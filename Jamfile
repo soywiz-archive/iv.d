@@ -1,0 +1,31 @@
+SubDir TOP src iv ;
+
+SubDirHdrs $(TOP) $(SUBDIR_TOKENS) .. ;
+
+
+Library libgccattrs.a : gccattrs.d ;
+Library libcmdcon.a : cmdcon.d ;
+Library libvideolib.a : videolib.d ;
+Library libvlwidgets.a : vlwidgets.d ;
+Library libivtimer.a : timer.d ;
+Library libivxmllite.a : xmllite.d ;
+Library libivweakref.a : weakref.d ;
+Library libivinflate.a : inflate.d ;
+Library libivzmbv.a : zmbv.d ;
+Library libivio.a : io.d ;
+Library libivstream.a : stream.d ;
+Library libivwriter.a : writer.d ;
+Library libivrect.a : rect.d ;
+
+
+Library libivcrt.a :
+  crt/evloop.d
+  crt/screen.d
+  crt/package.d
+;
+
+
+Library libzymosis.a :
+  zymosis/z80emu.d
+  zymosis/package.d
+;

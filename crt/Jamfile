@@ -1,0 +1,10 @@
+SubDir TOP src iv crt ;
+
+SubDirHdrs $(TOP) $(SUBDIR_TOKENS) .. .. ;
+
+
+Library libivcrt.a :
+  evloop.d
+  screen.d
+  package.d
+;
