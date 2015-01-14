@@ -2,4 +2,8 @@ SubDir TOP src iv sdl2 ;
 
 SubDirHdrs $(TOP) $(SUBDIR_TOKENS) .. .. ;
 
-Library libivsdl2.a : package.d types.d functions.d ;
+Library libivsdl2.a : sdl.d ;
+Library libivsdl2image.a : image.d ;
+Library libivsdl2mixer.a : mixer.d ;
+Library libivsdl2ttf.a : ttf.d ;
+Library libivsdl2net.a : net.d ;

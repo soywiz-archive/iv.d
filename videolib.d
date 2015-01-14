@@ -73,7 +73,7 @@ version(GNU) {
 import std.traits;
 
 
-public import iv.sdl2;
+public import iv.sdl2.sdl;
 version(videolib_opengl) {
   //import derelict.opengl3.gl;
   static assert(0);

@@ -29,8 +29,8 @@ Library libzymosis.a :
 ;
 
 
-Library libivsdl2.a :
-  sdl2/package.d
-  sdl2/types.d
-  sdl2/functions.d
-;
+Library libivsdl2sdl.a : sdl2/sdl.d ;
+Library libivsdl2image.a : sdl2/image.d ;
+Library libivsdl2mixer.a : sdl2/mixer.d ;
+Library libivsdl2ttf.a : sdl2/ttf.d ;
+Library libivsdl2net.a : sdl2/net.d ;
