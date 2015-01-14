@@ -1,0 +1,5 @@
+SubDir TOP src iv sdl2 ;
+
+SubDirHdrs $(TOP) $(SUBDIR_TOKENS) .. .. ;
+
+Library libivsdl2.a : package.d types.d functions.d ;

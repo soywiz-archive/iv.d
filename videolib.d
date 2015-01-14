@@ -73,8 +73,11 @@ version(GNU) {
 import std.traits;
 
 
-public import derelict.sdl2.sdl;
-version(videolib_opengl) import derelict.opengl3.gl;
+public import iv.sdl2;
+version(videolib_opengl) {
+  //import derelict.opengl3.gl;
+  static assert(0);
+}
 
 private import core.sys.posix.time;
 // idiotic phobos forgets 'nothrow' at it
@@ -213,7 +216,6 @@ void processArgs (ref string[] args) @trusted nothrow {
 }
 
 
-private __gshared bool sdlLoaded = false;
 private __gshared bool oglLoaded = false;
 
 
@@ -243,7 +245,6 @@ private void sdlError (bool raise) @trusted {
  *
  * Throws:
  *  VideoLibError on error
- *  derelict loader errors
  */
 void initVideo (string windowName=null) @trusted {
   if (!pvInitedOk) {
@@ -253,10 +254,6 @@ void initVideo (string windowName=null) @trusted {
 
     deinitInternal();
     if (windowName is null) windowName = "SDL Application";
-    if (!sdlLoaded) {
-      DerelictSDL2.load();
-      sdlLoaded = true;
-    }
     version(videolib_opengl) {
       enum uint winflags = SDL_WINDOW_OPENGL;
       if (!oglLoaded) {
