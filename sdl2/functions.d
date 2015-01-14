@@ -73,7 +73,7 @@ extern(C) @nogc nothrow {
   void SDL_UnlockAudio ();
   void SDL_UnlockAudioDevice (SDL_AudioDeviceID);
   void SDL_CloseAudio ();
-  void SDL_CloseAudioDevice ();
+  void SDL_CloseAudioDevice (SDL_AudioDeviceID);
   int SDL_AudioDeviceConnected (SDL_AudioDeviceID);
 
   // SDL_clipboard.h
@@ -274,6 +274,7 @@ extern(C) @nogc nothrow {
   SDL_Cursor* SDL_CreateSystemCursor (SDL_SystemCursor);
   void SDL_SetCursor (SDL_Cursor*);
   SDL_Cursor* SDL_GetCursor ();
+  SDL_Cursor* SDL_GetDefaultCursor ();
   void SDL_FreeCursor (SDL_Cursor*);
   int SDL_ShowCursor (int);
 
@@ -330,6 +331,8 @@ extern(C) @nogc nothrow {
   SDL_bool SDL_RenderTargetSupported (SDL_Renderer*);
   int SDL_SetRenderTarget (SDL_Renderer*, SDL_Texture*);
   SDL_Texture* SDL_GetRenderTarget (SDL_Renderer*);
+  int SDL_RenderSetClipRect (SDL_Renderer*, const(SDL_Rect)*);
+  void SDL_RenderGetClipRect (SDL_Renderer* renderer, SDL_Rect*);
   int SDL_RenderSetLogicalSize (SDL_Renderer*, int, int);
   void SDL_RenderGetLogicalSize (SDL_Renderer*, int*, int*);
   int SDL_RenderSetViewport (SDL_Renderer*, const(SDL_Rect)*);
@@ -348,7 +351,7 @@ extern(C) @nogc nothrow {
   int SDL_RenderDrawRect (SDL_Renderer*, const(SDL_Rect)*);
   int SDL_RenderDrawRects (SDL_Renderer*, const(SDL_Rect)*, int);
   int SDL_RenderFillRect (SDL_Renderer*, const(SDL_Rect)*);
-  int SDL_RenderFillRects (SDL_Renderer*, const(SDL_Rect)*);
+  int SDL_RenderFillRects (SDL_Renderer*, const(SDL_Rect)*, int);
   int SDL_RenderCopy (SDL_Renderer*, SDL_Texture*, const(SDL_Rect)*, const(SDL_Rect*));
   int SDL_RenderCopyEx (SDL_Renderer*, SDL_Texture*, const(SDL_Rect)*, const(SDL_Rect)*, const(double), const(SDL_Point)*, const(SDL_RendererFlip));
   int SDL_RenderReadPixels (SDL_Renderer*, const(SDL_Rect)*, uint, void*, int);
