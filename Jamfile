@@ -34,3 +34,6 @@ Library libivsdl2image.a : sdl2/image.d ;
 Library libivsdl2mixer.a : sdl2/mixer.d ;
 Library libivsdl2ttf.a : sdl2/ttf.d ;
 Library libivsdl2net.a : sdl2/net.d ;
+
+Library libivopengl.a : opengl/gl.d ;
+Library libivopenglu.a : opengl/glu.d ;
