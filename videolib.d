@@ -74,10 +74,7 @@ import std.traits;
 
 
 public import iv.sdl2.sdl;
-version(videolib_opengl) {
-  //import derelict.opengl3.gl;
-  static assert(0);
-}
+version(videolib_opengl) import iv.opengl.gl;
 
 private import core.sys.posix.time;
 // idiotic phobos forgets 'nothrow' at it
@@ -216,9 +213,6 @@ void processArgs (ref string[] args) @trusted nothrow {
 }
 
 
-private __gshared bool oglLoaded = false;
-
-
 private void sdlPrintError () @trusted nothrow @nogc {
   import core.stdc.stdio : stderr, fprintf;
   auto sdlError = SDL_GetError();
@@ -256,13 +250,9 @@ void initVideo (string windowName=null) @trusted {
     if (windowName is null) windowName = "SDL Application";
     version(videolib_opengl) {
       enum uint winflags = SDL_WINDOW_OPENGL;
-      if (!oglLoaded) {
-        DerelictGL.load();
-        enforce(glClear !is null);
-        enforce(glPixelZoom !is null);
-        enforce(glDrawPixels !is null);
-        oglLoaded = true;
-      }
+      //enforce(glClear !is null);
+      //enforce(glPixelZoom !is null);
+      //enforce(glDrawPixels !is null);
     } else {
       enum uint winflags = 0;
     }
@@ -300,9 +290,7 @@ void initVideo (string windowName=null) @trusted {
       winflags|(useFullscreen ? (useRealFullscreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_FULLSCREEN_DESKTOP) : 0)|(useOpenGL ? SDL_WINDOW_OPENGL : 0));
     sdlError(!sdlWindow);
     version(videolib_opengl) {
-      if (!noDefaultOpenGLContext) {
-        sdlGLCtx = SDL_GL_CreateContext(sdlWindow);
-      }
+      if (!noDefaultOpenGLContext) sdlGLCtx = SDL_GL_CreateContext(sdlWindow);
       SDL_GL_SetSwapInterval(useVSync ? 1: 0);
     } else {
       sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, (useVSync ? SDL_RENDERER_PRESENTVSYNC : 0));
@@ -727,6 +715,7 @@ void paintFrameDefault () @trusted {
         // easiest case
         glDrawPixels(vsWidth, vsHeight, GL_BGRA, GL_UNSIGNED_BYTE, vscr);
       } else {
+        import core.stdc.string : memcpy;
         final switch (useFilter) {
           case VideoFilter.None: memcpy(vscr2x, vscr, vsWidth*vsHeight*vscr[0].sizeof); break; // just in case
           case VideoFilter.BlackNWhite: blit1xBW(); break;
