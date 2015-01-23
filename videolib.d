@@ -1661,6 +1661,7 @@ nothrow:
   }
 
 
+  /+
   void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, Color col) @trusted {
     import std.math : abs;
     int dx =  abs(x1-x0), sx = (x0 < x1 ? 1 : -1);
@@ -1673,6 +1674,158 @@ nothrow:
       e2 = 2*err;
       if (e2 >= dy) { err += dy; x0 += sx; } // e_xy+e_x > 0
       if (e2 <= dx) { err += dx; y0 += sy; } // e_xy+e_y < 0
+    }
+  }
+  +/
+
+  // as the paper on which this code is based in not available to public,
+  // i say "fuck you!"
+  // knowledge must be publicly available; the ones who hides the knowledge
+  // are not deserving any credits.
+  void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, immutable Color col) {
+    enum swap(string a, string b) = "{int tmp_="~a~";"~a~"="~b~";"~b~"=tmp_;}";
+
+    if ((col&AMask) == AMask || mClipX0 > mClipX1 || mClipY0 > mClipY1 || mVScr is null) return;
+
+    if (x0 == x1 && y0 == y1) {
+      static if (lastPoint) putPixel(x0, y0, col);
+      return;
+    }
+
+    x0 += mXOfs; x1 += mXOfs;
+    y0 += mYOfs; y1 += mYOfs;
+
+    // clip rectange
+    int wx0 = mClipX0, wy0 = mClipY0, wx1 = mClipX1, wy1 = mClipY1;
+    // other vars
+    int stx, sty; // "steps" for x and y axes
+    int dsx, dsy; // "lengthes" for x and y axes
+    int dx2, dy2; // "double lengthes" for x and y axes
+    int xd, yd; // current coord
+    int e; // "error" (as in bresenham algo)
+    int rem;
+    int term;
+    int *d0, d1;
+    // horizontal setup
+    if (x0 < x1) {
+      // from left to right
+      if (x0 > wx1 || x1 < wx0) return; // out of screen
+      stx = 1; // going right
+    } else {
+      // from right to left
+      if (x1 > wx1 || x0 < wx0) return; // out of screen
+      stx = -1; // going left
+      x0 = -x0;
+      x1 = -x1;
+      wx0 = -wx0;
+      wx1 = -wx1;
+      mixin(swap!("wx0", "wx1"));
+    }
+    // vertical setup
+    if (y0 < y1) {
+      // from top to bottom
+      if (y0 > wy1 || y1 < wy0) return; // out of screen
+      sty = 1; // going down
+    } else {
+      // from bottom to top
+      if (y1 > wy1 || y0 < wy0) return; // out of screen
+      sty = -1; // going up
+      y0 = -y0;
+      y1 = -y1;
+      wy0 = -wy0;
+      wy1 = -wy1;
+      mixin(swap!("wy0", "wy1"));
+    }
+    dsx = x1-x0;
+    dsy = y1-y0;
+    if (dsx < dsy) {
+      d0 = &yd;
+      d1 = &xd;
+      mixin(swap!("x0", "y0"));
+      mixin(swap!("x1", "y1"));
+      mixin(swap!("dsx", "dsy"));
+      mixin(swap!("wx0", "wy0"));
+      mixin(swap!("wx1", "wy1"));
+      mixin(swap!("stx", "sty"));
+    } else {
+      d0 = &xd;
+      d1 = &yd;
+    }
+    dx2 = 2*dsx;
+    dy2 = 2*dsy;
+    xd = x0;
+    yd = y0;
+    e = 2*dsy-dsx;
+    term = x1;
+    bool xfixed = false;
+    if (y0 < wy0) {
+      // clip at top
+      int temp = dx2*(wy0-y0)-dsx;
+      xd += temp/dy2;
+      rem = temp%dy2;
+      if (xd > wx1) return; // x is moved out of clipping rect, nothing to do
+      if (xd+1 >= wx0) {
+        yd = wy0;
+        e -= rem+dsx;
+        if (rem > 0) { ++xd; e += dy2; }
+        xfixed = true;
+      }
+    }
+    if (!xfixed && x0 < wx0) {
+      // clip at left
+      int temp = dy2*(wx0-x0);
+      yd += temp/dx2;
+      rem = temp%dx2;
+      if (yd > wy1 || yd == wy1 && rem >= dsx) return;
+      xd = wx0;
+      e += rem;
+      if (rem >= dsx) { ++yd; e -= dx2; }
+    }
+    if (y1 > wy1) {
+      // clip at bottom
+      int temp = dx2*(wy1-y0)+dsx;
+      term = x0+temp/dy2;
+      rem = temp%dy2;
+      if (rem == 0) --term;
+    }
+    if (term > wx1) term = wx1; // clip at right
+    static if (lastPoint) {
+      // draw last point
+      ++term;
+    } else {
+      if (term == xd) return; // this is the only point, get out of here
+    }
+    if (sty == -1) yd = -yd;
+    if (stx == -1) { xd = -xd; term = -term; }
+    dx2 -= dy2;
+    // draw it; `putPixel()` can omit checks
+    while (xd != term) {
+      // inlined `putPixel(*d0, *d1, col)`
+      // this can be made even faster by precalculating `da` and making
+      // separate code branches for mixing and non-mixing drawing, but...
+      // ah, screw it!
+      uint* da = mVScr+(*d1)*mWidth+(*d0);
+      if (col&AMask) {
+        immutable uint a = 256-(col>>24); // to not loose bits
+        immutable uint dc = (*da)&0xffffff;
+        immutable uint srb = (col&0xff00ff);
+        immutable uint sg = (col&0x00ff00);
+        immutable uint drb = (dc&0xff00ff);
+        immutable uint dg = (dc&0x00ff00);
+        immutable uint orb = (drb+(((srb-drb)*a+0x800080)>>8))&0xff00ff;
+        immutable uint og = (dg+(((sg-dg)*a+0x008000)>>8))&0x00ff00;
+        *da = orb|og;
+      } else {
+        *da = col;
+      }
+      // done drawing, move coords
+      if (e >= 0) {
+        yd += sty;
+        e -= dx2;
+      } else {
+        e += dy2;
+      }
+      xd += stx;
     }
   }
 
