@@ -105,8 +105,12 @@ private shared bool pvInitedOk = false; // vill be set to 'true' if initVideo() 
 
 /// is VideoLib properly initialized and videomode set?
 bool isInited () @trusted nothrow @nogc {
-  import core.atomic : atomicLoad;
-  return atomicLoad(pvInitedOk);
+  version(GNU) {
+    return pvInitedOk;
+  } else {
+    import core.atomic : atomicLoad;
+    return atomicLoad(pvInitedOk);
+  }
 }
 
 shared bool useFullscreen = false; /// use fullscreen mode? this can be set to true before calling initVideo()
@@ -137,12 +141,20 @@ private shared bool sdlFrameChangedFlag = false; // this will be set to false by
 
 /// call this if you want VideoLib to call rebuild callback
 void frameChanged () @trusted nothrow @nogc {
-  import core.atomic : atomicStore;
-  atomicStore(sdlFrameChangedFlag, true);
+  version(GNU) {
+    sdlFrameChangedFlag = true;
+  } else {
+    import core.atomic : atomicStore;
+    atomicStore(sdlFrameChangedFlag, true);
+  }
 }
 bool isFrameChanged () @trusted nothrow @nogc {
-  import core.atomic : atomicLoad;
-  return atomicLoad(sdlFrameChangedFlag);
+  version(GNU) {
+    return sdlFrameChangedFlag;
+  } else {
+    import core.atomic : atomicLoad;
+    return atomicLoad(sdlFrameChangedFlag);
+  }
 }
 
 /// screen dimensions, should be changed prior to calling initVideo()
