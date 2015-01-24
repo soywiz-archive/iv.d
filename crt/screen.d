@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.crt.screen;
+module iv.crt.screen is aliced;
 
 import core.atomic;
 import core.sys.posix.unistd;

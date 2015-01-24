@@ -25,7 +25,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 */
-module iv.sdl2.sdl;
+module iv.sdl2.sdl is aliced;
 pragma(lib, "SDL2");
 
 import core.stdc.stdio; // FILE

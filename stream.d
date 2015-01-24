@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.stream;
+module iv.stream is aliced;
 
 import std.conv : ConvOverflowException;
 import std.traits : isMutable;

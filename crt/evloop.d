@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.crt.evloop;
+module iv.crt.evloop is aliced;
 private:
 
 public import iv.evloop : TimerType, addTimer, removeTimer, isGlobalQuit, sendQuitSignal;

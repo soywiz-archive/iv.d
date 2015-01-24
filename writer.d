@@ -67,7 +67,7 @@
  *        second '~': right filling char for 'center'
  *   '\0'...'\0': separator string for '%*'
  */
-module iv.writer;
+module iv.writer is aliced;
 private:
 
 import std.traits : isIntegral;

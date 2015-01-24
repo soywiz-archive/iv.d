@@ -51,7 +51,7 @@
  */
 //TODO:
 //  group: events on add and remove widgets
-module iv.vlwidgets;
+module iv.vlwidgets is aliced;
 
 import iv.videolib;
 import iv.rect;

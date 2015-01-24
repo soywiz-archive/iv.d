@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.autocomplete;
+module iv.autocomplete is aliced;
 
 
 /**

@@ -25,7 +25,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 */
-module iv.opengl.glu;
+module iv.opengl.glu is aliced;
 pragma(lib, "GLU");
 
 import iv.opengl.gl;

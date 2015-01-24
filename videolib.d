@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.videolib;
+module iv.videolib is aliced;
 
 version(videolib_opengl) {} else { version = videolib_sdl; }
 

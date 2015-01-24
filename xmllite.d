@@ -14,7 +14,7 @@
  *   Simon Arlott
  *   modifications and uglyfication by Ketmar // Invisible Vector
  */
-module iv.xmllite;
+module iv.xmllite is aliced;
 
 
 /******************************************************************************/

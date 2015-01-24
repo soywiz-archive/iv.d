@@ -35,7 +35,7 @@
  * This D port was made by Ketmar // Invisible Vector
  * ketmar@ketmar.no-ip.org
  */
-module iv.inflate;
+module iv.inflate is aliced;
 
 
 ////////////////////////////////////////////////////////////////////////////////

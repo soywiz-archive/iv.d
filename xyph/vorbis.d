@@ -25,7 +25,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 */
-module iv.xyph.vorbis;
+module iv.xyph.vorbis is aliced;
 pragma(lib, "vorbis");
 
 import core.stdc.config;

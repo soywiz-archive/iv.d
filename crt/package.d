@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.crt;
+module iv.crt is aliced;
 
 public import iv.crt.evloop;
 public import iv.crt.screen;

@@ -50,7 +50,7 @@
  * License: IVPLv0
  */
 // 866,1251,koi8u
-module iv.encoding;
+module iv.encoding is aliced;
 
 import std.encoding;
 

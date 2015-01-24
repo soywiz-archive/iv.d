@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.evloop;
+module iv.evloop is aliced;
 private:
 
 public import core.time; // for timers, Duration

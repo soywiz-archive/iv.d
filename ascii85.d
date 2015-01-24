@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.ascii85;
+module iv.ascii85 is aliced;
 
 import std.range;
 import std.traits;
