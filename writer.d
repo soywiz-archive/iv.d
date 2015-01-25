@@ -515,6 +515,17 @@ if (state == "got-maxlen")
 
 
 ////////////////////////////////////////////////////////////////////////////////
+static template isStaticNarrowString(T) {
+  import std.traits : isStaticArray;
+  static if (isStaticArray!T) {
+    import std.traits : Unqual;
+    static alias ArrayElementType(T: T[]) = Unqual!T;
+    enum isStaticNarrowString = is(ArrayElementType!T == char);
+  } else {
+    enum isStaticNarrowString = false;
+  }
+}
+
 template writefImpl(string state, alias data, AA...)
 if (state == "write-argument-s")
 {
@@ -522,7 +533,7 @@ if (state == "write-argument-s")
   import std.conv : to;
   static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
   enum aidx = data.aidx;
-  static if (is(Unqual!(AA[aidx]) == char[]) || is(AA[aidx] == string)) {
+  static if (is(Unqual!(AA[aidx]) == char[]) || is(AA[aidx] == string) || isStaticNarrowString!(AA[aidx])) {
     enum callFunc = "wrWriteWidth";
     enum func = "";
   } else static if (isIntegral!(AA[aidx])) {
