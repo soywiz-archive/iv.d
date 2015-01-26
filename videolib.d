@@ -105,12 +105,8 @@ private shared bool pvInitedOk = false; // vill be set to 'true' if initVideo() 
 
 /// is VideoLib properly initialized and videomode set?
 bool isInited () @trusted nothrow @nogc {
-  version(GNU) {
-    return pvInitedOk;
-  } else {
-    import core.atomic : atomicLoad;
-    return atomicLoad(pvInitedOk);
-  }
+  import core.atomic : atomicLoad;
+  return atomicLoad(pvInitedOk);
 }
 
 shared bool useFullscreen = false; /// use fullscreen mode? this can be set to true before calling initVideo()
@@ -141,20 +137,13 @@ private shared bool sdlFrameChangedFlag = false; // this will be set to false by
 
 /// call this if you want VideoLib to call rebuild callback
 void frameChanged () @trusted nothrow @nogc {
-  version(GNU) {
-    sdlFrameChangedFlag = true;
-  } else {
-    import core.atomic : atomicStore;
-    atomicStore(sdlFrameChangedFlag, true);
-  }
+  import core.atomic : atomicStore;
+  atomicStore(sdlFrameChangedFlag, true);
 }
+
 bool isFrameChanged () @trusted nothrow @nogc {
-  version(GNU) {
-    return sdlFrameChangedFlag;
-  } else {
-    import core.atomic : atomicLoad;
-    return atomicLoad(sdlFrameChangedFlag);
-  }
+  import core.atomic : atomicLoad;
+  return atomicLoad(sdlFrameChangedFlag);
 }
 
 /// screen dimensions, should be changed prior to calling initVideo()
@@ -1054,7 +1043,11 @@ private __gshared timespec videolib_clock_stt;
 
 
 private void initializeClock () @trusted nothrow @nogc {
-  version(GNU) {} else import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
+  version(GNU) {
+    import core.sys.posix.time : CLOCK_MONOTONIC_RAW;
+  } else {
+    import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
+  }
   timespec cres;
   vl_k8clock_initialized = -1;
   if (clock_getres(CLOCK_MONOTONIC_RAW, &cres) != 0) {
@@ -1077,7 +1070,11 @@ private void initializeClock () @trusted nothrow @nogc {
 /* returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * milliseconds; (0: no timer available) */
 ulong getTicks () @trusted nothrow @nogc {
-  version(GNU) {} else import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
+  version(GNU) {
+    import core.sys.posix.time : CLOCK_MONOTONIC_RAW;
+  } else {
+    import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
+  }
   if (vl_k8clock_initialized > 0) {
     timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
@@ -1094,7 +1091,11 @@ ulong getTicks () @trusted nothrow @nogc {
 /* returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * microseconds; (0: no timer available) */
 ulong ticksMicro () @trusted nothrow @nogc {
-  version(GNU) {} else import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
+  version(GNU) {
+    import core.sys.posix.time : CLOCK_MONOTONIC_RAW;
+  } else {
+    import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
+  }
   if (vl_k8clock_initialized > 0) {
     timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
