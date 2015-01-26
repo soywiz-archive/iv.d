@@ -55,21 +55,6 @@ version(videolib_opengl) {} else { version = videolib_sdl; }
 
 public import iv.gccattrs;
 
-/*
-// hackery for non-gcc compilers
-version(GNU) {
-  //public import gcc.attribute;
-  static import gcc.attribute;
-  enum gcc_inline = gcc.attribute.attribute("forceinline");
-} else {
-  //pragma(msg, "FATAL: please, use GDC to compile this code!");
-  //pragma(error);
-  //private struct VL_GCC_Attribute(A...) { A args; }
-  //auto vl_gcc_attribute(A...) (A args) if (A.length > 0 && is(A[0] == string)) { return VL_GCC_Attribute!A(args); }
-  private struct gcc_inline() {}
-}
-*/
-
 import std.traits;
 
 
@@ -1038,16 +1023,17 @@ public immutable ubyte[256] vlFontPropWidth = [
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version(GNU) {
+  private import core.sys.posix.time : CLOCK_MONOTONIC_RAW;
+} else {
+  private import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
+}
+
 private __gshared int vl_k8clock_initialized = 0;
 private __gshared timespec videolib_clock_stt;
 
 
 private void initializeClock () @trusted nothrow @nogc {
-  version(GNU) {
-    import core.sys.posix.time : CLOCK_MONOTONIC_RAW;
-  } else {
-    import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
-  }
   timespec cres;
   vl_k8clock_initialized = -1;
   if (clock_getres(CLOCK_MONOTONIC_RAW, &cres) != 0) {
@@ -1070,11 +1056,6 @@ private void initializeClock () @trusted nothrow @nogc {
 /* returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * milliseconds; (0: no timer available) */
 ulong getTicks () @trusted nothrow @nogc {
-  version(GNU) {
-    import core.sys.posix.time : CLOCK_MONOTONIC_RAW;
-  } else {
-    import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
-  }
   if (vl_k8clock_initialized > 0) {
     timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
@@ -1091,11 +1072,6 @@ ulong getTicks () @trusted nothrow @nogc {
 /* returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * microseconds; (0: no timer available) */
 ulong ticksMicro () @trusted nothrow @nogc {
-  version(GNU) {
-    import core.sys.posix.time : CLOCK_MONOTONIC_RAW;
-  } else {
-    import core.sys.linux.time : CLOCK_MONOTONIC_RAW;
-  }
   if (vl_k8clock_initialized > 0) {
     timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
