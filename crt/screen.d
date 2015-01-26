@@ -76,12 +76,7 @@ else debug(crt_debug) version = crt_log_enabled;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-version(GNU) {
-private extern(C) ssize_t write (int, in void*, usize) @trusted nothrow @nogc;
-private alias cwrite = write;
-} else {
 private alias cwrite = core.sys.posix.unistd.write;
-}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -199,31 +194,17 @@ private __gshared Rect windowArea = void;
 
 // ////////////////////////////////////////////////////////////////////////// //
 void hideCursor () @trusted nothrow @nogc {
-  version(GNU) {
-    if (++cursorHidden == 1) {
-      static immutable string estr = "\x1b[?25l";
-      cwrite(STDOUT_FILENO, estr.ptr, estr.length);
-    }
-  } else {
-    if (atomicOp!"+="(cursorHidden, 1) == 1) {
-      static immutable string estr = "\x1b[?25l";
-      cwrite(STDOUT_FILENO, estr.ptr, estr.length);
-    }
+  if (atomicOp!"+="(cursorHidden, 1) == 1) {
+    static immutable string estr = "\x1b[?25l";
+    cwrite(STDOUT_FILENO, estr.ptr, estr.length);
   }
 }
 
 
 void showCursor () @trusted nothrow @nogc {
-  version(GNU) {
-    if (--cursorHidden == 0) {
-      static immutable string estr = "\x1b[?25h";
-      cwrite(STDOUT_FILENO, estr.ptr, estr.length);
-    }
-  } else {
-    if (atomicOp!"-="(cursorHidden, 1) == 0) {
-      static immutable string estr = "\x1b[?25h";
-      cwrite(STDOUT_FILENO, estr.ptr, estr.length);
-    }
+  if (atomicOp!"-="(cursorHidden, 1) == 0) {
+    static immutable string estr = "\x1b[?25h";
+    cwrite(STDOUT_FILENO, estr.ptr, estr.length);
   }
 }
 
@@ -353,12 +334,7 @@ private void reinitBuffers () @trusted {
 
 // ////////////////////////////////////////////////////////////////////////// //
 void altScreen () @trusted nothrow @nogc {
-  version(GNU) {
-    int swpd = cast(int)(++screenSwapped);
-  } else {
-    int swpd = atomicOp!"+="(screenSwapped, 1);
-  }
-  if (swpd == 1) {
+  if (atomicOp!"+="(screenSwapped, 1) == 1) {
     static immutable string initStr =
       /*"\r\x1b[Kswapping to alternate screen...\n"*/
       "\x1b[?1048h"~ // save cursor position
@@ -374,12 +350,7 @@ void altScreen () @trusted nothrow @nogc {
 
 
 void normalScreen () @trusted nothrow @nogc {
-  version(GNU) {
-    int swpd = cast(int)(--screenSwapped);
-  } else {
-    int swpd = atomicOp!"-="(screenSwapped, 1);
-  }
-  if (swpd == 0) {
+  if (atomicOp!"-="(screenSwapped, 1) == 0) {
     static immutable string deinitStr =
       /*"\r\x1b[Kswapping to normal screen...\n"*/
       "\x1b[?1047l"~ // set normal screen
@@ -480,13 +451,8 @@ enum Color {
 
 // ////////////////////////////////////////////////////////////////////////// //
 private void updateScreen (Glyph[] vbuf, Glyph[] obuf) @trusted nothrow @nogc {
-  version(GNU) {
-    bool fullrf = doFullRefresh;
-    doFullRefresh = false;
-  } else {
-    bool fullrf = atomicLoad(doFullRefresh);
-    atomicStore(doFullRefresh, false);
-  }
+  bool fullrf = atomicLoad(doFullRefresh);
+  atomicStore(doFullRefresh, false);
   static char[32768] wbuf = void;
   usize wbufUsed = 0;
   usize pos = 0, ocurpos = 0xffffffffU;
