@@ -14,6 +14,7 @@ Library libivzmbv.a : zmbv.d ;
 Library libivstream.a : stream.d ;
 Library libivwriter.a : writer.d ;
 Library libivrect.a : rect.d ;
+Library libivprng.a : prng.d ;
 
 
 Library libivcrt.a :
