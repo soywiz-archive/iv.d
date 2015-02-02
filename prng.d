@@ -104,10 +104,10 @@ public:
   void seed (uint seed) {
     a = 0xf1ea5eed;
     b = c = d = seed;
-    foreach (; 0..20) get;
+    foreach (; 0..20) next;
   }
 
-  @property uint get () {
+  @property uint next () {
     enum ROT(string var, string cnt) = `cast(uint)(((`~var~`)<<(`~cnt~`))|((`~var~`)>>(32-(`~cnt~`))))`;
     uint e;
     /* original:
@@ -173,7 +173,7 @@ public:
     w = cast(uint)(seed&0xffffffffu);
   }
 
-  @property uint get () {
+  @property uint next () {
     if (w == 0) w = DefaultW;
     if (z == 0) z = DefaultZ;
     z = 36969*(z&0xffff)+(z>>16);
@@ -254,7 +254,7 @@ public:
     if (v == 0) v = xyzzyPRNGHashU32(w+1);
   }
 
-  @property uint get () {
+  @property uint next () {
     uint t;
     t = (x^(x>>7));
     x = y;
@@ -302,16 +302,16 @@ unittest {
   {
     BJRng r;
     r.randomize();
-    writefln("0x%08x", r.get);
+    writefln("0x%08x", r.next);
   }
   {
     GMRngSeed64 r;
     r.randomize();
-    writefln("0x%08x", r.get);
+    writefln("0x%08x", r.next);
   }
   {
     GMRng r;
     r.randomize();
-    writefln("0x%08x", r.get);
+    writefln("0x%08x", r.next);
   }
 }
