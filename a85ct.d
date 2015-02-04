@@ -140,6 +140,20 @@ string encodeAscii85(T) (const(T)[] src, int width=76) {
 }
 
 
+// for mixin
+template a85enc(string s) {
+  private static enum qstr(string s) = s.stringof;
+  enum a85enc = qstr!(encodeAscii85(s, 0));
+}
+
+
+// fox mixin
+template a85dec(string s) {
+  private static enum qstr(string s) = s.stringof;
+  enum a85dec = qstr!(decodeAscii85(s));
+}
+
+
 version(none) {
 enum e = encodeAscii85("One, two, Freddy's coming for you");
 enum s = decodeAscii85(`:Ms_p+EVgG/0IE&ARo=s-Z^D?Df'3+B-:f)EZfXGFT`);
