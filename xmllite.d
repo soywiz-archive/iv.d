@@ -489,7 +489,9 @@ public string encodeAllEntities (string str) {
 
 
 public string decodeEntities (string str) {
-  import std.conv;
+  import std.conv : to;
+  import std.utf : encode;
+
   auto fragments = str.fastSplit('&'); // see utils at the end of this file
   if (fragments.length <= 1) return str;
 
