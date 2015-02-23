@@ -70,7 +70,7 @@
 module iv.writer is aliced;
 private:
 
-import std.traits : isIntegral;
+private import std.traits : isIntegral, StripTypedef;
 
 
 __gshared void delegate (scope const(char[]), scope int fd=1) @trusted nothrow @nogc  wrwriter;
@@ -533,10 +533,11 @@ if (state == "write-argument-s")
   import std.conv : to;
   static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
   enum aidx = data.aidx;
-  static if (is(Unqual!(AA[aidx]) == char[]) || is(AA[aidx] == string) || isStaticNarrowString!(AA[aidx])) {
+  alias aatype = StripTypedef!(AA[aidx]);
+  static if (is(Unqual!aatype == char[]) || is(aatype == string) || isStaticNarrowString!aatype) {
     enum callFunc = "wrWriteWidth";
     enum func = "";
-  } else static if (isIntegral!(AA[aidx])) {
+  } else static if (isIntegral!aatype) {
     enum callFunc = "wrWriteWidthInt";
     enum func = "";
   } else {
@@ -563,7 +564,7 @@ if (state == "write-argument-xx")
   import std.conv : to;
   static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
   enum aidx = data.aidx;
-  static assert(isIntegral!(AA[aidx]), "'x' expects integer argument");
+  static assert(isIntegral!(StripTypedef!(AA[aidx])), "'x' expects integer argument");
   enum lfchar = data.lfchar;
   enum rfchar = data.rfchar;
   enum writefImpl =
@@ -774,4 +775,13 @@ unittest {
   writefln!"[%06s]"(-666);
   writefln!"[%06s]"(cast(long)0x8000_0000_0000_0000uL);
   writefln!"[%06x]"(cast(long)0x8000_0000_0000_0000uL);
+
+  typedef MyInt = int;
+  typedef MyString = string;
+
+  MyInt mi = 42;
+  MyString ms = cast(MyString)"hurry";
+  writefln!"%s"(mi);
+  writefln!"%x"(mi);
+  writefln!"%s"(ms);
 }
