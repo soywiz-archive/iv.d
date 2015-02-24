@@ -70,7 +70,7 @@
 module iv.writer is aliced;
 private:
 
-private import std.traits : isIntegral, StripTypedef;
+private import std.traits : isIntegral, isPointer, StripTypedef;
 
 
 __gshared void delegate (scope const(char[]), scope int fd=1) @trusted nothrow @nogc  wrwriter;
@@ -564,7 +564,8 @@ if (state == "write-argument-xx")
   import std.conv : to;
   static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
   enum aidx = data.aidx;
-  static assert(isIntegral!(StripTypedef!(AA[aidx])), "'x' expects integer argument");
+  private alias TTA = StripTypedef!(AA[aidx]);
+  static assert(isIntegral!TTA || isPointer!TTA, "'x' expects integer or pointer argument");
   enum lfchar = data.lfchar;
   enum rfchar = data.rfchar;
   enum writefImpl =
@@ -574,6 +575,7 @@ if (state == "write-argument-xx")
       data.getIntStr!"maxlen"()~","~
       data.getBoolStr!"optCenter"()~","~
       (upcase ? "true," : "false,")~
+      (isPointer!TTA ? "cast(usize)" : "cast("~TTA.stringof~")")~
       "(args["~to!string(aidx)~"]));\n";
 }
 
