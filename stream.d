@@ -131,7 +131,7 @@ unittest {
   static assert(streamHasSeek!File);
   static assert(streamHasTell!File);
   static assert(streamHasName!File);
-  static assert(!streamHasSize!File);
+  static assert(streamHasSize!File);
   struct S {}
   static assert(!isReadableStream!S);
   static assert(!isWriteableStream!S);
@@ -141,7 +141,7 @@ unittest {
   static assert(!streamHasSeek!S);
   static assert(!streamHasTell!S);
   static assert(!streamHasName!S);
-  static assert(!streamHasSize!File);
+  static assert(!streamHasSize!S);
 }
 
 
@@ -796,17 +796,19 @@ unittest {
 private class PartialStreamROData {
 private:
   ulong rc = 1;
+  immutable bool gcrange; // do `GC.removeRange()`?
   immutable long start;
   immutable long size;
   long curpos; // current position
-  usize gcroot; // !0: void* for GC.removeRoot()
+  usize gcroot; // allocated memory that must be free()d
 
-  this (long astart, long asize, usize agcroot) @safe nothrow @nogc
+  this (long astart, long asize, usize agcroot, bool arange) @safe nothrow @nogc
   in {
     assert(astart >= 0);
     assert(asize >= 0);
   }
   body {
+    gcrange = arange;
     start = astart;
     size = asize;
     gcroot = agcroot;
@@ -834,8 +836,10 @@ private:
       clear(); // finalize stream
       if (gcroot == 0) assert(0); // the thing that should not be
       // remove roots
-      GC.removeRange(cast(void*)gcroot);
-      GC.removeRoot(cast(void*)gcroot);
+      if (gcrange) {
+        GC.removeRange(cast(void*)gcroot);
+        GC.removeRoot(cast(void*)gcroot);
+      }
       // free allocated memory
       free(cast(void*)gcroot);
       // just in case
@@ -856,8 +860,8 @@ protected:
 private final class PartialStreamDataImpl(ST) : PartialStreamROData {
   ST stream;
 
-  this(ST) (auto ref ST astrm, long astart, long asize, usize agcroot) {
-    super(astart, asize, agcroot);
+  this(ST) (auto ref ST astrm, long astart, long asize, usize agcroot, bool arange) {
+    super(astart, asize, agcroot, arange);
     stream = astrm;
   }
 
@@ -908,18 +912,20 @@ private:
       import std.conv : emplace;
       import std.traits : hasIndirections;
       alias CT = PartialStreamDataImpl!ST; // i'm lazy
+      enum instSize = __traits(classInstanceSize, CT);
       // let's hope that malloc() aligns returned memory right
-      auto mem = malloc(__traits(classInstanceSize, CT));
+      auto mem = malloc(instSize);
       if (mem is null) onOutOfMemoryError(); // oops
-      usize root = 0;
-      root = cast(usize)mem;
-      if (hasIndirections!ST) {
+      usize root = cast(usize)mem;
+      static if (hasIndirections!ST) {
         // ouch, ST has some pointers; register it as gc root and range
-        usize rng = __traits(classInstanceSize, CT);
         GC.addRoot(cast(void*)root);
-        GC.addRange(cast(void*)root, rng);
+        GC.addRange(cast(void*)root, instSize);
+        enum isrng = true;
+      } else {
+        enum isrng = false;
       }
-      mStData = emplace!CT(mem[0..__traits(classInstanceSize, CT)], astrm, astart, asize, root);
+      mStData = emplace!CT(mem[0..instSize], astrm, astart, asize, root, isrng);
     }
   }
 
