@@ -114,7 +114,7 @@ class K8ByteEncoding(alias charMap) : EncodingScheme {
       buffer[0] = c&0xff;
     } else {
       buffer[0] = '?';
-      foreach (i, wchar d; charMap) {
+      foreach (immutable i, wchar d; charMap) {
         if (c == d) {
           buffer[0] = (i+128)&0xff;
           break;

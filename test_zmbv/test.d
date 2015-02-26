@@ -49,6 +49,8 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
+module zmbv_test is aliced;
+
 import core.stdc.stdlib : malloc, free;
 import core.stdc.string : memset, memcpy, memcmp;
 import std.exception;
@@ -57,7 +59,7 @@ import std.path;
 import std.stdio;
 import std.string;
 
-import zmbv;
+import iv.zmbv;
 
 
 private:
@@ -160,7 +162,7 @@ void encodeScreensToBin () {
   auto fo = File(outname, "w");
 
   void writer (const(void)[] buf) {
-    if (thisIsKeyframe) idxarray ~= cast(uint)fo.tell();
+    if (thisIsKeyframe) idxarray ~= cast(uint)fo.tell;
     uint size = cast(uint)buf.length;
     fo.rawWrite((&size)[0..1]);
     fo.rawWrite(buf);
@@ -176,7 +178,7 @@ void encodeScreensToBin () {
   fo.rawWrite((&scc)[0..1]);
   encodeScreens(&writer);
   // write idxarray
-  auto ipos = fo.tell();
+  auto ipos = fo.tell;
   fo.rawWrite(idxarray);
   // update header
   fo.seek(4);

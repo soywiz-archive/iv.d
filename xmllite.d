@@ -140,7 +140,7 @@ class XmlNode {
           }
           expect(s, '<');
           expect(s, '/');
-          foreach (tc; tag) expect(s, tc);
+          foreach (immutable char tc; tag) expect(s, tc);
           expect(s, '>');
         } else {
           expect(s, '>');
@@ -179,11 +179,11 @@ class XmlNode {
 
   final void writeTo(XmlWriter) (ref XmlWriter output) const {
     void writeChildren () {
-      foreach (child; children) child.writeTo(output);
+      foreach (auto child; children) child.writeTo(output);
     }
 
     void writeAttributes () {
-      foreach (key, value; attributes) output.addAttribute(key, value);
+      foreach (auto key, auto value; attributes) output.addAttribute(key, value);
     }
 
     switch (type) {
@@ -222,7 +222,7 @@ class XmlNode {
       case XmlNodeType.Node:
       case XmlNodeType.Root:
         string childrenText;
-        foreach (child; children) childrenText ~= child.text;
+        foreach (auto child; children) childrenText ~= child.text;
         return childrenText;
       default:
         return null;
@@ -230,13 +230,13 @@ class XmlNode {
   }
 
   final XmlNode findChild (string tag) {
-    foreach (child; children) if (child.type == XmlNodeType.Node && child.tag == tag) return child;
+    foreach (auto child; children) if (child.type == XmlNodeType.Node && child.tag == tag) return child;
     return null;
   }
 
   final XmlNode[] findChildren (string tag) {
     XmlNode[] result;
-    foreach (child; children) if (child.type == XmlNodeType.Node && child.tag == tag) result ~= child;
+    foreach (auto child; children) if (child.type == XmlNodeType.Node && child.tag == tag) result ~= child;
     return result;
   }
 
@@ -273,7 +273,7 @@ class XmlNode {
     auto result = new XmlNode(type, tag);
     result.attributes = attributes.dup;
     result.children.length = children.length;
-    foreach (i, child; children) result.children[i] = child.dup;
+    foreach (auto i, auto child; children) result.children[i] = child.dup;
     return result;
   }
 
@@ -350,13 +350,13 @@ void skipWhitespace (StringStream* s) {
 
 immutable bool[256] isWhiteChar = {
   bool[256] res;
-  foreach (c; 0..256) res[c] = isWhite(c);
+  foreach (immutable c; 0..256) res[c] = isWhite(c);
   return res;
 }();
 
 immutable bool[256] isWordChar = {
   bool[256] res;
-  foreach (c; 0..256) res[c] = (c == '-' || c == '_' || c == ':' || isAlphaNum(c));
+  foreach (immutable c; 0..256) res[c] = (c == '-' || c == '_' || c == ':' || isAlphaNum(c));
   return res;
 }();
 
@@ -462,13 +462,13 @@ shared static this () {
     "reg"   : '\&reg;',
     "apos"  : '\''
   ];
-  foreach (name, c; entities) entityNames[c] = name;
+  foreach (immutable name, immutable c; entities) entityNames[c] = name;
 }
 
 
 public string encodeEntities (string str) {
   // TODO: optimize
-  foreach_reverse (i, c; str) {
+  foreach_reverse (immutable i, immutable char c; str) {
     if (c == '<' || c == '>' || c == '"' || c == '\'' || c == '&') {
       str = str[0..i]~'&'~entityNames[c]~';'~str[i+1..$];
     }
@@ -480,7 +480,7 @@ public string encodeEntities (string str) {
 public string encodeAllEntities (string str) {
   import std.utf;
   // TODO: optimize
-  foreach_reverse (i, dchar c; str) {
+  foreach_reverse (immutable i, immutable dchar c; str) {
     auto name = c in entityNames;
     if (name) str = str[0..i]~'&'~*name~';'~str[i+stride(str, i)..$];
   }
@@ -499,7 +499,7 @@ public string decodeEntities (string str) {
   auto buffers = new char[4][fragments.length-1];
   interleaved[0] = fragments[0];
 
-  foreach (n, fragment; fragments[1..$]) {
+  foreach (auto n, auto fragment; fragments[1..$]) {
     auto p = fragment.indexOf(';');
     enforce(p > 0, "Invalid entity (unescaped ampersand?)");
     dchar c;
@@ -698,7 +698,7 @@ private:
 static immutable string[256] escChars = {
   import std.string;
   string[256] res;
-  foreach (c; 0..256) {
+  foreach (immutable c; 0..256) {
     switch (c) {
       case '<': res[c] = "&lt;"; break;
       case '>': res[c] = "&gt;"; break;
@@ -716,7 +716,7 @@ static immutable string[256] escChars = {
 static immutable bool[256] escEscaped = {
   bool[256] res;
   res[] = true;
-  foreach (c; 0..256) {
+  foreach (immutable c; 0..256) {
     switch (c) {
       case '<': case '>': case '&': case '"': break;
       default:
@@ -736,7 +736,7 @@ unittest {
   XmlWriter xml;
   xml.startDocument();
   xml.startTag!"quotes"();
-  foreach (author, text; quotes) {
+  foreach (immutable author, immutable text; quotes) {
     xml.startTagWithAttributes!"quote"();
     xml.addAttribute!"author"(author);
     xml.endAttributes();
@@ -857,7 +857,7 @@ public:
   void put(U...) (U items) if (CanPutAll!U) {
     // TODO: check for static if length is 1
     auto cursorEnd = cursor;
-    foreach (item; items) {
+    foreach (auto item; items) {
       static if (is(typeof(cursor[0] = item))) ++cursorEnd;
       else static if (is(typeof(cursor[0..1] = item[0..1]))) cursorEnd += item.length;
         // TODO: is this too lax? it allows passing static arrays by value
@@ -876,7 +876,7 @@ public:
       static if (is(typeof(cursor[0] = item))) cursor[0] = item;
       else cursor[0..item.length] = item[];
     } else {
-      foreach (item; items)
+      foreach (auto item; items)
         static if (is(typeof(cursor[0] = item))) {
           *cursor++ = item;
         } else static if (is(typeof(cursor[0..1] = item[0..1]))) {
@@ -889,7 +889,7 @@ public:
   /// Unsafe. Use together with preallocate().
   void uncheckedPut(U...) (U items) if (CanPutAll!U) {
     auto cursor = this.cursor;
-    foreach (item; items) {
+    foreach (auto item; items) {
       static if (is(typeof(cursor[0] = item))) {
         *cursor++ = item;
       } else static if (is(typeof(cursor[0..1] = item[0..1]))) {

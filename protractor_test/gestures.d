@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module gestures;
+module gesturespt_test is aliced;
 private:
 
 import std.stdio;

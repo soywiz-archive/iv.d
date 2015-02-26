@@ -1111,7 +1111,7 @@ __gshared void function () rebuild = null;
 
 __gshared void function (in ref SDL_KeyboardEvent ev) onKeyDown = null;
 __gshared void function (in ref SDL_KeyboardEvent ev) onKeyUp = null;
-__gshared void function (char ch) onTextInput = null;
+__gshared void function (dchar ch) onTextInput = null;
 
 __gshared void function (in ref SDL_MouseButtonEvent ev) onMouseDown = null;
 __gshared void function (in ref SDL_MouseButtonEvent ev) onMouseUp = null;

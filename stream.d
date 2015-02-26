@@ -207,13 +207,13 @@ if (goodEndianness!es && isWriteableStream!TF && __traits(isIntegral, TD) && __t
     ubyte[TD.sizeof] b = void;
     version(LittleEndian) {
       // convert to big-endian
-      foreach_reverse (idx; 0..TD.sizeof) {
+      foreach_reverse (immutable idx; 0..TD.sizeof) {
         b[idx] = v&0xff;
         v >>= 8;
       }
     } else {
       // convert to little-endian
-      foreach (idx; 0..TD.sizeof) {
+      foreach (immutable idx; 0..TD.sizeof) {
         b[idx] = v&0xff;
         v >>= 8;
       }
@@ -238,13 +238,13 @@ if (goodEndianness!es && isReadableStream!TF && __traits(isIntegral, T))
     ulong v = 0;
     version(LittleEndian) {
       // convert from big-endian
-      foreach (idx; 0..T.sizeof) {
+      foreach (immutable idx; 0..T.sizeof) {
         v <<= 8;
         v |= b[idx];
       }
     } else {
       // conver from little-endian
-      foreach_reverse (idx; 0..T.sizeof) {
+      foreach_reverse (immutable idx; 0..T.sizeof) {
         v <<= 8;
         v |= b[idx];
       }
@@ -600,12 +600,12 @@ version(unittest_stream) {
   private void dump (const(ubyte)[] data, File fl=stdout) @trusted {
     for (usize ofs = 0; ofs < data.length; ofs += 16) {
       writef("%04X:", ofs);
-      foreach (i; 0..16) {
+      foreach (immutable i; 0..16) {
         if (i == 8) write(' ');
         if (ofs+i < data.length) writef(" %02X", data[ofs+i]); else write("   ");
       }
       write(" ");
-      foreach (auto i; 0..16) {
+      foreach (immutable i; 0..16) {
         if (ofs+i >= data.length) break;
         if (i == 8) write(' ');
         ubyte b = data[ofs+i];

@@ -318,7 +318,7 @@ private void initKeyTrans () @trusted {
   ttyKeyTrans["[H"] = "home";
   ttyKeyTrans["[F"] = "end";
   // arrows and specials with modifiers
-  foreach (i, c; ["shift+", "alt+", "alt+shift+", "ctrl+", "ctrl+shift+", "alt+ctrl+", "alt+ctrl+shift+"]) {
+  foreach (immutable i, immutable c; ["shift+", "alt+", "alt+shift+", "ctrl+", "ctrl+shift+", "alt+ctrl+", "alt+ctrl+shift+"]) {
     string t = "[1;%d".format(i+2);
     ttyKeyTrans[t~"A"] = c~"up";
     ttyKeyTrans[t~"B"] = c~"down";
@@ -334,7 +334,7 @@ private void initKeyTrans () @trusted {
     ttyKeyTrans[t~"R"] = c~"f3";
     ttyKeyTrans[t~"S"] = c~"f4";
     // xterm, spec+f5..f12
-    foreach (idx, fn; [15, 17, 18, 19, 20, 21, 23, 24]) {
+    foreach (immutable idx, immutable fn; [15, 17, 18, 19, 20, 21, 23, 24]) {
       string fs = "[%d".format(fn);
       ttyKeyTrans[fs~t1] = c~format("f%d", idx+5);
     }
@@ -363,27 +363,27 @@ private void initKeyTrans () @trusted {
   //
   ttyKeyTrans["[E"] = "num5"; // xterm
   // fx, ctrl+fx
-  foreach (i; 1..6) {
+  foreach (immutable i; 1..6) {
     ttyKeyTrans["[%d~".format(i+10)] = "f%d".format(i);
     ttyKeyTrans["[%d^".format(i+10)] = "ctrl+f%d".format(i);
     ttyKeyTrans["[%d@".format(i+10)] = "ctrl+shift+f%d".format(i);
   }
-  foreach (i; 6..11) {
+  foreach (immutable i; 6..11) {
     ttyKeyTrans["[%d~".format(i+11)] = "f%d".format(i);
     ttyKeyTrans["[%d^".format(i+11)] = "ctrl+f%d".format(i);
     ttyKeyTrans["[%d@".format(i+11)] = "ctrl+shift+f%d".format(i);
   }
-  foreach (i; 11..15) {
+  foreach (immutable i; 11..15) {
     ttyKeyTrans["[%d~".format(i+12)] = "f%d".format(i);
     ttyKeyTrans["[%d^".format(i+12)] = "ctrl+f%d".format(i);
     ttyKeyTrans["[%d@".format(i+12)] = "ctrl+shift+f%d".format(i);
   }
-  foreach (i; 15..17) {
+  foreach (immutable i; 15..17) {
     ttyKeyTrans["[%d~".format(i+13)] = "f%d".format(i);
     ttyKeyTrans["[%d^".format(i+13)] = "ctrl+f%d".format(i);
     ttyKeyTrans["[%d@".format(i+13)] = "ctrl+shift+f%d".format(i);
   }
-  foreach (i; 17..21) {
+  foreach (immutable i; 17..21) {
     ttyKeyTrans["[%d~".format(i+14)] = "f%d".format(i);
     ttyKeyTrans["[%d^".format(i+14)] = "ctrl+f%d".format(i);
     ttyKeyTrans["[%d@".format(i+14)] = "ctrl+shift+f%d".format(i);
@@ -437,7 +437,7 @@ string ttyReadString (string prompt, const(string)[] strlist=null, string str=st
   void clearHints () {
     if (prevLines) {
       stdout.write("\r\x1b[K");
-      foreach (n; 0..prevLines) stdout.write("\n\r\x1b[K");
+      foreach (; 0..prevLines) stdout.write("\n\r\x1b[K");
       stdout.writef("\x1b[%dA", prevLines);
       prevLines = 0;
     }
@@ -461,7 +461,7 @@ string ttyReadString (string prompt, const(string)[] strlist=null, string str=st
         auto s = ac[0];
         s = s[str.length..$];
         stdout.write("\x1b[0;1m", s);
-        foreach (_; 0..s.length) stdout.write("\x08");
+        foreach (; 0..s.length) stdout.write("\x08");
         stdout.write("\x1b[0m");
       }
     }
@@ -532,7 +532,7 @@ string ttyReadString (string prompt, const(string)[] strlist=null, string str=st
           }
           prevLines = min(ac.length/rc+(ac.length%rc != 0), ttyHeight-1);
           stdout.write("\r\n\x1b[1m"); // skip prompt line
-          foreach (i, immutable s; ac) {
+          foreach (immutable i, immutable s; ac) {
             if (i && i%rc == 0) stdout.writeln();
             stdout.write(s, " ");
           }

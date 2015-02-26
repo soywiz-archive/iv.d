@@ -91,13 +91,13 @@ struct Adler32 {
     if (data.length == 0) return;
     usize len = data.length*data[0].sizeof; // length in bytes
     const(ubyte)* dta = cast(const(ubyte)*)data.ptr;
-    foreach (_0; 0..len/NMAX) {
-      foreach (_1; 0..NMAX/16) mixin(genByteProcessors(16));
+    foreach (; 0..len/NMAX) {
+      foreach (; 0..NMAX/16) mixin(genByteProcessors(16));
       mixin(normS1S2);
     }
     len %= NMAX;
     if (len) {
-      foreach (_; 0..len) mixin(genByteProcessors(1));
+      foreach (; 0..len) mixin(genByteProcessors(1));
       mixin(normS1S2);
     }
   }
@@ -120,7 +120,7 @@ private:
   private static string genByteProcessors (int count) pure @safe nothrow {
     enum doOneByte = `s1 += *dta++; s2 += s1;`;
     string res = `{`;
-    foreach (_; 0..count) res ~= doOneByte;
+    foreach (; 0..count) res ~= doOneByte;
     return res~`}`;
   }
 
@@ -158,18 +158,18 @@ private struct Tree {
     /* clear code length count table */
     table[] = 0;
     /* scan symbol lengths, and sum code length counts */
-    foreach (l; lengths) {
+    foreach (immutable l; lengths) {
       if (l >= 16) throw new InflateError("invalid lengths");
       ++table[l];
     }
     table[0] = 0;
     /* compute offset table for distribution sort */
-    foreach (i, n; table) {
+    foreach (immutable i, immutable n; table) {
       offs[i] = sum;
       sum += n;
     }
     /* create code->symbol translation table (symbols sorted by code) */
-    foreach (ushort i, l; lengths) {
+    foreach (ushort i, immutable l; lengths) {
       if (l) {
         auto n = offs[l]++;
         if (n >= 288) throw new InflateError("invalid lengths");
@@ -295,7 +295,7 @@ private:
     // read Adler32
     uint a32; // autoinit
     ubyte bt = void;
-    foreach_reverse (n; 0..4) {
+    foreach_reverse (immutable n; 0..4) {
       try {
         if (!readOneByte(bt)) error("out of input data");
       } catch (Throwable e) {
@@ -368,7 +368,7 @@ private:
     if (hclen > 19) error("invalid tree");
     lengths[0..19] = 0;
     // read code lengths for code length alphabet
-    foreach (i; 0..hclen) lengths[clcidx[i]] = cast(ubyte)readBits(3, 0); // get 3 bits code length (0-7)
+    foreach (immutable i; 0..hclen) lengths[clcidx[i]] = cast(ubyte)readBits(3, 0); // get 3 bits code length (0-7)
     // build code length tree
     try { codeTree.buildTree(lengths[0..19]); } catch (Throwable e) { setErrorState(); throw e; }
     // decode code lengths for the dynamic trees
@@ -645,10 +645,10 @@ private immutable Tree sltree = {
   sl.table[7] = 24;
   sl.table[8] = 152;
   sl.table[9] = 112;
-  foreach (i; 0..24) sl.trans[i] = cast(ushort)(256+i);
-  foreach (ushort i; 0..144) sl.trans[24+i] = i;
-  foreach (i; 0..8) sl.trans[24+144+i] = cast(ushort)(280+i);
-  foreach (i; 0..112) sl.trans[24+144+8+i] = cast(ushort)(144+i);
+  foreach (immutable i; 0..24) sl.trans[i] = cast(ushort)(256+i);
+  foreach (immutable ushort i; 0..144) sl.trans[24+i] = i;
+  foreach (immutable i; 0..8) sl.trans[24+144+i] = cast(ushort)(280+i);
+  foreach (immutable i; 0..112) sl.trans[24+144+8+i] = cast(ushort)(144+i);
   return sl;
 }();
 
@@ -662,12 +662,12 @@ private immutable Tree sdtree = {
 
 private void fillBits (ubyte[] bits, uint delta) @safe nothrow {
   bits[0..delta] = 0;
-  foreach (i; 0..30-delta) bits[i+delta] = cast(ubyte)(i/delta);
+  foreach (immutable i; 0..30-delta) bits[i+delta] = cast(ubyte)(i/delta);
 }
 
 private void fillBase (ushort[] base, immutable(ubyte[30]) bits, ushort first) @safe nothrow {
   ushort sum = first;
-  foreach (i; 0..30) {
+  foreach (immutable i; 0..30) {
     base[i] = sum;
     sum += 1<<bits[i];
   }

@@ -75,7 +75,7 @@ string[] autocomplete (string cmd, const(string)[] cmdlist) @trusted nothrow {
   foreach (immutable s; cmdlist) {
     if (cmd.length <= s.length) {
       usize pos = cmd.length;
-      foreach (idx; 0..cmd.length) if (cmd[idx] != s[idx]) { pos = idx; break; }
+      foreach (immutable idx; 0..cmd.length) if (cmd[idx] != s[idx]) { pos = idx; break; }
       if (pos == cmd.length) {
         if (s.length > found.length) found = s;
         ++pfxcount;
@@ -92,7 +92,7 @@ string[] autocomplete (string cmd, const(string)[] cmdlist) @trusted nothrow {
   foreach (immutable s; cmdlist) {
     if (s.length >= slen) {
       usize pos = slen;
-      foreach (idx; 0..slen) if (found[idx] != s[idx]) { pos = idx; break; }
+      foreach (immutable idx; 0..slen) if (found[idx] != s[idx]) { pos = idx; break; }
       if (pos == slen) {
         // наше, запоминаем и правим префикс
         res[respos++] = s;

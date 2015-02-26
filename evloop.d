@@ -474,7 +474,7 @@ int processAll () /*@trusted nothrow*/ {
   version(unittest) dumpFDs();
   // process and shot fds
   auto end = pfdUsed;
-  foreach (uint idx; 1..pfdUsed) {
+  foreach (immutable uint idx; 1..pfdUsed) {
     if (pfds[idx].fd < 0) continue; // nothing to do
     FDFlags flg = FDFlags.None;
     auto rev = pfds[idx].revents;

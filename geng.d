@@ -427,7 +427,7 @@ if (isWriteableStream!ST && isInputRange!R && !isInfinite!R && is(ElementType!R 
     } else {
       g.buildNormPoints(pts, g.points);
     }
-    foreach (pt; pts) st.writeNum!float(cast(float)pt);
+    foreach (immutable pt; pts) st.writeNum!float(cast(float)pt);
     static if (!hasLength!R) {
       if (cnt == 0x7fff_ffff) throw new Exception("too many glyphs");
       ++cnt;

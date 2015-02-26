@@ -86,7 +86,7 @@ version(crt_log_enabled) {
   void logln(A...) (A a) @trusted nothrow {
     try {
       auto fo = File("debug.log", "a");
-      foreach (w; a) fo.write(to!string(w));
+      foreach (immutable w; a) fo.write(to!string(w));
       fo.writeln();
     } catch (Exception) {}
   }
@@ -322,7 +322,7 @@ private void reinitBuffers () @trusted {
   screenArea.set(0, 0, ttyWdt, ttyHgt);
   vbufs[0].length = ttyWdt*ttyHgt;
   vbufs[1].length = ttyWdt*ttyHgt;
-  foreach (idx, ref g; vbufs[0]) {
+  foreach (immutable idx, ref g; vbufs[0]) {
     g.ch = ' ';
     g.attr = Color.LightGray|(Color.Black<<4);
     vbufs[1][idx] = g;
@@ -477,7 +477,7 @@ private void updateScreen (Glyph[] vbuf, Glyph[] obuf) @trusted nothrow @nogc {
   }
 
   void putStr (string s) @trusted nothrow @nogc {
-    foreach (ch; s) putChar(ch);
+    foreach (immutable char ch; s) putChar(ch);
   }
 
   void putNum (usize n) @trusted nothrow @nogc {
@@ -556,7 +556,7 @@ private void updateScreen (Glyph[] vbuf, Glyph[] obuf) @trusted nothrow @nogc {
     } else {
       char[] n = toUTF8(utfs, vbuf[pos].ch);
       if (g1set) { putChar('\x0f'); g1set = false; }
-      foreach (ch; n) putChar(ch);
+      foreach (immutable char ch; n) putChar(ch);
     }
     obuf[pos] = vbuf[pos];
     ++pos;
@@ -682,7 +682,7 @@ private dchar decodeUtf8Char (ref const(char)[] str) @trusted nothrow @nogc {
   // starter must have at least 2 first bits set
   if ((bc&0b1100_0000) != 0b1100_0000) goto notUtf;
 
-  foreach (i; TypeTuple!(1, 2, 3)) {
+  foreach (immutable i; TypeTuple!(1, 2, 3)) {
     if (i == str.length) goto notUtf;
     tmp = str[i];
     if ((tmp&0xC0) != 0x80) goto notUtf;
@@ -748,7 +748,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
     }
   } else {
     // '_aApplycd1' is not nothrow
-    foreach (idx; 0..str.length) {
+    foreach (immutable idx; 0..str.length) {
       vbufs[0][pos].ch = str[idx];
       fixAttr(pos++, fg, bg);
     }
@@ -763,9 +763,9 @@ if (isSomeChar!T && isIntegral!CW && isIntegral!CH)
   Rect rc = void;
   if (!normRect(rc, x, y, width, height)) return;
   usize pos = rc.y*ttyWdt+rc.x;
-  foreach (_; 0..rc.height) {
+  foreach (; 0..rc.height) {
     usize px = pos;
-    foreach (_1; 0..rc.width) {
+    foreach (; 0..rc.width) {
       vbufs[0][px].ch = ch;
       fixAttr(px++, fg, bg);
     }
@@ -788,9 +788,9 @@ if (isIntegral!CW && isIntegral!CH)
   Rect rc = void;
   if (!normRect(rc, x, y, width, height)) return;
   usize pos = rc.y*ttyWdt+rc.x;
-  foreach (_; 0..rc.height) {
+  foreach (; 0..rc.height) {
     usize px = pos;
-    foreach (_1; 0..rc.width) fixAttr(px++, fg, bg);
+    foreach (; 0..rc.width) fixAttr(px++, fg, bg);
     pos += ttyWdt;
   }
 }
@@ -827,9 +827,9 @@ if (isIntegral!CW && isIntegral!CH)
   Rect rc = void;
   if (!normRect(rc, x, y, width, height)) return;
   usize pos = rc.y*ttyWdt+rc.x;
-  foreach (_; 0..rc.height) {
+  foreach (; 0..rc.height) {
     usize px = pos;
-    foreach (_1; 0..rc.width) setShadow(px++);
+    foreach (; 0..rc.width) setShadow(px++);
     pos += ttyWdt;
   }
 }
@@ -868,8 +868,8 @@ public:
     if (!mArea.empty) {
       usize pos = 0;
       mData = new Glyph[](width*height);
-      foreach (sy; mArea.y0..mArea.y1+1) {
-        foreach (sx; mArea.x0..mArea.x1+1) {
+      foreach (immutable sy; mArea.y0..mArea.y1+1) {
+        foreach (immutable sx; mArea.x0..mArea.x1+1) {
           mData[pos++] = readGlyph(sx, sy);
         }
       }
@@ -887,8 +887,8 @@ final:
   void blit (int x, int y) @trusted nothrow @nogc {
     if (!mArea.empty) {
       usize pos = 0;
-      foreach (sy; y..y+mArea.height) {
-        foreach (sx; x..x+mArea.width) {
+      foreach (immutable sy; y..y+mArea.height) {
+        foreach (immutable sx; x..x+mArea.width) {
           writeGlyph(sx, sy, mData[pos++]);
         }
       }
@@ -898,8 +898,8 @@ final:
   void read (int x, int y) @trusted nothrow @nogc {
     if (!mArea.empty) {
       usize pos = 0;
-      foreach (sy; y..y+mArea.height) {
-        foreach (sx; x..x+mArea.width) {
+      foreach (immutable sy; y..y+mArea.height) {
+        foreach (immutable sx; x..x+mArea.width) {
           mData[pos++] = readGlyph(sx, sy);
         }
       }
@@ -930,7 +930,7 @@ if (isIntegral!CW)
       if (--width == 0) return;
     }
   }
-  foreach (idx; 0..width-(hasLast ? 1 : 0)) {
+  foreach (immutable idx; 0..width-(hasLast ? 1 : 0)) {
     vbufs[0][pos].setLine(GraphLeft|GraphRight, mix);
     fixAttr(pos++, fg, bg);
   }
@@ -976,7 +976,7 @@ if (isIntegral!CH)
       if (--rc.height == 0) return;
     }
   }
-  foreach (idx; 0..rc.height-(hasLast ? 1 : 0)) {
+  foreach (immutable idx; 0..rc.height-(hasLast ? 1 : 0)) {
     vbufs[0][pos].setLine(GraphDown|GraphUp, mix);
     fixAttr(pos, fg, bg);
     pos += ttyWdt;

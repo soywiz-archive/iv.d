@@ -67,7 +67,7 @@ string decodeAscii85(T) (const(T)[] src) {
     }
   }
 
-  foreach (/*auto*/b; data) {
+  foreach (immutable b; data) {
     if (b <= 32 || b > 126) continue; // skip blanks
     if (b == 'z') {
       // zero tuple
@@ -114,7 +114,7 @@ string encodeAscii85(T) (const(T)[] src, int width=76) {
     } while (tmp-- > 0);
   }
 
-  foreach (/*auto*/b; data) {
+  foreach (immutable b; data) {
     switch (count++) {
       case 0: tuple |= b<<24; break;
       case 1: tuple |= b<<16; break;

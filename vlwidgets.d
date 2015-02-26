@@ -451,7 +451,7 @@ class Group : Widget {
 
 
   private final int widgetIndex (const Widget w) const nothrow {
-    foreach (idx, wd; mChildren) if (w is wd) return cast(int)idx;
+    foreach (immutable idx, auto wd; mChildren) if (w is wd) return cast(int)idx;
     return -1;
   }
 
@@ -475,7 +475,7 @@ class Group : Widget {
   /// is w direct child of this widget?
   override bool myWidget (const Widget w) const nothrow {
     if (w !is null) {
-      foreach (xw; mChildren) if (w is xw) return true;
+      foreach (auto xw; mChildren) if (w is xw) return true;
     }
     return false;
   }
@@ -485,7 +485,7 @@ class Group : Widget {
   override bool myOrChildWidget (const Widget w) const nothrow {
     if (w !is null) {
       if (myWidget(w)) return true;
-      foreach (xw; mChildren) if (xw.myWidget(w)) return true;
+      foreach (auto xw; mChildren) if (xw.myWidget(w)) return true;
     }
     return false;
   }
@@ -495,7 +495,7 @@ class Group : Widget {
   final Widget childToMyWidget (Widget w) nothrow {
     if (w !is null) {
       if (myWidget(w)) return w;
-      foreach (xw; mChildren) if (xw.myWidget(w)) return xw;
+      foreach (auto xw; mChildren) if (xw.myWidget(w)) return xw;
     }
     return null;
   }
@@ -504,7 +504,7 @@ class Group : Widget {
   /// in which direct child (x,y) is
   /// (x,y) are client coords (see localToClient())
   final Widget clientInWidget (in int x, in int y) nothrow {
-    foreach_reverse (xw; mChildren) {
+    foreach_reverse (auto xw; mChildren) {
       if (xw.visible && x >= xw.x && y >= xw.y && x < xw.x+xw.width && y < xw.y+xw.height) return xw;
     }
     return null;
@@ -518,7 +518,7 @@ class Group : Widget {
     assert(ovl !is null);
     debug(widgets) writeln("Group.paint()");
     mDirty = false;
-    foreach (idx, wd; mChildren) {
+    foreach (immutable idx, auto wd; mChildren) {
       //TODO: coords to parent; set ofs and clip; draw
       if (!wd.visible) {
         debug(widgets) writefln(" child #%s: invisible", idx);
@@ -687,7 +687,7 @@ final:
     if (wd !is null && wd.mOwner is this) {
       bool regainFocus = false;
       usize widx = mChildren.length;
-      foreach (idx, w; mChildren) if (w is wd) { widx = idx; break; }
+      foreach (immutable idx, auto w; mChildren) if (w is wd) { widx = idx; break; }
       assert(widx < mChildren.length);
       if (wd.focused) {
         // remove focus
@@ -964,7 +964,7 @@ void focus (Widget w) { focused = w; }
 /// add widget
 VLWindow opOpAssign(string op) (VLWindow wd) if (op == "+" || op == "~") {
   assert(wd !is null);
-  foreach (w; wList) if (w is wd) return wd;
+  foreach (auto w; wList) if (w is wd) return wd;
   wList ~= wd;
   if (wFocused is null) wd.focus();
   return wd;
@@ -974,7 +974,7 @@ VLWindow opOpAssign(string op) (VLWindow wd) if (op == "+" || op == "~") {
 VLWindow opOpAssign(string op) (VLWindow wd) if (op == "-") {
   assert(wd !is null);
   usize widx = wList.length;
-  foreach (idx, w; wList) if (w is wd) { widx = idx; break; }
+  foreach (immutable idx, auto w; wList) if (w is wd) { widx = idx; break; }
   if (widx < wList.length) {
     //TODO: move focus to another window
     if (wd.focused) focused = null;
@@ -995,7 +995,7 @@ void closeWindows () {
 
 ////////////////////////////////////////////////////////////////////////////////
 void paintWidgets () @trusted {
-  foreach (w; wList) {
+  foreach (auto w; wList) {
     if (w.dirty) w.paint(null);
     w.mOvl.setPixel(0, 0, Transparent);
     w.mOvl.setPixel(w.mOvl.width-1, 0, Transparent);

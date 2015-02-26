@@ -101,8 +101,8 @@ private void wrWriteWidth(char lfill=' ', char rfill=' ')
                 bool center,
                 const(char[]) s,
                 bool leftIsMinus=false) {
-  static immutable char[64] spacesl = () { char[64] r; foreach (/*auto*/ p; 0..64) r[p] = lfill; return r; }();
-  static immutable char[64] spacesr = () { char[64] r; foreach (/*auto*/ p; 0..64) r[p] = rfill; return r; }();
+  static immutable char[64] spacesl = () { char[64] r; foreach (immutable p; 0..64) r[p] = lfill; return r; }();
+  static immutable char[64] spacesr = () { char[64] r; foreach (immutable p; 0..64) r[p] = rfill; return r; }();
   usize stpos = 0;
   // fix maxlen
   if (maxlen != int.min) {
