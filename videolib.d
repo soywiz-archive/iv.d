@@ -504,17 +504,15 @@ if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral,
 }
 
 // generate some templates
-private string genRGBGetSet (string cname) @safe pure {
-  return
-`@gcc_inline ubyte rgb`~cname~`() (Color clr) @safe pure nothrow @nogc { return ((clr>>`~cname[0]~`Shift)&0xff); }`~
-`@gcc_inline Color rgbSet`~cname~`(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {`~
-`return (clr&~`~cname[0]~`Mask)|((v&0xff)<<`~cname[0]~`Shift); }`;
-}
+private enum genRGBGetSet(string cname) =
+  `@gcc_inline ubyte rgb`~cname~`() (Color clr) @safe pure nothrow @nogc { return ((clr>>`~cname[0]~`Shift)&0xff); }`~
+  `@gcc_inline Color rgbSet`~cname~`(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {`~
+  `return (clr&~`~cname[0]~`Mask)|((v&0xff)<<`~cname[0]~`Shift); }`;
 
-mixin(genRGBGetSet("Alpha"));
-mixin(genRGBGetSet("Red"));
-mixin(genRGBGetSet("Green"));
-mixin(genRGBGetSet("Blue"));
+mixin(genRGBGetSet!"Alpha");
+mixin(genRGBGetSet!"Red");
+mixin(genRGBGetSet!"Green");
+mixin(genRGBGetSet!"Blue");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -558,34 +556,31 @@ void blitRect (int x, int y, int rx, int ry, int rw, int rh, const(Color)[] data
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private string buildBlit1x (string name, string op, string wrt) @safe pure {
-  return
+private enum buildBlit1x(string name, string op, string wrt) =
 `private void `~name~` () @trusted nothrow @nogc {`~
 `  auto s = cast(immutable(ubyte)*)vscr;`~
 `  auto d = cast(ubyte*)vscr2x;`~
-`  foreach (_; 0..vsWidth*vsHeight) {`~
+`  foreach (; 0..vsWidth*vsHeight) {`~
 `    ubyte i = `~op~`;`~
 `    `~wrt~`;`~
 `    s += 4;`~
 `    d += 4;`~
 `  }`~
 `}`;
-}
 
 
-mixin(buildBlit1x("blit1xBW", "(s[0]*28+s[1]*151+s[2]*77)/256", "d[0] = d[1] = d[2] = i"));
-mixin(buildBlit1x("blit1xGreen", "(s[0]*28+s[1]*151+s[2]*77)/256", "d[0] = d[2] = 0; d[1] = i"));
+mixin(buildBlit1x!("blit1xBW", "(s[0]*28+s[1]*151+s[2]*77)/256", "d[0] = d[1] = d[2] = i"));
+mixin(buildBlit1x!("blit1xGreen", "(s[0]*28+s[1]*151+s[2]*77)/256", "d[0] = d[2] = 0; d[1] = i"));
 
 
-private string buildBlit2x (string name, string op) @safe pure {
-return
+private enum buildBlit2x(string name, string op) =
 `private void `~name~` () @trusted nothrow @nogc {`~
 `  auto s = cast(immutable(ubyte)*)vscr;`~
 `  auto d = cast(uint*)vscr2x;`~
 `  immutable auto wdt = vsWidth;`~
 `  immutable auto wdt2x = vsWidth*2;`~
-`  foreach (y; 0..vsHeight) {`~
-`    foreach (x; 0..wdt) {`~
+`  foreach (immutable y; 0..vsHeight) {`~
+`    foreach (immutable x; 0..wdt) {`~
        op~
 `      immutable uint c1 = ((((c0&0x00ff00ff)*6)>>3)&0x00ff00ff)|(((c0&0x0000ff00)*6)>>3)&0x0000ff00;`~
 `      d[0] = d[1] = c0;`~
@@ -597,12 +592,11 @@ return
 `    d += wdt2x;`~
 `  }`~
 `}`;
-}
 
 
-mixin(buildBlit2x("blit2xTV", "immutable uint c0 = (cast(immutable(uint)*)s)[0];"));
-mixin(buildBlit2x("blit2xTVBW", "immutable ubyte i = cast(ubyte)((s[0]*28+s[1]*151+s[2]*77)/256); immutable uint c0 = (i<<16)|(i<<8)|i;"));
-mixin(buildBlit2x("blit2xTVGreen", "immutable ubyte i = cast(ubyte)((s[0]*28+s[1]*151+s[2]*77)/256); immutable uint c0 = i<<8;"));
+mixin(buildBlit2x!("blit2xTV", "immutable uint c0 = (cast(immutable(uint)*)s)[0];"));
+mixin(buildBlit2x!("blit2xTVBW", "immutable ubyte i = cast(ubyte)((s[0]*28+s[1]*151+s[2]*77)/256); immutable uint c0 = (i<<16)|(i<<8)|i;"));
+mixin(buildBlit2x!("blit2xTVGreen", "immutable ubyte i = cast(ubyte)((s[0]*28+s[1]*151+s[2]*77)/256); immutable uint c0 = i<<8;"));
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1849,13 +1843,13 @@ nothrow:
   void selectionRect (int phase, int x0, int y0, int wdt, int hgt, Color col0, Color col1=Transparent) @trusted {
     if (wdt > 0 && hgt > 0) {
       // top
-      foreach (f; x0..x0+wdt) { putPixel(f, y0, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
+      foreach (immutable f; x0..x0+wdt) { putPixel(f, y0, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
       // right
-      foreach (f; y0+1..y0+hgt) { putPixel(x0+wdt-1, f, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
+      foreach (immutable f; y0+1..y0+hgt) { putPixel(x0+wdt-1, f, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
       // bottom
-      foreach_reverse (f; x0..x0+wdt-1) { putPixel(f, y0+hgt-1, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
+      foreach_reverse (immutable f; x0..x0+wdt-1) { putPixel(f, y0+hgt-1, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
       // left
-      foreach_reverse (f; y0..y0+hgt-1) { putPixel(x0, f, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
+      foreach_reverse (immutable f; y0..y0+hgt-1) { putPixel(x0, f, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
     }
   }
 
@@ -2007,7 +2001,7 @@ nothrow:
         while (h-- > 0) {
           auto src = cast(immutable(uint)*)my;
           auto dst = dest;
-          foreach_reverse (dx; 0..w) {
+          foreach_reverse (immutable dx; 0..w) {
             immutable uint s = *src++;
             static if (btype == "SrcAlpha") {
               if ((s&AMask) == Transparent) { ++dst; continue; }
