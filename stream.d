@@ -1044,3 +1044,135 @@ unittest {
   rwc(t, 0, 'e');
   t.close();
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// turn streams to ranges
+import std.range;
+
+auto streamAsRange(STP) (auto ref STP st) if (isReadableStream!STP || isWriteableStream|STP) {
+  import std.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
+  static struct StreamRange(ST) {
+  private:
+    ST strm;
+    static if (isReadableStream!ST) {
+      ubyte[1] curByte;
+      bool curByteInited;
+    }
+
+    this(STX) (/*auto ref*/ STX ast) {
+      strm = ast;
+      //static if (isReadableStream!ST) popFront();
+    }
+
+  public:
+    // output range part
+    static if (isWriteableStream!ST) {
+      // `put`
+      void put (in ubyte data) { strm.rawWriteExact((&data)[0..1]); }
+      void put (const(ubyte)[] data) { strm.rawWriteExact(data); }
+    }
+
+    // input range part
+    static if (isReadableStream!ST) {
+      // `empty`
+      static if (streamHasEOF!ST) {
+        private enum hasRealEOF = true;
+        @property bool empty () { return strm.eof; }
+      } else static if (streamHasTell!ST && streamHasSize!ST) {
+        private enum hasRealEOF = true;
+        @property bool empty () { return (strm.tell >= strm.size); }
+      } else static if (streamHasTell!ST && streamHasSeek!ST) {
+        private enum hasRealEOF = true;
+        @property bool empty () {
+          immutable cpos = strm.tell;
+          strm.seek(0, SEEK_END);
+          immutable res = (cpos >= strm.tell);
+          strm.seek(cpos, SEEK_SET);
+          return res;
+        }
+      } else {
+        // endless stream
+        //enum empty = false;
+        private enum hasRealEOF = false;
+        private bool atEof;
+        @property bool eof () const { return atEof; }
+      }
+
+      // `length`
+      static if (streamHasTell!ST && (streamHasSeek!ST || streamHasSize!ST)) {
+        private enum hasRealLength = true;
+        @property usize length () {
+          immutable cpos = strm.tell;
+          static if (streamHasSize!ST) {
+            immutable sz = strm.size;
+          } else {
+            strm.seek(0, SEEK_END);
+            immutable sz = strm.tell;
+            strm.seek(cpos, SEEK_SET);
+          }
+          if (cpos >= sz) return 0;
+          immutable len = sz-cpos;
+          if (len > usize.max) {
+            import core.exception : onRangeError;
+            onRangeError();
+          }
+          return cast(usize)len;
+        }
+      } else {
+        private enum hasRealLength = false;
+      }
+
+      // `front`
+      @property ubyte front () {
+        if (!curByteInited) popFront();
+        return curByte[0];
+      }
+
+      // `popFront`
+      void popFront () {
+        curByteInited = true;
+        static if (hasRealEOF) {
+          if (strm.eof) {
+            curByte[0] = 0;
+          } else {
+            // std.stdio.File.eof is updated only after `rawRead()`
+            auto res = strm.rawRead(curByte[]);
+            if (res.length == 0) curByte[0] = 0;
+          }
+        } else {
+          if (atEof) {
+            curByte[0] = 0;
+          } else {
+            auto res = strm.rawRead(curByte[]);
+            if (res.length == 0) { atEof = true; curByte[0] = 0; }
+          }
+        }
+      }
+
+      // `opIndex`
+      // not now; it's slow and unreliable
+      /*
+      static if (streamHasTell!ST && streamHasSeek!ST && hasRealLength) {
+        ubyte opIndex (usize pos) {
+          import core.exception : onRangeError;
+          if (strm.eof) {
+            onRangeError();
+          } else {
+            if (pos >= this.length) onRangeError();
+            immutable cpos = strm.tell;
+            strm.seek(pos, SEEK_CUR);
+            ubyte[1] res;
+            strm.rawReadExact(res[]);
+            strm.seek(cpos, SEEK_SET);
+            return res[0];
+          }
+          assert(0);
+        }
+      }
+      */
+    }
+  }
+
+  return StreamRange!STP(st);
+}
