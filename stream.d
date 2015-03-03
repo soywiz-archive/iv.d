@@ -63,14 +63,14 @@ class StreamException : Exception {
 
 // ////////////////////////////////////////////////////////////////////////// //
 enum isReadableStream(T) = is(typeof((inout int=0) {
-  T t = T.init;
+  auto t = T.init;
   ubyte[1] b;
   auto v = cast(void[])b;
   t.rawRead(v);
 }));
 
 enum isWriteableStream(T) = is(typeof((inout int=0) {
-  T t = T.init;
+  auto t = T.init;
   ubyte[1] b;
   t.rawWrite(cast(void[])b);
 }));
@@ -80,7 +80,7 @@ enum isRWStream(T) = isReadableStream!T && isWriteableStream!T;
 template isSeekableStream(T) {
   enum isSeekableStream = is(typeof((inout int=0) {
     import core.stdc.stdio : SEEK_END;
-    T t = T.init;
+    auto t = T.init;
     t.seek(0, SEEK_END);
     ulong pos = t.tell;
   }));
@@ -88,34 +88,34 @@ template isSeekableStream(T) {
 
 // bad name!
 enum isClosableStream(T) = is(typeof((inout int=0) {
-  T t = T.init;
+  auto t = T.init;
   t.close();
 }));
 
 // bad name!
 enum streamHasEOF(T) = is(typeof((inout int=0) {
-  T t = T.init;
+  auto t = T.init;
   bool n = t.eof;
 }));
 
 enum streamHasSeek(T) = is(typeof((inout int=0) {
   import core.stdc.stdio : SEEK_END;
-  T t = T.init;
+  auto t = T.init;
   t.seek(0, SEEK_END);
 }));
 
 enum streamHasTell(T) = is(typeof((inout int=0) {
-  T t = T.init;
+  auto t = T.init;
   ulong pos = t.tell;
 }));
 
 enum streamHasName(T) = is(typeof((inout int=0) {
-  T t = T.init;
+  auto t = T.init;
   string n = t.name;
 }));
 
 enum streamHasSize(T) = is(typeof((inout int=0) {
-  T t = T.init;
+  auto t = T.init;
   ulong pos = t.size;
 }));
 
@@ -953,7 +953,6 @@ public:
   ~this () { close(); }
 
   void opAssign() (auto ref PartialStreamRO src) {
-    import std.stdio;
     if (isOpen) {
       // assigning to opened stream
       if (src.isOpen) {
@@ -1048,11 +1047,10 @@ unittest {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // turn streams to ranges
-import std.range;
-
 auto streamAsRange(STP, string rngtype="any") (auto ref STP st) if (isReadableStream!STP || isWriteableStream|STP) {
   static assert(rngtype == "any" || rngtype == "read" || rngtype == "write", "invalid range type: "~rngtype);
 
+  //import std.range;
   import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
   static struct StreamRange(ST) {
