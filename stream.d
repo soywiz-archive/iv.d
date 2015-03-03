@@ -1049,7 +1049,7 @@ unittest {
 // turn streams to ranges
 // rngtype can be: "any", "read", "write"
 // you can add ",indexable" to rngtype to include `opIndex()`
-auto streamAsRange(STP, string rngtype="any") (auto ref STP st) if (isReadableStream!STP || isWriteableStream|STP) {
+auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableStream!STP || isWriteableStream|STP) {
   enum {
     HasR = 0x01,
     HasW = 0x02,
@@ -1105,11 +1105,11 @@ auto streamAsRange(STP, string rngtype="any") (auto ref STP st) if (isReadableSt
   static if ((typeflags&HasRW) == HasRW) {
     enum rdStream = isReadableStream!STP;
     enum wrStream = isWriteableStream!STP;
-  } else if (typeflags&HasR) {
+  } else static if (typeflags&HasR) {
     static assert(isReadableStream!STP, "stream must be readable");
     enum rdStream = isReadableStream!STP;
     enum wrStream = false;
-  } else if (typeflags&HasW) {
+  } else static if (typeflags&HasW) {
     static assert(isWriteableStream!STP, "stream must be writeable");
     enum rdStream = false;
     enum wrStream = isWriteableStream!STP;
