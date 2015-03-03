@@ -1047,35 +1047,98 @@ unittest {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // turn streams to ranges
+// rngtype can be: "any", "read", "write"
+// you can add ",indexable" to rngtype to include `opIndex()`
 auto streamAsRange(STP, string rngtype="any") (auto ref STP st) if (isReadableStream!STP || isWriteableStream|STP) {
-  static assert(rngtype == "any" || rngtype == "read" || rngtype == "write", "invalid range type: "~rngtype);
+  enum {
+    HasR = 0x01,
+    HasW = 0x02,
+    HasRW = HasR|HasW,
+    HasI = 0x04
+  }
+  template ParseType (string s) {
+    private static string get (string str) {
+      usize spos = 0;
+      while (spos < str.length && str[spos] <= ' ') ++spos;
+      usize epos = spos;
+      while (epos < str.length && str[epos] != ',') ++epos;
+      while (epos > 0 && str[epos-1] <= ' ') --epos;
+      return str[spos..epos];
+    }
+    private static string skip (string str) {
+      usize spos = 0;
+      while (spos < str.length && str[spos] != ',') ++spos;
+      if (spos < str.length) ++spos;
+      while (spos < str.length && str[spos] <= ' ') ++spos;
+      return str[spos..$];
+    }
+    private ubyte parse (string str) {
+      ubyte has;
+      while (str.length > 0) {
+        auto w = get(str);
+        switch (w) {
+          case "read": has |= HasR; break;
+          case "write": has |= HasW; break;
+          case "any": has |= HasR|HasW; break;
+          case "indexable": has |= HasI; break;
+          default:
+            foreach (immutable char ch; w) {
+              switch (ch) {
+                case 'r': has |= HasR; break;
+                case 'w': has |= HasW; break;
+                case 'i': has |= HasI; break;
+                default: assert(0, "invalid mode word: '"~w~"'");
+              }
+            }
+            break;
+        }
+        str = skip(str);
+      }
+      if (has == 0) has = HasR|HasW; // any
+      return has;
+    }
+    enum ParseType = parse(s);
+  }
 
-  //import std.range;
+  enum typeflags = ParseType!(rngtype);
+  // setup stream type
+  static if ((typeflags&HasRW) == HasRW) {
+    enum rdStream = isReadableStream!STP;
+    enum wrStream = isWriteableStream!STP;
+  } else if (typeflags&HasR) {
+    static assert(isReadableStream!STP, "stream must be readable");
+    enum rdStream = isReadableStream!STP;
+    enum wrStream = false;
+  } else if (typeflags&HasW) {
+    static assert(isWriteableStream!STP, "stream must be writeable");
+    enum rdStream = false;
+    enum wrStream = isWriteableStream!STP;
+  } else {
+    static assert(0, "invalid range type: "~rngtype);
+  }
+
   import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
   static struct StreamRange(ST) {
   private:
     ST strm;
-    static if (isReadableStream!ST) {
+    static if (rdStream) {
       ubyte[1] curByte;
       bool curByteInited;
     }
 
-    this(STX) (/*auto ref*/ STX ast) {
-      strm = ast;
-      //static if (isReadableStream!ST) popFront();
-    }
+    this(STX) (auto ref STX ast) { strm = ast; }
 
   public:
     // output range part
-    static if (isWriteableStream!ST) {
+    static if (wrStream) {
       // `put`
       void put (in ubyte data) { strm.rawWriteExact((&data)[0..1]); }
       void put (const(ubyte)[] data) { strm.rawWriteExact(data); }
     }
 
     // input range part
-    static if (isReadableStream!ST) {
+    static if (rdStream) {
       // `empty`
       static if (streamHasEOF!ST) {
         private enum hasRealEOF = true;
@@ -1152,26 +1215,19 @@ auto streamAsRange(STP, string rngtype="any") (auto ref STP st) if (isReadableSt
       }
 
       // `opIndex`
-      // not now; it's slow and unreliable
-      /*
-      static if (streamHasTell!ST && streamHasSeek!ST && hasRealLength) {
+      // it's slow and unreliable
+      static if ((typeflags&HasI) && streamHasTell!ST && streamHasSeek!ST && hasRealLength) {
         ubyte opIndex (usize pos) {
           import core.exception : onRangeError;
-          if (strm.eof) {
-            onRangeError();
-          } else {
-            if (pos >= this.length) onRangeError();
-            immutable cpos = strm.tell;
-            strm.seek(pos, SEEK_CUR);
-            ubyte[1] res;
-            strm.rawReadExact(res[]);
-            strm.seek(cpos, SEEK_SET);
-            return res[0];
-          }
-          assert(0);
+          if (pos >= this.length) onRangeError();
+          immutable cpos = strm.tell;
+          strm.seek(pos, SEEK_CUR);
+          ubyte[1] res;
+          strm.rawReadExact(res[]);
+          strm.seek(cpos, SEEK_SET);
+          return res[0];
         }
       }
-      */
     }
   }
 
