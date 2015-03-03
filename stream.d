@@ -453,7 +453,7 @@ string readLine(TF) (auto ref TF fl, bool* eolhit=null, usize maxSize=1024*1024)
 // ////////////////////////////////////////////////////////////////////////// //
 public final class MemoryStream {
 private:
-  import std.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
+  import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
   ubyte[] data;
   uint curpos;
@@ -529,7 +529,7 @@ static assert(streamHasTell!MemoryStream);
 // ////////////////////////////////////////////////////////////////////////// //
 public final class MemoryStreamRO {
 private:
-  import std.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
+  import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
   const(ubyte)[] data;
   uint curpos;
@@ -930,7 +930,7 @@ private:
   }
 
 public:
-  import std.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
+  import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
   immutable string name;
 
@@ -1050,8 +1050,11 @@ unittest {
 // turn streams to ranges
 import std.range;
 
-auto streamAsRange(STP) (auto ref STP st) if (isReadableStream!STP || isWriteableStream|STP) {
-  import std.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
+auto streamAsRange(STP, string rngtype="any") (auto ref STP st) if (isReadableStream!STP || isWriteableStream|STP) {
+  static assert(rngtype == "any" || rngtype == "read" || rngtype == "write", "invalid range type: "~rngtype);
+
+  import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
+
   static struct StreamRange(ST) {
   private:
     ST strm;
