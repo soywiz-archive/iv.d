@@ -1124,10 +1124,20 @@ auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableSt
     ST strm;
     static if (rdStream) {
       ubyte[1] curByte;
-      bool curByteInited;
+      bool atEof;
     }
 
-    this(STX) (auto ref STX ast) { strm = ast; }
+    this(STX) (auto ref STX ast) {
+      strm = ast;
+      static if (rdStream) {
+        atEof = true;
+        // catch errors here, as `std.stdio.File` throws exception on reading from "w" files
+        try {
+          auto rd = strm.rawRead(curByte);
+          if (rd.length != 0) atEof = false;
+        } catch (Exception) {}
+      }
+    }
 
   public:
     // output range part
@@ -1140,28 +1150,7 @@ auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableSt
     // input range part
     static if (rdStream) {
       // `empty`
-      static if (streamHasEOF!ST) {
-        private enum hasRealEOF = true;
-        @property bool empty () { return strm.eof; }
-      } else static if (streamHasTell!ST && streamHasSize!ST) {
-        private enum hasRealEOF = true;
-        @property bool empty () { return (strm.tell >= strm.size); }
-      } else static if (streamHasTell!ST && streamHasSeek!ST) {
-        private enum hasRealEOF = true;
-        @property bool empty () {
-          immutable cpos = strm.tell;
-          strm.seek(0, SEEK_END);
-          immutable res = (cpos >= strm.tell);
-          strm.seek(cpos, SEEK_SET);
-          return res;
-        }
-      } else {
-        // endless stream
-        //enum empty = false;
-        private enum hasRealEOF = false;
-        private bool atEof;
-        @property bool eof () const { return atEof; }
-      }
+      @property bool empty () const { return atEof; }
 
       // `length`
       static if (streamHasTell!ST && (streamHasSeek!ST || streamHasSize!ST)) {
@@ -1188,29 +1177,14 @@ auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableSt
       }
 
       // `front`
-      @property ubyte front () {
-        if (!curByteInited) popFront();
-        return curByte[0];
-      }
+      @property ubyte front () const { return curByte[0]; }
 
       // `popFront`
       void popFront () {
-        curByteInited = true;
-        static if (hasRealEOF) {
-          if (strm.eof) {
-            curByte[0] = 0;
-          } else {
-            // std.stdio.File.eof is updated only after `rawRead()`
-            auto res = strm.rawRead(curByte[]);
-            if (res.length == 0) curByte[0] = 0;
-          }
-        } else {
-          if (atEof) {
-            curByte[0] = 0;
-          } else {
-            auto res = strm.rawRead(curByte[]);
-            if (res.length == 0) { atEof = true; curByte[0] = 0; }
-          }
+        curByte[0] = 0;
+        if (!atEof) {
+          auto res = strm.rawRead(curByte[]);
+          if (res.length == 0) atEof = true;
         }
       }
 
