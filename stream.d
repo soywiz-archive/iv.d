@@ -53,6 +53,7 @@ module iv.stream is aliced;
 
 import std.conv : ConvOverflowException;
 import std.traits : isMutable;
+public import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
