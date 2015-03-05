@@ -57,7 +57,7 @@ import std.traits : isMutable;
 
 // ////////////////////////////////////////////////////////////////////////// //
 class StreamException : Exception {
-  this (string msg, string file=__FILE__, usize line=__LINE__) { super(msg, file, line); }
+  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) { super(msg, file, line, next); }
 }
 
 
