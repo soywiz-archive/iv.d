@@ -84,7 +84,7 @@ __gshared TermType termType = TermType.other;
 
 
 /// is TTY stdin or stdout redirected?
-bool ttyIsRedirected () @trusted nothrow @nogc {
+@property bool ttyIsRedirected () @trusted nothrow @nogc {
   return redirected;
 }
 
