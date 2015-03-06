@@ -57,6 +57,8 @@ import core.sys.posix.unistd;
 import core.sys.posix.sys.ioctl;
 import core.sys.posix.sys.select;
 
+public import std.typecons : Flag, Yes, No;
+
 
 private __gshared termios origMode;
 private __gshared bool inRawMode = false;
@@ -110,7 +112,7 @@ TTYMode ttySetNormal () @trusted @nogc {
 
 
 /// returns previous mode or BAD
-TTYMode ttySetRaw () @trusted @nogc {
+TTYMode ttySetRaw (Flag!"waitkey" waitKey=Yes.waitkey) @trusted @nogc {
   if (redirected) return TTYMode.BAD;
   synchronized(xlock) {
     if (!inRawMode) {
@@ -129,7 +131,7 @@ TTYMode ttySetRaw () @trusted @nogc {
       // local modes: echoing off, canonical off, no extended functions, no signal chars (^Z,^C)
       raw.c_lflag &= ~(ECHO|ICANON|IEXTEN|ISIG);
       // control chars: set return condition: min number of bytes and timer; we want read to return every single byte, without timeout
-      raw.c_cc[VMIN] = 1; // one byte
+      raw.c_cc[VMIN] = (waitKey ? 1 : 0); // wait/poll mode
       raw.c_cc[VTIME] = 0; // no timer
       // put terminal in raw mode after flushing
       if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return TTYMode.BAD;
@@ -138,6 +140,23 @@ TTYMode ttySetRaw () @trusted @nogc {
     }
     return TTYMode.RAW;
   }
+}
+
+
+/// set wait/poll mode
+bool ttySetWaitKey (bool doWait) @trusted @nogc {
+  if (redirected) return false;
+  synchronized(xlock) {
+    if (inRawMode) {
+      termios raw;
+      tcflush(STDIN_FILENO, TCIOFLUSH);
+      if (tcgetattr(STDIN_FILENO, &raw) == 0) redirected = false;
+      raw.c_cc[VMIN] = (doWait ? 1 : 0); // wait/poll mode
+      if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return false;
+      return true;
+    }
+  }
+  return false;
 }
 
 
