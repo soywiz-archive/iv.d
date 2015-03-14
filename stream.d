@@ -983,6 +983,7 @@ public:
     }
   }
 
+  @property long stofs () const @safe pure nothrow @nogc { return (isOpen ? mStData.start : 0); }
   @property long tell () const @safe pure nothrow @nogc { return (isOpen ? mStData.curpos : 0); }
   @property bool eof () const @trusted pure nothrow @nogc { return (isOpen ? mStData.curpos >= mStData.size : true); }
 
