@@ -23,7 +23,7 @@ pragma(lib, "tag");
 
 // ////////////////////////////////////////////////////////////////////////// //
 class TagLibException : Exception {
-  this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe @pure @nothrow {
+  this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow {
     super(msg, file, line, next);
   }
 }
@@ -130,7 +130,7 @@ private:
       `taglib_tag_set_`~propName~`(mTags, s.toStringz);`~
       `m`~capitalize(propName)~` = s.idup;`~
       `}`~
-      `@property string `~propName~` () const @trusted @nothrow { return (mInited ? m`~capitalize(propName)~` : null); }`;
+      `@property string `~propName~` () const @safe pure nothrow { return (mInited ? m`~capitalize(propName)~` : null); }`;
   }
 
   static string stripL() (string str) {
@@ -229,8 +229,9 @@ shared static this () {
 // ////////////////////////////////////////////////////////////////////////// //
 private:
 extern(C):
-@nothrow:
+nothrow:
 @trusted:
+@nogc:
 
 typedef TagLibFile = void*;
 typedef TagLibTag = void*;
