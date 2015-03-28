@@ -55,11 +55,11 @@ version(GNU) {
   import gcc.attribute;
 } else {
   private struct Attribute(A...) { A args; }
-  auto attribute(A...) (A args) if (A.length > 0 && is(A[0] == string)) { return Attribute!A(args); }
+  auto attribute(A...) (A args) if (A.length > 0 && is(A[0] == string)) => Attribute!A(args);
 }
 
 /*
-@attribute("forceinline") int test () { return 42; }
+@attribute("forceinline") int test () => 42;
 
 
 void main () {

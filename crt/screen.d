@@ -257,7 +257,7 @@ struct Glyph {
   dchar ch = ' '; // bits 27-30: special graphics char
   ubyte attr = Color.LightGray; // 4-7: background; 0-3: foreground
 
-  @property bool valid () const pure nothrow @nogc { return (ch != GraphInvalid); }
+  @property bool valid () const pure nothrow @nogc => (ch != GraphInvalid);
 
   // 0: not a graphic char
   @property ubyte g1char () const pure nothrow @nogc {
@@ -574,11 +574,11 @@ void flushScreen () @trusted nothrow @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // windowArea managemet
-@property ref Rect window () @trusted nothrow @nogc { return windowArea; }
-void makeFSWindow () @trusted nothrow @nogc { windowArea = screenArea; }
+@property ref Rect window () @trusted nothrow @nogc => windowArea;
+void makeFSWindow () @trusted nothrow @nogc => windowArea = screenArea;
 
-@property int screenWidth () @trusted nothrow @nogc { return screenArea.width; }
-@property int screenHeight () @trusted nothrow @nogc { return screenArea.height; }
+@property int screenWidth () @trusted nothrow @nogc => screenArea.width;
+@property int screenHeight () @trusted nothrow @nogc => screenArea.height;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -877,9 +877,9 @@ public:
   }
 
 final:
-  @property Rect area () const @safe nothrow @nogc { return mArea; }
-  @property int width () const @safe nothrow @nogc { return (!mArea.empty ? mArea.width : 0); }
-  @property int height () const @safe nothrow @nogc { return (!mArea.empty ? mArea.height : 0); }
+  @property Rect area () const @safe nothrow @nogc => mArea;
+  @property int width () const @safe nothrow @nogc => (!mArea.empty ? mArea.width : 0);
+  @property int height () const @safe nothrow @nogc => (!mArea.empty ? mArea.height : 0);
 
   void restore () @trusted nothrow @nogc { if (!mArea.empty) blit(mArea.x, mArea.y); }
   void save () @trusted nothrow @nogc { if (!mArea.empty) read(mArea.x, mArea.y); }

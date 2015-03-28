@@ -99,7 +99,7 @@ public:
   }
 
 @safe:
-  this (uint aseed) { seed(aseed); }
+  this (uint aseed) => seed(aseed);
 
   void seed (uint seed) {
     a = 0xf1ea5eed;
@@ -166,7 +166,7 @@ public:
   }
 
 @safe:
-  this (ulong aseed) { seed(aseed); }
+  this (ulong aseed) => seed(aseed);
 
   void seed (ulong seed) {
     z = cast(uint)(seed>>32);
@@ -218,7 +218,7 @@ public:
   }
 
 @safe:
-  this (uint aseed) { seed(aseed); }
+  this (uint aseed) => seed(aseed);
 
   void seed (uint seed) {
     x = (seed ? seed : 0xdeadf00du);

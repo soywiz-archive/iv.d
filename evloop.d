@@ -62,7 +62,7 @@ public long mtimeToMSecs (in MonoTime mt) @safe pure nothrow {
 }
 
 
-public long currentMSecs () @safe nothrow { return mtimeToMSecs(MonoTime.currTime); }
+public long currentMSecs () @safe nothrow => mtimeToMSecs(MonoTime.currTime);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -76,7 +76,7 @@ __gshared bool doGlobalQuit = false;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public bool isGlobalQuit () @trusted nothrow @nogc { return doGlobalQuit; }
+public bool isGlobalQuit () @trusted nothrow @nogc => doGlobalQuit;
 
 public void sendQuitSignal (bool global=false) @trusted @nogc {
   import core.sys.posix.signal : raise, SIGINT;

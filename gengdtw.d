@@ -47,7 +47,7 @@ FP angleDiff(FP) (in FP alpha, in FP beta) if (isFloatingPoint!FP) {
 }
 
 
-FP sqr(FP) (in FP x) if (isFloatingPoint!FP) { return x*x; }
+FP sqr(FP) (in FP x) if (isFloatingPoint!FP) => x*x;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -65,11 +65,11 @@ private:
 
 public:
   this () @safe nothrow @nogc {}
-  this (string aname) @safe nothrow @nogc { mName = aname; }
+  this (string aname) @safe nothrow @nogc => mName = aname;
 
 final:
-  @property bool valid () const @safe pure nothrow @nogc { return (points.length >= 2); }
-  @property bool finished () const @safe pure nothrow @nogc { return (points.length >= 2 && mFinished); }
+  @property bool valid () const @safe pure nothrow @nogc => (points.length >= 2);
+  @property bool finished () const @safe pure nothrow @nogc => (points.length >= 2 && mFinished);
 
   auto clear () @safe nothrow @nogc {
     points = points.init;
@@ -119,13 +119,13 @@ final:
     return this;
   }
 
-  @property string name () const @safe pure nothrow @nogc { return mName; }
-  @property void name (string v) @safe nothrow @nogc { mName = v; }
+  @property string name () const @safe pure nothrow @nogc => mName;
+  @property void name (string v) @safe nothrow @nogc => mName = v;
 
-  usize length () const @safe pure nothrow @nogc { return points.length; }
+  usize length () const @safe pure nothrow @nogc => points.length;
   alias opDollar = length;
 
-  auto opIndex (usize idx) const @safe pure nothrow @nogc { return (idx < points.length ? points[idx] : Point.init); }
+  auto opIndex (usize idx) const @safe pure nothrow @nogc => (idx < points.length ? points[idx] : Point.init);
 
   auto finish () @safe nothrow @nogc {
     import std.math : hypot, atan2, PI;
@@ -285,10 +285,10 @@ final:
     return score;
   }
 
-  bool match (const(DTWGlyph) pat) const nothrow { return (pat !is null ? pat.score(this) >= DTWMinGestureMatch : false); }
+  bool match (const(DTWGlyph) pat) const nothrow => (pat !is null ? pat.score(this) >= DTWMinGestureMatch : false);
 
 private:
-  DTWFloat angle (usize idx) const @safe pure nothrow @nogc { return (idx < points.length ? points[idx].alpha : 0.0); }
+  DTWFloat angle (usize idx) const @safe pure nothrow @nogc => (idx < points.length ? points[idx].alpha : 0.0);
 
   DTWFloat angleDiff (const(DTWGlyph) b, usize idx0, usize idx1) const @safe pure nothrow @nogc {
     import std.math : abs;

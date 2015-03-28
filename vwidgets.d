@@ -381,11 +381,11 @@ public:
   }
 
  final { @safe { nothrow { @nogc {
-  @property WID id () const pure { return mID; }
+  @property WID id () const pure => mID;
 
   /// return widget flags (see Flags enum)
-  @property uint flags () const pure { return mFlags; }
-  @property string caption () const pure { return mCaption; }
+  @property uint flags () const pure => mFlags;
+  @property string caption () const pure => mCaption;
 
   /// get widget palette
   @property const(Palette*) pal () const {
@@ -406,7 +406,7 @@ public:
     }
   }
 
-  @property bool dirty () const pure { return mDirty; }
+  @property bool dirty () const pure => mDirty;
   // we can't reset dirty flag, you know
   @property void dirty (bool v) {
     if (!mDirty && v) {
@@ -415,17 +415,17 @@ public:
     }
   }
 
-  @property Rect area () const { return mArea; }
+  @property Rect area () const => mArea;
 
-  @property int x () const pure { return mArea.x; }
-  @property int y () const pure { return mArea.y; }
-  @property int width () const pure { return mArea.width; }
-  @property int height () const pure { return mArea.height; }
+  @property int x () const pure => mArea.x;
+  @property int y () const pure => mArea.y;
+  @property int width () const pure => mArea.width;
+  @property int height () const pure => mArea.height;
 
-  @property int x0 () const pure { return mArea.x0; }
-  @property int y0 () const pure { return mArea.y0; }
-  @property int x1 () const pure { return mArea.x1; }
-  @property int y1 () const pure { return mArea.y1; }
+  @property int x0 () const pure => mArea.x0;
+  @property int y0 () const pure => mArea.y0;
+  @property int x1 () const pure => mArea.x1;
+  @property int y1 () const pure => mArea.y1;
 
   void moveTo (int ax, int ay) {
     if (mArea.x != ax || mArea.y != ay) {
@@ -450,28 +450,28 @@ public:
     }
   }
 
-  @property void x (int ax) { moveTo(ax, mArea.y); }
-  @property void y (int ay) { moveTo(mArea.x, ay); }
+  @property void x (int ax) => moveTo(ax, mArea.y);
+  @property void y (int ay) => moveTo(mArea.x, ay);
 
-  @property void width (int awdt) { resizeTo(awdt, mArea.height); }
-  @property void height (int ahgt) { resizeTo(mArea.width, ahgt); }
+  @property void width (int awdt) => resizeTo(awdt, mArea.height);
+  @property void height (int ahgt) => resizeTo(mArea.width, ahgt);
 
-  @property void x0 (int ax) { this.x = ax; }
-  @property void y0 (int ay) { this.y = ay; }
-  @property void x1 (int ax) { this.width = ax-mArea.x+1; }
-  @property void y1 (int ay) { this.height = ay-mArea.y+1; }
+  @property void x0 (int ax) => this.x = ax;
+  @property void y0 (int ay) => this.y = ay;
+  @property void x1 (int ax) => this.width = ax-mArea.x+1;
+  @property void y1 (int ay) => this.height = ay-mArea.y+1;
 
   /// is widget alive? widget can be dead, but not collected yet
-  @property bool alive () const pure { return ((mFlags&Flags.Dead) == 0); }
+  @property bool alive () const pure => ((mFlags&Flags.Dead) == 0);
 
   /// is widget focused?
-  @property bool focused () const { return (WDesktop.focused is this); }
+  @property bool focused () const => (WDesktop.focused is this);
 
   /// is widget active? widget can be active, but not focused
-  @property bool active () const pure { return ((mFlags&Flags.Active) != 0); }
+  @property bool active () const pure => ((mFlags&Flags.Active) != 0);
 
   /// is widget enabled?
-  @property bool enabled () const pure { return ((mFlags&Flags.Disabled) == 0); }
+  @property bool enabled () const pure => ((mFlags&Flags.Disabled) == 0);
 
   /// change widget enabled state
   @property void enabled (bool v) {
@@ -482,7 +482,7 @@ public:
   }
 
   /// is widget visible?
-  @property bool visible () const pure { return ((mFlags&Flags.Hidden) == 0); }
+  @property bool visible () const pure => ((mFlags&Flags.Hidden) == 0);
 
   /// change widget visible state
   @property void visible (bool v) {
@@ -511,12 +511,12 @@ public:
   }
 
 
-  @property inout(Widget) topOwner () inout pure { return (mOwner is null ? this : mOwner.topOwner); }
-  @property inout(Widget) firstWidget () inout pure { return (mPrev is null ? this : mPrev.firstWidget); }
-  @property inout(Widget) lastWidget () inout pure { return (mNext is null ? this : mNext.lastWidget); }
+  @property inout(Widget) topOwner () inout pure => (mOwner is null ? this : mOwner.topOwner);
+  @property inout(Widget) firstWidget () inout pure => (mPrev is null ? this : mPrev.firstWidget);
+  @property inout(Widget) lastWidget () inout pure => (mNext is null ? this : mNext.lastWidget);
 
   /// is w direct child of this widget?
-  bool isMyChild (const(Widget) w) const pure { return (w !is null && (w.id in mChildren) !is null); }
+  bool isMyChild (const(Widget) w) const pure => (w !is null && (w.id in mChildren) !is null);
 
   /// is w direct or indirect child of this widget?
   bool isChild (const(Widget) w) const pure @trusted {
@@ -525,14 +525,14 @@ public:
     return false;
   }
 
-  inout(EventCB) eventCB () inout pure { return mECB; }
+  inout(EventCB) eventCB () inout pure => mECB;
   EventCB eventCB (EventCB ncb) {
     auto res = mECB;
     mECB = ncb;
     return res;
   }
 
-  @property bool skipPaint () const pure { return ((mFlags&(Flags.Hidden|Flags.Dead)) == 0); }
+  @property bool skipPaint () const pure => ((mFlags&(Flags.Hidden|Flags.Dead)) == 0);
  }}}} // final
 
   protected @property final VLOverlay overlay () {
@@ -584,7 +584,7 @@ public:
 
 
 final:
-  usize length () const pure @safe nothrow @nogc { return mChildren.length; }
+  usize length () const pure @safe nothrow @nogc => mChildren.length;
   alias opDollar = length;
 
   // foreach overloading
@@ -723,10 +723,10 @@ class WGroup : Widget {
   }
 
 final:
-  final Widget opOpAssign(string op : "~") (Widget w) { addWidget(w); }
-  final Widget opOpAssign(string op : "+") (Widget w) { addWidget(w); }
-  final Widget opOpAssign(string op : "-") (Widget w) { takeWidget(w); }
-  final bool opBinaryRight(string op : "in") (inout(Widget) w) inout @trusted { return isMyChild(w); }
+  final Widget opOpAssign(string op : "~") (Widget w) => addWidget(w);
+  final Widget opOpAssign(string op : "+") (Widget w) => addWidget(w);
+  final Widget opOpAssign(string op : "-") (Widget w) => takeWidget(w);
+  final bool opBinaryRight(string op : "in") (inout(Widget) w) inout @trusted => isMyChild(w);
 }
 
 
@@ -795,7 +795,7 @@ static: // and everything is static here
 }
 
 
-@property Widget focused () nothrow { return wFocused; }
+@property Widget focused () nothrow => wFocused;
 
 @property void focused (Widget w) {
   if (w !is null && w !is wFocused && w.canBeActivated) {
@@ -814,7 +814,7 @@ static: // and everything is static here
   }
 }
 
-void focus (Widget w) { focused = w; }
+void focus (Widget w) => focused = w;
 
 
 /// add widget
@@ -900,10 +900,10 @@ static VLWindow inWindow (in int x, in int y) nothrow {
 
 / *
   // x and y are in local coords for this widget
-  bool onMouseMotion (int x, int y, uint buttons, int xrel, int yrel) { return false; }
-  bool onMouseDouble (int x, int y, ubyte button, uint buttons) { return false; }
-  bool onMouseDown (int x, int y, ubyte button, uint buttons) { return false; }
-  bool onMouseUp (int x, int y, ubyte button, uint buttons) { return false; }
+  bool onMouseMotion (int x, int y, uint buttons, int xrel, int yrel) => false;
+  bool onMouseDouble (int x, int y, ubyte button, uint buttons) => false;
+  bool onMouseDown (int x, int y, ubyte button, uint buttons) => false;
+  bool onMouseUp (int x, int y, ubyte button, uint buttons) => false;
 * /
 */
 
@@ -921,21 +921,21 @@ private bool bubbleEvent (bool delegate (Widget) handler, Widget wd=null) {
 
 
 bool onKeyDown (in ref SDL_KeyboardEvent ev) {
-  bool doIt (Widget wd) { return wd.onKeyDown(ev.keysym.sym, ev.keysym.mod); }
+  bool doIt (Widget wd) => wd.onKeyDown(ev.keysym.sym, ev.keysym.mod);
   //writefln("KEYDOWN! key=%s; mod=%s", ev.keysym.sym, ev.keysym.mod);
   return bubbleEvent(&doIt);
 }
 
 
 bool onKeyUp (in ref SDL_KeyboardEvent ev) {
-  bool doIt (Widget wd) { return wd.onKeyUp(ev.keysym.sym, ev.keysym.mod); }
+  bool doIt (Widget wd) => wd.onKeyUp(ev.keysym.sym, ev.keysym.mod);
   return bubbleEvent(&doIt);
 }
 
 
 bool onMouseWheel (in ref SDL_MouseWheelEvent ev) {
   uint btns = SDL_GetMouseState(null, null);
-  bool doIt (Widget wd) { return wd.onMouseWheel(ev.x, ev.y, btns); }
+  bool doIt (Widget wd) => wd.onMouseWheel(ev.x, ev.y, btns);
   return bubbleEvent(&doIt);
 }
 
@@ -1082,13 +1082,13 @@ public:
     }
   }
 
-  @property const(Palette*) defaultPalette () @safe nothrow @nogc { return mDefaultPalette; }
+  @property const(Palette*) defaultPalette () @safe nothrow @nogc => mDefaultPalette;
 
-  @property Widget focused () @safe nothrow @nogc { return mFocused; }
+  @property Widget focused () @safe nothrow @nogc => mFocused;
 
-  //Widget opOpAssign(string op : "~") (Widget w) { addWidget(w); }
-  //Widget opOpAssign(string op : "+") (Widget w) { addWidget(w); }
-  //bool opBinaryRight(string op : "in") (inout(Widget) w) inout @trusted { return isMyChild(w); }
+  //Widget opOpAssign(string op : "~") (Widget w) => addWidget(w);
+  //Widget opOpAssign(string op : "+") (Widget w) => addWidget(w);
+  //bool opBinaryRight(string op : "in") (inout(Widget) w) inout @trusted => isMyChild(w);
 
 private:
   // draw window

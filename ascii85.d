@@ -87,9 +87,9 @@ if (isInputRange!RI &&
     }
 
     static if (!isInfinite!RI) {
-      @property bool empty () const pure nothrow @nogc { return isEmpty; }
+      @property bool empty () const pure nothrow @nogc => isEmpty;
     }
-    @property ubyte front () const pure nothrow @nogc { return curCh; }
+    @property ubyte front () const pure nothrow @nogc => curCh;
 
     static if (isForwardRange!RI) {
       @property auto save() () {
@@ -209,10 +209,10 @@ if (isInputRange!RI &&
     }
 
     static if (!isInfinite!RI) {
-      @property bool empty () const pure nothrow @nogc { return isEmpty; }
-      @property char front () const pure nothrow @nogc { return (isEmpty ? 0 : cast(char)buf[bpos]); }
+      @property bool empty () const pure nothrow @nogc => isEmpty;
+      @property char front () const pure nothrow @nogc => (isEmpty ? 0 : cast(char)buf[bpos]);
     } else {
-      @property char front () const pure nothrow @nogc { return cast(char)buf[bpos]; }
+      @property char front () const pure nothrow @nogc => cast(char)buf[bpos];
     }
 
     static if (isForwardRange!RI) {

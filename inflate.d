@@ -630,8 +630,8 @@ public:
     return buf;
   }
 
-  @property bool eof () const pure @safe nothrow @nogc { return (state == State.EOF); }
-  @property bool invalid () const pure @safe nothrow @nogc { return (state == State.Dead); }
+  @property bool eof () const pure @safe nothrow @nogc => (state == State.EOF);
+  @property bool invalid () const pure @safe nothrow @nogc => (state == State.Dead);
 }
 
 

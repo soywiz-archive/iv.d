@@ -67,11 +67,11 @@ struct Timer {
     Paused
   }
 
-  @property auto state () @safe const nothrow @nogc { return mState; }
+  @property auto state () @safe const nothrow @nogc => mState;
 
-  @property bool stopped () @safe const nothrow @nogc { return (mState == State.Stopped); }
-  @property bool running () @safe const nothrow @nogc { return (mState == State.Running); }
-  @property bool paused () @safe const nothrow @nogc { return (mState == State.Paused); }
+  @property bool stopped () @safe const nothrow @nogc => (mState == State.Stopped);
+  @property bool running () @safe const nothrow @nogc => (mState == State.Running);
+  @property bool paused () @safe const nothrow @nogc => (mState == State.Paused);
 
   void reset () @trusted nothrow {
     mAccum = Duration.zero;

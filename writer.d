@@ -75,7 +75,7 @@ private import std.traits : isIntegral, isPointer, StripTypedef;
 
 __gshared void delegate (scope const(char[]), scope int fd=1) @trusted nothrow @nogc  wrwriter;
 
-public @property auto WrWriter () @trusted nothrow @nogc { return wrwriter; }
+public @property auto WrWriter () @trusted nothrow @nogc => wrwriter;
 public @property auto WrWriter (typeof(wrwriter) cv) @trusted nothrow @nogc { auto res = wrwriter; wrwriter = cv; return res; }
 
 
@@ -723,28 +723,28 @@ void wrwritef(int fd, string fmt, AA...) (AA args) {
 ////////////////////////////////////////////////////////////////////////////////
 public:
 
-void fdwritef(int fd, string fmt, A...) (A args) { wrwritef!(fd, fmt)(args); }
-void fdwrite(int fd, A...) (A args) { wrwritef!(fd, "%*")(args); }
-void fdwriteln(int fd, A...) (A args) { wrwritef!(fd, "%*\n")(args); }
+void fdwritef(int fd, string fmt, A...) (A args) => wrwritef!(fd, fmt)(args);
+void fdwrite(int fd, A...) (A args) => wrwritef!(fd, "%*")(args);
+void fdwriteln(int fd, A...) (A args) => wrwritef!(fd, "%*\n")(args);
 
-void writef(string fmt, A...) (A args) { wrwritef!(1, fmt)(args); }
-void errwritef(string fmt, A...) (A args) { wrwritef!(2, fmt)(args); }
+void writef(string fmt, A...) (A args) => wrwritef!(1, fmt)(args);
+void errwritef(string fmt, A...) (A args) => wrwritef!(2, fmt)(args);
 
-void writefln(string fmt, A...) (A args) { wrwritef!(1, fmt~"\n")(args); }
-void errwritefln(string fmt, A...) (A args) { wrwritef!(2, fmt~"\n")(args); }
+void writefln(string fmt, A...) (A args) => wrwritef!(1, fmt~"\n")(args);
+void errwritefln(string fmt, A...) (A args) => wrwritef!(2, fmt~"\n")(args);
 
-void write(A...) (A args) { wrwritef!(1, "%*")(args); }
-void errwrite(A...) (A args) { wrwritef!(2, "%*")(args); }
+void write(A...) (A args) => wrwritef!(1, "%*")(args);
+void errwrite(A...) (A args) => wrwritef!(2, "%*")(args);
 
-void writeln(A...) (A args) { wrwritef!(1, "%*\n")(args); }
-void errwriteln(A...) (A args) { wrwritef!(2, "%*\n")(args); }
+void writeln(A...) (A args) => wrwritef!(1, "%*\n")(args);
+void errwriteln(A...) (A args) => wrwritef!(2, "%*\n")(args);
 
 
 ////////////////////////////////////////////////////////////////////////////////
 version(writer_test)
 unittest {
   class A {
-    override string toString () const { return "{A}"; }
+    override string toString () const => "{A}";
   }
 
   char[] n = ['x', 'y', 'z'];

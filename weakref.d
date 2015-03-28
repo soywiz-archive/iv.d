@@ -47,9 +47,9 @@ final class Weak(T : Object) {
     return (object !is null);
   }
 
-  void clear () @trusted { object = null; }
+  void clear () @trusted => object = null;
 
-  void opAssign (T obj) @trusted { object = obj; }
+  void opAssign (T obj) @trusted => object = obj;
 
   private void hook (Object obj) @trusted {
     if (obj !is null) {
@@ -106,8 +106,8 @@ unittest {
 
   static class A {
     int n;
-    this (int nn) @trusted nothrow { n = nn; }
-    ~this () @trusted { writeln("A:~this()"); }
+    this (int nn) @trusted nothrow => n = nn;
+    ~this () @trusted => writeln("A:~this()");
   }
 
   auto a = new A(42);

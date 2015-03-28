@@ -99,7 +99,7 @@ private:
 
 public:
   this () @safe nothrow @nogc {}
-  this (string aname) @safe nothrow @nogc { mName = aname; }
+  this (string aname) @safe nothrow @nogc => mName = aname;
   this (string aname, in GengPatternPoints apat) @safe nothrow @nogc {
     mName = aname;
     patpoints[] = apat[];
@@ -107,13 +107,13 @@ public:
   }
 
 final:
-  @property bool valid () const @safe pure nothrow @nogc { return (mNormalized || points.length >= 4); }
-  @property bool normalized () const @safe pure nothrow @nogc { return mNormalized; }
+  @property bool valid () const @safe pure nothrow @nogc => (mNormalized || points.length >= 4);
+  @property bool normalized () const @safe pure nothrow @nogc => mNormalized;
 
-  @property string name () const @safe pure nothrow @nogc { return mName; }
-  @property void name (string v) @safe nothrow @nogc { mName = v; }
+  @property string name () const @safe pure nothrow @nogc => mName;
+  @property void name (string v) @safe nothrow @nogc => mName = v;
 
-  usize length () const @safe pure nothrow @nogc { return (mNormalized ? NormalizedPoints : points.length/2); }
+  usize length () const @safe pure nothrow @nogc => (mNormalized ? NormalizedPoints : points.length/2);
   alias opDollar = length;
 
   auto x (usize idx) const @safe pure nothrow @nogc {

@@ -39,10 +39,10 @@ struct StringStream {
     this.s = (s~ditch)[0..$-ditch.length];
   }
 
-  void read (out char c) { c = s[position++]; }
-  void seekCur (sizediff_t offset) { position += offset; }
-  @property usize size () const { return s.length; }
-  @property bool eof () const { return (position >= s.length); }
+  void read (out char c) => c = s[position++];
+  void seekCur (sizediff_t offset) => position += offset;
+  @property usize size () const => s.length;
+  @property bool eof () const => (position >= s.length);
 }
 
 
@@ -64,9 +64,9 @@ class XmlNode {
   XmlNodeType type;
   ulong startPos, endPos;
 
-  this (Stream s) { parse(s); }
-  this (StringStream* s) { parse(s); }
-  this (string s) { this(new StringStream(s)); }
+  this (Stream s) => parse(s);
+  this (StringStream* s) => parse(s);
+  this (string s) => this(new StringStream(s));
 
   private final void parse(S) (S s) {
     startPos = s.position;
@@ -258,7 +258,7 @@ class XmlNode {
     return children[index];
   }
 
-  final @property usize length () const { return children.length; }
+  final @property usize length () const => children.length;
 
   int opApply (int delegate (ref XmlNode) dg) {
     int result = 0;
@@ -301,7 +301,7 @@ class XmlDocument : XmlNode {
 
   this (Stream s) { this(); parse(s); }
   this (StringStream* s) { this(); parse(s); }
-  this (string s) { this(new StringStream(s)); }
+  this (string s) => this(new StringStream(s));
 
   final void parse(S) (S s) {
     skipWhitespace(s);
@@ -316,7 +316,7 @@ class XmlDocument : XmlNode {
 }
 
 
-XmlDocument xmlParse(T) (T source) { return new XmlDocument(source); }
+XmlDocument xmlParse(T) (T source) => new XmlDocument(source);
 
 
 private:
@@ -535,16 +535,16 @@ struct CustomXmlWriter(WRITER, bool PRETTY) {
   static if (PRETTY) {
     uint indentLevel = 0;
 
-    void newLine () { output.put('\n'); }
-    void startLine () { output.allocate(indentLevel)[] = ' '; }
-    void indent () { ++indentLevel; }
+    void newLine () => output.put('\n');
+    void startLine () => output.allocate(indentLevel)[] = ' ';
+    void indent () => ++indentLevel;
     void outdent () { assert(indentLevel); --indentLevel; }
   }
 
   // verify well-formedness
   debug {
     string[] tagStack;
-    void pushTag (string tag) { tagStack ~= tag; }
+    void pushTag (string tag) => tagStack ~= tag;
     void popTag () {
       assert(tagStack.length, "No tag to close");
       tagStack = tagStack[0..$-1];
@@ -846,7 +846,7 @@ private:
 
 public:
   /// Preallocate
-  this (usize capacity) { reserve(capacity); }
+  this (usize capacity) => reserve(capacity);
 
   /// Start with a given buffer
   this (I[] arr) {
@@ -927,11 +927,11 @@ public:
     }
   }
 
-  void opOpAssign(string op, U) (U item) if (op == "~" && is(typeof(put!U))) { put(item); }
+  void opOpAssign(string op, U) (U item) if (op == "~" && is(typeof(put!U))) => put(item);
 
-  I[] get () { return cast(I[])start[0..cursor-start]; }
+  I[] get () => cast(I[])start[0..cursor-start];
 
-  @property usize length () const { return cursor-start; }
+  @property usize length () const => cursor-start;
 
   // mutable types only
   static if (is(I == T)) {
@@ -943,6 +943,6 @@ public:
 
     /// Effectively empties the data, but preserves the storage for reuse.
     /// Same as setting length to 0.
-    void clear () { cursor = start; }
+    void clear () => cursor = start;
   }
 }

@@ -152,7 +152,7 @@ public:
     }
   }
 
-  @property final bool dirty () const nothrow { return mDirty; }
+  @property final bool dirty () const nothrow => mDirty;
   // we can't reset dirty flag, you know
   @property final void dirty (bool v) nothrow {
     if (!mDirty && v) {
@@ -170,19 +170,19 @@ public:
     return null;
   }
 
-  @property final Widget lastWidget () nothrow { return lastWidgetImpl(); }
+  @property final Widget lastWidget () nothrow => lastWidgetImpl();
 
-  @property final Rect area () const nothrow { return mArea; }
+  @property final Rect area () const nothrow => mArea;
 
-  @property final int x () const nothrow { return mArea.x; }
-  @property final int y () const nothrow { return mArea.y; }
-  @property final int width () const nothrow { return mArea.width; }
-  @property final int height () const nothrow { return mArea.height; }
+  @property final int x () const nothrow => mArea.x;
+  @property final int y () const nothrow => mArea.y;
+  @property final int width () const nothrow => mArea.width;
+  @property final int height () const nothrow => mArea.height;
 
-  @property final int x0 () const nothrow { return mArea.x0; }
-  @property final int y0 () const nothrow { return mArea.y0; }
-  @property final int x1 () const nothrow { return mArea.x1; }
-  @property final int y1 () const nothrow { return mArea.y1; }
+  @property final int x0 () const nothrow => mArea.x0;
+  @property final int y0 () const nothrow => mArea.y0;
+  @property final int x1 () const nothrow => mArea.x1;
+  @property final int y1 () const nothrow => mArea.y1;
 
   @property final void x (int ax) {
     if (mArea.x != ax) { mArea.x = ax; dirty = true; onPositionChanged(); }
@@ -199,14 +199,14 @@ public:
     if (hgt != mArea.height) { mArea.height = hgt; dirty = true; onSizeChanged(); }
   }
 
-  @property final void x0 (int ax) { this.x = ax; }
-  @property final void y0 (int ay) { this.y = ay; }
-  @property final void x1 (int ax) { this.width = ax-mArea.x+1; }
-  @property final void y1 (int ay) { this.height = ay-mArea.y+1; }
+  @property final void x0 (int ax) => this.x = ax;
+  @property final void y0 (int ay) => this.y = ay;
+  @property final void x1 (int ax) => this.width = ax-mArea.x+1;
+  @property final void y1 (int ay) => this.height = ay-mArea.y+1;
 
 
   /// return widget flags (see Flags enum)
-  @property final uint flags () const nothrow { return mFlags; }
+  @property final uint flags () const nothrow => mFlags;
 
   /// can this widget be activated? it should be alive, visible, not disabled
   /// and so it's owners
@@ -218,15 +218,15 @@ public:
   }
 
   /// is widget alive? widget can be dead, but not collected yet
-  @property final bool alive () const nothrow { return ((mFlags&Flags.Dead) == 0); }
+  @property final bool alive () const nothrow => ((mFlags&Flags.Dead) == 0);
 
   /// is widget focused?
-  @property final bool focused () const nothrow { return ((mFlags&Flags.Focused) != 0 && VLDesk.focused is this); }
-  @property final void focused (bool v) { focus(); }
+  @property final bool focused () const nothrow => ((mFlags&Flags.Focused) != 0 && VLDesk.focused is this);
+  @property final void focused (bool v) => focus();
 
-  @property protected final bool semiFocused () const nothrow { return ((mFlags&Flags.Focused) != 0); }
+  @property protected final bool semiFocused () const nothrow => ((mFlags&Flags.Focused) != 0);
 
-  void focus () { setFocusedFlag(true); }
+  void focus () => setFocusedFlag(true);
 
   protected void setFocusedFlag (bool setit, Widget src=null) {
     if (!alive) return;
@@ -238,7 +238,7 @@ public:
   }
 
   /// is widget enabled?
-  @property final bool enabled () const nothrow { return ((mFlags&Flags.Disabled) == 0); }
+  @property final bool enabled () const nothrow => ((mFlags&Flags.Disabled) == 0);
 
   /// change widget enabled state
   @property final void enabled (bool v) {
@@ -256,7 +256,7 @@ public:
   }
 
   /// is widget visible?
-  @property final bool visible () const nothrow { return ((mFlags&Flags.Hidden) == 0); }
+  @property final bool visible () const nothrow => ((mFlags&Flags.Hidden) == 0);
 
   /// change widget visible state
   @property final void visible (bool v) {
@@ -275,10 +275,10 @@ public:
 
 
   /// is w direct child of this widget?
-  bool myWidget (const Widget w) const nothrow { return false; }
+  bool myWidget (const Widget w) const nothrow => false;
 
   /// is w direct or indirect child of this widget?
-  bool myOrChildWidget (const Widget w) const nothrow { return false; }
+  bool myOrChildWidget (const Widget w) const nothrow => false;
 
 
   /// set/remove callback
@@ -306,7 +306,7 @@ public:
 
 
   /// is global (x,y) in this widget?
-  bool localInMe (in int x, in int y) const nothrow { return mArea.inside(x, y); }
+  bool localInMe (in int x, in int y) const nothrow => mArea.inside(x, y);
 
 
   /// convert (x,y) from global coords to widget local coords
@@ -361,7 +361,7 @@ public:
   /// overlay clip region set to widget dimensions
   abstract void paint (VLOverlay ovl);
 
-  void onAction () { callECB("onAction"); }
+  void onAction () => callECB("onAction");
 
   void onAdopted () { dirty = true; callECB("onAdopted"); } /// called after widget was added to children
   void onOrphaned () { dirty = true; callECB("onOrphaned"); } /// called before widget will be removed from children
@@ -375,17 +375,17 @@ public:
   void onPositionChanged () { dirty = true; callECB("onPositionChanged"); }
   void onSizeChanged () { dirty = true; callECB("onSizeChanged"); }
 
-  bool onKeyDown (int keycode, ushort keymod) { return false; }
-  bool onKeyUp (int keycode, ushort keymod) { return false; }
+  bool onKeyDown (int keycode, ushort keymod) => false;
+  bool onKeyUp (int keycode, ushort keymod) => false;
 
   // x<0: left; x>0: right
   // y<0: down; x>0: up
-  bool onMouseWheel (int x, int y, uint buttons) { return false; }
+  bool onMouseWheel (int x, int y, uint buttons) => false;
   // x and y are in local coords for this widget
-  bool onMouseMotion (int x, int y, uint buttons, int xrel, int yrel) { return false; }
-  bool onMouseDouble (int x, int y, ubyte button, uint buttons) { return false; }
-  bool onMouseDown (int x, int y, ubyte button, uint buttons) { return false; }
-  bool onMouseUp (int x, int y, ubyte button, uint buttons) { return false; }
+  bool onMouseMotion (int x, int y, uint buttons, int xrel, int yrel) => false;
+  bool onMouseDouble (int x, int y, ubyte button, uint buttons) => false;
+  bool onMouseDown (int x, int y, ubyte button, uint buttons) => false;
+  bool onMouseUp (int x, int y, ubyte button, uint buttons) => false;
 
 
 protected:
@@ -589,17 +589,17 @@ class Group : Widget {
   }
 
   override bool onMouseDouble (int x, int y, ubyte button, uint buttons) {
-    bool doIt (Widget wd, int cx, int cy) { return wd.onMouseDouble(cx, cy, button, buttons); }
+    bool doIt (Widget wd, int cx, int cy) => wd.onMouseDouble(cx, cy, button, buttons);
     return doMouseEvent(x, y, &doIt);
   }
 
   override bool onMouseDown (int x, int y, ubyte button, uint buttons) {
-    bool doIt (Widget wd, int cx, int cy) { return wd.onMouseDown(cx, cy, button, buttons); }
+    bool doIt (Widget wd, int cx, int cy) => wd.onMouseDown(cx, cy, button, buttons);
     return doMouseEvent(x, y, &doIt);
   }
 
   override bool onMouseUp (int x, int y, ubyte button, uint buttons) {
-    bool doIt (Widget wd, int cx, int cy) { return wd.onMouseUp(cx, cy, button, buttons); }
+    bool doIt (Widget wd, int cx, int cy) => wd.onMouseUp(cx, cy, button, buttons);
     return doMouseEvent(x, y, &doIt);
   }
 
@@ -659,10 +659,10 @@ final:
 
 
   /// activate next widget
-  void activateNext () { activateNextPrevWidget(1); }
+  void activateNext () => activateNextPrevWidget(1);
 
   /// activate previous widget
-  void activatePrev () { activateNextPrevWidget(-1); }
+  void activatePrev () => activateNextPrevWidget(-1);
 
 
   void addWidget (Widget wd) {
@@ -939,7 +939,7 @@ void initPalettes () {
 }
 
 
-@property Widget focused () nothrow { return wFocused; }
+@property Widget focused () nothrow => wFocused;
 
 @property void focused (Widget w) {
   if (w !is null && w !is wFocused && w.canBeActivated) {
@@ -958,7 +958,7 @@ void initPalettes () {
   }
 }
 
-void focus (Widget w) { focused = w; }
+void focus (Widget w) => focused = w;
 
 
 /// add widget
@@ -1044,10 +1044,10 @@ static VLWindow inWindow (in int x, in int y) nothrow {
 
 /*
   // x and y are in local coords for this widget
-  bool onMouseMotion (int x, int y, uint buttons, int xrel, int yrel) { return false; }
-  bool onMouseDouble (int x, int y, ubyte button, uint buttons) { return false; }
-  bool onMouseDown (int x, int y, ubyte button, uint buttons) { return false; }
-  bool onMouseUp (int x, int y, ubyte button, uint buttons) { return false; }
+  bool onMouseMotion (int x, int y, uint buttons, int xrel, int yrel) => false;
+  bool onMouseDouble (int x, int y, ubyte button, uint buttons) => false;
+  bool onMouseDown (int x, int y, ubyte button, uint buttons) => false;
+  bool onMouseUp (int x, int y, ubyte button, uint buttons) => false;
 */
 +/
 
@@ -1065,21 +1065,21 @@ private bool bubbleEvent (bool delegate (Widget) handler, Widget wd=null) {
 
 
 bool onKeyDown (in ref SDL_KeyboardEvent ev) {
-  bool doIt (Widget wd) { return wd.onKeyDown(ev.keysym.sym, ev.keysym.mod); }
+  bool doIt (Widget wd) => wd.onKeyDown(ev.keysym.sym, ev.keysym.mod);
   //writefln("KEYDOWN! key=%s; mod=%s", ev.keysym.sym, ev.keysym.mod);
   return bubbleEvent(&doIt);
 }
 
 
 bool onKeyUp (in ref SDL_KeyboardEvent ev) {
-  bool doIt (Widget wd) { return wd.onKeyUp(ev.keysym.sym, ev.keysym.mod); }
+  bool doIt (Widget wd) => wd.onKeyUp(ev.keysym.sym, ev.keysym.mod);
   return bubbleEvent(&doIt);
 }
 
 
 bool onMouseWheel (in ref SDL_MouseWheelEvent ev) {
   uint btns = SDL_GetMouseState(null, null);
-  bool doIt (Widget wd) { return wd.onMouseWheel(ev.x, ev.y, btns); }
+  bool doIt (Widget wd) => wd.onMouseWheel(ev.x, ev.y, btns);
   return bubbleEvent(&doIt);
 }
 

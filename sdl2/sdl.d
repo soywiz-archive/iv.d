@@ -51,11 +51,11 @@ void SDL_VERSION (ref SDL_version x) @safe pure {
   x.patch = SDL_PATCHLEVEL;
 }
 
-uint SDL_VERSIONNUM() (ubyte X, ubyte Y, ubyte Z) { return X*1000+Y*100+Z; }
+uint SDL_VERSIONNUM() (ubyte X, ubyte Y, ubyte Z) => X*1000+Y*100+Z;
 
-uint SDL_COMPILEDVERSION() () { return SDL_VERSIONNUM(SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL); }
+uint SDL_COMPILEDVERSION() () => SDL_VERSIONNUM(SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
 
-bool SDL_VERSION_ATLEAST() (ubyte X, ubyte Y, ubyte Z) { return (SDL_COMPILEDVERSION() >= SDL_VERSIONNUM(X, Y, Z)); }
+bool SDL_VERSION_ATLEAST() (ubyte X, ubyte Y, ubyte Z) => (SDL_COMPILEDVERSION() >= SDL_VERSIONNUM(X, Y, Z));
 
 
 // From SDL_stdinc.h
@@ -65,7 +65,7 @@ enum {
   SDL_TRUE = 1
 }
 
-uint SDL_FOURCC() (char A, char B, char C, char D) { return (A|(B<<8)|(C<<16)|(D<<24)); }
+uint SDL_FOURCC() (char A, char B, char C, char D) => (A|(B<<8)|(C<<16)|(D<<24));
 
 // SDL.h
 enum : uint {
@@ -116,13 +116,13 @@ enum : SDL_AudioFormat {
   SDL_AUDIO_MASK_SIGNED = 1<<15,
 }
 
-ubyte SDL_AUDIO_BITSIZE() (SDL_AudioFormat x) { return cast(ubyte)(x&SDL_AUDIO_MASK_BITSIZE); }
-bool SDL_AUDIO_ISFLOAT() (SDL_AudioFormat x) { return !!(x&SDL_AUDIO_MASK_DATATYPE); }
-bool SDL_AUDIO_ISBIGENDIAN() (SDL_AudioFormat x) { return !!(x&SDL_AUDIO_MASK_ENDIAN); }
-bool SDL_AUDIO_ISSIGNED() (SDL_AudioFormat x) { return !!(x&SDL_AUDIO_MASK_SIGNED); }
-bool SDL_AUDIO_ISINT() (SDL_AudioFormat x) { return !SDL_AUDIO_ISFLOAT!(x); }
-bool SDL_AUDIO_ISLITTLEENDIAN() (SDL_AudioFormat x) { return !SDL_AUDIO_ISBIGENDIAN!(x); }
-bool SDL_AUDIO_ISUNSIGNED() (SDL_AudioFormat x) { return !SDL_AUDIO_ISSIGNED!(x); }
+ubyte SDL_AUDIO_BITSIZE() (SDL_AudioFormat x) => cast(ubyte)(x&SDL_AUDIO_MASK_BITSIZE);
+bool SDL_AUDIO_ISFLOAT() (SDL_AudioFormat x) => !!(x&SDL_AUDIO_MASK_DATATYPE);
+bool SDL_AUDIO_ISBIGENDIAN() (SDL_AudioFormat x) => !!(x&SDL_AUDIO_MASK_ENDIAN);
+bool SDL_AUDIO_ISSIGNED() (SDL_AudioFormat x) => !!(x&SDL_AUDIO_MASK_SIGNED);
+bool SDL_AUDIO_ISINT() (SDL_AudioFormat x) => !SDL_AUDIO_ISFLOAT!(x);
+bool SDL_AUDIO_ISLITTLEENDIAN() (SDL_AudioFormat x) => !SDL_AUDIO_ISBIGENDIAN!(x);
+bool SDL_AUDIO_ISUNSIGNED() (SDL_AudioFormat x) => !SDL_AUDIO_ISSIGNED!(x);
 
 enum : SDL_AudioFormat {
   AUDIO_U8 = 0x0008,
@@ -1128,7 +1128,7 @@ alias SDL_Keycode = int;
 
 enum SDLK_SCANCODE_MASK = 1<<30;
 
-T SDL_SCANCODE_TO_KEYCODE(T) (T x) if (isIntegral!T) { return (x|SDLK_SCANCODE_MASK); }
+T SDL_SCANCODE_TO_KEYCODE(T) (T x) if (isIntegral!T) => (x|SDLK_SCANCODE_MASK);
 
 enum {
   SDLK_UNKNOWN = 0,
@@ -1460,7 +1460,7 @@ extern(C) nothrow alias SDL_LogOutputFunction = void function (void*, int, SDL_L
 // SDL_mouse.h
 struct SDL_Cursor;
 
-ubyte SDL_BUTTON(T) (T x) if (isIntegral!T) { return cast(ubyte)(1<<(x-1)); }
+ubyte SDL_BUTTON(T) (T x) if (isIntegral!T) => cast(ubyte)(1<<(x-1));
 
 alias SDL_SystemCursor = int;
 
@@ -1560,11 +1560,11 @@ if (isIntegral!T0 && isIntegral!T1 && isIntegral!T2 && isIntegral!T3 && isIntegr
   return cast(uint)((1<<28)|(type<<24)|(order<<20)|(layout<<16)|(bits<<8)|bytes);
 }
 
-uint SDL_PIXELFLAG(T) (T X) if (isIntegral!T) { return (X>>28)&0x0F; }
-uint SDL_PIXELTYPE(T) (T X) if (isIntegral!T) { return (X>>24)&0x0F; }
-uint SDL_PIXELORDER(T) (T X) if (isIntegral!T) { return (X>>20)&0x0F; }
-uint SDL_PIXELLAYOUT(T) (T X) if (isIntegral!T) { return (X>>16)&0x0F; }
-uint SDL_BITSPERPIXEL(T) (T X) if (isIntegral!T) { return (X>>8)&0xFF; }
+uint SDL_PIXELFLAG(T) (T X) if (isIntegral!T) => (X>>28)&0x0F;
+uint SDL_PIXELTYPE(T) (T X) if (isIntegral!T) => (X>>24)&0x0F;
+uint SDL_PIXELORDER(T) (T X) if (isIntegral!T) => (X>>20)&0x0F;
+uint SDL_PIXELLAYOUT(T) (T X) if (isIntegral!T) => (X>>16)&0x0F;
+uint SDL_BITSPERPIXEL(T) (T X) if (isIntegral!T) => (X>>8)&0xFF;
 uint SDL_BYTESPERPIXEL(T) (T X) if (isIntegral!T) {
   if (SDL_ISPIXELFORMAT_FOURCC(X)) {
     return (X == SDL_PIXELFORMAT_YUY2 || X == SDL_PIXELFORMAT_UYVY || X == SDL_PIXELFORMAT_YVYU ? 2 : 1);
@@ -1591,7 +1591,7 @@ bool SDL_ISPIXELFORMAT_ALPHA(T) (T format) if (isIntegral!T) {
   }
 }
 
-bool SDL_ISPIXELFORMAT_FOURCC(T) (T format) if (isIntegral!T) { return format && !(format&0x80000000); }
+bool SDL_ISPIXELFORMAT_FOURCC(T) (T format) if (isIntegral!T) => format && !(format&0x80000000);
 
 enum {
   SDL_PIXELFORMAT_UNKNOWN,
@@ -1693,8 +1693,8 @@ struct SDL_Rect {
   int w, h;
 }
 
-bool SDL_RectEmpty() (const(SDL_Rect)* X) { return !X || ( X.w <= 0) || ( X.h <= 0); }
-bool SDL_RectEquals() (const(SDL_Rect)* A, const(SDL_Rect)* B) { return (A && B && A.x == B.x && A.y == B.y && A.w == B.w && A.h == B.h); }
+bool SDL_RectEmpty() (const(SDL_Rect)* X) => !X || ( X.w <= 0) || ( X.h <= 0);
+bool SDL_RectEquals() (const(SDL_Rect)* A, const(SDL_Rect)* B) => (A && B && A.x == B.x && A.y == B.y && A.w == B.w && A.h == B.h);
 
 // SDL_render.h
 alias SDL_RendererFlags = uint;
@@ -1804,12 +1804,12 @@ enum {
 }
 
 nothrow {
-  long SDL_RWsize (SDL_RWops* ctx) { return ctx.size (ctx); }
-  long SDL_RWseek (SDL_RWops* ctx, long offset, int whence) { return ctx.seek (ctx, offset, whence); }
-  long SDL_RWtell (SDL_RWops* ctx) { return ctx.seek (ctx, 0, RW_SEEK_CUR); }
-  usize SDL_RWread (SDL_RWops* ctx, void* ptr, usize size, usize n) { return ctx.read (ctx, ptr, size, n); }
-  usize SDL_RWwrite (SDL_RWops* ctx, const (void)* ptr, usize size, usize n) { return ctx.write (ctx, ptr, size, n); }
-  int SDL_RWclose (SDL_RWops* ctx) { return ctx.close (ctx); }
+  long SDL_RWsize (SDL_RWops* ctx) => ctx.size (ctx);
+  long SDL_RWseek (SDL_RWops* ctx, long offset, int whence) => ctx.seek (ctx, offset, whence);
+  long SDL_RWtell (SDL_RWops* ctx) => ctx.seek (ctx, 0, RW_SEEK_CUR);
+  usize SDL_RWread (SDL_RWops* ctx, void* ptr, usize size, usize n) => ctx.read (ctx, ptr, size, n);
+  usize SDL_RWwrite (SDL_RWops* ctx, const (void)* ptr, usize size, usize n) => ctx.write (ctx, ptr, size, n);
+  int SDL_RWclose (SDL_RWops* ctx) => ctx.close (ctx);
 }
 
 // SDL_shape.h
@@ -1850,7 +1850,7 @@ enum {
   SDL_DONTFREE = 0x00000004,
 }
 
-bool SDL_MUSTLOCK() (const SDL_Surface* S) { return ((S.flags&SDL_RLEACCEL) != 0); }
+bool SDL_MUSTLOCK() (const SDL_Surface* S) => ((S.flags&SDL_RLEACCEL) != 0);
 
 struct SDL_BlitMap;
 
@@ -1919,7 +1919,7 @@ extern(C) nothrow alias SDL_TimerCallback = uint function (uint interval, void* 
 
 alias SDL_TimerID = int;
 
-bool SDL_TICKS_PASSED() (uint A, uint B) { return cast(int)(B-A) <= 0; }
+bool SDL_TICKS_PASSED() (uint A, uint B) => cast(int)(B-A) <= 0;
 
 // SDL_touch.h
 alias SDL_TouchID = long;
@@ -1965,14 +1965,14 @@ enum {
 }
 
 enum SDL_WINDOWPOS_UNDEFINED_MASK = 0x1FFF0000;
-uint SDL_WINDOWPOS_UNDEFINED_DISPLAY(T) (T X) if (isIntegral!T) { return cast(uint)(SDL_WINDOWPOS_UNDEFINED_MASK|X); }
+uint SDL_WINDOWPOS_UNDEFINED_DISPLAY(T) (T X) if (isIntegral!T) => cast(uint)(SDL_WINDOWPOS_UNDEFINED_MASK|X);
 enum SDL_WINDOWPOS_UNDEFINED = SDL_WINDOWPOS_UNDEFINED_DISPLAY(0);
-bool SDL_WINDOWPOS_ISUNDEFINED(T) (T X) if (isIntegral!T) { return ((X&0xFFFF0000) == SDL_WINDOWPOS_UNDEFINED_MASK); }
+bool SDL_WINDOWPOS_ISUNDEFINED(T) (T X) if (isIntegral!T) => ((X&0xFFFF0000) == SDL_WINDOWPOS_UNDEFINED_MASK);
 
 enum SDL_WINDOWPOS_CENTERED_MASK = 0x2FFF0000;
-uint SDL_WINDOWPOS_CENTERED_DISPLAY(T) (T X) if (isIntegral!T) { return cast(uint)(SDL_WINDOWPOS_CENTERED_MASK|X); }
+uint SDL_WINDOWPOS_CENTERED_DISPLAY(T) (T X) if (isIntegral!T) => cast(uint)(SDL_WINDOWPOS_CENTERED_MASK|X);
 enum SDL_WINDOWPOS_CENTERED = SDL_WINDOWPOS_CENTERED_DISPLAY (0);
-bool SDL_WINDOWPOS_ISCENTERED(T) (T X) if (isIntegral!T) { return ((X&0xFFFF0000) == SDL_WINDOWPOS_CENTERED_MASK); }
+bool SDL_WINDOWPOS_ISCENTERED(T) (T X) if (isIntegral!T) => ((X&0xFFFF0000) == SDL_WINDOWPOS_CENTERED_MASK);
 
 alias SDL_WindowEventID = int;
 

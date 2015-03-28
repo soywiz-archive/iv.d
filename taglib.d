@@ -67,9 +67,9 @@ struct TagFile {
     if (!taglib_file_save(mFL)) throw new TagLibException("can't save tags object to file '"~mFName~"'");
   }
 
-  @property bool valid () const @safe pure nothrow { return mInited; }
+  @property bool valid () const @safe pure nothrow => mInited;
 
-  @property string filename () const @safe pure nothrow { return (mInited ? mFName : null); }
+  @property string filename () const @safe pure nothrow => (mInited ? mFName : null);
 
   mixin(strPropMixin!"artist");
   mixin(strPropMixin!"album");
@@ -77,7 +77,7 @@ struct TagFile {
   mixin(strPropMixin!"genre");
   mixin(strPropMixin!"comment");
 
-  @property uint year () const @safe pure nothrow { return (mInited ? mYear : 0); }
+  @property uint year () const @safe pure nothrow => (mInited ? mYear : 0);
   @property void year (uint v) {
     if (!mInited) throw new TagLibException("can't set YEAR tag for empty file");
     if (v > 0) {
@@ -94,7 +94,7 @@ struct TagFile {
     taglib_tag_set_year(mTags, v);
   }
 
-  @property uint track () const @safe pure nothrow { return (mInited ? mTrack : 0); }
+  @property uint track () const @safe pure nothrow => (mInited ? mTrack : 0);
   @property void track (uint v) {
     if (!mInited) throw new TagLibException("can't set TRACK tag for empty file");
     if (v > 999) {

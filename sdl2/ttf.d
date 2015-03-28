@@ -68,7 +68,7 @@ void SDL_TTF_VERSION() (ref SDL_version x) {
   x.patch = SDL_TTF_PATCHLEVEL;
 }
 
-void TTF_VERSION() (ref SDL_version x) { SDL_TTF_VERSION(x); }
+void TTF_VERSION() (ref SDL_version x) => SDL_TTF_VERSION(x);
 
 extern (C) nothrow @nogc {
   SDL_version* TTF_Linked_Version ();

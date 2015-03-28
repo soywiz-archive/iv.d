@@ -61,26 +61,25 @@ struct Rect {
   int height = -1; // <0: invalid rect
 
   // default constructor: (x, y, w, h)
-  this(CW, CH) (int ax, int ay, CW awidth, CH aheight) if (isIntegral!CW && isIntegral!CH) { set(ax, ay, awidth, aheight); }
+  this(CW, CH) (int ax, int ay, CW awidth, CH aheight) if (isIntegral!CW && isIntegral!CH) => set(ax, ay, awidth, aheight);
 
-  @property bool valid () const pure @safe nothrow @nogc { return (width >= 0 && height >= 0); }
+  @property bool valid () const pure @safe nothrow @nogc => (width >= 0 && height >= 0);
   @property bool empty () const pure @safe nothrow @nogc { return (width <= 0 || height <= 0); } /// invalid rects are empty
 
-  void invalidate () @safe nothrow @nogc { width = height = -1; }
+  void invalidate () @safe nothrow @nogc => width = height = -1;
 
-  @property int x0 () const pure @safe nothrow @nogc { return x; }
-  @property int y0 () const pure @safe nothrow @nogc { return y; }
-  @property int x1 () const pure @safe nothrow @nogc { return (width > 0 ? x+width-1 : x-1); }
-  @property int y1 () const pure @safe nothrow @nogc { return (height > 0 ? y+height-1 : y-1); }
+  @property int x0 () const pure @safe nothrow @nogc => x;
+  @property int y0 () const pure @safe nothrow @nogc => y;
+  @property int x1 () const pure @safe nothrow @nogc => (width > 0 ? x+width-1 : x-1);
+  @property int y1 () const pure @safe nothrow @nogc => (height > 0 ? y+height-1 : y-1);
 
   @property void x0 (in int val) @safe nothrow @nogc { width = x+width-val; x = val; }
   @property void y0 (in int val) @safe nothrow @nogc { height = y+height-val; y = val; }
-  @property void x1 (in int val) @safe nothrow @nogc { width = val-x+1; }
-  @property void y1 (in int val) @safe nothrow @nogc { height = val-y+1; }
+  @property void x1 (in int val) @safe nothrow @nogc => width = val-x+1;
+  @property void y1 (in int val) @safe nothrow @nogc => height = val-y+1;
 
-  bool inside (in int ax, in int ay) const pure @safe nothrow @nogc {
-    return (empty ? false : (ax >= x && ay >= y && ax < x+width && ay < y+height));
-  }
+  bool inside (in int ax, in int ay) const pure @safe nothrow @nogc =>
+    empty ? false : (ax >= x && ay >= y && ax < x+width && ay < y+height);
 
   void set(CW, CH) (int ax, int ay, CW awidth, CH aheight) if (isIntegral!CW && isIntegral!CH) {
     x = ax;

@@ -108,7 +108,7 @@ __gshared SDL_Window* sdlWindow = null; /// current SDL window; DON'T CHANGE THI
 
 alias PaintHookType = void function () @trusted;
 __gshared PaintHookType paintHook = void; /// set this to override standard paintFrame()
-shared static this () { paintHook = &paintFrameDefault; }
+shared static this () => paintHook = &paintFrameDefault;
 
 version(videolib_sdl) {
   private __gshared SDL_Renderer* sdlRenderer = null; // current SDL rendering context
@@ -162,7 +162,7 @@ __gshared uint* vscr = null; /// current SDL 'virtual screen', ARGB format for L
 private __gshared uint* vscr2x = null; // this is used in magnifying blitters
 private __gshared VLOverlay ovlVScr = null;
 
-@gcc_inline VLOverlay vscrOvl() () @trusted nothrow @nogc { return ovlVScr; }
+@gcc_inline VLOverlay vscrOvl() () @trusted nothrow @nogc => ovlVScr;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -453,7 +453,7 @@ enum Color Transparent = AMask; /// completely transparent pixel color
  * Returns:
  *  'transparent' flag
  */
-@gcc_inline bool isTransparent(T : Color) (T col) @safe pure nothrow @nogc { return ((col&AMask) == AMask); }
+@gcc_inline bool isTransparent(T : Color) (T col) @safe pure nothrow @nogc => ((col&AMask) == AMask);
 
 
 /**
@@ -465,7 +465,7 @@ enum Color Transparent = AMask; /// completely transparent pixel color
  * Returns:
  *  'transparent' flag
  */
-@gcc_inline bool isOpaque(T : Color) (T col) @safe pure nothrow @nogc { return ((col&AMask) == 0); }
+@gcc_inline bool isOpaque(T : Color) (T col) @safe pure nothrow @nogc => ((col&AMask) == 0);
 
 
 /**
@@ -1121,10 +1121,10 @@ __gshared void function (in ref SDL_MouseWheelEvent ev) onMouseWheel = null;
 
 
 /// start receiving text input events
-void startTextInput() () { SDL_StartTextInput(); }
+void startTextInput() () => SDL_StartTextInput();
 
 /// stop receiving text input events
-void stopTextInput() () { SDL_StopTextInput(); }
+void stopTextInput() () => SDL_StopTextInput();
 
 
 /* doubleclick processing */
@@ -1248,8 +1248,8 @@ private __gshared ulong lastUpdateCall = 0;
 private __gshared ulong nextUpdateCall = 0;
 private __gshared int msecsInFrame = 1000/35;
 
-@property int currentFPS () @trusted nothrow @nogc { return curFPS; }
-@property int msecsPerFrame () @trusted nothrow @nogc { return msecsInFrame; }
+@property int currentFPS () @trusted nothrow @nogc => curFPS;
+@property int msecsPerFrame () @trusted nothrow @nogc => msecsInFrame;
 
 
 void setFPS (int newfps) @trusted nothrow @nogc {
@@ -1336,7 +1336,7 @@ public:
     resize(wdt, hgt);
   }
 
-  ~this () @trusted nothrow @nogc { free(); }
+  ~this () @trusted nothrow @nogc => free();
 
 final:
   void resize(TW, TH) (TW wdt, TH hgt) if (__traits(isIntegral, TW) && __traits(isIntegral, TH)) {
@@ -1360,12 +1360,12 @@ final:
   }
 
   /// WARNING! this will trash virtual screen!
-  @property void width(T) (T w) if (__traits(isIntegral, T)) { resize(w, mHeight); }
-  @property void height(T) (T h) if (__traits(isIntegral, T)) { resize(mWidth, h); }
+  @property void width(T) (T w) if (__traits(isIntegral, T)) => resize(w, mHeight);
+  @property void height(T) (T h) if (__traits(isIntegral, T)) => resize(mWidth, h);
 
 @nogc:
 nothrow:
-  @property bool valid () const pure { return (mVScr !is null); }
+  @property bool valid () const pure => (mVScr !is null);
 
   void free () @trusted {
     if (!dontFree && mVScr !is null) {
@@ -1445,14 +1445,14 @@ nothrow:
     }
   }
 
-  @property int width () const @safe pure { return mWidth; }
-  @property int height () const @safe pure { return mHeight; }
+  @property int width () const @safe pure => mWidth;
+  @property int height () const @safe pure => mHeight;
 
-  @property int xOfs () const @safe pure { return mXOfs; }
-  @property void xOfs (int v) @safe { mXOfs = v; }
+  @property int xOfs () const @safe pure => mXOfs;
+  @property void xOfs (int v) @safe => mXOfs = v;
 
-  @property int yOfs () const @safe pure { return mYOfs; }
-  @property void yOfs (int v) @safe { mYOfs = v; }
+  @property int yOfs () const @safe pure => mYOfs;
+  @property void yOfs (int v) @safe => mYOfs = v;
 
   void getOfs (ref int x, ref int y) const @safe pure { x = mXOfs; y = mYOfs; }
   void setOfs (in int x, in int y) @safe { mXOfs = x; mYOfs = y; }
@@ -1464,7 +1464,7 @@ nothrow:
 
   void getOfs (ref Ofs ofs) const @safe pure { ofs.x = mXOfs; ofs.y = mYOfs; }
   void setOfs (in ref Ofs ofs) @safe { mXOfs = ofs.x; mYOfs = ofs.y; }
-  void resetOfs () @safe { mXOfs = mYOfs = 0; }
+  void resetOfs () @safe => mXOfs = mYOfs = 0;
 
 
   struct Clip {
@@ -1512,8 +1512,8 @@ nothrow:
     }
   }
 
-  void getClip (ref Clip clip) const @safe pure { getClip(clip.x, clip.y, clip.w, clip.h); }
-  void setClip (in ref Clip clip) @safe { setClip(clip.x, clip.y, clip.w, clip.h); }
+  void getClip (ref Clip clip) const @safe pure => getClip(clip.x, clip.y, clip.w, clip.h);
+  void setClip (in ref Clip clip) @safe => setClip(clip.x, clip.y, clip.w, clip.h);
 
   void clipIntrude (int dx, int dy) @safe {
     if (mVScr !is null) {
@@ -1524,7 +1524,7 @@ nothrow:
     }
   }
 
-  void clipExtrude (int dx, int dy) @safe { clipIntrude(-dx, -dy); }
+  void clipExtrude (int dx, int dy) @safe => clipIntrude(-dx, -dy);
 
   // //////////////////////////////////////////////////////////////////////// //
   /**
@@ -1812,8 +1812,8 @@ nothrow:
     }
   }
 
-  void line (int x0, int y0, int x1, int y1, Color col) @trusted { drawLine!true(x0, y0, x1, y1, col); }
-  void lineNoLast (int x0, int y0, int x1, int y1, Color col) @trusted { drawLine!false(x0, y0, x1, y1, col); }
+  void line (int x0, int y0, int x1, int y1, Color col) @trusted => drawLine!true(x0, y0, x1, y1, col);
+  void lineNoLast (int x0, int y0, int x1, int y1, Color col) @trusted => drawLine!false(x0, y0, x1, y1, col);
 
   void fillRect (int x, int y, int w, int h, Color col) @trusted {
     x += mXOfs;
