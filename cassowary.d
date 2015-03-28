@@ -52,7 +52,7 @@ mixin(error!("InvalidMathOp"));
 // ////////////////////////////////////////////////////////////////////////// //
 /// The enumerations from CswLinearInequality,
 /// and `global' functions that we want easy to access
-class Csw {
+abstract class Csw {
   private import std.traits : isSomeString;
 
 final:
