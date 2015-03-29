@@ -72,7 +72,7 @@ final:
   @property bool finished () const @safe pure nothrow @nogc => (points.length >= 2 && mFinished);
 
   auto clear () @safe nothrow @nogc {
-    points = points.init;
+    points = points.default;
     mName = null;
     return this;
   }
@@ -125,7 +125,7 @@ final:
   usize length () const @safe pure nothrow @nogc => points.length;
   alias opDollar = length;
 
-  auto opIndex (usize idx) const @safe pure nothrow @nogc => (idx < points.length ? points[idx] : Point.init);
+  auto opIndex (usize idx) const @safe pure nothrow @nogc => (idx < points.length ? points[idx] : Point.default);
 
   auto finish () @safe nothrow @nogc {
     import std.math : hypot, atan2, PI;
@@ -177,7 +177,7 @@ final:
       @disable this ();
       @disable this (this);
 
-      this (usize d0, usize d1, T initV=T.init) nothrow @nogc {
+      this (usize d0, usize d1, T initV=T.default) nothrow @nogc {
         import core.stdc.stdlib : malloc;
         import core.exception : onOutOfMemoryError;
         if (d0 < 1) d0 = 1;

@@ -187,7 +187,7 @@ body {
     if (zs.avail_out < obuflen) {
       version(test_zlib_log) printf("writing %u packed bytes\n", cast(uint)(obuflen-zs.avail_out));
       static if (is(typeof((inout int=0) {
-        auto r = RO.init;
+        auto r = RO.default;
         ubyte[2] b;
         r.put(b);
       }))) {
@@ -330,7 +330,7 @@ body {
     if (zs.avail_out < obuflen) {
       version(test_zlib_log) printf("writing %u packed bytes\n", cast(uint)(obuflen-zs.avail_out));
       static if (is(typeof((inout int=0) {
-        auto r = RO.init;
+        auto r = RO.default;
         ubyte[2] b;
         r.put(b);
       }))) {

@@ -79,7 +79,7 @@ if (isInputRange!RI &&
     this() (auto ref RI sr) {
       if (sr.empty) {
         static if (!isInfinite!RI) isEmpty = true;
-        rng = rng.init;
+        rng = rng.default;
       } else {
         rng = sr;
         popFront; // populate curCh
@@ -201,7 +201,7 @@ if (isInputRange!RI &&
     this() (auto ref RI sr) {
       if (sr.empty) {
         static if (!isInfinite!RI) isEmpty = true;
-        rng = rng.init;
+        rng = rng.default;
       } else {
         rng = sr;
         popFront; // populate curCh

@@ -921,8 +921,8 @@ public:
     } else {
       enum bool CanPutAll =
         (
-          is(typeof(cursor[0] = U[0].init)) ||
-          is(typeof(cursor[0..1] = U[0].init[0..1]))
+          is(typeof(cursor[0] = U[0].default)) ||
+          is(typeof(cursor[0..1] = U[0].default[0..1]))
         ) && CanPutAll!(U[1..$]);
     }
   }

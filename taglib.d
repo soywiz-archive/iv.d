@@ -58,7 +58,7 @@ struct TagFile {
     if (mInited) {
       mInited = false;
       taglib_file_free(mFL);
-      this = this.init;
+      this = this.default;
     }
   }
 

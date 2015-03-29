@@ -333,7 +333,7 @@ private auto WrData (int fd, int alen) {
       auto sfd = fd;
       auto saidx = aidx;
       auto salen = alen;
-      this = this.init;
+      this = this.default;
       fd = sfd;
       aidx = saidx;
       alen = salen;

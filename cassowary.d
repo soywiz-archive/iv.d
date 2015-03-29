@@ -1263,7 +1263,7 @@ final:
   CswSimplexSolver beginEdit () {
     assert(mEditVarMap.length > 0, "mEditVarMap.length == 0");
     // may later want to do more in here
-    mInfeasibleRows = mInfeasibleRows.init; //mInfeasibleRows.clear();
+    mInfeasibleRows = mInfeasibleRows.default; //mInfeasibleRows.clear();
     resetStayConstants();
     mStackEdCns ~= mEditVarMap.length;
     return this;
@@ -1539,7 +1539,7 @@ final:
     Csw.enterln("resolve()");
     dualOptimize();
     setExternalVariables();
-    mInfeasibleRows = mInfeasibleRows.init; //mInfeasibleRows.clear();
+    mInfeasibleRows = mInfeasibleRows.default; //mInfeasibleRows.clear();
     resetStayConstants();
   }
 

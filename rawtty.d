@@ -433,7 +433,7 @@ private void initKeyTrans () @trusted {
  *  Exception on TTY mode errors
  */
 import iv.autocomplete;
-string ttyReadString (string prompt, const(string)[] strlist=null, string str=string.init) @trusted {
+string ttyReadString (string prompt, const(string)[] strlist=null, string str=string.default) @trusted {
   import std.algorithm;
   import std.stdio;
 

@@ -64,14 +64,14 @@ class StreamException : Exception {
 
 // ////////////////////////////////////////////////////////////////////////// //
 enum isReadableStream(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ubyte[1] b;
   auto v = cast(void[])b;
   t.rawRead(v);
 }));
 
 enum isWriteableStream(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ubyte[1] b;
   t.rawWrite(cast(void[])b);
 }));
@@ -81,7 +81,7 @@ enum isRWStream(T) = isReadableStream!T && isWriteableStream!T;
 template isSeekableStream(T) {
   enum isSeekableStream = is(typeof((inout int=0) {
     import core.stdc.stdio : SEEK_END;
-    auto t = T.init;
+    auto t = T.default;
     t.seek(0, SEEK_END);
     ulong pos = t.tell;
   }));
@@ -89,34 +89,34 @@ template isSeekableStream(T) {
 
 // bad name!
 enum isClosableStream(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   t.close();
 }));
 
 // bad name!
 enum streamHasEOF(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   bool n = t.eof;
 }));
 
 enum streamHasSeek(T) = is(typeof((inout int=0) {
   import core.stdc.stdio : SEEK_END;
-  auto t = T.init;
+  auto t = T.default;
   t.seek(0, SEEK_END);
 }));
 
 enum streamHasTell(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ulong pos = t.tell;
 }));
 
 enum streamHasName(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   string n = t.name;
 }));
 
 enum streamHasSize(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ulong pos = t.size;
 }));
 
@@ -867,7 +867,7 @@ private final class PartialStreamDataImpl(ST) : PartialStreamROData {
   }
 
 protected:
-  override void clear () => stream = stream.init;
+  override void clear () => stream = stream.default;
 
   override void[] read (void[] buf) {
     assert(curpos >= 0 && curpos <= size);
