@@ -1137,6 +1137,17 @@ private {
   @property void onMouseDouble (void delegate (in ref SDL_MouseButtonEvent ev) cb) => onMouseDoubleCB = cb;
   @property void onMouseMotion (void delegate (in ref SDL_MouseMotionEvent ev) cb) => onMouseMotionCB = cb;
   @property void onMouseWheel (void delegate (in ref SDL_MouseWheelEvent ev) cb) => onMouseWheelCB = cb;
+
+  @property auto onUpdate () => onUpdateCB;
+  @property auto onRebuild () => onRebuildCB;
+  @property auto onKeyDown () => onKeyDownCB;
+  @property auto onKeyUp () => onKeyUpCB;
+  @property auto onTextInput () => onTextInputCB;
+  @property auto onMouseDown () => onMouseDownCB;
+  @property auto onMouseUp () => onMouseUpCB;
+  @property auto onMouseDouble () => onMouseDoubleCB;
+  @property auto onMouseMotion () => onMouseMotionCB;
+  @property auto onMouseWheel () => onMouseWheelCB;
 }
 
 /// start receiving text input events
