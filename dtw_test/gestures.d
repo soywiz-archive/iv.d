@@ -484,8 +484,8 @@ void main (string[] args) {
   }
   //
   setFPS(35);
-  update = &updateCB;
-  rebuild = &rebuildCB;
+  onUpdate = &updateCB;
+  onRebuild = &rebuildCB;
   onKeyDown = &onKeyDownCB;
   onTextInput = &onTextInputCB;
   onMouseDown = &onMouseDownCB;

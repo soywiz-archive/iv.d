@@ -69,14 +69,10 @@ extern(C) private int clock_gettime (clockid_t, timespec*) @trusted nothrow @nog
 // ////////////////////////////////////////////////////////////////////////// //
 /// generic VideoLib exception
 class VideoLibError : object.Exception {
-  @safe pure nothrow this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) {
+  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow =>
     super(msg, file, line, next);
-  }
 }
 
-
-/// FUCKIN' HACKERY! idiotic D compiler will fuck up all my public imports if
-/// i'm using the form 'import vl = iv.videolib;'. i REALLY hate it here.
 
 /// output filter
 enum VideoFilter {
@@ -89,7 +85,7 @@ private shared bool pvInited = false; // vill be set to 'true' if initVideo() in
 private shared bool pvInitedOk = false; // vill be set to 'true' if initVideo() initializes everything
 
 /// is VideoLib properly initialized and videomode set?
-bool isInited () @trusted nothrow @nogc {
+@property bool isInited () @trusted nothrow @nogc {
   import core.atomic : atomicLoad;
   return atomicLoad(pvInitedOk);
 }
@@ -107,8 +103,8 @@ shared VideoFilter useFilter = VideoFilter.None; /// output filter; default: Vid
 __gshared SDL_Window* sdlWindow = null; /// current SDL window; DON'T CHANGE THIS!
 
 alias PaintHookType = void function () @trusted;
-__gshared PaintHookType paintHook = void; /// set this to override standard paintFrame()
-shared static this () => paintHook = &paintFrameDefault;
+__gshared PaintHookType paintHook = null; /// set this to override standard paintFrame()
+//shared static this () => paintHook = &paintFrameDefault;
 
 version(videolib_sdl) {
   private __gshared SDL_Renderer* sdlRenderer = null; // current SDL rendering context
@@ -126,7 +122,7 @@ void frameChanged () @trusted nothrow @nogc {
   atomicStore(sdlFrameChangedFlag, true);
 }
 
-bool isFrameChanged () @trusted nothrow @nogc {
+@property bool isFrameChanged () @trusted nothrow @nogc {
   import core.atomic : atomicLoad;
   return atomicLoad(sdlFrameChangedFlag);
 }
@@ -135,8 +131,8 @@ bool isFrameChanged () @trusted nothrow @nogc {
 private shared int vsWidth = 320;
 private shared int vsHeight = 240;
 
-@gcc_inline @property int vlWidth() () @trusted nothrow @nogc { return vsWidth; } /// get current screen width
-@gcc_inline @property int vlHeight() () @trusted nothrow @nogc { return vsHeight; } /// get current screen height
+@gcc_inline @property int vlWidth() () @trusted nothrow @nogc => vsWidth; /// get current screen width
+@gcc_inline @property int vlHeight() () @trusted nothrow @nogc => vsHeight; /// get current screen height
 
 /// set screen width; must be used before initVideo()
 @property void vlWidth (int wdt) @trusted {
@@ -410,17 +406,17 @@ alias Color = uint;
 version(LittleEndian) {
   /// RGBA struct to ease color components extraction/replacing
   align(1) struct RGBA {
-    align(1):
+  align(1):
     ubyte b, g, r, a;
   }
-}
-
-version(BigEndian) {
+} else version(BigEndian) {
   /// RGBA struct to ease color components extraction/replacing
   align(1) struct RGBA {
-    align(1):
+  align(1):
     ubyte a, r, g, b;
   }
+} else {
+  static assert(0, "WTF?!");
 }
 
 static assert(RGBA.sizeof == Color.sizeof);
@@ -480,10 +476,8 @@ enum Color Transparent = AMask; /// completely transparent pixel color
  *  rgba color
  */
 @gcc_inline Color rgb2col(TR, TG, TB) (TR r, TG g, TB b) @safe pure nothrow @nogc
-if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB))
-{
-  return ((r&0xff)<<RShift)|((g&0xff)<<GShift)|((b&0xff)<<BShift);
-}
+if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB)) =>
+  ((r&0xff)<<RShift)|((g&0xff)<<GShift)|((b&0xff)<<BShift);
 
 /**
  * Build rgba color from components.
@@ -498,16 +492,14 @@ if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral,
  *  rgba color
  */
 @gcc_inline Color rgba2col(TR, TG, TB, TA) (TR r, TG g, TB b, TA a) @safe pure nothrow @nogc
-if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB) && __traits(isIntegral, TA))
-{
-  return ((a&0xff)<<AShift)|((r&0xff)<<RShift)|((g&0xff)<<GShift)|((b&0xff)<<BShift);
-}
+if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB) && __traits(isIntegral, TA)) =>
+  ((a&0xff)<<AShift)|((r&0xff)<<RShift)|((g&0xff)<<GShift)|((b&0xff)<<BShift);
 
 // generate some templates
 private enum genRGBGetSet(string cname) =
-  `@gcc_inline ubyte rgb`~cname~`() (Color clr) @safe pure nothrow @nogc { return ((clr>>`~cname[0]~`Shift)&0xff); }`~
-  `@gcc_inline Color rgbSet`~cname~`(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {`~
-  `return (clr&~`~cname[0]~`Mask)|((v&0xff)<<`~cname[0]~`Shift); }`;
+  `@gcc_inline ubyte rgb`~cname~`() (Color clr) @safe pure nothrow @nogc => ((clr>>`~cname[0]~`Shift)&0xff);`~
+  `@gcc_inline Color rgbSet`~cname~`(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) =>`~
+    `(clr&~`~cname[0]~`Mask)|((v&0xff)<<`~cname[0]~`Shift);`;
 
 mixin(genRGBGetSet!"Alpha");
 mixin(genRGBGetSet!"Red");
@@ -1047,7 +1039,7 @@ private void initializeClock () @trusted nothrow @nogc {
 }
 
 
-/* returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
+/** returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * milliseconds; (0: no timer available) */
 ulong getTicks () @trusted nothrow @nogc {
   if (vl_k8clock_initialized > 0) {
@@ -1063,7 +1055,7 @@ ulong getTicks () @trusted nothrow @nogc {
 }
 
 
-/* returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
+/** returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * microseconds; (0: no timer available) */
 ulong ticksMicro () @trusted nothrow @nogc {
   if (vl_k8clock_initialized > 0) {
@@ -1082,8 +1074,8 @@ ulong ticksMicro () @trusted nothrow @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 // main loop
 
-enum SDL_MOUSEDOUBLE = SDL_USEREVENT+1; // same as SDL_MouseButtonEvent
-enum SDL_FREEEVENT = SDL_USEREVENT+42; // first event available for user
+enum SDL_MOUSEDOUBLE = SDL_USEREVENT+1; /// same as SDL_MouseButtonEvent
+enum SDL_FREEEVENT = SDL_USEREVENT+42; /// first event available for user
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1094,31 +1086,58 @@ __gshared int function (ref SDL_Event ev) preprocessEventsHook = null; //DO NOT 
 
 /**
  * mechanics is like this:
- * when it's time to show new frame, videolib will call update().
- * if frameChanged is set (either from previous frame, or by update(),
- * videolib will call rebuild() and paintFrame().
- * note that videolib will reset frameChanged after rebuild() called.
- * also note that if update() or rebuild() will not set frameChanged,
+ * when it's time to show new frame, videolib will call onUpdateCB().
+ * if frameChanged is set (either from previous frame, or by onUpdateCB(),
+ * videolib will call onRebuildCB() and paintFrame().
+ * note that videolib will reset frameChanged after onRebuildCB() called.
+ * also note that if onUpdateCB() or onRebuildCB() will not set frameChanged,
  * frame visuals will not be updated properly.
- * you can either update and rebuild screen in update(), or update state in
- * update() and rebuild virtual screen in rebuild().
+ * you can either update and onRebuildCB screen in onUpdateCB(), or update state in
+ * onUpdateCB() and rebuild virtual screen in onRebuildCB().
  * you can count on videolib never changes virtual screen contents by itself.
  */
 /** elapsedTicks: ms elapsed from the last call; will try to keep up with FPS; 0: first call in mainLoop()
- * can call frameChanged() flag so mainLoop() will call rebuild() or call rebuild() itself */
-__gshared void function (int elapsedTicks) update = null;
-__gshared void function () rebuild = null;
+ * can call frameChanged() flag so mainLoop() will call onRebuildCB() or call onRebuildCB() itself */
+private {
+  __gshared void delegate (int elapsedTicks) onUpdateCB = null;
+  __gshared void delegate () onRebuildCB = null;
 
-__gshared void function (in ref SDL_KeyboardEvent ev) onKeyDown = null;
-__gshared void function (in ref SDL_KeyboardEvent ev) onKeyUp = null;
-__gshared void function (dchar ch) onTextInput = null;
+  __gshared void delegate (in ref SDL_KeyboardEvent ev) onKeyDownCB = null;
+  __gshared void delegate (in ref SDL_KeyboardEvent ev) onKeyUpCB = null;
+  __gshared void delegate (dchar ch) onTextInputCB = null;
 
-__gshared void function (in ref SDL_MouseButtonEvent ev) onMouseDown = null;
-__gshared void function (in ref SDL_MouseButtonEvent ev) onMouseUp = null;
-__gshared void function (in ref SDL_MouseButtonEvent ev) onMouseDouble = null; /// mouse double-click
-__gshared void function (in ref SDL_MouseMotionEvent ev) onMouseMotion = null;
-__gshared void function (in ref SDL_MouseWheelEvent ev) onMouseWheel = null;
+  __gshared void delegate (in ref SDL_MouseButtonEvent ev) onMouseDownCB = null;
+  __gshared void delegate (in ref SDL_MouseButtonEvent ev) onMouseUpCB = null;
+  __gshared void delegate (in ref SDL_MouseButtonEvent ev) onMouseDoubleCB = null; /// mouse double-click
+  __gshared void delegate (in ref SDL_MouseMotionEvent ev) onMouseMotionCB = null;
+  __gshared void delegate (in ref SDL_MouseWheelEvent ev) onMouseWheelCB = null;
+}
 
+
+@trusted nothrow @nogc {
+  private import std.functional : toDelegate;
+  @property void onUpdate (void function (int elapsedTicks) cb) => onUpdateCB = toDelegate(cb);
+  @property void onRebuild (void function () cb) => onRebuildCB = toDelegate(cb);
+  @property void onKeyDown (void function (in ref SDL_KeyboardEvent ev) cb) => onKeyDownCB = toDelegate(cb);
+  @property void onKeyUp (void function (in ref SDL_KeyboardEvent ev) cb) => onKeyUpCB = toDelegate(cb);
+  @property void onTextInput (void function (dchar ch) cb) => onTextInputCB = toDelegate(cb);
+  @property void onMouseDown (void function (in ref SDL_MouseButtonEvent ev) cb) => onMouseDownCB = toDelegate(cb);
+  @property void onMouseUp (void function (in ref SDL_MouseButtonEvent ev) cb) => onMouseUpCB = toDelegate(cb);
+  @property void onMouseDouble (void function (in ref SDL_MouseButtonEvent ev) cb) => onMouseDoubleCB = toDelegate(cb);
+  @property void onMouseMotion (void function (in ref SDL_MouseMotionEvent ev) cb) => onMouseMotionCB = toDelegate(cb);
+  @property void onMouseWheel (void function (in ref SDL_MouseWheelEvent ev) cb) => onMouseWheelCB = toDelegate(cb);
+
+  @property void onUpdate (void delegate (int elapsedTicks) cb) => onUpdateCB = cb;
+  @property void onRebuild (void delegate () cb) => onRebuildCB = cb;
+  @property void onKeyDown (void delegate (in ref SDL_KeyboardEvent ev) cb) => onKeyDownCB = cb;
+  @property void onKeyUp (void delegate (in ref SDL_KeyboardEvent ev) cb) => onKeyUpCB = cb;
+  @property void onTextInput (void delegate (dchar ch) cb) => onTextInputCB = cb;
+  @property void onMouseDown (void delegate (in ref SDL_MouseButtonEvent ev) cb) => onMouseDownCB = cb;
+  @property void onMouseUp (void delegate (in ref SDL_MouseButtonEvent ev) cb) => onMouseUpCB = cb;
+  @property void onMouseDouble (void delegate (in ref SDL_MouseButtonEvent ev) cb) => onMouseDoubleCB = cb;
+  @property void onMouseMotion (void delegate (in ref SDL_MouseMotionEvent ev) cb) => onMouseMotionCB = cb;
+  @property void onMouseWheel (void delegate (in ref SDL_MouseWheelEvent ev) cb) => onMouseWheelCB = cb;
+}
 
 /// start receiving text input events
 void startTextInput() () => SDL_StartTextInput();
@@ -1210,18 +1229,18 @@ int processEvent (ref SDL_Event ev) {
   }
   if (ev.type == SDL_QUIT) return 1;
   switch (ev.type) {
-    case SDL_KEYDOWN: if (onKeyDown !is null) onKeyDown(ev.key); break;
-    case SDL_KEYUP: if (onKeyUp !is null) onKeyUp(ev.key); break;
-    case SDL_MOUSEBUTTONDOWN: if (onMouseDown !is null) onMouseDown(ev.button); break;
-    case SDL_MOUSEBUTTONUP: if (onMouseUp !is null) onMouseUp(ev.button); break;
-    case SDL_MOUSEDOUBLE: if (onMouseDouble !is null) onMouseDouble(ev.button); break;
-    case SDL_MOUSEMOTION: if (onMouseMotion !is null) onMouseMotion(ev.motion); break;
-    case SDL_MOUSEWHEEL: if (onMouseWheel !is null) onMouseWheel(ev.wheel); break;
+    case SDL_KEYDOWN: if (onKeyDownCB !is null) onKeyDownCB(ev.key); break;
+    case SDL_KEYUP: if (onKeyUpCB !is null) onKeyUpCB(ev.key); break;
+    case SDL_MOUSEBUTTONDOWN: if (onMouseDownCB !is null) onMouseDownCB(ev.button); break;
+    case SDL_MOUSEBUTTONUP: if (onMouseUpCB !is null) onMouseUpCB(ev.button); break;
+    case SDL_MOUSEDOUBLE: if (onMouseDoubleCB !is null) onMouseDoubleCB(ev.button); break;
+    case SDL_MOUSEMOTION: if (onMouseMotionCB !is null) onMouseMotionCB(ev.motion); break;
+    case SDL_MOUSEWHEEL: if (onMouseWheelCB !is null) onMouseWheelCB(ev.wheel); break;
     case SDL_TEXTINPUT:
-      if (onTextInput !is null) {
+      if (onTextInputCB !is null) {
         //TODO: UTF-8 decode!
         if (ev.text.text[0] && ev.text.text[0] < 127) {
-          onTextInput(ev.text.text[0]);
+          onTextInputCB(ev.text.text[0]);
         }
       }
       break;
@@ -1248,10 +1267,11 @@ private __gshared ulong lastUpdateCall = 0;
 private __gshared ulong nextUpdateCall = 0;
 private __gshared int msecsInFrame = 1000/35;
 
-@property int currentFPS () @trusted nothrow @nogc => curFPS;
-@property int msecsPerFrame () @trusted nothrow @nogc => msecsInFrame;
+@property int currentFPS () @trusted nothrow @nogc => curFPS; /// return current FPS
+@property int msecsPerFrame () @trusted nothrow @nogc => msecsInFrame; /// return number of milliseconds in frame
 
 
+/// set desired FPS
 void setFPS (int newfps) @trusted nothrow @nogc {
   if (newfps < 1) newfps = 1;
   if (newfps > 500) newfps = 500;
@@ -1261,12 +1281,12 @@ void setFPS (int newfps) @trusted nothrow @nogc {
 }
 
 
-// update and rebuild frame if necessary
-// will not paint frame to screen
+/// update and rebuild frame if necessary
+/// will not paint frame to screen
 void sdlCheckFrameUpdate () {
   auto tm = getTicks();
   if (tm >= nextUpdateCall) {
-    if (update !is null) update(cast(int)(tm-lastUpdateCall));
+    if (onUpdateCB !is null) onUpdateCB(cast(int)(tm-lastUpdateCall));
     lastUpdateCall = tm;//getTicks();
     while (tm >= nextUpdateCall) {
       // do something with skipped frames
@@ -1277,19 +1297,19 @@ void sdlCheckFrameUpdate () {
   bool cf = cas(&sdlFrameChangedFlag, true, false); // cf is true if sdlFrameChangedFlag was true
   if (cf) {
     frameChanged();
-    if (rebuild !is null) rebuild();
+    if (onRebuildCB !is null) onRebuildCB();
   }
 }
 
 
-/* will start and stop FPS timer automatically */
+/** will start and stop FPS timer automatically */
 void mainLoop () {
   bool doQuit = false;
   SDL_Event ev;
   lastUpdateCall = getTicks();
   nextUpdateCall = lastUpdateCall+msecsInFrame;
-  if (update !is null) update(0);
-  if (rebuild !is null) rebuild();
+  if (onUpdateCB !is null) onUpdateCB(0);
+  if (onRebuildCB !is null) onRebuildCB();
   paintFrame();
   while (!doQuit) {
     if (!SDL_PollEvent(null)) {
