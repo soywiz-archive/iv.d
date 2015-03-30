@@ -23,6 +23,7 @@ module iv.cassowary is aliced;
 
 // ////////////////////////////////////////////////////////////////////////// //
 alias CswNumber = double;
+alias CswStrength = CswNumber;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -57,55 +58,6 @@ abstract class Csw {
 
 final:
 static:
-  protected static immutable string dbgPfx = "\x1b[1mDBG\x1b[0m: ";
-  protected static immutable string trcPfx = "\x1b[1mTRC\x1b[0m: ";
-  protected static immutable string fniPfx = "\x1b[1mFN+\x1b[0m: ";
-  protected static immutable string fnoPfx = "\x1b[1mFN-\x1b[0m: ";
-  protected static immutable string gcPfx = "\x1b[1mGC\x1b[0m: ";
-
-  protected bool mDebug = false;
-  protected bool mTrace = false;
-  protected bool mGC = false;
-
-  void logln(A...) (string pfx, A a) {
-    try {
-      import iv.writer;
-      bool first = true;
-      foreach (immutable w; a) {
-        if (first) { errwrite(pfx); first = false; }
-        errwrite(w);
-      }
-      errwriteln();
-    } catch (Exception) {}
-  }
-
-  void logfln(T, A...) (string pfx, lazy T fmt, lazy A args) if (isSomeString!T) {
-    try {
-      import iv.writer;
-      import std.string : format;
-      auto s = format(fmt, args);
-      errwriteln(pfx, s);
-    } catch (Exception) {}
-  }
-
-  void debugln(A...) (lazy A a) { if (mDebug) logln(dbgPfx, a); }
-  void debugfln(T, A...) (lazy T fmt, lazy A args) if (isSomeString!T) { if (mDebug) logfln(dbgPfx, fmt, args); }
-
-  void trdebugln(A...) (lazy A a) { if (mTrace) logln(dbgPfx, a); }
-  void trdebugfln(T, A...) (lazy T fmt, lazy A args) if (isSomeString!T) { if (mTrace) logfln(dbgPfx, fmt, args); }
-
-  void traceln(A...) (lazy A a) { if (mTrace) logln(trcPfx, a); }
-  void tracefln(T, A...) (lazy T fmt, lazy A args) if (isSomeString!T) { if (mTrace) logfln(trcPfx, fmt, args); }
-
-  void enterln(A...) (lazy A a) { if (mTrace) logln(fniPfx, a); }
-  void enterfln(T, A...) (lazy T fmt, lazy A args) if (isSomeString!T) { if (mTrace) logfln(fniPfx, fmt, args); }
-
-  void exitln(A...) (lazy A a) { if (mTrace) logln(fnoPfx, a); }
-  void exitfln(T, A...) (lazy T fmt, lazy A args) if (isSomeString!T) { if (mTrace) logfln(fnoPfx, fmt, args); }
-
-  void gcln(A...) (lazy A a) { if (mGC) logln(gcPfx, a); }
-  void gcfln(T, A...) (lazy T fmt, lazy A args) if (isSomeString!T) { if (mGC) logfln(gcPfx, fmt, args); }
-
   enum CompOp {
     GEQ = 1,
     LEQ = 2
@@ -140,15 +92,6 @@ static:
   bool approx (CswVariable clv, CswNumber b) pure @safe nothrow @nogc => approx(clv.value, b);
   bool approx (CswNumber a, CswVariable clv) pure @safe nothrow @nogc => approx(a, clv.value);
 
-  @property bool debugLog () @safe nothrow @nogc => mDebug;
-  @property void debugLog (bool v) @safe nothrow @nogc => mDebug = v;
-
-  @property bool traceLog () @safe nothrow @nogc => mTrace;
-  @property void traceLog (bool v) @safe nothrow @nogc => mTrace = v;
-
-  @property bool gcLog () @safe nothrow @nogc => mGC;
-  @property void gcLog (bool v) @safe nothrow @nogc => mGC = v;
-
   CswStrength Strength (string name) @safe nothrow @nogc {
     switch (name) {
       case "required": return Csw.Required;
@@ -170,11 +113,6 @@ static:
 
   private bool isRequiredStrength (CswStrength str) @safe pure nothrow @nogc => (str >= Required);
 }
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-// strength
-alias CswStrength = CswNumber;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -504,13 +442,6 @@ public:
   {
     assert(v !is null);
     // body largely duplicated below
-    /*
-    if (subject !is null) {
-      Csw.enterfln("AddVariable: %s, %s, %s, ...", v, c, subject);
-    } else {
-      Csw.enterfln("AddVariable: %s, %s", v, c);
-    }
-    */
     if (auto coeff = v.vindex in mTerms) {
       CswNumber newCoefficient = coeff.num+c;
       if (Csw.approx(newCoefficient, 0.0)) {
@@ -561,8 +492,6 @@ public:
   final void substituteOut (CswAbstractVariable var, CswLinearExpression expr, CswAbstractVariable subject,
                             CswTableau solver) nothrow
   {
-    //Csw.enterfln("CLE:substituteOut: %s, %s, %s, ...", var, expr, subject);
-    //Csw.tracefln("this = %s", this);
     CswNumber multiplier = mTerms[var.vindex].num;
     mTerms.remove(var.vindex);
     incrementConstant(multiplier*expr.constant);
@@ -583,7 +512,6 @@ public:
         solver.noteAddedVariable(clv.var, subject);
       }
     }
-    //Csw.tracefln("Now this is %s", this);
   }
 
   /// This linear expression currently represents the equation
@@ -629,7 +557,6 @@ public:
   /// Note that the term involving subject has been dropped.
   /// Returns the reciprocal, so changeSubject can use it, too
   final CswNumber newSubject (CswAbstractVariable subject) nothrow {
-    //Csw.enterfln("newSubject: %s", subject);
     assert(subject !is null);
     immutable coeff = mTerms[subject.vindex].num;
     mTerms.remove(subject.vindex);
@@ -730,14 +657,12 @@ public:
   /// subject (or if subject is nil then it's in the objective function).
   /// Update the column cross-indices.
   final void noteRemovedVariable (CswAbstractVariable v, CswAbstractVariable subject) nothrow {
-    //Csw.enterfln("noteRemovedVariable: %s, %s", v, subject);
     if (subject !is null) mColumns[v.vindex].set.remove(subject.vindex);
   }
 
   /// v has been added to the linear expression for subject
   /// update column cross indices.
   final void noteAddedVariable (CswAbstractVariable v, CswAbstractVariable subject) nothrow {
-    //Csw.enterfln("noteAddedVariable: %s, %s", v, subject);
     if (subject !is null) insertColVar(v, subject);
   }
 
@@ -797,30 +722,22 @@ public:
   protected final void addRow (CswAbstractVariable var, CswLinearExpression expr) nothrow {
     assert(var !is null);
     assert(expr !is null);
-    Csw.enterfln("AddRow: %s, %s", var, expr);
-
     // for each variable in expr, add var to the set of rows which
     // have that variable in their expression
     mRows[var.vindex] = Row(var, expr);
-
     // FIXME: check correctness!
     foreach (ref clv; expr.mTerms.byValue) {
       insertColVar(clv.var, var);
       if (clv.var.isExternal) mExternalParametricVars[clv.var.vindex] = clv.var;
     }
-
     if (var.isExternal) mExternalRows[var.vindex] = var;
-
-    Csw.tracefln("%s", this);
   }
 
   // Remove v from the tableau -- remove the column cross indices for v
   // and remove v from every expression in rows in which v occurs
   protected final void removeColumn (CswAbstractVariable var) nothrow {
     assert(var !is null);
-    Csw.enterfln("removeColumn: %s", var);
     // remove the rows with the variables in varset
-
     if (auto rows = var.vindex in mColumns) {
       mColumns.remove(var.vindex);
       foreach (ref clv; rows.set.byValue) {
@@ -829,9 +746,8 @@ public:
         //clv.expr.mTerms.remove(var.vindex);
       }
     } else {
-      Csw.trdebugfln("Could not find var %s in mColumns", var);
+      //Csw.trdebugfln("Could not find var %s in mColumns", var);
     }
-
     if (var.isExternal) {
       mExternalRows.remove(var.vindex);
       mExternalParametricVars.remove(var.vindex);
@@ -841,7 +757,6 @@ public:
   // Remove the basic variable v from the tableau row v=expr
   // Then update column cross indices.
   protected final CswLinearExpression removeRow (CswAbstractVariable var) nothrow {
-    //Csw.enterfln("removeRow: %s", var);
     auto expr = mRows[var.vindex].expr;
     assert(expr !is null); // just in case
     // For each variable in this expression, update
@@ -849,36 +764,28 @@ public:
     // of rows it is known to be in.
     foreach (ref clv; expr.mTerms.byValue) {
       if (auto varset = clv.var.vindex in mColumns) {
-        //Csw.trdebugln("removing from varset ", var);
         varset.set.remove(var.vindex);
       }
     }
     mInfeasibleRows.remove(var.vindex);
     if (var.isExternal) mExternalRows.remove(var.vindex);
     mRows.remove(var.vindex);
-    //Csw.exitfln("returning %s", expr);
     return expr;
   }
 
   // Replace all occurrences of oldVar with expr, and update column cross indices
   // oldVar should now be a basic variable.
   protected final void substituteOut (CswAbstractVariable oldVar, CswLinearExpression expr) nothrow {
-    Csw.enterfln("substituteOut: %s (expr: %s)", oldVar, expr);
-    Csw.tracefln("%s", this);
-
     auto varset = mColumns[oldVar.vindex];
-
     foreach (auto v; varset.set.byValue) {
       auto row = mRows[v.vindex].expr;
       row.substituteOut(oldVar, expr, v, this);
       if (v.isRestricted && row.constant < 0.0) mInfeasibleRows[v.vindex] = v;
     }
-
     if (oldVar.isExternal) {
       mExternalRows[oldVar.vindex] = oldVar;
       mExternalParametricVars.remove(oldVar.vindex);
     }
-
     mColumns.remove(oldVar.vindex);
   }
 
@@ -890,7 +797,6 @@ public:
 
   protected final CswLinearExpression rowExpression (CswAbstractVariable v) nothrow @nogc {
     assert(v !is null);
-    //Csw.enterfln("rowExpression: %s", v);
     auto res = v.vindex in mRows;
     return (res ? res.expr : null);
   }
@@ -1019,11 +925,7 @@ final:
     CswLinearExpression e = new CswLinearExpression();
     mRows[mObjective.vindex] = Row(mObjective, e);
 
-    //mStackEdCns = new Stack();
-    //mStackEdCns.Push(0);
     mStackEdCns ~= 0;
-
-    //Csw.tracefln("objective expr == %s", rowExpression(mObjective));
   }
 
   /// Convenience function for creating a linear inequality constraint.
@@ -1050,13 +952,11 @@ final:
   /// Params:
   ///   cn = The constraint to be added.
   CswSimplexSolver addConstraint (CswConstraint cn) {
-    Csw.enterfln("AddConstraint: %s", cn);
     CswSlackVariable[2] ePlusEMinus;
     CswNumber prevEConstant = 0.0;
     CswLinearExpression expr = newExpression(cn, /* output to: */ ePlusEMinus, prevEConstant);
 
     bool cAddedOkDirectly = false;
-
     try {
       cAddedOkDirectly = tryAddingDirectly(expr);
       if (!cAddedOkDirectly) {
@@ -1069,7 +969,6 @@ final:
     }
 
     mNeedsSolving = true;
-
     if (cn.isEditConstraint) {
       immutable i = mEditVarMap.length;
       CswEditConstraint cnEdit = cast(CswEditConstraint)cn;
@@ -1082,7 +981,6 @@ final:
       optimize(mObjective);
       setExternalVariables();
     }
-
     return this;
   }
 
@@ -1110,7 +1008,6 @@ final:
   /// Returns:
   ///   false if the constraint resulted in an unsolvable system, otherwise true.
   bool addConstraintNoException (CswConstraint cn) nothrow {
-    Csw.enterfln("AddConstraintNoException: %s", cn);
     try {
       addConstraint(cn);
       return true;
@@ -1251,18 +1148,11 @@ final:
   /// Remove a constraint from the tableau.
   /// Also remove any error variable associated with it.
   CswSimplexSolver removeConstraint (CswConstraint cn) {
-    Csw.enterfln("removeConstraint: %s", cn);
-    Csw.tracefln("%s", this);
-
     mNeedsSolving = true;
-
     resetStayConstants();
 
     CswLinearExpression zRow = rowExpression(mObjective);
-
     auto eVars = cn.cindex in mErrorVars;
-    //Csw.tracefln("eVars == %s", eVars);
-
     if (eVars !is null) {
       foreach (auto clv; eVars.vars.byValue) {
         CswLinearExpression expr = rowExpression(clv);
@@ -1293,21 +1183,15 @@ final:
       throw new CswErrorConstraintNotFound("removeConstraint: constraint not found");
     }
 
-    Csw.tracefln("Looking to remove var %s", marker);
-
     if (rowExpression(marker) is null) {
       // not in the basis, so need to do some more work
       auto col = mColumns[marker.vindex];
-
-      Csw.tracefln("Must pivot -- columns are %s", col);
-
       CswAbstractVariable exitVar = null;
       CswNumber minRatio = 0.0;
       foreach (auto v; col.set) {
         if (v.isRestricted) {
           CswLinearExpression expr = rowExpression(v);
           CswNumber coeff = expr.coefficientFor(marker);
-          Csw.tracefln("Marker %s's coefficient in %s is %s", marker, expr, coeff);
           if (coeff < 0.0) {
             CswNumber r = -expr.constant/coeff;
             if (exitVar is null || r < minRatio) {
@@ -1319,7 +1203,6 @@ final:
       }
 
       if (exitVar is null) {
-        Csw.traceln("exitVar is still null");
         foreach (auto v; col.set) {
           if (v.isRestricted) {
             CswLinearExpression expr = rowExpression(v);
@@ -1401,7 +1284,6 @@ final:
   /// answer, because the indices will be wrong in the CswEditInfo
   /// objects).
   void resolve (CswNumber[] newEditConstants) {
-    Csw.enterfln("resolve %s", newEditConstants);
     foreach (ref ev; mEditVarMap.byValue) {
       //CswEditInfo cei = mEditVarMap[v];
       auto v = ev.var;
@@ -1428,7 +1310,6 @@ final:
   /// values for the edit variables that have already been
   /// suggested (see suggestValue() method).
   void resolve () {
-    Csw.enterln("resolve()");
     dualOptimize();
     setExternalVariables();
     mInfeasibleRows = mInfeasibleRows.default; //mInfeasibleRows.clear();
@@ -1442,7 +1323,6 @@ final:
   /// The tableau will not be solved completely until after resolve()
   /// has been called.
   CswSimplexSolver suggestValue (CswAbstractVariable v, CswNumber x) {
-    Csw.enterfln("suggestValue(%s, %s)", v, x);
     if (auto ceiv = v.vindex in mEditVarMap) {
       auto cei = ceiv.edit;
       immutable i = cei.index;
@@ -1453,8 +1333,7 @@ final:
       deltaEditConstant(delta, clvEditPlus, clvEditMinus);
       return this;
     } else {
-      import iv.writer;
-      errwriteln("suggestValue for variable ", v.toString(), ", but var is not an edit variable");
+      debug { import iv.writer; errwriteln("suggestValue for variable ", v.toString(), ", but var is not an edit variable"); }
       throw new CswError("suggestValue!");
     }
   }
@@ -1508,7 +1387,6 @@ final:
         //import csw.errors : CswErrorInternalError;
         throw new CswErrorInternalError("Error in AddVar -- required failure is impossible");
       }
-      Csw.tracefln("added initial stay on %s", v);
     }
     return this;
   }
@@ -1557,25 +1435,16 @@ final:
   // to the inequality tableau, then make av be 0 (raise an exception
   // if we can't attain av=0).
   protected void addWithArtificialVariable (CswLinearExpression expr) {
-    Csw.enterfln("AddWithArtificialVariable: %s", expr);
-
     CswSlackVariable av = new CswSlackVariable(++mArtificialCounter, "a");
     CswObjectiveVariable az = new CswObjectiveVariable("az");
     CswLinearExpression azRow = /*(CswLinearExpression)*/ expr.clone();
 
-    Csw.traceln("before AddRows:\n", this.toString());
-
     addRow(az, azRow);
     addRow(av, expr);
-
-    Csw.traceln("after AddRows:\n", this.toString());
 
     optimize(az);
 
     CswLinearExpression azTableauRow = rowExpression(az);
-
-    Csw.tracefln("azTableauRow.constant == %s", azTableauRow.constant);
-
     if (!Csw.approx(azTableauRow.constant, 0.0)) {
       removeRow(az);
       removeColumn(av);
@@ -1613,16 +1482,11 @@ final:
   // Returns:
   //   True if successful and false if not.
   protected bool tryAddingDirectly (CswLinearExpression expr) {
-    Csw.enterfln("tryAddingDirectly: %s", expr);
     CswAbstractVariable subject = chooseSubject(expr);
-    if (subject is null) {
-      Csw.exitln("returning false");
-      return false;
-    }
+    if (subject is null) return false;
     expr.newSubject(subject);
     if (columnsHasKey(subject)) substituteOut(subject, expr);
     addRow(subject, expr);
-    Csw.exitln("returning true");
     return true; // succesfully added directly
   }
 
@@ -1640,15 +1504,12 @@ final:
   // (In this last case we have to add an artificial variable and use that
   // variable as the subject -- this is done outside this method though.)
   protected CswAbstractVariable chooseSubject (CswLinearExpression expr) {
-    Csw.enterfln("chooseSubject: %s", expr);
-
     CswAbstractVariable subject = null; // the current best subject, if any
 
     bool foundUnrestricted = false;
     bool foundNewRestricted = false;
 
     //auto terms = expr.mTerms;
-
     foreach (ref clv; expr.mTerms.byValue) {
       //CswNumber c = terms[v];
       auto v = clv.var;
@@ -1673,11 +1534,9 @@ final:
         }
       }
     }
-
     if (subject !is null) return subject;
 
     CswNumber coeff = 0.0;
-
     foreach (ref clv; expr.mTerms.byValue) {
       //CswNumber c = terms[v];
       auto v = clv.var;
@@ -1703,10 +1562,6 @@ final:
   protected CswLinearExpression newExpression (CswConstraint cn, out CswSlackVariable[2] ePlusEMinus,
                                                out CswNumber prevEConstant)
   {
-    Csw.enterfln("newExpression: %s", cn);
-    Csw.tracefln("cn.isInequality == %s", cn.isInequality);
-    Csw.tracefln("cn.isRequired == %s", cn.isRequired);
-
     CswLinearExpression cnExpr = cn.expression;
     CswLinearExpression expr = new CswLinearExpression(cnExpr.constant);
     CswSlackVariable slackVar = new CswSlackVariable();
@@ -1756,7 +1611,6 @@ final:
         dummyVar = new CswDummyVariable(mDummyCounter, "d");
         expr.setVariable(dummyVar, 1.0);
         mMarkerVars[cn.cindex] = MKV(cn, dummyVar);
-        Csw.tracefln("Adding dummyVar == d%s", mDummyCounter);
       } else {
         // cn is a non-required equality. Add a positive and a negative error
         // variable, making the resulting constraint
@@ -1772,11 +1626,6 @@ final:
         mMarkerVars[cn.cindex] = MKV(cn, eplus);
         CswLinearExpression zRow = rowExpression(mObjective);
         immutable swCoeff = cn.strength*cn.weight;
-        if (swCoeff == 0) {
-          Csw.tracefln("sw == %s", swCoeff);
-          Csw.tracefln("cn == %s", cn);
-          Csw.tracefln("adding %s and %s with swCoeff == %s", eplus, eminus, swCoeff);
-        }
         zRow.setVariable(eplus, swCoeff);
         noteAddedVariable(eplus, mObjective);
         zRow.setVariable(eminus, swCoeff);
@@ -1796,7 +1645,6 @@ final:
     // the Constant in the Expression should be non-negative. If necessary
     // normalize the Expression by multiplying by -1
     if (expr.constant < 0) expr.multiplyMe(-1);
-    Csw.exitfln("returning %s", expr);
     return expr;
   }
 
@@ -1804,9 +1652,6 @@ final:
   //
   // The tableau should already be feasible.
   protected void optimize (CswObjectiveVariable zVar) {
-    Csw.enterfln("optimize: %s", zVar);
-    Csw.traceln(this.toString());
-
     CswLinearExpression zRow = rowExpression(zVar);
     assert(zRow !is null, "zRow != null");
     CswAbstractVariable entryVar = null;
@@ -1827,8 +1672,6 @@ final:
         }
       }
       if (objectiveCoeff >= -mEpsilon || entryVar is null) return;
-      Csw.tracefln("entryVar == %s, objectiveCoeff == %s", entryVar, objectiveCoeff);
-
       // choose which variable to move out of the basis
       // Only consider pivotable basic variables
       // (i.e. restricted, non-dummy variables)
@@ -1836,11 +1679,9 @@ final:
       auto columnVars = mColumns[entryVar.vindex];
       CswNumber r = 0.0;
       foreach (auto v; columnVars.set) {
-        Csw.tracefln("Checking %s", v);
         if (v.isPivotable) {
           CswLinearExpression expr = rowExpression(v);
           CswNumber coeff = expr.coefficientFor(entryVar);
-          Csw.tracefln("pivotable, coeff == %s", coeff);
           if (coeff < 0.0) {
             r = -expr.constant/coeff;
             // Bland's anti-cycling rule:
@@ -1851,7 +1692,6 @@ final:
             //              (c.approx(r, minRatio) &&
             //               v.get_pclv() < exitVar.get_pclv()))
             if (r < minRatio) {
-              Csw.tracefln("new minRatio == %s", r);
               minRatio = r;
               exitVar = v;
             }
@@ -1867,7 +1707,6 @@ final:
         throw new CswErrorInternalError("Objective function is unbounded in optimize");
       }
       pivot(entryVar, exitVar);
-      Csw.traceln(this.toString());
     }
   }
 
@@ -1890,7 +1729,6 @@ final:
   // gone since it was part of the screwey vector-based interface
   // to resolveing. --02/16/99 gjb)
   protected void deltaEditConstant (CswNumber delta, CswAbstractVariable plusErrorVar, CswAbstractVariable minusErrorVar) {
-    Csw.enterfln("deltaEditConstant :%s, %s, %s", delta, plusErrorVar, minusErrorVar);
     CswLinearExpression exprPlus = rowExpression(plusErrorVar);
     if (exprPlus !is null) {
       exprPlus.incrementConstant(delta);
@@ -1919,7 +1757,6 @@ final:
   //
   // We have set new values for the constants in the edit constraints.
   protected void dualOptimize () {
-    Csw.enterln("dualOptimize: ");
     CswLinearExpression zRow = rowExpression(mObjective);
     while (mInfeasibleRows.length) {
       // get first var
@@ -1961,7 +1798,6 @@ final:
   // We could for example make entryVar a basic variable and
   // make exitVar a parametric variable.
   protected void pivot (CswAbstractVariable entryVar, CswAbstractVariable exitVar) {
-    Csw.enterfln("pivot: %s, %s", entryVar, exitVar);
     // the entryVar might be non-pivotable if we're doing a
     // removeConstraint -- otherwise it should be a pivotable
     // variable -- enforced at call sites, hopefully.
@@ -1993,7 +1829,6 @@ final:
   // for that basic error variable. Reset the constant of this
   // expression to 0.
   protected void resetStayConstants () {
-    Csw.enterln("resetStayConstants");
     foreach (immutable i; 0..mStayPlusErrorVars.length) {
       CswLinearExpression expr = rowExpression(mStayPlusErrorVars[i]);
       if (expr is null) expr = rowExpression(mStayMinusErrorVars[i]);
@@ -2011,34 +1846,25 @@ final:
   // don't actually store values -- their values are just implicit in the tableau -- so
   // we don't need to set them.
   protected void setExternalVariables () {
-    Csw.enterln("setExternalVariables:");
-    Csw.traceln(this.toString());
-
     foreach (auto v; mExternalParametricVars.byValue) {
       if (rowExpression(v) !is null) {
-        import iv.writer;
-        errwriteln("Error: variable ", v.toString(), "in mExternalParametricVars is basic");
+        debug { import iv.writer; errwriteln("Error: variable ", v.toString(), "in mExternalParametricVars is basic"); }
         continue;
       }
       auto vv = cast(CswVariable)v;
       vv.changeValue(0.0);
     }
-
     foreach (auto v; mExternalRows.byValue) {
       CswLinearExpression expr = rowExpression(v);
-      Csw.trdebugln("v == ", v);
-      Csw.trdebugln("expr == ", expr);
       auto vv = cast(CswVariable)v;
       vv.changeValue(expr.constant);
     }
-
     mNeedsSolving = false;
   }
 
   // Protected convenience function to insert an error variable
   // into the mErrorVars set, creating the mapping with Add as necessary.
   protected void insertErrorVar (CswConstraint cn, CswAbstractVariable var) {
-    Csw.enterfln("insertErrorVar: %s, %s", cn, var);
     if (auto cnset = cn.cindex in mErrorVars) {
       cnset.vars[var.vindex] = var;
     } else {
@@ -2878,8 +2704,7 @@ public CswConstraint CswParseConstraint (string s, CswSimplexSolver solver) {
     if (!st.peekToken().isEOF) throw new CswErrorParser("invalid constraint expression");
     return res;
   } catch (CswErrorParser e) {
-    import iv.writer;
-    errwriteln("PARSE ERROR IN: '", s, "'");
+    debug { import iv.writer; errwriteln("PARSE ERROR IN: '", s, "'"); }
     throw e;
   }
   assert(0);
@@ -2895,8 +2720,7 @@ public CswNumber CswParseSimpleMath (string s, CswSimplexSolver solver) {
     if (!ex.isNumber) throw new CswErrorParser("invalid simple math expression");
     return ex.n;
   } catch (CswErrorParser e) {
-    import iv.writer;
-    errwriteln("PARSE ERROR (", e.msg, ") IN: '", s, "'");
+    debug { import iv.writer; errwriteln("PARSE ERROR (", e.msg, ") IN: '", s, "'"); }
     throw e;
   }
   assert(0);
@@ -3016,7 +2840,7 @@ public void CswParseScript (string s, CswSimplexSolver solver) {
         writeln("*** UNKNOWN VARIABLE: '", tk.s, "'");
       } else {
         import iv.writer;
-        writeln("*** ", st.solver[tk.s]);
+        writeln(st.solver[tk.s]);
       }
       tk = st.peekToken();
       if (!tk.isEOX) {
@@ -3063,9 +2887,11 @@ public void CswParseScript (string s, CswSimplexSolver solver) {
       tk = st.nextToken();
     }
   } catch (CswErrorParser e) {
-    import iv.writer;
-    errwriteln("PARSE ERROR IN SCRIPT: ", e.msg);
-    errwriteln("POSITION: ", st.lastTokenPos);
+    debug {
+      import iv.writer;
+      errwriteln("PARSE ERROR IN SCRIPT: ", e.msg);
+      errwriteln("POSITION: ", st.lastTokenPos);
+    }
     //writeln(s[0..st.lastTokenPos]);
     //writeln(s[0..st.pos]);
     throw e;
