@@ -149,34 +149,32 @@ static:
   @property bool gcLog () @safe nothrow @nogc => mGC;
   @property void gcLog (bool v) @safe nothrow @nogc => mGC = v;
 
-  private enum SWMult = 1000.0;
-  CswNumber symWeight (in CswNumber w1, in CswNumber w2, in CswNumber w3) @safe pure nothrow @nogc =>
-    w3+w2*SWMult+w1*(SWMult*SWMult);
-
   CswStrength Strength (string name) @safe nothrow @nogc {
     switch (name) {
-      case "required": return Csw.symWeight(1000, 1000, 1000);
-      case "strong": return Csw.symWeight(1, 0, 0);
-      case "medium": return Csw.symWeight(0, 1, 0);
-      case "weak": return Csw.symWeight(0, 0, 1);
+      case "required": return Csw.Required;
+      case "strong": return Csw.Strong;
+      case "medium": return Csw.Medium;
+      case "weak": return Csw.Weak;
       default: assert(0, "invalid strength name");
     }
   }
 
-  CswNumber Strength (in CswNumber w1, in CswNumber w2, in CswNumber w3) @safe nothrow @nogc => symWeight(w1, w2, w3);
+  private enum SWMult = 1000.0;
+  CswNumber Strength (in CswNumber w1, in CswNumber w2, in CswNumber w3) @safe nothrow @nogc =>
+    w3+w2*SWMult+w1*(SWMult*SWMult);
 
-  enum Required = symWeight(1000, 1000, 1000);
-  enum Strong = symWeight(1, 0, 0);
-  enum Medium = symWeight(0, 1, 0);
-  enum Weak = symWeight(0, 0, 1);
+  enum Required = Strength(1000, 1000, 1000);
+  enum Strong = Strength(1, 0, 0);
+  enum Medium = Strength(0, 1, 0);
+  enum Weak = Strength(0, 0, 1);
+
+  private bool isRequiredStrength (CswStrength str) @safe pure nothrow @nogc => (str >= Required);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // strength
 alias CswStrength = CswNumber;
-
-private bool isRequired (CswStrength str) @safe pure nothrow @nogc => (str >= Csw.Required);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -217,7 +215,7 @@ nothrow:
   pure {
     @property bool isEditConstraint () const => false;
     @property bool isInequality () const => false;
-    @property bool isRequired () const => mStrength.isRequired;
+    @property bool isRequired () const => Csw.isRequiredStrength(mStrength);
     @property bool isStayConstraint () const => false;
   }
 
@@ -773,7 +771,6 @@ public:
 
     return s;
   }
-
 
   /// Convenience function to insert a variable into
   /// the set of rows stored at mColumns[paramVar],
@@ -1724,7 +1721,6 @@ final:
       CswLinearExpression e = rowExpression(v);
       if (e is null) expr.addVariable(v, c); else expr.addExpression(e, c);
     }
-
     if (cn.isInequality) {
       // cn is an inequality, so Add a slack variable. The original constraint
       // is expr>=0, so that the resulting equality is expr-slackVar=0. If cn is
@@ -1797,11 +1793,10 @@ final:
         }
       }
     }
-
+    // the Constant in the Expression should be non-negative. If necessary
+    // normalize the Expression by multiplying by -1
     if (expr.constant < 0) expr.multiplyMe(-1);
-
     Csw.exitfln("returning %s", expr);
-
     return expr;
   }
 
@@ -1819,6 +1814,9 @@ final:
     for (;;) {
       CswNumber objectiveCoeff = 0;
       //auto terms = zRow.terms;
+      // Find the most negative coefficient in the objective function (ignoring
+      // the non-pivotable dummy variables). If all coefficients are positive
+      // we're done
       foreach (ref clv; zRow.mTerms.byValue) {
         //CswNumber c = terms[v];
         auto v = clv.var;
@@ -1831,6 +1829,9 @@ final:
       if (objectiveCoeff >= -mEpsilon || entryVar is null) return;
       Csw.tracefln("entryVar == %s, objectiveCoeff == %s", entryVar, objectiveCoeff);
 
+      // choose which variable to move out of the basis
+      // Only consider pivotable basic variables
+      // (i.e. restricted, non-dummy variables)
       CswNumber minRatio = CswNumber.max;
       auto columnVars = mColumns[entryVar.vindex];
       CswNumber r = 0.0;
@@ -1841,7 +1842,14 @@ final:
           CswNumber coeff = expr.coefficientFor(entryVar);
           Csw.tracefln("pivotable, coeff == %s", coeff);
           if (coeff < 0.0) {
-            r = - expr.constant/coeff;
+            r = -expr.constant/coeff;
+            // Bland's anti-cycling rule:
+            // if multiple variables are about the same,
+            // always pick the lowest via some total
+            // ordering -- I use their addresses in memory
+            //    if (r < minRatio ||
+            //              (c.approx(r, minRatio) &&
+            //               v.get_pclv() < exitVar.get_pclv()))
             if (r < minRatio) {
               Csw.tracefln("new minRatio == %s", r);
               minRatio = r;
@@ -1850,6 +1858,10 @@ final:
           }
         }
       }
+      // If minRatio is still nil at this point, it means that the
+      // objective function is unbounded, i.e. it can become
+      // arbitrarily negative.  This should never happen in this
+      // application.
       if (minRatio == CswNumber.max) {
         //import csw.errors : CswErrorInternalError;
         throw new CswErrorInternalError("Objective function is unbounded in optimize");
@@ -1952,11 +1964,17 @@ final:
     Csw.enterfln("pivot: %s, %s", entryVar, exitVar);
     // the entryVar might be non-pivotable if we're doing a
     // removeConstraint -- otherwise it should be a pivotable
-    // variable -- enforced at call sites, hopefully
-    CswLinearExpression pexpr = removeRow(exitVar);
-    pexpr.changeSubject(exitVar, entryVar);
-    substituteOut(entryVar, pexpr);
-    addRow(entryVar, pexpr);
+    // variable -- enforced at call sites, hopefully.
+    // expr is the Expression for the exit variable (about to leave the basis) --
+    // so that the old tableau includes the equation:
+    //   exitVar = expr
+    CswLinearExpression expr = removeRow(exitVar);
+    // Compute an Expression for the entry variable.  Since expr has
+    // been deleted from the tableau we can destructively modify it to
+    // build this Expression.
+    expr.changeSubject(exitVar, entryVar);
+    substituteOut(entryVar, expr);
+    addRow(entryVar, expr);
   }
 
   // Fix the constants in the equations representing the stays.
