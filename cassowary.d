@@ -148,140 +148,35 @@ static:
 
   @property bool gcLog () @safe nothrow @nogc => mGC;
   @property void gcLog (bool v) @safe nothrow @nogc => mGC = v;
+
+  private enum SWMult = 1000.0;
+  CswNumber symWeight (in CswNumber w1, in CswNumber w2, in CswNumber w3) @safe pure nothrow @nogc =>
+    w3+w2*SWMult+w1*(SWMult*SWMult);
+
+  CswStrength Strength (string name) @safe nothrow @nogc {
+    switch (name) {
+      case "required": return Csw.symWeight(1000, 1000, 1000);
+      case "strong": return Csw.symWeight(1, 0, 0);
+      case "medium": return Csw.symWeight(0, 1, 0);
+      case "weak": return Csw.symWeight(0, 0, 1);
+      default: assert(0, "invalid strength name");
+    }
+  }
+
+  CswNumber Strength (in CswNumber w1, in CswNumber w2, in CswNumber w3) @safe nothrow @nogc => symWeight(w1, w2, w3);
+
+  enum Required = symWeight(1000, 1000, 1000);
+  enum Strong = symWeight(1, 0, 0);
+  enum Medium = symWeight(0, 1, 0);
+  enum Weak = symWeight(0, 0, 1);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // strength
-private struct CswSymbolicWeight {
-private:
-  CswNumber[3] mValues;
+alias CswStrength = CswNumber;
 
-public:
-  string toString () const {
-    import std.conv : to;
-    string result = "[";
-    if (mValues.length > 0) {
-      foreach (immutable v; mValues[0..$-1]) result ~= to!string(v)~",";
-      result ~= to!string(mValues[$-1])~"]";
-    } else {
-      result ~= "]";
-    }
-    return result;
-  }
-
-@nogc:
-@safe:
-nothrow:
-  @disable this ();
-
-  this (CswNumber w1, CswNumber w2, CswNumber w3) {
-    mValues[0] = w1;
-    mValues[1] = w2;
-    mValues[2] = w3;
-  }
-
-  private CswSymbolicWeight muldiv(string op) (CswNumber n) {
-    if (n != 1.0) {
-      auto res = this;
-      foreach (ref v; res.mValues) mixin(`v `~op~`= n;`);
-      return res;
-    } else {
-      return this;
-    }
-  }
-
-  private CswSymbolicWeight addsub(string op) (in CswSymbolicWeight clsw) {
-    auto res = this;
-    foreach (immutable idx, ref v; res.mValues) mixin(`v `~op~`= clsw.mValues[idx];`);
-    return res;
-  }
-
-  CswSymbolicWeight opBinary(string op) (CswNumber n) if (op == "*" || op == "/") => muldiv!op(n);
-  CswSymbolicWeight opBinaryRight(string op) (CswNumber n) if (op == "*" || op == "/") => muldiv!op(n);
-  CswSymbolicWeight opBinary(string op) (in CswSymbolicWeight n) if (op == "+" || op == "-") => addsub!op(n);
-
-  bool opEquals (in CswSymbolicWeight n) const => this.mValues == n.mValues;
-
-  int opCmp (in CswSymbolicWeight n) const {
-    foreach (immutable idx, immutable v; mValues) {
-      immutable t = n.mValues[idx];
-      if (v < t) return -1; else if (v > t) return 1;
-    }
-    return 0; // they are equal
-  }
-
-  private @property bool posnegzero(string op) () const {
-    foreach (immutable v; mValues) mixin(`if (v `~op~` 0.0) return false;`);
-    return true;
-  }
-  @property alias positive = posnegzero!"<=";
-  @property alias negative = posnegzero!">=";
-  @property alias zero = posnegzero!"!=";
-
-  T opCast(T : CswNumber) () const {
-    CswNumber sum = 0.0, factor = 1.0, multiplier = 1000.0;
-    foreach_reverse (immutable v; mValues) {
-      sum += v*factor;
-      factor *= multiplier;
-    }
-    return sum;
-  }
-
-  @property int levels () const pure => mValues.length;
-}
-
-
-struct CswStrength {
-private:
-  CswSymbolicWeight mSymbolicWeight = void;
-  bool mIsRequired = false;
-
-public:
-  string name;
-
-public:
-  string toString () const => (isRequired ? name : name~mSymbolicWeight.toString);
-
-@nogc:
-@safe:
-nothrow:
-  @disable this ();
-
-  this (string aname, CswNumber w1, CswNumber w2, CswNumber w3) {
-    name = aname;
-    mSymbolicWeight = CswSymbolicWeight(w1, w2, w3);
-  }
-
-  @property bool isRequired () const pure => mIsRequired;
-
-  @property ref CswSymbolicWeight symbolicWeight () pure => mSymbolicWeight;
-  @property void symbolicWeight (in CswSymbolicWeight v) => mSymbolicWeight = v;
-
-  static @property ref CswStrength required () @trusted => mRequired;
-  static @property ref CswStrength strong () @trusted => mStrong;
-  static @property ref CswStrength medium () @trusted => mMedium;
-  static @property ref CswStrength weak () @trusted => mWeak;
-
-private:
-  this (string name, CswNumber w1, CswNumber w2, CswNumber w3, bool isReq) {
-    this(name, w1, w2, w3);
-    mIsRequired = isReq;
-  }
-
-private:
-  __gshared CswStrength mRequired = void;
-  __gshared CswStrength mStrong = void;
-  __gshared CswStrength mMedium = void;
-  __gshared CswStrength mWeak = void;
-
-  shared static this () @trusted {
-    mRequired = CswStrength("<required>", 1000, 1000, 1000, true);
-    mStrong = CswStrength("strong", 1.0, 0.0, 0.0);
-    mMedium = CswStrength("medium", 0.0, 1.0, 0.0);
-    mWeak = CswStrength("weak", 0.0, 0.0, 1.0);
-  }
-}
+private bool isRequired (CswStrength str) @safe pure nothrow @nogc => (str >= Csw.Required);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -311,7 +206,7 @@ public:
 @nogc:
 @safe:
 nothrow:
-  this (in CswStrength strength=CswStrength.required, CswNumber weight=1.0) {
+  this (in CswStrength strength=Csw.Required, CswNumber weight=1.0) {
     cindex = newIndex;
     mStrength = strength;
     mWeight = weight;
@@ -347,7 +242,7 @@ public:
 
 @safe:
 nothrow:
-  this (CswVariable var, in CswStrength strength=CswStrength.required, CswNumber weight=1.0) {
+  this (CswVariable var, in CswStrength strength=Csw.Required, CswNumber weight=1.0) {
     super(strength, weight);
     mVariable = var;
     mExpression = new CswLinearExpression(mVariable, -1.0, mVariable.value);
@@ -363,7 +258,7 @@ class CswEditConstraint : CswEditOrStayConstraint {
   override string toString () const => "edit"~super.toString();
 @safe:
 nothrow:
-  this (CswVariable clv, in CswStrength strength=CswStrength.required, CswNumber weight=1.0) => super(clv, strength, weight);
+  this (CswVariable clv, in CswStrength strength=Csw.Required, CswNumber weight=1.0) => super(clv, strength, weight);
   override @property bool isEditConstraint () const pure @nogc => true;
 }
 
@@ -377,7 +272,7 @@ public:
 
 @safe:
 nothrow:
-  this (CswLinearExpression cle, in CswStrength strength=CswStrength.required, CswNumber weight=1.0) {
+  this (CswLinearExpression cle, in CswStrength strength=Csw.Required, CswNumber weight=1.0) {
     super(strength, weight);
     mExpression = cle;
   }
@@ -390,14 +285,14 @@ public class CswStayConstraint : CswEditOrStayConstraint {
   override string toString () const => "stay"~super.toString();
 @safe:
 nothrow:
-  this (CswVariable var, in CswStrength strength=CswStrength.weak, CswNumber weight=1.0) => super(var, strength, weight);
+  this (CswVariable var, in CswStrength strength=Csw.Weak, CswNumber weight=1.0) => super(var, strength, weight);
   override @property bool isStayConstraint () const pure @nogc => true;
 }
 
 
 class CswLinearEquation : CswLinearConstraint {
   private enum buildCtor(string args, string body) =
-    `this (`~args~`, in CswStrength strength=CswStrength.required, CswNumber weight=1.0) {`~body~`}`;
+    `this (`~args~`, in CswStrength strength=Csw.Required, CswNumber weight=1.0) {`~body~`}`;
 
   override string toString () const => super.toString()~" = 0)";
 nothrow:
@@ -433,7 +328,7 @@ nothrow:
 
 class CswLinearInequality : CswLinearConstraint {
   private enum buildCtor(string args, string opr, string sup, string adder="addVariable") =
-    `this (`~args~`, in CswStrength strength=CswStrength.required, CswNumber weight=1.0) {`~
+    `this (`~args~`, in CswStrength strength=Csw.Required, CswNumber weight=1.0) {`~
       sup~
       `switch (op) {`~
       `  case Csw.CompOp.GEQ:`~
@@ -448,7 +343,7 @@ class CswLinearInequality : CswLinearConstraint {
       `}`~
     `}`;
 
-  this (CswLinearExpression cle, in CswStrength strength=CswStrength.required, CswNumber weight=1.0) @safe nothrow {
+  this (CswLinearExpression cle, in CswStrength strength=Csw.Required, CswNumber weight=1.0) @safe nothrow {
     super(cle, strength, weight);
   }
 
@@ -1234,7 +1129,7 @@ final:
   /// Params:
   ///   v = Variable to add an edit constraint to.
   ///   strength = Strength of the edit constraint.
-  CswSimplexSolver addEditVar (CswVariable v, in CswStrength strength=CswStrength.strong) {
+  CswSimplexSolver addEditVar (CswVariable v, in CswStrength strength=Csw.Strong) {
     try {
       CswEditConstraint cnEdit = new CswEditConstraint(v, strength);
       return addConstraint(cnEdit);
@@ -1315,12 +1210,12 @@ final:
   ///
   /// Params:
   ///   v = Variable to add the stay constraint to.
-  CswSimplexSolver addStay (CswVariable v, in CswStrength strength=CswStrength.weak, CswNumber weight=1.0) {
+  CswSimplexSolver addStay (CswVariable v, in CswStrength strength=Csw.Weak, CswNumber weight=1.0) {
     CswStayConstraint cn = new CswStayConstraint(v, strength, weight);
     return addConstraint(cn);
   }
 
-  CswSimplexSolver addStay (string name, in CswStrength strength=CswStrength.weak, CswNumber weight=1.0) {
+  CswSimplexSolver addStay (string name, in CswStrength strength=Csw.Weak, CswNumber weight=1.0) {
     if (auto var = name in mVarMap) {
       CswStayConstraint cn = new CswStayConstraint(*var, strength, weight);
       return addConstraint(cn);
@@ -1375,10 +1270,10 @@ final:
       foreach (auto clv; eVars.vars.byValue) {
         CswLinearExpression expr = rowExpression(clv);
         if (expr is null) {
-          zRow.addVariable(clv, -cn.weight*cast(CswNumber)cn.strength.symbolicWeight, mObjective, this);
+          zRow.addVariable(clv, -cn.weight*cn.strength, mObjective, this);
         } else {
           // the error variable was in the basis
-          zRow.addExpression(expr, -cn.weight*cast(CswNumber)cn.strength.symbolicWeight, mObjective, this);
+          zRow.addExpression(expr, -cn.weight*cn.strength, mObjective, this);
         }
       }
     }
@@ -1803,6 +1698,11 @@ final:
     return subject;
   }
 
+  // Make a new linear Expression representing the constraint cn,
+  // replacing any basic variables with their defining expressions.
+  // Normalize if necessary so that the Constant is non-negative.
+  // If the constraint is non-required give its error variables an
+  // appropriate weight in the objective function.
   protected CswLinearExpression newExpression (CswConstraint cn, out CswSlackVariable[2] ePlusEMinus,
                                                out CswNumber prevEConstant)
   {
@@ -1826,6 +1726,18 @@ final:
     }
 
     if (cn.isInequality) {
+      // cn is an inequality, so Add a slack variable. The original constraint
+      // is expr>=0, so that the resulting equality is expr-slackVar=0. If cn is
+      // also non-required Add a negative error variable, giving:
+      //
+      //    expr - slackVar = -errorVar
+      //
+      // in other words:
+      //
+      //    expr - slackVar + errorVar = 0
+      //
+      // Since both of these variables are newly created we can just Add
+      // them to the Expression (they can't be basic).
       ++mSlackCounter;
       slackVar = new CswSlackVariable(mSlackCounter, "s");
       expr.setVariable(slackVar, -1);
@@ -1835,20 +1747,26 @@ final:
         eminus = new CswSlackVariable(mSlackCounter, "em");
         expr.setVariable(eminus, 1.0);
         CswLinearExpression zRow = rowExpression(mObjective);
-        auto sw = cn.strength.symbolicWeight*cn.weight;
-        zRow.setVariable(eminus, cast(CswNumber)sw);
+        zRow.setVariable(eminus, cn.strength*cn.weight);
         insertErrorVar(cn, eminus);
         noteAddedVariable(eminus, mObjective);
       }
     } else {
       // cn is an equality
       if (cn.isRequired) {
+        // Add a dummy variable to the Expression to serve as a marker for this constraint.
+        // The dummy variable is never allowed to enter the basis when pivoting.
         ++mDummyCounter;
         dummyVar = new CswDummyVariable(mDummyCounter, "d");
         expr.setVariable(dummyVar, 1.0);
         mMarkerVars[cn.cindex] = MKV(cn, dummyVar);
         Csw.tracefln("Adding dummyVar == d%s", mDummyCounter);
       } else {
+        // cn is a non-required equality. Add a positive and a negative error
+        // variable, making the resulting constraint
+        //       expr = eplus - eminus
+        // in other words:
+        //       expr - eplus + eminus = 0
         ++mSlackCounter;
         eplus = new CswSlackVariable(mSlackCounter, "ep");
         eminus = new CswSlackVariable(mSlackCounter, "em");
@@ -1857,10 +1775,9 @@ final:
         expr.setVariable(eminus, 1.0);
         mMarkerVars[cn.cindex] = MKV(cn, eplus);
         CswLinearExpression zRow = rowExpression(mObjective);
-        auto sw = cn.strength.symbolicWeight*cn.weight;
-        auto swCoeff = cast(CswNumber)sw;
+        immutable swCoeff = cn.strength*cn.weight;
         if (swCoeff == 0) {
-          Csw.tracefln("sw == %s", sw);
+          Csw.tracefln("sw == %s", swCoeff);
           Csw.tracefln("cn == %s", cn);
           Csw.tracefln("adding %s and %s with swCoeff == %s", eplus, eminus, swCoeff);
         }
@@ -2867,10 +2784,10 @@ bool parseStrength (ref ParserData st, ref CswStrength str, ref CswNumber weight
     if (tk.type == Token.Type.Id) {
       // named
       switch (tk.s) {
-        case "required": str = CswStrength.required; break;
-        case "weak": str = CswStrength.weak; break;
-        case "medium": str = CswStrength.medium; break;
-        case "strong": str = CswStrength.strong; break;
+        case "required": str = Csw.Required; break;
+        case "weak": str = Csw.Weak; break;
+        case "medium": str = Csw.Medium; break;
+        case "strong": str = Csw.Strong; break;
         default: throw new CswErrorParser("invalid strength: '"~tk.s~"'");
       }
       tk = st.nextToken();
@@ -2886,7 +2803,7 @@ bool parseStrength (ref ParserData st, ref CswStrength str, ref CswNumber weight
           tk = st.nextToken();
         }
       }
-      str = CswStrength("<custom>", nn[0], nn[1], nn[2]);
+      str = Csw.Strength(nn[0], nn[1], nn[2]);
     }
     // parse weight
     if (tk.type == Token.Type.Colon) {
@@ -2908,7 +2825,7 @@ bool parseStrength (ref ParserData st, ref CswStrength str, ref CswNumber weight
 // <w0,w1,w2[:weight]> expr eqop expr
 // default <required>
 CswConstraint constraint (ref ParserData st) {
-  CswStrength str = CswStrength.required; // default strength
+  CswStrength str = Csw.Required; // default strength
   CswNumber weight = 1.0; // default weight
   parseStrength(st, str, weight);
   // left part
@@ -2992,7 +2909,7 @@ public void CswParseScript (string s, CswSimplexSolver solver) {
     }
     // varlist
     while (!tk.isEOX) {
-      CswStrength str = CswStrength.weak; // default strength
+      CswStrength str = Csw.Weak; // default strength
       CswNumber weight = 1.0; // default weight
       bool isStay = isAllStay;
       tk = st.nextToken(); // Id or Less, skipped
