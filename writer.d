@@ -534,7 +534,12 @@ if (state == "write-argument-s")
   static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
   enum aidx = data.aidx;
   alias aatype = StripTypedef!(AA[aidx]);
-  static if (is(Unqual!aatype == char[]) || is(aatype == string) || isStaticNarrowString!aatype) {
+  //pragma(msg, "TYPE: ", Unqual!aatype);
+  static if (is(Unqual!aatype == char[]) ||
+             is(Unqual!aatype == const(char)[]) ||
+             is(aatype == string) ||
+             isStaticNarrowString!aatype) {
+    //pragma(msg, "STRING!");
     enum callFunc = "wrWriteWidth";
     enum func = "";
   } else static if (isIntegral!aatype) {
