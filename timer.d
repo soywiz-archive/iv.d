@@ -53,8 +53,29 @@ module iv.timer is aliced;
 
 
 struct Timer {
-  import core.time;
+private:
+  import core.time : Duration, MonoTime;
 
+  State mState = State.Stopped;
+  MonoTime mSTime;
+  Duration mAccum;
+
+public:
+  string toString () @trusted const {
+    import std.string : format;
+    Duration d;
+    final switch (mState) {
+      case State.Stopped: case State.Paused: d = mAccum; break;
+      case State.Running: d = mAccum+(MonoTime.currTime-mSTime); break;
+    }
+    auto tm = d.split!("hours", "minutes", "seconds", "msecs")();
+    if (tm.hours) return format("%s:%02d:%02d.%03d", tm.hours, tm.minutes, tm.seconds, tm.msecs);
+    else if (tm.minutes) return format("%s:%02d.%03d", tm.minutes, tm.seconds, tm.msecs);
+    else return format("%s.%03d", tm.seconds, tm.msecs);
+  }
+
+nothrow:
+@nogc:
   enum { Stopped, Started }
 
   this (int initState=Stopped) @trusted {
@@ -67,57 +88,41 @@ struct Timer {
     Paused
   }
 
-  @property auto state () @safe const nothrow @nogc => mState;
+  @property @safe const {
+    auto state () @safe const nothrow @nogc => mState;
+    bool stopped () @safe const nothrow @nogc => (mState == State.Stopped);
+    bool running () @safe const nothrow @nogc => (mState == State.Running);
+    bool paused () @safe const nothrow @nogc => (mState == State.Paused);
+  }
 
-  @property bool stopped () @safe const nothrow @nogc => (mState == State.Stopped);
-  @property bool running () @safe const nothrow @nogc => (mState == State.Running);
-  @property bool paused () @safe const nothrow @nogc => (mState == State.Paused);
-
-  void reset () @trusted nothrow {
+@trusted:
+  void reset () {
     mAccum = Duration.zero;
     mSTime = MonoTime.currTime;
   }
 
-  void start () @trusted {
-    if (mState != State.Stopped) throw new Exception("Timer.start(): invalid timer state");
+  void start () {
+    if (mState != State.Stopped) assert(0, "Timer.start(): invalid timer state");
     mAccum = Duration.zero;
     mState = State.Running;
     mSTime = MonoTime.currTime;
   }
 
-  void stop () @trusted {
-    if (mState != State.Running) throw new Exception("Timer.stop(): invalid timer state");
+  void stop () {
+    if (mState != State.Running) assert(0, "Timer.stop(): invalid timer state");
     mAccum += MonoTime.currTime-mSTime;
     mState = State.Stopped;
   }
 
-  void pause () @trusted {
-    if (mState != State.Running) throw new Exception("Timer.pause(): invalid timer state");
+  void pause () {
+    if (mState != State.Running) assert(0, "Timer.pause(): invalid timer state");
     mAccum += MonoTime.currTime-mSTime;
     mState = State.Paused;
   }
 
-  void resume () @trusted {
-    if (mState != State.Paused) throw new Exception("Timer.resume(): invalid timer state");
+  void resume () {
+    if (mState != State.Paused) assert(0, "Timer.resume(): invalid timer state");
     mState = State.Running;
     mSTime = MonoTime.currTime;
   }
-
-  string toString () @trusted const {
-    import std.string;
-    Duration d;
-    final switch (mState) {
-      case State.Stopped: case State.Paused: d = mAccum; break;
-      case State.Running: d = mAccum+(MonoTime.currTime-mSTime); break;
-    }
-    auto tm = d.split!("hours", "minutes", "seconds", "msecs")();
-    if (tm.hours) return format("%s:%02d:%02d.%03d", tm.hours, tm.minutes, tm.seconds, tm.msecs);
-    if (tm.minutes) return format("%s:%02d.%03d", tm.minutes, tm.seconds, tm.msecs);
-    return format("%s.%03d", tm.seconds, tm.msecs);
-  }
-
-private:
-  State mState = State.Stopped;
-  MonoTime mSTime;
-  Duration mAccum;
 }
