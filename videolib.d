@@ -4123,7 +4123,7 @@ public immutable ubyte[256] vlFontPropWidth = () {
     }
     switch (cnum) {
       case 0: wdt = 8; break; // 8px space
-      case 32: wdt = 6; break; // 6px space
+      case 32: wdt = 5; break; // 5px space
       case  17: .. case  27: wdt = 8; break; // single frames
       case  48: .. case  57: wdt = 5; break; // digits are monospaced
       case 127: .. case 142: wdt = 8; break; // filled frames
