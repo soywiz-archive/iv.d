@@ -153,7 +153,9 @@ nothrow:
   }
 
   //WARNING! returned range should not outlive this object!
-  auto findFirst (const(void)[] key) const nothrow @nogc {
+  auto findFirst(T=char) (const(void)[] key) const nothrow @nogc
+  if (is(T == char) || is(T == sbyte) || is(T == ubyte) || is(T == void))
+  {
     static struct Iter {
     private:
       const(CDB)* cdbp;
@@ -169,7 +171,9 @@ nothrow:
       @disable this ();
 
       @property bool empty () const @safe pure { return (cdbp is null || !cdbp.opened); }
-      @property const(ubyte)[] front () const @trusted pure nothrow @nogc { return (empty ? null : cdbp.mDataPtr[vpos..vpos+vlen]); }
+      @property const(T)[] front () const @trusted pure nothrow @nogc {
+        return (empty ? null : cast(const(T)[])cdbp.mDataPtr[vpos..vpos+vlen]);
+      }
       void close () { cdbp = null; key = null; htp = htab = htend = null; }
       void popFront () {
         if (empty) return;
