@@ -100,8 +100,12 @@ nothrow:
     }
   }
 
+  const(char)[] opIndex (const(char)[] key) const => find(key);
+
   // null: not found (or some error occured)
-  const(ubyte)[] find (const(void)[] key) const {
+  const(T)[] find(T=char) (const(void)[] key) const
+  if (is(T == char) || is(T == sbyte) || is(T == ubyte) || is(T == void))
+  {
     uint httodo; /* ht bytes left to look */
     uint pos, n;
     if (key.length < 1 || key.length >= mDataEnd) return null; /* if key size is too small or too large */
@@ -138,7 +142,7 @@ nothrow:
             if (mDataEnd < n || mDataEnd-n < pos+klen) return /*errno = EPROTO, -1*/null; // error
             // key: [pos..pos+klen]
             // val: [pos+klen..pos+klen+n]
-            return mDataPtr[pos+klen..pos+klen+n];
+            return cast(const(T)[])mDataPtr[pos+klen..pos+klen+n];
           }
         }
       }
