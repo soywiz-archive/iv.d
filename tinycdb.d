@@ -100,7 +100,7 @@ nothrow:
     }
   }
 
-  const(char)[] opIndex (const(char)[] key) const => find(key);
+  const(char)[] opIndex (const(char)[] key) const { return find(key); }
 
   // null: not found (or some error occured)
   const(T)[] find(T=char) (const(void)[] key) const
