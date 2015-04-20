@@ -60,26 +60,73 @@ struct Rect {
   int width = -1; // <0: invalid rect
   int height = -1; // <0: invalid rect
 
+  string toString () const @safe pure {
+    import std.string : format; // should be std.format, but gdc...
+    return (valid ? "(%s,%s)-(%s,%s)".format(x, y, x+width-1, y+height-1) : "(invalid-rect)");
+  }
+
   // default constructor: (x, y, w, h)
   this(CW, CH) (int ax, int ay, CW awidth, CH aheight) if (isIntegral!CW && isIntegral!CH) => set(ax, ay, awidth, aheight);
 
-  @property bool valid () const pure @safe nothrow @nogc => (width >= 0 && height >= 0);
-  @property bool empty () const pure @safe nothrow @nogc { return (width <= 0 || height <= 0); } /// invalid rects are empty
+@safe:
+nothrow:
+@nogc:
 
-  void invalidate () @safe nothrow @nogc => width = height = -1;
+  @property bool valid () const pure => (width >= 0 && height >= 0);
+  @property bool empty () const pure => (width <= 0 || height <= 0); /// invalid rects are empty
 
-  @property int x0 () const pure @safe nothrow @nogc => x;
-  @property int y0 () const pure @safe nothrow @nogc => y;
-  @property int x1 () const pure @safe nothrow @nogc => (width > 0 ? x+width-1 : x-1);
-  @property int y1 () const pure @safe nothrow @nogc => (height > 0 ? y+height-1 : y-1);
+  void invalidate () => width = height = -1;
 
-  @property void x0 (in int val) @safe nothrow @nogc { width = x+width-val; x = val; }
-  @property void y0 (in int val) @safe nothrow @nogc { height = y+height-val; y = val; }
-  @property void x1 (in int val) @safe nothrow @nogc => width = val-x+1;
-  @property void y1 (in int val) @safe nothrow @nogc => height = val-y+1;
+  @property int x0 () const pure => x;
+  @property int y0 () const pure => y;
+  @property int x1 () const pure => (width > 0 ? x+width-1 : x-1);
+  @property int y1 () const pure => (height > 0 ? y+height-1 : y-1);
 
-  bool inside (in int ax, in int ay) const pure @safe nothrow @nogc =>
+  @property void x0 (in int val) { width = x+width-val; x = val; }
+  @property void y0 (in int val) { height = y+height-val; y = val; }
+  @property void x1 (in int val) => width = val-x+1;
+  @property void y1 (in int val) => height = val-y+1;
+
+  alias left = x0;
+  alias top = y0;
+  alias right = x1;
+  alias bottom = y1;
+
+  bool inside (in int ax, in int ay) const pure =>
     empty ? false : (ax >= x && ay >= y && ax < x+width && ay < y+height);
+
+  // is `r` inside `this`?
+  bool inside (in Rect r) const pure {
+    return
+      !empty && !r.empty &&
+      r.x >= x && r.y >= y &&
+      r.x1 <= x1 && r.y1 <= y1;
+  }
+
+  // is `r` and `this` overlaps?
+  bool overlap (in Rect r) const pure {
+    return
+      !empty && !r.empty &&
+      x <= r.x1 && r.x <= x1 && y <= r.y1 && r.y <= y1;
+      //!(x > r.x1 || r.x > x1 || y > r.y1 || r.y > y1);
+  }
+
+  // extend `this` so it will include `r`
+  void include (in Rect r) {
+    if (!r.empty) {
+      if (empty) {
+        x = r.x;
+        y = r.y;
+        width = r.width;
+        height = r.height;
+      } else {
+        if (r.x < x) x = r.x;
+        if (r.y < y) y = r.y;
+        if (r.x1 > x1) x1 = r.x1;
+        if (r.y1 > y1) y1 = r.y1;
+      }
+    }
+  }
 
   void set(CW, CH) (int ax, int ay, CW awidth, CH aheight) if (isIntegral!CW && isIntegral!CH) {
     x = ax;
@@ -90,19 +137,19 @@ struct Rect {
     height = cast(int)aheight;
   }
 
-  void moveX0Y0By (int dx, int dy) @safe nothrow @nogc {
+  void moveX0Y0By (int dx, int dy) {
     x += dx;
     y += dy;
     width -= dx;
     height -= dy;
   }
 
-  void moveX1Y1By (int dx, int dy) @safe nothrow @nogc {
+  void moveX1Y1By (int dx, int dy) {
     width += dx;
     height += dy;
   }
 
-  void moveBy (int dx, int dy) @safe nothrow @nogc {
+  void moveBy (int dx, int dy) {
     x += dx;
     y += dy;
   }
@@ -155,7 +202,7 @@ struct Rect {
    * Returns:
    *  result = false if rect is completely clipped out (and rc is invalidated)
    */
-  bool clipRect (ref Rect rc) @safe nothrow @nogc {
+  bool clipRect (ref Rect rc) {
     if (rc.empty || this.empty) { rc.invalidate(); return false; }
     if (rc.y1 < this.y0 || rc.x1 < this.x0 || rc.x0 > this.x1 || rc.y0 > this.y1) { rc.invalidate(); return false; }
     // rc is at least partially inside this rect
@@ -165,11 +212,6 @@ struct Rect {
     if (rc.y1 > this.y1) rc.y1 = this.y1; // clip bottom
     assert(!rc.empty); // yeah, always
     return true;
-  }
-
-  string toString () const @safe {
-    import std.string : format; // should be std.format, but gdc...
-    return (valid ? "(%s,%s)-(%s,%s)".format(x, y, x+width-1, y+height-1) : "(invalid-rect)");
   }
 }
 
