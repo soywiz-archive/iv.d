@@ -40,14 +40,14 @@ module iv.inflate is aliced;
 
 ////////////////////////////////////////////////////////////////////////////////
 class InflateError : object.Exception {
-  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
+  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
     super(msg, file, line, next);
   }
 }
 
 
 class InflateEOF : InflateError {
-  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
+  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
     super(msg, file, line, next);
   }
 }
@@ -60,6 +60,24 @@ class InflateEOF : InflateError {
  */
 /// Adler-32 checksum computer
 struct Adler32 {
+@safe:
+nothrow:
+@nogc:
+private:
+  enum { BASE = 65521, NMAX = 5552 }
+  enum normS1S2 = `s1 %= BASE; s2 %= BASE;`;
+
+  template genByteProcessors(int count) {
+    static if (count > 0)
+      enum genByteProcessors = `s1 += *dta++;s2 += s1;`~genByteProcessors!(count-1);
+    else
+      enum genByteProcessors = "";
+  }
+
+  uint s1 = 1;
+  uint s2 = 0;
+
+public:
   /**
    * Computes the Adler-32 checksum. We can do `Adler32(buf)`.
    *
@@ -69,35 +87,33 @@ struct Adler32 {
    * Returns:
    *  adler32 checksum
    */
-  static uint opCall(T) (T[] data) @safe nothrow @nogc {
+  static uint opCall(T) (T[] data) {
     Adler32 a32;
     a32.doBuffer(data);
     return a32.result;
   }
 
   /// reinitialize
-  void reset () @safe nothrow @nogc {
+  void reset () {
     s1 = 1;
     s2 = 0;
   }
 
   /// get current Adler-32 sum
-  @property uint result () const pure @safe nothrow @nogc {
-    return (s2<<16)|s1;
-  }
+  @property uint result () const pure => (s2<<16)|s1;
 
   /// process buffer
-  void doBuffer(T) (T[] data) @trusted nothrow @nogc {
+  void doBuffer(T) (T[] data) @trusted {
     if (data.length == 0) return;
     usize len = data.length*data[0].sizeof; // length in bytes
     const(ubyte)* dta = cast(const(ubyte)*)data.ptr;
     foreach (; 0..len/NMAX) {
-      foreach (; 0..NMAX/16) mixin(genByteProcessors(16));
+      foreach (; 0..NMAX/16) { mixin(genByteProcessors!(16)); }
       mixin(normS1S2);
     }
     len %= NMAX;
     if (len) {
-      foreach (; 0..len) mixin(genByteProcessors(1));
+      foreach (; 0..len) { mixin(genByteProcessors!(1)); }
       mixin(normS1S2);
     }
   }
@@ -105,27 +121,13 @@ struct Adler32 {
   import std.traits;
 
   /// process one byte
-  void doByte(T) (T bt) @safe nothrow @nogc
+  void doByte(T) (T bt)
   if (is(Unqual!T == char) || is(Unqual!T == sbyte) || is(Unqual!T == ubyte))
   {
     s1 += cast(ubyte)bt;
     s2 += s1;
     mixin(normS1S2);
   }
-
-private:
-  enum { BASE = 65521, NMAX = 5552 }
-  enum normS1S2 = `s1 %= BASE; s2 %= BASE;`;
-
-  private static string genByteProcessors (int count) pure @safe nothrow {
-    enum doOneByte = `s1 += *dta++; s2 += s1;`;
-    string res = `{`;
-    foreach (; 0..count) res ~= doOneByte;
-    return res~`}`;
-  }
-
-  uint s1 = 1;
-  uint s2 = 0;
 }
 
 
