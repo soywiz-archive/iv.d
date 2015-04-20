@@ -57,11 +57,12 @@ struct ARC4Codec {
   ubyte[256] m; // permutation table
   ubyte x, y; // permutation indicies
 
-  this (const(void)[] key, usize skipBytes=4096) @trusted nothrow @nogc {
-    reinit(key, skipBytes);
-  }
+@trusted:
+nothrow:
+@nogc:
+  this (const(void)[] key, usize skipBytes=4096) => reinit(key, skipBytes);
 
-  void reinit (const(void)[] key, usize skipBytes=4096) @trusted nothrow @nogc {
+  void reinit (const(void)[] key, usize skipBytes=4096) {
     assert(key.length > 0);
     auto keybytes = cast(const ubyte *)key.ptr;
     x = y = 0;
@@ -87,7 +88,7 @@ struct ARC4Codec {
     }
   }
 
-  void processBuffer(T) (T[] buf) @trusted nothrow @nogc {
+  void processBuffer(T) (T[] buf) {
     usize len = T.sizeof*buf.length;
     auto data = cast(ubyte *)buf.ptr;
     foreach (; 0..len) {
@@ -96,8 +97,7 @@ struct ARC4Codec {
       y = (y+a)&0xff;
       auto bt = (m[x] = m[y]);
       m[y] = a;
-      *data ^= m[(a+bt)&0xff];
-      ++data;
+      *data++ ^= m[(a+bt)&0xff];
     }
   }
 }
@@ -106,7 +106,7 @@ struct ARC4Codec {
 // ///////////////////////////////////////////////////////////////////////// //
 unittest {
   import std.algorithm;
-  import std.stdio;
+  import iv.writer;
   writeln("unittest: arc4");
   enum ubyte[] sourceData = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
   enum ubyte[] encodedData = [51,27,44,79,153,231,133,220,143,156,178,63,31,238,28,138];
