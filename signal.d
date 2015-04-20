@@ -66,7 +66,6 @@ private extern (C) void rt_detachDisposeEvent (Object obj, DisposeEvt evt);
  ---
  import iv.signal;
  import std.stdio;
- import std.functional;
 
  class MyObject {
  private:
@@ -109,8 +108,8 @@ private extern (C) void rt_detachDisposeEvent (Object obj, DisposeEvt evt);
    a.value = 5;                // should not call o.watch()
    a.valueChanged.connect!"watch"(o);        // connect again
    // Do some fancy stuff:
-   a.valueChanged.connect!Observer(o, (obj, msg, i) =>  obj.watch("Some other text I made up", i+1));
-   a.valueChanged.strongConnect(toDelegate(&watch));
+   a.valueChanged.connect!Observer(o, (obj, msg, i) => obj.watch("Some other text I made up", i+1));
+   a.valueChanged.strongConnect(&watch);
    a.value = 6;                // should call o.watch()
    destroy(o);                 // destroying o should automatically disconnect it
    a.value = 7;                // should not call o.watch()
@@ -187,17 +186,16 @@ public:
    * references to the object the garbage collector will collect it
    * and this connection will be removed.
    *
-   * Preconditions: obj must not be null. mixin("&obj."~method)
-   * must be valid and compatible.
+   * Preconditions: mixin("&obj."~method) must be valid and compatible.
+   *
    * Params:
    *     obj = Some object of a class implementing a method
    *     compatible with this signal.
    */
   void connect(string method, ClassType) (ClassType obj) @trusted
   if (is(ClassType == class) && __traits(compiles, {void delegate (Args) dg = mixin("&obj."~method);}))
-  in { assert(obj); }
-  body {
-    mImpl.addSlot(obj, cast(void delegate ())mixin("&obj."~method));
+  {
+    if (obj) mImpl.addSlot(obj, cast(void delegate ())mixin("&obj."~method));
   }
 
   /**
@@ -213,8 +211,7 @@ public:
    * contains a ref to obj, the object won't be freed as long as
    * the connection remains.
    *
-   * Preconditions: obj and dg must not be null.
-   * dg's context must not be equal to obj.
+   * Preconditions: dg's context must not be equal to obj.
    *
    * Params:
    *     obj = The object to connect to. It will be passed to the
@@ -226,13 +223,11 @@ public:
    */
   void connect(ClassType) (ClassType obj, void delegate (ClassType obj, Args) dg) @trusted
   if (is(ClassType == class))
-  in {
-    assert(obj);
-    assert(dg);
-    assert(cast(void*)obj !is dg.ptr);
-  }
-  body {
-    mImpl.addSlot(obj, cast(void delegate ()) dg);
+  {
+    if (obj !is null && dg) {
+      if (cast(void*)obj is dg.ptr) assert(0, "iv.signal connect: invalid delegate");
+      mImpl.addSlot(obj, cast(void delegate ())dg);
+    }
   }
 
   /**
@@ -245,15 +240,20 @@ public:
    * connection is not removed and the signal gets not destroyed
    * itself.
    *
-   * Preconditions: dg must not be null.
-   *
    * Params:
    *     dg = The delegate to be connected.
    */
-  void strongConnect (void delegate (Args) dg) @trusted
-  in { assert(dg); }
-  body {
-    mImpl.addSlot(null, cast(void delegate ()) dg);
+  void strongConnect (void delegate (Args) dg) @trusted {
+    if (dg !is null) mImpl.addSlot(null, cast(void delegate ()) dg);
+  }
+
+  /// ditto
+  void strongConnect (void function (Args) fn) @trusted {
+    if (fn !is null) {
+      import std.functional : toDelegate;
+      auto dg = toDelegate(fn);
+      mImpl.addSlot(null, cast(void delegate ())dg);
+    }
   }
 
   /**
@@ -265,10 +265,11 @@ public:
    */
   void disconnect(string method, ClassType) (ClassType obj) @trusted
   if (is(ClassType == class) && __traits(compiles, {void delegate (Args) dg = mixin("&obj."~method);}))
-  in { assert(obj); }
-  body {
-    void delegate (Args) dg = mixin("&obj."~method);
-    mImpl.removeSlot(obj, cast(void delegate ()) dg);
+  {
+    if (obj !is null) {
+      void delegate (Args) dg = mixin("&obj."~method);
+      mImpl.removeSlot(obj, cast(void delegate ()) dg);
+    }
   }
 
   /**
@@ -283,12 +284,8 @@ public:
    */
   void disconnect(ClassType) (ClassType obj, void delegate (ClassType, T1) dg) @trusted
   if (is(ClassType == class))
-  in {
-    assert(obj);
-    assert(dg);
-  }
-  body {
-    mImpl.removeSlot(obj, cast(void delegate ())dg);
+  {
+    if (obj !is null && dg !is null) mImpl.removeSlot(obj, cast(void delegate ())dg);
   }
 
   /**
@@ -298,9 +295,8 @@ public:
    */
   void disconnect(ClassType) (ClassType obj) @trusted
   if (is(ClassType == class))
-  in { assert(obj); }
-  body {
-    mImpl.removeSlot(obj);
+  {
+    if (obj !is null) mImpl.removeSlot(obj);
   }
 
   /**
@@ -308,10 +304,17 @@ public:
    *
    * Disconnects all connections to dg.
    */
-  void strongDisconnect (void delegate (Args) dg) @trusted
-  in { assert(dg); }
-  body {
-    mImpl.removeSlot(null, cast(void delegate ()) dg);
+  void strongDisconnect (void delegate (Args) dg) @trusted {
+    if (dg !is null) mImpl.removeSlot(null, cast(void delegate ())dg);
+  }
+
+  /// ditto
+  void strongDisconnect (void function (Args) fn) @trusted {
+    if (fn !is null) {
+      import std.functional : toDelegate;
+      auto dg = toDelegate(fn);
+      mImpl.removeSlot(null, cast(void delegate ())dg);
+    }
   }
 }
 
@@ -352,7 +355,7 @@ public:
  ---
  */
 string signal(Args...) (string name, Protection protection=Protection.Private) @trusted { // trusted necessary because of to!string
-  static string pnorm (string n) => ""~cast(char)(n[0]+32)~n[1..$];
+  static string pnorm() (string n) => ""~cast(char)(n[0]+32)~n[1..$];
 
   import std.conv : to;
 
@@ -516,11 +519,7 @@ private:
   WeakRef mObj;
 
   enum directPtrFlag = cast(void*)(~0);
-  version(D_LP64) {
-    enum HasObjectFlag = 0x8000_0000_0000_0000uL;
-  } else {
-    enum HasObjectFlag = 0x8000_0000uL;
-  }
+  enum HasObjectFlag = 1uL<<(sptrdiff.sizeof*8-1);
 
 public:
   @disable this (this);
@@ -756,7 +755,7 @@ private:
   version(D_LP64) {
     static ulong makeVisible() (ulong addr) => ~addr;
     static ulong makeInvisible() (ulong addr) => ~addr;
-    static bool isVisible() (ulong addr) => !(addr&(1L<<(usize.sizeof*8-1)));
+    static bool isVisible() (ulong addr) => !(addr&(1uL<<(sptrdiff.sizeof*8-1)));
     static bool isNull() (ulong addr) => (addr == 0 || addr == ~0);
   } else {
     static ulong makeVisible() (ulong addr) {
@@ -804,13 +803,13 @@ private:
   BitsLength mBLength;
 
 public:
-  // Choose int for now, this saves 4 bytes on 64 bits.
-  alias int lengthType;
+  // Choose uint for now, this saves 4 bytes on 64 bits.
+  alias uint lengthType;
   import std.bitmanip : bitfields;
   enum reservedBitsCount = 3;
   enum maxSlotCount = lengthType.max>>reservedBitsCount;
   @property SlotImpl[] slots() => mPtr[0..length];
-  @property void slots(SlotImpl[] newSlots) {
+  @property void slots (SlotImpl[] newSlots) {
     mPtr = newSlots.ptr;
     version(assert) {
       import std.conv : text;
@@ -819,8 +818,8 @@ public:
     mBLength.length &= ~maxSlotCount;
     mBLength.length |= newSlots.length;
   }
-  @property usize length () => mBLength.length&maxSlotCount;
-  @property bool emitInProgress() => mBLength.emitInProgress;
+  @property usize length () const => mBLength.length&maxSlotCount;
+  @property bool emitInProgress() const => mBLength.emitInProgress;
   @property void emitInProgress (bool val) => mBLength.emitInProgress = val;
 }
 
