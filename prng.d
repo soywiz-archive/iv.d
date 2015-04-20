@@ -292,6 +292,17 @@ public:
 
 version(test_prng)
 unittest {
+  import std.range;
+  template checkRng(T) {
+    static assert(isInfinite!T, T.stringof~" is not infinite range");
+    static assert(isInputRange!T, T.stringof~" is not inpute range");
+    static assert(isForwardRange!T, T.stringof~" is not forward range");
+    enum checkRng = true;
+  }
+  static assert(checkRng!BJRng);
+  static assert(checkRng!GMRngSeed64);
+  static assert(checkRng!GMRng);
+
   import iv.writer;
   /*
   {
