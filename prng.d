@@ -99,6 +99,11 @@ public:
   }
 
 @safe:
+  enum empty = false;
+  @property uint front () const => d;
+  alias popFront = next;
+  @property auto save () inout => this;
+
   this (uint aseed) => seed(aseed);
 
   void seed (uint seed) {
@@ -142,6 +147,7 @@ private:
 
   uint w = DefaultW;
   uint z = DefaultZ;
+  uint lastnum = (DefaultZ<<16)+DefaultW;
 
 nothrow: @nogc:
 public:
@@ -166,11 +172,19 @@ public:
   }
 
 @safe:
+  enum empty = false;
+  @property uint front () const => lastnum;
+  alias popFront = next;
+  @property auto save () inout => this;
+
   this (ulong aseed) => seed(aseed);
 
   void seed (ulong seed) {
     z = cast(uint)(seed>>32);
     w = cast(uint)(seed&0xffffffffu);
+    if (w == 0) w = DefaultW;
+    if (z == 0) z = DefaultZ;
+    lastnum = (z<<16)+w;
   }
 
   @property uint next () {
@@ -178,7 +192,7 @@ public:
     if (z == 0) z = DefaultZ;
     z = 36969*(z&0xffff)+(z>>16);
     w = 18000*(w&0xffff)+(w>>16);
-    return (z<<16)+w;
+    return (lastnum = (z<<16)+w);
   }
 }
 
@@ -193,6 +207,7 @@ private:
   uint z = 0x7ed1c277u;
   uint w = 0x89574524u;
   uint v = 0x359c34a7u;
+  uint lastnum = 0x4d00381eu; // almost arbitrary
 
 nothrow: @nogc:
 public:
@@ -218,6 +233,11 @@ public:
   }
 
 @safe:
+  enum empty = false;
+  @property uint front () const => lastnum;
+  alias popFront = next;
+  @property auto save () inout => this;
+
   this (uint aseed) => seed(aseed);
 
   void seed (uint seed) {
@@ -226,6 +246,7 @@ public:
     z = xyzzyPRNGHashU32(y+1);
     w = xyzzyPRNGHashU32(z+1);
     v = xyzzyPRNGHashU32(w+1);
+    next;
   }
 
   void seed (uint s0, uint s1, uint s2, uint s3, uint s4) {
@@ -239,6 +260,7 @@ public:
     if (z == 0) z = xyzzyPRNGHashU32(y+1);
     if (w == 0) w = xyzzyPRNGHashU32(z+1);
     if (v == 0) v = xyzzyPRNGHashU32(w+1);
+    next;
   }
 
   void seed (in uint[] seed) {
@@ -252,6 +274,7 @@ public:
     if (z == 0) z = xyzzyPRNGHashU32(y+1);
     if (w == 0) w = xyzzyPRNGHashU32(z+1);
     if (v == 0) v = xyzzyPRNGHashU32(w+1);
+    next;
   }
 
   @property uint next () {
@@ -262,56 +285,56 @@ public:
     z = w;
     w = v;
     v = (v^(v<<6))^(t^(t<<13));
-    return (y+y+1)*v;
+    return (lastnum = (y+y+1)*v);
   }
 }
 
 
 version(test_prng)
 unittest {
-  import std.stdio;
+  import iv.writer;
   /*
   {
     BJRng r;
     r.seed(0xdeadf00du);
-    writefln("  uint a = 0x%08xu;", r.a);
-    writefln("  uint b = 0x%08xu;", r.b);
-    writefln("  uint c = 0x%08xu;", r.c);
-    writefln("  uint d = 0x%08xu;", r.d);
+    writefln!"  uint a = 0x%08xu;"(r.a);
+    writefln!"  uint b = 0x%08xu;"(r.b);
+    writefln!"  uint c = 0x%08xu;"(r.c);
+    writefln!"  uint d = 0x%08xu;"(r.d);
   }
   */
   /*
   {
     GMRngSeed64 r;
     r.seed(0xdeadf00d_fee1deadul);
-    writefln("  uint w = 0x%08xu;", r.w);
-    writefln("  uint z = 0x%08xu;", r.z);
+    writefln!"  uint w = 0x%08xu;"(r.w);
+    writefln!"  uint z = 0x%08xu;"(r.z);
   }
   */
   /*
   {
     GMRng r;
     r.seed(0xdeadf00du);
-    writefln("  uint x = 0x%08xu;", r.x);
-    writefln("  uint y = 0x%08xu;", r.y);
-    writefln("  uint z = 0x%08xu;", r.z);
-    writefln("  uint w = 0x%08xu;", r.w);
-    writefln("  uint v = 0x%08xu;", r.v);
+    writefln!"  uint x = 0x%08xu;"(r.x);
+    writefln!"  uint y = 0x%08xu;"(r.y);
+    writefln!"  uint z = 0x%08xu;"(r.z);
+    writefln!"  uint w = 0x%08xu;"(r.w);
+    writefln!"  uint v = 0x%08xu;"(r.v);
   }
   */
   {
     BJRng r;
     r.randomize();
-    writefln("0x%08x", r.next);
+    writefln!"0x%08x"(r.next);
   }
   {
     GMRngSeed64 r;
     r.randomize();
-    writefln("0x%08x", r.next);
+    writefln!"0x%08x"(r.next);
   }
   {
     GMRng r;
     r.randomize();
-    writefln("0x%08x", r.next);
+    writefln!"0x%08x"(r.next);
   }
 }
