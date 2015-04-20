@@ -51,12 +51,7 @@
  */
 module iv.rawtty is aliced;
 
-import core.sys.posix.termios;
-import core.sys.posix.unistd;
-
-import core.sys.posix.sys.ioctl;
-import core.sys.posix.sys.select;
-
+import core.sys.posix.termios : termios;
 public import std.typecons : Flag, Yes, No;
 
 
@@ -101,6 +96,9 @@ TTYMode ttyGetMode () @trusted nothrow @nogc {
 TTYMode ttySetNormal () @trusted @nogc {
   synchronized(xlock) {
     if (inRawMode) {
+      import core.sys.posix.termios : tcflush, tcsetattr;
+      import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
+      import core.sys.posix.unistd : STDIN_FILENO;
       tcflush(STDIN_FILENO, TCIOFLUSH);
       if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &origMode) < 0) return TTYMode.BAD;
       inRawMode = false;
@@ -116,6 +114,10 @@ TTYMode ttySetRaw (Flag!"waitkey" waitKey=Yes.waitkey) @trusted @nogc {
   if (redirected) return TTYMode.BAD;
   synchronized(xlock) {
     if (!inRawMode) {
+      import core.sys.posix.termios : tcflush, tcsetattr;
+      import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
+      import core.sys.posix.termios : BRKINT, CS8, ECHO, ICANON, IEXTEN, INPCK, ISIG, ISTRIP, IXON, ONLCR, OPOST, VMIN, VTIME;
+      import core.sys.posix.unistd : STDIN_FILENO;
       termios raw = origMode; // modify the original mode
       tcflush(STDIN_FILENO, TCIOFLUSH);
       // input modes: no break, no CR to NL, no parity check, no strip char, no start/stop output control
@@ -148,6 +150,10 @@ bool ttySetWaitKey (bool doWait) @trusted @nogc {
   if (redirected) return false;
   synchronized(xlock) {
     if (inRawMode) {
+      import core.sys.posix.termios : tcflush, tcgetattr, tcsetattr;
+      import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
+      import core.sys.posix.termios : VMIN;
+      import core.sys.posix.unistd : STDIN_FILENO;
       termios raw;
       tcflush(STDIN_FILENO, TCIOFLUSH);
       if (tcgetattr(STDIN_FILENO, &raw) == 0) redirected = false;
@@ -173,7 +179,8 @@ TTYMode ttySetMode (TTYMode mode) @trusted @nogc {
 /// return TTY width
 @property int ttyWidth () @trusted nothrow @nogc {
   if (!redirected) {
-    winsize sz;
+    import core.sys.posix.sys.ioctl : ioctl, winsize, TIOCGWINSZ;
+    winsize sz = void;
     if (ioctl(1, TIOCGWINSZ, &sz) != -1) return sz.ws_col;
   }
   return 80;
@@ -183,7 +190,8 @@ TTYMode ttySetMode (TTYMode mode) @trusted @nogc {
 /// return TTY height
 @property int ttyHeight () @trusted nothrow @nogc {
   if (!redirected) {
-    winsize sz;
+    import core.sys.posix.sys.ioctl : ioctl, winsize, TIOCGWINSZ;
+    winsize sz = void;
     if (ioctl(1, TIOCGWINSZ, &sz) != -1) return sz.ws_row;
     return sz.ws_row;
   }
@@ -202,6 +210,8 @@ TTYMode ttySetMode (TTYMode mode) @trusted @nogc {
  */
 bool ttyWaitKey (long toMSec=-1) @trusted nothrow @nogc {
   if (!redirected) {
+    import core.sys.posix.sys.select : fd_set, select, timeval, FD_ISSET, FD_SET, FD_ZERO;
+    import core.sys.posix.unistd : STDIN_FILENO;
     timeval tv;
     fd_set fds;
     FD_ZERO(&fds);
@@ -242,11 +252,12 @@ bool ttyIsKeyHit () @trusted nothrow @nogc {
  */
 int ttyReadKeyByte (long toMSec=-1) @trusted @nogc {
   if (!redirected) {
+    import core.sys.posix.unistd : read, STDIN_FILENO;
     ubyte res;
     if (toMSec >= 0) {
-      synchronized(xlock) if (ttyWaitKey(toMSec) && core.sys.posix.unistd.read(STDIN_FILENO, &res, 1) == 1) return res;
+      synchronized(xlock) if (ttyWaitKey(toMSec) && read(STDIN_FILENO, &res, 1) == 1) return res;
     } else {
-      if (core.sys.posix.unistd.read(STDIN_FILENO, &res, 1) == 1) return res;
+      if (read(STDIN_FILENO, &res, 1) == 1) return res;
     }
   }
   return -1;
@@ -270,8 +281,7 @@ __gshared string[string] ttyKeyTrans;
  *  null on error or keyname
  */
 string ttyReadKey (long toMSec=-1, long toEscMSec=300) @trusted {
-  import std.conv;
-  import std.string;
+  import std.string : format;
   int ch = ttyReadKeyByte(toMSec);
   if (ch < 0) return null; // error
   if (ch == 8 || ch == 127) return "backspace";
@@ -314,7 +324,7 @@ string ttyReadKey (long toMSec=-1, long toEscMSec=300) @trusted {
 
 
 private void initKeyTrans () @trusted {
-  import std.string;
+  import std.string : format;
   // RXVT
   // arrows, specials
   ttyKeyTrans["[A"] = "up";
@@ -416,175 +426,20 @@ private void initKeyTrans () @trusted {
 }
 
 
-/**
- * Read string from TTY with autocompletion.
- *
- * WARNING! Maximum str length is 64!
- *
- * Params:
- *  prompt = input prompt
- *  strlist = list of autocompletions
- *  str = initial string value
- *
- * Returns:
- *  entered string or empty string on cancel
- *
- * Throws:
- *  Exception on TTY mode errors
- */
-import iv.autocomplete;
-string ttyReadString (string prompt, const(string)[] strlist=null, string str=string.default) @trusted {
-  import std.algorithm;
-  import std.stdio;
-
-  void beep () {
-    stdout.write("\x07");
-    stdout.flush();
-  }
-
-  if (ttyIsRedirected) throw new Exception("TTY is redirected");
-  auto oldMode = ttyGetMode();
-  scope(exit) ttySetMode(oldMode);
-  if (oldMode != TTYMode.RAW) {
-    if (ttySetRaw() == TTYMode.BAD) throw new Exception("can't change TTY mode to raw");
-  }
-
-  int prevLines = 0; // # of previous written lines in 'tab list'
-
-  // clear prompt and hint lines
-  // return cursor to prompt line
-  void clearHints () {
-    if (prevLines) {
-      stdout.write("\r\x1b[K");
-      foreach (; 0..prevLines) stdout.write("\n\r\x1b[K");
-      stdout.writef("\x1b[%dA", prevLines);
-      prevLines = 0;
-    }
-  }
-
-  bool prevWasReturn = false;
-  stdout.write("\x1b[0m");
-  scope(exit) {
-    clearHints();
-    stdout.write("\r\x1b[K");
-    stdout.flush();
-  }
-  for (;;) {
-    int ch;
-    stdout.write("\r\x1b[0m", prompt, "\x1b[37;1m", str, "\x1b[0m\x1b[K");
-    // try to see if we have something to show here
-    if (strlist.length) {
-      auto ac = autocomplete(str, strlist);
-      if (ac.length > 0) {
-        //stdout.writeln("\r\n", ac);
-        auto s = ac[0];
-        s = s[str.length..$];
-        stdout.write("\x1b[0;1m", s);
-        foreach (; 0..s.length) stdout.write("\x08");
-        stdout.write("\x1b[0m");
-      }
-    }
-    stdout.flush();
-    ch = ttyReadKeyByte();
-    if (ch < 0 || ch == 3 || ch == 4) { str = ""; break; } // error, ^C or ^D
-    if (ch == 10) {
-      // return
-      if (strlist.length == 0) break; // we have no autocompletion variants
-      // if there is exactly one full match, return it
-      auto ac = autocomplete(str, strlist);
-      if (ac.length == 1) { str = ac[0]; break; } // the match is ok
-      if (prevWasReturn) break; // this is second return in a row
-      // else do autocomplete
-      ch = 9;
-      if (ac.length) beep(); // 'cause #9 will not beep in this case
-      prevWasReturn = true; // next 'return' will force return
-    } else {
-      // reset 'double return' flag
-      prevWasReturn = false;
-    }
-    if (ch == 23 || ch == 25) {
-      // ^W or ^Y
-      str = "";
-      continue;
-    }
-    if (ch == 27) {
-      // esc
-      ch = ttyReadKeyByte();
-      if (ch == 27) { str = ""; break; }
-      clearHints();
-      do {
-        version(readstring_debug) {
-          stdout.writef("ch: %3d", ch);
-          if (ch >= 32 && ch != 127) stdout.write("'", cast(char)ch, "'");
-          stdout.writeln();
-        }
-        if (ch != '[' && ch != ';' && (ch < '0' || ch > '9')) {
-          version(readstring_debug) stdout.writeln("DONE!");
-          break;
-        }
-      } while ((ch = ttyReadKeyByte(100)) >= 0);
-    }
-    if (ch == 8 || ch == 127) {
-      // backspace
-      if (str.length) str = str[0..$-1]; else beep();
-      continue;
-    }
-    if (ch == 9) {
-      // tab
-      clearHints();
-      prevLines = 0;
-      auto ac = autocomplete(str, strlist);
-      if (ac.length != 1) beep();
-      if (ac.length) {
-        str = ac[0];
-        if (ac.length > 1) {
-          usize maxlen, rc;
-          ac = ac[1..$];
-          //sort!"a<b"(ac);
-          // calculate maximum item length
-          foreach (immutable s; ac) maxlen = max(maxlen, s.length);
-          ++maxlen; // plus space
-          if (maxlen < ttyWidth) {
-            rc = ttyWidth/maxlen;
-          } else {
-            rc = 1;
-          }
-          prevLines = min(ac.length/rc+(ac.length%rc != 0), ttyHeight-1);
-          stdout.write("\r\n\x1b[1m"); // skip prompt line
-          foreach (immutable i, immutable s; ac) {
-            if (i && i%rc == 0) stdout.writeln();
-            stdout.write(s, " ");
-          }
-          stdout.write("\x1b[0m");
-          stdout.writef("\x1b[%dA", prevLines);
-          stdout.flush();
-        }
-      }
-      continue;
-    }
-    if (ch > 32 && ch < 127 && str.length < 64) {
-      str ~= ch;
-      continue;
-    }
-    beep();
-  }
-  return str;
-}
-
-
 shared static this () {
   {
-    import std.c.stdlib;
-    import std.c.string;
+    import std.c.stdlib : getenv;
+    import std.c.string : strcmp;
     auto tt = getenv("TERM");
     if (tt) {
       if (strcmp(tt, "rxvt") == 0) termType = TermType.rxvt;
       else if (strcmp(tt, "xterm") == 0) termType = TermType.xterm;
     }
   }
+  import core.sys.posix.unistd : isatty, STDIN_FILENO, STDOUT_FILENO;
+  import core.sys.posix.termios : tcgetattr;
   xlock = new XLock;
   if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO)) {
-    import std.stdio;
     if (tcgetattr(STDIN_FILENO, &origMode) == 0) redirected = false;
   }
   initKeyTrans();
