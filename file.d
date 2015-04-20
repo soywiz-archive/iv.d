@@ -51,7 +51,7 @@
  */
 module iv.file is aliced;
 
-public import std.stdio : File;
+private import std.stdio : File;
 
 
 /**
