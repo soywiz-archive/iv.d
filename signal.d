@@ -109,7 +109,7 @@ private extern (C) void rt_detachDisposeEvent (Object obj, DisposeEvt evt);
    a.valueChanged.connect!"watch"(o);        // connect again
    // Do some fancy stuff:
    a.valueChanged.connect!Observer(o, (obj, msg, i) => obj.watch("Some other text I made up", i+1));
-   a.valueChanged.strongConnect(&watch);
+   a.valueChanged.connect(&watch);
    a.value = 6;                // should call o.watch()
    destroy(o);                 // destroying o should automatically disconnect it
    a.value = 7;                // should not call o.watch()
@@ -244,11 +244,16 @@ public:
    *     dg = The delegate to be connected.
    */
   void strongConnect (void delegate (Args) dg) @trusted {
-    if (dg !is null) mImpl.addSlot(null, cast(void delegate ()) dg);
+    if (dg !is null) mImpl.addSlot(null, cast(void delegate ())dg);
   }
 
-  /// ditto
-  void strongConnect (void function (Args) fn) @trusted {
+  /**
+   * Connect a free function to this signal.
+   *
+   * Params:
+   *     fn = The free function to be connected.
+   */
+  void connect (void function (Args) fn) @trusted {
     if (fn !is null) {
       import std.functional : toDelegate;
       auto dg = toDelegate(fn);
@@ -308,8 +313,13 @@ public:
     if (dg !is null) mImpl.removeSlot(null, cast(void delegate ())dg);
   }
 
-  /// ditto
-  void strongDisconnect (void function (Args) fn) @trusted {
+  /**
+   * Disconnect a free function.
+   *
+   * Params:
+   *    fn = The function to be disconnected.
+   */
+  void disconnect (void function (Args) fn) @trusted {
     if (fn !is null) {
       import std.functional : toDelegate;
       auto dg = toDelegate(fn);
@@ -794,9 +804,9 @@ private struct SlotArray {
 private:
   SlotImpl* mPtr;
   union BitsLength {
-    $:bitfields!(
-      bool, "", lengthType.sizeof*8-1,
-      bool, "emitInProgress", 1
+    $=>bitfields!(
+       bool, "", lengthType.sizeof*8-1,
+       bool, "emitInProgress", 1
     );
     lengthType length;
   }
@@ -850,7 +860,7 @@ unittest {
   private:
     int mValue;
   public:
-    $:signal!(string, int)("valueChanged");
+    $=>signal!(string, int)("valueChanged");
     //pragma(msg, signal!(string, int)("valueChanged"));
 
     @property int value () => mValue;
@@ -926,7 +936,7 @@ unittest {
       return v;
     }
 
-    $:signal!(string, int)("extendedSig");
+    $=>signal!(string, int)("extendedSig");
     //pragma(msg, signal!(string, int)("extendedSig"));
     //Signal!(int) simpleSig;
   }
@@ -1001,9 +1011,9 @@ unittest {
     @property void value2 (int v)  => s2Sg.emit("str2", v);
     @property void value3 (long v) => s3Sg.emit("str3", v);
 
-    $:signal!(string, int) ("s1");
-    $:signal!(string, int) ("s2");
-    $:signal!(string, long)("s3");
+    $=>signal!(string, int) ("s1");
+    $=>signal!(string, int) ("s2");
+    $=>signal!(string, long)("s3");
   }
 
   void test(T) (T a) {
@@ -1078,9 +1088,9 @@ unittest {
     @property void value5 (int v)  => s5Sg.emit("str5", v);
     @property void value6 (long v) => s6Sg.emit("str6", v);
 
-    $:signal!(string, int) ("s4");
-    $:signal!(string, int) ("s5");
-    $:signal!(string, long)("s6");
+    $=>signal!(string, int) ("s4");
+    $=>signal!(string, int) ("s5");
+    $=>signal!(string, long)("s6");
   }
 
   auto a = new BarDerived;
@@ -1162,7 +1172,7 @@ unittest {
 
   public:
     alias value this;
-    $:signal!(int)("signal");
+    $=>signal!(int)("signal");
     @property int value () => mValue;
     ref Property opAssign (int val) {
       debug(signal) writefln!"Assigning int to property with signal: %08X"(&this);
@@ -1227,21 +1237,21 @@ unittest {
 version(unittest_signal)
 unittest {
   class A {
-    $:signal!(string, int)("s1");
+    $=>signal!(string, int)("s1");
   }
 
   class B : A {
-    $:signal!(string, int)("s2");
+    $=>signal!(string, int)("s2");
   }
 }
 
 version(unittest_signal)
 unittest {
   struct Test {
-    $:signal!int("a", Protection.Package);
-    $:signal!int("ap", Protection.Private);
-    $:signal!int("app", Protection.Protected);
-    $:signal!int("an", Protection.None);
+    $=>signal!int("a", Protection.Package);
+    $=>signal!int("ap", Protection.Private);
+    $=>signal!int("app", Protection.Protected);
+    $=>signal!int("an", Protection.None);
   }
 
   /*
