@@ -11,7 +11,7 @@ extern (C) @trusted nothrow @nogc:
 enum int XlibSpecificationRelease = 6;
 enum int X_HAVE_UTF8_STRING       = 1;
 
-alias XPointer = char *;
+alias XPointer = char*;
 alias Status = int;
 
 alias Bool = int;
@@ -41,11 +41,11 @@ int DisplayHeightMM() (Display* dpy,int scr) { return ScreenOfDisplay( dpy,scr )
 int DisplayPlanes() (Display* dpy,int scr) { return ScreenOfDisplay( dpy,scr ).root_depth; }
 int DisplayCells() (Display* dpy,int scr) { return DefaultVisual( dpy,scr ).map_entries; }
 int ScreenCount() (Display* dpy) { return dpy.nscreens; }
-char* ServerVendor() (Display* dpy) { return dpy.vendor; }
+const(char)* ServerVendor() (Display* dpy) { return dpy.vendor; }
 int ProtocolVersion() (Display* dpy) { return dpy.proto_major_version; }
 int ProtocolRevision() (Display* dpy) { return dpy.proto_minor_version; }
 int VendorRelease() (Display* dpy) { return dpy.release; }
-char* DisplayString() (Display* dpy) { return dpy.display_name; }
+const(char)* DisplayString() (Display* dpy) { return dpy.display_name; }
 int DefaultDepth() (Display* dpy,int scr) { return ScreenOfDisplay( dpy,scr ).root_depth; }
 Colormap DefaultColormap() (Display* dpy,int scr) { return ScreenOfDisplay( dpy,scr ).cmap; }
 int BitmapUnit() (Display* dpy) { return dpy.bitmap_unit; }
@@ -1424,7 +1424,7 @@ Atom XInternAtom(
 );
 Status XInternAtoms(
   Display* dpy,
-  char** names,
+  const(const(char)*)* names,
   int count,
   Bool onlyIfExists,
   Atom* atoms_return
@@ -1463,7 +1463,7 @@ Cursor XCreateFontCursor(
 );
 Font XLoadFont(
   Display* display,
-  char* name
+  const(char)* name
 );
 GC XCreateGC(
   Display* display,
@@ -1488,14 +1488,14 @@ Pixmap XCreatePixmap(
 Pixmap XCreateBitmapFromData(
   Display* display,
   Drawable d,
-  char* data,
+  const(char)* data,
   uint width,
   uint height
 );
 Pixmap XCreatePixmapFromBitmapData(
   Display* display,
   Drawable d,
-  char* data,
+  const(char)* data,
   uint width,
   uint height,
   c_ulong fg,
@@ -1538,13 +1538,13 @@ Colormap* XListInstalledColormaps(
 );
 char** XListFonts(
   Display* display,
-  char* pattern,
+  const(char)* pattern,
   int maxnames,
   int* actual_count_return
 );
 char* XListFontsWithInfo(
   Display* display,
-  char* pattern,
+  const(char)* pattern,
   int maxnames,
   int* count_return,
   XFontStruct** info_return
@@ -1583,7 +1583,7 @@ KeySym* XGetKeyboardMapping(
   int* keysyms_per_keycode_return
 );
 KeySym XStringToKeysym(
-  char* string
+  const(char)* string
 );
 c_long XMaxRequestSize(
   Display* display
@@ -1620,7 +1620,7 @@ void XUnlockDisplay(
 
 XExtCodes* XInitExtension(
   Display* display,
-  char* name
+  const(char)* name
 );
 
 XExtCodes* XAddExtension(
@@ -1859,7 +1859,7 @@ Status XAllocColorPlanes(
 Status XAllocNamedColor(
   Display* display,
   Colormap colormap,
-  char* color_name,
+  const(char)* color_name,
   XColor* screen_def_return,
   XColor* exact_def_return
 );
@@ -2196,7 +2196,7 @@ int XDrawImageString(
   GC gc,
   int x,
   int y,
-  char* string,
+  const(char)* string,
   int length
 );
 
@@ -2654,7 +2654,7 @@ int XKillClient(
 Status XLookupColor(
   Display* display,
   Colormap colormap,
-  char* color_name,
+  const(char)* color_name,
   XColor* exact_def_return,
   XColor* screen_def_return
 );
@@ -2866,7 +2866,7 @@ Bool XQueryPointer(
 int XQueryTextExtents(
   Display* display,
   XID font_ID,
-  char* string,
+  const(char)* string,
   int nchars,
   int* direction_return,
   int* font_ascent_return,
@@ -2911,7 +2911,7 @@ int XReadBitmapFile(
 );
 
 int XReadBitmapFileData(
-  char* filename,
+  const(char)* filename,
   uint* width_return,
   uint* height_return,
   ubyte** data_return,
@@ -3116,7 +3116,7 @@ int XSetGraphicsExposures(
 int XSetIconName(
   Display* display,
   Window w,
-  char* icon_name
+  const(char)* icon_name
 );
 
 int XSetInputFocus(
@@ -3284,7 +3284,7 @@ int XSync(
 
 int XTextExtents(
   XFontStruct* font_struct,
-  char* string,
+  const(char)* string,
   int nchars,
   int* direction_return,
   int* font_ascent_return,
@@ -3304,7 +3304,7 @@ int XTextExtents16(
 
 int XTextWidth(
   XFontStruct* font_struct,
-  char* string,
+  const(char)* string,
   int count
 );
 
@@ -3411,7 +3411,7 @@ int XWindowEvent(
 
 int XWriteBitmapFile(
   Display* display,
-  char* filename,
+  const(char)* filename,
   Pixmap bitmap,
   uint width,
   uint height,
@@ -3422,14 +3422,14 @@ int XWriteBitmapFile(
 Bool XSupportsLocale ( );
 
 char* XSetLocaleModifiers(
-  const char* modifier_list
+  const(char)* modifier_list
 );
 
 XOM XOpenOM(
   Display* display,
   _XrmHashBucketRec* rdb,
-  char* res_name,
-  char* res_class
+  const(char)* res_name,
+  const(char)* res_class
 );
 
 Status XCloseOM(
@@ -3453,7 +3453,6 @@ Display* XDisplayOfOM(
 );
 
 char* XLocaleOfOM(
-
   XOM om
 );
 
@@ -3503,7 +3502,7 @@ int XFontsOfFontSet(
 );
 
 char* XBaseFontNameListOfFontSet(
-  char font_set
+  XFontSet font_set /*was char*/
 );
 
 char* XLocaleOfFontSet(
@@ -3528,25 +3527,25 @@ XFontSetExtents* XExtentsOfFontSet(
 
 int XmbTextEscapement(
   XFontSet font_set,
-  char* text,
+  const(char)* text,
   int chars_text
 );
 
 int XwcTextEscapement(
   XFontSet font_set,
-  wchar* text,
+  const(wchar)* text,
   int num_wchars
 );
 
 int Xutf8TextEscapement(
   XFontSet font_set,
-  char* text,
+  const(char)* text,
   int chars_text
 );
 
 int XmbTextExtents(
   XFontSet font_set,
-  char* text,
+  const(char)* text,
   int chars_text,
   XRectangle* overall_ink_return,
   XRectangle* overall_logical_return
@@ -3554,7 +3553,7 @@ int XmbTextExtents(
 
 int XwcTextExtents(
   XFontSet font_set,
-  wchar* text,
+  const(wchar)* text,
   int num_wchars,
   XRectangle* overall_ink_return,
   XRectangle* overall_logical_return
@@ -3562,7 +3561,7 @@ int XwcTextExtents(
 
 int Xutf8TextExtents(
   XFontSet font_set,
-  char* text,
+  const(char)* text,
   int chars_text,
   XRectangle* overall_ink_return,
   XRectangle* overall_logical_return
@@ -3570,7 +3569,7 @@ int Xutf8TextExtents(
 
 Status XmbTextPerCharExtents(
   XFontSet font_set,
-  char* text,
+  const(char)* text,
   int chars_text,
   XRectangle* ink_extents_buffer,
   XRectangle* logical_extents_buffer,
@@ -3582,7 +3581,7 @@ Status XmbTextPerCharExtents(
 
 Status XwcTextPerCharExtents(
   XFontSet font_set,
-  wchar* text,
+  const(wchar)* text,
   int num_wchars,
   XRectangle* ink_extents_buffer,
   XRectangle* logical_extents_buffer,
@@ -3594,7 +3593,7 @@ Status XwcTextPerCharExtents(
 
 Status Xutf8TextPerCharExtents(
   XFontSet font_set,
-  char* text,
+  const(char)* text,
   int chars_text,
   XRectangle* ink_extents_buffer,
   XRectangle* logical_extents_buffer,
@@ -3641,7 +3640,7 @@ void XmbDrawString(
   GC gc,
   int x,
   int y,
-  char* text,
+  const(char)* text,
   int chars_text
 );
 
@@ -3652,7 +3651,7 @@ void XwcDrawString(
   GC gc,
   int x,
   int y,
-  wchar* text,
+  const(wchar)* text,
   int num_wchars
 );
 
@@ -3663,7 +3662,7 @@ void Xutf8DrawString(
   GC gc,
   int x,
   int y,
-  char* text,
+  const(char)* text,
   int chars_text
 );
 
@@ -3674,7 +3673,7 @@ void XmbDrawImageString(
   GC gc,
   int x,
   int y,
-  char* text,
+  const(char)* text,
   int chars_text
 );
 
@@ -3685,7 +3684,7 @@ void XwcDrawImageString(
   GC gc,
   int x,
   int y,
-  wchar* text,
+  const(wchar)* text,
   int num_wchars
 );
 
@@ -3696,15 +3695,15 @@ void Xutf8DrawImageString(
   GC gc,
   int x,
   int y,
-  char* text,
+  const(char)* text,
   int chars_text
 );
 
 XIM XOpenIM(
   Display* dpy,
   _XrmHashBucketRec* rdb,
-  char* res_name,
-  char* res_class
+  const(char)* res_name,
+  const(char)* res_class
 );
 
 Status XCloseIM(
@@ -3746,7 +3745,7 @@ void XUnsetICFocus(
   XIC ic
 );
 
-wchar*   XwcResetIC(
+wchar* XwcResetIC(
   XIC ic
 );
 
@@ -3814,8 +3813,8 @@ XVaNestedList XVaCreateNestedList(
 Bool XRegisterIMInstantiateCallback(
   Display* dpy,
   _XrmHashBucketRec* rdb,
-  char* res_name,
-  char* res_class,
+  const(char)* res_name,
+  const(char)* res_class,
   XIDProc callback,
   XPointer client_data
 );
@@ -3823,8 +3822,8 @@ Bool XRegisterIMInstantiateCallback(
 Bool XUnregisterIMInstantiateCallback(
   Display* dpy,
   _XrmHashBucketRec* rdb,
-  char* res_name,
-  char* res_class,
+  const(char)* res_name,
+  const(char)* res_class,
   XIDProc callback,
   XPointer client_data
 );
