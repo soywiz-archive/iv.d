@@ -1,6 +1,7 @@
 module iv.x11.util is aliced;
 
 import core.stdc.config;
+import iv.x11.md;
 import iv.x11.x11;
 import iv.x11.xlib;
 import iv.x11.region;
@@ -414,12 +415,12 @@ int XShrinkRegion (XRegion r, int dx, int dy);
 Status XStringListToTextProperty (char** list, int count, XTextProperty* text_prop_return);
 int XSubtractRegion (XRegion sra, XRegion srb, XRegion dr_return);
 int XmbTextListToTextProperty (Display* display, char** list, int count, XICCEncodingStyle style, XTextProperty* text_prop_return);
-int XwcTextListToTextProperty (Display* display, wchar** list, int count, XICCEncodingStyle style, XTextProperty* text_prop_return);
+int XwcTextListToTextProperty (Display* display, widechar** list, int count, XICCEncodingStyle style, XTextProperty* text_prop_return);
 int Xutf8TextListToTextProperty (Display* display, char** list, int count, XICCEncodingStyle style, XTextProperty* text_prop_return);
-void XwcFreeStringList (wchar** list);
+void XwcFreeStringList (widechar** list);
 Status XTextPropertyToStringList (XTextProperty* text_prop, char*** list_return, int* count_return);
 int XmbTextPropertyToTextList (Display* display, const XTextProperty* text_prop, char*** list_return, int* count_return);
-int XwcTextPropertyToTextList (Display* display, const(XTextProperty)* text_prop, wchar*** list_return, int* count_return);
+int XwcTextPropertyToTextList (Display* display, const(XTextProperty)* text_prop, widechar*** list_return, int* count_return);
 int Xutf8TextPropertyToTextList (Display* display, const(XTextProperty)* text_prop, char*** list_return, int* count_return);
 int XUnionRectWithRegion (XRectangle* rectangle, XRegion src_region, XRegion dest_region_return);
 int XUnionRegion (XRegion sra, XRegion srb, XRegion dr_return);

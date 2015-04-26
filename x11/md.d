@@ -27,3 +27,6 @@ alias BITS32 = CARD32;
 
 alias BYTE = CARD8;
 alias BOOL = CARD8;
+
+
+alias widechar = dchar;
