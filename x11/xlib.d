@@ -1065,49 +1065,51 @@ enum {
   XIMStatusNone       = 0x0800L,
 }
 
-immutable string XNVaNestedList               = "XNVaNestedList";
-immutable string XNQueryInputStyle            = "queryInputStyle";
-immutable string XNClientWindow               = "clientWindow";
-immutable string XNInputStyle                 = "inputStyle";
-immutable string XNFocusWindow                = "focusWindow";
-immutable string XNResourceName               = "resourceName";
-immutable string XNResourceClass              = "resourceClass";
-immutable string XNGeometryCallback           = "geometryCallback";
-immutable string XNDestroyCallback            = "destroyCallback";
-immutable string XNFilterEvents               = "filterEvents";
-immutable string XNPreeditStartCallback       = "preeditStartCallback";
-immutable string XNPreeditDoneCallback        = "preeditDoneCallback";
-immutable string XNPreeditDrawCallback        = "preeditDrawCallback";
-immutable string XNPreeditCaretCallback       = "preeditCaretCallback";
-immutable string XNPreeditStateNotifyCallback = "preeditStateNotifyCallback";
-immutable string XNPreeditAttributes          = "preeditAttributes";
-immutable string XNStatusStartCallback        = "statusStartCallback";
-immutable string XNStatusDoneCallback         = "statusDoneCallback";
-immutable string XNStatusDrawCallback         = "statusDrawCallback";
-immutable string XNStatusAttributes           = "statusAttributes";
-immutable string XNArea                       = "area";
-immutable string XNAreaNeeded                 = "areaNeeded";
-immutable string XNSpotLocation               = "spotLocation";
-immutable string XNColormap                   = "colorMap";
-immutable string XNStdColormap                = "stdColorMap";
-immutable string XNForeground                 = "foreground";
-immutable string XNBackground                 = "background";
-immutable string XNBackgroundPixmap           = "backgroundPixmap";
-immutable string XNFontSet                    = "fontSet";
-immutable string XNLineSpace                  = "lineSpace";
-immutable string XNCursor                     = "cursor";
+enum {
+  XNVaNestedList               = "XNVaNestedList",
+  XNQueryInputStyle            = "queryInputStyle",
+  XNClientWindow               = "clientWindow",
+  XNInputStyle                 = "inputStyle",
+  XNFocusWindow                = "focusWindow",
+  XNResourceName               = "resourceName",
+  XNResourceClass              = "resourceClass",
+  XNGeometryCallback           = "geometryCallback",
+  XNDestroyCallback            = "destroyCallback",
+  XNFilterEvents               = "filterEvents",
+  XNPreeditStartCallback       = "preeditStartCallback",
+  XNPreeditDoneCallback        = "preeditDoneCallback",
+  XNPreeditDrawCallback        = "preeditDrawCallback",
+  XNPreeditCaretCallback       = "preeditCaretCallback",
+  XNPreeditStateNotifyCallback = "preeditStateNotifyCallback",
+  XNPreeditAttributes          = "preeditAttributes",
+  XNStatusStartCallback        = "statusStartCallback",
+  XNStatusDoneCallback         = "statusDoneCallback",
+  XNStatusDrawCallback         = "statusDrawCallback",
+  XNStatusAttributes           = "statusAttributes",
+  XNArea                       = "area",
+  XNAreaNeeded                 = "areaNeeded",
+  XNSpotLocation               = "spotLocation",
+  XNColormap                   = "colorMap",
+  XNStdColormap                = "stdColorMap",
+  XNForeground                 = "foreground",
+  XNBackground                 = "background",
+  XNBackgroundPixmap           = "backgroundPixmap",
+  XNFontSet                    = "fontSet",
+  XNLineSpace                  = "lineSpace",
+  XNCursor                     = "cursor",
 
-immutable string XNQueryIMValuesList        = "queryIMValuesList";
-immutable string XNQueryICValuesList        = "queryICValuesList";
-immutable string XNVisiblePosition          = "visiblePosition";
-immutable string XNR6PreeditCallback        = "r6PreeditCallback";
-immutable string XNStringConversionCallback = "stringConversionCallback";
-immutable string XNStringConversion         = "stringConversion";
-immutable string XNResetState               = "resetState";
-immutable string XNHotKey                   = "hotKey";
-immutable string XNHotKeyState              = "hotKeyState";
-immutable string XNPreeditState             = "preeditState";
-immutable string XNSeparatorofNestedList    = "separatorofNestedList";
+  XNQueryIMValuesList        = "queryIMValuesList",
+  XNQueryICValuesList        = "queryICValuesList",
+  XNVisiblePosition          = "visiblePosition",
+  XNR6PreeditCallback        = "r6PreeditCallback",
+  XNStringConversionCallback = "stringConversionCallback",
+  XNStringConversion         = "stringConversion",
+  XNResetState               = "resetState",
+  XNHotKey                   = "hotKey",
+  XNHotKeyState              = "hotKeyState",
+  XNPreeditState             = "preeditState",
+  XNSeparatorofNestedList    = "separatorofNestedList",
+}
 
 enum int XBufferOverflow = -1;
 enum int XLookupNone     = 1;
@@ -3727,15 +3729,14 @@ char* XLocaleOfIM(
   XIM im
 );
 
-/+todo
+//TODO
 XIC XCreateIC(
   XIM im, ...
-) _X_SENTINEL(0);
+) /*_X_SENTINEL(0)*/;
 
 void XDestroyIC(
   XIC ic
 );
-+/
 
 void XSetICFocus(
   XIC ic
