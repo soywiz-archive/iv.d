@@ -1310,3 +1310,159 @@ version(unittest_signal)
 unittest {
   import iv.writer; errwriteln("tests passed!");
 }
+
+
+// parse signal definition, return mixin string
+template signals(string sstr) {
+  static string doIt() (string sstr) {
+    usize skipSpaces() (usize pos) {
+      while (pos < sstr.length) {
+        if (pos+1 < sstr.length && sstr[pos] == '/') {
+          if (sstr[pos+1] == '/') {
+            while (pos < sstr.length && sstr[pos] != '\n') ++pos;
+          } else if (sstr[pos+1] == '*' || sstr[pos+1] == '+') {
+            //FIXME: "+" should nest
+            char ech = sstr[pos+1];
+            pos += 2;
+            while (pos < sstr.length-1) {
+              if (sstr[pos+1] == '/' && sstr[pos] == ech) { ++pos; break; }
+              ++pos;
+            }
+            ++pos;
+          } else {
+            break;
+          }
+        } else if (sstr[pos] <= ' ') {
+          ++pos;
+        } else {
+          break;
+        }
+      }
+      return pos;
+    }
+
+    string res;
+    while (sstr.length) {
+      // get signal name
+      // skip spaces
+      usize pos = skipSpaces(0);
+      if (pos >= sstr.length) break;
+      // skip id
+      usize end = pos;
+      while (end < sstr.length) {
+        if (sstr[end] <= ' ' || sstr[end] == '(' || sstr[end] == '/') break;
+        ++end;
+      }
+      string id = sstr[pos..end];
+      end = skipSpaces(end);
+      if (end >= sstr.length || sstr[end] != '(') assert(0, "signals: '(' expected");
+      sstr = sstr[end+1..$];
+      //assert(0, "*** "~sstr);
+      res ~= "$=>signal!(";
+      // parse args
+      while (sstr.length) {
+        pos = skipSpaces(0);
+        if (pos >= sstr.length) assert(0, "signals: ')' expected");
+        if (sstr[pos] == ')') {
+          pos = skipSpaces(pos+1);
+          sstr = sstr[pos..$];
+          break;
+        }
+        // find ')' or ','
+        end = pos;
+        //usize lastSpace = usize.max;
+        usize bcnt = 0;
+        //TODO: comments
+        while (end < sstr.length) {
+          if (sstr[end] == '(') {
+            ++bcnt;
+          } else if (sstr[end] == ')') {
+            if (bcnt-- == 0) break;
+          } else if (sstr[end] == ',') {
+            if (bcnt != 0) assert(0, "signals: unbalanced parens: "~sstr[pos..end]);
+            break;
+          }
+          ++end;
+        }
+        if (end >= sstr.length || end == pos) assert(0, "signals: ')' expected");
+        // get definition
+        string def = sstr[pos..end];
+        end = skipSpaces(end);
+        if (sstr[end] == ',') ++end;
+        sstr = sstr[end..$];
+        // strip trailing spaces
+        for (end = def.length; end > 0; --end) if (def[end] > ' ') break;
+        //if (end < def.length) def = def[0..end];
+        // now cut out the last word
+        usize xxend = end;
+        while (end > 0 && def[end] > ' ') --end;
+        if (end == 0) {
+          // only one word, wtf?!
+          assert(0, "signals: argument name expected: "~def);
+        } else {
+          while (end > 0 && def[end] <= ' ') --end;
+          res ~= def[0..end+1]~",";
+        }
+      }
+      if (!sstr.length || sstr[0] != ';') assert(0, "signals: ';' expected: "~sstr);
+      sstr = sstr[1..$];
+      if (res[$-1] == ',') res = res[0..$-1];
+      res ~= ")(`"~id~"`);\n";
+    }
+    return res;
+  }
+  enum signals = doIt(sstr);
+}
+
+
+version(unittest_signal)
+unittest {
+  pragma(msg, signals!q{
+    onBottomLineChange (uint id, uint newln);
+    onWriteBytes (uint id, const(char)[] buf);
+  });
+}
+
+
+struct slot {
+  string signalName;
+}
+
+
+template AutoConnect(string srcobj, T) if (is(T == class) || is(T == struct)) {
+  private import iv.udas;
+  template doMember(MB...) {
+    static if (MB.length == 0) {
+      enum doMember = "";
+    } else static if (is(typeof(__traits(getMember, T, MB[0])))) {
+      static if (hasUDA!(__traits(getMember, T, MB[0]), slot)) {
+        //pragma(msg, MB[0]);
+        static if (is(typeof(getUDA!(__traits(getMember, T, MB[0]), slot))))
+          enum slt = getUDA!(__traits(getMember, T, MB[0]), slot).signalName;
+        else
+          enum slt = "";
+        enum doMember =
+          srcobj~"."~(slt.length ? slt : MB[0].stringof[1..$-1])~
+          ".connect!"~MB[0].stringof~"(this);\n"~
+          doMember!(MB[1..$]);
+      } else {
+        enum doMember = doMember!(MB[1..$]);
+      }
+    } else {
+      enum doMember = doMember!(MB[1..$]);
+    }
+  }
+  //private enum mems = __traits(T, getMembers);
+  enum AutoConnect = doMember!(__traits(allMembers, T));
+}
+
+
+unittest {
+  static class A {
+    @slot void onFuck () {}
+    @slot("onShit") void crap () {}
+    void piss () {};
+  }
+
+  pragma(msg, AutoConnect!("term", A));
+}
