@@ -3713,15 +3713,14 @@ Status XCloseIM(
   XIM im
 );
 
-/+
 char* XGetIMValues(
   XIM im, ...
-) _X_SENTINEL(0);
+) /*_X_SENTINEL(0)*/;
 
 char* XSetIMValues(
   XIM im, ...
-) _X_SENTINEL(0);
-+/
+) /*_X_SENTINEL(0)*/;
+
 Display* XDisplayOfIM(
   XIM im
 );
@@ -3759,15 +3758,13 @@ char* Xutf8ResetIC(
   XIC ic
 );
 
-/+todo
 char* XSetICValues(
   XIC ic, ...
-) _X_SENTINEL(0);
+) /*_X_SENTINEL(0)*/;
 
 char* XGetICValues(
   XIC ic, ...
-) _X_SENTINEL(0);
-+/
+) /*_X_SENTINEL(0)*/;
 
 XIM XIMOfIC(
   XIC ic
