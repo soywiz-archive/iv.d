@@ -70,7 +70,7 @@
 module iv.writer is aliced;
 private:
 
-private import std.traits : isIntegral, isPointer, StripTypedef;
+private import std.traits : isBoolean, isIntegral, isPointer, StripTypedef;
 
 
 __gshared void delegate (scope const(char[]), scope int fd=1) @trusted nothrow @nogc  wrwriter;
@@ -281,6 +281,18 @@ if (isIntegral!T)
   } else {
     wrWriteWidth!(lfill, rfill)(fd, width, maxlen, center, hstr[pos..$]);
   }
+}
+
+
+private void wrWriteWidthBool(char lfill=' ', char rfill=' ', T)
+               (int fd,
+                int width,
+                int maxlen,
+                bool center,
+                T v)
+if (isBoolean!T)
+{
+  wrWriteWidth!(lfill, rfill)(fd, width, maxlen, center, (v ? "true" : "false"));
 }
 
 
@@ -545,6 +557,9 @@ if (state == "write-argument-s")
   } else static if (isIntegral!aatype) {
     enum callFunc = "wrWriteWidthInt";
     enum func = "";
+  } else static if (isBoolean!aatype) {
+    enum callFunc = "wrWriteWidthBool";
+    enum func = "";
   } else {
     // this may allocate!
     enum callFunc = "wrWriteWidth";
@@ -791,4 +806,10 @@ unittest {
   writefln!"%s"(mi);
   writefln!"%x"(mi);
   writefln!"%s"(ms);
+
+  void testBool () @nogc {
+    writefln!"%s"(true);
+    writefln!"%s"(false);
+  }
+  testBool();
 }
