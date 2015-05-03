@@ -334,10 +334,10 @@ final:
   /** Reset emulated CPU. Will NOT reset tstate counter. */
   void reset () @safe nothrow @nogc {
     PC = prevPC = origPC = 0;
-    BC.w = DE.w = HL.w = AF.w = SP = IX.w = IY.w = 0;
-    BCx.w = DEx.w = HLx.w = AFx.w = 0;
+    BC = DE = HL = AF = SP = IX = IY = 0;
+    BCx = DEx = HLx = AFx = 0;
     DD = &HL;
-    MEMPTR.w = 0;
+    MEMPTR = 0;
     I = R = 0;
     IFF1 = IFF2 = false;
     mIM = 0;
@@ -431,7 +431,7 @@ final:
           disp = z80_peekb_3ts_args();
           if (disp > 127) disp -= 256;
           ++PC;
-          MEMPTR.w = cast(ushort)((cast(long)DD.w+disp)&0xffff);
+          MEMPTR = cast(ushort)((cast(long)DD.w+disp)&0xffff);
         } else if (opcode == 0xdd && opcode == 0xfd) {
           /* double prefix; restart main loop */
           prevWasEIDDR = EIDDR.BlockInt;
@@ -447,43 +447,43 @@ final:
         switch (opcode) {
           /* LDI, LDIR, LDD, LDDR */
           case 0xa0: case 0xb0: case 0xa8: case 0xb8:
-            tmpB = z80_peekb_3ts(HL.w);
-            z80_pokeb_3ts(DE.w, tmpB);
+            tmpB = z80_peekb_3ts(HL);
+            z80_pokeb_3ts(DE, tmpB);
             /*MWR(5)*/
-            z80_contention_by1ts(DE.w, 2);
-            --BC.w;
+            z80_contention_by1ts(DE, 2);
+            --BC;
             tmpB = (tmpB+AF.a)&0xff;
             AF.f = /* BOO! FEAR THE MIGHTY BITS! */
               (tmpB&Z80Flags.F3)|(AF.f&(Z80Flags.C|Z80Flags.Z|Z80Flags.S))|
-              (BC.w != 0 ? Z80Flags.PV : 0)|
+              (BC != 0 ? Z80Flags.PV : 0)|
               (tmpB&0x02 ? Z80Flags.F5 : 0);
             if (is_repeated(opcode)) {
-              if (BC.w != 0) {
+              if (BC != 0) {
                 /*IOP(5)*/
-                z80_contention_by1ts(DE.w, 5);
+                z80_contention_by1ts(DE, 5);
                 /* do it again */
                 PC -= 2;
-                MEMPTR.w = (PC+1)&0xffff;
+                MEMPTR = (PC+1)&0xffff;
               }
             }
-            if (!is_backward(opcode)) { ++HL.w; ++DE.w; } else { --HL.w; --DE.w; }
+            if (!is_backward(opcode)) { ++HL; ++DE; } else { --HL; --DE; }
             break;
           /* CPI, CPIR, CPD, CPDR */
           case 0xa1: case 0xb1: case 0xa9: case 0xb9:
             /* MEMPTR */
-            if (is_repeated(opcode) && (!(BC.w == 1 || z80_peekb_i(HL.w) == AF.a))) {
-              MEMPTR.w = cast(ushort)(origPC+1);
+            if (is_repeated(opcode) && (!(BC == 1 || z80_peekb_i(HL) == AF.a))) {
+              MEMPTR = cast(ushort)(origPC+1);
             } else {
-              MEMPTR.w = cast(ushort)(MEMPTR.w+(is_backward(opcode) ? -1 : 1));
+              MEMPTR = cast(ushort)(MEMPTR+(is_backward(opcode) ? -1 : 1));
             }
-            tmpB = z80_peekb_3ts(HL.w);
+            tmpB = z80_peekb_3ts(HL);
             /*IOP(5)*/
-            z80_contention_by1ts(HL.w, 5);
-            --BC.w;
+            z80_contention_by1ts(HL, 5);
+            --BC;
             AF.f = /* BOO! FEAR THE MIGHTY BITS! */
               Z80Flags.N|
               (AF.f&Z80Flags.C)|
-              (BC.w != 0 ? Z80Flags.PV : 0)|
+              (BC != 0 ? Z80Flags.PV : 0)|
               (cast(int)(AF.a&0x0f)-cast(int)(tmpB&0x0f) < 0 ? Z80Flags.H : 0);
             tmpB = (cast(int)AF.a-cast(int)tmpB)&0xff;
             AF.f |= (tmpB == 0 ? Z80Flags.Z : 0)|(tmpB&Z80Flags.S);
@@ -493,12 +493,12 @@ final:
               /* repeated */
               if ((AF.f&(Z80Flags.Z|Z80Flags.PV)) == Z80Flags.PV) {
                 /*IOP(5)*/
-                z80_contention_by1ts(HL.w, 5);
+                z80_contention_by1ts(HL, 5);
                 /* do it again */
                 PC -= 2;
               }
             }
-            if (is_backward(opcode)) --HL.w; else ++HL.w;
+            if (is_backward(opcode)) --HL; else ++HL;
             break;
           /* OUTI, OTIR, OUTD, OTDR */
           case 0xa3: case 0xb3: case 0xab: case 0xbb:
@@ -507,19 +507,19 @@ final:
             goto case 0xa2;
           /* INI, INIR, IND, INDR */
           case 0xa2: case 0xb2: case 0xaa: case 0xba:
-            MEMPTR.w = cast(ushort)(BC.w+(is_backward(opcode) ? -1 : 1));
+            MEMPTR = cast(ushort)(BC+(is_backward(opcode) ? -1 : 1));
             /*OCR(5)*/
             z80_contention_by1ts_ir(1);
             if (opcode&0x01) {
               /* OUT* */
-              tmpB = z80_peekb_3ts(HL.w);/*MRD(3)*/
-              z80_port_write(BC.w, tmpB);
-              tmpW = cast(ushort)(HL.w+(is_backward(opcode) ? -1 : 1));
+              tmpB = z80_peekb_3ts(HL);/*MRD(3)*/
+              z80_port_write(BC, tmpB);
+              tmpW = cast(ushort)(HL+(is_backward(opcode) ? -1 : 1));
               tmpC = (tmpB+tmpW)&0xff;
             } else {
               /* IN* */
-              tmpB = z80_port_read(BC.w);
-              z80_pokeb_3ts(HL.w, tmpB);/*MWR(3)*/
+              tmpB = z80_port_read(BC);
+              z80_pokeb_3ts(HL, tmpB);/*MWR(3)*/
               --BC.b;
               if (is_backward(opcode)) tmpC = (cast(int)tmpB+cast(int)BC.c-1)&0xff; else tmpC = (tmpB+BC.c+1)&0xff;
             }
@@ -531,14 +531,14 @@ final:
             if (is_repeated(opcode)) {
               /* repeating commands */
               if (BC.b != 0) {
-                ushort a = (opcode&0x01 ? BC.w : HL.w);
+                ushort a = (opcode&0x01 ? BC : HL);
                 /*IOP(5)*/
                 z80_contention_by1ts(a, 5);
                 /* do it again */
                 PC -= 2;
               }
             }
-            if (is_backward(opcode)) --HL.w; else ++HL.w;
+            if (is_backward(opcode)) --HL; else ++HL;
             break;
           /* not strings, but some good instructions anyway */
           default:
@@ -547,8 +547,8 @@ final:
               final switch (opcode&0x07) {
                 /* IN r8,(C) */
                 case 0:
-                  MEMPTR.w = cast(ushort)(BC.w+1);
-                  tmpB = z80_port_read(BC.w);
+                  MEMPTR = cast(ushort)(BC+1);
+                  tmpB = z80_port_read(BC);
                   AF.f = tblSZP53[tmpB]|(AF.f&Z80Flags.C);
                   final switch ((opcode>>3)&0x07) {
                     case 0: BC.b = tmpB; break;
@@ -563,7 +563,7 @@ final:
                   break;
                 /* OUT (C),r8 */
                 case 1:
-                  MEMPTR.w = cast(ushort)(BC.w+1);
+                  MEMPTR = cast(ushort)(BC+1);
                   final switch ((opcode>>3)&0x07) {
                     case 0: tmpB = BC.b; break;
                     case 1: tmpB = BC.c; break;
@@ -574,38 +574,38 @@ final:
                     case 6: tmpB = 0; break;
                     case 7: tmpB = AF.a; break;
                   }
-                  z80_port_write(BC.w, tmpB);
+                  z80_port_write(BC, tmpB);
                   break;
                 /* SBC HL,rr/ADC HL,rr */
                 case 2:
                   /*IOP(4),IOP(3)*/
                   z80_contention_by1ts_ir(7);
                   switch ((opcode>>4)&0x03) {
-                    case 0: tmpW = BC.w; break;
-                    case 1: tmpW = DE.w; break;
-                    case 2: tmpW = HL.w; break;
+                    case 0: tmpW = BC; break;
+                    case 1: tmpW = DE; break;
+                    case 2: tmpW = HL; break;
                     default: tmpW = SP; break;
                   }
-                  HL.w = (opcode&0x08 ? ADC_DD(tmpW, HL.w) : SBC_DD(tmpW, HL.w));
+                  HL = (opcode&0x08 ? ADC_DD(tmpW, HL) : SBC_DD(tmpW, HL));
                   break;
                 /* LD (nn),rr/LD rr,(nn) */
                 case 3:
                   tmpW = z80_getpcw(0);
-                  MEMPTR.w = (tmpW+1)&0xffff;
+                  MEMPTR = (tmpW+1)&0xffff;
                   if (opcode&0x08) {
                     /* LD rr,(nn) */
                     final switch ((opcode>>4)&0x03) {
-                      case 0: BC.w = z80_peekw_6ts(tmpW); break;
-                      case 1: DE.w = z80_peekw_6ts(tmpW); break;
-                      case 2: HL.w = z80_peekw_6ts(tmpW); break;
+                      case 0: BC = z80_peekw_6ts(tmpW); break;
+                      case 1: DE = z80_peekw_6ts(tmpW); break;
+                      case 2: HL = z80_peekw_6ts(tmpW); break;
                       case 3: SP = z80_peekw_6ts(tmpW); break;
                     }
                   } else {
                     /* LD (nn),rr */
                     final switch ((opcode>>4)&0x03) {
-                      case 0: z80_pokew_6ts(tmpW, BC.w); break;
-                      case 1: z80_pokew_6ts(tmpW, DE.w); break;
-                      case 2: z80_pokew_6ts(tmpW, HL.w); break;
+                      case 0: z80_pokew_6ts(tmpW, BC); break;
+                      case 1: z80_pokew_6ts(tmpW, DE); break;
+                      case 2: z80_pokew_6ts(tmpW, HL); break;
                       case 3: z80_pokew_6ts(tmpW, SP); break;
                     }
                   }
@@ -621,7 +621,7 @@ final:
                   /*RETI: 0x4d, 0x5d, 0x6d, 0x7d*/
                   /*RETN: 0x45, 0x55, 0x65, 0x75*/
                   IFF1 = IFF2;
-                  MEMPTR.w = PC = z80_pop_6ts();
+                  MEMPTR = PC = z80_pop_6ts();
                   if (opcode&0x08) {
                     /* RETI */
                     if (trapRETI(opcode)) return tstates-tstart;
@@ -695,7 +695,7 @@ final:
             case 3: tmpB = DE.e; break;
             case 4: tmpB = HL.h; break;
             case 5: tmpB = HL.l; break;
-            case 6: tmpB = z80_peekb_3ts(HL.w); if (contended) memContention(HL.w, 1, MemIO.Data, MemIOReq.Read); break;
+            case 6: tmpB = z80_peekb_3ts(HL); if (contended) memContention(HL, 1, MemIO.Data, MemIOReq.Read); break;
             case 7: tmpB = AF.a; break;
           }
         }
@@ -774,7 +774,7 @@ final:
                   z80_contention_by1ts_pc(5);
                   ++PC;
                   PC += disp;
-                  MEMPTR.w = PC;
+                  MEMPTR = PC;
                 } else {
                   ++PC;
                 }
@@ -790,8 +790,8 @@ final:
                 /*IOP(4),IOP(3)*/
                 z80_contention_by1ts_ir(7);
                 final switch ((opcode>>4)&0x03) {
-                  case 0: DD.w = ADD_DD(BC.w, DD.w); break;
-                  case 1: DD.w = ADD_DD(DE.w, DD.w); break;
+                  case 0: DD.w = ADD_DD(BC, DD.w); break;
+                  case 1: DD.w = ADD_DD(DE, DD.w); break;
                   case 2: DD.w = ADD_DD(DD.w, DD.w); break;
                   case 3: DD.w = ADD_DD(SP, DD.w); break;
                 }
@@ -799,8 +799,8 @@ final:
                 /* LD rr,nn */
                 tmpW = z80_getpcw(0);
                 final switch ((opcode>>4)&0x03) {
-                  case 0: BC.w = tmpW; break;
-                  case 1: DE.w = tmpW; break;
+                  case 0: BC = tmpW; break;
+                  case 1: DE = tmpW; break;
                   case 2: DD.w = tmpW; break;
                   case 3: SP = tmpW; break;
                 }
@@ -810,23 +810,23 @@ final:
             case 2:
               final switch ((opcode>>3)&0x07) {
                 /* LD (BC),A */
-                case 0: z80_pokeb_3ts(BC.w, AF.a); MEMPTR.l = (BC.c+1)&0xff; MEMPTR.h = AF.a; break;
+                case 0: z80_pokeb_3ts(BC, AF.a); MEMPTR.l = (BC.c+1)&0xff; MEMPTR.h = AF.a; break;
                 /* LD A,(BC) */
-                case 1: AF.a = z80_peekb_3ts(BC.w); MEMPTR.w = (BC.w+1)&0xffff; break;
+                case 1: AF.a = z80_peekb_3ts(BC); MEMPTR = (BC+1)&0xffff; break;
                 /* LD (DE),A */
-                case 2: z80_pokeb_3ts(DE.w, AF.a); MEMPTR.l = (DE.e+1)&0xff; MEMPTR.h = AF.a; break;
+                case 2: z80_pokeb_3ts(DE, AF.a); MEMPTR.l = (DE.e+1)&0xff; MEMPTR.h = AF.a; break;
                 /* LD A,(DE) */
-                case 3: AF.a = z80_peekb_3ts(DE.w); MEMPTR.w = (DE.w+1)&0xffff; break;
+                case 3: AF.a = z80_peekb_3ts(DE); MEMPTR = (DE+1)&0xffff; break;
                 /* LD (nn),HL */
                 case 4:
                   tmpW = z80_getpcw(0);
-                  MEMPTR.w = (tmpW+1)&0xffff;
+                  MEMPTR = (tmpW+1)&0xffff;
                   z80_pokew_6ts(tmpW, DD.w);
                   break;
                 /* LD HL,(nn) */
                 case 5:
                   tmpW = z80_getpcw(0);
-                  MEMPTR.w = (tmpW+1)&0xffff;
+                  MEMPTR = (tmpW+1)&0xffff;
                   DD.w = z80_peekw_6ts(tmpW);
                   break;
                 /* LD (nn),A */
@@ -839,7 +839,7 @@ final:
                 /* LD A,(nn) */
                 case 7:
                   tmpW = z80_getpcw(0);
-                  MEMPTR.w = (tmpW+1)&0xffff;
+                  MEMPTR = (tmpW+1)&0xffff;
                   AF.a = z80_peekb_3ts(tmpW);
                   break;
               }
@@ -851,16 +851,16 @@ final:
               if (opcode&0x08) {
                 /*DEC*/
                 final switch ((opcode>>4)&0x03) {
-                  case 0: --BC.w; break;
-                  case 1: --DE.w; break;
+                  case 0: --BC; break;
+                  case 1: --DE; break;
                   case 2: --DD.w; break;
                   case 3: --SP; break;
                 }
               } else {
                 /*INC*/
                 final switch ((opcode>>4)&0x03) {
-                  case 0: ++BC.w; break;
-                  case 1: ++DE.w; break;
+                  case 0: ++BC; break;
+                  case 1: ++DE; break;
                   case 2: ++DD.w; break;
                   case 3: ++SP; break;
                 }
@@ -1017,7 +1017,7 @@ final:
             case 0:
               z80_contention_by1ts_ir(1);
               mixin(SET_TRUE_CC);
-              if (trueCC) MEMPTR.w = PC = z80_pop_6ts();
+              if (trueCC) MEMPTR = PC = z80_pop_6ts();
               break;
             /* POP rr/special0 */
             case 1:
@@ -1025,7 +1025,7 @@ final:
                 /* special 0 */
                 final switch ((opcode>>4)&0x03) {
                   /* RET */
-                  case 0: MEMPTR.w = PC = z80_pop_6ts(); break;
+                  case 0: MEMPTR = PC = z80_pop_6ts(); break;
                   /* EXX */
                   case 1: exx(); break;
                   /* JP (HL) */
@@ -1041,24 +1041,24 @@ final:
                 /* POP rr */
                 tmpW = z80_pop_6ts();
                 final switch ((opcode>>4)&0x03) {
-                  case 0: BC.w = tmpW; break;
-                  case 1: DE.w = tmpW; break;
+                  case 0: BC = tmpW; break;
+                  case 1: DE = tmpW; break;
                   case 2: DD.w = tmpW; break;
-                  case 3: AF.w = tmpW; break;
+                  case 3: AF = tmpW; break;
                 }
               }
               break;
             /* JP cc,nn */
             case 2:
               mixin(SET_TRUE_CC);
-              MEMPTR.w = z80_getpcw(0);
-              if (trueCC) PC = MEMPTR.w;
+              MEMPTR = z80_getpcw(0);
+              if (trueCC) PC = MEMPTR;
               break;
             /* special1/special3 */
             case 3:
               final switch ((opcode>>3)&0x07) {
                 /* JP nn */
-                case 0: MEMPTR.w = PC = z80_getpcw(0); break;
+                case 0: MEMPTR = PC = z80_getpcw(0); break;
                 /* OUT (n),A */
                 case 2:
                   tmpW = z80_peekb_3ts_args();
@@ -1073,7 +1073,7 @@ final:
                   tmpB = z80_peekb_3ts_args();
                   tmpW = ((cast(ushort)(AF.a))<<8)|tmpB;
                   ++PC;
-                  MEMPTR.w = (tmpW+1)&0xffff;
+                  MEMPTR = (tmpW+1)&0xffff;
                   AF.a = z80_port_read(tmpW);
                   break;
                 /* EX (SP),HL */
@@ -1084,13 +1084,13 @@ final:
                   /*SWL(3),SWH(5)*/
                   z80_pokew_6ts_inverted(SP, DD.w);
                   z80_contention_by1ts(SP, 2);
-                  MEMPTR.w = DD.w = tmpW;
+                  MEMPTR = DD.w = tmpW;
                   break;
                 /* EX DE,HL */
                 case 5:
-                  tmpW = DE.w;
-                  DE.w = HL.w;
-                  HL.w = tmpW;
+                  tmpW = DE;
+                  DE = HL;
+                  HL = tmpW;
                   break;
                 /* DI */
                 case 6: IFF1 = IFF2 = 0; break;
@@ -1101,10 +1101,10 @@ final:
             /* CALL cc,nn */
             case 4:
               mixin(SET_TRUE_CC);
-              MEMPTR.w = z80_getpcw(trueCC);
+              MEMPTR = z80_getpcw(trueCC);
               if (trueCC) {
                 z80_push_6ts(PC);
-                PC = MEMPTR.w;
+                PC = MEMPTR;
               }
               break;
             /* PUSH rr/special2 */
@@ -1112,7 +1112,7 @@ final:
               if (opcode&0x08) {
                 if (((opcode>>4)&0x03) == 0) {
                   /* CALL */
-                  MEMPTR.w = tmpW = z80_getpcw(1);
+                  MEMPTR = tmpW = z80_getpcw(1);
                   z80_push_6ts(PC);
                   PC = tmpW;
                 }
@@ -1121,10 +1121,10 @@ final:
                 /*OCR(5)*/
                 z80_contention_by1ts_ir(1);
                 switch ((opcode>>4)&0x03) {
-                  case 0: tmpW = BC.w; break;
-                  case 1: tmpW = DE.w; break;
+                  case 0: tmpW = BC; break;
+                  case 1: tmpW = DE; break;
                   case 2: tmpW = DD.w; break;
-                  default: tmpW = AF.w; break;
+                  default: tmpW = AF; break;
                 }
                 z80_push_6ts(tmpW);
               }
@@ -1149,7 +1149,7 @@ final:
               /*OCR(5)*/
               z80_contention_by1ts_ir(1);
               z80_push_6ts(PC);
-              MEMPTR.w = PC = opcode&0x38;
+              MEMPTR = PC = opcode&0x38;
               break;
           }
           break;
@@ -1229,7 +1229,7 @@ final:
         /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
         /* M3 cycle: 3 T states write the low byte of PC and jump to #0038 */
         z80_push_6ts(PC);
-        MEMPTR.w = PC = 0x38;
+        MEMPTR = PC = 0x38;
         break;
       case 2:
         inc_r();
@@ -1240,7 +1240,7 @@ final:
         /* M4 cycle: 3 T to read high byte from the interrupt vector */
         /* M5 cycle: 3 T to read low byte from bus and jump to interrupt routine */
         a = ((cast(ushort)I)<<8)|0xff;
-        MEMPTR.w = PC = z80_peekw_6ts(a);
+        MEMPTR = PC = z80_peekw_6ts(a);
         break;
     }
     return tstates-ots; /* accepted */
@@ -1265,7 +1265,7 @@ final:
     /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
     /* M3 cycle: 3 T states write the low byte of PC and jump to #0066 */
     z80_push_6ts(PC);
-    MEMPTR.w = PC = 0x66;
+    MEMPTR = PC = 0x66;
     return tstates-ots;
   }
 
@@ -1302,14 +1302,14 @@ final:
 
   /** Execute EXX command. */
   void exx () @safe nothrow @nogc {
-    ushort t = BC.w; BC.w = BCx.w; BCx.w = t;
-    t = DE.w; DE.w = DEx.w; DEx.w = t;
-    t = HL.w; HL.w = HLx.w; HLx.w = t;
+    ushort t = BC; BC = BCx; BCx = t;
+    t = DE; DE = DEx; DEx = t;
+    t = HL; HL = HLx; HLx = t;
   }
 
   /** Execute EX AF,AF' command. */
   void exafaf () @safe nothrow @nogc {
-    ushort t = AF.w; AF.w = AFx.w; AFx.w = t;
+    ushort t = AF; AF = AFx; AFx = t;
   }
 
 private:
@@ -1598,7 +1598,7 @@ private:
     static immutable ubyte[8] hct = [ 0, Z80Flags.H, Z80Flags.H, Z80Flags.H, 0, 0, 0, Z80Flags.H ];
     uint res = cast(uint)value+cast(uint)ddvalue;
     ubyte b = ((value&0x0800)>>11)|((ddvalue&0x0800)>>10)|((res&0x0800)>>9);
-    MEMPTR.w = (ddvalue+1)&0xffff;
+    MEMPTR = (ddvalue+1)&0xffff;
     AF.f =
       (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|
       (res > 0xffff ? Z80Flags.C : 0)|
@@ -1612,7 +1612,7 @@ private:
     ubyte c = (AF.f&Z80Flags.C);
     uint newv = cast(uint)value+cast(uint)ddvalue+cast(uint)c;
     ushort res = (newv&0xffff);
-    MEMPTR.w = (ddvalue+1)&0xffff;
+    MEMPTR = (ddvalue+1)&0xffff;
     AF.f =
       ((res>>8)&Z80Flags.S35)|
       (res == 0 ? Z80Flags.Z : 0)|
@@ -1626,7 +1626,7 @@ private:
   @gcc_inline ushort SBC_DD (ushort value, ushort ddvalue) {
     ushort res;
     ubyte tmpB = AF.a;
-    MEMPTR.w = (ddvalue+1)&0xffff;
+    MEMPTR = (ddvalue+1)&0xffff;
     AF.a = ddvalue&0xff;
     SBC_A(value&0xff);
     res = AF.a;
@@ -1659,21 +1659,21 @@ private:
  } // //
 
   @gcc_inline void RRD_A () {
-    ubyte tmpB = z80_peekb_3ts(HL.w);
+    ubyte tmpB = z80_peekb_3ts(HL);
     //IOP(4)
-    MEMPTR.w = (HL.w+1)&0xffff;
-    z80_contention_by1ts(HL.w, 4);
-    z80_pokeb_3ts(HL.w, cast(ubyte)((AF.a<<4)|(tmpB>>4)));
+    MEMPTR = (HL+1)&0xffff;
+    z80_contention_by1ts(HL, 4);
+    z80_pokeb_3ts(HL, cast(ubyte)((AF.a<<4)|(tmpB>>4)));
     AF.a = (AF.a&0xf0)|(tmpB&0x0f);
     AF.f = (AF.f&Z80Flags.C)|tblSZP53[AF.a];
   }
 
   @gcc_inline void RLD_A () {
-    ubyte tmpB = z80_peekb_3ts(HL.w);
+    ubyte tmpB = z80_peekb_3ts(HL);
     //IOP(4)
-    MEMPTR.w = (HL.w+1)&0xffff;
-    z80_contention_by1ts(HL.w, 4);
-    z80_pokeb_3ts(HL.w, cast(ubyte)((tmpB<<4)|(AF.a&0x0f)));
+    MEMPTR = (HL+1)&0xffff;
+    z80_contention_by1ts(HL, 4);
+    z80_pokeb_3ts(HL, cast(ubyte)((tmpB<<4)|(AF.a&0x0f)));
     AF.a = (AF.a&0xf0)|(tmpB>>4);
     AF.f = (AF.f&Z80Flags.C)|tblSZP53[AF.a];
   }
