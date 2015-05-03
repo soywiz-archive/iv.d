@@ -1,0 +1,5 @@
+SubDir TOP src iv zymosis ;
+
+SubDirHdrs $(TOP) $(SUBDIR_TOKENS) .. .. ;
+
+Library libzymosis.a : z80emu.d package.d ;
