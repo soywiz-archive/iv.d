@@ -55,9 +55,10 @@
  *   negative maxlen: get right part
  * specifiers:
  *   's': use to!string to write argument
+ *        note that writer can print strings and integrals without allocation
  *   'x': write integer as hex
  *   'X': write integer as HEX
- *   '*': write all arguments that's left with to!string
+ *   '|': write all arguments that's left with "%s"
  *   '@': go to argument with number 'width' (use sign to relative goto)
  *   '!': skip all arguments that's left, no width allowed
  *   '%': just a percent sign, no width allowed
@@ -65,7 +66,7 @@
  *   '/': center string; negative width means "add extra space (if any) to the right"
  *   '~': fill with the following char instead of space
  *        second '~': right filling char for 'center'
- *   '\0'...'\0': separator string for '%*'
+ *   '\0'...'\0': separator string for '%|'
  */
 module iv.writer is aliced;
 private:
@@ -315,7 +316,7 @@ private auto WrData (int fd, int alen) {
     char lfchar = ' '; // "left fill"
     char rfchar = ' '; // "right fill"
     int fillhcharIdx; // 0: next will be lfchar, 1: next will be rfchar; 2: no more fills
-    string wsep; // separator string for "%*"
+    string wsep; // separator string for "%|"
 
     @disable this ();
 
@@ -647,7 +648,7 @@ if (state == "format-spec")
     enum writefImpl =
       writefImpl!("write-argument-"~fmt[0], data, AA)~
       writefImpl!("main", fmt[1..$], data.incAIdx(), AA);
-  } else static if (fmt[0] == '*') {
+  } else static if (fmt[0] == '|') {
     // write all unprocessed arguments
     static if (data.aidx < data.alen) {
       // has argument to process
@@ -744,8 +745,8 @@ void wrwritef(int fd, string fmt, AA...) (AA args) {
 public:
 
 void fdwritef(int fd, string fmt, A...) (A args) => wrwritef!(fd, fmt)(args);
-void fdwrite(int fd, A...) (A args) => wrwritef!(fd, "%*")(args);
-void fdwriteln(int fd, A...) (A args) => wrwritef!(fd, "%*\n")(args);
+void fdwrite(int fd, A...) (A args) => wrwritef!(fd, "%|")(args);
+void fdwriteln(int fd, A...) (A args) => wrwritef!(fd, "%|\n")(args);
 
 void writef(string fmt, A...) (A args) => wrwritef!(1, fmt)(args);
 void errwritef(string fmt, A...) (A args) => wrwritef!(2, fmt)(args);
@@ -753,11 +754,11 @@ void errwritef(string fmt, A...) (A args) => wrwritef!(2, fmt)(args);
 void writefln(string fmt, A...) (A args) => wrwritef!(1, fmt~"\n")(args);
 void errwritefln(string fmt, A...) (A args) => wrwritef!(2, fmt~"\n")(args);
 
-void write(A...) (A args) => wrwritef!(1, "%*")(args);
-void errwrite(A...) (A args) => wrwritef!(2, "%*")(args);
+void write(A...) (A args) => wrwritef!(1, "%|")(args);
+void errwrite(A...) (A args) => wrwritef!(2, "%|")(args);
 
-void writeln(A...) (A args) => wrwritef!(1, "%*\n")(args);
-void errwriteln(A...) (A args) => wrwritef!(2, "%*\n")(args);
+void writeln(A...) (A args) => wrwritef!(1, "%|\n")(args);
+void errwriteln(A...) (A args) => wrwritef!(2, "%|\n")(args);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -772,7 +773,7 @@ unittest {
   wrwriter("========================\n");
   writef!"`%%`\n"();
   writef!"`%-3s`\n"(42);
-  writef!"<`%3s`%%{str=%s}%*>\n"(cast(int)42, "[a]", new A(), n, t[]);
+  writef!"<`%3s`%%{str=%s}%|>\n"(cast(int)42, "[a]", new A(), n, t[]);
   writefln!"<`%2@%3s`>%!"(cast(int)42, "[a]", new A(), n, t);
   errwriteln("stderr");
   writefln!"`%-3s`"(42);
@@ -781,13 +782,13 @@ unittest {
   writefln!"`%!%-1@%+0@%-3s%!`"(69, 42, 666);
   writefln!"`%3.5s`"("a");
   writefln!"`%7.5s`"("abcdefgh");
-  writef!"%*\n"(42, 666);
+  writef!"%|\n"(42, 666);
   writefln!"`%/10.5s`"("abcdefgh");
   writefln!"`%/-10.-5s`"("abcdefgh");
   writefln!"`%/~+-10.-5s`"("abcdefgh");
   writefln!"`%/~+~:-10.-5s`"("abcdefgh");
-  writef!"%\0<>\0*\n"(42, 666, 999);
-  writef!"%\0\t\0*\n"(42, 666, 999);
+  writef!"%\0<>\0|\n"(42, 666, 999);
+  writef!"%\0\t\0|\n"(42, 666, 999);
   writefln!"`%~*05s %~.5s`"(42, 666);
   writef!"`%s`\n"(t);
   writef!"`%08s`\n"("alice");
