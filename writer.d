@@ -55,13 +55,16 @@
  *   negative maxlen: get right part
  * specifiers:
  *   's': use to!string to write argument
- *        note that writer can print strings and integrals without allocation
+ *        note that writer can print strings, bools and integrals without allocation
  *   'x': write integer as hex
  *   'X': write integer as HEX
  *   '|': write all arguments that's left with "%s"
  *   '@': go to argument with number 'width' (use sign to relative goto)
+ *        argument count starts with '1'
  *   '!': skip all arguments that's left, no width allowed
  *   '%': just a percent sign, no width allowed
+ *   '$': go to argument with number 'width' (use sign to relative goto), continue parsing
+ *        argument count starts with '1'
  * options (must immediately follow '%'):
  *   '/': center string; negative width means "add extra space (if any) to the right"
  *   '~': fill with the following char instead of space
@@ -668,16 +671,20 @@ if (state == "format-spec")
       // no more arguments
       enum writefImpl = writefImpl!("main", fmt[1..$], data, AA);
     }
-  } else static if (fmt[0] == '@') {
+  } else static if (fmt[0] == '@' || fmt[0] == '$') {
     // set current argument index
     // we must have no maxlen here
     static assert(data.maxlenSign == ' ', "invalid position for '@'");
     static if (data.widthSign == '+' || data.widthSign == '-')
-      enum newpos = data.aidx+data.getIntDef!"width"();
+      enum newpos = data.aidx+data.getIntDef!"width"()+1;
     else
       enum newpos = data.getIntDef!"width"();
-    static assert(newpos >= 0 && newpos <= data.alen, "position out of range for '@'");
-    enum writefImpl = writefImpl!("main", fmt[1..$], data.set!"aidx"(newpos), AA);
+    static assert(newpos >= 1 && newpos <= data.alen+1, "position out of range for '"~fmt[0]~"'");
+    static if (fmt[0] == '@' || (fmt.length > 1 && fmt[1] == '%')) {
+      enum writefImpl = writefImpl!("main", fmt[1..$], data.set!"aidx"(newpos-1), AA);
+    } else {
+      enum writefImpl = writefImpl!("main", "%"~fmt[1..$], data.set!"aidx"(newpos-1), AA);
+    }
   } else {
     static assert(0, "invalid format specifier: '"~fmt[0]~"'");
   }
@@ -774,11 +781,11 @@ unittest {
   writef!"`%%`\n"();
   writef!"`%-3s`\n"(42);
   writef!"<`%3s`%%{str=%s}%|>\n"(cast(int)42, "[a]", new A(), n, t[]);
-  writefln!"<`%2@%3s`>%!"(cast(int)42, "[a]", new A(), n, t);
+  writefln!"<`%3@%3s`>%!"(cast(int)42, "[a]", new A(), n, t);
   errwriteln("stderr");
   writefln!"`%-3s`"(42);
   writefln!"`%!z%-2@%-3s`%!"(69, 42, 666);
-  writefln!"`%!%0@%-3s%!`"(69, 42, 666);
+  writefln!"`%!%1@%-3s%!`"(69, 42, 666);
   writefln!"`%!%-1@%+0@%-3s%!`"(69, 42, 666);
   writefln!"`%3.5s`"("a");
   writefln!"`%7.5s`"("abcdefgh");
@@ -813,4 +820,7 @@ unittest {
     writefln!"%s"(false);
   }
   testBool();
+
+  writefln!"Hello, %2$s, I'm %1$s."("Alice", "Miriel");
+  writef!"%2$7s|\n%1$%7s|\n%||\n"("Alice", "Miriel");
 }
