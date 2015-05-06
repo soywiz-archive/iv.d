@@ -300,6 +300,20 @@ if (isBoolean!T)
 }
 
 
+import std.traits : Unqual;
+private void wrWriteWidthChar(char lfill=' ', char rfill=' ', T)
+               (int fd,
+                int width,
+                int maxlen,
+                bool center,
+                T v)
+if (is(Unqual!T == char))
+{
+  char[1] s = v;
+  wrWriteWidth!(lfill, rfill)(fd, width, maxlen, center, s);
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 private auto WrData (int fd, int alen) {
   static struct Data {
@@ -563,6 +577,9 @@ if (state == "write-argument-s")
     enum func = "";
   } else static if (isBoolean!aatype) {
     enum callFunc = "wrWriteWidthBool";
+    enum func = "";
+  } else static if (is(Unqual!aatype == char)) {
+    enum callFunc = "wrWriteWidthChar";
     enum func = "";
   } else {
     // this may allocate!
