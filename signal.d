@@ -1313,7 +1313,7 @@ unittest {
 
 
 // parse signal definition, return mixin string
-template signals(string sstr) {
+public template Signals(string sstr) {
   static string doIt() (string sstr) {
     usize skipSpaces() (usize pos) {
       while (pos < sstr.length) {
@@ -1355,14 +1355,14 @@ template signals(string sstr) {
       }
       string id = sstr[pos..end];
       end = skipSpaces(end);
-      if (end >= sstr.length || sstr[end] != '(') assert(0, "signals: '(' expected");
+      if (end >= sstr.length || sstr[end] != '(') assert(0, "Signals: '(' expected");
       sstr = sstr[end+1..$];
       //assert(0, "*** "~sstr);
       res ~= "$=>signal!(";
       // parse args
       while (sstr.length) {
         pos = skipSpaces(0);
-        if (pos >= sstr.length) assert(0, "signals: ')' expected");
+        if (pos >= sstr.length) assert(0, "Signals: ')' expected");
         if (sstr[pos] == ')') {
           pos = skipSpaces(pos+1);
           sstr = sstr[pos..$];
@@ -1379,12 +1379,12 @@ template signals(string sstr) {
           } else if (sstr[end] == ')') {
             if (bcnt-- == 0) break;
           } else if (sstr[end] == ',') {
-            if (bcnt != 0) assert(0, "signals: unbalanced parens: "~sstr[pos..end]);
+            if (bcnt != 0) assert(0, "Signals: unbalanced parens: "~sstr[pos..end]);
             break;
           }
           ++end;
         }
-        if (end >= sstr.length || end == pos) assert(0, "signals: ')' expected");
+        if (end >= sstr.length || end == pos) assert(0, "Signals: ')' expected");
         // get definition
         string def = sstr[pos..end];
         end = skipSpaces(end);
@@ -1398,26 +1398,26 @@ template signals(string sstr) {
         while (end > 0 && def[end] > ' ') --end;
         if (end == 0) {
           // only one word, wtf?!
-          assert(0, "signals: argument name expected: "~def);
+          assert(0, "Signals: argument name expected: "~def);
         } else {
           while (end > 0 && def[end] <= ' ') --end;
           res ~= def[0..end+1]~",";
         }
       }
-      if (!sstr.length || sstr[0] != ';') assert(0, "signals: ';' expected: "~sstr);
+      if (!sstr.length || sstr[0] != ';') assert(0, "Signals: ';' expected: "~sstr);
       sstr = sstr[1..$];
       if (res[$-1] == ',') res = res[0..$-1];
       res ~= ")(`"~id~"`);\n";
     }
     return res;
   }
-  enum signals = doIt(sstr);
+  enum Signals = doIt(sstr);
 }
 
 
 version(unittest_signal)
 unittest {
-  pragma(msg, signals!q{
+  pragma(msg, Signals!q{
     onBottomLineChange (uint id, uint newln);
     onWriteBytes (uint id, const(char)[] buf);
   });
@@ -1429,7 +1429,7 @@ struct slot {
 }
 
 
-template AutoConnect(string srcobj, T) if (is(T == class) || is(T == struct)) {
+public template AutoConnect(string srcobj, T) if (is(T == class) || is(T == struct)) {
   private import iv.udas;
   template doMember(MB...) {
     static if (MB.length == 0) {
@@ -1457,6 +1457,7 @@ template AutoConnect(string srcobj, T) if (is(T == class) || is(T == struct)) {
 }
 
 
+version(unittest_signal)
 unittest {
   static class A {
     @slot void onFuck () {}
