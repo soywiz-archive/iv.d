@@ -1456,6 +1456,11 @@ public template AutoConnect(string srcobj, T) if (is(T == class) || is(T == stru
   enum AutoConnect = doMember!(__traits(allMembers, T));
 }
 
+// to allow calling `$=>AutoConnect!("term", this);` from class/struct methods
+public template AutoConnect(string srcobj, alias obj) if (is(typeof(obj) == class) || is(typeof(obj) == struct)) {
+  enum AutoConnect = AutoConnect!(srcobj, typeof(obj));
+}
+
 
 version(unittest_signal)
 unittest {
