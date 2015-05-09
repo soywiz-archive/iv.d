@@ -7,3 +7,4 @@ public import iv.x11.resource;
 public import iv.x11.util;
 public import iv.x11.x11;
 public import iv.x11.xlib;
+public import iv.x11.xatoms;
