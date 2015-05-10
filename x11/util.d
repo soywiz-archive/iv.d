@@ -50,18 +50,18 @@ struct XSizeHints {
  * clients and applications use for communication.
  */
 /* flags argument in size hints */
-enum {
-  USPosition  = 1L<<0, /* user specified x, y */
-  USSize      = 1L<<1, /* user specified width, height */
+enum : c_ulong {
+  USPosition  = 1<<0, /* user specified x, y */
+  USSize      = 1<<1, /* user specified width, height */
 
-  PPosition   = 1L<<2, /* program specified position */
-  PSize       = 1L<<3, /* program specified size */
-  PMinSize    = 1L<<4, /* program specified minimum size */
-  PMaxSize    = 1L<<5, /* program specified maximum size */
-  PResizeInc  = 1L<<6, /* program specified resize increments */
-  PAspect     = 1L<<7, /* program specified min and max aspect ratios */
-  PBaseSize   = 1L<<8, /* program specified base for incrementing */
-  PWinGravity = 1L<<9, /* program specified window gravity */
+  PPosition   = 1<<2, /* program specified position */
+  PSize       = 1<<3, /* program specified size */
+  PMinSize    = 1<<4, /* program specified minimum size */
+  PMaxSize    = 1<<5, /* program specified maximum size */
+  PResizeInc  = 1<<6, /* program specified resize increments */
+  PAspect     = 1<<7, /* program specified min and max aspect ratios */
+  PBaseSize   = 1<<8, /* program specified base for incrementing */
+  PWinGravity = 1<<9, /* program specified window gravity */
 }
 
 /* obsolete */
@@ -80,16 +80,16 @@ struct XWMHints {
 }
 
 /* definition for flags of XWMHints */
-enum {
-  InputHint        = (1L<<0),
-  StateHint        = (1L<<1),
-  IconPixmapHint   = (1L<<2),
-  IconWindowHint   = (1L<<3),
-  IconPositionHint = (1L<<4),
-  IconMaskHint     = (1L<<5),
-  WindowGroupHint  = (1L<<6),
+enum : c_ulong {
+  InputHint        = (1<<0),
+  StateHint        = (1<<1),
+  IconPixmapHint   = (1<<2),
+  IconWindowHint   = (1<<3),
+  IconPositionHint = (1<<4),
+  IconMaskHint     = (1<<5),
+  WindowGroupHint  = (1<<6),
   AllHints         = (InputHint|StateHint|IconPixmapHint|IconWindowHint|IconPositionHint|IconMaskHint|WindowGroupHint),
-  XUrgencyHint     = (1L<<8),
+  XUrgencyHint     = (1<<8),
 }
 
 /* definitions for initial window state */
@@ -321,7 +321,7 @@ struct XStandardColormap{
   XID killid; /* added by ICCCM version 1 */
 }
 
-enum XID ReleaseByFreeingColormap = 1L; /* for killid field above */
+enum XID ReleaseByFreeingColormap = 1; /* for killid field above */
 
 
 /*

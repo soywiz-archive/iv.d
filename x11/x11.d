@@ -1,6 +1,6 @@
 module iv.x11.x11 is aliced;
 
-import core.stdc.config;
+public import core.stdc.config : c_long, c_ulong;
 
 extern (C) @safe nothrow @nogc:
 

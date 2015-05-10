@@ -989,16 +989,16 @@ struct XwcTextItem {
   XFontSet font_set;
 }
 
-immutable string XNRequiredCharSet             = ".duprequiredCharSet";
-immutable string XNQueryOrientation            = ".dupqueryOrientation";
-immutable string XNBaseFontName                = ".dupbaseFontName";
-immutable string XNOMAutomatic                 = ".dupomAutomatic";
-immutable string XNMissingCharSet              = ".dupmissingCharSet";
-immutable string XNDefaultString               = ".dupdefaultString";
-immutable string XNOrientation                 = ".duporientation";
-immutable string XNDirectionalDependentDrawing = ".dupdirectionalDependentDrawing";
-immutable string XNContextualDrawing           = ".dupcontextualDrawing";
-immutable string XNFontInfo                    = ".dupfontInfo";
+immutable char* XNRequiredCharSet             = "requiredCharSet";
+immutable char* XNQueryOrientation            = "queryOrientation";
+immutable char* XNBaseFontName                = "baseFontName";
+immutable char* XNOMAutomatic                 = "omAutomatic";
+immutable char* XNMissingCharSet              = "missingCharSet";
+immutable char* XNDefaultString               = "defaultString";
+immutable char* XNOrientation                 = "orientation";
+immutable char* XNDirectionalDependentDrawing = "directionalDependentDrawing";
+immutable char* XNContextualDrawing           = "contextualDrawing";
+immutable char* XNFontInfo                    = "fontInfo";
 
 struct XOMCharSetList {
   int charset_count;
@@ -1027,8 +1027,8 @@ struct XOMFontInfo{
 
 struct _XIM {}
 struct _XIC {}
-alias XIM = _XIM *;
-alias XIC = _XIC *;
+alias XIM = _XIM*;
+alias XIC = _XIC*;
 
 alias XIMProc = void function (
   XIM,
@@ -1054,16 +1054,16 @@ struct XIMStyles {
 }
 
 alias XIMStyle = c_ulong;
-enum {
-  XIMPreeditArea      = 0x0001L,
-  XIMPreeditCallbacks = 0x0002L,
-  XIMPreeditPosition  = 0x0004L,
-  XIMPreeditNothing   = 0x0008L,
-  XIMPreeditNone      = 0x0010L,
-  XIMStatusArea       = 0x0100L,
-  XIMStatusCallbacks  = 0x0200L,
-  XIMStatusNothing    = 0x0400L,
-  XIMStatusNone       = 0x0800L,
+enum : c_ulong {
+  XIMPreeditArea      = 0x0001,
+  XIMPreeditCallbacks = 0x0002,
+  XIMPreeditPosition  = 0x0004,
+  XIMPreeditNothing   = 0x0008,
+  XIMPreeditNone      = 0x0010,
+  XIMStatusArea       = 0x0100,
+  XIMStatusCallbacks  = 0x0200,
+  XIMStatusNothing    = 0x0400,
+  XIMStatusNone       = 0x0800,
 }
 
 immutable char* XNVaNestedList = "XNVaNestedList";
@@ -1270,9 +1270,9 @@ struct XIMHotKeyTriggers {
 }
 
 alias XIMHotKeyState = c_ulong;
-enum {
-  XIMHotKeyStateON  = 0x0001L,
-  XIMHotKeyStateOFF = 0x0002L,
+enum : c_ulong {
+  XIMHotKeyStateON  = 0x0001,
+  XIMHotKeyStateOFF = 0x0002,
 }
 
 struct XIMValuesList {
