@@ -1,8 +1,8 @@
 module iv.x11.xlib is aliced;
 pragma(lib, "X11");
 
-import core.stdc.config;
-import core.stdc.stdarg;
+import core.stdc.config : c_long, c_ulong;
+import core.stdc.stddef : wchar_t;
 
 import iv.x11.md;
 import iv.x11.x11;
@@ -983,7 +983,7 @@ struct XmbTextItem {
 }
 
 struct XwcTextItem {
-  widechar* chars;
+  wchar_t* chars;
   int nchars;
   int delta;
   XFontSet font_set;
@@ -1147,7 +1147,7 @@ struct XIMText {
   Bool encoding_is_wchar;
   union c_string {
     char* multi_char;
-    widechar* wide_char;
+    wchar_t* wide_char;
   }
 }
 
@@ -1185,7 +1185,7 @@ struct XIMStringConversionText{
   Bool encoding_is_wchar;
   union c_string{
     char* mbs;
-    widechar* wcs;
+    wchar_t* wcs;
   }
 }
 
@@ -3534,7 +3534,7 @@ int XmbTextEscapement(
 
 int XwcTextEscapement(
   XFontSet font_set,
-  const(widechar)* text,
+  const(wchar_t)* text,
   int num_wchars
 );
 
@@ -3554,7 +3554,7 @@ int XmbTextExtents(
 
 int XwcTextExtents(
   XFontSet font_set,
-  const(widechar)* text,
+  const(wchar_t)* text,
   int num_wchars,
   XRectangle* overall_ink_return,
   XRectangle* overall_logical_return
@@ -3582,7 +3582,7 @@ Status XmbTextPerCharExtents(
 
 Status XwcTextPerCharExtents(
   XFontSet font_set,
-  const(widechar)* text,
+  const(wchar_t)* text,
   int num_wchars,
   XRectangle* ink_extents_buffer,
   XRectangle* logical_extents_buffer,
@@ -3652,7 +3652,7 @@ void XwcDrawString(
   GC gc,
   int x,
   int y,
-  const(widechar)* text,
+  const(wchar_t)* text,
   int num_wchars
 );
 
@@ -3685,7 +3685,7 @@ void XwcDrawImageString(
   GC gc,
   int x,
   int y,
-  const(widechar)* text,
+  const(wchar_t)* text,
   int num_wchars
 );
 
@@ -3744,7 +3744,7 @@ void XUnsetICFocus(
   XIC ic
 );
 
-widechar* XwcResetIC(
+wchar_t* XwcResetIC(
   XIC ic
 );
 
@@ -3785,7 +3785,7 @@ int XmbLookupString(
 int XwcLookupString(
   XIC ic,
   XKeyPressedEvent* event,
-  widechar* buffer_return,
+  wchar_t* buffer_return,
   int wchars_buffer,
   KeySym* keysym_return,
   Status* status_return
@@ -3865,14 +3865,14 @@ void XSetAuthorization(
 );
 
 int _Xmbtowc(
-  widechar* wstr,
+  wchar_t* wstr,
   char* str,
   int len
 );
 
 int _Xwctomb(
   char* str,
-  widechar wc
+  wchar_t wc
 );
 
 Bool XGetEventData(
