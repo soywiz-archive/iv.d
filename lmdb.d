@@ -28,7 +28,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-module iv.lmdb is aliced; // ah, fuck it, you can't have `typedef` versioned anyway
+module iv.lmdb /*is aliced*/; // ah, fuck it, you can't have `typedef` versioned anyway
 pragma(lib, "lmdb");
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -37,8 +37,12 @@ extern(C):
 nothrow:
 @nogc:
 
-typedef mdb_mode_t = uint;
-//alias mdb_filehandle_t = void*;
+version(aliced) {
+  mixin(`typedef mdb_mode_t = uint;`);
+} else {
+  alias usize = size_t;
+  alias mdb_mode_t = uint;
+}
 struct mdb_filehandle_ts {}
 alias mdb_filehandle_t = mdb_filehandle_ts*;
 
@@ -49,14 +53,15 @@ enum {
   MDB_VERSION_DATE = "September 20, 2014",
 }
 
-//alias MDB_env = void;
 struct MDB_env_s {}
 alias MDB_envp = MDB_env_s*;
-//alias MDB_txn = void;
 struct MDB_txn_s {}
 alias MDB_txnp = MDB_txn_s*;
-typedef MDB_dbi = uint;
-//alias MDB_cursor = void;
+version(aliced) {
+  mixin(`typedef MDB_dbi = uint;`);
+} else {
+  alias MDB_dbi = uint;
+}
 struct MDB_cursor_s {}
 alias MDB_cursorp = MDB_cursor_s*;
 
