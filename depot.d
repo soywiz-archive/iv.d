@@ -26,12 +26,12 @@ version(aliced) {
 class DepotException : Exception {
   static if (__VERSION__ >= 2068) {
     // it's @nogc in 2.068+
-    this (uint ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
+    this (Depot.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
       super(errorMessage(ecode), file, line, next);
     }
   } else {
     // it's not @nogc in 2.067 and lower
-    this (uint ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
+    this (Depot.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
       super(errorMessage(ecode), file, line, next);
     }
   }
@@ -44,31 +44,31 @@ class DepotException : Exception {
    * Returns:
    *   The message string of the error code.
    */
-  static string errorMessage (uint ecode) @safe pure nothrow @nogc {
-    switch (ecode) with (Depot) {
-      case DP_ENOERR: return "no error";
-      case DP_EFATAL: return "with fatal error";
-      case DP_ECLOSED: return "database not opened error";
-      case DP_EOPENED: return "already opened database error";
-      case DP_EMODE: return "invalid mode";
-      case DP_EBROKEN: return "broken database file";
-      case DP_EKEEP: return "existing record";
-      case DP_ENOITEM: return "no item found";
-      case DP_EALLOC: return "memory allocation error";
-      case DP_EMAP: return "memory mapping error";
-      case DP_EOPEN: return "open error";
-      case DP_ECLOSE: return "close error";
-      case DP_ETRUNC: return "trunc error";
-      case DP_ESYNC: return "sync error";
-      case DP_ESTAT: return "stat error";
-      case DP_ESEEK: return "seek error";
-      case DP_EREAD: return "read error";
-      case DP_EWRITE: return "write error";
-      case DP_ELOCK: return "lock error";
-      case DP_EUNLINK: return "unlink error";
-      case DP_EMKDIR: return "mkdir error";
-      case DP_ERMDIR: return "rmdir error";
-      case DP_EMISC: return "miscellaneous error";
+  static string errorMessage (Depot.Error ecode) @safe pure nothrow @nogc {
+    switch (ecode) with (Depot.Error) {
+      case NOERR: return "no error";
+      case FATAL: return "with fatal error";
+      case CLOSED: return "database not opened error";
+      case OPENED: return "already opened database error";
+      case MODE: return "invalid mode";
+      case BROKEN: return "broken database file";
+      case KEEP: return "existing record";
+      case NOITEM: return "no item found";
+      case ALLOC: return "memory allocation error";
+      case MAP: return "memory mapping error";
+      case OPEN: return "open error";
+      case CLOSE: return "close error";
+      case TRUNC: return "trunc error";
+      case SYNC: return "sync error";
+      case STAT: return "stat error";
+      case SEEK: return "seek error";
+      case READ: return "read error";
+      case WRITE: return "write error";
+      case LOCK: return "lock error";
+      case UNLINK: return "unlink error";
+      case MKDIR: return "mkdir error";
+      case RMDIR: return "rmdir error";
+      case MISC: return "miscellaneous error";
       default: return "(invalid ecode)";
     }
     assert(0);
@@ -190,30 +190,30 @@ private:
 
 public:
   /// enumeration for error codes
-  enum {
-    DP_ENOERR,  /// no error
-    DP_EFATAL,  /// with fatal error
-    DP_ECLOSED, /// trying to operate on closed db
-    DP_EOPENED, /// trying to opend an already opened db
-    DP_EMODE,   /// invalid mode
-    DP_EBROKEN, /// broken database file
-    DP_EKEEP,   /// existing record
-    DP_ENOITEM, /// no item found
-    DP_EALLOC,  /// memory allocation error
-    DP_EMAP,    /// memory mapping error
-    DP_EOPEN,   /// open error
-    DP_ECLOSE,  /// close error
-    DP_ETRUNC,  /// trunc error
-    DP_ESYNC,   /// sync error
-    DP_ESTAT,   /// stat error
-    DP_ESEEK,   /// seek error
-    DP_EREAD,   /// read error
-    DP_EWRITE,  /// write error
-    DP_ELOCK,   /// lock error
-    DP_EUNLINK, /// unlink error
-    DP_EMKDIR,  /// mkdir error
-    DP_ERMDIR,  /// rmdir error
-    DP_EMISC,   /// miscellaneous error
+  enum Error {
+    NOERR,  /// no error
+    FATAL,  /// with fatal error
+    CLOSED, /// trying to operate on closed db
+    OPENED, /// trying to opend an already opened db
+    MODE,   /// invalid mode
+    BROKEN, /// broken database file
+    KEEP,   /// existing record
+    NOITEM, /// no item found
+    ALLOC,  /// memory allocation error
+    MAP,    /// memory mapping error
+    OPEN,   /// open error
+    CLOSE,  /// close error
+    TRUNC,  /// trunc error
+    SYNC,   /// sync error
+    STAT,   /// stat error
+    SEEK,   /// seek error
+    READ,   /// read error
+    WRITE,  /// write error
+    LOCK,   /// lock error
+    UNLINK, /// unlink error
+    MKDIR,  /// mkdir error
+    RMDIR,  /// rmdir error
+    MISC,   /// miscellaneous error
   }
 
   /// enumeration for open modes
@@ -238,9 +238,14 @@ final:
 public:
   @property bool opened () const @safe pure nothrow @nogc { return (m_fd >= 0); }
 
-  void checkOpened () {
-    if (m_fatal) raise(DP_EFATAL);
-    if (!opened) raise(DP_ECLOSED);
+  void checkOpened (string file=__FILE__, usize line=__LINE__) {
+    if (m_fatal) raise(Error.FATAL, file, line);
+    if (!opened) raise(Error.CLOSED, file, line);
+  }
+
+  void checkWriting (string file=__FILE__, usize line=__LINE__) {
+    checkOpened(file, line);
+    if (!m_wmode) raise(Error.MODE, file, line);
   }
 
   /** Free `malloc()`ed pointer and set variable to `null`.
@@ -296,7 +301,7 @@ public:
     int* fbpool;
     stat_t sbuf;
     time_t mtime;
-    if (opened) raise(DP_EOPENED);
+    if (opened) raise(Error.OPENED);
     assert(name.length);
     char[] namez; // unique
     // add '\0' after string
@@ -312,13 +317,13 @@ public:
       mode = O_RDWR;
       if (omode&DP_OCREAT) mode |= O_CREAT;
     }
-    if ((fd = open(namez.ptr, mode, DP_FILEMODE)) == -1) raise(DP_EOPEN);
+    if ((fd = open(namez.ptr, mode, DP_FILEMODE)) == -1) raise(Error.OPEN);
     scope(failure) close(fd);
     if ((omode&DP_ONOLCK) == 0) fdlock(fd, omode&DP_OWRITER, omode&DP_OLCKNB);
     if ((omode&DP_OWRITER) && (omode&DP_OTRUNC)) {
-      if (ftruncate(fd, 0) == -1) raise(DP_ETRUNC);
+      if (ftruncate(fd, 0) == -1) raise(Error.TRUNC);
     }
-    if (fstat(fd, &sbuf) == -1 || !S_ISREG(sbuf.st_mode) || (sbuf.st_ino == 0 && lstat(namez.ptr, &sbuf) == -1)) raise(DP_ESTAT);
+    if (fstat(fd, &sbuf) == -1 || !S_ISREG(sbuf.st_mode) || (sbuf.st_ino == 0 && lstat(namez.ptr, &sbuf) == -1)) raise(Error.STAT);
     inode = sbuf.st_ino;
     mtime = sbuf.st_mtime;
     fsiz = sbuf.st_size;
@@ -354,23 +359,23 @@ public:
     try {
       fdseekread(fd, 0, (&hbuf)[0..1]);
     } catch (Exception) {
-      raise(DP_EBROKEN);
+      raise(Error.BROKEN);
     }
     //k8: the original code checks header only if ((omode&DP_ONOLCK) == 0); why?
-    if (hbuf.signature[0..DP_MAGIC.length] != DP_MAGIC) raise(DP_EBROKEN);
-    if (hbuf.filesize != fsiz) raise(DP_EBROKEN);
+    if (hbuf.signature[0..DP_MAGIC.length] != DP_MAGIC) raise(Error.BROKEN);
+    if (hbuf.filesize != fsiz) raise(Error.BROKEN);
     bnum = hbuf.nbuckets;
-    if (bnum < 1 || hbuf.nrecords < 0 || fsiz < QDBMHeader.sizeof+bnum*int.sizeof) raise(DP_EBROKEN);
+    if (bnum < 1 || hbuf.nrecords < 0 || fsiz < QDBMHeader.sizeof+bnum*int.sizeof) raise(Error.BROKEN);
     msiz = QDBMHeader.sizeof+bnum*int.sizeof;
     map = cast(char*)mmap(null, msiz, PROT_READ|(mode&DP_OWRITER ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
-    if (map == MAP_FAILED) raise(DP_EMAP);
+    if (map == MAP_FAILED) raise(Error.MAP);
     scope(failure) munmap(map, msiz);
     fbpool = null;
     {
       import core.stdc.stdlib : malloc;
       fbpool = cast(int*)malloc(DP_FBPOOLSIZ*2*int.sizeof);
     }
-    if (fbpool is null) raise(DP_EALLOC);
+    if (fbpool is null) raise(Error.ALLOC);
     {
       import std.exception : assumeUnique;
       m_name = namez[0..$-1].assumeUnique;
@@ -410,16 +415,16 @@ public:
     import core.sys.posix.unistd : close;
     if (!opened) return;
     bool fatal = m_fatal;
-    uint err = DP_ENOERR;
+    Error err = Error.NOERR;
     if (m_wmode) updateHeader();
     if (m_map != MAP_FAILED) {
-      if (munmap(m_map, m_msiz) == -1) err = DP_EMAP;
+      if (munmap(m_map, m_msiz) == -1) err = Error.MAP;
     }
-    if (close(m_fd) == -1) err = DP_ECLOSE;
+    if (close(m_fd) == -1) err = Error.CLOSE;
     freeptr(m_fbpool);
     m_name = null;
-    if (fatal) err = DP_EFATAL;
-    if (err != DP_ENOERR) raise(err);
+    if (fatal) err = Error.FATAL;
+    if (err != Error.NOERR) raise(err);
   }
 
   /** Store a record.
@@ -442,14 +447,13 @@ public:
     bool ee;
     char[DP_ENTBUFSIZ] ebuf;
     char* tval, swap;
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     newoff = -1;
     hash = secondhash(kbuf);
     if (recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee, Yes.delhit)) {
       // record found
       fdel = head.flags&DP_RECFDEL;
-      if (dmode == DP_DKEEP && !fdel) raise(DP_EKEEP);
+      if (dmode == DP_DKEEP && !fdel) raise(Error.KEEP);
       if (fdel) {
         head.psiz += head.vsiz;
         head.vsiz = 0;
@@ -486,13 +490,13 @@ public:
           if (ee && RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
             import core.stdc.stdlib : malloc;
             tval = cast(char*)malloc(head.vsiz+vbuf.length+1);
-            if (tval is null) { m_fatal = true; raise(DP_EALLOC); }
+            if (tval is null) { m_fatal = true; raise(Error.ALLOC); }
             memcpy(tval, ebuf.ptr+(RecordHeader.sizeof+head.ksiz), head.vsiz);
           } else {
             import core.stdc.stdlib : realloc;
             tval = recval(off, head);
             swap = cast(char*)realloc(tval, head.vsiz+vbuf.length+1);
-            if (swap is null) raise(DP_EALLOC);
+            if (swap is null) raise(Error.ALLOC);
             tval = swap;
           }
           memcpy(tval+head.vsiz, vbuf.ptr, vbuf.length);
@@ -559,10 +563,9 @@ public:
     int hash, bi, off, entoff;
     bool ee;
     char[DP_ENTBUFSIZ] ebuf;
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return false; //raise(DP_ENOITEM);
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return false; //raise(Error.NOITEM);
     recdelete(off, head, No.reusable);
     --m_rnum;
     return true;
@@ -599,8 +602,8 @@ public:
     if (sp !is null) *sp = 0;
     checkOpened();
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return null; //raise(DP_ENOITEM);
-    if (start > head.vsiz) return null; //raise(DP_ENOITEM);
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return null; //raise(Error.NOITEM);
+    if (start > head.vsiz) return null; //raise(Error.NOITEM);
     if (start == head.vsiz) {
       import core.stdc.stdlib : malloc;
       vbuf = cast(char*)malloc(1);
@@ -618,7 +621,7 @@ public:
         vsiz = (max < head.vsiz ? max : head.vsiz);
       }
       vbuf = cast(char*)malloc(vsiz+1);
-      if (vbuf is null) raise(DP_EALLOC);
+      if (vbuf is null) raise(Error.ALLOC);
       memcpy(vbuf, ebuf.ptr+(RecordHeader.sizeof+head.ksiz+start), vsiz);
       vbuf[vsiz] = '\0';
     } else {
@@ -658,8 +661,8 @@ public:
     char[DP_ENTBUFSIZ] ebuf;
     checkOpened();
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return null; //raise(DP_ENOITEM);
-    if (start > head.vsiz) return null; //raise(DP_ENOITEM);
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return null; //raise(Error.NOITEM);
+    if (start > head.vsiz) return null; //raise(Error.NOITEM);
     scope(failure) m_fatal = true; // any failure beyond this point is fatal
     if (ee && RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
       import core.stdc.string : memcpy;
@@ -691,7 +694,7 @@ public:
     char[DP_ENTBUFSIZ] ebuf;
     checkOpened();
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return -1; //raise(DP_ENOITEM);
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return -1; //raise(Error.NOITEM);
     return head.vsiz;
   }
 
@@ -749,7 +752,7 @@ public:
           import core.stdc.stdlib : malloc;
           import core.stdc.string : memcpy;
           kbuf = cast(char*)malloc(head.ksiz+1);
-          if (kbuf is null) raise(DP_EALLOC);
+          if (kbuf is null) raise(Error.ALLOC);
           memcpy(kbuf, ebuf.ptr+RecordHeader.sizeof, head.ksiz);
           kbuf[head.ksiz] = '\0';
         } else {
@@ -760,7 +763,7 @@ public:
         return kbuf;
       }
     }
-    //raise(DP_ENOITEM);
+    //raise(Error.NOITEM);
     return null;
   }
 
@@ -780,8 +783,7 @@ public:
    *   DepotException on various errors
    */
   @property void alignment (int alignment) {
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     m_alignment = alignment;
   }
 
@@ -812,11 +814,10 @@ public:
   @property void freeBlockPoolSize (uint size) {
     import core.stdc.stdlib : realloc;
     int* fbpool;
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     size *= 2;
     fbpool = cast(int*)realloc(m_fbpool, size*int.sizeof+1);
-    if (fbpool is null) raise(DP_EALLOC);
+    if (fbpool is null) raise(Error.ALLOC);
     fbpool[0..size] = -1;
     m_fbpool = fbpool;
     m_fbpsiz = size;
@@ -832,7 +833,6 @@ public:
    */
   @property uint freeBlockPoolSize () {
     checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
     return m_fbpsiz/2;
   }
 
@@ -846,16 +846,15 @@ public:
   void sync () {
     import core.sys.posix.sys.mman : msync, MS_SYNC;
     import core.sys.posix.unistd : fsync;
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     updateHeader();
     if (msync(m_map, m_msiz, MS_SYNC) == -1) {
       m_fatal = true;
-      raise(DP_EMAP);
+      raise(Error.MAP);
     }
     if (fsync(m_fd) == -1) {
       m_fatal = true;
-      raise(DP_ESYNC);
+      raise(Error.SYNC);
     }
   }
 
@@ -882,8 +881,7 @@ public:
     int[DP_OPTRUNIT] ksizs, vsizs;
     char[DP_ENTBUFSIZ] ebuf;
     char*[DP_OPTRUNIT] kbufs, vbufs;
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     if (bnum < 0) {
       bnum = cast(int)(m_rnum*(1.0/DP_OPTBLOAD))+1;
       if (bnum < DP_DEFBNUM/2) bnum = DP_DEFBNUM/2;
@@ -906,10 +904,10 @@ public:
         if (ee && RecordHeader.sizeof+head.ksiz <= DP_ENTBUFSIZ) {
           import core.stdc.stdlib : malloc;
           import core.stdc.string : memcpy;
-          if ((kbufs[unum] = cast(char*)malloc(head.ksiz+1)) is null) raise(DP_EALLOC);
+          if ((kbufs[unum] = cast(char*)malloc(head.ksiz+1)) is null) raise(Error.ALLOC);
           memcpy(kbufs[unum], ebuf.ptr+RecordHeader.sizeof, head.ksiz);
           if (RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
-            if ((vbufs[unum] = cast(char*)malloc(head.vsiz+1)) is null) raise(DP_EALLOC);
+            if ((vbufs[unum] = cast(char*)malloc(head.vsiz+1)) is null) raise(Error.ALLOC);
             memcpy(vbufs[unum], ebuf.ptr+(RecordHeader.sizeof+head.ksiz), head.vsiz);
           } else {
             vbufs[unum] = recval(off, head);
@@ -940,9 +938,9 @@ public:
       freeptr(vbufs[i]);
     }
     tdepot.sync();
-    if (munmap(m_map, m_msiz) == -1) raise(DP_EMAP);
+    if (munmap(m_map, m_msiz) == -1) raise(Error.MAP);
     m_map = cast(char*)MAP_FAILED;
-    if (ftruncate(m_fd, 0) == -1) raise(DP_ETRUNC);
+    if (ftruncate(m_fd, 0) == -1) raise(Error.TRUNC);
     fcopy(m_fd, 0, tdepot.m_fd, 0);
     m_fsiz = tdepot.m_fsiz;
     m_bnum = tdepot.m_bnum;
@@ -952,11 +950,11 @@ public:
     }
     m_msiz = tdepot.m_msiz;
     m_map = cast(char*)mmap(null, m_msiz, PROT_READ|PROT_WRITE, MAP_SHARED, m_fd, 0);
-    if (m_map == MAP_FAILED) raise(DP_EMAP);
+    if (m_map == MAP_FAILED) raise(Error.MAP);
     m_buckets = cast(int*)(m_map+QDBMHeader.sizeof);
     string tempname = tdepot.m_name; // with trailing zero
     tdepot.close();
-    if (unlink(tempname.ptr) == -1) raise(DP_EUNLINK);
+    if (unlink(tempname.ptr) == -1) raise(Error.UNLINK);
   }
 
   /** Get the name of a database.
@@ -1106,7 +1104,7 @@ public:
     assert(name.length);
     auto namez = name.toStringz;
     if (lstat(namez, &sbuf) == -1) {
-      if (errno != ENOENT) straise(DP_ESTAT);
+      if (errno != ENOENT) straise(Error.STAT);
       // no file
       return;
     }
@@ -1115,7 +1113,7 @@ public:
     delete depot;
     // remove file
     if (unlink(namez) == -1) {
-      if (errno != ENOENT) straise(DP_EUNLINK);
+      if (errno != ENOENT) straise(Error.UNLINK);
       // no file
     }
   }
@@ -1150,9 +1148,9 @@ public:
     {
       import std.string : toStringz;
       auto namez = name.toStringz;
-      if (lstat(namez, &sbuf) == -1) raise(DP_ESTAT);
+      if (lstat(namez, &sbuf) == -1) raise(Error.STAT);
       fsiz = sbuf.st_size;
-      if ((fd = open(namez, O_RDWR, DP_FILEMODE)) == -1) raise(DP_EOPEN);
+      if ((fd = open(namez, O_RDWR, DP_FILEMODE)) == -1) raise(Error.OPEN);
     }
     scope(exit) if (fd >= 0) close(fd);
     fdseekread(fd, 0, (&dbhead)[0..1]);
@@ -1190,13 +1188,13 @@ public:
             err = true;
           }
         } else {
-          //if (!err) raise(DP_EALLOC);
+          //if (!err) raise(Error.ALLOC);
           err = true;
         }
         if (vbuf !is null) freeptr(vbuf);
         if (kbuf !is null) freeptr(kbuf);
       } else {
-        //if (!err) raise(DP_EBROKEN);
+        //if (!err) raise(Error.BROKEN);
         err = true;
       }
       rsiz = head.recsize;
@@ -1210,7 +1208,7 @@ public:
       err = true;
     }
     if (ftruncate(fd, 0) == -1) {
-      //if (!err) raise(DP_ETRUNC);
+      //if (!err) raise(Error.TRUNC);
       err = true;
     }
     auto tempname = tdepot.m_name; // with trailing zero
@@ -1221,12 +1219,12 @@ public:
       err = true;
     }
     if (close(fd) == -1) {
-      //if (!err) raise(DP_ECLOSE);
+      //if (!err) raise(Error.CLOSE);
       err = true;
     }
     fd = -1;
     if (unlink(tempname.ptr) == -1) {
-      //if (!err) raise(DP_EUNLINK);
+      //if (!err) raise(Error.UNLINK);
       err = true;
     }
     return !err;
@@ -1322,12 +1320,11 @@ public:
    */
   void memsync () {
     import core.sys.posix.sys.mman : msync, MS_SYNC;
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     updateHeader();
     if (msync(m_map, m_msiz, MS_SYNC) == -1) {
       m_fatal = true;
-      raise(DP_EMAP);
+      raise(Error.MAP);
     }
   }
 
@@ -1337,14 +1334,13 @@ public:
    *   DepotException on various errors
    */
   void memflush () {
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     updateHeader();
     // there is no mflush() call
     version(none) {
       if (mflush(m_map, m_msiz, MS_SYNC) == -1) {
         m_fatal = true;
-        raise(DP_EMAP);
+        raise(Error.MAP);
       }
     }
   }
@@ -1375,8 +1371,7 @@ public:
    *   DepotException on various errors
    */
   @property void flags (int v) {
-    checkOpened();
-    if (!m_wmode) raise(DP_EMODE);
+    checkWriting();
     auto hdr = cast(QDBMHeader*)m_map;
     hdr.flags = v;
   }
@@ -1386,14 +1381,14 @@ private:
    * private objects
    * ********************************************************************************************* */
 
-  void raise (uint errcode, string file=__FILE__, usize line=__LINE__) {
-    assert(errcode >= DP_ENOERR);
-    if (errcode == DP_EFATAL) m_fatal = true;
+  void raise (Error errcode, string file=__FILE__, usize line=__LINE__) {
+    assert(errcode >= Error.NOERR);
+    if (errcode == Error.FATAL) m_fatal = true;
     throw new DepotException(errcode, file, line);
   }
 
-  static void straise (uint errcode, string file=__FILE__, usize line=__LINE__) {
-    assert(errcode >= DP_ENOERR);
+  static void straise (Error errcode, string file=__FILE__, usize line=__LINE__) {
+    assert(errcode >= Error.NOERR);
     throw new DepotException(errcode, file, line);
   }
 
@@ -1435,7 +1430,7 @@ private:
     lock.l_pid = 0;
     while (fcntl(fd, nb ? F_SETLK : F_SETLKW, &lock) == -1) {
       import core.stdc.errno : errno, EINTR;
-      if (errno != EINTR) straise(DP_ELOCK);
+      if (errno != EINTR) straise(Error.LOCK);
     }
   }
 
@@ -1485,8 +1480,8 @@ private:
     import core.sys.posix.unistd : lseek;
     assert(fd >= 0);
     if (buf.length < 1) return;
-    if (lseek(fd, (off < 0 ? 0 : off), (off < 0 ? SEEK_END : SEEK_SET)) == -1) straise(DP_ESEEK);
-    if (fdwrite(fd, buf) != buf.length) straise(DP_EWRITE);
+    if (lseek(fd, (off < 0 ? 0 : off), (off < 0 ? SEEK_END : SEEK_SET)) == -1) straise(Error.SEEK);
+    if (fdwrite(fd, buf) != buf.length) straise(Error.WRITE);
   }
 
   /* Write an integer into a file at an offset.
@@ -1550,8 +1545,8 @@ private:
     import core.stdc.stdio : SEEK_SET;
     import core.sys.posix.unistd : lseek;
     assert(fd >= 0 && off >= 0);
-    if (lseek(fd, off, SEEK_SET) != off) straise(DP_ESEEK);
-    if (fdread(fd, buf) != buf.length) straise(DP_EREAD);
+    if (lseek(fd, off, SEEK_SET) != off) straise(Error.SEEK);
+    if (fdread(fd, buf) != buf.length) straise(Error.READ);
   }
 
   /* Copy data between files.
@@ -1573,13 +1568,13 @@ private:
     import core.sys.posix.unistd : lseek;
     char[DP_IOBUFSIZ] iobuf;
     int sum, iosiz;
-    if (lseek(srcfd, srcoff, SEEK_SET) == -1 || lseek(destfd, destoff, SEEK_SET) == -1) straise(DP_ESEEK);
+    if (lseek(srcfd, srcoff, SEEK_SET) == -1 || lseek(destfd, destoff, SEEK_SET) == -1) straise(Error.SEEK);
     sum = 0;
     while ((iosiz = fdread(srcfd, iobuf[])) > 0) {
-      if (fdwrite(destfd, iobuf[0..iosiz]) != iosiz) straise(DP_EWRITE);
+      if (fdwrite(destfd, iobuf[0..iosiz]) != iosiz) straise(Error.WRITE);
       sum += iosiz;
     }
-    if (iosiz < 0) straise(DP_EREAD);
+    if (iosiz < 0) straise(Error.READ);
     return sum;
   }
 
@@ -1626,7 +1621,7 @@ private:
   void rechead (long off, ref RecordHeader head, void[] ebuf, bool* eep) {
     assert(off >= 0);
     if (eep !is null) *eep = false;
-    if (off < 0 || off > m_fsiz) raise(DP_EBROKEN);
+    if (off < 0 || off > m_fsiz) raise(Error.BROKEN);
     scope(failure) m_fatal = true; // any failure is fatal here
     if (ebuf.length >= DP_ENTBUFSIZ && off < m_fsiz-DP_ENTBUFSIZ) {
       import core.stdc.string : memcpy;
@@ -1636,7 +1631,7 @@ private:
     } else {
       fdseekread(m_fd, off, (&head)[0..1]);
     }
-    if (head.ksiz < 0 || head.vsiz < 0 || head.psiz < 0 || head.left < 0 || head.right < 0) raise(DP_EBROKEN);
+    if (head.ksiz < 0 || head.vsiz < 0 || head.psiz < 0 || head.left < 0 || head.right < 0) raise(Error.BROKEN);
   }
 
   /* Read the entitiy of the key of a record.
@@ -1658,7 +1653,7 @@ private:
     assert(off >= 0);
     int ksiz = head.ksiz;
     kbuf = cast(char*)malloc(ksiz+1);
-    if (kbuf is null) raise(DP_EALLOC);
+    if (kbuf is null) raise(Error.ALLOC);
     scope(failure) freeptr(kbuf);
     fdseekread(m_fd, off+RecordHeader.sizeof, kbuf[0..ksiz]);
     kbuf[ksiz] = '\0';
@@ -1692,7 +1687,7 @@ private:
       vsiz = (max < head.vsiz ? max : head.vsiz);
     }
     vbuf = cast(char*)malloc(vsiz+1);
-    if (vbuf is null) { m_fatal = true; raise(DP_EALLOC); }
+    if (vbuf is null) { m_fatal = true; raise(Error.ALLOC); }
     scope(failure) { m_fatal = true; freeptr(vbuf); }
     fdseekread(m_fd, off+RecordHeader.sizeof+head.ksiz+start, vbuf[0..vsiz]);
     vbuf[vsiz] = '\0';
@@ -1791,14 +1786,14 @@ private:
           immutable ebstart = RecordHeader.sizeof;
           kcmp = keycmp(kbuf, ebuf[ebstart..ebstart+head.ksiz]);
         } else if (head.ksiz > DP_STKBUFSIZ) {
-          if ((tkey = reckey(off, head)) is null) raise(DP_EFATAL);
+          if ((tkey = reckey(off, head)) is null) raise(Error.FATAL);
           kcmp = keycmp(kbuf, tkey[0..head.ksiz]);
           freeptr(tkey);
         } else {
           try {
             fdseekread(m_fd, off+RecordHeader.sizeof, stkey[0..head.ksiz]);
           } catch (Exception) {
-            raise(DP_EFATAL);
+            raise(Error.FATAL);
           }
           kcmp = keycmp(kbuf, stkey[0..head.ksiz]);
         }
@@ -1948,7 +1943,7 @@ private:
       import core.stdc.stdlib : malloc;
       import core.stdc.string : memcpy, memset;
       auto hbuf = cast(char*)malloc(asiz);
-      if (hbuf is null) raise(DP_EALLOC);
+      if (hbuf is null) raise(Error.ALLOC);
       scope(exit) freeptr(hbuf);
       memcpy(hbuf, &head, head.sizeof);
       memcpy(hbuf+head.sizeof, kbuf.ptr, kbuf.length);
