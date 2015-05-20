@@ -130,25 +130,13 @@ private:
   enum DP_OPTRUNIT  = 256;  // number of records in a process of optimization
   enum DP_NUMBUFSIZ = 32;   // size of a buffer for a number
   enum DP_IOBUFSIZ  = 8192; // size of an I/O buffer
-
   enum DP_TMPFSUF = ".dptmp"; // suffix of a temporary file
 
-  // enumeration for a record header
-  enum {
-    DP_RHIFLAGS, // offset of flags
-    DP_RHIHASH,  // offset of value of the second hash function
-    DP_RHIKSIZ,  // offset of the size of the key
-    DP_RHIVSIZ,  // offset of the size of the value
-    DP_RHIPSIZ,  // offset of the size of the padding bytes
-    DP_RHILEFT,  // offset of the offset of the left child
-    DP_RHIRIGHT, // offset of the offset of the right child
-    DP_RHNUM     // number of elements of a header
-  }
 
   // enumeration for the flag of a record
   enum {
-    DP_RECFDEL = 1 << 0,  // deleted
-    DP_RECFREUSE = 1 << 1 // reusable
+    DP_RECFDEL   = 0x01, // deleted
+    DP_RECFREUSE = 0x02, // reusable
   }
 
   static align(1) struct QDBMHeader {
@@ -171,6 +159,34 @@ private:
   static assert(QDBMHeader.filesize.offsetof == 24);
   static assert(QDBMHeader.nbuckets.offsetof == 32);
   static assert(QDBMHeader.nrecords.offsetof == 40);
+
+  static align(1) struct RecordHeader {
+  align(1):
+    int flags; // flags
+    int hash2; // value of the second hash function
+    int ksiz;  // the size of the key
+    int vsiz;  // the size of the value
+    int psiz;  // the size of the padding bytes
+    int left;  // the offset of the left child
+    int right; // the offset of the right child
+
+    /* Get the size of a record in a database file.
+     *
+     * Returns:
+     *   The return value is the size of a record in a database file
+     */
+    @property int recsize () const @safe pure nothrow @nogc {
+      return cast(int)(RecordHeader.sizeof+ksiz+vsiz+psiz);
+    }
+  }
+  static assert(RecordHeader.sizeof == 7*int.sizeof);
+  static assert(RecordHeader.flags.offsetof == 0*int.sizeof);
+  static assert(RecordHeader.hash2.offsetof == 1*int.sizeof);
+  static assert(RecordHeader.ksiz.offsetof == 2*int.sizeof);
+  static assert(RecordHeader.vsiz.offsetof == 3*int.sizeof);
+  static assert(RecordHeader.psiz.offsetof == 4*int.sizeof);
+  static assert(RecordHeader.left.offsetof == 5*int.sizeof);
+  static assert(RecordHeader.right.offsetof == 6*int.sizeof);
 
 public:
   /// enumeration for error codes
@@ -202,20 +218,20 @@ public:
 
   /// enumeration for open modes
   enum {
-    DP_OREADER = 1 << 0, /// open as a reader
-    DP_OWRITER = 1 << 1, /// open as a writer
-    DP_OCREAT = 1 << 2,  /// a writer creating
-    DP_OTRUNC = 1 << 3,  /// a writer truncating
-    DP_ONOLCK = 1 << 4,  /// open without locking
-    DP_OLCKNB = 1 << 5,  /// lock without blocking
-    DP_OSPARSE = 1 << 6  /// create as a sparse file
+    DP_OREADER = 1<<0, /// open as a reader
+    DP_OWRITER = 1<<1, /// open as a writer
+    DP_OCREAT  = 1<<2, /// a writer creating
+    DP_OTRUNC  = 1<<3, /// a writer truncating
+    DP_ONOLCK  = 1<<4, /// open without locking
+    DP_OLCKNB  = 1<<5, /// lock without blocking
+    DP_OSPARSE = 1<<6, /// create as a sparse file
   }
 
   /// enumeration for write modes
   enum {
     DP_DOVER, /// overwrite an existing value
     DP_DKEEP, /// keep an existing value
-    DP_DCAT   /// concatenate values
+    DP_DCAT,  /// concatenate values
   }
 
 final:
@@ -420,7 +436,7 @@ public:
    *   DepotException on various errors
    */
   void put (const(void)[] kbuf, const(void)[] vbuf, int dmode=DP_DOVER) {
-    int[DP_RHNUM] head, next;
+    RecordHeader head, next;
     int hash, bi, off, entoff, newoff, fdel, mroff, mrsiz, mi, min;
     usize rsiz, nsiz;
     bool ee;
@@ -430,29 +446,29 @@ public:
     if (!m_wmode) raise(DP_EMODE);
     newoff = -1;
     hash = secondhash(kbuf);
-    if (recsearch(kbuf, hash, &bi, &off, &entoff, head[], ebuf[], &ee, Yes.delhit)) {
+    if (recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee, Yes.delhit)) {
       // record found
-      fdel = head.ptr[DP_RHIFLAGS]&DP_RECFDEL;
+      fdel = head.flags&DP_RECFDEL;
       if (dmode == DP_DKEEP && !fdel) raise(DP_EKEEP);
       if (fdel) {
-        head.ptr[DP_RHIPSIZ] += head.ptr[DP_RHIVSIZ];
-        head.ptr[DP_RHIVSIZ] = 0;
+        head.psiz += head.vsiz;
+        head.vsiz = 0;
       }
-      rsiz = recsize(head[]);
-      nsiz = DP_RHNUM*int.sizeof+kbuf.length+vbuf.length;
-      if (dmode == DP_DCAT) nsiz += head.ptr[DP_RHIVSIZ];
+      rsiz = head.recsize;
+      nsiz = RecordHeader.sizeof+kbuf.length+vbuf.length;
+      if (dmode == DP_DCAT) nsiz += head.vsiz;
       if (off+rsiz >= m_fsiz) {
         if (rsiz < nsiz) {
-          head.ptr[DP_RHIPSIZ] += nsiz-rsiz;
+          head.psiz += nsiz-rsiz;
           rsiz = nsiz;
           m_fsiz = off+rsiz;
         }
       } else {
         while (nsiz > rsiz && off+rsiz < m_fsiz) {
-          rechead(off+rsiz, next[], null, null);
-          if ((next.ptr[DP_RHIFLAGS]&DP_RECFREUSE) == 0) break;
-          head.ptr[DP_RHIPSIZ] += recsize(next[]);
-          rsiz += recsize(next[]);
+          rechead(off+rsiz, next, null, null);
+          if ((next.flags&DP_RECFREUSE) == 0) break;
+          head.psiz += next.recsize;
+          rsiz += next.recsize;
         }
         for (uint i = 0; i < m_fbpsiz; i += 2) {
           if (m_fbpool[i] >= off && m_fbpool[i] < off+rsiz) {
@@ -461,26 +477,26 @@ public:
         }
       }
       if (nsiz <= rsiz) {
-        recover(off, head[], vbuf, (dmode == DP_DCAT ? Yes.catmode : No.catmode));
+        recover(off, head, vbuf, (dmode == DP_DCAT ? Yes.catmode : No.catmode));
       } else {
         tval = null;
         scope(failure) { m_fatal = true; freeptr(tval); }
         if (dmode == DP_DCAT) {
           import core.stdc.string : memcpy;
-          if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
+          if (ee && RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
             import core.stdc.stdlib : malloc;
-            tval = cast(char*)malloc(head.ptr[DP_RHIVSIZ]+vbuf.length+1);
+            tval = cast(char*)malloc(head.vsiz+vbuf.length+1);
             if (tval is null) { m_fatal = true; raise(DP_EALLOC); }
-            memcpy(tval, ebuf.ptr+(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]), head.ptr[DP_RHIVSIZ]);
+            memcpy(tval, ebuf.ptr+(RecordHeader.sizeof+head.ksiz), head.vsiz);
           } else {
             import core.stdc.stdlib : realloc;
-            tval = recval(off, head[]);
-            swap = cast(char*)realloc(tval, head.ptr[DP_RHIVSIZ]+vbuf.length+1);
+            tval = recval(off, head);
+            swap = cast(char*)realloc(tval, head.vsiz+vbuf.length+1);
             if (swap is null) raise(DP_EALLOC);
             tval = swap;
           }
-          memcpy(tval+head.ptr[DP_RHIVSIZ], vbuf.ptr, vbuf.length);
-          immutable newsize = head.ptr[DP_RHIVSIZ]+vbuf.length;
+          memcpy(tval+head.vsiz, vbuf.ptr, vbuf.length);
+          immutable newsize = head.vsiz+vbuf.length;
           vbuf = tval[0..newsize];
         }
         mi = -1;
@@ -501,12 +517,12 @@ public:
           mroff = -1;
           mrsiz = -1;
         }
-        recdelete(off, head[], Yes.reusable);
+        recdelete(off, head, Yes.reusable);
         if (mroff > 0 && nsiz <= mrsiz) {
-          recrewrite(mroff, mrsiz, kbuf, vbuf, hash, head.ptr[DP_RHILEFT], head.ptr[DP_RHIRIGHT]);
+          recrewrite(mroff, mrsiz, kbuf, vbuf, hash, head.left, head.right);
           newoff = mroff;
         } else {
-          newoff = recappend(kbuf, vbuf, hash, head.ptr[DP_RHILEFT], head.ptr[DP_RHIRIGHT]);
+          newoff = recappend(kbuf, vbuf, hash, head.left, head.right);
         }
         freeptr(tval);
       }
@@ -539,15 +555,15 @@ public:
    *   DepotException on various errors
    */
   bool del (const(void)[] kbuf) {
-    int[DP_RHNUM] head;
+    RecordHeader head;
     int hash, bi, off, entoff;
     bool ee;
     char[DP_ENTBUFSIZ] ebuf;
     checkOpened();
     if (!m_wmode) raise(DP_EMODE);
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head[], ebuf[], &ee)) return false; //raise(DP_ENOITEM);
-    recdelete(off, head[], No.reusable);
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return false; //raise(DP_ENOITEM);
+    recdelete(off, head, No.reusable);
     --m_rnum;
     return true;
   }
@@ -574,7 +590,7 @@ public:
    *   DepotException on various errors
    */
   char* get (const(void)[] kbuf, uint start=0, uint max=uint.max, usize* sp=null) {
-    int[DP_RHNUM] head;
+    RecordHeader head;
     int hash, bi, off, entoff;
     bool ee;
     usize vsiz;
@@ -583,30 +599,36 @@ public:
     if (sp !is null) *sp = 0;
     checkOpened();
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head[], ebuf[], &ee)) return null; //raise(DP_ENOITEM);
-    if (start > head.ptr[DP_RHIVSIZ]) return null; //raise(DP_ENOITEM);
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return null; //raise(DP_ENOITEM);
+    if (start > head.vsiz) return null; //raise(DP_ENOITEM);
+    if (start == head.vsiz) {
+      import core.stdc.stdlib : malloc;
+      vbuf = cast(char*)malloc(1);
+      vbuf[0] = 0;
+      return vbuf;
+    }
     scope(failure) m_fatal = true; // any failure beyond this point is fatal
-    if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
+    if (ee && RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
       import core.stdc.stdlib : malloc;
       import core.stdc.string : memcpy;
-      head.ptr[DP_RHIVSIZ] -= start;
+      head.vsiz -= start;
       if (max == uint.max) {
-        vsiz = head.ptr[DP_RHIVSIZ];
+        vsiz = head.vsiz;
       } else {
-        vsiz = (max < head.ptr[DP_RHIVSIZ] ? max : head.ptr[DP_RHIVSIZ]);
+        vsiz = (max < head.vsiz ? max : head.vsiz);
       }
       vbuf = cast(char*)malloc(vsiz+1);
       if (vbuf is null) raise(DP_EALLOC);
-      memcpy(vbuf, ebuf.ptr+(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+start), vsiz);
+      memcpy(vbuf, ebuf.ptr+(RecordHeader.sizeof+head.ksiz+start), vsiz);
       vbuf[vsiz] = '\0';
     } else {
-      vbuf = recval(off, head[], start, max);
+      vbuf = recval(off, head, start, max);
     }
     if (sp !is null) {
       if (max == uint.max) {
-        *sp = head.ptr[DP_RHIVSIZ];
+        *sp = head.vsiz;
       } else {
-        *sp = (max < head.ptr[DP_RHIVSIZ] ? max : head.ptr[DP_RHIVSIZ]);
+        *sp = (max < head.vsiz ? max : head.vsiz);
       }
     }
     return vbuf;
@@ -629,23 +651,23 @@ public:
    *   DepotException on various errors
    */
   char[] getwb (void[] vbuf, const(void)[] kbuf, uint start=0) {
-    int[DP_RHNUM] head;
+    RecordHeader head;
     int hash, bi, off, entoff;
     bool ee;
     usize vsiz;
     char[DP_ENTBUFSIZ] ebuf;
     checkOpened();
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head[], ebuf[], &ee)) return null; //raise(DP_ENOITEM);
-    if (start > head.ptr[DP_RHIVSIZ]) return null; //raise(DP_ENOITEM);
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return null; //raise(DP_ENOITEM);
+    if (start > head.vsiz) return null; //raise(DP_ENOITEM);
     scope(failure) m_fatal = true; // any failure beyond this point is fatal
-    if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
+    if (ee && RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
       import core.stdc.string : memcpy;
-      head.ptr[DP_RHIVSIZ] -= start;
-      vsiz = (vbuf.length < head.ptr[DP_RHIVSIZ] ? vbuf.length : head.ptr[DP_RHIVSIZ]);
-      memcpy(vbuf.ptr, ebuf.ptr+(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+start), vsiz);
+      head.vsiz -= start;
+      vsiz = (vbuf.length < head.vsiz ? vbuf.length : head.vsiz);
+      memcpy(vbuf.ptr, ebuf.ptr+(RecordHeader.sizeof+head.ksiz+start), vsiz);
     } else {
-      vsiz = recvalwb(vbuf, off, head[], start);
+      vsiz = recvalwb(vbuf, off, head, start);
     }
     return cast(char[])(vbuf[0..vsiz]);
   }
@@ -663,14 +685,14 @@ public:
    *   DepotException on various errors
    */
   usize vsize (const(void)[] kbuf) {
-    int[DP_RHNUM] head;
+    RecordHeader head;
     int hash, bi, off, entoff;
     bool ee;
     char[DP_ENTBUFSIZ] ebuf;
     checkOpened();
     hash = secondhash(kbuf);
-    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head[], ebuf[], &ee)) return -1; //raise(DP_ENOITEM);
-    return head.ptr[DP_RHIVSIZ];
+    if (!recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee)) return -1; //raise(DP_ENOITEM);
+    return head.vsiz;
   }
 
   /** Initialize the iterator of a database handle.
@@ -708,7 +730,7 @@ public:
    *   DepotException on various errors
    */
   char* itNext (usize* sp=null) {
-    int[DP_RHNUM] head;
+    RecordHeader head;
     usize off;
     bool ee;
     char[DP_ENTBUFSIZ] ebuf;
@@ -719,22 +741,22 @@ public:
     off = (off > m_ioff ? off : m_ioff);
     scope(failure) m_fatal = true; // any failure is fatal here
     while (off < m_fsiz) {
-      rechead(off, head[], ebuf[], &ee);
-      if (head.ptr[DP_RHIFLAGS]&DP_RECFDEL) {
-        off += recsize(head[]);
+      rechead(off, head, ebuf[], &ee);
+      if (head.flags&DP_RECFDEL) {
+        off += head.recsize;
       } else {
-        if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ] <= DP_ENTBUFSIZ) {
+        if (ee && RecordHeader.sizeof+head.ksiz <= DP_ENTBUFSIZ) {
           import core.stdc.stdlib : malloc;
           import core.stdc.string : memcpy;
-          kbuf = cast(char*)malloc(head.ptr[DP_RHIKSIZ]+1);
+          kbuf = cast(char*)malloc(head.ksiz+1);
           if (kbuf is null) raise(DP_EALLOC);
-          memcpy(kbuf, ebuf.ptr+(DP_RHNUM*int.sizeof), head.ptr[DP_RHIKSIZ]);
-          kbuf[head.ptr[DP_RHIKSIZ]] = '\0';
+          memcpy(kbuf, ebuf.ptr+RecordHeader.sizeof, head.ksiz);
+          kbuf[head.ksiz] = '\0';
         } else {
-          kbuf = reckey(off, head[]);
+          kbuf = reckey(off, head);
         }
-        m_ioff = cast(int)(off+recsize(head[]));
-        if (sp !is null) *sp = head.ptr[DP_RHIKSIZ];
+        m_ioff = cast(int)(off+head.recsize);
+        if (sp !is null) *sp = head.ksiz;
         return kbuf;
       }
     }
@@ -853,7 +875,7 @@ public:
     import core.sys.posix.sys.mman : mmap, munmap, MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE;
     import core.sys.posix.unistd : ftruncate, unlink;
     Depot tdepot;
-    int[DP_RHNUM] head;
+    RecordHeader head;
     usize off;
     int unum;
     bool ee;
@@ -879,25 +901,25 @@ public:
     off = QDBMHeader.sizeof+m_bnum*int.sizeof;
     unum = 0;
     while (off < m_fsiz) {
-      rechead(off, head[], ebuf[], &ee);
-      if ((head.ptr[DP_RHIFLAGS]&DP_RECFDEL) == 0) {
-        if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ] <= DP_ENTBUFSIZ) {
+      rechead(off, head, ebuf[], &ee);
+      if ((head.flags&DP_RECFDEL) == 0) {
+        if (ee && RecordHeader.sizeof+head.ksiz <= DP_ENTBUFSIZ) {
           import core.stdc.stdlib : malloc;
           import core.stdc.string : memcpy;
-          if ((kbufs[unum] = cast(char*)malloc(head.ptr[DP_RHIKSIZ]+1)) is null) raise(DP_EALLOC);
-          memcpy(kbufs[unum], ebuf.ptr+(DP_RHNUM*int.sizeof), head.ptr[DP_RHIKSIZ]);
-          if (DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
-            if ((vbufs[unum] = cast(char*)malloc(head.ptr[DP_RHIVSIZ] + 1)) is null) raise(DP_EALLOC);
-            memcpy(vbufs[unum], ebuf.ptr+(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]), head.ptr[DP_RHIVSIZ]);
+          if ((kbufs[unum] = cast(char*)malloc(head.ksiz+1)) is null) raise(DP_EALLOC);
+          memcpy(kbufs[unum], ebuf.ptr+RecordHeader.sizeof, head.ksiz);
+          if (RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
+            if ((vbufs[unum] = cast(char*)malloc(head.vsiz+1)) is null) raise(DP_EALLOC);
+            memcpy(vbufs[unum], ebuf.ptr+(RecordHeader.sizeof+head.ksiz), head.vsiz);
           } else {
-            vbufs[unum] = recval(off, head[]);
+            vbufs[unum] = recval(off, head);
           }
         } else {
-          kbufs[unum] = reckey(off, head[]);
-          vbufs[unum] = recval(off, head[]);
+          kbufs[unum] = reckey(off, head);
+          vbufs[unum] = recval(off, head);
         }
-        ksizs[unum] = head.ptr[DP_RHIKSIZ];
-        vsizs[unum] = head.ptr[DP_RHIVSIZ];
+        ksizs[unum] = head.ksiz;
+        vsizs[unum] = head.vsiz;
         ++unum;
         if (unum >= DP_OPTRUNIT) {
           for (uint i = 0; i < unum; ++i) {
@@ -909,7 +931,7 @@ public:
           unum = 0;
         }
       }
-      off += recsize(head[]);
+      off += head.recsize;
     }
     for (uint i = 0; i < unum; ++i) {
       assert(kbufs[i] !is null && vbufs[i] !is null);
@@ -1119,7 +1141,7 @@ public:
     Depot tdepot;
     QDBMHeader dbhead;
     char* kbuf, vbuf;
-    int[DP_RHNUM] head;
+    RecordHeader head;
     int fd, flags, bnum, tbnum, rsiz, ksiz, vsiz;
     usize off;
     long fsiz;
@@ -1143,26 +1165,26 @@ public:
     bool err = false;
     while (off < fsiz) {
       try {
-        fdseekread(fd, off, head[]);
+        fdseekread(fd, off, (&head)[0..1]);
       } catch (Exception) {
         break;
       }
-      if (head.ptr[DP_RHIFLAGS]&DP_RECFDEL) {
-        rsiz = recsize(head[]);
+      if (head.flags&DP_RECFDEL) {
+        rsiz = head.recsize;
         if (rsiz < 0) break;
         off += rsiz;
         continue;
       }
-      ksiz = head.ptr[DP_RHIKSIZ];
-      vsiz = head.ptr[DP_RHIVSIZ];
+      ksiz = head.ksiz;
+      vsiz = head.vsiz;
       if (ksiz >= 0 && vsiz >= 0) {
         import core.stdc.stdlib : malloc;
         kbuf = cast(char*)malloc(ksiz+1);
         vbuf = cast(char*)malloc(vsiz+1);
         if (kbuf !is null && vbuf !is null) {
           try {
-            fdseekread(fd, off+DP_RHNUM*int.sizeof, kbuf[0..ksiz]);
-            fdseekread(fd, off+DP_RHNUM*int.sizeof+ksiz, vbuf[0..vsiz]);
+            fdseekread(fd, off+RecordHeader.sizeof, kbuf[0..ksiz]);
+            fdseekread(fd, off+RecordHeader.sizeof+ksiz, vbuf[0..vsiz]);
             tdepot.put(kbuf[0..ksiz], vbuf[0..vsiz], DP_DKEEP);
           } catch (Exception) {
             err = true;
@@ -1177,7 +1199,7 @@ public:
         //if (!err) raise(DP_EBROKEN);
         err = true;
       }
-      rsiz = recsize(head[]);
+      rsiz = head.recsize;
       if (rsiz < 0) break;
       off += rsiz;
     }
@@ -1572,35 +1594,22 @@ private:
    */
   usize padsize (usize ksiz, usize vsiz) const @safe pure nothrow @nogc {
     if (m_alignment > 0) {
-      return cast(usize)(m_alignment-(m_fsiz+DP_RHNUM*int.sizeof+ksiz+vsiz)%m_alignment);
+      return cast(usize)(m_alignment-(m_fsiz+RecordHeader.sizeof+ksiz+vsiz)%m_alignment);
     } else if (m_alignment < 0) {
       usize pad = cast(usize)(vsiz*(2.0/(1<<(-m_alignment))));
       if (vsiz+pad >= DP_FSBLKSIZ) {
         if (vsiz <= DP_FSBLKSIZ) pad = 0;
         if (m_fsiz%DP_FSBLKSIZ == 0) {
-          return cast(usize)((pad/DP_FSBLKSIZ)*DP_FSBLKSIZ+DP_FSBLKSIZ-(m_fsiz+DP_RHNUM*int.sizeof+ksiz+vsiz)%DP_FSBLKSIZ);
+          return cast(usize)((pad/DP_FSBLKSIZ)*DP_FSBLKSIZ+DP_FSBLKSIZ-(m_fsiz+RecordHeader.sizeof+ksiz+vsiz)%DP_FSBLKSIZ);
         } else {
           return cast(usize)((pad/(DP_FSBLKSIZ/2))*(DP_FSBLKSIZ/2)+(DP_FSBLKSIZ/2)-
-            (m_fsiz+DP_RHNUM*int.sizeof+ksiz+vsiz)%(DP_FSBLKSIZ/2));
+            (m_fsiz+RecordHeader.sizeof+ksiz+vsiz)%(DP_FSBLKSIZ/2));
         }
       } else {
-        return (pad >= DP_RHNUM*int.sizeof ? pad : DP_RHNUM*int.sizeof);
+        return (pad >= RecordHeader.sizeof ? pad : RecordHeader.sizeof);
       }
     }
     return 0;
-  }
-
-  /* Get the size of a record in a database file.
-   *
-   * Params:
-   *   head = the header of a record
-   *
-   * Returns:
-   *   The return value is the size of a record in a database file.
-   */
-  static int recsize (in int[] head) @trusted pure nothrow @nogc {
-    assert(head.length >= DP_RHNUM);
-    return cast(int)(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ]+head.ptr[DP_RHIPSIZ]);
   }
 
   /* Read the header of a record.
@@ -1614,8 +1623,8 @@ private:
    * Throws:
    *   DepotException on various errors
    */
-  void rechead (long off, int[] head, void[] ebuf, bool* eep) {
-    assert(off >= 0 && head.length >= DP_RHNUM);
+  void rechead (long off, ref RecordHeader head, void[] ebuf, bool* eep) {
+    assert(off >= 0);
     if (eep !is null) *eep = false;
     if (off < 0 || off > m_fsiz) raise(DP_EBROKEN);
     scope(failure) m_fatal = true; // any failure is fatal here
@@ -1623,12 +1632,11 @@ private:
       import core.stdc.string : memcpy;
       if (eep !is null) *eep = true;
       fdseekread(m_fd, off, ebuf[0..DP_ENTBUFSIZ]);
-      memcpy(head.ptr, ebuf.ptr, DP_RHNUM*int.sizeof);
+      memcpy(&head, ebuf.ptr, RecordHeader.sizeof);
     } else {
-      fdseekread(m_fd, off, head[0..DP_RHNUM]);
+      fdseekread(m_fd, off, (&head)[0..1]);
     }
-    if (head.ptr[DP_RHIKSIZ] < 0 || head.ptr[DP_RHIVSIZ] < 0 || head.ptr[DP_RHIPSIZ] < 0 ||
-        head.ptr[DP_RHILEFT] < 0 || head.ptr[DP_RHIRIGHT] < 0) raise(DP_EBROKEN);
+    if (head.ksiz < 0 || head.vsiz < 0 || head.psiz < 0 || head.left < 0 || head.right < 0) raise(DP_EBROKEN);
   }
 
   /* Read the entitiy of the key of a record.
@@ -1643,16 +1651,16 @@ private:
    * Throws:
    *   DepotException on various errors
    */
-  char* reckey (long off, in int[] head) {
+  char* reckey (long off, ref in RecordHeader head) {
     //TODO: return slice instead of pointer?
     import core.stdc.stdlib : malloc;
     char* kbuf;
-    assert(off >= 0 && head.length >= DP_RHNUM);
-    int ksiz = head.ptr[DP_RHIKSIZ];
+    assert(off >= 0);
+    int ksiz = head.ksiz;
     kbuf = cast(char*)malloc(ksiz+1);
     if (kbuf is null) raise(DP_EALLOC);
     scope(failure) freeptr(kbuf);
-    fdseekread(m_fd, off+DP_RHNUM*int.sizeof, kbuf[0..ksiz]);
+    fdseekread(m_fd, off+RecordHeader.sizeof, kbuf[0..ksiz]);
     kbuf[ksiz] = '\0';
     return kbuf;
   }
@@ -1671,22 +1679,22 @@ private:
    * Throws:
    *   DepotException on various errors
    */
-  char* recval (long off, int[] head, uint start=0, uint max=uint.max) {
+  char* recval (long off, ref RecordHeader head, uint start=0, uint max=uint.max) {
     //TODO: return slice instead of pointer?
     import core.stdc.stdlib : malloc;
     char* vbuf;
     uint vsiz;
-    assert(off >= 0 && head.length >= DP_RHNUM);
-    head.ptr[DP_RHIVSIZ] -= start;
+    assert(off >= 0);
+    head.vsiz -= start;
     if (max == uint.max) {
-      vsiz = head.ptr[DP_RHIVSIZ];
+      vsiz = head.vsiz;
     } else {
-      vsiz = (max < head.ptr[DP_RHIVSIZ] ? max : head.ptr[DP_RHIVSIZ]);
+      vsiz = (max < head.vsiz ? max : head.vsiz);
     }
     vbuf = cast(char*)malloc(vsiz+1);
     if (vbuf is null) { m_fatal = true; raise(DP_EALLOC); }
     scope(failure) { m_fatal = true; freeptr(vbuf); }
-    fdseekread(m_fd, off+DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+start, vbuf[0..vsiz]);
+    fdseekread(m_fd, off+RecordHeader.sizeof+head.ksiz+start, vbuf[0..vsiz]);
     vbuf[vsiz] = '\0';
     return vbuf;
   }
@@ -1705,11 +1713,11 @@ private:
    * Throws:
    *   DepotException on various errors
    */
-  usize recvalwb (void[] vbuf, long off, int[] head, uint start=0) {
-    assert(off >= 0 && head.length >= DP_RHNUM);
-    head.ptr[DP_RHIVSIZ] -= start;
-    usize vsiz = (vbuf.length < head.ptr[DP_RHIVSIZ] ? vbuf.length : head.ptr[DP_RHIVSIZ]);
-    fdseekread(m_fd, off+DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+start, vbuf[0..vsiz]);
+  usize recvalwb (void[] vbuf, long off, ref RecordHeader head, uint start=0) {
+    assert(off >= 0);
+    head.vsiz -= start;
+    usize vsiz = (vbuf.length < head.vsiz ? vbuf.length : head.vsiz);
+    fdseekread(m_fd, off+RecordHeader.sizeof+head.ksiz+start, vbuf[0..vsiz]);
     return vsiz;
   }
 
@@ -1753,13 +1761,13 @@ private:
    *   DepotException on various errors
    */
   bool recsearch (const(void)[] kbuf, int hash, int* bip, int* offp, int* entp,
-                  int[] head, void[] ebuf, bool* eep, Flag!"delhit" delhit=No.delhit)
+                  ref RecordHeader head, void[] ebuf, bool* eep, Flag!"delhit" delhit=No.delhit)
   {
-    usize off, entoff;
+    usize off;
+    int entoff;
     int thash, kcmp;
     char[DP_STKBUFSIZ] stkey;
     char* tkey;
-    assert(head.length >= DP_RHNUM);
     assert(ebuf.length >= DP_ENTBUFSIZ);
     assert(hash >= 0 && bip !is null && offp !is null && entp !is null && eep !is null);
     thash = innerhash(kbuf);
@@ -1771,49 +1779,49 @@ private:
     *eep = false;
     while (off != 0) {
       rechead(off, head, ebuf, eep);
-      thash = head.ptr[DP_RHIHASH];
+      thash = head.hash2;
       if (hash > thash) {
-        entoff = off+DP_RHILEFT*int.sizeof;
-        off = head.ptr[DP_RHILEFT];
+        entoff = off+RecordHeader.left.offsetof;
+        off = head.left;
       } else if (hash < thash) {
-        entoff = off+DP_RHIRIGHT*int.sizeof;
-        off = head.ptr[DP_RHIRIGHT];
+        entoff = off+RecordHeader.right.offsetof;
+        off = head.right;
       } else {
-        if (*eep && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ] <= DP_ENTBUFSIZ) {
-          immutable ebstart = (DP_RHNUM*int.sizeof);
-          kcmp = keycmp(kbuf, ebuf[ebstart..ebstart+head.ptr[DP_RHIKSIZ]]);
-        } else if (head.ptr[DP_RHIKSIZ] > DP_STKBUFSIZ) {
+        if (*eep && RecordHeader.sizeof+head.ksiz <= DP_ENTBUFSIZ) {
+          immutable ebstart = RecordHeader.sizeof;
+          kcmp = keycmp(kbuf, ebuf[ebstart..ebstart+head.ksiz]);
+        } else if (head.ksiz > DP_STKBUFSIZ) {
           if ((tkey = reckey(off, head)) is null) raise(DP_EFATAL);
-          kcmp = keycmp(kbuf, tkey[0..head.ptr[DP_RHIKSIZ]]);
+          kcmp = keycmp(kbuf, tkey[0..head.ksiz]);
           freeptr(tkey);
         } else {
           try {
-            fdseekread(m_fd, off+DP_RHNUM*int.sizeof, stkey[0..head.ptr[DP_RHIKSIZ]]);
+            fdseekread(m_fd, off+RecordHeader.sizeof, stkey[0..head.ksiz]);
           } catch (Exception) {
             raise(DP_EFATAL);
           }
-          kcmp = keycmp(kbuf, stkey[0..head.ptr[DP_RHIKSIZ]]);
+          kcmp = keycmp(kbuf, stkey[0..head.ksiz]);
         }
         if (kcmp > 0) {
-          entoff = off+DP_RHILEFT*int.sizeof;
-          off = head.ptr[DP_RHILEFT];
+          entoff = off+RecordHeader.left.offsetof;
+          off = head.left;
         } else if (kcmp < 0) {
-          entoff = off+DP_RHIRIGHT*int.sizeof;
-          off = head.ptr[DP_RHIRIGHT];
+          entoff = off+RecordHeader.right.offsetof;
+          off = head.right;
         } else {
-          if (!delhit && (head.ptr[DP_RHIFLAGS]&DP_RECFDEL)) {
-            entoff = off+DP_RHILEFT*int.sizeof;
-            off = head.ptr[DP_RHILEFT];
+          if (!delhit && (head.flags&DP_RECFDEL)) {
+            entoff = off+RecordHeader.left.offsetof;
+            off = head.left;
           } else {
             *offp = cast(int)off;
-            *entp = cast(int)entoff;
+            *entp = entoff;
             return true;
           }
         }
       }
     }
     *offp = cast(int)off;
-    *entp = cast(int)entoff;
+    *entp = entoff;
     return false;
   }
 
@@ -1833,27 +1841,27 @@ private:
    */
   void recrewrite (long off, int rsiz, const(void)[] kbuf, const(void)[] vbuf, int hash, int left, int right) {
     char[DP_WRTBUFSIZ] ebuf;
-    int[DP_RHNUM] head;
+    RecordHeader head;
     int hoff, koff, voff, mi, min, size;
     usize asiz;
     assert(off >= 1 && rsiz > 0);
-    head.ptr[DP_RHIFLAGS] = 0;
-    head.ptr[DP_RHIHASH] = hash;
-    head.ptr[DP_RHIKSIZ] = cast(int)kbuf.length;
-    head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
-    head.ptr[DP_RHIPSIZ] = cast(int)(rsiz-head.sizeof-kbuf.length-vbuf.length);
-    head.ptr[DP_RHILEFT] = left;
-    head.ptr[DP_RHIRIGHT] = right;
+    head.flags = 0;
+    head.hash2 = hash;
+    head.ksiz = cast(int)kbuf.length;
+    head.vsiz = cast(int)vbuf.length;
+    head.psiz = cast(int)(rsiz-head.sizeof-kbuf.length-vbuf.length);
+    head.left = left;
+    head.right = right;
     asiz = head.sizeof+kbuf.length+vbuf.length;
-    if (m_fbpsiz > DP_FBPOOLSIZ*4 && head.ptr[DP_RHIPSIZ] > asiz) {
-      rsiz = cast(int)((head.ptr[DP_RHIPSIZ]-asiz)/2+asiz);
-      head.ptr[DP_RHIPSIZ] -= rsiz;
+    if (m_fbpsiz > DP_FBPOOLSIZ*4 && head.psiz > asiz) {
+      rsiz = cast(int)((head.psiz-asiz)/2+asiz);
+      head.psiz -= rsiz;
     } else {
       rsiz = 0;
     }
     if (asiz <= DP_WRTBUFSIZ) {
       import core.stdc.string : memcpy;
-      memcpy(ebuf.ptr, head.ptr, head.sizeof);
+      memcpy(ebuf.ptr, &head, head.sizeof);
       memcpy(ebuf.ptr+head.sizeof, kbuf.ptr, kbuf.length);
       memcpy(ebuf.ptr+head.sizeof+kbuf.length, vbuf.ptr, vbuf.length);
       fdseekwrite(m_fd, off, ebuf[0..asiz]);
@@ -1861,21 +1869,21 @@ private:
       hoff = cast(int)off;
       koff = cast(int)(hoff+head.sizeof);
       voff = cast(int)(koff+kbuf.length);
-      fdseekwrite(m_fd, hoff, head[]);
+      fdseekwrite(m_fd, hoff, (&head)[0..1]);
       fdseekwrite(m_fd, koff, kbuf[]);
       fdseekwrite(m_fd, voff, vbuf[]);
     }
     if (rsiz > 0) {
-      off += head.sizeof+kbuf.length+vbuf.length+head.ptr[DP_RHIPSIZ];
-      head.ptr[DP_RHIFLAGS] = DP_RECFDEL|DP_RECFREUSE;
-      head.ptr[DP_RHIHASH] = hash;
-      head.ptr[DP_RHIKSIZ] = cast(int)kbuf.length;
-      head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
-      head.ptr[DP_RHIPSIZ] = cast(int)(rsiz-head.sizeof-kbuf.length-vbuf.length);
-      head.ptr[DP_RHILEFT] = 0;
-      head.ptr[DP_RHIRIGHT] = 0;
-      fdseekwrite(m_fd, off, head[]);
-      size = recsize(head[]);
+      off += head.sizeof+kbuf.length+vbuf.length+head.psiz;
+      head.flags = DP_RECFDEL|DP_RECFREUSE;
+      head.hash2 = hash;
+      head.ksiz = cast(int)kbuf.length;
+      head.vsiz = cast(int)vbuf.length;
+      head.psiz = cast(int)(rsiz-head.sizeof-kbuf.length-vbuf.length);
+      head.left = 0;
+      head.right = 0;
+      fdseekwrite(m_fd, off, (&head)[0..1]);
+      size = head.recsize;
       mi = -1;
       min = -1;
       for (uint i = 0; i < m_fbpsiz; i += 2) {
@@ -1916,22 +1924,22 @@ private:
    */
   int recappend (const(void)[] kbuf, const(void)[] vbuf, int hash, int left, int right) {
     char[DP_WRTBUFSIZ] ebuf;
-    int[DP_RHNUM] head;
+    RecordHeader head;
     usize asiz, psiz;
     long off;
     psiz = padsize(kbuf.length, vbuf.length);
-    head.ptr[DP_RHIFLAGS] = 0;
-    head.ptr[DP_RHIHASH] = hash;
-    head.ptr[DP_RHIKSIZ] = cast(int)kbuf.length;
-    head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
-    head.ptr[DP_RHIPSIZ] = cast(int)psiz;
-    head.ptr[DP_RHILEFT] = left;
-    head.ptr[DP_RHIRIGHT] = right;
+    head.flags = 0;
+    head.hash2 = hash;
+    head.ksiz = cast(int)kbuf.length;
+    head.vsiz = cast(int)vbuf.length;
+    head.psiz = cast(int)psiz;
+    head.left = left;
+    head.right = right;
     asiz = head.sizeof+kbuf.length+vbuf.length+psiz;
     off = m_fsiz;
     if (asiz <= DP_WRTBUFSIZ) {
       import core.stdc.string : memcpy, memset;
-      memcpy(ebuf.ptr, head.ptr, head.sizeof);
+      memcpy(ebuf.ptr, &head, head.sizeof);
       memcpy(ebuf.ptr+head.sizeof, kbuf.ptr, kbuf.length);
       memcpy(ebuf.ptr+head.sizeof+kbuf.length, vbuf.ptr, vbuf.length);
       memset(ebuf.ptr+head.sizeof+kbuf.length+vbuf.length, 0, psiz);
@@ -1942,7 +1950,7 @@ private:
       auto hbuf = cast(char*)malloc(asiz);
       if (hbuf is null) raise(DP_EALLOC);
       scope(exit) freeptr(hbuf);
-      memcpy(hbuf, head.ptr, head.sizeof);
+      memcpy(hbuf, &head, head.sizeof);
       memcpy(hbuf+head.sizeof, kbuf.ptr, kbuf.length);
       memcpy(hbuf+head.sizeof+kbuf.length, vbuf.ptr, vbuf.length);
       memset(hbuf+head.sizeof+kbuf.length+vbuf.length, 0, psiz);
@@ -1963,26 +1971,26 @@ private:
    * Throws:
    *   DepotException on various errors
    */
-  void recover (long off, int[] head, const(void)[] vbuf, Flag!"catmode" catmode) {
-    assert(off >= 0 && head.length >= DP_RHNUM);
+  void recover (long off, ref RecordHeader head, const(void)[] vbuf, Flag!"catmode" catmode) {
+    assert(off >= 0);
     for (uint i = 0; i < m_fbpsiz; i += 2) {
       if (m_fbpool[i] == off) {
         m_fbpool[i] = m_fbpool[i+1] = -1;
         break;
       }
     }
-    head.ptr[DP_RHIFLAGS] = 0;
-    long voff = off+DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ];
+    head.flags = 0;
+    long voff = off+RecordHeader.sizeof+head.ksiz;
     if (catmode) {
-      head.ptr[DP_RHIPSIZ] -= vbuf.length;
-      head.ptr[DP_RHIVSIZ] += vbuf.length;
-      voff += head.ptr[DP_RHIVSIZ]-vbuf.length; //k8:???
+      head.psiz -= vbuf.length;
+      head.vsiz += vbuf.length;
+      voff += head.vsiz-vbuf.length;
     } else {
-      head.ptr[DP_RHIPSIZ] += head.ptr[DP_RHIVSIZ]-vbuf.length;
-      head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
+      head.psiz += head.vsiz-vbuf.length;
+      head.vsiz = cast(int)vbuf.length;
     }
     scope(failure) m_fatal = true; // any failure is fatal here
-    fdseekwrite(m_fd, off, head[0..DP_RHNUM]);
+    fdseekwrite(m_fd, off, (&head)[0..1]);
     fdseekwrite(m_fd, voff, vbuf[]);
   }
 
@@ -1996,10 +2004,10 @@ private:
    * Throws:
    *   DepotException on various errors
    */
-  void recdelete (long off, int[] head, Flag!"reusable" reusable) {
-    assert(off >= 0 && head.length >= DP_RHNUM);
+  void recdelete (long off, ref in RecordHeader head, Flag!"reusable" reusable) {
+    assert(off >= 0);
     if (reusable) {
-      auto size = recsize(head[]);
+      auto size = head.recsize;
       int mi = -1;
       int min = -1;
       for (uint i = 0; i < m_fbpsiz; i += 2) {
@@ -2021,7 +2029,7 @@ private:
         fbpoolcoal();
       }
     }
-    fdseekwritenum(m_fd, off+DP_RHIFLAGS*int.sizeof, DP_RECFDEL|(reusable ? DP_RECFREUSE : 0));
+    fdseekwritenum(m_fd, off+RecordHeader.flags.offsetof, DP_RECFDEL|(reusable ? DP_RECFREUSE : 0));
   }
 
   /* Make contiguous records of the free block pool coalesce. */
