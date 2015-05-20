@@ -258,7 +258,8 @@ public:
     char* map;
     char c;
     string tname;
-    int mode, fd, rnum, msiz;
+    int mode, fd, rnum;
+    usize msiz;
     ulong inode;
     long fsiz;
     int* fbpool;
@@ -349,7 +350,7 @@ public:
     m_fd = fd;
     m_fsiz = fsiz;
     m_map = map;
-    m_msiz = msiz;
+    m_msiz = cast(int)msiz;
     m_buckets = cast(int*)(map+DP_HEADSIZ);
     m_bnum = bnum;
     m_rnum = rnum;
@@ -411,7 +412,8 @@ public:
     import core.stdc.string : memcpy;
     import core.stdc.stdlib : free, malloc, realloc;
     int[DP_RHNUM] head, next;
-    int hash, bi, off, entoff, newoff, rsiz, nsiz, fdel, mroff, mrsiz, mi, min;
+    int hash, bi, off, entoff, newoff, fdel, mroff, mrsiz, mi, min;
+    usize rsiz, nsiz;
     bool ee;
     char[DP_ENTBUFSIZ] ebuf;
     char* tval, swap;
@@ -443,7 +445,7 @@ public:
           head.ptr[DP_RHIPSIZ] += recsize(next[]);
           rsiz += recsize(next[]);
         }
-        for (usize i = 0; i < m_fbpsiz; i += 2) {
+        for (uint i = 0; i < m_fbpsiz; i += 2) {
           if (m_fbpool[i] >= off && m_fbpool[i] < off+rsiz) {
             m_fbpool[i] = m_fbpool[i+1] = -1;
           }
@@ -471,7 +473,7 @@ public:
         }
         mi = -1;
         min = -1;
-        for (usize i = 0; i < this.m_fbpsiz; i += 2) {
+        for (uint i = 0; i < m_fbpsiz; i += 2) {
           if (m_fbpool[i+1] < nsiz) continue;
           if (mi == -1 || m_fbpool[i+1] < min) {
             mi = i;
@@ -697,7 +699,7 @@ public:
     import core.stdc.stdlib : malloc;
     import core.stdc.string : memcpy;
     int[DP_RHNUM] head;
-    int off;
+    usize off;
     bool ee;
     char[DP_ENTBUFSIZ] ebuf;
     char* kbuf;
@@ -719,7 +721,7 @@ public:
         } else {
           kbuf = reckey(off, head[]);
         }
-        m_ioff = off+recsize(head[]);
+        m_ioff = cast(int)(off+recsize(head[]));
         if (sp !is null) *sp = head.ptr[DP_RHIKSIZ];
         return kbuf;
       }
@@ -846,7 +848,8 @@ public:
     Depot tdepot;
     char* name;
     int[DP_RHNUM] head;
-    int off, unum;
+    usize off;
+    int unum;
     bool ee;
     int[DP_OPTRUNIT] ksizs, vsizs;
     char[DP_ENTBUFSIZ] ebuf;
@@ -896,7 +899,7 @@ public:
         vsizs[unum] = head.ptr[DP_RHIVSIZ];
         ++unum;
         if (unum >= DP_OPTRUNIT) {
-          for (usize i = 0; i < unum; ++i) {
+          for (uint i = 0; i < unum; ++i) {
             assert(kbufs[i] !is null && vbufs[i] !is null);
             tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], DP_DKEEP);
             free(kbufs[i]);
@@ -907,7 +910,7 @@ public:
       }
       off += recsize(head[]);
     }
-    for (usize i = 0; i < unum; ++i) {
+    for (uint i = 0; i < unum; ++i) {
       assert(kbufs[i] !is null && vbufs[i] !is null);
       tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], DP_DKEEP);
       free(kbufs[i]);
@@ -921,7 +924,7 @@ public:
     m_fsiz = tdepot.m_fsiz;
     m_bnum = tdepot.m_bnum;
     m_ioff = 0;
-    for (usize i = 0; i < this.m_fbpsiz; i += 2) {
+    for (uint i = 0; i < this.m_fbpsiz; i += 2) {
       m_fbpool[i] = m_fbpool[i+1] = -1;
     }
     m_msiz = tdepot.m_msiz;
@@ -988,7 +991,7 @@ public:
   int bucketUsed () {
     checkOpened();
     int hits = 0;
-    for (usize i = 0; i < m_bnum; ++i) if (m_buckets[i]) ++hits;
+    for (uint i = 0; i < m_bnum; ++i) if (m_buckets[i]) ++hits;
     return hits;
   }
 
@@ -1116,7 +1119,8 @@ public:
     char[DP_HEADSIZ] dbhead;
     char* tname, kbuf, vbuf;
     int[DP_RHNUM] head;
-    int fd, flags, bnum, tbnum, off, rsiz, ksiz, vsiz;
+    int fd, flags, bnum, tbnum, rsiz, ksiz, vsiz;
+    usize off;
     long fsiz;
     stat_t sbuf;
     assert(name !is null);
@@ -1594,7 +1598,7 @@ private:
    */
   static int recsize (in int[] head) @trusted pure nothrow @nogc {
     assert(head.length >= DP_RHNUM);
-    return DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ]+head.ptr[DP_RHIPSIZ];
+    return cast(int)(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ]+head.ptr[DP_RHIPSIZ]);
   }
 
   /* Read the header of a record.
@@ -1750,7 +1754,8 @@ private:
                   int[] head, void[] ebuf, bool* eep, Flag!"delhit" delhit=No.delhit)
   {
     import core.stdc.stdlib : free;
-    int off, entoff, thash, kcmp;
+    usize off, entoff;
+    int thash, kcmp;
     char[DP_STKBUFSIZ] stkey;
     char* tkey;
     assert(head.length >= DP_RHNUM);
@@ -1799,15 +1804,15 @@ private:
             entoff = off+DP_RHILEFT*int.sizeof;
             off = head.ptr[DP_RHILEFT];
           } else {
-            *offp = off;
-            *entp = entoff;
+            *offp = cast(int)off;
+            *entp = cast(int)entoff;
             return true;
           }
         }
       }
     }
-    *offp = off;
-    *entp = entoff;
+    *offp = cast(int)off;
+    *entp = cast(int)entoff;
     return false;
   }
 
@@ -1829,18 +1834,19 @@ private:
     import core.stdc.string : memcpy;
     char[DP_WRTBUFSIZ] ebuf;
     int[DP_RHNUM] head;
-    int asiz, hoff, koff, voff, mi, min, size;
+    int hoff, koff, voff, mi, min, size;
+    usize asiz;
     assert(off >= 1 && rsiz > 0);
     head.ptr[DP_RHIFLAGS] = 0;
     head.ptr[DP_RHIHASH] = hash;
-    head.ptr[DP_RHIKSIZ] = kbuf.length;
-    head.ptr[DP_RHIVSIZ] = vbuf.length;
-    head.ptr[DP_RHIPSIZ] = rsiz-head.sizeof-kbuf.length-vbuf.length;
+    head.ptr[DP_RHIKSIZ] = cast(int)kbuf.length;
+    head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
+    head.ptr[DP_RHIPSIZ] = cast(int)(rsiz-head.sizeof-kbuf.length-vbuf.length);
     head.ptr[DP_RHILEFT] = left;
     head.ptr[DP_RHIRIGHT] = right;
     asiz = head.sizeof+kbuf.length+vbuf.length;
     if (m_fbpsiz > DP_FBPOOLSIZ*4 && head.ptr[DP_RHIPSIZ] > asiz) {
-      rsiz = (head.ptr[DP_RHIPSIZ]-asiz)/2+asiz;
+      rsiz = cast(int)((head.ptr[DP_RHIPSIZ]-asiz)/2+asiz);
       head.ptr[DP_RHIPSIZ] -= rsiz;
     } else {
       rsiz = 0;
@@ -1852,8 +1858,8 @@ private:
       fdseekwrite(m_fd, off, ebuf[0..asiz]);
     } else {
       hoff = cast(int)off;
-      koff = hoff+head.sizeof;
-      voff = koff+kbuf.length;
+      koff = cast(int)(hoff+head.sizeof);
+      voff = cast(int)(koff+kbuf.length);
       fdseekwrite(m_fd, hoff, head[]);
       fdseekwrite(m_fd, koff, kbuf[]);
       fdseekwrite(m_fd, voff, vbuf[]);
@@ -1862,16 +1868,16 @@ private:
       off += head.sizeof+kbuf.length+vbuf.length+head.ptr[DP_RHIPSIZ];
       head.ptr[DP_RHIFLAGS] = DP_RECFDEL|DP_RECFREUSE;
       head.ptr[DP_RHIHASH] = hash;
-      head.ptr[DP_RHIKSIZ] = kbuf.length;
-      head.ptr[DP_RHIVSIZ] = vbuf.length;
-      head.ptr[DP_RHIPSIZ] = rsiz-head.sizeof-kbuf.length-vbuf.length;
+      head.ptr[DP_RHIKSIZ] = cast(int)kbuf.length;
+      head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
+      head.ptr[DP_RHIPSIZ] = cast(int)(rsiz-head.sizeof-kbuf.length-vbuf.length);
       head.ptr[DP_RHILEFT] = 0;
       head.ptr[DP_RHIRIGHT] = 0;
       fdseekwrite(m_fd, off, head[]);
       size = recsize(head[]);
       mi = -1;
       min = -1;
-      for (usize i = 0; i < m_fbpsiz; i += 2) {
+      for (uint i = 0; i < m_fbpsiz; i += 2) {
         if (m_fbpool[i] == -1) {
           m_fbpool[i] = cast(int)off;
           m_fbpool[i+1] = size;
@@ -1912,14 +1918,14 @@ private:
     import core.stdc.stdlib : free, malloc;
     char[DP_WRTBUFSIZ] ebuf;
     int[DP_RHNUM] head;
-    int asiz, psiz;
+    usize asiz, psiz;
     long off;
     psiz = padsize(kbuf.length, vbuf.length);
     head.ptr[DP_RHIFLAGS] = 0;
     head.ptr[DP_RHIHASH] = hash;
-    head.ptr[DP_RHIKSIZ] = kbuf.length;
-    head.ptr[DP_RHIVSIZ] = vbuf.length;
-    head.ptr[DP_RHIPSIZ] = psiz;
+    head.ptr[DP_RHIKSIZ] = cast(int)kbuf.length;
+    head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
+    head.ptr[DP_RHIPSIZ] = cast(int)psiz;
     head.ptr[DP_RHILEFT] = left;
     head.ptr[DP_RHIRIGHT] = right;
     asiz = head.sizeof+kbuf.length+vbuf.length+psiz;
@@ -1957,7 +1963,7 @@ private:
    */
   void recover (long off, int[] head, const(void)[] vbuf, Flag!"catmode" catmode) {
     assert(off >= 0 && head.length >= DP_RHNUM);
-    for (usize i = 0; i < m_fbpsiz; i += 2) {
+    for (uint i = 0; i < m_fbpsiz; i += 2) {
       if (this.m_fbpool[i] == off) {
         m_fbpool[i] = m_fbpool[i+1] = -1;
         break;
@@ -1971,7 +1977,7 @@ private:
       voff += head.ptr[DP_RHIVSIZ]-vbuf.length; //k8:???
     } else {
       head.ptr[DP_RHIPSIZ] += head.ptr[DP_RHIVSIZ]-vbuf.length;
-      head.ptr[DP_RHIVSIZ] = vbuf.length;
+      head.ptr[DP_RHIVSIZ] = cast(int)vbuf.length;
     }
     scope(failure) m_fatal = true; // any failure is fatal here
     fdseekwrite(m_fd, off, head[0..DP_RHNUM]);
@@ -1994,7 +2000,7 @@ private:
       auto size = recsize(head[]);
       int mi = -1;
       int min = -1;
-      for (usize i = 0; i < m_fbpsiz; i += 2) {
+      for (uint i = 0; i < m_fbpsiz; i += 2) {
         if (m_fbpool[i] == -1) {
           m_fbpool[i] = cast(int)off;
           m_fbpool[i+1] = size;
@@ -2022,7 +2028,7 @@ private:
     if (m_fbpinc++ <= m_fbpsiz/4) return;
     m_fbpinc = 0;
     qsort(m_fbpool, m_fbpsiz/2, int.sizeof*2, &fbpoolcmp);
-    for (usize i = 2; i < m_fbpsiz; i += 2) {
+    for (uint i = 2; i < m_fbpsiz; i += 2) {
       if (m_fbpool[i-2] > 0 && m_fbpool[i-2]+m_fbpool[i-1]-m_fbpool[i] == 0) {
         m_fbpool[i] = m_fbpool[i-2];
         m_fbpool[i+1] += m_fbpool[i-1];
