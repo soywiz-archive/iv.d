@@ -84,7 +84,7 @@ public final class Depot {
   enum QDBM_VERSION = "1.8.78"; /// library version
   enum QDBM_LIBVER = 1414;
 
-  this (const(char)* name, int omode, int bnum=-1) { open(name, omode, bnum); }
+  this (const(char)[] name, int omode, int bnum=-1) { open(name, omode, bnum); }
   ~this () { close(); }
 
 private:
@@ -107,6 +107,7 @@ private:
   int m_alignment; // basic size of alignment (can be negative; why?)
 
 private:
+  enum DP_FILEMODE = 384; // 0o600: permission of a creating file
   version(BigEndian) {
     enum dpbigendian = true;
   } else {
@@ -114,13 +115,11 @@ private:
   }
   enum DP_MAGICNUMB = "[Depot]\n\f"; // magic number on environments of big endian
   enum DP_MAGICNUML = "[depot]\n\f"; // magic number on environments of little endian
-  enum DP_FILEMODE  = 384;  // 0o600: permission of a creating file
-  enum DP_HEADSIZ   = 48;   // size of the reagion of the header
-  enum DP_LIBVEROFF = 12;   // offset of the region for the library version
-  enum DP_FLAGSOFF  = 16;   // offset of the region for flags
-  enum DP_FSIZOFF   = 24;   // offset of the region for the file size
-  enum DP_BNUMOFF   = 32;   // offset of the region for the bucket number
-  enum DP_RNUMOFF   = 40;   // offset of the region for the record number
+  version(dpbigendian) {
+    alias DP_MAGIC = DP_MAGICNUMB;
+  } else {
+    alias DP_MAGIC = DP_MAGICNUML;
+  }
   enum DP_DEFBNUM   = 8191; // default bucket number
   enum DP_FBPOOLSIZ = 16;   // size of free block pool
   enum DP_ENTBUFSIZ = 128;  // size of the entity buffer
@@ -151,6 +150,27 @@ private:
     DP_RECFDEL = 1 << 0,  // deleted
     DP_RECFREUSE = 1 << 1 // reusable
   }
+
+  static align(1) struct QDBMHeader {
+  align(1):
+    char[12] signature; // DP_MAGICNUMB or DP_MAGICNUML, padded with '\0'
+    char[4] versionstr; // string, padded with '\0'
+    int flags;
+    uint unused0;
+    int filesize;
+    uint unused1;
+    int nbuckets; // number of buckets
+    uint unused2;
+    int nrecords; // number of records
+    uint unused3;
+  }
+  static assert(QDBMHeader.sizeof == 48);
+  static assert(QDBMHeader.signature.offsetof == 0);
+  static assert(QDBMHeader.versionstr.offsetof == 12);
+  static assert(QDBMHeader.flags.offsetof == 16);
+  static assert(QDBMHeader.filesize.offsetof == 24);
+  static assert(QDBMHeader.nbuckets.offsetof == 32);
+  static assert(QDBMHeader.nrecords.offsetof == 40);
 
 public:
   /// enumeration for error codes
@@ -246,19 +266,14 @@ public:
    * Throws:
    *   DepotException on various errors
    */
-  void open (const(char)* name, int omode, int bnum) {
-    import core.stdc.stdio : sprintf;
-    import core.stdc.stdlib : malloc, free;
-    import core.stdc.string : memcpy;
+  void open (const(char)[] name, int omode, int bnum) {
     import core.sys.posix.fcntl : open, O_CREAT, O_RDONLY, O_RDWR;
     import core.sys.posix.sys.mman : mmap, munmap, MAP_FAILED, PROT_READ, PROT_WRITE, MAP_SHARED;
     import core.sys.posix.sys.stat : fstat, lstat, S_ISREG, stat_t;
     import core.sys.posix.unistd : close, ftruncate;
-    char[DP_HEADSIZ] hbuf;
+    QDBMHeader hbuf;
     char* map;
-    char c;
-    string tname;
-    int mode, fd, rnum;
+    int mode, fd;
     usize msiz;
     ulong inode;
     long fsiz;
@@ -266,46 +281,52 @@ public:
     stat_t sbuf;
     time_t mtime;
     if (opened) raise(DP_EOPENED);
-    assert(name !is null);
+    assert(name.length);
+    char[] namez; // unique
+    // add '\0' after string
+    {
+      usize len = 0;
+      while (len < name.length && name[len]) ++len;
+      namez = new char[](len+1);
+      namez[0..$-1] = name[0..len];
+      namez[$-1] = 0;
+    }
     mode = O_RDONLY;
     if (omode&DP_OWRITER) {
       mode = O_RDWR;
       if (omode&DP_OCREAT) mode |= O_CREAT;
     }
-    if ((fd = open(name, mode, DP_FILEMODE)) == -1) raise(DP_EOPEN);
+    if ((fd = open(namez.ptr, mode, DP_FILEMODE)) == -1) raise(DP_EOPEN);
     scope(failure) close(fd);
     if ((omode&DP_ONOLCK) == 0) fdlock(fd, omode&DP_OWRITER, omode&DP_OLCKNB);
     if ((omode&DP_OWRITER) && (omode&DP_OTRUNC)) {
       if (ftruncate(fd, 0) == -1) raise(DP_ETRUNC);
     }
-    if (fstat(fd, &sbuf) == -1 || !S_ISREG(sbuf.st_mode) || (sbuf.st_ino == 0 && lstat(name, &sbuf) == -1)) raise(DP_ESTAT);
+    if (fstat(fd, &sbuf) == -1 || !S_ISREG(sbuf.st_mode) || (sbuf.st_ino == 0 && lstat(namez.ptr, &sbuf) == -1)) raise(DP_ESTAT);
     inode = sbuf.st_ino;
     mtime = sbuf.st_mtime;
     fsiz = sbuf.st_size;
     if ((omode&DP_OWRITER) && fsiz == 0) {
-      hbuf[] = 0;
-      static if (dpbigendian) {
-        hbuf[0..DP_MAGICNUMB.length] = DP_MAGICNUMB[];
-      } else {
-        hbuf[0..DP_MAGICNUML.length] = DP_MAGICNUML[];
+      hbuf.signature[] = 0;
+      hbuf.versionstr[] = 0;
+      hbuf.signature[0..DP_MAGIC.length] = DP_MAGIC[];
+      {
+        import core.stdc.stdio : snprintf;
+        snprintf(hbuf.versionstr.ptr, hbuf.versionstr.length, "%d", QDBM_LIBVER/100);
       }
-      sprintf(hbuf.ptr+DP_LIBVEROFF, "%d", QDBM_LIBVER/100);
       bnum = (bnum < 1 ? DP_DEFBNUM : bnum);
-      bnum = primenum(bnum);
-      memcpy(hbuf.ptr+DP_BNUMOFF, &bnum, int.sizeof);
-      rnum = 0;
-      memcpy(hbuf.ptr+DP_RNUMOFF, &rnum, int.sizeof);
-      fsiz = DP_HEADSIZ+bnum*int.sizeof;
-      memcpy(hbuf.ptr+DP_FSIZOFF, &fsiz, int.sizeof);
-      fdseekwrite(fd, 0, hbuf[]);
+      hbuf.nbuckets = primenum(bnum);
+      hbuf.nrecords = 0;
+      fsiz = hbuf.sizeof+bnum*int.sizeof;
+      hbuf.filesize = cast(int)fsiz;
+      fdseekwrite(fd, 0, (&hbuf)[0..1]);
       if (omode&DP_OSPARSE) {
-        c = 0;
+        ubyte c = 0;
         fdseekwrite(fd, fsiz-1, (&c)[0..1]);
       } else {
         ubyte[DP_IOBUFSIZ] ebuf; // totally empty buffer initialized with 0 %-)
-        map = cast(char*)malloc(bnum*int.sizeof);
         usize left = bnum*int.sizeof;
-        usize pos = DP_HEADSIZ;
+        usize pos = hbuf.sizeof;
         while (left > 0) {
           usize wr = (left > ebuf.length ? ebuf.length : left);
           fdseekwrite(fd, pos, ebuf[0..wr]);
@@ -315,45 +336,39 @@ public:
       }
     }
     try {
-      fdseekread(fd, 0, hbuf[0..DP_HEADSIZ]);
+      fdseekread(fd, 0, (&hbuf)[0..1]);
     } catch (Exception) {
       raise(DP_EBROKEN);
     }
-    static if (dpbigendian) {
-      alias MAGIC = DP_MAGICNUMB;
-    } else {
-      alias MAGIC = DP_MAGICNUML;
-    }
-    if ((omode&DP_ONOLCK) == 0 && (hbuf[0..MAGIC.length] != MAGIC || *(cast(int*)(hbuf.ptr+DP_FSIZOFF)) != fsiz)) raise(DP_EBROKEN);
-    bnum = *(cast(int*)(hbuf.ptr+DP_BNUMOFF));
-    rnum = *(cast(int*)(hbuf.ptr+DP_RNUMOFF));
-    if (bnum < 1 || rnum < 0 || fsiz < DP_HEADSIZ+bnum*int.sizeof) raise(DP_EBROKEN);
-    msiz = DP_HEADSIZ+bnum*int.sizeof;
-    map = cast(char*)mmap(null, msiz, PROT_READ | ((mode & DP_OWRITER) ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
+    //k8: the original code checks header only if ((omode&DP_ONOLCK) == 0); why?
+    if (hbuf.signature[0..DP_MAGIC.length] != DP_MAGIC) raise(DP_EBROKEN);
+    if (hbuf.filesize != fsiz) raise(DP_EBROKEN);
+    bnum = hbuf.nbuckets;
+    if (bnum < 1 || hbuf.nrecords < 0 || fsiz < QDBMHeader.sizeof+bnum*int.sizeof) raise(DP_EBROKEN);
+    msiz = QDBMHeader.sizeof+bnum*int.sizeof;
+    map = cast(char*)mmap(null, msiz, PROT_READ|(mode&DP_OWRITER ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
     if (map == MAP_FAILED) raise(DP_EMAP);
     scope(failure) munmap(map, msiz);
-    tname = null;
     fbpool = null;
-    { // keep '\0' after string
-      import std.exception : assumeUnique;
-      usize len = 0;
-      while (name[len]) ++len;
-      auto nmd = name[0..len+1].dup;
-      tname = nmd[0..$-1].assumeUnique;
+    {
+      import core.stdc.stdlib : malloc;
+      fbpool = cast(int*)malloc(DP_FBPOOLSIZ*2*int.sizeof);
     }
-    fbpool = cast(int*)malloc(DP_FBPOOLSIZ*2*int.sizeof);
     if (fbpool is null) raise(DP_EALLOC);
-    m_name = tname;
-    m_wmode = (mode & DP_OWRITER) != 0;
+    {
+      import std.exception : assumeUnique;
+      m_name = namez[0..$-1].assumeUnique;
+    }
+    m_wmode = (mode&DP_OWRITER) != 0;
     m_inode = inode;
     m_mtime = mtime;
     m_fd = fd;
     m_fsiz = fsiz;
     m_map = map;
     m_msiz = cast(int)msiz;
-    m_buckets = cast(int*)(map+DP_HEADSIZ);
+    m_buckets = cast(int*)(map+QDBMHeader.sizeof);
     m_bnum = bnum;
-    m_rnum = rnum;
+    m_rnum = hbuf.nrecords;
     m_fatal = false;
     m_ioff = 0;
     m_fbpool = fbpool;
@@ -377,14 +392,10 @@ public:
   void close () {
     import core.sys.posix.sys.mman : munmap, MAP_FAILED;
     import core.sys.posix.unistd : close;
-    import core.stdc.stdlib : free;
     if (!opened) return;
     bool fatal = m_fatal;
     uint err = DP_ENOERR;
-    if (m_wmode) {
-      *(cast(int*)(this.m_map+DP_FSIZOFF)) = cast(int)this.m_fsiz;
-      *(cast(int*)(this.m_map+DP_RNUMOFF)) = this.m_rnum;
-    }
+    if (m_wmode) updateHeader();
     if (m_map != MAP_FAILED) {
       if (munmap(m_map, m_msiz) == -1) err = DP_EMAP;
     }
@@ -409,8 +420,6 @@ public:
    *   DepotException on various errors
    */
   void put (const(void)[] kbuf, const(void)[] vbuf, int dmode=DP_DOVER) {
-    import core.stdc.string : memcpy;
-    import core.stdc.stdlib : free, malloc, realloc;
     int[DP_RHNUM] head, next;
     int hash, bi, off, entoff, newoff, fdel, mroff, mrsiz, mi, min;
     usize rsiz, nsiz;
@@ -457,11 +466,14 @@ public:
         tval = null;
         scope(failure) { m_fatal = true; freeptr(tval); }
         if (dmode == DP_DCAT) {
+          import core.stdc.string : memcpy;
           if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
+            import core.stdc.stdlib : malloc;
             tval = cast(char*)malloc(head.ptr[DP_RHIVSIZ]+vbuf.length+1);
             if (tval is null) { m_fatal = true; raise(DP_EALLOC); }
             memcpy(tval, ebuf.ptr+(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]), head.ptr[DP_RHIVSIZ]);
           } else {
+            import core.stdc.stdlib : realloc;
             tval = recval(off, head[]);
             swap = cast(char*)realloc(tval, head.ptr[DP_RHIVSIZ]+vbuf.length+1);
             if (swap is null) raise(DP_EALLOC);
@@ -496,7 +508,7 @@ public:
         } else {
           newoff = recappend(kbuf, vbuf, hash, head.ptr[DP_RHILEFT], head.ptr[DP_RHIRIGHT]);
         }
-        free(tval);
+        freeptr(tval);
       }
       if (fdel) ++m_rnum;
     } else {
@@ -555,15 +567,13 @@ public:
    *   the specified key or the size of the value of the corresponding record is less than `start`.
    *   Because an additional zero code is appended at the end of the region of the return value,
    *   the return value can be treated as a character string. Because the region of the return
-   *   value is allocated with the `malloc` call, it should be released with the `free` call if it
+   *   value is allocated with the `malloc` call, it should be released with the `freeptr` call if it
    *   is no longer in use.
    *
    * Throws:
    *   DepotException on various errors
    */
   char* get (const(void)[] kbuf, uint start=0, uint max=uint.max, usize* sp=null) {
-    import core.stdc.string : memcpy;
-    import core.stdc.stdlib : malloc;
     int[DP_RHNUM] head;
     int hash, bi, off, entoff;
     bool ee;
@@ -577,6 +587,8 @@ public:
     if (start > head.ptr[DP_RHIVSIZ]) return null; //raise(DP_ENOITEM);
     scope(failure) m_fatal = true; // any failure beyond this point is fatal
     if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
+      import core.stdc.stdlib : malloc;
+      import core.stdc.string : memcpy;
       head.ptr[DP_RHIVSIZ] -= start;
       if (max == uint.max) {
         vsiz = head.ptr[DP_RHIVSIZ];
@@ -617,7 +629,6 @@ public:
    *   DepotException on various errors
    */
   char[] getwb (void[] vbuf, const(void)[] kbuf, uint start=0) {
-    import core.stdc.string : memcpy;
     int[DP_RHNUM] head;
     int hash, bi, off, entoff;
     bool ee;
@@ -629,6 +640,7 @@ public:
     if (start > head.ptr[DP_RHIVSIZ]) return null; //raise(DP_ENOITEM);
     scope(failure) m_fatal = true; // any failure beyond this point is fatal
     if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
+      import core.stdc.string : memcpy;
       head.ptr[DP_RHIVSIZ] -= start;
       vsiz = (vbuf.length < head.ptr[DP_RHIVSIZ] ? vbuf.length : head.ptr[DP_RHIVSIZ]);
       memcpy(vbuf.ptr, ebuf.ptr+(DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+start), vsiz);
@@ -686,7 +698,7 @@ public:
    *   `null`. `null` is returned when no record is to be get out of the iterator.
    *   Because an additional zero code is appended at the end of the region of the return value,
    *   the return value can be treated as a character string. Because the region of the return
-   *   value is allocated with the `malloc` call, it should be released with the `free` call if
+   *   value is allocated with the `malloc` call, it should be released with the `freeptr` call if
    *   it is no longer in use. It is possible to access every record by iteration of calling
    *   this function. However, it is not assured if updating the database is occurred while the
    *   iteration. Besides, the order of this traversal access method is arbitrary, so it is not
@@ -696,8 +708,6 @@ public:
    *   DepotException on various errors
    */
   char* itNext (usize* sp=null) {
-    import core.stdc.stdlib : malloc;
-    import core.stdc.string : memcpy;
     int[DP_RHNUM] head;
     usize off;
     bool ee;
@@ -705,7 +715,7 @@ public:
     char* kbuf;
     if (sp !is null) *sp = 0;
     checkOpened();
-    off = DP_HEADSIZ+m_bnum*int.sizeof;
+    off = QDBMHeader.sizeof+m_bnum*int.sizeof;
     off = (off > m_ioff ? off : m_ioff);
     scope(failure) m_fatal = true; // any failure is fatal here
     while (off < m_fsiz) {
@@ -714,6 +724,8 @@ public:
         off += recsize(head[]);
       } else {
         if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ] <= DP_ENTBUFSIZ) {
+          import core.stdc.stdlib : malloc;
+          import core.stdc.string : memcpy;
           kbuf = cast(char*)malloc(head.ptr[DP_RHIKSIZ]+1);
           if (kbuf is null) raise(DP_EALLOC);
           memcpy(kbuf, ebuf.ptr+(DP_RHNUM*int.sizeof), head.ptr[DP_RHIKSIZ]);
@@ -797,8 +809,6 @@ public:
    *   DepotException on various errors
    */
   @property uint freeBlockPoolSize () {
-    import core.stdc.stdlib : realloc;
-    int* fbpool;
     checkOpened();
     if (!m_wmode) raise(DP_EMODE);
     return m_fbpsiz/2;
@@ -816,8 +826,7 @@ public:
     import core.sys.posix.unistd : fsync;
     checkOpened();
     if (!m_wmode) raise(DP_EMODE);
-    *(cast(int*)(m_map+DP_FSIZOFF)) = cast(int)m_fsiz;
-    *(cast(int*)(m_map+DP_RNUMOFF)) = m_rnum;
+    updateHeader();
     if (msync(m_map, m_msiz, MS_SYNC) == -1) {
       m_fatal = true;
       raise(DP_EMAP);
@@ -841,12 +850,9 @@ public:
    *   DepotException on various errors
    */
   void optimize (int bnum=-1) {
-    import core.stdc.stdlib : free, malloc;
-    import core.stdc.string : memcpy, strlen;
     import core.sys.posix.sys.mman : mmap, munmap, MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE;
     import core.sys.posix.unistd : ftruncate, unlink;
     Depot tdepot;
-    char* name;
     int[DP_RHNUM] head;
     usize off;
     int unum;
@@ -856,17 +862,11 @@ public:
     char*[DP_OPTRUNIT] kbufs, vbufs;
     checkOpened();
     if (!m_wmode) raise(DP_EMODE);
-    name = cast(char*)malloc(m_name.length+DP_TMPFSUF.length+1);
-    if (name is null) raise(DP_EALLOC);
-    {
-      import core.stdc.stdio : sprintf;
-      sprintf(name, "%s%s", m_name.ptr, DP_TMPFSUF.ptr);
-    }
     if (bnum < 0) {
       bnum = cast(int)(m_rnum*(1.0/DP_OPTBLOAD))+1;
       if (bnum < DP_DEFBNUM/2) bnum = DP_DEFBNUM/2;
     }
-    tdepot = new Depot(name, DP_OWRITER|DP_OCREAT|DP_OTRUNC, bnum);
+    tdepot = new Depot(m_name~DP_TMPFSUF, DP_OWRITER|DP_OCREAT|DP_OTRUNC, bnum);
     scope(failure) {
       import std.exception : collectException;
       m_fatal = true;
@@ -874,15 +874,16 @@ public:
       collectException(tdepot.close());
     }
     scope(exit) delete tdepot;
-    free(name);
     tdepot.flags = flags;
     tdepot.m_alignment = m_alignment;
-    off = DP_HEADSIZ+m_bnum*int.sizeof;
+    off = QDBMHeader.sizeof+m_bnum*int.sizeof;
     unum = 0;
     while (off < m_fsiz) {
       rechead(off, head[], ebuf[], &ee);
       if ((head.ptr[DP_RHIFLAGS]&DP_RECFDEL) == 0) {
         if (ee && DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ] <= DP_ENTBUFSIZ) {
+          import core.stdc.stdlib : malloc;
+          import core.stdc.string : memcpy;
           if ((kbufs[unum] = cast(char*)malloc(head.ptr[DP_RHIKSIZ]+1)) is null) raise(DP_EALLOC);
           memcpy(kbufs[unum], ebuf.ptr+(DP_RHNUM*int.sizeof), head.ptr[DP_RHIKSIZ]);
           if (DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+head.ptr[DP_RHIVSIZ] <= DP_ENTBUFSIZ) {
@@ -902,8 +903,8 @@ public:
           for (uint i = 0; i < unum; ++i) {
             assert(kbufs[i] !is null && vbufs[i] !is null);
             tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], DP_DKEEP);
-            free(kbufs[i]);
-            free(vbufs[i]);
+            freeptr(kbufs[i]);
+            freeptr(vbufs[i]);
           }
           unum = 0;
         }
@@ -913,8 +914,8 @@ public:
     for (uint i = 0; i < unum; ++i) {
       assert(kbufs[i] !is null && vbufs[i] !is null);
       tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], DP_DKEEP);
-      free(kbufs[i]);
-      free(vbufs[i]);
+      freeptr(kbufs[i]);
+      freeptr(vbufs[i]);
     }
     tdepot.sync();
     if (munmap(m_map, m_msiz) == -1) raise(DP_EMAP);
@@ -924,16 +925,16 @@ public:
     m_fsiz = tdepot.m_fsiz;
     m_bnum = tdepot.m_bnum;
     m_ioff = 0;
-    for (uint i = 0; i < this.m_fbpsiz; i += 2) {
+    for (uint i = 0; i < m_fbpsiz; i += 2) {
       m_fbpool[i] = m_fbpool[i+1] = -1;
     }
     m_msiz = tdepot.m_msiz;
     m_map = cast(char*)mmap(null, m_msiz, PROT_READ|PROT_WRITE, MAP_SHARED, m_fd, 0);
     if (m_map == MAP_FAILED) raise(DP_EMAP);
-    m_buckets = cast(int*)(m_map+DP_HEADSIZ);
-    string sname = tdepot.m_name;
+    m_buckets = cast(int*)(m_map+QDBMHeader.sizeof);
+    string tempname = tdepot.m_name; // with trailing zero
     tdepot.close();
-    if (unlink(sname.ptr) == -1) raise(DP_EUNLINK);
+    if (unlink(tempname.ptr) == -1) raise(DP_EUNLINK);
   }
 
   /** Get the name of a database.
@@ -942,7 +943,7 @@ public:
    *   If successful, the return value is the pointer to the region of the name of the database,
    *   else, it is `null`.
    *   Because the region of the return value is allocated with the `malloc` call, it should be
-   *   released with the `free` call if it is no longer in use.
+   *   released with the `freeptr` call if it is no longer in use.
    *
    * Throws:
    *   DepotException on various errors
@@ -1074,13 +1075,15 @@ public:
    * Throws:
    *   DepotException on various errors
    */
-  static void remove (const(char)* name) {
+  static void remove (const(char)[] name) {
     import core.stdc.errno : errno, ENOENT;
     import core.sys.posix.sys.stat : lstat, stat_t;
     import core.sys.posix.unistd : unlink;
-    assert(name !is null);
+    import std.string : toStringz;
     stat_t sbuf;
-    if (lstat(name, &sbuf) == -1) {
+    assert(name.length);
+    auto namez = name.toStringz;
+    if (lstat(namez, &sbuf) == -1) {
       if (errno != ENOENT) straise(DP_ESTAT);
       // no file
       return;
@@ -1089,7 +1092,7 @@ public:
     auto depot = new Depot(name, DP_OWRITER|DP_OTRUNC);
     delete depot;
     // remove file
-    if (unlink(name) == -1) {
+    if (unlink(namez) == -1) {
       if (errno != ENOENT) straise(DP_EUNLINK);
       // no file
     }
@@ -1109,39 +1112,34 @@ public:
    * Throws:
    *   DepotException on various errors
    */
-  bool repair (const(char)* name) {
-    import core.stdc.stdlib : free, malloc;
-    import core.stdc.string : strlen;
+  bool repair (const(char)[] name) {
     import core.sys.posix.fcntl : open, O_RDWR;
     import core.sys.posix.sys.stat : lstat, stat_t;
     import core.sys.posix.unistd : close, ftruncate, unlink;
     Depot tdepot;
-    char[DP_HEADSIZ] dbhead;
-    char* tname, kbuf, vbuf;
+    QDBMHeader dbhead;
+    char* kbuf, vbuf;
     int[DP_RHNUM] head;
     int fd, flags, bnum, tbnum, rsiz, ksiz, vsiz;
     usize off;
     long fsiz;
     stat_t sbuf;
-    assert(name !is null);
-    if (lstat(name, &sbuf) == -1) raise(DP_ESTAT);
-    fsiz = sbuf.st_size;
-    if ((fd = open(name, O_RDWR, DP_FILEMODE)) == -1) raise(DP_EOPEN);
-    scope(exit) if (fd >= 0) close(fd);
-    fdseekread(fd, 0, dbhead[]);
-    flags = *cast(int *)(dbhead.ptr+DP_FLAGSOFF);
-    bnum = *cast(int *)(dbhead.ptr+DP_BNUMOFF);
-    tbnum = *cast(int *)(dbhead.ptr+DP_RNUMOFF)*2;
-    if (tbnum < DP_DEFBNUM) tbnum = DP_DEFBNUM;
-    tname = cast(char*)malloc(strlen(name)+DP_TMPFSUF.length+1);
-    if (tname is null) raise(DP_EALLOC);
-    scope(exit) free(tname);
+    assert(name.length);
     {
-      import core.stdc.stdio : sprintf;
-      sprintf(tname, "%s%s", name, DP_TMPFSUF.ptr);
+      import std.string : toStringz;
+      auto namez = name.toStringz;
+      if (lstat(namez, &sbuf) == -1) raise(DP_ESTAT);
+      fsiz = sbuf.st_size;
+      if ((fd = open(namez, O_RDWR, DP_FILEMODE)) == -1) raise(DP_EOPEN);
     }
-    tdepot = new Depot(tname, DP_OWRITER|DP_OCREAT|DP_OTRUNC, tbnum);
-    off = DP_HEADSIZ+bnum*int.sizeof;
+    scope(exit) if (fd >= 0) close(fd);
+    fdseekread(fd, 0, (&dbhead)[0..1]);
+    flags = dbhead.flags;
+    bnum = dbhead.nbuckets;
+    tbnum = dbhead.nrecords*2;
+    if (tbnum < DP_DEFBNUM) tbnum = DP_DEFBNUM;
+    tdepot = new Depot(name~DP_TMPFSUF, DP_OWRITER|DP_OCREAT|DP_OTRUNC, tbnum);
+    off = QDBMHeader.sizeof+bnum*int.sizeof;
     bool err = false;
     while (off < fsiz) {
       try {
@@ -1158,6 +1156,7 @@ public:
       ksiz = head.ptr[DP_RHIKSIZ];
       vsiz = head.ptr[DP_RHIVSIZ];
       if (ksiz >= 0 && vsiz >= 0) {
+        import core.stdc.stdlib : malloc;
         kbuf = cast(char*)malloc(ksiz+1);
         vbuf = cast(char*)malloc(vsiz+1);
         if (kbuf !is null && vbuf !is null) {
@@ -1172,8 +1171,8 @@ public:
           //if (!err) raise(DP_EALLOC);
           err = true;
         }
-        if (vbuf !is null) free(vbuf);
-        if (kbuf !is null) free(kbuf);
+        if (vbuf !is null) freeptr(vbuf);
+        if (kbuf !is null) freeptr(kbuf);
       } else {
         //if (!err) raise(DP_EBROKEN);
         err = true;
@@ -1192,6 +1191,7 @@ public:
       //if (!err) raise(DP_ETRUNC);
       err = true;
     }
+    auto tempname = tdepot.m_name; // with trailing zero
     try {
       fcopy(fd, 0, tdepot.m_fd, 0);
       tdepot.close();
@@ -1203,7 +1203,7 @@ public:
       err = true;
     }
     fd = -1;
-    if (unlink(tname) == -1) {
+    if (unlink(tempname.ptr) == -1) {
       //if (!err) raise(DP_EUNLINK);
       err = true;
     }
@@ -1302,8 +1302,7 @@ public:
     import core.sys.posix.sys.mman : msync, MS_SYNC;
     checkOpened();
     if (!m_wmode) raise(DP_EMODE);
-    *(cast(int*)(m_map+DP_FSIZOFF)) = cast(int)m_fsiz;
-    *(cast(int*)(m_map+DP_RNUMOFF)) = m_rnum;
+    updateHeader();
     if (msync(m_map, m_msiz, MS_SYNC) == -1) {
       m_fatal = true;
       raise(DP_EMAP);
@@ -1318,11 +1317,10 @@ public:
   void memflush () {
     checkOpened();
     if (!m_wmode) raise(DP_EMODE);
-    *(cast(int*)(m_map+DP_FSIZOFF)) = cast(int)m_fsiz;
-    *(cast(int*)(m_map+DP_RNUMOFF)) = m_rnum;
+    updateHeader();
     // there is no mflush() call
     version(none) {
-      if (mflush(this.m_map, this.m_msiz, MS_SYNC) == -1) {
+      if (mflush(m_map, m_msiz, MS_SYNC) == -1) {
         m_fatal = true;
         raise(DP_EMAP);
       }
@@ -1338,11 +1336,9 @@ public:
    *   DepotException on various errors
    */
   @property int flags () {
-    import core.stdc.string : memcpy;
-    int res;
     checkOpened();
-    memcpy(&res, m_map+DP_FLAGSOFF, int.sizeof);
-    return res;
+    auto hdr = cast(QDBMHeader*)m_map;
+    return hdr.flags;
   }
 
   /** Set flags of a database.
@@ -1357,10 +1353,10 @@ public:
    *   DepotException on various errors
    */
   @property void flags (int v) {
-    import core.stdc.string : memcpy;
     checkOpened();
     if (!m_wmode) raise(DP_EMODE);
-    memcpy(m_map+DP_FLAGSOFF, &v, int.sizeof);
+    auto hdr = cast(QDBMHeader*)m_map;
+    hdr.flags = v;
   }
 
 private:
@@ -1384,6 +1380,12 @@ private:
     int res = 19780211;
     foreach_reverse (immutable bt; cast(const(ubyte)[])kbuf) res = res*37+bt;
     return (res*43321879)&int.max;
+  }
+
+  void updateHeader () @trusted nothrow @nogc {
+    auto hdr = cast(QDBMHeader*)m_map;
+    hdr.filesize = cast(int)m_fsiz;
+    hdr.nrecords = m_rnum;
   }
 
   /* Lock a file descriptor.
@@ -1523,8 +1525,8 @@ private:
    *   DepotException on various errors
    */
   static void fdseekread (int fd, long off, void[] buf) {
-    import core.sys.posix.unistd : lseek;
     import core.stdc.stdio : SEEK_SET;
+    import core.sys.posix.unistd : lseek;
     assert(fd >= 0 && off >= 0);
     if (lseek(fd, off, SEEK_SET) != off) straise(DP_ESEEK);
     if (fdread(fd, buf) != buf.length) straise(DP_EREAD);
@@ -1613,12 +1615,12 @@ private:
    *   DepotException on various errors
    */
   void rechead (long off, int[] head, void[] ebuf, bool* eep) {
-    import core.stdc.string : memcpy;
     assert(off >= 0 && head.length >= DP_RHNUM);
     if (eep !is null) *eep = false;
     if (off < 0 || off > m_fsiz) raise(DP_EBROKEN);
     scope(failure) m_fatal = true; // any failure is fatal here
     if (ebuf.length >= DP_ENTBUFSIZ && off < m_fsiz-DP_ENTBUFSIZ) {
+      import core.stdc.string : memcpy;
       if (eep !is null) *eep = true;
       fdseekread(m_fd, off, ebuf[0..DP_ENTBUFSIZ]);
       memcpy(head.ptr, ebuf.ptr, DP_RHNUM*int.sizeof);
@@ -1643,13 +1645,13 @@ private:
    */
   char* reckey (long off, in int[] head) {
     //TODO: return slice instead of pointer?
-    import core.stdc.stdlib : free, malloc;
+    import core.stdc.stdlib : malloc;
     char* kbuf;
     assert(off >= 0 && head.length >= DP_RHNUM);
     int ksiz = head.ptr[DP_RHIKSIZ];
     kbuf = cast(char*)malloc(ksiz+1);
     if (kbuf is null) raise(DP_EALLOC);
-    scope(failure) free(kbuf);
+    scope(failure) freeptr(kbuf);
     fdseekread(m_fd, off+DP_RHNUM*int.sizeof, kbuf[0..ksiz]);
     kbuf[ksiz] = '\0';
     return kbuf;
@@ -1671,7 +1673,7 @@ private:
    */
   char* recval (long off, int[] head, uint start=0, uint max=uint.max) {
     //TODO: return slice instead of pointer?
-    import core.stdc.stdlib : free, malloc;
+    import core.stdc.stdlib : malloc;
     char* vbuf;
     uint vsiz;
     assert(off >= 0 && head.length >= DP_RHNUM);
@@ -1683,7 +1685,7 @@ private:
     }
     vbuf = cast(char*)malloc(vsiz+1);
     if (vbuf is null) { m_fatal = true; raise(DP_EALLOC); }
-    scope(failure) { m_fatal = true; free(vbuf); }
+    scope(failure) { m_fatal = true; freeptr(vbuf); }
     fdseekread(m_fd, off+DP_RHNUM*int.sizeof+head.ptr[DP_RHIKSIZ]+start, vbuf[0..vsiz]);
     vbuf[vsiz] = '\0';
     return vbuf;
@@ -1753,7 +1755,6 @@ private:
   bool recsearch (const(void)[] kbuf, int hash, int* bip, int* offp, int* entp,
                   int[] head, void[] ebuf, bool* eep, Flag!"delhit" delhit=No.delhit)
   {
-    import core.stdc.stdlib : free;
     usize off, entoff;
     int thash, kcmp;
     char[DP_STKBUFSIZ] stkey;
@@ -1784,7 +1785,7 @@ private:
         } else if (head.ptr[DP_RHIKSIZ] > DP_STKBUFSIZ) {
           if ((tkey = reckey(off, head)) is null) raise(DP_EFATAL);
           kcmp = keycmp(kbuf, tkey[0..head.ptr[DP_RHIKSIZ]]);
-          free(tkey);
+          freeptr(tkey);
         } else {
           try {
             fdseekread(m_fd, off+DP_RHNUM*int.sizeof, stkey[0..head.ptr[DP_RHIKSIZ]]);
@@ -1831,7 +1832,6 @@ private:
    *   DepotException on various errors
    */
   void recrewrite (long off, int rsiz, const(void)[] kbuf, const(void)[] vbuf, int hash, int left, int right) {
-    import core.stdc.string : memcpy;
     char[DP_WRTBUFSIZ] ebuf;
     int[DP_RHNUM] head;
     int hoff, koff, voff, mi, min, size;
@@ -1852,6 +1852,7 @@ private:
       rsiz = 0;
     }
     if (asiz <= DP_WRTBUFSIZ) {
+      import core.stdc.string : memcpy;
       memcpy(ebuf.ptr, head.ptr, head.sizeof);
       memcpy(ebuf.ptr+head.sizeof, kbuf.ptr, kbuf.length);
       memcpy(ebuf.ptr+head.sizeof+kbuf.length, vbuf.ptr, vbuf.length);
@@ -1914,8 +1915,6 @@ private:
    *   DepotException on various errors
    */
   int recappend (const(void)[] kbuf, const(void)[] vbuf, int hash, int left, int right) {
-    import core.stdc.string : memcpy, memset;
-    import core.stdc.stdlib : free, malloc;
     char[DP_WRTBUFSIZ] ebuf;
     int[DP_RHNUM] head;
     usize asiz, psiz;
@@ -1931,15 +1930,18 @@ private:
     asiz = head.sizeof+kbuf.length+vbuf.length+psiz;
     off = m_fsiz;
     if (asiz <= DP_WRTBUFSIZ) {
+      import core.stdc.string : memcpy, memset;
       memcpy(ebuf.ptr, head.ptr, head.sizeof);
       memcpy(ebuf.ptr+head.sizeof, kbuf.ptr, kbuf.length);
       memcpy(ebuf.ptr+head.sizeof+kbuf.length, vbuf.ptr, vbuf.length);
       memset(ebuf.ptr+head.sizeof+kbuf.length+vbuf.length, 0, psiz);
       fdseekwrite(m_fd, off, ebuf[0..asiz]);
     } else {
+      import core.stdc.stdlib : malloc;
+      import core.stdc.string : memcpy, memset;
       auto hbuf = cast(char*)malloc(asiz);
       if (hbuf is null) raise(DP_EALLOC);
-      scope(exit) free(hbuf);
+      scope(exit) freeptr(hbuf);
       memcpy(hbuf, head.ptr, head.sizeof);
       memcpy(hbuf+head.sizeof, kbuf.ptr, kbuf.length);
       memcpy(hbuf+head.sizeof+kbuf.length, vbuf.ptr, vbuf.length);
@@ -1964,7 +1966,7 @@ private:
   void recover (long off, int[] head, const(void)[] vbuf, Flag!"catmode" catmode) {
     assert(off >= 0 && head.length >= DP_RHNUM);
     for (uint i = 0; i < m_fbpsiz; i += 2) {
-      if (this.m_fbpool[i] == off) {
+      if (m_fbpool[i] == off) {
         m_fbpool[i] = m_fbpool[i+1] = -1;
         break;
       }
