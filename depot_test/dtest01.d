@@ -21,7 +21,7 @@ void main (string[] args) {
 
     if (args[1] == "put") {
       if (args.length != 4) fatal("put <name> <phone>");
-      db.put(args[2], args[3], Depot.DP_DOVER);
+      db.put(args[2], args[3], Depot.WMode.OVER);
     } else if (args[1] == "get") {
       if (args.length != 3) fatal("get <name>");
       auto rs = db.getwb(buf[], args[2]);

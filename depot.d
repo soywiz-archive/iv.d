@@ -228,10 +228,10 @@ public:
   }
 
   /// enumeration for write modes
-  enum {
-    DP_DOVER, /// overwrite an existing value
-    DP_DKEEP, /// keep an existing value
-    DP_DCAT,  /// concatenate values
+  enum WMode {
+    OVER, /// overwrite an existing value
+    KEEP, /// keep an existing value
+    CAT,  /// concatenate values
   }
 
 final:
@@ -433,14 +433,14 @@ public:
    *   kbuf = the pointer to the region of a key
    *   vbuf = the pointer to the region of a value
    *   dmode = behavior when the key overlaps, by the following values:
-   *           `DP_DOVER`, which means the specified value overwrites the existing one,
-   *           `DP_DKEEP`, which means the existing value is kept,
-   *           `DP_DCAT`, which means the specified value is concatenated at the end of the existing value.
+   *           `WMode.OVER`, which means the specified value overwrites the existing one,
+   *           `WMode.KEEP`, which means the existing value is kept,
+   *           `WMode.CAT`, which means the specified value is concatenated at the end of the existing value.
    *
    * Throws:
    *   DepotException on various errors
    */
-  void put (const(void)[] kbuf, const(void)[] vbuf, int dmode=DP_DOVER) {
+  void put (const(void)[] kbuf, const(void)[] vbuf, WMode dmode=WMode.OVER) {
     RecordHeader head, next;
     int hash, bi, off, entoff, newoff, fdel, mroff, mrsiz, mi, min;
     usize rsiz, nsiz;
@@ -453,14 +453,14 @@ public:
     if (recsearch(kbuf, hash, &bi, &off, &entoff, head, ebuf[], &ee, Yes.delhit)) {
       // record found
       fdel = head.flags&DP_RECFDEL;
-      if (dmode == DP_DKEEP && !fdel) raise(Error.KEEP);
+      if (dmode == WMode.KEEP && !fdel) raise(Error.KEEP);
       if (fdel) {
         head.psiz += head.vsiz;
         head.vsiz = 0;
       }
       rsiz = head.recsize;
       nsiz = RecordHeader.sizeof+kbuf.length+vbuf.length;
-      if (dmode == DP_DCAT) nsiz += head.vsiz;
+      if (dmode == WMode.CAT) nsiz += head.vsiz;
       if (off+rsiz >= m_fsiz) {
         if (rsiz < nsiz) {
           head.psiz += nsiz-rsiz;
@@ -481,11 +481,11 @@ public:
         }
       }
       if (nsiz <= rsiz) {
-        recover(off, head, vbuf, (dmode == DP_DCAT ? Yes.catmode : No.catmode));
+        recover(off, head, vbuf, (dmode == WMode.CAT ? Yes.catmode : No.catmode));
       } else {
         tval = null;
         scope(failure) { m_fatal = true; freeptr(tval); }
-        if (dmode == DP_DCAT) {
+        if (dmode == WMode.CAT) {
           import core.stdc.string : memcpy;
           if (ee && RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
             import core.stdc.stdlib : malloc;
@@ -922,7 +922,7 @@ public:
         if (unum >= DP_OPTRUNIT) {
           for (uint i = 0; i < unum; ++i) {
             assert(kbufs[i] !is null && vbufs[i] !is null);
-            tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], DP_DKEEP);
+            tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], WMode.KEEP);
             freeptr(kbufs[i]);
             freeptr(vbufs[i]);
           }
@@ -933,7 +933,7 @@ public:
     }
     for (uint i = 0; i < unum; ++i) {
       assert(kbufs[i] !is null && vbufs[i] !is null);
-      tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], DP_DKEEP);
+      tdepot.put(kbufs[i][0..ksizs[i]], vbufs[i][0..vsizs[i]], WMode.KEEP);
       freeptr(kbufs[i]);
       freeptr(vbufs[i]);
     }
@@ -1183,7 +1183,7 @@ public:
           try {
             fdseekread(fd, off+RecordHeader.sizeof, kbuf[0..ksiz]);
             fdseekread(fd, off+RecordHeader.sizeof+ksiz, vbuf[0..vsiz]);
-            tdepot.put(kbuf[0..ksiz], vbuf[0..vsiz], DP_DKEEP);
+            tdepot.put(kbuf[0..ksiz], vbuf[0..vsiz], WMode.KEEP);
           } catch (Exception) {
             err = true;
           }
