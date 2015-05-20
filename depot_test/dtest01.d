@@ -16,7 +16,7 @@ void main (string[] args) {
   if (args.length < 2) fatal("wut?");
 
   try {
-    auto db = new Depot("zphones.qdbm", Depot.DP_OWRITER|Depot.DP_OCREAT);
+    auto db = new Depot("zphones.qdbm", Depot.WRITER|Depot.CREAT);
     scope(exit) delete db;
 
     if (args[1] == "put") {

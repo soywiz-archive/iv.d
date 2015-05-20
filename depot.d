@@ -84,7 +84,7 @@ public final class Depot {
   enum QDBM_VERSION = "1.8.78"; /// library version
   enum QDBM_LIBVER = 1414;
 
-  this (const(char)[] name, int omode, int bnum=-1) { open(name, omode, bnum); }
+  this (const(char)[] name, int omode=READER, int bnum=-1) { open(name, omode, bnum); }
   ~this () { close(); }
 
 private:
@@ -218,13 +218,13 @@ public:
 
   /// enumeration for open modes
   enum {
-    DP_OREADER = 1<<0, /// open as a reader
-    DP_OWRITER = 1<<1, /// open as a writer
-    DP_OCREAT  = 1<<2, /// a writer creating
-    DP_OTRUNC  = 1<<3, /// a writer truncating
-    DP_ONOLCK  = 1<<4, /// open without locking
-    DP_OLCKNB  = 1<<5, /// lock without blocking
-    DP_OSPARSE = 1<<6, /// create as a sparse file
+    READER = 1<<0, /// open as a reader
+    WRITER = 1<<1, /// open as a writer
+    CREAT  = 1<<2, /// a writer creating
+    TRUNC  = 1<<3, /// a writer truncating
+    NOLCK  = 1<<4, /// open without locking
+    LCKNB  = 1<<5, /// lock without blocking
+    SPARSE = 1<<6, /// create as a sparse file
   }
 
   /// enumeration for write modes
@@ -265,18 +265,18 @@ public:
    *
    *  While connecting as a writer, an exclusive lock is invoked to the database file.
    *  While connecting as a reader, a shared lock is invoked to the database file. The thread
-   *  blocks until the lock is achieved. If `DP_ONOLCK` is used, the application is responsible
+   *  blocks until the lock is achieved. If `NOLCK` is used, the application is responsible
    *  for exclusion control.
    *
    * Params:
    *   name = the name of a database file
-   *   omode = specifies the connection mode: `DP_OWRITER` as a writer, `DP_OREADER` as a reader.
-   *    If the mode is `DP_OWRITER`, the following may be added by bitwise or: `DP_OCREAT`, which
-   *    means it creates a new database if not exist, `DP_OTRUNC`, which means it creates a new
-   *    database regardless if one exists.  Both of `DP_OREADER` and `DP_OWRITER` can be added to by
-   *    bitwise or: `DP_ONOLCK`, which means it opens a database file without file locking, or
-   *    `DP_OLCKNB`, which means locking is performed without blocking.  `DP_OCREAT` can be added to
-   *    by bitwise or: `DP_OSPARSE`, which means it creates a database file as a sparse file.
+   *   omode = specifies the connection mode: `WRITER` as a writer, `READER` as a reader.
+   *    If the mode is `WRITER`, the following may be added by bitwise or: `CREAT`, which
+   *    means it creates a new database if not exist, `TRUNC`, which means it creates a new
+   *    database regardless if one exists.  Both of `READER` and `WRITER` can be added to by
+   *    bitwise or: `NOLCK`, which means it opens a database file without file locking, or
+   *    `LCKNB`, which means locking is performed without blocking.  `CREAT` can be added to
+   *    by bitwise or: `SPARSE`, which means it creates a database file as a sparse file.
    *   bnum = the number of elements of the bucket array.
    *    If it is not more than 0, the default value is specified.  The size of a bucket array is
    *    determined on creating, and can not be changed except for by optimization of the database.
@@ -287,7 +287,7 @@ public:
    * Throws:
    *   DepotException on various errors
    */
-  void open (const(char)[] name, int omode, int bnum) {
+  void open (const(char)[] name, int omode=READER, int bnum=-1) {
     import core.sys.posix.fcntl : open, O_CREAT, O_RDONLY, O_RDWR;
     import core.sys.posix.sys.mman : mmap, munmap, MAP_FAILED, PROT_READ, PROT_WRITE, MAP_SHARED;
     import core.sys.posix.sys.stat : fstat, lstat, S_ISREG, stat_t;
@@ -313,21 +313,21 @@ public:
       namez[$-1] = 0;
     }
     mode = O_RDONLY;
-    if (omode&DP_OWRITER) {
+    if (omode&WRITER) {
       mode = O_RDWR;
-      if (omode&DP_OCREAT) mode |= O_CREAT;
+      if (omode&CREAT) mode |= O_CREAT;
     }
     if ((fd = open(namez.ptr, mode, DP_FILEMODE)) == -1) raise(Error.OPEN);
     scope(failure) close(fd);
-    if ((omode&DP_ONOLCK) == 0) fdlock(fd, omode&DP_OWRITER, omode&DP_OLCKNB);
-    if ((omode&DP_OWRITER) && (omode&DP_OTRUNC)) {
+    if ((omode&NOLCK) == 0) fdlock(fd, omode&WRITER, omode&LCKNB);
+    if ((omode&WRITER) && (omode&TRUNC)) {
       if (ftruncate(fd, 0) == -1) raise(Error.TRUNC);
     }
     if (fstat(fd, &sbuf) == -1 || !S_ISREG(sbuf.st_mode) || (sbuf.st_ino == 0 && lstat(namez.ptr, &sbuf) == -1)) raise(Error.STAT);
     inode = sbuf.st_ino;
     mtime = sbuf.st_mtime;
     fsiz = sbuf.st_size;
-    if ((omode&DP_OWRITER) && fsiz == 0) {
+    if ((omode&WRITER) && fsiz == 0) {
       hbuf.signature[] = 0;
       hbuf.versionstr[] = 0;
       hbuf.signature[0..DP_MAGIC.length] = DP_MAGIC[];
@@ -341,7 +341,7 @@ public:
       fsiz = hbuf.sizeof+bnum*int.sizeof;
       hbuf.filesize = cast(int)fsiz;
       fdseekwrite(fd, 0, (&hbuf)[0..1]);
-      if (omode&DP_OSPARSE) {
+      if (omode&SPARSE) {
         ubyte c = 0;
         fdseekwrite(fd, fsiz-1, (&c)[0..1]);
       } else {
@@ -361,13 +361,13 @@ public:
     } catch (Exception) {
       raise(Error.BROKEN);
     }
-    //k8: the original code checks header only if ((omode&DP_ONOLCK) == 0); why?
+    //k8: the original code checks header only if ((omode&NOLCK) == 0); why?
     if (hbuf.signature[0..DP_MAGIC.length] != DP_MAGIC) raise(Error.BROKEN);
     if (hbuf.filesize != fsiz) raise(Error.BROKEN);
     bnum = hbuf.nbuckets;
     if (bnum < 1 || hbuf.nrecords < 0 || fsiz < QDBMHeader.sizeof+bnum*int.sizeof) raise(Error.BROKEN);
     msiz = QDBMHeader.sizeof+bnum*int.sizeof;
-    map = cast(char*)mmap(null, msiz, PROT_READ|(mode&DP_OWRITER ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
+    map = cast(char*)mmap(null, msiz, PROT_READ|(mode&WRITER ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
     if (map == MAP_FAILED) raise(Error.MAP);
     scope(failure) munmap(map, msiz);
     fbpool = null;
@@ -380,7 +380,7 @@ public:
       import std.exception : assumeUnique;
       m_name = namez[0..$-1].assumeUnique;
     }
-    m_wmode = (mode&DP_OWRITER) != 0;
+    m_wmode = (mode&WRITER) != 0;
     m_inode = inode;
     m_mtime = mtime;
     m_fd = fd;
@@ -886,7 +886,7 @@ public:
       bnum = cast(int)(m_rnum*(1.0/DP_OPTBLOAD))+1;
       if (bnum < DP_DEFBNUM/2) bnum = DP_DEFBNUM/2;
     }
-    tdepot = new Depot(m_name~DP_TMPFSUF, DP_OWRITER|DP_OCREAT|DP_OTRUNC, bnum);
+    tdepot = new Depot(m_name~DP_TMPFSUF, WRITER|CREAT|TRUNC, bnum);
     scope(failure) {
       import std.exception : collectException;
       m_fatal = true;
@@ -1109,7 +1109,7 @@ public:
       return;
     }
     //k8:??? try to open the file to check if it's not locked or something
-    auto depot = new Depot(name, DP_OWRITER|DP_OTRUNC);
+    auto depot = new Depot(name, WRITER|TRUNC);
     delete depot;
     // remove file
     if (unlink(namez) == -1) {
@@ -1158,7 +1158,7 @@ public:
     bnum = dbhead.nbuckets;
     tbnum = dbhead.nrecords*2;
     if (tbnum < DP_DEFBNUM) tbnum = DP_DEFBNUM;
-    tdepot = new Depot(name~DP_TMPFSUF, DP_OWRITER|DP_OCREAT|DP_OTRUNC, tbnum);
+    tdepot = new Depot(name~DP_TMPFSUF, WRITER|CREAT|TRUNC, tbnum);
     off = QDBMHeader.sizeof+bnum*int.sizeof;
     bool err = false;
     while (off < fsiz) {
