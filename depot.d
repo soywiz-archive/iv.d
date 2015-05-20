@@ -1781,10 +1781,10 @@ private:
       rechead(off, head, ebuf, eep);
       thash = head.hash2;
       if (hash > thash) {
-        entoff = off+RecordHeader.left.offsetof;
+        entoff = cast(int)(off+RecordHeader.left.offsetof);
         off = head.left;
       } else if (hash < thash) {
-        entoff = off+RecordHeader.right.offsetof;
+        entoff = cast(int)(off+RecordHeader.right.offsetof);
         off = head.right;
       } else {
         if (*eep && RecordHeader.sizeof+head.ksiz <= DP_ENTBUFSIZ) {
@@ -1803,14 +1803,14 @@ private:
           kcmp = keycmp(kbuf, stkey[0..head.ksiz]);
         }
         if (kcmp > 0) {
-          entoff = off+RecordHeader.left.offsetof;
+          entoff = cast(int)(off+RecordHeader.left.offsetof);
           off = head.left;
         } else if (kcmp < 0) {
-          entoff = off+RecordHeader.right.offsetof;
+          entoff = cast(int)(off+RecordHeader.right.offsetof);
           off = head.right;
         } else {
           if (!delhit && (head.flags&DP_RECFDEL)) {
-            entoff = off+RecordHeader.left.offsetof;
+            entoff = cast(int)(off+RecordHeader.left.offsetof);
             off = head.left;
           } else {
             *offp = cast(int)off;
