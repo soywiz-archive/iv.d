@@ -196,7 +196,21 @@ nothrow:
    */
   ubyte[8] resultUB(bool finishIt=false) () {
     import std.bitmanip : nativeToLittleEndian;
+    return nativeToLittleEndian(result!finishIt);
+  }
 
+  /**
+   * Returns the finished SipHash hash as ubyte[8], not ulong.
+   * This also calls `reset` to reset the internal state.
+   */
+  //ubyte[8] finish () { return result!true(); }
+  alias finish = resultUB!true;
+
+  /**
+   * Returns the finished SipHash hash as ubyte[8], not ulong.
+   * This also calls `reset` to reset the internal state.
+   */
+  ulong result(bool finishIt=false) () {
     static if (!finishIt) {
       immutable sv0 = v0;
       immutable sv1 = v1;
@@ -224,65 +238,16 @@ nothrow:
     v2 ^= 0xff;
     foreach (immutable _; 0..D) mixin(SipRound);
 
-    ubyte[8] result = nativeToLittleEndian(v0^v1^v2^v3);
-    static if (finishIt) {
-      reset();
-    } else {
+    static if (!finishIt) {
+      ulong res = v0^v1^v2^v3;
       v0 = sv0;
       v1 = sv1;
       v2 = sv2;
       v3 = sv3;
+      return res;
+    } else {
+      return v0^v1^v2^v3;
     }
-    return result;
-  }
-
-  /**
-   * Returns the finished SipHash hash as ubyte[8], not ulong.
-   * This also calls `reset` to reset the internal state.
-   */
-  //ubyte[8] finish () { return result!true(); }
-  alias finish = resultUB!true;
-
-  /**
-   * Returns the finished SipHash hash as ubyte[8], not ulong.
-   * This also calls `reset` to reset the internal state.
-   */
-  ulong result () {
-    import std.bitmanip : nativeToLittleEndian;
-
-    immutable sv0 = v0;
-    immutable sv1 = v1;
-    immutable sv2 = v2;
-    immutable sv3 = v3;
-
-    // process accumulated data, if any
-    ulong tail = cast(ulong)((processedLength+message[$-1])&0xff)<<56;
-    switch (message[$-1]) {
-      case 7: tail |= cast(ulong)message[6]<<48; goto case 6;
-      case 6: tail |= cast(ulong)message[5]<<40; goto case 5;
-      case 5: tail |= cast(ulong)message[4]<<32; goto case 4;
-      case 4: tail |= cast(ulong)message[3]<<24; goto case 3;
-      case 3: tail |= cast(ulong)message[2]<<16; goto case 2;
-      case 2: tail |= cast(ulong)message[1]<<8; goto case 1;
-      case 1: tail |= cast(ulong)message[0]; break;
-      default: break;
-    }
-
-    v3 ^= tail;
-    foreach (immutable _; 0..C) mixin(SipRound);
-    v0 ^= tail;
-
-    v2 ^= 0xff;
-    foreach (immutable _; 0..D) mixin(SipRound);
-
-    ubyte[8] result = nativeToLittleEndian(v0^v1^v2^v3);
-
-    v0 = sv0;
-    v1 = sv1;
-    v2 = sv2;
-    v3 = sv3;
-
-    return SipHashU8to64LE(result.ptr);
   }
 
   /// very clever hack
