@@ -113,7 +113,7 @@ private:
   } else {
     enum dpbigendian = false;
   }
-  enum DP_MAGICNUMB = "[Depot]\n\f"; // magic number on environments of big endian
+  enum DP_MAGICNUMB = "[DEPOT]\n\f"; // magic number on environments of big endian
   enum DP_MAGICNUML = "[depot]\n\f"; // magic number on environments of little endian
   version(dpbigendian) {
     alias DP_MAGIC = DP_MAGICNUMB;
