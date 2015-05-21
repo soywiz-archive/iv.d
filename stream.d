@@ -920,6 +920,9 @@ private:
       usize root = cast(usize)mem;
       static if (hasIndirections!ST) {
         // ouch, ST has some pointers; register it as gc root and range
+        // note that this approach is very simplictic; we might want to
+        // scan the type for pointers using typeinfo pointer bitmap and
+        // register only pointer containing areas.
         GC.addRoot(cast(void*)root);
         GC.addRange(cast(void*)root, instSize);
         enum isrng = true;
