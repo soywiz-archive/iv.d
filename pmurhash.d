@@ -61,7 +61,7 @@ nothrow:
   void reset (uint seed=0) { accum = totallen = 0; hash = seed; }
 
   /// process data block
-  void put(T) (const(T)[] data) if (T.sizeof == 1) {
+  void put(T) (scope const(T)[] data...) if (T.sizeof == 1) {
     if (data.length == 0) return; // nothing to do
     uint acc = accum;
     uint hh = hash;
