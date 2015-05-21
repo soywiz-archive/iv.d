@@ -260,7 +260,7 @@ class XmlNode {
 
   final @property usize length () const => children.length;
 
-  int opApply (int delegate (ref XmlNode) dg) {
+  int opApply (scope int delegate (ref XmlNode) dg) {
     int result = 0;
     for (int i = 0; i < children.length; ++i) {
       result = dg(children[i]);
