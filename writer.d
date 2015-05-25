@@ -129,7 +129,7 @@ private void wrWriteWidth(char lfill=' ', char rfill=' ')
   // fix width
   if (width == int.min) {
     // no width specified, defaults to visible string width
-    width = cast(int)s.length-stpos;
+    width = cast(int)(s.length-stpos);
     // fuck overflows
     if (width < 0) width = 666;
   }
