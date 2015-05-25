@@ -1066,7 +1066,7 @@ final:
     assert(mEditVarMap.length > 0, "mEditVarMap.length == 0");
     resolve();
     mStackEdCns.length = mStackEdCns.length-1; //mStackEdCns.Pop();
-    int n = mStackEdCns[$-1]; // peek
+    int n = cast(int)mStackEdCns[$-1]; //FIXME(64); peek
     removeEditVarsTo(n);
     // may later want to do more in hore
     return this;
