@@ -462,7 +462,7 @@ private:
 public:
   @property ubyte[] bytes () @safe pure nothrow @nogc => data;
 
-  @property uint size () const @safe pure nothrow @nogc => data.length;
+  @property uint size () const @safe pure nothrow @nogc => cast(uint)data.length; //FIXME: x86_64
   @property uint tell () const @safe pure nothrow @nogc => curpos;
 
   //TODO: check for overflow
@@ -542,7 +542,7 @@ public:
 
   @property const(ubyte)[] bytes () @safe pure nothrow @nogc => data;
 
-  @property uint size () const @safe pure nothrow @nogc => data.length;
+  @property uint size () const @safe pure nothrow @nogc => cast(uint)data.length; //FIXME: x86_64
   @property uint tell () const @safe pure nothrow @nogc => curpos;
 
   //TODO: check for overflow
