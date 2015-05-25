@@ -25,20 +25,20 @@ typedef KeyCode = ubyte;
 /*****************************************************************
  * RESERVED RESOURCE AND CONSTANT DEFINITIONS
  *****************************************************************/
-enum XID None = 0;           /* universal null resource or null atom */
-enum XID ParentRelative = 1; /* background pixmap in CreateWindow and ChangeWindowAttributes */
-enum XID CopyFromParent = 0; /* border pixmap in CreateWindow and ChangeWindowAttributes special VisualID and
-                                special window class passed to CreateWindow */
+enum XID None = cast(XID)0;           /* universal null resource or null atom */
+enum XID ParentRelative = cast(XID)1; /* background pixmap in CreateWindow and ChangeWindowAttributes */
+enum XID CopyFromParent = cast(XID)0; /* border pixmap in CreateWindow and ChangeWindowAttributes special VisualID and
+                                         special window class passed to CreateWindow */
 
-enum Window PointerWindow = 0; /* destination window in SendEvent */
-enum Window InputFocus = 1;    /* destination window in SendEvent */
-enum Window PointerRoot = 1;   /* focus window in SetInputFocus */
-enum Atom AnyPropertyType = 0; /* special Atom, passed to GetProperty */
-enum KeyCode AnyKey = 0;       /* special Key Code, passed to GrabKey */
-enum c_long AnyButton = 0;     /* special Button Code, passed to GrabButton */
-enum XID AllTemporary = 0;     /* special Resource ID passed to KillClient */
-enum Time CurrentTime = 0;     /* special Time */
-enum KeySym NoSymbol = 0;      /* special KeySym */
+enum Window PointerWindow = cast(Window)0; /* destination window in SendEvent */
+enum Window InputFocus = cast(Window)1;    /* destination window in SendEvent */
+enum Window PointerRoot = cast(Window)1;   /* focus window in SetInputFocus */
+enum Atom AnyPropertyType = cast(Atom)0;   /* special Atom, passed to GetProperty */
+enum KeyCode AnyKey = cast(KeyCode)0;      /* special Key Code, passed to GrabKey */
+enum c_long AnyButton = cast(c_long)0;     /* special Button Code, passed to GrabButton */
+enum XID AllTemporary = cast(XID)0;        /* special Resource ID passed to KillClient */
+enum Time CurrentTime = cast(Time)0;       /* special Time */
+enum KeySym NoSymbol = cast(KeySym)0;      /* special KeySym */
 
 /*****************************************************************
  * EVENT DEFINITIONS

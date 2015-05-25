@@ -322,7 +322,7 @@ struct XStandardColormap{
   XID killid; /* added by ICCCM version 1 */
 }
 
-enum XID ReleaseByFreeingColormap = 1; /* for killid field above */
+enum XID ReleaseByFreeingColormap = cast(XID)1; /* for killid field above */
 
 
 /*
