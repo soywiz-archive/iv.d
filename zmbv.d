@@ -424,10 +424,10 @@ final:
       // create the actual frame with compression
       import etc.c.zlib : deflate, Z_OK, Z_SYNC_FLUSH;
       zstream.next_in = work;
-      zstream.avail_in = workUsed;
+      zstream.avail_in = cast(uint)workUsed;
       zstream.total_in = 0;
       zstream.next_out = outbuf+writeDone;
-      zstream.avail_out = outbufSize-writeDone;
+      zstream.avail_out = cast(uint)(outbufSize-writeDone);
       zstream.total_out = 0;
       if (deflate(&zstream, Z_SYNC_FLUSH) != Z_OK) throw new ZMBVError("deflate error"); // the thing that should not be
       ++frameCount;
@@ -620,10 +620,10 @@ final:
     if (mCompression == Compression.ZLib) {
       import etc.c.zlib : inflate, Z_OK, Z_SYNC_FLUSH;
       zstream.next_in = cast(ubyte*)data;
-      zstream.avail_in = size;
+      zstream.avail_in = cast(uint)size;
       zstream.total_in = 0;
       zstream.next_out = work;
-      zstream.avail_out = bufSize;
+      zstream.avail_out = cast(uint)bufSize;
       zstream.total_out = 0;
       if (inflate(&zstream, Z_SYNC_FLUSH/*Z_NO_FLUSH*/) != Z_OK) throw new ZMBVError("can't read inflate stream"); // the thing that should not be
       workUsed = zstream.total_out;
