@@ -646,13 +646,13 @@ void paintFrameDefault () @trusted {
         case VideoFilter.BlackNWhite: blit2xTVBW(); break;
         case VideoFilter.Green: blit2xTVGreen(); break;
       }
-      SDL_UpdateTexture(sdlScr2x, null, vscr2x, vsWidth*2*vscr2x[0].sizeof);
+      SDL_UpdateTexture(sdlScr2x, null, vscr2x, cast(uint)(vsWidth*2*vscr2x[0].sizeof));
       SDL_RenderCopy(sdlRenderer, sdlScr2x, null, null);
     } else {
       // light cases
       if (useFilter == VideoFilter.None) {
         // easiest case
-        SDL_UpdateTexture(sdlScreen, null, vscr, vsWidth*vscr[0].sizeof);
+        SDL_UpdateTexture(sdlScreen, null, vscr, cast(uint)(vsWidth*vscr[0].sizeof));
       } else {
         import core.stdc.string : memcpy;
         final switch (useFilter) {
@@ -660,7 +660,7 @@ void paintFrameDefault () @trusted {
           case VideoFilter.BlackNWhite: blit1xBW(); break;
           case VideoFilter.Green: blit1xGreen(); break;
         }
-        SDL_UpdateTexture(sdlScreen, null, vscr2x, vsWidth*vscr2x[0].sizeof);
+        SDL_UpdateTexture(sdlScreen, null, vscr2x, cast(uint)(vsWidth*vscr2x[0].sizeof));
       }
       SDL_RenderCopy(sdlRenderer, sdlScreen, null, null);
     }
