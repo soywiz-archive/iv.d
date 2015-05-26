@@ -49,13 +49,19 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.exex is aliced;
+module iv.exex /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 mixin template ExceptionCtor() {
-  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
-    super(msg, file, line, next);
+  static if (__VERSION__ > 2067) {
+    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
+      super(msg, file, line, next);
+    }
+  } else {
+    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow {
+      super(msg, file, line, next);
+    }
   }
 }
 
@@ -66,9 +72,9 @@ mixin template ExceptionCtor() {
 enum MyException(string name, string base="Exception") = `class `~name~` : `~base~` { mixin ExceptionCtor; }`;
 
 
-$=>MyException!"IVException";
-$=>MyException!("IVNamedExceptionBase", "IVException");
-$=>MyException!("IVNamedException(string name)", "IVNamedExceptionBase");
+mixin(MyException!"IVException");
+mixin(MyException!("IVNamedExceptionBase", "IVException"));
+mixin(MyException!("IVNamedException(string name)", "IVNamedExceptionBase"));
 
 
 version(test_exex)
