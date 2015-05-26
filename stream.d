@@ -49,29 +49,31 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.stream is aliced;
+module iv.stream /*is aliced*/;
 
 import std.conv : ConvOverflowException;
 import std.traits : isMutable;
 public import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
+version (aliced) {} else { private alias usize = size_t; }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
-class StreamException : Exception {
-  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) => super(msg, file, line, next);
-}
+import iv.exex : MyException, ExceptionCtor;
+
+mixin(MyException!"StreamException");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 enum isReadableStream(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ubyte[1] b;
   auto v = cast(void[])b;
   t.rawRead(v);
 }));
 
 enum isWriteableStream(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ubyte[1] b;
   t.rawWrite(cast(void[])b);
 }));
@@ -81,7 +83,7 @@ enum isRWStream(T) = isReadableStream!T && isWriteableStream!T;
 template isSeekableStream(T) {
   enum isSeekableStream = is(typeof((inout int=0) {
     import core.stdc.stdio : SEEK_END;
-    auto t = T.default;
+    auto t = T.init;
     t.seek(0, SEEK_END);
     ulong pos = t.tell;
   }));
@@ -89,34 +91,34 @@ template isSeekableStream(T) {
 
 // bad name!
 enum isClosableStream(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   t.close();
 }));
 
 // bad name!
 enum streamHasEOF(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   bool n = t.eof;
 }));
 
 enum streamHasSeek(T) = is(typeof((inout int=0) {
   import core.stdc.stdio : SEEK_END;
-  auto t = T.default;
+  auto t = T.init;
   t.seek(0, SEEK_END);
 }));
 
 enum streamHasTell(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ulong pos = t.tell;
 }));
 
 enum streamHasName(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   string n = t.name;
 }));
 
 enum streamHasSize(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ulong pos = t.size;
 }));
 
@@ -307,11 +309,11 @@ if (goodEndianness!es && isReadableStream!TF && __traits(isFloating, TD))
 }
 
 
-void writeNum(TD, string es="LE", T, TF) (auto ref TF fl, T n) @trusted if (__traits(isIntegral, TD)) => writeInt!(TD, es, T, TF)(fl, n);
-void writeNum(TD, string es="LE", T, TF) (auto ref TF fl, T n) @trusted if (__traits(isFloating, TD)) => writeFloat!(TD, es, T, TF)(fl, n);
+void writeNum(TD, string es="LE", T, TF) (auto ref TF fl, T n) @trusted if (__traits(isIntegral, TD)) { writeInt!(TD, es, T, TF)(fl, n); }
+void writeNum(TD, string es="LE", T, TF) (auto ref TF fl, T n) @trusted if (__traits(isFloating, TD)) { writeFloat!(TD, es, T, TF)(fl, n); }
 
-TD readNum(TD, string es="LE", TF) (auto ref TF fl) @trusted if (__traits(isIntegral, TD)) => readInt!(TD, es, TF)(fl);
-TD readNum(TD, string es="LE", TF) (auto ref TF fl) @trusted if (__traits(isFloating, TD)) => readFloat!(TD, es, TF)(fl);
+TD readNum(TD, string es="LE", TF) (auto ref TF fl) @trusted if (__traits(isIntegral, TD)) { return readInt!(TD, es, TF)(fl); }
+TD readNum(TD, string es="LE", TF) (auto ref TF fl) @trusted if (__traits(isFloating, TD)) { return readFloat!(TD, es, TF)(fl); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -460,10 +462,10 @@ private:
   uint curpos;
 
 public:
-  @property ubyte[] bytes () @safe pure nothrow @nogc => data;
+  @property ubyte[] bytes () @safe pure nothrow @nogc { return data; }
 
-  @property uint size () const @safe pure nothrow @nogc => cast(uint)data.length; //FIXME: x86_64
-  @property uint tell () const @safe pure nothrow @nogc => curpos;
+  @property uint size () const @safe pure nothrow @nogc { return cast(uint)data.length; } //FIXME: x86_64
+  @property uint tell () const @safe pure nothrow @nogc { return curpos; }
 
   //TODO: check for overflow
   void seek (long offset, int origin=SEEK_SET) @trusted {
@@ -508,7 +510,7 @@ public:
     }
   }
 
-  @property bool eof () const @trusted pure nothrow @nogc => (curpos >= data.length);
+  @property bool eof () const @trusted pure nothrow @nogc { return (curpos >= data.length); }
 
   void close () @safe pure nothrow @nogc {
     curpos = 0;
@@ -540,10 +542,10 @@ public:
     data = cast(typeof(data))adata;
   }
 
-  @property const(ubyte)[] bytes () @safe pure nothrow @nogc => data;
+  @property const(ubyte)[] bytes () @safe pure nothrow @nogc { return data; }
 
-  @property uint size () const @safe pure nothrow @nogc => cast(uint)data.length; //FIXME: x86_64
-  @property uint tell () const @safe pure nothrow @nogc => curpos;
+  @property uint size () const @safe pure nothrow @nogc { return cast(uint)data.length; } //FIXME: x86_64
+  @property uint tell () const @safe pure nothrow @nogc { return curpos; }
 
   //TODO: check for overflow
   void seek (long offset, int origin=SEEK_SET) @trusted {
@@ -574,7 +576,7 @@ public:
     }
   }
 
-  @property bool eof () const @trusted pure nothrow @nogc => (curpos >= data.length);
+  @property bool eof () const @trusted pure nothrow @nogc { return (curpos >= data.length); }
 
   void close () @safe pure nothrow @nogc {
     curpos = 0;
@@ -867,7 +869,7 @@ private final class PartialStreamDataImpl(ST) : PartialStreamROData {
   }
 
 protected:
-  override void clear () => stream = stream.default;
+  override void clear () { stream = stream.init; }
 
   override void[] read (void[] buf) {
     assert(curpos >= 0 && curpos <= size);
@@ -954,7 +956,7 @@ public:
   }
 
   this (this) @safe nothrow @nogc { if (isOpen) mStData.incRef(); }
-  ~this () => close();
+  ~this () { close(); }
 
   void opAssign() (auto ref PartialStreamRO src) {
     if (isOpen) {
@@ -977,7 +979,7 @@ public:
     }
   }
 
-  @property bool isOpen () const pure @safe nothrow @nogc => (mStData !is null);
+  @property bool isOpen () const pure @safe nothrow @nogc { return (mStData !is null); }
 
   void close () {
     if (isOpen) {
@@ -986,9 +988,9 @@ public:
     }
   }
 
-  @property long stofs () const @safe pure nothrow @nogc => (isOpen ? mStData.start : 0);
-  @property long tell () const @safe pure nothrow @nogc => (isOpen ? mStData.curpos : 0);
-  @property bool eof () const @trusted pure nothrow @nogc => (isOpen ? mStData.curpos >= mStData.size : true);
+  @property long stofs () const @safe pure nothrow @nogc { return (isOpen ? mStData.start : 0); }
+  @property long tell () const @safe pure nothrow @nogc { return (isOpen ? mStData.curpos : 0); }
+  @property bool eof () const @trusted pure nothrow @nogc { return (isOpen ? mStData.curpos >= mStData.size : true); }
 
   //TODO: check for overflow
   void seek (long offset, int origin=SEEK_SET) @trusted {
@@ -1148,14 +1150,14 @@ auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableSt
     // output range part
     static if (wrStream) {
       // `put`
-      void put (in ubyte data) => strm.rawWriteExact((&data)[0..1]);
-      void put (in ubyte[] data...) => strm.rawWriteExact(data);
+      void put (in ubyte data) { strm.rawWriteExact((&data)[0..1]); }
+      void put (in ubyte[] data...) { strm.rawWriteExact(data); }
     }
 
     // input range part
     static if (rdStream) {
       // `empty`
-      @property bool empty () const pure @safe nothrow @nogc => atEof;
+      @property bool empty () const pure @safe nothrow @nogc { return atEof; }
 
       // `length`
       static if (streamHasTell!ST && (streamHasSeek!ST || streamHasSize!ST)) {
@@ -1182,7 +1184,7 @@ auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableSt
       }
 
       // `front`
-      @property ubyte front () const pure @safe nothrow @nogc => curByte[0];
+      @property ubyte front () const pure @safe nothrow @nogc { return curByte[0]; }
 
       // `popFront`
       void popFront() () {
