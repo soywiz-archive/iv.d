@@ -1149,18 +1149,18 @@ auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableSt
     static if (wrStream) {
       // `put`
       void put (in ubyte data) => strm.rawWriteExact((&data)[0..1]);
-      void put (const(ubyte)[] data) => strm.rawWriteExact(data);
+      void put (in ubyte[] data...) => strm.rawWriteExact(data);
     }
 
     // input range part
     static if (rdStream) {
       // `empty`
-      @property bool empty () const => atEof;
+      @property bool empty () const pure @safe nothrow @nogc => atEof;
 
       // `length`
       static if (streamHasTell!ST && (streamHasSeek!ST || streamHasSize!ST)) {
         private enum hasRealLength = true;
-        @property usize length () {
+        @property usize length() () {
           immutable cpos = strm.tell;
           static if (streamHasSize!ST) {
             immutable sz = strm.size;
@@ -1182,21 +1182,18 @@ auto streamAsRange(string rngtype="any", STP) (auto ref STP st) if (isReadableSt
       }
 
       // `front`
-      @property ubyte front () const => curByte[0];
+      @property ubyte front () const pure @safe nothrow @nogc => curByte[0];
 
       // `popFront`
-      void popFront () {
+      void popFront() () {
         curByte[0] = 0;
-        if (!atEof) {
-          auto res = strm.rawRead(curByte[]);
-          if (res.length == 0) atEof = true;
-        }
+        if (!atEof && strm.rawRead(curByte[]).length == 0) atEof = true;
       }
 
       // `opIndex`
       // it's slow and unreliable
       static if ((typeflags&HasI) && streamHasTell!ST && streamHasSeek!ST && hasRealLength) {
-        ubyte opIndex (usize pos) {
+        ubyte opIndex() (usize pos) {
           import core.exception : onRangeError;
           if (pos >= this.length) onRangeError();
           immutable cpos = strm.tell;
