@@ -108,6 +108,6 @@ ulong fasthash32(T) (const(T)[] buf, uint seed=0) @trusted nothrow @nogc if (T.s
 
 
 unittest {
-  static assert(fasthash32("Alice & Miriel"), 0xed6586a5);
-  static assert(fasthash32("Alice & Miriel"), 0xa8ed28359652aedaUL);
+  static assert(fasthash32("Alice & Miriel") == 0xed6586a5);
+  static assert(fasthash64("Alice & Miriel") == 0xa8ed28359652aedaUL);
 }
