@@ -8,7 +8,7 @@
  * This is a D implementation of MurmurHash3_x86_32 (Murmur3A) with support
  * for progressive processing.
  */
-module iv.pmurhash;
+module iv.hash.murhash;
 
 /*-----------------------------------------------------------------------------
 
@@ -40,7 +40,7 @@ on big endian machines, or a byte-by-byte read if the endianess is unknown.
 
 -----------------------------------------------------------------------------*/
 
-public struct PMurHash {
+public struct MurHash {
 private:
   enum C1 = 0xcc9e2d51u;
   enum C2 = 0x1b873593u;
@@ -68,9 +68,9 @@ nothrow:
     auto bytes = cast(const(ubyte)*)data.ptr;
     auto len = data.length;
     static if (len.sizeof > uint.sizeof) {
-      if (len > uint.max) assert(0, "PMurHash: too much data");
+      if (len > uint.max) assert(0, "MurHash: too much data");
     }
-    if (uint.max-totallen < len) assert(0, "PMurHash: too much data"); // overflow
+    if (uint.max-totallen < len) assert(0, "MurHash: too much data"); // overflow
     totallen += len;
     // extract carry count from low 2 bits of accum value
     ubyte n = acc&3;
@@ -142,7 +142,7 @@ nothrow:
   void put(T) (const(T)[] data) if (T.sizeof != 1) { put!ubyte(cast(const(ubyte)[])data); }
 
   /// finalize a hash (i.e. return current result).
-  /// note that you can continue putting data to PMurHash, as this is not destructive
+  /// note that you can continue putting data to MurHash, as this is not destructive
   uint result () const {
     uint acc = accum;
     uint hh = hash;
@@ -166,23 +166,23 @@ nothrow:
 
   /// very clever hack
   static uint opIndex(T) (const(T)[] data, uint seed=0) if (T.sizeof == 1) {
-    auto mur = PMurHash(seed);
+    auto mur = MurHash(seed);
     mur.put(data);
     return mur.result;
   }
 
   /// very clever hack
   static uint opIndex(T) (const(T)[] data, uint seed=0) if (T.sizeof != 1) {
-    return PMurHash.opIndex!ubyte(cast(const(ubyte)[])data);
+    return MurHash.opIndex!ubyte(cast(const(ubyte)[])data);
   }
 }
 
 
 unittest {
   // wow, we can do this in compile time!
-  static assert(PMurHash["Alice & Miriel"] == 0x295db5e7u);
+  static assert(MurHash["Alice & Miriel"] == 0x295db5e7u);
   // and in runtime
-  auto mur = PMurHash();
+  auto mur = MurHash();
   mur.put("Alice & Miriel");
   assert(mur.result == 0x295db5e7u);
 }
