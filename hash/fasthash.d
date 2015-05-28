@@ -43,10 +43,10 @@ private:
   enum M = 0x880355f21e6d1965UL;
 
 private:
-  ulong hash; // current value; MUST BE FIRST
+  ulong seed; // initial seed value; MUST BE FIRST
+  ulong hash; // current value
   ulong accum; // we operate 64-bit chunks; high 3 bits of accum used as counter
   ulong totallen;
-  ulong seed;
 
 public:
 @trusted:
