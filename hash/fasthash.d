@@ -190,7 +190,7 @@ nothrow:
  *   buf =  data buffer
  *   seed = the seed
  */
-ulong fastHash64(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc {
+ulong fastHash64(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc if (T.sizeof == 1) {
   auto hh = FastHash(seed);
   hh.put(buf);
   return hh.result64;
@@ -203,7 +203,7 @@ ulong fastHash64(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc {
  *   buf =  data buffer
  *   seed = the seed
  */
-uint fastHash32(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc {
+uint fastHash32(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc if (T.sizeof == 1) {
   auto hh = FastHash(seed);
   hh.put(buf);
   return hh.result32;
@@ -214,39 +214,13 @@ unittest {
   static assert(fastHash32("Alice & Miriel") == 0x4773e2a3U);
   static assert(fastHash64("Alice & Miriel") == 0xfa02b41e417696c1UL);
 
-  import std.traits : ReturnType;
-  import std.stdio;
+  /*{
+    import std.stdio;
+    writefln("0x%08xU", fastHash32("Alice & Miriel"));
+    writefln("0x%016xUL", fastHash64("Alice & Miriel"));
+  }*/
 
-  void doTest(int sz) (string str, ulong hh) {
-    if (mixin("fastHash"~sz.stringof~"(str)") != hh) {
-      writeln("fastHash", sz, " fucked!");
-      assert(0);
-    }
-    foreach_reverse (immutable len; 0..str.length) {
-      {
-        auto hs = FastHash();
-        hs.put(str[0..len]);
-        foreach (immutable pos; len..str.length) hs.put(str[pos]);
-        auto res = mixin("hs.result"~sz.stringof);
-        if (res != hh) {
-          writeln("FastHash", sz, "(", len, ") fucked!");
-          assert(0);
-        }
-      }
-      {
-        auto h0 = mixin("fastHash"~sz.stringof~"(str[0..len])");
-        auto h1 = FastHash();
-        foreach (immutable pos; 0..len) h1.put(str[pos]);
-        if (mixin("h1.result"~sz.stringof) != h0) {
-          writeln("FastHashByOne", sz, "(", len, ") fucked!");
-          assert(0);
-        }
-      }
-    }
-  }
-
-  writefln("0x%08xU", fastHash32("Alice & Miriel"));
-  writefln("0x%016xUL", fastHash64("Alice & Miriel"));
-  doTest!32("Alice & Miriel", 0x4773e2a3U);
-  doTest!64("Alice & Miriel", 0xfa02b41e417696c1UL);
+  mixin(import("test.d"));
+  doTest!(32, "FastHash")("Alice & Miriel", 0x4773e2a3U);
+  doTest!(64, "FastHash")("Alice & Miriel", 0xfa02b41e417696c1UL);
 }
