@@ -53,6 +53,10 @@ module iv.hash.joaathash;
 // Bob Jenkins' One-At-A-Time hash function
 
 
+// this seems to give worser results
+//version = JoaatMixLength;
+
+
 /**
  * 32-bit implementation of joaat
  *
@@ -68,7 +72,11 @@ public:
 private:
   uint seed; // initial seed value; MUST BE FIRST
   uint hash; // current value
-  ulong totallen;
+  version(JoaatMixLength) {
+    ulong totallen;
+  } else {
+    ubyte totallen;
+  }
 
 public:
 @trusted:
@@ -89,8 +97,12 @@ nothrow:
     if (totallen == 0) hash = seed;
     auto bytes = cast(const(ubyte)*)data.ptr;
     auto len = data.length;
-    if (totallen+len < totallen) assert(0, "FastHash: too much data"); // overflow
-    totallen += len;
+    version(JoaatMixLength) {
+      if (totallen+len < totallen) assert(0, "FastHash: too much data"); // overflow
+      totallen += len;
+    } else {
+      totallen = 1;
+    }
     auto h = hash;
     foreach (immutable _; 0..len) {
       h += *bytes++;
@@ -105,12 +117,14 @@ nothrow:
   @property uint result32 () const {
     uint h = hash;
     if (totallen == 0) h = seed;
-    ulong len = totallen;
-    while (len != 0) {
-      h += len&0xff;
-      h += (h<<10);
-      h ^= (h>>6);
-      len >>= 8;
+    version(JoaatMixLength) {
+      ulong len = totallen;
+      while (len != 0) {
+        h += len&0xff;
+        h += (h<<10);
+        h ^= (h>>6);
+        len >>= 8;
+      }
     }
     h += (h<<3);
     h ^= (h>>11);
@@ -137,7 +151,12 @@ uint joaatHash32(T) (const(T)[] buf, uint seed=0) @trusted nothrow @nogc if (T.s
 
 
 unittest {
-  static assert(joaatHash32("Alice & Miriel") == 0x17fa5136U);
+  version(JoaatMixLength) {
+    enum HashValue = 0x17fa5136U;
+  } else {
+    enum HashValue = 0xb8519b5bU;
+  }
+  static assert(joaatHash32("Alice & Miriel") == HashValue);
 
   /*{
     import std.stdio;
@@ -145,5 +164,5 @@ unittest {
   }*/
 
   mixin(import("test.d"));
-  doTest!(32, "JoaatHash")("Alice & Miriel", 0x17fa5136U);
+  doTest!(32, "JoaatHash")("Alice & Miriel", HashValue);
 }
