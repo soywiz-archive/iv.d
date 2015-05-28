@@ -41,13 +41,18 @@ on big endian machines, or a byte-by-byte read if the endianess is unknown.
 -----------------------------------------------------------------------------*/
 
 public struct MurHash {
+public:
+  enum has64bit = false;
+  enum has32bit = true;
+
 private:
   enum C1 = 0xcc9e2d51u;
   enum C2 = 0x1b873593u;
 
 private:
-  uint accum; // we operate 32-bit chunks; low 2 bits of accum used as counter
+  uint seed; // initial seed value; MUST BE FIRST
   uint hash; // current value
+  uint accum; // we operate 32-bit chunks; low 2 bits of accum used as counter
   uint totallen; // to match the original Murmur3A
 
 public:
@@ -55,16 +60,17 @@ public:
 nothrow:
 @nogc:
   /// construct state with seed
-  this (uint seed) { hash = seed; }
+  this (uint aseed) { hash = seed = aseed; }
 
   /// reset state
-  void reset (uint seed=0) { accum = totallen = 0; hash = seed; }
+  void reset () { accum = totallen = 0; hash = seed; }
+
+  /// reset state
+  void reset (uint aseed) { accum = totallen = 0; hash = seed = aseed; }
 
   /// process data block
   void put(T) (scope const(T)[] data...) if (T.sizeof == 1) {
     if (data.length == 0) return; // nothing to do
-    uint acc = accum;
-    uint hh = hash;
     auto bytes = cast(const(ubyte)*)data.ptr;
     auto len = data.length;
     static if (len.sizeof > uint.sizeof) {
@@ -72,6 +78,8 @@ nothrow:
     }
     if (uint.max-totallen < len) assert(0, "MurHash: too much data"); // overflow
     totallen += len;
+    auto acc = accum;
+    auto hh = hash;
     // extract carry count from low 2 bits of accum value
     ubyte n = acc&3;
     // consume any carry bytes
@@ -138,12 +146,9 @@ nothrow:
     accum = acc;
   }
 
-  /// process data block
-  void put(T) (const(T)[] data) if (T.sizeof != 1) { put!ubyte(cast(const(ubyte)[])data); }
-
   /// finalize a hash (i.e. return current result).
-  /// note that you can continue putting data to MurHash, as this is not destructive
-  uint result () const {
+  /// note that you can continue putting data, as this is not destructive
+  @property uint result32 () const {
     uint acc = accum;
     uint hh = hash;
     immutable n = acc&3;
@@ -164,25 +169,33 @@ nothrow:
     return hh;
   }
 
-  /// very clever hack
-  static uint opIndex(T) (const(T)[] data, uint seed=0) if (T.sizeof == 1) {
-    auto mur = MurHash(seed);
-    mur.put(data);
-    return mur.result;
-  }
+  uint finish32 () { auto res = result32; reset(); return res; }
+}
 
-  /// very clever hack
-  static uint opIndex(T) (const(T)[] data, uint seed=0) if (T.sizeof != 1) {
-    return MurHash.opIndex!ubyte(cast(const(ubyte)[])data);
-  }
+
+/**
+ * 32-bit implementation of Murmur3
+ *
+ * Params:
+ *   buf =  data buffer
+ *   seed = the seed
+ */
+uint murHash32(T) (const(T)[] buf, uint seed=0) @trusted nothrow @nogc if (T.sizeof == 1) {
+  auto hh = MurHash(seed);
+  hh.put(buf);
+  return hh.result32;
 }
 
 
 unittest {
   // wow, we can do this in compile time!
-  static assert(MurHash["Alice & Miriel"] == 0x295db5e7u);
-  // and in runtime
-  auto mur = MurHash();
-  mur.put("Alice & Miriel");
-  assert(mur.result == 0x295db5e7u);
+  static assert(murHash32("Alice & Miriel") == 0x295db5e7u);
+
+  /*{
+    import std.stdio;
+    writefln("0x%08xU", murHash32("Alice & Miriel"));
+  }*/
+
+  mixin(import("test.d"));
+  doTest!(32, "MurHash")("Alice & Miriel", 0x295db5e7u);
 }
