@@ -19,6 +19,7 @@
  *
  * modifications, CTFEcation, etc. by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
+///WARNING: not conforming to hash API!
 module iv.hash.siphash;
 private:
 
