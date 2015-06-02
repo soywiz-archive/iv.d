@@ -55,7 +55,7 @@ import iv.btenc;
 
 
 void main () {
-  auto nfo = Field.load("rtorrent.dht_cache");
+  auto nfo = BTField.load("rtorrent.dht_cache");
   auto nodes = nfo["/nodes"];
   foreach (string id; nodes.vdict.byKey) {
     auto ni = id in nodes.vdict;

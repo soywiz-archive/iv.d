@@ -54,14 +54,14 @@ module dump;
 import iv.btenc;
 
 
-void dump (ref Field fld, string indent="") {
+void dump (ref BTField fld, string indent="") {
   import iv.strex : quote;
   import std.stdio : writeln;
-  if (fld.type == Field.Type.UInt) {
+  if (fld.type == BTField.Type.UInt) {
     writeln(indent, "uint:<", fld.vuint, ">");
-  } else if (fld.type == Field.Type.Str) {
+  } else if (fld.type == BTField.Type.Str) {
     writeln(indent, "str:<#", fld.vstr.length, ":", quote(fld.vstr), ">");
-  } else if (fld.type == Field.Type.List) {
+  } else if (fld.type == BTField.Type.List) {
     writeln(indent, "LIST");
     indent ~= " ";
     string ii = indent~" ";
@@ -69,7 +69,7 @@ void dump (ref Field fld, string indent="") {
       writeln(indent, "#", idx);
       dump(fld.vlist[idx], ii);
     }
-  } else if (fld.type == Field.Type.Dict) {
+  } else if (fld.type == BTField.Type.Dict) {
     writeln(indent, "DICT");
     indent ~= " ";
     string ii = indent~" ";
@@ -85,6 +85,6 @@ void dump (ref Field fld, string indent="") {
 
 void main (string[] args) {
   if (args.length != 2) assert(0);
-  auto nfo = Field.load(args[1]);
+  auto nfo = BTField.load(args[1]);
   dump(nfo);
 }

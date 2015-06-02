@@ -55,15 +55,15 @@ import iv.stream;
 import iv.strex : quote;
 
 
-struct Field {
+struct BTField {
   version (aliced) {} else { private alias usize = size_t; }
 
   enum Type { UInt, Str, List, Dict }
   Type type = Type.UInt;
   string vstr;
   ulong vuint;
-  Field[] vlist;
-  Field[string] vdict;
+  BTField[] vlist;
+  BTField[string] vdict;
 
   const @safe pure nothrow @nogc {
     @property const(ubyte)[] bytes () { return cast(const(ubyte)[])vstr; }
@@ -73,12 +73,12 @@ struct Field {
     @property bool isDict () { return (type == Type.Dict); }
   }
 
-  static Field load (string fname) {
+  static BTField load (string fname) {
     import std.stdio : File;
     return load(File(fname));
   }
 
-  static Field load(ST) (auto ref ST st) if (isReadableStream!ST) {
+  static BTField load(ST) (auto ref ST st) if (isReadableStream!ST) {
     char tch;
     st.rawReadExact((&tch)[0..1]);
     return loadElement(st, tch);
@@ -114,7 +114,7 @@ struct Field {
       st.rawWriteExact(vstr);
     } else if (type == Type.List) {
       putChar('l');
-      foreach (const ref Field fld; vlist) fld.save(st);
+      foreach (const ref BTField fld; vlist) fld.save(st);
       putChar('e');
     } else if (type == Type.Dict) {
       // we have to sort keys by standard
@@ -132,16 +132,16 @@ struct Field {
     }
   }
 
-  ref Field opIndex (string path) {
+  ref BTField opIndex (string path) {
     auto res = byPath!"throw"(path);
     return *res;
   }
 
-  Field* opBinaryRight(string op="in") (string path) { return byPath(path); }
+  BTField* opBinaryRight(string op="in") (string path) { return byPath(path); }
 
 private:
   // opt: "throw"
-  Field* byPath(string opt="") (string path) {
+  BTField* byPath(string opt="") (string path) {
     static assert(opt.length == 0 || opt == "throw", "invalid mode; only 'throw' allowed");
 
     static if (opt == "throw") {
@@ -157,7 +157,7 @@ private:
       }
     }
 
-    Field* cf = &this;
+    BTField* cf = &this;
     while (path.length > 0) {
       while (path.length > 0 && path[0] == '/') path = path[1..$];
       if (path.length == 0) break;
@@ -218,7 +218,7 @@ private:
   }
 
 
-  static Field loadElement(ST) (auto ref ST st, char tch) if (isReadableStream!ST) {
+  static BTField loadElement(ST) (auto ref ST st, char tch) if (isReadableStream!ST) {
     ulong loadInteger (char ech, char fch=0) {
       ulong n = 0;
       if (fch >= '0' && fch <= '9') n = fch-'0';
@@ -253,12 +253,12 @@ private:
       }
     }
 
-    void loadUInt (ref Field fld) {
+    void loadUInt (ref BTField fld) {
       fld.type = Type.UInt;
       fld.vuint = loadInteger('e');
     }
 
-    void loadList (ref Field fld) {
+    void loadList (ref BTField fld) {
       fld.type = Type.List;
       for (;;) {
         char tch;
@@ -268,7 +268,7 @@ private:
       }
     }
 
-    void loadDict (ref Field fld) {
+    void loadDict (ref BTField fld) {
       fld.type = Type.Dict;
       for (;;) {
         char tch;
@@ -281,7 +281,7 @@ private:
       }
     }
 
-    Field res;
+    BTField res;
     if (tch == 'l') {
       debug { import iv.writer; writeln("LIST"); }
       loadList(res);

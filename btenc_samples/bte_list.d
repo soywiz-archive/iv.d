@@ -75,7 +75,7 @@ void die(A...) (string fmt, A args) {
 void main (string[] args) {
   import std.stdio : writeln;
   if (args.length != 2) die("one argument expected");
-  auto btf = Field.load(args[1]);
+  auto btf = BTField.load(args[1]);
   if (!btf.isDict) die("benc file is not a dictionary");
   auto info = "info" in btf;
   if (info is null) die("no \"info\" entry");
