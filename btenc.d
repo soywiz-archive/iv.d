@@ -65,6 +65,10 @@ struct BTField {
   BTField[] vlist;
   BTField[string] vdict;
 
+  this (ulong v) @safe nothrow @nogc { type = Type.UInt; vuint = v; }
+  this (string v) @safe nothrow @nogc { type = Type.Str; vstr = v; }
+  this (const(ubyte[]) v) @safe nothrow @nogc { type = Type.Str; vstr = cast(string)(v.idup); }
+
   const @safe pure nothrow @nogc {
     @property const(ubyte)[] bytes () { return cast(const(ubyte)[])vstr; }
     @property bool isUInt () { return (type == Type.UInt); }
