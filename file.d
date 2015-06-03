@@ -193,7 +193,7 @@ File openCI (string fileName) @trusted {
 }
 
 
-verstion(test_file) unittest {
+version(test_file) unittest {
   import std.file, std.path, std.stdio;
   string md = getcwd().dirName;
   writeln(md);
@@ -280,7 +280,7 @@ struct ByLineFast(Char, Terminator) {
     return false;
   }
 
-  @property char[] front() @safe return/*DIP-25*/ {
+  @property char[] front() @safe /*return*//*DIP-25*/ {
     if (firstCall) {
       popFront();
       firstCall = false;
@@ -357,14 +357,14 @@ auto byLineFast(Terminator=char, Char=char) (File f,
 }
 
 
-verstion(test_file) unittest {
+version(test_file) unittest {
   import std.stdio: File, writeln;
   import std.algorithm.searching: count;
   const path = "/etc/passwd";
   assert(File(path).byLineFast.count == File(path).byLine.count);
 }
 
-verstion(test_file) @safe unittest {
+version(test_file) @safe unittest {
   import std.stdio: File;
   const path = "/etc/passwd";
   char[] mutable_line;

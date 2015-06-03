@@ -71,7 +71,7 @@ ptrdiff_t indexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure @
   ) {
     return -1;
   } else {
-    import iv.strex : memmem;
+    //import iv.strex : memmem;
     auto res = memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
     return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
   }

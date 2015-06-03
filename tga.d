@@ -71,12 +71,14 @@ final class Targa {
   }
   static assert(TGAHeader.sizeof == 18);
 
-  static align(1) union Color {
-    align(1) struct {
-      align(1):
-      ubyte b, g, r, a;
+  static align(1) struct Color {
+    align(1) union {
+      align(1) struct {
+        align(1):
+        ubyte b, g, r, a;
+      }
+      uint val;
     }
-    uint val;
     this (ubyte ar, ubyte ag, ubyte ab, ubyte aa=0) {
       b = ab;
       r = ar;

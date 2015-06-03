@@ -102,7 +102,7 @@ uint adler32 (const(void)[] buf, uint prevadler=0) {
   import etc.c.zlib : adler32;
   while (buf.length > 0) {
     uint len = (buf.length > 0xffff_0000u ? 0xffff_0000u : cast(uint)buf.length);
-    prevadler = etc.c.zlib.adler32(prevadler, cast(ubyte*)buf.ptr, len);
+    prevadler = /*etc.c.zlib.*/adler32(prevadler, cast(ubyte*)buf.ptr, len);
     buf = buf[len..$];
   }
   return prevadler;
@@ -117,7 +117,7 @@ uint crc32 (const(void)[] buf, uint prevcrc=0) {
   import etc.c.zlib : crc32;
   while (buf.length > 0) {
     uint len = (buf.length > 0xffff_0000u ? 0xffff_0000u : cast(uint)buf.length);
-    prevcrc = etc.c.zlib.crc32(prevcrc, cast(ubyte*)buf.ptr, len);
+    prevcrc = /*etc.c.zlib.*/crc32(prevcrc, cast(ubyte*)buf.ptr, len);
     buf = buf[len..$];
   }
   return prevcrc;

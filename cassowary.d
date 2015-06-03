@@ -591,7 +591,7 @@ public:
     string s;
     if (!Csw.approx(mConstant, 0.0) || mTerms.length == 0) return to!string(mConstant);
     bool first = true;
-    foreach (immutable clv; mTerms.byValue) {
+    foreach (auto clv; mTerms.byValue) {
       import std.string : format;
       s ~= format((first ? "%s*%s" : " + %s*%s"), clv.num, clv.var);
       first = false;
@@ -686,7 +686,7 @@ public:
   override string toString () const {
     import std.string : format;
     string s = "Tableau:\n";
-    foreach (immutable ev; mRows.byValue) s ~= format("%s <==> %s\n", ev.var, ev.expr);
+    foreach (auto ev; mRows.byValue) s ~= format("%s <==> %s\n", ev.var, ev.expr);
 
     s ~= format("\nColumns:\n%s", mColumns);
     s ~= format("\nInfeasible rows: %s", mInfeasibleRows);
