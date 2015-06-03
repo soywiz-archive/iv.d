@@ -55,7 +55,7 @@ module iv.strex;
 /// quote string: append double quotes, screen all special chars;
 /// so quoted string forms valid D string literal.
 /// allocates.
-string quote (string s) {
+string quote (const(char)[] s) {
   import std.array : appender;
   import std.format : formatElement, FormatSpec;
   auto res = appender!string();
