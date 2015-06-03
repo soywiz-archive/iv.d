@@ -99,8 +99,22 @@ unittest {
   assert(indexOf("Alice & Miriel", "Miriel", 9) == -1);
 }
 
-extern(C):
 @system:
 nothrow:
 @nogc:
-pure inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
+pure:
+version(linux) {
+  extern(C) inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
+} else {
+  inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
+    auto h = cast(const(ubyte)*)haystack;
+    auto n = cast(const(ubyte)*)needle;
+    // size_t is unsigned
+    if (needlelen > haystacklen) return null;
+    foreach (immutable i; 0..haystacklen-needlelen+1) {
+      import core.stdc.string : memcmp;
+      if (memcmp(h+i, n, needlelen) == 0) return cast(void*)(h+i);
+    }
+    return null;
+  }
+}
