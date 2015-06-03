@@ -63,3 +63,44 @@ string quote (string s) {
   formatElement(res, s, fspc);
   return res.data;
 }
+
+
+ptrdiff_t indexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure @trusted nothrow @nogc {
+  if (hay.length <= stIdx || need.length == 0 ||
+      need.length > hay.length-stIdx
+  ) {
+    return -1;
+  } else {
+    import iv.strex : memmem;
+    auto res = memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
+    return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
+  }
+}
+
+
+ptrdiff_t indexOf (const(void)[] hay, ubyte ch, size_t stIdx=0) pure @trusted nothrow @nogc {
+  return indexOf(hay, (&ch)[0..1], stIdx);
+}
+
+
+unittest {
+  assert(indexOf("Alice & Miriel", " & ") == 5);
+  assert(indexOf("Alice & Miriel", " &!") == -1);
+  assert(indexOf("Alice & Miriel", "Alice & Miriel was here!") == -1);
+  assert(indexOf("Alice & Miriel", '&') == 6);
+  char ch = ' ';
+  assert(indexOf("Alice & Miriel", ch) == 5);
+
+  assert(indexOf("Alice & Miriel", "i") == 2);
+  assert(indexOf("Alice & Miriel", "i", 6) == 9);
+  assert(indexOf("Alice & Miriel", "i", 12) == -1);
+
+  assert(indexOf("Alice & Miriel", "Miriel", 8) == 8);
+  assert(indexOf("Alice & Miriel", "Miriel", 9) == -1);
+}
+
+extern(C):
+@system:
+nothrow:
+@nogc:
+pure inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
