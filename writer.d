@@ -56,6 +56,7 @@
  * specifiers:
  *   's': use to!string to write argument
  *        note that writer can print strings, bools and integrals without allocation
+ *   'S': print asciiz C string
  *   'x': write integer as hex
  *   'X': write integer as HEX
  *   '|': write all arguments that's left with "%s"
@@ -195,6 +196,21 @@ private void wrWriteWidth(char lfill=' ', char rfill=' ')
     }
     if (writeS && maxlen > 0) wrwriter(s[stpos..stpos+maxlen], fd);
   }
+}
+
+// width<0: pad right
+// width == int.min: no width specified
+// maxlen == int.min: no maxlen specified
+private void wrWriteWidthStrZ(char lfill=' ', char rfill=' ')
+               (int fd,
+                int width,
+                int maxlen,
+                bool center,
+                const char *s,
+                bool leftIsMinus=false) {
+  usize end = 0;
+  while (s[end]) ++end;
+  wrWriteWidth!(lfill, rfill)(fd, width, maxlen, center, s[0..end], leftIsMinus);
 }
 
 
@@ -604,6 +620,35 @@ if (state == "write-argument-s")
 }
 
 
+template writefImpl(string state, alias data, AA...)
+if (state == "write-argument-S")
+{
+  import std.traits : Unqual;
+  import std.conv : to;
+  static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
+  enum aidx = data.aidx;
+  alias aatype = StripTypedef!(AA[aidx]);
+  //pragma(msg, "TYPE: ", Unqual!aatype);
+  static if (is(Unqual!aatype == char*) ||
+             is(Unqual!aatype == const(char)*) ||
+             is(Unqual!aatype == immutable(char)*) ||
+             is(Unqual!aatype == const(char*)) ||
+             is(Unqual!aatype == immutable(char*))) {
+    enum lfchar = data.lfchar;
+    enum rfchar = data.rfchar;
+    enum writefImpl =
+      "wrWriteWidthStrZ!("~lfchar.stringof~","~rfchar.stringof~")("~
+        data.fd~","~
+        data.getIntStr!"width"()~","~
+        data.getIntStr!"maxlen"()~","~
+        data.getBoolStr!"optCenter"()~","~
+        "(cast(const char*)args["~to!string(aidx)~"]));\n";
+  } else {
+    enum writefImpl = writefImpl!"write-argument-s"(state, data, AA);
+  }
+}
+
+
 template writefImpl(string state, bool upcase, alias data, AA...)
 if (state == "write-argument-xx")
 {
@@ -669,7 +714,7 @@ template writefImpl(string state, string fmt, alias data, AA...)
 if (state == "format-spec")
 {
   static assert(fmt.length > 0, "invalid format string");
-  static if (fmt[0] == 's' || fmt[0] == 'x' || fmt[0] == 'X') {
+  static if (fmt[0] == 's' || fmt[0] == 'x' || fmt[0] == 'X' || fmt[0] == 'S') {
     // known specs
     enum writefImpl =
       writefImpl!("write-argument-"~fmt[0], data, AA)~
@@ -851,4 +896,7 @@ unittest {
     };
     mixin(TypedefTestStr);
   }
+
+  immutable char *strz = "stringz\0s";
+  writefln!"[%S]"(strz);
 }
