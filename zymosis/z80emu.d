@@ -348,14 +348,14 @@ final:
   }
 
   /**
-   * Execute emulated CPU instructions. $(BR)
+   * Execute emulated CPU instructions.
    * This function will execute Z80 code until tstates reaches nextEventTS
-   * or at least tscount tstates passed. $(BR)
+   * or at least tscount tstates passed.
    * Note that it can spend more that tscount states and slightly miss
    * nextEventTS so tstates will be >= nextEventTS.
    *
-   * $(B WARNING): don't decrease tstates value in callbacks, or everything
-   *               will be really bad!
+   * WARNING: don't decrease tstates value in callbacks, or everything
+   *          will be really bad!
    *
    * Params:
    *  tscount = how much tstates we should spend executing;
@@ -1160,7 +1160,7 @@ final:
 
   /**
    * Execute one instruction.
-   * $(B WARNING): this function ignores z80.nextEventTS.
+   * WARNING: this function ignores z80.nextEventTS.
    *
    * Params:
    *  none
@@ -1176,8 +1176,8 @@ final:
     return res;
   }
 
-  /** Execute at least 'atstates' t-states; return real number of executed t-states. $(BR)
-   * $(B WARNING): this function ignores z80.nextEventTS.
+  /** Execute at least 'atstates' t-states; return real number of executed t-states.
+   * WARNING: this function ignores z80.nextEventTS.
    *
    * Params:
    *  atstates = minimum tstates to spend
@@ -1196,7 +1196,8 @@ final:
     return 0;
   }
 
-  /** Initiate maskable interrupt (if interrupts are enabled).$(BR)May change z80.tstates.
+  /** Initiate maskable interrupt (if interrupts are enabled).
+   *  May change z80.tstates.
    *
    * Params:
    *  none
@@ -1220,6 +1221,9 @@ final:
         /* M3 cycle: 3 T to read high byte of 'nnnn' and decrement SP */
         /* M4 cycle: 3 T to write high byte of PC to the stack and decrement SP */
         /* M5 cycle: 3 T to write low byte of PC and jump to 'nnnn' */
+        /* BUT! FUSE says this: */
+        /* Only the first byte is provided directly to the Z80: all remaining bytes */
+        /* of the instruction are fetched from memory using PC, which is incremented as normal. */
         tstates += 6;
         /* fallthru */
         goto case 1;
@@ -1246,7 +1250,8 @@ final:
     return tstates-ots; /* accepted */
   }
 
-  /** Initiate non-maskable interrupt.$(BR)May change z80.tstates.
+  /** Initiate non-maskable interrupt.
+   * May change z80.tstates.
    *
    * Params:
    *  none
