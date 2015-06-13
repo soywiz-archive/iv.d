@@ -3485,7 +3485,7 @@ char* XGetOCValues(
 
 XFontSet XCreateFontSet(
   Display* display,
-  char* base_font_name_list,
+  const(char)* base_font_name_list,
   char*** missing_charset_list,
   int* missing_charset_count,
   char** def_string
@@ -3883,4 +3883,11 @@ Bool XGetEventData(
 void XFreeEventData(
   Display* dpy,
   XGenericEventCookie* cookie
+);
+
+
+Bool XkbSetDetectableAutoRepeat(
+  Display* dpy,
+  Bool detectable,
+  Bool* supported
 );
