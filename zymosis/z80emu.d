@@ -328,8 +328,10 @@ final:
   @property ubyte IM () const @safe pure nothrow @nogc { return mIM; } /** get Interrupt Mode (0-2) */
   @property void IM (in ubyte v) @safe nothrow @nogc { mIM = (v > 2 ? 0 : v); } /** set Interrupt Mode (0-2) */
 
+  enum IncRMixin = `R = ((R&0x7f)+1)|(R&0x80);`;
+
   /** increment R register. note that Z80 never changes the high bit of R. */
-  @gcc_inline void inc_r() () @safe nothrow @nogc { R = ((R&0x7f)+1)|(R&0x80); }
+  @gcc_inline void incR() () @safe nothrow @nogc { mixin(IncRMixin); }
 
   /** Reset emulated CPU. Will NOT reset tstate counter. */
   void reset () @safe nothrow @nogc {
@@ -1228,7 +1230,7 @@ final:
         /* fallthru */
         goto case 1;
       case 1: /* just do RST #38 */
-        inc_r();
+        mixin(IncRMixin);
         tstates += 7; /* M1 cycle: 7 T to acknowledge interrupt and decrement SP */
         /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
         /* M3 cycle: 3 T states write the low byte of PC and jump to #0038 */
@@ -1236,7 +1238,7 @@ final:
         MEMPTR = PC = 0x38;
         break;
       case 2:
-        inc_r();
+        mixin(IncRMixin);
         tstates += 7; /* M1 cycle: 7 T to acknowledge interrupt and decrement SP */
         /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
         /* M3 cycle: 3 T states write the low byte of PC */
@@ -1264,7 +1266,7 @@ final:
     /*??? emulate Z80 bug with interrupted LD A,I/R */
     prevWasEIDDR = EIDDR.Normal; /* don't care */
     if (halted) { halted = false; ++PC; }
-    inc_r();
+    mixin(IncRMixin);
     IFF1 = false; /* IFF2 is not changed */
     tstates += 5; /* M1 cycle: 5 T states to do an opcode read and decrement SP */
     /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
