@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.gccattrs is aliced;
+module iv.gccattrs /*is aliced*/;
 
 
 version(GNU) {
