@@ -2722,7 +2722,7 @@ int XNoOp(
 Status XParseColor(
   Display* display,
   Colormap colormap,
-  char* spec,
+  const(char)* spec,
   XColor* exact_def_return
 );
 
