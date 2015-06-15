@@ -123,9 +123,7 @@ struct Tox {
 }
 alias ToxP = Tox*;
 
-static if (!is(typeof(usize))) {
-  alias usize = size_t;
-}
+static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 /*******************************************************************************

@@ -16,10 +16,7 @@
  * ********************************************************************************************* */
 module iv.depot /*is aliced*/;
 
-version(aliced) {
-} else {
-  private alias usize = size_t;
-}
+static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 /// database errors

@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.rawtty is aliced;
+module iv.rawtty /*is aliced*/;
 
 import core.sys.posix.termios : termios;
 public import std.typecons : Flag, Yes, No;

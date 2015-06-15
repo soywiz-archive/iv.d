@@ -37,10 +37,10 @@ extern(C):
 nothrow:
 @nogc:
 
+static if (!is(typeof(usize))) private alias usize = size_t;
 version(aliced) {
   mixin(`typedef mdb_mode_t = uint;`);
 } else {
-  alias usize = size_t;
   alias mdb_mode_t = uint;
 }
 struct mdb_filehandle_ts {}

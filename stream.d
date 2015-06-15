@@ -55,7 +55,7 @@ import std.conv : ConvOverflowException;
 import std.traits : isMutable;
 public import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
-version (aliced) {} else { private alias usize = size_t; }
+static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

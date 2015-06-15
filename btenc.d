@@ -54,9 +54,10 @@ module iv.btenc;
 import iv.stream;
 import iv.strex : quote;
 
+static if (!is(typeof(usize))) private alias usize = size_t;
+
 
 struct BTField {
-  version (aliced) {} else { private alias usize = size_t; }
 
   enum Type { UInt, Str, List, Dict }
   Type type = Type.UInt;
@@ -315,7 +316,6 @@ ubyte[20] btInfoHash (string fname) {
 
 
 ubyte[20] btInfoHash(ST) (auto ref ST st) if (isReadableStream!ST) {
-  version (aliced) {} else { alias usize = size_t; }
   import std.digest.sha : SHA1;
 
   SHA1 dig;

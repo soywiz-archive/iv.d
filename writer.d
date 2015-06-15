@@ -76,10 +76,10 @@ module iv.writer /*is aliced*/;
 private:
 
 private import std.traits : isBoolean, isIntegral, isPointer;
+static if (!is(typeof(usize))) private alias usize = size_t;
 version(aliced) {
   private import std.traits : StripTypedef;
 } else {
-  private alias usize = size_t;
   private alias StripTypedef(T) = T;
 }
 
