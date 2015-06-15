@@ -49,7 +49,7 @@
  * Authors: Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * License: IVPLv0
  */
-module iv.timer is aliced;
+module iv.timer /*is aliced*/;
 
 
 struct Timer {
@@ -89,10 +89,10 @@ nothrow:
   }
 
   @property @safe const {
-    auto state () @safe const nothrow @nogc => mState;
-    bool stopped () @safe const nothrow @nogc => (mState == State.Stopped);
-    bool running () @safe const nothrow @nogc => (mState == State.Running);
-    bool paused () @safe const nothrow @nogc => (mState == State.Paused);
+    auto state () @safe const nothrow @nogc { return mState; }
+    bool stopped () @safe const nothrow @nogc { return (mState == State.Stopped); }
+    bool running () @safe const nothrow @nogc { return (mState == State.Running); }
+    bool paused () @safe const nothrow @nogc { return (mState == State.Paused); }
   }
 
 @trusted:
