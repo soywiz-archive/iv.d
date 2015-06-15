@@ -2462,9 +2462,9 @@ int XGeometry(
 
 int XGetErrorDatabaseText(
   Display* display,
-  char* name,
-  char* message,
-  char* default_string,
+  const(char)* name,
+  const(char)* message,
+  const(char)* default_string,
   char* buffer_return,
   int length
 );
