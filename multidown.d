@@ -55,7 +55,6 @@ private:
 pragma(lib, "curl");
 import std.concurrency;
 import std.net.curl;
-import std.regex;
 
 import iv.writer;
 import iv.rawtty;
@@ -262,11 +261,15 @@ void downloadThread (usize tnum, Tid ownerTid) {
       import std.file : mkdirRecurse;
       import std.path : baseName, dirName;
       string line, upath, ddir, dname;
-      //if (url[0..35] != "http://wos.meulie.net/pub/sinclair/") assert(0);
-      //upath = url[35..$];
-      //ddir = destDir.idup~upath.dirName;
-      //dname = upath.baseName;
       upath = url2path(url);
+      if (upath.length == 0) {
+        static if (is(typeof(() { import core.exception : ExitError; }()))) {
+          import core.exception : ExitError;
+          throw new ExitError();
+        } else {
+          assert(0);
+        }
+      }
       ddir = upath.dirName;
       dname = upath.baseName;
       {
@@ -306,7 +309,7 @@ void downloadThread (usize tnum, Tid ownerTid) {
             try {
               download(url, fname, conn);
               ok = true;
-            } catch (Exception) {
+            } catch (Exception e) {
               ok = false;
             }
             if (ok) break;
@@ -325,7 +328,7 @@ void downloadThread (usize tnum, Tid ownerTid) {
             synchronized urldone(url);
           }
           done = true;
-        } catch (Exception) {
+        } catch (Exception e) {
         }
       }
       done = false;
@@ -386,6 +389,7 @@ void stopThreads () {
       }
     );
   }
+  threads = null;
 }
 
 
@@ -404,9 +408,11 @@ extern(C) void sigtermh (int snum) nothrow @nogc {
 public string downloadAll (uint tcount=4) {
   if (tcount < 1 || tcount > 64) assert(0);
   if (urlList.length == 0) return "nothing to do";
-  //{ import core.memory : GC; GC.collect(); }
+  { import core.memory : GC; GC.collect(); }
   import core.stdc.signal;
   auto oldh = signal(SIGINT, &sigtermh);
+  scope(exit) signal(SIGINT, oldh);
+  scope(exit) { import iv.writer; write("\x1b[?25h"); }
   // do it!
   //auto oldTTYMode = ttySetRaw();
   //scope(exit) ttySetMode(oldTTYMode);
@@ -415,7 +421,9 @@ public string downloadAll (uint tcount=4) {
   startThreads();
   ulong toCollect = 0;
   auto timer = Timer(Timer.Started);
+  atomicStore(urlDone, 0);
   while (atomicLoad(urlDone) < urlList.length) {
+    // force periodical collect to keep CURL happy
     if (toCollect-- == 0) {
       import core.memory : GC;
       GC.collect();
@@ -450,10 +458,7 @@ public string downloadAll (uint tcount=4) {
   // all downloads sheduled; wait for completion
   stopThreads();
   timer.stop();
-  //addProcessedUrl(pageURL);
   removeInfoLines();
-  //writeln(atomicLoad(urlDone), " files downloaded; time: ", timer);
-  signal(SIGINT, oldh);
   { import iv.writer; write("\r\x1b[0m\x1b[K\x1b[?25h"); }
   {
     import std.string : format;
