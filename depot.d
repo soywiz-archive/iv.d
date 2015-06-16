@@ -335,8 +335,8 @@ public:
         ubyte c = 0;
         fdseekwrite(fd, fsiz-1, (&c)[0..1]);
       } else {
-        ubyte[DP_IOBUFSIZ] ebuf; // totally empty buffer initialized with 0 %-)
-        usize left = bnum*int.sizeof;
+        ubyte[DP_IOBUFSIZ] ebuf = 0; // totally empty buffer initialized with 0 %-)
+        usize left = hbuf.nbuckets*int.sizeof;
         usize pos = hbuf.sizeof;
         while (left > 0) {
           usize wr = (left > ebuf.length ? ebuf.length : left);
