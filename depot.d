@@ -106,16 +106,9 @@ private:
 private:
   enum DP_FILEMODE = 384; // 0o600: permission of a creating file
   version(BigEndian) {
-    enum dpbigendian = true;
+    enum DP_MAGIC = "[DEPOT]\n\f"; // magic on environments of big endian
   } else {
-    enum dpbigendian = false;
-  }
-  enum DP_MAGICNUMB = "[DEPOT]\n\f"; // magic number on environments of big endian
-  enum DP_MAGICNUML = "[depot]\n\f"; // magic number on environments of little endian
-  version(dpbigendian) {
-    alias DP_MAGIC = DP_MAGICNUMB;
-  } else {
-    alias DP_MAGIC = DP_MAGICNUML;
+    enum DP_MAGIC = "[depot]\n\f"; // magic on environments of little endian
   }
   enum DP_DEFBNUM   = 8191; // default bucket number
   enum DP_FBPOOLSIZ = 16;   // size of free block pool
