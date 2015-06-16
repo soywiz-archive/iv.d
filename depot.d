@@ -261,12 +261,14 @@ public:
    * Params:
    *   name = the name of a database file
    *   omode = specifies the connection mode: `WRITER` as a writer, `READER` as a reader.
-   *    If the mode is `WRITER`, the following may be added by bitwise or: `CREAT`, which
-   *    means it creates a new database if not exist, `TRUNC`, which means it creates a new
-   *    database regardless if one exists.  Both of `READER` and `WRITER` can be added to by
-   *    bitwise or: `NOLCK`, which means it opens a database file without file locking, or
-   *    `LCKNB`, which means locking is performed without blocking.  `CREAT` can be added to
-   *    by bitwise or: `SPARSE`, which means it creates a database file as a sparse file.
+   *    If the mode is `WRITER`, the following may be added by bitwise or:
+   *      `CREAT`, which means it creates a new database if not exist,
+   *      `TRUNC`, which means it creates a new database regardless if one exists.
+   *    Both of `READER` and `WRITER` can be added to by bitwise or:
+   *      `NOLCK`, which means it opens a database file without file locking, or
+   *      `LCKNB`, which means locking is performed without blocking.
+   *    `CREAT` can be added to by bitwise or:
+   *      `SPARSE`, which means it creates a database file as a sparse file.
    *   bnum = the number of elements of the bucket array.
    *    If it is not more than 0, the default value is specified.  The size of a bucket array is
    *    determined on creating, and can not be changed except for by optimization of the database.
@@ -326,7 +328,8 @@ public:
         snprintf(hbuf.versionstr.ptr, hbuf.versionstr.length, "%d", QDBM_LIBVER/100);
       }
       bnum = (bnum < 1 ? DP_DEFBNUM : bnum);
-      hbuf.nbuckets = primenum(bnum);
+      bnum = primenum(bnum);
+      hbuf.nbuckets = bnum;
       hbuf.nrecords = 0;
       fsiz = hbuf.sizeof+bnum*int.sizeof;
       hbuf.filesize = cast(int)fsiz;
@@ -336,12 +339,11 @@ public:
         fdseekwrite(fd, fsiz-1, (&c)[0..1]);
       } else {
         ubyte[DP_IOBUFSIZ] ebuf = 0; // totally empty buffer initialized with 0 %-)
-        usize left = hbuf.nbuckets*int.sizeof;
         usize pos = hbuf.sizeof;
-        while (left > 0) {
+        while (pos < fsiz) {
+          usize left = cast(usize)fsiz-pos;
           usize wr = (left > ebuf.length ? ebuf.length : left);
           fdseekwrite(fd, pos, ebuf[0..wr]);
-          left -= wr;
           pos += wr;
         }
       }
@@ -407,12 +409,15 @@ public:
     bool fatal = m_fatal;
     Error err = Error.NOERR;
     if (m_wmode) updateHeader();
-    if (m_map != MAP_FAILED) {
+    if (m_map != null) {
       if (munmap(m_map, m_msiz) == -1) err = Error.MAP;
     }
+    m_map = null;
     if (close(m_fd) == -1) err = Error.CLOSE;
     freeptr(m_fbpool);
     m_name = null;
+    m_fd = -1;
+    m_wmode = false;
     if (fatal) err = Error.FATAL;
     if (err != Error.NOERR) raise(err);
   }
