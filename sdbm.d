@@ -108,7 +108,7 @@ private:
   int m_alignment; // basic size of alignment (can be negative; why?)
 
 private:
-  enum DP_FILEMODE = 384; // 0o600: permission of a creating file
+  public static ushort DP_FILEMODE = 384; // 0o600: permission of a creating file
   version(BigEndian) {
     enum DP_MAGIC = "[SDBMFILE]\n\f"; // magic on environments of big endian
   } else {
