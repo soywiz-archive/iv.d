@@ -300,7 +300,7 @@ public:
     }
     if ((fd = open(namez.ptr, mode, DP_FILEMODE)) == -1) raise(Error.OPEN);
     scope(failure) close(fd);
-    if ((omode&NOLCK) == 0) fdlock(fd, omode&WRITER, omode&LCKNB);
+    if ((omode&NOLCK) == 0) fdlock(fd, (omode&WRITER) != 0, (omode&LCKNB) != 0);
     if ((omode&(WRITER|TRUNC)) == (WRITER|TRUNC)) {
       if (ftruncate(fd, 0) == -1) raise(Error.TRUNC);
     }
@@ -1216,7 +1216,7 @@ private:
    * Throws:
    *   SDBMException on various errors
    */
-  static void fdlock (int fd, int ex, int nb) {
+  static void fdlock (int fd, bool ex, bool nb) {
     import core.stdc.stdio : SEEK_SET;
     import core.stdc.string : memset;
     import core.sys.posix.fcntl : flock, fcntl, F_RDLCK, F_SETLK, F_SETLKW, F_WRLCK;
@@ -1228,7 +1228,7 @@ private:
     lock.l_start = 0;
     lock.l_len = 0;
     lock.l_pid = 0;
-    while (fcntl(fd, nb ? F_SETLK : F_SETLKW, &lock) == -1) {
+    while (fcntl(fd, (nb ? F_SETLK : F_SETLKW), &lock) == -1) {
       import core.stdc.errno : errno, EINTR;
       if (errno != EINTR) straise(Error.LOCK);
     }
