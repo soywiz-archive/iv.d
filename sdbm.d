@@ -572,6 +572,27 @@ public:
     return head.vsiz;
   }
 
+  /** Check if a record is existing.
+   *
+   * Params:
+   *   kbuf = the pointer to the region of a key
+   *
+   * Returns:
+   *   `true` if a record is in database, `false` otherwise.
+   *
+   * Throws:
+   *   SDBMException on various errors
+   */
+  bool exists (const(void)[] kbuf) {
+    RecordHeader head;
+    int bi, off, entoff;
+    bool ee;
+    char[DP_ENTBUFSIZ] ebuf;
+    checkOpened();
+    if (!recsearch(kbuf, &bi, &off, &entoff, head, ebuf[], &ee)) return false;
+    return true;
+  }
+
   /** Store a record.
    *
    * Params:
