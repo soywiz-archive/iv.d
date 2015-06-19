@@ -7,7 +7,8 @@
  * $(LINK2 http://en.wikipedia.org/wiki/Qt_%28framework%29, Qt GUI toolkit), alternate implementations are
  * $(LINK2 http://libsigc.sourceforge.net, libsig++) or
  * $(LINK2 http://www.boost.org/doc/libs/1_55_0/doc/html/signals2.html, Boost.Signals2)
- * similar concepts are implemented in other languages than C++ too.
+ * similar concepts are implemented in other languages than C++ too.$(BR)
+ * $(LINK2 https://github.com/phobos-x/phobosx.git, original)
  *
  * Copyright: Copyright Robert Klotzner 2012 - 2014; Ketmar Dark 2015
  * License:   <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>.
