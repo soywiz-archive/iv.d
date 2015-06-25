@@ -7,7 +7,15 @@ import core.stdc.stddef : wchar_t;
 import iv.x11.md;
 import iv.x11.x11;
 
-extern (C) @trusted nothrow @nogc:
+
+extern(C):
+
+alias XIOErrorHandler = int function ( /* WARNING, this type not in Xlib spec */
+  Display* display
+);
+
+
+@trusted nothrow @nogc:
 
 enum int XlibSpecificationRelease = 6;
 enum int X_HAVE_UTF8_STRING       = 1;
@@ -1721,11 +1729,7 @@ XErrorHandler XSetErrorHandler (
   XErrorHandler handler
 );
 
-
-alias XIOErrorHandler = int function ( /* WARNING, this type not in Xlib spec */
-  Display* display
-);
-
+//XIOErrorHandler: see at the top
 XIOErrorHandler XSetIOErrorHandler (
   XIOErrorHandler handler
 );
