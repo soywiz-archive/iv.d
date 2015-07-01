@@ -411,7 +411,7 @@ if (__traits(isIntegral, T) && T.sizeof == 1)
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-alias vlColor = uint;
+alias Color = uint;
 
 version(LittleEndian) {
   /// vlRGBA struct to ease color components extraction/replacing
@@ -429,17 +429,17 @@ version(LittleEndian) {
   static assert(0, "WTF?!");
 }
 
-static assert(vlRGBA.sizeof == vlColor.sizeof);
+static assert(vlRGBA.sizeof == Color.sizeof);
 
 
-enum : vlColor {
+enum : Color {
   vlAMask = 0xff000000u,
   vlRMask = 0x00ff0000u,
   vlGMask = 0x0000ff00u,
   vlBMask = 0x000000ffu
 }
 
-enum : vlColor {
+enum : Color {
   vlAShift = 24,
   vlRShift = 16,
   vlGShift = 8,
@@ -447,7 +447,7 @@ enum : vlColor {
 }
 
 
-enum vlColor vlcTransparent = vlAMask; /// completely transparent pixel color
+enum Color vlcTransparent = vlAMask; /// completely transparent pixel color
 
 
 /**
@@ -459,7 +459,7 @@ enum vlColor vlcTransparent = vlAMask; /// completely transparent pixel color
  * Returns:
  *  'transparent' flag
  */
-@gcc_inline bool vlcIsTransparent(T : vlColor) (T col) @safe pure nothrow @nogc {
+@gcc_inline bool vlcIsTransparent(T : Color) (T col) @safe pure nothrow @nogc {
   version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
   return ((col&vlAMask) == vlAMask);
 }
@@ -473,7 +473,7 @@ enum vlColor vlcTransparent = vlAMask; /// completely transparent pixel color
  * Returns:
  *  'transparent' flag
  */
-@gcc_inline bool isOpaque(T : vlColor) (T col) @safe pure nothrow @nogc {
+@gcc_inline bool isOpaque(T : Color) (T col) @safe pure nothrow @nogc {
   version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
   return ((col&vlAMask) == 0);
 }
@@ -490,7 +490,7 @@ enum vlColor vlcTransparent = vlAMask; /// completely transparent pixel color
  * Returns:
  *  rgba color
  */
-@gcc_inline vlColor rgb2col(TR, TG, TB, TA=ubyte) (TR r, TG g, TB b, TA a=0) @safe pure nothrow @nogc
+@gcc_inline Color rgb2col(TR, TG, TB, TA=ubyte) (TR r, TG g, TB b, TA a=0) @safe pure nothrow @nogc
 if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB) && __traits(isIntegral, TA)) {
   version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
   return
@@ -517,11 +517,11 @@ alias rgba2col = rgb2col;
 
 // generate some templates
 private enum genRGBGetSet(string cname) =
-  "@gcc_inline ubyte rgb"~cname~"() (vlColor clr) @safe pure nothrow @nogc {\n"~
+  "@gcc_inline ubyte rgb"~cname~"() (Color clr) @safe pure nothrow @nogc {\n"~
   "  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);\n"~
   "  return ((clr>>vl"~cname[0]~"Shift)&0xff);\n"~
   "}\n"~
-  "@gcc_inline vlColor rgbSet"~cname~"(T) (vlColor clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {\n"~
+  "@gcc_inline Color rgbSet"~cname~"(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {\n"~
   "  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);\n"~
   "  return (clr&~vl"~cname[0]~"Mask)|(clampToByte(v)<<vl"~cname[0]~"Shift);\n"~
   "}\n";

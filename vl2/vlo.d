@@ -165,7 +165,7 @@ nothrow:
    * Returns:
    *  nothing
    */
-  @gcc_inline void putPixel(TX, TY) (TX x, TY y, vlColor col) @trusted
+  @gcc_inline void putPixel(TX, TY) (TX x, TY y, Color col) @trusted
   if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
   {
     version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
@@ -200,7 +200,7 @@ nothrow:
    * Returns:
    *  nothing
    */
-  @gcc_inline void setPixel(TX, TY) (TX x, TY y, vlColor col) @trusted
+  @gcc_inline void setPixel(TX, TY) (TX x, TY y, Color col) @trusted
   if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
   {
     version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
@@ -320,19 +320,19 @@ nothrow:
    * Returns:
    *  nothing
    */
-  void drawChar (int x, int y, char ch, vlColor col, vlColor bkcol=vlcTransparent) @trusted {
+  void drawChar (int x, int y, char ch, Color col, Color bkcol=vlcTransparent) @trusted {
     size_t pos = ch*8;
     foreach (immutable int dy; 0..8) {
       ubyte b = vlFont6[pos++];
       foreach (immutable int dx; 0..6) {
-        vlColor c = (b&0x80 ? col : bkcol);
+        Color c = (b&0x80 ? col : bkcol);
         if (!vlcIsTransparent(c)) putPixel(x+dx, y+dy, c);
         b = (b<<1)&0xff;
       }
     }
   }
 
-  void drawStr (int x, int y, string str, vlColor col, vlColor bkcol=vlcTransparent) @trusted {
+  void drawStr (int x, int y, string str, Color col, Color bkcol=vlcTransparent) @trusted {
     foreach (immutable char ch; str) {
       drawChar(x, y, ch, col, bkcol);
       x += 6;
@@ -348,13 +348,13 @@ nothrow:
     return wdt;
   }
 
-  int drawCharProp (int x, int y, char ch, vlColor col, vlColor bkcol=vlcTransparent) @trusted {
+  int drawCharProp (int x, int y, char ch, Color col, Color bkcol=vlcTransparent) @trusted {
     size_t pos = ch*8;
     immutable int wdt = (vlFontPropWidth[ch]&0x0f);
     foreach (immutable int dy; 0..8) {
       ubyte b = (vlFont6[pos++]<<(vlFontPropWidth[ch]>>4))&0xff;
       foreach (immutable int dx; 0..wdt) {
-        vlColor c = (b&0x80 ? col : bkcol);
+        Color c = (b&0x80 ? col : bkcol);
         if (!vlcIsTransparent(c)) putPixel(x+dx, y+dy, c);
         b = (b<<1)&0xff;
       }
@@ -362,7 +362,7 @@ nothrow:
     return wdt;
   }
 
-  int drawStrProp (int x, int y, string str, vlColor col, vlColor bkcol=vlcTransparent) @trusted {
+  int drawStrProp (int x, int y, string str, Color col, Color bkcol=vlcTransparent) @trusted {
     bool vline = false;
     int sx = x;
     foreach (immutable char ch; str) {
@@ -376,7 +376,7 @@ nothrow:
     return x-sx;
   }
 
-  void drawOutlineStr (int x, int y, string text, vlColor col, vlColor outcol) @trusted {
+  void drawOutlineStr (int x, int y, string text, Color col, Color outcol) @trusted {
     foreach (immutable int dy; -1..2) {
       foreach (immutable int dx; -1..2) {
         if (dx || dy) drawStr(x+dx, y+dy, text, outcol, vlcTransparent);
@@ -385,7 +385,7 @@ nothrow:
     drawStr(x, y, text, col, vlcTransparent);
   }
 
-  int drawOutlineProp (int x, int y, string text, vlColor col, vlColor outcol) @trusted {
+  int drawOutlineProp (int x, int y, string text, Color col, Color outcol) @trusted {
     foreach (immutable int dy; -1..2) {
       foreach (immutable int dx; -1..2) {
         if (dx || dy) drawStrProp(x+dx, y+dy, text, outcol, vlcTransparent);
@@ -395,14 +395,14 @@ nothrow:
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
-  void clear (vlColor col) @trusted {
+  void clear (Color col) @trusted {
     if (mVScr !is null) {
       if (dontFree) col &= 0xffffff;
       mVScr[0..mWidth*mHeight] = col;
     }
   }
 
-  void hline (int x0, int y0, int len, vlColor col) @trusted {
+  void hline (int x0, int y0, int len, Color col) @trusted {
     if (isOpaque(col) && len > 0 && mVScr !is null) {
       x0 += mXOfs;
       y0 += mYOfs;
@@ -417,13 +417,13 @@ nothrow:
     }
   }
 
-  void vline (int x0, int y0, int len, vlColor col) @trusted {
+  void vline (int x0, int y0, int len, Color col) @trusted {
     while (len-- > 0) putPixel(x0, y0++, col);
   }
 
 
   /+
-  void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, vlColor col) @trusted {
+  void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, Color col) @trusted {
     import std.math : abs;
     int dx =  abs(x1-x0), sx = (x0 < x1 ? 1 : -1);
     int dy = -abs(y1-y0), sy = (y0 < y1 ? 1 : -1);
@@ -443,7 +443,7 @@ nothrow:
   // i say "fuck you!"
   // knowledge must be publicly available; the ones who hides the knowledge
   // are not deserving any credits.
-  void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, immutable vlColor col) {
+  void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, immutable Color col) {
     enum swap(string a, string b) = "{int tmp_="~a~";"~a~"="~b~";"~b~"=tmp_;}";
 
     if ((col&vlAMask) == vlAMask || mClipX0 > mClipX1 || mClipY0 > mClipY1 || mVScr is null) return;
@@ -590,10 +590,10 @@ nothrow:
     }
   }
 
-  void line (int x0, int y0, int x1, int y1, vlColor col) @trusted { drawLine!true(x0, y0, x1, y1, col); }
-  void lineNoLast (int x0, int y0, int x1, int y1, vlColor col) @trusted { drawLine!false(x0, y0, x1, y1, col); }
+  void line (int x0, int y0, int x1, int y1, Color col) @trusted { drawLine!true(x0, y0, x1, y1, col); }
+  void lineNoLast (int x0, int y0, int x1, int y1, Color col) @trusted { drawLine!false(x0, y0, x1, y1, col); }
 
-  void fillRect (int x, int y, int w, int h, vlColor col) @trusted {
+  void fillRect (int x, int y, int w, int h, Color col) @trusted {
     x += mXOfs;
     y += mYOfs;
     if (w > 0 && h > 0 && x+w > mClipX0 && y+h > mClipY0 && x <= mClipX1 && y <= mClipY1) {
@@ -608,7 +608,7 @@ nothrow:
     }
   }
 
-  void rect (int x, int y, int w, int h, vlColor col) @trusted {
+  void rect (int x, int y, int w, int h, Color col) @trusted {
     if (w > 0 && h > 0) {
       hline(x, y, w, col);
       hline(x, y+h-1, w, col);
@@ -618,7 +618,7 @@ nothrow:
   }
 
   /* 4 phases */
-  void selectionRect (int phase, int x0, int y0, int wdt, int hgt, vlColor col0, vlColor col1=vlcTransparent) @trusted {
+  void selectionRect (int phase, int x0, int y0, int wdt, int hgt, Color col0, Color col1=vlcTransparent) @trusted {
     if (wdt > 0 && hgt > 0) {
       // top
       foreach (immutable f; x0..x0+wdt) { putPixel(f, y0, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
@@ -631,14 +631,14 @@ nothrow:
     }
   }
 
-  private void plot4points() (int cx, int cy, int x, int y, vlColor clr) @trusted {
+  private void plot4points() (int cx, int cy, int x, int y, Color clr) @trusted {
     putPixel(cx+x, cy+y, clr);
     if (x != 0) putPixel(cx-x, cy+y, clr);
     if (y != 0) putPixel(cx+x, cy-y, clr);
     putPixel(cx-x, cy-y, clr);
   }
 
-  void circle (int cx, int cy, int radius, vlColor clr) @trusted {
+  void circle (int cx, int cy, int radius, Color clr) @trusted {
     if (radius > 0 && !vlcIsTransparent(clr)) {
       int error = -radius, x = radius, y = 0;
       if (radius == 1) { putPixel(cx, cy, clr); return; }
@@ -653,7 +653,7 @@ nothrow:
     }
   }
 
-  void fillCircle (int cx, int cy, int radius, vlColor clr) @trusted {
+  void fillCircle (int cx, int cy, int radius, Color clr) @trusted {
     if (radius > 0 && !vlcIsTransparent(clr)) {
       int error = -radius, x = radius, y = 0;
       if (radius == 1) { putPixel(cx, cy, clr); return; }
@@ -677,7 +677,7 @@ nothrow:
     }
   }
 
-  void ellipse (int x0, int y0, int x1, int y1, vlColor clr) @trusted {
+  void ellipse (int x0, int y0, int x1, int y1, Color clr) @trusted {
     import std.math : abs;
     int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
     long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
@@ -703,7 +703,7 @@ nothrow:
     }
   }
 
-  void fillEllipse (int x0, int y0, int x1, int y1, vlColor clr) @trusted {
+  void fillEllipse (int x0, int y0, int x1, int y1, Color clr) @trusted {
     import std.math : abs;
     int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
     long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
