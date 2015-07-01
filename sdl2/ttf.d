@@ -25,7 +25,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 */
-module iv.sdl2.ttf is aliced;
+module iv.sdl2.ttf /*is aliced*/;
 pragma(lib, "SDL2_ttf");
 
 import core.stdc.config; // c_long
@@ -68,7 +68,7 @@ void SDL_TTF_VERSION() (ref SDL_version x) {
   x.patch = SDL_TTF_PATCHLEVEL;
 }
 
-void TTF_VERSION() (ref SDL_version x) => SDL_TTF_VERSION(x);
+void TTF_VERSION() (ref SDL_version x) { return SDL_TTF_VERSION(x); }
 
 extern (C) nothrow @nogc {
   SDL_version* TTF_Linked_Version ();
