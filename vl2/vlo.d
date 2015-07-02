@@ -75,12 +75,12 @@ __gshared VLOverlay vlsOvl; /// vscreen overlay
 
 // ////////////////////////////////////////////////////////////////////////// //
 private void vloInitVSO () {
-  vlsOvl = new VLOverlay(vlVScr, vlWidth, vlHeight);
+  vlsOvl.setupWithVScr(vlVScr, vlWidth, vlHeight);
 }
 
 
 private void vloDeinitVSO () {
-  vlsOvl = null;
+  vlsOvl.free(); // this will not free VScr, as vlsOvl isn't own it
 }
 
 
@@ -91,23 +91,20 @@ shared static this () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-class VLOverlay {
-private:
+// BEWARE! ANY COPIES WILL RESET `vscrOwn` FLAG! NO REFCOUNTING HERE!
+struct VLOverlay {
+//private:
+public:
   int mWidth, mHeight;
   int mClipX0, mClipY0;
   int mClipX1, mClipY1;
   int mXOfs, mYOfs;
   uint* mVScr;
-  bool dontFree = false;
+  bool vscrOwn; // true: `free()` mVScr in dtor
 
-private:
-  this (void* avscr, int wdt, int hgt) @trusted nothrow @nogc {
-    mVScr = cast(uint*)avscr;
-    dontFree = true;
-    mWidth = wdt;
-    mHeight = hgt;
-    resetClipOfs();
-  }
+//private:
+public:
+  this (void* avscr, int wdt, int hgt) @trusted nothrow @nogc { setupWithVScr(avscr, wdt, hgt); }
 
 public:
   this(TW, TH) (TW wdt, TH hgt) if (__traits(isIntegral, TW) && __traits(isIntegral, TH)) {
@@ -116,12 +113,28 @@ public:
 
   ~this () @trusted nothrow @nogc { free(); }
 
-final:
+  // any copy resets "own" flag
+  this (this) @safe nothrow @nogc { vscrOwn = false; }
+
+//final:
+  void setupWithVScr (void* avscr, int wdt, int hgt) @trusted nothrow @nogc {
+    if (wdt < 1 || hgt < 1 || avscr is null) {
+      free();
+    } else {
+      if (avscr !is mVScr) free();
+      mVScr = cast(uint*)avscr;
+      vscrOwn = false;
+      mWidth = wdt;
+      mHeight = hgt;
+      resetClipOfs();
+    }
+  }
+
   void resize(TW, TH) (TW wdt, TH hgt) if (__traits(isIntegral, TW) && __traits(isIntegral, TH)) {
     import core.exception : onOutOfMemoryError;
     import core.stdc.stdlib : malloc, realloc, free;
     if (wdt < 1 || wdt > 16384 || hgt < 1 || hgt > 16384) throw new VideoLibError("VLOverlay: invalid size");
-    if (dontFree) throw new VideoLibError("VLOverlay: can't resize predefined overlay");
+    if (!vscrOwn) throw new VideoLibError("VLOverlay: can't resize predefined overlay");
     if (mVScr is null) {
       mWidth = cast(int)wdt;
       mHeight = cast(int)hgt;
@@ -146,12 +159,14 @@ nothrow:
   @property bool valid () const pure { return (mVScr !is null); }
 
   void free () @trusted {
-    if (!dontFree && mVScr !is null) {
+    if (vscrOwn && mVScr !is null) {
       import core.stdc.stdlib : free;
       free(mVScr);
       mVScr = null;
-      resetClipOfs();
     }
+    mWidth = 1;
+    mHeight = 1;
+    resetClipOfs();
   }
 
   /**
@@ -397,7 +412,7 @@ nothrow:
   // ////////////////////////////////////////////////////////////////////////// //
   void clear (Color col) @trusted {
     if (mVScr !is null) {
-      if (dontFree) col &= 0xffffff;
+      if (!vscrOwn) col &= 0xffffff;
       mVScr[0..mWidth*mHeight] = col;
     }
   }
@@ -729,9 +744,9 @@ nothrow:
   }
 
   /** blit overlay to main screen */
-  void blitTpl(string btype) (VLOverlay destovl, int xd, int yd, ubyte alpha=0) @trusted {
+  void blitTpl(string btype) (ref VLOverlay destovl, int xd, int yd, ubyte alpha=0) @trusted {
     static if (btype == "NoSrcAlpha") import core.stdc.string : memcpy;
-    if (!valid || destovl is null || !destovl.valid) return;
+    if (!valid || !destovl.valid) return;
     if (xd > -mWidth && yd > -mHeight && xd < destovl.mWidth && yd < destovl.mHeight && alpha < 255) {
       int w = mWidth, h = mHeight;
       immutable uint vsPitch = destovl.mWidth;
