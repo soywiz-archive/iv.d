@@ -163,9 +163,9 @@ private void updateCB (int elapsedTicks) {
   realizeFrame();
   if (!videoDone) {
     if (curFrame) vlsOvl.hline(0, 0, cast(uint)(cast(ulong)vlsOvl.width*curFrame/framesTotal), rgb2col(0, 255, 0));
-    if (paused) vlsOvl.drawOutlineProp(3, 3, "paused", rgb2col(255, 127, 0), 0);
+    if (paused) vlsOvl.drawStrPropOut(3, 3, "paused", rgb2col(255, 127, 0), 0);
   } else {
-    vlsOvl.drawOutlineProp(3, 3, "DONE!", rgb2col(255, 0, 0), 0);
+    vlsOvl.drawStrPropOut(3, 3, "DONE!", rgb2col(255, 0, 0), 0);
   }
   vlFrameChanged();
 }
