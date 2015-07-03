@@ -323,6 +323,107 @@ nothrow:
 
   // //////////////////////////////////////////////////////////////////////// //
   /**
+   * Draw character onto virtual screen in KOI8 encoding.
+   *
+   * Params:
+   *  x = x coordinate
+   *  y = y coordinate
+   *  wdt = char width
+   *  shift = shl count
+   *  ch = character
+   *  col = foreground color
+   *  bkcol = background color
+   *
+   * Returns:
+   *  nothing
+   */
+  void drawCharWdt (int x, int y, int wdt, int shift, char ch, Color col, Color bkcol=vlcTransparent) @trusted {
+    size_t pos = ch*8;
+    if (wdt < 1 || shift >= 8) return;
+    if (col == vlcTransparent && bkcol == vlcTransparent) return;
+    if (wdt > 8) wdt = 8;
+    if (shift < 0) shift = 0;
+    foreach (immutable int dy; 0..8) {
+      ubyte b = cast(ubyte)(vlFont6[pos++]<<shift);
+      foreach (immutable int dx; 0..wdt) {
+        Color c = (b&0x80 ? col : bkcol);
+        if (!vlcIsTransparent(c)) putPixel(x+dx, y+dy, c);
+        b = (b<<1)&0xff;
+      }
+    }
+  }
+
+  // outline types
+  enum : ubyte {
+    OutLeft   = 0x01,
+    OutRight  = 0x02,
+    OutUp     = 0x04,
+    OutDown   = 0x08,
+    OutLU     = 0x10, // left-up
+    OutRU     = 0x20, // right-up
+    OutLD     = 0x40, // left-down
+    OutRD     = 0x80, // right-down
+    OutAll    = 0xff,
+  }
+
+  /**
+   * Draw outlined character onto virtual screen in KOI8 encoding.
+   *
+   * Params:
+   *  x = x coordinate
+   *  y = y coordinate
+   *  wdt = char width
+   *  shift = shl count
+   *  ch = character
+   *  col = foreground color
+   *  outcol = outline color
+   *  ot = outline type, OutXXX, ored
+   *
+   * Returns:
+   *  nothing
+   */
+  void drawCharWdtOut (int x, int y, int wdt, int shift, char ch, Color col, Color outcol=vlcTransparent, ubyte ot=0) @trusted {
+    if (col == vlcTransparent && outcol == vlcTransparent) return;
+    if (ot == 0 || outcol == vlcTransparent) {
+      // no outline? simple draw
+      drawCharWdt(x, y, wdt, shift, ch, col, vlcTransparent);
+      return;
+    }
+    size_t pos = ch*8;
+    if (wdt < 1 || shift >= 8) return;
+    if (wdt > 8) wdt = 8;
+    if (shift < 0) shift = 0;
+    ubyte[8+2][8+2] bmp = 0; // char bitmap; 0: empty; 1: char; 2: outline
+    foreach (immutable dy; 1..9) {
+      ubyte b = cast(ubyte)(vlFont6[pos++]<<shift);
+      foreach (immutable dx; 1..wdt+1) {
+        if (b&0x80) {
+          // put pixel
+          bmp[dy][dx] = 1;
+          // put outlines
+          if ((ot&OutUp) && bmp[dy-1][dx] == 0) bmp[dy-1][dx] = 2;
+          if ((ot&OutDown) && bmp[dy+1][dx] == 0) bmp[dy+1][dx] = 2;
+          if ((ot&OutLeft) && bmp[dy][dx-1] == 0) bmp[dy][dx-1] = 2;
+          if ((ot&OutRight) && bmp[dy][dx+1] == 0) bmp[dy][dx+1] = 2;
+          if ((ot&OutLU) && bmp[dy-1][dx-1] == 0) bmp[dy-1][dx-1] = 2;
+          if ((ot&OutRU) && bmp[dy-1][dx+1] == 0) bmp[dy-1][dx+1] = 2;
+          if ((ot&OutLD) && bmp[dy+1][dx-1] == 0) bmp[dy+1][dx-1] = 2;
+          if ((ot&OutRD) && bmp[dy+1][dx+1] == 0) bmp[dy+1][dx+1] = 2;
+        }
+        b = (b<<1)&0xff;
+      }
+    }
+    // now draw it
+    --x;
+    --y;
+    foreach (immutable int dy; 0..10) {
+      foreach (immutable int dx; 0..10) {
+        if (auto t = bmp[dy][dx]) putPixel(x+dx, y+dy, (t == 1 ? col : outcol));
+      }
+    }
+  }
+
+  /**
    * Draw 6x8 character onto virtual screen in KOI8 encoding.
    *
    * Params:
@@ -336,20 +437,23 @@ nothrow:
    *  nothing
    */
   void drawChar (int x, int y, char ch, Color col, Color bkcol=vlcTransparent) @trusted {
-    size_t pos = ch*8;
-    foreach (immutable int dy; 0..8) {
-      ubyte b = vlFont6[pos++];
-      foreach (immutable int dx; 0..6) {
-        Color c = (b&0x80 ? col : bkcol);
-        if (!vlcIsTransparent(c)) putPixel(x+dx, y+dy, c);
-        b = (b<<1)&0xff;
-      }
-    }
+    drawCharWdt(x, y, 6, 0, ch, col, bkcol);
+  }
+
+  void drawCharOut (int x, int y, char ch, Color col, Color outcol=vlcTransparent, ubyte ot=OutAll) @trusted {
+    drawCharWdtOut(x, y, 6, 0, ch, col, outcol, ot);
   }
 
   void drawStr (int x, int y, string str, Color col, Color bkcol=vlcTransparent) @trusted {
     foreach (immutable char ch; str) {
       drawChar(x, y, ch, col, bkcol);
+      x += 6;
+    }
+  }
+
+  void drawStrOut (int x, int y, string str, Color col, Color outcol=vlcTransparent, ubyte ot=OutAll) @trusted {
+    foreach (immutable char ch; str) {
+      drawCharOut(x, y, ch, col, outcol, ot);
       x += 6;
     }
   }
@@ -364,16 +468,14 @@ nothrow:
   }
 
   int drawCharProp (int x, int y, char ch, Color col, Color bkcol=vlcTransparent) @trusted {
-    size_t pos = ch*8;
     immutable int wdt = (vlFontPropWidth[ch]&0x0f);
-    foreach (immutable int dy; 0..8) {
-      ubyte b = (vlFont6[pos++]<<(vlFontPropWidth[ch]>>4))&0xff;
-      foreach (immutable int dx; 0..wdt) {
-        Color c = (b&0x80 ? col : bkcol);
-        if (!vlcIsTransparent(c)) putPixel(x+dx, y+dy, c);
-        b = (b<<1)&0xff;
-      }
-    }
+    drawCharWdt(x, y, wdt, vlFontPropWidth[ch]>>4, ch, col, bkcol);
+    return wdt;
+  }
+
+  int drawCharPropOut (int x, int y, char ch, Color col, Color outcol=vlcTransparent, ubyte ot=OutAll) @trusted {
+    immutable int wdt = (vlFontPropWidth[ch]&0x0f);
+    drawCharWdtOut(x, y, wdt, vlFontPropWidth[ch]>>4, ch, col, outcol, ot);
     return wdt;
   }
 
@@ -391,22 +493,13 @@ nothrow:
     return x-sx;
   }
 
-  void drawOutlineStr (int x, int y, string text, Color col, Color outcol) @trusted {
-    foreach (immutable int dy; -1..2) {
-      foreach (immutable int dx; -1..2) {
-        if (dx || dy) drawStr(x+dx, y+dy, text, outcol, vlcTransparent);
-      }
+  int drawStrPropOut (int x, int y, string str, Color col, Color outcol=vlcTransparent, ubyte ot=OutAll) @trusted {
+    int sx = x;
+    foreach (immutable char ch; str) {
+      x += drawCharPropOut(x, y, ch, col, outcol, ot)+1;
     }
-    drawStr(x, y, text, col, vlcTransparent);
-  }
-
-  int drawOutlineProp (int x, int y, string text, Color col, Color outcol) @trusted {
-    foreach (immutable int dy; -1..2) {
-      foreach (immutable int dx; -1..2) {
-        if (dx || dy) drawStrProp(x+dx, y+dy, text, outcol, vlcTransparent);
-      }
-    }
-    return drawStrProp(x, y, text, col, vlcTransparent);
+    if (x > sx) --x; // don't count last empty pixel
+    return x-sx;
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
