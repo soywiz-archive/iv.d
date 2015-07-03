@@ -249,6 +249,7 @@ protected:
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 class Encoder : Codec {
 private:
   struct CodecVector {
@@ -543,6 +544,7 @@ private:
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 class Decoder : Codec {
 private:
   usize workPos;
@@ -705,6 +707,7 @@ private:
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 private enum AVI_HEADER_SIZE = 500;
 
 
@@ -802,7 +805,7 @@ public:
     AVIOUTd(0x110); // Flags, 0x10 has index, 0x100 interleaved
     AVIOUTd(frames); // TotalFrames
     AVIOUTd(0); // InitialFrames
-    AVIOUTd(2); // Stream count
+    AVIOUTd(audiowritten > 0 ? 2 : 1); // Stream count
     AVIOUTd(0); // SuggestedBufferSize
     AVIOUTd(ec.width); // Width
     AVIOUTd(ec.height); // Height
