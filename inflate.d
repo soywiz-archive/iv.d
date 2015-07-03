@@ -38,19 +38,11 @@
 module iv.inflate is aliced;
 
 
-////////////////////////////////////////////////////////////////////////////////
-class InflateError : object.Exception {
-  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
-    super(msg, file, line, next);
-  }
-}
+// ////////////////////////////////////////////////////////////////////////// //
+import iv.exex;
 
-
-class InflateEOF : InflateError {
-  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
-    super(msg, file, line, next);
-  }
-}
+mixin(MyException!"InflateError");
+mixin(MyException!("InflateError", "InflateEOF"));
 
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -68,7 +68,7 @@ extern(C) private int clock_gettime (clockid_t, timespec*) @trusted nothrow @nog
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// generic VideoLib exception
-class VideoLibError : object.Exception {
+class VideoLibError : Exception {
   this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow =>
     super(msg, file, line, next);
 }

@@ -22,11 +22,9 @@ pragma(lib, "tag");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-class TagLibException : Exception {
-  this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow {
-    super(msg, file, line, next);
-  }
-}
+import iv.exex;
+
+mixin(MyException!"TagLibException");
 
 
 // ////////////////////////////////////////////////////////////////////////// //

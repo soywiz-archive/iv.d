@@ -66,7 +66,7 @@ enum ZlibMax = 666; // special constant for compression level
  * Errors throw a ZlibException.
  */
 class ZlibException : Exception {
-  this (int errnum, string file=__FILE__, usize line=__LINE__, Throwable next=null) {
+  this (int errnum, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure {
     import etc.c.zlib;
     string msg;
     switch (errnum) {

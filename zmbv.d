@@ -19,13 +19,13 @@
 module iv.zmbv is aliced;
 
 
-class ZMBVError : object.Exception {
-  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
-    super(msg, file, line, next);
-  }
-}
+// ////////////////////////////////////////////////////////////////////////// //
+import iv.exex;
+
+mixin(MyException!"ZMBVError");
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 class Codec {
 public:
   enum Format {
