@@ -16,7 +16,7 @@
  *
  * D translation by Ketmar // Invisible Vector
  */
-module iv.zmbv is aliced;
+module iv.zmbv /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -48,9 +48,7 @@ public:
 
 
   // returns Format.None for unknown bpp
-  static Format bpp2format(T) (T bpp) @safe pure nothrow @nogc
-  if (__traits(isIntegral, T))
-  {
+  static Format bpp2format(T) (T bpp) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {
     switch (bpp) {
       case 8: return Format.bpp8;
       case 15: return Format.bpp15;
@@ -132,10 +130,10 @@ private:
 
   ubyte* oldFrame, newFrame;
   ubyte* buf1, buf2, work;
-  usize bufSize;
-  usize workUsed;
+  size_t bufSize;
+  size_t workUsed;
 
-  usize blockCount;
+  size_t blockCount;
   FrameBlock* blocks;
 
   ushort palSize;
@@ -150,7 +148,7 @@ private:
   bool zstreamInited;
 
   // used in encoder only, but moved here for freeBuffers()
-  usize outbufSize;
+  size_t outbufSize;
   ubyte* outbuf;
 
 public:
@@ -174,9 +172,9 @@ public:
   protected abstract void zlibDeinit () @trusted nothrow /*@nogc*/;
 
 final:
-  @property uint width () const @safe pure nothrow @nogc => mWidth;
-  @property uint height () const @safe pure nothrow @nogc => mHeight;
-  @property Format format () const @safe pure nothrow @nogc => mFormat;
+  @property uint width () const @safe pure nothrow @nogc { return mWidth; }
+  @property uint height () const @safe pure nothrow @nogc { return mHeight; }
+  @property Format format () const @safe pure nothrow @nogc { return mFormat; }
 
 protected:
   void freeBuffers () @trusted nothrow @nogc {
@@ -252,15 +250,15 @@ protected:
 // ////////////////////////////////////////////////////////////////////////// //
 class Encoder : Codec {
 private:
-  struct CodecVector {
+  static struct CodecVector {
     int x, y;
   }
   CodecVector[441] vectorTable = void;
 
   ubyte mCompressionLevel;
   ulong frameCount;
-  usize linesDone;
-  usize writeDone;
+  size_t linesDone;
+  size_t writeDone;
 
 public:
   enum PrepareFlags {
@@ -303,7 +301,7 @@ public:
 
   // (re)allocate buffer for compressed data
   private final fixOutBuffer () @trusted {
-    usize nbs = workBufferSize();
+    size_t nbs = workBufferSize();
     if (nbs == 0) throw new ZMBVError("internal error");
     if (nbs > outbufSize) {
       import core.stdc.stdlib : realloc;
@@ -316,9 +314,9 @@ public:
   }
 
 final:
-  @property Compression compression () const @safe pure nothrow @nogc => mCompression;
-  @property ubyte compressionLevel () const @safe pure nothrow @nogc => mCompressionLevel;
-  @property ulong processedFrames () const @safe pure nothrow @nogc => frameCount;
+  @property Compression compression () const @safe pure nothrow @nogc { return mCompression; }
+  @property ubyte compressionLevel () const @safe pure nothrow @nogc { return mCompressionLevel; }
+  @property ulong processedFrames () const @safe pure nothrow @nogc { return frameCount; }
 
   void prepareFrame (PrepareFlags flags, const(ubyte)[] pal=null, Format fmt=Format.None) @trusted {
     import std.algorithm : min;
@@ -355,14 +353,14 @@ final:
       auto header = cast(KeyframeHeader*)(outbuf+writeDone);
       header.versionHi = Version.High;
       header.versionLo = Version.Low;
-      header.compression = cast(sbyte)mCompression;
+      header.compression = cast(byte)mCompression;
       header.format = cast(ubyte)mFormat;
       header.blockWidth = 16;
       header.blockHeight = 16;
       writeDone += KeyframeHeader.sizeof;
       if (palSize) {
         if (pal.length) {
-          immutable usize end = min(pal.length, mPalette.length);
+          immutable size_t end = min(pal.length, mPalette.length);
           mPalette[0..end] = pal[0..end];
           if (end < mPalette.length) mPalette[end..$] = 0;
         } else {
@@ -379,7 +377,7 @@ final:
       }
     } else {
       if (palSize && pal.length) {
-        immutable usize end = min(pal.length, mPalette.length);
+        immutable size_t end = min(pal.length, mPalette.length);
         if (pal != mPalette) {
           *firstByte |= FrameMask.DeltaPalette;
           foreach (immutable i; 0..end) work[workUsed++] = mPalette[i]^pal[i];
@@ -394,7 +392,7 @@ final:
     if (linesDone >= mHeight) throw new ZMBVError("too many lines");
     immutable uint lineWidth = mWidth*pixelSize;
     if (line.length < lineWidth) throw new ZMBVError("line too short");
-    immutable usize ofs = pixelSize*(MaxVector+(linesDone+MaxVector)*mPitch);
+    immutable size_t ofs = pixelSize*(MaxVector+(linesDone+MaxVector)*mPitch);
     newFrame[ofs..ofs+lineWidth] = (cast(const(ubyte*))line.ptr)[0..lineWidth];
     ++linesDone;
   }
@@ -405,7 +403,7 @@ final:
     ubyte firstByte = *outbuf;
     if (firstByte&FrameMask.Keyframe) {
       // add the full frame data
-      usize ofs = pixelSize*(MaxVector+MaxVector*mPitch);
+      size_t ofs = pixelSize*(MaxVector+MaxVector*mPitch);
       immutable llen = mWidth*pixelSize;
       foreach (immutable i; 0..mHeight) {
         work[workUsed..workUsed+llen] = newFrame[ofs..ofs+llen];
@@ -415,7 +413,7 @@ final:
     } else {
       // add the delta frame data
       switch (mFormat) {
-        case Format.bpp8: addXorFrame!sbyte(); break;
+        case Format.bpp8: addXorFrame!byte(); break;
         case Format.bpp15: case Format.bpp16: addXorFrame!short(); break;
         case Format.bpp32: addXorFrame!int(); break;
         default: throw new ZMBVError("internal error");
@@ -441,15 +439,15 @@ final:
   }
 
 private:
-  usize workBufferSize () const @safe pure nothrow @nogc {
-    usize f = format2pixelSize(mFormat);
+  size_t workBufferSize () const @safe pure nothrow @nogc {
+    size_t f = format2pixelSize(mFormat);
     return (f ? f*mWidth*mHeight+2*(1+(mWidth/8))*(1+(mHeight/8))+1024 : 0);
   }
 
   void createVectorTable () @safe pure nothrow @nogc {
     import std.math : abs;
     vectorTable[0].x = vectorTable[0].y = 0;
-    usize vectorCount = 1;
+    size_t vectorCount = 1;
     foreach (immutable s; 1..11) {
       foreach (immutable y; 0-s..0+s+1) {
         foreach (immutable x; 0-s..0+s+1) {
@@ -468,8 +466,8 @@ private:
     int ret = 0;
     auto pold = (cast(const(P)*)oldFrame)+block.start+(vy*mPitch)+vx;
     auto pnew = (cast(const(P)*)newFrame)+block.start;
-    for (usize y = 0; y < block.dy; y += 4) {
-      for (usize x = 0; x < block.dx; x += 4) {
+    for (size_t y = 0; y < block.dy; y += 4) {
+      for (size_t x = 0; x < block.dx; x += 4) {
         int test = 0-((pold[x]-pnew[x])&0x00ffffff);
         ret -= (test>>31); // 0 or -1
       }
@@ -547,7 +545,7 @@ private:
 // ////////////////////////////////////////////////////////////////////////// //
 class Decoder : Codec {
 private:
-  usize workPos;
+  size_t workPos;
   bool mPaletteChanged;
   Format mOldFormat;
   ubyte blockWidth;
@@ -570,21 +568,19 @@ public:
   }
 
 final:
-  @property const(ubyte)[] palette () @trusted nothrow @nogc {
-    return mPalette[0..768];
-  }
+  @property const(ubyte)[] palette () @trusted nothrow @nogc { return mPalette[0..768]; }
 
-  const(ubyte)[] line (usize idx) const @trusted nothrow @nogc {
+  const(ubyte)[] line (size_t idx) const @trusted nothrow @nogc {
     if (idx >= mHeight) return null;
-    usize stpos = pixelSize*(MaxVector+MaxVector*mPitch)+mPitch*pixelSize*idx;
+    size_t stpos = pixelSize*(MaxVector+MaxVector*mPitch)+mPitch*pixelSize*idx;
     return newFrame[stpos..stpos+mWidth*pixelSize];
   }
 
   // was pallette changed on currently decoded frame?
-  bool paletteChanged () const @trusted nothrow @nogc => mPaletteChanged;
+  bool paletteChanged () const @trusted nothrow @nogc { return mPaletteChanged; }
 
   void decodeFrame (const(void)[] frameData) @trusted {
-    usize size = frameData.length;
+    size_t size = frameData.length;
     mPaletteChanged = false;
     if (frameData is null || size <= 1) throw new ZMBVError("invalid frame data");
     auto data = cast(const(ubyte)*)frameData.ptr;
@@ -644,7 +640,7 @@ final:
       newFrame = buf1;
       oldFrame = buf2;
       ubyte* writeframe = newFrame+pixelSize*(MaxVector+MaxVector*mPitch);
-      foreach (; 0..mHeight) {
+      foreach (immutable _; 0..mHeight) {
         if (workPos+mWidth*pixelSize > workUsed) throw new ZMBVError("invalid frame data");
         writeframe[0..mWidth*pixelSize] = work[workPos..workPos+mWidth*pixelSize];
         writeframe += mPitch*pixelSize;
@@ -693,7 +689,7 @@ private:
   }
 
   void unxorFrame(P) () @trusted nothrow @nogc {
-    auto vectors = cast(sbyte*)work+workPos;
+    auto vectors = cast(byte*)work+workPos;
     workPos = (workPos+blockCount*2+3)&~3;
     const(FrameBlock)* block = blocks;
     foreach (immutable b; 0..blockCount) {
@@ -764,7 +760,7 @@ public:
 
   void fixHeader () @trusted {
     ubyte[AVI_HEADER_SIZE] hdr;
-    usize header_pos = 0;
+    size_t header_pos = 0;
 
     void AVIOUT4 (string s) @trusted {
       assert(s.length == 4);
@@ -939,7 +935,7 @@ public:
       indexsize += 16*4096;
     }
 
-    void putu32 (usize pos, ulong n) @trusted nothrow @nogc {
+    void putu32 (size_t pos, ulong n) @trusted nothrow @nogc {
       idx[pos] = (n&0xff);
       idx[pos] = ((n>>8)&0xff);
       idx[pos] = ((n>>16)&0xff);
