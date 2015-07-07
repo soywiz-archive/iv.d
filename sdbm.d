@@ -418,7 +418,7 @@ public:
    * Throws:
    *   SDBMException on various errors
    */
-  void[] get (const(void)[] kbuf, uint start=0, uint max=uint.max, usize* sp=null) {
+  T[] getA(T=char) (const(void)[] kbuf, uint start=0, uint max=uint.max, usize* sp=null) if (!isArray!T) {
     RecordHeader head;
     int bi, off, entoff;
     bool ee;
@@ -455,7 +455,9 @@ public:
         *sp = (max < head.vsiz ? max : head.vsiz);
       }
     }
-    return cast(void[])vbuf;
+    immutable len = vbuf.length/T.sizeof;
+    return cast(T[])(vbuf[0..len*T.sizeof]);
+    //return cast(void[])vbuf;
   }
 
   /** Retrieve a record and write the value into a buffer.
@@ -474,7 +476,7 @@ public:
    * Throws:
    *   SDBMException on various errors
    */
-  void[] getToBuf (void[] vbuf, const(void)[] kbuf, uint start=0) {
+  T[] getToBuf(T=char) (T[] vbuff, const(void)[] kbuf, uint start=0) if (!isArray!T) {
     RecordHeader head;
     int bi, off, entoff;
     bool ee;
@@ -484,6 +486,7 @@ public:
     if (!recsearch(kbuf, &bi, &off, &entoff, head, ebuf[], &ee)) return null; //raise(Error.NOITEM);
     if (start > head.vsiz) return null; //raise(Error.NOITEM);
     scope(failure) m_fatal = true; // any failure beyond this point is fatal
+    auto vbuf = cast(ubyte[])vbuff;
     if (ee && RecordHeader.sizeof+head.ksiz+head.vsiz <= DP_ENTBUFSIZ) {
       import core.stdc.string : memcpy;
       head.vsiz -= start;
@@ -491,15 +494,18 @@ public:
       memcpy(vbuf.ptr, ebuf.ptr+(RecordHeader.sizeof+head.ksiz+start), vsiz);
     } else {
       vbuf = recReadValueToBuf(vbuf, off, head, start);
+      vsiz = vbuf.length;
     }
-    return vbuf[0..vsiz];
+    immutable len = vsiz/T.sizeof;
+    return cast(T[])(vbuf[0..len*T.sizeof]);
+    //return vbuf[0..vsiz];
   }
 
   // `mode`: "throw", "nothrow"
   T get(T, string mode="throw") (const(void)[] kbuf) if (!isArray!T) {
     static assert(mode == "throw" || mode == "nothrow", "invalid mode");
     T[1] data;
-    auto res = getToBuf(cast(void[])data, kbuf);
+    auto res = getToBuf(cast(ubyte[])(data[]), kbuf);
     static if (mode == "throw") {
       if (res.length != T.sizeof) raise(Error.NOTFOUND);
     } else {
@@ -509,45 +515,15 @@ public:
   }
 
   // `mode`: "throw", "nothrow"
-  bool get(T, string mode="throw") (const(void)[] kbuf, ref T dval) if (!isArray!T) {
+  bool get(T, string mode="nothrow") (const(void)[] kbuf, ref T dval) if (!isArray!T) {
     static assert(mode == "throw" || mode == "nothrow", "invalid mode");
-    auto res = getToBuf!void(cast(void[])((&dval)[0..1]), kbuf);
+    auto res = getToBuf(cast(ubyte[])((&dval)[0..1]), kbuf);
     static if (mode == "throw") {
       if (res.length != T.sizeof) raise(Error.NOTFOUND);
     } else {
       if (res.length != T.sizeof) dval = T.init;
     }
     return (res.length == T.sizeof);
-  }
-
-  private static template ArrayDimensions(T) {
-    static if (is(T t == U[], U)) // is T an array of U, for some type U?
-      enum ArrayDimensions = 1+ArrayDimensions!(U);
-    else
-      enum ArrayDimensions = 0;
-  }
-
-  private static template ArrayElementType(T : U[], U) {
-    alias ArrayElementType = U;
-  }
-
-  // `mode`: "throw", "nothrow"
-  T get(T, string mode="throw") (const(void)[] kbuf) if (isDynamicArray!T && ArrayDimensions!T == 1) {
-    import std.traits : Unqual;
-    alias ET = Unqual!(ArrayElementType!T);
-    //if (sz%ET.sizeof) assert(0);
-    //return T.init;
-    auto val = get(kbuf, 0);
-    static if (mode == "throw") {
-      if (val is null) raise(Error.NOTFOUND);
-    }
-    immutable len = val.length/ET.sizeof;
-    if (len == 0) {
-      val = new ubyte[](1);
-      return cast(T)(val[0..0]);
-    } else {
-      return cast(T)(val[0..len*ET.sizeof]);
-    }
   }
 
   /** Get the size of the value of a record.
