@@ -397,7 +397,7 @@ void vlPostQuitMessage () @trusted nothrow @nogc {
 @gcc_inline ubyte clampToByte(T) (T n) @safe pure nothrow @nogc
 if (__traits(isIntegral, T) && (T.sizeof == 2 || T.sizeof == 4))
 {
-  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   n &= -cast(int)(n >= 0);
   return cast(ubyte)(n|((255-cast(int)n)>>31));
 }
@@ -405,7 +405,7 @@ if (__traits(isIntegral, T) && (T.sizeof == 2 || T.sizeof == 4))
 @gcc_inline ubyte clampToByte(T) (T n) @safe pure nothrow @nogc
 if (__traits(isIntegral, T) && T.sizeof == 1)
 {
-  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   return cast(ubyte)n;
 }
 
@@ -460,7 +460,7 @@ enum Color vlcTransparent = vlAMask; /// completely transparent pixel color
  *  'transparent' flag
  */
 @gcc_inline bool vlcIsTransparent(T : Color) (T col) @safe pure nothrow @nogc {
-  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   return ((col&vlAMask) == vlAMask);
 }
 
@@ -474,7 +474,7 @@ enum Color vlcTransparent = vlAMask; /// completely transparent pixel color
  *  'transparent' flag
  */
 @gcc_inline bool isOpaque(T : Color) (T col) @safe pure nothrow @nogc {
-  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   return ((col&vlAMask) == 0);
 }
 
@@ -492,7 +492,7 @@ enum Color vlcTransparent = vlAMask; /// completely transparent pixel color
  */
 @gcc_inline Color rgb2col(TR, TG, TB, TA=ubyte) (TR r, TG g, TB b, TA a=0) @safe pure nothrow @nogc
 if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB) && __traits(isIntegral, TA)) {
-  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   return
     (clampToByte(a)<<vlAShift)|
     (clampToByte(r)<<vlRShift)|
@@ -518,11 +518,11 @@ alias rgba2col = rgb2col;
 // generate some templates
 private enum genRGBGetSet(string cname) =
   "@gcc_inline ubyte rgb"~cname~"() (Color clr) @safe pure nothrow @nogc {\n"~
-  "  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);\n"~
+  "  static if (__VERSION__ > 2067) pragma(inline, true);\n"~
   "  return ((clr>>vl"~cname[0]~"Shift)&0xff);\n"~
   "}\n"~
   "@gcc_inline Color rgbSet"~cname~"(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {\n"~
-  "  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);\n"~
+  "  static if (__VERSION__ > 2067) pragma(inline, true);\n"~
   "  return (clr&~vl"~cname[0]~"Mask)|(clampToByte(v)<<vl"~cname[0]~"Shift);\n"~
   "}\n";
 
@@ -689,7 +689,7 @@ private void vlInitializeClock () @trusted nothrow @nogc {
 /** returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * milliseconds; (0: no timer available) */
 @gcc_inline ulong vlGetTicks () @trusted nothrow @nogc {
-  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   timespec ts = void;
   if (clock_gettime(vlClockType, &ts) != 0) assert(0, "FATAL: can't get real-time clock value!\n");
   // ah, ignore nanoseconds in videolib_clock_stt->stt here: we need only 'differential' time, and it can start with something weird
@@ -700,7 +700,7 @@ private void vlInitializeClock () @trusted nothrow @nogc {
 /** returns monitonically increasing time; starting value is UNDEFINED (i.e. can be any number)
  * microseconds; (0: no timer available) */
 @gcc_inline ulong vlGetTicksMicro () @trusted nothrow @nogc {
-  version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   timespec ts = void;
   if (clock_gettime(vlClockType, &ts) != 0) assert(0, "FATAL: can't get real-time clock value!\n");
   // ah, ignore nanoseconds in videolib_clock_stt->stt here: we need only 'differential' time, and it can start with something weird

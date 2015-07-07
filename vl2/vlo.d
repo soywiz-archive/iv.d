@@ -183,7 +183,7 @@ nothrow:
   @gcc_inline void putPixel(TX, TY) (TX x, TY y, Color col) @trusted
   if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
   {
-    version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+    static if (__VERSION__ > 2067) pragma(inline, true);
     immutable long xx = cast(long)x+mXOfs;
     immutable long yy = cast(long)y+mYOfs;
     if ((col&vlAMask) != vlAMask && xx >= mClipX0 && yy >= mClipY0 && xx <= mClipX1 && yy <= mClipY1) {
@@ -218,7 +218,7 @@ nothrow:
   @gcc_inline void setPixel(TX, TY) (TX x, TY y, Color col) @trusted
   if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
   {
-    version(DMD) static if (__VERSION__ > 2067) pragma(inline, true);
+    static if (__VERSION__ > 2067) pragma(inline, true);
     immutable long xx = cast(long)x+mXOfs;
     immutable long yy = cast(long)y+mYOfs;
     if (xx >= mClipX0 && yy >= mClipY0 && xx <= mClipX1 && yy <= mClipY1) {
