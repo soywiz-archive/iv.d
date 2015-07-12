@@ -196,24 +196,54 @@ private __gshared uint* vscr2x = null; // this is used in magnifying blitters
  *  command line with processed arguments removed
  */
 void vlProcessArgs (ref string[] args) @trusted nothrow {
+ main_loop:
   for (uint idx = 1; idx < args.length; ++idx) {
     auto arg = args[idx];
     if (arg == "--") break;
-    else if (arg == "--fs") vlFullscreen = true;
-    else if (arg == "--win") vlFullscreen = false;
-    else if (arg == "--realfs") vlRealFullscreen = true;
-    else if (arg == "--winfs") vlRealFullscreen = false;
-    else if (arg == "--tv") vlScanlines = true;
-    else if (arg == "--notv") vlScanlines = false;
-    else if (arg == "--bw") vlFilter = VLFilter.BlackNWhite;
-    else if (arg == "--green") vlFilter = VLFilter.Green;
-    else if (arg == "--1x") vlMag2x = false;
-    else if (arg == "--2x") vlMag2x = true;
-    else if (arg == "--vbl") vlVSync = true;
-    else if (arg == "--novbl") vlVSync = false;
-    else continue;
+    if (arg.length < 3 || arg[0] != '-' || arg[1] != '-') continue;
+    bool yes = true;
+    if (arg.length > 5 && arg[2..5] == "no-") {
+      yes = false;
+      arg = arg[5..$];
+    } else {
+      arg = arg[2..$];
+    }
+    switch (arg) {
+      case "fs": vlFullscreen = yes; break;
+      case "win": vlFullscreen = !yes; break;
+      case "realfs": vlRealFullscreen = yes; break;
+      case "winfs": vlRealFullscreen = !yes; break;
+      case "tv": vlScanlines = yes; break;
+      case "bw": if (yes) vlFilter = VLFilter.BlackNWhite; break;
+      case "green": if (yes) vlFilter = VLFilter.Green; break;
+      case "1x": vlMag2x = !yes; break;
+      case "2x": vlMag2x = yes; break;
+      case "vbl": vlVSync = yes; break;
+      case "vhelp":
+        if (yes) {
+          import core.stdc.stdlib : exit;
+          import std.exception : collectException;
+          import std.stdio : stdout;
+          collectException(stdout.write(
+            "video options (add \"no-\" to negate):\n"~
+            "  --fs      fullscreen\n"
+            "  --win     windowed\n"
+            "  --realfs  use \"real\" fullscreen\n"
+            "  --winfs   use \"windowed\" fullscreen\n"
+            "  --tv      scanlines filter\n"
+            "  --bw      black-and-white filter\n"
+            "  --green   green filter\n"
+            "  --1x      normal size\n"
+            "  --2x      magnify\n"
+            "  --vbl     vsync\n"));
+          exit(0);
+        }
+        break;
+      default: continue main_loop;
+    }
+    // remove option
     foreach (immutable c; idx+1..args.length) args[c-1] = args[c];
-    args.length = args.length-1;
+    args.length -= 1;
     --idx; // compensate for removed element
   }
 }
