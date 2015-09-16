@@ -7,20 +7,34 @@ extern (C) @safe nothrow @nogc:
 enum uint X_PROTOCOL          = 11; /* current protocol version */
 enum uint X_PROTOCOL_REVISION = 0;  /* current minor version    */
 
-typedef XID = c_ulong;
-typedef Mask = c_ulong;
-typedef Atom = c_ulong;
-typedef VisualID = c_ulong;
-typedef Time = c_ulong;
-typedef Window = XID;
-typedef Drawable = XID;
-typedef Font = XID;
-typedef Pixmap = XID;
-typedef Cursor = XID;
-typedef Colormap = XID;
-typedef GContext = XID;
-typedef KeySym = XID;
-typedef KeyCode = ubyte;
+//typedef XID = c_ulong;
+alias XID = c_ulong;
+//typedef Mask = c_ulong;
+alias Mask = c_ulong;
+//typedef Atom = c_ulong;
+alias Atom = c_ulong;
+//typedef VisualID = c_ulong;
+alias VisualID = c_ulong;
+//typedef Time = c_ulong;
+alias Time = c_ulong;
+//typedef Window = XID;
+alias Window = XID;
+//typedef Drawable = XID;
+alias Drawable = XID;
+//typedef Font = XID;
+alias Font = XID;
+//typedef Pixmap = XID;
+alias Pixmap = XID;
+//typedef Cursor = XID;
+alias Cursor = XID;
+//typedef Colormap = XID;
+alias Colormap = XID;
+//typedef GContext = XID;
+alias GContext = XID;
+//typedef KeySym = XID;
+alias KeySym = XID;
+//typedef KeyCode = ubyte;
+alias KeyCode = ubyte;
 
 /*****************************************************************
  * RESERVED RESOURCE AND CONSTANT DEFINITIONS

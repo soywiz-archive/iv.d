@@ -890,7 +890,7 @@ unittest {
       writefln!"Hello, %2$s, I'm %1$s."("Alice", "Miriel");
       writef!"%2$7s|\n%1$%7s|\n%||\n"("Alice", "Miriel");
     };
-    mixin(TypedefTestStr);
+    //mixin(TypedefTestStr);
   }
 
   immutable char *strz = "stringz\0s";

@@ -231,10 +231,14 @@ nothrow:
 @trusted:
 @nogc:
 
-typedef TagLibFile = void*;
-typedef TagLibTag = void*;
-typedef TagLibAudioProperties = void*;
-typedef TagBool = uint;
+//typedef TagLibFile = void*;
+alias TagLibFile = void*;
+//typedef TagLibTag = void*;
+alias TagLibTag = void*;
+//typedef TagLibAudioProperties = void*;
+alias TagLibAudioProperties = void*;
+//typedef TagBool = uint;
+alias TagBool = uint;
 alias TagCString = const(char)*; // can't use typedef here
 
 

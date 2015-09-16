@@ -15,16 +15,24 @@ alias DATA16 = ushort;
 alias DATA8 = ubyte;
 
 /* opaque data types */
-typedef Imlib_Context = void*;
-typedef Imlib_Image = void*;
-typedef Imlib_Color_Modifier = void*;
-typedef Imlib_Updates = void*;
-typedef Imlib_Font = void*;
-typedef Imlib_Color_Range = void*;
-typedef Imlib_Filter = void*;
+//typedef Imlib_Context = void*;
+alias Imlib_Context = void*;
+//typedef Imlib_Image = void*;
+alias Imlib_Image = void*;
+//typedef Imlib_Color_Modifier = void*;
+alias Imlib_Color_Modifier = void*;
+//typedef Imlib_Updates = void*;
+alias Imlib_Updates = void*;
+//typedef Imlib_Font = void*;
+alias Imlib_Font = void*;
+//typedef Imlib_Color_Range = void*;
+alias Imlib_Color_Range = void*;
+//typedef Imlib_Filter = void*;
+alias Imlib_Filter = void*;
 alias Imlib_Border = _imlib_border;
 alias Imlib_Color = _imlib_color;
-typedef ImlibPolygon = void*;
+//typedef ImlibPolygon = void*;
+alias ImlibPolygon = void*;
 
 /* blending operations */
 enum /*_imlib_operation*/
@@ -97,15 +105,12 @@ struct _imlib_color
 }
 
 /* Progressive loading callbacks */
-typedef Imlib_Progress_Function = int function (
+/*typedef*/alias Imlib_Progress_Function = int function (
   Imlib_Image im, char percent,
   int update_x, int update_y,
   int update_w, int update_h);
-typedef Imlib_Data_Destructor_Function = void function (Imlib_Image im, void *data);
-
-
-/* context handling */
-/*EAPI*/ Imlib_Context imlib_context_new();
+//typedef Imlib_Data_Destructor_Function = void function (Imlib_Image im, void *data);
+alias Imlib_Data_Destructor_Function = void function (Imlib_Image im, void *data);
 /*EAPI*/ void imlib_context_free(Imlib_Context context);
 
 /*EAPI*/ void imlib_context_push(Imlib_Context context);

@@ -346,7 +346,8 @@ enum {
   XCNOENT   = 2, /* No entry in table */
 }
 
-typedef XContext = int;
+//typedef XContext = int;
+alias XContext = int;
 
 template XUniqueContext () {
   const XContext XUniqueContext = XrmUniqueQuark();

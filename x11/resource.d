@@ -9,8 +9,10 @@ extern (C) @trusted nothrow @nogc:
 char* Xpermalloc (uint size);
 
 /* Quark Management */
-typedef XrmQuark = int;
-typedef XrmQuarkList = int*;
+//typedef XrmQuark = int;
+alias XrmQuark = int;
+//typedef XrmQuarkList = int*;
+alias XrmQuarkList = int*;
 enum XrmQuark NULLQUARK = 0;
 
 alias XrmString = char*;
@@ -31,24 +33,30 @@ bool XrmStringsEqual (XrmString a1, XrmString a2) { return (*a1 == *a2); }
 
 
 /* Conversion of Strings to Lists */
-typedef XrmBinding = int;
+//typedef XrmBinding = int;
+alias XrmBinding = int;
 enum { XrmBindTightly, XrmBindLoosely }
-typedef XrmBindingList = XrmBinding*;
+//typedef XrmBindingList = XrmBinding*;
+alias XrmBindingList = XrmBinding*;
 
 void XrmStringToQuarkList (const(char)* str, XrmQuarkList quarks_return);
 
 void XrmStringToBindingQuarkList (const char* str, XrmBindingList bindings_return, XrmQuarkList quarks_return);
 
 /* Name and Class lists. */
-typedef XrmName = XrmQuark;
-typedef XrmNameList = XrmQuarkList;
+//typedef XrmName = XrmQuark;
+alias XrmName = XrmQuark;
+//typedef XrmNameList = XrmQuarkList;
+alias XrmNameList = XrmQuarkList;
 
 XrmString XrmNameToString (XrmName name) { return XrmQuarkToString(cast(XrmQuark)name); }
 XrmName XrmStringToName (XrmString str) { return cast(XrmName) XrmStringToQuark(str); }
 void XrmStringToNameList (XrmString str, XrmNameList name) { XrmStringToQuarkList(str, name); }
 
-typedef XrmClass = XrmQuark;
-typedef XrmClassList = XrmQuarkList;
+//typedef XrmClass = XrmQuark;
+alias XrmClass = XrmQuark;
+//typedef XrmClassList = XrmQuarkList;
+alias XrmClassList = XrmQuarkList;
 
 XrmString XrmClassToString (XrmClass c_class) { return XrmQuarkToString(cast(XrmQuark)c_class); }
 XrmClass XrmStringToClass (XrmString c_class) { return cast(XrmClass)XrmStringToQuark(c_class); }
@@ -56,7 +64,8 @@ void XrmStringToClassList (XrmString str, XrmClassList c_class) { XrmStringToQua
 
 
 /* Resource Representation Types and Values */
-typedef XrmRepresentation = XrmQuark;
+//typedef XrmRepresentation = XrmQuark;
+alias XrmRepresentation = XrmQuark;
 
 XrmRepresentation XrmStringToRepresentation (XrmString str) { return cast(XrmRepresentation)XrmStringToQuark(str); }
 XrmString XrmRepresentationToString( XrmRepresentation type) { return XrmQuarkToString(type); }

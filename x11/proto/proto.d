@@ -11,21 +11,24 @@ extern(C) @safe nothrow @nogc:
 struct _xSegment {
   INT16 x1, y1, x2, y2;
 }
-typedef xSegment = _xSegment;
+//typedef xSegment = _xSegment;
+alias xSegment = _xSegment;
 
 
 /* POINT */
 struct _xPoint {
   INT16 x, y;
 }
-typedef xPoint = _xPoint;
+//typedef xPoint = _xPoint;
+alias xPoint = _xPoint;
 
 
 struct _xRectangle {
   INT16 x, y;
   CARD16 width, height;
 }
-typedef xRectangle = _xRectangle;
+//typedef xRectangle = _xRectangle;
+alias xRectangle = _xRectangle;
 
 
 /*  ARC */
@@ -34,7 +37,8 @@ struct _xArc {
   CARD16 width, height;
   INT16 angle1, angle2;
 }
-typedef xArc = _xArc;
+//typedef xArc = _xArc;
+alias xArc = _xArc;
 
 
 /*
