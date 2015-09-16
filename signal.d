@@ -805,10 +805,10 @@ private struct SlotArray {
 private:
   SlotImpl* mPtr;
   union BitsLength {
-    $=>bitfields!(
+    mixin(bitfields!(
        bool, "", lengthType.sizeof*8-1,
        bool, "emitInProgress", 1
-    );
+    ));
     lengthType length;
   }
   BitsLength mBLength;
@@ -861,7 +861,7 @@ unittest {
   private:
     int mValue;
   public:
-    $=>signal!(string, int)("valueChanged");
+    mixin(signal!(string, int)("valueChanged"));
     //pragma(msg, signal!(string, int)("valueChanged"));
 
     @property int value () => mValue;
@@ -937,7 +937,7 @@ unittest {
       return v;
     }
 
-    $=>signal!(string, int)("extendedSig");
+    mixin(signal!(string, int)("extendedSig"));
     //pragma(msg, signal!(string, int)("extendedSig"));
     //Signal!(int) simpleSig;
   }
@@ -1012,9 +1012,9 @@ unittest {
     @property void value2 (int v)  => s2Sg.emit("str2", v);
     @property void value3 (long v) => s3Sg.emit("str3", v);
 
-    $=>signal!(string, int) ("s1");
-    $=>signal!(string, int) ("s2");
-    $=>signal!(string, long)("s3");
+    mixin(signal!(string, int) ("s1"));
+    mixin(signal!(string, int) ("s2"));
+    mixin(signal!(string, long)("s3"));
   }
 
   void test(T) (T a) {
@@ -1089,9 +1089,9 @@ unittest {
     @property void value5 (int v)  => s5Sg.emit("str5", v);
     @property void value6 (long v) => s6Sg.emit("str6", v);
 
-    $=>signal!(string, int) ("s4");
-    $=>signal!(string, int) ("s5");
-    $=>signal!(string, long)("s6");
+    mixin(signal!(string, int) ("s4"));
+    mixin(signal!(string, int) ("s5"));
+    mixin(signal!(string, long)("s6"));
   }
 
   auto a = new BarDerived;
@@ -1173,7 +1173,7 @@ unittest {
 
   public:
     alias value this;
-    $=>signal!(int)("signal");
+    mixin(signal!(int)("signal"));
     @property int value () => mValue;
     ref Property opAssign (int val) {
       debug(signal) writefln!"Assigning int to property with signal: %08X"(&this);
@@ -1238,21 +1238,21 @@ unittest {
 version(unittest_signal)
 unittest {
   class A {
-    $=>signal!(string, int)("s1");
+    mixin(signal!(string, int)("s1"));
   }
 
   class B : A {
-    $=>signal!(string, int)("s2");
+    mixin(signal!(string, int)("s2"));
   }
 }
 
 version(unittest_signal)
 unittest {
   struct Test {
-    $=>signal!int("a", Protection.Package);
-    $=>signal!int("ap", Protection.Private);
-    $=>signal!int("app", Protection.Protected);
-    $=>signal!int("an", Protection.None);
+    mixin(signal!int("a", Protection.Package));
+    mixin(signal!int("ap", Protection.Private));
+    mixin(signal!int("app", Protection.Protected));
+    mixin(signal!int("an", Protection.None));
   }
 
   /*
@@ -1359,7 +1359,7 @@ public template Signals(string sstr) {
       if (end >= sstr.length || sstr[end] != '(') assert(0, "Signals: '(' expected");
       sstr = sstr[end+1..$];
       //assert(0, "*** "~sstr);
-      res ~= "$=>signal!(";
+      res ~= "mixin(signal!(";
       // parse args
       while (sstr.length) {
         pos = skipSpaces(0);
@@ -1408,7 +1408,7 @@ public template Signals(string sstr) {
       if (!sstr.length || sstr[0] != ';') assert(0, "Signals: ';' expected: "~sstr);
       sstr = sstr[1..$];
       if (res[$-1] == ',') res = res[0..$-1];
-      res ~= ")(`"~id~"`);\n";
+      res ~= ")(`"~id~"`));\n";
     }
     return res;
   }
@@ -1457,7 +1457,7 @@ public template AutoConnect(string srcobj, T) if (is(T == class) || is(T == stru
   enum AutoConnect = doMember!(__traits(allMembers, T));
 }
 
-// to allow calling `$=>AutoConnect!("term", this);` from class/struct methods
+// to allow calling `mixin(AutoConnect!("term", this));` from class/struct methods
 public template AutoConnect(string srcobj, alias obj) if (is(typeof(obj) == class) || is(typeof(obj) == struct)) {
   enum AutoConnect = AutoConnect!(srcobj, typeof(obj));
 }

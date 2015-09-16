@@ -77,11 +77,7 @@ private:
 
 private import std.traits : isBoolean, isIntegral, isPointer;
 static if (!is(typeof(usize))) private alias usize = size_t;
-version(aliced) {
-  private import std.traits : StripTypedef;
-} else {
-  private alias StripTypedef(T) = T;
-}
+private alias StripTypedef(T) = T;
 
 
 __gshared void delegate (scope const(char[]), scope int fd=1) @trusted nothrow @nogc  wrwriter;

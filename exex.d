@@ -67,8 +67,8 @@ mixin template ExceptionCtor() {
 
 
 // usage:
-//   $=>MyException!"MyEx";
-//   $=>MyException!("MyEx1", "MyEx");
+//   mixin(MyException!"MyEx");
+//   mixin(MyException!("MyEx1", "MyEx"));
 enum MyException(string name, string base="Exception") = `class `~name~` : `~base~` { mixin ExceptionCtor; }`;
 
 
