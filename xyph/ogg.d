@@ -146,7 +146,7 @@ extern(C) nothrow @nogc {
   int ogg_sync_reset (ogg_sync_state*);
   int ogg_sync_destroy (ogg_sync_state*);
   int ogg_sync_check (ogg_sync_state*);
-  ubyte* ogg_sync_buffer (ogg_sync_state*, c_long); //??? sbyte?
+  ubyte* ogg_sync_buffer (ogg_sync_state*, c_long); //??? byte?
   int ogg_sync_wrote (ogg_sync_state*, c_long);
   c_long ogg_sync_pageseek (ogg_sync_state*,ogg_page*);
   int ogg_sync_pageout (ogg_sync_state*, ogg_page*);

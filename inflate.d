@@ -114,7 +114,7 @@ public:
 
   /// process one byte
   void doByte(T) (T bt)
-  if (is(Unqual!T == char) || is(Unqual!T == sbyte) || is(Unqual!T == ubyte))
+  if (is(Unqual!T == char) || is(Unqual!T == byte) || is(Unqual!T == ubyte))
   {
     s1 += cast(ubyte)bt;
     s2 += s1;

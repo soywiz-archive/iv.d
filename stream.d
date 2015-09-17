@@ -664,8 +664,8 @@ unittest {
 
     try {
       fl.seek(0);
-      assert(fl.readVInt!sbyte() == 1);
-      assert(fl.readVInt!sbyte() == -1);
+      assert(fl.readVInt!byte() == 1);
+      assert(fl.readVInt!byte() == -1);
       assert(fl.readVInt!int() == 128000);
       assert(fl.readVInt!int() == -32000);
       assert(fl.tell() == fl.size);
@@ -675,8 +675,8 @@ unittest {
 
     try {
       fl.seek(0);
-      assert(fl.readVInt!sbyte() == 1);
-      assert(fl.readVInt!sbyte() == -1);
+      assert(fl.readVInt!byte() == 1);
+      assert(fl.readVInt!byte() == -1);
       assert(fl.readVInt!int() == 128000);
       assert(fl.readVInt!short() == -32000);
       assert(fl.tell() == fl.size);
@@ -687,13 +687,13 @@ unittest {
     auto cnt = 0;
     try {
       fl.seek(0);
-      assert(fl.readVInt!sbyte() == 1);
+      assert(fl.readVInt!byte() == 1);
       ++cnt;
-      assert(fl.readVInt!sbyte() == -1);
+      assert(fl.readVInt!byte() == -1);
       ++cnt;
-      assert(fl.readVInt!sbyte() == 128000);
+      assert(fl.readVInt!byte() == 128000);
       ++cnt;
-      assert(fl.readVInt!sbyte() == -32000);
+      assert(fl.readVInt!byte() == -32000);
       ++cnt;
       assert(fl.tell() == fl.size);
       ++cnt;
@@ -705,13 +705,13 @@ unittest {
     cnt = 0;
     try {
       fl.seek(0);
-      assert(fl.readVInt!sbyte() == 1);
+      assert(fl.readVInt!byte() == 1);
       ++cnt;
       assert(fl.readVInt!ubyte() == -1);
       ++cnt;
-      assert(fl.readVInt!sbyte() == 128000);
+      assert(fl.readVInt!byte() == 128000);
       ++cnt;
-      assert(fl.readVInt!sbyte() == -32000);
+      assert(fl.readVInt!byte() == -32000);
       ++cnt;
       assert(fl.tell() == fl.size);
       ++cnt;
@@ -723,9 +723,9 @@ unittest {
     cnt = 0;
     try {
       fl.seek(0);
-      assert(fl.readVInt!sbyte() == 1);
+      assert(fl.readVInt!byte() == 1);
       ++cnt;
-      assert(fl.readVInt!sbyte() == -1);
+      assert(fl.readVInt!byte() == -1);
       ++cnt;
       assert(fl.readVInt!int() == 128000);
       ++cnt;

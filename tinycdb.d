@@ -104,7 +104,7 @@ nothrow:
 
   // null: not found (or some error occured)
   const(T)[] find(T=char) (const(void)[] key) const
-  if (is(T == char) || is(T == sbyte) || is(T == ubyte) || is(T == void))
+  if (is(T == char) || is(T == byte) || is(T == ubyte) || is(T == void))
   {
     uint httodo; /* ht bytes left to look */
     uint pos, n;
@@ -154,7 +154,7 @@ nothrow:
 
   //WARNING! returned range should not outlive this object!
   auto findFirst(T=char) (const(void)[] key) const nothrow @nogc
-  if (is(T == char) || is(T == sbyte) || is(T == ubyte) || is(T == void))
+  if (is(T == char) || is(T == byte) || is(T == ubyte) || is(T == void))
   {
     static struct Iter {
     private:

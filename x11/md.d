@@ -12,7 +12,7 @@ module iv.x11.md is aliced;
  */
 //~ #  define B32 :32
 //~ #  define B16 :16
-alias INT8 = sbyte;
+alias INT8 = byte;
 alias INT16 = short; // was uint, why?!
 alias INT32 = int;
 alias INT64 = long;

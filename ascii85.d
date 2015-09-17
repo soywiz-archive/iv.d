@@ -60,7 +60,7 @@ auto ascii85Decoder(RI) (auto ref RI src)
 if (isInputRange!RI &&
     (isSomeChar!(ElementType!RI)) ||
      is(ElementType!RI : ubyte) ||
-     is(ElementType!RI : sbyte))
+     is(ElementType!RI : byte))
 {
   static struct A85D {
   private:
@@ -183,7 +183,7 @@ auto ascii85Encoder(RI) (auto ref RI src)
 if (isInputRange!RI &&
     (is(ElementType!RI : char) ||
      is(ElementType!RI : ubyte) ||
-     is(ElementType!RI : sbyte)))
+     is(ElementType!RI : byte)))
 {
   static struct A85E {
   private:
