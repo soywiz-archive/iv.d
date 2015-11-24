@@ -139,22 +139,41 @@ static if (__USE_GNU) int glob_pattern_p (const(char)* __pattern, int __quote);
 ////////////////////////////////////////////////////////////////////////////////
 // high-level interface
 struct Glob {
+private import std.traits;
+
 @trusted:
-  private int opApplyX(DG, string dir="normal") (scope DG dg)
+  private int opApplyX(string dir, DG) (scope DG dg)
   if (isCallable!DG &&
-      (ParameterTypeTuple!DG.length == 1 && is(ParameterTypeTuple!DG[0] : Item)) ||
-      (ParameterTypeTuple!DG.length == 2 && isIntegral!(ParameterTypeTuple!DG[0]) && is(ParameterTypeTuple!DG[1] : Item)))
+      (ParameterTypeTuple!DG.length == 1 &&
+       (is(Unqual!(ParameterTypeTuple!DG[0]) : Item)) ||
+        is(ParameterTypeTuple!DG[0] == string) ||
+        is(ParameterTypeTuple!DG[0] == const(char)[]) ||
+        is(ParameterTypeTuple!DG[0] == const char[]) ||
+        is(ParameterTypeTuple!DG[0] == char[])) ||
+      (ParameterTypeTuple!DG.length == 2 && isIntegral!(ParameterTypeTuple!DG[0]) &&
+       (is(Unqual!(ParameterTypeTuple!DG[1]) : Item) ||
+        is(ParameterTypeTuple!DG[1] == string) ||
+        is(ParameterTypeTuple!DG[1] == const(char)[]) ||
+        is(ParameterTypeTuple!DG[1] == const char[]) ||
+        is(ParameterTypeTuple!DG[1] == char[])))
+     )
   {
     alias ptt = ParameterTypeTuple!DG;
+    alias xarg = ptt[ptt.length-1];
     int res = 0;
     enum foreachBody = q{
-      auto it = Item(ge, idx);
+      static if (is(Unqual!(xarg) : Item)) {
+        auto it = Item(ge, idx);
+      } else {
+        // it's ok to cast here
+        auto it = cast(xarg)getName(idx).dup;
+      }
       static if (ptt.length == 2) {
-        static if (idx.sizeof != ptt[0].sizeof) {
+        static if (is(typeof(idx) == ptt[0])) {
+          res = dg(idx, it);
+        } else {
           auto i = cast(ptt[0])idx;
           res = dg(i, it);
-        } else {
-          res = dg(idx, it);
         }
       } else {
         res = dg(it);
@@ -171,11 +190,8 @@ struct Glob {
     return res;
   }
 
-  int opApply (scope int delegate (ref Item) dg) { return opApplyX!(typeof(dg))(dg); }
-  int opApply (scope int delegate (ref size_t idx, ref Item) dg) { return opApplyX!(typeof(dg))(dg); }
-
-  int opApplyReverse (scope int delegate (ref Item) dg) { return opApplyX!(typeof(dg), "reverse")(dg); }
-  int opApplyReverse (scope int delegate (ref size_t idx, ref Item) dg) { return opApplyX!(typeof(dg), "reverse")(dg); }
+  auto opApply(Args...) (Args args) { return opApplyX!("normal", Args)(args); }
+  auto opApplyReverse(Args...) (Args args) { return opApplyX!("reverse", Args)(args); }
 
 nothrow @nogc: // ah, let's dance!
 private:
@@ -234,8 +250,6 @@ public:
     return Item(ge, idx);
   }
 
-  private import std.traits;
-
 private:
   static struct globent {
     size_t refcount;
@@ -243,7 +257,7 @@ private:
     int res;
   }
 
-  static struct Item {
+  public static struct Item {
   @trusted nothrow @nogc: // ah, let's dance!
   private:
     globent* ge;
@@ -260,6 +274,7 @@ private:
     ~this () { assert(ge !is null); Glob.decref(ge); }
 
     @property size_t index () pure const { return idx; }
+    @property size_t length () pure const { return ge.gb.gl_pathc; }
 
     // WARNING! this can escape!
     @property const(char)[] name () pure const return {
@@ -288,6 +303,14 @@ private:
       globfree(&ge.gb);
       free(ge);
     }
+  }
+
+  // WARNING! this can escape!
+  @property const(char)[] getName (size_t idx) pure const return {
+    size_t pos = 0;
+    auto ptr = ge.gb.gl_pathv[idx];
+    while (ptr[pos]) ++pos;
+    return ptr[0..pos];
   }
 
 private:
