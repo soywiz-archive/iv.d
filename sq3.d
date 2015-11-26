@@ -206,154 +206,238 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 struct DBStatement {
-private:
-  sqlite3_stmt* st;
-
 public:
-  @disable this (this); // no copy!
+  this (this) { this.incref(data); }
+  ~this () { this.decref(data); }
 
   private this (sqlite3* db, const(char)[] stmtstr) {
     if (db is null) throw new SQLiteException("database is not opened");
     if (stmtstr.length > int.max) throw new SQLiteException("statement too big");
+    import core.stdc.stdlib : malloc;
+    data = cast(Data*)malloc(Data.sizeof);
+    if (data is null) {
+      import core.exception : onOutOfMemoryErrorNoGC;
+      onOutOfMemoryErrorNoGC();
+    }
+    data.refcount = 1;
+    data.rowcount = 0;
+    data.stepIndex = 0;
+    data.st = null;
+    scope(failure) DBStatement.decref(data);
     const(char)* e;
-    sqcheck(sqlite3_prepare_v2(db, stmtstr.ptr, cast(int)stmtstr.length, &st, &e));
+    sqcheck(sqlite3_prepare_v2(db, stmtstr.ptr, cast(int)stmtstr.length, &data.st, &e));
   }
 
-  ~this () {
-    reset();
-    if (st !is null) sqlite3_finalize(st);
-    st = null;
+  @property auto range () {
+    //if (st is null) throw new SQLiteException("statement is not prepared");
+    if (data.stepIndex != 0) throw new SQLiteException("can't get range from busy statement");
+    return DBRowRange(this);
   }
 
   void reset () {
-    if (st !is null) {
-      sqlite3_reset(st);
-      sqlite3_clear_bindings(st);
-    }
+    //if (data.stepIndex != 0) throw new SQLiteException("can't reset busy statement");
+    data.stepIndex = 0;
+    sqlite3_reset(data.st);
+    sqlite3_clear_bindings(data.st);
   }
 
-  void stepAll () {
-    //if (st is null) throw new SQLiteException("statement is not prepared");
+  void doAll () {
+    if (data.stepIndex != 0) throw new SQLiteException("can't doAll on busy statement");
     scope(exit) reset();
     for (;;) {
-      auto rc = sqlite3_step(st);
+      auto rc = sqlite3_step(data.st);
       if (rc == SQLITE_DONE) break;
       if (rc != SQLITE_ROW) sqcheck(rc);
     }
   }
 
-  bool step () {
-    //if (st is null) throw new SQLiteException("statement is not prepared");
-    auto rc = sqlite3_step(st);
-    if (rc == SQLITE_DONE) { reset(); return false; }
-    if (rc != SQLITE_ROW) { reset(); sqcheck(rc); }
-    return true;
+  ref DBStatement bind(T) (usize idx, T value) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) {
+    if (data.stepIndex != 0) throw new SQLiteException("can't bind on busy statement");
+    if (idx < 1 || idx > sqlite3_bind_parameter_count(data.st)) {
+      import std.conv : to;
+      throw new SQLiteException("invalid field index: "~to!string(idx));
+    }
+    int rc;
+    static if (isNarrowString!T) {
+      if (value.length > int.max) throw new SQLiteException("value too big");
+      static if (is(ElementEncodingType!T == immutable(char))) {
+        rc = sqlite3_bind_text(data.st, idx, value.ptr, cast(int)value.length, /*SQLITE_STATIC*/SQLITE_TRANSIENT);
+      } else {
+        rc = sqlite3_bind_text(data.st, idx, value.ptr, cast(int)value.length, SQLITE_TRANSIENT);
+      }
+    } else static if (isIntegral!T) {
+      static if (isSigned!T) {
+        rc = sqlite3_bind_int64(data.st, idx, cast(long)value);
+      } else {
+        rc = sqlite3_bind_int64(data.st, idx, cast(ulong)value);
+      }
+    } else {
+      static assert(0, "WTF?!");
+    }
+    sqcheck(rc);
+    return this;
   }
 
-  auto q () {
-    static struct Q {
-      private sqlite3_stmt** stx____;
+  ref DBStatement bind(T) (const(char)[] name, T value) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) {
+    if (data.stepIndex != 0) throw new SQLiteException("can't bind on busy statement");
+    char[257] fldname = 0;
+    if (name.length > 255) throw new SQLiteException("field name too long");
+    if (name[0] == ':') {
+      fldname[0..name.length] = name[];
+    } else {
+      fldname[0] = ':';
+      fldname[1..name.length+1] = name[];
+    }
+    auto idx = sqlite3_bind_parameter_index(data.st, fldname.ptr);
+    if (idx < 1) throw new SQLiteException("invalid field name: '"~name.idup~"'");
+    return bind!T(idx, value);
+  }
 
-      @disable this (this); // no copy!
-      private this (ref DBStatement ast) { stx____ = &ast.st; }
+private:
+  struct DBRow {
+    private this (DBStatement.Data* adata) {
+      data____ = adata;
+      DBStatement.incref(data____);
+      ++data____.rowcount;
+    }
 
-      private @property sqlite3_stmt* st____ () pure nothrow @safe @nogc => *stx____;
+    this (this) { DBStatement.incref(data____); ++data____.rowcount; }
 
-      void set(T) (usize idx, T v) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) {
-        if (st____ is null) throw new SQLiteException("statement closed");
-        if (idx < 1 || idx > sqlite3_bind_parameter_count(st____)) throw new SQLiteException("invalid field index");
-        int rc;
-        static if (isNarrowString!T) {
-          if (v.length > int.max) throw new SQLiteException("value too big");
-          static if (is(ElementEncodingType!T == immutable(char))) {
-            rc = sqlite3_bind_text(st____, idx, v.ptr, cast(int)v.length, /*SQLITE_STATIC*/SQLITE_TRANSIENT);
-          } else {
-            rc = sqlite3_bind_text(st____, idx, v.ptr, cast(int)v.length, SQLITE_TRANSIENT);
+    ~this () {
+      DBStatement.decrowref(data____);
+      DBStatement.decref(data____);
+    }
+
+    int fieldIndex____ (const(char)[] name) {
+      if (name.length > 0) {
+        foreach (immutable int idx; 0..sqlite3_data_count(data____.st)) {
+          import core.stdc.string : memcmp, strlen;
+          auto n = sqlite3_column_name(data____.st, idx);
+          if (n !is null) {
+            auto len = strlen(n);
+            if (len == name.length && memcmp(n, name.ptr, len) == 0) return idx;
           }
-        } else static if (isIntegral!T) {
-          static if (isSigned!T) {
-            rc = sqlite3_bind_int64(st____, idx, cast(long)v);
-          } else {
-            rc = sqlite3_bind_int64(st____, idx, cast(ulong)v);
-          }
-        } else {
-          static assert(0, "WTF?!");
         }
+      }
+      throw new SQLiteException("invalid field name: '"~name.idup~"'");
+    }
+
+    T to(T) (usize idx) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) {
+      if (data____.stepIndex == 0) throw new SQLiteException("can't get row field of completed statement");
+      if (idx >= sqlite3_data_count(data____.st)) throw new SQLiteException("invalid result index");
+      static if (isIntegral!T) {
+        auto res = sqlite3_column_int64(data____.st, idx);
+        if (res < T.min || res > T.max) throw new SQLiteException("integral overflow");
+        return cast(T)res;
+      } else {
+        auto res = sqlite3_column_text(data____.st, idx);
+        auto len = sqlite3_column_bytes(data____.st, idx);
+        if (len < 0) throw new SQLiteException("invalid result");
+        static if (is(ElementEncodingType!T == const(char))) {
+          return res[0..len];
+        } else static if (is(ElementEncodingType!T == immutable(char))) {
+          return res[0..len].idup;
+        } else {
+          return res[0..len].dup;
+        }
+      }
+    }
+    T to(T) (const(char)[] name) => this.to!T(fieldIndex____(name));
+
+    template opIndex() {
+      T opIndexImpl(T) (usize idx) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(idx);
+      T opIndexImpl(T) (const(char)[] name) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(name);
+      alias opIndex = opIndexImpl;
+    }
+
+    template opDispatch(string name) {
+      T opDispatchImpl(T) () if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(name);
+      alias opDispatch = opDispatchImpl;
+    }
+
+    auto index_ () pure const nothrow @nogc => (data____.stepIndex > 0 ? data____.stepIndex-1 : 0);
+
+    private DBStatement.Data* data____;
+  }
+
+  struct DBRowRange {
+    private this (ref DBStatement astat) {
+      data = astat.data;
+      DBStatement.incref(data);
+      ++data.rowcount;
+      assert(data.stepIndex == 0);
+      data.stepIndex = 1;
+      popFront();
+    }
+
+    this (this) { DBStatement.incref(data); ++data.rowcount; }
+
+    ~this () {
+      DBStatement.decrowref(data);
+      DBStatement.decref(data);
+    }
+
+    @property bool empty () const pure nothrow @nogc { return (data.stepIndex == 0); }
+
+    @property auto front () {
+      if (data.stepIndex == 0) throw new SQLiteException("can't get front element of completed statement");
+      return DBRow(data);
+    }
+
+    void popFront () {
+      if (data.stepIndex == 0) throw new SQLiteException("can't pop element of completed statement");
+      auto rc = sqlite3_step(data.st);
+      if (rc == SQLITE_DONE) {
+        data.stepIndex = 0;
+        return;
+      }
+      if (rc != SQLITE_ROW) {
+        data.stepIndex = 0;
         sqcheck(rc);
       }
-      void set(T) (const(char)[] name, T v) {
-        import std.internal.cstring;
-        auto idx = sqlite3_bind_parameter_index(st____, name.tempCString);
-        if (idx < 1) throw new SQLiteException("invalid field name: '"~name.idup~"'");
-        return this.set!T(idx, v);
-      }
-      template opDispatch(string name) {
-        void opDispatchImpl(T) (T v) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || (is(T == ulong) || is(T == long))) => this.set!T(":"~name, v);
-        alias opDispatch = opDispatchImpl;
-      }
-      template opIndexAssign() {
-        void opIndexAssignImpl(T) (T v, const(char)[] name) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.set!T(name, v);
-        void opIndexAssignImpl(T) (T v, usize idx) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.set!T(idx, v);
-      }
+      ++data.stepIndex;
     }
-    return Q(this);
+
+    auto index_ () pure const nothrow @nogc => (data.stepIndex > 0 ? data.stepIndex-1 : 0);
+
+    private DBStatement.Data* data;
   }
 
-  auto row () {
-    static struct Row {
-      private sqlite3_stmt** stx____;
-
-      @disable this (this); // no copy!
-      private this (ref DBStatement ast) { stx____ = &ast.st; }
-
-      private @property sqlite3_stmt* st____ () pure nothrow @safe @nogc => *stx____;
-
-      int fieldIndex____ (const(char)[] name) {
-        if (st____ is null) throw new SQLiteException("statement closed");
-        if (name.length > 0) {
-          foreach (immutable int idx; 0..sqlite3_data_count(st____)) {
-            import core.stdc.string : memcmp, strlen;
-            auto n = sqlite3_column_name(st____, idx);
-            if (n !is null) {
-              auto len = strlen(n);
-              if (len == name.length && memcmp(n, name.ptr, len) == 0) return idx;
-            }
-          }
-        }
-        throw new SQLiteException("invalid field name: '"~name.idup~"'");
-      }
-
-      T to(T) (usize idx) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || (is(T == ulong) || is(T == long))) {
-        if (st____ is null) throw new SQLiteException("statement closed");
-        if (idx >= sqlite3_data_count(st____)) throw new SQLiteException("invalid result index");
-        static if (is(T == ulong) || is(T == long)) {
-          return sqlite3_column_int64(st____, idx);
-        } else {
-          auto res = sqlite3_column_text(st____, idx);
-          auto len = sqlite3_column_bytes(st____, idx);
-          if (len < 0) throw new SQLiteException("invalid result");
-          static if (is(ElementEncodingType!T == const(char))) {
-            return res[0..len];
-          } else static if (is(ElementEncodingType!T == immutable(char))) {
-            return res[0..len].idup;
-          } else {
-            return res[0..len].dup;
-          }
-        }
-      }
-      T to(T) (const(char)[] name) => this.to!T(fieldIndex____(name));
-
-      template opIndex() {
-        T opIndexImpl(T) (usize idx) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || (is(T == ulong) || is(T == long))) => this.to!T(idx);
-        T opIndexImpl(T) (const(char)[] name) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || (is(T == ulong) || is(T == long))) => this.to!T(name);
-        alias opIndex = opIndexImpl;
-      }
-
-      template opDispatch(string name) {
-        T opDispatchImpl(T) () if ((isNarrowString!T && is(ElementEncodingType!T : char)) || (is(T == ulong) || is(T == long))) => this.to!T(name);
-        alias opDispatch = opDispatchImpl;
-      }
-    }
-    return Row(this);
+  static void incref (Data* data) {
+    assert(data !is null);
+    ++data.refcount;
   }
+
+  static void decref (Data* data) {
+    assert(data !is null);
+    --data.refcount;
+    if (data.refcount == 0) {
+      import core.stdc.stdlib : free;
+      if (data.st !is null) {
+        sqlite3_reset(data.st);
+        sqlite3_clear_bindings(data.st);
+        sqlite3_finalize(data.st);
+      }
+      free(data);
+    }
+  }
+
+  static void decrowref (Data* data) {
+    assert(data !is null);
+    --data.rowcount;
+    if (data.rowcount == 0) {
+      data.stepIndex = 0;
+      sqlite3_reset(data.st);
+      sqlite3_clear_bindings(data.st);
+    }
+  }
+
+private:
+  static struct Data {
+    uint refcount;
+    uint rowcount; // number of row structs using this statement
+    uint stepIndex;
+    sqlite3_stmt* st;
+  }
+  Data* data;
 }
