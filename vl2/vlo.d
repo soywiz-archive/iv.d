@@ -304,6 +304,9 @@ nothrow:
       mClipY0 += dx;
       mClipX1 -= dx;
       mClipY1 -= dx;
+      if (mClipX1 >= mClipX0 && mClipY1 >= mClipY0) {
+        setClip(mClipX0, mClipY0, mClipX1-mClipX0+1, mClipY1-mClipY0+1);
+      }
     }
   }
 
