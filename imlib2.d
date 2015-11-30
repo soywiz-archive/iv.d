@@ -111,6 +111,8 @@ struct _imlib_color
   int update_w, int update_h);
 //typedef Imlib_Data_Destructor_Function = void function (Imlib_Image im, void *data);
 alias Imlib_Data_Destructor_Function = void function (Imlib_Image im, void *data);
+
+/*EAPI*/ Imlib_Context imlib_context_new ();
 /*EAPI*/ void imlib_context_free(Imlib_Context context);
 
 /*EAPI*/ void imlib_context_push(Imlib_Context context);

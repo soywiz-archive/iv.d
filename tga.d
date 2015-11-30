@@ -42,7 +42,7 @@ module iv.tga is aliced;
 final class Targa {
   private import iv.stream;
 
-  private static struct TGAHeader {
+  private static align(1) struct TGAHeader {
   align(1):
     ubyte idlen; // after header
     ubyte cmaptype;
