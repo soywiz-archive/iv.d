@@ -174,6 +174,11 @@ final:
     }
   }
 
+  string patpointsToString () {
+    import std.string : format;
+    return format("%s", patpoints);
+  }
+
 private:
   // this: template
   static GengFloat match (in GengPatternPoints tpl, const(PTGlyph) sample) @safe pure nothrow @nogc {
