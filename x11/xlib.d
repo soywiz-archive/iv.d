@@ -997,16 +997,18 @@ struct XwcTextItem {
   XFontSet font_set;
 }
 
-immutable char* XNRequiredCharSet             = "requiredCharSet";
-immutable char* XNQueryOrientation            = "queryOrientation";
-immutable char* XNBaseFontName                = "baseFontName";
-immutable char* XNOMAutomatic                 = "omAutomatic";
-immutable char* XNMissingCharSet              = "missingCharSet";
-immutable char* XNDefaultString               = "defaultString";
-immutable char* XNOrientation                 = "orientation";
-immutable char* XNDirectionalDependentDrawing = "directionalDependentDrawing";
-immutable char* XNContextualDrawing           = "contextualDrawing";
-immutable char* XNFontInfo                    = "fontInfo";
+enum {
+  XNRequiredCharSet             = "requiredCharSet";
+  XNQueryOrientation            = "queryOrientation";
+  XNBaseFontName                = "baseFontName";
+  XNOMAutomatic                 = "omAutomatic";
+  XNMissingCharSet              = "missingCharSet";
+  XNDefaultString               = "defaultString";
+  XNOrientation                 = "orientation";
+  XNDirectionalDependentDrawing = "directionalDependentDrawing";
+  XNContextualDrawing           = "contextualDrawing";
+  XNFontInfo                    = "fontInfo";
+}
 
 struct XOMCharSetList {
   int charset_count;
@@ -1074,49 +1076,51 @@ enum : c_ulong {
   XIMStatusNone       = 0x0800,
 }
 
-immutable char* XNVaNestedList = "XNVaNestedList";
-immutable char* XNQueryInputStyle = "queryInputStyle";
-immutable char* XNClientWindow = "clientWindow";
-immutable char* XNInputStyle = "inputStyle";
-immutable char* XNFocusWindow = "focusWindow";
-immutable char* XNResourceName = "resourceName";
-immutable char* XNResourceClass = "resourceClass";
-immutable char* XNGeometryCallback = "geometryCallback";
-immutable char* XNDestroyCallback = "destroyCallback";
-immutable char* XNFilterEvents = "filterEvents";
-immutable char* XNPreeditStartCallback = "preeditStartCallback";
-immutable char* XNPreeditDoneCallback = "preeditDoneCallback";
-immutable char* XNPreeditDrawCallback = "preeditDrawCallback";
-immutable char* XNPreeditCaretCallback = "preeditCaretCallback";
-immutable char* XNPreeditStateNotifyCallback = "preeditStateNotifyCallback";
-immutable char* XNPreeditAttributes = "preeditAttributes";
-immutable char* XNStatusStartCallback = "statusStartCallback";
-immutable char* XNStatusDoneCallback = "statusDoneCallback";
-immutable char* XNStatusDrawCallback = "statusDrawCallback";
-immutable char* XNStatusAttributes = "statusAttributes";
-immutable char* XNArea = "area";
-immutable char* XNAreaNeeded = "areaNeeded";
-immutable char* XNSpotLocation = "spotLocation";
-immutable char* XNColormap = "colorMap";
-immutable char* XNStdColormap = "stdColorMap";
-immutable char* XNForeground = "foreground";
-immutable char* XNBackground = "background";
-immutable char* XNBackgroundPixmap = "backgroundPixmap";
-immutable char* XNFontSet = "fontSet";
-immutable char* XNLineSpace = "lineSpace";
-immutable char* XNCursor = "cursor";
+enum {
+  XNVaNestedList = "XNVaNestedList";
+  XNQueryInputStyle = "queryInputStyle";
+  XNClientWindow = "clientWindow";
+  XNInputStyle = "inputStyle";
+  XNFocusWindow = "focusWindow";
+  XNResourceName = "resourceName";
+  XNResourceClass = "resourceClass";
+  XNGeometryCallback = "geometryCallback";
+  XNDestroyCallback = "destroyCallback";
+  XNFilterEvents = "filterEvents";
+  XNPreeditStartCallback = "preeditStartCallback";
+  XNPreeditDoneCallback = "preeditDoneCallback";
+  XNPreeditDrawCallback = "preeditDrawCallback";
+  XNPreeditCaretCallback = "preeditCaretCallback";
+  XNPreeditStateNotifyCallback = "preeditStateNotifyCallback";
+  XNPreeditAttributes = "preeditAttributes";
+  XNStatusStartCallback = "statusStartCallback";
+  XNStatusDoneCallback = "statusDoneCallback";
+  XNStatusDrawCallback = "statusDrawCallback";
+  XNStatusAttributes = "statusAttributes";
+  XNArea = "area";
+  XNAreaNeeded = "areaNeeded";
+  XNSpotLocation = "spotLocation";
+  XNColormap = "colorMap";
+  XNStdColormap = "stdColorMap";
+  XNForeground = "foreground";
+  XNBackground = "background";
+  XNBackgroundPixmap = "backgroundPixmap";
+  XNFontSet = "fontSet";
+  XNLineSpace = "lineSpace";
+  XNCursor = "cursor";
 
-immutable char* XNQueryIMValuesList = "queryIMValuesList";
-immutable char* XNQueryICValuesList = "queryICValuesList";
-immutable char* XNVisiblePosition = "visiblePosition";
-immutable char* XNR6PreeditCallback = "r6PreeditCallback";
-immutable char* XNStringConversionCallback = "stringConversionCallback";
-immutable char* XNStringConversion = "stringConversion";
-immutable char* XNResetState = "resetState";
-immutable char* XNHotKey = "hotKey";
-immutable char* XNHotKeyState = "hotKeyState";
-immutable char* XNPreeditState = "preeditState";
-immutable char* XNSeparatorofNestedList = "separatorofNestedList";
+  XNQueryIMValuesList = "queryIMValuesList";
+  XNQueryICValuesList = "queryICValuesList";
+  XNVisiblePosition = "visiblePosition";
+  XNR6PreeditCallback = "r6PreeditCallback";
+  XNStringConversionCallback = "stringConversionCallback";
+  XNStringConversion = "stringConversion";
+  XNResetState = "resetState";
+  XNHotKey = "hotKey";
+  XNHotKeyState = "hotKeyState";
+  XNPreeditState = "preeditState";
+  XNSeparatorofNestedList = "separatorofNestedList";
+}
 
 enum int XBufferOverflow = -1;
 enum int XLookupNone     = 1;
