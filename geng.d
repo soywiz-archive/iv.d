@@ -40,7 +40,7 @@
 /*
  * Protractor recognizer
  */
-module iv.geng is aliced;
+module iv.geng;
 private:
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -87,7 +87,7 @@ private:
 
 public:
   this () @safe nothrow @nogc {}
-  this (string aname) @safe nothrow @nogc => mName = aname;
+  this (string aname) @safe nothrow @nogc { mName = aname; }
   this (string aname, in GengPatternPoints apat) @safe nothrow @nogc {
     mName = aname;
     patpoints[] = apat[];
@@ -95,23 +95,23 @@ public:
   }
 
 final:
-  @property bool valid () const @safe pure nothrow @nogc => (mNormalized || points.length >= 4);
-  @property bool normalized () const @safe pure nothrow @nogc => mNormalized;
+  @property bool valid () const @safe pure nothrow @nogc { return (mNormalized || points.length >= 4); }
+  @property bool normalized () const @safe pure nothrow @nogc { return mNormalized; }
 
-  @property string name () const @safe pure nothrow @nogc => mName;
-  @property void name (string v) @safe nothrow @nogc => mName = v;
+  @property string name () const @safe pure nothrow @nogc { return mName; }
+  @property void name (string v) @safe nothrow @nogc { mName = v; }
 
-  usize length () const @safe pure nothrow @nogc => (mNormalized ? NormalizedPoints : points.length/2);
+  size_t length () const @safe pure nothrow @nogc { return (mNormalized ? NormalizedPoints : points.length/2); }
   alias opDollar = length;
 
-  auto x (usize idx) const @safe pure nothrow @nogc {
+  auto x (size_t idx) const @safe pure nothrow @nogc {
     if (!mNormalized) {
       return (idx*2 < points.length ? points[idx*2] : typeof(points[0]).nan);
     } else {
       return (idx < NormalizedPoints ? patpoints[idx*2] : typeof(points[0]).nan);
     }
   }
-  auto y (usize idx) const @safe pure nothrow @nogc {
+  auto y (size_t idx) const @safe pure nothrow @nogc {
     if (!mNormalized) {
       return (idx*2 < points.length ? points[idx*2+1] : typeof(points[0]).nan);
     } else {
@@ -199,7 +199,7 @@ private:
   static GengFloat optimalCosineDistance (in GengPatternPoints v0, in GengPatternPoints v1) @safe pure nothrow @nogc {
     import std.math : atan, acos, cos, sin;
     GengFloat a = 0.0, b = 0.0;
-    foreach (auto idx; 0..NormalizedPoints) {
+    foreach (immutable idx; 0..NormalizedPoints) {
       a += v0[idx*2+0]*v1[idx*2+0]+v0[idx*2+1]*v1[idx*2+1];
       b += v0[idx*2+0]*v1[idx*2+1]-v0[idx*2+1]*v1[idx*2+0];
     }
@@ -213,7 +213,7 @@ private:
     if (points.length >= 4) {
       // don't want to bring std.algo here
       GengFloat px = points[0], py = points[1];
-      foreach (auto idx; 2..points.length/2) {
+      foreach (immutable idx; 2..points.length/2) {
         immutable cx = points[idx*2+0], cy = points[idx*2+1];
         res += distance(px, py, cx, cy);
         px = cx;
@@ -232,7 +232,7 @@ private:
     // add first point as-is
     ptres[0] = prx;
     ptres[1] = pry;
-    usize ptpos = 2, oppos = 2;
+    size_t ptpos = 2, oppos = 2;
     while (oppos < points.length) {
       immutable GengFloat cx = points[oppos], cy = points[oppos+1];
       immutable d = distance(prx, pry, cx, cy);
@@ -271,13 +271,13 @@ private:
     GengFloat indAngle, delta;
     GengFloat cx = 0.0, cy = 0.0;
     // center it
-    foreach (auto idx; 0..NormalizedPoints) {
+    foreach (immutable idx; 0..NormalizedPoints) {
       cx += ptx[idx*2+0];
       cy += ptx[idx*2+1];
     }
     cx /= NormalizedPoints;
     cy /= NormalizedPoints;
-    foreach (auto idx; 0..NormalizedPoints) {
+    foreach (immutable idx; 0..NormalizedPoints) {
       pts[idx*2+0] = ptx[idx*2+0]-cx;
       pts[idx*2+1] = ptx[idx*2+1]-cy;
     }
@@ -291,7 +291,7 @@ private:
     immutable GengFloat cosd = cos(delta);
     immutable GengFloat sind = sin(delta);
     GengFloat sum = 0.0;
-    foreach (auto idx; 0..NormalizedPoints) {
+    foreach (immutable idx; 0..NormalizedPoints) {
       immutable nx = pts[idx*2+0]*cosd-pts[idx*2+1]*sind;
       immutable ny = pts[idx*2+1]*cosd+pts[idx*2+0]*sind;
       vres[idx*2+0] = nx;
@@ -299,7 +299,7 @@ private:
       sum += nx*nx+ny*ny;
     }
     immutable GengFloat magnitude = sqrt(sum);
-    foreach (auto idx; 0..NormalizedPoints*2) vres[idx] /= magnitude;
+    foreach (immutable idx; 0..NormalizedPoints*2) vres[idx] /= magnitude;
   }
 
   static void buildNormPoints (out GengPatternPoints vres, in GengFloat[] points, bool orientationSensitive=true)
@@ -355,7 +355,7 @@ if (isOutputRange!(R, PTGlyph) && isReadableStream!ST)
   auto cnt = st.readNum!uint();
   if (cnt > 0x7fff_ffff) throw new Exception("too many glyphs");
   if (cnt == 0) return;
-  foreach (auto idx; 0..cnt) {
+  foreach (immutable idx; 0..cnt) {
     // name
     auto len = st.readNum!uint();
     if (len > 1024) throw new Exception("glyph name too long");
@@ -401,7 +401,7 @@ if (isWriteableStream!ST && isInputRange!R && !isInfinite!R && is(ElementType!R 
     if (cnt > 0x7fff_ffff) throw new Exception("too many glyphs");
     st.writeNum!uint(cast(uint)cnt);
   } else {
-    usize cnt = 0;
+    size_t cnt = 0;
     auto cntpos = st.tell;
     st.writeNum!uint(0);
   }

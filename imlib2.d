@@ -1,4 +1,4 @@
-module iv.imlib2 is aliced;
+module iv.imlib2;
 pragma(lib, "Imlib2");
 import iv.x11;
 

@@ -1,4 +1,4 @@
-module iv.x11.xlib is aliced;
+module iv.x11.xlib;
 pragma(lib, "X11");
 
 import core.stdc.config : c_long, c_ulong;
@@ -998,16 +998,16 @@ struct XwcTextItem {
 }
 
 enum {
-  XNRequiredCharSet             = "requiredCharSet";
-  XNQueryOrientation            = "queryOrientation";
-  XNBaseFontName                = "baseFontName";
-  XNOMAutomatic                 = "omAutomatic";
-  XNMissingCharSet              = "missingCharSet";
-  XNDefaultString               = "defaultString";
-  XNOrientation                 = "orientation";
-  XNDirectionalDependentDrawing = "directionalDependentDrawing";
-  XNContextualDrawing           = "contextualDrawing";
-  XNFontInfo                    = "fontInfo";
+  XNRequiredCharSet             = "requiredCharSet",
+  XNQueryOrientation            = "queryOrientation",
+  XNBaseFontName                = "baseFontName",
+  XNOMAutomatic                 = "omAutomatic",
+  XNMissingCharSet              = "missingCharSet",
+  XNDefaultString               = "defaultString",
+  XNOrientation                 = "orientation",
+  XNDirectionalDependentDrawing = "directionalDependentDrawing",
+  XNContextualDrawing           = "contextualDrawing",
+  XNFontInfo                    = "fontInfo",
 }
 
 struct XOMCharSetList {
@@ -1077,49 +1077,49 @@ enum : c_ulong {
 }
 
 enum {
-  XNVaNestedList = "XNVaNestedList";
-  XNQueryInputStyle = "queryInputStyle";
-  XNClientWindow = "clientWindow";
-  XNInputStyle = "inputStyle";
-  XNFocusWindow = "focusWindow";
-  XNResourceName = "resourceName";
-  XNResourceClass = "resourceClass";
-  XNGeometryCallback = "geometryCallback";
-  XNDestroyCallback = "destroyCallback";
-  XNFilterEvents = "filterEvents";
-  XNPreeditStartCallback = "preeditStartCallback";
-  XNPreeditDoneCallback = "preeditDoneCallback";
-  XNPreeditDrawCallback = "preeditDrawCallback";
-  XNPreeditCaretCallback = "preeditCaretCallback";
-  XNPreeditStateNotifyCallback = "preeditStateNotifyCallback";
-  XNPreeditAttributes = "preeditAttributes";
-  XNStatusStartCallback = "statusStartCallback";
-  XNStatusDoneCallback = "statusDoneCallback";
-  XNStatusDrawCallback = "statusDrawCallback";
-  XNStatusAttributes = "statusAttributes";
-  XNArea = "area";
-  XNAreaNeeded = "areaNeeded";
-  XNSpotLocation = "spotLocation";
-  XNColormap = "colorMap";
-  XNStdColormap = "stdColorMap";
-  XNForeground = "foreground";
-  XNBackground = "background";
-  XNBackgroundPixmap = "backgroundPixmap";
-  XNFontSet = "fontSet";
-  XNLineSpace = "lineSpace";
-  XNCursor = "cursor";
+  XNVaNestedList = "XNVaNestedList",
+  XNQueryInputStyle = "queryInputStyle",
+  XNClientWindow = "clientWindow",
+  XNInputStyle = "inputStyle",
+  XNFocusWindow = "focusWindow",
+  XNResourceName = "resourceName",
+  XNResourceClass = "resourceClass",
+  XNGeometryCallback = "geometryCallback",
+  XNDestroyCallback = "destroyCallback",
+  XNFilterEvents = "filterEvents",
+  XNPreeditStartCallback = "preeditStartCallback",
+  XNPreeditDoneCallback = "preeditDoneCallback",
+  XNPreeditDrawCallback = "preeditDrawCallback",
+  XNPreeditCaretCallback = "preeditCaretCallback",
+  XNPreeditStateNotifyCallback = "preeditStateNotifyCallback",
+  XNPreeditAttributes = "preeditAttributes",
+  XNStatusStartCallback = "statusStartCallback",
+  XNStatusDoneCallback = "statusDoneCallback",
+  XNStatusDrawCallback = "statusDrawCallback",
+  XNStatusAttributes = "statusAttributes",
+  XNArea = "area",
+  XNAreaNeeded = "areaNeeded",
+  XNSpotLocation = "spotLocation",
+  XNColormap = "colorMap",
+  XNStdColormap = "stdColorMap",
+  XNForeground = "foreground",
+  XNBackground = "background",
+  XNBackgroundPixmap = "backgroundPixmap",
+  XNFontSet = "fontSet",
+  XNLineSpace = "lineSpace",
+  XNCursor = "cursor",
 
-  XNQueryIMValuesList = "queryIMValuesList";
-  XNQueryICValuesList = "queryICValuesList";
-  XNVisiblePosition = "visiblePosition";
-  XNR6PreeditCallback = "r6PreeditCallback";
-  XNStringConversionCallback = "stringConversionCallback";
-  XNStringConversion = "stringConversion";
-  XNResetState = "resetState";
-  XNHotKey = "hotKey";
-  XNHotKeyState = "hotKeyState";
-  XNPreeditState = "preeditState";
-  XNSeparatorofNestedList = "separatorofNestedList";
+  XNQueryIMValuesList = "queryIMValuesList",
+  XNQueryICValuesList = "queryICValuesList",
+  XNVisiblePosition = "visiblePosition",
+  XNR6PreeditCallback = "r6PreeditCallback",
+  XNStringConversionCallback = "stringConversionCallback",
+  XNStringConversion = "stringConversion",
+  XNResetState = "resetState",
+  XNHotKey = "hotKey",
+  XNHotKeyState = "hotKeyState",
+  XNPreeditState = "preeditState",
+  XNSeparatorofNestedList = "separatorofNestedList",
 }
 
 enum int XBufferOverflow = -1;

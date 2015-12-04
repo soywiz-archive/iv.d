@@ -1,4 +1,4 @@
-module iv.x11.x11 is aliced;
+module iv.x11.x11;
 
 public import core.stdc.config : c_long, c_ulong;
 
