@@ -351,7 +351,7 @@ private:
     }
 
     template opDispatch(string name) {
-      T opDispatchImpl(T) () if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(name);
+      T opDispatchImpl(T=const(char)[]) () if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(name);
       alias opDispatch = opDispatchImpl;
     }
 
