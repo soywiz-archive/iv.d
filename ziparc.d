@@ -100,18 +100,21 @@ private:
 private:
   File zfl;
   FileInfo[] dir;
+  bool mNormNames; // true: convert names to lower case, do case-insensitive comparison (ASCII only)
 
 public:
-  this (string fname) {
-    initLock();
+  this (string fname, bool normNames=true) {
     import std.stdio : File;
+    mNormNames = normNames;
+    initLock();
     zfl = File(fname);
     open(zfl);
     scope(failure) { zfl.close; zfl = zfl.init; }
   }
 
   // it now owns the file (if no exception was thrown)
-  this (File fl) {
+  this (File fl, bool normNames=true) {
+    mNormNames = normNames;
     initLock();
     open(fl);
     scope(success) zfl = fl;
@@ -149,7 +152,11 @@ public:
     }
 
     foreach (immutable idx, ref fi; dir) {
-      if (strequ(fi.path, de.path) && strequ(fi.name, de.name)) return openDirEntry(idx, fi.name);
+      if (mNormNames) {
+        if (strequ(fi.path, de.path) && strequ(fi.name, de.name)) return openDirEntry(idx, fi.name);
+      } else {
+        if (fi.path == de.path && fi.name == de.name) return openDirEntry(idx, fi.name);
+      }
     }
 
     throw new NamedException!"ZipArchive"("file not found");
@@ -183,14 +190,6 @@ private:
       if (fl.rawRead(data[]).length != data.length) throw new NamedException!"ZipArchive"("reading error");
       return cast(ushort)(data[0]+0x100*data[1]);
     }
-
-    /*
-    uint readU32 () {
-      ubyte[4] data;
-      if (fl.rawRead(data[]).length != data.length) throw new NamedException!"ZipArchive"("reading error");
-      return data[0]+0x100*data[1]+0x10000*data[2]+0x1000000*data[3];
-    }
-    */
 
     if (fl.size > 0xffff_ffffu) throw new NamedException!"ZipArchive"("file too big");
     uint flsize = cast(uint)fl.size;
@@ -289,7 +288,7 @@ private:
           if (ch == '\\') ch = '/'; // just in case
           if (ch == '/' && (nbpos == 0 || (nbpos > 0 && nb[nbpos-1] == '/'))) continue;
           if (ch == '/') lastSlash = nbpos+1;
-          if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's `toLower()`
+          if (mNormNames && ch >= 'A' && ch <= 'Z') ch += 32; // poor man's `toLower()`
           nb[nbpos++] = ch;
         }
         if (nbpos > 0 && nb[nbpos-1] != '/') {
