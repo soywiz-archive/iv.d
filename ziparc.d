@@ -81,11 +81,41 @@ private:
     ushort cmtsize; // .ZIP file comment length
   }
 
+  align(1) static struct EOCD64Header {
+  align(1):
+    char[4] sign; // "PK\x06\x06"
+    ulong eocdsize; // size of zip64 end of central directory record
+    ushort madebyver; // version made by
+    ushort extrver; // version needed to extract
+    uint diskno; // number of this disk
+    uint diskcd; // number of the disk with the start of the central directory
+    ulong diskfileno; // total number of entries in the central directory
+    ulong fileno; // total number of entries in the central directory
+    ulong cdsize; // size of the central directory
+    ulong cdofs; // offset of start of central directory with respect to the starting disk number
+  }
+
+  align(1) static struct Z64Locator {
+  align(1):
+    char[4] sign; // "PK\x06\x07"
+    uint diskcd; // number of the disk with the start of the zip64 end of central directory
+    long ecd64ofs; // relative offset of the zip64 end of central directory record
+    uint diskno; // total number of disks
+  }
+
+  align(1) static struct Z64Extra {
+  align(1):
+    ulong size;
+    ulong pksize;
+    ulong hdrofs;
+    uint disk; // number of the disk on which this file starts
+  }
+
   static struct FileInfo {
     bool packed; // only "store" and "deflate" are supported
-    uint pksize;
-    uint size;
-    uint hdrofs;
+    ulong pksize;
+    ulong size;
+    ulong hdrofs;
     string path;
     string name;
   }
@@ -94,7 +124,7 @@ private:
   public static struct DirEntry {
     string path;
     string name;
-    uint size;
+    ulong size;
   }
 
 private:
@@ -124,17 +154,25 @@ public:
     static struct Range {
     private:
       ZipArchive me;
-      uint curindex;
+      ulong curindex;
 
     nothrow @safe @nogc:
-      this (ZipArchive ame, uint aidx=0) { me = ame; curindex = aidx; }
+      this (ZipArchive ame, ulong aidx=0) { me = ame; curindex = aidx; }
 
     public:
       @property bool empty () const { return (curindex >= me.dir.length); }
-      @property DirEntry front () const { return DirEntry((curindex < me.dir.length ? me.dir[curindex].path : null), (curindex < me.dir.length ? me.dir[curindex].name : null), (curindex < me.dir.length ? me.dir[curindex].size : 0)); }
+      @property DirEntry front () const {
+        return DirEntry(
+          (curindex < me.dir.length ? me.dir[cast(usize)curindex].path : null),
+          (curindex < me.dir.length ? me.dir[cast(usize)curindex].name : null),
+          (curindex < me.dir.length ? me.dir[cast(usize)curindex].size : 0));
+      }
       @property Range save () { return Range(me, curindex); }
       void popFront () { if (curindex < me.dir.length) ++curindex; }
-      @property uint length () const { return cast(uint)me.dir.length; }
+      @property ulong length () const { return me.dir.length; }
+      @property ulong position () const { return curindex; } // current position
+      @property void position (ulong np) { curindex = np; }
+      void rewind () { curindex = 0; }
     }
     return Range(this);
   }
@@ -192,21 +230,21 @@ private:
     }
 
     if (fl.size > 0xffff_ffffu) throw new NamedException!"ZipArchive"("file too big");
-    uint flsize = cast(uint)fl.size;
+    ulong flsize = fl.size;
     if (flsize < EOCDHeader.sizeof) throw new NamedException!"ZipArchive"("file too small");
 
     // search for "end of central dir"
-    auto cdbuf = xalloc!ubyte(65536+EOCDHeader.sizeof);
+    auto cdbuf = xalloc!ubyte(65536+EOCDHeader.sizeof+Z64Locator.sizeof);
     scope(exit) xfree(cdbuf);
     ubyte[] buf;
-    uint ubufpos;
+    ulong ubufpos;
     if (flsize < cdbuf.length) {
       fl.seek(0);
-      buf = fl.rawRead(cdbuf[0..flsize]);
+      buf = fl.rawRead(cdbuf[0..cast(usize)flsize]);
       if (buf.length != flsize) throw new NamedException!"ZipArchive"("reading error");
     } else {
       fl.seek(-cast(ulong)cdbuf.length, SEEK_END);
-      ubufpos = cast(uint)fl.tell;
+      ubufpos = fl.tell;
       buf = fl.rawRead(cdbuf[]);
       if (buf.length != cdbuf.length) throw new NamedException!"ZipArchive"("reading error");
     }
@@ -226,9 +264,34 @@ private:
       writefln("cdofs: %s (0x%08x)", eocd.cdofs, eocd.cdofs);
       writeln("cmtsize: ", eocd.cmtsize);
     }
-    if (eocd.diskno != 0 || eocd.diskcd != 0) throw new NamedException!"ZipArchive"("multidisk archive");
-    if (eocd.diskfileno != eocd.fileno || ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize != flsize) throw new NamedException!"ZipArchive"("corrupted archive");
-    if (eocd.cdofs >= ubufpos+pos || flsize-eocd.cdofs < eocd.cdsize) throw new NamedException!"ZipArchive"("corrupted archive");
+    long cdofs = -1, cdsize = -1;
+    bool zip64 = false;
+    // zip64?
+    if (eocd.cdofs == 0xffff_ffffu) {
+      zip64 = true;
+      if (pos < Z64Locator.sizeof) throw new NamedException!"ZipArchive"("corrupted archive");
+      auto lt64 = cast(Z64Locator*)&buf[pos-Z64Locator.sizeof];
+      if (lt64.sign != "PK\x06\x07") throw new NamedException!"ZipArchive"("corrupted archive");
+      if (lt64.diskcd != 0 || lt64.diskno > 1) throw new NamedException!"ZipArchive"("multidisk archive");
+      debug writeln("ecd64ofs=", lt64.ecd64ofs);
+      if (lt64.ecd64ofs < 0 || lt64.ecd64ofs+EOCD64Header.sizeof > ubufpos+pos-Z64Locator.sizeof) throw new NamedException!"ZipArchive"("corrupted archive");
+      EOCD64Header e64 = void;
+      fl.seek(lt64.ecd64ofs);
+      if (fl.rawRead((&e64)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+      if (e64.sign != "PK\x06\x06") throw new NamedException!"ZipArchive"("corrupted archive");
+      if (e64.diskno != 0 || e64.diskcd != 0) throw new NamedException!"ZipArchive"("multidisk archive");
+      if (e64.diskfileno != e64.fileno) throw new NamedException!"ZipArchive"("corrupted archive");
+      if (e64.cdsize >= lt64.ecd64ofs) throw new NamedException!"ZipArchive"("corrupted archive");
+      if (e64.cdofs >= lt64.ecd64ofs || e64.cdofs+e64.cdsize > lt64.ecd64ofs) throw new NamedException!"ZipArchive"("corrupted archive");
+      cdofs = e64.cdofs;
+      cdsize = e64.cdsize;
+    } else {
+      if (eocd.diskno != 0 || eocd.diskcd != 0) throw new NamedException!"ZipArchive"("multidisk archive");
+      if (eocd.diskfileno != eocd.fileno || ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize != flsize) throw new NamedException!"ZipArchive"("corrupted archive");
+      cdofs = eocd.cdofs;
+      cdsize = eocd.cdsize;
+      if (cdofs >= ubufpos+pos || flsize-cdofs < cdsize) throw new NamedException!"ZipArchive"("corrupted archive");
+    }
 
     // now read central directory
     auto namebuf = xalloc!char(0x10000);
@@ -237,8 +300,8 @@ private:
     uint[string] knownNames; // value is dir index
     scope(exit) knownNames.destroy;
     cleanup();
-    uint bleft = eocd.cdsize;
-    fl.seek(eocd.cdofs);
+    auto bleft = cdsize;
+    fl.seek(cdofs);
     CDFileHeader cdfh = void;
     char[4] sign;
     dir.assumeSafeAppend; // yep
@@ -291,7 +354,71 @@ private:
           if (mNormNames && ch >= 'A' && ch <= 'Z') ch += 32; // poor man's `toLower()`
           nb[nbpos++] = ch;
         }
-        if (nbpos > 0 && nb[nbpos-1] != '/') {
+        bool doSkip = false;
+        // should we parse extra field?
+        debug writefln("size=0x%08x; pksize=0x%08x; packed=%s", fi.size, fi.pksize, (fi.packed ? "tan" : "ona"));
+        if (zip64 && (fi.size == 0xffff_ffffu || fi.pksize == 0xffff_ffffu || fi.hdrofs == 0xffff_ffffu)) {
+          // yep, do it
+          bool found = false;
+          //Z64Extra z64e = void;
+          debug writeln("extlen=", cdfh.extlen);
+          while (cdfh.extlen >= 4) {
+            auto eid = readU16();
+            auto esize = readU16();
+            debug writefln("0x%04x %s", eid, esize);
+            cdfh.extlen -= 4;
+            bleft -= 4;
+            if (cdfh.extlen < esize) break;
+            cdfh.extlen -= esize;
+            bleft -= esize;
+            // skip unknown info
+            if (eid != 1 || esize < /*Z64Extra.sizeof*/8) {
+              fl.seek(esize, SEEK_CUR);
+            } else {
+              // wow, Zip64 info
+              found = true;
+              if (fi.size == 0xffff_ffffu) {
+                if (fl.rawRead((&fi.size)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                esize -= 8;
+                //debug writeln(" size=", fi.size);
+              }
+              if (fi.pksize == 0xffff_ffffu) {
+                if (esize == 0) {
+                  //fi.pksize = ulong.max; // this means "get from local header"
+                  // read local file header; it's slow, but i don't care
+                  /*
+                  if (fi.hdrofs == 0xffff_ffffu) throw new NamedException!"ZipArchive"("invalid zip64 archive (3)");
+                  CDFileHeader lfh = void;
+                  auto oldpos = fl.tell;
+                  fl.seek(fi.hdrofs);
+                  if (fl.rawRead((&lfh)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                  assert(0);
+                  */
+                  throw new NamedException!"ZipArchive"("invalid zip64 archive (4)");
+                } else {
+                  if (esize < 8) throw new NamedException!"ZipArchive"("invalid zip64 archive (1)");
+                  if (fl.rawRead((&fi.pksize)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                  esize -= 8;
+                }
+              }
+              if (fi.hdrofs == 0xffff_ffffu) {
+                if (esize < 8) throw new NamedException!"ZipArchive"("invalid zip64 archive (2)");
+                if (fl.rawRead((&fi.hdrofs)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                esize -= 8;
+              }
+              if (esize > 0) fl.seek(esize, SEEK_CUR); // skip possible extra data
+              //if (z64e.disk != 0) throw new NamedException!"ZipArchive"("invalid central directory entry (disk number)");
+              break;
+            }
+          }
+          if (!found) {
+            debug writeln("required zip64 record not found");
+            //throw new NamedException!"ZipArchive"("required zip64 record not found");
+            //fi.size = fi.pksize = 0x1_0000_0000Lu; // hack: skip it
+            doSkip = true;
+          }
+        }
+        if (!doSkip && nbpos > 0 && nb[nbpos-1] != '/') {
           if (auto idx = nb[0..nbpos] in knownNames) {
             // replace
             auto fip = &dir[*idx];
@@ -369,8 +496,8 @@ private:
     }
     (*fc) = InnerFileCookied.init;
     (*fc).stpos = stofs;
-    (*fc).size = dir[idx].size;
-    (*fc).pksize = dir[idx].pksize;
+    (*fc).size = cast(uint)dir[idx].size; //FIXME
+    (*fc).pksize = cast(uint)dir[idx].pksize; //FIXME
     (*fc).mode = (dir[idx].packed ? InnerFileCookied.Mode.Zip : InnerFileCookied.Mode.Raw);
     (*fc).lock = lock;
     GC.addRange(fc, InnerFileCookied.sizeof);
