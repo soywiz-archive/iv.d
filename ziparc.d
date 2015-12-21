@@ -341,7 +341,7 @@ private:
         fi.pksize = cdfh.pksize;
         fi.size = cdfh.size;
         fi.hdrofs = cdfh.hdrofs;
-        if (fi.packed) fi.pksize = fi.size;
+        if (!fi.packed) fi.pksize = fi.size;
         // now, this is valid file, so read it's name
         if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new NamedException!"ZipArchive"("reading error");
         auto nb = new char[](cdfh.namelen);

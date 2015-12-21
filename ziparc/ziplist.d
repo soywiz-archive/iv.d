@@ -26,7 +26,7 @@ void main (string[] args) {
   auto zip = new ZipArchive(args[1]);
   foreach (ref de; zip.files) {
     stdout.writefln("%10s %s", de.size, de.name);
-    if (de.name == "-") {
+    if (de.name == "-" || de.name == "ziplist.d") {
       foreach (auto line; zip.fopen(de).byLine) {
         writeln("  [", line, "]");
       }
