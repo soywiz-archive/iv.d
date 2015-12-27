@@ -76,9 +76,38 @@ enum {
   SdpyButtonDownRight = 1<<2,
 }
 
-@property int sdpyMouseX () nothrow @trusted @nogc { return lastMouseX; }
-@property int sdpyMouseY () nothrow @trusted @nogc { return lastMouseY; }
-@property int sdpyMouseButts () nothrow @trusted @nogc { return lastMouseButts; }
+// changed before event callback
+@property int sdpyMouseX() () nothrow @trusted @nogc {
+  static if (__VERSION__ > 2067) pragma(inline, true);
+  return lastMouseX;
+}
+
+// changed before event callback
+@property int sdpyMouseY() () nothrow @trusted @nogc {
+  static if (__VERSION__ > 2067) pragma(inline, true);
+  return lastMouseY;
+}
+
+// changed before event callback
+@property int sdpyMouseButts() () nothrow @trusted @nogc {
+  static if (__VERSION__ > 2067) pragma(inline, true);
+  return lastMouseButts;
+}
+
+
+enum {
+  SdpyKeyCtrlDown = 1<<0,
+  SdpyKeyAltDown = 1<<1,
+  SdpyKeyShiftDown = 1<<2,
+  SdpyKeyMetaDown = 1<<3,
+}
+
+// changed before event callback
+@property int sdpyKeyMods() () nothrow @trusted @nogc {
+  static if (__VERSION__ > 2067) pragma(inline, true);
+  return lastKeyMods;
+}
+
 
 @property bool sdpyCursorVisible () nothrow @trusted @nogc { return (sdpyCurVisible == 1); }
 void sdpyHideCursor () nothrow @trusted @nogc { --sdpyCurVisible; }
@@ -386,6 +415,7 @@ private __gshared {
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared int lastMouseX = 0, lastMouseY = 0;
 __gshared uint lastMouseButts = 0;
+__gshared ubyte lastKeyMods = 0;
 
 
 void fixMouseVars() (in ref MouseEvent ev) {
@@ -404,6 +434,38 @@ void fixMouseVars() (in ref MouseEvent ev) {
     case MouseEventType.buttonReleased: lastMouseButts &= ~bmask; break;
     default:
   }
+  // fix keymods
+  ubyte res = 0;
+  if (ev.modifierState&ModifierState.ctrl) res |= SdpyKeyCtrlDown;
+  if (ev.modifierState&ModifierState.alt) res |= SdpyKeyAltDown;
+  if (ev.modifierState&ModifierState.shift) res |= SdpyKeyShiftDown;
+  if (ev.modifierState&ModifierState.windows) res |= SdpyKeyMetaDown;
+  lastKeyMods = res;
+}
+
+
+void fixKeyevMods() (in ref KeyEvent ev) {
+  ubyte res = 0;
+  if (ev.modifierState&ModifierState.ctrl) res |= SdpyKeyCtrlDown;
+  if (ev.modifierState&ModifierState.alt) res |= SdpyKeyAltDown;
+  if (ev.modifierState&ModifierState.shift) res |= SdpyKeyShiftDown;
+  if (ev.modifierState&ModifierState.windows) res |= SdpyKeyMetaDown;
+  switch (ev.key) with (Key) {
+    case Ctrl: case Ctrl_r:
+      if (ev.pressed) res |= SdpyKeyCtrlDown; else res &= ~SdpyKeyCtrlDown;
+      break;
+    case Alt: case Alt_r:
+      if (ev.pressed) res |= SdpyKeyAltDown; else res &= ~SdpyKeyAltDown;
+      break;
+    case Shift: case Shift_r:
+      if (ev.pressed) res |= SdpyKeyShiftDown; else res &= ~SdpyKeyShiftDown;
+      break;
+    case Windows: case Windows_r:
+      if (ev.pressed) res |= SdpyKeyMetaDown; else res &= ~SdpyKeyMetaDown;
+      break;
+    default:
+  }
+  lastKeyMods = res;
 }
 
 
@@ -544,6 +606,7 @@ public void sdpyMainLoop () {
 
   sdwindow.onFocusChange = delegate (bool focused) {
     lastMouseButts = 0;
+    lastKeyMods = 0;
     if (focused) {
       if (sdpyFocusCB !is null) sdpyFocusCB();
     } else {
@@ -559,6 +622,7 @@ public void sdpyMainLoop () {
     },
     delegate (KeyEvent event) {
       if (sdwindow.closed) return;
+      fixKeyevMods(event);
       static if (use_messages) {
         if (subtitles.length > 0 && event.key == Key.Ctrl/*Shift*/) {
           if (sdpyOnKeyCB !is null) sdpyOnKeyCB(event, true); // eaten
