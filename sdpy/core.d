@@ -16,10 +16,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdx.core;
+module iv.sdpy.core;
 
-import iv.sdx.compat;
-import iv.sdx.vlo : vloInitVSO, vloDeinitVSO;
+import iv.sdpy.compat;
+import iv.sdpy.vlo : vloInitVSO, vloDeinitVSO;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

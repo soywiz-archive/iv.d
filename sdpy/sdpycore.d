@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdx.sdpy;
+module iv.sdpy.sdpycore;
 
 private:
 static if (__traits(compiles, () { import arsd.simpledisplay; })) {
@@ -37,11 +37,11 @@ static if (__traits(compiles, () { import iv.geng, iv.stream; })) {
 public enum use_gestures = false;
 enum use_messages = false;
 
-import iv.sdx.compat;
-import iv.sdx.color;
-import iv.sdx.core;
-import iv.sdx.font6;
-import iv.sdx.vlo;
+import iv.sdpy.compat;
+import iv.sdpy.color;
+import iv.sdpy.core;
+import iv.sdpy.font6;
+import iv.sdpy.vlo;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

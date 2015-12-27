@@ -16,12 +16,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdx.vlo;
+module iv.sdpy.vlo;
 
-import iv.sdx.compat;
-import iv.sdx.core;
-import iv.sdx.font6;
-import iv.sdx.color;
+import iv.sdpy.compat;
+import iv.sdpy.core;
+import iv.sdpy.font6;
+import iv.sdpy.color;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
