@@ -25,6 +25,13 @@ static if (__traits(compiles, () { import arsd.simpledisplay; })) {
   public import simpledisplay;
 }
 
+static if (__traits(compiles, () { import iv.ticks; })) {
+  import iv.ticks;
+  enum use_fps = true;
+} else {
+  enum use_fps = false;
+}
+
 /*
 static if (__traits(compiles, () { import iv.geng, iv.stream; })) {
   public enum use_gestures = true;
@@ -176,22 +183,24 @@ void drawCursor (int x, int y) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-uint updateFPS () {
-  __gshared ulong fpsStTicks = 0;
-  __gshared uint fpsFrameCount = 0;
-  __gshared uint fpsLastFPS = 0;
+static if (use_fps) {
+  uint updateFPS () {
+    __gshared ulong fpsStTicks = 0;
+    __gshared uint fpsFrameCount = 0;
+    __gshared uint fpsLastFPS = 0;
 
-  immutable stt = vlGetTicks();
-  if (fpsStTicks == 0) fpsStTicks = stt;
-  immutable stdiff = stt-fpsStTicks;
+    immutable stt = getTicks();
+    if (fpsStTicks == 0) fpsStTicks = stt;
+    immutable stdiff = stt-fpsStTicks;
 
-  ++fpsFrameCount;
-  if (stdiff >= 2000) {
-    fpsLastFPS = cast(uint)(cast(double)fpsFrameCount*1000.0/cast(double)stdiff+0.5);
-    fpsStTicks = stt;
-    fpsFrameCount = 0;
+    ++fpsFrameCount;
+    if (stdiff >= 2000) {
+      fpsLastFPS = cast(uint)(cast(double)fpsFrameCount*1000.0/cast(double)stdiff+0.5);
+      fpsStTicks = stt;
+      fpsFrameCount = 0;
+    }
+    return fpsLastFPS;
   }
-  return fpsLastFPS;
 }
 
 
@@ -480,24 +489,26 @@ private void updateCB () {
 
   static if (use_gestures) if (drawnGlyph !is null && drawnGlyph.valid) drawStroke(drawnGlyph);
 
-  if (sdpyShowFPS) {
-    // do manual number conversion to avoid allocations
-    char[64] buf;
-    usize pos = buf.length;
-    auto fps = updateFPS();
-    do {
-      buf[--pos] = cast(char)('0'+fps%10);
-      fps /= 10;
-    } while (fps > 0);
-    while (buf.length-pos < 2) buf[--pos] = '0';
-    buf[--pos] = ' ';
-    buf[--pos] = ':';
-    buf[--pos] = 'S';
-    buf[--pos] = 'P';
-    buf[--pos] = 'F';
-    auto s = buf[pos..$];
-    immutable sw = vlOvl.textWidthProp(s);
-    vlOvl.drawTextPropOut(vlOvl.width-sw-3, 2, s, VColor.rgb(255, 127, 0), VColor.black);
+  static if (use_fps) {
+    if (sdpyShowFPS) {
+      // do manual number conversion to avoid allocations
+      char[64] buf;
+      usize pos = buf.length;
+      auto fps = updateFPS();
+      do {
+        buf[--pos] = cast(char)('0'+fps%10);
+        fps /= 10;
+      } while (fps > 0);
+      while (buf.length-pos < 2) buf[--pos] = '0';
+      buf[--pos] = ' ';
+      buf[--pos] = ':';
+      buf[--pos] = 'S';
+      buf[--pos] = 'P';
+      buf[--pos] = 'F';
+      auto s = buf[pos..$];
+      immutable sw = vlOvl.textWidthProp(s);
+      vlOvl.drawTextPropOut(vlOvl.width-sw-3, 2, s, VColor.rgb(255, 127, 0), VColor.black);
+    }
   }
 
   if (sdpyCurVisible) drawCursor(lastMouseX, lastMouseY);
