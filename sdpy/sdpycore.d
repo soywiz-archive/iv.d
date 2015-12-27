@@ -80,7 +80,7 @@ enum {
 }
 
 // changed before event callback
-@property int sdpyMouseButts() () nothrow @trusted @nogc {
+@property ubyte sdpyMouseButts() () nothrow @trusted @nogc {
   static if (__VERSION__ > 2067) pragma(inline, true);
   return lastMouseButts;
 }
@@ -94,7 +94,7 @@ enum {
 }
 
 // changed before event callback
-@property int sdpyKeyMods() () nothrow @trusted @nogc {
+@property ubyte sdpyKeyMods() () nothrow @trusted @nogc {
   static if (__VERSION__ > 2067) pragma(inline, true);
   return lastKeyMods;
 }
@@ -270,7 +270,7 @@ void initOpenGL () {
 
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared int lastMouseX = 0, lastMouseY = 0;
-__gshared uint lastMouseButts = 0;
+__gshared ubyte lastMouseButts = 0;
 __gshared ubyte lastKeyMods = 0;
 
 
@@ -278,7 +278,7 @@ void fixMouseVars() (in ref MouseEvent ev) {
   immutable mag = vlEffectiveMag;
   lastMouseX = ev.x/mag;
   lastMouseY = ev.y/mag;
-  uint bmask = 0;
+  ubyte bmask = 0;
   switch (ev.button) with (MouseButton) {
     case left: bmask = SdpyButtonDownLeft; break;
     case middle: bmask = SdpyButtonDownMiddle; break;
