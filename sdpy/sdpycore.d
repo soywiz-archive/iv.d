@@ -32,19 +32,6 @@ static if (__traits(compiles, () { import iv.ticks; })) {
   enum use_fps = false;
 }
 
-version(sdpy_enable_gestures) {
-  static if (__traits(compiles, () { import iv.geng, iv.stream; })) {
-    public enum use_gestures = true;
-    public import iv.geng;
-    import iv.stream;
-  } else {
-    public enum use_gestures = false;
-  }
-} else {
-  public enum use_gestures = false;
-}
-
-
 import iv.sdpy.compat;
 import iv.sdpy.color;
 import iv.sdpy.core;
@@ -61,9 +48,9 @@ __gshared void delegate () sdpyCloseQueryCB;
 __gshared void delegate () sdpyFocusCB;
 __gshared void delegate () sdpyBlurCB;
 __gshared void delegate () sdpyFrameCB; // called on the start of each frame
-__gshared void delegate (KeyEvent evt, bool active) sdpyOnKeyCB;
-__gshared void delegate (MouseEvent evt, bool active) sdpyOnMouseCB;
-__gshared void delegate (dchar ch, bool active) sdpyOnCharCB;
+__gshared void delegate (KeyEvent evt, bool active=true) sdpyOnKeyCB;
+__gshared void delegate (MouseEvent evt, bool active=true) sdpyOnMouseCB;
+__gshared void delegate (dchar ch, bool active=true) sdpyOnCharCB;
 
 void sdpyPostQuitMessage () {
   if (!sdwindow.closed) {
@@ -282,79 +269,6 @@ void initOpenGL () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-static if (use_gestures) {
-
-public __gshared PTGlyph[] sdpyKnownGestures;
-public __gshared PTGlyph sdpyDrawnGlyph;
-
-shared static this () {
-  //sdpyKnownGestures = gstLibLoad(File("strokes.dat"));
-  sdpyKnownGestures = gstLibLoad(new MemoryStreamRO(import("strokes.dat")));
-}
-
-
-// if `name` is `null`, gesture is not recognized
-// `glyph` is nor normalized
-public __gshared void delegate (string name, PTGlyph glyph) sdpyGestureCB;
-
-
-public void sdpyRegisterGlyph (string name, PTGlyph glyph) {
-  if (glyph !is null && glyph.valid && name.length > 0) {
-    auto gg = glyph.clone.normalize;
-    gg.name = name;
-    foreach (immutable idx, PTGlyph g; sdpyKnownGestures) {
-      if (g.name == name) {
-        sdpyKnownGestures[idx] = gg;
-        return;
-      }
-    }
-    sdpyKnownGestures ~= gg;
-  }
-}
-
-
-public void sdpyDrawGestureTemplate (const(PTGlyph) stk) {
-  if (stk is null || !stk.normalized) return;
-  foreach (uint idx; 1..stk.length) {
-    auto g = cast(ubyte)(255*idx/(stk.length-1));
-    auto b = cast(ubyte)(255-(255*idx/(stk.length-1)));
-    double x0 = stk.x(idx-1), y0 = stk.y(idx-1);
-    double x1 = stk.x(idx), y1 = stk.y(idx);
-    //FIXME: calc this!
-    x0 = x0*200+200;
-    y0 = y0*200+150;
-    x1 = x1*200+200;
-    y1 = y1*200+150;
-    vlOvl.line(cast(int)x0, cast(int)y0, cast(int)x1, cast(int)y1, VColor.rgb(0, g, b));
-  }
-}
-
-
-public void sdpyDrawGestureStroke (const(PTGlyph) stk, VColor col=VColor.rgb(255, 255, 0)) {
-  if (stk is null || stk.normalized) return;
-  foreach (uint idx; 1..stk.length) {
-    double x0 = stk.x(idx-1), y0 = stk.y(idx-1);
-    double x1 = stk.x(idx), y1 = stk.y(idx);
-    vlOvl.line(cast(int)x0, cast(int)y0, cast(int)x1, cast(int)y1, col);
-  }
-}
-
-
-public void sdpyDrawGestureStrokeDir (const(PTGlyph) stk) {
-  if (stk is null || stk.normalized) return;
-  foreach (uint idx; 1..stk.length) {
-    auto g = cast(ubyte)(255*idx/(stk.length-1));
-    auto b = cast(ubyte)(255-(255*idx/(stk.length-1)));
-    double x0 = stk.x(idx-1), y0 = stk.y(idx-1);
-    double x1 = stk.x(idx), y1 = stk.y(idx);
-    vlOvl.line(cast(int)x0, cast(int)y0, cast(int)x1, cast(int)y1, VColor.rgb(0, g, b));
-  }
-}
-
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 __gshared int lastMouseX = 0, lastMouseY = 0;
 __gshared uint lastMouseButts = 0;
 __gshared ubyte lastKeyMods = 0;
@@ -419,8 +333,6 @@ private void updateCB () {
   }
 
   if (sdpyPreDrawCB !is null) sdpyPreDrawCB();
-
-  static if (use_gestures) if (sdpyDrawnGlyph !is null && sdpyDrawnGlyph.valid) sdpyDrawGestureStroke(sdpyDrawnGlyph);
 
   static if (use_fps) {
     if (sdpyShowFPS) {
@@ -551,50 +463,14 @@ public void sdpyMainLoop () {
     delegate (KeyEvent event) {
       if (sdwindow.closed) return;
       fixKeyevMods(event);
-      if (sdpyOnKeyCB !is null) sdpyOnKeyCB(event, true); // normal
+      if (sdpyOnKeyCB !is null) sdpyOnKeyCB(event);
     },
     delegate (MouseEvent event) {
       fixMouseVars(event);
-      static if (use_gestures) {
-        if (event.type == MouseEventType.buttonPressed) {
-          // draw stroke?
-          if (lastMouseButts == SdpyButtonDownRight && event.button == MouseButton.right) {
-            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, false); // eaten
-            sdpyDrawnGlyph = new PTGlyph();
-            sdpyDrawnGlyph.addPoint(lastMouseX, lastMouseY);
-            return;
-          }
-        } else if (event.type == MouseEventType.buttonReleased) {
-          if (sdpyDrawnGlyph !is null) {
-            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, false); // eaten
-            if (lastMouseButts == 0) {
-              if (sdpyGestureCB !is null) {
-                auto glyph = sdpyDrawnGlyph;
-                sdpyDrawnGlyph = null;
-                auto detectedGlyph = glyph.findMatch(sdpyKnownGestures[]);
-                if (detectedGlyph !is null) {
-                  sdpyGestureCB(detectedGlyph.name, glyph);
-                } else if (glyph !is null && glyph.valid) {
-                  sdpyGestureCB(null, glyph);
-                }
-              } else {
-                sdpyDrawnGlyph = null;
-              }
-            }
-            return;
-          }
-        } else if (event.type == MouseEventType.motion) {
-          if (sdpyDrawnGlyph !is null) {
-            sdpyDrawnGlyph.addPoint(lastMouseX, lastMouseY);
-            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, false); // eaten
-            return;
-          }
-        }
-      }
-      if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, true); // normal
+      if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event);
     },
     delegate (dchar ch) {
-      if (sdpyOnCharCB !is null) sdpyOnCharCB(ch, true); // normal
+      if (sdpyOnCharCB !is null) sdpyOnCharCB(ch);
     },
   );
   if (!sdwindow.closed) {

@@ -72,11 +72,9 @@ void main (string[] args) {
   };
 
   sdpyOnMouseCB = delegate (MouseEvent evt, bool active) {
-    if (!active) return;
   };
 
   sdpyOnCharCB = delegate (dchar ch, bool active) {
-    if (!active) return;
   };
 
   sdpyMainLoop();
