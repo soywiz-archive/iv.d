@@ -68,6 +68,11 @@ shared bool vlMag2x = true; // set to true to create double-sized window; defaul
 shared bool vlScanlines = true; // set to true to use 'scanline' filter in mag2x mode; default: true
 shared VLFilter vlFilter = VLFilter.None; /// output filter; default: VLFilter.None
 
+__gshared bool sdpyUseOpenGL = false;
+__gshared bool sdpyShowFPS = true;
+__gshared uint sdpyFPS = 35;
+__gshared string sdpyWindowTitle = "SDPY";
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// screen dimensions, should be changed prior to calling vlInit()
@@ -159,6 +164,9 @@ void vlProcessArgs (ref string[] args) @trusted nothrow {
       case "green": if (yes) vlFilter = VLFilter.Green; break;
       case "1x": vlMag2x = !yes; break;
       case "2x": vlMag2x = yes; break;
+      case "x11": sdpyUseOpenGL = !yes; break;
+      case "ogl": sdpyUseOpenGL = yes; break;
+      case "fps": sdpyShowFPS = yes; break;
       case "vhelp":
         if (yes) {
           import core.stdc.stdlib : exit;
@@ -169,7 +177,12 @@ void vlProcessArgs (ref string[] args) @trusted nothrow {
             "  --bw      black-and-white filter\n"
             "  --green   green filter\n"
             "  --1x      normal size\n"
-            "  --2x      magnify\n");
+            "  --2x      magnify\n"
+            "  --x11     use X11 backend (default)\n"
+            "  --ogl     use OpenGl backend\n"
+            "  --fps     show FPS (default)\n"
+            "  --no-fps  don't show FPS\n"
+          );
           exit(0);
         }
         break;

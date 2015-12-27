@@ -66,17 +66,17 @@ void main (string[] args) {
   sdpyFrameCB = delegate () {
   };
 
-  sdpyOnKeyCB = delegate (KeyEvent evt, bool eaten) {
-    if (eaten) return;
+  sdpyOnKeyCB = delegate (KeyEvent evt, bool active) {
+    if (!active) return;
     if (evt.key == Key.Escape) { sdpyPostQuitMessage(); return; }
   };
 
-  sdpyOnMouseCB = delegate (MouseEvent evt, bool eaten) {
-    if (eaten) return;
+  sdpyOnMouseCB = delegate (MouseEvent evt, bool active) {
+    if (!active) return;
   };
 
-  sdpyOnCharCB = delegate (dchar ch, bool eaten) {
-    if (eaten) return;
+  sdpyOnCharCB = delegate (dchar ch, bool active) {
+    if (!active) return;
   };
 
   sdpyMainLoop();

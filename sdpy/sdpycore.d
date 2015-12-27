@@ -32,17 +32,18 @@ static if (__traits(compiles, () { import iv.ticks; })) {
   enum use_fps = false;
 }
 
-/*
-static if (__traits(compiles, () { import iv.geng, iv.stream; })) {
-  public enum use_gestures = true;
-  public import iv.geng;
-  import iv.stream;
+version(sdpy_enable_gestures) {
+  static if (__traits(compiles, () { import iv.geng, iv.stream; })) {
+    public enum use_gestures = true;
+    public import iv.geng;
+    import iv.stream;
+  } else {
+    public enum use_gestures = false;
+  }
 } else {
   public enum use_gestures = false;
 }
-*/
-public enum use_gestures = false;
-enum use_messages = false;
+
 
 import iv.sdpy.compat;
 import iv.sdpy.color;
@@ -53,10 +54,6 @@ import iv.sdpy.vlo;
 
 // ////////////////////////////////////////////////////////////////////////// //
 public:
-__gshared bool sdpyUseOpenGL = false;
-__gshared bool sdpyShowFPS = true;
-__gshared uint sdpyFPS = 35;
-
 __gshared void delegate () sdpyClearOvlCB;
 __gshared void delegate () sdpyPreDrawCB;
 __gshared void delegate () sdpyPostDrawCB;
@@ -64,9 +61,9 @@ __gshared void delegate () sdpyCloseQueryCB;
 __gshared void delegate () sdpyFocusCB;
 __gshared void delegate () sdpyBlurCB;
 __gshared void delegate () sdpyFrameCB; // called on the start of each frame
-__gshared void delegate (KeyEvent evt, bool eaten) sdpyOnKeyCB;
-__gshared void delegate (MouseEvent evt, bool eaten) sdpyOnMouseCB;
-__gshared void delegate (dchar ch, bool eaten) sdpyOnCharCB;
+__gshared void delegate (KeyEvent evt, bool active) sdpyOnKeyCB;
+__gshared void delegate (MouseEvent evt, bool active) sdpyOnMouseCB;
+__gshared void delegate (dchar ch, bool active) sdpyOnCharCB;
 
 void sdpyPostQuitMessage () {
   if (!sdwindow.closed) {
@@ -287,12 +284,12 @@ void initOpenGL () {
 // ////////////////////////////////////////////////////////////////////////// //
 static if (use_gestures) {
 
-public __gshared PTGlyph[] knownGestures;
-public __gshared PTGlyph drawnGlyph;
+public __gshared PTGlyph[] sdpyKnownGestures;
+public __gshared PTGlyph sdpyDrawnGlyph;
 
 shared static this () {
-  //knownGestures = gstLibLoad(File("strokes.dat"));
-  knownGestures = gstLibLoad(new MemoryStreamRO(import("strokes.dat")));
+  //sdpyKnownGestures = gstLibLoad(File("strokes.dat"));
+  sdpyKnownGestures = gstLibLoad(new MemoryStreamRO(import("strokes.dat")));
 }
 
 
@@ -300,22 +297,23 @@ shared static this () {
 // `glyph` is nor normalized
 public __gshared void delegate (string name, PTGlyph glyph) sdpyGestureCB;
 
-public void registerGlyph (string name, PTGlyph glyph) {
+
+public void sdpyRegisterGlyph (string name, PTGlyph glyph) {
   if (glyph !is null && glyph.valid && name.length > 0) {
     auto gg = glyph.clone.normalize;
     gg.name = name;
-    foreach (immutable idx, PTGlyph g; knownGestures) {
+    foreach (immutable idx, PTGlyph g; sdpyKnownGestures) {
       if (g.name == name) {
-        knownGestures[idx] = gg;
+        sdpyKnownGestures[idx] = gg;
         return;
       }
     }
-    knownGestures ~= gg;
+    sdpyKnownGestures ~= gg;
   }
 }
 
 
-public void drawTemplate (const(PTGlyph) stk) {
+public void sdpyDrawGestureTemplate (const(PTGlyph) stk) {
   if (stk is null || !stk.normalized) return;
   foreach (uint idx; 1..stk.length) {
     auto g = cast(ubyte)(255*idx/(stk.length-1));
@@ -332,7 +330,7 @@ public void drawTemplate (const(PTGlyph) stk) {
 }
 
 
-public void drawStroke (const(PTGlyph) stk, VColor col=VColor.rgb(255, 255, 0)) {
+public void sdpyDrawGestureStroke (const(PTGlyph) stk, VColor col=VColor.rgb(255, 255, 0)) {
   if (stk is null || stk.normalized) return;
   foreach (uint idx; 1..stk.length) {
     double x0 = stk.x(idx-1), y0 = stk.y(idx-1);
@@ -342,7 +340,7 @@ public void drawStroke (const(PTGlyph) stk, VColor col=VColor.rgb(255, 255, 0)) 
 }
 
 
-public void drawStrokeDir (const(PTGlyph) stk) {
+public void sdpyDrawGestureStrokeDir (const(PTGlyph) stk) {
   if (stk is null || stk.normalized) return;
   foreach (uint idx; 1..stk.length) {
     auto g = cast(ubyte)(255*idx/(stk.length-1));
@@ -353,71 +351,6 @@ public void drawStrokeDir (const(PTGlyph) stk) {
   }
 }
 
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-static if (use_messages) {
-private __gshared {
-  string messageText;
-  ulong messageHide; // 0 and text is not empty: appearing
-  ubyte messageAlpha;
-  string messageTextCollecting = null;
-  string[] subtitles;
-  bool showNextSub;
-
-
-  bool isMessageActive () { return (messageText.length > 0); }
-
-
-  void showMessage (string msg) {
-    messageText = msg;
-    messageHide = 0;
-    messageAlpha = 255;
-  }
-
-
-  void doMessageStep () {
-    if (messageText.length == 0) return;
-    if (messageHide == 0) {
-      // fade in
-      int newA = messageAlpha-10;
-      if (newA < 0) {
-        messageHide = (showNextSub ? 1 : vlGetTicks+5000);
-        messageAlpha = 0;
-      } else {
-        messageAlpha = cast(ubyte)newA;
-      }
-    } else if (messageAlpha > 0) {
-      // fade out
-      int newA = messageAlpha+10;
-      if (newA > 255) {
-        messageText = null;
-        if (showNextSub) {
-          showNextSub = false;
-          if (subtitles.length) {
-            showMessage(subtitles[0]);
-            subtitles = subtitles[1..$];
-          }
-        }
-      } else {
-        messageAlpha = cast(ubyte)newA;
-      }
-    } else if (vlGetTicks >= messageHide) {
-      messageAlpha += 10;
-    } else if (showNextSub) {
-      messageHide = 1;
-    }
-  }
-
-
-  void drawMessage () {
-    if (messageText.length == 0) return;
-    int x = (vlWidth-vlOvl.textWidthProp(messageText))/2;
-    int y = vlHeight-8;
-    vlOvl.drawTextProp(x, y, messageText, VColor.rgba(255, 255, 255, messageAlpha));
-  }
-}
 }
 
 
@@ -487,7 +420,7 @@ private void updateCB () {
 
   if (sdpyPreDrawCB !is null) sdpyPreDrawCB();
 
-  static if (use_gestures) if (drawnGlyph !is null && drawnGlyph.valid) drawStroke(drawnGlyph);
+  static if (use_gestures) if (sdpyDrawnGlyph !is null && sdpyDrawnGlyph.valid) sdpyDrawGestureStroke(sdpyDrawnGlyph);
 
   static if (use_fps) {
     if (sdpyShowFPS) {
@@ -513,27 +446,11 @@ private void updateCB () {
 
   if (sdpyCurVisible) drawCursor(lastMouseX, lastMouseY);
   if (sdpyPostDrawCB !is null) sdpyPostDrawCB();
-
-  static if (use_messages) {
-    doMessageStep();
-    drawMessage();
-  }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public void sdpyMainLoop () {
-  static if (use_messages) {
-    import std.file : exists;
-    import std.stdio : File, writeln;
-    if ("subtitles.txt".exists) {
-      foreach (char[] line; File("subtitles.txt").byLine) {
-        subtitles ~= line.idup;
-        writeln("*** ", line);
-      }
-    }
-  }
-
   vlInit();
 
   intrSdpyUseOpenGL = sdpyUseOpenGL; // cache value
@@ -541,7 +458,7 @@ public void sdpyMainLoop () {
   if (intrFPS < 1) intrFPS = 1; else if (intrFPS > 200) intrFPS = 200;
   if (!intrSdpyUseOpenGL) texImage = new Image(vlEffectiveWidth, vlEffectiveHeight);
 
-  sdwindow = new SimpleWindow(vlEffectiveWidth, vlEffectiveHeight, "FlexGUI/SimpleDisplay", (intrSdpyUseOpenGL ? OpenGlOptions.yes : OpenGlOptions.no), Resizablity.fixedSize);
+  sdwindow = new SimpleWindow(vlEffectiveWidth, vlEffectiveHeight, sdpyWindowTitle, (intrSdpyUseOpenGL ? OpenGlOptions.yes : OpenGlOptions.no), Resizablity.fixedSize);
   if (!intrSdpyUseOpenGL) {
     auto painter = sdwindow.draw();
     painter.outlineColor = Color.black;
@@ -634,25 +551,7 @@ public void sdpyMainLoop () {
     delegate (KeyEvent event) {
       if (sdwindow.closed) return;
       fixKeyevMods(event);
-      static if (use_messages) {
-        if (subtitles.length > 0 && event.key == Key.Ctrl/*Shift*/) {
-          if (sdpyOnKeyCB !is null) sdpyOnKeyCB(event, true); // eaten
-          if (event.pressed) {
-            if (isMessageActive) {
-              showNextSub = true;
-            } else {
-              showMessage(subtitles[0]);
-              subtitles = subtitles[1..$];
-            }
-          }
-          return;
-        }
-        if (messageTextCollecting !is null) {
-          if (sdpyOnKeyCB !is null) sdpyOnKeyCB(event, true); // eaten
-          return;
-        }
-      }
-      if (sdpyOnKeyCB !is null) sdpyOnKeyCB(event, false); // normal
+      if (sdpyOnKeyCB !is null) sdpyOnKeyCB(event, true); // normal
     },
     delegate (MouseEvent event) {
       fixMouseVars(event);
@@ -660,64 +559,42 @@ public void sdpyMainLoop () {
         if (event.type == MouseEventType.buttonPressed) {
           // draw stroke?
           if (lastMouseButts == SdpyButtonDownRight && event.button == MouseButton.right) {
-            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, true); // eaten
-            drawnGlyph = new PTGlyph();
-            drawnGlyph.addPoint(lastMouseX, lastMouseY);
+            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, false); // eaten
+            sdpyDrawnGlyph = new PTGlyph();
+            sdpyDrawnGlyph.addPoint(lastMouseX, lastMouseY);
             return;
           }
         } else if (event.type == MouseEventType.buttonReleased) {
-          if (drawnGlyph !is null) {
-            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, true); // eaten
+          if (sdpyDrawnGlyph !is null) {
+            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, false); // eaten
             if (lastMouseButts == 0) {
               if (sdpyGestureCB !is null) {
-                auto glyph = drawnGlyph;
-                drawnGlyph = null;
-                auto detectedGlyph = glyph.findMatch(knownGestures[]);
+                auto glyph = sdpyDrawnGlyph;
+                sdpyDrawnGlyph = null;
+                auto detectedGlyph = glyph.findMatch(sdpyKnownGestures[]);
                 if (detectedGlyph !is null) {
                   sdpyGestureCB(detectedGlyph.name, glyph);
                 } else if (glyph !is null && glyph.valid) {
                   sdpyGestureCB(null, glyph);
                 }
               } else {
-                drawnGlyph = null;
+                sdpyDrawnGlyph = null;
               }
             }
             return;
           }
         } else if (event.type == MouseEventType.motion) {
-          if (drawnGlyph !is null) {
-            drawnGlyph.addPoint(lastMouseX, lastMouseY);
-            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, true); // eaten
+          if (sdpyDrawnGlyph !is null) {
+            sdpyDrawnGlyph.addPoint(lastMouseX, lastMouseY);
+            if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, false); // eaten
             return;
           }
         }
       }
-      if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, false); // normal
+      if (sdpyOnMouseCB !is null) sdpyOnMouseCB(event, true); // normal
     },
     delegate (dchar ch) {
-      static if (use_messages) {
-        if (ch == '~') {
-          if (sdpyOnCharCB !is null) sdpyOnCharCB(ch, true); // eaten
-          if (messageTextCollecting is null) {
-            messageTextCollecting = "";
-          } else {
-            showMessage(messageTextCollecting);
-            messageTextCollecting = null;
-          }
-          return;
-        } else if (messageTextCollecting !is null) {
-          if (sdpyOnCharCB !is null) sdpyOnCharCB(ch, true); // eaten
-          if (ch >= ' ' && ch <= 127) {
-            messageTextCollecting ~= cast(char)ch;
-            import std.stdio; writeln(messageTextCollecting, "_");
-          } else if (ch == '\x08' && messageTextCollecting.length > 0) {
-            messageTextCollecting = messageTextCollecting[0..$-1];
-            import std.stdio; writeln(messageTextCollecting, "_");
-          }
-          return;
-        }
-      }
-      if (sdpyOnCharCB !is null) sdpyOnCharCB(ch, false); // normal
+      if (sdpyOnCharCB !is null) sdpyOnCharCB(ch, true); // normal
     },
   );
   if (!sdwindow.closed) {
