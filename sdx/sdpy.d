@@ -48,6 +48,7 @@ import iv.sdx.vlo;
 public:
 __gshared bool sdpyUseOpenGL = false;
 __gshared bool sdpyShowFPS = true;
+__gshared uint sdpyFPS = 35;
 
 __gshared void delegate () sdpyClearOvlCB;
 __gshared void delegate () sdpyPreDrawCB;
@@ -88,6 +89,7 @@ void sdpyShowCursor () nothrow @trusted @nogc { ++sdpyCurVisible; }
 private:
 __gshared bool intrSdpyUseOpenGL;
 __gshared int sdpyCurVisible = 1;
+__gshared uint intrFPS;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -462,6 +464,8 @@ public void sdpyMainLoop () {
   vlInit();
 
   intrSdpyUseOpenGL = sdpyUseOpenGL; // cache value
+  intrFPS = sdpyFPS; // cache value
+  if (intrFPS < 1) intrFPS = 1; else if (intrFPS > 200) intrFPS = 200;
   if (!intrSdpyUseOpenGL) texImage = new Image(vlEffectiveWidth, vlEffectiveHeight);
 
   sdwindow = new SimpleWindow(vlEffectiveWidth, vlEffectiveHeight, "FlexGUI/SimpleDisplay", (intrSdpyUseOpenGL ? OpenGlOptions.yes : OpenGlOptions.no), Resizablity.fixedSize);
@@ -547,7 +551,7 @@ public void sdpyMainLoop () {
     }
   };
 
-  sdwindow.eventLoop(30,
+  sdwindow.eventLoop(/*30*/1000/intrFPS,
     delegate () {
       if (sdpyFrameCB !is null) sdpyFrameCB();
       if (sdwindow.closed) return;
