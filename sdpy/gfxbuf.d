@@ -39,13 +39,13 @@ private:
   nothrow @trusted @nogc:
     VColor* buf;
     int w, h; // vscreen size
-    int rc; // refcount
+    int rc = -1; // refcount; <0: this is vlVScr
     Region reg; // here, to keep struct size small
     int mClipX0, mClipY0;
     int mClipX1, mClipY1;
     int mXOfs, mYOfs;
 
-    @disable this ();
+    //@disable this ();
     @disable this (this);
   }
 
@@ -57,15 +57,16 @@ private:
 
 nothrow @trusted @nogc:
   void vscrIncRef () {
-    if (mVScrS == 0) assert(0);
+    if (mVScrS == 0) return;
     auto vscr = cast(VScr*)mVScrS;
-    if (vscr.rc <= 0) assert(0);
+    if (vscr.rc < 0) return; // vlVScr buf
     ++vscr.rc;
   }
 
   void vscrDecRef () {
-    if (mVScrS == 0) assert(0);
+    if (mVScrS == 0) return;
     auto vscr = cast(VScr*)mVScrS;
+    if (vscr.rc < 0) return; // vlVScr buf
     if (--vscr.rc == 0) {
       import core.stdc.stdlib : free;
       free(vscr.buf);
@@ -87,15 +88,12 @@ nothrow @trusted @nogc:
     *vs = VScr.init;
     vs.buf = cast(VColor*)malloc((wdt && hgt ? wdt*hgt : 1)*VColor.sizeof);
     if (vs.buf is null) { free(vs); assert(0, "GfxBuf: out of memory"); }
+    mVScrS = cast(size_t)vs;
     vs.w = wdt;
     vs.h = hgt;
     vs.rc = 1;
-    vs.mClipX0 = vs.mClipY0 = 0;
-    vs.mClipX1 = wdt-1;
-    vs.mClipY1 = hgt-1;
-    vs.mXOfs = vs.mYOfs = 0;
+    resetClipOfs();
     vs.reg.setSize(wdt, hgt);
-    mVScrS = cast(size_t)vs;
   }
 
   @property inout(VScr)* vscr () inout pure {
@@ -103,10 +101,40 @@ nothrow @trusted @nogc:
     return cast(VScr*)mVScrS;
   }
 
+  // to create GfxBuf for vlVScr
+  this (VScr* vs) { mVScrS = cast(size_t)vs; }
+
+  __gshared VScr vsbuf;
+
+  static void fixVSBuf () {
+    vsbuf.buf = cast(VColor*)vlVScr;
+    if (vsbuf.w != vlWidth || vsbuf.h != vlHeight) {
+      vsbuf.w = vlWidth;
+      vsbuf.h = vlHeight;
+      vsbuf.rc = -1; // special mark
+      vsbuf.mClipX0 = vsbuf.mClipY0 = vsbuf.mXOfs = vsbuf.mYOfs = 0;
+      vsbuf.mClipX1 = vlWidth-1;
+      vsbuf.mClipY1 = vlHeight-1;
+      vsbuf.reg.setSize(vlWidth, vlHeight);
+    }
+  }
+
+  package static void updateVScr () { fixVSBuf(); }
+
 public:
   this (int wdt, int hgt) { createVBuf(wdt, hgt); }
   ~this () { vscrDecRef(); }
   this (this) { vscrIncRef(); }
+
+  void setSize (int wdt, int hgt) {
+    if (mVScrS != 0) assert(0, "GfxBuf: double init");
+    createVBuf(wdt, hgt);
+  }
+
+  static GfxBuf vlVScrBuf () {
+    fixVSBuf();
+    return GfxBuf(&vsbuf);
+  }
 
   @property VColor* vbuf () pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.buf; }
 
@@ -170,7 +198,7 @@ public:
   bool isEmptyClip () const pure {
     static if (__VERSION__ > 2067) pragma(inline, true);
     auto vs = vscr;
-    return (vs.mClipX1 > vs.mClipX0 || vs.mClipY1 > vs.mClipY0 || vs.reg.empty);
+    return (vs.mClipX0 > vs.mClipX1 || vs.mClipY0 > vs.mClipY1 || vs.reg.empty);
   }
 
   void resetClipOfs () {
@@ -242,6 +270,7 @@ public:
     usize pos = ch*8;
     if (wdt < 1 || shift >= 8) return;
     if (col.isTransparent && bkcol.isTransparent) return;
+    if (isEmptyClip) return;
     if (wdt > 8) wdt = 8;
     if (shift < 0) shift = 0;
     foreach (immutable int dy; 0..8) {
@@ -846,11 +875,5 @@ public:
 
   void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha=0) {
     blit(cast(VColor*)vlVScr, xd, yd, vlWidth, vlHeight, alpha);
-  }
-
-  private import iv.sdpy.vlo : VLOverlay;
-  void blit(string btype="NoSrcAlpha") (ref VLOverlay dest, int xd, int yd, ubyte alpha=0) {
-    if (dest.mVScr is null) return;
-    blit(cast(VColor*)dest.mVScr, xd, yd, dest.mWidth, dest.mHeight, alpha);
   }
 }

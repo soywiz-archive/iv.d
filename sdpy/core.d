@@ -19,7 +19,7 @@
 module iv.sdpy.core;
 
 import iv.sdpy.compat;
-import iv.sdpy.vlo : vloInitVSO, vloDeinitVSO;
+private import iv.sdpy.gfxbuf;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -214,6 +214,8 @@ void vlInit () @trusted {
     case Done: return;
   }
 
+  if (vsWidth < 1 || vsHeight < 1) throw new VideoLibError("sdpy: screen size is not set");
+
   import core.exception : onOutOfMemoryError;
   import core.stdc.stdlib : malloc, free;
 
@@ -231,7 +233,7 @@ void vlInit () @trusted {
   if (vscr2x is null) onOutOfMemoryError();
 
   atomicStore(pvInited, VLInitState.Partial);
-  vloInitVSO();
+  GfxBuf.updateVScr();
   atomicStore(pvInited, VLInitState.Done);
 }
 
@@ -250,10 +252,10 @@ private void vlDeinitInternal () /*@trusted nothrow @nogc*/ {
   import core.stdc.stdlib : free;
 
   if (atomicLoad(pvInited) == VLInitState.Not) return;
-  vloDeinitVSO();
 
   if (vlVScr !is null) { free(vlVScr); vlVScr = null; }
   if (vscr2x !is null) { free(vscr2x); vscr2x = null; }
+  GfxBuf.updateVScr();
 
   atomicStore(pvInited, VLInitState.Not);
 }

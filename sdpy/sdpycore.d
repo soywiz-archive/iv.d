@@ -35,13 +35,12 @@ static if (__traits(compiles, () { import iv.ticks; })) {
 import iv.sdpy.compat;
 import iv.sdpy.color;
 import iv.sdpy.core;
-import iv.sdpy.font6;
-import iv.sdpy.vlo;
+import iv.sdpy.gfxbuf;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public:
-__gshared void delegate () sdpyClearOvlCB;
+__gshared void delegate () sdpyClearVScrCB;
 __gshared void delegate () sdpyPreDrawCB;
 __gshared void delegate () sdpyPostDrawCB;
 __gshared void delegate () sdpyCloseQueryCB;
@@ -160,7 +159,13 @@ void drawCursor (int x, int y) {
     foreach (immutable dx; 0..curWidth) {
       auto clr = curPal[curImg[dy*curWidth+dx]];
       if (pressed && clr.a != 0) continue;
-      vlOvl.putPixel(x+dx-2, y+dy, clr);
+      //vlOvl.putPixel(x+dx-2, y+dy, clr);
+      int cx = x+dx-2;
+      int cy = y+dy;
+      if (cx >= 0 && cy >= 0 && cx < vlWidth && cy < vlHeight) {
+        uint* da = vlVScr+cy*vlWidth+cx;
+        mixin(VColor.ColorBlendMixinStr!("clr.u32", "*da"));
+      }
     }
   }
 }
@@ -326,13 +331,16 @@ void fixKeyevMods() (in ref KeyEvent ev) {
 
 
 private void updateCB () {
-  if (sdpyClearOvlCB !is null) {
-    sdpyClearOvlCB();
+  if (sdpyClearVScrCB !is null) {
+    sdpyClearVScrCB();
   } else {
-    vlOvl.clear(VColor.black);
+    import core.stdc.string : memset;
+    memset(vlVScr, 0, vlWidth*vlHeight*VColor.sizeof);
   }
 
   if (sdpyPreDrawCB !is null) sdpyPreDrawCB();
+  if (sdpyCurVisible) drawCursor(lastMouseX, lastMouseY);
+  if (sdpyPostDrawCB !is null) sdpyPostDrawCB();
 
   static if (use_fps) {
     if (sdpyShowFPS) {
@@ -351,13 +359,11 @@ private void updateCB () {
       buf[--pos] = 'P';
       buf[--pos] = 'F';
       auto s = buf[pos..$];
+      auto vlOvl = GfxBuf.vlVScrBuf;
       immutable sw = vlOvl.textWidthProp(s);
       vlOvl.drawTextPropOut(vlOvl.width-sw-3, 2, s, VColor.rgb(255, 127, 0), VColor.black);
     }
   }
-
-  if (sdpyCurVisible) drawCursor(lastMouseX, lastMouseY);
-  if (sdpyPostDrawCB !is null) sdpyPostDrawCB();
 }
 
 

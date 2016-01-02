@@ -18,6 +18,8 @@
  */
 import iv.sdpy;
 
+import iv.writer;
+
 
 void main (string[] args) {
   import std.stdio;
@@ -28,16 +30,30 @@ void main (string[] args) {
   vlWidth = 400;
   vlHeight = 300;
 
+  int gbx = 3, gby = 3;
+  bool gbvis = false;
+
+  auto gb = GfxBuf(92, 48);
+  gb.clear(VColor.green);
+  gb.region.punch(0, 0);
+  gb.region.punch(gb.width-1, 0);
+  gb.region.punch(0, gb.height-1);
+  gb.region.punch(gb.width-1, gb.height-1);
+
   sdpyCloseQueryCB = delegate () {
     sdpyPostQuitMessage();
   };
 
-  sdpyClearOvlCB = delegate () {
+  sdpyClearVScrCB = delegate () {
+    auto vlOvl = GfxBuf.vlVScrBuf;
     vlOvl.clear(VColor.black);
   };
 
   sdpyPreDrawCB = delegate () {
     import std.string : format;
+
+    auto vlOvl = GfxBuf.vlVScrBuf;
+
     vlOvl.drawText(10, 10, "Text!", VColor.rgb(255, 0, 0));
 
     auto s = "%03s,%03s".format(sdpyMouseX, sdpyMouseY);
@@ -63,18 +79,32 @@ void main (string[] args) {
     //vlOvl.drawTextProp(10, 10, "Text", VColor.rgb(255, 127, 0));
   };
 
+  sdpyPostDrawCB = delegate () {
+    if (gbvis) gb.blitToVScr(gbx, gby);
+  };
+
   sdpyFrameCB = delegate () {
   };
 
   sdpyOnKeyCB = delegate (KeyEvent evt, bool active) {
     if (!active) return;
     if (evt.key == Key.Escape) { sdpyPostQuitMessage(); return; }
+    if (!evt.pressed) return;
+    if (!gbvis) return;
+    switch (evt.key) with (Key) {
+      case Left: gbx -= 1; break;
+      case Right: gbx += 1; break;
+      case Up: gby -= 1; break;
+      case Down: gby += 1; break;
+      default:
+    }
   };
 
   sdpyOnMouseCB = delegate (MouseEvent evt, bool active) {
   };
 
   sdpyOnCharCB = delegate (dchar ch, bool active) {
+    if (ch == ' ') gbvis = !gbvis;
   };
 
   sdpyMainLoop();
