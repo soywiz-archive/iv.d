@@ -66,10 +66,10 @@ struct Region {
   }
 
   // punch a hole
-  void punch (int x, int y, int w=1, int h=1) { doPunchPatch!"punch"(x, y, w, h); }
+  void punch (int x, int y, int w=1, int h=1) nothrow @trusted { doPunchPatch!"punch"(x, y, w, h); }
 
   // patch a hole
-  void patch (int x, int y, int w=1, int h=1) { doPunchPatch!"patch"(x, y, w, h); }
+  void patch (int x, int y, int w=1, int h=1) nothrow @trusted { doPunchPatch!"patch"(x, y, w, h); }
 
   // ////////////////////////////////////////////////////////////////////////// //
   enum State { Mixed = -1, Empty, Solid } //WARNING! don't change the order!
@@ -106,8 +106,8 @@ struct Region {
 
   // call delegate for each solid or empty span
   // multiple declarations will allow us to use this in `@nogc` and `nothrow` contexts
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) { spansEnumerator!solids(y, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) { spansEnumerator!solids(y, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) nothrow @nogc { spansEnumerator!solids(y, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) @nogc { spansEnumerator!solids(y, x0, x1, dg); }
   void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) dg) { spansEnumerator!solids(y, x0, x1, dg); }
 
   //TODO: slab enumerator
@@ -200,7 +200,7 @@ private:
   // punch a hole, patch a hole
   // mode: "punch", "patch"
   //FIXME: overflows
-  void doPunchPatch(string mode) (int x, int y, int w=1, int h=1) {
+  void doPunchPatch(string mode) (int x, int y, int w=1, int h=1) nothrow @trusted {
     static assert(mode == "punch" || mode == "patch", "Region: invalid mode: "~mode);
     if (rdata is null) return;
     static if (mode == "punch") {
@@ -297,7 +297,7 @@ private:
   }
 
   // all args must be valid
-  void doPunchPatchLine(string mode) (int y, int x0, int x1) {
+  void doPunchPatchLine(string mode) (int y, int x0, int x1) nothrow @trusted {
     static if (mode == "patch") {
       if (rdata.simple && rdata.simpleSolid) return; // no need to patch completely solid region
     } else {
@@ -450,7 +450,7 @@ private:
   // destSolid: `true` to patch, `false` to cut
   // this will build a new valid line data, starting from data.length
   // (i.e. this line data will include length as first element)
-  void patchSpan(bool destSolid) (uint a, int x0, int x1) {
+  void patchSpan(bool destSolid) (uint a, int x0, int x1) nothrow @trusted {
     /*
     if (rdata.rwdt < 1) return;
     if (x1 < 0 || x0 >= rdata.rwdt || x1 < x0) return;
