@@ -16,107 +16,101 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.vlo;
+module iv.sdpy.gfxbuf;
 
 import iv.sdpy.compat;
 import iv.sdpy.core;
 import iv.sdpy.font6;
 import iv.sdpy.color;
+import iv.sdpy.region;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared VLOverlay vlOvl; /// vscreen overlay
+static assert(VColor.sizeof == uint.sizeof);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-package void vloInitVSO () {
-  vlOvl.setupWithVScr(vlVScr, vlWidth, vlHeight);
-}
+struct GfxBuf {
+private:
+  static struct VScr {
+  nothrow @trusted @nogc:
+    VColor* buf;
+    int w, h; // vscreen size
+    int rc; // refcount
+    Region reg; // here, 'cause we can't copy regions
+    int mClipX0, mClipY0;
+    int mClipX1, mClipY1;
+    int mXOfs, mYOfs;
 
+    @disable this ();
+    @disable this (this);
+  }
 
-package void vloDeinitVSO () {
-  vlOvl.free(); // this will not free VScr, as vlOvl isn't own it
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-// BEWARE! ANY COPIES WILL RESET `vscrOwn` FLAG! NO REFCOUNTING HERE!
-struct VLOverlay {
 public:
   alias stringc = const(char)[];
 
-//private:
-public:
-  int mWidth, mHeight;
-  int mClipX0, mClipY0;
-  int mClipX1, mClipY1;
-  int mXOfs, mYOfs;
-  uint* mVScr;
-  bool vscrOwn; // true: `free()` mVScr in dtor
+private:
+  size_t mVScrS; // this is actually `VScr*`
 
-//private:
-public:
-  this (void* avscr, int wdt, int hgt) @trusted nothrow @nogc { setupWithVScr(avscr, wdt, hgt); }
-
-public:
-  this (int wdt, int hgt) { resize(wdt, hgt); }
-  ~this () @trusted nothrow @nogc { free(); }
-
-  // any copy resets "own" flag
-  this (this) @safe nothrow @nogc { vscrOwn = false; }
-
-  uint* opIndex (usize idx) pure nothrow @nogc { return (idx < mHeight ? &mVScr[idx*mWidth] : null); }
-
-  void setupWithVScr (void* avscr, int wdt, int hgt) @trusted nothrow @nogc {
-    if (wdt < 1 || hgt < 1 || avscr is null) {
-      free();
-    } else {
-      if (avscr !is mVScr) free();
-      mVScr = cast(uint*)avscr;
-      vscrOwn = false;
-      mWidth = wdt;
-      mHeight = hgt;
-      resetClipOfs();
-    }
+nothrow @trusted @nogc:
+  void vscrIncRef () {
+    if (mVScrS == 0) assert(0);
+    auto vscr = cast(VScr*)mVScrS;
+    if (vscr.rc <= 0) assert(0);
+    ++vscr.rc;
   }
 
-  void resize (int wdt, int hgt) {
-    import core.exception : onOutOfMemoryError;
-    import core.stdc.stdlib : malloc, realloc, free;
-    if (wdt < 1 || wdt > 16384 || hgt < 1 || hgt > 16384) throw new VideoLibError("VLOverlay: invalid size");
-    if (!vscrOwn) throw new VideoLibError("VLOverlay: can't resize predefined overlay");
-    if (mVScr is null) {
-      mWidth = cast(int)wdt;
-      mHeight = cast(int)hgt;
-      mVScr = cast(uint*)malloc(mWidth*mHeight*mVScr[0].sizeof);
-      if (mVScr is null) onOutOfMemoryError();
-    } else if (mWidth != cast(int)wdt || mHeight != cast(int)hgt) {
-      mWidth = cast(int)wdt;
-      mHeight = cast(int)hgt;
-      auto scr = cast(uint*)realloc(mVScr, mWidth*mHeight*mVScr[0].sizeof);
-      if (scr is null) { this.free(); onOutOfMemoryError(); }
-      mVScr = scr;
-    }
-    resetClipOfs();
-  }
-
-  /// WARNING! this will trash virtual screen!
-  @property void width (int w) { resize(w, mHeight); }
-  @property void height (int h) { resize(mWidth, h); }
-
-nothrow @nogc:
-  @property bool valid () const pure { return (mVScr !is null); }
-
-  void free () @trusted {
-    if (vscrOwn && mVScr !is null) {
+  void vscrDecRef () {
+    if (mVScrS == 0) assert(0);
+    auto vscr = cast(VScr*)mVScrS;
+    if (--vscr.rc == 0) {
       import core.stdc.stdlib : free;
-      free(mVScr);
-      mVScr = null;
+      free(vscr.buf);
+      vscr.buf = null;
+      mVScrS = 0;
+    } else {
+      if (vscr.rc < 0) assert(0);
     }
-    mWidth = 1;
-    mHeight = 1;
-    resetClipOfs();
   }
+
+  void createVBuf (int wdt, int hgt) {
+    //import core.exception : onOutOfMemoryError;
+    import core.stdc.stdlib : malloc, realloc, free;
+    if (wdt < 0) wdt = 0;
+    if (hgt < 0) hgt = 0;
+    if (wdt > 32767 || hgt > 32767) assert(0, "invalid GfxBuf dimensions");
+    auto vs = cast(VScr*)malloc(VScr.sizeof);
+    if (vs is null) assert(0, "GfxBuf: out of memory");
+    *vs = VScr.init;
+    vs.buf = cast(VColor*)malloc((wdt && hgt ? wdt*hgt : 1)*VColor.sizeof);
+    if (vs.buf is null) { free(vs); assert(0, "GfxBuf: out of memory"); }
+    vs.w = wdt;
+    vs.h = hgt;
+    vs.rc = 1;
+    vs.mClipX0 = vs.mClipY0 = 0;
+    vs.mClipX1 = wdt-1;
+    vs.mClipY1 = hgt-1;
+    vs.mXOfs = vs.mYOfs = 0;
+    vs.reg.setSize(wdt, hgt);
+    mVScrS = cast(size_t)vs;
+  }
+
+  @property inout(VScr)* vscr () inout pure {
+    static if (__VERSION__ > 2067) pragma(inline, true);
+    return cast(VScr*)mVScrS;
+  }
+
+public:
+  this (int wdt, int hgt) { createVBuf(wdt, hgt); }
+  ~this () { vscrDecRef(); }
+  this (this) { vscrIncRef(); }
+
+  @property VColor* vbuf () pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.buf; }
+
+  @property int width () pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.w; }
+  @property int height () pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.h; }
+
+  VColor* scanline (usize idx) pure { static if (__VERSION__ > 2067) pragma(inline, true); return (idx < height ? vbuf+idx*width : null); }
 
   /**
    * Draw (possibly semi-transparent) pixel onto virtual screen; mix colors.
@@ -129,134 +123,101 @@ nothrow @nogc:
    * Returns:
    *  nothing
    */
-  @gcc_inline void putPixel() (int x, int y, VColor col) @trusted {
+  @gcc_inline void putPixel() (int x, int y, VColor col) {
     static if (__VERSION__ > 2067) pragma(inline, true);
-    //TODO: overflow check
-    x += mXOfs;
-    y += mYOfs;
-    if ((col.u32&VColor.AMask) != VColor.AMask && x >= mClipX0 && y >= mClipY0 && x <= mClipX1 && y <= mClipY1) {
-      uint* da = mVScr+y*mWidth+x;
-      mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
-    }
-  }
-
-  /**
-   * Draw (possibly semi-transparent) pixel onto virtual screen; don't mix colors.
-   *
-   * Params:
-   *  x = x coordinate
-   *  y = y coordinate
-   *  col = rgba color
-   *
-   * Returns:
-   *  nothing
-   */
-  @gcc_inline void setPixel() (int x, int y, VColor col) @trusted {
-    static if (__VERSION__ > 2067) pragma(inline, true);
-    //TODO: overflow check
-    x += mXOfs;
-    y += mYOfs;
-    if (x >= mClipX0 && y >= mClipY0 && x <= mClipX1 && y <= mClipY1) mVScr[y*mWidth+x] = col;
-  }
-
-  void resetClipOfs () @safe {
-    if (mVScr !is null) {
-      mClipX0 = mClipY0 = mXOfs = mYOfs = 0;
-      mClipX1 = mWidth-1;
-      mClipY1 = mHeight-1;
-    } else {
-      // all functions checks clipping, and this is not valid region
-      // so we can omit VScr checks
-      mClipX0 = mClipY0 = -42;
-      mClipX1 = mClipY1 = -666;
-    }
-  }
-
-  @property int width () const @safe pure { return mWidth; }
-  @property int height () const @safe pure { return mHeight; }
-
-  @property int xOfs () const @safe pure { return mXOfs; }
-  @property void xOfs (int v) @safe { mXOfs = v; }
-
-  @property int yOfs () const @safe pure { return mYOfs; }
-  @property void yOfs (int v) @safe { mYOfs = v; }
-
-  void getOfs (ref int x, ref int y) const @safe pure { x = mXOfs; y = mYOfs; }
-  void setOfs (in int x, in int y) @safe { mXOfs = x; mYOfs = y; }
-
-
-  static struct Ofs {
-    int x, y;
-  }
-
-  void getOfs (ref Ofs ofs) const @safe pure { ofs.x = mXOfs; ofs.y = mYOfs; }
-  void setOfs (in ref Ofs ofs) @safe { mXOfs = ofs.x; mYOfs = ofs.y; }
-  void resetOfs () @safe { mXOfs = mYOfs = 0; }
-
-
-  static struct Clip {
-    int x, y, w, h;
-  }
-
-  void getClip (ref int x0, ref int y0, ref int wdt, ref int hgt) const @safe pure {
-    if (mVScr !is null) {
-      x0 = mClipX0;
-      y0 = mClipY0;
-      wdt = mClipX1-mClipX0+1;
-      hgt = mClipY1-mClipY0+1;
-    } else {
-      x0 = y0 = wdt = hgt = 0;
-    }
-  }
-
-  void setClip (in int x0, in int y0, in int wdt, in int hgt) @safe {
-    if (mVScr !is null) {
-      mClipX0 = x0;
-      mClipY0 = y0;
-      mClipX1 = (wdt > 0 ? x0+wdt-1 : x0-1);
-      mClipY1 = (hgt > 0 ? y0+hgt-1 : y0-1);
-      if (mClipX0 < 0) mClipX0 = 0;
-      if (mClipY0 < 0) mClipY0 = 0;
-      if (mClipX0 >= mWidth) mClipX0 = mWidth-1;
-      if (mClipY0 >= mHeight) mClipY0 = mHeight-1;
-      if (mClipX1 < 0) mClipX1 = 0;
-      if (mClipY1 < 0) mClipY1 = 0;
-      if (mClipX1 >= mWidth) mClipX1 = mWidth-1;
-      if (mClipY1 >= mHeight) mClipY1 = mHeight-1;
-    }
-  }
-
-  void resetClip () @safe {
-    if (mVScr !is null) {
-      mClipX0 = mClipY0 = 0;
-      mClipX1 = mWidth-1;
-      mClipY1 = mHeight-1;
-    } else {
-      // all functions checks clipping, and this is not valid region
-      // so we can omit VScr checks
-      mClipX0 = mClipY0 = -42;
-      mClipX1 = mClipY1 = -666;
-    }
-  }
-
-  void getClip (ref Clip clip) const @safe pure { getClip(clip.x, clip.y, clip.w, clip.h); }
-  void setClip (in ref Clip clip) @safe { setClip(clip.x, clip.y, clip.w, clip.h); }
-
-  void clipIntrude (int dx, int dy) @safe {
-    if (mVScr !is null) {
-      mClipX0 += dx;
-      mClipY0 += dx;
-      mClipX1 -= dx;
-      mClipY1 -= dx;
-      if (mClipX1 >= mClipX0 && mClipY1 >= mClipY0) {
-        setClip(mClipX0, mClipY0, mClipX1-mClipX0+1, mClipY1-mClipY0+1);
+    if (!col.isTransparent) {
+      //TODO: overflow check
+      auto vs = vscr;
+      x += vs.mXOfs;
+      y += vs.mYOfs;
+      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 && vs.reg.visible(x, y)) {
+        uint* da = cast(uint*)vs.buf+y*vs.w+x;
+        mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
       }
     }
   }
 
-  void clipExtrude (int dx, int dy) @safe { clipIntrude(-dx, -dy); }
+  /**
+   * Draw pixel onto virtual screen; don't mix colors.
+   *
+   * Params:
+   *  x = x coordinate
+   *  y = y coordinate
+   *  col = rgb color
+   *
+   * Returns:
+   *  nothing
+   */
+  @gcc_inline void setPixel() (int x, int y, VColor col) {
+    static if (__VERSION__ > 2067) pragma(inline, true);
+    //TODO: overflow check
+    auto vs = vscr;
+    x += vs.mXOfs;
+    y += vs.mYOfs;
+    if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 && vs.reg.visible(x, y)) {
+      uint* da = cast(uint*)vs.buf+y*vs.w+x;
+      mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
+    }
+  }
+
+  // //////////////////////////////////////////////////////////////////// //
+  // offsets and clips
+  bool isEmptyClip () const pure {
+    static if (__VERSION__ > 2067) pragma(inline, true);
+    auto vs = vscr;
+    return (vs.mClipX1 > vs.mClipX0 || vs.mClipY1 > vs.mClipY0 || vs.reg.empty);
+  }
+
+  void resetClipOfs () {
+    auto vs = vscr;
+    vs.mClipX0 = vs.mClipY0 = vs.mXOfs = vs.mYOfs = 0;
+    vs.mClipX1 = vs.w-1;
+    vs.mClipY1 = vs.h-1;
+  }
+
+  void resetOfs () { vscr.mXOfs = vscr.mYOfs = 0; }
+
+  void resetClip () {
+    auto vs = vscr;
+    vs.mClipX0 = vs.mClipY0 = 0;
+    vs.mClipX1 = vs.w-1;
+    vs.mClipY1 = vs.h-1;
+  }
+
+  @property int xOfs () const pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.mXOfs; }
+  @property void xOfs (int v) { static if (__VERSION__ > 2067) pragma(inline, true); vscr.mXOfs = v; }
+
+  @property int yOfs () const pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.mYOfs; }
+  @property void yOfs (int v) { static if (__VERSION__ > 2067) pragma(inline, true); vscr.mYOfs = v; }
+
+  static struct Clip { int x, y, w, h; }
+
+  @property Clip clip () pure {
+    Clip res = void;
+    auto vs = vscr;
+    res.x = vs.mClipX0;
+    res.y = vs.mClipY0;
+    res.w = vs.mClipX1-vs.mClipX0+1;
+    res.h = vs.mClipY1-vs.mClipY0+1;
+    if (res.w < 0) res.w = 0;
+    if (res.h < 0) res.h = 0;
+    return res;
+  }
+
+  @property void clip() (in auto ref Clip c) {
+    auto vs = vscr;
+    vs.mClipX0 = c.x;
+    vs.mClipY0 = c.y;
+    vs.mClipX1 = c.x+c.w-1;
+    vs.mClipY1 = c.y+c.h-1;
+  }
+
+  // //////////////////////////////////////////////////////////////////// //
+  // region
+  @property ref Region region () { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.reg; }
 
   // //////////////////////////////////////////////////////////////////////// //
+  // various drawing
   /**
    * Draw character onto virtual screen in KOI8 encoding.
    *
@@ -272,7 +233,7 @@ nothrow @nogc:
    * Returns:
    *  nothing
    */
-  void drawCharWdt (int x, int y, int wdt, int shift, char ch, VColor col, VColor bkcol=VColor.transparent) @trusted {
+  void drawCharWdt (int x, int y, int wdt, int shift, char ch, VColor col, VColor bkcol=VColor.transparent) {
     usize pos = ch*8;
     if (wdt < 1 || shift >= 8) return;
     if (col.isTransparent && bkcol.isTransparent) return;
@@ -317,7 +278,7 @@ nothrow @nogc:
    * Returns:
    *  nothing
    */
-  void drawCharWdtOut (int x, int y, int wdt, int shift, char ch, VColor col, VColor outcol=VColor.transparent, ubyte ot=0) @trusted {
+  void drawCharWdtOut (int x, int y, int wdt, int shift, char ch, VColor col, VColor outcol=VColor.transparent, ubyte ot=0) {
     if (col.isTransparent && outcol.isTransparent) return;
     if (ot == 0 || outcol.isTransparent) {
       // no outline? simple draw
@@ -371,55 +332,54 @@ nothrow @nogc:
    * Returns:
    *  nothing
    */
-  void drawChar (int x, int y, char ch, VColor col, VColor bkcol=VColor.transparent) @trusted {
+  void drawChar (int x, int y, char ch, VColor col, VColor bkcol=VColor.transparent) {
     drawCharWdt(x, y, 6, 0, ch, col, bkcol);
   }
 
-  void drawCharOut (int x, int y, char ch, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) @trusted {
+  void drawCharOut (int x, int y, char ch, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) {
     drawCharWdtOut(x, y, 6, 0, ch, col, outcol, ot);
   }
 
-  void drawText (int x, int y, stringc str, VColor col, VColor bkcol=VColor.transparent) @trusted {
+  void drawText (int x, int y, stringc str, VColor col, VColor bkcol=VColor.transparent) {
     if (col.isTransparent && bkcol.isTransparent) return;
+    if (isEmptyClip) return;
     foreach (immutable char ch; str) {
       drawChar(x, y, ch, col, bkcol);
       x += 6;
     }
   }
 
-  void drawTextOut (int x, int y, stringc str, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) @trusted {
+  void drawTextOut (int x, int y, stringc str, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) {
+    if (isEmptyClip) return;
     foreach (immutable char ch; str) {
       drawCharOut(x, y, ch, col, outcol, ot);
       x += 6;
     }
   }
 
-  static int charWidthProp (char ch) @trusted pure { return (vlFontPropWidth[ch]&0x0f); }
-
-  int textWidth (stringc str) @trusted pure {
-    return cast(int)str.length*6;
-  }
-
-  int textWidthProp (stringc str) @trusted pure {
+  static @property int fontHeight () pure { static if (__VERSION__ > 2067) pragma(inline, true); return 8; }
+  static int charWidthProp (char ch) pure { static if (__VERSION__ > 2067) pragma(inline, true); return (vlFontPropWidth[ch]&0x0f); }
+  static int textWidth (stringc str) pure { static if (__VERSION__ > 2067) pragma(inline, true); return cast(int)str.length*6; }
+  static int textWidthProp (stringc str) {
     int wdt = 0;
     foreach (immutable char ch; str) wdt += (vlFontPropWidth[ch]&0x0f)+1;
     if (wdt > 0) --wdt; // don't count last empty pixel
     return wdt;
   }
 
-  int drawCharProp (int x, int y, char ch, VColor col, VColor bkcol=VColor.transparent) @trusted {
+  int drawCharProp (int x, int y, char ch, VColor col, VColor bkcol=VColor.transparent) {
     immutable int wdt = (vlFontPropWidth[ch]&0x0f);
     drawCharWdt(x, y, wdt, vlFontPropWidth[ch]>>4, ch, col, bkcol);
     return wdt;
   }
 
-  int drawCharPropOut (int x, int y, char ch, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) @trusted {
+  int drawCharPropOut (int x, int y, char ch, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) {
     immutable int wdt = (vlFontPropWidth[ch]&0x0f);
     drawCharWdtOut(x, y, wdt, vlFontPropWidth[ch]>>4, ch, col, outcol, ot);
     return wdt;
   }
 
-  int drawTextProp (int x, int y, stringc str, VColor col, VColor bkcol=VColor.transparent) @trusted {
+  int drawTextProp (int x, int y, stringc str, VColor col, VColor bkcol=VColor.transparent) {
     bool vline = false;
     int sx = x;
     foreach (immutable char ch; str) {
@@ -433,7 +393,7 @@ nothrow @nogc:
     return x-sx;
   }
 
-  int drawTextPropOut (int x, int y, stringc str, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) @trusted {
+  int drawTextPropOut (int x, int y, stringc str, VColor col, VColor outcol=VColor.transparent, ubyte ot=OutAll) {
     int sx = x;
     foreach (immutable char ch; str) x += drawCharPropOut(x, y, ch, col, outcol, ot)+1;
     if (x > sx) --x; // don't count last empty pixel
@@ -441,49 +401,52 @@ nothrow @nogc:
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
-  void clear (VColor col) @trusted {
-    if (mVScr !is null) {
-      if (!vscrOwn) col.u32 &= ~VColor.AMask;
-      mVScr[0..mWidth*mHeight] = col.u32;
-    }
-  }
-
-  void hline (int x0, int y0, int len, VColor col) @trusted {
-    if (col.isOpaque && len > 0 && mVScr !is null) {
-      x0 += mXOfs;
-      y0 += mYOfs;
-      if (y0 >= mClipY0 && x0 <= mClipX1 && y0 <= mClipY1 && x0+len > mClipX0) {
-        if (x0 < mClipX0) { if ((len += (x0-mClipX0)) <= 0) return; x0 = mClipX0; }
-        if (x0+len-1 > mClipX1) len = mClipX1-x0+1;
-        immutable usize ofs = y0*mWidth+x0;
-        mVScr[ofs..ofs+len] = col.u32;
+  void clear (VColor col) {
+    auto vs = vscr;
+    if (vs.w && vs.h && !vs.reg.empty) {
+      col.u32 &= ~VColor.AMask;
+      if (vs.reg.solid) {
+        vs.buf[0..vs.w*vs.h] = col;
+      } else {
+        VColor* da = vs.buf;
+        foreach (immutable y; 0..vs.h) {
+          vs.reg.spans!true(y, 0, vs.w-1, (sx, ex) @trusted {
+            //{ import iv.writer; writeln("y=", y, "; sx=", sx, "; ex=", ex); }
+            da[sx..ex+1] = col;
+          });
+          da += vs.w;
+        }
       }
-    } else {
-      while (len-- > 0) putPixel(x0++, y0, col);
     }
   }
 
-  void vline (int x0, int y0, int len, VColor col) @trusted {
+  void hline (int x0, int y0, int len, VColor col) {
+    if (len < 1 || col.isTransparent || isEmptyClip) return;
+    if (len == 1) { putPixel(x0, y0, col); return; }
+    auto vs = vscr;
+    x0 += vs.mXOfs;
+    y0 += vs.mYOfs;
+    if (y0 < vs.mClipY0 || y0 > vs.mClipY1) return;
+    if (x0+len < vs.mClipX0 || x0 > vs.mClipX1) return;
+    uint adr = y0*vs.w;
+    vs.reg.spans!true(y0, x0, x0+len-1, (sx, ex) @trusted {
+      if (col.isOpaque) {
+        vs.buf[adr+sx..adr+ex+1] = col;
+      } else {
+        uint* da = cast(uint*)vs.buf+adr+sx;
+        while (sx++ <= ex) {
+          mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
+          ++da;
+        }
+      }
+    });
+  }
+
+  void vline (int x0, int y0, int len, VColor col) {
+    if (len < 1 || col.isTransparent || isEmptyClip) return;
     while (len-- > 0) putPixel(x0, y0++, col);
   }
 
-
-  /+
-  void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, VColor col) @trusted {
-    import std.math : abs;
-    int dx =  abs(x1-x0), sx = (x0 < x1 ? 1 : -1);
-    int dy = -abs(y1-y0), sy = (y0 < y1 ? 1 : -1);
-    int err = dx+dy, e2; // error value e_xy
-    for (;;) {
-      static if (lastPoint) putPixel(x0, y0, col);
-      if (x0 == x1 && y0 == y1) break;
-      static if (!lastPoint) putPixel(x0, y0, col);
-      e2 = 2*err;
-      if (e2 >= dy) { err += dy; x0 += sx; } // e_xy+e_x > 0
-      if (e2 <= dx) { err += dx; y0 += sy; } // e_xy+e_y < 0
-    }
-  }
-  +/
 
   // as the paper on which this code is based in not available to public,
   // so fuck you, and no credits.
@@ -492,18 +455,19 @@ nothrow @nogc:
   void drawLine(bool lastPoint) (int x0, int y0, int x1, int y1, immutable VColor col) {
     enum swap(string a, string b) = "{int tmp_="~a~";"~a~"="~b~";"~b~"=tmp_;}";
 
-    if ((col.u32&VColor.AMask) == VColor.AMask || mClipX0 > mClipX1 || mClipY0 > mClipY1 || mVScr is null) return;
+    if (col.isTransparent || isEmptyClip) return;
 
     if (x0 == x1 && y0 == y1) {
       static if (lastPoint) putPixel(x0, y0, col);
       return;
     }
 
-    x0 += mXOfs; x1 += mXOfs;
-    y0 += mYOfs; y1 += mYOfs;
+    auto vs = vscr;
+    x0 += vs.mXOfs; x1 += vs.mXOfs;
+    y0 += vs.mYOfs; y1 += vs.mYOfs;
 
     // clip rectange
-    int wx0 = mClipX0, wy0 = mClipY0, wx1 = mClipX1, wy1 = mClipY1;
+    int wx0 = vs.mClipX0, wy0 = vs.mClipY0, wx1 = vs.mClipX1, wy1 = vs.mClipY1;
     // other vars
     int stx, sty; // "steps" for x and y axes
     int dsx, dsy; // "lengthes" for x and y axes
@@ -611,8 +575,10 @@ nothrow @nogc:
       // this can be made even faster by precalculating `da` and making
       // separate code branches for mixing and non-mixing drawing, but...
       // ah, screw it!
-      uint* da = mVScr+(*d1)*mWidth+(*d0);
-      mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
+      if (vs.reg.visible(*d0, *d1)) {
+        uint* da = cast(uint*)vs.buf+(*d1)*vs.w+(*d0);
+        mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
+      }
       // done drawing, move coords
       if (e >= 0) {
         yd += sty;
@@ -624,78 +590,50 @@ nothrow @nogc:
     }
   }
 
-  void line (int x0, int y0, int x1, int y1, VColor col) @trusted { drawLine!true(x0, y0, x1, y1, col); }
-  void lineNoLast (int x0, int y0, int x1, int y1, VColor col) @trusted { drawLine!false(x0, y0, x1, y1, col); }
+  void line (int x0, int y0, int x1, int y1, VColor col) { drawLine!true(x0, y0, x1, y1, col); }
+  void lineNoLast (int x0, int y0, int x1, int y1, VColor col) { drawLine!false(x0, y0, x1, y1, col); }
 
-  void fillRect (int x, int y, int w, int h, VColor col) @trusted {
-    x += mXOfs;
-    y += mYOfs;
-    if (w > 0 && h > 0 && x+w > mClipX0 && y+h > mClipY0 && x <= mClipX1 && y <= mClipY1) {
-      static struct Rect {
-        int x, y;
-        int w, h;
-        @gcc_inline @property bool empty () const pure nothrow @safe @nogc {
-          static if (__VERSION__ > 2067) pragma(inline, true);
-          return (w <= 0 || h <= 0);
-        }
-      }
-
-      static bool intersectRect (in ref Rect A, in ref Rect B, out Rect result) pure nothrow @safe @nogc {
-        int Amin, Amax, Bmin, Bmax;
-
-        // special cases for empty rects
-        if (A.empty || B.empty) return false;
-
-        // horizontal intersection
-        Amin = A.x;
-        Amax = Amin+A.w;
-        Bmin = B.x;
-        Bmax = Bmin+B.w;
-        if (Bmin > Amin) Amin = Bmin;
-        result.x = Amin;
-        if (Bmax < Amax) Amax = Bmax;
-        result.w = Amax-Amin;
-
-        // vertical intersection
-        Amin = A.y;
-        Amax = Amin+A.h;
-        Bmin = B.y;
-        Bmax = Bmin+B.h;
-        if (Bmin > Amin) Amin = Bmin;
-        result.y = Amin;
-        if (Bmax < Amax) Amax = Bmax;
-        result.h = Amax-Amin;
-
-        return !result.empty;
-      }
-
-      Rect r, sr, dr;
-      sr.x = mClipX0; sr.y = mClipY0; sr.w = mClipX1-mClipX0+1; sr.h = mClipY1-mClipY0+1;
-      r.x = x; r.y = y; r.w = w; r.h = h;
-      if (intersectRect(sr, r, dr)) {
-        x = dr.x-mXOfs;
-        y = dr.y-mYOfs;
-        while (dr.h-- > 0) hline(x, y++, dr.w, col);
-      }
-    }
+  void fillRect (int x, int y, int w, int h, VColor col) {
+    if (col.isTransparent || isEmptyClip || w < 1 || h < 1) return;
+    auto vs = vscr;
+    x += vs.mXOfs;
+    y += vs.mYOfs;
+    int ex = x+w-1;
+    int ey = y+h-1;
+    if (x > vs.mClipX1 || y > vs.mClipY1 || ex < vs.mClipX0 || ey < vs.mClipY0) return;
+    if (x < vs.mClipX0) x = vs.mClipX0;
+    if (y < vs.mClipY0) y = vs.mClipY0;
+    if (ex < vs.mClipX0) x = vs.mClipX0;
+    if (ey < vs.mClipY0) y = vs.mClipY0;
+    if (ex < x || ey < y) return; // just in case
+    w = ex+1-x;
+    foreach (int dy; y..ey+1) hline(x, dy, w, col);
   }
 
-  void rect (int x, int y, int w, int h, VColor col) @trusted {
+  void rect (int x, int y, int w, int h, VColor col) {
     if (w > 0 && h > 0) {
-      hline(x, y, w, col);
-      hline(x, y+h-1, w, col);
-      vline(x, y+1, h-2, col);
-      vline(x+w-1, y+1, h-2, col);
+      if (w == 1) {
+        vline(x, y, h, col);
+      } else if (h == 1) {
+        hline(x, y, w, col);
+      } else {
+        hline(x, y, w, col);
+        hline(x, y+h-1, w, col);
+        vline(x, y+1, h-2, col);
+        vline(x+w-1, y+1, h-2, col);
+      }
     }
   }
 
   /* 4 phases */
-  void selectionRect (int phase, int x0, int y0, int wdt, int hgt, VColor col0, VColor col1=VColor.transparent) @trusted {
+  void selectionRect (int phase, int x0, int y0, int wdt, int hgt, VColor col0, VColor col1=VColor.transparent) {
     if (wdt > 0 && hgt > 0) {
       // top
-      foreach (immutable f; x0..x0+wdt) { putPixel(f, y0, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
+      if (wdt > 1) foreach (immutable f; x0..x0+wdt) { putPixel(f, y0, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
+      if (hgt == 1) return;
       // right
       foreach (immutable f; y0+1..y0+hgt) { putPixel(x0+wdt-1, f, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
+      if (wdt == 1) return;
       // bottom
       foreach_reverse (immutable f; x0..x0+wdt-1) { putPixel(f, y0+hgt-1, ((phase %= 4) < 2 ? col0 : col1)); ++phase; }
       // left
@@ -703,14 +641,14 @@ nothrow @nogc:
     }
   }
 
-  private void plot4points() (int cx, int cy, int x, int y, VColor col) @trusted {
+  private void plot4points() (int cx, int cy, int x, int y, VColor col) {
     putPixel(cx+x, cy+y, col);
     if (x != 0) putPixel(cx-x, cy+y, col);
     if (y != 0) putPixel(cx+x, cy-y, col);
     putPixel(cx-x, cy-y, col);
   }
 
-  void circle (int cx, int cy, int radius, VColor col) @trusted {
+  void circle (int cx, int cy, int radius, VColor col) {
     if (radius > 0 && !col.isTransparent) {
       int error = -radius, x = radius, y = 0;
       if (radius == 1) { putPixel(cx, cy, col); return; }
@@ -725,7 +663,7 @@ nothrow @nogc:
     }
   }
 
-  void fillCircle (int cx, int cy, int radius, VColor col) @trusted {
+  void fillCircle (int cx, int cy, int radius, VColor col) {
     if (radius > 0 && !col.isTransparent) {
       int error = -radius, x = radius, y = 0;
       if (radius == 1) { putPixel(cx, cy, col); return; }
@@ -749,7 +687,7 @@ nothrow @nogc:
     }
   }
 
-  void ellipse (int x0, int y0, int x1, int y1, VColor col) @trusted {
+  void ellipse (int x0, int y0, int x1, int y1, VColor col) {
     import std.math : abs;
     int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
     long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
@@ -775,7 +713,7 @@ nothrow @nogc:
     }
   }
 
-  void fillEllipse (int x0, int y0, int x1, int y1, VColor col) @trusted {
+  void fillEllipse (int x0, int y0, int x1, int y1, VColor col) {
     import std.math : abs;
     int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
     long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
@@ -800,58 +738,62 @@ nothrow @nogc:
     }
   }
 
-  /** blit overlay to main screen */
-  void blitTpl(string btype) (ref VLOverlay destovl, int xd, int yd, ubyte alpha=0) @trusted {
-    static if (btype == "NoSrcAlpha") import core.stdc.string : memcpy;
-    if (!valid || !destovl.valid) return;
-    if (xd > -mWidth && yd > -mHeight && xd < destovl.mWidth && yd < destovl.mHeight && alpha < 255) {
-      int w = mWidth, h = mHeight;
-      immutable uint vsPitch = destovl.mWidth;
-      immutable uint myPitch = mWidth;
-      uint *my = mVScr;
-      uint *dest;
-      // vertical clipping
-      if (yd < 0) {
-        // skip invisible top part
-        if ((h += yd) < 1) return;
-        my -= yd*mWidth;
-        yd = 0;
-      }
-      if (yd+h > destovl.mHeight) {
-        // don't draw invisible bottom part
-        if ((h = destovl.mHeight-yd) < 1) return;
-      }
-      // horizontal clipping
-      if (xd < 0) {
-        // skip invisible left part
-        if ((w += xd) < 1) return;
-        my -= xd;
-        xd = 0;
-      }
-      if (xd+w > destovl.mWidth) {
-        // don't draw invisible right part
-        if ((w = destovl.mWidth-xd) < 1) return;
-      }
-      // copying?
-      dest = destovl.mVScr+yd*vsPitch+xd;
-      static if (btype == "NoSrcAlpha") {
-        if (alpha == 0) {
-          while (h-- > 0) {
+  // blit overlay to buffer, possibly with alpha
+  // destbuf should not overlap with vscr.buf
+  void blit(string btype="NoSrcAlpha") (VColor* destbuf, int xd, int yd, int destw, int desth, ubyte alpha=0) {
+    static assert(btype == "NoSrcAlpha" || btype == "SrcAlpha");
+    auto vs = vscr;
+    if (destw < 1 || desth < 1 || destbuf is null || vs.w < 1 || vs.h < 1 ||
+        xd >= destw || yd >= desth || xd+vs.w < 0 || yd+vs.h < 0 || alpha == 255)
+    {
+      return;
+    }
+    // horizontal cliping
+    int sx = 0, ex = vs.w-1; // our coords
+    if (xd < 0) {
+      if ((sx = -xd) > ex) return; // just in case
+      xd = 0;
+    }
+    if (xd+(ex-sx+1) > destw) {
+      if ((ex = sx+destw-xd-1) < sx) return; // just in case
+    }
+    assert(sx >= 0 && ex < vs.w && sx <= ex);
+    // vertical clipping
+    int sy = 0, ey = vs.h-1; // our coords
+    if (yd < 0) {
+      if ((sy = -yd) > ey) return; // just in case
+      yd = 0;
+    }
+    if (yd+(ey-sy+1) > desth) {
+      if ((ey = sy+desth-yd-1) < sy) return; // just in case
+    }
+    assert(sy >= 0 && ey < vs.h && sy <= ey);
+    // now we can put spans
+    uint* sba = cast(uint*)vs.buf+sy*vs.w;
+    uint* dba = cast(uint*)destbuf+yd*destw+xd;
+    static if (btype == "NoSrcAlpha") {
+      if (alpha == 0) {
+        // copying
+        while (sy <= ey) {
+          vs.reg.spans!true(sy, sx, ex, (x0, x1) @trusted {
             import core.stdc.string : memcpy;
-            memcpy(dest, my, w*destovl.mVScr[0].sizeof);
-            dest += vsPitch;
-            my += myPitch;
-          }
-          return;
+            memcpy(dba+x0-sx, sba+x0, (x1-x0+1)*VColor.sizeof);
+          });
+          sba += vs.w;
+          dba += destw;
+          ++sy;
         }
+        return;
       }
-      // alpha mixing
-      {
-        static if (btype == "NoSrcAlpha") immutable uint a = (alpha<<VColor.AShift);
-        while (h-- > 0) {
-          auto src = cast(immutable(uint)*)my;
-          auto dst = dest;
-          foreach_reverse (immutable dx; 0..w) {
+    }
+    // alpha mixing
+    {
+      static if (btype == "NoSrcAlpha") immutable uint a = (alpha<<VColor.AShift);
+      while (sy <= ey) {
+        vs.reg.spans!true(sy, sx, ex, (x0, x1) @trusted {
+          uint* src = sba+x0;
+          uint* dst = dba+x0-sx;
+          while (x0++ <= x1) {
             uint s = *src++;
             static if (btype == "SrcAlpha") {
               s = s&~VColor.AMask|(clampToByte(alpha+((s>>VColor.AShift)&0xff)));
@@ -861,13 +803,25 @@ nothrow @nogc:
             mixin(VColor.ColorBlendMixinStr!("s", "*dst"));
             ++dst;
           }
-          dest += vsPitch;
-          my += myPitch;
-        }
+        });
+        sba += vs.w;
+        dba += destw;
+        ++sy;
       }
     }
   }
 
-  alias blit = blitTpl!"NoSrcAlpha";
-  alias blitSrcAlpha = blitTpl!"SrcAlpha";
+  void blit(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha=0) {
+    blit(dest.vscr.buf, xd, yd, dest.width, dest.height, alpha);
+  }
+
+  void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha=0) {
+    blit(cast(VColor*)vlVScr, xd, yd, vlWidth, vlHeight, alpha);
+  }
+
+  private import iv.sdpy.vlo : VLOverlay;
+  void blit(string btype="NoSrcAlpha") (ref VLOverlay dest, int xd, int yd, ubyte alpha=0) {
+    if (dest.mVScr is null) return;
+    blit(cast(VColor*)dest.mVScr, xd, yd, dest.mWidth, dest.mHeight, alpha);
+  }
 }
