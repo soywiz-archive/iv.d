@@ -32,6 +32,9 @@ static assert(VColor.sizeof == uint.sizeof);
 // ////////////////////////////////////////////////////////////////////////// //
 struct GfxBuf {
 private:
+  // to avoid importing `std.math`
+  static int abs (int n) pure nothrow @safe @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return (n >= 0 ? n : -n); }
+
   static struct VScr {
   nothrow @trusted @nogc:
     VColor* buf;
@@ -125,12 +128,12 @@ public:
    */
   @gcc_inline void putPixel() (int x, int y, VColor col) {
     static if (__VERSION__ > 2067) pragma(inline, true);
-    if (!col.isTransparent) {
+    if (!col.isTransparent && vscr.reg.visible(x, y)) {
       //TODO: overflow check
       auto vs = vscr;
       x += vs.mXOfs;
       y += vs.mYOfs;
-      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 && vs.reg.visible(x, y)) {
+      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1) {
         uint* da = cast(uint*)vs.buf+y*vs.w+x;
         mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
       }
@@ -151,12 +154,14 @@ public:
   @gcc_inline void setPixel() (int x, int y, VColor col) {
     static if (__VERSION__ > 2067) pragma(inline, true);
     //TODO: overflow check
-    auto vs = vscr;
-    x += vs.mXOfs;
-    y += vs.mYOfs;
-    if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 && vs.reg.visible(x, y)) {
-      uint* da = cast(uint*)vs.buf+y*vs.w+x;
-      mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
+    if (vscr.reg.visible(x, y)) {
+      auto vs = vscr;
+      x += vs.mXOfs;
+      y += vs.mYOfs;
+      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1) {
+        uint* da = cast(uint*)vs.buf+y*vs.w+x;
+        mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
+      }
     }
   }
 
@@ -426,11 +431,17 @@ public:
     auto vs = vscr;
     x0 += vs.mXOfs;
     y0 += vs.mYOfs;
+    if (y0 < 0 || y0 >= vs.h || x0+len <= 0 || x0 >= vs.w) return;
     if (y0 < vs.mClipY0 || y0 > vs.mClipY1) return;
     if (x0+len < vs.mClipX0 || x0 > vs.mClipX1) return;
     uint adr = y0*vs.w;
+    // go back for region
+    x0 -= vs.mXOfs;
+    y0 -= vs.mYOfs;
     vs.reg.spans!true(y0, x0, x0+len-1, (sx, ex) @trusted {
       if (col.isOpaque) {
+        sx += vs.mXOfs;
+        ex += vs.mXOfs;
         vs.buf[adr+sx..adr+ex+1] = col;
       } else {
         uint* da = cast(uint*)vs.buf+adr+sx;
@@ -468,6 +479,15 @@ public:
 
     // clip rectange
     int wx0 = vs.mClipX0, wy0 = vs.mClipY0, wx1 = vs.mClipX1, wy1 = vs.mClipY1;
+    if (wx0 < 0) wx0 = 0;
+    if (wx0 >= vs.w) wx0 = vs.w-1;
+    if (wx1 < 0) wx1 = 0;
+    if (wx1 >= vs.w) wx1 = vs.w-1;
+    if (wy0 < 0) wy0 = 0;
+    if (wy0 >= vs.h) wy0 = vs.h-1;
+    if (wy1 < 0) wy1 = 0;
+    if (wy1 >= vs.h) wy1 = vs.h-1;
+    if (wx0 > wx1 || wy0 > wy1) return;
     // other vars
     int stx, sty; // "steps" for x and y axes
     int dsx, dsy; // "lengthes" for x and y axes
@@ -575,7 +595,7 @@ public:
       // this can be made even faster by precalculating `da` and making
       // separate code branches for mixing and non-mixing drawing, but...
       // ah, screw it!
-      if (vs.reg.visible(*d0, *d1)) {
+      if (vs.reg.visible(*d0-vs.mXOfs, *d1-vs.mYOfs)) {
         uint* da = cast(uint*)vs.buf+(*d1)*vs.w+(*d0);
         mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
       }
@@ -605,6 +625,14 @@ public:
     if (y < vs.mClipY0) y = vs.mClipY0;
     if (ex < vs.mClipX0) x = vs.mClipX0;
     if (ey < vs.mClipY0) y = vs.mClipY0;
+    if (x < 0) x = 0;
+    if (x >= vs.w) x = vs.w-1;
+    if (ex < 0) ex = 0;
+    if (ex >= vs.w) ex = vs.w-1;
+    if (y < 0) y = 0;
+    if (y >= vs.h) y = vs.h-1;
+    if (ey < 0) ey = 0;
+    if (ey >= vs.h) ey = vs.h-1;
     if (ex < x || ey < y) return; // just in case
     w = ex+1-x;
     foreach (int dy; y..ey+1) hline(x, dy, w, col);
@@ -642,6 +670,7 @@ public:
   }
 
   private void plot4points() (int cx, int cy, int x, int y, VColor col) {
+    //static if (__VERSION__ > 2067) pragma(inline, true); // alas, dmd inliner sux again
     putPixel(cx+x, cy+y, col);
     if (x != 0) putPixel(cx-x, cy+y, col);
     if (y != 0) putPixel(cx+x, cy-y, col);
@@ -649,7 +678,7 @@ public:
   }
 
   void circle (int cx, int cy, int radius, VColor col) {
-    if (radius > 0 && !col.isTransparent) {
+    if (radius > 0 && !col.isTransparent && !isEmptyClip) {
       int error = -radius, x = radius, y = 0;
       if (radius == 1) { putPixel(cx, cy, col); return; }
       while (x > y) {
@@ -664,7 +693,7 @@ public:
   }
 
   void fillCircle (int cx, int cy, int radius, VColor col) {
-    if (radius > 0 && !col.isTransparent) {
+    if (radius > 0 && !col.isTransparent && !isEmptyClip) {
       int error = -radius, x = radius, y = 0;
       if (radius == 1) { putPixel(cx, cy, col); return; }
       while (x >= y) {
@@ -688,7 +717,7 @@ public:
   }
 
   void ellipse (int x0, int y0, int x1, int y1, VColor col) {
-    import std.math : abs;
+    if (col.isTransparent || isEmptyClip) return;
     int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
     long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
     long err = dx+dy+b1*a*a; // error of 1.step
@@ -714,7 +743,7 @@ public:
   }
 
   void fillEllipse (int x0, int y0, int x1, int y1, VColor col) {
-    import std.math : abs;
+    if (col.isTransparent || isEmptyClip) return;
     int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
     long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
     long err = dx+dy+b1*a*a; // error of 1.step
@@ -744,7 +773,7 @@ public:
     static assert(btype == "NoSrcAlpha" || btype == "SrcAlpha");
     auto vs = vscr;
     if (destw < 1 || desth < 1 || destbuf is null || vs.w < 1 || vs.h < 1 ||
-        xd >= destw || yd >= desth || xd+vs.w < 0 || yd+vs.h < 0 || alpha == 255)
+        xd >= destw || yd >= desth || xd+vs.w < 0 || yd+vs.h < 0 || alpha == 255 || vs.reg.empty)
     {
       return;
     }
