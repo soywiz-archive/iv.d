@@ -37,7 +37,7 @@ private:
     VColor* buf;
     int w, h; // vscreen size
     int rc; // refcount
-    Region reg; // here, 'cause we can't copy regions
+    Region reg; // here, to keep struct size small
     int mClipX0, mClipY0;
     int mClipX1, mClipY1;
     int mXOfs, mYOfs;

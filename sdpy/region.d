@@ -25,16 +25,16 @@ struct Region {
   alias SpanType = ushort; // you probably will never need this, but...
 
   @property pure const nothrow @safe @nogc {
-    int width () { static if (__VERSION__ > 2067) pragma(inline, true); return rdata.rwdt; }
-    int height () { static if (__VERSION__ > 2067) pragma(inline, true); return rdata.rhgt; }
-    bool solid () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata.simple && rdata.simpleSolid); }
-    bool empty () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata.simple && !rdata.simpleSolid); }
+    int width () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.rwdt : 0); }
+    int height () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.rhgt : 0); }
+    bool solid () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.simple && rdata.simpleSolid : false); }
+    bool empty () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.simple && !rdata.simpleSolid : true); }
   }
 
   // this creates solid region
   this (int awidth, int aheight, bool solid=true) nothrow @safe @nogc { setSize(awidth, aheight, solid); }
   ~this () nothrow @safe @nogc { decRC(); } // release this region data
-  this (this) nothrow @safe @nogc { ++rdata.rc; } // share this region data
+  this (this) nothrow @safe @nogc { if (rdata !is null) ++rdata.rc; } // share this region data
 
   void setSize (int awidth, int aheight, bool solid=true) nothrow @safe @nogc {
     if (awidth <= 0 || aheight <= 0) awidth = aheight = 0;
@@ -50,6 +50,7 @@ struct Region {
   // is given point visible?
   bool visible (int x, int y) const pure nothrow @safe @nogc {
     // easiest cases
+    if (rdata is null) return false;
     if (rdata.rwdt < 1 || rdata.rhgt < 1) return false;
     if (x < 0 || y < 0 || x >= rdata.rwdt || y >= rdata.rhgt) return false;
     if (rdata.simple) return rdata.simpleSolid; // ok, easy case here
@@ -75,6 +76,7 @@ struct Region {
 
   // return span state %-)
   State spanState (int y, int x0, int x1) const pure nothrow @safe @nogc {
+    if (rdata is null) return State.Empty;
     if (y < 0 || y >= rdata.rhgt || x1 < 0 || x0 >= rdata.rwdt || x1 < x0) return State.Empty;
     if (rdata.simple) {
       // if our span is not fully inside, it can be either Empty or Mixed
@@ -112,7 +114,12 @@ struct Region {
 private:
   // ////////////////////////////////////////////////////////////////////////// //
   void spansEnumerator(bool solids, T) (int y, int x0, int x1, scope /*void delegate (int x0, int x1)*/T dg) {
+    if (x0 > x1) return;
     assert(dg !is null);
+    if (rdata is null) {
+      static if (!solids) dg(x0, x1);
+      return;
+    }
     if (y < 0 || y >= rdata.rhgt || x1 < 0 || x0 >= rdata.rwdt || x1 < x0) {
       static if (!solids) dg(x0, x1);
       return;
@@ -195,10 +202,11 @@ private:
   //FIXME: overflows
   void doPunchPatch(string mode) (int x, int y, int w=1, int h=1) {
     static assert(mode == "punch" || mode == "patch", "Region: invalid mode: "~mode);
+    if (rdata is null) return;
     static if (mode == "punch") {
-      if (rdata.simple && !rdata.simpleSolid) return;
+      if (empty) return;
     } else {
-      if (rdata.simple && rdata.simpleSolid) return;
+      if (solid) return;
     }
     if (w < 1 || h < 1) return;
     if (x >= rdata.rwdt || y >= rdata.rhgt) return;
@@ -623,6 +631,8 @@ private:
       if (dstd is null) assert(0, "Region: out of memory"); // this is unlikely, and hey, just crash
       if (srcd !is null) {
         // copy
+        --srcd.rc;
+        assert(srcd.rc > 0);
         dstd.rwdt = srcd.rwdt;
         dstd.rhgt = srcd.rhgt;
         dstd.simple = srcd.simple;
