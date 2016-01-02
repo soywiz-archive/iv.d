@@ -609,16 +609,18 @@ private:
   }
 
 private:
-  RData* rdata;
+  size_t rdatap; // hide from GC
+
+  @property inout(RData)* rdata () inout pure const nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return cast(RData*)rdatap; }
 
   void decRC () nothrow @trusted @nogc {
     import core.memory : GC;
     import core.stdc.stdlib : free;
-    if (rdata is null) return;
+    if (!rdatap) return;
     if (--rdata.rc != 0) return;
     GC.removeRange(rdata);
     free(rdata);
-    rdata = null; // just in case
+    rdatap = 0; // just in case
   }
 
   // copy-on-write mechanics
@@ -651,7 +653,7 @@ private:
         // init with default values
         *dstd = RData.init;
       }
-      rdata = dstd;
+      rdatap = cast(size_t)dstd;
       GC.addRange(rdata, RData.sizeof, typeid(RData));
     }
   }
