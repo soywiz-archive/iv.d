@@ -161,7 +161,9 @@ public:
       auto vs = vscr;
       x += vs.mXOfs;
       y += vs.mYOfs;
-      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1) {
+      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 &&
+          x >= 0 && y >= 0 && x < vs.w && y < vs.h)
+      {
         uint* da = cast(uint*)vs.buf+y*vs.w+x;
         mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
       }
@@ -186,7 +188,9 @@ public:
       auto vs = vscr;
       x += vs.mXOfs;
       y += vs.mYOfs;
-      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1) {
+      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 &&
+          x >= 0 && y >= 0 && x < vs.w && y < vs.h)
+      {
         uint* da = cast(uint*)vs.buf+y*vs.w+x;
         mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
       }
@@ -217,11 +221,11 @@ public:
     vs.mClipY1 = vs.h-1;
   }
 
-  @property int xOfs () const pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.mXOfs; }
-  @property void xOfs (int v) { static if (__VERSION__ > 2067) pragma(inline, true); vscr.mXOfs = v; }
+  @property int xofs () const pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.mXOfs; }
+  @property void xofs (int v) { static if (__VERSION__ > 2067) pragma(inline, true); vscr.mXOfs = v; }
 
-  @property int yOfs () const pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.mYOfs; }
-  @property void yOfs (int v) { static if (__VERSION__ > 2067) pragma(inline, true); vscr.mYOfs = v; }
+  @property int yofs () const pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.mYOfs; }
+  @property void yofs (int v) { static if (__VERSION__ > 2067) pragma(inline, true); vscr.mYOfs = v; }
 
   static struct Clip { int x, y, w, h; }
 
@@ -460,20 +464,31 @@ public:
     auto vs = vscr;
     x0 += vs.mXOfs;
     y0 += vs.mYOfs;
-    if (y0 < 0 || y0 >= vs.h || x0+len <= 0 || x0 >= vs.w) return;
+    int ex = x0+len-1;
+    if (y0 < 0 || y0 >= vs.h || ex < 0 || x0 >= vs.w) return;
     if (y0 < vs.mClipY0 || y0 > vs.mClipY1) return;
-    if (x0+len < vs.mClipX0 || x0 > vs.mClipX1) return;
+    if (ex < vs.mClipX0 || x0 > vs.mClipX1) return;
+    if (x0 < vs.mClipX0) x0 = vs.mClipX0;
+    if (x0 > vs.mClipX1) x0 = vs.mClipX1;
+    if (x0 < 0) x0 = 0;
+    if (x0 >= vs.w) x0 = vs.w-1;
+    if (ex < vs.mClipX0) ex = vs.mClipX0;
+    if (ex > vs.mClipX1) ex = vs.mClipX1;
+    if (ex < 0) ex = 0;
+    if (ex >= vs.w) ex = vs.w-1;
+    if (x0 > ex) return;
     uint adr = y0*vs.w;
     // go back for region
     x0 -= vs.mXOfs;
+    ex -= vs.mXOfs;
     y0 -= vs.mYOfs;
-    vs.reg.spans!true(y0, x0, x0+len-1, (sx, ex) @trusted {
+    vs.reg.spans!true(y0, x0, ex, (sx, ex) @trusted {
       if (col.isOpaque) {
         sx += vs.mXOfs;
         ex += vs.mXOfs;
         vs.buf[adr+sx..adr+ex+1] = col;
       } else {
-        uint* da = cast(uint*)vs.buf+adr+sx;
+        uint* da = cast(uint*)vs.buf+adr+sx+vs.mXOfs;
         while (sx++ <= ex) {
           mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
           ++da;
@@ -650,20 +665,12 @@ public:
     int ex = x+w-1;
     int ey = y+h-1;
     if (x > vs.mClipX1 || y > vs.mClipY1 || ex < vs.mClipX0 || ey < vs.mClipY0) return;
-    if (x < vs.mClipX0) x = vs.mClipX0;
     if (y < vs.mClipY0) y = vs.mClipY0;
-    if (ex < vs.mClipX0) x = vs.mClipX0;
-    if (ey < vs.mClipY0) y = vs.mClipY0;
-    if (x < 0) x = 0;
-    if (x >= vs.w) x = vs.w-1;
-    if (ex < 0) ex = 0;
-    if (ex >= vs.w) ex = vs.w-1;
-    if (y < 0) y = 0;
-    if (y >= vs.h) y = vs.h-1;
-    if (ey < 0) ey = 0;
-    if (ey >= vs.h) ey = vs.h-1;
-    if (ex < x || ey < y) return; // just in case
+    if (ey > vs.mClipY1) ey = vs.mClipY1;
     w = ex+1-x;
+    x -= vs.mXOfs;
+    y -= vs.mYOfs;
+    ey -= vs.mYOfs;
     foreach (int dy; y..ey+1) hline(x, dy, w, col);
   }
 
