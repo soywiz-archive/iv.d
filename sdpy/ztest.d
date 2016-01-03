@@ -30,6 +30,9 @@ void main (string[] args) {
   vlWidth = 400;
   vlHeight = 300;
 
+  auto chr = new BgiChr("chrfonts/v1/thin.chr");
+  writeln("baseline: ", chr.baseline, "; ascent: ", chr.ascent, "; descent: ", chr.descent, "; height: ", chr.height);
+
   int gbx = 3, gby = 3;
   bool gbvis = false;
 
@@ -74,6 +77,22 @@ void main (string[] args) {
       if (sdpyKeyMods&SdpyKeyShiftDown) buf[2] = 'S';
       if (sdpyKeyMods&SdpyKeyMetaDown) buf[3] = 'M';
       vlOvl.drawText(10, 40, buf, VColor.rgb(255, 0, 0));
+    }
+
+    int cy = 60;
+    chr.drawText(vlOvl, 10, cy, "Hello from BGI!", VColor.rgb(255, 255, 0));
+    vlOvl.hline(0, cy, 400, VColor.rgb(255, 0, 0));
+    vlOvl.hline(0, cy-chr.height, 400, VColor.rgb(255, 127, 0));
+    vlOvl.hline(0, cy-chr.baseline, 400, VColor.rgb(0, 255, 0));
+    vlOvl.hline(0, cy-chr.ascent, 400, VColor.rgb(0, 127, 0));
+    vlOvl.hline(0, cy-chr.descent, 400, VColor.rgb(127, 127, 0));
+
+    foreach (int dy; 0..16) {
+      foreach (int dx; 0..16) {
+        int x = dx*14+4;
+        int y = dy*14+cy;
+        chr.drawChar(vlOvl, x, y, cast(char)(dy*16+dx), VColor.white, 1);
+      }
     }
 
     //vlOvl.drawTextProp(10, 10, "Text", VColor.rgb(255, 127, 0));

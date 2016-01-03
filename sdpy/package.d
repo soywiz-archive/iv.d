@@ -24,3 +24,5 @@ public import iv.sdpy.core;
 public import iv.sdpy.font6;
 public import iv.sdpy.gfxbuf;
 public import iv.sdpy.sdpycore;
+
+public import iv.sdpy.bgichr;
