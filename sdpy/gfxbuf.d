@@ -809,7 +809,7 @@ public:
 
   // blit overlay to buffer, possibly with alpha
   // destbuf should not overlap with vscr.buf
-  void blitRect(string btype="NoSrcAlpha") (
+  void blitRectTo(string btype="NoSrcAlpha") (
       VColor* destbuf, int destw, int desth,
       int xd, int yd, int sw, int sh,
       ubyte alpha,
@@ -889,13 +889,13 @@ public:
     }
   }
 
-  void blit(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha, in auto ref Region reg) {
-    blitRect!btype(dest.vscr.buf, dest.width, dest.height, xd, yd, vscr.w, vscr.h, alpha, reg);
+  void blitTo(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha, in auto ref Region reg) {
+    blitRectTo!btype(dest.vscr.buf, dest.width, dest.height, xd, yd, vscr.w, vscr.h, alpha, reg);
   }
-  void blit(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha=0) { blit!btype(dest, xd, yd, alpha, vscr.reg); }
+  void blitTo(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha=0) { blitTo!btype(dest, xd, yd, alpha, vscr.reg); }
 
   void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha, in auto ref Region reg) {
-    blitRect!btype(cast(VColor*)vlVScr, vlWidth, vlHeight, xd, yd, vscr.w, vscr.h, alpha, reg);
+    blitRectTo!btype(cast(VColor*)vlVScr, vlWidth, vlHeight, xd, yd, vscr.w, vscr.h, alpha, reg);
   }
   void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha=0) { blitToVScr!btype(xd, yd, alpha, vscr.reg); }
 }
