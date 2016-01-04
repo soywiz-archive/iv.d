@@ -71,10 +71,10 @@ nothrow @trusted @nogc:
       import core.stdc.stdlib : free;
       free(vscr.buf);
       vscr.buf = null;
-      mVScrS = 0;
     } else {
       if (vscr.rc < 0) assert(0);
     }
+    mVScrS = 0;
   }
 
   void createVBuf (int wdt, int hgt) {
@@ -127,7 +127,11 @@ public:
   this (this) { vscrIncRef(); }
 
   void setSize (int wdt, int hgt) {
-    if (mVScrS != 0) assert(0, "GfxBuf: double init");
+    if (mVScrS != 0) {
+      if (wdt == vscr.w && hgt == vscr.h) return;
+      if (vscr.rc < 0) assert(0, "GfxBuf: double init");
+      vscrDecRef();
+    }
     createVBuf(wdt, hgt);
   }
 
