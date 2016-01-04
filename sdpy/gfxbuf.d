@@ -855,7 +855,7 @@ public:
       if (alpha == 0) {
         // copying
         while (sy <= ey) {
-          vs.reg.spans!true(sy-sofsy, sofsx, sx, ex, (x0, x1) @trusted {
+          reg.spans!true(sy-sofsy, sofsx, sx, ex, (x0, x1) @trusted {
             import core.stdc.string : memcpy;
             memcpy(dba+x0-sx, sba+x0, (x1-x0+1)*VColor.sizeof);
           });
