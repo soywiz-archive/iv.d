@@ -53,14 +53,13 @@ public:
   alias stringc = const(char)[];
 
 private:
-  size_t mVScrS; // this is actually `VScr*`
+  size_t mVScrS = 0; // this is actually `VScr*`
 
 nothrow @trusted @nogc:
   void vscrIncRef () {
     if (mVScrS == 0) return;
     auto vscr = cast(VScr*)mVScrS;
-    if (vscr.rc < 0) return; // vlVScr buf
-    ++vscr.rc;
+    if (vscr.rc > 0) ++vscr.rc; // !vlVScr buf
   }
 
   void vscrDecRef () {
@@ -69,7 +68,7 @@ nothrow @trusted @nogc:
     if (vscr.rc < 0) return; // vlVScr buf
     if (--vscr.rc == 0) {
       import core.stdc.stdlib : free;
-      free(vscr.buf);
+      if (vscr.buf !is null) free(vscr.buf);
       vscr.buf = null;
     } else {
       if (vscr.rc < 0) assert(0);
@@ -80,12 +79,15 @@ nothrow @trusted @nogc:
   void createVBuf (int wdt, int hgt) {
     //import core.exception : onOutOfMemoryError;
     import core.stdc.stdlib : malloc, realloc, free;
+    import core.stdc.string : memcpy;
     if (wdt < 0) wdt = 0;
     if (hgt < 0) hgt = 0;
     if (wdt > 32767 || hgt > 32767) assert(0, "invalid GfxBuf dimensions");
     auto vs = cast(VScr*)malloc(VScr.sizeof);
     if (vs is null) assert(0, "GfxBuf: out of memory");
-    *vs = VScr.init;
+    static immutable VScr initr = VScr.init;
+    memcpy(vs, &initr, VScr.sizeof);
+    //(*vs).__ctor();
     vs.buf = cast(VColor*)malloc((wdt && hgt ? wdt*hgt : 1)*VColor.sizeof);
     if (vs.buf is null) { free(vs); assert(0, "GfxBuf: out of memory"); }
     mVScrS = cast(size_t)vs;

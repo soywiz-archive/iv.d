@@ -34,7 +34,7 @@ struct Region {
   // this creates solid region
   this (int awidth, int aheight, bool solid=true) nothrow @safe @nogc { setSize(awidth, aheight, solid); }
   ~this () nothrow @safe @nogc { decRC(); } // release this region data
-  this (this) nothrow @safe @nogc { if (rdata !is null) ++rdata.rc; } // share this region data
+  this (this) nothrow @safe @nogc { if (rdatap) ++rdata.rc; } // share this region data
 
   void setSize (int awidth, int aheight, bool solid=true) nothrow @safe @nogc {
     if (awidth <= 0 || aheight <= 0) awidth = aheight = 0;
@@ -609,18 +609,20 @@ private:
   }
 
 private:
-  size_t rdatap; // hide from GC
+  size_t rdatap = 0; // hide from GC
 
   @property inout(RData)* rdata () inout pure const nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return cast(RData*)rdatap; }
 
   void decRC () nothrow @trusted @nogc {
-    import core.memory : GC;
-    import core.stdc.stdlib : free;
-    if (!rdatap) return;
-    if (--rdata.rc != 0) return;
-    GC.removeRange(rdata);
-    free(rdata);
-    rdatap = 0; // just in case
+    if (rdatap != 0) {
+      if (--rdata.rc == 0) {
+        import core.memory : GC;
+        import core.stdc.stdlib : free;
+        GC.removeRange(rdata);
+        free(rdata);
+      }
+      rdatap = 0; // just in case
+    }
   }
 
   // copy-on-write mechanics
@@ -629,12 +631,16 @@ private:
     if (srcd is null || srcd.rc != 1) {
       import core.memory : GC;
       import core.stdc.stdlib : malloc, free;
+      import core.stdc.string : memcpy;
       auto dstd = cast(RData*)malloc(RData.sizeof);
       if (dstd is null) assert(0, "Region: out of memory"); // this is unlikely, and hey, just crash
+      // init with default values
+      //*dstd = RData.init;
+      static immutable RData initr = RData.init;
+      memcpy(dstd, &initr, RData.sizeof);
+      //(*dstd).__ctor();
       if (srcd !is null) {
         // copy
-        --srcd.rc;
-        assert(srcd.rc > 0);
         dstd.rwdt = srcd.rwdt;
         dstd.rhgt = srcd.rhgt;
         dstd.simple = srcd.simple;
@@ -649,9 +655,8 @@ private:
             if (srcd.data.length) dstd.data = srcd.data.dup;
           }
         }
-      } else {
-        // init with default values
-        *dstd = RData.init;
+        --srcd.rc;
+        assert(srcd.rc > 0);
       }
       rdatap = cast(size_t)dstd;
       GC.addRange(rdata, RData.sizeof, typeid(RData));
