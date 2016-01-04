@@ -44,6 +44,9 @@ private:
     int mClipX0, mClipY0;
     int mClipX1, mClipY1;
     int mXOfs, mYOfs;
+    // "real" cliprect, always inside buf
+    int mRClipX0, mRClipY0;
+    int mRClipX1, mRClipY1;
 
     //@disable this ();
     @disable this (this);
@@ -114,9 +117,10 @@ nothrow @trusted @nogc:
       vsbuf.w = vlWidth;
       vsbuf.h = vlHeight;
       vsbuf.rc = -1; // special mark
-      vsbuf.mClipX0 = vsbuf.mClipY0 = vsbuf.mXOfs = vsbuf.mYOfs = 0;
-      vsbuf.mClipX1 = vlWidth-1;
-      vsbuf.mClipY1 = vlHeight-1;
+      vsbuf.mClipX0 = vsbuf.mClipY0 = vsbuf.mRClipX0 = vsbuf.mRClipY0 = 0;
+      vsbuf.mXOfs = vsbuf.mYOfs = 0;
+      vsbuf.mClipX1 = vsbuf.mRClipX1 = vlWidth-1;
+      vsbuf.mClipY1 = vsbuf.mRClipY1 = vlHeight-1;
       vsbuf.reg.setSize(vlWidth, vlHeight);
     }
   }
@@ -167,9 +171,7 @@ public:
       auto vs = vscr;
       x += vs.mXOfs;
       y += vs.mYOfs;
-      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 &&
-          x >= 0 && y >= 0 && x < vs.w && y < vs.h)
-      {
+      if (x >= vs.mRClipX0 && y >= vs.mRClipY0 && x <= vs.mRClipX1 && y <= vs.mRClipY1) {
         uint* da = cast(uint*)vs.buf+y*vs.w+x;
         mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
       }
@@ -194,11 +196,8 @@ public:
       auto vs = vscr;
       x += vs.mXOfs;
       y += vs.mYOfs;
-      if (x >= vs.mClipX0 && y >= vs.mClipY0 && x <= vs.mClipX1 && y <= vs.mClipY1 &&
-          x >= 0 && y >= 0 && x < vs.w && y < vs.h)
-      {
-        uint* da = cast(uint*)vs.buf+y*vs.w+x;
-        mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
+      if (x >= vs.mRClipX0 && y >= vs.mRClipY0 && x <= vs.mRClipX1 && y <= vs.mRClipY1) {
+        *(vs.buf+y*vs.w+x) = col;
       }
     }
   }
@@ -208,23 +207,24 @@ public:
   bool isEmptyClip () const pure {
     static if (__VERSION__ > 2067) pragma(inline, true);
     auto vs = vscr;
-    return (vs.mClipX0 > vs.mClipX1 || vs.mClipY0 > vs.mClipY1 || vs.reg.empty);
+    return (vs.mRClipX0 > vs.mRClipX1 || vs.mRClipY0 > vs.mRClipY1 || vs.reg.empty);
   }
 
   void resetClipOfs () {
     auto vs = vscr;
-    vs.mClipX0 = vs.mClipY0 = vs.mXOfs = vs.mYOfs = 0;
-    vs.mClipX1 = vs.w-1;
-    vs.mClipY1 = vs.h-1;
+    vs.mXOfs = vs.mYOfs = 0;
+    vs.mClipX0 = vs.mClipY0 = vs.mRClipX0 = vs.mRClipY0 = 0;
+    vs.mClipX1 = vs.mRClipX1 = vs.w-1;
+    vs.mClipY1 = vs.mRClipY1 = vs.h-1;
   }
 
   void resetOfs () { vscr.mXOfs = vscr.mYOfs = 0; }
 
   void resetClip () {
     auto vs = vscr;
-    vs.mClipX0 = vs.mClipY0 = 0;
-    vs.mClipX1 = vs.w-1;
-    vs.mClipY1 = vs.h-1;
+    vs.mClipX0 = vs.mClipY0 = vs.mRClipX0 = vs.mRClipY0 = 0;
+    vs.mClipX1 = vs.mRClipX1 = vs.w-1;
+    vs.mClipY1 = vs.mRClipY1 = vs.h-1;
   }
 
   @property int xofs () const pure { static if (__VERSION__ > 2067) pragma(inline, true); return vscr.mXOfs; }
@@ -249,10 +249,22 @@ public:
 
   @property void clip() (in auto ref Clip c) {
     auto vs = vscr;
-    vs.mClipX0 = c.x;
-    vs.mClipY0 = c.y;
-    vs.mClipX1 = c.x+c.w-1;
-    vs.mClipY1 = c.y+c.h-1;
+    vs.mClipX0 = vs.mRClipX0 = c.x;
+    vs.mClipY0 = vs.mRClipY0 = c.y;
+    vs.mClipX1 = vs.mRClipX1 = c.x+c.w-1;
+    vs.mClipY1 = vs.mRClipY1 = c.y+c.h-1;
+    if (vs.mRClipX0 < 0) vs.mRClipX0 = 0;
+    if (vs.mRClipX1 < 0) vs.mRClipX1 = 0;
+    if (vs.mRClipY0 < 0) vs.mRClipY0 = 0;
+    if (vs.mRClipY1 < 0) vs.mRClipY1 = 0;
+    if (vs.mRClipX0 >= vs.w) vs.mRClipX0 = vs.w-1;
+    if (vs.mRClipX1 >= vs.w) vs.mRClipX1 = vs.w-1;
+    if (vs.mRClipY0 >= vs.h) vs.mRClipY0 = vs.h-1;
+    if (vs.mRClipY1 >= vs.h) vs.mRClipY1 = vs.h-1;
+    if (vs.mRClipX1 < 0 || vs.mRClipX0 >= vs.w || vs.mRClipY1 < 0 || vs.mRClipY0 >= vs.h) {
+      vs.mRClipX0 = vs.mRClipY0 = 1;
+      vs.mRClipX1 = vs.mRClipY1 = 0;
+    }
   }
 
   // //////////////////////////////////////////////////////////////////// //
@@ -471,30 +483,18 @@ public:
     x0 += vs.mXOfs;
     y0 += vs.mYOfs;
     int ex = x0+len-1;
-    if (y0 < 0 || y0 >= vs.h || ex < 0 || x0 >= vs.w) return;
-    if (y0 < vs.mClipY0 || y0 > vs.mClipY1) return;
-    if (ex < vs.mClipX0 || x0 > vs.mClipX1) return;
-    if (x0 < vs.mClipX0) x0 = vs.mClipX0;
-    if (x0 > vs.mClipX1) x0 = vs.mClipX1;
-    if (x0 < 0) x0 = 0;
-    if (x0 >= vs.w) x0 = vs.w-1;
-    if (ex < vs.mClipX0) ex = vs.mClipX0;
-    if (ex > vs.mClipX1) ex = vs.mClipX1;
-    if (ex < 0) ex = 0;
-    if (ex >= vs.w) ex = vs.w-1;
+    if (y0 < vs.mRClipY0 || y0 > vs.mRClipY1 || ex < vs.mRClipX0 || x0 > vs.mRClipX1) return;
+    if (x0 < vs.mRClipX0) x0 = vs.mRClipX0;
+    if (x0 > vs.mRClipX1) x0 = vs.mRClipX1;
+    if (ex < vs.mRClipX0) ex = vs.mRClipX0;
+    if (ex > vs.mRClipX1) ex = vs.mRClipX1;
     if (x0 > ex) return;
     uint adr = y0*vs.w;
-    // go back for region
-    x0 -= vs.mXOfs;
-    ex -= vs.mXOfs;
-    y0 -= vs.mYOfs;
-    vs.reg.spans!true(y0, x0, ex, (sx, ex) @trusted {
+    vs.reg.spans!true(y0-vs.mYOfs, vs.mXOfs, x0, ex, (sx, ex) @trusted {
       if (col.isOpaque) {
-        sx += vs.mXOfs;
-        ex += vs.mXOfs;
         vs.buf[adr+sx..adr+ex+1] = col;
       } else {
-        uint* da = cast(uint*)vs.buf+adr+sx+vs.mXOfs;
+        uint* da = cast(uint*)vs.buf+adr+sx;
         while (sx++ <= ex) {
           mixin(VColor.ColorBlendMixinStr!("col.u32", "*da"));
           ++da;
@@ -524,19 +524,13 @@ public:
     }
 
     auto vs = vscr;
-    x0 += vs.mXOfs; x1 += vs.mXOfs;
-    y0 += vs.mYOfs; y1 += vs.mYOfs;
+    x0 += vs.mXOfs;
+    x1 += vs.mXOfs;
+    y0 += vs.mYOfs;
+    y1 += vs.mYOfs;
 
     // clip rectange
-    int wx0 = vs.mClipX0, wy0 = vs.mClipY0, wx1 = vs.mClipX1, wy1 = vs.mClipY1;
-    if (wx0 < 0) wx0 = 0;
-    if (wx0 >= vs.w) wx0 = vs.w-1;
-    if (wx1 < 0) wx1 = 0;
-    if (wx1 >= vs.w) wx1 = vs.w-1;
-    if (wy0 < 0) wy0 = 0;
-    if (wy0 >= vs.h) wy0 = vs.h-1;
-    if (wy1 < 0) wy1 = 0;
-    if (wy1 >= vs.h) wy1 = vs.h-1;
+    int wx0 = vs.mRClipX0, wy0 = vs.mRClipY0, wx1 = vs.mRClipX1, wy1 = vs.mRClipY1;
     if (wx0 > wx1 || wy0 > wy1) return;
     // other vars
     int stx, sty; // "steps" for x and y axes
@@ -670,14 +664,12 @@ public:
     y += vs.mYOfs;
     int ex = x+w-1;
     int ey = y+h-1;
-    if (x > vs.mClipX1 || y > vs.mClipY1 || ex < vs.mClipX0 || ey < vs.mClipY0) return;
-    if (y < vs.mClipY0) y = vs.mClipY0;
-    if (ey > vs.mClipY1) ey = vs.mClipY1;
-    w = ex+1-x;
+    if (x > vs.mRClipX1 || y > vs.mRClipY1 || ex < vs.mRClipX0 || ey < vs.mRClipY0) return;
+    if (y < vs.mRClipY0) y = vs.mRClipY0;
+    if (ey > vs.mRClipY1) ey = vs.mRClipY1;
+    w = ex-x+1;
     x -= vs.mXOfs;
-    y -= vs.mYOfs;
-    ey -= vs.mYOfs;
-    foreach (int dy; y..ey+1) hline(x, dy, w, col);
+    foreach (int dy; y-vs.mYOfs..ey-vs.mYOfs+1) hline(x, dy, w, col);
   }
 
   void rect (int x, int y, int w, int h, VColor col) {
@@ -689,8 +681,10 @@ public:
       } else {
         hline(x, y, w, col);
         hline(x, y+h-1, w, col);
-        vline(x, y+1, h-2, col);
-        vline(x+w-1, y+1, h-2, col);
+        h -= 2;
+        y += 1;
+        vline(x, y, h, col);
+        vline(x+w-1, y, h, col);
       }
     }
   }
@@ -811,42 +805,48 @@ public:
 
   // blit overlay to buffer, possibly with alpha
   // destbuf should not overlap with vscr.buf
+  // `reg` starting at `(sofsx, sofsy)`
   void blitRectTo(string btype="NoSrcAlpha") (
       VColor* destbuf, int destw, int desth,
-      int xd, int yd, int sw, int sh,
+      int sofsx, int sofsy, int sw, int sh,
+      int xd, int yd,
       ubyte alpha,
       in auto ref Region reg)
   {
     static assert(btype == "NoSrcAlpha" || btype == "SrcAlpha");
     auto vs = vscr;
-    if (destbuf is null || destw < 1 || desth < 1 ||
+    if (destbuf is null || destw < 1 || desth < 1 || reg.empty || alpha == 255 ||
         sw < 1 || sh < 1 || vs.w < 1 || vs.h < 1 ||
-        xd >= destw || yd >= desth || xd+vs.w < 0 || yd+vs.h < 0 ||
-        alpha == 255 || reg.empty)
+        sofsx >= vs.w || sofsy >= vs.h || sofsx+sw <= 0 || sofsy+sh <= 0 ||
+        xd >= destw || yd >= desth)
     {
       return;
     }
-    if (sw > vs.w) sw = vs.w;
-    if (sh > vs.h) sh = vs.h;
-    // horizontal cliping
-    int sx = 0, ex = sw-1; // our coords
+    int sx = sofsx, ex = sx+sw-1;
+    int sy = sofsy, ey = sy+sh-1;
+    // sanitize source rect
+    if (sx < 0) { xd += -sx; sx = 0; }
+    if (sy < 0) { yd += -sy; sy = 0; }
+    if (ex >= vs.w) ex = vs.w-1;
+    if (ey >= vs.h) ey = vs.h-1;
+    if (sx > ex || sy > ey) return; // completely clipped out
+    // clip source rect against dest rect
     if (xd < 0) {
-      if ((sx = -xd) > ex) return; // just in case
+      if ((sx += -xd) > ex) return;
       xd = 0;
     }
     if (xd+(ex-sx+1) > destw) {
-      if ((ex = sx+destw-xd-1) < sx) return; // just in case
+      if ((ex = sx+destw-xd-1) < sx) return;
     }
-    assert(sx >= 0 && ex < vs.w && sx <= ex);
-    // vertical clipping
-    int sy = 0, ey = sh-1; // our coords
     if (yd < 0) {
-      if ((sy = -yd) > ey) return; // just in case
+      if ((sy += -yd) > ey) return;
       yd = 0;
     }
     if (yd+(ey-sy+1) > desth) {
-      if ((ey = sy+desth-yd-1) < sy) return; // just in case
+      if ((ey = sy+desth-yd-1) < sy) return;
     }
+    if (sx > ex || sy > ey) return;
+    assert(sx >= 0 && ex < vs.w && sx <= ex);
     assert(sy >= 0 && ey < vs.h && sy <= ey);
     // now we can put spans
     uint* sba = cast(uint*)vs.buf+sy*vs.w;
@@ -855,7 +855,7 @@ public:
       if (alpha == 0) {
         // copying
         while (sy <= ey) {
-          vs.reg.spans!true(sy, sx, ex, (x0, x1) @trusted {
+          vs.reg.spans!true(sy-sofsy, sofsx, sx, ex, (x0, x1) @trusted {
             import core.stdc.string : memcpy;
             memcpy(dba+x0-sx, sba+x0, (x1-x0+1)*VColor.sizeof);
           });
@@ -870,7 +870,7 @@ public:
     {
       static if (btype == "NoSrcAlpha") immutable uint a = (alpha<<VColor.AShift);
       while (sy <= ey) {
-        vs.reg.spans!true(sy, sx, ex, (x0, x1) @trusted {
+        vs.reg.spans!true(sy-sofsy, sofsx, sx, ex, (x0, x1) @trusted {
           uint* src = sba+x0;
           uint* dst = dba+x0-sx;
           while (x0++ <= x1) {
@@ -892,12 +892,12 @@ public:
   }
 
   void blitTo(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha, in auto ref Region reg) {
-    blitRectTo!btype(dest.vscr.buf, dest.width, dest.height, xd, yd, vscr.w, vscr.h, alpha, reg);
+    blitRectTo!btype(dest.vscr.buf, dest.width, dest.height, 0, 0, vscr.w, vscr.h, xd, yd, alpha, reg);
   }
   void blitTo(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha=0) { blitTo!btype(dest, xd, yd, alpha, vscr.reg); }
 
   void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha, in auto ref Region reg) {
-    blitRectTo!btype(cast(VColor*)vlVScr, vlWidth, vlHeight, xd, yd, vscr.w, vscr.h, alpha, reg);
+    blitRectTo!btype(cast(VColor*)vlVScr, vlWidth, vlHeight, 0, 0, vscr.w, vscr.h, xd, yd, alpha, reg);
   }
   void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha=0) { blitToVScr!btype(xd, yd, alpha, vscr.reg); }
 }
