@@ -25,13 +25,13 @@ struct Region {
   alias SpanType = ushort; // you probably will never need this, but...
 
   @property pure const nothrow @safe @nogc {
-    int width () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.rwdt : 0); }
-    int height () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.rhgt : 0); }
-    bool solid () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.simple && rdata.simpleSolid : false); }
-    bool empty () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.simple && !rdata.simpleSolid : true); }
+    int width () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.rwdt : 0); }
+    int height () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.rhgt : 0); }
+    bool solid () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.simple && rdata.rwdt > 0 && rdata.rhgt > 0 && rdata.simpleSolid : false); }
+    bool empty () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.rwdt < 1 || rdata.rhgt < 1 || (rdata.simple && !rdata.simpleSolid) : true); }
   }
 
-  @property uint[] getData () nothrow @safe {
+  @property uint[] getData () const nothrow @safe {
     uint[] res;
     if (rdata.simple) {
       res ~= 1|(rdata.simpleSolid ? 2 : 0);
@@ -137,19 +137,19 @@ struct Region {
 
   // call delegate for each solid or empty span
   // multiple declarations will allow us to use this in `@nogc` and `nothrow` contexts
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) nothrow @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) dg) { spansEnumerator!solids(y, 0, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) const nothrow @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) const @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) dg) const { spansEnumerator!solids(y, 0, x0, x1, dg); }
 
   // `ofsx` will be automatically subtracted from `x0` and `x1` args, and added to `x0` and `x1` delegate args
-  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) nothrow @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) dg) { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) const nothrow @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) const @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) dg) const { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
 
   //TODO: slab enumerator
 private:
   // ////////////////////////////////////////////////////////////////////////// //
-  void spansEnumerator(bool solids, T) (int y, int ofsx, int x0, int x1, scope /*void delegate (int x0, int x1)*/T dg) {
+  void spansEnumerator(bool solids, T) (int y, int ofsx, int x0, int x1, scope /*void delegate (int x0, int x1)*/T dg) const {
     if (x0 > x1) return;
     assert(dg !is null);
     if (rdata is null) {
