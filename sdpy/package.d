@@ -22,6 +22,7 @@ module iv.sdpy;
 public import iv.sdpy.color;
 public import iv.sdpy.core;
 public import iv.sdpy.font6;
+public import iv.sdpy.region;
 public import iv.sdpy.gfxbuf;
 public import iv.sdpy.sdpycore;
 
