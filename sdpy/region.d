@@ -38,6 +38,7 @@ struct Region {
     } else {
       res ~= 0;
     }
+    res[0] |= cast(int)(SpanType.sizeof<<4);
     res ~= rdata.rwdt;
     res ~= rdata.rhgt;
     if (!rdata.simple) {
@@ -49,6 +50,7 @@ struct Region {
 
   void setData (const(int)[] data) nothrow @safe {
     cow!false();
+    if (data.length < 3 || (data[0]>>4) != SpanType.sizeof) assert(0, "invalid region data");
     rdata.rwdt = data[1];
     rdata.rhgt = data[2];
     rdata.simple = ((data[0]&0x01) != 0);
