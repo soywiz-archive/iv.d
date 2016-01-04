@@ -31,6 +31,37 @@ struct Region {
     bool empty () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdata !is null ? rdata.simple && !rdata.simpleSolid : true); }
   }
 
+  @property uint[] getData () nothrow @safe {
+    uint[] res;
+    if (rdata.simple) {
+      res ~= 1|(rdata.simpleSolid ? 2 : 0);
+    } else {
+      res ~= 0;
+    }
+    res ~= rdata.rwdt;
+    res ~= rdata.rhgt;
+    if (!rdata.simple) {
+      res ~= rdata.lineofs;
+      foreach (SpanType d; rdata.data) res ~= d;
+    }
+    return res;
+  }
+
+  void setData (const(int)[] data) nothrow @safe {
+    cow!false();
+    rdata.rwdt = data[1];
+    rdata.rhgt = data[2];
+    rdata.simple = ((data[0]&0x01) != 0);
+    rdata.lineofs = null;
+    rdata.data = null;
+    if (rdata.simple) {
+      rdata.simpleSolid = ((data[0]&0x02) != 0);
+    } else {
+      foreach (int d; data[3..3+rdata.rhgt]) rdata.lineofs ~= d;
+      foreach (int d; data[3+rdata.rhgt..$]) rdata.data ~= cast(SpanType)d;
+    }
+  }
+
   // this creates solid region
   this (int awidth, int aheight, bool solid=true) nothrow @safe @nogc { setSize(awidth, aheight, solid); }
   ~this () nothrow @safe @nogc { decRC(); } // release this region data
@@ -50,10 +81,10 @@ struct Region {
   // is given point visible?
   bool visible (int x, int y) const pure nothrow @safe @nogc {
     // easiest cases
-    if (rdata is null) return false;
+    if (!rdatap) return false;
     if (rdata.rwdt < 1 || rdata.rhgt < 1) return false;
     if (x < 0 || y < 0 || x >= rdata.rwdt || y >= rdata.rhgt) return false;
-    if (rdata.simple) return rdata.simpleSolid; // ok, easy case here
+    if (rdata.simple) return true; // ok, easy case here
     // now the hard one
     immutable ldofs = rdata.lineofs[y];
     immutable len = rdata.data[ldofs];
@@ -62,7 +93,7 @@ struct Region {
     int idx = void; // will be initied in mixin
     mixin(FindSpanMixinStr!"idx");
     debug assert(idx < line.length); // too far (the thing that should not be)
-    return ((idx+(rdata.data[idx] == x))%2 == 0);
+    return ((idx+(line[idx] == x))%2 == 0);
   }
 
   // punch a hole
@@ -106,22 +137,29 @@ struct Region {
 
   // call delegate for each solid or empty span
   // multiple declarations will allow us to use this in `@nogc` and `nothrow` contexts
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) nothrow @nogc { spansEnumerator!solids(y, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) @nogc { spansEnumerator!solids(y, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) dg) { spansEnumerator!solids(y, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) nothrow @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) dg) { spansEnumerator!solids(y, 0, x0, x1, dg); }
+
+  // `ofsx` will be automatically subtracted from `x0` and `x1` args, and added to `x0` and `x1` delegate args
+  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) nothrow @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
+  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) dg) { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
 
   //TODO: slab enumerator
 private:
   // ////////////////////////////////////////////////////////////////////////// //
-  void spansEnumerator(bool solids, T) (int y, int x0, int x1, scope /*void delegate (int x0, int x1)*/T dg) {
+  void spansEnumerator(bool solids, T) (int y, int ofsx, int x0, int x1, scope /*void delegate (int x0, int x1)*/T dg) {
     if (x0 > x1) return;
     assert(dg !is null);
     if (rdata is null) {
       static if (!solids) dg(x0, x1);
       return;
     }
+    x0 -= ofsx;
+    x1 -= ofsx;
     if (y < 0 || y >= rdata.rhgt || x1 < 0 || x0 >= rdata.rwdt || x1 < x0) {
-      static if (!solids) dg(x0, x1);
+      static if (!solids) dg(x0+ofsx, x1+ofsx);
       return;
     }
     if (rdata.simple) {
@@ -129,13 +167,13 @@ private:
         static if (solids) {
           if (x0 < 0) x0 = 0;
           if (x1 >= rdata.rwdt) x1 = rdata.rwdt-1;
-          if (x0 <= x1) dg(x0, x1);
+          if (x0 <= x1) dg(x0+ofsx, x1+ofsx);
         } else {
-          if (x0 < 0) dg(x0, -1);
-          if (x1 >= rdata.rwdt) dg(rdata.rwdt, x1);
+          if (x0 < 0) dg(x0+ofsx, -1+ofsx);
+          if (x1 >= rdata.rwdt) dg(rdata.rwdt+ofsx, x1+ofsx);
         }
       } else {
-        static if (!solids) dg(x0, x1);
+        static if (!solids) dg(x0+ofsx, x1+ofsx);
       }
       return;
     }
@@ -147,8 +185,8 @@ private:
     if (x0 < 0) {
       int ex = (rdata.data[ldofs+1] == 0 ? rdata.data[ldofs+2]-1 : -1);
       // is first span empty too?
-      if (ex >= x1) { static if (!solids) dg(x0, x1); return; }
-      static if (!solids) dg(x0, ex);
+      if (ex >= x1) { static if (!solids) dg(x0+ofsx, x1+ofsx); return; }
+      static if (!solids) dg(x0+ofsx, ex+ofsx);
       x0 = ex+1;
     }
     static if (solids) { if (x1 >= rdata.rwdt) x1 = rdata.rwdt-1; }
@@ -165,11 +203,11 @@ private:
       // emit part from x0 to ex if necessary
       static if (solids) {
         // current span is solid?
-        if (idx%2 == 0) dg(x0, cex);
+        if (idx%2 == 0) dg(x0+ofsx, cex+ofsx);
       } else {
         // current span is empty?
         if (idx%2 == 1) {
-          dg(x0, (ex < rdata.rwdt-1 ? cex : x1));
+          dg(x0+ofsx, (ex < rdata.rwdt-1 ? cex : x1)+ofsx);
           if (ex == rdata.rwdt-1) return;
         } else {
           if (ex == rdata.rwdt-1) { x0 = rdata.rwdt; break; }
@@ -179,7 +217,7 @@ private:
       ++idx;
       //static if (!solids) { if (x0 == rdata.rwdt) break; }
     }
-    static if (!solids) { if (x0 <= x1) dg(x0, x1); }
+    static if (!solids) { if (x0 <= x1) dg(x0+ofsx, x1+ofsx); }
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
