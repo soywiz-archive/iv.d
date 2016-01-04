@@ -805,16 +805,25 @@ public:
 
   // blit overlay to buffer, possibly with alpha
   // destbuf should not overlap with vscr.buf
-  void blit(string btype="NoSrcAlpha") (VColor* destbuf, int xd, int yd, int destw, int desth, ubyte alpha=0) {
+  void blitRect(string btype="NoSrcAlpha") (
+      VColor* destbuf, int destw, int desth,
+      int xd, int yd, int sw, int sh,
+      ubyte alpha,
+      in auto ref Region reg)
+  {
     static assert(btype == "NoSrcAlpha" || btype == "SrcAlpha");
     auto vs = vscr;
-    if (destw < 1 || desth < 1 || destbuf is null || vs.w < 1 || vs.h < 1 ||
-        xd >= destw || yd >= desth || xd+vs.w < 0 || yd+vs.h < 0 || alpha == 255 || vs.reg.empty)
+    if (destbuf is null || destw < 1 || desth < 1 ||
+        sw < 1 || sh < 1 || vs.w < 1 || vs.h < 1 ||
+        xd >= destw || yd >= desth || xd+vs.w < 0 || yd+vs.h < 0 ||
+        alpha == 255 || reg.empty)
     {
       return;
     }
+    if (sw > vs.w) sw = vs.w;
+    if (sh > vs.h) sh = vs.h;
     // horizontal cliping
-    int sx = 0, ex = vs.w-1; // our coords
+    int sx = 0, ex = sw-1; // our coords
     if (xd < 0) {
       if ((sx = -xd) > ex) return; // just in case
       xd = 0;
@@ -824,7 +833,7 @@ public:
     }
     assert(sx >= 0 && ex < vs.w && sx <= ex);
     // vertical clipping
-    int sy = 0, ey = vs.h-1; // our coords
+    int sy = 0, ey = sh-1; // our coords
     if (yd < 0) {
       if ((sy = -yd) > ey) return; // just in case
       yd = 0;
@@ -876,11 +885,13 @@ public:
     }
   }
 
-  void blit(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha=0) {
-    blit(dest.vscr.buf, xd, yd, dest.width, dest.height, alpha);
+  void blit(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha, in auto ref Region reg) {
+    blitRect!btype(dest.vscr.buf, dest.width, dest.height, xd, yd, vscr.w, vscr.h, alpha, reg);
   }
+  void blit(string btype="NoSrcAlpha") (ref GfxBuf dest, int xd, int yd, ubyte alpha=0) { blit!btype(dest, xd, yd, alpha, vscr.reg); }
 
-  void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha=0) {
-    blit(cast(VColor*)vlVScr, xd, yd, vlWidth, vlHeight, alpha);
+  void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha, in auto ref Region reg) {
+    blitRect!btype(cast(VColor*)vlVScr, vlWidth, vlHeight, xd, yd, vscr.w, vscr.h, alpha, reg);
   }
+  void blitToVScr(string btype="NoSrcAlpha") (int xd, int yd, ubyte alpha=0) { blitToVScr!btype(xd, yd, alpha, vscr.reg); }
 }
