@@ -148,6 +148,201 @@ struct Region {
   void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) const @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
   void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) dg) const { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
 
+  static struct XPair { int x0, x1; }
+
+  auto spanRange(bool solids=true) (int y, int x0, int x1) nothrow @safe @nogc { return spanRange!solids(y, 0, x0, x1); }
+  auto spanRange(bool solids=true) (int y, int ofsx, int x0, int x1) nothrow @safe @nogc {
+    static struct SpanRange(bool solids) {
+      int ofsx, x0, x1, rwdt, idx;
+      ubyte eosNM; // empty(bit0), nomore(bit1) ;-)
+      XPair fpair; // front
+      const(SpanType)[] line;
+
+    nothrow @safe @nogc: @trusted:
+      this (ref Region reg, int y, int aofsx, int ax0, int ax1) {
+        ofsx = aofsx;
+        x0 = ax0;
+        x1 = ax1;
+        if (x0 > x1) { eosNM = 0x01; return; }
+        if (reg.rdata is null) {
+          static if (!solids) {
+            fpair.x0 = x0;
+            fpair.x1 = x1;
+            eosNM = 0x02;
+          } else {
+            eosNM = 0x01;
+          }
+          return;
+        }
+        rwdt = reg.rdata.rwdt;
+        x0 -= ofsx;
+        x1 -= ofsx;
+        if (y < 0 || y >= reg.rdata.rhgt || x1 < 0 || x0 >= rwdt || x1 < x0) {
+          static if (!solids) {
+            fpair.x0 = x0+ofsx;
+            fpair.x1 = x1+ofsx;
+            eosNM = 0x02;
+          } else {
+            eosNM = 0x01;
+          }
+          return;
+        }
+        if (reg.rdata.simple) {
+          if (reg.rdata.simpleSolid) {
+            static if (solids) {
+              if (x0 < 0) x0 = 0;
+              if (x1 >= rwdt) x1 = rwdt-1;
+              if (x0 <= x1) {
+                fpair.x0 = x0+ofsx;
+                fpair.x1 = x1+ofsx;
+                eosNM = 0x02;
+              } else {
+                eosNM = 0x01;
+              }
+            } else {
+              if (x0 < 0) {
+                fpair.x0 = x0+ofsx;
+                fpair.x1 = -1+ofsx;
+                eosNM = (x1 < rwdt ? 0x02 : 0x04);
+              } else {
+                if (x1 >= rwdt) {
+                  fpair.x0 = rwdt+ofsx;
+                  fpair.x1 = x1+ofsx;
+                  eosNM = 0x02;
+                } else {
+                  eosNM = 0x01;
+                }
+              }
+            }
+          } else {
+            static if (!solids) {
+              fpair.x0 = x0+ofsx;
+              fpair.x1 = x1+ofsx;
+              eosNM = 0x02;
+            } else {
+              eosNM = 0x01;
+            }
+          }
+          return;
+        }
+        // edge cases are checked
+        immutable ldofs = reg.rdata.lineofs[y];
+        immutable len = reg.rdata.data[ldofs];
+        debug assert(len > 1);
+        line = reg.rdata.data[ldofs+1..ldofs+len];
+        // beyond left border? move to first solid span
+        bool hasOne = false;
+        if (x0 < 0) {
+          int ex = (line[0] == 0 ? line[1]-1 : -1);
+          // is first span empty too?
+          if (ex >= x1) {
+            static if (!solids) {
+              fpair.x0 = x0+ofsx;
+              fpair.x1 = x1+ofsx;
+              eosNM = 0x02;
+            } else {
+              eosNM = 0x01;
+            }
+            return;
+          }
+          static if (!solids) {
+            fpair.x0 = x0+ofsx;
+            fpair.x1 = ex+ofsx;
+            hasOne = true;
+            if (x0 == -9) {
+              //import iv.writer; writeln("*");
+            }
+          }
+          x0 = ex+1;
+        }
+        static if (solids) { if (x1 >= rwdt) x1 = rwdt-1; }
+        //int idx = void; // will be initied in mixin
+        alias x = x0; // for mixin
+        mixin(FindSpanMixinStr!"idx");
+        debug assert(idx < line.length); // too far (the thing that should not be)
+        // move to "real" span, so sx is line[idx-1], ex+1 is line[idx]
+        if (line[idx] == x) ++idx;
+        if (!hasOne) popFront();
+      }
+
+      @property auto save () pure {
+        SpanRange!solids res;
+        res.ofsx = ofsx;
+        res.x0 = x0;
+        res.x1 = x1;
+        res.rwdt = rwdt;
+        res.idx = idx;
+        res.eosNM = eosNM;
+        res.fpair = fpair;
+        res.line = line;
+        return res;
+      }
+
+      @property bool empty () const pure { return ((eosNM&0x01) != 0); }
+      @property XPair front () const pure { return XPair(fpair.x0, fpair.x1); }
+
+      void popFront () {
+        if (eosNM&0x02) eosNM = 0x01;
+        if (eosNM&0x01) return;
+        // edge case
+        if (eosNM&0x04) {
+          if (x1 >= rwdt) {
+            static if (!solids) {
+              fpair.x0 = rwdt+ofsx;
+              fpair.x1 = x1+ofsx;
+              eosNM = 0x02;
+            } else {
+              eosNM = 0x01;
+            }
+          } else {
+            eosNM = 0x01;
+          }
+          return;
+        }
+        bool hasOne = false;
+        // process spans
+        while (x0 <= x1) {
+          int ex = line[idx]-1;
+          int cex = (ex < x1 ? ex : x1); // clipped ex
+          // emit part from x0 to ex if necessary
+          static if (solids) {
+            // current span is solid?
+            if (idx%2 == 0) {
+              fpair.x0 = x0+ofsx;
+              fpair.x1 = cex+ofsx;
+              hasOne = true;
+            }
+          } else {
+            // current span is empty?
+            if (idx%2 == 1) {
+              fpair.x0 = x0+ofsx;
+              fpair.x1 = (ex < rwdt-1 ? cex : x1)+ofsx;
+              hasOne = true;
+              if (ex == rwdt-1) { eosNM = 0x02; return; }
+            } else {
+              if (ex == rwdt-1) { x0 = rwdt; break; }
+            }
+          }
+          x0 = ex+1;
+          ++idx;
+          if (hasOne) return;
+        }
+        if (hasOne) return;
+        static if (!solids) {
+          if (x0 <= x1) {
+            fpair.x0 = x0+ofsx;
+            fpair.x1 = x1+ofsx;
+            eosNM = 0x02;
+            return;
+          }
+        }
+        eosNM = 0x01;
+      }
+    }
+
+    return SpanRange!solids(this, y, ofsx, x0, x1);
+  }
+
   //TODO: slab enumerator
 private:
   // ////////////////////////////////////////////////////////////////////////// //
@@ -724,4 +919,177 @@ private:
       // (i.e. region starts from transparent span)
     int rc = 1; // refcount
   }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+version(sdpy_region_test) {
+//static assert(0);
+import iv.writer;
+
+
+void dumpData (ref Region reg) {
+  import iv.writer;
+  if (reg.rdata.simple) { writeln("simple ", (reg.rdata.simpleSolid ? "solid" : "empty"), " region"); return; }
+  foreach (immutable y, uint ofs; reg.rdata.lineofs) {
+    if (y > 0 && reg.rdata.lineofs[y-1] == ofs) {
+      writefln!"%5s:%3s: ditto"(ofs, y);
+    } else {
+      writef!"%5s:%3s: len="(ofs, y);
+      write(reg.rdata.data[ofs]);
+      auto end = ofs+reg.rdata.data[ofs];
+      ++ofs;
+      while (ofs < end) write("; ", reg.rdata.data[ofs++]);
+      writeln;
+    }
+  }
+}
+
+
+void checkLineOffsets (ref Region reg) {
+  if (reg.rdata.simple) return;
+  foreach (immutable idx; 1..reg.rdata.lineofs.length) {
+    if (reg.rdata.lineofs[idx-1] > reg.rdata.lineofs[idx]) assert(0, "invalid line offset data");
+    // check for two equal, but unmerged lines
+    if (reg.rdata.lineofs[idx-1] != reg.rdata.lineofs[idx]) {
+      import core.stdc.string : memcmp;
+      if (reg.rdata.data[reg.rdata.lineofs[idx-1]] == reg.rdata.data[reg.rdata.lineofs[idx]] &&
+          memcmp(reg.rdata.data.ptr+reg.rdata.lineofs[idx-1], reg.rdata.data.ptr+reg.rdata.lineofs[idx], reg.SpanType.sizeof*reg.rdata.data[reg.rdata.lineofs[idx]]) == 0)
+      {
+        dumpData(reg);
+        assert(0, "found two identical, but not merged lines");
+      }
+      if (reg.rdata.data[reg.rdata.lineofs[idx-1]] < 2) assert(0, "bad data (0)");
+      if (reg.rdata.data[reg.rdata.lineofs[idx]] < 2) assert(0, "bad data (1)");
+    }
+  }
+}
+
+
+void buildBitmap (ref Region reg, int[] bmp) {
+  if (reg.rdata.simple) {
+    bmp[0..reg.width*reg.height] = (reg.rdata.simpleSolid ? 1 : 0);
+    return;
+  }
+  bmp[0..reg.width*reg.height] = 42;
+  foreach (immutable y, uint ofs; reg.rdata.lineofs) {
+    usize a = y*reg.width;
+    usize len = reg.rdata.data[ofs++];
+    if (len < 1) assert(0, "invalid span");
+    int sx = 0;
+    bool solid = true;
+    if (reg.rdata.data[ofs] == 0) { solid = false; ++ofs; }
+    while (sx != reg.width) {
+      // we should not have two consecutive zero-width spans
+      if (reg.rdata.data[ofs] == 0 || reg.rdata.data[ofs] <= sx) {
+        //foreach (immutable idx; 0..reg.rdata.data.length) if (reg.rdata.data[idx] >= 0) writeln(idx, ": ", reg.rdata.data[idx]); else break;
+        //assert(reg.rdata.data[ofs+1] != 0);
+        assert(0, "invalid span");
+      }
+      int ex = reg.rdata.data[ofs++];
+      bmp[a+sx..a+ex] = (solid ? 1 : 0);
+      solid = !solid;
+      sx = ex;
+    }
+    debug assert(sx == reg.width);
+  }
+  foreach (immutable v; bmp[0..reg.width*reg.height]) if (v == 42) assert(0, "invalid region data");
+}
+
+
+int[] buildCoords (int[] bmp, int type, int x0, int x1) {
+  bool isSolid (int x) { return (x >= 0 && x < bmp.length && bmp[x] != 0); }
+  int[] res;
+  while (x0 <= x1) {
+    while (x0 <= x1 && type != isSolid(x0)) ++x0;
+    if (x0 > x1) break;
+    res ~= x0; // start
+    while (x0 <= x1 && type == isSolid(x0)) ++x0;
+    res ~= x0-1;
+  }
+  return res;
+}
+
+
+void fuzzyEnumerator () {
+  import std.random;
+  auto reg = Region(uniform!"[]"(1, 128), 1);
+  int[] bmp, ebmp;
+  bmp.length = reg.width*reg.height;
+  ebmp.length = reg.width*reg.height;
+  if (uniform!"[]"(0, 1)) {
+    reg.rdata.simpleSolid = false;
+    ebmp[] = 0; // default is empty
+  } else {
+    ebmp[] = 1; // default is solid
+  }
+  foreach (immutable tx0; 0..1000) {
+    checkLineOffsets(reg);
+    buildBitmap(reg, bmp[]);
+    assert(bmp[] == ebmp[]);
+    foreach (immutable trx; 0..200) {
+      //writeln("*");
+      int x0 = uniform!"[)"(-10, reg.width+10);
+      int x1 = uniform!"[)"(-10, reg.width+10);
+      if (x0 > x1) { auto t = x0; x0 = x1; x1 = t; }
+      int[] coords;
+      int type = uniform!"[]"(0, 1);
+      if (type == 0) {
+        reg.spans!false(0, x0, x1, (x0, x1) { coords ~= x0; coords ~= x1; });
+      } else {
+        reg.spans!true(0, x0, x1, (x0, x1) { coords ~= x0; coords ~= x1; });
+      }
+      auto ecr = buildCoords(bmp[], type, x0, x1);
+      assert(ecr[] == coords[]);
+      // now check enumerator range
+      coords.length = 0;
+      if (type == 0) {
+        foreach (ref pair; reg.spanRange!false(0, x0, x1)) { coords ~= pair.x0; coords ~= pair.x1; }
+      } else {
+        foreach (ref pair; reg.spanRange!true(0, x0, x1)) { coords ~= pair.x0; coords ~= pair.x1; }
+      }
+      if (ecr[] != coords[]) {
+        import std.stdio : writeln;
+        writeln("\ntype=", type);
+        writeln("ecr=", ecr);
+        writeln("crd=", coords);
+      }
+      assert(ecr[] == coords[]);
+    }
+    // now do random punch/patch
+    {
+      int x = uniform!"[)"(0, reg.width);
+      int y = uniform!"[)"(0, reg.height);
+      int w = uniform!"[]"(0, reg.width);
+      int h = uniform!"[]"(0, reg.height);
+      int patch = uniform!"[]"(0, 1);
+      if (patch) reg.patch(x, y, w, h); else reg.punch(x, y, w, h);
+      // fix ebmp
+      foreach (int dy; y..y+h) {
+        if (dy < 0) continue;
+        if (dy >= reg.height) break;
+        foreach (int dx; x..x+w) {
+          if (dx < 0) continue;
+          if (dx >= reg.width) break;
+          ebmp[dy*reg.width+dx] = patch;
+        }
+      }
+    }
+  }
+}
+
+void main () {
+  import iv.writer;
+  import std.random;
+  foreach (immutable trycount; 0..1000) {
+    {
+      auto seed = unpredictableSeed;
+      //seed = 4098958554;
+      rndGen.seed(seed);
+      write("try: ", trycount, "; seed = ", seed, " ... ");
+    }
+    fuzzyEnumerator();
+    writeln("OK");
+  }
+}
 }
