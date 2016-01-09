@@ -163,7 +163,7 @@ enum {
     SDL_AUDIO_ALLOW_CHANNELS_CHANGE,
 }
 
-extern(C) nothrow alias SDL_AudioCallback = void function (void* userdata, ubyte* stream, int len);
+extern(C) nothrow @nogc alias SDL_AudioCallback = void function (void* userdata, ubyte* stream, int len);
 
 struct SDL_AudioSpec {
   int freq;
