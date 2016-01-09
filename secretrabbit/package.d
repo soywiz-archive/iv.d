@@ -29,6 +29,10 @@ version(lib_secret_rabbit_allow_hq_filter) enum rabbitHasHQ = true; else enum ra
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+static if (!is(usize == size_t)) alias usize = size_t;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public struct SecretRabbit {
 public:
   enum Error {
@@ -47,8 +51,6 @@ public:
     Best,
     Medium,
     Fast,
-    Linear,
-    ZeroOrderHold,
   }
 
   // Data is used to pass data to `process()`
@@ -83,13 +85,18 @@ private:
   int bCurrent, bEnd, bRealEnd, bLen;
 
   // sure hope noone does more than 128 channels at once
-  double[128] leftCalc, rightCalc;
+  double[128] leftCalc;
+  union {
+    double[128] rightCalc;
+    float[128] lastValue;
+  }
 
   float* buffer; // malloced
 
   // other interpolators (linear and zoh)
   bool resetFlt;
-  alias lastValue = leftCalc;
+  //float[128] lastValue;
+  //alias lastValue = leftCalc;
 
   // processing functions
   Error function (ref SecretRabbit filter, ref Data data) nothrow @trusted @nogc processFn; // process function
@@ -112,11 +119,7 @@ public:
     if (chans < 1 || chans > leftCalc.length) { lastError = Error.BadChannelCount; return; }
     interpType = flt;
     channels = chans;
-    switch (interpType) with (Type) {
-      case Linear: processFn = &linearProcessor; break;
-      case ZeroOrderHold: processFn = &zohProcessor; break;
-      default: if ((lastError = setupSinc(flt)) != 0) return; break;
-    }
+    if ((lastError = setupSinc(flt)) != 0) return;
     reset();
   }
 
@@ -189,18 +192,14 @@ public:
     bCurrent = bEnd = 0;
     bRealEnd = -1;
     srcRatio = inputIndex = 0.0;
-    switch (interpType) {
-      case Type.Linear: case Type.ZeroOrderHold: break;
-      default:
-        if (buffer !is null) {
-          if (bLen > 0) buffer[0..bLen] = 0;
-          // set this for a sanity check
-          memset(buffer+bLen, 0xAA, channels*buffer[0].sizeof);
-        }
-        break;
+    if (buffer !is null) {
+      if (bLen > 0) buffer[0..bLen] = 0;
+      // set this for a sanity check
+      memset(buffer+bLen, 0xAA, channels*buffer[0].sizeof);
     }
     leftCalc[] = 0;
     rightCalc[] = 0;
+    //lastValue[] = 0;
     return (lastError = Error.OK);
   }
 
@@ -267,10 +266,10 @@ private:
 
 public:
 static:
-  string errorStr (Error err) pure { pragma(inline, true); return (err >= Error.min && err <= Error.max ? rabbitErrorStrings[err] : "rabbit-wtf"); }
-  string name (Type flt) pure { pragma(inline, true); return (flt >= Type.min && flt <= Type.max ? rabbitFilterNames[flt] : "invalid interpolator type"); }
-  string description (Type flt) pure { pragma(inline, true); return (flt >= Type.min && flt <= Type.max ? rabbitFilterDescs[flt] : "invalid interpolator type"); }
-  bool isValidRatio (double ratio) pure { pragma(inline, true); return !isBadSrcRatio(ratio); }
+  string errorStr (Error err) pure { static if (__VERSION__ > 2067) pragma(inline, true); return (err >= Error.min && err <= Error.max ? rabbitErrorStrings[err] : "rabbit-wtf"); }
+  string name (Type flt) pure { static if (__VERSION__ > 2067) pragma(inline, true); return (flt >= Type.min && flt <= Type.max ? rabbitFilterNames[flt] : "invalid interpolator type"); }
+  string description (Type flt) pure { static if (__VERSION__ > 2067) pragma(inline, true); return (flt >= Type.min && flt <= Type.max ? rabbitFilterDescs[flt] : "invalid interpolator type"); }
+  bool isValidRatio (double ratio) pure { static if (__VERSION__ > 2067) pragma(inline, true); return !isBadSrcRatio(ratio); }
 
   // will not resize output
   void short2float (in short[] input, float[] output) {
@@ -315,16 +314,12 @@ immutable string[SecretRabbit.Type.max+1] rabbitFilterNames = [
   "Best Sinc Interpolator",
   "Medium Sinc Interpolator",
   "Fastest Sinc Interpolator",
-  "Linear Interpolator",
-  "ZOH Interpolator",
 ];
 
 immutable string[SecretRabbit.Type.max+1] rabbitFilterDescs = [
   "Band limited sinc interpolation, fastest, 97dB SNR, 80% BW",
   "Band limited sinc interpolation, medium quality, 121dB SNR, 90% BW",
   "Band limited sinc interpolation, best quality, 145dB SNR, 96% BW",
-  "Linear interpolator, very fast, poor quality",
-  "Zero order hold interpolator, very fast, poor quality",
 ];
 
 
@@ -365,24 +360,24 @@ enum INV_FP_ONE = (1.0/FP_ONE);
 static assert(SHIFT_BITS < int.sizeof*8-1, "internal error: SHIFT_BITS too large");
 
 // ////////////////////////////////////////////////////////////////////////// //
-bool isBadSrcRatio() (double ratio) { pragma(inline, true); import std.math : isNaN; return (isNaN(ratio) || ratio < (1.0/SRC_MAX_RATIO) || ratio > (1.0*SRC_MAX_RATIO)); }
+bool isBadSrcRatio() (double ratio) { static if (__VERSION__ > 2067) pragma(inline, true); import std.math : isNaN; return (isNaN(ratio) || ratio < (1.0/SRC_MAX_RATIO) || ratio > (1.0*SRC_MAX_RATIO)); }
 
 double fmodOne() (double x) {
-  pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   import core.stdc.math : lrint;
   double res = x-lrint(x);
   return (res < 0.0 ? res+1.0 : res);
 }
 
-T min(T) (T v0, T v1) { pragma(inline, true); return (v0 < v1 ? v0 : v1); }
-T max(T) (T v0, T v1) { pragma(inline, true); return (v0 < v1 ? v1 : v0); }
-T fabs(T) (T v) { pragma(inline, true); return (v < 0 ? -v : v); }
+T min(T) (T v0, T v1) { static if (__VERSION__ > 2067) pragma(inline, true); return (v0 < v1 ? v0 : v1); }
+T max(T) (T v0, T v1) { static if (__VERSION__ > 2067) pragma(inline, true); return (v0 < v1 ? v1 : v0); }
+T fabs(T) (T v) { static if (__VERSION__ > 2067) pragma(inline, true); return (v < 0 ? -v : v); }
 
-int double2fp() (double x) { pragma(inline, true); import core.stdc.math : lrint; return (lrint((x)*FP_ONE)); } /* double2fp */
-int int2fp() (int x) { pragma(inline, true); return (x<<SHIFT_BITS); } /* int2fp */
-int fp2int() (int x) { pragma(inline, true); return (x>>SHIFT_BITS); } /* fp2int */
-int fpfrac() (int x) { pragma(inline, true); return (x&((1<<SHIFT_BITS)-1)); } /* fpfrac */
-double fp2double() (int x) { pragma(inline, true); return fpfrac(x)*INV_FP_ONE; } /* fp2double */
+int double2fp() (double x) { static if (__VERSION__ > 2067) pragma(inline, true); import core.stdc.math : lrint; return (lrint((x)*FP_ONE)); } /* double2fp */
+int int2fp() (int x) { static if (__VERSION__ > 2067) pragma(inline, true); return (x<<SHIFT_BITS); } /* int2fp */
+int fp2int() (int x) { static if (__VERSION__ > 2067) pragma(inline, true); return (x>>SHIFT_BITS); } /* fp2int */
+int fpfrac() (int x) { static if (__VERSION__ > 2067) pragma(inline, true); return (x&((1<<SHIFT_BITS)-1)); } /* fpfrac */
+double fp2double() (int x) { static if (__VERSION__ > 2067) pragma(inline, true); return fpfrac(x)*INV_FP_ONE; } /* fp2double */
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -910,158 +905,4 @@ void prepareData (ref SecretRabbit filter, ref SecretRabbit.Data data, int halfF
     memset(filter.buffer+filter.bEnd, 0, len*filter.buffer[0].sizeof);
     filter.bEnd += len;
   }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-SecretRabbit.Error linearProcessor (ref SecretRabbit filter, ref SecretRabbit.Data data) nothrow @trusted @nogc {
-  import core.stdc.math : lrint;
-
-  double srcRatio, inputIndex, rem;
-
-  if (data.dataIn.length == 0) return SecretRabbit.Error.OK;
-
-  if (filter.resetFlt) {
-    // if we have just been reset, set the lastValue data
-    foreach (int ch; 0..filter.channels) filter.lastValue.ptr[ch] = data.dataIn.ptr[ch];
-    filter.resetFlt = false;
-  }
-
-  filter.inCount = data.dataIn.length/*mul chans*/;
-  filter.outCount = data.dataOut.length/*mul chans*/;
-  filter.inUsed = filter.outUsed = 0;
-
-  srcRatio = filter.lastRatio;
-  inputIndex = filter.lastPosition;
-
-  // calculate samples before first sample in input array
-  while (inputIndex < 1.0 && filter.outUsed < filter.outCount) {
-    if (filter.inUsed+filter.channels*(1.0+inputIndex) >= filter.inCount) break;
-
-    if (filter.outCount > 0 && fabs(filter.lastRatio-data.srcRatio) > SRC_MIN_RATIO_DIFF) {
-      srcRatio = filter.lastRatio+filter.outUsed*(data.srcRatio-filter.lastRatio)/filter.outCount;
-    }
-
-    foreach (int ch; 0..filter.channels) {
-      data.dataOut.ptr[filter.outUsed] = cast(float)(filter.lastValue.ptr[ch]+inputIndex*(data.dataIn.ptr[ch]-filter.lastValue.ptr[ch]));
-      ++filter.outUsed;
-    }
-
-    // figure out the next index
-    inputIndex += 1.0/srcRatio;
-  }
-
-  rem = fmodOne(inputIndex);
-  filter.inUsed += filter.channels*lrint(inputIndex-rem);
-  inputIndex = rem;
-
-  // main processing loop
-  while (filter.outUsed < filter.outCount && filter.inUsed+filter.channels*inputIndex < filter.inCount) {
-    if (filter.outCount > 0 && fabs(filter.lastRatio-data.srcRatio) > SRC_MIN_RATIO_DIFF) {
-      srcRatio = filter.lastRatio+filter.outUsed*(data.srcRatio-filter.lastRatio)/filter.outCount;
-    }
-
-    foreach (int ch; 0..filter.channels) {
-      data.dataOut.ptr[filter.outUsed] = cast(float)(data.dataIn.ptr[filter.inUsed-filter.channels+ch]+inputIndex*(data.dataIn.ptr[filter.inUsed+ch]-data.dataIn.ptr[filter.inUsed-filter.channels+ch]));
-      ++filter.outUsed;
-    }
-
-    // figure out the next index
-    inputIndex += 1.0/srcRatio;
-    rem = fmodOne(inputIndex);
-
-    filter.inUsed += filter.channels*lrint(inputIndex-rem);
-    inputIndex = rem;
-  }
-
-  if (filter.inUsed > filter.inCount) {
-    inputIndex += (filter.inUsed-filter.inCount)/filter.channels;
-    filter.inUsed = filter.inCount;
-  }
-
-  filter.lastPosition = inputIndex;
-
-  if (filter.inUsed > 0) foreach (int ch; 0..filter.channels) filter.lastValue.ptr[ch] = data.dataIn.ptr[filter.inUsed-filter.channels+ch];
-
-  // save current ratio rather then target ratio
-  filter.lastRatio = srcRatio;
-
-  return SecretRabbit.Error.OK;
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-SecretRabbit.Error zohProcessor (ref SecretRabbit filter, ref SecretRabbit.Data data) nothrow @trusted @nogc  {
-  import core.stdc.math : lrint;
-
-  double srcRatio, inputIndex, rem;
-
-  if (data.dataIn.length == 0) return SecretRabbit.Error.OK;
-
-  if (filter.resetFlt) {
-    // if we have just been reset, set the lastValue data
-    foreach (int ch; 0..filter.channels) filter.lastValue.ptr[ch] = data.dataIn.ptr[ch];
-    filter.resetFlt = false;
-  }
-
-  filter.inCount = data.dataIn.length/*mul chans*/;
-  filter.outCount = data.dataOut.length/*mul chans*/;
-  filter.inUsed = filter.outUsed = 0;
-
-  srcRatio = filter.lastRatio;
-  inputIndex = filter.lastPosition;
-
-  // calculate samples before first sample in input array
-  while (inputIndex < 1.0 && filter.outUsed < filter.outCount) {
-    if (filter.inUsed+filter.channels*inputIndex >= filter.inCount) break;
-
-    if (filter.outCount > 0 && fabs(filter.lastRatio-data.srcRatio) > SRC_MIN_RATIO_DIFF) {
-      srcRatio = filter.lastRatio+filter.outUsed*(data.srcRatio-filter.lastRatio)/filter.outCount;
-    }
-
-    foreach (int ch; 0..filter.channels) {
-      data.dataOut.ptr[filter.outUsed] = filter.lastValue.ptr[ch];
-      ++filter.outUsed;
-    }
-
-    // figure out the next index
-    inputIndex += 1.0/srcRatio;
-  }
-
-  rem = fmodOne(inputIndex);
-  filter.inUsed += filter.channels*lrint(inputIndex-rem);
-  inputIndex = rem;
-
-  // main processing loop
-  while (filter.outUsed < filter.outCount && filter.inUsed+filter.channels*inputIndex <= filter.inCount) {
-    if (filter.outCount > 0 && fabs(filter.lastRatio-data.srcRatio) > SRC_MIN_RATIO_DIFF) {
-      srcRatio = filter.lastRatio+filter.outUsed*(data.srcRatio-filter.lastRatio)/filter.outCount;
-    }
-
-    foreach (int ch; 0..filter.channels) {
-      data.dataOut.ptr[filter.outUsed] = data.dataIn.ptr[filter.inUsed-filter.channels+ch];
-      ++filter.outUsed;
-    }
-
-    // figure out the next index
-    inputIndex += 1.0/srcRatio;
-    rem = fmodOne(inputIndex);
-
-    filter.inUsed += filter.channels*lrint(inputIndex-rem);
-    inputIndex = rem;
-  }
-
-  if (filter.inUsed > filter.inCount) {
-    inputIndex += (filter.inUsed-filter.inCount)/filter.channels;
-    filter.inUsed = filter.inCount;
-  }
-
-  filter.lastPosition = inputIndex;
-
-  if (filter.inUsed > 0) foreach (int ch; 0..filter.channels) filter.lastValue.ptr[ch] = data.dataIn.ptr[filter.inUsed-filter.channels+ch];
-
-  // save current ratio rather then target ratio
-  filter.lastRatio = srcRatio;
-
-  return SecretRabbit.Error.OK;
 }
