@@ -420,7 +420,7 @@ string readLine(TF) (auto ref TF fl, bool* eolhit=null, usize maxSize=1024*1024)
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public final class MemoryStream {
+public struct MemoryStream {
 private:
   import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
@@ -496,7 +496,7 @@ static assert(streamHasTell!MemoryStream);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public final class MemoryStreamRO {
+public struct MemoryStreamRO {
 private:
   import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
@@ -606,7 +606,7 @@ unittest {
     //dump(ms.data);
   }
   {
-    auto ms = new MemoryStreamRO(cast(const(void)[])"hello");
+    auto ms = /*new*/ MemoryStreamRO(cast(const(void)[])"hello");
     assert(ms.data == cast(ubyte[])"hello");
   }
 }
