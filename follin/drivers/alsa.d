@@ -143,7 +143,7 @@ package(iv.follin) bool sndWriteBuffer (ref bool playbackStarted) {
       version(follin_radio_silence_debug) { import core.stdc.stdio; if (sndSamplesSize-(sndSamplesSize/2-used) < 256) printf("radio silence: too much input buffer drained: %u\n", cast(uint)(sndSamplesSize/2-used)); }
       auto paused = atomicLoad(sndPaused);
       auto b2p = atomicLoad(sndbufToPlay);
-      auto bpos = (!paused ? sndbuf.ptr : sndsilence.ptr)+sndSamplesSize*b2p;
+      auto bpos = (!paused ? sndbuf.ptr : sndsilence.ptr)+(sndSamplesSize+8)*b2p;
       if (atomicLoad(sndbufToFill) == b2p && atomicLoad(sndbufFillingNow)) {
         // radio silence
         //bpos = sndsilence.ptr;

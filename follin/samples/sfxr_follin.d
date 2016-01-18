@@ -26,6 +26,7 @@ void playSfx() (in auto ref Sfxr sfx) {
 
   foreach (immutable count; 0..1) {
     auto chan = new SfxChannel(sfx);
+    chan.volume = 128;
     if (!tflAddChannel("sfx", chan, TFLdefault, TflChannel.QualitySfx)) {
       import core.stdc.stdio;
       fprintf(stderr, "ERROR: can't add sfx channel!\n");

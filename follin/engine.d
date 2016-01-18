@@ -50,7 +50,10 @@ shared static this () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-version(X86) version = follin_use_sse;
+version(X86) {
+  version = follin_use_sse;
+  version = follin_use_sse2;
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -588,7 +591,7 @@ bool sndGenerateBuffer () {
   bool wasAtLeastOne = false;
   uint bpos, epos;
   synchronized (sndMutexChanRW.writer) {
-    bpos = sndSamplesSize*buf2fill;
+    bpos = (sndSamplesSize+8)*buf2fill;
     epos = bpos+sndSamplesSize;
     if (firstFreeChan > 0) {
       immutable bufsz = sndSamplesSize;
@@ -880,25 +883,26 @@ bool sndGenerateBuffer () {
           mulps    XMM0,XMM4;    // mul by volume and shift
           //maxps    XMM0,XMM2;    // clip lower
           //minps    XMM0,XMM3;    // clip upper
+        }
+        version(follin_use_sse2) asm nothrow @safe @nogc {
+          cvttps2dq XMM1,XMM0;  // XMM1 now contains four int32 values
+          packssdw  XMM1,XMM1;
+          movups    [EBX],XMM1;
+        } else asm nothrow @safe @nogc {
           cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
           movhlps  XMM5,XMM0;    // get high floats
           cvtps2pi MM1,XMM5;     // MM1 now contains two high int32 values
           packssdw MM0,MM1;      // MM0 now contains 4 int16 values
           movq     [EBX],MM0;
+        }
+        asm nothrow @safe @nogc {
           add     EAX,16;
           add     EBX,8;
           dec     ECX;
           jnz     finalloopmix;
-          emms;
-          /*
-          cvttps2dq XMM1,XMM0;  // XMM1 now contains four int32 values
-          packssdw  XMM1,XMM0;
-          movups    [EBX],XMM1;
-          add     EAX,16;
-          add     EBX,8;
-          dec     ECX;
-          jnz     finalloopmix;
-          */
+        }
+        version(follin_use_sse2) {} else {
+          asm nothrow @safe @nogc { emms; }
         }
       } else {
         immutable float mull = (1.0f/255.0f)*mvolL;
