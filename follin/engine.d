@@ -533,7 +533,7 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
         }
       }
       if (ch.lastquality < 0 && !ch.cub.setup(cast(float)ch.lastsrate/cast(float)realSampleRate)) ch.lastquality = 0; // don't use cubic
-      if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
+      //if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
       ch.prevsrate = ch.lastsrate;
       if (ch.bufpos == 0) ch.lastvolL = ch.lastvolR = 0; // so if we won't even had a chance to play it, it can be replaced
       ch.prio = prio;
@@ -604,7 +604,7 @@ bool sndGenerateBuffer () {
             ch.prevsrate = ch.lastsrate;
             if (!srate) { killChan(ch, channelsChanged); break chmixloop; } // something is wrong with this channel, kill it
             if (ch.lastquality < 0 && !ch.cub.setup(cast(float)srate/cast(float)realSampleRate)) ch.lastquality = 0; // don't use cubic
-            if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
+            //if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
           }
           //{ import core.stdc.stdio; printf("wanted %u frames (has %u frames)\n", (bufsz-ch.bufpos)/2, ch.bufpos/2); }
           while (ch.bufpos < bufsz && (ch.chan !is null && !ch.chan.paused) && ch.lastsrate == ch.chan.sampleRate) {
