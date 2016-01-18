@@ -42,6 +42,7 @@ void showProgress () {
 void playOgg() (string fname, bool asMusic) {
 
   auto chan = new VorbisChannel(fname);
+  chan.volume = 200;
   vrTotalTimeMsec = cast(uint)(cast(ulong)chan.totalFrames*1000/chan.sampleRate);
   vrNextTimeMsec = 0;
 

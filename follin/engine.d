@@ -50,6 +50,10 @@ shared static this () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version(X86) version = follin_use_sse;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 // throws FollinException on error
 // starts paused
 void tflInit () {
@@ -233,16 +237,16 @@ shared static this () {
 // ////////////////////////////////////////////////////////////////////////// //
 void sndEngineInit () {
   sndSamplesSize *= numchans; // frames to samples
-  sndbuf.length = sndSamplesSize*bufcount;
+  sndbuf.length = (sndSamplesSize+32)*bufcount;
   sndbuf[] = 0;
-  sndsilence.length = sndSamplesSize*bufcount;
+  sndsilence.length = (sndSamplesSize+32)*bufcount;
   sndsilence[] = 0;
-  tmprsbuf.length = sndSamplesSize;
-  sndrsbuf.length = sndSamplesSize;
-  tmpmonobuf.length = sndSamplesSize;
+  tmprsbuf.length = sndSamplesSize+32;
+  sndrsbuf.length = sndSamplesSize+32;
+  tmpmonobuf.length = sndSamplesSize+32;
   foreach (ref ch; chans) {
     import core.stdc.stdlib : malloc;
-    ch.buf = cast(float*)malloc(ch.buf[0].sizeof*sndSamplesSize);
+    ch.buf = cast(float*)malloc(ch.buf[0].sizeof*(sndSamplesSize+32));
     if (ch.buf is null) assert(0, "Follin: out of memory");
     ch.bufpos = 0;
     if (!ch.srb.inited) {
@@ -639,44 +643,69 @@ bool sndGenerateBuffer () {
               // silent
               ch.buf[ch.bufpos..bufsz] = 0.0f;
             } else {
-              // left
-              if (ch.lastvolL == 255) {
-                // at full volume, do nothing
-              } else if (ch.lastvolL == 0) {
-                // silent, clear it
-                auto d = ch.buf+ch.bufpos;
-                foreach (immutable _; 0..fblen) {
-                  *d = 0.0f;
-                  d += 2;
+              version(follin_use_sse) {
+                if (ch.lastvolL != 255 || ch.lastvolR != 255) {
+                  __gshared float[4] mul = void;
+                  mul[0] = mul[2] = (1.0f/255.0f)*cast(float)ch.lastvolL;
+                  mul[1] = mul[3] = (1.0f/255.0f)*cast(float)ch.lastvolR;
+                  auto bptr = ch.buf+ch.bufpos;
+                  auto blen = (bufsz-ch.bufpos+3)/4;
+                  asm nothrow @safe @nogc {
+                    mov     EAX,[bptr];
+                    mov     EBX,offsetof mul[0];
+                    mov     ECX,[blen];
+                    align 8;
+                    movups  XMM1,[EBX];
+                    align 8;
+                   addloopchvol:
+                    movups  XMM0,[EAX];
+                    mulps   XMM0,XMM1;
+                    movups  [EAX],XMM0;
+                    add     EAX,16;
+                    dec     ECX;
+                    jnz     addloopchvol;
+                  }
                 }
               } else {
-                // do volume
-                immutable float mul = cast(float)ch.lastvolL/255.0f;
-                auto d = ch.buf+ch.bufpos;
-                foreach (immutable _; 0..fblen) {
-                  *d *= mul;
-                  d += 2;
+                // left
+                if (ch.lastvolL == 255) {
+                  // at full volume, do nothing
+                } else if (ch.lastvolL == 0) {
+                  // silent, clear it
+                  auto d = ch.buf+ch.bufpos;
+                  foreach (immutable _; 0..fblen) {
+                    *d = 0.0f;
+                    d += 2;
+                  }
+                } else {
+                  // do volume
+                  immutable float mul = cast(float)ch.lastvolL/255.0f;
+                  auto d = ch.buf+ch.bufpos;
+                  foreach (immutable _; 0..fblen) {
+                    *d *= mul;
+                    d += 2;
+                  }
                 }
-              }
-              // right
-              if (ch.lastvolR == 255) {
-                // at full volume, do nothing
-              } else if (ch.lastvolR == 0) {
-                // silent, clear it
-                auto d = ch.buf+ch.bufpos+1;
-                foreach (immutable _; 0..fblen) {
-                  *d = 0.0f;
-                  d += 2;
+                // right
+                if (ch.lastvolR == 255) {
+                  // at full volume, do nothing
+                } else if (ch.lastvolR == 0) {
+                  // silent, clear it
+                  auto d = ch.buf+ch.bufpos+1;
+                  foreach (immutable _; 0..fblen) {
+                    *d = 0.0f;
+                    d += 2;
+                  }
+                } else {
+                  // do volume
+                  immutable float mul = cast(float)ch.lastvolL/255.0f;
+                  auto d = ch.buf+ch.bufpos+1;
+                  foreach (immutable _; 0..fblen) {
+                    *d *= mul;
+                    d += 2;
+                  }
                 }
-              } else {
-                // do volume
-                immutable float mul = cast(float)ch.lastvolL/255.0f;
-                auto d = ch.buf+ch.bufpos+1;
-                foreach (immutable _; 0..fblen) {
-                  *d *= mul;
-                  d += 2;
-                }
-              }
+              } // version
             }
             ch.bufpos += fblen*2; // frames to samples
           }
@@ -704,7 +733,26 @@ bool sndGenerateBuffer () {
             auto s = tmprsbuf.ptr+rspos;
             auto d = sndrsbuf.ptr+rspos;
             // will clamp later
-            foreach (immutable _; rspos..tspos) *d++ += *s++;
+            version(follin_use_sse) {
+              auto blen = (tspos-rspos+3)/4;
+              asm nothrow @safe @nogc {
+                mov     EAX,[d];
+                mov     EBX,[s];
+                mov     ECX,[blen];
+                align 8;
+               addloopchmix:
+                movups  XMM0,[EAX];
+                movups  XMM1,[EBX];
+                addps   XMM0,XMM1;
+                movups  [EAX],XMM0;
+                add     EAX,16;
+                add     EBX,16;
+                dec     ECX;
+                jnz     addloopchmix;
+              }
+            } else {
+              foreach (immutable _; rspos..tspos) *d++ += *s++;
+            }
             ch.genFrames += (tspos-rspos)/2;
             //{ import core.stdc.stdio; printf("  +f: %u\n", (tspos-rspos)/2); }
             rspos += tspos;
@@ -715,7 +763,26 @@ bool sndGenerateBuffer () {
             auto s = ch.buf;
             auto d = sndrsbuf.ptr+rspos;
             // will clamp later
-            foreach (immutable _; 0..bsused) *d++ += *s++;
+            version(follin_use_sse) {
+              auto blen = (bsused+3)/4;
+              asm nothrow @safe @nogc {
+                mov     EAX,[d];
+                mov     EBX,[s];
+                mov     ECX,[blen];
+                align 8;
+               addloopchmix1:
+                movups  XMM0,[EAX];
+                movups  XMM1,[EBX];
+                addps   XMM0,XMM1;
+                movups  [EAX],XMM0;
+                add     EAX,16;
+                add     EBX,16;
+                dec     ECX;
+                jnz     addloopchmix1;
+              }
+            } else {
+              foreach (immutable _; 0..bsused) *d++ += *s++;
+            }
             rspos += bsused;
             ch.genFrames += bsused/2;
             //{ import core.stdc.stdio; printf("  +f: %u\n", bsused/2); }
@@ -743,7 +810,26 @@ bool sndGenerateBuffer () {
                 auto s = tmprsbuf.ptr+rspos;
                 auto d = sndrsbuf.ptr+rspos;
                 // will clamp later
-                foreach (immutable _; 0..srbdata.outputSamplesUsed) *d++ += *s++;
+                version(follin_use_sse) {
+                  auto blen = (srbdata.outputSamplesUsed+3)/4;
+                  asm nothrow @safe @nogc {
+                    mov     EAX,[d];
+                    mov     EBX,[s];
+                    mov     ECX,[blen];
+                    align 8;
+                   addloopchmix2:
+                    movups  XMM0,[EAX];
+                    movups  XMM1,[EBX];
+                    addps   XMM0,XMM1;
+                    movups  [EAX],XMM0;
+                    add     EAX,16;
+                    add     EBX,16;
+                    dec     ECX;
+                    jnz     addloopchmix2;
+                  }
+                } else {
+                  foreach (immutable _; 0..srbdata.outputSamplesUsed) *d++ += *s++;
+                }
                 rspos += srbdata.outputSamplesUsed;
               }
             }
@@ -765,25 +851,61 @@ bool sndGenerateBuffer () {
     if (mvolL+mvolR == 0) {
       sndbuf[bpos..epos] = 0;
     } else {
-      immutable float mull = (1.0f/255.0f)*mvolL;
-      immutable float mulr = (1.0f/255.0f)*mvolR;
-      auto sp = sndbuf.ptr+bpos;
+      auto dp = sndbuf.ptr+bpos;
       auto src = sndrsbuf.ptr;
-      mixin(declfcvar!"temp");
-      foreach (immutable _; 0..sndrsbuf.length/2) {
-        // left
-        float f = (*src++)*mull;
-        {
-          mixin(FAST_SCALED_FLOAT_TO_INT!("f", "15"));
-          if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
-          *sp++ = cast(short)v;
+      version(follin_use_sse) {
+        //__gshared immutable float[4] fmin4 = -32768.0;
+        //__gshared immutable float[4] fmax4 = 32767.0;
+        __gshared float[4] mvol = void;
+        mvol[0] = mvol[2] = (32768.0/255.0f)*cast(float)mvolL;
+        mvol[1] = mvol[3] = (32768.0/255.0f)*cast(float)mvolR;
+        auto blen = (sndSamplesSize+3)/4;
+        asm nothrow @safe @nogc {
+          //mov      EAX,offsetof fmin4[0];
+          //movups   XMM2,[EAX]; // XMM2: min values
+          //mov      EAX,offsetof fmax4[0];
+          //movups   XMM3,[EAX]; // XMM3: max values
+          mov      EAX,offsetof mvol[0]; // source
+          movups   XMM4,[EAX]; // XMM4: multipliers
+          mov      EAX,[src]; // source
+          mov      EBX,[dp]; // dest
+          mov      ECX,[blen];
+          align 8;
+         finalloopmix:
+          movups   XMM0,[EAX];
+          mulps    XMM0,XMM4;    // mul by volume and shift
+          //maxps    XMM0,XMM2;    // clip lower
+          //minps    XMM0,XMM3;    // clip upper
+          cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
+          movhlps  XMM5,XMM0;    // get high floats
+          cvtps2pi MM1,XMM5;     // MM1 now contains two high int32 values
+          packssdw MM0,MM1;      // MM0 now contains 4 int16 values
+          movq     [EBX],MM0;
+          add     EAX,16;
+          add     EBX,8;
+          dec     ECX;
+          jnz     finalloopmix;
+          emms;
         }
-        // right
-        f = (*src++)*mulr;
-        {
-          mixin(FAST_SCALED_FLOAT_TO_INT!("f", "15"));
-          if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
-          *sp++ = cast(short)v;
+      } else {
+        immutable float mull = (1.0f/255.0f)*mvolL;
+        immutable float mulr = (1.0f/255.0f)*mvolR;
+        mixin(declfcvar!"temp");
+        foreach (immutable _; 0..sndSamplesSize/2) {
+          // left
+          float f = (*src++)*mull;
+          {
+            mixin(FAST_SCALED_FLOAT_TO_INT!("f", "15"));
+            if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+            *dp++ = cast(short)v;
+          }
+          // right
+          f = (*src++)*mulr;
+          {
+            mixin(FAST_SCALED_FLOAT_TO_INT!("f", "15"));
+            if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+            *dp++ = cast(short)v;
+          }
         }
       }
     }
