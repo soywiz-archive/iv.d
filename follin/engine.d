@@ -20,6 +20,7 @@ module iv.follin.engine;
 //version = follin_prefer_alsa_plug;
 //version = follin_threads_debug;
 //version = follin_wait_debug;
+//version = follin_debug_resampler_type;
 
 import iv.follin.exception;
 
@@ -330,6 +331,7 @@ void sndEngineInit () {
     ch.bufpos = 0;
     if (!ch.srb.inited) {
       ch.lastquality = 8;
+      ch.useCubic = false;
       ch.srb.setup(numchans, 44100, 48000, ch.lastquality);
     }
     ch.cub.reset();
@@ -358,6 +360,7 @@ struct Channel {
   uint bufpos; // current position to write in `tmpbuf`/`buf`
   ubyte lastvolL, lastvolR; // latest volume
   int lastquality = 666; // <0: try cubic
+  bool useCubic;
   uint lastsrate, prevsrate; // last sampling rate
   ulong genFrames; // generated, but not yet consumed frames
   ulong playedFrames;
@@ -617,8 +620,8 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
           return false;
         }
       }
-      if (ch.lastquality < 0 && !ch.cub.setup(cast(float)ch.lastsrate/cast(float)realSampleRate)) ch.lastquality = 0; // don't use cubic
-      //if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
+      if (ch.lastquality < 0) ch.useCubic = ch.cub.setup(cast(float)ch.lastsrate/cast(float)realSampleRate); // don't use cubic
+      version(follin_debug_resampler_type) if (ch.useCubic) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
       ch.prevsrate = ch.lastsrate;
       if (ch.bufpos == 0) ch.lastvolL = ch.lastvolR = 0; // so if we won't even had a chance to play it, it can be replaced
       ch.prio = prio;
@@ -688,8 +691,8 @@ bool sndGenerateBuffer () {
             }
             ch.prevsrate = ch.lastsrate;
             if (!srate) { killChan(ch, channelsChanged); break chmixloop; } // something is wrong with this channel, kill it
-            if (ch.lastquality < 0 && !ch.cub.setup(cast(float)srate/cast(float)realSampleRate)) ch.lastquality = 0; // don't use cubic
-            //if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
+            if (ch.lastquality < 0) ch.useCubic = ch.cub.setup(cast(float)srate/cast(float)realSampleRate); // don't use cubic
+            version(follin_debug_resampler_type) { if (ch.useCubic) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); } }
           }
           //{ import core.stdc.stdio; printf("wanted %u frames (has %u frames)\n", (bufsz-ch.bufpos)/2, ch.bufpos/2); }
           while (ch.bufpos < bufsz && (ch.chan !is null && !ch.chan.paused) && ch.lastsrate == ch.chan.sampleRate) {
@@ -801,7 +804,7 @@ bool sndGenerateBuffer () {
               srbdata.dataIn = ch.buf[bsused..ch.bufpos];
               srbdata.dataOut = tmprsbuf.ptr[tspos..bufsz];
               //{ import core.stdc.stdio; printf("realSampleRate=%u; ch.lastsrate=%u\n", realSampleRate, ch.lastsrate); }
-              err = (ch.lastquality < 0 ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
+              err = (ch.useCubic ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break; }
               //{ import core.stdc.stdio; printf("inused: %u of %u; outused: %u of %u; bsused=%u\n", srbdata.inputSamplesUsed, cast(uint)srbdata.dataIn.length, srbdata.outputSamplesUsed, cast(uint)srbdata.dataOut.length, bsused); }
               bsused += srbdata.inputSamplesUsed;
@@ -886,7 +889,7 @@ bool sndGenerateBuffer () {
             if (rspos < bufsz && ch.lastsrate != realSampleRate) {
               srbdata.dataIn = null;
               srbdata.dataOut = tmprsbuf.ptr[rspos..bufsz];
-              err = (ch.lastquality < 0 ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
+              err = (ch.useCubic ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break chmixloop; }
               if (srbdata.outputSamplesUsed) {
                 // mix

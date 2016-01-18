@@ -47,7 +47,7 @@ void showProgress () {
 }
 
 
-bool cubic = false;
+int quality = TflChannel.QualityMusic;
 
 enum Action { Quit, Prev, Next }
 
@@ -67,13 +67,13 @@ Action playOgg() () {
     import core.stdc.stdio;
     import std.path : baseName;
     auto bn = playlist[plidx].baseName;
-    printf("=== [%u/%u] %.*s ===\n", cast(uint)(plidx+1), cast(uint)playlist.length, cast(uint)bn.length, bn.ptr);
+    printf("=== [%u/%u] %.*s (%d) ===\n", cast(uint)(plidx+1), cast(uint)playlist.length, cast(uint)bn.length, bn.ptr, quality);
   }
 
   vrTotalTimeMsec = cast(uint)(cast(ulong)chan.totalFrames*1000/chan.sampleRate);
   vrNextTimeMsec = 0;
 
-  if (!tflAddChannel("ogg", chan, TFLmusic, (cubic ? -1 : TflChannel.QualityMusic))) {
+  if (!tflAddChannel("ogg", chan, TFLmusic, quality)) {
     import core.stdc.stdio;
     fprintf(stderr, "ERROR: can't add ogg channel!\n");
     return Action.Quit;
@@ -124,15 +124,19 @@ void main (string[] args) {
 
   if (args.length < 2) throw new Exception("filename?");
 
-  bool cubic = false;
   bool nomoreargs = false;
 
   foreach (string arg; args[1..$]) {
     if (args.length == 0) continue;
     if (!nomoreargs) {
       if (arg == "--") { nomoreargs = true; continue; }
-      if (arg == "--cubic") { cubic = true; continue; }
-      if (arg[0] == '-') throw new Exception("unknown option: '"~arg~"'");
+      if (arg == "--cubic") { quality = -1; continue; }
+      if (arg == "--best") { quality = 10; continue; }
+      if (arg[0] == '-') {
+        if (arg.length == 2 && arg[1] >= '0' && arg[1] <= '9') { quality = arg[1]-'0'; continue; }
+        if (arg.length == 3 && arg[1] == 'q' && arg[2] >= '0' && arg[2] <= '9') { quality = arg[2]-'0'; continue; }
+        throw new Exception("unknown option: '"~arg~"'");
+      }
     }
     import std.file : exists;
     if (!arg.exists) {
