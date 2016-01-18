@@ -20,6 +20,7 @@ module iv.follin.synth.dmm;
 
 import iv.follin.engine : TflChannel;
 
+static if (__traits(compiles, () { import iv.stream; })) {
 import iv.stream;
 
 
@@ -681,4 +682,5 @@ public class DmmChannel : TflChannel {
     }
     return count; // return number of mono frames
   }
+}
 }

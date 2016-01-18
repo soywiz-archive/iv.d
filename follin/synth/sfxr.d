@@ -19,6 +19,7 @@ module iv.follin.synth.sfxr;
 
 import iv.follin.engine : TflChannel;
 
+static if (__traits(compiles, () { import iv.stream; })) {
 import iv.stream;
 
 
@@ -683,4 +684,5 @@ public class SfxChannel : TflChannel {
     atomicStore(sfxdone, true);
   }
   */
+}
 }

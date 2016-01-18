@@ -19,6 +19,7 @@ module iv.follin.synth.vorbis;
 
 import iv.follin.engine : TflChannel;
 
+static if (__traits(compiles, () { import iv.stb.vorbis; })) {
 import iv.stb.vorbis;
 
 
@@ -116,4 +117,5 @@ class VorbisChannel : TflChannel {
     right = r;
     return fr2put;
   }
+}
 }
