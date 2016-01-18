@@ -158,7 +158,7 @@ public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @
       version(follin_use_sse2) asm nothrow @safe @nogc {
         cvttps2dq XMM1,XMM0;  // XMM1 now contains four int32 values
         packssdw  XMM1,XMM1;
-        movups    [EBX],XMM1;
+        movq      [EBX],XMM1;
       } else asm nothrow @safe @nogc {
         cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
         movhlps  XMM5,XMM0;    // get high floats
@@ -963,7 +963,7 @@ bool sndGenerateBuffer () {
         version(follin_use_sse2) asm nothrow @safe @nogc {
           cvttps2dq XMM1,XMM0;  // XMM1 now contains four int32 values
           packssdw  XMM1,XMM1;
-          movups    [EBX],XMM1;
+          movq      [EBX],XMM1;
         } else asm nothrow @safe @nogc {
           cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
           movhlps  XMM5,XMM0;    // get high floats
