@@ -888,12 +888,15 @@ nothrow @trusted @nogc:
   float[4][2] data; // -1..3
   uint[2] drain;
 
-  bool setup (float astep) {
-    if (astep >= 1.0f) return false;
+  void reset () {
     curposfrac[] = 0.0f;
-    step = astep;
     foreach (ref d; data) d[] = 0.0f;
     drain[] = 0;
+  }
+
+  bool setup (float astep) {
+    if (astep >= 1.0f) return false;
+    step = astep;
     return true;
   }
 
@@ -937,7 +940,7 @@ nothrow @trusted @nogc:
       if (outleft == 0) return;
       --outleft;
       // cubic interpolation
-      {
+      /*version(none)*/ {
         // interpolate between y1 and y2
         immutable float mu = (*cpf); // how far we are moved from y1 to y2
         immutable float mu2 = mu*mu; // wow
@@ -954,8 +957,7 @@ nothrow @trusted @nogc:
           immutable float a2 = y2-y0;
         }
         *dataOut = a0*mu*mu2+a1*mu2+a2*mu+y1;
-      }
-      //*dataOut = front(cidx);
+      }// else *dataOut = dt[1];
       dataOut += 2;
       if (((*cpf) += st) >= 1.0f) {
         (*cpf) -= 1.0f;

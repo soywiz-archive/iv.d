@@ -249,6 +249,7 @@ void sndEngineInit () {
       ch.lastquality = 8;
       ch.srb.setup(numchans, 44100, 48000, ch.lastquality);
     }
+    ch.cub.reset();
     ch.prevsrate = ch.lastsrate = 44100;
   }
   scope(failure) {
@@ -505,6 +506,7 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
       ch.genFrames = 0;
       ch.playedFrames = 0;
       if (ochan !is null) ochan.discarded();
+      ch.cub.reset(); // it is fast
     }
 
     if (chan !is null) {
@@ -678,6 +680,7 @@ bool sndGenerateBuffer () {
             }
             ch.bufpos += fblen*2; // frames to samples
           }
+          if (ch.lastquality < 0 && ch.bufpos < bufsz) ch.cub.reset(); // it is fast
 
           //{ import core.stdc.stdio; printf("have %u frames out of %u\n", ch.bufpos/2, bufsz/2); }
           // if we have any data in channel buffer, resample it
