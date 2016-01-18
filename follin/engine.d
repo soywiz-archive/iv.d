@@ -463,6 +463,7 @@ bool sndKillChan (const(char)[] name) {
         ch.namelen = 0;
         ch.genFrames = 0;
         if (ochan !is null) ochan.discarded();
+        packChannels();
         return true;
       }
     }
@@ -547,6 +548,8 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
       same.fixVictim!"same"(ch, prio, idx);
     }
 
+    //{ import core.stdc.stdio; printf("replaceIdx(0)=%d; firstFreeChan=%u\n", replaceIdx, firstFreeChan); }
+
     if (replaceIdx < 0) {
       if (chan is null) return false;
       if (lower.idx >= 0 && lower.state < int.max-1) {
@@ -567,6 +570,8 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
         replaceIdx = firstFreeChan;
       }
     }
+
+    //{ import core.stdc.stdio; printf("replaceIdx(1)=%d; firstFreeChan=%u\n", replaceIdx, firstFreeChan); }
 
     // replace channel
     auto ch = &chans.ptr[replaceIdx];
@@ -849,22 +854,24 @@ bool sndGenerateBuffer () {
             auto s = ch.buf;
             auto d = sndrsbuf.ptr+rspos;
             // will clamp later
-            version(follin_use_sse) {
-              auto blen = (bsused+3)/4;
-              asm nothrow @safe @nogc {
-                mov     EAX,[d];
-                mov     EBX,[s];
-                mov     ECX,[blen];
-                align 8;
-               addloopchmix1:
-                movups  XMM0,[EAX];
-                movups  XMM1,[EBX];
-                addps   XMM0,XMM1;
-                movups  [EAX],XMM0;
-                add     EAX,16;
-                add     EBX,16;
-                dec     ECX;
-                jnz     addloopchmix1;
+            if (bsused > 0) {
+              version(follin_use_sse) {
+                auto blen = (bsused+3)/4;
+                asm nothrow @safe @nogc {
+                  mov     EAX,[d];
+                  mov     EBX,[s];
+                  mov     ECX,[blen];
+                  align 8;
+                 addloopchmix1:
+                  movups  XMM0,[EAX];
+                  movups  XMM1,[EBX];
+                  addps   XMM0,XMM1;
+                  movups  [EAX],XMM0;
+                  add     EAX,16;
+                  add     EBX,16;
+                  dec     ECX;
+                  jnz     addloopchmix1;
+                }
               }
             } else {
               foreach (immutable _; 0..bsused) *d++ += *s++;

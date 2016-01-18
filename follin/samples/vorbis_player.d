@@ -34,8 +34,8 @@ __gshared uint vrNextTimeMsec = 0;
 __gshared bool vrPaused = false;
 
 
-void showProgress () {
-  auto curTime = tflChannelPlayTimeMsec("ogg");
+void showProgress (bool endtime=false) {
+  auto curTime = (endtime ? vrTotalTimeMsec : tflChannelPlayTimeMsec("ogg"));
   if (curTime >= vrNextTimeMsec || tflPaused != vrPaused) {
     vrNextTimeMsec = curTime+1000;
     vrPaused = tflPaused;
@@ -78,11 +78,17 @@ Action playOgg() () {
     fprintf(stderr, "ERROR: can't add ogg channel!\n");
     return Action.Quit;
   }
+  /*
+  foreach (immutable _; 0..3*2) {
+    { import core.sys.posix.unistd : usleep; usleep(1000*500); }
+    if (tflActiveChannels != 0) break;
+  }
+  */
   //{ import core.stdc.stdio; printf("active channels: %u\n", tflActiveChannels); }
   while (tflIsChannelAlive("ogg")) {
     showProgress();
     // process keys
-    if (ttyWaitKey(100)) {
+    if (ttyWaitKey(500)) {
       auto key = ttyReadKey();
       switch (key) {
         case " ":
@@ -111,9 +117,10 @@ Action playOgg() () {
     }
   }
   assert(!tflIsChannelAlive("ogg"));
-  { import core.stdc.stdio; printf("\nogg complete\n"); }
+  showProgress(true);
+  { import core.stdc.stdio; printf("\n"); }
   // sleep 100 ms
-  foreach (immutable _; 0..100) { import core.sys.posix.unistd : usleep; usleep(1000); }
+  //foreach (immutable _; 0..100) { import core.sys.posix.unistd : usleep; usleep(1000); }
   return res;
 }
 
