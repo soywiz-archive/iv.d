@@ -728,7 +728,7 @@ bool sndGenerateBuffer () {
                   mul[0] = mul[2] = (1.0f/255.0f)*cast(float)ch.lastvolL;
                   mul[1] = mul[3] = (1.0f/255.0f)*cast(float)ch.lastvolR;
                   auto bptr = ch.buf+ch.bufpos;
-                  auto blen = (bufsz-ch.bufpos+3)/4;
+                  auto blen = (fblen+1)/2;
                   asm nothrow @safe @nogc {
                     mov     EAX,[bptr];
                     mov     EBX,offsetof mul[0];
