@@ -136,12 +136,88 @@ public void tflShort2Float (in short[] input, float[] output) nothrow @trusted @
 public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @nogc {
   auto s = input.ptr;
   auto d = output.ptr;
-  mixin(declfcvar!"temp");
-  foreach (immutable _; 0..input.length) {
-    mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
-    if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
-    *d++ = cast(short)v;
-    ++s;
+  version(follin_use_sse) {
+    auto blen = cast(uint)input.length;
+    if (blen > 0) {
+      __gshared float[4] mvol = void;
+      mvol[] = 32768.0;
+      asm nothrow @safe @nogc {
+        mov      EAX,offsetof mvol[0]; // source
+        movups   XMM4,[EAX]; // XMM4: multipliers
+        mov      EAX,[s]; // source
+        mov      EBX,[d]; // dest
+        mov      ECX,[blen];
+        mov      EDX,ECX;
+        shr      ECX,2;
+        jz       skip4part;
+        align 8;
+       finalloopmix:
+        movups   XMM0,[EAX];
+        mulps    XMM0,XMM4;    // mul by volume and shift
+      }
+      version(follin_use_sse2) asm nothrow @safe @nogc {
+        cvttps2dq XMM1,XMM0;  // XMM1 now contains four int32 values
+        packssdw  XMM1,XMM1;
+        movups    [EBX],XMM1;
+      } else asm nothrow @safe @nogc {
+        cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
+        movhlps  XMM5,XMM0;    // get high floats
+        cvtps2pi MM1,XMM5;     // MM1 now contains two high int32 values
+        packssdw MM0,MM1;      // MM0 now contains 4 int16 values
+        movq     [EBX],MM0;
+      }
+      asm nothrow @safe @nogc {
+        add     EAX,16;
+        add     EBX,8;
+        dec     ECX;
+        jnz     finalloopmix;
+       skip4part:
+        test    EDX,2;
+        jz      skip2part;
+        // do 2 floats
+        movd    XMM0,[EAX];
+       }
+       version(follin_use_sse2) asm nothrow @safe @nogc {
+        cvttps2dq XMM1,XMM0;  // XMM1 now contains int32 values
+        packssdw  XMM1,XMM1;
+        movd      [EBX],XMM1;
+       } else asm nothrow @safe @nogc {
+        cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
+        movhlps  XMM5,XMM0;    // get high floats
+        packssdw MM0,MM1;      // MM0 now contains 4 int16 values
+        movd     [EBX],MM0;
+       }
+       asm nothrow @safe @nogc {
+        add     EAX,8;
+        add     EBX,4;
+       skip2part:
+        test     EDX,1;
+        jz       skip1part;
+        movss     XMM0,[EAX];
+       }
+       version(follin_use_sse2) asm nothrow @safe @nogc {
+        cvttps2dq XMM1,XMM0;  // XMM1 now contains int32 values
+        packssdw  XMM1,XMM1;
+        movss     [EBX],XMM1;
+       } else asm nothrow @safe @nogc {
+        cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
+        movhlps  XMM5,XMM0;    // get high floats
+        packssdw MM0,MM1;      // MM0 now contains 4 int16 values
+        movss    [EBX],MM0;
+       }
+      skip1part:
+      version(follin_use_sse2) {} else {
+        asm nothrow @safe @nogc { emms; }
+      }
+    }
+  } else {
+    mixin(declfcvar!"temp");
+    foreach (immutable _; 0..input.length) {
+      mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+      if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+      *d++ = cast(short)v;
+      ++s;
+    }
   }
 }
 
