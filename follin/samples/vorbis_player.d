@@ -24,6 +24,11 @@ import iv.rawtty;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+string[] playlist;
+usize plidx;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 __gshared uint vrTotalTimeMsec = 0;
 __gshared uint vrNextTimeMsec = 0;
 __gshared bool vrPaused = false;
@@ -42,24 +47,42 @@ void showProgress () {
 }
 
 
-void playOgg() (string fname, bool asMusic) {
-  ttySetRaw();
-  scope(exit) ttySetNormal();
+bool cubic = false;
 
-  auto chan = new VorbisChannel(fname);
+enum Action { Quit, Prev, Next }
+
+Action playOgg() () {
+  if (plidx >= playlist.length) return Action.Quit;
+
+  Action res = Action.Next;
+
+  auto chan = new VorbisChannel(playlist[plidx]);
+  if (chan.totalFrames == 0) {
+    foreach (immutable c; plidx+1..playlist.length) playlist[c-1] = playlist[c];
+    playlist.length -= 1;
+    return Action.Prev;
+  }
+
+  {
+    import core.stdc.stdio;
+    import std.path : baseName;
+    auto bn = playlist[plidx].baseName;
+    printf("=== [%u/%u] %.*s ===\n", cast(uint)(plidx+1), cast(uint)playlist.length, cast(uint)bn.length, bn.ptr);
+  }
+
   vrTotalTimeMsec = cast(uint)(cast(ulong)chan.totalFrames*1000/chan.sampleRate);
   vrNextTimeMsec = 0;
 
-  if (!tflAddChannel("ogg", chan, TFLmusic, (asMusic ? TflChannel.QualityMusic : -1))) {
+  if (!tflAddChannel("ogg", chan, TFLmusic, (cubic ? -1 : TflChannel.QualityMusic))) {
     import core.stdc.stdio;
     fprintf(stderr, "ERROR: can't add ogg channel!\n");
-    return;
+    return Action.Quit;
   }
-  { import core.stdc.stdio; printf("active channels: %u\n", tflActiveChannels); }
+  //{ import core.stdc.stdio; printf("active channels: %u\n", tflActiveChannels); }
   while (tflIsChannelAlive("ogg")) {
     showProgress();
     // process keys
-    if (ttyWaitKey(5)) {
+    if (ttyWaitKey(100)) {
       auto key = ttyReadKey();
       switch (key) {
         case " ":
@@ -73,6 +96,15 @@ void playOgg() (string fname, bool asMusic) {
           break;
         case "q":
           tflKillChannel("ogg");
+          res = Action.Quit;
+          break;
+        case "<":
+          tflKillChannel("ogg");
+          res = Action.Prev;
+          break;
+        case ">":
+          tflKillChannel("ogg");
+          res = Action.Next;
           break;
         default:
       }
@@ -82,6 +114,7 @@ void playOgg() (string fname, bool asMusic) {
   { import core.stdc.stdio; printf("\nogg complete\n"); }
   // sleep 100 ms
   foreach (immutable _; 0..100) { import core.sys.posix.unistd : usleep; usleep(1000); }
+  return res;
 }
 
 
@@ -91,9 +124,39 @@ void main (string[] args) {
 
   if (args.length < 2) throw new Exception("filename?");
 
+  bool cubic = false;
+  bool nomoreargs = false;
+
+  foreach (string arg; args[1..$]) {
+    if (args.length == 0) continue;
+    if (!nomoreargs) {
+      if (arg == "--") { nomoreargs = true; continue; }
+      if (arg == "--cubic") { cubic = true; continue; }
+      if (arg[0] == '-') throw new Exception("unknown option: '"~arg~"'");
+    }
+    import std.file : exists;
+    if (!arg.exists) {
+      import core.stdc.stdio;
+      printf("skipped '%.*s'\n", cast(uint)arg.length, arg.ptr);
+    } else {
+      playlist ~= arg;
+    }
+  }
+
+  if (playlist.length == 0) throw new Exception("no files!");
+
+  ttySetRaw();
+  scope(exit) ttySetNormal();
+
   tflInit();
   scope(exit) tflDeinit();
   { import std.stdio; writeln("latency: ", tflLatency); }
 
-  playOgg(args[1], (args.length == 2));
+  mainloop: for (;;) {
+    final switch (playOgg()) with (Action) {
+      case Prev: if (plidx > 0) --plidx; break;
+      case Next: ++plidx; break;
+      case Quit: break mainloop;
+    }
+  }
 }
