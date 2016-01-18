@@ -79,7 +79,7 @@ version = sincresample_use_full_table;
 // ////////////////////////////////////////////////////////////////////////// //
 public struct SpeexResampler {
 public:
-  alias Quality = uint;
+  alias Quality = int;
   enum : uint {
     Fastest = 0,
     Voip = 3,
@@ -199,7 +199,8 @@ public:
     import core.stdc.stdlib : malloc, free;
 
     deinit();
-    if (aquality > SpeexResampler.Best) return Error.BadArgument;
+    if (aquality < 0) aquality = 0;
+    if (aquality > SpeexResampler.Best) aquality = SpeexResampler.Best;
     if (chans < 1 || chans > 16) return Error.BadArgument;
 
     started = false;
@@ -297,7 +298,8 @@ public:
    *  0 or error code
    */
   Error setQuality (Quality aquality) {
-    if (aquality > SpeexResampler.Best) return Error.BadArgument;
+    if (aquality < 0) aquality = 0;
+    if (aquality > SpeexResampler.Best) aquality = SpeexResampler.Best;
     if (srQuality == aquality) return Error.OK;
     srQuality = aquality;
     return (inited ? updateFilter() : Error.OK);
@@ -872,5 +874,97 @@ uint gcd() (uint a, uint b) {
       if (b == 0) return a;
       if (b == 1) return 1;
     }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// very simple and cheap cubic upsampler
+struct CubicUpsampler {
+public:
+nothrow @trusted @nogc:
+  float[2] curposfrac; // current position offset [0..1)
+  float step; // how long we should move on one step?
+  float[4][2] data; // -1..3
+  uint[2] drain;
+
+  bool setup (float astep) {
+    if (astep >= 1.0f) return false;
+    curposfrac[] = 0.0f;
+    step = astep;
+    foreach (ref d; data) d[] = 0.0f;
+    drain[] = 0;
+    return true;
+  }
+
+  /*
+  static struct Data {
+    const(float)[] dataIn;
+    float[] dataOut;
+    uint inputSamplesUsed; // out value, in samples (i.e. multiplied by channel count)
+    uint outputSamplesUsed; // out value, in samples (i.e. multiplied by channel count)
+  }
+  */
+
+  SpeexResampler.Error process (ref SpeexResampler.Data d) {
+    d.inputSamplesUsed = d.outputSamplesUsed = 0;
+    if (d.dataOut.length < 2) return SpeexResampler.Error.OK;
+    foreach (uint cidx; 0..2) {
+      uint inleft = d.dataIn.length/2;
+      uint outleft = d.dataOut.length/2;
+      processChannel(inleft, outleft, (d.dataIn.length ? d.dataIn.ptr+cidx : null), (d.dataOut.length ? d.dataOut.ptr+cidx : null), cidx);
+      d.outputSamplesUsed += cast(uint)(d.dataOut.length/2)-outleft;
+      d.inputSamplesUsed += cast(uint)(d.dataIn.length/2)-inleft;
+    }
+    return SpeexResampler.Error.OK;
+  }
+
+  private void processChannel (ref uint inleft, ref uint outleft, const(float)* dataIn, float* dataOut, uint cidx) {
+    if (outleft == 0) return;
+    if (inleft == 0 && drain.ptr[cidx] <= 1) return;
+    for (;;) {
+      // fill buffer
+      while (drain.ptr[cidx] < 4) {
+        if (inleft == 0) return;
+        data.ptr[cidx].ptr[drain.ptr[cidx]++] = *dataIn;
+        dataIn += 2;
+        --inleft;
+      }
+      if (outleft == 0) return;
+      --outleft;
+      // upsampling
+      *dataOut = front(cidx);
+      dataOut += 2;
+      if ((curposfrac.ptr[cidx] += step) >= 1.0f) {
+        curposfrac.ptr[cidx] -= 1.0f;
+        data.ptr[cidx].ptr[0] = data.ptr[cidx].ptr[1];
+        data.ptr[cidx].ptr[1] = data.ptr[cidx].ptr[2];
+        data.ptr[cidx].ptr[2] = data.ptr[cidx].ptr[3];
+        data.ptr[cidx].ptr[3] = 0.0f;
+        --drain.ptr[cidx]; // will request more input bytes
+      }
+    }
+  }
+
+  // this will do cubic interpolation
+  // valid only if the range is not empty
+  float front (uint cidx) const pure {
+    pragma(inline, true);
+    // interpolate between y1 and y2
+    immutable float mu = curposfrac.ptr[cidx]; // how far we are moved from y1 to y2
+    immutable float mu2 = mu*mu; // wow
+    immutable float y0 = data.ptr[cidx].ptr[0], y1 = data.ptr[cidx].ptr[1], y2 = data.ptr[cidx].ptr[2], y3 = data.ptr[cidx].ptr[3];
+    version(complex_cubic) {
+      immutable float z0 = 0.5*y3;
+      immutable float z1 = 0.5*y0;
+      immutable float a0 = 1.5*y1-z1-1.5*y2+z0;
+      immutable float a1 = y0-2.5*y1+2*y2-z0;
+      immutable float a2 = 0.5*y2-z1;
+    } else {
+      immutable float a0 = y3-y2-y0+y1;
+      immutable float a1 = y0-y1-a0;
+      immutable float a2 = y2-y0;
+    }
+    return a0*mu*mu2+a1*mu2+a2*mu+y1;
   }
 }

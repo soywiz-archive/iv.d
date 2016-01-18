@@ -145,10 +145,10 @@ public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @
 class TflChannel {
   // resampling quality
   alias Quality = int;
-  enum QualityMin = 0;
+  enum QualityMin = -1; // try cubic upsampler
   enum QualityMax = 10;
   enum QualityMusic = 8;
-  enum QualitySfx = 3; // default
+  enum QualitySfx = -1; // default
 
   // volumes for each channel
   ubyte volL = 255;
@@ -246,8 +246,8 @@ void sndEngineInit () {
     if (ch.buf is null) assert(0, "Follin: out of memory");
     ch.bufpos = 0;
     if (!ch.srb.inited) {
-      ch.lastquality = q2srb(8);
-      ch.srb.setup(numchans, 44100, 48000, /*q2srb(TflChannel.QualityMusic)*/q2srb(ch.lastquality));
+      ch.lastquality = 8;
+      ch.srb.setup(numchans, 44100, 48000, ch.lastquality);
     }
     ch.prevsrate = ch.lastsrate = 44100;
   }
@@ -261,26 +261,19 @@ void sndEngineInit () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-SpeexResampler.Quality q2srb (TflChannel.Quality q) {
-  if (q < 0) q = 0;
-  if (q > 10) q = 10;
-  return cast(SpeexResampler.Quality)q;
-}
-
-
 struct Channel {
   uint prio; // channel priority
   usize namehash;
   usize namelen; // 0: this channel is free
   char[128] name; // no longer than this
   TflChannel chan; // can be `null` if channel callback is done, but something is still playing
-  uint lastFrameId; // trick ;-)
   SpeexResampler srb;
+  CubicUpsampler cub;
   // buffers are always of `sndSamplesSize` size
   float* buf; // frame buffer
   uint bufpos; // current position to write in `tmpbuf`/`buf`
   ubyte lastvolL, lastvolR; // latest volume
-  uint lastquality = 666;
+  int lastquality = 666; // <0: try cubic
   uint lastsrate, prevsrate; // last sampling rate
   ulong genFrames; // generated, but not yet consumed frames
   ulong playedFrames;
@@ -298,7 +291,7 @@ __gshared uint sndFrameId;
 void packChannels () nothrow @trusted @nogc {
   import core.stdc.string : memcpy;
 
-  __gshared ubyte[Channel.srb.sizeof] srbMoveBuf = void;
+  __gshared ubyte[Channel.srb.sizeof > Channel.cub.sizeof ? Channel.srb.sizeof : Channel.cub.sizeof] srbMoveBuf = void;
 
   int freeIdx = 0;
   for (;;) {
@@ -317,10 +310,14 @@ void packChannels () nothrow @trusted @nogc {
     sc.namelen = dc.namelen;
     sc.name = dc.name;
     sc.chan = dc.chan;
-    // now tricky part: swap SecretRabbits
+    // now tricky part: swap SpeexResampler
     memcpy(srbMoveBuf.ptr, &sc.srb, sc.srb.sizeof);
     memcpy(&sc.srb, &dc.srb, sc.srb.sizeof);
     memcpy(&dc.srb, srbMoveBuf.ptr, sc.srb.sizeof);
+    // now tricky part: swap CubicUpsampler
+    memcpy(srbMoveBuf.ptr, &sc.cub, sc.cub.sizeof);
+    memcpy(&sc.cub, &dc.cub, sc.cub.sizeof);
+    memcpy(&dc.cub, srbMoveBuf.ptr, sc.cub.sizeof);
     // mark as free
     sc.namelen = 0;
     sc.chan = null;
@@ -512,15 +509,15 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
 
     if (chan !is null) {
       //if (ch.chan is null) ch.srb.reset();
-      //if (ch.srb.getQuality() != q2srb(q)) ch.srb.setup(numchans, chan.sampleRate, realSampleRate, q2srb(q)); else ch.srb.reset();
-      if (ch.lastquality != q2srb(q)) {
-        //{ import core.stdc.stdio; printf("changing quality from %u to %u\n", ch.lastquality, q2srb(q)); }
-        ch.lastquality = q2srb(q);
+      if (q < -1) q = -1; else if (q > 10) q = 10;
+      if (ch.lastquality != q) {
+        //{ import core.stdc.stdio; printf("changing quality from %u to %u\n", ch.lastquality, q); }
+        ch.lastquality = q;
         if (ch.srb.inited) {
-          ch.srb.setQuality(q2srb(q));
+          ch.srb.setQuality(q);
         } else {
           //ch.srb.deinit();
-          ch.srb.setup(numchans, 44100, 48000, q2srb(q));
+          ch.srb.setup(numchans, 44100, 48000, q);
         }
       }
       if (ch.prevsrate != ch.lastsrate) {
@@ -535,6 +532,8 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
           return false;
         }
       }
+      if (ch.lastquality < 0 && !ch.cub.setup(cast(float)ch.lastsrate/cast(float)realSampleRate)) ch.lastquality = 0; // don't use cubic
+      if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
       ch.prevsrate = ch.lastsrate;
       if (ch.bufpos == 0) ch.lastvolL = ch.lastvolR = 0; // so if we won't even had a chance to play it, it can be replaced
       ch.prio = prio;
@@ -580,7 +579,6 @@ bool sndGenerateBuffer () {
   bool channelsChanged = false;
   auto buf2fill = atomicLoad(sndbufToFill);
   atomicStore(sndbufFillingNow, true);
-  //sndLock!"sndGenerateBuffer"();
   bool wasAtLeastOne = false;
   uint bpos, epos;
   synchronized (sndMutexChanRW.writer) {
@@ -592,12 +590,9 @@ bool sndGenerateBuffer () {
       //{ import core.stdc.stdio; printf("filling buffer %u\n", buf2fill); }
       foreach (ref ch; chans) {
         if (ch.namelen == 0) break; // last channel
-        //if (ch.lastFrameId == sndFrameId) continue; // already done
         uint rspos = 0; // current position in `sndrsbuf`
         chmixloop: while (rspos < bufsz) {
           // try to get as much data from the channel as we can
-          // we have to do that, or we can accidentally feed resampler with
-          // very small amount of samples, and it will click
           if (ch.bufpos == 0 && (ch.chan !is null && !ch.chan.paused) && ch.lastsrate != ch.chan.sampleRate) {
             auto srate = ch.chan.sampleRate;
             ch.lastsrate = srate;
@@ -608,6 +603,8 @@ bool sndGenerateBuffer () {
             }
             ch.prevsrate = ch.lastsrate;
             if (!srate) { killChan(ch, channelsChanged); break chmixloop; } // something is wrong with this channel, kill it
+            if (ch.lastquality < 0 && !ch.cub.setup(cast(float)srate/cast(float)realSampleRate)) ch.lastquality = 0; // don't use cubic
+            if (ch.lastquality < 0) { import core.stdc.stdio; printf("*** using cubic upsampler\n"); }
           }
           //{ import core.stdc.stdio; printf("wanted %u frames (has %u frames)\n", (bufsz-ch.bufpos)/2, ch.bufpos/2); }
           while (ch.bufpos < bufsz && (ch.chan !is null && !ch.chan.paused) && ch.lastsrate == ch.chan.sampleRate) {
@@ -632,12 +629,6 @@ bool sndGenerateBuffer () {
                 *d++ = *s;
                 *d++ = *s++;
               }
-              /*
-              if (ch.buf+ch.bufpos+fblen*2 !is d) {
-                import core.stdc.stdlib;
-                abort();
-              }
-              */
             }
             //{ import core.stdc.stdio; printf("trying to get %u frames, got %u frames...\n", (bufsz-ch.bufpos)/2, fblen); }
             if (fblen == 0) { killChan(ch, channelsChanged); break; }
@@ -699,9 +690,9 @@ bool sndGenerateBuffer () {
               srbdata.dataIn = ch.buf[bsused..ch.bufpos];
               srbdata.dataOut = tmprsbuf.ptr[tspos..bufsz];
               //{ import core.stdc.stdio; printf("realSampleRate=%u; ch.lastsrate=%u\n", realSampleRate, ch.lastsrate); }
-              err = ch.srb.process(srbdata);
-              //{ import core.stdc.stdio; printf("%d; inused: %u of %u; outused: %u of %u; bsused=%u\n", cast(int)err, srbdata.inputSamplesUsed, cast(uint)srbdata.dataIn.length, srbdata.outputSamplesUsed, cast(uint)srbdata.dataOut.length, bsused); }
+              err = (ch.lastquality < 0 ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break; }
+              //{ import core.stdc.stdio; printf("inused: %u of %u; outused: %u of %u; bsused=%u\n", srbdata.inputSamplesUsed, cast(uint)srbdata.dataIn.length, srbdata.outputSamplesUsed, cast(uint)srbdata.dataOut.length, bsused); }
               bsused += srbdata.inputSamplesUsed;
               tspos += srbdata.outputSamplesUsed;
             }
@@ -742,7 +733,7 @@ bool sndGenerateBuffer () {
             if (rspos < bufsz && ch.lastsrate != realSampleRate) {
               srbdata.dataIn = null;
               srbdata.dataOut = tmprsbuf.ptr[rspos..bufsz];
-              err = ch.srb.process(srbdata);
+              err = (ch.lastquality < 0 ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break chmixloop; }
               if (srbdata.outputSamplesUsed) {
                 // mix

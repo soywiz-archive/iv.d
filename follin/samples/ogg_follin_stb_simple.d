@@ -17,10 +17,7 @@
  */
 module ogg_follin is aliced;
 
-import core.atomic;
-
 import iv.follin;
-import iv.rawtty;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -43,8 +40,6 @@ void showProgress () {
 
 
 void playOgg() (string fname, bool asMusic) {
-  ttySetRaw();
-  scope(exit) ttySetNormal();
 
   auto chan = new VorbisChannel(fname);
   vrTotalTimeMsec = cast(uint)(cast(ulong)chan.totalFrames*1000/chan.sampleRate);
@@ -58,25 +53,8 @@ void playOgg() (string fname, bool asMusic) {
   { import core.stdc.stdio; printf("active channels: %u\n", tflActiveChannels); }
   while (tflIsChannelAlive("ogg")) {
     showProgress();
-    // process keys
-    if (ttyWaitKey(5)) {
-      auto key = ttyReadKey();
-      switch (key) {
-        case " ":
-          tflPaused = !tflPaused;
-          break;
-        case "p":
-          if (auto oc = tflChannelObject("ogg")) {
-            auto p = !oc.paused;
-            oc.paused = p;
-          }
-          break;
-        case "q":
-          tflKillChannel("ogg");
-          break;
-        default:
-      }
-    }
+    import core.sys.posix.unistd : usleep;
+    usleep(5000);
   }
   assert(!tflIsChannelAlive("ogg"));
   { import core.stdc.stdio; printf("\nogg complete\n"); }
@@ -87,8 +65,6 @@ void playOgg() (string fname, bool asMusic) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 void main (string[] args) {
-  if (ttyIsRedirected) throw new Exception("no redirects, please!");
-
   if (args.length < 2) throw new Exception("filename?");
 
   tflInit();
