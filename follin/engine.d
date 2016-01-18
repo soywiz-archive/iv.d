@@ -592,7 +592,7 @@ bool sndGenerateBuffer () {
     epos = bpos+sndSamplesSize;
     if (firstFreeChan > 0) {
       immutable bufsz = sndSamplesSize;
-      sndrsbuf[] = 0.0f;
+      sndrsbuf.ptr[0..sndSamplesSize] = 0.0f;
       //{ import core.stdc.stdio; printf("filling buffer %u\n", buf2fill); }
       foreach (ref ch; chans) {
         if (ch.namelen == 0) break; // last channel
@@ -730,27 +730,31 @@ bool sndGenerateBuffer () {
             }
             //{ import core.stdc.stdio; printf("resampled %u frames to %u frames\n", bsused/2, (tspos-rspos)/2); }
             // mix
-            auto s = tmprsbuf.ptr+rspos;
-            auto d = sndrsbuf.ptr+rspos;
             // will clamp later
             version(follin_use_sse) {
-              auto blen = (tspos-rspos+3)/4;
-              asm nothrow @safe @nogc {
-                mov     EAX,[d];
-                mov     EBX,[s];
-                mov     ECX,[blen];
-                align 8;
-               addloopchmix:
-                movups  XMM0,[EAX];
-                movups  XMM1,[EBX];
-                addps   XMM0,XMM1;
-                movups  [EAX],XMM0;
-                add     EAX,16;
-                add     EBX,16;
-                dec     ECX;
-                jnz     addloopchmix;
+              if (rspos < tspos) {
+                auto s = tmprsbuf.ptr+rspos;
+                auto d = sndrsbuf.ptr+rspos;
+                auto blen = (tspos-rspos+3)/4;
+                asm nothrow @safe @nogc {
+                  mov     EAX,[d];
+                  mov     EBX,[s];
+                  mov     ECX,[blen];
+                  align 8;
+                 addloopchmix:
+                  movups  XMM0,[EAX];
+                  movups  XMM1,[EBX];
+                  addps   XMM0,XMM1;
+                  movups  [EAX],XMM0;
+                  add     EAX,16;
+                  add     EBX,16;
+                  dec     ECX;
+                  jnz     addloopchmix;
+                }
               }
             } else {
+              auto s = tmprsbuf.ptr+rspos;
+              auto d = sndrsbuf.ptr+rspos;
               foreach (immutable _; rspos..tspos) *d++ += *s++;
             }
             ch.genFrames += (tspos-rspos)/2;
@@ -886,6 +890,15 @@ bool sndGenerateBuffer () {
           dec     ECX;
           jnz     finalloopmix;
           emms;
+          /*
+          cvttps2dq XMM1,XMM0;  // XMM1 now contains four int32 values
+          packssdw  XMM1,XMM0;
+          movups    [EBX],XMM1;
+          add     EAX,16;
+          add     EBX,8;
+          dec     ECX;
+          jnz     finalloopmix;
+          */
         }
       } else {
         immutable float mull = (1.0f/255.0f)*mvolL;
