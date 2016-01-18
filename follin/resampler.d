@@ -922,49 +922,49 @@ nothrow @trusted @nogc:
   private void processChannel (ref uint inleft, ref uint outleft, const(float)* dataIn, float* dataOut, uint cidx) {
     if (outleft == 0) return;
     if (inleft == 0 && drain.ptr[cidx] <= 1) return;
+    auto dt = data.ptr[cidx].ptr;
+    auto drn = drain.ptr+cidx;
+    auto cpf = curposfrac.ptr+cidx;
+    immutable float st = step;
     for (;;) {
       // fill buffer
-      while (drain.ptr[cidx] < 4) {
+      while ((*drn) < 4) {
         if (inleft == 0) return;
-        data.ptr[cidx].ptr[drain.ptr[cidx]++] = *dataIn;
+        dt[(*drn)++] = *dataIn;
         dataIn += 2;
         --inleft;
       }
       if (outleft == 0) return;
       --outleft;
-      // upsampling
-      *dataOut = front(cidx);
+      // cubic interpolation
+      {
+        // interpolate between y1 and y2
+        immutable float mu = (*cpf); // how far we are moved from y1 to y2
+        immutable float mu2 = mu*mu; // wow
+        immutable float y0 = dt[0], y1 = dt[1], y2 = dt[2], y3 = dt[3];
+        version(complex_cubic) {
+          immutable float z0 = 0.5*y3;
+          immutable float z1 = 0.5*y0;
+          immutable float a0 = 1.5*y1-z1-1.5*y2+z0;
+          immutable float a1 = y0-2.5*y1+2*y2-z0;
+          immutable float a2 = 0.5*y2-z1;
+        } else {
+          immutable float a0 = y3-y2-y0+y1;
+          immutable float a1 = y0-y1-a0;
+          immutable float a2 = y2-y0;
+        }
+        *dataOut = a0*mu*mu2+a1*mu2+a2*mu+y1;
+      }
+      //*dataOut = front(cidx);
       dataOut += 2;
-      if ((curposfrac.ptr[cidx] += step) >= 1.0f) {
-        curposfrac.ptr[cidx] -= 1.0f;
-        data.ptr[cidx].ptr[0] = data.ptr[cidx].ptr[1];
-        data.ptr[cidx].ptr[1] = data.ptr[cidx].ptr[2];
-        data.ptr[cidx].ptr[2] = data.ptr[cidx].ptr[3];
-        data.ptr[cidx].ptr[3] = 0.0f;
-        --drain.ptr[cidx]; // will request more input bytes
+      if (((*cpf) += st) >= 1.0f) {
+        (*cpf) -= 1.0f;
+        dt[0] = dt[1];
+        dt[1] = dt[2];
+        dt[2] = dt[3];
+        dt[3] = 0.0f;
+        --(*drn); // will request more input bytes
       }
     }
-  }
-
-  // this will do cubic interpolation
-  // valid only if the range is not empty
-  float front (uint cidx) const pure {
-    pragma(inline, true);
-    // interpolate between y1 and y2
-    immutable float mu = curposfrac.ptr[cidx]; // how far we are moved from y1 to y2
-    immutable float mu2 = mu*mu; // wow
-    immutable float y0 = data.ptr[cidx].ptr[0], y1 = data.ptr[cidx].ptr[1], y2 = data.ptr[cidx].ptr[2], y3 = data.ptr[cidx].ptr[3];
-    version(complex_cubic) {
-      immutable float z0 = 0.5*y3;
-      immutable float z1 = 0.5*y0;
-      immutable float a0 = 1.5*y1-z1-1.5*y2+z0;
-      immutable float a1 = y0-2.5*y1+2*y2-z0;
-      immutable float a2 = 0.5*y2-z1;
-    } else {
-      immutable float a0 = y3-y2-y0+y1;
-      immutable float a1 = y0-y1-a0;
-      immutable float a2 = y2-y0;
-    }
-    return a0*mu*mu2+a1*mu2+a2*mu+y1;
   }
 }
