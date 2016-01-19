@@ -394,8 +394,8 @@ private void initKeyTrans () @trusted {
 
 shared static this () {
   {
-    import std.c.stdlib : getenv;
-    import std.c.string : strcmp;
+    import core.stdc.stdlib : getenv;
+    import core.stdc.string : strcmp;
     auto tt = getenv("TERM");
     if (tt) {
       if (strcmp(tt, "rxvt") == 0) termType = TermType.rxvt;
