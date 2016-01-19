@@ -627,6 +627,74 @@ public struct stb_vorbis {
   uint temp_memory_required;
   uint setup_temp_memory_required;
 
+  bool read_comments;
+  ubyte* comment_data;
+  uint comment_size;
+
+  // functions to get comment data
+  uint comment_data_pos;
+
+  nothrow @trusted @nogc {
+    private enum cmt_len_size = 2;
+
+    @property bool comment_empty () const pure { return (comment_get_line_len == 0); }
+
+    // 0: error
+    // includes length itself
+    private uint comment_get_line_len () const pure {
+      if (comment_data_pos >= comment_size) return 0;
+      if (comment_size-comment_data_pos < cmt_len_size) return 0;
+      uint len = comment_data[comment_data_pos];
+      len += cast(uint)comment_data[comment_data_pos+1]<<8;
+      return (len >= cmt_len_size && comment_data_pos+len <= comment_size ? len : 0);
+    }
+
+    void comment_rewind () {
+      comment_data_pos = 0;
+      for (;;) {
+        auto len = comment_get_line_len();
+        if (!len) { comment_data_pos = comment_size; return; }
+        if (len != cmt_len_size) break;
+        comment_data_pos += len;
+      }
+    }
+
+    // true: has something to read after skip
+    bool comment_skip () {
+      comment_data_pos += comment_get_line_len();
+      for (;;) {
+        auto len = comment_get_line_len();
+        if (!len) { comment_data_pos = comment_size; return false; }
+        if (len != cmt_len_size) break;
+        comment_data_pos += len;
+      }
+      return true;
+    }
+
+    const(char)[] comment_line () {
+      auto len = comment_get_line_len();
+      if (len < cmt_len_size) return null;
+      if (len == cmt_len_size) return "";
+      return (cast(char*)comment_data+comment_data_pos+cmt_len_size)[0..len-cmt_len_size];
+    }
+
+    const(char)[] comment_name () {
+      auto line = comment_line();
+      if (line.length == 0) return line;
+      uint epos = 0;
+      while (epos < line.length && line.ptr[epos] != '=') ++epos;
+      return (epos < line.length ? line[0..epos] : "");
+    }
+
+    const(char)[] comment_value () {
+      auto line = comment_line();
+      if (line.length == 0) return line;
+      uint epos = 0;
+      while (epos < line.length && line.ptr[epos] != '=') ++epos;
+      return (epos < line.length ? line[epos+1..$] : line);
+    }
+  }
+
   // input config
   version(STB_VORBIS_NO_STDIO) {} else {
     FILE* f;
@@ -1375,6 +1443,18 @@ private int get8_packet_raw (stb_vorbis* f) {
 private int get8_packet (stb_vorbis* f) {
   int x = get8_packet_raw(f);
   f.valid_bits = 0;
+  return x;
+}
+
+private uint get32_packet (stb_vorbis* f) {
+  uint x = get8_packet(f), b;
+  if (x == EOP) return EOP;
+  if ((b = get8_packet(f)) == EOP) return EOP;
+  x += b<<8;
+  if ((b = get8_packet(f)) == EOP) return EOP;
+  x += b<<16;
+  if ((b = get8_packet(f)) == EOP) return EOP;
+  x += b<<24;
   return x;
 }
 
@@ -3159,15 +3239,69 @@ private int start_decoder (stb_vorbis* f) {
   x = get8(f);
   if (!(x&1)) return error(f, STBVorbisError.invalid_first_page);
 
-  // second packet!
+  // second packet! (comments)
   if (!start_page(f)) return false;
 
+  // read comments
   if (!start_packet(f)) return false;
-  do {
-    len = next_segment(f);
-    skip(f, len);
-    f.bytes_in_seg = 0;
-  } while (len);
+
+  if (f.read_comments) {
+    version(STB_VORBIS_NO_PUSHDATA_API) {} else {
+      if (IS_PUSH_MODE(f)) {
+        if (!is_whole_packet_present(f, true)) {
+          // convert error in ogg header to write type
+          if (f.error == STBVorbisError.invalid_stream) f.error = STBVorbisError.invalid_setup;
+          return false;
+        }
+      }
+    }
+    if (get8_packet(f) != VorbisPacket.comment) return error(f, STBVorbisError.invalid_setup);
+    foreach (immutable i; 0..6) header[i] = cast(ubyte)get8_packet(f); //k8
+    if (!vorbis_validate(header.ptr)) return error(f, STBVorbisError.invalid_setup);
+
+    // skip vendor id
+    uint vidsize = get32_packet(f);
+    //{ import core.stdc.stdio; printf("vendor size: %u\n", vidsize); }
+    if (vidsize == EOP) return error(f, STBVorbisError.invalid_setup);
+    while (vidsize--) get8_packet(f);
+
+    // read comments section
+    uint cmtcount = get32_packet(f);
+    if (cmtcount == EOP) return error(f, STBVorbisError.invalid_setup);
+    if (cmtcount > 0) {
+      uint cmtsize = 32768; // this should be enough for everyone
+      f.comment_data = setup_malloc!ubyte(f, cmtsize);
+      if (f.comment_data is null) return error(f, STBVorbisError.outofmem);
+      auto cmtpos = 0;
+      auto d = f.comment_data;
+      while (cmtcount--) {
+        uint linelen = get32_packet(f);
+        //{ import core.stdc.stdio; printf("linelen: %u; lines left: %u\n", linelen, cmtcount); }
+        if (linelen == EOP || linelen > ushort.max-2) break;
+        if (linelen == 0) { continue; }
+        if (cmtpos+2+linelen > cmtsize) break;
+        cmtpos += linelen+2;
+        *d++ = (linelen+2)&0xff;
+        *d++ = ((linelen+2)>>8)&0xff;
+        while (linelen--) {
+          auto b = get8_packet(f);
+          if (b == EOP) return error(f, STBVorbisError.outofmem);
+          *d++ = cast(ubyte)b;
+        }
+        //{ import core.stdc.stdio; printf("%u bytes of comments read\n", cmtpos); }
+        f.comment_size = cmtpos;
+      }
+    }
+    flush_packet(f);
+    f.comment_rewind();
+  } else {
+    // skip comments
+    do {
+      len = next_segment(f);
+      skip(f, len);
+      f.bytes_in_seg = 0;
+    } while (len);
+  }
 
   // third packet!
   if (!start_packet(f)) return false;
@@ -3630,6 +3764,9 @@ private int start_decoder (stb_vorbis* f) {
 }
 
 private void vorbis_deinit (stb_vorbis* p) {
+  import core.stdc.string : memset;
+
+  setup_free(p, p.comment_data);
   if (p.residue_config) {
     foreach (immutable i; 0..p.residue_count) {
       Residue* r = p.residue_config+i;
@@ -3676,6 +3813,7 @@ private void vorbis_deinit (stb_vorbis* p) {
     import core.stdc.stdio : fclose;
     if (p.close_on_free) fclose(p.f);
   }
+  memset(p, 0, (*p).sizeof);
 }
 
 private void vorbis_init (stb_vorbis* p, stb_vorbis_alloc* z) {
@@ -4362,16 +4500,42 @@ public int stb_vorbis_get_frame_float (stb_vorbis* f, int* channels, float*** ou
 
 
 version(STB_VORBIS_NO_STDIO) {} else {
-public stb_vorbis* stb_vorbis_open_file_section (FILE* file, bool close_on_free, int* error, stb_vorbis_alloc* alloc, uint length) {
-  import core.stdc.stdio : ftell;
+public struct VorbisOpenOptions {
+  bool close_on_free = true;
+  bool read_comments = false;
+  stb_vorbis_alloc* alloc = null;
+  uint section_start = 0;
+  uint section_length = uint.max;
+}
+
+public stb_vorbis* stb_vorbis_open_file_section_ex() (FILE* file, auto ref VorbisOpenOptions opts, int* error=null) {
+  import core.stdc.stdio : SEEK_END, SEEK_SET, fseek, ftell;
 
   stb_vorbis* f;
   stb_vorbis p = void;
-  vorbis_init(&p, alloc);
+  vorbis_init(&p, opts.alloc);
   p.f = file;
-  p.f_start = ftell(file);
-  p.stream_len = length;
-  p.close_on_free = close_on_free;
+  if (opts.section_start) {
+    p.f_start = opts.section_start;
+    fseek(file, opts.section_start, SEEK_SET);
+  } else {
+    p.f_start = ftell(file);
+  }
+  if (opts.section_length == uint.max) {
+    fseek(file, 0, SEEK_END);
+    auto pos = ftell(file);
+    fseek(file, p.f_start, SEEK_SET);
+    if (pos < opts.section_start) pos = opts.section_start;
+    static if (pos.sizeof > uint.sizeof) {
+      if (pos > uint.max) pos = uint.max;
+    }
+    p.stream_len = cast(uint)(pos-p.f_start);
+  } else {
+    p.stream_len = opts.section_length;
+  }
+  p.close_on_free = opts.close_on_free;
+  p.read_comments = opts.read_comments;
+
   if (start_decoder(&p)) {
     f = vorbis_alloc(&p);
     if (f) {
@@ -4385,17 +4549,39 @@ public stb_vorbis* stb_vorbis_open_file_section (FILE* file, bool close_on_free,
   return null;
 }
 
-public stb_vorbis* stb_vorbis_open_file (FILE* file, bool close_on_free, int* error, stb_vorbis_alloc* alloc=null) {
-  import core.stdc.stdio : SEEK_END, SEEK_SET, fseek, ftell;
-
-  uint start = cast(uint)ftell(file);
-  fseek(file, 0, SEEK_END);
-  uint len = cast(uint)ftell(file)-start;
-  fseek(file, start, SEEK_SET);
-  return stb_vorbis_open_file_section(file, close_on_free, error, alloc, len);
+public stb_vorbis* stb_vorbis_open_file_section (FILE* file, bool close_on_free, int* error, stb_vorbis_alloc* alloc, uint length) {
+  VorbisOpenOptions opts;
+  opts.close_on_free = close_on_free;
+  opts.read_comments = false;
+  opts.alloc = alloc;
+  opts.section_length = length;
+  return stb_vorbis_open_file_section_ex(file, opts, error);
 }
 
-public stb_vorbis* stb_vorbis_open_filename (const(char)[] filename, int* error, stb_vorbis_alloc* alloc=null) {
+public stb_vorbis* stb_vorbis_open_file (FILE* file, bool close_on_free, int* error=null, stb_vorbis_alloc* alloc=null) {
+  VorbisOpenOptions opts;
+  opts.close_on_free = close_on_free;
+  opts.read_comments = false;
+  opts.alloc = alloc;
+  return stb_vorbis_open_file_section_ex(file, opts, error);
+}
+
+public stb_vorbis* stb_vorbis_open_filename_ex() (const(char)[] filename, bool read_comments, int* error=null) {
+  import core.stdc.stdio : fopen;
+  import std.internal.cstring; // sorry
+
+  FILE* f = fopen(filename.tempCString, "rb");
+  if (f) {
+    VorbisOpenOptions opts;
+    opts.close_on_free = true;
+    opts.read_comments = read_comments;
+    return stb_vorbis_open_file_section_ex(f, opts, error);
+  }
+  if (error) *error = STBVorbisError.file_open_failure;
+  return null;
+}
+
+public stb_vorbis* stb_vorbis_open_filename (const(char)[] filename, int* error=null, stb_vorbis_alloc* alloc=null) {
   import core.stdc.stdio : fopen;
   import std.internal.cstring; // sorry
 
@@ -4406,7 +4592,7 @@ public stb_vorbis* stb_vorbis_open_filename (const(char)[] filename, int* error,
 }
 } // STB_VORBIS_NO_STDIO
 
-public stb_vorbis* stb_vorbis_open_memory (const(void)* data, int len, int* error, stb_vorbis_alloc* alloc=null) {
+public stb_vorbis* stb_vorbis_open_memory (const(void)* data, int len, int* error=null, stb_vorbis_alloc* alloc=null) {
   stb_vorbis* f;
   stb_vorbis p = void;
   if (data is null) return null;
