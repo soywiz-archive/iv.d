@@ -928,9 +928,10 @@ private float square (float x) {
 // this is a weird definition of log2() for which log2(1) = 1, log2(2) = 2, log2(4) = 3
 // as required by the specification. fast(?) implementation from stb.h
 // @OPTIMIZE: called multiple times per-packet with "constants"; move to setup
+immutable byte[16] log2_4 = [0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4];
 private int ilog (int n) {
-  immutable byte[16] log2_4 = [0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4];
   // 2 compares if n < 16, 3 compares otherwise (4 if signed or n > 1<<29)
+  //static if (__VERSION__ > 2067) pragma(inline, true);
   if (n < (1<<14)) {
     if (n < (1<<4)) return 0+log2_4[n];
     if (n < (1<<9)) return 5+log2_4[n>>5];
@@ -951,11 +952,10 @@ enum NO_CODE = 255;
 
 /////////////////////// LEAF SETUP FUNCTIONS //////////////////////////
 //
-// these functions are only called at setup, and only a few times
-// per file
+// these functions are only called at setup, and only a few times per file
 private float float32_unpack (uint x) {
   import core.math : ldexp;
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  //static if (__VERSION__ > 2067) pragma(inline, true);
   // from the specification
   uint mantissa = x&0x1fffff;
   uint sign = x&0x80000000;
@@ -1843,16 +1843,16 @@ private int codebook_decode_deinterleave_repeat_2 (stb_vorbis* f, Codebook* c, r
 } // version
 
 
-private int predict_point (int x, int x0, int x1, int y0, int y1) {
-  import std.math : abs;
-  static if (__VERSION__ > 2067) pragma(inline, true);
-  int dy = y1-y0;
-  int adx = x1-x0;
+//private int predict_point (int x, int x0, int x1, int y0, int y1)
+enum predict_point(string dest, string x, string x0, string x1, string y0, string y1) = q{{
+  //import std.math : abs;
+  int dy = ${y1}-${y0};
+  int adx = ${x1}-${x0};
   // @OPTIMIZE: force int division to round in the right direction... is this necessary on x86?
-  int err = abs(dy)*(x-x0);
+  int err = /*abs(dy)*/(dy < 0 ? -dy : dy)*(${x}-${x0});
   int off = err/adx;
-  return (dy < 0 ? y0-off : y0+off);
-}
+  /*return*/${dest} = (dy < 0 ? ${y0}-off : ${y0}+off);
+}}.cmacroFixVars!("dest", "x", "x0", "x1", "y0", "y1")(dest, x, x0, x1, y0, y1);
 
 // the following table is block-copied from the specification
 immutable float[256] inverse_db_table = [
@@ -2892,7 +2892,8 @@ private int vorbis_decode_packet_rest (stb_vorbis* f, int* len, Mode* m, int lef
           int low = g.neighbors.ptr[j][0];
           int high = g.neighbors.ptr[j][1];
           //neighbors(g.Xlist, j, &low, &high);
-          int pred = predict_point(g.Xlist.ptr[j], g.Xlist.ptr[low], g.Xlist.ptr[high], finalY[low], finalY[high]);
+          int pred = void;
+          mixin(predict_point!("pred", "g.Xlist.ptr[j]", "g.Xlist.ptr[low]", "g.Xlist.ptr[high]", "finalY[low]", "finalY[high]"));
           int val = finalY[j];
           int highroom = range-pred;
           int lowroom = pred;
