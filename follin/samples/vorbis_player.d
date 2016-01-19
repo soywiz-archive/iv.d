@@ -32,6 +32,8 @@ usize plidx;
 __gshared uint vrTotalTimeMsec = 0;
 __gshared uint vrNextTimeMsec = 0;
 __gshared bool vrPaused = false;
+__gshared ubyte vrVolume = 255;
+__gshared bool forceUp = false;
 
 
 void showProgress (bool endtime=false) {
@@ -41,8 +43,10 @@ void showProgress (bool endtime=false) {
     vrPaused = tflPaused;
     import core.sys.posix.unistd : write;
     import std.string : format;
-    auto pstr = "\r%02s:%02s/%02s:%02s%s\e[K".format(curTime/1000/60, curTime/1000%60, vrTotalTimeMsec/1000/60, vrTotalTimeMsec/1000%60, (vrPaused ? " [P]" : ""));
+    auto pstr = "\r%02s:%02s/%02s:%02s %3s%%%s\e[K".format(curTime/1000/60, curTime/1000%60, vrTotalTimeMsec/1000/60, vrTotalTimeMsec/1000%60,
+      100*vrVolume/255, (vrPaused ? " [P]" : ""));
     write(1/*stdout*/, pstr.ptr, cast(uint)pstr.length);
+    forceUp = false;
   }
 }
 
@@ -97,7 +101,7 @@ Action playOgg() () {
   while (tflIsChannelAlive("ogg")) {
     showProgress();
     // process keys
-    if (ttyWaitKey(500)) {
+    if (ttyWaitKey(200)) {
       auto key = ttyReadKey();
       switch (key) {
         case " ":
@@ -121,11 +125,26 @@ Action playOgg() () {
           tflKillChannel("ogg");
           res = Action.Next;
           break;
+        case "9":
+          if (vrVolume > 0) {
+            --vrVolume;
+            chan.volume = vrVolume;
+            forceUp = true;
+          }
+          break;
+        case "0":
+          if (vrVolume < 255) {
+            ++vrVolume;
+            chan.volume = vrVolume;
+            forceUp = true;
+          }
+          break;
         default:
       }
     }
   }
   assert(!tflIsChannelAlive("ogg"));
+  forceUp = true;
   showProgress(true);
   { import core.stdc.stdio; printf("\n"); }
   // sleep 100 ms
