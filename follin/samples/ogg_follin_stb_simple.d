@@ -18,6 +18,7 @@
 module ogg_follin is aliced;
 
 import iv.follin;
+import iv.stb.vorbis;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -40,8 +41,19 @@ void showProgress () {
 
 
 void playOgg() (string fname, bool asMusic) {
-
   auto chan = new VorbisChannel(fname);
+
+  if (chan.vf) {
+    for (;;) {
+      import std.stdio;
+      auto name = chan.vf.comment_name;
+      auto value = chan.vf.comment_value;
+      if (name is null) break;
+      writeln(name, "=", value);
+      chan.vf.comment_skip();
+    }
+  }
+
   chan.volume = 200;
   vrTotalTimeMsec = cast(uint)(cast(ulong)chan.totalFrames*1000/chan.sampleRate);
   vrNextTimeMsec = 0;

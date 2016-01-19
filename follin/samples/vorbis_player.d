@@ -57,7 +57,8 @@ Action playOgg() () {
   Action res = Action.Next;
 
   auto chan = new VorbisChannel(playlist[plidx]);
-  if (chan.totalFrames == 0) {
+
+  if (chan.totalFrames == 0 || chan.vf is null) {
     foreach (immutable c; plidx+1..playlist.length) playlist[c-1] = playlist[c];
     playlist.length -= 1;
     return Action.Prev;
@@ -68,6 +69,14 @@ Action playOgg() () {
     import std.path : baseName;
     auto bn = playlist[plidx].baseName;
     printf("=== [%u/%u] %.*s (%d) ===\n", cast(uint)(plidx+1), cast(uint)playlist.length, cast(uint)bn.length, bn.ptr, quality);
+    for (;;) {
+      import std.stdio;
+      auto name = chan.vf.comment_name;
+      auto value = chan.vf.comment_value;
+      if (name is null) break;
+      writeln("  ", name, "=", value);
+      chan.vf.comment_skip();
+    }
   }
 
   vrTotalTimeMsec = cast(uint)(cast(ulong)chan.totalFrames*1000/chan.sampleRate);

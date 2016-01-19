@@ -36,7 +36,7 @@ class VorbisChannel : TflChannel {
     import core.stdc.stdio;
 
     int error;
-    vf = stb_vorbis_open_filename(fname, &error, null);
+    vf = stb_vorbis_open_filename_ex(fname, true, &error); // open with comments
     if (vf is null) {
       import core.stdc.stdio;
       printf("can't open file: '%.*s'\n", cast(uint)fname.length, fname.ptr);
