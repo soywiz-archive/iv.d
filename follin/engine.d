@@ -741,7 +741,6 @@ bool sndGenerateBuffer () {
                     mov     EAX,[bptr];
                     mov     EBX,offsetof mul[0];
                     mov     ECX,[blen];
-                    align 8;
                     movups  XMM1,[EBX];
                     align 8;
                    addloopchvol:
