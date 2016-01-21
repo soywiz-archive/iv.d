@@ -25,7 +25,7 @@ import iv.stb.vorbis;
 
 // ////////////////////////////////////////////////////////////////////////// //
 class VorbisChannel : TflChannel {
-  stb_vorbis* vf;
+  VorbisDecoder vf;
   // for stb
   const(float)* left, right;
   int hasframes; // 0: eof
@@ -35,47 +35,44 @@ class VorbisChannel : TflChannel {
   this (string fname) {
     import core.stdc.stdio;
 
-    int error;
-    vf = stb_vorbis_open_filename_ex(fname, true, &error); // open with comments
-    if (vf is null) {
+    vf = new VorbisDecoder(fname);
+    if (vf.closed) {
       import core.stdc.stdio;
       printf("can't open file: '%.*s'\n", cast(uint)fname.length, fname.ptr);
+      vf = null;
       return;
     }
 
-    auto info = stb_vorbis_get_info(vf);
-
-    if (info.sample_rate < 1024 || info.sample_rate > 96000) {
+    if (vf.sampleRate < 1024 || vf.sampleRate > 96000) {
       import core.stdc.stdio;
       printf("fucked file sample rate: '%.*s'\n", cast(uint)fname.length, fname.ptr);
-      stb_vorbis_close(vf);
+      vf.close();
       vf = null;
       return;
     }
 
-    if (info.channels < 1 || info.channels > 2) {
+    if (vf.chans < 1 || vf.chans > 2) {
       import core.stdc.stdio;
       printf("fucked file channels: '%.*s'\n", cast(uint)fname.length, fname.ptr);
-      stb_vorbis_close(vf);
+      vf.close();
       vf = null;
       return;
     }
 
-    //chans = info.channels;
-    sampleRate = info.sample_rate;
-    //{ import core.stdc.stdio; printf("%uHz, %u channels\n", sampleRate, chans); }
+    sampleRate = vf.sampleRate;
+    { import core.stdc.stdio; printf("%uHz, %u channels\n", vf.sampleRate, vf.chans); }
 
     hasframes = 1;
     frused = 1; // hoax
     vrtotalFrames = -1;
-    //{ import core.stdc.stdio; printf("vorbis: got %u frames\n", hasframes); }
   }
 
-  ~this () { if (vf !is null) stb_vorbis_close(vf); }
+  ~this () {}
 
   final @property uint totalFrames () nothrow @nogc {
     if (vrtotalFrames < 0) {
-      vrtotalFrames = (vf !is null ? stb_vorbis_stream_length_in_samples(vf) : 0);
+      vrtotalFrames = (vf !is null ? vf.streamLengthInSamples : 0);
+      //{ import core.stdc.stdio; printf("vorbis: got %u frames\n", cast(int)vrtotalFrames); }
       if (vrtotalFrames < 0) vrtotalFrames = 0;
     }
     return cast(uint)vrtotalFrames;
@@ -88,9 +85,9 @@ class VorbisChannel : TflChannel {
       int haschans;
       float** frbuffer;
       frused = 0;
-      hasframes = stb_vorbis_get_frame_float(vf, &haschans, &frbuffer);
-      if (hasframes <= 0) { hasframes = 0; stb_vorbis_close(vf); vf = null; return false; } // eof
+      hasframes = vf.getFrameFloat(&haschans, &frbuffer);
       //{ import core.stdc.stdio; printf("vorbis: got %u frames\n", hasframes); }
+      if (hasframes <= 0) { hasframes = 0; vf.close(); vf = null; return false; } // eof
       // setup buffers
       left = frbuffer[0];
       right = frbuffer[haschans > 1 ? 1 : 0];
