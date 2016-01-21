@@ -613,10 +613,12 @@ private int error (VorbisDecoder f, STBVorbisError e) {
 uint temp_alloc_save (VorbisDecoder f) nothrow @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return f.alloc.tempSave(f); }
 void temp_alloc_restore (VorbisDecoder f, uint p) nothrow @nogc { static if (__VERSION__ > 2067) pragma(inline, true); f.alloc.tempRestore(p, f); }
 
+/*
 T* temp_alloc(T) (VorbisDecoder f, uint count) nothrow @nogc {
   auto res = f.alloc.alloc(count*T.sizeof, f);
   return cast(T*)res;
 }
+*/
 
 /+
 enum array_size_required(string count, string size) = q{((${count})*((void*).sizeof+(${size})))}.cmacroFixVars!("count", "size")(count, size);
@@ -632,13 +634,25 @@ template temp_block_array(string count, string size) {
     .cmacroFixVars!("count", "size", "tam")(count, size, temp_alloc!(array_size_required!(count, size)));
 }
 +/
+enum array_size_required(string count, string size) = q{((${count})*((void*).sizeof+(${size})))}.cmacroFixVars!("count", "size")(count, size);
 
+template temp_alloc(string size) {
+  enum temp_alloc = q{alloca(${size})}.cmacroFixVars!("size")(size);
+}
+
+template temp_block_array(string count, string size) {
+  enum temp_block_array = q{(make_block_array(${tam}, (${count}), (${size})))}
+    .cmacroFixVars!("count", "size", "tam")(count, size, temp_alloc!(array_size_required!(count, size)));
+}
+
+/*
 T** temp_block_array(T) (VorbisDecoder f, uint count, uint size) {
   size *= T.sizeof;
   auto mem = f.alloc.alloc(count*(void*).sizeof+size, f);
   if (mem !is null) make_block_array(mem, count, size);
   return cast(T**)mem;
 }
+*/
 
 // given a sufficiently large block of memory, make an array of pointers to subblocks of it
 private void* make_block_array (void* mem, int count, int size) {
@@ -652,8 +666,7 @@ private void* make_block_array (void* mem, int count, int size) {
 }
 
 private T* setup_malloc(T) (VorbisDecoder f, uint sz) {
-  sz = (sz*T.sizeof+3)&~3;
-  if (!sz) sz = 4; // just in case
+  sz *= T.sizeof;
   /*
   f.setup_memory_required += sz;
   if (f.alloc.alloc_buffer) {
@@ -663,10 +676,10 @@ private T* setup_malloc(T) (VorbisDecoder f, uint sz) {
     return cast(T*)p;
   }
   */
-  auto res = f.alloc.alloc(sz, f);
+  auto res = f.alloc.alloc(sz+8, f); // +8 to compensate dmd codegen bug: it can read dword(qword?) when told to read only byte
   if (res !is null) {
     import core.stdc.string : memset;
-    memset(res, 0, sz);
+    memset(res, 0, sz+8);
   }
   return cast(T*)res;
 }
@@ -676,18 +689,16 @@ private void setup_free (VorbisDecoder f, void* p) {
 }
 
 private void* setup_temp_malloc (VorbisDecoder f, uint sz) {
-  sz = (sz+3)&~3;
-  if (!sz) sz = 4; // just in case
-  auto res = f.alloc.allocTemp(sz, f);
+  auto res = f.alloc.allocTemp(sz+8, f); // +8 to compensate dmd codegen bug: it can read dword(qword?) when told to read only byte
   if (res !is null) {
     import core.stdc.string : memset;
-    memset(res, 0, sz);
+    memset(res, 0, sz+8);
   }
   return res;
 }
 
 private void setup_temp_free (VorbisDecoder f, void* p, uint sz) {
-  if (p !is null) f.alloc.freeTemp(p, sz, f);
+  if (p !is null) f.alloc.freeTemp(p, (sz ? sz : 1)+8, f); // +8 to compensate dmd codegen bug: it can read dword(qword?) when told to read only byte
 }
 
 immutable uint[256] crc_table;
@@ -780,10 +791,10 @@ private void add_entry (Codebook* c, uint huff_code, int symbol, int count, ubyt
 private int compute_codewords (Codebook* c, ubyte* len, int n, uint* values) {
   import core.stdc.string : memset;
 
-  int i, k, m=0;
+  int i, k, m = 0;
   uint[32] available;
 
-  memset(available.ptr, 0, (available).sizeof);
+  memset(available.ptr, 0, available.sizeof);
   // find the first entry
   for (k = 0; k < n; ++k) if (len[k] < NO_CODE) break;
   if (k == n) { assert(c.sorted_entries == 0); return true; }
@@ -797,7 +808,7 @@ private int compute_codewords (Codebook* c, ubyte* len, int n, uint* values) {
   // and I use 0 in available[] to mean 'empty')
   for (i = k+1; i < n; ++i) {
     uint res;
-    int z = len[i], y;
+    int z = len[i];
     if (z == NO_CODE) continue;
     // find lowest available leaf (should always be earliest,
     // which is what the specification calls for)
@@ -809,10 +820,16 @@ private int compute_codewords (Codebook* c, ubyte* len, int n, uint* values) {
     if (z == 0) return false;
     res = available[z];
     available[z] = 0;
-    add_entry(c, bit_reverse(res), i, m++, len[i], values);
+    ubyte xxx = len[i];
+    add_entry(c,
+      bit_reverse(res),
+      i,
+      m++,
+      xxx, // dmd bug: it reads 4 bytes without temp
+      values);
     // propogate availability up the tree
     if (z != len[i]) {
-      for (y = len[i]; y > z; --y) {
+      for (int y = len[i]; y > z; --y) {
         assert(available[y] == 0);
         available[y] = res+(1<<(32-y));
       }
@@ -1741,9 +1758,9 @@ private void decode_residue (VorbisDecoder f, ref float*[STB_VORBIS_MAX_CHANNELS
   int part_read = n_read/r.part_size;
   uint temp_alloc_point = temp_alloc_save(f);
   version(STB_VORBIS_DIVIDES_IN_RESIDUE) {
-    int **classifications = temp_block_array!int(f, f.channels, part_read);
+    int** classifications = cast(int**)mixin(temp_block_array!("f.channels", "part_read*int.sizeof"));
   } else {
-    ubyte ***part_classdata = temp_block_array!(ubyte*)(f, f.channels, part_read);
+    ubyte*** part_classdata = cast(ubyte***)mixin(temp_block_array!("f.channels", "part_read*(ubyte*).sizeof"));
   }
 
   //stb_prof(2);
@@ -2165,7 +2182,7 @@ private void inverse_mdct (float* buffer, int n, VorbisDecoder f, int blocktype)
   // @OPTIMIZE: reduce register pressure by using fewer variables?
   int save_point = temp_alloc_save(f);
   float *buf2;
-  buf2 = temp_alloc!(float)(f, n2);
+  buf2 = cast(float*)mixin(temp_alloc!("n2*float.sizeof"));
   float *u = null, v = null;
   // twiddle factors
   float *A = f.A.ptr[blocktype];
@@ -3044,6 +3061,7 @@ private int start_decoder (VorbisDecoder f) {
   // codebooks
   f.codebook_count = get_bits!8(f)+1;
   f.codebooks = setup_malloc!Codebook(f, f.codebook_count);
+  static assert((*f.codebooks).sizeof == Codebook.sizeof);
   if (f.codebooks is null) return error(f, STBVorbisError.outofmem);
   memset(f.codebooks, 0, (*f.codebooks).sizeof*f.codebook_count);
   foreach (immutable i; 0..f.codebook_count) {
