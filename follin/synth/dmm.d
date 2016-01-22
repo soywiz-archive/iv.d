@@ -132,7 +132,10 @@ nothrow @trusted @nogc:
   bool hasloop;
   uint loopstart, loopend; // positions
   float[] data;
-  float lastseenbyte = 0.0f; // just4fun; you won't hear the difference
+  float[4] lastdata = 0;
+  uint ldused;
+  bool drain;
+  uint lastipos;
 
   void setup (DmmInstrument ai, float astep) {
     if (ai !is null) {
@@ -151,6 +154,8 @@ nothrow @trusted @nogc:
         hasloop = (loopend > loopstart && loopend-loopstart >= 2 && loopstart < cast(uint)data.length);
         if (hasloop) spos = loopstart;
       }
+      drain = false;
+      lastipos = lastipos.max;
     } else {
       spos = spos.max;
       data = null; // don't anchor it
@@ -158,66 +163,78 @@ nothrow @trusted @nogc:
     //{ import core.stdc.stdio; printf("setup: step=%f\n", step); }
   }
 
-  @property /*const pure*/ {
-    bool empty () const pure { pragma(inline, true); return (spos == spos.max); }
+  @property bool empty () const pure { return (spos == spos.max); }
 
-    // this will do cubic interpolation
-    // valid only if the range is not empty
-    float front () {
-      //version(dmm_complex_cubic) {} else pragma(inline, true);
-      auto ipos = cast(uint)curpos;
-      // interpolate between y1 and y2
-      immutable float mu = curpos-ipos; // how far we are moved from y1 to y2
-      //{ import core.stdc.stdio; printf("front at %i (%f)\n", ipos, mu); }
-      immutable float mu2 = mu*mu; // wow
-      immutable dlen = cast(uint)data.length;
-      auto d = data.ptr+ipos;
-      float y0 = void, y1 = d[0], y2 = void, y3 = void;
-      // get the points; the process is complicated by looping
-      if (!hasloop) {
-        // no looping, easy deal
-        y0 = (ipos > lastseenbyte ? d[-1] : d[0]); // we can do better at the start, of course
-        y2 = (ipos+1 < dlen ? d[1] : 0);
-        y3 = (ipos+2 < dlen ? d[2] : 0);
-      } else if (!inloop) {
-        // has looping, but we aren't in the loop yet
-        y0 = (ipos > lastseenbyte ? d[-1] : d[0]); // we can do better at the start, of course
-        y2 = (ipos+1 < dlen ? d[1] : data.ptr[loopstart]);
-        y3 = (ipos+2 < dlen ? d[2] : data.ptr[loopstart+(ipos+2-dlen)]);
-      } else {
-        // has looping, and we are in the loop
-        y0 = (ipos > loopstart ? d[-1] : data.ptr[loopend-1]);
-        y2 = (ipos+1 < loopend ? d[1] : data.ptr[loopstart]);
-        y3 = (ipos+2 < loopend ? d[2] : data.ptr[loopstart+(ipos+2-dlen)]);
-      }
-      lastseenbyte = y2;
-      version(dmm_complex_cubic) {
-        immutable float z0 = 0.5*y3;
-        immutable float z1 = 0.5*y0;
-        immutable float a0 = 1.5*y1-z1-1.5*y2+z0;
-        immutable float a1 = y0-2.5*y1+2*y2-z0;
-        immutable float a2 = 0.5*y2-z1;
-      } else {
-        immutable float a0 = y3-y2-y0+y1;
-        immutable float a1 = y0-y1-a0;
-        immutable float a2 = y2-y0;
-      }
-      return a0*mu*mu2+a1*mu2+a2*mu+y1;
+  void clearLastData () {
+    if (spos != spos.max) {
+      spos = spos.max;
+      lastdata[] = 0;
     }
   }
-  void popFront () {
+
+  // this will do cubic interpolation
+  // valid only if the range is not empty
+  float nextSample () {
+    if (spos == spos.max) return 0.0f;
+
+    // advance position
     if ((curpos += step) >= epos) {
-      if (!hasloop) { spos = spos.max; return; } // this is the end, my only friend
+      if (!hasloop) {
+        if (drain) {
+          if (--ldused == 0) {
+            // this is the end, my only friend
+            lastdata[] = 0;
+            spos = spos.max;
+            return 0.0f;
+          }
+        } else {
+          drain = true;
+          ldused = 3;
+          spos = cast(uint)data.length-1;
+        }
+        lastipos = lastipos.max;
+      }
       // alas, we moved out of data
       float stover = cast(float)epos-curpos; // how much?
       // fix bounds
-      if (!inloop) { epos = loopend; inloop = true; }
+      if (!drain && !inloop) { epos = loopend; inloop = true; }
       // the following can happen if `step` is too big
       if ((curpos = spos+stover) >= epos) {
         // just carry over a rational part here
         curpos = cast(float)(loopstart+cast(int)curpos%(loopend-loopstart))+(curpos-cast(int)curpos);
       }
     }
+
+    auto ipos = cast(uint)curpos;
+    // load new sample byte, if we have to
+    if (ipos != lastipos) {
+      lastdata.ptr[0] = lastdata.ptr[1];
+      lastdata.ptr[1] = lastdata.ptr[2];
+      lastdata.ptr[2] = lastdata.ptr[3];
+      if (!drain) {
+        lastdata.ptr[3] = data.ptr[ipos];
+      } else {
+        lastdata.ptr[3] = 0.0f;
+      }
+      lastipos = ipos;
+    }
+
+    // interpolate between y1 and y2
+    immutable float mu = curpos-ipos; // how far we are moved from y1 to y2
+    //{ import core.stdc.stdio; printf("front at %i (%f)\n", ipos, mu); }
+    immutable float mu2 = mu*mu; // wow
+    version(dmm_complex_cubic) {
+      immutable float z0 = 0.5*lastdata.ptr[3];
+      immutable float z1 = 0.5*lastdata.ptr[0];
+      immutable float a0 = 1.5*lastdata.ptr[1]-z1-1.5*lastdata.ptr[2]+z0;
+      immutable float a1 = lastdata.ptr[0]-2.5*lastdata.ptr[1]+2*lastdata.ptr[2]-z0;
+      immutable float a2 = 0.5*lastdata.ptr[2]-z1;
+    } else {
+      immutable float a0 = lastdata.ptr[3]-lastdata.ptr[2]-lastdata.ptr[0]+lastdata.ptr[1];
+      immutable float a1 = lastdata.ptr[0]-lastdata.ptr[1]-a0;
+      immutable float a2 = lastdata.ptr[2]-lastdata.ptr[0];
+    }
+    return a0*mu*mu2+a1*mu2+a2*mu+lastdata.ptr[1];
   }
 }
 
@@ -283,11 +300,10 @@ public:
 
   // mix one tick, no clipping; return `false` if nothing was done
   bool mixTick() (float* outdata) {
-    if (xsilent || cantsound) { w.lastseenbyte = 0.0f; return false; } // you won't hear it anyway ;-)
+    if (xsilent || cantsound) { w.clearLastData(); return false; } // you won't hear it anyway ;-)
     foreach (immutable _; 0..samplesInTick) {
-      if (w.empty) { w.lastseenbyte = 0.0f; return (_ > 0); }
-      *outdata++ += w.front*volume;
-      w.popFront();
+      if (w.empty) return (_ > 0);
+      *outdata++ += w.nextSample*volume;
     }
     return true;
   }
