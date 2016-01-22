@@ -25,6 +25,7 @@ import iv.stream;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version = dmm_use_sse;
 version = dmm_ignore_module_loops;
 //version = dmm_complex_cubic;
 
@@ -331,7 +332,7 @@ private:
 public:
   this (string fname, string instrumentBaseDir=null) {
     import std.path;
-    tickbuf.length = chans[0].mix.samplesInTick;
+    tickbuf.length = chans[0].mix.samplesInTick+8; // +dummy values for sse
     scope(failure) ver = 255;
     import std.stdio : File;
     loadIntr(instrumentBaseDir, File(fname));
@@ -340,13 +341,13 @@ public:
   ubyte getVersion () const pure nothrow @safe @nogc { pragma(inline, true); return ver; }
 
   @property uint samplesInTick () const nothrow @safe @nogc { pragma(inline, true); return chans.ptr[0].mix.samplesInTick; }
-  @property inout(float)[] soundBuffer () inout pure nothrow @safe @nogc { pragma(inline, true); return tickbuf[]; }
+  @property inout(float)[] soundBuffer () inout pure nothrow @safe @nogc { pragma(inline, true); return tickbuf[0..chans.ptr[0].mix.samplesInTick]; }
 
   @property uint destRate () const nothrow @safe @nogc { pragma(inline, true); return chans.ptr[0].mix.destRate; }
   @property void destRate (uint srate) nothrow @safe {
     if (srate != chans.ptr[0].mix.destRate) {
       foreach (ref ch; chans) ch.mix.setupDestRate(srate);
-      tickbuf.length = chans[0].mix.samplesInTick;
+      tickbuf.length = chans[0].mix.samplesInTick+8; // +dummy values for sse
     }
   }
 
@@ -506,7 +507,8 @@ private:
       bool someChanIsActive = false;
       bool needClip = false;
       for (;;) {
-        foreach (immutable cidx, ref Chan ch; chans) {
+        foreach (immutable cidx; 0..chans.length) {
+          auto ch = chans.ptr+cidx;
           if (processEvent(cidx)) someChanIsActive = true;
           if (ch.mix.mixTick(tickbuf.ptr)) needClip = true; // if anything was mixed, set "clip flag"
         }
@@ -518,7 +520,34 @@ private:
         }
         // if we did something, clip it
         if (needClip) {
-          foreach (ref float f; tickbuf) if (f < -1.0f) f = -1.0f; else if (f > 1.0f) f = 1.0f;
+          auto tb = tickbuf.ptr;
+          version(dmm_use_sse) {
+            __gshared /*immutable*/ float[4] fmin4 = -1.0;
+            __gshared /*immutable*/ float[4] fmax4 = 1.0;
+            auto blen = cast(uint)(tickbuf.length+3)/4;
+            asm nothrow @safe @nogc {
+              mov      EAX,offsetof fmin4[0];
+              movups   XMM2,[EAX]; // XMM2: min values
+              mov      EAX,offsetof fmax4[0];
+              movups   XMM3,[EAX]; // XMM3: max values
+              mov      EAX,[tb]; // source
+              mov      ECX,[blen];
+              align 8;
+             cliploop:
+              movups   XMM0,[EAX];
+              maxps    XMM0,XMM2;    // clip lower
+              minps    XMM0,XMM3;    // clip upper
+              movups   [EAX],XMM0;
+              add      EAX,16;
+              dec      ECX;
+              jnz      cliploop;
+            }
+          } else {
+            foreach (immutable _; 0..tickbuf.length) {
+              if (*tb < -1.0f) *tb = -1.0f; else if (*tb > 1.0f) *tb = 1.0f;
+              ++tb;
+            }
+          }
         }
         return true;
       }
