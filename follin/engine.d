@@ -129,7 +129,8 @@ public void tflShort2Float (in short[] input, float[] output) nothrow @trusted @
   if (output.length < input.length) assert(0, "invalid length");
   auto d = output.ptr;
   immutable float mul = 1.0f/32768.0f;
-  foreach (short v; input) *d++ = mul*v;
+  auto src = input.ptr;
+  foreach (immutable _; 0..input.length) *d++ = mul*(*src++);
 }
 
 
@@ -415,9 +416,10 @@ void packChannels () nothrow @trusted @nogc {
 Channel* sndFindChanByName (const(char)[] name) nothrow @trusted @nogc {
   if (name.length == 0 || name.length > Channel.name.length) return null;
   auto hash = hashBuffer(name.ptr, name.length);
-  foreach (ref ch; chans) {
+  foreach (immutable idx; 0..chans.length) {
+    auto ch = chans.ptr+idx;
     if (ch.namelen == 0) break;
-    if (ch.namehash == hash && ch.namelen == name.length && ch.name[0..ch.namelen] == name) return &ch;
+    if (ch.namehash == hash && ch.namelen == name.length && ch.name[0..ch.namelen] == name) return ch;
   }
   return null;
 }
@@ -450,10 +452,9 @@ uint sndGetPlayTimeMsec (const(char)[] name) nothrow @trusted /*@nogc*/ {
 bool sndKillChan (const(char)[] name) {
   if (name.length == 0 || name.length > Channel.name.length) return false;
   auto hash = hashBuffer(name.ptr, name.length);
-  //sndLock!"sndKillChan"();
-  //scope(exit) sndUnlock!"sndKillChan"();
   synchronized (sndMutexChanRW.writer) {
-    foreach (ref ch; chans) {
+    foreach (immutable idx; 0..chans.length) {
+      auto ch = chans.ptr+idx;
       if (ch.namelen == 0) break;
       if (ch.namehash == hash && ch.namelen == name.length && ch.name[0..ch.namelen] == name) {
         // kill this channel
@@ -538,14 +539,15 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
 
   synchronized (sndMutexChanRW.writer) {
     // for lowest prio: prefer finished channel, then paused channel
-    foreach (immutable idx, ref ch; chans) {
+    foreach (immutable idx; 0..chans.length) {
+      auto ch = chans.ptr+idx;
       if (ch.namelen == 0) break; // last channel
       if (ch.namehash == hash && ch.namelen == name.length && ch.name[0..ch.namelen] == name) {
         replaceIdx = cast(int)idx;
         break;
       }
-      lower.fixVictim!"lower"(ch, prio, idx);
-      same.fixVictim!"same"(ch, prio, idx);
+      lower.fixVictim!"lower"(*ch, prio, idx);
+      same.fixVictim!"same"(*ch, prio, idx);
     }
 
     //{ import core.stdc.stdio; printf("replaceIdx(0)=%d; firstFreeChan=%u\n", replaceIdx, firstFreeChan); }
@@ -650,7 +652,7 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
 
 // ////////////////////////////////////////////////////////////////////////// //
 bool sndGenerateBuffer () {
-  static void killChan() (ref Channel ch, ref bool channelsChanged) {
+  static void killChan() (Channel* ch, ref bool channelsChanged) {
     if (ch.namelen) {
       channelsChanged = true;
       auto chan = ch.chan;
@@ -681,7 +683,8 @@ bool sndGenerateBuffer () {
       immutable bufsz = sndSamplesSize;
       sndrsbuf.ptr[0..sndSamplesSize] = 0.0f;
       //{ import core.stdc.stdio; printf("filling buffer %u\n", buf2fill); }
-      foreach (ref ch; chans) {
+      foreach (immutable cidx; 0..chans.length) {
+        auto ch = chans.ptr+cidx;
         if (ch.namelen == 0) break; // last channel
         uint rspos = 0; // current position in `sndrsbuf`
         chmixloop: while (rspos < bufsz) {
@@ -1095,7 +1098,8 @@ void sndPlayTreadFunc () {
         // fix channel playing time
         synchronized (sndMutexChanRW.writer) {
           if (firstFreeChan > 0) {
-            foreach (ref ch; chans) {
+            foreach (immutable idx; 0..chans.length) {
+              auto ch = chans.ptr+idx;
               if (ch.namelen == 0) break; // last channel
               //{ import core.stdc.stdio; printf("pf: %u; gf: %u\n", cast(uint)ch.playedFrames, cast(uint)ch.genFrames); }
               if (ch.playedFrames < ch.genFrames) {

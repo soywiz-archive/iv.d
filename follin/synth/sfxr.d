@@ -475,7 +475,7 @@ public struct SfxrSample {
     if (fx.p_arp_speed == 1.0f) arp_limit = 0;
   }
 
-  void reset() (in auto ref Sfxr sfx) nothrow @safe @nogc {
+  void reset() (in auto ref Sfxr sfx) nothrow @trusted @nogc {
     import std.math : abs, pow;
 
     fx = sfx;
@@ -510,7 +510,10 @@ public struct SfxrSample {
     iphase = abs(cast(int)fphase);
     ipp = 0;
     phaser_buffer[] = 0.0f;
-    foreach (ref el; noise_buffer) el = frnd(2.0f)-1.0f;
+    {
+      auto nb = noise_buffer.ptr;
+      foreach (immutable _; 0..noise_buffer.length) *nb++ = frnd(2.0f)-1.0f;
+    }
 
     rep_time = 0;
     rep_limit = cast(int)(pow(1.0f-fx.p_repeat_speed, 2.0f)*20000+32);
@@ -520,7 +523,7 @@ public struct SfxrSample {
   }
 
   // return `true` if the whole frame was silent
-  void fillBuffer(string mode, BT) (BT[] buffer) nothrow @safe @nogc
+  void fillBuffer(string mode, BT) (BT[] buffer) nothrow @trusted @nogc
   if ((is(BT == byte) || is(BT == short) || is(BT == float)) && (mode == "mono" || mode == "stereo"))
   {
     import std.math : abs, pow, sin, PI;
@@ -532,13 +535,14 @@ public struct SfxrSample {
       bool smpdup;
     }
 
-    foreach (ref bufel; buffer) {
+    foreach (immutable bidx; 0..buffer.length) {
+      auto bufel = buffer.ptr+bidx;
       static if (mode == "stereo") {
         if (smpdup) {
           smpdup = false;
-          static if (is(BT == float)) bufel = smp;
-          else static if (is(BT == byte)) bufel = cast(byte)(smp*127);
-          else static if (is(BT == short)) bufel = cast(short)(smp*32767);
+          static if (is(BT == float)) *bufel = smp;
+          else static if (is(BT == byte)) *bufel = cast(byte)(smp*127);
+          else static if (is(BT == short)) *bufel = cast(short)(smp*32767);
           else static assert(0, "wtf?!");
           continue;
         }
@@ -546,7 +550,7 @@ public struct SfxrSample {
       //if (!playing_sample) break; //FIXME: silence buffer?
       if (!playing_sample) {
         //static if (is(BT == ubyte)) bufel = 0.0f;
-        bufel = 0;
+        *bufel = 0;
         continue;
       }
 
@@ -609,7 +613,8 @@ public struct SfxrSample {
           //phase = 0;
           phase %= period;
           if (fx.wave_type == Sfxr.Type.Noise) {
-            foreach (ref el; noise_buffer) el = frnd(2.0f)-1.0f;
+            auto nb = noise_buffer.ptr;
+            foreach (immutable _0; 0..noise_buffer.length) *nb++ = frnd(2.0f)-1.0f;
           }
         }
         // base waveform
@@ -651,9 +656,9 @@ public struct SfxrSample {
         static if (mode == "mono") float smp = ssample; else smp = ssample;
         if (smp > 1.0f) smp = 1.0f;
         if (smp < -1.0f) smp = -1.0f;
-        static if (is(BT == float)) bufel = smp;
-        else static if (is(BT == byte)) bufel = cast(byte)(smp*127);
-        else static if (is(BT == short)) bufel = cast(short)(smp*32767);
+        static if (is(BT == float)) *bufel = smp;
+        else static if (is(BT == byte)) *bufel = cast(byte)(smp*127);
+        else static if (is(BT == short)) *bufel = cast(short)(smp*32767);
         else static assert(0, "wtf?!");
         static if (mode == "stereo") smpdup = true;
       }
