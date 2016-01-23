@@ -147,7 +147,8 @@ public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @
       auto tmpptr = &tmp;
       asm nothrow @safe @nogc {
         mov       EAX,offsetof mvol[0]; // source
-        movntdqa  XMM4,[EAX]; // XMM4: multipliers
+        //movntdqa  XMM4,[EAX]; // XMM4: multipliers (sse4.1)
+        movaps    XMM4,[EAX];
         mov       EAX,[s]; // source
         mov       EBX,[d]; // dest
         mov       ECX,[blen];
@@ -717,19 +718,20 @@ bool sndGenerateBuffer () {
       // use SSE to clear buffer, if we can
       version(follin_use_sse) {
         asm nothrow @safe @nogc {
-          mov      EAX,[sndrsbufptr];
+          mov       EAX,[sndrsbufptr];
           // ECX = (sndSamplesSize+3)/4
-          mov      ECX,[sndSamplesSize];
-          add      ECX,3;
-          shr      ECX,2;
-          mov      EBX,offsetof zeroes[0];
-          movntdqa XMM0,[EBX]; // non-temporal, don't bring zeroes to cache
+          mov       ECX,[sndSamplesSize];
+          add       ECX,3;
+          shr       ECX,2;
+          mov       EBX,offsetof zeroes[0];
+          //movntdqa  XMM0,[EBX]; // non-temporal, don't bring zeroes to cache (sse4.1)
+          movaps    XMM0,[EBX];
           align 8;
          loopsseclear_x0:
-          movaps   [EAX],XMM0; // dest is always aligned
-          add      EAX,16;
-          dec      ECX;
-          jnz      loopsseclear_x0;
+          movaps    [EAX],XMM0; // dest is always aligned
+          add       EAX,16;
+          dec       ECX;
+          jnz       loopsseclear_x0;
         }
       } else {
         sndrsbufptr[0..sndSamplesSize] = 0.0f;
@@ -787,33 +789,34 @@ bool sndGenerateBuffer () {
               // silent
               version(follin_use_sse) {
                 asm nothrow @safe @nogc {
-                  mov      EAX,[bptr];
-                  mov      EBX,offsetof zeroes[0];
-                  movntdqa XMM0,[EBX]; // non-temporal
-                  mov      ECX,[fblen];
-                  mov      EDX,8;
+                  mov       EAX,[bptr];
+                  mov       EBX,offsetof zeroes[0];
+                  //movntdqa XMM0,[EBX]; // non-temporal (sse4.1)
+                  movaps    XMM0,[EBX];
+                  mov       ECX,[fblen];
+                  mov       EDX,8;
                   // is buffer aligned?
                   // process floats one-by-one if not
                  zerovol_unaligned:
-                  test     EAX,0x0f;
-                  jz       zerovol_aligned;
+                  test      EAX,0x0f;
+                  jz        zerovol_aligned;
                   // using `movsd` brings some penalty here, but meh...
-                  movsd    [EAX],XMM0; // store two floats (single double)
-                  add      EAX,EDX;
-                  dec      ECX;
-                  jnz      zerovol_unaligned;
-                  jmp      zerovol_done;
+                  movsd     [EAX],XMM0; // store two floats (single double)
+                  add       EAX,EDX;
+                  dec       ECX;
+                  jnz       zerovol_unaligned;
+                  jmp       zerovol_done;
                  zerovol_aligned:
-                  mov      EDX,16;
+                  mov       EDX,16;
                   // ECX = (xlen+1)/2
-                  inc      ECX;
-                  shr      ECX,1;
+                  inc       ECX;
+                  shr       ECX,1;
                   align 8;
                  zerovol:
-                  movaps   [EAX],XMM0;
-                  add      EAX,EDX;
-                  dec      ECX;
-                  jnz      zerovol;
+                  movaps    [EAX],XMM0;
+                  add       EAX,EDX;
+                  dec       ECX;
+                  jnz       zerovol;
                  zerovol_done:;
                }
               } else {
@@ -827,37 +830,38 @@ bool sndGenerateBuffer () {
                   mul[0] = mul[2] = (1.0f/255.0f)*cast(float)ch.lastvolL;
                   mul[1] = mul[3] = (1.0f/255.0f)*cast(float)ch.lastvolR;
                   asm nothrow @safe @nogc {
-                    mov      EAX,[bptr];
-                    mov      EBX,offsetof mul[0];
-                    movntdqa XMM1,[EBX]; // non-temporal, don't bring volumes to cache
-                    mov      ECX,[fblen];
-                    mov      EDX,8;
+                    mov       EAX,[bptr];
+                    mov       EBX,offsetof mul[0];
+                    //movntdqa  XMM1,[EBX]; // non-temporal, don't bring volumes to cache (sse4.1)
+                    movaps    XMM1,[EBX];
+                    mov       ECX,[fblen];
+                    mov       EDX,8;
                     // is buffer aligned?
                     // process floats one-by-one if not
                    addloopchvol_unaligned:
-                    test     EAX,0x0f;
-                    jz       addloopchvol_aligned;
+                    test      EAX,0x0f;
+                    jz        addloopchvol_aligned;
                     // using `movsd` brings some penalty here, but meh...
-                    movsd    XMM3,[EAX]; // load two floats (single double), clear others
-                    mulps    XMM3,XMM1;
-                    movsd    [EAX],XMM3; // store two floats (single double)
-                    add      EAX,EDX;
-                    dec      ECX;
-                    jnz      addloopchvol_unaligned;
-                    jmp      addloopchvol_done;
+                    movsd     XMM3,[EAX]; // load two floats (single double), clear others
+                    mulps     XMM3,XMM1;
+                    movsd     [EAX],XMM3; // store two floats (single double)
+                    add       EAX,EDX;
+                    dec       ECX;
+                    jnz       addloopchvol_unaligned;
+                    jmp       addloopchvol_done;
                    addloopchvol_aligned:
-                    mov      EDX,16;
+                    mov       EDX,16;
                     // ECX = (xlen+1)/2
-                    inc      ECX;
-                    shr      ECX,1;
+                    inc       ECX;
+                    shr       ECX,1;
                     align 8;
                    addloopchvol:
-                    movaps   XMM0,[EAX];
-                    mulps    XMM0,XMM1;
-                    movaps   [EAX],XMM0;
-                    add      EAX,EDX;
-                    dec      ECX;
-                    jnz      addloopchvol;
+                    movaps    XMM0,[EAX];
+                    mulps     XMM0,XMM1;
+                    movaps    [EAX],XMM0;
+                    add       EAX,EDX;
+                    dec       ECX;
+                    jnz       addloopchvol;
                    addloopchvol_done:;
                   }
                 }
@@ -1077,18 +1081,19 @@ bool sndGenerateBuffer () {
         asm nothrow @safe @nogc {
           mov      ECX,[sndSamplesSize];
           // (sndSamplesSize+7)/8 -- destination is s16, not float
-          add      ECX,7;
-          shr      ECX,3;
-          mov      EAX,[dp]; // dest, aligned
-          mov      EBX,offsetof zeroes[0]; // lucky me, floating zero is s16 zero too
-          movntdqa XMM0,[EBX]; // non-temporal, don't bring zeroes to cache
-          mov      EDX,16;
+          add       ECX,7;
+          shr       ECX,3;
+          mov       EAX,[dp]; // dest, aligned
+          mov       EBX,offsetof zeroes[0]; // lucky me, floating zero is s16 zero too
+          //movntdqa  XMM0,[EBX]; // non-temporal, don't bring zeroes to cache (sse4.1)
+          movaps    XMM0,[EBX];
+          mov       EDX,16;
           align 8;
          lastzfill_loop:
-          movaps   [EAX],XMM0;
-          add      EAX,EDX;
-          dec      ECX;
-          jnz      lastzfill_loop;
+          movaps    [EAX],XMM0;
+          add       EAX,EDX;
+          dec       ECX;
+          jnz       lastzfill_loop;
         }
       } else {
         dp[0..sndSamplesSize] = 0;
@@ -1107,36 +1112,37 @@ bool sndGenerateBuffer () {
           //movntdqa XMM2,[EAX]; // XMM2: min values
           //mov      EAX,offsetof fmax4[0];
           //movntdqa XMM3,[EAX]; // XMM3: max values
-          mov      EAX,offsetof mvol[0]; // source
-          movntdqa XMM4,[EAX]; // XMM4: multipliers
+          mov       EAX,offsetof mvol[0]; // source
+          //movntdqa  XMM4,[EAX]; // XMM4: multipliers (sse4.1)
+          movaps    XMM4,[EAX];
           // source and dest are aligned
-          mov      EAX,[src]; // source
-          mov      EBX,[dp]; // dest
-          mov      ECX,[blen];
-          mov      EDX,16;
+          mov       EAX,[src]; // source
+          mov       EBX,[dp]; // dest
+          mov       ECX,[blen];
+          mov       EDX,16;
           align 8;
          finalloopmix:
-          movaps   XMM0,[EAX];
-          mulps    XMM0,XMM4;    // mul by volume and shift
-          //maxps    XMM0,XMM2;    // clip lower
-          //minps    XMM0,XMM3;    // clip upper
+          movaps    XMM0,[EAX];
+          mulps     XMM0,XMM4;    // mul by volume and shift
+          //maxps     XMM0,XMM2;    // clip lower
+          //minps     XMM0,XMM3;    // clip upper
         }
         version(follin_use_sse2) asm nothrow @safe @nogc {
           cvttps2dq XMM1,XMM0;  // XMM1 now contains four int32 values
           packssdw  XMM1,XMM1;
           movq      [EBX],XMM1;
         } else asm nothrow @safe @nogc {
-          cvtps2pi MM0,XMM0;     // MM0 now contains two low int32 values
-          movhlps  XMM5,XMM0;    // get high floats
-          cvtps2pi MM1,XMM5;     // MM1 now contains two high int32 values
-          packssdw MM0,MM1;      // MM0 now contains 4 int16 values
-          movq     [EBX],MM0;
+          cvtps2pi  MM0,XMM0;     // MM0 now contains two low int32 values
+          movhlps   XMM5,XMM0;    // get high floats
+          cvtps2pi  MM1,XMM5;     // MM1 now contains two high int32 values
+          packssdw  MM0,MM1;      // MM0 now contains 4 int16 values
+          movq      [EBX],MM0;
         }
         asm nothrow @safe @nogc {
-          add     EAX,EDX;
-          add     EBX,8;
-          dec     ECX;
-          jnz     finalloopmix;
+          add       EAX,EDX;
+          add       EBX,8;
+          dec       ECX;
+          jnz       finalloopmix;
         }
         version(follin_use_sse2) {} else {
           asm nothrow @safe @nogc { emms; }
