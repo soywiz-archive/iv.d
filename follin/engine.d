@@ -17,6 +17,7 @@
  */
 module iv.follin.engine;
 
+version = follin_use_spinrw;
 //version = follin_prefer_alsa_plug;
 //version = follin_threads_debug;
 //version = follin_wait_debug;
@@ -111,16 +112,16 @@ void tflDeinit () nothrow @trusted /*@nogc*/ { sndEngineDeinit(); }
 
   ubyte tflMasterVolume () {
     static if (__VERSION__ > 2067) pragma(inline, true);
-    auto l = atomicLoad(sndMasterVolumeL);
-    auto r = atomicLoad(sndMasterVolumeR);
+    auto l = atomicLoad(sndMasterVolume);
+    auto r = (l>>8)&0xff;
     return cast(ubyte)(l > r ? l : r);
   }
-  void tflMasterVolume (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolumeL, cast(uint)v); atomicStore(sndMasterVolumeR, cast(uint)v); }
+  void tflMasterVolume (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolume, cast(ushort)(v<<8|v)); }
 
-  ubyte tflMasterVolumeL () { static if (__VERSION__ > 2067) pragma(inline, true); return cast(ubyte)atomicLoad(sndMasterVolumeL); }
-  void tflMasterVolumeL (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolumeL, cast(uint)v); }
-  ubyte tflMasterVolumeR () { static if (__VERSION__ > 2067) pragma(inline, true); return cast(ubyte)atomicLoad(sndMasterVolumeR); }
-  void tflMasterVolumeR (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolumeR, cast(uint)v); }
+  ubyte tflMasterVolumeL () { static if (__VERSION__ > 2067) pragma(inline, true); return atomicLoad(sndMasterVolume)&0xff; }
+  ubyte tflMasterVolumeR () { static if (__VERSION__ > 2067) pragma(inline, true); return (atomicLoad(sndMasterVolume)>>8)&0xff; }
+  void tflMasterVolumeL (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolume, cast(ushort)((atomicLoad(sndMasterVolume)&0xff00)|v)); }
+  void tflMasterVolumeR (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolume, cast(ushort)((atomicLoad(sndMasterVolume)&0x00ff)|(v<<8))); }
 }
 
 
@@ -296,6 +297,7 @@ import iv.follin.ftrick;
 import iv.follin.hash;
 import iv.follin.resampler;
 import iv.follin.sdata;
+version(follin_use_spinrw) import iv.follin.rwlock;
 
 
 enum samplerate = 44100;
@@ -316,16 +318,19 @@ __gshared float* tmprsbufptr = null; // here we'll collect floating point sample
 __gshared float* tmpmonobufMem = null; // chunk of memory for `tmpmonobufptr`
 __gshared float* tmpmonobufptr = null; // here we'll collect mono samples; aligned on 16 bytes for sse
 __gshared Thread sndThread = null, sndMixThread = null;
-shared uint sndMasterVolumeL = 255;
-shared uint sndMasterVolumeR = 255;
-__gshared ReadWriteMutex sndMutexChanRW;
+shared ushort sndMasterVolume = 0xffff;
+version(follin_use_spinrw) {
+  shared TflRWLock sndMutexChanRW;
+} else {
+  __gshared ReadWriteMutex sndMutexChanRW;
+}
 __gshared Mutex mutexCondMixer;
 __gshared Condition condMixerWait;
 
 shared static this () {
   mutexCondMixer = new Mutex();
   condMixerWait = new Condition(mutexCondMixer);
-  sndMutexChanRW = new ReadWriteMutex(ReadWriteMutex.Policy.PREFER_WRITERS);
+  version(follin_use_spinrw) {} else sndMutexChanRW = new ReadWriteMutex(ReadWriteMutex.Policy.PREFER_WRITERS);
 }
 
 
@@ -461,35 +466,59 @@ Channel* sndFindChanByName (const(char)[] name) nothrow @trusted @nogc {
 
 
 bool sndIsChanAlive (const(char)[] name) nothrow @trusted /*@nogc*/ {
-  synchronized (sndMutexChanRW.reader) {
-    if (auto ch = sndFindChanByName(name)) return true;
+  version(follin_use_spinrw) {
+    sndMutexChanRW.readLock();
+    auto ch = sndFindChanByName(name);
+    sndMutexChanRW.readUnlock();
+    return (ch !is null);
+  } else {
+    synchronized (sndMutexChanRW.reader) {
+      if (auto ch = sndFindChanByName(name)) return true;
+    }
+    return false;
   }
-  return false;
 }
 
 
 TflChannel sndGetChanObj (const(char)[] name) nothrow @trusted /*@nogc*/ {
-  synchronized (sndMutexChanRW.reader) {
-    if (auto ch = sndFindChanByName(name)) return ch.chan;
+  version(follin_use_spinrw) {
+    sndMutexChanRW.readLock();
+    auto ch = sndFindChanByName(name);
+    TflChannel res = (ch !is null ? ch.chan : null);
+    sndMutexChanRW.readUnlock();
+    return res;
+  } else {
+    synchronized (sndMutexChanRW.reader) {
+      if (auto ch = sndFindChanByName(name)) return ch.chan;
+    }
+    return null;
   }
-  return null;
 }
 
 
 uint sndGetPlayTimeMsec (const(char)[] name) nothrow @trusted /*@nogc*/ {
-  synchronized (sndMutexChanRW.reader) {
-    if (auto ch = sndFindChanByName(name)) return cast(uint)(ch.playedFrames*1000/realSampleRate);
+  version(follin_use_spinrw) {
+    sndMutexChanRW.readLock();
+    if (auto ch = sndFindChanByName(name)) {
+      auto res = cast(uint)(ch.playedFrames*1000/realSampleRate);
+      sndMutexChanRW.readUnlock();
+      return res;
+    }
+    sndMutexChanRW.readUnlock();
+    return 0;
+  } else {
+    synchronized (sndMutexChanRW.reader) {
+      if (auto ch = sndFindChanByName(name)) return cast(uint)(ch.playedFrames*1000/realSampleRate);
+    }
+    return 0;
   }
-  return 0;
 }
 
 
 bool sndKillChan (const(char)[] name) {
-  if (name.length == 0 || name.length > Channel.name.length) return false;
-  auto hash = hashBuffer(name.ptr, name.length);
-  synchronized (sndMutexChanRW.writer) {
+  static bool doIt() (usize hash, const(char)[] name) {
+    auto ch = chans.ptr;
     foreach (immutable idx; 0..chans.length) {
-      auto ch = chans.ptr+idx;
       if (ch.namelen == 0) break;
       if (ch.namehash == hash && ch.namelen == name.length && ch.name[0..ch.namelen] == name) {
         // kill this channel
@@ -502,9 +531,21 @@ bool sndKillChan (const(char)[] name) {
         packChannels();
         return true;
       }
+      ++ch;
     }
+    return false;
   }
-  return false;
+
+  if (name.length == 0 || name.length > Channel.name.length) return false;
+  auto hash = hashBuffer(name.ptr, name.length);
+  version(follin_use_spinrw) {
+    sndMutexChanRW.writeLock();
+    auto res = doIt(hash, name);
+    sndMutexChanRW.writeUnlock();
+    return res;
+  } else {
+    synchronized (sndMutexChanRW.writer) return doIt(hash, name);
+  }
 }
 
 
@@ -514,9 +555,7 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
   if (name.length == 0) {
     if (chan is null) return false;
     usize pos = tmpname.length;
-    //sndLock!"sndAddChanAnon"();
     ulong num = atomicOp!"+="(chanid, 1);
-    //sndUnlock!"sndAddChanAnon"();
     do { tmpname[--pos] = cast(char)('0'+num%10); } while ((num /= 10) != 0);
     enum pfx = "uninspiring channel #";
     pos -= pfx.length;
@@ -527,8 +566,6 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
     return false;
   }
   auto hash = hashBuffer(name.ptr, name.length);
-  //sndLock!"sndAddChan"();
-  //scope(exit) sndUnlock!"sndAddChan"();
 
   static struct VictimInfo {
     int idx = -1;
@@ -572,7 +609,7 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
   VictimInfo lower, same;
   int replaceIdx = -1;
 
-  synchronized (sndMutexChanRW.writer) {
+  bool doIt() () {
     // for lowest prio: prefer finished channel, then paused channel
     foreach (immutable idx; 0..chans.length) {
       auto ch = chans.ptr+idx;
@@ -679,9 +716,17 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
       ch.namelen = 0; // "it's free" flag
       packChannels();
     }
+    return true;
   }
 
-  return true;
+  version(follin_use_spinrw) {
+    sndMutexChanRW.writeLock();
+    auto res = doIt();
+    sndMutexChanRW.writeUnlock();
+    return res;
+  } else {
+    synchronized (sndMutexChanRW.writer) return doIt();
+  }
 }
 
 
@@ -712,7 +757,8 @@ bool sndGenerateBuffer () {
   auto buf2fill = atomicLoad(sndbufToFill);
   atomicStore(sndbufFillingNow, true);
   bool wasAtLeastOne = false;
-  synchronized (sndMutexChanRW.writer) {
+
+  enum doer = q{
     if (firstFreeChan > 0) {
       immutable bufsz = sndSamplesSize;
       // use SSE to clear buffer, if we can
@@ -1068,15 +1114,22 @@ bool sndGenerateBuffer () {
       }
     }
     if (channelsChanged) packChannels();
+  }; // doer
+
+  version(follin_use_spinrw) {
+    sndMutexChanRW.writeLock();
+    mixin(doer);
+    sndMutexChanRW.writeUnlock();
+  } else {
+    synchronized (sndMutexChanRW.writer) { mixin(doer); }
   }
 
   // do final converting
   auto dp = sndbufptr[buf2fill];
   if (wasAtLeastOne) {
     // something is playing, mix it
-    auto mvolL = cast(ubyte)atomicLoad(sndMasterVolumeL);
-    auto mvolR = cast(ubyte)atomicLoad(sndMasterVolumeR);
-    if ((mvolL|mvolR) == 0) {
+    auto mvol = atomicLoad(sndMasterVolume);
+    if (mvol == 0) {
       version(follin_use_sse) {
         asm nothrow @safe @nogc {
           mov      ECX,[sndSamplesSize];
@@ -1099,20 +1152,22 @@ bool sndGenerateBuffer () {
         dp[0..sndSamplesSize] = 0;
       }
     } else {
+      auto mvolL = mvol&0xff;
+      auto mvolR = (mvol>>8)&0xff;
       auto src = sndrsbufptr;
       version(follin_use_sse) {
         //align(64) __gshared float[4] fmin4 = -32768.0;
         //align(64) __gshared float[4] fmax4 = 32767.0;
-        align(64) __gshared float[4] mvol = void;
-        mvol[0] = mvol[2] = (32768.0/255.0f)*cast(float)mvolL;
-        mvol[1] = mvol[3] = (32768.0/255.0f)*cast(float)mvolR;
+        align(64) __gshared float[4] mvolf = void;
+        mvolf[0] = mvolf[2] = (32768.0/255.0f)*cast(float)mvolL;
+        mvolf[1] = mvolf[3] = (32768.0/255.0f)*cast(float)mvolR;
         auto blen = (sndSamplesSize+3)/4;
         asm nothrow @safe @nogc {
           //mov      EAX,offsetof fmin4[0];
           //movntdqa XMM2,[EAX]; // XMM2: min values
           //mov      EAX,offsetof fmax4[0];
           //movntdqa XMM3,[EAX]; // XMM3: max values
-          mov       EAX,offsetof mvol[0]; // source
+          mov       EAX,offsetof mvolf[0]; // source
           //movntdqa  XMM4,[EAX]; // XMM4: multipliers (sse4.1)
           movaps    XMM4,[EAX];
           // source and dest are aligned
@@ -1251,7 +1306,7 @@ void sndPlayTreadFunc () {
       if (consumed) {
         // buffer consumed
         // fix channel playing time
-        synchronized (sndMutexChanRW.writer) {
+        enum doer = q{
           if (firstFreeChan > 0) {
             foreach (immutable idx; 0..chans.length) {
               auto ch = chans.ptr+idx;
@@ -1263,6 +1318,13 @@ void sndPlayTreadFunc () {
               }
             }
           }
+        }; // doer
+        version(follin_use_spinrw) {
+          sndMutexChanRW.writeLock();
+          mixin(doer);
+          sndMutexChanRW.writeUnlock();
+        } else {
+          synchronized (sndMutexChanRW.writer) { mixin(doer); }
         }
         b2p = (b2p+1)%bufcount;
         atomicStore(sndbufToPlay, b2p);
