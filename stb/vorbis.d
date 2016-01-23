@@ -119,6 +119,7 @@ public struct stb_vorbis_alloc {
 
 ///////////   FUNCTIONS USEABLE WITH ALL INPUT MODES
 
+/*
 public struct stb_vorbis_info {
   uint sample_rate;
   int channels;
@@ -129,6 +130,8 @@ public struct stb_vorbis_info {
 
   int max_frame_size;
 }
+*/
+
 
 /* ************************************************************************** *
 // get general information about the file
@@ -1758,9 +1761,9 @@ private void decode_residue (VorbisDecoder f, ref float*[STB_VORBIS_MAX_CHANNELS
   int part_read = n_read/r.part_size;
   uint temp_alloc_point = temp_alloc_save(f);
   version(STB_VORBIS_DIVIDES_IN_RESIDUE) {
-    int** classifications = cast(int**)mixin(temp_block_array!("f.channels", "part_read*int.sizeof"));
+    int** classifications = cast(int**)mixin(temp_block_array!("f.vrchannels", "part_read*int.sizeof"));
   } else {
-    ubyte*** part_classdata = cast(ubyte***)mixin(temp_block_array!("f.channels", "part_read*(ubyte*).sizeof"));
+    ubyte*** part_classdata = cast(ubyte***)mixin(temp_block_array!("f.vrchannels", "part_read*(ubyte*).sizeof"));
   }
 
   //stb_prof(2);
@@ -2587,7 +2590,7 @@ private int vorbis_decode_packet_rest (VorbisDecoder f, int* len, Mode* m, int l
   n2 = n>>1;
 
   //stb_prof(1);
-  foreach (immutable i; 0..f.channels) {
+  foreach (immutable i; 0..f.vrchannels) {
     int s = map.chan[i].mux, floor;
     zero_channel[i] = false;
     floor = map.submap_floor.ptr[s];
@@ -2673,7 +2676,7 @@ private int vorbis_decode_packet_rest (VorbisDecoder f, int* len, Mode* m, int l
   //debug(stb_vorbis) if (f.alloc.alloc_buffer) assert(f.alloc.alloc_buffer_length_in_bytes == f.temp_offset);
 
   // re-enable coupled channels if necessary
-  memcpy(really_zero_channel.ptr, zero_channel.ptr, (really_zero_channel[0]).sizeof*f.channels);
+  memcpy(really_zero_channel.ptr, zero_channel.ptr, (really_zero_channel[0]).sizeof*f.vrchannels);
   foreach (immutable i; 0..map.coupling_steps) {
     if (!zero_channel[map.chan[i].magnitude] || !zero_channel[map.chan[i].angle]) {
       zero_channel[map.chan[i].magnitude] = zero_channel[map.chan[i].angle] = false;
@@ -2685,7 +2688,7 @@ private int vorbis_decode_packet_rest (VorbisDecoder f, int* len, Mode* m, int l
     float*[STB_VORBIS_MAX_CHANNELS] residue_buffers;
     ubyte[256] do_not_decode = void;
     int ch = 0;
-    foreach (immutable j; 0..f.channels) {
+    foreach (immutable j; 0..f.vrchannels) {
       if (map.chan[j].mux == i) {
         if (zero_channel[j]) {
           do_not_decode[ch] = true;
@@ -2723,7 +2726,7 @@ private int vorbis_decode_packet_rest (VorbisDecoder f, int* len, Mode* m, int l
 
   // finish decoding the floors
   version(STB_VORBIS_NO_DEFER_FLOOR) {
-    foreach (immutable i; 0..f.channels) {
+    foreach (immutable i; 0..f.vrchannels) {
       if (really_zero_channel[i]) {
         memset(f.channel_buffers.ptr[i], 0, (*f.channel_buffers.ptr[i]).sizeof*n2);
       } else {
@@ -2732,7 +2735,7 @@ private int vorbis_decode_packet_rest (VorbisDecoder f, int* len, Mode* m, int l
     }
   } else {
     //stb_prof(15);
-    foreach (immutable i; 0..f.channels) {
+    foreach (immutable i; 0..f.vrchannels) {
       if (really_zero_channel[i]) {
         memset(f.channel_buffers.ptr[i], 0, (*f.channel_buffers.ptr[i]).sizeof*n2);
       } else {
@@ -2743,7 +2746,7 @@ private int vorbis_decode_packet_rest (VorbisDecoder f, int* len, Mode* m, int l
 
   // INVERSE MDCT
   //stb_prof(16);
-  foreach (immutable i; 0..f.channels) inverse_mdct(f.channel_buffers.ptr[i], n, f, m.blockflag);
+  foreach (immutable i; 0..f.vrchannels) inverse_mdct(f.channel_buffers.ptr[i], n, f, m.blockflag);
   //stb_prof(0);
 
   // this shouldn't be necessary, unless we exited on an error
@@ -2832,7 +2835,7 @@ private int vorbis_finish_frame (VorbisDecoder f, int len, int left, int right) 
   if (f.previous_length) {
     int n = f.previous_length;
     float *w = get_window(f, n);
-    foreach (immutable i; 0..f.channels) {
+    foreach (immutable i; 0..f.vrchannels) {
       foreach (immutable j; 0..n) {
         (f.channel_buffers.ptr[i])[left+j] =
           (f.channel_buffers.ptr[i])[left+j]*w[    j]+
@@ -2852,7 +2855,7 @@ private int vorbis_finish_frame (VorbisDecoder f, int len, int left, int right) 
   // channel_buffers couldn't be temp mem (although they're NOT
   // currently temp mem, they could be (unless we want to level
   // performance by spreading out the computation))
-  foreach (immutable i; 0..f.channels) {
+  foreach (immutable i; 0..f.vrchannels) {
     for (uint j = 0; right+j < len; ++j) (f.previous_window.ptr[i])[j] = (f.channel_buffers.ptr[i])[right+j];
   }
 
@@ -2960,8 +2963,8 @@ private int start_decoder (VorbisDecoder f) {
   if (!vorbis_validate(header.ptr)) return error(f, STBVorbisError.invalid_first_page);
   // vorbis_version
   if (get32(f) != 0) return error(f, STBVorbisError.invalid_first_page);
-  f.channels = get8(f); if (!f.channels) return error(f, STBVorbisError.invalid_first_page);
-  if (f.channels > STB_VORBIS_MAX_CHANNELS) return error(f, STBVorbisError.too_many_channels);
+  f.vrchannels = get8(f); if (!f.vrchannels) return error(f, STBVorbisError.invalid_first_page);
+  if (f.vrchannels > STB_VORBIS_MAX_CHANNELS) return error(f, STBVorbisError.too_many_channels);
   f.sample_rate = get32(f); if (!f.sample_rate) return error(f, STBVorbisError.invalid_first_page);
   get32(f); // bitrate_maximum
   get32(f); // bitrate_nominal
@@ -3391,17 +3394,17 @@ private int start_decoder (VorbisDecoder f) {
     Mapping* m = f.mapping+i;
     int mapping_type = get_bits!16(f);
     if (mapping_type != 0) return error(f, STBVorbisError.invalid_setup);
-    m.chan = setup_malloc!MappingChannel(f, f.channels);
+    m.chan = setup_malloc!MappingChannel(f, f.vrchannels);
     if (m.chan is null) return error(f, STBVorbisError.outofmem);
     m.submaps = (get_bits!1(f) ? get_bits_add_no!4(f, 1) : 1);
     if (m.submaps > max_submaps) max_submaps = m.submaps;
     if (get_bits!1(f)) {
       m.coupling_steps = get_bits_add_no!8(f, 1);
       foreach (immutable k; 0..m.coupling_steps) {
-        m.chan[k].magnitude = cast(ubyte)get_bits_main(f, ilog(f.channels-1)); //k8
-        m.chan[k].angle = cast(ubyte)get_bits_main(f, ilog(f.channels-1)); //k8
-        if (m.chan[k].magnitude >= f.channels) return error(f, STBVorbisError.invalid_setup);
-        if (m.chan[k].angle     >= f.channels) return error(f, STBVorbisError.invalid_setup);
+        m.chan[k].magnitude = cast(ubyte)get_bits_main(f, ilog(f.vrchannels-1)); //k8
+        m.chan[k].angle = cast(ubyte)get_bits_main(f, ilog(f.vrchannels-1)); //k8
+        if (m.chan[k].magnitude >= f.vrchannels) return error(f, STBVorbisError.invalid_setup);
+        if (m.chan[k].angle     >= f.vrchannels) return error(f, STBVorbisError.invalid_setup);
         if (m.chan[k].magnitude == m.chan[k].angle) return error(f, STBVorbisError.invalid_setup);
       }
     } else {
@@ -3411,13 +3414,13 @@ private int start_decoder (VorbisDecoder f) {
     // reserved field
     if (get_bits!2(f)) return error(f, STBVorbisError.invalid_setup);
     if (m.submaps > 1) {
-      foreach (immutable j; 0..f.channels) {
+      foreach (immutable j; 0..f.vrchannels) {
         m.chan[j].mux = get_bits!4(f);
         if (m.chan[j].mux >= m.submaps) return error(f, STBVorbisError.invalid_setup);
       }
     } else {
       // @SPECIFICATION: this case is missing from the spec
-      foreach (immutable j; 0..f.channels) m.chan[j].mux = 0;
+      foreach (immutable j; 0..f.vrchannels) m.chan[j].mux = 0;
     }
     foreach (immutable j; 0..m.submaps) {
       get_bits!8(f); // discard
@@ -3445,7 +3448,7 @@ private int start_decoder (VorbisDecoder f) {
 
   f.previous_length = 0;
 
-  foreach (immutable i; 0..f.channels) {
+  foreach (immutable i; 0..f.vrchannels) {
     f.channel_buffers.ptr[i] = setup_malloc!float(f, f.blocksize_1);
     f.previous_window.ptr[i] = setup_malloc!float(f, f.blocksize_1/2);
     f.finalY.ptr[i]          = setup_malloc!short(f, longest_floorlist);
@@ -3481,9 +3484,9 @@ private int start_decoder (VorbisDecoder f) {
       if (part_read > max_part_read) max_part_read = part_read;
     }
     version(STB_VORBIS_DIVIDES_IN_RESIDUE) {
-      classify_mem = f.channels*((void*).sizeof+max_part_read*(int*).sizeof);
+      classify_mem = f.vrchannels*((void*).sizeof+max_part_read*(int*).sizeof);
     } else {
-      classify_mem = f.channels*((void*).sizeof+max_part_read*(ubyte*).sizeof);
+      classify_mem = f.vrchannels*((void*).sizeof+max_part_read*(ubyte*).sizeof);
     }
     f.temp_memory_required = classify_mem;
     if (imdct_mem > f.temp_memory_required) f.temp_memory_required = imdct_mem;
@@ -4181,7 +4184,7 @@ public:
       foreach (immutable i; 0..this.mapping_count) setup_free(this, this.mapping[i].chan);
       setup_free(this, this.mapping);
     }
-    foreach (immutable i; 0..(this.channels > STB_VORBIS_MAX_CHANNELS ? STB_VORBIS_MAX_CHANNELS : this.channels)) {
+    foreach (immutable i; 0..(this.vrchannels > STB_VORBIS_MAX_CHANNELS ? STB_VORBIS_MAX_CHANNELS : this.vrchannels)) {
       setup_free(this, this.channel_buffers.ptr[i]);
       setup_free(this, this.previous_window.ptr[i]);
       version(STB_VORBIS_NO_DEFER_FLOOR) setup_free(this, this.floor_buffers.ptr[i]);
@@ -4206,7 +4209,7 @@ public:
     stfl = null;
 
     sample_rate = 0;
-    channels = 0;
+    vrchannels = 0;
 
     setup_memory_required = 0;
     temp_memory_required = 0;
@@ -4308,7 +4311,7 @@ public:
   @property const pure {
     int getSampleOffset () { return (current_loc_valid ? current_loc : -1); }
 
-    @property ubyte chans () { return (isOpened ? cast(ubyte)this.channels : 0); }
+    @property ubyte chans () { return (isOpened ? cast(ubyte)this.vrchannels : 0); }
     @property uint sampleRate () { return (isOpened ? this.sample_rate : 0); }
     @property uint maxFrameSize () { return (isOpened ? this.blocksize_1>>1 : 0); }
 
@@ -4397,9 +4400,9 @@ public:
 
     // success!
     len = vorbis_finish_frame(this, len, left, right);
-    foreach (immutable i; 0..this.channels) this.outputs.ptr[i] = this.channel_buffers.ptr[i]+left;
+    foreach (immutable i; 0..this.vrchannels) this.outputs.ptr[i] = this.channel_buffers.ptr[i]+left;
 
-    if (channels) *channels = this.channels;
+    if (channels) *channels = this.vrchannels;
     *samples = len;
     *output = this.outputs.ptr;
     return this.stream-data;
@@ -4560,12 +4563,12 @@ public:
     }
 
     len = vorbis_finish_frame(this, len, left, right);
-    foreach (immutable i; 0..this.channels) this.outputs.ptr[i] = this.channel_buffers.ptr[i]+left;
+    foreach (immutable i; 0..this.vrchannels) this.outputs.ptr[i] = this.channel_buffers.ptr[i]+left;
 
     channel_buffer_start = left;
     channel_buffer_end = left+len;
 
-    if (channels) *channels = this.channels;
+    if (channels) *channels = this.vrchannels;
     if (output) *output = this.outputs.ptr;
     return len;
   }
@@ -4593,64 +4596,66 @@ public:
     vorbis_deinit(&p);
     return null;
   }
+  +/
 
   // s16 samples API
-  public int stb_vorbis_get_frame_short (VorbisDecoder this, int num_c, short** buffer, int num_samples) {
+  int getFrameShort (int num_c, short** buffer, int num_samples) {
     float** output;
-    int len = stb_vorbis_get_frame_float(this, null, &output);
+    int len = getFrameFloat(null, &output);
     if (len > num_samples) len = num_samples;
-    if (len) convert_samples_short(num_c, buffer, 0, this.channels, output, 0, len);
+    if (len) convert_samples_short(num_c, buffer, 0, vrchannels, output, 0, len);
     return len;
   }
 
-  public int stb_vorbis_get_frame_short_interleaved (VorbisDecoder this, int num_c, short* buffer, int num_shorts) {
-    float **output;
+  int getFrameShortInterleaved (int num_c, short* buffer, int num_shorts) {
+    float** output;
     int len;
-    if (num_c == 1) return stb_vorbis_get_frame_short(this, num_c, &buffer, num_shorts);
-    len = stb_vorbis_get_frame_float(this, null, &output);
+    if (num_c == 1) return getFrameShort(num_c, &buffer, num_shorts);
+    len = getFrameFloat(null, &output);
     if (len) {
       if (len*num_c > num_shorts) len = num_shorts/num_c;
-      convert_channels_short_interleaved(num_c, buffer, this.channels, output, 0, len);
+      convert_channels_short_interleaved(num_c, buffer, vrchannels, output, 0, len);
     }
     return len;
   }
 
-  public int stb_vorbis_get_samples_short_interleaved (VorbisDecoder this, int channels, short* buffer, int num_shorts) {
+  int getSamplesShortInterleaved (int channels, short* buffer, int num_shorts) {
     float** outputs;
     int len = num_shorts/channels;
     int n = 0;
-    int z = this.channels;
+    int z = this.vrchannels;
     if (z > channels) z = channels;
     while (n < len) {
-      int k = this.channel_buffer_end-this.channel_buffer_start;
+      int k = channel_buffer_end-channel_buffer_start;
       if (n+k >= len) k = len-n;
-      if (k) convert_channels_short_interleaved(channels, buffer, this.channels, this.channel_buffers.ptr, this.channel_buffer_start, k);
+      if (k) convert_channels_short_interleaved(channels, buffer, vrchannels, channel_buffers.ptr, channel_buffer_start, k);
       buffer += k*channels;
       n += k;
-      this.channel_buffer_start += k;
+      channel_buffer_start += k;
       if (n == len) break;
-      if (!stb_vorbis_get_frame_float(this, null, &outputs)) break;
+      if (!getFrameFloat(null, &outputs)) break;
     }
     return n;
   }
 
-  public int stb_vorbis_get_samples_short (VorbisDecoder this, int channels, short** buffer, int len) {
+  int getSamplesShort (int channels, short** buffer, int len) {
     float** outputs;
     int n = 0;
-    int z = this.channels;
+    int z = this.vrchannels;
     if (z > channels) z = channels;
     while (n < len) {
-      int k = this.channel_buffer_end-this.channel_buffer_start;
+      int k = channel_buffer_end-channel_buffer_start;
       if (n+k >= len) k = len-n;
-      if (k) convert_samples_short(channels, buffer, n, this.channels, this.channel_buffers.ptr, this.channel_buffer_start, k);
+      if (k) convert_samples_short(channels, buffer, n, vrchannels, channel_buffers.ptr, channel_buffer_start, k);
       n += k;
-      this.channel_buffer_start += k;
+      channel_buffer_start += k;
       if (n == len) break;
-      if (!stb_vorbis_get_frame_float(this, null, &outputs)) break;
+      if (!getFrameFloat(null, &outputs)) break;
     }
     return n;
   }
 
+  /+
   public int stb_vorbis_decode_filename (string filename, int* channels, int* sample_rate, short** output) {
     import core.stdc.stdlib : malloc, realloc;
 
@@ -4658,8 +4663,8 @@ public:
     short* data;
     VorbisDecoder v = stb_vorbis_open_filename(filename, &error, null);
     if (v is null) return -1;
-    limit = v.channels*4096;
-    *channels = v.channels;
+    limit = v.vrchannels*4096;
+    *channels = v.vrchannels;
     if (sample_rate) *sample_rate = v.sample_rate;
     offset = data_len = 0;
     total = limit;
@@ -4669,10 +4674,10 @@ public:
       return -2;
     }
     for (;;) {
-      int n = stb_vorbis_get_frame_short_interleaved(v, v.channels, data+offset, total-offset);
+      int n = stb_vorbis_get_frame_short_interleaved(v, v.vrchannels, data+offset, total-offset);
       if (n == 0) break;
       data_len += n;
-      offset += n*v.channels;
+      offset += n*v.vrchannels;
       if (offset+limit > total) {
         short *data2;
         total *= 2;
@@ -4698,8 +4703,8 @@ public:
     short* data;
     VorbisDecoder v = stb_vorbis_open_memory(mem, len, &error, null);
     if (v is null) return -1;
-    limit = v.channels*4096;
-    *channels = v.channels;
+    limit = v.vrchannels*4096;
+    *channels = v.vrchannels;
     if (sample_rate) *sample_rate = v.sample_rate;
     offset = data_len = 0;
     total = limit;
@@ -4709,10 +4714,10 @@ public:
       return -2;
     }
     for (;;) {
-      int n = stb_vorbis_get_frame_short_interleaved(v, v.channels, data+offset, total-offset);
+      int n = stb_vorbis_get_frame_short_interleaved(v, v.vrchannels, data+offset, total-offset);
       if (n == 0) break;
       data_len += n;
-      offset += n*v.channels;
+      offset += n*v.vrchannels;
       if (offset+limit > total) {
         short *data2;
         total *= 2;
@@ -4735,7 +4740,7 @@ public:
     float** outputs;
     int len = num_floats/channels;
     int n = 0;
-    int z = this.channels;
+    int z = this.vrchannels;
     if (z > channels) z = channels;
     while (n < len) {
       int k = this.channel_buffer_end-this.channel_buffer_start;
@@ -4757,7 +4762,7 @@ public:
     import core.stdc.string : memcpy, memset;
     float** outputs;
     int n = 0;
-    int z = channels;
+    int z = vrchannels;
     if (z > achans) z = achans;
     while (n < num_samples) {
       int k = channel_buffer_end-channel_buffer_start;
@@ -4777,7 +4782,7 @@ public:
 private: // k8: 'cause i'm evil
   // user-accessible info
   uint sample_rate;
-  int channels;
+  int vrchannels;
 
   uint setup_memory_required;
   uint temp_memory_required;
