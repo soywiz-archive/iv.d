@@ -142,7 +142,7 @@ public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @
     auto blen = cast(uint)input.length;
     if (blen > 0) {
       //TODO: use aligned instructions
-      __gshared float[4] mvol = void;
+      align(64) __gshared float[4] mvol = void;
       mvol[] = 32768.0;
       asm nothrow @safe @nogc {
         mov      EAX,offsetof mvol[0]; // source
@@ -678,6 +678,8 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
 
 // ////////////////////////////////////////////////////////////////////////// //
 bool sndGenerateBuffer () {
+  version(follin_use_sse) align(64) __gshared float[4] zeroes = 0;
+
   static void killChan() (Channel* ch, ref bool channelsChanged) {
     if (ch.namelen) {
       channelsChanged = true;
@@ -704,7 +706,26 @@ bool sndGenerateBuffer () {
   synchronized (sndMutexChanRW.writer) {
     if (firstFreeChan > 0) {
       immutable bufsz = sndSamplesSize;
-      sndrsbufptr[0..sndSamplesSize] = 0.0f;
+      // use SSE to clear buffer, if we can
+      version(follin_use_sse) {
+        asm nothrow @safe @nogc {
+          mov      EAX,[sndrsbufptr];
+          // ECX = (sndSamplesSize+3)/4
+          mov      ECX,[sndSamplesSize];
+          add      ECX,3;
+          shr      ECX,2;
+          mov      EBX,offsetof zeroes[0];
+          movntdqa XMM0,[EBX]; // non-temporal, don't bring zeroes to cache
+          align 8;
+         loopsseclear_x0:
+          movaps   [EAX],XMM0; // dest is always aligned
+          add      EAX,16;
+          dec      ECX;
+          jnz      loopsseclear_x0;
+        }
+      } else {
+        sndrsbufptr[0..sndSamplesSize] = 0.0f;
+      }
       //{ import core.stdc.stdio; printf("filling buffer %u\n", buf2fill); }
       foreach (immutable cidx; 0..chans.length) {
         auto ch = chans.ptr+cidx;
@@ -752,129 +773,199 @@ bool sndGenerateBuffer () {
             //{ import core.stdc.stdio; printf("trying to get %u frames, got %u frames...\n", (bufsz-ch.bufpos)/2, fblen); }
             if (fblen == 0) { killChan(ch, channelsChanged); break; }
             // do volume
-            if (ch.lastvolL+ch.lastvolR == 0) {
+            auto bptr = ch.bufptr+ch.bufpos;
+            ch.bufpos += fblen*2; // frames to samples
+            if ((ch.lastvolL|ch.lastvolR) == 0) {
               // silent
-              ch.bufptr[ch.bufpos..bufsz] = 0.0f;
+              version(follin_use_sse) {
+                asm nothrow @safe @nogc {
+                  mov      EAX,[bptr];
+                  mov      EBX,offsetof zeroes[0];
+                  movntdqa XMM0,[EBX]; // non-temporal
+                  mov      ECX,[fblen];
+                  mov      EDX,8;
+                  // is buffer aligned?
+                  // process floats one-by-one if not
+                 zerovol_unaligned:
+                  test     EAX,0x0f;
+                  jz       zerovol_aligned;
+                  // using `movsd` brings some penalty here, but meh...
+                  movsd    [EAX],XMM0; // store two floats (single double)
+                  add      EAX,EDX;
+                  dec      ECX;
+                  jnz      zerovol_unaligned;
+                  jmp      zerovol_done;
+                 zerovol_aligned:
+                  mov      EDX,16;
+                  // ECX = (xlen+1)/2
+                  inc      ECX;
+                  shr      ECX,1;
+                  align 8;
+                 zerovol:
+                  movaps   [EAX],XMM0;
+                  add      EAX,EDX;
+                  dec      ECX;
+                  jnz      zerovol;
+                 zerovol_done:;
+               }
+              } else {
+                //ch.bufptr[ch.bufpos..bufsz] = 0.0f;
+                bptr[0..fblen*2] = 0;
+              }
             } else {
               version(follin_use_sse) {
                 if (ch.lastvolL != 255 || ch.lastvolR != 255) {
-                  __gshared float[4] mul = void;
+                  align(64) __gshared float[4] mul = void;
                   mul[0] = mul[2] = (1.0f/255.0f)*cast(float)ch.lastvolL;
                   mul[1] = mul[3] = (1.0f/255.0f)*cast(float)ch.lastvolR;
-                  auto bptr = ch.bufptr+ch.bufpos;
-                  auto blen = (fblen+1)/2;
                   asm nothrow @safe @nogc {
-                    mov     EAX,[bptr];
-                    mov     EBX,offsetof mul[0];
-                    mov     ECX,[blen];
-                    movups  XMM1,[EBX];
+                    mov      EAX,[bptr];
+                    mov      EBX,offsetof mul[0];
+                    movntdqa XMM1,[EBX]; // non-temporal, don't bring volumes to cache
+                    mov      ECX,[fblen];
+                    mov      EDX,8;
+                    // is buffer aligned?
+                    // process floats one-by-one if not
+                   addloopchvol_unaligned:
+                    test     EAX,0x0f;
+                    jz       addloopchvol_aligned;
+                    // using `movsd` brings some penalty here, but meh...
+                    movsd    XMM3,[EAX]; // load two floats (single double), clear others
+                    mulps    XMM3,XMM1;
+                    movsd    [EAX],XMM3; // store two floats (single double)
+                    add      EAX,EDX;
+                    dec      ECX;
+                    jnz      addloopchvol_unaligned;
+                    jmp      addloopchvol_done;
+                   addloopchvol_aligned:
+                    mov      EDX,16;
+                    // ECX = (xlen+1)/2
+                    inc      ECX;
+                    shr      ECX,1;
                     align 8;
                    addloopchvol:
-                    movups  XMM0,[EAX];
-                    mulps   XMM0,XMM1;
-                    movups  [EAX],XMM0;
-                    add     EAX,16;
-                    dec     ECX;
-                    jnz     addloopchvol;
+                    movaps   XMM0,[EAX];
+                    mulps    XMM0,XMM1;
+                    movaps   [EAX],XMM0;
+                    add      EAX,EDX;
+                    dec      ECX;
+                    jnz      addloopchvol;
+                   addloopchvol_done:;
                   }
                 }
               } else {
-                // left
-                immutable float mulL = (1.0f/255.0f)*cast(float)ch.lastvolL;
-                immutable float mulR = (1.0f/255.0f)*cast(float)ch.lastvolR;
                 // do volume
-                auto d = ch.bufptr+ch.bufpos;
-                foreach (immutable _; 0..fblen) {
-                  *d++ *= mulL;
-                  *d++ *= mulR;
+                if (ch.lastvolL != 255 || ch.lastvolR != 255) {
+                  immutable float mulL = (1.0f/255.0f)*cast(float)ch.lastvolL;
+                  immutable float mulR = (1.0f/255.0f)*cast(float)ch.lastvolR;
+                  foreach (immutable _; 0..fblen) {
+                    *bptr++ *= mulL;
+                    *bptr++ *= mulR;
+                  }
                 }
               } // version
             }
-            ch.bufpos += fblen*2; // frames to samples
-          }
-          if (ch.lastquality < 0 && ch.bufpos < bufsz) ch.cub.reset(); // it is fast
+          } // while
 
           //{ import core.stdc.stdio; printf("have %u frames out of %u\n", ch.bufpos/2, bufsz/2); }
           // if we have any data in channel buffer, resample it
-          uint bsused = void;
+          uint blen = void, bsused = void;
+          float* xss = void;
+          auto xdd = sndrsbufptr+rspos;
           if (ch.lastsrate != realSampleRate) {
             // resample
+            xss = tmprsbufptr+rspos;
             bsused = 0;
-            uint tspos = rspos;
-            while (bsused < ch.bufpos && tspos < bufsz) {
+            blen = 0;
+            while (bsused < ch.bufpos && rspos < bufsz) {
               srbdata.dataIn = ch.bufptr[bsused..ch.bufpos];
-              srbdata.dataOut = tmprsbufptr[tspos..bufsz];
+              srbdata.dataOut = tmprsbufptr[rspos..bufsz];
               //{ import core.stdc.stdio; printf("realSampleRate=%u; ch.lastsrate=%u\n", realSampleRate, ch.lastsrate); }
               err = (ch.useCubic ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break; }
               //{ import core.stdc.stdio; printf("inused: %u of %u; outused: %u of %u; bsused=%u\n", srbdata.inputSamplesUsed, cast(uint)srbdata.dataIn.length, srbdata.outputSamplesUsed, cast(uint)srbdata.dataOut.length, bsused); }
               bsused += srbdata.inputSamplesUsed;
-              tspos += srbdata.outputSamplesUsed;
+              rspos += srbdata.outputSamplesUsed;
+              blen += srbdata.outputSamplesUsed;
             }
-            //{ import core.stdc.stdio; printf("resampled %u frames to %u frames\n", bsused/2, (tspos-rspos)/2); }
-            // mix
-            // will clamp later
-            version(follin_use_sse) {
-              if (rspos < tspos) {
-                auto s = tmprsbufptr+rspos;
-                auto d = sndrsbufptr+rspos;
-                auto blen = (tspos-rspos+3)/4;
-                asm nothrow @safe @nogc {
-                  mov     EAX,[d];
-                  mov     EBX,[s];
-                  mov     ECX,[blen];
-                  align 8;
-                 addloopchmix:
-                  movups  XMM0,[EAX];
-                  movups  XMM1,[EBX];
-                  addps   XMM0,XMM1;
-                  movups  [EAX],XMM0;
-                  add     EAX,16;
-                  add     EBX,16;
-                  dec     ECX;
-                  jnz     addloopchmix;
-                }
-              }
-            } else {
-              auto s = tmprsbufptr+rspos;
-              auto d = sndrsbufptr+rspos;
-              foreach (immutable _; rspos..tspos) *d++ += *s++;
-            }
-            ch.genFrames += (tspos-rspos)/2;
-            //{ import core.stdc.stdio; printf("  +f: %u\n", (tspos-rspos)/2); }
-            rspos += tspos;
           } else {
-            // mix directly
-            bsused = ch.bufpos;
-            if (bsused > bufsz-rspos) bsused = bufsz-rspos;
-            auto s = ch.bufptr;
-            auto d = sndrsbufptr+rspos;
-            // will clamp later
-            if (bsused > 0) {
-              version(follin_use_sse) {
-                auto blen = (bsused+3)/4;
-                asm nothrow @safe @nogc {
-                  mov     EAX,[d];
-                  mov     EBX,[s];
-                  mov     ECX,[blen];
-                  align 8;
-                 addloopchmix1:
-                  movups  XMM0,[EAX];
-                  movups  XMM1,[EBX];
-                  addps   XMM0,XMM1;
-                  movups  [EAX],XMM0;
-                  add     EAX,16;
-                  add     EBX,16;
-                  dec     ECX;
-                  jnz     addloopchmix1;
-                }
+            // no need to resample, can use data as-is
+            xss = ch.bufptr;
+            bsused = blen = ch.bufpos;
+            rspos += blen;
+          }
+          // if we have something to mix...
+          if (blen) {
+            // ...mix it; will clamp data later (this should theoretically improve mixing quality)
+            ch.genFrames += blen/2;
+            version(follin_use_sse) {
+              asm nothrow @safe @nogc {
+                mov     ECX,[blen];
+                mov     EAX,[xdd];
+                mov     EBX,[xss];
+                // dest may be unaligned, check it
+                test    EAX,0x0f;
+                jz      diraddmix_daligned;
+                // here we should process some floats to become aligned again
+                mov     EDX,EAX;
+                shr     EDX,2;
+                and     EDX,0x03;
+                // now DL is the number of unaligned floats
+                jz      diraddmix_daligned;
+                sub     ECX,EDX; // will check ECX later
+                // we can do it faster by unrolling here, but meh...
+                mov     DH,3;
+               diraddmix_unaligned:
+                movss   XMM2,[EBX]; // load single float, clear others
+                movss   XMM3,[EAX]; // load single float, clear others
+                addps   XMM3,XMM2;
+                movss   [EAX],XMM3; // store single float
+                add     EAX,4;
+                add     EBX,4;
+                inc     DL;
+                and     DL,DH;
+                jnz     diraddmix_unaligned;
+                // ECX is actually really small, so check the high bit to detect overflow
+                test    ECX,0x8000_0000U;
+                jnz     diraddmix_done;
+                // has something more to do
+               diraddmix_daligned:
+                // ECX=(blen+3)/4;
+                mov     EDX,16; // memory increment
+                add     ECX,3;
+                shr     ECX,2;
+                // is source aligned too?
+                test    EBX,0x0f;
+                jnz     diraddmix_bad;
+                // good case: source is aligned
+                align 8;
+               diraddmix_good:
+                movaps  XMM0,[EAX];
+                movaps  XMM1,[EBX];
+                addps   XMM0,XMM1;
+                movaps  [EAX],XMM0;
+                add     EAX,EDX;
+                add     EBX,EDX;
+                dec     ECX;
+                jnz     diraddmix_good;
+                jmp     diraddmix_done;
+                // bad case: source is not aligned
+                align 8;
+               diraddmix_bad:
+                movaps  XMM0,[EAX];
+                movups  XMM1,[EBX];
+                addps   XMM0,XMM1;
+                movaps  [EAX],XMM0;
+                add     EAX,EDX;
+                add     EBX,EDX;
+                dec     ECX;
+                jnz     diraddmix_bad;
+               diraddmix_done:;
               }
             } else {
-              foreach (immutable _; 0..bsused) *d++ += *s++;
+              // no sse
+              foreach (immutable _; 0..blen) *d++ += *s++;
             }
-            rspos += bsused;
-            ch.genFrames += bsused/2;
-            //{ import core.stdc.stdio; printf("  +f: %u\n", bsused/2); }
           }
 
           // remove data from input buffer
@@ -888,38 +979,73 @@ bool sndGenerateBuffer () {
 
           // if this channel is paused or dead, do not try to process it again
           if (ch.chan is null || ch.chan.paused) {
-          // try to squeeze last resampled data bytes out of it
+            // try to squeeze last resampled data bytes out of it
             if (rspos < bufsz && ch.lastsrate != realSampleRate) {
+              // here we can shift tmprsbufptr to get both buffers aligned
+              blen = bufsz-rspos; // we don't need more than this
+              xss = tmprsbufptr+(rspos&0x03); // if rspos is not aligned, shift xss
               srbdata.dataIn = null;
-              srbdata.dataOut = tmprsbufptr[rspos..bufsz];
+              srbdata.dataOut = xss[0..blen];
               err = (ch.useCubic ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break chmixloop; }
+              if (ch.lastquality < 0 && ch.bufpos < bufsz) ch.cub.reset(); // it is fast
               if (srbdata.outputSamplesUsed) {
-                // mix
-                auto s = tmprsbufptr+rspos;
-                auto d = sndrsbufptr+rspos;
-                // will clamp later
+                // ...mix it; will clamp data later (this should theoretically improve mixing quality)
+                xdd = sndrsbufptr+rspos;
+                rspos += srbdata.outputSamplesUsed;
                 version(follin_use_sse) {
-                  auto blen = (srbdata.outputSamplesUsed+3)/4;
+                  blen = srbdata.outputSamplesUsed;
                   asm nothrow @safe @nogc {
-                    mov     EAX,[d];
-                    mov     EBX,[s];
+                    mov     EAX,[xdd];
+                    mov     EBX,[xss];
                     mov     ECX,[blen];
+                    // dest may be unaligned, check it
+                    test    EAX,0x0f;
+                    jz      diraddmix2_daligned;
+                    // here we should process some floats to become aligned again
+                    mov     EDX,EAX;
+                    shr     EDX,2;
+                    and     EDX,0x03;
+                    // now DL is the number of unaligned floats
+                    jz      diraddmix2_daligned;
+                    sub     ECX,EDX; // will check ECX later
+                    // we can do it faster by unrolling here, but meh...
+                    mov     DH,3;
+                   diraddmix2_unaligned:
+                    movss   XMM2,[EBX]; // load single float, clear others
+                    movss   XMM3,[EAX]; // load single float, clear others
+                    addps   XMM3,XMM2;
+                    movss   [EAX],XMM3; // store single float
+                    add     EAX,4;
+                    add     EBX,4;
+                    inc     DL;
+                    and     DL,DH;
+                    jnz     diraddmix2_unaligned;
+                    // ECX is actually really small, so check the high bit to detect overflow
+                    test    ECX,0x8000_0000U;
+                    jnz     diraddmix2_done;
+                    // has something more to do
+                   diraddmix2_daligned:
+                    // ECX=(blen+3)/4;
+                    mov     EDX,16; // memory increment
+                    add     ECX,3;
+                    shr     ECX,2;
+                    // source is aligned too
                     align 8;
-                   addloopchmix2:
-                    movups  XMM0,[EAX];
-                    movups  XMM1,[EBX];
+                   diraddmix2_good:
+                    movaps  XMM0,[EAX];
+                    movaps  XMM1,[EBX];
                     addps   XMM0,XMM1;
-                    movups  [EAX],XMM0;
-                    add     EAX,16;
-                    add     EBX,16;
+                    movaps  [EAX],XMM0;
+                    add     EAX,EDX;
+                    add     EBX,EDX;
                     dec     ECX;
-                    jnz     addloopchmix2;
+                    jnz     diraddmix2_good;
+                   diraddmix2_done:;
                   }
                 } else {
-                  foreach (immutable _; 0..srbdata.outputSamplesUsed) *d++ += *s++;
+                  foreach (immutable _; 0..srbdata.outputSamplesUsed) *xdd++ += *xss++;
                 }
-                rspos += srbdata.outputSamplesUsed;
               }
             }
             break;
@@ -938,30 +1064,51 @@ bool sndGenerateBuffer () {
     // something is playing, mix it
     auto mvolL = cast(ubyte)atomicLoad(sndMasterVolumeL);
     auto mvolR = cast(ubyte)atomicLoad(sndMasterVolumeR);
-    if (mvolL+mvolR == 0) {
-      dp[0..sndSamplesSize] = 0;
+    if ((mvolL|mvolR) == 0) {
+      version(follin_use_sse) {
+        asm nothrow @safe @nogc {
+          mov      ECX,[sndSamplesSize];
+          // (sndSamplesSize+7)/8 -- destination is s16, not float
+          add      ECX,7;
+          shr      ECX,3;
+          mov      EAX,[dp]; // dest, aligned
+          mov      EBX,offsetof zeroes[0]; // lucky me, floating zero is s16 zero too
+          movntdqa XMM0,[EBX]; // non-temporal, don't bring zeroes to cache
+          mov      EDX,16;
+          align 8;
+         lastzfill_loop:
+          movaps   [EAX],XMM0;
+          add      EAX,EDX;
+          dec      ECX;
+          jnz      lastzfill_loop;
+        }
+      } else {
+        dp[0..sndSamplesSize] = 0;
+      }
     } else {
       auto src = sndrsbufptr;
       version(follin_use_sse) {
-        //__gshared immutable float[4] fmin4 = -32768.0;
-        //__gshared immutable float[4] fmax4 = 32767.0;
-        __gshared float[4] mvol = void;
+        //align(64) __gshared float[4] fmin4 = -32768.0;
+        //align(64) __gshared float[4] fmax4 = 32767.0;
+        align(64) __gshared float[4] mvol = void;
         mvol[0] = mvol[2] = (32768.0/255.0f)*cast(float)mvolL;
         mvol[1] = mvol[3] = (32768.0/255.0f)*cast(float)mvolR;
         auto blen = (sndSamplesSize+3)/4;
         asm nothrow @safe @nogc {
           //mov      EAX,offsetof fmin4[0];
-          //movups   XMM2,[EAX]; // XMM2: min values
+          //movntdqa XMM2,[EAX]; // XMM2: min values
           //mov      EAX,offsetof fmax4[0];
-          //movups   XMM3,[EAX]; // XMM3: max values
+          //movntdqa XMM3,[EAX]; // XMM3: max values
           mov      EAX,offsetof mvol[0]; // source
-          movups   XMM4,[EAX]; // XMM4: multipliers
+          movntdqa XMM4,[EAX]; // XMM4: multipliers
+          // source and dest are aligned
           mov      EAX,[src]; // source
           mov      EBX,[dp]; // dest
           mov      ECX,[blen];
+          mov      EDX,16;
           align 8;
          finalloopmix:
-          movups   XMM0,[EAX];
+          movaps   XMM0,[EAX];
           mulps    XMM0,XMM4;    // mul by volume and shift
           //maxps    XMM0,XMM2;    // clip lower
           //minps    XMM0,XMM3;    // clip upper
@@ -978,7 +1125,7 @@ bool sndGenerateBuffer () {
           movq     [EBX],MM0;
         }
         asm nothrow @safe @nogc {
-          add     EAX,16;
+          add     EAX,EDX;
           add     EBX,8;
           dec     ECX;
           jnz     finalloopmix;
