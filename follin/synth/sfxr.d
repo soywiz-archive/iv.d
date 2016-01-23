@@ -26,6 +26,7 @@ import iv.stream;
 // ////////////////////////////////////////////////////////////////////////// //
 public struct Sfxr {
   // seed must not be 0
+  /*
   static ulong nextrand64 (ref ulong seed) nothrow @trusted @nogc {
     static if (__VERSION__ > 2067) pragma(inline, true);
     if (seed == 0) seed = 0x29a; // arbitrary number
@@ -43,7 +44,43 @@ public struct Sfxr {
     seed ^= seed>>27; // c
     return (seed*0x2545f4914f6cdd1dUL)&0xffff_ffffu;
   }
+  */
 
+  static uint nextrand32 (ref int seed) nothrow @trusted @nogc {
+    static if (__VERSION__ > 2067) pragma(inline, true);
+    if (!seed) seed = 0x29a; // arbitrary number
+    seed *= 16807;
+    return cast(uint)seed;
+  }
+
+  // fast floating point rand, suitable for noise
+  align(1) static union FITrick {
+  align(1):
+    float fres;
+    uint ires;
+  }
+
+  // gives [0..1] result (wow!)
+  static float nextfrand (ref int seed) nothrow @trusted @nogc {
+    static if (__VERSION__ > 2067) pragma(inline, true);
+    if (!seed) seed = 0x29a; // arbitrary number
+    seed *= 16807;
+    FITrick fi = void;
+    fi.ires = (((cast(uint)seed)>>9)|0x3f800000);
+    return fi.fres-1.0f;
+  }
+
+  // gives [-1..1] result (wow!)
+  static float nextfrandneg (ref int seed) nothrow @trusted @nogc {
+    static if (__VERSION__ > 2067) pragma(inline, true);
+    if (!seed) seed = 0x29a; // arbitrary number
+    seed *= 16807;
+    FITrick fi = void;
+    fi.ires = (((cast(uint)seed)>>9)|0x3f800000);
+    fi.fres -= 1.0f;
+    fi.ires ^= cast(uint)seed&0x8000_0000u;
+    return fi.fres;
+  }
 
   enum Type : int {
     Square, // 0
@@ -87,13 +124,13 @@ public struct Sfxr {
 
   float sound_vol = 0.5f;
 
-  ulong origSeed = 0x29a, curseed = 0x29a;
+  int origSeed = 0x29a, curseed = 0x29a;
 
 
-  void setSeed (ulong seed) nothrow @trusted @nogc { origSeed = curseed = seed; }
+  void setSeed (int seed) nothrow @trusted @nogc { origSeed = curseed = seed; }
 
   void reset () nothrow @safe @nogc {
-    ulong sd = origSeed;
+    uint sd = origSeed;
     this = this.init;
     origSeed = curseed = sd;
   }
@@ -268,7 +305,7 @@ public struct Sfxr {
   }
 
   uint rnd () nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return nextrand32(curseed); }
-  float frnd (float range) nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return (1.0f/16384.0f)*range*(nextrand32(curseed)%16384); }
+  float frnd (float range) nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return nextfrand(curseed)*range; }
 
   void rndPickup () nothrow @safe @nogc {
     reset();
@@ -445,13 +482,13 @@ public struct SfxrSample {
   int arp_time;
   int arp_limit;
   double arp_mod;
-  ulong curseed;
+  int curseed;
 
   this() (in auto ref Sfxr sfx) { reset(sfx); curseed = sfx.origSeed; }
 
-  void setSeed (ulong seed) nothrow @trusted @nogc { curseed = seed; }
+  void setSeed (int seed) nothrow @trusted @nogc { curseed = seed; }
 
-  float frnd (float range) nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return (1.0f/16384.0f)*range*(Sfxr.nextrand32(curseed)%16384); }
+  //float frnd (float range) nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return (1.0f/16384.0f)*range*(Sfxr.nextrand32(curseed)%16384); }
 
   @property bool playing () const pure nothrow @safe @nogc { return playing_sample; }
 
@@ -512,7 +549,7 @@ public struct SfxrSample {
     phaser_buffer[] = 0.0f;
     {
       auto nb = noise_buffer.ptr;
-      foreach (immutable _; 0..noise_buffer.length) *nb++ = frnd(2.0f)-1.0f;
+      foreach (immutable _; 0..noise_buffer.length) *nb++ = /*frnd(2.0f)-1.0f*/Sfxr.nextfrandneg(curseed);
     }
 
     rep_time = 0;
@@ -614,7 +651,7 @@ public struct SfxrSample {
           phase %= period;
           if (fx.wave_type == Sfxr.Type.Noise) {
             auto nb = noise_buffer.ptr;
-            foreach (immutable _0; 0..noise_buffer.length) *nb++ = frnd(2.0f)-1.0f;
+            foreach (immutable _0; 0..noise_buffer.length) *nb++ = /*frnd(2.0f)-1.0f*/Sfxr.nextfrandneg(curseed);
           }
         }
         // base waveform

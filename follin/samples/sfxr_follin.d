@@ -56,7 +56,7 @@ void main (string[] args) {
   scope(exit) tflDeinit();
 
   Sfxr sfxr;
-  sfxr.setSeed(uniform!"[]"(0, ulong.max));
+  sfxr.setSeed(uniform!"[]"(int.min, int.max));
 
   if (args.length > 1) {
     import std.stdio;
@@ -82,7 +82,7 @@ void main (string[] args) {
     }
     if (wantHelp) return;
     if (args[1] == "rnd") {
-      ulong seed = uniform!"[]"(0, ulong.max);
+      int seed = uniform!"[]"(int.min, int.max);
       int n = Sfxr.nextrand32(seed)%count;
       foreach (string mem; __traits(allMembers, Sfxr)) {
         static if (mem.length > 3 && mem[0..3] == "rnd" && mem[3] >= 'A' && mem[3] <= 'Z') {
