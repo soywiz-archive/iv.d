@@ -231,6 +231,7 @@ public:
     setRate(ainRate, aoutRate);
 
     if (auto filterErr = updateFilter()) { deinit(); return filterErr; }
+    skipZeros(); // make sure that the first samples to go out of the resamplers don't have leading zeros
 
     return Error.OK;
   }
@@ -384,6 +385,7 @@ public:
     sampFracNum[] = 0;
     //foreach (immutable i; 0..chanCount*(filterLen-1)) mem[i] = 0;
     if (mem !is null) mem[0..chanCount*(filterLen-1)] = 0;
+    skipZeros(); // make sure that the first samples to go out of the resamplers don't have leading zeros
   }
 
 private:
