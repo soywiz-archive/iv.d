@@ -930,7 +930,7 @@ bool sndGenerateBuffer () {
                diraddmix_unaligned:
                 movss   XMM2,[EBX]; // load single float, clear others
                 movss   XMM3,[EAX]; // load single float, clear others
-                addps   XMM3,XMM2;
+                addss   XMM3,XMM2;
                 movss   [EAX],XMM3; // store single float
                 add     EAX,4;
                 add     EBX,4;
@@ -976,7 +976,7 @@ bool sndGenerateBuffer () {
               }
             } else {
               // no sse
-              foreach (immutable _; 0..blen) *d++ += *s++;
+              foreach (immutable _; 0..blen) *xdd++ += *xss++;
             }
           }
 
@@ -1026,7 +1026,7 @@ bool sndGenerateBuffer () {
                    diraddmix2_unaligned:
                     movss   XMM2,[EBX]; // load single float, clear others
                     movss   XMM3,[EAX]; // load single float, clear others
-                    addps   XMM3,XMM2;
+                    addss   XMM3,XMM2;
                     movss   [EAX],XMM3; // store single float
                     add     EAX,4;
                     add     EBX,4;

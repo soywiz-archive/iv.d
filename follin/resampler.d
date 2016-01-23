@@ -74,6 +74,9 @@ module iv.follin.resampler;
    The latter both reduces CPU time and makes the algorithm more SIMD-friendly.
 */
 version = sincresample_use_full_table;
+version(X86) {
+  version = sincresample_use_sse;
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -764,7 +767,7 @@ void cubicCoef (float frac, float* interp) {
 int resamplerBasicDirect(T) (ref SpeexResampler st, uint chanIdx, const(float)* indata, uint* indataLen, float* outdata, uint* outdataLen)
 if (is(T == float) || is(T == double))
 {
-  immutable N = st.filterLen;
+  auto N = st.filterLen;
   static if (is(T == double)) assert(N%4 == 0);
   int outSample = 0;
   int lastSample = st.lastSample.ptr[chanIdx];
@@ -774,16 +777,71 @@ if (is(T == float) || is(T == double))
   immutable intAdvance = st.intAdvance;
   immutable fracAdvance = st.fracAdvance;
   immutable denRate = st.denRate;
-  T sum;
-
+  T sum = void;
   //static if (is(T == double)) T[4] accum;
   while (!(lastSample >= cast(int)(*indataLen) || outSample >= cast(int)(*outdataLen))) {
     const(float)* sinct = &sincTable[sampFracNum*N];
     const(float)* iptr = &indata[lastSample];
-
     static if (is(T == float)) {
-      sum = 0;
-      foreach (immutable j; 0..N) sum += sinct[j]*iptr[j];
+      // at least 2x speedup with SSE here
+      version(sincresample_use_sse) {
+        align(64) __gshared float[4] zero = 0;
+        asm nothrow @safe @nogc {
+          mov       ECX,[N];
+          shr       ECX,2;
+          jz        rbdseeloop_skip;
+          mov       EAX,offsetof zero;
+          movaps    XMM0,[EAX];
+          mov       EAX,[sinct];
+          mov       EBX,[iptr];
+          mov       EDX,16;
+          align 8;
+         rbdseeloop:
+          movups    XMM1,[EAX];
+          movups    XMM2,[EBX];
+          mulps     XMM1,XMM2;
+          addps     XMM0,XMM1;
+          add       EAX,EDX;
+          add       EBX,EDX;
+          dec       ECX;
+          jnz       rbdseeloop;
+          // store result in sum
+          movhlps   XMM1,XMM0; // now low part of XMM1 contains high part of XMM0
+          addps     XMM0,XMM1; // low part of XMM0 is ok
+          movaps    XMM1,XMM0;
+          shufps    XMM1,XMM0,0b_01_01_01_01; // 2nd float of XMM0 goes to the 1st float of XMM1
+          addss     XMM0,XMM1;
+         rbdseeloop_skip:
+          mov       ECX,[N];
+          and       CL,0x03;
+          jz        rbdseeloop_done;
+          mov       EDX,4;
+         rbdseeloop_slow:
+          movss     XMM1,[EAX];
+          movss     XMM2,[EBX];
+          mulss     XMM1,XMM2;
+          addss     XMM0,XMM1;
+          add       EAX,EDX;
+          add       EBX,EDX;
+          dec       CL;
+          jnz       rbdseeloop_slow;
+         rbdseeloop_done:;
+          movss     [sum],XMM0;
+        }
+        /*
+        float sum1 = 0;
+        foreach (immutable j; 0..N) sum1 += sinct[j]*iptr[j];
+        import std.math;
+        if (fabs(sum-sum1) > 0.000001f) {
+          import core.stdc.stdio;
+          printf("sum=%f; sum1=%f\n", sum, sum1);
+          assert(0);
+        }
+        */
+      } else {
+        sum = 0;
+        foreach (immutable j; 0..N) sum += sinct[j]*iptr[j];
+      }
     } else {
       sum = 0;
       foreach (immutable j; 0..N) sum += cast(double)sinct[j]*cast(double)iptr[j];
@@ -799,7 +857,6 @@ if (is(T == float) || is(T == double))
       sum = accum.ptr[0]+accum.ptr[1]+accum.ptr[2]+accum.ptr[3];
       */
     }
-
     outdata[outStride*outSample++] = sum;
     lastSample += intAdvance;
     sampFracNum += fracAdvance;
@@ -808,7 +865,6 @@ if (is(T == float) || is(T == double))
       ++lastSample;
     }
   }
-
   st.lastSample.ptr[chanIdx] = lastSample;
   st.sampFracNum.ptr[chanIdx] = sampFracNum;
   return outSample;
