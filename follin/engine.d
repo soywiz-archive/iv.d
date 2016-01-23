@@ -122,6 +122,11 @@ void tflDeinit () nothrow @trusted /*@nogc*/ { sndEngineDeinit(); }
   ubyte tflMasterVolumeR () { static if (__VERSION__ > 2067) pragma(inline, true); return (atomicLoad(sndMasterVolume)>>8)&0xff; }
   void tflMasterVolumeL (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolume, cast(ushort)((atomicLoad(sndMasterVolume)&0xff00)|v)); }
   void tflMasterVolumeR (ubyte v) { static if (__VERSION__ > 2067) pragma(inline, true); atomicStore(sndMasterVolume, cast(ushort)((atomicLoad(sndMasterVolume)&0x00ff)|(v<<8))); }
+
+  // DON'T USE YET!
+  // callback is called inside mixing thread and lock
+  auto tflS16Callback () { return sndS16CB; }
+  void tflS16Callback (void delegate (short[] buf) nothrow @nogc dg) { sndS16CB = dg; }
 }
 
 
@@ -310,6 +315,7 @@ shared bool initialized = false;
 shared bool sndWantShutdown = false;
 shared bool sndSafeToShutdown0 = false, sndSafeToShutdown1 = false;
 //shared uint sndActiveChanCount;
+__gshared void delegate (short[] buf) nothrow @nogc sndS16CB;
 __gshared short* sndbufMem = null; // chunk of memory for `sndbufptr`
 __gshared float* sndrsbufMem = null; // chunk of memory for `sndrsbufptr`
 __gshared float* sndrsbufptr = null; // aligned on 16 bytes for sse
@@ -1227,6 +1233,7 @@ bool sndGenerateBuffer () {
   } else {
     dp[0..sndSamplesSize] = 0;
   }
+  if (sndS16CB !is null) sndS16CB(dp[0..sndSamplesSize]);
   atomicStore(sndbufToFill, (buf2fill+1)%bufcount);
   atomicStore(sndbufFillingNow, false);
   return wasAtLeastOne;
