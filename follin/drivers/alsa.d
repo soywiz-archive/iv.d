@@ -29,6 +29,7 @@ import iv.follin.sdata;
 
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared snd_pcm_t* apcm = null;
+__gshared short* sndsilence = null;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -37,6 +38,11 @@ package(iv.follin) void sndDeinit () nothrow @trusted /*@nogc*/ {
     snd_pcm_drop(apcm);
     snd_pcm_close(apcm);
     apcm = null;
+    if (sndsilence !is null) {
+      import core.stdc.stdlib : free;
+      free(sndsilence);
+      sndsilence = null;
+    }
   }
 }
 
@@ -108,6 +114,14 @@ package(iv.follin) void sndInit (const(char)* alsaDev, uint srate) {
   alsaCall(snd_pcm_sw_params(apcm, sw_params), "cannot set software parameters");
   alsaCall(snd_pcm_nonblock(apcm, 0), "cannot set blocking mode");
   //alsaCall(snd_pcm_nonblock(apcm, 1), "cannot set non-blocking mode");
+
+  {
+    import core.stdc.stdlib : realloc;
+    sndsilence = cast(short*)realloc(sndsilence, sndSamplesSize*2*short.sizeof);
+    if (sndsilence is null) throw new FollinException("out of memory"); // `new` when `malloc` failed, nice
+    //sndsilence.length = sndSamplesSize*2; // frames->samples
+    sndsilence[0..sndSamplesSize*2] = 0;
+  }
 }
 
 
@@ -143,7 +157,7 @@ package(iv.follin) bool sndWriteBuffer (ref bool playbackStarted) {
       version(follin_radio_silence_debug) { import core.stdc.stdio; if (sndSamplesSize-(sndSamplesSize/2-used) < 256) printf("radio silence: too much input buffer drained: %u\n", cast(uint)(sndSamplesSize/2-used)); }
       auto paused = atomicLoad(sndPaused);
       auto b2p = atomicLoad(sndbufToPlay);
-      auto bpos = (!paused ? sndbuf.ptr : sndsilence.ptr)+(sndSamplesSize+8)*b2p;
+      auto bpos = (!paused ? sndbufptr[b2p] : sndsilence);
       if (atomicLoad(sndbufToFill) == b2p && atomicLoad(sndbufFillingNow)) {
         // radio silence
         //bpos = sndsilence.ptr;
@@ -168,7 +182,7 @@ package(iv.follin) bool sndWriteBuffer (ref bool playbackStarted) {
           }
           snd_pcm_recover(apcm, cast(int)err, 1);
           fleft = sndSamplesSize/2/*numchans*/;
-          bpos = sndsilence.ptr; // write silence instead
+          bpos = sndsilence; // write silence instead
           res = false;
           continue waitnwrite;
         }

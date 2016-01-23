@@ -141,6 +141,7 @@ public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @
   version(follin_use_sse) {
     auto blen = cast(uint)input.length;
     if (blen > 0) {
+      //TODO: use aligned instructions
       __gshared float[4] mvol = void;
       mvol[] = 32768.0;
       asm nothrow @safe @nogc {
@@ -298,9 +299,13 @@ shared bool initialized = false;
 shared bool sndWantShutdown = false;
 shared bool sndSafeToShutdown0 = false, sndSafeToShutdown1 = false;
 //shared uint sndActiveChanCount;
-__gshared float[] sndrsbuf;
-__gshared float[] tmprsbuf; // here we'll collect floating point samples
-__gshared float[] tmpmonobuf; // here we'll collect mono samples
+__gshared short* sndbufMem = null; // chunk of memory for `sndbufptr`
+__gshared float* sndrsbufMem = null; // chunk of memory for `sndrsbufptr`
+__gshared float* sndrsbufptr = null; // aligned on 16 bytes for sse
+__gshared float* tmprsbufMem = null; // chunk of memory for `tmprsbufptr`
+__gshared float* tmprsbufptr = null; // here we'll collect floating point samples; aligned on 16 bytes for sse
+__gshared float* tmpmonobufMem = null; // chunk of memory for `tmpmonobufptr`
+__gshared float* tmpmonobufptr = null; // here we'll collect mono samples; aligned on 16 bytes for sse
 __gshared Thread sndThread = null, sndMixThread = null;
 shared uint sndMasterVolumeL = 255;
 shared uint sndMasterVolumeR = 255;
@@ -316,19 +321,37 @@ shared static this () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private T* alignTo16(T) (T* ptr) {
+  pragma(inline, true);
+  if ((cast(usize)ptr)&0x0f) ptr = cast(T*)(((cast(usize)ptr)|0x0f)+1);
+  return ptr;
+}
+
+
 void sndEngineInit () {
+  static T* realloc(T) (ref T* ptr, uint len) {
+    import core.stdc.stdlib: realloc;
+    ptr = cast(T*)realloc(ptr, len*T.sizeof);
+    if (ptr is null) assert(0, "Follin: out of memory");
+    return alignTo16(ptr);
+  }
   sndSamplesSize *= numchans; // frames to samples
-  sndbuf.length = (sndSamplesSize+32)*bufcount;
-  sndbuf[] = 0;
-  sndsilence.length = (sndSamplesSize+32)*bufcount;
-  sndsilence[] = 0;
-  tmprsbuf.length = sndSamplesSize+32;
-  sndrsbuf.length = sndSamplesSize+32;
-  tmpmonobuf.length = sndSamplesSize+32;
+  // buffers for final mixed sound
+  sndbufptr = cast(short**)realloc(sndbufptr, (short*).sizeof*bufcount);
+  if (sndbufptr is null) assert(0, "Follin: out of memory");
+  sndbufptr[0] = realloc(sndbufMem, (sndSamplesSize+128)*bufcount);
+  //{ import std.stdio; writefln("0x%08x 0x%08x 0x%08x", cast(uint)sndbufMem, cast(uint)sndbufptr[0], cast(uint)sndbufptr[1]); }
+  foreach (immutable idx; 1..bufcount) sndbufptr[idx] = alignTo16(sndbufptr[idx-1]+sndSamplesSize+8);
+  // buffer to collect stereo samples (float)
+  tmprsbufptr = realloc(tmprsbufMem, sndSamplesSize+128);
+  // buffer to collect mono samples (float)
+  tmpmonobufptr = realloc(tmpmonobufMem, sndSamplesSize+128);
+  // buffer to mix samples (float)
+  sndrsbufptr = realloc(sndrsbufMem, sndSamplesSize+128);
+  // init channels
   foreach (ref ch; chans) {
     import core.stdc.stdlib : malloc;
-    ch.buf = cast(float*)malloc(ch.buf[0].sizeof*(sndSamplesSize+32));
-    if (ch.buf is null) assert(0, "Follin: out of memory");
+    ch.bufptr = realloc(ch.bufMem, sndSamplesSize+128);
     ch.bufpos = 0;
     if (!ch.srb.inited) {
       ch.lastquality = 8;
@@ -338,12 +361,14 @@ void sndEngineInit () {
     ch.cub.reset();
     ch.prevsrate = ch.lastsrate = 44100;
   }
+  /*
   scope(failure) {
     import core.stdc.stdlib : free;
     foreach (ref ch; chans) {
-      if (ch.buf !is null) { free(ch.buf); ch.buf = null; }
+      if (ch.bufMem !is null) { free(ch.bufMem); ch.bufMem = null; }
     }
   }
+  */
 }
 
 
@@ -357,7 +382,8 @@ struct Channel {
   SpeexResampler srb;
   CubicUpsampler cub;
   // buffers are always of `sndSamplesSize` size
-  float* buf; // frame buffer
+  float* bufMem; // chunk of memory for `buf`
+  float* bufptr; // frame buffer, aligned to 16 bytes
   uint bufpos; // current position to write in `tmpbuf`/`buf`
   ubyte lastvolL, lastvolR; // latest volume
   int lastquality = 666; // <0: try cubic
@@ -675,18 +701,15 @@ bool sndGenerateBuffer () {
   auto buf2fill = atomicLoad(sndbufToFill);
   atomicStore(sndbufFillingNow, true);
   bool wasAtLeastOne = false;
-  uint bpos, epos;
   synchronized (sndMutexChanRW.writer) {
-    bpos = (sndSamplesSize+8)*buf2fill;
-    epos = bpos+sndSamplesSize;
     if (firstFreeChan > 0) {
       immutable bufsz = sndSamplesSize;
-      sndrsbuf.ptr[0..sndSamplesSize] = 0.0f;
+      sndrsbufptr[0..sndSamplesSize] = 0.0f;
       //{ import core.stdc.stdio; printf("filling buffer %u\n", buf2fill); }
       foreach (immutable cidx; 0..chans.length) {
         auto ch = chans.ptr+cidx;
         if (ch.namelen == 0) break; // last channel
-        uint rspos = 0; // current position in `sndrsbuf`
+        uint rspos = 0; // current position in `sndrsbufptr`
         chmixloop: while (rspos < bufsz) {
           // try to get as much data from the channel as we can
           if (ch.bufpos == 0 && (ch.chan !is null && !ch.chan.paused) && ch.lastsrate != ch.chan.sampleRate) {
@@ -712,15 +735,15 @@ bool sndGenerateBuffer () {
             auto len = (bufsz-ch.bufpos)/2; // frames
             if (ch.chan.stereo) {
               // stereo
-              fblen = ch.chan.fillFrames(ch.buf[ch.bufpos..bufsz]);
+              fblen = ch.chan.fillFrames(ch.bufptr[ch.bufpos..bufsz]);
               if (fblen > len) fblen = 0; // something is very wrong with this channel
             } else {
               //FIXME mono
-              fblen = ch.chan.fillFrames(tmpmonobuf[0..len]);
+              fblen = ch.chan.fillFrames(tmpmonobufptr[0..len]);
               if (fblen > len) fblen = 0; // something is very wrong with this channel
               // expand
-              auto s = tmpmonobuf.ptr;
-              auto d = ch.buf+ch.bufpos;
+              auto s = tmpmonobufptr;
+              auto d = ch.bufptr+ch.bufpos;
               foreach (immutable _; 0..fblen) {
                 *d++ = *s;
                 *d++ = *s++;
@@ -731,14 +754,14 @@ bool sndGenerateBuffer () {
             // do volume
             if (ch.lastvolL+ch.lastvolR == 0) {
               // silent
-              ch.buf[ch.bufpos..bufsz] = 0.0f;
+              ch.bufptr[ch.bufpos..bufsz] = 0.0f;
             } else {
               version(follin_use_sse) {
                 if (ch.lastvolL != 255 || ch.lastvolR != 255) {
                   __gshared float[4] mul = void;
                   mul[0] = mul[2] = (1.0f/255.0f)*cast(float)ch.lastvolL;
                   mul[1] = mul[3] = (1.0f/255.0f)*cast(float)ch.lastvolR;
-                  auto bptr = ch.buf+ch.bufpos;
+                  auto bptr = ch.bufptr+ch.bufpos;
                   auto blen = (fblen+1)/2;
                   asm nothrow @safe @nogc {
                     mov     EAX,[bptr];
@@ -757,42 +780,13 @@ bool sndGenerateBuffer () {
                 }
               } else {
                 // left
-                if (ch.lastvolL == 255) {
-                  // at full volume, do nothing
-                } else if (ch.lastvolL == 0) {
-                  // silent, clear it
-                  auto d = ch.buf+ch.bufpos;
-                  foreach (immutable _; 0..fblen) {
-                    *d = 0.0f;
-                    d += 2;
-                  }
-                } else {
-                  // do volume
-                  immutable float mul = cast(float)ch.lastvolL/255.0f;
-                  auto d = ch.buf+ch.bufpos;
-                  foreach (immutable _; 0..fblen) {
-                    *d *= mul;
-                    d += 2;
-                  }
-                }
-                // right
-                if (ch.lastvolR == 255) {
-                  // at full volume, do nothing
-                } else if (ch.lastvolR == 0) {
-                  // silent, clear it
-                  auto d = ch.buf+ch.bufpos+1;
-                  foreach (immutable _; 0..fblen) {
-                    *d = 0.0f;
-                    d += 2;
-                  }
-                } else {
-                  // do volume
-                  immutable float mul = cast(float)ch.lastvolL/255.0f;
-                  auto d = ch.buf+ch.bufpos+1;
-                  foreach (immutable _; 0..fblen) {
-                    *d *= mul;
-                    d += 2;
-                  }
+                immutable float mulL = (1.0f/255.0f)*cast(float)ch.lastvolL;
+                immutable float mulR = (1.0f/255.0f)*cast(float)ch.lastvolR;
+                // do volume
+                auto d = ch.bufptr+ch.bufpos;
+                foreach (immutable _; 0..fblen) {
+                  *d++ *= mulL;
+                  *d++ *= mulR;
                 }
               } // version
             }
@@ -808,8 +802,8 @@ bool sndGenerateBuffer () {
             bsused = 0;
             uint tspos = rspos;
             while (bsused < ch.bufpos && tspos < bufsz) {
-              srbdata.dataIn = ch.buf[bsused..ch.bufpos];
-              srbdata.dataOut = tmprsbuf.ptr[tspos..bufsz];
+              srbdata.dataIn = ch.bufptr[bsused..ch.bufpos];
+              srbdata.dataOut = tmprsbufptr[tspos..bufsz];
               //{ import core.stdc.stdio; printf("realSampleRate=%u; ch.lastsrate=%u\n", realSampleRate, ch.lastsrate); }
               err = (ch.useCubic ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break; }
@@ -822,8 +816,8 @@ bool sndGenerateBuffer () {
             // will clamp later
             version(follin_use_sse) {
               if (rspos < tspos) {
-                auto s = tmprsbuf.ptr+rspos;
-                auto d = sndrsbuf.ptr+rspos;
+                auto s = tmprsbufptr+rspos;
+                auto d = sndrsbufptr+rspos;
                 auto blen = (tspos-rspos+3)/4;
                 asm nothrow @safe @nogc {
                   mov     EAX,[d];
@@ -842,8 +836,8 @@ bool sndGenerateBuffer () {
                 }
               }
             } else {
-              auto s = tmprsbuf.ptr+rspos;
-              auto d = sndrsbuf.ptr+rspos;
+              auto s = tmprsbufptr+rspos;
+              auto d = sndrsbufptr+rspos;
               foreach (immutable _; rspos..tspos) *d++ += *s++;
             }
             ch.genFrames += (tspos-rspos)/2;
@@ -853,8 +847,8 @@ bool sndGenerateBuffer () {
             // mix directly
             bsused = ch.bufpos;
             if (bsused > bufsz-rspos) bsused = bufsz-rspos;
-            auto s = ch.buf;
-            auto d = sndrsbuf.ptr+rspos;
+            auto s = ch.bufptr;
+            auto d = sndrsbufptr+rspos;
             // will clamp later
             if (bsused > 0) {
               version(follin_use_sse) {
@@ -888,7 +882,7 @@ bool sndGenerateBuffer () {
             ch.bufpos = 0;
           } else if (bsused > 0) {
             import core.stdc.string : memmove;
-            memmove(ch.buf, ch.buf+bsused, (ch.bufpos-bsused)*ch.buf[0].sizeof);
+            memmove(ch.bufptr, ch.bufptr+bsused, (ch.bufpos-bsused)*ch.bufptr[0].sizeof);
             ch.bufpos -= bsused;
           }
 
@@ -897,13 +891,13 @@ bool sndGenerateBuffer () {
           // try to squeeze last resampled data bytes out of it
             if (rspos < bufsz && ch.lastsrate != realSampleRate) {
               srbdata.dataIn = null;
-              srbdata.dataOut = tmprsbuf.ptr[rspos..bufsz];
+              srbdata.dataOut = tmprsbufptr[rspos..bufsz];
               err = (ch.useCubic ? ch.cub.process(srbdata) : ch.srb.process(srbdata));
               if (err) { killChan(ch, channelsChanged); break chmixloop; }
               if (srbdata.outputSamplesUsed) {
                 // mix
-                auto s = tmprsbuf.ptr+rspos;
-                auto d = sndrsbuf.ptr+rspos;
+                auto s = tmprsbufptr+rspos;
+                auto d = sndrsbufptr+rspos;
                 // will clamp later
                 version(follin_use_sse) {
                   auto blen = (srbdata.outputSamplesUsed+3)/4;
@@ -939,15 +933,15 @@ bool sndGenerateBuffer () {
   }
 
   // do final converting
+  auto dp = sndbufptr[buf2fill];
   if (wasAtLeastOne) {
     // something is playing, mix it
     auto mvolL = cast(ubyte)atomicLoad(sndMasterVolumeL);
     auto mvolR = cast(ubyte)atomicLoad(sndMasterVolumeR);
     if (mvolL+mvolR == 0) {
-      sndbuf[bpos..epos] = 0;
+      dp[0..sndSamplesSize] = 0;
     } else {
-      auto dp = sndbuf.ptr+bpos;
-      auto src = sndrsbuf.ptr;
+      auto src = sndrsbufptr;
       version(follin_use_sse) {
         //__gshared immutable float[4] fmin4 = -32768.0;
         //__gshared immutable float[4] fmax4 = 32767.0;
@@ -1015,7 +1009,7 @@ bool sndGenerateBuffer () {
       }
     }
   } else {
-    sndbuf[bpos..epos] = 0;
+    dp[0..sndSamplesSize] = 0;
   }
   atomicStore(sndbufToFill, (buf2fill+1)%bufcount);
   atomicStore(sndbufFillingNow, false);
@@ -1145,13 +1139,15 @@ void sndEngineDeinit () nothrow @trusted {
       //{ import core.stdc.stdio; printf("DEINIT: 1\n"); }
       sndThread = sndMixThread = null;
       sndDeinit();
+      /*
       foreach (ref ch; chans) {
         import core.stdc.stdlib : free;
         ch.namelen = 0;
         ch.chan = null;
-        if (ch.buf !is null) { free(ch.buf); ch.buf = null; }
+        if (ch.bufMem !is null) { free(ch.bufMem); ch.bufMem = null; }
         ch.srb.deinit();
       }
+      */
       atomicStore(initialized, false);
     }
   }

@@ -20,7 +20,7 @@ module iv.follin.sdata;
 package(iv.follin) __gshared uint latency = 1000*512/44100;
 package(iv.follin) __gshared uint realSampleRate = 44100;
 package(iv.follin) __gshared uint sndSamplesSize;// # of samples in one buffer (not frames!)
-package(iv.follin) __gshared short[] sndbuf, sndsilence;
+package(iv.follin) __gshared short** sndbufptr; // 2 buffers, aligned on 16 bytes (for sse)
 package(iv.follin) shared uint sndbufToFill, sndbufToPlay;
 package(iv.follin) shared bool sndbufFillingNow;
 package(iv.follin) __gshared uint realBufSize;
