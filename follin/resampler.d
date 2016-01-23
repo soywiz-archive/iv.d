@@ -778,86 +778,84 @@ if (is(T == float) || is(T == double))
   immutable fracAdvance = st.fracAdvance;
   immutable denRate = st.denRate;
   T sum = void;
-  //static if (is(T == double)) T[4] accum;
   while (!(lastSample >= cast(int)(*indataLen) || outSample >= cast(int)(*outdataLen))) {
     const(float)* sinct = &sincTable[sampFracNum*N];
     const(float)* iptr = &indata[lastSample];
     static if (is(T == float)) {
-      // at least 2x speedup with SSE here
-      version(sincresample_use_sse) {
-        align(64) __gshared float[4] zero = 0;
-        asm nothrow @safe @nogc {
-          mov       ECX,[N];
-          shr       ECX,2;
-          jz        rbdseeloop_skip;
-          mov       EAX,offsetof zero;
-          movaps    XMM0,[EAX];
-          mov       EAX,[sinct];
-          mov       EBX,[iptr];
-          mov       EDX,16;
-          align 8;
-         rbdseeloop:
-          movups    XMM1,[EAX];
-          movups    XMM2,[EBX];
-          mulps     XMM1,XMM2;
-          addps     XMM0,XMM1;
-          add       EAX,EDX;
-          add       EBX,EDX;
-          dec       ECX;
-          jnz       rbdseeloop;
-          // store result in sum
-          movhlps   XMM1,XMM0; // now low part of XMM1 contains high part of XMM0
-          addps     XMM0,XMM1; // low part of XMM0 is ok
-          movaps    XMM1,XMM0;
-          shufps    XMM1,XMM0,0b_01_01_01_01; // 2nd float of XMM0 goes to the 1st float of XMM1
-          addss     XMM0,XMM1;
-         rbdseeloop_skip:
-          mov       ECX,[N];
-          and       CL,0x03;
-          jz        rbdseeloop_done;
-          mov       EDX,4;
-         rbdseeloop_slow:
-          movss     XMM1,[EAX];
-          movss     XMM2,[EBX];
-          mulss     XMM1,XMM2;
-          addss     XMM0,XMM1;
-          add       EAX,EDX;
-          add       EBX,EDX;
-          dec       CL;
-          jnz       rbdseeloop_slow;
-         rbdseeloop_done:;
-          movss     [sum],XMM0;
+      // at least 2x speedup with SSE here (but for unrolled loop)
+      if (N%4 == 0) {
+        version(sincresample_use_sse) {
+          align(64) __gshared float[4] zero = 0;
+          asm nothrow @safe @nogc {
+            mov       ECX,[N];
+            shr       ECX,2;
+            mov       EAX,offsetof zero;
+            movaps    XMM0,[EAX];
+            mov       EAX,[sinct];
+            mov       EBX,[iptr];
+            mov       EDX,16;
+            align 8;
+           rbdseeloop:
+            movups    XMM1,[EAX];
+            movups    XMM2,[EBX];
+            mulps     XMM1,XMM2;
+            addps     XMM0,XMM1;
+            add       EAX,EDX;
+            add       EBX,EDX;
+            dec       ECX;
+            jnz       rbdseeloop;
+            // store result in sum
+            movhlps   XMM1,XMM0; // now low part of XMM1 contains high part of XMM0
+            addps     XMM0,XMM1; // low part of XMM0 is ok
+            movaps    XMM1,XMM0;
+            shufps    XMM1,XMM0,0b_01_01_01_01; // 2nd float of XMM0 goes to the 1st float of XMM1
+            addss     XMM0,XMM1;
+            movss     [sum],XMM0;
+          }
+          /*
+          float sum1 = 0;
+          foreach (immutable j; 0..N) sum1 += sinct[j]*iptr[j];
+          import std.math;
+          if (fabs(sum-sum1) > 0.000001f) {
+            import core.stdc.stdio;
+            printf("sum=%f; sum1=%f\n", sum, sum1);
+            assert(0);
+          }
+          */
+        } else {
+          // no SSE; for my i3 unrolled loop is almost of the speed of SSE code
+          T[4] accum = 0;
+          foreach (immutable j; 0..N/4) {
+            accum.ptr[0] += *sinct++ * *iptr++;
+            accum.ptr[1] += *sinct++ * *iptr++;
+            accum.ptr[2] += *sinct++ * *iptr++;
+            accum.ptr[3] += *sinct++ * *iptr++;
+          }
+          sum = accum.ptr[0]+accum.ptr[1]+accum.ptr[2]+accum.ptr[3];
         }
-        /*
-        float sum1 = 0;
-        foreach (immutable j; 0..N) sum1 += sinct[j]*iptr[j];
-        import std.math;
-        if (fabs(sum-sum1) > 0.000001f) {
-          import core.stdc.stdio;
-          printf("sum=%f; sum1=%f\n", sum, sum1);
-          assert(0);
-        }
-        */
       } else {
         sum = 0;
-        foreach (immutable j; 0..N) sum += sinct[j]*iptr[j];
+        foreach (immutable j; 0..N) sum += *sinct++ * *iptr++;
       }
+      outdata[outStride*outSample++] = sum;
     } else {
-      sum = 0;
-      foreach (immutable j; 0..N) sum += cast(double)sinct[j]*cast(double)iptr[j];
-      /* wtf?!
-      accum[] = 0;
-      foreach (immutable j; 0..N) {
-        immutable jj = j*4;
-        accum.ptr[0] += sinct[jj+0]*iptr[jj+0];
-        accum.ptr[1] += sinct[jj+1]*iptr[jj+1];
-        accum.ptr[2] += sinct[jj+2]*iptr[jj+2];
-        accum.ptr[3] += sinct[jj+3]*iptr[jj+3];
+      if (N%4 == 0) {
+        //TODO: write SSE code here!
+        // for my i3 unrolled loop is ~2 times faster
+        T[4] accum = 0;
+        foreach (immutable j; 0..N/4) {
+          accum.ptr[0] += cast(double)*sinct++ * cast(double)*iptr++;
+          accum.ptr[1] += cast(double)*sinct++ * cast(double)*iptr++;
+          accum.ptr[2] += cast(double)*sinct++ * cast(double)*iptr++;
+          accum.ptr[3] += cast(double)*sinct++ * cast(double)*iptr++;
+        }
+        sum = accum.ptr[0]+accum.ptr[1]+accum.ptr[2]+accum.ptr[3];
+      } else {
+        sum = 0;
+        foreach (immutable j; 0..N) sum += cast(double)*sinct++ * cast(double)*iptr++;
       }
-      sum = accum.ptr[0]+accum.ptr[1]+accum.ptr[2]+accum.ptr[3];
-      */
+      outdata[outStride*outSample++] = cast(float)sum;
     }
-    outdata[outStride*outSample++] = sum;
     lastSample += intAdvance;
     sampFracNum += fracAdvance;
     if (sampFracNum >= denRate) {
@@ -892,6 +890,7 @@ if (is(T == float) || is(T == double))
     const int offset = sampFracNum*st.oversample/st.denRate;
     const float frac = (cast(float)((sampFracNum*st.oversample)%st.denRate))/st.denRate;
     accum[] = 0;
+    //TODO: optimize!
     foreach (immutable j; 0..N) {
       immutable T currIn = iptr[j];
       accum.ptr[0] += currIn*(st.sincTable[4+(j+1)*st.oversample-offset-2]);
