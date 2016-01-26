@@ -38,7 +38,7 @@ __gshared bool forceUp = false;
 
 void showProgress (bool endtime=false) {
   auto curTime = (endtime ? vrTotalTimeMsec : tflChannelPlayTimeMsec("ogg"));
-  if (curTime >= vrNextTimeMsec || tflPaused != vrPaused) {
+  if (curTime >= vrNextTimeMsec || tflPaused != vrPaused || forceUp) {
     vrNextTimeMsec = curTime+1000;
     vrPaused = tflPaused;
     import core.sys.posix.unistd : write;
