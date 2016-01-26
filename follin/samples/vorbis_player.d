@@ -61,6 +61,7 @@ Action playOgg() () {
   Action res = Action.Next;
 
   auto chan = new VorbisChannel(playlist[plidx]);
+  chan.volume = vrVolume;
 
   if (chan.totalFrames == 0 || chan.vf is null) {
     foreach (immutable c; plidx+1..playlist.length) playlist[c-1] = playlist[c];
