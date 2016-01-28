@@ -81,14 +81,14 @@ private shared uint vsHeight = 240;
 
 /// get current screen width
 @gcc_inline @property uint vlWidth() () @trusted nothrow @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  //static if (__VERSION__ > 2067) pragma(inline, true);
   import core.atomic : atomicLoad;
   return atomicLoad(vsWidth);
 }
 
 /// get current screen height
 @gcc_inline @property uint vlHeight() () @trusted nothrow @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  //static if (__VERSION__ > 2067) pragma(inline, true);
   import core.atomic : atomicLoad;
   return atomicLoad(vsHeight);
 }
@@ -120,17 +120,17 @@ private __gshared int effectiveMag2x; // effective vlMag2x (1, 2)
 private __gshared int prevLogSizeWas1x = 0; // DON'T change to bool!
 
 @gcc_inline @property int vlEffectiveWidth() () nothrow @trusted @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  //static if (__VERSION__ > 2067) pragma(inline, true);
   import core.atomic : atomicLoad;
   return cast(int)atomicLoad(vsWidth)*effectiveMag2x;
 }
 @gcc_inline @property int vlEffectiveHeight() () nothrow @trusted @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  //static if (__VERSION__ > 2067) pragma(inline, true);
   import core.atomic : atomicLoad;
   return cast(int)atomicLoad(vsHeight)*effectiveMag2x;
 }
 @gcc_inline @property int vlEffectiveMag() () nothrow @trusted @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  //static if (__VERSION__ > 2067) pragma(inline, true);
   return effectiveMag2x;
 }
 
