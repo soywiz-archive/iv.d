@@ -205,8 +205,8 @@ public:
     auto pos = fname.length;
     while (pos > 0 && fname[pos-1] != '/') --pos;
     if (pos) {
-      de.path = cast(string)fname[0..pos+1]; // it's safe here
-      de.name = cast(string)fname[pos+1..$]; // it's safe here
+      de.path = cast(string)fname[0..pos]; // it's safe here
+      de.name = cast(string)fname[pos..$]; // it's safe here
     } else {
       de.name = cast(string)fname; // it's safe here
     }
