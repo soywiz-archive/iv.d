@@ -22,6 +22,35 @@ import std.encoding;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// utils
+// `ch`: utf8 start
+// -1: invalid utf8
+byte utf8CodeLen (char ch) {
+  //pragma(inline, true);
+  if (ch < 0x80) return 1;
+  if ((ch&0b1111_1110) == 0b1111_1100) return 6;
+  if ((ch&0b1111_1100) == 0b1111_1000) return 5;
+  if ((ch&0b1111_1000) == 0b1111_0000) return 4;
+  if ((ch&0b1111_0000) == 0b1110_0000) return 3;
+  if ((ch&0b1110_0000) == 0b1100_0000) return 2;
+  return -1; // invalid
+}
+
+
+bool utf8Valid (const(char)[] buf) {
+  auto bp = buf.ptr;
+  auto left = buf.length;
+  while (left-- > 0) {
+    auto len = utf8CodeLen(*bp++)-1;
+    if (len < 0 || len > left) return false;
+    left -= len;
+    while (len-- > 0) if (((*bp++)&0b1100_0000) != 0b1000_0000) return false;
+  }
+  return true;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 immutable wchar[128] charMap1251 = [
   '\u0402','\u0403','\u201A','\u0453','\u201E','\u2026','\u2020','\u2021','\u20AC','\u2030','\u0409','\u2039','\u040A','\u040C','\u040B','\u040F',
   '\u0452','\u2018','\u2019','\u201C','\u201D','\u2022','\u2013','\u2014','\u003F','\u2122','\u0459','\u203A','\u045A','\u045C','\u045B','\u045F',
