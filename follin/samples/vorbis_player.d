@@ -21,6 +21,7 @@ import core.atomic;
 
 import iv.follin;
 import iv.rawtty;
+import iv.encoding;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -79,6 +80,7 @@ Action playOgg() () {
       auto name = chan.vf.comment_name;
       auto value = chan.vf.comment_value;
       if (name is null) break;
+      if (utf8Valid(value)) value = recodeToKOI8(value);
       writeln("  ", name, "=", value);
       chan.vf.comment_skip();
     }
