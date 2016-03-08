@@ -488,6 +488,7 @@ jit_value_t jit_insn_load_elem (jit_function_t func, jit_value_t base_addr, jit_
 jit_value_t jit_insn_load_elem_address (jit_function_t func, jit_value_t base_addr, jit_value_t index, jit_type_t elem_type) nothrow @nogc;
 int jit_insn_store_elem (jit_function_t func, jit_value_t base_addr, jit_value_t index, jit_value_t value) nothrow @nogc;
 int jit_insn_check_null (jit_function_t func, jit_value_t value) nothrow @nogc;
+int jit_insn_nop (jit_function_t func) nothrow @nogc;
 
 jit_value_t jit_insn_add (jit_function_t func, jit_value_t value1, jit_value_t value2) nothrow @nogc;
 jit_value_t jit_insn_add_ovf (jit_function_t func, jit_value_t value1, jit_value_t value2) nothrow @nogc;
@@ -1001,8 +1002,68 @@ void jit_meta_destroy (jit_meta_t* list) nothrow @nogc;
 /*
  * Opaque types that describe object model elements.
  */
-struct jit_objmodel {}
+//struct jit_objmodel {}
+/*
+ * Internal structure of an object model handler.
+ */
+struct jit_objmodel {
+  /*
+   * Size of this structure, for versioning.
+   */
+  uint size;
+
+  /*
+   * Reserved fields that can be used by the handler to store its state.
+   */
+  void* reserved0;
+  void* reserved1;
+  void* reserved2;
+  void* reserved3;
+
+  /*
+   * Operations on object models.
+   */
+  void function (jit_objmodel_t model) nothrow  destroy_model;
+  jitom_class_t function (jit_objmodel_t model, const(char)* name) nothrow  get_class_by_name;
+
+  /*
+   * Operations on object model classes.
+   */
+  char* function (jit_objmodel_t model, jitom_class_t klass) nothrow  class_get_name;
+  int function (jit_objmodel_t model, jitom_class_t klass) nothrow  class_get_modifiers;
+  jit_type_t function (jit_objmodel_t model, jitom_class_t klass) nothrow  class_get_type;
+  jit_type_t function (jit_objmodel_t model, jitom_class_t klass) nothrow  class_get_value_type;
+  jitom_class_t function (jit_objmodel_t model, jitom_class_t klass) nothrow  class_get_primary_super;
+  jitom_class_t* function (jit_objmodel_t model, jitom_class_t klass, uint* num) nothrow  class_get_all_supers;
+  jitom_class_t* function (jit_objmodel_t model, jitom_class_t klass, uint* num) nothrow  class_get_interfaces;
+  jitom_field_t* function (jit_objmodel_t model, jitom_class_t klass, uint* num) nothrow  class_get_fields;
+  jitom_method_t* function (jit_objmodel_t model, jitom_class_t klass, uint* num) nothrow  class_get_methods;
+  jit_value_t function (jit_objmodel_t model, jitom_class_t klass, jitom_method_t ctor, jit_function_t func, jit_value_t* args, uint num_args, int flags) nothrow  class_new;
+  jit_value_t function (jit_objmodel_t model, jitom_class_t klass, jitom_method_t ctor, jit_function_t func, jit_value_t* args, uint num_args, int flags) nothrow  class_new_value;
+  int function (jit_objmodel_t model, jitom_class_t klass, jit_value_t obj_value) nothrow  class_delete;
+  int function (jit_objmodel_t model, jitom_class_t klass, jit_value_t obj_value) nothrow  class_add_ref;
+
+  /*
+   * Operations on object model fields.
+   */
+  char* function (jit_objmodel_t model, jitom_class_t klass, jitom_field_t field) nothrow  field_get_name;
+  jit_type_t function (jit_objmodel_t model, jitom_class_t klass, jitom_field_t field) nothrow  field_get_type;
+  int function (jit_objmodel_t model, jitom_class_t klass, jitom_field_t field) nothrow  field_get_modifiers;
+  jit_value_t function (jit_objmodel_t model, jitom_class_t klass, jitom_field_t field, jit_function_t func, jit_value_t obj_value) nothrow  field_load;
+  jit_value_t function (jit_objmodel_t model, jitom_class_t klass, jitom_field_t field, jit_function_t func, jit_value_t obj_value) nothrow  field_load_address;
+  int function (jit_objmodel_t model, jitom_class_t klass, jitom_field_t field, jit_function_t func, jit_value_t obj_value, jit_value_t value) nothrow  field_store;
+
+  /*
+   * Operations on object model methods.
+   */
+  char* function (jit_objmodel_t model, jitom_class_t klass, jitom_method_t method) nothrow  method_get_name;
+  jit_type_t function (jit_objmodel_t model, jitom_class_t klass, jitom_method_t method) nothrow  method_get_type;
+  int function (jit_objmodel_t model, jitom_class_t klass, jitom_method_t method) nothrow  method_get_modifiers;
+  jit_value_t function (jit_objmodel_t model, jitom_class_t klass, jitom_method_t method, jit_function_t func, jit_value_t* args, uint num_args, int flags) nothrow  method_invoke;
+  jit_value_t function (jit_objmodel_t model, jitom_class_t klass, jitom_method_t method, jit_function_t func, jit_value_t* args, uint num_args, int flags) nothrow  method_invoke_virtual;
+}
 alias jit_objmodel_t = jit_objmodel*;
+
 struct jitom_class {}
 alias jitom_class_t = jitom_class*;
 struct jitom_field {}

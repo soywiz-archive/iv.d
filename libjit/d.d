@@ -499,6 +499,11 @@ final:
     if (!jit_insn_check_null(func, value.raw)) out_of_memory();
   }
 
+  void insn_nop (JitValue value) {
+    assert(this.valid);
+    if (!jit_insn_nop(func)) out_of_memory();
+  }
+
   private enum UnInsnMixin(string name) =
     "JitValue insn_"~name~" (JitValue value1) {\n"~
     "  assert(this.valid);\n"~
