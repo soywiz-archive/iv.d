@@ -107,8 +107,8 @@ final:
   mixin(UnOpMixin!("~", "not"));
 
 
-  private enum BinOpMixin(string op, string insn) =
-    "JitValue opBinary(string op : "~op.stringof~") (JitValue rhs) {\n"~
+  private enum BinOpMixin(string op, string insn, string opname="opBinary") =
+    "JitValue "~opname~"(string op : "~op.stringof~") (JitValue rhs) {\n"~
     "  pragma(inline, true);\n"~
     "  return JitValue(jit_insn_"~insn~"(value_owner(this, rhs), this.raw, rhs.raw));\n"~
     "}";
@@ -131,6 +131,14 @@ final:
   mixin(BinOpMixin!("!=", "ne"));
   mixin(BinOpMixin!("<=", "le"));
   mixin(BinOpMixin!(">=", "ge"));
+
+  // Aliced extension
+  mixin(BinOpMixin!("<", "lt", "opBinaryCmp"));
+  mixin(BinOpMixin!(">", "gt", "opBinaryCmp"));
+  mixin(BinOpMixin!("==", "eq", "opBinaryCmp"));
+  mixin(BinOpMixin!("!=", "ne", "opBinaryCmp"));
+  mixin(BinOpMixin!("<=", "le", "opBinaryCmp"));
+  mixin(BinOpMixin!(">=", "ge", "opBinaryCmp"));
 
 private:
   // Get the function that owns a pair of values.  It will choose
