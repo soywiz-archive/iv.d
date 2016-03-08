@@ -21,23 +21,23 @@ public:
   this (JitContext context) {
     super(context);
     create();
-    set_recompilable();
+    recompilable = true;
   }
 
   override void build () {
     printf("Compiling mul_add on demand\n");
 
-    JitValue x = get_param(0);
-    JitValue y = get_param(1);
-    JitValue z = get_param(2);
+    JitValue x = getParam(0);
+    JitValue y = getParam(1);
+    JitValue z = getParam(2);
 
     insn_return(x*y+z);
   }
 
 protected:
-  override jit_type_t create_signature () {
+  override jit_type_t createSignature () {
     // Return type, followed by three parameters.
-    return signature_helper(jit_type_int, jit_type_int, jit_type_int, jit_type_int);
+    return signatureHelper(jit_type_int, jit_type_int, jit_type_int, jit_type_int);
   }
 }
 
@@ -76,10 +76,10 @@ void main () {
   printf("mul_add(13, 5, 7) = %d\n", cast(int)result);
 
   // Force the function to be recompiled.
-  mul_add.build_start();
+  mul_add.buildStart();
   mul_add.build();
   mul_add.compile();
-  mul_add.build_end();
+  mul_add.buildEnd();
 
   // Execute the function a third time, after it is recompiled.
   arg1 = 2;
