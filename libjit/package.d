@@ -2033,6 +2033,14 @@ struct jit_memory_manager {
 jit_memory_manager_t jit_default_memory_manager () nothrow @nogc;
 
 
+import core.stdc.stdio : FILE;
+
+void jit_dump_type (FILE* stream, jit_type_t type) nothrow @nogc;
+void jit_dump_value (FILE* stream, jit_function_t func, jit_value_t value, const(char)* prefix) nothrow @nogc;
+void jit_dump_insn (FILE* stream, jit_function_t func, jit_insn_t insn) nothrow @nogc;
+void jit_dump_function (FILE* stream, jit_function_t func, const(char)* name) nothrow @nogc;
+
+
 /*
  * Get the frame address for a frame which is "n" levels up the stack.
  * A level value of zero indicates the current frame.
