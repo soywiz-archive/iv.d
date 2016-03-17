@@ -284,7 +284,7 @@ enum TFLmusic = 100; // music should always play
 
 // returns `false` if there's no room for new channel (and it's not added)
 bool tflAddChannel (const(char)[] name, TflChannel chan, uint prio=TFLdefault, TflChannel.Quality q=TflChannel.QualitySfx) { static if (__VERSION__ > 2067) pragma(inline, true); return sndAddChan(name, chan, prio, q); }
-bool tflKillChannel (const(char)[] name) { static if (__VERSION__ > 2067) pragma(inline, true); return sndKillChan(name); }
+bool tflKillChannel (const(char)[] name) { /*static if (__VERSION__ > 2067) pragma(inline, true);*/ return sndKillChan(name); }
 bool tflIsChannelAlive (const(char)[] name) nothrow @trusted /*@nogc*/ { static if (__VERSION__ > 2067) pragma(inline, true); return sndIsChanAlive(name); }
 TflChannel tflChannelObject (const(char)[] name) nothrow @trusted /*@nogc*/ { static if (__VERSION__ > 2067) pragma(inline, true); return sndGetChanObj(name); }
 uint tflChannelPlayTimeMsec (const(char)[] name) nothrow @trusted /*@nogc*/ { static if (__VERSION__ > 2067) pragma(inline, true); return sndGetPlayTimeMsec(name); }
