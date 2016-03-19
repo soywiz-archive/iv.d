@@ -23,7 +23,7 @@ module iv.aatree /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-final class AATree(TKey, TValue, bool stableIter=false) if (is(typeof((TKey a, TKey b) => a < b || a > b))) {
+final class AATree(TKey, TValue, bool stableIter=true) if (is(typeof((TKey a, TKey b) => a < b || a > b))) {
 public:
   enum HEIGHT_LIMIT = 64; // tallest allowable tree
 
