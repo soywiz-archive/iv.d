@@ -108,10 +108,10 @@ struct Region {
   }
 
   /// punch a hole
-  void punch (int x, int y, int w=1, int h=1) nothrow @trusted { doPunchPatch!"punch"(x, y, w, h); }
+  void punch (int x, int y, int w=1, int h=1) nothrow @trusted { pragma(inline, true); doPunchPatch!"punch"(x, y, w, h); }
 
   /// patch a hole
-  void patch (int x, int y, int w=1, int h=1) nothrow @trusted { doPunchPatch!"patch"(x, y, w, h); }
+  void patch (int x, int y, int w=1, int h=1) nothrow @trusted { pragma(inline, true); doPunchPatch!"patch"(x, y, w, h); }
 
   // ////////////////////////////////////////////////////////////////////////// //
   enum State { Mixed = -1, Empty, Solid } //WARNING! don't change the order!
