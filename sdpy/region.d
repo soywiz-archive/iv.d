@@ -24,6 +24,15 @@ module iv.sdpy.region;
 struct Region {
   alias SpanType = ushort; // you probably will never need this, but...
 
+  /// combine operation for region combiner %-)
+  enum CombineOp {
+    Or, /// logic or
+    And, /// logic and
+    Xor, /// logic exclusive or
+    Cut, /// cut solid parts
+    NCut, /// cut empty parts
+  }
+
   @property pure const nothrow @safe @nogc {
     int width () { pragma(inline, true); return (rdatap ? rdata.rwdt : 0); }
     int height () { pragma(inline, true); return (rdatap ? rdata.rhgt : 0); }
@@ -548,6 +557,7 @@ private:
   }
 
   // all args must be valid
+  // [x0..x1]
   void doPunchPatchLine(string mode) (int y, int x0, int x1) nothrow @trusted {
     static if (mode == "patch") {
       if (rdata.simple && rdata.simpleSolid) return; // no need to patch completely solid region
@@ -558,12 +568,50 @@ private:
     // check if we really have to do anything here
     static if (mode == "patch") {
       if (spanState(y, x0, x1) == State.Solid) return;
-      enum psmode = true;
+      //enum psmode = true;
+      enum op = CombineOp.Or;
     } else {
       if (spanState(y, x0, x1) == State.Empty) return;
-      enum psmode = false;
+      //enum psmode = false;
+      enum op = CombineOp.Cut;
     }
 
+    doCombine(y, (uint lofs, ref SpanType[] dptr) nothrow @trusted {
+      // note that after `assumeSafeAppend` we can increase length without further `assumeSafeAppend` calls
+      debug(region_more_prints) { import core.stdc.stdio : printf; printf("op=%d; x0=%d; x1=%d; rwdt=%d\n", cast(int)op, x0, x1, rdata.rwdt); }
+      SpanType dsp = cast(SpanType)(x1-x0+1);
+      debug(region_more_prints) {
+        import core.stdc.stdio : printf;
+        auto cspd = CSPD(op, &dsp, x1-x0+1, x0);
+        while (!cspd.empty) {
+          printf(" (%d,%d,%d)", cspd.sx, cspd.ex, (cspd.solid ? 1 : 0));
+          cspd.popFront();
+        }
+        printf("\n");
+      }
+      combineSpans(
+        (int x) nothrow @trusted { dptr ~= cast(SpanType)x; },
+        CSPD(CombineOp.Or, rdata.data.ptr+lofs+1, rdata.rwdt), // base span
+        CSPD(op, &dsp, x1-x0+1, x0),
+      );
+    });
+  }
+
+  /+
+  static void combineSpans(SPR...) (scope void delegate (int x) nothrow @safe putX, auto ref SPR spans) if (SPR.length > 1) {
+  // all args must be valid
+  void doPunchPatchLine(SPR...) (CombineOp op, int y, auto ref SPR spans) nothrow @trusted if (SPR.length > 0) {
+    if (rdata.simple) {
+      if (op == CombineOp.Or && rdata.simpleSolid) return; // no need to patch completely solid region
+      if ((op == CombineOp.And || op == CombineOp.Cut || op == op == CombineOp.NCut) && !rdata.simpleSolid) return; // no need to patch completely empty region
+    }
+  +/
+
+
+  // `combine`: `lofs` is starting index in `rdata.data` for base line (i.e. length element)
+  //            it should  build a new valid line data, starting from `rdata.data.length`, not including line length tho
+  // all args must be valid
+  void doCombine() (int y, scope void delegate (uint lofs, ref SpanType[] dptr) nothrow @trusted combine) nothrow @trusted {
     // bad luck, build new line
     cow!true();
     if (rdata.simple) {
@@ -587,9 +635,22 @@ private:
     }
 
     auto lofs = rdata.lineofs[y]; // current line offset
-    int lsize = rdata.data[lofs]; // current line size
+    int lsize = rdata.data.ptr[lofs]; // current line size
     auto tmppos = cast(uint)rdata.data.length; // starting position of the new line data
-    patchSpan!psmode(lofs+1, x0, x1);
+
+    //patchSpan!psmode(lofs+1, x0, x1);
+    rdata.data.assumeSafeAppend ~= 0; // length
+    combine(lofs, rdata.data);
+    debug(region_more_prints) { import core.stdc.stdio : printf; printf("LEN=%d\n", cast(int)(rdata.data.length-tmppos)); }
+    if (rdata.data.length-tmppos > SpanType.max) assert(0, "region internal error: line data too big");
+    rdata.data.ptr[tmppos] = cast(SpanType)(rdata.data.length-tmppos);
+
+    debug(region_more_prints) {
+      import core.stdc.stdio : printf;
+      foreach (SpanType t; rdata.data[tmppos..$]) printf(" %u", cast(uint)t);
+      printf("\n");
+    }
+
     int newsize = rdata.data[tmppos]; // size of the new line
 
     // was this line first in slab?
@@ -682,65 +743,21 @@ private:
       }
     }
 
-    // check if we have a fully solid or fully empty region now
-    static if (mode == "patch") {
-      if (rdata.data.length != 2 || rdata.data[0] != 2 || rdata.data[1] != rdata.rwdt) return;
+    // check if we can collapse this region
+    if (rdata.data.length == 2) {
+      if (rdata.data.ptr[0] != 2 || rdata.data.ptr[1] != rdata.rwdt) return;
+    } else if (rdata.data.length == 3) {
+      if (rdata.data.ptr[0] != 3 || rdata.data.ptr[1] != 0 || rdata.data.ptr[2] != rdata.rwdt) return;
     } else {
-      if (rdata.data.length != 3 || rdata.data[0] != 3 || rdata.data[1] != 0 || rdata.data[2] != rdata.rwdt) return;
+      return;
     }
     foreach (immutable ofs; rdata.lineofs[1..$]) if (ofs != 0) return;
 
     rdata.simple = true;
-    static if (mode == "patch") rdata.simpleSolid = true; else rdata.simpleSolid = false;
+    //static if (mode == "patch") rdata.simpleSolid = true; else rdata.simpleSolid = false;
+    rdata.simpleSolid = (rdata.data.length == 2);
     rdata.lineofs.length = 0; // we may need it later, so keep it
   }
-
-  // ////////////////////////////////////////////////////////////////////////// //
-  // all args must be valid
-  // [x0..x1]
-  // destSolid: `true` to patch, `false` to cut
-  // this will build a new valid line data, starting from data.length
-  // (i.e. this line data will include length as first element)
-  // `a`: address of span0 in data
-  void patchSpan(bool destSolid) (uint a, int x0, int x1) nothrow @trusted {
-    // note that after `assumeSafeAppend` we can increase length without further `assumeSafeAppend` calls
-    auto dnstart = rdata.data.length;
-    auto dptr = rdata.data.assumeSafeAppend;
-    dptr ~= 0; // reserved for line length
-    debug(region_more_prints) { import core.stdc.stdio : printf; printf("x0=%d; x1=%d; destSolid=%d; rwdt=%d\n", x0, x1, (destSolid ? 1 : 0), rdata.rwdt); }
-    //SpanType[1] dsp = void;
-    //dsp.ptr[0] = cast(SpanType)(x1-x0+1);
-    SpanType dsp = cast(SpanType)(x1-x0+1);
-    static if (destSolid) {
-      enum op = CombineOp.Or;
-    } else {
-      enum op = CombineOp.Cut;
-    }
-    debug(region_more_prints) {
-      import core.stdc.stdio : printf;
-      auto cspd = CSPD(op, &dsp, x1-x0+1, x0);
-      while (!cspd.empty) {
-        printf(" (%d,%d,%d)", cspd.sx, cspd.ex, (cspd.solid ? 1 : 0));
-        cspd.popFront();
-      }
-      printf("\n");
-    }
-    combineSpans(
-      (int x) @trusted { dptr ~= cast(SpanType)x; },
-      CSPD(CombineOp.Or, rdata.data.ptr+a, rdata.rwdt), // source span
-      CSPD(op, &dsp, x1-x0+1, x0));
-    rdata.data = dptr;
-    rdata.data.ptr[dnstart] = cast(SpanType)(rdata.data.length-dnstart);
-    debug(region_more_prints) {
-      import core.stdc.stdio : printf;
-      while (dnstart < rdata.data.length) {
-        printf(" %u", cast(uint)(rdata.data[dnstart++]));
-      }
-      printf("\n");
-    }
-  }
-
-  enum CombineOp { Or, And, Xor, Cut/*cut solid parts*/, NCut/*cut empty parts*/ }
 
   static struct CSPD {
   nothrow @trusted @nogc:
@@ -791,8 +808,8 @@ private:
     int lastsx = 0; // it's ok
 
     void pushSpan() (int ex, bool solid) {
-      pragma(inline, true);
-      debug(region_more_prints) { import core.stdc.stdio : printf; printf("  ex=%d; solid=%d; lastsx=%d; lastsolid=%d\n", ex, (solid ? 1 : 0), lastsx, (lastsolid ? 1 : 0)); }
+      debug(region_more_prints) {} else pragma(inline, true);
+      //debug(region_more_prints) { import core.stdc.stdio : printf; printf("  ex=%d; solid=%d; lastsx=%d; lastsolid=%d\n", ex, (solid ? 1 : 0), lastsx, (lastsolid ? 1 : 0)); }
       //debug if (ex <= lastsx) { import core.stdc.stdio : printf; printf("ex=%d; lastsx=%d\n", ex, lastsx); }
       debug assert(ex >= lastsx);
       if (solid != lastsolid) {
@@ -1106,7 +1123,7 @@ void fuzzyEnumerator () {
 }
 
 
-//enum OneSeed = 1873105751;
+//enum OneSeed = 1586553857;
 
 void main () {
   import iv.writer;
