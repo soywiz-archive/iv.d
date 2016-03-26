@@ -466,7 +466,7 @@ public:
       } else {
         VColor* da = vs.buf;
         foreach (immutable y; 0..vs.h) {
-          vs.reg.spans!true(y, 0, vs.w-1, (sx, ex) @trusted {
+          vs.reg.spans!true(y, 0, vs.w-1, (int sx, int ex) @trusted {
             //{ import iv.writer; writeln("y=", y, "; sx=", sx, "; ex=", ex); }
             da[sx..ex+1] = col;
           });
@@ -490,7 +490,7 @@ public:
     if (ex > vs.mRClipX1) ex = vs.mRClipX1;
     if (x0 > ex) return;
     uint adr = y0*vs.w;
-    vs.reg.spans!true(y0-vs.mYOfs, vs.mXOfs, x0, ex, (sx, ex) @trusted {
+    vs.reg.spans!true(y0-vs.mYOfs, vs.mXOfs, x0, ex, (int sx, int ex) @trusted {
       if (col.isOpaque) {
         vs.buf[adr+sx..adr+ex+1] = col;
       } else {
@@ -855,7 +855,7 @@ public:
       if (alpha == 0) {
         // copying
         while (sy <= ey) {
-          reg.spans!true(sy-sofsy, sofsx, sx, ex, (x0, x1) @trusted {
+          reg.spans!true(sy-sofsy, sofsx, sx, ex, (int x0, int x1) @trusted {
             import core.stdc.string : memcpy;
             memcpy(dba+x0-sx, sba+x0, (x1-x0+1)*VColor.sizeof);
           });
@@ -870,7 +870,7 @@ public:
     {
       static if (btype == "NoSrcAlpha") immutable uint a = (alpha<<VColor.AShift);
       while (sy <= ey) {
-        vs.reg.spans!true(sy-sofsy, sofsx, sx, ex, (x0, x1) @trusted {
+        vs.reg.spans!true(sy-sofsy, sofsx, sx, ex, (int x0, int x1) @trusted {
           uint* src = sba+x0;
           uint* dst = dba+x0-sx;
           while (x0++ <= x1) {
