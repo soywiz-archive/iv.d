@@ -25,10 +25,10 @@ struct Region {
   alias SpanType = ushort; // you probably will never need this, but...
 
   @property pure const nothrow @safe @nogc {
-    int width () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.rwdt : 0); }
-    int height () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.rhgt : 0); }
-    bool solid () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.simple && rdata.rwdt > 0 && rdata.rhgt > 0 && rdata.simpleSolid : false); }
-    bool empty () { static if (__VERSION__ > 2067) pragma(inline, true); return (rdatap ? rdata.rwdt < 1 || rdata.rhgt < 1 || (rdata.simple && !rdata.simpleSolid) : true); }
+    int width () { pragma(inline, true); return (rdatap ? rdata.rwdt : 0); }
+    int height () { pragma(inline, true); return (rdatap ? rdata.rhgt : 0); }
+    bool solid () { pragma(inline, true); return (rdatap ? rdata.simple && rdata.rwdt > 0 && rdata.rhgt > 0 && rdata.simpleSolid : false); }
+    bool empty () { pragma(inline, true); return (rdatap ? rdata.rwdt < 1 || rdata.rhgt < 1 || (rdata.simple && !rdata.simpleSolid) : true); }
   }
 
   @property uint[] getData () const nothrow @safe {
@@ -80,7 +80,7 @@ struct Region {
     rdata.data = null;
   }
 
-  // is given point visible?
+  /// is given point visible?
   bool visible (int x, int y) const pure nothrow @safe @nogc {
     // easiest cases
     if (!rdatap) return false;
@@ -98,16 +98,16 @@ struct Region {
     return ((idx+(line[idx] == x))%2 == 0);
   }
 
-  // punch a hole
+  /// punch a hole
   void punch (int x, int y, int w=1, int h=1) nothrow @trusted { doPunchPatch!"punch"(x, y, w, h); }
 
-  // patch a hole
+  /// patch a hole
   void patch (int x, int y, int w=1, int h=1) nothrow @trusted { doPunchPatch!"patch"(x, y, w, h); }
 
   // ////////////////////////////////////////////////////////////////////////// //
   enum State { Mixed = -1, Empty, Solid } //WARNING! don't change the order!
 
-  // return span state %-)
+  /// return span state %-)
   State spanState (int y, int x0, int x1) const pure nothrow @safe @nogc {
     if (rdata is null) return State.Empty;
     if (y < 0 || y >= rdata.rhgt || x1 < 0 || x0 >= rdata.rwdt || x1 < x0) return State.Empty;
@@ -137,20 +137,29 @@ struct Region {
     return cast(State)idx;
   }
 
-  // call delegate for each solid or empty span
-  // multiple declarations will allow us to use this in `@nogc` and `nothrow` contexts
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) const nothrow @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) const @nogc { spansEnumerator!solids(y, 0, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int x0, int x1, scope void delegate (int x0, int x1) dg) const { spansEnumerator!solids(y, 0, x0, x1, dg); }
+  static private template IsGoodSDG(T) {
+    private import std.traits;
+    static private template IsGoodRT(T) { enum IsGoodRT = is(T == void) || is(T == bool) || is(T : int); }
+    static private template IsGoodAT(T) { enum IsGoodAT = is(T == int) || is(T == long) || is(T == uint) || is(T == ulong); }
+    enum IsGoodSDG = isCallable!T && IsGoodRT!(ReturnType!T) && (variadicFunctionStyle!T == Variadic.no) &&
+      Parameters!T.length == 2 && IsGoodAT!(Parameters!T[0]) && IsGoodAT!(Parameters!T[1]);
+  }
 
-  // `ofsx` will be automatically subtracted from `x0` and `x1` args, and added to `x0` and `x1` delegate args
-  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) nothrow @nogc dg) const nothrow @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) @nogc dg) const @nogc { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
-  void spans(bool solids=true) (int y, int ofsx, int x0, int x1, scope void delegate (int x0, int x1) dg) const { spansEnumerator!solids(y, ofsx, x0, x1, dg); }
+  /// call delegate for each solid or empty span
+  /// for non-void returning delegates, return !0 to exit
+  auto spans(bool solids=true, DG) (int y, int x0, int x1, scope DG dg) const if (IsGoodSDG!DG) { return spansEnumerator!(DG, solids)(y, 0, x0, x1, dg); }
 
+  /// call delegate for each solid or empty span
+  /// for non-void returning delegates, return !0 to exit
+  /// `ofsx` will be automatically subtracted from `x0` and `x1` args, and added to `x0` and `x1` delegate args
+  auto spans(bool solids=true, DG) (int y, int ofsx, int x0, int x1, scope DG dg) const if (IsGoodSDG!DG) { return spansEnumerator!(DG, solids)(y, ofsx, x0, x1, dg); }
+
+  /// element of span range
   static struct XPair { int x0, x1; }
 
+  /// get range of spans
   auto spanRange(bool solids=true) (int y, int x0, int x1) nothrow @safe @nogc { return spanRange!solids(y, 0, x0, x1); }
+  /// ditto
   auto spanRange(bool solids=true) (int y, int ofsx, int x0, int x1) nothrow @safe @nogc {
     static struct SpanRange(bool solids) {
       int ofsx, x0, x1, rwdt, idx;
@@ -158,7 +167,7 @@ struct Region {
       XPair fpair; // front
       const(SpanType)[] line;
 
-    nothrow @safe @nogc: @trusted:
+    nothrow @trusted @nogc:
       this (ref Region reg, int y, int aofsx, int ax0, int ax1) {
         ofsx = aofsx;
         x0 = ax0;
@@ -343,36 +352,42 @@ struct Region {
     return SpanRange!solids(this, y, ofsx, x0, x1);
   }
 
-  //TODO: slab enumerator
 private:
   // ////////////////////////////////////////////////////////////////////////// //
-  void spansEnumerator(bool solids, T) (int y, int ofsx, int x0, int x1, scope /*void delegate (int x0, int x1)*/T dg) const {
-    if (x0 > x1) return;
-    assert(dg !is null);
+  auto spansEnumerator(DG, bool solids) (int y, int ofsx, int x0, int x1, scope DG dg) const {
+    import std.traits : ReturnType;
+    static if (is(ReturnType!DG == void)) {
+      enum ReturnFail = "return;";
+      enum DgCall(string args) = "dg("~args~");";
+    } else {
+      static if (is(ReturnType!DG == bool)) enum ReturnFail = "return false;"; else enum ReturnFail = "return 0;";
+      enum DgCall(string args) = "if (auto xres = dg("~args~")) return xres;";
+    }
+    if (x0 > x1 || dg is null) mixin(ReturnFail);
     if (rdata is null) {
       static if (!solids) dg(x0, x1);
-      return;
+      mixin(ReturnFail);
     }
     x0 -= ofsx;
     x1 -= ofsx;
     if (y < 0 || y >= rdata.rhgt || x1 < 0 || x0 >= rdata.rwdt || x1 < x0) {
-      static if (!solids) dg(x0+ofsx, x1+ofsx);
-      return;
+      static if (!solids) { mixin(DgCall!"x0+ofsx, x1+ofsx"); }
+      mixin(ReturnFail);
     }
     if (rdata.simple) {
       if (rdata.simpleSolid) {
         static if (solids) {
           if (x0 < 0) x0 = 0;
           if (x1 >= rdata.rwdt) x1 = rdata.rwdt-1;
-          if (x0 <= x1) dg(x0+ofsx, x1+ofsx);
+          if (x0 <= x1) { mixin(DgCall!"x0+ofsx, x1+ofsx"); }
         } else {
-          if (x0 < 0) dg(x0+ofsx, -1+ofsx);
-          if (x1 >= rdata.rwdt) dg(rdata.rwdt+ofsx, x1+ofsx);
+          if (x0 < 0) { mixin(DgCall!"x0+ofsx, -1+ofsx"); }
+          if (x1 >= rdata.rwdt) { mixin(DgCall!"rdata.rwdt+ofsx, x1+ofsx"); }
         }
       } else {
-        static if (!solids) dg(x0+ofsx, x1+ofsx);
+        static if (!solids) { mixin(DgCall!"x0+ofsx, x1+ofsx"); }
       }
-      return;
+      mixin(ReturnFail);
     }
     immutable ldofs = rdata.lineofs[y];
     immutable len = rdata.data[ldofs];
@@ -382,8 +397,8 @@ private:
     if (x0 < 0) {
       int ex = (rdata.data[ldofs+1] == 0 ? rdata.data[ldofs+2]-1 : -1);
       // is first span empty too?
-      if (ex >= x1) { static if (!solids) dg(x0+ofsx, x1+ofsx); return; }
-      static if (!solids) dg(x0+ofsx, ex+ofsx);
+      if (ex >= x1) { static if (!solids) { mixin(DgCall!"x0+ofsx, x1+ofsx"); } mixin(ReturnFail); }
+      static if (!solids) { mixin(DgCall!"x0+ofsx, ex+ofsx"); }
       x0 = ex+1;
     }
     static if (solids) { if (x1 >= rdata.rwdt) x1 = rdata.rwdt-1; }
@@ -400,12 +415,12 @@ private:
       // emit part from x0 to ex if necessary
       static if (solids) {
         // current span is solid?
-        if (idx%2 == 0) dg(x0+ofsx, cex+ofsx);
+        if (idx%2 == 0) { mixin(DgCall!"x0+ofsx, cex+ofsx"); }
       } else {
         // current span is empty?
         if (idx%2 == 1) {
-          dg(x0+ofsx, (ex < rdata.rwdt-1 ? cex : x1)+ofsx);
-          if (ex == rdata.rwdt-1) return;
+          { mixin(DgCall!"x0+ofsx, (ex < rdata.rwdt-1 ? cex : x1)+ofsx"); }
+          if (ex == rdata.rwdt-1) mixin(ReturnFail);
         } else {
           if (ex == rdata.rwdt-1) { x0 = rdata.rwdt; break; }
         }
@@ -414,7 +429,8 @@ private:
       ++idx;
       //static if (!solids) { if (x0 == rdata.rwdt) break; }
     }
-    static if (!solids) { if (x0 <= x1) dg(x0+ofsx, x1+ofsx); }
+    static if (!solids) { if (x0 <= x1) { mixin(DgCall!"x0+ofsx, x1+ofsx"); } }
+    mixin(ReturnFail);
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
@@ -1045,9 +1061,9 @@ void fuzzyEnumerator () {
       int[] coords;
       int type = uniform!"[]"(0, 1);
       if (type == 0) {
-        reg.spans!false(0, x0, x1, (x0, x1) { coords ~= x0; coords ~= x1; });
+        reg.spans!false(0, x0, x1, (int x0, int x1) { coords ~= x0; coords ~= x1; });
       } else {
-        reg.spans!true(0, x0, x1, (x0, x1) { coords ~= x0; coords ~= x1; });
+        reg.spans!true(0, x0, x1, (int x0, int x1) { coords ~= x0; coords ~= x1; return 0; });
       }
       auto ecr = buildCoords(bmp[], type, x0, x1);
       assert(ecr[] == coords[]);
