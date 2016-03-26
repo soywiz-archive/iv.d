@@ -685,162 +685,164 @@ private:
   // destSolid: `true` to patch, `false` to cut
   // this will build a new valid line data, starting from data.length
   // (i.e. this line data will include length as first element)
+  // `a`: address of span0 in data
   void patchSpan(bool destSolid) (uint a, int x0, int x1) nothrow @trusted {
-    /*
-    if (rdata.rwdt < 1) return;
-    if (x1 < 0 || x0 >= rdata.rwdt || x1 < x0) return;
-    if (x0 < 0) x0 = 0;
-    if (x1 >= rdata.rwdt) x1 = rdata.rwdt-1;
-    */
-    debug assert(x0 <= x1);
-
-    //int a = 0; // address in data
-    int sx = 0, ex; // current span coords [sx..ex]
-    bool solid = true; // current span type
-
-    // load first span
-    if (rdata.data[a] == 0) {
-      // first span is empty
-      solid = false;
-      ++a;
-    }
-    debug assert(rdata.data[a] > 0);
-    ex = rdata.data[a++]-1;
-    debug assert(ex >= sx);
-
     // note that after `assumeSafeAppend` we can increase length without further `assumeSafeAppend` calls
-    rdata.data.assumeSafeAppend ~= 0; // reserved for line length
-    auto dnlen = rdata.data.length; // to avoid `.length -= 1`, as it require another `assumeSafeAppend`
-    immutable sp0pos = dnlen;
-
-    // the only function that does `~=`
-    void putN() (int n) nothrow @safe {
-      //DMD sux, it can't inline this
-      //static if (__VERSION__ > 2067) pragma(inline, true);
-      debug assert(n >= 0 && n <= SpanType.max);
-      if (dnlen == rdata.data.length) rdata.data ~= cast(SpanType)n; else rdata.data[dnlen] = cast(SpanType)n;
-      ++dnlen;
+    auto dnstart = rdata.data.length;
+    auto dptr = rdata.data.assumeSafeAppend;
+    dptr ~= 0; // reserved for line length
+    debug(region_more_prints) { import core.stdc.stdio : printf; printf("x0=%d; x1=%d; destSolid=%d; rwdt=%d\n", x0, x1, (destSolid ? 1 : 0), rdata.rwdt); }
+    //SpanType[1] dsp = void;
+    //dsp.ptr[0] = cast(SpanType)(x1-x0+1);
+    SpanType dsp = cast(SpanType)(x1-x0+1);
+    static if (destSolid) {
+      enum op = CombineOp.Or;
+    } else {
+      enum op = CombineOp.Cut;
     }
-
-    // now process spans
-    for (;;) {
-      if (x1 < 0 || x0 > ex) {
-        // nothing to do, or current span is unaffected
-       put_and_go_to_next_span:
-        debug assert(sx <= ex);
-        debug assert(ex < rdata.rwdt);
-        // if this is first empty span, put zero-width soild first
-        if (!solid && dnlen == sp0pos) putN(0);
-        putN(ex+1); // put current span
-        if (ex == rdata.rwdt-1) break; // no more spans
-        sx = ex+1;
-        ex = rdata.data[a++]-1;
-        debug assert(ex < rdata.rwdt);
-        debug assert(sx <= ex);
-        solid = !solid;
-        continue;
+    debug(region_more_prints) {
+      import core.stdc.stdio : printf;
+      auto cspd = CSPD(op, &dsp, x1-x0+1, x0);
+      while (!cspd.empty) {
+        printf(" (%d,%d,%d)", cspd.sx, cspd.ex, (cspd.solid ? 1 : 0));
+        cspd.popFront();
       }
-      if (solid == destSolid) {
-        // at destSolid span
-        if (x1 <= ex) {
-          // completely in current span
-          x1 = -1; // no more checks
-          goto put_and_go_to_next_span;
-        } else {
-          // partially in current span
-          x0 = ex+1; // skip current span
-          goto put_and_go_to_next_span;
-        }
+      printf("\n");
+    }
+    combineSpans(
+      (int x) @trusted { dptr ~= cast(SpanType)x; },
+      CSPD(CombineOp.Or, rdata.data.ptr+a, rdata.rwdt), // source span
+      CSPD(op, &dsp, x1-x0+1, x0));
+    rdata.data = dptr;
+    rdata.data.ptr[dnstart] = cast(SpanType)(rdata.data.length-dnstart);
+    debug(region_more_prints) {
+      import core.stdc.stdio : printf;
+      while (dnstart < rdata.data.length) {
+        printf(" %u", cast(uint)(rdata.data[dnstart++]));
+      }
+      printf("\n");
+    }
+  }
+
+  enum CombineOp { Or, And, Xor, Cut/*cut solid parts*/, NCut/*cut empty parts*/ }
+
+  static struct CSPD {
+  nothrow @trusted @nogc:
+    const(SpanType)* data;
+    int width; // to detect span end
+    int xofs;
+    CombineOp op; // operation
+    bool dsolid; // current span
+    int csx;
+
+    this (CombineOp aop, const(SpanType)* adata, int awdt, int axofs=0) {
+      // if first span is zero-sized, this region starts with empty span
+      op = aop;
+      width = awdt;
+      xofs = axofs;
+      if (*adata == 0) {
+        dsolid = false;
+        ++adata;
       } else {
-        // at !destSolid span
-        if (x0 == sx) {
-          // empty space starts at current span start
-          if (x1 >= ex) {
-            // covers the whole current span
-            if (x1 > ex) x0 = ex+1; else x1 = -1; // skip current span
-            // drop next span (it's the same type as previous saved span, and we dropped span inbetween, so let's merge)
-            int nextex = (ex < rdata.rwdt-1 ? rdata.data[a++]-1 : rdata.rwdt-1); // next span is consumed
-            // previous stored span is destSolid (if any), drop it, it will be replaced with combined one
-            if (dnlen > sp0pos) {
-              dnlen -= 1;
-            } else {
-              // this is first span, nothing to drop
-              debug assert(sx == 0);
-            }
-            sx = (dnlen > sp0pos ? rdata.data[dnlen-1] : 0);
-            solid = destSolid; // previous span is destSolid
-            ex = nextex;
-            continue;
-          } else {
-            // cut left part: [sx..x1]
-            if (dnlen == sp0pos) {
-              // this is first span, and if we need first empty span, insert zero-width solid span
-              debug assert(sx == 0);
-              // put destSolid part
-              static if (!destSolid) putN(0);
-              putN(x1+1);
-            } else {
-              rdata.data[dnlen-1] = cast(SpanType)(x1+1); // extend previous span to x1
-            }
-            sx = x1+1; // current span starts here
-            x1 = -1; // no more checks
-            goto put_and_go_to_next_span;
-          }
-        } else {
-          // empty space starts somewhere inside the current span
-          if (x1 >= ex) {
-            // covers whole right part of current span
-            static if (destSolid) { if (dnlen == sp0pos) putN(0); } // put zero-width solid span
-            putN(x0); // put current span
-            // go to next span
-            if (ex != rdata.rwdt-1) ex = (ex < rdata.rwdt-1 ? rdata.data[a++]-1 : rdata.rwdt-1);
-            sx = x0; // fix span start
-            debug assert(sx <= ex);
-            solid = destSolid; // we are destSolid
-            continue;
-          } else {
-            // cut hole in current span
-            static if (destSolid) { if (dnlen == sp0pos) putN(0); } // put zero-width solid span
-            putN(x0); // put left part of current span
-            putN(x1+1); // put hole
-            // process right part of current span
-            sx = x1+1;
-            x1 = -1;
-            goto put_and_go_to_next_span;
-          }
+        dsolid = true;
+      }
+      data = adata;
+    }
+
+    this() (CombineOp aop, auto ref Region rg, int axofs=0) {
+      this(aop, rg.ldata.ptr, rg.width, axofs);
+    }
+
+    @disable this (this); // no copies
+
+    @property bool empty () const pure { pragma(inline, true); return (data is null); }
+    @property bool solid () const pure { pragma(inline, true); return dsolid; }
+    @property int sx () const pure { pragma(inline, true); return xofs+csx; }
+    @property int ex () const pure { pragma(inline, true); return xofs+(*data)-1; }
+    void popFront () {
+      pragma(inline, true);
+      csx = *data++;
+      if (csx >= width) data = null;
+      dsolid = !dsolid;
+    }
+  }
+
+  // spans[0] should have `int .width`, `empty`, `popFront`, `sx`, `ex`, `solid`
+  // others sould have: `empty`, `popFront`, `sx`, `ex`, `solid`, `op`
+  // spans[0] should always start at 0 (i.e. it is alpha and omega)
+  static void combineSpans(SPR...) (scope void delegate (int x) nothrow @safe putX, auto ref SPR spans) if (SPR.length > 1) {
+    bool lastsolid = true; // it's ok
+    int lastsx = 0; // it's ok
+
+    void pushSpan() (int ex, bool solid) {
+      pragma(inline, true);
+      debug(region_more_prints) { import core.stdc.stdio : printf; printf("  ex=%d; solid=%d; lastsx=%d; lastsolid=%d\n", ex, (solid ? 1 : 0), lastsx, (lastsolid ? 1 : 0)); }
+      //debug if (ex <= lastsx) { import core.stdc.stdio : printf; printf("ex=%d; lastsx=%d\n", ex, lastsx); }
+      debug assert(ex >= lastsx);
+      if (solid != lastsolid) {
+        lastsolid = solid;
+        putX(lastsx); // new span starts here
+        debug(region_more_prints) { import core.stdc.stdio : printf; printf("   EMIT: %d\n", lastsx); }
+      }
+      lastsx = ex+1;
+    }
+
+    debug assert(!spans[0].empty);
+    debug assert(spans[0].sx == 0);
+    immutable sp0w = spans[0].width;
+    int cursx = 0;
+    while (!spans[0].empty) {
+      // process other spans
+      bool seenAliveSpan = false;
+      bool nsolid = spans[0].solid;
+      int nex = spans[0].ex;
+      foreach (ref sp; spans[1..$]) {
+        while (!sp.empty && sp.ex < cursx) sp.popFront();
+        if (sp.empty) continue;
+        seenAliveSpan = true;
+        debug(region_more_prints) { import core.stdc.stdio : printf; printf(" cursx=%d; nex=%d; nsolid=%d; sp.sx=%d; sp.ex=%d; sp.solid=%d\n", cursx, nex, (nsolid ? 1 : 0), sp.sx, sp.ex, (sp.solid ? 1 : 0)); }
+        //debug if (sp.sx > cursx) { import core.stdc.stdio : printf; printf("cursx=%d; sp.sx=%d; sp.ex=%d; sp.solid=%d\n", cursx, sp.sx, sp.ex, (sp.solid ? 1 : 0)); }
+        //debug assert(sp.sx <= cursx);
+        if (sp.sx > nex) continue; // too far
+        if (sp.sx > cursx) { nex = sp.sx-1; continue; } // partial
+        // do logic op
+        final switch (sp.op) {
+          case CombineOp.Or: nsolid = nsolid || sp.solid; break;
+          case CombineOp.And: nsolid = nsolid && sp.solid; break;
+          case CombineOp.Xor: if (sp.solid) nsolid = !nsolid; break;
+          case CombineOp.Cut: if (sp.solid) nsolid = false; break;
+          case CombineOp.NCut: if (!sp.solid) nsolid = false; break;
         }
+        if (sp.ex < nex) nex = sp.ex;
+      }
+      pushSpan(nex, nsolid);
+      if (!seenAliveSpan) {
+        // no more alive spans, process span0 till the end
+        debug(region_more_prints) { import core.stdc.stdio : printf; printf(" NM!\n"); }
+        if (nex < spans[0].ex) pushSpan(spans[0].ex, spans[0].solid); // finish current span
+        for (;;) {
+          spans[0].popFront();
+          if (spans[0].empty) break;
+          pushSpan(spans[0].ex, spans[0].solid);
+        }
+        // put sentinel
+        debug assert(lastsx <= sp0w);
+        putX(sp0w);
+        return;
+      }
+      if (nex < spans[0].ex) {
+        // something was done, and first slab of span0 is not completely eaten
+        cursx = nex+1;
+      } else {
+        // either no alive spans, or first slab of span0 is completely eaten
+        spans[0].popFront();
+        if (spans[0].empty) { putX(sp0w); return; } // done
+        cursx = spans[0].sx;
       }
     }
-    debug assert(ex == rdata.rwdt-1);
-    debug assert(dnlen > 0 && rdata.data[dnlen-1] == rdata.rwdt); // check end-of-span flag
-
-    // check if we covered the whole span
-    debug {
-      sx = 0;
-      usize pp = sp0pos;
-      if (rdata.data[pp] == 0) ++pp;
-      while (sx != rdata.rwdt) {
-        // check if span coords are increasing
-        if (rdata.data[pp] == 0 || rdata.data[pp] <= sx) {
-          //{ import std.stdio; foreach (immutable idx; sp0pos..rdata.data.length) writeln(idx-sp0pos, ": ", rdata.data[idx]); }
-          debug assert(rdata.data[pp+1] != 0);
-        }
-        sx = rdata.data[pp++];
-      }
-      import std.conv : to;
-      debug assert(sx == rdata.rwdt, "sx="~to!string(sx)~"; rwdt="~to!string(rdata.rwdt));
-    }
-
-    // fix line length
-    if (rdata.data.length-sp0pos > SpanType.max-1) assert(0, "region internal error: span data is too long");
-    rdata.data[sp0pos-1] = cast(SpanType)(rdata.data.length-sp0pos+1);
-
-    // remove unused data, if any
-    // this probably will never happen, but it's better to play safe %-)
-    if (dnlen < rdata.data.length) {
-      rdata.data.length = dnlen;
-      rdata.data.assumeSafeAppend; // caller must be sure that no unnecessary realloc will happen
-    }
+    // put sentinel
+    debug assert(lastsx <= sp0w);
+    putX(sp0w);
   }
 
 private:
@@ -1026,6 +1028,14 @@ void fuzzyEnumerator () {
   foreach (immutable tx0; 0..1000) {
     checkLineOffsets(reg);
     buildBitmap(reg, bmp[]);
+    debug(region_more_prints) {
+      if (1/*bmp[] != ebmp[]*/) {
+        assert(bmp.length == ebmp.length);
+        writeln;
+        foreach (immutable idx; 0..bmp.length) write(bmp[idx]); writeln;
+        foreach (immutable idx; 0..ebmp.length) write(ebmp[idx]); writeln;
+      }
+    }
     assert(bmp[] == ebmp[]);
     foreach (immutable trx; 0..200) {
       //writeln("*");
@@ -1063,6 +1073,7 @@ void fuzzyEnumerator () {
       int w = uniform!"[]"(0, reg.width);
       int h = uniform!"[]"(0, reg.height);
       int patch = uniform!"[]"(0, 1);
+      debug(region_more_prints) { import core.stdc.stdio : printf; printf(":x0=%d; x1=%d; w=%d; solid=%d\n", x, x+w-1, w, patch); }
       if (patch) reg.patch(x, y, w, h); else reg.punch(x, y, w, h);
       // fix ebmp
       foreach (int dy; y..y+h) {
@@ -1078,18 +1089,22 @@ void fuzzyEnumerator () {
   }
 }
 
+
+//enum OneSeed = 1873105751;
+
 void main () {
   import iv.writer;
   import std.random;
   foreach (immutable trycount; 0..1000) {
     {
       auto seed = unpredictableSeed;
-      //seed = 4098958554;
+      static if (is(typeof(OneSeed))) seed = OneSeed;
       rndGen.seed(seed);
       write("try: ", trycount, "; seed = ", seed, " ... ");
     }
     fuzzyEnumerator();
     writeln("OK");
+    static if (is(typeof(OneSeed))) break;
   }
 }
 }
