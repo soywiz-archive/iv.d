@@ -44,6 +44,11 @@ enum isWriteableStream(T) = is(typeof((inout int=0) {
   t.rawWrite(cast(void[])b);
 }));
 
+enum isCloseableStream(T) = is(typeof((inout int=0) {
+  auto t = T.init;
+  t.close();
+}));
+
 enum isRWStream(T) = isReadableStream!T && isWriteableStream!T;
 
 template isSeekableStream(T) {
@@ -86,6 +91,16 @@ enum streamHasName(T) = is(typeof((inout int=0) {
 enum streamHasSize(T) = is(typeof((inout int=0) {
   auto t = T.init;
   ulong pos = t.size;
+}));
+
+enum streamHasIsOpen(T) = is(typeof((inout int=0) {
+  auto t = T.init;
+  bool op = t.isOpen;
+}));
+
+enum streamHasDetach(T) = is(typeof((inout int=0) {
+  auto t = T.init;
+  op = t.detach;
 }));
 
 
