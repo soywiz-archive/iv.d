@@ -138,7 +138,7 @@ public:
     if (buf.length > 0) {
       ssize res;
       try {
-        res = wst.read(buf.ptr, buf.length*T.sizeof);
+        synchronized(wst) res = wst.read(buf.ptr, buf.length*T.sizeof);
       } catch (Exception e) {
         // chain exception
         throw new VFSException("read error", __FILE__, __LINE__, e);
@@ -155,7 +155,7 @@ public:
     if (buf.length > 0) {
       ssize res;
       try {
-        res = wst.write(buf.ptr, buf.length*T.sizeof);
+        synchronized(wst) res = wst.write(buf.ptr, buf.length*T.sizeof);
       } catch (Exception e) {
         // chain exception
         throw new VFSException("read error", __FILE__, __LINE__, e);
@@ -167,7 +167,7 @@ public:
   void seek (long offset, int origin=Seek.Set) {
     if (!isOpen) throw new VFSException("can't seek in closed stream");
     try {
-      wst.seek(offset, origin);
+      synchronized(wst) wst.seek(offset, origin);
     } catch (Exception e) {
       // chain exception
       throw new VFSException("read error", __FILE__, __LINE__, e);
@@ -177,7 +177,7 @@ public:
   @property long tell () {
     if (!isOpen) throw new VFSException("can't get position in closed stream");
     try {
-      return wst.tell;
+      synchronized(wst) return wst.tell;
     } catch (Exception e) {
       // chain exception
       throw new VFSException("read error", __FILE__, __LINE__, e);
@@ -187,7 +187,7 @@ public:
   @property long size () {
     if (!isOpen) throw new VFSException("can't get size of closed stream");
     try {
-      return wst.size;
+      synchronized(wst) return wst.size;
     } catch (Exception e) {
       // chain exception
       throw new VFSException("read error", __FILE__, __LINE__, e);
@@ -258,7 +258,7 @@ protected:
     if (xrc == 0) {
       import core.memory : GC;
       import core.stdc.stdlib : free;
-      close(); // finalize stream
+      synchronized(this) close(); // finalize stream
       /*
       if (gcroot) {
         // remove roots
