@@ -527,7 +527,7 @@ private struct ZipFileLowLevel {
 
   alias tell = pos;
 
-  this (ZipArchiveImpl zip, uint idx) {
+  this (ZipArchiveImpl zip, usize idx) {
     assert(zip !is null);
     assert(idx < zip.dir.length);
     // read file header

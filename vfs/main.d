@@ -97,21 +97,51 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared VFSDriver[] drivers;
+struct DriverInfo {
+  enum Mode { Normal, First, Last }
+  Mode mode;
+  VFSDriver drv;
+}
+
+__gshared DriverInfo[] drivers;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// register new VFS driver
 public void vfsRegister(string mode="normal") (VFSDriver drv) {
-  static assert(mode == "normal" || mode == "last");
+  static assert(mode == "normal" || mode == "last" || mode == "first");
   if (drv is null) return;
+  //{ import core.stdc.stdio : printf; printf("*** %p [%s]\n", cast(void*)drv, mode.ptr); }
   ptlock.lock();
   scope(exit) ptlock.unlock();
   static if (mode == "normal") {
-    drivers ~= drv;
+    // normal
+    usize ipos = drivers.length;
+    while (ipos > 0 && drivers[ipos-1].mode == DriverInfo.Mode.First) --ipos;
+    //{ import core.stdc.stdio : printf; printf("  : %u (%u)\n", cast(uint)ipos, cast(uint)drivers.length); }
+    if (ipos == drivers.length) {
+      drivers ~= DriverInfo(DriverInfo.Mode.Normal, drv);
+    } else {
+      drivers.length += 1;
+      foreach_reverse (immutable c; ipos+1..drivers.length) drivers[c] = drivers[c-1];
+      drivers[ipos] = DriverInfo(DriverInfo.Mode.Normal, drv);
+    }
+  } else static if (mode == "first") {
+    // first
+    drivers ~= DriverInfo(DriverInfo.Mode.First, drv);
+  } else static if (mode == "last") {
+    drivers = [DriverInfo(DriverInfo.Mode.Last, drv)]~drivers;
   } else {
-    drivers = [drv]~drivers;
+    static assert(0, "wtf?!");
   }
+  /*
+  {
+    foreach (immutable idx, ref di; drivers) {
+      import core.stdc.stdio : printf;
+      printf("+++ %u (%u) %p\n", cast(uint)idx, cast(uint)di.mode, cast(void*)di.drv);
+    }
+  }
+  */
 }
 
 
@@ -137,9 +167,9 @@ public VFile vfsOpenFile (const(char)[] fname) {
     scope(exit) ptlock.unlock();
 
     // try all drivers
-    foreach_reverse (VFSDriver drv; drivers) {
+    foreach_reverse (ref di; drivers) {
       try {
-        auto fl = drv.tryOpen(fname);
+        auto fl = di.drv.tryOpen(fname);
         if (fl.isOpen) return fl;
       } catch (Exception e) {
         // chain
@@ -168,18 +198,37 @@ public VFile vfsOpenFile (const(char)[] fname) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared VFSDriverDetector[] detectors;
+struct DetectorInfo {
+  enum Mode { Normal, First, Last }
+  Mode mode;
+  VFSDriverDetector dt;
+}
+
+__gshared DetectorInfo[] detectors;
 
 
 public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
-  static assert(mode == "normal" || mode == "first");
+  static assert(mode == "normal" || mode == "last" || mode == "first");
   if (dt is null) return;
   ptlock.lock();
   scope(exit) ptlock.unlock();
   static if (mode == "normal") {
-    detectors ~= dt;
+    // normal
+    usize ipos = detectors.length;
+    while (ipos > 0 && detectors[ipos-1].mode == DetectorInfo.Mode.Last) --ipos;
+    if (ipos == detectors.length) {
+      detectors ~= DetectorInfo(DetectorInfo.Mode.Normal, dt);
+    } else {
+      detectors.length += 1;
+      foreach_reverse (immutable c; ipos+1..detectors.length) detectors[c] = detectors[c-1];
+      detectors[ipos] = DetectorInfo(DetectorInfo.Mode.Normal, dt);
+    }
+  } else static if (mode == "last") {
+    detectors ~= DetectorInfo(DetectorInfo.Mode.First, dt);
+  } else static if (mode == "first") {
+    detectors = [DetectorInfo(DetectorInfo.Mode.Last, dt)]~detectors;
   } else {
-    detectors = [dt]~detectors;
+    static assert(0, "wtf?!");
   }
 }
 
@@ -212,10 +261,10 @@ public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
   scope(exit) ptlock.unlock();
 
   // try all detectors
-  foreach_reverse (VFSDriverDetector dt; detectors) {
+  foreach (ref di; detectors) {
     try {
       fl.seek(opos);
-      auto drv = dt.tryOpen(fl);
+      auto drv = di.dt.tryOpen(fl);
       if (drv !is null) { vfsRegister(drv); return; }
     } catch (Exception e) {
       // chain
