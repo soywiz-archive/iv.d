@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arcs.f2dat;
+module iv.vfs.arcs.q1pak;
 
 import iv.vfs : usize, ssize, Seek;
 import iv.vfs.augs;
@@ -25,16 +25,16 @@ import iv.vfs.vfile;
 
 // ////////////////////////////////////////////////////////////////////////// //
 shared static this () {
-  vfsRegisterDetector(new F2DatDetector());
+  vfsRegisterDetector(new Q1PakDetector());
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private final class F2DatDetector : VFSDriverDetector {
+private final class Q1PakDetector : VFSDriverDetector {
   override VFSDriver tryOpen (VFile fl) {
     try {
-      auto pak = new F2DatArchiveImpl(fl);
-      return new VFSDriverF2Dat(pak);
+      auto pak = new Q1PakArchiveImpl(fl);
+      return new VFSDriverQ1Pak(pak);
     } catch (Exception) {}
     return null;
   }
@@ -42,12 +42,12 @@ private final class F2DatDetector : VFSDriverDetector {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public final class VFSDriverF2Dat : VFSDriver {
+public final class VFSDriverQ1Pak : VFSDriver {
 private:
-  F2DatArchiveImpl pak;
+  Q1PakArchiveImpl pak;
 
 public:
-  this (F2DatArchiveImpl apak) {
+  this (Q1PakArchiveImpl apak) {
     if (apak is null) throw new VFSException("wtf?!");
     pak = apak;
   }
@@ -65,11 +65,9 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private final class F2DatArchiveImpl {
+private final class Q1PakArchiveImpl {
 protected:
   static struct FileInfo {
-    bool packed;
-    ulong pksize;
     ulong size;
     ulong ofs; // offset in .DAT
     string name; // with path
@@ -96,11 +94,11 @@ public:
   final @property auto files () {
     static struct Range {
     private:
-      F2DatArchiveImpl me;
+      Q1PakArchiveImpl me;
       usize curindex;
 
     nothrow @safe @nogc:
-      this (F2DatArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
+      this (Q1PakArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
 
     public:
       @property bool empty () const { return (curindex >= me.dir.length); }
@@ -133,13 +131,13 @@ public:
 
     foreach_reverse (immutable idx, ref fi; dir) {
       if (mNormNames) {
-        if (strequ(fi.name, de.name)) return wrapStream(F2DatFileLowLevel(this, idx));
+        if (strequ(fi.name, de.name)) return wrapStream(Q1PakFileLowLevel(this, idx));
       } else {
-        if (fi.name == de.name) return wrapStream(F2DatFileLowLevel(this, idx));
+        if (fi.name == de.name) return wrapStream(Q1PakFileLowLevel(this, idx));
       }
     }
 
-    throw new VFSNamedException!"F2DatArchive"("file not found");
+    throw new VFSNamedException!"Q1PakArchive"("file not found");
   }
 
   VFile fopen (const(char)[] fname) {
@@ -154,149 +152,74 @@ private:
   }
 
   void open (VFile fl) {
-    debug(f2datarc) import std.stdio : writeln, writefln;
+    debug(q1pakarc) import std.stdio : writeln, writefln;
     scope(failure) cleanup();
 
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"F2DatArchive"("file too big");
-    // check it
-    if (flsize < 8) throw new VFSNamedException!"F2DatArchive"("invalid DAT file");
-    fl.seek(flsize-8);
+    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"Q1PakArchive"("file too big");
+    char[4] sign;
+    fl.rawReadExact(sign[]);
+    if (sign != "PACK") throw new VFSNamedException!"Q1PakArchive"("not a PAK file");
+    auto dirOfs = fl.readNum!uint;
     auto dirSize = fl.readNum!uint;
-    auto datSize = fl.readNum!uint;
-    if (dirSize < 17 || datSize != flsize || dirSize > datSize-4) throw new VFSNamedException!"F2DatArchive"("invalid DAT file");
-    debug(f2datarc) writefln("dir at: 0x%08x", datSize-4-dirSize);
+    if (dirSize%64 != 0 || dirSize >= flsize || dirOfs >= flsize || dirOfs+dirSize > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid PAK file");
+    debug(q1pakarc) writefln("dir at: 0x%08x", dirOfs);
     // read directory
-    fl.seek(datSize-4-dirSize);
-    char[2048] nbuf;
-    while (dirSize >= 17) {
+    fl.seek(dirOfs);
+    char[56] nbuf;
+    while (dirSize >= 64) {
       FileInfo fi;
-      dirSize -= 17;
-      auto nlen = fl.readNum!uint;
-      if (nlen == 0 || nlen > dirSize || nlen > 2048) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
+      dirSize -= 64;
       char[] name;
       {
         usize nbpos = 0;
-        fl.rawReadExact(nbuf[0..nlen]);
-        dirSize -= nlen;
-        name = new char[](nlen);
-        foreach (char ch; nbuf[0..nlen]) {
-               if (ch == 0) break;
-          else if (ch == '\\') ch = '/';
-          else if (ch == '/') ch = '_';
+        fl.rawReadExact(nbuf[]);
+        name = new char[](56);
+        foreach (char ch; nbuf[]) {
+          if (ch == 0) break;
+          if (ch == '\\') ch = '/';
           if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
           name.ptr[nbpos++] = ch;
         }
         name = name[0..nbpos];
         if (name.length && name[$-1] == '/') name = null;
       }
-      fi.packed = (fl.readNum!ubyte() != 0);
-      fi.size = fl.readNum!uint;
-      fi.pksize = fl.readNum!uint;
       fi.ofs = fl.readNum!uint;
+      fi.size = fl.readNum!uint;
       // some sanity checks
-      if (fi.size > 0 && fi.ofs >= datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
-      if (fi.size >= datSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
-      if (fi.ofs+fi.size > datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
+      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid DAT file directory");
+      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid DAT file directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
         dir ~= fi;
       }
     }
-    debug(f2datarc) writeln(dir.length, " files found");
+    debug(q1pakarc) writeln(dir.length, " files found");
   }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private struct F2DatFileLowLevel {
-  private import etc.c.zlib;
-
-  enum ibsize = 32768;
-
-  enum Mode { Raw, ZLib }
-
+private struct Q1PakFileLowLevel {
   VFile zfl; // archive file
-  Mode mode;
   long stpos; // starting position
   uint size; // unpacked size
-  uint pksize; // packed size
   uint pos; // current file position
-  uint prpos; // previous file position
-  uint pkpos; // current position in DAT
-  ubyte[] pkb; // packed data
-  z_stream zs;
-  bool eoz;
 
   alias tell = pos;
 
-  this (F2DatArchiveImpl pak, usize idx) {
+  this (Q1PakArchiveImpl pak, usize idx) {
     assert(pak !is null);
     assert(idx < pak.dir.length);
     stpos = cast(uint)pak.dir[idx].ofs; //FIXME
     size = cast(uint)pak.dir[idx].size; //FIXME
-    pksize = cast(uint)pak.dir[idx].pksize; //FIXME
-    mode = (pak.dir[idx].packed ? F2DatFileLowLevel.Mode.ZLib : F2DatFileLowLevel.Mode.Raw);
     zfl = pak.st;
   }
 
   @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
 
   void close () {
-    import core.stdc.stdlib : free;
-    if (pkb.length) {
-      inflateEnd(&zs);
-      free(pkb.ptr);
-      pkb = null;
-    }
     if (zfl.isOpen) zfl.close();
-    eoz = true;
-  }
-
-  private bool initZStream () {
-    import core.stdc.stdlib : malloc, free;
-    if (mode == Mode.Raw || pkb.ptr !is null) return true;
-    // allocate buffer for packed data
-    auto pb = cast(ubyte*)malloc(ibsize);
-    if (pb is null) return false;
-    pkb = pb[0..ibsize];
-    zs.avail_in = 0;
-    zs.avail_out = 0;
-    // initialize unpacker
-    if (inflateInit2(&zs, 15) != Z_OK) {
-      free(pb);
-      pkb = null;
-      return false;
-    }
-    // we are ready
-    return true;
-  }
-
-  private bool readPackedChunk () {
-    import core.stdc.stdio : fread;
-    import core.sys.posix.stdio : fseeko;
-    if (zs.avail_in > 0) return true;
-    if (pkpos >= pksize) return false;
-    zs.next_in = cast(typeof(zs.next_in))pkb.ptr;
-    zs.avail_in = cast(uint)(pksize-pkpos > ibsize ? ibsize : pksize-pkpos);
-    zfl.seek(stpos+pkpos);
-    auto rd = zfl.rawRead(pkb[0..zs.avail_in]);
-    if (rd.length == 0) return false;
-    zs.avail_in = cast(int)rd.length;
-    pkpos += zs.avail_in;
-    return true;
-  }
-
-  private bool unpackNextChunk () {
-    while (zs.avail_out > 0) {
-      if (eoz) return false;
-      if (!readPackedChunk()) return false;
-      auto err = inflate(&zs, Z_SYNC_FLUSH);
-      //if (err == Z_BUF_ERROR) { import iv.writer; writeln("*** OUT OF BUFFER!"); }
-      if (err != Z_STREAM_END && err != Z_OK) return false;
-      if (err == Z_STREAM_END) eoz = true;
-    }
-    return true;
   }
 
   ssize read (void* buf, usize count) {
@@ -304,45 +227,11 @@ private struct F2DatFileLowLevel {
     if (count == 0 || size == 0) return 0;
     if (!isOpen) return -1; // read error
     if (pos >= size) return 0; // EOF
-    if (mode == Mode.Raw) {
-      if (size-pos < count) count = cast(usize)(size-pos);
-      zfl.seek(stpos+pos);
-      auto rd = zfl.rawRead(buf[0..count]);
-      pos += rd.length;
-      return rd.length;
-    } else {
-      if (pkb.ptr is null && !initZStream()) return -1;
-      // do we want to seek backward?
-      if (prpos > pos) {
-        // yes, rewind
-        inflateEnd(&zs);
-        zs = zs.init;
-        pkpos = 0;
-        if (!initZStream()) return -1;
-        prpos = 0;
-      }
-      // do we need to seek forward?
-      if (prpos < pos) {
-        // yes, skip data
-        ubyte[1024] tbuf = void;
-        uint skp = pos-prpos;
-        while (skp > 0) {
-          uint rd = cast(uint)(skp > tbuf.length ? tbuf.length : skp);
-          zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
-          zs.avail_out = rd;
-          if (!unpackNextChunk()) return -1;
-          skp -= rd;
-        }
-        prpos = pos;
-      }
-      // unpack data
-      if (size-pos < count) count = cast(usize)(size-pos);
-      zs.next_out = cast(typeof(zs.next_out))buf;
-      zs.avail_out = cast(uint)count;
-      if (!unpackNextChunk()) return -1;
-      prpos = (pos += count);
-      return count;
-    }
+    if (size-pos < count) count = cast(usize)(size-pos);
+    zfl.seek(stpos+pos);
+    auto rd = zfl.rawRead(buf[0..count]);
+    pos += rd.length;
+    return rd.length;
   }
 
   ssize write (in void* buf, usize count) { return -1; }

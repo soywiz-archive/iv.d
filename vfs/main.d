@@ -255,15 +255,13 @@ public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
 
   if (!fl.isOpen) error();
 
-  auto opos = fl.tell;
-
   ptlock.lock();
   scope(exit) ptlock.unlock();
 
   // try all detectors
   foreach (ref di; detectors) {
     try {
-      fl.seek(opos);
+      fl.seek(0);
       auto drv = di.dt.tryOpen(fl);
       if (drv !is null) { vfsRegister(drv); return; }
     } catch (Exception e) {
