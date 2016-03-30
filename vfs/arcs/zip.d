@@ -73,13 +73,11 @@ protected:
     ulong pksize;
     ulong size;
     ulong hdrofs;
-    string path;
     string name;
   }
 
   // for dir range
   public static struct DirEntry {
-    string path;
     string name;
     ulong size;
   }
@@ -109,7 +107,6 @@ public:
       @property bool empty () const { return (curindex >= me.dir.length); }
       @property DirEntry front () const {
         return DirEntry(
-          (curindex < me.dir.length ? me.dir[cast(usize)curindex].path : null),
           (curindex < me.dir.length ? me.dir[cast(usize)curindex].name : null),
           (curindex < me.dir.length ? me.dir[cast(usize)curindex].size : 0));
       }
@@ -135,11 +132,11 @@ public:
       return true;
     }
 
-    foreach (immutable idx, ref fi; dir) {
+    foreach_reverse (immutable idx, ref fi; dir) {
       if (mNormNames) {
-        if (strequ(fi.path, de.path) && strequ(fi.name, de.name)) return wrapStream(ZipFileLowLevel(this, idx));
+        if (strequ(fi.name, de.name)) return wrapStream(ZipFileLowLevel(this, idx));
       } else {
-        if (fi.path == de.path && fi.name == de.name) return wrapStream(ZipFileLowLevel(this, idx));
+        if (fi.name == de.name) return wrapStream(ZipFileLowLevel(this, idx));
       }
     }
 
@@ -148,14 +145,7 @@ public:
 
   VFile fopen (const(char)[] fname) {
     DirEntry de;
-    auto pos = fname.length;
-    while (pos > 0 && fname[pos-1] != '/') --pos;
-    if (pos) {
-      de.path = cast(string)fname[0..pos]; // it's safe here
-      de.name = cast(string)fname[pos..$]; // it's safe here
-    } else {
-      de.name = cast(string)fname; // it's safe here
-    }
+    de.name = cast(string)fname; // it's safe here
     return fopen(de);
   }
 
@@ -289,13 +279,11 @@ private:
         if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new VFSNamedException!"ZipArchive"("reading error");
         auto nb = new char[](cdfh.namelen);
         uint nbpos = 0;
-        uint lastSlash = 0;
-        foreach (ref char ch; namebuf[0..cdfh.namelen]) {
+        foreach (char ch; namebuf[0..cdfh.namelen]) {
+          if (ch == 0) break;
           if (ch == '\\') ch = '/'; // just in case
-          if (ch == '/' && (nbpos == 0 || (nbpos > 0 && nb[nbpos-1] == '/'))) continue;
-          if (ch == '/') lastSlash = nbpos+1;
-          if (mNormNames && ch >= 'A' && ch <= 'Z') ch += 32; // poor man's `toLower()`
-          nb[nbpos++] = ch;
+          if (ch == '/' && (nbpos == 0 || nb.ptr[nbpos-1] == '/')) continue;
+          nb.ptr[nbpos++] = ch;
         }
         bool doSkip = false;
         // should we parse extra field?
@@ -375,13 +363,7 @@ private:
           } else {
             // add new
             if (dir.length == uint.max) throw new VFSNamedException!"ZipArchive"("directory too long");
-            if (lastSlash) {
-              fi.path = cast(string)nb[0..lastSlash]; // this is safe
-              fi.name = cast(string)nb[lastSlash..nbpos]; // this is safe
-            } else {
-              fi.path = "";
-              fi.name = cast(string)nb[0..nbpos]; // this is safe
-            }
+            fi.name = cast(string)nb[0..nbpos]; // this is safe
             knownNames[fi.name] = cast(uint)dir.length;
             dir ~= fi;
           }

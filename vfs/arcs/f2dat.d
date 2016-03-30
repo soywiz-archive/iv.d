@@ -132,7 +132,7 @@ public:
       return true;
     }
 
-    foreach (immutable idx, ref fi; dir) {
+    foreach_reverse (immutable idx, ref fi; dir) {
       if (mNormNames) {
         if (strequ(fi.name, de.name)) return wrapStream(F2DatFileLowLevel(this, idx));
       } else {
@@ -177,7 +177,7 @@ private:
       if (nlen == 0 || nlen > dirSize || nlen > 2048) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
       char[] name;
       {
-        usize npos = 0;
+        usize nbpos = 0;
         fl.rawReadExact(nbuf[0..nlen]);
         dirSize -= nlen;
         name = new char[](nlen);
@@ -185,11 +185,10 @@ private:
                if (ch == 0) break;
           else if (ch == '\\') ch = '/';
           else if (ch == '/') ch = '_';
-          else if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
-          if (ch == '/' && (npos == 0 || name.ptr[npos-1] == '/')) continue;
-          name.ptr[npos++] = ch;
+          if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
+          name.ptr[nbpos++] = ch;
         }
-        name = name[0..npos];
+        name = name[0..nbpos];
         if (name.length && name[$-1] == '/') name = null;
       }
       fi.packed = (fl.readNum!ubyte() != 0);
