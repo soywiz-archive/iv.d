@@ -91,7 +91,7 @@ enum streamHasSeek(T) = is(typeof((inout int=0) {
 /// check if a given stream supports `tell`
 enum streamHasTell(T) = is(typeof((inout int=0) {
   auto t = T.init;
-  ulong pos = t.tell;
+  long pos = t.tell;
 }));
 
 /// check if a given stream supports `tell`
@@ -109,7 +109,7 @@ enum streamHasName(T) = is(typeof((inout int=0) {
 /// check if a given stream supports `size`
 enum streamHasSize(T) = is(typeof((inout int=0) {
   auto t = T.init;
-  ulong pos = t.size;
+  long pos = t.size;
 }));
 
 /// check if a given stream supports `isOpen`

@@ -145,7 +145,7 @@ public:
       }
     }
 
-    throw new NamedException!"ZipArchive"("file not found");
+    throw new VFSNamedException!"ZipArchive"("file not found");
   }
 
   VFile fopen (const(char)[] fname) {
@@ -170,9 +170,9 @@ private:
     debug(ziparc) import std.stdio : writeln, writefln;
     scope(failure) cleanup();
 
-    if (fl.size > 0xffff_ffffu) throw new NamedException!"ZipArchive"("file too big");
+    if (fl.size > 0xffff_ffffu) throw new VFSNamedException!"ZipArchive"("file too big");
     ulong flsize = fl.size;
-    if (flsize < EOCDHeader.sizeof) throw new NamedException!"ZipArchive"("file too small");
+    if (flsize < EOCDHeader.sizeof) throw new VFSNamedException!"ZipArchive"("file too small");
 
     // search for "end of central dir"
     auto cdbuf = xalloc!ubyte(65536+EOCDHeader.sizeof+Z64Locator.sizeof);
@@ -182,18 +182,18 @@ private:
     if (flsize < cdbuf.length) {
       fl.seek(0);
       buf = fl.rawRead(cdbuf[0..cast(usize)flsize]);
-      if (buf.length != flsize) throw new NamedException!"ZipArchive"("reading error");
+      if (buf.length != flsize) throw new VFSNamedException!"ZipArchive"("reading error");
     } else {
       fl.seek(-cast(ulong)cdbuf.length, Seek.End);
       ubufpos = fl.tell;
       buf = fl.rawRead(cdbuf[]);
-      if (buf.length != cdbuf.length) throw new NamedException!"ZipArchive"("reading error");
+      if (buf.length != cdbuf.length) throw new VFSNamedException!"ZipArchive"("reading error");
     }
     int pos;
     for (pos = cast(int)(buf.length-EOCDHeader.sizeof); pos >= 0; --pos) {
       if (buf[pos] == 'P' && buf[pos+1] == 'K' && buf[pos+2] == 5 && buf[pos+3] == 6) break;
     }
-    if (pos < 0) throw new NamedException!"ZipArchive"("no central dir end marker found");
+    if (pos < 0) throw new VFSNamedException!"ZipArchive"("no central dir end marker found");
     auto eocd = cast(EOCDHeader*)&buf[pos];
     debug(ziparc) {
       writeln("=== EOCD ===");
@@ -210,28 +210,28 @@ private:
     // zip64?
     if (eocd.cdofs == 0xffff_ffffu) {
       zip64 = true;
-      if (pos < Z64Locator.sizeof) throw new NamedException!"ZipArchive"("corrupted archive");
+      if (pos < Z64Locator.sizeof) throw new VFSNamedException!"ZipArchive"("corrupted archive");
       auto lt64 = cast(Z64Locator*)&buf[pos-Z64Locator.sizeof];
-      if (lt64.sign != "PK\x06\x07") throw new NamedException!"ZipArchive"("corrupted archive");
-      if (lt64.diskcd != 0 || lt64.diskno > 1) throw new NamedException!"ZipArchive"("multidisk archive");
+      if (lt64.sign != "PK\x06\x07") throw new VFSNamedException!"ZipArchive"("corrupted archive");
+      if (lt64.diskcd != 0 || lt64.diskno > 1) throw new VFSNamedException!"ZipArchive"("multidisk archive");
       debug(ziparc) writeln("ecd64ofs=", lt64.ecd64ofs);
-      if (lt64.ecd64ofs < 0 || lt64.ecd64ofs+EOCD64Header.sizeof > ubufpos+pos-Z64Locator.sizeof) throw new NamedException!"ZipArchive"("corrupted archive");
+      if (lt64.ecd64ofs < 0 || lt64.ecd64ofs+EOCD64Header.sizeof > ubufpos+pos-Z64Locator.sizeof) throw new VFSNamedException!"ZipArchive"("corrupted archive");
       EOCD64Header e64 = void;
       fl.seek(lt64.ecd64ofs);
-      if (fl.rawRead((&e64)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
-      if (e64.sign != "PK\x06\x06") throw new NamedException!"ZipArchive"("corrupted archive");
-      if (e64.diskno != 0 || e64.diskcd != 0) throw new NamedException!"ZipArchive"("multidisk archive");
-      if (e64.diskfileno != e64.fileno) throw new NamedException!"ZipArchive"("corrupted archive");
-      if (e64.cdsize >= lt64.ecd64ofs) throw new NamedException!"ZipArchive"("corrupted archive");
-      if (e64.cdofs >= lt64.ecd64ofs || e64.cdofs+e64.cdsize > lt64.ecd64ofs) throw new NamedException!"ZipArchive"("corrupted archive");
+      if (fl.rawRead((&e64)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
+      if (e64.sign != "PK\x06\x06") throw new VFSNamedException!"ZipArchive"("corrupted archive");
+      if (e64.diskno != 0 || e64.diskcd != 0) throw new VFSNamedException!"ZipArchive"("multidisk archive");
+      if (e64.diskfileno != e64.fileno) throw new VFSNamedException!"ZipArchive"("corrupted archive");
+      if (e64.cdsize >= lt64.ecd64ofs) throw new VFSNamedException!"ZipArchive"("corrupted archive");
+      if (e64.cdofs >= lt64.ecd64ofs || e64.cdofs+e64.cdsize > lt64.ecd64ofs) throw new VFSNamedException!"ZipArchive"("corrupted archive");
       cdofs = e64.cdofs;
       cdsize = e64.cdsize;
     } else {
-      if (eocd.diskno != 0 || eocd.diskcd != 0) throw new NamedException!"ZipArchive"("multidisk archive");
-      if (eocd.diskfileno != eocd.fileno || ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize != flsize) throw new NamedException!"ZipArchive"("corrupted archive");
+      if (eocd.diskno != 0 || eocd.diskcd != 0) throw new VFSNamedException!"ZipArchive"("multidisk archive");
+      if (eocd.diskfileno != eocd.fileno || ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize != flsize) throw new VFSNamedException!"ZipArchive"("corrupted archive");
       cdofs = eocd.cdofs;
       cdsize = eocd.cdsize;
-      if (cdofs >= ubufpos+pos || flsize-cdofs < cdsize) throw new NamedException!"ZipArchive"("corrupted archive");
+      if (cdofs >= ubufpos+pos || flsize-cdofs < cdsize) throw new VFSNamedException!"ZipArchive"("corrupted archive");
     }
 
     // now read central directory
@@ -248,26 +248,26 @@ private:
     dir.assumeSafeAppend; // yep
     while (bleft > 0) {
       if (bleft < 4) break;
-      if (fl.rawRead(sign[]).length != sign.length) throw new NamedException!"ZipArchive"("reading error");
+      if (fl.rawRead(sign[]).length != sign.length) throw new VFSNamedException!"ZipArchive"("reading error");
       bleft -= 4;
-      if (sign[0] != 'P' || sign[1] != 'K') throw new NamedException!"ZipArchive"("invalid central directory entry");
+      if (sign[0] != 'P' || sign[1] != 'K') throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
       // digital signature?
       if (sign[2] == 5 && sign[3] == 5) {
         // yes, skip it
-        if (bleft < 2) throw new NamedException!"ZipArchive"("reading error");
+        if (bleft < 2) throw new VFSNamedException!"ZipArchive"("reading error");
         auto sz = fl.readNum!ushort;
-        if (sz > bleft) throw new NamedException!"ZipArchive"("invalid central directory entry");
+        if (sz > bleft) throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
         fl.seek(sz, Seek.Cur);
         bleft -= sz;
         continue;
       }
       // file item?
       if (sign[2] == 1 && sign[3] == 2) {
-        if (bleft < cdfh.sizeof) throw new NamedException!"ZipArchive"("reading error");
-        if (fl.rawRead((&cdfh)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+        if (bleft < cdfh.sizeof) throw new VFSNamedException!"ZipArchive"("reading error");
+        if (fl.rawRead((&cdfh)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
         bleft -= cdfh.sizeof;
-        if (cdfh.disk != 0) throw new NamedException!"ZipArchive"("invalid central directory entry (disk number)");
-        if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new NamedException!"ZipArchive"("invalid central directory entry");
+        if (cdfh.disk != 0) throw new VFSNamedException!"ZipArchive"("invalid central directory entry (disk number)");
+        if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
         // skip bad files
         if ((cdfh.method != 0 && cdfh.method != 8) || cdfh.namelen == 0 || (cdfh.gflags&0b10_0000_0110_0001) != 0 || (cdfh.attr&0x58) != 0 ||
             cast(long)cdfh.hdrofs+(cdfh.method ? cdfh.pksize : cdfh.size) >= ubufpos+pos)
@@ -284,7 +284,7 @@ private:
         fi.hdrofs = cdfh.hdrofs;
         if (!fi.packed) fi.pksize = fi.size;
         // now, this is valid file, so read it's name
-        if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new NamedException!"ZipArchive"("reading error");
+        if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new VFSNamedException!"ZipArchive"("reading error");
         auto nb = new char[](cdfh.namelen);
         uint nbpos = 0;
         uint lastSlash = 0;
@@ -319,7 +319,7 @@ private:
               // wow, Zip64 info
               found = true;
               if (fi.size == 0xffff_ffffu) {
-                if (fl.rawRead((&fi.size)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                if (fl.rawRead((&fi.size)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
                 esize -= 8;
                 //debug(ziparc) writeln(" size=", fi.size);
               }
@@ -328,33 +328,33 @@ private:
                   //fi.pksize = ulong.max; // this means "get from local header"
                   // read local file header; it's slow, but i don't care
                   /*
-                  if (fi.hdrofs == 0xffff_ffffu) throw new NamedException!"ZipArchive"("invalid zip64 archive (3)");
+                  if (fi.hdrofs == 0xffff_ffffu) throw new VFSNamedException!"ZipArchive"("invalid zip64 archive (3)");
                   CDFileHeader lfh = void;
                   auto oldpos = fl.tell;
                   fl.seek(fi.hdrofs);
-                  if (fl.rawRead((&lfh)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                  if (fl.rawRead((&lfh)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
                   assert(0);
                   */
-                  throw new NamedException!"ZipArchive"("invalid zip64 archive (4)");
+                  throw new VFSNamedException!"ZipArchive"("invalid zip64 archive (4)");
                 } else {
-                  if (esize < 8) throw new NamedException!"ZipArchive"("invalid zip64 archive (1)");
-                  if (fl.rawRead((&fi.pksize)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                  if (esize < 8) throw new VFSNamedException!"ZipArchive"("invalid zip64 archive (1)");
+                  if (fl.rawRead((&fi.pksize)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
                   esize -= 8;
                 }
               }
               if (fi.hdrofs == 0xffff_ffffu) {
-                if (esize < 8) throw new NamedException!"ZipArchive"("invalid zip64 archive (2)");
-                if (fl.rawRead((&fi.hdrofs)[0..1]).length != 1) throw new NamedException!"ZipArchive"("reading error");
+                if (esize < 8) throw new VFSNamedException!"ZipArchive"("invalid zip64 archive (2)");
+                if (fl.rawRead((&fi.hdrofs)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
                 esize -= 8;
               }
               if (esize > 0) fl.seek(esize, Seek.Cur); // skip possible extra data
-              //if (z64e.disk != 0) throw new NamedException!"ZipArchive"("invalid central directory entry (disk number)");
+              //if (z64e.disk != 0) throw new VFSNamedException!"ZipArchive"("invalid central directory entry (disk number)");
               break;
             }
           }
           if (!found) {
             debug(ziparc) writeln("required zip64 record not found");
-            //throw new NamedException!"ZipArchive"("required zip64 record not found");
+            //throw new VFSNamedException!"ZipArchive"("required zip64 record not found");
             //fi.size = fi.pksize = 0x1_0000_0000Lu; // hack: skip it
             doSkip = true;
           }
@@ -369,7 +369,7 @@ private:
             fip.hdrofs = fi.hdrofs;
           } else {
             // add new
-            if (dir.length == uint.max) throw new NamedException!"ZipArchive"("directory too long");
+            if (dir.length == uint.max) throw new VFSNamedException!"ZipArchive"("directory too long");
             if (lastSlash) {
               fi.path = cast(string)nb[0..lastSlash]; // this is safe
               fi.name = cast(string)nb[lastSlash..nbpos]; // this is safe
@@ -388,7 +388,7 @@ private:
         continue;
       }
       // wtf?!
-      throw new NamedException!"ZipArchive"("unknown central directory entry");
+      throw new VFSNamedException!"ZipArchive"("unknown central directory entry");
     }
     debug(ziparc) writeln(dir.length, " files found");
   }
@@ -653,7 +653,7 @@ private struct ZipFileLowLevel {
 
   ssize write (in void* buf, usize count) { return -1; }
 
-  void seek (long ofs, int whence) {
+  void seek (long ofs, int whence=Seek.Set) {
     if (!isOpen) throw new VFSException("can't seek in closed stream");
     //TODO: overflow checks
     switch (whence) {
@@ -671,3 +671,5 @@ private struct ZipFileLowLevel {
     pos = cast(uint)ofs;
   }
 }
+
+static assert(streamHasSeek!ZipFileLowLevel);
