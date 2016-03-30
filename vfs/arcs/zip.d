@@ -100,10 +100,10 @@ public:
     static struct Range {
     private:
       ZipArchiveImpl me;
-      ulong curindex;
+      usize curindex;
 
     nothrow @safe @nogc:
-      this (ZipArchiveImpl ame, ulong aidx=0) { me = ame; curindex = aidx; }
+      this (ZipArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
 
     public:
       @property bool empty () const { return (curindex >= me.dir.length); }
@@ -115,9 +115,9 @@ public:
       }
       @property Range save () { return Range(me, curindex); }
       void popFront () { if (curindex < me.dir.length) ++curindex; }
-      @property ulong length () const { return me.dir.length; }
-      @property ulong position () const { return curindex; } // current position
-      @property void position (ulong np) { curindex = np; }
+      @property usize length () const { return me.dir.length; }
+      @property usize position () const { return curindex; } // current position
+      @property void position (usize np) { curindex = np; }
       void rewind () { curindex = 0; }
     }
     return Range(this);
