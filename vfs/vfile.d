@@ -131,6 +131,8 @@ public:
 
   @property bool eof () { pragma(inline, true); return (!wstp || wst.eof); }
 
+  private import std.traits : isMutable;
+
   T[] rawRead(T) (T[] buf) if (isMutable!T) {
     if (!isOpen) throw new VFSException("can't read from closed stream");
     if (buf.length > 0) {
@@ -497,7 +499,7 @@ private:
   bool eofhit;
   bool closed;
 
-  public this (auto ref ST ast) { st = ast; } // fuck! emplace needs it
+  public this() (auto ref ST ast) { st = ast; } // fuck! emplace needs it
 
 protected:
   override @property const(char)[] name () {

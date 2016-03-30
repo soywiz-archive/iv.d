@@ -32,12 +32,20 @@ shared static this () { ptlock = new core.sync.mutex.Mutex; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// abstract class for VFS drivers
 public abstract class VFSDriver {
   // return empty VFile if it can't open the thing
   abstract VFile tryOpen (const(char)[] fname);
 }
 
+/// abstract class for "pak" files
+public abstract class VFSDriverDetector {
+  // return null if it can't open the thing
+  abstract VFSDriver tryOpen (VFile fl);
+}
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// you can register this driver as "last" to prevent disk searches
 public final class VFSDriverAlwaysFail : VFSDriver {
   override VFile tryOpen (const(char)[] fname) {
@@ -80,9 +88,10 @@ public:
       nbuf[dataPath.length+fname.length] = '\0';
     }
     auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
-    scope(failure) core.stdc.stdio.fclose(fl); // just in case
     if (fl is null) return VFile.init;
-    return VFile(fl);
+    try { return VFile(fl); } catch (Exception e) {}
+    core.stdc.stdio.fclose(fl);
+    return VFile.init;
   }
 }
 
@@ -121,14 +130,21 @@ public VFile vfsOpenFile (const(char)[] fname) {
     throw new VFSException(s.data, file, line, e);
   }
 
-  // try all drivers
-  foreach_reverse (VFSDriver drv; drivers) {
-    try {
-      auto fl = drv.tryOpen(fname);
-      if (fl.isOpen) return fl;
-    } catch (Exception e) {
-      // chain
-      errorfn("can't open file '!'", e);
+  if (fname.length == 0) error("can't open file ''");
+
+  {
+    ptlock.lock();
+    scope(exit) ptlock.unlock();
+
+    // try all drivers
+    foreach_reverse (VFSDriver drv; drivers) {
+      try {
+        auto fl = drv.tryOpen(fname);
+        if (fl.isOpen) return fl;
+      } catch (Exception e) {
+        // chain
+        errorfn("can't open file '!'", e);
+      }
     }
   }
 
@@ -148,4 +164,83 @@ public VFile vfsOpenFile (const(char)[] fname) {
     errorfn("can't open file '!'", e);
   }
   assert(0);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+__gshared VFSDriverDetector[] detectors;
+
+
+public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
+  static assert(mode == "normal" || mode == "first");
+  if (dt is null) return;
+  ptlock.lock();
+  scope(exit) ptlock.unlock();
+  static if (mode == "normal") {
+    detectors ~= drv;
+  } else {
+    detectors = [dt]~detectors;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public void vfsAddPak (const(char)[] fname) {
+  vfsAddPak(vfsDiskOpen(fname), fname);
+}
+
+
+public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
+  void error (Throwable e=null, string file=__FILE__, usize line=__LINE__) {
+    if (fname.length == 0) {
+      throw new VFSException("can't open pak file", file, line, e);
+    } else {
+      import std.array : appender;
+      auto s = appender!string();
+      s.put("can't open pak file '");
+      s.put(fname);
+      s.put("'");
+      throw new VFSException(s.data, file, line, e);
+    }
+  }
+
+  if (!fl.isOpen) error();
+
+  auto opos = fl.tell;
+
+  ptlock.lock();
+  scope(exit) ptlock.unlock();
+
+  // try all detectors
+  foreach_reverse (VFSDriverDetector dt; detectors) {
+    try {
+      fl.seek(opos);
+      auto drv = dt.tryOpen(fl);
+      if (drv !is null) { vfsRegister(drv); return; }
+    } catch (Exception e) {
+      // chain
+      error(e);
+    }
+  }
+  error();
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+VFile vfsDiskOpen (const(char)[] fname) {
+  static import core.stdc.stdio;
+  if (fname.length == 0) throw new VFSException("can't open file ''");
+  if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
+  char[2049] nbuf;
+  nbuf[0..fname.length] = fname[];
+  nbuf[fname.length] = '\0';
+  auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
+  if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
+  scope(failure) core.stdc.stdio.fclose(fl); // just in case
+  try {
+    return VFile(fl);
+  } catch (Exception e) {
+    // chain
+    throw new VFSException("can't open file '"~fname.idup~"'", __FILE__, __LINE__, e);
+  }
 }

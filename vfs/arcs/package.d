@@ -15,33 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs;
+module iv.vfs.arcs;
 
-static if (!is(typeof(object.usize))) {
-  package alias usize = size_t;
-} else {
-  package import object : usize;
-}
-
-static if (!is(typeof(object.ssize))) {
-       static if (usize.sizeof == 8) package alias ssize = long;
-  else static if (usize.sizeof == 4) package alias ssize = int;
-  else static assert(0, "wtf?!");
-} else {
-  package import object : ssize;
-}
-
-
-private import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
-public enum Seek : int {
-  Set = SEEK_SET,
-  Cur = SEEK_CUR,
-  End = SEEK_END,
-}
-
-
-public import iv.vfs.error;
-public import iv.vfs.augs;
-public import iv.vfs.vfile;
-public import iv.vfs.main;
-public import iv.vfs.arcs;
+public import iv.vfs.arcs.zip;
