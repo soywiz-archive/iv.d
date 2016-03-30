@@ -24,8 +24,15 @@ import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+shared static this () {
+  vfsRegisterDetector(new ZipDetector());
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 private final class ZipDetector : VFSDriverDetector {
   override VFSDriver tryOpen (VFile fl) {
+    debug(ziparc) { import std.stdio : writeln; writeln("trying ZIP..."); }
     try {
       auto zip = new ZipArchiveImpl(fl);
       return new VFSDriverZip(zip);

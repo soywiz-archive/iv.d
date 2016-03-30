@@ -177,7 +177,7 @@ public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
   ptlock.lock();
   scope(exit) ptlock.unlock();
   static if (mode == "normal") {
-    detectors ~= drv;
+    detectors ~= dt;
   } else {
     detectors = [dt]~detectors;
   }
