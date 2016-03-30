@@ -602,3 +602,68 @@ public VFile wrapStream (int st) { return VFile(st); }
 
 /// ditto
 public VFile wrapStream(ST) (auto ref ST st) if (isReadableStream!ST || isWriteableStream!ST) { return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st)); }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private struct PartialLowLevelRO {
+  VFile zfl; // original file
+  long stpos; // starting position
+  long size; // unpacked size
+  long pos; // current file position
+
+  alias tell = pos;
+
+  this (VFile fl, long astpos, long asize) {
+    stpos = astpos;
+    size = asize;
+    zfl = fl;
+  }
+
+  @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
+
+  void close () {
+    if (zfl.isOpen) zfl.close();
+  }
+
+  ssize read (void* buf, usize count) {
+    if (buf is null) return -1;
+    if (count == 0 || size == 0) return 0;
+    if (!isOpen) return -1; // read error
+    if (pos >= size) return 0; // EOF
+    if (size-pos < count) count = cast(usize)(size-pos);
+    zfl.seek(stpos+pos);
+    auto rd = zfl.rawRead(buf[0..count]);
+    pos += rd.length;
+    return rd.length;
+  }
+
+  ssize write (in void* buf, usize count) { return -1; }
+
+  void seek (long ofs, int whence=Seek.Set) {
+    if (!isOpen) throw new VFSException("can't seek in closed stream");
+    //TODO: overflow checks
+    switch (whence) {
+      case Seek.Set: break;
+      case Seek.Cur: ofs += pos; break;
+      case Seek.End:
+        if (ofs > 0) ofs = 0;
+        ofs += size;
+        break;
+      default:
+        throw new VFSException("seek error");
+    }
+    if (ofs < 0) throw new VFSException("seek error");
+    if (ofs > size) ofs = size;
+    pos = cast(uint)ofs;
+  }
+}
+
+
+/// wrap VFile into read-only stream, with given offset and length.
+/// if `len` == -1, wrap from starting position to file end.
+public VFile wrapStreamRO (VFile st, long stpos=0, long len=-1) {
+  if (stpos < 0) throw new VFSException("invalid starting position");
+  if (len == -1) len = st.size-stpos;
+  if (len < 0) throw new VFSException("invalid length");
+  return wrapStream(PartialLowLevelRO(st, stpos, len));
+}

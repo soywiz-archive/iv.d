@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arcs.q1pak;
+module iv.vfs.arcs.dunepak;
 
 import iv.vfs : usize, ssize, Seek;
 import iv.vfs.augs;
@@ -25,16 +25,16 @@ import iv.vfs.vfile;
 
 // ////////////////////////////////////////////////////////////////////////// //
 shared static this () {
-  vfsRegisterDetector(new Q1PakDetector());
+  vfsRegisterDetector(new DunePakDetector());
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private final class Q1PakDetector : VFSDriverDetector {
+private final class DunePakDetector : VFSDriverDetector {
   override VFSDriver tryOpen (VFile fl) {
     try {
-      auto pak = new Q1PakArchiveImpl(fl);
-      return new VFSDriverQ1Pak(pak);
+      auto pak = new DunePakArchiveImpl(fl);
+      return new VFSDriverDunePak(pak);
     } catch (Exception) {}
     return null;
   }
@@ -42,12 +42,12 @@ private final class Q1PakDetector : VFSDriverDetector {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public final class VFSDriverQ1Pak : VFSDriver {
+public final class VFSDriverDunePak : VFSDriver {
 private:
-  Q1PakArchiveImpl pak;
+  DunePakArchiveImpl pak;
 
 public:
-  this (Q1PakArchiveImpl apak) {
+  this (DunePakArchiveImpl apak) {
     if (apak is null) throw new VFSException("wtf?!");
     pak = apak;
   }
@@ -65,7 +65,7 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private final class Q1PakArchiveImpl {
+private final class DunePakArchiveImpl {
 protected:
   static struct FileInfo {
     ulong size;
@@ -96,11 +96,11 @@ public:
   final @property auto files () {
     static struct Range {
     private:
-      Q1PakArchiveImpl me;
+      DunePakArchiveImpl me;
       usize curindex;
 
     nothrow @safe @nogc:
-      this (Q1PakArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
+      this (DunePakArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
 
     public:
       @property bool empty () const { return (curindex >= me.dir.length); }
@@ -139,7 +139,7 @@ public:
       }
     }
 
-    throw new VFSNamedException!"Q1PakArchive"("file not found");
+    throw new VFSNamedException!"DunePakArchive"("file not found");
   }
 
   VFile fopen (const(char)[] fname) {
@@ -154,48 +154,55 @@ private:
   }
 
   void open (VFile fl) {
-    debug(q1pakarc) import std.stdio : writeln, writefln;
+    debug(dunepakarc) import std.stdio : writeln, writefln;
     scope(failure) cleanup();
 
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"Q1PakArchive"("file too big");
-    char[4] sign;
-    fl.rawReadExact(sign[]);
-    if (sign != "PACK") throw new VFSNamedException!"Q1PakArchive"("not a PAK file");
-    auto dirOfs = fl.readNum!uint;
-    auto dirSize = fl.readNum!uint;
-    if (dirSize%64 != 0 || dirSize >= flsize || dirOfs >= flsize || dirOfs+dirSize > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid PAK file");
-    debug(q1pakarc) writefln("dir at: 0x%08x", dirOfs);
+    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DunePakArchive"("file too big");
     // read directory
-    fl.seek(dirOfs);
-    char[56] nbuf;
-    while (dirSize >= 64) {
-      FileInfo fi;
-      dirSize -= 64;
+    uint prevofs = uint.max;
+    char[12] nbuf;
+    for (;;) {
+      auto ofs = fl.readNum!uint;
+      if (ofs == 0) break;
+      if (ofs >= flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
       char[] name;
       {
         usize nbpos = 0;
-        fl.rawReadExact(nbuf[]);
-        name = new char[](56);
-        foreach (char ch; nbuf[]) {
+        char ch;
+        for (;;) {
+          fl.rawReadExact((&ch)[0..1]);
           if (ch == 0) break;
-          if (ch == '\\') ch = '/';
-          if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
-          name.ptr[nbpos++] = ch;
+          if (nbpos > 12) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+          if (ch == '\\' || ch == '/' || ch > 127) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+          nbuf.ptr[nbpos++] = ch;
         }
-        name = name[0..nbpos];
-        if (name.length && name[$-1] == '/') name = null;
+        if (nbpos == 0) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+        name = new char[](nbpos);
+        name[] = nbuf[0..nbpos];
       }
-      fi.ofs = fl.readNum!uint;
-      fi.size = fl.readNum!uint;
-      // some sanity checks
-      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid DAT file directory");
-      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid DAT file directory");
-      if (name.length) {
-        fi.name = cast(string)name; // it's safe here
-        dir ~= fi;
+      debug(dunepakarc) writefln("[%s]: ofs=0x%08x", name, ofs);
+      FileInfo fi;
+      fi.ofs = ofs;
+      if (prevofs != uint.max) {
+        if (dir[$-1].ofs > ofs) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+        dir[$-1].size = ofs-dir[$-1].ofs;
+        // some sanity checks
+        if (dir[$-1].size > 0 && dir[$-1].ofs >= flsize || dir[$-1].size > flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+        if (dir[$-1].ofs+dir[$-1].size > flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
       }
+      fi.name = cast(string)name; // it's safe here
+      dir ~= fi;
+      prevofs = ofs;
     }
-    debug(q1pakarc) writeln(dir.length, " files found");
+    if (dir.length) {
+      // fix last file
+      if (dir[$-1].ofs > flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+      dir[$-1].size = flsize-dir[$-1].ofs;
+      // some sanity checks
+      if (dir[$-1].size > 0 && dir[$-1].ofs >= flsize || dir[$-1].size > flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+      if (dir[$-1].ofs+dir[$-1].size > flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+    }
+    debug(dunepakarc) writeln(dir.length, " files found");
   }
 }
