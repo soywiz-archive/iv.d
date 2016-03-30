@@ -68,8 +68,6 @@ public:
 // ////////////////////////////////////////////////////////////////////////// //
 private final class ZipArchiveImpl {
 protected:
-  import core.sys.posix.sys.types : ssize_t, off64_t = off_t;
-
   static struct FileInfo {
     bool packed; // only "store" and "deflate" are supported
     ulong pksize;
