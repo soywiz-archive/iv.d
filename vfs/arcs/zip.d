@@ -192,7 +192,8 @@ private:
       if (buf[pos] == 'P' && buf[pos+1] == 'K' && buf[pos+2] == 5 && buf[pos+3] == 6) break;
     }
     if (pos < 0) throw new VFSNamedException!"ZipArchive"("no central dir end marker found");
-    auto eocd = cast(EOCDHeader*)&buf[pos];
+    auto eocd = *cast(EOCDHeader*)&buf[pos];
+    eocd.fixEndian;
     debug(ziparc) {
       writeln("=== EOCD ===");
       writeln("diskno: ", eocd.diskno);
@@ -209,7 +210,8 @@ private:
     if (eocd.cdofs == 0xffff_ffffu) {
       zip64 = true;
       if (pos < Z64Locator.sizeof) throw new VFSNamedException!"ZipArchive"("corrupted archive");
-      auto lt64 = cast(Z64Locator*)&buf[pos-Z64Locator.sizeof];
+      auto lt64 = *cast(Z64Locator*)&buf[pos-Z64Locator.sizeof];
+      lt64.fixEndian;
       if (lt64.sign != "PK\x06\x07") throw new VFSNamedException!"ZipArchive"("corrupted archive");
       if (lt64.diskcd != 0 || lt64.diskno > 1) throw new VFSNamedException!"ZipArchive"("multidisk archive");
       debug(ziparc) writeln("ecd64ofs=", lt64.ecd64ofs);
@@ -217,6 +219,7 @@ private:
       EOCD64Header e64 = void;
       fl.seek(lt64.ecd64ofs);
       if (fl.rawRead((&e64)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
+      e64.fixEndian;
       if (e64.sign != "PK\x06\x06") throw new VFSNamedException!"ZipArchive"("corrupted archive");
       if (e64.diskno != 0 || e64.diskcd != 0) throw new VFSNamedException!"ZipArchive"("multidisk archive");
       if (e64.diskfileno != e64.fileno) throw new VFSNamedException!"ZipArchive"("corrupted archive");
@@ -263,6 +266,7 @@ private:
       if (sign[2] == 1 && sign[3] == 2) {
         if (bleft < cdfh.sizeof) throw new VFSNamedException!"ZipArchive"("reading error");
         if (fl.rawRead((&cdfh)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
+        cdfh.fixEndian;
         bleft -= cdfh.sizeof;
         if (cdfh.disk != 0) throw new VFSNamedException!"ZipArchive"("invalid central directory entry (disk number)");
         if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
@@ -318,6 +322,7 @@ private:
               found = true;
               if (fi.size == 0xffff_ffffu) {
                 if (fl.rawRead((&fi.size)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
+                version(BigEndian) { import std.bitmanip : swapEndian; fi.size = swapEndian(fi.size); }
                 esize -= 8;
                 //debug(ziparc) writeln(" size=", fi.size);
               }
@@ -337,12 +342,14 @@ private:
                 } else {
                   if (esize < 8) throw new VFSNamedException!"ZipArchive"("invalid zip64 archive (1)");
                   if (fl.rawRead((&fi.pksize)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
+                  version(BigEndian) { import std.bitmanip : swapEndian; fi.pksize = swapEndian(fi.pksize); }
                   esize -= 8;
                 }
               }
               if (fi.hdrofs == 0xffff_ffffu) {
                 if (esize < 8) throw new VFSNamedException!"ZipArchive"("invalid zip64 archive (2)");
                 if (fl.rawRead((&fi.hdrofs)[0..1]).length != 1) throw new VFSNamedException!"ZipArchive"("reading error");
+                version(BigEndian) { import std.bitmanip : swapEndian; fi.hdrofs = swapEndian(fi.hdrofs); }
                 esize -= 8;
               }
               if (esize > 0) fl.seek(esize, Seek.Cur); // skip possible extra data
@@ -428,6 +435,22 @@ align(1):
   uint size; // uncompressed size
   ushort namelen; // file name length
   ushort extlen; // extra field length
+
+  void fixEndian () nothrow @trusted @nogc {
+    version(BigEndian) {
+      import std.bitmanip : swapEndian;
+      extrver = swapEndian(extrver);
+      gflags = swapEndian(gflags);
+      method = swapEndian(method);
+      mtime = swapEndian(mtime);
+      mdate = swapEndian(mdate);
+      crc32 = swapEndian(crc32);
+      pksize = swapEndian(pksize);
+      size = swapEndian(size);
+      namelen = swapEndian(namelen);
+      extlen = swapEndian(extlen);
+    }
+  }
 }
 
 align(1) static struct CDFileHeader {
@@ -458,6 +481,27 @@ align(1):
   ushort year () { return cast(ushort)((mdate>>9)+1980); }
   ubyte month () { return (mdate>>5)&0x0f; }
   ubyte day () { return (mdate&0x1f); }
+
+  void fixEndian () nothrow @trusted @nogc {
+    version(BigEndian) {
+      import std.bitmanip : swapEndian;
+      madebyver = swapEndian(madebyver);
+      extrver = swapEndian(extrver);
+      gflags = swapEndian(gflags);
+      method = swapEndian(method);
+      mtime = swapEndian(mtime);
+      mdate = swapEndian(mdate);
+      crc32 = swapEndian(crc32);
+      pksize = swapEndian(pksize);
+      size = swapEndian(size);
+      namelen = swapEndian(namelen);
+      extlen = swapEndian(extlen);
+      cmtlen = swapEndian(cmtlen);
+      disk = swapEndian(disk);
+      iattr = swapEndian(iattr);
+      hdrofs = swapEndian(hdrofs);
+    }
+  }
 }
 
 align(1) static struct EOCDHeader {
@@ -470,6 +514,17 @@ align(1):
   uint cdsize; // size of the central directory
   uint cdofs; // offset of start of central directory with respect to the starting disk number
   ushort cmtsize; // .ZIP file comment length
+
+  void fixEndian () nothrow @trusted @nogc {
+    version(BigEndian) {
+      import std.bitmanip : swapEndian;
+      diskno = swapEndian(diskno);
+      fileno = swapEndian(fileno);
+      cdsize = swapEndian(cdsize);
+      cdofs = swapEndian(cdofs);
+      cmtsize = swapEndian(cmtsize);
+    }
+  }
 }
 
 align(1) static struct EOCD64Header {
@@ -484,6 +539,21 @@ align(1):
   ulong fileno; // total number of entries in the central directory
   ulong cdsize; // size of the central directory
   ulong cdofs; // offset of start of central directory with respect to the starting disk number
+
+  void fixEndian () nothrow @trusted @nogc {
+    version(BigEndian) {
+      import std.bitmanip : swapEndian;
+      eocdsize = swapEndian(eocdsize);
+      madebyver = swapEndian(madebyver);
+      extrver = swapEndian(extrver);
+      diskno = swapEndian(diskno);
+      diskcd = swapEndian(diskcd);
+      diskfileno = swapEndian(diskfileno);
+      fileno = swapEndian(fileno);
+      cdsize = swapEndian(cdsize);
+      cdofs = swapEndian(cdofs);
+    }
+  }
 }
 
 align(1) static struct Z64Locator {
@@ -492,6 +562,15 @@ align(1):
   uint diskcd; // number of the disk with the start of the zip64 end of central directory
   long ecd64ofs; // relative offset of the zip64 end of central directory record
   uint diskno; // total number of disks
+
+  void fixEndian () nothrow @trusted @nogc {
+    version(BigEndian) {
+      import std.bitmanip : swapEndian;
+      diskcd = swapEndian(diskcd);
+      ecd64ofs = swapEndian(ecd64ofs);
+      diskno = swapEndian(diskno);
+    }
+  }
 }
 
 align(1) static struct Z64Extra {
@@ -500,6 +579,15 @@ align(1):
   ulong pksize;
   ulong hdrofs;
   uint disk; // number of the disk on which this file starts
+
+  void fixEndian () nothrow @trusted @nogc {
+    version(BigEndian) {
+      import std.bitmanip : swapEndian;
+      size = swapEndian(size);
+      pksize = swapEndian(pksize);
+      disk = swapEndian(disk);
+    }
+  }
 }
 
 
@@ -533,6 +621,7 @@ private struct ZipFileLowLevel {
     zip.st.seek(zip.dir[idx].hdrofs);
     zip.st.rawReadExact((&zfh)[0..1]);
     if (zfh.sign != "PK\x03\x04") throw new VFSException("invalid ZIP archive entry");
+    zfh.fixEndian;
     // skip name and extra
     auto xpos = zip.st.tell;
     stpos = xpos+zfh.namelen+zfh.extlen;
