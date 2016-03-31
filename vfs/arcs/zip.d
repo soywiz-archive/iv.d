@@ -167,13 +167,8 @@ public:
   }
 
 private:
-  void cleanup () {
-    dir.length = 0;
-  }
-
   void open (VFile fl) {
     debug(ziparc) import std.stdio : writeln, writefln;
-    scope(failure) cleanup();
 
     if (fl.size > 0xffff_ffffu) throw new VFSNamedException!"ZipArchive"("file too big");
     ulong flsize = fl.size;
@@ -248,7 +243,6 @@ private:
 
     uint[string] knownNames; // value is dir index
     scope(exit) knownNames.destroy;
-    cleanup();
     auto bleft = cdsize;
     fl.seek(cdofs);
     CDFileHeader cdfh = void;

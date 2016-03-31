@@ -149,13 +149,8 @@ public:
   }
 
 private:
-  void cleanup () {
-    dir.length = 0;
-  }
-
   void open (VFile fl) {
     debug(q1pakarc) import std.stdio : writeln, writefln;
-    scope(failure) cleanup();
 
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"Q1PakArchive"("file too big");

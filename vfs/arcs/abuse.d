@@ -216,13 +216,7 @@ public:
   }
 
 private:
-  void cleanup () {
-    dir.length = 0;
-  }
-
   void open (VFile fl) {
-    scope(failure) cleanup();
-
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"AbuseSpecArchive"("file too big");
     char[512] nbuf;

@@ -153,14 +153,7 @@ public:
   }
 
 private:
-  void cleanup () {
-    dir.length = 0;
-  }
-
   void open (VFile fl) {
-    debug(f2datarc) import std.stdio : writeln, writefln;
-    scope(failure) cleanup();
-
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DFWadArchive"("file too big");
     // check it
@@ -223,6 +216,6 @@ private:
         dir ~= fi;
       }
     }
-    debug(f2datarc) writeln(dir.length, " files found");
+    debug(dfwadarc) { import std.stdio; writeln(dir.length, " files found"); }
   }
 }
