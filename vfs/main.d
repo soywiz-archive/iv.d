@@ -56,7 +56,7 @@ public abstract class VFSDriver {
   /// for dir range
   public static struct DirEntry {
     string name; // for disk: doesn't include base path; ends with '/'
-    ulong size; // can be -1 if size is not known; for dirs means nothing
+    long size; // can be -1 if size is not known; for dirs means nothing
   }
 
   /// this constructor is used for disk drivers
