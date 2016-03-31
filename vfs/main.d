@@ -29,6 +29,23 @@ static import core.sync.mutex;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+shared bool vflagIgnoreCase = true; // ignore file name case by default
+
+
+/// get "ingore filename case" flag (default: true)
+@property bool vfsIgnoreCase () nothrow @trusted @nogc {
+  import core.atomic : atomicLoad;
+  return atomicLoad(vflagIgnoreCase);
+}
+
+/// set "ingore filename case" flag
+@property void vfsIgnoreCase (bool v) nothrow @trusted @nogc {
+  import core.atomic : atomicStore;
+  return atomicStore(vflagIgnoreCase, v);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 __gshared core.sync.mutex.Mutex ptlock;
 shared static this () { ptlock = new core.sync.mutex.Mutex; }
 
@@ -36,9 +53,30 @@ shared static this () { ptlock = new core.sync.mutex.Mutex; }
 // ////////////////////////////////////////////////////////////////////////// //
 /// abstract class for VFS drivers
 public abstract class VFSDriver {
-  // return empty VFile if it can't open the thing
-  abstract VFile tryOpen (const(char)[] fname);
+  /// for dir range
+  public static struct DirEntry {
+    string name; // for disk: doesn't include base path; ends with '/'
+    ulong size; // can be -1 if size is not known; for dirs means nothing
+  }
+
+  /// this constructor is used for disk drivers
+  this () {}
+
+  /// this constructor is used for archive drivers
+  this (VFile fl) { throw new VFSException("not implemented for abstract driver"); }
+
+  /// try to find and open the file in archive.
+  /// should return `VFile.init` if no file was found.
+  /// should not throw (except for VERY unrecoverable error).
+  /// doesn't do any security checks, 'cause i don't care.
+  abstract VFile tryOpen (const(char)[] fname, bool ignoreCase);
+
+  /// get number of entries in archive directory.
+  @property usize dirLength () { return 0; }
+  /// get directory entry with the given index. can throw, but it's not necessary.
+  DirEntry dirEntry (usize idx) { return DirEntry.init; }
 }
+
 
 /// abstract class for "pak" files
 public abstract class VFSDriverDetector {
@@ -50,7 +88,7 @@ public abstract class VFSDriverDetector {
 // ////////////////////////////////////////////////////////////////////////// //
 /// you can register this driver as "last" to prevent disk searches
 public final class VFSDriverAlwaysFail : VFSDriver {
-  override VFile tryOpen (const(char)[] fname) {
+  override VFile tryOpen (const(char)[] fname, bool ignoreCase) {
     throw new VFSException("can't open file '"~fname.idup~"'");
   }
 }
@@ -59,13 +97,11 @@ public final class VFSDriverAlwaysFail : VFSDriver {
 public final class VFSDriverDisk : VFSDriver {
 private:
   string dataPath;
-  bool mNormNames;
 
 public:
-  this (bool normnames=true) { mNormNames = normnames; dataPath = "./"; }
+  this () { dataPath = "./"; }
 
-  this(T) (T dpath, bool normnames=true) if (is(T : const(char)[])) {
-    mNormNames = normnames;
+  this(T) (T dpath) if (is(T : const(char)[])) {
     if (dpath.length == 0) {
       dataPath = "./";
     } else if (dpath[$-1] == '/') {
@@ -76,12 +112,15 @@ public:
   }
 
   /// doesn't do any security checks, 'cause i don't care
-  override VFile tryOpen (const(char)[] fname) {
+  override VFile tryOpen (const(char)[] fname, bool ignoreCase) {
     static import core.stdc.stdio;
     if (fname.length == 0) return VFile.init;
     char[2049] nbuf;
     if (fname[0] == '/') {
-      if (dataPath[0] != '/' || fname.length <= dataPath.length || fname[0..dataPath.length] != dataPath) return VFile.init;
+      if (dataPath[0] != '/' || fname.length <= dataPath.length) {
+        bool hit = (ignoreCase ? koi8StrCaseEqu(fname[0..dataPath.length], dataPath) : fname[0..dataPath.length] == dataPath);
+        if (!hit) return VFile.init;
+      }
       if (fname.length > 2048) return VFile.init;
       nbuf[0..fname.length] = fname[];
       nbuf[fname.length] = '\0';
@@ -91,7 +130,7 @@ public:
       nbuf[dataPath.length..dataPath.length+fname.length] = fname[];
       nbuf[dataPath.length+fname.length] = '\0';
     }
-    if (mNormNames) {
+    if (ignoreCase) {
       uint len;
       while (len < nbuf.length && nbuf.ptr[len]) ++len;
       auto pt = findPathCI(nbuf[0..len]);
@@ -120,6 +159,7 @@ __gshared DriverInfo[] drivers;
 // ////////////////////////////////////////////////////////////////////////// //
 /// register new VFS driver
 public void vfsRegister(string mode="normal") (VFSDriver drv) {
+  import core.atomic : atomicOp;
   static assert(mode == "normal" || mode == "last" || mode == "first");
   if (drv is null) return;
   //{ import core.stdc.stdio : printf; printf("*** %p [%s]\n", cast(void*)drv, mode.ptr); }
@@ -157,6 +197,33 @@ public void vfsRegister(string mode="normal") (VFSDriver drv) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// list all files known to VFS.
+/// WARNING: don't add new drivers while this is in process!
+public VFSDriver.DirEntry[] vfsFileList () {
+  usize[string] filesSeen;
+  VFSDriver.DirEntry[] res;
+
+  ptlock.lock();
+  scope(exit) ptlock.unlock();
+
+  foreach (ref drvnfo; drivers) {
+    foreach (immutable idx; 0..drvnfo.drv.dirLength) {
+      auto de = drvnfo.drv.dirEntry(idx);
+      if (de.name.length == 0) continue;
+      if (auto iptr = de.name in filesSeen) {
+        res.ptr[*iptr] = de;
+      } else {
+        filesSeen[de.name] = res.length;
+        res ~= de;
+      }
+    }
+  }
+
+  return res;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public VFile vfsOpenFile (const(char)[] fname) {
   static import core.stdc.stdio;
 
@@ -173,6 +240,7 @@ public VFile vfsOpenFile (const(char)[] fname) {
 
   if (fname.length == 0) error("can't open file ''");
 
+  bool ignoreCase = vfsIgnoreCase;
   {
     ptlock.lock();
     scope(exit) ptlock.unlock();
@@ -180,7 +248,7 @@ public VFile vfsOpenFile (const(char)[] fname) {
     // try all drivers
     foreach_reverse (ref di; drivers) {
       try {
-        auto fl = di.drv.tryOpen(fname);
+        auto fl = di.drv.tryOpen(fname, ignoreCase);
         if (fl.isOpen) return fl;
       } catch (Exception e) {
         // chain
@@ -190,21 +258,7 @@ public VFile vfsOpenFile (const(char)[] fname) {
   }
 
   // no drivers found, try disk file
-  if (fname.length > 2048) errorfn("can't open file '!'");
-
-  char[2049] nbuf;
-  nbuf[0..fname.length] = fname[];
-  nbuf[fname.length] = '\0';
-  auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
-  if (fl is null) errorfn("can't open file '!'");
-  scope(failure) core.stdc.stdio.fclose(fl); // just in case
-  try {
-    return VFile(fl);
-  } catch (Exception e) {
-    // chain
-    errorfn("can't open file '!'", e);
-  }
-  assert(0);
+  return vfsDiskOpen(fname, (ignoreCase ? "ri" : "rI"));
 }
 
 
@@ -285,6 +339,7 @@ public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// takes into account `vfsIgnoreCase` flag. you can override it with 'i' (on) or 'I' (off) mode letter.
 public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
   if (fname.length == 0) throw new VFSException("can't open file ''");
@@ -292,8 +347,11 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   bool[128] got;
   char[16] modebuf;
   uint mpos;
+  bool ignoreCase = vfsIgnoreCase;
   foreach (char ch; mode) {
     if (ch < 128 && !got[ch]) {
+      if (ch == 'i') { ignoreCase = true; continue; }
+      if (ch == 'I') { ignoreCase = false; continue; }
       if (mpos >= modebuf.length-1) throw new VFSException("can't open file '"~fname.idup~"' with mode '"~mode.idup~"'");
       got[ch] = true;
       modebuf.ptr[mpos++] = ch;
@@ -312,6 +370,19 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   char[2049] nbuf;
   nbuf[0..fname.length] = fname[];
   nbuf[fname.length] = '\0';
+  if (ignoreCase) {
+    // we have to lock here, as `findPathCI()` is not thread-safe
+    ptlock.lock();
+    scope(exit) ptlock.unlock();
+    auto pt = findPathCI(nbuf[0..fname.length]);
+    if (pt is null) {
+      // restore filename for correct error message
+      nbuf[0..fname.length] = fname[];
+      nbuf[fname.length] = '\0';
+    } else {
+      nbuf[pt.length] = '\0';
+    }
+  }
   auto fl = core.stdc.stdio.fopen(nbuf.ptr, modebuf.ptr);
   if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
   scope(failure) core.stdc.stdio.fclose(fl); // just in case

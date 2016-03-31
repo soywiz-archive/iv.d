@@ -24,67 +24,23 @@ import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-shared static this () {
-  vfsRegisterDetector(new F2DatDetector());
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private final class F2DatDetector : VFSDriverDetector {
-  override VFSDriver tryOpen (VFile fl) {
-    try {
-      auto pak = new F2DatArchiveImpl(fl);
-      return new VFSDriverF2Dat(pak);
-    } catch (Exception) {}
-    return null;
-  }
-}
+private import iv.vfs.arcs : VFSSimpleArchiveDetectorMixin;
+mixin(VFSSimpleArchiveDetectorMixin!"F2Dat");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverF2Dat : VFSDriver {
+  private import iv.vfs.arcs : VFSSimpleArchiveDriverMixin;
+  mixin VFSSimpleArchiveDriverMixin;
+
 private:
-  F2DatArchiveImpl pak;
-
-public:
-  this (F2DatArchiveImpl apak) {
-    if (apak is null) throw new VFSException("wtf?!");
-    pak = apak;
-  }
-
-  /// doesn't do any security checks, 'cause i don't care
-  override VFile tryOpen (const(char)[] fname) {
-    static import core.stdc.stdio;
-    if (fname.length == 0) return VFile.init;
-    try {
-      return pak.fopen(fname);
-    } catch (Exception) {}
-    return VFile.init;
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private final class F2DatArchiveImpl {
-protected:
   static struct FileInfo {
     bool packed;
-    ulong pksize;
-    ulong size;
-    ulong ofs; // offset in .DAT
+    long pksize;
+    long size;
+    long ofs; // offset in archive
     string name; // with path
   }
-
-  // for dir range
-  public static struct DirEntry {
-    string name;
-    ulong size;
-  }
-
-protected:
-  VFile st;
-  FileInfo[] dir;
-  bool mNormNames; // true: convert names to lower case, do case-insensitive comparison (ASCII only)
 
   VFile wrap (usize idx) {
     assert(idx < dir.length);
@@ -95,61 +51,8 @@ protected:
     return wrapZLibStreamRO(st, mode, size, stpos, pksize);
   }
 
-public:
-  this (VFile fl, bool anormNames=true) {
-    mNormNames = anormNames;
-    open(fl);
-    st = fl;
-  }
-
-  final @property auto files () {
-    static struct Range {
-    private:
-      F2DatArchiveImpl me;
-      usize curindex;
-
-    nothrow @safe @nogc:
-      this (F2DatArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
-
-    public:
-      @property bool empty () const { return (curindex >= me.dir.length); }
-      @property DirEntry front () const {
-        return DirEntry(
-          (curindex < me.dir.length ? me.dir[cast(usize)curindex].name : null),
-          (curindex < me.dir.length ? me.dir[cast(usize)curindex].size : 0));
-      }
-      @property Range save () { return Range(me, curindex); }
-      void popFront () { if (curindex < me.dir.length) ++curindex; }
-      @property usize length () const { return me.dir.length; }
-      @property usize position () const { return curindex; } // current position
-      @property void position (usize np) { curindex = np; }
-      void rewind () { curindex = 0; }
-    }
-    return Range(this);
-  }
-
-  VFile fopen (ref in DirEntry de) {
-    import iv.vfs.koi8 : koi8StrCaseEqu;
-    foreach_reverse (immutable idx, ref fi; dir) {
-      if (mNormNames) {
-        if (koi8StrCaseEqu(fi.name, de.name)) return wrap(idx);
-      } else {
-        if (fi.name == de.name) return wrap(idx);
-      }
-    }
-    throw new VFSNamedException!"F2DatArchive"("file not found");
-  }
-
-  VFile fopen (const(char)[] fname) {
-    DirEntry de;
-    de.name = cast(string)fname; // it's safe here
-    return fopen(de);
-  }
-
-private:
   void open (VFile fl) {
     debug(f2datarc) import std.stdio : writeln, writefln;
-
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"F2DatArchive"("file too big");
     // check it

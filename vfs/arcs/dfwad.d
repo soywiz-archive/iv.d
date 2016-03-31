@@ -24,64 +24,22 @@ import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-shared static this () {
-  vfsRegisterDetector(new DFWadDetector());
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private final class DFWadDetector : VFSDriverDetector {
-  override VFSDriver tryOpen (VFile fl) {
-    try {
-      auto pak = new DFWadArchiveImpl(fl);
-      return new VFSDriverDFWad(pak);
-    } catch (Exception) {}
-    return null;
-  }
-}
+private import iv.vfs.arcs : VFSSimpleArchiveDetectorMixin;
+mixin(VFSSimpleArchiveDetectorMixin!"DFWad");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverDFWad : VFSDriver {
+  private import iv.vfs.arcs : VFSSimpleArchiveDriverMixin;
+  mixin VFSSimpleArchiveDriverMixin;
+
 private:
-  DFWadArchiveImpl pak;
-
-public:
-  this (DFWadArchiveImpl apak) {
-    if (apak is null) throw new VFSException("wtf?!");
-    pak = apak;
-  }
-
-  /// doesn't do any security checks, 'cause i don't care
-  override VFile tryOpen (const(char)[] fname) {
-    static import core.stdc.stdio;
-    if (fname.length == 0) return VFile.init;
-    try {
-      return pak.fopen(fname);
-    } catch (Exception) {}
-    return VFile.init;
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private final class DFWadArchiveImpl {
-protected:
   static struct FileInfo {
-    ulong pksize;
-    ulong ofs; // offset in archive
+    long pksize;
+    long ofs; // offset in archive
+    long size = -1;
     string name; // with path
   }
-
-  // for dir range
-  public static struct DirEntry {
-    string name;
-  }
-
-protected:
-  VFile st;
-  FileInfo[] dir;
-  bool mNormNames; // true: convert names to lower case, do case-insensitive comparison (ASCII only)
 
   VFile wrap (usize idx) {
     assert(idx < dir.length);
@@ -92,56 +50,6 @@ protected:
     return wrapZLibStreamRO(st, mode, size, stpos, pksize);
   }
 
-public:
-  this (VFile fl, bool anormNames=true) {
-    mNormNames = anormNames;
-    open(fl);
-    st = fl;
-  }
-
-  final @property auto files () {
-    static struct Range {
-    private:
-      DFWadArchiveImpl me;
-      usize curindex;
-
-    nothrow @safe @nogc:
-      this (DFWadArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
-
-    public:
-      @property bool empty () const { return (curindex >= me.dir.length); }
-      @property DirEntry front () const {
-        return DirEntry((curindex < me.dir.length ? me.dir[cast(usize)curindex].name : null));
-      }
-      @property Range save () { return Range(me, curindex); }
-      void popFront () { if (curindex < me.dir.length) ++curindex; }
-      @property usize length () const { return me.dir.length; }
-      @property usize position () const { return curindex; } // current position
-      @property void position (usize np) { curindex = np; }
-      void rewind () { curindex = 0; }
-    }
-    return Range(this);
-  }
-
-  VFile fopen (ref in DirEntry de) {
-    import iv.vfs.koi8 : koi8StrCaseEqu;
-    foreach_reverse (immutable idx, ref fi; dir) {
-      if (mNormNames) {
-        if (koi8StrCaseEqu(fi.name, de.name)) return wrap(idx);
-      } else {
-        if (fi.name == de.name) return wrap(idx);
-      }
-    }
-    throw new VFSNamedException!"DFWadArchive"("file not found");
-  }
-
-  VFile fopen (const(char)[] fname) {
-    DirEntry de;
-    de.name = cast(string)fname; // it's safe here
-    return fopen(de);
-  }
-
-private:
   void open (VFile fl) {
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DFWadArchive"("file too big");

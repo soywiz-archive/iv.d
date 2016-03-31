@@ -24,123 +24,26 @@ import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-shared static this () {
-  vfsRegisterDetector(new DunePakDetector());
-}
+private import iv.vfs.arcs : VFSSimpleArchiveDetectorMixin;
+mixin(VFSSimpleArchiveDetectorMixin!"Dune2Pak");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private final class DunePakDetector : VFSDriverDetector {
-  override VFSDriver tryOpen (VFile fl) {
-    try {
-      auto pak = new DunePakArchiveImpl(fl);
-      return new VFSDriverDunePak(pak);
-    } catch (Exception) {}
-    return null;
-  }
-}
+public final class VFSDriverDune2Pak : VFSDriver {
+  private import iv.vfs.arcs : VFSSimpleArchiveDriverMixin;
+  mixin VFSSimpleArchiveDriverMixin;
 
-
-// ////////////////////////////////////////////////////////////////////////// //
-public final class VFSDriverDunePak : VFSDriver {
 private:
-  DunePakArchiveImpl pak;
-
-public:
-  this (DunePakArchiveImpl apak) {
-    if (apak is null) throw new VFSException("wtf?!");
-    pak = apak;
-  }
-
-  /// doesn't do any security checks, 'cause i don't care
-  override VFile tryOpen (const(char)[] fname) {
-    static import core.stdc.stdio;
-    if (fname.length == 0) return VFile.init;
-    try {
-      return pak.fopen(fname);
-    } catch (Exception) {}
-    return VFile.init;
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private final class DunePakArchiveImpl {
-protected:
   static struct FileInfo {
-    ulong size;
-    ulong ofs; // offset in .DAT
+    long size;
+    long ofs; // offset in archive
     string name; // with path
   }
 
-  // for dir range
-  public static struct DirEntry {
-    string name;
-    ulong size;
-  }
-
-protected:
-  VFile st;
-  FileInfo[] dir;
-  bool mNormNames; // true: convert names to lower case, do case-insensitive comparison (ASCII only)
-
   VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size); }
 
-public:
-  this (VFile fl, bool anormNames=true) {
-    mNormNames = anormNames;
-    open(fl);
-    st = fl;
-  }
-
-  final @property auto files () {
-    static struct Range {
-    private:
-      DunePakArchiveImpl me;
-      usize curindex;
-
-    nothrow @safe @nogc:
-      this (DunePakArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
-
-    public:
-      @property bool empty () const { return (curindex >= me.dir.length); }
-      @property DirEntry front () const {
-        return DirEntry(
-          (curindex < me.dir.length ? me.dir[cast(usize)curindex].name : null),
-          (curindex < me.dir.length ? me.dir[cast(usize)curindex].size : 0));
-      }
-      @property Range save () { return Range(me, curindex); }
-      void popFront () { if (curindex < me.dir.length) ++curindex; }
-      @property usize length () const { return me.dir.length; }
-      @property usize position () const { return curindex; } // current position
-      @property void position (usize np) { curindex = np; }
-      void rewind () { curindex = 0; }
-    }
-    return Range(this);
-  }
-
-  VFile fopen (ref in DirEntry de) {
-    import iv.vfs.koi8 : koi8StrCaseEqu;
-    foreach_reverse (immutable idx, ref fi; dir) {
-      if (mNormNames) {
-        if (koi8StrCaseEqu(fi.name, de.name)) return wrap(idx);
-      } else {
-        if (fi.name == de.name) return wrap(idx);
-      }
-    }
-    throw new VFSNamedException!"DunePakArchive"("file not found");
-  }
-
-  VFile fopen (const(char)[] fname) {
-    DirEntry de;
-    de.name = cast(string)fname; // it's safe here
-    return fopen(de);
-  }
-
-private:
   void open (VFile fl) {
     debug(dunepakarc) import std.stdio : writeln, writefln;
-
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DunePakArchive"("file too big");
     // read directory
