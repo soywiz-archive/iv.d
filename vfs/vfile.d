@@ -657,6 +657,7 @@ struct ZLibLowLevelRO {
   bool eofhit;
 
   this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize) {
+    if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
     zfl = fl;
     stpos = astpos;
     size = aupsize;
@@ -679,23 +680,26 @@ struct ZLibLowLevelRO {
     if (zfl.isOpen) zfl.close();
   }
 
-  private bool initZStream () {
+  private bool initZStream (bool reinit=false) {
     import core.stdc.stdlib : malloc, free;
-    if (mode == VFSZLibMode.Raw || pkb.ptr !is null) return true;
+    if (mode == VFSZLibMode.Raw || (!reinit && pkb.ptr !is null)) return true;
     // allocate buffer for packed data
-    auto pb = cast(ubyte*)malloc(ibsize);
-    if (pb is null) return false;
-    pkb = pb[0..ibsize];
+    if (pkb.ptr is null) {
+      auto pb = cast(ubyte*)malloc(ibsize);
+      if (pb is null) return false;
+      pkb = pb[0..ibsize];
+    }
     zs.avail_in = 0;
     zs.avail_out = 0;
     // initialize unpacker
     // -15 is a magic value used to decompress zip files:
     // it has the effect of not requiring the 2 byte header and 4 byte trailer
     if (inflateInit2(&zs, (mode == VFSZLibMode.Zip ? -15 : 15)) != Z_OK) {
-      free(pb);
+      free(pkb.ptr);
       pkb = null;
       return false;
     }
+    eoz = false;
     // we are ready
     return true;
   }
@@ -717,7 +721,7 @@ struct ZLibLowLevelRO {
 
   private bool unpackNextChunk () {
     while (zs.avail_out > 0) {
-      if (eoz) return false;
+      if (eoz) return (size < 0); // `false` for known size, `true` for unknown size
       if (!readPackedChunk()) return false;
       auto err = inflate(&zs, Z_SYNC_FLUSH);
       //if (err == Z_BUF_ERROR) { import iv.writer; writeln("*** OUT OF BUFFER!"); }
@@ -727,11 +731,28 @@ struct ZLibLowLevelRO {
     return true;
   }
 
+  bool findUnpackedSize () {
+    ubyte[1024] tbuf = void;
+    //size = pos; // current size
+    for (;;) {
+      uint rd = cast(uint)tbuf.length;
+      zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
+      zs.avail_out = rd;
+      if (!unpackNextChunk()) return false;
+      rd -= zs.avail_out;
+      if (pos+rd < 0) return false; // file too big
+      prpos = (pos += rd);
+      if (zs.avail_out != 0) break;
+    }
+    size = pos;
+    return true;
+  }
+
   ssize read (void* buf, usize count) {
     if (buf is null) return -1;
     if (count == 0 || size == 0) return 0;
     if (!isOpen) return -1; // read error
-    if (pos >= size) { eofhit = true; return 0; } // EOF
+    if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
     if (mode == VFSZLibMode.Raw) {
       if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
       zfl.seek(stpos+pos);
@@ -746,7 +767,7 @@ struct ZLibLowLevelRO {
         inflateEnd(&zs);
         zs = zs.init;
         pkpos = 0;
-        if (!initZStream()) return -1;
+        if (!initZStream(true)) return -1;
         prpos = 0;
       }
       // do we need to seek forward?
@@ -764,10 +785,15 @@ struct ZLibLowLevelRO {
         prpos = pos;
       }
       // unpack data
-      if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+      if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
       zs.next_out = cast(typeof(zs.next_out))buf;
       zs.avail_out = cast(uint)count;
       if (!unpackNextChunk()) return -1;
+      if (size < 0 && zs.avail_out > 0) {
+        eofhit = true;
+        count -= zs.avail_out;
+        size = pos+count;
+      }
       prpos = (pos += count);
       return count;
     }
@@ -783,13 +809,17 @@ struct ZLibLowLevelRO {
       case Seek.Cur: ofs += pos; break;
       case Seek.End:
         if (ofs > 0) ofs = 0;
+        if (size < 0) {
+          if (pkb.ptr is null && !initZStream()) return -1;
+          if (!findUnpackedSize) return -1;
+        }
         ofs += size;
         break;
       default:
         return -1;
     }
     if (ofs < 0) return -1;
-    if (ofs > size) ofs = size;
+    if (size >= 0 && ofs > size) ofs = size;
     pos = ofs;
     eofhit = false;
     return pos;
@@ -799,10 +829,10 @@ struct ZLibLowLevelRO {
 
 /// wrap VFile into read-only zlib-packed stream, with given offset and length.
 /// if `len` == -1, wrap from starting position to file end.
-/// `upsize`: size of unpacked file (sorry, should be known)
+/// `upsize`: size of unpacked file (-1: size unknown)
 public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stpos=0, long len=-1) {
   if (stpos < 0) throw new VFSException("invalid starting position");
-  if (upsize < 0) throw new VFSException("invalid unpacked size");
+  if (upsize < 0 && upsize != -1) throw new VFSException("invalid unpacked size");
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
   return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len));
