@@ -19,4 +19,4 @@ module iv.vfs.arcs;
 
 public import iv.vfs.arcs.zip;
 public import iv.vfs.arcs.q1pak;
-public import iv.vfs.arcs.abuse;
+//public import iv.vfs.arcs.abuse;
