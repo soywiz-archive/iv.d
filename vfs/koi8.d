@@ -155,6 +155,11 @@ public char dos2koi8 (char ch) pure nothrow @trusted @nogc {
   return koi8from866Table.ptr[cast(int)ch];
 }
 
+public char win2koi8 (char ch) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return koi8from1251Table.ptr[cast(int)ch];
+}
+
 public char koi8lower (char ch) pure nothrow @trusted @nogc {
   pragma(inline, true);
   return koi8tolowerTable.ptr[cast(int)ch];

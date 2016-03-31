@@ -129,25 +129,14 @@ public:
   }
 
   VFile fopen (ref in DirEntry de) {
-    static bool strequ() (const(char)[] s0, const(char)[] s1) {
-      if (s0.length != s1.length) return false;
-      foreach (immutable idx, char ch; s0) {
-        char c1 = s1[idx];
-        if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's `toLower()`
-        if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's `toLower()`
-        if (ch != c1) return false;
-      }
-      return true;
-    }
-
+    import iv.vfs.koi8 : koi8StrCaseEqu;
     foreach_reverse (immutable idx, ref fi; dir) {
       if (mNormNames) {
-        if (strequ(fi.name, de.name)) return wrap(idx);
+        if (koi8StrCaseEqu(fi.name, de.name)) return wrap(idx);
       } else {
         if (fi.name == de.name) return wrap(idx);
       }
     }
-
     throw new VFSNamedException!"F2DatArchive"("file not found");
   }
 

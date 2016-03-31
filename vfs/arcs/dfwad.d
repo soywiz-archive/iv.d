@@ -124,25 +124,14 @@ public:
   }
 
   VFile fopen (ref in DirEntry de) {
-    static bool strequ() (const(char)[] s0, const(char)[] s1) {
-      if (s0.length != s1.length) return false;
-      foreach (immutable idx, char ch; s0) {
-        char c1 = s1[idx];
-        if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's `toLower()`
-        if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's `toLower()`
-        if (ch != c1) return false;
-      }
-      return true;
-    }
-
+    import iv.vfs.koi8 : koi8StrCaseEqu;
     foreach_reverse (immutable idx, ref fi; dir) {
       if (mNormNames) {
-        if (strequ(fi.name, de.name)) return wrap(idx);
+        if (koi8StrCaseEqu(fi.name, de.name)) return wrap(idx);
       } else {
         if (fi.name == de.name) return wrap(idx);
       }
     }
-
     throw new VFSNamedException!"DFWadArchive"("file not found");
   }
 
@@ -177,6 +166,7 @@ private:
       if (fi.ofs == 0 && fi.pksize == 0) path = null; // new path
       char[] name;
       {
+        import iv.vfs.koi8 : win2koi8;
         name = new char[](nbuf.length+path.length+2);
         if (path.length) name[0..path.length] = path[];
         usize nbpos = path.length;
@@ -185,7 +175,7 @@ private:
           else if (ch == '\\') ch = '/';
           else if (ch == '/') ch = '_';
           if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
-          name.ptr[nbpos++] = ch;
+          name.ptr[nbpos++] = win2koi8(ch);
         }
         if (fi.ofs == 0 && fi.pksize == 0 && nbpos > 0 && name[nbpos-1] != '/') name.ptr[nbpos++] = '/';
         name = name[0..nbpos];
