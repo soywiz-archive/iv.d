@@ -169,11 +169,11 @@ private:
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"F2DatArchive"("file too big");
     // check it
-    if (flsize < 8) throw new VFSNamedException!"F2DatArchive"("invalid DAT file");
+    if (flsize < 8) throw new VFSNamedException!"F2DatArchive"("invalid archive");
     fl.seek(flsize-8);
     auto dirSize = fl.readNum!uint;
     auto datSize = fl.readNum!uint;
-    if (dirSize < 17 || datSize != flsize || dirSize > datSize-4) throw new VFSNamedException!"F2DatArchive"("invalid DAT file");
+    if (dirSize < 17 || datSize != flsize || dirSize > datSize-4) throw new VFSNamedException!"F2DatArchive"("invalid archive");
     debug(f2datarc) writefln("dir at: 0x%08x", datSize-4-dirSize);
     // read directory
     fl.seek(datSize-4-dirSize);
@@ -182,7 +182,7 @@ private:
       FileInfo fi;
       dirSize -= 17;
       auto nlen = fl.readNum!uint;
-      if (nlen == 0 || nlen > dirSize || nlen > 2048) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
+      if (nlen == 0 || nlen > dirSize || nlen > 2048) throw new VFSNamedException!"F2DatArchive"("invalid archive directory");
       char[] name;
       {
         usize nbpos = 0;
@@ -204,9 +204,9 @@ private:
       fi.pksize = fl.readNum!uint;
       fi.ofs = fl.readNum!uint;
       // some sanity checks
-      if (fi.pksize > 0 && fi.ofs >= datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
-      if (fi.pksize >= datSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
-      if (fi.ofs+fi.pksize > datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
+      if (fi.pksize > 0 && fi.ofs >= datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid archive directory");
+      if (fi.pksize >= datSize) throw new VFSNamedException!"F2DatArchive"("invalid archive directory");
+      if (fi.ofs+fi.pksize > datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
         dir ~= fi;

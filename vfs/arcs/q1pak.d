@@ -161,23 +161,24 @@ private:
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"Q1PakArchive"("file too big");
     char[4] sign;
     fl.rawReadExact(sign[]);
-    if (sign != "PACK") throw new VFSNamedException!"Q1PakArchive"("not a PAK file");
+    if (sign != "PACK" && sign != "SPAK") throw new VFSNamedException!"Q1PakArchive"("not a PAK file");
+    uint direlsize = (sign[0] == 'S' ? 128 : 64);
     auto dirOfs = fl.readNum!uint;
     auto dirSize = fl.readNum!uint;
-    if (dirSize%64 != 0 || dirSize >= flsize || dirOfs >= flsize || dirOfs+dirSize > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid PAK file");
+    if (dirSize%direlsize != 0 || dirSize >= flsize || dirOfs >= flsize || dirOfs+dirSize > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid PAK file");
     debug(q1pakarc) writefln("dir at: 0x%08x", dirOfs);
     // read directory
     fl.seek(dirOfs);
-    char[56] nbuf;
-    while (dirSize >= 64) {
+    char[120] nbuf;
+    while (dirSize >= direlsize) {
       FileInfo fi;
-      dirSize -= 64;
+      dirSize -= direlsize;
       char[] name;
       {
         usize nbpos = 0;
-        fl.rawReadExact(nbuf[]);
-        name = new char[](56);
-        foreach (char ch; nbuf[]) {
+        fl.rawReadExact(nbuf[0..direlsize-8]);
+        name = new char[](direlsize-8);
+        foreach (char ch; nbuf[0..direlsize-8]) {
           if (ch == 0) break;
           if (ch == '\\') ch = '/';
           if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
@@ -189,8 +190,8 @@ private:
       fi.ofs = fl.readNum!uint;
       fi.size = fl.readNum!uint;
       // some sanity checks
-      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid DAT file directory");
-      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid DAT file directory");
+      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid archive directory");
+      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
         dir ~= fi;
