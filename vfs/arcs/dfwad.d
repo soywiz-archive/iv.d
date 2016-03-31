@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arcs.f2dat;
+module iv.vfs.arcs.dfwad;
 
 import iv.vfs : usize, ssize, Seek;
 import iv.vfs.augs;
@@ -25,16 +25,16 @@ import iv.vfs.vfile;
 
 // ////////////////////////////////////////////////////////////////////////// //
 shared static this () {
-  vfsRegisterDetector(new F2DatDetector());
+  vfsRegisterDetector(new DFWadDetector());
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private final class F2DatDetector : VFSDriverDetector {
+private final class DFWadDetector : VFSDriverDetector {
   override VFSDriver tryOpen (VFile fl) {
     try {
-      auto pak = new F2DatArchiveImpl(fl);
-      return new VFSDriverF2Dat(pak);
+      auto pak = new DFWadArchiveImpl(fl);
+      return new VFSDriverDFWad(pak);
     } catch (Exception) {}
     return null;
   }
@@ -42,12 +42,12 @@ private final class F2DatDetector : VFSDriverDetector {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public final class VFSDriverF2Dat : VFSDriver {
+public final class VFSDriverDFWad : VFSDriver {
 private:
-  F2DatArchiveImpl pak;
+  DFWadArchiveImpl pak;
 
 public:
-  this (F2DatArchiveImpl apak) {
+  this (DFWadArchiveImpl apak) {
     if (apak is null) throw new VFSException("wtf?!");
     pak = apak;
   }
@@ -65,20 +65,17 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private final class F2DatArchiveImpl {
+private final class DFWadArchiveImpl {
 protected:
   static struct FileInfo {
-    bool packed;
     ulong pksize;
-    ulong size;
-    ulong ofs; // offset in .DAT
+    ulong ofs; // offset in archive
     string name; // with path
   }
 
   // for dir range
   public static struct DirEntry {
     string name;
-    ulong size;
   }
 
 protected:
@@ -89,9 +86,9 @@ protected:
   VFile wrap (usize idx) {
     assert(idx < dir.length);
     auto stpos = dir[idx].ofs;
-    auto size = dir[idx].size;
+    auto size = -1;
     auto pksize = dir[idx].pksize;
-    VFSZLibMode mode = (dir[idx].packed ? VFSZLibMode.ZLib : VFSZLibMode.Raw);
+    VFSZLibMode mode = VFSZLibMode.ZLib;
     return wrapZLibStreamRO(st, mode, size, stpos, pksize);
   }
 
@@ -105,18 +102,16 @@ public:
   final @property auto files () {
     static struct Range {
     private:
-      F2DatArchiveImpl me;
+      DFWadArchiveImpl me;
       usize curindex;
 
     nothrow @safe @nogc:
-      this (F2DatArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
+      this (DFWadArchiveImpl ame, usize aidx=0) { me = ame; curindex = aidx; }
 
     public:
       @property bool empty () const { return (curindex >= me.dir.length); }
       @property DirEntry front () const {
-        return DirEntry(
-          (curindex < me.dir.length ? me.dir[cast(usize)curindex].name : null),
-          (curindex < me.dir.length ? me.dir[cast(usize)curindex].size : 0));
+        return DirEntry((curindex < me.dir.length ? me.dir[cast(usize)curindex].name : null));
       }
       @property Range save () { return Range(me, curindex); }
       void popFront () { if (curindex < me.dir.length) ++curindex; }
@@ -148,7 +143,7 @@ public:
       }
     }
 
-    throw new VFSNamedException!"F2DatArchive"("file not found");
+    throw new VFSNamedException!"DFWadArchive"("file not found");
   }
 
   VFile fopen (const(char)[] fname) {
@@ -167,47 +162,63 @@ private:
     scope(failure) cleanup();
 
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"F2DatArchive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DFWadArchive"("file too big");
     // check it
-    if (flsize < 8) throw new VFSNamedException!"F2DatArchive"("invalid DAT file");
-    fl.seek(flsize-8);
-    auto dirSize = fl.readNum!uint;
-    auto datSize = fl.readNum!uint;
-    if (dirSize < 17 || datSize != flsize || dirSize > datSize-4) throw new VFSNamedException!"F2DatArchive"("invalid DAT file");
-    debug(f2datarc) writefln("dir at: 0x%08x", datSize-4-dirSize);
+    if (flsize < 8) throw new VFSNamedException!"DFWadArchive"("invalid archive file");
+
+    char[6] sign;
+    fl.rawReadExact(sign[]);
+    if (sign != "DFWAD\x01") throw new VFSNamedException!"DFWadArchive"("invalid archive file");
+
+    uint count = fl.readNum!ushort;
+    //{ import core.stdc.stdio : printf; printf("dfwad: count=%u\n", cast(uint)count); }
     // read directory
-    fl.seek(datSize-4-dirSize);
-    char[2048] nbuf;
-    while (dirSize >= 17) {
+    char[17] dirbuf;
+    char[] path; // current path
+    char[16] nbuf;
+    while (count--) {
       FileInfo fi;
-      dirSize -= 17;
-      auto nlen = fl.readNum!uint;
-      if (nlen == 0 || nlen > dirSize || nlen > 2048) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
+      fl.rawReadExact(nbuf[]);
+      fi.ofs = fl.readNum!uint;
+      fi.pksize = fl.readNum!uint;
+      if (fi.ofs == 0 && fi.pksize == 0) path = null; // new path
       char[] name;
       {
-        usize nbpos = 0;
-        fl.rawReadExact(nbuf[0..nlen]);
-        dirSize -= nlen;
-        name = new char[](nlen);
-        foreach (char ch; nbuf[0..nlen]) {
+        name = new char[](nbuf.length+path.length+2);
+        if (path.length) name[0..path.length] = path[];
+        usize nbpos = path.length;
+        foreach (char ch; nbuf[]) {
                if (ch == 0) break;
           else if (ch == '\\') ch = '/';
           else if (ch == '/') ch = '_';
           if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
           name.ptr[nbpos++] = ch;
         }
+        if (fi.ofs == 0 && fi.pksize == 0 && nbpos > 0 && name[nbpos-1] != '/') name.ptr[nbpos++] = '/';
         name = name[0..nbpos];
-        if (name.length && name[$-1] == '/') name = null;
+        if (fi.ofs == 0 && fi.pksize == 0) {
+          // new path
+          if (name == "/") name = null;
+          assert(name.length <= dirbuf.length);
+          if (name.length) {
+            dirbuf[0..name.length] = name[];
+            path = dirbuf[0..name.length];
+          } else {
+            path = null;
+          }
+          //{ import core.stdc.stdio : printf; printf("NEWDIR: [%.*s]\n", cast(uint)path.length, path.ptr); }
+          continue;
+        } else {
+          // normal file
+          if (name.length && name[$-1] == '/') name = null;
+        }
       }
-      fi.packed = (fl.readNum!ubyte() != 0);
-      fi.size = fl.readNum!uint;
-      fi.pksize = fl.readNum!uint;
-      fi.ofs = fl.readNum!uint;
       // some sanity checks
-      if (fi.pksize > 0 && fi.ofs >= datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
-      if (fi.pksize >= datSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
-      if (fi.ofs+fi.pksize > datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid DAT file directory");
+      if (fi.pksize > 0 && fi.ofs >= flsize) throw new VFSNamedException!"DFWadArchive"("invalid archive file directory");
+      if (fi.pksize >= flsize) throw new VFSNamedException!"DFWadArchive"("invalid archive file directory");
+      if (fi.ofs+fi.pksize > flsize) throw new VFSNamedException!"DFWadArchive"("invalid archive file directory");
       if (name.length) {
+        //{ import core.stdc.stdio : printf; printf("[%.*s]\n", cast(uint)name.length, name.ptr); }
         fi.name = cast(string)name; // it's safe here
         dir ~= fi;
       }

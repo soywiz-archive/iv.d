@@ -274,7 +274,7 @@ public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
+public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
   if (fname.length == 0) throw new VFSException("can't open file ''");
   if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
@@ -286,6 +286,11 @@ VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
       if (mpos >= modebuf.length-1) throw new VFSException("can't open file '"~fname.idup~"' with mode '"~mode.idup~"'");
       got[ch] = true;
       modebuf.ptr[mpos++] = ch;
+      if (!got['b'] && (ch == 'r' || ch == 'w' || ch == 'a' || ch == 'R' || ch == 'W' || ch == 'A')) {
+        if (mpos >= modebuf.length-1) throw new VFSException("can't open file '"~fname.idup~"' with mode '"~mode.idup~"'");
+        got['b'] = true;
+        modebuf.ptr[mpos++] = 'b';
+      }
     }
   }
   if (mpos == 0) {
