@@ -23,6 +23,8 @@ import iv.vfs : usize;
 import iv.vfs.augs;
 import iv.vfs.error;
 import iv.vfs.vfile;
+import iv.vfs.posixci;
+import iv.vfs.koi8;
 static import core.sync.mutex;
 
 
@@ -57,11 +59,13 @@ public final class VFSDriverAlwaysFail : VFSDriver {
 public final class VFSDriverDisk : VFSDriver {
 private:
   string dataPath;
+  bool mNormNames;
 
 public:
-  this () { dataPath = "./"; }
+  this (bool normnames=true) { mNormNames = normnames; dataPath = "./"; }
 
-  this(T) (T dpath) if (is(T : const(char)[])) {
+  this(T) (T dpath, bool normnames=true) if (is(T : const(char)[])) {
+    mNormNames = normnames;
     if (dpath.length == 0) {
       dataPath = "./";
     } else if (dpath[$-1] == '/') {
@@ -86,6 +90,13 @@ public:
       nbuf[0..dataPath.length] = dataPath[];
       nbuf[dataPath.length..dataPath.length+fname.length] = fname[];
       nbuf[dataPath.length+fname.length] = '\0';
+    }
+    if (mNormNames) {
+      uint len;
+      while (len < nbuf.length && nbuf.ptr[len]) ++len;
+      auto pt = findPathCI(nbuf[0..len]);
+      if (pt is null) return VFile.init;
+      nbuf[pt.length] = '\0';
     }
     auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
     if (fl is null) return VFile.init;
