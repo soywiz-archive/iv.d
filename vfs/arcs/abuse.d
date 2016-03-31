@@ -96,32 +96,31 @@ enum {
 }
 
 
-immutable string[SPEC_MAX_TYPE+1] exts = [
-  //".invalid",
-  "",
-  ".colortabel",
-  ".pal",
-  ".empty",
-  ".img",
-  ".foretile",
-  ".backtile",
-  ".character",
-  ".morph8",
-  ".morph16",
-  ".grue",
-  ".esfx",
-  ".dmxmus",
-  ".morphpatch",
+immutable string[SPEC_MAX_TYPE+1] dirs = [
+  "bad/",
+  "colortabel/",
+  "pal/",
+  "empty/",
+  "img/",
+  "foretile/",
+  "backtile/",
+  "character/",
+  "morph8/",
+  "morph16/",
+  "grue/",
+  "esfx/",
+  "dmxmus/",
+  "morphpatch/",
   "", // normal file
-  ".cz1", // compressed
-  ".vimg",
-  ".lights",
-  ".foregrue",
-  ".backgrue",
-  ".data",
-  ".character2",
-  ".particle",
-  ".ecache",
+  "cz1/", // compressed
+  "vimg/",
+  "lights/",
+  "foregrue/",
+  "backgrue/",
+  "data/",
+  "character2/",
+  "particle/",
+  "ecache/",
 ];
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -223,21 +222,15 @@ private:
       char[] name;
       {
         fl.rawReadExact(nbuf[0..nlen]);
-        name = new char[](nlen+exts[type].length);
-        usize nbpos = 0;
+        name = new char[](nlen+dirs[type].length);
+        usize nbpos = dirs[type].length;
+        if (nbpos) name[0..nbpos] = dirs[type][];
         foreach (char ch; nbuf[0..nlen]) {
           if (ch == 0) break;
           if (ch == '\\' || ch == '/' || ch > 127) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
           name.ptr[nbpos++] = ch;
         }
         if (nbpos == 0) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
-        // add type extension
-        version(none) {
-          if (exts[type].length) {
-            name[nbpos..nbpos+exts[type].length] = exts[type][];
-            nbpos += exts[type].length;
-          }
-        }
         name = name[0..nbpos];
         //{ import core.stdc.stdio : printf; printf("abuse: [%.*s]\n", cast(uint)name.length, name.ptr); }
       }
