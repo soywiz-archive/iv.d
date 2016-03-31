@@ -101,7 +101,7 @@ public:
   @property const(char)[] name () {
     if (!wstp) return null;
     try {
-      return wst.name;
+      synchronized(wst) return wst.name;
     } catch (Exception e) {
       // chain exception
       throw new VFSException("read error", __FILE__, __LINE__, e);
@@ -111,7 +111,7 @@ public:
   @property bool isOpen () {
     if (!wstp) return false;
     try {
-      return wst.isOpen;
+      synchronized(wst) return wst.isOpen;
     } catch (Exception e) {
       // chain exception
       throw new VFSException("read error", __FILE__, __LINE__, e);
@@ -256,7 +256,7 @@ protected:
 
   this () pure nothrow @safe @nogc {}
 
-  // this should never be called
+  // this shouldn't be called, ever
   ~this () nothrow @safe @nogc {
     assert(0); // why we are here?!
   }
@@ -275,20 +275,7 @@ protected:
     if (xrc == 0) {
       import core.memory : GC;
       import core.stdc.stdlib : free;
-      synchronized(this) close(); // finalize stream
-      /*
-      if (gcroot) {
-        // remove roots
-        if (gcrange) {
-          GC.removeRange(cast(void*)gcroot);
-          GC.removeRoot(cast(void*)gcroot);
-        }
-        // free allocated memory
-        if (libcfree) free(cast(void*)gcroot);
-        // just in case
-        gcroot = 0;
-      }
-      */
+      synchronized(this) close(); // finalize stream; should be synchronized right here
       return true;
     } else {
       return false;
@@ -485,6 +472,15 @@ protected:
     }
   }
 
+  override @property bool eof () {
+    if (closed) return true;
+    static if (streamHasEof!ST) {
+      return st.eof;
+    } else {
+      return eofhit;
+    }
+  }
+
   override void close () {
     if (!closed) {
       closed = true;
@@ -524,6 +520,7 @@ protected:
   }
 
   override long lseek (long offset, int origin) {
+    if (origin != Seek.Set && origin != Seek.Cur && origin != Seek.End) return -1;
     static if (isLowLevelStreamS!ST) {
       // has low-level seek
       if (closed) return -1;
@@ -544,19 +541,86 @@ protected:
 }
 
 
-/// wrap any valid stream into VFile
+/// wrap `std.stdio.File` into `VFile`
 public VFile wrapStream (std.stdio.File st) { return VFile(st); }
 
-/// wrap any valid stream into VFile
+/// wrap another `VFile` into `VFile`
 public VFile wrapStream (VFile st) { return VFile(st); }
 
-/// wrap any valid stream into VFile
+/// wrap libc `FILE*` into `VFile`
 public VFile wrapStream (core.stdc.stdio.FILE* st) { return VFile(st); }
 
-/// wrap any valid stream into VFile
+/// wrap file descriptor into `VFile`
 public VFile wrapStream (int st) { return VFile(st); }
 
-/// ditto
+/** wrap any valid i/o stream into `VFile`.
+ * "valid" stream should emplement one of two interfaces described below.
+ * only one thread can call stream operations at a time, it's guaranteed by `VFile`.
+ * note that any function is free to throw, `VFile` will take care of that.
+ *
+ * low-level interface:
+ *
+ * [mandatory] `ssize read (void* buf, usize count);`
+ *
+ *   read bytes; should read up to `count` bytes and return number of bytes read.
+ *   should return -1 on error. can't be called with `count == 0`.
+ *
+ * [mandatory] `ssize write (in void* buf, usize count);`
+ *
+ *   write bytes; should write exactly `count` bytes and return number of bytes read.
+ *   should return -1 on error. can't be called with `count == 0`. note that if you
+ *   will return something except `count` (i.e. will write less bytes than requested),
+ *   `VFile` will throw.
+ *
+ * [mandatory] `long lseek (long offset, int origin);`
+ *
+ *   seek into stream. `origin` is one of `Seek.Set`, `Seek.Cur`, or `Seek.End`.
+ *   should return resulting offset from stream start or -1 on error.
+ *
+ * or high-level interface:
+ *
+ * [mandatory] `void[] rawRead (void[] buf);`
+ *
+ *   read bytes; should read up to `buf.length` bytes and return slice with read bytes.
+ *   should throw on error. can't be called with empty buf.
+ *
+ * [mandatory] `void rawWrite (in void[] buf);`
+ *
+ *   write bytes; should write exactly `buf.length` bytes.
+ *   should throw on error (note that if it wrote less bytes than requested, it's an
+ *   error too).
+ *
+ * [mandatory] `void seek (long offset, int origin);`
+ *
+ *   seek into stream. `origin` is one of `Seek.Set`, `Seek.Cur`, or `Seek.End`.
+ *   should throw on error.
+ *
+ * [mandatory] `@property long tell ();`
+ *
+ *   should return current position in stream. should throw on error.
+ *
+ * [mandatory] `@property long size ();`
+ *
+ *   should return stream size. should throw on error.
+ *
+ * common interface, optional:
+ *
+ * [optional] `@property const(char)[] name ();`
+ *
+ *   should return stream name, or throw on error.
+ *
+ * [optional] `@property bool isOpen ();`
+ *
+ *   should return `true` if the stream is opened, or throw on error.
+ *
+ * [optional] `@property bool eof ();`
+ *
+ *   should return `true` if end of stream is reached, or throw on error.
+ *
+ * [optional] `void close ();`
+ *
+ *   should close stream, or throw on error.
+ */
 public VFile wrapStream(ST) (auto ref ST st) if (isReadableStream!ST || isWriteableStream!ST) { return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st)); }
 
 
