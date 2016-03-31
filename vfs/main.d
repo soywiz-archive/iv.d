@@ -274,14 +274,29 @@ public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-VFile vfsDiskOpen (const(char)[] fname) {
+VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
   if (fname.length == 0) throw new VFSException("can't open file ''");
   if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
+  bool[128] got;
+  char[16] modebuf;
+  uint mpos;
+  foreach (char ch; mode) {
+    if (ch < 128 && !got[ch]) {
+      if (mpos >= modebuf.length-1) throw new VFSException("can't open file '"~fname.idup~"' with mode '"~mode.idup~"'");
+      got[ch] = true;
+      modebuf.ptr[mpos++] = ch;
+    }
+  }
+  if (mpos == 0) {
+    modebuf[0..3] = "rb\0";
+  } else {
+    modebuf[mpos++] = '\0';
+  }
   char[2049] nbuf;
   nbuf[0..fname.length] = fname[];
   nbuf[fname.length] = '\0';
-  auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
+  auto fl = core.stdc.stdio.fopen(nbuf.ptr, modebuf.ptr);
   if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
   scope(failure) core.stdc.stdio.fclose(fl); // just in case
   try {
