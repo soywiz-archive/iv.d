@@ -164,34 +164,50 @@ public:
     }
   }
 
-  void seek (long offset, int origin=Seek.Set) {
+  long seek (long offset, int origin=Seek.Set) {
     if (!isOpen) throw new VFSException("can't seek in closed stream");
+    long p;
     try {
-      synchronized(wst) wst.seek(offset, origin);
+      synchronized(wst) p = wst.lseek(offset, origin);
     } catch (Exception e) {
       // chain exception
-      throw new VFSException("read error", __FILE__, __LINE__, e);
+      throw new VFSException("seek error", __FILE__, __LINE__, e);
     }
+    if (p == -1) throw new VFSException("seek error");
+    return p;
   }
 
   @property long tell () {
     if (!isOpen) throw new VFSException("can't get position in closed stream");
+    long p;
     try {
-      synchronized(wst) return wst.tell;
+      synchronized(wst) p = wst.lseek(0, Seek.Cur);
     } catch (Exception e) {
       // chain exception
-      throw new VFSException("read error", __FILE__, __LINE__, e);
+      throw new VFSException("tell error", __FILE__, __LINE__, e);
     }
+    if (p == -1) throw new VFSException("tell error");
+    return p;
   }
 
   @property long size () {
     if (!isOpen) throw new VFSException("can't get size of closed stream");
+    bool noChain = false;
+    long p;
     try {
-      synchronized(wst) return wst.size;
+      synchronized(wst) {
+        auto opos = wst.lseek(0, Seek.Cur);
+        if (opos == -1) { noChain = true; throw new VFSException("size error"); }
+        p = wst.lseek(0, Seek.End);
+        if (p == -1) { noChain = true; throw new VFSException("size error"); }
+        if (wst.lseek(opos, Seek.Set) == -1) { noChain = true; throw new VFSException("size error"); }
+      }
     } catch (Exception e) {
       // chain exception
-      throw new VFSException("read error", __FILE__, __LINE__, e);
+      if (noChain) throw e;
+      throw new VFSException("size error", __FILE__, __LINE__, e);
     }
+    return p;
   }
 
   void opAssign (VFile src) {
@@ -236,6 +252,7 @@ public:
 package class WrappedStreamRC {
 protected:
   shared uint rc = 1;
+  bool eofhit;
 
   this () pure nothrow @safe @nogc {}
 
@@ -279,15 +296,13 @@ protected:
   }
 
 protected:
-  abstract void close ();
-  abstract @property const(char)[] name ();
+  @property const(char)[] name () { return null; }
+  @property bool eof () { return eofhit; }
   abstract @property bool isOpen ();
-  abstract @property bool eof ();
+  abstract void close ();
   ssize read (void* buf, usize count) { return -1; }
   ssize write (in void* buf, usize count) { return -1; }
-  void seek (long offset, int origin=Seek.Set) { throw new VFSException("seek is not supported"); }
-  @property long tell () { throw new VFSException("tell is not supported"); }
-  @property long size () { throw new VFSException("size is not supported"); }
+  long lseek (long offset, int origin) { return -1; }
 }
 
 
@@ -317,10 +332,10 @@ private:
 
 protected:
   override @property const(char)[] name () { return fl.name; }
-
-  override void close () { if (fl.isOpen) fl.close(); }
   override @property bool isOpen () { return fl.isOpen; }
   override @property bool eof () { return fl.eof; }
+
+  override void close () { if (fl.isOpen) fl.close(); }
 
   override ssize read (void* buf, usize count) {
     if (count == 0) return 0;
@@ -333,9 +348,7 @@ protected:
     return count;
   }
 
-  override void seek (long offset, int origin=Seek.Set) { fl.seek(offset, origin); }
-  override @property long tell () { return fl.tell; }
-  override @property long size () { return fl.size; }
+  override long lseek (long offset, int origin) { fl.seek(offset, origin); return fl.tell; }
 }
 
 
@@ -354,7 +367,8 @@ private:
   public this (core.stdc.stdio.FILE* afl) { fl = afl; } // fuck! emplace needs it
 
 protected:
-  override @property const(char)[] name () { return null; }
+  override @property bool isOpen () { return (fl !is null); }
+  override @property bool eof () { return (fl is null || core.stdc.stdio.feof(fl) != 0); }
 
   override void close () {
     if (fl !is null) {
@@ -364,9 +378,6 @@ protected:
       if (res != 0) throw new ErrnoException("can't close file", __FILE__, __LINE__);
     }
   }
-
-  override @property bool isOpen () { return (fl !is null); }
-  override @property bool eof () { return (fl is null || core.stdc.stdio.feof(fl) != 0); }
 
   override ssize read (void* buf, usize count) {
     if (fl is null || core.stdc.stdio.ferror(fl)) return -1;
@@ -384,32 +395,11 @@ protected:
     return res;
   }
 
-  override void seek (long offset, int origin=Seek.Set) {
-    import std.exception : ErrnoException;
-    if (fl is null) { errno = EBADF; throw new ErrnoException("can't seek in closed file", __FILE__, __LINE__); }
-    if (core.sys.posix.stdio.fseeko(fl, offset, origin) == -1) throw new ErrnoException("seek error", __FILE__, __LINE__);
-    core.stdc.stdio.clearerr(fl);
-  }
-
-  override @property long tell () {
-    import std.exception : ErrnoException;
-    if (fl is null) { errno = EBADF; throw new ErrnoException("can't tell in closed file", __FILE__, __LINE__); }
-    auto res = core.stdc.stdio.ftell(fl);
-    if (res == -1) throw new ErrnoException("tell error", __FILE__, __LINE__);
-    return res;
-  }
-
-  override @property long size () {
-    import std.exception : ErrnoException;
-    if (fl is null) { errno = EBADF; throw new ErrnoException("can't seek in closed file", __FILE__, __LINE__); }
-    auto opos = core.stdc.stdio.ftell(fl);
-    if (opos == -1) throw new ErrnoException("tell error", __FILE__, __LINE__);
-    core.stdc.stdio.clearerr(fl);
-    if (core.sys.posix.stdio.fseeko(fl, 0, Seek.End) == -1) throw new ErrnoException("seek error", __FILE__, __LINE__);
-    auto sz = core.stdc.stdio.ftell(fl);
-    if (sz == -1) throw new ErrnoException("tell error", __FILE__, __LINE__);
-    if (core.sys.posix.stdio.fseeko(fl, opos, Seek.Set) == -1) throw new ErrnoException("seek error", __FILE__, __LINE__);
-    return sz;
+  override long lseek (long offset, int origin) {
+    if (fl is null) return -1;
+    auto res = core.sys.posix.stdio.fseeko(fl, offset, origin);
+    if (res != -1) core.stdc.stdio.clearerr(fl);
+    return core.sys.posix.stdio.ftello(fl);
   }
 }
 
@@ -423,12 +413,11 @@ usize WrapLibcFile (core.stdc.stdio.FILE* fl) {
 final class WrappedStreamFD : WrappedStreamRC {
 private:
   int fd;
-  bool eofhit;
 
   public this (int afd) { fd = afd; eofhit = (afd < 0); } // fuck! emplace needs it
 
 protected:
-  override @property const(char)[] name () { return null; }
+  override @property bool isOpen () { return (fd >= 0); }
 
   override void close () {
     if (fd >= 0) {
@@ -439,9 +428,6 @@ protected:
       if (res < 0) throw new ErrnoException("can't close file", __FILE__, __LINE__);
     }
   }
-
-  override @property bool isOpen () { return (fd >= 0); }
-  override @property bool eof () { return eofhit; }
 
   override ssize read (void* buf, usize count) {
     if (fd < 0) return -1;
@@ -459,30 +445,11 @@ protected:
     return res;
   }
 
-  override void seek (long offset, int origin=Seek.Set) {
-    import std.exception : ErrnoException;
-    if (fd < 0) { errno = EBADF; throw new ErrnoException("can't seek in closed file", __FILE__, __LINE__); }
-    if (core.sys.posix.unistd.lseek(fd, offset, origin) == -1) throw new ErrnoException("seek error", __FILE__, __LINE__);
-    eofhit = false;
-  }
-
-  override @property long tell () {
-    import std.exception : ErrnoException;
-    if (fd < 0) { errno = EBADF; throw new ErrnoException("can't tell in closed file", __FILE__, __LINE__); }
-    auto res = core.sys.posix.unistd.lseek(fd, 0, Seek.Cur);
-    if (res == -1) throw new ErrnoException("tell error", __FILE__, __LINE__);
+  override long lseek (long offset, int origin) {
+    if (fd < 0) return -1;
+    auto res = core.sys.posix.unistd.lseek(fd, offset, origin);
+    if (res != -1) eofhit = false;
     return res;
-  }
-
-  override @property long size () {
-    import std.exception : ErrnoException;
-    if (fd < 0) { errno = EBADF; throw new ErrnoException("can't tell in closed file", __FILE__, __LINE__); }
-    auto opos = core.sys.posix.unistd.lseek(fd, 0, Seek.Cur);
-    if (opos == -1) throw new ErrnoException("seek error", __FILE__, __LINE__);
-    auto sz = core.sys.posix.unistd.lseek(fd, 0, Seek.End);
-    if (sz == -1) throw new ErrnoException("seek error", __FILE__, __LINE__);
-    if (core.sys.posix.unistd.lseek(fd, opos, Seek.Set) == -1) throw new ErrnoException("seek error", __FILE__, __LINE__);
-    return sz;
   }
 }
 
@@ -496,7 +463,6 @@ usize WrapFD (int fd) {
 final class WrappedStreamAny(ST) : WrappedStreamRC {
 private:
   ST st;
-  bool eofhit;
   bool closed;
 
   public this() (auto ref ST ast) { st = ast; } // fuck! emplace needs it
@@ -510,15 +476,6 @@ protected:
     }
   }
 
-  override void close () {
-    if (!closed) {
-      closed = true;
-      eofhit = true;
-      static if (streamHasClose!ST) st.close();
-      st = ST.init;
-    }
-  }
-
   override @property bool isOpen () {
     static if (streamHasIsOpen!ST) {
       if (closed) return true;
@@ -527,7 +484,15 @@ protected:
       return !closed;
     }
   }
-  override @property bool eof () { return eofhit; }
+
+  override void close () {
+    if (!closed) {
+      closed = true;
+      eofhit = true;
+      static if (streamHasClose!ST) st.close();
+      st = ST.init;
+    }
+  }
 
   override ssize read (void* buf, usize count) {
     if (closed) return -1;
@@ -558,31 +523,22 @@ protected:
     }
   }
 
-  override void seek (long offset, int origin=Seek.Set) {
-    if (closed) throw new VFSException("can't seek in closed stream");
-    static if (streamHasSeek!ST) {
+  override long lseek (long offset, int origin) {
+    static if (isLowLevelStreamS!ST) {
+      // has low-level seek
+      if (closed) return -1;
+      auto res = st.lseek(offset, origin);
+      if (res != -1) eofhit = false;
+      return res;
+    } else static if (streamHasSeek!ST) {
+      // has high-level seek
+      if (closed) return -1;
       st.seek(offset, origin);
       eofhit = false;
-    } else {
-      throw new VFSException("seek error");
-    }
-  }
-
-  override @property long tell () {
-    if (closed) throw new VFSException("can't seek in closed stream");
-    static if (streamHasTell!ST) {
       return st.tell;
     } else {
-      throw new VFSException("tell error");
-    }
-  }
-
-  override @property long size () {
-    if (closed) throw new VFSException("can't seek in closed stream");
-    static if (streamHasSize!ST) {
-      return st.size;
-    } else {
-      throw new VFSException("can't get stream size");
+      // no seek at all
+      return -1;
     }
   }
 }
@@ -610,8 +566,7 @@ private struct PartialLowLevelRO {
   long stpos; // starting position
   long size; // unpacked size
   long pos; // current file position
-
-  alias tell = pos;
+  bool eofhit;
 
   this (VFile fl, long astpos, long asize) {
     stpos = astpos;
@@ -619,9 +574,12 @@ private struct PartialLowLevelRO {
     zfl = fl;
   }
 
+  //@property const(char)[] name () { pragma(inline, true); return zfl.name; }
   @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
+  @property bool eof () { pragma(inline, true); return eofhit; }
 
   void close () {
+    eofhit = true;
     if (zfl.isOpen) zfl.close();
   }
 
@@ -629,20 +587,20 @@ private struct PartialLowLevelRO {
     if (buf is null) return -1;
     if (count == 0 || size == 0) return 0;
     if (!isOpen) return -1; // read error
-    if (pos >= size) return 0; // EOF
-    if (size-pos < count) count = cast(usize)(size-pos);
+    if (pos >= size) { eofhit = true; return 0; } // EOF
+    if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
     zfl.seek(stpos+pos);
     auto rd = zfl.rawRead(buf[0..count]);
     pos += rd.length;
     return rd.length;
   }
 
-  ssize write (in void* buf, usize count) { return -1; }
+  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
 
-  void seek (long ofs, int whence=Seek.Set) {
-    if (!isOpen) throw new VFSException("can't seek in closed stream");
+  long lseek (long ofs, int origin) {
+    if (!isOpen) return -1;
     //TODO: overflow checks
-    switch (whence) {
+    switch (origin) {
       case Seek.Set: break;
       case Seek.Cur: ofs += pos; break;
       case Seek.End:
@@ -650,11 +608,13 @@ private struct PartialLowLevelRO {
         ofs += size;
         break;
       default:
-        throw new VFSException("seek error");
+        return -1;
     }
-    if (ofs < 0) throw new VFSException("seek error");
+    if (ofs < 0) return -1;
+    eofhit = false;
     if (ofs > size) ofs = size;
-    pos = cast(uint)ofs;
+    pos = ofs;
+    return pos;
   }
 }
 
@@ -666,4 +626,184 @@ public VFile wrapStreamRO (VFile st, long stpos=0, long len=-1) {
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
   return wrapStream(PartialLowLevelRO(st, stpos, len));
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public enum VFSZLibMode {
+  Raw,
+  ZLib,
+  Zip, // special mode for zip archives
+}
+
+
+struct ZLibLowLevelRO {
+  private import etc.c.zlib;
+
+  enum ibsize = 32768;
+
+
+  VFile zfl; // archive file
+  VFSZLibMode mode;
+  long stpos; // starting position
+  long size; // unpacked size
+  long pksize; // packed size
+  long pos; // current file position
+  long prpos; // previous file position
+  long pkpos; // current position in DAT
+  ubyte[] pkb; // packed data
+  z_stream zs;
+  bool eoz;
+  bool eofhit;
+
+  this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize) {
+    zfl = fl;
+    stpos = astpos;
+    size = aupsize;
+    pksize = asize;
+    mode = amode;
+  }
+
+  @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
+  @property bool eof () { pragma(inline, true); return eofhit; }
+
+  void close () {
+    import core.stdc.stdlib : free;
+    eofhit = true;
+    if (pkb.length) {
+      inflateEnd(&zs);
+      free(pkb.ptr);
+      pkb = null;
+    }
+    eoz = true;
+    if (zfl.isOpen) zfl.close();
+  }
+
+  private bool initZStream () {
+    import core.stdc.stdlib : malloc, free;
+    if (mode == VFSZLibMode.Raw || pkb.ptr !is null) return true;
+    // allocate buffer for packed data
+    auto pb = cast(ubyte*)malloc(ibsize);
+    if (pb is null) return false;
+    pkb = pb[0..ibsize];
+    zs.avail_in = 0;
+    zs.avail_out = 0;
+    // initialize unpacker
+    // -15 is a magic value used to decompress zip files:
+    // it has the effect of not requiring the 2 byte header and 4 byte trailer
+    if (inflateInit2(&zs, (mode == VFSZLibMode.Zip ? -15 : 15)) != Z_OK) {
+      free(pb);
+      pkb = null;
+      return false;
+    }
+    // we are ready
+    return true;
+  }
+
+  private bool readPackedChunk () {
+    import core.stdc.stdio : fread;
+    import core.sys.posix.stdio : fseeko;
+    if (zs.avail_in > 0) return true;
+    if (pkpos >= pksize) return false;
+    zs.next_in = cast(typeof(zs.next_in))pkb.ptr;
+    zs.avail_in = cast(uint)(pksize-pkpos > ibsize ? ibsize : pksize-pkpos);
+    zfl.seek(stpos+pkpos);
+    auto rd = zfl.rawRead(pkb[0..zs.avail_in]);
+    if (rd.length == 0) return false;
+    zs.avail_in = cast(int)rd.length;
+    pkpos += zs.avail_in;
+    return true;
+  }
+
+  private bool unpackNextChunk () {
+    while (zs.avail_out > 0) {
+      if (eoz) return false;
+      if (!readPackedChunk()) return false;
+      auto err = inflate(&zs, Z_SYNC_FLUSH);
+      //if (err == Z_BUF_ERROR) { import iv.writer; writeln("*** OUT OF BUFFER!"); }
+      if (err != Z_STREAM_END && err != Z_OK) return false;
+      if (err == Z_STREAM_END) eoz = true;
+    }
+    return true;
+  }
+
+  ssize read (void* buf, usize count) {
+    if (buf is null) return -1;
+    if (count == 0 || size == 0) return 0;
+    if (!isOpen) return -1; // read error
+    if (pos >= size) { eofhit = true; return 0; } // EOF
+    if (mode == VFSZLibMode.Raw) {
+      if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+      zfl.seek(stpos+pos);
+      auto rd = zfl.rawRead(buf[0..count]);
+      pos += rd.length;
+      return rd.length;
+    } else {
+      if (pkb.ptr is null && !initZStream()) return -1;
+      // do we want to seek backward?
+      if (prpos > pos) {
+        // yes, rewind
+        inflateEnd(&zs);
+        zs = zs.init;
+        pkpos = 0;
+        if (!initZStream()) return -1;
+        prpos = 0;
+      }
+      // do we need to seek forward?
+      if (prpos < pos) {
+        // yes, skip data
+        ubyte[1024] tbuf = void;
+        auto skp = pos-prpos;
+        while (skp > 0) {
+          uint rd = cast(uint)(skp > tbuf.length ? tbuf.length : skp);
+          zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
+          zs.avail_out = rd;
+          if (!unpackNextChunk()) return -1;
+          skp -= rd;
+        }
+        prpos = pos;
+      }
+      // unpack data
+      if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+      zs.next_out = cast(typeof(zs.next_out))buf;
+      zs.avail_out = cast(uint)count;
+      if (!unpackNextChunk()) return -1;
+      prpos = (pos += count);
+      return count;
+    }
+  }
+
+  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+
+  long lseek (long ofs, int origin) {
+    if (!isOpen) return -1;
+    //TODO: overflow checks
+    switch (origin) {
+      case Seek.Set: break;
+      case Seek.Cur: ofs += pos; break;
+      case Seek.End:
+        if (ofs > 0) ofs = 0;
+        ofs += size;
+        break;
+      default:
+        return -1;
+    }
+    if (ofs < 0) return -1;
+    if (ofs > size) ofs = size;
+    pos = ofs;
+    eofhit = false;
+    return pos;
+  }
+}
+
+
+/// wrap VFile into read-only zlib-packed stream, with given offset and length.
+/// if `len` == -1, wrap from starting position to file end.
+/// `upsize`: size of unpacked file (sorry, should be known)
+public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stpos=0, long len=-1) {
+  if (stpos < 0) throw new VFSException("invalid starting position");
+  if (upsize < 0) throw new VFSException("invalid unpacked size");
+  if (len == -1) len = st.size-stpos;
+  if (len < 0) throw new VFSException("invalid length");
+  return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len));
 }

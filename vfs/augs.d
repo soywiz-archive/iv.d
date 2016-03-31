@@ -42,6 +42,13 @@ enum isLowLevelStreamW(T) = is(typeof((inout int=0) {
 }));
 
 
+/// is this "low-level" stream that can be seeked?
+enum isLowLevelStreamS(T) = is(typeof((inout int=0) {
+  auto t = T.init;
+  long p = t.lseek(0, 0);
+}));
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 /// augment low-level streams with `rawRead`
 T[] rawRead(ST, T) (auto ref ST st, T[] buf) if (isLowLevelStreamR!ST && isMutable!T) {
