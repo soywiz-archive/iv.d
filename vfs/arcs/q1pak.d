@@ -42,7 +42,7 @@ private:
 
   VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size); }
 
-  void open (VFile fl) {
+  void open (VFile fl, const(char)[] prefixpath) {
     debug(q1pakarc) import std.stdio : writeln, writefln;
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"Q1PakArchive"("file too big");
@@ -62,9 +62,10 @@ private:
       dirSize -= direlsize;
       char[] name;
       {
-        usize nbpos = 0;
         fl.rawReadExact(nbuf[0..direlsize-8]);
-        name = new char[](direlsize-8);
+        name = new char[](prefixpath.length+direlsize-8);
+        usize nbpos = prefixpath.length;
+        if (nbpos) name[0..nbpos] = prefixpath[];
         foreach (char ch; nbuf[0..direlsize-8]) {
           if (ch == 0) break;
           if (ch == '\\') ch = '/';

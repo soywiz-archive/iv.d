@@ -62,8 +62,9 @@ public abstract class VFSDriver {
   /// this constructor is used for disk drivers
   this () {}
 
-  /// this constructor is used for archive drivers
-  this (VFile fl) { throw new VFSException("not implemented for abstract driver"); }
+  /// this constructor is used for archive drivers.
+  /// `prefixpath`: this will be prepended to each name from archive, unmodified.
+  this (VFile fl, const(char)[] prefixpath) { throw new VFSException("not implemented for abstract driver"); }
 
   /// try to find and open the file in archive.
   /// should return `VFile.init` if no file was found.
@@ -80,8 +81,9 @@ public abstract class VFSDriver {
 
 /// abstract class for "pak" files
 public abstract class VFSDriverDetector {
-  // return null if it can't open the thing
-  abstract VFSDriver tryOpen (VFile fl);
+  /// return null if it can't open the thing.
+  /// `prefixpath`: this will be prepended to each name from archive, unmodified.
+  abstract VFSDriver tryOpen (VFile fl, const(char)[] prefixpath);
 }
 
 
@@ -299,12 +301,14 @@ public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void vfsAddPak (const(char)[] fname) {
-  vfsAddPak(vfsDiskOpen(fname), fname);
+/// `prefixpath`: this will be prepended to each name from archive, unmodified.
+public void vfsAddPak (const(char)[] fname, const(char)[] prefixpath=null) {
+  vfsAddPak(vfsDiskOpen(fname), fname, prefixpath);
 }
 
 
-public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
+/// `prefixpath`: this will be prepended to each name from archive, unmodified.
+public void vfsAddPak(T) (VFile fl, T fname=null, const(char)[] prefixpath=null) if (is(T : const(char)[])) {
   void error (Throwable e=null, string file=__FILE__, usize line=__LINE__) {
     if (fname.length == 0) {
       throw new VFSException("can't open pak file", file, line, e);
@@ -327,7 +331,7 @@ public void vfsAddPak(T) (VFile fl, T fname=null) if (is(T : const(char)[])) {
   foreach (ref di; detectors) {
     try {
       fl.seek(0);
-      auto drv = di.dt.tryOpen(fl);
+      auto drv = di.dt.tryOpen(fl, prefixpath);
       if (drv !is null) { vfsRegister(drv); return; }
     } catch (Exception e) {
       // chain

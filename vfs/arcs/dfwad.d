@@ -50,7 +50,7 @@ private:
     return wrapZLibStreamRO(st, mode, size, stpos, pksize);
   }
 
-  void open (VFile fl) {
+  void open (VFile fl, const(char)[] prefixpath) {
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DFWadArchive"("file too big");
     // check it
@@ -71,13 +71,17 @@ private:
       fl.rawReadExact(nbuf[]);
       fi.ofs = fl.readNum!uint;
       fi.pksize = fl.readNum!uint;
-      if (fi.ofs == 0 && fi.pksize == 0) path = null; // new path
       char[] name;
       {
         import iv.vfs.koi8 : win2koi8;
-        name = new char[](nbuf.length+path.length+2);
-        if (path.length) name[0..path.length] = path[];
-        usize nbpos = path.length;
+        name = new char[](prefixpath.length+nbuf.length+path.length+2);
+        usize nbpos = prefixpath.length;
+        if (fi.ofs == 0 && fi.pksize == 0) {
+          nbpos = 0;
+        } else {
+          if (nbpos) name[0..nbpos] = prefixpath[];
+          if (path.length) { name[nbpos..nbpos+path.length] = path[]; nbpos += path.length; }
+        }
         foreach (char ch; nbuf[]) {
                if (ch == 0) break;
           else if (ch == '\\') ch = '/';

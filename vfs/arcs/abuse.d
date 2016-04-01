@@ -49,7 +49,7 @@ private:
     }
   }
 
-  void open (VFile fl) {
+  void open (VFile fl, const(char)[] prefixpath) {
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"AbuseSpecArchive"("file too big");
     char[512] nbuf;
@@ -67,9 +67,10 @@ private:
       char[] name;
       {
         fl.rawReadExact(nbuf[0..nlen]);
-        name = new char[](nlen+dirs[type].length);
-        usize nbpos = dirs[type].length;
-        if (nbpos) name[0..nbpos] = dirs[type][];
+        name = new char[](prefixpath.length+nlen+dirs[type].length);
+        usize nbpos = prefixpath.length;
+        if (nbpos) name[0..nbpos] = prefixpath[];
+        if (dirs[type].length) { name[nbpos..nbpos+dirs[type].length] = dirs[type][]; nbpos += dirs[type].length; }
         foreach (char ch; nbuf[0..nlen]) {
           if (ch == 0) break;
           if (ch == '\\' || ch == '/' || ch > 127) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");

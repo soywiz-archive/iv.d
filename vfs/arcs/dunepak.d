@@ -42,31 +42,32 @@ private:
 
   VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size); }
 
-  void open (VFile fl) {
+  void open (VFile fl, const(char)[] prefixpath) {
     debug(dunepakarc) import std.stdio : writeln, writefln;
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DunePakArchive"("file too big");
     // read directory
     uint prevofs = uint.max;
-    char[12] nbuf;
     for (;;) {
       auto ofs = fl.readNum!uint;
       if (ofs == 0) break;
       if (ofs >= flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
       char[] name;
       {
-        usize nbpos = 0;
+        name = new char[](prefixpath.length+16);
+        usize nbpos = prefixpath.length;
+        if (nbpos) name[0..nbpos] = prefixpath[];
         char ch;
+        int left = 12;
         for (;;) {
           fl.rawReadExact((&ch)[0..1]);
           if (ch == 0) break;
-          if (nbpos > 12) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+          if (--left < 0) throw new VFSNamedException!"DunePakArchive"("invalid directory");
           if (ch == '\\' || ch == '/' || ch > 127) throw new VFSNamedException!"DunePakArchive"("invalid directory");
-          nbuf.ptr[nbpos++] = ch;
+          name.ptr[nbpos++] = ch;
         }
-        if (nbpos == 0) throw new VFSNamedException!"DunePakArchive"("invalid directory");
-        name = new char[](nbpos);
-        name[] = nbuf[0..nbpos];
+        if (left == 12) throw new VFSNamedException!"DunePakArchive"("invalid directory");
+        name = name[0..nbpos];
       }
       debug(dunepakarc) writefln("[%s]: ofs=0x%08x", name, ofs);
       FileInfo fi;

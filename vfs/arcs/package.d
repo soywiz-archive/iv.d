@@ -28,8 +28,8 @@ protected:
   FileInfo[] dir;
 
 public:
-  this (VFile fl) {
-    open(fl);
+  this (VFile fl, const(char)[] prefixpath) {
+    open(fl, prefixpath);
     st = fl;
   }
 
@@ -55,9 +55,9 @@ public:
 package enum VFSSimpleArchiveDetectorMixin(string drvname) =
   "shared static this () { vfsRegisterDetector(new "~drvname~"Detector()); }\n"~
   "private final class "~drvname~"Detector : VFSDriverDetector {\n"~
-  "  override VFSDriver tryOpen (VFile fl) {\n"~
+  "  override VFSDriver tryOpen (VFile fl, const(char)[] prefixpath) {\n"~
   "    try {\n"~
-  "      return new VFSDriver"~drvname~"(fl);\n"~
+  "      return new VFSDriver"~drvname~"(fl, prefixpath);\n"~
   "    } catch (Exception) {}\n"~
   "    return null;\n"~
   "  }\n"~

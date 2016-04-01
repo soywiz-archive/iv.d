@@ -51,7 +51,7 @@ private:
     return wrapZLibStreamRO(st, mode, size, stpos, pksize);
   }
 
-  void open (VFile fl) {
+  void open (VFile fl, const(char)[] prefixpath) {
     debug(f2datarc) import std.stdio : writeln, writefln;
     ulong flsize = fl.size;
     if (flsize > 0xffff_ffffu) throw new VFSNamedException!"F2DatArchive"("file too big");
@@ -72,10 +72,11 @@ private:
       if (nlen == 0 || nlen > dirSize || nlen > 2048) throw new VFSNamedException!"F2DatArchive"("invalid archive directory");
       char[] name;
       {
-        usize nbpos = 0;
         fl.rawReadExact(nbuf[0..nlen]);
         dirSize -= nlen;
-        name = new char[](nlen);
+        name = new char[](prefixpath.length+nlen);
+        usize nbpos = prefixpath.length;
+        if (nbpos) name[0..nbpos] = prefixpath[];
         foreach (char ch; nbuf[0..nlen]) {
                if (ch == 0) break;
           else if (ch == '\\') ch = '/';

@@ -59,7 +59,7 @@ private:
     return wrapZLibStreamRO(st, mode, size, stpos, pksize);
   }
 
-  void open (VFile fl) {
+  void open (VFile fl, const(char)[] prefixpath) {
     debug(ziparc) import std.stdio : writeln, writefln;
 
     if (fl.size > 0xffff_ffffu) throw new VFSNamedException!"ZipArchive"("file too big");
@@ -133,8 +133,6 @@ private:
     auto namebuf = xalloc!char(0x10000);
     scope(exit) xfree(namebuf);
 
-    uint[string] knownNames; // value is dir index
-    scope(exit) knownNames.destroy;
     auto bleft = cdsize;
     fl.seek(cdofs);
     CDFileHeader cdfh = void;
@@ -180,8 +178,9 @@ private:
         if (!fi.packed) fi.pksize = fi.size;
         // now, this is valid file, so read it's name
         if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new VFSNamedException!"ZipArchive"("reading error");
-        auto nb = new char[](cdfh.namelen);
-        uint nbpos = 0;
+        auto nb = new char[](prefixpath.length+cdfh.namelen);
+        usize nbpos = prefixpath.length;
+        if (nbpos) nb[0..nbpos] = prefixpath[];
         foreach (char ch; namebuf[0..cdfh.namelen]) {
           if (ch == 0) break;
           if (ch == '\\') ch = '/'; // just in case
@@ -256,20 +255,10 @@ private:
           }
         }
         if (!doSkip && nbpos > 0 && nb[nbpos-1] != '/') {
-          if (auto idx = nb[0..nbpos] in knownNames) {
-            // replace
-            auto fip = &dir[*idx];
-            fip.packed = fi.packed;
-            fip.pksize = fi.pksize;
-            fip.size = fi.size;
-            fip.hdrofs = fi.hdrofs;
-          } else {
-            // add new
-            if (dir.length == uint.max) throw new VFSNamedException!"ZipArchive"("directory too long");
-            fi.name = cast(string)nb[0..nbpos]; // this is safe
-            knownNames[fi.name] = cast(uint)dir.length;
-            dir ~= fi;
-          }
+          // add new
+          if (dir.length == uint.max) throw new VFSNamedException!"ZipArchive"("directory too long");
+          fi.name = cast(string)nb[0..nbpos]; // this is safe
+          dir ~= fi;
           //debug(ziparc) writefln("%10s %10s %s %04s/%02s/%02s %02s:%02s:%02s %s", fi.pksize, fi.size, (fi.packed ? "P" : "."), cdfh.year, cdfh.month, cdfh.day, cdfh.hour, cdfh.min, cdfh.sec, fi.name);
         }
         // skip extra and comments
