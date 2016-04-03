@@ -5,7 +5,7 @@
 function dotest() {
   #echo "testing $1..."
   #rdmd -unittest -main -J. -I.. ../iv/stc/$1.d
-  rdmd -unittest -main -J. -I.. ../$1.d
+  rdmd -unittest -main -J. -I. ../$1.d
 }
 
 
