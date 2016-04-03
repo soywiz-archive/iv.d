@@ -22,12 +22,13 @@ import iv.stc.chacha;
 
 uint count = 0;
 
-void test (const(void)[] key, const(void)[] iv, const(void)[] ks, const(uint)[] xst) {
+void test (const(void)[] key, const(void)[] iv, const(void)[] ks, const(uint)[] xst=null) {
   auto bkey = cast(const(ubyte)[])key;
   auto biv = cast(const(ubyte)[])iv;
   auto bks = cast(const(ubyte)[])ks;
   auto ctx = ChaCha20(bkey, biv);
-  {
+
+  if (xst.length) {
     auto st = ctx.getState;
     if (st[] != xst[]) {
       import std.stdio;
@@ -166,6 +167,41 @@ void main () {
     immutable[] ks = x"F63A89B75C2271F9368816542BA52F06ED49241792302B00B5E8F80AE9A473AFC25B218F519AF0FDD406362E8D69DE7F54C604A6E00F353F110F771BDCA8AB92E5FBC34E60A1D9A9DB17345B0A402736853BF910B060BDF1F897B6290F01D138AE2C4C90225BA9EA14D518F55929DEA098CA7A6CCFE61227053C84E49A4A3332";
     immutable uint[] st = [0x61707865,0x3320646e,0x79622d32,0x6b206574,0xb1c16ec4,0x78a8e88c,0xe7375a72,0x35b7df80,0x2eed681f,0xfb794c19,0xe1beaec6,0x5d9767a6,0x00000000,0x00000000,0xd531da1a,0x218268cf,];
     test(key[], nonce[], ks[], st[]);
+  }
+
+  {
+    immutable[] key = x"0000000000000000000000000000000000000000000000000000000000000000";
+    immutable[] nonce = x"0000000000000000";
+    immutable[] ks = x"76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586";
+    test(key[], nonce[], ks[]);
+  }
+
+  {
+    immutable[] key = x"0000000000000000000000000000000000000000000000000000000000000001";
+    immutable[] nonce = x"0000000000000000";
+    immutable[] ks = x"4540f05a9f1fb296d7736e7b208e3c96eb4fe1834688d2604f450952ed432d41bbe2a0b6ea7566d2a5d1e7e20d42af2c53d792b1c43fea817e9ad275ae546963";
+    test(key[], nonce[], ks[]);
+  }
+
+  {
+    immutable[] key = x"0000000000000000000000000000000000000000000000000000000000000000";
+    immutable[] nonce = x"0000000000000001";
+    immutable[] ks = x"de9cba7bf3d69ef5e786dc63973f653a0b49e015adbff7134fcb7df137821031e85a050278a7084527214f73efc7fa5b5277062eb7a0433e445f41e3";
+    test(key[], nonce[], ks[]);
+  }
+
+  {
+    immutable[] key = x"0000000000000000000000000000000000000000000000000000000000000000";
+    immutable[] nonce = x"0100000000000000";
+    immutable[] ks = x"ef3fdfd6c61578fbf5cf35bd3dd33b8009631634d21e42ac33960bd138e50d32111e4caf237ee53ca8ad6426194a88545ddc497a0b466e7d6bbdb0041b2f586b";
+    test(key[], nonce[], ks[]);
+  }
+
+  {
+    immutable[] key = x"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+    immutable[] nonce = x"0001020304050607";
+    immutable[] ks = x"f798a189f195e66982105ffb640bb7757f579da31602fc93ec01ac56f85ac3c134a4547b733b46413042c9440049176905d3be59ea1c53f15916155c2be8241a38008b9a26bc35941e2444177c8ade6689de95264986d95889fb60e84629c9bd9a5acb1cc118be563eb9b3a4a472f82e09a7e778492b562ef7130e88dfe031c79db9d4f7c7a899151b9a475032b63fc385245fe054e3dd5a97a5f576fe064025d3ce042c566ab2c507b138db853e3d6959660996546cc9c4a6eafdc777c040d70eaf46f76dad3979e5c5360c3317166a1c894c94a371876a94df7628fe4eaaf2ccb27d5aaae0ad7ad0f9d4b6ad3b54098746d4524d38407a6deb3ab78fab78c9";
+    test(key[], nonce[], ks[]);
   }
 
   writeln(count, " tests passed.");
