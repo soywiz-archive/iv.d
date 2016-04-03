@@ -39,29 +39,27 @@ private:
   void resetState(KR, IR) (KR key, IR iv) @trusted {
     static if (hasLength!KR) assert(key.length == 16 || key.length == 32); else assert(!key.empty);
     static if (hasLength!IR) assert(iv.length == 0 || iv.length == 8);
-    static if (isRandomAccessRange!KR && hasLength!KR) {
-      alias keybuf = key;
-    } else {
-      ubyte[KeySize] kb = void;
+    ubyte[KeySize] kb = void;
+    ubyte[] keybuf;
+    {
       size_t len = 0;
       while (!key.empty && len < kb.length) {
         kb.ptr[len++] = cast(ubyte)key.front;
         key.popFront;
       }
       if (len != 16 && len != 32) key.popFront; // this should throw exception
-      ubyte[] keybuf = kb[0..len];
+      keybuf = kb[0..len];
     }
-    static if (isRandomAccessRange!IR && hasLength!IR) {
-      alias ivbuf = iv;
-    } else {
-      ubyte[IVSize] ib = void;
+    ubyte[IVSize] ib = void;
+    ubyte[] ivbuf;
+    {
       size_t len = 0;
       while (!iv.empty && len < ib.length) {
         ib.ptr[len++] = cast(ubyte)iv.front;
         iv.popFront;
       }
       if (len && len != IVSize) iv.popFront; // this should throw exception
-      ubyte[] ivbuf = ib[0..len];
+      ivbuf = ib[0..IVSize];
     }
     // setup key
     uint offset, n;
@@ -91,10 +89,10 @@ private:
       state.ptr[i*5] = n;
       // setup IV
       if (ivbuf.length >= i*4+4) {
-        n = cast(ubyte)ivbuf[i*4+3];
-        n = (n<<8)|cast(ubyte)ivbuf[i*4+2];
-        n = (n<<8)|cast(ubyte)ivbuf[i*4+1];
-        n = (n<<8)|cast(ubyte)ivbuf[i*4];
+        n = cast(ubyte)ivbuf.ptr[i*4+3];
+        n = (n<<8)|cast(ubyte)ivbuf.ptr[i*4+2];
+        n = (n<<8)|cast(ubyte)ivbuf.ptr[i*4+1];
+        n = (n<<8)|cast(ubyte)ivbuf.ptr[i*4];
       } else {
         n = 0;
       }
@@ -102,7 +100,7 @@ private:
     }
   }
 
-  void cleanState () nothrow @trusted @nogc {
+  void clearState () nothrow @trusted @nogc {
     state[] = 0;
   }
 

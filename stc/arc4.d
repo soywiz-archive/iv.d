@@ -37,16 +37,15 @@ private:
   void resetState(KR, IR) (KR key, IR iv) @trusted {
     static if (hasLength!KR) assert(key.length > 0); else assert(!key.empty);
     static if (hasLength!IR) assert(iv.length == 0); else assert(iv.empty);
-    static if (isRandomAccessRange!KR && hasLength!KR) {
-      alias keybuf = key;
-    } else {
-      ubyte[256] kb = void;
+    ubyte[256] kb = void;
+    ubyte[] keybuf;
+    {
       size_t len = 0;
       while (!key.empty && len < kb.length) {
         kb.ptr[len++] = cast(ubyte)key.front;
         key.popFront;
       }
-      ubyte[] keybuf = kb[0..len];
+      keybuf = kb[0..len];
     }
     // setup key
     ubyte a, c;
@@ -78,7 +77,7 @@ private:
     }
   }
 
-  void cleanState () nothrow @trusted @nogc {
+  void clearState () nothrow @trusted @nogc {
     statem[] = 0;
     statex = statey = 0;
   }

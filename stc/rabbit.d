@@ -46,29 +46,26 @@ private:
   void resetState(KR, IR) (KR key, IR iv) @trusted {
     static if (hasLength!KR) assert(key.length == 16); else assert(!key.empty);
     static if (hasLength!IR) assert(iv.length == 0 || iv.length == 8);
-    static if (isRandomAccessRange!KR && hasLength!KR) {
-      alias keybuf = key;
-    } else {
-      ubyte[KeySize] kb = void;
+    ubyte[KeySize] kb = void;
+    {
       size_t len = 0;
       while (!key.empty && len < kb.length) {
         kb.ptr[len++] = cast(ubyte)key.front;
         key.popFront;
       }
       if (len != KeySize) key.popFront; // this should throw exception
-      ubyte[] keybuf = kb[0..len];
     }
-    static if (isRandomAccessRange!IR && hasLength!IR) {
-      alias ivbuf = iv;
-    } else {
-      ubyte[IVSize] ib = void;
+    ubyte[] keybuf = kb[0..KeySize];
+    ubyte[IVSize] ib = void;
+    ubyte[] ivbuf;
+    {
       size_t len = 0;
       while (!iv.empty && len < ib.length) {
         ib.ptr[len++] = cast(ubyte)iv.front;
         iv.popFront;
       }
       if (len && len != IVSize) iv.popFront; // this should throw exception
-      ubyte[] ivbuf = ib[0..len];
+      ivbuf = ib[0..IVSize];
     }
     uint k0, k1, k2, k3;
     // generate four subkeys
@@ -118,15 +115,15 @@ private:
     if (ivbuf.length) {
       uint i0, i1, i2, i3;
       // generate four subvectors
-      i0 = cast(ubyte)ivbuf[3];
-      i0 = (i0<<8)|cast(ubyte)ivbuf[2];
-      i0 = (i0<<8)|cast(ubyte)ivbuf[1];
-      i0 = (i0<<8)|cast(ubyte)ivbuf[0];
+      i0 = cast(ubyte)ivbuf.ptr[3];
+      i0 = (i0<<8)|cast(ubyte)ivbuf.ptr[2];
+      i0 = (i0<<8)|cast(ubyte)ivbuf.ptr[1];
+      i0 = (i0<<8)|cast(ubyte)ivbuf.ptr[0];
       // third
-      i2 = cast(ubyte)ivbuf[7];
-      i2 = (i2<<8)|cast(ubyte)ivbuf[6];
-      i2 = (i2<<8)|cast(ubyte)ivbuf[5];
-      i2 = (i2<<8)|cast(ubyte)ivbuf[4];
+      i2 = cast(ubyte)ivbuf.ptr[7];
+      i2 = (i2<<8)|cast(ubyte)ivbuf.ptr[6];
+      i2 = (i2<<8)|cast(ubyte)ivbuf.ptr[5];
+      i2 = (i2<<8)|cast(ubyte)ivbuf.ptr[4];
       // second
       i1 = (i0>>16)|(i2&0xFFFF0000U);
       // fourth
@@ -145,7 +142,7 @@ private:
     }
   }
 
-  void cleanState () nothrow @trusted @nogc {
+  void clearState () nothrow @trusted @nogc {
     statex[] = 0;
     statec[] = 0;
     statecarry = 0;

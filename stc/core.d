@@ -57,7 +57,7 @@ public:
    *  key = key
    */
   void reset(R0) (R0 key) @trusted if (isValidIR!R0) {
-    cleanBuf();
+    clearBuf();
     ubyte[] iv;
     resetState(key, iv);
   }
@@ -70,7 +70,7 @@ public:
    *  iv = initial vector
    */
   void reset(R0, R1) (R0 key, R1 iv) @trusted if (isValidIR!R0 && isValidIR!R1) {
-    cleanBuf();
+    clearBuf();
     resetState(key, iv);
   }
 
@@ -147,15 +147,15 @@ public:
    * Clean state, so there will be no cipher-related bytes in memory.
    */
   void cleanup() () @trusted {
-    cleanBuf();
-    cleanState();
+    clearBuf();
+    clearState();
   }
 
 private:
   static uint bitRotLeft (uint v, uint n) pure nothrow @safe @nogc { pragma(inline, true); return (v<<n)|(v>>(32-n)); }
   static uint bitRotRight (uint v, uint n) pure nothrow @safe @nogc { pragma(inline, true); return (v<<(32-n))|(v>>n); }
 
-  void cleanBuf () nothrow @trusted @nogc {
+  void clearBuf () nothrow @trusted @nogc {
     buf[] = 0;
     bufpos = BlockSize;
   }
@@ -163,8 +163,8 @@ private:
   // this should generate new 'buf'
   //void getBuf () nothrow @trusted;
 
-  // this should clean state
-  //void cleanState () nothrow @trusted;
+  // this should clear state
+  //void clearState () nothrow @trusted;
 
   // this should reset cipher state
   // must understand empty iv

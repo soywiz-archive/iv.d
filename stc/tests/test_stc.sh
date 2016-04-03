@@ -12,3 +12,5 @@ function dotest() {
 dotest rabbit
 dotest salsa
 rdmd testarc4.d
+rdmd testchacha8.d
+rdmd testchacha.d
