@@ -127,7 +127,7 @@ private:
 
     uint[16] x = input[0..16];
 
-    foreach (immutable i; 0..10) {
+    foreach (immutable _; 0..10) {
       mixin(QUARTERROUND!( 0, 4, 8,12));
       mixin(QUARTERROUND!( 1, 5, 9,13));
       mixin(QUARTERROUND!( 2, 6,10,14));
@@ -156,13 +156,4 @@ private:
 
 private:
   uint[16] state;
-}
-
-
-unittest {
-  import std.stdio;
-  import iv.stc.testing;
-  writeln("testing Salsa20...");
-  processTVFile!Salsa20(import("salsa-verified.test-vectors"));
-  writeln(count, " tests passed.");
 }

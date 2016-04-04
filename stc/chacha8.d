@@ -151,12 +151,3 @@ private:
 private:
   uint[16] state;
 }
-
-
-unittest {
-  import std.stdio;
-  import iv.stc.testing;
-  writeln("testing Salsa20...");
-  processTVFile!Salsa20(import("salsa-verified.test-vectors"));
-  writeln(count, " tests passed.");
-}
