@@ -226,7 +226,48 @@ public VFSDriver.DirEntry[] vfsFileList () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public VFile vfsOpenFile (const(char)[] fname) {
+char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
+  bool[128] got;
+  uint mpos;
+  ignoreCase = vfsIgnoreCase;
+  foreach (char ch; mode) {
+    if (ch < 128 && !got[ch]) {
+      if (ch == 'i') { ignoreCase = true; continue; }
+      if (ch == 'I') { ignoreCase = false; continue; }
+      version(Windows) {} else { if (ch == 'b' || ch == 't') continue; }
+      if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+      got[ch] = true;
+      modebuf.ptr[mpos++] = ch;
+    }
+  }
+  // add 'b' for idiotic shitdoze
+  version(Windows) {
+    if (!got['b'] && !got['t'] && (got['r'] || got['w'] || got['a'] || got['R'] || got['W'] || got['A'])) {
+      if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+      modebuf.ptr[mpos++] = 'b';
+    }
+  }
+  if (mpos == 0) {
+    if (modebuf.length < 2) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+    modebuf[0..2] = "rb";
+    mpos = 2;
+  }
+  if (modebuf.length-mpos < 1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+  modebuf[mpos++] = '\0';
+  return modebuf[0..mpos];
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+bool isROMode (char[] modebuf) {
+  foreach (char ch; modebuf) {
+    if (ch == 'w' || ch == 'W' || ch == 'a' || ch == 'A' || ch == '+' || ch == 't') return false;
+  }
+  return true;
+}
+
+
+public VFile vfsOpenFile (const(char)[] fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
 
   void error (string msg, Throwable e=null, string file=__FILE__, usize line=__LINE__) { throw new VFSException(msg, file, line, e); }
@@ -242,7 +283,10 @@ public VFile vfsOpenFile (const(char)[] fname) {
 
   if (fname.length == 0) error("can't open file ''");
 
-  bool ignoreCase = vfsIgnoreCase;
+  bool ignoreCase;
+  char[16] modebuf;
+  auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
+
   {
     ptlock.lock();
     scope(exit) ptlock.unlock();
@@ -251,7 +295,10 @@ public VFile vfsOpenFile (const(char)[] fname) {
     foreach_reverse (ref di; drivers) {
       try {
         auto fl = di.drv.tryOpen(fname, ignoreCase);
-        if (fl.isOpen) return fl;
+        if (fl.isOpen) {
+          if (!isROMode(mdb)) errorfn("can't open file '!' in non-binary non-readonly mode");
+          return fl;
+        }
       } catch (Exception e) {
         // chain
         errorfn("can't open file '!'", e);
@@ -260,7 +307,7 @@ public VFile vfsOpenFile (const(char)[] fname) {
   }
 
   // no drivers found, try disk file
-  return vfsDiskOpen(fname, (ignoreCase ? "ri" : "rI"));
+  return vfsDiskOpen(fname, mode);
 }
 
 
@@ -348,29 +395,9 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
   if (fname.length == 0) throw new VFSException("can't open file ''");
   if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
-  bool[128] got;
+  bool ignoreCase;
   char[16] modebuf;
-  uint mpos;
-  bool ignoreCase = vfsIgnoreCase;
-  foreach (char ch; mode) {
-    if (ch < 128 && !got[ch]) {
-      if (ch == 'i') { ignoreCase = true; continue; }
-      if (ch == 'I') { ignoreCase = false; continue; }
-      if (mpos >= modebuf.length-1) throw new VFSException("can't open file '"~fname.idup~"' with mode '"~mode.idup~"'");
-      got[ch] = true;
-      modebuf.ptr[mpos++] = ch;
-      if (!got['b'] && (ch == 'r' || ch == 'w' || ch == 'a' || ch == 'R' || ch == 'W' || ch == 'A')) {
-        if (mpos >= modebuf.length-1) throw new VFSException("can't open file '"~fname.idup~"' with mode '"~mode.idup~"'");
-        got['b'] = true;
-        modebuf.ptr[mpos++] = 'b';
-      }
-    }
-  }
-  if (mpos == 0) {
-    modebuf[0..3] = "rb\0";
-  } else {
-    modebuf[mpos++] = '\0';
-  }
+  auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
   char[2049] nbuf;
   nbuf[0..fname.length] = fname[];
   nbuf[fname.length] = '\0';
@@ -387,7 +414,7 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
       nbuf[pt.length] = '\0';
     }
   }
-  auto fl = core.stdc.stdio.fopen(nbuf.ptr, modebuf.ptr);
+  auto fl = core.stdc.stdio.fopen(nbuf.ptr, mdb.ptr);
   if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
   scope(failure) core.stdc.stdio.fclose(fl); // just in case
   try {

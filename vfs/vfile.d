@@ -91,9 +91,9 @@ public:
   }
 
   /// open named file with VFS engine; start with "/" or "./" to use only disk files
-  this(T) (T fname) if (is(T : const(char)[])) {
+  this(T) (T fname, const(char)[] mode=null) if (is(T : const(char)[])) {
     import iv.vfs.main : vfsOpenFile;
-    auto fl = vfsOpenFile(fname);
+    auto fl = vfsOpenFile(fname, mode);
     wstp = fl.wstp;
     fl.wstp = 0;
   }
