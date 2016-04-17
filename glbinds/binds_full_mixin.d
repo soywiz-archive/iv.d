@@ -8,11 +8,7 @@ version = glbind_lazy_load;
 //version = glbind_debug;
 
 
-static if (__traits(compiles, () { import arsd.simpledisplay; })) {
-  public import arsd.simpledisplay;
-} else {
-  public import simpledisplay;
-}
+public import arsd.simpledisplay;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

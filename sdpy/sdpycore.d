@@ -19,11 +19,7 @@
 module iv.sdpy.sdpycore;
 
 private:
-static if (__traits(compiles, () { import arsd.simpledisplay; })) {
-  public import arsd.simpledisplay;
-} else {
-  public import simpledisplay;
-}
+public import arsd.simpledisplay;
 
 static if (__traits(compiles, () { import iv.ticks; })) {
   import iv.ticks;
