@@ -199,7 +199,7 @@ private template isSystemEndianness(string s) if (isGoodEndianness!s) {
 // ////////////////////////////////////////////////////////////////////////// //
 /// write integer value of the given type, with the given endianness (default: little-endian)
 /// usage: st.writeNum!ubyte(10)
-void writeInt(T, string es="LE", ST) (auto ref ST st, T n) if (isGoodEndianness!es && isWriteableStream!ST && __traits(isIntegral, T)) {
+void writeNum(T, string es="LE", ST) (auto ref ST st, T n) if (isGoodEndianness!es && isWriteableStream!ST && __traits(isIntegral, T)) {
   static assert(T.sizeof <= 8); // just in case
   static if (isSystemEndianness!es) {
     st.rawWriteExact((&n)[0..1]);
