@@ -29,20 +29,21 @@ static import core.sync.mutex;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-shared bool vflagIgnoreCase = true; // ignore file name case by default
+shared bool vflagIgnoreCase = true; // ignore file name case
+shared bool vflagIgnoreCaseNoDat = false; // ignore file name case when no archive files are connected
 
 
 /// get "ingore filename case" flag (default: true)
-@property bool vfsIgnoreCase () nothrow @trusted @nogc {
-  import core.atomic : atomicLoad;
-  return atomicLoad(vflagIgnoreCase);
-}
+@property bool vfsIgnoreCase () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCase); }
 
 /// set "ingore filename case" flag
-@property void vfsIgnoreCase (bool v) nothrow @trusted @nogc {
-  import core.atomic : atomicStore;
-  return atomicStore(vflagIgnoreCase, v);
-}
+@property void vfsIgnoreCase (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCase, v); }
+
+/// get "ingore filename case" flag when no archive files are attached (default: false)
+@property bool vfsIgnoreCaseNoDat () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCaseNoDat); }
+
+/// set "ingore filename case" flag when no archive files are attached
+@property void vfsIgnoreCaseNoDat (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseNoDat, v); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -229,7 +230,7 @@ public VFSDriver.DirEntry[] vfsFileList () {
 char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
   bool[128] got;
   uint mpos;
-  ignoreCase = vfsIgnoreCase;
+  ignoreCase = (drivers.length ? vfsIgnoreCase : vfsIgnoreCaseNoDat);
   foreach (char ch; mode) {
     if (ch < 128 && !got[ch]) {
       if (ch == 'i') { ignoreCase = true; continue; }
