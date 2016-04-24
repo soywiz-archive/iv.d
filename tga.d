@@ -118,7 +118,7 @@ final class Targa {
     hdr.imgtype = 2;
     hdr.width = cast(ushort)mWidth;
     hdr.height = cast(ushort)mHeight;
-    hdr.bpp = 24;
+    hdr.bpp = 32;
     // write header
     fl.writeNum!ubyte(hdr.idlen);
     fl.writeNum!ubyte(hdr.cmaptype);
@@ -140,7 +140,7 @@ final class Targa {
     foreach (immutable y; 0..mHeight) {
       foreach (immutable x; 0..mWidth) {
         ubyte[4] rgba = void;
-        immutable clr = this[x, mWidth-y-1];
+        immutable clr = this[x, mHeight-y-1];
         rgba[0] = clr.b;
         rgba[1] = clr.g;
         rgba[2] = clr.r;
