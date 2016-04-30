@@ -168,7 +168,7 @@ private void wrWriteWidthStrZ(char lfill=' ', char rfill=' ')
                 int width,
                 int maxlen,
                 bool center,
-                const char *s,
+                const(char)* s,
                 bool leftIsMinus=false) {
   usize end = 0;
   while (s[end]) ++end;
@@ -239,7 +239,7 @@ if (isIntegral!T)
 {
   import std.traits : isSigned, isMutable, Unqual;
   static if (isMutable!T) alias num = numm; else Unqual!T num = cast(Unqual!T)numm;
-  char[22] hstr;
+  char[22] hstr = void;
   auto pos = hstr.length;
   static if (isSigned!T) {
     static if (T.sizeof == 8) {
@@ -271,7 +271,6 @@ if (isIntegral!T)
   }
 }
 
-
 private void wrWriteWidthBool(char lfill=' ', char rfill=' ', T)
                (int fd,
                 int width,
@@ -295,6 +294,20 @@ if (is(Unqual!T == char))
 {
   char[1] s = v;
   wrWriteWidth!(lfill, rfill)(fd, width, maxlen, center, s);
+}
+
+private void wrWriteWidthFloat(char lfill=' ', char rfill=' ', T)
+               (int fd,
+                int width,
+                int maxlen,
+                bool center,
+                T numm) nothrow @trusted @nogc
+if (is(T == float) || is(T == double) || is(T == const float) || is(T == const double) || is(T == immutable float) || is(T == immutable double))
+{
+  import core.stdc.stdio : snprintf;
+  char[256] hstr = void;
+  auto len = snprintf(hstr.ptr, hstr.length, "%g", cast(double)numm);
+  wrWriteWidth!(lfill, rfill)(fd, width, maxlen, center, hstr[0..len], (numm < 0 && lfill == '0'));
 }
 
 
@@ -558,6 +571,9 @@ if (state == "write-argument-s")
     enum func = "";
   } else static if (isIntegral!aatype) {
     enum callFunc = "wrWriteWidthInt";
+    enum func = "";
+  } else static if (is(aatype == float) || is(aatype == double) || is(aatype == const float) || is(aatype == const double) || is(aatype == immutable float) || is(aatype == immutable double)) {
+    enum callFunc = "wrWriteWidthFloat";
     enum func = "";
   } else static if (isBoolean!aatype) {
     enum callFunc = "wrWriteWidthBool";
@@ -859,6 +875,34 @@ unittest {
     //mixin(TypedefTestStr);
   }
 
+  void wrflt () nothrow @nogc {
+    writeln(42.666f);
+    writeln(cast(double)42.666);
+  }
+  wrflt();
+
   immutable char *strz = "stringz\0s";
   writefln!"[%S]"(strz);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+mixin template writedump (Names...) {
+  auto _xdump_tmp_ = {
+    import iv.writer : write;
+    foreach (immutable i, immutable name; Names) write(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
+    return false;
+  }();
+}
+
+version(writer_test)
+unittest {
+  int x = 5;
+  int y = 3;
+  int z = 15;
+
+  mixin writedump!("x", "y");  // x = 5, y = 3
+  mixin writedump!("z");       // z = 15
+  mixin writedump!("x+y");     // x+y = 8
+  mixin writedump!("x+y < z"); // x+y < z = true
 }
