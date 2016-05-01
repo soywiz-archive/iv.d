@@ -36,6 +36,10 @@ private:
 public:
 pure nothrow @trusted @nogc:
   enum bool isUniformRandom = true;
+  // tnx to Joseph Rushton Wakeling
+  enum ulong min = ulong.min;
+  enum ulong max = ulong.max;
+
   enum bool empty = false;
 
   this (ulong s0, ulong s1=0) { seed(s0, s1); }
@@ -89,9 +93,21 @@ version(text_xs128) unittest {
     3809796149818962200uL,
     13627210250571023489uL,
   ];
-  auto rng = XS128P(0);
-  foreach (ulong v; checkValues) {
-    if (v != rng.front) assert(0);
-    rng.popFront();
+  {
+    auto rng = XS128P(0);
+    foreach (ulong v; checkValues) {
+      if (v != rng.front) assert(0);
+      rng.popFront();
+    }
+  }
+  // std.random test
+  {
+    import std.random : uniform;
+    auto rng = XS128P(0);
+    foreach (immutable _; 0..8) {
+      import std.stdio;
+      auto v = uniform!"[)"(0, 4, rng);
+      writeln(v, "uL");
+    }
   }
 }
