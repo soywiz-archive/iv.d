@@ -7,7 +7,7 @@
  */
 // D port by Ketmar // Invisible Vector
 // http://xoroshiro.di.unimi.it/xoroshiro128plus.c
-module iv.xs128p;
+module iv.prngxs128p;
 
 /* This is the successor to xorshift128+. It is the fastest full-period
  * generator passing BigCrush without systematic failures, but due to the
@@ -82,7 +82,7 @@ private:
 }
 
 
-version(text_xs128) unittest {
+version(test_xs128p) unittest {
   static immutable ulong[8] checkValues = [
     5548480508102869659uL,
     1528641388659518426uL,
