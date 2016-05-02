@@ -82,7 +82,7 @@ public void consoleUnlock() () { pragma(inline, true); consoleLocker.unlock(); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// thread-safe
+/// put characters to console buffer (and, possibly, STDOUT_FILENO). thread-safe.
 public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
   if (chrs.length) {
     import core.atomic : atomicLoad, atomicOp;
@@ -113,8 +113,8 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// warning! don't modify conbuf while the range is active!
-// not thread-safe
+/// range of conbuffer lines, from last. not thread-safe.
+/// warning! don't modify conbuf while the range is active!
 public auto conbufLinesRev () nothrow @trusted @nogc {
   static struct Line {
   nothrow @trusted @nogc:
@@ -1021,6 +1021,7 @@ unittest {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+/// dump variables. use like this: `mixin condump!("x", "y")` ==> "x = 5, y = 3"
 mixin template condump (Names...) {
   auto _xdump_tmp_ = {
     import conwrt : conwrite;
@@ -1188,28 +1189,10 @@ static:
     static if (is(T == bool)) {
       auto w = getWord(s);
       if (w is null) throw exNoArg;
-      if (w.length > 5) throw exBadBool;
-      char[5] tbuf;
-      usize pos = 0;
-      foreach (char ch; w[]) {
-        if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
-        tbuf.ptr[pos++] = ch;
-      }
-      w = tbuf[0..w.length];
-      switch (w) {
-        case "y": case "t":
-        case "yes": case "tan":
-        case "true": case "on":
-        case "1":
-          return true;
-        case "n": case "f":
-        case "no": case "ona":
-        case "false": case "off":
-        case "0":
-          return false;
-        default: break;
-      }
-      throw exBadBool;
+      bool good = false;
+      auto res = parseBool(w, true, &good);
+      if (!good) throw exBadBool;
+      return res;
     } else static if ((isIntegral!T || isFloatingPoint!T) && !is(T == enum)) {
       auto w = getWord(s);
       if (w is null) throw exNoArg;
@@ -1236,6 +1219,46 @@ static:
     }
   }
 
+  /// parse boolean value
+  public static bool parseBool (ConString s, bool allowNumbers=true, bool* goodval=null) nothrow @trusted @nogc {
+    char[5] tbuf;
+    if (goodval !is null) *goodval = false;
+    while (s.length > 0 && s[0] <= ' ') s = s[1..$];
+    while (s.length > 0 && s[$-1] <= ' ') s = s[0..$-1];
+    if (s.length > tbuf.length) return false;
+    usize pos = 0;
+    foreach (char ch; s) {
+      if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
+      tbuf.ptr[pos++] = ch;
+    }
+    switch (tbuf[0..pos]) {
+      case "y": case "t":
+      case "yes": case "tan":
+      case "true": case "on":
+        if (goodval !is null) *goodval = true;
+        return true;
+      case "1": case "-1": case "42":
+        if (allowNumbers) {
+          if (goodval !is null) *goodval = true;
+          return true;
+        }
+        break;
+      case "n": case "f":
+      case "no": case "ona":
+      case "false": case "off":
+        if (goodval !is null) *goodval = true;
+        return false;
+      case "0":
+        if (allowNumbers) {
+          if (goodval !is null) *goodval = true;
+          return false;
+        }
+        break;
+      default: break;
+    }
+    return false;
+  }
+
   /** parse integer number.
    *
    * parser checks for overflows and understands different bases (0x, 0b, 0o, 0d).
@@ -1251,9 +1274,8 @@ static:
    * Throws:
    *  ConvException or ConvOverflowException
    */
-  private T parseInt(T, TS) (ref TS s) if (isSomeChar!(ElementType!TS) && isIntegral!T && !is(T == enum)) {
+  public static T parseInt(T, TS) (ref TS s) if (isSomeChar!(ElementType!TS) && isIntegral!T && !is(T == enum)) {
     import std.traits : isSigned;
-
     uint base = 10;
     ulong num = 0;
     static if (isSigned!T) bool neg = false;
@@ -1354,20 +1376,20 @@ static:
    * Throws:
    *  ConvException or ConvOverflowException
    */
-  private T parseNum(T, TS) (ref TS s) if (isSomeChar!(ElementType!TS) && (isIntegral!T || isFloatingPoint!T) && !is(T == enum)) {
+  public static T parseNum(T, TS) (ref TS s) if (isSomeChar!(ElementType!TS) && (isIntegral!T || isFloatingPoint!T) && !is(T == enum)) {
     static if (isIntegral!T) {
       return parseInt!T(s);
     } else {
-      import std.conv : parse;
       while (!s.empty) {
         if (s.front > 32) break;
         s.popFront();
       }
-      return std.conv.parse!T(s);
+      import std.conv : stcparse = parse;
+      return stcparse!T(s);
     }
   }
 
-  bool checkHelp (scope ConString s) {
+  public static bool checkHelp (scope ConString s) {
     usize pos = 0;
     while (pos < s.length && s.ptr[pos] <= 32) ++pos;
     if (pos == s.length || s.ptr[pos] != '?') return false;
@@ -1376,13 +1398,13 @@ static:
     return (pos >= s.length);
   }
 
-  bool hasArgs (scope ConString s) {
+  public static bool hasArgs (scope ConString s) {
     usize pos = 0;
     while (pos < s.length && s.ptr[pos] <= 32) ++pos;
     return (pos < s.length);
   }
 
-  void writeQuotedString (scope ConString s) {
+  public static void writeQuotedString (scope ConString s) {
     static immutable string hexd = "0123456789abcdef";
     static bool isBadChar() (char ch) {
       pragma(inline, true);
