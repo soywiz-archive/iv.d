@@ -452,7 +452,15 @@ private:
   ST st;
   bool closed;
 
-  public this() (auto ref ST ast) { st = ast; } // fuck! emplace needs it
+   // fuck! emplace needs it
+  public this() (auto ref ST ast) {
+    st = ast;
+    static if (streamHasIsOpen!ST) {
+      closed = !st.isOpen;
+    } else {
+      closed = false;
+    }
+  }
 
 protected:
   override @property const(char)[] name () {
