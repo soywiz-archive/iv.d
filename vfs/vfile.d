@@ -47,6 +47,7 @@ private:
 
   static bool doDecRef (WrappedStreamRC st) {
     if (st !is null) {
+      //{ import core.stdc.stdio : printf; printf("DO DECREF FOR 0x%08x\n", cast(void*)st); }
       if (st.decRef) {
         // free `wst` itself
         import core.memory : GC;
@@ -97,6 +98,9 @@ public:
     wstp = fl.wstp;
     fl.wstp = 0;
   }
+
+  this (this) { if (wst !is null) wst.incRef(); }
+  ~this () { doDecRef(wst); }
 
   @property const(char)[] name () {
     if (!wstp) return null;
@@ -264,12 +268,14 @@ protected:
   final void incRef () {
     import core.atomic;
     if (atomicOp!"+="(rc, 1) == 0) assert(0); // hey, this is definitely a bug!
+    //{ import core.stdc.stdio : printf; printf("INCREF(0x%08x): %u...\n", cast(void*)this, rc); }
   }
 
   // return true if this class is dead
   final bool decRef () {
     // no need to protect this code with `synchronized`, as only one thread can reach zero rc anyway
     import core.atomic;
+    //{ import core.stdc.stdio : printf; printf("DECREF(0x%08x): %u...\n", cast(void*)this, rc); }
     auto xrc = atomicOp!"-="(rc, 1);
     if (xrc == rc.max) assert(0); // hey, this is definitely a bug!
     if (xrc == 0) {
@@ -306,6 +312,7 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
   GC.addRoot(mem);
   GC.addRange(mem, instSize);
   emplace!CT(mem[0..instSize], args);
+  //{ import core.stdc.stdio : printf; printf("CREATED WRAPPER 0x%08x\n", mem); }
   return cast(usize)mem;
 }
 
@@ -709,6 +716,7 @@ public enum VFSZLibMode {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 struct ZLibLowLevelRO {
   private import etc.c.zlib;
 
@@ -908,4 +916,165 @@ public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stp
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
   return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len));
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+struct ZLibLowLevelWO {
+  private import etc.c.zlib;
+
+  enum obsize = 32768;
+
+
+  VFile zfl; // destination file
+  VFSZLibMode mode;
+  long stpos; // starting position
+  long pos; // current file position (from stpos)
+  long prpos; // previous file position (from stpos)
+  ubyte[] pkb; // packed data
+  z_stream zs;
+  bool eofhit;
+  int complevel;
+
+  this (VFile fl, VFSZLibMode amode, int acomplevel=-1) {
+    zfl = fl;
+    stpos = fl.tell;
+    mode = amode;
+    if (acomplevel < 0) acomplevel = 6;
+    if (acomplevel > 9) acomplevel = 9;
+    complevel = 9;
+  }
+
+  @property bool isOpen () { pragma(inline, true); return !eofhit && zfl.isOpen; }
+  @property bool eof () { pragma(inline, true); return isOpen; }
+
+  void close () {
+    scope(exit) {
+      import core.stdc.stdlib : free;
+      eofhit = true;
+      if (pkb !is null) free(pkb.ptr);
+      pkb = null;
+    }
+    //{ import core.stdc.stdio : printf; printf("CLOSING...\n"); }
+    if (!eofhit) {
+      scope(exit) zfl.close();
+      if (zfl.isOpen && pkb !is null) {
+        int err;
+        // do leftovers
+        //{ import core.stdc.stdio : printf; printf("writing %u bytes; avail_out: %u bytes\n", cast(uint)zs.avail_in, cast(uint)zs.avail_out); }
+        for (;;) {
+          zs.avail_in = 0;
+          err = deflate(&zs, Z_FINISH);
+          if (err != Z_OK && err != Z_STREAM_END) throw new VFSException("zlib compression error");
+          if (zs.avail_out < obsize) {
+            //{ import core.stdc.stdio : printf; printf("flushing %u bytes (avail_out: %u bytes)\n", cast(uint)(obsize-zs.avail_out), cast(uint)zs.avail_out); }
+            if (prpos != pos) throw new VFSException("zlib compression seek error");
+            zfl.seek(stpos+pos);
+            zfl.rawWriteExact(pkb[0..obsize-zs.avail_out]);
+            pos += obsize-zs.avail_out;
+            prpos = pos;
+            zs.next_out = pkb.ptr;
+            zs.avail_out = obsize;
+          }
+          if (err != Z_OK) break;
+        }
+        // succesfully flushed?
+        if (err != Z_STREAM_END) throw new VFSException("zlib compression error");
+      }
+      deflateEnd(&zs);
+    }
+  }
+
+  private bool initZStream () {
+    import core.stdc.stdlib : malloc, free;
+    if (mode == VFSZLibMode.Raw || pkb.ptr !is null) return true;
+    // allocate buffer for packed data
+    if (pkb.ptr is null) {
+      auto pb = cast(ubyte*)malloc(obsize);
+      if (pb is null) return false;
+      pkb = pb[0..obsize];
+    }
+    zs.next_out = pkb.ptr;
+    zs.avail_out = obsize;
+    zs.next_in = null;
+    zs.avail_in = 0;
+    // initialize packer
+    // -15 is a magic value used to decompress zip files:
+    // it has the effect of not requiring the 2 byte header and 4 byte trailer
+    if (deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, (mode == VFSZLibMode.Zip ? -15 : 15), complevel, 0) != Z_OK) {
+      free(pkb.ptr);
+      pkb = null;
+      eofhit = true;
+      return false;
+    }
+    zs.next_out = pkb.ptr;
+    zs.avail_out = obsize;
+    zs.next_in = null;
+    zs.avail_in = 0;
+    // we are ready
+    return true;
+  }
+
+  ssize read (void* buf, usize count) { pragma(inline, true); return -1; }
+
+  ssize write (in void* buf, usize count) {
+    if (buf is null) return -1;
+    if (count == 0) return 0;
+    if (mode == VFSZLibMode.Raw) {
+      if (prpos != pos) return -1;
+      zfl.seek(stpos+prpos);
+      zfl.rawWriteExact(buf[0..count]);
+      prpos += count;
+      pos = prpos;
+    } else {
+      if (!initZStream()) return -1;
+      auto css = count;
+      auto bp = cast(const(ubyte)*)buf;
+      while (css > 0) {
+        zs.next_in = cast(typeof(zs.next_in))bp;
+        zs.avail_in = (css > 0x3fff_ffff ? 0x3fff_ffff : cast(uint)css);
+        bp += zs.avail_in;
+        css -= zs.avail_in;
+        // now process the whole input
+        while (zs.avail_in > 0) {
+          // write buffer
+          //{ import core.stdc.stdio : printf; printf("writing %u bytes; avail_out: %u bytes\n", cast(uint)zs.avail_in, cast(uint)zs.avail_out); }
+          if (zs.avail_out == 0) {
+            if (prpos != pos) return -1;
+            zfl.seek(stpos+prpos);
+            zfl.rawWriteExact(pkb[0..obsize]);
+            prpos += obsize;
+            pos = prpos;
+            zs.next_out = pkb.ptr;
+            zs.avail_out = obsize;
+          }
+          auto err = deflate(&zs, Z_NO_FLUSH);
+          if (err != Z_OK) return -1;
+        }
+      }
+    }
+    return count;
+  }
+
+  long lseek (long ofs, int origin) {
+    if (!isOpen) return -1;
+    //TODO: overflow checks
+    switch (origin) {
+      case Seek.Set: break;
+      case Seek.Cur: ofs += prpos; break;
+      case Seek.End: if (ofs > 0) ofs = 0; ofs += pos; break;
+      default: return -1;
+    }
+    if (ofs < 0) return -1;
+    if (ofs > pos) ofs = pos;
+    prpos = ofs;
+    return pos;
+  }
+}
+
+
+/// wrap VFile into write-only zlib-packing stream.
+/// default compression mode is 9.
+public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9) {
+  return wrapStream(ZLibLowLevelWO(st, mode, complevel));
 }
