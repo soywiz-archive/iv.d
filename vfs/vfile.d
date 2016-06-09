@@ -47,7 +47,7 @@ private:
 
   static bool doDecRef (WrappedStreamRC st) {
     if (st !is null) {
-      //{ import core.stdc.stdio : printf; printf("DO DECREF FOR 0x%08x\n", cast(void*)st); }
+      debug(vfs_rc) { import core.stdc.stdio : printf; printf("DO DECREF FOR 0x%08x\n", cast(void*)st); }
       if (st.decRef) {
         // free `wst` itself
         import core.memory : GC;
@@ -94,13 +94,29 @@ public:
   /// open named file with VFS engine; start with "/" or "./" to use only disk files
   this(T) (T fname, const(char)[] mode=null) if (is(T : const(char)[])) {
     import iv.vfs.main : vfsOpenFile;
+    debug(vfs_rc) { import core.stdc.stdio : printf; printf("CTOR:STR(%.*s)\n", cast(uint)fname.length, fname.ptr); }
     auto fl = vfsOpenFile(fname, mode);
+    debug(vfs_rc) { import core.stdc.stdio : printf; printf("CTOR(0x%08x)\n", cast(void*)fl.wstp); }
     wstp = fl.wstp;
     fl.wstp = 0;
+    //this = fl;
   }
 
-  this (this) { if (wst !is null) wst.incRef(); }
-  ~this () { doDecRef(wst); }
+  this (this) {
+    debug(vfs_rc) { import core.stdc.stdio : printf; printf("POSTBLIT(0x%08x)\n", cast(void*)wstp); }
+    debug(vfs_rc_trace) {
+      try { throw new Exception("stack trace"); } catch (Exception e) { import std.stdio; writeln("*** ", e.toString); }
+    }
+    if (wst !is null) wst.incRef();
+  }
+
+  ~this () {
+    debug(vfs_rc) { import core.stdc.stdio : printf; printf("DTOR(0x%08x)\n", cast(void*)wstp); }
+    debug(vfs_rc_trace) {
+      try { throw new Exception("stack trace"); } catch (Exception e) { import std.stdio; writeln("*** ", e.toString); }
+    }
+    doDecRef(wst);
+  }
 
   @property const(char)[] name () {
     if (!wstp) return null;
@@ -217,6 +233,7 @@ public:
   void opAssign (VFile src) {
     if (!wstp && !src.wstp) return;
     try {
+      debug(vfs_rc) { import core.stdc.stdio : printf; printf("***OPASSIGN(0x%08x -> 0x%08x)\n", cast(void*)src.wstp, cast(void*)wstp); }
       if (wstp) {
         // assigning to opened stream
         if (src.wstp) {
@@ -268,15 +285,16 @@ protected:
   final void incRef () {
     import core.atomic;
     if (atomicOp!"+="(rc, 1) == 0) assert(0); // hey, this is definitely a bug!
-    //{ import core.stdc.stdio : printf; printf("INCREF(0x%08x): %u...\n", cast(void*)this, rc); }
+    debug(vfs_rc) { import core.stdc.stdio : printf; printf("INCREF(0x%08x): %u (was %u)...\n", cast(void*)this, rc, rc-1); }
   }
 
   // return true if this class is dead
   final bool decRef () {
     // no need to protect this code with `synchronized`, as only one thread can reach zero rc anyway
     import core.atomic;
-    //{ import core.stdc.stdio : printf; printf("DECREF(0x%08x): %u...\n", cast(void*)this, rc); }
+    debug(vfs_rc) { import core.stdc.stdio : printf; printf("DECREF(0x%08x): %u (will be %u)...\n", cast(void*)this, rc, rc-1); }
     auto xrc = atomicOp!"-="(rc, 1);
+    debug(vfs_rc) { import core.stdc.stdio : printf; printf("  DECREF(0x%08x): %u %u...\n", cast(void*)this, rc, xrc); }
     if (xrc == rc.max) assert(0); // hey, this is definitely a bug!
     if (xrc == 0) {
       import core.memory : GC;
