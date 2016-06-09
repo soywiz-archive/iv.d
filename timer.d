@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+// this essentially duplicates std.datetime.StopWatch, but meh...
 module iv.timer /*is aliced*/;
 
 
@@ -27,6 +28,13 @@ private:
   Duration mAccum;
 
 public:
+  enum State {
+    Stopped,
+    Running,
+    Paused,
+  }
+
+public:
   string toString () @trusted const {
     import std.string : format;
     Duration d;
@@ -36,32 +44,22 @@ public:
     }
     auto tm = d.split!("hours", "minutes", "seconds", "msecs")();
     if (tm.hours) return format("%s:%02d:%02d.%03d", tm.hours, tm.minutes, tm.seconds, tm.msecs);
-    else if (tm.minutes) return format("%s:%02d.%03d", tm.minutes, tm.seconds, tm.msecs);
-    else return format("%s.%03d", tm.seconds, tm.msecs);
+    if (tm.minutes) return format("%s:%02d.%03d", tm.minutes, tm.seconds, tm.msecs);
+    return format("%s.%03d", tm.seconds, tm.msecs);
   }
 
-nothrow:
-@nogc:
-  enum { Stopped, Started }
-
-  this (int initState=Stopped) @trusted {
-    if (initState == Started) start();
+nothrow @safe @nogc:
+  this (State initState) @trusted {
+    if (initState == State.Running) start();
   }
 
-  enum State {
-    Stopped,
-    Running,
-    Paused
+  @property const pure {
+    auto state () { pragma(inline, true); return mState; }
+    bool stopped () { pragma(inline, true); return (mState == State.Stopped); }
+    bool running () { pragma(inline, true); return (mState == State.Running); }
+    bool paused () { pragma(inline, true); return (mState == State.Paused); }
   }
 
-  @property @safe const {
-    auto state () @safe const nothrow @nogc { return mState; }
-    bool stopped () @safe const nothrow @nogc { return (mState == State.Stopped); }
-    bool running () @safe const nothrow @nogc { return (mState == State.Running); }
-    bool paused () @safe const nothrow @nogc { return (mState == State.Paused); }
-  }
-
-@trusted:
   void reset () {
     mAccum = Duration.zero;
     mSTime = MonoTime.currTime;

@@ -386,7 +386,7 @@ public string downloadAll (uint tcount=4) {
   prevThreadCount = 1; // we already has one empty line
   startThreads();
   ulong toCollect = 0;
-  auto timer = Timer(Timer.Started);
+  auto timer = Timer(Timer.State.Running);
   atomicStore(urlDone, 0);
   while (atomicLoad(urlDone) < urlList.length) {
     // force periodical collect to keep CURL happy
