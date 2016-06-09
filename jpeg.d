@@ -79,7 +79,8 @@ public TrueColorImage readJpeg (VFile stream) {
   stream.rawReadExact(tmp[]);
   if (tmp[0..2] != [0xff, 0xd8]) throw new ImageIOException("not JPEG");
 
-  JPEG_Decoder dc = { stream: stream };
+  JPEG_Decoder dc;// = { stream: stream }; // DMD bug: no postblit is called
+  dc.stream = stream;
 
   read_markers(dc); // reads until first scan header or eoi
   if (dc.eoi_reached) throw new ImageIOException("no image data");
@@ -90,6 +91,9 @@ public TrueColorImage readJpeg (VFile stream) {
   //assert(pixels.length == dc.width*dc.height*4);
   return new TrueColorImage(dc.width, dc.height, pixels);
 }
+
+
+public TrueColorImage readJpeg (const(char)[] fname) { return readJpeg(VFile(fname)); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
