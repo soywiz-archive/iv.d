@@ -3155,6 +3155,166 @@ public ubyte[] decompress_jpeg_image_from_memory(bool useMalloc=false) (const(vo
 }
 
 
+// if we can access "arsd.color", add some handy API
+static if (__traits(compiles, { import arsd.color; })) enum JpegHasArsd = true; else enum JpegHasArsd = false;
+
+
+static if (JpegHasArsd) {
+import arsd.color;
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// decompress JPEG image, what else?
+public MemoryImage readJpegFromStream (scope JpegStreamReadFunc rfn) {
+  import core.stdc.string : memcpy;
+  enum req_comps = 4;
+
+  if (rfn is null) return null;
+
+  auto decoder = jpeg_decoder(rfn);
+  if (decoder.error_code != JPGD_SUCCESS) return null;
+  version(jpegd_test) scope(exit) { import core.stdc.stdio : printf; printf("%u bytes read.\n", cast(uint)decoder.total_bytes_read); }
+
+  immutable int image_width = decoder.width;
+  immutable int image_height = decoder.height;
+  //width = image_width;
+  //height = image_height;
+  //actual_comps = decoder.num_components;
+
+  if (decoder.begin_decoding() != JPGD_SUCCESS || image_width < 1 || image_height < 1) return null;
+
+  immutable int dst_bpl = image_width*req_comps;
+  auto img = new TrueColorImage(image_width, image_height);
+  ubyte* pImage_data = img.imageData.bytes.ptr;
+
+  for (int y = 0; y < image_height; ++y) {
+    const(ubyte)* pScan_line;
+    uint scan_line_len;
+    if (decoder.decode(/*(const void**)*/cast(void**)&pScan_line, &scan_line_len) != JPGD_SUCCESS) {
+      jpgd_free(pImage_data);
+      return null;
+    }
+
+    ubyte* pDst = pImage_data+y*dst_bpl;
+
+    if ((req_comps == 1 && decoder.num_components == 1) || (req_comps == 4 && decoder.num_components == 3)) {
+      memcpy(pDst, pScan_line, dst_bpl);
+    } else if (decoder.num_components == 1) {
+      if (req_comps == 3) {
+        for (int x = 0; x < image_width; ++x) {
+          ubyte luma = pScan_line[x];
+          pDst[0] = luma;
+          pDst[1] = luma;
+          pDst[2] = luma;
+          pDst += 3;
+        }
+      } else {
+        for (int x = 0; x < image_width; ++x) {
+          ubyte luma = pScan_line[x];
+          pDst[0] = luma;
+          pDst[1] = luma;
+          pDst[2] = luma;
+          pDst[3] = 255;
+          pDst += 4;
+        }
+      }
+    } else if (decoder.num_components == 3) {
+      if (req_comps == 1) {
+        immutable int YR = 19595, YG = 38470, YB = 7471;
+        for (int x = 0; x < image_width; ++x) {
+          int r = pScan_line[x*4+0];
+          int g = pScan_line[x*4+1];
+          int b = pScan_line[x*4+2];
+          *pDst++ = cast(ubyte)((r * YR + g * YG + b * YB + 32768) >> 16);
+        }
+      } else {
+        for (int x = 0; x < image_width; ++x) {
+          pDst[0] = pScan_line[x*4+0];
+          pDst[1] = pScan_line[x*4+1];
+          pDst[2] = pScan_line[x*4+2];
+          pDst += 3;
+        }
+      }
+    }
+  }
+
+  return img;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// decompress JPEG image from disk file.
+public MemoryImage readJpeg (const(char)[] filename) {
+  import core.stdc.stdio;
+
+  FILE* m_pFile;
+  bool m_eof_flag, m_error_flag;
+
+  if (filename.length == 0) throw new Exception("cannot open unnamed file");
+  if (filename.length < 2048) {
+    import core.stdc.stdlib : alloca;
+    auto tfn = (cast(char*)alloca(filename.length+1))[0..filename.length+1];
+    tfn[0..filename.length] = filename[];
+    tfn[filename.length] = 0;
+    m_pFile = fopen(tfn.ptr, "rb");
+  } else {
+    import core.stdc.stdlib : malloc, free;
+    auto tfn = (cast(char*)malloc(filename.length+1))[0..filename.length+1];
+    if (tfn !is null) {
+      scope(exit) free(tfn.ptr);
+      m_pFile = fopen(tfn.ptr, "rb");
+    }
+  }
+  if (m_pFile is null) throw new Exception("cannot open file '"~filename.idup~"'");
+  scope(exit) if (m_pFile) fclose(m_pFile);
+
+  return readJpegFromStream(
+    delegate int (void* pBuf, int max_bytes_to_read, bool *pEOF_flag) {
+      if (m_pFile is null) return -1;
+      if (m_eof_flag) {
+        *pEOF_flag = true;
+        return 0;
+      }
+      if (m_error_flag) return -1;
+      int bytes_read = cast(int)(fread(pBuf, 1, max_bytes_to_read, m_pFile));
+      if (bytes_read < max_bytes_to_read) {
+        if (ferror(m_pFile)) {
+          m_error_flag = true;
+          return -1;
+        }
+        m_eof_flag = true;
+        *pEOF_flag = true;
+      }
+      return bytes_read;
+    }
+  );
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// decompress JPEG image from memory buffer.
+public MemoryImage readJpegFromMemory (const(void)[] buf) {
+  bool m_eof_flag;
+  size_t bufpos;
+  auto b = cast(const(ubyte)*)buf.ptr;
+
+  return readJpegFromStream(
+    delegate int (void* pBuf, int max_bytes_to_read, bool *pEOF_flag) {
+      import core.stdc.string : memcpy;
+      if (bufpos >= buf.length) {
+        *pEOF_flag = true;
+        return 0;
+      }
+      if (buf.length-bufpos < max_bytes_to_read) max_bytes_to_read = cast(int)(buf.length-bufpos);
+      memcpy(pBuf, b, max_bytes_to_read);
+      b += max_bytes_to_read;
+      return max_bytes_to_read;
+    }
+  );
+}
+// done with arsd API
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 version(jpegd_test) {
 import arsd.color;
@@ -3166,22 +3326,9 @@ void main (string[] args) {
   {
     assert(detect_jpeg_image_from_file((args.length > 1 ? args[1] : "image.jpg"), width, height, comps));
     writeln(width, "x", height, "x", comps);
-    auto img = decompress_jpeg_image_from_file((args.length > 1 ? args[1] : "image.jpg"), width, height, comps);
-    writeln(width, "x", height, "x", comps);
-    auto tc = new TrueColorImage(width, height);
-    {
-      auto src = img.ptr;
-      auto dest = tc.imageData.bytes.ptr;
-      foreach (immutable _; 0..width*height) {
-        dest[0] = src[0];
-        dest[1] = src[1];
-        dest[2] = src[2];
-        dest[3] = 255;
-        src += comps;
-        dest += 4;
-      }
-    }
-    writePng("z00.png", tc);
+    auto img = readJpeg((args.length > 1 ? args[1] : "image.jpg"));
+    writeln(img.width, "x", img.height);
+    writePng("z00.png", img);
   }
   {
     ubyte[] file;
@@ -3192,22 +3339,9 @@ void main (string[] args) {
     }
     assert(detect_jpeg_image_from_memory(file[], width, height, comps));
     writeln(width, "x", height, "x", comps);
-    auto img = decompress_jpeg_image_from_memory(file[], width, height, comps);
-    writeln(width, "x", height, "x", comps);
-    auto tc = new TrueColorImage(width, height);
-    {
-      auto src = img.ptr;
-      auto dest = tc.imageData.bytes.ptr;
-      foreach (immutable _; 0..width*height) {
-        dest[0] = src[0];
-        dest[1] = src[1];
-        dest[2] = src[2];
-        dest[3] = 255;
-        src += comps;
-        dest += 4;
-      }
-    }
-    writePng("z01.png", tc);
+    auto img = readJpegFromMemory(file[]);
+    writeln(img.width, "x", img.height);
+    writePng("z01.png", img);
   }
 }
 }
