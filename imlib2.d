@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+// docs: https://docs.enlightenment.org/api/imlib2/html/imlib2_8c.html
+// sample: https://docs.enlightenment.org/api/imlib2/html/
 module iv.imlib2;
 pragma(lib, "Imlib2");
 import iv.x11;
