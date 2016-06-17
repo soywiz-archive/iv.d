@@ -2995,7 +2995,7 @@ public bool detect_jpeg_image_from_memory (const(void)[] buf, out int width, out
 // ////////////////////////////////////////////////////////////////////////// //
 /// decompress JPEG image, what else?
 /// you can specify required color components in `req_comps` (3 for RGB or 4 for RGBA), or leave it as is to use image value.
-public ubyte* decompress_jpeg_image_from_stream (scope JpegStreamReadFunc rfn, out int width, out int height, out int actual_comps, int req_comps=-1) {
+public ubyte[] decompress_jpeg_image_from_stream(bool useMalloc=false) (scope JpegStreamReadFunc rfn, out int width, out int height, out int actual_comps, int req_comps=-1) {
   import core.stdc.string : memcpy;
 
   //actual_comps = 0;
@@ -3017,8 +3017,14 @@ public ubyte* decompress_jpeg_image_from_stream (scope JpegStreamReadFunc rfn, o
 
   immutable int dst_bpl = image_width*req_comps;
 
-  ubyte* pImage_data = cast(ubyte*)jpgd_malloc(dst_bpl * image_height);
-  if (pImage_data is null) return null;
+  static if (useMalloc) {
+    ubyte* pImage_data = cast(ubyte*)jpgd_malloc(dst_bpl*image_height);
+    if (pImage_data is null) return null;
+    auto idata = pImage_data[0..dst_bpl*image_height];
+  } else {
+    auto idata = new ubyte[](dst_bpl*image_height);
+    auto pImage_data = idata.ptr;
+  }
 
   for (int y = 0; y < image_height; ++y) {
     const(ubyte)* pScan_line;
@@ -3071,14 +3077,14 @@ public ubyte* decompress_jpeg_image_from_stream (scope JpegStreamReadFunc rfn, o
     }
   }
 
-  return pImage_data;
+  return idata;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// decompress JPEG image from disk file.
 /// you can specify required color components in `req_comps` (3 for RGB or 4 for RGBA), or leave it as is to use image value.
-public ubyte* decompress_jpeg_image_from_file (const(char)[] filename, out int width, out int height, out int actual_comps, int req_comps=-1) {
+public ubyte[] decompress_jpeg_image_from_file(bool useMalloc=false) (const(char)[] filename, out int width, out int height, out int actual_comps, int req_comps=-1) {
   import core.stdc.stdio;
 
   FILE* m_pFile;
@@ -3102,7 +3108,7 @@ public ubyte* decompress_jpeg_image_from_file (const(char)[] filename, out int w
   if (m_pFile is null) throw new Exception("cannot open file '"~filename.idup~"'");
   scope(exit) if (m_pFile) fclose(m_pFile);
 
-  return decompress_jpeg_image_from_stream(
+  return decompress_jpeg_image_from_stream!useMalloc(
     delegate int (void* pBuf, int max_bytes_to_read, bool *pEOF_flag) {
       if (m_pFile is null) return -1;
       if (m_eof_flag) {
@@ -3128,12 +3134,12 @@ public ubyte* decompress_jpeg_image_from_file (const(char)[] filename, out int w
 // ////////////////////////////////////////////////////////////////////////// //
 /// decompress JPEG image from memory buffer.
 /// you can specify required color components in `req_comps` (3 for RGB or 4 for RGBA), or leave it as is to use image value.
-public ubyte* decompress_jpeg_image_from_memory (const(void)[] buf, out int width, out int height, out int actual_comps, int req_comps=-1) {
+public ubyte[] decompress_jpeg_image_from_memory(bool useMalloc=false) (const(void)[] buf, out int width, out int height, out int actual_comps, int req_comps=-1) {
   bool m_eof_flag;
   size_t bufpos;
   auto b = cast(const(ubyte)*)buf.ptr;
 
-  return decompress_jpeg_image_from_stream(
+  return decompress_jpeg_image_from_stream!useMalloc(
     delegate int (void* pBuf, int max_bytes_to_read, bool *pEOF_flag) {
       import core.stdc.string : memcpy;
       if (bufpos >= buf.length) {
@@ -3149,6 +3155,7 @@ public ubyte* decompress_jpeg_image_from_memory (const(void)[] buf, out int widt
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 version(jpegd_test) {
 import arsd.color;
 import arsd.png;
@@ -3163,7 +3170,7 @@ void main (string[] args) {
     writeln(width, "x", height, "x", comps);
     auto tc = new TrueColorImage(width, height);
     {
-      auto src = img;
+      auto src = img.ptr;
       auto dest = tc.imageData.bytes.ptr;
       foreach (immutable _; 0..width*height) {
         dest[0] = src[0];
@@ -3189,7 +3196,7 @@ void main (string[] args) {
     writeln(width, "x", height, "x", comps);
     auto tc = new TrueColorImage(width, height);
     {
-      auto src = img;
+      auto src = img.ptr;
       auto dest = tc.imageData.bytes.ptr;
       foreach (immutable _; 0..width*height) {
         dest[0] = src[0];
