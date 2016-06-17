@@ -3358,6 +3358,21 @@ public MemoryImage readJpeg (VFile fl) {
     }
   );
 }
+
+public bool detectJpeg (VFile fl, out int width, out int height, out int actual_comps) {
+  return detect_jpeg_image_from_stream(
+    delegate int (void* pBuf, int max_bytes_to_read, bool *pEOF_flag) {
+      if (!fl.isOpen) return -1;
+      if (fl.eof) {
+        *pEOF_flag = true;
+        return 0;
+      }
+      auto rd = fl.rawRead(pBuf[0..max_bytes_to_read]);
+      if (fl.eof) *pEOF_flag = true;
+      return cast(int)rd.length;
+    },
+    width, height, actual_comps);
+}
 // vfs API
 }
 
