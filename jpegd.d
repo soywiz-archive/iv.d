@@ -3155,9 +3155,37 @@ public ubyte[] decompress_jpeg_image_from_memory(bool useMalloc=false) (const(vo
 }
 
 
-// if we can access "arsd.color", add some handy API
-static if (__traits(compiles, { import arsd.color; })) enum JpegHasArsd = true; else enum JpegHasArsd = false;
+// ////////////////////////////////////////////////////////////////////////// //
+// if we have access "iv.vfs", add some handy API
+static if (__traits(compiles, { import iv.vfs; })) enum JpegHasIVVFS = true; else enum JpegHasIVVFS = false;
 
+static if (JpegHasIVVFS) {
+import iv.vfs;
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// decompress JPEG image from disk file.
+/// you can specify required color components in `req_comps` (3 for RGB or 4 for RGBA), or leave it as is to use image value.
+public ubyte[] decompress_jpeg_image_from_file(bool useMalloc=false) (VFile fl, out int width, out int height, out int actual_comps, int req_comps=-1) {
+  return decompress_jpeg_image_from_stream!useMalloc(
+    delegate int (void* pBuf, int max_bytes_to_read, bool *pEOF_flag) {
+      if (!fl.isOpen) return -1;
+      if (fl.eof) {
+        *pEOF_flag = true;
+        return 0;
+      }
+      auto rd = fl.rawRead(pBuf[0..max_bytes_to_read]);
+      if (fl.eof) *pEOF_flag = true;
+      return cast(int)rd.length;
+    },
+    width, height, actual_comps, req_comps);
+}
+// vfs API
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// if we have access "arsd.color", add some handy API
+static if (__traits(compiles, { import arsd.color; })) enum JpegHasArsd = true; else enum JpegHasArsd = false;
 
 static if (JpegHasArsd) {
 import arsd.color;
@@ -3312,6 +3340,25 @@ public MemoryImage readJpegFromMemory (const(void)[] buf) {
   );
 }
 // done with arsd API
+}
+
+
+static if (JpegHasIVVFS) {
+public MemoryImage readJpeg (VFile fl) {
+  return readJpegFromStream(
+    delegate int (void* pBuf, int max_bytes_to_read, bool *pEOF_flag) {
+      if (!fl.isOpen) return -1;
+      if (fl.eof) {
+        *pEOF_flag = true;
+        return 0;
+      }
+      auto rd = fl.rawRead(pBuf[0..max_bytes_to_read]);
+      if (fl.eof) *pEOF_flag = true;
+      return cast(int)rd.length;
+    }
+  );
+}
+// vfs API
 }
 
 
