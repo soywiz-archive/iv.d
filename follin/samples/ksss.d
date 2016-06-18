@@ -77,12 +77,13 @@ public:
   }
 
   @property float nextSample() () {
+    int previdx = (index-1+bufused)%bufused;
     int nextidx = (index+1)%bufused;
     // get our sample to return
     float res = buffer[index];
     // low pass filter (average) some samples
-    float value = (buffer[index]+buffer[nextidx])*0.5f*feedback;
-    buffer[index] = value;
+    buffer[index] = (buffer[index]+buffer[nextidx])*0.5f*feedback;
+    //buffer[index] = (buffer[previdx]+buffer[index]+buffer[nextidx])/3.0f*feedback;
     // move to the next sample
     index = nextidx;
     // return the sample from the buffer
@@ -202,7 +203,7 @@ void playSfx () {
   import core.sys.posix.unistd : usleep;
 
   auto chan = new KSSString(song[]);
-  chan.volume = 128;
+  chan.volume = 220;
   if (!tflAddChannel("sfx", chan, TFLdefault, TflChannel.QualitySfx)) {
     import core.stdc.stdio;
     fprintf(stderr, "ERROR: can't add sfx channel!\n");
