@@ -14,6 +14,8 @@ module iv.balz;
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// LZ compressor and decompressor.
+///
+/// memory usage (both for compression and for decompression): 33554432+33554432+262144+655360+65536 bytes (~65MB)
 struct BalzCodec(string mode) {
 static assert(mode == "encoder" || mode == "decoder", "invalid Balz mode");
 
@@ -71,6 +73,7 @@ private:
     import core.stdc.stdlib : malloc;
     auto res = malloc(mem*T.sizeof);
     if (res is null) onOutOfMemoryError();
+    debug(balz_alloc) { import core.stdc.stdio : printf; printf("balz allocated %u bytes\n", cast(uint)(mem*T.sizeof)); }
     return cast(T*)res;
   }
 
