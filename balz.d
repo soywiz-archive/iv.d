@@ -18,7 +18,7 @@ struct BalzCodec(string mode) {
 static assert(mode == "encoder" || mode == "decoder", "invalid Balz mode");
 
 private:
-  enum MAGIC = 0xba; // baLZ
+  enum MAGIC = 0xab; // baLZ
 
   static align(1) struct Counter {
   pure nothrow @safe @nogc align(1):
@@ -89,11 +89,6 @@ public:
   alias PutBufFn = void delegate (const(void)[] buf);
 
 public:
-  //GetBufFn getBuf; /// you can manually set this to change data reading delegate.
-  //PutBufFn putBuf; /// you can manually set this to change data writing delegate.
-
-public:
-  //this (GetBufFn rdfn, PutBufFn wrfn) { getBuf = rdfn; putBuf = wrfn; } /// create codec with i/o delegates.
   ~this () { freeMem(); }
 
   @disable this (this); // no copies
@@ -137,11 +132,13 @@ public:
       }
     }
 
+    // doesn't do 511-escaping
     void encode(string mode) (uint t, uint c) {
       static if (mode == "char") {
         enum Limit = 512;
         enum Mask = 256;
         auto cptr = counters;
+        debug(balz_eos) { import core.stdc.stdio : printf; printf("ec: t=%u; c=%u\n", cast(uint)t, cast(uint)c); }
       } else static if (mode == "idx") {
         enum Limit = TAB_SIZE;
         enum Mask = (TAB_SIZE>>1);
@@ -160,20 +157,26 @@ public:
     }
 
     int[MAX_MATCH+1] bestIdx;
+
     reset();
-    obuf[obufPos++] = MAGIC; //putb(MAGIC);
-    bool eofSeen = false;
-    while (!eofSeen) {
+    obuf[obufPos++] = MAGIC;
+    obuf[obufPos++] = 00; // stream version
+    for (;;) {
       int n = 0;
       while (n < BUF_SIZE) {
         auto rd = getBuf(buf[n..BUF_SIZE]);
-        if (rd == 0) { eofSeen = true; break; }
+        if (rd == 0) break;
         n += rd;
       }
-      if (n == 0) break; // no more data
-      tab[0..TAB_SIZE*TabCntSize] = 0;
+      // write block size
+      encode!"char"((n>>24)&0xff, 0);
+      encode!"char"((n>>16)&0xff, 0);
+      encode!"char"((n>>8)&0xff, 0);
+      encode!"char"(n&0xff, 0);
+      if (n == 0) break;
       int p = 0;
       while (p < 2 && p < n) encode!"char"(buf[p++], 0);
+      tab[0..TAB_SIZE*TabCntSize] = 0;
       while (p < n) {
         immutable int c2 = buf[(p+BUF_SIZE-2)&BUF_MASK]|(buf[(p+BUF_SIZE-1)&BUF_MASK]<<8);
         immutable uint hash = getHash(p);
@@ -238,10 +241,11 @@ public:
   /// decompress data. will call `getBuf()` to read compressed data and
   /// `putBuf` to write uncompressed data. pass *uncompressed* data length in
   /// `flen`. sorry, no "end of stream" flag is provided.
-  static if (mode == "decoder") void decompress (long flen, scope GetBufFn getBuf, scope PutBufFn putBuf) {
+  /// returns number of decoded bytes.
+  static if (mode == "decoder") long decompress (scope GetBufFn getBuf, scope PutBufFn putBuf, long flen=-1) {
     assert(getBuf !is null);
     assert(putBuf !is null);
-    assert(flen >= 0);
+    //assert(flen >= 0);
 
     // i moved those functions here 'cause they need to do i/o
     ubyte getb () {
@@ -284,23 +288,45 @@ public:
       cptr += c*Limit;
       uint ctx = 1;
       while (ctx < Limit) ctx += ctx+decodeWithCounter(cptr+ctx);
+      static if (mode == "char") {
+        debug(balz_eos) { import core.stdc.stdio : printf; printf("dc: t=%u; c=%u\n", cast(uint)(ctx-Limit), cast(uint)c); }
+      }
       return ctx-Limit;
     }
 
+    long totalout = 0;
     reset();
-    if (getb != MAGIC) throw new Exception("invalid compressed stream format");
+    if (getb() != MAGIC) throw new Exception("invalid compressed stream format");
+    if (getb() != 00) throw new Exception("invalid compressed stream version");
     foreach (immutable _; 0..4) code = (code<<8)|getb();
-    while (flen > 0) {
+    while (flen != 0) {
+      // read block size
+      int n = 0;
+      foreach (immutable _; 0..4) {
+        immutable uint t = decode!"char"(0);
+        if (t >= 256) throw new Exception("compressed stream corrupted");
+        n = (n<<8)|(t&0xff);
+      }
+      if (n < 0 || n > BUF_SIZE) throw new Exception("compressed stream corrupted");
+      if (n == 0) {
+        // done
+        if (flen > 0) throw new Exception("compressed stream ends unexpectedly");
+        break;
+      }
+      if (flen > 0) {
+        if (n > flen) n = cast(int)flen; // don't read more than we need
+        flen -= n;
+      }
       int p = 0;
-      while (p < 2 && p < flen) {
-        immutable int t = decode!"char"(0);
+      while (p < 2 && p < n) {
+        immutable uint t = decode!"char"(0);
         if (t >= 256) throw new Exception("compressed stream corrupted");
         buf[p++] = cast(ubyte)t;
       }
-      while (p < BUF_SIZE && p < flen) {
+      while (p < n) {
         immutable int tmp = p;
         immutable int c2 = buf[(p+BUF_SIZE-2)&BUF_MASK]|(buf[(p+BUF_SIZE-1)&BUF_MASK]<<8);
-        immutable int t = decode!"char"(buf[(p+BUF_SIZE-1)&BUF_MASK]);
+        int t = decode!"char"(buf[(p+BUF_SIZE-1)&BUF_MASK]);
         if (t >= 256) {
           int len = t-256;
           int s = tab[c2*TAB_SIZE+((cnt[c2]-decode!"idx"(buf[(p+BUF_SIZE-2)&BUF_MASK]))&TAB_MASK)];
@@ -313,9 +339,10 @@ public:
         }
         tab[c2*TAB_SIZE+(++cnt[c2]&TAB_MASK)] = tmp;
       }
+      totalout += p;
       putBuf(buf[0..p]);
-      flen -= p;
     }
+    return totalout;
   }
 
 private:
