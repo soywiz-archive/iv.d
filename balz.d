@@ -1,12 +1,22 @@
-// balz is written and placed in the public domain by Ilya Muravyov <ilya.muravyov@yahoo.com>
-// BALZ is a command-line file compressor with a high compression ratio and fast decompression.
-// Special thanks to Matt Mahoney, Eugene Shelwien, Uwe Herklotz, Malcolm Taylor and LovePimple.
-// D port by Ketmar // Invisible Vector
-module iv.balz is aliced;
+/**
+ * BALZ: A ROLZ-based file compressor.
+ *
+ * balz is written and placed in the public domain by Ilya Muravyov <ilya.muravyov@yahoo.com>
+ *
+ * BALZ is a ROLZ-based data compressor with a high compression ratio and fast decompression.
+ *
+ * Special thanks to Matt Mahoney, Eugene Shelwien, Uwe Herklotz, Malcolm Taylor and LovePimple.
+ *
+ * D port by Ketmar // Invisible Vector
+ */
+module iv.balz;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 /// LZ compressor and decompressor.
-final class Balz {
+struct BalzCodec(string mode) {
+static assert(mode == "encoder" || mode == "decoder", "invalid Balz mode");
+
 private:
   enum MAGIC = 0xba; // baLZ
 
@@ -22,18 +32,20 @@ private:
 private:
   uint code;
   uint low;
-  uint high = cast(uint)-1;
+  uint high;
 
-  Counter*[256] counter1; //[512]
-  Counter*[256] counter2; //[TAB_SIZE]
-  //Counter[512][256] counter1; //[512]
-  //Counter[TAB_SIZE][256] counter2; //[TAB_SIZE]
+  enum CounterSize = 256;
+  Counter* counters; // [512][CounterSize], then [TAB_SIZE][CounterSize]
 
-  ubyte[65536] obuf;
-  uint obufPos;
-
-  ubyte[65536] ibuf;
-  uint ibufPos, ibufUsed;
+  static if (mode == "encoder") {
+    enum obufSize = 65536;
+    ubyte* obuf;
+    uint obufPos;
+  } else {
+    ubyte* ibuf;
+    enum ibufSize = 65536;
+    uint ibufPos, ibufUsed;
+  }
 
   enum TAB_BITS = 7;
   enum TAB_SIZE = 1<<TAB_BITS;
@@ -46,35 +58,20 @@ private:
   enum BUF_SIZE = 1<<BUF_BITS;
   enum BUF_MASK = cast(uint)(BUF_SIZE-1);
 
+  enum TabCntSize = 1<<16;
+
   ubyte* buf; //[BUF_SIZE]
-  uint*[1<<16] tab; //[TAB_SIZE][1<<16]
-  int[1<<16] cnt;
+  uint* tab; // [TAB_SIZE][TabCntSize]
+  int* cnt; // [TabCntSize]
 
 private:
-  static T* xalloc(T, bool clear=true) (uint mem) if (T.sizeof > 0) {
+  static T* xalloc(T) (uint mem) if (T.sizeof > 0) {
     import core.exception : onOutOfMemoryError;
     assert(mem != 0);
-    static if (clear) {
-      import core.stdc.stdlib : calloc;
-      auto res = calloc(mem, T.sizeof);
-      if (res is null) onOutOfMemoryError();
-      static if (is(T == struct)) {
-        import core.stdc.string : memcpy;
-        static immutable T i = T.init;
-        memcpy(res, &i, T.sizeof);
-      }
-      return cast(T*)res;
-    } else {
-      import core.stdc.stdlib : malloc;
-      auto res = malloc(mem*T.sizeof);
-      if (res is null) onOutOfMemoryError();
-      static if (is(T == struct)) {
-        import core.stdc.string : memcpy;
-        static immutable T i = T.init;
-        memcpy(res, &i, T.sizeof);
-      }
-      return cast(T*)res;
-    }
+    import core.stdc.stdlib : malloc;
+    auto res = malloc(mem*T.sizeof);
+    if (res is null) onOutOfMemoryError();
+    return cast(T*)res;
   }
 
   static void xfree(T) (ref T* ptr) {
@@ -92,20 +89,25 @@ public:
   alias PutBufFn = void delegate (const(void)[] buf);
 
 public:
-  GetBufFn getBuf;
-  PutBufFn putBuf;
+  //GetBufFn getBuf; /// you can manually set this to change data reading delegate.
+  //PutBufFn putBuf; /// you can manually set this to change data writing delegate.
 
 public:
-  this () {}
-  this (GetBufFn rdfn, PutBufFn wrfn) { getBuf = rdfn; putBuf = wrfn; }
+  //this (GetBufFn rdfn, PutBufFn wrfn) { getBuf = rdfn; putBuf = wrfn; } /// create codec with i/o delegates.
   ~this () { freeMem(); }
+
+  @disable this (this); // no copies
 
   /// free working memory. can be called after compressing/decompressing.
   void freeMem () {
-    import core.stdc.stdlib : free;
-    foreach_reverse (ref c; counter2) xfree(c);
-    foreach_reverse (ref c; counter1) xfree(c);
-    foreach_reverse (ref t; tab) xfree(t);
+    static if (mode == "encoder") {
+      xfree(obuf);
+    } else {
+      xfree(ibuf);
+    }
+    xfree(counters);
+    xfree(cnt);
+    xfree(tab);
     xfree(buf);
   }
 
@@ -113,120 +115,195 @@ public:
   /// compress data. will call `getBuf()` to read uncompressed data and
   /// `putBuf` to write compressed data. set `max` to `true` to squeeze some
   /// more bytes, but sacrifice some speed.
-  public void compress (bool max=false) {
+  static if (mode == "encoder") void compress (scope GetBufFn getBuf, scope PutBufFn putBuf, bool max=false) {
+    assert(getBuf !is null);
+    assert(putBuf !is null);
+
+    // i moved those functions here 'cause they need to do i/o
+    void encodeWithCounter (int bit, Counter* counter) {
+      immutable mid = cast(uint)(low+((cast(ulong)(high-low)*(counter.p<<15))>>32));
+      if (bit) {
+        high = mid;
+        counter.update1();
+      } else {
+        low = mid+1;
+        counter.update0();
+      }
+      while ((low^high) < (1<<24)) {
+        if (obufPos >= obufSize) { auto wr = obufPos; obufPos = 0; putBuf(obuf[0..wr]); }
+        obuf[obufPos++] = cast(ubyte)(low>>24);
+        low <<= 8;
+        high = (high<<8)|255;
+      }
+    }
+
+    void encode(string mode) (uint t, uint c) {
+      static if (mode == "char") {
+        enum Limit = 512;
+        enum Mask = 256;
+        auto cptr = counters;
+      } else static if (mode == "idx") {
+        enum Limit = TAB_SIZE;
+        enum Mask = (TAB_SIZE>>1);
+        auto cptr = counters+(512*CounterSize);
+      } else {
+        static assert(0, "invalid mode");
+      }
+      cptr += c*Limit;
+      int ctx = 1;
+      while (ctx < Limit) {
+        immutable bit = cast(int)((t&Mask) != 0);
+        t += t;
+        encodeWithCounter(bit, cptr+ctx);
+        ctx += ctx+bit;
+      }
+    }
+
     int[MAX_MATCH+1] bestIdx;
-    int n;
-
-    setupMem();
-    putb(MAGIC);
-    buf[0..BUF_SIZE] = 0;
-    foreach (ref c; counter1) c[0..512] = Counter.init;
-    foreach (ref c; counter2) c[0..TAB_SIZE] = Counter.init;
-
-    while ((n = readToBuf()) > 0) {
-      int oldn = n;
-      foreach (ref t; tab) t[0..TAB_SIZE] = 0;
+    reset();
+    obuf[obufPos++] = MAGIC; //putb(MAGIC);
+    bool eofSeen = false;
+    while (!eofSeen) {
+      int n = 0;
+      while (n < BUF_SIZE) {
+        auto rd = getBuf(buf[n..BUF_SIZE]);
+        if (rd == 0) { eofSeen = true; break; }
+        n += rd;
+      }
+      if (n == 0) break; // no more data
+      tab[0..TAB_SIZE*TabCntSize] = 0;
       int p = 0;
-
-      while (p < 2 && p < n) encode(buf[p++], 0);
-
+      while (p < 2 && p < n) encode!"char"(buf[p++], 0);
       while (p < n) {
         immutable int c2 = buf[(p+BUF_SIZE-2)&BUF_MASK]|(buf[(p+BUF_SIZE-1)&BUF_MASK]<<8);
         immutable uint hash = getHash(p);
-
         int len = MIN_MATCH-1;
         int idx = TAB_SIZE;
-
         int max_match = n-p;
         if (max_match > MAX_MATCH) max_match = MAX_MATCH;
-
-        for (int x = 0; x < TAB_SIZE; ++x) {
-          immutable uint d = tab.ptr[c2][(cnt[c2]-x)&TAB_MASK];
+        // hash search
+        foreach (uint x; 0..TAB_SIZE) {
+          immutable uint d = tab[c2*TAB_SIZE+((cnt[c2]-x)&TAB_MASK)];
           if (!d) break;
-
           if ((d&~BUF_MASK) != hash) continue;
-
           immutable int s = d&BUF_MASK;
           if (buf[(s+len)&BUF_MASK] != buf[(p+len)&BUF_MASK] || buf[s] != buf[p&BUF_MASK]) continue;
-
           int l = 0;
           while (++l < max_match) if (buf[(s+l)&BUF_MASK] != buf[(p+l)&BUF_MASK]) break;
-
           if (l > len) {
-            for (int i = l; i > len; --i) bestIdx[i] = x;
+            for (int i = l; i > len; --i) bestIdx.ptr[i] = x;
             idx = x;
             len = l;
             if (l == max_match) break;
           }
         }
-
+        // check match
         if (max && len >= MIN_MATCH) {
           int sum = getPts(len, idx)+getPtsAt(p+len, n);
           if (sum < getPts(len+MAX_MATCH, 0)) {
             immutable int lookahead = len;
             for (int i = 1; i < lookahead; ++i) {
-              immutable int tmp = getPts(i, bestIdx[i])+getPtsAt(p+i, n);
+              immutable int tmp = getPts(i, bestIdx.ptr[i])+getPtsAt(p+i, n);
               if (tmp > sum) {
                 sum = tmp;
                 len = i;
               }
             }
-            idx = bestIdx[len];
+            idx = bestIdx.ptr[len];
           }
         }
-
-        tab.ptr[c2][++cnt[c2]&TAB_MASK] = hash|p;
-
+        tab[c2*TAB_SIZE+(++cnt[c2]&TAB_MASK)] = hash|p;
         if (len >= MIN_MATCH) {
-          encode((256-MIN_MATCH)+len, buf[(p+BUF_SIZE-1)&BUF_MASK]);
-          encodeIdx(idx, buf[(p+BUF_SIZE-2)&BUF_MASK]);
+          encode!"char"((256-MIN_MATCH)+len, buf[(p+BUF_SIZE-1)&BUF_MASK]);
+          encode!"idx"(idx, buf[(p+BUF_SIZE-2)&BUF_MASK]);
           p += len;
         } else {
-          encode(buf[p], buf[(p+BUF_SIZE-1)&BUF_MASK]);
+          encode!"char"(buf[p], buf[(p+BUF_SIZE-1)&BUF_MASK]);
           ++p;
         }
       }
-      if (oldn < BUF_SIZE) break;
     }
-
-    flush();
+    // flush output buffer, so we can skip flush checks in code flush
+    if (obufPos > 0) { auto wr = obufPos; obufPos = 0; putBuf(obuf[0..wr]); }
+    // flush codes
+    foreach (immutable _; 0..4) {
+      obuf[obufPos++] = cast(ubyte)(low>>24);
+      low <<= 8;
+    }
+    // flush output buffer again
+    if (obufPos > 0) { auto wr = obufPos; obufPos = 0; putBuf(obuf[0..wr]); }
   }
 
   // ////////////////////////////////////////////////////////////////////// //
   /// decompress data. will call `getBuf()` to read compressed data and
   /// `putBuf` to write uncompressed data. pass *uncompressed* data length in
   /// `flen`. sorry, no "end of stream" flag is provided.
-  public void decompress (long flen) {
+  static if (mode == "decoder") void decompress (long flen, scope GetBufFn getBuf, scope PutBufFn putBuf) {
+    assert(getBuf !is null);
+    assert(putBuf !is null);
     assert(flen >= 0);
 
-    setupMem();
+    // i moved those functions here 'cause they need to do i/o
+    ubyte getb () {
+      if (ibufPos >= ibufUsed) {
+        ibufPos = ibufUsed = 0;
+        ibufUsed = getBuf(ibuf[0..ibufSize]);
+        if (ibufUsed == 0) throw new Exception("out of input data");
+      }
+      return ibuf[ibufPos++];
+    }
+
+    uint decodeWithCounter (Counter* counter) {
+      immutable uint mid = cast(uint)(low+((cast(ulong)(high-low)*(counter.p<<15))>>32));
+      immutable int bit = (code <= mid);
+      if (bit) {
+        high = mid;
+        counter.update1();
+      } else {
+        low = mid+1;
+        counter.update0();
+      }
+      while ((low^high) < (1<<24)) {
+        code = (code<<8)|getb();
+        low <<= 8;
+        high = (high<<8)|255;
+      }
+      return bit;
+    }
+
+    int decode(string mode) (uint c) {
+      static if (mode == "char") {
+        enum Limit = 512;
+        auto cptr = counters;
+      } else static if (mode == "idx") {
+        enum Limit = TAB_SIZE;
+        auto cptr = counters+(512*CounterSize);
+      } else {
+        static assert(0, "invalid mode");
+      }
+      cptr += c*Limit;
+      uint ctx = 1;
+      while (ctx < Limit) ctx += ctx+decodeWithCounter(cptr+ctx);
+      return ctx-Limit;
+    }
+
+    reset();
     if (getb != MAGIC) throw new Exception("invalid compressed stream format");
-    flushb();
-
-    buf[0..BUF_SIZE] = 0;
-    foreach (ref c; counter1) c[0..512] = Counter.init;
-    foreach (ref c; counter2) c[0..TAB_SIZE] = Counter.init;
-    foreach (ref t; tab) t[0..TAB_SIZE] = 0;
     foreach (immutable _; 0..4) code = (code<<8)|getb();
-
     while (flen > 0) {
       int p = 0;
-
       while (p < 2 && p < flen) {
-        immutable int t = decode(0);
+        immutable int t = decode!"char"(0);
         if (t >= 256) throw new Exception("compressed stream corrupted");
         buf[p++] = cast(ubyte)t;
       }
-
       while (p < BUF_SIZE && p < flen) {
         immutable int tmp = p;
-        immutable int c2 = buf[(p+BUF_SIZE-2)&BUF_MASK]|(buf[(p+BUF_SIZE-1)&BUF_MASK]<<8);//*cast(ushort*)(buf.ptr+p-2);
-
-        immutable int t = decode(buf[(p+BUF_SIZE-1)&BUF_MASK]);
+        immutable int c2 = buf[(p+BUF_SIZE-2)&BUF_MASK]|(buf[(p+BUF_SIZE-1)&BUF_MASK]<<8);
+        immutable int t = decode!"char"(buf[(p+BUF_SIZE-1)&BUF_MASK]);
         if (t >= 256) {
           int len = t-256;
-          int s = tab.ptr[c2][(cnt[c2]-decodeIdx(buf[(p+BUF_SIZE-2)&BUF_MASK]))&TAB_MASK];
-
+          int s = tab[c2*TAB_SIZE+((cnt[c2]-decode!"idx"(buf[(p+BUF_SIZE-2)&BUF_MASK]))&TAB_MASK)];
           buf[p&BUF_MASK] = buf[s&BUF_MASK]; ++p; ++s;
           buf[p&BUF_MASK] = buf[s&BUF_MASK]; ++p; ++s;
           buf[p&BUF_MASK] = buf[s&BUF_MASK]; ++p; ++s;
@@ -234,8 +311,7 @@ public:
         } else {
           buf[p&BUF_MASK] = cast(ubyte)t; ++p;
         }
-
-        tab.ptr[c2][++cnt[c2]&TAB_MASK] = tmp;
+        tab[c2*TAB_SIZE+(++cnt[c2]&TAB_MASK)] = tmp;
       }
       putBuf(buf[0..p]);
       flen -= p;
@@ -246,214 +322,73 @@ private:
   void setupMem () {
     scope(failure) freeMem();
     if (buf is null) buf = xalloc!ubyte(BUF_SIZE);
-    foreach (ref t; tab) if (t is null) t = xalloc!uint(TAB_SIZE);
-    foreach (ref c; counter1) c = xalloc!Counter(512);
-    foreach (ref c; counter2) c = xalloc!Counter(TAB_SIZE);
-  }
-
-  void flushb () {
-    if (obufPos > 0) {
-      auto wr = obufPos;
-      obufPos = 0;
-      putBuf(obuf[0..wr]);
+    if (tab is null) tab = xalloc!uint(TAB_SIZE*TabCntSize);
+    if (cnt is null) cnt = xalloc!int(TabCntSize);
+    if (counters is null) counters = xalloc!Counter(512*CounterSize+TAB_SIZE*CounterSize);
+    static if (mode == "encoder") {
+      if (obuf is null) obuf = xalloc!ubyte(obufSize);
+    } else {
+      if (ibuf is null) ibuf = xalloc!ubyte(ibufSize);
     }
   }
 
-  void putb (ubyte b) {
-    obuf.ptr[obufPos++] = b;
-    if (obufPos >= obuf.length) flushb();
-  }
-
-  ubyte getb () {
-    if (ibufPos >= ibufUsed) {
+  void reset () {
+    setupMem();
+    buf[0..BUF_SIZE] = 0;
+    counters[0..512*CounterSize+TAB_SIZE*CounterSize] = Counter.init;
+    static if (mode == "decoder") {
+      tab[0..TAB_SIZE*TabCntSize] = 0; // encoder will immediately reinit this anyway
       ibufPos = ibufUsed = 0;
-      ibufUsed = getBuf(ibuf[]);
-      if (ibufUsed == 0) throw new Exception("out of input data");
-    }
-    return ibuf.ptr[ibufPos++];
-  }
-
-  uint readToBuf () {
-    uint bp = 0;
-    while (bp < BUF_SIZE && ibufPos < ibufUsed) buf[bp++] = ibuf[ibufPos++];
-    ibufPos = ibufUsed = 0;
-    while (bp < BUF_SIZE) {
-      auto rd = getBuf(buf[bp..BUF_SIZE]);
-      if (rd == 0) break;
-      bp += rd;
-    }
-    return bp;
-  }
-
-  void encode (int bit, ref Counter counter) {
-    immutable uint mid = cast(uint)(low+((cast(ulong)(high-low)*(counter.p<<15))>>32));
-    if (bit) {
-      high = mid;
-      counter.update1();
     } else {
-      low = mid+1;
-      counter.update0();
+      obufPos = 0;
     }
-    while ((low^high) < (1<<24)) {
-      putb(cast(ubyte)(low>>24));
-      low <<= 8;
-      high = (high<<8)|255;
-    }
-  }
-
-  void flush () {
-    foreach (immutable _; 0..4) {
-      putb(cast(ubyte)(low>>24));
-      low <<= 8;
-    }
-    flushb();
-  }
-
-  int decode (ref Counter counter) {
-    immutable uint mid = cast(uint)(low+((cast(ulong)(high-low)*(counter.p<<15))>>32));
-    immutable int bit = (code<=mid);
-    if (bit) {
-      high = mid;
-      counter.update1();
-    } else {
-      low = mid+1;
-      counter.update0();
-    }
-    while ((low^high) < (1<<24)) {
-      code = (code<<8)|getb();
-      low <<= 8;
-      high = (high<<8)|255;
-    }
-    return bit;
+    cnt[0..TabCntSize] = 0;
+    code = 0;
+    low = 0;
+    high = uint.max;
   }
 
   // ////////////////////////////////////////////////////////////////////// //
-  void encode (int t, int c1) {
-    int ctx = 1;
-    while (ctx < 512) {
-      immutable int bit = cast(int)((t&256) != 0);
-      t += t;
-      encode(bit, counter1.ptr[c1][ctx]);
-      ctx += ctx+bit;
+  // encoder utility functions
+  static if (mode == "encoder") {
+    uint getHash (int p) {
+      pragma(inline, true);
+      return (((buf[(p+0)&BUF_MASK]|(buf[(p+1)&BUF_MASK]<<8)|(buf[(p+2)&BUF_MASK]<<16)|(buf[(p+3)&BUF_MASK]<<24))&0xffffff)*2654435769UL)&~BUF_MASK;
     }
-  }
 
-  void encodeIdx (int x, int c2) {
-    int ctx = 1;
-    while (ctx < TAB_SIZE) {
-      immutable int bit = cast(int)((x&(TAB_SIZE>>1)) != 0);
-      x += x;
-      encode(bit, counter2.ptr[c2][ctx]);
-      ctx += ctx+bit;
+    int getPts (int len, int x) {
+      pragma(inline, true);
+      return (len >= MIN_MATCH ? (len<<TAB_BITS)-x : ((MIN_MATCH-1)<<TAB_BITS)-8);
     }
-  }
 
-  int decode (int c1) {
-    int ctx = 1;
-    while (ctx < 512) ctx += ctx+decode(counter1.ptr[c1][ctx]);
-    return ctx-512;
-  }
-
-  int decodeIdx (int c2) {
-    int ctx = 1;
-    while (ctx < TAB_SIZE) ctx += ctx+decode(counter2.ptr[c2][ctx]);
-    return ctx-TAB_SIZE;
-  }
-
-  // ////////////////////////////////////////////////////////////////////// //
-  uint getHash (int p) {
-    pragma(inline, true);
-    return (((buf[(p+0)&BUF_MASK]|(buf[(p+1)&BUF_MASK]<<8)|(buf[(p+2)&BUF_MASK]<<16)|(buf[(p+3)&BUF_MASK]<<24))&0xffffff)*2654435769UL)&~BUF_MASK;
-  }
-
-  int getPts (int len, int x) {
-    pragma(inline, true);
-    return (len >= MIN_MATCH ? (len<<TAB_BITS)-x : ((MIN_MATCH-1)<<TAB_BITS)-8);
-  }
-
-  int getPtsAt (int p, int n) {
-    immutable int c2 = buf[(p+BUF_SIZE-2)&BUF_MASK]|(buf[(p+BUF_SIZE-1)&BUF_MASK]<<8);//*cast(ushort*)(buf.ptr+p-2);
-    immutable uint hash = getHash(p);
-
-    int len = MIN_MATCH-1;
-    int idx = TAB_SIZE;
-
-    int max_match = n-p;
-    if (max_match > MAX_MATCH) max_match = MAX_MATCH;
-
-    foreach (int x; 0..TAB_SIZE) {
-      immutable uint d = tab.ptr[c2][(cnt[c2]-x)&TAB_MASK];
-      if (!d) break;
-
-      if ((d&~BUF_MASK) != hash) continue;
-
-      immutable int s = d&BUF_MASK;
-      if (buf[(s+len)&BUF_MASK] != buf[(p+len)&BUF_MASK] || buf[s] != buf[p]) continue;
-
-      int l = 0;
-      while (++l < max_match) if (buf[(s+l)&BUF_MASK] != buf[(p+l)&BUF_MASK]) break;
-
-      if (l > len) {
-        idx = x;
-        len = l;
-        if (l == max_match) break;
+    int getPtsAt (int p, int n) {
+      immutable int c2 = buf[(p+BUF_SIZE-2)&BUF_MASK]|(buf[(p+BUF_SIZE-1)&BUF_MASK]<<8);//*cast(ushort*)(buf.ptr+p-2);
+      immutable uint hash = getHash(p);
+      int len = MIN_MATCH-1;
+      int idx = TAB_SIZE;
+      int max_match = n-p;
+      if (max_match > MAX_MATCH) max_match = MAX_MATCH;
+      foreach (int x; 0..TAB_SIZE) {
+        immutable uint d = tab[c2*TAB_SIZE+((cnt[c2]-x)&TAB_MASK)];
+        if (!d) break;
+        if ((d&~BUF_MASK) != hash) continue;
+        immutable int s = d&BUF_MASK;
+        if (buf[(s+len)&BUF_MASK] != buf[(p+len)&BUF_MASK] || buf[s] != buf[p]) continue;
+        int l = 0;
+        while (++l < max_match) if (buf[(s+l)&BUF_MASK] != buf[(p+l)&BUF_MASK]) break;
+        if (l > len) {
+          idx = x;
+          len = l;
+          if (l == max_match) break;
+        }
       }
+      return getPts(len, idx);
     }
-
-    return getPts(len, idx);
   }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-version(balz_demo) {
-int main (string[] args) {
-  import core.stdc.time;
-  import std.stdio;
-
-  if (args.length != 4) {
-    write(
-      "BALZ - A ROLZ-based file compressor, v1.20\n"~
-      "\n"~
-      "Usage: BALZ command infile outfile\n"~
-      "\n"~
-      "Commands:\n"~
-      "  c|cx Compress (Normal|Maximum)\n"~
-      "  d    Decompress\n"
-    );
-    return 1;
-  }
-
-  auto fin = File(args[2]);
-  auto fout = File(args[3], "w");
-
-  auto cm = new Balz(
-    // reader
-    (buf) { auto res = fin.rawRead(buf[]); return cast(uint)res.length; },
-    // writer
-    (buf) { fout.rawWrite(buf[]); },
-  );
-
-  // 'e' -- for compatibility with v1.15
-  if (args[1][0] == 'c' || args[1][0] == 'e') {
-    writefln("Compressing %s...", args[2]);
-    long fsz = fin.size;
-    fout.rawWrite((&fsz)[0..1]);
-    auto start = clock();
-    cm.compress(args[1].length > 1 && args[1][1] == 'x');
-    writefln("%s -> %s in %.3fs", fin.size, fout.size, double(clock()-start)/CLOCKS_PER_SEC);
-  } else if (args[1][0] == 'd') {
-    writefln("Decompressing %s...", args[2]);
-    long fsz;
-    fin.rawRead((&fsz)[0..1]);
-    auto start = clock();
-    cm.decompress(fsz);
-    writefln("%s -> %s in %.3fs", fin.size, fout.size, double(clock()-start)/CLOCKS_PER_SEC);
-  } else {
-    writefln("Unknown command: %s", args[1]);
-    return 1;
-  }
-
-  return 0;
-}
-}
+// handy aliases
+alias Balz = BalzCodec!"encoder"; /// alias for Balz encoder
+alias Unbalz = BalzCodec!"decoder"; /// alias for Balz decoder
