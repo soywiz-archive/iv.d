@@ -1,3 +1,5 @@
+module zpack;
+
 import core.time;
 import std.stdio;
 

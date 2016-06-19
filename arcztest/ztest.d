@@ -1,8 +1,8 @@
-module iv.ztest;
+module ztest;
 
+import std.stdio;
 import std.random;
-import iv.vfs;
-import arcz;
+import iv.arcz;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -20,9 +20,9 @@ void main (string[] args) {
   writeln(arc.files.length, " files found");
   ubyte[] ofile;
   {
-    auto fl = VFile(DirName~"/"~FileName);
+    auto fl = File(DirName~"/"~FileName);
     ofile = new ubyte[](cast(uint)fl.size);
-    fl.rawReadExact(ofile[]);
+    fl.rawRead(ofile[]);
   }
 
   auto fl = arc.open(args.length > 2 ? args[2] : FileName);
