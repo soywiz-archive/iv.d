@@ -16,8 +16,9 @@ module iv.balz;
 /// LZ compressor and decompressor.
 ///
 /// memory usage (both for compression and for decompression): 33554432+33554432+262144+655360+65536 bytes (~65MB)
-struct BalzCodec(string mode) {
+struct BalzCodec(string mode, uint BUF_BITS=25) {
 static assert(mode == "encoder" || mode == "decoder", "invalid Balz mode");
+static assert(BUF_BITS >= 8 && BUF_BITS <= 25, "invalid dictionary size");
 
 private:
   enum MAGIC = 0xab; // baLZ
@@ -56,7 +57,7 @@ private:
   enum MIN_MATCH = 3;
   enum MAX_MATCH = 255+MIN_MATCH;
 
-  enum BUF_BITS = 25;
+  //enum BUF_BITS = 25;
   enum BUF_SIZE = 1<<BUF_BITS;
   enum BUF_MASK = cast(uint)(BUF_SIZE-1);
 
