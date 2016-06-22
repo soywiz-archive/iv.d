@@ -3,3 +3,4 @@ module iv.glbinds;
 
 //public import iv.glbinds.binds_minimal;
 public import iv.glbinds.binds_full;
+public import iv.glbinds.utils;
