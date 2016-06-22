@@ -51,333 +51,277 @@ float rad2deg() (float v) pure nothrow @safe @nogc { pragma(inline, true); impor
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct vec2 {
-  float x = 0.0f, y = 0.0f;
-
-nothrow @safe:
-  string toString () const {
-    import std.string : format;
-    try {
-      return "(%s,%s)".format(x, y);
-    } catch (Exception) {
-      assert(0);
-    }
-  }
-
-@nogc:
-  this (float nx, float ny) pure { /*pragma(inline, true);*/ x = nx; y = ny; }
-
-  static vec2 fromAngle (float a) pure {
-    pragma(inline, true);
-    import std.math : cos, sin;
-    return vec2(cos(a), sin(a));
-  }
-
-  float opIndex (usize idx) const pure {
-    pragma(inline, true);
-    return (idx == 0 ? x : idx == 1 ? y : float.nan);
-  }
-
-  void opIndexAssign (float v, usize idx) pure {
-    pragma(inline, true);
-    if (idx == 0) x = v; else if (idx == 1) y = v;
-  }
-
-  ref vec2 normalize () pure {
-    //pragma(inline, true);
-    import std.math : sqrt;
-    immutable float invlength = 1.0f/sqrt(x*x+y*y);
-    x *= invlength;
-    y *= invlength;
-    return this;
-  }
-
-  ref vec2 safeNormalize () pure {
-    //pragma(inline, true);
-    import std.math : sqrt;
-    float invlength = sqrt(x*x+y*y);
-    if (invlength >= FLTEPS) {
-      invlength = 1.0f/invlength;
-      x *= invlength;
-      y *= invlength;
-    } else {
-      x = 1;
-      y = 0;
-    }
-    return this;
-  }
-
-  ref vec2 opOpAssign(string op) (in auto ref vec2 a) if (op == "+" || op == "-" || op == "*") {
-    //pragma(inline, true);
-    mixin("x "~op~"= a.x;");
-    mixin("y "~op~"= a.y;");
-    return this;
-  }
-
-  ref vec2 opOpAssign(string op) (float a) if (op == "+" || op == "-" || op == "*") {
-    //pragma(inline, true);
-    mixin("x "~op~"= a;");
-    mixin("y "~op~"= a;");
-    return this;
-  }
-
-  ref vec2 opOpAssign(string op : "/") (float a) {
-    //pragma(inline, true);
-    import std.math : abs;
-    a = (abs(a) >= FLTEPS ? 1.0f/a : float.nan);
-    x *= a;
-    y *= a;
-    return this;
-  }
-
-const pure:
-  vec2 normalized () { pragma(inline, true); return vec2(x, y).normalize; }
-  vec2 safeNormalized () { pragma(inline, true); return vec2(x, y).safeNormalize; }
-
-  @property float length () {
-    pragma(inline, true);
-    import std.math : sqrt;
-    return sqrt(x*x+y*y);
-  }
-
-  @property float lengthSquared () { pragma(inline, true); return x*x+y*y; }
-
-  @property vec2 tangent () { pragma(inline, true); return vec2(-y, x); }
-
-  // normalized ;-)
-  @property vec2 normal() (in auto ref vec2 v1) {
-    pragma(inline, true);
-    import std.math : sqrt;
-    immutable float dx = v1.x-x, dy = v1.y-dy;
-    float len = sqrt(dx*dx+dy*dy);
-    if (len >= FLTEPS) {
-      len = 1.0f/len;
-      return vec2(-dy*len, dx*len);
-    } else {
-      return vec2(0, 0);
-    }
-  }
-
-  // distance
-  float distance() (in auto ref vec2 a) {
-    pragma(inline, true);
-    import std.math : sqrt;
-    return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y));
-  }
-
-  @property float angle () {
-    pragma(inline, true);
-    import std.math : atan2;
-    return atan2(y, x);
-  }
-
-  @property float angleTo() (in auto ref vec2 v1) {
-    pragma(inline, true);
-    import std.math : atan2, PI;
-    immutable a = atan2(v1.y, v1.x)-atan2(y, x);
-    return (a > PI ? a-2*PI : (a < -PI ? a+2*PI : a));
-  }
-
-  vec2 opBinary(string op) (in auto ref vec2 a) if (op == "+" || op == "-") {
-    pragma(inline, true);
-    mixin("return vec2(x"~op~"a.x, y"~op~"a.y);");
-  }
-
-  // dot product
-  float opBinary(string op : "*") (in auto ref vec2 a) { pragma(inline, true); return x*a.x+y*a.y; }
-
-  vec2 opBinary(string op) (float a) if (op == "+" || op == "-" || op == "*") { pragma(inline, true); mixin("return vec2(x"~op~"a, y"~op~"a);"); }
-  vec2 opBinary(string op : "/") (float a) { pragma(inline, true); import std.math : abs; a = (abs(a) >= FLTEPS ? 1.0f/a : float.nan); return vec2(x*a, y*a); }
-
-  vec2 opUnary(string op : "-") () { pragma(inline, true); return vec2(-x, -y); }
-
-  vec2 abs () { pragma(inline, true); return vec2((x < 0 ? -x : x), (y < 0 ? -y : y)); }
-
-  bool opEquals() (in auto ref vec2 a) { pragma(inline, true); return (x == a.x && y == a.y); }
-
-  // 2d stuff
-  // test if a point (`this`) is left/on/right of an infinite 2d line
-  // return:
-  //   <0: on the right
-  //   =0: on the line
-  //   >0: on the left
-  float side() (in auto ref vec2 v0, in auto ref vec2 v1) const {
-    pragma(inline, true);
-    return ((v1.x-v0.x)*(this.y-v0.y)-(this.x-v0.x)*(v1.y-v0.y));
-  }
-
-  @property float dot() (in auto ref vec2 v) const { pragma(inline, true); return x*v.x+y*v.y; }
-
-  // swizzling
-  auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xy", 2, 3)) {
-    static if (fld.length == 2) {
-      return mixin(SwizzleCtor!("vec2", fld));
-    } else {
-      return mixin(SwizzleCtor!("vec3", fld));
-    }
-  }
-}
+alias vec2 = vecn!2;
+alias vec3 = vecn!3;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct vec3 {
-  float x = 0.0f, y = 0.0f, z = 0.0f;
+struct vecn(ubyte dims) if (dims >= 2 && dims <= 3) {
+private:
+  enum isVector(VT) = (is(VT == vecn!2) || is(VT == vecn!3));
+  enum isVector2(VT) = is(VT == vecn!2);
+  enum isVector3(VT) = is(VT == vecn!3);
+
+public:
+  float x = 0.0f;
+  float y = 0.0f;
+  static if (dims >= 3) float z = 0.0f;
 
 nothrow @safe:
   string toString () const {
     import std.string : format;
     try {
-      return "(%s,%s,%s)".format(x, y, z);
+           static if (dims == 2) return "(%s,%s)".format(x, y);
+      else static if (dims == 3) return "(%s,%s,%s)".format(x, y, z);
+      else static assert(0, "invalid dimension count for vector");
     } catch (Exception) {
       assert(0);
     }
   }
 
 @nogc:
-  this (float nx, float ny, float nz=0.0f) pure {
-    pragma(inline, true);
-    x = nx;
-    y = ny;
-    z = nz;
+  static if (dims == 2)
+  this (in float ax, in float ay) pure {
+    //pragma(inline, true);
+    x = ax;
+    y = ay;
   }
 
-  this() (in auto ref vec2 v) pure {
-    pragma(inline, true);
+  static if (dims == 3)
+  this (in float ax, in float ay, in float az) pure {
+    //pragma(inline, true);
+    x = ax;
+    y = ay;
+    z = az;
+  }
+
+  this(VT) (in auto ref VT v) pure if (isVector!VT) {
+    //pragma(inline, true);
     x = v.x;
     y = v.y;
-    z = 0.0f;
+    static if (dims == 3) {
+      static if (isVector3!VT) z = v.z; else z = 0.0f;
+    }
   }
 
   float opIndex (usize idx) const pure {
     pragma(inline, true);
-    return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : float.nan);
+         static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : float.nan);
+    else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : float.nan);
+    else static assert(0, "invalid dimension count for vector");
   }
 
   void opIndexAssign (float v, usize idx) pure {
     pragma(inline, true);
-    if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v;
+         static if (dims == 2) { if (idx == 0) x = v; else if (idx == 1) y = v; }
+    else static if (dims == 3) { if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v; }
+    else static assert(0, "invalid dimension count for vector");
   }
 
-  ref vec3 normalize () pure {
-    pragma(inline, true);
+  ref auto normalize () pure {
+    //pragma(inline, true);
     import std.math : sqrt;
-    immutable float invlength = 1.0f/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) immutable float invlength = 1.0f/sqrt(x*x+y*y);
+    else static if (dims == 3) immutable float invlength = 1.0f/sqrt(x*x+y*y+z*z);
+    else static assert(0, "invalid dimension count for vector");
     x *= invlength;
     y *= invlength;
-    z *= invlength;
+    static if (dims == 3) z *= invlength;
     return this;
   }
 
-  ref vec3 safeNormalize () pure {
-    pragma(inline, true);
+  ref auto safeNormalize () pure {
+    //pragma(inline, true);
     import std.math : sqrt;
-    float invlength = sqrt(x*x+y*y+z*z);
+         static if (dims == 2) float invlength = 1.0f/sqrt(x*x+y*y);
+    else static if (dims == 3) float invlength = 1.0f/sqrt(x*x+y*y+z*z);
+    else static assert(0, "invalid dimension count for vector");
     if (invlength >= FLTEPS) {
       invlength = 1.0f/invlength;
       x *= invlength;
       y *= invlength;
-      z *= invlength;
+      static if (dims == 3) z *= invlength;
     } else {
       x = 1;
       y = 0;
-      z = 0;
+      static if (dims == 3) z = 0;
     }
     return this;
   }
 
-  ref vec3 opOpAssign(string op) (in auto ref vec3 a) if (op == "+" || op == "-" || op == "*") {
-    pragma(inline, true);
+  ref auto opOpAssign(string op, VT) (in auto ref VT a) if (isVector!VT && (op == "+" || op == "-" || op == "*")) {
+    //pragma(inline, true);
     mixin("x "~op~"= a.x;");
     mixin("y "~op~"= a.y;");
-    mixin("z "~op~"= a.z;");
+    static if (dims == 3 && isVector3!VT) mixin("z "~op~"= a.z;");
     return this;
   }
 
-  ref vec3 opOpAssign(string op) (float a) if (op == "+" || op == "-" || op == "*") {
-    pragma(inline, true);
+  ref auto opOpAssign(string op) (float a) if (op == "+" || op == "-" || op == "*") {
+    //pragma(inline, true);
     mixin("x "~op~"= a;");
     mixin("y "~op~"= a;");
-    mixin("z "~op~"= a;");
+    static if (dims == 3) mixin("z "~op~"= a;");
     return this;
   }
 
-  ref vec3 opOpAssign(string op : "/") (float a) {
+  ref auto opOpAssign(string op:"/") (float a) {
     import std.math : abs;
-    pragma(inline, true);
+    //pragma(inline, true);
     a = (abs(a) >= FLTEPS ? 1.0f/a : float.nan);
     x *= a;
     y *= a;
-    z *= a;
+    static if (dims == 3) z *= a;
     return this;
   }
 
 const pure:
-  vec3 normalized () { pragma(inline, true); return vec3(x, y, z).normalize; }
-  vec3 safeNormalized () { pragma(inline, true); return vec3(x, y, z).safeNormalize; }
+  auto normalized () {
+    pragma(inline, true);
+    static if (dims == 2) return vec2(x, y).normalize; else return vec3(x, y, z).normalize;
+  }
+
+  auto safeNormalized () {
+    pragma(inline, true);
+    static if (dims == 2) return vec2(x, y).safeNormalize; else return vec3(x, y, z).safeNormalize;
+  }
 
   @property float length () {
     pragma(inline, true);
     import std.math : sqrt;
-    return sqrt(x*x+y*y+z*z);
+         static if (dims == 2) return sqrt(x*x+y*y);
+    else static if (dims == 3) return sqrt(x*x+y*y+z*z);
+    else static assert(0, "invalid dimension count for vector");
   }
 
-  @property float lengthSquared () { pragma(inline, true); return x*x+y*y+z*z; }
+  @property float lengthSquared () {
+    pragma(inline, true);
+         static if (dims == 2) return x*x+y*y;
+    else static if (dims == 3) return x*x+y*y+z*z;
+    else static assert(0, "invalid dimension count for vector");
+  }
 
   // distance
-  float distance() (in auto ref vec3 a) {
+  float distance(VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     import std.math : sqrt;
-    return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+(z-a.z)*(z-a.z));
+    static if (dims == 2) {
+           static if (isVector2!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y));
+      else static if (isVector3!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+a.z*a.z);
+      else static assert(0, "invalid dimension count for vector");
+    } else static if (dims == 3) {
+           static if (isVector2!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+z*z);
+      else static if (isVector3!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+(z-a.z)*(z-a.z));
+      else static assert(0, "invalid dimension count for vector");
+    } else {
+      static assert(0, "invalid dimension count for vector");
+    }
   }
 
-  vec3 opBinary(string op) (in auto ref vec3 a) if (op == "+" || op == "-") {
+  auto opBinary(string op, VT) (in auto ref VT a) if (isVector!VT && (op == "+" || op == "-")) {
     pragma(inline, true);
-    mixin("return vec3(x"~op~"a.x, y"~op~"a.y, z"~op~"a.z);");
+         static if (dims == 2 && isVector2!VT) mixin("return vec2(x"~op~"a.x, y"~op~"a.y);");
+    else static if (dims == 2 && isVector3!VT) mixin("return vec3(x"~op~"a.x, y"~op~"a.y, 0);");
+    else static if (dims == 3 && isVector2!VT) mixin("return vec3(x"~op~"a.x, y"~op~"a.y, 0);");
+    else static if (dims == 3 && isVector3!VT) mixin("return vec3(x"~op~"a.x, y"~op~"a.y, z"~op~"a.z);");
+    else static assert(0, "invalid dimension count for vector");
   }
 
   // dot product
-  float opBinary(string op : "*") (in auto ref vec3 a) { pragma(inline, true); return x*a.x+y*a.y+z*a.z; }
-
-  // cross product
-  vec3 opBinary(string op : "%") (in auto ref vec3 a) { pragma(inline, true); return vec3(y*a.z-z*a.y, z*a.x-x*a.z, x*a.y-y*a.x); }
-
-  vec3 opBinary(string op) (float a) if (op == "+" || op == "-" || op == "*") { pragma(inline, true); mixin("return vec2(x"~op~"a, y"~op~"a, z"~op~"a);"); }
-  vec3 opBinary(string op : "/") (float a) { pragma(inline, true); import std.math : abs; a = (abs(a) >= FLTEPS ? 1.0f/a : float.nan); return vec3(x*a, y*a, z*a); }
-
-  vec3 opUnary(string op : "-") () { pragma(inline, true); return vec3(-x, -y, -z); }
-
-  vec3 abs () { pragma(inline, true); return vec3((x < 0 ? -x : x), (y < 0 ? -y : y), (z < 0 ? -z : z)); }
-
-  bool opEquals() (in auto ref vec3 a) { pragma(inline, true); return (x == a.x && y == a.y && z == a.z); }
-
-  // this dot v
-  @property float dot() (in auto ref vec2 v) const { pragma(inline, true); return x*v.x+y*v.y+z*v.z; }
-
-  // this cross v
-  vec3 cross() (in auto ref vec2 v) const {
+  float opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
-    return vec3(
-      (y*v.z)-(z*v.y),
-      (z*v.x)-(x*v.z),
-      (x*v.y)-(y*v.x)
-    );
+    static if (dims == 2) {
+      return x*a.x+y*a.y;
+    } else static if (dims == 3) {
+           static if (isVector2!VT) return x*a.x+y*a.y;
+      else static if (isVector3!VT) return x*a.x+y*a.y+z*a.z;
+      else static assert(0, "invalid dimension count for vector");
+    } else {
+      static assert(0, "invalid dimension count for vector");
+    }
   }
 
+  // cross product
+  auto opBinary(string op:"%", VT) (in auto ref VT a) if (isVector!VT) {
+    pragma(inline, true);
+         static if (dims == 2 && isVector2!VT) return vec3(0, 0, x*a.y-y*a.x);
+    else static if (dims == 2 && isVector3!VT) return vec3(y*a.z, -x*a.z, x*a.y-y*a.x);
+    else static if (dims == 3 && isVector2!VT) return vec3(-z*a.y, z*a.x, x*a.y-y*a.x);
+    else static if (dims == 3 && isVector3!VT) return vec3(y*a.z-z*a.y, z*a.x-x*a.z, x*a.y-y*a.x);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  auto opBinary(string op) (float a) if (op == "+" || op == "-" || op == "*") {
+    pragma(inline, true);
+         static if (dims == 2) mixin("return vec2(x"~op~"a, y"~op~"a);");
+    else static if (dims == 3) mixin("return vec3(x"~op~"a, y"~op~"a, z"~op~"a);");
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  auto opBinary(string op:"/") (float a) {
+    pragma(inline, true);
+    import std.math : abs;
+    immutable float a = (abs(a) >= FLTEPS ? 1.0f/a : float.nan);
+         static if (dims == 2) return vec2(x*a, y*a);
+    else static if (dims == 3) return vec3(x*a, y*a, z*a);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  auto opUnary(string op:"-") () {
+    pragma(inline, true);
+         static if (dims == 2) return vec2(-x, -y);
+    else static if (dims == 3) return vec3(-x, -y, -z);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  auto abs () {
+    pragma(inline, true);
+    import std.math : abs;
+         static if (dims == 2) return vec2(abs(x), abs(y));
+    else static if (dims == 3) return vec3(abs(x), abs(y), abs(z));
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  bool opEquals(VT) (in auto ref VT a) if (isVector!VT) {
+    pragma(inline, true);
+         static if (dims == 2 && isVector2!VT) return (x == a.x && y == a.y);
+    else static if (dims == 2 && isVector3!VT) return (x == a.x && y == a.y && a.z == 0);
+    else static if (dims == 3 && isVector2!VT) return (x == a.x && y == a.y && z == 0);
+    else static if (dims == 3 && isVector3!VT) return (x == a.x && y == a.y && z == a.z);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  // this dot v
+  @property float dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
+
+  // this cross v
+  auto cross(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this%v; }
+
   // compute Euler angles from direction vector (this) (with zero roll)
-  vec3 hpr () {
+  auto hpr () {
     import std.math : atan2, sqrt;
     auto tmp = this.normalized;
     /*hpr.x = -atan2(tmp.x, tmp.y);
       hpr.y = -atan2(tmp.z, sqrt(tmp.x*tmp.x+tmp.y*tmp.y));*/
-    return vec3(
-      atan2(tmp.x, tmp.z),
-      -atan2(tmp.y, sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
-      0
-    );
+    static if (dims == 2) {
+      return vec2(
+        atan2(tmp.x, 0.0f),
+        -atan2(tmp.y, tmp.x),
+      );
+    } else {
+      return vec3(
+        atan2(tmp.x, tmp.z),
+        -atan2(tmp.y, sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
+        0
+      );
+    }
   }
 
   // swizzling
-  auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xyz", 2, 3)) {
+  auto opDispatch(string fld) ()
+  if ((dims == 2 && isGoodSwizzling!(fld, "xy", 2, 3)) ||
+      (dims == 3 && isGoodSwizzling!(fld, "xyz", 2, 3)))
+  {
     static if (fld.length == 2) {
       return mixin(SwizzleCtor!("vec2", fld));
     } else {
@@ -385,8 +329,6 @@ const pure:
     }
   }
 }
-
-
 // ////////////////////////////////////////////////////////////////////////// //
 // plane in 3D space: Ax+By+Cz+D=0
 struct plane3 {
@@ -430,7 +372,12 @@ nothrow @safe:
     return this;
   }
 
-  bool pointSide() (in auto ref vec3 p) const pure { return (a*p.x+b*p.y+c*p.z+d >= 0); }
+  bool pointSide(VT) (in auto ref VT p) const pure if (isVector!VT) {
+    pragma(inline, true);
+         static if (isVector2!VT) return (a*p.x+b*p.y+d >= 0);
+    else static if (isVector3!VT) return (a*p.x+b*p.y+c*p.z+d >= 0);
+    else static assert(0, "invalid dimension count for vector");
+  }
   //float distance() (in auto ref vec3 p) const pure { return a*p.x+b*p.y+c*p.z+d; }
 
   // swizzling
@@ -505,7 +452,7 @@ pure @nogc:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct bbox(VT) if (is(VT == vec2) || is(VT == vec3)) {
+struct bbox(VT) if (isVector!VT) {
   // vertexes
   VT v0, v1; // min and max respective
 
@@ -519,10 +466,11 @@ pure nothrow @safe @nogc:
     pragma(inline, true);
     v0.x = v0.y = float.infinity;
     v1.x = v1.y = -float.infinity;
+    static if (isVector3!VT) v1.z = v1.z = -float.infinity;
   }
 
-  void addPoint() (in auto ref VT v) {
-    static if (is(VT == vec2)) enum vclen = 2; else enum vclen = 3;
+  void addPoint() (in auto ref VT v) if (isVector!VT) {
+    static if (isVector2!VT) enum vclen = 2; else enum vclen = 3;
     import std.algorithm : min, max;
     foreach (immutable cidx; 0..vclen) {
       v0[cidx] = min(v0[cidx], v[cidx]);
@@ -535,9 +483,9 @@ pure nothrow @safe @nogc:
     addPoint(b.v1);
   }
 
-  bool inside() (in auto ref VT p) const {
+  bool inside() (in auto ref VT p) const if (isVector!VT) {
     pragma(inline, true);
-    static if (is(VT == vec2)) {
+    static if (isVector2!VT) {
       return (p.x >= v0.x && p.y >= v0.y && p.x <= v1.x && p.y <= v1.y);
     } else {
       return (p.x >= v0.x && p.y >= v0.y && p.z >= v0.z && p.x <= v1.x && p.y <= v1.y && p.z <= v1.z);
@@ -548,10 +496,10 @@ pure nothrow @safe @nogc:
   void extrude (float delta=0.0000015f) {
     v0.x -= delta;
     v0.y -= delta;
-    static if (is(VT == vec3)) v0.z -= delta;
+    static if (isVector3!VT) v0.z -= delta;
     v1.x += delta;
     v1.y += delta;
-    static if (is(VT == vec3)) v0.z += delta;
+    static if (isVector3!VT) v0.z += delta;
   }
 }
 
