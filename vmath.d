@@ -44,10 +44,18 @@ private template SwizzleCtor(string stn, string s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum FLTEPS = 0.000001f;
+static if (!is(typeof(Float))) {
+  version(vmath_float) alias Float = float; else alias Float = double;
+}
 
-float deg2rad() (float v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*PI/180.0f; }
-float rad2deg() (float v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*180.0f/PI; }
+enum FLTEPS = 1e-6f;
+enum DBLEPS = 1e-18f;
+     static if (is(Float == float)) public enum EPSILON = FLTEPS;
+else static if (is(Float == double)) public enum EPSILON = DBLEPS;
+else static assert(0, "vmath: invalid Float type");
+
+auto deg2rad(T) (T v) pure nothrow @safe @nogc if (is(T == float) || is(T == double)) { pragma(inline, true); import std.math : PI; return v*PI/180.0; }
+auto rad2deg(T) (T v) pure nothrow @safe @nogc if (is(T == float) || is(T == double)) { pragma(inline, true); import std.math : PI; return v*180.0/PI; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -56,16 +64,16 @@ alias vec3 = vecn!3;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct vecn(ubyte dims) if (dims >= 2 && dims <= 3) {
+struct vecn(ubyte dims) if (dims >= 2 && dims <= 3 && (is(Float == float) || is(Float == double))) {
 private:
   enum isVector(VT) = (is(VT == vecn!2) || is(VT == vecn!3));
   enum isVector2(VT) = is(VT == vecn!2);
   enum isVector3(VT) = is(VT == vecn!3);
 
 public:
-  float x = 0.0f;
-  float y = 0.0f;
-  static if (dims >= 3) float z = 0.0f;
+  Float x = 0.0;
+  Float y = 0.0;
+  static if (dims >= 3) Float z = 0.0;
 
 nothrow @safe:
   string toString () const {
@@ -80,15 +88,21 @@ nothrow @safe:
   }
 
 @nogc:
+  this (in Float[] c...) pure @trusted {
+    x = (c.length >= 1 ? c.ptr[0] : 0);
+    y = (c.length >= 2 ? c.ptr[1] : 0);
+    static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
+  }
+
   static if (dims == 2)
-  this (in float ax, in float ay) pure {
+  this (in Float ax, in Float ay) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
   }
 
   static if (dims == 3)
-  this (in float ax, in float ay, in float az) pure {
+  this (in Float ax, in Float ay, in Float az) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
@@ -100,18 +114,18 @@ nothrow @safe:
     x = v.x;
     y = v.y;
     static if (dims == 3) {
-      static if (isVector3!VT) z = v.z; else z = 0.0f;
+      static if (isVector3!VT) z = v.z; else z = 0.0;
     }
   }
 
-  float opIndex (usize idx) const pure {
+  Float opIndex (usize idx) const pure {
     pragma(inline, true);
-         static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : float.nan);
-    else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : float.nan);
+         static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : Float.nan);
+    else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : Float.nan);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void opIndexAssign (float v, usize idx) pure {
+  void opIndexAssign (Float v, usize idx) pure {
     pragma(inline, true);
          static if (dims == 2) { if (idx == 0) x = v; else if (idx == 1) y = v; }
     else static if (dims == 3) { if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v; }
@@ -121,8 +135,8 @@ nothrow @safe:
   ref auto normalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) immutable float invlength = 1.0f/sqrt(x*x+y*y);
-    else static if (dims == 3) immutable float invlength = 1.0f/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) immutable Float invlength = 1.0/sqrt(x*x+y*y);
+    else static if (dims == 3) immutable Float invlength = 1.0/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
     x *= invlength;
     y *= invlength;
@@ -133,11 +147,11 @@ nothrow @safe:
   ref auto safeNormalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) float invlength = 1.0f/sqrt(x*x+y*y);
-    else static if (dims == 3) float invlength = 1.0f/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) Float invlength = 1.0/sqrt(x*x+y*y);
+    else static if (dims == 3) Float invlength = 1.0/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
-    if (invlength >= FLTEPS) {
-      invlength = 1.0f/invlength;
+    if (invlength >= EPSILON) {
+      invlength = 1.0/invlength;
       x *= invlength;
       y *= invlength;
       static if (dims == 3) z *= invlength;
@@ -157,7 +171,7 @@ nothrow @safe:
     return this;
   }
 
-  ref auto opOpAssign(string op) (float a) if (op == "+" || op == "-" || op == "*") {
+  ref auto opOpAssign(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
     //pragma(inline, true);
     mixin("x "~op~"= a;");
     mixin("y "~op~"= a;");
@@ -165,10 +179,10 @@ nothrow @safe:
     return this;
   }
 
-  ref auto opOpAssign(string op:"/") (float a) {
+  ref auto opOpAssign(string op:"/") (Float a) {
     import std.math : abs;
     //pragma(inline, true);
-    a = (abs(a) >= FLTEPS ? 1.0f/a : float.nan);
+    a = (abs(a) >= EPSILON ? 1.0/a : Float.nan);
     x *= a;
     y *= a;
     static if (dims == 3) z *= a;
@@ -176,6 +190,11 @@ nothrow @safe:
   }
 
 const pure:
+  auto lerp(VT) (in auto ref VT a, in Float t) if (isVector!VT) {
+    pragma(inline, true);
+    return this+(a-this)*t;
+  }
+
   auto normalized () {
     pragma(inline, true);
     static if (dims == 2) return vec2(x, y).normalize; else return vec3(x, y, z).normalize;
@@ -186,7 +205,7 @@ const pure:
     static if (dims == 2) return vec2(x, y).safeNormalize; else return vec3(x, y, z).safeNormalize;
   }
 
-  @property float length () {
+  @property Float length () {
     pragma(inline, true);
     import std.math : sqrt;
          static if (dims == 2) return sqrt(x*x+y*y);
@@ -194,7 +213,7 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  @property float lengthSquared () {
+  @property Float lengthSquared () {
     pragma(inline, true);
          static if (dims == 2) return x*x+y*y;
     else static if (dims == 3) return x*x+y*y+z*z;
@@ -202,7 +221,7 @@ const pure:
   }
 
   // distance
-  float distance(VT) (in auto ref VT a) if (isVector!VT) {
+  Float distance(VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     import std.math : sqrt;
     static if (dims == 2) {
@@ -228,7 +247,7 @@ const pure:
   }
 
   // dot product
-  float opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
+  Float opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     static if (dims == 2) {
       return x*a.x+y*a.y;
@@ -251,17 +270,17 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op) (float a) if (op == "+" || op == "-" || op == "*") {
+  auto opBinary(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
     pragma(inline, true);
          static if (dims == 2) mixin("return vec2(x"~op~"a, y"~op~"a);");
     else static if (dims == 3) mixin("return vec3(x"~op~"a, y"~op~"a, z"~op~"a);");
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op:"/") (float a) {
+  auto opBinary(string op:"/") (Float a) {
     pragma(inline, true);
     import std.math : abs;
-    immutable float a = (abs(a) >= FLTEPS ? 1.0f/a : float.nan);
+    immutable Float a = (abs(a) >= EPSILON ? 1.0/a : Float.nan);
          static if (dims == 2) return vec2(x*a, y*a);
     else static if (dims == 3) return vec3(x*a, y*a, z*a);
     else static assert(0, "invalid dimension count for vector");
@@ -292,7 +311,7 @@ const pure:
   }
 
   // this dot v
-  @property float dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
+  @property Float dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
 
   // this cross v
   auto cross(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this%v; }
@@ -305,13 +324,13 @@ const pure:
       hpr.y = -atan2(tmp.z, sqrt(tmp.x*tmp.x+tmp.y*tmp.y));*/
     static if (dims == 2) {
       return vec2(
-        atan2(tmp.x, 0.0f),
-        -atan2(tmp.y, tmp.x),
+        atan2(cast(Float)tmp.x, cast(Float)0.0),
+        -atan2(cast(Float)tmp.y, cast(Float)tmp.x),
       );
     } else {
       return vec3(
-        atan2(tmp.x, tmp.z),
-        -atan2(tmp.y, sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
+        atan2(cast(Float)tmp.x, cast(Float)tmp.z),
+        -atan2(cast(Float)tmp.y, cast(Float)sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
         0
       );
     }
@@ -332,7 +351,7 @@ const pure:
 // ////////////////////////////////////////////////////////////////////////// //
 // plane in 3D space: Ax+By+Cz+D=0
 struct plane3 {
-  float a = 0, b = 0, c = 0, d = 0;
+  Float a = 0, b = 0, c = 0, d = 0;
 
 nothrow @safe:
   string toString () const {
@@ -347,21 +366,21 @@ nothrow @safe:
 @nogc:
   this() (in auto ref plane3 p) pure { a = p.a; b = p.b; c = p.c; d = p.d; }
 
-  float opIndex (usize idx) const pure {
+  Float opIndex (usize idx) const pure {
     pragma(inline, true);
-    return (idx == 0 ? a : idx == 1 ? b : idx == 2 ? c : idx == 3 ? d : float.nan);
+    return (idx == 0 ? a : idx == 1 ? b : idx == 2 ? c : idx == 3 ? d : Float.nan);
   }
 
-  void opIndexAssign (float v, usize idx) pure {
+  void opIndexAssign (Float v, usize idx) pure {
     pragma(inline, true);
     if (idx == 0) a = v; else if (idx == 1) b = v; else if (idx == 2) c = v; else if (idx == 3) d = v;
   }
 
   ref plane3 normalized () pure {
     import std.math : sqrt;
-    float dd = sqrt(a*a+b*b+c*c);
-    if (dd >= FLTEPS) {
-      dd = 1.0f/dd;
+    Float dd = sqrt(a*a+b*b+c*c);
+    if (dd >= EPSILON) {
+      dd = 1.0/dd;
       a *= dd;
       b *= dd;
       c *= dd;
@@ -372,13 +391,14 @@ nothrow @safe:
     return this;
   }
 
-  bool pointSide(VT) (in auto ref VT p) const pure if (isVector!VT) {
-    pragma(inline, true);
-         static if (isVector2!VT) return (a*p.x+b*p.y+d >= 0);
-    else static if (isVector3!VT) return (a*p.x+b*p.y+c*p.z+d >= 0);
+  int pointSide(VT) (in auto ref VT p) const pure if (isVector!VT) {
+    //pragma(inline, true);
+         static if (isVector2!VT) immutable s = (a*p.x+b*p.y+d >= 0);
+    else static if (isVector3!VT) immutable s = (a*p.x+b*p.y+c*p.z+d >= 0);
     else static assert(0, "invalid dimension count for vector");
+    return (s < EPSILON ? -1 : (s > EPSILON ? 1 : 0));
   }
-  //float distance() (in auto ref vec3 p) const pure { return a*p.x+b*p.y+c*p.z+d; }
+  //Float distance() (in auto ref vec3 p) const pure { return a*p.x+b*p.y+c*p.z+d; }
 
   // swizzling
   auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "abcd", 2, 3)) {
@@ -407,10 +427,10 @@ nothrow @safe:
   }
 
 pure @nogc:
-  this (float x, float y, float angle) { pragma(inline, true); setOrgDir(x, y, angle); }
-  this() (in auto ref vec2 aorg, float angle) { pragma(inline, true); setOrgDir(aorg, angle); }
+  this (Float x, Float y, Float angle) { pragma(inline, true); setOrgDir(x, y, angle); }
+  this() (in auto ref vec2 aorg, Float angle) { pragma(inline, true); setOrgDir(aorg, angle); }
 
-  void setOrgDir (float x, float y, float angle) {
+  void setOrgDir (Float x, Float y, Float angle) {
     pragma(inline, true);
     org.x = x;
     org.y = y;
@@ -419,7 +439,7 @@ pure @nogc:
     dir.y = sin(angle);
   }
 
-  void setOrgDir() (in auto ref vec2 aorg, float angle) {
+  void setOrgDir() (in auto ref vec2 aorg, Float angle) {
     pragma(inline, true);
     org.x = aorg.x;
     org.y = aorg.y;
@@ -428,7 +448,7 @@ pure @nogc:
     dir.y = sin(angle);
   }
 
-  void setOrg (float x, float y) {
+  void setOrg (Float x, Float y) {
     pragma(inline, true);
     org.x = x;
     org.y = y;
@@ -440,7 +460,7 @@ pure @nogc:
     org.y = aorg.y;
   }
 
-  void setDir (float angle) {
+  void setDir (Float angle) {
     pragma(inline, true);
     import std.math : cos, sin;
     dir.x = cos(angle);
@@ -464,9 +484,9 @@ pure nothrow @safe @nogc:
 
   void reset () {
     pragma(inline, true);
-    v0.x = v0.y = float.infinity;
-    v1.x = v1.y = -float.infinity;
-    static if (isVector3!VT) v1.z = v1.z = -float.infinity;
+    v0.x = v0.y = double.infinity;
+    v1.x = v1.y = -double.infinity;
+    static if (isVector3!VT) v1.z = v1.z = -double.infinity;
   }
 
   void addPoint() (in auto ref VT v) if (isVector!VT) {
@@ -493,7 +513,7 @@ pure nothrow @safe @nogc:
   }
 
   // extrude bbox a little, to compensate floating point inexactness
-  void extrude (float delta=0.0000015f) {
+  void extrude (double delta=0.0000015) {
     v0.x -= delta;
     v0.y -= delta;
     static if (isVector3!VT) v0.z -= delta;
@@ -506,7 +526,7 @@ pure nothrow @safe @nogc:
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct mat4 {
-  float[4*4] mt = 0; // OpenGL-compatible, row by row
+  Float[4*4] mt = 0; // OpenGL-compatible, row by row
 
 nothrow @safe:
   string toString () const @trusted {
@@ -523,7 +543,7 @@ nothrow @safe:
     }
   }
 
-  @property ref float opIndex (usize r, usize c) @trusted @nogc { pragma(inline, true); return (r < 4 && c < 4 ? mt.ptr[c*4+r] : mt.ptr[0]); }
+  @property ref Float opIndex (usize r, usize c) @trusted @nogc { pragma(inline, true); return (r < 4 && c < 4 ? mt.ptr[c*4+r] : mt.ptr[0]); }
 
 pure @nogc:
   this() (in auto ref mat4 m) { mt[] = m.mt[]; }
@@ -538,7 +558,7 @@ pure @nogc:
   static mat4 zero () { pragma(inline, true); return mat4(); }
   static mat4 identity () @trusted { pragma(inline, true); mat4 res; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res; }
 
-  static mat4 rotateX (float angle) @trusted {
+  static mat4 rotateX (Float angle) @trusted {
     import std.math : cos, sin;
     mat4 res;
     res.mt.ptr[0*4+0] = 1.0;
@@ -550,7 +570,7 @@ pure @nogc:
     return res;
   }
 
-  static mat4 rotateY (float angle) @trusted {
+  static mat4 rotateY (Float angle) @trusted {
     import std.math : cos, sin;
     mat4 res;
     res.mt.ptr[0*4+0] = cos(angle);
@@ -562,7 +582,7 @@ pure @nogc:
     return res;
   }
 
-  static mat4 rotateZ (float angle) @trusted {
+  static mat4 rotateZ (Float angle) @trusted {
     import std.math : cos, sin;
     mat4 res;
     res.mt.ptr[0*4+0] = cos(angle);
@@ -665,14 +685,14 @@ pure @nogc:
     return res;
   }
 
-  mat4 opBinary(string op : "*") (float a) const {
+  mat4 opBinary(string op : "*") (Float a) const {
     auto res = mat4(this);
     //foreach (ref v; res.mt) v *= a;
     res.mt[] *= a;
     return res;
   }
 
-  mat4 opBinary(string op : "/") (float a) const {
+  mat4 opBinary(string op : "/") (Float a) const {
     import std.math : abs;
     auto res = mat4(this);
     if (abs(a) >= FLTEPS) {
@@ -708,15 +728,15 @@ pure @nogc:
   }
 
   // returns determinant of matrix without given column and row
-  float cofactor (int x, int y) const {
+  Float cofactor (int x, int y) const {
     int[3] xx, yy;
     foreach (int i; 0..3) {
       if (i < x) xx.ptr[i] = i; else xx.ptr[i] = i+1;
       if (i < y) yy.ptr[i] = i; else yy.ptr[i] = i+1;
     }
-    float det = 0;
+    Float det = 0;
     foreach (int i; 0..3) {
-      float plus = 1, minus = 1;
+      Float plus = 1, minus = 1;
       foreach (int j; 0..3) {
         plus = plus*mt.ptr[xx.ptr[j]+(yy.ptr[(i+j)%3])*4];
         minus = minus*mt.ptr[xx.ptr[2-j]+(yy.ptr[(i+j)%3])*4];
@@ -726,8 +746,8 @@ pure @nogc:
     return det;
   }
 
-  float determinant () const {
-    float det = 0;
+  Float determinant () const {
+    Float det = 0;
     foreach (int i; 0..4) {
       foreach (int j; 0..4) {
         det += mt.ptr[i+j*4]*cofactor(i, j);
@@ -748,7 +768,7 @@ pure @nogc:
 
   mat4 invert () const {
     import std.math : abs;
-    float det = determinant;
+    Float det = determinant;
     if (abs(det) >= FLTEPS) {
       return adjoint/det;
     } else {
@@ -769,7 +789,7 @@ pure @nogc:
 
 /+
   ////////////////////////////////////////////////////////////////////////////////
-  void mat4::addColumns (int c1, int c2, float *a) const {
+  void mat4::addColumns (int c1, int c2, Float *a) const {
     a[0] = mt.ptr[c1][0]+mt.ptr[c2][0];
     a[1] = mt.ptr[c1][1]+mt.ptr[c2][1];
     a[2] = mt.ptr[c1][2]+mt.ptr[c2][2];
@@ -777,7 +797,7 @@ pure @nogc:
   }
 
 
-  void mat4::subColumns (int c1, int c2, float *a) const {
+  void mat4::subColumns (int c1, int c2, Float *a) const {
     a[0] = mt.ptr[c1][0]-mt.ptr[c2][0];
     a[1] = mt.ptr[c1][1]-mt.ptr[c2][1];
     a[2] = mt.ptr[c1][2]-mt.ptr[c2][2];
@@ -794,7 +814,7 @@ pure @nogc:
   //  m4
 
   void mat4::glGetProjectionMatrix () {
-    float a[16];
+    Float a[16];
     //
     glGetDoublev(GL_PROJECTION_MATRIX, a);
     for (int i = 0; i < 4; ++i)
@@ -804,7 +824,7 @@ pure @nogc:
 
 
   void mat4::glGetModelviewMatrix () {
-    float a[16];
+    Float a[16];
     //
     glGetDoublev(GL_MODELVIEW_MATRIX, a);
     for (int i = 0; i < 4; ++i)
@@ -814,7 +834,7 @@ pure @nogc:
 
 
   void mat4::glLoadMatrix () const {
-    float a[16];
+    Float a[16];
     //
     for (int i = 0; i < 4; ++i)
       for (int j = 0; j < 4; ++j)
@@ -824,7 +844,7 @@ pure @nogc:
 
 
   void mat4::glMultMatrix () const {
-    float a[16];
+    Float a[16];
     //
     for (int i = 0; i < 4; ++i)
       for (int j = 0; j < 4; ++j)
