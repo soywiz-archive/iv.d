@@ -66,12 +66,14 @@ void doMain (string[] args) {
     write(
       "zpack [options] -o outfile sourcedir\n"~
       "options:\n"~
-      "  -b  block size [1..32MB] (default is 256KB)\n"
+      "  -b     block size [1..32MB] (default is 256KB)\n"~
+      "  --balz use Balz compressor instead of zlib\n"
     );
   }
 
   string outfname = null;
   string srcdir = null;
+  bool useBalz = false;
 
   ubyte[] rdbuf;
   rdbuf.length = 65536;
@@ -87,6 +89,7 @@ void doMain (string[] args) {
       if (arg == "--") { nomore = true; continue; }
       if (arg == "-") throw new Exception("stdin is not supported");
       if (arg[0] == '-') {
+        if (arg == "--balz") { useBalz = true; continue; }
         if (arg[1] == '-') throw new Exception("long options aren't supported");
         arg = arg[1..$];
         while (arg.length) {
@@ -172,7 +175,7 @@ void doMain (string[] args) {
     return (a.name < b.name);
   });
 
-  auto arcz = new ArzCreator(outfname, blockSize);
+  auto arcz = new ArzCreator(outfname, blockSize, useBalz);
   auto stt = MonoTime.currTime;
   foreach (immutable filenum, ref nfo; filelist) {
     arcz.newFile(nfo.name, nfo.size);

@@ -8,10 +8,9 @@
  */
 module iv.arcz;
 
-// uncomment this to use Balz compressor
-//version = arcz_use_balz;
-
-version(arcz_use_balz) import iv.balz;
+// use Balz compressor if available
+static if (__traits(compiles, { import iv.balz; })) enum arcz_has_balz = true; else enum arcz_has_balz = false;
+static if (arcz_has_balz) import iv.balz;
 
 // comment this to free pakced chunk buffer right after using
 // i.e. `AZFile` will allocate new block for each new chunk
@@ -46,6 +45,7 @@ private:
     FileInfo[string] files;
     uint chunkSize;
     uint lastChunkSize;
+    bool useBalz;
     FILE* afl; // archive file, we'll keep it opened
 
     @disable this (this); // no copies!
@@ -113,7 +113,7 @@ private:
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
         static immutable T i = T.init;
-        memcpy(res, &i, T.sizeof);
+        foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }
       return cast(T*)res;
@@ -124,7 +124,7 @@ private:
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
         static immutable T i = T.init;
-        memcpy(res, &i, T.sizeof);
+        foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }
       return cast(T*)res;
@@ -139,7 +139,7 @@ private:
     }
   }
 
-  version(arcz_use_balz) static ubyte balzDictSize (uint blockSize) {
+  static if (arcz_has_balz) static ubyte balzDictSize (uint blockSize) {
     foreach (ubyte bits; Balz.MinDictBits..Balz.MaxDictBits+1) {
       if ((1U<<bits) >= blockSize) return bits;
     }
@@ -147,54 +147,64 @@ private:
   }
 
   // unpack exactly `destlen` bytes
-  static void unpackBlock (void* dest, uint destlen, const(void)* src, uint srclen, uint blocksize) {
-    version(arcz_use_balz) {
-      Unbalz bz;
-      bz.reinit(balzDictSize(blocksize));
-      int ipos, opos;
-      auto dc = bz.decompress(
-        // reader
-        (buf) {
+  static if (arcz_has_balz) static void unpackBlockBalz (void* dest, uint destlen, const(void)* src, uint srclen, uint blocksize) {
+    Unbalz bz;
+    bz.reinit(balzDictSize(blocksize));
+    int ipos, opos;
+    auto dc = bz.decompress(
+      // reader
+      (buf) {
+        import core.stdc.string : memcpy;
+        if (ipos >= srclen) return 0;
+        uint rd = destlen-ipos;
+        if (rd > buf.length) rd = cast(uint)buf.length;
+        memcpy(buf.ptr, src+ipos, rd);
+        ipos += rd;
+        return rd;
+      },
+      // writer
+      (buf) {
+        //if (opos+buf.length > destlen) throw new Exception("error unpacking archive");
+        uint wr = destlen-opos;
+        if (wr > buf.length) wr = cast(uint)buf.length;
+        if (wr > 0) {
           import core.stdc.string : memcpy;
-          if (ipos >= srclen) return 0;
-          uint rd = destlen-ipos;
-          if (rd > buf.length) rd = cast(uint)buf.length;
-          memcpy(buf.ptr, src+ipos, rd);
-          ipos += rd;
-          return rd;
-        },
-        // writer
-        (buf) {
-          //if (opos+buf.length > destlen) throw new Exception("error unpacking archive");
-          uint wr = destlen-opos;
-          if (wr > buf.length) wr = cast(uint)buf.length;
-          if (wr > 0) {
-            import core.stdc.string : memcpy;
-            memcpy(dest+opos, buf.ptr, wr);
-            opos += wr;
-          }
-        },
-        // unpack length
-        destlen
-      );
-      if (opos != destlen) throw new Exception("error unpacking archive");
+          memcpy(dest+opos, buf.ptr, wr);
+          opos += wr;
+        }
+      },
+      // unpack length
+      destlen
+    );
+    if (opos != destlen) throw new Exception("error unpacking archive");
+  }
+
+  static void unpackBlockZLib (void* dest, uint destlen, const(void)* src, uint srclen, uint blocksize) {
+    z_stream zs;
+    zs.avail_in = 0;
+    zs.avail_out = 0;
+    // initialize unpacker
+    if (inflateInit2(&zs, 15) != Z_OK) throw new Exception("can't initialize zlib");
+    scope(exit) inflateEnd(&zs);
+    zs.next_in = cast(typeof(zs.next_in))src;
+    zs.avail_in = srclen;
+    zs.next_out = cast(typeof(zs.next_out))dest;
+    zs.avail_out = destlen;
+    while (zs.avail_out > 0) {
+      auto err = inflate(&zs, Z_SYNC_FLUSH);
+      if (err != Z_STREAM_END && err != Z_OK) throw new Exception("error unpacking archive");
+      if (err == Z_STREAM_END) break;
+    }
+    if (zs.avail_out != 0) throw new Exception("error unpacking archive");
+  }
+
+  static void unpackBlock (void* dest, uint destlen, const(void)* src, uint srclen, uint blocksize, bool useBalz) {
+    static if (arcz_has_balz) {
+      if (useBalz) unpackBlockBalz(dest, destlen, src, srclen, blocksize);
+      else unpackBlockZLib(dest, destlen, src, srclen, blocksize);
     } else {
-      z_stream zs;
-      zs.avail_in = 0;
-      zs.avail_out = 0;
-      // initialize unpacker
-      if (inflateInit2(&zs, 15) != Z_OK) throw new Exception("can't initialize zlib");
-      scope(exit) inflateEnd(&zs);
-      zs.next_in = cast(typeof(zs.next_in))src;
-      zs.avail_in = srclen;
-      zs.next_out = cast(typeof(zs.next_out))dest;
-      zs.avail_out = destlen;
-      while (zs.avail_out > 0) {
-        auto err = inflate(&zs, Z_SYNC_FLUSH);
-        if (err != Z_STREAM_END && err != Z_OK) throw new Exception("error unpacking archive");
-        if (err == Z_STREAM_END) break;
-      }
-      if (zs.avail_out != 0) throw new Exception("error unpacking archive");
+      if (useBalz) throw new Exception("no Balz support was compiled in ArcZ");
+      else unpackBlockZLib(dest, destlen, src, srclen, blocksize);
     }
   }
 
@@ -246,12 +256,13 @@ public:
     }
     if (fl is null) throw new Exception("cannot open archive file '"~filename.idup~"'");
     char[4] sign;
+    bool useBalz;
     readBuf(fl, sign[]);
     if (sign != "CZA1") throw new Exception("invalid archive file '"~filename.idup~"'");
-    version(arcz_use_balz) {
-      if (readUbyte(fl) != 1) throw new Exception("invalid version of archive file '"~filename.idup~"'");
-    } else {
-      if (readUbyte(fl) != 0) throw new Exception("invalid version of archive file '"~filename.idup~"'");
+    switch (readUbyte(fl)) {
+      case 0: useBalz = false; break;
+      case 1: useBalz = true; break;
+      default: throw new Exception("invalid version of archive file '"~filename.idup~"'");
     }
     uint indexofs = readUint(fl); // index offset in file
     uint pkidxsize = readUint(fl); // packed index size
@@ -266,7 +277,7 @@ public:
       if (fseek(fl, indexofs, 0) < 0) throw new Exception("seek error in archive file '"~filename.idup~"'");
       readBuf(fl, pib[0..pkidxsize]);
       idxbuf = xalloc!ubyte(idxsize);
-      unpackBlock(idxbuf, idxsize, pib, pkidxsize, idxsize);
+      unpackBlock(idxbuf, idxsize, pib, pkidxsize, idxsize, useBalz);
     }
 
     // parse index and build structures
@@ -314,6 +325,7 @@ public:
     }
 
     // read chunk info and data
+    nfo.useBalz = useBalz;
     nfo.chunkSize = getUint;
     auto ccount = getUint; // chunk count
     nfo.lastChunkSize = getUint;
@@ -360,7 +372,7 @@ public:
   AZFile open (const(char)[] name) {
     if (!nfop) throw new Exception("can't open file from non-opened archive");
     if (auto fi = name in nfo.files) {
-      auto zl = xalloc!ZLibLowLevelRO(1);
+      auto zl = xalloc!LowLevelPackedRO(1);
       scope(failure) xfree(zl);
       debug(arcz_rc) { import core.stdc.stdio : printf; printf("Zl %p allocated\n", zl); }
       zl.setup(nfo, fi.chunk, fi.chunkofs, fi.size);
@@ -372,7 +384,7 @@ public:
   }
 
 private:
-  static struct ZLibLowLevelRO {
+  static struct LowLevelPackedRO {
     private import etc.c.zlib;
 
     uint rc = 1;
@@ -381,7 +393,7 @@ private:
     private @property inout(Nfo*) nfo () inout pure nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))nfop; }
     static void decRef (size_t me) {
       if (me) {
-        auto zl = cast(ZLibLowLevelRO*)me;
+        auto zl = cast(LowLevelPackedRO*)me;
         assert(zl.rc);
         if (--zl.rc == 0) {
           import core.stdc.stdlib : free;
@@ -477,7 +489,7 @@ private:
         immutable uint jem = justEnoughMemory;
         if (upsize > jem) upsize = jem;
         debug(arcz_unp) { import core.stdc.stdio : printf; printf(" unpacking %u bytes to %u bytes\n", chunk.pksize, upsize); }
-        ArzArchive.unpackBlock(chunkData, upsize, pkd, chunk.pksize, cksz);
+        ArzArchive.unpackBlock(chunkData, upsize, pkd, chunk.pksize, cksz, nfo.useBalz);
         curcsize = upsize;
       }
       curcpos = 0;
@@ -584,8 +596,8 @@ public struct AZFile {
 private:
   size_t zlp;
 
-  private @property inout(ArzArchive.ZLibLowLevelRO)* zl () inout pure nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))zlp; }
-  private void decRef () { pragma(inline, true); ArzArchive.ZLibLowLevelRO.decRef(zlp); zlp = 0; }
+  private @property inout(ArzArchive.LowLevelPackedRO)* zl () inout pure nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))zlp; }
+  private void decRef () { pragma(inline, true); ArzArchive.LowLevelPackedRO.decRef(zlp); zlp = 0; }
 
 public:
   this (in AZFile afl) {
@@ -602,7 +614,7 @@ public:
 
   void opAssign (in AZFile afl) {
     if (afl.zlp) {
-      auto n = cast(ArzArchive.ZLibLowLevelRO*)afl.zlp;
+      auto n = cast(ArzArchive.LowLevelPackedRO*)afl.zlp;
       ++n.rc;
     }
     decRef();
@@ -695,8 +707,8 @@ private:
   ChunkInfo[] chunks;
   FileInfo[] files;
   uint lastChunkSize;
-
   uint statChunks, statFiles;
+  bool useBalz;
 
 private:
   void writeUint (uint v) {
@@ -724,65 +736,79 @@ private:
     }
   }
 
+  static if (arcz_has_balz) long writePackedBalz (const(void)[] upbuf) {
+    assert(upbuf.length > 0 && upbuf.length < int.max);
+    long res = 0;
+    Balz bz;
+    int ipos, opos;
+    bz.reinit(ArzArchive.balzDictSize(cast(uint)upbuf.length));
+    bz.compress(
+      // reader
+      (buf) {
+        import core.stdc.string : memcpy;
+        if (ipos >= upbuf.length) return 0;
+        uint rd = cast(uint)upbuf.length-ipos;
+        if (rd > buf.length) rd = cast(uint)buf.length;
+        memcpy(buf.ptr, upbuf.ptr+ipos, rd);
+        ipos += rd;
+        return rd;
+      },
+      // writer
+      (buf) {
+        writeBuf(buf[]);
+        res += buf.length;
+      },
+      // max mode
+      true
+    );
+    return res;
+  }
+
+  long writePackedZLib (const(void)[] upbuf) {
+    assert(upbuf.length > 0 && upbuf.length < int.max);
+    long res = 0;
+    z_stream zs;
+    ubyte[2048] obuf;
+    zs.next_out = obuf.ptr;
+    zs.avail_out = cast(uint)obuf.length;
+    zs.next_in = null;
+    zs.avail_in = 0;
+    // initialize packer
+    if (deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, 15, 9, 0) != Z_OK) throw new Exception("can't write packed data");
+    scope(exit) deflateEnd(&zs);
+    zs.next_in = cast(typeof(zs.next_in))upbuf.ptr;
+    zs.avail_in = cast(uint)upbuf.length;
+    while (zs.avail_in > 0) {
+      if (zs.avail_out == 0) {
+        writeBuf(obuf[]);
+        res += cast(uint)obuf.length;
+        zs.next_out = obuf.ptr;
+        zs.avail_out = cast(uint)obuf.length;
+      }
+      auto err = deflate(&zs, Z_NO_FLUSH);
+      if (err != Z_OK) throw new Exception("zlib compression error");
+    }
+    while (zs.avail_out != obuf.length) {
+      res += cast(uint)obuf.length-zs.avail_out;
+      writeBuf(obuf[0..$-zs.avail_out]);
+      zs.next_out = obuf.ptr;
+      zs.avail_out = cast(uint)obuf.length;
+      auto err = deflate(&zs, Z_FINISH);
+      if (err != Z_OK && err != Z_STREAM_END) throw new Exception("zlib compression error");
+      // succesfully flushed?
+      //if (err != Z_STREAM_END) throw new VFSException("zlib compression error");
+    }
+    return res;
+  }
+
   // return size of packed data written
   uint writePackedBuf (const(void)[] upbuf) {
     assert(upbuf.length > 0 && upbuf.length < int.max);
     long res = 0;
-    version(arcz_use_balz) {
-      Balz bz;
-      int ipos, opos;
-      bz.reinit(ArzArchive.balzDictSize(cast(uint)upbuf.length));
-      bz.compress(
-        // reader
-        (buf) {
-          import core.stdc.string : memcpy;
-          if (ipos >= upbuf.length) return 0;
-          uint rd = cast(uint)upbuf.length-ipos;
-          if (rd > buf.length) rd = cast(uint)buf.length;
-          memcpy(buf.ptr, upbuf.ptr+ipos, rd);
-          ipos += rd;
-          return rd;
-        },
-        // writer
-        (buf) {
-          writeBuf(buf[]);
-          res += buf.length;
-        },
-        // max mode
-        true
-      );
+    static if (arcz_has_balz) {
+      if (useBalz) res = writePackedBalz(upbuf); else res = writePackedZLib(upbuf);
     } else {
-      z_stream zs;
-      ubyte[2048] obuf;
-      zs.next_out = obuf.ptr;
-      zs.avail_out = cast(uint)obuf.length;
-      zs.next_in = null;
-      zs.avail_in = 0;
-      // initialize packer
-      if (deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, 15, 9, 0) != Z_OK) throw new Exception("can't write packed data");
-      scope(exit) deflateEnd(&zs);
-      zs.next_in = cast(typeof(zs.next_in))upbuf.ptr;
-      zs.avail_in = cast(uint)upbuf.length;
-      while (zs.avail_in > 0) {
-        if (zs.avail_out == 0) {
-          writeBuf(obuf[]);
-          res += cast(uint)obuf.length;
-          zs.next_out = obuf.ptr;
-          zs.avail_out = cast(uint)obuf.length;
-        }
-        auto err = deflate(&zs, Z_NO_FLUSH);
-        if (err != Z_OK) throw new Exception("zlib compression error");
-      }
-      while (zs.avail_out != obuf.length) {
-        res += cast(uint)obuf.length-zs.avail_out;
-        writeBuf(obuf[0..$-zs.avail_out]);
-        zs.next_out = obuf.ptr;
-        zs.avail_out = cast(uint)obuf.length;
-        auto err = deflate(&zs, Z_FINISH);
-        if (err != Z_OK && err != Z_STREAM_END) throw new Exception("zlib compression error");
-        // succesfully flushed?
-        //if (err != Z_STREAM_END) throw new VFSException("zlib compression error");
-      }
+      if (useBalz) throw new Exception("no Balz support was compiled in ArcZ"); else res = writePackedZLib(upbuf);
     }
     if (res > uint.max) throw new Exception("output archive too big");
     return cast(uint)res;
@@ -894,16 +920,20 @@ private:
   }
 
 public:
-  this (const(char)[] fname, uint chunkSize=256*1024) {
+  this (const(char)[] fname, uint chunkSize=256*1024, bool auseBalz=false) {
     import std.internal.cstring;
     assert(chunkSize > 0 && chunkSize < 32*1024*1024); // arbitrary limit
+    static if (!arcz_has_balz) {
+      if (auseBalz) throw new Exception("no Balz support was compiled in ArcZ");
+    }
+    useBalz = auseBalz;
     arcfl = fopen(fname.tempCString, "wb");
     if (arcfl is null) throw new Exception("can't create output file '"~fname.idup~"'");
     cdpos = 0;
     chunkdata.length = chunkSize;
     scope(failure) { fclose(arcfl); arcfl = null; }
     writeBuf("CZA1"); // signature
-    version(arcz_use_balz) {
+    if (useBalz) {
       writeUbyte(1); // version
     } else {
       writeUbyte(0); // version
