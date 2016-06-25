@@ -16,9 +16,9 @@ module iv.balz;
 /// LZ compressor and decompressor.
 ///
 /// memory usage (both for compression and for decompression): (~65MB)
-struct BalzCodec(string mode, uint BUF_BITS=25) {
+struct BalzCodec(string mode) {
 static assert(mode == "encoder" || mode == "decoder", "invalid Balz mode");
-static assert(BUF_BITS >= 8 && BUF_BITS <= 25, "invalid dictionary size");
+//static assert(BufBits >= 8 && BufBits <= 25, "invalid dictionary size");
 
 private:
   enum MAGIC = 0xab; // baLZ
@@ -38,7 +38,7 @@ private:
   uint high;
 
   enum CounterSize = 256;
-  Counter* counters; // [512][CounterSize], then [TAB_SIZE][CounterSize]
+  Counter* counters; // [512][CounterSize], then [TabSize][CounterSize]
 
   static if (mode == "encoder") {
     enum obufSize = 65536;
@@ -50,22 +50,26 @@ private:
     uint ibufPos, ibufUsed;
   }
 
-  enum TAB_BITS = 7;
-  enum TAB_SIZE = 1<<TAB_BITS;
-  enum TAB_MASK = TAB_SIZE-1;
+  enum TabBits = 7;
+  enum TabSize = 1<<TabBits;
+  enum TabMask = TabSize-1;
 
-  enum MIN_MATCH = 3;
-  enum MAX_MATCH = 255+MIN_MATCH;
+  enum MinMatchLen = 3;
+  enum MaxMatchLen = 255+MinMatchLen;
 
-  //enum BUF_BITS = 25;
-  enum BUF_SIZE = 1<<BUF_BITS;
-  enum BUF_MASK = cast(uint)(BUF_SIZE-1);
+  //enum SlDictBits = 25;
+  ubyte lastDictBits = 0;
+  ubyte SlDictBits = 25;
+  uint SlDictSize; // = 1<<SlDictBits;
+  uint SlDictMask; // = cast(uint)(SlDictSize-1);
 
   enum TabCntSize = 1<<16;
 
-  ubyte* sldict; //[BUF_SIZE]
-  uint* tab; // [TAB_SIZE][TabCntSize]
+  ubyte* sldict; //[SlDictSize]
+  uint* tab; // [TabSize][TabCntSize]
   int* cnt; // [TabCntSize]
+
+  bool inProgress; // we are currently doing compressing or decompressing (and can't reinit engine)
 
 private:
   static T* xalloc(T) (uint mem) if (T.sizeof > 0) {
@@ -93,15 +97,15 @@ public:
   alias PutBufFn = void delegate (const(void)[] buf);
 
 public:
-  /// get memory requirements for this configuration
-  static getMemoryRequirements () {
+  /// get memory requirements for current configuration
+  uint getMemoryRequirements () {
     pragma(inline, true);
     static if (mode == "encoder") enum iobufsize = obufSize; else enum iobufsize = ibufSize;
     return
-      (1<<BUF_BITS)+ // sldict
-      TAB_SIZE*TabCntSize*uint.sizeof+ // tab
-      TabCntSize*int.sizeof+
-      (512*CounterSize+TAB_SIZE*CounterSize)*Counter.sizeof+
+      (1U<<SlDictBits)+ // sldict
+      TabSize*TabCntSize*cast(uint)uint.sizeof+ // tab
+      TabCntSize*cast(uint)int.sizeof+
+      (512*CounterSize+TabSize*CounterSize)*cast(uint)Counter.sizeof+
       iobufsize;
   }
 
@@ -109,6 +113,22 @@ public:
   ~this () { freeMem(); }
 
   @disable this (this); // no copies
+
+  enum MinDictBits = 10; /// minimum dictionary size
+  enum MaxDictBits = 25; /// maximum dictionary size
+
+  @property ubyte dictBits () const pure nothrow @safe @nogc { pragma(inline, true); return SlDictBits; }
+  @property uint dictSize () const pure nothrow @safe @nogc { pragma(inline, true); return (1U<<SlDictBits); }
+
+  /// reinit engine with new dictionary size
+  bool reinit (ubyte dictbits) pure nothrow @safe @nogc {
+    if (dictbits < MinDictBits || dictbits > MaxDictBits) return false;
+    if (inProgress) return false;
+    SlDictBits = dictbits;
+    SlDictSize = 1U<<SlDictBits;
+    SlDictMask = cast(uint)(SlDictSize-1);
+    return true;
+  }
 
   /// free working memory. can be called after compressing/decompressing.
   void freeMem () {
@@ -157,8 +177,8 @@ public:
         auto cptr = counters;
         debug(balz_eos) { import core.stdc.stdio : printf; printf("ec: t=%u; c=%u\n", cast(uint)t, cast(uint)c); }
       } else static if (mode == "idx") {
-        enum Limit = TAB_SIZE;
-        enum Mask = (TAB_SIZE>>1);
+        enum Limit = TabSize;
+        enum Mask = (TabSize>>1);
         auto cptr = counters+(512*CounterSize);
       } else {
         static assert(0, "invalid mode");
@@ -173,15 +193,18 @@ public:
       }
     }
 
-    int[MAX_MATCH+1] bestIdx;
+    int[MaxMatchLen+1] bestIdx;
 
+    if (inProgress) throw new Exception("already doing something");
+    inProgress = true;
+    scope(exit) inProgress = false;
     reset();
     obuf[obufPos++] = MAGIC;
     obuf[obufPos++] = 00; // stream version
     for (;;) {
       int n = 0;
-      while (n < BUF_SIZE) {
-        auto rd = getBuf(sldict[n..BUF_SIZE]);
+      while (n < SlDictSize) {
+        auto rd = getBuf(sldict[n..SlDictSize]);
         if (rd == 0) break;
         n += rd;
       }
@@ -193,23 +216,23 @@ public:
       if (n == 0) break;
       int p = 0;
       while (p < 2 && p < n) encode!"char"(sldict[p++], 0);
-      tab[0..TAB_SIZE*TabCntSize] = 0;
+      tab[0..TabSize*TabCntSize] = 0;
       while (p < n) {
-        immutable int c2 = sldict[(p+BUF_SIZE-2)&BUF_MASK]|(sldict[(p+BUF_SIZE-1)&BUF_MASK]<<8);
+        immutable int c2 = sldict[(p+SlDictSize-2)&SlDictMask]|(sldict[(p+SlDictSize-1)&SlDictMask]<<8);
         immutable uint hash = getHash(p);
-        int len = MIN_MATCH-1;
-        int idx = TAB_SIZE;
+        int len = MinMatchLen-1;
+        int idx = TabSize;
         int max_match = n-p;
-        if (max_match > MAX_MATCH) max_match = MAX_MATCH;
+        if (max_match > MaxMatchLen) max_match = MaxMatchLen;
         // hash search
-        foreach (uint x; 0..TAB_SIZE) {
-          immutable uint d = tab[c2*TAB_SIZE+((cnt[c2]-x)&TAB_MASK)];
+        foreach (uint x; 0..TabSize) {
+          immutable uint d = tab[c2*TabSize+((cnt[c2]-x)&TabMask)];
           if (!d) break;
-          if ((d&~BUF_MASK) != hash) continue;
-          immutable int s = d&BUF_MASK;
-          if (sldict[(s+len)&BUF_MASK] != sldict[(p+len)&BUF_MASK] || sldict[s] != sldict[p&BUF_MASK]) continue;
+          if ((d&~SlDictMask) != hash) continue;
+          immutable int s = d&SlDictMask;
+          if (sldict[(s+len)&SlDictMask] != sldict[(p+len)&SlDictMask] || sldict[s] != sldict[p&SlDictMask]) continue;
           int l = 0;
-          while (++l < max_match) if (sldict[(s+l)&BUF_MASK] != sldict[(p+l)&BUF_MASK]) break;
+          while (++l < max_match) if (sldict[(s+l)&SlDictMask] != sldict[(p+l)&SlDictMask]) break;
           if (l > len) {
             for (int i = l; i > len; --i) bestIdx.ptr[i] = x;
             idx = x;
@@ -218,9 +241,9 @@ public:
           }
         }
         // check match
-        if (max && len >= MIN_MATCH) {
+        if (max && len >= MinMatchLen) {
           int sum = getPts(len, idx)+getPtsAt(p+len, n);
-          if (sum < getPts(len+MAX_MATCH, 0)) {
+          if (sum < getPts(len+MaxMatchLen, 0)) {
             immutable int lookahead = len;
             for (int i = 1; i < lookahead; ++i) {
               immutable int tmp = getPts(i, bestIdx.ptr[i])+getPtsAt(p+i, n);
@@ -232,13 +255,13 @@ public:
             idx = bestIdx.ptr[len];
           }
         }
-        tab[c2*TAB_SIZE+(++cnt[c2]&TAB_MASK)] = hash|p;
-        if (len >= MIN_MATCH) {
-          encode!"char"((256-MIN_MATCH)+len, sldict[(p+BUF_SIZE-1)&BUF_MASK]);
-          encode!"idx"(idx, sldict[(p+BUF_SIZE-2)&BUF_MASK]);
+        tab[c2*TabSize+(++cnt[c2]&TabMask)] = hash|p;
+        if (len >= MinMatchLen) {
+          encode!"char"((256-MinMatchLen)+len, sldict[(p+SlDictSize-1)&SlDictMask]);
+          encode!"idx"(idx, sldict[(p+SlDictSize-2)&SlDictMask]);
           p += len;
         } else {
-          encode!"char"(sldict[p], sldict[(p+BUF_SIZE-1)&BUF_MASK]);
+          encode!"char"(sldict[p], sldict[(p+SlDictSize-1)&SlDictMask]);
           ++p;
         }
       }
@@ -297,7 +320,7 @@ public:
         enum Limit = 512;
         auto cptr = counters;
       } else static if (mode == "idx") {
-        enum Limit = TAB_SIZE;
+        enum Limit = TabSize;
         auto cptr = counters+(512*CounterSize);
       } else {
         static assert(0, "invalid mode");
@@ -311,6 +334,9 @@ public:
       return ctx-Limit;
     }
 
+    if (inProgress) throw new Exception("already doing something");
+    inProgress = true;
+    scope(exit) inProgress = false;
     long totalout = 0;
     reset();
     if (getb() != MAGIC) throw new Exception("invalid compressed stream format");
@@ -324,7 +350,7 @@ public:
         if (t >= 256) throw new Exception("compressed stream corrupted");
         n = (n<<8)|(t&0xff);
       }
-      if (n < 0 || n > BUF_SIZE) throw new Exception("compressed stream corrupted");
+      if (n < 0 || n > SlDictSize) throw new Exception("compressed stream corrupted");
       if (n == 0) {
         // done
         if (flen > 0) throw new Exception("compressed stream ends unexpectedly");
@@ -342,19 +368,19 @@ public:
       }
       while (p < n) {
         immutable int tmp = p;
-        immutable int c2 = sldict[(p+BUF_SIZE-2)&BUF_MASK]|(sldict[(p+BUF_SIZE-1)&BUF_MASK]<<8);
-        int t = decode!"char"(sldict[(p+BUF_SIZE-1)&BUF_MASK]);
+        immutable int c2 = sldict[(p+SlDictSize-2)&SlDictMask]|(sldict[(p+SlDictSize-1)&SlDictMask]<<8);
+        int t = decode!"char"(sldict[(p+SlDictSize-1)&SlDictMask]);
         if (t >= 256) {
           int len = t-256;
-          int s = tab[c2*TAB_SIZE+((cnt[c2]-decode!"idx"(sldict[(p+BUF_SIZE-2)&BUF_MASK]))&TAB_MASK)];
-          sldict[p&BUF_MASK] = sldict[s&BUF_MASK]; ++p; ++s;
-          sldict[p&BUF_MASK] = sldict[s&BUF_MASK]; ++p; ++s;
-          sldict[p&BUF_MASK] = sldict[s&BUF_MASK]; ++p; ++s;
-          while (len--) { sldict[p&BUF_MASK] = sldict[s&BUF_MASK]; ++p; ++s; }
+          int s = tab[c2*TabSize+((cnt[c2]-decode!"idx"(sldict[(p+SlDictSize-2)&SlDictMask]))&TabMask)];
+          sldict[p&SlDictMask] = sldict[s&SlDictMask]; ++p; ++s;
+          sldict[p&SlDictMask] = sldict[s&SlDictMask]; ++p; ++s;
+          sldict[p&SlDictMask] = sldict[s&SlDictMask]; ++p; ++s;
+          while (len--) { sldict[p&SlDictMask] = sldict[s&SlDictMask]; ++p; ++s; }
         } else {
-          sldict[p&BUF_MASK] = cast(ubyte)t; ++p;
+          sldict[p&SlDictMask] = cast(ubyte)t; ++p;
         }
-        tab[c2*TAB_SIZE+(++cnt[c2]&TAB_MASK)] = tmp;
+        tab[c2*TabSize+(++cnt[c2]&TabMask)] = tmp;
       }
       totalout += p;
       putBuf(sldict[0..p]);
@@ -365,10 +391,16 @@ public:
 private:
   void setupMem () {
     scope(failure) freeMem();
-    if (sldict is null) sldict = xalloc!ubyte(BUF_SIZE);
-    if (tab is null) tab = xalloc!uint(TAB_SIZE*TabCntSize);
+    SlDictSize = 1U<<SlDictBits;
+    SlDictMask = cast(uint)(SlDictSize-1);
+    if (sldict is null || SlDictBits != lastDictBits) {
+      xfree(sldict);
+      sldict = xalloc!ubyte(SlDictSize);
+      lastDictBits = SlDictBits;
+    }
+    if (tab is null) tab = xalloc!uint(TabSize*TabCntSize);
     if (cnt is null) cnt = xalloc!int(TabCntSize);
-    if (counters is null) counters = xalloc!Counter(512*CounterSize+TAB_SIZE*CounterSize);
+    if (counters is null) counters = xalloc!Counter(512*CounterSize+TabSize*CounterSize);
     static if (mode == "encoder") {
       if (obuf is null) obuf = xalloc!ubyte(obufSize);
     } else {
@@ -378,10 +410,10 @@ private:
 
   void reset () {
     setupMem();
-    sldict[0..BUF_SIZE] = 0;
-    counters[0..512*CounterSize+TAB_SIZE*CounterSize] = Counter.init;
+    sldict[0..SlDictSize] = 0;
+    counters[0..512*CounterSize+TabSize*CounterSize] = Counter.init;
     static if (mode == "decoder") {
-      tab[0..TAB_SIZE*TabCntSize] = 0; // encoder will immediately reinit this anyway
+      tab[0..TabSize*TabCntSize] = 0; // encoder will immediately reinit this anyway
       ibufPos = ibufUsed = 0;
     } else {
       obufPos = 0;
@@ -397,29 +429,29 @@ private:
   static if (mode == "encoder") {
     uint getHash (int p) {
       pragma(inline, true);
-      return (((sldict[(p+0)&BUF_MASK]|(sldict[(p+1)&BUF_MASK]<<8)|(sldict[(p+2)&BUF_MASK]<<16)|(sldict[(p+3)&BUF_MASK]<<24))&0xffffff)*2654435769UL)&~BUF_MASK;
+      return (((sldict[(p+0)&SlDictMask]|(sldict[(p+1)&SlDictMask]<<8)|(sldict[(p+2)&SlDictMask]<<16)|(sldict[(p+3)&SlDictMask]<<24))&0xffffff)*2654435769UL)&~SlDictMask;
     }
 
     int getPts (int len, int x) {
       pragma(inline, true);
-      return (len >= MIN_MATCH ? (len<<TAB_BITS)-x : ((MIN_MATCH-1)<<TAB_BITS)-8);
+      return (len >= MinMatchLen ? (len<<TabBits)-x : ((MinMatchLen-1)<<TabBits)-8);
     }
 
     int getPtsAt (int p, int n) {
-      immutable int c2 = sldict[(p+BUF_SIZE-2)&BUF_MASK]|(sldict[(p+BUF_SIZE-1)&BUF_MASK]<<8);//*cast(ushort*)(sldict.ptr+p-2);
+      immutable int c2 = sldict[(p+SlDictSize-2)&SlDictMask]|(sldict[(p+SlDictSize-1)&SlDictMask]<<8);//*cast(ushort*)(sldict.ptr+p-2);
       immutable uint hash = getHash(p);
-      int len = MIN_MATCH-1;
-      int idx = TAB_SIZE;
+      int len = MinMatchLen-1;
+      int idx = TabSize;
       int max_match = n-p;
-      if (max_match > MAX_MATCH) max_match = MAX_MATCH;
-      foreach (int x; 0..TAB_SIZE) {
-        immutable uint d = tab[c2*TAB_SIZE+((cnt[c2]-x)&TAB_MASK)];
+      if (max_match > MaxMatchLen) max_match = MaxMatchLen;
+      foreach (int x; 0..TabSize) {
+        immutable uint d = tab[c2*TabSize+((cnt[c2]-x)&TabMask)];
         if (!d) break;
-        if ((d&~BUF_MASK) != hash) continue;
-        immutable int s = d&BUF_MASK;
-        if (sldict[(s+len)&BUF_MASK] != sldict[(p+len)&BUF_MASK] || sldict[s] != sldict[p]) continue;
+        if ((d&~SlDictMask) != hash) continue;
+        immutable int s = d&SlDictMask;
+        if (sldict[(s+len)&SlDictMask] != sldict[(p+len)&SlDictMask] || sldict[s] != sldict[p]) continue;
         int l = 0;
-        while (++l < max_match) if (sldict[(s+l)&BUF_MASK] != sldict[(p+l)&BUF_MASK]) break;
+        while (++l < max_match) if (sldict[(s+l)&SlDictMask] != sldict[(p+l)&SlDictMask]) break;
         if (l > len) {
           idx = x;
           len = l;

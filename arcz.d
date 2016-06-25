@@ -15,7 +15,7 @@ version(arcz_use_balz) import iv.balz;
 
 // comment this to free pakced chunk buffer right after using
 // i.e. `AZFile` will allocate new block for each new chunk
-version = arcz_use_more_memory;
+//version = arcz_use_more_memory;
 
 public import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 
@@ -23,7 +23,6 @@ public import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 // ////////////////////////////////////////////////////////////////////////// //
 /// ARZ archive accessor. Use this to open ARZ archives, and open packed files from ARZ archives.
 public struct ArzArchive {
-version(arcz_use_balz) public enum BalzDictSize = 18; // 256KB
 private:
   static assert(size_t.sizeof >= (void*).sizeof);
   private import core.stdc.stdio : FILE, fopen, fclose, fread, fseek;
@@ -140,10 +139,18 @@ private:
     }
   }
 
+  version(arcz_use_balz) static ubyte balzDictSize (uint blockSize) {
+    foreach (ubyte bits; Balz.MinDictBits..Balz.MaxDictBits+1) {
+      if ((1U<<bits) >= blockSize) return bits;
+    }
+    return Balz.MaxDictBits;
+  }
+
   // unpack exactly `destlen` bytes
-  static void unpackBlock (void* dest, uint destlen, const(void)* src, uint srclen) {
+  static void unpackBlock (void* dest, uint destlen, const(void)* src, uint srclen, uint blocksize) {
     version(arcz_use_balz) {
-      BalzCodec!("decoder", ArzArchive.BalzDictSize) bz;
+      Unbalz bz;
+      bz.reinit(balzDictSize(blocksize));
       int ipos, opos;
       auto dc = bz.decompress(
         // reader
@@ -242,7 +249,7 @@ public:
     readBuf(fl, sign[]);
     if (sign != "CZA1") throw new Exception("invalid archive file '"~filename.idup~"'");
     version(arcz_use_balz) {
-      if (readUbyte(fl) != (ArzArchive.BalzDictSize|0x80)) throw new Exception("invalid version of archive file '"~filename.idup~"'");
+      if (readUbyte(fl) != 1) throw new Exception("invalid version of archive file '"~filename.idup~"'");
     } else {
       if (readUbyte(fl) != 0) throw new Exception("invalid version of archive file '"~filename.idup~"'");
     }
@@ -259,7 +266,7 @@ public:
       if (fseek(fl, indexofs, 0) < 0) throw new Exception("seek error in archive file '"~filename.idup~"'");
       readBuf(fl, pib[0..pkidxsize]);
       idxbuf = xalloc!ubyte(idxsize);
-      unpackBlock(idxbuf, idxsize, pib, pkidxsize);
+      unpackBlock(idxbuf, idxsize, pib, pkidxsize, idxsize);
     }
 
     // parse index and build structures
@@ -466,10 +473,11 @@ private:
         if (fseek(nfo.afl, chunk.ofs, 0) < 0) throw new Exception("ARCZ reading error");
         if (fread(pkd, 1, chunk.pksize, nfo.afl) != chunk.pksize) throw new Exception("ARCZ reading error");
         uint upsize = (nextchunk == nfo.chunks.length-1 ? nfo.lastChunkSize : nfo.chunkSize); // unpacked chunk size
+        immutable uint cksz = upsize;
         immutable uint jem = justEnoughMemory;
         if (upsize > jem) upsize = jem;
         debug(arcz_unp) { import core.stdc.stdio : printf; printf(" unpacking %u bytes to %u bytes\n", chunk.pksize, upsize); }
-        ArzArchive.unpackBlock(chunkData, upsize, pkd, chunk.pksize);
+        ArzArchive.unpackBlock(chunkData, upsize, pkd, chunk.pksize, cksz);
         curcsize = upsize;
       }
       curcpos = 0;
@@ -721,8 +729,9 @@ private:
     assert(upbuf.length > 0 && upbuf.length < int.max);
     long res = 0;
     version(arcz_use_balz) {
-      BalzCodec!("encoder", ArzArchive.BalzDictSize) bz;
+      Balz bz;
       int ipos, opos;
+      bz.reinit(ArzArchive.balzDictSize(cast(uint)upbuf.length));
       bz.compress(
         // reader
         (buf) {
@@ -895,7 +904,7 @@ public:
     scope(failure) { fclose(arcfl); arcfl = null; }
     writeBuf("CZA1"); // signature
     version(arcz_use_balz) {
-      writeUbyte(ArzArchive.BalzDictSize|0x80); // version and dictionary size
+      writeUbyte(1); // version
     } else {
       writeUbyte(0); // version
     }
