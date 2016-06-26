@@ -47,6 +47,9 @@ module csg;
 
 import iv.vmath;
 
+//static assert(is(Float == double), "compile this with -version=vmath_double");
+alias Vec3 = VecN!(3, double);
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Represents a vertex of a polygon. This class provides `normal` so convenience
@@ -60,11 +63,11 @@ public:
   }
 
 public:
-  vec3 pos, normal;
+  Vec3 pos, normal;
 
 public:
 /*pure*/ nothrow @safe @nogc:
-  this() (in auto ref vec3 apos, in auto ref vec3 anormal) {
+  this() (in auto ref Vec3 apos, in auto ref Vec3 anormal) {
     pos = apos;
     normal = anormal;
   }
@@ -78,139 +81,88 @@ public:
 
   // Create a new vertex between this vertex and `other` by linearly
   // interpolating all properties using a parameter of `t`.
-  Vertex interpolate() (in auto ref Vertex other, Float t) const {
+  Vertex interpolate() (in auto ref Vertex other, Vec3.VFloat t) const {
     pragma(inline, true);
     return Vertex(
       pos.lerp(other.pos, t),
       normal.lerp(other.normal, t)
     );
   }
-
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Represents a plane in 3D space.
-struct Plane {
-public:
-  string toString () const {
-    import std.string : format;
-    return "(%s,%s,%s,%s)".format(normal.x, normal.y, normal.z, w);
+alias Plane = Plane3!(Vec3.VFloat, 0.00001f, false); // EPS is 0.00001f, no swizzling
+
+void flip (ref Plane plane) pure nothrow @safe @nogc {
+  pragma(inline, true);
+  if (plane.valid) {
+    plane.normal = -plane.normal;
+    plane.w = -plane.w;
+  }
+}
+
+Plane.PType polySide (in ref Plane plane, in Polygon pl) {
+  // classify each point as well as the entire polygon into one of the above four classes
+  Plane.PType polygonType = Plane.Coplanar;
+  foreach (const ref Vertex v; pl.vertices) {
+    Plane.PType type = plane.pointSide(v.pos);
+    polygonType |= type;
+  }
+  return polygonType;
+}
+
+// Split `polygon` by this plane if needed, then put the polygon or polygon
+// fragments in the appropriate lists. Coplanar polygons go into either
+// `coplanarFront` or `coplanarBack` depending on their orientation with
+// respect to this plane. Polygons in front or in back of this plane go into
+// either `front` or `back`.
+void splitPolygon (in ref Plane plane, Polygon polygon, ref Polygon[] coplanarFront, ref Polygon[] coplanarBack, ref Polygon[] front, ref Polygon[] back) {
+  import std.math : abs;
+  assert(plane.valid);
+
+  // classify each point as well as the entire polygon into one of the above four classes
+  Plane.PType polygonType = Plane.Coplanar;
+  Plane.PType[] types;
+  foreach (const ref Vertex v; polygon.vertices) {
+    Plane.PType type = plane.pointSide(v.pos);
+    polygonType |= type;
+    types ~= type;
   }
 
-public:
-  // `Plane.EPS` is the tolerance used by `splitPolygon()` to decide if a point is on the plane.
-  enum EPS = 0.00001f;
-  //enum EPS = EPSILON;
-  alias PType = uint;
-  enum /*PType*/ {
-    COPLANAR = 0,
-    FRONT = 1,
-    BACK = 2,
-    SPANNING = 3,
-  }
-
-public:
-  vec3 normal;
-  Float w;
-
-public:
-/*pure*/ nothrow @safe:
-  this() (in auto ref vec3 anormal, Float aw) @nogc {
-    import std.math : abs;
-    normal = anormal;
-    w = aw;
-    if (abs(w) <= Plane.EPS) w = 0;
-  }
-
-  @property bool valid () const @nogc { pragma(inline, true); import std.math : isNaN; return !isNaN(w); }
-
-  static Plane fromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
-    //var n = b.minus(a).cross(c.minus(a)).unit();
-    auto n = ((b-a)%(c-a)).normalized;
-    return Plane(n, n*a); // n.dot(a)
-  }
-
-  PType pointSide() (in auto ref vec3 p) const pure {
-    pragma(inline, true);
-    auto t = (normal*p)-w; // dot
-    return (t < -Plane.EPS ? BACK : (t > Plane.EPS ? FRONT : COPLANAR));
-  }
-
-  Float pointSideF() (in auto ref vec3 p) const pure {
-    pragma(inline, true);
-    return (normal*p)-w; // dot
-  }
-
-  PType polySide (in Polygon pl) {
-    // classify each point as well as the entire polygon into one of the above four classes
-    PType polygonType = COPLANAR;
-    foreach (const ref Vertex v; pl.vertices) {
-      PType type = pointSide(v.pos);
-      polygonType |= type;
-    }
-    return polygonType;
-  }
-
-  void flip () @nogc {
-    pragma(inline, true);
-    if (valid) {
-      normal = -normal;
-      w = -w;
-    }
-  }
-
-  // Split `polygon` by this plane if needed, then put the polygon or polygon
-  // fragments in the appropriate lists. Coplanar polygons go into either
-  // `coplanarFront` or `coplanarBack` depending on their orientation with
-  // respect to this plane. Polygons in front or in back of this plane go into
-  // either `front` or `back`.
-  void splitPolygon (Polygon polygon, ref Polygon[] coplanarFront, ref Polygon[] coplanarBack, ref Polygon[] front, ref Polygon[] back) {
-    import std.math : abs;
-    assert(valid);
-
-    // classify each point as well as the entire polygon into one of the above four classes
-    PType polygonType = COPLANAR;
-    PType[] types;
-    foreach (const ref Vertex v; polygon.vertices) {
-      PType type = pointSide(v.pos);
-      polygonType |= type;
-      types ~= type;
-    }
-
-    // put the polygon in the correct list, splitting it when necessary
-    final switch (polygonType) {
-      case COPLANAR:
-        if (normal*polygon.plane.normal > 0) coplanarFront ~= polygon; else coplanarBack ~= polygon; // dot
-        break;
-      case FRONT:
-        front ~= polygon;
-        break;
-      case BACK:
-        back ~= polygon;
-        break;
-      case SPANNING:
-        Vertex[] f, b;
-        foreach (immutable i; 0..polygon.vertices.length) {
-          immutable j = (i+1)%polygon.vertices.length;
-          auto ti = types[i];
-          auto tj = types[j];
-          auto vi = polygon.vertices[i];
-          auto vj = polygon.vertices[j];
-          if (ti != BACK) f ~= vi;
-          if (ti != FRONT) b ~= vi; //(ti != BACK ? vi.dup : vi);
-          if ((ti|tj) == SPANNING) {
-            auto t = (w-(normal*vi.pos))/(normal*(vj.pos-vi.pos));
-            assert(abs(t) > EPS);
-            auto v = vi.interpolate(vj, t);
-            f ~= v;
-            b ~= v;//v.dup;
-          }
+  // put the polygon in the correct list, splitting it when necessary
+  final switch (polygonType) {
+    case Plane.Coplanar:
+      if (plane.normal*polygon.plane.normal > 0) coplanarFront ~= polygon; else coplanarBack ~= polygon; // dot
+      break;
+    case Plane.Front:
+      front ~= polygon;
+      break;
+    case Plane.Back:
+      back ~= polygon;
+      break;
+    case Plane.Spanning:
+      Vertex[] f, b;
+      foreach (immutable i; 0..polygon.vertices.length) {
+        immutable j = (i+1)%polygon.vertices.length;
+        auto ti = types[i];
+        auto tj = types[j];
+        auto vi = polygon.vertices[i];
+        auto vj = polygon.vertices[j];
+        if (ti != Plane.Back) f ~= vi;
+        if (ti != Plane.Front) b ~= vi; //(ti != Back ? vi.dup : vi);
+        if ((ti|tj) == Plane.Spanning) {
+          auto t = (plane.w-(plane.normal*vi.pos))/(plane.normal*(vj.pos-vi.pos));
+          assert(abs(t) > Plane.EPS);
+          auto v = vi.interpolate(vj, t);
+          f ~= v;
+          b ~= v;//v.dup;
         }
-        if (f.length >= 3) front ~= new Polygon(f, cast(Object[])polygon.mshared);
-        if (b.length >= 3) back ~= new Polygon(b, cast(Object[])polygon.mshared);
-        break;
-    }
+      }
+      if (f.length >= 3) front ~= new Polygon(f, cast(Object[])polygon.mshared);
+      if (b.length >= 3) back ~= new Polygon(b, cast(Object[])polygon.mshared);
+      break;
   }
 }
 
@@ -249,7 +201,7 @@ public:
     assert(avertices.length > 2);
     vertices = avertices;
     mshared = ashared;
-    plane = Plane.fromPoints(vertices[0].pos, vertices[1].pos, vertices[2].pos);
+    plane.setFromPoints(vertices[0].pos, vertices[1].pos, vertices[2].pos);
     foreach (immutable idx, const ref v; vertices) {
       if (plane.pointSide(v.pos) != 0) {
         { import core.stdc.stdio : printf; printf("invalid polygon: vertex #%u is bad! (%g, %g)\n", cast(uint)idx, cast(double)plane.pointSideF(v.pos), cast(double)Plane.EPS); }
@@ -385,9 +337,9 @@ public:
               int l = 0, r = 0, s = 0;
               foreach (Polygon p; plys) {
                 auto side = pl.polySide(p);
-                     if (side == Plane.BACK) ++l;
-                else if (side == Plane.FRONT) ++r;
-                else if (side == Plane.SPANNING) ++s;
+                     if (side == Plane.Back) ++l;
+                else if (side == Plane.Front) ++r;
+                else if (side == Plane.Spanning) ++s;
               }
               import std.math : abs;
               if (idx == 0 || (/*s < bests ||*/ abs(l-r) < abs(bestl-bestr))) {
@@ -561,11 +513,11 @@ static:
   //       center: [0, 0, 0],
   //       radius: 1
   //     });
-  CSG cube (vec3 center=vec3(0, 0, 0), Float radius=1) {
+  CSG cube (Vec3 center=Vec3(0, 0, 0), Vec3.VFloat radius=1) {
     import std.algorithm : map;
     import std.array : array;
     auto c = center;
-    auto r = (radius > 0 ? vec3(radius, radius, radius) : vec3(1, 1, 1));
+    auto r = (radius > 0 ? Vec3(radius, radius, radius) : Vec3(1, 1, 1));
     return CSG.fromPolygons([
       [[0.0, 4.0, 6.0, 2.0], [-1.0, 0.0, 0.0]],
       [[1.0, 3.0, 7.0, 5.0], [+1.0, 0.0, 0.0]],
@@ -575,12 +527,12 @@ static:
       [[4.0, 5.0, 7.0, 6.0], [0.0, 0.0, +1.0]]
     ].map!((info) {
       return new Polygon(info[0].map!((i) {
-        auto pos = vec3(
-          c.x+cast(Float)r[0]*cast(Float)(2*(cast(int)i&1 ? 1 : 0)-1),
-          c.y+cast(Float)r[1]*cast(Float)(2*(cast(int)i&2 ? 1 : 0)-1),
-          c.z+cast(Float)r[2]*cast(Float)(2*(cast(int)i&4 ? 1 : 0)-1),
+        auto pos = Vec3(
+          c.x+cast(Vec3.VFloat)r[0]*cast(Vec3.VFloat)(2*(cast(int)i&1 ? 1 : 0)-1),
+          c.y+cast(Vec3.VFloat)r[1]*cast(Vec3.VFloat)(2*(cast(int)i&2 ? 1 : 0)-1),
+          c.z+cast(Vec3.VFloat)r[2]*cast(Vec3.VFloat)(2*(cast(int)i&4 ? 1 : 0)-1),
         );
-        return Vertex(pos, vec3(cast(Float)info[1][0], cast(Float)info[1][1], cast(Float)info[1][2]));
+        return Vertex(pos, Vec3(cast(Vec3.VFloat)info[1][0], cast(Vec3.VFloat)info[1][1], cast(Vec3.VFloat)info[1][2]));
       }).array);
     }).array);
   }
@@ -598,15 +550,15 @@ static:
   //       slices: 16,
   //       stacks: 8
   //     });
-  CSG sphere (vec3 center=vec3(0, 0, 0), Float radius=1, int slices=16, int stacks=8) {
+  CSG sphere (Vec3 center=Vec3(0, 0, 0), Vec3.VFloat radius=1, int slices=16, int stacks=8) {
     import std.math;
     auto c = center;
     Polygon[] polygons;
     Vertex[] vertices;
-    void vertex (Float theta, Float phi) {
+    void vertex (Vec3.VFloat theta, Vec3.VFloat phi) {
       theta *= PI*2;
       phi *= PI;
-      auto dir = vec3(
+      auto dir = Vec3(
         cos(theta)*sin(phi),
         cos(phi),
         sin(theta)*sin(phi),
@@ -616,10 +568,10 @@ static:
     foreach (int i; 0..slices) {
       foreach (int j; 0..stacks) {
         vertices = [];
-        vertex(cast(Float)i/slices, cast(Float)j/stacks);
-        if (j > 0) vertex(cast(Float)(i+1)/slices, cast(Float)j/stacks);
-        if (j < stacks-1) vertex(cast(Float)(i+1)/slices, cast(Float)(j+1)/stacks);
-        vertex(cast(Float)i/slices, cast(Float)(j+1)/stacks);
+        vertex(cast(Vec3.VFloat)i/slices, cast(Vec3.VFloat)j/stacks);
+        if (j > 0) vertex(cast(Vec3.VFloat)(i+1)/slices, cast(Vec3.VFloat)j/stacks);
+        if (j < stacks-1) vertex(cast(Vec3.VFloat)(i+1)/slices, cast(Vec3.VFloat)(j+1)/stacks);
+        vertex(cast(Vec3.VFloat)i/slices, cast(Vec3.VFloat)(j+1)/stacks);
         polygons ~= new Polygon(vertices);
       }
     }
@@ -638,19 +590,19 @@ static:
   //       radius: 1,
   //       slices: 16
   //     });
-  CSG cylinder (vec3 start=vec3(0, -1, 0), vec3 end=vec3(0, 1, 0), Float radius=1, int slices=16) {
+  CSG cylinder (Vec3 start=Vec3(0, -1, 0), Vec3 end=Vec3(0, 1, 0), Vec3.VFloat radius=1, int slices=16) {
     import std.math;
     auto s = start;
     auto e = end;
     auto ray = e-s;
     auto axisZ = ray.normalized;
     auto isY = (abs(axisZ.y) > 0.5 ? 1 : 0);
-    auto axisX = (vec3(isY, !isY, 0)%axisZ).normalized;
+    auto axisX = (Vec3(isY, !isY, 0)%axisZ).normalized;
     auto axisY = (axisX%axisZ).normalized;
     auto sv = Vertex(s, -axisZ);
     auto ev = Vertex(e, axisZ.normalized);
     Polygon[] polygons;
-    Vertex point (Float stack, Float slice, Float normalBlend) {
+    Vertex point (Vec3.VFloat stack, Vec3.VFloat slice, Vec3.VFloat normalBlend) {
       auto angle = slice*PI*2;
       auto o = (axisX*cos(angle))+(axisY*sin(angle));
       auto pos = s+(ray*stack)+(o*radius);
@@ -658,8 +610,8 @@ static:
       return Vertex(pos, normal);
     }
     foreach (int i; 0..slices) {
-      auto t0 = cast(Float)i/slices;
-      auto t1 = cast(Float)(i+1)/slices;
+      auto t0 = cast(Vec3.VFloat)i/slices;
+      auto t1 = cast(Vec3.VFloat)(i+1)/slices;
       polygons ~= new Polygon([sv, point(0, t0, -1), point(0, t1, -1)]);
       polygons ~= new Polygon([point(0, t1, 0), point(0, t0, 0), point(1, t0, 0), point(1, t1, 0)]);
       polygons ~= new Polygon([ev, point(1, t1, 1), point(1, t0, 1)]);
@@ -672,8 +624,8 @@ static:
 version(csg_test) unittest {
   auto a = CSG.cube();
   auto b = CSG.sphere(radius:1.35, stacks:12);
-  auto c = CSG.cylinder(radius: 0.7, start:vec3(-1, 0, 0), end:vec3(1, 0, 0));
-  auto d = CSG.cylinder(radius: 0.7, start:vec3(0, -1, 0), end:vec3(0, 1, 0));
-  auto e = CSG.cylinder(radius: 0.7, start:vec3(0, 0, -1), end:vec3(0, 0, 1));
+  auto c = CSG.cylinder(radius: 0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
+  auto d = CSG.cylinder(radius: 0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
+  auto e = CSG.cylinder(radius: 0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
   auto mesh = a.opintersect(b).opsubtract(c.opunion(d).opunion(e));
 }

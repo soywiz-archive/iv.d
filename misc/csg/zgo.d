@@ -14,8 +14,8 @@ void main () {
   foreach (auto tri; gourdTris) {
     fo.write("  plys ~= new Polygon([");
     foreach (auto i; tri) {
-      fo.write("\n    Vertex(vec3(", gourdVerts[i][0], ", ", gourdVerts[i][1], ", ", gourdVerts[i][2],
-        "), vec3(", gourdNorms[i][0], ", ", gourdNorms[i][1], ", ", gourdNorms[i][2], ")),");
+      fo.write("\n    Vertex(Vec3(", gourdVerts[i][0], ", ", gourdVerts[i][1], ", ", gourdVerts[i][2],
+        "), Vec3(", gourdNorms[i][0], ", ", gourdNorms[i][1], ", ", gourdNorms[i][2], ")),");
     }
     fo.writeln("\n  ]);");
   }

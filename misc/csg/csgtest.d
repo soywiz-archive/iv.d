@@ -15,11 +15,11 @@ enum GHeight = 600;
 
 
 enum VertexShader = q{
-  varying vec3 color;
-  varying vec3 normal;
-  varying vec3 light;
+  varying Vec3 color;
+  varying Vec3 normal;
+  varying Vec3 light;
   void main () {
-    const vec3 lightDir = vec3(1.0, 2.0, 3.0)/3.741657386773941;
+    const Vec3 lightDir = Vec3(1.0, 2.0, 3.0)/3.741657386773941;
     light = (gl_ModelViewMatrix*vec4(lightDir, 0.0)).xyz;
     color = gl_Color.rgb;
     normal = gl_NormalMatrix*gl_Normal;
@@ -28,14 +28,14 @@ enum VertexShader = q{
 };
 
 enum FragmentShader = q{
-  varying vec3 color;
-  varying vec3 normal;
-  varying vec3 light;
+  varying Vec3 color;
+  varying Vec3 normal;
+  varying Vec3 light;
   void main () {
-    vec3 n = normalize(normal);
+    Vec3 n = normalize(normal);
     float diffuse = max(0.0, dot(light, n));
     float specular = pow(max(0.0, -reflect(light, n).z), 32.0)*sqrt(diffuse);
-    gl_FragColor = vec4(mix(color*(0.3+0.7*diffuse), vec3(1.0), specular), 1.0);
+    gl_FragColor = vec4(mix(color*(0.3+0.7*diffuse), Vec3(1.0), specular), 1.0);
   }
 };
 
@@ -57,7 +57,7 @@ void initMesh (int sample) {
 
   if (sample >= 3 && sample <= 5) {
     auto a = CSG.cube();
-    auto b = args!(CSG.sphere, center=>vec3(-0.5, 0, 0.5), radius=>1.3)();
+    auto b = args!(CSG.sphere, center=>Vec3(-0.5, 0, 0.5), radius=>1.3)();
     if (sample == 3) mesh = a.opunion(b);
     if (sample == 4) mesh = a.opsubtract(b);
     if (sample == 5) mesh = a.opintersect(b);
@@ -68,14 +68,14 @@ void initMesh (int sample) {
     auto a = CSG.cube();
     version(aliced) {
       auto b = CSG.sphere(radius:1.35, stacks:12);
-      auto c = CSG.cylinder(radius:0.7, start:vec3(-1, 0, 0), end:vec3(1, 0, 0));
-      auto d = CSG.cylinder(radius:0.7, start:vec3(0, -1, 0), end:vec3(0, 1, 0));
-      auto e = CSG.cylinder(radius:0.7, start:vec3(0, 0, -1), end:vec3(0, 0, 1));
+      auto c = CSG.cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
+      auto d = CSG.cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
+      auto e = CSG.cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
     } else {
       auto b = args!(CSG.sphere, radius=>1.35, stacks=>12)();
-      auto c = args!(CSG.cylinder, radius=>0.7, start=>vec3(-1, 0, 0), end=>vec3(1, 0, 0))();
-      auto d = args!(CSG.cylinder, radius=>0.7, start=>vec3(0, -1, 0), end=>vec3(0, 1, 0))();
-      auto e = args!(CSG.cylinder, radius=>0.7, start=>vec3(0, 0, -1), end=>vec3(0, 0, 1))();
+      auto c = args!(CSG.cylinder, radius=>0.7, start=>Vec3(-1, 0, 0), end=>Vec3(1, 0, 0))();
+      auto d = args!(CSG.cylinder, radius=>0.7, start=>Vec3(0, -1, 0), end=>Vec3(0, 1, 0))();
+      auto e = args!(CSG.cylinder, radius=>0.7, start=>Vec3(0, 0, -1), end=>Vec3(0, 0, 1))();
     }
     mesh = a.opintersect(b).opsubtract(c.opunion(d).opunion(e));
     return;
@@ -84,7 +84,7 @@ void initMesh (int sample) {
   if (sample == 7) {
     auto gourd = buildGourd();
     assert(gourd !is null);
-    auto cyl = args!(CSG.cylinder, radius=>0.4, start=>vec3(0.6, 0.8, -0.6), end=>vec3(-0.6, -0.8, 0.6))();
+    auto cyl = args!(CSG.cylinder, radius=>0.4, start=>Vec3(0.6, 0.8, -0.6), end=>Vec3(-0.6, -0.8, 0.6))();
     //gourd.setColor(0.5, 1, 0);
     //cyl.setColor(0, 0.5, 1);
     //auto n = new Node(gourd.polygons);
