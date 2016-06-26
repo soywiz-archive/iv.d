@@ -44,36 +44,41 @@ private template SwizzleCtor(string stn, string s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-static if (!is(typeof(Float))) {
-  version(vmath_float) alias Float = float; else alias Float = double;
-}
-
 enum FLTEPS = 1e-6f;
 enum DBLEPS = 1e-18f;
-     static if (is(Float == float)) public enum EPSILON = FLTEPS;
-else static if (is(Float == double)) public enum EPSILON = DBLEPS;
-else static assert(0, "vmath: invalid Float type");
+template EPSILON(T) if (is(T == float) || is(T == double)) {
+       static if (is(T == float)) enum EPSILON = FLTEPS;
+  else static if (is(T == double)) enum EPSILON = DBLEPS;
+  else static assert(0, "wtf?!");
+}
 
 auto deg2rad(T) (T v) pure nothrow @safe @nogc if (is(T == float) || is(T == double)) { pragma(inline, true); import std.math : PI; return v*PI/180.0; }
 auto rad2deg(T) (T v) pure nothrow @safe @nogc if (is(T == float) || is(T == double)) { pragma(inline, true); import std.math : PI; return v*180.0/PI; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-alias vec2 = vecn!2;
-alias vec3 = vecn!3;
+alias vec2 = VecN!2;
+alias vec3 = VecN!3;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct vecn(ubyte dims) if (dims >= 2 && dims <= 3 && (is(Float == float) || is(Float == double))) {
-private:
-  enum isVector(VT) = (is(VT == vecn!2) || is(VT == vecn!3));
-  enum isVector2(VT) = is(VT == vecn!2);
-  enum isVector3(VT) = is(VT == vecn!3);
+struct VecN(ubyte dims, FloatType=float) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
+public:
+  alias VFloat = FloatType;
+
+  enum isVector(VT) = (is(VT == VecN!(2, FloatType)) || is(VT == VecN!(3, FloatType)));
+  enum isVector2(VT) = is(VT == VecN!(2, FloatType));
+  enum isVector3(VT) = is(VT == VecN!(3, FloatType));
+
+  alias v2 = VecN!(2, FloatType);
+  alias v3 = VecN!(3, FloatType);
+
+  enum Float(real v) = cast(FloatType)v;
 
 public:
-  Float x = 0.0;
-  Float y = 0.0;
-  static if (dims >= 3) Float z = 0.0;
+  FloatType x = 0.0;
+  FloatType y = 0.0;
+  static if (dims >= 3) FloatType z = 0.0;
 
 nothrow @safe:
   string toString () const {
@@ -88,21 +93,21 @@ nothrow @safe:
   }
 
 @nogc:
-  this (in Float[] c...) pure @trusted {
+  this (in FloatType[] c...) pure @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
     static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
   }
 
   static if (dims == 2)
-  this (in Float ax, in Float ay) pure {
+  this (in FloatType ax, in FloatType ay) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
   }
 
   static if (dims == 3)
-  this (in Float ax, in Float ay, in Float az) pure {
+  this (in FloatType ax, in FloatType ay, in FloatType az) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
@@ -118,14 +123,44 @@ nothrow @safe:
     }
   }
 
-  Float opIndex (usize idx) const pure {
+  void set (in FloatType[] c...) pure @trusted {
+    x = (c.length >= 1 ? c.ptr[0] : 0);
+    y = (c.length >= 2 ? c.ptr[1] : 0);
+    static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
+  }
+
+  static if (dims == 2)
+  void set (in FloatType ax, in FloatType ay) pure {
+    //pragma(inline, true);
+    x = ax;
+    y = ay;
+  }
+
+  static if (dims == 3)
+  void set (in FloatType ax, in FloatType ay, in FloatType az) pure {
+    //pragma(inline, true);
+    x = ax;
+    y = ay;
+    z = az;
+  }
+
+  void opAssign(VT) (in auto ref VT v) pure if (isVector!VT) {
+    //pragma(inline, true);
+    x = v.x;
+    y = v.y;
+    static if (dims == 3) {
+      static if (isVector3!VT) z = v.z; else z = 0.0;
+    }
+  }
+
+  FloatType opIndex (usize idx) const pure {
     pragma(inline, true);
-         static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : Float.nan);
-    else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : Float.nan);
+         static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : FloatType.nan);
+    else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : FloatType.nan);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void opIndexAssign (Float v, usize idx) pure {
+  void opIndexAssign (FloatType v, usize idx) pure {
     pragma(inline, true);
          static if (dims == 2) { if (idx == 0) x = v; else if (idx == 1) y = v; }
     else static if (dims == 3) { if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v; }
@@ -135,8 +170,8 @@ nothrow @safe:
   ref auto normalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) immutable Float invlength = 1.0/sqrt(x*x+y*y);
-    else static if (dims == 3) immutable Float invlength = 1.0/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) immutable FloatType invlength = 1.0/sqrt(x*x+y*y);
+    else static if (dims == 3) immutable FloatType invlength = 1.0/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
     x *= invlength;
     y *= invlength;
@@ -147,10 +182,10 @@ nothrow @safe:
   ref auto safeNormalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) Float invlength = 1.0/sqrt(x*x+y*y);
-    else static if (dims == 3) Float invlength = 1.0/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) FloatType invlength = 1.0/sqrt(x*x+y*y);
+    else static if (dims == 3) FloatType invlength = 1.0/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
-    if (invlength >= EPSILON) {
+    if (invlength >= EPSILON!FloatType) {
       invlength = 1.0/invlength;
       x *= invlength;
       y *= invlength;
@@ -171,7 +206,7 @@ nothrow @safe:
     return this;
   }
 
-  ref auto opOpAssign(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
+  ref auto opOpAssign(string op) (FloatType a) if (op == "+" || op == "-" || op == "*") {
     //pragma(inline, true);
     mixin("x "~op~"= a;");
     mixin("y "~op~"= a;");
@@ -179,10 +214,10 @@ nothrow @safe:
     return this;
   }
 
-  ref auto opOpAssign(string op:"/") (Float a) {
+  ref auto opOpAssign(string op:"/") (FloatType a) {
     import std.math : abs;
     //pragma(inline, true);
-    a = (abs(a) >= EPSILON ? 1.0/a : Float.nan);
+    a = (abs(a) >= EPSILON!FloatType ? 1.0/a : FloatType.nan);
     x *= a;
     y *= a;
     static if (dims == 3) z *= a;
@@ -190,22 +225,22 @@ nothrow @safe:
   }
 
 const pure:
-  auto lerp(VT) (in auto ref VT a, in Float t) if (isVector!VT) {
+  auto lerp(VT) (in auto ref VT a, in FloatType t) if (isVector!VT) {
     pragma(inline, true);
     return this+(a-this)*t;
   }
 
   auto normalized () {
     pragma(inline, true);
-    static if (dims == 2) return vec2(x, y).normalize; else return vec3(x, y, z).normalize;
+    static if (dims == 2) return v2(x, y).normalize; else return v3(x, y, z).normalize;
   }
 
   auto safeNormalized () {
     pragma(inline, true);
-    static if (dims == 2) return vec2(x, y).safeNormalize; else return vec3(x, y, z).safeNormalize;
+    static if (dims == 2) return v2(x, y).safeNormalize; else return v3(x, y, z).safeNormalize;
   }
 
-  @property Float length () {
+  @property FloatType length () {
     pragma(inline, true);
     import std.math : sqrt;
          static if (dims == 2) return sqrt(x*x+y*y);
@@ -213,7 +248,7 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  @property Float lengthSquared () {
+  @property FloatType lengthSquared () {
     pragma(inline, true);
          static if (dims == 2) return x*x+y*y;
     else static if (dims == 3) return x*x+y*y+z*z;
@@ -221,7 +256,7 @@ const pure:
   }
 
   // distance
-  Float distance(VT) (in auto ref VT a) if (isVector!VT) {
+  FloatType distance(VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     import std.math : sqrt;
     static if (dims == 2) {
@@ -239,15 +274,15 @@ const pure:
 
   auto opBinary(string op, VT) (in auto ref VT a) if (isVector!VT && (op == "+" || op == "-")) {
     pragma(inline, true);
-         static if (dims == 2 && isVector2!VT) mixin("return vec2(x"~op~"a.x, y"~op~"a.y);");
-    else static if (dims == 2 && isVector3!VT) mixin("return vec3(x"~op~"a.x, y"~op~"a.y, 0);");
-    else static if (dims == 3 && isVector2!VT) mixin("return vec3(x"~op~"a.x, y"~op~"a.y, 0);");
-    else static if (dims == 3 && isVector3!VT) mixin("return vec3(x"~op~"a.x, y"~op~"a.y, z"~op~"a.z);");
+         static if (dims == 2 && isVector2!VT) mixin("return v2(x"~op~"a.x, y"~op~"a.y);");
+    else static if (dims == 2 && isVector3!VT) mixin("return v3(x"~op~"a.x, y"~op~"a.y, 0);");
+    else static if (dims == 3 && isVector2!VT) mixin("return v3(x"~op~"a.x, y"~op~"a.y, 0);");
+    else static if (dims == 3 && isVector3!VT) mixin("return v3(x"~op~"a.x, y"~op~"a.y, z"~op~"a.z);");
     else static assert(0, "invalid dimension count for vector");
   }
 
   // dot product
-  Float opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
+  FloatType opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     static if (dims == 2) {
       return x*a.x+y*a.y;
@@ -263,41 +298,48 @@ const pure:
   // cross product
   auto opBinary(string op:"%", VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
-         static if (dims == 2 && isVector2!VT) return vec3(0, 0, x*a.y-y*a.x);
-    else static if (dims == 2 && isVector3!VT) return vec3(y*a.z, -x*a.z, x*a.y-y*a.x);
-    else static if (dims == 3 && isVector2!VT) return vec3(-z*a.y, z*a.x, x*a.y-y*a.x);
-    else static if (dims == 3 && isVector3!VT) return vec3(y*a.z-z*a.y, z*a.x-x*a.z, x*a.y-y*a.x);
+         static if (dims == 2 && isVector2!VT) return v3(0, 0, x*a.y-y*a.x);
+    else static if (dims == 2 && isVector3!VT) return v3(y*a.z, -x*a.z, x*a.y-y*a.x);
+    else static if (dims == 3 && isVector2!VT) return v3(-z*a.y, z*a.x, x*a.y-y*a.x);
+    else static if (dims == 3 && isVector3!VT) return v3(y*a.z-z*a.y, z*a.x-x*a.z, x*a.y-y*a.x);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
+  auto opBinary(string op) (FloatType a) if (op == "+" || op == "-" || op == "*") {
     pragma(inline, true);
-         static if (dims == 2) mixin("return vec2(x"~op~"a, y"~op~"a);");
-    else static if (dims == 3) mixin("return vec3(x"~op~"a, y"~op~"a, z"~op~"a);");
+         static if (dims == 2) mixin("return v2(x"~op~"a, y"~op~"a);");
+    else static if (dims == 3) mixin("return v3(x"~op~"a, y"~op~"a, z"~op~"a);");
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op:"/") (Float a) {
+  auto opBinaryRight(string op:"*") (FloatType a) {
+    pragma(inline, true);
+         static if (dims == 2) mixin("return v2(x"~op~"a, y"~op~"a);");
+    else static if (dims == 3) mixin("return v3(x"~op~"a, y"~op~"a, z"~op~"a);");
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  auto opBinary(string op:"/") (FloatType a) {
     pragma(inline, true);
     import std.math : abs;
-    immutable Float a = (abs(a) >= EPSILON ? 1.0/a : Float.nan);
-         static if (dims == 2) return vec2(x*a, y*a);
-    else static if (dims == 3) return vec3(x*a, y*a, z*a);
+    immutable FloatType a = (abs(a) >= EPSILON!FloatType ? 1.0/a : FloatType.nan);
+         static if (dims == 2) return v2(x*a, y*a);
+    else static if (dims == 3) return v3(x*a, y*a, z*a);
     else static assert(0, "invalid dimension count for vector");
   }
 
   auto opUnary(string op:"-") () {
     pragma(inline, true);
-         static if (dims == 2) return vec2(-x, -y);
-    else static if (dims == 3) return vec3(-x, -y, -z);
+         static if (dims == 2) return v2(-x, -y);
+    else static if (dims == 3) return v3(-x, -y, -z);
     else static assert(0, "invalid dimension count for vector");
   }
 
   auto abs () {
     pragma(inline, true);
     import std.math : abs;
-         static if (dims == 2) return vec2(abs(x), abs(y));
-    else static if (dims == 3) return vec3(abs(x), abs(y), abs(z));
+         static if (dims == 2) return v2(abs(x), abs(y));
+    else static if (dims == 3) return v3(abs(x), abs(y), abs(z));
     else static assert(0, "invalid dimension count for vector");
   }
 
@@ -311,7 +353,7 @@ const pure:
   }
 
   // this dot v
-  @property Float dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
+  @property FloatType dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
 
   // this cross v
   auto cross(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this%v; }
@@ -323,14 +365,14 @@ const pure:
     /*hpr.x = -atan2(tmp.x, tmp.y);
       hpr.y = -atan2(tmp.z, sqrt(tmp.x*tmp.x+tmp.y*tmp.y));*/
     static if (dims == 2) {
-      return vec2(
-        atan2(cast(Float)tmp.x, cast(Float)0.0),
-        -atan2(cast(Float)tmp.y, cast(Float)tmp.x),
+      return v2(
+        atan2(cast(FloatType)tmp.x, cast(FloatType)0.0),
+        -atan2(cast(FloatType)tmp.y, cast(FloatType)tmp.x),
       );
     } else {
-      return vec3(
-        atan2(cast(Float)tmp.x, cast(Float)tmp.z),
-        -atan2(cast(Float)tmp.y, cast(Float)sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
+      return v3(
+        atan2(cast(FloatType)tmp.x, cast(FloatType)tmp.z),
+        -atan2(cast(FloatType)tmp.y, cast(FloatType)sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
         0
       );
     }
@@ -342,66 +384,107 @@ const pure:
       (dims == 3 && isGoodSwizzling!(fld, "xyz", 2, 3)))
   {
     static if (fld.length == 2) {
-      return mixin(SwizzleCtor!("vec2", fld));
+      return mixin(SwizzleCtor!("v2", fld));
     } else {
-      return mixin(SwizzleCtor!("vec3", fld));
+      return mixin(SwizzleCtor!("v3", fld));
     }
   }
 }
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // plane in 3D space: Ax+By+Cz+D=0
-struct plane3 {
-  Float a = 0, b = 0, c = 0, d = 0;
+struct Plane3(FloatType=float, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
+public:
+  alias plane3 = Plane3!(FloatType, PlaneEps, enableSwizzling);
+  alias vec3 = VecN!(3, FloatType);
+  static if (PlaneEps < 0) {
+    enum EPS = EPSILON!FloatType;
+  } else {
+    enum EPS = PlaneEps;
+  }
+
+public:
+  alias PType = ubyte;
+  enum /*PType*/ {
+    Coplanar = 0,
+    Front = 1,
+    Back = 2,
+    Spanning = 3,
+  }
+
+public:
+  //FloatType a = 0, b = 0, c = 0, d = 0;
+  vec3 normal;
+  FloatType w;
 
 nothrow @safe:
   string toString () const {
     import std.string : format;
     try {
-      return "(%s,%s,%s,%s)".format(a, b, c, d);
+      return "(%s,%s,%s,%s)".format(normal.x, normal.y, normal.z, w);
     } catch (Exception) {
       assert(0);
     }
   }
 
-@nogc:
-  this() (in auto ref plane3 p) pure { a = p.a; b = p.b; c = p.c; d = p.d; }
+pure @nogc:
+  this() (in auto ref vec3 anormal, FloatType aw) { pragma(inline, true); set(anormal, aw); }
+  this() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) { pragma(inline, true); setFromPoints(a, b, c); }
 
-  Float opIndex (usize idx) const pure {
-    pragma(inline, true);
-    return (idx == 0 ? a : idx == 1 ? b : idx == 2 ? c : idx == 3 ? d : Float.nan);
+  void set () (in auto ref vec3 anormal, FloatType aw) {
+    import std.math : abs;
+    normal = anormal;
+    w = aw;
+    if (abs(w) <= EPS) w = 0;
   }
 
-  void opIndexAssign (Float v, usize idx) pure {
-    pragma(inline, true);
-    if (idx == 0) a = v; else if (idx == 1) b = v; else if (idx == 2) c = v; else if (idx == 3) d = v;
+  ref plane3 setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
+    normal = ((b-a)%(c-a)).normalized;
+    w = normal*a; // n.dot(a)
+    return this;
   }
 
-  ref plane3 normalized () pure {
-    import std.math : sqrt;
-    Float dd = sqrt(a*a+b*b+c*c);
-    if (dd >= EPSILON) {
+  @property bool valid () const { pragma(inline, true); import std.math : isNaN; return !isNaN(w); }
+
+  FloatType opIndex (usize idx) const {
+    pragma(inline, true);
+    return (idx == 0 ? normal.x : idx == 1 ? normal.y : idx == 2 ? normal.z : idx == 3 ? w : FloatType.nan);
+  }
+
+  void opIndexAssign (FloatType v, usize idx) {
+    pragma(inline, true);
+    if (idx == 0) normal.x = v; else if (idx == 1) normal.y = v; else if (idx == 2) normal.z = v; else if (idx == 3) w = v;
+  }
+
+  ref plane3 normalize () {
+    FloatType dd = normal.length;
+    if (dd >= EPSILON!FloatType) {
       dd = 1.0/dd;
-      a *= dd;
-      b *= dd;
-      c *= dd;
-      d *= dd;
+      normal.x *= dd;
+      normal.y *= dd;
+      normal.z *= dd;
+      w *= dd;
     } else {
-      a = b = c = d = 0;
+      normal = vec3(0, 0, 0);
+      w = 0;
     }
     return this;
   }
 
-  int pointSide(VT) (in auto ref VT p) const pure if (isVector!VT) {
-    //pragma(inline, true);
-         static if (isVector2!VT) immutable s = (a*p.x+b*p.y+d >= 0);
-    else static if (isVector3!VT) immutable s = (a*p.x+b*p.y+c*p.z+d >= 0);
-    else static assert(0, "invalid dimension count for vector");
-    return (s < EPSILON ? -1 : (s > EPSILON ? 1 : 0));
+  PType pointSide() (in auto ref vec3 p) const {
+    pragma(inline, true);
+    auto t = (normal*p)-w; // dot
+    return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
   }
-  //Float distance() (in auto ref vec3 p) const pure { return a*p.x+b*p.y+c*p.z+d; }
+
+  FloatType pointSideF() (in auto ref vec3 p) const pure {
+    pragma(inline, true);
+    return (normal*p)-w; // dot
+  }
 
   // swizzling
-  auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "abcd", 2, 3)) {
+  static if (enableSwizzling) auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xyzw", 2, 3)) {
     static if (fld.length == 2) {
       return mixin(SwizzleCtor!("vec2", fld));
     } else {
@@ -412,6 +495,7 @@ nothrow @safe:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/+TODO:
 struct ray2 {
   vec2 org;
   vec2 dir;
@@ -427,10 +511,10 @@ nothrow @safe:
   }
 
 pure @nogc:
-  this (Float x, Float y, Float angle) { pragma(inline, true); setOrgDir(x, y, angle); }
-  this() (in auto ref vec2 aorg, Float angle) { pragma(inline, true); setOrgDir(aorg, angle); }
+  this (FloatType x, FloatType y, FloatType angle) { pragma(inline, true); setOrgDir(x, y, angle); }
+  this() (in auto ref vec2 aorg, FloatType angle) { pragma(inline, true); setOrgDir(aorg, angle); }
 
-  void setOrgDir (Float x, Float y, Float angle) {
+  void setOrgDir (FloatType x, FloatType y, FloatType angle) {
     pragma(inline, true);
     org.x = x;
     org.y = y;
@@ -439,7 +523,7 @@ pure @nogc:
     dir.y = sin(angle);
   }
 
-  void setOrgDir() (in auto ref vec2 aorg, Float angle) {
+  void setOrgDir() (in auto ref vec2 aorg, FloatType angle) {
     pragma(inline, true);
     org.x = aorg.x;
     org.y = aorg.y;
@@ -448,7 +532,7 @@ pure @nogc:
     dir.y = sin(angle);
   }
 
-  void setOrg (Float x, Float y) {
+  void setOrg (FloatType x, FloatType y) {
     pragma(inline, true);
     org.x = x;
     org.y = y;
@@ -460,7 +544,7 @@ pure @nogc:
     org.y = aorg.y;
   }
 
-  void setDir (Float angle) {
+  void setDir (FloatType angle) {
     pragma(inline, true);
     import std.math : cos, sin;
     dir.x = cos(angle);
@@ -469,9 +553,11 @@ pure @nogc:
 
   @property vec2 right () const => vec2(dir.y, -dir.x);
 }
++/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/+TODO:
 struct bbox(VT) if (isVector!VT) {
   // vertexes
   VT v0, v1; // min and max respective
@@ -522,11 +608,17 @@ pure nothrow @safe @nogc:
     static if (isVector3!VT) v0.z += delta;
   }
 }
++/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct mat4 {
-  Float[4*4] mt = 0; // OpenGL-compatible, row by row
+struct Mat4(FloatType=float) if (is(FloatType == FloatType) || is(FloatType == double)) {
+public:
+  alias mat4 = Mat4!FloatType;
+  alias vec3 = VecN!(3, FloatType);
+
+public:
+  FloatType[4*4] mt = 0; // OpenGL-compatible, row by row
 
 nothrow @safe:
   string toString () const @trusted {
@@ -543,7 +635,7 @@ nothrow @safe:
     }
   }
 
-  @property ref Float opIndex (usize r, usize c) @trusted @nogc { pragma(inline, true); return (r < 4 && c < 4 ? mt.ptr[c*4+r] : mt.ptr[0]); }
+  @property ref FloatType opIndex (usize r, usize c) @trusted @nogc { pragma(inline, true); return (r < 4 && c < 4 ? mt.ptr[c*4+r] : mt.ptr[0]); }
 
 pure @nogc:
   this() (in auto ref mat4 m) { mt[] = m.mt[]; }
@@ -558,7 +650,7 @@ pure @nogc:
   static mat4 zero () { pragma(inline, true); return mat4(); }
   static mat4 identity () @trusted { pragma(inline, true); mat4 res; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res; }
 
-  static mat4 rotateX (Float angle) @trusted {
+  static mat4 rotateX (FloatType angle) @trusted {
     import std.math : cos, sin;
     mat4 res;
     res.mt.ptr[0*4+0] = 1.0;
@@ -570,7 +662,7 @@ pure @nogc:
     return res;
   }
 
-  static mat4 rotateY (Float angle) @trusted {
+  static mat4 rotateY (FloatType angle) @trusted {
     import std.math : cos, sin;
     mat4 res;
     res.mt.ptr[0*4+0] = cos(angle);
@@ -582,7 +674,7 @@ pure @nogc:
     return res;
   }
 
-  static mat4 rotateZ (Float angle) @trusted {
+  static mat4 rotateZ (FloatType angle) @trusted {
     import std.math : cos, sin;
     mat4 res;
     res.mt.ptr[0*4+0] = cos(angle);
@@ -685,14 +777,14 @@ pure @nogc:
     return res;
   }
 
-  mat4 opBinary(string op : "*") (Float a) const {
+  mat4 opBinary(string op : "*") (FloatType a) const {
     auto res = mat4(this);
     //foreach (ref v; res.mt) v *= a;
     res.mt[] *= a;
     return res;
   }
 
-  mat4 opBinary(string op : "/") (Float a) const {
+  mat4 opBinary(string op : "/") (FloatType a) const {
     import std.math : abs;
     auto res = mat4(this);
     if (abs(a) >= FLTEPS) {
@@ -728,15 +820,15 @@ pure @nogc:
   }
 
   // returns determinant of matrix without given column and row
-  Float cofactor (int x, int y) const {
+  FloatType cofactor (int x, int y) const {
     int[3] xx, yy;
     foreach (int i; 0..3) {
       if (i < x) xx.ptr[i] = i; else xx.ptr[i] = i+1;
       if (i < y) yy.ptr[i] = i; else yy.ptr[i] = i+1;
     }
-    Float det = 0;
+    FloatType det = 0;
     foreach (int i; 0..3) {
-      Float plus = 1, minus = 1;
+      FloatType plus = 1, minus = 1;
       foreach (int j; 0..3) {
         plus = plus*mt.ptr[xx.ptr[j]+(yy.ptr[(i+j)%3])*4];
         minus = minus*mt.ptr[xx.ptr[2-j]+(yy.ptr[(i+j)%3])*4];
@@ -746,8 +838,8 @@ pure @nogc:
     return det;
   }
 
-  Float determinant () const {
-    Float det = 0;
+  FloatType determinant () const {
+    FloatType det = 0;
     foreach (int i; 0..4) {
       foreach (int j; 0..4) {
         det += mt.ptr[i+j*4]*cofactor(i, j);
@@ -768,7 +860,7 @@ pure @nogc:
 
   mat4 invert () const {
     import std.math : abs;
-    Float det = determinant;
+    FloatType det = determinant;
     if (abs(det) >= FLTEPS) {
       return adjoint/det;
     } else {
@@ -789,7 +881,7 @@ pure @nogc:
 
 /+
   ////////////////////////////////////////////////////////////////////////////////
-  void mat4::addColumns (int c1, int c2, Float *a) const {
+  void mat4::addColumns (int c1, int c2, FloatType *a) const {
     a[0] = mt.ptr[c1][0]+mt.ptr[c2][0];
     a[1] = mt.ptr[c1][1]+mt.ptr[c2][1];
     a[2] = mt.ptr[c1][2]+mt.ptr[c2][2];
@@ -797,7 +889,7 @@ pure @nogc:
   }
 
 
-  void mat4::subColumns (int c1, int c2, Float *a) const {
+  void mat4::subColumns (int c1, int c2, FloatType *a) const {
     a[0] = mt.ptr[c1][0]-mt.ptr[c2][0];
     a[1] = mt.ptr[c1][1]-mt.ptr[c2][1];
     a[2] = mt.ptr[c1][2]-mt.ptr[c2][2];
@@ -814,7 +906,7 @@ pure @nogc:
   //  m4
 
   void mat4::glGetProjectionMatrix () {
-    Float a[16];
+    FloatType a[16];
     //
     glGetDoublev(GL_PROJECTION_MATRIX, a);
     for (int i = 0; i < 4; ++i)
@@ -824,7 +916,7 @@ pure @nogc:
 
 
   void mat4::glGetModelviewMatrix () {
-    Float a[16];
+    FloatType a[16];
     //
     glGetDoublev(GL_MODELVIEW_MATRIX, a);
     for (int i = 0; i < 4; ++i)
@@ -834,7 +926,7 @@ pure @nogc:
 
 
   void mat4::glLoadMatrix () const {
-    Float a[16];
+    FloatType a[16];
     //
     for (int i = 0; i < 4; ++i)
       for (int j = 0; j < 4; ++j)
@@ -844,7 +936,7 @@ pure @nogc:
 
 
   void mat4::glMultMatrix () const {
-    Float a[16];
+    FloatType a[16];
     //
     for (int i = 0; i < 4; ++i)
       for (int j = 0; j < 4; ++j)
