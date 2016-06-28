@@ -785,11 +785,18 @@ if (is(T == float) || is(T == double))
       // at least 2x speedup with SSE here (but for unrolled loop)
       if (N%4 == 0) {
         version(sincresample_use_sse) {
-          align(64) __gshared float[4] zero = 0;
+          //align(64) __gshared float[4] zero = 0;
+          align(64) __gshared float[4+32] zeroesBuf = 0; // dmd cannot into such aligns, alas
+          __gshared uint zeroesptr = 0;
+          if (zeroesptr == 0) {
+            zeroesptr = cast(uint)zeroesBuf.ptr;
+            if (zeroesptr&0x3f) zeroesptr = (zeroesptr|0x3f)+1;
+          }
+          //assert((zeroesptr&0x3f) == 0, "wtf?!");
           asm nothrow @safe @nogc {
             mov       ECX,[N];
             shr       ECX,2;
-            mov       EAX,offsetof zero;
+            mov       EAX,[zeroesptr];
             movaps    XMM0,[EAX];
             mov       EAX,[sinct];
             mov       EBX,[iptr];

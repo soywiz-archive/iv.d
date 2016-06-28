@@ -738,7 +738,17 @@ bool sndAddChan (const(char)[] name, TflChannel chan, uint prio, TflChannel.Qual
 
 // ////////////////////////////////////////////////////////////////////////// //
 bool sndGenerateBuffer () {
-  version(follin_use_sse) align(64) __gshared float[4] zeroes = 0;
+  //version(follin_use_sse) align(64) __gshared float[4] zeroes = 0; // dmd cannot into such aligns, alas
+  version(follin_use_sse) {
+    align(64) __gshared float[4+32] zeroesBuf = 0; // dmd cannot into such aligns, alas
+    __gshared uint zeroesptr = 0;
+    if (zeroesptr == 0) {
+      zeroesptr = cast(uint)zeroesBuf.ptr;
+      if (zeroesptr&0x3f) zeroesptr = (zeroesptr|0x3f)+1;
+    }
+    assert((zeroesptr&0x3f) == 0, "wtf?!");
+  }
+  //version(follin_use_sse) assert(((cast(size_t)zeroes.ptr)&0x3f) == 0, "wtf?!");
 
   static void killChan() (Channel* ch, ref bool channelsChanged) {
     if (ch.namelen) {
@@ -775,7 +785,8 @@ bool sndGenerateBuffer () {
           mov       ECX,[sndSamplesSize];
           add       ECX,3;
           shr       ECX,2;
-          mov       EBX,offsetof zeroes[0];
+          //mov       EBX,offsetof zeroes[0];
+          mov       EBX,[zeroesptr];
           //movntdqa  XMM0,[EBX]; // non-temporal, don't bring zeroes to cache (sse4.1)
           movaps    XMM0,[EBX];
           align 8;
@@ -842,7 +853,8 @@ bool sndGenerateBuffer () {
               version(follin_use_sse) {
                 asm nothrow @safe @nogc {
                   mov       EAX,[bptr];
-                  mov       EBX,offsetof zeroes[0];
+                  //mov       EBX,offsetof zeroes[0];
+                  mov       EBX,[zeroesptr];
                   //movntdqa XMM0,[EBX]; // non-temporal (sse4.1)
                   movaps    XMM0,[EBX];
                   mov       ECX,[fblen];
@@ -1143,7 +1155,8 @@ bool sndGenerateBuffer () {
           add       ECX,7;
           shr       ECX,3;
           mov       EAX,[dp]; // dest, aligned
-          mov       EBX,offsetof zeroes[0]; // lucky me, floating zero is s16 zero too
+          //mov       EBX,offsetof zeroes[0]; // lucky me, floating zero is s16 zero too
+          mov       EBX,[zeroesptr]; // lucky me, floating zero is s16 zero too
           //movntdqa  XMM0,[EBX]; // non-temporal, don't bring zeroes to cache (sse4.1)
           movaps    XMM0,[EBX];
           mov       EDX,16;
