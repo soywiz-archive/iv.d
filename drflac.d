@@ -3397,7 +3397,7 @@ public drflac* drflac_open_file(const(char)* filename)
     return pFlac;
 }
 
-public drflac* drflac_open_file_with_metadata(const(char)* filename, drflac_meta_proc onMeta, void* pUserData)
+public drflac* drflac_open_file_with_metadata(const(char)* filename, drflac_meta_proc onMeta, void* pUserData=null)
 {
     import std.functional : toDelegate;
     drflac_file file = drflac__open_file_handle(filename);
@@ -4001,6 +4001,18 @@ public const(char)* drflac_next_vorbis_comment(drflac_vorbis_comment_iterator* p
 
     if (pCommentLengthOut) *pCommentLengthOut = length;
     return pComment;
+}
+
+
+public long drflac_vorbis_comment_size (uint commentCount, const(char)* pComments) {
+  uint res = 0;
+  while (commentCount-- > 0) {
+    uint length = drflac__le2host_32(*cast(uint*)pComments);
+    res += length;
+    pComments += 4;
+    pComments += length;
+  }
+  return res;
 }
 
 

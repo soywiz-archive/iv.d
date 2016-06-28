@@ -104,11 +104,14 @@ Action playOgg() () {
     return Action.Prev;
   }
 
-  if (auto vc = cast(VorbisChannel)chan) {
+  {
     import core.stdc.stdio;
     import std.path : baseName;
     auto bn = playlist[plidx].baseName;
     printf("=== [%u/%u] %.*s (%d) ===\n", cast(uint)(plidx+1), cast(uint)playlist.length, cast(uint)bn.length, bn.ptr, quality);
+  }
+
+  if (auto vc = cast(VorbisChannel)chan) {
     for (;;) {
       import std.stdio;
       auto name = vc.vf.comment_name;
@@ -117,6 +120,12 @@ Action playOgg() () {
       if (utf8Valid(value)) value = recodeToKOI8(value);
       writeln("  ", name, "=", value);
       vc.vf.comment_skip();
+    }
+  } else if (auto fc = cast(FlacChannel)chan) {
+    foreach (string val; fc.comments) {
+      import std.stdio;
+      if (utf8Valid(val)) val = recodeToKOI8(val);
+      writeln("  ", val);
     }
   }
 

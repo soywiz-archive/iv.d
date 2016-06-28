@@ -33,17 +33,52 @@ class FlacChannel : TflChannel {
   float* frsmpbuf;
   int frused;
   long vrtotalFrames = -1;
+  string[] comments;
 
   this (string fname) {
     import core.stdc.stdio;
     import std.string : toStringz;
+    import core.stdc.stdlib : malloc, free;
 
-    ff = drflac_open_file(fname.toStringz);
+    uint commentCount;
+    char* fcmts;
+    scope(exit) if (fcmts !is null) free(fcmts);
+
+    ff = drflac_open_file_with_metadata(fname.toStringz, (void* pUserData, drflac_metadata* pMetadata) {
+      if (pMetadata.type == DRFLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT) {
+        /*
+        */
+        if (fcmts !is null) free(fcmts);
+        auto csz = drflac_vorbis_comment_size(pMetadata.data.vorbis_comment.commentCount, pMetadata.data.vorbis_comment.comments);
+        if (csz > 0 && csz < 0x100_0000) {
+          fcmts = cast(char*)malloc(cast(uint)csz);
+        } else {
+          fcmts = null;
+        }
+        if (fcmts is null) {
+          commentCount = 0;
+        } else {
+          import core.stdc.string : memcpy;
+          commentCount = pMetadata.data.vorbis_comment.commentCount;
+          memcpy(fcmts, pMetadata.data.vorbis_comment.comments, cast(uint)csz);
+        }
+      }
+    });
     if (ff is null) {
       import core.stdc.stdio;
       printf("can't open file: '%.*s'\n", cast(uint)fname.length, fname.ptr);
       ff = null;
       return;
+    }
+
+    {
+      drflac_vorbis_comment_iterator i;
+      drflac_init_vorbis_comment_iterator(&i, commentCount, fcmts);
+      uint commentLength;
+      const(char)* pComment;
+      while ((pComment = drflac_next_vorbis_comment(&i, &commentLength)) !is null) {
+        comments ~= pComment[0..commentLength].idup;
+      }
     }
 
     if (ff.sampleRate < 1024 || ff.sampleRate > 96000) {
@@ -67,7 +102,6 @@ class FlacChannel : TflChannel {
 
     vrtotalFrames = ff.totalSampleCount/ff.channels;
 
-    import core.stdc.stdlib : malloc, free;
     smpbuf = cast(int*)malloc(smpbufsize*int.sizeof);
     if (smpbuf is null) {
       drflac_close(ff);
