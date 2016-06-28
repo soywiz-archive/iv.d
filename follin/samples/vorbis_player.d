@@ -15,13 +15,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module ogg_follin is aliced;
+module vorbis_player is aliced;
 
 import core.atomic;
 
 import iv.follin;
 import iv.rawtty;
 import iv.encoding;
+
+import iv.drflac;
+import iv.stb.vorbis;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -52,37 +55,68 @@ void showProgress (bool endtime=false) {
 }
 
 
+long totalFrames (TflChannel chan) {
+  if (chan is null) return 0;
+  if (auto cc = cast(VorbisChannel)chan) return cc.totalFrames;
+  if (auto cc = cast(FlacChannel)chan) return cc.totalFrames;
+  return 0;
+}
+
+
 int quality = TflChannel.QualityMusic;
 
 enum Action { Quit, Prev, Next }
 
 Action playOgg() () {
+  import std.string : toStringz;
+
+  enum {
+    Unknown,
+    Vorbis,
+    Flac,
+  }
+
   if (plidx >= playlist.length) return Action.Quit;
 
   Action res = Action.Next;
 
-  auto chan = new VorbisChannel(playlist[plidx]);
-  chan.volume = vrVolume;
+  TflChannel chan = null;
 
-  if (chan.totalFrames == 0 || chan.vf is null) {
+  // determine format
+  int ftype = Unknown;
+  auto namez = playlist[plidx].toStringz;
+  if (auto flc = drflac_open_file(namez)) {
+    drflac_close(flc);
+    ftype = Flac;
+    chan = new FlacChannel(playlist[plidx]);
+  } else {
+    auto vf = new VorbisDecoder(playlist[plidx]);
+    if (!vf.closed) {
+      ftype = Vorbis;
+      vf.destroy;
+      chan = new VorbisChannel(playlist[plidx]);
+    }
+  }
+
+  if (chan is null || chan.totalFrames == 0) {
     foreach (immutable c; plidx+1..playlist.length) playlist[c-1] = playlist[c];
     playlist.length -= 1;
     return Action.Prev;
   }
 
-  {
+  if (auto vc = cast(VorbisChannel)chan) {
     import core.stdc.stdio;
     import std.path : baseName;
     auto bn = playlist[plidx].baseName;
     printf("=== [%u/%u] %.*s (%d) ===\n", cast(uint)(plidx+1), cast(uint)playlist.length, cast(uint)bn.length, bn.ptr, quality);
     for (;;) {
       import std.stdio;
-      auto name = chan.vf.comment_name;
-      auto value = chan.vf.comment_value;
+      auto name = vc.vf.comment_name;
+      auto value = vc.vf.comment_value;
       if (name is null) break;
       if (utf8Valid(value)) value = recodeToKOI8(value);
       writeln("  ", name, "=", value);
-      chan.vf.comment_skip();
+      vc.vf.comment_skip();
     }
   }
 

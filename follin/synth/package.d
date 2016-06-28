@@ -19,4 +19,5 @@ module iv.follin.synth;
 
 public import iv.follin.synth.sfxr;
 public import iv.follin.synth.vorbis;
+public import iv.follin.synth.flac;
 //public import iv.follin.synth.dmm;
