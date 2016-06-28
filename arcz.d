@@ -694,6 +694,7 @@ public:
   enum Compressor {
     ZLib, // default
     Balz,
+    BalzMax, // Balz, maximum compression
     Zopfli,
   }
 
@@ -769,7 +770,7 @@ private:
         writeBuf(buf[]);
       },
       // max mode
-      true
+      (cpr == Compressor.BalzMax)
     );
     return res;
   }
@@ -831,6 +832,7 @@ private:
         res = writePackedZLib(upbuf);
         break;
       case Compressor.Balz:
+      case Compressor.BalzMax:
         static if (arcz_has_balz) {
           res = writePackedBalz(upbuf);
           break;
@@ -959,7 +961,7 @@ public:
     import std.internal.cstring;
     assert(chunkSize > 0 && chunkSize < 32*1024*1024); // arbitrary limit
     static if (!arcz_has_balz) {
-      if (acpr == Compressor.Balz) throw new Exception("no Balz support was compiled in ArcZ");
+      if (acpr == Compressor.Balz || acpr == Compressor.BalzMax) throw new Exception("no Balz support was compiled in ArcZ");
     }
     static if (!arcz_has_zopfli) {
       if (acpr == Compressor.Zopfli) throw new Exception("no Zopfli support was compiled in ArcZ");
@@ -971,7 +973,7 @@ public:
     chunkdata.length = chunkSize;
     scope(failure) { fclose(arcfl); arcfl = null; }
     writeBuf("CZA1"); // signature
-    if (cpr == Compressor.Balz) {
+    if (cpr == Compressor.Balz || cpr == Compressor.BalzMax) {
       writeUbyte(1); // version
     } else {
       writeUbyte(0); // version

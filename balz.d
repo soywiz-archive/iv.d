@@ -8,6 +8,8 @@
  * Special thanks to Matt Mahoney, Eugene Shelwien, Uwe Herklotz, Malcolm Taylor and LovePimple.
  *
  * D port by Ketmar // Invisible Vector
+ *
+ * What is ROLZ: http://ezcodesample.com/rolz/rolz_article.html
  */
 module iv.balz;
 

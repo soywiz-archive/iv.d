@@ -64,6 +64,7 @@ void doMain (string[] args) {
   void usage () {
     import std.stdio : write;
     static if (arcz_has_balz) enum sbalz = "  --balz   use Balz compressor\n"; else sbalz = "";
+    static if (arcz_has_balz) enum sbalz1 = "  --balzx  use Balz compressor in \"maximum\" mode\n"; else sbalz1 = "";
     static if (arcz_has_zopfli) enum szop = "  --zopfli use Zopfli compressor\n"; else enum szop = "";
     write(
       "zpack [options] -o outfile sourcedir\n"~
@@ -71,6 +72,7 @@ void doMain (string[] args) {
       "  -b       block size [1..32MB] (default is 256KB)\n"~
       "  --zlib   use ZLib compressor (default)\n"~
       sbalz~
+      sbalz1~
       szop
     );
   }
@@ -94,6 +96,7 @@ void doMain (string[] args) {
       if (arg == "-") throw new Exception("stdin is not supported");
       if (arg[0] == '-') {
         if (arg == "--balz") { cpr = ArzCreator.Compressor.Balz; continue; }
+        if (arg == "--balzx") { cpr = ArzCreator.Compressor.BalzMax; continue; }
         if (arg == "--zopfli") { cpr = ArzCreator.Compressor.Zopfli; continue; }
         if (arg == "--zlib") { cpr = ArzCreator.Compressor.ZLib; continue; }
         if (arg[1] == '-') throw new Exception("long options aren't supported");
