@@ -10,7 +10,9 @@ module iv.arcz;
 
 // use Balz compressor if available
 static if (__traits(compiles, { import iv.balz; })) enum arcz_has_balz = true; else enum arcz_has_balz = false;
+static if (__traits(compiles, { import iv.zopfli; })) enum arcz_has_zopfli = true; else enum arcz_has_zopfli = false;
 static if (arcz_has_balz) import iv.balz;
+static if (arcz_has_zopfli) import iv.zopfli;
 
 // comment this to free pakced chunk buffer right after using
 // i.e. `AZFile` will allocate new block for each new chunk
@@ -686,8 +688,16 @@ public:
 final class ArzCreator {
 private import etc.c.zlib;
 private import core.stdc.stdio : FILE, fopen, fclose, ftell, fseek, fwrite;
-private:
 
+public:
+  //WARNING! don't change the order!
+  enum Compressor {
+    ZLib, // default
+    Balz,
+    Zopfli,
+  }
+
+private:
   static struct ChunkInfo {
     uint ofs; // offset in file
     uint pksize; // packed chunk size
@@ -708,7 +718,7 @@ private:
   FileInfo[] files;
   uint lastChunkSize;
   uint statChunks, statFiles;
-  bool useBalz;
+  Compressor cpr = Compressor.ZLib;
 
 private:
   void writeUint (uint v) {
@@ -755,13 +765,24 @@ private:
       },
       // writer
       (buf) {
-        writeBuf(buf[]);
         res += buf.length;
+        writeBuf(buf[]);
       },
       // max mode
       true
     );
     return res;
+  }
+
+  static if (arcz_has_zopfli) long writePackedZopfli (const(void)[] upbuf) {
+    ubyte[] indata;
+    void* odata;
+    size_t osize;
+    ZopfliOptions opts;
+    ZopfliCompress(opts, ZOPFLI_FORMAT_ZLIB, upbuf.ptr, upbuf.length, &odata, &osize);
+    writeBuf(odata[0..osize]);
+    ZopfliFree(odata);
+    return cast(long)osize;
   }
 
   long writePackedZLib (const(void)[] upbuf) {
@@ -780,8 +801,8 @@ private:
     zs.avail_in = cast(uint)upbuf.length;
     while (zs.avail_in > 0) {
       if (zs.avail_out == 0) {
-        writeBuf(obuf[]);
         res += cast(uint)obuf.length;
+        writeBuf(obuf[]);
         zs.next_out = obuf.ptr;
         zs.avail_out = cast(uint)obuf.length;
       }
@@ -805,10 +826,24 @@ private:
   uint writePackedBuf (const(void)[] upbuf) {
     assert(upbuf.length > 0 && upbuf.length < int.max);
     long res = 0;
-    static if (arcz_has_balz) {
-      if (useBalz) res = writePackedBalz(upbuf); else res = writePackedZLib(upbuf);
-    } else {
-      if (useBalz) throw new Exception("no Balz support was compiled in ArcZ"); else res = writePackedZLib(upbuf);
+    final switch (cpr) {
+      case Compressor.ZLib:
+        res = writePackedZLib(upbuf);
+        break;
+      case Compressor.Balz:
+        static if (arcz_has_balz) {
+          res = writePackedBalz(upbuf);
+          break;
+        } else {
+          new Exception("no Balz support was compiled in ArcZ");
+        }
+      case Compressor.Zopfli:
+        static if (arcz_has_zopfli) {
+          res = writePackedZopfli(upbuf);
+          break;
+        } else {
+          new Exception("no Zopfli support was compiled in ArcZ");
+        }
     }
     if (res > uint.max) throw new Exception("output archive too big");
     return cast(uint)res;
@@ -920,20 +955,23 @@ private:
   }
 
 public:
-  this (const(char)[] fname, uint chunkSize=256*1024, bool auseBalz=false) {
+  this (const(char)[] fname, uint chunkSize=256*1024, Compressor acpr=Compressor.ZLib) {
     import std.internal.cstring;
     assert(chunkSize > 0 && chunkSize < 32*1024*1024); // arbitrary limit
     static if (!arcz_has_balz) {
-      if (auseBalz) throw new Exception("no Balz support was compiled in ArcZ");
+      if (acpr == Compressor.Balz) throw new Exception("no Balz support was compiled in ArcZ");
     }
-    useBalz = auseBalz;
+    static if (!arcz_has_zopfli) {
+      if (acpr == Compressor.Zopfli) throw new Exception("no Zopfli support was compiled in ArcZ");
+    }
+    cpr = acpr;
     arcfl = fopen(fname.tempCString, "wb");
     if (arcfl is null) throw new Exception("can't create output file '"~fname.idup~"'");
     cdpos = 0;
     chunkdata.length = chunkSize;
     scope(failure) { fclose(arcfl); arcfl = null; }
     writeBuf("CZA1"); // signature
-    if (useBalz) {
+    if (cpr == Compressor.Balz) {
       writeUbyte(1); // version
     } else {
       writeUbyte(0); // version

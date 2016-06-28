@@ -63,17 +63,21 @@ void doMain (string[] args) {
 
   void usage () {
     import std.stdio : write;
+    static if (arcz_has_balz) enum sbalz = "  --balz   use Balz compressor\n"; else sbalz = "";
+    static if (arcz_has_zopfli) enum szop = "  --zopfli use Zopfli compressor\n"; else enum szop = "";
     write(
       "zpack [options] -o outfile sourcedir\n"~
       "options:\n"~
-      "  -b     block size [1..32MB] (default is 256KB)\n"~
-      "  --balz use Balz compressor instead of zlib\n"
+      "  -b       block size [1..32MB] (default is 256KB)\n"~
+      "  --zlib   use ZLib compressor (default)\n"~
+      sbalz~
+      szop
     );
   }
 
   string outfname = null;
   string srcdir = null;
-  bool useBalz = false;
+  ArzCreator.Compressor cpr = ArzCreator.Compressor.ZLib;
 
   ubyte[] rdbuf;
   rdbuf.length = 65536;
@@ -89,7 +93,9 @@ void doMain (string[] args) {
       if (arg == "--") { nomore = true; continue; }
       if (arg == "-") throw new Exception("stdin is not supported");
       if (arg[0] == '-') {
-        if (arg == "--balz") { useBalz = true; continue; }
+        if (arg == "--balz") { cpr = ArzCreator.Compressor.Balz; continue; }
+        if (arg == "--zopfli") { cpr = ArzCreator.Compressor.Zopfli; continue; }
+        if (arg == "--zlib") { cpr = ArzCreator.Compressor.ZLib; continue; }
         if (arg[1] == '-') throw new Exception("long options aren't supported");
         arg = arg[1..$];
         while (arg.length) {
@@ -175,7 +181,7 @@ void doMain (string[] args) {
     return (a.name < b.name);
   });
 
-  auto arcz = new ArzCreator(outfname, blockSize, useBalz);
+  auto arcz = new ArzCreator(outfname, blockSize, cpr);
   auto stt = MonoTime.currTime;
   foreach (immutable filenum, ref nfo; filelist) {
     arcz.newFile(nfo.name, nfo.size);
