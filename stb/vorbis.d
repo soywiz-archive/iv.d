@@ -71,7 +71,7 @@ module iv.stb.vorbis;
 
 import core.stdc.stdio : FILE;
 
-nothrow @trusted:
+nothrow /*@trusted*/:
 @nogc { // code block, as c macro helper is not @nogc; yet it's CTFE-only
 // import it here, as druntime has no `@nogc` on it (for a reason)
 private extern(C) void qsort (void* base, size_t nmemb, size_t size, int function(in void*, in void*) compar);
@@ -4092,6 +4092,7 @@ public:
   this () {}
   ~this () { close(); }
 
+  this (int asize, readCB rcb) { assert(rcb !is null); stend = (asize > 0 ? asize : 0); stmread = rcb; }
   this (FILE* fl, bool doclose=true) { open(fl, doclose); }
   this (const(char)[] filename) { open(filename); }
 
@@ -4796,7 +4797,7 @@ private: // k8: 'cause i'm evil
   uint comment_data_pos;
 
   private enum cmt_len_size = 2;
-  nothrow @trusted @nogc {
+  nothrow /*@trusted*/ @nogc {
     public @property bool comment_empty () const pure { return (comment_get_line_len == 0); }
 
     // 0: error
@@ -4945,7 +4946,6 @@ private: // k8: 'cause i'm evil
   int channel_buffer_start;
   int channel_buffer_end;
 }
-
 
 
 // ////////////////////////////////////////////////////////////////////////// //
