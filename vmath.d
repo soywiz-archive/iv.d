@@ -73,7 +73,7 @@ public:
   alias v2 = VecN!(2, FloatType);
   alias v3 = VecN!(3, FloatType);
 
-  enum Float(real v) = cast(FloatType)v;
+  enum VFloatNum(real v) = cast(FloatType)v;
 
 public:
   FloatType x = 0.0;
