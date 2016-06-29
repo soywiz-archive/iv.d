@@ -118,7 +118,7 @@ class MP3Channel : TflChannel {
         }
       }
     }
-    return res/mp3.channels; // frames, not samples
+    return res/(stereo ? 2 : 1); // frames, not samples
   }
 }
 }
