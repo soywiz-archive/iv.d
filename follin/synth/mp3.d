@@ -75,7 +75,8 @@ class MP3Channel : TflChannel {
     { import core.stdc.stdio; printf("%uHz, %u channels\n", mp3.sampleRate, mp3.channels); }
 
     vrtotalFrames = info.samples;
-    hasframes = cast(uint)mp3.frameSamples.length/mp3.channels;
+    hasframes = cast(uint)mp3.frameSamples.length;
+    stereo = (mp3.channels == 2);
   }
 
   ~this () {
@@ -92,26 +93,15 @@ class MP3Channel : TflChannel {
     if (closed) return 0;
     uint res = 0;
     auto dest = buf.ptr;
-    auto left = cast(uint)buf.length/2;
+    auto left = cast(uint)buf.length;
     while (left > 0 && !closed) {
       //{ import core.stdc.stdio; printf("left=%u; frused=%u; hasframes=%u\n", left, frused, hasframes); }
       if (frused < hasframes) {
         uint cvt = hasframes-frused;
         if (cvt > left) cvt = left;
-        auto smp = mp3.frameSamples.ptr+frused*mp3.channels;
-        if (mp3.channels == 2) {
-          foreach (immutable _; 0..cvt*2) {
-            *dest++ = *smp/32768.0f;
-            ++smp;
-          }
-        } else {
-          foreach (immutable _; 0..cvt) {
-            immutable fl = *smp/32768.0f;
-            *dest++ = fl;
-            *dest++ = fl;
-            ++smp;
-          }
-        }
+        auto smp = mp3.frameSamples.ptr+frused;
+        tflShort2Float(smp[0..cvt], dest[0..cvt]);
+        dest += cvt;
         frused += cvt;
         res += cvt;
         left -= cvt;
@@ -120,7 +110,7 @@ class MP3Channel : TflChannel {
         //{ import core.stdc.stdio; printf("*** decoding...\n"); }
         if (mp3.decodeNextFrame()) {
           //{ import core.stdc.stdio; printf("*** decoded!\n"); }
-          hasframes = cast(uint)mp3.frameSamples.length/2;
+          hasframes = cast(uint)mp3.frameSamples.length;
         } else {
           hasframes = 0;
           fclose(fi);
@@ -128,7 +118,7 @@ class MP3Channel : TflChannel {
         }
       }
     }
-    return res; // frames, not samples
+    return res/mp3.channels; // frames, not samples
   }
 }
 }
