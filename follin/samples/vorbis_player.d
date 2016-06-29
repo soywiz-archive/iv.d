@@ -59,6 +59,7 @@ long totalFrames (TflChannel chan) {
   if (chan is null) return 0;
   if (auto cc = cast(VorbisChannel)chan) return cc.totalFrames;
   if (auto cc = cast(FlacChannel)chan) return cc.totalFrames;
+  if (auto cc = cast(MP3Channel)chan) return cc.totalFrames;
   return 0;
 }
 
@@ -74,6 +75,7 @@ Action playOgg() () {
     Unknown,
     Vorbis,
     Flac,
+    MP3,
   }
 
   if (plidx >= playlist.length) return Action.Quit;
@@ -89,16 +91,28 @@ Action playOgg() () {
     drflac_close(flc);
     ftype = Flac;
     chan = new FlacChannel(playlist[plidx]);
+    { import core.stdc.stdio : printf; printf("FLAC\n"); }
   } else {
     auto vf = new VorbisDecoder(playlist[plidx]);
     if (!vf.closed) {
       ftype = Vorbis;
       vf.destroy;
       chan = new VorbisChannel(playlist[plidx]);
+      { import core.stdc.stdio : printf; printf("VORBIS\n"); }
+    } else {
+      vf.destroy;
+      auto mp3 = new MP3Channel(playlist[plidx]);
+      if (!mp3.closed) {
+        ftype = MP3;
+        chan = mp3;
+        { import core.stdc.stdio : printf; printf("MP3\n"); }
+      } else {
+        mp3.destroy;
+      }
     }
   }
 
-  if (chan is null || chan.totalFrames == 0) {
+  if (chan is null /*|| chan.totalFrames == 0*/) {
     foreach (immutable c; plidx+1..playlist.length) playlist[c-1] = playlist[c];
     playlist.length -= 1;
     return Action.Prev;

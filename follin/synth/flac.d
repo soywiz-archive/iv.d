@@ -26,7 +26,6 @@ import iv.drflac;
 // ////////////////////////////////////////////////////////////////////////// //
 class FlacChannel : TflChannel {
   drflac* ff;
-  // for stb
   int* smpbuf;
   enum smpbufsize = 8192;
   int hasframes; // 0: eof
