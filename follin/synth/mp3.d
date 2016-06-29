@@ -25,7 +25,7 @@ import iv.minimp3;
 
 // ////////////////////////////////////////////////////////////////////////// //
 class MP3Channel : TflChannel {
-  private import core.stdc.stdio : FILE, fopen, fread, fclose;
+  private import core.stdc.stdio : FILE, fopen, fread, fclose, ftell, fseek;
   MP3DecoderNoGC mp3;
   int hasframes; // 0: eof
   int frused;
@@ -48,11 +48,33 @@ class MP3Channel : TflChannel {
     });
     if (!mp3.valid) { fclose(fi); fi = null; return; }
 
+    // scan file to determine number of frames
+    auto opos = ftell(fi);
+    auto info = mp3Scan((void[] buf) {
+      auto rd = fread(buf.ptr, 1, buf.length, fi);
+      if (rd < 0) return -1;
+      return cast(int)rd;
+    });
+    fseek(fi, opos, 0);
+
+    if (!info.valid) {
+      mp3.close();
+      fclose(fi);
+      fi = null;
+      mp3.destroy;
+      mp3 = null;
+      return;
+    }
+    //writeln("sample rate: ", info.sampleRate);
+    //writeln("channels   : ", info.channels);
+    //writeln("samples    : ", info.samples);
+    //auto seconds = info.samples/info.sampleRate;
+    //writefln("time: %2s:%02s", seconds/60, seconds%60);
+
     sampleRate = mp3.sampleRate;
     { import core.stdc.stdio; printf("%uHz, %u channels\n", mp3.sampleRate, mp3.channels); }
 
-    //vrtotalFrames = mp3.totalSampleCount/mp3.channels;
-    vrtotalFrames = 0;
+    vrtotalFrames = info.samples;
     hasframes = cast(uint)mp3.frameSamples.length/mp3.channels;
   }
 

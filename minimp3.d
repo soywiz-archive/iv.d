@@ -48,10 +48,88 @@ module iv.minimp3;
   fo.close();
 */
 
+/* determining mp3 duration with scanning:
+  auto fi = File(args.length > 1 ? args[1] : FileName);
+
+  auto info = mp3Scan((void[] buf) {
+    auto rd = fi.rawRead(buf[]);
+    return cast(uint)rd.length;
+  });
+
+  if (!info.valid) {
+    writeln("invalid MP3 file!");
+  } else {
+    writeln("sample rate: ", info.sampleRate);
+    writeln("channels   : ", info.channels);
+    writeln("samples    : ", info.samples);
+    auto seconds = info.samples/info.sampleRate;
+    writefln("time: %2s:%02s", seconds/60, seconds%60);
+  }
+*/
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 alias MP3Decoder = MP3DecoderImpl!true;
 alias MP3DecoderNoGC = MP3DecoderImpl!false;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+struct MP3Info {
+  uint sampleRate;
+  ubyte channels;
+  ulong samples;
+
+  @property bool valid () const pure nothrow @safe @nogc { return (sampleRate != 0); }
+}
+
+
+MP3Info mp3Scan(RDG) (RDG rdg) if (is(typeof({
+  ubyte[2] buf;
+  int rd = rdg(buf[]);
+}))) {
+  MP3Info info;
+  bool eofhit;
+  ubyte[4096] inbuf;
+  enum inbufsize = cast(uint)inbuf.length;
+  uint inbufpos, inbufused;
+  mp3_context_t* s = cast(mp3_context_t*)libc_calloc(mp3_context_t.sizeof, 1);
+  if (s is null) return info;
+  scope(exit) libc_free(s);
+  // now skip frames
+  while (!eofhit) {
+    if (inbufused-inbufpos < 1441) {
+      import core.stdc.string : memmove;
+      auto left = inbufused-inbufpos;
+      if (inbufpos > 0) memmove(inbuf.ptr, inbuf.ptr+inbufpos, left);
+      inbufpos = 0;
+      inbufused = left;
+      // read more bytes
+      left = inbufsize-inbufused;
+      int rd = rdg(inbuf[inbufused..inbufused+left]);
+      if (rd <= 0) {
+        eofhit = true;
+      } else {
+        inbufused += rd;
+      }
+      if (eofhit && inbufused-inbufpos < 1024) break;
+    }
+    int res = mp3_skip_frame(s, inbuf.ptr+inbufpos, inbufused-inbufpos);
+    if (res < 0) {
+      // can't decode frame
+      if (inbufused-inbufpos < 1024) inbufpos = inbufused; else inbufpos += 1024;
+    } else {
+      if (!info.valid) {
+        if (s.sample_rate < 1024 || s.sample_rate > 96000) break;
+        if (s.nb_channels < 1 || s.nb_channels > 2) break;
+        info.sampleRate = s.sample_rate;
+        info.channels = cast(ubyte)s.nb_channels;
+      }
+      info.samples += s.sample_count;
+      inbufpos += res;
+    }
+  }
+  return info;
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -327,6 +405,7 @@ struct mp3_context_t {
   bitstream_t gb;
   bitstream_t in_gb;
   int nb_channels;
+  int sample_count;
   int mode;
   int mode_ext;
   int lsf;
@@ -2229,6 +2308,17 @@ void mp3_synth_filter(
 
 // ////////////////////////////////////////////////////////////////////////// //
 int decode_header(mp3_context_t *s, uint32_t header) {
+    static immutable short[4][4] sampleCount = [
+      [0, 576, 1152, 384], // v2.5
+      [0, 0, 0, 0], // reserved
+      [0, 576, 1152, 384], // v2
+      [0, 1152, 1152, 384], // v1
+    ];
+    ubyte mpid = (header>>19)&0x03;
+    ubyte layer = (header>>17)&0x03;
+
+    s.sample_count = sampleCount.ptr[mpid].ptr[layer];
+
     int sample_rate, frame_size, mpeg25, padding;
     int sample_rate_index, bitrate_index;
     if (header & (1<<20)) {
@@ -2795,3 +2885,31 @@ retry:
     s.frame_size += extra_bytes;
     return buf_size;
 }
+
+
+int mp3_skip_frame (mp3_context_t *s, uint8_t *buf, int buf_size) {
+  uint32_t header;
+  int out_size;
+  int extra_bytes = 0;
+
+retry:
+  if (buf_size < HEADER_SIZE) return -1;
+  header = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+  if (mp3_check_header(header) < 0) {
+    ++buf;
+    --buf_size;
+    ++extra_bytes;
+    goto retry;
+  }
+
+  if (decode_header(s, header) == 1) {
+    s.frame_size = -1;
+    return -1;
+  }
+
+  if (s.frame_size <= 0 || s.frame_size > buf_size) return -1;  // incomplete frame
+  if (s.frame_size < buf_size) buf_size = s.frame_size;
+  s.frame_size += extra_bytes;
+  return buf_size;
+}
+
