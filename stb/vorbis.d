@@ -1,21 +1,3 @@
-/*
- * D translation by Ketmar // Invisible Vector
- * This port is licenced under the following GNU GPL.
- * Keep using wrappers, you suckers. Or go GPL.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- */
 // Ogg Vorbis audio decoder - v1.06 - public domain
 // http://nothings.org/stb_vorbis/
 //
@@ -67,6 +49,7 @@
 //    0.99995 -            - avoid alias-optimization issue in float-to-int conversion
 //
 // See end of file for full version history.
+// D translation by Ketmar // Invisible Vector
 module iv.stb.vorbis;
 
 import core.stdc.stdio : FILE;
