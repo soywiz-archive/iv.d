@@ -1752,7 +1752,16 @@ int huffman_decode (mp3_context_t *s, granule_t *g, int16_t *exponents, int end_
         }
         s_index+=4;
     }
-    libc_memset(&g.sb_hybrid[s_index], 0, (g.sb_hybrid[0]).sizeof*(576 - s_index));
+    /*
+    if (s_index >= g.sb_hybrid.length) {
+      import core.stdc.stdio : printf;
+      printf("s_index=%u; len=%u; len=%u\n", cast(uint)s_index, cast(uint)g.sb_hybrid.length, cast(uint)((g.sb_hybrid[0]).sizeof*(576 - s_index)));
+      assert(0);
+    }
+    */
+    if ((g.sb_hybrid[0]).sizeof*(576 - s_index) > 0) {
+      libc_memset(&g.sb_hybrid[s_index], 0, (g.sb_hybrid[0]).sizeof*(576 - s_index));
+    }
 
     /* skip extension bits */
     bits_left = end_pos2 - get_bits_count(&s.gb);
