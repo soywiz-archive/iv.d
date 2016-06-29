@@ -50,14 +50,22 @@ module iv.minimp3;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-final class MP3Decoder {
+alias MP3Decoder = MP3DecoderImpl!true;
+alias MP3DecoderNoGC = MP3DecoderImpl!false;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+final class MP3DecoderImpl(bool allowGC) {
 public:
   enum MaxSamplesPerFrame = 1152*2;
 
-  // read bytes into the buffer, return number of bytes read or 0 for EOF
+  // read bytes into the buffer, return number of bytes read or 0 for EOF, -1 on error
   // will never be called with empty buffer, or buffer more than 128KB
-  // throw on error
-  alias ReadBufFn = uint delegate (void[] buf);
+  static if (allowGC) {
+    alias ReadBufFn = int delegate (void[] buf);
+  } else {
+    alias ReadBufFn = int delegate (void[] buf) nothrow @nogc;
+  }
 
 public:
   static struct mp3_info_t {
@@ -76,6 +84,10 @@ private:
   short[MaxSamplesPerFrame] samples;
   uint scanLeft = 256*1024+16; // how much bytes we should scan (max ID3 size is 256KB)
 
+  static if (allowGC) mixin(ObjectCodeMixin); else mixin("nothrow @nogc: "~ObjectCodeMixin);
+}
+
+private enum ObjectCodeMixin = q{
 private:
   uint ensureBytes (uint size) {
     import core.stdc.string : memmove;
@@ -97,13 +109,13 @@ private:
       assert(left > 0);
       if (inbufsize < inbufused+left) {
         auto np = libc_realloc(inbuf, inbufused+left);
-        if (np is null) throw new Exception("out of memory"); //FIXME
+        if (np is null) assert(0, "out of memory"); //FIXME
         inbufsize = inbufused+left;
         inbuf = cast(ubyte*)np;
       }
       auto rd = readBuf(inbuf[inbufused..inbufused+left]);
-      if (rd > left) throw new Exception("mp3 reader returned too many bytes");
-      if (rd == 0) eofhit = true; else inbufused += rd;
+      if (rd > left) assert(0, "mp3 reader returned too many bytes");
+      if (rd <= 0) eofhit = true; else inbufused += rd;
     }
   }
 
@@ -164,8 +176,8 @@ public:
     assert(reader !is null);
     readBuf = reader;
     dec = libc_calloc(mp3_context_t.sizeof, 1);
-    if (dec is null) throw new Exception("out of memory"); // no, really! ;-)
-    mp3_decode_init(cast(mp3_context_t*)dec);
+    if (dec is null) assert(0, "out of memory"); // no, really! ;-)
+    //mp3_decode_init(cast(mp3_context_t*)dec);
     if (!decodeOneFrame(true)) close();
   }
 
@@ -194,7 +206,7 @@ public:
     if (!valid) return null;
     return samples[0..info.audio_bytes/2];
   }
-}
+};
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -350,20 +362,20 @@ struct huff_table_t {
   immutable(uint16_t)* codes;
 }
 
-static vlc_t[16] huff_vlc;
-static vlc_t[2] huff_quad_vlc;
-static uint16_t[23][9] band_index_long;
+__gshared vlc_t[16] huff_vlc;
+__gshared vlc_t[2] huff_quad_vlc;
+__gshared uint16_t[23][9] band_index_long;
 enum TABLE_4_3_SIZE = (8191 + 16)*4;
-static int8_t* table_4_3_exp;
-static uint32_t* table_4_3_value;
-static uint32_t[512] exp_table;
-static uint32_t[16][512] expval_table;
-static int32_t[16][2] is_table;
-static int32_t[16][2][2] is_table_lsf;
-static int32_t[4][8] csa_table;
-static float[4][8] csa_table_float;
-static int32_t[36][8] mdct_win;
-static int16_t[512] window;
+__gshared int8_t* table_4_3_exp;
+__gshared uint32_t* table_4_3_value;
+__gshared uint32_t[512] exp_table;
+__gshared uint32_t[16][512] expval_table;
+__gshared int32_t[16][2] is_table;
+__gshared int32_t[16][2][2] is_table_lsf;
+__gshared int32_t[4][8] csa_table;
+__gshared float[4][8] csa_table_float;
+__gshared int32_t[36][8] mdct_win;
+__gshared int16_t[512] window;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -2576,11 +2588,15 @@ int mp3_decode_main(
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-int mp3_decode_init(mp3_context_t *s) {
-    static int init=0;
+shared static this () {
+  auto res = mp3_decode_init();
+  if (res < 0) assert(0, "mp3 initialization failed");
+}
+
+int mp3_decode_init () {
     int i, j, k;
 
-    if (!init) {
+    if (true) {
         /* synth init */
         for(i=0;i<257;i++) {
             int v;
@@ -2734,7 +2750,7 @@ int mp3_decode_init(mp3_context_t *s) {
                 mdct_win[j + 4][i + 1] = -mdct_win[j][i + 1];
             }
         }
-        init = 1;
+        //init = 1;
     }
     return 0;
 }
