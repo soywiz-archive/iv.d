@@ -5025,6 +5025,11 @@ template cmacroFixVars(T...) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /* Version history
+    1.09    - 2016/04/04 - back out 'avoid discarding last frame' fix from previous version
+    1.08    - 2016/04/02 - fixed multiple warnings; fix setup memory leaks;
+                           avoid discarding last frame of audio data
+    1.07    - 2015/01/16 - fixed some warnings, fix mingw, const-correct API
+                           some more crash fixes when out of memory or with corrupt files
     1.06    - 2015/08/31 - full, correct support for seeking API (Dougall Johnson)
                            some crash fixes when out of memory or with corrupt files
     1.05    - 2015/04/19 - don't define __forceinline if it's redundant
