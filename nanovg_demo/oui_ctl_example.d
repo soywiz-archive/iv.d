@@ -1,7 +1,7 @@
 //
 // based on NanoVG's example code by Mikko Mononen
 import core.time;
-//import core.stdc.stdio;
+import core.stdc.stdio : snprintf;
 import iv.nanovg;
 import iv.nanovg.oui;
 import perf;
@@ -34,7 +34,7 @@ float getSeconds () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared NVGcontext* _vg = null;
+__gshared NVGcontext* nvg = null;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -183,15 +183,13 @@ void draw_demostuff (NVGcontext* vg, int x, int y, float w, float h) {
   x = ox;
   y += 40;
   float progress_value = fmodf(getSeconds()/10.0, 1.0);
-  //char[32] progress_label;
-  //sprintf(progress_label.ptr, "%d%%", int(progress_value*100+0.5f));
-  import std.string : format;
-  string progress_label = "%d%%".format(cast(int)(progress_value*100+0.5f));
-  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, progress_value, "Default", progress_label);
+  char[32] progress_label;
+  int len = cast(int)snprintf(progress_label.ptr, progress_label.length, "%d%%", cast(int)(progress_value*100+0.5f));
+  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, progress_value, "Default", progress_label[0..len]);
   y += 25;
-  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_HOVER, progress_value, "Hovered", progress_label);
+  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_HOVER, progress_value, "Hovered", progress_label[0..len]);
   y += 25;
-  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_ACTIVE, progress_value, "Active", progress_label);
+  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_ACTIVE, progress_value, "Active", progress_label[0..len]);
 
   int rw = x+240-rx;
   float s_offset = sinf(getSeconds()/2.0)*0.5+0.5;
@@ -627,13 +625,17 @@ void draw (NVGcontext *vg, float w, float h) {
     }
   }
 
-  uiProcess(cast(int)(getSeconds()*1000.0));
+  __gshared int prevTime = 0;
+  int curTime = cast(int)(getSeconds()*1000.0);
+  uiProcess(curTime-prevTime);
+  prevTime = curTime;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 void main () {
   PerfGraph fps;
+  int owdt = -1, ohgt = -1;
 
   double mx = 0, my = 0;
   bool doQuit = false;
@@ -649,16 +651,23 @@ void main () {
   auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.fixedSize);
   //sdwindow.hideCursor();
 
-  sdwindow.closeQuery = delegate () { doQuit = true; };
+  void clearWindowData () {
+    if (uictx !is null) uiDestroyContext(uictx);
+    uictx = null;
+    if (!sdwindow.closed && nvg !is null) {
+      nvgDeleteGL2(nvg);
+      nvg = null;
+    }
+  }
+
+  sdwindow.closeQuery = delegate () {
+    clearWindowData();
+    doQuit = true;
+  };
 
   void closeWindow () {
-    if (!sdwindow.closed && _vg !is null) {
-      if (uictx !is null) uiDestroyContext(uictx);
-      uictx = null;
-      nvgDeleteGL2(_vg);
-      _vg = null;
-      sdwindow.close();
-    }
+    clearWindowData();
+    if (!sdwindow.closed) sdwindow.close();
   }
 
   auto stt = MonoTime.currTime;
@@ -666,12 +675,15 @@ void main () {
   auto curt = prevt;
   float dt = 0, secs = 0;
 
-  int peak_items = 0;
-  uint peak_alloc = 0;
+  //int peak_items = 0;
+  //uint peak_alloc = 0;
 
   sdwindow.redrawOpenGlScene = delegate () {
-    // Calculate pixel ration for hi-dpi devices.
-    float pxRatio = cast(float)GWidth/cast(float)GHeight;
+    if (owdt != sdwindow.width || ohgt != sdwindow.height) {
+      owdt = sdwindow.width;
+      ohgt = sdwindow.height;
+      glViewport(0, 0, owdt, ohgt);
+    }
 
     // timers
     prevt = curt;
@@ -680,18 +692,17 @@ void main () {
     dt = cast(double)((curt-prevt).total!"msecs")/1000.0;
 
     // Update and render
-    //glViewport(0, 0, fbWidth, fbHeight);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
 
-    if (_vg !is null) {
+    if (nvg !is null) {
       updateGraph(&fps, dt);
-      nvgBeginFrame(_vg, GWidth, GHeight, pxRatio);
-      draw(_vg, GWidth, GHeight);
-      peak_items = (peak_items > uiGetItemCount() ? peak_items : uiGetItemCount());
-      peak_alloc = (peak_alloc > uiGetAllocSize() ? peak_alloc : uiGetAllocSize());
-      renderGraph(_vg, GWidth-200-5, GHeight-35-5, &fps);
-      nvgEndFrame(_vg);
+      nvgBeginFrame(nvg, owdt, ohgt);
+      draw(nvg, owdt, ohgt);
+      //peak_items = (peak_items > uiGetItemCount() ? peak_items : uiGetItemCount());
+      //peak_alloc = (peak_alloc > uiGetAllocSize() ? peak_alloc : uiGetAllocSize());
+      renderGraph(nvg, owdt-200-5, ohgt-35-5, &fps);
+      nvgEndFrame(nvg);
     }
   };
 
@@ -709,16 +720,16 @@ void main () {
     glLoadIdentity();
 
     version(DEMO_MSAA) {
-      _vg = nvgCreateGL2(NVG_STENCIL_STROKES | NVG_DEBUG);
+      nvg = nvgCreateGL2(NVG_STENCIL_STROKES | NVG_DEBUG);
     } else {
-      _vg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+      nvg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
     }
-    if (_vg is null) {
+    if (nvg is null) {
       import std.stdio;
       writeln("Could not init nanovg.");
       //sdwindow.close();
     }
-    init(_vg);
+    init(nvg);
     initGraph(&fps, GRAPH_RENDER_FPS, "Frame Time", "system");
     sdwindow.redrawOpenGlScene();
   };

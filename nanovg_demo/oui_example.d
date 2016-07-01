@@ -1,6 +1,7 @@
 //
 // based on NanoVG's example code by Mikko Mononen
 import core.time;
+import core.stdc.stdio : snprintf;
 import iv.nanovg;
 import iv.nanovg.oui;
 import perf;
@@ -668,15 +669,13 @@ void draw_demostuff (NVGcontext* vg, int x, int y, float w, float h) {
   x = ox;
   y += 40;
   float progress_value = fmodf(getSeconds()/10.0, 1.0);
-  //char[32] progress_label;
-  //sprintf(progress_label.ptr, "%d%%", int(progress_value*100+0.5f));
-  import std.string : format;
-  string progress_label = "%d%%".format(cast(int)(progress_value*100+0.5f));
-  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, progress_value, "Default", progress_label);
+  char[32] progress_label;
+  int len = cast(int)snprintf(progress_label.ptr, progress_label.length, "%d%%", cast(int)(progress_value*100+0.5f));
+  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, progress_value, "Default", progress_label[0..len]);
   y += 25;
-  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_HOVER, progress_value, "Hovered", progress_label);
+  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_HOVER, progress_value, "Hovered", progress_label[0..len]);
   y += 25;
-  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_ACTIVE, progress_value, "Active", progress_label);
+  bndSlider(vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_ACTIVE, progress_value, "Active", progress_label[0..len]);
 
   int rw = x+240-rx;
   float s_offset = sinf(getSeconds()/2.0)*0.5+0.5;

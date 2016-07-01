@@ -425,7 +425,7 @@ void sliderhandler (int item, UIevent event) {
       // get the items layouted rectangle
       UIrect rc = uiGetRect(item);
       // calculate our new offset and clamp
-      float value = sliderstart + (cast(float)pos.x / cast(float)rc.w);
+      float value = sliderstart+(cast(float)pos.x/cast(float)rc.w);
       value = (value < 0 ? 0 : (value > 1 ? 1 : value));
       // assign the new value
       *data.progress = value;
@@ -440,7 +440,7 @@ public int slider(T : const(char)[]) (T label, float* progress) {
   // set size of wiget; horizontal size is dynamic, vertical is fixed
   uiSetSize(item, 0, BND_WIDGET_HEIGHT);
   // attach our slider event handler and capture two classes of events
-  uiSetEvents(item, UI_BUTTON0_DOWN | UI_BUTTON0_CAPTURE);
+  uiSetEvents(item, UI_BUTTON0_DOWN|UI_BUTTON0_CAPTURE);
   // store some custom data with the button that we use for styling
   // and logic, e.g. the pointer to the data we want to alter.
   UISliderData *data = uiAllocHandle!UISliderData(item);
@@ -485,7 +485,7 @@ void textboxhandler (int item, UIevent event) {
 public int textbox (CtlTextData* text, int maxsize) {
   int item = uiItem();
   uiSetSize(item, 0, BND_WIDGET_HEIGHT);
-  uiSetEvents(item, UI_BUTTON0_DOWN | UI_KEY_DOWN | UI_CHAR);
+  uiSetEvents(item, UI_BUTTON0_DOWN|UI_KEY_DOWN|UI_CHAR);
   // store some custom data with the button that we use for styling
   // and logic, e.g. the pointer to the data we want to alter.
   UITextData *data = uiAllocHandle!UITextData(item);

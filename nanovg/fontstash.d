@@ -225,7 +225,7 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
   FT_GlyphSlot ftGlyph;
   //FONS_NOTUSED(scale);
   version(nanovg_ft_mono) enum exflags = FT_LOAD_MONOCHROME; else enum exflags = 0;
-  ftError = FT_Set_Pixel_Sizes(font.font, 0, cast(FT_UInt)(size * cast(float)font.font.units_per_EM / cast(float)(font.font.ascender - font.font.descender)));
+  ftError = FT_Set_Pixel_Sizes(font.font, 0, cast(FT_UInt)(size*cast(float)font.font.units_per_EM/cast(float)(font.font.ascender-font.font.descender)));
   if (ftError) return 0;
   ftError = FT_Load_Glyph(font.font, glyph, FT_LOAD_RENDER|/*FT_LOAD_NO_AUTOHINT|*/exflags);
   if (ftError) return 0;
@@ -234,9 +234,9 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
   ftGlyph = font.font.glyph;
   *lsb = ftGlyph.metrics.horiBearingX;
   *x0 = ftGlyph.bitmap_left;
-  *x1 = *x0 + ftGlyph.bitmap.width;
+  *x1 = *x0+ftGlyph.bitmap.width;
   *y0 = -ftGlyph.bitmap_top;
-  *y1 = *y0 + ftGlyph.bitmap.rows;
+  *y1 = *y0+ftGlyph.bitmap.rows;
   return 1;
 }
 
@@ -263,7 +263,7 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
       foreach (int x; 0..ftGlyph.bitmap.width) {
         //auto bt = ftGlyph.bitmap.buffer[ftGlyphOffset++];
         //if (bt < 200) bt = 0; else bt = 255;
-        output[(y * outStride) + x] = ftGlyph.bitmap.buffer[ftGlyphOffset++];
+        output[(y*outStride)+x] = ftGlyph.bitmap.buffer[ftGlyphOffset++];
       }
     }
   }
@@ -287,7 +287,7 @@ struct FONSttFontImpl {
   stbtt_fontinfo font;
 }
 
-int fons__tt_init (FONScontext *context) {
+int fons__tt_init (FONScontext* context) {
   //FONS_NOTUSED(context);
   return 1;
 }
@@ -493,9 +493,9 @@ FONSatlas* fons__allocAtlas (int w, int h, int nnodes) {
   atlas.height = h;
 
   // Allocate space for skyline nodes
-  atlas.nodes = cast(FONSatlasNode*)malloc(FONSatlasNode.sizeof * nnodes);
+  atlas.nodes = cast(FONSatlasNode*)malloc(FONSatlasNode.sizeof*nnodes);
   if (atlas.nodes is null) goto error;
-  memset(atlas.nodes, 0, FONSatlasNode.sizeof * nnodes);
+  memset(atlas.nodes, 0, FONSatlasNode.sizeof*nnodes);
   atlas.nnodes = 0;
   atlas.cnodes = nnodes;
 
@@ -535,7 +535,7 @@ void fons__atlasRemoveNode (FONSatlas* atlas, int idx) {
 
 void fons__atlasExpand (FONSatlas* atlas, int w, int h) {
   // Insert node for empty space
-  if (w > atlas.width) fons__atlasInsertNode(atlas, atlas.nnodes, atlas.width, 0, w - atlas.width);
+  if (w > atlas.width) fons__atlasInsertNode(atlas, atlas.nnodes, atlas.width, 0, w-atlas.width);
   atlas.width = w;
   atlas.height = h;
 }
@@ -596,7 +596,7 @@ int fons__atlasRectFits (FONSatlas* atlas, int i, int w, int h) {
   while (spaceLeft > 0) {
     if (i == atlas.nnodes) return -1;
     y = fons__maxi(y, atlas.nodes[i].y);
-    if (y + h > atlas.height) return -1;
+    if (y+h > atlas.height) return -1;
     spaceLeft -= atlas.nodes[i].width;
     ++i;
   }
@@ -865,10 +865,10 @@ package(iv.nanovg) int fonsAddFontMem (FONScontext* stash, const(char)[] name, u
   // Store normalized line height. The real line height is got
   // by multiplying the lineh by font size.
   fons__tt_getFontVMetrics( &font.font, &ascent, &descent, &lineGap);
-  fh = ascent - descent;
-  font.ascender = cast(float)ascent / cast(float)fh;
-  font.descender = cast(float)descent / cast(float)fh;
-  font.lineh = cast(float)(fh + lineGap) / cast(float)fh;
+  fh = ascent-descent;
+  font.ascender = cast(float)ascent/cast(float)fh;
+  font.descender = cast(float)descent/cast(float)fh;
+  font.lineh = cast(float)(fh+lineGap)/cast(float)fh;
 
   return idx;
 
@@ -907,13 +907,13 @@ void fons__blurCols (ubyte* dst, int w, int h, int dstStride, int alpha) {
   for (y = 0; y < h; y++) {
     int z = 0; // force zero border
     for (x = 1; x < w; x++) {
-      z += (alpha*((cast(int)(dst[x]) << ZPREC)-z)) >> APREC;
+      z += (alpha*((cast(int)(dst[x])<<ZPREC)-z))>>APREC;
       dst[x] = cast(ubyte)(z>>ZPREC);
     }
     dst[w-1] = 0; // force zero border
     z = 0;
     for (x = w-2; x >= 0; x--) {
-      z += (alpha*((cast(int)(dst[x])<<ZPREC)-z)) >> APREC;
+      z += (alpha*((cast(int)(dst[x])<<ZPREC)-z))>>APREC;
       dst[x] = cast(ubyte)(z>>ZPREC);
     }
     dst[0] = 0; // force zero border
@@ -926,13 +926,13 @@ void fons__blurRows (ubyte* dst, int w, int h, int dstStride, int alpha) {
   for (x = 0; x < w; x++) {
     int z = 0; // force zero border
     for (y = dstStride; y < h*dstStride; y += dstStride) {
-      z += (alpha * ((cast(int)(dst[y])<<ZPREC)-z))>>APREC;
+      z += (alpha*((cast(int)(dst[y])<<ZPREC)-z))>>APREC;
       dst[y] = cast(ubyte)(z>>ZPREC);
     }
     dst[(h-1)*dstStride] = 0; // force zero border
     z = 0;
     for (y = (h-2)*dstStride; y >= 0; y -= dstStride) {
-      z += (alpha * ((cast(int)(dst[y])<<ZPREC)-z))>>APREC;
+      z += (alpha*((cast(int)(dst[y])<<ZPREC)-z))>>APREC;
       dst[y] = cast(ubyte)(z>>ZPREC);
     }
     dst[0] = 0; // force zero border
@@ -949,7 +949,7 @@ void fons__blur (FONScontext* stash, ubyte* dst, int w, int h, int dstStride, in
 
   if (blur < 1) return;
   // Calculate the alpha such that 90% of the kernel is within the radius. (Kernel extends to infinity)
-  sigma = cast(float)blur*0.57735f; // 1 / sqrt(3)
+  sigma = cast(float)blur*0.57735f; // 1/sqrt(3)
   alpha = cast(int)((1<<APREC)*(1.0f-expf(-2.3f/(sigma+1.0f))));
   fons__blurRows(dst, w, h, dstStride, alpha);
   fons__blurCols(dst, w, h, dstStride, alpha);
@@ -979,7 +979,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   stash.nscratch = 0;
 
   // Find code point and size.
-  h = fons__hashint(codepoint) & (FONS_HASH_LUT_SIZE-1);
+  h = fons__hashint(codepoint)&(FONS_HASH_LUT_SIZE-1);
   i = font.lut[h];
   while (i != -1) {
     if (font.glyphs[i].codepoint == codepoint && font.glyphs[i].size == isize && font.glyphs[i].blur == iblur) return &font.glyphs[i];
@@ -990,8 +990,8 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   scale = fons__tt_getPixelHeightScale(&font.font, size);
   g = fons__tt_getGlyphIndex(&font.font, codepoint);
   fons__tt_buildGlyphBitmap(&font.font, g, size, scale, &advance, &lsb, &x0, &y0, &x1, &y1);
-  gw = x1-x0 + pad*2;
-  gh = y1-y0 + pad*2;
+  gw = x1-x0+pad*2;
+  gh = y1-y0+pad*2;
 
   // Find free spot for the rect in the atlas
   added = fons__atlasAddRect(stash.atlas, gw, gh, &gx, &gy);
@@ -1012,9 +1012,9 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   glyph.y0 = cast(short)gy;
   glyph.x1 = cast(short)(glyph.x0+gw);
   glyph.y1 = cast(short)(glyph.y0+gh);
-  glyph.xadv = cast(short)(scale * advance * 10.0f);
-  glyph.xoff = cast(short)(x0 - pad);
-  glyph.yoff = cast(short)(y0 - pad);
+  glyph.xadv = cast(short)(scale*advance*10.0f);
+  glyph.xoff = cast(short)(x0-pad);
+  glyph.yoff = cast(short)(y0-pad);
   glyph.next = 0;
 
   // Insert char to hash lookup.
@@ -1022,18 +1022,18 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   font.lut[h] = font.nglyphs-1;
 
   // Rasterize
-  dst = &stash.texData[(glyph.x0+pad) + (glyph.y0+pad) * stash.params.width];
+  dst = &stash.texData[(glyph.x0+pad)+(glyph.y0+pad)*stash.params.width];
   fons__tt_renderGlyphBitmap(&font.font, dst, gw-pad*2, gh-pad*2, stash.params.width, scale, scale, g);
 
   // Make sure there is one pixel empty border.
-  dst = &stash.texData[glyph.x0 + glyph.y0 * stash.params.width];
+  dst = &stash.texData[glyph.x0+glyph.y0*stash.params.width];
   for (y = 0; y < gh; y++) {
     dst[y*stash.params.width] = 0;
-    dst[gw-1 + y*stash.params.width] = 0;
+    dst[gw-1+y*stash.params.width] = 0;
   }
   for (x = 0; x < gw; x++) {
     dst[x] = 0;
-    dst[x + (gh-1)*stash.params.width] = 0;
+    dst[x+(gh-1)*stash.params.width] = 0;
   }
 
   // Debug code to color the glyph background
@@ -1051,7 +1051,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   // Blur
   if (iblur > 0) {
     stash.nscratch = 0;
-    bdst = &stash.texData[glyph.x0 + glyph.y0 * stash.params.width];
+    bdst = &stash.texData[glyph.x0+glyph.y0*stash.params.width];
     fons__blur(stash, bdst, gw, gh, stash.params.width, iblur);
   }
 
@@ -1081,7 +1081,7 @@ void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONS
   x1 = cast(float)(glyph.x1-1);
   y1 = cast(float)(glyph.y1-1);
 
-  if (stash.params.flags & FONS_ZERO_TOPLEFT) {
+  if (stash.params.flags&FONS_ZERO_TOPLEFT) {
     rx = cast(float)cast(int)(*x+xoff);
     ry = cast(float)cast(int)(*y+yoff);
 
@@ -1177,14 +1177,14 @@ package(iv.nanovg) float fonsDrawText (FONScontext* stash, float x, float y, con
   if (end is null) end = str+strlen(str);
 
   // Align horizontally
-  if (state.align_ & FONS_ALIGN_LEFT) {
+  if (state.align_&FONS_ALIGN_LEFT) {
     // empty
-  } else if (state.align_ & FONS_ALIGN_RIGHT) {
+  } else if (state.align_&FONS_ALIGN_RIGHT) {
     width = fonsTextBounds(stash, x, y, str, end, null);
     x -= width;
-  } else if (state.align_ & FONS_ALIGN_CENTER) {
+  } else if (state.align_&FONS_ALIGN_CENTER) {
     width = fonsTextBounds(stash, x, y, str, end, null);
-    x -= width * 0.5f;
+    x -= width*0.5f;
   }
   // Align vertically.
   y += fons__getVertAlign(stash, font, state.align_, isize);
@@ -1228,19 +1228,19 @@ package(iv.nanovg) int fonsTextIterInit (FONScontext* stash, FONStextIter* iter,
   iter.scale = fons__tt_getPixelHeightScale(&iter.font.font, cast(float)iter.isize/10.0f);
 
   // Align horizontally
-  if (state.align_ & FONS_ALIGN_LEFT) {
+  if (state.align_&FONS_ALIGN_LEFT) {
     // empty
-  } else if (state.align_ & FONS_ALIGN_RIGHT) {
+  } else if (state.align_&FONS_ALIGN_RIGHT) {
     width = fonsTextBounds(stash, x, y, str, end, null);
     x -= width;
-  } else if (state.align_ & FONS_ALIGN_CENTER) {
+  } else if (state.align_&FONS_ALIGN_CENTER) {
     width = fonsTextBounds(stash, x, y, str, end, null);
-    x -= width * 0.5f;
+    x -= width*0.5f;
   }
   // Align vertically.
   y += fons__getVertAlign(stash, iter.font, state.align_, iter.isize);
 
-  if (end is null) end = str + strlen(str);
+  if (end is null) end = str+strlen(str);
 
   iter.x = iter.nextx = x;
   iter.y = iter.nexty = y;
@@ -1281,8 +1281,8 @@ debug package(iv.nanovg) void fonsDrawDebug (FONScontext* stash, float x, float 
   int i;
   int w = stash.params.width;
   int h = stash.params.height;
-  float u = w == 0 ? 0 : (1.0f / w);
-  float v = h == 0 ? 0 : (1.0f / h);
+  float u = (w == 0 ? 0 : 1.0f/w);
+  float v = (h == 0 ? 0 : 1.0f/h);
 
   if (stash.nverts+6+6 > FONS_VERTEX_COUNT)
     fons__flush(stash);
@@ -1361,7 +1361,7 @@ package(iv.nanovg) float fonsTextBounds (FONScontext* stash, float x, float y, c
       fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
       if (q.x0 < minx) minx = q.x0;
       if (q.x1 > maxx) maxx = q.x1;
-      if (stash.params.flags & FONS_ZERO_TOPLEFT) {
+      if (stash.params.flags&FONS_ZERO_TOPLEFT) {
         if (q.y0 < miny) miny = q.y0;
         if (q.y1 > maxy) maxy = q.y1;
       } else {
@@ -1372,17 +1372,17 @@ package(iv.nanovg) float fonsTextBounds (FONScontext* stash, float x, float y, c
     prevGlyphIndex = glyph !is null ? glyph.index : -1;
   }
 
-  advance = x - startx;
+  advance = x-startx;
 
   // Align horizontally
-  if (state.align_ & FONS_ALIGN_LEFT) {
+  if (state.align_&FONS_ALIGN_LEFT) {
     // empty
-  } else if (state.align_ & FONS_ALIGN_RIGHT) {
+  } else if (state.align_&FONS_ALIGN_RIGHT) {
     minx -= advance;
     maxx -= advance;
-  } else if (state.align_ & FONS_ALIGN_CENTER) {
-    minx -= advance * 0.5f;
-    maxx -= advance * 0.5f;
+  } else if (state.align_&FONS_ALIGN_CENTER) {
+    minx -= advance*0.5f;
+    maxx -= advance*0.5f;
   }
 
   if (bounds) {
@@ -1406,12 +1406,9 @@ package(iv.nanovg) void fonsVertMetrics (FONScontext* stash, float* ascender, fl
   isize = cast(short)(state.size*10.0f);
   if (font.data is null) return;
 
-  if (ascender)
-    *ascender = font.ascender*isize/10.0f;
-  if (descender)
-    *descender = font.descender*isize/10.0f;
-  if (lineh)
-    *lineh = font.lineh*isize/10.0f;
+  if (ascender) *ascender = font.ascender*isize/10.0f;
+  if (descender) *descender = font.descender*isize/10.0f;
+  if (lineh) *lineh = font.lineh*isize/10.0f;
 }
 
 package(iv.nanovg) void fonsLineBounds (FONScontext* stash, float y, float* miny, float* maxy) {
@@ -1427,12 +1424,12 @@ package(iv.nanovg) void fonsLineBounds (FONScontext* stash, float y, float* miny
 
   y += fons__getVertAlign(stash, font, state.align_, isize);
 
-  if (stash.params.flags & FONS_ZERO_TOPLEFT) {
-    *miny = y - font.ascender * cast(float)isize/10.0f;
-    *maxy = *miny + font.lineh*isize/10.0f;
+  if (stash.params.flags&FONS_ZERO_TOPLEFT) {
+    *miny = y-font.ascender*cast(float)isize/10.0f;
+    *maxy = *miny+font.lineh*isize/10.0f;
   } else {
-    *maxy = y + font.descender * cast(float)isize/10.0f;
-    *miny = *maxy - font.lineh*isize/10.0f;
+    *maxy = y+font.descender*cast(float)isize/10.0f;
+    *miny = *maxy-font.lineh*isize/10.0f;
   }
 }
 
@@ -1502,16 +1499,16 @@ package(iv.nanovg) int fonsExpandAtlas (FONScontext* stash, int width, int heigh
     if (stash.params.renderResize(stash.params.userPtr, width, height) == 0) return 0;
   }
   // Copy old texture data over.
-  data = cast(ubyte*)malloc(width * height);
+  data = cast(ubyte*)malloc(width*height);
   if (data is null) return 0;
   for (i = 0; i < stash.params.height; i++) {
     ubyte* dst = &data[i*width];
     ubyte* src = &stash.texData[i*stash.params.width];
     memcpy(dst, src, stash.params.width);
     if (width > stash.params.width)
-      memset(dst+stash.params.width, 0, width - stash.params.width);
+      memset(dst+stash.params.width, 0, width-stash.params.width);
   }
-  if (height > stash.params.height) memset(&data[stash.params.height * width], 0, (height - stash.params.height) * width);
+  if (height > stash.params.height) memset(&data[stash.params.height*width], 0, (height-stash.params.height)*width);
 
   free(stash.texData);
   stash.texData = data;
@@ -1550,9 +1547,9 @@ package(iv.nanovg) int fonsResetAtlas (FONScontext* stash, int width, int height
   fons__atlasReset(stash.atlas, width, height);
 
   // Clear texture data.
-  stash.texData = cast(ubyte*)realloc(stash.texData, width * height);
+  stash.texData = cast(ubyte*)realloc(stash.texData, width*height);
   if (stash.texData is null) return 0;
-  memset(stash.texData, 0, width * height);
+  memset(stash.texData, 0, width*height);
 
   // Reset dirty rect
   stash.dirtyRect[0] = width;

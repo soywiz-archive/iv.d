@@ -1383,12 +1383,12 @@ void drawBlendish (NVGcontext* _vg, float _x, float _y, float _w, float _h, floa
   y += 40.0f;
   float progress_value = fmodf(_t / 10.0f, 1.0f);
   char[32] progress_label;
-  snprintf(progress_label.ptr, progress_label.length, "%d%%", cast(int)(progress_value * 100 + 0.5f) );
-  bndSlider(_vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, progress_value, "Default", progress_label);
+  int len = cast(int)snprintf(progress_label.ptr, progress_label.length, "%d%%", cast(int)(progress_value * 100 + 0.5f) );
+  bndSlider(_vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, progress_value, "Default", progress_label[0..len]);
   y += 25.0f;
-  bndSlider(_vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_HOVER, progress_value, "Hovered", progress_label);
+  bndSlider(_vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_HOVER, progress_value, "Hovered", progress_label[0..len]);
   y += 25.0f;
-  bndSlider(_vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_ACTIVE, progress_value, "Active", progress_label);
+  bndSlider(_vg, x, y, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_ACTIVE, progress_value, "Active", progress_label[0..len]);
 
   float rw = x + 240.0f - rx;
   float s_offset = sinf(_t / 2.0f) * 0.5f + 0.5f;

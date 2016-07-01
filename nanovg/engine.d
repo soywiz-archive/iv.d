@@ -138,7 +138,7 @@ enum NVGimageFlags {
 // control the rendering on Hi-DPI devices.
 // For example, GLFW returns two dimension for an opened window: window size and
 // frame buffer size. In that case you would set windowWidth/Height to the window size
-// devicePixelRatio to: frameBufferWidth/windowWidth.
+// devicePixelRatio to: frameBufferWidth/windowHeight.
 //!void nvgBeginFrame (NVGcontext* ctx, int windowWidth, int windowHeight, float devicePixelRatio);
 
 // Cancels drawing the current frame.
@@ -158,13 +158,11 @@ enum NVGimageFlags {
 // Returns a color value from red, green, blue values. Alpha will be set to 1.0f.
 //!NVGcolor nvgRGBf(float r, float g, float b);
 
-
 // Returns a color value from red, green, blue and alpha values.
 //!NVGcolor nvgRGBA(ubyte r, ubyte g, ubyte b, ubyte a);
 
 // Returns a color value from red, green, blue and alpha values.
 //!NVGcolor nvgRGBAf(float r, float g, float b, float a);
-
 
 // Linearly interpolates from color c0 to c1, and returns resulting color value.
 //!NVGcolor nvgLerpRGBA(NVGcolor c0, NVGcolor c1, float u);
@@ -289,7 +287,6 @@ enum NVGimageFlags {
 // There should be space for 6 floats in the return buffer for the values a-f.
 //!void nvgCurrentTransform(NVGcontext* ctx, float* xform);
 
-
 // The following functions can be used to make calculations on 2x3 transformation matrices.
 // A 2x3 matrix is represented as float[6].
 
@@ -331,8 +328,8 @@ enum NVGimageFlags {
 //
 // Images
 //
-// NanoVG allows you to load jpg, png, psd, tga, pic and gif files to be used for rendering.
-// In addition you can upload your own image. The image loading is provided by stb_image.
+// NanoVG allows you to load jpg and png (if arsd loaders are in place) files to be used for rendering.
+// In addition you can upload your own image.
 // The parameter imageFlags is combination of flags defined in NVGimageFlags.
 
 // Creates image by loading it from the disk from specified file name.
@@ -341,7 +338,7 @@ enum NVGimageFlags {
 
 // Creates image by loading it from the specified chunk of memory.
 // Returns handle to the image.
-//!int nvgCreateImageMem(NVGcontext* ctx, int imageFlags, ubyte* data, int ndata);
+//!int nvgCreateImageFromMemoryImage(NVGcontext* ctx, int imageFlags, MemoryImage img);
 
 // Creates image from specified image data.
 // Returns handle to the image.
@@ -468,7 +465,6 @@ enum NVGimageFlags {
 
 // Fills the current path with current stroke style.
 //!void nvgStroke(NVGcontext* ctx);
-
 
 //
 // Text
@@ -861,12 +857,17 @@ package(iv.nanovg) void nvgDeleteInternal (NVGcontext* ctx) {
   free(ctx);
 }
 
-public void nvgBeginFrame (NVGcontext* ctx, int windowWidth, int windowHeight, float devicePixelRatio) {
+public void nvgBeginFrame (NVGcontext* ctx, int windowWidth, int windowHeight, float devicePixelRatio=float.nan) {
+  import std.math : isNaN;
   /*
   printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
          ctx.drawCallCount, ctx.fillTriCount, ctx.strokeTriCount, ctx.textTriCount,
          ctx.fillTriCount+ctx.strokeTriCount+ctx.textTriCount);
   */
+
+  if (isNaN(devicePixelRatio)) {
+    devicePixelRatio = (windowHeight > 0 ? cast(float)windowWidth/cast(float)windowHeight : 1024.0/768.0);
+  }
 
   ctx.nstates = 0;
   nvgSave(ctx);
@@ -1673,7 +1674,7 @@ void nvg__pathWinding (NVGcontext* ctx, NVGwinding winding) {
   path.winding = winding;
 }
 
-float nvg__getAverageScale (float *t) {
+float nvg__getAverageScale (float* t) {
   float sx = nvg__sqrtf(t[0]*t[0]+t[2]*t[2]);
   float sy = nvg__sqrtf(t[1]*t[1]+t[3]*t[3]);
   return (sx+sy)*0.5f;

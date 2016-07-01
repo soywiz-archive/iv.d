@@ -589,7 +589,7 @@ GLNVGtexture* glnvg__allocTexture(GLNVGcontext* gl)
   if (tex is null) {
     if (gl.ntextures+1 > gl.ctextures) {
       GLNVGtexture* textures;
-      int ctextures = glnvg__maxi(gl.ntextures+1, 4) +  gl.ctextures/2; // 1.5x Overallocate
+      int ctextures = glnvg__maxi(gl.ntextures+1, 4)+gl.ctextures/2; // 1.5x Overallocate
       textures = cast(GLNVGtexture*)realloc(gl.textures, (GLNVGtexture).sizeof*ctextures);
       if (textures is null) return null;
       gl.textures = textures;
@@ -618,7 +618,7 @@ int glnvg__deleteTexture(GLNVGcontext* gl, int id)
   int i;
   for (i = 0; i < gl.ntextures; i++) {
     if (gl.textures[i].id == id) {
-      if (gl.textures[i].tex != 0 && (gl.textures[i].flags & NVG_IMAGE_NODELETE) == 0)
+      if (gl.textures[i].tex != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0)
         glDeleteTextures(1, &gl.textures[i].tex);
       memset(&gl.textures[i], 0, (gl.textures[i]).sizeof);
       return 1;
@@ -653,7 +653,7 @@ void glnvg__checkError(GLNVGcontext* gl, const(char)* str)
 {
   import core.stdc.stdio : printf;
   GLenum err;
-  if ((gl.flags & NVG_DEBUG) == 0) return;
+  if ((gl.flags&NVG_DEBUG) == 0) return;
   err = glGetError();
   if (err != GL_NO_ERROR) {
     printf("Error %08x after %s\n", err, str);
@@ -751,7 +751,7 @@ int glnvg__renderCreate(void* uptr)
     "void main(void) {\n"~
     " ftcoord = tcoord;\n"~
     " fpos = vertex;\n"~
-    " gl_Position = vec4(2.0*vertex.x/viewSize.x - 1.0, 1.0 - 2.0*vertex.y/viewSize.y, 0, 1);\n"~
+    " gl_Position = vec4(2.0*vertex.x/viewSize.x-1.0, 1.0-2.0*vertex.y/viewSize.y, 0, 1);\n"~
     "}\n";
 
   enum fillFragShader =
@@ -774,21 +774,21 @@ int glnvg__renderCreate(void* uptr)
     " #define type int(frag[10].w)\n"~
     "\n"~
     "float sdroundrect(vec2 pt, vec2 ext, float rad) {\n"~
-    " vec2 ext2 = ext - vec2(rad,rad);\n"~
-    " vec2 d = abs(pt) - ext2;\n"~
-    " return min(max(d.x,d.y),0.0) + length(max(d,0.0)) - rad;\n"~
+    " vec2 ext2 = ext-vec2(rad,rad);\n"~
+    " vec2 d = abs(pt)-ext2;\n"~
+    " return min(max(d.x,d.y),0.0)+length(max(d,0.0))-rad;\n"~
     "}\n"~
     "\n"~
     "// Scissoring\n"~
     "float scissorMask(vec2 p) {\n"~
-    " vec2 sc = (abs((scissorMat * vec3(p,1.0)).xy) - scissorExt);\n"~
-    " sc = vec2(0.5,0.5) - sc * scissorScale;\n"~
-    " return clamp(sc.x,0.0,1.0) * clamp(sc.y,0.0,1.0);\n"~
+    " vec2 sc = (abs((scissorMat*vec3(p,1.0)).xy)-scissorExt);\n"~
+    " sc = vec2(0.5,0.5)-sc*scissorScale;\n"~
+    " return clamp(sc.x,0.0,1.0)*clamp(sc.y,0.0,1.0);\n"~
     "}\n"~
     "#ifdef EDGE_AA\n"~
     "// Stroke - from [0..1] to clipped pyramid, where the slope is 1px.\n"~
     "float strokeMask() {\n"~
-    " return min(1.0, (1.0-abs(ftcoord.x*2.0-1.0))*strokeMult) * min(1.0, ftcoord.y);\n"~
+    " return min(1.0, (1.0-abs(ftcoord.x*2.0-1.0))*strokeMult)*min(1.0, ftcoord.y);\n"~
     "}\n"~
     "#endif\n"~
     "\n"~
@@ -802,22 +802,22 @@ int glnvg__renderCreate(void* uptr)
     "#endif\n"~
     " if (type == 0) {      // Gradient\n"~
     "   // Calculate gradient color using box gradient\n"~
-    "   vec2 pt = (paintMat * vec3(fpos,1.0)).xy;\n"~
-    "   float d = clamp((sdroundrect(pt, extent, radius) + feather*0.5) / feather, 0.0, 1.0);\n"~
+    "   vec2 pt = (paintMat*vec3(fpos,1.0)).xy;\n"~
+    "   float d = clamp((sdroundrect(pt, extent, radius)+feather*0.5)/feather, 0.0, 1.0);\n"~
     "   vec4 color = mix(innerCol,outerCol,d);\n"~
     "   // Combine alpha\n"~
-    "   color *= strokeAlpha * scissor;\n"~
+    "   color *= strokeAlpha*scissor;\n"~
     "   result = color;\n"~
     " } else if (type == 1) {   // Image\n"~
     "   // Calculate color fron texture\n"~
-    "   vec2 pt = (paintMat * vec3(fpos,1.0)).xy / extent;\n"~
+    "   vec2 pt = (paintMat*vec3(fpos,1.0)).xy/extent;\n"~
     "   vec4 color = texture2D(tex, pt);\n"~
     "   if (texType == 1) color = vec4(color.xyz*color.w,color.w);\n"~
     "   if (texType == 2) color = vec4(color.x);\n"~
     "   // Apply color tint and alpha.\n"~
     "   color *= innerCol;\n"~
     "   // Combine alpha\n"~
-    "   color *= strokeAlpha * scissor;\n"~
+    "   color *= strokeAlpha*scissor;\n"~
     "   result = color;\n"~
     " } else if (type == 2) {   // Stencil fill\n"~
     "   result = vec4(1,1,1,1);\n"~
@@ -826,7 +826,7 @@ int glnvg__renderCreate(void* uptr)
     "   if (texType == 1) color = vec4(color.xyz*color.w,color.w);\n"~
     "   if (texType == 2) color = vec4(color.x);\n"~
     "   color *= scissor;\n"~
-    "   result = color * innerCol;\n"~
+    "   result = color*innerCol;\n"~
     " }\n"~
     "#ifdef EDGE_AA\n"~
     " if (strokeAlpha < strokeThr) discard;\n"~
@@ -836,7 +836,7 @@ int glnvg__renderCreate(void* uptr)
 
   glnvg__checkError(gl, "init");
 
-  if (gl.flags & NVG_ANTIALIAS) {
+  if (gl.flags&NVG_ANTIALIAS) {
     if (glnvg__createShader(&gl.shader, "shader", shaderHeader, "#define EDGE_AA 1\n", fillVertShader, fillFragShader) == 0)
       return 0;
   } else {
@@ -850,7 +850,7 @@ int glnvg__renderCreate(void* uptr)
   // Create dynamic vertex array
   glGenBuffers(1, &gl.vertBuf);
 
-  gl.fragSize = (GLNVGfragUniforms).sizeof + align_ - (GLNVGfragUniforms).sizeof % align_;
+  gl.fragSize = (GLNVGfragUniforms).sizeof+align_-GLNVGfragUniforms.sizeof%align_;
 
   glnvg__checkError(gl, "create done");
 
@@ -879,7 +879,7 @@ int glnvg__renderCreateTexture(void* uptr, NVGtexture type, int w, int h, int im
   glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
 
   // GL 1.4 and later has support for generating mipmaps using a tex parameter.
-  if (imageFlags & NVGimageFlags.GenerateMipmaps) {
+  if (imageFlags&NVGimageFlags.GenerateMipmaps) {
     glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
   }
 
@@ -888,19 +888,19 @@ int glnvg__renderCreateTexture(void* uptr, NVGtexture type, int w, int h, int im
   else
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, data);
 
-  if (imageFlags & NVGimageFlags.GenerateMipmaps) {
+  if (imageFlags&NVGimageFlags.GenerateMipmaps) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   } else {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   }
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-  if (imageFlags & NVGimageFlags.RepeatX)
+  if (imageFlags&NVGimageFlags.RepeatX)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   else
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 
-  if (imageFlags & NVGimageFlags.RepeatY)
+  if (imageFlags&NVGimageFlags.RepeatY)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   else
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -1009,18 +1009,18 @@ int glnvg__convertPaint(GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGpaint* pai
     glnvg__xformToMat3x4(frag.scissorMat.ptr, invxform.ptr);
     frag.scissorExt[0] = scissor.extent[0];
     frag.scissorExt[1] = scissor.extent[1];
-    frag.scissorScale[0] = sqrtf(scissor.xform[0]*scissor.xform[0] + scissor.xform[2]*scissor.xform[2]) / fringe;
-    frag.scissorScale[1] = sqrtf(scissor.xform[1]*scissor.xform[1] + scissor.xform[3]*scissor.xform[3]) / fringe;
+    frag.scissorScale[0] = sqrtf(scissor.xform[0]*scissor.xform[0]+scissor.xform[2]*scissor.xform[2])/fringe;
+    frag.scissorScale[1] = sqrtf(scissor.xform[1]*scissor.xform[1]+scissor.xform[3]*scissor.xform[3])/fringe;
   }
 
   memcpy(frag.extent.ptr, paint.extent.ptr, (frag.extent).sizeof);
-  frag.strokeMult = (width*0.5f + fringe*0.5f) / fringe;
+  frag.strokeMult = (width*0.5f+fringe*0.5f)/fringe;
   frag.strokeThr = strokeThr;
 
   if (paint.image != 0) {
     tex = glnvg__findTexture(gl, paint.image);
     if (tex is null) return 0;
-    if ((tex.flags & NVGimageFlags.FlipY) != 0) {
+    if ((tex.flags&NVGimageFlags.FlipY) != 0) {
       float[6] flipped;
       nvgTransformScale(flipped.ptr, 1.0f, -1.0f);
       nvgTransformMultiply(flipped.ptr, paint.xform.ptr);
@@ -1031,7 +1031,7 @@ int glnvg__convertPaint(GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGpaint* pai
     frag.type = NSVG_SHADER_FILLIMG;
 
     if (tex.type == NVGtexture.RGBA)
-      frag.texType = (tex.flags & NVGimageFlags.Premultiplied ? 0 : 1);
+      frag.texType = (tex.flags&NVGimageFlags.Premultiplied ? 0 : 1);
     else
       frag.texType = 2;
       //printf("frag.texType = %d\n", frag.texType);
@@ -1095,10 +1095,10 @@ void glnvg__fill(GLNVGcontext* gl, GLNVGcall* call)
   // Draw anti-aliased pixels
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-  glnvg__setUniforms(gl, call.uniformOffset + gl.fragSize, call.image);
+  glnvg__setUniforms(gl, call.uniformOffset+gl.fragSize, call.image);
   glnvg__checkError(gl, "fill fill");
 
-  if (gl.flags & NVG_ANTIALIAS) {
+  if (gl.flags&NVG_ANTIALIAS) {
     glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xff);
     glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
     // Draw fringes
@@ -1124,7 +1124,7 @@ void glnvg__convexFill(GLNVGcontext* gl, GLNVGcall* call)
 
   for (i = 0; i < npaths; i++)
     glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
-  if (gl.flags & NVG_ANTIALIAS) {
+  if (gl.flags&NVG_ANTIALIAS) {
     // Draw fringes
     for (i = 0; i < npaths; i++)
       glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
@@ -1136,7 +1136,7 @@ void glnvg__stroke(GLNVGcontext* gl, GLNVGcall* call)
   GLNVGpath* paths = &gl.paths[call.pathOffset];
   int npaths = call.pathCount, i;
 
-  if (gl.flags & NVG_STENCIL_STROKES) {
+  if (gl.flags&NVG_STENCIL_STROKES) {
 
     glEnable(GL_STENCIL_TEST);
     glnvg__stencilMask(gl, 0xff);
@@ -1144,7 +1144,7 @@ void glnvg__stroke(GLNVGcontext* gl, GLNVGcall* call)
     // Fill the stroke base without overlap
     glnvg__stencilFunc(gl, GL_EQUAL, 0x0, 0xff);
     glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
-    glnvg__setUniforms(gl, call.uniformOffset + gl.fragSize, call.image);
+    glnvg__setUniforms(gl, call.uniformOffset+gl.fragSize, call.image);
     glnvg__checkError(gl, "stroke fill 0");
     for (i = 0; i < npaths; i++)
       glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
@@ -1167,7 +1167,7 @@ void glnvg__stroke(GLNVGcontext* gl, GLNVGcall* call)
 
     glDisable(GL_STENCIL_TEST);
 
-    //glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset + gl.fragSize), paint, scissor, strokeWidth, fringe, 1.0f - 0.5f/255.0f);
+    //glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, strokeWidth, fringe, 1.0f-0.5f/255.0f);
 
   } else {
     glnvg__setUniforms(gl, call.uniformOffset, call.image);
@@ -1227,11 +1227,11 @@ void glnvg__renderFlush(void* uptr)
 
     // Upload vertex data
     glBindBuffer(GL_ARRAY_BUFFER, gl.vertBuf);
-    glBufferData(GL_ARRAY_BUFFER, gl.nverts * (NVGvertex).sizeof, gl.verts, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, gl.nverts*(NVGvertex).sizeof, gl.verts, GL_STREAM_DRAW);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, (NVGvertex).sizeof, cast(const(GLvoid)*)cast(size_t)0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, (NVGvertex).sizeof, cast(const(GLvoid)*)(0 + 2*(float).sizeof));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, (NVGvertex).sizeof, cast(const(GLvoid)*)(0+2*(float).sizeof));
 
     // Set view and texture just once per frame.
     glUniform1i(gl.shader.loc[GLNVG_LOC_TEX], 0);
@@ -1279,8 +1279,8 @@ GLNVGcall* glnvg__allocCall(GLNVGcontext* gl)
   GLNVGcall* ret = null;
   if (gl.ncalls+1 > gl.ccalls) {
     GLNVGcall* calls;
-    int ccalls = glnvg__maxi(gl.ncalls+1, 128) + gl.ccalls/2; // 1.5x Overallocate
-    calls = cast(GLNVGcall*)realloc(gl.calls, (GLNVGcall).sizeof * ccalls);
+    int ccalls = glnvg__maxi(gl.ncalls+1, 128)+gl.ccalls/2; // 1.5x Overallocate
+    calls = cast(GLNVGcall*)realloc(gl.calls, (GLNVGcall).sizeof*ccalls);
     if (calls is null) return null;
     gl.calls = calls;
     gl.ccalls = ccalls;
@@ -1295,8 +1295,8 @@ int glnvg__allocPaths(GLNVGcontext* gl, int n)
   int ret = 0;
   if (gl.npaths+n > gl.cpaths) {
     GLNVGpath* paths;
-    int cpaths = glnvg__maxi(gl.npaths + n, 128) + gl.cpaths/2; // 1.5x Overallocate
-    paths = cast(GLNVGpath*)realloc(gl.paths, (GLNVGpath).sizeof * cpaths);
+    int cpaths = glnvg__maxi(gl.npaths+n, 128)+gl.cpaths/2; // 1.5x Overallocate
+    paths = cast(GLNVGpath*)realloc(gl.paths, (GLNVGpath).sizeof*cpaths);
     if (paths is null) return -1;
     gl.paths = paths;
     gl.cpaths = cpaths;
@@ -1311,8 +1311,8 @@ int glnvg__allocVerts(GLNVGcontext* gl, int n)
   int ret = 0;
   if (gl.nverts+n > gl.cverts) {
     NVGvertex* verts;
-    int cverts = glnvg__maxi(gl.nverts + n, 4096) + gl.cverts/2; // 1.5x Overallocate
-    verts = cast(NVGvertex*)realloc(gl.verts, (NVGvertex).sizeof * cverts);
+    int cverts = glnvg__maxi(gl.nverts+n, 4096)+gl.cverts/2; // 1.5x Overallocate
+    verts = cast(NVGvertex*)realloc(gl.verts, (NVGvertex).sizeof*cverts);
     if (verts is null) return -1;
     gl.verts = verts;
     gl.cverts = cverts;
@@ -1327,13 +1327,13 @@ int glnvg__allocFragUniforms(GLNVGcontext* gl, int n)
   int ret = 0, structSize = gl.fragSize;
   if (gl.nuniforms+n > gl.cuniforms) {
     ubyte* uniforms;
-    int cuniforms = glnvg__maxi(gl.nuniforms+n, 128) + gl.cuniforms/2; // 1.5x Overallocate
-    uniforms = cast(ubyte*)realloc(gl.uniforms, structSize * cuniforms);
+    int cuniforms = glnvg__maxi(gl.nuniforms+n, 128)+gl.cuniforms/2; // 1.5x Overallocate
+    uniforms = cast(ubyte*)realloc(gl.uniforms, structSize*cuniforms);
     if (uniforms is null) return -1;
     gl.uniforms = uniforms;
     gl.cuniforms = cuniforms;
   }
-  ret = gl.nuniforms * structSize;
+  ret = gl.nuniforms*structSize;
   gl.nuniforms += n;
   return ret;
 }
@@ -1372,24 +1372,24 @@ void glnvg__renderFill(void* uptr, NVGpaint* paint, NVGscissor* scissor, float f
     call.type = GLNVG_CONVEXFILL;
 
   // Allocate vertices for all the paths.
-  maxverts = glnvg__maxVertCount(paths, npaths) + 6;
+  maxverts = glnvg__maxVertCount(paths, npaths)+6;
   offset = glnvg__allocVerts(gl, maxverts);
   if (offset == -1) goto error;
 
   for (i = 0; i < npaths; i++) {
-    GLNVGpath* copy = &gl.paths[call.pathOffset + i];
+    GLNVGpath* copy = &gl.paths[call.pathOffset+i];
     const(NVGpath)* path = &paths[i];
     memset(copy, 0, (GLNVGpath).sizeof);
     if (path.nfill > 0) {
       copy.fillOffset = offset;
       copy.fillCount = path.nfill;
-      memcpy(&gl.verts[offset], path.fill, (NVGvertex).sizeof * path.nfill);
+      memcpy(&gl.verts[offset], path.fill, (NVGvertex).sizeof*path.nfill);
       offset += path.nfill;
     }
     if (path.nstroke > 0) {
       copy.strokeOffset = offset;
       copy.strokeCount = path.nstroke;
-      memcpy(&gl.verts[offset], path.stroke, (NVGvertex).sizeof * path.nstroke);
+      memcpy(&gl.verts[offset], path.stroke, (NVGvertex).sizeof*path.nstroke);
       offset += path.nstroke;
     }
   }
@@ -1416,7 +1416,7 @@ void glnvg__renderFill(void* uptr, NVGpaint* paint, NVGscissor* scissor, float f
     frag.strokeThr = -1.0f;
     frag.type = NSVG_SHADER_SIMPLE;
     // Fill shader
-    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset + gl.fragSize), paint, scissor, fringe, fringe, -1.0f);
+    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, fringe, fringe, -1.0f);
   } else {
     call.uniformOffset = glnvg__allocFragUniforms(gl, 1);
     if (call.uniformOffset == -1) goto error;
@@ -1453,24 +1453,24 @@ void glnvg__renderStroke(void* uptr, NVGpaint* paint, NVGscissor* scissor, float
   if (offset == -1) goto error;
 
   for (i = 0; i < npaths; i++) {
-    GLNVGpath* copy = &gl.paths[call.pathOffset + i];
+    GLNVGpath* copy = &gl.paths[call.pathOffset+i];
     const(NVGpath)* path = &paths[i];
     memset(copy, 0, (GLNVGpath).sizeof);
     if (path.nstroke) {
       copy.strokeOffset = offset;
       copy.strokeCount = path.nstroke;
-      memcpy(&gl.verts[offset], path.stroke, (NVGvertex).sizeof * path.nstroke);
+      memcpy(&gl.verts[offset], path.stroke, (NVGvertex).sizeof*path.nstroke);
       offset += path.nstroke;
     }
   }
 
-  if (gl.flags & NVG_STENCIL_STROKES) {
+  if (gl.flags&NVG_STENCIL_STROKES) {
     // Fill shader
     call.uniformOffset = glnvg__allocFragUniforms(gl, 2);
     if (call.uniformOffset == -1) goto error;
 
     glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset), paint, scissor, strokeWidth, fringe, -1.0f);
-    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset + gl.fragSize), paint, scissor, strokeWidth, fringe, 1.0f - 0.5f/255.0f);
+    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, strokeWidth, fringe, 1.0f-0.5f/255.0f);
 
   } else {
     // Fill shader
@@ -1504,7 +1504,7 @@ void glnvg__renderTriangles(void* uptr, NVGpaint* paint, NVGscissor* scissor,
   if (call.triangleOffset == -1) goto error;
   call.triangleCount = nverts;
 
-  memcpy(&gl.verts[call.triangleOffset], verts, (NVGvertex).sizeof * nverts);
+  memcpy(&gl.verts[call.triangleOffset], verts, (NVGvertex).sizeof*nverts);
 
   // Fill shader
   call.uniformOffset = glnvg__allocFragUniforms(gl, 1);
@@ -1533,7 +1533,7 @@ void glnvg__renderDelete(void* uptr)
     glDeleteBuffers(1, &gl.vertBuf);
 
   for (i = 0; i < gl.ntextures; i++) {
-    if (gl.textures[i].tex != 0 && (gl.textures[i].flags & NVG_IMAGE_NODELETE) == 0)
+    if (gl.textures[i].tex != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0)
       glDeleteTextures(1, &gl.textures[i].tex);
   }
   free(gl.textures);
@@ -1569,7 +1569,7 @@ public NVGcontext* nvgCreateGL2(int flags)
   params.renderTriangles = &glnvg__renderTriangles;
   params.renderDelete = &glnvg__renderDelete;
   params.userPtr = gl;
-  params.edgeAntiAlias = flags & NVG_ANTIALIAS ? 1 : 0;
+  params.edgeAntiAlias = (flags&NVG_ANTIALIAS ? 1 : 0);
 
   gl.flags = flags;
 
@@ -1584,9 +1584,8 @@ error:
   return null;
 }
 
-public void nvgDeleteGL2(NVGcontext* ctx)
-{
-  nvgDeleteInternal(ctx);
+public void nvgDeleteGL2(NVGcontext* ctx) {
+  if (ctx !is null) nvgDeleteInternal(ctx);
 }
 
 public int nvglCreateImageFromHandleGL2(NVGcontext* ctx, GLuint textureId, int w, int h, int imageFlags)
