@@ -147,6 +147,9 @@ enum NVGimageFlags {
 // Ends drawing flushing remaining render state.
 //!void nvgEndFrame (NVGcontext* ctx);
 
+// Return flags for glClear().
+//!uint nvgGlClearFlags ();
+
 //
 // Color utils
 //

@@ -1115,6 +1115,8 @@ __gshared float BND_NUMBER_ARROW_SIZE = 4;
 enum BND_COLOR_TEXT = nvgRGBAf(0, 0, 0, 1);
 // default highlighted text color
 enum BND_COLOR_TEXT_SELECTED = nvgRGBAf(1, 1, 1, 1);
+// default color for active element
+enum BND_COLOR_ACTIVE = nvgRGBA(255, 127, 0, 255);
 
 // radius of tool button
 __gshared float BND_TOOL_RADIUS = 4;
@@ -1174,13 +1176,13 @@ float bnd_clamp() (float v, float mn, float mx) { pragma(inline, true); return (
 // the initial theme
 __gshared BNDtheme bnd_theme = BNDtheme(
   // backgroundColor
-  nvgRGBAf(0.447, 0.447, 0.447, 1.0),
+  nvgRGBA(113, 113, 113, 255),
   // regularTheme
   BNDwidgetTheme(
-    nvgRGBAf(0.098, 0.098, 0.098, 1), // color_outline
-    nvgRGBAf(0.098, 0.098, 0.098, 1), // color_item
-    nvgRGBAf(0.6, 0.6, 0.6, 1), // color_inner
-    nvgRGBAf(0.392, 0.392, 0.392, 1), // color_inner_selected
+    nvgRGBA( 24,  24,  24, 255), // color_outline
+    nvgRGBA( 24,  24,  24, 255), // color_item
+    nvgRGBA(153, 153, 153, 255), // color_inner
+    nvgRGBA( 99,  99,  99, 255), // color_inner_selected
     BND_COLOR_TEXT, // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     0, // shade_top
@@ -1188,10 +1190,10 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // toolTheme
   BNDwidgetTheme(
-    nvgRGBAf(0.098, 0.098, 0.098, 1), // color_outline
-    nvgRGBAf(0.098, 0.098, 0.098, 1), // color_item
-    nvgRGBAf(0.6, 0.6, 0.6, 1), // color_inner
-    nvgRGBAf(0.392, 0.392, 0.392, 1), // color_inner_selected
+    nvgRGBA( 24,  24,  24, 255), // color_outline
+    nvgRGBA( 24,  24,  24, 255), // color_item
+    nvgRGBA(153, 153, 153, 255), // color_inner
+    nvgRGBA( 99,  99,  99, 255), // color_inner_selected
     BND_COLOR_TEXT, // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     15, // shade_top
@@ -1199,10 +1201,10 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // radioTheme
   BNDwidgetTheme(
-    nvgRGBAf(0, 0, 0, 1), // color_outline
-    nvgRGBAf(1, 1, 1, 1), // color_item
-    nvgRGBAf(0.275, 0.275, 0.275, 1), // color_inner
-    nvgRGBAf(0.337, 0.502, 0.761, 1), // color_inner_selected
+    nvgRGBA(  0,   0,   0, 255), // color_outline
+    nvgRGBA(255, 255, 255, 255), // color_item
+    nvgRGBA( 70,  70,  70, 255), // color_inner
+    BND_COLOR_ACTIVE, // color_inner_selected
     BND_COLOR_TEXT_SELECTED, // color_text
     BND_COLOR_TEXT, // color_text_selected
     15, // shade_top
@@ -1210,10 +1212,10 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // textFieldTheme
   BNDwidgetTheme(
-    nvgRGBAf(0.098, 0.098, 0.098, 1), // color_outline
-    nvgRGBAf(0.353, 0.353, 0.353, 1), // color_item
-    nvgRGBAf(0.6, 0.6, 0.6, 1), // color_inner
-    nvgRGBAf(0.6, 0.6, 0.6, 1), // color_inner_selected
+    nvgRGBA( 24,  24,  24, 255), // color_outline
+    nvgRGBA( 90,  90,  90, 255), // color_item
+    nvgRGBA(153, 153, 153, 255), // color_inner
+    nvgRGBA(153, 153, 153, 255), // color_inner_selected
     BND_COLOR_TEXT, // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     0, // shade_top
@@ -1221,10 +1223,10 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // optionTheme
   BNDwidgetTheme(
-    nvgRGBAf(0, 0, 0, 1), // color_outline
-    nvgRGBAf(1, 1, 1, 1), // color_item
-    nvgRGBAf(0.275, 0.275, 0.275, 1), // color_inner
-    nvgRGBAf(0.275, 0.275, 0.275, 1), // color_inner_selected
+    nvgRGBA(  0,   0,   0, 255), // color_outline
+    nvgRGBA(255, 255, 255, 255), // color_item
+    nvgRGBA( 70,  70,  70, 255), // color_inner
+    nvgRGBA( 70,  70,  70, 255), // color_inner_selected
     BND_COLOR_TEXT, // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     15, // shade_top
@@ -1232,21 +1234,21 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // choiceTheme
   BNDwidgetTheme(
-    nvgRGBAf(0, 0, 0, 1), // color_outline
-    nvgRGBAf(1, 1, 1, 1), // color_item
-    nvgRGBAf(0.275, 0.275, 0.275, 1), // color_inner
-    nvgRGBAf(0.275, 0.275, 0.275, 1), // color_inner_selected
+    nvgRGBA(  0,   0,   0, 255), // color_outline
+    nvgRGBA(255, 255, 255, 255), // color_item
+    nvgRGBA( 70,  70,  70, 255), // color_inner
+    nvgRGBA( 70,  70,  70, 255), // color_inner_selected
     BND_COLOR_TEXT_SELECTED, // color_text
-    nvgRGBAf(0.8, 0.8, 0.8, 1), // color_text_selected
+    nvgRGBA(204, 204, 204, 255), // color_text_selected
     15, // shade_top
     -15, // shade_down
   ),
   // numberFieldTheme
   BNDwidgetTheme(
-    nvgRGBAf(0.098, 0.098, 0.098, 1), // color_outline
-    nvgRGBAf(0.353, 0.353, 0.353, 1), // color_item
-    nvgRGBAf(0.706, 0.706, 0.706, 1), // color_inner
-    nvgRGBAf(0.6, 0.6, 0.6, 1), // color_inner_selected
+    nvgRGBA( 24,  24,  24, 255), // color_outline
+    nvgRGBA( 90,  90,  90, 255), // color_item
+    nvgRGBA(180, 180, 180, 255), // color_inner
+    nvgRGBA(153, 153, 153, 255), // color_inner_selected
     BND_COLOR_TEXT, // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     -20, // shade_top
@@ -1254,10 +1256,10 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // sliderTheme
   BNDwidgetTheme(
-    nvgRGBAf(0.098, 0.098, 0.098, 1), // color_outline
-    nvgRGBAf(0.502, 0.502, 0.502, 1), // color_item
-    nvgRGBAf(0.706, 0.706, 0.706, 1), // color_inner
-    nvgRGBAf(0.6, 0.6, 0.6, 1), // color_inner_selected
+    nvgRGBA( 24,  24,  24, 255), // color_outline
+    nvgRGBA(128, 128, 128, 255), // color_item
+    nvgRGBA(180, 180, 180, 255), // color_inner
+    nvgRGBA(153, 153, 153, 255), // color_inner_selected
     BND_COLOR_TEXT, // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     -20, // shade_top
@@ -1265,10 +1267,10 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // scrollBarTheme
   BNDwidgetTheme(
-    nvgRGBAf(0.196, 0.196, 0.196, 1), // color_outline
-    nvgRGBAf(0.502, 0.502, 0.502, 1), // color_item
-    nvgRGBAf(0.314, 0.314, 0.314, 0.706), // color_inner
-    nvgRGBAf(0.392, 0.392, 0.392, 0.706), // color_inner_selected
+    nvgRGBA( 49,  49,  49, 255), // color_outline
+    nvgRGBA(128, 128, 128, 255), // color_item
+    nvgRGBA( 80,  80,  80, 180), // color_inner
+    nvgRGBA( 99,  99,  99, 180), // color_inner_selected
     BND_COLOR_TEXT, // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     5, // shade_top
@@ -1276,32 +1278,32 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // tooltipTheme
   BNDwidgetTheme(
-    nvgRGBAf(0, 0, 0, 1), // color_outline
-    nvgRGBAf(0.392, 0.392, 0.392, 1), // color_item
-    nvgRGBAf(0.098, 0.098, 0.098, 0.902), // color_inner
-    nvgRGBAf(0.176, 0.176, 0.176, 0.902), // color_inner_selected
-    nvgRGBAf(0.627, 0.627, 0.627, 1), // color_text
+    nvgRGBA(  0,   0,   0, 255), // color_outline
+    nvgRGBA( 99,  99,  99, 255), // color_item
+    nvgRGBA( 24,  24,  24, 230), // color_inner
+    nvgRGBA( 44,  44,  44, 230), // color_inner_selected
+    nvgRGBA(159, 159, 159, 255), // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     0, // shade_top
     0, // shade_down
   ),
   // menuTheme
   BNDwidgetTheme(
-    nvgRGBAf(0, 0, 0, 1), // color_outline
-    nvgRGBAf(0.392, 0.392, 0.392, 1), // color_item
-    nvgRGBAf(0.098, 0.098, 0.098, 0.902), // color_inner
-    nvgRGBAf(0.176, 0.176, 0.176, 0.902), // color_inner_selected
-    nvgRGBAf(0.627, 0.627, 0.627, 1), // color_text
+    nvgRGBA(  0,   0,   0, 255), // color_outline
+    nvgRGBA( 99,  99,  99, 255), // color_item
+    nvgRGBA( 24,  24,  24, 230), // color_inner
+    nvgRGBA( 44,  44,  44, 230), // color_inner_selected
+    nvgRGBA(159, 159, 159, 255), // color_text
     BND_COLOR_TEXT_SELECTED, // color_text_selected
     0, // shade_top
     0, // shade_down
   ),
   // menuItemTheme
   BNDwidgetTheme(
-    nvgRGBAf(0, 0, 0, 1), // color_outline
-    nvgRGBAf(0.675, 0.675, 0.675, 0.502), // color_item
-    nvgRGBAf(0, 0, 0, 0), // color_inner
-    nvgRGBAf(0.337, 0.502, 0.761, 1), // color_inner_selected
+    nvgRGBA(  0,   0,   0, 255), // color_outline
+    nvgRGBA(172, 172, 172, 128), // color_item
+    nvgRGBA(  0,   0,   0,   0), // color_inner
+    BND_COLOR_ACTIVE, // color_inner_selected
     BND_COLOR_TEXT_SELECTED, // color_text
     BND_COLOR_TEXT, // color_text_selected
     38, // shade_top
@@ -1309,12 +1311,12 @@ __gshared BNDtheme bnd_theme = BNDtheme(
   ),
   // nodeTheme
   BNDnodeTheme(
-    nvgRGBAf(0.945, 0.345, 0, 1), // nodeSelectedColor
-    nvgRGBAf(0, 0, 0, 1), // wiresColor
-    nvgRGBAf(0.498, 0.439, 0.439, 1), // textSelectedColor
-    nvgRGBAf(1, 0.667, 0.251, 1), // activeNodeColor
-    nvgRGBAf(1, 1, 1, 1), // wireSelectColor
-    nvgRGBAf(0.608, 0.608, 0.608, 0.627), // nodeBackdropColor
+    nvgRGBA(240,  87,   0, 255), // nodeSelectedColor
+    nvgRGBA(  0,   0,   0, 255), // wiresColor
+    nvgRGBA(126, 111, 111, 255), // textSelectedColor
+    nvgRGBA(255, 170,  64, 255), // activeNodeColor
+    nvgRGBA(255, 255, 255, 255), // wireSelectColor
+    nvgRGBA(155, 155, 155, 159), // nodeBackdropColor
     5, // noodleCurving
   ),
 );

@@ -42,6 +42,9 @@ import core.stdc.string : memcpy, memset;
 import iv.nanovg.engine;
 import arsd.simpledisplay;
 
+// sdpy is missing that yet
+static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
+
 
 // OpenGL API missing from simpledisplay
 private extern(C) nothrow @nogc {
@@ -410,6 +413,13 @@ enum NANOVG_GL_USE_STATE_FILTER = true;
 alias NVGimageFlagsGL = int;
 enum /*NVGimageFlagsGL*/ {
   NVG_IMAGE_NODELETE = 1<<16,  // Do not delete GL texture handle.
+}
+
+
+// Return flags for glClear().
+uint nvgGlClearFlags () pure nothrow @safe @nogc {
+  pragma(inline, true);
+  return (GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
 }
 
 
