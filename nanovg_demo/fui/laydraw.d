@@ -85,6 +85,7 @@ void buildWindow0 (FuiContext ctx) {
     }
 
   // horizontal box for the first text line
+  __gshared bool cbval;
   hbox = ctx.hbox(0);
   with (ctx.layprops(hbox)) flex = 0;
 
@@ -96,7 +97,7 @@ void buildWindow0 (FuiContext ctx) {
       vgroup = lbl0;
     }
     // button
-    auto but0 = ctx.button(hbox, "button for first label");
+    auto but0 = ctx.checkbox(hbox, "button for first label", &cbval);
     with (ctx.layprops(but0)) {
       flex = 0;
       hgroup = but0;
@@ -114,10 +115,47 @@ void buildWindow0 (FuiContext ctx) {
       vgroup = lbl0;
     }
     // button
-    with (ctx.layprops(ctx.button(hbox, "button for second label"))) {
+    with (ctx.layprops(ctx.checkbox(hbox, "button for second label", &cbval))) {
       flex = 0;
       hgroup = but0;
       vgroup = lbl0;
+    }
+
+  // horizontal box for the first text line
+  __gshared int rbval;
+  hbox = ctx.hbox(0);
+  with (ctx.layprops(hbox)) flex = 0;
+
+    // label
+    auto lbl1 = ctx.label(hbox, "\x02first label:");
+    with (ctx.layprops(lbl1)) {
+      flex = 0;
+      hgroup = lbl1;
+      vgroup = lbl1;
+    }
+    // button
+    auto rad0 = ctx.radio(hbox, "button for first label", &rbval);
+    with (ctx.layprops(rad0)) {
+      flex = 0;
+      hgroup = rad0;
+      vgroup = lbl1;
+    }
+
+  // horizontal box for the second text line
+  hbox = ctx.hbox(0);
+  with (ctx.layprops(hbox)) flex = 0;
+
+    // label
+    with (ctx.layprops(ctx.label(hbox, "\x02second label:"))) {
+      flex = 0;
+      hgroup = lbl1;
+      vgroup = lbl1;
+    }
+    // button
+    with (ctx.layprops(ctx.radio(hbox, "button for second label", &rbval))) {
+      flex = 0;
+      hgroup = rad0;
+      vgroup = lbl1;
     }
 
   // horizontal box to push last line down

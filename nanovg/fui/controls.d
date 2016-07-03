@@ -32,9 +32,11 @@ import iv.nanovg.fui.engine;
 enum FuiCtlType : ubyte {
   Invisible,
   Box,
+  Panel,
   Label,
   Button,
-  Panel,
+  Check,
+  Radio,
 }
 
 mixin template FuiCtlHead() {
@@ -116,6 +118,44 @@ int vpanel (FuiContext ctx, int parent) { return ctx.panel(parent, false); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private int buttonLike(T, FuiCtlType type) (FuiContext ctx, int parent, string text, int iconid=-1) {
+  if (!ctx.valid) return -1;
+  auto item = ctx.addItem!T(parent);
+  auto data = ctx.item!T(item);
+  data.type = type;
+  static if (is(typeof(T.htaligh))) {
+    data.htaligh = BND_LEFT;
+    if (text.length && text[0] == '\x01') {
+      text = text[1..$];
+      data.htaligh = BND_CENTER;
+    } else if (text.length && text[0] == '\x02') {
+      text = text[1..$];
+      data.htaligh = BND_RIGHT;
+    }
+  }
+  data.text = text;
+  data.iconid = iconid;
+  auto font = bndGetFont();
+  if (font >= 0 && ctx.vg !is null) {
+    /*
+    float[4] bounds;
+    nvgTextBounds(ctx.vg, 0, 0, text, bounds);
+    ctx.layprops(item).minSize = FuiSize(cast(int)(bounds[2]-bounds[0])+4, cast(int)(bounds[3]-bounds[1])+4);
+    */
+    auto w = cast(int)bndLabelWidth(ctx.vg, iconid, text);
+    auto h = cast(int)bndLabelHeight(ctx.vg, iconid, text, w);
+    ctx.layprops(item).minSize = FuiSize(w+2, h);
+  } else {
+    ctx.layprops(item).minSize = FuiSize(cast(int)text.length*8+4, 10);
+  }
+  with (ctx.layprops(item)) {
+    flex = 1;
+  }
+  return item;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 align(1) struct FuiCtlLabel {
 align(1):
   mixin FuiCtlHead;
@@ -126,33 +166,7 @@ align(1):
 }
 
 int label (FuiContext ctx, int parent, string text, int iconid=-1) {
-  if (!ctx.valid) return -1;
-  auto item = ctx.addItem!FuiCtlLabel(parent);
-  auto data = ctx.item!FuiCtlLabel(item);
-  data.type = FuiCtlType.Label;
-  data.htaligh = BND_LEFT;
-  if (text.length && text[0] == '\x01') {
-    text = text[1..$];
-    data.htaligh = BND_CENTER;
-  } else if (text.length && text[0] == '\x02') {
-    text = text[1..$];
-    data.htaligh = BND_RIGHT;
-  }
-  data.text = text;
-  data.iconid = iconid;
-  auto font = bndGetFont();
-  if (font >= 0 && ctx.vg !is null) {
-    float[4] bounds;
-    nvgTextBounds(ctx.vg, 0, 0, text, bounds);
-    ctx.layprops(item).minSize = FuiSize(cast(int)(bounds[2]-bounds[0])+4, cast(int)(bounds[3]-bounds[1])+4);
-    //{ import std.stdio; writeln(bounds[]); }
-  } else {
-    ctx.layprops(item).minSize = FuiSize(cast(int)text.length*8+4, 10);
-  }
-  with (ctx.layprops(item)) {
-    flex = 1;
-  }
-  return item;
+  return ctx.buttonLike!(FuiCtlLabel, FuiCtlType.Label)(parent, text, iconid);
 }
 
 
@@ -166,29 +180,67 @@ align(1):
 }
 
 int button (FuiContext ctx, int parent, string text, int iconid=-1) {
-  if (!ctx.valid) return -1;
-  auto item = ctx.addItem!FuiCtlButton(parent);
-  auto data = ctx.item!FuiCtlButton(item);
-  data.type = FuiCtlType.Button;
-  data.text = text;
-  data.iconid = iconid;
-  auto font = bndGetFont();
-  if (font >= 0 && ctx.vg !is null) {
-    float[4] bounds;
-    nvgTextBounds(ctx.vg, 0, 0, text, bounds);
-    ctx.layprops(item).minSize = FuiSize(cast(int)(bounds[2]-bounds[0])+16, cast(int)(bounds[3]-bounds[1])+4);
-    //{ import std.stdio; writeln(bounds[]); }
-  } else {
-    ctx.layprops(item).minSize = FuiSize(cast(int)text.length*8+4, 10);
-  }
-  with (ctx.layprops(item)) {
-    flex = 1;
-    clickMask |= FuiLayoutProps.Buttons.Left;
-    canBeFocused = true;
+  auto item = ctx.buttonLike!(FuiCtlButton, FuiCtlType.Button)(parent, text, iconid);
+  if (item >= 0) {
+    with (ctx.layprops(item)) {
+      flex = 1;
+      clickMask |= FuiLayoutProps.Buttons.Left;
+      canBeFocused = true;
+    }
   }
   return item;
 }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
+align(1) struct FuiCtlCheck {
+align(1):
+  mixin FuiCtlHead;
+
+  string text;
+  int iconid;
+  bool* var;
+}
+
+int checkbox (FuiContext ctx, int parent, string text, bool* var=null, int iconid=-1) {
+  auto item = ctx.buttonLike!(FuiCtlCheck, FuiCtlType.Check)(parent, text, iconid);
+  if (item >= 0) {
+    auto data = ctx.item!FuiCtlCheck(item);
+    data.var = var;
+    with (ctx.layprops(item)) {
+      flex = 1;
+      clickMask |= FuiLayoutProps.Buttons.Left;
+      canBeFocused = true;
+      minSize.w += 14;
+    }
+  }
+  return item;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+align(1) struct FuiCtlRadio {
+align(1):
+  mixin FuiCtlHead;
+
+  string text;
+  int iconid;
+  int* var;
+}
+
+int radio (FuiContext ctx, int parent, string text, int* var=null, int iconid=-1) {
+  auto item = ctx.buttonLike!(FuiCtlRadio, FuiCtlType.Radio)(parent, text, iconid);
+  if (item >= 0) {
+    auto data = ctx.item!FuiCtlRadio(item);
+    data.var = var;
+    with (ctx.layprops(item)) {
+      flex = 1;
+      clickMask |= FuiLayoutProps.Buttons.Left;
+      canBeFocused = true;
+    }
+  }
+  return item;
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -207,7 +259,7 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
     rc.xp += g.x;
     rc.yp += g.y;
 
-    if (!lp.enabled) nvgGlobalAlpha(nvg, 0.5); else if (item == ctx.focused) nvgGlobalAlpha(nvg, 0.7);
+    if (!lp.enabled) nvgGlobalAlpha(nvg, 0.5); //else if (item == ctx.focused) nvgGlobalAlpha(nvg, 0.7);
     scope(exit) nvgGlobalAlpha(nvg, 1.0);
 
     if (item == 0) {
@@ -217,6 +269,9 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
       final switch (ctx.item!FuiCtlSpan(item).type) {
         case FuiCtlType.Invisible: break;
         case FuiCtlType.Box: break;
+        case FuiCtlType.Panel:
+          bndBevel(nvg, rc.x, rc.y, rc.w, rc.h);
+          break;
         case FuiCtlType.Label:
           auto data = ctx.item!FuiCtlLabel(item);
           bndLabel(nvg, rc.x, rc.y, rc.w, rc.h, data.iconid, data.text, data.htaligh);
@@ -225,10 +280,32 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
           auto data = ctx.item!FuiCtlButton(item);
           bndToolButton(nvg, rc.x, rc.y, rc.w, rc.h, BND_CORNER_NONE, (lp.active ? BND_ACTIVE : lp.hovered ? BND_HOVER : BND_DEFAULT), data.iconid, data.text);
           break;
-        case FuiCtlType.Panel:
-          bndBevel(nvg, rc.x, rc.y, rc.w, rc.h);
+        case FuiCtlType.Check:
+          auto data = ctx.item!FuiCtlCheck(item);
+          bndOptionButton(nvg, rc.x, rc.y, rc.w, rc.h, (data.var !is null && *data.var ? BND_ACTIVE : lp.hovered ? BND_HOVER : BND_DEFAULT), data.text);
+          break;
+        case FuiCtlType.Radio:
+          auto data = ctx.item!FuiCtlCheck(item);
+          bndRadioButton(nvg, rc.x, rc.y, rc.w, rc.h, BND_CORNER_NONE, (/*lp.active ? BND_ACTIVE :*/ lp.hovered ? BND_HOVER : BND_DEFAULT), data.iconid, data.text);
           break;
       }
+    }
+    if (ctx.focused == item) {
+      nvgSave(nvg);
+      scope(exit) nvgRestore(nvg);
+      nvgStrokeColor(nvg, nvgRGB(0, 0, 100));
+      nvgStrokeWidth(nvg, 1.2);
+      nvgMiterLimit(nvg, 0);
+      nvgBeginPath(nvg);
+      switch (ctx.item!FuiCtlSpan(item).type) {
+        case FuiCtlType.Check:
+          nvgRect(nvg, rc.x+3+14, rc.y+3, rc.w-6-14, rc.h-7);
+          break;
+        default:
+          nvgRect(nvg, rc.x+3, rc.y+3, rc.w-6, rc.h-7);
+          break;
+      }
+      nvgStroke(nvg);
     }
     // draw children
     item = lp.firstChild;
@@ -277,11 +354,44 @@ bool fuiProcessEvent (FuiContext ctx, FuiEvent ev) {
               }
             }
             break;
+          case FuiCtlType.Check:
+            if (ev.key == Key.Space) {
+              auto data = ctx.item!FuiCtlCheck(ev.item);
+              if (lp.clickMask) {
+                if (data.var !is null) {
+                  *data.var = !*data.var;
+                  return true;
+                } else {
+                  uint bidx = uint.max;
+                  foreach (ubyte shift; 0..8) if (lp.clickMask&(1<<shift)) { bidx = shift; break; }
+                  if (bidx != uint.max) {
+                    ctx.queueEvent(ev.item, FuiEvent.Type.Click, bidx, ctx.lastButtons|(ctx.lastMods<<8));
+                    return true;
+                  }
+                }
+              }
+            }
+            break;
           default:
         }
       }
       return false;
     case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
+      if (auto lp = ctx.layprops(ev.item)) {
+        if (lp.disabled || !lp.canBeFocused) return false;
+        switch (ctx.item!FuiCtlSpan(ev.item).type) {
+          case FuiCtlType.Check:
+            auto data = ctx.item!FuiCtlCheck(ev.item);
+            if (lp.clickMask) {
+              if (data.var !is null) {
+                *data.var = !*data.var;
+                return true;
+              }
+            }
+            break;
+          default:
+        }
+      }
       return false;
     case FuiEvent.Type.Double: // mouse double-click; param0: buttton index; param1: mods&buttons
       return false;
