@@ -46,6 +46,7 @@ void init (NVGcontext* vg) {
 // ////////////////////////////////////////////////////////////////////////// //
 void buildWindow0 (FuiContext ctx) {
   ctx.clear();
+
   with (ctx.layprops(0)) {
     vertical = true;
     padding.left = 1;
@@ -54,9 +55,6 @@ void buildWindow0 (FuiContext ctx) {
     padding.bottom = 6;
     spacing = 0;
     lineSpacing = 1;
-    version(LineBreakTest) {
-      minSize = FuiSize(105, 56);
-    }
   }
 
   // horizontal box for the first two lines
@@ -145,6 +143,8 @@ void buildWindow0 (FuiContext ctx) {
 void main () {
   bool doQuit = false;
   PerfGraph fps;
+  bool perfHidden = true;
+  bool alwaysRelayout = false;
 
   //setOpenGLContextVersion(3, 2); // up to GLSL 150
   setOpenGLContextVersion(2, 0); // it's enough
@@ -160,7 +160,7 @@ void main () {
   */
   int prevItemAt = -1;
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.allowResizing);
+  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.fixedSize/*allowResizing*/);
   //sdwindow.hideCursor();
 
   void clearWindowData () {
@@ -186,17 +186,15 @@ void main () {
   int owdt = -1, ohgt = -1;
 
   sdwindow.windowResized = delegate (int w, int h) {
-    writeln("w=", w, "; h=", h);
+    //writeln("w=", w, "; h=", h);
     owdt = w;
     ohgt = h;
     glViewport(0, 0, w, h);
-    ctx.layprops(0).minSize = FuiSize(w, h);
+    ctx.layprops(0).defSize = FuiSize(w, h);
     ctx.relayout();
   };
 
   sdwindow.redrawOpenGlScene = delegate () {
-    // Calculate pixel ration for hi-dpi devices.
-    //float pxRatio = cast(float)GWidth/cast(float)GHeight;
     ctx.update();
 
     // process events
@@ -205,17 +203,16 @@ void main () {
       { import std.stdio; writeln(ev); }
     }
 
-    /*
-    if (owdt != sdwindow.width || ohgt != sdwindow.height) {
-      owdt = sdwindow.width;
-      ohgt = sdwindow.height;
-      //glViewport(0, 0, owdt, ohgt);
-      // relayout widgets
-      ctx.layprops(0).minSize = FuiSize(owdt, ohgt);
+    if (alwaysRelayout) {
+      nvgFontSize(nvg, 16);
+      ctx.buildWindow0();
+      glViewport(0, 0, owdt, ohgt);
+      //ctx.layprops(0).minSize = FuiSize(owdt, ohgt);
+      //ctx.layprops(0).maxSize = FuiSize(owdt, ohgt);
+      ctx.layprops(0).defSize = FuiSize(owdt, ohgt);
       ctx.relayout();
-      debug(fui_dump) ctx.dumpLayoutBack();
+      //writeln("w=", owdt, "; h=", ohgt, "; w=", ctx.layprops(0).position.w, "; h=", ctx.layprops(0).position.h);
     }
-    */
 
     // timers
     prevt = curt;
@@ -231,7 +228,7 @@ void main () {
       if (fps !is null) fps.update(dt);
       nvgBeginFrame(nvg, owdt, ohgt);
       ctx.draw();
-      if (fps !is null) fps.render(nvg, owdt-200-5, ohgt-35-5);
+      if (fps !is null && !perfHidden) fps.render(nvg, owdt-200-5, ohgt-35-5);
       nvgEndFrame(nvg);
     }
   };
@@ -243,11 +240,13 @@ void main () {
     //glbindLoadFunctions();
 
     // init matrices
+    /*
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0, GWidth, GHeight, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    */
 
     nvg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
     if (nvg is null) {
@@ -258,9 +257,10 @@ void main () {
     init(nvg);
     ctx.vg = nvg;
 
+    nvgFontSize(nvg, 16);
     buildWindow0(ctx);
     // relayout widgets
-    ctx.layprops(0).minSize = FuiSize(0, 0);
+    //ctx.layprops(0).minSize = FuiSize(0, 0);
     ctx.relayout();
 
     GWidth = ctx.layprops(0).position.w;
@@ -273,7 +273,7 @@ void main () {
     //ctx.layprops(0).minSize = FuiSize(GWidth, GHeight);
     //ctx.relayout();
 
-    //if (fps is null) fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");
+    if (fps is null) fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");
     //sdwindow.redrawOpenGlScene();
   };
 
@@ -319,7 +319,8 @@ void main () {
     },
     delegate (dchar ch) {
       //if (ch == 'q') { doQuit = true; return; }
-      //uiSetChar(cast(uint)ch);
+      if (ch == 'P') { perfHidden = !perfHidden; return; }
+      if (ch == 'L') { alwaysRelayout = !alwaysRelayout; return; }
       ctx.charEvent(ch);
     },
   );
