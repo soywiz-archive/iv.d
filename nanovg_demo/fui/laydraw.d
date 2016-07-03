@@ -151,13 +151,6 @@ void main () {
   //openGLContextCompatible = false;
 
   auto ctx = FuiContext.create();
-  /*
-  buildWindow0(ctx);
-  ctx.relayout();
-  debug(fui_dump) ctx.dumpLayout();
-  GWidth = ctx.layprops(0).position.w;
-  GHeight = ctx.layprops(0).position.h;
-  */
   int prevItemAt = -1;
 
   auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.fixedSize/*allowResizing*/);
@@ -190,7 +183,9 @@ void main () {
     owdt = w;
     ohgt = h;
     glViewport(0, 0, w, h);
+    // set dimensions and relayout
     ctx.layprops(0).defSize = FuiSize(w, h);
+    ctx.layprops(0).maxSize = ctx.layprops(0).defSize;
     ctx.relayout();
   };
 
@@ -207,9 +202,9 @@ void main () {
       nvgFontSize(nvg, 16);
       ctx.buildWindow0();
       glViewport(0, 0, owdt, ohgt);
-      //ctx.layprops(0).minSize = FuiSize(owdt, ohgt);
-      //ctx.layprops(0).maxSize = FuiSize(owdt, ohgt);
+      // set dimensions and relayout
       ctx.layprops(0).defSize = FuiSize(owdt, ohgt);
+      ctx.layprops(0).maxSize = ctx.layprops(0).defSize;
       ctx.relayout();
       //writeln("w=", owdt, "; h=", ohgt, "; w=", ctx.layprops(0).position.w, "; h=", ctx.layprops(0).position.h);
     }
@@ -239,15 +234,6 @@ void main () {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    // init matrices
-    /*
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, GWidth, GHeight, 0, -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    */
-
     nvg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
     if (nvg is null) {
       import std.stdio;
@@ -259,19 +245,14 @@ void main () {
 
     nvgFontSize(nvg, 16);
     buildWindow0(ctx);
-    // relayout widgets
-    //ctx.layprops(0).minSize = FuiSize(0, 0);
+    // layout controls in default root box to determine minimal dimenstions
+    // but set maximal dimensions to our max window size
+    ctx.layprops(0).maxSize = FuiSize(1028, 768);
     ctx.relayout();
 
     GWidth = ctx.layprops(0).position.w;
     GHeight = ctx.layprops(0).position.h;
-    //sdwindow.width = GWidth;
-    //sdwindow.height = GHeight;
     sdwindow.resize(GWidth, GHeight);
-    //glViewport(0, 0, owdt, ohgt);
-
-    //ctx.layprops(0).minSize = FuiSize(GWidth, GHeight);
-    //ctx.relayout();
 
     if (fps is null) fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");
     //sdwindow.redrawOpenGlScene();
@@ -290,35 +271,12 @@ void main () {
         case Key.Escape: sdwindow.close(); return;
         default:
       }
-      //uiSetKey(cast(uint)event.key, 0/*mods*/, event.pressed);
       ctx.keyboardEvent(event);
     },
     delegate (MouseEvent event) {
-      /*
-      auto iat = ctx.itemAt(FuiPoint(event.x, event.y));
-      if (iat != prevItemAt) {
-        prevItemAt = iat;
-        writeln("hovering ", iat);
-      }
-      */
       ctx.mouseEvent(event);
-      /+
-      switch (event.type) {
-        case MouseEventType.buttonPressed:
-        case MouseEventType.buttonReleased:
-          if (event.button == MouseButton.left) uiSetButton(0, /*mods*/0, (event.type == MouseEventType.buttonPressed));
-          if (event.button == MouseButton.right) uiSetButton(2, /*mods*/0, (event.type == MouseEventType.buttonPressed));
-          break;
-        case MouseEventType.motion:
-          //{ import std.stdio; writeln(event.x, ",", event.y); }
-          uiSetCursor(event.x, event.y);
-          break;
-        default:
-      }
-      +/
     },
     delegate (dchar ch) {
-      //if (ch == 'q') { doQuit = true; return; }
       if (ch == 'P') { perfHidden = !perfHidden; return; }
       if (ch == 'L') { alwaysRelayout = !alwaysRelayout; return; }
       ctx.charEvent(ch);
