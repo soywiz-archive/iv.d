@@ -601,11 +601,11 @@ struct NVGpath {
 struct NVGparams {
   void* userPtr;
   int edgeAntiAlias;
-  int function (void* uptr) renderCreate;
+  bool function (void* uptr) renderCreate;
   int function (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) renderCreateTexture;
-  int function (void* uptr, int image) renderDeleteTexture;
-  int function (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) renderUpdateTexture;
-  int function (void* uptr, int image, int* w, int* h) renderGetTextureSize;
+  bool function (void* uptr, int image) renderDeleteTexture;
+  bool function (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) renderUpdateTexture;
+  bool function (void* uptr, int image, int* w, int* h) renderGetTextureSize;
   void function (void* uptr, int width, int height) renderViewport;
   void function (void* uptr) renderCancel;
   void function (void* uptr) renderFlush;
@@ -810,7 +810,7 @@ package(iv.nanovg) NVGcontext* nvgCreateInternal (NVGparams* params) {
 
   nvg__setDevicePixelRatio(ctx, 1.0f);
 
-  if (ctx.params.renderCreate(ctx.params.userPtr) == 0) goto error;
+  if (!ctx.params.renderCreate(ctx.params.userPtr)) goto error;
 
   // Init font rendering
   memset(&fontParams, 0, fontParams.sizeof);

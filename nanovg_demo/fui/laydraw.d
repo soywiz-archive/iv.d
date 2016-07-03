@@ -234,7 +234,7 @@ void main () {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    nvg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+    nvg = nvgCreateGL2(/*NVG_ANTIALIAS|*/NVG_STENCIL_STROKES|NVG_DEBUG);
     if (nvg is null) {
       import std.stdio;
       writeln("Could not init nanovg.");

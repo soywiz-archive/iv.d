@@ -103,7 +103,7 @@ struct FONSparams {
   int width, height;
   ubyte flags;
   void* userPtr;
-  int function (void* uptr, int width, int height) renderCreate;
+  bool function (void* uptr, int width, int height) renderCreate;
   int function (void* uptr, int width, int height) renderResize;
   void function (void* uptr, int* rect, const(ubyte)* data) renderUpdate;
   void function (void* uptr, const(float)* verts, const(float)* tcoords, const(uint)* colors, int nverts) renderDraw;
@@ -671,7 +671,7 @@ package(iv.nanovg) FONScontext* fonsCreateInternal (FONSparams* params) {
   if (!fons__tt_init(stash)) goto error;
 
   if (stash.params.renderCreate !is null) {
-    if (stash.params.renderCreate(stash.params.userPtr, stash.params.width, stash.params.height) == 0) goto error;
+    if (!stash.params.renderCreate(stash.params.userPtr, stash.params.width, stash.params.height)) goto error;
   }
 
   stash.atlas = fons__allocAtlas(stash.params.width, stash.params.height, FONS_INIT_ATLAS_NODES);
