@@ -385,29 +385,20 @@ private extern(C) nothrow @nogc {
 }
 
 
-// Create flags
+/// Create flags
 alias NVGcreateFlags = int;
+/// Create flags
 enum /*NVGcreateFlags*/ {
-  // Flag indicating if geometry based anti-aliasing is used (may not be needed when using MSAA).
+  /// Flag indicating if geometry based anti-aliasing is used (may not be needed when using MSAA).
   NVG_ANTIALIAS = 1<<0,
-  // Flag indicating if strokes should be drawn using stencil buffer. The rendering will be a little
-  // slower, but path overlaps (i.e. self-intersecting or sharp turns) will be drawn just once.
+  /** Flag indicating if strokes should be drawn using stencil buffer. The rendering will be a little
+    * slower, but path overlaps (i.e. self-intersecting or sharp turns) will be drawn just once. */
   NVG_STENCIL_STROKES = 1<<1,
-  // Flag indicating that additional debug checks are done.
+  /// Flag indicating that additional debug checks are done.
   NVG_DEBUG = 1<<2,
 }
 
 enum NANOVG_GL_USE_STATE_FILTER = true;
-
-// Creates NanoVG contexts for different OpenGL (ES) versions.
-// Flags should be combination of the create flags above.
-
-//!NVGcontext* nvgCreateGL2(int flags);
-//!void nvgDeleteGL2(NVGcontext* ctx);
-
-//!int nvglCreateImageFromHandleGL2(NVGcontext* ctx, GLuint textureId, int w, int h, int flags);
-//!GLuint nvglImageFromHandleGL2(NVGcontext* ctx, int image);
-
 
 // These are additional flags on top of NVGimageFlags.
 alias NVGimageFlagsGL = int;
@@ -1475,6 +1466,8 @@ void glnvg__renderDelete (void* uptr) {
 }
 
 
+/// Creates NanoVG contexts for OpenGL versions.
+/// Flags should be combination of the create flags above.
 public NVGcontext* nvgCreateGL2 (int flags) {
   NVGparams params;
   NVGcontext* ctx = null;
@@ -1511,10 +1504,12 @@ error:
   return null;
 }
 
+/// Delete NanoVG OpenGL context.
 public void nvgDeleteGL2 (NVGcontext* ctx) {
   if (ctx !is null) nvgDeleteInternal(ctx);
 }
 
+/// Create NanoVG OpenGL image from texture id.
 public int nvglCreateImageFromHandleGL2 (NVGcontext* ctx, GLuint textureId, int w, int h, int imageFlags) {
   GLNVGcontext* gl = cast(GLNVGcontext*)nvgInternalParams(ctx).userPtr;
   GLNVGtexture* tex = glnvg__allocTexture(gl);
@@ -1530,6 +1525,7 @@ public int nvglCreateImageFromHandleGL2 (NVGcontext* ctx, GLuint textureId, int 
   return tex.id;
 }
 
+/// Delete created NanoVG image texture.
 public GLuint nvglImageHandleGL2 (NVGcontext* ctx, int image) {
   GLNVGcontext* gl = cast(GLNVGcontext*)nvgInternalParams(ctx).userPtr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
