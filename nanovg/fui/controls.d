@@ -144,6 +144,8 @@ int label (FuiContext ctx, int parent, string text, int iconid=-1) {
     nvgTextBounds(ctx.vg, 0, 0, text, bounds);
     ctx.layprops(item).minSize = FuiSize(cast(int)(bounds[2]-bounds[0])+4, cast(int)(bounds[3]-bounds[1])+4);
     //{ import std.stdio; writeln(bounds[]); }
+  } else {
+    ctx.layprops(item).minSize = FuiSize(cast(int)text.length*8+4, 10);
   }
   with (ctx.layprops(item)) {
     flex = 1;
@@ -174,6 +176,8 @@ int button (FuiContext ctx, int parent, string text, int iconid=-1) {
     nvgTextBounds(ctx.vg, 0, 0, text, bounds);
     ctx.layprops(item).minSize = FuiSize(cast(int)(bounds[2]-bounds[0])+16, cast(int)(bounds[3]-bounds[1])+4);
     //{ import std.stdio; writeln(bounds[]); }
+  } else {
+    ctx.layprops(item).minSize = FuiSize(cast(int)text.length*8+4, 10);
   }
   with (ctx.layprops(item)) {
     flex = 1;
