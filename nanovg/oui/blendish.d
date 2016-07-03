@@ -159,6 +159,7 @@ alias BNDtextAlignment = int;
 enum /*BNDtextAlignment*/ {
   BND_LEFT = 0,
   BND_CENTER,
+  BND_RIGHT,
 }
 
 // states altering the styling of a widget
@@ -1343,8 +1344,8 @@ void bndSetFont (int font) nothrow @trusted @nogc { pragma(inline, true); bnd_fo
 int bndGetFont () nothrow @trusted @nogc { pragma(inline, true); return bnd_font; }
 
 ////////////////////////////////////////////////////////////////////////////////
-public void bndLabel (NVGcontext* ctx, float x, float y, float w, float h, int iconid, const(char)[] label) {
-  bndIconLabelValue(ctx, x, y, w, h, iconid, bnd_theme.regularTheme.textColor, BND_LEFT, BND_LABEL_FONT_SIZE, label);
+public void bndLabel (NVGcontext* ctx, float x, float y, float w, float h, int iconid, const(char)[] label, int align_=BND_LEFT) {
+  bndIconLabelValue(ctx, x, y, w, h, iconid, bnd_theme.regularTheme.textColor, /*BND_LEFT*/align_, BND_LABEL_FONT_SIZE, label);
 }
 
 public void bndToolButton (NVGcontext* ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
@@ -1911,6 +1912,9 @@ public void bndIconLabelValue (NVGcontext* ctx, float x, float y, float w, float
       if (align_ == BND_CENTER) {
         float width = label_width+sep_width+nvgTextBounds(ctx, 1, 1, value, null);
         x += ((w-BND_PAD_RIGHT-pleft)-width)*0.5f;
+      } else if (align_ == BND_RIGHT) {
+        float width = label_width+sep_width+nvgTextBounds(ctx, 1, 1, value, null);
+        x += w-BND_PAD_RIGHT-width;
       }
       y += BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN;
       nvgText(ctx, x, y, label);
@@ -1919,7 +1923,7 @@ public void bndIconLabelValue (NVGcontext* ctx, float x, float y, float w, float
       x += sep_width;
       nvgText(ctx, x, y, value);
     } else {
-      nvgTextAlign(ctx, (align_ == BND_LEFT ? (NVGalign.Left|NVGalign.Baseline) : (NVGalign.Center|NVGalign.Baseline)));
+      nvgTextAlign(ctx, (align_ == BND_LEFT ? (NVGalign.Left|NVGalign.Baseline) : align_ == BND_CENTER ? (NVGalign.Center|NVGalign.Baseline) : (NVGalign.Right|NVGalign.Baseline)));
       nvgTextBox(ctx, x+pleft, y+BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN, w-BND_PAD_RIGHT-pleft, label);
     }
   } else if (iconid >= 0) {

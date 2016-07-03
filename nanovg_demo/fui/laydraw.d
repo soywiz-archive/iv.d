@@ -53,7 +53,7 @@ void buildWindow0 (FuiContext ctx) {
     padding.top = 4;
     padding.bottom = 6;
     spacing = 0;
-    lineSpacing = 10;
+    lineSpacing = 1;
     version(LineBreakTest) {
       minSize = FuiSize(105, 56);
     }
@@ -91,7 +91,7 @@ void buildWindow0 (FuiContext ctx) {
   with (ctx.layprops(hbox)) flex = 0;
 
     // label
-    auto lbl0 = ctx.label(hbox, "first label:");
+    auto lbl0 = ctx.label(hbox, "\x02first label:");
     with (ctx.layprops(lbl0)) {
       flex = 0;
       hgroup = lbl0;
@@ -110,7 +110,7 @@ void buildWindow0 (FuiContext ctx) {
   with (ctx.layprops(hbox)) flex = 0;
 
     // label
-    with (ctx.layprops(ctx.label(hbox, "second label:"))) {
+    with (ctx.layprops(ctx.label(hbox, "\x02second label:"))) {
       flex = 0;
       hgroup = lbl0;
       vgroup = lbl0;
@@ -160,7 +160,7 @@ void main () {
   */
   int prevItemAt = -1;
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.fixedSize);
+  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.allowResizing);
   //sdwindow.hideCursor();
 
   void clearWindowData () {
@@ -185,6 +185,15 @@ void main () {
   auto curt = prevt;
   int owdt = -1, ohgt = -1;
 
+  sdwindow.windowResized = delegate (int w, int h) {
+    writeln("w=", w, "; h=", h);
+    owdt = w;
+    ohgt = h;
+    glViewport(0, 0, w, h);
+    ctx.layprops(0).minSize = FuiSize(w, h);
+    ctx.relayout();
+  };
+
   sdwindow.redrawOpenGlScene = delegate () {
     // Calculate pixel ration for hi-dpi devices.
     //float pxRatio = cast(float)GWidth/cast(float)GHeight;
@@ -196,15 +205,17 @@ void main () {
       { import std.stdio; writeln(ev); }
     }
 
+    /*
     if (owdt != sdwindow.width || ohgt != sdwindow.height) {
       owdt = sdwindow.width;
       ohgt = sdwindow.height;
-      glViewport(0, 0, owdt, ohgt);
+      //glViewport(0, 0, owdt, ohgt);
       // relayout widgets
       ctx.layprops(0).minSize = FuiSize(owdt, ohgt);
       ctx.relayout();
       debug(fui_dump) ctx.dumpLayoutBack();
     }
+    */
 
     // timers
     prevt = curt;
@@ -246,10 +257,24 @@ void main () {
     }
     init(nvg);
     ctx.vg = nvg;
+
     buildWindow0(ctx);
+    // relayout widgets
+    ctx.layprops(0).minSize = FuiSize(0, 0);
     ctx.relayout();
+
+    GWidth = ctx.layprops(0).position.w;
+    GHeight = ctx.layprops(0).position.h;
+    //sdwindow.width = GWidth;
+    //sdwindow.height = GHeight;
+    sdwindow.resize(GWidth, GHeight);
+    //glViewport(0, 0, owdt, ohgt);
+
+    //ctx.layprops(0).minSize = FuiSize(GWidth, GHeight);
+    //ctx.relayout();
+
     //if (fps is null) fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");
-    sdwindow.redrawOpenGlScene();
+    //sdwindow.redrawOpenGlScene();
   };
 
   sdwindow.eventLoop(1000/60,

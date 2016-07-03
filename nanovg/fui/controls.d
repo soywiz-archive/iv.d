@@ -120,6 +120,7 @@ align(1):
 
   string text;
   int iconid;
+  int htaligh;
 }
 
 int label (FuiContext ctx, int parent, string text, int iconid=-1) {
@@ -127,6 +128,14 @@ int label (FuiContext ctx, int parent, string text, int iconid=-1) {
   auto item = ctx.addItem!FuiCtlLabel(parent);
   auto data = ctx.item!FuiCtlLabel(item);
   data.type = FuiCtlType.Label;
+  data.htaligh = BND_LEFT;
+  if (text.length && text[0] == '\x01') {
+    text = text[1..$];
+    data.htaligh = BND_CENTER;
+  } else if (text.length && text[0] == '\x02') {
+    text = text[1..$];
+    data.htaligh = BND_RIGHT;
+  }
   data.text = text;
   data.iconid = iconid;
   auto font = bndGetFont();
@@ -203,7 +212,7 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
         case FuiCtlType.Box: break;
         case FuiCtlType.Label:
           auto data = ctx.item!FuiCtlLabel(item);
-          bndLabel(nvg, rc.x, rc.y, rc.w, rc.h, data.iconid, data.text);
+          bndLabel(nvg, rc.x, rc.y, rc.w, rc.h, data.iconid, data.text, data.htaligh);
           break;
         case FuiCtlType.Button:
           auto data = ctx.item!FuiCtlButton(item);
