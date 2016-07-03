@@ -1331,18 +1331,16 @@ const(BNDtheme)* bndGetTheme () {
 }
 
 // the handle to the image containing the icon sheet
-__gshared int bnd_icon_image = -1;
+private __gshared int bnd_icon_image = -1;
 
-void bndSetIconImage (int image) {
-  bnd_icon_image = image;
-}
+void bndSetIconImage (int image) nothrow @trusted @nogc { pragma(inline, true); bnd_icon_image = image; }
+int bndGetIconImage () nothrow @trusted @nogc { pragma(inline, true); return bnd_icon_image; }
 
 // the handle to the UI font
-__gshared int bnd_font = -1;
+private __gshared int bnd_font = -1;
 
-void bndSetFont (int font) {
-  bnd_font = font;
-}
+void bndSetFont (int font) nothrow @trusted @nogc { pragma(inline, true); bnd_font = font; }
+int bndGetFont () nothrow @trusted @nogc { pragma(inline, true); return bnd_font; }
 
 ////////////////////////////////////////////////////////////////////////////////
 public void bndLabel (NVGcontext* ctx, float x, float y, float w, float h, int iconid, const(char)[] label) {

@@ -495,7 +495,7 @@ enum NVGimageFlags {
 // same way regardless of scaling. I.e. following works regardless of scaling:
 //
 //    string txt = "Text me up.";
-//    nvgTextBounds(vg, x, y, txt, null, bounds);
+//    nvgTextBounds(vg, x, y, txt, bounds);
 //    nvgBeginPath(vg);
 //    nvgRoundedRect(vg, bounds[0], bounds[1], bounds[2]-bounds[0], bounds[3]-bounds[1]);
 //    nvgFill(vg);
