@@ -161,12 +161,9 @@ private:
     // internal flags for layouter
     TempLineBreak  = 0x1000_0000u,
     TouchedByGroup = 0x2000_0000u,
-    GrowH          = 0x4000_0000u,
-    GrowV          = 0x8000_0000u,
     LayouterFlagsMask =
       TempLineBreak|
       TouchedByGroup|
-      GrowV|GrowH|
       0,
   }
 
@@ -212,12 +209,6 @@ private:
 
     bool touchedByGroup () const { pragma(inline, true); return ((flags&Flags.TouchedByGroup) != 0); }
     void touchedByGroup (bool v) { pragma(inline, true); if (v) flags |= Flags.TouchedByGroup; else flags &= ~Flags.TouchedByGroup; }
-
-    bool growH () const { pragma(inline, true); return ((flags&Flags.GrowH) != 0); }
-    void growH (bool v) { pragma(inline, true); if (v) flags |= Flags.GrowH; else flags &= ~Flags.GrowH; }
-
-    bool growV () const { pragma(inline, true); return ((flags&Flags.GrowV) != 0); }
-    void growV (bool v) { pragma(inline, true); if (v) flags |= Flags.GrowV; else flags &= ~Flags.GrowV; }
 
     // this is strictly internal thing
     void hovered (bool v) { pragma(inline, true); if (v) flags |= Flags.Hovered; else flags &= ~Flags.Hovered; }
@@ -830,12 +821,7 @@ public:
       foreach (int idx; 0..length) {
         auto lp = layprops(idx);
         lp.resetLayouterFlags();
-        // setup width
-        lp.position.w = min(max(lp.minSize.w, max(lp.defSize.w, 0)), lp.maxSize.w);
-        lp.growV = (lp.position.w == 0);
-        // setup height
-        lp.position.h = min(max(lp.minSize.h, max(lp.defSize.h, 0)), lp.maxSize.h);
-        lp.growH = (lp.position.h == 0);
+        lp.position = lp.position.init; // zero it out
         // setup group lists
         mixin(FixGroupEnum!"hGroup");
         mixin(FixGroupEnum!"vGroup");
@@ -935,7 +921,7 @@ public:
       void putItem (FuiLayoutProps* clp, int cidx) {
         int nw = curWidth+clp.position.w+(lastCIdx != -1 ? bspc : 0);
         // do we neeed to start a new line?
-        if (nw <= (lp.growH ? lp.maxSize.w : lp.position.w)) {
+        if (nw <= (lp.position.w ? lp.position.w : lp.maxSize.w)) {
           addToLine(clp, cidx);
           return;
         }
@@ -976,8 +962,10 @@ public:
 
       // grow box or clamp max size
       // but only if size is not defined; in other cases our size is changed by parent to fit in
-      if (lp.growH && lp.position.w == 0) lp.position.w = min(max(lp.position.w, lp.minSize.w, maxW), lp.maxSize.w); else maxW = lp.position.w;
-      if (lp.growV && lp.position.h == 0) lp.position.h = min(max(lp.position.h, lp.minSize.h, maxH), lp.maxSize.h); else maxH = lp.position.h;
+      if (lp.position.w == 0) lp.position.w = min(max(0, lp.defSize.w, lp.minSize.w, maxW), lp.maxSize.w);
+      if (lp.position.h == 0) lp.position.h = min(max(0, lp.defSize.h, lp.minSize.h, maxH), lp.maxSize.h);
+      maxH = lp.position.h;
+      maxW = lp.position.w;
 
       int flexTotal, flexBoxCount, curSpc, spaceLeft;
 
