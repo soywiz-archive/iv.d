@@ -102,6 +102,12 @@ align(1):
     bool lineBreak () const { pragma(inline, true); return ((flags&Flags.LineBreak) != 0); }
     void lineBreak (bool v) { pragma(inline, true); if (v) flags |= Flags.LineBreak; else flags &= ~Flags.LineBreak; }
 
+    bool wantTab () const { pragma(inline, true); return ((flags&Flags.WantTab) != 0); }
+    void wantTab (bool v) { pragma(inline, true); if (v) flags |= Flags.WantTab; else flags &= ~Flags.WantTab; }
+
+    bool wantReturn () const { pragma(inline, true); return ((flags&Flags.WantReturn) != 0); }
+    void wantReturn (bool v) { pragma(inline, true); if (v) flags |= Flags.WantReturn; else flags &= ~Flags.WantReturn; }
+
     ushort userFlags () const { pragma(inline, true); return (flags&Flags.UserFlagsMask); }
     void userFlags (ushort v) { pragma(inline, true); flags = (flags&~Flags.UserFlagsMask)|v; }
   }
@@ -158,6 +164,8 @@ private:
     Hovered        = 0x0008_0000u, // this item is hovered
     CanBeFocused   = 0x0010_0000u, // this item can be focused
     Active         = 0x0020_0000u, // mouse is pressed on this
+    WantTab        = 0x0040_0000u, // want to receive tab key events
+    WantReturn     = 0x0080_0000u, // want to receive return key events
     // internal flags for layouter
     TempLineBreak  = 0x1000_0000u,
     TouchedByGroup = 0x2000_0000u,
@@ -510,6 +518,16 @@ private:
         case ExternalEvent.Type.Char:
           break;
         case ExternalEvent.Type.Key:
+          if (extEvents.ptr[extevHead].kev.pressed && extEvents.ptr[extevHead].kev.key == Key.Tab) {
+            auto lfc = layprops(focused);
+            if (lfc is null) {
+              focused = findNext(0, (int item) { if (auto lc = layprops(item)) return lc.canBeFocused; else return false; });
+            } else {
+              focused = findNext(focused, (int item) { if (auto lc = layprops(item)) return (item != focused && lc.canBeFocused); else return false; });
+              if (focused == -1) focused = findNext(0, (int item) { if (auto lc = layprops(item)) return lc.canBeFocused; else return false; });
+            }
+            break;
+          }
           break;
         case ExternalEvent.Type.Mouse:
           auto ev = &extEvents.ptr[extevHead].mev;

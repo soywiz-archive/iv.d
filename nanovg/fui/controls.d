@@ -182,6 +182,7 @@ int button (FuiContext ctx, int parent, string text, int iconid=-1) {
   with (ctx.layprops(item)) {
     flex = 1;
     clickMask |= FuiLayoutProps.Buttons.Left;
+    canBeFocused = true;
   }
   return item;
 }
