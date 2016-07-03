@@ -195,6 +195,7 @@ void main () {
     // process events
     while (ctx.hasEvents) {
       auto ev = ctx.getEvent();
+      if (ctx.fuiProcessEvent(ev)) continue;
       { import std.stdio; writeln(ev); }
     }
 

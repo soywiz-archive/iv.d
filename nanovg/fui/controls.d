@@ -20,6 +20,8 @@
  */
 module iv.nanovg.fui.controls;
 
+import arsd.simpledisplay;
+
 import iv.nanovg;
 import iv.nanovg.oui.blendish;
 
@@ -250,3 +252,38 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+// returns `true` if event was consumed
+bool fuiProcessEvent (FuiContext ctx, FuiEvent ev) {
+  final switch (ev.type) {
+    case FuiEvent.Type.None:
+      return false;
+    case FuiEvent.Type.Char: // param0: dchar; param1: mods&buttons
+      return false;
+    case FuiEvent.Type.Key: // param0: sdpy keycode; param1: mods&buttons
+      if (auto lp = ctx.layprops(ev.item)) {
+        if (lp.disabled || !lp.canBeFocused) return false;
+        switch (ctx.item!FuiCtlSpan(ev.item).type) {
+          case FuiCtlType.Button:
+            if (ev.key == Key.Space) {
+              auto data = ctx.item!FuiCtlButton(ev.item);
+              if (lp.clickMask) {
+                uint bidx = uint.max;
+                foreach (ubyte shift; 0..8) if (lp.clickMask&(1<<shift)) { bidx = shift; break; }
+                if (bidx != uint.max) {
+                  ctx.queueEvent(ev.item, FuiEvent.Type.Click, bidx, ctx.lastButtons|(ctx.lastMods<<8));
+                  return true;
+                }
+              }
+            }
+            break;
+          default:
+        }
+      }
+      return false;
+    case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
+      return false;
+    case FuiEvent.Type.Double: // mouse double-click; param0: buttton index; param1: mods&buttons
+      return false;
+  }
+}

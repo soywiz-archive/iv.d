@@ -226,19 +226,27 @@ private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public enum FuiEventType {
-  None, // just in case
-  Char, // param0: dchar; param1: mods&buttons
-  Key, // param0: sdpy keycode; param1: mods&buttons
-  Click, // mouse click; param0: buttton index; param1: mods&buttons
-  Double, // mouse double-click; param0: buttton index; param1: mods&buttons
-}
-
 public static struct FuiEvent {
-  FuiEventType type;
+  enum Type {
+    None, // just in case
+    Char, // param0: dchar; param1: mods&buttons
+    Key, // param0: sdpy keycode; param1: mods&buttons
+    Click, // mouse click; param0: buttton index; param1: mods&buttons
+    Double, // mouse double-click; param0: buttton index; param1: mods&buttons
+  }
+
+  Type type;
   int item;
   uint param0;
   uint param1;
+
+@property const pure nothrow @safe @nogc:
+  ubyte mods () { pragma(inline, true); return cast(ubyte)(param1>>8); }
+  ubyte buts () { pragma(inline, true); return cast(ubyte)param1; }
+
+  Key key () { pragma(inline, true); return cast(Key)param0; }
+  dchar ch () { pragma(inline, true); return cast(dchar)param0; }
+  ubyte bidx () { pragma(inline, true); return cast(ubyte)param0; }
 }
 
 
@@ -270,7 +278,7 @@ private:
 
 nothrow @nogc:
 private:
-  void queueEvent (int aitem, FuiEventType atype, uint aparam0=0, uint aparam1=0) nothrow @trusted @nogc {
+  void queueEvent (int aitem, FuiEvent.Type atype, uint aparam0=0, uint aparam1=0) nothrow @trusted @nogc {
     if (eventPos >= events.length) return;
     auto nn = (eventHead+eventPos++)%events.length;
     with (events.ptr[nn]) {
@@ -341,7 +349,7 @@ private:
         if (lastClickDelta.ptr[bidx] <= fuiDoubleTime) {
           debug(fui_mouse) { import core.stdc.stdio : printf; printf("  DOUBLE!\n"); }
           // it comes right in time too
-          queueEvent(lastHover, FuiEventType.Double, bidx, lastButtons|(lastMods<<8));
+          queueEvent(lastHover, FuiEvent.Type.Double, bidx, lastButtons|(lastMods<<8));
           // continue registering doubleclicks
           lastClickDelta.ptr[bidx] = 0;
           beventCount.ptr[bidx] = 2;
@@ -357,7 +365,7 @@ private:
       // try single click
       if (beventCount.ptr[bidx] == 1) {
         debug(fui_mouse) { import core.stdc.stdio : printf; printf("  SINGLE\n"); }
-        if (lp.clickMask&(1<<bidx)) queueEvent(lastHover, FuiEventType.Click, bidx, lastButtons|(lastMods<<8));
+        if (lp.clickMask&(1<<bidx)) queueEvent(lastHover, FuiEvent.Type.Click, bidx, lastButtons|(lastMods<<8));
         // start doubleclick timer
         beventCount.ptr[bidx] = 2;
         // start registering doubleclicks
@@ -516,17 +524,24 @@ private:
     while (extevPos > 0) {
       final switch (extEvents.ptr[extevHead].type) {
         case ExternalEvent.Type.Char:
+          if (auto lc = layprops(focused)) {
+            if (lc.canBeFocused) queueEvent(focused, FuiEvent.Type.Char, cast(uint)extEvents.ptr[extevHead].cev);
+          }
           break;
         case ExternalEvent.Type.Key:
+          if (!extEvents.ptr[extevHead].kev.pressed) break;
           if (extEvents.ptr[extevHead].kev.pressed && extEvents.ptr[extevHead].kev.key == Key.Tab) {
             auto lfc = layprops(focused);
             if (lfc is null) {
               focused = findNext(0, (int item) { if (auto lc = layprops(item)) return lc.canBeFocused; else return false; });
-            } else {
+            } else if (!lfc.wantTab || lfc.disabled) {
               focused = findNext(focused, (int item) { if (auto lc = layprops(item)) return (item != focused && lc.canBeFocused); else return false; });
               if (focused == -1) focused = findNext(0, (int item) { if (auto lc = layprops(item)) return lc.canBeFocused; else return false; });
             }
             break;
+          }
+          if (auto lc = layprops(focused)) {
+            if (lc.canBeFocused && lc.enabled) queueEvent(focused, FuiEvent.Type.Key, cast(uint)extEvents.ptr[extevHead].kev.key);
           }
           break;
         case ExternalEvent.Type.Mouse:
@@ -1275,9 +1290,13 @@ public:
   // don't pass anything to automatically calculate update delta
   void update (int msecDelta=-1) { pragma(inline, true); if (ctxp) ctx.update(msecDelta); }
 
+  void queueEvent (int aitem, FuiEvent.Type atype, uint aparam0=0, uint aparam1=0) nothrow @trusted @nogc { pragma(inline, true); if (ctxp) ctx.queueEvent(aitem, atype, aparam0, aparam1); }
   bool hasEvents () const nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.hasEvents() : false); }
   FuiEvent getEvent () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.getEvent() : FuiEvent.init); }
 
   @property NVGcontext* vg () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.vgc : null); }
   @property void vg (NVGcontext* v) nothrow @trusted @nogc { pragma(inline, true); if (ctxp) ctx.vgc = v; }
+
+  @property ubyte lastButtons () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastButtons : 0); }
+  @property ubyte lastMods () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastMods : 0); }
 }
