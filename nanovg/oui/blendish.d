@@ -83,17 +83,17 @@ import iv.nanovg;
  * the Theme panel in the Blender preferences */
 public struct BNDwidgetTheme {
   /// color of widget box outline
-  NVGcolor outlineColor;
+  NVGColor outlineColor;
   /// color of widget item (meaning changes depending on class)
-  NVGcolor itemColor;
+  NVGColor itemColor;
   /// fill color of widget box
-  NVGcolor innerColor;
+  NVGColor innerColor;
   /// fill color of widget box when active
-  NVGcolor innerSelectedColor;
+  NVGColor innerSelectedColor;
   /// color of text label
-  NVGcolor textColor;
+  NVGColor textColor;
   /// color of text label when active
-  NVGcolor textSelectedColor;
+  NVGColor textSelectedColor;
   /// delta modifier for upper part of gradient (-100 to 100)
   int shadeTop;
   /// delta modifier for lower part of gradient (-100 to 100)
@@ -103,18 +103,18 @@ public struct BNDwidgetTheme {
 /// describes the theme used to draw nodes
 public struct BNDnodeTheme {
   /// inner color of selected node (and downarrow)
-  NVGcolor nodeSelectedColor;
+  NVGColor nodeSelectedColor;
   /// outline of wires
-  NVGcolor wiresColor;
+  NVGColor wiresColor;
   /// color of text label when active
-  NVGcolor textSelectedColor;
+  NVGColor textSelectedColor;
 
   /// inner color of active node (and dragged wire)
-  NVGcolor activeNodeColor;
+  NVGColor activeNodeColor;
   /// color of selected wire
-  NVGcolor wireSelectColor;
+  NVGColor wireSelectColor;
   /// color of background of node
-  NVGcolor nodeBackdropColor;
+  NVGColor nodeBackdropColor;
 
   /// how much a noodle curves (0 to 10)
   int noodleCurving;
@@ -123,7 +123,7 @@ public struct BNDnodeTheme {
 /// describes the theme used to draw widgets
 public struct BNDtheme {
   /// the background color of panels and windows
-  NVGcolor backgroundColor;
+  NVGColor backgroundColor;
   /// theme for labels
   BNDwidgetTheme regularTheme;
   /// theme for tool buttons
@@ -1085,7 +1085,7 @@ public void bndLabel (NVGContext ctx, float x, float y, float w, float h, int ic
  */
 public void bndToolButton (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
   float[4] cr;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
 
   bndSelectCorners(cr.ptr, BND_TOOL_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
@@ -1107,7 +1107,7 @@ public void bndToolButton (NVGContext ctx, float x, float y, float w, float h, i
  */
 public void bndRadioButton (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
   float[4] cr;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_OPTION_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
   bndInnerColors(&shade_top, &shade_down, &bnd_theme.radioTheme, state, 1);
@@ -1142,7 +1142,7 @@ public int bndTextFieldTextPosition (NVGContext ctx, float x, float y, float w, 
  */
 public void bndTextField (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] text, int cbegin, int cend) {
   float[4] cr;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_TEXT_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
   bndInnerColors(&shade_top, &shade_down, &bnd_theme.textFieldTheme, state, 0);
@@ -1162,7 +1162,7 @@ public void bndTextField (NVGContext ctx, float x, float y, float w, float h, in
  */
 public void bndOptionButton (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, const(char)[] label) {
   float ox, oy;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
   ox = x;
   oy = y+h-BND_OPTION_HEIGHT-3;
   bndBevelInset(ctx, ox, oy, BND_OPTION_WIDTH, BND_OPTION_HEIGHT, BND_OPTION_RADIUS, BND_OPTION_RADIUS);
@@ -1185,7 +1185,7 @@ public void bndOptionButton (NVGContext ctx, float x, float y, float w, float h,
  */
 public void bndChoiceButton (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
   float[4] cr;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_OPTION_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
   bndInnerColors(&shade_top, &shade_down, &bnd_theme.choiceTheme, state, 1);
@@ -1201,7 +1201,7 @@ public void bndChoiceButton (NVGContext ctx, float x, float y, float w, float h,
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndColorButton (NVGContext ctx, float x, float y, float w, float h, int flags, NVGcolor color) {
+public void bndColorButton (NVGContext ctx, float x, float y, float w, float h, int flags, NVGColor color) {
   float[4] cr;
   bndSelectCorners(cr.ptr, BND_TOOL_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
@@ -1221,7 +1221,7 @@ public void bndColorButton (NVGContext ctx, float x, float y, float w, float h, 
  */
 public void bndNumberField (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, const(char)[] label, const(char)[] value) {
   float[4] cr;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_NUMBER_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
   bndInnerColors(&shade_top, &shade_down, &bnd_theme.numberFieldTheme, state, 0);
@@ -1246,7 +1246,7 @@ public void bndNumberField (NVGContext ctx, float x, float y, float w, float h, 
  */
 public void bndSlider (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, float progress, const(char)[] label, const(char)[] value) {
   float[4] cr;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
 
   bndSelectCorners(cr.ptr, BND_NUMBER_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
@@ -1291,7 +1291,7 @@ public void bndScrollBar (NVGContext ctx, float x, float y, float w, float h, BN
     BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
     bndTransparent(bnd_theme.scrollBarTheme.outlineColor));
 
-  NVGcolor itemColor = bndOffsetColor(bnd_theme.scrollBarTheme.itemColor, (state == BND_ACTIVE ? BND_SCROLLBAR_ACTIVE_SHADE : 0));
+  NVGColor itemColor = bndOffsetColor(bnd_theme.scrollBarTheme.itemColor, (state == BND_ACTIVE ? BND_SCROLLBAR_ACTIVE_SHADE : 0));
 
   bndScrollHandleRect(&x, &y, &w, &h, offset, size);
 
@@ -1311,7 +1311,7 @@ public void bndScrollBar (NVGContext ctx, float x, float y, float w, float h, BN
  */
 public void bndMenuBackground (NVGContext ctx, float x, float y, float w, float h, int flags) {
   float[4] cr;
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_MENU_RADIUS, flags);
   bndInnerColors(&shade_top, &shade_down, &bnd_theme.menuTheme, BND_DEFAULT, 0);
   bndInnerBox(ctx, x, y, w, h+1, cr[0], cr[1], cr[2], cr[3], shade_top, shade_down);
@@ -1321,7 +1321,7 @@ public void bndMenuBackground (NVGContext ctx, float x, float y, float w, float 
 
 /// Draw a tooltip background with its lower left origin at (x, y) and size of (w, h)
 public void bndTooltipBackground (NVGContext ctx, float x, float y, float w, float h) {
-  NVGcolor shade_top, shade_down;
+  NVGColor shade_top, shade_down;
   bndInnerColors(&shade_top, &shade_down, &bnd_theme.tooltipTheme, BND_DEFAULT, 0);
   bndInnerBox(ctx, x, y, w, h+1, BND_MENU_RADIUS, BND_MENU_RADIUS, BND_MENU_RADIUS, BND_MENU_RADIUS, shade_top, shade_down);
   bndOutlineBox(ctx, x, y, w, h+1, BND_MENU_RADIUS, BND_MENU_RADIUS, BND_MENU_RADIUS, BND_MENU_RADIUS, bndTransparent(bnd_theme.tooltipTheme.outlineColor));
@@ -1362,7 +1362,7 @@ public void bndMenuItem (NVGContext ctx, float x, float y, float w, float h, BND
 }
 
 /// Draw a node port at the given position filled with the given color
-public void bndNodePort (NVGContext ctx, float x, float y, BNDwidgetState state, NVGcolor color) {
+public void bndNodePort (NVGContext ctx, float x, float y, BNDwidgetState state, NVGColor color) {
   ctx.beginPath();
   ctx.circle(x, y, BND_NODE_PORT_RADIUS);
   ctx.strokeColor(bnd_theme.nodeTheme.wiresColor);
@@ -1373,7 +1373,7 @@ public void bndNodePort (NVGContext ctx, float x, float y, BNDwidgetState state,
 }
 
 /// Draw a node wire originating at (x0, y0) and floating to (x1, y1), with a colored gradient based on the two colors color0 and color1
-public void bndColoredNodeWire (NVGContext ctx, float x0, float y0, float x1, float y1, NVGcolor color0, NVGcolor color1) {
+public void bndColoredNodeWire (NVGContext ctx, float x0, float y0, float x1, float y1, NVGColor color0, NVGColor color1) {
   import core.stdc.math : fabsf;
   float length = bnd_fmaxf(fabsf(x1-x0), fabsf(y1-y0));
   float delta = length*cast(float)bnd_theme.nodeTheme.noodleCurving/10.0f;
@@ -1381,7 +1381,7 @@ public void bndColoredNodeWire (NVGContext ctx, float x0, float y0, float x1, fl
   ctx.beginPath();
   ctx.moveTo(x0, y0);
   ctx.bezierTo(x0+delta, y0, x1-delta, y1, x1, y1);
-  NVGcolor colorw = bnd_theme.nodeTheme.wiresColor;
+  NVGColor colorw = bnd_theme.nodeTheme.wiresColor;
   colorw.a = (color0.a < color1.a ? color0.a : color1.a);
   ctx.strokeColor(colorw);
   ctx.strokeWidth(BND_NODE_WIRE_OUTLINE_WIDTH);
@@ -1405,7 +1405,7 @@ public void bndNodeWire (NVGContext ctx, float x0, float y0, float x1, float y1,
 }
 
 /// Draw a node background with its upper left origin at (x, y) and size of (w, h) where titleColor provides the base color for the title bar
-public void bndNodeBackground (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(char)[] label, NVGcolor titleColor) {
+public void bndNodeBackground (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(char)[] label, NVGColor titleColor) {
   bndInnerBox(ctx, x, y, w, BND_NODE_TITLE_HEIGHT+2,
       BND_NODE_RADIUS, BND_NODE_RADIUS, 0, 0,
       bndTransparent(bndOffsetColor(titleColor, BND_BEVEL_SHADE)),
@@ -1420,8 +1420,8 @@ public void bndNodeBackground (NVGContext ctx, float x, float y, float w, float 
       iconid, bnd_theme.regularTheme.textColor,
       bndOffsetColor(titleColor, BND_BEVEL_SHADE),
       BND_LEFT, BND_LABEL_FONT_SIZE, label);
-  NVGcolor arrowColor;
-  NVGcolor borderColor;
+  NVGColor arrowColor;
+  NVGColor borderColor;
   switch (state) {
     default:
     case BND_DEFAULT:
@@ -1444,9 +1444,9 @@ public void bndNodeBackground (NVGContext ctx, float x, float y, float w, float 
 
 /// Draw a window with the upper right and lower left splitter widgets into the rectangle at origin (x, y) and size (w, h)
 public void bndSplitterWidgets (NVGContext ctx, float x, float y, float w, float h) {
-  NVGcolor insetLight = bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, BND_SPLITTER_SHADE));
-  NVGcolor insetDark = bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, -BND_SPLITTER_SHADE));
-  NVGcolor inset = bndTransparent(bnd_theme.backgroundColor);
+  NVGColor insetLight = bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, BND_SPLITTER_SHADE));
+  NVGColor insetDark = bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, -BND_SPLITTER_SHADE));
+  NVGColor inset = bndTransparent(bnd_theme.backgroundColor);
 
   float x2 = x+w;
   float y2 = y+h;
@@ -1621,13 +1621,13 @@ public void bndRoundedBox (NVGContext ctx, float x, float y, float w, float h, f
 }
 
 /// make color transparent using the default alpha value
-public NVGcolor bndTransparent (NVGcolor color) {
+public NVGColor bndTransparent (NVGColor color) {
   color.a *= BND_TRANSPARENT_ALPHA;
   return color;
 }
 
 /// offset a color by a given integer delta in the range -100 to 100
-public NVGcolor bndOffsetColor (NVGcolor color, int delta) {
+public NVGColor bndOffsetColor (NVGColor color, int delta) {
   float offset = cast(float)delta/255.0f;
   return (delta ? nvgRGBAf(bnd_clamp(color.r+offset, 0, 1), bnd_clamp(color.g+offset, 0, 1), bnd_clamp(color.b+offset, 0, 1), color.a) : color);
 }
@@ -1675,7 +1675,7 @@ public void bndBevelInset (NVGContext ctx, float x, float y, float w, float h, f
   ctx.arcTo(x+w, y+h, x, y+h, cr2);
   ctx.arcTo(x, y+h, x, y, cr3);
 
-  NVGcolor bevelColor = bndOffsetColor(bnd_theme.backgroundColor, BND_INSET_BEVEL_SHADE);
+  NVGColor bevelColor = bndOffsetColor(bnd_theme.backgroundColor, BND_INSET_BEVEL_SHADE);
 
   ctx.strokeWidth(1);
   ctx.strokePaint(ctx.linearGradient(x, y+h-bnd_fmaxf(cr2, cr3)-1, x, y+h-1, nvgRGBAf(bevelColor.r, bevelColor.g, bevelColor.b, 0), bevelColor));
@@ -1739,7 +1739,7 @@ public void bndDropShadow (NVGContext ctx, float x, float y, float w, float h, f
 /* Draw the inner part of a widget box, with a gradient from shade_top to
  * shade_down. If h>w, the gradient will be horizontal instead of vertical.
  */
-public void bndInnerBox (NVGContext ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGcolor shade_top, NVGcolor shade_down) {
+public void bndInnerBox (NVGContext ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGColor shade_top, NVGColor shade_down) {
   ctx.beginPath();
   bndRoundedBox(ctx, x+1, y+1, w-2, h-3, bnd_fmaxf(0, cr0-1), bnd_fmaxf(0, cr1-1), bnd_fmaxf(0, cr2-1), bnd_fmaxf(0, cr3-1));
   ctx.fillPaint((h-2 > w ? ctx.linearGradient(x, y, x+w, y, shade_top, shade_down) : ctx.linearGradient(x, y, x, y+h, shade_top, shade_down)));
@@ -1747,7 +1747,7 @@ public void bndInnerBox (NVGContext ctx, float x, float y, float w, float h, flo
 }
 
 /// Draw the outline part of a widget box with the given color
-public void bndOutlineBox (NVGContext ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGcolor color) {
+public void bndOutlineBox (NVGContext ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGColor color) {
   ctx.beginPath();
   bndRoundedBox(ctx, x+0.5f, y+0.5f, w-1, h-2, cr0, cr1, cr2, cr3);
   ctx.strokeColor(color);
@@ -1770,7 +1770,7 @@ public void bndSelectCorners (float* radiuses, float r, int flags) {
  * theme and the widgets state. If flipActive is set and the state is
  * BND_ACTIVE, the upper and lower colors will be swapped.
  */
-public void bndInnerColors (NVGcolor* shade_top, NVGcolor* shade_down, const(BNDwidgetTheme)* theme, BNDwidgetState state, int flipActive) {
+public void bndInnerColors (NVGColor* shade_top, NVGColor* shade_down, const(BNDwidgetTheme)* theme, BNDwidgetState state, int flipActive) {
   switch (state) {
     default:
     case BND_DEFAULT:
@@ -1778,7 +1778,7 @@ public void bndInnerColors (NVGcolor* shade_top, NVGcolor* shade_down, const(BND
       *shade_down = bndOffsetColor(theme.innerColor, theme.shadeDown);
       break;
     case BND_HOVER:
-      NVGcolor color = bndOffsetColor(theme.innerColor, BND_HOVER_SHADE);
+      NVGColor color = bndOffsetColor(theme.innerColor, BND_HOVER_SHADE);
       *shade_top = bndOffsetColor(color, theme.shadeTop);
       *shade_down = bndOffsetColor(color, theme.shadeDown);
       break;
@@ -1790,7 +1790,7 @@ public void bndInnerColors (NVGcolor* shade_top, NVGcolor* shade_down, const(BND
 }
 
 /// computes the text color for a widget label from a widget theme and the widgets state.
-public NVGcolor bndTextColor (const(BNDwidgetTheme)* theme, BNDwidgetState state) {
+public NVGColor bndTextColor (const(BNDwidgetTheme)* theme, BNDwidgetState state) {
   return (state == BND_ACTIVE ? theme.textSelectedColor : theme.textColor);
 }
 
@@ -1803,7 +1803,7 @@ public NVGcolor bndTextColor (const(BNDwidgetTheme)* theme, BNDwidgetState state
  *
  * if value is not null, label and value will be drawn with a ":" separator inbetween.
  */
-public void bndIconLabelValue (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGcolor color, int align_, float fontsize, const(char)[] label, const(char)[] value=null) {
+public void bndIconLabelValue (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGColor color, int align_, float fontsize, const(char)[] label, const(char)[] value=null) {
   float pleft = BND_PAD_LEFT;
   if (label.length) {
     if (iconid >= 0) {
@@ -1820,7 +1820,7 @@ public void bndIconLabelValue (NVGContext ctx, float x, float y, float w, float 
       float label_width = ctx.textBounds(1, 1, label, null);
       float sep_width = ctx.textBounds(1, 1, BND_LABEL_SEPARATOR, null);
 
-      ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
+      ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
       x += pleft;
       if (align_ == BND_CENTER) {
         float width = label_width+sep_width+ctx.textBounds(1, 1, value, null);
@@ -1836,7 +1836,7 @@ public void bndIconLabelValue (NVGContext ctx, float x, float y, float w, float 
       x += sep_width;
       ctx.text(x, y, value);
     } else {
-      ctx.textAlign((align_ == BND_LEFT ? (NVGalign.Left|NVGalign.Baseline) : align_ == BND_CENTER ? (NVGalign.Center|NVGalign.Baseline) : (NVGalign.Right|NVGalign.Baseline)));
+      ctx.textAlign((align_ == BND_LEFT ? (NVGAlign.Left|NVGAlign.Baseline) : align_ == BND_CENTER ? (NVGAlign.Center|NVGAlign.Baseline) : (NVGAlign.Right|NVGAlign.Baseline)));
       ctx.textBox(x+pleft, y+BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN, w-BND_PAD_RIGHT-pleft, label);
     }
   } else if (iconid >= 0) {
@@ -1851,12 +1851,12 @@ public void bndIconLabelValue (NVGContext ctx, float x, float y, float w, float 
  *
  * if label is not null, it will be drawn with the specified alignment, fontsize and color.
  */
-public void bndNodeIconLabel (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGcolor color, NVGcolor shadowColor, int align_, float fontsize, const(char)[] label) {
+public void bndNodeIconLabel (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGColor color, NVGColor shadowColor, int align_, float fontsize, const(char)[] label) {
   if (label.length && bnd_font >= 0) {
     ctx.fontFaceId(bnd_font);
     ctx.fontSize(fontsize);
     ctx.beginPath();
-    ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
+    ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
     ctx.fillColor(shadowColor);
     ctx.fontBlur(BND_NODE_TITLE_FEATHER);
     ctx.textBox(x+1, y+h+3-BND_TEXT_PAD_DOWN, w, label);
@@ -1883,12 +1883,12 @@ public int bndIconLabelTextPosition (NVGContext ctx, float x, float y, float w, 
 
   ctx.fontFaceId(bnd_font);
   ctx.fontSize(fontsize);
-  ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
+  ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
 
   w -= BND_TEXT_RADIUS+pleft;
 
   float asc, desc, lh;
-  static NVGtextRow[BND_MAX_ROWS] rows;
+  static NVGTextRow[BND_MAX_ROWS] rows;
   int nrows = ctx.textBreakLines(label, w, rows.ptr, BND_MAX_ROWS);
   if (nrows == 0) return 0;
   ctx.textBoxBounds(x, y, w, label, bounds[]);
@@ -1897,7 +1897,7 @@ public int bndIconLabelTextPosition (NVGContext ctx, float x, float y, float w, 
   // calculate vertical position
   int row = cast(int)bnd_clamp(cast(int)(cast(float)(py-bounds[1])/lh), 0, nrows-1);
   // search horizontal position
-  static NVGglyphPosition[BND_MAX_GLYPHS] glyphs;
+  static NVGGlyphPosition[BND_MAX_GLYPHS] glyphs;
   int nglyphs = ctx.textGlyphPositions(x, y, rows[row].start, rows[row].end+1, glyphs.ptr, BND_MAX_GLYPHS);
   int col, p = 0;
   for (col = 0; col < nglyphs && glyphs[col].x < px; ++col) p = glyphs[col].str-label.ptr;
@@ -1906,8 +1906,8 @@ public int bndIconLabelTextPosition (NVGContext ctx, float x, float y, float w, 
   return p;
 }
 
-static void bndCaretPosition (NVGContext ctx, float x, float y, float desc, float lineHeight, const(char)* caret, NVGtextRow* rows, int nrows, int* cr, float* cx, float* cy) {
-  static NVGglyphPosition[BND_MAX_GLYPHS] glyphs;
+static void bndCaretPosition (NVGContext ctx, float x, float y, float desc, float lineHeight, const(char)* caret, NVGTextRow* rows, int nrows, int* cr, float* cx, float* cy) {
+  static NVGGlyphPosition[BND_MAX_GLYPHS] glyphs;
   int r, nglyphs;
   for (r = 0; r < nrows && rows[r].end < caret; ++r) {}
   *cr = r;
@@ -1933,7 +1933,7 @@ static void bndCaretPosition (NVGContext ctx, float x, float y, float desc, floa
  *
  * cend must be >= cbegin and <= strlen(text) and denotes the end of the caret if cend < cbegin, then no caret will be drawn
  */
-public void bndIconLabelCaret (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGcolor color, float fontsize, const(char)[] label, NVGcolor caretcolor, int cbegin, int cend) {
+public void bndIconLabelCaret (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGColor color, float fontsize, const(char)[] label, NVGColor caretcolor, int cbegin, int cend) {
   float pleft = BND_TEXT_RADIUS;
   if (label.length == 0) return;
   if (iconid >= 0) {
@@ -1948,7 +1948,7 @@ public void bndIconLabelCaret (NVGContext ctx, float x, float y, float w, float 
 
   ctx.fontFaceId(bnd_font);
   ctx.fontSize(fontsize);
-  ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
+  ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
 
   w -= BND_TEXT_RADIUS+pleft;
 
@@ -1956,7 +1956,7 @@ public void bndIconLabelCaret (NVGContext ctx, float x, float y, float w, float 
     int c0r, c1r;
     float c0x, c0y, c1x, c1y;
     float desc, lh;
-    static NVGtextRow[BND_MAX_ROWS] rows;
+    static NVGTextRow[BND_MAX_ROWS] rows;
     int nrows = ctx.textBreakLines(label.ptr, label.ptr+cend+1, w, rows.ptr, BND_MAX_ROWS);
     ctx.textMetrics(null, &desc, &lh);
 
@@ -1987,12 +1987,12 @@ public void bndIconLabelCaret (NVGContext ctx, float x, float y, float w, float 
 }
 
 /// Draw a checkmark for an option box with the given upper left coordinates (ox, oy) with the specified color.
-public void bndCheck (NVGContext ctx, float ox, float oy, NVGcolor color) {
+public void bndCheck (NVGContext ctx, float ox, float oy, NVGColor color) {
   ctx.beginPath();
   ctx.strokeWidth(2);
   ctx.strokeColor(color);
-  ctx.lineCap(NVGlineCap.Butt);
-  ctx.lineJoin(NVGlineCap.Miter);
+  ctx.lineCap(NVGLineCap.Butt);
+  ctx.lineJoin(NVGLineCap.Miter);
   ctx.moveTo(ox+4, oy+5);
   ctx.lineTo(ox+7, oy+8);
   ctx.lineTo(ox+14, oy+1);
@@ -2000,7 +2000,7 @@ public void bndCheck (NVGContext ctx, float ox, float oy, NVGcolor color) {
 }
 
 /// Draw a horizontal arrow for a number field with its center at (x, y) and size s; if s is negative, the arrow points to the left.
-public void bndArrow (NVGContext ctx, float x, float y, float s, NVGcolor color) {
+public void bndArrow (NVGContext ctx, float x, float y, float s, NVGColor color) {
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(x-s, y+s);
@@ -2011,7 +2011,7 @@ public void bndArrow (NVGContext ctx, float x, float y, float s, NVGcolor color)
 }
 
 /// Draw an up/down arrow for a choice box with its center at (x, y) and size s
-public void bndUpDownArrow (NVGContext ctx, float x, float y, float s, NVGcolor color) {
+public void bndUpDownArrow (NVGContext ctx, float x, float y, float s, NVGColor color) {
   float w;
   ctx.beginPath();
   w = 1.1f*s;
@@ -2028,7 +2028,7 @@ public void bndUpDownArrow (NVGContext ctx, float x, float y, float s, NVGcolor 
 }
 
 /// Draw a node down-arrow with its tip at (x, y) and size s
-public void bndNodeArrowDown (NVGContext ctx, float x, float y, float s, NVGcolor color) {
+public void bndNodeArrowDown (NVGContext ctx, float x, float y, float s, NVGColor color) {
   float w;
   ctx.beginPath();
   w = 1.0f*s;
@@ -2066,7 +2066,7 @@ public void bndScrollHandleRect (float* x, float* y, float* w, float* h, float o
  *
  * BND_ACTIVE indicates dragged state
  */
-public NVGcolor bndNodeWireColor (const(BNDnodeTheme)* theme, BNDwidgetState state) {
+public NVGColor bndNodeWireColor (const(BNDnodeTheme)* theme, BNDwidgetState state) {
   switch (state) {
     default:
     case BND_DEFAULT: return nvgRGBf(0.5f, 0.5f, 0.5f);

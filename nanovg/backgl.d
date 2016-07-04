@@ -400,7 +400,7 @@ enum /*NVGcreateFlags*/ {
 
 enum NANOVG_GL_USE_STATE_FILTER = true;
 
-// These are additional flags on top of NVGimageFlags.
+// These are additional flags on top of NVGImageFlags.
 alias NVGimageFlagsGL = int;
 enum /*NVGimageFlagsGL*/ {
   NVG_IMAGE_NODELETE = 1<<16,  // Do not delete GL texture handle.
@@ -482,8 +482,8 @@ struct GLNVGfragUniforms {
     struct {
       float[12] scissorMat; // matrices are actually 3 vec4s
       float[12] paintMat;
-      NVGcolor innerCol;
-      NVGcolor outerCol;
+      NVGColor innerCol;
+      NVGColor outerCol;
       float[2] scissorExt;
       float[2] scissorScale;
       float[2] extent;
@@ -850,7 +850,7 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
   glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
 
   // GL 1.4 and later has support for generating mipmaps using a tex parameter.
-  if (imageFlags&NVGimageFlags.GenerateMipmaps) glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+  if (imageFlags&NVGImageFlags.GenerateMipmaps) glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 
   if (type == NVGtexture.RGBA) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
@@ -858,20 +858,20 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, data);
   }
 
-  if (imageFlags&NVGimageFlags.GenerateMipmaps) {
+  if (imageFlags&NVGImageFlags.GenerateMipmaps) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   } else {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   }
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-  if (imageFlags&NVGimageFlags.RepeatX) {
+  if (imageFlags&NVGImageFlags.RepeatX) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   } else {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   }
 
-  if (imageFlags&NVGimageFlags.RepeatY) {
+  if (imageFlags&NVGImageFlags.RepeatY) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   } else {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -947,14 +947,14 @@ void glnvg__xformToMat3x4 (float* m3, const(float)* t) {
   m3[11] = 0.0f;
 }
 
-NVGcolor glnvg__premulColor (NVGcolor c) {
+NVGColor glnvg__premulColor (NVGColor c) {
   c.r *= c.a;
   c.g *= c.a;
   c.b *= c.a;
   return c;
 }
 
-bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGpaint* paint, NVGscissor* scissor, float width, float fringe, float strokeThr) {
+bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* paint, NVGscissor* scissor, float width, float fringe, float strokeThr) {
   import core.stdc.math : sqrtf;
   GLNVGtexture* tex = null;
   float[6] invxform;
@@ -986,7 +986,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGpaint* p
   if (paint.image != 0) {
     tex = glnvg__findTexture(gl, paint.image);
     if (tex is null) return false;
-    if ((tex.flags&NVGimageFlags.FlipY) != 0) {
+    if ((tex.flags&NVGImageFlags.FlipY) != 0) {
       float[6] flipped;
       nvgTransformScale(flipped.ptr, 1.0f, -1.0f);
       nvgTransformMultiply(flipped.ptr, paint.xform.ptr);
@@ -997,7 +997,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGpaint* p
     frag.type = NSVG_SHADER_FILLIMG;
 
     if (tex.type == NVGtexture.RGBA) {
-      frag.texType = (tex.flags&NVGimageFlags.Premultiplied ? 0 : 1);
+      frag.texType = (tex.flags&NVGImageFlags.Premultiplied ? 0 : 1);
     } else {
       frag.texType = 2;
     }
@@ -1283,7 +1283,7 @@ void glnvg__vset (NVGvertex* vtx, float x, float y, float u, float v) {
   vtx.v = v;
 }
 
-void glnvg__renderFill (void* uptr, NVGpaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) {
+void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   NVGvertex* quad;
@@ -1361,7 +1361,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderStroke (void* uptr, NVGpaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) {
+void glnvg__renderStroke (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   int maxverts, offset;
@@ -1412,7 +1412,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderTriangles (void* uptr, NVGpaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) {
+void glnvg__renderTriangles (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   GLNVGfragUniforms* frag;
@@ -1468,7 +1468,7 @@ void glnvg__renderDelete (void* uptr) {
 
 /// Creates NanoVG contexts for OpenGL versions.
 /// Flags should be combination of the create flags above.
-public NVGContext createGL2 (int flags) {
+public NVGContext createGL2NVG (int flags) {
   NVGparams params;
   NVGContext ctx = null;
   GLNVGcontext* gl = cast(GLNVGcontext*)malloc(GLNVGcontext.sizeof);

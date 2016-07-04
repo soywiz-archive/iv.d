@@ -4,7 +4,7 @@ import core.time;
 import core.stdc.stdio : snprintf;
 import iv.nanovg;
 import iv.nanovg.oui;
-import perf;
+import iv.nanovg.perf;
 
 import arsd.simpledisplay;
 import arsd.color;
@@ -75,7 +75,7 @@ struct UIData {
 struct UIRectData {
   UIData head;
   string label;
-  NVGcolor color;
+  NVGColor color;
 }
 
 struct UIButtonData {
@@ -114,34 +114,34 @@ struct UITextData {
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared NVGcontext* _vg = null;
+__gshared NVGContext _vg = null;
 
 void ui_handler (int item, UIevent event) {
   auto data = uiGetHandle!UIData(item);
   if (data !is null && data.handler !is null) data.handler(item, event);
 }
 
-void init (NVGcontext* vg) {
+void init (NVGContext vg) {
   version(nanovg_demo_msfonts) {
-    bndSetFont(nvgCreateFont(vg, "system", "/home/ketmar/ttf/ms/tahoma.ttf"));
+    bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/tahoma.ttf"));
   } else {
-    bndSetFont(nvgCreateFont(vg, "system", "data/Roboto-Regular.ttf"));
+    bndSetFont(vg.createFont("system", "data/Roboto-Regular.ttf"));
   }
-  bndSetIconImage(nvgCreateImage(vg, "data/images/blender_icons16.png", 0));
+  bndSetIconImage(vg.createImage("data/images/blender_icons16.png", 0));
 }
 
-void testrect (NVGcontext *vg, UIrect rect) {
+void testrect (NVGContext vg, UIrect rect) {
   version(none) {
-    nvgBeginPath(vg);
-    nvgRect(vg, rect.x+0.5, rect.y+0.5, rect.w-1, rect.h-1);
-    nvgStrokeColor(vg, nvgRGBf(1, 0, 0));
-    nvgStrokeWidth(vg, 1);
-    nvgStroke(vg);
+    vg.beginPath();
+    vg.rect(rect.x+0.5, rect.y+0.5, rect.w-1, rect.h-1);
+    vg.strokeColor(nvgRGBf(1, 0, 0));
+    vg.strokeWidth(1);
+    vg.stroke();
   }
 }
 
 
-void drawUIItems (NVGcontext* vg, int item, int corners) {
+void drawUIItems (NVGContext vg, int item, int corners) {
   int kid = uiFirstChild(item);
   while (kid > 0) {
     drawUI(vg, kid, corners);
@@ -149,7 +149,7 @@ void drawUIItems (NVGcontext* vg, int item, int corners) {
   }
 }
 
-void drawUIItemsHbox (NVGcontext* vg, int item) {
+void drawUIItemsHbox (NVGContext vg, int item) {
   int kid = uiFirstChild(item);
   if (kid < 0) return;
   int nextkid = uiNextSibling(kid);
@@ -166,7 +166,7 @@ void drawUIItemsHbox (NVGcontext* vg, int item) {
   }
 }
 
-void drawUIItemsVbox (NVGcontext* vg, int item) {
+void drawUIItemsVbox (NVGContext vg, int item) {
   int kid = uiFirstChild(item);
   if (kid < 0) return;
   int nextkid = uiNextSibling(kid);
@@ -183,10 +183,10 @@ void drawUIItemsVbox (NVGcontext* vg, int item) {
   }
 }
 
-void drawUI (NVGcontext* vg, int item, int corners) {
+void drawUI (NVGContext vg, int item, int corners) {
   auto head = uiGetHandle!(const UIData)(item);
   UIrect rect = uiGetRect(item);
-  if (uiGetState(item) == UI_FROZEN) nvgGlobalAlpha(vg, BND_DISABLED_ALPHA);
+  if (uiGetState(item) == UI_FROZEN) vg.globalAlpha(BND_DISABLED_ALPHA);
   if (head) {
     switch (head.subtype) {
       default:
@@ -245,36 +245,36 @@ void drawUI (NVGcontext* vg, int item, int corners) {
         auto data = cast(const(UIRectData)*)head;
         if (rect.w && rect.h) {
           BNDwidgetState state = cast(BNDwidgetState)uiGetState(item);
-          nvgSave(vg);
-          scope(exit) nvgRestore(vg);
-          nvgStrokeColor(vg, nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.9f));
+          vg.save();
+          scope(exit) vg.restore();
+          vg.strokeColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.9f));
           if (state != BND_DEFAULT) {
-            nvgFillColor(vg, nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.5f));
+            vg.fillColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.5f));
           } else {
-            nvgFillColor(vg, nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.1f));
+            vg.fillColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.1f));
           }
-          nvgStrokeWidth(vg, 2);
-          nvgBeginPath(vg);
+          vg.strokeWidth(2);
+          vg.beginPath();
           version(none) {
-            nvgRect(vg, rect.x, rect.y, rect.w, rect.h);
+            vg.rect(rect.x, rect.y, rect.w, rect.h);
           } else {
-            nvgRoundedRect(vg, rect.x, rect.y, rect.w, rect.h, 3);
+            vg.roundedRect(rect.x, rect.y, rect.w, rect.h, 3);
           }
-          nvgFill(vg);
-          nvgStroke(vg);
+          vg.fill();
+          vg.stroke();
 
           if (state != BND_DEFAULT) {
-            nvgFillColor(vg, nvgRGBAf(0.0f, 0.0f, 0.0f, 1.0f));
-            nvgFontSize(vg, 15.0f);
-            nvgBeginPath(vg);
-            nvgTextAlign(vg, NVGalign.Top|NVGalign.Center);
-            nvgTextBox(vg, rect.x, rect.y+rect.h*0.3f, rect.w, data.label);
+            vg.fillColor(nvgRGBAf(0.0f, 0.0f, 0.0f, 1.0f));
+            vg.fontSize(15.0f);
+            vg.beginPath();
+            vg.textAlign(NVGAlign.Top|NVGAlign.Center);
+            vg.textBox(rect.x, rect.y+rect.h*0.3f, rect.w, data.label);
           }
         }
 
-        nvgSave(vg);
-        scope(exit) nvgRestore(vg);
-        nvgIntersectScissor(vg, rect.x, rect.y, rect.w, rect.h);
+        vg.save();
+        scope(exit) vg.restore();
+        vg.intersectScissor(rect.x, rect.y, rect.w, rect.h);
 
         drawUIItems(vg, item, corners);
         break;
@@ -285,12 +285,12 @@ void drawUI (NVGcontext* vg, int item, int corners) {
   }
 
   if (uiGetState(item) == UI_FROZEN) {
-    nvgGlobalAlpha(vg, 1.0);
+    vg.globalAlpha(1.0);
   }
 }
 
 
-int colorrect(T : const(char)[]) (T label, NVGcolor color) {
+int colorrect(T : const(char)[]) (T label, NVGColor color) {
   int item = uiItem();
   UIRectData *data = uiAllocHandle!UIRectData(item);
   data.head.subtype = ST_RECT;
@@ -376,7 +376,7 @@ void sliderhandler (int item, UIevent event) {
       // get the items layouted rectangle
       UIrect rc = uiGetRect(item);
       // calculate our new offset and clamp
-      float value = sliderstart + (cast(float)pos.x / cast(float)rc.w);
+      float value = sliderstart+(cast(float)pos.x/cast(float)rc.w);
       value = (value < 0 ? 0 : (value > 1 ? 1 : value));
       // assign the new value
       *data.progress = value;
@@ -390,7 +390,7 @@ int slider(T : const(char)[]) (T label, float* progress) {
   // set size of wiget; horizontal size is dynamic, vertical is fixed
   uiSetSize(item, 0, BND_WIDGET_HEIGHT);
   // attach our slider event handler and capture two classes of events
-  uiSetEvents(item, UI_BUTTON0_DOWN | UI_BUTTON0_CAPTURE);
+  uiSetEvents(item, UI_BUTTON0_DOWN|UI_BUTTON0_CAPTURE);
   // store some custom data with the button that we use for styling
   // and logic, e.g. the pointer to the data we want to alter.
   UISliderData *data = uiAllocHandle!UISliderData(item);
@@ -432,7 +432,7 @@ void textboxhandler (int item, UIevent event) {
 int textbox (TextData* text, int maxsize) {
   int item = uiItem();
   uiSetSize(item, 0, BND_WIDGET_HEIGHT);
-  uiSetEvents(item, UI_BUTTON0_DOWN | UI_KEY_DOWN | UI_CHAR);
+  uiSetEvents(item, UI_BUTTON0_DOWN|UI_KEY_DOWN|UI_CHAR);
   // store some custom data with the button that we use for styling
   // and logic, e.g. the pointer to the data we want to alter.
   UITextData *data = uiAllocHandle!UITextData(item);
@@ -546,7 +546,7 @@ int row () {
   return item;
 }
 
-void draw_noodles (NVGcontext* vg, int x, int y) {
+void draw_noodles (NVGContext vg, int x, int y) {
   int w = 200;
   int s = 70;
 
@@ -582,13 +582,13 @@ static void roothandler (int parent, UIevent event) {
   }
 }
 
-void draw_demostuff (NVGcontext* vg, int x, int y, float w, float h) {
+void draw_demostuff (NVGContext vg, int x, int y, float w, float h) {
   import core.stdc.math : fmodf, cosf, sinf;
 
-  nvgSave(vg);
-  scope(exit) nvgRestore(vg);
+  vg.save();
+  scope(exit) vg.restore();
 
-  nvgTranslate(vg, x, y);
+  vg.translate(x, y);
 
   bndSplitterWidgets(vg, 0, 0, w, h);
 
@@ -691,7 +691,7 @@ void draw_demostuff (NVGcontext* vg, int x, int y, float w, float h) {
   int textlen = cast(int)edit_text.length+1;
   int t = cast(int)(getSeconds()*2);
   int idx1 = (t/textlen)%textlen;
-  int idx2 = idx1 + (t%(textlen-idx1));
+  int idx2 = idx1+(t%(textlen-idx1));
 
   ry += 25;
   bndTextField(vg, rx, ry, 240, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, -1, edit_text, idx1, idx2);
@@ -702,7 +702,7 @@ void draw_demostuff (NVGcontext* vg, int x, int y, float w, float h) {
 
   draw_noodles(vg, 20, ry+50);
 
-  rx += rw + 20;
+  rx += rw+20;
   ry = 10;
   bndScrollBar(vg, rx, ry, BND_SCROLLBAR_WIDTH, 240, BND_DEFAULT, s_offset, s_size);
   rx += 20;
@@ -807,24 +807,24 @@ void build_layoutdemo (int parent) {
   enum int M = 10;
   enum int S = 150;
 
-  int box = demorect(parent, "Box( UI_LAYOUT )\nLayout( UI_FILL )", 0.6f, UI_LAYOUT, UI_FILL, 0, 0, M, M, M, M);
-  demorect(box, "Layout( UI_HFILL | UI_TOP )", 0.7f, 0, UI_HFILL|UI_TOP, S, S+M, M, M, M, 0);
-  demorect(box, "Layout( UI_HFILL )", 0.7f, 0, UI_HFILL, S, S+2*M, M, 0, M, 0);
-  demorect(box, "Layout( UI_HFILL | UI_DOWN )", 0.7f, 0, UI_HFILL|UI_DOWN, S, S+M, M, 0, M, M);
+  int box = demorect(parent, "Box(UI_LAYOUT)\nLayout(UI_FILL)", 0.6f, UI_LAYOUT, UI_FILL, 0, 0, M, M, M, M);
+  demorect(box, "Layout(UI_HFILL|UI_TOP)", 0.7f, 0, UI_HFILL|UI_TOP, S, S+M, M, M, M, 0);
+  demorect(box, "Layout(UI_HFILL)", 0.7f, 0, UI_HFILL, S, S+2*M, M, 0, M, 0);
+  demorect(box, "Layout(UI_HFILL|UI_DOWN)", 0.7f, 0, UI_HFILL|UI_DOWN, S, S+M, M, 0, M, M);
 
-  demorect(box, "Layout( UI_LEFT | UI_VFILL )", 0.7f, 0, UI_LEFT|UI_VFILL, S+M, S, M, M, 0, M);
-  demorect(box, "Layout( UI_VFILL )", 0.7f, 0, UI_VFILL, S+2*M, S, 0, M, 0, M);
-  demorect(box, "Layout( UI_RIGHT | UI_VFILL )", 0.7f, 0, UI_RIGHT|UI_VFILL, S+M, S, 0, M, M, M);
+  demorect(box, "Layout(UI_LEFT|UI_VFILL)", 0.7f, 0, UI_LEFT|UI_VFILL, S+M, S, M, M, 0, M);
+  demorect(box, "Layout(UI_VFILL)", 0.7f, 0, UI_VFILL, S+2*M, S, 0, M, 0, M);
+  demorect(box, "Layout(UI_RIGHT|UI_VFILL)", 0.7f, 0, UI_RIGHT|UI_VFILL, S+M, S, 0, M, M, M);
 
-  demorect(box, "Layout( UI_LEFT | UI_TOP )", 0.55f, 0, UI_LEFT|UI_TOP, S, S, M, M, 0, 0);
-  demorect(box, "Layout( UI_TOP )", 0.57f, 0, UI_TOP, S, S, 0, M, 0, 0);
-  demorect(box, "Layout( UI_RIGHT | UI_TOP )", 0.55f, 0, UI_RIGHT|UI_TOP, S, S, 0, M, M, 0);
-  demorect(box, "Layout( UI_LEFT )", 0.57f, 0, UI_LEFT, S, S, M, 0, 0, 0);
-  demorect(box, "Layout( UI_CENTER )", 0.59f, 0, UI_CENTER, S, S, 0, 0, 0, 0);
-  demorect(box, "Layout( UI_RIGHT )", 0.57f, 0, UI_RIGHT, S, S, 0, 0, M, 0);
-  demorect(box, "Layout( UI_LEFT | UI_DOWN )", 0.55f, 0, UI_LEFT|UI_DOWN, S, S, M, 0, 0, M);
+  demorect(box, "Layout(UI_LEFT|UI_TOP)", 0.55f, 0, UI_LEFT|UI_TOP, S, S, M, M, 0, 0);
+  demorect(box, "Layout(UI_TOP)", 0.57f, 0, UI_TOP, S, S, 0, M, 0, 0);
+  demorect(box, "Layout(UI_RIGHT|UI_TOP)", 0.55f, 0, UI_RIGHT|UI_TOP, S, S, 0, M, M, 0);
+  demorect(box, "Layout(UI_LEFT)", 0.57f, 0, UI_LEFT, S, S, M, 0, 0, 0);
+  demorect(box, "Layout(UI_CENTER)", 0.59f, 0, UI_CENTER, S, S, 0, 0, 0, 0);
+  demorect(box, "Layout(UI_RIGHT)", 0.57f, 0, UI_RIGHT, S, S, 0, 0, M, 0);
+  demorect(box, "Layout(UI_LEFT|UI_DOWN)", 0.55f, 0, UI_LEFT|UI_DOWN, S, S, M, 0, 0, M);
   demorect(box, "Layout( UI_DOWN)", 0.57f, 0, UI_DOWN, S, S, 0, 0, 0, M);
-  demorect(box, "Layout( UI_RIGHT | UI_DOWN )", 0.55f, 0, UI_RIGHT|UI_DOWN, S, S, 0, 0, M, M);
+  demorect(box, "Layout(UI_RIGHT|UI_DOWN)", 0.55f, 0, UI_RIGHT|UI_DOWN, S, S, 0, 0, M, M);
 }
 
 void build_rowdemo (int parent) {
@@ -835,28 +835,28 @@ void build_rowdemo (int parent) {
   enum int T = 100;
 
   {
-    int box = demorect(parent, "Box( UI_ROW )\nLayout( UI_LEFT | UI_VFILL )", 0.6f, UI_ROW, UI_LEFT|UI_VFILL, 0, S, M, M, M, M);
-    demorect(box, "Layout( UI_TOP )", 0.05f, 0, UI_TOP, T, T, M, M, M, 0);
-    demorect(box, "Layout( UI_VCENTER )", 0.1f, 0, UI_VCENTER, T, T, 0, 0, M, 0);
-    demorect(box, "Layout( UI_VFILL )", 0.15f, 0, UI_VFILL, T, T, 0, M, M, M);
-    demorect(box, "Layout( UI_DOWN )", 0.25f, 0, UI_DOWN, T, T, 0, 0, M, M);
+    int box = demorect(parent, "Box(UI_ROW)\nLayout(UI_LEFT|UI_VFILL)", 0.6f, UI_ROW, UI_LEFT|UI_VFILL, 0, S, M, M, M, M);
+    demorect(box, "Layout(UI_TOP)", 0.05f, 0, UI_TOP, T, T, M, M, M, 0);
+    demorect(box, "Layout(UI_VCENTER)", 0.1f, 0, UI_VCENTER, T, T, 0, 0, M, 0);
+    demorect(box, "Layout(UI_VFILL)", 0.15f, 0, UI_VFILL, T, T, 0, M, M, M);
+    demorect(box, "Layout(UI_DOWN)", 0.25f, 0, UI_DOWN, T, T, 0, 0, M, M);
   }
   {
-    int box = demorect(parent, "Box( UI_ROW | UI_JUSTIFY )\nLayout( UI_FILL )", 0.6f, UI_ROW|UI_JUSTIFY, UI_FILL, 0, S, M, 0, M, M);
-    demorect(box, "Layout( UI_TOP )", 0.05f, 0, UI_TOP, T, T, M, M, M, 0);
-    demorect(box, "Layout( UI_VCENTER )", 0.1f, 0, UI_VCENTER, T, T, 0, 0, M, 0);
-    demorect(box, "Layout( UI_VFILL )", 0.15f, 0, UI_VFILL, T, T, 0, M, M, M);
-    demorect(box, "Layout( UI_DOWN )", 0.25f, 0, UI_DOWN, T, T, 0, 0, M, M);
+    int box = demorect(parent, "Box(UI_ROW|UI_JUSTIFY)\nLayout(UI_FILL)", 0.6f, UI_ROW|UI_JUSTIFY, UI_FILL, 0, S, M, 0, M, M);
+    demorect(box, "Layout(UI_TOP)", 0.05f, 0, UI_TOP, T, T, M, M, M, 0);
+    demorect(box, "Layout(UI_VCENTER)", 0.1f, 0, UI_VCENTER, T, T, 0, 0, M, 0);
+    demorect(box, "Layout(UI_VFILL)", 0.15f, 0, UI_VFILL, T, T, 0, M, M, M);
+    demorect(box, "Layout(UI_DOWN)", 0.25f, 0, UI_DOWN, T, T, 0, 0, M, M);
   }
   {
-    int box = demorect(parent, "Box( UI_ROW )\nLayout( UI_FILL )", 0.6f, UI_ROW, UI_FILL, 0, S, M, 0, M, M);
-    demorect(box, "Layout( UI_TOP )", 0.05f, 0, UI_TOP, T, T, M, M, M, 0);
-    demorect(box, "Layout( UI_VCENTER )", 0.1f, 0, UI_VCENTER, T, T, 0, 0, M, 0);
-    demorect(box, "Layout( UI_VFILL )", 0.15f, 0, UI_VFILL, T, T, 0, M, M, M);
-    demorect(box, "Layout( UI_HFILL )", 0.2f, 0, UI_HFILL, T, T, 0, 0, M, 0);
-    demorect(box, "Layout( UI_HFILL )", 0.2f, 0, UI_HFILL, T, T, 0, 0, M, 0);
-    demorect(box, "Layout( UI_HFILL )", 0.2f, 0, UI_HFILL, T, T, 0, 0, M, 0);
-    demorect(box, "Layout( UI_DOWN )", 0.25f, 0, UI_DOWN, T, T, 0, 0, M, M);
+    int box = demorect(parent, "Box(UI_ROW)\nLayout(UI_FILL)", 0.6f, UI_ROW, UI_FILL, 0, S, M, 0, M, M);
+    demorect(box, "Layout(UI_TOP)", 0.05f, 0, UI_TOP, T, T, M, M, M, 0);
+    demorect(box, "Layout(UI_VCENTER)", 0.1f, 0, UI_VCENTER, T, T, 0, 0, M, 0);
+    demorect(box, "Layout(UI_VFILL)", 0.15f, 0, UI_VFILL, T, T, 0, M, M, M);
+    demorect(box, "Layout(UI_HFILL)", 0.2f, 0, UI_HFILL, T, T, 0, 0, M, 0);
+    demorect(box, "Layout(UI_HFILL)", 0.2f, 0, UI_HFILL, T, T, 0, 0, M, 0);
+    demorect(box, "Layout(UI_HFILL)", 0.2f, 0, UI_HFILL, T, T, 0, 0, M, 0);
+    demorect(box, "Layout(UI_DOWN)", 0.25f, 0, UI_DOWN, T, T, 0, 0, M, M);
   }
 }
 
@@ -868,28 +868,28 @@ void build_columndemo (int parent) {
   enum int T = 100;
 
   {
-    int box = demorect(parent, "Box( UI_COLUMN )\nLayout( UI_TOP | UI_HFILL )", 0.6f, UI_COLUMN, UI_TOP|UI_HFILL, S, 0, M, M, M, M);
-    demorect(box, "Layout( UI_LEFT )", 0.05f, 0, UI_LEFT, T, T, M, M, 0, M);
-    demorect(box, "Layout( UI_HCENTER )", 0.1f, 0, UI_HCENTER, T, T, 0, 0, 0, M);
-    demorect(box, "Layout( UI_HFILL )", 0.15f, 0, UI_HFILL, T, T, M, 0, M, M);
-    demorect(box, "Layout( UI_RIGHT )", 0.25f, 0, UI_RIGHT, T, T, 0, 0, M, M);
+    int box = demorect(parent, "Box(UI_COLUMN)\nLayout(UI_TOP|UI_HFILL)", 0.6f, UI_COLUMN, UI_TOP|UI_HFILL, S, 0, M, M, M, M);
+    demorect(box, "Layout(UI_LEFT)", 0.05f, 0, UI_LEFT, T, T, M, M, 0, M);
+    demorect(box, "Layout(UI_HCENTER)", 0.1f, 0, UI_HCENTER, T, T, 0, 0, 0, M);
+    demorect(box, "Layout(UI_HFILL)", 0.15f, 0, UI_HFILL, T, T, M, 0, M, M);
+    demorect(box, "Layout(UI_RIGHT)", 0.25f, 0, UI_RIGHT, T, T, 0, 0, M, M);
   }
   {
-    int box = demorect(parent, "Box( UI_COLUMN )\nLayout( UI_FILL )", 0.6f, UI_COLUMN, UI_FILL, S, 0, 0, M, M, M);
-    demorect(box, "Layout( UI_LEFT )", 0.05f, 0, UI_LEFT, T, T, M, M, 0, M);
-    demorect(box, "Layout( UI_HCENTER )", 0.1f, 0, UI_HCENTER, T, T, 0, 0, 0, M);
-    demorect(box, "Layout( UI_HFILL )", 0.15f, 0, UI_HFILL, T, T, M, 0, M, M);
-    demorect(box, "Layout( UI_RIGHT )", 0.25f, 0, UI_RIGHT, T, T, 0, 0, M, M);
+    int box = demorect(parent, "Box(UI_COLUMN)\nLayout(UI_FILL)", 0.6f, UI_COLUMN, UI_FILL, S, 0, 0, M, M, M);
+    demorect(box, "Layout(UI_LEFT)", 0.05f, 0, UI_LEFT, T, T, M, M, 0, M);
+    demorect(box, "Layout(UI_HCENTER)", 0.1f, 0, UI_HCENTER, T, T, 0, 0, 0, M);
+    demorect(box, "Layout(UI_HFILL)", 0.15f, 0, UI_HFILL, T, T, M, 0, M, M);
+    demorect(box, "Layout(UI_RIGHT)", 0.25f, 0, UI_RIGHT, T, T, 0, 0, M, M);
   }
   {
-    int box = demorect(parent, "Box( UI_COLUMN )\nLayout( UI_FILL )", 0.6f, UI_COLUMN, UI_FILL, S, 0, 0, M, M, M);
-    demorect(box, "Layout( UI_LEFT )", 0.05f, 0, UI_LEFT, T, T, M, M, 0, M);
-    demorect(box, "Layout( UI_HCENTER )", 0.1f, 0, UI_HCENTER, T, T, 0, 0, 0, M);
-    demorect(box, "Layout( UI_HFILL )", 0.15f, 0, UI_HFILL, T, T, M, 0, M, M);
-    demorect(box, "Layout( UI_VFILL )", 0.2f, 0, UI_VFILL, T, T, 0, 0, 0, M);
-    demorect(box, "Layout( UI_VFILL )", 0.2f, 0, UI_VFILL, T, T, 0, 0, 0, M);
-    demorect(box, "Layout( UI_VFILL )", 0.2f, 0, UI_VFILL, T, T, 0, 0, 0, M);
-    demorect(box, "Layout( UI_RIGHT )", 0.25f, 0, UI_RIGHT, T, T, 0, 0, M, M);
+    int box = demorect(parent, "Box(UI_COLUMN)\nLayout(UI_FILL)", 0.6f, UI_COLUMN, UI_FILL, S, 0, 0, M, M, M);
+    demorect(box, "Layout(UI_LEFT)", 0.05f, 0, UI_LEFT, T, T, M, M, 0, M);
+    demorect(box, "Layout(UI_HCENTER)", 0.1f, 0, UI_HCENTER, T, T, 0, 0, 0, M);
+    demorect(box, "Layout(UI_HFILL)", 0.15f, 0, UI_HFILL, T, T, M, 0, M, M);
+    demorect(box, "Layout(UI_VFILL)", 0.2f, 0, UI_VFILL, T, T, 0, 0, 0, M);
+    demorect(box, "Layout(UI_VFILL)", 0.2f, 0, UI_VFILL, T, T, 0, 0, 0, M);
+    demorect(box, "Layout(UI_VFILL)", 0.2f, 0, UI_VFILL, T, T, 0, 0, 0, M);
+    demorect(box, "Layout(UI_RIGHT)", 0.25f, 0, UI_RIGHT, T, T, 0, 0, M, M);
   }
 }
 
@@ -903,22 +903,22 @@ void fill_wrap_row_box (int box) {
   rndGen.seed(303);
   for (int i = 0; i < 20; ++i) {
     float hue = cast(float)(uniform!"[)"(0, 360))/360.0f;
-    int width = 10 + (uniform!"[)"(0, 5))*10;
+    int width = 10+(uniform!"[)"(0, 5))*10;
 
     int u;
     switch (uniform!"[)"(0, 4)) {
       default: break;
       case 0:
-        u = demorect(box, "Layout( UI_TOP )", hue, 0, UI_TOP, width, T, M, M, M, M);
+        u = demorect(box, "Layout(UI_TOP)", hue, 0, UI_TOP, width, T, M, M, M, M);
         break;
       case 1:
-        u = demorect(box, "Layout( UI_VCENTER )", hue, 0, UI_VCENTER, width, T/2, M, M, M, M);
+        u = demorect(box, "Layout(UI_VCENTER)", hue, 0, UI_VCENTER, width, T/2, M, M, M, M);
         break;
       case 2:
-        u = demorect(box, "Layout( UI_VFILL )", hue, 0, UI_VFILL, width, T, M, M, M, M);
+        u = demorect(box, "Layout(UI_VFILL)", hue, 0, UI_VFILL, width, T, M, M, M, M);
         break;
       case 3:
-        u = demorect(box, "Layout( UI_DOWN )", hue, 0, UI_DOWN, width, T/2, M, M, M, M);
+        u = demorect(box, "Layout(UI_DOWN)", hue, 0, UI_DOWN, width, T/2, M, M, M, M);
         break;
     }
 
@@ -935,22 +935,22 @@ void fill_wrap_column_box (int box) {
   rndGen.seed(303);
   for (int i = 0; i < 20; ++i) {
     float hue = cast(float)(uniform!"[)"(0, 360))/360.0f;
-    int height = 10 + (uniform!"[)"(0, 5))*10;
+    int height = 10+(uniform!"[)"(0, 5))*10;
 
     int u;
     switch (uniform!"[)"(0, 4)) {
       default: break;
       case 0:
-        u = demorect(box, "Layout( UI_LEFT )", hue, 0, UI_LEFT, T, height, M, M, M, M);
+        u = demorect(box, "Layout(UI_LEFT)", hue, 0, UI_LEFT, T, height, M, M, M, M);
         break;
       case 1:
-        u = demorect(box, "Layout( UI_HCENTER )", hue, 0, UI_HCENTER, T/2, height, M, M, M, M);
+        u = demorect(box, "Layout(UI_HCENTER)", hue, 0, UI_HCENTER, T/2, height, M, M, M, M);
         break;
       case 2:
-        u = demorect(box, "Layout( UI_HFILL )", hue, 0, UI_HFILL, T, height, M, M, M, M);
+        u = demorect(box, "Layout(UI_HFILL)", hue, 0, UI_HFILL, T, height, M, M, M, M);
         break;
       case 3:
-        u = demorect(box, "Layout( UI_RIGHT )", hue, 0, UI_RIGHT, T/2, height, M, M, M, M);
+        u = demorect(box, "Layout(UI_RIGHT)", hue, 0, UI_RIGHT, T/2, height, M, M, M, M);
         break;
     }
 
@@ -969,19 +969,19 @@ void build_wrapdemo (int parent) {
   enum int T = 50;
 
   int box;
-  box = demorect(col, "Box( UI_ROW | UI_WRAP | UI_START )\nLayout( UI_HFILL | UI_TOP )", 0.6f, UI_ROW | UI_WRAP | UI_START, UI_TOP, 0, 0, M, M, M, M);
+  box = demorect(col, "Box(UI_ROW|UI_WRAP|UI_START)\nLayout(UI_HFILL|UI_TOP)", 0.6f, UI_ROW|UI_WRAP|UI_START, UI_TOP, 0, 0, M, M, M, M);
   fill_wrap_row_box(box);
 
-  box = demorect(col, "Box( UI_ROW | UI_WRAP | UI_MIDDLE )\nLayout( UI_HFILL | UI_TOP )", 0.6f, UI_ROW | UI_WRAP, UI_HFILL | UI_TOP, 0, 0, M, M, M, M);
+  box = demorect(col, "Box(UI_ROW|UI_WRAP|UI_MIDDLE)\nLayout(UI_HFILL|UI_TOP)", 0.6f, UI_ROW|UI_WRAP, UI_HFILL|UI_TOP, 0, 0, M, M, M, M);
   fill_wrap_row_box(box);
 
-  box = demorect(col, "Box( UI_ROW | UI_WRAP | UI_END )\nLayout( UI_HFILL | UI_TOP )", 0.6f, UI_ROW | UI_WRAP | UI_END, UI_HFILL | UI_TOP, 0, 0, M, M, M, M);
+  box = demorect(col, "Box(UI_ROW|UI_WRAP|UI_END)\nLayout(UI_HFILL|UI_TOP)", 0.6f, UI_ROW|UI_WRAP|UI_END, UI_HFILL|UI_TOP, 0, 0, M, M, M, M);
   fill_wrap_row_box(box);
 
-  box = demorect(col, "Box( UI_ROW | UI_WRAP | UI_JUSTIFY )\nLayout( UI_HFILL | UI_TOP )", 0.6f, UI_ROW | UI_WRAP | UI_JUSTIFY, UI_HFILL | UI_TOP, 0, 0, M, M, M, M);
+  box = demorect(col, "Box(UI_ROW|UI_WRAP|UI_JUSTIFY)\nLayout(UI_HFILL|UI_TOP)", 0.6f, UI_ROW|UI_WRAP|UI_JUSTIFY, UI_HFILL|UI_TOP, 0, 0, M, M, M, M);
   fill_wrap_row_box(box);
 
-  box = demorect(col, "Box( UI_COLUMN | UI_WRAP | UI_START )\nLayout( UI_LEFT | UI_VFILL )", 0.6f, UI_COLUMN | UI_WRAP | UI_START, UI_LEFT | UI_VFILL, 0, 0, M, M, M, M);
+  box = demorect(col, "Box(UI_COLUMN|UI_WRAP|UI_START)\nLayout(UI_LEFT|UI_VFILL)", 0.6f, UI_COLUMN|UI_WRAP|UI_START, UI_LEFT|UI_VFILL, 0, 0, M, M, M, M);
   fill_wrap_column_box(box);
 }
 
@@ -994,7 +994,7 @@ int add_menu_option(T : const(char)[]) (int parent, T name, int* choice) {
   return opt;
 }
 
-void draw (NVGcontext *vg, float w, float h) {
+void draw (NVGContext vg, float w, float h) {
   bndBackground(vg, 0, 0, w, h);
 
   // some OUI stuff
@@ -1058,11 +1058,11 @@ void draw (NVGcontext *vg, float w, float h) {
     for (int i = 0; i < uiGetLastItemCount(); ++i) {
       if (uiRecoverItem(i) == -1) {
         UIitem *pitem = uiLastItemPtr(i);
-        nvgBeginPath(vg);
-        nvgRect(vg, pitem.margins[0], pitem.margins[1], pitem.size[0], pitem.size[1]);
-        nvgStrokeWidth(vg, 2);
-        nvgStrokeColor(vg, nvgRGBAf(1.0f, 0.0f, 0.0f, 0.5f));
-        nvgStroke(vg);
+        vg.beginPath();
+        vg.rect(pitem.margins[0], pitem.margins[1], pitem.size[0], pitem.size[1]);
+        vg.strokeWidth(2);
+        vg.strokeColor(nvgRGBAf(1.0f, 0.0f, 0.0f, 0.5f));
+        vg.stroke();
       }
     }
   }
@@ -1107,7 +1107,7 @@ void main () {
     if (!sdwindow.closed && _vg !is null) {
       if (uictx !is null) uiDestroyContext(uictx);
       uictx = null;
-      nvgDeleteGL2(_vg);
+      _vg.deleteGL2();
       _vg = null;
       sdwindow.close();
     }
@@ -1137,13 +1137,13 @@ void main () {
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
 
     if (_vg !is null) {
-      updateGraph(&fps, dt);
-      nvgBeginFrame(_vg, GWidth, GHeight, pxRatio);
+      if (fps !is null) fps.update(dt);
+      _vg.beginFrame(GWidth, GHeight, pxRatio);
       draw(_vg, GWidth, GHeight);
       peak_items = (peak_items > uiGetItemCount() ? peak_items : uiGetItemCount());
       peak_alloc = (peak_alloc > uiGetAllocSize() ? peak_alloc : uiGetAllocSize());
-      renderGraph(_vg, GWidth-200-5, GHeight-35-5, &fps);
-      nvgEndFrame(_vg);
+      if (fps !is null) fps.render(_vg, GWidth-200-5, GHeight-35-5);
+      _vg.endFrame();
     }
   };
 
@@ -1161,9 +1161,9 @@ void main () {
     glLoadIdentity();
 
     version(DEMO_MSAA) {
-      _vg = nvgCreateGL2(NVG_STENCIL_STROKES | NVG_DEBUG);
+      _vg = createGL2NVG(NVG_STENCIL_STROKES|NVG_DEBUG);
     } else {
-      _vg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+      _vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
     }
     if (_vg is null) {
       import std.stdio;
@@ -1171,7 +1171,7 @@ void main () {
       //sdwindow.close();
     }
     init(_vg);
-    initGraph(&fps, GRAPH_RENDER_FPS, "Frame Time", "system");
+    fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");
     sdwindow.redrawOpenGlScene();
   };
 
@@ -1198,7 +1198,7 @@ void main () {
           if (event.button == MouseButton.right) uiSetButton(2, /*mods*/0, (event.type == MouseEventType.buttonPressed));
           break;
         case MouseEventType.motion:
-          //{ import std.stdio; writeln(event.x, ",", event.y); }
+          //{ import std.stdio; writeln(event.x, ", ", event.y); }
           uiSetCursor(event.x, event.y);
           break;
         default:

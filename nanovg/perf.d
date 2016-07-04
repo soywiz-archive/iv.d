@@ -122,7 +122,7 @@ public:
 
     if (name[0] != '\0') {
       vg.fontSize(14.0f);
-      vg.textAlign(NVGalign.Left|NVGalign.Top);
+      vg.textAlign(NVGAlign.Left|NVGAlign.Top);
       vg.fillColor(nvgRGBA(240, 240, 240, 192));
       uint len = 0; while (len < name.length && name.ptr[len]) ++len;
       vg.text(x+3, y+1, name.ptr[0..len]);
@@ -132,27 +132,27 @@ public:
     final switch (gstyle) {
       case Style.FPS:
         vg.fontSize(18.0f);
-        vg.textAlign(NVGalign.Right|NVGalign.Top);
+        vg.textAlign(NVGAlign.Right|NVGAlign.Top);
         vg.fillColor(nvgRGBA(240, 240, 240, 255));
         auto len = snprintf(str.ptr, str.length, "%.2f FPS", 1.0f/avg);
         vg.text(x+width-3, y+1, str.ptr[0..len]);
 
         vg.fontSize(15.0f);
-        vg.textAlign(NVGalign.Right|NVGalign.Bottom);
+        vg.textAlign(NVGAlign.Right|NVGAlign.Bottom);
         vg.fillColor(nvgRGBA(240, 240, 240, 160));
         len = snprintf(str.ptr, str.length, "%.2f ms", avg*1000.0f);
         vg.text(x+width-3, y+height-1, str.ptr[0..len]);
         break;
       case Style.Percent:
         vg.fontSize(18.0f);
-        vg.textAlign(NVGalign.Right|NVGalign.Top);
+        vg.textAlign(NVGAlign.Right|NVGAlign.Top);
         vg.fillColor(nvgRGBA(240, 240, 240, 255));
         auto len = snprintf(str.ptr, str.length, "%.1f %%", avg*1.0f);
         vg.text(x+width-3, y+1, str.ptr[0..len]);
         break;
       case Style.MSec:
         vg.fontSize(18.0f);
-        vg.textAlign(NVGalign.Right|NVGalign.Top);
+        vg.textAlign(NVGAlign.Right|NVGAlign.Top);
         vg.fillColor(nvgRGBA(240, 240, 240, 255));
         auto len = snprintf(str.ptr, str.length, "%.2f ms", avg * 1000.0f);
         vg.text(x+width-3, y+1, str.ptr[0..len]);

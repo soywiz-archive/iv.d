@@ -17,8 +17,8 @@
 //
 import core.stdc.stdio;
 import iv.nanovg;
+import iv.nanovg.perf;
 import demo;
-import perf;
 
 import arsd.simpledisplay;
 import arsd.color;
@@ -46,7 +46,7 @@ void main () {
   //auto c = nvgHSLA(0.5, 0.5, 0.5, 255);
 
   DemoData data;
-  NVGcontext* vg = null;
+  NVGContext vg = null;
   PerfGraph fps;
 
   double mx = 0, my = 0;
@@ -64,7 +64,7 @@ void main () {
   void closeWindow () {
     if (!sdwindow.closed && vg !is null) {
       freeDemoData(vg, &data);
-      nvgDeleteGL2(vg);
+      vg.deleteGL2();
       vg = null;
       sdwindow.close();
     }
@@ -92,11 +92,11 @@ void main () {
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
 
     if (vg !is null) {
-      updateGraph(&fps, dt);
-      nvgBeginFrame(vg, GWidth, GHeight, pxRatio);
+      if (fps !is null) fps.update(dt);
+      vg.beginFrame(GWidth, GHeight, pxRatio);
       renderDemo(vg, mx, my, GWidth, GHeight, secs, blowup, &data);
-      renderGraph(vg, 5,5, &fps);
-      nvgEndFrame(vg);
+      if (fps !is null) fps.render(vg, 5, 5);
+      vg.endFrame();
     }
   };
 
@@ -114,9 +114,9 @@ void main () {
     glLoadIdentity();
 
     version(DEMO_MSAA) {
-      vg = nvgCreateGL2(NVG_STENCIL_STROKES | NVG_DEBUG);
+      vg = createGL2NVG(NVG_STENCIL_STROKES|NVG_DEBUG);
     } else {
-      vg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+      vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
     }
     if (vg is null) {
       import std.stdio;
@@ -128,11 +128,11 @@ void main () {
       import std.stdio;
       writeln("cannot load demo data");
       freeDemoData(vg, &data);
-      nvgDeleteGL2(vg);
+      vg.deleteGL2();
       vg = null;
       return;
     }
-    initGraph(&fps, GRAPH_RENDER_FPS, "Frame Time");
+    fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
     sdwindow.redrawOpenGlScene();
   };
 

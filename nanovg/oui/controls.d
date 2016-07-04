@@ -106,7 +106,7 @@ struct UIUserData {
 struct UIRectData {
   UIData head;
   string label;
-  NVGcolor color;
+  NVGColor color;
 }
 
 struct UIButtonData {
@@ -296,7 +296,7 @@ public void drawUI (NVGContext vg, int item, int corners) {
             vg.fillColor(nvgRGBAf(0.0f, 0.0f, 0.0f, 1.0f));
             vg.fontSize(15.0f);
             vg.beginPath();
-            vg.textAlign(NVGalign.Top|NVGalign.Center);
+            vg.textAlign(NVGAlign.Top|NVGAlign.Center);
             vg.textBox(rect.x, rect.y+rect.h*0.3f, rect.w, data.label);
           }
         }
@@ -336,7 +336,7 @@ public int userCtl (void delegate (NVGContext vg, int item) onPaint, void delega
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public int colorrect(T : const(char)[]) (T label, NVGcolor color) {
+public int colorrect(T : const(char)[]) (T label, NVGColor color) {
   int item = uiItem();
   UIRectData *data = uiAllocHandle!UIRectData(item);
   data.head.subtype = ST_RECT;
