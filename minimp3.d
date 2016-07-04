@@ -95,8 +95,9 @@ MP3Info mp3Scan(RDG) (RDG rdg) if (is(typeof({
   mp3_context_t* s = cast(mp3_context_t*)libc_calloc(mp3_context_t.sizeof, 1);
   if (s is null) return info;
   scope(exit) libc_free(s);
-  // now skip frames
-  while (!eofhit) {
+  bool skipTagCheck;
+
+  void readMoreData () {
     if (inbufused-inbufpos < 1441) {
       import core.stdc.string : memmove;
       auto left = inbufused-inbufpos;
@@ -111,9 +112,51 @@ MP3Info mp3Scan(RDG) (RDG rdg) if (is(typeof({
       } else {
         inbufused += rd;
       }
-      if (eofhit && inbufused-inbufpos < 1024) break;
     }
-    int res = mp3_skip_frame(s, inbuf.ptr+inbufpos, inbufused-inbufpos);
+  }
+
+  // now skip frames
+  while (!eofhit) {
+    readMoreData();
+    if (eofhit && inbufused-inbufpos < 1024) break;
+    auto left = inbufused-inbufpos;
+    // check for tags
+    if (!skipTagCheck) {
+      skipTagCheck = true;
+      if (left >= 10) {
+        // check for ID3v2
+        if (inbuf.ptr[0] == 'I' && inbuf.ptr[1] == 'D' && inbuf.ptr[2] == '3' && inbuf.ptr[3] != 0xff && inbuf.ptr[4] != 0xff &&
+            ((inbuf.ptr[6]|inbuf.ptr[7]|inbuf.ptr[8]|inbuf.ptr[9])&0x80) == 0) { // see ID3v2 specs
+          // get tag size
+          uint sz = (inbuf.ptr[9]|(inbuf.ptr[8]<<7)|(inbuf.ptr[7]<<14)|(inbuf.ptr[6]<<21))+10;
+          // skip `sz` bytes, it's a tag
+          while (sz > 0 && !eofhit) {
+            readMoreData();
+            left = inbufused-inbufpos;
+            if (left > sz) left = sz;
+            inbufpos += left;
+            sz -= left;
+          }
+          if (eofhit) break;
+          continue;
+        }
+      }
+    } else {
+      if (inbuf.ptr[0] == 'T' && inbuf.ptr[1] == 'A' && inbuf.ptr[2] == 'G') {
+        // this may be ID3v1, just skip 128 bytes
+        uint sz = 128;
+        while (sz > 0 && !eofhit) {
+          readMoreData();
+          left = inbufused-inbufpos;
+          if (left > sz) left = sz;
+          inbufpos += left;
+          sz -= left;
+        }
+        if (eofhit) break;
+        continue;
+      }
+    }
+    int res = mp3_skip_frame(s, inbuf.ptr+inbufpos, left);
     if (res < 0) {
       // can't decode frame
       if (inbufused-inbufpos < 1024) inbufpos = inbufused; else inbufpos += 1024;
@@ -212,12 +255,51 @@ private:
 private:
   mp3_info_t info;
   bool curFrameIsOk;
+  bool skipTagCheck;
 
 private:
   bool decodeOneFrame (bool first=false) {
     for (;;) {
       if (!eofhit && inbufused-inbufpos < 1441) ensureBytes(64*1024);
       int res, size = -1;
+
+      // check for tags
+      if (!skipTagCheck) {
+        skipTagCheck = false;
+        if (inbufused-inbufpos >= 10) {
+          // check for ID3v2
+          if (inbuf[inbufpos+0] == 'I' && inbuf[inbufpos+1] == 'D' && inbuf[inbufpos+2] == '3' && inbuf[inbufpos+3] != 0xff && inbuf[inbufpos+4] != 0xff &&
+              ((inbuf[inbufpos+6]|inbuf[inbufpos+7]|inbuf[inbufpos+8]|inbuf[inbufpos+9])&0x80) == 0) { // see ID3v2 specs
+            // get tag size
+            uint sz = (inbuf[inbufpos+9]|(inbuf[inbufpos+8]<<7)|(inbuf[inbufpos+7]<<14)|(inbuf[inbufpos+6]<<21))+10;
+            // skip `sz` bytes, it's a tag
+            while (sz > 0 && !eofhit) {
+              ensureBytes(64*1024);
+              auto left = inbufused-inbufpos;
+              if (left > sz) left = sz;
+              removeBytes(left);
+              sz -= left;
+            }
+            if (eofhit) { curFrameIsOk = false; return false; }
+            continue;
+          }
+        }
+      } else {
+        if (inbuf[inbufpos+0] == 'T' && inbuf[inbufpos+1] == 'A' && inbuf[inbufpos+2] == 'G') {
+          // this may be ID3v1, just skip 128 bytes
+          uint sz = 128;
+          while (sz > 0 && !eofhit) {
+            ensureBytes(64*1024);
+            auto left = inbufused-inbufpos;
+            if (left > sz) left = sz;
+            removeBytes(left);
+            sz -= left;
+          }
+          if (eofhit) { curFrameIsOk = false; return false; }
+          continue;
+        }
+      }
+
       mp3_context_t* s = cast(mp3_context_t*)dec;
       res = mp3_decode_frame(s, /*cast(int16_t*)out_*/samples.ptr, &size, inbuf+inbufpos, /*bytes*/inbufused-inbufpos);
       if (res < 0) {
@@ -1334,19 +1416,15 @@ void switch_buffer (mp3_context_t *s, int *pos, int *end_pos, int *end_pos2) {
 // ////////////////////////////////////////////////////////////////////////// //
 int mp3_check_header(uint32_t header){
   //pragma(inline, true);
-    /* header */
-    if ((header & 0xffe00000) != 0xffe00000)
-        return -1;
-    /* layer check */
-    if ((header & (3<<17)) != (1 << 17))
-        return -1;
-    /* bit rate */
-    if ((header & (0xf<<12)) == 0xf<<12)
-        return -1;
-    /* frequency */
-    if ((header & (3<<10)) == 3<<10)
-        return -1;
-    return 0;
+  /* header */
+  if ((header & 0xffe00000) != 0xffe00000) return -1;
+  /* layer check */
+  if ((header & (3<<17)) != (1 << 17)) return -1;
+  /* bit rate */
+  if ((header & (0xf<<12)) == 0xf<<12) return -1;
+  /* frequency */
+  if ((header & (3<<10)) == 3<<10) return -1;
+  return 0;
 }
 
 
@@ -2903,6 +2981,7 @@ int mp3_skip_frame (mp3_context_t *s, uint8_t *buf, int buf_size) {
 
 retry:
   if (buf_size < HEADER_SIZE) return -1;
+
   header = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
   if (mp3_check_header(header) < 0) {
     ++buf;
