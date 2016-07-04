@@ -496,6 +496,7 @@ struct mp3_context_t {
   int32_t[SBLIMIT][36][MP3_MAX_CHANNELS] sb_samples;
   int32_t[SBLIMIT*18][MP3_MAX_CHANNELS] mdct_buf;
   int dither_state;
+  uint last_header; //&0xffff0c00u;
 }
 
 struct granule_t {
@@ -2932,45 +2933,45 @@ int mp3_decode_init () {
     return 0;
 }
 
-int mp3_decode_frame(
-    mp3_context_t *s,
-    int16_t *out_samples, int *data_size,
-    uint8_t *buf, int buf_size
-) {
-    uint32_t header;
-    int out_size;
-    int extra_bytes = 0;
+int mp3_decode_frame (mp3_context_t *s, int16_t *out_samples, int *data_size, uint8_t *buf, int buf_size) {
+  uint32_t header;
+  int out_size;
+  int extra_bytes = 0;
 
 retry:
-    if(buf_size < HEADER_SIZE)
-        return -1;
+  if (buf_size < HEADER_SIZE) return -1;
 
-    header = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
-    if(mp3_check_header(header) < 0){
-        buf++;
-        buf_size--;
-        extra_bytes++;
-        goto retry;
-    }
+  header = (buf[0]<<24)|(buf[1]<<16)|(buf[2]<<8)|buf[3];
+  if (mp3_check_header(header) < 0){
+    ++buf;
+    --buf_size;
+    ++extra_bytes;
+    goto retry;
+  }
 
-    if (decode_header(s, header) == 1) {
-        s.frame_size = -1;
-        return -1;
-    }
+  if (s.last_header && (header&0xffff0c00u) != s.last_header) {
+    ++buf;
+    --buf_size;
+    ++extra_bytes;
+    goto retry;
+  }
 
-    if(s.frame_size<=0 || s.frame_size > buf_size){
-        return -1;  // incomplete frame
-    }
-    if(s.frame_size < buf_size) {
-        buf_size = s.frame_size;
-    }
+  if (decode_header(s, header) == 1) {
+    s.frame_size = -1;
+    return -1;
+  }
 
-    out_size = mp3_decode_main(s, out_samples, buf, buf_size);
-    if(out_size>=0)
-        *data_size = out_size;
-    // else: Error while decoding MPEG audio frame.
-    s.frame_size += extra_bytes;
-    return buf_size;
+  if (s.frame_size<=0 || s.frame_size > buf_size) return -1; // incomplete frame
+  if (s.frame_size < buf_size) buf_size = s.frame_size;
+
+  out_size = mp3_decode_main(s, out_samples, buf, buf_size);
+  if (out_size >= 0) {
+    *data_size = out_size;
+    s.last_header = header&0xffff0c00u;
+  }
+  // else: Error while decoding MPEG audio frame.
+  s.frame_size += extra_bytes;
+  return buf_size;
 }
 
 
@@ -2990,6 +2991,13 @@ retry:
     goto retry;
   }
 
+  if (s.last_header && (header&0xffff0c00u) != s.last_header) {
+    ++buf;
+    --buf_size;
+    ++extra_bytes;
+    goto retry;
+  }
+
   if (decode_header(s, header) == 1) {
     s.frame_size = -1;
     return -1;
@@ -2997,6 +3005,7 @@ retry:
 
   if (s.frame_size <= 0 || s.frame_size > buf_size) return -1;  // incomplete frame
   if (s.frame_size < buf_size) buf_size = s.frame_size;
+  s.last_header = header&0xffff0c00u;
   s.frame_size += extra_bytes;
   return buf_size;
 }
