@@ -1028,7 +1028,7 @@ public __gshared BNDtheme bnd_theme = BNDtheme(
 public void bndSetTheme (in ref BNDtheme theme) { bnd_theme = theme; }
 
 /// Returns the currently set theme
-public const(BNDtheme)* bndGetTheme () { return &bnd_theme; }
+public BNDtheme* bndGetTheme () { return &bnd_theme; }
 
 // the handle to the image containing the icon sheet
 private __gshared int bnd_icon_image = -1;
@@ -1114,6 +1114,29 @@ public void bndRadioButton (NVGContext ctx, float x, float y, float w, float h, 
   bndInnerBox(ctx, x, y, w, h, cr[0], cr[1], cr[2], cr[3], shade_top, shade_down);
   bndOutlineBox(ctx, x, y, w, h, cr[0], cr[1], cr[2], cr[3], bndTransparent(bnd_theme.radioTheme.outlineColor));
   bndIconLabelValue(ctx, x, y, w, h, iconid, bndTextColor(&bnd_theme.radioTheme, state), BND_CENTER, BND_LABEL_FONT_SIZE, label);
+}
+
+/** Draw a radio button with its lower left origin at (x, y) and size of (w, h),
+ * where flags is one or multiple flags from BNDcornerFlags and state denotes
+ * the widgets current UI state.
+ *
+ * if iconid >= 0, an icon will be added to the widget
+ *
+ * if label is not null, a label will be added to the widget
+ *
+ * widget looks best when height is BND_WIDGET_HEIGHT
+ */
+public void bndRadioButton2 (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
+  float ox, oy;
+  NVGColor shade_top, shade_down;
+  ox = x;
+  oy = y+h-BND_OPTION_HEIGHT-3;
+  bndBevelInset(ctx, ox, oy, BND_OPTION_WIDTH, BND_OPTION_HEIGHT, BND_OPTION_RADIUS, BND_OPTION_RADIUS);
+  bndInnerColors(&shade_top, &shade_down, &bnd_theme.optionTheme, state, 1);
+  bndInnerBox(ctx, ox, oy, BND_OPTION_WIDTH, BND_OPTION_HEIGHT, BND_OPTION_RADIUS, BND_OPTION_RADIUS, BND_OPTION_RADIUS, BND_OPTION_RADIUS, shade_top, shade_down);
+  bndOutlineBox(ctx, ox, oy, BND_OPTION_WIDTH, BND_OPTION_HEIGHT, BND_OPTION_RADIUS, BND_OPTION_RADIUS, BND_OPTION_RADIUS, BND_OPTION_RADIUS, bndTransparent(bnd_theme.optionTheme.outlineColor));
+  if (state == BND_ACTIVE) bndRadioCheck(ctx, ox, oy, bndTransparent(bnd_theme.optionTheme.itemColor));
+  bndIconLabelValue(ctx, x+12, y, w-12, h, -1, bndTextColor(&bnd_theme.optionTheme, state), BND_LEFT, BND_LABEL_FONT_SIZE, label);
 }
 
 /** Calculate the corresponding text position for given coordinates px/py
@@ -1997,6 +2020,14 @@ public void bndCheck (NVGContext ctx, float ox, float oy, NVGColor color) {
   ctx.lineTo(ox+7, oy+8);
   ctx.lineTo(ox+14, oy+1);
   ctx.stroke();
+}
+
+/// Draw a checkmark for a radio with the given upper left coordinates (ox, oy) with the specified color.
+public void bndRadioCheck (NVGContext ctx, float ox, float oy, NVGColor color) {
+  ctx.beginPath();
+  ctx.fillColor(color);
+  ctx.circle(ox+7, oy+7, 3);
+  ctx.fill();
 }
 
 /// Draw a horizontal arrow for a number field with its center at (x, y) and size s; if s is negative, the arrow points to the left.

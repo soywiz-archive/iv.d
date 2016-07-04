@@ -38,7 +38,7 @@ __gshared NVGContext nvg = null;
 
 // ////////////////////////////////////////////////////////////////////////// //
 void init (NVGContext vg) {
-  bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/tahoma.ttf"));
+  bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/verdana.ttf"));
   bndSetIconImage(vg.createImage("../data/images/blender_icons16.png", 0));
 }
 
@@ -97,7 +97,7 @@ void buildWindow0 (FuiContext ctx) {
       vgroup = lbl0;
     }
     // button
-    auto but0 = ctx.checkbox(hbox, "button for first label", &cbval);
+    auto but0 = ctx.checkbox(hbox, "checkbox for first label", &cbval);
     with (ctx.layprops(but0)) {
       flex = 0;
       hgroup = but0;
@@ -115,7 +115,7 @@ void buildWindow0 (FuiContext ctx) {
       vgroup = lbl0;
     }
     // button
-    with (ctx.layprops(ctx.checkbox(hbox, "button for second label", &cbval))) {
+    with (ctx.layprops(ctx.checkbox(hbox, "checkbox for second label", &cbval))) {
       flex = 0;
       hgroup = but0;
       vgroup = lbl0;
@@ -134,7 +134,7 @@ void buildWindow0 (FuiContext ctx) {
       vgroup = lbl1;
     }
     // button
-    auto rad0 = ctx.radio(hbox, "button for first label", &rbval);
+    auto rad0 = ctx.radio(hbox, "radio for first label", &rbval);
     with (ctx.layprops(rad0)) {
       flex = 0;
       hgroup = rad0;
@@ -152,7 +152,7 @@ void buildWindow0 (FuiContext ctx) {
       vgroup = lbl1;
     }
     // button
-    with (ctx.layprops(ctx.radio(hbox, "button for second label", &rbval))) {
+    with (ctx.layprops(ctx.radio(hbox, "radio for second label", &rbval))) {
       flex = 0;
       hgroup = rad0;
       vgroup = lbl1;

@@ -29,6 +29,10 @@ import iv.nanovg.fui.engine;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+__gshared auto fuiFocusColor = BND_COLOR_ACTIVE; //nvgRGB(86, 128, 194);
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum FuiCtlType : ubyte {
   Invisible,
   Box,
@@ -237,6 +241,7 @@ int radio (FuiContext ctx, int parent, string text, int* var=null, int iconid=-1
       flex = 1;
       clickMask |= FuiLayoutProps.Buttons.Left;
       canBeFocused = true;
+      minSize.w += 14;
     }
   }
   return item;
@@ -278,34 +283,40 @@ void draw (FuiContext ctx, NVGContext avg=null) {
           break;
         case FuiCtlType.Button:
           auto data = ctx.item!FuiCtlButton(item);
+          auto oic = bndGetTheme.toolTheme.innerColor;
+          scope(exit) bndGetTheme.toolTheme.innerColor = oic;
+          if (ctx.focused == item) bndGetTheme.toolTheme.innerColor = fuiFocusColor;
           bndToolButton(nvg, rc.x, rc.y, rc.w, rc.h, BND_CORNER_NONE, (lp.active ? BND_ACTIVE : lp.hovered ? BND_HOVER : BND_DEFAULT), data.iconid, data.text);
           break;
         case FuiCtlType.Check:
           auto data = ctx.item!FuiCtlCheck(item);
+          auto oic0 = bndGetTheme.optionTheme.innerColor;
+          auto oic1 = bndGetTheme.optionTheme.innerSelectedColor;
+          scope(exit) {
+            bndGetTheme.optionTheme.innerColor = oic0;
+            bndGetTheme.optionTheme.innerSelectedColor = oic1;
+          }
+          if (ctx.focused == item) {
+            bndGetTheme.optionTheme.innerColor = fuiFocusColor;
+            bndGetTheme.optionTheme.innerSelectedColor = fuiFocusColor;
+          }
           bndOptionButton(nvg, rc.x, rc.y, rc.w, rc.h, (data.var !is null && *data.var ? BND_ACTIVE : lp.hovered ? BND_HOVER : BND_DEFAULT), data.text);
           break;
         case FuiCtlType.Radio:
           auto data = ctx.item!FuiCtlCheck(item);
-          bndRadioButton(nvg, rc.x, rc.y, rc.w, rc.h, BND_CORNER_NONE, (/*lp.active ? BND_ACTIVE :*/ lp.hovered ? BND_HOVER : BND_DEFAULT), data.iconid, data.text);
+          auto oic0 = bndGetTheme.optionTheme.innerColor;
+          auto oic1 = bndGetTheme.optionTheme.innerSelectedColor;
+          scope(exit) {
+            bndGetTheme.optionTheme.innerColor = oic0;
+            bndGetTheme.optionTheme.innerSelectedColor = oic1;
+          }
+          if (ctx.focused == item) {
+            bndGetTheme.optionTheme.innerColor = fuiFocusColor;
+            bndGetTheme.optionTheme.innerSelectedColor = fuiFocusColor;
+          }
+          bndRadioButton2(nvg, rc.x, rc.y, rc.w, rc.h, BND_CORNER_NONE, (/*lp.active ? BND_ACTIVE :*/ lp.hovered ? BND_HOVER : BND_DEFAULT), data.iconid, data.text);
           break;
       }
-    }
-    if (ctx.focused == item) {
-      nvg.save();
-      scope(exit) nvg.restore();
-      nvg.strokeColor(nvgRGB(0, 0, 100));
-      nvg.strokeWidth(1.2);
-      nvg.miterLimit(0);
-      nvg.beginPath();
-      switch (ctx.item!FuiCtlSpan(item).type) {
-        case FuiCtlType.Check:
-          nvg.rect(rc.x+3+14, rc.y+3, rc.w-6-14, rc.h-7);
-          break;
-        default:
-          nvg.rect(rc.x+3, rc.y+3, rc.w-6, rc.h-7);
-          break;
-      }
-      nvg.stroke();
     }
     // draw children
     item = lp.firstChild;
