@@ -77,9 +77,6 @@ void main () {
   //int mxOld = -1, myOld = -1;
 
   sdwindow.redrawOpenGlScene = delegate () {
-    // Calculate pixel ration for hi-dpi devices.
-    float pxRatio = cast(float)GWidth/cast(float)GHeight;
-
     // timers
     prevt = curt;
     curt = MonoTime.currTime;
@@ -89,11 +86,11 @@ void main () {
     // Update and render
     //glViewport(0, 0, fbWidth, fbHeight);
     if (premult) glClearColor(0, 0, 0, 0); else glClearColor(0.3f, 0.3f, 0.32f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+    glClear(glNVGClearFlags);
 
     if (vg !is null) {
       if (fps !is null) fps.update(dt);
-      vg.beginFrame(GWidth, GHeight, pxRatio);
+      vg.beginFrame(GWidth, GHeight);
       renderDemo(vg, mx, my, GWidth, GHeight, secs, blowup, &data);
       if (fps !is null) fps.render(vg, 5, 5);
       vg.endFrame();
@@ -105,13 +102,6 @@ void main () {
     sdwindow.vsync = false;
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
-
-    // init matrices
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, GWidth, GHeight, 0, -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
 
     version(DEMO_MSAA) {
       vg = createGL2NVG(NVG_STENCIL_STROKES|NVG_DEBUG);

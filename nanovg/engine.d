@@ -188,15 +188,6 @@ struct NVGparams {
   void function (void* uptr) renderDelete;
 }
 
-// Constructor and destructor, called by the render back-end.
-//!NVGContext createInternal (NVGparams* params);
-//!void deleteInternal (NVGContext ctx);
-
-//!NVGparams* internalParams (NVGContext ctx);
-
-// Debug function to dump cached path data.
-//!void debugDumpPathCache (NVGContext ctx);
-
 // ////////////////////////////////////////////////////////////////////////// //
 private:
 
@@ -364,6 +355,7 @@ void nvg__setDevicePixelRatio (NVGContext ctx, float ratio) {
   ctx.devicePxRatio = ratio;
 }
 
+// Constructor called by the render back-end.
 package(iv.nanovg) NVGContext createInternal (NVGparams* params) {
   FONSparams fontParams;
   NVGContext ctx = cast(NVGContext )malloc(NVGcontext.sizeof);
@@ -413,10 +405,12 @@ error:
   return null;
 }
 
+// Called by render backend.
 package(iv.nanovg) NVGparams* internalParams (NVGContext ctx) {
   return &ctx.params;
 }
 
+// Destructor called by the render back-end.
 package(iv.nanovg) void deleteInternal (NVGContext ctx) {
   if (ctx is null) return;
   if (ctx.commands !is null) free(ctx.commands);
@@ -438,9 +432,9 @@ package(iv.nanovg) void deleteInternal (NVGContext ctx) {
 
 /** Begin drawing a new frame
  *
- * Calls to nanovg drawing API should be wrapped in `nvgBeginFrame()` and `nvgEndFrame()`
+ * Calls to nanovg drawing API should be wrapped in `beginFrame()` and `endFrame()`
  *
- * `nvgBeginFrame()` defines the size of the window to render to in relation currently
+ * `beginFrame()` defines the size of the window to render to in relation currently
  * set viewport (i.e. glViewport on GL backends). Device pixel ration allows to
  * control the rendering on Hi-DPI devices.
  *
@@ -507,8 +501,9 @@ public void endFrame (NVGContext ctx) {
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Color utils
+/// <h1>Color utils</h1>
 /// Colors in NanoVG are stored as unsigned ints in ABGR format.
+public alias NVGSectionDummy00 = void;
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 255 (1.0f).
 public NVGColor nvgRGB() (ubyte r, ubyte g, ubyte b) {
@@ -546,7 +541,7 @@ public NVGColor nvgRGBAf() (float r, float g, float b, float a=1) {
   return color;
 }
 
-// Sets transparency of a color value.
+/// Sets transparency of a color value.
 public NVGColor nvgTransRGBA() (NVGColor c, ubyte a) {
   pragma(inline, true);
   c.a = a/255.0f;
@@ -617,7 +612,7 @@ NVGstate* nvg__getState (NVGContext ctx) {
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Transforms
+/// <h1>Transforms</h1>
 //
 /** The paths, gradients, patterns and scissor region are transformed by an transformation
  * matrix at the time when they are passed to the API.
@@ -632,14 +627,15 @@ NVGstate* nvg__getState (NVGContext ctx) {
  * Where: (sx, sy) define scaling, (kx, ky) skewing, and (tx, ty) translation.
  * The last row is assumed to be (0, 0, 1) and is not stored.
  *
- * Apart from nvgResetTransform(), each transformation function first creates
+ * Apart from `resetTransform()`, each transformation function first creates
  * specific transformation matrix and pre-multiplies the current transformation by it.
  *
- * Current coordinate system (transformation) can be saved and restored using nvgSave() and nvgRestore().
+ * Current coordinate system (transformation) can be saved and restored using `save()` and `restore()`.
  *
  * The following functions can be used to make calculations on 2x3 transformation matrices.
  * A 2x3 matrix is represented as float[6].
  */
+public alias NVGSectionDummy01 = void;
 
 /// Sets the transform to identity matrix.
 public void nvgTransformIdentity (float* t) {
@@ -762,15 +758,16 @@ void nvg__setPaintColor (NVGPaint* p, NVGColor color) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// State handling
+/// <h1>State handling</h1>
 //
 /** NanoVG contains state which represents how paths will be rendered.
  * The state contains transform, fill and stroke styles, text and font styles,
  * and scissor clipping.
  */
+public alias NVGSectionDummy02 = void;
 
 /** Pushes and saves the current render state into a state stack.
- * A matching nvgRestore() must be used to restore the state.
+ * A matching `restore()` must be used to restore the state.
  */
 public void save (NVGContext ctx) {
   if (ctx.nstates >= NVG_MAX_STATES) return;
@@ -810,14 +807,15 @@ public void reset (NVGContext ctx) {
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Render styles
+/// <h1>Render styles</h1>
 //
 /** Fill and stroke render style can be either a solid color or a paint which is a gradient or a pattern.
  * Solid color is simply defined as a color value, different kinds of paints can be created
- * using ).linearGradient().boxGradient(nvgRadialGradient() and nvgImagePattern().
+ * using `linearGradient()`, `boxGradient()`, `radialGradient()` and `imagePattern()`.
  *
- * Current render style can be saved and restored using nvgSave() and nvgRestore().
+ * Current render style can be saved and restored using `save()` and `restore()`.
  */
+public alias NVGSectionDummy03 = void;
 
 /// Sets the stroke width of the stroke style.
 public void strokeWidth (NVGContext ctx, float width) {
@@ -958,12 +956,13 @@ public void fillPaint (NVGContext ctx, NVGPaint paint) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Images
+/// <h1>Images</h1>
 //
 /** NanoVG allows you to load jpg and png (if arsd loaders are in place) files to be used for rendering.
  * In addition you can upload your own image.
  * The parameter imageFlags is combination of flags defined in NVGImageFlags.
  */
+public alias NVGSectionDummy04 = void;
 
 version(nanovg_use_arsd_image) {
   // do we have new arsd API to load images?
@@ -1086,15 +1085,16 @@ public void deleteImage (NVGContext ctx, int image) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Paints
+/// <h1>Paints</h1>
 //
 /** NanoVG supports four types of paints: linear gradient, box gradient, radial gradient and image pattern.
  * These can be used as paints for strokes and fills.
  */
+public alias NVGSectionDummy05 = void;
 
 /** Creates and returns a linear gradient. Parameters `(sx, sy) (ex, ey)` specify the start and end coordinates
  * of the linear gradient, icol specifies the start color and ocol the end color.
- * The gradient is transformed by the current transform when it is passed to `nvgFillPaint()` or `nvgStrokePaint()`.
+ * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, float ey, NVGColor icol, NVGColor ocol) {
   NVGPaint p;
@@ -1134,7 +1134,7 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
 
 /** Creates and returns a radial gradient. Parameters (cx, cy) specify the center, inr and outr specify
  * the inner and outer radius of the gradient, icol specifies the start color and ocol the end color.
- * The gradient is transformed by the current transform when it is passed to nvgFillPaint() or nvgStrokePaint().
+ * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, float outr, NVGColor icol, NVGColor ocol) {
   NVGPaint p;
@@ -1164,7 +1164,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
  * drop shadows or highlights for boxes. Parameters (x, y) define the top-left corner of the rectangle,
  * (w, h) define the size of the rectangle, r defines the corner radius, and f feather. Feather defines how blurry
  * the border of the rectangle is. Parameter icol specifies the inner color and ocol the outer color of the gradient.
- * The gradient is transformed by the current transform when it is passed to nvgFillPaint() or nvgStrokePaint().
+ * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h, float r, float f, NVGColor icol, NVGColor ocol) {
   NVGPaint p;
@@ -1191,7 +1191,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
 
 /** Creates and returns an image patter. Parameters (ox, oy) specify the left-top location of the image pattern,
  * (ex, ey) the size of one image, angle rotation around the top-left corner, image is handle to the image to render.
- * The gradient is transformed by the current transform when it is passed to nvgFillPaint() or nvgStrokePaint().
+ * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float h, float angle, int image, float alpha) {
   NVGPaint p;
@@ -1213,11 +1213,12 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Scissoring
+/// <h1>Scissoring</h1>
 //
 /** Scissoring allows you to clip the rendering into a rectangle. This is useful for various
  * user interface cases like rendering a text edit or a timeline.
  */
+public alias NVGSectionDummy06 = void;
 
 /// Sets the current scissor rectangle. The scissor rectangle is transformed by the current transform.
 public void scissor (NVGContext ctx, float x, float y, float w, float h) {
@@ -2149,22 +2150,23 @@ int nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Paths
+/// <h1>Paths</h1>
 //
-/** Drawing a new shape starts with nvgBeginPath(), it clears all the currently defined paths.
+/** Drawing a new shape starts with `beginPath()`, it clears all the currently defined paths.
  * Then you define one or more paths and sub-paths which describe the shape. The are functions
  * to draw common shapes like rectangles and circles, and lower level step-by-step functions,
  * which allow to define a path curve by curve.
  *
  * NanoVG uses even-odd fill rule to draw the shapes. Solid shapes should have counter clockwise
  * winding and holes should have counter clockwise order. To specify winding of a path you can
- * call `nvgPathWinding()`. This is useful especially for the common shapes, which are drawn CCW.
+ * call `pathWinding()`. This is useful especially for the common shapes, which are drawn CCW.
  *
- * Finally you can fill the path using current fill style by calling nvgFill(), and stroke it
- * with current stroke style by calling nvgStroke().
+ * Finally you can fill the path using current fill style by calling `fill()`, and stroke it
+ * with current stroke style by calling `stroke()`.
  *
  * The curve segments and sub-paths are transformed by the current transform.
  */
+public alias NVGSectionDummy07 = void;
 
 /// Clears the current path and sub-paths.
 public void beginPath (NVGContext ctx) {
@@ -2393,6 +2395,7 @@ public void circle (NVGContext ctx, float cx, float cy, float r) {
   ctx.ellipse(cx, cy, r, r);
 }
 
+/// Debug function to dump cached path data.
 debug public void debugDumpPathCache (NVGContext ctx) {
   import core.stdc.stdio : printf;
   const(NVGpath)* path;
@@ -2483,7 +2486,7 @@ public void stroke (NVGContext ctx) {
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// Text
+/// <h1>Text</h1>
 //
 /** NanoVG allows you to load .ttf files and use the font to render text.
  *
@@ -2517,6 +2520,7 @@ public void stroke (NVGContext ctx) {
  *
  * Note: currently only solid color fill is supported for text.
  */
+public alias NVGSectionDummy08 = void;
 
 /// Creates font by loading it from the disk from specified file name.
 /// Returns handle to the font.

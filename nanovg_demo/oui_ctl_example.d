@@ -693,7 +693,7 @@ void main () {
 
     // Update and render
     glClearColor(0, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+    glClear(glNVGClearFlags);
 
     if (nvg !is null) {
       if (fps !is null) fps.update(dt);
@@ -711,13 +711,6 @@ void main () {
     sdwindow.vsync = false;
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
-
-    // init matrices
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, GWidth, GHeight, 0, -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
 
     version(DEMO_MSAA) {
       nvg = createGL2NVG(NVG_STENCIL_STROKES|NVG_DEBUG);
