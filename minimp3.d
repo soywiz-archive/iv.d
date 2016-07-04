@@ -96,6 +96,7 @@ MP3Info mp3Scan(RDG) (RDG rdg) if (is(typeof({
   if (s is null) return info;
   scope(exit) libc_free(s);
   bool skipTagCheck;
+  int headersCount;
 
   void readMoreData () {
     if (inbufused-inbufpos < 1441) {
@@ -161,6 +162,7 @@ MP3Info mp3Scan(RDG) (RDG rdg) if (is(typeof({
       // can't decode frame
       if (inbufused-inbufpos < 1024) inbufpos = inbufused; else inbufpos += 1024;
     } else {
+      if (headersCount < 6) ++headersCount;
       if (!info.valid) {
         if (s.sample_rate < 1024 || s.sample_rate > 96000) break;
         if (s.nb_channels < 1 || s.nb_channels > 2) break;
@@ -171,6 +173,8 @@ MP3Info mp3Scan(RDG) (RDG rdg) if (is(typeof({
       inbufpos += res;
     }
   }
+  //{ import core.stdc.stdio : printf; printf("%d\n", headersCount); }
+  if (headersCount < 6) info = info.init;
   return info;
 }
 
