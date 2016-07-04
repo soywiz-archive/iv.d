@@ -189,13 +189,13 @@ struct NVGparams {
 }
 
 // Constructor and destructor, called by the render back-end.
-//!NVGcontext* nvgCreateInternal(NVGparams* params);
-//!void nvgDeleteInternal(NVGcontext* ctx);
+//!NVGContext createInternal (NVGparams* params);
+//!void deleteInternal (NVGContext ctx);
 
-//!NVGparams* nvgInternalParams(NVGcontext* ctx);
+//!NVGparams* internalParams (NVGContext ctx);
 
 // Debug function to dump cached path data.
-//!void nvgDebugDumpPathCache(NVGcontext* ctx);
+//!void debugDumpPathCache (NVGContext ctx);
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
@@ -266,7 +266,10 @@ struct NVGpathCache {
   float[4] bounds;
 }
 
-public struct NVGcontext {
+/// pointer to opaque NanoVG context structure.
+public alias NVGContext = NVGcontext*;
+
+private struct NVGcontext {
   NVGparams params;
   float* commands;
   int ccommands;
@@ -354,16 +357,16 @@ error:
   return null;
 }
 
-void nvg__setDevicePixelRatio (NVGcontext* ctx, float ratio) {
+void nvg__setDevicePixelRatio (NVGContext ctx, float ratio) {
   ctx.tessTol = 0.25f/ratio;
   ctx.distTol = 0.01f/ratio;
   ctx.fringeWidth = 1.0f/ratio;
   ctx.devicePxRatio = ratio;
 }
 
-package(iv.nanovg) NVGcontext* nvgCreateInternal (NVGparams* params) {
+package(iv.nanovg) NVGContext createInternal (NVGparams* params) {
   FONSparams fontParams;
-  NVGcontext* ctx = cast(NVGcontext*)malloc(NVGcontext.sizeof);
+  NVGContext ctx = cast(NVGContext )malloc(NVGcontext.sizeof);
   if (ctx is null) goto error;
   memset(ctx, 0, NVGcontext.sizeof);
 
@@ -378,8 +381,8 @@ package(iv.nanovg) NVGcontext* nvgCreateInternal (NVGparams* params) {
   ctx.cache = nvg__allocPathCache();
   if (ctx.cache is null) goto error;
 
-  nvgSave(ctx);
-  nvgReset(ctx);
+  ctx.save();
+  ctx.reset();
 
   nvg__setDevicePixelRatio(ctx, 1.0f);
 
@@ -406,15 +409,15 @@ package(iv.nanovg) NVGcontext* nvgCreateInternal (NVGparams* params) {
   return ctx;
 
 error:
-  nvgDeleteInternal(ctx);
+  ctx.deleteInternal();
   return null;
 }
 
-package(iv.nanovg) NVGparams* nvgInternalParams (NVGcontext* ctx) {
+package(iv.nanovg) NVGparams* internalParams (NVGContext ctx) {
   return &ctx.params;
 }
 
-package(iv.nanovg) void nvgDeleteInternal (NVGcontext* ctx) {
+package(iv.nanovg) void deleteInternal (NVGContext ctx) {
   if (ctx is null) return;
   if (ctx.commands !is null) free(ctx.commands);
   if (ctx.cache !is null) nvg__deletePathCache(ctx.cache);
@@ -423,7 +426,7 @@ package(iv.nanovg) void nvgDeleteInternal (NVGcontext* ctx) {
 
   foreach (uint i; 0..NVG_MAX_FONTIMAGES) {
     if (ctx.fontImages[i] != 0) {
-      nvgDeleteImage(ctx, ctx.fontImages[i]);
+      ctx.deleteImage(ctx.fontImages[i]);
       ctx.fontImages[i] = 0;
     }
   }
@@ -445,9 +448,9 @@ package(iv.nanovg) void nvgDeleteInternal (NVGcontext* ctx) {
  * frame buffer size. In that case you would set windowWidth/windowHeight to the window size,
  * devicePixelRatio to: `windowWidth/windowHeight`.
  *
- * see also `nvgGlClearFlags()`, which returns necessary flags for `glClear()`.
+ * see also `glNVGClearFlags()`, which returns necessary flags for `glClear()`.
  */
-public void nvgBeginFrame (NVGcontext* ctx, int windowWidth, int windowHeight, float devicePixelRatio=float.nan) {
+public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float devicePixelRatio=float.nan) {
   import std.math : isNaN;
   /*
   printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
@@ -460,8 +463,8 @@ public void nvgBeginFrame (NVGcontext* ctx, int windowWidth, int windowHeight, f
   }
 
   ctx.nstates = 0;
-  nvgSave(ctx);
-  nvgReset(ctx);
+  ctx.save();
+  ctx.reset();
 
   nvg__setDevicePixelRatio(ctx, devicePixelRatio);
 
@@ -474,24 +477,24 @@ public void nvgBeginFrame (NVGcontext* ctx, int windowWidth, int windowHeight, f
 }
 
 /// Cancels drawing the current frame.
-public void nvgCancelFrame (NVGcontext* ctx) {
+public void cancelFrame (NVGContext ctx) {
   ctx.params.renderCancel(ctx.params.userPtr);
 }
 
 /// Ends drawing flushing remaining render state.
-public void nvgEndFrame (NVGcontext* ctx) {
+public void endFrame (NVGContext ctx) {
   ctx.params.renderFlush(ctx.params.userPtr);
   if (ctx.fontImageIdx != 0) {
     int fontImage = ctx.fontImages[ctx.fontImageIdx];
     int i, j, iw, ih;
     // delete images that smaller than current one
     if (fontImage == 0) return;
-    nvgImageSize(ctx, fontImage, &iw, &ih);
+    ctx.imageSize(fontImage, &iw, &ih);
     for (i = j = 0; i < ctx.fontImageIdx; i++) {
       if (ctx.fontImages[i] != 0) {
         int nw, nh;
-        nvgImageSize(ctx, ctx.fontImages[i], &nw, &nh);
-        if (nw < iw || nh < ih) nvgDeleteImage(ctx, ctx.fontImages[i]); else ctx.fontImages[j++] = ctx.fontImages[i];
+        ctx.imageSize(ctx.fontImages[i], &nw, &nh);
+        if (nw < iw || nh < ih) ctx.deleteImage(ctx.fontImages[i]); else ctx.fontImages[j++] = ctx.fontImages[i];
       }
     }
     // make current font image to first
@@ -608,7 +611,7 @@ public NVGcolor nvgHSLA() (float h, float s, float l, ubyte a=255) {
 }
 
 
-NVGstate* nvg__getState (NVGcontext* ctx) {
+NVGstate* nvg__getState (NVGContext ctx) {
   //pragma(inline, true);
   return &ctx.states[ctx.nstates-1];
 }
@@ -769,20 +772,20 @@ void nvg__setPaintColor (NVGpaint* p, NVGcolor color) {
 /** Pushes and saves the current render state into a state stack.
  * A matching nvgRestore() must be used to restore the state.
  */
-public void nvgSave (NVGcontext* ctx) {
+public void save (NVGContext ctx) {
   if (ctx.nstates >= NVG_MAX_STATES) return;
   if (ctx.nstates > 0) memcpy(&ctx.states[ctx.nstates], &ctx.states[ctx.nstates-1], (NVGstate).sizeof);
   ++ctx.nstates;
 }
 
 /// Pops and restores current render state.
-public void nvgRestore (NVGcontext* ctx) {
+public void restore (NVGContext ctx) {
   if (ctx.nstates <= 1) return;
   --ctx.nstates;
 }
 
 /// Resets current render state to default values. Does not affect the render state stack.
-public void nvgReset (NVGcontext* ctx) {
+public void reset (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
   memset(state, 0, (*state).sizeof);
 
@@ -811,40 +814,40 @@ public void nvgReset (NVGcontext* ctx) {
 //
 /** Fill and stroke render style can be either a solid color or a paint which is a gradient or a pattern.
  * Solid color is simply defined as a color value, different kinds of paints can be created
- * using nvgLinearGradient(), nvgBoxGradient(), nvgRadialGradient() and nvgImagePattern().
+ * using ).linearGradient().boxGradient(nvgRadialGradient() and nvgImagePattern().
  *
  * Current render style can be saved and restored using nvgSave() and nvgRestore().
  */
 
 /// Sets the stroke width of the stroke style.
-public void nvgStrokeWidth (NVGcontext* ctx, float width) {
+public void strokeWidth (NVGContext ctx, float width) {
   NVGstate* state = nvg__getState(ctx);
   state.strokeWidth = width;
 }
 
 /// Sets the miter limit of the stroke style. Miter limit controls when a sharp corner is beveled.
-public void nvgMiterLimit (NVGcontext* ctx, float limit) {
+public void miterLimit (NVGContext ctx, float limit) {
   NVGstate* state = nvg__getState(ctx);
   state.miterLimit = limit;
 }
 
 /// Sets how the end of the line (cap) is drawn,
 /// Can be one of: NVGlineCap.Butt (default), NVGlineCap.Round, NVGlineCap.Square.
-public void nvgLineCap (NVGcontext* ctx, NVGlineCap cap) {
+public void lineCap (NVGContext ctx, NVGlineCap cap) {
   NVGstate* state = nvg__getState(ctx);
   state.lineCap = cap;
 }
 
 /// Sets how sharp path corners are drawn.
 /// Can be one of NVGlineCap.Miter (default), NVGlineCap.Round, NVGlineCap.Bevel.
-public void nvgLineJoin (NVGcontext* ctx, NVGlineCap join) {
+public void lineJoin (NVGContext ctx, NVGlineCap join) {
   NVGstate* state = nvg__getState(ctx);
   state.lineJoin = join;
 }
 
 /// Sets the transparency applied to all rendered shapes.
 /// Already transparent paths will get proportionally more transparent as well.
-public void nvgGlobalAlpha (NVGcontext* ctx, float alpha) {
+public void globalAlpha (NVGContext ctx, float alpha) {
   NVGstate* state = nvg__getState(ctx);
   state.alpha = alpha;
 }
@@ -859,20 +862,20 @@ public void nvgGlobalAlpha (NVGcontext* ctx, float alpha) {
  *   [0 0 1]
  * ----------------------
  */
-public void nvgTransform (NVGcontext* ctx, float a, float b, float c, float d, float e, float f) {
+public void transform (NVGContext ctx, float a, float b, float c, float d, float e, float f) {
   NVGstate* state = nvg__getState(ctx);
   float[6] t = [ a, b, c, d, e, f ];
   nvgTransformPremultiply(state.xform.ptr, t.ptr);
 }
 
 /// Resets current transform to a identity matrix.
-public void nvgResetTransform (NVGcontext* ctx) {
+public void resetTransform (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
   nvgTransformIdentity(state.xform.ptr);
 }
 
 /// Translates current coordinate system.
-public void nvgTranslate (NVGcontext* ctx, float x, float y) {
+public void translate (NVGContext ctx, float x, float y) {
   NVGstate* state = nvg__getState(ctx);
   float[6] t;
   nvgTransformTranslate(t.ptr, x, y);
@@ -880,7 +883,7 @@ public void nvgTranslate (NVGcontext* ctx, float x, float y) {
 }
 
 /// Rotates current coordinate system. Angle is specified in radians.
-public void nvgRotate (NVGcontext* ctx, float angle) {
+public void rotate (NVGContext ctx, float angle) {
   NVGstate* state = nvg__getState(ctx);
   float[6] t;
   nvgTransformRotate(t.ptr, angle);
@@ -888,7 +891,7 @@ public void nvgRotate (NVGcontext* ctx, float angle) {
 }
 
 /// Skews the current coordinate system along X axis. Angle is specified in radians.
-public void nvgSkewX (NVGcontext* ctx, float angle) {
+public void skewX (NVGContext ctx, float angle) {
   NVGstate* state = nvg__getState(ctx);
   float[6] t;
   nvgTransformSkewX(t.ptr, angle);
@@ -896,7 +899,7 @@ public void nvgSkewX (NVGcontext* ctx, float angle) {
 }
 
 /// Skews the current coordinate system along Y axis. Angle is specified in radians.
-public void nvgSkewY (NVGcontext* ctx, float angle) {
+public void skewY (NVGContext ctx, float angle) {
   NVGstate* state = nvg__getState(ctx);
   float[6] t;
   nvgTransformSkewY(t.ptr, angle);
@@ -904,7 +907,7 @@ public void nvgSkewY (NVGcontext* ctx, float angle) {
 }
 
 /// Scales the current coordinate system.
-public void nvgScale (NVGcontext* ctx, float x, float y) {
+public void scale (NVGContext ctx, float x, float y) {
   NVGstate* state = nvg__getState(ctx);
   float[6] t;
   nvgTransformScale(t.ptr, x, y);
@@ -921,33 +924,33 @@ public void nvgScale (NVGcontext* ctx, float x, float y) {
  *
  * There should be space for 6 floats in the return buffer for the values a-f.
  */
-public void nvgCurrentTransform (NVGcontext* ctx, float* xform) {
+public void currentTransform (NVGContext ctx, float* xform) {
   NVGstate* state = nvg__getState(ctx);
   if (xform is null) return;
   memcpy(xform, state.xform.ptr, (float).sizeof*6);
 }
 
 /// Sets current stroke style to a solid color.
-public void nvgStrokeColor (NVGcontext* ctx, NVGcolor color) {
+public void strokeColor (NVGContext ctx, NVGcolor color) {
   NVGstate* state = nvg__getState(ctx);
   nvg__setPaintColor(&state.stroke, color);
 }
 
 /// Sets current stroke style to a paint, which can be a one of the gradients or a pattern.
-public void nvgStrokePaint (NVGcontext* ctx, NVGpaint paint) {
+public void strokePaint (NVGContext ctx, NVGpaint paint) {
   NVGstate* state = nvg__getState(ctx);
   state.stroke = paint;
   nvgTransformMultiply(state.stroke.xform.ptr, state.xform.ptr);
 }
 
 /// Sets current fill style to a solid color.
-public void nvgFillColor (NVGcontext* ctx, NVGcolor color) {
+public void fillColor (NVGContext ctx, NVGcolor color) {
   NVGstate* state = nvg__getState(ctx);
   nvg__setPaintColor(&state.fill, color);
 }
 
 /// Sets current fill style to a paint, which can be a one of the gradients or a pattern.
-public void nvgFillPaint (NVGcontext* ctx, NVGpaint paint) {
+public void fillPaint (NVGContext ctx, NVGpaint paint) {
   NVGstate* state = nvg__getState(ctx);
   state.fill = paint;
   nvgTransformMultiply(state.fill.xform.ptr, state.xform.ptr);
@@ -1008,12 +1011,12 @@ version(nanovg_use_arsd_image) {
 
 /// Creates image by loading it from the disk from specified file name.
 /// Returns handle to the image.
-public int nvgCreateImage (NVGcontext* ctx, const(char)[] filename, int imageFlags) {
+public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags) {
   version(nanovg_use_arsd_image) {
     try {
       auto img = ArsdImage(filename).getAsTrueColorImage;
       scope(exit) img.destroy;
-      return nvgCreateImageRGBA(ctx, img.width, img.height, imageFlags, img.imageData.bytes.ptr);
+      return ctx.createImageRGBA(img.width, img.height, imageFlags, img.imageData.bytes.ptr);
     } catch (Exception) {}
     return 0;
   } else {
@@ -1027,7 +1030,7 @@ public int nvgCreateImage (NVGcontext* ctx, const(char)[] filename, int imageFla
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
       return 0;
     }
-    image = nvgCreateImageRGBA(ctx, w, h, imageFlags, img);
+    image = ctx.createImageRGBA(w, h, imageFlags, img);
     stbi_image_free(img);
     return image;
   }
@@ -1036,22 +1039,22 @@ public int nvgCreateImage (NVGcontext* ctx, const(char)[] filename, int imageFla
 version(nanovg_use_arsd_image) {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image.
-  public int nvgCreateImageFromMemoryImage (NVGcontext* ctx, int imageFlags, MemoryImage img) {
+  public int createImageFromMemoryImage (NVGContext ctx, int imageFlags, MemoryImage img) {
     if (img is null) return 0;
     auto tc = img.getAsTrueColorImage;
-    return nvgCreateImageRGBA(ctx, tc.width, tc.height, imageFlags, tc.imageData.bytes.ptr);
+    return ctx.createImageRGBA(tc.width, tc.height, imageFlags, tc.imageData.bytes.ptr);
   }
 } else {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image.
-  public int nvgCreateImageMem (NVGcontext* ctx, int imageFlags, ubyte* data, int ndata) {
+  public int createImageMem (NVGContext ctx, int imageFlags, ubyte* data, int ndata) {
     int w, h, n, image;
     ubyte* img = stbi_load_from_memory(data, ndata, &w, &h, &n, 4);
     if (img is null) {
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
       return 0;
     }
-    image = nvgCreateImageRGBA(ctx, w, h, imageFlags, img);
+    image = ctx.createImageRGBA(w, h, imageFlags, img);
     stbi_image_free(img);
     return image;
   }
@@ -1059,24 +1062,24 @@ version(nanovg_use_arsd_image) {
 
 /// Creates image from specified image data.
 /// Returns handle to the image.
-public int nvgCreateImageRGBA (NVGcontext* ctx, int w, int h, int imageFlags, const(ubyte)* data) {
+public int createImageRGBA (NVGContext ctx, int w, int h, int imageFlags, const(ubyte)* data) {
   return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, data);
 }
 
 /// Updates image data specified by image handle.
-public void nvgUpdateImage (NVGcontext* ctx, int image, const(ubyte)* data) {
+public void updateImage (NVGContext ctx, int image, const(ubyte)* data) {
   int w, h;
   ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
   ctx.params.renderUpdateTexture(ctx.params.userPtr, image, 0, 0, w, h, data);
 }
 
 /// Returns the dimensions of a created image.
-public void nvgImageSize (NVGcontext* ctx, int image, int* w, int* h) {
+public void imageSize (NVGContext ctx, int image, int* w, int* h) {
   ctx.params.renderGetTextureSize(ctx.params.userPtr, image, w, h);
 }
 
 /// Deletes created image.
-public void nvgDeleteImage (NVGcontext* ctx, int image) {
+public void deleteImage (NVGContext ctx, int image) {
   if (ctx is null || image < 0) return;
   ctx.params.renderDeleteTexture(ctx.params.userPtr, image);
 }
@@ -1093,7 +1096,7 @@ public void nvgDeleteImage (NVGcontext* ctx, int image) {
  * of the linear gradient, icol specifies the start color and ocol the end color.
  * The gradient is transformed by the current transform when it is passed to `nvgFillPaint()` or `nvgStrokePaint()`.
  */
-public NVGpaint nvgLinearGradient (NVGcontext* ctx, float sx, float sy, float ex, float ey, NVGcolor icol, NVGcolor ocol) {
+public NVGpaint linearGradient (NVGContext ctx, float sx, float sy, float ex, float ey, NVGcolor icol, NVGcolor ocol) {
   NVGpaint p;
   float dx, dy, d;
   const float large = 1e5;
@@ -1133,7 +1136,7 @@ public NVGpaint nvgLinearGradient (NVGcontext* ctx, float sx, float sy, float ex
  * the inner and outer radius of the gradient, icol specifies the start color and ocol the end color.
  * The gradient is transformed by the current transform when it is passed to nvgFillPaint() or nvgStrokePaint().
  */
-public NVGpaint nvgRadialGradient (NVGcontext* ctx, float cx, float cy, float inr, float outr, NVGcolor icol, NVGcolor ocol) {
+public NVGpaint radialGradient (NVGContext ctx, float cx, float cy, float inr, float outr, NVGcolor icol, NVGcolor ocol) {
   NVGpaint p;
   float r = (inr+outr)*0.5f;
   float f = (outr-inr);
@@ -1163,7 +1166,7 @@ public NVGpaint nvgRadialGradient (NVGcontext* ctx, float cx, float cy, float in
  * the border of the rectangle is. Parameter icol specifies the inner color and ocol the outer color of the gradient.
  * The gradient is transformed by the current transform when it is passed to nvgFillPaint() or nvgStrokePaint().
  */
-public NVGpaint nvgBoxGradient (NVGcontext* ctx, float x, float y, float w, float h, float r, float f, NVGcolor icol, NVGcolor ocol) {
+public NVGpaint boxGradient (NVGContext ctx, float x, float y, float w, float h, float r, float f, NVGcolor icol, NVGcolor ocol) {
   NVGpaint p;
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
@@ -1190,7 +1193,7 @@ public NVGpaint nvgBoxGradient (NVGcontext* ctx, float x, float y, float w, floa
  * (ex, ey) the size of one image, angle rotation around the top-left corner, image is handle to the image to render.
  * The gradient is transformed by the current transform when it is passed to nvgFillPaint() or nvgStrokePaint().
  */
-public NVGpaint nvgImagePattern (NVGcontext* ctx, float cx, float cy, float w, float h, float angle, int image, float alpha) {
+public NVGpaint imagePattern (NVGContext ctx, float cx, float cy, float w, float h, float angle, int image, float alpha) {
   NVGpaint p;
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
@@ -1217,7 +1220,7 @@ public NVGpaint nvgImagePattern (NVGcontext* ctx, float cx, float cy, float w, f
  */
 
 /// Sets the current scissor rectangle. The scissor rectangle is transformed by the current transform.
-public void nvgScissor (NVGcontext* ctx, float x, float y, float w, float h) {
+public void scissor (NVGContext ctx, float x, float y, float w, float h) {
   NVGstate* state = nvg__getState(ctx);
 
   w = nvg__maxf(0.0f, w);
@@ -1250,12 +1253,12 @@ void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float 
  * rectangle and the previous scissor rectangle transformed in the current
  * transform space. The resulting shape is always rectangle.
  */
-public void nvgIntersectScissor (NVGcontext* ctx, float x, float y, float w, float h) {
+public void intersectScissor (NVGContext ctx, float x, float y, float w, float h) {
   NVGstate* state = nvg__getState(ctx);
 
   // If no previous scissor has been set, set the scissor as current scissor.
   if (state.scissor.extent[0] < 0) {
-    nvgScissor(ctx, x, y, w, h);
+    ctx.scissor(x, y, w, h);
     return;
   }
 
@@ -1276,11 +1279,11 @@ public void nvgIntersectScissor (NVGcontext* ctx, float x, float y, float w, flo
   // Intersect rects.
   nvg__isectRects(rect.ptr, pxform[4]-tex, pxform[5]-tey, tex*2, tey*2, x, y, w, h);
 
-  nvgScissor(ctx, rect[0], rect[1], rect[2], rect[3]);
+  ctx.scissor(rect[0], rect[1], rect[2], rect[3]);
 }
 
 /// Reset and disables scissoring.
-public void nvgResetScissor (NVGcontext* ctx) {
+public void resetScissor (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
   memset(state.scissor.xform.ptr, 0, (state.scissor.xform.ptr).sizeof);
   state.scissor.extent[0] = -1.0f;
@@ -1308,7 +1311,7 @@ float nvg__distPtSeg (float x, float y, float px, float py, float qx, float qy) 
   return dx*dx+dy*dy;
 }
 
-void nvg__appendCommands (NVGcontext* ctx, float* vals, int nvals) {
+void nvg__appendCommands (NVGContext ctx, float* vals, int nvals) {
   NVGstate* state = nvg__getState(ctx);
 
   if (ctx.ncommands+nvals > ctx.ccommands) {
@@ -1361,16 +1364,16 @@ void nvg__appendCommands (NVGcontext* ctx, float* vals, int nvals) {
 }
 
 
-void nvg__clearPathCache (NVGcontext* ctx) {
+void nvg__clearPathCache (NVGContext ctx) {
   ctx.cache.npoints = 0;
   ctx.cache.npaths = 0;
 }
 
-NVGpath* nvg__lastPath (NVGcontext* ctx) {
+NVGpath* nvg__lastPath (NVGContext ctx) {
   return (ctx.cache.npaths > 0 ? &ctx.cache.paths[ctx.cache.npaths-1] : null);
 }
 
-void nvg__addPath (NVGcontext* ctx) {
+void nvg__addPath (NVGContext ctx) {
   NVGpath* path;
   if (ctx.cache.npaths+1 > ctx.cache.cpaths) {
     NVGpath* paths;
@@ -1388,11 +1391,11 @@ void nvg__addPath (NVGcontext* ctx) {
   ++ctx.cache.npaths;
 }
 
-NVGpoint* nvg__lastPoint (NVGcontext* ctx) {
+NVGpoint* nvg__lastPoint (NVGContext ctx) {
   return (ctx.cache.npoints > 0 ? &ctx.cache.points[ctx.cache.npoints-1] : null);
 }
 
-void nvg__addPoint (NVGcontext* ctx, float x, float y, int flags) {
+void nvg__addPoint (NVGContext ctx, float x, float y, int flags) {
   NVGpath* path = nvg__lastPath(ctx);
   NVGpoint* pt;
   if (path is null) return;
@@ -1424,13 +1427,13 @@ void nvg__addPoint (NVGcontext* ctx, float x, float y, int flags) {
   ++path.count;
 }
 
-void nvg__closePath (NVGcontext* ctx) {
+void nvg__closePath (NVGContext ctx) {
   NVGpath* path = nvg__lastPath(ctx);
   if (path is null) return;
   path.closed = 1;
 }
 
-void nvg__pathWinding (NVGcontext* ctx, NVGwinding winding) {
+void nvg__pathWinding (NVGContext ctx, NVGwinding winding) {
   NVGpath* path = nvg__lastPath(ctx);
   if (path is null) return;
   path.winding = winding;
@@ -1442,7 +1445,7 @@ float nvg__getAverageScale (float* t) {
   return (sx+sy)*0.5f;
 }
 
-NVGvertex* nvg__allocTempVerts (NVGcontext* ctx, int nverts) {
+NVGvertex* nvg__allocTempVerts (NVGContext ctx, int nverts) {
   if (nverts > ctx.cache.cverts) {
     NVGvertex* verts;
     int cverts = (nverts+0xff)&~0xff; // Round up to prevent allocations when things change just slightly.
@@ -1494,7 +1497,7 @@ void nvg__vset (NVGvertex* vtx, float x, float y, float u, float v) {
   vtx.v = v;
 }
 
-void nvg__tesselateBezier (NVGcontext* ctx, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, int level, int type) {
+void nvg__tesselateBezier (NVGContext ctx, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, int level, int type) {
   float x12, y12, x23, y23, x34, y34, x123, y123, x234, y234, x1234, y1234;
   float dx, dy, d2, d3;
 
@@ -1535,7 +1538,7 @@ void nvg__tesselateBezier (NVGcontext* ctx, float x1, float y1, float x2, float 
   nvg__tesselateBezier(ctx, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
 }
 
-void nvg__flattenPaths (NVGcontext* ctx) {
+void nvg__flattenPaths (NVGContext ctx) {
   NVGpathCache* cache = ctx.cache;
   //NVGstate* state = nvg__getState(ctx);
   NVGpoint* last;
@@ -1842,7 +1845,7 @@ NVGvertex* nvg__roundCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, fl
 }
 
 
-void nvg__calculateJoins (NVGcontext* ctx, float w, int lineJoin, float miterLimit) {
+void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimit) {
   NVGpathCache* cache = ctx.cache;
   int i, j;
   float iw = 0.0f;
@@ -1911,7 +1914,7 @@ void nvg__calculateJoins (NVGcontext* ctx, float w, int lineJoin, float miterLim
 }
 
 
-int nvg__expandStroke (NVGcontext* ctx, float w, int lineCap, int lineJoin, float miterLimit) {
+int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float miterLimit) {
   NVGpathCache* cache = ctx.cache;
   NVGvertex* verts;
   NVGvertex* dst;
@@ -2025,7 +2028,7 @@ int nvg__expandStroke (NVGcontext* ctx, float w, int lineCap, int lineJoin, floa
   return 1;
 }
 
-int nvg__expandFill (NVGcontext* ctx, float w, int lineJoin, float miterLimit) {
+int nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) {
   NVGpathCache* cache = ctx.cache;
   NVGvertex* verts;
   NVGvertex* dst;
@@ -2164,31 +2167,31 @@ int nvg__expandFill (NVGcontext* ctx, float w, int lineJoin, float miterLimit) {
  */
 
 /// Clears the current path and sub-paths.
-public void nvgBeginPath (NVGcontext* ctx) {
+public void beginPath (NVGContext ctx) {
   ctx.ncommands = 0;
   nvg__clearPathCache(ctx);
 }
 
 /// Starts new sub-path with specified point as first point.
-public void nvgMoveTo (NVGcontext* ctx, float x, float y) {
+public void moveTo (NVGContext ctx, float x, float y) {
   float[3] vals = [ NVGcommands.MoveTo, x, y ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Adds line segment from the last point in the path to the specified point.
-public void nvgLineTo (NVGcontext* ctx, float x, float y) {
+public void lineTo (NVGContext ctx, float x, float y) {
   float[3] vals = [ NVGcommands.LineTo, x, y ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Adds cubic bezier segment from last point in the path via two control points to the specified point.
-public void nvgBezierTo (NVGcontext* ctx, float c1x, float c1y, float c2x, float c2y, float x, float y) {
+public void bezierTo (NVGContext ctx, float c1x, float c1y, float c2x, float c2y, float x, float y) {
   float[7] vals = [ NVGcommands.BezierTo, c1x, c1y, c2x, c2y, x, y ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Adds quadratic bezier segment from last point in the path via a control point to the specified point.
-public void nvgQuadTo (NVGcontext* ctx, float cx, float cy, float x, float y) {
+public void quadTo (NVGContext ctx, float cx, float cy, float x, float y) {
   float x0 = ctx.commandx;
   float y0 = ctx.commandy;
   float[7] vals = [ NVGcommands.BezierTo,
@@ -2199,7 +2202,7 @@ public void nvgQuadTo (NVGcontext* ctx, float cx, float cy, float x, float y) {
 }
 
 /// Adds an arc segment at the corner defined by the last path point, and two specified points.
-public void nvgArcTo (NVGcontext* ctx, float x1, float y1, float x2, float y2, float radius) {
+public void arcTo (NVGContext ctx, float x1, float y1, float x2, float y2, float radius) {
   float x0 = ctx.commandx;
   float y0 = ctx.commandy;
   float dx0, dy0, dx1, dy1, a, d, cx, cy, a0, a1;
@@ -2212,7 +2215,7 @@ public void nvgArcTo (NVGcontext* ctx, float x1, float y1, float x2, float y2, f
     nvg__ptEquals(x1, y1, x2, y2, ctx.distTol) ||
     nvg__distPtSeg(x1, y1, x0, y0, x2, y2) < ctx.distTol*ctx.distTol ||
     radius < ctx.distTol) {
-    nvgLineTo(ctx, x1, y1);
+    ctx.lineTo(x1, y1);
     return;
   }
 
@@ -2229,7 +2232,7 @@ public void nvgArcTo (NVGcontext* ctx, float x1, float y1, float x2, float y2, f
   //printf("a=%f° d=%f\n", a/NVG_PI*180.0f, d);
 
   if (d > 10000.0f) {
-    nvgLineTo(ctx, x1, y1);
+    ctx.lineTo(x1, y1);
     return;
   }
 
@@ -2249,23 +2252,23 @@ public void nvgArcTo (NVGcontext* ctx, float x1, float y1, float x2, float y2, f
     //printf("CCW c=(%f, %f) a0=%f° a1=%f°\n", cx, cy, a0/NVG_PI*180.0f, a1/NVG_PI*180.0f);
   }
 
-  nvgArc(ctx, cx, cy, radius, a0, a1, dir);
+  ctx.arc(cx, cy, radius, a0, a1, dir);
 }
 
 /// Closes current sub-path with a line segment.
-public void nvgClosePath (NVGcontext* ctx) {
+public void closePath (NVGContext ctx) {
   float[1] vals = [ NVGcommands.Close ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Sets the current sub-path winding, see NVGwinding and NVGsolidity.
-public void nvgPathWinding (NVGcontext* ctx, NVGwinding dir) {
+public void pathWinding (NVGContext ctx, NVGwinding dir) {
   float[2] vals = [ NVGcommands.Winding, cast(float)dir ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Ditto.
-public void nvgPathWinding (NVGcontext* ctx, NVGsolidity dir) {
+public void pathWinding (NVGContext ctx, NVGsolidity dir) {
   float[2] vals = [ NVGcommands.Winding, cast(float)dir ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
@@ -2274,7 +2277,7 @@ public void nvgPathWinding (NVGcontext* ctx, NVGsolidity dir) {
  * and the arc is drawn from angle a0 to a1, and swept in direction dir (NVGwinding.CCW, or NVGwinding.CW).
  * Angles are specified in radians.
  */
-public void nvgArc (NVGcontext* ctx, float cx, float cy, float r, float a0, float a1, NVGwinding dir) {
+public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1, NVGwinding dir) {
   float a = 0, da = 0, hda = 0, kappa = 0;
   float dx = 0, dy = 0, x = 0, y = 0, tanx = 0, tany = 0;
   float px = 0, py = 0, ptanx = 0, ptany = 0;
@@ -2338,7 +2341,7 @@ public void nvgArc (NVGcontext* ctx, float cx, float cy, float r, float a0, floa
 }
 
 /// Creates new rectangle shaped sub-path.
-public void nvgRect (NVGcontext* ctx, float x, float y, float w, float h) {
+public void rect (NVGContext ctx, float x, float y, float w, float h) {
   float[13] vals = [
     NVGcommands.MoveTo, x, y,
     NVGcommands.LineTo, x, y+h,
@@ -2350,9 +2353,9 @@ public void nvgRect (NVGcontext* ctx, float x, float y, float w, float h) {
 }
 
 /// Creates new rounded rectangle shaped sub-path.
-public void nvgRoundedRect (NVGcontext* ctx, float x, float y, float w, float h, float r) {
+public void roundedRect (NVGContext ctx, float x, float y, float w, float h, float r) {
   if (r < 0.1f) {
-    nvgRect(ctx, x, y, w, h);
+    ctx.rect(x, y, w, h);
     return;
   } else {
     float rx = nvg__minf(r, nvg__absf(w)*0.5f)*nvg__signf(w), ry = nvg__minf(r, nvg__absf(h)*0.5f)*nvg__signf(h);
@@ -2373,7 +2376,7 @@ public void nvgRoundedRect (NVGcontext* ctx, float x, float y, float w, float h,
 }
 
 /// Creates new ellipse shaped sub-path.
-public void nvgEllipse (NVGcontext* ctx, float cx, float cy, float rx, float ry) {
+public void ellipse (NVGContext ctx, float cx, float cy, float rx, float ry) {
   float[32] vals = [
     NVGcommands.MoveTo, cx-rx, cy,
     NVGcommands.BezierTo, cx-rx, cy+ry*NVG_KAPPA90, cx-rx*NVG_KAPPA90, cy+ry, cx, cy+ry,
@@ -2386,11 +2389,11 @@ public void nvgEllipse (NVGcontext* ctx, float cx, float cy, float rx, float ry)
 }
 
 /// Creates new circle shaped sub-path.
-public void nvgCircle (NVGcontext* ctx, float cx, float cy, float r) {
-  nvgEllipse(ctx, cx, cy, r, r);
+public void circle (NVGContext ctx, float cx, float cy, float r) {
+  ctx.ellipse(cx, cy, r, r);
 }
 
-debug public void nvgDebugDumpPathCache (NVGcontext* ctx) {
+debug public void debugDumpPathCache (NVGContext ctx) {
   import core.stdc.stdio : printf;
   const(NVGpath)* path;
   int i, j;
@@ -2413,7 +2416,7 @@ debug public void nvgDebugDumpPathCache (NVGcontext* ctx) {
 }
 
 /// Fills the current path with current fill style.
-public void nvgFill (NVGcontext* ctx) {
+public void fill (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
   const(NVGpath)* path;
   NVGpaint fillPaint = state.fill;
@@ -2441,7 +2444,7 @@ public void nvgFill (NVGcontext* ctx) {
 }
 
 /// Fills the current path with current stroke style.
-public void nvgStroke (NVGcontext* ctx) {
+public void stroke (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getAverageScale(state.xform.ptr);
   float strokeWidth = nvg__clampf(state.strokeWidth*scale, 0.0f, 200.0f);
@@ -2506,10 +2509,10 @@ public void nvgStroke (NVGcontext* ctx) {
  *
  * ----------------------
  *    string txt = "Text me up.";
- *    nvgTextBounds(vg, x, y, txt, bounds);
- *    nvgBeginPath(vg);
- *    nvgRoundedRect(vg, bounds[0], bounds[1], bounds[2]-bounds[0], bounds[3]-bounds[1]);
- *    nvgFill(vg);
+ *    vg.textBounds(x, y, txt, bounds);
+ *    vg.beginPath();
+ *    vg.roundedRect(bounds[0], bounds[1], bounds[2]-bounds[0], bounds[3]-bounds[1]);
+ *    vg.fill();
  * ----------------------
  *
  * Note: currently only solid color fill is supported for text.
@@ -2517,60 +2520,60 @@ public void nvgStroke (NVGcontext* ctx) {
 
 /// Creates font by loading it from the disk from specified file name.
 /// Returns handle to the font.
-public int nvgCreateFont (NVGcontext* ctx, const(char)[] name, const(char)[] path) {
+public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) {
   return fonsAddFont(ctx.fs, name, path);
 }
 
 /// Creates font by loading it from the specified memory chunk.
 /// Returns handle to the font.
-public int nvgCreateFontMem (NVGcontext* ctx, const(char)[] name, ubyte* data, int ndata, int freeData) {
+public int createFontMem (NVGContext ctx, const(char)[] name, ubyte* data, int ndata, int freeData) {
   return fonsAddFontMem(ctx.fs, name, data, ndata, freeData);
 }
 
 /// Finds a loaded font of specified name, and returns handle to it, or -1 if the font is not found.
-public int nvgFindFont (NVGcontext* ctx, const(char)[] name) {
+public int findFont (NVGContext ctx, const(char)[] name) {
   if (name is null) return -1;
   return fonsGetFontByName(ctx.fs, name);
 }
 
 /// Sets the font size of current text style.
-public void nvgFontSize (NVGcontext* ctx, float size) {
+public void fontSize (NVGContext ctx, float size) {
   NVGstate* state = nvg__getState(ctx);
   state.fontSize = size;
 }
 
 /// Sets the blur of current text style.
-public void nvgFontBlur (NVGcontext* ctx, float blur) {
+public void fontBlur (NVGContext ctx, float blur) {
   NVGstate* state = nvg__getState(ctx);
   state.fontBlur = blur;
 }
 
 /// Sets the letter spacing of current text style.
-public void nvgTextLetterSpacing (NVGcontext* ctx, float spacing) {
+public void textLetterSpacing (NVGContext ctx, float spacing) {
   NVGstate* state = nvg__getState(ctx);
   state.letterSpacing = spacing;
 }
 
 /// Sets the proportional line height of current text style. The line height is specified as multiple of font size.
-public void nvgTextLineHeight (NVGcontext* ctx, float lineHeight) {
+public void textLineHeight (NVGContext ctx, float lineHeight) {
   NVGstate* state = nvg__getState(ctx);
   state.lineHeight = lineHeight;
 }
 
 /// Sets the text align of current text style, see NVGalign for options.
-public void nvgTextAlign (NVGcontext* ctx, int align_) {
+public void textAlign (NVGContext ctx, int align_) {
   NVGstate* state = nvg__getState(ctx);
   state.textAlign = align_;
 }
 
 /// Sets the font face based on specified id of current text style.
-public void nvgFontFaceId (NVGcontext* ctx, int font) {
+public void fontFaceId (NVGContext ctx, int font) {
   NVGstate* state = nvg__getState(ctx);
   state.fontId = font;
 }
 
 /// Sets the font face based on specified name of current text style.
-public void nvgFontFace (NVGcontext* ctx, const(char)[] font) {
+public void fontFace (NVGContext ctx, const(char)[] font) {
   NVGstate* state = nvg__getState(ctx);
   state.fontId = fonsGetFontByName(ctx.fs, font);
 }
@@ -2585,7 +2588,7 @@ float nvg__getFontScale (NVGstate* state) {
   return nvg__minf(nvg__quantize(nvg__getAverageScale(state.xform.ptr), 0.01f), 4.0f);
 }
 
-void nvg__flushTextTexture (NVGcontext* ctx) {
+void nvg__flushTextTexture (NVGContext ctx) {
   int[4] dirty;
   if (fonsValidateTexture(ctx.fs, dirty.ptr)) {
     int fontImage = ctx.fontImages[ctx.fontImageIdx];
@@ -2602,16 +2605,16 @@ void nvg__flushTextTexture (NVGcontext* ctx) {
   }
 }
 
-int nvg__allocTextAtlas (NVGcontext* ctx) {
+int nvg__allocTextAtlas (NVGContext ctx) {
   int iw, ih;
   nvg__flushTextTexture(ctx);
   if (ctx.fontImageIdx >= NVG_MAX_FONTIMAGES-1) return 0;
   // if next fontImage already have a texture
   if (ctx.fontImages[ctx.fontImageIdx+1] != 0) {
-    nvgImageSize(ctx, ctx.fontImages[ctx.fontImageIdx+1], &iw, &ih);
+    ctx.imageSize(ctx.fontImages[ctx.fontImageIdx+1], &iw, &ih);
   } else {
     // calculate the new font image size and create it
-    nvgImageSize(ctx, ctx.fontImages[ctx.fontImageIdx], &iw, &ih);
+    ctx.imageSize(ctx.fontImages[ctx.fontImageIdx], &iw, &ih);
     if (iw > ih) ih *= 2; else iw *= 2;
     if (iw > NVG_MAX_FONTIMAGE_SIZE || ih > NVG_MAX_FONTIMAGE_SIZE) iw = ih = NVG_MAX_FONTIMAGE_SIZE;
     ctx.fontImages[ctx.fontImageIdx+1] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, 0, null);
@@ -2621,7 +2624,7 @@ int nvg__allocTextAtlas (NVGcontext* ctx) {
   return 1;
 }
 
-void nvg__renderText (NVGcontext* ctx, NVGvertex* verts, int nverts) {
+void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) {
   NVGstate* state = nvg__getState(ctx);
   NVGpaint paint = state.fill;
 
@@ -2639,10 +2642,10 @@ void nvg__renderText (NVGcontext* ctx, NVGvertex* verts, int nverts) {
 }
 
 /// Draws text string at specified location. If end is specified only the sub-string up to the end is drawn.
-public float nvgText (NVGcontext* ctx, float x, float y, const(char)[] str) { return (str.length ? nvgText(ctx, x, y, str.ptr, str.ptr+str.length) : x); }
+public float text (NVGContext ctx, float x, float y, const(char)[] str) { return (str.length ? ctx.text(x, y, str.ptr, str.ptr+str.length) : x); }
 
 /// Ditto.
-public float nvgText (NVGcontext* ctx, float x, float y, const(char)* str, const(char)* end) {
+public float text (NVGContext ctx, float x, float y, const(char)* str, const(char)* end) {
   NVGstate* state = nvg__getState(ctx);
   FONStextIter iter, prevIter;
   FONSquad q;
@@ -2709,10 +2712,10 @@ public float nvgText (NVGcontext* ctx, float x, float y, const(char)* str, const
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
  */
-public void nvgTextBox (NVGcontext* ctx, float x, float y, float breakRowWidth, const(char)[] str) { if (str.length) nvgTextBox(ctx, x, y, breakRowWidth, str.ptr, str.ptr+str.length); }
+public void textBox (NVGContext ctx, float x, float y, float breakRowWidth, const(char)[] str) { if (str.length) ctx.textBox(x, y, breakRowWidth, str.ptr, str.ptr+str.length); }
 
 /// Ditto.
-public void nvgTextBox (NVGcontext* ctx, float x, float y, float breakRowWidth, const(char)* str, const(char)* end) {
+public void textBox (NVGContext ctx, float x, float y, float breakRowWidth, const(char)* str, const(char)* end) {
   NVGstate* state = nvg__getState(ctx);
   NVGtextRow[2] rows = void;
   int nrows = 0, i;
@@ -2723,19 +2726,19 @@ public void nvgTextBox (NVGcontext* ctx, float x, float y, float breakRowWidth, 
 
   if (state.fontId == FONS_INVALID) return;
 
-  nvgTextMetrics(ctx, null, null, &lineh);
+  ctx.textMetrics(null, null, &lineh);
 
   state.textAlign = NVGalign.Left|valign;
 
-  while ((nrows = nvgTextBreakLines(ctx, str, end, breakRowWidth, rows.ptr, 2)) != 0) {
+  while ((nrows = ctx.textBreakLines(str, end, breakRowWidth, rows.ptr, 2)) != 0) {
     for (i = 0; i < nrows; i++) {
       NVGtextRow* row = &rows[i];
       if (haling&NVGalign.Left)
-        nvgText(ctx, x, y, row.start, row.end);
+        ctx.text(x, y, row.start, row.end);
       else if (haling&NVGalign.Center)
-        nvgText(ctx, x+breakRowWidth*0.5f-row.width*0.5f, y, row.start, row.end);
+        ctx.text(x+breakRowWidth*0.5f-row.width*0.5f, y, row.start, row.end);
       else if (haling&NVGalign.Right)
-        nvgText(ctx, x+breakRowWidth-row.width, y, row.start, row.end);
+        ctx.text(x+breakRowWidth-row.width, y, row.start, row.end);
       y += lineh*state.lineHeight;
     }
     str = rows[nrows-1].next;
@@ -2756,33 +2759,33 @@ private template isGoodPositionDelegate(DG) {
 /** Calculates the glyph x positions of the specified text. If end is specified only the sub-string will be used.
  * Measured values are returned in local coordinate space.
  */
-public int nvgTextGlyphPositions (NVGcontext* ctx, float x, float y, const(char)[] str, NVGglyphPosition[] positions) {
+public int textGlyphPositions (NVGContext ctx, float x, float y, const(char)[] str, NVGglyphPosition[] positions) {
   if (str.length == 0 || positions.length == 0) return 0;
   size_t posnum;
-  return nvgTextGlyphPositions(ctx, x, y, str.ptr, str.ptr+str.length, (in ref NVGglyphPosition pos) {
+  return ctx.textGlyphPositions(x, y, str.ptr, str.ptr+str.length, (in ref NVGglyphPosition pos) {
     positions.ptr[posnum++] = pos;
     return (posnum < positions.length);
   });
 }
 
 /// Ditto.
-public int nvgTextGlyphPositions(DG) (NVGcontext* ctx, float x, float y, const(char)[] str, scope DG dg) if (isGoodPositionDelegate!DG) {
+public int textGlyphPositions(DG) (NVGContext ctx, float x, float y, const(char)[] str, scope DG dg) if (isGoodPositionDelegate!DG) {
   if (str.length == 0) return 0;
-  return nvgTextGlyphPositions(ctx, x, y, str.ptr, str.ptr+str.length, dg);
+  return ctx.textGlyphPositions(x, y, str.ptr, str.ptr+str.length, dg);
 }
 
 /// Ditto.
-public int nvgTextGlyphPositions (NVGcontext* ctx, float x, float y, const(char)* str, const(char)* end, NVGglyphPosition* positions, int maxPositions) {
+public int textGlyphPositions (NVGContext ctx, float x, float y, const(char)* str, const(char)* end, NVGglyphPosition* positions, int maxPositions) {
   if (maxPositions < 1 || str is null) return 0;
   size_t posnum;
-  return nvgTextGlyphPositions(ctx, x, y, str, end, (in ref NVGglyphPosition pos) {
+  return ctx.textGlyphPositions(x, y, str, end, (in ref NVGglyphPosition pos) {
     positions[posnum++] = pos;
     return (posnum < maxPositions);
   });
 }
 
 /// Ditto.
-public int nvgTextGlyphPositions(DG) (NVGcontext* ctx, float x, float y, const(char)* str, const(char)* end, scope DG dg) if (isGoodPositionDelegate!DG) {
+public int textGlyphPositions(DG) (NVGContext ctx, float x, float y, const(char)* str, const(char)* end, scope DG dg) if (isGoodPositionDelegate!DG) {
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
 
@@ -2829,9 +2832,9 @@ public int nvgTextGlyphPositions(DG) (NVGcontext* ctx, float x, float y, const(c
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
  */
-public int nvgTextBreakLines (NVGcontext* ctx, const(char)[] str, float breakRowWidth, NVGtextRow* rows, int maxRows) {
+public int textBreakLines (NVGContext ctx, const(char)[] str, float breakRowWidth, NVGtextRow* rows, int maxRows) {
   if (str.length == 0) str = "";
-  return nvgTextBreakLines(ctx, str.ptr, str.ptr+str.length, breakRowWidth, rows, maxRows);
+  return ctx.textBreakLines(str.ptr, str.ptr+str.length, breakRowWidth, rows, maxRows);
 }
 
 private template isGoodRowDelegate(DG) {
@@ -2844,23 +2847,23 @@ private template isGoodRowDelegate(DG) {
 }
 
 /// Ditto.
-public int nvgTextBreakLines(DG) (NVGcontext* ctx, const(char)[] str, float breakRowWidth, scope DG dg) if (isGoodRowDelegate!DG) {
+public int textBreakLines(DG) (NVGContext ctx, const(char)[] str, float breakRowWidth, scope DG dg) if (isGoodRowDelegate!DG) {
   if (str.length == 0) str = "";
-  return nvgTextBreakLines(ctx, str.ptr, str.ptr+str.length, breakRowWidth, dg);
+  return ctx.textBreakLines(str.ptr, str.ptr+str.length, breakRowWidth, dg);
 }
 
 /// Ditto.
-public int nvgTextBreakLines (NVGcontext* ctx, const(char)* str, const(char)* end, float breakRowWidth, NVGtextRow* rows, int maxRows) {
+public int textBreakLines (NVGContext ctx, const(char)* str, const(char)* end, float breakRowWidth, NVGtextRow* rows, int maxRows) {
   if (maxRows <= 0) return 0;
   int nrow = 0;
-  return nvgTextBreakLines(ctx, str, end, breakRowWidth, (in ref NVGtextRow row) {
+  return ctx.textBreakLines(str, end, breakRowWidth, (in ref NVGtextRow row) {
     rows[nrow++] = row;
     return (nrow < maxRows);
   });
 }
 
 /// Ditto.
-public int nvgTextBreakLines(DG) (NVGcontext* ctx, const(char)* str, const(char)* end, float breakRowWidth, scope DG dg) if (isGoodRowDelegate!DG) {
+public int textBreakLines(DG) (NVGContext ctx, const(char)* str, const(char)* end, float breakRowWidth, scope DG dg) if (isGoodRowDelegate!DG) {
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
 
@@ -3071,10 +3074,10 @@ public int nvgTextBreakLines(DG) (NVGcontext* ctx, const(char)* str, const(char)
  * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
  * Measured values are returned in local coordinate space.
  */
-public float nvgTextBounds (NVGcontext* ctx, float x, float y, const(char)[] str, float[] bounds) {
+public float textBounds (NVGContext ctx, float x, float y, const(char)[] str, float[] bounds) {
   if (str.length == 0) str = "";
   float[4] bnd = void;
-  auto res = nvgTextBounds(ctx, x, y, str.ptr, str.ptr+str.length, bnd.ptr);
+  auto res = ctx.textBounds(x, y, str.ptr, str.ptr+str.length, bnd.ptr);
   for (int i = 0; i < 4; ++i) {
     if (i >= bounds.length) break;
     bounds.ptr[i] = bnd[i];
@@ -3083,7 +3086,7 @@ public float nvgTextBounds (NVGcontext* ctx, float x, float y, const(char)[] str
 }
 
 /// Ditto.
-public float nvgTextBounds (NVGcontext* ctx, float x, float y, const(char)* str, const(char)* end, float* bounds) {
+public float textBounds (NVGContext ctx, float x, float y, const(char)* str, const(char)* end, float* bounds) {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
@@ -3110,11 +3113,11 @@ public float nvgTextBounds (NVGcontext* ctx, float x, float y, const(char)* str,
 }
 
 /// Ditto.
-public void nvgTextBoxBounds (NVGcontext* ctx, float x, float y, float breakRowWidth, const(char)[] str, float[] bounds) {
+public void textBoxBounds (NVGContext ctx, float x, float y, float breakRowWidth, const(char)[] str, float[] bounds) {
   if (bounds.length == 0) return;
   if (str.length == 0) str = "";
   float[4] bnd = void;
-  nvgTextBoxBounds(ctx, x, y, breakRowWidth, str.ptr, str.ptr+str.length, bnd.ptr);
+  ctx.textBoxBounds(x, y, breakRowWidth, str.ptr, str.ptr+str.length, bnd.ptr);
   for (int i = 0; i < 4; ++i) {
     if (i >= bounds.length) break;
     bounds.ptr[i] = bnd[i];
@@ -3122,7 +3125,7 @@ public void nvgTextBoxBounds (NVGcontext* ctx, float x, float y, float breakRowW
 }
 
 /// Ditto.
-public void nvgTextBoxBounds (NVGcontext* ctx, float x, float y, float breakRowWidth, const(char)* str, const(char)* end, float* bounds) {
+public void textBoxBounds (NVGContext ctx, float x, float y, float breakRowWidth, const(char)* str, const(char)* end, float* bounds) {
   NVGstate* state = nvg__getState(ctx);
   NVGtextRow[2] rows;
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
@@ -3139,7 +3142,7 @@ public void nvgTextBoxBounds (NVGcontext* ctx, float x, float y, float breakRowW
     return;
   }
 
-  nvgTextMetrics(ctx, null, null, &lineh);
+  ctx.textMetrics(null, null, &lineh);
 
   state.textAlign = NVGalign.Left|valign;
 
@@ -3155,7 +3158,7 @@ public void nvgTextBoxBounds (NVGcontext* ctx, float x, float y, float breakRowW
   rminy *= invscale;
   rmaxy *= invscale;
 
-  while ((nrows = nvgTextBreakLines(ctx, str, end, breakRowWidth, rows.ptr, 2)) != 0) {
+  while ((nrows = ctx.textBreakLines(str, end, breakRowWidth, rows.ptr, 2)) != 0) {
     foreach (int i; 0..nrows) {
       NVGtextRow* row = &rows[i];
       float rminx, rmaxx, dx = 0;
@@ -3187,7 +3190,7 @@ public void nvgTextBoxBounds (NVGcontext* ctx, float x, float y, float breakRowW
 }
 
 /// Returns the vertical metrics based on the current text style. Measured values are returned in local coordinate space.
-public void nvgTextMetrics (NVGcontext* ctx, float* ascender, float* descender, float* lineh) {
+public void textMetrics (NVGContext ctx, float* ascender, float* descender, float* lineh) {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;

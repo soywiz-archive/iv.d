@@ -72,19 +72,19 @@ public:
   }
 
 
-  void render (NVGcontext* vg, float x, float y) {
+  void render (NVGContext vg, float x, float y) {
     import core.stdc.stdio : snprintf;
 
     if (vg is null) return;
     float avg = getAverage();
 
-    nvgBeginPath(vg);
-    nvgRect(vg, x, y, width, height);
-    nvgFillColor(vg, nvgRGBA(0, 0, 0, 128));
-    nvgFill(vg);
+    vg.beginPath();
+    vg.rect(x, y, width, height);
+    vg.fillColor(nvgRGBA(0, 0, 0, 128));
+    vg.fill();
 
-    nvgBeginPath(vg);
-    nvgMoveTo(vg, x, y+height);
+    vg.beginPath();
+    vg.moveTo(x, y+height);
     final switch (gstyle) {
       case Style.FPS:
         foreach (int i; 0..HistorySize) {
@@ -92,7 +92,7 @@ public:
           if (v > 80.0f) v = 80.0f;
           float vx = x+(cast(float)i/(HistorySize-1))*width;
           float vy = y+height-((v/80.0f)*height);
-          nvgLineTo(vg, vx, vy);
+          vg.lineTo(vx, vy);
         }
         break;
       case Style.Percent:
@@ -101,7 +101,7 @@ public:
           if (v > 100.0f) v = 100.0f;
           float vx = x+(cast(float)i/(HistorySize-1))*width;
           float vy = y+height-((v/100.0f)*height);
-          nvgLineTo(vg, vx, vy);
+          vg.lineTo(vx, vy);
         }
         break;
       case Style.MSec:
@@ -110,52 +110,52 @@ public:
           if (v > 20.0f) v = 20.0f;
           float vx = x+(cast(float)i/(HistorySize-1))*width;
           float vy = y+height-((v/20.0f)*height);
-          nvgLineTo(vg, vx, vy);
+          vg.lineTo(vx, vy);
         }
         break;
     }
-    nvgLineTo(vg, x+width, y+height);
-    nvgFillColor(vg, nvgRGBA(255, 192, 0, 128));
-    nvgFill(vg);
+    vg.lineTo(x+width, y+height);
+    vg.fillColor(nvgRGBA(255, 192, 0, 128));
+    vg.fill();
 
-    nvgFontFace(vg, fontname);
+    vg.fontFace(fontname);
 
     if (name[0] != '\0') {
-      nvgFontSize(vg, 14.0f);
-      nvgTextAlign(vg, NVGalign.Left|NVGalign.Top);
-      nvgFillColor(vg, nvgRGBA(240, 240, 240, 192));
+      vg.fontSize(14.0f);
+      vg.textAlign(NVGalign.Left|NVGalign.Top);
+      vg.fillColor(nvgRGBA(240, 240, 240, 192));
       uint len = 0; while (len < name.length && name.ptr[len]) ++len;
-      nvgText(vg, x+3, y+1, name.ptr[0..len]);
+      vg.text(x+3, y+1, name.ptr[0..len]);
     }
 
     char[64] str;
     final switch (gstyle) {
       case Style.FPS:
-        nvgFontSize(vg, 18.0f);
-        nvgTextAlign(vg, NVGalign.Right|NVGalign.Top);
-        nvgFillColor(vg, nvgRGBA(240, 240, 240, 255));
+        vg.fontSize(18.0f);
+        vg.textAlign(NVGalign.Right|NVGalign.Top);
+        vg.fillColor(nvgRGBA(240, 240, 240, 255));
         auto len = snprintf(str.ptr, str.length, "%.2f FPS", 1.0f/avg);
-        nvgText(vg, x+width-3, y+1, str.ptr[0..len]);
+        vg.text(x+width-3, y+1, str.ptr[0..len]);
 
-        nvgFontSize(vg, 15.0f);
-        nvgTextAlign(vg, NVGalign.Right|NVGalign.Bottom);
-        nvgFillColor(vg, nvgRGBA(240, 240, 240, 160));
+        vg.fontSize(15.0f);
+        vg.textAlign(NVGalign.Right|NVGalign.Bottom);
+        vg.fillColor(nvgRGBA(240, 240, 240, 160));
         len = snprintf(str.ptr, str.length, "%.2f ms", avg*1000.0f);
-        nvgText(vg, x+width-3, y+height-1, str.ptr[0..len]);
+        vg.text(x+width-3, y+height-1, str.ptr[0..len]);
         break;
       case Style.Percent:
-        nvgFontSize(vg, 18.0f);
-        nvgTextAlign(vg, NVGalign.Right|NVGalign.Top);
-        nvgFillColor(vg, nvgRGBA(240, 240, 240, 255));
+        vg.fontSize(18.0f);
+        vg.textAlign(NVGalign.Right|NVGalign.Top);
+        vg.fillColor(nvgRGBA(240, 240, 240, 255));
         auto len = snprintf(str.ptr, str.length, "%.1f %%", avg*1.0f);
-        nvgText(vg, x+width-3, y+1, str.ptr[0..len]);
+        vg.text(x+width-3, y+1, str.ptr[0..len]);
         break;
       case Style.MSec:
-        nvgFontSize(vg, 18.0f);
-        nvgTextAlign(vg, NVGalign.Right|NVGalign.Top);
-        nvgFillColor(vg, nvgRGBA(240, 240, 240, 255));
+        vg.fontSize(18.0f);
+        vg.textAlign(NVGalign.Right|NVGalign.Top);
+        vg.fillColor(nvgRGBA(240, 240, 240, 255));
         auto len = snprintf(str.ptr, str.length, "%.2f ms", avg * 1000.0f);
-        nvgText(vg, x+width-3, y+1, str.ptr[0..len]);
+        vg.text(x+width-3, y+1, str.ptr[0..len]);
         break;
     }
   }

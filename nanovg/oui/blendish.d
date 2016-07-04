@@ -1069,7 +1069,7 @@ public int bndGetFont () nothrow @trusted @nogc { pragma(inline, true); return b
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndLabel (NVGcontext* ctx, float x, float y, float w, float h, int iconid, const(char)[] label, int align_=BND_LEFT) {
+public void bndLabel (NVGContext ctx, float x, float y, float w, float h, int iconid, const(char)[] label, int align_=BND_LEFT) {
   bndIconLabelValue(ctx, x, y, w, h, iconid, bnd_theme.regularTheme.textColor, /*BND_LEFT*/align_, BND_LABEL_FONT_SIZE, label);
 }
 
@@ -1083,7 +1083,7 @@ public void bndLabel (NVGcontext* ctx, float x, float y, float w, float h, int i
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndToolButton (NVGcontext* ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
+public void bndToolButton (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
   float[4] cr;
   NVGcolor shade_top, shade_down;
 
@@ -1105,7 +1105,7 @@ public void bndToolButton (NVGcontext* ctx, float x, float y, float w, float h, 
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndRadioButton (NVGcontext* ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
+public void bndRadioButton (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
   float[4] cr;
   NVGcolor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_OPTION_RADIUS, flags);
@@ -1120,7 +1120,7 @@ public void bndRadioButton (NVGcontext* ctx, float x, float y, float w, float h,
  * in a text field.
  * See bndTextField for more info.
  */
-public int bndTextFieldTextPosition (NVGcontext* ctx, float x, float y, float w, float h, int iconid, const(char)[] text, int px, int py) {
+public int bndTextFieldTextPosition (NVGContext ctx, float x, float y, float w, float h, int iconid, const(char)[] text, int px, int py) {
   return bndIconLabelTextPosition(ctx, x, y, w, h, iconid, BND_LABEL_FONT_SIZE, text, px, py);
 }
 
@@ -1140,7 +1140,7 @@ public int bndTextFieldTextPosition (NVGcontext* ctx, float x, float y, float w,
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndTextField (NVGcontext* ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] text, int cbegin, int cend) {
+public void bndTextField (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] text, int cbegin, int cend) {
   float[4] cr;
   NVGcolor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_TEXT_RADIUS, flags);
@@ -1160,7 +1160,7 @@ public void bndTextField (NVGcontext* ctx, float x, float y, float w, float h, i
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndOptionButton (NVGcontext* ctx, float x, float y, float w, float h, BNDwidgetState state, const(char)[] label) {
+public void bndOptionButton (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, const(char)[] label) {
   float ox, oy;
   NVGcolor shade_top, shade_down;
   ox = x;
@@ -1183,7 +1183,7 @@ public void bndOptionButton (NVGcontext* ctx, float x, float y, float w, float h
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndChoiceButton (NVGcontext* ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
+public void bndChoiceButton (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(char)[] label) {
   float[4] cr;
   NVGcolor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_OPTION_RADIUS, flags);
@@ -1201,7 +1201,7 @@ public void bndChoiceButton (NVGcontext* ctx, float x, float y, float w, float h
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndColorButton (NVGcontext* ctx, float x, float y, float w, float h, int flags, NVGcolor color) {
+public void bndColorButton (NVGContext ctx, float x, float y, float w, float h, int flags, NVGcolor color) {
   float[4] cr;
   bndSelectCorners(cr.ptr, BND_TOOL_RADIUS, flags);
   bndBevelInset(ctx, x, y, w, h, cr[2], cr[3]);
@@ -1219,7 +1219,7 @@ public void bndColorButton (NVGcontext* ctx, float x, float y, float w, float h,
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndNumberField (NVGcontext* ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, const(char)[] label, const(char)[] value) {
+public void bndNumberField (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, const(char)[] label, const(char)[] value) {
   float[4] cr;
   NVGcolor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_NUMBER_RADIUS, flags);
@@ -1244,7 +1244,7 @@ public void bndNumberField (NVGcontext* ctx, float x, float y, float w, float h,
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndSlider (NVGcontext* ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, float progress, const(char)[] label, const(char)[] value) {
+public void bndSlider (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, float progress, const(char)[] label, const(char)[] value) {
   float[4] cr;
   NVGcolor shade_top, shade_down;
 
@@ -1260,9 +1260,9 @@ public void bndSlider (NVGcontext* ctx, float x, float y, float w, float h, int 
     shade_top = bndOffsetColor(bnd_theme.sliderTheme.itemColor, bnd_theme.sliderTheme.shadeDown);
     shade_down = bndOffsetColor(bnd_theme.sliderTheme.itemColor, bnd_theme.sliderTheme.shadeTop);
   }
-  nvgScissor(ctx, x, y, 8+(w-8)*bnd_clamp(progress, 0, 1), h);
+  ctx.scissor(x, y, 8+(w-8)*bnd_clamp(progress, 0, 1), h);
   bndInnerBox(ctx, x, y, w, h, cr[0], cr[1], cr[2], cr[3], shade_top, shade_down);
-  nvgResetScissor(ctx);
+  ctx.resetScissor();
 
   bndOutlineBox(ctx, x, y, w, h, cr[0], cr[1], cr[2], cr[3], bndTransparent(bnd_theme.sliderTheme.outlineColor));
   bndIconLabelValue(ctx, x, y, w, h, -1, bndTextColor(&bnd_theme.sliderTheme, state), BND_CENTER, BND_LABEL_FONT_SIZE, label, value);
@@ -1279,7 +1279,7 @@ public void bndSlider (NVGcontext* ctx, float x, float y, float w, float h, int 
  *
  * vertical looks best when width is BND_SCROLLBAR_WIDTH
  */
-public void bndScrollBar (NVGcontext* ctx, float x, float y, float w, float h, BNDwidgetState state, float offset, float size) {
+public void bndScrollBar (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, float offset, float size) {
   bndBevelInset(ctx, x, y, w, h, BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS);
   bndInnerBox(ctx, x, y, w, h,
     BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
@@ -1309,7 +1309,7 @@ public void bndScrollBar (NVGcontext* ctx, float x, float y, float w, float h, B
 /** Draw a menu background with its lower left origin at (x, y) and size of (w, h),
  * where flags is one or multiple flags from BNDcornerFlags.
  */
-public void bndMenuBackground (NVGcontext* ctx, float x, float y, float w, float h, int flags) {
+public void bndMenuBackground (NVGContext ctx, float x, float y, float w, float h, int flags) {
   float[4] cr;
   NVGcolor shade_top, shade_down;
   bndSelectCorners(cr.ptr, BND_MENU_RADIUS, flags);
@@ -1320,7 +1320,7 @@ public void bndMenuBackground (NVGcontext* ctx, float x, float y, float w, float
 }
 
 /// Draw a tooltip background with its lower left origin at (x, y) and size of (w, h)
-public void bndTooltipBackground (NVGcontext* ctx, float x, float y, float w, float h) {
+public void bndTooltipBackground (NVGContext ctx, float x, float y, float w, float h) {
   NVGcolor shade_top, shade_down;
   bndInnerColors(&shade_top, &shade_down, &bnd_theme.tooltipTheme, BND_DEFAULT, 0);
   bndInnerBox(ctx, x, y, w, h+1, BND_MENU_RADIUS, BND_MENU_RADIUS, BND_MENU_RADIUS, BND_MENU_RADIUS, shade_top, shade_down);
@@ -1336,7 +1336,7 @@ public void bndTooltipBackground (NVGcontext* ctx, float x, float y, float w, fl
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndMenuLabel (NVGcontext* ctx, float x, float y, float w, float h, int iconid, const(char)[] label) {
+public void bndMenuLabel (NVGContext ctx, float x, float y, float w, float h, int iconid, const(char)[] label) {
   bndIconLabelValue(ctx, x, y, w, h, iconid, bnd_theme.menuTheme.textColor, BND_LEFT, BND_LABEL_FONT_SIZE, label);
 }
 
@@ -1349,7 +1349,7 @@ public void bndMenuLabel (NVGcontext* ctx, float x, float y, float w, float h, i
  *
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
-public void bndMenuItem (NVGcontext* ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(char)[] label) {
+public void bndMenuItem (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(char)[] label) {
   if (state != BND_DEFAULT) {
     bndInnerBox(ctx, x, y, w, h, 0, 0, 0, 0,
       bndOffsetColor(bnd_theme.menuItemTheme.innerSelectedColor, bnd_theme.menuItemTheme.shadeTop),
@@ -1362,33 +1362,33 @@ public void bndMenuItem (NVGcontext* ctx, float x, float y, float w, float h, BN
 }
 
 /// Draw a node port at the given position filled with the given color
-public void bndNodePort (NVGcontext* ctx, float x, float y, BNDwidgetState state, NVGcolor color) {
-  nvgBeginPath(ctx);
-  nvgCircle(ctx, x, y, BND_NODE_PORT_RADIUS);
-  nvgStrokeColor(ctx, bnd_theme.nodeTheme.wiresColor);
-  nvgStrokeWidth(ctx, 1.0f);
-  nvgStroke(ctx);
-  nvgFillColor(ctx, (state != BND_DEFAULT ? bndOffsetColor(color, BND_HOVER_SHADE) : color));
-  nvgFill(ctx);
+public void bndNodePort (NVGContext ctx, float x, float y, BNDwidgetState state, NVGcolor color) {
+  ctx.beginPath();
+  ctx.circle(x, y, BND_NODE_PORT_RADIUS);
+  ctx.strokeColor(bnd_theme.nodeTheme.wiresColor);
+  ctx.strokeWidth(1.0f);
+  ctx.stroke();
+  ctx.fillColor((state != BND_DEFAULT ? bndOffsetColor(color, BND_HOVER_SHADE) : color));
+  ctx.fill();
 }
 
 /// Draw a node wire originating at (x0, y0) and floating to (x1, y1), with a colored gradient based on the two colors color0 and color1
-public void bndColoredNodeWire (NVGcontext* ctx, float x0, float y0, float x1, float y1, NVGcolor color0, NVGcolor color1) {
+public void bndColoredNodeWire (NVGContext ctx, float x0, float y0, float x1, float y1, NVGcolor color0, NVGcolor color1) {
   import core.stdc.math : fabsf;
   float length = bnd_fmaxf(fabsf(x1-x0), fabsf(y1-y0));
   float delta = length*cast(float)bnd_theme.nodeTheme.noodleCurving/10.0f;
 
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x0, y0);
-  nvgBezierTo(ctx, x0+delta, y0, x1-delta, y1, x1, y1);
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.bezierTo(x0+delta, y0, x1-delta, y1, x1, y1);
   NVGcolor colorw = bnd_theme.nodeTheme.wiresColor;
   colorw.a = (color0.a < color1.a ? color0.a : color1.a);
-  nvgStrokeColor(ctx, colorw);
-  nvgStrokeWidth(ctx, BND_NODE_WIRE_OUTLINE_WIDTH);
-  nvgStroke(ctx);
-  nvgStrokePaint(ctx, nvgLinearGradient(ctx, x0, y0, x1, y1, color0, color1));
-  nvgStrokeWidth(ctx, BND_NODE_WIRE_WIDTH);
-  nvgStroke(ctx);
+  ctx.strokeColor(colorw);
+  ctx.strokeWidth(BND_NODE_WIRE_OUTLINE_WIDTH);
+  ctx.stroke();
+  ctx.strokePaint(ctx.linearGradient(x0, y0, x1, y1, color0, color1));
+  ctx.strokeWidth(BND_NODE_WIRE_WIDTH);
+  ctx.stroke();
 }
 
 /** Draw a node wire originating at (x0, y0) and floating to (x1, y1), with
@@ -1400,12 +1400,12 @@ public void bndColoredNodeWire (NVGcontext* ctx, float x0, float y0, float x1, f
  *
  * BND_ACTIVE: dragged wire color
  */
-public void bndNodeWire (NVGcontext* ctx, float x0, float y0, float x1, float y1, BNDwidgetState state0, BNDwidgetState state1) {
+public void bndNodeWire (NVGContext ctx, float x0, float y0, float x1, float y1, BNDwidgetState state0, BNDwidgetState state1) {
   bndColoredNodeWire(ctx, x0, y0, x1, y1, bndNodeWireColor(&bnd_theme.nodeTheme, state0), bndNodeWireColor(&bnd_theme.nodeTheme, state1));
 }
 
 /// Draw a node background with its upper left origin at (x, y) and size of (w, h) where titleColor provides the base color for the title bar
-public void bndNodeBackground (NVGcontext* ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(char)[] label, NVGcolor titleColor) {
+public void bndNodeBackground (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(char)[] label, NVGcolor titleColor) {
   bndInnerBox(ctx, x, y, w, BND_NODE_TITLE_HEIGHT+2,
       BND_NODE_RADIUS, BND_NODE_RADIUS, 0, 0,
       bndTransparent(bndOffsetColor(titleColor, BND_BEVEL_SHADE)),
@@ -1443,7 +1443,7 @@ public void bndNodeBackground (NVGcontext* ctx, float x, float y, float w, float
 }
 
 /// Draw a window with the upper right and lower left splitter widgets into the rectangle at origin (x, y) and size (w, h)
-public void bndSplitterWidgets (NVGcontext* ctx, float x, float y, float w, float h) {
+public void bndSplitterWidgets (NVGContext ctx, float x, float y, float w, float h) {
   NVGcolor insetLight = bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, BND_SPLITTER_SHADE));
   NVGcolor insetDark = bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, -BND_SPLITTER_SHADE));
   NVGcolor inset = bndTransparent(bnd_theme.backgroundColor);
@@ -1451,59 +1451,59 @@ public void bndSplitterWidgets (NVGcontext* ctx, float x, float y, float w, floa
   float x2 = x+w;
   float y2 = y+h;
 
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x, y2-13);
-  nvgLineTo(ctx, x+13, y2);
-  nvgMoveTo(ctx, x, y2-9);
-  nvgLineTo(ctx, x+9, y2);
-  nvgMoveTo(ctx, x, y2-5);
-  nvgLineTo(ctx, x+5, y2);
+  ctx.beginPath();
+  ctx.moveTo(x, y2-13);
+  ctx.lineTo(x+13, y2);
+  ctx.moveTo(x, y2-9);
+  ctx.lineTo(x+9, y2);
+  ctx.moveTo(x, y2-5);
+  ctx.lineTo(x+5, y2);
 
-  nvgMoveTo(ctx, x2-11, y);
-  nvgLineTo(ctx, x2, y+11);
-  nvgMoveTo(ctx, x2-7, y);
-  nvgLineTo(ctx, x2, y+7);
-  nvgMoveTo(ctx, x2-3, y);
-  nvgLineTo(ctx, x2, y+3);
+  ctx.moveTo(x2-11, y);
+  ctx.lineTo(x2, y+11);
+  ctx.moveTo(x2-7, y);
+  ctx.lineTo(x2, y+7);
+  ctx.moveTo(x2-3, y);
+  ctx.lineTo(x2, y+3);
 
-  nvgStrokeColor(ctx, insetDark);
-  nvgStroke(ctx);
+  ctx.strokeColor(insetDark);
+  ctx.stroke();
 
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x, y2-11);
-  nvgLineTo(ctx, x+11, y2);
-  nvgMoveTo(ctx, x, y2-7);
-  nvgLineTo(ctx, x+7, y2);
-  nvgMoveTo(ctx, x, y2-3);
-  nvgLineTo(ctx, x+3, y2);
+  ctx.beginPath();
+  ctx.moveTo(x, y2-11);
+  ctx.lineTo(x+11, y2);
+  ctx.moveTo(x, y2-7);
+  ctx.lineTo(x+7, y2);
+  ctx.moveTo(x, y2-3);
+  ctx.lineTo(x+3, y2);
 
-  nvgMoveTo(ctx, x2-13, y);
-  nvgLineTo(ctx, x2, y+13);
-  nvgMoveTo(ctx, x2-9, y);
-  nvgLineTo(ctx, x2, y+9);
-  nvgMoveTo(ctx, x2-5, y);
-  nvgLineTo(ctx, x2, y+5);
+  ctx.moveTo(x2-13, y);
+  ctx.lineTo(x2, y+13);
+  ctx.moveTo(x2-9, y);
+  ctx.lineTo(x2, y+9);
+  ctx.moveTo(x2-5, y);
+  ctx.lineTo(x2, y+5);
 
-  nvgStrokeColor(ctx, insetLight);
-  nvgStroke(ctx);
+  ctx.strokeColor(insetLight);
+  ctx.stroke();
 
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x, y2-12);
-  nvgLineTo(ctx, x+12, y2);
-  nvgMoveTo(ctx, x, y2-8);
-  nvgLineTo(ctx, x+8, y2);
-  nvgMoveTo(ctx, x, y2-4);
-  nvgLineTo(ctx, x+4, y2);
+  ctx.beginPath();
+  ctx.moveTo(x, y2-12);
+  ctx.lineTo(x+12, y2);
+  ctx.moveTo(x, y2-8);
+  ctx.lineTo(x+8, y2);
+  ctx.moveTo(x, y2-4);
+  ctx.lineTo(x+4, y2);
 
-  nvgMoveTo(ctx, x2-12, y);
-  nvgLineTo(ctx, x2, y+12);
-  nvgMoveTo(ctx, x2-8, y);
-  nvgLineTo(ctx, x2, y+8);
-  nvgMoveTo(ctx, x2-4, y);
-  nvgLineTo(ctx, x2, y+4);
+  ctx.moveTo(x2-12, y);
+  ctx.lineTo(x2, y+12);
+  ctx.moveTo(x2-8, y);
+  ctx.lineTo(x2, y+8);
+  ctx.moveTo(x2-4, y);
+  ctx.lineTo(x2, y+4);
 
-  nvgStrokeColor(ctx, inset);
-  nvgStroke(ctx);
+  ctx.strokeColor(inset);
+  ctx.stroke();
 }
 
 /** Draw the join area overlay stencil into the rectangle
@@ -1511,7 +1511,7 @@ public void bndSplitterWidgets (NVGcontext* ctx, float x, float y, float w, floa
  *
  * vertical is `false` or `true` and designates the arrow orientation, mirror is `false` or `true` and flips the arrow side
  */
-public void bndJoinAreaOverlay (NVGcontext* ctx, float x, float y, float w, float h, bool vertical, bool mirror) {
+public void bndJoinAreaOverlay (NVGContext ctx, float x, float y, float w, float h, bool vertical, bool mirror) {
   if (vertical) {
     float u = w;
     w = h; h = u;
@@ -1553,13 +1553,13 @@ public void bndJoinAreaOverlay (NVGcontext* ctx, float x, float y, float w, floa
     [ x0, yc-s8 ]
   ];
 
-  nvgBeginPath(ctx);
+  ctx.beginPath();
   int count = cast(int)points.length; //sizeof(points)/(sizeof(float)*2);
-  nvgMoveTo(ctx, x+points[0][vertical&1], y+points[0][(vertical&1)^1]);
-  foreach (int i; 1..count) nvgLineTo(ctx, x+points[i][vertical&1], y+points[i][(vertical&1)^1]);
+  ctx.moveTo(x+points[0][vertical&1], y+points[0][(vertical&1)^1]);
+  foreach (int i; 1..count) ctx.lineTo(x+points[i][vertical&1], y+points[i][(vertical&1)^1]);
 
-  nvgFillColor(ctx, nvgRGBAf(0, 0, 0, 0.3));
-  nvgFill(ctx);
+  ctx.fillColor(nvgRGBAf(0, 0, 0, 0.3));
+  ctx.fill();
 }
 
 
@@ -1568,27 +1568,27 @@ public void bndJoinAreaOverlay (NVGcontext* ctx, float x, float y, float w, floa
 /// Use these functions to estimate sizes for widgets with your NVGcontext.
 
 /// returns the ideal width for a label with given icon and text
-public float bndLabelWidth (NVGcontext* ctx, int iconid, const(char)[] label) {
+public float bndLabelWidth (NVGContext ctx, int iconid, const(char)[] label) {
   int w = BND_PAD_LEFT+BND_PAD_RIGHT;
   if (iconid >= 0) w += BND_ICON_SHEET_RES;
   if (label && (bnd_font >= 0)) {
-    nvgFontFaceId(ctx, bnd_font);
-    nvgFontSize(ctx, BND_LABEL_FONT_SIZE);
-    w += cast(int)nvgTextBounds(ctx, 1, 1, label, null);
+    ctx.fontFaceId(bnd_font);
+    ctx.fontSize(BND_LABEL_FONT_SIZE);
+    w += cast(int)ctx.textBounds(1, 1, label, null);
   }
   return w;
 }
 
 /// returns the height for a label with given icon, text and width; this function is primarily useful in conjunction with multiline labels and textboxes
-public float bndLabelHeight (NVGcontext* ctx, int iconid, const(char)[] label, float width) {
+public float bndLabelHeight (NVGContext ctx, int iconid, const(char)[] label, float width) {
   int h = BND_WIDGET_HEIGHT;
   width -= BND_TEXT_RADIUS*2;
   if (iconid >= 0) width -= BND_ICON_SHEET_RES;
   if (label && (bnd_font >= 0)) {
-    nvgFontFaceId(ctx, bnd_font);
-    nvgFontSize(ctx, BND_LABEL_FONT_SIZE);
+    ctx.fontFaceId(bnd_font);
+    ctx.fontSize(BND_LABEL_FONT_SIZE);
     float[4] bounds;
-    nvgTextBoxBounds(ctx, 1, 1, width, label, bounds[]);
+    ctx.textBoxBounds(1, 1, width, label, bounds[]);
     int bh = cast(int)(bounds[3]-bounds[1])+BND_TEXT_PAD_DOWN;
     if (bh > h) h = bh;
   }
@@ -1607,17 +1607,17 @@ public float bndLabelHeight (NVGcontext* ctx, int iconid, const(char)[] label, f
  * this is a low level drawing function: the path must be stroked or filled
  * to become visible.
  */
-public void bndRoundedBox (NVGcontext* ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3) {
+public void bndRoundedBox (NVGContext ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3) {
   float d;
   w = bnd_fmaxf(0, w);
   h = bnd_fmaxf(0, h);
   d = bnd_fminf(w, h);
-  nvgMoveTo(ctx, x, y+h*0.5f);
-  nvgArcTo(ctx, x, y, x+w, y, bnd_fminf(cr0, d/2));
-  nvgArcTo(ctx, x+w, y, x+w, y+h, bnd_fminf(cr1, d/2));
-  nvgArcTo(ctx, x+w, y+h, x, y+h, bnd_fminf(cr2, d/2));
-  nvgArcTo(ctx, x, y+h, x, y, bnd_fminf(cr3, d/2));
-  nvgClosePath(ctx);
+  ctx.moveTo(x, y+h*0.5f);
+  ctx.arcTo(x, y, x+w, y, bnd_fminf(cr0, d/2));
+  ctx.arcTo(x+w, y, x+w, y+h, bnd_fminf(cr1, d/2));
+  ctx.arcTo(x+w, y+h, x, y+h, bnd_fminf(cr2, d/2));
+  ctx.arcTo(x, y+h, x, y, bnd_fminf(cr3, d/2));
+  ctx.closePath();
 }
 
 /// make color transparent using the default alpha value
@@ -1633,27 +1633,27 @@ public NVGcolor bndOffsetColor (NVGcolor color, int delta) {
 }
 
 /// Draw a beveled border at position (x, y) with size (w, h) shaded with lighter and darker versions of backgroundColor
-public void bndBevel (NVGcontext* ctx, float x, float y, float w, float h) {
-  nvgStrokeWidth(ctx, 1);
+public void bndBevel (NVGContext ctx, float x, float y, float w, float h) {
+  ctx.strokeWidth(1);
 
   x += 0.5f;
   y += 0.5f;
   w -= 1;
   h -= 1;
 
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x, y+h);
-  nvgLineTo(ctx, x+w, y+h);
-  nvgLineTo(ctx, x+w, y);
-  nvgStrokeColor(ctx, bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, -BND_BEVEL_SHADE)));
-  nvgStroke(ctx);
+  ctx.beginPath();
+  ctx.moveTo(x, y+h);
+  ctx.lineTo(x+w, y+h);
+  ctx.lineTo(x+w, y);
+  ctx.strokeColor(bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, -BND_BEVEL_SHADE)));
+  ctx.stroke();
 
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x, y+h);
-  nvgLineTo(ctx, x, y);
-  nvgLineTo(ctx, x+w, y);
-  nvgStrokeColor(ctx, bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, BND_BEVEL_SHADE)));
-  nvgStroke(ctx);
+  ctx.beginPath();
+  ctx.moveTo(x, y+h);
+  ctx.lineTo(x, y);
+  ctx.lineTo(x+w, y);
+  ctx.strokeColor(bndTransparent(bndOffsetColor(bnd_theme.backgroundColor, BND_BEVEL_SHADE)));
+  ctx.stroke();
 }
 
 /** Draw a lower inset for a rounded box at position (x, y) with size (w, h)
@@ -1662,7 +1662,7 @@ public void bndBevel (NVGcontext* ctx, float x, float y, float w, float h) {
  * cr2 and cr3 contain the radiuses of the bottom right and bottom left
  * corners of the rounded box.
  */
-public void bndBevelInset (NVGcontext* ctx, float x, float y, float w, float h, float cr2, float cr3) {
+public void bndBevelInset (NVGContext ctx, float x, float y, float w, float h, float cr2, float cr3) {
   float d;
 
   y -= 0.5f;
@@ -1670,28 +1670,28 @@ public void bndBevelInset (NVGcontext* ctx, float x, float y, float w, float h, 
   cr2 = bnd_fminf(cr2, d/2);
   cr3 = bnd_fminf(cr3, d/2);
 
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x+w, y+h-cr2);
-  nvgArcTo(ctx, x+w, y+h, x, y+h, cr2);
-  nvgArcTo(ctx, x, y+h, x, y, cr3);
+  ctx.beginPath();
+  ctx.moveTo(x+w, y+h-cr2);
+  ctx.arcTo(x+w, y+h, x, y+h, cr2);
+  ctx.arcTo(x, y+h, x, y, cr3);
 
   NVGcolor bevelColor = bndOffsetColor(bnd_theme.backgroundColor, BND_INSET_BEVEL_SHADE);
 
-  nvgStrokeWidth(ctx, 1);
-  nvgStrokePaint(ctx, nvgLinearGradient(ctx, x, y+h-bnd_fmaxf(cr2, cr3)-1, x, y+h-1, nvgRGBAf(bevelColor.r, bevelColor.g, bevelColor.b, 0), bevelColor));
-  nvgStroke(ctx);
+  ctx.strokeWidth(1);
+  ctx.strokePaint(ctx.linearGradient(x, y+h-bnd_fmaxf(cr2, cr3)-1, x, y+h-1, nvgRGBAf(bevelColor.r, bevelColor.g, bevelColor.b, 0), bevelColor));
+  ctx.stroke();
 }
 
 /// Draw a flat panel without any decorations at position (x, y) with size (w, h) and fills it with backgroundColor
-public void bndBackground (NVGcontext* ctx, float x, float y, float w, float h) {
-  nvgBeginPath(ctx);
-  nvgRect(ctx, x, y, w, h);
-  nvgFillColor(ctx, bnd_theme.backgroundColor);
-  nvgFill(ctx);
+public void bndBackground (NVGContext ctx, float x, float y, float w, float h) {
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.fillColor(bnd_theme.backgroundColor);
+  ctx.fill();
 }
 
 /// Draw an icon with (x, y) as its upper left coordinate; the iconid selects the icon from the sheet; use the BND_ICONID macro to build icon IDs.
-public void bndIcon (NVGcontext* ctx, float x, float y, int iconid) {
+public void bndIcon (NVGContext ctx, float x, float y, int iconid) {
   int ix, iy, u, v;
   if (bnd_icon_image < 0) return; // no icons loaded
 
@@ -1700,10 +1700,10 @@ public void bndIcon (NVGcontext* ctx, float x, float y, int iconid) {
   u = BND_ICON_SHEET_OFFSET_X+ix*BND_ICON_SHEET_GRID;
   v = BND_ICON_SHEET_OFFSET_Y+iy*BND_ICON_SHEET_GRID;
 
-  nvgBeginPath(ctx);
-  nvgRect(ctx, x, y, BND_ICON_SHEET_RES, BND_ICON_SHEET_RES);
-  nvgFillPaint(ctx, nvgImagePattern(ctx, x-u, y-v, BND_ICON_SHEET_WIDTH, BND_ICON_SHEET_HEIGHT, 0, bnd_icon_image, 1));
-  nvgFill(ctx);
+  ctx.beginPath();
+  ctx.rect(x, y, BND_ICON_SHEET_RES, BND_ICON_SHEET_RES);
+  ctx.fillPaint(ctx.imagePattern(x-u, y-v, BND_ICON_SHEET_WIDTH, BND_ICON_SHEET_HEIGHT, 0, bnd_icon_image, 1));
+  ctx.fill();
 }
 
 /** Draw a drop shadow around the rounded box at (x, y) with size (w, h) and
@@ -1711,49 +1711,48 @@ public void bndIcon (NVGcontext* ctx, float x, float y, int iconid) {
  *
  * No shadow will be painted inside the rounded box.
  */
-public void bndDropShadow (NVGcontext* ctx, float x, float y, float w, float h, float r, float feather, float alpha) {
-  nvgBeginPath(ctx);
+public void bndDropShadow (NVGContext ctx, float x, float y, float w, float h, float r, float feather, float alpha) {
+  ctx.beginPath();
   y += feather;
   h -= feather;
 
-  nvgMoveTo(ctx, x-feather, y-feather);
-  nvgLineTo(ctx, x, y-feather);
-  nvgLineTo(ctx, x, y+h-feather);
-  nvgArcTo(ctx, x, y+h, x+r, y+h, r);
-  nvgArcTo(ctx, x+w, y+h, x+w, y+h-r, r);
-  nvgLineTo(ctx, x+w, y-feather);
-  nvgLineTo(ctx, x+w+feather, y-feather);
-  nvgLineTo(ctx, x+w+feather, y+h+feather);
-  nvgLineTo(ctx, x-feather, y+h+feather);
-  nvgClosePath(ctx);
+  ctx.moveTo(x-feather, y-feather);
+  ctx.lineTo(x, y-feather);
+  ctx.lineTo(x, y+h-feather);
+  ctx.arcTo(x, y+h, x+r, y+h, r);
+  ctx.arcTo(x+w, y+h, x+w, y+h-r, r);
+  ctx.lineTo(x+w, y-feather);
+  ctx.lineTo(x+w+feather, y-feather);
+  ctx.lineTo(x+w+feather, y+h+feather);
+  ctx.lineTo(x-feather, y+h+feather);
+  ctx.closePath();
 
-  nvgFillPaint(ctx, nvgBoxGradient(ctx,
-      x-feather*0.5f, y-feather*0.5f,
+  ctx.fillPaint(ctx.boxGradient(x-feather*0.5f, y-feather*0.5f,
       w+feather, h+feather,
       r+feather*0.5f,
       feather,
       nvgRGBAf(0, 0, 0, alpha*alpha),
       nvgRGBAf(0, 0, 0, 0)));
-  nvgFill(ctx);
+  ctx.fill();
 }
 
 /* Draw the inner part of a widget box, with a gradient from shade_top to
  * shade_down. If h>w, the gradient will be horizontal instead of vertical.
  */
-public void bndInnerBox (NVGcontext* ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGcolor shade_top, NVGcolor shade_down) {
-  nvgBeginPath(ctx);
+public void bndInnerBox (NVGContext ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGcolor shade_top, NVGcolor shade_down) {
+  ctx.beginPath();
   bndRoundedBox(ctx, x+1, y+1, w-2, h-3, bnd_fmaxf(0, cr0-1), bnd_fmaxf(0, cr1-1), bnd_fmaxf(0, cr2-1), bnd_fmaxf(0, cr3-1));
-  nvgFillPaint(ctx, (h-2 > w ? nvgLinearGradient(ctx, x, y, x+w, y, shade_top, shade_down) : nvgLinearGradient(ctx, x, y, x, y+h, shade_top, shade_down)));
-  nvgFill(ctx);
+  ctx.fillPaint((h-2 > w ? ctx.linearGradient(x, y, x+w, y, shade_top, shade_down) : ctx.linearGradient(x, y, x, y+h, shade_top, shade_down)));
+  ctx.fill();
 }
 
 /// Draw the outline part of a widget box with the given color
-public void bndOutlineBox (NVGcontext* ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGcolor color) {
-  nvgBeginPath(ctx);
+public void bndOutlineBox (NVGContext ctx, float x, float y, float w, float h, float cr0, float cr1, float cr2, float cr3, NVGcolor color) {
+  ctx.beginPath();
   bndRoundedBox(ctx, x+0.5f, y+0.5f, w-1, h-2, cr0, cr1, cr2, cr3);
-  nvgStrokeColor(ctx, color);
-  nvgStrokeWidth(ctx, 1);
-  nvgStroke(ctx);
+  ctx.strokeColor(color);
+  ctx.strokeWidth(1);
+  ctx.stroke();
 }
 
 /** assigns radius r to the four entries of array radiuses depending on whether
@@ -1804,7 +1803,7 @@ public NVGcolor bndTextColor (const(BNDwidgetTheme)* theme, BNDwidgetState state
  *
  * if value is not null, label and value will be drawn with a ":" separator inbetween.
  */
-public void bndIconLabelValue (NVGcontext* ctx, float x, float y, float w, float h, int iconid, NVGcolor color, int align_, float fontsize, const(char)[] label, const(char)[] value=null) {
+public void bndIconLabelValue (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGcolor color, int align_, float fontsize, const(char)[] label, const(char)[] value=null) {
   float pleft = BND_PAD_LEFT;
   if (label.length) {
     if (iconid >= 0) {
@@ -1813,32 +1812,32 @@ public void bndIconLabelValue (NVGcontext* ctx, float x, float y, float w, float
     }
 
     if (bnd_font < 0) return;
-    nvgFontFaceId(ctx, bnd_font);
-    nvgFontSize(ctx, fontsize);
-    nvgBeginPath(ctx);
-    nvgFillColor(ctx, color);
+    ctx.fontFaceId(bnd_font);
+    ctx.fontSize(fontsize);
+    ctx.beginPath();
+    ctx.fillColor(color);
     if (value.length) {
-      float label_width = nvgTextBounds(ctx, 1, 1, label, null);
-      float sep_width = nvgTextBounds(ctx, 1, 1, BND_LABEL_SEPARATOR, null);
+      float label_width = ctx.textBounds(1, 1, label, null);
+      float sep_width = ctx.textBounds(1, 1, BND_LABEL_SEPARATOR, null);
 
-      nvgTextAlign(ctx, NVGalign.Left|NVGalign.Baseline);
+      ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
       x += pleft;
       if (align_ == BND_CENTER) {
-        float width = label_width+sep_width+nvgTextBounds(ctx, 1, 1, value, null);
+        float width = label_width+sep_width+ctx.textBounds(1, 1, value, null);
         x += ((w-BND_PAD_RIGHT-pleft)-width)*0.5f;
       } else if (align_ == BND_RIGHT) {
-        float width = label_width+sep_width+nvgTextBounds(ctx, 1, 1, value, null);
+        float width = label_width+sep_width+ctx.textBounds(1, 1, value, null);
         x += w-BND_PAD_RIGHT-width;
       }
       y += BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN;
-      nvgText(ctx, x, y, label);
+      ctx.text(x, y, label);
       x += label_width;
-      nvgText(ctx, x, y, BND_LABEL_SEPARATOR);
+      ctx.text(x, y, BND_LABEL_SEPARATOR);
       x += sep_width;
-      nvgText(ctx, x, y, value);
+      ctx.text(x, y, value);
     } else {
-      nvgTextAlign(ctx, (align_ == BND_LEFT ? (NVGalign.Left|NVGalign.Baseline) : align_ == BND_CENTER ? (NVGalign.Center|NVGalign.Baseline) : (NVGalign.Right|NVGalign.Baseline)));
-      nvgTextBox(ctx, x+pleft, y+BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN, w-BND_PAD_RIGHT-pleft, label);
+      ctx.textAlign((align_ == BND_LEFT ? (NVGalign.Left|NVGalign.Baseline) : align_ == BND_CENTER ? (NVGalign.Center|NVGalign.Baseline) : (NVGalign.Right|NVGalign.Baseline)));
+      ctx.textBox(x+pleft, y+BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN, w-BND_PAD_RIGHT-pleft, label);
     }
   } else if (iconid >= 0) {
     bndIcon(ctx, x+2, y+2, iconid);
@@ -1852,18 +1851,18 @@ public void bndIconLabelValue (NVGcontext* ctx, float x, float y, float w, float
  *
  * if label is not null, it will be drawn with the specified alignment, fontsize and color.
  */
-public void bndNodeIconLabel (NVGcontext* ctx, float x, float y, float w, float h, int iconid, NVGcolor color, NVGcolor shadowColor, int align_, float fontsize, const(char)[] label) {
+public void bndNodeIconLabel (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGcolor color, NVGcolor shadowColor, int align_, float fontsize, const(char)[] label) {
   if (label.length && bnd_font >= 0) {
-    nvgFontFaceId(ctx, bnd_font);
-    nvgFontSize(ctx, fontsize);
-    nvgBeginPath(ctx);
-    nvgTextAlign(ctx, NVGalign.Left|NVGalign.Baseline);
-    nvgFillColor(ctx, shadowColor);
-    nvgFontBlur(ctx, BND_NODE_TITLE_FEATHER);
-    nvgTextBox(ctx, x+1, y+h+3-BND_TEXT_PAD_DOWN, w, label);
-    nvgFillColor(ctx, color);
-    nvgFontBlur(ctx, 0);
-    nvgTextBox(ctx, x, y+h+2-BND_TEXT_PAD_DOWN, w, label);
+    ctx.fontFaceId(bnd_font);
+    ctx.fontSize(fontsize);
+    ctx.beginPath();
+    ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
+    ctx.fillColor(shadowColor);
+    ctx.fontBlur(BND_NODE_TITLE_FEATHER);
+    ctx.textBox(x+1, y+h+3-BND_TEXT_PAD_DOWN, w, label);
+    ctx.fillColor(color);
+    ctx.fontBlur(0);
+    ctx.textBox(x, y+h+2-BND_TEXT_PAD_DOWN, w, label);
   }
   if (iconid >= 0) bndIcon(ctx, x+w-BND_ICON_SHEET_RES, y+3, iconid);
 }
@@ -1871,7 +1870,7 @@ public void bndNodeIconLabel (NVGcontext* ctx, float x, float y, float w, float 
 /** Calculate the corresponding text position for given coordinates px/py in an iconLabel.
  * See bndIconLabelCaret for more info.
  */
-public int bndIconLabelTextPosition (NVGcontext* ctx, float x, float y, float w, float h, int iconid, float fontsize, const(char)[] label, int px, int py) {
+public int bndIconLabelTextPosition (NVGContext ctx, float x, float y, float w, float h, int iconid, float fontsize, const(char)[] label, int px, int py) {
   float[4] bounds;
   float pleft = BND_TEXT_RADIUS;
   if (label.length == 0) return -1;
@@ -1882,24 +1881,24 @@ public int bndIconLabelTextPosition (NVGcontext* ctx, float x, float y, float w,
   x += pleft;
   y += BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN;
 
-  nvgFontFaceId(ctx, bnd_font);
-  nvgFontSize(ctx, fontsize);
-  nvgTextAlign(ctx, NVGalign.Left|NVGalign.Baseline);
+  ctx.fontFaceId(bnd_font);
+  ctx.fontSize(fontsize);
+  ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
 
   w -= BND_TEXT_RADIUS+pleft;
 
   float asc, desc, lh;
   static NVGtextRow[BND_MAX_ROWS] rows;
-  int nrows = nvgTextBreakLines(ctx, label, w, rows.ptr, BND_MAX_ROWS);
+  int nrows = ctx.textBreakLines(label, w, rows.ptr, BND_MAX_ROWS);
   if (nrows == 0) return 0;
-  nvgTextBoxBounds(ctx, x, y, w, label, bounds[]);
-  nvgTextMetrics(ctx, &asc, &desc, &lh);
+  ctx.textBoxBounds(x, y, w, label, bounds[]);
+  ctx.textMetrics(&asc, &desc, &lh);
 
   // calculate vertical position
   int row = cast(int)bnd_clamp(cast(int)(cast(float)(py-bounds[1])/lh), 0, nrows-1);
   // search horizontal position
   static NVGglyphPosition[BND_MAX_GLYPHS] glyphs;
-  int nglyphs = nvgTextGlyphPositions(ctx, x, y, rows[row].start, rows[row].end+1, glyphs.ptr, BND_MAX_GLYPHS);
+  int nglyphs = ctx.textGlyphPositions(x, y, rows[row].start, rows[row].end+1, glyphs.ptr, BND_MAX_GLYPHS);
   int col, p = 0;
   for (col = 0; col < nglyphs && glyphs[col].x < px; ++col) p = glyphs[col].str-label.ptr;
   // see if we should move one character further
@@ -1907,7 +1906,7 @@ public int bndIconLabelTextPosition (NVGcontext* ctx, float x, float y, float w,
   return p;
 }
 
-static void bndCaretPosition (NVGcontext* ctx, float x, float y, float desc, float lineHeight, const(char)* caret, NVGtextRow* rows, int nrows, int* cr, float* cx, float* cy) {
+static void bndCaretPosition (NVGContext ctx, float x, float y, float desc, float lineHeight, const(char)* caret, NVGtextRow* rows, int nrows, int* cr, float* cx, float* cy) {
   static NVGglyphPosition[BND_MAX_GLYPHS] glyphs;
   int r, nglyphs;
   for (r = 0; r < nrows && rows[r].end < caret; ++r) {}
@@ -1916,7 +1915,7 @@ static void bndCaretPosition (NVGcontext* ctx, float x, float y, float desc, flo
   *cy = y-lineHeight-desc+r*lineHeight;
   if (nrows == 0) return;
   *cx = rows[r].minx;
-  nglyphs = nvgTextGlyphPositions(ctx, x, y, rows[r].start, rows[r].end+1, glyphs.ptr, BND_MAX_GLYPHS);
+  nglyphs = ctx.textGlyphPositions(x, y, rows[r].start, rows[r].end+1, glyphs.ptr, BND_MAX_GLYPHS);
   foreach (int i; 0..nglyphs) {
     *cx = glyphs[i].x;
     if (glyphs[i].str == caret) break;
@@ -1934,7 +1933,7 @@ static void bndCaretPosition (NVGcontext* ctx, float x, float y, float desc, flo
  *
  * cend must be >= cbegin and <= strlen(text) and denotes the end of the caret if cend < cbegin, then no caret will be drawn
  */
-public void bndIconLabelCaret (NVGcontext* ctx, float x, float y, float w, float h, int iconid, NVGcolor color, float fontsize, const(char)[] label, NVGcolor caretcolor, int cbegin, int cend) {
+public void bndIconLabelCaret (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGcolor color, float fontsize, const(char)[] label, NVGcolor caretcolor, int cbegin, int cend) {
   float pleft = BND_TEXT_RADIUS;
   if (label.length == 0) return;
   if (iconid >= 0) {
@@ -1947,9 +1946,9 @@ public void bndIconLabelCaret (NVGcontext* ctx, float x, float y, float w, float
   x += pleft;
   y += BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN;
 
-  nvgFontFaceId(ctx, bnd_font);
-  nvgFontSize(ctx, fontsize);
-  nvgTextAlign(ctx, NVGalign.Left|NVGalign.Baseline);
+  ctx.fontFaceId(bnd_font);
+  ctx.fontSize(fontsize);
+  ctx.textAlign(NVGalign.Left|NVGalign.Baseline);
 
   w -= BND_TEXT_RADIUS+pleft;
 
@@ -1958,87 +1957,87 @@ public void bndIconLabelCaret (NVGcontext* ctx, float x, float y, float w, float
     float c0x, c0y, c1x, c1y;
     float desc, lh;
     static NVGtextRow[BND_MAX_ROWS] rows;
-    int nrows = nvgTextBreakLines(ctx, label.ptr, label.ptr+cend+1, w, rows.ptr, BND_MAX_ROWS);
-    nvgTextMetrics(ctx, null, &desc, &lh);
+    int nrows = ctx.textBreakLines(label.ptr, label.ptr+cend+1, w, rows.ptr, BND_MAX_ROWS);
+    ctx.textMetrics(null, &desc, &lh);
 
     bndCaretPosition(ctx, x, y, desc, lh, label.ptr+cbegin, rows.ptr, nrows, &c0r, &c0x, &c0y);
     bndCaretPosition(ctx, x, y, desc, lh, label.ptr+cend, rows.ptr, nrows, &c1r, &c1x, &c1y);
 
-    nvgBeginPath(ctx);
+    ctx.beginPath();
     if (cbegin == cend) {
-      nvgFillColor(ctx, nvgRGBf(0.337, 0.502, 0.761));
-      nvgRect(ctx, c0x-1, c0y, 2, lh+1);
+      ctx.fillColor(nvgRGBf(0.337, 0.502, 0.761));
+      ctx.rect(c0x-1, c0y, 2, lh+1);
     } else {
-      nvgFillColor(ctx, caretcolor);
+      ctx.fillColor(caretcolor);
       if (c0r == c1r) {
-        nvgRect(ctx, c0x-1, c0y, c1x-c0x+1, lh+1);
+        ctx.rect(c0x-1, c0y, c1x-c0x+1, lh+1);
       } else {
         int blk = c1r-c0r-1;
-        nvgRect(ctx, c0x-1, c0y, x+w-c0x+1, lh+1);
-        nvgRect(ctx, x, c1y, c1x-x+1, lh+1);
-        if (blk) nvgRect(ctx, x, c0y+lh, w, blk*lh+1);
+        ctx.rect(c0x-1, c0y, x+w-c0x+1, lh+1);
+        ctx.rect(x, c1y, c1x-x+1, lh+1);
+        if (blk) ctx.rect(x, c0y+lh, w, blk*lh+1);
       }
     }
-    nvgFill(ctx);
+    ctx.fill();
   }
 
-  nvgBeginPath(ctx);
-  nvgFillColor(ctx, color);
-  nvgTextBox(ctx, x, y, w, label);
+  ctx.beginPath();
+  ctx.fillColor(color);
+  ctx.textBox(x, y, w, label);
 }
 
 /// Draw a checkmark for an option box with the given upper left coordinates (ox, oy) with the specified color.
-public void bndCheck (NVGcontext* ctx, float ox, float oy, NVGcolor color) {
-  nvgBeginPath(ctx);
-  nvgStrokeWidth(ctx, 2);
-  nvgStrokeColor(ctx, color);
-  nvgLineCap(ctx, NVGlineCap.Butt);
-  nvgLineJoin(ctx, NVGlineCap.Miter);
-  nvgMoveTo(ctx, ox+4, oy+5);
-  nvgLineTo(ctx, ox+7, oy+8);
-  nvgLineTo(ctx, ox+14, oy+1);
-  nvgStroke(ctx);
+public void bndCheck (NVGContext ctx, float ox, float oy, NVGcolor color) {
+  ctx.beginPath();
+  ctx.strokeWidth(2);
+  ctx.strokeColor(color);
+  ctx.lineCap(NVGlineCap.Butt);
+  ctx.lineJoin(NVGlineCap.Miter);
+  ctx.moveTo(ox+4, oy+5);
+  ctx.lineTo(ox+7, oy+8);
+  ctx.lineTo(ox+14, oy+1);
+  ctx.stroke();
 }
 
 /// Draw a horizontal arrow for a number field with its center at (x, y) and size s; if s is negative, the arrow points to the left.
-public void bndArrow (NVGcontext* ctx, float x, float y, float s, NVGcolor color) {
-  nvgBeginPath(ctx);
-  nvgMoveTo(ctx, x, y);
-  nvgLineTo(ctx, x-s, y+s);
-  nvgLineTo(ctx, x-s, y-s);
-  nvgClosePath(ctx);
-  nvgFillColor(ctx, color);
-  nvgFill(ctx);
+public void bndArrow (NVGContext ctx, float x, float y, float s, NVGcolor color) {
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x-s, y+s);
+  ctx.lineTo(x-s, y-s);
+  ctx.closePath();
+  ctx.fillColor(color);
+  ctx.fill();
 }
 
 /// Draw an up/down arrow for a choice box with its center at (x, y) and size s
-public void bndUpDownArrow (NVGcontext* ctx, float x, float y, float s, NVGcolor color) {
+public void bndUpDownArrow (NVGContext ctx, float x, float y, float s, NVGcolor color) {
   float w;
-  nvgBeginPath(ctx);
+  ctx.beginPath();
   w = 1.1f*s;
-  nvgMoveTo(ctx, x, y-1);
-  nvgLineTo(ctx, x+0.5*w, y-s-1);
-  nvgLineTo(ctx, x+w, y-1);
-  nvgClosePath(ctx);
-  nvgMoveTo(ctx, x, y+1);
-  nvgLineTo(ctx, x+0.5*w, y+s+1);
-  nvgLineTo(ctx, x+w, y+1);
-  nvgClosePath(ctx);
-  nvgFillColor(ctx, color);
-  nvgFill(ctx);
+  ctx.moveTo(x, y-1);
+  ctx.lineTo(x+0.5*w, y-s-1);
+  ctx.lineTo(x+w, y-1);
+  ctx.closePath();
+  ctx.moveTo(x, y+1);
+  ctx.lineTo(x+0.5*w, y+s+1);
+  ctx.lineTo(x+w, y+1);
+  ctx.closePath();
+  ctx.fillColor(color);
+  ctx.fill();
 }
 
 /// Draw a node down-arrow with its tip at (x, y) and size s
-public void bndNodeArrowDown (NVGcontext* ctx, float x, float y, float s, NVGcolor color) {
+public void bndNodeArrowDown (NVGContext ctx, float x, float y, float s, NVGcolor color) {
   float w;
-  nvgBeginPath(ctx);
+  ctx.beginPath();
   w = 1.0f*s;
-  nvgMoveTo(ctx, x, y);
-  nvgLineTo(ctx, x+0.5*w, y-s);
-  nvgLineTo(ctx, x-0.5*w, y-s);
-  nvgClosePath(ctx);
-  nvgFillColor(ctx, color);
-  nvgFill(ctx);
+  ctx.moveTo(x, y);
+  ctx.lineTo(x+0.5*w, y-s);
+  ctx.lineTo(x-0.5*w, y-s);
+  ctx.closePath();
+  ctx.fillColor(color);
+  ctx.fill();
 }
 
 /** computes the bounds of the scrollbar handle from the scrollbar size and the handles offset and size.

@@ -274,7 +274,7 @@ private:
   ubyte[8] beventCount; // oooh...
   FuiEvent[MaxQueuedEvents] events;
   uint eventHead, eventPos;
-  NVGcontext* vgc; // doesn't own it
+  NVGContext vgc; // doesn't own it
 
 nothrow @nogc:
 private:
@@ -716,8 +716,8 @@ public:
     }
   }
 
-  @property NVGcontext* vg () nothrow @trusted @nogc { pragma(inline, true); return vgc; }
-  @property void vg (NVGcontext* v) nothrow @trusted @nogc { pragma(inline, true); vgc = v; }
+  @property NVGContext vg () nothrow @trusted @nogc { pragma(inline, true); return vgc; }
+  @property void vg (NVGContext v) nothrow @trusted @nogc { pragma(inline, true); vgc = v; }
 }
 
 
@@ -739,7 +739,7 @@ private:
 
 public:
   // this will produce new context, ready to accept controls
-  static FuiContext create (NVGcontext* vg=null) {
+  static FuiContext create (NVGContext vg=null) {
     import core.stdc.stdlib : malloc;
     import core.stdc.string : memcpy;
     FuiContext res;
@@ -1294,8 +1294,8 @@ public:
   bool hasEvents () const nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.hasEvents() : false); }
   FuiEvent getEvent () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.getEvent() : FuiEvent.init); }
 
-  @property NVGcontext* vg () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.vgc : null); }
-  @property void vg (NVGcontext* v) nothrow @trusted @nogc { pragma(inline, true); if (ctxp) ctx.vgc = v; }
+  @property NVGContext vg () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.vgc : null); }
+  @property void vg (NVGContext v) nothrow @trusted @nogc { pragma(inline, true); if (ctxp) ctx.vgc = v; }
 
   @property ubyte lastButtons () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastButtons : 0); }
   @property ubyte lastMods () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastMods : 0); }

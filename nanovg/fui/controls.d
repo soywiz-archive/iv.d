@@ -139,7 +139,7 @@ private int buttonLike(T, FuiCtlType type) (FuiContext ctx, int parent, string t
   if (font >= 0 && ctx.vg !is null) {
     /*
     float[4] bounds;
-    nvgTextBounds(ctx.vg, 0, 0, text, bounds);
+    ctx.vg.textBounds(0, 0, text, bounds);
     ctx.layprops(item).minSize = FuiSize(cast(int)(bounds[2]-bounds[0])+4, cast(int)(bounds[3]-bounds[1])+4);
     */
     auto w = cast(int)bndLabelWidth(ctx.vg, iconid, text);
@@ -244,7 +244,7 @@ int radio (FuiContext ctx, int parent, string text, int* var=null, int iconid=-1
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void draw (FuiContext ctx, NVGcontext* avg=null) {
+void draw (FuiContext ctx, NVGContext avg=null) {
   if (!ctx.valid) return;
   auto nvg = (avg !is null ? avg : ctx.vg);
   if (nvg is null) return;
@@ -259,12 +259,12 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
     rc.xp += g.x;
     rc.yp += g.y;
 
-    if (!lp.enabled) nvgGlobalAlpha(nvg, 0.5); //else if (item == ctx.focused) nvgGlobalAlpha(nvg, 0.7);
-    scope(exit) nvgGlobalAlpha(nvg, 1.0);
+    if (!lp.enabled) nvg.globalAlpha(0.5); //else if (item == ctx.focused) nvg.globalAlpha(0.7);
+    scope(exit) nvg.globalAlpha(1.0);
 
     if (item == 0) {
       bndBackground(nvg, rc.x, rc.y, rc.w, rc.h);
-      nvgScissor(nvg, rc.x, rc.y, rc.w, rc.h);
+      nvg.scissor(rc.x, rc.y, rc.w, rc.h);
     } else {
       final switch (ctx.item!FuiCtlSpan(item).type) {
         case FuiCtlType.Invisible: break;
@@ -291,31 +291,31 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
       }
     }
     if (ctx.focused == item) {
-      nvgSave(nvg);
-      scope(exit) nvgRestore(nvg);
-      nvgStrokeColor(nvg, nvgRGB(0, 0, 100));
-      nvgStrokeWidth(nvg, 1.2);
-      nvgMiterLimit(nvg, 0);
-      nvgBeginPath(nvg);
+      nvg.save();
+      scope(exit) nvg.restore();
+      nvg.strokeColor(nvgRGB(0, 0, 100));
+      nvg.strokeWidth(1.2);
+      nvg.miterLimit(0);
+      nvg.beginPath();
       switch (ctx.item!FuiCtlSpan(item).type) {
         case FuiCtlType.Check:
-          nvgRect(nvg, rc.x+3+14, rc.y+3, rc.w-6-14, rc.h-7);
+          nvg.rect(rc.x+3+14, rc.y+3, rc.w-6-14, rc.h-7);
           break;
         default:
-          nvgRect(nvg, rc.x+3, rc.y+3, rc.w-6, rc.h-7);
+          nvg.rect(rc.x+3, rc.y+3, rc.w-6, rc.h-7);
           break;
       }
-      nvgStroke(nvg);
+      nvg.stroke();
     }
     // draw children
     item = lp.firstChild;
     lp = ctx.layprops(item);
     if (lp is null) return;
     // as we will setup scissors, we need to save and restore state
-    nvgSave(nvg);
-    scope(exit) nvgRestore(nvg);
+    nvg.save();
+    scope(exit) nvg.restore();
     // setup scissors
-    nvgIntersectScissor(nvg, rc.x, rc.y, rc.w, rc.h);
+    nvg.intersectScissor(rc.x, rc.y, rc.w, rc.h);
     while (lp !is null) {
       drawItem(item, rc.pos);
       item = lp.nextSibling;
@@ -323,8 +323,8 @@ void draw (FuiContext ctx, NVGcontext* avg=null) {
     }
   }
 
-  nvgSave(nvg);
-  scope(exit) nvgRestore(nvg);
+  nvg.save();
+  scope(exit) nvg.restore();
   drawItem(0, ctx.layprops(0).position.pos);
 }
 

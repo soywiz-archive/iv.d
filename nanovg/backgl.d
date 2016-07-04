@@ -408,7 +408,7 @@ enum /*NVGimageFlagsGL*/ {
 
 
 /// Return flags for glClear().
-uint nvgGlClearFlags () pure nothrow @safe @nogc {
+uint glNVGClearFlags () pure nothrow @safe @nogc {
   pragma(inline, true);
   return (GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
 }
@@ -1468,9 +1468,9 @@ void glnvg__renderDelete (void* uptr) {
 
 /// Creates NanoVG contexts for OpenGL versions.
 /// Flags should be combination of the create flags above.
-public NVGcontext* nvgCreateGL2 (int flags) {
+public NVGContext createGL2 (int flags) {
   NVGparams params;
-  NVGcontext* ctx = null;
+  NVGContext ctx = null;
   GLNVGcontext* gl = cast(GLNVGcontext*)malloc(GLNVGcontext.sizeof);
   if (gl is null) goto error;
   memset(gl, 0, GLNVGcontext.sizeof);
@@ -1493,25 +1493,25 @@ public NVGcontext* nvgCreateGL2 (int flags) {
 
   gl.flags = flags;
 
-  ctx = nvgCreateInternal(&params);
+  ctx = createInternal(&params);
   if (ctx is null) goto error;
 
   return ctx;
 
 error:
   // 'gl' is freed by nvgDeleteInternal.
-  if (ctx !is null) nvgDeleteInternal(ctx);
+  if (ctx !is null) ctx.deleteInternal();
   return null;
 }
 
 /// Delete NanoVG OpenGL context.
-public void nvgDeleteGL2 (NVGcontext* ctx) {
-  if (ctx !is null) nvgDeleteInternal(ctx);
+public void deleteGL2 (NVGContext ctx) {
+  if (ctx !is null) ctx.deleteInternal();
 }
 
 /// Create NanoVG OpenGL image from texture id.
-public int nvglCreateImageFromHandleGL2 (NVGcontext* ctx, GLuint textureId, int w, int h, int imageFlags) {
-  GLNVGcontext* gl = cast(GLNVGcontext*)nvgInternalParams(ctx).userPtr;
+public int glCreateImageFromHandleGL2 (NVGContext ctx, GLuint textureId, int w, int h, int imageFlags) {
+  GLNVGcontext* gl = cast(GLNVGcontext*)ctx.internalParams().userPtr;
   GLNVGtexture* tex = glnvg__allocTexture(gl);
 
   if (tex is null) return 0;
@@ -1525,9 +1525,9 @@ public int nvglCreateImageFromHandleGL2 (NVGcontext* ctx, GLuint textureId, int 
   return tex.id;
 }
 
-/// Delete created NanoVG image texture.
-public GLuint nvglImageHandleGL2 (NVGcontext* ctx, int image) {
-  GLNVGcontext* gl = cast(GLNVGcontext*)nvgInternalParams(ctx).userPtr;
+/// Return OpenGL texture id for NanoVG image.
+public GLuint glImageHandleGL2 (NVGContext ctx, int image) {
+  GLNVGcontext* gl = cast(GLNVGcontext*)ctx.internalParams().userPtr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
   return tex.tex;
 }

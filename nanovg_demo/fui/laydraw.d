@@ -33,13 +33,13 @@ float getSeconds () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared NVGcontext* nvg = null;
+__gshared NVGContext nvg = null;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void init (NVGcontext* vg) {
-  bndSetFont(nvgCreateFont(vg, "system", "/home/ketmar/ttf/ms/tahoma.ttf"));
-  bndSetIconImage(nvgCreateImage(vg, "../data/images/blender_icons16.png", 0));
+void init (NVGContext vg) {
+  bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/tahoma.ttf"));
+  bndSetIconImage(vg.createImage("../data/images/blender_icons16.png", 0));
 }
 
 
@@ -196,7 +196,7 @@ void main () {
 
   void clearWindowData () {
     if (!sdwindow.closed && nvg !is null) {
-      nvgDeleteGL2(nvg);
+      nvg.deleteGL2();
       nvg = null;
     }
   }
@@ -238,7 +238,7 @@ void main () {
     }
 
     if (alwaysRelayout) {
-      nvgFontSize(nvg, 16);
+      nvg.fontSize(16);
       ctx.buildWindow0();
       glViewport(0, 0, owdt, ohgt);
       // set dimensions and relayout
@@ -256,14 +256,14 @@ void main () {
 
     // Update and render
     glClearColor(0, 0, 0, 1);
-    glClear(nvgGlClearFlags);
+    glClear(glNVGClearFlags);
 
     if (nvg !is null) {
       if (fps !is null) fps.update(dt);
-      nvgBeginFrame(nvg, owdt, ohgt);
+      nvg.beginFrame(owdt, ohgt);
       ctx.draw();
       if (fps !is null && !perfHidden) fps.render(nvg, owdt-200-5, ohgt-35-5);
-      nvgEndFrame(nvg);
+      nvg.endFrame();
     }
   };
 
@@ -273,7 +273,7 @@ void main () {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    nvg = nvgCreateGL2(/*NVG_ANTIALIAS|*/NVG_STENCIL_STROKES|NVG_DEBUG);
+    nvg = createGL2(/*NVG_ANTIALIAS|*/NVG_STENCIL_STROKES|NVG_DEBUG);
     if (nvg is null) {
       import std.stdio;
       writeln("Could not init nanovg.");
@@ -282,7 +282,7 @@ void main () {
     init(nvg);
     ctx.vg = nvg;
 
-    nvgFontSize(nvg, 16);
+    nvg.fontSize(16);
     buildWindow0(ctx);
     // layout controls in default root box to determine minimal dimenstions
     // but set maximal dimensions to our max window size

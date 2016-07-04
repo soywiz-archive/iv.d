@@ -99,7 +99,7 @@ struct UIData {
 
 struct UIUserData {
   UIData head;
-  void delegate (NVGcontext* vg, int item) onPaint;
+  void delegate (NVGContext vg, int item) onPaint;
   void delegate (int item, UIevent event) onClick;
 }
 
@@ -166,7 +166,7 @@ public void ctlSetPanelHandler (int item, UIhandler h) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void drawUIItems (NVGcontext* vg, int item, int corners) {
+void drawUIItems (NVGContext vg, int item, int corners) {
   int kid = uiFirstChild(item);
   while (kid > 0) {
     drawUI(vg, kid, corners);
@@ -174,7 +174,7 @@ void drawUIItems (NVGcontext* vg, int item, int corners) {
   }
 }
 
-void drawUIItemsHbox (NVGcontext* vg, int item) {
+void drawUIItemsHbox (NVGContext vg, int item) {
   int kid = uiFirstChild(item);
   if (kid < 0) return;
   int nextkid = uiNextSibling(kid);
@@ -192,7 +192,7 @@ void drawUIItemsHbox (NVGcontext* vg, int item) {
 }
 
 
-void drawUIItemsVbox (NVGcontext* vg, int item) {
+void drawUIItemsVbox (NVGContext vg, int item) {
   int kid = uiFirstChild(item);
   if (kid < 0) return;
   int nextkid = uiNextSibling(kid);
@@ -210,10 +210,10 @@ void drawUIItemsVbox (NVGcontext* vg, int item) {
 }
 
 
-public void drawUI (NVGcontext* vg, int item, int corners) {
+public void drawUI (NVGContext vg, int item, int corners) {
   auto head = uiGetHandle!(UIData)(item);
   UIrect rect = uiGetRect(item);
-  if (uiGetState(item) == UI_FROZEN) nvgGlobalAlpha(vg, BND_DISABLED_ALPHA);
+  if (uiGetState(item) == UI_FROZEN) vg.globalAlpha(BND_DISABLED_ALPHA);
   if (head) {
     switch (head.subtype) {
       default:
@@ -274,36 +274,36 @@ public void drawUI (NVGcontext* vg, int item, int corners) {
         auto data = cast(const(UIRectData)*)head;
         if (rect.w && rect.h) {
           BNDwidgetState state = cast(BNDwidgetState)uiGetState(item);
-          nvgSave(vg);
-          scope(exit) nvgRestore(vg);
-          nvgStrokeColor(vg, nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.9f));
+          vg.save();
+          scope(exit) vg.restore();
+          vg.strokeColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.9f));
           if (state != BND_DEFAULT) {
-            nvgFillColor(vg, nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.5f));
+            vg.fillColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.5f));
           } else {
-            nvgFillColor(vg, nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.1f));
+            vg.fillColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.1f));
           }
-          nvgStrokeWidth(vg, 2);
-          nvgBeginPath(vg);
+          vg.strokeWidth(2);
+          vg.beginPath();
           version(none) {
-            nvgRect(vg, rect.x, rect.y, rect.w, rect.h);
+            vg.rect(rect.x, rect.y, rect.w, rect.h);
           } else {
-            nvgRoundedRect(vg, rect.x, rect.y, rect.w, rect.h, 3);
+            vg.roundedRect(rect.x, rect.y, rect.w, rect.h, 3);
           }
-          nvgFill(vg);
-          nvgStroke(vg);
+          vg.fill();
+          vg.stroke();
 
           if (state != BND_DEFAULT) {
-            nvgFillColor(vg, nvgRGBAf(0.0f, 0.0f, 0.0f, 1.0f));
-            nvgFontSize(vg, 15.0f);
-            nvgBeginPath(vg);
-            nvgTextAlign(vg, NVGalign.Top|NVGalign.Center);
-            nvgTextBox(vg, rect.x, rect.y+rect.h*0.3f, rect.w, data.label);
+            vg.fillColor(nvgRGBAf(0.0f, 0.0f, 0.0f, 1.0f));
+            vg.fontSize(15.0f);
+            vg.beginPath();
+            vg.textAlign(NVGalign.Top|NVGalign.Center);
+            vg.textBox(rect.x, rect.y+rect.h*0.3f, rect.w, data.label);
           }
         }
 
-        nvgSave(vg);
-        scope(exit) nvgRestore(vg);
-        nvgIntersectScissor(vg, rect.x, rect.y, rect.w, rect.h);
+        vg.save();
+        scope(exit) vg.restore();
+        vg.intersectScissor(rect.x, rect.y, rect.w, rect.h);
 
         drawUIItems(vg, item, corners);
         break;
@@ -312,7 +312,7 @@ public void drawUI (NVGcontext* vg, int item, int corners) {
     drawUIItems(vg, item, corners);
   }
 
-  if (uiGetState(item) == UI_FROZEN) nvgGlobalAlpha(vg, 1.0);
+  if (uiGetState(item) == UI_FROZEN) vg.globalAlpha(1.0);
 }
 
 
@@ -323,7 +323,7 @@ void user_handler (int item, UIevent event) {
 }
 
 
-public int userCtl (void delegate (NVGcontext* vg, int item) onPaint, void delegate (int item, UIevent event) onClick=null) {
+public int userCtl (void delegate (NVGContext vg, int item) onPaint, void delegate (int item, UIevent event) onClick=null) {
   int item = uiItem();
   UIUserData *data = uiAllocHandle!UIUserData(item);
   data.head.subtype = ST_USER;
