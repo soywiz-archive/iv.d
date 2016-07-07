@@ -436,14 +436,14 @@ enum MODE_EXT_I_STEREO = 1;
 enum FRAC_ONE = (1 << FRAC_BITS);
 //enum FIX(a)   ((int)((a) * FRAC_ONE))
 enum FIXR(double a) = (cast(int)((a) * FRAC_ONE + 0.5));
-int FIXRx(double a) { pragma(inline, true); return (cast(int)((a) * FRAC_ONE + 0.5)); }
+int FIXRx(double a) { static if (__VERSION__ > 2067) pragma(inline, true); return (cast(int)((a) * FRAC_ONE + 0.5)); }
 //enum FRAC_RND(a) (((a) + (FRAC_ONE/2)) >> FRAC_BITS)
 enum FIXHR(double a) = (cast(int)((a) * (1L<<32) + 0.5));
-int FIXHRx() (double a) { pragma(inline, true); return (cast(int)((a) * (1L<<32) + 0.5)); }
+int FIXHRx() (double a) { static if (__VERSION__ > 2067) pragma(inline, true); return (cast(int)((a) * (1L<<32) + 0.5)); }
 
-long MULL() (int a, int b) { pragma(inline, true); return ((cast(long)(a) * cast(long)(b)) >> FRAC_BITS); }
-long MULH() (int a, int b) { pragma(inline, true); return ((cast(long)(a) * cast(long)(b)) >> 32); }
-auto MULS(T) (T ra, T rb) { pragma(inline, true); return ((ra) * (rb)); }
+long MULL() (int a, int b) { static if (__VERSION__ > 2067) pragma(inline, true); return ((cast(long)(a) * cast(long)(b)) >> FRAC_BITS); }
+long MULH() (int a, int b) { static if (__VERSION__ > 2067) pragma(inline, true); return ((cast(long)(a) * cast(long)(b)) >> 32); }
+auto MULS(T) (T ra, T rb) { static if (__VERSION__ > 2067) pragma(inline, true); return ((ra) * (rb)); }
 
 enum ISQRT2 = FIXR!(0.70710678118654752440);
 
@@ -1170,7 +1170,7 @@ static immutable int[9] icos36h = [
 ////////////////////////////////////////////////////////////////////////////////
 
 int unaligned32_be (const(uint8_t)* p) {
-  pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   return (((p[0]<<8) | p[1])<<16) | (p[2]<<8) | (p[3]);
 }
 
@@ -1202,9 +1202,9 @@ enum SHOW_SBITS(string name, string gb, string num) = NEG_SSR32(name~"_cache", n
 
 enum GET_CACHE(string name, string gb) = "(cast(uint32_t)"~name~"_cache)";
 
-int get_bits_count() (const(bitstream_t)* s) { pragma(inline, true); return s.index; }
+int get_bits_count() (const(bitstream_t)* s) { static if (__VERSION__ > 2067) pragma(inline, true); return s.index; }
 
-void skip_bits_long (bitstream_t* s, int n) { pragma(inline, true); s.index += n; }
+void skip_bits_long (bitstream_t* s, int n) { static if (__VERSION__ > 2067) pragma(inline, true); s.index += n; }
 //#define skip_bits skip_bits_long
 alias skip_bits = skip_bits_long;
 
@@ -1231,7 +1231,7 @@ uint get_bits (bitstream_t* s, int n){
 }
 
 int get_bitsz (bitstream_t* s, int n) {
-  pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   return (n == 0 ? 0 : get_bits(s, n));
 }
 

@@ -609,7 +609,7 @@ enum DRFLAC_CHANNEL_ASSIGNMENT_MID_SIDE = 10;
 version(LittleEndian) enum drflac__is_little_endian = true; else enum drflac__is_little_endian = false;
 
 ushort drflac__be2host_16 (ushort n) {
-  pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     return cast(ushort)((n>>8)|((n&0xff)<<8));
   } else {
@@ -618,7 +618,7 @@ ushort drflac__be2host_16 (ushort n) {
 }
 
 uint drflac__be2host_32 (uint n) {
-  pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     import core.bitop : bswap;
     return bswap(n);
@@ -628,10 +628,16 @@ uint drflac__be2host_32 (uint n) {
 }
 
 ulong drflac__be2host_64 (ulong n) {
-  pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     import core.bitop : bswap;
-    return bswap(n);
+    version(GNU) {
+      auto n0 = cast(ulong)bswap(cast(uint)n);
+      auto n1 = cast(ulong)bswap(cast(uint)(n>>32));
+      return (n0<<32)|n1;
+    } else {
+      return bswap(n);
+    }
   } else {
     return n;
   }
@@ -639,7 +645,7 @@ ulong drflac__be2host_64 (ulong n) {
 
 
 uint drflac__le2host_32 (uint n) {
-  pragma(inline, true);
+  static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     return n;
   } else {
