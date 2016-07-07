@@ -215,7 +215,8 @@ int checkbox (FuiContext ctx, int parent, string text, bool* var=null, int iconi
       flex = 1;
       clickMask |= FuiLayoutProps.Buttons.Left;
       canBeFocused = true;
-      minSize.w += 14;
+      minSize.w += cast(int)BND_OPTION_WIDTH;
+      if (minSize.h < BND_OPTION_HEIGHT) minSize.h = cast(int)BND_OPTION_HEIGHT;
     }
   }
   return item;

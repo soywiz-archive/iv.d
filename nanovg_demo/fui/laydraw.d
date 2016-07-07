@@ -222,8 +222,8 @@ void main () {
     ohgt = h;
     glViewport(0, 0, w, h);
     // set dimensions and relayout
-    ctx.layprops(0).defSize = FuiSize(w, h);
-    ctx.layprops(0).maxSize = ctx.layprops(0).defSize;
+    ctx.layprops(0).minSize = FuiSize(w, h);
+    ctx.layprops(0).maxSize = ctx.layprops(0).minSize;
     ctx.relayout();
   };
 
@@ -242,8 +242,8 @@ void main () {
       ctx.buildWindow0();
       glViewport(0, 0, owdt, ohgt);
       // set dimensions and relayout
-      ctx.layprops(0).defSize = FuiSize(owdt, ohgt);
-      ctx.layprops(0).maxSize = ctx.layprops(0).defSize;
+      ctx.layprops(0).minSize = FuiSize(owdt, ohgt);
+      ctx.layprops(0).maxSize = ctx.layprops(0).minSize;
       ctx.relayout();
       //writeln("w=", owdt, "; h=", ohgt, "; w=", ctx.layprops(0).position.w, "; h=", ctx.layprops(0).position.h);
     }
@@ -291,6 +291,22 @@ void main () {
 
     GWidth = ctx.layprops(0).position.w;
     GHeight = ctx.layprops(0).position.h;
+
+    // as font sizes changes slightly, we'll do this hack
+    glViewport(0, 0, GWidth, GHeight);
+    nvg.beginFrame(GWidth, GHeight);
+    ctx.draw();
+    nvg.cancelFrame();
+
+    // and layout it all again
+    buildWindow0(ctx);
+    ctx.layprops(0).minSize = FuiSize(GWidth, GHeight);
+    ctx.layprops(0).maxSize = FuiSize(1028, 768);
+    ctx.relayout();
+
+    GWidth = ctx.layprops(0).position.w;
+    GHeight = ctx.layprops(0).position.h;
+
     sdwindow.resize(GWidth, GHeight);
 
     if (fps is null) fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");

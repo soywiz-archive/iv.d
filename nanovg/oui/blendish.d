@@ -1594,7 +1594,7 @@ public void bndJoinAreaOverlay (NVGContext ctx, float x, float y, float w, float
 public float bndLabelWidth (NVGContext ctx, int iconid, const(char)[] label) {
   int w = BND_PAD_LEFT+BND_PAD_RIGHT;
   if (iconid >= 0) w += BND_ICON_SHEET_RES;
-  if (label && (bnd_font >= 0)) {
+  if (label && bnd_font >= 0) {
     ctx.fontFaceId(bnd_font);
     ctx.fontSize(BND_LABEL_FONT_SIZE);
     w += cast(int)ctx.textBounds(1, 1, label, null);

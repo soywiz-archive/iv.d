@@ -135,7 +135,6 @@ align(1):
 
   FuiSize minSize;
   FuiSize maxSize = FuiSize(int.max-1024, int.max-1024); // arbitrary limit, you know
-  FuiSize defSize;
   FuiMargin padding;
   int spacing; // spacing for children
   int lineSpacing; // line spacing for horizontal boxes
@@ -876,28 +875,6 @@ public:
       */
     }
 
-    // fix children dimensions
-    void layFixChildrenDims(string which) (int topid, bool doResetSizes) if (which == "w" || which == "h" || which == "all") {
-      auto lp = layprops(topid);
-      if (lp is null) return;
-      topid = lp.firstChild;
-      while ((lp = layprops(topid)) !is null) {
-        if (doResetSizes) {
-               static if (which == "all") lp.position = lp.position.init;
-          else static if (which == "h") lp.position.x = lp.position.h = 0;
-          else static if (which == "w") lp.position.y = lp.position.w = 0;
-        }
-        static if (which == "all" || which == "w") {
-          if (lp.position.w <= 0) lp.position.w = (lp.defSize.w > 0 ? lp.defSize.w : (lp.minSize.w > 0 ? lp.minSize.w : 0));
-        }
-        static if (which == "all" || which == "h") {
-          if (lp.position.h <= 0) lp.position.h = (lp.defSize.h > 0 ? lp.defSize.h : (lp.minSize.h > 0 ? lp.minSize.h : 0));
-        }
-        layFixChildrenDims!which(topid, doResetSizes);
-        topid = lp.nextSibling;
-      }
-    }
-
     // layout children in this item
     // `spareGroups`: don't touch widget sizes for hv groups
     // `spareAll`: don't fix this widget's size
@@ -995,8 +972,8 @@ public:
 
       // grow box or clamp max size
       // but only if size is not defined; in other cases our size is changed by parent to fit in
-      if (lp.position.w == 0) lp.position.w = min(max(0, lp.defSize.w, lp.minSize.w, maxW), lp.maxSize.w);
-      if (lp.position.h == 0) lp.position.h = min(max(0, lp.defSize.h, lp.minSize.h, maxH), lp.maxSize.h);
+      if (lp.position.w == 0) lp.position.w = min(max(0, lp.minSize.w, maxW), lp.maxSize.w);
+      if (lp.position.h == 0) lp.position.h = min(max(0, lp.minSize.h, maxH), lp.maxSize.h);
       maxH = lp.position.h;
       maxW = lp.position.w;
 
