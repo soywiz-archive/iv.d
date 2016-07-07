@@ -1995,7 +1995,7 @@ void compute_imdct (mp3_context_t *s, granule_t *g, int32_t *sb_samples, int32_t
         if (v != 0)
             break;
     }
-    sblimit = ((ptr - g.sb_hybrid.ptr) / 18) + 1;
+    sblimit = cast(int)((ptr - g.sb_hybrid.ptr) / 18) + 1;
 
     if (g.block_type == 2) {
         /* XXX: check for 8000 Hz */
@@ -2765,7 +2765,7 @@ int mp3_decode_main(
             samples_ptr += 32 * s.nb_channels;
         }
     }
-    return nb_frames * 32 * uint16_t.sizeof * s.nb_channels;
+    return nb_frames * 32 * cast(int)uint16_t.sizeof * s.nb_channels;
 }
 
 

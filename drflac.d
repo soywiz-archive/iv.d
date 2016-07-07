@@ -1135,8 +1135,8 @@ enum DRFLAC__DECODE_SAMPLES_WITH_RESIDULE__RICE__PROC(string funcName, string pr
 "    1, 1, 1, 1, 1, 1, 1, 1\n"~
 "  ];\n"~
 "\n"~
-"  drflac_cache_t riceParamMask = "~DRFLAC_CACHE_L1_SELECTION_MASK!"riceParam"~";\n"~
-"  drflac_cache_t resultHiShift = "~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~"-riceParam;\n"~
+"  drflac_cache_t riceParamMask = cast(drflac_cache_t)("~DRFLAC_CACHE_L1_SELECTION_MASK!"riceParam"~");\n"~
+"  drflac_cache_t resultHiShift = cast(drflac_cache_t)("~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~"-riceParam);\n"~
 "\n"~
 "  for (int i = 0; i < cast(int)count; ++i) {\n"~
 "    uint zeroCounter = 0;\n"~
@@ -1155,8 +1155,8 @@ enum DRFLAC__DECODE_SAMPLES_WITH_RESIDULE__RICE__PROC(string funcName, string pr
 "      decodedRice = (zeroCounter+(setBitOffsetPlus1-1))<<riceParam;\n"~
 "    } else {\n"~
 "      if (bs.cache == 1) {\n"~
-"        setBitOffsetPlus1 = "~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~";\n"~
-"        decodedRice = (zeroCounter+("~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~"-1))<<riceParam;\n"~
+"        setBitOffsetPlus1 = cast(uint)("~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~");\n"~
+"        decodedRice = cast(uint)((zeroCounter+("~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~"-1))<<riceParam);\n"~
 "      } else {\n"~
 "        setBitOffsetPlus1 = 5;\n"~
 "        for (;;) {\n"~
@@ -1908,7 +1908,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
             metadata.rawDataSize = blockSize;
             metadata.data.application.id       = drflac__be2host_32(*cast(uint*)pRawData);
             metadata.data.application.pData    = cast(const(void)*)(cast(ubyte*)pRawData+uint.sizeof);
-            metadata.data.application.dataSize = blockSize-uint.sizeof;
+            metadata.data.application.dataSize = blockSize-cast(uint)uint.sizeof;
             pFlac.onMeta(pFlac.pUserDataMD, &metadata);
 
             free(pRawData);

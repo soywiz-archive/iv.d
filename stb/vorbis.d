@@ -921,7 +921,7 @@ private int vorbis_validate (const(void)* data) {
 private int lookup1_values (int entries, int dim) {
   import core.stdc.math : lrintf;
   import std.math : floor, exp, pow, log;
-  int r = lrintf(floor(exp(cast(float)log(cast(float)entries)/dim)));
+  int r = cast(int)lrintf(floor(exp(cast(float)log(cast(float)entries)/dim)));
   if (lrintf(floor(pow(cast(float)r+1, dim))) <= entries) ++r; // (int) cast for MinGW warning; floor() to avoid _ftol() when non-CRT
   assert(pow(cast(float)r+1, dim) > entries);
   assert(lrintf(floor(pow(cast(float)r, dim))) <= entries); // (int), floor() as above
@@ -1689,7 +1689,7 @@ private void decode_residue (VorbisDecoder f, ref float*[STB_VORBIS_MAX_CHANNELS
   version(STB_VORBIS_DIVIDES_IN_RESIDUE) {
     int** classifications = cast(int**)mixin(temp_block_array!("f.vrchannels", "part_read*int.sizeof"));
   } else {
-    ubyte*** part_classdata = cast(ubyte***)mixin(temp_block_array!("f.vrchannels", "part_read*(ubyte*).sizeof"));
+    ubyte*** part_classdata = cast(ubyte***)mixin(temp_block_array!("f.vrchannels", "part_read*cast(int)(ubyte*).sizeof"));
   }
 
   //stb_prof(2);
@@ -3079,12 +3079,12 @@ private int start_decoder (VorbisDecoder f) {
       if (c.sorted_entries) {
         c.codeword_lengths = setup_malloc!ubyte(f, c.sorted_entries);
         if (!c.codeword_lengths) return error(f, STBVorbisError.outofmem);
-        c.codewords = cast(uint*)setup_temp_malloc(f, (*c.codewords).sizeof*c.sorted_entries);
+        c.codewords = cast(uint*)setup_temp_malloc(f, cast(int)(*c.codewords).sizeof*c.sorted_entries);
         if (!c.codewords) return error(f, STBVorbisError.outofmem);
-        values = cast(uint*)setup_temp_malloc(f, (*values).sizeof*c.sorted_entries);
+        values = cast(uint*)setup_temp_malloc(f, cast(int)(*values).sizeof*c.sorted_entries);
         if (!values) return error(f, STBVorbisError.outofmem);
       }
-      uint size = c.entries+((*c.codewords).sizeof+(*values).sizeof)*c.sorted_entries;
+      uint size = c.entries+cast(int)((*c.codewords).sizeof+(*values).sizeof)*c.sorted_entries;
       if (size > f.setup_temp_memory_required) f.setup_temp_memory_required = size;
     }
 
@@ -3107,8 +3107,8 @@ private int start_decoder (VorbisDecoder f) {
     }
 
     if (c.sparse) {
-      setup_temp_free(f, values, (*values).sizeof*c.sorted_entries);
-      setup_temp_free(f, c.codewords, (*c.codewords).sizeof*c.sorted_entries);
+      setup_temp_free(f, values, cast(int)(*values).sizeof*c.sorted_entries);
+      setup_temp_free(f, c.codewords, cast(int)(*c.codewords).sizeof*c.sorted_entries);
       setup_temp_free(f, lengths, c.entries);
       c.codewords = null;
     }
@@ -3129,11 +3129,11 @@ private int start_decoder (VorbisDecoder f) {
         c.lookup_values = c.entries*c.dimensions;
       }
       if (c.lookup_values == 0) return error(f, STBVorbisError.invalid_setup);
-      mults = cast(ushort*)setup_temp_malloc(f, (mults[0]).sizeof*c.lookup_values);
+      mults = cast(ushort*)setup_temp_malloc(f, cast(int)(mults[0]).sizeof*c.lookup_values);
       if (mults is null) return error(f, STBVorbisError.outofmem);
       foreach (immutable j; 0..cast(int)c.lookup_values) {
         int q = get_bits_main(f, c.value_bits);
-        if (q == EOP) { setup_temp_free(f, mults, (mults[0]).sizeof*c.lookup_values); return error(f, STBVorbisError.invalid_setup); }
+        if (q == EOP) { setup_temp_free(f, mults, cast(int)(mults[0]).sizeof*c.lookup_values); return error(f, STBVorbisError.invalid_setup); }
         mults[j] = cast(ushort)q; //k8
       }
 
@@ -3148,7 +3148,7 @@ private int start_decoder (VorbisDecoder f) {
           } else {
             c.multiplicands = setup_malloc!codetype(f, c.entries*c.dimensions);
           }
-          if (c.multiplicands is null) { setup_temp_free(f, mults, (mults[0]).sizeof*c.lookup_values); return error(f, STBVorbisError.outofmem); }
+          if (c.multiplicands is null) { setup_temp_free(f, mults, cast(int)(mults[0]).sizeof*c.lookup_values); return error(f, STBVorbisError.outofmem); }
           foreach (immutable j; 0..(sparse ? c.sorted_entries : c.entries)) {
             uint z = (sparse ? c.sorted_values[j] : j);
             uint div = 1;
@@ -3160,7 +3160,7 @@ private int start_decoder (VorbisDecoder f) {
               if (c.sequence_p) last = val;
               if (k+1 < c.dimensions) {
                  if (div > uint.max/cast(uint)c.lookup_values) {
-                    setup_temp_free(f, mults, (mults[0]).sizeof*c.lookup_values);
+                    setup_temp_free(f, mults, cast(uint)(mults[0]).sizeof*c.lookup_values);
                     return error(f, STBVorbisError.invalid_setup);
                  }
                  div *= c.lookup_values;
@@ -3175,7 +3175,7 @@ private int start_decoder (VorbisDecoder f) {
       {
         float last = 0;
         c.multiplicands = setup_malloc!codetype(f, c.lookup_values);
-        if (c.multiplicands is null) { setup_temp_free(f, mults, (mults[0]).sizeof*c.lookup_values); return error(f, STBVorbisError.outofmem); }
+        if (c.multiplicands is null) { setup_temp_free(f, mults, cast(uint)(mults[0]).sizeof*c.lookup_values); return error(f, STBVorbisError.outofmem); }
         foreach (immutable j; 0..cast(int)c.lookup_values) {
           float val = mults[j]*c.delta_value+c.minimum_value+last;
           c.multiplicands[j] = val;
@@ -3184,7 +3184,7 @@ private int start_decoder (VorbisDecoder f) {
       }
      //version(STB_VORBIS_DIVIDES_IN_CODEBOOK)
      skip: // this is versioned out in C
-      setup_temp_free(f, mults, (mults[0]).sizeof*c.lookup_values);
+      setup_temp_free(f, mults, cast(uint)(mults[0]).sizeof*c.lookup_values);
     }
   }
 
@@ -3409,7 +3409,7 @@ private int start_decoder (VorbisDecoder f) {
 
   // 1.
   {
-    uint imdct_mem = (f.blocksize_1*(float).sizeof>>1);
+    uint imdct_mem = (f.blocksize_1*cast(uint)(float).sizeof>>1);
     uint classify_mem;
     int max_part_read = 0;
     foreach (immutable i; 0..f.residue_count) {
@@ -3419,9 +3419,9 @@ private int start_decoder (VorbisDecoder f) {
       if (part_read > max_part_read) max_part_read = part_read;
     }
     version(STB_VORBIS_DIVIDES_IN_RESIDUE) {
-      classify_mem = f.vrchannels*((void*).sizeof+max_part_read*(int*).sizeof);
+      classify_mem = f.vrchannels*cast(uint)((void*).sizeof+max_part_read*(int*).sizeof);
     } else {
-      classify_mem = f.vrchannels*((void*).sizeof+max_part_read*(ubyte*).sizeof);
+      classify_mem = f.vrchannels*cast(uint)((void*).sizeof+max_part_read*(ubyte*).sizeof);
     }
     f.temp_memory_required = classify_mem;
     if (imdct_mem > f.temp_memory_required) f.temp_memory_required = imdct_mem;
