@@ -989,8 +989,8 @@ struct Point {
 }
 
 extern(C) int point_compare (const void *p, const void *q) {
-  auto* a = cast(const Point*)p;
-  auto* b = cast(const Point*)q;
+  auto a = cast(const(Point)*)p;
+  auto b = cast(const(Point)*)q;
   return (a.x < b.x ? -1 : a.x > b.x);
 }
 /////////////////////// END LEAF SETUP FUNCTIONS //////////////////////////
@@ -3969,8 +3969,116 @@ private:
   bool stclose;
   FILE* stfl;
 
+private:
+  //ubyte* stream;
+  //ubyte* stream_start;
+  //ubyte* stream_end;
+  //uint stream_len;
+
+  /+bool push_mode;+/
+
+  uint first_audio_page_offset;
+
+  ProbedPage p_first, p_last;
+
+  // memory management
+  Allocator alloc;
+  int setup_offset;
+  int temp_offset;
+
+  // run-time results
+  bool eof = true;
+  STBVorbisError error;
+
+  // header info
+  int[2] blocksize;
+  int blocksize_0, blocksize_1;
+  int codebook_count;
+  Codebook* codebooks;
+  int floor_count;
+  ushort[64] floor_types; // varies
+  Floor* floor_config;
+  int residue_count;
+  ushort[64] residue_types; // varies
+  Residue* residue_config;
+  int mapping_count;
+  Mapping* mapping;
+  int mode_count;
+  Mode[64] mode_config;  // varies
+
+  uint total_samples;
+
+  // decode buffer
+  float*[STB_VORBIS_MAX_CHANNELS] channel_buffers;
+  float*[STB_VORBIS_MAX_CHANNELS] outputs;
+
+  float*[STB_VORBIS_MAX_CHANNELS] previous_window;
+  int previous_length;
+
+  version(STB_VORBIS_NO_DEFER_FLOOR) {
+    float*[STB_VORBIS_MAX_CHANNELS] floor_buffers;
+  } else {
+    short*[STB_VORBIS_MAX_CHANNELS] finalY;
+  }
+
+  uint current_loc; // sample location of next frame to decode
+  int current_loc_valid;
+
+  // per-blocksize precomputed data
+
+  // twiddle factors
+  float*[2] A, B, C;
+  float*[2] window;
+  ushort*[2] bit_reverse;
+
+  // current page/packet/segment streaming info
+  uint serial; // stream serial number for verification
+  int last_page;
+  int segment_count;
+  ubyte[255] segments;
+  ubyte page_flag;
+  ubyte bytes_in_seg;
+  ubyte first_decode;
+  int next_seg;
+  int last_seg;  // flag that we're on the last segment
+  int last_seg_which; // what was the segment number of the last seg?
+  uint acc;
+  int valid_bits;
+  int packet_bytes;
+  int end_seg_with_known_loc;
+  uint known_loc_for_packet;
+  int discard_samples_deferred;
+  uint samples_output;
+
+  // push mode scanning
+  /+
+  int page_crc_tests; // only in push_mode: number of tests active; -1 if not searching
+  CRCscan[STB_VORBIS_PUSHDATA_CRC_COUNT] scan;
+  +/
+
+  // sample-access
+  int channel_buffer_start;
+  int channel_buffer_end;
+
+private: // k8: 'cause i'm evil
+  // user-accessible info
+  uint sample_rate;
+  int vrchannels;
+
+  uint setup_memory_required;
+  uint temp_memory_required;
+  uint setup_temp_memory_required;
+
+  bool read_comments;
+  ubyte* comment_data;
+  uint comment_size;
+
+  // functions to get comment data
+  uint comment_data_pos;
+
+private:
   int rawRead (void[] buf) {
-    pragma(inline, true);
+    static if (__VERSION__ > 2067) pragma(inline, true);
     if (isOpened && buf.length > 0 && stpos < stend) {
       if (stend-stpos < buf.length) buf = buf[0..stend-stpos];
       auto rd = stmread(buf, stpos, this);
@@ -3979,11 +4087,9 @@ private:
     }
     return 0;
   }
-  void rawSkip (int n) { pragma(inline, true); if (isOpened && n > 0) { if ((stpos += n) > stend) stpos = stend; } }
-  void rawSeek (int n) { pragma(inline, true); if (isOpened) { stpos = stst+(n < 0 ? 0 : n); if (stpos > stend) stpos = stend; } }
-  void rawClose () { pragma(inline, true); if (isOpened) { isOpened = false; stmread(null, 0, this); } }
-
-public:
+  void rawSkip (int n) { static if (__VERSION__ > 2067) pragma(inline, true); if (isOpened && n > 0) { if ((stpos += n) > stend) stpos = stend; } }
+  void rawSeek (int n) { static if (__VERSION__ > 2067) pragma(inline, true); if (isOpened) { stpos = stst+(n < 0 ? 0 : n); if (stpos > stend) stpos = stend; } }
+  void rawClose () { static if (__VERSION__ > 2067) pragma(inline, true); if (isOpened) { isOpened = false; stmread(null, 0, this); } }
 
 final:
 private:
@@ -4716,21 +4822,6 @@ public:
   }
 
 private: // k8: 'cause i'm evil
-  // user-accessible info
-  uint sample_rate;
-  int vrchannels;
-
-  uint setup_memory_required;
-  uint temp_memory_required;
-  uint setup_temp_memory_required;
-
-  bool read_comments;
-  ubyte* comment_data;
-  uint comment_size;
-
-  // functions to get comment data
-  uint comment_data_pos;
-
   private enum cmt_len_size = 2;
   nothrow /*@trusted*/ @nogc {
     public @property bool comment_empty () const pure { return (comment_get_line_len == 0); }
@@ -4790,96 +4881,6 @@ private: // k8: 'cause i'm evil
       return (epos < line.length ? line[epos+1..$] : line);
     }
   }
-
-  //ubyte* stream;
-  //ubyte* stream_start;
-  //ubyte* stream_end;
-  //uint stream_len;
-
-  /+bool push_mode;+/
-
-  uint first_audio_page_offset;
-
-  ProbedPage p_first, p_last;
-
-  // memory management
-  Allocator alloc;
-  int setup_offset;
-  int temp_offset;
-
-  // run-time results
-  bool eof = true;
-  STBVorbisError error;
-
-  // header info
-  int[2] blocksize;
-  int blocksize_0, blocksize_1;
-  int codebook_count;
-  Codebook* codebooks;
-  int floor_count;
-  ushort[64] floor_types; // varies
-  Floor* floor_config;
-  int residue_count;
-  ushort[64] residue_types; // varies
-  Residue* residue_config;
-  int mapping_count;
-  Mapping* mapping;
-  int mode_count;
-  Mode[64] mode_config;  // varies
-
-  uint total_samples;
-
-  // decode buffer
-  float*[STB_VORBIS_MAX_CHANNELS] channel_buffers;
-  float*[STB_VORBIS_MAX_CHANNELS] outputs;
-
-  float*[STB_VORBIS_MAX_CHANNELS] previous_window;
-  int previous_length;
-
-  version(STB_VORBIS_NO_DEFER_FLOOR) {
-    float*[STB_VORBIS_MAX_CHANNELS] floor_buffers;
-  } else {
-    short*[STB_VORBIS_MAX_CHANNELS] finalY;
-  }
-
-  uint current_loc; // sample location of next frame to decode
-  int current_loc_valid;
-
-  // per-blocksize precomputed data
-
-  // twiddle factors
-  float*[2] A, B, C;
-  float*[2] window;
-  ushort*[2] bit_reverse;
-
-  // current page/packet/segment streaming info
-  uint serial; // stream serial number for verification
-  int last_page;
-  int segment_count;
-  ubyte[255] segments;
-  ubyte page_flag;
-  ubyte bytes_in_seg;
-  ubyte first_decode;
-  int next_seg;
-  int last_seg;  // flag that we're on the last segment
-  int last_seg_which; // what was the segment number of the last seg?
-  uint acc;
-  int valid_bits;
-  int packet_bytes;
-  int end_seg_with_known_loc;
-  uint known_loc_for_packet;
-  int discard_samples_deferred;
-  uint samples_output;
-
-  // push mode scanning
-  /+
-  int page_crc_tests; // only in push_mode: number of tests active; -1 if not searching
-  CRCscan[STB_VORBIS_PUSHDATA_CRC_COUNT] scan;
-  +/
-
-  // sample-access
-  int channel_buffer_start;
-  int channel_buffer_end;
 }
 
 
