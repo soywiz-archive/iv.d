@@ -38,7 +38,9 @@ __gshared NVGContext nvg = null;
 
 // ////////////////////////////////////////////////////////////////////////// //
 void init (NVGContext vg) {
-  bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/verdana.ttf"));
+  enum FontFile = "/home/ketmar/ttf/ms/verdana.ttf";
+  //enum FontFile = "/home/ketmar/back/D/ports/soui.ttf";
+  bndSetFont(vg.createFont("system", FontFile));
   bndSetIconImage(vg.createImage("../data/images/blender_icons16.png", 0));
 }
 
