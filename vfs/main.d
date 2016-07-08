@@ -76,7 +76,7 @@ public abstract class VFSDriver {
   /// get number of entries in archive directory.
   @property usize dirLength () { return 0; }
   /// get directory entry with the given index. can throw, but it's not necessary.
-  DirEntry dirEntry (usize idx) { return DirEntry.init; }
+  DirEntry dirEntry (uint idx) { return DirEntry.init; }
 }
 
 

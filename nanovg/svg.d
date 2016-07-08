@@ -237,7 +237,7 @@ struct NSVG {
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
-T* xalloc(T) (uint addmem=0) if (!is(T == class)) {
+T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   import core.stdc.stdlib : malloc;
   if (T.sizeof == 0 && addmem == 0) addmem = 1;
   auto res = cast(ubyte*)malloc(T.sizeof+addmem+256);
