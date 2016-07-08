@@ -240,7 +240,7 @@ private:
 T* xalloc(T) (uint addmem=0) if (!is(T == class)) {
   import core.stdc.stdlib : malloc;
   if (T.sizeof == 0 && addmem == 0) addmem = 1;
-  auto res = cast(ubyte*)malloc(T.sizeof+addmem);
+  auto res = cast(ubyte*)malloc(T.sizeof+addmem+256);
   if (res is null) return null;
   /+
   static if (is(T == struct)) {
@@ -261,7 +261,7 @@ T* xcalloc(T) (usize count) if (!is(T == class) && !is(T == struct)) {
   import core.stdc.stdlib : malloc;
   usize sz = T.sizeof*count;
   if (sz == 0) sz = 1;
-  auto res = cast(ubyte*)malloc(sz);
+  auto res = cast(ubyte*)malloc(sz+256);
   if (res is null) return null;
   res[0..sz] = 0;
   return cast(T*)res;
@@ -732,7 +732,7 @@ void nsvg__addPoint (Parser* p, float x, float y) {
   if (p.npts+1 > p.cpts) {
     import core.stdc.stdlib : realloc;
     p.cpts = (p.cpts ? p.cpts*2 : 8);
-    p.pts = cast(float*)realloc(p.pts, p.cpts*2*float.sizeof);
+    p.pts = cast(float*)realloc(p.pts, p.cpts*2*float.sizeof+256);
     if (p.pts is null) assert(0, "nanosvg: out of memory");
   }
   p.pts[p.npts*2+0] = x;
@@ -2475,7 +2475,7 @@ void nsvg__parseGradientStop (Parser* p, AttrList attr) {
   if (grad is null) return;
 
   ++grad.nstops;
-  grad.stops = cast(NSVG.GradientStop*)realloc(grad.stops, NSVG.GradientStop.sizeof*grad.nstops);
+  grad.stops = cast(NSVG.GradientStop*)realloc(grad.stops, NSVG.GradientStop.sizeof*grad.nstops+256);
   if (grad.stops is null) assert(0, "nanosvg: out of memory");
 
   // Insert
@@ -2935,7 +2935,7 @@ void nsvg__addPathPoint (NSVGrasterizer r, float x, float y, int flags) {
 
   if (r.npoints+1 > r.cpoints) {
     r.cpoints = (r.cpoints > 0 ? r.cpoints*2 : 64);
-    r.points = cast(NSVGpoint*)realloc(r.points, NSVGpoint.sizeof*r.cpoints);
+    r.points = cast(NSVGpoint*)realloc(r.points, NSVGpoint.sizeof*r.cpoints+256);
     if (r.points is null) assert(0, "nanosvg: out of memory");
   }
 
@@ -2950,7 +2950,7 @@ void nsvg__appendPathPoint (NSVGrasterizer r, NSVGpoint pt) {
   import core.stdc.stdlib : realloc;
   if (r.npoints+1 > r.cpoints) {
     r.cpoints = (r.cpoints > 0 ? r.cpoints*2 : 64);
-    r.points = cast(NSVGpoint*)realloc(r.points, NSVGpoint.sizeof*r.cpoints);
+    r.points = cast(NSVGpoint*)realloc(r.points, NSVGpoint.sizeof*r.cpoints+256);
     if (r.points is null) assert(0, "nanosvg: out of memory");
   }
   r.points[r.npoints] = pt;
@@ -2962,7 +2962,7 @@ void nsvg__duplicatePoints (NSVGrasterizer r) {
   import core.stdc.string : memmove;
   if (r.npoints > r.cpoints2) {
     r.cpoints2 = r.npoints;
-    r.points2 = cast(NSVGpoint*)realloc(r.points2, NSVGpoint.sizeof*r.cpoints2);
+    r.points2 = cast(NSVGpoint*)realloc(r.points2, NSVGpoint.sizeof*r.cpoints2+256);
     if (r.points2 is null) assert(0, "nanosvg: out of memory");
   }
   memmove(r.points2, r.points, NSVGpoint.sizeof*r.npoints);
@@ -2978,7 +2978,7 @@ void nsvg__addEdge (NSVGrasterizer r, float x0, float y0, float x1, float y1) {
   if (r.nedges+1 > r.cedges) {
     import core.stdc.stdlib : realloc;
     r.cedges = (r.cedges > 0 ? r.cedges*2 : 64);
-    r.edges = cast(NSVGedge*)realloc(r.edges, NSVGedge.sizeof*r.cedges);
+    r.edges = cast(NSVGedge*)realloc(r.edges, NSVGedge.sizeof*r.cedges+256);
     if (r.edges is null) assert(0, "nanosvg: out of memory");
   }
 
@@ -3976,7 +3976,7 @@ public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float 
   if (w > r.cscanline) {
     import core.stdc.stdlib : realloc;
     r.cscanline = w;
-    r.scanline = cast(ubyte*)realloc(r.scanline, w);
+    r.scanline = cast(ubyte*)realloc(r.scanline, w+256);
     if (r.scanline is null) assert(0, "nanosvg: out of memory");
   }
 

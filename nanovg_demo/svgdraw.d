@@ -38,6 +38,7 @@ void main (string[] args) {
 
   NSVG* svg = nsvgParseFromFile(args.length > 1 ? args[1] : "data/svg/tiger.svg");
   scope(exit) svg.kill();
+  { import std.stdio; writeln(args.length > 1 ? args[1] : "data/svg/tiger.svg"); }
 
   //writefln("size: %f x %f", svg.width, svg.height);
   GWidth = cast(int)svg.width;
