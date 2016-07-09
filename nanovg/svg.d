@@ -47,6 +47,7 @@ module iv.nanovg.svg is aliced;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
 private import iv.strex;
+private import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -219,20 +220,10 @@ struct NSVG {
     NSVG.Shape* next;          // Pointer to next shape, or null if last element.
   }
 
-
   float width;       // Width of the image.
   float height;      // Height of the image.
   NSVG.Shape* shapes; // Linked list of shapes in the image.
 }
-
-// Parses SVG file from a file, returns SVG image as paths.
-//NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px", float dpi=96);
-
-// Parses SVG file from a null terminated string, returns SVG image as paths.
-//NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi=96);
-
-// Deletes list of paths.
-//void kill (NSVG* image);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -4050,4 +4041,214 @@ public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float 
   r.width = 0;
   r.height = 0;
   r.stride = 0;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public void serialize(ST) (auto ref ST fo, NSVG* svg) if (isWriteableStream!ST) {
+  assert(svg !is null);
+
+  const(char)[] fromAsciiz (const(char)[] s) {
+    foreach (immutable idx, char ch; s) if (!ch) return s[0..idx];
+    return s;
+  }
+
+  fo.rawWriteExact("NSVG"[]);
+  fo.writeNum!ubyte(0); // version
+
+  // dimensions
+  fo.writeNum!float(svg.width);
+  fo.writeNum!float(svg.height);
+
+  // number of shapes
+  uint shapes = 0;
+  for (auto shape = svg.shapes; shape !is null; shape = shape.next) ++shapes;
+  fo.writeXInt(shapes);
+
+  void writePaint (in ref NSVG.Paint p) {
+    fo.writeNum!ubyte(cast(ubyte)p.type);
+    if (p.isNone) return;
+    if (p.isColor) {
+      // color
+      fo.writeXInt!uint(p.color);
+    } else {
+      // gradient
+      auto g = p.gradient;
+      foreach (immutable f; g.xform) fo.writeNum!float(f);
+      fo.writeNum!ubyte(cast(ubyte)g.spread);
+      fo.writeNum!float(g.fx);
+      fo.writeNum!float(g.fy);
+      fo.writeXInt(cast(uint)g.nstops);
+      foreach (const ref stop; g.stops.ptr[0..g.nstops]) {
+        fo.writeXInt(cast(uint)stop.color);
+        fo.writeNum!float(stop.offset);
+      }
+    }
+  }
+
+  // shapes
+  for (auto shape = svg.shapes; shape !is null; shape = shape.next) {
+    // shape options
+    {
+      auto s = fromAsciiz(shape.id[]);
+      fo.writeXInt(s.length);
+      fo.rawWriteExact(s[]);
+    }
+    writePaint(shape.fill);
+    writePaint(shape.stroke);
+    foreach (immutable f; shape.bounds) fo.writeNum!float(f);
+    fo.writeNum!float(shape.opacity);
+    fo.writeNum!float(shape.strokeWidth);
+    fo.writeNum!float(shape.strokeDashOffset);
+    fo.writeNum!ubyte(shape.strokeDashCount);
+    foreach (immutable f; shape.strokeDashArray[0..shape.strokeDashCount]) fo.writeNum!float(f);
+    /*
+    fo.writeNum!ubyte(cast(ubyte)shape.strokeLineJoin);
+    fo.writeNum!ubyte(cast(ubyte)shape.strokeLineCap);
+    fo.writeNum!ubyte(cast(ubyte)shape.fillRule);
+    fo.writeNum!ubyte(cast(ubyte)shape.flags);
+    */
+    // combine
+    static assert(NSVG.LineJoin.max <= 3);
+    static assert(NSVG.LineCap.max <= 3);
+    static assert(NSVG.FillRule.max <= 1);
+    ubyte b =
+      cast(ubyte)(shape.strokeLineJoin)|
+      (cast(ubyte)(shape.strokeLineCap<<2))|
+      (cast(ubyte)(shape.fillRule<<4))|
+      (cast(ubyte)(shape.flags ? 0x80 : 0x00));
+    fo.writeNum!ubyte(b);
+
+    // number of pathes
+    uint pathes = 0;
+    for (auto path = shape.paths; path !is null; path = path.next) ++pathes;
+    fo.writeXInt(pathes);
+
+    // pathes itself
+    for (auto path = shape.paths; path !is null; path = path.next) {
+      foreach (immutable f; path.bounds) fo.writeNum!float(f);
+      fo.writeNum!ubyte(path.closed ? 1 : 0);
+      fo.writeXInt(cast(uint)path.npts);
+      foreach (immutable f; path.pts[0..path.npts*2]) fo.writeNum!float(f);
+    }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public NSVG* nsvgUnserialize(ST) (auto ref ST fi) if (isWriteableStream!ST) {
+  NSVG* svg;
+  char[4] sign;
+
+  svg = xalloc!NSVG;
+  if (svg is null) throw new VFSNamedException!"NSVG"("out of memory"); // it is unlikely that we can, but...
+  scope(failure) kill(svg);
+
+  fi.rawReadExact(sign[]);
+  if (sign != "NSVG") throw new VFSNamedException!"NSVG"("invalid signature");
+  if (fi.readNum!ubyte != 0) throw new VFSNamedException!"NSVG"("invalid version");
+
+  // dimensions
+  svg.width = fi.readNum!float;
+  svg.height = fi.readNum!float;
+
+  void readPaint (ref NSVG.Paint p) {
+    auto tp = fi.readNum!ubyte;
+    if (tp > NSVG.PaintType.max) throw new VFSNamedException!"NSVG"("invalid paint type");
+    p.type = cast(NSVG.PaintType)tp;
+    if (p.isNone) return;
+    if (p.isColor) {
+      // color
+      p.color = fi.readXInt!uint;
+    } else {
+      import core.stdc.stdlib : realloc;
+      // gradient
+      NSVG.Gradient gg;
+      foreach (ref f; gg.xform) f = fi.readNum!float;
+      gg.spread = cast(NSVG.SpreadType)fi.readNum!ubyte;
+      if (gg.spread > NSVG.SpreadType.max) throw new VFSNamedException!"NSVG"("invalid spread type");
+      gg.fx = fi.readNum!float;
+      gg.fy = fi.readNum!float;
+      auto stopCount = fi.readXInt!uint;
+      if (stopCount > 65535) throw new VFSNamedException!"NSVG"("too many gradient stops");
+      //
+      auto g = xalloc!(NSVG.Gradient)(stopCount*NSVG.GradientStop.sizeof);
+      if (g is null) throw new VFSNamedException!"NSVG"("out of memory"); // it is unlikely that we can, but...
+      p.gradient = g;
+      g.xform[] = gg.xform[];
+      g.spread = gg.spread;
+      g.fx = gg.fx;
+      g.fy = gg.fy;
+      g.nstops = stopCount;
+      if (stopCount > 0) {
+        //auto ng = cast(NSVG.Gradient*)realloc(g, NSVG.Gradient.sizeof+NSVG.GradientStop.sizeof*stopCount);
+        //if (ng is null) throw new VFSNamedException!"NSVG"("out of memory"); // it is unlikely that we can, but...
+        //g.nstops = stopCount;
+        foreach (ref stop; g.stops.ptr[0..g.nstops]) {
+          stop.color = fi.readXInt!uint;
+          stop.offset = fi.readNum!float;
+        }
+      }
+    }
+  }
+
+  // number of shapes
+  uint shapeCount = fi.readXInt!uint;
+  // shapes
+  NSVG.Shape* lastShape = null;
+  foreach (immutable _; 0..shapeCount) {
+    auto shape = xalloc!(NSVG.Shape);
+    if (shape is null) throw new VFSNamedException!"NSVG"("out of memory"); // it is unlikely that we can, but...
+    if (lastShape !is null) lastShape.next = shape; else svg.shapes = shape;
+    lastShape = shape;
+    // shape options
+    { // name
+      char[256] buf = void;
+      auto ln = fi.readXInt!uint;
+      if (ln > 255) throw new VFSNamedException!"NSVG"("shape id too long");
+      if (ln) {
+        fi.rawReadExact(buf[0..ln]);
+        if (ln > shape.id.length) ln = cast(uint)shape.id.length;
+        shape.id[0..ln] = buf[0..ln];
+      }
+    }
+    readPaint(shape.fill);
+    readPaint(shape.stroke);
+    foreach (ref f; shape.bounds) f = fi.readNum!float;
+    shape.opacity = fi.readNum!float;
+    shape.strokeWidth = fi.readNum!float;
+    shape.strokeDashOffset = fi.readNum!float;
+    shape.strokeDashCount = fi.readNum!ubyte;
+    if (shape.strokeDashCount > shape.strokeDashArray.length) throw new VFSNamedException!"NSVG"("too many dashes");
+    foreach (ref f; shape.strokeDashArray[0..shape.strokeDashCount]) f = fi.readNum!float;
+    // uncombine
+    {
+      ubyte b = fi.readNum!ubyte;
+      shape.strokeLineJoin = cast(NSVG.LineJoin)(b&0x03);
+      shape.strokeLineCap = cast(NSVG.LineCap)((b>>2)&0x03);
+      shape.fillRule = cast(NSVG.FillRule)((b>>4)&0x01);
+      if (b&0x80) shape.flags = NSVG.Visible;
+    }
+    // number of pathes
+    uint pathCount = fi.readXInt!uint;
+    NSVG.Path* lastPath;
+    foreach (immutable _1; 0..pathCount) {
+      auto path = xalloc!(NSVG.Path);
+      if (path is null) throw new VFSNamedException!"NSVG"("out of memory"); // it is unlikely that we can, but...
+      if (lastPath !is null) lastPath.next = path; else shape.paths = path;
+      lastPath = path;
+      foreach (ref f; path.bounds) f = fi.readNum!float;
+      path.closed = (fi.readNum!ubyte != 0);
+      auto ptc = fi.readXInt!uint;
+      if (ptc > int.max) throw new VFSNamedException!"NSVG"("too many points");
+      if (ptc > 0) {
+        path.npts = cast(int)ptc;
+        path.pts = xcalloc!float(ptc*2);
+        if (path.pts is null) throw new VFSNamedException!"NSVG"("out of memory"); // it is unlikely that we can, but...
+        foreach (ref f; path.pts[0..ptc*2]) f = fi.readNum!float;
+      }
+    }
+  }
+
+  return svg;
 }
