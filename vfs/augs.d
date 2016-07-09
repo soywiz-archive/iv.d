@@ -282,3 +282,77 @@ T readNum(T, string es="LE", ST) (auto ref ST st) if (isGoodEndianness!es && isR
   }
   return v;
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// first byte: bit 7 is sign; bit 6 is "has more bytes" mark; bits 0..5: first number bits
+// next bytes: bit 7 is "has more bytes" mark; bits 0..6: next number bits
+void writeXInt(T : ulong, ST) (auto ref ST fl, T vv) if (isWriteableStream!ST) {
+  ubyte[16] buf = void; // actually, 10 is enough ;-)
+       static if (T.sizeof == ulong.sizeof) ulong v = cast(ulong)vv;
+  else static if (!__traits(isUnsigned, T)) ulong v = cast(ulong)cast(long)vv; // extend sign bits
+  else ulong v = cast(ulong)vv;
+  uint len = 1; // at least
+  // now write as signed
+  if (v == 0x8000_0000_0000_0000UL) {
+    // special (negative zero)
+    buf.ptr[0] = 0x80;
+  } else {
+    if (v&0x8000_0000_0000_0000UL) {
+      v = (v^~0uL)+1; // negate v
+      buf.ptr[0] = 0x80; // sign bit
+    } else {
+      buf.ptr[0] = 0;
+    }
+    buf.ptr[0] |= v&0x3f;
+    v >>= 6;
+    if (v != 0) buf.ptr[0] |= 0x40; // has more
+    while (v != 0) {
+      buf.ptr[len] = v&0x7f;
+      v >>= 7;
+      if (v > 0) buf.ptr[len] |= 0x80; // has more
+      ++len;
+    }
+  }
+  fl.rawWriteExact(buf.ptr[0..len]);
+}
+
+
+T readXInt(T : ulong, ST) (auto ref ST fl) if (isReadableStream!ST) {
+  ulong v = 0;
+  ubyte c = void;
+  // first byte contains sign flag
+  fl.rawReadExact((&c)[0..1]);
+  if (c == 0x80) {
+    // special (negative zero)
+    v = 0x8000_0000_0000_0000UL;
+  } else {
+    bool neg = ((c&0x80) != 0);
+    v = c&0x3f;
+    c <<= 1;
+    // 63/7 == 9, so we can shift at most 56==(7*8) bits
+    ubyte shift = 6;
+    while (c&0x80) {
+      if (shift > 62) throw new ConvOverflowException("readXInt overflow");
+      fl.rawReadExact((&c)[0..1]);
+      ulong n = c&0x7f;
+      if (shift == 62 && n > 1) throw new ConvOverflowException("readXInt overflow");
+      n <<= shift;
+      v |= n;
+      shift += 7;
+    }
+    if (neg) v = (v^~0uL)+1; // negate v
+  }
+  // now convert to output
+  static if (T.sizeof == v.sizeof) {
+    return v;
+  } else static if (!__traits(isUnsigned, T)) {
+    auto l = cast(long)v;
+    if (v < T.min) throw new ConvOverflowException("readXInt underflow");
+    if (v > T.max) throw new ConvOverflowException("readXInt overflow");
+    return cast(T)l;
+  } else {
+    if (v > T.max) throw new ConvOverflowException("readXInt overflow");
+    return cast(T)v;
+  }
+}
