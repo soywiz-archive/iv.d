@@ -220,6 +220,7 @@ void main (string[] args) {
   if (args.length < 2) throw new Exception("filename?");
 
   bool nomoreargs = false;
+  bool shuffle = false;
 
   foreach (string arg; args[1..$]) {
     if (args.length == 0) continue;
@@ -227,6 +228,7 @@ void main (string[] args) {
       if (arg == "--") { nomoreargs = true; continue; }
       if (arg == "--cubic") { quality = -1; continue; }
       if (arg == "--best") { quality = 10; continue; }
+      if (arg == "--shuffle") { shuffle = true; continue; }
       if (arg[0] == '-') {
         if (arg.length == 2 && arg[1] >= '0' && arg[1] <= '9') { quality = arg[1]-'0'; continue; }
         if (arg.length == 3 && arg[1] == 'q' && arg[2] >= '0' && arg[2] <= '9') { quality = arg[2]-'0'; continue; }
@@ -243,6 +245,10 @@ void main (string[] args) {
   }
 
   if (playlist.length == 0) throw new Exception("no files!");
+  if (shuffle) {
+    import std.random;
+    playlist.randomShuffle;
+  }
 
   ttySetRaw();
   scope(exit) ttySetNormal();
