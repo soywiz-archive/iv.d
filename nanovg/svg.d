@@ -43,11 +43,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.svg is aliced;
+module iv.nanovg.svg;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
-private import iv.strex;
-private import iv.vfs;
+static if (is(typeof({import iv.vfs;}()))) enum NanoSVGHasVFS = true; else enum NanoSVGHasVFS = false;
+static if (NanoSVGHasVFS) import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -329,7 +329,7 @@ int xsscanf(A...) (const(char)[] str, const(char)[] fmt, ref A args) {
     }
   }
 
-  bool parseImpl(T/*, usize dummy*/) (ref T res) {
+  bool parseImpl(T/*, size_t dummy*/) (ref T res) {
     while (fpos < fmt.length) {
       //{ import std.stdio; writeln("spos=", spos, "; fpos=", fpos, "\nfmt=", fmt[fpos..$].quote, "\nstr=", str[spos..$].quote); }
       if (fmt.ptr[fpos] <= ' ') {
@@ -448,7 +448,7 @@ int xsscanf(A...) (const(char)[] str, const(char)[] fmt, ref A args) {
     return false;
   }
 
-  foreach (immutable aidx, auto T; A) {
+  foreach (size_t aidx, immutable T; A) {
     //pragma(msg, "aidx=", aidx, "; T=", T);
     if (!parseImpl!(T)(args[aidx])) return -(spos+1);
     //{ import std.stdio; writeln("@@@ aidx=", aidx+3, "; spos=", spos, "; fpos=", fpos, "\nfmt=", fmt[fpos..$].quote, "\nstr=", str[spos..$].quote); }
@@ -459,7 +459,7 @@ int xsscanf(A...) (const(char)[] str, const(char)[] fmt, ref A args) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
+T* xalloc(T) (size_t addmem=0) if (!is(T == class)) {
   import core.stdc.stdlib : malloc;
   if (T.sizeof == 0 && addmem == 0) addmem = 1;
   auto res = cast(ubyte*)malloc(T.sizeof+addmem+256);
@@ -479,9 +479,9 @@ T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   return cast(T*)res;
 }
 
-T* xcalloc(T) (usize count) if (!is(T == class) && !is(T == struct)) {
+T* xcalloc(T) (size_t count) if (!is(T == class) && !is(T == struct)) {
   import core.stdc.stdlib : malloc;
-  usize sz = T.sizeof*count;
+  size_t sz = T.sizeof*count;
   if (sz == 0) sz = 1;
   auto res = cast(ubyte*)malloc(sz+256);
   if (res is null) return null;
@@ -570,7 +570,7 @@ static void nsvg__parseElement (const(char)[] s,
   // Get tag name
   //{ import std.stdio; writeln("bs=", s.quote); }
   {
-    usize pos = 0;
+    size_t pos = 0;
     while (pos < s.length && !nsvg__isspace(s[pos])) ++pos;
     name = s[0..pos];
     s = s[pos..$];
@@ -586,7 +586,7 @@ static void nsvg__parseElement (const(char)[] s,
     if (s[0] == '/') { end = 1; break; }
     // find end of the attrib name
     {
-      usize pos = 0;
+      size_t pos = 0;
       while (pos < s.length && !nsvg__isspace(s[pos]) && s[pos] != '=') ++pos;
       attr[nattr++] = s[0..pos];
       s = s[pos..$];
@@ -598,7 +598,7 @@ static void nsvg__parseElement (const(char)[] s,
     quote = s[0];
     s = s[1..$];
     {
-      usize pos = 0;
+      size_t pos = 0;
       while (pos < s.length && s[pos] != quote) ++pos;
       attr[nattr++] = s[0..pos];
       s = s[pos+(pos < s.length ? 1 : 0)..$];
@@ -623,7 +623,7 @@ void nsvg__parseXML (const(char)[] input,
                      scope void function (void* ud, const(char)[] s) contentCb,
                      void* ud)
 {
-  usize cpos = 0;
+  size_t cpos = 0;
   int state = NSVG_XML_CONTENT;
   while (cpos < input.length) {
     if (state == NSVG_XML_CONTENT && input[cpos] == '<') {
@@ -1413,7 +1413,7 @@ uint nsvg__parseColorRGB (const(char)[] str) {
   const(char)[] s1, s2;
   assert(str.length > 4);
   xsscanf(str[4..$], "%d%[%%, \t]%d%[%%, \t]%d", r, s1, g, s2, b);
-  if (s1[].indexOf('%') >= 0) {
+  if (s1[].xindexOf('%') >= 0) {
     return NSVG.Paint.rgb(cast(ubyte)((r*255)/100), cast(ubyte)((g*255)/100), cast(ubyte)((b*255)/100));
   } else {
     return NSVG.Paint.rgb(cast(ubyte)r, cast(ubyte)g, cast(ubyte)b);
@@ -1425,7 +1425,7 @@ struct NSVGNamedColor {
   uint color;
 }
 
-static immutable NSVGNamedColor[$] nsvg__colors = [
+static immutable NSVGNamedColor[147] nsvg__colors = [
   NSVGNamedColor("red", NSVG.Paint.rgb(255, 0, 0)),
   NSVGNamedColor("green", NSVG.Paint.rgb( 0, 128, 0)),
   NSVGNamedColor("blue", NSVG.Paint.rgb( 0, 0, 255)),
@@ -1634,7 +1634,7 @@ float nsvg__parseCoordinate (Parser* p, const(char)[] str, float orig, float len
 }
 
 int nsvg__parseTransformArgs (const(char)[] str, float* args, int maxNa, int* na) {
-  usize end, ptr;
+  size_t end, ptr;
   char[65] it = void;
 
   assert(str.length);
@@ -1906,7 +1906,7 @@ bool nsvg__parseAttr (Parser* p, const(char)[] name, const(char)[] value) {
 bool nsvg__parseNameValue (Parser* p, const(char)[] str) {
   const(char)[] name, val;
 
-  usize pos = 0;
+  size_t pos = 0;
   while (pos < str.length && str[pos] != ':') ++pos;
   val = str[0..pos];
   // Right Trim
@@ -1925,7 +1925,7 @@ void nsvg__parseStyle (Parser* p, const(char)[] str) {
   while (str.length) {
     // Left Trim
     while (str.length && nsvg__isspace(str[0])) str = str[1..$];
-    usize pos = 0;
+    size_t pos = 0;
     while (pos < str.length && str[pos] != ';') ++pos;
     auto val = str[0..pos];
     str = str[pos+(pos < str.length ? 1 : 0)..$];
@@ -1936,7 +1936,7 @@ void nsvg__parseStyle (Parser* p, const(char)[] str) {
 }
 
 void nsvg__parseAttribs (Parser* p, AttrList attr) {
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (attr[i] == "style") nsvg__parseStyle(p, attr[i+1]); else nsvg__parseAttr(p, attr[i], attr[i+1]);
   }
 }
@@ -2278,7 +2278,7 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
   char closedFlag;
   char[65] item;
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (attr[i] == "d") {
       s = attr[i+1];
     } else {
@@ -2406,7 +2406,7 @@ void nsvg__parseRect (Parser* p, AttrList attr) {
   float rx = -1.0f; // marks not set
   float ry = -1.0f;
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "x") x = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "y") y = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2456,7 +2456,7 @@ void nsvg__parseCircle (Parser* p, AttrList attr) {
   float cy = 0.0f;
   float r = 0.0f;
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "cx") cx = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "cy") cy = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2485,7 +2485,7 @@ void nsvg__parseEllipse (Parser* p, AttrList attr) {
   float rx = 0.0f;
   float ry = 0.0f;
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "cx") cx = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "cy") cy = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2516,7 +2516,7 @@ void nsvg__parseLine (Parser* p, AttrList attr) {
   float x2 = 0.0;
   float y2 = 0.0;
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "x1") x1 = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "y1") y1 = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2543,7 +2543,7 @@ void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
 
   nsvg__resetPath(p);
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
       if (attr[i] == "points") {
         const(char)[]s = attr[i+1];
@@ -2569,7 +2569,7 @@ void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
 }
 
 void nsvg__parseSVG (Parser* p, AttrList attr) {
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
       if (attr[i] == "width") {
         p.image.width = nsvg__parseCoordinate(p, attr[i+1], 0.0f, 1.0f);
@@ -2578,21 +2578,21 @@ void nsvg__parseSVG (Parser* p, AttrList attr) {
       } else if (attr[i] == "viewBox") {
         xsscanf(attr[i+1], "%f%*[%%, \t]%f%*[%%, \t]%f%*[%%, \t]%f", p.viewMinx, p.viewMiny, p.viewWidth, p.viewHeight);
       } else if (attr[i] == "preserveAspectRatio") {
-        if (attr[i+1].indexOf("none") >= 0) {
+        if (attr[i+1].xindexOf("none") >= 0) {
           // No uniform scaling
           p.alignType = NSVG_ALIGN_NONE;
         } else {
           // Parse X align
-               if (attr[i+1].indexOf("xMin") >= 0) p.alignX = NSVG_ALIGN_MIN;
-          else if (attr[i+1].indexOf("xMid") >= 0) p.alignX = NSVG_ALIGN_MID;
-          else if (attr[i+1].indexOf("xMax") >= 0) p.alignX = NSVG_ALIGN_MAX;
+               if (attr[i+1].xindexOf("xMin") >= 0) p.alignX = NSVG_ALIGN_MIN;
+          else if (attr[i+1].xindexOf("xMid") >= 0) p.alignX = NSVG_ALIGN_MID;
+          else if (attr[i+1].xindexOf("xMax") >= 0) p.alignX = NSVG_ALIGN_MAX;
           // Parse X align
-               if (attr[i+1].indexOf("yMin") >= 0) p.alignY = NSVG_ALIGN_MIN;
-          else if (attr[i+1].indexOf("yMid") >= 0) p.alignY = NSVG_ALIGN_MID;
-          else if (attr[i+1].indexOf("yMax") >= 0) p.alignY = NSVG_ALIGN_MAX;
+               if (attr[i+1].xindexOf("yMin") >= 0) p.alignY = NSVG_ALIGN_MIN;
+          else if (attr[i+1].xindexOf("yMid") >= 0) p.alignY = NSVG_ALIGN_MID;
+          else if (attr[i+1].xindexOf("yMax") >= 0) p.alignY = NSVG_ALIGN_MAX;
           // Parse meet/slice
           p.alignType = NSVG_ALIGN_MEET;
-          if (attr[i+1].indexOf("slice") >= 0) p.alignType = NSVG_ALIGN_SLICE;
+          if (attr[i+1].xindexOf("slice") >= 0) p.alignType = NSVG_ALIGN_SLICE;
         }
       }
     }
@@ -2618,7 +2618,7 @@ void nsvg__parseGradient (Parser* p, AttrList attr, NSVG.PaintType type) {
 
   nsvg__xformIdentity(grad.xform.ptr);
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) {
+  for (size_t i = 0; attr.length-i >= 2; i += 2) {
     if (attr[i] == "id") {
       grad.id[] = 0;
       const(char)[] s = attr[i+1];
@@ -2667,7 +2667,7 @@ void nsvg__parseGradientStop (Parser* p, AttrList attr) {
   curAttr.stopColor = 0;
   curAttr.stopOpacity = 1.0f;
 
-  for (usize i = 0; attr.length-i >= 2; i += 2) nsvg__parseAttr(p, attr[i], attr[i+1]);
+  for (size_t i = 0; attr.length-i >= 2; i += 2) nsvg__parseAttr(p, attr[i], attr[i+1]);
 
   // Add stop to the last gradient.
   grad = p.gradients;
@@ -2922,7 +2922,7 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
   import std.internal.cstring : tempCString;
 
   FILE* fp = null;
-  usize size;
+  size_t size;
   char* data = null;
   NSVG* image = null;
 
@@ -2931,12 +2931,12 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
   fp = fopen(filename.tempCString, "rb");
   if (fp is null) goto error;
   fseek(fp, 0, SEEK_END);
-  size = cast(usize)ftell(fp);
+  size = cast(size_t)ftell(fp);
   fseek(fp, 0, SEEK_SET);
   data = cast(char*)malloc(size+1);
   if (data is null) goto error;
   if (size > 0) { if (fread(data, 1, size, fp) != size) goto error; }
-  data[size] = '\0';  // not necessary, but meh...
+  data[size] = '\0'; // not necessary, but meh...
   fclose(fp);
   image = nsvgParse(data[0..size], units, dpi);
   free(data);
@@ -4253,6 +4253,8 @@ public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float 
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+static if (NanoSVGHasVFS) {
+
 public void serialize(ST) (auto ref ST fo, NSVG* svg) if (isWriteableStream!ST) {
   assert(svg !is null);
 
@@ -4459,4 +4461,41 @@ public NSVG* nsvgUnserialize(ST) (auto ref ST fi) if (isWriteableStream!ST) {
   }
 
   return svg;
+}
+
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+ptrdiff_t xindexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure @trusted nothrow @nogc {
+  if (hay.length <= stIdx || need.length == 0 ||
+      need.length > hay.length-stIdx
+  ) {
+    return -1;
+  } else {
+    //import iv.strex : memmem;
+    auto res = memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
+    return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
+  }
+}
+
+ptrdiff_t xindexOf (const(void)[] hay, ubyte ch, size_t stIdx=0) pure @trusted nothrow @nogc {
+  return xindexOf(hay, (&ch)[0..1], stIdx);
+}
+
+pure nothrow @trusted @nogc:
+version(linux) {
+  extern(C) inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
+} else {
+  inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
+    auto h = cast(const(ubyte)*)haystack;
+    auto n = cast(const(ubyte)*)needle;
+    // size_t is unsigned
+    if (needlelen > haystacklen) return null;
+    foreach (immutable i; 0..haystacklen-needlelen+1) {
+      import core.stdc.string : memcmp;
+      if (memcmp(h+i, n, needlelen) == 0) return cast(void*)(h+i);
+    }
+    return null;
+  }
 }
