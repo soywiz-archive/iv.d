@@ -319,6 +319,7 @@ void writeXInt(T : ulong, ST) (auto ref ST fl, T vv) if (isWriteableStream!ST) {
 
 
 T readXInt(T : ulong, ST) (auto ref ST fl) if (isReadableStream!ST) {
+  import std.conv : ConvOverflowException;
   ulong v = 0;
   ubyte c = void;
   // first byte contains sign flag
