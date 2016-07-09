@@ -2967,6 +2967,27 @@ public void kill (NSVG* image) {
   xfree(image);
 }
 
+static if (NanoSVGHasVFS) {
+  public NSVG* nsvgParseFromFile(ST) (auto ref ST fi, const(char)[] units="px", float dpi=96) if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST) {
+    import core.stdc.stdlib : malloc, free;
+
+    size_t size;
+    char* data = null;
+
+    auto sz = fi.size;
+    auto pp = fi.tell;
+    if (pp >= sz) return null;
+    sz -= pp;
+    if (sz > 0x3ff_ffff) return null;
+    size = cast(size_t)sz;
+    data = cast(char*)malloc(size+1);
+    if (data is null) return null;
+    scope(exit) free(data);
+    fi.rawReadExact(data[0..size]);
+    return nsvgParse(data[0..size], units, dpi);
+  }
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // rasterizer

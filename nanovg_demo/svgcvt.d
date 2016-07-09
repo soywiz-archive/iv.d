@@ -30,7 +30,7 @@ void writePng (NSVG* svg, string ofname) {
 
 
 void main (string[] args) {
-  NSVG* svg = nsvgParseFromFile(args.length > 1 ? args[1] : "data/svg/tiger.svg");
+  NSVG* svg = nsvgParseFromFile(VFile(args.length > 1 ? args[1] : "data/svg/tiger.svg"));
   scope(exit) svg.kill();
   VFile("z00.svb", "w").serialize(svg);
 
