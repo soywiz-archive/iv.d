@@ -228,6 +228,237 @@ struct NSVG {
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
+
+// ////////////////////////////////////////////////////////////////////////// //
+// sscanf replacement: just enough to replace all our cases
+int xsscanf(A...) (const(char)[] str, const(char)[] fmt, ref A args) {
+  int spos;
+  while (spos < str.length && str.ptr[spos] <= ' ') ++spos;
+
+  static int hexdigit() (char c) {
+    pragma(inline, true);
+    return
+      (c >= '0' && c <= '9' ? c-'0' :
+       c >= 'A' && c <= 'F' ? c-'A'+10 :
+       c >= 'a' && c <= 'f' ? c-'a'+10 :
+       -1);
+  }
+
+  bool parseInt(T : ulong) (ref T res) {
+    res = 0;
+    debug(xsscanf_int) { import std.stdio; writeln("parseInt00: str=", str[spos..$].quote); }
+    bool neg = false;
+         if (spos < str.length && str.ptr[spos] == '+') ++spos;
+    else if (spos < str.length && str.ptr[spos] == '-') { neg = true; ++spos; }
+    if (spos >= str.length || str.ptr[spos] < '0' || str.ptr[spos] > '9') return false;
+    while (spos < str.length && str.ptr[spos] >= '0' && str.ptr[spos] <= '9') res = res*10+str.ptr[spos++]-'0';
+    debug(xsscanf_int) { import std.stdio; writeln("parseInt10: str=", str[spos..$].quote); }
+    if (neg) res = -res;
+    return true;
+  }
+
+  bool parseHex(T : ulong) (ref T res) {
+    res = 0;
+    debug(xsscanf_int) { import std.stdio; writeln("parseHex00: str=", str[spos..$].quote); }
+    if (spos >= str.length || hexdigit(str.ptr[spos]) < 0) return false;
+    while (spos < str.length) {
+      auto d = hexdigit(str.ptr[spos]);
+      if (d < 0) break;
+      res = res*16+d;
+      ++spos;
+    }
+    debug(xsscanf_int) { import std.stdio; writeln("parseHex10: str=", str[spos..$].quote); }
+    return true;
+  }
+
+  bool parseFloat(T : real) (ref T res) {
+    res = 0.0;
+    debug(xsscanf_float) { import std.stdio; writeln("parseFloat00: str=", str[spos..$].quote); }
+    bool neg = false;
+         if (spos < str.length && str.ptr[spos] == '+') ++spos;
+    else if (spos < str.length && str.ptr[spos] == '-') { neg = true; ++spos; }
+    bool wasChar = false;
+    // integer part
+    debug(xsscanf_float) { import std.stdio; writeln("parseFloat01: str=", str[spos..$].quote); }
+    if (spos < str.length && str.ptr[spos] >= '0' && str.ptr[spos] <= '9') wasChar = true;
+    while (spos < str.length && str.ptr[spos] >= '0' && str.ptr[spos] <= '9') res = res*10+str.ptr[spos++]-'0';
+    // fractional part
+    if (spos < str.length && str.ptr[spos] == '.') {
+      debug(xsscanf_float) { import std.stdio; writeln("parseFloat02: str=", str[spos..$].quote); }
+      T div = 1.0/10;
+      ++spos;
+      if (spos < str.length && str.ptr[spos] >= '0' && str.ptr[spos] <= '9') wasChar = true;
+      debug(xsscanf_float) { import std.stdio; writeln("parseFloat03: str=", str[spos..$].quote); }
+      while (spos < str.length && str.ptr[spos] >= '0' && str.ptr[spos] <= '9') {
+        res += div*(str.ptr[spos++]-'0');
+        div /= 10.0;
+      }
+      debug(xsscanf_float) { import std.stdio; writeln("parseFloat04: str=", str[spos..$].quote); }
+      debug(xsscanf_float) { import std.stdio; writeln("div=", div, "; res=", res, "; str=", str[spos..$].quote); }
+    }
+    // '[Ee][+-]num' part
+    if (wasChar && spos < str.length && (str.ptr[spos] == 'E' || str.ptr[spos] == 'e')) {
+      debug(xsscanf_float) { import std.stdio; writeln("parseFloat05: str=", str[spos..$].quote); }
+      ++spos;
+      bool xneg = false;
+           if (spos < str.length && str.ptr[spos] == '+') ++spos;
+      else if (spos < str.length && str.ptr[spos] == '-') { xneg = true; ++spos; }
+      int n = 0;
+      if (spos >= str.length || str.ptr[spos] < '0' || str.ptr[spos] > '9') return false; // number expected
+      debug(xsscanf_float) { import std.stdio; writeln("parseFloat06: str=", str[spos..$].quote); }
+      while (spos < str.length && str.ptr[spos] >= '0' && str.ptr[spos] <= '9') n = n*10+str.ptr[spos++]-'0';
+      if (xneg) {
+        while (n-- > 0) res /= 10;
+      } else {
+        while (n-- > 0) res *= 10;
+      }
+      debug(xsscanf_float) { import std.stdio; writeln("parseFloat07: str=", str[spos..$].quote); }
+    }
+    if (!wasChar) return false;
+    debug(xsscanf_float) { import std.stdio; writeln("parseFloat10: str=", str[spos..$].quote); }
+    if (neg) res = -res;
+    return true;
+  }
+
+  int fpos;
+
+  void skipXSpaces () {
+    if (fpos < fmt.length && fmt.ptr[fpos] <= ' ') {
+      while (fpos < fmt.length && fmt.ptr[fpos] <= ' ') ++fpos;
+      while (spos < str.length && str.ptr[spos] <= ' ') ++spos;
+    }
+  }
+
+  bool parseImpl(T/*, usize dummy*/) (ref T res) {
+    while (fpos < fmt.length) {
+      //{ import std.stdio; writeln("spos=", spos, "; fpos=", fpos, "\nfmt=", fmt[fpos..$].quote, "\nstr=", str[spos..$].quote); }
+      if (fmt.ptr[fpos] <= ' ') {
+        skipXSpaces();
+        continue;
+      }
+      if (fmt.ptr[fpos] != '%') {
+        if (spos >= str.length || str.ptr[spos] != fmt.ptr[spos]) return false;
+        ++spos;
+        ++fpos;
+        continue;
+      }
+      if (fmt.length-fpos < 2) return false; // stray percent
+      fpos += 2;
+      bool skipAss = false;
+      if (fmt.ptr[fpos-1] == '*') {
+        ++fpos;
+        if (fpos >= fmt.length) return false; // stray star
+        skipAss = true;
+      }
+      switch (fmt.ptr[fpos-1]) {
+        case '%':
+          if (spos >= str.length || str.ptr[spos] != '%') return false;
+          ++spos;
+          break;
+        case 'd':
+          static if (is(T : ulong)) {
+            if (skipAss) {
+              long v;
+              if (!parseInt!long(v)) return false;
+            } else {
+              return parseInt!T(res);
+            }
+          } else {
+            if (!skipAss) assert(0, "invalid type");
+            long v;
+            if (!parseInt!long(v)) return false;
+          }
+          break;
+        case 'x':
+          static if (is(T : ulong)) {
+            if (skipAss) {
+              long v;
+              if (!parseHex!long(v)) return false;
+            } else {
+              return parseHex!T(res);
+            }
+          } else {
+            if (!skipAss) assert(0, "invalid type");
+            ulong v;
+            if (!parseHex!ulong(v)) return false;
+          }
+          break;
+        case 'f':
+          static if (is(T == float) || is(T == double) || is(T == real)) {
+            if (skipAss) {
+              double v;
+              if (!parseFloat!double(v)) return false;
+            } else {
+              return parseFloat!T(res);
+            }
+          } else {
+            if (!skipAss) assert(0, "invalid type");
+            double v;
+            if (!parseFloat!double(v)) return false;
+          }
+          break;
+        case '[':
+          if (fmt.length-fpos < 1) return false;
+          auto stp = spos;
+          while (spos < str.length) {
+            bool ok = false;
+            foreach (immutable cidx, char c; fmt[fpos..$]) {
+              if (cidx != 0) {
+                if (c == '-') assert(0, "not yet");
+                if (c == ']') break;
+              }
+              if (c == ' ') {
+                if (str.ptr[spos] <= ' ') { ok = true; break; }
+              } else {
+                if (str.ptr[spos] == c) { ok = true; break; }
+              }
+            }
+            //{ import std.stdio; writeln("** spos=", spos, "; fpos=", fpos, "\nfmt=", fmt[fpos..$].quote, "\nstr=", str[spos..$].quote, "\nok: ", ok); }
+            if (!ok) break; // not a match
+            ++spos; // skip match
+          }
+          ++fpos;
+          while (fpos < fmt.length && fmt[fpos] != ']') ++fpos;
+          if (fpos < fmt.length) ++fpos;
+          static if (is(T == const(char)[])) {
+            if (!skipAss) {
+              res = str[stp..spos];
+              return true;
+            }
+          } else {
+            if (!skipAss) assert(0, "invalid type");
+          }
+          break;
+        case 's':
+          auto stp = spos;
+          while (spos < str.length && str.ptr[spos] > ' ') ++spos;
+          static if (is(T == const(char)[])) {
+            if (!skipAss) {
+              res = str[stp..spos];
+              return true;
+            }
+          } else {
+            // skip non-spaces
+            if (!skipAss) assert(0, "invalid type");
+          }
+          break;
+        default: assert(0, "unknown format specifier");
+      }
+    }
+    return false;
+  }
+
+  foreach (immutable aidx, auto T; A) {
+    //pragma(msg, "aidx=", aidx, "; T=", T);
+    if (!parseImpl!(T)(args[aidx])) return -(spos+1);
+    //{ import std.stdio; writeln("@@@ aidx=", aidx+3, "; spos=", spos, "; fpos=", fpos, "\nfmt=", fmt[fpos..$].quote, "\nstr=", str[spos..$].quote); }
+  }
+  skipXSpaces();
+  return (fpos < fmt.length ? -(spos+1) : spos);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   import core.stdc.stdlib : malloc;
   if (T.sizeof == 0 && addmem == 0) addmem = 1;
@@ -1178,40 +1409,14 @@ uint nsvg__parseColorHex (const(char)[] str) {
 }
 
 uint nsvg__parseColorRGB (const(char)[] str) {
-  version(none) {
-    str = str[4..$];
-    int[3] ca;
-    char prc = 0;
-    foreach (immutable idx, ref c; ca) {
-      while (str.length && str[0] <= ' ') str = str[1..$];
-      if (!str.length || !nsvg__isdigit(str[0])) return NSVG.Paint.rgb(128, 128, 128);
-      while (str.length && nsvg__isdigit(str[0])) {
-        c = c*10+str[0]-'0';
-        str = str[1..$];
-      }
-      while (str.length && str[0] <= ' ') str = str[1..$];
-           if (str.length && str[0] == '%') { prc = '%'; str = str[1..$]; }
-      else if (str.length && str[0] == ',') str = str[1..$];
-      while (str.length && str[0] <= ' ') str = str[1..$];
-    }
-    if (prc) {
-      return NSVG.Paint.rgb(cast(ubyte)((ca[0]*255)/100), cast(ubyte)((ca[1]*255)/100), cast(ubyte)((ca[2]*255)/100));
-    } else {
-      return NSVG.Paint.rgb(cast(ubyte)ca[0], cast(ubyte)ca[1], cast(ubyte)ca[2]);
-    }
+  int r = -1, g = -1, b = -1;
+  const(char)[] s1, s2;
+  assert(str.length > 4);
+  xsscanf(str[4..$], "%d%[%%, \t]%d%[%%, \t]%d", r, s1, g, s2, b);
+  if (s1[].indexOf('%') >= 0) {
+    return NSVG.Paint.rgb(cast(ubyte)((r*255)/100), cast(ubyte)((g*255)/100), cast(ubyte)((b*255)/100));
   } else {
-    import core.stdc.stdio : sscanf;
-    import std.internal.cstring : tempCString;
-    int r = -1, g = -1, b = -1;
-    char[32] s1 = 0, s2 = 0;
-    assert(str.length > 4);
-    str = str[4..$];
-    sscanf(str.tempCString, "%d%[%%, \t]%d%[%%, \t]%d", &r, s1.ptr, &g, s2.ptr, &b);
-    if (s1[].indexOf('%') >= 0) {
-      return NSVG.Paint.rgb(cast(ubyte)((r*255)/100), cast(ubyte)((g*255)/100), cast(ubyte)((b*255)/100));
-    } else {
-      return NSVG.Paint.rgb(cast(ubyte)r, cast(ubyte)g, cast(ubyte)b);
-    }
+    return NSVG.Paint.rgb(cast(ubyte)r, cast(ubyte)g, cast(ubyte)b);
   }
 }
 
@@ -1388,10 +1593,8 @@ uint nsvg__parseColor (const(char)[] str) {
 }
 
 float nsvg__parseOpacity (const(char)[] str) {
-  import core.stdc.stdio : sscanf;
-  import std.internal.cstring : tempCString;
   float val = 0;
-  sscanf(str.tempCString, "%f", &val);
+  xsscanf(str, "%f", val);
   if (val < 0.0f) val = 0.0f;
   if (val > 1.0f) val = 1.0f;
   return val;
@@ -1413,13 +1616,10 @@ Units nsvg__parseUnits (const(char)[] units) {
 }
 
 Coordinate nsvg__parseCoordinateRaw (const(char)[] str) {
-  import core.stdc.stdio : sscanf;
-  import std.internal.cstring : tempCString;
   Coordinate coord = Coordinate(0, Units.user);
-  char[32] units = 0;
-  sscanf(str.tempCString, "%f%s", &coord.value, units.ptr);
-  int n = 0; while (n < units.length && units[n]) ++n;
-  coord.units = nsvg__parseUnits(units[0..n]);
+  const(char)[] units;
+  xsscanf(str, "%f%s", coord.value, units);
+  coord.units = nsvg__parseUnits(units);
   return coord;
 }
 
@@ -2376,9 +2576,7 @@ void nsvg__parseSVG (Parser* p, AttrList attr) {
       } else if (attr[i] == "height") {
         p.image.height = nsvg__parseCoordinate(p, attr[i+1], 0.0f, 1.0f);
       } else if (attr[i] == "viewBox") {
-        import core.stdc.stdio : sscanf;
-        import std.internal.cstring : tempCString;
-        sscanf(attr[i+1].tempCString, "%f%*[%%, \t]%f%*[%%, \t]%f%*[%%, \t]%f", &p.viewMinx, &p.viewMiny, &p.viewWidth, &p.viewHeight);
+        xsscanf(attr[i+1], "%f%*[%%, \t]%f%*[%%, \t]%f%*[%%, \t]%f", p.viewMinx, p.viewMiny, p.viewWidth, p.viewHeight);
       } else if (attr[i] == "preserveAspectRatio") {
         if (attr[i+1].indexOf("none") >= 0) {
           // No uniform scaling
