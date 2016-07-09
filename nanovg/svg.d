@@ -284,6 +284,15 @@ int nsvg__isspace() (char c) { pragma(inline, true); return (c && c <= ' '); } /
 int nsvg__isdigit() (char c) { pragma(inline, true); return (c >= '0' && c <= '9'); }
 int nsvg__isnum() (char c) { pragma(inline, true); return ((c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.' || c == 'e' || c == 'E'); }
 
+int nsvg__hexdigit() (char c) {
+  pragma(inline, true);
+  return
+    (c >= '0' && c <= '9' ? c-'0' :
+     c >= 'A' && c <= 'F' ? c-'A'+10 :
+     c >= 'a' && c <= 'f' ? c-'a'+10 :
+     -1);
+}
+
 float nsvg__minf() (float a, float b) { pragma(inline, true); return (a < b ? a : b); }
 float nsvg__maxf() (float a, float b) { pragma(inline, true); return (a > b ? a : b); }
 
@@ -1144,22 +1153,23 @@ int nsvg__getNextPathItem (const(char)[] s, char[] it) {
 }
 
 uint nsvg__parseColorHex (const(char)[] str) {
-  import core.stdc.stdio : sscanf;
   char[12] tmp = 0;
   uint c = 0;
   ubyte r = 0, g = 0, b = 0;
   int n = 0;
   if (str.length) str = str[1..$]; // skip #
-  // Calculate number of characters.
+  // calculate number of characters
   while (n < str.length && !nsvg__isspace(str[n])) ++n;
-  if (n == 6) {
-    tmp[0..6] = str[0..6];
-    sscanf(tmp.ptr, "%x", &c);
-  } else if (n == 3) {
-    tmp[0..3] = str[0..3];
-    sscanf(tmp.ptr, "%x", &c);
-    c = (c&0xf)|((c&0xf0)<<4)|((c&0xf00)<<8);
-    c |= c<<4;
+  if (n == 3 || n == 6) {
+    foreach (char ch; str[0..n]) {
+      auto d0 = nsvg__hexdigit(ch);
+      if (d0 < 0) break;
+      c = c*16+d0;
+    }
+    if (n == 3) {
+      c = (c&0xf)|((c&0xf0)<<4)|((c&0xf00)<<8);
+      c |= c<<4;
+    }
   }
   r = (c>>16)&0xff;
   g = (c>>8)&0xff;
