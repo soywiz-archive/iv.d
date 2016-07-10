@@ -35,14 +35,14 @@
  * This D port was made by Ketmar // Invisible Vector
  * ketmar@ketmar.no-ip.org
  */
-module iv.inflate is aliced;
+module iv.inflate;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 import iv.exex;
 
 mixin(MyException!"InflateError");
-mixin(MyException!("InflateError", "InflateEOF"));
+mixin(MyException!("InflateEOF", "InflateError"));
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -52,9 +52,7 @@ mixin(MyException!("InflateError", "InflateEOF"));
  */
 /// Adler-32 checksum computer
 struct Adler32 {
-@safe:
-nothrow:
-@nogc:
+nothrow @safe @nogc:
 private:
   enum { BASE = 65521, NMAX = 5552 }
   enum normS1S2 = `s1 %= BASE; s2 %= BASE;`;
@@ -87,34 +85,36 @@ public:
 
   /// reinitialize
   void reset () {
+    pragma(inline, true);
     s1 = 1;
     s2 = 0;
   }
 
   /// get current Adler-32 sum
-  @property uint result () const pure => (s2<<16)|s1;
+  @property uint result () const pure { pragma(inline, true); return ((s2<<16)|s1); }
 
   /// process buffer
   void doBuffer(T) (T[] data) @trusted {
     if (data.length == 0) return;
     usize len = data.length*data[0].sizeof; // length in bytes
     const(ubyte)* dta = cast(const(ubyte)*)data.ptr;
-    foreach (; 0..len/NMAX) {
-      foreach (; 0..NMAX/16) { mixin(genByteProcessors!(16)); }
+    foreach (immutable _; 0..len/NMAX) {
+      foreach (immutable _; 0..NMAX/16) { mixin(genByteProcessors!(16)); }
       mixin(normS1S2);
     }
     len %= NMAX;
     if (len) {
-      foreach (; 0..len) { mixin(genByteProcessors!(1)); }
+      foreach (immutable _; 0..len) { mixin(genByteProcessors!(1)); }
       mixin(normS1S2);
     }
   }
 
-  import std.traits;
-
   /// process one byte
   void doByte(T) (T bt)
-  if (is(Unqual!T == char) || is(Unqual!T == byte) || is(Unqual!T == ubyte))
+  // sorry
+  if (is(T == char) || is(T == byte) || is(T == ubyte) ||
+      is(T == const char) || is(T == const byte) || is(T == const ubyte) ||
+      is(T == immutable char) || is(T == immutable byte) || is(T == immutable ubyte))
   {
     s1 += cast(ubyte)bt;
     s2 += s1;
@@ -139,35 +139,35 @@ alias adler32 = Adler32;
 // internal data structures
 //
 private struct Tree {
-  ushort[16] table;  /* table of code length counts */
-  ushort[288] trans; /* code -> symbol translation table */
+  ushort[16] table;  // table of code length counts
+  ushort[288] trans; // code -> symbol translation table
 
   @disable this (this); /* disable copying */
 
-  /* given an array of code lengths, build a tree */
-  void buildTree (const(ubyte)[] lengths) @safe {
+  // given an array of code lengths, build a tree
+  void buildTree (const(ubyte)[] lengths) @trusted {
     if (lengths.length < 1) throw new InflateError("invalid lengths");
     ushort[16] offs = void;
     ushort sum = 0;
-    /* clear code length count table */
+    // clear code length count table
     table[] = 0;
-    /* scan symbol lengths, and sum code length counts */
+    // scan symbol lengths, and sum code length counts
     foreach (immutable l; lengths) {
       if (l >= 16) throw new InflateError("invalid lengths");
-      ++table[l];
+      ++table.ptr[l];
     }
-    table[0] = 0;
-    /* compute offset table for distribution sort */
+    table.ptr[0] = 0;
+    // compute offset table for distribution sort
     foreach (immutable i, immutable n; table) {
-      offs[i] = sum;
+      offs.ptr[i] = sum;
       sum += n;
     }
-    /* create code->symbol translation table (symbols sorted by code) */
+    // create code->symbol translation table (symbols sorted by code)
     foreach (ushort i, immutable l; lengths) {
       if (l) {
-        auto n = offs[l]++;
+        auto n = offs.ptr[l]++;
         if (n >= 288) throw new InflateError("invalid lengths");
-        trans[n] = i;
+        trans.ptr[n] = i;
       }
     }
   }
@@ -217,14 +217,14 @@ private:
   ubyte[65536] dict = void;
   uint dictEnd; // current dict free byte
 
-  void dictPutByte (ubyte bt) @trusted nothrow @nogc {
+  void dictPutByte (ubyte bt) nothrow @trusted @nogc {
     if (dictEnd == dict.length) {
       import core.stdc.string : memmove;
       // move dict data
-      memmove(dict.ptr, &dict[dictEnd-32768], 32768);
+      memmove(dict.ptr, dict.ptr+dictEnd-32768, 32768);
       dictEnd = 32768;
     }
-    dict[dictEnd++] = bt;
+    dict.ptr[dictEnd++] = bt;
     if (mode == Mode.ZLib) {
       a32s1 += bt;
       a32s2 += a32s1;
@@ -236,14 +236,14 @@ private:
     }
   }
 
-  uint finishAdler32 () @safe nothrow @nogc {
+  uint finishAdler32 () nothrow @safe @nogc {
     a32s1 %= Adler32.BASE;
     a32s2 %= Adler32.BASE;
     return (a32s2<<16)|a32s1;
   }
 
 private:
-  void setErrorState () @safe nothrow @nogc {
+  void setErrorState () nothrow @safe @nogc {
     state = State.Dead;
     lt = dt = null; // just in case
     doingFinalBlock = false; // just in case too
@@ -285,14 +285,14 @@ private:
     state = State.ExpectBlock;
   }
 
-  void finishZLibData () @trusted {
+  void finishZLibData () {
     // read Adler32
     uint a32; // autoinit
     ubyte bt = void;
     foreach_reverse (immutable n; 0..4) {
       try {
         if (!readOneByte(bt)) error("out of input data");
-      } catch (Throwable e) {
+      } catch (Exception e) {
         setErrorState();
         throw e;
       }
@@ -302,11 +302,11 @@ private:
   }
 
   // get one bit from source stream
-  uint getBit () @trusted {
+  uint getBit () {
     if (!bitcount--) {
       ubyte bt = void;
       bool ok = void;
-      try { ok = readOneByte(bt); } catch (Throwable e) { setErrorState(); throw e; }
+      try { ok = readOneByte(bt); } catch (Exception e) { setErrorState(); throw e; }
       if (!ok) error("out of input data");
       tag = bt;
       bitcount = 7;
@@ -317,17 +317,17 @@ private:
   }
 
   // read a num bit value from a stream and add base
-  uint readBits (ubyte num, uint base) @safe {
+  uint readBits (ubyte num, uint base) {
     uint val = 0;
     if (num) {
-      const uint limit = 1<<num;
+      immutable uint limit = 1<<num;
       for (uint mask = 1; mask < limit; mask <<= 1) if (getBit()) val += mask;
     }
     return val+base;
   }
 
   // given a data stream and a tree, decode a symbol
-  uint decodeSymbol (const(Tree*) t) @safe {
+  uint decodeSymbol (const(Tree*) t) {
     int cur, sum, len; // autoinit
     // get more bits while code value is above sum
     do {
@@ -335,17 +335,17 @@ private:
       cur = 2*cur+getBit();
       ++len;
       if (len >= 16) error("invalid symbol");
-      sl = t.table[len];
+      sl = t.table.ptr[len];
       sum += sl;
       cur -= sl;
     } while (cur >= 0);
     sum += cur;
     if (sum < 0 || sum >= 288) error("invalid symbol");
-    return t.trans[sum];
+    return t.trans.ptr[sum];
   }
 
   // given a data stream, decode dynamic trees from it
-  void decodeTrees () @trusted {
+  void decodeTrees () {
     // special ordering of code length codes
     static immutable ubyte[19] clcidx = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
     Tree codeTree;
@@ -364,7 +364,7 @@ private:
     // read code lengths for code length alphabet
     foreach (immutable i; 0..hclen) lengths[clcidx[i]] = cast(ubyte)readBits(3, 0); // get 3 bits code length (0-7)
     // build code length tree
-    try { codeTree.buildTree(lengths[0..19]); } catch (Throwable e) { setErrorState(); throw e; }
+    try { codeTree.buildTree(lengths[0..19]); } catch (Exception e) { setErrorState(); throw e; }
     // decode code lengths for the dynamic trees
     for (num = 0; num < hlit+hdist; ) {
       ubyte bt;
@@ -397,14 +397,14 @@ private:
     try {
       ltree.buildTree(lengths[0..hlit]);
       dtree.buildTree(lengths[hlit..hlit+hdist]);
-    } catch (Throwable e) {
+    } catch (Exception e) {
       setErrorState();
       throw e;
     }
   }
 
   // return true if char was read
-  bool processInflatedBlock (out ubyte bt) @safe {
+  bool processInflatedBlock (out ubyte bt) {
     if (bytesLeft > 0) {
       // copying match; all checks already done
       --bytesLeft;
@@ -441,11 +441,11 @@ private:
   }
 
   // return true if char was read
-  bool processUncompressedBlock (out ubyte bt) @trusted {
+  bool processUncompressedBlock (out ubyte bt) {
     if (bytesLeft > 0) {
       // copying
       bool ok;
-      try { ok = readOneByte(bt); } catch (Throwable e) { setErrorState(); throw e; }
+      try { ok = readOneByte(bt); } catch (Exception e) { setErrorState(); throw e; }
       if (!ok) error("out of input data");
       --bytesLeft;
       return true;
@@ -453,11 +453,11 @@ private:
     return false;
   }
 
-  ushort readU16 () @trusted {
+  ushort readU16 () {
     ubyte b0, b1;
     try {
       if (readOneByte(b0) && readOneByte(b1)) return cast(ushort)(b0|(b1<<8));
-    } catch (Throwable e) {
+    } catch (Exception e) {
       setErrorState();
       throw e;
     }
@@ -465,24 +465,24 @@ private:
     assert(0);
   }
 
-  void processRawHeader () @safe {
+  void processRawHeader () {
     ushort length = readU16();
     ushort invlength = readU16(); // one's complement of length
     // check length
-    if (length != (~invlength&0x0000ffffu)) error("invalid uncompressed block length");
+    if (length != cast(ushort)(~invlength)) error("invalid uncompressed block length");
     bitcount = 0; // make sure we start next block on a byte boundary
     bytesLeft = length;
     state = State.RawBlock;
   }
 
-  void processFixedHeader () @safe nothrow @nogc {
+  void processFixedHeader () nothrow @safe @nogc {
     lt = &sltree;
     dt = &sdtree;
     bytesLeft = 0; // force reading of symbol (just in case)
     state = State.CompressedBlock;
   }
 
-  void processDynamicHeader () @safe {
+  void processDynamicHeader () {
     // decode trees from stream
     decodeTrees();
     lt = &ltree;
@@ -492,7 +492,7 @@ private:
   }
 
   // set state to State.EOF on correct EOF
-  void processBlockHeader () @safe {
+  void processBlockHeader () {
     if (doingFinalBlock) {
       if (mode == Mode.ZLib) finishZLibData();
       doingFinalBlock = false;
@@ -510,7 +510,7 @@ private:
   }
 
   // false on eof
-  bool getOneByte (out ubyte bt) @safe {
+  bool getOneByte (out ubyte bt) {
     bool gotbyte = false;
     do {
       final switch (state) {
@@ -546,13 +546,18 @@ public:
    * Throws:
    *  InflateError on error
    */
-  this (bool delegate (out ubyte bt) dgb=null, Mode mode=Mode.ZLib) @trusted {
+  this (bool delegate (out ubyte bt) dgb, Mode mode=Mode.ZLib) {
     if (dgb is null) dgb = (out ubyte bt) => false;
     reinit(dgb, mode);
   }
 
   /// Ditto.
-  void reinit (bool delegate (out ubyte bt) dgb=null, Mode mode=Mode.ZLib) @trusted {
+  this (Mode mode) @trusted {
+    reinit(null, mode);
+  }
+
+  /// Ditto.
+  void reinit (bool delegate (out ubyte bt) dgb=null, Mode mode=Mode.ZLib) {
     if (dgb !is null) readOneByte = dgb;
     state = State.ExpectBlock;
     this.mode = mode;
@@ -573,7 +578,7 @@ public:
    * Throws:
    *  InflateError on error
    */
-  void checkStreamHeader () @safe {
+  void checkStreamHeader () {
     if (mode == Mode.ZLib && state == State.ExpectZLibHeader) processZLibHeader();
   }
 
@@ -587,13 +592,11 @@ public:
    *  InflateEOF on EOF
    *  InflateError on error
    */
-  ubyte getByte () @safe {
+  ubyte getByte () {
     ubyte res;
     if (!getOneByte(res)) throw new InflateEOF("no more data");
     return res;
   }
-
-  import std.traits;
 
   /**
    * Read bytes from stream. Almost similar to File.rawRead().
@@ -607,34 +610,33 @@ public:
    * Throws:
    *  InflateError on error
    */
-  T[] rawRead(T) (T[] buf) @trusted {
-    if (buf.length == 0) return buf;
-    usize pos; // autoinit
-    usize len = buf.length*buf[0].sizeof;
-    ubyte[] dst = (cast(ubyte*)buf.ptr)[0..len];
-    while (pos < len) {
-      ubyte res = void;
-      if (!getOneByte(res)) {
+  T[] rawRead(T) (T[] buf) {
+    auto len = buf.length*T.sizeof;
+    auto dst = cast(ubyte*)buf.ptr;
+    ubyte res = void;
+    while (len--) {
+      if (!getOneByte(*dst)) {
         // check if the last 'dest' item is fully decompressed
-        static if (buf[0].sizeof > 1) { if (pos%buf[0].sizeof) error("partial data"); }
-        return (pos > 0 ? buf[0..pos/buf[0].sizeof] : null);
+        static if (T.sizeof > 1) { if ((cast(size_t)dst-buf.ptr)%T.sizeof) error("partial data"); }
+        return buf[0..cast(size_t)(dst-buf.ptr)];
       }
-      dst[pos++] = res;
+      ++dst;
     }
     return buf;
   }
 
-  @property bool eof () const pure @safe nothrow @nogc => (state == State.EOF);
-  @property bool invalid () const pure @safe nothrow @nogc => (state == State.Dead);
+  @property bool eof () const pure nothrow @safe @nogc { pragma(inline, true); return (state == State.EOF); }
+  @property bool invalid () const pure nothrow @safe @nogc { pragma(inline, true); return (state == State.Dead); }
 }
 
 
 // -----------------------------------------------------------------------------
+private:
 // private global data
 // build it using CTFE
 
 // fixed length/symbol tree
-private immutable Tree sltree = {
+immutable Tree sltree = {
   Tree sl;
   sl.table[7] = 24;
   sl.table[8] = 152;
@@ -647,19 +649,19 @@ private immutable Tree sltree = {
 }();
 
 // fixed distance tree
-private immutable Tree sdtree = {
+immutable Tree sdtree = {
   Tree sd;
   sd.table[5] = 32;
-  foreach (ushort i; 0..32) sd.trans[i] = i;
+  foreach (immutable ushort i; 0..32) sd.trans[i] = i;
   return sd;
 }();
 
-private void fillBits (ubyte[] bits, uint delta) @safe nothrow {
+void fillBits (ubyte[] bits, uint delta) @safe nothrow {
   bits[0..delta] = 0;
   foreach (immutable i; 0..30-delta) bits[i+delta] = cast(ubyte)(i/delta);
 }
 
-private void fillBase (ushort[] base, immutable(ubyte[30]) bits, ushort first) @safe nothrow {
+void fillBase (ushort[] base, immutable(ubyte[30]) bits, ushort first) @safe nothrow {
   ushort sum = first;
   foreach (immutable i; 0..30) {
     base[i] = sum;
@@ -668,14 +670,14 @@ private void fillBase (ushort[] base, immutable(ubyte[30]) bits, ushort first) @
 }
 
 // extra bits and base tables for length codes
-private immutable ubyte[30] lengthBits = {
+immutable ubyte[30] lengthBits = {
   ubyte[30] bits;
   fillBits(bits, 4);
   bits[28] = 0; // fix a special case
   return bits;
 }();
 
-private immutable ushort[30] lengthBase = {
+immutable ushort[30] lengthBase = {
   ubyte[30] bits;
   ushort[30] base;
   fillBits(bits, 4);
@@ -685,13 +687,13 @@ private immutable ushort[30] lengthBase = {
 }();
 
 // extra bits and base tables for distance codes
-private immutable ubyte[30] distBits = {
+immutable ubyte[30] distBits = {
   ubyte[30] bits;
   fillBits(bits, 2);
   return bits;
 }();
 
-private immutable ushort[30] distBase = {
+immutable ushort[30] distBase = {
   enum bits = distBits;
   ushort[30] base;
   fillBase(base, bits, 1);
