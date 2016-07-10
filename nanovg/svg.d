@@ -32,6 +32,10 @@ private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sq
 static if (is(typeof({import iv.vfs;}()))) enum NanoSVGHasVFS = true; else enum NanoSVGHasVFS = false;
 static if (NanoSVGHasVFS) import iv.vfs;
 
+version = nanosvg_crappy_stylesheet_parser;
+//version = nanosvg_debug_styles;
+//version(rdmd) import iv.strex;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // NanoSVG is a simple stupid single-header-file SVG parse. The output of the parser is a list of cubic bezier shapes.
@@ -610,12 +614,41 @@ void nsvg__parseXML (const(char)[] input,
   int state = NSVG_XML_CONTENT;
   while (cpos < input.length) {
     if (state == NSVG_XML_CONTENT && input[cpos] == '<') {
+      if (input.length-cpos >= 9 && input[cpos..cpos+9] == "<![CDATA[") {
+        cpos += 9;
+        while (cpos < input.length) {
+          if (input.length-cpos > 1 && input.ptr[cpos] == ']' && input.ptr[cpos+1] == ']') {
+            cpos += 2;
+            while (cpos < input.length && input.ptr[cpos] <= ' ') ++cpos;
+            if (cpos < input.length && input.ptr[cpos] == '>') { ++cpos; break; }
+          } else {
+            ++cpos;
+          }
+        }
+        continue;
+      }
       // start of a tag
       //{ import std.stdio; writeln("ctx: ", input[0..cpos].quote); }
+      ////version(nanosvg_debug_styles) { import std.stdio; writeln("ctx: ", input[0..cpos].quote); }
       nsvg__parseContent(input[0..cpos], contentCb, ud);
       input = input[cpos+1..$];
+      if (input.length > 2 && input.ptr[0] == '!' && input.ptr[1] == '-' && input.ptr[2] == '-') {
+        //{ import std.stdio; writeln("ctx0: ", input.quote); }
+        // skip comments
+        cpos = 3;
+        while (cpos < input.length) {
+          if (input.length-cpos > 2 && input.ptr[cpos] == '-' && input.ptr[cpos+1] == '-' && input.ptr[cpos+2] == '>') {
+            cpos += 3;
+            break;
+          }
+          ++cpos;
+        }
+        input = input[cpos..$];
+        //{ import std.stdio; writeln("ctx1: ", input.quote); }
+      } else {
+        state = NSVG_XML_TAG;
+      }
       cpos = 0;
-      state = NSVG_XML_TAG;
     } else if (state == NSVG_XML_TAG && input[cpos] == '>') {
       // start of a content or new tag
       //{ import std.stdio; writeln("tag: ", input[0..cpos].quote); }
@@ -709,6 +742,13 @@ struct Attrib {
   ubyte visible;
 }
 
+version(nanosvg_crappy_stylesheet_parser) {
+struct Style {
+  const(char)[] name;
+  const(char)[] value;
+}
+}
+
 struct Parser {
   Attrib[NSVG_MAX_ATTR] attr;
   int attrHead;
@@ -723,6 +763,16 @@ struct Parser {
   float dpi;
   char pathFlag;
   char defsFlag;
+  version(nanosvg_crappy_stylesheet_parser) {
+    Style* styles;
+    uint styleCount;
+    bool inStyle;
+  }
+}
+
+const(char)[] fromAsciiz (const(char)[] s) {
+  foreach (immutable idx, char ch; s) if (!ch) return s[0..idx];
+  return s;
 }
 
 void nsvg__xformIdentity (float* t) {
@@ -934,6 +984,7 @@ void nsvg__deleteParser (Parser* p) {
     nsvg__deleteGradientData(p.gradients);
     kill(p.image);
     xfree(p.pts);
+    version(nanosvg_crappy_stylesheet_parser) xfree(p.styles);
     xfree(p);
   }
 }
@@ -1025,11 +1076,6 @@ float nsvg__convertToPixels (Parser* p, Coordinate c, float orig, float length) 
   }
   assert(0);
   //return c.value;
-}
-
-const(char)[] fromAsciiz (const(char)[] s) {
-  foreach (immutable idx, char ch; s) if (!ch) return s[0..idx];
-  return s;
 }
 
 GradientData* nsvg__findGradientData (Parser* p, const(char)[] id) {
@@ -1817,6 +1863,61 @@ int nsvg__parseStrokeDashArray (Parser* p, const(char)[] str, float* strokeDashA
   return count;
 }
 
+const(char)[] trimLeft (const(char)[] s, char ech=0) {
+  size_t pos = 0;
+  while (pos < s.length) {
+    if (s.ptr[pos] <= ' ') { ++pos; continue; }
+    if (ech && s.ptr[pos] == ech) { ++pos; continue; }
+    if (s.ptr[pos] == '/' && s.length-pos > 1 && s.ptr[pos+1] == '*') {
+      pos += 2;
+      while (s.length-pos > 1 && !(s.ptr[pos] == '*' && s.ptr[pos+1] == '/')) ++pos;
+      if ((pos += 2) > s.length) pos = s.length;
+      continue;
+    }
+    break;
+  }
+  return s[pos..$];
+}
+
+static const(char)[] trimRight (const(char)[] s, char ech=0) {
+  size_t pos = 0;
+  while (pos < s.length) {
+    if (s.ptr[pos] <= ' ' || (ech && s.ptr[pos] == ech)) {
+      if (s[pos..$].trimLeft(ech).length == 0) return s[0..pos];
+    } else if (s.ptr[pos] == '/' && s.length-pos > 1 && s.ptr[pos+1] == '*') {
+      if (s[pos..$].trimLeft(ech).length == 0) return s[0..pos];
+    }
+    ++pos;
+  }
+  return s;
+}
+
+version(nanosvg_crappy_stylesheet_parser) {
+Style* findStyle (Parser* p, char fch, const(char)[] name) {
+  if (name.length == 0) return null;
+  foreach (ref st; p.styles[0..p.styleCount]) {
+    if (st.name.length < 2 || st.name.ptr[0] != fch) continue;
+    if (st.name[1..$] == name) return &st;
+  }
+  return null;
+}
+
+void nsvg__parseClassOrId (Parser* p, char lch, const(char)[] str) {
+  while (str.length) {
+    while (str.length && str.ptr[0] <= ' ') str = str[1..$];
+    if (str.length == 0) break;
+    size_t pos = 1;
+    while (pos < str.length && str.ptr[pos] > ' ') ++pos;
+    version(nanosvg_debug_styles) { import std.stdio; writeln("class to find: ", lch, str[0..pos].quote); }
+    if (auto st = p.findStyle(lch, str[0..pos])) {
+      version(nanosvg_debug_styles) { import std.stdio; writeln("class: [", str[0..pos], "]; value: ", st.value.quote); }
+      nsvg__parseStyle(p, st.value);
+    }
+    str = str[pos..$];
+  }
+}
+}
+
 bool nsvg__parseAttr (Parser* p, const(char)[] name, const(char)[] value) {
   float[6] xform;
   Attrib* attr = nsvg__getAttr(p);
@@ -1876,7 +1977,11 @@ bool nsvg__parseAttr (Parser* p, const(char)[] name, const(char)[] value) {
     attr.stopOpacity = nsvg__parseOpacity(value);
   } else if (name == "offset") {
     attr.stopOffset = nsvg__parseCoordinate(p, value, 0.0f, 1.0f);
+  } else if (name == "class") {
+    version(nanosvg_crappy_stylesheet_parser) nsvg__parseClassOrId(p, '.', value);
   } else if (name == "id") {
+    // apply classes here too
+    version(nanosvg_crappy_stylesheet_parser) nsvg__parseClassOrId(p, '#', value);
     attr.id[] = 0;
     if (value.length > attr.id.length-1) value = value[0..attr.id.length-1];
     attr.id[0..value.length] = value[];
@@ -1887,40 +1992,55 @@ bool nsvg__parseAttr (Parser* p, const(char)[] name, const(char)[] value) {
 }
 
 bool nsvg__parseNameValue (Parser* p, const(char)[] str) {
-  const(char)[] name, val;
+  const(char)[] name;
 
+  str = str.trimLeft;
   size_t pos = 0;
-  while (pos < str.length && str[pos] != ':') ++pos;
-  val = str[0..pos];
-  // Right Trim
-  while (val.length && (val[$-1] == ':' || nsvg__isspace(val[$-1]))) val = val[0..$-1];
-  name = val;
+  while (pos < str.length && str.ptr[pos] != ':') {
+    if (str.length-pos > 1 && str.ptr[pos] == '/' && str.ptr[pos+1] == '*') {
+      pos += 2;
+      while (str.length-pos > 1 && !(str.ptr[pos] == '*' && str.ptr[pos+1] == '/')) ++pos;
+      if ((pos += 2) > str.length) pos = str.length;
+    } else {
+      ++pos;
+    }
+  }
 
-  while (pos < str.length && (str[pos] == ':' || nsvg__isspace(str[pos]))) ++pos;
-  val = str[pos..$];
-  // Right Trim
-  while (val.length && (val[$-1] == ':' || nsvg__isspace(val[$-1]))) val = val[0..$-1];
+  name = str[0..pos].trimLeft.trimRight;
+  if (name.length == 0) return false;
 
-  return nsvg__parseAttr(p, name, val);
+  str = str[pos+(pos < str.length ? 1 : 0)..$].trimLeft.trimRight(';');
+
+  version(nanosvg_debug_styles) { import std.stdio; writeln("** name=", name.quote, "; value=", str.quote); }
+
+  return nsvg__parseAttr(p, name, str);
 }
 
 void nsvg__parseStyle (Parser* p, const(char)[] str) {
   while (str.length) {
-    // Left Trim
-    while (str.length && nsvg__isspace(str[0])) str = str[1..$];
+    str = str.trimLeft;
     size_t pos = 0;
-    while (pos < str.length && str[pos] != ';') ++pos;
-    auto val = str[0..pos];
+    while (pos < str.length && str[pos] != ';') {
+      if (str.length-pos > 1 && str.ptr[pos] == '/' && str.ptr[pos+1] == '*') {
+        pos += 2;
+        while (str.length-pos > 1 && !(str.ptr[pos] == '*' && str.ptr[pos+1] == '/')) ++pos;
+        if ((pos += 2) > str.length) pos = str.length;
+      } else {
+        ++pos;
+      }
+    }
+    const(char)[] val = trimRight(str[0..pos]);
+    version(nanosvg_debug_styles) { import std.stdio; writeln("style: ", val.quote); }
     str = str[pos+(pos < str.length ? 1 : 0)..$];
-    // Right Trim
-    while (val.length && (val[$-1] == ';' || nsvg__isspace(val[$-1]))) val = val[0..$-1];
-    nsvg__parseNameValue(p, val);
+    if (val.length > 0) nsvg__parseNameValue(p, val);
   }
 }
 
 void nsvg__parseAttribs (Parser* p, AttrList attr) {
   for (size_t i = 0; attr.length-i >= 2; i += 2) {
-    if (attr[i] == "style") nsvg__parseStyle(p, attr[i+1]); else nsvg__parseAttr(p, attr[i], attr[i+1]);
+         if (attr[i] == "style") nsvg__parseStyle(p, attr[i+1]);
+    else if (attr[i] == "class") { version(nanosvg_crappy_stylesheet_parser) nsvg__parseClassOrId(p, '.', attr[i+1]); }
+    else nsvg__parseAttr(p, attr[i], attr[i+1]);
   }
 }
 
@@ -2681,6 +2801,9 @@ void nsvg__parseGradientStop (Parser* p, AttrList attr) {
 void nsvg__startElement (void* ud, const(char)[] el, AttrList attr) {
   Parser* p = cast(Parser*)ud;
 
+  version(nanosvg_debug_styles) { import std.stdio; writeln("tagB: ", el.quote); }
+  version(nanosvg_crappy_stylesheet_parser) { p.inStyle = (el == "style"); }
+
   if (p.defsFlag) {
     // Skip everything but gradients in defs
     if (el == "linearGradient") {
@@ -2697,8 +2820,7 @@ void nsvg__startElement (void* ud, const(char)[] el, AttrList attr) {
     nsvg__pushAttr(p);
     nsvg__parseAttribs(p, attr);
   } else if (el == "path") {
-    if (p.pathFlag)  // Do not allow nested paths.
-      return;
+    if (p.pathFlag) return; // do not allow nested paths
     nsvg__pushAttr(p);
     nsvg__parsePath(p, attr);
     nsvg__popAttr(p);
@@ -2740,14 +2862,84 @@ void nsvg__startElement (void* ud, const(char)[] el, AttrList attr) {
 }
 
 void nsvg__endElement (void* ud, const(char)[] el) {
+  version(nanosvg_debug_styles) { import std.stdio; writeln("tagE: ", el.quote); }
   Parser* p = cast(Parser*)ud;
        if (el == "g") nsvg__popAttr(p);
   else if (el == "path") p.pathFlag = 0;
   else if (el == "defs") p.defsFlag = 0;
+  else if (el == "style") { version(nanosvg_crappy_stylesheet_parser) p.inStyle = false; }
 }
 
 void nsvg__content (void* ud, const(char)[] s) {
-  // empty
+  version(nanosvg_crappy_stylesheet_parser) {
+    Parser* p = cast(Parser*)ud;
+    if (!p.inStyle) {
+      return;
+    }
+    // cheap hack
+    for (;;) {
+      while (s.length && s.ptr[0] <= ' ') s = s[1..$];
+      if (!s.startsWith("<![CDATA[")) break;
+      s = s[9..$];
+    }
+    for (;;) {
+      while (s.length && (s[$-1] <= ' ' || s[$-1] == '>')) s = s[0..$-1];
+      if (s.length > 1 && s[$-2..$] == "]]") s = s[0..$-2]; else break;
+    }
+    version(nanosvg_debug_styles) { import std.stdio; writeln("ctx: ", s.quote); }
+    uint tokensAdded = 0;
+    while (s.length) {
+      if (s.length > 1 && s.ptr[0] == '/' && s.ptr[1] == '*') {
+        // comment
+        s = s[2..$];
+        while (s.length > 1 && !(s.ptr[0] == '*' && s.ptr[1] == '/')) s = s[1..$];
+        if (s.length <= 2) break;
+        s = s[2..$];
+        continue;
+      } else if (s.ptr[0] <= ' ') {
+        while (s.length && s.ptr[0] <= ' ') s = s[1..$];
+        continue;
+      }
+      //version(nanosvg_debug_styles) { import std.stdio; writeln("::: ", s.quote); }
+      if (s.ptr[0] == '{') {
+        size_t pos = 1;
+        while (pos < s.length && s.ptr[pos] != '}') {
+          if (s.length-pos > 1 && s.ptr[pos] == '/' && s.ptr[pos+1] == '*') {
+            // skip comment
+            pos += 2;
+            while (s.length-pos > 1 && !(s.ptr[pos] == '*' && s.ptr[pos+1] == '/')) ++pos;
+            if (s.length-pos <= 2) { pos = cast(uint)s.length; break; }
+            pos += 2;
+          } else {
+            ++pos;
+          }
+        }
+        version(nanosvg_debug_styles) { import std.stdio; writeln("*** style: ", s[1..pos].quote); }
+        if (tokensAdded > 0) {
+          foreach (immutable idx; p.styleCount-tokensAdded..p.styleCount) p.styles[idx].value = s[1..pos];
+        }
+        tokensAdded = 0;
+        if (s.length-pos < 1) break;
+        s = s[pos+1..$];
+      } else {
+        size_t pos = 0;
+        while (pos < s.length && s.ptr[pos] > ' ' && s.ptr[pos] != '{' && s.ptr[pos] != '/') ++pos;
+        const(char)[] tk = s[0..pos];
+        version(nanosvg_debug_styles) { import std.stdio; writeln("token: ", tk.quote); }
+        s = s[pos..$];
+        {
+          import core.stdc.stdlib : realloc;
+          import core.stdc.string : memset;
+          p.styles = cast(typeof(p.styles))realloc(p.styles, p.styles[0].sizeof*(p.styleCount+1));
+          memset(p.styles+p.styleCount, 0, p.styles[0].sizeof);
+          ++p.styleCount;
+        }
+        p.styles[p.styleCount-1].name = tk;
+        ++tokensAdded;
+      }
+    }
+    version(nanosvg_debug_styles) foreach (const ref st; p.styles[0..p.styleCount]) { import std.stdio; writeln("name: ", st.name.quote, "; value: ", st.value.quote); }
+  }
 }
 
 void nsvg__imageBounds (Parser* p, float* bounds) {
