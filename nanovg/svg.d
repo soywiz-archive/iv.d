@@ -761,8 +761,8 @@ struct Parser {
   float viewMinx, viewMiny, viewWidth, viewHeight;
   int alignX, alignY, alignType;
   float dpi;
-  char pathFlag;
-  char defsFlag;
+  bool pathFlag;
+  bool defsFlag;
   version(nanosvg_crappy_stylesheet_parser) {
     Style* styles;
     uint styleCount;
@@ -2821,6 +2821,7 @@ void nsvg__startElement (void* ud, const(char)[] el, AttrList attr) {
     nsvg__parseAttribs(p, attr);
   } else if (el == "path") {
     if (p.pathFlag) return; // do not allow nested paths
+    p.pathFlag = true;
     nsvg__pushAttr(p);
     nsvg__parsePath(p, attr);
     nsvg__popAttr(p);
@@ -2855,7 +2856,7 @@ void nsvg__startElement (void* ud, const(char)[] el, AttrList attr) {
   } else if (el == "stop") {
     nsvg__parseGradientStop(p, attr);
   } else if (el == "defs") {
-    p.defsFlag = 1;
+    p.defsFlag = true;
   } else if (el == "svg") {
     nsvg__parseSVG(p, attr);
   }
@@ -2865,8 +2866,8 @@ void nsvg__endElement (void* ud, const(char)[] el) {
   version(nanosvg_debug_styles) { import std.stdio; writeln("tagE: ", el.quote); }
   Parser* p = cast(Parser*)ud;
        if (el == "g") nsvg__popAttr(p);
-  else if (el == "path") p.pathFlag = 0;
-  else if (el == "defs") p.defsFlag = 0;
+  else if (el == "path") p.pathFlag = false;
+  else if (el == "defs") p.defsFlag = false;
   else if (el == "style") { version(nanosvg_crappy_stylesheet_parser) p.inStyle = false; }
 }
 
