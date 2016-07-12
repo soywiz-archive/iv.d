@@ -42,19 +42,28 @@ import core.stdc.stdio : FILE, fopen, fclose, fseek, ftell, fread, SEEK_END, SEE
 
 // welcome to version hell!
 version(nanovg_force_detect) {} else version(nanovg_use_freetype) { version = nanovg_use_freetype_ii; }
+version(nanovg_ignore_iv_stb_ttf) enum nanovg_ignore_iv_stb_ttf = true; else enum nanovg_ignore_iv_stb_ttf = false;
 
 version(nanovg_use_freetype_ii) {
   enum HasAST = false;
+  //pragma(msg, "iv.freetype: forced");
 } else {
-  static if (__traits(compiles, { import arsd.ttf; })) {
+  static if (!nanovg_ignore_iv_stb_ttf && __traits(compiles, { import iv.stb.ttf; })) {
+    import iv.stb.ttf;
+    enum HasAST = true;
+    //pragma(msg, "iv.stb.ttf");
+  } else static if (__traits(compiles, { import arsd.ttf; })) {
     import arsd.ttf;
     enum HasAST = true;
+    //pragma(msg, "arsd.ttf");
   } else static if (__traits(compiles, { import stb_truetype; })) {
     import stb_truetype;
     enum HasAST = true;
+    //pragma(msg, "stb_truetype");
   } else static if (__traits(compiles, { import iv.freetype; })) {
     import iv.freetype;
     enum HasAST = false;
+    //pragma(msg, "iv.freetype");
   } else {
     static assert(0, "no stb_ttf/iv.freetype found!");
   }
@@ -321,6 +330,19 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
 
 void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) {
   stbtt_MakeGlyphBitmap(&font.font, output, outWidth, outHeight, outStride, scaleX, scaleY, glyph);
+  /*
+  version(nanovg_ft_mono) {
+    auto p = output;
+    foreach (immutable y; 0..outHeight) {
+      auto l = p;
+      foreach (immutable x; 0..outWidth) {
+        if (*l < 128) *l = 0; else *l = 255;
+        ++l;
+      }
+      p += (outStride ? outStride : outWidth);
+    }
+  }
+  */
 }
 
 int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) {
