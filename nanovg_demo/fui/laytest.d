@@ -225,8 +225,8 @@ void main () {
   auto sz = ctx.layprops(0).position.size;
 
   ctx.buildWindow2();
-  ctx.layprops(0).defSize = sz;
-  ctx.layprops(0).maxSize = ctx.layprops(0).defSize;
+  ctx.layprops(0).minSize = sz;
+  ctx.layprops(0).maxSize = ctx.layprops(0).minSize;
   ctx.relayout();
   debug ctx.dumpLayout();
 }
