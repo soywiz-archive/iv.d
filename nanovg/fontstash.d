@@ -43,6 +43,7 @@ import core.stdc.stdio : FILE, fopen, fclose, fseek, ftell, fread, SEEK_END, SEE
 // welcome to version hell!
 version(nanovg_force_detect) {} else version(nanovg_use_freetype) { version = nanovg_use_freetype_ii; }
 version(nanovg_ignore_iv_stb_ttf) enum nanovg_ignore_iv_stb_ttf = true; else enum nanovg_ignore_iv_stb_ttf = false;
+//version(nanovg_ignore_mono);
 
 version(nanovg_use_freetype_ii) {
   enum HasAST = false;
@@ -233,7 +234,8 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
   FT_Error ftError;
   FT_GlyphSlot ftGlyph;
   //FONS_NOTUSED(scale);
-  version(nanovg_ft_mono) enum exflags = FT_LOAD_MONOCHROME; else enum exflags = 0;
+  version(nanovg_ignore_mono) enum exflags = 0;
+  else version(nanovg_ft_mono) enum exflags = FT_LOAD_MONOCHROME; else enum exflags = 0;
   ftError = FT_Set_Pixel_Sizes(font.font, 0, cast(FT_UInt)(size*cast(float)font.font.units_per_EM/cast(float)(font.font.ascender-font.font.descender)));
   if (ftError) return 0;
   ftError = FT_Load_Glyph(font.font, glyph, FT_LOAD_RENDER|/*FT_LOAD_NO_AUTOHINT|*/exflags);
@@ -256,24 +258,36 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
   //FONS_NOTUSED(scaleX);
   //FONS_NOTUSED(scaleY);
   //FONS_NOTUSED(glyph); // glyph has already been loaded by fons__tt_buildGlyphBitmap
-  version(nanovg_ft_mono) {
+  version(nanovg_ignore_mono) enum RenderAA = true;
+  else version(nanovg_ft_mono) enum RenderAA = false;
+  else enum RenderAA = true;
+  static if (RenderAA) {
     auto src = ftGlyph.bitmap.buffer;
+    auto dst = output;
+    auto spt = ftGlyph.bitmap.pitch;
+    if (spt < 0) spt = -spt;
     foreach (int y; 0..ftGlyph.bitmap.rows) {
-      ubyte count = 0, b = 0;
-      foreach (int x; 0..ftGlyph.bitmap.width) {
-        if (count-- == 0) { count = 7; b = *src++; } else b <<= 1;
-        output[(y*outStride)+x] = (b&0x80 ? 255 : 0);
-      }
-      if ((cast(size_t)src)&0x01) ++src;
+      import core.stdc.string : memcpy;
+      //dst[0..ftGlyph.bitmap.width] = src[0..ftGlyph.bitmap.width];
+      memcpy(dst, src, ftGlyph.bitmap.width);
+      src += spt;
+      dst += outStride;
     }
   } else {
-    int ftGlyphOffset = 0;
+    auto src = ftGlyph.bitmap.buffer;
+    auto dst = output;
+    auto spt = ftGlyph.bitmap.pitch;
+    if (spt < 0) spt = -spt;
     foreach (int y; 0..ftGlyph.bitmap.rows) {
+      ubyte count = 0, b = 0;
+      auto s = src;
+      auto d = dst;
       foreach (int x; 0..ftGlyph.bitmap.width) {
-        //auto bt = ftGlyph.bitmap.buffer[ftGlyphOffset++];
-        //if (bt < 200) bt = 0; else bt = 255;
-        output[(y*outStride)+x] = ftGlyph.bitmap.buffer[ftGlyphOffset++];
+        if (count-- == 0) { count = 7; b = *s++; } else b <<= 1;
+        *d++ = (b&0x80 ? 255 : 0);
       }
+      src += spt;
+      dst += outStride;
     }
   }
 }
