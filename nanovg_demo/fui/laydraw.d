@@ -262,7 +262,8 @@ void main () {
 
     if (nvg !is null) {
       if (fps !is null) fps.update(dt);
-      nvg.beginFrame(owdt, ohgt);
+      nvg.beginFrame(owdt, ohgt, 1);
+      nvg.fontBlur(0);
       ctx.draw();
       if (fps !is null && !perfHidden) fps.render(nvg, owdt-200-5, ohgt-35-5);
       nvg.endFrame();
