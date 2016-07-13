@@ -616,7 +616,21 @@ private:
     return res;
   }
 
-  void clear () { pmemused = 0; pcount = 0; }
+  void clear () {
+    pmemused = 0;
+    pcount = 0;
+    focusedId = -1;
+    lastHover = -1;
+    lastClickDelta[] = short.max;
+    lastClick[] = -1; // on which item it was registered?
+    eventHead =  eventPos = 0;
+  }
+
+  // this will clear only controls, use with care!
+  void clearControls () {
+    pmemused = 0;
+    pcount = 0;
+  }
 
 public:
   @disable this (this); // no copies!
@@ -819,6 +833,16 @@ public:
     pragma(inline, true);
     if (ctxp) {
       ctx.clear();
+      // add root panel
+      ctx.addItem!FuiLayoutProps();
+    }
+  }
+
+  // this will clear only controls, use with care!
+  void clearControls () {
+    pragma(inline, true);
+    if (ctxp) {
+      ctx.clearControls();
       // add root panel
       ctx.addItem!FuiLayoutProps();
     }

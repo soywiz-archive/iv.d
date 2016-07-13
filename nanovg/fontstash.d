@@ -1073,16 +1073,16 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   }
 
   // Debug code to color the glyph background
-  /*
-  ubyte* fdst = &stash.texData[glyph.x0+glyph.y0*stash.params.width];
-  for (y = 0; y < gh; y++) {
-    for (x = 0; x < gw; x++) {
-      int a = (int)fdst[x+y*stash.params.width]+20;
-      if (a > 255) a = 255;
-      fdst[x+y*stash.params.width] = a;
+  version(none) {
+    ubyte* fdst = &stash.texData[glyph.x0+glyph.y0*stash.params.width];
+    foreach (immutable yy; 0..gh) {
+      foreach (immutable xx; 0..gw) {
+        int a = cast(int)fdst[xx+yy*stash.params.width]+20;
+        if (a > 255) a = 255;
+        fdst[xx+yy*stash.params.width] = cast(ubyte)a;
+      }
     }
   }
-  */
 
   // Blur
   if (iblur > 0) {
@@ -1116,6 +1116,13 @@ void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONS
   y0 = cast(float)(glyph.y0+1);
   x1 = cast(float)(glyph.x1-1);
   y1 = cast(float)(glyph.y1-1);
+
+  /*
+  x0 -= 1;
+  y0 -= 1;
+  x1 += 2;
+  y1 += 2;
+  */
 
   if (stash.params.flags&FONS_ZERO_TOPLEFT) {
     rx = cast(float)cast(int)(*x+xoff);

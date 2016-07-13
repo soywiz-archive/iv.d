@@ -38,16 +38,20 @@ __gshared NVGContext nvg = null;
 
 // ////////////////////////////////////////////////////////////////////////// //
 void init (NVGContext vg) {
-  enum FontFile = "/home/ketmar/ttf/ms/verdana.ttf";
-  //enum FontFile = "/home/ketmar/back/D/ports/soui.ttf";
-  bndSetFont(vg.createFont("system", FontFile));
+  import std.path : expandTilde;
+  //enum FontFile = "~/ttf/ms/arial.ttf";
+  //enum FontFile = "~/ttf/ms/verdana.ttf";
+  enum FontFile = "~/.fonts/PTC55F.ttf";
+  //enum FontFile = "~/ttf/ms/tahoma.ttf";
+  bndSetFont(vg.createFont("system", FontFile.expandTilde));
   bndSetIconImage(vg.createImage("../data/images/blender_icons16.png", 0));
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 void buildWindow0 (FuiContext ctx) {
-  ctx.clear();
+  //ctx.clear();
+  ctx.clearControls();
 
   with (ctx.layprops(0)) {
     vertical = true;
