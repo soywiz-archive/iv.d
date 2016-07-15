@@ -79,8 +79,8 @@ enum FONS_INVALID = -1;
 
 alias FONSflags = int;
 enum /*FONSflags*/ {
-  FONS_ZERO_TOPLEFT = 1,
-  FONS_ZERO_BOTTOMLEFT = 2,
+  FONS_ZERO_TOPLEFT    = 1<<0,
+  FONS_ZERO_BOTTOMLEFT = 1<<1,
 }
 
 alias FONSalign = int;
@@ -196,6 +196,7 @@ import iv.freetype;
 
 struct FONSttFontImpl {
   FT_Face font;
+  bool mono; // no aa?
 }
 
 __gshared FT_Library ftLibrary;
@@ -205,6 +206,10 @@ int fons__tt_init (FONScontext* context) {
   //FONS_NOTUSED(context);
   ftError = FT_Init_FreeType(&ftLibrary);
   return (ftError == 0);
+}
+
+void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) {
+  font.mono = v;
 }
 
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) {
@@ -233,8 +238,9 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
   FT_Error ftError;
   FT_GlyphSlot ftGlyph;
   //FONS_NOTUSED(scale);
-  version(nanovg_ignore_mono) enum exflags = 0;
-  else version(nanovg_ft_mono) enum exflags = FT_LOAD_MONOCHROME; else enum exflags = 0;
+  //version(nanovg_ignore_mono) enum exflags = 0;
+  //else version(nanovg_ft_mono) enum exflags = FT_LOAD_MONOCHROME; else enum exflags = 0;
+  uint exflags = (font.mono ? FT_LOAD_MONOCHROME : 0);
   ftError = FT_Set_Pixel_Sizes(font.font, 0, cast(FT_UInt)(size*cast(float)font.font.units_per_EM/cast(float)(font.font.ascender-font.font.descender)));
   if (ftError) return 0;
   ftError = FT_Load_Glyph(font.font, glyph, FT_LOAD_RENDER|/*FT_LOAD_NO_AUTOHINT|*/exflags);
@@ -257,22 +263,10 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
   //FONS_NOTUSED(scaleX);
   //FONS_NOTUSED(scaleY);
   //FONS_NOTUSED(glyph); // glyph has already been loaded by fons__tt_buildGlyphBitmap
-  version(nanovg_ignore_mono) enum RenderAA = true;
-  else version(nanovg_ft_mono) enum RenderAA = false;
-  else enum RenderAA = true;
-  static if (RenderAA) {
-    auto src = ftGlyph.bitmap.buffer;
-    auto dst = output;
-    auto spt = ftGlyph.bitmap.pitch;
-    if (spt < 0) spt = -spt;
-    foreach (int y; 0..ftGlyph.bitmap.rows) {
-      import core.stdc.string : memcpy;
-      //dst[0..ftGlyph.bitmap.width] = src[0..ftGlyph.bitmap.width];
-      memcpy(dst, src, ftGlyph.bitmap.width);
-      src += spt;
-      dst += outStride;
-    }
-  } else {
+  //version(nanovg_ignore_mono) enum RenderAA = true;
+  //else version(nanovg_ft_mono) enum RenderAA = false;
+  //else enum RenderAA = true;
+  if (font.mono) {
     auto src = ftGlyph.bitmap.buffer;
     auto dst = output;
     auto spt = ftGlyph.bitmap.pitch;
@@ -285,6 +279,18 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
         if (count-- == 0) { count = 7; b = *s++; } else b <<= 1;
         *d++ = (b&0x80 ? 255 : 0);
       }
+      src += spt;
+      dst += outStride;
+    }
+  } else {
+    auto src = ftGlyph.bitmap.buffer;
+    auto dst = output;
+    auto spt = ftGlyph.bitmap.pitch;
+    if (spt < 0) spt = -spt;
+    foreach (int y; 0..ftGlyph.bitmap.rows) {
+      import core.stdc.string : memcpy;
+      //dst[0..ftGlyph.bitmap.width] = src[0..ftGlyph.bitmap.width];
+      memcpy(dst, src, ftGlyph.bitmap.width);
       src += spt;
       dst += outStride;
     }
@@ -312,6 +318,9 @@ struct FONSttFontImpl {
 int fons__tt_init (FONScontext* context) {
   //FONS_NOTUSED(context);
   return 1;
+}
+
+void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) {
 }
 
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) {
@@ -892,6 +901,14 @@ package(iv.nanovg) int fonsAddFontMem (FONScontext* stash, const(char)[] name, u
   font.dataSize = dataSize;
   font.data = data;
   font.freeData = cast(ubyte)freeData;
+
+  {
+    enum NoAlias = ":noaa";
+    if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
+      //{ import core.stdc.stdio : printf; printf("MONO: [%.*s]\n", cast(uint)name.length, name.ptr); }
+      fons__tt_setMono(stash, &font.font, true);
+    }
+  }
 
   // Init font
   stash.nscratch = 0;

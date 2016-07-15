@@ -2521,14 +2521,15 @@ public void stroke (NVGContext ctx) {
  */
 public alias NVGSectionDummy08 = void;
 
-/// Creates font by loading it from the disk from specified file name.
-/// Returns handle to the font.
+/** Creates font by loading it from the disk from specified file name.
+ * Returns handle to the font.
+ * use "fontname:noaa" as `name` to turn off antialiasing (if font driver supports that). */
 public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) {
   return fonsAddFont(ctx.fs, name, path);
 }
 
-/// Creates font by loading it from the specified memory chunk.
-/// Returns handle to the font.
+/** Creates font by loading it from the specified memory chunk.
+ * Returns handle to the font. */
 public int createFontMem (NVGContext ctx, const(char)[] name, ubyte* data, int ndata, int freeData) {
   return fonsAddFontMem(ctx.fs, name, data, ndata, freeData);
 }

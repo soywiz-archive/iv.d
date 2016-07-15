@@ -43,7 +43,7 @@ void init (NVGContext vg) {
   //enum FontFile = "~/ttf/ms/verdana.ttf";
   enum FontFile = "~/.fonts/PTC55F.ttf";
   //enum FontFile = "~/ttf/ms/tahoma.ttf";
-  bndSetFont(vg.createFont("system", FontFile.expandTilde));
+  bndSetFont(vg.createFont("system:noaa", FontFile.expandTilde));
   bndSetIconImage(vg.createImage("../data/images/blender_icons16.png", 0));
 }
 
@@ -340,7 +340,7 @@ void main () {
 
     sdwindow.resize(GWidth, GHeight);
 
-    if (fps is null) fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");
+    if (fps is null) fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system:noaa");
     //sdwindow.redrawOpenGlScene();
   };
 
