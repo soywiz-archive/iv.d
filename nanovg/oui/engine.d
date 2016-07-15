@@ -24,8 +24,7 @@ THE SOFTWARE.
 /* Invisible Vector Library
  * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * Understanding is not required. Only obedience.
- * yes, this D port is GPLed. thanks to all "active" members of D
- * community, and for all (zero) feedback posts.
+ * yes, this D port is GPLed.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
