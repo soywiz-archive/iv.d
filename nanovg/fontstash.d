@@ -1117,13 +1117,6 @@ void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONS
   x1 = cast(float)(glyph.x1-1);
   y1 = cast(float)(glyph.y1-1);
 
-  /*
-  x0 -= 1;
-  y0 -= 1;
-  x1 += 2;
-  y1 += 2;
-  */
-
   if (stash.params.flags&FONS_ZERO_TOPLEFT) {
     rx = cast(float)cast(int)(*x+xoff);
     ry = cast(float)cast(int)(*y+yoff);
@@ -1476,7 +1469,7 @@ package(iv.nanovg) void fonsLineBounds (FONScontext* stash, float y, float* miny
   }
 }
 
-package(iv.nanovg) const(ubyte)* fonsGetTextureData (FONScontext* stash, int* width, int* height) {
+/*package(iv.nanovg)*/public const(ubyte)* fonsGetTextureData (FONScontext* stash, int* width, int* height) {
   if (width !is null) *width = stash.params.width;
   if (height !is null) *height = stash.params.height;
   return stash.texData;

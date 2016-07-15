@@ -270,6 +270,30 @@ void main () {
       nvg.fontBlur(0);
       ctx.draw();
       if (fps !is null && !perfHidden) fps.render(nvg, owdt-200-5, ohgt-35-5);
+      version(none) {
+        import iv.nanovg.fontstash;
+        //fonsDrawDebug(nvg.fs, 1, 1);
+        int w, h;
+        const(ubyte)*d = fonsGetTextureData(nvg.fs, &w, &h);
+        writeln("w=", w, "; h=", h);
+        auto tc = new TrueColorImage(w, h);
+        scope(exit) tc.destroy;
+        foreach (immutable y; 0..h) {
+          foreach (immutable x; 0..w) {
+            auto b = d[y*w+x];
+            if (b == 0) {
+              tc.setPixel(x, y, Color(255, 127, 0));
+            } else {
+              tc.setPixel(x, y, Color(b, b, b));
+            }
+          }
+        }
+        writePng("z00.png", tc);
+        /*
+        auto fo = File("z00.raw", "w");
+        fo.rawWrite(d[0..w*h]);
+        */
+      }
       nvg.endFrame();
     }
   };
@@ -280,7 +304,7 @@ void main () {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    nvg = createGL2NVG(/*NVG_ANTIALIAS|*/NVG_STENCIL_STROKES|NVG_DEBUG);
+    nvg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
     if (nvg is null) {
       import std.stdio;
       writeln("Could not init nanovg.");

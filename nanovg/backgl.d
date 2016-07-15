@@ -710,8 +710,6 @@ bool glnvg__renderCreate (void* uptr) {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   enum align_ = 4;
 
-  // TODO: mediump float may not be enough for GLES2 in iOS.
-  // see the following discussion: https://github.com/memononen/nanovg/issues/46
   enum shaderHeader =
     "#define UNIFORMARRAY_SIZE 11\n"~
     "\n";
