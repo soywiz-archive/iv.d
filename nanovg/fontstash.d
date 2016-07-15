@@ -1190,6 +1190,7 @@ float fons__getVertAlign (FONScontext* stash, FONSfont* font, int align_, short 
   return 0.0;
 }
 
+/*k8: not used
 package(iv.nanovg) float fonsDrawText (FONScontext* stash, float x, float y, const(char)* str, const(char)* end) {
   FONSstate* state = fons__getState(stash);
   uint codepoint;
@@ -1241,12 +1242,13 @@ package(iv.nanovg) float fonsDrawText (FONScontext* stash, float x, float y, con
       fons__vertex(stash, q.x0, q.y1, q.s0, q.t1, state.color);
       fons__vertex(stash, q.x1, q.y1, q.s1, q.t1, state.color);
     }
-    prevGlyphIndex = glyph !is null ? glyph.index : -1;
+    prevGlyphIndex = (glyph !is null ? glyph.index : -1);
   }
   fons__flush(stash);
 
   return x;
 }
+*/
 
 package(iv.nanovg) int fonsTextIterInit (FONScontext* stash, FONStextIter* iter, float x, float y, const(char)* str, const(char)* end) {
   FONSstate* state = fons__getState(stash);
@@ -1290,14 +1292,14 @@ package(iv.nanovg) int fonsTextIterInit (FONScontext* stash, FONStextIter* iter,
   return 1;
 }
 
-package(iv.nanovg) int fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) {
+package(iv.nanovg) bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) {
   FONSglyph* glyph = null;
   const(char)* str = iter.next;
   iter.str = iter.next;
 
-  if (str == iter.end) return 0;
+  if (str is iter.end) return false;
 
-  for (; str != iter.end; str++) {
+  for (; str !is iter.end; ++str) {
     if (fons__decutf8(&iter.utf8state, &iter.codepoint, *cast(const(ubyte)*)str)) continue;
     ++str;
     // Get glyph and quad
@@ -1305,12 +1307,12 @@ package(iv.nanovg) int fonsTextIterNext (FONScontext* stash, FONStextIter* iter,
     iter.y = iter.nexty;
     glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
     if (glyph !is null) fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
-    iter.prevGlyphIndex = glyph !is null ? glyph.index : -1;
+    iter.prevGlyphIndex = (glyph !is null ? glyph.index : -1);
     break;
   }
   iter.next = str;
 
-  return 1;
+  return true;
 }
 
 debug package(iv.nanovg) void fonsDrawDebug (FONScontext* stash, float x, float y) {
@@ -1320,8 +1322,7 @@ debug package(iv.nanovg) void fonsDrawDebug (FONScontext* stash, float x, float 
   float u = (w == 0 ? 0 : 1.0f/w);
   float v = (h == 0 ? 0 : 1.0f/h);
 
-  if (stash.nverts+6+6 > FONS_VERTEX_COUNT)
-    fons__flush(stash);
+  if (stash.nverts+6+6 > FONS_VERTEX_COUNT) fons__flush(stash);
 
   // Draw background
   fons__vertex(stash, x+0, y+0, u, v, 0x0fffffff);

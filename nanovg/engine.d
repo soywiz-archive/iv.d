@@ -2695,12 +2695,12 @@ public float text (NVGContext ctx, float x, float y, const(char)* str, const(cha
     nvgTransformPoint(&c[6], &c[7], state.xform.ptr, q.x0*invscale, q.y1*invscale);
     // Create triangles
     if (nverts+6 <= cverts) {
-      nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); nverts++;
-      nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
-      nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); nverts++;
-      nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); nverts++;
-      nvg__vset(&verts[nverts], c[6], c[7], q.s0, q.t1); nverts++;
-      nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); nverts++;
+      nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); ++nverts;
+      nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); ++nverts;
+      nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); ++nverts;
+      nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); ++nverts;
+      nvg__vset(&verts[nverts], c[6], c[7], q.s0, q.t1); ++nverts;
+      nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); ++nverts;
     }
   }
 
