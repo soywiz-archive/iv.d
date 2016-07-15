@@ -877,6 +877,8 @@ error:
   return FONS_INVALID;
 }
 
+private enum NoAlias = ":noaa";
+
 package(iv.nanovg) int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, int freeData) {
   int i, ascent, descent, fh, lineGap;
   FONSfont* font;
@@ -902,12 +904,9 @@ package(iv.nanovg) int fonsAddFontMem (FONScontext* stash, const(char)[] name, u
   font.data = data;
   font.freeData = cast(ubyte)freeData;
 
-  {
-    enum NoAlias = ":noaa";
-    if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
-      //{ import core.stdc.stdio : printf; printf("MONO: [%.*s]\n", cast(uint)name.length, name.ptr); }
-      fons__tt_setMono(stash, &font.font, true);
-    }
+  if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
+    //{ import core.stdc.stdio : printf; printf("MONO: [%.*s]\n", cast(uint)name.length, name.ptr); }
+    fons__tt_setMono(stash, &font.font, true);
   }
 
   // Init font
@@ -933,6 +932,24 @@ error:
 package(iv.nanovg) int fonsGetFontByName (FONScontext* s, const(char)[] name) {
   foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
     if (font.namelen == name.length && font.name[0..font.namelen] == name[]) return cast(int)idx;
+  }
+  // not found, try variations
+  if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
+    // search for font name without ":noaa"
+    name = name[0..$-NoAlias.length];
+    foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
+      if (font.namelen == name.length && font.name[0..font.namelen] == name[]) return cast(int)idx;
+    }
+  } else {
+    // search for font name with ":noaa"
+    foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
+      if (font.namelen == name.length+NoAlias.length) {
+        if (font.name[0..name.length] == name[] && font.name[name.length..font.namelen] == NoAlias) {
+          //{ import std.stdio; writeln(font.name[0..name.length], " : ", name, " <", font.name[name.length..$], ">"); }
+          return cast(int)idx;
+        }
+      }
+    }
   }
   return FONS_INVALID;
 }
