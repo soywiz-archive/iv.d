@@ -30,7 +30,7 @@ module iv.nanovg.svg;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
 static if (is(typeof({import iv.vfs;}()))) enum NanoSVGHasVFS = true; else enum NanoSVGHasVFS = false;
-static if (NanoSVGHasVFS) import iv.vfs;
+static if (NanoSVGHasVFS) { import iv.vfs; import iv.vfs.streams; }
 
 version = nanosvg_crappy_stylesheet_parser;
 //version = nanosvg_debug_styles;
@@ -3074,6 +3074,14 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
 public NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi=96) {
   Parser* p;
   NSVG* ret = null;
+
+  /*
+  static if (NanoSVGHasVFS) {
+    if (input.length > 4 && input[0..5] == "NSVG\x00" && units == "px" && dpi == 96) {
+      return nsvgUnserialize(wrapStream(MemoryStreamRO(input)));
+    }
+  }
+  */
 
   p = nsvg__createParser();
   if (p is null) return null;
