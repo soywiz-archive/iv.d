@@ -556,11 +556,9 @@ public NVGColor nvgTransRGBAf() (NVGColor c, float a) {
 
 /// Linearly interpolates from color c0 to c1, and returns resulting color value.
 public NVGColor nvgLerpRGBA() (NVGColor c0, NVGColor c1, float u) {
-  int i;
-  float oneminu;
   NVGColor cint;
   u = nvg__clampf(u, 0.0f, 1.0f);
-  oneminu = 1.0f-u;
+  float oneminu = 1.0f-u;
   foreach (uint i; 0..4) cint.rgba[i] = c0.rgba[i]*oneminu+c1.rgba[i]*u;
   return cint;
 }
