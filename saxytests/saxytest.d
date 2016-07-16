@@ -78,7 +78,7 @@ void main () {
     auto inst = readFile("z00.xml").byChar;
   }
   xmparse(inst,
-    (XmlString name, XmlString[string] attrs) {
+    (char[] name, char[][string] attrs) {
       import std.stdio;
       write(indent);
       write("tag '", name, "' opened");
@@ -91,13 +91,13 @@ void main () {
       writeln;
       indent ~= ' ';
     },
-    (XmlString name) {
+    (char[] name) {
       import std.stdio;
       indent.length -= 1;
       indent.assumeSafeAppend;
       writeln(indent, "tag '", name, "' closed");
     },
-    (XmlString text) {
+    (char[] text) {
       import std.stdio;
       writeln(indent, text.length, " bytes of content");
     },

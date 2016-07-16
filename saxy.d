@@ -38,18 +38,18 @@ static if (is(typeof({import iv.vfs;}))) {
 }
 
 
-alias XmlString = const(char)[];
+//alias XmlString = const(char)[];
 
 
 //*WARNING*: attr keys are *NOT* strings!
 void xmparse(ST) (auto ref ST fl,
-  scope void delegate (XmlString name, XmlString[string] attrs) tagStart,
-  scope void delegate (XmlString name) tagEnd,
-  scope void delegate (XmlString text) content,
+  scope void delegate (char[] name, char[][string] attrs) tagStart,
+  scope void delegate (char[] name) tagEnd,
+  scope void delegate (char[] text) content,
 ) if (isReadableStream!ST || (isInputRange!ST && is(ElementEncodingType!ST == char))) {
   char[] buf;
   uint bufpos;
-  XmlString[string] attrs;
+  char[][string] attrs;
   scope(exit) {
     attrs.destroy;
     buf.destroy;
@@ -270,7 +270,7 @@ void xmparse(ST) (auto ref ST fl,
           if (stpos >= bufpos) { attrs[aname] = null; break; } // no value
           if (buf.ptr[stpos] != '=') { attrs[aname] = null; continue; } // no value
           ++stpos;
-          if (stpos >= bufpos) { attrs[aname] = ""; break; }
+          if (stpos >= bufpos) { attrs[aname] = buf[bufpos..bufpos]; break; }
           if (buf.ptr[stpos] == '"' || buf.ptr[stpos] == '\'') {
             auto ech = buf.ptr[stpos];
             nst = ++stpos;
