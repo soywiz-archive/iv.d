@@ -107,6 +107,7 @@ void xmparse(ST) (auto ref ST fl,
   }
 
   void parseCData () {
+    clearBuf();
     while (!eof) {
       if (bufpos >= 3 && buf.ptr[bufpos-1] == '>' && buf.ptr[bufpos-2] == ']' && buf.ptr[bufpos-3] == ']') {
         bufpos -= 3;
@@ -120,6 +121,7 @@ void xmparse(ST) (auto ref ST fl,
   }
 
   void parseContent () {
+    clearBuf();
     while (!eof) {
       if (curCh == '<') break;
       if (curCh != '&') {
@@ -151,7 +153,7 @@ void xmparse(ST) (auto ref ST fl,
 
   void parseTag () {
     assert(!eof && curCh == '<');
-    assert(bufpos == 0);
+    clearBuf();
     skipChar();
     if (eof) throw new Exception("invalid xml");
     bool inlineClose = false, closeTag = false;
