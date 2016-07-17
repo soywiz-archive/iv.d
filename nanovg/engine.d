@@ -65,6 +65,20 @@ align(1):
       float r, g, b, a;
     }
   }
+  this (ubyte ar, ubyte ag, ubyte ab, ubyte aa=255) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    r = ar/255.0f;
+    g = ag/255.0f;
+    b = ab/255.0f;
+    a = aa/255.0f;
+  }
+  this (float ar, float ag, float ab, float aa=1) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    r = ar;
+    g = ag;
+    b = ab;
+    a = aa;
+  }
 }
 
 ///
@@ -507,37 +521,25 @@ public alias NVGSectionDummy00 = void;
 /// Returns a color value from red, green, blue values. Alpha will be set to 255 (1.0f).
 public NVGColor nvgRGB() (ubyte r, ubyte g, ubyte b) {
   pragma(inline, true);
-  return nvgRGBA(r, g, b, 255);
+  return NVGColor(r, g, b, 255);
 }
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 1.0f.
 public NVGColor nvgRGBf() (float r, float g, float b) {
   pragma(inline, true);
-  return nvgRGBAf(r, g, b, 1.0f);
+  return NVGColor(r, g, b, 1.0f);
 }
 
 /// Returns a color value from red, green, blue and alpha values.
 public NVGColor nvgRGBA() (ubyte r, ubyte g, ubyte b, ubyte a=255) @trusted {
   pragma(inline, true);
-  NVGColor color = void;
-  // Use longer initialization to suppress warning.
-  color.r = r/255.0f;
-  color.g = g/255.0f;
-  color.b = b/255.0f;
-  color.a = a/255.0f;
-  return color;
+  return NVGColor(r, g, b, a);
 }
 
 /// Returns a color value from red, green, blue and alpha values.
 public NVGColor nvgRGBAf() (float r, float g, float b, float a=1) {
   pragma(inline, true);
-  NVGColor color;
-  // Use longer initialization to suppress warning.
-  color.r = r;
-  color.g = g;
-  color.b = b;
-  color.a = a;
-  return color;
+  return NVGColor(r, g, b, a);
 }
 
 /// Sets transparency of a color value.
@@ -555,11 +557,11 @@ public NVGColor nvgTransRGBAf() (NVGColor c, float a) {
 }
 
 /// Linearly interpolates from color c0 to c1, and returns resulting color value.
-public NVGColor nvgLerpRGBA() (NVGColor c0, NVGColor c1, float u) {
-  NVGColor cint;
+public NVGColor nvgLerpRGBA() (in auto ref NVGColor c0, in auto ref NVGColor c1, float u) {
+  NVGColor cint = void;
   u = nvg__clampf(u, 0.0f, 1.0f);
   float oneminu = 1.0f-u;
-  foreach (uint i; 0..4) cint.rgba[i] = c0.rgba[i]*oneminu+c1.rgba[i]*u;
+  foreach (uint i; 0..4) cint.rgba.ptr[i] = c0.rgba.ptr[i]*oneminu+c1.rgba.ptr[i]*u;
   return cint;
 }
 
@@ -588,7 +590,7 @@ public alias nvgHSL = nvgHSLA; // trick to allow inlining
 public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
   pragma(inline, true);
   float m1, m2;
-  NVGColor col;
+  NVGColor col = void;
   h = nvg__modf(h, 1.0f);
   if (h < 0.0f) h += 1.0f;
   s = nvg__clampf(s, 0.0f, 1.0f);
