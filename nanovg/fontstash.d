@@ -1340,12 +1340,13 @@ package(iv.nanovg) bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter
   iter.str = iter.next;
 
   if (str is iter.end) return false;
+  const(char)*e = iter.end;
 
-  for (; str !is iter.end; ++str) {
+  for (; str !is e; ++str) {
     /*if (fons__decutf8(&iter.utf8state, &iter.codepoint, *cast(const(ubyte)*)str)) continue;*/
     mixin(DecUtfMixin!("iter.utf8state", "iter.codepoint", "*cast(const(ubyte)*)str"));
     if (iter.utf8state) continue;
-    ++str;
+    ++str; // 'cause we'll break anyway
     // Get glyph and quad
     iter.x = iter.nextx;
     iter.y = iter.nexty;
@@ -1435,7 +1436,7 @@ package(iv.nanovg) float fonsTextBounds (FONScontext* stash, float x, float y, c
 
   if (end is null) end = str+strlen(str);
 
-  for (; str != end; ++str) {
+  for (; str !is end; ++str) {
     //if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
     mixin(DecUtfMixin!("utf8state", "codepoint", "*cast(const(ubyte)*)str"));
     if (utf8state) continue;
