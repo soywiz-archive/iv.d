@@ -489,34 +489,43 @@ void fons__tmpfree (void* ptr, void* up) {
 enum FONS_UTF8_ACCEPT = 0;
 enum FONS_UTF8_REJECT = 12;
 
+static immutable ubyte[364] utf8d = [
+  // The first part of the table maps bytes to character classes that
+  // to reduce the size of the transition table and create bitmasks.
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+  7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,  7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+  8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  10, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 3, 3, 11, 6, 6, 6, 5, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+
+  // The second part is a transition table that maps a combination
+  // of a state of the automaton and a character class to a state.
+  0, 12, 24, 36, 60, 96, 84, 12, 12, 12, 48, 72, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+  12, 0, 12, 12, 12, 12, 12, 0, 12, 0, 12, 12, 12, 24, 12, 12, 12, 12, 12, 24, 12, 24, 12, 12,
+  12, 12, 12, 12, 12, 12, 12, 24, 12, 12, 12, 12, 12, 24, 12, 12, 12, 12, 12, 12, 12, 24, 12, 12,
+  12, 12, 12, 12, 12, 12, 12, 36, 12, 36, 12, 12, 12, 36, 12, 12, 12, 12, 12, 36, 12, 36, 12, 12,
+  12, 36, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+];
+
+private enum DecUtfMixin(string state, string codep, string byte_) =
+`{
+  uint type_ = utf8d.ptr[`~byte_~`];
+  `~codep~` = (`~state~` != FONS_UTF8_ACCEPT ? (`~byte_~`&0x3fu)|(`~codep~`<<6) : (0xff>>type_)&`~byte_~`);
+  `~state~` = utf8d.ptr[256+`~state~`+type_];
+ }`;
+
+/*
 uint fons__decutf8 (uint* state, uint* codep, uint byte_) {
-  static immutable ubyte[364] utf8d = [
-    // The first part of the table maps bytes to character classes that
-    // to reduce the size of the transition table and create bitmasks.
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
-    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,  7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
-    8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    10, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 3, 3, 11, 6, 6, 6, 5, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-
-    // The second part is a transition table that maps a combination
-    // of a state of the automaton and a character class to a state.
-    0, 12, 24, 36, 60, 96, 84, 12, 12, 12, 48, 72, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-    12, 0, 12, 12, 12, 12, 12, 0, 12, 0, 12, 12, 12, 24, 12, 12, 12, 12, 12, 24, 12, 24, 12, 12,
-    12, 12, 12, 12, 12, 12, 12, 24, 12, 12, 12, 12, 12, 24, 12, 12, 12, 12, 12, 12, 12, 24, 12, 12,
-    12, 12, 12, 12, 12, 12, 12, 36, 12, 36, 12, 12, 12, 36, 12, 12, 12, 12, 12, 36, 12, 36, 12, 12,
-    12, 36, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-  ];
-
-  uint type = utf8d[byte_];
-
+  pragma(inline, true);
+  uint type = utf8d.ptr[byte_];
   *codep = (*state != FONS_UTF8_ACCEPT ? (byte_&0x3fu)|(*codep<<6) : (0xff>>type)&byte_);
   *state = utf8d.ptr[256 + *state+type];
   return *state;
 }
+*/
 
 // Atlas based on Skyline Bin Packer by Jukka Jylänki
 void fons__deleteAtlas (FONSatlas* atlas) {
@@ -1333,7 +1342,9 @@ package(iv.nanovg) bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter
   if (str is iter.end) return false;
 
   for (; str !is iter.end; ++str) {
-    if (fons__decutf8(&iter.utf8state, &iter.codepoint, *cast(const(ubyte)*)str)) continue;
+    /*if (fons__decutf8(&iter.utf8state, &iter.codepoint, *cast(const(ubyte)*)str)) continue;*/
+    mixin(DecUtfMixin!("iter.utf8state", "iter.codepoint", "*cast(const(ubyte)*)str"));
+    if (iter.utf8state) continue;
     ++str;
     // Get glyph and quad
     iter.x = iter.nextx;
@@ -1425,7 +1436,9 @@ package(iv.nanovg) float fonsTextBounds (FONScontext* stash, float x, float y, c
   if (end is null) end = str+strlen(str);
 
   for (; str != end; ++str) {
-    if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
+    //if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
+    mixin(DecUtfMixin!("utf8state", "codepoint", "*cast(const(ubyte)*)str"));
+    if (utf8state) continue;
     glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
     if (glyph !is null) {
       fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
@@ -1439,7 +1452,7 @@ package(iv.nanovg) float fonsTextBounds (FONScontext* stash, float x, float y, c
         if (q.y0 > maxy) maxy = q.y0;
       }
     }
-    prevGlyphIndex = glyph !is null ? glyph.index : -1;
+    prevGlyphIndex = (glyph !is null ? glyph.index : -1);
   }
 
   advance = x-startx;
