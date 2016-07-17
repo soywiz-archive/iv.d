@@ -189,9 +189,9 @@ struct FONStextIter {
 
 // ////////////////////////////////////////////////////////////////////////// //
 //#define FONS_NOTUSED(v)  (void)sizeof(v)
-static if (!HasAST) version = nanovg_use_freetype_ii;
+//static if (!HasAST) version = nanovg_use_freetype_ii_x;
 
-version(nanovg_use_freetype_ii) {
+/*version(nanovg_use_freetype_ii_x)*/ static if (!HasAST) {
 import iv.freetype;
 
 struct FONSttFontImpl {

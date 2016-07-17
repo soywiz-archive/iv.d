@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // 866,1251,koi8u
-module iv.encoding is aliced;
+module iv.encoding /*is aliced*/;
 
 import std.encoding;
 
@@ -96,7 +96,7 @@ class K8ByteEncoding(alias charMap) : EncodingScheme {
     return false;
   }
 
-  override usize encodedLength (dchar c) const
+  override size_t encodedLength (dchar c) const
   in {
     assert(canEncode(c));
   }
@@ -104,7 +104,7 @@ class K8ByteEncoding(alias charMap) : EncodingScheme {
     return 1;
   }
 
-  override usize encode (dchar c, ubyte[] buffer) const {
+  override size_t encode (dchar c, ubyte[] buffer) const {
     if (c < 0x80) {
       buffer[0] = c&0xff;
     } else {
@@ -135,29 +135,29 @@ class K8ByteEncoding(alias charMap) : EncodingScheme {
     return res;
   }
 
-  override @property immutable(ubyte)[] replacementSequence () const => ['?'];
+  override @property immutable(ubyte)[] replacementSequence () const { return ['?']; }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 class KBBCWindows1251 : K8ByteEncoding!charMap1251 {
-  shared static this () => EncodingScheme.register("iv.encoding.KBBCWindows1251");
-  override string toString () const @safe pure nothrow @nogc => "windows-1251";
-  override string[] names () const @safe pure nothrow => ["windows-1251", "cp-1251", "cp1251"];
+  shared static this () { EncodingScheme.register("iv.encoding.KBBCWindows1251"); }
+  override string toString () const @safe pure nothrow @nogc { return "windows-1251"; }
+  override string[] names () const @safe pure nothrow { return ["windows-1251", "cp-1251", "cp1251"]; }
 }
 
 
 class KBBCP866 : K8ByteEncoding!charMap866 {
-  shared static this () => EncodingScheme.register("iv.encoding.KBBCP866");
-  override string toString () const @safe pure nothrow @nogc => "windows-866";
-  override string[] names () const @safe pure nothrow => ["windows-866", "cp-866", "cp866"];
+  shared static this () { EncodingScheme.register("iv.encoding.KBBCP866"); }
+  override string toString () const @safe pure nothrow @nogc { return "windows-866"; }
+  override string[] names () const @safe pure nothrow { return ["windows-866", "cp-866", "cp866"]; }
 }
 
 
 class KBBCKOI8 : K8ByteEncoding!charMapKOI8 {
-  shared static this () => EncodingScheme.register("iv.encoding.KBBCKOI8");
-  override string toString () const @safe pure nothrow @nogc => "koi8-u";
-  override string[] names () const @safe pure nothrow => ["koi8-u", "koi8-r", "koi8", "koi8u", "koi8r"];
+  shared static this () { EncodingScheme.register("iv.encoding.KBBCKOI8"); }
+  override string toString () const @safe pure nothrow @nogc { return "koi8-u"; }
+  override string[] names () const @safe pure nothrow { return ["koi8-u", "koi8-r", "koi8", "koi8u", "koi8r"]; }
 }
 
 
@@ -281,13 +281,6 @@ string recode(T) (T s, string to, string from) if (isSomeString!T) {
 }
 
 
-unittest {
-  assert(recode(n"╞╗╖╓═", "utf-8", "cp866") == "п©п╦п╥п╢п╟");
-  assert(recode("п©п╦п╥п╢п╟", "koi8-u", "utf-8") == n"пизда");
-  assert(recode(n"ОХГДЮ", "koi8-u", "cp1251") == n"пизда");
-}
-
-
 string recodeToKOI8(T) (T s, string from=null) if (isSomeString!T) {
   ubyte[] res;
   ubyte[1] buf;
@@ -297,7 +290,7 @@ string recodeToKOI8(T) (T s, string from=null) if (isSomeString!T) {
     // from utf-8
     auto len = s.count;
     res = new ubyte[](len);
-    usize idx = 0;
+    size_t idx = 0;
     foreach (dchar dc; s) {
       eto.encode(dc, buf);
       res[idx++] = buf[0];
@@ -316,13 +309,6 @@ string recodeToKOI8(T) (T s, string from=null) if (isSomeString!T) {
 }
 
 
-unittest {
-  assert(recodeToKOI8("п©п╦п╥п╢п╟!"c) == n"пизда!");
-  assert(recodeToKOI8("п©п╦п╥п╢п╟!"w) == n"пизда!");
-  assert(recodeToKOI8("п©п╦п╥п╢п╟!"d) == n"пизда!");
-}
-
-
 // ////////////////////////////////////////////////////////////////////////// //
 //public import std.conv;
 
@@ -330,11 +316,4 @@ string to(string enc, T) (T s)
 if (isSomeString!T && (enc == "koi8" || enc == "koi8-r" || enc == "koi8-u" || enc == "koi8r" || enc == "koi8u"))
 {
   return recodeToKOI8(s);
-}
-
-
-unittest {
-  assert(to!"koi8"("п©п╦п╥п╢п╟!"c) == n"пизда!");
-  assert(to!"koi8"("п©п╦п╥п╢п╟!"w) == n"пизда!");
-  assert(to!"koi8"("п©п╦п╥п╢п╟!"d) == n"пизда!");
 }

@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.strex is aliced;
+module iv.strex /*is aliced*/;
 
 
 /// quote string: append double quotes, screen all special chars;
@@ -31,7 +31,7 @@ string quote (const(char)[] s) {
 }
 
 
-sptrdiff indexOf (const(void)[] hay, const(void)[] need, usize stIdx=0) pure @trusted nothrow @nogc {
+ptrdiff_t indexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure @trusted nothrow @nogc {
   if (hay.length <= stIdx || need.length == 0 ||
       need.length > hay.length-stIdx
   ) {
@@ -39,12 +39,12 @@ sptrdiff indexOf (const(void)[] hay, const(void)[] need, usize stIdx=0) pure @tr
   } else {
     //import iv.strex : memmem;
     auto res = memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
-    return (res !is null ? cast(sptrdiff)(res-hay.ptr) : -1);
+    return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
   }
 }
 
 
-sptrdiff indexOf (const(void)[] hay, ubyte ch, usize stIdx=0) pure @trusted nothrow @nogc {
+ptrdiff_t indexOf (const(void)[] hay, ubyte ch, size_t stIdx=0) pure @trusted nothrow @nogc {
   return indexOf(hay, (&ch)[0..1], stIdx);
 }
 
@@ -102,7 +102,7 @@ auto byLine(T) (T s) if (is(T : const(char)[])) {
   nothrow @safe @nogc:
   private:
     T s;
-    usize llen, npos;
+    size_t llen, npos;
     this (T as) { s = as; popFront(); }
   public:
     @property bool empty () const { pragma(inline, true); return (s.length == 0); }
@@ -163,7 +163,7 @@ string outdentAll (const(char)[] s) {
   import std.array : appender;
   // first calculate maximum indent spaces
   uint maxspc = uint.max;
-  foreach (auto line; s.byLine) {
+  foreach (/*auto*/ line; s.byLine) {
     uint col = 0;
     while (col < line.length && line.ptr[col] <= ' ') {
       if (line.ptr[col] == '\t') assert(0, "can't outdent shit with tabs");
@@ -175,7 +175,7 @@ string outdentAll (const(char)[] s) {
   }
 
   auto res = appender!string();
-  foreach (auto line; s.byLine) {
+  foreach (/*auto*/ line; s.byLine) {
     uint col = 0;
     while (col < line.length && line.ptr[col] <= ' ') ++col;
     if (col < line.length) {
@@ -215,12 +215,12 @@ nothrow:
 @nogc:
 pure:
 version(linux) {
-  extern(C) inout(void)* memmem (inout(void)* haystack, usize haystacklen, inout(void)* needle, usize needlelen);
+  extern(C) inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
 } else {
-  inout(void)* memmem (inout(void)* haystack, usize haystacklen, inout(void)* needle, usize needlelen) {
+  inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
     auto h = cast(const(ubyte)*)haystack;
     auto n = cast(const(ubyte)*)needle;
-    // usize is unsigned
+    // size_t is unsigned
     if (needlelen > haystacklen) return null;
     foreach (immutable i; 0..haystacklen-needlelen+1) {
       import core.stdc.string : memcmp;
