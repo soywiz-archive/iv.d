@@ -265,10 +265,20 @@ import std.traits;
 
 // SLOOOOOW. but who cares?
 string recode(T) (T s, string to, string from) if (isSomeString!T) {
+  static bool strEqu (const(char)[] s0, const(char)[] s1) {
+    if (s0.length != s1.length) return false;
+    foreach (immutable idx, char c0; s0) {
+      import std.ascii : toLower;
+      c0 = c0.toLower;
+      char c1 = s1.ptr[idx].toLower;
+      if (c0 != c1) return false;
+    }
+    return true;
+  }
   ubyte[] res;
   ubyte[16] buf;
-  auto efrom = EncodingScheme.create(from);
-  auto eto = EncodingScheme.create(to);
+  auto efrom = (strEqu(from, "utf-8") ? new EncodingSchemeUtf8() : EncodingScheme.create(from));
+  auto eto = (strEqu(to, "utf-8") ? new EncodingSchemeUtf8() : EncodingScheme.create(to));
   auto ub = cast(const(ubyte)[])s;
   while (ub.length > 0) {
     dchar dc = efrom.safeDecode(ub);
