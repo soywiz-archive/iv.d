@@ -38,7 +38,7 @@
 module iv.nanovg.perf;
 private:
 
-import iv.nanovg.engine;
+import iv.nanovg;
 
 public final class PerfGraph {
 public:

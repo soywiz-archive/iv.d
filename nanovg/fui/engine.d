@@ -20,7 +20,7 @@
  */
 module iv.nanovg.fui.engine;
 
-import iv.nanovg.engine;
+import iv.nanovg;
 import arsd.simpledisplay;
 
 //version = fui_many_asserts;
