@@ -154,6 +154,8 @@ struct DriverInfo {
   enum Mode { Normal, First, Last }
   Mode mode;
   VFSDriver drv;
+  string fname;
+  string prefixpath;
 }
 
 __gshared DriverInfo[] drivers;
@@ -161,7 +163,7 @@ __gshared DriverInfo[] drivers;
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// register new VFS driver
-public void vfsRegister(string mode="normal") (VFSDriver drv) {
+public void vfsRegister(string mode="normal") (VFSDriver drv, const(char)[] fname, const(char)[] prefixpath=null) {
   import core.atomic : atomicOp;
   static assert(mode == "normal" || mode == "last" || mode == "first");
   if (drv is null) return;
@@ -174,17 +176,17 @@ public void vfsRegister(string mode="normal") (VFSDriver drv) {
     while (ipos > 0 && drivers[ipos-1].mode == DriverInfo.Mode.First) --ipos;
     //{ import core.stdc.stdio : printf; printf("  : %u (%u)\n", cast(uint)ipos, cast(uint)drivers.length); }
     if (ipos == drivers.length) {
-      drivers ~= DriverInfo(DriverInfo.Mode.Normal, drv);
+      drivers ~= DriverInfo(DriverInfo.Mode.Normal, drv, fname.idup, prefixpath.idup);
     } else {
       drivers.length += 1;
       foreach_reverse (immutable c; ipos+1..drivers.length) drivers[c] = drivers[c-1];
-      drivers[ipos] = DriverInfo(DriverInfo.Mode.Normal, drv);
+      drivers[ipos] = DriverInfo(DriverInfo.Mode.Normal, drv, fname.idup, prefixpath.idup);
     }
   } else static if (mode == "first") {
     // first
-    drivers ~= DriverInfo(DriverInfo.Mode.First, drv);
+    drivers ~= DriverInfo(DriverInfo.Mode.First, drv, fname.idup, prefixpath.idup);
   } else static if (mode == "last") {
-    drivers = [DriverInfo(DriverInfo.Mode.Last, drv)]~drivers;
+    drivers = [DriverInfo(DriverInfo.Mode.Last, drv, fname.idup, prefixpath.idup)]~drivers;
   } else {
     static assert(0, "wtf?!");
   }
@@ -196,6 +198,22 @@ public void vfsRegister(string mode="normal") (VFSDriver drv) {
     }
   }
   */
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// unregister driver
+/// WARNING: don't add new drivers while this is in process!
+public void vfsUnregister (const(char)[] fname, const(char)[] prefixpath=null) {
+  ptlock.lock();
+  scope(exit) ptlock.unlock();
+  foreach_reverse (immutable idx, ref drv; drivers) {
+    if (drv.fname == fname && drv.prefixpath == prefixpath) {
+      // i found her!
+      foreach (immutable c; idx+1..drivers.length) drivers[c-1] = drivers[c];
+      drivers.length -= 1;
+    }
+  }
 }
 
 
@@ -355,6 +373,12 @@ public void vfsAddPak (const(char)[] fname, const(char)[] prefixpath=null) {
 }
 
 
+/// `prefixpath`: this was be prepended to each name from archive.
+public void vfsRemovePack (const(char)[] fname, const(char)[] prefixpath=null) {
+  vfsUnregister(fname, prefixpath);
+}
+
+
 /// `prefixpath`: this will be prepended to each name from archive, unmodified.
 public void vfsAddPak(T) (VFile fl, T fname=null, const(char)[] prefixpath=null) if (is(T : const(char)[])) {
   void error (Throwable e=null, string file=__FILE__, usize line=__LINE__) {
@@ -380,7 +404,7 @@ public void vfsAddPak(T) (VFile fl, T fname=null, const(char)[] prefixpath=null)
     try {
       fl.seek(0);
       auto drv = di.dt.tryOpen(fl, prefixpath);
-      if (drv !is null) { vfsRegister(drv); return; }
+      if (drv !is null) { vfsRegister(drv, fname, prefixpath); return; }
     } catch (Exception e) {
       // chain
       error(e);
