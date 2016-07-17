@@ -983,7 +983,10 @@ struct ZLibLowLevelWO {
         for (;;) {
           zs.avail_in = 0;
           err = deflate(&zs, Z_FINISH);
-          if (err != Z_OK && err != Z_STREAM_END) throw new VFSException("zlib compression error");
+          if (err != Z_OK && err != Z_STREAM_END && err != Z_BUF_ERROR) {
+            //{ import core.stdc.stdio; printf("cerr: %d\n", err); }
+            throw new VFSException("zlib compression error");
+          }
           if (zs.avail_out < obsize) {
             //{ import core.stdc.stdio : printf; printf("flushing %u bytes (avail_out: %u bytes)\n", cast(uint)(obsize-zs.avail_out), cast(uint)zs.avail_out); }
             if (prpos != pos) throw new VFSException("zlib compression seek error");
@@ -994,7 +997,7 @@ struct ZLibLowLevelWO {
             zs.next_out = pkb.ptr;
             zs.avail_out = obsize;
           }
-          if (err != Z_OK) break;
+          if (err != Z_OK && err != Z_BUF_ERROR) break;
         }
         // succesfully flushed?
         if (err != Z_STREAM_END) throw new VFSException("zlib compression error");
