@@ -705,7 +705,7 @@ nothrow @safe:
     return res;
   }
 
-  static mat4 translate() (in auto ref vec3 v) {
+  static mat4 Translate() (in auto ref vec3 v) {
     mat4 res = Zero;
     res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = 1;
     res.mt.ptr[3*4+0] = v.x;
@@ -715,7 +715,7 @@ nothrow @safe:
     return res;
   }
 
-  static mat4 scale() (in auto ref vec3 v) {
+  static mat4 Scale() (in auto ref vec3 v) {
     mat4 res = Zero;
     res.mt.ptr[0*4+0] = v.x;
     res.mt.ptr[1*4+1] = v.y;
@@ -779,7 +779,7 @@ nothrow @safe:
 
 public:
   // does `gluLookAt()`
-  mat4 lookAt() (in auto ref vec3 eye, in auto ref vec3 center, in auto ref vec3 up) {
+  mat4 lookAt() (in auto ref vec3 eye, in auto ref vec3 center, in auto ref vec3 up) const {
     static if (is(FloatType == float)) {
       import core.stdc.math : sqrt=sqrtf;
     } else static if (is(FloatType == double)) {
@@ -850,10 +850,63 @@ public:
     m.mt.ptr[3*4+3] = 1.0f;
 
     // move, and translate Eye to Origin
-    return this*m*translate(-eye);
+    return this*m*Translate(-eye);
   }
 
-  mat4 rotate() (FloatType angle, in auto ref vec3 axis) {
+  // rotate matrix to face along the target direction
+  // this function will clear the previous rotation and scale, but it will keep the previous translation
+  // it is for rotating object to look at the target, NOT for camera
+  ref mat4 lookingAt() (in auto ref vec3 target) {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : abs=fabsf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : abs=fabs;
+    } else {
+      import std.math : abs;
+    }
+    vec3 position = vec3(mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    vec3 forward = (target-position).normalize;
+    vec3 up;
+    if (abs(forward.x) < EPSILON!FloatType && abs(forward.z) < EPSILON!FloatType) {
+      up.z = (forward.y > 0 ? -1 : 1);
+    } else {
+      up.y = 1;
+    }
+    vec3 left = up.cross(forward).normalize;
+    up = forward.cross(left)/*.normalize*/;
+    mt.ptr[0*4+0] = left.x;
+    mt.ptr[0*4+1] = left.y;
+    mt.ptr[0*4+2] = left.z;
+    mt.ptr[1*4+0] = up.x;
+    mt.ptr[1*4+1] = up.y;
+    mt.ptr[1*4+2] = up.z;
+    mt.ptr[2*4+0] = forward.x;
+    mt.ptr[2*4+1] = forward.y;
+    mt.ptr[2*4+2] = forward.z;
+    return this;
+  }
+
+  ref mat4 lookingAt() (in auto ref vec3 target, in auto ref vec3 upVec) {
+    vec3 position = vec3(mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    vec3 forward = (target-position).normalize;
+    vec3 left = upVec.cross(forward).normalize;
+    vec3 up = forward.cross(left).normalize;
+    mt.ptr[0*4+0] = left.x;
+    mt.ptr[0*4+1] = left.y;
+    mt.ptr[0*4+2] = left.z;
+    mt.ptr[1*4+0] = up.x;
+    mt.ptr[1*4+1] = up.y;
+    mt.ptr[1*4+2] = up.z;
+    mt.ptr[2*4+0] = forward.x;
+    mt.ptr[2*4+1] = forward.y;
+    mt.ptr[2*4+2] = forward.z;
+    return this;
+  }
+
+  mat4 lookAt() (in auto ref vec3 target) { pragma(inline, true); auto res = mat4(this); return this.lookingAt(target); }
+  mat4 lookAt() (in auto ref vec3 target, in auto ref vec3 upVec) { pragma(inline, true); auto res = mat4(this); return this.lookingAt(target, upVec); }
+
+  ref mat4 rotated() (FloatType angle, in auto ref vec3 axis) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -875,24 +928,23 @@ public:
     immutable FloatType r10= axis.z*axis.z*c1+c;
 
     // multiply rotation matrix
-    mat4 res = void;
-    res.mt.ptr[0] = r0*m0+r4*m1+r8*m2;
-    res.mt.ptr[1] = r1*m0+r5*m1+r9*m2;
-    res.mt.ptr[2] = r2*m0+r6*m1+r10*m2;
-    res.mt.ptr[4] = r0*m4+r4*m5+r8*m6;
-    res.mt.ptr[5] = r1*m4+r5*m5+r9*m6;
-    res.mt.ptr[6] = r2*m4+r6*m5+r10*m6;
-    res.mt.ptr[8] = r0*m8+r4*m9+r8*m10;
-    res.mt.ptr[9] = r1*m8+r5*m9+r9*m10;
-    res.mt.ptr[10] = r2*m8+r6*m9+r10*m10;
-    res.mt.ptr[12] = r0*m12+r4*m13+r8*m14;
-    res.mt.ptr[13] = r1*m12+r5*m13+r9*m14;
-    res.mt.ptr[14] = r2*m12+r6*m13+r10*m14;
+    mt.ptr[0] = r0*m0+r4*m1+r8*m2;
+    mt.ptr[1] = r1*m0+r5*m1+r9*m2;
+    mt.ptr[2] = r2*m0+r6*m1+r10*m2;
+    mt.ptr[4] = r0*m4+r4*m5+r8*m6;
+    mt.ptr[5] = r1*m4+r5*m5+r9*m6;
+    mt.ptr[6] = r2*m4+r6*m5+r10*m6;
+    mt.ptr[8] = r0*m8+r4*m9+r8*m10;
+    mt.ptr[9] = r1*m8+r5*m9+r9*m10;
+    mt.ptr[10] = r2*m8+r6*m9+r10*m10;
+    mt.ptr[12] = r0*m12+r4*m13+r8*m14;
+    mt.ptr[13] = r1*m12+r5*m13+r9*m14;
+    mt.ptr[14] = r2*m12+r6*m13+r10*m14;
 
-    return res;
+    return this;
   }
 
-  mat4 rotateX() (FloatType angle) {
+  ref mat4 rotatedX() (FloatType angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -902,19 +954,19 @@ public:
     immutable FloatType m9 = mt.ptr[9], m10 = mt.ptr[10];
     immutable FloatType m13 = mt.ptr[13], m14 = mt.ptr[14];
 
-    res.mt.ptr[1] = m1*c+m2*-s;
-    res.mt.ptr[2] = m1*s+m2*c;
-    res.mt.ptr[5] = m5*c+m6*-s;
-    res.mt.ptr[6] = m5*s+m6*c;
-    res.mt.ptr[9] = m9*c+m10*-s;
-    res.mt.ptr[10]= m9*s+m10*c;
-    res.mt.ptr[13]= m13*c+m14*-s;
-    res.mt.ptr[14]= m13*s+m14*c;
+    mt.ptr[1] = m1*c+m2*-s;
+    mt.ptr[2] = m1*s+m2*c;
+    mt.ptr[5] = m5*c+m6*-s;
+    mt.ptr[6] = m5*s+m6*c;
+    mt.ptr[9] = m9*c+m10*-s;
+    mt.ptr[10]= m9*s+m10*c;
+    mt.ptr[13]= m13*c+m14*-s;
+    mt.ptr[14]= m13*s+m14*c;
 
-    return res;
+    return this;
   }
 
-  mat4 rotateY() (FloatType angle) {
+  ref mat4 rotatedY() (FloatType angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -924,19 +976,19 @@ public:
     immutable FloatType m8 = mt.ptr[8], m10 = mt.ptr[10];
     immutable FloatType m12 = mt.ptr[12], m14 = mt.ptr[14];
 
-    res.mt.ptr[0] = m0*c+m2*s;
-    res.mt.ptr[2] = m0*-s+m2*c;
-    res.mt.ptr[4] = m4*c+m6*s;
-    res.mt.ptr[6] = m4*-s+m6*c;
-    res.mt.ptr[8] = m8*c+m10*s;
-    res.mt.ptr[10]= m8*-s+m10*c;
-    res.mt.ptr[12]= m12*c+m14*s;
-    res.mt.ptr[14]= m12*-s+m14*c;
+    mt.ptr[0] = m0*c+m2*s;
+    mt.ptr[2] = m0*-s+m2*c;
+    mt.ptr[4] = m4*c+m6*s;
+    mt.ptr[6] = m4*-s+m6*c;
+    mt.ptr[8] = m8*c+m10*s;
+    mt.ptr[10]= m8*-s+m10*c;
+    mt.ptr[12]= m12*c+m14*s;
+    mt.ptr[14]= m12*-s+m14*c;
 
-    return res;
+    return this;
   }
 
-  mat4 rotateZ() (FloatType angle) {
+  ref mat4 rotatedZ() (FloatType angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -946,16 +998,64 @@ public:
     immutable FloatType m8 = mt.ptr[8], m9 = mt.ptr[9];
     immutable FloatType m12 = mt.ptr[12], m13 = mt.ptr[13];
 
-    res.mt.ptr[0] = m0*c+m1*-s;
-    res.mt.ptr[1] = m0*s+m1*c;
-    res.mt.ptr[4] = m4*c+m5*-s;
-    res.mt.ptr[5] = m4*s+m5*c;
-    res.mt.ptr[8] = m8*c+m9*-s;
-    res.mt.ptr[9] = m8*s+m9*c;
-    res.mt.ptr[12]= m12*c+m13*-s;
-    res.mt.ptr[13]= m12*s+m13*c;
+    mt.ptr[0] = m0*c+m1*-s;
+    mt.ptr[1] = m0*s+m1*c;
+    mt.ptr[4] = m4*c+m5*-s;
+    mt.ptr[5] = m4*s+m5*c;
+    mt.ptr[8] = m8*c+m9*-s;
+    mt.ptr[9] = m8*s+m9*c;
+    mt.ptr[12]= m12*c+m13*-s;
+    mt.ptr[13]= m12*s+m13*c;
 
-    return res;
+    return this;
+  }
+
+  ref mat4 translated() (in auto ref vec3 v) {
+    mt.ptr[0] += mt.ptr[3]*v.x; mt.ptr[4] += mt.ptr[7]*v.x; mt.ptr[8] += mt.ptr[11]*v.x; mt.ptr[12] += mt.ptr[15]*v.x;
+    mt.ptr[1] += mt.ptr[3]*v.y; mt.ptr[5] += mt.ptr[7]*v.y; mt.ptr[9] += mt.ptr[11]*v.y; mt.ptr[13] += mt.ptr[15]*v.y;
+    mt.ptr[2] += mt.ptr[3]*v.z; mt.ptr[6] += mt.ptr[7]*v.z; mt.ptr[10] += mt.ptr[11]*v.z; mt.ptr[14] += mt.ptr[15]*v.z;
+    return this;
+  }
+
+  ref mat4 scaled() (in auto ref vec3 v) {
+    mt.ptr[0] *= v.x; mt.ptr[4] *= v.x; mt.ptr[8] *= v.x; mt.ptr[12] *= v.x;
+    mt.ptr[1] *= v.y; mt.ptr[5] *= v.y; mt.ptr[9] *= v.y; mt.ptr[13] *= v.y;
+    mt.ptr[2] *= v.z; mt.ptr[6] *= v.z; mt.ptr[10] *= v.z; mt.ptr[14] *= v.z;
+    return this;
+  }
+
+  mat4 rotate() (FloatType angle, in auto ref vec3 axis) const { pragma(inline, true); auto res = mat4(this); return res.rotated(angle, axis); }
+  mat4 rotateX() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotatedX(angle); }
+  mat4 rotateY() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotatedY(angle); }
+  mat4 rotateZ() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotatedZ(angle); }
+  mat4 translate() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.translated(v); }
+  mat4 scale() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.scaled(v); }
+
+  // retrieve angles in degree from rotation matrix, M = Rx*Ry*Rz
+  // Rx: rotation about X-axis, pitch
+  // Ry: rotation about Y-axis, yaw (heading)
+  // Rz: rotation about Z-axis, roll
+  vec3 getAngles () const {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : atan2=atan2f, asin=asinf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : atan2, asin;
+    } else {
+      import std.math : atan2, asin;
+    }
+    FloatType pitch = void, roll = void;
+    FloatType yaw = rad2deg(asin(mt.ptr[8]));
+    if (mt.ptr[10] < 0) {
+      if (yaw >= 0) yaw = 180-yaw; else yaw = -180-yaw;
+    }
+    if (mt.ptr[0] > -EPSILON!FloatType && mt.ptr[0] < EPSILON!FloatType) {
+      roll = 0;
+      pitch = rad2deg(atan2(mt.ptr[1], mt.ptr[5]));
+    } else {
+      roll = rad2deg(atan2(-mt.ptr[4], mt.ptr[0]));
+      pitch = rad2deg(atan2(-mt.ptr[9], mt.ptr[10]));
+    }
+    return vec3(pitch, yaw, roll);
   }
 
   vec3 opBinary(string op : "*") (in auto ref vec3 v) const {
@@ -966,7 +1066,6 @@ public:
       mt.ptr[0*4+2]*v.x+mt.ptr[1*4+2]*v.y+mt.ptr[2*4+2]*v.z+mt.ptr[3*4+2]);
   }
 
-
   vec3 opBinaryRight(string op : "*") (in auto ref vec3 v) const {
     //pragma(inline, true);
     return vec3(
@@ -974,7 +1073,6 @@ public:
       mt.ptr[1*4+0]*v.x+mt.ptr[1*4+1]*v.y+mt.ptr[1*4+2]*v.z+mt.ptr[1*4+3],
       mt.ptr[2*4+0]*v.x+mt.ptr[2*4+1]*v.y+mt.ptr[2*4+2]*v.z+mt.ptr[2*4+3]);
   }
-
 
   mat4 opBinary(string op : "*") (in auto ref mat4 m) const {
     //pragma(inline, true);
@@ -1040,57 +1138,6 @@ public:
       mt.ptr[3], mt.ptr[7], mt.ptr[11], mt.ptr[15],
     );
   }
-
-  /+
-  // returns determinant of matrix without given column and row
-  FloatType cofactor (int x, int y) const {
-    int[3] xx, yy;
-    foreach (int i; 0..3) {
-      if (i < x) xx.ptr[i] = i; else xx.ptr[i] = i+1;
-      if (i < y) yy.ptr[i] = i; else yy.ptr[i] = i+1;
-    }
-    FloatType det = 0;
-    foreach (int i; 0..3) {
-      FloatType plus = 1, minus = 1;
-      foreach (int j; 0..3) {
-        plus = plus*mt.ptr[xx.ptr[j]+(yy.ptr[(i+j)%3])*4];
-        minus = minus*mt.ptr[xx.ptr[2-j]+(yy.ptr[(i+j)%3])*4];
-      }
-      det = det+plus-minus;
-    }
-    return det;
-  }
-
-  FloatType determinant () const {
-    FloatType det = 0;
-    foreach (int i; 0..4) {
-      foreach (int j; 0..4) {
-        det += mt.ptr[i+j*4]*cofactor(i, j);
-      }
-    }
-    return det;
-  }
-
-  mat4 adjoint () const {
-    mat4 res;
-    foreach (int i; 0..4) {
-      foreach (int j; 0..4) {
-        res.mt.ptr[i+j*4] = cofactor(i, j);
-      }
-    }
-    return res.transpose();
-  }
-
-  mat4 invert () const {
-    import std.math : abs;
-    FloatType det = determinant;
-    if (abs(det) >= FLTEPS) {
-      return adjoint/det;
-    } else {
-      return mat4();
-    }
-  }
-  +/
 
   void negate () { foreach (ref v; mt) v = -v; }
 
