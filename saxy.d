@@ -106,6 +106,66 @@ void xmparse(ST) (auto ref ST fl,
     }
   }
 
+  // curCh is '&'
+  void parseEntity () {
+    assert(curCh == '&');
+    bufPut(curCh);
+    auto xpos = bufpos;
+    skipChar();
+    while (!eof && curCh != '<' && curCh != ';' && bufpos-xpos < 8) {
+      bufPut(curCh);
+      skipChar();
+    }
+    if (!eof && curCh == ';' && bufpos > xpos) {
+      import std.utf : encode, UseReplacementDchar;
+      char[4] ubuf = void; // utf buffer
+      switch (buf[xpos..bufpos]) {
+        case "lt": bufpos = xpos-1; bufPut('<'); break;
+        case "gt": bufpos = xpos-1; bufPut('>'); break;
+        case "amp": bufpos = xpos-1; bufPut('&'); break;
+        case "quot": bufpos = xpos-1; bufPut('"'); break;
+        case "apos": bufpos = xpos-1; bufPut('\''); break;
+        default:
+          bufPut(curCh); // first put ';'
+          if (bufpos-xpos > 3 && buf.ptr[xpos] == '#' && buf.ptr[xpos+1] == 'x') {
+            // should be hex code
+            uint n = 0;
+            auto pos = xpos+2;
+            while (pos < bufpos-1) {
+              char ch = buf.ptr[pos++];
+                   if (ch >= '0' && ch <= '9') n = n*16+ch-'0';
+              else if (ch >= 'A' && ch <= 'F') n = n*16+ch-'A'+10;
+              else if (ch >= 'a' && ch <= 'f') n = n*16+ch-'a'+10;
+              else { n = uint.max; break; } // invalid digit
+              if (n > dchar.max) break; // invalid char
+            }
+            if (n <= dchar.max) {
+              bufpos = xpos-1;
+              auto sz = encode!(UseReplacementDchar.yes)(ubuf, cast(dchar)n);
+              foreach (immutable char ch; ubuf[0..sz]) bufPut(ch);
+            }
+          } else if (bufpos-xpos > 2 && buf.ptr[xpos] == '#') {
+            // shoud be decimal code
+            uint n = 0;
+            auto pos = xpos+1;
+            while (pos < bufpos-1) {
+              char ch = buf.ptr[pos++];
+              if (ch >= '0' && ch <= '9') n = n*10+ch-'0';
+              else { n = uint.max; break; } // invalid digit
+              if (n > dchar.max) break; // invalid char
+            }
+            if (n <= dchar.max) {
+              bufpos = xpos-1;
+              auto sz = encode!(UseReplacementDchar.yes)(ubuf, cast(dchar)n);
+              foreach (immutable char ch; ubuf[0..sz]) bufPut(ch);
+            }
+          }
+          break;
+      }
+      skipChar();
+    }
+  }
+
   void parseCData () {
     clearBuf();
     while (!eof) {
@@ -128,23 +188,7 @@ void xmparse(ST) (auto ref ST fl,
         bufPut(curCh);
         skipChar();
       } else {
-        bufPut(curCh);
-        auto xpos = bufpos;
-        skipChar();
-        while (!eof && curCh != '<' && curCh != ';' && bufpos-xpos < 8) {
-          bufPut(curCh);
-          skipChar();
-        }
-        if (!eof && curCh == ';' && bufpos > xpos) {
-          switch (buf[xpos..bufpos]) {
-            case "lt": bufpos = xpos-1; bufPut('<'); break;
-            case "gt": bufpos = xpos-1; bufPut('>'); break;
-            case "amp": bufpos = xpos-1; bufPut('&'); break;
-            case "quot": bufpos = xpos-1; bufPut('"'); break;
-            default: bufPut(curCh); break;
-          }
-          skipChar();
-        }
+        parseEntity();
       }
     }
     if (tagLevel && bufpos > 0 && content !is null) content(buf[0..bufpos]);
@@ -232,23 +276,7 @@ void xmparse(ST) (auto ref ST fl,
           if (qch) {
             if (curCh == qch) qch = 0;
             if (curCh == '&') {
-              bufPut(curCh);
-              auto xpos = bufpos;
-              skipChar();
-              while (!eof && curCh != qch && curCh != ';' && bufpos-xpos < 8) {
-                bufPut(curCh);
-                skipChar();
-              }
-              if (!eof && curCh == ';' && bufpos > xpos) {
-                switch (buf[xpos..bufpos]) {
-                  case "lt": bufpos = xpos-1; bufPut('<'); break;
-                  case "gt": bufpos = xpos-1; bufPut('>'); break;
-                  case "amp": bufpos = xpos-1; bufPut('&'); break;
-                  case "quot": bufpos = xpos-1; bufPut('"'); break;
-                  default: bufPut(curCh); break;
-                }
-                skipChar();
-              }
+              parseEntity();
               continue;
             }
           } else {
