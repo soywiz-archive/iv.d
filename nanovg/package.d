@@ -3078,6 +3078,96 @@ public int textBreakLines(DG) (NVGContext ctx, const(char)* str, const(char)* en
   return nrows;
 }
 
+/** Returns iterator which you can use to calculate text bounds and advancement.
+ * This is usable when you need to do some text layouting with wrapping, to avoid
+ * guesswork ("will advancement for this space stay the same?"), and Schlemiel's
+ * algorithm. Note that you can copy the returned struct to save iterator state.
+ *
+ * You can check if iterator is valid with `valid` property, put new chars with
+ * `put()` method, get current advance with `advance` property, and current
+ * bounds with `getBounds(ref float[4] bounds)` method.
+ *
+ * WARNING! Don't change font parameters while iterating! Or use `restoreFont()`
+ *          method.
+ */
+public struct TextBoundsIterator {
+private:
+  NVGContext ctx;
+  FonsTextBoundsIterator fsiter; // fontstash iterator
+  float scale, invscale, xscaled, yscaled;
+  // font settings
+  float fsSize, fsSpacing, fsBlur;
+  int fsAlign, fsFontId;
+
+public:
+  this (NVGContext actx, float ax, float ay) { reset(actx, ax, ay); }
+
+  void reset (NVGContext actx, float ax, float ay) {
+    fsiter = fsiter.init;
+    this = this.init;
+    if (actx is null) return;
+    NVGstate* state = nvg__getState(actx);
+    if (state is null) return;
+    if (state.fontId == FONS_INVALID) { ctx = null; return; }
+
+    ctx = actx;
+    scale = nvg__getFontScale(state)*ctx.devicePxRatio;
+    invscale = 1.0f/scale;
+
+    fsSize = state.fontSize*scale;
+    fsSpacing = state.letterSpacing*scale;
+    fsBlur = state.fontBlur*scale;
+    fsAlign = state.textAlign;
+    fsFontId = state.fontId;
+    restoreFont();
+
+    xscaled = ax*scale;
+    yscaled = ay*scale;
+    fsiter.reset(ctx.fs, xscaled, yscaled);
+  }
+
+  /// Restart iteration. Will not restore font.
+  void restart () {
+    if (ctx !is null) fsiter.reset(ctx.fs, xscaled, yscaled);
+  }
+
+  /// Restore font settings for the context.
+  void restoreFont () {
+    if (ctx !is null) {
+      fonsSetSize(ctx.fs, fsSize);
+      fonsSetSpacing(ctx.fs, fsSpacing);
+      fonsSetBlur(ctx.fs, fsBlur);
+      fonsSetAlign(ctx.fs, fsAlign);
+      fonsSetFont(ctx.fs, fsFontId);
+    }
+  }
+
+  /// Is this iterator valid?
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null); }
+
+  /// Add chars.
+  void put (const(char)[] str...) {
+    if (ctx !is null) fsiter.put(str[]);
+  }
+
+  /// Return current advance
+  @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null ? fsiter.advance*invscale : 0); }
+
+  /// Return current text bounds.
+  void getBounds (ref float[4] bounds) {
+    if (ctx !is null) {
+      fsiter.getBounds(bounds);
+      fonsLineBounds(ctx.fs, yscaled, &bounds[1], &bounds[3]);
+      bounds[0] *= invscale;
+      bounds[1] *= invscale;
+      bounds[2] *= invscale;
+      bounds[3] *= invscale;
+    } else {
+      bounds[] = 0;
+    }
+  }
+}
+
 /** Measures the specified text string. Parameter bounds should be a pointer to float[4],
  * if the bounding box of the text should be returned. The bounds value are [xmin, ymin, xmax, ymax]
  * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
@@ -4592,6 +4682,101 @@ debug package/*(iv.nanovg)*/ void fonsDrawDebug (FONScontext* stash, float x, fl
   }
 
   fons__flush(stash);
+}
+
+package/*(iv.nanovg)*/ struct FonsTextBoundsIterator {
+private:
+  FONScontext* stash;
+  FONSstate* state;
+  uint codepoint;
+  uint utf8state = 0;
+  FONSquad q;
+  FONSglyph* glyph = null;
+  int prevGlyphIndex = -1;
+  short isize, iblur;
+  float scale;
+  FONSfont* font;
+  float startx, x, y;
+  float minx, miny, maxx, maxy;
+
+public:
+  this (FONScontext* astash, float ax, float ay) { reset(astash, ax, ay); }
+
+  void reset (FONScontext* astash, float ax, float ay) {
+    this = this.init;
+    if (astash is null) return;
+    stash = astash;
+    state = fons__getState(stash);
+    if (state is null) { stash = null; return; } // alas
+
+    x = ax;
+    y = ay;
+
+    isize = cast(short)(state.size*10.0f);
+    iblur = cast(short)state.blur;
+
+    if (state.font < 0 || state.font >= stash.nfonts) { stash = null; return; }
+    font = stash.fonts[state.font];
+    if (font.data is null) { stash = null; return; }
+
+    scale = fons__tt_getPixelHeightScale(&font.font, cast(float)isize/10.0f);
+
+    // align vertically
+    y += fons__getVertAlign(stash, font, state.align_, isize);
+
+    minx = maxx = x;
+    miny = maxy = y;
+    startx = x;
+    assert(prevGlyphIndex == -1);
+  }
+
+public:
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null); }
+
+  void put (const(char)[] str...) {
+    if (state is null) return; // alas
+    foreach (char ch; str) {
+      mixin(DecUtfMixin!("utf8state", "codepoint", "cast(ubyte)ch"));
+      if (utf8state) continue; // full char is not collected yet
+      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
+      if (glyph !is null) {
+        fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
+        if (q.x0 < minx) minx = q.x0;
+        if (q.x1 > maxx) maxx = q.x1;
+        if (stash.params.flags&FONS_ZERO_TOPLEFT) {
+          if (q.y0 < miny) miny = q.y0;
+          if (q.y1 > maxy) maxy = q.y1;
+        } else {
+          if (q.y1 < miny) miny = q.y1;
+          if (q.y0 > maxy) maxy = q.y0;
+        }
+      }
+      prevGlyphIndex = (glyph !is null ? glyph.index : -1);
+    }
+  }
+
+  // return current advance
+  @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null ? x-startx : 0); }
+
+  void getBounds (ref float[4] bounds) const pure nothrow @safe @nogc {
+    float lminx = minx, lmaxx = maxx;
+    // align horizontally
+    if (state.align_&FONS_ALIGN_LEFT) {
+      // empty
+    } else if (state.align_&FONS_ALIGN_RIGHT) {
+      float ca = advance;
+      lminx -= ca;
+      lmaxx -= ca;
+    } else if (state.align_&FONS_ALIGN_CENTER) {
+      float ca = advance*0.5f;
+      lminx -= ca;
+      lmaxx -= ca;
+    }
+    bounds[0] = lminx;
+    bounds[1] = miny;
+    bounds[2] = lmaxx;
+    bounds[3] = maxy;
+  }
 }
 
 package/*(iv.nanovg)*/ float fonsTextBounds (FONScontext* stash, float x, float y, const(char)* str, const(char)* end, float* bounds) {
