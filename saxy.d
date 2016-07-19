@@ -398,16 +398,16 @@ public:
 
   void onOpen(ST : const(char)[]) (ST path, TagOpenCB cb) {
     assert(cb !is null);
-    auto cb = newCallback(path);
-    cb.type = TagCB.Type.Open;
-    cb.open = cb;
+    auto tcb = newCallback(path);
+    tcb.type = TagCB.Type.Open;
+    tcb.open = cb;
   }
 
   void onClose(ST : const(char)[]) (ST path, TagCloseCB cb) {
     assert(cb !is null);
-    auto cb = newCallback(path);
-    cb.type = TagCB.Type.Close;
-    cb.close = cb;
+    auto tcb = newCallback(path);
+    tcb.type = TagCB.Type.Close;
+    tcb.close = cb;
   }
 
   // text will be duped
@@ -514,7 +514,6 @@ private:
   void loadFile(ST) (auto ref ST fl) if (isReadableStream!ST || (isInputRange!ST && is(ElementEncodingType!ST == char))) {
     bool seenXML;
     string[] tagStack;
-    string encoding;
     EncodingScheme efrom, eto;
     scope(exit) { efrom.destroy; eto.destroy; }
     char[] recbuf; // recode buffer
@@ -587,13 +586,8 @@ private:
               import std.ascii : toLower;
               ch = ch.toLower;
             }
-            if (*ec != "utf-8") {
-              encoding = (*ec).idup;
-            } else {
-              encoding = null;
-            }
-            if (encoding.length) {
-              efrom = EncodingScheme.create(encoding);
+            if (*ec != "utf-8" && (*ec).length) {
+              efrom = EncodingScheme.create(cast(string)(*ec)); // let's hope that it is safe...
               eto = new EncodingSchemeUtf8();
             }
           }
