@@ -547,14 +547,7 @@ private:
       if (text.length == 0) return null;
       char[] s;
       if (efrom !is null) {
-        ubyte[16] buf;
-        auto ub = cast(const(ubyte)[])text;
-        while (ub.length > 0) {
-          dchar dc = efrom.safeDecode(ub);
-          if (dc == INVALID_SEQUENCE) dc = '?';
-          auto len = eto.encode(dc, buf);
-          s ~= buf[0..len];
-        }
+        s = nrecode(text);
       } else {
         s = text.dup;
       }
@@ -586,9 +579,9 @@ private:
               import std.ascii : toLower;
               ch = ch.toLower;
             }
-            if (*ec != "utf-8" && (*ec).length) {
+            if ((*ec).length && *ec != "utf-8") {
               efrom = EncodingScheme.create(cast(string)(*ec)); // let's hope that it is safe...
-              eto = new EncodingSchemeUtf8();
+              eto = EncodingScheme.create("utf-8");
             }
           }
           return;
