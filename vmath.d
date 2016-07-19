@@ -656,8 +656,8 @@ nothrow @safe:
     mt.ptr[3*4+3] = 1; // just in case
   }
 
-  static mat4 zero () pure { pragma(inline, true); return mat4(); }
-  static mat4 identity () pure { pragma(inline, true); mat4 res = zero(); res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res; }
+  static mat4 Zero () pure { pragma(inline, true); return mat4(); }
+  static mat4 Identity () pure { pragma(inline, true); mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res; }
 
   private enum SinCosImportMixin = q{
     static if (is(FloatType == float)) {
@@ -669,9 +669,9 @@ nothrow @safe:
     }
   };
 
-  static mat4 rotateX() (FloatType angle) {
+  static mat4 RotateX() (FloatType angle) {
     mixin(SinCosImportMixin);
-    mat4 res = zero();
+    mat4 res = Zero;
     res.mt.ptr[0*4+0] = 1.0;
     res.mt.ptr[1*4+1] = cos(angle);
     res.mt.ptr[2*4+1] = -sin(angle);
@@ -681,9 +681,9 @@ nothrow @safe:
     return res;
   }
 
-  static mat4 rotateY() (FloatType angle) {
+  static mat4 RotateY() (FloatType angle) {
     mixin(SinCosImportMixin);
-    mat4 res = zero();
+    mat4 res = Zero;
     res.mt.ptr[0*4+0] = cos(angle);
     res.mt.ptr[2*4+0] = sin(angle);
     res.mt.ptr[1*4+1] = 1.0;
@@ -693,9 +693,9 @@ nothrow @safe:
     return res;
   }
 
-  static mat4 rotateZ() (FloatType angle) {
+  static mat4 RotateZ() (FloatType angle) {
     mixin(SinCosImportMixin);
-    mat4 res = zero();
+    mat4 res = Zero;
     res.mt.ptr[0*4+0] = cos(angle);
     res.mt.ptr[1*4+0] = -sin(angle);
     res.mt.ptr[0*4+1] = sin(angle);
@@ -706,7 +706,7 @@ nothrow @safe:
   }
 
   static mat4 translate() (in auto ref vec3 v) {
-    mat4 res = zero();
+    mat4 res = Zero;
     res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = 1;
     res.mt.ptr[3*4+0] = v.x;
     res.mt.ptr[3*4+1] = v.y;
@@ -716,7 +716,7 @@ nothrow @safe:
   }
 
   static mat4 scale() (in auto ref vec3 v) {
-    mat4 res = zero();
+    mat4 res = Zero;
     res.mt.ptr[0*4+0] = v.x;
     res.mt.ptr[1*4+1] = v.y;
     res.mt.ptr[2*4+2] = v.z;
@@ -724,16 +724,16 @@ nothrow @safe:
     return res;
   }
 
-  static mat4 rotate() (in auto ref vec3 v) {
-    auto mx = mat4.rotateX(v.x);
-    auto my = mat4.rotateY(v.y);
-    auto mz = mat4.rotateZ(v.z);
+  static mat4 Rotate() (in auto ref vec3 v) {
+    auto mx = mat4.RotateX(v.x);
+    auto my = mat4.RotateY(v.y);
+    auto mz = mat4.RotateZ(v.z);
     return mz*my*mx;
   }
 
   // same as `glFrustum()`
-  static mat4 frustum() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
-    Matrix4 res = zero;
+  static mat4 Frustum() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
+    Matrix4 res = Zero;
     res.mt.ptr[0]  = 2*nearVal/(right-left);
     res.mt.ptr[5]  = 2*nearVal/(top-bottom);
     res.mt.ptr[8]  = (right+left)/(right-left);
@@ -746,8 +746,8 @@ nothrow @safe:
   }
 
   // same as `glOrtho()`
-  static mat4 ortho() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
-    Matrix4 res = zero;
+  static mat4 Ortho() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
+    Matrix4 res = Zero;
     res.mt.ptr[0]  = 2/(right-left);
     res.mt.ptr[5]  = 2/(top-bottom);
     res.mt.ptr[10] = -2/(farVal-nearVal);
@@ -763,7 +763,7 @@ nothrow @safe:
   // aspect - Aspect ratio of the viewport
   // zNear  - The near clipping distance
   // zFar   - The far clipping distance
-  static mat4 perspective() (FloatType fovY, FloatType aspect, FloatType zNear, FloatType zFar) nothrow @trusted @nogc {
+  static mat4 Perspective() (FloatType fovY, FloatType aspect, FloatType zNear, FloatType zFar) nothrow @trusted @nogc {
     static if (is(FloatType == float)) {
       import core.stdc.math : tan=tanf;
     } else static if (is(FloatType == double)) {
@@ -853,7 +853,111 @@ public:
     return this*m*translate(-eye);
   }
 
-@trusted:
+  mat4 rotate() (FloatType angle, in auto ref vec3 axis) {
+    mixin(SinCosImportMixin);
+    angle = deg2rad(angle);
+    immutable FloatType c = cos(angle);
+    immutable FloatType s = sin(angle);
+    immutable FloatType c1 = 1-c;
+    immutable FloatType m0 = mt.ptr[0], m4 = mt.ptr[4], m8 = mt.ptr[8], m12 = mt.ptr[12];
+    immutable FloatType m1 = mt.ptr[1], m5 = mt.ptr[5], m9 = mt.ptr[9], m13 = mt.ptr[13];
+    immutable FloatType m2 = mt.ptr[2], m6 = mt.ptr[6], m10 = mt.ptr[10], m14 = mt.ptr[14];
+
+    // build rotation matrix
+    immutable FloatType r0 = axis.x*axis.x*c1+c;
+    immutable FloatType r1 = axis.x*axis.y*c1+axis.z*s;
+    immutable FloatType r2 = axis.x*axis.z*c1-axis.y*s;
+    immutable FloatType r4 = axis.x*axis.y*c1-axis.z*s;
+    immutable FloatType r5 = axis.y*axis.y*c1+c;
+    immutable FloatType r6 = axis.y*axis.z*c1+axis.x*s;
+    immutable FloatType r8 = axis.x*axis.z*c1+axis.y*s;
+    immutable FloatType r9 = axis.y*axis.z*c1-axis.x*s;
+    immutable FloatType r10= axis.z*axis.z*c1+c;
+
+    // multiply rotation matrix
+    mat4 res = void;
+    res.mt.ptr[0] = r0*m0+r4*m1+r8*m2;
+    res.mt.ptr[1] = r1*m0+r5*m1+r9*m2;
+    res.mt.ptr[2] = r2*m0+r6*m1+r10*m2;
+    res.mt.ptr[4] = r0*m4+r4*m5+r8*m6;
+    res.mt.ptr[5] = r1*m4+r5*m5+r9*m6;
+    res.mt.ptr[6] = r2*m4+r6*m5+r10*m6;
+    res.mt.ptr[8] = r0*m8+r4*m9+r8*m10;
+    res.mt.ptr[9] = r1*m8+r5*m9+r9*m10;
+    res.mt.ptr[10] = r2*m8+r6*m9+r10*m10;
+    res.mt.ptr[12] = r0*m12+r4*m13+r8*m14;
+    res.mt.ptr[13] = r1*m12+r5*m13+r9*m14;
+    res.mt.ptr[14] = r2*m12+r6*m13+r10*m14;
+
+    return res;
+  }
+
+  mat4 rotateX() (FloatType angle) {
+    mixin(SinCosImportMixin);
+    angle = deg2rad(angle);
+    immutable FloatType c = cos(angle);
+    immutable FloatType s = sin(angle);
+    immutable FloatType m1 = mt.ptr[1], m2 = mt.ptr[2];
+    immutable FloatType m5 = mt.ptr[5], m6 = mt.ptr[6];
+    immutable FloatType m9 = mt.ptr[9], m10 = mt.ptr[10];
+    immutable FloatType m13 = mt.ptr[13], m14 = mt.ptr[14];
+
+    res.mt.ptr[1] = m1*c+m2*-s;
+    res.mt.ptr[2] = m1*s+m2*c;
+    res.mt.ptr[5] = m5*c+m6*-s;
+    res.mt.ptr[6] = m5*s+m6*c;
+    res.mt.ptr[9] = m9*c+m10*-s;
+    res.mt.ptr[10]= m9*s+m10*c;
+    res.mt.ptr[13]= m13*c+m14*-s;
+    res.mt.ptr[14]= m13*s+m14*c;
+
+    return res;
+  }
+
+  mat4 rotateY() (FloatType angle) {
+    mixin(SinCosImportMixin);
+    angle = deg2rad(angle);
+    immutable FloatType c = cos(angle);
+    immutable FloatType s = sin(angle);
+    immutable FloatType m0 = mt.ptr[0], m2 = mt.ptr[2];
+    immutable FloatType m4 = mt.ptr[4], m6 = mt.ptr[6];
+    immutable FloatType m8 = mt.ptr[8], m10 = mt.ptr[10];
+    immutable FloatType m12 = mt.ptr[12], m14 = mt.ptr[14];
+
+    res.mt.ptr[0] = m0*c+m2*s;
+    res.mt.ptr[2] = m0*-s+m2*c;
+    res.mt.ptr[4] = m4*c+m6*s;
+    res.mt.ptr[6] = m4*-s+m6*c;
+    res.mt.ptr[8] = m8*c+m10*s;
+    res.mt.ptr[10]= m8*-s+m10*c;
+    res.mt.ptr[12]= m12*c+m14*s;
+    res.mt.ptr[14]= m12*-s+m14*c;
+
+    return res;
+  }
+
+  mat4 rotateZ() (FloatType angle) {
+    mixin(SinCosImportMixin);
+    angle = deg2rad(angle);
+    immutable FloatType c = cos(angle);
+    immutable FloatType s = sin(angle);
+    immutable FloatType m0 = mt.ptr[0], m1 = mt.ptr[1];
+    immutable FloatType m4 = mt.ptr[4], m5 = mt.ptr[5];
+    immutable FloatType m8 = mt.ptr[8], m9 = mt.ptr[9];
+    immutable FloatType m12 = mt.ptr[12], m13 = mt.ptr[13];
+
+    res.mt.ptr[0] = m0*c+m1*-s;
+    res.mt.ptr[1] = m0*s+m1*c;
+    res.mt.ptr[4] = m4*c+m5*-s;
+    res.mt.ptr[5] = m4*s+m5*c;
+    res.mt.ptr[8] = m8*c+m9*-s;
+    res.mt.ptr[9] = m8*s+m9*c;
+    res.mt.ptr[12]= m12*c+m13*-s;
+    res.mt.ptr[13]= m12*s+m13*c;
+
+    return res;
+  }
+
   vec3 opBinary(string op : "*") (in auto ref vec3 v) const {
     //pragma(inline, true);
     return vec3(
