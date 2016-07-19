@@ -174,6 +174,7 @@ void xmparse(ST) (auto ref ST fl,
         if (curCh != 'A') throw new Exception("invalid xml");
         skipChar();
         if (curCh != '[') throw new Exception("invalid xml");
+        skipChar();
         clearBuf();
         parseCData();
         return;

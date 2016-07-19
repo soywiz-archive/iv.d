@@ -23,6 +23,7 @@
 module saxytest;
 
 import iv.saxy;
+import iv.strex;
 
 static if (is(typeof({import iv.vfs;}))) {
   import iv.vfs;
@@ -64,18 +65,19 @@ char[] readFile (const(char)[] fname) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void main () {
+void main (string[] args) {
   import std.stdio;
   import std.utf;
+  string infilename = (args.length > 1 ? args[1] : "z00.xml");
   char[] indent;
   version(all) {
     static if (HasVFS) {
-      auto inst = VFile("z00.xml");
+      auto inst = VFile(infilename);
     } else {
-      auto inst = File("z00.xml");
+      auto inst = File(infilename);
     }
   } else {
-    auto inst = readFile("z00.xml").byChar;
+    auto inst = readFile(infilename).byChar;
   }
   xmparse(inst,
     (char[] name, char[][string] attrs) {
@@ -99,7 +101,7 @@ void main () {
     },
     (char[] text) {
       import std.stdio;
-      writeln(indent, text.length, " bytes of content");
+      writeln(indent, text.length, " bytes of content: ", text.quote);
     },
   );
 }
