@@ -1149,4 +1149,112 @@ public:
       -mt.ptr[12], -mt.ptr[13], -mt.ptr[14], -mt.ptr[15],
     );
   }
+
+  FloatType determinant() () const {
+    return mt.ptr[0]*getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15])-
+           mt.ptr[1]*getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15])+
+           mt.ptr[2]*getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15])-
+           mt.ptr[3]*getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // compute the inverse of 4x4 Euclidean transformation matrix
+  //
+  // Euclidean transformation is translation, rotation, and reflection.
+  // With Euclidean transform, only the position and orientation of the object
+  // will be changed. Euclidean transform does not change the shape of an object
+  // (no scaling). Length and angle are reserved.
+  //
+  // Use inverseAffine() if the matrix has scale and shear transformation.
+  ref mat4 invertedEuclidean() () {
+    FloatType tmp = void;
+    tmp = mt.ptr[1]; mt.ptr[1] = mt.ptr[4]; mt.ptr[4] = tmp;
+    tmp = mt.ptr[2]; mt.ptr[2] = mt.ptr[8]; mt.ptr[8] = tmp;
+    tmp = mt.ptr[6]; mt.ptr[6] = mt.ptr[9]; mt.ptr[9] = tmp;
+    FloatType x = mt.ptr[12];
+    FloatType y = mt.ptr[13];
+    FloatType z = mt.ptr[14];
+    mt.ptr[12] = -(mt.ptr[0]*x+mt.ptr[4]*y+mt.ptr[8]*z);
+    mt.ptr[13] = -(mt.ptr[1]*x+mt.ptr[5]*y+mt.ptr[9]*z);
+    mt.ptr[14] = -(mt.ptr[2]*x+mt.ptr[6]*y+mt.ptr[10]*z);
+    return this;
+  }
+
+  ref mat4 inverted() () {
+    // If the 4th row is [0,0,0,1] then it is affine matrix and
+    // it has no projective transformation.
+    if (mt.ptr[3] == 0 && mt.ptr[7] == 0 && mt.ptr[11] == 0 && mt.ptr[15] == 1) {
+      invertedAffine();
+    } else {
+      invertedGeneral();
+    }
+    return this;
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // compute the inverse of a general 4x4 matrix using Cramer's Rule
+  // If cannot find inverse, return indentity matrix
+  ref mat4 invertedGeneral() () {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : abs=fabsf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : abs=fabs;
+    } else {
+      import std.math : abs;
+    }
+
+    FloatType cofactor0 = getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    FloatType cofactor1 = getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    FloatType cofactor2 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    FloatType cofactor3 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+
+    FloatType determinant = mt.ptr[0]*cofactor0-mt.ptr[1]*cofactor1+mt.ptr[2]*cofactor2-mt.ptr[3]*cofactor3;
+    if (abs(determinant) <= EPSILON!FloatType) { this = Identity; return this; }
+
+    FloatType cofactor4 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    FloatType cofactor5 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    FloatType cofactor6 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    FloatType cofactor7 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+
+    FloatType cofactor8 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    FloatType cofactor9 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    FloatType cofactor10= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    FloatType cofactor11= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+
+    FloatType cofactor12= getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[9], mt.ptr[10], mt.ptr[11]);
+    FloatType cofactor13= getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[8], mt.ptr[10], mt.ptr[11]);
+    FloatType cofactor14= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[8], mt.ptr[9], mt.ptr[11]);
+    FloatType cofactor15= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[8], mt.ptr[9], mt.ptr[10]);
+
+    FloatType invDeterminant = cast(FloatType)1.0/determinant;
+    mt.ptr[0] =  invDeterminant*cofactor0;
+    mt.ptr[1] = -invDeterminant*cofactor4;
+    mt.ptr[2] =  invDeterminant*cofactor8;
+    mt.ptr[3] = -invDeterminant*cofactor12;
+
+    mt.ptr[4] = -invDeterminant*cofactor1;
+    mt.ptr[5] =  invDeterminant*cofactor5;
+    mt.ptr[6] = -invDeterminant*cofactor9;
+    mt.ptr[7] =  invDeterminant*cofactor13;
+
+    mt.ptr[8] =  invDeterminant*cofactor2;
+    mt.ptr[9] = -invDeterminant*cofactor6;
+    mt.ptr[10]=  invDeterminant*cofactor10;
+    mt.ptr[11]= -invDeterminant*cofactor14;
+
+    mt.ptr[12]= -invDeterminant*cofactor3;
+    mt.ptr[13]=  invDeterminant*cofactor7;
+    mt.ptr[14]= -invDeterminant*cofactor11;
+    mt.ptr[15]=  invDeterminant*cofactor15;
+
+    return this;
+  }
+
+  // compute cofactor of 3x3 minor matrix without sign
+  // input params are 9 elements of the minor matrix
+  // NOTE: The caller must know its sign.
+  private static FloatType getCofactor() (FloatType m0, FloatType m1, FloatType m2, FloatType m3, FloatType m4, FloatType m5, FloatType m6, FloatType m7, FloatType m8) {
+    pragma(inline, true);
+    return m0*(m4*m8-m5*m7)-m1*(m3*m8-m5*m6)+m2*(m3*m7-m4*m6);
+  }
 }
