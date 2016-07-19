@@ -23,6 +23,7 @@
 // SAX style xml parser
 module iv.saxy;
 
+import std.encoding;
 import std.range;
 static if (is(typeof({import iv.vfs;}))) {
   import iv.vfs;
@@ -39,9 +40,7 @@ static if (is(typeof({import iv.vfs;}))) {
 }
 
 
-//alias XmlString = const(char)[];
-
-
+// ////////////////////////////////////////////////////////////////////////// //
 //*WARNING*: attr keys are *NOT* strings!
 void xmparse(ST) (auto ref ST fl,
   scope void delegate (char[] name, char[][string] attrs) tagStart,
@@ -359,4 +358,295 @@ void xmparse(ST) (auto ref ST fl,
   }
 
   if (tagLevel != 0) throw new Exception("invalid xml");
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+final class SaxyEx {
+private import std.range;
+public:
+  alias TagOpenCB = void delegate (char[] name, char[][string] attrs);
+  alias TagCloseCB = void delegate (char[] name);
+  alias TagContentCB = void delegate (char[] text);
+
+private:
+  static struct PathElement {
+    string name; // empty: any tag
+    char quant = 0; // '+', '*', 0
+  }
+
+  static struct TagCB {
+    enum Type { Open, Close, Content, NormContent }
+    Type type;
+    PathElement[] path;
+    union {
+      TagOpenCB open;
+      TagCloseCB close;
+      TagContentCB content;
+    }
+  }
+
+private:
+  TagCB[] callbacks;
+
+public:
+  this () {}
+
+  void load (const(char)[] filename) { loadFile(VFile(filename)); }
+
+  void loadStream(ST) (auto ref ST st) if (isReadableStream!ST || (isInputRange!ST && is(ElementEncodingType!ST == char))) { loadFile(st); }
+
+  void onOpen(ST : const(char)[]) (ST path, TagOpenCB cb) {
+    assert(cb !is null);
+    auto cb = newCallback(path);
+    cb.type = TagCB.Type.Open;
+    cb.open = cb;
+  }
+
+  void onClose(ST : const(char)[]) (ST path, TagCloseCB cb) {
+    assert(cb !is null);
+    auto cb = newCallback(path);
+    cb.type = TagCB.Type.Close;
+    cb.close = cb;
+  }
+
+  // text will be duped
+  void onContent(bool normText=false, ST : const(char)[]) (ST path, TagContentCB cb) {
+    assert(cb !is null);
+    auto tcb = newCallback(path);
+    static if (normText) {
+      tcb.type = TagCB.Type.NormContent;
+    } else {
+      tcb.type = TagCB.Type.Content;
+    }
+    tcb.content = cb;
+  }
+
+private:
+  TagCB* newCallback(ST : const(char)[]) (ST path) {
+    static if (is(ST == typeof(null))) {
+      return newCallback("");
+    } else {
+      // parse path
+      PathElement[] pth;
+      if (path.length) {
+        while (path.length != 0) {
+          while (path.length != 0 && path.ptr[0] == '/') path = path[1..$];
+          if (path.length == 0) break;
+          usize e = 0;
+          while (e < path.length && path.ptr[e] != '/') ++e;
+          //if (e == 1 && path.ptr[0] == '+') throw new Exception("invalid callback path");
+          if (path.ptr[e-1] == '+' || path.ptr[e-1] == '*') {
+            pth ~= PathElement(path[0..e-1].idup, path.ptr[e-1]);
+          } else {
+            pth ~= PathElement(path[0..e].idup, 0);
+          }
+          path = path[e..$];
+        }
+        if (pth.length == 0) throw new Exception("invalid callback path");
+      } else {
+        pth ~= PathElement(null, '*');
+      }
+      TagCB* res;
+      callbacks.length += 1;
+      res = &callbacks[$-1];
+      res.path = pth;
+      return res;
+    }
+  }
+
+  // yes, i can make it faster with some more preprocessing, but why should i bother?
+  static bool pathHit (string[] tagStack, PathElement[] path) {
+    version(none) {
+      import std.stdio;
+      writeln("tagStack: ", tagStack[]);
+      foreach (const ref PathElement pe; path) {
+        write((pe.quant ? pe.quant : ' '), pe.name);
+      }
+      writeln;
+    }
+    while (path.length > 0) {
+      auto pe = &path[0];
+      path = path[1..$];
+      if (pe.quant == '*') {
+        if (pe.name.length == 0) {
+          // any number of any tag, including zero
+          if (path.length == 0) return true;
+          while (tagStack.length > 0) {
+            if (pathHit(tagStack, path)) return true;
+            tagStack = tagStack[1..$];
+          }
+          return false;
+        } else {
+          // any number of given tag, including zero
+          // skip this tag and continue
+          while (tagStack.length && tagStack.ptr[0] == pe.name) tagStack = tagStack[1..$];
+        }
+      } else if (pe.quant == '+') {
+        if (pe.name.length == 0) {
+          // any number of any tag, not including zero
+          if (path.length == 0) return (tagStack.length > 0);
+          while (tagStack.length > 0) {
+            if (pathHit(tagStack, path)) return true;
+            tagStack = tagStack[1..$];
+          }
+          return false;
+        } else {
+          // any number of given tag, not including zero
+          if (tagStack.length == 0 || tagStack.ptr[0] != pe.name) return false;
+          // skip this tag and continue
+          while (tagStack.length && tagStack.ptr[0] == pe.name) tagStack = tagStack[1..$];
+        }
+      } else if (pe.name.length != 0) {
+        // named tag
+        if (tagStack.length == 0) return false;
+        if (pe.name != tagStack.ptr[0]) return false;
+        tagStack = tagStack[1..$];
+      } else {
+        // any tag
+        tagStack = tagStack[1..$];
+      }
+    }
+    return (tagStack.length == 0);
+  }
+
+private:
+  void loadFile(ST) (auto ref ST fl) if (isReadableStream!ST || (isInputRange!ST && is(ElementEncodingType!ST == char))) {
+    bool seenXML;
+    string[] tagStack;
+    string encoding;
+    EncodingScheme efrom, eto;
+    scope(exit) { efrom.destroy; eto.destroy; }
+    char[] recbuf; // recode buffer
+    size_t rcpos; // for recode buffer
+    scope(exit) recbuf.destroy;
+
+    char[] nrecode (char[] text) {
+      if (efrom is null) return text.dup; // nothing to do
+      rcpos = 0;
+      ubyte[16] buf;
+      auto ub = cast(const(ubyte)[])text;
+      while (ub.length > 0) {
+        dchar dc = efrom.safeDecode(ub);
+        if (dc == INVALID_SEQUENCE) dc = '?';
+        auto len = eto.encode(dc, buf);
+        if (rcpos+len > recbuf.length) {
+          recbuf.assumeSafeAppend; // we will copy that anyway
+          recbuf.length = ((rcpos+len)|0x3ff)+1;
+        }
+        recbuf[rcpos..rcpos+len] = cast(char[])buf[0..len];
+        rcpos += len;
+      }
+      return recbuf[0..rcpos];
+    }
+
+    char[] norm(bool dospacenorm) (char[] text) {
+      static if (dospacenorm) {
+        while (text.length > 0 && text.ptr[0] <= ' ') text = text[1..$];
+        while (text.length > 0 && text[$-1] <= ' ') text = text[0..$-1];
+      }
+      if (text.length == 0) return null;
+      char[] s;
+      if (efrom !is null) {
+        ubyte[16] buf;
+        auto ub = cast(const(ubyte)[])text;
+        while (ub.length > 0) {
+          dchar dc = efrom.safeDecode(ub);
+          if (dc == INVALID_SEQUENCE) dc = '?';
+          auto len = eto.encode(dc, buf);
+          s ~= buf[0..len];
+        }
+      } else {
+        s = text.dup;
+      }
+      static if (dospacenorm) {
+        size_t pos = 0;
+        while (pos < s.length) {
+          if (s.ptr[pos] <= ' ') {
+            if (pos == 0 || s.ptr[pos-1] <= ' ') {
+              import core.stdc.string : memmove;
+              memmove(s.ptr+pos, s.ptr+pos+1, s.length-pos-1);
+              s.length -= 1;
+              continue;
+            }
+            s.ptr[pos] = ' ';
+          }
+          ++pos;
+        }
+      }
+      return s; // it is safe to cast here
+    }
+
+    xmparse(fl,
+      (char[] name, char[][string] attrs) {
+        if (name == "?xml") {
+          if (seenXML) throw new Exception("duplicate '?xml?' tag");
+          seenXML = true;
+          if (auto ec = "encoding" in attrs) {
+            foreach (ref char ch; *ec) {
+              import std.ascii : toLower;
+              ch = ch.toLower;
+            }
+            if (*ec != "utf-8") {
+              encoding = (*ec).idup;
+            } else {
+              encoding = null;
+            }
+            if (encoding.length) {
+              efrom = EncodingScheme.create(encoding);
+              eto = new EncodingSchemeUtf8();
+            }
+          }
+          return;
+        }
+        if (!seenXML) throw new Exception("no '?xml?' tag");
+        tagStack.assumeSafeAppend;
+        tagStack ~= name.idup;
+        bool attrsRecoded = (efrom !is null);
+        foreach (ref TagCB tcb; callbacks) {
+          if (tcb.type == TagCB.Type.Open && pathHit(tagStack, tcb.path)) {
+            // recode attrs and call the callback
+            if (!attrsRecoded) {
+              foreach (ref v; attrs.byValue) v = nrecode(v);
+              attrsRecoded = true;
+            }
+            tcb.open(name, attrs);
+          }
+        }
+      },
+      (char[] name) {
+        if (name == "?xml") return;
+        if (tagStack.length == 0 || tagStack[$-1] != name) throw new Exception("unbalanced xml tags");
+        foreach (ref TagCB tcb; callbacks) {
+          if (tcb.type == TagCB.Type.Close && pathHit(tagStack, tcb.path)) {
+            // call the callback
+            tcb.close(name);
+          }
+        }
+        tagStack.length -= 1;
+      },
+      (char[] text) {
+        bool textRecoded = false;
+        bool textNormed = false;
+        char[] textNorm;
+        foreach (ref TagCB tcb; callbacks) {
+          if (tcb.type == TagCB.Type.Content && pathHit(tagStack, tcb.path)) {
+            // recode text and call the callback
+            if (!textRecoded) {
+              text = nrecode(text);
+              textRecoded = true;
+            }
+            tcb.content(text);
+          } else if (tcb.type == TagCB.Type.NormContent && pathHit(tagStack, tcb.path)) {
+            // normalize text and call the callback
+            if (!textNormed) {
+              textNorm = norm!true(text);
+              textNormed = true;
+            }
+            if (textNorm.length) tcb.content(textNorm);
+          }
+        }
+      },
+    );
+  }
 }
