@@ -52,8 +52,8 @@ template EPSILON(T) if (is(T == float) || is(T == double)) {
   else static assert(0, "wtf?!");
 }
 
-auto deg2rad(T) (T v) pure nothrow @safe @nogc if (is(T == float) || is(T == double)) { pragma(inline, true); import std.math : PI; return v*PI/180.0; }
-auto rad2deg(T) (T v) pure nothrow @safe @nogc if (is(T == float) || is(T == double)) { pragma(inline, true); import std.math : PI; return v*180.0/PI; }
+auto deg2rad(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*PI/180.0; }
+auto rad2deg(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*180.0/PI; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -612,19 +612,27 @@ pure nothrow @safe @nogc:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+alias mat4 = Mat4!float;
+
 struct Mat4(FloatType=float) if (is(FloatType == FloatType) || is(FloatType == double)) {
 public:
   alias mat4 = Mat4!FloatType;
   alias vec3 = VecN!(3, FloatType);
 
 public:
-  FloatType[4*4] mt = 0; // OpenGL-compatible, row by row
+   // OpenGL-compatible, row by row
+  FloatType[4*4] mt = [
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ];
 
 nothrow @safe:
   string toString () const @trusted {
     import std.string : format;
     try {
-      return "[%s,%s,%s,%s]\n[%s,%s,%s,%s]\n[%s,%s,%s,%s]\n[%s,%s,%s,%s]".format(
+      return "0:[%s,%s,%s,%s]\n4:[%s,%s,%s,%s]\n8:[%s,%s,%s,%s]\nc:[%s,%s,%s,%s]".format(
         mt.ptr[ 0], mt.ptr[ 1], mt.ptr[ 2], mt.ptr[ 3],
         mt.ptr[ 4], mt.ptr[ 5], mt.ptr[ 6], mt.ptr[ 7],
         mt.ptr[ 8], mt.ptr[ 9], mt.ptr[10], mt.ptr[11],
@@ -635,10 +643,11 @@ nothrow @safe:
     }
   }
 
-  @property ref FloatType opIndex (usize r, usize c) @trusted @nogc { pragma(inline, true); return (r < 4 && c < 4 ? mt.ptr[c*4+r] : mt.ptr[0]); }
+  @property FloatType opIndex (usize x, usize y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : FloatType.nan); }
 
-pure @nogc:
-  this() (in auto ref mat4 m) { mt[] = m.mt[]; }
+@nogc @trusted:
+  this() (in FloatType[] vals...) { pragma(inline, true); if (vals.length >= 16) mt[] = vals[0..16]; else { mt[] = 0; mt[0..vals.length] = vals[]; } }
+  this() (in auto ref mat4 m) { pragma(inline, true); mt[] = m.mt[]; }
   this() (in auto ref vec3 v) {
     mt[] = 0;
     mt.ptr[0*4+0] = v.x;
@@ -647,12 +656,22 @@ pure @nogc:
     mt.ptr[3*4+3] = 1; // just in case
   }
 
-  static mat4 zero () { pragma(inline, true); return mat4(); }
-  static mat4 identity () @trusted { pragma(inline, true); mat4 res; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res; }
+  static mat4 zero () pure { pragma(inline, true); return mat4(); }
+  static mat4 identity () pure { pragma(inline, true); mat4 res = zero(); res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res; }
 
-  static mat4 rotateX (FloatType angle) @trusted {
-    import std.math : cos, sin;
-    mat4 res;
+  private enum SinCosImportMixin = q{
+    static if (is(FloatType == float)) {
+      import core.stdc.math : cos=cosf, sin=sinf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : cos, sin;
+    } else {
+      import std.math : cos, sin;
+    }
+  };
+
+  static mat4 rotateX() (FloatType angle) {
+    mixin(SinCosImportMixin);
+    mat4 res = zero();
     res.mt.ptr[0*4+0] = 1.0;
     res.mt.ptr[1*4+1] = cos(angle);
     res.mt.ptr[2*4+1] = -sin(angle);
@@ -662,9 +681,9 @@ pure @nogc:
     return res;
   }
 
-  static mat4 rotateY (FloatType angle) @trusted {
-    import std.math : cos, sin;
-    mat4 res;
+  static mat4 rotateY() (FloatType angle) {
+    mixin(SinCosImportMixin);
+    mat4 res = zero();
     res.mt.ptr[0*4+0] = cos(angle);
     res.mt.ptr[2*4+0] = sin(angle);
     res.mt.ptr[1*4+1] = 1.0;
@@ -674,9 +693,9 @@ pure @nogc:
     return res;
   }
 
-  static mat4 rotateZ (FloatType angle) @trusted {
-    import std.math : cos, sin;
-    mat4 res;
+  static mat4 rotateZ() (FloatType angle) {
+    mixin(SinCosImportMixin);
+    mat4 res = zero();
     res.mt.ptr[0*4+0] = cos(angle);
     res.mt.ptr[1*4+0] = -sin(angle);
     res.mt.ptr[0*4+1] = sin(angle);
@@ -686,8 +705,8 @@ pure @nogc:
     return res;
   }
 
-  static mat4 translate() (in auto ref vec3 v) @trusted {
-    mat4 res;
+  static mat4 translate() (in auto ref vec3 v) {
+    mat4 res = zero();
     res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = 1;
     res.mt.ptr[3*4+0] = v.x;
     res.mt.ptr[3*4+1] = v.y;
@@ -696,8 +715,8 @@ pure @nogc:
     return res;
   }
 
-  static mat4 scale() (in auto ref vec3 v) @trusted {
-    mat4 res;
+  static mat4 scale() (in auto ref vec3 v) {
+    mat4 res = zero();
     res.mt.ptr[0*4+0] = v.x;
     res.mt.ptr[1*4+1] = v.y;
     res.mt.ptr[2*4+2] = v.z;
@@ -712,37 +731,131 @@ pure @nogc:
     return mz*my*mx;
   }
 
-  static mat4 camera() (in auto ref vec3 eye, in auto ref vec3 point, in auto ref vec3 up) {
-    mat4 res;
-    vec3 f, u, s;
-    f = point-eye;
-    f.normalize;
-    u = up;
-    u.normalize;
-    s = f.cross(u);
-    u = s.cross(f);
-    res.mt.ptr[0*4+0] = s.x;
-    res.mt.ptr[1*4+0] = s.y;
-    res.mt.ptr[2*4+0] = s.z;
-    res.mt.ptr[3*4+0] = 0.0;
-    res.mt.ptr[0*4+1] = u.x;
-    res.mt.ptr[1*4+1] = u.y;
-    res.mt.ptr[2*4+1] = u.z;
-    res.mt.ptr[3*4+1] = 0.0;
-    res.mt.ptr[0*4+2] = -f.x;
-    res.mt.ptr[1*4+2] = -f.y;
-    res.mt.ptr[2*4+2] = -f.z;
-    res.mt.ptr[3*4+2] = 0.0;
-    res.mt.ptr[0*4+3] = 0.0;
-    res.mt.ptr[1*4+3] = 0.0;
-    res.mt.ptr[2*4+3] = 0.0;
-    res.mt.ptr[3*4+3] = 1.0;
+  // same as `glFrustum()`
+  static mat4 frustum() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
+    Matrix4 res = zero;
+    res.mt.ptr[0]  = 2*nearVal/(right-left);
+    res.mt.ptr[5]  = 2*nearVal/(top-bottom);
+    res.mt.ptr[8]  = (right+left)/(right-left);
+    res.mt.ptr[9]  = (top+bottom)/(top-bottom);
+    res.mt.ptr[10] = -(farVal+nearVal)/(farVal-nearVal);
+    res.mt.ptr[11] = -1;
+    res.mt.ptr[14] = -(2*farVal*nearVal)/(farVal-nearVal);
+    res.mt.ptr[15] = 0;
     return res;
+  }
+
+  // same as `glOrtho()`
+  static mat4 ortho() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
+    Matrix4 res = zero;
+    res.mt.ptr[0]  = 2/(right-left);
+    res.mt.ptr[5]  = 2/(top-bottom);
+    res.mt.ptr[10] = -2/(farVal-nearVal);
+    res.mt.ptr[12] = -(right+left)/(right-left);
+    res.mt.ptr[13] = -(top+bottom)/(top-bottom);
+    res.mt.ptr[14] = -(farVal+nearVal)/(farVal-nearVal);
+    return mat;
+  }
+
+  // same as `gluPerspective()`
+  // sets the frustum to perspective mode.
+  // fovY   - Field of vision in degrees in the y direction
+  // aspect - Aspect ratio of the viewport
+  // zNear  - The near clipping distance
+  // zFar   - The far clipping distance
+  static mat4 perspective() (FloatType fovY, FloatType aspect, FloatType zNear, FloatType zFar) nothrow @trusted @nogc {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : tan=tanf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : tan;
+    } else {
+      import std.math : tan;
+    }
+    import std.math : PI;
+    immutable FloatType fH = cast(FloatType)(tan(fovY/360*PI)*zNear);
+    immutable FloatType fW = cast(FloatType)(fH*aspect);
+    return frustum(-fW, fW, -fH, fH, zNear, zFar);
+  }
+
+public:
+  // does `gluLookAt()`
+  mat4 lookAt() (in auto ref vec3 eye, in auto ref vec3 center, in auto ref vec3 up) {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : sqrt=sqrtf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : sqrt;
+    } else {
+      import std.math : sqrt;
+    }
+
+    mat4 m = void;
+    float[3] x = void, y = void, z = void;
+    float mag;
+    // make rotation matrix
+    // Z vector
+    z.ptr[0] = eye.x-center.x;
+    z.ptr[1] = eye.y-center.y;
+    z.ptr[2] = eye.z-center.z;
+    mag = sqrt(z.ptr[0]*z.ptr[0]+z.ptr[1]*z.ptr[1]+z.ptr[2]*z.ptr[2]);
+    if (mag != 0.0f) {
+      z.ptr[0] /= mag;
+      z.ptr[1] /= mag;
+      z.ptr[2] /= mag;
+    }
+    // Y vector
+    y.ptr[0] = up.x;
+    y.ptr[1] = up.y;
+    y.ptr[2] = up.z;
+    // X vector = Y cross Z
+    x.ptr[0] =  y.ptr[1]*z.ptr[2]-y.ptr[2]*z.ptr[1];
+    x.ptr[1] = -y.ptr[0]*z.ptr[2]+y.ptr[2]*z.ptr[0];
+    x.ptr[2] =  y.ptr[0]*z.ptr[1]-y.ptr[1]*z.ptr[0];
+    // Recompute Y = Z cross X
+    y.ptr[0] =  z.ptr[1]*x.ptr[2]-z.ptr[2]*x.ptr[1];
+    y.ptr[1] = -z.ptr[0]*x.ptr[2]+z.ptr[2]*x.ptr[0];
+    y.ptr[2] =  z.ptr[0]*x.ptr[1]-z.ptr[1]*x.ptr[0];
+
+    /* cross product gives area of parallelogram, which is < 1.0 for
+     * non-perpendicular unit-length vectors; so normalize x, y here
+     */
+    mag = sqrt(x.ptr[0]*x.ptr[0]+x.ptr[1]*x.ptr[1]+x.ptr[2]*x.ptr[2]);
+    if (mag != 0.0f) {
+      x.ptr[0] /= mag;
+      x.ptr[1] /= mag;
+      x.ptr[2] /= mag;
+    }
+
+    mag = sqrt(y.ptr[0]*y.ptr[0]+y.ptr[1]*y.ptr[1]+y.ptr[2]*y.ptr[2]);
+    if (mag != 0.0f) {
+      y.ptr[0] /= mag;
+      y.ptr[1] /= mag;
+      y.ptr[2] /= mag;
+    }
+
+    m.mt.ptr[0*4+0] = x.ptr[0];
+    m.mt.ptr[1*4+0] = x.ptr[1];
+    m.mt.ptr[2*4+0] = x.ptr[2];
+    m.mt.ptr[3*4+0] = 0.0f;
+    m.mt.ptr[0*4+1] = y.ptr[0];
+    m.mt.ptr[1*4+1] = y.ptr[1];
+    m.mt.ptr[2*4+1] = y.ptr[2];
+    m.mt.ptr[3*4+1] = 0.0f;
+    m.mt.ptr[0*4+2] = z.ptr[0];
+    m.mt.ptr[1*4+2] = z.ptr[1];
+    m.mt.ptr[2*4+2] = z.ptr[2];
+    m.mt.ptr[3*4+2] = 0.0f;
+    m.mt.ptr[0*4+3] = 0.0f;
+    m.mt.ptr[1*4+3] = 0.0f;
+    m.mt.ptr[2*4+3] = 0.0f;
+    m.mt.ptr[3*4+3] = 1.0f;
+
+    // move, and translate Eye to Origin
+    return this*m*translate(-eye);
   }
 
 @trusted:
   vec3 opBinary(string op : "*") (in auto ref vec3 v) const {
-    pragma(inline, true);
+    //pragma(inline, true);
     return vec3(
       mt.ptr[0*4+0]*v.x+mt.ptr[1*4+0]*v.y+mt.ptr[2*4+0]*v.z+mt.ptr[3*4+0],
       mt.ptr[0*4+1]*v.x+mt.ptr[1*4+1]*v.y+mt.ptr[2*4+1]*v.z+mt.ptr[3*4+1],
@@ -751,7 +864,7 @@ pure @nogc:
 
 
   vec3 opBinaryRight(string op : "*") (in auto ref vec3 v) const {
-    pragma(inline, true);
+    //pragma(inline, true);
     return vec3(
       mt.ptr[0*4+0]*v.x+mt.ptr[0*4+1]*v.y+mt.ptr[0*4+2]*v.z+mt.ptr[0*4+3],
       mt.ptr[1*4+0]*v.x+mt.ptr[1*4+1]*v.y+mt.ptr[1*4+2]*v.z+mt.ptr[1*4+3],
@@ -760,15 +873,13 @@ pure @nogc:
 
 
   mat4 opBinary(string op : "*") (in auto ref mat4 m) const {
-    mat4 res;
-    foreach (immutable i; 0..4) {
-      foreach (immutable j; 0..4) {
-        foreach (immutable k; 0..4) {
-          res.mt.ptr[i+j*4] += mt.ptr[i+k*4]*m.mt.ptr[k+j*4];
-        }
-      }
-    }
-    return res;
+    //pragma(inline, true);
+    return mat4(
+      mt.ptr[0]*m.mt.ptr[0] +mt.ptr[4]*m.mt.ptr[1] +mt.ptr[8]*m.mt.ptr[2] +mt.ptr[12]*m.mt.ptr[3], mt.ptr[1]*m.mt.ptr[0] +mt.ptr[5]*m.mt.ptr[1] +mt.ptr[9]*m.mt.ptr[2] +mt.ptr[13]*m.mt.ptr[3], mt.ptr[2]*m.mt.ptr[0] +mt.ptr[6]*m.mt.ptr[1] +mt.ptr[10]*m.mt.ptr[2] +mt.ptr[14]*m.mt.ptr[3], mt.ptr[3]*m.mt.ptr[0] +mt.ptr[7]*m.mt.ptr[1] +mt.ptr[11]*m.mt.ptr[2] +mt.ptr[15]*m.mt.ptr[3],
+      mt.ptr[0]*m.mt.ptr[4] +mt.ptr[4]*m.mt.ptr[5] +mt.ptr[8]*m.mt.ptr[6] +mt.ptr[12]*m.mt.ptr[7], mt.ptr[1]*m.mt.ptr[4] +mt.ptr[5]*m.mt.ptr[5] +mt.ptr[9]*m.mt.ptr[6] +mt.ptr[13]*m.mt.ptr[7], mt.ptr[2]*m.mt.ptr[4] +mt.ptr[6]*m.mt.ptr[5] +mt.ptr[10]*m.mt.ptr[6] +mt.ptr[14]*m.mt.ptr[7], mt.ptr[3]*m.mt.ptr[4] +mt.ptr[7]*m.mt.ptr[5] +mt.ptr[11]*m.mt.ptr[6] +mt.ptr[15]*m.mt.ptr[7],
+      mt.ptr[0]*m.mt.ptr[8] +mt.ptr[4]*m.mt.ptr[9] +mt.ptr[8]*m.mt.ptr[10]+mt.ptr[12]*m.mt.ptr[11],mt.ptr[1]*m.mt.ptr[8] +mt.ptr[5]*m.mt.ptr[9] +mt.ptr[9]*m.mt.ptr[10]+mt.ptr[13]*m.mt.ptr[11],mt.ptr[2]*m.mt.ptr[8] +mt.ptr[6]*m.mt.ptr[9] +mt.ptr[10]*m.mt.ptr[10]+mt.ptr[14]*m.mt.ptr[11],mt.ptr[3]*m.mt.ptr[8] +mt.ptr[7]*m.mt.ptr[9] +mt.ptr[11]*m.mt.ptr[10]+mt.ptr[15]*m.mt.ptr[11],
+      mt.ptr[0]*m.mt.ptr[12]+mt.ptr[4]*m.mt.ptr[13]+mt.ptr[8]*m.mt.ptr[14]+mt.ptr[12]*m.mt.ptr[15],mt.ptr[1]*m.mt.ptr[12]+mt.ptr[5]*m.mt.ptr[13]+mt.ptr[9]*m.mt.ptr[14]+mt.ptr[13]*m.mt.ptr[15],mt.ptr[2]*m.mt.ptr[12]+mt.ptr[6]*m.mt.ptr[13]+mt.ptr[10]*m.mt.ptr[14]+mt.ptr[14]*m.mt.ptr[15],mt.ptr[3]*m.mt.ptr[12]+mt.ptr[7]*m.mt.ptr[13]+mt.ptr[11]*m.mt.ptr[14]+mt.ptr[15]*m.mt.ptr[15],
+    );
   }
 
   mat4 opBinary(string op : "+") (in auto ref mat4 m) const {
@@ -779,7 +890,6 @@ pure @nogc:
 
   mat4 opBinary(string op : "*") (FloatType a) const {
     auto res = mat4(this);
-    //foreach (ref v; res.mt) v *= a;
     res.mt[] *= a;
     return res;
   }
@@ -810,6 +920,7 @@ pure @nogc:
   }
 
   mat4 transpose () const {
+    /*
     mat4 res;
     foreach (immutable i; 0..4) {
       foreach (immutable j; 0..4) {
@@ -817,8 +928,16 @@ pure @nogc:
       }
     }
     return res;
+    */
+    return mat4(
+      mt.ptr[0], mt.ptr[4], mt.ptr[8],  mt.ptr[12],
+      mt.ptr[1], mt.ptr[5], mt.ptr[9],  mt.ptr[13],
+      mt.ptr[2], mt.ptr[6], mt.ptr[10], mt.ptr[14],
+      mt.ptr[3], mt.ptr[7], mt.ptr[11], mt.ptr[15],
+    );
   }
 
+  /+
   // returns determinant of matrix without given column and row
   FloatType cofactor (int x, int y) const {
     int[3] xx, yy;
@@ -867,81 +986,16 @@ pure @nogc:
       return mat4();
     }
   }
+  +/
 
-  void negate () {
-    foreach (ref v; mt) v = -v;
-  }
+  void negate () { foreach (ref v; mt) v = -v; }
 
   mat4 opUnary(string op : "-") () const {
-    mat4 res = void;
-    res.mt[] = mt[];
-    foreach (ref v; res.mt) v = -v;
-    return res;
+    return mat4(
+      -mt.ptr[0], -mt.ptr[1], -mt.ptr[2], -mt.ptr[3],
+      -mt.ptr[4], -mt.ptr[5], -mt.ptr[6], -mt.ptr[7],
+      -mt.ptr[8], -mt.ptr[9], -mt.ptr[10], -mt.ptr[11],
+      -mt.ptr[12], -mt.ptr[13], -mt.ptr[14], -mt.ptr[15],
+    );
   }
-
-/+
-  ////////////////////////////////////////////////////////////////////////////////
-  void mat4::addColumns (int c1, int c2, FloatType *a) const {
-    a[0] = mt.ptr[c1][0]+mt.ptr[c2][0];
-    a[1] = mt.ptr[c1][1]+mt.ptr[c2][1];
-    a[2] = mt.ptr[c1][2]+mt.ptr[c2][2];
-    a[3] = mt.ptr[c1][3]+mt.ptr[c2][3];
-  }
-
-
-  void mat4::subColumns (int c1, int c2, FloatType *a) const {
-    a[0] = mt.ptr[c1][0]-mt.ptr[c2][0];
-    a[1] = mt.ptr[c1][1]-mt.ptr[c2][1];
-    a[2] = mt.ptr[c1][2]-mt.ptr[c2][2];
-    a[3] = mt.ptr[c1][3]-mt.ptr[c2][3];
-  }
-
-
-  ////////////////////////////////////////////////////////////////////////////////
-  // *** GL STUFF ***
-
-  //  m1 m5 (...)
-  //  m2
-  //  m3
-  //  m4
-
-  void mat4::glGetProjectionMatrix () {
-    FloatType a[16];
-    //
-    glGetDoublev(GL_PROJECTION_MATRIX, a);
-    for (int i = 0; i < 4; ++i)
-      for (int j = 0; j < 4; ++j)
-        mt.ptr[i][j] = a[j*4+i];
-  }
-
-
-  void mat4::glGetModelviewMatrix () {
-    FloatType a[16];
-    //
-    glGetDoublev(GL_MODELVIEW_MATRIX, a);
-    for (int i = 0; i < 4; ++i)
-      for (int j = 0; j < 4; ++j)
-        mt.ptr[i][j] = a[j*4+i];
-  }
-
-
-  void mat4::glLoadMatrix () const {
-    FloatType a[16];
-    //
-    for (int i = 0; i < 4; ++i)
-      for (int j = 0; j < 4; ++j)
-        a[j*4+i] = mt.ptr[i][j];
-    glLoadMatrixd(a);
-  }
-
-
-  void mat4::glMultMatrix () const {
-    FloatType a[16];
-    //
-    for (int i = 0; i < 4; ++i)
-      for (int j = 0; j < 4; ++j)
-        a[j*4+i] = mt.ptr[i][j];
-    glMultMatrixd(a);
-  }
-+/
 }
