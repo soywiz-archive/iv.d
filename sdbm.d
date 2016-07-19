@@ -14,6 +14,7 @@
  * not, write to the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
  * 02111-1307 USA.
  * ********************************************************************************************* */
+// key/value database based on QDBM
 module iv.sdbm /*is aliced*/;
 
 import std.traits : isArray, isDynamicArray;

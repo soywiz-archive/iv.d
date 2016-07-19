@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+// severely outdated case-insensitive filesystem interface
+// use iv.vfs instead
 module iv.file is aliced;
 
 private import std.stdio : File;

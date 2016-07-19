@@ -15,6 +15,7 @@
  *
  * D translation by Ketmar // Vampire Avalon
  */
+// CDB key/value database creator
 module iv.tinycdbmk;
 
 

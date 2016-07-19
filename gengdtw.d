@@ -16,7 +16,7 @@
  *
  * adaptation by Ketmar // Vampire Avalon
  */
-// DTW recognizer
+// DTW-based gesture recognizer
 module iv.gengdtw is aliced;
 private:
 

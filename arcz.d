@@ -1,4 +1,4 @@
-/** ARZ chunked archive format reader.
+/** ARZ chunked archive format processor.
  *
  * This module provides `std.stdio.File`-like interface to ARZ archives.
  *

@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+// severely outdated! do not use!
 module iv.videolib is aliced;
 
 version(videolib_opengl) {} else { version = videolib_sdl; }

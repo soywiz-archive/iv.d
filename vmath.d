@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+// various vector and matrix operations.
+// matrix should be compatible with OpenGL, but mostly untested.
 module iv.vmath is aliced;
 
 

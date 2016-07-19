@@ -16,6 +16,7 @@
  *
  * D translation and "d-fication" by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * ********************************************************************************************* */
+// key/value database based on tokyo kabinet
 module iv.depot /*is aliced*/;
 
 static if (!is(typeof(usize))) private alias usize = size_t;
