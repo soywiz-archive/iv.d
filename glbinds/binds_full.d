@@ -8,11 +8,20 @@ version = glbind_lazy_load;
 //version = glbind_debug;
 
 
-public import arsd.simpledisplay;
+//public import arsd.simpledisplay;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 extern(C) nothrow @nogc {
+
+version(Windows) {
+  pragma(lib, "opengl32");
+} else {
+  pragma(lib, "GL");
+}
+
+void* glXGetProcAddress (const(char)* name);
+alias glGetProcAddress = glXGetProcAddress;
 
 alias GLvoid = void;
 alias GLintptr = ptrdiff_t;
@@ -24920,4 +24929,3 @@ __gshared glbfn_glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN glRepla
 
 
 public void glbindLoadFunctions () {}
-
