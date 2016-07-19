@@ -108,14 +108,21 @@ void xmparse(ST) (auto ref ST fl,
   }
 
   // curCh is '&'
-  void parseEntity () {
+  void parseEntity (bool inattr) {
     assert(curCh == '&');
     bufPut(curCh);
     auto xpos = bufpos;
     skipChar();
-    while (!eof && curCh != '<' && curCh != ';' && bufpos-xpos < 8) {
-      bufPut(curCh);
-      skipChar();
+    if (inattr) {
+      while (!eof && curCh != '/' && curCh != '>' && curCh != '?' && curCh != ';' && bufpos-xpos < 9) {
+        bufPut(curCh);
+        skipChar();
+      }
+    } else {
+      while (!eof && curCh != '<' && curCh != ';' && bufpos-xpos < 9) {
+        bufPut(curCh);
+        skipChar();
+      }
     }
     if (!eof && curCh == ';' && bufpos > xpos) {
       import std.utf : encode, UseReplacementDchar;
@@ -189,7 +196,7 @@ void xmparse(ST) (auto ref ST fl,
         bufPut(curCh);
         skipChar();
       } else {
-        parseEntity();
+        parseEntity(false);
       }
     }
     if (tagLevel && bufpos > 0 && content !is null) content(buf[0..bufpos]);
@@ -277,7 +284,7 @@ void xmparse(ST) (auto ref ST fl,
           if (qch) {
             if (curCh == qch) qch = 0;
             if (curCh == '&') {
-              parseEntity();
+              parseEntity(true);
               continue;
             }
           } else {
