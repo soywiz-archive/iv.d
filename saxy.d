@@ -56,6 +56,7 @@ void xmparse(ST) (auto ref ST fl,
   }
 
   static bool isValidNameChar() (char ch) {
+    pragma(inline, true);
     return
       (ch >= '0' && ch <= '9') ||
       (ch >= 'A' && ch <= 'Z') ||
@@ -84,25 +85,30 @@ void xmparse(ST) (auto ref ST fl,
   char curCh;
   bool eof;
 
+  static if (isReadableStream!ST) {
+    char[] rdbuf;
+    scope(exit) rdbuf.destroy;
+    uint rdbufpos, rdbufused;
+  }
+
   void skipChar () {
     if (!eof) {
       static if (isReadableStream!ST) {
-        if (fl.rawRead((&curCh)[0..1]).length == 0) {
-          eof = true;
-          curCh = 0;
-        } else {
-          if (curCh == 0) curCh = ' ';
+        // buffer more bytes
+        if (rdbufpos >= rdbufused) {
+          if (rdbuf.length == 0) rdbuf.length = 32*1024;
+          auto rd = fl.rawRead(rdbuf[]);
+          if (rd.length == 0) { eof = true; curCh = 0; return; }
+          rdbufpos = 0;
+          rdbufused = cast(uint)rd.length;
         }
+        curCh = rdbuf.ptr[rdbufpos++];
       } else {
-        if (fl.empty) {
-          eof = true;
-          curCh = 0;
-        } else {
-          curCh = fl.front;
-          fl.popFront;
-          if (curCh == 0) curCh = ' ';
-        }
+        if (fl.empty) { eof = true; curCh = 0; return; }
+        curCh = fl.front;
+        fl.popFront;
       }
+      if (curCh == 0) curCh = ' ';
     }
   }
 
