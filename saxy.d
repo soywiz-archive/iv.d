@@ -433,7 +433,7 @@ private:
         while (path.length != 0) {
           while (path.length != 0 && path.ptr[0] == '/') path = path[1..$];
           if (path.length == 0) break;
-          usize e = 0;
+          size_t e = 0;
           while (e < path.length && path.ptr[e] != '/') ++e;
           //if (e == 1 && path.ptr[0] == '+') throw new Exception("invalid callback path");
           if (path.ptr[e-1] == '+' || path.ptr[e-1] == '*') {
