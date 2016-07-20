@@ -421,7 +421,8 @@ public:
     tcb.close = cb;
   }
 
-  // text will be duped
+  // `text` passed to callback will always be duped if `normText` is `true`.
+  // if `normText` is `false`, you are expected to copy text if you need it.
   void onContent(bool normText=false, ST : const(char)[]) (ST path, TagContentCB cb) {
     assert(cb !is null);
     auto tcb = newCallback!"content"(path);
