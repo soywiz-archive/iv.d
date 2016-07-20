@@ -385,6 +385,7 @@ private:
     enum Type { Open, Close, Content, NormContent }
     Type type;
     PathElement[] path;
+    bool pathHasQuants; // use faster algo if there are no quantifiers
     union {
       TagOpenCB open;
       TagCloseCB close;
@@ -393,7 +394,9 @@ private:
   }
 
 private:
-  TagCB[] callbacks;
+  TagCB[] callbacksOpen;
+  TagCB[] callbacksClose;
+  TagCB[] callbacksContent;
 
 public:
   this () {}
@@ -404,22 +407,20 @@ public:
 
   void onOpen(ST : const(char)[]) (ST path, TagOpenCB cb) {
     assert(cb !is null);
-    auto tcb = newCallback(path);
-    tcb.type = TagCB.Type.Open;
+    auto tcb = newCallback!"open"(path);
     tcb.open = cb;
   }
 
   void onClose(ST : const(char)[]) (ST path, TagCloseCB cb) {
     assert(cb !is null);
-    auto tcb = newCallback(path);
-    tcb.type = TagCB.Type.Close;
+    auto tcb = newCallback!"close"(path);
     tcb.close = cb;
   }
 
   // text will be duped
   void onContent(bool normText=false, ST : const(char)[]) (ST path, TagContentCB cb) {
     assert(cb !is null);
-    auto tcb = newCallback(path);
+    auto tcb = newCallback!"content"(path);
     static if (normText) {
       tcb.type = TagCB.Type.NormContent;
     } else {
@@ -429,11 +430,12 @@ public:
   }
 
 private:
-  TagCB* newCallback(ST : const(char)[]) (ST path) {
+  TagCB* newCallback(string type, ST : const(char)[]) (ST path) {
     static if (is(ST == typeof(null))) {
       return newCallback("");
     } else {
       // parse path
+      bool hasQuants = false;
       PathElement[] pth;
       if (path.length) {
         while (path.length != 0) {
@@ -444,6 +446,7 @@ private:
           //if (e == 1 && path.ptr[0] == '+') throw new Exception("invalid callback path");
           if (path.ptr[e-1] == '+' || path.ptr[e-1] == '*') {
             pth ~= PathElement(path[0..e-1].idup, path.ptr[e-1]);
+            hasQuants = true;
           } else {
             pth ~= PathElement(path[0..e].idup, 0);
           }
@@ -451,18 +454,33 @@ private:
         }
         if (pth.length == 0) throw new Exception("invalid callback path");
       } else {
+        hasQuants = true;
         pth ~= PathElement(null, '*');
       }
       TagCB* res;
-      callbacks.length += 1;
-      res = &callbacks[$-1];
+      static if (type == "open") {
+        callbacksOpen.length += 1;
+        res = &callbacksOpen[$-1];
+        res.type = TagCB.Type.Open;
+      } else static if (type == "close") {
+        callbacksClose.length += 1;
+        res = &callbacksClose[$-1];
+        res.type = TagCB.Type.Close;
+      } else static if (type == "content") {
+        callbacksContent.length += 1;
+        res = &callbacksContent[$-1];
+        // type will be set by caller
+      } else {
+        static assert(0, "wtf?!");
+      }
       res.path = pth;
+      res.pathHasQuants = hasQuants;
       return res;
     }
   }
 
   // yes, i can make it faster with some more preprocessing, but why should i bother?
-  static bool pathHit (string[] tagStack, PathElement[] path) {
+  static bool pathHit (const(char)[][] tagStack, PathElement[] path, bool hasQuants) {
     version(none) {
       import std.stdio;
       writeln("tagStack: ", tagStack[]);
@@ -471,6 +489,20 @@ private:
       }
       writeln;
     }
+    if (!hasQuants) {
+      // easy case
+      if (tagStack.length != path.length) return false;
+      foreach_reverse (immutable idx, const ref PathElement pe; path) {
+        if (tagStack.ptr[idx] != pe.name) return false;
+      }
+      return true;
+    }
+
+    static bool hasQ (PathElement[] path) {
+      foreach (const ref PathElement pe; path) if (pe.quant) return true;
+      return false;
+    }
+
     while (path.length > 0) {
       auto pe = &path[0];
       path = path[1..$];
@@ -479,7 +511,7 @@ private:
           // any number of any tag, including zero
           if (path.length == 0) return true;
           while (tagStack.length > 0) {
-            if (pathHit(tagStack, path)) return true;
+            if (pathHit(tagStack, path, hasQ(path))) return true;
             tagStack = tagStack[1..$];
           }
           return false;
@@ -493,7 +525,7 @@ private:
           // any number of any tag, not including zero
           if (path.length == 0) return (tagStack.length > 0);
           while (tagStack.length > 0) {
-            if (pathHit(tagStack, path)) return true;
+            if (pathHit(tagStack, path, hasQ(path))) return true;
             tagStack = tagStack[1..$];
           }
           return false;
@@ -519,12 +551,39 @@ private:
 private:
   void loadFile(ST) (auto ref ST fl) if (isReadableStream!ST || (isInputRange!ST && is(ElementEncodingType!ST == char))) {
     bool seenXML;
-    string[] tagStack;
+    bool tagStackLastWasAppend = true;
+    const(char)[][] tagStack; // all data is in tagStackBuf
+    char[] tagStackBuf;
+    scope(exit) tagStackBuf.destroy;
+    uint tagStackBufPos;
     EncodingScheme efrom, eto;
     scope(exit) { efrom.destroy; eto.destroy; }
     char[] recbuf; // recode buffer
     size_t rcpos; // for recode buffer
     scope(exit) recbuf.destroy;
+
+    void pushTag (const(char)[] s) {
+      if (s.length) {
+        if (tagStackBufPos+s.length >= tagStackBuf.length) {
+          if (tagStackBufPos >= int.max/2) throw new Exception("too many tags");
+          tagStackBuf.length = ((tagStackBufPos+s.length)|0x3ff)+1;
+        }
+        tagStackBuf[tagStackBufPos..tagStackBufPos+s.length] = s[];
+        if (!tagStackLastWasAppend) { tagStack.assumeSafeAppend; tagStackLastWasAppend = true; }
+        tagStack ~= tagStackBuf[tagStackBufPos..tagStackBufPos+s.length];
+        tagStackBufPos += s.length;
+      } else {
+        if (!tagStackLastWasAppend) { tagStack.assumeSafeAppend; tagStackLastWasAppend = true; }
+        tagStack ~= "";
+      }
+    }
+
+    void popTag () {
+      tagStack.length -= 1;
+      auto idx = tagStack.length;
+      tagStackBufPos -= tagStack.ptr[idx].length;
+      tagStackLastWasAppend = false;
+    }
 
     char[] nrecode (char[] text) {
       if (efrom is null) return text.dup; // nothing to do
@@ -593,11 +652,10 @@ private:
           return;
         }
         if (!seenXML) throw new Exception("no '?xml?' tag");
-        tagStack.assumeSafeAppend;
-        tagStack ~= name.idup;
+        pushTag(name);
         bool attrsRecoded = (efrom !is null);
-        foreach (ref TagCB tcb; callbacks) {
-          if (tcb.type == TagCB.Type.Open && pathHit(tagStack, tcb.path)) {
+        foreach (ref TagCB tcb; callbacksOpen) {
+          if (tcb.type == TagCB.Type.Open && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
             // recode attrs and call the callback
             if (!attrsRecoded) {
               foreach (ref v; attrs.byValue) v = nrecode(v);
@@ -610,27 +668,27 @@ private:
       (char[] name) {
         if (name == "?xml") return;
         if (tagStack.length == 0 || tagStack[$-1] != name) throw new Exception("unbalanced xml tags");
-        foreach (ref TagCB tcb; callbacks) {
-          if (tcb.type == TagCB.Type.Close && pathHit(tagStack, tcb.path)) {
+        foreach (ref TagCB tcb; callbacksClose) {
+          if (tcb.type == TagCB.Type.Close && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
             // call the callback
             tcb.close(name);
           }
         }
-        tagStack.length -= 1;
+        popTag();
       },
       (char[] text) {
         bool textRecoded = false;
         bool textNormed = false;
         char[] textNorm;
-        foreach (ref TagCB tcb; callbacks) {
-          if (tcb.type == TagCB.Type.Content && pathHit(tagStack, tcb.path)) {
+        foreach (ref TagCB tcb; callbacksContent) {
+          if (tcb.type == TagCB.Type.Content && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
             // recode text and call the callback
             if (!textRecoded) {
               text = nrecode(text);
               textRecoded = true;
             }
             tcb.content(text);
-          } else if (tcb.type == TagCB.Type.NormContent && pathHit(tagStack, tcb.path)) {
+          } else if (tcb.type == TagCB.Type.NormContent && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
             // normalize text and call the callback
             if (!textNormed) {
               textNorm = norm!true(text);
