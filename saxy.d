@@ -386,7 +386,7 @@ private:
   }
 
   static struct TagCB {
-    enum Type { Open, Close, Content, NormContent }
+    enum Type { Open, Close, Content }
     Type type;
     PathElement[] path;
     bool pathHasQuants; // use faster algo if there are no quantifiers
@@ -421,16 +421,9 @@ public:
     tcb.close = cb;
   }
 
-  // `text` passed to callback will always be duped if `normText` is `true`.
-  // if `normText` is `false`, you are expected to copy text if you need it.
-  void onContent(bool normText=false, ST : const(char)[]) (ST path, TagContentCB cb) {
+  void onContent(ST : const(char)[]) (ST path, TagContentCB cb) {
     assert(cb !is null);
     auto tcb = newCallback!"content"(path);
-    static if (normText) {
-      tcb.type = TagCB.Type.NormContent;
-    } else {
-      tcb.type = TagCB.Type.Content;
-    }
     tcb.content = cb;
   }
 
@@ -474,7 +467,7 @@ private:
       } else static if (type == "content") {
         callbacksContent.length += 1;
         res = &callbacksContent[$-1];
-        // type will be set by caller
+        res.type = TagCB.Type.Content;
       } else {
         static assert(0, "wtf?!");
       }
@@ -591,7 +584,7 @@ private:
     }
 
     char[] nrecode (char[] text) {
-      if (efrom is null) return text.dup; // nothing to do
+      if (efrom is null) return text; // nothing to do
       rcpos = 0;
       ubyte[16] buf;
       auto ub = cast(const(ubyte)[])text;
@@ -600,43 +593,13 @@ private:
         if (dc == INVALID_SEQUENCE) dc = '?';
         auto len = eto.encode(dc, buf);
         if (rcpos+len > recbuf.length) {
-          recbuf.assumeSafeAppend; // we will copy that anyway
+          recbuf.assumeSafeAppend; // the user is expected to copy data
           recbuf.length = ((rcpos+len)|0x3ff)+1;
         }
         recbuf[rcpos..rcpos+len] = cast(char[])buf[0..len];
         rcpos += len;
       }
       return recbuf[0..rcpos];
-    }
-
-    char[] norm(bool dospacenorm) (char[] text) {
-      static if (dospacenorm) {
-        while (text.length > 0 && text.ptr[0] <= ' ') text = text[1..$];
-        while (text.length > 0 && text[$-1] <= ' ') text = text[0..$-1];
-      }
-      if (text.length == 0) return null;
-      char[] s;
-      if (efrom !is null) {
-        s = nrecode(text);
-      } else {
-        s = text.dup;
-      }
-      static if (dospacenorm) {
-        size_t pos = 0;
-        while (pos < s.length) {
-          if (s.ptr[pos] <= ' ') {
-            if (pos == 0 || s.ptr[pos-1] <= ' ') {
-              import core.stdc.string : memmove;
-              memmove(s.ptr+pos, s.ptr+pos+1, s.length-pos-1);
-              s.length -= 1;
-              continue;
-            }
-            s.ptr[pos] = ' ';
-          }
-          ++pos;
-        }
-      }
-      return s; // it is safe to cast here
     }
 
     xmparse(fl,
@@ -683,8 +646,6 @@ private:
       },
       (char[] text) {
         bool textRecoded = false;
-        bool textNormed = false;
-        char[] textNorm;
         foreach (ref TagCB tcb; callbacksContent) {
           if (tcb.type == TagCB.Type.Content && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
             // recode text and call the callback
@@ -693,13 +654,6 @@ private:
               textRecoded = true;
             }
             tcb.content(text);
-          } else if (tcb.type == TagCB.Type.NormContent && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
-            // normalize text and call the callback
-            if (!textNormed) {
-              textNorm = norm!true(text);
-              textNormed = true;
-            }
-            if (textNorm.length) tcb.content(textNorm);
           }
         }
       },
