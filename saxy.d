@@ -368,6 +368,10 @@ void xmparse(ST) (auto ref ST fl,
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// you can use "quantifiers" in pathes, like this:
+//   "/a/b/c*/d+/*"
+// that means "any number of 'c' tags", "one or more 'd' tags", "any number of any tags"
+// the last is useful to parse things like "bold" tag inside "p" tag, for example
 final class SaxyEx {
 private import std.range;
 public:
