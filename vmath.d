@@ -17,12 +17,12 @@
  */
 // various vector and matrix operations.
 // matrix should be compatible with OpenGL, but mostly untested.
-module iv.vmath is aliced;
+module iv.vmath /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 private template isGoodSwizzling(string s, string comps, int minlen, int maxlen) {
-  private static template hasChar(string str, char ch, usize idx=0) {
+  private static template hasChar(string str, char ch, size_t idx=0) {
          static if (idx >= str.length) enum hasChar = false;
     else static if (str[idx] == ch) enum hasChar = true;
     else enum hasChar = hasChar!(str, ch, idx+1);
@@ -64,7 +64,8 @@ alias vec3 = VecN!3;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct VecN(ubyte dims, FloatType=float) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
+align(1) struct VecN(ubyte dims, FloatType=float) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
+align(1):
 public:
   alias VFloat = FloatType;
 
@@ -155,14 +156,14 @@ nothrow @safe:
     }
   }
 
-  FloatType opIndex (usize idx) const pure {
+  FloatType opIndex (size_t idx) const pure {
     pragma(inline, true);
          static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : FloatType.nan);
     else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : FloatType.nan);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void opIndexAssign (FloatType v, usize idx) pure {
+  void opIndexAssign (FloatType v, size_t idx) pure {
     pragma(inline, true);
          static if (dims == 2) { if (idx == 0) x = v; else if (idx == 1) y = v; }
     else static if (dims == 3) { if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v; }
@@ -396,7 +397,8 @@ const pure:
 
 // ////////////////////////////////////////////////////////////////////////// //
 // plane in 3D space: Ax+By+Cz+D=0
-struct Plane3(FloatType=float, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
+align(1) struct Plane3(FloatType=float, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
+align(1):
 public:
   alias plane3 = Plane3!(FloatType, PlaneEps, enableSwizzling);
   alias vec3 = VecN!(3, FloatType);
@@ -449,12 +451,12 @@ pure @nogc:
 
   @property bool valid () const { pragma(inline, true); import std.math : isNaN; return !isNaN(w); }
 
-  FloatType opIndex (usize idx) const {
+  FloatType opIndex (size_t idx) const {
     pragma(inline, true);
     return (idx == 0 ? normal.x : idx == 1 ? normal.y : idx == 2 ? normal.z : idx == 3 ? w : FloatType.nan);
   }
 
-  void opIndexAssign (FloatType v, usize idx) {
+  void opIndexAssign (FloatType v, size_t idx) {
     pragma(inline, true);
     if (idx == 0) normal.x = v; else if (idx == 1) normal.y = v; else if (idx == 2) normal.z = v; else if (idx == 3) w = v;
   }
@@ -565,7 +567,7 @@ struct bbox(VT) if (isVector!VT) {
   VT v0, v1; // min and max respective
 
 pure nothrow @safe @nogc:
-  ref VT opIndex (usize idx) const {
+  ref VT opIndex (size_t idx) const {
     pragma(inline, true);
     return (idx == 0 ? v0 : v1);
   }
@@ -616,7 +618,8 @@ pure nothrow @safe @nogc:
 // ////////////////////////////////////////////////////////////////////////// //
 alias mat4 = Mat4!float;
 
-struct Mat4(FloatType=float) if (is(FloatType == FloatType) || is(FloatType == double)) {
+align(1) struct Mat4(FloatType=float) if (is(FloatType == FloatType) || is(FloatType == double)) {
+align(1):
 public:
   alias mat4 = Mat4!FloatType;
   alias vec3 = VecN!(3, FloatType);
@@ -645,7 +648,7 @@ nothrow @safe:
     }
   }
 
-  @property FloatType opIndex (usize x, usize y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : FloatType.nan); }
+  @property FloatType opIndex (size_t x, size_t y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : FloatType.nan); }
 
 @nogc @trusted:
   this() (in FloatType[] vals...) { pragma(inline, true); if (vals.length >= 16) mt[] = vals[0..16]; else { mt[] = 0; mt[0..vals.length] = vals[]; } }
