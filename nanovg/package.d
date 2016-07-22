@@ -2936,7 +2936,6 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
         break;
     }
     if (phase == Phase.SkipBlanks) {
-      if (type == NVGcodepointType.Space) continue;
       // fix row start
       rowStart = cast(int)(iter.string!T-str.ptr);
       rowEnd = rowStart;
@@ -2950,6 +2949,7 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
       breakEnd = rowStart;
       breakWidth = 0.0;
       breakMaxX = 0.0;
+      if (type == NVGcodepointType.Space) continue;
       phase = Phase.Normal;
     }
 
@@ -3038,11 +3038,12 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
   }
 
   // break the line from the end of the last word, and start new line from the beginning of the new
-  if (rowStart < str.length && rowEnd > rowStart) {
+  if (phase != Phase.SkipBlanks && rowStart < str.length) {
+    //{ import core.stdc.stdio : printf; printf("  rowStart=%u; len=%u\n", rowStart, cast(uint)str.length); }
     NVGTextRow row;
     row.string!T = str;
     row.start = rowStart;
-    row.end = rowEnd;
+    row.end = cast(int)str.length;
     row.width = rowWidth*invscale;
     row.minx = rowMinX*invscale;
     row.maxx = rowMaxX*invscale;
