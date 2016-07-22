@@ -24,7 +24,7 @@
 module iv.utfutil;
 
 
-struct Utf8Decoder {
+struct Utf8DecoderFast {
 private:
   enum State {
     Accept = 0,
@@ -87,8 +87,40 @@ public:
   // same as `decode`, never reaches `invalid` state, returns '?' for invalid chars
   bool decodeSafe (ubyte b) pure @trusted {
     uint type = utf8dfa.ptr[b];
-    codepoint = (state != State.Accept ? (b&0x3fu)|(codepoint<<6) : (0xff>>type)&b);
+    codepoint = (state != State.Accept ? (b&0x3f)|(codepoint<<6) : (0xff>>type)&b);
     if ((state = utf8dfa.ptr[256+state+type]) == State.Reject) { state = State.Accept; codepoint = '?'; }
     return (state == State.Accept);
+  }
+}
+
+
+// slow, but using only 4 bytes (dchar)
+struct Utf8Decoder {
+private:
+  enum State : uint {
+    Accept = 0x0000_0000u,
+    Reject = 0x0c00_0000u,
+    Mask = 0xff00_0000u
+  }
+  uint codep = State.Accept;
+pure nothrow @safe @nogc:
+public:
+  // is current character complete? take `codepoint` then
+  @property bool complete () const { pragma(inline, true); return ((codep&State.Mask) == State.Accept); }
+  @property bool invalid () const { pragma(inline, true); return ((codep&State.Mask) == State.Reject); }
+  @property bool completeOrInvalid () const { pragma(inline, true); return (complete || invalid); }
+  @property dchar currCodePoint () const { pragma(inline, true); return (codep <= dchar.max ? codep : '?'); }
+  // same as `decode`, never reaches `invalid` state, returns '?' for invalid chars
+  // returns invalid dchar while it is "in progress" (i.e. result > dchar.max)
+  dchar decode (ubyte b) @trusted {
+    immutable ubyte type = Utf8DecoderFast.utf8dfa.ptr[b];
+    ubyte state = (codep>>24)&0xff;
+    codep = (state /*!= State.Accept*/ ? (b&0x3f)|(codep<<6) : (0xff>>type)&b);
+    if ((state = Utf8DecoderFast.utf8dfa.ptr[256+state+type]) == 12/*State.Reject*/) {
+      codep = '?';
+    } else {
+      codep |= (cast(uint)state<<24);
+    }
+    return codep;
   }
 }
