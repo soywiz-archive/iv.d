@@ -1598,6 +1598,7 @@ public float bndLabelWidth (NVGContext ctx, int iconid, const(char)[] label) {
     ctx.fontSize(BND_LABEL_FONT_SIZE);
     w += cast(int)ctx.textBounds(1, 1, label, null);
   }
+  //{ import core.stdc.stdio : printf; printf("len=%u; w=%d\n", cast(uint)label.length, cast(int)w); }
   return w;
 }
 
@@ -1609,7 +1610,7 @@ public float bndLabelHeight (NVGContext ctx, int iconid, const(char)[] label, fl
   if (label && (bnd_font >= 0)) {
     ctx.fontFaceId(bnd_font);
     ctx.fontSize(BND_LABEL_FONT_SIZE);
-    float[4] bounds;
+    float[4] bounds = void;
     ctx.textBoxBounds(1, 1, width, label, bounds[]);
     int bh = cast(int)(bounds[3]-bounds[1])+BND_TEXT_PAD_DOWN;
     if (bh > h) h = bh;
@@ -1860,6 +1861,7 @@ public void bndIconLabelValue (NVGContext ctx, float x, float y, float w, float 
     } else {
       ctx.textAlign((align_ == BND_LEFT ? (NVGAlign.Left|NVGAlign.Baseline) : align_ == BND_CENTER ? (NVGAlign.Center|NVGAlign.Baseline) : (NVGAlign.Right|NVGAlign.Baseline)));
       ctx.textBox(x+pleft, y+BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN, w-BND_PAD_RIGHT-pleft, label);
+      //{ import core.stdc.stdio : printf; printf("l=%u\n", cast(uint)label.length); }
     }
   } else if (iconid >= 0) {
     bndIcon(ctx, x+2, y+2, iconid);
@@ -1911,16 +1913,19 @@ public int bndIconLabelTextPosition (NVGContext ctx, float x, float y, float w, 
 
   float asc, desc, lh;
   static NVGTextRow[BND_MAX_ROWS] rows;
-  int nrows = ctx.textBreakLines(label, w, rows.ptr, BND_MAX_ROWS);
-  if (nrows == 0) return 0;
+  auto rres = ctx.textBreakLines(label, w, rows[]);
+  { import core.stdc.stdio : printf; printf("rlen=%u\n", cast(uint)rres.length); }
+  if (rres.length == 0) return 0;
   ctx.textBoxBounds(x, y, w, label, bounds[]);
   ctx.textMetrics(&asc, &desc, &lh);
 
   // calculate vertical position
-  int row = cast(int)bnd_clamp(cast(int)(cast(float)(py-bounds[1])/lh), 0, nrows-1);
+  int row = cast(int)bnd_clamp(cast(int)(cast(float)(py-bounds[1])/lh), 0, cast(int)rres.length-1);
   // search horizontal position
   static NVGGlyphPosition[BND_MAX_GLYPHS] glyphs;
-  int nglyphs = ctx.textGlyphPositions(x, y, rows[row].start, rows[row].end+1, glyphs.ptr, BND_MAX_GLYPHS);
+  //int nglyphs = ctx.textGlyphPositions(x, y, rows[row].start, rows[row].end+1, glyphs.ptr, BND_MAX_GLYPHS);
+  auto rglyphs = ctx.textGlyphPositions(x, y, rows[row].row!char, glyphs[]);
+  int nglyphs = cast(int)rglyphs.length;
   int col, p = 0;
   for (col = 0; col < nglyphs && glyphs[col].x < px; ++col) p = cast(int)(glyphs[col].str-label.ptr);
   // see if we should move one character further
@@ -1930,17 +1935,18 @@ public int bndIconLabelTextPosition (NVGContext ctx, float x, float y, float w, 
 
 static void bndCaretPosition (NVGContext ctx, float x, float y, float desc, float lineHeight, const(char)* caret, NVGTextRow* rows, int nrows, int* cr, float* cx, float* cy) {
   static NVGGlyphPosition[BND_MAX_GLYPHS] glyphs;
-  int r, nglyphs;
-  for (r = 0; r < nrows && rows[r].end < caret; ++r) {}
+  int r = 0;
+  //for (r = 0; r < nrows && rows[r].end < caret; ++r) {}
+  while (r < nrows && rows[r].str.ptr+rows[r].end < caret) ++r;
   *cr = r;
   *cx = x;
   *cy = y-lineHeight-desc+r*lineHeight;
   if (nrows == 0) return;
   *cx = rows[r].minx;
-  nglyphs = ctx.textGlyphPositions(x, y, rows[r].start, rows[r].end+1, glyphs.ptr, BND_MAX_GLYPHS);
-  foreach (int i; 0..nglyphs) {
-    *cx = glyphs[i].x;
-    if (glyphs[i].str == caret) break;
+  auto rglyphs = ctx.textGlyphPositions(x, y, rows[r].row!char, glyphs[]);
+  foreach (immutable i; 0..rglyphs.length) {
+    *cx = glyphs.ptr[i].x;
+    if (glyphs.ptr[i].str == caret) break;
   }
 }
 
@@ -1979,7 +1985,8 @@ public void bndIconLabelCaret (NVGContext ctx, float x, float y, float w, float 
     float c0x, c0y, c1x, c1y;
     float desc, lh;
     static NVGTextRow[BND_MAX_ROWS] rows;
-    int nrows = ctx.textBreakLines(label.ptr, label.ptr+cend+1, w, rows.ptr, BND_MAX_ROWS);
+    auto rrows = ctx.textBreakLines(label[0..cend], w, rows[]);
+    int nrows = cast(int)rrows.length;
     ctx.textMetrics(null, &desc, &lh);
 
     bndCaretPosition(ctx, x, y, desc, lh, label.ptr+cbegin, rows.ptr, nrows, &c0r, &c0x, &c0y);

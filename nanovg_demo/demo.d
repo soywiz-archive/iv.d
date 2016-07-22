@@ -184,7 +184,7 @@ public bool isBlack() (in auto ref NVGColor col) {
   return (col.r == 0.0f && col.g == 0.0f && col.b == 0.0f && col.a == 0.0f);
 }
 
-char* cpToUTF8 (int cp, char* str) {
+char[] cpToUTF8 (int cp, char[] str) {
   int n = 0;
        if (cp < 0x80) n = 1;
   else if (cp < 0x800) n = 2;
@@ -192,17 +192,17 @@ char* cpToUTF8 (int cp, char* str) {
   else if (cp < 0x200000) n = 4;
   else if (cp < 0x4000000) n = 5;
   else if (cp <= 0x7fffffff) n = 6;
-  str[n] = '\0';
+  if (str.length < n) assert(0, "cpToUTF8: str too small");
   switch (n) {
-    case 6: str[5] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x4000000; goto case;
-    case 5: str[4] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x200000; goto case;
-    case 4: str[3] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x10000; goto case;
-    case 3: str[2] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x800; goto case;
-    case 2: str[1] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0xc0; goto case;
-    case 1: str[0] = cast(char)cp; break;
+    case 6: str.ptr[5] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x4000000; goto case;
+    case 5: str.ptr[4] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x200000; goto case;
+    case 4: str.ptr[3] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x10000; goto case;
+    case 3: str.ptr[2] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0x800; goto case;
+    case 2: str.ptr[1] = 0x80|(cp&0x3f); cp = cp>>6; cp |= 0xc0; goto case;
+    case 1: str.ptr[0] = cast(char)cp; break;
     default:
   }
-  return str;
+  return str[0..n];
 }
 
 
@@ -281,7 +281,7 @@ public void drawSearchBox (NVGContext vg, const(char)[] text, float x, float y, 
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 64));
   vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
-  vg.text(x+h*0.55f, y+h*0.55f, cpToUTF8(ICON_SEARCH, icon.ptr), null);
+  vg.text(x+h*0.55f, y+h*0.55f, cpToUTF8(ICON_SEARCH, icon));
 
   vg.fontSize(20.0f);
   vg.fontFace("sans");
@@ -294,7 +294,7 @@ public void drawSearchBox (NVGContext vg, const(char)[] text, float x, float y, 
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 32));
   vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
-  vg.text(x+w-h*0.55f, y+h*0.55f, cpToUTF8(ICON_CIRCLED_CROSS, icon.ptr), null);
+  vg.text(x+w-h*0.55f, y+h*0.55f, cpToUTF8(ICON_CIRCLED_CROSS, icon));
 }
 
 
@@ -324,7 +324,7 @@ public void drawDropDown (NVGContext vg, const(char)[] text, float x, float y, f
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 64));
   vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
-  vg.text(x+w-h*0.5f, y+h*0.5f, cpToUTF8(ICON_CHEVRON_RIGHT, icon.ptr), null);
+  vg.text(x+w-h*0.5f, y+h*0.5f, cpToUTF8(ICON_CHEVRON_RIGHT, icon));
 }
 
 
@@ -409,7 +409,7 @@ public void drawCheckBox (NVGContext vg, const(char)[] text, float x, float y, f
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 128));
   vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
-  vg.text(x+9+2, y+h*0.5f, cpToUTF8(ICON_CHECK, icon.ptr), null);
+  vg.text(x+9+2, y+h*0.5f, cpToUTF8(ICON_CHECK, icon));
 }
 
 
@@ -440,7 +440,7 @@ public void drawButton (NVGContext vg, int preicon, const(char)[] text, float x,
   if (preicon != 0) {
     vg.fontSize(h*1.3f);
     vg.fontFace("icons");
-    iw = vg.textBounds(0, 0, cpToUTF8(preicon, icon.ptr), null, null);
+    iw = vg.textBounds(0, 0, cpToUTF8(preicon, icon), null);
     iw += h*0.15f;
   }
 
@@ -449,7 +449,7 @@ public void drawButton (NVGContext vg, int preicon, const(char)[] text, float x,
     vg.fontFace("icons");
     vg.fillColor(nvgRGBA(255, 255, 255, 96));
     vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
-    vg.text(x+w*0.5f-tw*0.5f-iw*0.75f, y+h*0.5f, cpToUTF8(preicon, icon.ptr), null);
+    vg.text(x+w*0.5f-tw*0.5f-iw*0.75f, y+h*0.5f, cpToUTF8(preicon, icon));
   }
 
   vg.fontSize(20.0f);
@@ -1030,12 +1030,13 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
       vg.fill();
 
       vg.fillColor(nvgRGBA(255, 255, 255, 255));
-      vg.text(x, y, row.start, row.end);
+      vg.text(x, y, row.row!char);
 
       if (hit) {
         caretx = (mx < x+row.width/2 ? x : x+row.width);
         px = x;
-        nglyphs = vg.textGlyphPositions(x, y, row.start, row.end, glyphs.ptr, 100);
+        auto rglyphs = vg.textGlyphPositions(x, y, row.row!char, glyphs[]);
+        nglyphs = cast(int)rglyphs.length;
         foreach (immutable j; 0..nglyphs) {
           float x0 = glyphs[j].x;
           float x1 = (j+1 < nglyphs ? glyphs[j+1].x : x+row.width);
@@ -1061,11 +1062,11 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
   if (gutter) {
     import core.stdc.stdio : snprintf;
     char[16] txt;
-    snprintf(txt.ptr, (txt).sizeof, "%d", gutter);
+    auto len = snprintf(txt.ptr, (txt).sizeof, "%d", gutter);
     vg.fontSize(13.0f);
     vg.textAlign(NVGAlign.Right|NVGAlign.Middle);
 
-    vg.textBounds(gx, gy, txt.ptr, null, bounds.ptr);
+    vg.textBounds(gx, gy, txt[0..len], bounds[]);
 
     vg.beginPath();
     vg.fillColor(nvgRGBA(255, 192, 0, 255));
@@ -1073,7 +1074,7 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
     vg.fill();
 
     vg.fillColor(nvgRGBA(32, 32, 32, 255));
-    vg.text(gx, gy, txt.ptr, null);
+    vg.text(gx, gy, txt[0..len]);
   }
 
   y += 20.0f;
@@ -1082,7 +1083,7 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
   vg.textAlign(NVGAlign.Left|NVGAlign.Top);
   vg.textLineHeight(1.2f);
 
-  vg.textBoxBounds(x, y, 150, "Hover your mouse over the text to see calculated caret position.", null, bounds.ptr);
+  vg.textBoxBounds(x, y, 150, "Hover your mouse over the text to see calculated caret position.", bounds[]);
 
   // Fade the tooltip out when close to it.
   gx = fabsf((mx-(bounds[0]+bounds[2])*0.5f)/(bounds[0]-bounds[2]));
@@ -1101,7 +1102,7 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
   vg.fill();
 
   vg.fillColor(nvgRGBA(0, 0, 0, 220));
-  vg.textBox(x, y, 150, "Hover your mouse over the text to see calculated caret position.", null);
+  vg.textBox(x, y, 150, "Hover your mouse over the text to see calculated caret position.");
 
   vg.restore();
 }

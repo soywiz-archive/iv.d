@@ -140,13 +140,32 @@ struct NVGGlyphPosition {
 
 ///
 struct NVGTextRow {
-  const(char)* start; /// Pointer to the input text where the row starts.
-  const(char)* end;   /// Pointer to the input text where the row ends (one past the last character).
-  const(char)* next;  /// Pointer to the beginning of the next row.
-  float width;        /// Logical width of the row.
-  float minx, maxx;   /// Actual bounds of the row. Logical with and bounds can differ because of kerning and some parts over extending.
-const pure nothrow @trusted @nogc:
-  @property int nextpos () { pragma(inline, true); return cast(int)(cast(size_t)next-cast(size_t)start); } ///
+  const(char)[] str;
+  const(dchar)[] dstr;
+  int start;        /// Index in the input text where the row starts.
+  int end;          /// Index in the input text where the row ends (one past the last character).
+  float width;      /// Logical width of the row.
+  float minx, maxx; /// Actual bounds of the row. Logical with and bounds can differ because of kerning and some parts over extending.
+  @property bool isChar () const pure nothrow @trusted @nogc { pragma(inline, true); return (str.ptr !is null); } /// Is this char or dchar row?
+  /// Get rest of the string.
+  @property const(T)[] rest(T) () const pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+    pragma(inline, true);
+    static if (is(T == char)) return (end <= str.length ? str[end..$] : null);
+    else return (end <= dstr.length ? dstr[end..$] : null);
+  }
+  /// Get current row.
+  @property const(T)[] row(T) () const pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+    pragma(inline, true);
+    static if (is(T == char)) return str[start..end]; else return dstr[start..end];
+  }
+  @property const(T)[] string(T) () const pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+    pragma(inline, true);
+    static if (is(T == char)) return str; else return dstr;
+  }
+  @property void string(T) (const(T)[] v) pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+    pragma(inline, true);
+    static if (is(T == char)) str = v; else dstr = v;
+  }
 }
 
 ///
@@ -2598,7 +2617,7 @@ float nvg__getFontScale (NVGstate* state) {
 }
 
 void nvg__flushTextTexture (NVGContext ctx) {
-  int[4] dirty;
+  int[4] dirty = void;
   if (fonsValidateTexture(ctx.fs, dirty.ptr)) {
     int fontImage = ctx.fontImages[ctx.fontImageIdx];
     // Update texture
@@ -2650,11 +2669,8 @@ void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) {
   ctx.textTriCount += nverts/3;
 }
 
-/// Draws text string at specified location. If end is specified only the sub-string up to the end is drawn.
-public float text (NVGContext ctx, float x, float y, const(char)[] str) { return (str.length ? ctx.text(x, y, str.ptr, str.ptr+str.length) : x); }
-
-/// Ditto.
-public float text (NVGContext ctx, float x, float y, const(char)* str, const(char)* end) {
+/// Draws text string at specified location. Returns next x position.
+public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
   FONStextIter iter, prevIter;
   FONSquad q;
@@ -2664,9 +2680,8 @@ public float text (NVGContext ctx, float x, float y, const(char)* str, const(cha
   int cverts = 0;
   int nverts = 0;
 
-  if (end is null) end = str+strlen(str);
-
   if (state.fontId == FONS_INVALID) return x;
+  if (str.length == 0) return x;
 
   fonsSetSize(ctx.fs, state.fontSize*scale);
   fonsSetSpacing(ctx.fs, state.letterSpacing*scale);
@@ -2674,11 +2689,11 @@ public float text (NVGContext ctx, float x, float y, const(char)* str, const(cha
   fonsSetAlign(ctx.fs, state.textAlign);
   fonsSetFont(ctx.fs, state.fontId);
 
-  cverts = nvg__maxi(2, cast(int)(end-str))*6; // conservative estimate.
+  cverts = nvg__maxi(2, cast(int)(str.length))*6; // conservative estimate
   verts = nvg__allocTempVerts(ctx, cverts);
   if (verts is null) return x;
 
-  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str, end);
+  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     float[4*2] c = void;
@@ -2709,7 +2724,7 @@ public float text (NVGContext ctx, float x, float y, const(char)* str, const(cha
     }
   }
 
-  // TODO: add back-end bit to do this just once per frame.
+  // TODO: add back-end bit to do this just once per frame
   nvg__flushTextTexture(ctx);
 
   nvg__renderText(ctx, verts, nverts);
@@ -2719,15 +2734,10 @@ public float text (NVGContext ctx, float x, float y, const(char)* str, const(cha
 
 /** Draws multi-line text string at specified location wrapped at the specified width. If end is specified only the sub-string up to the end is drawn.
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
- * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
- */
-public void textBox (NVGContext ctx, float x, float y, float breakRowWidth, const(char)[] str) { if (str.length) ctx.textBox(x, y, breakRowWidth, str.ptr, str.ptr+str.length); }
-
-/// Ditto.
-public void textBox (NVGContext ctx, float x, float y, float breakRowWidth, const(char)* str, const(char)* end) {
+ * Words longer than the max width are slit at nearest character (i.e. no hyphenation). */
+public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) if (is(T == char) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
-  NVGTextRow[2] rows = void;
-  int nrows = 0, i;
+  NVGTextRow[2] rows;
   int oldAlign = state.textAlign;
   int haling = state.textAlign&(NVGAlign.Left|NVGAlign.Center|NVGAlign.Right);
   int valign = state.textAlign&(NVGAlign.Top|NVGAlign.Middle|NVGAlign.Bottom|NVGAlign.Baseline);
@@ -2739,18 +2749,17 @@ public void textBox (NVGContext ctx, float x, float y, float breakRowWidth, cons
 
   state.textAlign = NVGAlign.Left|valign;
 
-  while ((nrows = ctx.textBreakLines(str, end, breakRowWidth, rows.ptr, 2)) != 0) {
-    for (i = 0; i < nrows; i++) {
-      NVGTextRow* row = &rows[i];
-      if (haling&NVGAlign.Left)
-        ctx.text(x, y, row.start, row.end);
-      else if (haling&NVGAlign.Center)
-        ctx.text(x+breakRowWidth*0.5f-row.width*0.5f, y, row.start, row.end);
-      else if (haling&NVGAlign.Right)
-        ctx.text(x+breakRowWidth-row.width, y, row.start, row.end);
+  for (;;) {
+    auto rres = ctx.textBreakLines(str, breakRowWidth, rows[]);
+    //{ import core.stdc.stdio : printf; printf("slen=%u; rlen=%u; bw=%f\n", cast(uint)str.length, cast(uint)rres.length, cast(double)breakRowWidth); }
+    if (rres.length == 0) break;
+    foreach (ref row; rres) {
+           if (haling&NVGAlign.Left) ctx.text(x, y, row.row!T);
+      else if (haling&NVGAlign.Center) ctx.text(x+breakRowWidth*0.5f-row.width*0.5f, y, row.row!T);
+      else if (haling&NVGAlign.Right) ctx.text(x+breakRowWidth-row.width, y, row.row!T);
       y += lineh*state.lineHeight;
     }
-    str = rows[nrows-1].next;
+    str = rres[$-1].rest!T;
   }
 
   state.textAlign = oldAlign;
@@ -2768,33 +2777,20 @@ private template isGoodPositionDelegate(DG) {
 /** Calculates the glyph x positions of the specified text. If end is specified only the sub-string will be used.
  * Measured values are returned in local coordinate space.
  */
-public int textGlyphPositions (NVGContext ctx, float x, float y, const(char)[] str, NVGGlyphPosition[] positions) {
-  if (str.length == 0 || positions.length == 0) return 0;
+public NVGGlyphPosition[] textGlyphPositions(T) (NVGContext ctx, float x, float y, const(T)[] str, NVGGlyphPosition[] positions) if (is(T == char) || is(T == dchar)) {
+  if (str.length == 0 || positions.length == 0) return positions[0..0];
   size_t posnum;
-  return ctx.textGlyphPositions(x, y, str.ptr, str.ptr+str.length, (in ref NVGGlyphPosition pos) {
+  auto len = ctx.textGlyphPositions(x, y, str, (in ref NVGGlyphPosition pos) {
     positions.ptr[posnum++] = pos;
     return (posnum < positions.length);
   });
+  return positions[0..len];
 }
 
 /// Ditto.
-public int textGlyphPositions(DG) (NVGContext ctx, float x, float y, const(char)[] str, scope DG dg) if (isGoodPositionDelegate!DG) {
-  if (str.length == 0) return 0;
-  return ctx.textGlyphPositions(x, y, str.ptr, str.ptr+str.length, dg);
-}
-
-/// Ditto.
-public int textGlyphPositions (NVGContext ctx, float x, float y, const(char)* str, const(char)* end, NVGGlyphPosition* positions, int maxPositions) {
-  if (maxPositions < 1 || str is null) return 0;
-  size_t posnum;
-  return ctx.textGlyphPositions(x, y, str, end, (in ref NVGGlyphPosition pos) {
-    positions[posnum++] = pos;
-    return (posnum < maxPositions);
-  });
-}
-
-/// Ditto.
-public int textGlyphPositions(DG) (NVGContext ctx, float x, float y, const(char)* str, const(char)* end, scope DG dg) if (isGoodPositionDelegate!DG) {
+public int textGlyphPositions(T, DG) (NVGContext ctx, float x, float y, const(T)[] str, scope DG dg)
+if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
+{
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
 
@@ -2805,11 +2801,7 @@ public int textGlyphPositions(DG) (NVGContext ctx, float x, float y, const(char)
   FONSquad q;
   int npos = 0;
 
-  if (state.fontId == FONS_INVALID) return 0;
-
-  if (end is null) end = str+strlen(str);
-
-  if (str == end) return 0;
+  if (str.length == 0) return 0;
 
   fonsSetSize(ctx.fs, state.fontSize*scale);
   fonsSetSpacing(ctx.fs, state.letterSpacing*scale);
@@ -2817,7 +2809,7 @@ public int textGlyphPositions(DG) (NVGContext ctx, float x, float y, const(char)
   fonsSetAlign(ctx.fs, state.textAlign);
   fonsSetFont(ctx.fs, state.fontId);
 
-  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str, end);
+  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     if (iter.prevGlyphIndex < 0 && nvg__allocTextAtlas(ctx)) { // can not retrieve glyph?
@@ -2837,15 +2829,6 @@ public int textGlyphPositions(DG) (NVGContext ctx, float x, float y, const(char)
   return npos;
 }
 
-/** Breaks the specified text into lines. If end is specified only the sub-string will be used.
- * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
- * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
- */
-public int textBreakLines (NVGContext ctx, const(char)[] str, float breakRowWidth, NVGTextRow* rows, int maxRows) {
-  if (str.length == 0) str = "";
-  return ctx.textBreakLines(str.ptr, str.ptr+str.length, breakRowWidth, rows, maxRows);
-}
-
 private template isGoodRowDelegate(DG) {
   private DG dg;
   static if (is(typeof({ NVGTextRow row; bool res = dg(row); })) ||
@@ -2855,24 +2838,25 @@ private template isGoodRowDelegate(DG) {
     enum isGoodRowDelegate = false;
 }
 
-/// Ditto.
-public int textBreakLines(DG) (NVGContext ctx, const(char)[] str, float breakRowWidth, scope DG dg) if (isGoodRowDelegate!DG) {
-  if (str.length == 0) str = "";
-  return ctx.textBreakLines(str.ptr, str.ptr+str.length, breakRowWidth, dg);
-}
-
-/// Ditto.
-public int textBreakLines (NVGContext ctx, const(char)* str, const(char)* end, float breakRowWidth, NVGTextRow* rows, int maxRows) {
-  if (maxRows <= 0) return 0;
+/** Breaks the specified text into lines.
+ * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
+ * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
+ */
+public NVGTextRow[] textBreakLines(T) (NVGContext ctx, const(T)[] str, float breakRowWidth, NVGTextRow[] rows) if (is(T == char) || is(T == dchar)) {
+  if (rows.length == 0) return rows;
+  if (rows.length > int.max-1) rows = rows[0..int.max-1];
   int nrow = 0;
-  return ctx.textBreakLines(str, end, breakRowWidth, (in ref NVGTextRow row) {
+  auto count = ctx.textBreakLines(str, breakRowWidth, (in ref NVGTextRow row) {
     rows[nrow++] = row;
-    return (nrow < maxRows);
+    return (nrow < rows.length);
   });
+  return rows[0..count];
 }
 
 /// Ditto.
-public int textBreakLines(DG) (NVGContext ctx, const(char)* str, const(char)* end, float breakRowWidth, scope DG dg) if (isGoodRowDelegate!DG) {
+public int textBreakLines(T, DG) (NVGContext ctx, const(T)[] str, float breakRowWidth, scope DG dg)
+if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
+{
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
 
@@ -2892,23 +2876,19 @@ public int textBreakLines(DG) (NVGContext ctx, const(char)* str, const(char)* en
   float rowWidth = 0;
   float rowMinX = 0;
   float rowMaxX = 0;
-  const(char)* rowStart = null;
-  const(char)* rowEnd = null;
-  const(char)* wordStart = null;
+  int rowStart = 0;
+  int rowEnd = 0;
+  int wordStart = 0;
   float wordStartX = 0;
   float wordMinX = 0;
-  const(char)* breakEnd = null;
+  int breakEnd = 0;
   float breakWidth = 0;
   float breakMaxX = 0;
   int type = NVGcodepointType.Space, ptype = NVGcodepointType.Space;
   uint pcodepoint = 0;
 
   if (state.fontId == FONS_INVALID) return 0;
-  if (str is null || dg is null) return 0;
-
-  if (end is null) end = str+strlen(str);
-
-  if (str is end) return 0;
+  if (str.length == 0 || dg is null) return 0;
 
   fonsSetSize(ctx.fs, state.fontSize*scale);
   fonsSetSpacing(ctx.fs, state.letterSpacing*scale);
@@ -2918,7 +2898,13 @@ public int textBreakLines(DG) (NVGContext ctx, const(char)* str, const(char)* en
 
   breakRowWidth *= scale;
 
-  fonsTextIterInit(ctx.fs, &iter, 0, 0, str, end);
+  enum Phase {
+    Normal, // searching for breaking point
+    SkipBlanks, // skip leading blanks
+  }
+  Phase phase = Phase.SkipBlanks; // don't skip blanks on first line
+
+  fonsTextIterInit(ctx.fs, &iter, 0, 0, str);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     if (iter.prevGlyphIndex < 0 && nvg__allocTextAtlas(ctx)) { // can not retrieve glyph?
@@ -2935,126 +2921,115 @@ public int textBreakLines(DG) (NVGContext ctx, const(char)* str, const(char)* en
         type = NVGcodepointType.Space;
         break;
       case 10: // \n
-        type = pcodepoint == 13 ? NVGcodepointType.Space : NVGcodepointType.NewLine;
+        type = (pcodepoint == 13 ? NVGcodepointType.Space : NVGcodepointType.NewLine);
         break;
       case 13: // \r
-        type = pcodepoint == 10 ? NVGcodepointType.Space : NVGcodepointType.NewLine;
+        type = (pcodepoint == 10 ? NVGcodepointType.Space : NVGcodepointType.NewLine);
         break;
       case 0x0085: // NEL
+      case 0x2028: // Line Separator
+      case 0x2029: // Paragraph Separator
         type = NVGcodepointType.NewLine;
         break;
       default:
         type = NVGcodepointType.Char;
         break;
     }
-
-    if (type == NVGcodepointType.NewLine) {
-      // Always handle new lines.
-      NVGTextRow row = void; //WARNING!
-      row.start = (rowStart !is null ? rowStart : iter.str);
-      row.end = (rowEnd !is null ? rowEnd : iter.str);
-      row.width = rowWidth*invscale;
-      row.minx = rowMinX*invscale;
-      row.maxx = rowMaxX*invscale;
-      row.next = iter.next;
-      ++nrows;
-      static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
-      // Set null break point
+    if (phase == Phase.SkipBlanks) {
+      if (type == NVGcodepointType.Space) continue;
+      // fix row start
+      rowStart = cast(int)(iter.string!T-str.ptr);
+      rowEnd = rowStart;
+      rowStartX = iter.x;
+      rowWidth = iter.nextx-rowStartX; // q.x1-rowStartX;
+      rowMinX = q.x0-rowStartX;
+      rowMaxX = q.x1-rowStartX;
+      wordStart = rowStart;
+      wordStartX = iter.x;
+      wordMinX = q.x0-rowStartX;
       breakEnd = rowStart;
       breakWidth = 0.0;
       breakMaxX = 0.0;
-      // Indicate to skip the white space at the beginning of the row.
-      rowStart = null;
-      rowEnd = null;
-      rowWidth = 0;
-      rowMinX = rowMaxX = 0;
+      phase = Phase.Normal;
+    }
+
+    if (type == NVGcodepointType.NewLine) {
+      // always handle new lines
+      NVGTextRow row;
+      row.string!T = str;
+      row.start = rowStart;
+      row.end = rowEnd;
+      row.width = rowWidth*invscale;
+      row.minx = rowMinX*invscale;
+      row.maxx = rowMaxX*invscale;
+      ++nrows;
+      static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
+      phase = Phase.SkipBlanks;
     } else {
-      if (rowStart is null) {
-        // Skip white space until the beginning of the line
-        if (type == NVGcodepointType.Char) {
-          // The current char is the row so far
+      float nextWidth = iter.nextx-rowStartX;
+      // track last non-white space character
+      if (type == NVGcodepointType.Char) {
+        rowEnd = cast(int)(iter.nextp!T-str.ptr);
+        rowWidth = iter.nextx-rowStartX;
+        rowMaxX = q.x1-rowStartX;
+      }
+      // track last end of a word
+      if (ptype == NVGcodepointType.Char && type == NVGcodepointType.Space) {
+        breakEnd = cast(int)(iter.string!T-str.ptr);
+        breakWidth = rowWidth;
+        breakMaxX = rowMaxX;
+      }
+      // track last beginning of a word
+      if (ptype == NVGcodepointType.Space && type == NVGcodepointType.Char) {
+        wordStart = cast(int)(iter.string!T-str.ptr);
+        wordStartX = iter.x;
+        wordMinX = q.x0-rowStartX;
+      }
+      // break to new line when a character is beyond break width
+      if (type == NVGcodepointType.Char && nextWidth > breakRowWidth) {
+        // the run length is too long, need to break to new line
+        NVGTextRow row;
+        row.string!T = str;
+        if (breakEnd == rowStart) {
+          // the current word is longer than the row length, just break it from here
+          row.start = rowStart;
+          row.end = cast(int)(iter.string!T-str.ptr);
+          row.width = rowWidth*invscale;
+          row.minx = rowMinX*invscale;
+          row.maxx = rowMaxX*invscale;
+          ++nrows;
+          static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
           rowStartX = iter.x;
-          rowStart = iter.str;
-          rowEnd = iter.next;
-          rowWidth = iter.nextx-rowStartX; // q.x1-rowStartX;
+          rowStart = cast(int)(iter.string!T-str.ptr);
+          rowEnd = cast(int)(iter.nextp!T-str.ptr);
+          rowWidth = iter.nextx-rowStartX;
           rowMinX = q.x0-rowStartX;
           rowMaxX = q.x1-rowStartX;
-          wordStart = iter.str;
+          wordStart = rowStart;
           wordStartX = iter.x;
           wordMinX = q.x0-rowStartX;
-          // Set null break point
-          breakEnd = rowStart;
-          breakWidth = 0.0;
-          breakMaxX = 0.0;
-        }
-      } else {
-        float nextWidth = iter.nextx-rowStartX;
-
-        // track last non-white space character
-        if (type == NVGcodepointType.Char) {
-          rowEnd = iter.next;
+        } else {
+          // break the line from the end of the last word, and start new line from the beginning of the new
+          //{ import core.stdc.stdio : printf; printf("rowStart=%u; rowEnd=%u; breakEnd=%u; len=%u\n", rowStart, rowEnd, breakEnd, cast(uint)str.length); }
+          row.start = rowStart;
+          row.end = breakEnd;
+          row.width = breakWidth*invscale;
+          row.minx = rowMinX*invscale;
+          row.maxx = breakMaxX*invscale;
+          ++nrows;
+          static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
+          rowStartX = wordStartX;
+          rowStart = wordStart;
+          rowEnd = cast(int)(iter.nextp!T-str.ptr);
           rowWidth = iter.nextx-rowStartX;
+          rowMinX = wordMinX;
           rowMaxX = q.x1-rowStartX;
+          // no change to the word start
         }
-        // track last end of a word
-        if (ptype == NVGcodepointType.Char && type == NVGcodepointType.Space) {
-          breakEnd = iter.str;
-          breakWidth = rowWidth;
-          breakMaxX = rowMaxX;
-        }
-        // track last beginning of a word
-        if (ptype == NVGcodepointType.Space && type == NVGcodepointType.Char) {
-          wordStart = iter.str;
-          wordStartX = iter.x;
-          wordMinX = q.x0-rowStartX;
-        }
-
-        // Break to new line when a character is beyond break width.
-        if (type == NVGcodepointType.Char && nextWidth > breakRowWidth) {
-          // The run length is too long, need to break to new line.
-          NVGTextRow row = void; //WARNING!
-          if (breakEnd == rowStart) {
-            // The current word is longer than the row length, just break it from here.
-            row.start = rowStart;
-            row.end = iter.str;
-            row.width = rowWidth*invscale;
-            row.minx = rowMinX*invscale;
-            row.maxx = rowMaxX*invscale;
-            row.next = iter.str;
-            ++nrows;
-            static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
-            rowStartX = iter.x;
-            rowStart = iter.str;
-            rowEnd = iter.next;
-            rowWidth = iter.nextx-rowStartX;
-            rowMinX = q.x0-rowStartX;
-            rowMaxX = q.x1-rowStartX;
-            wordStart = iter.str;
-            wordStartX = iter.x;
-            wordMinX = q.x0-rowStartX;
-          } else {
-            // Break the line from the end of the last word, and start new line from the beginning of the new.
-            row.start = rowStart;
-            row.end = breakEnd;
-            row.width = breakWidth*invscale;
-            row.minx = rowMinX*invscale;
-            row.maxx = breakMaxX*invscale;
-            row.next = wordStart;
-            ++nrows;
-            static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
-            rowStartX = wordStartX;
-            rowStart = wordStart;
-            rowEnd = iter.next;
-            rowWidth = iter.nextx-rowStartX;
-            rowMinX = wordMinX;
-            rowMaxX = q.x1-rowStartX;
-            // No change to the word start
-          }
-          // Set null break point
-          breakEnd = rowStart;
-          breakWidth = 0.0;
-          breakMaxX = 0.0;
-        }
+        // set null break point
+        breakEnd = rowStart;
+        breakWidth = 0.0;
+        breakMaxX = 0.0;
       }
     }
 
@@ -3062,15 +3037,15 @@ public int textBreakLines(DG) (NVGContext ctx, const(char)* str, const(char)* en
     ptype = type;
   }
 
-  // Break the line from the end of the last word, and start new line from the beginning of the new.
-  if (rowStart !is null) {
-    NVGTextRow row = void; //WARNING!
+  // break the line from the end of the last word, and start new line from the beginning of the new
+  if (rowStart < str.length && rowEnd > rowStart) {
+    NVGTextRow row;
+    row.string!T = str;
     row.start = rowStart;
     row.end = rowEnd;
     row.width = rowWidth*invscale;
     row.minx = rowMinX*invscale;
     row.maxx = rowMaxX*invscale;
-    row.next = end;
     ++nrows;
     static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
   }
@@ -3146,7 +3121,7 @@ public:
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null); }
 
   /// Add chars.
-  void put (const(char)[] str...) {
+  void put(T) (const(T)[] str...) if (is(T == char) || is(T == dchar)) {
     if (ctx !is null) fsiter.put(str[]);
   }
 
@@ -3166,6 +3141,36 @@ public:
       bounds[] = 0;
     }
   }
+
+  /// Return current horizontal text bounds.
+  void getHBounds (out float xmin, out float xmax) {
+    float[4] b = void;
+    getBounds(b[]);
+    xmin = b.ptr[0];
+    xmax = b.ptr[2];
+  }
+
+  /// Return current vertical text bounds.
+  void getVBounds (out float ymin, out float ymax) {
+    float[4] b = void;
+    getBounds(b[]);
+    ymin = b.ptr[1];
+    ymax = b.ptr[3];
+  }
+
+  /// Return current horizontal text size.
+  float getHTotal () {
+    float[4] b = void;
+    getBounds(b[]);
+    return b.ptr[2]-b.ptr[0];
+  }
+
+  /// Return current vertical text size.
+  float getVTotal () {
+    float[4] b = void;
+    getBounds(b[]);
+    return b.ptr[3]-b.ptr[1];
+  }
 }
 
 /** Measures the specified text string. Parameter bounds should be a pointer to float[4],
@@ -3173,25 +3178,16 @@ public:
  * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
  * Measured values are returned in local coordinate space.
  */
-public float textBounds (NVGContext ctx, float x, float y, const(char)[] str, float[] bounds) {
-  if (str.length == 0) str = "";
-  float[4] bnd = void;
-  auto res = ctx.textBounds(x, y, str.ptr, str.ptr+str.length, bnd.ptr);
-  for (int i = 0; i < 4; ++i) {
-    if (i >= bounds.length) break;
-    bounds.ptr[i] = bnd[i];
-  }
-  return res;
-}
-
-/// Ditto.
-public float textBounds (NVGContext ctx, float x, float y, const(char)* str, const(char)* end, float* bounds) {
+public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
   float width;
 
-  if (state.fontId == FONS_INVALID) return 0;
+  if (state.fontId == FONS_INVALID) {
+    bounds[] = 0;
+    return 0;
+  }
 
   fonsSetSize(ctx.fs, state.fontSize*scale);
   fonsSetSpacing(ctx.fs, state.letterSpacing*scale);
@@ -3199,37 +3195,25 @@ public float textBounds (NVGContext ctx, float x, float y, const(char)* str, con
   fonsSetAlign(ctx.fs, state.textAlign);
   fonsSetFont(ctx.fs, state.fontId);
 
-  width = fonsTextBounds(ctx.fs, x*scale, y*scale, str, end, bounds);
-  if (bounds !is null) {
-    // Use line bounds for height.
-    fonsLineBounds(ctx.fs, y*scale, &bounds[1], &bounds[3]);
-    bounds[0] *= invscale;
-    bounds[1] *= invscale;
-    bounds[2] *= invscale;
-    bounds[3] *= invscale;
+  float[4] b = void;
+  width = fonsTextBounds(ctx.fs, x*scale, y*scale, str, b[]);
+  if (bounds.length) {
+    // use line bounds for height
+    fonsLineBounds(ctx.fs, y*scale, b.ptr+1, b.ptr+3);
+    if (bounds.length > 0) bounds.ptr[0] = b.ptr[0]*invscale;
+    if (bounds.length > 1) bounds.ptr[1] = b.ptr[1]*invscale;
+    if (bounds.length > 2) bounds.ptr[2] = b.ptr[2]*invscale;
+    if (bounds.length > 3) bounds.ptr[3] = b.ptr[3]*invscale;
   }
   return width*invscale;
 }
 
 /// Ditto.
-public void textBoxBounds (NVGContext ctx, float x, float y, float breakRowWidth, const(char)[] str, float[] bounds) {
-  if (bounds.length == 0) return;
-  if (str.length == 0) str = "";
-  float[4] bnd = void;
-  ctx.textBoxBounds(x, y, breakRowWidth, str.ptr, str.ptr+str.length, bnd.ptr);
-  for (int i = 0; i < 4; ++i) {
-    if (i >= bounds.length) break;
-    bounds.ptr[i] = bnd[i];
-  }
-}
-
-/// Ditto.
-public void textBoxBounds (NVGContext ctx, float x, float y, float breakRowWidth, const(char)* str, const(char)* end, float* bounds) {
+public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
   NVGTextRow[2] rows;
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
-  int nrows = 0;
   int oldAlign = state.textAlign;
   int haling = state.textAlign&(NVGAlign.Left|NVGAlign.Center|NVGAlign.Right);
   int valign = state.textAlign&(NVGAlign.Top|NVGAlign.Middle|NVGAlign.Bottom|NVGAlign.Baseline);
@@ -3237,7 +3221,7 @@ public void textBoxBounds (NVGContext ctx, float x, float y, float breakRowWidth
   float minx, miny, maxx, maxy;
 
   if (state.fontId == FONS_INVALID) {
-    if (bounds !is null) bounds[0] = bounds[1] = bounds[2] = bounds[3] = 0.0f;
+    bounds[] = 0;
     return;
   }
 
@@ -3257,11 +3241,12 @@ public void textBoxBounds (NVGContext ctx, float x, float y, float breakRowWidth
   rminy *= invscale;
   rmaxy *= invscale;
 
-  while ((nrows = ctx.textBreakLines(str, end, breakRowWidth, rows.ptr, 2)) != 0) {
-    foreach (int i; 0..nrows) {
-      NVGTextRow* row = &rows[i];
+  for (;;) {
+    auto rres = ctx.textBreakLines(str, breakRowWidth, rows[]);
+    if (rres.length == 0) break;
+    foreach (ref row; rres) {
       float rminx, rmaxx, dx = 0;
-      // Horizontal bounds
+      // horizontal bounds
            if (haling&NVGAlign.Left) dx = 0;
       else if (haling&NVGAlign.Center) dx = breakRowWidth*0.5f-row.width*0.5f;
       else if (haling&NVGAlign.Right) dx = breakRowWidth-row.width;
@@ -3269,22 +3254,21 @@ public void textBoxBounds (NVGContext ctx, float x, float y, float breakRowWidth
       rmaxx = x+row.maxx+dx;
       minx = nvg__minf(minx, rminx);
       maxx = nvg__maxf(maxx, rmaxx);
-      // Vertical bounds.
+      // vertical bounds
       miny = nvg__minf(miny, y+rminy);
       maxy = nvg__maxf(maxy, y+rmaxy);
-
       y += lineh*state.lineHeight;
     }
-    str = rows[nrows-1].next;
+    str = rres[$-1].rest!T;
   }
 
   state.textAlign = oldAlign;
 
-  if (bounds !is null) {
-    bounds[0] = minx;
-    bounds[1] = miny;
-    bounds[2] = maxx;
-    bounds[3] = maxy;
+  if (bounds.length) {
+    if (bounds.length > 0) bounds.ptr[0] = minx;
+    if (bounds.length > 1) bounds.ptr[1] = miny;
+    if (bounds.length > 2) bounds.ptr[2] = maxx;
+    if (bounds.length > 3) bounds.ptr[3] = maxy;
   }
 }
 
@@ -3408,65 +3392,33 @@ struct FONStextIter {
   short isize, iblur;
   FONSfont* font;
   int prevGlyphIndex;
+  // for char
   const(char)* str;
   const(char)* next;
   const(char)* end;
   uint utf8state;
+  // for dchar
+  const(dchar)* dstr;
+  const(dchar)* dnext;
+  const(dchar)* dend;
+  // to choose between states, check if `str` is null
+  @property bool isChar () const pure nothrow @safe @nogc { pragma(inline, true); return (str !is null); }
+  @property const(T)* string(T) () const pure nothrow @safe @nogc if (is(T == char) || is(T == dchar)) {
+    pragma(inline, true);
+    static if (is(T == char)) return str; else return dstr;
+  }
+  @property const(T)* nextp(T) () const pure nothrow @safe @nogc if (is(T == char) || is(T == dchar)) {
+    pragma(inline, true);
+    static if (is(T == char)) return next; else return dnext;
+  }
+  @property const(T)* endp(T) () const pure nothrow @safe @nogc if (is(T == char) || is(T == dchar)) {
+    pragma(inline, true);
+    static if (is(T == char)) return end; else return dend;
+  }
 }
 
 
-// Constructor and destructor.
-//!FONScontext* fonsCreateInternal(FONSparams* params);
-//!void fonsDeleteInternal(FONScontext* s);
-
-//!void fonsSetErrorCallback(FONScontext* s, void (*callback)(void* uptr, int error, int val), void* uptr);
-// Returns current atlas size.
-//!void fonsGetAtlasSize(FONScontext* s, int* width, int* height);
-// Expands the atlas size.
-//!int fonsExpandAtlas(FONScontext* s, int width, int height);
-// Resets the whole stash.
-//!int fonsResetAtlas(FONScontext* stash, int width, int height);
-
-// Add fonts
-//!int fonsAddFont(FONScontext* s, const(char)[] name, const(char)[] path);
-//!int fonsAddFontMem(FONScontext* s, const(char)[] name, ubyte* data, int ndata, int freeData);
-//!int fonsGetFontByName(FONScontext* s, const(char)[] name);
-
-// State handling
-//!void fonsPushState(FONScontext* s);
-//!void fonsPopState(FONScontext* s);
-//!void fonsClearState(FONScontext* s);
-
-// State setting
-//!void fonsSetSize(FONScontext* s, float size);
-//!void fonsSetColor(FONScontext* s, uint color);
-//!void fonsSetSpacing(FONScontext* s, float spacing);
-//!void fonsSetBlur(FONScontext* s, float blur);
-//!void fonsSetAlign(FONScontext* s, int align);
-//!void fonsSetFont(FONScontext* s, int font);
-
-// Draw text
-//!float fonsDrawText(FONScontext* s, float x, float y, const(char)* string, const(char)* end);
-
-// Measure text
-//!float fonsTextBounds(FONScontext* s, float x, float y, const(char)* string, const(char)* end, float* bounds);
-//!void fonsLineBounds(FONScontext* s, float y, float* miny, float* maxy);
-//!void fonsVertMetrics(FONScontext* s, float* ascender, float* descender, float* lineh);
-
-// Text iterator
-//!int fonsTextIterInit(FONScontext* stash, FONStextIter* iter, float x, float y, const(char)* str, const(char)* end);
-//!int fonsTextIterNext(FONScontext* stash, FONStextIter* iter, struct FONSquad* quad);
-
-// Pull texture changes
-//!const(ubyte)* fonsGetTextureData(FONScontext* stash, int* width, int* height);
-//!int fonsValidateTexture(FONScontext* s, int* dirty);
-
-// Draws the stash texture for debugging
-//!void fonsDrawDebug(FONScontext* s, float x, float y);
-
-
 // ////////////////////////////////////////////////////////////////////////// //
-//#define FONS_NOTUSED(v)  (void)sizeof(v)
 //static if (!HasAST) version = nanovg_use_freetype_ii_x;
 
 /*version(nanovg_use_freetype_ii_x)*/ static if (!HasAST) {
@@ -3492,7 +3444,6 @@ void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) {
 
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) {
   FT_Error ftError;
-  //FONS_NOTUSED(context);
   //font.font.userdata = stash;
   ftError = FT_New_Memory_Face(ftLibrary, cast(const(FT_Byte)*)data, dataSize, 0, &font.font);
   return ftError == 0;
@@ -3515,7 +3466,6 @@ int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) {
 int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) {
   FT_Error ftError;
   FT_GlyphSlot ftGlyph;
-  //FONS_NOTUSED(scale);
   //version(nanovg_ignore_mono) enum exflags = 0;
   //else version(nanovg_ft_mono) enum exflags = FT_LOAD_MONOCHROME; else enum exflags = 0;
   uint exflags = (font.mono ? FT_LOAD_MONOCHROME : 0);
@@ -3536,10 +3486,6 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
 
 void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) {
   FT_GlyphSlot ftGlyph = font.font.glyph;
-  //FONS_NOTUSED(outWidth);
-  //FONS_NOTUSED(outHeight);
-  //FONS_NOTUSED(scaleX);
-  //FONS_NOTUSED(scaleY);
   //FONS_NOTUSED(glyph); // glyph has already been loaded by fons__tt_buildGlyphBitmap
   //version(nanovg_ignore_mono) enum RenderAA = true;
   //else version(nanovg_ft_mono) enum RenderAA = false;
@@ -3583,18 +3529,11 @@ int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) 
 
 } else {
 // ////////////////////////////////////////////////////////////////////////// //
-//static void* fons__tmpalloc(size_t size, void* up);
-//static void fons__tmpfree(void* ptr, void* up);
-//#define STBTT_malloc(x, u)    fons__tmpalloc(x, u)
-//#define STBTT_free(x, u)      fons__tmpfree(x, u)
-//#include "stb_truetype.h"
-
 struct FONSttFontImpl {
   stbtt_fontinfo font;
 }
 
 int fons__tt_init (FONScontext* context) {
-  //FONS_NOTUSED(context);
   return 1;
 }
 
@@ -3603,7 +3542,6 @@ void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) {
 
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) {
   int stbError;
-  //FONS_NOTUSED(dataSize);
   font.font.userdata = context;
   stbError = stbtt_InitFont(&font.font, data, 0);
   return stbError;
@@ -3622,7 +3560,6 @@ int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) {
 }
 
 int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) {
-  //FONS_NOTUSED(size);
   stbtt_GetGlyphHMetrics(&font.font, glyph, advance, lsb);
   stbtt_GetGlyphBitmapBox(&font.font, glyph, scale, scale, x0, y0, x1, y1);
   return 1;
@@ -3630,19 +3567,6 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
 
 void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) {
   stbtt_MakeGlyphBitmap(&font.font, output, outWidth, outHeight, outStride, scaleX, scaleY, glyph);
-  /*
-  version(nanovg_ft_mono) {
-    auto p = output;
-    foreach (immutable y; 0..outHeight) {
-      auto l = p;
-      foreach (immutable x; 0..outWidth) {
-        if (*l < 128) *l = 0; else *l = 255;
-        ++l;
-      }
-      p += (outStride ? outStride : outWidth);
-    }
-  }
-  */
 }
 
 int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) {
@@ -3756,8 +3680,6 @@ void* fons__tmpalloc (size_t size, void* up) {
 }
 
 void fons__tmpfree (void* ptr, void* up) {
-  //(void)ptr;
-  //(void)up;
   // empty
 }
 
@@ -3792,7 +3714,10 @@ private enum DecUtfMixin(string state, string codep, string byte_) =
 `{
   uint type_ = utf8d.ptr[`~byte_~`];
   `~codep~` = (`~state~` != FONS_UTF8_ACCEPT ? (`~byte_~`&0x3fu)|(`~codep~`<<6) : (0xff>>type_)&`~byte_~`);
-  `~state~` = utf8d.ptr[256+`~state~`+type_];
+  if ((`~state~` = utf8d.ptr[256+`~state~`+type_]) == FONS_UTF8_REJECT) {
+    `~state~` = FONS_UTF8_ACCEPT;
+    `~codep~` = '?';
+  }
  }`;
 
 /*
@@ -4259,16 +4184,15 @@ enum APREC = 16;
 enum ZPREC = 7;
 
 void fons__blurCols (ubyte* dst, int w, int h, int dstStride, int alpha) {
-  int x, y;
-  for (y = 0; y < h; y++) {
+  foreach (int y; 0..h) {
     int z = 0; // force zero border
-    for (x = 1; x < w; x++) {
+    foreach (int x; 1..w) {
       z += (alpha*((cast(int)(dst[x])<<ZPREC)-z))>>APREC;
       dst[x] = cast(ubyte)(z>>ZPREC);
     }
     dst[w-1] = 0; // force zero border
     z = 0;
-    for (x = w-2; x >= 0; x--) {
+    for (int x = w-2; x >= 0; --x) {
       z += (alpha*((cast(int)(dst[x])<<ZPREC)-z))>>APREC;
       dst[x] = cast(ubyte)(z>>ZPREC);
     }
@@ -4278,16 +4202,15 @@ void fons__blurCols (ubyte* dst, int w, int h, int dstStride, int alpha) {
 }
 
 void fons__blurRows (ubyte* dst, int w, int h, int dstStride, int alpha) {
-  int x, y;
-  for (x = 0; x < w; x++) {
+  foreach (int x; 0..w) {
     int z = 0; // force zero border
-    for (y = dstStride; y < h*dstStride; y += dstStride) {
+    for (int y = dstStride; y < h*dstStride; y += dstStride) {
       z += (alpha*((cast(int)(dst[y])<<ZPREC)-z))>>APREC;
       dst[y] = cast(ubyte)(z>>ZPREC);
     }
     dst[(h-1)*dstStride] = 0; // force zero border
     z = 0;
-    for (y = (h-2)*dstStride; y >= 0; y -= dstStride) {
+    for (int y = (h-2)*dstStride; y >= 0; y -= dstStride) {
       z += (alpha*((cast(int)(dst[y])<<ZPREC)-z))>>APREC;
       dst[y] = cast(ubyte)(z>>ZPREC);
     }
@@ -4301,8 +4224,6 @@ void fons__blur (FONScontext* stash, ubyte* dst, int w, int h, int dstStride, in
   import std.math : expf = exp;
   int alpha;
   float sigma;
-  //(void)stash;
-
   if (blur < 1) return;
   // Calculate the alpha such that 90% of the kernel is within the radius. (Kernel extends to infinity)
   sigma = cast(float)blur*0.57735f; // 1/sqrt(3)
@@ -4570,13 +4491,13 @@ package/*(iv.nanovg)*/ float fonsDrawText (FONScontext* stash, float x, float y,
 }
 +/
 
-package/*(iv.nanovg)*/ int fonsTextIterInit (FONScontext* stash, FONStextIter* iter, float x, float y, const(char)* str, const(char)* end) {
+package/*(iv.nanovg)*/ int fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
   FONSstate* state = fons__getState(stash);
   float width;
 
   memset(iter, 0, (*iter).sizeof);
 
-  if (stash is null || str is null) return 0;
+  if (stash is null || str.length == 0) return 0;
   if (state.font < 0 || state.font >= stash.nfonts) return 0;
   iter.font = stash.fonts[state.font];
   if (iter.font.data is null) return 0;
@@ -4589,23 +4510,28 @@ package/*(iv.nanovg)*/ int fonsTextIterInit (FONScontext* stash, FONStextIter* i
   if (state.align_&FONS_ALIGN_LEFT) {
     // empty
   } else if (state.align_&FONS_ALIGN_RIGHT) {
-    width = fonsTextBounds(stash, x, y, str, end, null);
+    width = fonsTextBounds(stash, x, y, str, null);
     x -= width;
   } else if (state.align_&FONS_ALIGN_CENTER) {
-    width = fonsTextBounds(stash, x, y, str, end, null);
+    width = fonsTextBounds(stash, x, y, str, null);
     x -= width*0.5f;
   }
   // Align vertically.
   y += fons__getVertAlign(stash, iter.font, state.align_, iter.isize);
 
-  if (end is null) end = str+strlen(str);
-
   iter.x = iter.nextx = x;
   iter.y = iter.nexty = y;
   iter.spacing = state.spacing;
-  iter.str = str;
-  iter.next = str;
-  iter.end = end;
+  static if (is(T == char)) {
+    if (str.ptr is null) str = "";
+    iter.str = str.ptr;
+    iter.next = str.ptr;
+    iter.end = str.ptr+str.length;
+  } else {
+    iter.dstr = str.ptr;
+    iter.dnext = str.ptr;
+    iter.dend = str.ptr+str.length;
+  }
   iter.codepoint = 0;
   iter.prevGlyphIndex = -1;
 
@@ -4614,26 +4540,40 @@ package/*(iv.nanovg)*/ int fonsTextIterInit (FONScontext* stash, FONStextIter* i
 
 package/*(iv.nanovg)*/ bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) {
   FONSglyph* glyph = null;
-  const(char)* str = iter.next;
-  iter.str = iter.next;
 
-  if (str is iter.end) return false;
-  const(char)*e = iter.end;
-
-  for (; str !is e; ++str) {
-    /*if (fons__decutf8(&iter.utf8state, &iter.codepoint, *cast(const(ubyte)*)str)) continue;*/
-    mixin(DecUtfMixin!("iter.utf8state", "iter.codepoint", "*cast(const(ubyte)*)str"));
-    if (iter.utf8state) continue;
-    ++str; // 'cause we'll break anyway
+  if (iter.isChar) {
+    const(char)* str = iter.next;
+    iter.str = iter.next;
+    if (str is iter.end) return false;
+    const(char)*e = iter.end;
+    for (; str !is e; ++str) {
+      /*if (fons__decutf8(&iter.utf8state, &iter.codepoint, *cast(const(ubyte)*)str)) continue;*/
+      mixin(DecUtfMixin!("iter.utf8state", "iter.codepoint", "*cast(const(ubyte)*)str"));
+      if (iter.utf8state) continue;
+      ++str; // 'cause we'll break anyway
+      // Get glyph and quad
+      iter.x = iter.nextx;
+      iter.y = iter.nexty;
+      glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
+      if (glyph !is null) fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
+      iter.prevGlyphIndex = (glyph !is null ? glyph.index : -1);
+      break;
+    }
+    iter.next = str;
+  } else {
+    const(dchar)* str = iter.dnext;
+    iter.dstr = iter.dnext;
+    if (str is iter.dend) return false;
+    iter.codepoint = cast(uint)(*str++);
+    if (iter.codepoint > dchar.max) iter.codepoint = '?';
     // Get glyph and quad
     iter.x = iter.nextx;
     iter.y = iter.nexty;
     glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
     if (glyph !is null) fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
     iter.prevGlyphIndex = (glyph !is null ? glyph.index : -1);
-    break;
+    iter.dnext = str;
   }
-  iter.next = str;
 
   return true;
 }
@@ -4733,11 +4673,8 @@ public:
 public:
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null); }
 
-  void put (const(char)[] str...) {
-    if (state is null) return; // alas
-    foreach (char ch; str) {
-      mixin(DecUtfMixin!("utf8state", "codepoint", "cast(ubyte)ch"));
-      if (utf8state) continue; // full char is not collected yet
+  void put(T) (const(T)[] str...) if (is(T == char) || is(T == dchar)) {
+    enum DoCodePointMixin = q{
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
       if (glyph !is null) {
         fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
@@ -4752,6 +4689,27 @@ public:
         }
       }
       prevGlyphIndex = (glyph !is null ? glyph.index : -1);
+    };
+
+    if (state is null) return; // alas
+    static if (is(T == char)) {
+      foreach (char ch; str) {
+        mixin(DecUtfMixin!("utf8state", "codepoint", "cast(ubyte)ch"));
+        if (utf8state) continue; // full char is not collected yet
+        mixin(DoCodePointMixin);
+      }
+    } else {
+      if (str.length == 0) return;
+      if (utf8state) {
+        utf8state = 0;
+        codepoint = '?';
+        mixin(DoCodePointMixin);
+      }
+      foreach (dchar dch; str) {
+        if (dch > dchar.max) dch = '?';
+        codepoint = cast(uint)dch;
+        mixin(DoCodePointMixin);
+      }
     }
   }
 
@@ -4779,7 +4737,7 @@ public:
   }
 }
 
-package/*(iv.nanovg)*/ float fonsTextBounds (FONScontext* stash, float x, float y, const(char)* str, const(char)* end, float* bounds) {
+package/*(iv.nanovg)*/ float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
   FONSstate* state = fons__getState(stash);
   uint codepoint;
   uint utf8state = 0;
@@ -4793,7 +4751,7 @@ package/*(iv.nanovg)*/ float fonsTextBounds (FONScontext* stash, float x, float 
   float startx, advance;
   float minx, miny, maxx, maxy;
 
-  if (stash is null || str is null) return 0;
+  if (stash is null) return 0;
   if (state.font < 0 || state.font >= stash.nfonts) return 0;
   font = stash.fonts[state.font];
   if (font.data is null) return 0;
@@ -4807,26 +4765,45 @@ package/*(iv.nanovg)*/ float fonsTextBounds (FONScontext* stash, float x, float 
   miny = maxy = y;
   startx = x;
 
-  if (end is null) end = str+strlen(str);
-
-  for (; str !is end; ++str) {
-    //if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
-    mixin(DecUtfMixin!("utf8state", "codepoint", "*cast(const(ubyte)*)str"));
-    if (utf8state) continue;
-    glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
-    if (glyph !is null) {
-      fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
-      if (q.x0 < minx) minx = q.x0;
-      if (q.x1 > maxx) maxx = q.x1;
-      if (stash.params.flags&FONS_ZERO_TOPLEFT) {
-        if (q.y0 < miny) miny = q.y0;
-        if (q.y1 > maxy) maxy = q.y1;
-      } else {
-        if (q.y1 < miny) miny = q.y1;
-        if (q.y0 > maxy) maxy = q.y0;
+  static if (is(T == char)) {
+    foreach (char ch; str) {
+      //if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
+      mixin(DecUtfMixin!("utf8state", "codepoint", "(cast(ubyte)ch)"));
+      if (utf8state) continue;
+      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
+      if (glyph !is null) {
+        fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
+        if (q.x0 < minx) minx = q.x0;
+        if (q.x1 > maxx) maxx = q.x1;
+        if (stash.params.flags&FONS_ZERO_TOPLEFT) {
+          if (q.y0 < miny) miny = q.y0;
+          if (q.y1 > maxy) maxy = q.y1;
+        } else {
+          if (q.y1 < miny) miny = q.y1;
+          if (q.y0 > maxy) maxy = q.y0;
+        }
       }
+      prevGlyphIndex = (glyph !is null ? glyph.index : -1);
     }
-    prevGlyphIndex = (glyph !is null ? glyph.index : -1);
+  } else {
+    foreach (dchar ch; str) {
+      if (ch > dchar.max) ch = '?';
+      codepoint = cast(uint)ch;
+      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
+      if (glyph !is null) {
+        fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
+        if (q.x0 < minx) minx = q.x0;
+        if (q.x1 > maxx) maxx = q.x1;
+        if (stash.params.flags&FONS_ZERO_TOPLEFT) {
+          if (q.y0 < miny) miny = q.y0;
+          if (q.y1 > maxy) maxy = q.y1;
+        } else {
+          if (q.y1 < miny) miny = q.y1;
+          if (q.y0 > maxy) maxy = q.y0;
+        }
+      }
+      prevGlyphIndex = (glyph !is null ? glyph.index : -1);
+    }
   }
 
   advance = x-startx;
@@ -4842,11 +4819,11 @@ package/*(iv.nanovg)*/ float fonsTextBounds (FONScontext* stash, float x, float 
     maxx -= advance*0.5f;
   }
 
-  if (bounds) {
-    bounds[0] = minx;
-    bounds[1] = miny;
-    bounds[2] = maxx;
-    bounds[3] = maxy;
+  if (bounds.length) {
+    if (bounds.length > 0) bounds.ptr[0] = minx;
+    if (bounds.length > 1) bounds.ptr[1] = miny;
+    if (bounds.length > 2) bounds.ptr[2] = maxx;
+    if (bounds.length > 3) bounds.ptr[3] = maxy;
   }
 
   return advance;
