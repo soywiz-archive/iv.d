@@ -126,6 +126,14 @@ nothrow @safe:
     }
   }
 
+  @property bool valid () const nothrow @safe @nogc {
+    pragma(inline, true);
+    import core.stdc.math : isnan;
+         static if (dims == 2) return !isnan(x) && !isnan(y);
+    else static if (dims == 3) return !isnan(x) && !isnan(y) && !isnan(z);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
   void set (in FloatType[] c...) pure @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
@@ -911,7 +919,7 @@ public:
   mat4 lookAt() (in auto ref vec3 target) { pragma(inline, true); auto res = mat4(this); return this.lookingAt(target); }
   mat4 lookAt() (in auto ref vec3 target, in auto ref vec3 upVec) { pragma(inline, true); auto res = mat4(this); return this.lookingAt(target, upVec); }
 
-  ref mat4 rotated() (FloatType angle, in auto ref vec3 axis) {
+  ref mat4 rotate() (FloatType angle, in auto ref vec3 axis) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -949,7 +957,7 @@ public:
     return this;
   }
 
-  ref mat4 rotatedX() (FloatType angle) {
+  ref mat4 rotateX() (FloatType angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -971,7 +979,7 @@ public:
     return this;
   }
 
-  ref mat4 rotatedY() (FloatType angle) {
+  ref mat4 rotateY() (FloatType angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -993,7 +1001,7 @@ public:
     return this;
   }
 
-  ref mat4 rotatedZ() (FloatType angle) {
+  ref mat4 rotateZ() (FloatType angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
     immutable FloatType c = cos(angle);
@@ -1015,26 +1023,26 @@ public:
     return this;
   }
 
-  ref mat4 translated() (in auto ref vec3 v) {
+  ref mat4 translate() (in auto ref vec3 v) {
     mt.ptr[0] += mt.ptr[3]*v.x; mt.ptr[4] += mt.ptr[7]*v.x; mt.ptr[8] += mt.ptr[11]*v.x; mt.ptr[12] += mt.ptr[15]*v.x;
     mt.ptr[1] += mt.ptr[3]*v.y; mt.ptr[5] += mt.ptr[7]*v.y; mt.ptr[9] += mt.ptr[11]*v.y; mt.ptr[13] += mt.ptr[15]*v.y;
     mt.ptr[2] += mt.ptr[3]*v.z; mt.ptr[6] += mt.ptr[7]*v.z; mt.ptr[10] += mt.ptr[11]*v.z; mt.ptr[14] += mt.ptr[15]*v.z;
     return this;
   }
 
-  ref mat4 scaled() (in auto ref vec3 v) {
+  ref mat4 scale() (in auto ref vec3 v) {
     mt.ptr[0] *= v.x; mt.ptr[4] *= v.x; mt.ptr[8] *= v.x; mt.ptr[12] *= v.x;
     mt.ptr[1] *= v.y; mt.ptr[5] *= v.y; mt.ptr[9] *= v.y; mt.ptr[13] *= v.y;
     mt.ptr[2] *= v.z; mt.ptr[6] *= v.z; mt.ptr[10] *= v.z; mt.ptr[14] *= v.z;
     return this;
   }
 
-  mat4 rotate() (FloatType angle, in auto ref vec3 axis) const { pragma(inline, true); auto res = mat4(this); return res.rotated(angle, axis); }
-  mat4 rotateX() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotatedX(angle); }
-  mat4 rotateY() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotatedY(angle); }
-  mat4 rotateZ() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotatedZ(angle); }
-  mat4 translate() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.translated(v); }
-  mat4 scale() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.scaled(v); }
+  mat4 rotated() (FloatType angle, in auto ref vec3 axis) const { pragma(inline, true); auto res = mat4(this); return res.rotate(angle, axis); }
+  mat4 rotatedX() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateX(angle); }
+  mat4 rotatedY() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateY(angle); }
+  mat4 rotatedZ() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateZ(angle); }
+  mat4 translated() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.translate(v); }
+  mat4 scaled() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.scale(v); }
 
   // retrieve angles in degree from rotation matrix, M = Rx*Ry*Rz
   // Rx: rotation about X-axis, pitch
@@ -1261,5 +1269,201 @@ public:
   private static FloatType getCofactor() (FloatType m0, FloatType m1, FloatType m2, FloatType m3, FloatType m4, FloatType m5, FloatType m6, FloatType m7, FloatType m8) {
     pragma(inline, true);
     return m0*(m4*m8-m5*m7)-m1*(m3*m8-m5*m6)+m2*(m3*m7-m4*m6);
+  }
+
+  Quat4!FloatType toQuaternion () const nothrow @trusted @nogc {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : sqrt=sqrtf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : sqrt;
+    } else {
+      import std.math : sqrt;
+    }
+    Quat4!FloatType res = void;
+    FloatType tr = mt.ptr[0*4+0]+mt.ptr[1*4+1]+mt.ptr[2*4+2];
+    // check the diagonal
+    if (tr > 0) {
+      FloatType s = sqrt(tr+1.0);
+      res.w = s/cast(FloatType)2;
+      s = cast(FloatType)0.5/s;
+      res.x = (mt.ptr[2*4+1]-mt.ptr[1*4+2])*s;
+      res.y = (mt.ptr[0*4+2]-mt.ptr[2*4+0])*s;
+      res.z = (mt.ptr[1*4+0]-mt.ptr[0*4+1])*s;
+    } else {
+      // diagonal is negative
+      int i, j, k;
+      int[3] nxt = [1, 2, 0];
+      FloatType s = void;
+      FloatType[4] q = void;
+      i = 0;
+      if (mt.ptr[1*4+1] > mt.ptr[0*4+0]) i = 1;
+      if (mt.ptr[2*4+2] > mt.ptr[i*4+i]) i = 2;
+      j = nxt.ptr[i];
+      k = nxt.ptr[j];
+      s = sqrt((mt.ptr[i*4+i]-(mt.ptr[j*4+j]+mt.ptr[k*4+k]))+cast(FloatType)1);
+      q[i] = s*cast(FloatType)0.5;
+      if (s != 0) s = cast(FloatType)0.5/s;
+      q[3] = (mt.ptr[k*4+j]-mt.ptr[j*4+k])*s;
+      q[j] = (mt.ptr[j*4+i]+mt.ptr[i*4+j])*s;
+      q[k] = (mt.ptr[k*4+i]+mt.ptr[i*4+k])*s;
+      res.x = q[0];
+      res.y = q[1];
+      res.z = q[2];
+      res.w = q[3];
+    }
+    return res;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+alias quat4 = Quat4!float;
+
+align(1) struct Quat4(FloatType=float) {
+align(1):
+  alias quat4 = Quat4!FloatType;
+
+  FloatType w=1, x=0, y=0, z=0;
+
+  this (FloatType aw, FloatType ax, FloatType ay, FloatType az) nothrow @trusted @nogc {
+    w = aw;
+    x = ax;
+    y = ay;
+    z = az;
+  }
+
+  static quat4 Identity () nothrow @trusted @nogc { pragma(inline, true); return quat4(1, 0, 0, 0); }
+
+  static quat4 fromAngles (FloatType roll, FloatType pitch, FloatType yaw) nothrow @trusted @nogc {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : cos=cosf, sin=sinf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : cos, sin;
+    } else {
+      import std.math : cos, sin;
+    }
+    // calculate trig identities
+    FloatType cr = cos(roll/2);
+    FloatType cp = cos(pitch/2);
+    FloatType cy = cos(yaw/2);
+    FloatType sr = sin(roll/2);
+    FloatType sp = sin(pitch/2);
+    FloatType sy = sin(yaw/2);
+    FloatType cpcy = cp*cy;
+    FloatType spsy = sp*sy;
+    return quat4(
+      cr*cpcy+sr*spsy,
+      sr*cpcy-cr*spsy,
+      cr*sp*cy+sr*cp*sy,
+      cr*cp*sy-sr*sp*cy,
+    );
+  }
+
+  @property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w) && !isnan(x) && !isnan(y) && !isnan(z); }
+
+  Mat4!FloatType toMatrix () const nothrow @trusted @nogc {
+    Mat4!FloatType res = void;
+    FloatType wx = void, wy = void, wz = void, xx = void, yy = void, yz = void;
+    FloatType xy = void, xz = void, zz = void, x2 = void, y2 = void, z2 = void;
+
+    // calculate coefficients
+    x2 = this.x+this.x; y2 = this.y+this.y;
+    z2 = this.z+this.z;
+    xx = this.x*x2; xy = this.x*y2; xz = this.x*z2;
+    yy = this.y*y2; yz = this.y*z2; zz = this.z*z2;
+    wx = this.w*x2; wy = this.w*y2; wz = this.w*z2;
+
+
+    res.mt.ptr[0*4+0] = cast(FloatType)1-(yy+zz);
+    res.mt.ptr[0*4+1] = xy-wz;
+    res.mt.ptr[0*4+2] = xz+wy;
+    res.mt.ptr[0*4+3] = 0;
+
+    res.mt.ptr[1*4+0] = xy+wz;
+    res.mt.ptr[1*4+1] = cast(FloatType)1-(xx+zz);
+    res.mt.ptr[1*4+2] = yz-wx;
+    res.mt.ptr[1*4+3] = 0;
+
+
+    res.mt.ptr[2*4+0] = xz-wy;
+    res.mt.ptr[2*4+1] = yz+wx;
+    res.mt.ptr[2*4+2] = cast(FloatType)1-(xx+yy);
+    res.mt.ptr[2*4+3] = 0;
+
+
+    res.mt.ptr[3*4+0] = 0;
+    res.mt.ptr[3*4+1] = 0;
+    res.mt.ptr[3*4+2] = 0;
+    res.mt.ptr[3*4+3] = 1;
+
+    return res;
+  }
+
+  quat4 opBinary(string op:"*") (in auto ref quat4 q2) const nothrow @safe @nogc {
+    auto res = quat4(this.w, this.x, this.y, this.z);
+    return (res *= q2);
+  }
+
+  ref quat4 opOpAssign(string op:"*") (in auto ref quat4 q2) nothrow @safe @nogc {
+    FloatType A = (this.w+this.x)*(q2.w+q2.x);
+    FloatType B = (this.z-this.y)*(q2.y-q2.z);
+    FloatType C = (this.w-this.x)*(q2.y+q2.z);
+    FloatType D = (this.y+this.z)*(q2.w-q2.x);
+    FloatType E = (this.x+this.z)*(q2.x+q2.y);
+    FloatType F = (this.x-this.z)*(q2.x-q2.y);
+    FloatType G = (this.w+this.y)*(q2.w-q2.z);
+    FloatType H = (this.w-this.y)*(q2.w+q2.z);
+    this.w = B+(-E-F+G+H)/2;
+    this.x = A-(E+F+G+H)/2;
+    this.y = C+(E-F+G-H)/2;
+    this.z = D+(E-F-G+H)/2;
+    return this;
+  }
+
+  quat4 slerp() (in auto ref quat4 to, FloatType t) const nothrow @trusted @nogc {
+    static if (is(FloatType == float)) {
+      import core.stdc.math : acos, sin;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : acos, sin;
+    } else {
+      import std.math : acos, sin;
+    }
+    FloatType[4] to1 = void;
+    // calc cosine
+    double cosom = this.x*to.x+this.y*to.y+this.z*to.z+this.w*to.w;
+    // adjust signs (if necessary)
+    if (cosom < 0.0) {
+      cosom = -cosom;
+      to1[0] = -to.x;
+      to1[1] = -to.y;
+      to1[2] = -to.z;
+      to1[3] = -to.w;
+    } else  {
+      to1[0] = to.x;
+      to1[1] = to.y;
+      to1[2] = to.z;
+      to1[3] = to.w;
+    }
+    double scale0 = void, scale1 = void;
+    // calculate coefficients
+    if (1.0-cosom > EPSILON!double) {
+      // standard case (slerp)
+      double omega = acos(cosom);
+      double sinom = sin(omega);
+      scale0 = sin((1.0-t)*omega)/sinom;
+      scale1 = sin(t*omega)/sinom;
+    } else {
+      // "from" and "to" quaternions are very close
+      //  ... so we can do a linear interpolation
+      scale0 = 1.0-t;
+      scale1 = t;
+    }
+    // calculate final values
+    return quat4(
+      scale0*this.w+scale1*to1[3],
+      scale0*this.x+scale1*to1[0],
+      scale0*this.y+scale1*to1[1],
+      scale0*this.z+scale1*to1[2],
+    );
   }
 }
