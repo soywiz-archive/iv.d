@@ -2697,7 +2697,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     float[4*2] c = void;
-    if (iter.prevGlyphIndex == -1) { // can not retrieve glyph?
+    if (iter.prevGlyphIndex < 0) { // can not retrieve glyph?
       if (!nvg__allocTextAtlas(ctx)) break; // no memory :(
       if (nverts != 0) {
         nvg__renderText(ctx, verts, nverts);
@@ -2705,7 +2705,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T
       }
       iter = prevIter;
       fonsTextIterNext(ctx.fs, &iter, &q); // try again
-      if (iter.prevGlyphIndex == -1) break; // still can not find glyph?
+      if (iter.prevGlyphIndex < 0) break; // still can not find glyph?
     }
     prevIter = iter;
     // Transform corners.
@@ -4344,7 +4344,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
 void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float scale, float spacing, float* x, float* y, FONSquad* q) {
   float rx, ry, xoff, yoff, x0, y0, x1, y1;
 
-  if (prevGlyphIndex != -1) {
+  if (prevGlyphIndex >= 0) {
     float adv = fons__tt_getGlyphKernAdvance(&font.font, prevGlyphIndex, glyph.index)*scale;
     *x += cast(int)(adv+spacing+0.5f);
   }
@@ -4556,8 +4556,12 @@ package/*(iv.nanovg)*/ bool fonsTextIterNext (FONScontext* stash, FONStextIter* 
       iter.x = iter.nextx;
       iter.y = iter.nexty;
       glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
-      if (glyph !is null) fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
-      iter.prevGlyphIndex = (glyph !is null ? glyph.index : -1);
+      if (glyph !is null) {
+        fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
+        iter.prevGlyphIndex = glyph.index;
+      } else {
+        iter.prevGlyphIndex = -1;
+      }
       break;
     }
     iter.next = str;
@@ -4571,8 +4575,12 @@ package/*(iv.nanovg)*/ bool fonsTextIterNext (FONScontext* stash, FONStextIter* 
     iter.x = iter.nextx;
     iter.y = iter.nexty;
     glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
-    if (glyph !is null) fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
-    iter.prevGlyphIndex = (glyph !is null ? glyph.index : -1);
+    if (glyph !is null) {
+      fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
+      iter.prevGlyphIndex = glyph.index;
+    } else {
+      iter.prevGlyphIndex = -1;
+    }
     iter.dnext = str;
   }
 
@@ -4668,7 +4676,7 @@ public:
     minx = maxx = x;
     miny = maxy = y;
     startx = x;
-    assert(prevGlyphIndex == -1);
+    //assert(prevGlyphIndex == -1);
   }
 
 public:
@@ -4688,8 +4696,10 @@ public:
           if (q.y1 < miny) miny = q.y1;
           if (q.y0 > maxy) maxy = q.y0;
         }
+        prevGlyphIndex = glyph.index;
+      } else {
+        prevGlyphIndex = -1;
       }
-      prevGlyphIndex = (glyph !is null ? glyph.index : -1);
     };
 
     if (state is null) return; // alas
@@ -4783,8 +4793,10 @@ package/*(iv.nanovg)*/ float fonsTextBounds(T) (FONScontext* stash, float x, flo
           if (q.y1 < miny) miny = q.y1;
           if (q.y0 > maxy) maxy = q.y0;
         }
+        prevGlyphIndex = glyph.index;
+      } else {
+        prevGlyphIndex = -1;
       }
-      prevGlyphIndex = (glyph !is null ? glyph.index : -1);
     }
   } else {
     foreach (dchar ch; str) {
@@ -4802,8 +4814,10 @@ package/*(iv.nanovg)*/ float fonsTextBounds(T) (FONScontext* stash, float x, flo
           if (q.y1 < miny) miny = q.y1;
           if (q.y0 > maxy) maxy = q.y0;
         }
+        prevGlyphIndex = glyph.index;
+      } else {
+        prevGlyphIndex = -1;
       }
-      prevGlyphIndex = (glyph !is null ? glyph.index : -1);
     }
   }
 
