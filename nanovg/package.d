@@ -170,6 +170,7 @@ struct NVGTextRow {
 
 ///
 enum NVGImageFlags {
+  None            =    0, /// Nothing special.
   GenerateMipmaps = 1<<0, /// Generate mipmaps during creation of the image.
   RepeatX         = 1<<1, /// Repeat image in X direction.
   RepeatY         = 1<<2, /// Repeat image in Y direction.
@@ -1038,7 +1039,7 @@ public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags) 
     try {
       auto img = ArsdImage(filename).getAsTrueColorImage;
       scope(exit) img.destroy;
-      return ctx.createImageRGBA(img.width, img.height, imageFlags, img.imageData.bytes.ptr);
+      return ctx.createImageRGBA(img.width, img.height, imageFlags, img.imageData.bytes[]);
     } catch (Exception) {}
     return 0;
   } else {
@@ -1052,7 +1053,7 @@ public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags) 
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
       return 0;
     }
-    image = ctx.createImageRGBA(w, h, imageFlags, img);
+    image = ctx.createImageRGBA(w, h, imageFlags, img[0..w*h*4]);
     stbi_image_free(img);
     return image;
   }
@@ -1064,7 +1065,7 @@ version(nanovg_use_arsd_image) {
   public int createImageFromMemoryImage (NVGContext ctx, int imageFlags, MemoryImage img) {
     if (img is null) return 0;
     auto tc = img.getAsTrueColorImage;
-    return ctx.createImageRGBA(tc.width, tc.height, imageFlags, tc.imageData.bytes.ptr);
+    return ctx.createImageRGBA(tc.width, tc.height, imageFlags, tc.imageData.bytes[]);
   }
 } else {
   /// Creates image by loading it from the specified chunk of memory.
@@ -1076,7 +1077,7 @@ version(nanovg_use_arsd_image) {
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
       return 0;
     }
-    image = ctx.createImageRGBA(w, h, imageFlags, img);
+    image = ctx.createImageRGBA(w, h, imageFlags, img[0..w*h*4]);
     stbi_image_free(img);
     return image;
   }
@@ -1084,15 +1085,16 @@ version(nanovg_use_arsd_image) {
 
 /// Creates image from specified image data.
 /// Returns handle to the image.
-public int createImageRGBA (NVGContext ctx, int w, int h, int imageFlags, const(ubyte)* data) {
-  return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, data);
+public int createImageRGBA (NVGContext ctx, int w, int h, int imageFlags, const(void)[] data) {
+  if (w < 1 || h < 1 || data.length < w*h*4) return -1;
+  return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
 }
 
 /// Updates image data specified by image handle.
-public void updateImage (NVGContext ctx, int image, const(ubyte)* data) {
+public void updateImage (NVGContext ctx, int image, const(void)[] data) {
   int w, h;
   ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
-  ctx.params.renderUpdateTexture(ctx.params.userPtr, image, 0, 0, w, h, data);
+  ctx.params.renderUpdateTexture(ctx.params.userPtr, image, 0, 0, w, h, cast(const(ubyte)*)data.ptr);
 }
 
 /// Returns the dimensions of a created image.

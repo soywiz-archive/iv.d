@@ -128,7 +128,7 @@ void main (string[] args) {
           1, // scale
           svgraster.ptr, GWidth, GHeight);
       }
-      vgimg = vg.createImageRGBA(GWidth, GHeight, 0, svgraster.ptr);
+      vgimg = vg.createImageRGBA(GWidth, GHeight, 0, svgraster[]);
     }
     fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
     sdwindow.redrawOpenGlScene();
