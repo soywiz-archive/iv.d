@@ -376,6 +376,7 @@ final class SaxyEx {
 private import std.range;
 public:
   alias TagOpenCB = void delegate (char[] name, char[][string] attrs);
+  alias TagOpenCBNA = void delegate (char[] name);
   alias TagCloseCB = void delegate (char[] name);
   alias TagContentCB = void delegate (char[] text);
 
@@ -390,6 +391,7 @@ private:
     Type type;
     PathElement[] path;
     bool pathHasQuants; // use faster algo if there are no quantifiers
+    bool openNoAttr;
     union {
       TagOpenCB open;
       TagCloseCB close;
@@ -413,6 +415,14 @@ public:
     assert(cb !is null);
     auto tcb = newCallback!"open"(path);
     tcb.open = cb;
+    tcb.openNoAttr = false;
+  }
+
+  void onOpen(ST : const(char)[]) (ST path, TagOpenCBNA cb) {
+    assert(cb !is null);
+    auto tcb = newCallback!"open"(path);
+    tcb.close = cb; // lucky me
+    tcb.openNoAttr = true;
   }
 
   void onClose(ST : const(char)[]) (ST path, TagCloseCB cb) {
@@ -628,13 +638,17 @@ private:
         bool attrsRecoded = (efrom is null);
         foreach (ref TagCB tcb; callbacksOpen) {
           if (tcb.type == TagCB.Type.Open && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
-            // recode attrs and call the callback
-            if (!attrsRecoded) {
-              rcpos = 0; // reset recode
-              foreach (ref v; attrs.byValue) v = nrecode!false(v);
-              attrsRecoded = true;
+            if (tcb.openNoAttr) {
+              tcb.close(name);
+            } else {
+              // recode attrs and call the callback
+              if (!attrsRecoded) {
+                rcpos = 0; // reset recode
+                foreach (ref v; attrs.byValue) v = nrecode!false(v);
+                attrsRecoded = true;
+              }
+              tcb.open(name, attrs);
             }
-            tcb.open(name, attrs);
           }
         }
       },
