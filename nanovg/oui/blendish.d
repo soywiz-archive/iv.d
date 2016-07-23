@@ -1002,7 +1002,7 @@ public __gshared BNDtheme bnd_theme = BNDtheme(
   BNDwidgetTheme(
     nvgRGBA(  0,   0,   0, 255), // color_outline
     nvgRGBA(172, 172, 172, 128), // color_item
-    nvgRGBA(150, 150,   0, 255), // color_inner
+    nvgRGBA(  0, 100, 180, 255), // color_inner
     BND_COLOR_ACTIVE, // color_inner_selected
     BND_COLOR_TEXT_SELECTED, // color_text
     BND_COLOR_TEXT, // color_text_selected
