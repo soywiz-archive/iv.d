@@ -1002,7 +1002,7 @@ public __gshared BNDtheme bnd_theme = BNDtheme(
   BNDwidgetTheme(
     nvgRGBA(  0,   0,   0, 255), // color_outline
     nvgRGBA(172, 172, 172, 128), // color_item
-    nvgRGBA(  0,   0,   0,   0), // color_inner
+    nvgRGBA(150, 150,   0, 255), // color_inner
     BND_COLOR_ACTIVE, // color_inner_selected
     BND_COLOR_TEXT_SELECTED, // color_text
     BND_COLOR_TEXT, // color_text_selected
@@ -1397,10 +1397,11 @@ public void bndMenuItem(T=char) (NVGContext ctx, float x, float y, float w, floa
 if (is(T == char) || is(T == dchar))
 {
   if (state != BND_DEFAULT) {
+    auto clr = (state == BND_HOVER ? bndOffsetColor(bnd_theme.menuItemTheme.innerColor/*innerSelectedColor*/, BND_HOVER_SHADE) : bnd_theme.menuItemTheme.innerSelectedColor);
     bndInnerBox(ctx, x, y, w, h, 0, 0, 0, 0,
-      bndOffsetColor(bnd_theme.menuItemTheme.innerSelectedColor, bnd_theme.menuItemTheme.shadeTop),
-      bndOffsetColor(bnd_theme.menuItemTheme.innerSelectedColor, bnd_theme.menuItemTheme.shadeDown));
-      state = BND_ACTIVE;
+      bndOffsetColor(clr, bnd_theme.menuItemTheme.shadeTop),
+      bndOffsetColor(clr, bnd_theme.menuItemTheme.shadeDown));
+    state = BND_ACTIVE;
   }
   bndIconLabelValue(ctx, x, y, w, h, iconid,
     bndTextColor(&bnd_theme.menuItemTheme, state), BND_LEFT,
