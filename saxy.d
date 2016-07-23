@@ -583,9 +583,13 @@ private:
       tagStackLastWasAppend = false;
     }
 
-    char[] nrecode (char[] text) {
+    char[] nrecode(bool doreset=true) (char[] text) {
       if (efrom is null) return text; // nothing to do
-      rcpos = 0;
+      static if (doreset) rcpos = 0;
+      bool needRecode = false;
+      foreach (char ch; text) if (ch >= 0x80) { needRecode = true; break; }
+      if (!needRecode) return text;
+      auto stpos = rcpos;
       ubyte[16] buf;
       auto ub = cast(const(ubyte)[])text;
       while (ub.length > 0) {
@@ -599,7 +603,7 @@ private:
         recbuf[rcpos..rcpos+len] = cast(char[])buf[0..len];
         rcpos += len;
       }
-      return recbuf[0..rcpos];
+      return recbuf[stpos..rcpos];
     }
 
     xmparse(fl,
@@ -621,12 +625,13 @@ private:
         }
         if (!seenXML) throw new Exception("no '?xml?' tag");
         pushTag(name);
-        bool attrsRecoded = (efrom !is null);
+        bool attrsRecoded = (efrom is null);
         foreach (ref TagCB tcb; callbacksOpen) {
           if (tcb.type == TagCB.Type.Open && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
             // recode attrs and call the callback
             if (!attrsRecoded) {
-              foreach (ref v; attrs.byValue) v = nrecode(v);
+              rcpos = 0; // reset recode
+              foreach (ref v; attrs.byValue) v = nrecode!false(v);
               attrsRecoded = true;
             }
             tcb.open(name, attrs);
@@ -645,7 +650,7 @@ private:
         popTag();
       },
       (char[] text) {
-        bool textRecoded = false;
+        bool textRecoded = (efrom is null);
         foreach (ref TagCB tcb; callbacksContent) {
           if (tcb.type == TagCB.Type.Content && pathHit(tagStack, tcb.path, tcb.pathHasQuants)) {
             // recode text and call the callback
