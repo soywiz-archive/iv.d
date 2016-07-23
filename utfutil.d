@@ -115,7 +115,7 @@ public:
   dchar decode (ubyte b) @trusted {
     immutable ubyte type = Utf8DecoderFast.utf8dfa.ptr[b];
     ubyte state = (codep>>24)&0xff;
-    codep = (state /*!= State.Accept*/ ? (b&0x3f)|(codep<<6) : (0xff>>type)&b);
+    codep = (state /*!= State.Accept*/ ? (b&0x3f)|((codep&~State.Mask)<<6) : (0xff>>type)&b);
     if ((state = Utf8DecoderFast.utf8dfa.ptr[256+state+type]) == 12/*State.Reject*/) {
       codep = '?';
     } else {
