@@ -32,6 +32,26 @@ string quote (const(char)[] s) {
 }
 
 
+// ascii only
+bool strEquCI (const(char)[] s0, const(char)[] s1) {
+  if (s0.length != s1.length) return false;
+  foreach (immutable idx, char c0; s0) {
+    import std.ascii : toLower;
+    c0 = c0.toLower;
+    char c1 = s1.ptr[idx].toLower;
+    if (c0 != c1) return false;
+  }
+  return true;
+}
+
+
+inout(char)[] xstrip (inout(char)[] s) {
+  while (s.length && s.ptr[0] <= ' ') s = s[1..$];
+  while (s.length && s[$-1] <= ' ') s = s[0..$-1];
+  return s;
+}
+
+
 ptrdiff_t indexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure @trusted nothrow @nogc {
   if (hay.length <= stIdx || need.length == 0 ||
       need.length > hay.length-stIdx
