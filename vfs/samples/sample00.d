@@ -3,7 +3,7 @@ import std.stdio;
 import iv.vfs;
 
 void main () {
-  vfsRegister!"first"(new VFSDriverDisk("data")); // data dir, will be looked last
+  vfsRegister!"first"(new VFSDriverDiskListed("data")); // data dir, will be looked last
   vfsAddPak("data/base.pk3"); // disk name, will not be looked in VFS
 
   {

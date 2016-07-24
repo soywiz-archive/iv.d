@@ -76,7 +76,7 @@ public abstract class VFSDriver {
   /// get number of entries in archive directory.
   @property usize dirLength () { return 0; }
   /// get directory entry with the given index. can throw, but it's not necessary.
-  DirEntry dirEntry (uint idx) { return DirEntry.init; }
+  DirEntry dirEntry (usize idx) { return DirEntry.init; }
 }
 
 
@@ -97,20 +97,24 @@ public final class VFSDriverAlwaysFail : VFSDriver {
 }
 
 /// you can register this driver to try disk files with the given data path
-public final class VFSDriverDisk : VFSDriver {
-private:
+public class VFSDriverDisk : VFSDriver {
+protected:
   string dataPath;
 
 public:
   this () { dataPath = "./"; }
 
-  this(T) (T dpath) if (is(T : const(char)[])) {
-    if (dpath.length == 0) {
+  this(T : const(char)[]) (T dpath) {
+    static if (is(T == typeof(null))) {
       dataPath = "./";
-    } else if (dpath[$-1] == '/') {
-      static if (is(T == string)) dataPath = dpath; else dataPath = dpath.idup;
     } else {
-      dataPath = dpath~"/";
+      if (dpath.length == 0) {
+        dataPath = "./";
+      } else if (dpath[$-1] == '/') {
+        static if (is(T == string)) dataPath = dpath; else dataPath = dpath.idup;
+      } else {
+        dataPath = dpath~"/";
+      }
     }
   }
 
@@ -148,6 +152,36 @@ public:
   }
 }
 
+/// same as `VFSDriverDisk`, but provides file list too
+public class VFSDriverDiskListed : VFSDriverDisk {
+protected:
+  DirEntry[] files;
+  bool flistInited;
+
+protected:
+  final void buildFileList () {
+    import std.file : DE = DirEntry, dirEntries, SpanMode;
+    if (flistInited) return;
+    try {
+      foreach (DE de; dirEntries(dataPath, SpanMode./*breadth*/depth)) {
+        if (!de.isFile) continue;
+        if (de.name.length <= dataPath.length) continue;
+        files ~= DirEntry(de.name[dataPath.length..$], de.size);
+      }
+    } catch (Exception e) {}
+    flistInited = true;
+  }
+
+public:
+  this () { super(); }
+  this(T : const(char)[]) (T dpath) { super(dpath); }
+
+  /// get number of entries in archive directory.
+  override @property usize dirLength () { buildFileList(); return files.length; }
+  /// get directory entry with the given index. can throw, but it's not necessary.
+  override DirEntry dirEntry (usize idx) { buildFileList(); return files[idx]; }
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct DriverInfo {
@@ -163,7 +197,7 @@ __gshared DriverInfo[] drivers;
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// register new VFS driver
-public void vfsRegister(string mode="normal") (VFSDriver drv, const(char)[] fname, const(char)[] prefixpath=null) {
+public void vfsRegister(string mode="normal") (VFSDriver drv, const(char)[] fname=null, const(char)[] prefixpath=null) {
   import core.atomic : atomicOp;
   static assert(mode == "normal" || mode == "last" || mode == "first");
   if (drv is null) return;
@@ -241,6 +275,34 @@ public VFSDriver.DirEntry[] vfsFileList () {
   }
 
   return res;
+}
+
+
+/// call callback for each known file in VFS. return non-zero from callback to stop.
+/// WARNING: don't add new drivers while this is in process!
+public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb) {
+  if (cb is null) return 0;
+
+  ptlock.lock();
+  scope(exit) ptlock.unlock();
+
+  bool[string] filesSeen;
+  foreach_reverse (ref drvnfo; drivers) {
+    foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
+      auto de = drvnfo.drv.dirEntry(idx);
+      if (de.name !in filesSeen) {
+        filesSeen[de.name] = true;
+        if (auto res = cb(de)) return res;
+      }
+    }
+  }
+
+  return 0;
+}
+
+
+public void vfsForEachFile (scope void delegate (in ref VFSDriver.DirEntry de) cb) {
+  if (cb !is null) vfsForEachFile((in ref VFSDriver.DirEntry de) { cb(de); return 0; });
 }
 
 
@@ -380,7 +442,7 @@ public void vfsRemovePack (const(char)[] fname, const(char)[] prefixpath=null) {
 
 
 /// `prefixpath`: this will be prepended to each name from archive, unmodified.
-public void vfsAddPak(T) (VFile fl, T fname=null, const(char)[] prefixpath=null) if (is(T : const(char)[])) {
+public void vfsAddPak(T : const(char)[]) (VFile fl, T fname=null, const(char)[] prefixpath=null) {
   void error (Throwable e=null, string file=__FILE__, usize line=__LINE__) {
     if (fname.length == 0) {
       throw new VFSException("can't open pak file", file, line, e);

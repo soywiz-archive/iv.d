@@ -47,7 +47,7 @@ public:
   }
 
   override @property usize dirLength () { return dir.length; }
-  override DirEntry dirEntry (uint idx) { return (idx < dir.length ? DirEntry(dir.ptr[idx].name, dir.ptr[idx].size) : DirEntry.init); }
+  override DirEntry dirEntry (usize idx) { return (idx < dir.length ? DirEntry(dir.ptr[idx].name, dir.ptr[idx].size) : DirEntry.init); }
 }
 
 
