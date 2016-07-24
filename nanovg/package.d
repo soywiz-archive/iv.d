@@ -4068,14 +4068,28 @@ error:
   return FONS_INVALID;
 }
 
+private enum NoAlias = ":noaa";
+
 public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) {
   import std.internal.cstring;
+
   FILE* fp = null;
   int dataSize = 0;
   ubyte* data = null;
 
+  // if font path ends with ":noaa", add this to font name instead
+  if (path.length >= NoAlias.length && path[$-NoAlias.length..$] == NoAlias) {
+    path = path[0..$-NoAlias.length];
+    if (name.length < NoAlias.length || name[$-NoAlias.length..$] != NoAlias) name = name.idup~":noaa";
+  }
+
   if (path.length == 0) return FONS_INVALID;
-  if (name.length == 0) return FONS_INVALID;
+  if (name.length == 0 || name == NoAlias) return FONS_INVALID;
+
+  if (path.length && path[0] == '~') {
+    import std.path : expandTilde;
+    path = path.idup.expandTilde;
+  }
 
   // Read in the font data.
   fp = fopen(path.tempCString, "rb");
@@ -4097,13 +4111,11 @@ error:
   return FONS_INVALID;
 }
 
-private enum NoAlias = ":noaa";
-
 public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, int freeData) {
   int i, ascent, descent, fh, lineGap;
   FONSfont* font;
 
-  if (name.length == 0) return FONS_INVALID;
+  if (name.length == 0 || name == NoAlias) return FONS_INVALID;
 
   int idx = fons__allocFont(stash);
   if (idx == FONS_INVALID) return FONS_INVALID;
