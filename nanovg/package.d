@@ -300,6 +300,9 @@ struct NVGpathCache {
 /// pointer to opaque NanoVG context structure.
 public alias NVGContext = NVGcontext*;
 
+/// Returns FontStash context of the given NanoVG context.
+FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs : null); }
+
 private struct NVGcontext {
   NVGparams params;
   float* commands;
