@@ -261,8 +261,8 @@ public VFSDriver.DirEntry[] vfsFileList () {
   ptlock.lock();
   scope(exit) ptlock.unlock();
 
-  foreach (ref drvnfo; drivers) {
-    foreach (immutable idx; 0..drvnfo.drv.dirLength) {
+  foreach_reverse (ref drvnfo; drivers) {
+    foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
       auto de = drvnfo.drv.dirEntry(idx);
       if (de.name.length == 0) continue;
       if (auto iptr = de.name in filesSeen) {
