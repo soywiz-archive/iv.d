@@ -84,6 +84,8 @@ align(1):
     b = ab;
     a = aa;
   }
+
+  @property string toString () const @safe { import std.string : format; return "NVGColor(%s,%s,%s,%s)".format(r, g, b, a); }
 }
 
 ///

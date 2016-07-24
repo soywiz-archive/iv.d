@@ -33,7 +33,7 @@ string quote (const(char)[] s) {
 
 
 // ascii only
-bool strEquCI (const(char)[] s0, const(char)[] s1) {
+bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
   if (s0.length != s1.length) return false;
   foreach (immutable idx, char c0; s0) {
     import std.ascii : toLower;
@@ -45,7 +45,7 @@ bool strEquCI (const(char)[] s0, const(char)[] s1) {
 }
 
 
-inout(char)[] xstrip (inout(char)[] s) {
+inout(char)[] xstrip (inout(char)[] s) pure nothrow @trusted @nogc {
   while (s.length && s.ptr[0] <= ' ') s = s[1..$];
   while (s.length && s[$-1] <= ' ') s = s[0..$-1];
   return s;
