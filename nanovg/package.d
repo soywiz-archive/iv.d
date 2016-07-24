@@ -398,7 +398,7 @@ void nvg__setDevicePixelRatio (NVGContext ctx, float ratio) {
 // Constructor called by the render back-end.
 package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) {
   FONSparams fontParams;
-  NVGContext ctx = cast(NVGContext )malloc(NVGcontext.sizeof);
+  NVGContext ctx = cast(NVGContext)malloc(NVGcontext.sizeof);
   if (ctx is null) goto error;
   memset(ctx, 0, NVGcontext.sizeof);
 
@@ -3914,7 +3914,7 @@ void fons__addWhiteRect (FONScontext* stash, int w, int h) {
   stash.dirtyRect[3] = fons__maxi(stash.dirtyRect[3], gy+h);
 }
 
-package/*(iv.nanovg)*/ FONScontext* fonsCreateInternal (FONSparams* params) {
+public FONScontext* fonsCreateInternal (FONSparams* params) {
   FONScontext* stash = null;
 
   // Allocate memory for the font stash.
@@ -3975,38 +3975,38 @@ FONSstate* fons__getState (FONScontext* stash) {
   return &stash.states[stash.nstates-1];
 }
 
-package/*(iv.nanovg)*/ void fonsSetSize (FONScontext* stash, float size) {
+public void fonsSetSize (FONScontext* stash, float size) {
   pragma(inline, true);
   fons__getState(stash).size = size;
 }
 
-package/*(iv.nanovg)*/ void fonsSetColor (FONScontext* stash, uint color) {
+public void fonsSetColor (FONScontext* stash, uint color) {
   pragma(inline, true);
   fons__getState(stash).color = color;
 }
 
-package/*(iv.nanovg)*/ void fonsSetSpacing (FONScontext* stash, float spacing) {
+public void fonsSetSpacing (FONScontext* stash, float spacing) {
   pragma(inline, true);
   fons__getState(stash).spacing = spacing;
 }
 
-package/*(iv.nanovg)*/ void fonsSetBlur (FONScontext* stash, float blur) {
+public void fonsSetBlur (FONScontext* stash, float blur) {
   pragma(inline, true);
   version(nanovg_kill_font_blur) blur = 0;
   fons__getState(stash).blur = blur;
 }
 
-package/*(iv.nanovg)*/ void fonsSetAlign (FONScontext* stash, int align_) {
+public void fonsSetAlign (FONScontext* stash, int align_) {
   pragma(inline, true);
   fons__getState(stash).align_ = align_;
 }
 
-package/*(iv.nanovg)*/ void fonsSetFont (FONScontext* stash, int font) {
+public void fonsSetFont (FONScontext* stash, int font) {
   pragma(inline, true);
   fons__getState(stash).font = font;
 }
 
-package/*(iv.nanovg)*/ void fonsPushState (FONScontext* stash) {
+public void fonsPushState (FONScontext* stash) {
   if (stash.nstates >= FONS_MAX_STATES) {
     if (stash.handleError) stash.handleError(stash.errorUptr, FONS_STATES_OVERFLOW, 0);
     return;
@@ -4015,7 +4015,7 @@ package/*(iv.nanovg)*/ void fonsPushState (FONScontext* stash) {
   ++stash.nstates;
 }
 
-package/*(iv.nanovg)*/ void fonsPopState (FONScontext* stash) {
+public void fonsPopState (FONScontext* stash) {
   if (stash.nstates <= 1) {
     if (stash.handleError) stash.handleError(stash.errorUptr, FONS_STATES_UNDERFLOW, 0);
     return;
@@ -4023,7 +4023,7 @@ package/*(iv.nanovg)*/ void fonsPopState (FONScontext* stash) {
   --stash.nstates;
 }
 
-package/*(iv.nanovg)*/ void fonsClearState (FONScontext* stash) {
+public void fonsClearState (FONScontext* stash) {
   FONSstate* state = fons__getState(stash);
   state.size = 12.0f;
   state.color = 0xffffffff;
@@ -4065,7 +4065,7 @@ error:
   return FONS_INVALID;
 }
 
-package/*(iv.nanovg)*/ int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) {
+public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) {
   import std.internal.cstring;
   FILE* fp = null;
   int dataSize = 0;
@@ -4096,7 +4096,7 @@ error:
 
 private enum NoAlias = ":noaa";
 
-package/*(iv.nanovg)*/ int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, int freeData) {
+public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, int freeData) {
   int i, ascent, descent, fh, lineGap;
   FONSfont* font;
 
@@ -4146,7 +4146,7 @@ error:
   return FONS_INVALID;
 }
 
-package/*(iv.nanovg)*/ int fonsGetFontByName (FONScontext* s, const(char)[] name) {
+public int fonsGetFontByName (FONScontext* s, const(char)[] name) {
   foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
     if (font.namelen == name.length && font.name[0..font.namelen] == name[]) return cast(int)idx;
   }
@@ -4437,7 +4437,7 @@ float fons__getVertAlign (FONScontext* stash, FONSfont* font, int align_, short 
 }
 
 /+k8: not used
-package/*(iv.nanovg)*/ float fonsDrawText (FONScontext* stash, float x, float y, const(char)* str, const(char)* end) {
+public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* str, const(char)* end) {
   FONSstate* state = fons__getState(stash);
   uint codepoint;
   uint utf8state = 0;
@@ -4496,7 +4496,7 @@ package/*(iv.nanovg)*/ float fonsDrawText (FONScontext* stash, float x, float y,
 }
 +/
 
-package/*(iv.nanovg)*/ int fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
+public int fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
   FONSstate* state = fons__getState(stash);
   float width;
 
@@ -4543,7 +4543,7 @@ package/*(iv.nanovg)*/ int fonsTextIterInit(T) (FONScontext* stash, FONStextIter
   return 1;
 }
 
-package/*(iv.nanovg)*/ bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) {
+public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) {
   FONSglyph* glyph = null;
 
   if (iter.isChar) {
@@ -4591,7 +4591,7 @@ package/*(iv.nanovg)*/ bool fonsTextIterNext (FONScontext* stash, FONStextIter* 
   return true;
 }
 
-debug package/*(iv.nanovg)*/ void fonsDrawDebug (FONScontext* stash, float x, float y) {
+debug public void fonsDrawDebug (FONScontext* stash, float x, float y) {
   int i;
   int w = stash.params.width;
   int h = stash.params.height;
@@ -4637,7 +4637,7 @@ debug package/*(iv.nanovg)*/ void fonsDrawDebug (FONScontext* stash, float x, fl
   fons__flush(stash);
 }
 
-package/*(iv.nanovg)*/ struct FonsTextBoundsIterator {
+public struct FonsTextBoundsIterator {
 private:
   FONScontext* stash;
   FONSstate* state;
@@ -4752,7 +4752,7 @@ public:
   }
 }
 
-package/*(iv.nanovg)*/ float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
+public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
   FONSstate* state = fons__getState(stash);
   uint codepoint;
   uint utf8state = 0;
@@ -4848,7 +4848,7 @@ package/*(iv.nanovg)*/ float fonsTextBounds(T) (FONScontext* stash, float x, flo
   return advance;
 }
 
-package/*(iv.nanovg)*/ void fonsVertMetrics (FONScontext* stash, float* ascender, float* descender, float* lineh) {
+public void fonsVertMetrics (FONScontext* stash, float* ascender, float* descender, float* lineh) {
   FONSfont* font;
   FONSstate* state = fons__getState(stash);
   short isize;
@@ -4864,7 +4864,7 @@ package/*(iv.nanovg)*/ void fonsVertMetrics (FONScontext* stash, float* ascender
   if (lineh) *lineh = font.lineh*isize/10.0f;
 }
 
-package/*(iv.nanovg)*/ void fonsLineBounds (FONScontext* stash, float y, float* miny, float* maxy) {
+public void fonsLineBounds (FONScontext* stash, float y, float* miny, float* maxy) {
   FONSfont* font;
   FONSstate* state = fons__getState(stash);
   short isize;
@@ -4886,13 +4886,13 @@ package/*(iv.nanovg)*/ void fonsLineBounds (FONScontext* stash, float y, float* 
   }
 }
 
-/+package/*(iv.nanovg)*/ +/public const(ubyte)* fonsGetTextureData (FONScontext* stash, int* width, int* height) {
+public const(ubyte)* fonsGetTextureData (FONScontext* stash, int* width, int* height) {
   if (width !is null) *width = stash.params.width;
   if (height !is null) *height = stash.params.height;
   return stash.texData;
 }
 
-package/*(iv.nanovg)*/ int fonsValidateTexture (FONScontext* stash, int* dirty) {
+public int fonsValidateTexture (FONScontext* stash, int* dirty) {
   if (stash.dirtyRect[0] < stash.dirtyRect[2] && stash.dirtyRect[1] < stash.dirtyRect[3]) {
     dirty[0] = stash.dirtyRect[0];
     dirty[1] = stash.dirtyRect[1];
@@ -4908,7 +4908,7 @@ package/*(iv.nanovg)*/ int fonsValidateTexture (FONScontext* stash, int* dirty) 
   return 0;
 }
 
-package/*(iv.nanovg)*/ void fonsDeleteInternal (FONScontext* stash) {
+public void fonsDeleteInternal (FONScontext* stash) {
   if (stash is null) return;
 
   if (stash.params.renderDelete) stash.params.renderDelete(stash.params.userPtr);
@@ -4922,19 +4922,19 @@ package/*(iv.nanovg)*/ void fonsDeleteInternal (FONScontext* stash) {
   free(stash);
 }
 
-package/*(iv.nanovg)*/ void fonsSetErrorCallback (FONScontext* stash, void function (void* uptr, int error, int val) callback, void* uptr) {
+public void fonsSetErrorCallback (FONScontext* stash, void function (void* uptr, int error, int val) callback, void* uptr) {
   if (stash is null) return;
   stash.handleError = callback;
   stash.errorUptr = uptr;
 }
 
-package/*(iv.nanovg)*/ void fonsGetAtlasSize (FONScontext* stash, int* width, int* height) {
+public void fonsGetAtlasSize (FONScontext* stash, int* width, int* height) {
   if (stash is null) return;
   *width = stash.params.width;
   *height = stash.params.height;
 }
 
-package/*(iv.nanovg)*/ int fonsExpandAtlas (FONScontext* stash, int width, int height) {
+public int fonsExpandAtlas (FONScontext* stash, int width, int height) {
   int i, maxy = 0;
   ubyte* data = null;
   if (stash is null) return 0;
@@ -4984,7 +4984,7 @@ package/*(iv.nanovg)*/ int fonsExpandAtlas (FONScontext* stash, int width, int h
   return 1;
 }
 
-package/*(iv.nanovg)*/ int fonsResetAtlas (FONScontext* stash, int width, int height) {
+public int fonsResetAtlas (FONScontext* stash, int width, int height) {
   int i, j;
   if (stash is null) return 0;
 
