@@ -3152,32 +3152,21 @@ public:
 
   /// Return current horizontal text bounds.
   void getHBounds (out float xmin, out float xmax) {
-    float[4] b = void;
-    getBounds(b[]);
-    xmin = b.ptr[0];
-    xmax = b.ptr[2];
+    if (ctx !is null) {
+      fsiter.getHBounds(xmin, xmax);
+      xmin *= invscale;
+      xmax *= invscale;
+    }
   }
 
   /// Return current vertical text bounds.
   void getVBounds (out float ymin, out float ymax) {
-    float[4] b = void;
-    getBounds(b[]);
-    ymin = b.ptr[1];
-    ymax = b.ptr[3];
-  }
-
-  /// Return current horizontal text size.
-  float getHTotal () {
-    float[4] b = void;
-    getBounds(b[]);
-    return b.ptr[2]-b.ptr[0];
-  }
-
-  /// Return current vertical text size.
-  float getVTotal () {
-    float[4] b = void;
-    getBounds(b[]);
-    return b.ptr[3]-b.ptr[1];
+    if (ctx !is null) {
+      //fsiter.getVBounds(ymin, ymax);
+      fonsLineBounds(ctx.fs, yscaled, &ymin, &ymax);
+      ymin *= invscale;
+      ymax *= invscale;
+    }
   }
 }
 
@@ -4747,6 +4736,7 @@ public:
   @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null ? x-startx : 0); }
 
   void getBounds (ref float[4] bounds) const pure nothrow @safe @nogc {
+    if (state is null) { bounds[] = 0; return; }
     float lminx = minx, lmaxx = maxx;
     // align horizontally
     if (state.align_&FONS_ALIGN_LEFT) {
@@ -4764,6 +4754,35 @@ public:
     bounds[1] = miny;
     bounds[2] = lmaxx;
     bounds[3] = maxy;
+  }
+
+  // Return current horizontal text bounds.
+  void getHBounds (out float xmin, out float xmax) {
+    if (state !is null) {
+      float lminx = minx, lmaxx = maxx;
+      // align horizontally
+      if (state.align_&FONS_ALIGN_LEFT) {
+        // empty
+      } else if (state.align_&FONS_ALIGN_RIGHT) {
+        float ca = advance;
+        lminx -= ca;
+        lmaxx -= ca;
+      } else if (state.align_&FONS_ALIGN_CENTER) {
+        float ca = advance*0.5f;
+        lminx -= ca;
+        lmaxx -= ca;
+      }
+      xmin = lminx;
+      xmax = lmaxx;
+    }
+  }
+
+  // Return current vertical text bounds.
+  void getVBounds (out float ymin, out float ymax) {
+    if (state !is null) {
+      ymin = miny;
+      ymax = maxy;
+    }
   }
 }
 
