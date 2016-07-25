@@ -112,6 +112,7 @@ public:
   @property dchar currCodePoint () const { pragma(inline, true); return (codep <= dchar.max ? codep : '?'); }
   // same as `decode`, never reaches `invalid` state, returns '?' for invalid chars
   // returns invalid dchar while it is "in progress" (i.e. result > dchar.max)
+  void reset () { codep = State.Accept; }
   dchar decode (ubyte b) @trusted {
     immutable ubyte type = Utf8DecoderFast.utf8dfa.ptr[b];
     ubyte state = (codep>>24)&0xff;
