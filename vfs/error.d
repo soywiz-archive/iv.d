@@ -21,11 +21,11 @@ module iv.vfs.error;
 // ////////////////////////////////////////////////////////////////////////// //
 mixin template VFSExceptionCtor() {
   static if (__VERSION__ > 2067) {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
+    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
       super(msg, file, line, next);
     }
   } else {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow {
+    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) pure nothrow @safe {
       super(msg, file, line, next);
     }
   }
