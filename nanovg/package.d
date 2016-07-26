@@ -63,21 +63,23 @@ version(nanovg_use_arsd_image) {
 ///
 align(1) struct NVGColor {
 align(1):
-  union {
-    float[4] rgba;
-    align(1) struct {
-    align(1):
-      float r, g, b, a;
-    }
-  }
-  this (ubyte ar, ubyte ag, ubyte ab, ubyte aa=255) pure nothrow @safe @nogc {
+public:
+  float[4] rgba = 0; // default color is transparent
+
+public:
+  @property string toString () const @safe { import std.string : format; return "NVGColor(%s,%s,%s,%s)".format(r, g, b, a); }
+
+pure nothrow @safe @nogc:
+public:
+  this (ubyte ar, ubyte ag, ubyte ab, ubyte aa=255) {
     pragma(inline, true);
     r = ar/255.0f;
     g = ag/255.0f;
     b = ab/255.0f;
     a = aa/255.0f;
   }
-  this (float ar, float ag, float ab, float aa=1) pure nothrow @safe @nogc {
+
+  this (float ar, float ag, float ab, float aa=1) {
     pragma(inline, true);
     r = ar;
     g = ag;
@@ -85,7 +87,29 @@ align(1):
     a = aa;
   }
 
-  @property string toString () const @safe { import std.string : format; return "NVGColor(%s,%s,%s,%s)".format(r, g, b, a); }
+  // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
+  this (uint c) {
+    pragma(inline, true);
+    r = (c&0xff)/255.0f;
+    g = ((c>>8)&0xff)/255.0f;
+    b = ((c>>16)&0xff)/255.0f;
+    a = ((c>>24)&0xff)/255.0f;
+  }
+
+  // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
+  @property uint asUint () const {
+    pragma(inline, true);
+    return
+      cast(uint)(r*255)|
+      (cast(uint)(g*255)<<8)|
+      (cast(uint)(b*255)<<16)|
+      (cast(uint)(a*255)<<24);
+  }
+
+  @property ref inout(float) r () inout @trusted { pragma(inline, true); return rgba.ptr[0]; }
+  @property ref inout(float) g () inout @trusted { pragma(inline, true); return rgba.ptr[1]; }
+  @property ref inout(float) b () inout @trusted { pragma(inline, true); return rgba.ptr[2]; }
+  @property ref inout(float) a () inout @trusted { pragma(inline, true); return rgba.ptr[3]; }
 }
 
 ///
