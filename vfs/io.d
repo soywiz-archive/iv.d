@@ -202,6 +202,6 @@ public void writeln(A...) (A args) if (A.length == 0) { stdout.rawWriteExact("\n
 public void writeln(A...) (A args) if (A.length > 0 && !isWriteableStream!(A[0])) { writeImpl!true(stdout, args); }
 
 public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length == 0) {}
-public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(false, Char)(fl, fmt, args); }
+public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(false, Char)(stdout, fmt, args); }
 public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
-public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(true, Char)(fl, fmt, args); }
+public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(true, Char)(stdout, fmt, args); }
