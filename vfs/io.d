@@ -25,9 +25,10 @@
 module iv.vfs.io;
 private:
 
-import iv.vfs.augs;
-import iv.vfs.error;
-import iv.vfs.vfile;
+public import iv.vfs;
+//import iv.vfs.augs;
+//import iv.vfs.error;
+//import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -127,19 +128,19 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
 
 // ////////////////////////////////////////////////////////////////////////// //
 // hack around "has scoped destruction, cannot build closure"
-public void write(A...) (VFile fl, auto ref A args) { writeImpl!(false)(fl, args); }
-public void write(ST, A...) (auto ref ST fl, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writeImpl!(false, ST)(fl, args); }
-public void writeln(A...) (VFile fl, auto ref A args) { writeImpl!(true)(fl, args); }
-public void writeln(ST, A...) (auto ref ST fl, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writeImpl!(true, ST)(fl, args); }
+public void write(A...) (VFile fl, A args) { writeImpl!(false)(fl, args); }
+public void write(ST, A...) (auto ref ST fl, A args) if (!is(ST == VFile) && isWriteableStream!ST) { writeImpl!(false, ST)(fl, args); }
+public void writeln(A...) (VFile fl, A args) { writeImpl!(true)(fl, args); }
+public void writeln(ST, A...) (auto ref ST fl, A args) if (!is(ST == VFile) && isWriteableStream!ST) { writeImpl!(true, ST)(fl, args); }
 
-public void writef(Char:dchar, A...) (VFile fl, const(Char)[] fmt, auto ref A args) { writefImpl!(false, Char)(fl, fmt, args); }
-public void writef(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writefImpl!(false, Char, ST)(fl, fmt, args); }
-public void writefln(Char:dchar, A...) (VFile fl, const(Char)[] fmt, auto ref A args) { writefImpl!(true, Char)(fl, fmt, args); }
-public void writefln(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writefImpl!(true, Char, ST)(fl, fmt, args); }
+public void writef(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { writefImpl!(false, Char)(fl, fmt, args); }
+public void writef(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, A args) if (!is(ST == VFile) && isWriteableStream!ST) { writefImpl!(false, Char, ST)(fl, fmt, args); }
+public void writefln(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { writefImpl!(true, Char)(fl, fmt, args); }
+public void writefln(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, A args) if (!is(ST == VFile) && isWriteableStream!ST) { writefImpl!(true, Char, ST)(fl, fmt, args); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private void writeImpl(bool donl, ST, A...) (auto ref ST fl, auto ref A args) {
+private void writeImpl(bool donl, ST, A...) (auto ref ST fl, A args) {
   import std.format : formattedWrite;
   static struct Writer(ST) {
     ST fl;
@@ -151,7 +152,7 @@ private void writeImpl(bool donl, ST, A...) (auto ref ST fl, auto ref A args) {
   static if (donl) fl.rawWriteExact("\n");
 }
 
-private void writefImpl(bool donl, Char, ST, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) {
+private void writefImpl(bool donl, Char, ST, A...) (auto ref ST fl, const(Char)[] fmt, A args) {
   import std.format : formattedWrite;
   static struct Writer(ST) {
     ST fl;
@@ -165,8 +166,8 @@ private void writefImpl(bool donl, Char, ST, A...) (auto ref ST fl, const(Char)[
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public auto readf(Char:dchar, A...) (VFile fl, const(Char)[] fmt, auto ref A args) { return readfImpl!(Char)(fl, fmt, args); }
-public auto readf(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) if (!is(ST == VFile) && isReadableStream!ST) { return readfImpl!(Char, ST)(fl, fmt, args); }
+public auto readf(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { return readfImpl!(Char)(fl, fmt, args); }
+public auto readf(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, A args) if (!is(ST == VFile) && isReadableStream!ST) { return readfImpl!(Char, ST)(fl, fmt, args); }
 
 private auto readfImpl(Char:dchar, ST, A...) (auto ref ST fl, const(Char)[] fmt, A args) {
   import std.format : formattedRead;
@@ -195,12 +196,12 @@ shared static this () {
 }
 
 
-public void write(A...) (auto ref A args) if (A.length == 0) {}
-public void write(A...) (auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { writeImpl!false(stdout, args); }
-public void writeln(A...) (auto ref A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
-public void writeln(A...) (auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { writeImpl!true(stdout, args); }
+public void write(A...) (A args) if (A.length == 0) {}
+public void write(A...) (A args) if (A.length > 0 && !isWriteableStream!(A[0])) { writeImpl!false(stdout, args); }
+public void writeln(A...) (A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
+public void writeln(A...) (A args) if (A.length > 0 && !isWriteableStream!(A[0])) { writeImpl!true(stdout, args); }
 
-public void writef(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length == 0) {}
-public void writef(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(false, Char)(fl, fmt, args); }
-public void writefln(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
-public void writefln(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(true, Char)(fl, fmt, args); }
+public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length == 0) {}
+public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(false, Char)(fl, fmt, args); }
+public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
+public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(true, Char)(fl, fmt, args); }
