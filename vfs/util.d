@@ -22,10 +22,11 @@
  * wrapped stream is thread-safe (i.e. reads, writes, etc), but
  * wrapper itself isn't.
  */
-module iv.vfs.stex;
+module iv.vfs.util;
 private:
 
 import iv.vfs : ssize, usize, Seek;
+import iv.vfs.vfile;
 import iv.vfs.error;
 import iv.vfs.augs;
 
@@ -67,11 +68,12 @@ public string readLine(ST) (auto ref ST fl, bool* eolhit=null, usize maxSize=102
     static if (streamHasEof!ST) if (fl.eof) { *eolhit = true; break; }
     if (fl.rawRead((&ch)[0..1]).length == 0) { *eolhit = true; break; }
     if (ch == '\r') {
+      // fuck macs
       static if (streamHasEof!ST) if (fl.eof) { *eolhit = true; break; }
       if (fl.rawRead((&ch)[0..1]).length == 0) { *eolhit = true; break; }
       if (ch == '\n') { *eolhit = true; break; }
       if (maxSize == 0) break;
-      res.put('\n');
+      res.put('\r');
     } else if (ch == '\n') {
       *eolhit = true;
       break;
@@ -81,4 +83,65 @@ public string readLine(ST) (auto ref ST fl, bool* eolhit=null, usize maxSize=102
     --maxSize;
   }
   return res.data;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public VFile writef(A...) (VFile fl, const(char)[] fmt, /*lazy*/auto ref A args) {
+  import std.format : formattedWrite;
+  static struct Writer {
+    VFile fl;
+    void put (const(char)[] s...) { fl.rawWriteExact(s); }
+  }
+  formattedWrite(Writer(fl), fmt, args);
+  return fl;
+}
+
+public VFile writefln(A...) (VFile fl, const(char)[] fmt, auto ref A args) {
+  import std.format : formattedWrite;
+  static struct Writer {
+    VFile fl;
+    void put (const(char)[] s...) { fl.rawWriteExact(s); }
+  }
+  formattedWrite(Writer(fl), fmt, args);
+  fl.rawWriteExact("\n");
+  return fl;
+}
+
+public VFile write(A...) (VFile fl, auto ref A args) {
+  import std.format : formattedWrite;
+  static struct Writer {
+    VFile fl;
+    void put (const(char)[] s...) { fl.rawWriteExact(s); }
+  }
+  foreach (ref a; args) formattedWrite(Writer(fl), "%s", a);
+  return fl;
+}
+
+public VFile writeln(A...) (VFile fl, auto ref A args) {
+  import std.format : formattedWrite;
+  static struct Writer {
+    VFile fl;
+    void put (const(char)[] s...) { fl.rawWriteExact(s); }
+  }
+  foreach (ref a; args) formattedWrite(Writer(fl), "%s", a);
+  fl.rawWriteExact("\n");
+  return fl;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public uint readf(A...) (VFile fl, const(char)[] fmt, A args) {
+  import std.format : formattedRead;
+  static struct Reader {
+    VFile fl;
+    char ch;
+    bool eof;
+    this (VFile afl) { fl = afl; if (fl.eof) eof = true; else popFront(); }
+    @property bool empty () { return fl.eof; }
+    @property char front () const pure nothrow @safe @nogc { pragma(inline, true); return ch; }
+    void popFront() { if (!eof) { eof = (fl.rawRead((&ch)[0..1]).length == 0); } }
+  }
+  auto rd = Reader(fl);
+  return formattedRead(rd, fmt, args);
 }
