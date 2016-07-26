@@ -44,5 +44,4 @@ public import iv.vfs.error;
 public import iv.vfs.augs;
 public import iv.vfs.vfile;
 public import iv.vfs.main;
-public import iv.vfs.util;
 public import iv.vfs.arcs;
