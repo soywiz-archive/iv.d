@@ -148,7 +148,7 @@ private void writeImpl(bool donl, ST, A...) (auto ref ST fl, A args) {
     void put (const(char)[] s...) { fl.rawWriteExact(s); }
   }
   auto wr = Writer!ST(fl);
-  foreach (ref a; args) formattedWrite(wr, "%s", a);
+  foreach (a; args) formattedWrite(wr, "%s", a);
   static if (donl) fl.rawWriteExact("\n");
 }
 
