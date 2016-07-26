@@ -32,6 +32,7 @@ static import std.stdio;
 import iv.vfs : ssize, usize, Seek;
 import iv.vfs.error;
 import iv.vfs.augs;
+import iv.vfs.streams.mem;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -79,10 +80,10 @@ public:
     }
   }
 
-  /// this will throw if `fl` is `null`; `fl` is owned by VFile now
-  this (core.stdc.stdio.FILE* fl) {
+  /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
+  this (core.stdc.stdio.FILE* fl, bool own=false) {
     if (fl is null) throw new VFSException("can't open file");
-    wstp = WrapLibcFile(fl);
+    if (own) wstp = WrapLibcFile!true(fl); else wstp = WrapLibcFile!false(fl);
   }
 
   /// wrap file descriptor; `fd` is owned by VFile now; can throw
@@ -372,7 +373,7 @@ usize WrapStdioFile (std.stdio.File fl) {
 // ////////////////////////////////////////////////////////////////////////// //
 private import core.stdc.errno;
 
-final class WrappedStreamLibcFile : WrappedStreamRC {
+final class WrappedStreamLibcFile(bool ownfl=true) : WrappedStreamRC {
 private:
   core.stdc.stdio.FILE* fl;
 
@@ -384,10 +385,14 @@ protected:
 
   override void close () {
     if (fl !is null) {
-      import std.exception : ErrnoException;
-      auto res = core.stdc.stdio.fclose(fl);
-      fl = null;
-      if (res != 0) throw new ErrnoException("can't close file", __FILE__, __LINE__);
+      static if (ownfl) {
+        import std.exception : ErrnoException;
+        auto res = core.stdc.stdio.fclose(fl);
+        fl = null;
+        if (res != 0) throw new ErrnoException("can't close file", __FILE__, __LINE__);
+      } else {
+        fl = null;
+      }
     }
   }
 
@@ -416,8 +421,8 @@ protected:
 }
 
 
-usize WrapLibcFile (core.stdc.stdio.FILE* fl) {
-  return newWS!WrappedStreamLibcFile(fl);
+usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl) {
+  return newWS!(WrappedStreamLibcFile!ownfl)(fl);
 }
 
 
@@ -1098,4 +1103,35 @@ struct ZLibLowLevelWO {
 /// default compression mode is 9.
 public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9) {
   return wrapStream(ZLibLowLevelWO(st, mode, complevel));
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// wrap read-only memory buffer into VFile
+public VFile wrapMemoryRO (const(void)[] buf) { return wrapStream(MemoryStreamRO(buf)); }
+
+/// wrap read-write memory buffer into VFile; it duplicates data
+public VFile wrapMemoryRW (const(void)[] buf) { return wrapStream(MemoryStreamRW(buf)); }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// wrap libc stdout
+public VFile wrapStdout () {
+  import core.stdc.stdio : stdout;
+  if (stdout !is null) return wrapStream(stdout);
+  return VFile.init;
+}
+
+/// wrap libc stderr
+public VFile wrapStderr () {
+  import core.stdc.stdio : stderr;
+  if (stderr !is null) return wrapStream(stderr);
+  return VFile.init;
+}
+
+/// wrap libc stdin
+public VFile wrapStdin () {
+  import core.stdc.stdio : stdin;
+  if (stdin !is null) return wrapStream(stdin);
+  return VFile.init;
 }
