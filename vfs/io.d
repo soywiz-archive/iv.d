@@ -127,15 +127,15 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
 
 // ////////////////////////////////////////////////////////////////////////// //
 // hack around "has scoped destruction, cannot build closure"
-public void write(A...) (VFile fl, auto ref A args) { return writeImpl!(false)(fl, args); }
-public void write(ST, A...) (auto ref ST fl, auto ref A args) if (!is(ST == VFile) && isReadableStream!ST) { return writeImpl!(false, ST)(fl, args); }
-public void writeln(A...) (VFile fl, auto ref A args) { return writeImpl!(true)(fl, args); }
-public void writeln(ST, A...) (auto ref ST fl, auto ref A args) if (!is(ST == VFile) && isReadableStream!ST) { return writeImpl!(true, ST)(fl, args); }
+public void write(A...) (VFile fl, auto ref A args) { writeImpl!(false)(fl, args); }
+public void write(ST, A...) (auto ref ST fl, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writeImpl!(false, ST)(fl, args); }
+public void writeln(A...) (VFile fl, auto ref A args) { writeImpl!(true)(fl, args); }
+public void writeln(ST, A...) (auto ref ST fl, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writeImpl!(true, ST)(fl, args); }
 
-public void writef(Char:dchar, A...) (VFile fl, const(Char)[] fmt, auto ref A args) { return writefImpl!(false, Char)(fl, fmt, args); }
-public void writef(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) if (!is(ST == VFile) && isReadableStream!ST) { return writefImpl!(false, Char, ST)(fl, fmt, args); }
-public void writefln(Char:dchar, A...) (VFile fl, const(Char)[] fmt, auto ref A args) { return writefImpl!(true, Char)(fl, fmt, args); }
-public void writefln(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) if (!is(ST == VFile) && isReadableStream!ST) { return writefImpl!(true, Char, ST)(fl, fmt, args); }
+public void writef(Char:dchar, A...) (VFile fl, const(Char)[] fmt, auto ref A args) { writefImpl!(false, Char)(fl, fmt, args); }
+public void writef(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writefImpl!(false, Char, ST)(fl, fmt, args); }
+public void writefln(Char:dchar, A...) (VFile fl, const(Char)[] fmt, auto ref A args) { writefImpl!(true, Char)(fl, fmt, args); }
+public void writefln(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, auto ref A args) if (!is(ST == VFile) && isWriteableStream!ST) { writefImpl!(true, Char, ST)(fl, fmt, args); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -182,3 +182,25 @@ private auto readfImpl(Char:dchar, ST, A...) (auto ref ST fl, const(Char)[] fmt,
   auto rd = Reader!ST(fl);
   return formattedRead(rd, fmt, args);
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// aaaaah, let's conflict with std.stdio!
+public __gshared VFile stdin, stdout, stderr;
+
+shared static this () {
+  stdin = wrapStdin;
+  stdout = wrapStdout;
+  stderr = wrapStderr;
+}
+
+
+public void write(A...) (auto ref A args) if (A.length == 0) {}
+public void write(A...) (auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { writeImpl!false(stdout, args); }
+public void writeln(A...) (auto ref A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
+public void writeln(A...) (auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { writeImpl!true(stdout, args); }
+
+public void writef(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length == 0) {}
+public void writef(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(false, Char)(fl, fmt, args); }
+public void writefln(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
+public void writefln(Char:dchar, A...) (const(Char)[] fmt, auto ref A args) if (A.length > 0 && !isWriteableStream!(A[0])) { return writefImpl!(true, Char)(fl, fmt, args); }
