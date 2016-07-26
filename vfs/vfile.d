@@ -941,6 +941,11 @@ public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stp
   return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len));
 }
 
+/// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
+public VFile wrapZLibStreamRO (VFile st, long upsize, long stpos=0, long len=-1) {
+  return wrapZLibStreamRO(st, VFSZLibMode.ZLib, upsize, stpos, len);
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct ZLibLowLevelWO {
@@ -1105,12 +1110,17 @@ public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9) {
   return wrapStream(ZLibLowLevelWO(st, mode, complevel));
 }
 
+/// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
+public VFile wrapZLibStreamWO (VFile st, int complevel=9) {
+  return wrapZLibStreamWO(st, VFSZLibMode.ZLib, complevel);
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// wrap read-only memory buffer into VFile
 public VFile wrapMemoryRO (const(void)[] buf) { return wrapStream(MemoryStreamRO(buf)); }
 
-/// wrap read-write memory buffer into VFile; it duplicates data
+/// wrap read-write memory buffer into VFile; duplicates data
 public VFile wrapMemoryRW (const(void)[] buf) { return wrapStream(MemoryStreamRW(buf)); }
 
 
