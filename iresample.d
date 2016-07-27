@@ -1117,7 +1117,7 @@ struct FilterInfo {
   Resampler.Resample_Real support;
 }
 
-static immutable FilterInfo[$] g_filters = [
+static immutable FilterInfo[16] g_filters = [
    FilterInfo("box",              &box_filter,              BOX_FILTER_SUPPORT),
    FilterInfo("tent",             &tent_filter,             TENT_FILTER_SUPPORT),
    FilterInfo("bell",             &bell_filter,             BELL_SUPPORT),
