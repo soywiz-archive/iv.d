@@ -106,6 +106,21 @@ public:
       (cast(uint)(a*255)<<24);
   }
 
+  // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
+  @property uint asUintHtml () const {
+    pragma(inline, true);
+    return
+      cast(uint)(b*255)|
+      (cast(uint)(g*255)<<8)|
+      (cast(uint)(r*255)<<16)|
+      (cast(uint)(a*255)<<24);
+  }
+
+  static NVGColor fromHtml (uint c) {
+    pragma(inline, true);
+    return NVGColor((c>>16)&0xff, (c>>8)&0xff, c&0xff, (c>>24)&0xff);
+  }
+
   @property ref inout(float) r () inout @trusted { pragma(inline, true); return rgba.ptr[0]; }
   @property ref inout(float) g () inout @trusted { pragma(inline, true); return rgba.ptr[1]; }
   @property ref inout(float) b () inout @trusted { pragma(inline, true); return rgba.ptr[2]; }
