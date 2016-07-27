@@ -1078,12 +1078,12 @@ version(nanovg_use_arsd_image) {
 
 /// Creates image by loading it from the disk from specified file name.
 /// Returns handle to the image.
-public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags) {
+public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=NVGImageFlags.None) {
   version(nanovg_use_arsd_image) {
     try {
       auto img = ArsdImage(filename).getAsTrueColorImage;
       scope(exit) img.destroy;
-      return ctx.createImageRGBA(img.width, img.height, imageFlags, img.imageData.bytes[]);
+      return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
     } catch (Exception) {}
     return 0;
   } else {
@@ -1106,22 +1106,22 @@ public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags) 
 version(nanovg_use_arsd_image) {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image.
-  public int createImageFromMemoryImage (NVGContext ctx, int imageFlags, MemoryImage img) {
+  public int createImageFromMemoryImage (NVGContext ctx, MemoryImage img, int imageFlags=NVGImageFlags.None) {
     if (img is null) return 0;
     auto tc = img.getAsTrueColorImage;
-    return ctx.createImageRGBA(tc.width, tc.height, imageFlags, tc.imageData.bytes[]);
+    return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
   }
 } else {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image.
-  public int createImageMem (NVGContext ctx, int imageFlags, ubyte* data, int ndata) {
+  public int createImageMem (NVGContext ctx, const(ubyte)* data, int ndata, int imageFlags=NVGImageFlags.None) {
     int w, h, n, image;
     ubyte* img = stbi_load_from_memory(data, ndata, &w, &h, &n, 4);
     if (img is null) {
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
       return 0;
     }
-    image = ctx.createImageRGBA(w, h, imageFlags, img[0..w*h*4]);
+    image = ctx.createImageRGBA(w, h, img[0..w*h*4], imageFlags);
     stbi_image_free(img);
     return image;
   }
@@ -1129,7 +1129,7 @@ version(nanovg_use_arsd_image) {
 
 /// Creates image from specified image data.
 /// Returns handle to the image.
-public int createImageRGBA (NVGContext ctx, int w, int h, int imageFlags, const(void)[] data) {
+public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, int imageFlags=NVGImageFlags.None) {
   if (w < 1 || h < 1 || data.length < w*h*4) return -1;
   return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
 }
