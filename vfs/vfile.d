@@ -81,7 +81,7 @@ public:
   }
 
   /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
-  this (core.stdc.stdio.FILE* fl, bool own=false) {
+  this (core.stdc.stdio.FILE* fl, bool own=true) {
     if (fl is null) throw new VFSException("can't open file");
     if (own) wstp = WrapLibcFile!true(fl); else wstp = WrapLibcFile!false(fl);
   }
@@ -953,7 +953,6 @@ struct ZLibLowLevelWO {
 
   enum obsize = 32768;
 
-
   VFile zfl; // destination file
   VFSZLibMode mode;
   long stpos; // starting position
@@ -1128,20 +1127,20 @@ public VFile wrapMemoryRW (const(void)[] buf) { return wrapStream(MemoryStreamRW
 /// wrap libc stdout
 public VFile wrapStdout () {
   import core.stdc.stdio : stdout;
-  if (stdout !is null) return wrapStream(stdout);
+  if (stdout !is null) return VFile(stdout, false); // don't own
   return VFile.init;
 }
 
 /// wrap libc stderr
 public VFile wrapStderr () {
   import core.stdc.stdio : stderr;
-  if (stderr !is null) return wrapStream(stderr);
+  if (stderr !is null) return VFile(stderr, false); // don't own
   return VFile.init;
 }
 
 /// wrap libc stdin
 public VFile wrapStdin () {
   import core.stdc.stdio : stdin;
-  if (stdin !is null) return wrapStream(stdin);
+  if (stdin !is null) return VFile(stdin, false); // don't own
   return VFile.init;
 }
