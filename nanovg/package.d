@@ -3428,29 +3428,35 @@ struct FONStextIter {
   short isize, iblur;
   FONSfont* font;
   int prevGlyphIndex;
-  // for char
-  const(char)* str;
-  const(char)* next;
-  const(char)* end;
-  uint utf8state;
-  // for dchar
-  const(dchar)* dstr;
-  const(dchar)* dnext;
-  const(dchar)* dend;
-  // to choose between states, check if `str` is null
-  @property bool isChar () const pure nothrow @safe @nogc { pragma(inline, true); return (str !is null); }
-  @property const(T)* string(T) () const pure nothrow @safe @nogc if (is(T == char) || is(T == dchar)) {
+  union {
+    // for char
+    struct {
+      const(char)* str;
+      const(char)* next;
+      const(char)* end;
+      uint utf8state;
+    }
+    // for dchar
+    struct {
+      const(dchar)* dstr;
+      const(dchar)* dnext;
+      const(dchar)* dend;
+    }
+  }
+  bool isChar;
+  @property const(T)* string(T) () const pure nothrow @nogc if (is(T == char) || is(T == dchar)) {
     pragma(inline, true);
     static if (is(T == char)) return str; else return dstr;
   }
-  @property const(T)* nextp(T) () const pure nothrow @safe @nogc if (is(T == char) || is(T == dchar)) {
+  @property const(T)* nextp(T) () const pure nothrow @nogc if (is(T == char) || is(T == dchar)) {
     pragma(inline, true);
     static if (is(T == char)) return next; else return dnext;
   }
-  @property const(T)* endp(T) () const pure nothrow @safe @nogc if (is(T == char) || is(T == dchar)) {
+  @property const(T)* endp(T) () const pure nothrow @nogc if (is(T == char) || is(T == dchar)) {
     pragma(inline, true);
     static if (is(T == char)) return end; else return dend;
   }
+  ~this () { pragma(inline, true); if (isChar) { str = next = end = null; utf8state = 0; } else { dstr = dnext = dend = null; } }
 }
 
 
@@ -4539,16 +4545,18 @@ public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* st
 }
 +/
 
-public int fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
+public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
+  if (stash is null || iter is null) return false;
+
   FONSstate* state = fons__getState(stash);
   float width;
 
   memset(iter, 0, (*iter).sizeof);
 
-  if (stash is null || str.length == 0) return 0;
-  if (state.font < 0 || state.font >= stash.nfonts) return 0;
+  if (stash is null) return false;
+  if (state.font < 0 || state.font >= stash.nfonts) return false;
   iter.font = stash.fonts[state.font];
-  if (iter.font.data is null) return 0;
+  if (iter.font.data is null) return false;
 
   iter.isize = cast(short)(state.size*10.0f);
   iter.iblur = cast(short)state.blur;
@@ -4575,20 +4583,22 @@ public int fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x,
     iter.str = str.ptr;
     iter.next = str.ptr;
     iter.end = str.ptr+str.length;
+    iter.isChar = true;
   } else {
     iter.dstr = str.ptr;
     iter.dnext = str.ptr;
     iter.dend = str.ptr+str.length;
+    iter.isChar = false;
   }
   iter.codepoint = 0;
   iter.prevGlyphIndex = -1;
 
-  return 1;
+  return true;
 }
 
 public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) {
+  if (stash is null || iter is null) return false;
   FONSglyph* glyph = null;
-
   if (iter.isChar) {
     const(char)* str = iter.next;
     iter.str = iter.next;
@@ -4599,7 +4609,7 @@ public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* 
       mixin(DecUtfMixin!("iter.utf8state", "iter.codepoint", "*cast(const(ubyte)*)str"));
       if (iter.utf8state) continue;
       ++str; // 'cause we'll break anyway
-      // Get glyph and quad
+      // get glyph and quad
       iter.x = iter.nextx;
       iter.y = iter.nexty;
       glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
@@ -4630,7 +4640,6 @@ public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* 
     }
     iter.dnext = str;
   }
-
   return true;
 }
 
