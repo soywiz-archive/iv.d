@@ -127,7 +127,74 @@ public:
   @property ref inout(float) g () inout @trusted { pragma(inline, true); return rgba.ptr[1]; }
   @property ref inout(float) b () inout @trusted { pragma(inline, true); return rgba.ptr[2]; }
   @property ref inout(float) a () inout @trusted { pragma(inline, true); return rgba.ptr[3]; }
+
+  NVGHSL asHSL (bool useWeightedLightness=false) const { pragma(inline, true); return NVGHSL.fromColor(this, useWeightedLightness); }
+  static fromHSL() (in auto ref NVGHSL hsl) { pragma(inline, true); return hsl.asColor; }
 }
+
+
+align(1) struct NVGHSL {
+align(1):
+  float h=0, s=0, l=1, a=1;
+
+  string toString () const { import std.format : format; return (a != 1 ? "HSL(%s,%s,%s,%d)".format(h, s, l, a) : "HSL(%s,%s,%s)".format(h, s, l)); }
+
+nothrow @safe @nogc:
+public:
+  this (float ah, float as, float al, float aa=1) pure { pragma(inline, true); h = ah; s = as; l = al; a = aa; }
+
+  NVGColor asColor () const { /*pragma(inline, true);*/ return nvgHSLA(h, s, l, a); }
+
+  // taken from Adam's arsd.color
+  /** Converts an RGB color into an HSL triplet.
+   * `useWeightedLightness` will try to get a better value for luminosity for the human eye,
+   * which is more sensitive to green than red and more to red than blue.
+   * If it is false, it just does average of the rgb. */
+  static NVGHSL fromColor() (in auto ref NVGColor c, bool useWeightedLightness=false) pure {
+    NVGHSL res;
+    res.a = c.a;
+    float r1 = c.r;
+    float g1 = c.g;
+    float b1 = c.b;
+
+    float maxColor = r1;
+    if (g1 > maxColor) maxColor = g1;
+    if (b1 > maxColor) maxColor = b1;
+    float minColor = r1;
+    if (g1 < minColor) minColor = g1;
+    if (b1 < minColor) minColor = b1;
+
+    res.l = (maxColor+minColor)/2;
+    if (useWeightedLightness) {
+      // the colors don't affect the eye equally
+      // this is a little more accurate than plain HSL numbers
+      res.l = 0.2126*r1+0.7152*g1+0.0722*b1;
+    }
+    //res.s = 0;
+    //res.h = 0;
+    if (maxColor != minColor) {
+      if (res.l < 0.5) {
+        res.s = (maxColor-minColor)/(maxColor+minColor);
+      } else {
+        res.s = (maxColor-minColor)/(2.0-maxColor-minColor);
+      }
+      if (r1 == maxColor) {
+        res.h = (g1-b1)/(maxColor-minColor);
+      } else if(g1 == maxColor) {
+        res.h = 2.0+(b1-r1)/(maxColor-minColor);
+      } else {
+        res.h = 4.0+(r1-g1)/(maxColor-minColor);
+      }
+    }
+
+    res.h = res.h*60;
+    if (res.h < 0) res.h += 360;
+    res.h /= 360;
+
+    return res;
+  }
+}
+
 
 ///
 struct NVGPaint {
@@ -672,6 +739,25 @@ public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
   col.g = nvg__clampf(nvg__hue(h, m1, m2), 0.0f, 1.0f);
   col.b = nvg__clampf(nvg__hue(h-1.0f/3.0f, m1, m2), 0.0f, 1.0f);
   col.a = a/255.0f;
+  return col;
+}
+
+/// Ditto.
+public NVGColor nvgHSLA() (float h, float s, float l, float a) {
+  // sorry for copypasta, it is for inliner
+  pragma(inline, true);
+  float m1, m2;
+  NVGColor col = void;
+  h = nvg__modf(h, 1.0f);
+  if (h < 0.0f) h += 1.0f;
+  s = nvg__clampf(s, 0.0f, 1.0f);
+  l = nvg__clampf(l, 0.0f, 1.0f);
+  m2 = l <= 0.5f ? (l*(1+s)) : (l+s-l*s);
+  m1 = 2*l-m2;
+  col.r = nvg__clampf(nvg__hue(h+1.0f/3.0f, m1, m2), 0.0f, 1.0f);
+  col.g = nvg__clampf(nvg__hue(h, m1, m2), 0.0f, 1.0f);
+  col.b = nvg__clampf(nvg__hue(h-1.0f/3.0f, m1, m2), 0.0f, 1.0f);
+  col.a = a;
   return col;
 }
 
