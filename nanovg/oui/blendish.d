@@ -1947,7 +1947,7 @@ if (is(T == char) || is(T == dchar))
   float asc, desc, lh;
   static NVGTextRow[BND_MAX_ROWS] rows;
   auto rres = ctx.textBreakLines(label, w, rows[]);
-  { import core.stdc.stdio : printf; printf("rlen=%u\n", cast(uint)rres.length); }
+  //{ import core.stdc.stdio : printf; printf("rlen=%u\n", cast(uint)rres.length); }
   if (rres.length == 0) return 0;
   ctx.textBoxBounds(x, y, w, label, bounds[]);
   ctx.textMetrics(&asc, &desc, &lh);
