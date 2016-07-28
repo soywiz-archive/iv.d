@@ -71,9 +71,9 @@ public:
 public:
   @property string toString () const @safe { import std.string : format; return "NVGColor(%s,%s,%s,%s)".format(r, g, b, a); }
 
-pure nothrow @safe @nogc:
+nothrow @safe @nogc:
 public:
-  this (ubyte ar, ubyte ag, ubyte ab, ubyte aa=255) {
+  this (ubyte ar, ubyte ag, ubyte ab, ubyte aa=255) pure {
     pragma(inline, true);
     r = ar/255.0f;
     g = ag/255.0f;
@@ -81,7 +81,7 @@ public:
     a = aa/255.0f;
   }
 
-  this (float ar, float ag, float ab, float aa=1) {
+  this (float ar, float ag, float ab, float aa=1) pure {
     pragma(inline, true);
     r = ar;
     g = ag;
@@ -90,7 +90,7 @@ public:
   }
 
   // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
-  this (uint c) {
+  this (uint c) pure {
     pragma(inline, true);
     r = (c&0xff)/255.0f;
     g = ((c>>8)&0xff)/255.0f;
@@ -99,7 +99,7 @@ public:
   }
 
   // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
-  @property uint asUint () const {
+  @property uint asUint () const pure {
     pragma(inline, true);
     return
       cast(uint)(r*255)|
@@ -109,7 +109,7 @@ public:
   }
 
   // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
-  @property uint asUintHtml () const {
+  @property uint asUintHtml () const pure {
     pragma(inline, true);
     return
       cast(uint)(b*255)|
@@ -118,18 +118,23 @@ public:
       (cast(uint)(a*255)<<24);
   }
 
-  static NVGColor fromHtml (uint c) {
+  static NVGColor fromHtml (uint c) pure {
     pragma(inline, true);
     return NVGColor((c>>16)&0xff, (c>>8)&0xff, c&0xff, (c>>24)&0xff);
   }
 
-  @property ref inout(float) r () inout @trusted { pragma(inline, true); return rgba.ptr[0]; }
-  @property ref inout(float) g () inout @trusted { pragma(inline, true); return rgba.ptr[1]; }
-  @property ref inout(float) b () inout @trusted { pragma(inline, true); return rgba.ptr[2]; }
-  @property ref inout(float) a () inout @trusted { pragma(inline, true); return rgba.ptr[3]; }
+  @property ref inout(float) r () inout pure @trusted { pragma(inline, true); return rgba.ptr[0]; }
+  @property ref inout(float) g () inout pure @trusted { pragma(inline, true); return rgba.ptr[1]; }
+  @property ref inout(float) b () inout pure @trusted { pragma(inline, true); return rgba.ptr[2]; }
+  @property ref inout(float) a () inout pure @trusted { pragma(inline, true); return rgba.ptr[3]; }
 
-  NVGHSL asHSL (bool useWeightedLightness=false) const { pragma(inline, true); return NVGHSL.fromColor(this, useWeightedLightness); }
+  NVGHSL asHSL() (bool useWeightedLightness=false) const { pragma(inline, true); return NVGHSL.fromColor(this, useWeightedLightness); }
   static fromHSL() (in auto ref NVGHSL hsl) { pragma(inline, true); return hsl.asColor; }
+
+  version(nanovg_use_arsd_image) {
+    Color toArsd () const { /*pragma(inline, true);*/ import core.stdc.math : lrintf; return Color(lrintf(r*255), lrintf(g*255), lrintf(b*255), lrintf(a*255)); }
+    static NVGColor fromArsd() (in auto ref Color c) const { /*pragma(inline, true);*/ return NVGColor(c.r, c.g, c.b, c.a); }
+  }
 }
 
 
