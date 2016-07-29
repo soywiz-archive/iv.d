@@ -5276,284 +5276,151 @@ private extern(C) nothrow @nogc {
   enum uint GL_ARRAY_BUFFER = 0x8892;
 
   alias glbfn_glStencilMask = void function(GLuint);
-  __gshared glbfn_glStencilMask glStencilMask = function void (GLuint a0) nothrow {
+  __gshared glbfn_glStencilMask glStencilMask;
+  alias glbfn_glStencilFunc = void function(GLenum, GLint, GLuint);
+  __gshared glbfn_glStencilFunc glStencilFunc;
+  alias glbfn_glGetShaderInfoLog = void function(GLuint, GLsizei, GLsizei*, GLchar*);
+  __gshared glbfn_glGetShaderInfoLog glGetShaderInfoLog;
+  alias glbfn_glGetProgramInfoLog = void function(GLuint, GLsizei, GLsizei*, GLchar*);
+  __gshared glbfn_glGetProgramInfoLog glGetProgramInfoLog;
+  alias glbfn_glCreateProgram = GLuint function();
+  __gshared glbfn_glCreateProgram glCreateProgram;
+  alias glbfn_glCreateShader = GLuint function(GLenum);
+  __gshared glbfn_glCreateShader glCreateShader;
+  alias glbfn_glShaderSource = void function(GLuint, GLsizei, const(GLchar*)*, const(GLint)*);
+  __gshared glbfn_glShaderSource glShaderSource;
+  alias glbfn_glCompileShader = void function(GLuint);
+  __gshared glbfn_glCompileShader glCompileShader;
+  alias glbfn_glGetShaderiv = void function(GLuint, GLenum, GLint*);
+  __gshared glbfn_glGetShaderiv glGetShaderiv;
+  alias glbfn_glAttachShader = void function(GLuint, GLuint);
+  __gshared glbfn_glAttachShader glAttachShader;
+  alias glbfn_glBindAttribLocation = void function(GLuint, GLuint, const(GLchar)*);
+  __gshared glbfn_glBindAttribLocation glBindAttribLocation;
+  alias glbfn_glLinkProgram = void function(GLuint);
+  __gshared glbfn_glLinkProgram glLinkProgram;
+  alias glbfn_glGetProgramiv = void function(GLuint, GLenum, GLint*);
+  __gshared glbfn_glGetProgramiv glGetProgramiv;
+  alias glbfn_glDeleteProgram = void function(GLuint);
+  __gshared glbfn_glDeleteProgram glDeleteProgram;
+  alias glbfn_glDeleteShader = void function(GLuint);
+  __gshared glbfn_glDeleteShader glDeleteShader;
+  alias glbfn_glGetUniformLocation = GLint function(GLuint, const(GLchar)*);
+  __gshared glbfn_glGetUniformLocation glGetUniformLocation;
+  alias glbfn_glGenBuffers = void function(GLsizei, GLuint*);
+  __gshared glbfn_glGenBuffers glGenBuffers;
+  alias glbfn_glPixelStorei = void function(GLenum, GLint);
+  __gshared glbfn_glPixelStorei glPixelStorei;
+  alias glbfn_glUniform4fv = void function(GLint, GLsizei, const(GLfloat)*);
+  __gshared glbfn_glUniform4fv glUniform4fv;
+  alias glbfn_glColorMask = void function(GLboolean, GLboolean, GLboolean, GLboolean);
+  __gshared glbfn_glColorMask glColorMask;
+  alias glbfn_glStencilOpSeparate = void function(GLenum, GLenum, GLenum, GLenum);
+  __gshared glbfn_glStencilOpSeparate glStencilOpSeparate;
+  alias glbfn_glDrawArrays = void function(GLenum, GLint, GLsizei);
+  __gshared glbfn_glDrawArrays glDrawArrays;
+  alias glbfn_glStencilOp = void function(GLenum, GLenum, GLenum);
+  __gshared glbfn_glStencilOp glStencilOp;
+  alias glbfn_glUseProgram = void function(GLuint);
+  __gshared glbfn_glUseProgram glUseProgram;
+  alias glbfn_glCullFace = void function(GLenum);
+  __gshared glbfn_glCullFace glCullFace;
+  alias glbfn_glFrontFace = void function(GLenum);
+  __gshared glbfn_glFrontFace glFrontFace;
+  alias glbfn_glActiveTexture = void function(GLenum);
+  __gshared glbfn_glActiveTexture glActiveTexture;
+  alias glbfn_glBindBuffer = void function(GLenum, GLuint);
+  __gshared glbfn_glBindBuffer glBindBuffer;
+  alias glbfn_glBufferData = void function(GLenum, GLsizeiptr, const(void)*, GLenum);
+  __gshared glbfn_glBufferData glBufferData;
+  alias glbfn_glEnableVertexAttribArray = void function(GLuint);
+  __gshared glbfn_glEnableVertexAttribArray glEnableVertexAttribArray;
+  alias glbfn_glVertexAttribPointer = void function(GLuint, GLint, GLenum, GLboolean, GLsizei, const(void)*);
+  __gshared glbfn_glVertexAttribPointer glVertexAttribPointer;
+  alias glbfn_glUniform1i = void function(GLint, GLint);
+  __gshared glbfn_glUniform1i glUniform1i;
+  alias glbfn_glUniform2fv = void function(GLint, GLsizei, const(GLfloat)*);
+  __gshared glbfn_glUniform2fv glUniform2fv;
+  alias glbfn_glDisableVertexAttribArray = void function(GLuint);
+  __gshared glbfn_glDisableVertexAttribArray glDisableVertexAttribArray;
+  alias glbfn_glDeleteBuffers = void function(GLsizei, const(GLuint)*);
+  __gshared glbfn_glDeleteBuffers glDeleteBuffers;
+
+  private void nanovgInitOpenGL () {
+    __gshared bool initialized = false;
+    if (initialized) return;
     glStencilMask = cast(glbfn_glStencilMask)glGetProcAddress(`glStencilMask`);
     if (glStencilMask is null) assert(0, `OpenGL function 'glStencilMask' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glStencilMask'\n"); }
-    glStencilMask(a0,);
-  };
-
-  alias glbfn_glStencilFunc = void function(GLenum, GLint, GLuint);
-  __gshared glbfn_glStencilFunc glStencilFunc = function void (GLenum a0, GLint a1, GLuint a2) nothrow {
     glStencilFunc = cast(glbfn_glStencilFunc)glGetProcAddress(`glStencilFunc`);
     if (glStencilFunc is null) assert(0, `OpenGL function 'glStencilFunc' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glStencilFunc'\n"); }
-    glStencilFunc(a0,a1,a2,);
-  };
-
-  alias glbfn_glGetShaderInfoLog = void function(GLuint, GLsizei, GLsizei*, GLchar*);
-  __gshared glbfn_glGetShaderInfoLog glGetShaderInfoLog = function void (GLuint a0, GLsizei a1, GLsizei* a2, GLchar* a3) nothrow {
     glGetShaderInfoLog = cast(glbfn_glGetShaderInfoLog)glGetProcAddress(`glGetShaderInfoLog`);
     if (glGetShaderInfoLog is null) assert(0, `OpenGL function 'glGetShaderInfoLog' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glGetShaderInfoLog'\n"); }
-    glGetShaderInfoLog(a0,a1,a2,a3,);
-  };
-
-  alias glbfn_glGetProgramInfoLog = void function(GLuint, GLsizei, GLsizei*, GLchar*);
-  __gshared glbfn_glGetProgramInfoLog glGetProgramInfoLog = function void (GLuint a0, GLsizei a1, GLsizei* a2, GLchar* a3) nothrow {
     glGetProgramInfoLog = cast(glbfn_glGetProgramInfoLog)glGetProcAddress(`glGetProgramInfoLog`);
     if (glGetProgramInfoLog is null) assert(0, `OpenGL function 'glGetProgramInfoLog' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glGetProgramInfoLog'\n"); }
-    glGetProgramInfoLog(a0,a1,a2,a3,);
-  };
-
-  alias glbfn_glCreateProgram = GLuint function();
-  __gshared glbfn_glCreateProgram glCreateProgram = function GLuint () nothrow {
     glCreateProgram = cast(glbfn_glCreateProgram)glGetProcAddress(`glCreateProgram`);
     if (glCreateProgram is null) assert(0, `OpenGL function 'glCreateProgram' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glCreateProgram'\n"); }
-    return glCreateProgram();
-  };
-
-  alias glbfn_glCreateShader = GLuint function(GLenum);
-  __gshared glbfn_glCreateShader glCreateShader = function GLuint (GLenum a0) nothrow {
     glCreateShader = cast(glbfn_glCreateShader)glGetProcAddress(`glCreateShader`);
     if (glCreateShader is null) assert(0, `OpenGL function 'glCreateShader' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glCreateShader'\n"); }
-    return glCreateShader(a0,);
-  };
-
-  alias glbfn_glShaderSource = void function(GLuint, GLsizei, const(GLchar*)*, const(GLint)*);
-  __gshared glbfn_glShaderSource glShaderSource = function void (GLuint a0, GLsizei a1, const(GLchar*)* a2, const(GLint)* a3) nothrow {
     glShaderSource = cast(glbfn_glShaderSource)glGetProcAddress(`glShaderSource`);
     if (glShaderSource is null) assert(0, `OpenGL function 'glShaderSource' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glShaderSource'\n"); }
-    glShaderSource(a0,a1,a2,a3,);
-  };
-
-  alias glbfn_glCompileShader = void function(GLuint);
-  __gshared glbfn_glCompileShader glCompileShader = function void (GLuint a0) nothrow {
     glCompileShader = cast(glbfn_glCompileShader)glGetProcAddress(`glCompileShader`);
     if (glCompileShader is null) assert(0, `OpenGL function 'glCompileShader' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glCompileShader'\n"); }
-    glCompileShader(a0,);
-  };
-
-  alias glbfn_glGetShaderiv = void function(GLuint, GLenum, GLint*);
-  __gshared glbfn_glGetShaderiv glGetShaderiv = function void (GLuint a0, GLenum a1, GLint* a2) nothrow {
     glGetShaderiv = cast(glbfn_glGetShaderiv)glGetProcAddress(`glGetShaderiv`);
     if (glGetShaderiv is null) assert(0, `OpenGL function 'glGetShaderiv' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glGetShaderiv'\n"); }
-    glGetShaderiv(a0,a1,a2,);
-  };
-
-  alias glbfn_glAttachShader = void function(GLuint, GLuint);
-  __gshared glbfn_glAttachShader glAttachShader = function void (GLuint a0, GLuint a1) nothrow {
     glAttachShader = cast(glbfn_glAttachShader)glGetProcAddress(`glAttachShader`);
     if (glAttachShader is null) assert(0, `OpenGL function 'glAttachShader' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glAttachShader'\n"); }
-    glAttachShader(a0,a1,);
-  };
-
-  alias glbfn_glBindAttribLocation = void function(GLuint, GLuint, const(GLchar)*);
-  __gshared glbfn_glBindAttribLocation glBindAttribLocation = function void (GLuint a0, GLuint a1, const(GLchar)* a2) nothrow {
     glBindAttribLocation = cast(glbfn_glBindAttribLocation)glGetProcAddress(`glBindAttribLocation`);
     if (glBindAttribLocation is null) assert(0, `OpenGL function 'glBindAttribLocation' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glBindAttribLocation'\n"); }
-    glBindAttribLocation(a0,a1,a2,);
-  };
-
-  alias glbfn_glLinkProgram = void function(GLuint);
-  __gshared glbfn_glLinkProgram glLinkProgram = function void (GLuint a0) nothrow {
     glLinkProgram = cast(glbfn_glLinkProgram)glGetProcAddress(`glLinkProgram`);
     if (glLinkProgram is null) assert(0, `OpenGL function 'glLinkProgram' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glLinkProgram'\n"); }
-    glLinkProgram(a0,);
-  };
-
-  alias glbfn_glGetProgramiv = void function(GLuint, GLenum, GLint*);
-  __gshared glbfn_glGetProgramiv glGetProgramiv = function void (GLuint a0, GLenum a1, GLint* a2) nothrow {
     glGetProgramiv = cast(glbfn_glGetProgramiv)glGetProcAddress(`glGetProgramiv`);
     if (glGetProgramiv is null) assert(0, `OpenGL function 'glGetProgramiv' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glGetProgramiv'\n"); }
-    glGetProgramiv(a0,a1,a2,);
-  };
-
-  alias glbfn_glDeleteProgram = void function(GLuint);
-  __gshared glbfn_glDeleteProgram glDeleteProgram = function void (GLuint a0) nothrow {
     glDeleteProgram = cast(glbfn_glDeleteProgram)glGetProcAddress(`glDeleteProgram`);
     if (glDeleteProgram is null) assert(0, `OpenGL function 'glDeleteProgram' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glDeleteProgram'\n"); }
-    glDeleteProgram(a0,);
-  };
-
-  alias glbfn_glDeleteShader = void function(GLuint);
-  __gshared glbfn_glDeleteShader glDeleteShader = function void (GLuint a0) nothrow {
     glDeleteShader = cast(glbfn_glDeleteShader)glGetProcAddress(`glDeleteShader`);
     if (glDeleteShader is null) assert(0, `OpenGL function 'glDeleteShader' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glDeleteShader'\n"); }
-    glDeleteShader(a0,);
-  };
-
-  alias glbfn_glGetUniformLocation = GLint function(GLuint, const(GLchar)*);
-  __gshared glbfn_glGetUniformLocation glGetUniformLocation = function GLint (GLuint a0, const(GLchar)* a1) nothrow {
     glGetUniformLocation = cast(glbfn_glGetUniformLocation)glGetProcAddress(`glGetUniformLocation`);
     if (glGetUniformLocation is null) assert(0, `OpenGL function 'glGetUniformLocation' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glGetUniformLocation'\n"); }
-    return glGetUniformLocation(a0,a1,);
-  };
-
-  alias glbfn_glGenBuffers = void function(GLsizei, GLuint*);
-  __gshared glbfn_glGenBuffers glGenBuffers = function void (GLsizei a0, GLuint* a1) nothrow {
     glGenBuffers = cast(glbfn_glGenBuffers)glGetProcAddress(`glGenBuffers`);
     if (glGenBuffers is null) assert(0, `OpenGL function 'glGenBuffers' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glGenBuffers'\n"); }
-    glGenBuffers(a0,a1,);
-  };
-
-  alias glbfn_glPixelStorei = void function(GLenum, GLint);
-  __gshared glbfn_glPixelStorei glPixelStorei = function void (GLenum a0, GLint a1) nothrow {
     glPixelStorei = cast(glbfn_glPixelStorei)glGetProcAddress(`glPixelStorei`);
     if (glPixelStorei is null) assert(0, `OpenGL function 'glPixelStorei' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glPixelStorei'\n"); }
-    glPixelStorei(a0,a1,);
-  };
-
-  alias glbfn_glUniform4fv = void function(GLint, GLsizei, const(GLfloat)*);
-  __gshared glbfn_glUniform4fv glUniform4fv = function void (GLint a0, GLsizei a1, const(GLfloat)* a2) nothrow {
     glUniform4fv = cast(glbfn_glUniform4fv)glGetProcAddress(`glUniform4fv`);
     if (glUniform4fv is null) assert(0, `OpenGL function 'glUniform4fv' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glUniform4fv'\n"); }
-    glUniform4fv(a0,a1,a2,);
-  };
-
-  alias glbfn_glColorMask = void function(GLboolean, GLboolean, GLboolean, GLboolean);
-  __gshared glbfn_glColorMask glColorMask = function void (GLboolean a0, GLboolean a1, GLboolean a2, GLboolean a3) nothrow {
     glColorMask = cast(glbfn_glColorMask)glGetProcAddress(`glColorMask`);
     if (glColorMask is null) assert(0, `OpenGL function 'glColorMask' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glColorMask'\n"); }
-    glColorMask(a0,a1,a2,a3,);
-  };
-
-  alias glbfn_glStencilOpSeparate = void function(GLenum, GLenum, GLenum, GLenum);
-  __gshared glbfn_glStencilOpSeparate glStencilOpSeparate = function void (GLenum a0, GLenum a1, GLenum a2, GLenum a3) nothrow {
     glStencilOpSeparate = cast(glbfn_glStencilOpSeparate)glGetProcAddress(`glStencilOpSeparate`);
     if (glStencilOpSeparate is null) assert(0, `OpenGL function 'glStencilOpSeparate' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glStencilOpSeparate'\n"); }
-    glStencilOpSeparate(a0,a1,a2,a3,);
-  };
-
-  alias glbfn_glDrawArrays = void function(GLenum, GLint, GLsizei);
-  __gshared glbfn_glDrawArrays glDrawArrays = function void (GLenum a0, GLint a1, GLsizei a2) nothrow {
     glDrawArrays = cast(glbfn_glDrawArrays)glGetProcAddress(`glDrawArrays`);
     if (glDrawArrays is null) assert(0, `OpenGL function 'glDrawArrays' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glDrawArrays'\n"); }
-    glDrawArrays(a0,a1,a2,);
-  };
-
-  alias glbfn_glStencilOp = void function(GLenum, GLenum, GLenum);
-  __gshared glbfn_glStencilOp glStencilOp = function void (GLenum a0, GLenum a1, GLenum a2) nothrow {
     glStencilOp = cast(glbfn_glStencilOp)glGetProcAddress(`glStencilOp`);
     if (glStencilOp is null) assert(0, `OpenGL function 'glStencilOp' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glStencilOp'\n"); }
-    glStencilOp(a0,a1,a2,);
-  };
-
-  alias glbfn_glUseProgram = void function(GLuint);
-  __gshared glbfn_glUseProgram glUseProgram = function void (GLuint a0) nothrow {
     glUseProgram = cast(glbfn_glUseProgram)glGetProcAddress(`glUseProgram`);
     if (glUseProgram is null) assert(0, `OpenGL function 'glUseProgram' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glUseProgram'\n"); }
-    glUseProgram(a0,);
-  };
-
-  alias glbfn_glCullFace = void function(GLenum);
-  __gshared glbfn_glCullFace glCullFace = function void (GLenum a0) nothrow {
     glCullFace = cast(glbfn_glCullFace)glGetProcAddress(`glCullFace`);
     if (glCullFace is null) assert(0, `OpenGL function 'glCullFace' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glCullFace'\n"); }
-    glCullFace(a0,);
-  };
-
-  alias glbfn_glFrontFace = void function(GLenum);
-  __gshared glbfn_glFrontFace glFrontFace = function void (GLenum a0) nothrow {
     glFrontFace = cast(glbfn_glFrontFace)glGetProcAddress(`glFrontFace`);
     if (glFrontFace is null) assert(0, `OpenGL function 'glFrontFace' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glFrontFace'\n"); }
-    glFrontFace(a0,);
-  };
-
-  alias glbfn_glActiveTexture = void function(GLenum);
-  __gshared glbfn_glActiveTexture glActiveTexture = function void (GLenum a0) nothrow {
     glActiveTexture = cast(glbfn_glActiveTexture)glGetProcAddress(`glActiveTexture`);
     if (glActiveTexture is null) assert(0, `OpenGL function 'glActiveTexture' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glActiveTexture'\n"); }
-    glActiveTexture(a0,);
-  };
-
-  alias glbfn_glBindBuffer = void function(GLenum, GLuint);
-  __gshared glbfn_glBindBuffer glBindBuffer = function void (GLenum a0, GLuint a1) nothrow {
     glBindBuffer = cast(glbfn_glBindBuffer)glGetProcAddress(`glBindBuffer`);
     if (glBindBuffer is null) assert(0, `OpenGL function 'glBindBuffer' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glBindBuffer'\n"); }
-    glBindBuffer(a0,a1,);
-  };
-
-  alias glbfn_glBufferData = void function(GLenum, GLsizeiptr, const(void)*, GLenum);
-  __gshared glbfn_glBufferData glBufferData = function void (GLenum a0, GLsizeiptr a1, const(void)* a2, GLenum a3) nothrow {
     glBufferData = cast(glbfn_glBufferData)glGetProcAddress(`glBufferData`);
     if (glBufferData is null) assert(0, `OpenGL function 'glBufferData' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glBufferData'\n"); }
-    glBufferData(a0,a1,a2,a3,);
-  };
-
-  alias glbfn_glEnableVertexAttribArray = void function(GLuint);
-  __gshared glbfn_glEnableVertexAttribArray glEnableVertexAttribArray = function void (GLuint a0) nothrow {
     glEnableVertexAttribArray = cast(glbfn_glEnableVertexAttribArray)glGetProcAddress(`glEnableVertexAttribArray`);
     if (glEnableVertexAttribArray is null) assert(0, `OpenGL function 'glEnableVertexAttribArray' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glEnableVertexAttribArray'\n"); }
-    glEnableVertexAttribArray(a0,);
-  };
-
-  alias glbfn_glVertexAttribPointer = void function(GLuint, GLint, GLenum, GLboolean, GLsizei, const(void)*);
-  __gshared glbfn_glVertexAttribPointer glVertexAttribPointer = function void (GLuint a0, GLint a1, GLenum a2, GLboolean a3, GLsizei a4, const(void)* a5) nothrow {
     glVertexAttribPointer = cast(glbfn_glVertexAttribPointer)glGetProcAddress(`glVertexAttribPointer`);
     if (glVertexAttribPointer is null) assert(0, `OpenGL function 'glVertexAttribPointer' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glVertexAttribPointer'\n"); }
-    glVertexAttribPointer(a0,a1,a2,a3,a4,a5,);
-  };
-
-  alias glbfn_glUniform1i = void function(GLint, GLint);
-  __gshared glbfn_glUniform1i glUniform1i = function void (GLint a0, GLint a1) nothrow {
     glUniform1i = cast(glbfn_glUniform1i)glGetProcAddress(`glUniform1i`);
     if (glUniform1i is null) assert(0, `OpenGL function 'glUniform1i' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glUniform1i'\n"); }
-    glUniform1i(a0,a1,);
-  };
-
-  alias glbfn_glUniform2fv = void function(GLint, GLsizei, const(GLfloat)*);
-  __gshared glbfn_glUniform2fv glUniform2fv = function void (GLint a0, GLsizei a1, const(GLfloat)* a2) nothrow {
     glUniform2fv = cast(glbfn_glUniform2fv)glGetProcAddress(`glUniform2fv`);
     if (glUniform2fv is null) assert(0, `OpenGL function 'glUniform2fv' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glUniform2fv'\n"); }
-    glUniform2fv(a0,a1,a2,);
-  };
-
-  alias glbfn_glDisableVertexAttribArray = void function(GLuint);
-  __gshared glbfn_glDisableVertexAttribArray glDisableVertexAttribArray = function void (GLuint a0) nothrow {
     glDisableVertexAttribArray = cast(glbfn_glDisableVertexAttribArray)glGetProcAddress(`glDisableVertexAttribArray`);
     if (glDisableVertexAttribArray is null) assert(0, `OpenGL function 'glDisableVertexAttribArray' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glDisableVertexAttribArray'\n"); }
-    glDisableVertexAttribArray(a0,);
-  };
-
-  alias glbfn_glDeleteBuffers = void function(GLsizei, const(GLuint)*);
-  __gshared glbfn_glDeleteBuffers glDeleteBuffers = function void (GLsizei a0, const(GLuint)* a1) nothrow {
     glDeleteBuffers = cast(glbfn_glDeleteBuffers)glGetProcAddress(`glDeleteBuffers`);
     if (glDeleteBuffers is null) assert(0, `OpenGL function 'glDeleteBuffers' not found!`);
-    version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, "GLBIND: 'glDeleteBuffers'\n"); }
-    glDeleteBuffers(a0,a1,);
-  };
+    initialized = true;
+  }
 }
 
 
@@ -6122,6 +5989,7 @@ void glnvg__xformToMat3x4 (float* m3, const(float)* t) {
 }
 
 NVGColor glnvg__premulColor (NVGColor c) {
+  //pragma(inline, true);
   c.r *= c.a;
   c.g *= c.a;
   c.b *= c.a;
@@ -6645,6 +6513,7 @@ void glnvg__renderDelete (void* uptr) {
 public NVGContext createGL2NVG (int flags) {
   NVGparams params;
   NVGContext ctx = null;
+  nanovgInitOpenGL(); // why not?
   GLNVGcontext* gl = cast(GLNVGcontext*)malloc(GLNVGcontext.sizeof);
   if (gl is null) goto error;
   memset(gl, 0, GLNVGcontext.sizeof);

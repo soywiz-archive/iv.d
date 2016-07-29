@@ -27,6 +27,8 @@ import iv.vfs.posixci;
 import iv.vfs.koi8;
 static import core.sync.mutex;
 
+version(Windows) {} else version = VFS_Normal_OS;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 shared bool vflagIgnoreCase = true; // ignore file name case
@@ -137,7 +139,7 @@ public:
       nbuf[dataPath.length..dataPath.length+fname.length] = fname[];
       nbuf[dataPath.length+fname.length] = '\0';
     }
-    if (ignoreCase) {
+    version(VFS_Normal_OS) if (ignoreCase) {
       uint len;
       while (len < nbuf.length && nbuf.ptr[len]) ++len;
       auto pt = findPathCI(nbuf[0..len]);
@@ -315,15 +317,28 @@ char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
     if (ch < 128 && !got[ch]) {
       if (ch == 'i') { ignoreCase = true; continue; }
       if (ch == 'I') { ignoreCase = false; continue; }
+      version(VFS_Normal_OS) { if (ch == 'b' || ch == 't') continue; }
       if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
       got[ch] = true;
       modebuf.ptr[mpos++] = ch;
     }
   }
+  // add 'b' for idiotic shitdoze
+  version(VFS_Normal_OS) {} else {
+    if (!got['b'] && !got['t'] && (got['r'] || got['w'] || got['a'] || got['R'] || got['W'] || got['A'])) {
+      if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+      modebuf.ptr[mpos++] = 'b';
+    }
+  }
   if (mpos == 0) {
     if (modebuf.length < 2) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-    modebuf[0..1] = "r";
-    mpos = 1;
+    version(VFS_Normal_OS) {
+      modebuf[0..1] = "r";
+      mpos = 1;
+    } else {
+      modebuf[0..2] = "rb";
+      mpos = 1;
+    }
   }
   if (modebuf.length-mpos < 1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
   modebuf[mpos++] = '\0';
@@ -480,7 +495,7 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   char[2049] nbuf;
   nbuf[0..fname.length] = fname[];
   nbuf[fname.length] = '\0';
-  if (ignoreCase) {
+  version(VFS_Normal_OS) if (ignoreCase) {
     // we have to lock here, as `findPathCI()` is not thread-safe
     ptlock.lock();
     scope(exit) ptlock.unlock();
