@@ -27,6 +27,8 @@ import iv.vfs.posixci;
 import iv.vfs.koi8;
 static import core.sync.mutex;
 
+version(Windows) {} else version = NormalOS;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 shared bool vflagIgnoreCase = true; // ignore file name case
@@ -137,7 +139,7 @@ public:
       nbuf[dataPath.length..dataPath.length+fname.length] = fname[];
       nbuf[dataPath.length+fname.length] = '\0';
     }
-    if (ignoreCase) {
+    version(NormalOS) if (ignoreCase) {
       uint len;
       while (len < nbuf.length && nbuf.ptr[len]) ++len;
       auto pt = findPathCI(nbuf[0..len]);
@@ -488,7 +490,7 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   char[2049] nbuf;
   nbuf[0..fname.length] = fname[];
   nbuf[fname.length] = '\0';
-  if (ignoreCase) {
+  version(NormalOS) if (ignoreCase) {
     // we have to lock here, as `findPathCI()` is not thread-safe
     ptlock.lock();
     scope(exit) ptlock.unlock();

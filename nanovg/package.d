@@ -128,8 +128,8 @@ public:
   @property ref inout(float) b () inout pure @trusted { pragma(inline, true); return rgba.ptr[2]; }
   @property ref inout(float) a () inout pure @trusted { pragma(inline, true); return rgba.ptr[3]; }
 
-  NVGHSL asHSL() (bool useWeightedLightness=false) const { pragma(inline, true); return NVGHSL.fromColor(this, useWeightedLightness); }
-  static fromHSL() (in auto ref NVGHSL hsl) { pragma(inline, true); return hsl.asColor; }
+  NVGHSL asHSL() (bool useWeightedLightness=false) const { /*pragma(inline, true);*/ return NVGHSL.fromColor(this, useWeightedLightness); }
+  static fromHSL() (in auto ref NVGHSL hsl) { /*pragma(inline, true);*/ return hsl.asColor; }
 
   version(nanovg_use_arsd_image) {
     Color toArsd () const { /*pragma(inline, true);*/ import core.stdc.math : lrintf; return Color(lrintf(r*255), lrintf(g*255), lrintf(b*255), lrintf(a*255)); }
