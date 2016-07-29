@@ -20,9 +20,6 @@ module iv.vfs.posixci;
 private import core.sys.posix.dirent;
 import iv.vfs.koi8;
 
-version(Windows) {} else version = NormalOS;
-
-version(NormalOS) {
 
 // `name` will be modified
 package bool findFileCI (const(char)[] path, char[] name, bool asDir) {
@@ -141,7 +138,6 @@ package char[] findPathCI (char[] path, bool asDir=false) {
   return path;
 }
 
-}
 
 /*
 void main () {

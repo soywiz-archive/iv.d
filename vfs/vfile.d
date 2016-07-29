@@ -34,8 +34,6 @@ import iv.vfs.error;
 import iv.vfs.augs;
 import iv.vfs.streams.mem;
 
-version(Windows) {} else version = NormalOS;
-
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// wrapper structure for various streams. kinda like `std.stdio.File`,
@@ -89,7 +87,7 @@ public:
   }
 
   /// wrap file descriptor; `fd` is owned by VFile now; can throw
-  version(NormalOS) this (int fd) {
+  this (int fd) {
     if (fd < 0) throw new VFSException("can't open file");
     wstp = WrapFD(fd);
   }
@@ -416,17 +414,9 @@ protected:
 
   override long lseek (long offset, int origin) {
     if (fl is null) return -1;
-    version(Windows) {
-      // windoze sux
-      if (offset < int.min || offset > int.max) return -1;
-      auto res = core.stdc.stdio.fseek(fl, cast(int)offset, origin);
-      if (res != -1) core.stdc.stdio.clearerr(fl);
-      return core.stdc.stdio.ftell(fl);
-    } else {
-      auto res = core.sys.posix.stdio.fseeko(fl, offset, origin);
-      if (res != -1) core.stdc.stdio.clearerr(fl);
-      return core.sys.posix.stdio.ftello(fl);
-    }
+    auto res = core.sys.posix.stdio.fseeko(fl, offset, origin);
+    if (res != -1) core.stdc.stdio.clearerr(fl);
+    return core.sys.posix.stdio.ftello(fl);
   }
 }
 
@@ -437,7 +427,6 @@ usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-version(NormalOS)
 final class WrappedStreamFD : WrappedStreamRC {
 private:
   int fd;
@@ -482,7 +471,7 @@ protected:
 }
 
 
-version(NormalOS) usize WrapFD (int fd) {
+usize WrapFD (int fd) {
   return newWS!WrappedStreamFD(fd);
 }
 
@@ -600,7 +589,7 @@ public VFile wrapStream (VFile st) { return VFile(st); }
 public VFile wrapStream (core.stdc.stdio.FILE* st) { return VFile(st); }
 
 /// wrap file descriptor into `VFile`
-version(NormalOS) public VFile wrapStream (int st) { return VFile(st); }
+public VFile wrapStream (int st) { return VFile(st); }
 
 /** wrap any valid i/o stream into `VFile`.
  * "valid" stream should emplement one of two interfaces described below.
