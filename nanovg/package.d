@@ -5942,8 +5942,7 @@ bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int
   if (tex is null) return false;
   glnvg__bindTexture(gl, tex.tex);
 
-  glPixelStorei(GL_UNPACK_ALIGNMENT,1);
-
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, tex.width);
   glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
   glPixelStorei(GL_UNPACK_SKIP_ROWS, y);

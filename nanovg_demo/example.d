@@ -59,7 +59,7 @@ void main () {
   auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoVG", OpenGlOptions.yes, Resizablity.fixedSize);
   //sdwindow.hideCursor();
 
-  sdwindow.closeQuery = delegate () { doQuit = true; };
+  version(X11) sdwindow.closeQuery = delegate () { doQuit = true; };
 
   void closeWindow () {
     if (!sdwindow.closed && vg !is null) {
