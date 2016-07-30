@@ -367,7 +367,7 @@ char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
     if (ch < 128 && !got[ch]) {
       if (ch == 'i') { ignoreCase = true; continue; }
       if (ch == 'I') { ignoreCase = false; continue; }
-      if (ch == 'b' || ch == 't') continue;
+      static if (VFS_NORMAL_OS) if (ch == 'b'/* || ch == 't'*/) continue;
       if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
       got[ch] = true;
       modebuf.ptr[mpos++] = ch;
@@ -387,7 +387,7 @@ char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
       mpos = 1;
     } else {
       modebuf[0..2] = "rb";
-      mpos = 1;
+      mpos = 2;
     }
   }
   if (modebuf.length-mpos < 1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
