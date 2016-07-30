@@ -326,7 +326,7 @@ struct NVGpath {
 
 struct NVGparams {
   void* userPtr;
-  int edgeAntiAlias;
+  bool edgeAntiAlias;
   bool function (void* uptr) renderCreate;
   int function (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) renderCreateTexture;
   bool function (void* uptr, int image) renderDeleteTexture;
@@ -608,9 +608,7 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
          ctx.fillTriCount+ctx.strokeTriCount+ctx.textTriCount);
   */
 
-  if (isNaN(devicePixelRatio)) {
-    devicePixelRatio = (windowHeight > 0 ? cast(float)windowWidth/cast(float)windowHeight : 1024.0/768.0);
-  }
+  if (isNaN(devicePixelRatio)) devicePixelRatio = (windowHeight > 0 ? cast(float)windowWidth/cast(float)windowHeight : 1024.0/768.0);
 
   ctx.nstates = 0;
   ctx.save();
@@ -636,15 +634,19 @@ public void endFrame (NVGContext ctx) {
   ctx.params.renderFlush(ctx.params.userPtr);
   if (ctx.fontImageIdx != 0) {
     int fontImage = ctx.fontImages[ctx.fontImageIdx];
-    int i, j, iw, ih;
+    int j, iw, ih;
     // delete images that smaller than current one
     if (fontImage == 0) return;
     ctx.imageSize(fontImage, &iw, &ih);
-    for (i = j = 0; i < ctx.fontImageIdx; i++) {
+    foreach (int i; 0..ctx.fontImageIdx) {
       if (ctx.fontImages[i] != 0) {
         int nw, nh;
         ctx.imageSize(ctx.fontImages[i], &nw, &nh);
-        if (nw < iw || nh < ih) ctx.deleteImage(ctx.fontImages[i]); else ctx.fontImages[j++] = ctx.fontImages[i];
+        if (nw < iw || nh < ih) {
+          ctx.deleteImage(ctx.fontImages[i]);
+        } else {
+          ctx.fontImages[j++] = ctx.fontImages[i];
+        }
       }
     }
     // make current font image to first
@@ -652,7 +654,7 @@ public void endFrame (NVGContext ctx) {
     ctx.fontImages[0] = fontImage;
     ctx.fontImageIdx = 0;
     // clear all images after j
-    for (i = j; i < NVG_MAX_FONTIMAGES; i++) ctx.fontImages[i] = 0;
+    ctx.fontImages[j..NVG_MAX_FONTIMAGES] = 0;
   }
 }
 
@@ -799,100 +801,112 @@ NVGstate* nvg__getState (NVGContext ctx) {
 public alias NVGSectionDummy01 = void;
 
 /// Sets the transform to identity matrix.
-public void nvgTransformIdentity (float* t) {
+public void nvgTransformIdentity (float[] t) {
   pragma(inline, true);
-  t[0] = 1.0f; t[1] = 0.0f;
-  t[2] = 0.0f; t[3] = 1.0f;
-  t[4] = 0.0f; t[5] = 0.0f;
+  assert(t.length > 5);
+  t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
+  t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
+  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to translation matrix matrix.
-public void nvgTransformTranslate (float* t, float tx, float ty) {
+public void nvgTransformTranslate (float[] t, float tx, float ty) {
   pragma(inline, true);
-  t[0] = 1.0f; t[1] = 0.0f;
-  t[2] = 0.0f; t[3] = 1.0f;
-  t[4] = tx; t[5] = ty;
+  assert(t.length > 5);
+  t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
+  t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
+  t.ptr[4] = tx; t.ptr[5] = ty;
 }
 
 /// Sets the transform to scale matrix.
-public void nvgTransformScale (float* t, float sx, float sy) {
+public void nvgTransformScale (float[] t, float sx, float sy) {
   pragma(inline, true);
-  t[0] = sx; t[1] = 0.0f;
-  t[2] = 0.0f; t[3] = sy;
-  t[4] = 0.0f; t[5] = 0.0f;
+  assert(t.length > 5);
+  t.ptr[0] = sx; t.ptr[1] = 0.0f;
+  t.ptr[2] = 0.0f; t.ptr[3] = sy;
+  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to rotate matrix. Angle is specified in radians.
-public void nvgTransformRotate (float* t, float a) {
+public void nvgTransformRotate (float[] t, float a) {
   //pragma(inline, true);
+  assert(t.length > 5);
   float cs = nvg__cosf(a), sn = nvg__sinf(a);
-  t[0] = cs; t[1] = sn;
-  t[2] = -sn; t[3] = cs;
-  t[4] = 0.0f; t[5] = 0.0f;
+  t.ptr[0] = cs; t.ptr[1] = sn;
+  t.ptr[2] = -sn; t.ptr[3] = cs;
+  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to skew-x matrix. Angle is specified in radians.
-public void nvgTransformSkewX (float* t, float a) {
+public void nvgTransformSkewX (float[] t, float a) {
   //pragma(inline, true);
-  t[0] = 1.0f; t[1] = 0.0f;
-  t[2] = nvg__tanf(a); t[3] = 1.0f;
-  t[4] = 0.0f; t[5] = 0.0f;
+  assert(t.length > 5);
+  t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
+  t.ptr[2] = nvg__tanf(a); t.ptr[3] = 1.0f;
+  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to skew-y matrix. Angle is specified in radians.
-public void nvgTransformSkewY (float* t, float a) {
+public void nvgTransformSkewY (float[] t, float a) {
   //pragma(inline, true);
-  t[0] = 1.0f; t[1] = nvg__tanf(a);
-  t[2] = 0.0f; t[3] = 1.0f;
-  t[4] = 0.0f; t[5] = 0.0f;
+  assert(t.length > 5);
+  t.ptr[0] = 1.0f; t.ptr[1] = nvg__tanf(a);
+  t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
+  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to the result of multiplication of two transforms, of A = A*B.
-public void nvgTransformMultiply (float* t, const(float)* s) {
+public void nvgTransformMultiply (float[] t, const(float)[] s) {
+  assert(t.length > 5);
+  assert(s.length > 5);
   //pragma(inline, true);
-  float t0 = t[0]*s[0]+t[1]*s[2];
-  float t2 = t[2]*s[0]+t[3]*s[2];
-  float t4 = t[4]*s[0]+t[5]*s[2]+s[4];
-  t[1] = t[0]*s[1]+t[1]*s[3];
-  t[3] = t[2]*s[1]+t[3]*s[3];
-  t[5] = t[4]*s[1]+t[5]*s[3]+s[5];
-  t[0] = t0;
-  t[2] = t2;
-  t[4] = t4;
+  float t0 = t.ptr[0]*s.ptr[0]+t.ptr[1]*s.ptr[2];
+  float t2 = t.ptr[2]*s.ptr[0]+t.ptr[3]*s.ptr[2];
+  float t4 = t.ptr[4]*s.ptr[0]+t.ptr[5]*s.ptr[2]+s.ptr[4];
+  t.ptr[1] = t.ptr[0]*s.ptr[1]+t.ptr[1]*s.ptr[3];
+  t.ptr[3] = t.ptr[2]*s.ptr[1]+t.ptr[3]*s.ptr[3];
+  t.ptr[5] = t.ptr[4]*s.ptr[1]+t.ptr[5]*s.ptr[3]+s.ptr[5];
+  t.ptr[0] = t0;
+  t.ptr[2] = t2;
+  t.ptr[4] = t4;
 }
 
 /// Sets the transform to the result of multiplication of two transforms, of A = B*A.
-public void nvgTransformPremultiply (float* t, const(float)* s) {
+public void nvgTransformPremultiply (float[] t, const(float)[] s) {
+  assert(t.length > 5);
+  assert(s.length > 5);
   //pragma(inline, true);
-  float[6] s2;
-  memcpy(s2.ptr, s, (float).sizeof*6);
-  nvgTransformMultiply(s2.ptr, t);
-  memcpy(t, s2.ptr, (float).sizeof*6);
+  float[6] s2 = s[0..6];
+  nvgTransformMultiply(s2[], t);
+  t[0..6] = s2[];
 }
 
 /// Sets the destination to inverse of specified transform.
-/// Returns 1 if the inverse could be calculated, else 0.
-public int nvgTransformInverse (float* inv, const(float)* t) {
-  double det = cast(double)t[0]*t[3]-cast(double)t[2]*t[1];
+/// Returns `true` if the inverse could be calculated, else `false`.
+public bool nvgTransformInverse (float[] inv, const(float)[] t) {
+  assert(t.length > 5);
+  assert(inv.length > 5);
+  double det = cast(double)t.ptr[0]*t.ptr[3]-cast(double)t.ptr[2]*t.ptr[1];
   if (det > -1e-6 && det < 1e-6) {
     nvgTransformIdentity(inv);
-    return 0;
+    return false;
   }
   double invdet = 1.0/det;
-  inv[0] = cast(float)(t[3]*invdet);
-  inv[2] = cast(float)(-t[2]*invdet);
-  inv[4] = cast(float)((cast(double)t[2]*t[5]-cast(double)t[3]*t[4])*invdet);
-  inv[1] = cast(float)(-t[1]*invdet);
-  inv[3] = cast(float)(t[0]*invdet);
-  inv[5] = cast(float)((cast(double)t[1]*t[4]-cast(double)t[0]*t[5])*invdet);
-  return 1;
+  inv.ptr[0] = cast(float)(t.ptr[3]*invdet);
+  inv.ptr[2] = cast(float)(-t.ptr[2]*invdet);
+  inv.ptr[4] = cast(float)((cast(double)t.ptr[2]*t.ptr[5]-cast(double)t.ptr[3]*t.ptr[4])*invdet);
+  inv.ptr[1] = cast(float)(-t.ptr[1]*invdet);
+  inv.ptr[3] = cast(float)(t.ptr[0]*invdet);
+  inv.ptr[5] = cast(float)((cast(double)t.ptr[1]*t.ptr[4]-cast(double)t.ptr[0]*t.ptr[5])*invdet);
+  return true;
 }
 
 /// Transform a point by given transform.
-public void nvgTransformPoint (float* dx, float* dy, const(float)* t, float sx, float sy) {
+public void nvgTransformPoint (float* dx, float* dy, const(float)[] t, float sx, float sy) {
   pragma(inline, true);
-  *dx = sx*t[0]+sy*t[2]+t[4];
-  *dy = sx*t[1]+sy*t[3]+t[5];
+  assert(t.length > 5);
+  *dx = sx*t.ptr[0]+sy*t.ptr[2]+t.ptr[4];
+  *dy = sx*t.ptr[1]+sy*t.ptr[3]+t.ptr[5];
 }
 
 // Converts degrees to radians.
@@ -910,7 +924,7 @@ public float nvgRadToDeg() (float rad) {
 void nvg__setPaintColor (NVGPaint* p, NVGColor color) {
   //pragma(inline, true);
   memset(p, 0, (*p).sizeof);
-  nvgTransformIdentity(p.xform.ptr);
+  nvgTransformIdentity(p.xform[]);
   p.radius = 0.0f;
   p.feather = 1.0f;
   p.innerColor = color;
@@ -954,7 +968,7 @@ public void reset (NVGContext ctx) {
   state.lineCap = NVGLineCap.Butt;
   state.lineJoin = NVGLineCap.Miter;
   state.alpha = 1.0f;
-  nvgTransformIdentity(state.xform.ptr);
+  nvgTransformIdentity(state.xform[]);
 
   state.scissor.extent[0] = -1.0f;
   state.scissor.extent[1] = -1.0f;
@@ -1024,53 +1038,53 @@ public void globalAlpha (NVGContext ctx, float alpha) {
 public void transform (NVGContext ctx, float a, float b, float c, float d, float e, float f) {
   NVGstate* state = nvg__getState(ctx);
   float[6] t = [ a, b, c, d, e, f ];
-  nvgTransformPremultiply(state.xform.ptr, t.ptr);
+  nvgTransformPremultiply(state.xform[], t[]);
 }
 
 /// Resets current transform to a identity matrix.
 public void resetTransform (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
-  nvgTransformIdentity(state.xform.ptr);
+  nvgTransformIdentity(state.xform[]);
 }
 
 /// Translates current coordinate system.
 public void translate (NVGContext ctx, float x, float y) {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t;
-  nvgTransformTranslate(t.ptr, x, y);
-  nvgTransformPremultiply(state.xform.ptr, t.ptr);
+  float[6] t = void;
+  nvgTransformTranslate(t[], x, y);
+  nvgTransformPremultiply(state.xform[], t[]);
 }
 
 /// Rotates current coordinate system. Angle is specified in radians.
 public void rotate (NVGContext ctx, float angle) {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t;
-  nvgTransformRotate(t.ptr, angle);
-  nvgTransformPremultiply(state.xform.ptr, t.ptr);
+  float[6] t = void;
+  nvgTransformRotate(t[], angle);
+  nvgTransformPremultiply(state.xform[], t[]);
 }
 
 /// Skews the current coordinate system along X axis. Angle is specified in radians.
 public void skewX (NVGContext ctx, float angle) {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t;
-  nvgTransformSkewX(t.ptr, angle);
-  nvgTransformPremultiply(state.xform.ptr, t.ptr);
+  float[6] t = void;
+  nvgTransformSkewX(t[], angle);
+  nvgTransformPremultiply(state.xform[], t[]);
 }
 
 /// Skews the current coordinate system along Y axis. Angle is specified in radians.
 public void skewY (NVGContext ctx, float angle) {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t;
-  nvgTransformSkewY(t.ptr, angle);
-  nvgTransformPremultiply(state.xform.ptr, t.ptr);
+  float[6] t = void;
+  nvgTransformSkewY(t[], angle);
+  nvgTransformPremultiply(state.xform[], t[]);
 }
 
 /// Scales the current coordinate system.
 public void scale (NVGContext ctx, float x, float y) {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t;
-  nvgTransformScale(t.ptr, x, y);
-  nvgTransformPremultiply(state.xform.ptr, t.ptr);
+  float[6] t = void;
+  nvgTransformScale(t[], x, y);
+  nvgTransformPremultiply(state.xform[], t[]);
 }
 
 /** Stores the top part (a-f) of the current transformation matrix in to the specified buffer.
@@ -1083,10 +1097,10 @@ public void scale (NVGContext ctx, float x, float y) {
  *
  * There should be space for 6 floats in the return buffer for the values a-f.
  */
-public void currentTransform (NVGContext ctx, float* xform) {
+public void currentTransform (NVGContext ctx, float[] xform) {
+  assert(xform.length > 5);
   NVGstate* state = nvg__getState(ctx);
-  if (xform is null) return;
-  memcpy(xform, state.xform.ptr, (float).sizeof*6);
+  xform[0..6] = state.xform[0..6];
 }
 
 /// Sets current stroke style to a solid color.
@@ -1099,7 +1113,7 @@ public void strokeColor (NVGContext ctx, NVGColor color) {
 public void strokePaint (NVGContext ctx, NVGPaint paint) {
   NVGstate* state = nvg__getState(ctx);
   state.stroke = paint;
-  nvgTransformMultiply(state.stroke.xform.ptr, state.xform.ptr);
+  nvgTransformMultiply(state.stroke.xform[], state.xform[]);
 }
 
 /// Sets current fill style to a solid color.
@@ -1112,7 +1126,7 @@ public void fillColor (NVGContext ctx, NVGColor color) {
 public void fillPaint (NVGContext ctx, NVGPaint paint) {
   NVGstate* state = nvg__getState(ctx);
   state.fill = paint;
-  nvgTransformMultiply(state.fill.xform.ptr, state.xform.ptr);
+  nvgTransformMultiply(state.fill.xform[], state.xform[]);
 }
 
 
@@ -1305,7 +1319,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
 
-  nvgTransformIdentity(p.xform.ptr);
+  nvgTransformIdentity(p.xform[]);
   p.xform.ptr[4] = cx;
   p.xform.ptr[5] = cy;
 
@@ -1333,7 +1347,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
 
-  nvgTransformIdentity(p.xform.ptr);
+  nvgTransformIdentity(p.xform[]);
   p.xform.ptr[4] = x+w*0.5f;
   p.xform.ptr[5] = y+h*0.5f;
 
@@ -1360,7 +1374,7 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
 
-  nvgTransformRotate(p.xform.ptr, angle);
+  nvgTransformRotate(p.xform[], angle);
   p.xform.ptr[4] = cx;
   p.xform.ptr[5] = cy;
 
@@ -1389,10 +1403,10 @@ public void scissor (NVGContext ctx, float x, float y, float w, float h) {
   w = nvg__maxf(0.0f, w);
   h = nvg__maxf(0.0f, h);
 
-  nvgTransformIdentity(state.scissor.xform.ptr);
+  nvgTransformIdentity(state.scissor.xform[]);
   state.scissor.xform.ptr[4] = x+w*0.5f;
   state.scissor.xform.ptr[5] = y+h*0.5f;
-  nvgTransformMultiply(state.scissor.xform.ptr, state.xform.ptr);
+  nvgTransformMultiply(state.scissor.xform[], state.xform[]);
 
   state.scissor.extent[0] = w*0.5f;
   state.scissor.extent[1] = h*0.5f;
@@ -1434,8 +1448,8 @@ public void intersectScissor (NVGContext ctx, float x, float y, float w, float h
   memcpy(pxform.ptr, state.scissor.xform.ptr, float.sizeof*6);
   ex = state.scissor.extent[0];
   ey = state.scissor.extent[1];
-  nvgTransformInverse(invxorm.ptr, state.xform.ptr);
-  nvgTransformMultiply(pxform.ptr, invxorm.ptr);
+  nvgTransformInverse(invxorm[], state.xform[]);
+  nvgTransformMultiply(pxform[], invxorm[]);
   tex = ex*nvg__absf(pxform[0])+ey*nvg__absf(pxform[2]);
   tey = ex*nvg__absf(pxform[1])+ey*nvg__absf(pxform[3]);
 
@@ -1497,17 +1511,17 @@ void nvg__appendCommands (NVGContext ctx, float* vals, int nvals) {
     auto cmd = cast(NVGcommands)vals[i];
     switch (cmd) {
     case NVGcommands.MoveTo:
-      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform.ptr, vals[i+1], vals[i+2]);
+      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform[], vals[i+1], vals[i+2]);
       i += 3;
       break;
     case NVGcommands.LineTo:
-      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform.ptr, vals[i+1], vals[i+2]);
+      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform[], vals[i+1], vals[i+2]);
       i += 3;
       break;
     case NVGcommands.BezierTo:
-      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform.ptr, vals[i+1], vals[i+2]);
-      nvgTransformPoint(&vals[i+3], &vals[i+4], state.xform.ptr, vals[i+3], vals[i+4]);
-      nvgTransformPoint(&vals[i+5], &vals[i+6], state.xform.ptr, vals[i+5], vals[i+6]);
+      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform[], vals[i+1], vals[i+2]);
+      nvgTransformPoint(&vals[i+3], &vals[i+4], state.xform[], vals[i+3], vals[i+4]);
+      nvgTransformPoint(&vals[i+5], &vals[i+6], state.xform[], vals[i+5], vals[i+6]);
       i += 7;
       break;
     case NVGcommands.Close:
@@ -1602,9 +1616,10 @@ void nvg__pathWinding (NVGContext ctx, NVGWinding winding) {
   path.winding = winding;
 }
 
-float nvg__getAverageScale (float* t) {
-  float sx = nvg__sqrtf(t[0]*t[0]+t[2]*t[2]);
-  float sy = nvg__sqrtf(t[1]*t[1]+t[3]*t[3]);
+float nvg__getAverageScale (float[] t) {
+  assert(t.length > 5);
+  float sx = nvg__sqrtf(t.ptr[0]*t.ptr[0]+t.ptr[2]*t.ptr[2]);
+  float sy = nvg__sqrtf(t.ptr[1]*t.ptr[1]+t.ptr[3]*t.ptr[3]);
   return (sx+sy)*0.5f;
 }
 
@@ -2611,7 +2626,7 @@ public void fill (NVGContext ctx) {
 /// Fills the current path with current stroke style.
 public void stroke (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
-  float scale = nvg__getAverageScale(state.xform.ptr);
+  float scale = nvg__getAverageScale(state.xform[]);
   float strokeWidth = nvg__clampf(state.strokeWidth*scale, 0.0f, 200.0f);
   NVGPaint strokePaint = state.stroke;
   const(NVGpath)* path;
@@ -2752,7 +2767,7 @@ float nvg__quantize (float a, float d) {
 
 float nvg__getFontScale (NVGstate* state) {
   pragma(inline, true);
-  return nvg__minf(nvg__quantize(nvg__getAverageScale(state.xform.ptr), 0.01f), 4.0f);
+  return nvg__minf(nvg__quantize(nvg__getAverageScale(state.xform[]), 0.01f), 4.0f);
 }
 
 void nvg__flushTextTexture (NVGContext ctx) {
@@ -2772,10 +2787,10 @@ void nvg__flushTextTexture (NVGContext ctx) {
   }
 }
 
-int nvg__allocTextAtlas (NVGContext ctx) {
+bool nvg__allocTextAtlas (NVGContext ctx) {
   int iw, ih;
   nvg__flushTextTexture(ctx);
-  if (ctx.fontImageIdx >= NVG_MAX_FONTIMAGES-1) return 0;
+  if (ctx.fontImageIdx >= NVG_MAX_FONTIMAGES-1) return false;
   // if next fontImage already have a texture
   if (ctx.fontImages[ctx.fontImageIdx+1] != 0) {
     ctx.imageSize(ctx.fontImages[ctx.fontImageIdx+1], &iw, &ih);
@@ -2788,7 +2803,7 @@ int nvg__allocTextAtlas (NVGContext ctx) {
   }
   ++ctx.fontImageIdx;
   fonsResetAtlas(ctx.fs, iw, ih);
-  return 1;
+  return true;
 }
 
 void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) {
@@ -2848,10 +2863,10 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T
     }
     prevIter = iter;
     // Transform corners.
-    nvgTransformPoint(&c[0], &c[1], state.xform.ptr, q.x0*invscale, q.y0*invscale);
-    nvgTransformPoint(&c[2], &c[3], state.xform.ptr, q.x1*invscale, q.y0*invscale);
-    nvgTransformPoint(&c[4], &c[5], state.xform.ptr, q.x1*invscale, q.y1*invscale);
-    nvgTransformPoint(&c[6], &c[7], state.xform.ptr, q.x0*invscale, q.y1*invscale);
+    nvgTransformPoint(&c[0], &c[1], state.xform[], q.x0*invscale, q.y0*invscale);
+    nvgTransformPoint(&c[2], &c[3], state.xform[], q.x1*invscale, q.y0*invscale);
+    nvgTransformPoint(&c[4], &c[5], state.xform[], q.x1*invscale, q.y1*invscale);
+    nvgTransformPoint(&c[6], &c[7], state.xform[], q.x0*invscale, q.y1*invscale);
     // Create triangles
     if (nverts+6 <= cverts) {
       nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); ++nverts;
@@ -5994,17 +6009,19 @@ bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) {
   return true;
 }
 
-void glnvg__xformToMat3x4 (float* m3, const(float)* t) {
-  m3[0] = t[0];
-  m3[1] = t[1];
+void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) {
+  assert(t.length > 5);
+  assert(m3.length > 11);
+  m3[0] = t.ptr[0];
+  m3[1] = t.ptr[1];
   m3[2] = 0.0f;
   m3[3] = 0.0f;
-  m3[4] = t[2];
-  m3[5] = t[3];
+  m3[4] = t.ptr[2];
+  m3[5] = t.ptr[3];
   m3[6] = 0.0f;
   m3[7] = 0.0f;
-  m3[8] = t[4];
-  m3[9] = t[5];
+  m3[8] = t.ptr[4];
+  m3[9] = t.ptr[5];
   m3[10] = 1.0f;
   m3[11] = 0.0f;
 }
@@ -6034,8 +6051,8 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     frag.scissorScale[0] = 1.0f;
     frag.scissorScale[1] = 1.0f;
   } else {
-    nvgTransformInverse(invxform.ptr, scissor.xform.ptr);
-    glnvg__xformToMat3x4(frag.scissorMat.ptr, invxform.ptr);
+    nvgTransformInverse(invxform[], scissor.xform[]);
+    glnvg__xformToMat3x4(frag.scissorMat[], invxform[]);
     frag.scissorExt[0] = scissor.extent[0];
     frag.scissorExt[1] = scissor.extent[1];
     frag.scissorScale[0] = sqrtf(scissor.xform[0]*scissor.xform[0]+scissor.xform[2]*scissor.xform[2])/fringe;
@@ -6051,11 +6068,11 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     if (tex is null) return false;
     if ((tex.flags&NVGImageFlags.FlipY) != 0) {
       float[6] flipped;
-      nvgTransformScale(flipped.ptr, 1.0f, -1.0f);
-      nvgTransformMultiply(flipped.ptr, paint.xform.ptr);
-      nvgTransformInverse(invxform.ptr, flipped.ptr);
+      nvgTransformScale(flipped[], 1.0f, -1.0f);
+      nvgTransformMultiply(flipped[], paint.xform[]);
+      nvgTransformInverse(invxform[], flipped[]);
     } else {
-      nvgTransformInverse(invxform.ptr, paint.xform.ptr);
+      nvgTransformInverse(invxform[], paint.xform[]);
     }
     frag.type = NSVG_SHADER_FILLIMG;
 
@@ -6069,10 +6086,10 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     frag.type = NSVG_SHADER_FILLGRAD;
     frag.radius = paint.radius;
     frag.feather = paint.feather;
-    nvgTransformInverse(invxform.ptr, paint.xform.ptr);
+    nvgTransformInverse(invxform[], paint.xform[]);
   }
 
-  glnvg__xformToMat3x4(frag.paintMat.ptr, invxform.ptr);
+  glnvg__xformToMat3x4(frag.paintMat[], invxform[]);
 
   return true;
 }
@@ -6553,7 +6570,7 @@ public NVGContext createGL2NVG (int flags) {
   params.renderTriangles = &glnvg__renderTriangles;
   params.renderDelete = &glnvg__renderDelete;
   params.userPtr = gl;
-  params.edgeAntiAlias = (flags&NVG_ANTIALIAS ? 1 : 0);
+  params.edgeAntiAlias = (flags&NVG_ANTIALIAS ? true : false);
 
   gl.flags = flags;
 
