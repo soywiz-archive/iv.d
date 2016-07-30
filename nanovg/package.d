@@ -519,7 +519,7 @@ package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) {
   memset(ctx, 0, NVGcontext.sizeof);
 
   ctx.params = *params;
-  foreach (uint i; 0..NVG_MAX_FONTIMAGES) ctx.fontImages[i] = 0;
+  ctx.fontImages[0..NVG_MAX_FONTIMAGES] = 0;
 
   ctx.commands = cast(float*)malloc(float.sizeof*NVG_INIT_COMMANDS_SIZE);
   if (ctx.commands is null) goto error;
@@ -731,7 +731,7 @@ public alias nvgHSL = nvgHSLA; // trick to allow inlining
 /// Returns color value specified by hue, saturation and lightness and alpha.
 /// HSL values are all in range [0..1], alpha in range [0..255]
 public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
-  pragma(inline, true);
+  static if (__VERSION__ >= 2072) pragma(inline, true);
   float m1, m2;
   NVGColor col = void;
   h = nvg__modf(h, 1.0f);
@@ -750,7 +750,7 @@ public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
 /// Ditto.
 public NVGColor nvgHSLA() (float h, float s, float l, float a) {
   // sorry for copypasta, it is for inliner
-  pragma(inline, true);
+  static if (__VERSION__ >= 2072) pragma(inline, true);
   float m1, m2;
   NVGColor col = void;
   h = nvg__modf(h, 1.0f);
@@ -5219,7 +5219,7 @@ static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT =
 
 
 // OpenGL API missing from simpledisplay
-private extern(C) nothrow @nogc {
+private extern(System) nothrow @nogc {
   alias GLvoid = void;
   alias GLboolean = ubyte;
   alias GLuint = uint;
@@ -5274,6 +5274,25 @@ private extern(C) nothrow @nogc {
   enum uint GL_TEXTURE0 = 0x84C0;
 
   enum uint GL_ARRAY_BUFFER = 0x8892;
+
+  /*
+  version(Windows) {
+    private void* kglLoad (const(char)* name) {
+      void* res = glGetProcAddress(name);
+      if (res is null) {
+        import core.sys.windows.windef, core.sys.windows.winbase;
+        static HINSTANCE dll = null;
+        if (dll is null) {
+          dll = LoadLibraryA("opengl32.dll");
+          if (dll is null) return null; // <32, but idc
+          return GetProcAddress(dll, name);
+        }
+      }
+    }
+  } else {
+    alias kglLoad = glGetProcAddress;
+  }
+  */
 
   alias glbfn_glStencilMask = void function(GLuint);
   __gshared glbfn_glStencilMask glStencilMask;
@@ -5653,7 +5672,7 @@ bool glnvg__deleteTexture (GLNVGcontext* gl, int id) {
 
 void glnvg__dumpShaderError (GLuint shader, const(char)* name, const(char)* type) {
   import core.stdc.stdio : fprintf, stderr;
-  GLchar[512+1] str;
+  GLchar[512+1] str = 0;
   GLsizei len = 0;
   glGetShaderInfoLog(shader, 512, &len, str.ptr);
   if (len > 512) len = 512;
@@ -5663,7 +5682,7 @@ void glnvg__dumpShaderError (GLuint shader, const(char)* name, const(char)* type
 
 void glnvg__dumpProgramError (GLuint prog, const(char)* name) {
   import core.stdc.stdio : fprintf, stderr;
-  GLchar[512+1] str;
+  GLchar[512+1] str = 0;
   GLsizei len = 0;
   glGetProgramInfoLog(prog, 512, &len, str.ptr);
   if (len > 512) len = 512;
@@ -5686,18 +5705,16 @@ bool glnvg__createShader (GLNVGshader* shader, const(char)* name, const(char)* h
   GLint status;
   GLuint prog, vert, frag;
   const(char)*[3] str;
-  str[0] = header;
-  str[1] = (opts !is null ? opts : "");
 
   memset(shader, 0, (*shader).sizeof);
 
   prog = glCreateProgram();
   vert = glCreateShader(GL_VERTEX_SHADER);
   frag = glCreateShader(GL_FRAGMENT_SHADER);
+  str[0] = header;
+  str[1] = (opts !is null ? opts : "");
   str[2] = vshader;
   glShaderSource(vert, 3, cast(const(char*)*)str.ptr, null);
-  str[2] = fshader;
-  glShaderSource(frag, 3, cast(const(char*)*)str.ptr, null);
 
   glCompileShader(vert);
   glGetShaderiv(vert, GL_COMPILE_STATUS, &status);
@@ -5705,6 +5722,11 @@ bool glnvg__createShader (GLNVGshader* shader, const(char)* name, const(char)* h
     glnvg__dumpShaderError(vert, name, "vert");
     return false;
   }
+
+  str[0] = header;
+  str[1] = (opts !is null ? opts : "");
+  str[2] = fshader;
+  glShaderSource(frag, 3, cast(const(char*)*)str.ptr, null);
 
   glCompileShader(frag);
   glGetShaderiv(frag, GL_COMPILE_STATUS, &status);
@@ -5869,7 +5891,7 @@ bool glnvg__renderCreate (void* uptr) {
 
   glFinish();
 
-  return 1;
+  return true;
 }
 
 int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) {

@@ -108,11 +108,7 @@ void main () {
     } else {
       vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
     }
-    if (vg is null) {
-      import std.stdio;
-      writeln("Could not init nanovg.");
-      //sdwindow.close();
-    }
+    if (vg is null) assert(0, "Could not init nanovg.");
     if (loadDemoData(vg, &data) == -1) {
       //sdwindow.close();
       import std.stdio;
@@ -126,7 +122,7 @@ void main () {
     sdwindow.redrawOpenGlScene();
   };
 
-  sdwindow.eventLoop(1000/62,
+  sdwindow.eventLoop(1000/35,
     delegate () {
       if (sdwindow.closed) return;
       if (doQuit) { closeWindow(); return; }

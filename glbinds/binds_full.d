@@ -12,11 +12,24 @@ version = glbind_lazy_load;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-extern(C) nothrow @nogc {
+extern(System) nothrow @nogc {
 
 version(Windows) {
   pragma(lib, "opengl32");
-  import core.sys.windows.wingdi : glGetProcAddress = wglGetProcAddress;
+  private void* glGetProcAddress (const(char)* name) {
+    import core.sys.windows.wingdi : wglGetProcAddress;
+    void* res = wglGetProcAddress(name);
+    if (res is null) {
+      import core.sys.windows.windef, core.sys.windows.winbase;
+      static HINSTANCE dll = null;
+      if (dll is null) {
+        dll = LoadLibraryA("opengl32.dll");
+        if (dll is null) return null; // <32, but idc
+      }
+      return GetProcAddress(dll, name);
+    }
+    return res;
+  }
 } else {
   pragma(lib, "GL");
   void* glXGetProcAddress (const(char)* name);
