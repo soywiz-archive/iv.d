@@ -30,11 +30,10 @@ static import core.sys.posix.unistd;
 static import std.stdio;
 
 import iv.vfs : ssize, usize, Seek;
+import iv.vfs.config;
 import iv.vfs.error;
 import iv.vfs.augs;
 import iv.vfs.streams.mem;
-
-version(Windows) {} else version = VFS_Normal_OS;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -89,7 +88,7 @@ public:
   }
 
   /// wrap file descriptor; `fd` is owned by VFile now; can throw
-  version(VFS_Normal_OS) this (int fd) {
+  static if (VFS_NORMAL_OS) this (int fd) {
     if (fd < 0) throw new VFSException("can't open file");
     wstp = WrapFD(fd);
   }
@@ -416,7 +415,7 @@ protected:
 
   override long lseek (long offset, int origin) {
     if (fl is null) return -1;
-    version(VFS_Normal_OS) {
+    static if (VFS_NORMAL_OS) {
       auto res = core.sys.posix.stdio.fseeko(fl, offset, origin);
     } else {
       // windoze sux
@@ -424,7 +423,7 @@ protected:
       auto res = core.stdc.stdio.fseek(fl, cast(int)offset, origin);
     }
     if (res != -1) core.stdc.stdio.clearerr(fl);
-    version(VFS_Normal_OS) {
+    static if (VFS_NORMAL_OS) {
       return core.sys.posix.stdio.ftello(fl);
     } else {
       return core.stdc.stdio.ftell(fl);
@@ -439,7 +438,7 @@ usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-version(VFS_Normal_OS) final class WrappedStreamFD : WrappedStreamRC {
+static if (VFS_NORMAL_OS) final class WrappedStreamFD : WrappedStreamRC {
 private:
   int fd;
 
@@ -483,7 +482,7 @@ protected:
 }
 
 
-version(VFS_Normal_OS) usize WrapFD (int fd) {
+static if (VFS_NORMAL_OS) usize WrapFD (int fd) {
   return newWS!WrappedStreamFD(fd);
 }
 
@@ -600,8 +599,10 @@ public VFile wrapStream (VFile st) { return VFile(st); }
 /// wrap libc `FILE*` into `VFile`
 public VFile wrapStream (core.stdc.stdio.FILE* st) { return VFile(st); }
 
+static if (VFS_NORMAL_OS) {
 /// wrap file descriptor into `VFile`
-version(VFS_Normal_OS) public VFile wrapStream (int st) { return VFile(st); }
+public VFile wrapStream (int st) { return VFile(st); }
+}
 
 /** wrap any valid i/o stream into `VFile`.
  * "valid" stream should emplement one of two interfaces described below.

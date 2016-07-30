@@ -15,34 +15,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs;
+// VFS config defs (somewhat similar to autocrap's config.h)
+module iv.vfs.config;
 
-static if (!is(typeof(object.usize))) {
-  package alias usize = size_t;
+public:
+version(Windows) {
+  enum VFS_SHITDOZE = true;
+  enum VFS_NORMAL_OS = false;
+} else version(Posix) {
+  enum VFS_SHITDOZE = false;
+  enum VFS_NORMAL_OS = true;
 } else {
-  package import object : usize;
+  static assert(false, "iv.vfs: not shitdoze and not posix? O_O");
 }
-
-static if (!is(typeof(object.ssize))) {
-       static if (usize.sizeof == 8) package alias ssize = long;
-  else static if (usize.sizeof == 4) package alias ssize = int;
-  else static assert(0, "wtf?!");
-} else {
-  package import object : ssize;
-}
-
-
-private import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
-public enum Seek : int {
-  Set = SEEK_SET,
-  Cur = SEEK_CUR,
-  End = SEEK_END,
-}
-
-
-public import iv.vfs.config;
-public import iv.vfs.error;
-public import iv.vfs.augs;
-public import iv.vfs.vfile;
-public import iv.vfs.main;
-public import iv.vfs.arcs;

@@ -20,14 +20,13 @@ module iv.vfs.main;
 private:
 
 import iv.vfs : usize;
+import iv.vfs.config;
 import iv.vfs.augs;
 import iv.vfs.error;
 import iv.vfs.vfile;
 import iv.vfs.posixci;
 import iv.vfs.koi8;
 static import core.sync.mutex;
-
-version(Windows) {} else version = VFS_Normal_OS;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -139,14 +138,18 @@ public:
       nbuf[dataPath.length..dataPath.length+fname.length] = fname[];
       nbuf[dataPath.length+fname.length] = '\0';
     }
-    version(VFS_Normal_OS) if (ignoreCase) {
+    static if (VFS_NORMAL_OS) if (ignoreCase) {
       uint len;
       while (len < nbuf.length && nbuf.ptr[len]) ++len;
       auto pt = findPathCI(nbuf[0..len]);
       if (pt is null) return VFile.init;
       nbuf[pt.length] = '\0';
     }
-    auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
+    static if (VFS_NORMAL_OS) {
+      auto fl = core.stdc.stdio.fopen(nbuf.ptr, "r");
+    } else {
+      auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
+    }
     if (fl is null) return VFile.init;
     try { return VFile(fl); } catch (Exception e) {}
     core.stdc.stdio.fclose(fl);
@@ -199,18 +202,18 @@ __gshared DriverInfo[] drivers;
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// register new VFS driver
+/// driver order is: firsts, normals, lasts (obviously ;-).
+/// search order is reverse: i.e. from last to first.
 public void vfsRegister(string mode="normal") (VFSDriver drv, const(char)[] fname=null, const(char)[] prefixpath=null) {
   import core.atomic : atomicOp;
   static assert(mode == "normal" || mode == "last" || mode == "first");
   if (drv is null) return;
-  //{ import core.stdc.stdio : printf; printf("*** %p [%s]\n", cast(void*)drv, mode.ptr); }
   ptlock.lock();
   scope(exit) ptlock.unlock();
   static if (mode == "normal") {
     // normal
     usize ipos = drivers.length;
     while (ipos > 0 && drivers[ipos-1].mode == DriverInfo.Mode.First) --ipos;
-    //{ import core.stdc.stdio : printf; printf("  : %u (%u)\n", cast(uint)ipos, cast(uint)drivers.length); }
     if (ipos == drivers.length) {
       drivers ~= DriverInfo(DriverInfo.Mode.Normal, drv, fname.idup, prefixpath.idup);
     } else {
@@ -226,14 +229,6 @@ public void vfsRegister(string mode="normal") (VFSDriver drv, const(char)[] fnam
   } else {
     static assert(0, "wtf?!");
   }
-  /*
-  {
-    foreach (immutable idx, ref di; drivers) {
-      import core.stdc.stdio : printf;
-      printf("+++ %u (%u) %p\n", cast(uint)idx, cast(uint)di.mode, cast(void*)di.drv);
-    }
-  }
-  */
 }
 
 
@@ -317,14 +312,14 @@ char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
     if (ch < 128 && !got[ch]) {
       if (ch == 'i') { ignoreCase = true; continue; }
       if (ch == 'I') { ignoreCase = false; continue; }
-      version(VFS_Normal_OS) { if (ch == 'b' || ch == 't') continue; }
+      if (ch == 'b' || ch == 't') continue;
       if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
       got[ch] = true;
       modebuf.ptr[mpos++] = ch;
     }
   }
   // add 'b' for idiotic shitdoze
-  version(VFS_Normal_OS) {} else {
+  static if (!VFS_NORMAL_OS) {
     if (!got['b'] && !got['t'] && (got['r'] || got['w'] || got['a'] || got['R'] || got['W'] || got['A'])) {
       if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
       modebuf.ptr[mpos++] = 'b';
@@ -332,7 +327,7 @@ char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
   }
   if (mpos == 0) {
     if (modebuf.length < 2) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-    version(VFS_Normal_OS) {
+    static if (VFS_NORMAL_OS) {
       modebuf[0..1] = "r";
       mpos = 1;
     } else {
@@ -495,7 +490,7 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   char[2049] nbuf;
   nbuf[0..fname.length] = fname[];
   nbuf[fname.length] = '\0';
-  version(VFS_Normal_OS) if (ignoreCase) {
+  static if (VFS_NORMAL_OS) if (ignoreCase) {
     // we have to lock here, as `findPathCI()` is not thread-safe
     ptlock.lock();
     scope(exit) ptlock.unlock();
