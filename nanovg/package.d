@@ -132,7 +132,7 @@ public:
   static fromHSL() (in auto ref NVGHSL hsl) { /*pragma(inline, true);*/ return hsl.asColor; }
 
   version(nanovg_use_arsd_image) {
-    Color toArsd () const { /*pragma(inline, true);*/ import core.stdc.math : lrintf; return Color(lrintf(r*255), lrintf(g*255), lrintf(b*255), lrintf(a*255)); }
+    Color toArsd () const { /*pragma(inline, true);*/ return Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255)); }
     static NVGColor fromArsd() (in auto ref Color c) const { /*pragma(inline, true);*/ return NVGColor(c.r, c.g, c.b, c.a); }
   }
 }
