@@ -1872,7 +1872,7 @@ if ((is(T == char) || is(T == dchar)) && (is(TV == char) || is(TV == dchar)))
       float label_width = ctx.textBounds(1, 1, label, null);
       float sep_width = ctx.textBounds(1, 1, BND_LABEL_SEPARATOR, null);
 
-      ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
+      ctx.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline);
       x += pleft;
       if (align_ == BND_CENTER) {
         float width = label_width+sep_width+ctx.textBounds(1, 1, value, null);
@@ -1888,7 +1888,7 @@ if ((is(T == char) || is(T == dchar)) && (is(TV == char) || is(TV == dchar)))
       x += sep_width;
       ctx.text(x, y, value);
     } else {
-      ctx.textAlign((align_ == BND_LEFT ? (NVGAlign.Left|NVGAlign.Baseline) : align_ == BND_CENTER ? (NVGAlign.Center|NVGAlign.Baseline) : (NVGAlign.Right|NVGAlign.Baseline)));
+      ctx.textAlign((align_ == BND_LEFT ? NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline) : align_ == BND_CENTER ? NVGTextAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Baseline) : NVGTextAlign(NVGTextAlign.H.Right, NVGTextAlign.V.Baseline)));
       ctx.textBox(x+pleft, y+BND_WIDGET_HEIGHT-BND_TEXT_PAD_DOWN, w-BND_PAD_RIGHT-pleft, label);
       //{ import core.stdc.stdio : printf; printf("l=%u\n", cast(uint)label.length); }
     }
@@ -1911,7 +1911,7 @@ if (is(T == char) || is(T == dchar))
     ctx.fontFaceId(bnd_font);
     ctx.fontSize(fontsize);
     ctx.beginPath();
-    ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
+    ctx.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline);
     ctx.fillColor(shadowColor);
     ctx.fontBlur(BND_NODE_TITLE_FEATHER);
     ctx.textBox(x+1, y+h+3-BND_TEXT_PAD_DOWN, w, label);
@@ -1940,7 +1940,7 @@ if (is(T == char) || is(T == dchar))
 
   ctx.fontFaceId(bnd_font);
   ctx.fontSize(fontsize);
-  ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
+  ctx.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline);
 
   w -= BND_TEXT_RADIUS+pleft;
 
@@ -2013,7 +2013,7 @@ if (is(T == char) || is(T == dchar))
 
   ctx.fontFaceId(bnd_font);
   ctx.fontSize(fontsize);
-  ctx.textAlign(NVGAlign.Left|NVGAlign.Baseline);
+  ctx.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline);
 
   w -= BND_TEXT_RADIUS+pleft;
 

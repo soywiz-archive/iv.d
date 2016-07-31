@@ -295,7 +295,7 @@ public void drawUI (NVGContext vg, int item, int corners) {
             vg.fillColor(nvgRGBAf(0.0f, 0.0f, 0.0f, 1.0f));
             vg.fontSize(15.0f);
             vg.beginPath();
-            vg.textAlign(NVGAlign.Top|NVGAlign.Center);
+            vg.textAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Top);
             vg.textBox(rect.x, rect.y+rect.h*0.3f, rect.w, data.label);
           }
         }

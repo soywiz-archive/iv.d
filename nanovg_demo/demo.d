@@ -244,7 +244,7 @@ public void drawWindow (NVGContext vg, const(char)[] title, float x, float y, fl
 
   vg.fontSize(18.0f);
   vg.fontFace("sans-bold");
-  vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Middle);
 
   vg.fontBlur(2);
   vg.fillColor(nvgRGBA(0, 0, 0, 128));
@@ -280,20 +280,20 @@ public void drawSearchBox (NVGContext vg, const(char)[] text, float x, float y, 
   vg.fontSize(h*1.3f);
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 64));
-  vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Middle);
   vg.text(x+h*0.55f, y+h*0.55f, cpToUTF8(ICON_SEARCH, icon));
 
   vg.fontSize(20.0f);
   vg.fontFace("sans");
   vg.fillColor(nvgRGBA(255, 255, 255, 32));
 
-  vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Middle);
   vg.text(x+h*1.05f, y+h*0.5f, text);
 
   vg.fontSize(h*1.3f);
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 32));
-  vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Middle);
   vg.text(x+w-h*0.55f, y+h*0.55f, cpToUTF8(ICON_CIRCLED_CROSS, icon));
 }
 
@@ -317,13 +317,13 @@ public void drawDropDown (NVGContext vg, const(char)[] text, float x, float y, f
   vg.fontSize(20.0f);
   vg.fontFace("sans");
   vg.fillColor(nvgRGBA(255, 255, 255, 160));
-  vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Middle);
   vg.text(x+h*0.3f, y+h*0.5f, text);
 
   vg.fontSize(h*1.3f);
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 64));
-  vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Middle);
   vg.text(x+w-h*0.5f, y+h*0.5f, cpToUTF8(ICON_CHEVRON_RIGHT, icon));
 }
 
@@ -335,7 +335,7 @@ public void drawLabel (NVGContext vg, const(char)[] text, float x, float y, floa
   vg.fontFace("sans");
   vg.fillColor(nvgRGBA(255, 255, 255, 128));
 
-  vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Middle);
   vg.text(x, y+h*0.5f, text);
 }
 
@@ -361,7 +361,7 @@ public void drawEditBox (NVGContext vg, const(char)[] text, float x, float y, fl
   vg.fontSize(20.0f);
   vg.fontFace("sans");
   vg.fillColor(nvgRGBA(255, 255, 255, 64));
-  vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Middle);
   vg.text(x+h*0.3f, y+h*0.5f, text);
 }
 
@@ -376,13 +376,13 @@ public void drawEditBoxNum (NVGContext vg, const(char)[] text, const(char)[] uni
   vg.fontSize(18.0f);
   vg.fontFace("sans");
   vg.fillColor(nvgRGBA(255, 255, 255, 64));
-  vg.textAlign(NVGAlign.Right|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Right, NVGTextAlign.V.Middle);
   vg.text(x+w-h*0.3f, y+h*0.5f, units);
 
   vg.fontSize(20.0f);
   vg.fontFace("sans");
   vg.fillColor(nvgRGBA(255, 255, 255, 128));
-  vg.textAlign(NVGAlign.Right|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Right, NVGTextAlign.V.Middle);
   vg.text(x+w-uw-h*0.5f, y+h*0.5f, text);
 }
 
@@ -396,7 +396,7 @@ public void drawCheckBox (NVGContext vg, const(char)[] text, float x, float y, f
   vg.fontFace("sans");
   vg.fillColor(nvgRGBA(255, 255, 255, 160));
 
-  vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Middle);
   vg.text(x+28, y+h*0.5f, text);
 
   bg = vg.boxGradient(x+1, y+cast(int)(h*0.5f)-9+1, 18, 18, 3, 3, nvgRGBA(0, 0, 0, 32), nvgRGBA(0, 0, 0, 92));
@@ -408,7 +408,7 @@ public void drawCheckBox (NVGContext vg, const(char)[] text, float x, float y, f
   vg.fontSize(40);
   vg.fontFace("icons");
   vg.fillColor(nvgRGBA(255, 255, 255, 128));
-  vg.textAlign(NVGAlign.Center|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Middle);
   vg.text(x+9+2, y+h*0.5f, cpToUTF8(ICON_CHECK, icon));
 }
 
@@ -448,13 +448,13 @@ public void drawButton (NVGContext vg, int preicon, const(char)[] text, float x,
     vg.fontSize(h*1.3f);
     vg.fontFace("icons");
     vg.fillColor(nvgRGBA(255, 255, 255, 96));
-    vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
+    vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Middle);
     vg.text(x+w*0.5f-tw*0.5f-iw*0.75f, y+h*0.5f, cpToUTF8(preicon, icon));
   }
 
   vg.fontSize(20.0f);
   vg.fontFace("sans-bold");
-  vg.textAlign(NVGAlign.Left|NVGAlign.Middle);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Middle);
   vg.fillColor(nvgRGBA(0, 0, 0, 160));
   vg.text(x+w*0.5f-tw*0.5f+iw*0.25f, y+h*0.5f-1, text);
   vg.fillColor(nvgRGBA(255, 255, 255, 160));
@@ -971,7 +971,7 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
 
   vg.fontSize(18.0f);
   vg.fontFace("sans");
-  vg.textAlign(NVGAlign.Left|NVGAlign.Top);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top);
   vg.textMetrics(null, null, &lineh);
 
   // The text break API can be used to fill a large buffer of rows,
@@ -1064,7 +1064,7 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
     char[16] txt;
     auto len = snprintf(txt.ptr, (txt).sizeof, "%d", gutter);
     vg.fontSize(13.0f);
-    vg.textAlign(NVGAlign.Right|NVGAlign.Middle);
+    vg.textAlign(NVGTextAlign.H.Right, NVGTextAlign.V.Middle);
 
     vg.textBounds(gx, gy, txt[0..len], bounds[]);
 
@@ -1080,7 +1080,7 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
   y += 20.0f;
 
   vg.fontSize(13.0f);
-  vg.textAlign(NVGAlign.Left|NVGAlign.Top);
+  vg.textAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top);
   vg.textLineHeight(1.2f);
 
   vg.textBoxBounds(x, y, 150, "Hover your mouse over the text to see calculated caret position.", bounds[]);

@@ -233,17 +233,58 @@ enum NVGLineCap {
   Miter, ///
 }
 
-///
-enum NVGAlign {
-  // Horizontal align
-  Left     = 1<<0, /// Default, align text horizontally to left.
-  Center   = 1<<1, /// Align text horizontally to center.
-  Right    = 1<<2, /// Align text horizontally to right.
-  // Vertical align
-  Top      = 1<<3, /// Align text vertically to top.
-  Middle   = 1<<4, /// Align text vertically to middle.
-  Bottom   = 1<<5, /// Align text vertically to bottom.
-  Baseline = 1<<6, /// Default, align text vertically to baseline.
+/// Text align.
+align(1) struct NVGTextAlign {
+align(1):
+  /// Horizontal align.
+  enum H : ubyte {
+    Left     = 0, /// Default, align text horizontally to left.
+    Center   = 1, /// Align text horizontally to center.
+    Right    = 2, /// Align text horizontally to right.
+  }
+
+  /// Vertical align.
+  enum V : ubyte {
+    Baseline = 0, /// Default, align text vertically to baseline.
+    Top      = 1, /// Align text vertically to top.
+    Middle   = 2, /// Align text vertically to middle.
+    Bottom   = 3, /// Align text vertically to bottom.
+  }
+
+pure nothrow @safe @nogc:
+public:
+  this (H h) { pragma(inline, true); value = h; }
+  this (V v) { pragma(inline, true); value = cast(ubyte)(v<<4); }
+  this (H h, V v) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
+  this (V v, H h) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
+  void reset () { pragma(inline, true); value = 0; }
+  void reset (H h, V v) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
+  void reset (V v, H h) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
+@property:
+  bool left () const { pragma(inline, true); return ((value&0x0f) == H.Left); } ///
+  void left (bool v) { pragma(inline, true); value = cast(ubyte)((value&0xf0)|(v ? H.Left : 0)); } ///
+  bool center () const { pragma(inline, true); return ((value&0x0f) == H.Center); } ///
+  void center (bool v) { pragma(inline, true); value = cast(ubyte)((value&0xf0)|(v ? H.Center : 0)); } ///
+  bool right () const { pragma(inline, true); return ((value&0x0f) == H.Right); } ///
+  void right (bool v) { pragma(inline, true); value = cast(ubyte)((value&0xf0)|(v ? H.Right : 0)); } ///
+  //
+  bool baseline () const { pragma(inline, true); return (((value>>4)&0x0f) == V.Baseline); } ///
+  void baseline (bool v) { pragma(inline, true); value = cast(ubyte)((value&0x0f)|(v ? V.Baseline<<4 : 0)); } ///
+  bool top () const { pragma(inline, true); return (((value>>4)&0x0f) == V.Top); } ///
+  void top (bool v) { pragma(inline, true); value = cast(ubyte)((value&0x0f)|(v ? V.Top<<4 : 0)); } ///
+  bool middle () const { pragma(inline, true); return (((value>>4)&0x0f) == V.Middle); } ///
+  void middle (bool v) { pragma(inline, true); value = cast(ubyte)((value&0x0f)|(v ? V.Middle<<4 : 0)); } ///
+  bool bottom () const { pragma(inline, true); return (((value>>4)&0x0f) == V.Bottom); } ///
+  void bottom (bool v) { pragma(inline, true); value = cast(ubyte)((value&0x0f)|(v ? V.Bottom<<4 : 0)); } ///
+  //
+  H horizontal () const { pragma(inline, true); return cast(H)(value&0x0f); } ///
+  void horizontal (H v) { pragma(inline, true); value = (value&0xf0)|v; } ///
+  //
+  V vertical () const { pragma(inline, true); return cast(V)((value>>4)&0x0f); } ///
+  void vertical (V v) { pragma(inline, true); value = (value&0x0f)|cast(ubyte)(v<<4); } ///
+  //
+private:
+  ubyte value = 0; // low nibble: horizontal; high nibble: vertical
 }
 
 ///
@@ -385,7 +426,7 @@ struct NVGstate {
   float letterSpacing;
   float lineHeight;
   float fontBlur;
-  int textAlign;
+  NVGTextAlign textAlign;
   int fontId;
 }
 
@@ -943,17 +984,20 @@ public alias NVGSectionDummy02 = void;
 
 /** Pushes and saves the current render state into a state stack.
  * A matching `restore()` must be used to restore the state.
+ * Returns `false` if state stack overflowed.
  */
-public void save (NVGContext ctx) {
-  if (ctx.nstates >= NVG_MAX_STATES) return;
-  if (ctx.nstates > 0) memcpy(&ctx.states[ctx.nstates], &ctx.states[ctx.nstates-1], (NVGstate).sizeof);
+public bool save (NVGContext ctx) {
+  if (ctx.nstates >= NVG_MAX_STATES) return false;
+  if (ctx.nstates > 0) memcpy(&ctx.states[ctx.nstates], &ctx.states[ctx.nstates-1], NVGstate.sizeof);
   ++ctx.nstates;
+  return true;
 }
 
 /// Pops and restores current render state.
-public void restore (NVGContext ctx) {
-  if (ctx.nstates <= 1) return;
+public bool restore (NVGContext ctx) {
+  if (ctx.nstates <= 1) return false;
   --ctx.nstates;
+  return true;
 }
 
 /// Resets current render state to default values. Does not affect the render state stack.
@@ -970,14 +1014,14 @@ public void reset (NVGContext ctx) {
   state.alpha = 1.0f;
   nvgTransformIdentity(state.xform[]);
 
-  state.scissor.extent[0] = -1.0f;
-  state.scissor.extent[1] = -1.0f;
+  state.scissor.extent.ptr[0] = -1.0f;
+  state.scissor.extent.ptr[1] = -1.0f;
 
   state.fontSize = 16.0f;
   state.letterSpacing = 0.0f;
   state.lineHeight = 1.0f;
   state.fontBlur = 0.0f;
-  state.textAlign = NVGAlign.Left|NVGAlign.Baseline;
+  state.textAlign.reset;
   state.fontId = 0;
 }
 
@@ -2714,50 +2758,110 @@ public int createFontMem (NVGContext ctx, const(char)[] name, ubyte* data, int n
 
 /// Finds a loaded font of specified name, and returns handle to it, or -1 if the font is not found.
 public int findFont (NVGContext ctx, const(char)[] name) {
-  if (name is null) return -1;
-  return fonsGetFontByName(ctx.fs, name);
+  pragma(inline, true);
+  return (name.length == 0 ? -1 : fonsGetFontByName(ctx.fs, name));
 }
 
 /// Sets the font size of current text style.
 public void fontSize (NVGContext ctx, float size) {
-  NVGstate* state = nvg__getState(ctx);
-  state.fontSize = size;
+  pragma(inline, true);
+  nvg__getState(ctx).fontSize = size;
+}
+
+/// Gets the font size of current text style.
+public float fontSize (NVGContext ctx) {
+  pragma(inline, true);
+  return nvg__getState(ctx).fontSize;
 }
 
 /// Sets the blur of current text style.
 public void fontBlur (NVGContext ctx, float blur) {
-  NVGstate* state = nvg__getState(ctx);
-  state.fontBlur = blur;
+  pragma(inline, true);
+  nvg__getState(ctx).fontBlur = blur;
+}
+
+/// Gets the blur of current text style.
+public float fontBlur (NVGContext ctx) {
+  pragma(inline, true);
+  return nvg__getState(ctx).fontBlur;
 }
 
 /// Sets the letter spacing of current text style.
 public void textLetterSpacing (NVGContext ctx, float spacing) {
-  NVGstate* state = nvg__getState(ctx);
-  state.letterSpacing = spacing;
+  pragma(inline, true);
+  nvg__getState(ctx).letterSpacing = spacing;
+}
+
+/// Gets the letter spacing of current text style.
+public float textLetterSpacing (NVGContext ctx) {
+  pragma(inline, true);
+  return nvg__getState(ctx).letterSpacing;
 }
 
 /// Sets the proportional line height of current text style. The line height is specified as multiple of font size.
 public void textLineHeight (NVGContext ctx, float lineHeight) {
-  NVGstate* state = nvg__getState(ctx);
-  state.lineHeight = lineHeight;
+  pragma(inline, true);
+  nvg__getState(ctx).lineHeight = lineHeight;
 }
 
-/// Sets the text align of current text style, see NVGAlign for options.
-public void textAlign (NVGContext ctx, int align_) {
-  NVGstate* state = nvg__getState(ctx);
-  state.textAlign = align_;
+/// Gets the proportional line height of current text style. The line height is specified as multiple of font size.
+public float textLineHeight (NVGContext ctx) {
+  pragma(inline, true);
+  return nvg__getState(ctx).lineHeight;
+}
+
+/// Sets the text align of current text style, see `NVGTextAlign` for options.
+public void textAlign (NVGContext ctx, NVGTextAlign talign) {
+  pragma(inline, true);
+  nvg__getState(ctx).textAlign = talign;
+}
+
+/// Ditto.
+public void textAlign (NVGContext ctx, NVGTextAlign.H h) {
+  pragma(inline, true);
+  nvg__getState(ctx).textAlign.horizontal = h;
+}
+
+/// Ditto.
+public void textAlign (NVGContext ctx, NVGTextAlign.V v) {
+  pragma(inline, true);
+  nvg__getState(ctx).textAlign.vertical = v;
+}
+
+/// Ditto.
+public void textAlign (NVGContext ctx, NVGTextAlign.H h, NVGTextAlign.V v) {
+  pragma(inline, true);
+  nvg__getState(ctx).textAlign.reset(h, v);
+}
+
+/// Ditto.
+public void textAlign (NVGContext ctx, NVGTextAlign.V v, NVGTextAlign.H h) {
+  pragma(inline, true);
+  nvg__getState(ctx).textAlign.reset(h, v);
+}
+
+/// Gets the text align of current text style, see `NVGTextAlign` for options.
+public NVGTextAlign textAlign (NVGContext ctx) {
+  pragma(inline, true);
+  return nvg__getState(ctx).textAlign;
 }
 
 /// Sets the font face based on specified id of current text style.
 public void fontFaceId (NVGContext ctx, int font) {
-  NVGstate* state = nvg__getState(ctx);
-  state.fontId = font;
+  pragma(inline, true);
+  nvg__getState(ctx).fontId = font;
+}
+
+/// Gets the font face based on specified id of current text style.
+public int fontFaceId (NVGContext ctx) {
+  pragma(inline, true);
+  return nvg__getState(ctx).fontId;
 }
 
 /// Sets the font face based on specified name of current text style.
 public void fontFace (NVGContext ctx, const(char)[] font) {
-  NVGstate* state = nvg__getState(ctx);
-  state.fontId = fonsGetFontByName(ctx.fs, font);
+  pragma(inline, true);
+  nvg__getState(ctx).fontId = fonsGetFontByName(ctx.fs, font);
 }
 
 float nvg__quantize (float a, float d) {
@@ -2891,32 +2995,30 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation). */
 public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) if (is(T == char) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
-  NVGTextRow[2] rows;
-  int oldAlign = state.textAlign;
-  int haling = state.textAlign&(NVGAlign.Left|NVGAlign.Center|NVGAlign.Right);
-  int valign = state.textAlign&(NVGAlign.Top|NVGAlign.Middle|NVGAlign.Bottom|NVGAlign.Baseline);
-  float lineh = 0;
-
   if (state.fontId == FONS_INVALID) return;
 
+  NVGTextRow[2] rows;
+  auto oldAlign = state.textAlign;
+  scope(exit) state.textAlign = oldAlign;
+  auto halign = state.textAlign.horizontal;
+  float lineh = 0;
+
   ctx.textMetrics(null, null, &lineh);
-
-  state.textAlign = NVGAlign.Left|valign;
-
+  state.textAlign.horizontal = NVGTextAlign.H.Left;
   for (;;) {
     auto rres = ctx.textBreakLines(str, breakRowWidth, rows[]);
     //{ import core.stdc.stdio : printf; printf("slen=%u; rlen=%u; bw=%f\n", cast(uint)str.length, cast(uint)rres.length, cast(double)breakRowWidth); }
     if (rres.length == 0) break;
     foreach (ref row; rres) {
-           if (haling&NVGAlign.Left) ctx.text(x, y, row.row!T);
-      else if (haling&NVGAlign.Center) ctx.text(x+breakRowWidth*0.5f-row.width*0.5f, y, row.row!T);
-      else if (haling&NVGAlign.Right) ctx.text(x+breakRowWidth-row.width, y, row.row!T);
+      final switch (halign) {
+        case NVGTextAlign.H.Left: ctx.text(x, y, row.row!T); break;
+        case NVGTextAlign.H.Center: ctx.text(x+breakRowWidth*0.5f-row.width*0.5f, y, row.row!T); break;
+        case NVGTextAlign.H.Right: ctx.text(x+breakRowWidth-row.width, y, row.row!T); break;
+      }
       y += lineh*state.lineHeight;
     }
     str = rres[$-1].rest!T;
   }
-
-  state.textAlign = oldAlign;
 }
 
 private template isGoodPositionDelegate(DG) {
@@ -3227,7 +3329,8 @@ private:
   float scale, invscale, xscaled, yscaled;
   // font settings
   float fsSize, fsSpacing, fsBlur;
-  int fsAlign, fsFontId;
+  int fsFontId;
+  NVGTextAlign fsAlign;
 
 public:
   this (NVGContext actx, float ax, float ay) { reset(actx, ax, ay); }
@@ -3358,9 +3461,6 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
   NVGTextRow[2] rows;
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
-  int oldAlign = state.textAlign;
-  int haling = state.textAlign&(NVGAlign.Left|NVGAlign.Center|NVGAlign.Right);
-  int valign = state.textAlign&(NVGAlign.Top|NVGAlign.Middle|NVGAlign.Bottom|NVGAlign.Baseline);
   float lineh = 0, rminy = 0, rmaxy = 0;
   float minx, miny, maxx, maxy;
 
@@ -3369,9 +3469,12 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
     return;
   }
 
-  ctx.textMetrics(null, null, &lineh);
+  auto oldAlign = state.textAlign;
+  scope(exit) state.textAlign = oldAlign;
+  auto halign = state.textAlign.horizontal;
 
-  state.textAlign = NVGAlign.Left|valign;
+  ctx.textMetrics(null, null, &lineh);
+  state.textAlign.horizontal = NVGTextAlign.H.Left;
 
   minx = maxx = x;
   miny = maxy = y;
@@ -3391,9 +3494,11 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
     foreach (ref row; rres) {
       float rminx, rmaxx, dx = 0;
       // horizontal bounds
-           if (haling&NVGAlign.Left) dx = 0;
-      else if (haling&NVGAlign.Center) dx = breakRowWidth*0.5f-row.width*0.5f;
-      else if (haling&NVGAlign.Right) dx = breakRowWidth-row.width;
+      final switch (halign) {
+        case NVGTextAlign.H.Left: dx = 0; break;
+        case NVGTextAlign.H.Center: dx = breakRowWidth*0.5f-row.width*0.5f; break;
+        case NVGTextAlign.H.Right: dx = breakRowWidth-row.width; break;
+      }
       rminx = x+row.minx+dx;
       rmaxx = x+row.maxx+dx;
       minx = nvg__minf(minx, rminx);
@@ -3405,8 +3510,6 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
     }
     str = rres[$-1].rest!T;
   }
-
-  state.textAlign = oldAlign;
 
   if (bounds.length) {
     if (bounds.length > 0) bounds.ptr[0] = minx;
@@ -3489,6 +3592,7 @@ enum /*FONSflags*/ {
   FONS_ZERO_BOTTOMLEFT = 1<<1,
 }
 
+/+
 alias FONSalign = int;
 enum /*FONSalign*/ {
   // Horizontal align
@@ -3501,6 +3605,7 @@ enum /*FONSalign*/ {
   FONS_ALIGN_BOTTOM = 1<<5,
   FONS_ALIGN_BASELINE = 1<<6, // Default
 }
++/
 
 alias FONSerrorCode = int;
 enum /*FONSerrorCode*/ {
@@ -3776,7 +3881,7 @@ struct FONSfont {
 
 struct FONSstate {
   int font;
-  int align_;
+  NVGTextAlign talign;
   float size;
   uint color;
   float blur;
@@ -3818,7 +3923,7 @@ public struct FONScontext {
 void* fons__tmpalloc (size_t size, void* up) {
   ubyte* ptr;
   FONScontext* stash = cast(FONScontext*)up;
-  // 16-byte align_ the returned pointer
+  // 16-byte align the returned pointer
   size = (size+0xf)&~0xf;
   if (stash.nscratch+cast(int)size > FONS_SCRATCH_BUF_SIZE) {
     if (stash.handleError) stash.handleError(stash.errorUptr, FONS_SCRATCH_FULL, stash.nscratch+cast(int)size);
@@ -4141,9 +4246,9 @@ public void fonsSetBlur (FONScontext* stash, float blur) {
   fons__getState(stash).blur = blur;
 }
 
-public void fonsSetAlign (FONScontext* stash, int align_) {
+public void fonsSetAlign (FONScontext* stash, NVGTextAlign talign) {
   pragma(inline, true);
-  fons__getState(stash).align_ = align_;
+  fons__getState(stash).talign = talign;
 }
 
 public void fonsSetFont (FONScontext* stash, int font) {
@@ -4175,7 +4280,7 @@ public void fonsClearState (FONScontext* stash) {
   state.font = 0;
   state.blur = 0;
   state.spacing = 0;
-  state.align_ = FONS_ALIGN_LEFT|FONS_ALIGN_BASELINE;
+  state.talign.reset; //FONS_ALIGN_LEFT|FONS_ALIGN_BASELINE;
 }
 
 void fons__freeFont (FONSfont* font) {
@@ -4578,19 +4683,23 @@ void fons__vertex (FONScontext* stash, float x, float y, float s, float t, uint 
   ++stash.nverts;
 }
 
-float fons__getVertAlign (FONScontext* stash, FONSfont* font, int align_, short isize) {
+float fons__getVertAlign (FONScontext* stash, FONSfont* font, NVGTextAlign talign, short isize) {
   if (stash.params.flags&FONS_ZERO_TOPLEFT) {
-    if (align_&FONS_ALIGN_TOP) return font.ascender*cast(float)isize/10.0f;
-    if (align_&FONS_ALIGN_MIDDLE) return (font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
-    if (align_&FONS_ALIGN_BASELINE) return 0.0f;
-    if (align_&FONS_ALIGN_BOTTOM) return font.descender*cast(float)isize/10.0f;
+    final switch (talign.vertical) {
+      case NVGTextAlign.V.Top: return font.ascender*cast(float)isize/10.0f;
+      case NVGTextAlign.V.Middle: return (font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
+      case NVGTextAlign.V.Baseline: return 0.0f;
+      case NVGTextAlign.V.Bottom: return font.descender*cast(float)isize/10.0f;
+    }
   } else {
-    if (align_&FONS_ALIGN_TOP) return -font.ascender*cast(float)isize/10.0f;
-    if (align_&FONS_ALIGN_MIDDLE) return -(font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
-    if (align_&FONS_ALIGN_BASELINE) return 0.0f;
-    if (align_&FONS_ALIGN_BOTTOM) return -font.descender*cast(float)isize/10.0f;
+    final switch (talign.vertical) {
+      case NVGTextAlign.V.Top: return -font.ascender*cast(float)isize/10.0f;
+      case NVGTextAlign.V.Middle: return -(font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
+      case NVGTextAlign.V.Baseline: return 0.0f;
+      case NVGTextAlign.V.Bottom: return -font.descender*cast(float)isize/10.0f;
+    }
   }
-  return 0.0;
+  assert(0);
 }
 
 /+k8: not used
@@ -4671,17 +4780,17 @@ public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x
   iter.scale = fons__tt_getPixelHeightScale(&iter.font.font, cast(float)iter.isize/10.0f);
 
   // Align horizontally
-  if (state.align_&FONS_ALIGN_LEFT) {
+  if (state.talign.left) {
     // empty
-  } else if (state.align_&FONS_ALIGN_RIGHT) {
+  } else if (state.talign.right) {
     width = fonsTextBounds(stash, x, y, str, null);
     x -= width;
-  } else if (state.align_&FONS_ALIGN_CENTER) {
+  } else if (state.talign.center) {
     width = fonsTextBounds(stash, x, y, str, null);
     x -= width*0.5f;
   }
   // Align vertically.
-  y += fons__getVertAlign(stash, iter.font, state.align_, iter.isize);
+  y += fons__getVertAlign(stash, iter.font, state.talign, iter.isize);
 
   iter.x = iter.nextx = x;
   iter.y = iter.nexty = y;
@@ -4835,7 +4944,7 @@ public:
     scale = fons__tt_getPixelHeightScale(&font.font, cast(float)isize/10.0f);
 
     // align vertically
-    y += fons__getVertAlign(stash, font, state.align_, isize);
+    y += fons__getVertAlign(stash, font, state.talign, isize);
 
     minx = maxx = x;
     miny = maxy = y;
@@ -4895,13 +5004,13 @@ public:
     if (state is null) { bounds[] = 0; return; }
     float lminx = minx, lmaxx = maxx;
     // align horizontally
-    if (state.align_&FONS_ALIGN_LEFT) {
+    if (state.talign.left) {
       // empty
-    } else if (state.align_&FONS_ALIGN_RIGHT) {
+    } else if (state.talign.right) {
       float ca = advance;
       lminx -= ca;
       lmaxx -= ca;
-    } else if (state.align_&FONS_ALIGN_CENTER) {
+    } else if (state.talign.center) {
       float ca = advance*0.5f;
       lminx -= ca;
       lmaxx -= ca;
@@ -4917,13 +5026,13 @@ public:
     if (state !is null) {
       float lminx = minx, lmaxx = maxx;
       // align horizontally
-      if (state.align_&FONS_ALIGN_LEFT) {
+      if (state.talign.left) {
         // empty
-      } else if (state.align_&FONS_ALIGN_RIGHT) {
+      } else if (state.talign.right) {
         float ca = advance;
         lminx -= ca;
         lmaxx -= ca;
-      } else if (state.align_&FONS_ALIGN_CENTER) {
+      } else if (state.talign.center) {
         float ca = advance*0.5f;
         lminx -= ca;
         lmaxx -= ca;
@@ -4964,7 +5073,7 @@ public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[]
   scale = fons__tt_getPixelHeightScale(&font.font, cast(float)isize/10.0f);
 
   // Align vertically.
-  y += fons__getVertAlign(stash, font, state.align_, isize);
+  y += fons__getVertAlign(stash, font, state.talign, isize);
 
   minx = maxx = x;
   miny = maxy = y;
@@ -5018,12 +5127,12 @@ public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[]
   advance = x-startx;
 
   // Align horizontally
-  if (state.align_&FONS_ALIGN_LEFT) {
+  if (state.talign.left) {
     // empty
-  } else if (state.align_&FONS_ALIGN_RIGHT) {
+  } else if (state.talign.right) {
     minx -= advance;
     maxx -= advance;
-  } else if (state.align_&FONS_ALIGN_CENTER) {
+  } else if (state.talign.center) {
     minx -= advance*0.5f;
     maxx -= advance*0.5f;
   }
@@ -5065,7 +5174,7 @@ public void fonsLineBounds (FONScontext* stash, float y, float* miny, float* max
   isize = cast(short)(state.size*10.0f);
   if (font.data is null) return;
 
-  y += fons__getVertAlign(stash, font, state.align_, isize);
+  y += fons__getVertAlign(stash, font, state.talign, isize);
 
   if (stash.params.flags&FONS_ZERO_TOPLEFT) {
     *miny = y-font.ascender*cast(float)isize/10.0f;
