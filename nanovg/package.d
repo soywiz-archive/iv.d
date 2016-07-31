@@ -489,14 +489,11 @@ import core.stdc.math :
   nvg__acosf = acosf,
   nvg__ceilf = ceilf;
 
-int nvg__mini() (int a, int b) { pragma(inline, true); return (a < b ? a : b); }
-int nvg__maxi() (int a, int b) { pragma(inline, true); return (a > b ? a : b); }
-int nvg__clampi() (int a, int mn, int mx) { pragma(inline, true); return (a < mn ? mn : (a > mx ? mx : a)); }
-float nvg__minf() (float a, float b) { pragma(inline, true); return (a < b ? a : b); }
-float nvg__maxf() (float a, float b) { pragma(inline, true); return (a > b ? a : b); }
+auto nvg__min(T) (T a, T b) { pragma(inline, true); return (a < b ? a : b); }
+auto nvg__max(T) (T a, T b) { pragma(inline, true); return (a > b ? a : b); }
+auto nvg__clamp(T) (T a, T mn, T mx) { pragma(inline, true); return (a < mn ? mn : (a > mx ? mx : a)); }
 float nvg__absf() (float a) { pragma(inline, true); return (a >= 0.0f ? a : -a); }
-float nvg__signf() (float a) { pragma(inline, true); return (a >= 0.0f ? 1.0f : -1.0f); }
-float nvg__clampf() (float a, float mn, float mx) { pragma(inline, true); return (a < mn ? mn : (a > mx ? mx : a)); }
+auto nvg__sign(T) (T a) { pragma(inline, true); return (a >= cast(T)0 ? cast(T)1 : cast(T)(-1)); }
 float nvg__cross() (float dx0, float dy0, float dx1, float dy1) { pragma(inline, true); return (dx1*dy0-dx0*dy1); }
 
 float nvg__normalize (float* x, float* y) {
@@ -745,7 +742,7 @@ public NVGColor nvgTransRGBAf() (NVGColor c, float a) {
 /// Linearly interpolates from color c0 to c1, and returns resulting color value.
 public NVGColor nvgLerpRGBA() (in auto ref NVGColor c0, in auto ref NVGColor c1, float u) {
   NVGColor cint = void;
-  u = nvg__clampf(u, 0.0f, 1.0f);
+  u = nvg__clamp(u, 0.0f, 1.0f);
   float oneminu = 1.0f-u;
   foreach (uint i; 0..4) cint.rgba.ptr[i] = c0.rgba.ptr[i]*oneminu+c1.rgba.ptr[i]*u;
   return cint;
@@ -779,13 +776,13 @@ public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
   NVGColor col = void;
   h = nvg__modf(h, 1.0f);
   if (h < 0.0f) h += 1.0f;
-  s = nvg__clampf(s, 0.0f, 1.0f);
-  l = nvg__clampf(l, 0.0f, 1.0f);
+  s = nvg__clamp(s, 0.0f, 1.0f);
+  l = nvg__clamp(l, 0.0f, 1.0f);
   m2 = l <= 0.5f ? (l*(1+s)) : (l+s-l*s);
   m1 = 2*l-m2;
-  col.r = nvg__clampf(nvg__hue(h+1.0f/3.0f, m1, m2), 0.0f, 1.0f);
-  col.g = nvg__clampf(nvg__hue(h, m1, m2), 0.0f, 1.0f);
-  col.b = nvg__clampf(nvg__hue(h-1.0f/3.0f, m1, m2), 0.0f, 1.0f);
+  col.r = nvg__clamp(nvg__hue(h+1.0f/3.0f, m1, m2), 0.0f, 1.0f);
+  col.g = nvg__clamp(nvg__hue(h, m1, m2), 0.0f, 1.0f);
+  col.b = nvg__clamp(nvg__hue(h-1.0f/3.0f, m1, m2), 0.0f, 1.0f);
   col.a = a/255.0f;
   return col;
 }
@@ -798,13 +795,13 @@ public NVGColor nvgHSLA() (float h, float s, float l, float a) {
   NVGColor col = void;
   h = nvg__modf(h, 1.0f);
   if (h < 0.0f) h += 1.0f;
-  s = nvg__clampf(s, 0.0f, 1.0f);
-  l = nvg__clampf(l, 0.0f, 1.0f);
+  s = nvg__clamp(s, 0.0f, 1.0f);
+  l = nvg__clamp(l, 0.0f, 1.0f);
   m2 = l <= 0.5f ? (l*(1+s)) : (l+s-l*s);
   m1 = 2*l-m2;
-  col.r = nvg__clampf(nvg__hue(h+1.0f/3.0f, m1, m2), 0.0f, 1.0f);
-  col.g = nvg__clampf(nvg__hue(h, m1, m2), 0.0f, 1.0f);
-  col.b = nvg__clampf(nvg__hue(h-1.0f/3.0f, m1, m2), 0.0f, 1.0f);
+  col.r = nvg__clamp(nvg__hue(h+1.0f/3.0f, m1, m2), 0.0f, 1.0f);
+  col.g = nvg__clamp(nvg__hue(h, m1, m2), 0.0f, 1.0f);
+  col.b = nvg__clamp(nvg__hue(h-1.0f/3.0f, m1, m2), 0.0f, 1.0f);
   col.a = a;
   return col;
 }
@@ -1344,7 +1341,7 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
 
   p.radius = 0.0f;
 
-  p.feather = nvg__maxf(1.0f, d);
+  p.feather = nvg__max(1.0f, d);
 
   p.innerColor = icol;
   p.outerColor = ocol;
@@ -1372,7 +1369,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
 
   p.radius = r;
 
-  p.feather = nvg__maxf(1.0f, f);
+  p.feather = nvg__max(1.0f, f);
 
   p.innerColor = icol;
   p.outerColor = ocol;
@@ -1400,7 +1397,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
 
   p.radius = r;
 
-  p.feather = nvg__maxf(1.0f, f);
+  p.feather = nvg__max(1.0f, f);
 
   p.innerColor = icol;
   p.outerColor = ocol;
@@ -1444,8 +1441,8 @@ public alias NVGSectionDummy06 = void;
 public void scissor (NVGContext ctx, float x, float y, float w, float h) {
   NVGstate* state = nvg__getState(ctx);
 
-  w = nvg__maxf(0.0f, w);
-  h = nvg__maxf(0.0f, h);
+  w = nvg__max(0.0f, w);
+  h = nvg__max(0.0f, h);
 
   nvgTransformIdentity(state.scissor.xform[]);
   state.scissor.xform.ptr[4] = x+w*0.5f;
@@ -1457,14 +1454,14 @@ public void scissor (NVGContext ctx, float x, float y, float w, float h) {
 }
 
 void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) {
-  float minx = nvg__maxf(ax, bx);
-  float miny = nvg__maxf(ay, by);
-  float maxx = nvg__minf(ax+aw, bx+bw);
-  float maxy = nvg__minf(ay+ah, by+bh);
+  float minx = nvg__max(ax, bx);
+  float miny = nvg__max(ay, by);
+  float maxx = nvg__min(ax+aw, bx+bw);
+  float maxy = nvg__min(ay+ah, by+bh);
   dst[0] = minx;
   dst[1] = miny;
-  dst[2] = nvg__maxf(0.0f, maxx-minx);
-  dst[3] = nvg__maxf(0.0f, maxy-miny);
+  dst[2] = nvg__max(0.0f, maxx-minx);
+  dst[3] = nvg__max(0.0f, maxy-miny);
 }
 
 /** Intersects current scissor rectangle with the specified rectangle.
@@ -1847,10 +1844,10 @@ void nvg__flattenPaths (NVGContext ctx) {
       p0.dy = p1.y-p0.y;
       p0.len = nvg__normalize(&p0.dx, &p0.dy);
       // Update bounds
-      cache.bounds[0] = nvg__minf(cache.bounds[0], p0.x);
-      cache.bounds[1] = nvg__minf(cache.bounds[1], p0.y);
-      cache.bounds[2] = nvg__maxf(cache.bounds[2], p0.x);
-      cache.bounds[3] = nvg__maxf(cache.bounds[3], p0.y);
+      cache.bounds[0] = nvg__min(cache.bounds[0], p0.x);
+      cache.bounds[1] = nvg__min(cache.bounds[1], p0.y);
+      cache.bounds[2] = nvg__max(cache.bounds[2], p0.x);
+      cache.bounds[3] = nvg__max(cache.bounds[3], p0.y);
       // Advance
       p0 = p1++;
     }
@@ -1859,7 +1856,7 @@ void nvg__flattenPaths (NVGContext ctx) {
 
 int nvg__curveDivs (float r, float arc, float tol) {
   float da = nvg__acosf(r/(r+tol))*2.0f;
-  return nvg__maxi(2, cast(int)nvg__ceilf(arc/da));
+  return nvg__max(2, cast(int)nvg__ceilf(arc/da));
 }
 
 void nvg__chooseBevel (int bevel, NVGpoint* p0, NVGpoint* p1, float w, float* x0, float* y0, float* x1, float* y1) {
@@ -1894,7 +1891,7 @@ NVGvertex* nvg__roundJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
     nvg__vset(dst, lx0, ly0, lu, 1); dst++;
     nvg__vset(dst, p1.x-dlx0*rw, p1.y-dly0*rw, ru, 1); dst++;
 
-    n = nvg__clampi(cast(int)nvg__ceilf(((a0-a1)/NVG_PI)*ncap), 2, ncap);
+    n = nvg__clamp(cast(int)nvg__ceilf(((a0-a1)/NVG_PI)*ncap), 2, ncap);
     for (i = 0; i < n; ++i) {
       float u = i/cast(float)(n-1);
       float a = a0+u*(a1-a0);
@@ -1917,7 +1914,7 @@ NVGvertex* nvg__roundJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
     nvg__vset(dst, p1.x+dlx0*rw, p1.y+dly0*rw, lu, 1); dst++;
     nvg__vset(dst, rx0, ry0, ru, 1); dst++;
 
-    n = nvg__clampi(cast(int)nvg__ceilf(((a1-a0)/NVG_PI)*ncap), 2, ncap);
+    n = nvg__clamp(cast(int)nvg__ceilf(((a1-a0)/NVG_PI)*ncap), 2, ncap);
     for (i = 0; i < n; i++) {
       float u = i/cast(float)(n-1);
       float a = a0+u*(a1-a0);
@@ -2114,7 +2111,7 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
       }
 
       // Calculate if we should use bevel or miter for inner join.
-      limit = nvg__maxf(1.01f, nvg__minf(p0.len, p1.len)*iw);
+      limit = nvg__max(1.01f, nvg__min(p0.len, p1.len)*iw);
       if ((dmr2*limit*limit) < 1.0f)
         p1.flags |= NVGpointFlags.InnerBevelPR;
 
@@ -2525,7 +2522,7 @@ public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1
   }
 
   // Split arc into max 90 degree segments.
-  ndivs = nvg__maxi(1, nvg__mini(cast(int)(nvg__absf(da)/(NVG_PI*0.5f)+0.5f), 5));
+  ndivs = nvg__max(1, nvg__min(cast(int)(nvg__absf(da)/(NVG_PI*0.5f)+0.5f), 5));
   hda = (da/cast(float)ndivs)/2.0f;
   kappa = nvg__absf(4.0f/3.0f*(1.0f-nvg__cosf(hda))/nvg__sinf(hda));
 
@@ -2581,7 +2578,7 @@ public void roundedRect (NVGContext ctx, float x, float y, float w, float h, flo
     ctx.rect(x, y, w, h);
     return;
   } else {
-    float rx = nvg__minf(r, nvg__absf(w)*0.5f)*nvg__signf(w), ry = nvg__minf(r, nvg__absf(h)*0.5f)*nvg__signf(h);
+    float rx = nvg__min(r, nvg__absf(w)*0.5f)*nvg__sign(w), ry = nvg__min(r, nvg__absf(h)*0.5f)*nvg__sign(h);
     float[44] vals = [
       NVGcommands.MoveTo, x, y+ry,
       NVGcommands.LineTo, x, y+h-ry,
@@ -2671,14 +2668,14 @@ public void fill (NVGContext ctx) {
 public void stroke (NVGContext ctx) {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getAverageScale(state.xform[]);
-  float strokeWidth = nvg__clampf(state.strokeWidth*scale, 0.0f, 200.0f);
+  float strokeWidth = nvg__clamp(state.strokeWidth*scale, 0.0f, 200.0f);
   NVGPaint strokePaint = state.stroke;
   const(NVGpath)* path;
 
   if (strokeWidth < ctx.fringeWidth) {
     // If the stroke width is less than pixel size, use alpha to emulate coverage.
     // Since coverage is area, scale by alpha*alpha.
-    float alpha = nvg__clampf(strokeWidth/ctx.fringeWidth, 0.0f, 1.0f);
+    float alpha = nvg__clamp(strokeWidth/ctx.fringeWidth, 0.0f, 1.0f);
     strokePaint.innerColor.a *= alpha*alpha;
     strokePaint.outerColor.a *= alpha*alpha;
     strokeWidth = ctx.fringeWidth;
@@ -2871,7 +2868,7 @@ float nvg__quantize (float a, float d) {
 
 float nvg__getFontScale (NVGstate* state) {
   pragma(inline, true);
-  return nvg__minf(nvg__quantize(nvg__getAverageScale(state.xform[]), 0.01f), 4.0f);
+  return nvg__min(nvg__quantize(nvg__getAverageScale(state.xform[]), 0.01f), 4.0f);
 }
 
 void nvg__flushTextTexture (NVGContext ctx) {
@@ -2947,7 +2944,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T
   fonsSetAlign(ctx.fs, state.textAlign);
   fonsSetFont(ctx.fs, state.fontId);
 
-  cverts = nvg__maxi(2, cast(int)(str.length))*6; // conservative estimate
+  cverts = nvg__max(2, cast(int)(str.length))*6; // conservative estimate
   verts = nvg__allocTempVerts(ctx, cverts);
   if (verts is null) return x;
 
@@ -3080,8 +3077,8 @@ if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
       position.strpos = cast(size_t)(iter.dstr-str.ptr);
     }
     position.x = iter.x*invscale;
-    position.minx = nvg__minf(iter.x, q.x0)*invscale;
-    position.maxx = nvg__maxf(iter.nextx, q.x1)*invscale;
+    position.minx = nvg__min(iter.x, q.x0)*invscale;
+    position.maxx = nvg__max(iter.nextx, q.x1)*invscale;
     ++npos;
     static if (RetBool) { if (!dg(position)) return npos; } else dg(position);
   }
@@ -3505,11 +3502,11 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
       }
       rminx = x+row.minx+dx;
       rmaxx = x+row.maxx+dx;
-      minx = nvg__minf(minx, rminx);
-      maxx = nvg__maxf(maxx, rmaxx);
+      minx = nvg__min(minx, rminx);
+      maxx = nvg__max(maxx, rmaxx);
       // vertical bounds
-      miny = nvg__minf(miny, y+rminy);
-      maxy = nvg__maxf(maxy, y+rmaxy);
+      miny = nvg__min(miny, y+rminy);
+      maxy = nvg__max(maxy, y+rmaxy);
       y += lineh*state.lineHeight;
     }
     str = rres[$-1].rest!T;
@@ -3855,9 +3852,6 @@ uint fons__hashint() (uint a) {
   return a;
 }
 
-int fons__mini() (int a, int b) { pragma(inline, true); return (a < b ? a : b); }
-int fons__maxi() (int a, int b) { pragma(inline, true); return (a > b ? a : b); }
-
 struct FONSglyph {
   uint codepoint;
   int index;
@@ -4110,7 +4104,7 @@ int fons__atlasRectFits (FONSatlas* atlas, int i, int w, int h) {
   spaceLeft = w;
   while (spaceLeft > 0) {
     if (i == atlas.nnodes) return -1;
-    y = fons__maxi(y, atlas.nodes[i].y);
+    y = nvg__max(y, atlas.nodes[i].y);
     if (y+h > atlas.height) return -1;
     spaceLeft -= atlas.nodes[i].width;
     ++i;
@@ -4162,10 +4156,10 @@ void fons__addWhiteRect (FONScontext* stash, int w, int h) {
     dst += stash.params.width;
   }
 
-  stash.dirtyRect[0] = fons__mini(stash.dirtyRect[0], gx);
-  stash.dirtyRect[1] = fons__mini(stash.dirtyRect[1], gy);
-  stash.dirtyRect[2] = fons__maxi(stash.dirtyRect[2], gx+w);
-  stash.dirtyRect[3] = fons__maxi(stash.dirtyRect[3], gy+h);
+  stash.dirtyRect[0] = nvg__min(stash.dirtyRect[0], gx);
+  stash.dirtyRect[1] = nvg__min(stash.dirtyRect[1], gy);
+  stash.dirtyRect[2] = nvg__max(stash.dirtyRect[2], gx+w);
+  stash.dirtyRect[3] = nvg__max(stash.dirtyRect[3], gy+h);
 }
 
 public FONScontext* fonsCreateInternal (FONSparams* params) {
@@ -4603,10 +4597,10 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
     fons__blur(stash, bdst, gw, gh, stash.params.width, iblur);
   }
 
-  stash.dirtyRect[0] = fons__mini(stash.dirtyRect[0], glyph.x0);
-  stash.dirtyRect[1] = fons__mini(stash.dirtyRect[1], glyph.y0);
-  stash.dirtyRect[2] = fons__maxi(stash.dirtyRect[2], glyph.x1);
-  stash.dirtyRect[3] = fons__maxi(stash.dirtyRect[3], glyph.y1);
+  stash.dirtyRect[0] = nvg__min(stash.dirtyRect[0], glyph.x0);
+  stash.dirtyRect[1] = nvg__min(stash.dirtyRect[1], glyph.y0);
+  stash.dirtyRect[2] = nvg__max(stash.dirtyRect[2], glyph.x1);
+  stash.dirtyRect[3] = nvg__max(stash.dirtyRect[3], glyph.y1);
 
   return glyph;
 }
@@ -5242,8 +5236,8 @@ public int fonsExpandAtlas (FONScontext* stash, int width, int height) {
   ubyte* data = null;
   if (stash is null) return 0;
 
-  width = fons__maxi(width, stash.params.width);
-  height = fons__maxi(height, stash.params.height);
+  width = nvg__max(width, stash.params.width);
+  height = nvg__max(height, stash.params.height);
 
   if (width == stash.params.width && height == stash.params.height) return 1;
 
@@ -5273,7 +5267,7 @@ public int fonsExpandAtlas (FONScontext* stash, int width, int height) {
   fons__atlasExpand(stash.atlas, width, height);
 
   // Add existing data as dirty.
-  for (i = 0; i < stash.atlas.nnodes; i++) maxy = fons__maxi(maxy, stash.atlas.nodes[i].y);
+  for (i = 0; i < stash.atlas.nnodes; i++) maxy = nvg__max(maxy, stash.atlas.nodes[i].y);
   stash.dirtyRect[0] = 0;
   stash.dirtyRect[1] = 0;
   stash.dirtyRect[2] = stash.params.width;
