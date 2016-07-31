@@ -1960,28 +1960,26 @@ if (is(T == char) || is(T == dchar))
   auto rglyphs = ctx.textGlyphPositions(x, y, rows[row].row!T, glyphs[]);
   int nglyphs = cast(int)rglyphs.length;
   int col, p = 0;
-  for (col = 0; col < nglyphs && glyphs[col].x < px; ++col) p = cast(int)(glyphs[col].str-label.ptr);
+  for (col = 0; col < nglyphs && glyphs[col].x < px; ++col) p = cast(int)glyphs[col].strpos;
   // see if we should move one character further
-  if (col > 0 && col < nglyphs && glyphs[col].x-px < px-glyphs[col-1].x) p = cast(int)(glyphs[col].str-label.ptr);
+  if (col > 0 && col < nglyphs && glyphs[col].x-px < px-glyphs[col-1].x) p = cast(int)glyphs[col].strpos;
   return p;
 }
 
-static void bndCaretPosition(T=char) (NVGContext ctx, float x, float y, float desc, float lineHeight, const(T)* caret, NVGTextRow* rows, int nrows, int* cr, float* cx, float* cy)
-if (is(T == char) || is(T == dchar))
-{
+void bndCaretPosition (NVGContext ctx, float x, float y, float desc, float lineHeight, int caretpos, NVGTextRow* rows, int nrows, int* cr, float* cx, float* cy) {
   static NVGGlyphPosition[BND_MAX_GLYPHS] glyphs;
   int r = 0;
   //for (r = 0; r < nrows && rows[r].end < caret; ++r) {}
-  while (r < nrows && rows[r].str.ptr+rows[r].end < caret) ++r;
+  while (r < nrows && rows[r].end < caretpos) ++r;
   *cr = r;
   *cx = x;
   *cy = y-lineHeight-desc+r*lineHeight;
   if (nrows == 0) return;
   *cx = rows[r].minx;
-  auto rglyphs = ctx.textGlyphPositions(x, y, rows[r].row!T, glyphs[]);
+  auto rglyphs = (rows[r].isChar ? ctx.textGlyphPositions(x, y, rows[r].row!char, glyphs[]) : ctx.textGlyphPositions(x, y, rows[r].row!dchar, glyphs[]));
   foreach (immutable i; 0..rglyphs.length) {
     *cx = glyphs.ptr[i].x;
-    if (glyphs.ptr[i].str == caret) break;
+    if (glyphs.ptr[i].strpos == caretpos) break;
   }
 }
 
@@ -2026,8 +2024,8 @@ if (is(T == char) || is(T == dchar))
     int nrows = cast(int)rrows.length;
     ctx.textMetrics(null, &desc, &lh);
 
-    bndCaretPosition(ctx, x, y, desc, lh, label.ptr+cbegin, rows.ptr, nrows, &c0r, &c0x, &c0y);
-    bndCaretPosition(ctx, x, y, desc, lh, label.ptr+cend, rows.ptr, nrows, &c1r, &c1x, &c1y);
+    bndCaretPosition(ctx, x, y, desc, lh, cbegin, rows.ptr, nrows, &c0r, &c0x, &c0y);
+    bndCaretPosition(ctx, x, y, desc, lh, cend, rows.ptr, nrows, &c1r, &c1x, &c1y);
 
     ctx.beginPath();
     if (cbegin == cend) {

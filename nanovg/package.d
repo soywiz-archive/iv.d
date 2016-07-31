@@ -289,7 +289,7 @@ private:
 
 ///
 struct NVGGlyphPosition {
-  const(char)* str; /// Position of the glyph in the input string.
+  size_t strpos;    /// Position of the glyph in the input string.
   float x;          /// The x-coordinate of the logical glyph position.
   float minx, maxx; /// The bounds of the glyph shape.
 }
@@ -3074,7 +3074,11 @@ if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
     }
     prevIter = iter;
     NVGGlyphPosition position = void; //WARNING!
-    position.str = iter.str;
+    static if (is(T == char)) {
+      position.strpos = cast(size_t)(iter.str-str.ptr);
+    } else {
+      position.strpos = cast(size_t)(iter.dstr-str.ptr);
+    }
     position.x = iter.x*invscale;
     position.minx = nvg__minf(iter.x, q.x0)*invscale;
     position.maxx = nvg__maxf(iter.nextx, q.x1)*invscale;
