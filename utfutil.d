@@ -24,7 +24,12 @@
 module iv.utfutil;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 struct Utf8DecoderFast {
+public:
+  enum dchar replacement = '\uFFFD';
+  static bool isValidDC (dchar c) pure nothrow @safe @nogc { pragma(inline, true); return (c < 0xD800 || (c > 0xDFFF && c <= 0x10FFFF)); }
+
 private:
   enum State {
     Accept = 0,
@@ -84,18 +89,23 @@ public:
     state = utf8dfa.ptr[256+state+type];
     return (state == State.Accept);
   }
-  // same as `decode`, never reaches `invalid` state, returns '?' for invalid chars
+  // same as `decode`, never reaches `invalid` state, returns `replacement` for invalid chars
   bool decodeSafe (ubyte b) pure @trusted {
     uint type = utf8dfa.ptr[b];
     codepoint = (state != State.Accept ? (b&0x3f)|(codepoint<<6) : (0xff>>type)&b);
-    if ((state = utf8dfa.ptr[256+state+type]) == State.Reject) { state = State.Accept; codepoint = '?'; }
+    if ((state = utf8dfa.ptr[256+state+type]) == State.Reject) { state = State.Accept; codepoint = replacement; }
     return (state == State.Accept);
   }
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 // slow, but using only 4 bytes (dchar)
 struct Utf8Decoder {
+public:
+  enum dchar replacement = '\uFFFD';
+  static bool isValidDC (dchar c) pure nothrow @safe @nogc { pragma(inline, true); return (c < 0xD800 || (c > 0xDFFF && c <= 0x10FFFF)); }
+
 private:
   enum State : uint {
     Accept = 0x0000_0000u,
@@ -109,8 +119,8 @@ public:
   @property bool complete () const { pragma(inline, true); return ((codep&State.Mask) == State.Accept); }
   @property bool invalid () const { pragma(inline, true); return ((codep&State.Mask) == State.Reject); }
   @property bool completeOrInvalid () const { pragma(inline, true); return (complete || invalid); }
-  @property dchar currCodePoint () const { pragma(inline, true); return (codep <= dchar.max ? codep : '?'); }
-  // same as `decode`, never reaches `invalid` state, returns '?' for invalid chars
+  @property dchar currCodePoint () const { pragma(inline, true); return (codep <= dchar.max ? codep : replacement); }
+  // same as `decode`, never reaches `invalid` state, returns `replacement` for invalid chars
   // returns invalid dchar while it is "in progress" (i.e. result > dchar.max)
   void reset () { codep = State.Accept; }
   dchar decode (ubyte b) @trusted {
@@ -118,10 +128,80 @@ public:
     ubyte state = (codep>>24)&0xff;
     codep = (state /*!= State.Accept*/ ? (b&0x3f)|((codep&~State.Mask)<<6) : (0xff>>type)&b);
     if ((state = Utf8DecoderFast.utf8dfa.ptr[256+state+type]) == 12/*State.Reject*/) {
-      codep = '?';
+      codep = replacement;
     } else {
       codep |= (cast(uint)state<<24);
     }
     return codep;
   }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// returns -1 on error (out of room in `s`, for example), or bytes taken
+int utf8Encode(dchar replacement='\uFFFD') (char[] s, dchar c) pure nothrow @trusted @nogc {
+  static assert(Utf8Decoder.isValidDC(replacement), "invalid replacement char");
+  if (!Utf8Decoder.isValidDC(c)) c = replacement;
+  if (c <= 0x7F) {
+    if (s.length < 1) return -1;
+    s.ptr[0] = cast(char)c;
+    return 1;
+  } else {
+    char[4] buf;
+    ubyte len;
+    if (c <= 0x7FF) {
+      buf.ptr[0] = cast(char)(0xC0|(c>>6));
+      buf.ptr[1] = cast(char)(0x80|(c&0x3F));
+      len = 2;
+    } else if (c <= 0xFFFF) {
+      buf.ptr[0] = cast(char)(0xE0|(c>>12));
+      buf.ptr[1] = cast(char)(0x80|((c>>6)&0x3F));
+      buf.ptr[2] = cast(char)(0x80|(c&0x3F));
+      len = 3;
+    } else if (c <= 0x10FFFF) {
+      buf.ptr[0] = cast(char)(0xF0|(c>>18));
+      buf.ptr[1] = cast(char)(0x80|((c>>12)&0x3F));
+      buf.ptr[2] = cast(char)(0x80|((c>>6)&0x3F));
+      buf.ptr[3] = cast(char)(0x80|(c&0x3F));
+      len = 4;
+    } else {
+      assert(0, "wtf?!");
+    }
+    if (s.length < len) return -1;
+    s[0..len] = buf[0..len];
+    return len;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// doesn't do all possible checks, so don't pass invalid UTF-8
+size_t utf8Length (const(char)[] s) pure nothrow @trusted @nogc {
+  static immutable ubyte[256] UTF8stride = [
+    cast(ubyte)
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+    4,4,4,4,4,4,4,4,5,5,5,5,6,6,0xFF,0xFF,
+  ];
+  size_t pos = 0, res = 0;
+  while (pos < s.length) {
+    ubyte l = UTF8stride.ptr[s.ptr[pos++]];
+    if (l == 0xFF) l = 1;
+    res += l;
+    pos += (l-1);
+  }
+  return res;
 }
