@@ -33,7 +33,7 @@ module iv.autocomplete is aliced;
  * Throws:
  *  Out of memory exception
  */
-string[] autocomplete (string cmd, const(string)[] cmdlist) @trusted nothrow {
+string[] autocomplete (string cmd, string[] cmdlist...) @trusted nothrow {
   if (cmdlist.length == 0) return [cmd];
   string found; // autoinit
   usize foundlen, pfxcount; // autoinit

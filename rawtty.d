@@ -66,7 +66,7 @@ TTYMode ttySetNormal () @trusted @nogc {
       import core.sys.posix.termios : tcflush, tcsetattr;
       import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
       import core.sys.posix.unistd : STDIN_FILENO;
-      tcflush(STDIN_FILENO, TCIOFLUSH);
+      //tcflush(STDIN_FILENO, TCIOFLUSH);
       if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &origMode) < 0) return TTYMode.BAD;
       inRawMode = false;
       return TTYMode.RAW;
@@ -86,7 +86,7 @@ TTYMode ttySetRaw (Flag!"waitkey" waitKey=Yes.waitkey) @trusted @nogc {
       import core.sys.posix.termios : BRKINT, CS8, ECHO, ICANON, IEXTEN, INPCK, ISIG, ISTRIP, IXON, ONLCR, OPOST, VMIN, VTIME;
       import core.sys.posix.unistd : STDIN_FILENO;
       termios raw = origMode; // modify the original mode
-      tcflush(STDIN_FILENO, TCIOFLUSH);
+      //tcflush(STDIN_FILENO, TCIOFLUSH);
       // input modes: no break, no CR to NL, no parity check, no strip char, no start/stop output control
       //raw.c_iflag &= ~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
       // input modes: no break, no parity check, no strip char, no start/stop output control
@@ -122,7 +122,7 @@ bool ttySetWaitKey (bool doWait) @trusted @nogc {
       import core.sys.posix.termios : VMIN;
       import core.sys.posix.unistd : STDIN_FILENO;
       termios raw;
-      tcflush(STDIN_FILENO, TCIOFLUSH);
+      //tcflush(STDIN_FILENO, TCIOFLUSH);
       if (tcgetattr(STDIN_FILENO, &raw) == 0) redirected = false;
       raw.c_cc[VMIN] = (doWait ? 1 : 0); // wait/poll mode
       if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return false;
