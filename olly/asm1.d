@@ -20,8 +20,8 @@ module iv.olly.asm1;
 
 /// Model to search for assembler command
 public struct AsmModel {
-  ubyte[MAXCMDSIZE] code; /// Binary code
-  ubyte[MAXCMDSIZE] mask; /// Mask for binary code (0: bit ignored)
+  ubyte[ASMMAXCMDSIZE] code; /// Binary code
+  ubyte[ASMMAXCMDSIZE] mask; /// Mask for binary code (0: bit ignored)
   int length;             /// Length of code, bytes (0: empty)
   int jmpsize;            /// Offset size if relative jump
   int jmpoffset;          /// Offset relative to IP
@@ -147,9 +147,9 @@ struct AsmInstrData {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // ///////////////// ASSEMBLER, DISASSEMBLER AND EXPRESSIONS //////////////// //
-public enum MAXCMDSIZE = 16; // Maximal length of 80x86 command
-public enum MAXCALSIZE = 8; // Max length of CALL without prefixes
-public enum NMODELS = 8; // Number of assembler search models
+public enum ASMMAXCMDSIZE = 16; // Maximal length of 80x86 command
+public enum ASMMAXCALSIZE = 8; // Max length of CALL without prefixes
+public enum ASMNMODELS = 8; // Number of assembler search models
 
 // Indexes of general-purpose registers in t_reg.
 enum {
@@ -1664,8 +1664,8 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
   int l, displacement, immediate, jmpoffset;
   char[32] name = 0;
   const(char)* nameend;
-  ubyte[MAXCMDSIZE] tcode;
-  ubyte[MAXCMDSIZE] tmask;
+  ubyte[ASMMAXCMDSIZE] tcode;
+  ubyte[ASMMAXCMDSIZE] tmask;
   AsmOperand[3] aop; // Up to 3 operands allowed
   AsmOperand* op;
   immutable(AsmInstrData)* pd;
