@@ -68,4 +68,6 @@ void main () {
 
   // error, unable to determine size of operands.
   assit("MOV [475AE0],1", 4);
+
+  assit("jz  long 0x400000", 4);
 }
