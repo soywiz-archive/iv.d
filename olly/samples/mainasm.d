@@ -59,6 +59,9 @@ void assit (const(char)[] cmd, uint csize, bool ideal=false) {
       writeln('^');
       break;
     } else {
+      writeln("  jmpsize: ", am.jmpsize);
+      writefln("  jmpoffset: 0x%08x", am.jmpoffset);
+      writeln("  jmppos: ", am.jmppos);
       dasmOne(am.code[], 0x400000);
     }
   }

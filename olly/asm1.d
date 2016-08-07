@@ -1252,7 +1252,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     scdata.scan = SCAN_ICONST;
     scdata.skipBlanks();
     return;
-  } else if (*scdata.asmcmd == '$' || !isalnum(scdata.asmcmd[1])) {
+  } else if (*scdata.asmcmd == '$' && !isalnum(scdata.asmcmd[1])) {
     // dollar, current EIP
     ++scdata.asmcmd;
     scdata.idata = scdata.stpc;
@@ -1327,7 +1327,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     } else if (scdata.idata == '<') {
       if (*scdata.asmcmd == '&') {
         // Import pseudolabel (for internal use)
-        if ((mode&SA_IMPORT) == 0) { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
+        if ((mode&SA_IMPORT) == 0) { scdata.asmerror = "Syntax error (0)"; scdata.scan = SCAN_ERR; return; }
         ++scdata.asmcmd;
         i = 0;
         while (*scdata.asmcmd != '\0' && *scdata.asmcmd != '>') {
@@ -1363,15 +1363,16 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       scdata.prio = 1;
     } else if (scdata.idata == ']') {
       pcmd = scdata.asmcmd;
-      scanasm(scdata, SA_NAME, resolver);
-      if (scdata.scan != SCAN_SYMB || scdata.idata != '[') {
-        scdata.idata = ']';
-        scdata.asmcmd = pcmd;
-        scdata.prio = 0;
-      } else {
+      scdata.skipBlanks();
+      if (*scdata.asmcmd == '[') {
         // Translate '][' to '+'
         scdata.idata = '+';
         scdata.prio = 2;
+        ++scdata.asmcmd;
+      } else {
+        scdata.idata = ']';
+        scdata.asmcmd = pcmd;
+        scdata.prio = 0;
       }
     } else {
       // Any other character
@@ -1543,9 +1544,12 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
     xlataddr = 0;
     // Get SIB and offset
     for (;;) {
-      if (scdata.scan == SCAN_SYMB && (scdata.idata == '+' || scdata.idata == '-')) { sign = scdata.idata; scanasm(scdata, 0, resolver); }
+      if (scdata.scan == SCAN_SYMB && (scdata.idata == '+' || scdata.idata == '-')) {
+        sign = scdata.idata;
+        scanasm(scdata, 0, resolver);
+      }
       if (scdata.scan == SCAN_ERR) return;
-      if (sign == '?') { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
+      if (sign == '?') { scdata.asmerror = "Syntax error (1)"; scdata.scan = SCAN_ERR; return; }
       // Register AL appears as part of operand of (seldom used) command XLAT.
       if (scdata.scan == SCAN_REG8 && scdata.idata == REG_EAX) {
         if (sign == '-') { scdata.asmerror = "Unable to subtract register"; scdata.scan = SCAN_ERR; return; }
@@ -1565,7 +1569,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
           scanasm(scdata, 0, resolver);
           if (scdata.scan == SCAN_ERR) return;
           if (scdata.scan == SCAN_OFS) { scdata.asmerror = "Undefined scale is not allowed"; scdata.scan = SCAN_ERR; return; }
-          if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
+          if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { scdata.asmerror = "Syntax error (2)"; scdata.scan = SCAN_ERR; return; }
           if (scdata.idata == 6 || scdata.idata == 7 || scdata.idata > 9) { scdata.asmerror = "Invalid scale"; scdata.scan = SCAN_ERR; return; }
           r[reg] += scdata.idata;
           scanasm(scdata, 0, resolver);
@@ -1590,7 +1594,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
           if (scdata.scan == SCAN_ERR) return;
           if (sign == '-') { scdata.asmerror = "Unable to subtract register"; scdata.scan = SCAN_ERR; return; }
           if (scdata.scan == SCAN_REG16) { scdata.asmerror = "Sorry, 16-bit addressing is not supported"; scdata.scan = SCAN_ERR; return; }
-          if (scdata.scan != SCAN_REG32) { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
+          if (scdata.scan != SCAN_REG32) { scdata.asmerror = "Syntax error (3)"; scdata.scan = SCAN_ERR; return; }
           if (offset == 6 || offset == 7 || offset > 9) { scdata.asmerror = "Invalid scale"; scdata.scan = SCAN_ERR; return; }
           r[scdata.idata] += offset;
           scanasm(scdata, 0, resolver);
@@ -1609,7 +1613,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
       sign = '?';
     }
     if (scdata.scan == SCAN_ERR) return;
-    if (scdata.scan != SCAN_SYMB || scdata.idata != ']') { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
+    if (scdata.scan != SCAN_SYMB || scdata.idata != ']') { scdata.asmerror = "Syntax error (4)"; scdata.scan = SCAN_ERR; return; }
     // Process XLAT address separately.
     if (xlataddr != 0) {
       // XLAT address in form [EBX+AX]
