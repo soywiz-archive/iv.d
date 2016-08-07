@@ -1447,7 +1447,8 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       scdata.skipBlanks();
       return;
     }
-    if (*scdata.asmcmd == '.') {                // Force decimal number
+    if (*scdata.asmcmd == '.') {
+      // Force decimal number
       if (base == 16 || maxdigit > 9) { scdata.asmerror = "Not a decimal number"; scdata.scan = SCAN_ERR; return; }
       ++scdata.asmcmd;
       if (isdigit(*scdata.asmcmd) || toupper(*scdata.asmcmd) == 'E') {
@@ -1476,11 +1477,28 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
         }
         scdata.fdata = floating;
         scdata.scan = SCAN_FCONST;
+        if (!scdata.inMath) {
+          // retreat and do expression
+          scdata.inMath = true;
+          scope(exit) scdata.inMath = false;
+          scdata.restore(saved);
+          doExpression();
+        } else {
+          scdata.skipBlanks();
+        }
         return;
       } else {
         scdata.idata = decimal;
         scdata.scan = SCAN_DCONST;
-        scdata.skipBlanks();
+        if (!scdata.inMath) {
+          // retreat and do expression
+          scdata.inMath = true;
+          scope(exit) scdata.inMath = false;
+          scdata.restore(saved);
+          doExpression();
+        } else {
+          scdata.skipBlanks();
+        }
         return;
       }
     }
@@ -1520,12 +1538,72 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
   } else if (*scdata.asmcmd == '\'') {
     // Character constant
     ++scdata.asmcmd;
-    if (*scdata.asmcmd == '\0' || (*scdata.asmcmd == '\\' && scdata.asmcmd[1] == '\0'))  { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
-    if (*scdata.asmcmd == '\'') { scdata.asmerror = "Empty character constant"; scdata.scan = SCAN_ERR; return; }
-    if (*scdata.asmcmd == '\\') ++scdata.asmcmd;
-    scdata.idata = *scdata.asmcmd++;
-    if (*scdata.asmcmd != '\'')  { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
+    char[4] cc;
+    int ccpos = 0;
+    foreach (immutable _; 0..4) {
+      if (*scdata.asmcmd == '\0' || (*scdata.asmcmd == '\\' && scdata.asmcmd[1] == '\0')) { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
+      if (*scdata.asmcmd == '\'') {
+        if (ccpos == 0) { scdata.asmerror = "Empty character constant"; scdata.scan = SCAN_ERR; return; }
+        break;
+      }
+      if (*scdata.asmcmd == '\\') {
+        ++scdata.asmcmd;
+        if (*scdata.asmcmd == '\0') { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
+        switch (*scdata.asmcmd++) {
+          case 't': cc[ccpos++] = '\t'; break;
+          case 'r': cc[ccpos++] = '\r'; break;
+          case 'n': cc[ccpos++] = '\n'; break;
+          default: cc[ccpos++] = scdata.asmcmd[-1]; break;
+        }
+      } else {
+        cc[ccpos++] = *scdata.asmcmd++;
+      }
+    }
+    if (*scdata.asmcmd != '\'') { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
     ++scdata.asmcmd;
+    if (ccpos != 1 && ccpos != 2 && ccpos != 4) { scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return; }
+    switch (ccpos) {
+      case 1: scdata.idata = cast(ubyte)cc[0]; break;
+      case 2: scdata.idata = ((cast(ubyte)cc[0])<<8)|(cast(ubyte)cc[1]); break;
+      case 4: scdata.idata = ((cast(ubyte)cc[0])<<24)|((cast(ubyte)cc[1])<<16)|((cast(ubyte)cc[2])<<8)|(cast(ubyte)cc[3]); break;
+      default: scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return;
+    }
+    scdata.skipBlanks();
+    scdata.scan = SCAN_ICONST;
+    return;
+  } else if (*scdata.asmcmd == '`') {
+    // Character constant
+    ++scdata.asmcmd;
+    char[4] cc;
+    int ccpos = 0;
+    foreach (immutable _; 0..4) {
+      if (*scdata.asmcmd == '\0' || (*scdata.asmcmd == '\\' && scdata.asmcmd[1] == '\0')) { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
+      if (*scdata.asmcmd == '`') {
+        if (ccpos == 0) { scdata.asmerror = "Empty character constant"; scdata.scan = SCAN_ERR; return; }
+        break;
+      }
+      if (*scdata.asmcmd == '\\') {
+        ++scdata.asmcmd;
+        if (*scdata.asmcmd == '\0') { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
+        switch (*scdata.asmcmd++) {
+          case 't': cc[ccpos++] = '\t'; break;
+          case 'r': cc[ccpos++] = '\r'; break;
+          case 'n': cc[ccpos++] = '\n'; break;
+          default: cc[ccpos++] = scdata.asmcmd[-1]; break;
+        }
+      } else {
+        cc[ccpos++] = *scdata.asmcmd++;
+      }
+    }
+    if (*scdata.asmcmd != '`') { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
+    ++scdata.asmcmd;
+    if (ccpos != 1 && ccpos != 2 && ccpos != 4) { scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return; }
+    switch (ccpos) {
+      case 1: scdata.idata = cast(ubyte)cc[0]; break;
+      case 2: scdata.idata = ((cast(ubyte)cc[1])<<8)|(cast(ubyte)cc[0]); break;
+      case 4: scdata.idata = ((cast(ubyte)cc[3])<<24)|((cast(ubyte)cc[2])<<16)|((cast(ubyte)cc[1])<<8)|(cast(ubyte)cc[0]); break;
+      default: scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return;
+    }
     scdata.skipBlanks();
     scdata.scan = SCAN_ICONST;
     return;
