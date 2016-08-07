@@ -849,8 +849,7 @@ immutable AsmInstrData[585] asmInstrs = [
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Scanner modes.
-enum SA_NAME   = 0x0001; // Don't try to decode labels
-enum SA_IMPORT = 0x0002; // Allow import pseudolabel
+enum SA_NAME = 0x0001; // Don't try to decode labels
 
 enum MAX_PRIO = 10;
 
@@ -1611,93 +1610,25 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     // Any other character or combination
     scdata.idata = scdata.sdata[0] = *scdata.asmcmd++;
     scdata.sdata[1] = scdata.sdata[2] = '\0';
-    if (scdata.idata == '|' && *scdata.asmcmd == '|') {
-      // '||'
-      scdata.idata = S2toI!("||");
-      scdata.prio = 10;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '&' && *scdata.asmcmd == '&') {
-      // '&&'
-      scdata.idata = S2toI!("&&");
-      scdata.prio = 9;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '=' && *scdata.asmcmd == '=') {
-      // '=='
-      scdata.idata = S2toI!("==");
-      scdata.prio = 5;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '!' && *scdata.asmcmd == '=') {
-      // '!='
-      scdata.idata = S2toI!("!=");
-      scdata.prio = 5;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '<' && *scdata.asmcmd == '=') {
-      // '<='
-      scdata.idata = S2toI!("<=");
-      scdata.prio = 4;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '>' && *scdata.asmcmd == '=') {
-      // '>='
-      scdata.idata = S2toI!(">=");
-      scdata.prio = 4;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '<' && *scdata.asmcmd == '<') {
-      // '<<'
-      scdata.idata = S2toI!("<<");
-      scdata.prio = 3;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '>' && *scdata.asmcmd == '>') {
-      // '>>'
-      scdata.idata = S2toI!(">>");
-      scdata.prio = 3;
-      scdata.sdata[1] = *scdata.asmcmd++;
-    } else if (scdata.idata == '|') {
-      // '|'
-      scdata.prio = 8;
-    } else if (scdata.idata == '^') {
-      // '^'
-      scdata.prio = 7;
-    } else if (scdata.idata == '&') {
-      // '&'
-      scdata.prio = 6;
-    } else if (scdata.idata == '<') {
-      if (*scdata.asmcmd == '&') {
-        // Import pseudolabel (for internal use)
-        if ((mode&SA_IMPORT) == 0) { scdata.asmerror = "Syntax error (0)"; scdata.scan = SCAN_ERR; return; }
-        ++scdata.asmcmd;
-        i = 0;
-        while (*scdata.asmcmd != '\0' && *scdata.asmcmd != '>') {
-          scdata.sdata[i++] = *scdata.asmcmd++;
-          if (i >= scdata.sdata.sizeof) { scdata.asmerror = "Too long import name"; scdata.scan = SCAN_ERR; return; }
-        }
-        if (*scdata.asmcmd != '>') { scdata.asmerror = "Unterminated import name"; scdata.scan = SCAN_ERR; return; }
-        ++scdata.asmcmd;
-        scdata.sdata[i] = '\0';
-        scdata.scan = SCAN_IMPORT;
-        return;
-      } else {
-        // '<'
-        scdata.prio = 4;
-      }
-    } else if (scdata.idata == '>') {
-      // '>'
-      scdata.prio = 4;
-    } else if (scdata.idata == '+') {
-      // '+'
-      scdata.prio = 2;
-    } else if (scdata.idata == '-') {
-      // '-'
-      scdata.prio = 2;
-    } else if (scdata.idata == '*') {
-      // '*'
-      scdata.prio = 1;
-    } else if (scdata.idata == '/') {
-      // '/'
-      scdata.prio = 1;
-    } else if (scdata.idata == '%') {
-      // '%'
-      scdata.prio = 1;
-    } else if (scdata.idata == ']') {
+         if (scdata.idata == '|' && *scdata.asmcmd == '|') { scdata.idata = S2toI!("||"); scdata.prio = 10; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '&' && *scdata.asmcmd == '&') { scdata.idata = S2toI!("&&"); scdata.prio = 9; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '=' && *scdata.asmcmd == '=') { scdata.idata = S2toI!("=="); scdata.prio = 5; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '!' && *scdata.asmcmd == '=') { scdata.idata = S2toI!("!="); scdata.prio = 5; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '<' && *scdata.asmcmd == '=') { scdata.idata = S2toI!("<="); scdata.prio = 4; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '>' && *scdata.asmcmd == '=') { scdata.idata = S2toI!(">="); scdata.prio = 4; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '<' && *scdata.asmcmd == '<') { scdata.idata = S2toI!("<<"); scdata.prio = 3; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '>' && *scdata.asmcmd == '>') { scdata.idata = S2toI!(">>"); scdata.prio = 3; scdata.sdata[1] = *scdata.asmcmd++; }
+    else if (scdata.idata == '|') scdata.prio = 8;
+    else if (scdata.idata == '^') scdata.prio = 7;
+    else if (scdata.idata == '&') scdata.prio = 6;
+    else if (scdata.idata == '<') scdata.prio = 4;
+    else if (scdata.idata == '>') scdata.prio = 4;
+    else if (scdata.idata == '+') scdata.prio = 2;
+    else if (scdata.idata == '-') scdata.prio = 2;
+    else if (scdata.idata == '*') scdata.prio = 1;
+    else if (scdata.idata == '/') scdata.prio = 1;
+    else if (scdata.idata == '%') scdata.prio = 1;
+    else if (scdata.idata == ']') {
       pcmd = scdata.asmcmd;
       scdata.skipBlanks();
       if (!scdata.inMath && *scdata.asmcmd == '[') {
