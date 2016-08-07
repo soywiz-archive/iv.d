@@ -1244,8 +1244,8 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     // Some keyword or identifier
     scdata.sdata[0] = *scdata.asmcmd++;
     i = 1;
-    while ((isalnum(*scdata.asmcmd) || *scdata.asmcmd == '_' || *scdata.asmcmd == '@') && i < scdata.sdata.sizeof) scdata.sdata[i++] = *scdata.asmcmd++;
-    if (i >= scdata.sdata.sizeof) { scdata.asmerror = "Too long identifier"; scdata.scan = SCAN_ERR; return; }
+    while ((isalnum(*scdata.asmcmd) || *scdata.asmcmd == '_' || *scdata.asmcmd == '@' || *scdata.asmcmd == '.' || *scdata.asmcmd == '$') && i < scdata.sdata.length) scdata.sdata[i++] = *scdata.asmcmd++;
+    if (i >= scdata.sdata.length) { scdata.asmerror = "Too long identifier"; scdata.scan = SCAN_ERR; return; }
     auto symname = (scdata.asmcmd-i)[0..i];
     scdata.sdata[i] = '\0';
     scdata.skipBlanks(); // Skip trailing spaces
