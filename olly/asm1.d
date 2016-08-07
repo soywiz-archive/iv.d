@@ -852,44 +852,50 @@ immutable AsmInstrData[585] asmInstrs = [
 enum SA_NAME   = 0x0001; // Don't try to decode labels
 enum SA_IMPORT = 0x0002; // Allow import pseudolabel
 
-// Types of input tokens reported by scanner.
-enum SCAN_EOL =       0;   // End of line
-enum SCAN_REG8 =      1;   // 8-bit register
-enum SCAN_REG16 =     2;   // 16-bit register
-enum SCAN_REG32 =     3;   // 32-bit register
-enum SCAN_SEG =       4;   // Segment register
-enum SCAN_FPU =       5;   // FPU register
-enum SCAN_MMX =       6;   // MMX register
-enum SCAN_CR =        7;   // Control register
-enum SCAN_DR =        8;   // Debug register
-enum SCAN_OPSIZE =    9;   // Operand size modifier
-enum SCAN_JMPSIZE =   10;  // Jump size modifier
-enum SCAN_LOCAL =     11;  // Address on stack in form LOCAL.decimal
-enum SCAN_ARG =       12;  // Address on stack in form ARG.decimal
-enum SCAN_PTR =       20;  // PTR in MASM addressing statements
-enum SCAN_REP =       21;  // REP prefix
-enum SCAN_REPE =      22;  // REPE prefix
-enum SCAN_REPNE =     23;  // REPNE prefix
-enum SCAN_LOCK =      24;  // LOCK prefix
-enum SCAN_NAME =      25;  // Command or label
-enum SCAN_ICONST =    26;  // Hexadecimal constant
-enum SCAN_DCONST =    27;  // Decimal constant
-enum SCAN_OFS =       28;  // Undefined constant
-enum SCAN_FCONST =    29;  // Floating-point constant
-enum SCAN_EIP =       30;  // Register EIP
-enum SCAN_SIGNED =    31;  // Keyword "SIGNED" (in expressions)
-enum SCAN_UNSIGNED =  32;  // Keyword "UNSIGNED" (in expressions)
-enum SCAN_CHAR =      33;  // Keyword "CHAR" (in expressions)
-enum SCAN_FLOAT =     34;  // Keyword "FLOAT" (in expressions)
-enum SCAN_DOUBLE =    35;  // Keyword "DOUBLE" (in expressions)
-enum SCAN_FLOAT10 =   36;  // Keyword "FLOAT10" (in expressions)
-enum SCAN_STRING =    37;  // Keyword "STRING" (in expressions)
-enum SCAN_UNICODE =   38;  // Keyword "UNICODE" (in expressions)
-enum SCAN_MSG =       39;  // Pseudovariable MSG (in expressions)
+enum MAX_PRIO = 10;
 
-enum SCAN_SYMB =      64;  // Any other character
-enum SCAN_IMPORT =    65;  // Import pseudolabel
-enum SCAN_ERR =       255; // Definitely bad item
+// Types of input tokens reported by scanner.
+enum {
+  SCAN_EOL = 0,   // End of line
+  SCAN_REG8,      // 8-bit register
+  SCAN_REG16,     // 16-bit register
+  SCAN_REG32,     // 32-bit register
+  SCAN_SEG,       // Segment register
+  SCAN_FPU,       // FPU register
+  SCAN_MMX,       // MMX register
+  SCAN_CR,        // Control register
+  SCAN_DR,        // Debug register
+  SCAN_OPSIZE,    // Operand size modifier
+  SCAN_JMPSIZE,   // Jump size modifier
+  SCAN_LOCAL,     // Address on stack in form LOCAL.decimal
+  SCAN_ARG,       // Address on stack in form ARG.decimal
+
+  SCAN_PTR = 20,  // PTR in MASM addressing statements
+  SCAN_REP,       // REP prefix
+  SCAN_REPE,      // REPE prefix
+  SCAN_REPNE,     // REPNE prefix
+  SCAN_LOCK,      // LOCK prefix
+  SCAN_NAME,      // Command or label
+  SCAN_ICONST,    // Hexadecimal constant
+  SCAN_DCONST,    // Decimal constant
+  SCAN_OFS,       // Undefined constant
+  SCAN_FCONST,    // Floating-point constant
+  SCAN_EIP,       // Register EIP
+  SCAN_SIGNED,    // Keyword "SIGNED" (in expressions)
+  SCAN_UNSIGNED,  // Keyword "UNSIGNED" (in expressions)
+  SCAN_CHAR,      // Keyword "CHAR" (in expressions)
+  SCAN_FLOAT,     // Keyword "FLOAT" (in expressions)
+  SCAN_DOUBLE,    // Keyword "DOUBLE" (in expressions)
+  SCAN_FLOAT10,   // Keyword "FLOAT10" (in expressions)
+  SCAN_STRING,    // Keyword "STRING" (in expressions)
+  SCAN_UNICODE,   // Keyword "UNICODE" (in expressions)
+  SCAN_MSG,       // Pseudovariable MSG (in expressions)
+
+  SCAN_SYMB = 64, // Any other character
+  SCAN_IMPORT,    // Import pseudolabel
+
+  SCAN_ERR = 255, // Definitely bad item
+}
 
 // Definition used by Assembler to report command matching errors.
 enum MA_JMP = 0x0001; // Invalid jump size modifier
@@ -924,9 +930,21 @@ struct AsmScanData {
   string asmerror;     // Explanation of last error, or null
   uint stpc;           // starting pc (for '$')
   bool defaultHex;     // default number base is hex
+  bool inMath;         // true: don't convert '][' to '+'
 
   void skipBlanks () nothrow @nogc {
     while (*asmcmd > 0 && *asmcmd <= ' ') ++asmcmd;
+  }
+
+  auto save () nothrow @nogc { pragma(inline, true); return Save(asmcmd, scan, idata, fdata); }
+  void restore() (in auto ref Save sv) { pragma(inline, true); asmcmd = sv.asmcmd; scan = sv.scan; idata = sv.idata; fdata = sv.idata; }
+
+private:
+  static struct Save {
+    const(char)* asmcmd;
+    int scan;
+    int idata;
+    real fdata;
   }
 }
 
@@ -997,6 +1015,220 @@ private int strnicmp (const(char)* s0, const(char)* s1, int len) {
 private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resolver) {
   import core.stdc.ctype : isalpha, isalnum, isdigit, toupper, isxdigit;
   import core.stdc.string : strcmp, strcpy;
+
+  static struct MathOp {
+    int type = -1;
+    int ival;
+    real fval;
+
+    this (in ref AsmScanData scdata) {
+      if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST) {
+        type = SCAN_ICONST;
+        ival = scdata.idata;
+      } else if (scdata.scan == SCAN_FCONST) {
+        type = SCAN_FCONST;
+        fval = scdata.fdata;
+      } else {
+        type = -1; // invalid
+      }
+    }
+
+    @property bool valid () const pure nothrow @safe @nogc { return (type > 0); }
+    @property bool isInt () const pure nothrow @safe @nogc { return (type == SCAN_ICONST); }
+    @property bool isFloat () const pure nothrow @safe @nogc { return (type == SCAN_FCONST); }
+
+    void put (ref AsmScanData scdata) {
+      if (!valid) return;
+      if (isInt) {
+        scdata.scan = SCAN_ICONST;
+        scdata.idata = ival;
+      } else {
+        scdata.scan = SCAN_FCONST;
+        scdata.fdata = fval;
+      }
+    }
+
+    // upgrade both this and op if necessary
+    bool upgradeType (ref MathOp op) {
+      if (!op.valid || !valid) return false;
+      if (isFloat) {
+        if (op.isInt) {
+          op.type = SCAN_FCONST;
+          op.fval = op.ival;
+        }
+      } else if (isInt) {
+        if (op.isFloat) {
+          type = SCAN_FCONST;
+          fval = ival;
+        }
+      } else {
+        assert(0, "wtf?!");
+      }
+      return true;
+    }
+
+    bool doMath (int op, MathOp op2) {
+      if (!upgradeType(op2)) { type = -1; return false; }
+      switch (op) {
+        case S2toI!("||"):
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval != 0 || op2.fval != 0);
+          } else {
+            ival = (ival != 0 || op2.ival != 0);
+          }
+          break;
+        case S2toI!("&&"):
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval != 0 && op2.fval != 0);
+          } else {
+            ival = (ival != 0 && op2.ival != 0);
+          }
+          break;
+        case S2toI!("=="):
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval == op2.fval);
+          } else {
+            ival = (ival == op2.ival);
+          }
+          break;
+        case S2toI!("!="):
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval != op2.fval);
+          } else {
+            ival = (ival != op2.ival);
+          }
+          break;
+        case S2toI!("<="):
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval <= op2.fval);
+          } else {
+            ival = (ival <= op2.ival);
+          }
+          break;
+        case S2toI!(">="):
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval >= op2.fval);
+          } else {
+            ival = (ival >= op2.ival);
+          }
+          break;
+        case '<':
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval < op2.fval);
+          } else {
+            ival = (ival < op2.ival);
+          }
+          break;
+        case '>':
+          if (isFloat) {
+            type = SCAN_ICONST;
+            ival = (fval > op2.fval);
+          } else {
+            ival = (ival > op2.ival);
+          }
+          break;
+        case S2toI!("<<"):
+          if (isFloat || op2.ival < 0 || op2.ival > 31) { type = -1; return false; }
+          ival <<= op2.ival;
+          break;
+        case S2toI!(">>"):
+          if (isFloat || op2.ival < 0 || op2.ival > 31) { type = -1; return false; }
+          ival >>= op2.ival;
+          break;
+        case '|':
+          if (isFloat) { type = -1; return false; }
+          ival |= op2.ival;
+          break;
+        case '^':
+          if (isFloat) { type = -1; return false; }
+          ival ^= op2.ival;
+          break;
+        case '&':
+          if (isFloat) { type = -1; return false; }
+          ival &= op2.ival;
+          break;
+        case '+':
+          if (isFloat) fval += op2.fval; else ival += op2.ival;
+          break;
+        case '-':
+          if (isFloat) fval -= op2.fval; else ival -= op2.ival;
+          break;
+        case '*':
+          if (isFloat) fval *= op2.fval; else ival *= op2.ival;
+          break;
+        case '/':
+          if ((isFloat && fval == 0) || (isInt && ival == 0)) { type = -2; return false; }
+          if (isFloat) fval /= op2.fval; else ival /= op2.ival;
+          break;
+        case '%':
+          if ((isFloat && fval == 0) || (isInt && ival == 0)) { type = -2; return false; }
+          if (isFloat) fval %= op2.fval; else ival %= op2.ival;
+          break;
+        default: type = -1; return false;
+      }
+      return true;
+    }
+  }
+
+  MathOp doExpr (int prio) {
+    if (prio == 0) {
+      // term
+      auto saved = scdata.save;
+      scdata.prio = 0;
+      scanasm(scdata, 0, resolver);
+      if (scdata.prio <= 0) {
+        if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST || scdata.scan == SCAN_FCONST) {
+          return MathOp(scdata);
+        } else if (scdata.scan == SCAN_SYMB && scdata.idata == '(') {
+          auto op = doExpr(MAX_PRIO);
+          scdata.prio = 0;
+          scanasm(scdata, 0, resolver);
+          if (scdata.scan != SCAN_SYMB || scdata.idata != ')') {
+            scdata.restore(saved);
+            scdata.asmerror = "')' expected";
+            scdata.scan = SCAN_ERR;
+            return MathOp();
+          }
+          return op;
+        }
+      }
+      scdata.restore(saved);
+      scdata.asmerror = "invalid math";
+      scdata.scan = SCAN_ERR;
+      return MathOp();
+    }
+
+    auto op1 = doExpr(prio-1);
+    if (!op1.valid) return op1;
+    for (;;) {
+      auto saved = scdata.save;
+      scdata.prio = 0;
+      scanasm(scdata, 0, resolver);
+      if (scdata.scan == SCAN_SYMB && scdata.prio == prio) {
+        auto op = scdata.idata;
+        auto op2 = doExpr(prio-1);
+        if (!op2.valid) { scdata.restore(saved); return op2; }
+        if (!op1.upgradeType(op2)) { scdata.asmerror = "invalid math operation"; scdata.scan = SCAN_ERR; return MathOp(); }
+        if (!op1.doMath(op, op2)) { scdata.asmerror = "invalid math operation"; scdata.scan = SCAN_ERR; return MathOp(); }
+      } else {
+        scdata.restore(saved);
+        break;
+      }
+    }
+    return op1;
+  }
+
+  void doExpression () {
+    auto op = doExpr(MAX_PRIO);
+    if (op.valid) op.put(scdata);
+  }
 
   int i, j, base, maxdigit;
   int decimal, hex;
@@ -1176,6 +1408,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
   } else if (isdigit(*scdata.asmcmd)) {
     // Constant
     bool metHexDigit = false;
+    auto saved = scdata.save;
     base = 0;
     maxdigit = 0;
     decimal = hex = 0;
@@ -1258,14 +1491,31 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       scdata.idata = decimal;
     }
     scdata.scan = SCAN_ICONST;
-    scdata.skipBlanks();
+    if (!scdata.inMath) {
+      // retreat and do expression
+      scdata.inMath = true;
+      scope(exit) scdata.inMath = false;
+      scdata.restore(saved);
+      doExpression();
+    } else {
+      scdata.skipBlanks();
+    }
     return;
   } else if (*scdata.asmcmd == '$' && !isalnum(scdata.asmcmd[1])) {
     // dollar, current EIP
+    auto saved = scdata.save;
     ++scdata.asmcmd;
     scdata.idata = scdata.stpc;
     scdata.scan = SCAN_ICONST;
-    scdata.skipBlanks();
+    if (!scdata.inMath) {
+      // retreat and do expression
+      scdata.inMath = true;
+      scope(exit) scdata.inMath = false;
+      scdata.restore(saved);
+      doExpression();
+    } else {
+      scdata.skipBlanks();
+    }
     return;
   } else if (*scdata.asmcmd == '\'') {
     // Character constant
@@ -1372,7 +1622,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     } else if (scdata.idata == ']') {
       pcmd = scdata.asmcmd;
       scdata.skipBlanks();
-      if (*scdata.asmcmd == '[') {
+      if (!scdata.inMath && *scdata.asmcmd == '[') {
         // Translate '][' to '+'
         scdata.idata = '+';
         scdata.prio = 2;
