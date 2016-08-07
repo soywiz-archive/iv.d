@@ -71,8 +71,15 @@ void rawWrite(ST, T) (auto ref ST st, in T[] buf) if (isLowLevelStreamW!ST) {
 
 /// read exact size or throw error
 T[] rawReadExact(ST, T) (auto ref ST st, T[] buf) if (isReadableStream!ST && isMutable!T) {
-  auto res = st.rawRead(buf);
-  if (res.length != buf.length) throw new VFSException("read error");
+  if (buf.length == 0) return buf;
+  auto left = buf.length*T.sizeof;
+  auto dp = cast(ubyte*)buf.ptr;
+  while (left > 0) {
+    auto res = st.rawRead(cast(void[])(dp[0..left]));
+    if (res.length == 0) throw new VFSException("read error");
+    dp += res.length;
+    left -= res.length;
+  }
   return buf;
 }
 

@@ -81,4 +81,6 @@ void main () {
   assit("jz  long start", 4);
 
   assit("jz  $", 4);
+
+  assit("int3", 0);
 }
