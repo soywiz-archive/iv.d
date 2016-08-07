@@ -33,7 +33,8 @@ public struct AsmModel {
 /// Assembler options
 public struct AsmOptions {
   bool ideal = true;    /// Force IDEAL decoding mode
-  bool sizesens = true; /// How to decode size-sensitive mnemonics
+  bool sizesens = true; /// How to encode size-sensitive mnemonics (false: word, true: dword)
+  bool defaultHex = false; /// default number base is hex
 }
 
 
@@ -922,6 +923,7 @@ struct AsmScanData {
   real fdata;          // Floating-point number
   string asmerror;     // Explanation of last error, or null
   uint stpc;           // starting pc (for '$')
+  bool defaultHex;     // default number base is hex
 
   void skipBlanks () nothrow @nogc {
     while (*asmcmd > 0 && *asmcmd <= ' ') ++asmcmd;
@@ -1173,6 +1175,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     return;
   } else if (isdigit(*scdata.asmcmd)) {
     // Constant
+    bool metHexDigit = false;
     base = 0;
     maxdigit = 0;
     decimal = hex = 0;
@@ -1186,6 +1189,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
         if (maxdigit == 0) maxdigit = 9;
         ++scdata.asmcmd;
       } else if (isxdigit(*scdata.asmcmd)) {
+        metHexDigit = true;
         hex = hex*16+toupper(*scdata.asmcmd++)-'A'+10;
         maxdigit = 15;
       } else {
@@ -1248,7 +1252,11 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       }
     }
     // Default is hexadecimal
-    scdata.idata = hex;
+    if (scdata.defaultHex || metHexDigit) {
+      scdata.idata = hex;
+    } else {
+      scdata.idata = decimal;
+    }
     scdata.scan = SCAN_ICONST;
     scdata.skipBlanks();
     return;
@@ -1789,7 +1797,7 @@ retrylongjump:
           if (pd.name[j] == '*') {
                  if (name[i] == 'W') { datasize = 2; ++i; }
             else if (name[i] == 'D') { datasize = 4; ++i; }
-            else if (opts.sizesens == 0) datasize = 2;
+            else if (!opts.sizesens) datasize = 2;
             else datasize = 4;
           } else if (pd.name[j] == name[i]) {
             ++i;
@@ -1821,7 +1829,7 @@ retrylongjump:
           if (pd.name[j] == '*') {
                  if (name[i] == 'W') { addrsize = 2; ++i; }
             else if (name[i] == 'D') { addrsize = 4; ++i; }
-            else if (opts.sizesens == 0) addrsize = 2;
+            else if (!opts.sizesens) addrsize = 2;
             else addrsize = 4;
           } else if (pd.name[j] == name[i]) {
             ++i;
