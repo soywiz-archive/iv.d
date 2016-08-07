@@ -145,6 +145,9 @@ enum isWriteableStream(T) = is(typeof((inout int=0) {
 /// check if a given stream supports both reading and writing
 enum isRWStream(T) = isReadableStream!T && isWriteableStream!T;
 
+/// check if a given stream supports both reading and writing
+enum isRorWStream(T) = isReadableStream!T || isWriteableStream!T;
+
 /// check if a given stream supports `.seek(ofs, [whence])`, and `.tell`
 enum isSeekableStream(T) = (streamHasSeek!T && streamHasTell!T);
 

@@ -88,9 +88,9 @@ public:
   }
 
   /// wrap file descriptor; `fd` is owned by VFile now; can throw
-  static if (VFS_NORMAL_OS) this (int fd) {
+  static if (VFS_NORMAL_OS) this (int fd, bool own=true) {
     if (fd < 0) throw new VFSException("can't open file");
-    wstp = WrapFD(fd);
+    if (own) wstp = WrapFD!true(fd); else wstp = WrapFD!true(fd);
   }
 
   /// open named file with VFS engine; start with "/" or "./" to use only disk files
@@ -438,7 +438,7 @@ usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-static if (VFS_NORMAL_OS) final class WrappedStreamFD : WrappedStreamRC {
+static if (VFS_NORMAL_OS) final class WrappedStreamFD(bool own) : WrappedStreamRC {
 private:
   int fd;
 
@@ -450,10 +450,10 @@ protected:
   override void close () {
     if (fd >= 0) {
       import std.exception : ErrnoException;
-      auto res = core.sys.posix.unistd.close(fd);
+      static if (own) auto res = core.sys.posix.unistd.close(fd);
       fd = -1;
       eofhit = true;
-      if (res < 0) throw new ErrnoException("can't close file", __FILE__, __LINE__);
+      static if (own) if (res < 0) throw new ErrnoException("can't close file", __FILE__, __LINE__);
     }
   }
 
@@ -482,8 +482,8 @@ protected:
 }
 
 
-static if (VFS_NORMAL_OS) usize WrapFD (int fd) {
-  return newWS!WrappedStreamFD(fd);
+static if (VFS_NORMAL_OS) usize WrapFD(bool own) (int fd) {
+  return newWS!(WrappedStreamFD!own)(fd);
 }
 
 
