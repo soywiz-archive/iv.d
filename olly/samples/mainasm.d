@@ -42,7 +42,13 @@ void assit (const(char)[] cmd, uint csize, bool ideal=false) {
 
   foreach (uint attempt; 0..int.max) {
     writeln(cmd, ":");
-    auto res = assemble(cmd, 0x400000, &am, opts, attempt, csize, errtext[]);
+    auto res = assemble(cmd, 0x400000, &am, opts, attempt, csize, errtext[],
+      (name) {
+        //writeln("<", name, ">");
+        if (name == "start") return 0x400000;
+        throw new Exception("invalid symbol");
+      }
+    );
     auto n = sprintf(s.ptr, "%3i  ", res);
     foreach (immutable int i; 0..res) n += sprintf(s.ptr+n, "%02X ", am.code[i]);
     if (res <= 0) sprintf(s.ptr+n, "  error=\"%s\"", errtext.ptr);
@@ -69,5 +75,7 @@ void main () {
   // error, unable to determine size of operands.
   assit("MOV [475AE0],1", 4);
 
-  assit("jz  long 0x400000", 4);
+  assit("jz  long start", 4);
+
+  assit("jz  $", 4);
 }

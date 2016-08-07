@@ -17,6 +17,8 @@
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 module iv.olly.asm1;
 
+/// symbol resolver; should throw on unknown symbol
+alias uint delegate (const(char)[] name) ResolveSymCB;
 
 /// Model to search for assembler command
 public struct AsmModel {
@@ -919,6 +921,7 @@ struct AsmScanData {
   int idata;           // Last scanned value
   real fdata;          // Floating-point number
   string asmerror;     // Explanation of last error, or null
+  uint stpc;           // starting pc (for '$')
 
   void skipBlanks () nothrow @nogc {
     while (*asmcmd > 0 && *asmcmd <= ' ') ++asmcmd;
@@ -989,7 +992,7 @@ private int strnicmp (const(char)* s0, const(char)* s1, int len) {
   return 0;
 }
 
-private void scanasm (ref AsmScanData scdata, int mode) {
+private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resolver) {
   import core.stdc.ctype : isalpha, isalnum, isdigit, toupper, isxdigit;
   import core.stdc.string : strcmp, strcpy;
 
@@ -1010,9 +1013,11 @@ private void scanasm (ref AsmScanData scdata, int mode) {
     i = 1;
     while ((isalnum(*scdata.asmcmd) || *scdata.asmcmd == '_' || *scdata.asmcmd == '@') && i < scdata.sdata.sizeof) scdata.sdata[i++] = *scdata.asmcmd++;
     if (i >= scdata.sdata.sizeof) { scdata.asmerror = "Too long identifier"; scdata.scan = SCAN_ERR; return; }
+    auto symname = (scdata.asmcmd-i)[0..i];
     scdata.sdata[i] = '\0';
     scdata.skipBlanks(); // Skip trailing spaces
-    strcpy(s.ptr, scdata.sdata.ptr); strupr(s.ptr);
+    strcpy(s.ptr, scdata.sdata.ptr);
+    strupr(s.ptr);
     // j == 8 means "any register"
     for (j = 0; j <= 8; ++j) {
       if (strcmp(s.ptr, regname[0][j].ptr) != 0) continue;
@@ -1046,7 +1051,7 @@ private void scanasm (ref AsmScanData scdata, int mode) {
     if (strcmp(s.ptr, "ST") == 0) {
       // FPU register
       pcmd = scdata.asmcmd;
-      scanasm(scdata, SA_NAME);
+      scanasm(scdata, SA_NAME, resolver);
       if (scdata.scan != SCAN_SYMB || scdata.idata != '(') {
         // Undo last scan
         scdata.asmcmd = pcmd;
@@ -1054,20 +1059,21 @@ private void scanasm (ref AsmScanData scdata, int mode) {
         scdata.scan = SCAN_FPU;
         return;
       }
-      scanasm(scdata, SA_NAME);
+      scanasm(scdata, SA_NAME, resolver);
       j = scdata.idata;
       if ((scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) || scdata.idata < 0 || scdata.idata > 7) {
         scdata.asmerror = "FPU registers have indexes 0 to 7";
         scdata.scan = SCAN_ERR;
         return;
       }
-      scanasm(scdata, SA_NAME);
+      scanasm(scdata, SA_NAME, resolver);
       if (scdata.scan != SCAN_SYMB || scdata.idata != ')') {
         scdata.asmerror = "Closing parenthesis expected";
         scdata.scan = SCAN_ERR;
         return;
       }
-      scdata.idata = j; scdata.scan = SCAN_FPU;
+      scdata.idata = j;
+      scdata.scan = SCAN_FPU;
       return;
     }
     for (j = 0; j <= 8; ++j) {
@@ -1101,7 +1107,7 @@ private void scanasm (ref AsmScanData scdata, int mode) {
     for (j = 0; j < sizename.length; ++j) {
       if (strcmp(s.ptr, sizename[j].ptr) != 0) continue;
       pcmd = scdata.asmcmd;
-      scanasm(scdata, SA_NAME);
+      scanasm(scdata, SA_NAME, resolver);
       if (scdata.scan != SCAN_PTR) scdata.asmcmd = pcmd; // Fetch non-functional "PTR"
       // Operand (data) size in bytes
       scdata.idata = j;
@@ -1153,6 +1159,15 @@ private void scanasm (ref AsmScanData scdata, int mode) {
     if (strcmp(s.ptr, "UNICODE") == 0) { scdata.scan = SCAN_UNICODE; return; } // Keyword "UNICODE" (in expressions)
     if (strcmp(s.ptr, "MSG") == 0) { scdata.scan = SCAN_MSG; return; } // Pseudovariable MSG (in expressions)
     if (mode&SA_NAME) { scdata.idata = i; scdata.scan = SCAN_NAME; return; } // Don't try to decode symbolic label
+    // symbol
+    if (resolver !is null) {
+      try {
+        scdata.idata = resolver(symname);
+        scdata.scan = SCAN_ICONST;
+        scdata.skipBlanks();
+        return;
+      } catch (Exception) {}
+    }
     scdata.asmerror = "Unknown identifier";
     scdata.scan = SCAN_ERR;
     return;
@@ -1234,6 +1249,13 @@ private void scanasm (ref AsmScanData scdata, int mode) {
     }
     // Default is hexadecimal
     scdata.idata = hex;
+    scdata.scan = SCAN_ICONST;
+    scdata.skipBlanks();
+    return;
+  } else if (*scdata.asmcmd == '$' || !isalnum(scdata.asmcmd[1])) {
+    // dollar, current EIP
+    ++scdata.asmcmd;
+    scdata.idata = scdata.stpc;
     scdata.scan = SCAN_ICONST;
     scdata.skipBlanks();
     return;
@@ -1341,7 +1363,7 @@ private void scanasm (ref AsmScanData scdata, int mode) {
       scdata.prio = 1;
     } else if (scdata.idata == ']') {
       pcmd = scdata.asmcmd;
-      scanasm(scdata, SA_NAME);
+      scanasm(scdata, SA_NAME, resolver);
       if (scdata.scan != SCAN_SYMB || scdata.idata != '[') {
         scdata.idata = ']';
         scdata.asmcmd = pcmd;
@@ -1364,7 +1386,7 @@ private void scanasm (ref AsmScanData scdata, int mode) {
 // with operand's data. Expects that first token of the operand is already
 // scanned. Supports operands in generalized form (for example, R32 means any
 // of general-purpose 32-bit integer registers).
-private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
+private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope ResolveSymCB resolver) {
   int i, j, bracket, sign, xlataddr;
   int reg;
   int[9] r;
@@ -1379,7 +1401,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
     while (scdata.scan == SCAN_JMPSIZE) {
       // Fetch all size modifiers
       j |= scdata.idata;
-      scanasm(scdata, 0);
+      scanasm(scdata, 0, resolver);
     }
     if (((j&0x03) == 0x03) || // Mixed SHORT and LONG
         ((j&0x0C) == 0x0C) || // Mixed NEAR and FAR
@@ -1419,7 +1441,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
     op.index = scdata.idata;
   } else if (scdata.scan == SCAN_SYMB && scdata.idata == '-') {
     // Negative constant
-    scanasm(scdata, 0);
+    scanasm(scdata, 0, resolver);
     if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
       scdata.asmerror = "Integer number expected";
       scdata.scan = SCAN_ERR;
@@ -1430,7 +1452,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
     if (scdata.scan == SCAN_OFS) op.anyoffset = 1;
   } else if (scdata.scan == SCAN_SYMB && scdata.idata == '+') {
     // Positive constant
-    scanasm(scdata, 0);
+    scanasm(scdata, 0, resolver);
     if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
       scdata.asmerror = "Integer number expected";
       scdata.scan = SCAN_ERR;
@@ -1442,10 +1464,10 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
   } else if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST || scdata.scan == SCAN_OFS) {
     j = scdata.idata;
     if (scdata.scan == SCAN_OFS) op.anyoffset = 1;
-    scanasm(scdata, 0);
+    scanasm(scdata, 0, resolver);
     if (scdata.scan == SCAN_SYMB && scdata.idata == ':') {
       // Absolute long address (seg:offset)
-      scanasm(scdata, 0);
+      scanasm(scdata, 0, resolver);
       if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
         scdata.asmerror = "Integer address expected";
         scdata.scan = SCAN_ERR;
@@ -1469,7 +1491,8 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
     // Segment register or address
     bracket = 0;
     if (scdata.scan == SCAN_SEG) {
-      j = scdata.idata; scanasm(scdata, 0);
+      j = scdata.idata;
+      scanasm(scdata, 0, resolver);
       if (scdata.scan != SCAN_SYMB || scdata.idata != ':') {
         // Segment register as operand
         op.type = SGM;
@@ -1477,7 +1500,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
         return; // Next token already scanned
       }
       op.segment = j;
-      scanasm(scdata, 0);
+      scanasm(scdata, 0, resolver);
     }
     // Scan 32-bit address. This parser does not support 16-bit addresses.
     // First of all, get size of operand (optional), segment register (optional)
@@ -1494,7 +1517,8 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
       } else if (scdata.scan == SCAN_SEG) {
         // Segment register
         if (op.segment != SEG_UNDEF) { scdata.asmerror = "Duplicated segment register"; scdata.scan = SCAN_ERR; return; }
-        op.segment = scdata.idata; scanasm(scdata, 0);
+        op.segment = scdata.idata;
+        scanasm(scdata, 0, resolver);
         if (scdata.scan != SCAN_SYMB || scdata.idata != ':') { scdata.asmerror = "Semicolon expected"; scdata.scan = SCAN_ERR; return; }
       } else if (scdata.scan == SCAN_ERR) {
         return;
@@ -1502,7 +1526,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
         // None of expected address elements
         break;
       }
-      scanasm(scdata, 0);
+      scanasm(scdata, 0, resolver);
     }
     if (bracket == 0) { scdata.asmerror = "Address expression requires brackets"; scdata.scan = SCAN_ERR; return; }
     // Assembling a 32-bit address may be a kind of nigthmare, due to a large
@@ -1519,7 +1543,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
     xlataddr = 0;
     // Get SIB and offset
     for (;;) {
-      if (scdata.scan == SCAN_SYMB && (scdata.idata == '+' || scdata.idata == '-')) { sign = scdata.idata; scanasm(scdata, 0); }
+      if (scdata.scan == SCAN_SYMB && (scdata.idata == '+' || scdata.idata == '-')) { sign = scdata.idata; scanasm(scdata, 0, resolver); }
       if (scdata.scan == SCAN_ERR) return;
       if (sign == '?') { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
       // Register AL appears as part of operand of (seldom used) command XLAT.
@@ -1527,23 +1551,24 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
         if (sign == '-') { scdata.asmerror = "Unable to subtract register"; scdata.scan = SCAN_ERR; return; }
         if (xlataddr != 0) { scdata.asmerror = "Too many registers"; scdata.scan = SCAN_ERR; return; }
         xlataddr = 1;
-        scanasm(scdata, 0);
+        scanasm(scdata, 0, resolver);
       } else if (scdata.scan == SCAN_REG16) {
         scdata.asmerror = "Sorry, 16-bit addressing is not supported";
         scdata.scan = SCAN_ERR;
         return;
       } else if (scdata.scan == SCAN_REG32) {
         if (sign == '-') { scdata.asmerror = "Unable to subtract register"; scdata.scan = SCAN_ERR; return; }
-        reg = scdata.idata; scanasm(scdata, 0);
+        reg = scdata.idata;
+        scanasm(scdata, 0, resolver);
         if (scdata.scan == SCAN_SYMB && scdata.idata == '*') {
           // Try index*scale
-          scanasm(scdata, 0);
+          scanasm(scdata, 0, resolver);
           if (scdata.scan == SCAN_ERR) return;
           if (scdata.scan == SCAN_OFS) { scdata.asmerror = "Undefined scale is not allowed"; scdata.scan = SCAN_ERR; return; }
           if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
           if (scdata.idata == 6 || scdata.idata == 7 || scdata.idata > 9) { scdata.asmerror = "Invalid scale"; scdata.scan = SCAN_ERR; return; }
           r[reg] += scdata.idata;
-          scanasm(scdata, 0);
+          scanasm(scdata, 0, resolver);
         } else {
           // Simple register
           ++r[reg];
@@ -1551,29 +1576,29 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
       } else if (scdata.scan == SCAN_LOCAL) {
         ++r[REG_EBP];
         op.offset -= scdata.idata*4;
-        scanasm(scdata, 0);
+        scanasm(scdata, 0, resolver);
       } else if (scdata.scan == SCAN_ARG) {
         ++r[REG_EBP];
         op.offset += (scdata.idata+1)*4;
-        scanasm(scdata, 0);
+        scanasm(scdata, 0, resolver);
       } else if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST) {
         offset = scdata.idata;
-        scanasm(scdata, 0);
+        scanasm(scdata, 0, resolver);
         if (scdata.scan == SCAN_SYMB && scdata.idata == '*') {
           // Try scale*index
-          scanasm(scdata, 0);
+          scanasm(scdata, 0, resolver);
           if (scdata.scan == SCAN_ERR) return;
           if (sign == '-') { scdata.asmerror = "Unable to subtract register"; scdata.scan = SCAN_ERR; return; }
           if (scdata.scan == SCAN_REG16) { scdata.asmerror = "Sorry, 16-bit addressing is not supported"; scdata.scan = SCAN_ERR; return; }
           if (scdata.scan != SCAN_REG32) { scdata.asmerror = "Syntax error"; scdata.scan = SCAN_ERR; return; }
           if (offset == 6 || offset == 7 || offset > 9) { scdata.asmerror = "Invalid scale"; scdata.scan = SCAN_ERR; return; }
           r[scdata.idata] += offset;
-          scanasm(scdata, 0);
+          scanasm(scdata, 0, resolver);
         } else {
           if (sign == '-') op.offset -= offset; else op.offset += offset;
         }
       } else if (scdata.scan == SCAN_OFS) {
-        scanasm(scdata, 0);
+        scanasm(scdata, 0, resolver);
         if (scdata.scan == SCAN_SYMB && scdata.idata == '*') { scdata.asmerror = "Undefined scale is not allowed"; scdata.scan = SCAN_ERR; return; }
         op.anyoffset = 1;
       } else {
@@ -1634,7 +1659,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
     scdata.scan = SCAN_ERR;
     return;
   }
-  scanasm(scdata, 0); // Fetch next token from input line
+  scanasm(scdata, 0, resolver); // Fetch next token from input line
 }
 
 
@@ -1654,7 +1679,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op) {
  * detected error. This number is the negation of the offset in the input text
  * where the error encountered.
  */
-public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOptions opts, uint attempt, uint constsize, char[] errtext) {
+public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOptions opts, uint attempt, uint constsize, char[] errtext, scope ResolveSymCB resolver=null) {
   import core.stdc.stdio : snprintf;
   import core.stdc.string : memcpy, memset, strcpy, strcmp, strlen;
   int i, j, k, namelen, nameok, arg, match, datasize, addrsize, bytesize, minop, maxop;
@@ -1680,9 +1705,10 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
   scdata.acommand[] = 0;
   scdata.acommand[0..cmdstr.length] = cmdstr;
   scdata.asmcmd = scdata.acommand.ptr;
+  scdata.stpc = ip;
   rep = lock = 0;
   errtext[0] = '\0';
-  scanasm(scdata, SA_NAME);
+  scanasm(scdata, SA_NAME, resolver);
   if (scdata.scan == SCAN_EOL) return 0; // End of line, nothing to assemble
   // Fetch all REPxx and LOCK prefixes
   for (;;) {
@@ -1696,7 +1722,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
       // No more prefixes
       break;
     }
-    scanasm(scdata, SA_NAME);
+    scanasm(scdata, SA_NAME, resolver);
   }
   if (scdata.scan != SCAN_NAME || scdata.idata > 16) { xstrcpy(errtext, "Command mnemonic expected"); goto error; }
   nameend = scdata.asmcmd;
@@ -1706,7 +1732,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
   else if (rep == SCAN_REPE) snprintf(name.ptr, name.length, "REPE %s", scdata.sdata.ptr);
   else if (rep == SCAN_REPNE) snprintf(name.ptr, name.length, "REPNE %s", scdata.sdata.ptr);
   else strcpy(name.ptr, scdata.sdata.ptr);
-  scanasm(scdata, 0);
+  scanasm(scdata, 0, resolver);
   // Parse command operands (up to 3). Note: jump address is always the first
   // (and only) operand in actual command set.
   for (i = 0; i < 3; ++i) {
@@ -1720,15 +1746,15 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
     aop[i].segment = SEG_UNDEF; // No segment
     aop[i].jmpmode = 0;         // No jump size modifier
   }
-  Parseasmoperand(scdata, aop[0]);
+  Parseasmoperand(scdata, aop[0], resolver);
   jmpmode = aop[0].jmpmode;
   if (jmpmode != 0) jmpmode |= 0x80;
   if (scdata.scan == SCAN_SYMB && scdata.idata == ',') {
-    scanasm(scdata, 0);
-    Parseasmoperand(scdata, aop[1]);
+    scanasm(scdata, 0, resolver);
+    Parseasmoperand(scdata, aop[1], resolver);
     if (scdata.scan == SCAN_SYMB && scdata.idata == ',') {
-      scanasm(scdata, 0);
-      Parseasmoperand(scdata, aop[2]);
+      scanasm(scdata, 0, resolver);
+      Parseasmoperand(scdata, aop[2], resolver);
     }
   }
   if (scdata.scan == SCAN_ERR) { xstrcpyx(errtext, scdata.asmerror); goto error; }
