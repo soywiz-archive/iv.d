@@ -7,12 +7,9 @@ int test () {
 }
 
 
-int decodeaddress (char* s, uint addr) {
-  if (addr == cast(uint)&test) {
-    import core.stdc.stdio;
-    return sprintf(s, "fn_test");
-  }
-  return 0;
+const(char)[] decodeaddress (uint addr) {
+  if (addr == cast(uint)&test) return "fn_test";
+  return null;
 }
 
 
@@ -20,7 +17,7 @@ void main () {
   DisasmData da;
   auto code = cast(const(ubyte)*)&test;
   foreach (immutable _; 0..8) {
-    auto len = disasm(code[0..64], cast(uint)&test, &da, DA_DUMP|DA_TEXT|DA_HILITE, null, (char *s, uint addr) => decodeaddress(s, addr));
+    auto len = disasm(code[0..64], cast(uint)&test, &da, DA_DUMP|DA_TEXT|DA_HILITE, null, (uint addr) => decodeaddress(addr));
     if (len == 0) {
       writeln("ERROR: ", disErrMessage(da.errors, da.warnings));
       break;

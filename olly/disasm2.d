@@ -503,7 +503,7 @@ struct DAConfig {
   bool tabarguments = false;          // Tab between mnemonic and arguments
   bool extraspace = false;            // Extra space between arguments
   bool useretform = false;            // Use RET instead of RETN
-  bool shortstringcmds = false;       // Use short form of string commands
+  bool shortstringcmds = true;        // Use short form of string commands
   bool putdefseg = false;             // Display default segments in listing
   bool showmemsize = false;           // Always show memory size
   bool shownear = false;              // Show NEAR modifiers
@@ -2079,7 +2079,7 @@ struct t_imdata {
   DisasmData* da;                  // Result of disassembly
   uint damode;               // Disassembling mode, set of DA_xxx
   const(DAConfig)* config;              // Disassembler configuration
-  uint delegate (char* s, uint addr) decodeaddress;
+  const(char)[] delegate (uint addr) decodeaddress;
   uint prefixlist;           // List of command's prefixes, PF_xxx
   int ssesize;              // Size of SSE operands (16/32 bytes)
   uint immsize1;             // Size of first immediate constant
@@ -2658,6 +2658,17 @@ private int Getsegment (t_imdata *im, int arg, int defseg) {
   }
 }
 
+private bool decodeAddr (t_imdata* im, char[] buf, uint addr) {
+  if (im.decodeaddress is null) return false;
+  auto name = im.decodeaddress(addr);
+  if (name.length == 0) return false;
+  if (name.length > buf.length-1) name = name[0..buf.length-1];
+  buf[0..name.length] = name[];
+  buf[name.length] = 0;
+  return true;
+}
+
+
 // Decodes generalized memory address to text.
 private void Memaddrtotext (t_imdata* im, int arg, int datasize, int seg, const(char)* regpart, int constpart, char* s) {
   int n;
@@ -2678,7 +2689,7 @@ private void Memaddrtotext (t_imdata* im, int arg, int datasize, int seg, const(
       s[n++] = '-';
       n += Hexprint((im.prefixlist&PF_ASIZE?2:4), s+n, -constpart, im, B_ADDR);
     } else if (constpart != 0) {
-      if (seg != SEG_FS && seg != SEG_GS && im.decodeaddress !is null && im.decodeaddress(label.ptr, constpart) != 0) {
+      if (seg != SEG_FS && seg != SEG_GS && decodeAddr(im, label[], constpart)) {
         n += Tstrcopy(s+n, TEXTLEN-n, label.ptr);
       } else {
         n += Hexprint((im.prefixlist&PF_ASIZE ? 2 : 4), s+n, constpart, im, B_ADDR);
@@ -2742,7 +2753,7 @@ private void Memaddrtotext (t_imdata* im, int arg, int datasize, int seg, const(
       n += Hexprint((im.prefixlist&PF_ASIZE ? 2 : 4), s+n, -constpart, im, B_ADDR);
     } else if (constpart != 0 || regpart[0] == '\0') {
       if (regpart[0] != '\0') s[n++] = '+';
-      if (seg != SEG_FS && seg != SEG_GS && im.decodeaddress !is null && im.decodeaddress(label.ptr, constpart) != 0) {
+      if (seg != SEG_FS && seg != SEG_GS && decodeAddr(im, label[], constpart)) {
         n += Tstrcopy(s+n, TEXTLEN-n, label.ptr);
       } else {
         n += Hexprint((im.prefixlist&PF_ASIZE?2:4), s+n, constpart, im, B_ADDR);
@@ -3245,7 +3256,7 @@ private void Operandoffset (t_imdata* im, uint offsetsize, uint datasize, const(
       n = 0;
     }
     if (datasize == 4) {
-      if (im.decodeaddress !is null && im.decodeaddress(label.ptr, op.opconst) != 0) {
+      if (decodeAddr(im, label[], op.opconst)) {
         Tstrcopy(op.text.ptr+n, TEXTLEN-n, label.ptr);
       } else {
         if (im.config.disasmmode == DAMODE_ATT) op.text[n++] = '$';
@@ -3364,7 +3375,7 @@ private void Operandimmconst (t_imdata* im, uint nbytes, uint constsize, uint da
       Hexprint(1, op.text.ptr+n, op.opconst, im, op.arg);
     } else if (constsize == 4) {
       // 32-bit constant
-      if (im.decodeaddress !is null && (mod == B_NONSPEC || mod == B_JMPCALL || mod == B_JMPCALLFAR) && im.decodeaddress(label.ptr, op.opconst) != 0) {
+      if ((mod == B_NONSPEC || mod == B_JMPCALL || mod == B_JMPCALLFAR) && decodeAddr(im, label[], op.opconst)) {
         Tstrcopy(op.text.ptr+n, TEXTLEN-n, label.ptr);
       } else {
         if (im.config.disasmmode == DAMODE_ATT) op.text[n++] = '$';
@@ -3476,7 +3487,7 @@ private void Operandmxcsr (t_imdata* im, AsmOperand* op) {
 // address. Assumes that address and data size attributes of all participating
 // segments are 32 bit (flat model). Returns length of the command or 0 in case
 // of severe error.
-public uint disasm (const(void)[] codearr, uint ip, DisasmData* da, int damode, const(DAConfig)* config, uint delegate (char *s, uint addr) decodeaddress=null) {
+public uint disasm (const(void)[] codearr, uint ip, DisasmData* da, int damode, const(DAConfig)* config, scope const(char)[] delegate (uint addr) decodeaddress=null) {
   import core.stdc.string : memset;
   int i, j, k, q, noperand, nout, enclose, vexreg, success, cfill, ofill;
   uint m, n, u, prefix, prefixmask, code, arg, cmdtype, datasize;
