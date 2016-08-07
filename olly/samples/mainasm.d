@@ -83,4 +83,6 @@ void main () {
   assit("jz  $", 4);
 
   assit("int3", 0);
+
+  assit("repne scasb", 0);
 }

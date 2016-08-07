@@ -187,7 +187,7 @@ private auto readfImpl(Char:dchar, ST, A...) (auto ref ST fl, const(Char)[] fmt,
 
 // ////////////////////////////////////////////////////////////////////////// //
 public string readln() (VFile fl) { return readlnImpl(fl); }
-public string readln(ST) (auto ref ST fl, A args) if (!is(ST == VFile) && isRorWStream!ST) { return readlnImpl!ST(fl); }
+public string readln(ST) (auto ref ST fl) if (!is(ST == VFile) && isRorWStream!ST) { return readlnImpl!ST(fl); }
 
 // slow, but IDC
 private string readlnImpl(ST) (auto ref ST fl) {
@@ -216,6 +216,7 @@ private string readlnImpl(ST) (auto ref ST fl) {
 public __gshared VFile stdin, stdout, stderr;
 
 shared static this () {
+  debug(vfs_rc) { import core.stdc.stdio : printf; printf("******** SHARED CTOR FOR iv.vfs.io\n"); }
   stdin = wrapStdin;
   stdout = wrapStdout;
   stderr = wrapStderr;

@@ -450,10 +450,18 @@ protected:
   override void close () {
     if (fd >= 0) {
       import std.exception : ErrnoException;
+      static if (own) {
+        debug(vfs_rc) { import core.stdc.stdio : printf; printf("******** CLOSING FD %u\n", cast(uint)fd); }
+      } else {
+        debug(vfs_rc) { import core.stdc.stdio : printf; printf("******** RELEASING FD %u\n", cast(uint)fd); }
+      }
       static if (own) auto res = core.sys.posix.unistd.close(fd);
       fd = -1;
       eofhit = true;
       static if (own) if (res < 0) throw new ErrnoException("can't close file", __FILE__, __LINE__);
+    } else {
+      fd = -1;
+      eofhit = true;
     }
   }
 
@@ -1137,21 +1145,33 @@ public VFile wrapMemoryRW (const(void)[] buf) { return wrapStream(MemoryStreamRW
 // ////////////////////////////////////////////////////////////////////////// //
 /// wrap libc stdout
 public VFile wrapStdout () {
-  import core.stdc.stdio : stdout;
-  if (stdout !is null) return VFile(stdout, false); // don't own
-  return VFile.init;
+  static if (VFS_NORMAL_OS) {
+    return VFile(1, false); // don't own
+  } else {
+    import core.stdc.stdio : stdout;
+    if (stdout !is null) return VFile(stdout, false); // don't own
+    return VFile.init;
+  }
 }
 
 /// wrap libc stderr
 public VFile wrapStderr () {
-  import core.stdc.stdio : stderr;
-  if (stderr !is null) return VFile(stderr, false); // don't own
-  return VFile.init;
+  static if (VFS_NORMAL_OS) {
+    return VFile(2, false); // don't own
+  } else {
+    import core.stdc.stdio : stderr;
+    if (stderr !is null) return VFile(stderr, false); // don't own
+    return VFile.init;
+  }
 }
 
 /// wrap libc stdin
 public VFile wrapStdin () {
-  import core.stdc.stdio : stdin;
-  if (stdin !is null) return VFile(stdin, false); // don't own
-  return VFile.init;
+  static if (VFS_NORMAL_OS) {
+    return VFile(0, false); // don't own
+  } else {
+    import core.stdc.stdio : stdin;
+    if (stdin !is null) return VFile(stdin, false); // don't own
+    return VFile.init;
+  }
 }

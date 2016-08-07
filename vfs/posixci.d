@@ -19,8 +19,9 @@ module iv.vfs.posixci;
 
 private import core.sys.posix.dirent;
 import iv.vfs.koi8;
+import iv.vfs.config;
 
-version(Windows) {} else {
+static if (VFS_NORMAL_OS) {
 
 // `name` will be modified
 package bool findFileCI (const(char)[] path, char[] name, bool asDir) {
