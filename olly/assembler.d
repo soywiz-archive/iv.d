@@ -187,38 +187,65 @@ public:
   // curpc is current pc ;-)
   private void asmLine (uint lidx) {
     // try to assemble it
+    AsmModel lastgoodam;
     AsmModel am;
     AsmOptions opts;
     opts.ideal = true;
-    char[1024] errtext = 0;
+    char[256] errtext = 0;
+    char[256] lasterrtext = 0;
+    int lasterrpos = 1; // <=0: was error
     auto line = &lines[lidx];
+    ubyte[] dbdata;
+
     if (curpc == 0) throw new Exception("invalid pc");
     fixLabelAddr(lidx, curpc);
-    ubyte[] dbdata;
-    auto cmdlen = .assemble(line.str, curpc, &am, opts, 0/*attempt*/, 0/*csize*/, errtext[], &findLabelAddr,
-      (uint addr, ubyte b) {
-        dbdata ~= b;
-      }
-    );
-    if (cmdlen <= 0) {
+
+    void throwError () {
+      if (lasterrpos > 0) return;
       import core.stdc.stdio : stderr, fprintf;
-      fprintf(stderr, "ERROR at line %u: %s\n", line.srclnum, errtext.ptr);
+      fprintf(stderr, "ERROR at line %u: %s\n", line.srclnum, lasterrtext.ptr);
       fprintf(stderr, "%.*s\n", cast(uint)line.str.length, line.str.ptr);
-      foreach (immutable _; 0..-cmdlen-1) fprintf(stderr, "^");
+      foreach (immutable _; 0..-lasterrpos-1) fprintf(stderr, "^");
       fprintf(stderr, "^\n");
       throw new Exception("asm error");
-    } else {
-      //{ import std.stdio; writefln("DATA: %s [%s]", am.data, line.str); }
-      //import std.stdio : stderr;
-      //stderr.writefln("line %s(%s) [%s] assembled to %s bytes at 0x%08x", lidx, line.srclnum, line.str, am.length, curpc);
     }
+
+    // try all possible variants, choose shorter one
+    int attempt = 0;
+    lastgoodam.length = lastgoodam.length.max;
+    mainloop: for (;; ++attempt) {
+      // try each operand size
+      int errcount = 0; // all 4 sizes gives an error? we are done
+      foreach (immutable int csize; 0..4) {
+        auto cmdlen = .assemble(line.str, curpc, &am, opts, attempt, csize, errtext[], &findLabelAddr, (uint addr, ubyte b) { dbdata ~= b; });
+        if (cmdlen <= 0) {
+          // error; if we have no previous command, and no previous error, register this one
+          // we are using the fact that 0th attempt with 0th operand size should always produce an instruction
+          if (lastgoodam.length == lastgoodam.length.max && lasterrpos > 0) {
+            lasterrpos = cmdlen;
+            lasterrtext[] = errtext[];
+          }
+          ++errcount;
+          continue;
+        }
+        // if this is data command, don't go further
+        if (am.data) { lastgoodam = am; break mainloop; }
+        // good command, check if we should save it
+        if (am.length >= lastgoodam.length) continue;
+        // i found her!
+        lastgoodam = am;
+      }
+      if (errcount == 4) break; // all 4 operand sizes gives us error, so no more commands can be found
+    }
+    throwError(); // if any
+    // if command size of address was changed, we need yet another pass to stabilize the things
     if (line.addr != 0) {
-      if (line.am.length != cmdlen || line.addr != curpc || line.am.jmpsize != am.jmpsize) needMorePasses = true;
+      if (line.am.length != lastgoodam.length || line.addr != curpc) needMorePasses = true;
     }
     line.addr = curpc;
-    line.am = am;
+    line.am = lastgoodam;
     line.databuf = dbdata;
-    curpc += cmdlen;
+    curpc += lastgoodam.length;
   }
 
   private void asmPass () {

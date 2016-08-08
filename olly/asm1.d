@@ -1959,6 +1959,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
   if (scdata.scan == SCAN_EOL) return 0; // End of line, nothing to assemble
   //TODO: ??? process "db" and company here
   if (scdata.scan == SCAN_DEFB || scdata.scan == SCAN_DEFW || scdata.scan == SCAN_DEFD) {
+    if (attempt != 0) { xstrcpy(errtext, "Invalid command"); goto error; } // only one attempt
     uint bpos = 0;
     model.length = 0;
     model.jmpsize = 0;

@@ -43,41 +43,50 @@ enum NOPERAND   = 4;      // Maximal allowed number of operands
 enum NREG       = 8;      // Number of registers (of any type)
 enum NSEG       = 6;      // Number of valid segment registers
 enum MAXCMDSIZE = 16;     // Maximal length of valid 80x86 command
-enum NEGLIMIT   = -16384; // Limit to decode offsets as negative
-enum DECLIMIT   = 16384;  // Limit to decode constants as decimal
+private enum NEGLIMIT   = -16384; // Limit to decode offsets as negative
+private enum DECLIMIT   = 16384;  // Limit to decode constants as decimal
 
 
 // CMDMASK can be used to balance between the necessary memory size and the disassembly time.
-enum CMDMASK = 0x3FFF; // Search mask for Disassembler, 2**n-1
-enum NCHAIN = 44300; // Max allowed number of chain links
+private enum CMDMASK = 0x3FFF; // Search mask for Disassembler, 2**n-1
+private enum NCHAIN = 44300; // Max allowed number of chain links
 
 // Registers.
-enum REG_UNDEF = -1; // Codes of general purpose registers
-enum REG_EAX = 0;
-enum REG_ECX = 1;
-enum REG_EDX = 2;
-enum REG_EBX = 3;
-enum REG_ESP = 4;
-enum REG_EBP = 5;
-enum REG_ESI = 6;
-enum REG_EDI = 7;
+// Codes of general purpose registers
+enum {
+  REG_UNDEF = -1,
+  REG_EAX = 0,
+  REG_ECX = 1,
+  REG_EDX = 2,
+  REG_EBX = 3,
+  REG_ESP = 4,
+  REG_EBP = 5,
+  REG_ESI = 6,
+  REG_EDI = 7,
+}
 
-enum REG_AL = 0; // Symbolic indices of 8-bit registers
-enum REG_CL = 1;
-enum REG_DL = 2;
-enum REG_BL = 3;
-enum REG_AH = 4;
-enum REG_CH = 5;
-enum REG_DH = 6;
-enum REG_BH = 7;
+// Symbolic indices of 8-bit registers
+enum {
+  REG_AL = 0,
+  REG_CL = 1,
+  REG_DL = 2,
+  REG_BL = 3,
+  REG_AH = 4,
+  REG_CH = 5,
+  REG_DH = 6,
+  REG_BH = 7,
+}
 
-enum SEG_UNDEF = -1; // Codes of segment/selector registers
-enum SEG_ES = 0;
-enum SEG_CS = 1;
-enum SEG_SS = 2;
-enum SEG_DS = 3;
-enum SEG_FS = 4;
-enum SEG_GS = 5;
+// Codes of segment/selector registers
+enum {
+  SEG_UNDEF = -1,
+  SEG_ES = 0,
+  SEG_CS = 1,
+  SEG_SS = 2,
+  SEG_DS = 3,
+  SEG_FS = 4,
+  SEG_GS = 5,
+}
 
 // Command highlighting.
 enum DRAW_PLAIN =     '.'; //0x0000000C      // Plain commands
