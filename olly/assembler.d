@@ -100,12 +100,20 @@ public:
   void addLabel (const(char)[] name, uint addr) {
     if (addr == 0) throw new Exception("invalid label address");
     if (name.length == 0) throw new Exception("invalid label name");
-    foreach (const ref lbl; labels) {
-      if (lbl.name == name) throw new Exception("label '"~lbl.name~"' already defined");
-    }
+    foreach (const ref lbl; labels) if (lbl.name == name) throw new Exception("label '"~lbl.name~"' already defined");
     Label lbl;
     lbl.line = uint.max;
     lbl.addr = addr;
+    lbl.name = name.idup;
+    labels ~= lbl;
+  }
+
+  void addLabelHere (const(char)[] name) {
+    if (name.length == 0) throw new Exception("invalid label name");
+    foreach (const ref lbl; labels) if (lbl.name == name) throw new Exception("label '"~lbl.name~"' already defined");
+    Label lbl;
+    lbl.line = cast(uint)lines.length;
+    lbl.addr = 0;
     lbl.name = name.idup;
     labels ~= lbl;
   }
@@ -214,6 +222,14 @@ public:
   }
 
   uint dasmOne (const(void)[] code, uint ip, uint ofs) {
+    // put labels
+    foreach (const ref Label lbl; labels) {
+      if (lbl.addr == ip+ofs) {
+        import core.stdc.stdio : stderr, fprintf;
+        fprintf(stderr, "0x%08x: %.*s:\n", ip+ofs, cast(uint)lbl.name.length, lbl.name.ptr);
+      }
+    }
+
     if (isDataByte(ip+ofs)) {
       import core.stdc.stdio : stderr, fprintf;
       ubyte b = (cast(const(ubyte)[])code)[ofs];

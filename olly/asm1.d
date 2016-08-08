@@ -1447,7 +1447,15 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       ++scdata.asmcmd;
       scdata.idata = hex;
       scdata.scan = SCAN_ICONST;
-      scdata.skipBlanks();
+      if (!scdata.inMath) {
+        // retreat and do expression
+        scdata.inMath = true;
+        scope(exit) scdata.inMath = false;
+        scdata.restore(saved);
+        doExpression();
+      } else {
+        scdata.skipBlanks();
+      }
       return;
     }
     if (*scdata.asmcmd == '.') {
@@ -1506,7 +1514,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       }
     }
     // Default is hexadecimal
-    if (scdata.defaultHex || metHexDigit) {
+    if (scdata.defaultHex || metHexDigit || base == 16) {
       scdata.idata = hex;
     } else {
       scdata.idata = decimal;
@@ -2007,6 +2015,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
       if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { xstrcpy(errtext, "byte constant expected"); goto error; }
       if (bpos >= model.code.length) { xstrcpy(errtext, "too many byte constants"); goto error; }
       if (scdata.idata < byte.min || scdata.idata > ubyte.max) { xstrcpy(errtext, "byte constant overflow"); goto error; }
+      { import core.stdc.stdio; printf("DB: 0x%02x\n", cast(ubyte)(scdata.idata&0xff)); }
       model.code[bpos] = cast(ubyte)(scdata.idata&0xff);
       model.mask[bpos] = 0xff;
       ++bpos;
