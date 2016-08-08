@@ -7,3 +7,4 @@
   db 0-1
   dw 0x29a
   dd 0x12345678
+  dd "string!"

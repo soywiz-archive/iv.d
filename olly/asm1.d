@@ -879,8 +879,8 @@ enum {
   SCAN_REPNE,     // REPNE prefix
   SCAN_LOCK,      // LOCK prefix
   SCAN_NAME,      // Command or label
-  SCAN_ICONST,    // Hexadecimal constant
-  SCAN_DCONST,    // Decimal constant
+  SCAN_UCONST,    // Unsigned integer constant
+  SCAN_DCONST,    // Signed integer constant
   SCAN_OFS,       // Undefined constant
   SCAN_FCONST,    // Floating-point constant
   SCAN_EIP,       // Register EIP
@@ -897,8 +897,7 @@ enum {
   SCAN_DEFW,      // DEFW byte
   SCAN_DEFD,      // DEFD byte
 
-  SCAN_SYMB = 64, // Any other character
-  SCAN_IMPORT,    // Import pseudolabel
+  SCAN_SYMB,      // Any other character
 
   SCAN_ERR = 255, // Definitely bad item
 }
@@ -1036,8 +1035,8 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     real fval;
 
     this (in ref AsmScanData scdata) {
-      if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST) {
-        type = SCAN_ICONST;
+      if (scdata.scan == SCAN_UCONST || scdata.scan == SCAN_DCONST) {
+        type = scdata.scan;
         ival = scdata.idata;
       } else if (scdata.scan == SCAN_FCONST) {
         type = SCAN_FCONST;
@@ -1048,33 +1047,31 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     }
 
     @property bool valid () const pure nothrow @safe @nogc { return (type > 0); }
-    @property bool isInt () const pure nothrow @safe @nogc { return (type == SCAN_ICONST); }
+    @property bool isAnyInt () const pure nothrow @safe @nogc { return (type == SCAN_UCONST || type == SCAN_DCONST); }
+    @property bool isSignedInt () const pure nothrow @safe @nogc { return (type == SCAN_DCONST); }
     @property bool isFloat () const pure nothrow @safe @nogc { return (type == SCAN_FCONST); }
 
     void put (ref AsmScanData scdata) {
       if (!valid) return;
-      if (isInt) {
-        scdata.scan = SCAN_ICONST;
-        scdata.idata = ival;
-      } else {
-        scdata.scan = SCAN_FCONST;
-        scdata.fdata = fval;
-      }
+      scdata.scan = type;
+      if (isAnyInt) scdata.idata = ival; else scdata.fdata = fval;
     }
 
     // upgrade both this and op if necessary
     bool upgradeType (ref MathOp op) {
       if (!op.valid || !valid) return false;
       if (isFloat) {
-        if (op.isInt) {
+        if (op.isAnyInt) {
           op.type = SCAN_FCONST;
-          op.fval = op.ival;
+          if (op.isSignedInt) op.fval = op.ival; else op.fval = cast(uint)op.ival;
         }
-      } else if (isInt) {
+      } else if (isAnyInt) {
         if (op.isFloat) {
+          if (isSignedInt) fval = ival; else fval = cast(uint)ival;
           type = SCAN_FCONST;
-          fval = ival;
+          return true;
         }
+        if (!isSignedInt || !op.isSignedInt) { type = SCAN_UCONST; op.type = SCAN_UCONST; }
       } else {
         assert(0, "wtf?!");
       }
@@ -1082,79 +1079,34 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     }
 
     bool doMath (int op, MathOp op2) {
+      enum LogOpMixin(string op) = "if (isFloat) { type = SCAN_UCONST; ival = (fval != 0 "~op~" op2.fval != 0); } else { type = SCAN_UCONST; ival = (ival != 0 "~op~" op2.ival != 0); }";
+      enum CmpOpMixin(string op) = "if (isFloat) { type = SCAN_UCONST; ival = (fval "~op~" op2.fval); } else { type = SCAN_UCONST; ival = (ival "~op~" op2.ival); }";
+
       if (!upgradeType(op2)) { type = -1; return false; }
       switch (op) {
-        case S2toI!("||"):
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval != 0 || op2.fval != 0);
-          } else {
-            ival = (ival != 0 || op2.ival != 0);
-          }
-          break;
-        case S2toI!("&&"):
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval != 0 && op2.fval != 0);
-          } else {
-            ival = (ival != 0 && op2.ival != 0);
-          }
-          break;
-        case S2toI!("=="):
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval == op2.fval);
-          } else {
-            ival = (ival == op2.ival);
-          }
-          break;
-        case S2toI!("!="):
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval != op2.fval);
-          } else {
-            ival = (ival != op2.ival);
-          }
-          break;
-        case S2toI!("<="):
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval <= op2.fval);
-          } else {
-            ival = (ival <= op2.ival);
-          }
-          break;
-        case S2toI!(">="):
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval >= op2.fval);
-          } else {
-            ival = (ival >= op2.ival);
-          }
-          break;
-        case '<':
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval < op2.fval);
-          } else {
-            ival = (ival < op2.ival);
-          }
-          break;
-        case '>':
-          if (isFloat) {
-            type = SCAN_ICONST;
-            ival = (fval > op2.fval);
-          } else {
-            ival = (ival > op2.ival);
-          }
-          break;
+        case S2toI!("||"): mixin(LogOpMixin!"||"); break;
+        case S2toI!("&&"): mixin(LogOpMixin!"&&"); break;
+        case S2toI!("=="): mixin(CmpOpMixin!"=="); break;
+        case S2toI!("!="): mixin(CmpOpMixin!"!="); break;
+        case S2toI!("<="): mixin(CmpOpMixin!"<="); break;
+        case S2toI!(">="): mixin(CmpOpMixin!">="); break;
+        case '<': mixin(CmpOpMixin!"<"); break;
+        case '>': mixin(CmpOpMixin!">"); break;
         case S2toI!("<<"):
           if (isFloat || op2.ival < 0 || op2.ival > 31) { type = -1; return false; }
-          ival <<= op2.ival;
+          if (op2.isSignedInt) {
+            ival <<= op2.ival;
+          } else {
+            ival = (cast(uint)ival)<<op2.ival;
+          }
           break;
         case S2toI!(">>"):
           if (isFloat || op2.ival < 0 || op2.ival > 31) { type = -1; return false; }
-          ival >>= op2.ival;
+          if (op2.isSignedInt) {
+            ival >>= op2.ival;
+          } else {
+            ival = (cast(uint)ival)>>op2.ival;
+          }
           break;
         case '|':
           if (isFloat) { type = -1; return false; }
@@ -1175,15 +1127,21 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
           if (isFloat) fval -= op2.fval; else ival -= op2.ival;
           break;
         case '*':
-          if (isFloat) fval *= op2.fval; else ival *= op2.ival;
+          if (isFloat) fval *= op2.fval;
+          else if (op2.isSignedInt) ival *= op2.ival;
+          else ival = cast(uint)ival*cast(uint)op2.ival;
           break;
         case '/':
-          if ((isFloat && fval == 0) || (isInt && ival == 0)) { type = -2; return false; }
-          if (isFloat) fval /= op2.fval; else ival /= op2.ival;
+          if ((isFloat && fval == 0) || (isAnyInt && ival == 0)) { type = -2; return false; }
+          if (isFloat) fval /= op2.fval;
+          else if (op2.isSignedInt) ival /= op2.ival;
+          else ival = cast(uint)ival/cast(uint)op2.ival;
           break;
         case '%':
-          if ((isFloat && fval == 0) || (isInt && ival == 0)) { type = -2; return false; }
-          if (isFloat) fval %= op2.fval; else ival %= op2.ival;
+          if ((isFloat && fval == 0) || (isAnyInt && ival == 0)) { type = -2; return false; }
+          if (isFloat) fval %= op2.fval;
+          else if (op2.isSignedInt) ival %= op2.ival;
+          else ival = cast(uint)ival%cast(uint)op2.ival;
           break;
         default: type = -1; return false;
       }
@@ -1198,7 +1156,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       scdata.prio = 0;
       scanasm(scdata, 0, resolver);
       if (scdata.prio <= 0) {
-        if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST || scdata.scan == SCAN_FCONST) {
+        if (scdata.scan == SCAN_UCONST || scdata.scan == SCAN_DCONST || scdata.scan == SCAN_FCONST) {
           return MathOp(scdata);
         } else if (scdata.scan == SCAN_SYMB && scdata.idata == '(') {
           auto op = doExpr(MAX_PRIO);
@@ -1309,7 +1267,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       }
       scanasm(scdata, SA_NAME, resolver);
       j = scdata.idata;
-      if ((scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) || scdata.idata < 0 || scdata.idata > 7) {
+      if ((scdata.scan != SCAN_UCONST && scdata.scan != SCAN_DCONST) || scdata.idata < 0 || scdata.idata > 7) {
         scdata.asmerror = "FPU registers have indexes 0 to 7";
         scdata.scan = SCAN_ERR;
         return;
@@ -1417,7 +1375,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     if (resolver !is null) {
       try {
         scdata.idata = resolver(symname);
-        scdata.scan = SCAN_ICONST;
+        scdata.scan = SCAN_UCONST;
         scdata.skipBlanks();
         return;
       } catch (Exception) {}
@@ -1463,7 +1421,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       }
       ++scdata.asmcmd;
       scdata.idata = hex;
-      scdata.scan = SCAN_ICONST;
+      scdata.scan = SCAN_UCONST;
       if (!scdata.inMath) {
         // retreat and do expression
         scdata.inMath = true;
@@ -1516,8 +1474,8 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
         }
         return;
       } else {
-        scdata.idata = decimal;
-        scdata.scan = SCAN_DCONST;
+        scdata.fdata = decimal;
+        scdata.scan = SCAN_FCONST;
         if (!scdata.inMath) {
           // retreat and do expression
           scdata.inMath = true;
@@ -1533,10 +1491,11 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     // Default is hexadecimal
     if (scdata.defaultHex || metHexDigit || base == 16) {
       scdata.idata = hex;
+      scdata.scan = SCAN_UCONST;
     } else {
+      scdata.scan = SCAN_UCONST;
       scdata.idata = decimal;
     }
-    scdata.scan = SCAN_ICONST;
     if (!scdata.inMath) {
       // retreat and do expression
       scdata.inMath = true;
@@ -1552,7 +1511,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     auto saved = scdata.save;
     ++scdata.asmcmd;
     scdata.idata = scdata.stpc;
-    scdata.scan = SCAN_ICONST;
+    scdata.scan = SCAN_UCONST;
     if (!scdata.inMath) {
       // retreat and do expression
       scdata.inMath = true;
@@ -1616,7 +1575,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       }
     }
     scdata.skipBlanks();
-    scdata.scan = SCAN_ICONST;
+    scdata.scan = SCAN_UCONST;
     return;
   } else {
     // Any other character or combination
@@ -1722,7 +1681,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
   } else if (scdata.scan == SCAN_SYMB && scdata.idata == '-') {
     // Negative constant
     scanasm(scdata, 0, resolver);
-    if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
+    if (scdata.scan != SCAN_UCONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
       scdata.asmerror = "Integer number expected";
       scdata.scan = SCAN_ERR;
       return;
@@ -1733,7 +1692,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
   } else if (scdata.scan == SCAN_SYMB && scdata.idata == '+') {
     // Positive constant
     scanasm(scdata, 0, resolver);
-    if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
+    if (scdata.scan != SCAN_UCONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
       scdata.asmerror = "Integer number expected";
       scdata.scan = SCAN_ERR;
       return;
@@ -1741,14 +1700,14 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
     op.type = IMM;
     op.offset = scdata.idata;
     if (scdata.scan == SCAN_OFS) op.anyoffset = 1;
-  } else if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST || scdata.scan == SCAN_OFS) {
+  } else if (scdata.scan == SCAN_UCONST || scdata.scan == SCAN_DCONST || scdata.scan == SCAN_OFS) {
     j = scdata.idata;
     if (scdata.scan == SCAN_OFS) op.anyoffset = 1;
     scanasm(scdata, 0, resolver);
     if (scdata.scan == SCAN_SYMB && scdata.idata == ':') {
       // Absolute long address (seg:offset)
       scanasm(scdata, 0, resolver);
-      if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
+      if (scdata.scan != SCAN_UCONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_OFS) {
         scdata.asmerror = "Integer address expected";
         scdata.scan = SCAN_ERR;
         return;
@@ -1848,7 +1807,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
           scanasm(scdata, 0, resolver);
           if (scdata.scan == SCAN_ERR) return;
           if (scdata.scan == SCAN_OFS) { scdata.asmerror = "Undefined scale is not allowed"; scdata.scan = SCAN_ERR; return; }
-          if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { scdata.asmerror = "Syntax error (2)"; scdata.scan = SCAN_ERR; return; }
+          if (scdata.scan != SCAN_UCONST && scdata.scan != SCAN_DCONST) { scdata.asmerror = "Syntax error (2)"; scdata.scan = SCAN_ERR; return; }
           if (scdata.idata == 6 || scdata.idata == 7 || scdata.idata > 9) { scdata.asmerror = "Invalid scale"; scdata.scan = SCAN_ERR; return; }
           r[reg] += scdata.idata;
           scanasm(scdata, 0, resolver);
@@ -1864,7 +1823,7 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
         ++r[REG_EBP];
         op.offset += (scdata.idata+1)*4;
         scanasm(scdata, 0, resolver);
-      } else if (scdata.scan == SCAN_ICONST || scdata.scan == SCAN_DCONST) {
+      } else if (scdata.scan == SCAN_UCONST || scdata.scan == SCAN_DCONST) {
         offset = scdata.idata;
         scanasm(scdata, 0, resolver);
         if (scdata.scan == SCAN_SYMB && scdata.idata == '*') {
@@ -2036,6 +1995,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
 
     for (;;) {
       scanasm(scdata, 0, resolver);
+      if (scdata.scan == SCAN_ERR) { xstrcpyx(errtext, scdata.asmerror); goto error; }
       if (scdata.scan == SCAN_EOL) {
         if (bpos == 0) { xstrcpy(errtext, "byte constant expected"); goto error; }
         break;
@@ -2043,6 +2003,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
       if (bpos != 0) {
         if (scdata.scan != SCAN_SYMB || scdata.idata != ',') { xstrcpy(errtext, "comma expected"); goto error; }
         scanasm(scdata, 0, resolver);
+        if (scdata.scan == SCAN_ERR) { xstrcpyx(errtext, scdata.asmerror); goto error; }
       }
       if (scdata.scan == SCAN_SYMB && scdata.idata == '"') {
         // parse string
@@ -2053,19 +2014,19 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
           } else {
             ++scdata.asmcmd;
             switch (*scdata.asmcmd++) {
-              case 0: scdata.asmerror = "Unexpected end of string"; scdata.scan = SCAN_ERR; goto error;
+              case 0: xstrcpy(errtext, "Unexpected end of string"); goto error;
               case 't': vb = cast(ubyte)'\t'; break;
               case 'r': vb = cast(ubyte)'\r'; break;
               case 'n': vb = cast(ubyte)'\n'; break;
               case 'x': case 'X':
                 uint n = 0;
-                if (!isxdigit(*scdata.asmcmd)) { scdata.asmerror = "Hex number expected"; scdata.scan = SCAN_ERR; goto error; }
+                if (!isxdigit(*scdata.asmcmd)) { xstrcpy(errtext, "Hex number expected"); goto error; }
                 n = hdig(*scdata.asmcmd++);
                 if (isxdigit(*scdata.asmcmd)) n = n*16+hdig(*scdata.asmcmd++);
                 vb = cast(char)n;
                 break;
               default:
-                if (isalpha(scdata.asmcmd[-1])) { scdata.asmerror = "Invalid escape"; scdata.scan = SCAN_ERR; goto error; }
+                if (isalpha(scdata.asmcmd[-1])) { xstrcpy(errtext, "Invalid escape"); goto error; }
                 vb = cast(ubyte)scdata.asmcmd[-1];
                 break;
             }
@@ -2074,7 +2035,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
         }
         if (*scdata.asmcmd == '"') ++scdata.asmcmd;
       } else {
-        if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { xstrcpy(errtext, "constant expected"); goto error; }
+        if (scdata.scan != SCAN_UCONST && scdata.scan != SCAN_DCONST) { xstrcpy(errtext, "constant expected"); goto error; }
         final switch (csize) {
           case 1: if (scdata.idata < byte.min || scdata.idata > ubyte.max) { xstrcpy(errtext, "byte constant overflow"); goto error; } break;
           case 2: if (scdata.idata < short.min || scdata.idata > ushort.max) { xstrcpy(errtext, "word constant overflow"); goto error; } break;
