@@ -20,6 +20,9 @@ module iv.olly.asm1;
 /// symbol resolver; should throw on unknown symbol
 alias uint delegate (const(char)[] name) ResolveSymCB;
 
+/// "db" and company will call this; no cb means limited support; size: element size in data buffer
+alias void delegate (uint addr, ubyte b) PutDataCB;
+
 /// Model to search for assembler command
 public struct AsmModel {
   ubyte[ASMMAXCMDSIZE] code; /// Binary code
@@ -891,6 +894,8 @@ enum {
   SCAN_UNICODE,   // Keyword "UNICODE" (in expressions)
   SCAN_MSG,       // Pseudovariable MSG (in expressions)
   SCAN_DEFB,      // DEFB byte
+  SCAN_DEFW,      // DEFW byte
+  SCAN_DEFD,      // DEFD byte
 
   SCAN_SYMB = 64, // Any other character
   SCAN_IMPORT,    // Import pseudolabel
@@ -1012,6 +1017,14 @@ private int strnicmp (const(char)* s0, const(char)* s1, int len) {
   }
   return 0;
 }
+
+static int hdig (char ch) {
+  if (ch >= '0' && ch <= '9') return ch-'0';
+  if (ch >= 'A' && ch <= 'F') return ch-'A'+10;
+  if (ch >= 'a' && ch <= 'f') return ch-'a'+10;
+  return -1;
+}
+
 
 private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resolver) {
   import core.stdc.ctype : isalpha, isalnum, isdigit, toupper, isxdigit;
@@ -1394,7 +1407,11 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     if (strcmp(s.ptr, "UNICODE") == 0) { scdata.scan = SCAN_UNICODE; return; } // Keyword "UNICODE" (in expressions)
     if (strcmp(s.ptr, "MSG") == 0) { scdata.scan = SCAN_MSG; return; } // Pseudovariable MSG (in expressions)
     if (strcmp(s.ptr, "DEFB") == 0) { scdata.scan = SCAN_DEFB; return; }
+    if (strcmp(s.ptr, "DEFW") == 0) { scdata.scan = SCAN_DEFW; return; }
+    if (strcmp(s.ptr, "DEFD") == 0) { scdata.scan = SCAN_DEFD; return; }
     if (strcmp(s.ptr, "DB") == 0) { scdata.scan = SCAN_DEFB; return; }
+    if (strcmp(s.ptr, "DW") == 0) { scdata.scan = SCAN_DEFW; return; }
+    if (strcmp(s.ptr, "DD") == 0) { scdata.scan = SCAN_DEFD; return; }
     if (mode&SA_NAME) { scdata.idata = i; scdata.scan = SCAN_NAME; return; } // Don't try to decode symbolic label
     // symbol
     if (resolver !is null) {
@@ -1546,14 +1563,14 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       scdata.skipBlanks();
     }
     return;
-  } else if (*scdata.asmcmd == '\'') {
+  } else if (*scdata.asmcmd == '\'' || *scdata.asmcmd == '`') {
     // Character constant
-    ++scdata.asmcmd;
+    char ech = *scdata.asmcmd++;
     char[4] cc;
     int ccpos = 0;
     foreach (immutable _; 0..4) {
       if (*scdata.asmcmd == '\0' || (*scdata.asmcmd == '\\' && scdata.asmcmd[1] == '\0')) { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
-      if (*scdata.asmcmd == '\'') {
+      if (*scdata.asmcmd == ech) {
         if (ccpos == 0) { scdata.asmerror = "Empty character constant"; scdata.scan = SCAN_ERR; return; }
         break;
       }
@@ -1564,56 +1581,39 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
           case 't': cc[ccpos++] = '\t'; break;
           case 'r': cc[ccpos++] = '\r'; break;
           case 'n': cc[ccpos++] = '\n'; break;
-          default: cc[ccpos++] = scdata.asmcmd[-1]; break;
+          case 'x': case 'X':
+            uint n = 0;
+            if (!isxdigit(*scdata.asmcmd)) { scdata.asmerror = "Hex number expected"; scdata.scan = SCAN_ERR; return; }
+            n = hdig(*scdata.asmcmd++);
+            if (isxdigit(*scdata.asmcmd)) n = n*16+hdig(*scdata.asmcmd++);
+            cc[ccpos++] = cast(char)n;
+            break;
+          default:
+            if (isalpha(scdata.asmcmd[-1])) { scdata.asmerror = "Invalid escape"; scdata.scan = SCAN_ERR; return; }
+            cc[ccpos++] = scdata.asmcmd[-1];
+            break;
         }
       } else {
         cc[ccpos++] = *scdata.asmcmd++;
       }
     }
-    if (*scdata.asmcmd != '\'') { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
+    if (*scdata.asmcmd != ech) { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
     ++scdata.asmcmd;
     if (ccpos != 1 && ccpos != 2 && ccpos != 4) { scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return; }
-    switch (ccpos) {
-      case 1: scdata.idata = cast(ubyte)cc[0]; break;
-      case 2: scdata.idata = ((cast(ubyte)cc[0])<<8)|(cast(ubyte)cc[1]); break;
-      case 4: scdata.idata = ((cast(ubyte)cc[0])<<24)|((cast(ubyte)cc[1])<<16)|((cast(ubyte)cc[2])<<8)|(cast(ubyte)cc[3]); break;
-      default: scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return;
-    }
-    scdata.skipBlanks();
-    scdata.scan = SCAN_ICONST;
-    return;
-  } else if (*scdata.asmcmd == '`') {
-    // Character constant
-    ++scdata.asmcmd;
-    char[4] cc;
-    int ccpos = 0;
-    foreach (immutable _; 0..4) {
-      if (*scdata.asmcmd == '\0' || (*scdata.asmcmd == '\\' && scdata.asmcmd[1] == '\0')) { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
-      if (*scdata.asmcmd == '`') {
-        if (ccpos == 0) { scdata.asmerror = "Empty character constant"; scdata.scan = SCAN_ERR; return; }
-        break;
+    if (ech == '`') {
+      switch (ccpos) {
+        case 1: scdata.idata = cast(ubyte)cc[0]; break;
+        case 2: scdata.idata = ((cast(ubyte)cc[1])<<8)|(cast(ubyte)cc[0]); break;
+        case 4: scdata.idata = ((cast(ubyte)cc[3])<<24)|((cast(ubyte)cc[2])<<16)|((cast(ubyte)cc[1])<<8)|(cast(ubyte)cc[0]); break;
+        default: scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return;
       }
-      if (*scdata.asmcmd == '\\') {
-        ++scdata.asmcmd;
-        if (*scdata.asmcmd == '\0') { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
-        switch (*scdata.asmcmd++) {
-          case 't': cc[ccpos++] = '\t'; break;
-          case 'r': cc[ccpos++] = '\r'; break;
-          case 'n': cc[ccpos++] = '\n'; break;
-          default: cc[ccpos++] = scdata.asmcmd[-1]; break;
-        }
-      } else {
-        cc[ccpos++] = *scdata.asmcmd++;
+    } else {
+      switch (ccpos) {
+        case 1: scdata.idata = cast(ubyte)cc[0]; break;
+        case 2: scdata.idata = ((cast(ubyte)cc[0])<<8)|(cast(ubyte)cc[1]); break;
+        case 4: scdata.idata = ((cast(ubyte)cc[0])<<24)|((cast(ubyte)cc[1])<<16)|((cast(ubyte)cc[2])<<8)|(cast(ubyte)cc[3]); break;
+        default: scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return;
       }
-    }
-    if (*scdata.asmcmd != '`') { scdata.asmerror = "Unterminated character constant"; scdata.scan = SCAN_ERR; return; }
-    ++scdata.asmcmd;
-    if (ccpos != 1 && ccpos != 2 && ccpos != 4) { scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return; }
-    switch (ccpos) {
-      case 1: scdata.idata = cast(ubyte)cc[0]; break;
-      case 2: scdata.idata = ((cast(ubyte)cc[1])<<8)|(cast(ubyte)cc[0]); break;
-      case 4: scdata.idata = ((cast(ubyte)cc[3])<<24)|((cast(ubyte)cc[2])<<16)|((cast(ubyte)cc[1])<<8)|(cast(ubyte)cc[0]); break;
-      default: scdata.asmerror = "Invalid character constant"; scdata.scan = SCAN_ERR; return;
     }
     scdata.skipBlanks();
     scdata.scan = SCAN_ICONST;
@@ -1962,7 +1962,11 @@ private void Parseasmoperand (ref AsmScanData scdata, ref AsmOperand op, scope R
  * detected error. This number is the negation of the offset in the input text
  * where the error encountered.
  */
-public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOptions opts, uint attempt, uint constsize, char[] errtext, scope ResolveSymCB resolver=null) {
+public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOptions opts, uint attempt, uint constsize, char[] errtext,
+                    scope ResolveSymCB resolver=null,
+                    scope PutDataCB putdata=null)
+{
+  import core.stdc.ctype : isalpha, isalnum, isdigit, toupper, isxdigit;
   import core.stdc.stdio : snprintf;
   import core.stdc.string : memcpy, memset, strcpy, strcmp, strlen;
   int i, j, k, namelen, nameok, arg, match, datasize, addrsize, bytesize, minop, maxop;
@@ -1995,13 +1999,41 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
   scanasm(scdata, SA_NAME, resolver);
   if (scdata.scan == SCAN_EOL) return 0; // End of line, nothing to assemble
   //TODO: ??? process "db" and company here
-  if (scdata.scan == SCAN_DEFB) {
+  if (scdata.scan == SCAN_DEFB || scdata.scan == SCAN_DEFW || scdata.scan == SCAN_DEFD) {
     uint bpos = 0;
     model.length = 0;
     model.jmpsize = 0;
     model.jmpoffset = 0;
     model.jmppos = 0;
     model.data = true;
+    int csize = (scdata.scan == SCAN_DEFB ? 1 : scdata.scan == SCAN_DEFW ? 2 : 4);
+
+    bool dbPutByte (ubyte vb) {
+      if (putdata !is null) {
+        if (bpos < model.code.length) {
+          model.code[bpos] = vb;
+          model.mask[bpos] = 0xff;
+          ++bpos;
+        }
+        putdata(ip+model.length, vb);
+      } else {
+        if (bpos >= model.code.length) { xstrcpy(errtext, "too many byte constants"); return false; }
+        model.code[bpos] = vb;
+        model.mask[bpos] = 0xff;
+        ++bpos;
+      }
+      ++model.length;
+      return true;
+    }
+
+    bool dbPutConst (uint v) {
+      foreach (immutable _; 0..csize) {
+        if (!dbPutByte(v&0xff)) return false;
+        v >>= 8;
+      }
+      return true;
+    }
+
     for (;;) {
       scanasm(scdata, 0, resolver);
       if (scdata.scan == SCAN_EOL) {
@@ -2012,16 +2044,47 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
         if (scdata.scan != SCAN_SYMB || scdata.idata != ',') { xstrcpy(errtext, "comma expected"); goto error; }
         scanasm(scdata, 0, resolver);
       }
-      if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { xstrcpy(errtext, "byte constant expected"); goto error; }
-      if (bpos >= model.code.length) { xstrcpy(errtext, "too many byte constants"); goto error; }
-      if (scdata.idata < byte.min || scdata.idata > ubyte.max) { xstrcpy(errtext, "byte constant overflow"); goto error; }
-      { import core.stdc.stdio; printf("DB: 0x%02x\n", cast(ubyte)(scdata.idata&0xff)); }
-      model.code[bpos] = cast(ubyte)(scdata.idata&0xff);
-      model.mask[bpos] = 0xff;
-      ++bpos;
+      if (scdata.scan == SCAN_SYMB && scdata.idata == '"') {
+        // parse string
+        while (*scdata.asmcmd && *scdata.asmcmd != '"') {
+          ubyte vb;
+          if (*scdata.asmcmd != '\\') {
+            vb = cast(ubyte)(*scdata.asmcmd++);
+          } else {
+            ++scdata.asmcmd;
+            switch (*scdata.asmcmd++) {
+              case 0: scdata.asmerror = "Unexpected end of string"; scdata.scan = SCAN_ERR; goto error;
+              case 't': vb = cast(ubyte)'\t'; break;
+              case 'r': vb = cast(ubyte)'\r'; break;
+              case 'n': vb = cast(ubyte)'\n'; break;
+              case 'x': case 'X':
+                uint n = 0;
+                if (!isxdigit(*scdata.asmcmd)) { scdata.asmerror = "Hex number expected"; scdata.scan = SCAN_ERR; goto error; }
+                n = hdig(*scdata.asmcmd++);
+                if (isxdigit(*scdata.asmcmd)) n = n*16+hdig(*scdata.asmcmd++);
+                vb = cast(char)n;
+                break;
+              default:
+                if (isalpha(scdata.asmcmd[-1])) { scdata.asmerror = "Invalid escape"; scdata.scan = SCAN_ERR; goto error; }
+                vb = cast(ubyte)scdata.asmcmd[-1];
+                break;
+            }
+          }
+          if (!dbPutByte(vb)) goto error;
+        }
+        if (*scdata.asmcmd == '"') ++scdata.asmcmd;
+      } else {
+        if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { xstrcpy(errtext, "constant expected"); goto error; }
+        final switch (csize) {
+          case 1: if (scdata.idata < byte.min || scdata.idata > ubyte.max) { xstrcpy(errtext, "byte constant overflow"); goto error; } break;
+          case 2: if (scdata.idata < short.min || scdata.idata > ushort.max) { xstrcpy(errtext, "word constant overflow"); goto error; } break;
+          case 4: break;
+        }
+        //{ import core.stdc.stdio; printf("DB: 0x%02x\n", cast(ubyte)(scdata.idata&0xff)); }
+        if (!dbPutConst(scdata.idata)) goto error;
+      }
     }
-    model.length = bpos;
-    return bpos;
+    return model.length;
   }
   // Fetch all REPxx and LOCK prefixes
   for (;;) {

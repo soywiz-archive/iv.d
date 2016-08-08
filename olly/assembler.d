@@ -35,6 +35,7 @@ private:
     uint srclnum;
     uint addr; // 0: undefined
     AsmModel am;
+    ubyte[] databuf; // for "db" and such
   }
   Line[] lines;
 
@@ -90,7 +91,11 @@ public:
     auto res = new ubyte[](len);
     len = 0;
     foreach (const ref Line ln; lines) {
-      res[len..len+ln.am.length] = ln.am.code[0..ln.am.length];
+      if (ln.databuf.length) {
+        res[len..len+ln.am.length] = ln.databuf[];
+      } else {
+        res[len..len+ln.am.length] = ln.am.code[0..ln.am.length];
+      }
       len += ln.am.length;
     }
     assert(len == res.length);
@@ -189,7 +194,12 @@ public:
     auto line = &lines[lidx];
     if (curpc == 0) throw new Exception("invalid pc");
     fixLabelAddr(lidx, curpc);
-    auto cmdlen = .assemble(line.str, curpc, &am, opts, 0/*attempt*/, 0/*csize*/, errtext[], &findLabelAddr);
+    ubyte[] dbdata;
+    auto cmdlen = .assemble(line.str, curpc, &am, opts, 0/*attempt*/, 0/*csize*/, errtext[], &findLabelAddr,
+      (uint addr, ubyte b) {
+        dbdata ~= b;
+      }
+    );
     if (cmdlen <= 0) {
       import core.stdc.stdio : stderr, fprintf;
       fprintf(stderr, "ERROR at line %u: %s\n", line.srclnum, errtext.ptr);
@@ -207,6 +217,7 @@ public:
     }
     line.addr = curpc;
     line.am = am;
+    line.databuf = dbdata;
     curpc += cmdlen;
   }
 
