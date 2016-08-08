@@ -44,6 +44,13 @@ private:
   bool assembled;
   uint linesSeen;
 
+  bool isDataByte (uint addr) {
+    foreach (const ref Line ln; lines) {
+      if (ln.am.data && addr >= ln.addr && addr < ln.addr+ln.am.length) return true;
+    }
+    return false;
+  }
+
   uint findLabelAddr (const(char)[] name) {
     foreach (const ref Label lbl; labels) {
       if (name == lbl.name) {
@@ -173,6 +180,7 @@ public:
       fprintf(stderr, "^\n");
       throw new Exception("asm error");
     } else {
+      //{ import std.stdio; writefln("DATA: %s [%s]", am.data, line.str); }
       //import std.stdio : stderr;
       //stderr.writefln("line %s(%s) [%s] assembled to %s bytes at 0x%08x", lidx, line.srclnum, line.str, am.length, curpc);
     }
@@ -206,6 +214,11 @@ public:
   }
 
   uint dasmOne (const(void)[] code, uint ip, uint ofs) {
+    if (isDataByte(ip+ofs)) {
+      import core.stdc.stdio : stderr, fprintf;
+      fprintf(stderr, "0x%08x: %02x%-14s db\t0x%02x\n", ip+ofs, *cast(ubyte*)(code.ptr+ofs), "".ptr, *cast(ubyte*)(code.ptr+ofs));
+      return 1;
+    }
     DisasmData da;
     DAConfig cfg;
     cfg.tabarguments = true;

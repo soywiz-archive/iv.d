@@ -24,10 +24,11 @@ alias uint delegate (const(char)[] name) ResolveSymCB;
 public struct AsmModel {
   ubyte[ASMMAXCMDSIZE] code; /// Binary code
   ubyte[ASMMAXCMDSIZE] mask; /// Mask for binary code (0: bit ignored)
-  int length;             /// Length of code, bytes (0: empty)
-  int jmpsize;            /// Offset size if relative jump
-  int jmpoffset;          /// Offset relative to IP
-  int jmppos;             /// Position of jump offset in command
+  int length;                /// Length of code, bytes (0: empty)
+  int jmpsize;               /// Offset size if relative jump
+  int jmpoffset;             /// Offset relative to IP
+  int jmppos;                /// Position of jump offset in command
+  bool data;                 /// db, etc
 }
 
 /// Assembler options
@@ -889,6 +890,7 @@ enum {
   SCAN_STRING,    // Keyword "STRING" (in expressions)
   SCAN_UNICODE,   // Keyword "UNICODE" (in expressions)
   SCAN_MSG,       // Pseudovariable MSG (in expressions)
+  SCAN_DEFB,      // DEFB byte
 
   SCAN_SYMB = 64, // Any other character
   SCAN_IMPORT,    // Import pseudolabel
@@ -1391,6 +1393,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     if (strcmp(s.ptr, "STRING") == 0) { scdata.scan = SCAN_STRING; return; } // Keyword "STRING" (in expressions)
     if (strcmp(s.ptr, "UNICODE") == 0) { scdata.scan = SCAN_UNICODE; return; } // Keyword "UNICODE" (in expressions)
     if (strcmp(s.ptr, "MSG") == 0) { scdata.scan = SCAN_MSG; return; } // Pseudovariable MSG (in expressions)
+    if (strcmp(s.ptr, "DEFB") == 0) { scdata.scan = SCAN_DEFB; return; }
     if (mode&SA_NAME) { scdata.idata = i; scdata.scan = SCAN_NAME; return; } // Don't try to decode symbolic label
     // symbol
     if (resolver !is null) {
@@ -1973,6 +1976,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
     if (errtext !is null) xstrcpy(errtext, "Internal OLLYASM error");
     return 0;
   }
+  model.data = false;
   scdata.acommand[] = 0;
   scdata.acommand[0..cmdstr.length] = cmdstr;
   scdata.asmcmd = scdata.acommand.ptr;
@@ -1981,6 +1985,34 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
   errtext[0] = '\0';
   scanasm(scdata, SA_NAME, resolver);
   if (scdata.scan == SCAN_EOL) return 0; // End of line, nothing to assemble
+  //TODO: ??? process "db" and company here
+  if (scdata.scan == SCAN_DEFB) {
+    uint bpos = 0;
+    model.length = 0;
+    model.jmpsize = 0;
+    model.jmpoffset = 0;
+    model.jmppos = 0;
+    model.data = true;
+    for (;;) {
+      scanasm(scdata, 0, resolver);
+      if (scdata.scan == SCAN_EOL) {
+        if (bpos == 0) { xstrcpy(errtext, "byte constant expected"); goto error; }
+        break;
+      }
+      if (bpos != 0) {
+        if (scdata.scan != SCAN_SYMB || scdata.idata != ',') { xstrcpy(errtext, "comma expected"); goto error; }
+        scanasm(scdata, 0, resolver);
+      }
+      if (scdata.scan != SCAN_ICONST && scdata.scan != SCAN_DCONST) { xstrcpy(errtext, "byte constant expected"); goto error; }
+      if (bpos >= model.code.length) { xstrcpy(errtext, "too many byte constants"); goto error; }
+      if (scdata.idata < byte.min || scdata.idata > ubyte.max) { xstrcpy(errtext, "byte constant overflow"); goto error; }
+      model.code[bpos] = cast(ubyte)(scdata.idata&0xff);
+      model.mask[bpos] = 0xff;
+      ++bpos;
+    }
+    model.length = bpos;
+    return bpos;
+  }
   // Fetch all REPxx and LOCK prefixes
   for (;;) {
     if (scdata.scan == SCAN_REP || scdata.scan == SCAN_REPE || scdata.scan == SCAN_REPNE) {

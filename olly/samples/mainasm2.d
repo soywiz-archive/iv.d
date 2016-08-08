@@ -76,6 +76,7 @@ skipcall:
 void main (string[] args) {
   enum ijAddr = 0x400000;
   auto ass = new Assembler(ijAddr);
+  writeln("collecting...");
   ass.addLabel("malloc", 666);
   ass.addLabel("free", 667);
   ass.addLabel("dlopen", 668);
@@ -88,6 +89,7 @@ void main (string[] args) {
   } else {
     ass.addLines(injectCode);
   }
+  writeln("assembling...");
   auto ijcode = ass.getCode();
   writeln("assembled to ", ijcode.length, " bytes");
   ass.disasmCode(ijcode, ass.orgpc);
