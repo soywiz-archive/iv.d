@@ -118,6 +118,16 @@ public:
     labels ~= lbl;
   }
 
+  bool hasLabel (const(char)[] name) {
+    foreach (const ref lbl; labels) if (lbl.name == name) return true;
+    return false;
+  }
+
+  uint labelAddr (const(char)[] name) {
+    foreach (const ref lbl; labels) if (lbl.name == name) return lbl.addr;
+    throw new Exception("label '"~name.idup~"' not found");
+  }
+
   void addLines(T : const(char)[]) (T s) {
     static if (!is(T == typeof(null))) {
       while (s.length > 0) {
