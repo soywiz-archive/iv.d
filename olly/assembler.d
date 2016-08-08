@@ -234,9 +234,9 @@ public:
       import core.stdc.stdio : stderr, fprintf;
       ubyte b = (cast(const(ubyte)[])code)[ofs];
       if (b >= ' ' && b < 127) {
-        fprintf(stderr, "0x%08x: %02x%-14s db\t0x%02x  ; '%c'\n", ip+ofs, b, "".ptr, b, b);
+        fprintf(stderr, "0x%08x:   %02x%-14s db\t0x%02x  ; '%c'\n", ip+ofs, b, "".ptr, b, b);
       } else {
-        fprintf(stderr, "0x%08x: %02x%-14s db\t0x%02x\n", ip+ofs, b, "".ptr, b);
+        fprintf(stderr, "0x%08x:   %02x%-14s db\t0x%02x\n", ip+ofs, b, "".ptr, b);
       }
       return 1;
     }
@@ -250,7 +250,7 @@ public:
     if (len == 0) throw new Exception("ERROR: "~disErrMessage(da.errors, da.warnings));
     {
       import core.stdc.stdio : stderr, fprintf;
-      fprintf(stderr, "0x%08x: %-16s %s\n", da.ip, da.dump.ptr, da.result.ptr);
+      fprintf(stderr, "0x%08x:   %-16s %s\n", da.ip, da.dump.ptr, da.result.ptr);
     }
     return da.size;
   }
