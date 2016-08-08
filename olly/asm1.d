@@ -1394,6 +1394,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     if (strcmp(s.ptr, "UNICODE") == 0) { scdata.scan = SCAN_UNICODE; return; } // Keyword "UNICODE" (in expressions)
     if (strcmp(s.ptr, "MSG") == 0) { scdata.scan = SCAN_MSG; return; } // Pseudovariable MSG (in expressions)
     if (strcmp(s.ptr, "DEFB") == 0) { scdata.scan = SCAN_DEFB; return; }
+    if (strcmp(s.ptr, "DB") == 0) { scdata.scan = SCAN_DEFB; return; }
     if (mode&SA_NAME) { scdata.idata = i; scdata.scan = SCAN_NAME; return; } // Don't try to decode symbolic label
     // symbol
     if (resolver !is null) {

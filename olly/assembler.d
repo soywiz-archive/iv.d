@@ -216,7 +216,12 @@ public:
   uint dasmOne (const(void)[] code, uint ip, uint ofs) {
     if (isDataByte(ip+ofs)) {
       import core.stdc.stdio : stderr, fprintf;
-      fprintf(stderr, "0x%08x: %02x%-14s db\t0x%02x\n", ip+ofs, *cast(ubyte*)(code.ptr+ofs), "".ptr, *cast(ubyte*)(code.ptr+ofs));
+      ubyte b = (cast(const(ubyte)[])code)[ofs];
+      if (b >= ' ' && b < 127) {
+        fprintf(stderr, "0x%08x: %02x%-14s db\t0x%02x  ; '%c'\n", ip+ofs, b, "".ptr, b, b);
+      } else {
+        fprintf(stderr, "0x%08x: %02x%-14s db\t0x%02x\n", ip+ofs, b, "".ptr, b);
+      }
       return 1;
     }
     DisasmData da;
