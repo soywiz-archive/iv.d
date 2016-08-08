@@ -129,6 +129,16 @@ public:
     auto ttymode = ttyGetMode();
     scope(exit) ttySetMode(ttymode);
     ttySetRaw();
+
+    void doBackspace () {
+      if (curlen-curpos > 1) {
+        import core.stdc.string : memmove;
+        memmove(curline.ptr+curpos-1, curline.ptr+curpos, curlen-curpos);
+      }
+      --curpos;
+      --curlen;
+    }
+
     for (;;) {
       drawLine();
       auto key = ttyReadKey();
@@ -142,6 +152,14 @@ public:
       if (key == "return") { fixCurLine(); return Result.Normal; }
       if (key == "tab") { fixCurLine(); autocomplete(); continue; }
       if (key == "^K") { fixCurLine(); curlen = curpos; continue; }
+      if (key == "^W") {
+        if (curpos > 0) {
+          fixCurLine();
+          while (curpos > 0 && curline[curpos-1] <= ' ') doBackspace();
+          while (curpos > 0 && curline[curpos-1] > ' ') doBackspace();
+          continue;
+        }
+      }
       if (key == "up") {
         if (history.length == 0) continue;
         if (hpos == -1) {
@@ -179,12 +197,7 @@ public:
       if (key == "backspace") {
         if (curlen > 0 && curpos > 0) {
           fixCurLine();
-          if (curlen-curpos > 1) {
-            import core.stdc.string : memmove;
-            memmove(curline.ptr+curpos, curline.ptr+curpos+1, curlen-curpos-1);
-          }
-          --curpos;
-          --curlen;
+          doBackspace();
         }
         continue;
       }
