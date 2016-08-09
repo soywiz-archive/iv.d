@@ -228,44 +228,44 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
 
       ulong[(FieldNameTuple!T.length+ulong.sizeof-1)/ulong.sizeof] fldseen = 0;
 
-      void tryField (const(char)[] name) {
-        alias tuple(T...) = T;
-        bool found = false;
-        foreach (immutable idx, string fldname; FieldNameTuple!T) {
-          static if (!hasUDA!(__traits(getMember, T, fldname), NCIgnore)) {
-            static if (hasUDA!(__traits(getMember, T, fldname), NCName)) {
-              enum names = getUDAs!(__traits(getMember, T, fldname), NCName);
-            } else {
-              enum names = tuple!(NCName(fldname));
-            }
-            foreach (immutable xname; names) {
-              if (xname.name == name) {
-                if (fldseen[idx/8]&(1UL<<(idx%8))) throw new Exception(`duplicate field value for '`~xname.name~`'`);
-                fldseen[idx/8] |= 1UL<<(idx%8);
-                fl.ncunser(__traits(getMember, v, fldname));
-                found = true;
-                break;
-              }
-            }
-            if (found) break;
+      bool tryField(uint idx, string fldname) (const(char)[] name) {
+        static if (hasUDA!(__traits(getMember, T, fldname), NCName)) {
+          enum names = getUDAs!(__traits(getMember, T, fldname), NCName);
+        } else {
+          alias tuple(T...) = T;
+          enum names = tuple!(NCName(fldname));
+        }
+        foreach (immutable xname; names) {
+          if (xname.name == name) {
+            if (fldseen[idx/8]&(1UL<<(idx%8))) throw new Exception(`duplicate field value for '`~fldname~`'`);
+            fldseen[idx/8] |= 1UL<<(idx%8);
+            fl.ncunser(__traits(getMember, v, fldname));
+            return true;
           }
         }
-        if (!found) throw new Exception("unknown field '"~name.idup~"'");
+        return false;
       }
 
-      for (;;) {
-        char[255] cbuf = void;
-        auto nlen = fl.ncReadUbyte;
-        if (nlen == NCEntryType.End) break;
-        fl.rawReadExact(cbuf[0..nlen]);
-        tryField(cbuf[0..nlen]);
+      void tryAllFields (const(char)[] name) {
+        foreach (immutable idx, string fldname; FieldNameTuple!T) {
+          static if (!hasUDA!(__traits(getMember, T, fldname), NCIgnore)) {
+            if (tryField!(idx, fldname)(name)) return;
+          }
+        }
+        throw new Exception("unknown field '"~name.idup~"'");
       }
 
+      char[255] cbuf = void;
+      // let's hope that fields are in order
       foreach (immutable idx, string fldname; FieldNameTuple!T) {
         static if (!hasUDA!(__traits(getMember, T, fldname), NCIgnore)) {
-          if ((fldseen[idx/8]&(1UL<<(idx&0x07))) == 0) throw new Exception(`value for field '`~fldname~`' not found`);
+          auto nlen = fl.ncReadUbyte;
+          if (nlen == NCEntryType.End) throw new Exception("invalid stream (out of fields)");
+          fl.rawReadExact(cbuf[0..nlen]);
+          if (!tryField!(idx, fldname)(cbuf[0..nlen])) tryAllFields(cbuf[0..nlen]);
         }
       }
+      if (fl.ncReadUbyte != NCEntryType.End) throw new Exception("invalid stream (extra fields)");
     }
   }
 
