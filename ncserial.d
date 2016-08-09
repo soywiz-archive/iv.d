@@ -179,8 +179,9 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
           static if (isMultiDimArray!AT) {
             foreach (ref a2; arr) readMArray(a2);
           } else {
+            alias ET = arrayElementType!AT;
             // read byte arrays in one chunk
-            static if (UT.sizeof == 1) {
+            static if (ET.sizeof == 1 && !is(ET == bool)) {
               fl.rawReadExact(arr[]);
             } else {
               foreach (ref it; arr) unserData(it);
@@ -191,8 +192,9 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
             foreach (ref a2; arr) readMArray(a2);
           } else {
             auto narr = new arrayElementType!AT[](llen);
+            alias ET = arrayElementType!AT;
             // read byte arrays in one chunk
-            static if (arrayElementType!AT.sizeof == 1) {
+            static if (ET.sizeof == 1 && !is(ET == bool)) {
               fl.rawReadExact(narr[]);
             } else {
               foreach (ref it; narr) unserData(it);
