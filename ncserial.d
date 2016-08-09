@@ -43,6 +43,26 @@ enum NCEntryType : ubyte {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+template isSimpleType(T) {
+  private import std.traits : Unqual;
+  private alias UT = Unqual!T;
+  enum isSimpleType = __traits(isIntegral, UT) || __traits(isFloating, UT) || is(UT == bool);
+}
+
+
+void ncWriteUbyte(ST) (auto ref ST fl, ubyte b) {
+  fl.rawWriteExact((&b)[0..1]);
+}
+
+
+ubyte ncReadUbyte(ST) (auto ref ST fl) {
+  ubyte b;
+  fl.rawReadExact((&b)[0..1]);
+  return b;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isWriteableStream!ST) {
   import std.traits : Unqual;
 
@@ -51,29 +71,29 @@ public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isW
     static if (is(UT : V[], V)) {
       enum dc = dimensionCount!UT;
       static assert(dc <= 255, "too many array dimenstions");
-      fl.writeNum!ubyte(NCEntryType.Array);
-      fl.writeNum!ubyte(cast(ubyte)dc);
+      fl.ncWriteUbyte(NCEntryType.Array);
+      fl.ncWriteUbyte(cast(ubyte)dc);
       writeTypeHeader!(arrayElementType!UT);
     } else static if (is(UT : K[V], K, V)) {
-      fl.writeNum!ubyte(NCEntryType.Dict);
+      fl.ncWriteUbyte(NCEntryType.Dict);
       writeTypeHeader!(Unqual!K);
       writeTypeHeader!(Unqual!V);
     } else static if (is(UT == bool)) {
-      fl.writeNum!ubyte(NCEntryType.Bool);
+      fl.ncWriteUbyte(NCEntryType.Bool);
     } else static if (is(UT == char) || is(UT == wchar) || is(UT == dchar)) {
-      fl.writeNum!ubyte(cast(ubyte)(NCEntryType.Char|UT.sizeof));
+      fl.ncWriteUbyte(cast(ubyte)(NCEntryType.Char|UT.sizeof));
     } else static if (__traits(isIntegral, UT)) {
       static if (__traits(isUnsigned, UT)) {
-        fl.writeNum!ubyte(cast(ubyte)(NCEntryType.Uint|UT.sizeof));
+        fl.ncWriteUbyte(cast(ubyte)(NCEntryType.Uint|UT.sizeof));
       } else {
-        fl.writeNum!ubyte(cast(ubyte)(NCEntryType.Int|UT.sizeof));
+        fl.ncWriteUbyte(cast(ubyte)(NCEntryType.Int|UT.sizeof));
       }
     } else static if (__traits(isFloating, UT)) {
-      fl.writeNum!ubyte(cast(ubyte)(NCEntryType.Float|UT.sizeof));
+      fl.ncWriteUbyte(cast(ubyte)(NCEntryType.Float|UT.sizeof));
     } else static if (is(UT == struct)) {
       static assert(UT.stringof.length <= 255, "struct name too long: "~UT.stringof);
-      fl.writeNum!ubyte(NCEntryType.Struct);
-      fl.writeNum!ubyte(cast(ubyte)UT.stringof.length);
+      fl.ncWriteUbyte(NCEntryType.Struct);
+      fl.ncWriteUbyte(cast(ubyte)UT.stringof.length);
       fl.rawWriteExact(UT.stringof[]);
     } else {
       static assert(0, "can't serialize type '"~T.stringof~"'");
@@ -89,8 +109,8 @@ public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isW
         static if (isMultiDimArray!AT) {
           foreach (const a2; arr) writeMArray(a2);
         } else {
-          // write byte arrays in one chunk
-          static if (UT.sizeof == 1) {
+          // write POD arrays in one chunk
+          static if (isSimpleType!UT) {
             fl.rawWriteExact(arr[]);
           } else {
             foreach (const ref it; arr) serData(it);
@@ -105,10 +125,8 @@ public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isW
         serData(kv.key);
         serData(kv.value);
       }
-    } else static if (is(UT == bool)) {
-      fl.writeNum!ubyte(cast(ubyte)v);
-    } else static if (__traits(isIntegral, UT) || __traits(isFloating, UT)) {
-      fl.writeNum!UT(v);
+    } else static if (isSimpleType!UT) {
+      fl.rawWriteExact((&v)[0..1]);
     } else static if (is(UT == struct)) {
       import std.traits : FieldNameTuple, getUDAs, hasUDA;
       foreach (string fldname; FieldNameTuple!UT) {
@@ -116,12 +134,12 @@ public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isW
           enum names = getUDAs!(__traits(getMember, UT, fldname), NCName);
           static if (names.length) enum xname = names[0].name; else enum xname = fldname;
           static assert(xname.length <= 255, "struct '"~UT.stringof~"': field name too long: "~xname);
-          fl.writeNum!ubyte(cast(ubyte)xname.length);
+          fl.ncWriteUbyte(cast(ubyte)xname.length);
           fl.rawWriteExact(xname[]);
           fl.ncser(__traits(getMember, v, fldname));
         }
       }
-      fl.writeNum!ubyte(NCEntryType.End);
+      fl.ncWriteUbyte(NCEntryType.End);
     } else {
       static assert(0, "can't serialize type '"~T.stringof~"'");
     }
@@ -138,30 +156,30 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
 
   void checkTypeId(T) () {
     static if (is(T : V[], V)) {
-      if (fl.readNum!ubyte != NCEntryType.Array) throw new Exception(`invalid stream (array expected)`);
-      if (fl.readNum!ubyte != dimensionCount!T) throw new Exception(`invalid stream (dimension count)`);
+      if (fl.ncReadUbyte != NCEntryType.Array) throw new Exception(`invalid stream (array expected)`);
+      if (fl.ncReadUbyte != dimensionCount!T) throw new Exception(`invalid stream (dimension count)`);
       checkTypeId!(arrayElementType!T);
     } else static if (is(T : K[V], K, V)) {
-      if (fl.readNum!ubyte != NCEntryType.Dict) throw new Exception(`invalid stream (dict expected)`);
+      if (fl.ncReadUbyte != NCEntryType.Dict) throw new Exception(`invalid stream (dict expected)`);
       checkTypeId!(Unqual!K);
       checkTypeId!(Unqual!V);
     } else static if (is(T == bool)) {
-      if (fl.readNum!ubyte != NCEntryType.Bool) throw new Exception(`invalid stream (bool expected)`);
+      if (fl.ncReadUbyte != NCEntryType.Bool) throw new Exception(`invalid stream (bool expected)`);
     } else static if (is(T == char) || is(T == wchar) || is(T == dchar)) {
-      if (fl.readNum!ubyte != (NCEntryType.Char|T.sizeof)) throw new Exception(`invalid stream (char expected)`);
+      if (fl.ncReadUbyte != (NCEntryType.Char|T.sizeof)) throw new Exception(`invalid stream (char expected)`);
     } else static if (__traits(isIntegral, T)) {
       static if (__traits(isUnsigned, T)) {
-        if (fl.readNum!ubyte != (NCEntryType.Uint|T.sizeof)) throw new Exception(`invalid stream (int expected)`);
+        if (fl.ncReadUbyte != (NCEntryType.Uint|T.sizeof)) throw new Exception(`invalid stream (int expected)`);
       } else {
-        if (fl.readNum!ubyte != (NCEntryType.Int|T.sizeof)) throw new Exception(`invalid stream (int expected)`);
+        if (fl.ncReadUbyte != (NCEntryType.Int|T.sizeof)) throw new Exception(`invalid stream (int expected)`);
       }
     } else static if (__traits(isFloating, T)) {
-      if (fl.readNum!ubyte != (NCEntryType.Float|T.sizeof)) throw new Exception(`invalid stream (float expected)`);
+      if (fl.ncReadUbyte != (NCEntryType.Float|T.sizeof)) throw new Exception(`invalid stream (float expected)`);
     } else static if (is(T == struct)) {
       char[255] cbuf = void;
       static assert(T.stringof.length <= 255, "struct name too long: "~T.stringof);
-      if (fl.readNum!ubyte != NCEntryType.Struct) throw new Exception(`invalid stream (struct expected)`);
-      if (fl.readNum!ubyte != T.stringof.length) throw new Exception(`invalid stream (struct name length)`);
+      if (fl.ncReadUbyte != NCEntryType.Struct) throw new Exception(`invalid stream (struct expected)`);
+      if (fl.ncReadUbyte != T.stringof.length) throw new Exception(`invalid stream (struct name length)`);
       fl.rawReadExact(cbuf[0..T.stringof.length]);
       if (cbuf[0..T.stringof.length] != T.stringof) throw new Exception(`invalid stream (struct name)`);
     } else {
@@ -176,32 +194,23 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
         if (llen == 0) return;
         static if (__traits(isStaticArray, AT)) {
           if (arr.length != llen) throw new Exception(`invalid stream (array size)`);
-          static if (isMultiDimArray!AT) {
-            foreach (ref a2; arr) readMArray(a2);
-          } else {
-            alias ET = arrayElementType!AT;
-            // read byte arrays in one chunk
-            static if (ET.sizeof == 1 && !is(ET == bool)) {
-              fl.rawReadExact(arr[]);
-            } else {
-              foreach (ref it; arr) unserData(it);
-            }
-          }
+          alias narr = arr;
         } else {
-          static if (isMultiDimArray!AT) {
-            foreach (ref a2; arr) readMArray(a2);
+          Unqual!(typeof(arr[0]))[] narr;
+          narr.length = llen;
+        }
+        static if (isMultiDimArray!AT) {
+          foreach (ref a2; narr) readMArray(a2);
+        } else {
+          alias ET = arrayElementType!AT;
+          // read byte arrays in one chunk
+          static if (isSimpleType!ET) {
+            fl.rawReadExact(narr[]);
           } else {
-            auto narr = new arrayElementType!AT[](llen);
-            alias ET = arrayElementType!AT;
-            // read byte arrays in one chunk
-            static if (ET.sizeof == 1 && !is(ET == bool)) {
-              fl.rawReadExact(narr[]);
-            } else {
-              foreach (ref it; narr) unserData(it);
-            }
-            arr = cast(AT)narr;
+            foreach (ref it; narr) unserData(it);
           }
         }
+        static if (!__traits(isStaticArray, AT)) arr = cast(AT)narr;
       }
       readMArray(v);
     } else static if (is(T : V[K], K, V)) {
@@ -212,10 +221,8 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
         unserData(value);
         v[key] = value;
       }
-    } else static if (is(T == bool)) {
-      v = fl.readNum!ubyte != 0;
-    } else static if (__traits(isIntegral, T) || __traits(isFloating, T)) {
-      v = fl.readNum!T;
+    } else static if (isSimpleType!T) {
+      fl.rawReadExact((&v)[0..1]);
     } else static if (is(T == struct)) {
       import std.traits : FieldNameTuple, getUDAs, hasUDA;
 
@@ -248,7 +255,7 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
 
       for (;;) {
         char[255] cbuf = void;
-        auto nlen = fl.readNum!ubyte;
+        auto nlen = fl.ncReadUbyte;
         if (nlen == NCEntryType.End) break;
         fl.rawReadExact(cbuf[0..nlen]);
         tryField(cbuf[0..nlen]);
@@ -333,6 +340,7 @@ version(ncserial_test) unittest {
     @NCName("command") @NCName("xcommand") ubyte cmd;
     @NCName("values") AssemblyInfo[][2] list;
     uint[string] dict;
+    bool fbool;
   }
 
 
@@ -344,6 +352,7 @@ version(ncserial_test) unittest {
     ri.list[1] ~= AssemblyInfo(69, "fuck");
     ri.dict["foo"] = 42;
     ri.dict["boo"] = 666;
+    ri.fbool = true;
     {
       auto fl = VFile("z00.bin", "w");
       fl.ncser(ri);
@@ -364,6 +373,7 @@ version(ncserial_test) unittest {
       assert(xf.dict.length == 2);
       assert(xf.dict["foo"] == 42);
       assert(xf.dict["boo"] == 666);
+      assert(xf.fbool == true);
     }
   }
 }
