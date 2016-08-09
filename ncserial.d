@@ -341,6 +341,7 @@ version(ncserial_test) unittest {
     @NCName("values") AssemblyInfo[][2] list;
     uint[string] dict;
     bool fbool;
+    char[3] ext;
   }
 
 
@@ -353,6 +354,7 @@ version(ncserial_test) unittest {
     ri.dict["foo"] = 42;
     ri.dict["boo"] = 666;
     ri.fbool = true;
+    ri.ext = "elf";
     {
       auto fl = VFile("z00.bin", "w");
       fl.ncser(ri);
@@ -374,6 +376,7 @@ version(ncserial_test) unittest {
       assert(xf.dict["foo"] == 42);
       assert(xf.dict["boo"] == 666);
       assert(xf.fbool == true);
+      assert(xf.ext == "elf");
     }
   }
 }
