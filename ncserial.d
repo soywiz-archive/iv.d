@@ -15,6 +15,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // very simple serializer
+// WARNING! do not use for disk and other sensitive serialization,
+//          as format may change without notice! at least version it!
 module iv.ncserial;
 private:
 
