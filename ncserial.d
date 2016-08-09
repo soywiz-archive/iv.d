@@ -89,7 +89,12 @@ public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isW
         static if (isMultiDimArray!AT) {
           foreach (const a2; arr) writeMArray(a2);
         } else {
-          foreach (const ref it; arr) serData(it);
+          // write byte arrays in one chunk
+          static if (UT.sizeof == 1) {
+            fl.rawWriteExact(arr[]);
+          } else {
+            foreach (const ref it; arr) serData(it);
+          }
         }
       }
       writeMArray(v);
@@ -174,14 +179,24 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
           static if (isMultiDimArray!AT) {
             foreach (ref a2; arr) readMArray(a2);
           } else {
-            foreach (ref it; arr) unserData(it);
+            // read byte arrays in one chunk
+            static if (UT.sizeof == 1) {
+              fl.rawReadExact(arr[]);
+            } else {
+              foreach (ref it; arr) unserData(it);
+            }
           }
         } else {
           static if (isMultiDimArray!AT) {
             foreach (ref a2; arr) readMArray(a2);
           } else {
             auto narr = new arrayElementType!AT[](llen);
-            foreach (ref it; narr) unserData(it);
+            // read byte arrays in one chunk
+            static if (arrayElementType!AT.sizeof == 1) {
+              fl.rawReadExact(narr[]);
+            } else {
+              foreach (ref it; narr) unserData(it);
+            }
             arr = cast(AT)narr;
           }
         }
