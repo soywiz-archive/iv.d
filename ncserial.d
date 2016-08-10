@@ -17,6 +17,7 @@
 // very simple serializer
 // WARNING! do not use for disk and other sensitive serialization,
 //          as format may change without notice! at least version it!
+// there is also very simple RPC system based on this serializer
 module iv.ncserial;
 private:
 
@@ -529,4 +530,221 @@ version(ncserial_test) unittest {
     assert(mem.tell == mem.size);
     assert(m2.tell == mem.size);
   }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// simple RPC system
+private import std.traits;
+
+
+public enum RPCommand : ushort {
+  Call = 0x29a,
+  Ret = 0x29b,
+  Err = 0x29c,
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private alias Id(alias T) = T;
+
+private struct RPCEndPoint {
+  string name;
+  ubyte[20] hash;
+  bool isFunction;
+  VFile delegate (VFile fi) dg; // read args, do call, write result; throws on error; returns serialized res
+}
+
+
+private RPCEndPoint[string] endpoints;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// look over the whole module for callable functions
+public void rpcRegisterModuleEndpoints(alias mod) () {
+  foreach (string memberName; __traits(allMembers, mod)) {
+    static if (is(typeof(__traits(getMember, mod, memberName)))) {
+      alias member = Id!(__traits(getMember, mod, memberName));
+      // is it a function marked with export?
+      static if (is(typeof(member) == function) && __traits(getProtection, member) == "export") {
+        //pragma(msg, memberName);
+        rpcRegisterEndpoint!member;
+      }
+    }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public static ubyte[20] rpchash(alias func) () if (isCallable!func) {
+  import std.digest.sha;
+  SHA1 sha;
+
+  void put (const(void)[] buf) {
+    sha.put(cast(const(ubyte)[])buf);
+  }
+
+  sha.start();
+  put(fullyQualifiedName!func.stringof);
+  put(ReturnType!func.stringof);
+  put(",");
+  foreach (immutable par; Parameters!func) {
+    put(par.stringof);
+    put(",");
+  }
+  return sha.finish();
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private string BuildCall(alias func) () {
+  string res = "func(";
+  foreach (immutable idx, immutable par; Parameters!func) {
+    import std.conv : to;
+    res ~= "mr.a";
+    res ~= idx.to!string;
+    res ~= ",";
+  }
+  return res~")";
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private static mixin template BuildRPCArgs (alias func) {
+  private import std.traits;
+  private static string buildIt(alias func) () {
+    string res;
+    alias defs = ParameterDefaults!func;
+    foreach (immutable idx, immutable par; Parameters!func) {
+      import std.conv : to;
+      res ~= par.stringof~" a"~to!string(idx);
+      static if (!is(defs[idx] == void)) res ~= " = "~defs[idx].stringof;
+      res ~= ";\n";
+    }
+    return res;
+  }
+  mixin(buildIt!func);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public struct RPCCallHeader {
+  string name; // fqn
+  ubyte[20] hash;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private void fcopy (VFile to, VFile from) {
+  ubyte[64] buf = void;
+  for (;;) {
+    auto rd = from.rawRead(buf[]);
+    if (rd.length == 0) break;
+    to.rawWriteExact(rd[]);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// client will use this
+public static auto rpcall(alias func, ST, A...) (auto ref ST chan, A args)
+if (isRWStream!ST && is(typeof(func) == function) && __traits(getProtection, func) == "export")
+{
+  //pragma(msg, "type: ", typeof(func));
+  //pragma(msg, "prot: ", __traits(getProtection, func));
+  import std.traits;
+  static struct RPCMarshalArgs { mixin BuildRPCArgs!func; }
+  RPCMarshalArgs mr;
+  alias defs = ParameterDefaults!func;
+  static assert(A.length <= defs.length, "too many arguments");
+  static if (A.length < defs.length) static assert(!is(defs[A.length] == void), "not enough default argument values");
+  foreach (immutable idx, ref arg; args) {
+    import std.conv : to;
+    mixin("mr.a"~to!string(idx)~" = arg;");
+  }
+  RPCCallHeader hdr;
+  hdr.name = fullyQualifiedName!func.stringof;
+  hdr.hash = rpchash!func;
+  // call
+  chan.writeNum!ushort(RPCommand.Call);
+  chan.ncser(hdr);
+  chan.ncser(mr);
+  // result
+  auto replyCode = chan.readNum!ushort;
+  if (replyCode == RPCommand.Err) {
+    string msg;
+    chan.ncunser(msg);
+    throw new Exception("RPC ERROR: "~msg);
+  }
+  if (replyCode != RPCommand.Ret) throw new Exception("invalid RPC reply");
+  // got reply, wow
+  static if (!is(ReturnType!func == void)) {
+    // read result
+    ReturnType!func rval;
+    chan.ncunser(rval);
+    return rval;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public static void rpcRegisterEndpoint(alias func) () if (is(typeof(func) == function)) {
+  import std.digest.sha;
+  RPCEndPoint ep;
+  ep.name = fullyQualifiedName!func.stringof;
+  ep.hash = rpchash!func;
+  ep.dg = delegate (VFile fi) {
+    // parse and call
+    static struct RPCMarshalArgs { mixin BuildRPCArgs!func; }
+    RPCMarshalArgs mr;
+    fi.ncunser(mr);
+    auto fo = wrapMemoryRW(null);
+    static if (is(ReturnType!func == void)) {
+      mixin(BuildCall!func~";");
+    } else {
+      mixin("fo.ncser("~BuildCall!func~");");
+    }
+    fo.seek(0);
+    return fo;
+  };
+  endpoints[ep.name] = ep;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// server will use this; RPCommand.Call already read
+// throws on unrecoverable stream error
+public static bool rpcProcessCall(ST) (auto ref ST chan) if (isRWStream!ST) {
+  RPCCallHeader hdr;
+  chan.ncunser(hdr);
+  auto epp = hdr.name in endpoints;
+  if (epp is null) {
+    chan.ncskip;
+    chan.writeNum!ushort(RPCommand.Err);
+    chan.ncser("unknown function");
+    return false;
+  }
+  if (epp.hash != hdr.hash) {
+    chan.ncskip;
+    chan.writeNum!ushort(RPCommand.Err);
+    chan.ncser("invalid function signature");
+    return false;
+  }
+  auto rdf = chan.ncread;
+  VFile rf;
+  try {
+    rf = epp.dg(rdf);
+  } catch (Exception e) {
+    chan.writeNum!ushort(RPCommand.Err);
+    chan.ncser("EXCEPTION: "~e.msg);
+    return false;
+  }
+  chan.writeNum!ushort(RPCommand.Ret);
+  ubyte[512] buf = void;
+  for (;;) {
+    auto rd = rf.rawRead(buf[]);
+    if (rd.length == 0) break;
+    chan.rawWriteExact(rd[]);
+  }
+  return true;
 }
