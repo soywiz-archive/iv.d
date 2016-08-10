@@ -560,7 +560,7 @@ private RPCEndPoint[string] endpoints;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// look over the whole module for callable functions
+// look over the whole module for exported functions
 public void rpcRegisterModuleEndpoints(alias mod) () {
   foreach (string memberName; __traits(allMembers, mod)) {
     static if (is(typeof(__traits(getMember, mod, memberName)))) {
@@ -647,8 +647,10 @@ private void fcopy (VFile to, VFile from) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // client will use this
+// it will send RPCommand.Call
+// throws on fatal stream error
 public static auto rpcall(alias func, ST, A...) (auto ref ST chan, A args)
-if (isRWStream!ST && is(typeof(func) == function) && __traits(getProtection, func) == "export")
+if (isRWStream!ST && is(typeof(func) == function) /*&& __traits(getProtection, func) == "export"*/)
 {
   //pragma(msg, "type: ", typeof(func));
   //pragma(msg, "prot: ", __traits(getProtection, func));
@@ -688,6 +690,7 @@ if (isRWStream!ST && is(typeof(func) == function) && __traits(getProtection, fun
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// register RPC endpoint (server-side)
 public static void rpcRegisterEndpoint(alias func) () if (is(typeof(func) == function)) {
   import std.digest.sha;
   RPCEndPoint ep;
