@@ -540,8 +540,9 @@ private import std.traits;
 
 public enum RPCommand : ushort {
   Call = 0x29a,
-  Ret = 0x29b,
-  Err = 0x29c,
+  RetVoid,
+  RetRes,
+  Err,
 }
 
 
@@ -557,6 +558,10 @@ private struct RPCEndPoint {
 
 
 private RPCEndPoint[string] endpoints;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public string[] rpcEndpointNames () { return endpoints.keys; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -585,7 +590,7 @@ public static ubyte[20] rpchash(alias func) () if (isCallable!func) {
   }
 
   sha.start();
-  put(fullyQualifiedName!func.stringof);
+  put(fullyQualifiedName!func.stringof[1..$-1]);
   put(ReturnType!func.stringof);
   put(",");
   foreach (immutable par; Parameters!func) {
@@ -617,7 +622,9 @@ private static mixin template BuildRPCArgs (alias func) {
     alias defs = ParameterDefaults!func;
     foreach (immutable idx, immutable par; Parameters!func) {
       import std.conv : to;
-      res ~= par.stringof~" a"~to!string(idx);
+      res ~= par.stringof;
+      res ~= " a";
+      res ~= to!string(idx);
       static if (!is(defs[idx] == void)) res ~= " = "~defs[idx].stringof;
       res ~= ";\n";
     }
@@ -665,7 +672,7 @@ if (isRWStream!ST && is(typeof(func) == function) /*&& __traits(getProtection, f
     mixin("mr.a"~to!string(idx)~" = arg;");
   }
   RPCCallHeader hdr;
-  hdr.name = fullyQualifiedName!func.stringof;
+  hdr.name = fullyQualifiedName!func.stringof[1..$-1];
   hdr.hash = rpchash!func;
   // call
   chan.writeNum!ushort(RPCommand.Call);
@@ -678,14 +685,84 @@ if (isRWStream!ST && is(typeof(func) == function) /*&& __traits(getProtection, f
     chan.ncunser(msg);
     throw new Exception("RPC ERROR: "~msg);
   }
-  if (replyCode != RPCommand.Ret) throw new Exception("invalid RPC reply");
-  // got reply, wow
-  static if (!is(ReturnType!func == void)) {
-    // read result
-    ReturnType!func rval;
-    chan.ncunser(rval);
-    return rval;
+  if (replyCode == RPCommand.RetRes) {
+    static if (!is(ReturnType!func == void)) {
+      // read result
+      ReturnType!func rval;
+      chan.ncunser(rval);
+      return rval;
+    } else {
+      chan.ncskip;
+      return;
+    }
+  } else if (replyCode == RPCommand.RetVoid) {
+    // got reply, wow
+    static if (!is(ReturnType!func == void)) {
+      return ReturnType!func.init;
+    } else {
+      return;
+    }
   }
+  throw new Exception("invalid RPC reply");
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// client will use this
+// it will send RPCommand.Call
+// throws on fatal stream error
+public static RT rpcallany(RT, ST, A...) (auto ref ST chan, const(char)[] name, A args) if (isRWStream!ST) {
+  import std.traits;
+  string BuildIt () {
+    string res;
+    foreach (immutable idx, const tp; A) {
+      import std.conv : to;
+      res ~= tp.stringof;
+      res ~= " a";
+      res ~= to!string(idx);
+      res ~= ";\n";
+    }
+    return res;
+  }
+  static struct RPCMarshalArgs { mixin(BuildIt); /*pragma(msg, BuildIt);*/ }
+  RPCMarshalArgs mr;
+  foreach (immutable idx, ref arg; args) {
+    import std.conv : to;
+    mixin("mr.a"~to!string(idx)~" = arg;");
+  }
+  RPCCallHeader hdr;
+  hdr.name = cast(string)name; // it is safe to cast it here
+  hdr.hash[] = 0;
+  // call
+  chan.writeNum!ushort(RPCommand.Call);
+  chan.ncser(hdr);
+  chan.ncser(mr);
+  // result
+  auto replyCode = chan.readNum!ushort;
+  if (replyCode == RPCommand.Err) {
+    string msg;
+    chan.ncunser(msg);
+    throw new Exception("RPC ERROR: "~msg);
+  }
+  if (replyCode == RPCommand.RetRes) {
+    static if (!is(RT == void)) {
+      // read result
+      RT rval;
+      chan.ncunser(rval);
+      return rval;
+    } else {
+      chan.ncskip;
+      return;
+    }
+  } else if (replyCode == RPCommand.RetVoid) {
+    // got reply, wow
+    static if (!is(RT == void)) {
+      return RT.init;
+    } else {
+      return;
+    }
+  }
+  throw new Exception("invalid RPC reply");
 }
 
 
@@ -694,7 +771,7 @@ if (isRWStream!ST && is(typeof(func) == function) /*&& __traits(getProtection, f
 public static void rpcRegisterEndpoint(alias func) () if (is(typeof(func) == function)) {
   import std.digest.sha;
   RPCEndPoint ep;
-  ep.name = fullyQualifiedName!func.stringof;
+  ep.name = fullyQualifiedName!func.stringof[1..$-1];
   ep.hash = rpchash!func;
   ep.dg = delegate (VFile fi) {
     // parse and call
@@ -724,14 +801,19 @@ public static bool rpcProcessCall(ST) (auto ref ST chan) if (isRWStream!ST) {
   if (epp is null) {
     chan.ncskip;
     chan.writeNum!ushort(RPCommand.Err);
-    chan.ncser("unknown function");
+    chan.ncser("unknown function '"~hdr.name~"'");
     return false;
   }
-  if (epp.hash != hdr.hash) {
-    chan.ncskip;
-    chan.writeNum!ushort(RPCommand.Err);
-    chan.ncser("invalid function signature");
-    return false;
+  foreach (ubyte b; hdr.hash) {
+    if (b != 0) {
+      if (epp.hash != hdr.hash) {
+        chan.ncskip;
+        chan.writeNum!ushort(RPCommand.Err);
+        chan.ncser("invalid signature for function '"~hdr.name~"'");
+        return false;
+      }
+      break;
+    }
   }
   auto rdf = chan.ncread;
   VFile rf;
@@ -742,12 +824,16 @@ public static bool rpcProcessCall(ST) (auto ref ST chan) if (isRWStream!ST) {
     chan.ncser("EXCEPTION: "~e.msg);
     return false;
   }
-  chan.writeNum!ushort(RPCommand.Ret);
-  ubyte[512] buf = void;
-  for (;;) {
-    auto rd = rf.rawRead(buf[]);
-    if (rd.length == 0) break;
-    chan.rawWriteExact(rd[]);
+  if (rf.size > 0) {
+    chan.writeNum!ushort(RPCommand.RetRes);
+    ubyte[512] buf = void;
+    for (;;) {
+      auto rd = rf.rawRead(buf[]);
+      if (rd.length == 0) break;
+      chan.rawWriteExact(rd[]);
+    }
+  } else {
+    chan.writeNum!ushort(RPCommand.RetVoid);
   }
   return true;
 }
