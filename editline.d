@@ -403,7 +403,7 @@ public:
       if (key == "right") { curline.movePos(1); continue; }
       if (key == "home" || key == "^A") { curline.movePos(-curline.MaxLen); continue; }
       if (key == "end" || key == "^E") { curline.movePos(curline.MaxLen); continue; }
-      if (key == "return") { fixCurLine(); return Result.Normal; }
+      if (key == "return") { fixCurLine(); wrt("\r\n"); return Result.Normal; }
       if (key == "tab") { fixCurLine(); autocomplete(); continue; }
       if (key == "^K") { fixCurLine(); curline.crop(); continue; }
       if (key == "^Y") { fixCurLine(); curline.clear(); continue; }
