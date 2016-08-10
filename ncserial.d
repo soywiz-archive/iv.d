@@ -20,8 +20,8 @@
 module iv.ncserial;
 private:
 
-import iv.vfs : usize;
-import iv.vfs.augs;
+import iv.vfs;
+//version(rdmd) import iv.strex;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -39,6 +39,117 @@ enum NCEntryType : ubyte {
   Struct = 0x60,
   Array  = 0x70,
   Dict   = 0x80,
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// skip serialized data block
+public void ncskip(ST) (auto ref ST st) if (isReadableStream!ST) {
+  void skip (uint count) {
+    if (count == 0) return;
+    /*
+    static if (isSeekableStream!ST) {
+      st.seek(count, Seek.Cur);
+    } else*/ {
+      ubyte[64] buf = void;
+      while (count > 0) {
+        int rd = (count > buf.length ? cast(int)buf.length : cast(int)count);
+        st.rawReadExact(buf[0..rd]);
+        count -= rd;
+      }
+    }
+  }
+
+  void skipStr () {
+    ubyte len = st.readNum!ubyte;
+    skip(len);
+  }
+
+  void skipType (ubyte tp, int count=1) {
+    switch (tp&0xf0) {
+      case NCEntryType.Bool:
+      case NCEntryType.Char:
+      case NCEntryType.Int:
+      case NCEntryType.Uint:
+      case NCEntryType.Float:
+        skip(count*(tp&0x0f)); // size
+        break;
+      case NCEntryType.Struct:
+        if ((tp&0x0f) != 0) throw new Exception("invalid struct type");
+        while (count-- > 0) {
+          skipStr(); // struct name
+          // fields
+          for (;;) {
+            tp = st.readNum!ubyte; // name length
+            if (tp == NCEntryType.End) break;
+            skip(tp); // name
+            tp = st.readNum!ubyte; // data type
+            skipType(tp);
+          }
+        }
+        break;
+      case NCEntryType.Array:
+        if ((tp&0x0f) != 0) throw new Exception("invalid array type");
+        while (count-- > 0) {
+          ubyte dimc = st.readNum!ubyte; // dimension count
+          if (dimc == 0) throw new Exception("invalid array type");
+          tp = st.readNum!ubyte; // data type
+
+          void readDim (int dcleft) {
+            auto len = st.readXInt!uint;
+            if (dcleft == 1) {
+              //foreach (immutable _; 0..len) skipType(tp);
+              if (len <= int.max) {
+                skipType(tp, len);
+              } else {
+                foreach (immutable _; 0..len) skipType(tp);
+              }
+            } else {
+              foreach (immutable _; 0..len) readDim(dcleft-1);
+            }
+          }
+          readDim(dimc);
+        }
+        break;
+      case NCEntryType.Dict:
+        if ((tp&0x0f) != 0) throw new Exception("invalid dict type");
+        while (count-- > 0) {
+          ubyte kt = st.readNum!ubyte; // key type
+          ubyte vt = st.readNum!ubyte; // value type
+          foreach (immutable _; 0..st.readXInt!usize) {
+            skipType(kt);
+            skipType(vt);
+          }
+        }
+        break;
+      default: throw new Exception("invalid data type");
+    }
+  }
+
+  skipType(st.readNum!ubyte);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// read serialized data block to buffer, return wrapped memory
+public ubyte[] ncreadBytes(ST) (auto ref ST st) if (isReadableStream!ST) {
+  ubyte[] data;
+
+  struct CopyStream {
+    void[] rawRead (void[] buf) {
+      auto rd = st.rawRead(buf);
+      if (rd.length) data ~= cast(const(ubyte)[])rd;
+      return rd;
+    }
+  }
+  wrapStream(CopyStream()).ncskip;
+  return data;
+}
+
+
+// read serialized data block to buffer, return wrapped memory
+public VFile ncread(ST) (auto ref ST st) if (isReadableStream!ST) {
+  return st.ncreadBytes.wrapMemoryRO;
 }
 
 
@@ -63,7 +174,7 @@ ubyte ncReadUbyte(ST) (auto ref ST fl) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isWriteableStream!ST) {
+public void ncser(T, ST) (auto ref ST fl, in auto ref T v) if (!is(T == class) && isWriteableStream!ST) {
   import std.traits : Unqual;
 
   void writeTypeHeader(T) () {
@@ -79,7 +190,7 @@ public void ncser(T, ST) (auto ref ST fl, in ref T v) if (!is(T == class) && isW
       writeTypeHeader!(Unqual!K);
       writeTypeHeader!(Unqual!V);
     } else static if (is(UT == bool)) {
-      fl.ncWriteUbyte(NCEntryType.Bool);
+      fl.ncWriteUbyte(cast(ubyte)(NCEntryType.Bool|bool.sizeof));
     } else static if (is(UT == char) || is(UT == wchar) || is(UT == dchar)) {
       fl.ncWriteUbyte(cast(ubyte)(NCEntryType.Char|UT.sizeof));
     } else static if (__traits(isIntegral, UT)) {
@@ -164,7 +275,7 @@ public void ncunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isRe
       checkTypeId!(Unqual!K);
       checkTypeId!(Unqual!V);
     } else static if (is(T == bool)) {
-      if (fl.ncReadUbyte != NCEntryType.Bool) throw new Exception(`invalid stream (bool expected)`);
+      if (fl.ncReadUbyte != (NCEntryType.Bool|bool.sizeof)) throw new Exception(`invalid stream (bool expected)`);
     } else static if (is(T == char) || is(T == wchar) || is(T == dchar)) {
       if (fl.ncReadUbyte != (NCEntryType.Char|T.sizeof)) throw new Exception(`invalid stream (char expected)`);
     } else static if (__traits(isIntegral, T)) {
@@ -346,7 +457,7 @@ version(ncserial_test) unittest {
 
 
   // ////////////////////////////////////////////////////////////////////////// //
-  {
+  void test0 () {
     ReplyAsmInfo ri;
     ri.cmd = 42;
     ri.list[0] ~= AssemblyInfo(666, "hell");
@@ -378,5 +489,44 @@ version(ncserial_test) unittest {
       assert(xf.fbool == true);
       assert(xf.ext == "elf");
     }
+  }
+
+  void test1 () {
+    ReplyAsmInfo ri;
+    ri.cmd = 42;
+    ri.list[0] ~= AssemblyInfo(666, "hell");
+    ri.list[1] ~= AssemblyInfo(69, "fuck");
+    ri.dict["foo"] = 42;
+    ri.dict["boo"] = 666;
+    ri.fbool = true;
+    ri.ext = "elf";
+    auto mem = wrapMemoryRW(null);
+    mem.ncser(ri);
+    {
+      mem.seek(0);
+      ReplyAsmInfo xf;
+      mem.ncunser(xf);
+      assert(mem.tell == mem.size);
+      assert(xf.cmd == 42);
+      assert(xf.list.length == 2);
+      assert(xf.list[0].length == 1);
+      assert(xf.list[1].length == 1);
+      assert(xf.list[0][0].id == 666);
+      assert(xf.list[0][0].name == "hell");
+      assert(xf.list[1][0].id == 69);
+      assert(xf.list[1][0].name == "fuck");
+      assert(xf.dict.length == 2);
+      assert(xf.dict["foo"] == 42);
+      assert(xf.dict["boo"] == 666);
+      assert(xf.fbool == true);
+      assert(xf.ext == "elf");
+    }
+    mem.seek(0);
+    mem.ncskip;
+    assert(mem.tell == mem.size);
+
+    auto m2 = mem.ncread;
+    assert(mem.tell == mem.size);
+    assert(m2.tell == mem.size);
   }
 }
