@@ -51,6 +51,7 @@ public:
     @property int length () const pure nothrow @safe @nogc { pragma(inline, true); return llen; }
 
     char opIndex (long pos) const pure nothrow @trusted @nogc { pragma(inline, true); return (pos >= 0 && pos < llen ? cline.ptr[cast(uint)pos] : 0); }
+    const(char)[] opIndex() (in auto ref WordPos wp) const pure nothrow @safe @nogc { pragma(inline, true); return this[wp.s..wp.e]; }
 
     // do not slice it, buffer WILL change
     const(char)[] opSlice () const pure nothrow @safe @nogc { pragma(inline, true); return cline[0..llen]; }
@@ -64,14 +65,14 @@ public:
     }
 
     // clear line
-    void clear () { lpos = llen = 0; }
+    void clear () pure nothrow @trusted @nogc { lpos = llen = 0; }
 
     // crop line at current position
-    void crop () { llen = lpos; }
+    void crop () pure nothrow @trusted @nogc { llen = lpos; }
 
     // set current line, move cursor to end; crop if length is too big
     // return `false` if new line was cropped
-    bool set (const(char)[] s...) {
+    bool set (const(char)[] s...) pure nothrow @trusted @nogc {
       bool res = true;
       if (s.length > MaxLen) { s = s[0..MaxLen]; res = false; }
       if (s.length) cline[0..s.length] = s[];
@@ -81,7 +82,7 @@ public:
 
     // insert chars at cursor position, move cursor
     // return `false` if there is no room, line is not modified in this case
-    bool insert (const(char)[] s...) {
+    bool insert (const(char)[] s...) pure nothrow @trusted @nogc {
       if (s.length == 0) return true;
       if (s.length > MaxLen || llen+s.length > MaxLen) return false;
       // make room
@@ -98,7 +99,7 @@ public:
 
     // replace chars at cursor position, move cursor; does appending
     // return `false` if there is no room, line is not modified in this case
-    bool replace (const(char)[] s...) {
+    bool replace (const(char)[] s...) pure nothrow @trusted @nogc {
       if (s.length == 0) return true;
       if (s.length > MaxLen || lpos+s.length > MaxLen) return false;
       // replace
@@ -109,10 +110,10 @@ public:
     }
 
     // remove chars at cursor position (delete), don't move cursor
-    void remove (int len) {
+    void remove (int len) pure nothrow @trusted @nogc {
       if (len < 1 || lpos >= llen) return;
       if (len > MaxLen) len = MaxLen;
-      if (lpos+len >= lpos) {
+      if (lpos+len >= llen) {
         // strip
         llen = lpos;
       } else {
@@ -124,12 +125,137 @@ public:
     }
 
     // delete chars at cursor position (backspace), move cursor
-    void backspace (int len) {
+    void backspace (int len) pure nothrow @trusted @nogc {
       if (len < 1 || lpos < 1) return;
       if (len > lpos) len = lpos;
       lpos -= len;
       remove(len);
     }
+
+    // //// something to make programmer's life easier //// //
+
+    static struct WordPos {
+      int s, e; // start and end position, suitable for slicing
+      @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (s >= 0 && s < e); }
+      @property int length () const pure nothrow @safe @nogc { pragma(inline, true); return e-s; }
+    }
+
+    // word positions range
+    auto words () inout pure nothrow @trusted @nogc {
+      static struct Result {
+      private:
+        const Line ln;
+        WordPos wp;
+        this (in Line aln) pure nothrow @safe @nogc { ln = aln; popFront(); }
+        this() (in Line aln, in auto ref WordPos awp) pure nothrow @safe @nogc { ln = aln; wp.s = awp.s; wp.e = awp.e; }
+      public:
+        @property const(char)[] word () const pure nothrow @safe @nogc { pragma(inline, true); return ln[wp.s..wp.e]; }
+        @property WordPos front () const pure nothrow @safe @nogc { pragma(inline, true); return WordPos(wp.s, wp.e); }
+        @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (wp.s >= ln.llen); }
+        @property auto save () const pure nothrow @safe @nogc { pragma(inline, true); return Result(ln, wp); }
+        @property void popFront () pure nothrow @trusted @nogc {
+          if (wp.s >= ln.llen) return;
+          wp.s = wp.e;
+          while (wp.s < ln.llen && ln.cline.ptr[wp.s] <= ' ') ++wp.s;
+          wp.e = wp.s;
+          if (wp.e >= ln.llen) return;
+          char qch = ln.cline.ptr[wp.e];
+          if (qch == '"' || qch == '\'' || qch == '`') {
+            // quoted
+            ++wp.e;
+            while (wp.e < ln.llen) {
+              char ch = ln.cline.ptr[wp.e++];
+              if (ch == '\\') {
+                if (wp.e < ln.llen) ++wp.e;
+              } else if (ch == qch) {
+                break;
+              }
+            }
+          } else {
+            while (wp.e < ln.llen && ln.cline.ptr[wp.e] > ' ') ++wp.e;
+          }
+        }
+      }
+      return Result(this);
+    }
+
+    int wordCount () const pure nothrow @trusted @nogc {
+      int res = 0;
+      auto ww = words();
+      while (!ww.empty) { ++res; ww.popFront(); }
+      return res;
+    }
+
+    const(char)[] word (int idx) const pure nothrow @trusted @nogc {
+      if (idx < 0) return null;
+      auto ww = words();
+      while (idx > 0 && !ww.empty) { --idx; ww.popFront(); }
+      if (!ww.empty) return this[ww.front.s..ww.front.e];
+      return null;
+    }
+
+    // assume that `pos` is inside word, return `true` if word starts with quote
+    bool wordQuoted (int pos) const pure nothrow @trusted @nogc {
+      foreach (const ref wp; words) {
+        if (pos >= wp.s && pos < wp.e) {
+          // our word
+          char ch = this[wp.s];
+          return (ch == '"' || ch == '\'' || ch == '`');
+        }
+      }
+      return false;
+    }
+
+    // we can autocomplete empty line or any word if we're at it's end
+    bool canAutocomplete () const pure nothrow @trusted @nogc {
+      if (llen == 0) return true;
+      if (llen == MaxLen) return false;
+      if (lpos == 0) return false; // we have some text, so can't
+      if (lpos == llen) return (cline.ptr[lpos-1] <= ' ' || !wordQuoted(lpos-1));
+      // end of word?
+      return (cline.ptr[lpos] <= ' ' && cline.ptr[lpos-1] > ' ' && !wordQuoted(lpos-1));
+    }
+
+    // get word number for autocompletion
+    int acWordNum () const pure nothrow @trusted @nogc {
+      if (!canAutocomplete) return -1;
+      if (lpos == llen && cline.ptr[lpos-1] <= ' ') return wordCount;
+      int idx;
+      foreach (ref wp; words) {
+        if (lpos >= wp.s && lpos <= wp.e) return idx;
+        ++idx;
+      }
+      return idx;
+    }
+
+    // get word for autocompletion
+    WordPos acWordPos () const pure nothrow @trusted @nogc {
+      if (!canAutocomplete) return WordPos();
+      if (lpos == llen && cline.ptr[lpos-1] <= ' ') return WordPos(llen, llen);
+      foreach (ref wp; words) if (lpos >= wp.s && lpos <= wp.e) return wp;
+      return WordPos(llen, llen);
+    }
+
+    // replace current with new
+    bool acWordReplace (const(char)[] w, bool addSpace=false) pure nothrow @trusted @nogc {
+      if (w.length == 0 || w.length > MaxLen || !canAutocomplete) return false;
+      foreach (const ref wp; words) {
+        if (lpos >= wp.s && lpos <= wp.e) {
+          // check if we should add space
+          if (addSpace) addSpace = (wp.e >= llen || cline.ptr[wp.e] > ' ');
+          int addlen = (addSpace ? 1 : 0);
+          if (llen-wp.length+w.length+addlen > MaxLen) return false;
+          backspace(wp.length);
+          insert(w);
+          if (addSpace) insert(' ');
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // replace current word with new, add space
+    bool acWordReplaceSpaced (const(char)[] w) pure nothrow @trusted @nogc { return acWordReplace(w, true); }
   }
 
 public:
@@ -148,6 +274,8 @@ protected:
 
 public:
   this () { promptbuf = ">".dup; curline = new Line(); }
+
+  final @property inout(Line) line () inout pure nothrow @safe @nogc { pragma(inline, true); return curline; }
 
   // const(char)[] returns slice of internal buffer, don't store it!
   final @property T get(T=string) () if (is(T : const(char)[])) {
@@ -324,6 +452,13 @@ public:
         }
         continue;
       }
+      if (key == "delete") {
+        if (curline.pos < curline.length) {
+          fixCurLine();
+          curline.remove(1);
+        }
+        continue;
+      }
       if (key == "ctrl+left") {
         if (curline.pos > 0) {
           if (curline[curline.pos-1] <= ' ') {
@@ -348,7 +483,7 @@ public:
         }
         continue;
       }
-      if (key.length >= 1) {
+      if (key.length == 1) {
         if (curline.length < Line.MaxLen) {
           fixCurLine();
           curline.insert(key);
@@ -361,9 +496,9 @@ public:
   void autocomplete () {}
 
 protected:
+static:
   void clearOutput () { wrt("\r\x1b[K"); }
 
-static:
   void wrt (const(char)[] str...) nothrow @nogc {
     import core.sys.posix.unistd : write;
     if (str.length) write(1, str.ptr, str.length);
@@ -379,6 +514,8 @@ static:
     } while (n != 0);
     wrt(buf[pos..$]);
   }
+
+  void beep () { wrt('\x07'); }
 }
 
 
@@ -393,6 +530,8 @@ void main () {
     writeln;
     if (res != EditLine.Result.Normal) break;
     writeln("[", el.get.quote, "]");
+    writeln(el.line.wordCount, " words in line");
+    foreach (const ref wp; el.line.words) writeln("  ", el.line[wp].quote);
     el.pushCurrentToHistory();
   }
 }
