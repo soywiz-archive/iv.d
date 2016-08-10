@@ -551,7 +551,7 @@ private alias Id(alias T) = T;
 
 private struct RPCEndPoint {
   string name;
-  ubyte[20] hash;
+  ubyte[32] hash;
   bool isFunction;
   VFile delegate (VFile fi) dg; // read args, do call, write result; throws on error; returns serialized res
 }
@@ -581,9 +581,9 @@ public void rpcRegisterModuleEndpoints(alias mod) () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public static ubyte[20] rpchash(alias func) () if (isCallable!func) {
+public static ubyte[32] rpchash(alias func) () if (isCallable!func) {
   import std.digest.sha;
-  SHA1 sha;
+  SHA256 sha;
 
   void put (const(void)[] buf) {
     sha.put(cast(const(ubyte)[])buf);
