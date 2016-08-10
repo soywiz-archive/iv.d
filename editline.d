@@ -25,30 +25,135 @@ import iv.strex;
 // ////////////////////////////////////////////////////////////////////////// //
 class EditLine {
 public:
+  final class Line {
+  public:
+    enum MaxLen = 4096;
+
+  private:
+    char[MaxLen] cline;
+    int lpos; // cursor position: [0..len]
+    int llen; // line length (line can be longer)
+    //uint ofs; // used in text draw
+
+  public:
+    this () {}
+
+    // cursor position
+    @property int pos () const pure nothrow @safe @nogc { pragma(inline, true); return lpos; }
+    @property void pos (int npos) pure nothrow @safe @nogc { if (npos < 0) npos = 0; if (npos > llen) npos = llen; lpos = npos; }
+    void movePos (int delta) {
+      if (delta < -MaxLen) delta = -MaxLen;
+      if (delta > MaxLen) delta = MaxLen;
+      pos = lpos+delta;
+    }
+
+    // line length
+    @property int length () const pure nothrow @safe @nogc { pragma(inline, true); return llen; }
+
+    char opIndex (long pos) const pure nothrow @trusted @nogc { pragma(inline, true); return (pos >= 0 && pos < llen ? cline.ptr[cast(uint)pos] : 0); }
+
+    // do not slice it, buffer WILL change
+    const(char)[] opSlice () const pure nothrow @safe @nogc { pragma(inline, true); return cline[0..llen]; }
+    const(char)[] opSlice (long lo, long hi) const pure nothrow @safe @nogc {
+      //pragma(inline, true);
+      if (lo >= hi) return null;
+      if (hi <= 0 || lo >= llen) return null;
+      if (lo < 0) lo = 0;
+      if (hi > llen) hi = llen;
+      return cline[cast(uint)lo..cast(uint)hi];
+    }
+
+    // clear line
+    void clear () { lpos = llen = 0; }
+
+    // crop line at current position
+    void crop () { llen = lpos; }
+
+    // set current line, move cursor to end; crop if length is too big
+    // return `false` if new line was cropped
+    bool set (const(char)[] s...) {
+      bool res = true;
+      if (s.length > MaxLen) { s = s[0..MaxLen]; res = false; }
+      if (s.length) cline[0..s.length] = s[];
+      lpos = llen = cast(int)s.length;
+      return res;
+    }
+
+    // insert chars at cursor position, move cursor
+    // return `false` if there is no room, line is not modified in this case
+    bool insert (const(char)[] s...) {
+      if (s.length == 0) return true;
+      if (s.length > MaxLen || llen+s.length > MaxLen) return false;
+      // make room
+      if (lpos < llen) {
+        import core.stdc.string : memmove;
+        memmove(cline.ptr+lpos+cast(int)s.length, cline.ptr+lpos, llen-lpos);
+      }
+      llen += cast(int)s.length;
+      // copy
+      cline[lpos..lpos+cast(int)s.length] = s[];
+      lpos += cast(int)s.length;
+      return true;
+    }
+
+    // replace chars at cursor position, move cursor; does appending
+    // return `false` if there is no room, line is not modified in this case
+    bool replace (const(char)[] s...) {
+      if (s.length == 0) return true;
+      if (s.length > MaxLen || lpos+s.length > MaxLen) return false;
+      // replace
+      cline[lpos..lpos+cast(int)s.length] = s[];
+      lpos += cast(int)s.length;
+      if (llen < lpos) llen = lpos;
+      return true;
+    }
+
+    // remove chars at cursor position (delete), don't move cursor
+    void remove (int len) {
+      if (len < 1 || lpos >= llen) return;
+      if (len > MaxLen) len = MaxLen;
+      if (lpos+len >= lpos) {
+        // strip
+        llen = lpos;
+      } else {
+        import core.stdc.string : memmove;
+        memmove(cline.ptr+lpos, cline.ptr+lpos+len, llen-(lpos+len));
+        llen -= len;
+        assert(lpos < llen);
+      }
+    }
+
+    // delete chars at cursor position (backspace), move cursor
+    void backspace (int len) {
+      if (len < 1 || lpos < 1) return;
+      if (len > lpos) len = lpos;
+      lpos -= len;
+      remove(len);
+    }
+  }
+
+public:
   enum Result {
     Normal,
     CtrlC,
     CtrlD,
   }
 
-  enum MaxLength = 4096;
   uint historyLimit = 512;
   string[] history;
 
 protected:
-  char[] curline;
-  int curlen;
-  int curpos;
-  int curofs; // output offset
+  Line curline;
   char[] promptbuf;
 
 public:
-  this () {
-    promptbuf = ">".dup;
-  }
+  this () { promptbuf = ">".dup; curline = new Line(); }
 
-  final @property T get(T=string) () if (is(T == const(char)[]) || is(T == string)) {
-    static if (is(T == string)) return curline[0..curlen].idup; else return curline[0..curlen];
+  // const(char)[] returns slice of internal buffer, don't store it!
+  final @property T get(T=string) () if (is(T : const(char)[])) {
+         static if (is(T == string)) return curline[].idup;
+    else static if (is(T == const(char)[])) return curline[];
+    else return curline[].dup;
   }
 
   final @property string prompt () { return promptbuf.idup; }
@@ -80,83 +185,105 @@ public:
         return;
       }
     }
-         if (history.length > MaxLength) history.length = MaxLength;
-    else if (history.length < MaxLength) history.length += 1;
+         if (history.length > historyLimit) history.length = historyLimit;
+    else if (history.length < historyLimit) history.length += 1;
     foreach_reverse (immutable c; 1..history.length) history[c] = history[c-1];
     history[0] = hs;
   }
 
-  // return `null` on special
   final Result readline () {
-    char[] lastInput; // stored for history walks
+    char[Line.MaxLen] lastInput; // stored for history walks
     uint lastLen; // stored for history walks
     int hpos = -1; // -1: current
+    int curofs; // output offset
 
     void fixCurLine () {
-      if (hpos != -1) {
-        curline = history[hpos].dup;
-        hpos = -1;
-      }
-      lastInput = null;
+      hpos = -1;
+      lastLen = 0;
     }
 
     void drawLine () {
-      auto wdt = ttyWidth;
-      const(char)[] cline = (hpos < 0 ? curline : history[hpos]);
-      if (wdt <= promptbuf.length+2) wdt = 2; else wdt -= promptbuf.length;
-      if (curpos < 0) curpos = 0;
-      if (curpos > curlen) curpos = curlen;
-      if (curpos < curofs) curofs = curpos-8;
-      if (curofs < 0) curofs = 0;
-      if (curofs+wdt <= curpos) {
-        curofs = curpos-(wdt < 8 ? wdt-1 : wdt-8);
-        if (curofs < 0) curofs = 0;
+      auto wdt = ttyWidth-1;
+      if (wdt < 16) wdt = 16;
+      const(char)[] cline = (hpos < 0 ? curline[] : history[hpos]);
+      if (wdt <= promptbuf.length+3) wdt = 3; else wdt -= cast(int)promptbuf.length;
+      int wvis = (wdt < 10 ? wdt-1 : 8);
+      int cpos = curline.pos;
+      // special handling for negative offset: it means "make left part visible"
+      if (curofs < 0) {
+        // is cursor at eol? special handling
+        if (cpos == curline.length) {
+          curofs = cpos-wdt;
+          if (curofs < 0) curofs = 0;
+        } else {
+          // make wvis char after cursor visible
+          curofs = cpos-wdt+wvis;
+          if (curofs < 0) curofs = 0;
+          // i did something wrong here...
+          if (curofs >= curline.length) {
+            curofs = curline.length-wdt;
+            if (curofs < 0) curofs = 0;
+          }
+        }
+      } else {
+        // is cursor too far at left?
+        if (cpos < curofs) {
+          // make wvis left chars visible
+          curofs = cpos-wvis;
+          if (curofs < 0) curofs = 0;
+        }
+        // is cursor too far at right?
+        if (curofs+wdt <= cpos) {
+          // make wvis right chars visible
+          curofs = cpos-wdt+wvis;
+          if (curofs < 0) curofs = 0;
+          if (curofs >= curline.length) {
+            curofs = curline.length-wdt;
+            if (curofs < 0) curofs = 0;
+          }
+        }
       }
+      assert(curofs >= 0 && curofs <= curline.length);
       int end = curofs+wdt;
-      if (end > curlen) end = curlen;
+      if (end > curline.length) end = curline.length;
       wrt("\r");
       wrt(promptbuf);
-      wrt(cline[curofs..end]);
-      wrt("\x1b[K\r\x1b[");
-      wrtuint(promptbuf.length+(curpos-curofs));
-      wrt("C");
+      wrt(curline[curofs..end]);
+      if (cpos == end) {
+        wrt("\x1b[K");
+      } else {
+        wrt("\x1b[K\r\x1b[");
+        wrtuint(promptbuf.length+(cpos-curofs));
+        wrt("C");
+      }
     }
 
-    curlen = 0;
-    curpos = 0;
     curofs = 0;
-    curline.assumeSafeAppend;
+    curline.clear();
+
     auto ttymode = ttyGetMode();
     scope(exit) ttySetMode(ttymode);
     ttySetRaw();
-
-    void doBackspace () {
-      if (curlen-curpos > 1) {
-        import core.stdc.string : memmove;
-        memmove(curline.ptr+curpos-1, curline.ptr+curpos, curlen-curpos);
-      }
-      --curpos;
-      --curlen;
-    }
 
     for (;;) {
       drawLine();
       auto key = ttyReadKey();
       if (key.length == 0) continue;
-      if (key == "^C") { curlen = 0; return Result.CtrlC; }
-      if (key == "^D") { curlen = 0; return Result.CtrlD; }
-      if (key == "left") { --curpos; continue; }
-      if (key == "right") { ++curpos; continue; }
-      if (key == "home" || key == "^A") { curpos = 0; continue; }
-      if (key == "end" || key == "^E") { curpos = curlen; continue; }
+      if (key == "^C") { curline.clear(); return Result.CtrlC; }
+      if (key == "^D") { curline.clear(); return Result.CtrlD; }
+      if (key == "left") { curline.movePos(-1); continue; }
+      if (key == "right") { curline.movePos(1); continue; }
+      if (key == "home" || key == "^A") { curline.movePos(-curline.MaxLen); continue; }
+      if (key == "end" || key == "^E") { curline.movePos(curline.MaxLen); continue; }
       if (key == "return") { fixCurLine(); return Result.Normal; }
       if (key == "tab") { fixCurLine(); autocomplete(); continue; }
-      if (key == "^K") { fixCurLine(); curlen = curpos; continue; }
-      if (key == "^W") {
-        if (curpos > 0) {
+      if (key == "^K") { fixCurLine(); curline.crop(); continue; }
+      if (key == "^Y") { fixCurLine(); curline.clear(); continue; }
+      if (key == "^W" || key == "alt+^H") {
+        if (curline.pos > 0) {
           fixCurLine();
-          while (curpos > 0 && curline[curpos-1] <= ' ') doBackspace();
-          while (curpos > 0 && curline[curpos-1] > ' ') doBackspace();
+          while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.backspace(1);
+          while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.backspace(1);
           continue;
         }
       }
@@ -164,52 +291,67 @@ public:
         if (history.length == 0) continue;
         if (hpos == -1) {
           // store current line so we can return to it
-          lastInput = curline;
-          lastLen = curlen;
+          lastInput[0..curline.length] = curline[];
+          lastLen = curline.length;
           hpos = 0;
         } else if (hpos < history.length-1) {
           ++hpos;
         } else {
           continue;
         }
-        curlen = cast(int)history[hpos].length;
-        curpos = curlen;
+        curline.set(history[hpos]);
         curofs = 0;
         continue;
       }
       if (key == "down") {
         if (history.length == 0) continue;
         if (hpos == 0) {
-          // store current line so we can return to it
+          // restore previous user line
           hpos = -1;
-          curline = lastInput;
-          curlen = lastLen;
+          curline.set(lastInput[0..lastLen]);
+          curofs = 0;
         } else if (hpos > 0) {
           --hpos;
-          curlen = cast(int)history[hpos].length;
-        } else {
-          continue;
+          curline.set(history[hpos]);
+          curofs = 0;
         }
-        curpos = curlen;
-        curofs = 0;
         continue;
       }
       if (key == "backspace") {
-        if (curlen > 0 && curpos > 0) {
+        if (curline.length > 0 && curline.pos > 0) {
           fixCurLine();
-          doBackspace();
+          curline.backspace(1);
         }
         continue;
       }
-      if (key.length == 1) {
-        if (curlen < MaxLength) {
-          import core.stdc.string : memmove;
+      if (key == "ctrl+left") {
+        if (curline.pos > 0) {
+          if (curline[curline.pos-1] <= ' ') {
+            // move to word end
+            while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.movePos(-1);
+          } else {
+            // move to word start
+            while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.movePos(-1);
+          }
+        }
+        continue;
+      }
+      if (key == "ctrl+right") {
+        if (curline.pos < curline.length) {
+          if (curline[curline.pos] <= ' ') {
+            // move to word start
+            while (curline.pos < curline.length && curline[curline.pos] <= ' ') curline.movePos(1);
+          } else {
+            // move to word end
+            while (curline.pos < curline.length && curline[curline.pos] > ' ') curline.movePos(1);
+          }
+        }
+        continue;
+      }
+      if (key.length >= 1) {
+        if (curline.length < Line.MaxLen) {
           fixCurLine();
-          if (curlen+1 >= curline.length) curline.length = curlen+1024;
-          // make room
-          if (curpos < curlen) memmove(curline.ptr+curpos+1, curline.ptr+curpos, curlen-curpos); // insert
-          curline[curpos++] = key[0];
-          ++curlen;
+          curline.insert(key);
         }
         continue;
       }
@@ -219,15 +361,6 @@ public:
   void autocomplete () {}
 
 protected:
-  void replaceLine (const(char)[] s) {
-    if (s.length > MaxLength) s = s[0..MaxLength];
-    if (curline.length < s.length) curline.length = s.length;
-    if (s.length) {
-      curline[0..s.length] = s[];
-    }
-    curpos = curlen = cast(int)s.length;
-  }
-
   void clearOutput () { wrt("\r\x1b[K"); }
 
 static:
@@ -254,8 +387,13 @@ version(editline_test) {
 import iv.strex;
 void main () {
   auto el = new EditLine();
-  el.readline();
-  import std.stdio;
-  writeln("\n[", el.get.quote, "]");
+  for (;;) {
+    import std.stdio;
+    auto res = el.readline();
+    writeln;
+    if (res != EditLine.Result.Normal) break;
+    writeln("[", el.get.quote, "]");
+    el.pushCurrentToHistory();
+  }
 }
 }
