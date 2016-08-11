@@ -580,19 +580,19 @@ struct DisasmData {
 // ////////////////////////////////////////////////////////////////////////// //
 private:
 // Description of 80x86 command
-struct AsmInstrDsc {
+public struct AsmInstrDsc {
   string name;        // Symbolic name for this command
   uint cmdtype;       // Command's features, set of D_xxx
   uint exttype;       // More features, set of DX_xxx
   uint length;        // Length of main code (before ModRM/SIB)
   uint mask;          // Mask for first 4 bytes of the command
   uint code;          // Compare masked bytes with this
-  uint postbyte;      // Postbyte
+  ubyte postbyte;     // Postbyte
   uint[NOPERAND] arg; // Types of arguments, set of B_xxx
 }
 
 
-immutable AsmInstrDsc[1394] asmInstrTable = [
+public immutable AsmInstrDsc[1394] asmInstrTable = [
   AsmInstrDsc("PAUSE\0",D_SSE|D_MUSTF3,0,1,0x000000FF,0x00000090,0x00,[B_NONE,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("NOP\0",D_CMD,DX_NOP,1,0x000000FF,0x00000090,0x00,[B_NONE,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("NOP\0",D_CMD|D_UNDOC,DX_NOP,2,0x0000FFFF,0x0000190F,0x00,[B_INT,B_NONE,B_NONE,B_NONE]),
@@ -2028,6 +2028,9 @@ immutable string[NREG] crname = ["CR0", "CR1", "CR2", "CR3", "CR4", "CR5", "CR6"
 // Names of debug registers.
 immutable string[NREG] drname = ["DR0", "DR1", "DR2", "DR3", "DR4", "DR5", "DR6", "DR7"];
 
+
+// ////////////////////////////////////////////////////////////////////////// //
+private:
 // Declarations for data types. Depending on ssesizemode, name of 16-byte data type (DQWORD)
 // may be changed to XMMWORD and that of 32-bit type (QQWORD) to YMMWORD.
 immutable string[33] sizename = [
