@@ -592,7 +592,8 @@ public struct AsmInstrDsc {
 }
 
 
-public immutable AsmInstrDsc[1394] asmInstrTable = [
+// '*' in name meads "size modifier" (like in "PUSHAD", for example)
+public static immutable AsmInstrDsc[1388] asmInstrTable = [
   AsmInstrDsc("PAUSE\0",D_SSE|D_MUSTF3,0,1,0x000000FF,0x00000090,0x00,[B_NONE,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("NOP\0",D_CMD,DX_NOP,1,0x000000FF,0x00000090,0x00,[B_NONE,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("NOP\0",D_CMD|D_UNDOC,DX_NOP,2,0x0000FFFF,0x0000190F,0x00,[B_INT,B_NONE,B_NONE,B_NONE]),
@@ -1981,59 +1982,62 @@ public immutable AsmInstrDsc[1394] asmInstrTable = [
   AsmInstrDsc("REP\0",D_PREFIX|D_SUSPICIOUS,0,1,0x000000FF,0x000000F3,0x00,[B_NONE,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("REPE\0",D_PREFIX|D_SUSPICIOUS,0,1,0x000000FF,0x000000F3,0x00,[B_NONE,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("REPZ\0",D_PREFIX|D_SUSPICIOUS,0,1,0x000000FF,0x000000F3,0x00,[B_NONE,B_NONE,B_NONE,B_NONE]),
-  // Pseudocommands used by Assembler for masked search only.
+  // pseudocommands used by Assembler for masked search only.
+  /+
   AsmInstrDsc("JCC\0",D_PSEUDO|D_BHINT|D_COND,0,1,0x000000F0,0x00000070,0x00,[B_BYTEOFFS|B_JMPCALL,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("JCC\0",D_PSEUDO|D_BHINT|D_COND,0,2,0x0000F0FF,0x0000800F,0x00,[B_OFFSET|B_JMPCALL,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("SETCC\0",D_PSEUDO|D_COND,0,2,0x0038F0FF,0x0000900F,0x00,[B_INT8|B_SHOWSIZE|B_CHG,B_NONE,B_NONE,B_NONE]),
   AsmInstrDsc("CMOVCC\0",D_PSEUDO|D_COND,0,2,0x0000F0FF,0x0000400F,0x00,[B_REG|B_UPD,B_INT,B_NONE,B_NONE]),
   AsmInstrDsc("FCMOVCC\0",D_PSEUDO|D_COND,0,2,0x0000E0FF,0x0000C0DA,0x00,[B_ST0|B_CHG,B_ST,B_NONE,B_NONE]),
   AsmInstrDsc("FCMOVCC\0",D_PSEUDO|D_COND,0,2,0x0000E0FF,0x0000C0DB,0x00,[B_ST0|B_CHG,B_ST,B_NONE,B_NONE]),
+  +/
 ];
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // ///////////////////////////// SYMBOLIC NAMES ///////////////////////////// //
-
+package(iv.olly) {
 // 8-bit register names, sorted by 'natural' index (as understood by CPU, not
 // in the alphabetical order as some 'programmers' prefer).
-immutable string[NREG] regname8 = ["AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"];
+static immutable string[NREG] regname8 = ["AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"];
 
 // 16-bit register names.
-immutable string[NREG] regname16 = ["AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI"];
+static immutable string[NREG] regname16 = ["AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI"];
 
 // 32-bit register names.
-immutable string[NREG] regname32 = ["EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI"];
+static immutable string[NREG] regname32 = ["EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI"];
 
 // Names of segment registers.
-immutable string[NREG] segname = ["ES", "CS", "SS", "DS", "FS", "GS", "SEG6:", "SEG7:"];
+static immutable string[NREG] segname = ["ES", "CS", "SS", "DS", "FS", "GS", "SEG6:", "SEG7:"];
 
 // Names of FPU registers, classical form.
-immutable string[NREG] fpulong = ["ST(0)", "ST(1)", "ST(2)", "ST(3)", "ST(4)", "ST(5)", "ST(6)", "ST(7)"];
+static immutable string[NREG] fpulong = ["ST(0)", "ST(1)", "ST(2)", "ST(3)", "ST(4)", "ST(5)", "ST(6)", "ST(7)"];
 
 // Names of FPU registers, short form.
-immutable string[NREG] fpushort = ["ST0", "ST1", "ST2", "ST3", "ST4", "ST5", "ST6", "ST7"];
+static immutable string[NREG] fpushort = ["ST0", "ST1", "ST2", "ST3", "ST4", "ST5", "ST6", "ST7"];
 
 // Names of MMX/3DNow! registers.
-immutable string[NREG] mmxname = ["MM0", "MM1", "MM2", "MM3", "MM4", "MM5", "MM6", "MM7"];
+static immutable string[NREG] mmxname = ["MM0", "MM1", "MM2", "MM3", "MM4", "MM5", "MM6", "MM7"];
 
 // Names of 128-bit SSE registers.
-immutable string[NREG] sse128 = ["XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7"];
+static immutable string[NREG] sse128 = ["XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7"];
 
 // Names of 256-bit SSE registers.
-immutable string[NREG] sse256 = ["YMM0", "YMM1", "YMM2", "YMM3", "YMM4", "YMM5", "YMM6", "YMM7"];
+static immutable string[NREG] sse256 = ["YMM0", "YMM1", "YMM2", "YMM3", "YMM4", "YMM5", "YMM6", "YMM7"];
 
 // Names of control registers.
-immutable string[NREG] crname = ["CR0", "CR1", "CR2", "CR3", "CR4", "CR5", "CR6", "CR7"];
+static immutable string[NREG] crname = ["CR0", "CR1", "CR2", "CR3", "CR4", "CR5", "CR6", "CR7"];
 
 // Names of debug registers.
-immutable string[NREG] drname = ["DR0", "DR1", "DR2", "DR3", "DR4", "DR5", "DR6", "DR7"];
+static immutable string[NREG] drname = ["DR0", "DR1", "DR2", "DR3", "DR4", "DR5", "DR6", "DR7"];
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
 // Declarations for data types. Depending on ssesizemode, name of 16-byte data type (DQWORD)
 // may be changed to XMMWORD and that of 32-bit type (QQWORD) to YMMWORD.
-immutable string[33] sizename = [
+static immutable string[33] sizename = [
   null,     "BYTE", "WORD",  null,
   "DWORD",  null,   "FWORD", null,
   "QWORD",  null,   "TBYTE", null,
@@ -2046,7 +2050,7 @@ immutable string[33] sizename = [
 ];
 
 // Keywords for immediate data. HLA uses sizename[] instead of sizekey[].
-immutable string[33] sizekey = [
+static immutable string[33] sizekey = [
   null,  "DB", "DW", null,
   "DD",  null, "DF", null,
   "DQ",  null, "DT", null,
@@ -2059,7 +2063,7 @@ immutable string[33] sizekey = [
 ];
 
 // Keywords for immediate data in AT&T format.
-immutable string[33] sizeatt = [
+static immutable string[33] sizeatt = [
   null,     ".BYTE", ".WORD",  null,
   ".LONG",  null,    ".FWORD", null,
   ".QUAD",  null,    ".TBYTE", null,
@@ -2072,7 +2076,7 @@ immutable string[33] sizeatt = [
 ];
 
 // Comparison predicates in SSE [0..7] and VEX commands [0..31].
-immutable string[32] ssepredicate = [
+static immutable string[32] ssepredicate = [
   "EQ",       "LT",       "LE",       "UNORD",
   "NEQ",      "NLT",      "NLE",      "ORD",
   "EQ_UQ",    "NGE",      "NGT",      "FALSE",
@@ -4690,7 +4694,7 @@ public string disErrMessage (uint errors, uint warnings) {
   if (errors&DAE_SAMEPREF) return "Two prefixes from the same group";
   if (errors&DAE_MANYPREF) return "More than 4 prefixes";
   if (errors&DAE_BADCR) return "Invalid CR register";
-  if (errors&DAE_INTERN) return "Internal OllyDbg error";
+  if (errors&DAE_INTERN) return "Internal error";
 
   if (warnings&DAW_DATASIZE) return "Superfluous operand size prefix";
   if (warnings&DAW_ADDRSIZE) return "Superfluous address size prefix";

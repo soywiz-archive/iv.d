@@ -136,11 +136,6 @@ enum {
   PDI, // EDI (in MMX extentions)
 }
 
-struct AsmAddrDec {
-  int defseg;
-  string descr;
-}
-
 struct AsmInstrData {
   uint mask;              // Mask for first 4 bytes of the command
   uint code;              // Compare masked bytes with this
@@ -207,46 +202,55 @@ enum   C_EXPL = 0x01; // (non-MMX) Specify explicit memory size
 // package. Contain names of register, register combinations or commands and
 // their properties.
 
-immutable string[9][3] regname = [
+static immutable string[9][3] regname = [
   ["AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH", "R8" ],
   ["AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI", "R16"],
   ["EAX","ECX","EDX","EBX","ESP","EBP","ESI","EDI","R32"],
 ];
 
-immutable string[8] segname = ["ES","CS","SS","DS","FS","GS","SEG?","SEG?"];
+static immutable string[8] segname = ["ES","CS","SS","DS","FS","GS","SEG?","SEG?"];
 
-immutable string[11] sizename = [
+static immutable string[11] sizename = [
   "(0-BYTE)", "BYTE", "WORD", "(3-BYTE)",
   "DWORD", "(5-BYTE)", "FWORD", "(7-BYTE)",
   "QWORD", "(9-BYTE)", "TBYTE"
 ];
 
-immutable AsmAddrDec[8] addr16 = [
-  AsmAddrDec(SEG_DS,"BX+SI"),
-  AsmAddrDec(SEG_DS,"BX+DI"),
-  AsmAddrDec(SEG_SS,"BP+SI"),
-  AsmAddrDec(SEG_SS,"BP+DI"),
-  AsmAddrDec(SEG_DS,"SI"),
-  AsmAddrDec(SEG_DS,"DI"),
-  AsmAddrDec(SEG_SS,"BP"),
-  AsmAddrDec(SEG_DS,"BX"),
+static immutable int[8] addr32 = [
+  SEG_DS,
+  SEG_DS,
+  SEG_DS,
+  SEG_DS,
+  SEG_SS,
+  SEG_SS,
+  SEG_DS,
+  SEG_DS,
 ];
 
-immutable AsmAddrDec[8] addr32 = [
-  AsmAddrDec(SEG_DS,"EAX"),
-  AsmAddrDec(SEG_DS,"ECX"),
-  AsmAddrDec(SEG_DS,"EDX"),
-  AsmAddrDec(SEG_DS,"EBX"),
-  AsmAddrDec(SEG_SS,""),
-  AsmAddrDec(SEG_SS,"EBP"),
-  AsmAddrDec(SEG_DS,"ESI"),
-  AsmAddrDec(SEG_DS,"EDI"),
-];
+static immutable string[9] fpuname = ["ST0","ST1","ST2","ST3","ST4","ST5","ST6","ST7","FPU"];
+static immutable string[9] mmxname = ["MM0","MM1","MM2","MM3","MM4","MM5","MM6","MM7","MMX"];
+static immutable string[9] crname = ["CR0","CR1","CR2","CR3","CR4","CR5","CR6","CR7","CRX"];
+static immutable string[9] drname = ["DR0","DR1","DR2","DR3","DR4","DR5","DR6","DR7","DRX"];
 
-immutable string[9] fpuname = ["ST0","ST1","ST2","ST3","ST4","ST5","ST6","ST7","FPU"];
-immutable string[9] mmxname = ["MM0","MM1","MM2","MM3","MM4","MM5","MM6","MM7","MMX"];
-immutable string[9] crname = ["CR0","CR1","CR2","CR3","CR4","CR5","CR6","CR7","CRX"];
-immutable string[9] drname = ["DR0","DR1","DR2","DR3","DR4","DR5","DR6","DR7","DRX"];
+private __gshared uint[140][26] asmmnemolist; // 26 latin letters
+
+shared static this () {
+  foreach (ref arr; asmmnemolist) arr[] = uint.max;
+  foreach (immutable idx, const ref ai; asmInstrs) {
+    auto np = ai.name.ptr;
+    while (*np && (*np < 'A' || *np > 'Z')) ++np;
+    if (*np < 'A' || *np > 'Z') assert(0, "invalid asm mnemonic: "~ai.name);
+    bool ok = false;
+    foreach (immutable xidx, ref uint ni; asmmnemolist[*np-'A']) {
+      if (ni == uint.max && xidx < asmmnemolist[*np-'A'].length-1) {
+        ok = true;
+        ni = cast(uint)idx;
+        break;
+      }
+    }
+    if (!ok) assert(0, "too many commands starting with letter '"~(*np)~"'");
+  }
+}
 
 // List of available processor commands with decoding, types of parameters and
 // other useful information. Last element has field mask=0. If mnemonic begins
@@ -256,7 +260,7 @@ immutable string[9] drname = ["DR0","DR1","DR2","DR3","DR4","DR5","DR6","DR7","D
 // asterisk ('*') will be substituted by either W (16), D (32) or none (16/32)
 // character. If command is of type C_MMX or C_NOW, or if type contains C_EXPL
 // (=0x01), Disassembler must specify explicit size of memory operand.
-immutable AsmInstrData[585] asmInstrs = [
+static immutable AsmInstrData[585] asmInstrs = [
   AsmInstrData(0x0000FF, 0x000090, 1,00,  NNN,NNN,NNN, C_CMD+0,        "NOP\0"),
   AsmInstrData(0x0000FE, 0x00008A, 1,WW,  REG,MRG,NNN, C_CMD+0,        "MOV\0"),
   AsmInstrData(0x0000F8, 0x000050, 1,00,  RCM,NNN,NNN, C_PSH+0,        "PUSH\0"),
@@ -936,6 +940,7 @@ struct AsmScanData {
   uint stpc;           // starting pc (for '$')
   bool defaultHex;     // default number base is hex
   bool inMath;         // true: don't convert '][' to '+'
+  bool noExprs;        // true: no expression parsing
 
   void skipBlanks () nothrow @nogc {
     while (*asmcmd > 0 && *asmcmd <= ' ') ++asmcmd;
@@ -1185,6 +1190,19 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       scanasm(scdata, 0, resolver);
       if (scdata.scan == SCAN_SYMB && scdata.prio == prio) {
         auto op = scdata.idata;
+        // check if this is not a register or keyword
+        {
+          auto sv1 = scdata.save;
+          scanasm(scdata, SA_NAME, resolver);
+          if (scdata.scan != SCAN_SYMB) {
+            if (scdata.scan != SCAN_UCONST && scdata.scan != SCAN_DCONST && scdata.scan != SCAN_FCONST) {
+              // alas, abort right here
+              scdata.restore(saved);
+              break;
+            }
+          }
+          scdata.restore(sv1);
+        }
         auto op2 = doExpr(prio-1);
         if (!op2.valid) { scdata.restore(saved); return op2; }
         if (!op1.upgradeType(op2)) { scdata.asmerror = "invalid math operation"; scdata.scan = SCAN_ERR; return MathOp(); }
@@ -1422,7 +1440,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       ++scdata.asmcmd;
       scdata.idata = hex;
       scdata.scan = SCAN_UCONST;
-      if (!scdata.inMath) {
+      if (!scdata.inMath && !scdata.noExprs) {
         // retreat and do expression
         scdata.inMath = true;
         scope(exit) scdata.inMath = false;
@@ -1463,7 +1481,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
         }
         scdata.fdata = floating;
         scdata.scan = SCAN_FCONST;
-        if (!scdata.inMath) {
+        if (!scdata.inMath && !scdata.noExprs) {
           // retreat and do expression
           scdata.inMath = true;
           scope(exit) scdata.inMath = false;
@@ -1476,7 +1494,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       } else {
         scdata.fdata = decimal;
         scdata.scan = SCAN_FCONST;
-        if (!scdata.inMath) {
+        if (!scdata.inMath && !scdata.noExprs) {
           // retreat and do expression
           scdata.inMath = true;
           scope(exit) scdata.inMath = false;
@@ -1496,7 +1514,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
       scdata.scan = SCAN_UCONST;
       scdata.idata = decimal;
     }
-    if (!scdata.inMath) {
+    if (!scdata.inMath && !scdata.noExprs) {
       // retreat and do expression
       scdata.inMath = true;
       scope(exit) scdata.inMath = false;
@@ -1512,7 +1530,7 @@ private void scanasm (ref AsmScanData scdata, int mode, scope ResolveSymCB resol
     ++scdata.asmcmd;
     scdata.idata = scdata.stpc;
     scdata.scan = SCAN_UCONST;
-    if (!scdata.inMath) {
+    if (!scdata.inMath && !scdata.noExprs) {
       // retreat and do expression
       scdata.inMath = true;
       scope(exit) scdata.inMath = false;
@@ -1957,7 +1975,8 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
   errtext[0] = '\0';
   scanasm(scdata, SA_NAME, resolver);
   if (scdata.scan == SCAN_EOL) return 0; // End of line, nothing to assemble
-  //TODO: ??? process "db" and company here
+
+  // process "db" and company
   if (scdata.scan == SCAN_DEFB || scdata.scan == SCAN_DEFW || scdata.scan == SCAN_DEFD) {
     if (attempt != 0) { xstrcpy(errtext, "Invalid command"); goto error; } // only one attempt
     uint bpos = 0;
@@ -2048,6 +2067,8 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
     }
     return model.length;
   }
+
+  //scdata.noExprs = true; // temp
   // Fetch all REPxx and LOCK prefixes
   for (;;) {
     if (scdata.scan == SCAN_REP || scdata.scan == SCAN_REPE || scdata.scan == SCAN_REPNE) {
@@ -2062,7 +2083,7 @@ public int assemble(const(char)[] cmdstr, uint ip, AsmModel* model, in AsmOption
     }
     scanasm(scdata, SA_NAME, resolver);
   }
-  if (scdata.scan != SCAN_NAME || scdata.idata > 16) { xstrcpy(errtext, "Command mnemonic expected"); goto error; }
+  if (scdata.scan != SCAN_NAME || scdata.idata > 16 || toupper(scdata.sdata[0]) < 'A' || toupper(scdata.sdata[0]) > 'Z') { xstrcpy(errtext, "Command mnemonic expected"); goto error; }
   nameend = scdata.asmcmd;
   strupr(scdata.sdata.ptr);
   // Prepare full mnemonic (including repeat prefix, if any).
@@ -2110,8 +2131,10 @@ retrylongjump:
   // Main assembly loop: try to find the command which matches all operands,
   // but do not process operands yet.
   namelen = strlen(name.ptr);
-  foreach (const ref cdx; asmInstrs) {
-    pd = &cdx;
+  if (toupper(name[0]) < 'A' || toupper(name[0] > 'Z')) assert(0, "internal assembler error");
+  foreach (uint amnidx; asmmnemolist[toupper(name[0])-'A'][]) {
+    if (amnidx == uint.max) break;
+    pd = &asmInstrs[amnidx];
     if (pd.name[0] == '&') {
       // Mnemonic depends on operand size
       j = 1;
@@ -2563,7 +2586,9 @@ retrylongjump:
       case MFE: // Memory in ModRM byte (FPU environment)
       case MFS: // Memory in ModRM byte (FPU state)
       case MFX: // Memory in ModRM byte (ext. FPU state)
-        hasrm = 1; displacement = op.offset; anydisp = op.anyoffset;
+        hasrm = 1;
+        displacement = op.offset;
+        anydisp = op.anyoffset;
         if (op.base < 0 && op.index < 0) {
           dispsize = 4; // Special case of immediate address
           if (op.segment != SEG_UNDEF && op.segment != SEG_DS) segment = op.segment;
@@ -2581,7 +2606,7 @@ retrylongjump:
             dispsize = 4;
           }
           if (op.base < 8) {
-            if (op.segment != SEG_UNDEF && op.segment != addr32[op.base].defseg) segment = op.segment;
+            if (op.segment != SEG_UNDEF && op.segment != addr32[op.base]) segment = op.segment;
             tcode[i+1] |= cast(ubyte)op.base; // Note that case [ESP] has base<0.
             tmask[i+1] |= 0x07;
           } else {
@@ -2613,7 +2638,7 @@ retrylongjump:
           }
           if (op.base < 8) {
             if (op.base < 0) op.base = 0x05;
-            if (op.segment != SEG_UNDEF && op.segment != addr32[op.base].defseg) segment = op.segment;
+            if (op.segment != SEG_UNDEF && op.segment != addr32[op.base]) segment = op.segment;
             tcode[i+2] |= cast(ubyte)op.base;
             tmask[i+2] |= 0x07;
           } else {
@@ -2626,7 +2651,8 @@ retrylongjump:
       case VXD: // VxD service (32-bit only)
         if (datasize == 0 && pd.arg2 == NNN && (pd.bits == SS || pd.bits == WS)) datasize = 4;
         if (datasize == 0) { xstrcpy(errtext, "Please specify operand size"); goto error; }
-        immediate = op.offset; anyimm = op.anyoffset;
+        immediate = op.offset;
+        anyimm = op.anyoffset;
         if (pd.bits == SS || pd.bits == WS) {
           if (datasize > 1 && (constsize&2) != 0 && ((immediate >= -128 && immediate < 128) || op.anyoffset != 0)) { immsize = 1; tcode[i] |= 0x02; } else immsize = datasize;
           tmask[i] |= 0x02;
