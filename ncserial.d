@@ -539,6 +539,7 @@ private import std.traits;
 
 
 public enum NCRPCEP;
+public struct NCRPCEPName { string name; } // RPC endpoint name, can be used instead of NCRPCEP
 
 public enum RPCommand : ushort {
   Call = 0x29a,
@@ -583,9 +584,11 @@ public void rpcRegisterModuleEndpoints(alias mod) (const(char)[] prefix=null) {
       alias member = Id!(__traits(getMember, mod, memberName));
       // is it a function marked with export?
       static if (is(typeof(member) == function) /*&& __traits(getProtection, member) == "export"*/) {
-        static if (hasUDA!(member, NCRPCEP)) {
+        static if (hasUDA!(member, NCRPCEPName)) {
           //pragma(msg, memberName);
-          rpcRegisterEndpointPrefixed!member(prefix);
+          rpcRegisterEndpoint!member(null, getUDAs!(member, NCRPCEPName)[0].name);
+        } else static if (hasUDA!(member, NCRPCEP)) {
+          rpcRegisterEndpoint!member(prefix);
         }
       }
     }
@@ -785,7 +788,8 @@ public static RT rpcallany(RT, ST, A...) (auto ref ST chan, const(char)[] name, 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // register RPC endpoint (server-side)
-public static void rpcRegisterEndpointPrefixed(alias func) (const(char)[] prefix, const(char)[] name=null) if (is(typeof(func) == function)) {
+// if you'll specify only prefix, it will be added to func name
+public static void rpcRegisterEndpoint(alias func) (const(char)[] prefix=null, const(char)[] name=null) if (is(typeof(func) == function)) {
   import std.digest.sha;
   RPCEndPoint ep;
   if (name.length) {
@@ -810,11 +814,6 @@ public static void rpcRegisterEndpointPrefixed(alias func) (const(char)[] prefix
     return fo;
   };
   endpoints[ep.name] = ep;
-}
-
-
-public static void rpcRegisterEndpoint(alias func) (const(char)[] name=null) if (is(typeof(func) == function)) {
-  rpcRegisterEndpointPrefixed!func(null, name);
 }
 
 
