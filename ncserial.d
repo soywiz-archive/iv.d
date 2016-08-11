@@ -538,6 +538,8 @@ version(ncserial_test) unittest {
 private import std.traits;
 
 
+public enum NCRPCEP;
+
 public enum RPCommand : ushort {
   Call = 0x29a,
   RetVoid,
@@ -561,19 +563,30 @@ private RPCEndPoint[string] endpoints;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private string nodots (string s) {
+  if (s.length > 2 && s[0] == '"' && s[$-1] == '"') s = s[1..$-1];
+  usize pos = s.length;
+  while (pos > 0 && s[pos-1] != '.') --pos;
+  return s[pos..$];
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public string[] rpcEndpointNames () { return endpoints.keys; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // look over the whole module for exported functions
-public void rpcRegisterModuleEndpoints(alias mod) () {
+public void rpcRegisterModuleEndpoints(alias mod) (const(char)[] prefix=null) {
   foreach (string memberName; __traits(allMembers, mod)) {
     static if (is(typeof(__traits(getMember, mod, memberName)))) {
       alias member = Id!(__traits(getMember, mod, memberName));
       // is it a function marked with export?
-      static if (is(typeof(member) == function) && __traits(getProtection, member) == "export") {
-        //pragma(msg, memberName);
-        rpcRegisterEndpoint!member;
+      static if (is(typeof(member) == function) /*&& __traits(getProtection, member) == "export"*/) {
+        static if (hasUDA!(member, NCRPCEP)) {
+          //pragma(msg, memberName);
+          rpcRegisterEndpointPrefixed!member(prefix);
+        }
       }
     }
   }
@@ -590,7 +603,7 @@ public static ubyte[32] rpchash(alias func) () if (isCallable!func) {
   }
 
   sha.start();
-  put(fullyQualifiedName!func.stringof[1..$-1]);
+  //put(nodots(fullyQualifiedName!func.stringof));
   put(ReturnType!func.stringof);
   put(",");
   foreach (immutable par; Parameters!func) {
@@ -637,7 +650,7 @@ private static mixin template BuildRPCArgs (alias func) {
 // ////////////////////////////////////////////////////////////////////////// //
 public struct RPCCallHeader {
   string name; // fqn
-  ubyte[20] hash;
+  ubyte[32] hash;
 }
 
 
@@ -656,7 +669,7 @@ private void fcopy (VFile to, VFile from) {
 // client will use this
 // it will send RPCommand.Call
 // throws on fatal stream error
-public static auto rpcall(alias func, ST, A...) (auto ref ST chan, A args)
+public static auto rpcall(alias func, string prefix=null, string name=null, ST, A...) (auto ref ST chan, A args)
 if (isRWStream!ST && is(typeof(func) == function) /*&& __traits(getProtection, func) == "export"*/)
 {
   //pragma(msg, "type: ", typeof(func));
@@ -672,7 +685,11 @@ if (isRWStream!ST && is(typeof(func) == function) /*&& __traits(getProtection, f
     mixin("mr.a"~to!string(idx)~" = arg;");
   }
   RPCCallHeader hdr;
-  hdr.name = fullyQualifiedName!func.stringof[1..$-1];
+  static if (name.length > 0) {
+    hdr.name = prefix~name;
+  } else {
+    hdr.name = prefix~nodots(fullyQualifiedName!func.stringof);
+  }
   hdr.hash = rpchash!func;
   // call
   chan.writeNum!ushort(RPCommand.Call);
@@ -768,10 +785,15 @@ public static RT rpcallany(RT, ST, A...) (auto ref ST chan, const(char)[] name, 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // register RPC endpoint (server-side)
-public static void rpcRegisterEndpoint(alias func) () if (is(typeof(func) == function)) {
+public static void rpcRegisterEndpointPrefixed(alias func) (const(char)[] prefix, const(char)[] name=null) if (is(typeof(func) == function)) {
   import std.digest.sha;
   RPCEndPoint ep;
-  ep.name = fullyQualifiedName!func.stringof[1..$-1];
+  if (name.length) {
+    ep.name = prefix.idup~name.idup;
+  } else {
+    ep.name = prefix.idup~nodots(fullyQualifiedName!func.stringof);
+    //{ import std.stdio; stderr.writeln("name: [", ep.name, "]"); }
+  }
   ep.hash = rpchash!func;
   ep.dg = delegate (VFile fi) {
     // parse and call
@@ -788,6 +810,11 @@ public static void rpcRegisterEndpoint(alias func) () if (is(typeof(func) == fun
     return fo;
   };
   endpoints[ep.name] = ep;
+}
+
+
+public static void rpcRegisterEndpoint(alias func) (const(char)[] name=null) if (is(typeof(func) == function)) {
+  rpcRegisterEndpointPrefixed!func(null, name);
 }
 
 

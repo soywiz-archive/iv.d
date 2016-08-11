@@ -10,7 +10,7 @@ void main () {
   sk.connect("/k8/rpc-test");
   auto res = sk.rpcall!getList(666);
   writeln("result: ", res);
-  auto list = sk.rpcallany!(string[])("rpcserver.listEndpoints");
+  auto list = sk.rpcallany!(string[])("listEndpoints");
   writeln(list.length, " endpoints found");
   foreach (string s; list) writeln("  ", s);
   sk.rpcall!quit;
