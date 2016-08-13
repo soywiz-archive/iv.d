@@ -18,7 +18,7 @@
  */
 module iv.editline;
 
-import iv.rawtty;
+import iv.rawtty2;
 import iv.strex;
 
 
@@ -396,99 +396,133 @@ public:
     for (;;) {
       drawLine();
       auto key = ttyReadKey();
-      if (key.length == 0) continue;
-      if (key == "^C") { curline.clear(); return Result.CtrlC; }
-      if (key == "^D") { curline.clear(); return Result.CtrlD; }
-      if (key == "left") { curline.movePos(-1); continue; }
-      if (key == "right") { curline.movePos(1); continue; }
-      if (key == "home" || key == "^A") { curline.movePos(-curline.MaxLen); continue; }
-      if (key == "end" || key == "^E") { curline.movePos(curline.MaxLen); continue; }
-      if (key == "return") { fixCurLine(); wrt("\r\n"); return Result.Normal; }
-      if (key == "tab") { fixCurLine(); autocomplete(); continue; }
-      if (key == "^K") { fixCurLine(); curline.crop(); continue; }
-      if (key == "^Y") { fixCurLine(); curline.clear(); continue; }
-      if (key == "^W" || key == "alt+^H") {
-        if (curline.pos > 0) {
-          fixCurLine();
-          while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.backspace(1);
-          while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.backspace(1);
+      if (key.key == TtyKey.Key.Error) { curline.clear(); return Result.CtrlD; }
+      if (key.key == TtyKey.Key.Unknown) continue;
+      if (key.key == TtyKey.Key.ModChar) {
+        if ((key.alt && key.ctrl && !key.shift && key.ch == 'H') ||
+            (!key.alt && key.ctrl && !key.shift && key.ch == 'W'))
+        {
+          // delete word
+          if (curline.pos > 0) {
+            fixCurLine();
+            while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.backspace(1);
+            while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.backspace(1);
+          }
           continue;
         }
-      }
-      if (key == "up") {
-        if (history.length == 0) continue;
-        if (hpos == -1) {
-          // store current line so we can return to it
-          lastInput[0..curline.length] = curline[];
-          lastLen = curline.length;
-          hpos = 0;
-        } else if (hpos < history.length-1) {
-          ++hpos;
-        } else {
-          continue;
-        }
-        curline.set(history[hpos]);
-        curofs = 0;
+        if (!key.alt && key.ctrl && !key.shift && key.ch == 'C') { curline.clear(); return Result.CtrlC; }
+        if (!key.alt && key.ctrl && !key.shift && key.ch == 'D') { curline.clear(); return Result.CtrlD; }
+        if (!key.alt && key.ctrl && !key.shift && key.ch == 'K') { fixCurLine(); curline.crop(); continue; }
+        if (!key.alt && key.ctrl && !key.shift && key.ch == 'Y') { fixCurLine(); curline.clear(); continue; }
+        if (!key.alt && key.ctrl && !key.shift && key.ch == 'A') { curline.movePos(-curline.MaxLen); continue; }
+        if (!key.alt && key.ctrl && !key.shift && key.ch == 'E') { curline.movePos(curline.MaxLen); continue; }
         continue;
       }
-      if (key == "down") {
-        if (history.length == 0) continue;
-        if (hpos == 0) {
-          // restore previous user line
-          hpos = -1;
-          curline.set(lastInput[0..lastLen]);
-          curofs = 0;
-        } else if (hpos > 0) {
-          --hpos;
-          curline.set(history[hpos]);
-          curofs = 0;
-        }
-        continue;
-      }
-      if (key == "backspace") {
-        if (curline.length > 0 && curline.pos > 0) {
-          fixCurLine();
-          curline.backspace(1);
-        }
-        continue;
-      }
-      if (key == "delete") {
-        if (curline.pos < curline.length) {
-          fixCurLine();
-          curline.remove(1);
-        }
-        continue;
-      }
-      if (key == "ctrl+left") {
-        if (curline.pos > 0) {
-          if (curline[curline.pos-1] <= ' ') {
-            // move to word end
-            while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.movePos(-1);
-          } else {
-            // move to word start
-            while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.movePos(-1);
+      switch (key.key) {
+        case TtyKey.Key.Left:
+          if (!key.alt && !key.shift) {
+            if (key.ctrl) {
+              if (curline.pos > 0) {
+                if (curline[curline.pos-1] <= ' ') {
+                  // move to word end
+                  while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.movePos(-1);
+                } else {
+                  // move to word start
+                  while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.movePos(-1);
+                }
+              }
+            } else {
+              curline.movePos(-1);
+            }
           }
-        }
-        continue;
-      }
-      if (key == "ctrl+right") {
-        if (curline.pos < curline.length) {
-          if (curline[curline.pos] <= ' ') {
-            // move to word start
-            while (curline.pos < curline.length && curline[curline.pos] <= ' ') curline.movePos(1);
-          } else {
-            // move to word end
-            while (curline.pos < curline.length && curline[curline.pos] > ' ') curline.movePos(1);
+          break;
+        case TtyKey.Key.Right:
+          if (!key.alt && !key.shift) {
+            if (key.ctrl) {
+              if (curline.pos < curline.length) {
+                if (curline[curline.pos] <= ' ') {
+                  // move to word start
+                  while (curline.pos < curline.length && curline[curline.pos] <= ' ') curline.movePos(1);
+                } else {
+                  // move to word end
+                  while (curline.pos < curline.length && curline[curline.pos] > ' ') curline.movePos(1);
+                }
+              }
+            } else {
+              curline.movePos(1);
+            }
           }
-        }
-        continue;
-      }
-      if (key.length == 1) {
-        if (curline.length < Line.MaxLen) {
+          break;
+        case TtyKey.Key.Home:
+          if (!key.ctrl && !key.alt && !key.shift) curline.movePos(-curline.MaxLen);
+          break;
+        case TtyKey.Key.End:
+          if (!key.ctrl && !key.alt && !key.shift) curline.movePos(curline.MaxLen);
+          break;
+        case TtyKey.Key.Enter:
           fixCurLine();
-          curline.insert(key);
-        }
-        continue;
+          wrt("\r\n");
+          return Result.Normal;
+        case TtyKey.Key.Tab:
+          if (!key.ctrl && !key.alt && !key.shift) { fixCurLine(); autocomplete(); continue; }
+          break;
+        case TtyKey.Key.Up:
+          if (!key.ctrl && !key.alt && !key.shift) {
+            if (history.length == 0) continue;
+            if (hpos == -1) {
+              // store current line so we can return to it
+              lastInput[0..curline.length] = curline[];
+              lastLen = curline.length;
+              hpos = 0;
+            } else if (hpos < history.length-1) {
+              ++hpos;
+            } else {
+              continue;
+            }
+            curline.set(history[hpos]);
+            curofs = 0;
+          }
+          break;
+        case TtyKey.Key.Down:
+          if (!key.ctrl && !key.alt && !key.shift) {
+            if (history.length == 0) continue;
+            if (hpos == 0) {
+              // restore previous user line
+              hpos = -1;
+              curline.set(lastInput[0..lastLen]);
+              curofs = 0;
+            } else if (hpos > 0) {
+              --hpos;
+              curline.set(history[hpos]);
+              curofs = 0;
+            }
+          }
+          break;
+        case TtyKey.Key.Backspace:
+          if (!key.ctrl && !key.alt && !key.shift) {
+            if (curline.length > 0 && curline.pos > 0) {
+              fixCurLine();
+              curline.backspace(1);
+            }
+          }
+          break;
+        case TtyKey.Key.Delete:
+          if (!key.ctrl && !key.alt && !key.shift) {
+            if (curline.pos < curline.length) {
+              fixCurLine();
+              curline.remove(1);
+            }
+          }
+          break;
+        case TtyKey.Key.Char:
+          if (key.ch >= ' ' && key.ch < 127) {
+            if (curline.length < Line.MaxLen) {
+              fixCurLine();
+              curline.insert(cast(char)key.ch);
+            }
+          }
+          break;
+        default:
       }
     }
   }
