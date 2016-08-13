@@ -271,11 +271,14 @@ public struct TtyKey {
     F10, ///
     F11, ///
     F12, ///
+
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    N0, N1, N2, N3, N4, N5, N6, N7, N8, N9,
   }
 
   Key key; ///
   bool alt, ctrl, shift; /// for special keys
-  dchar ch; /// can be 0 for special key
+  dchar ch = 0; /// can be 0 for special key
 }
 
 
@@ -291,74 +294,17 @@ public struct TtyKey {
  * Returns:
  *  null on error or keyname
  */
-TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=300) @trusted @nogc {
+TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   TtyKey key;
-  int ch = ttyReadKeyByte(toMSec);
-  if (ch < 0) { key.key = TtyKey.Key.Error; return key; } // error
-  if (ch == 0) { key.key = TtyKey.Key.ModChar; key.alt = true; key.ch = '`'; return key; }
-  if (ch == 8 || ch == 127) { key.key = TtyKey.Key.Backspace; return key; }
-  if (ch == 9) { key.key = TtyKey.Key.Tab; return key; }
-  if (ch == 10) { key.key = TtyKey.Key.Enter; return key; }
-  // escape?
-  if (ch == 27) {
-    char[64] kkk;
-    uint kkpos;
 
-    void put (const(char)[] s...) nothrow @trusted @nogc {
-      foreach (char ch; s) if (kkpos < kkk.length) kkk.ptr[kkpos++] = ch;
+  void skipCSI () {
+    key.key = TtyKey.Key.Unknown;
+    for (;;) {
+      auto ch = ttyReadKeyByte(toEscMSec);
+      if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; break; }
+      if (ch != ';' && (ch < '0' || ch > '9')) break;
     }
-
-    ch = ttyReadKeyByte(toEscMSec);
-    if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; return key; }
-
-    if (termType != TermType.rxvt && ch == 'O') {
-      put('O');
-      ch = ttyReadKeyByte(toEscMSec);
-      if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; return key; }
-      if (ch >= 'A' && ch <= 'Z') put(cast(char)ch);
-    } else if (ch == '[') {
-      put('[');
-      for (;;) {
-        ch = ttyReadKeyByte(toEscMSec);
-        if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; return key; }
-        put(cast(char)ch);
-        if (ch != ';' && (ch < '0' || ch > '9')) break;
-      }
-    } else if (ch == 9) {
-      key.key = TtyKey.Key.Tab;
-      key.alt = true;
-      key.ch = 9;
-      return key;
-    } else if (ch >= 1 && ch <= 26) {
-      key.key = TtyKey.Key.ModChar;
-      key.alt = true;
-      key.ch = cast(dchar)(ch+64);
-      return key;
-    } else if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
-      key.key = TtyKey.Key.ModChar;
-      key.alt = true;
-      key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
-      key.ch = cast(dchar)ch;
-      return key;
-    }
-    return translateKey(kkk[0..kkpos]);
   }
-  if (ch < 32) {
-    // ctrl+letter
-    key.key = TtyKey.Key.ModChar;
-    key.ctrl = true;
-    key.ch = cast(dchar)(ch+64);
-  } else {
-    key.key = TtyKey.Key.Char;
-    key.ch = cast(dchar)(ch);
-  }
-  return key;
-}
-
-
-private TtyKey translateKey (const(char)[] kn) nothrow @trusted @nogc {
-  TtyKey key;
-  key.key = TtyKey.Key.Unknown;
 
   bool xtermMods (uint mci) {
     switch (mci) {
@@ -374,133 +320,180 @@ private TtyKey translateKey (const(char)[] kn) nothrow @trusted @nogc {
     return false;
   }
 
-  if (kn.length == 0) return key;
-  if (kn.ptr[0] == 'O') {
-    if (kn.length != 2) return key;
-    switch (kn.ptr[1]) {
-      case 'A': key.key = TtyKey.Key.Up; return key;
-      case 'B': key.key = TtyKey.Key.Down; return key;
-      case 'C': key.key = TtyKey.Key.Right; return key;
-      case 'D': key.key = TtyKey.Key.Left; return key;
-      case 'P': key.key = TtyKey.Key.F1; return key;
-      case 'Q': key.key = TtyKey.Key.F2; return key;
-      case 'R': key.key = TtyKey.Key.F3; return key;
-      case 'S': key.key = TtyKey.Key.F4; return key;
-      default:
+  void badCSI () {
+    key = key.init;
+    key.key = TtyKey.Key.Unknown;
+  }
+
+  void csiSpecial (uint n) {
+    switch (n) {
+      case 1: key.key = TtyKey.Key.Home; return;
+      case 2: key.key = TtyKey.Key.Insert; return;
+      case 3: key.key = TtyKey.Key.Delete; return;
+      case 4: key.key = TtyKey.Key.End; return;
+      case 5: key.key = TtyKey.Key.PageUp; return;
+      case 6: key.key = TtyKey.Key.PageDown; return;
+      case 7: key.key = TtyKey.Key.Home; return;
+      case 8: key.key = TtyKey.Key.End; return;
+      case 1+10: key.key = TtyKey.Key.F1; return;
+      case 2+10: key.key = TtyKey.Key.F2; return;
+      case 3+10: key.key = TtyKey.Key.F3; return;
+      case 4+10: key.key = TtyKey.Key.F4; return;
+      case 5+10: key.key = TtyKey.Key.F5; return;
+      case 6+11: key.key = TtyKey.Key.F6; return;
+      case 7+11: key.key = TtyKey.Key.F7; return;
+      case 8+11: key.key = TtyKey.Key.F8; return;
+      case 9+11: key.key = TtyKey.Key.F9; return;
+      case 10+11: key.key = TtyKey.Key.F10; return;
+      case 11+12: key.key = TtyKey.Key.F11; return;
+      case 12+12: key.key = TtyKey.Key.F12; return;
+      default: badCSI(); break;
+    }
+  }
+
+  void xtermSpecial (char ch) {
+    switch (ch) {
+      case 'A': key.key = TtyKey.Key.Up; break;
+      case 'B': key.key = TtyKey.Key.Down; break;
+      case 'C': key.key = TtyKey.Key.Right; break;
+      case 'D': key.key = TtyKey.Key.Left; break;
+      case 'E': key.key = TtyKey.Key.Pad5; break;
+      case 'H': key.key = TtyKey.Key.Home; break;
+      case 'F': key.key = TtyKey.Key.End; break;
+      case 'P': key.key = TtyKey.Key.F1; break;
+      case 'Q': key.key = TtyKey.Key.F2; break;
+      case 'R': key.key = TtyKey.Key.F3; break;
+      case 'S': key.key = TtyKey.Key.F4; break;
+      default: badCSI(); break;
+    }
+  }
+
+  int ch = ttyReadKeyByte(toMSec);
+  if (ch < 0) { key.key = TtyKey.Key.Error; return key; } // error
+  if (ch == 0) { key.key = TtyKey.Key.ModChar; key.alt = true; key.ch = '`'; return key; }
+  if (ch == 8 || ch == 127) { key.key = TtyKey.Key.Backspace; key.ch = 8; return key; }
+  if (ch == 9) { key.key = TtyKey.Key.Tab; key.ch = 9; return key; }
+  if (ch == 10) { key.key = TtyKey.Key.Enter; key.ch = 13; return key; }
+
+  key.key = TtyKey.Key.Unknown;
+
+  // escape?
+  if (ch == 27) {
+    ch = ttyReadKeyByte(toEscMSec);
+    if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
+    // xterm stupidity
+    if (termType != TermType.rxvt && ch == 'O') {
+      ch = ttyReadKeyByte(toEscMSec);
+      if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
+      if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
+      return key;
+    }
+    // csi
+    if (ch == '[') {
+      uint[2] nn;
+      uint nc = 0;
+      bool wasDigit = false;
+      // parse csi
+      for (;;) {
+        ch = ttyReadKeyByte(toEscMSec);
+        if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
+        if (ch == ';') {
+          ++nc;
+          if (nc > nn.length) { skipCSI(); return key; }
+        } else if (ch >= '0' && ch <= '9') {
+          if (nc >= nn.length) { skipCSI(); return key; }
+          nn.ptr[nc] = nn.ptr[nc]*10+ch-'0';
+          wasDigit = true;
+        } else {
+          if (wasDigit) ++nc;
+          break;
+        }
+      }
+      //{ import core.stdc.stdio : printf; printf("nc=%u", nc); foreach (uint idx; 0..nc) printf("; n%u=%u", idx, nn.ptr[idx]); printf("; ch=%c\n", ch); }
+      // process specials
+      if (nc == 0) {
+        if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
+        switch (ch) {
+          case 'A': key.key = TtyKey.Key.Up; return key;
+          case 'B': key.key = TtyKey.Key.Down; return key;
+          case 'C': key.key = TtyKey.Key.Right; return key;
+          case 'D': key.key = TtyKey.Key.Left; return key;
+          case 'E': key.key = TtyKey.Key.Pad5; return key;
+          case 'H': key.key = TtyKey.Key.Home; return key;
+          case 'F': key.key = TtyKey.Key.End; return key;
+          case 'P': key.key = TtyKey.Key.F1; break;
+          case 'Q': key.key = TtyKey.Key.F2; break;
+          case 'R': key.key = TtyKey.Key.F3; break;
+          case 'S': key.key = TtyKey.Key.F4; break;
+          default:
+        }
+        badCSI();
+      } else if (nc == 1) {
+        switch (ch) {
+          case '~':
+            switch (nn.ptr[0]) {
+              case 23: key.shift = true; key.key = TtyKey.Key.F1; return key;
+              case 24: key.shift = true; key.key = TtyKey.Key.F2; return key;
+              case 25: key.shift = true; key.key = TtyKey.Key.F3; return key;
+              case 26: key.shift = true; key.key = TtyKey.Key.F4; return key;
+              case 28: key.shift = true; key.key = TtyKey.Key.F5; return key;
+              case 29: key.shift = true; key.key = TtyKey.Key.F6; return key;
+              case 31: key.shift = true; key.key = TtyKey.Key.F7; return key;
+              case 32: key.shift = true; key.key = TtyKey.Key.F8; return key;
+              case 33: key.shift = true; key.key = TtyKey.Key.F9; return key;
+              case 34: key.shift = true; key.key = TtyKey.Key.F10; return key;
+              default:
+            }
+            break;
+          case '^': key.ctrl = true; break;
+          case '$': key.shift = true; break;
+          case '@': key.ctrl = true; key.shift = true; break;
+          case 'A': .. case 'Z': xtermMods(nn.ptr[0]); xtermSpecial(cast(char)ch); return key;
+          default: badCSI(); return key;
+        }
+        csiSpecial(nn.ptr[0]);
+      } else if (nc == 2 && xtermMods(nn.ptr[1])) {
+        if (nn.ptr[0] == 1 && ch >= 'A' && ch <= 'Z') {
+          xtermSpecial(cast(char)ch);
+        } else if (ch == '~') {
+          csiSpecial(nn.ptr[0]);
+        }
+      } else {
+        badCSI();
+      }
+      return key;
+    }
+    if (ch == 9) {
+      key.key = TtyKey.Key.Tab;
+      key.alt = true;
+      key.ch = 9;
+      return key;
+    }
+    if (ch >= 1 && ch <= 26) {
+      key.key = TtyKey.Key.ModChar;
+      key.alt = true;
+      key.ch = cast(dchar)(ch+64);
+      return key;
+    }
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+      key.key = TtyKey.Key.ModChar;
+      key.alt = true;
+      key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
+      key.ch = cast(dchar)ch;
+      return key;
     }
     return key;
   }
-  if (kn.ptr[0] != '[') return key;
 
-  switch (kn) {
-    // rxvt
-    case "[A": key.key = TtyKey.Key.Up; return key;
-    case "[B": key.key = TtyKey.Key.Down; return key;
-    case "[C": key.key = TtyKey.Key.Right; return key;
-    case "[D": key.key = TtyKey.Key.Left; return key;
-    case "[2~": key.key = TtyKey.Key.Insert; return key;
-    case "[3~": key.key = TtyKey.Key.Delete; return key;
-    case "[5~": key.key = TtyKey.Key.PageUp; return key;
-    case "[6~": key.key = TtyKey.Key.PageDown; return key;
-    case "[7~": key.key = TtyKey.Key.Home; return key;
-    case "[8~": key.key = TtyKey.Key.End; return key;
-    case "[1~": key.key = TtyKey.Key.Home; return key;
-    case "[4~": key.key = TtyKey.Key.End; return key;
-    // xterm
-    case "[2^": key.ctrl = true; key.key = TtyKey.Key.Insert; return key;
-    case "[3^": key.ctrl = true; key.key = TtyKey.Key.Delete; return key;
-    case "[5^": key.ctrl = true; key.key = TtyKey.Key.PageUp; return key;
-    case "[6^": key.ctrl = true; key.key = TtyKey.Key.PageDown; return key;
-    case "[7^": key.ctrl = true; key.key = TtyKey.Key.Home; return key;
-    case "[8^": key.ctrl = true; key.key = TtyKey.Key.End; return key;
-    case "[1^": key.ctrl = true; key.key = TtyKey.Key.Home; return key;
-    case "[4^": key.ctrl = true; key.key = TtyKey.Key.End; return key;
-    case "[H": key.key = TtyKey.Key.Home; return key;
-    case "[F": key.key = TtyKey.Key.End; return key;
-    case "[E": key.key = TtyKey.Key.Pad5; return key;
-    case "[2$": key.shift = true; key.key = TtyKey.Key.Insert; return key;
-    case "[3$": key.shift = true; key.key = TtyKey.Key.Delete; return key;
-    case "[5$": key.shift = true; key.key = TtyKey.Key.PageUp; return key;
-    case "[6$": key.shift = true; key.key = TtyKey.Key.PageDown; return key;
-    case "[7$": key.shift = true; key.key = TtyKey.Key.Home; return key;
-    case "[8$": key.shift = true; key.key = TtyKey.Key.End; return key;
-    case "[1$": key.shift = true; key.key = TtyKey.Key.Home; return key;
-    case "[4$": key.shift = true; key.key = TtyKey.Key.End; return key;
-    default:
-  }
-  if (kn.length > 3 && kn[0..3] == "[1;") {
-    // try special modifiers
-    kn = kn[3..$];
-    uint mci;
-    while (kn.length && kn.ptr[0] >= '0' && kn.ptr[0] <= '9') {
-      mci = mci*10+kn.ptr[0]-'0';
-      kn = kn[1..$];
-    }
-    if (kn.length == 1 && xtermMods(mci)) {
-      switch (kn.ptr[0]) {
-        case 'A': key.key = TtyKey.Key.Up; return key;
-        case 'B': key.key = TtyKey.Key.Down; return key;
-        case 'C': key.key = TtyKey.Key.Right; return key;
-        case 'D': key.key = TtyKey.Key.Left; return key;
-        case 'H': key.key = TtyKey.Key.Home; return key;
-        case 'F': key.key = TtyKey.Key.End; return key;
-        case 'P': key.key = TtyKey.Key.F1; return key;
-        case 'Q': key.key = TtyKey.Key.F2; return key;
-        case 'R': key.key = TtyKey.Key.F3; return key;
-        case 'S': key.key = TtyKey.Key.F4; return key;
-        default:
-      }
-    }
+  if (ch < 32) {
+    // ctrl+letter
+    key.key = TtyKey.Key.ModChar;
+    key.ctrl = true;
+    key.ch = cast(dchar)(ch+64);
   } else {
-    if (kn.length < 2 || kn.ptr[0] != '[' || kn.ptr[1] < '0' || kn.ptr[1] > '9') return key;
-    kn = kn[1..$];
-    uint n0, n1;
-    while (kn.length && kn.ptr[0] >= '0' && kn.ptr[0] <= '9') {
-      n0 = n0*10+kn.ptr[0]-'0';
-      kn = kn[1..$];
-    }
-    if (kn.length == 0) return key;
-    if (kn.ptr[0] == ';') {
-      // two nums
-      if (kn.length < 2 || kn.ptr[1] < '0' || kn.ptr[1] > '9') return key;
-      kn = kn[2..$];
-      while (kn.length && kn.ptr[0] >= '0' && kn.ptr[0] <= '9') {
-        n1 = n1*10+kn.ptr[0]-'0';
-        kn = kn[1..$];
-      }
-      if (kn == "~" && xtermMods(n1)) {
-        switch (n0) {
-          case 2: key.key = TtyKey.Key.Insert; return key;
-          case 3: key.key = TtyKey.Key.Delete; return key;
-          case 5: key.key = TtyKey.Key.PageUp; return key;
-          case 6: key.key = TtyKey.Key.PageDown; return key;
-          case 15: key.key = TtyKey.Key.F5; return key;
-          case 17: key.key = TtyKey.Key.F6; return key;
-          case 18: key.key = TtyKey.Key.F7; return key;
-          case 19: key.key = TtyKey.Key.F8; return key;
-          case 20: key.key = TtyKey.Key.F9; return key;
-          case 21: key.key = TtyKey.Key.F10; return key;
-          case 23: key.key = TtyKey.Key.F11; return key;
-          case 24: key.key = TtyKey.Key.F12; return key;
-          default:
-        }
-      }
-    } else {
-      // one num
-      if (kn.length != 1) return key;
-      switch (kn.ptr[0]) {
-        case '~': break;
-        case '^': key.ctrl = true; break;
-        case '@': key.ctrl = true; key.shift = true; break;
-        default: return key;
-      }
-      if (n0 >= 1+10 && n0 < 6+10) { key.key = cast(TtyKey.Key)(TtyKey.Key.F1+n0-10); return key; }
-      if (n0 >= 6+11 && n0 < 11+11) { key.key = cast(TtyKey.Key)(TtyKey.Key.F6+n0-(6+11)); return key; }
-      if (n0 == 11+12) { key.key = TtyKey.Key.F12; return key; }
-    }
+    key.key = TtyKey.Key.Char;
+    key.ch = cast(dchar)(ch);
   }
-  key = TtyKey.init;
-  key.key = TtyKey.Key.Unknown;
   return key;
 }
 

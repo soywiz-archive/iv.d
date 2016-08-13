@@ -399,7 +399,7 @@ public:
       if (key.key == TtyKey.Key.Error) { curline.clear(); return Result.CtrlD; }
       if (key.key == TtyKey.Key.Unknown) continue;
       if (key.key == TtyKey.Key.ModChar) {
-        if ((key.alt && key.ctrl && !key.shift && key.ch == 'H') ||
+        if ((key.alt && key.ctrl && key.shift && key.ch == 'H') ||
             (!key.alt && key.ctrl && !key.shift && key.ch == 'W'))
         {
           // delete word
