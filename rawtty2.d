@@ -472,12 +472,16 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     if (ch >= 1 && ch <= 26) {
       key.key = TtyKey.Key.ModChar;
       key.alt = true;
-      key.ch = cast(dchar)(ch+64);
+      key.ch = cast(dchar)(ch+96);
+      if (key.ch == 'h') {
+        key.key = TtyKey.Key.Backspace;
+        key.ch = 8;
+      }
       return key;
     }
     if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
-      key.key = TtyKey.Key.ModChar;
       key.alt = true;
+      key.key = TtyKey.Key.ModChar;
       key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
       key.ch = cast(dchar)ch;
       return key;

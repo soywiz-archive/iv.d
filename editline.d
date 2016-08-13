@@ -393,23 +393,21 @@ public:
     scope(exit) ttySetMode(ttymode);
     ttySetRaw();
 
+    void delPrevWord () {
+      if (curline.pos > 0) {
+        fixCurLine();
+        while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.backspace(1);
+        while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.backspace(1);
+      }
+    }
+
     for (;;) {
       drawLine();
       auto key = ttyReadKey();
       if (key.key == TtyKey.Key.Error) { curline.clear(); return Result.CtrlD; }
       if (key.key == TtyKey.Key.Unknown) continue;
       if (key.key == TtyKey.Key.ModChar) {
-        if ((key.alt && key.ctrl && key.shift && key.ch == 'H') ||
-            (!key.alt && key.ctrl && !key.shift && key.ch == 'W'))
-        {
-          // delete word
-          if (curline.pos > 0) {
-            fixCurLine();
-            while (curline.pos > 0 && curline[curline.pos-1] <= ' ') curline.backspace(1);
-            while (curline.pos > 0 && curline[curline.pos-1] > ' ') curline.backspace(1);
-          }
-          continue;
-        }
+        if (!key.alt && key.ctrl && !key.shift && key.ch == 'W') { delPrevWord(); continue; }
         if (!key.alt && key.ctrl && !key.shift && key.ch == 'C') { curline.clear(); return Result.CtrlC; }
         if (!key.alt && key.ctrl && !key.shift && key.ch == 'D') { curline.clear(); return Result.CtrlD; }
         if (!key.alt && key.ctrl && !key.shift && key.ch == 'K') { fixCurLine(); curline.crop(); continue; }
@@ -504,6 +502,8 @@ public:
               fixCurLine();
               curline.backspace(1);
             }
+          } else if (!key.ctrl && key.alt && !key.shift) {
+            delPrevWord();
           }
           break;
         case TtyKey.Key.Delete:
