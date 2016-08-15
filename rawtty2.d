@@ -231,6 +231,20 @@ int ttyReadKeyByte (int toMSec=-1) @trusted @nogc {
 }
 
 
+void ttyEnableBracketedPaste () {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?2004h";
+  write(1, str.ptr, str.length);
+}
+
+
+void ttyDisableBracketedPaste () {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?2004l";
+  write(1, str.ptr, str.length);
+}
+
+
 /// pressed key info
 public struct TtyKey {
   enum Key {
@@ -240,6 +254,10 @@ public struct TtyKey {
 
     Char, ///
     ModChar, /// char with some modifier
+
+    // for bracketed paste mode
+    PasteStart,
+    PasteEnd,
 
     Up, ///
     Down, ///
@@ -429,6 +447,8 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
         }
         badCSI();
       } else if (nc == 1) {
+        if (ch == '~' && nn.ptr[0] == 200) { key.key = TtyKey.Key.PasteStart; return key; }
+        if (ch == '~' && nn.ptr[0] == 201) { key.key = TtyKey.Key.PasteEnd; return key; }
         switch (ch) {
           case '~':
             switch (nn.ptr[0]) {
