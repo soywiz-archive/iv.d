@@ -224,7 +224,10 @@ int ttyReadKeyByte (int toMSec=-1) @trusted @nogc {
     if (toMSec >= 0) {
       synchronized(XLock.classinfo) if (ttyWaitKey(toMSec) && read(STDIN_FILENO, &res, 1) == 1) return res;
     } else {
-      if (read(STDIN_FILENO, &res, 1) == 1) return res;
+      if (read(STDIN_FILENO, &res, 1) == 1) {
+        //{ import core.stdc.stdio; if (res > 32 && res != 127) printf("[%c]\n", res); else printf("{%d}\n", res); }
+        return res;
+      }
     }
   }
   return -1;
@@ -493,10 +496,8 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       key.key = TtyKey.Key.ModChar;
       key.alt = true;
       key.ch = cast(dchar)(ch+96);
-      if (key.ch == 'h') {
-        key.key = TtyKey.Key.Backspace;
-        key.ch = 8;
-      }
+           if (key.ch == 'h') { key.key = TtyKey.Key.Backspace; key.ch = 8; }
+      else if (key.ch == 'j') { key.key = TtyKey.Key.Enter; key.ch = 13; }
       return key;
     }
     if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
