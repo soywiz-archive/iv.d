@@ -319,7 +319,7 @@ public:
     history[0] = hs;
   }
 
-  final Result readline () {
+  final Result readline (const(char)[] initval=null) {
     char[Line.MaxLen] lastInput; // stored for history walks
     uint lastLen; // stored for history walks
     int hpos = -1; // -1: current
@@ -388,6 +388,7 @@ public:
 
     curofs = 0;
     curline.clear();
+    if (initval.length) curline.set(initval);
 
     auto ttymode = ttyGetMode();
     scope(exit) ttySetMode(ttymode);
@@ -529,7 +530,7 @@ public:
 
   void autocomplete () {}
 
-protected:
+public:
 static:
   void clearOutput () { wrt("\r\x1b[K"); }
 
