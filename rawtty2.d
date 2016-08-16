@@ -54,6 +54,18 @@ TTYMode ttyGetMode () nothrow @trusted @nogc {
 }
 
 
+///
+void ttyRestoreOrigMode () {
+  import core.atomic;
+  import core.sys.posix.termios : tcflush, tcsetattr;
+  import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
+  import core.sys.posix.unistd : STDIN_FILENO;
+  //tcflush(STDIN_FILENO, TCIOFLUSH);
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &origMode);
+  atomicStore(inRawMode, false);
+}
+
+
 /// returns previous mode or Bad
 TTYMode ttySetNormal () @trusted @nogc {
   import core.atomic;
@@ -293,8 +305,8 @@ public struct TtyKey {
     F11, ///
     F12, ///
 
-    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-    N0, N1, N2, N3, N4, N5, N6, N7, N8, N9,
+    //A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    //N0, N1, N2, N3, N4, N5, N6, N7, N8, N9,
   }
 
   Key key; ///
@@ -495,15 +507,16 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     if (ch >= 1 && ch <= 26) {
       key.key = TtyKey.Key.ModChar;
       key.alt = true;
-      key.ch = cast(dchar)(ch+96);
-           if (key.ch == 'h') { key.key = TtyKey.Key.Backspace; key.ch = 8; }
-      else if (key.ch == 'j') { key.key = TtyKey.Key.Enter; key.ch = 13; }
+      key.ch = cast(dchar)(ch+64);
+           if (key.ch == 'H') { key.key = TtyKey.Key.Backspace; key.ch = 8; }
+      else if (key.ch == 'J') { key.key = TtyKey.Key.Enter; key.ch = 13; }
       return key;
     }
     if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
       key.alt = true;
       key.key = TtyKey.Key.ModChar;
       key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
+      if (ch >= 'a' && ch <= 'z') ch -= 32;
       key.ch = cast(dchar)ch;
       return key;
     }
