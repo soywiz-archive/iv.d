@@ -20,6 +20,8 @@ module iv.rawtty2;
 
 import core.sys.posix.termios : termios;
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 private __gshared termios origMode;
 private __gshared bool redirected = true; // can be used without synchronization
 private shared bool inRawMode = false;
@@ -27,6 +29,7 @@ private shared bool inRawMode = false;
 private class XLock {}
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 /// TTY mode
 enum TTYMode {
   Bad = -1, /// some error occured
@@ -35,18 +38,61 @@ enum TTYMode {
 }
 
 
+/// Terminal type (yeah, i know alot of 'em)
 enum TermType {
   other,
   rxvt,
   xterm
 }
 
-__gshared TermType termType = TermType.other;
+__gshared TermType termType = TermType.other; ///
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 /// is TTY stdin or stdout redirected?
 @property bool ttyIsRedirected () nothrow @trusted @nogc { pragma(inline, true); return redirected; }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// return TTY width
+@property int ttyWidth () nothrow @trusted @nogc {
+  if (!redirected) {
+    import core.sys.posix.sys.ioctl : ioctl, winsize, TIOCGWINSZ;
+    winsize sz = void;
+    if (ioctl(1, TIOCGWINSZ, &sz) != -1) return sz.ws_col;
+  }
+  return 80;
+}
+
+
+/// return TTY height
+@property int ttyHeight () nothrow @trusted @nogc {
+  if (!redirected) {
+    import core.sys.posix.sys.ioctl : ioctl, winsize, TIOCGWINSZ;
+    winsize sz = void;
+    if (ioctl(1, TIOCGWINSZ, &sz) != -1) return sz.ws_row;
+    return sz.ws_row;
+  }
+  return 25;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+void ttyEnableBracketedPaste () {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?2004h";
+  write(1, str.ptr, str.length);
+}
+
+
+void ttyDisableBracketedPaste () {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?2004l";
+  write(1, str.ptr, str.length);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// get current TTY mode
 TTYMode ttyGetMode () nothrow @trusted @nogc {
   import core.atomic;
@@ -54,7 +100,7 @@ TTYMode ttyGetMode () nothrow @trusted @nogc {
 }
 
 
-///
+/// Restore terminal mode we had at program startup
 void ttyRestoreOrigMode () {
   import core.atomic;
   import core.sys.posix.termios : tcflush, tcsetattr;
@@ -121,6 +167,17 @@ TTYMode ttySetRaw (bool waitkey=true) @trusted @nogc {
 }
 
 
+/// change TTY mode if possible
+/// returns previous mode or Bad
+TTYMode ttySetMode (TTYMode mode) @trusted @nogc {
+  // check what we can without locking
+  if (mode == TTYMode.Bad) return TTYMode.Bad;
+  if (redirected) return (mode == TTYMode.Normal ? TTYMode.Normal : TTYMode.Bad);
+  synchronized(XLock.classinfo) return (mode == TTYMode.Normal ? ttySetNormal() : ttySetRaw());
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// set wait/poll mode
 bool ttySetWaitKey (bool doWait) @trusted @nogc {
   import core.atomic;
@@ -143,39 +200,7 @@ bool ttySetWaitKey (bool doWait) @trusted @nogc {
 }
 
 
-/// change TTY mode if possible
-/// returns previous mode or Bad
-TTYMode ttySetMode (TTYMode mode) @trusted @nogc {
-  // check what we can without locking
-  if (mode == TTYMode.Bad) return TTYMode.Bad;
-  if (redirected) return (mode == TTYMode.Normal ? TTYMode.Normal : TTYMode.Bad);
-  synchronized(XLock.classinfo) return (mode == TTYMode.Normal ? ttySetNormal() : ttySetRaw());
-}
-
-
-/// return TTY width
-@property int ttyWidth () nothrow @trusted @nogc {
-  if (!redirected) {
-    import core.sys.posix.sys.ioctl : ioctl, winsize, TIOCGWINSZ;
-    winsize sz = void;
-    if (ioctl(1, TIOCGWINSZ, &sz) != -1) return sz.ws_col;
-  }
-  return 80;
-}
-
-
-/// return TTY height
-@property int ttyHeight () nothrow @trusted @nogc {
-  if (!redirected) {
-    import core.sys.posix.sys.ioctl : ioctl, winsize, TIOCGWINSZ;
-    winsize sz = void;
-    if (ioctl(1, TIOCGWINSZ, &sz) != -1) return sz.ws_row;
-    return sz.ws_row;
-  }
-  return 25;
-}
-
-
+// ////////////////////////////////////////////////////////////////////////// //
 /**
  * Wait for keypress.
  *
@@ -214,9 +239,7 @@ bool ttyWaitKey (int toMSec=-1) @trusted @nogc {
  * Returns:
  *  true if key was pressed, false if no key was pressed
  */
-bool ttyIsKeyHit () @trusted @nogc {
-  return ttyWaitKey(0);
-}
+bool ttyIsKeyHit () @trusted @nogc { return ttyWaitKey(0); }
 
 
 /**
@@ -246,20 +269,7 @@ int ttyReadKeyByte (int toMSec=-1) @trusted @nogc {
 }
 
 
-void ttyEnableBracketedPaste () {
-  import core.sys.posix.unistd : write;
-  enum str = "\x1b[?2004h";
-  write(1, str.ptr, str.length);
-}
-
-
-void ttyDisableBracketedPaste () {
-  import core.sys.posix.unistd : write;
-  enum str = "\x1b[?2004l";
-  write(1, str.ptr, str.length);
-}
-
-
+// ////////////////////////////////////////////////////////////////////////// //
 /// pressed key info
 public struct TtyKey {
   enum Key {
@@ -512,7 +522,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       else if (key.ch == 'J') { key.key = TtyKey.Key.Enter; key.ch = 13; }
       return key;
     }
-    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
       key.alt = true;
       key.key = TtyKey.Key.ModChar;
       key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
@@ -531,11 +541,25 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   } else {
     key.key = TtyKey.Key.Char;
     key.ch = cast(dchar)(ch);
+    // xterm does alt+letter with 7th bit set
+    if (termType == TermType.xterm && ch >= 0x80 && ch <= 0xff) {
+      ch -= 0x80;
+      if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
+        key.alt = true;
+        key.key = TtyKey.Key.ModChar;
+        key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
+        if (ch >= 'a' && ch <= 'z') ch -= 32;
+        key.ch = cast(dchar)ch;
+        return key;
+      }
+    }
   }
   return key;
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+// housekeeping
 private extern(C) void ttyExitRestore () {
   import core.atomic;
   if (atomicLoad(inRawMode)) {
@@ -575,4 +599,108 @@ shared static this () {
 
 shared static ~this () {
   ttySetNormal();
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// k8sterm color table, lol
+static immutable uint[256] ttyRGB = {
+  uint[256] res;
+  // standard terminal colors
+  res[0] = 0x000000;
+  res[1] = 0xb21818;
+  res[2] = 0x18b218;
+  res[3] = 0xb26818;
+  res[4] = 0x1818b2;
+  res[5] = 0xb218b2;
+  res[6] = 0x18b2b2;
+  res[7] = 0xb2b2b2;
+  res[8] = 0x686868;
+  res[9] = 0xff5454;
+  res[10] = 0x54ff54;
+  res[11] = 0xffff54;
+  res[12] = 0x5454ff;
+  res[13] = 0xff54ff;
+  res[14] = 0x54ffff;
+  res[15] = 0xffffff;
+  // rgb colors [16..231]
+  int f = 16;
+  foreach (ubyte r; 0..6) {
+    foreach (ubyte g; 0..6) {
+      foreach (ubyte b; 0..6) {
+        uint cr = (r == 0 ? 0 : 0x37+0x28*r); assert(cr <= 255);
+        uint cg = (g == 0 ? 0 : 0x37+0x28*g); assert(cg <= 255);
+        uint cb = (b == 0 ? 0 : 0x37+0x28*b); assert(cb <= 255);
+        res[f++] = (cr<<16)|(cg<<8)|cb;
+      }
+    }
+  }
+  assert(f == 232);
+  // b/w shades [232..255]
+  foreach (ubyte n; 0..24) {
+    uint c = 0x08+0x0a*n; assert(c <= 255);
+    res[f++] = (c<<16)|(c<<8)|c;
+  }
+  assert(f == 256);
+  return res;
+}();
+
+
+/// Convert 256-color terminal color number to approximate rgb values
+void ttyColor2rgb (ubyte cnum, out ubyte r, out ubyte g, out ubyte b) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  r = cast(ubyte)(ttyRGB.ptr[cnum]>>16);
+  g = cast(ubyte)(ttyRGB.ptr[cnum]>>8);
+  b = cast(ubyte)(ttyRGB.ptr[cnum]);
+  /*
+  if (cnum == 0) {
+    r = g = b = 0;
+  } else if (cnum == 8) {
+    r = g = b = 0x80;
+  } else if (cnum >= 0 && cnum < 16) {
+    r = (cnum&(1<<0) ? (cnum&(1<<3) ? 0xff : 0x80) : 0x00);
+    g = (cnum&(1<<1) ? (cnum&(1<<3) ? 0xff : 0x80) : 0x00);
+    b = (cnum&(1<<2) ? (cnum&(1<<3) ? 0xff : 0x80) : 0x00);
+  } else if (cnum >= 16 && cnum < 232) {
+    // [0..5] -> [0..255]
+    b = cast(ubyte)(((cnum-16)%6)*51);
+    g = cast(ubyte)((((cnum-16)/6)%6)*51);
+    r = cast(ubyte)((((cnum-16)/6/6)%6)*51);
+  } else if (cnum >= 232 && cnum <= 255) {
+    // [0..23] (0 is very dark gray; 23 is *almost* white)
+    b = g = r = cast(ubyte)(8+(cnum-232)*10);
+  }
+  */
+}
+
+
+/// Convert rgb values to approximate 256-color (or 16-color) teminal color number
+ubyte ttyRgb2Color(bool allow256=true) (ubyte r, ubyte g, ubyte b) pure nothrow @trusted @nogc {
+  // use standard (weighted) color distance function to find the closest match
+  // d = ((r2-r1)*0.30)^^2+((g2-g1)*0.59)^^2+((b2-b1)*0.11)^^2
+  enum n = 16384; // scale
+  enum m0 = 4916; // 0.30*16384
+  enum m1 = 9666; // 0.59*16384
+  enum m2 = 1802; // 0.11*16384
+  long dist = long.max;
+  ubyte resclr = 0;
+  static if (allow256) enum lastc = 256; else enum lastc = 16;
+  foreach (immutable idx, uint cc; ttyRGB[0..lastc]) {
+    long dr = cast(int)((cc>>16)&0xff)-cast(int)r;
+    dr = ((dr*m0)*(dr*m0))/n;
+    assert(dr >= 0);
+    long dg = cast(int)((cc>>8)&0xff)-cast(int)g;
+    dg = ((dg*m1)*(dg*m1))/n;
+    assert(dg >= 0);
+    long db = cast(int)(cc&0xff)-cast(int)b;
+    db = ((db*m2)*(db*m2))/n;
+    assert(db >= 0);
+    long d = dr+dg+db;
+    assert(d >= 0);
+    if (d < dist) {
+      resclr = cast(ubyte)idx;
+      dist = d;
+    }
+  }
+  return resclr;
 }
