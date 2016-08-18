@@ -32,14 +32,15 @@ string quote (const(char)[] s) {
 }
 
 
+char tolower (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch-'A'+'a') : ch); }
+char toupper (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'a' && ch <= 'z' ? cast(char)(ch-'a'+'A') : ch); }
+
+
 // ascii only
 bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
   if (s0.length != s1.length) return false;
   foreach (immutable idx, char c0; s0) {
-    import std.ascii : toLower;
-    c0 = c0.toLower;
-    char c1 = s1.ptr[idx].toLower;
-    if (c0 != c1) return false;
+    if (c0.tolower != s1.ptr[idx].tolower) return false;
   }
   return true;
 }
@@ -52,20 +53,51 @@ inout(char)[] xstrip (inout(char)[] s) pure nothrow @trusted @nogc {
 }
 
 
-ptrdiff_t indexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure @trusted nothrow @nogc {
+bool startsWith (const(char)[] str, const(char)[] pat) pure nothrow @trusted @nogc {
+  import core.stdc.string : memcmp;
+  if (pat.length > str.length) return false;
+  return (memcmp(str.ptr, pat.ptr, pat.length) == 0);
+}
+
+
+bool endsWith (const(char)[] str, const(char)[] pat) pure nothrow @trusted @nogc {
+  import core.stdc.string : memcmp;
+  if (pat.length > str.length) return false;
+  return (memcmp(str.ptr+str.length-pat.length, pat.ptr, pat.length) == 0);
+}
+
+
+bool startsWithCI (const(char)[] str, const(char)[] pat) pure nothrow @trusted @nogc {
+  if (pat.length > str.length) return false;
+  auto s = cast(const(char)*)str.ptr;
+  auto p = cast(const(char)*)pat.ptr;
+  foreach (immutable _; 0..pat.length) if (tolower(*s++) != tolower(*p++)) return false;
+  return true;
+}
+
+
+bool endsWithCI (const(char)[] str, const(char)[] pat) pure nothrow @trusted @nogc {
+  if (pat.length > str.length) return false;
+  auto s = cast(const(char)*)str.ptr+str.length-pat.length;
+  auto p = cast(const(char)*)pat.ptr;
+  foreach (immutable _; 0..pat.length) if (tolower(*s++) != tolower(*p++)) return false;
+  return true;
+}
+
+
+ptrdiff_t indexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure nothrow @trusted @nogc {
   if (hay.length <= stIdx || need.length == 0 ||
       need.length > hay.length-stIdx
   ) {
     return -1;
   } else {
-    //import iv.strex : memmem;
     auto res = memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
     return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
   }
 }
 
 
-ptrdiff_t indexOf (const(void)[] hay, ubyte ch, size_t stIdx=0) pure @trusted nothrow @nogc {
+ptrdiff_t indexOf (const(char)[] hay, char ch, size_t stIdx=0) pure nothrow @trusted @nogc {
   return indexOf(hay, (&ch)[0..1], stIdx);
 }
 
