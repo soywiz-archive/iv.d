@@ -700,6 +700,7 @@ ubyte ttyRgb2Color(bool allow256=true) (ubyte r, ubyte g, ubyte b) pure nothrow 
     if (d < dist) {
       resclr = cast(ubyte)idx;
       dist = d;
+      if (d == 0) break; // no better match is possible
     }
   }
   return resclr;
