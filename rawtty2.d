@@ -159,6 +159,12 @@ TTYMode ttySetRaw (bool waitkey=true) @trusted @nogc {
       raw.c_cc[VTIME] = 0; // no timer
       // put terminal in raw mode after flushing
       if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0) return TTYMode.Bad;
+      {
+        import core.sys.posix.unistd : write;
+        // G0 is ASCII, G1 is graphics
+        enum setupStr = "\x1b(B\x1b)0\x0f";
+        write(1, setupStr.ptr, setupStr.length);
+      }
       atomicStore(inRawMode, true);
       return TTYMode.Normal;
     }
@@ -673,6 +679,8 @@ void ttyColor2rgb (ubyte cnum, out ubyte r, out ubyte g, out ubyte b) pure nothr
   */
 }
 
+/// Force CTFE
+enum TtyRgb2Color(ubyte r, ubyte g, ubyte b, bool allow256=true) = ttyRgb2Color!allow256(r, g, b);
 
 /// Convert rgb values to approximate 256-color (or 16-color) teminal color number
 ubyte ttyRgb2Color(bool allow256=true) (ubyte r, ubyte g, ubyte b) pure nothrow @trusted @nogc {

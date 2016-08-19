@@ -35,6 +35,19 @@ string quote (const(char)[] s) {
 char tolower (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch-'A'+'a') : ch); }
 char toupper (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'a' && ch <= 'z' ? cast(char)(ch-'a'+'A') : ch); }
 
+bool isalpha (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')); }
+bool isdigit (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= '0' && ch <= '9'); }
+bool isalnum (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')); }
+bool isxdigit (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f') || (ch >= '0' && ch <= '9')); }
+int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return
+    base >= 1 && ch >= '0' && ch < '0'+base ? ch-'0' :
+    base > 10 && ch >= 'A' && ch < 'A'+base-10 ? ch-'A'+10 :
+    base > 10 && ch >= 'a' && ch < 'a'+base-10 ? ch-'a'+10 :
+    -1;
+}
+
 
 // ascii only
 bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
