@@ -358,6 +358,11 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     }
   }
 
+  void badCSI () {
+    key = key.init;
+    key.key = TtyKey.Key.Unknown;
+  }
+
   bool xtermMods (uint mci) {
     switch (mci) {
       case 2: key.shift = true; return true;
@@ -372,9 +377,22 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     return false;
   }
 
-  void badCSI () {
-    key = key.init;
-    key.key = TtyKey.Key.Unknown;
+  void xtermSpecial (char ch) {
+    switch (ch) {
+      case 'A': key.key = TtyKey.Key.Up; break;
+      case 'B': key.key = TtyKey.Key.Down; break;
+      case 'C': key.key = TtyKey.Key.Right; break;
+      case 'D': key.key = TtyKey.Key.Left; break;
+      case 'E': key.key = TtyKey.Key.Pad5; break;
+      case 'H': key.key = TtyKey.Key.Home; break;
+      case 'F': key.key = TtyKey.Key.End; break;
+      case 'P': key.key = TtyKey.Key.F1; break;
+      case 'Q': key.key = TtyKey.Key.F2; break;
+      case 'R': key.key = TtyKey.Key.F3; break;
+      case 'S': key.key = TtyKey.Key.F4; break;
+      case 'Z': key.key = TtyKey.Key.Tab; key.ch = 9; if (!key.shift && !key.alt && !key.ctrl) key.shift = true; break;
+      default: badCSI(); break;
+    }
   }
 
   void csiSpecial (uint n) {
@@ -399,23 +417,6 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       case 10+11: key.key = TtyKey.Key.F10; return;
       case 11+12: key.key = TtyKey.Key.F11; return;
       case 12+12: key.key = TtyKey.Key.F12; return;
-      default: badCSI(); break;
-    }
-  }
-
-  void xtermSpecial (char ch) {
-    switch (ch) {
-      case 'A': key.key = TtyKey.Key.Up; break;
-      case 'B': key.key = TtyKey.Key.Down; break;
-      case 'C': key.key = TtyKey.Key.Right; break;
-      case 'D': key.key = TtyKey.Key.Left; break;
-      case 'E': key.key = TtyKey.Key.Pad5; break;
-      case 'H': key.key = TtyKey.Key.Home; break;
-      case 'F': key.key = TtyKey.Key.End; break;
-      case 'P': key.key = TtyKey.Key.F1; break;
-      case 'Q': key.key = TtyKey.Key.F2; break;
-      case 'R': key.key = TtyKey.Key.F3; break;
-      case 'S': key.key = TtyKey.Key.F4; break;
       default: badCSI(); break;
     }
   }
@@ -465,21 +466,6 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       // process specials
       if (nc == 0) {
         if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
-        switch (ch) {
-          case 'A': key.key = TtyKey.Key.Up; return key;
-          case 'B': key.key = TtyKey.Key.Down; return key;
-          case 'C': key.key = TtyKey.Key.Right; return key;
-          case 'D': key.key = TtyKey.Key.Left; return key;
-          case 'E': key.key = TtyKey.Key.Pad5; return key;
-          case 'H': key.key = TtyKey.Key.Home; return key;
-          case 'F': key.key = TtyKey.Key.End; return key;
-          case 'P': key.key = TtyKey.Key.F1; break;
-          case 'Q': key.key = TtyKey.Key.F2; break;
-          case 'R': key.key = TtyKey.Key.F3; break;
-          case 'S': key.key = TtyKey.Key.F4; break;
-          default:
-        }
-        badCSI();
       } else if (nc == 1) {
         if (ch == '~' && nn.ptr[0] == 200) { key.key = TtyKey.Key.PasteStart; return key; }
         if (ch == '~' && nn.ptr[0] == 201) { key.key = TtyKey.Key.PasteEnd; return key; }
