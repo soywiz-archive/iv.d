@@ -423,7 +423,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
 
   int ch = ttyReadKeyByte(toMSec);
   if (ch < 0) { key.key = TtyKey.Key.Error; return key; } // error
-  if (ch == 0) { key.key = TtyKey.Key.ModChar; key.alt = true; key.ch = '`'; return key; }
+  if (ch == 0) { key.key = TtyKey.Key.ModChar; key.ctrl = true; key.ch = ' '; return key; }
   if (ch == 8 || ch == 127) { key.key = TtyKey.Key.Backspace; key.ch = 8; return key; }
   if (ch == 9) { key.key = TtyKey.Key.Tab; key.ch = 9; return key; }
   if (ch == 10) { key.key = TtyKey.Key.Enter; key.ch = 13; return key; }
@@ -517,7 +517,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       else if (key.ch == 'J') { key.key = TtyKey.Key.Enter; key.ch = 13; }
       return key;
     }
-    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
+    if (/*(ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '`'*/true) {
       key.alt = true;
       key.key = TtyKey.Key.ModChar;
       key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
