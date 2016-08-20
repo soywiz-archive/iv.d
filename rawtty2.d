@@ -20,6 +20,8 @@ module iv.rawtty2;
 
 import core.sys.posix.termios : termios;
 
+//version = rawtty_weighted_colors;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 private __gshared termios origMode;
@@ -42,10 +44,11 @@ enum TTYMode {
 enum TermType {
   other,
   rxvt,
-  xterm
+  xterm,
 }
 
 __gshared TermType termType = TermType.other; ///
+__gshared bool xtermMetaSendsEscape = true; /// you should add `XTerm*metaSendsEscape: true` to "~/.Xdefaults"
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -458,7 +461,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
           break;
         }
       }
-      //{ import core.stdc.stdio : printf; printf("nc=%u", nc); foreach (uint idx; 0..nc) printf("; n%u=%u", idx, nn.ptr[idx]); printf("; ch=%c\n", ch); }
+      debug(rawtty_show_csi) { import core.stdc.stdio : printf; printf("nc=%u", nc); foreach (uint idx; 0..nc) printf("; n%u=%u", idx, nn.ptr[idx]); printf("; ch=%c\n", ch); }
       // process specials
       if (nc == 0) {
         if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
@@ -548,7 +551,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     key.key = TtyKey.Key.Char;
     key.ch = cast(dchar)(ch);
     // xterm does alt+letter with 7th bit set
-    if (termType == TermType.xterm && ch >= 0x80 && ch <= 0xff) {
+    if (!xtermMetaSendsEscape && termType == TermType.xterm && ch >= 0x80 && ch <= 0xff) {
       ch -= 0x80;
       if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
         key.alt = true;
@@ -694,17 +697,31 @@ ubyte ttyRgb2Color(bool allow256=true) (ubyte r, ubyte g, ubyte b) pure nothrow 
   ubyte resclr = 0;
   static if (allow256) enum lastc = 256; else enum lastc = 16;
   foreach (immutable idx, uint cc; ttyRGB[0..lastc]) {
-    long dr = cast(int)((cc>>16)&0xff)-cast(int)r;
-    dr = ((dr*m0)*(dr*m0))/n;
-    assert(dr >= 0);
-    long dg = cast(int)((cc>>8)&0xff)-cast(int)g;
-    dg = ((dg*m1)*(dg*m1))/n;
-    assert(dg >= 0);
-    long db = cast(int)(cc&0xff)-cast(int)b;
-    db = ((db*m2)*(db*m2))/n;
-    assert(db >= 0);
-    long d = dr+dg+db;
-    assert(d >= 0);
+    version(rawtty_weighted_colors) {
+      long dr = cast(int)((cc>>16)&0xff)-cast(int)r;
+      dr = ((dr*m0)*(dr*m0))/n;
+      assert(dr >= 0);
+      long dg = cast(int)((cc>>8)&0xff)-cast(int)g;
+      dg = ((dg*m1)*(dg*m1))/n;
+      assert(dg >= 0);
+      long db = cast(int)(cc&0xff)-cast(int)b;
+      db = ((db*m2)*(db*m2))/n;
+      assert(db >= 0);
+      long d = dr+dg+db;
+      assert(d >= 0);
+    } else {
+      long dr = cast(int)((cc>>16)&0xff)-cast(int)r;
+      dr = dr*dr;
+      assert(dr >= 0);
+      long dg = cast(int)((cc>>8)&0xff)-cast(int)g;
+      dg = dg*dg;
+      assert(dg >= 0);
+      long db = cast(int)(cc&0xff)-cast(int)b;
+      db = db*db;
+      assert(db >= 0);
+      long d = dr+dg+db;
+      assert(d >= 0);
+    }
     if (d < dist) {
       resclr = cast(ubyte)idx;
       dist = d;

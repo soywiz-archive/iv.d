@@ -1134,6 +1134,7 @@ public:
                 doChildrenRelayout = true;
                 clp.position.w = nd;
               }
+              clp.position.x = bpadLeft;
               break;
           }
           // fix flexbox size
