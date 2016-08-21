@@ -440,7 +440,7 @@ public struct TtyKey {
         if (pos < s.length && s.ptr[pos] > ' ') goto error;
         assert(w.length > 0);
         if (w.strEquCI("space")) w = " ";
-        if (w.length == 2 && w.ptr[0] == '^') { key.ctrl = true; w = w[1..$]; }
+        if (w.length > 1 && w.ptr[0] == '^') { key.ctrl = true; w = w[1..$]; }
         if (w.length == 1) {
           // single char
           key.ch = w.ptr[0];
