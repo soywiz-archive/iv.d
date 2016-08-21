@@ -489,6 +489,8 @@ public struct TtyKey {
           }
         } else {
           if (w.length > 2 && w.ptr[0] == '<' && w[$-1] == '>') w = w[1..$-1];
+          if (w.strEquCI("return")) w = "enter";
+          if (w.strEquCI("esc")) w = "escape";
           bool found = false;
           foreach (string kn; __traits(allMembers, TtyKey.Key)) {
             if (!found && w.strEquCI(kn)) {
