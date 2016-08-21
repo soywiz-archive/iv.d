@@ -345,6 +345,12 @@ public struct TtyKey {
       );
   }
 
+  bool opEquals (const(char)[] s) const pure nothrow @safe @nogc {
+    TtyKey k;
+    if (TtyKey.parse(k, s).length != 0) return false;
+    return (k == this);
+  }
+
   string toString () const nothrow {
     char[128] buf = void;
     return toCharBuf(buf[]).idup;
@@ -406,7 +412,7 @@ public struct TtyKey {
     "C-f any"
   */
   // return rest of the string, `TtyKey.Key.Error` on error, `TtyKey.Key.None` on empty string
-  static const(char)[] parse (out TtyKey key, const(char)[] s) nothrow @trusted @nogc {
+  static const(char)[] parse (out TtyKey key, const(char)[] s) pure nothrow @trusted @nogc {
     while (s.length && s.ptr[0] <= ' ') s = s[1..$];
     if (s.length == 0) return s; // no more
     // parse by words
