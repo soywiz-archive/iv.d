@@ -331,15 +331,24 @@ public struct TtyKey {
   }
 
   Key key; ///
-  bool alt, ctrl, shift; /// for special keys
+  bool ctrl, alt, shift; /// for special keys
   dchar ch = 0; /// can be 0 for special key
+
+  this (const(char)[] s) pure nothrow @safe @nogc {
+    if (TtyKey.parse(this, s).length != 0) {
+      key = Key.Error;
+      ctrl = alt = shift = false;
+      ch = 0;
+    }
+  }
 
   bool opEquals (in TtyKey k) const pure nothrow @safe @nogc {
     pragma(inline, true);
     return
       (key == k.key ?
        (key == Key.Char ? (ch == k.ch) :
-        key >= Key.ModChar ? (ctrl == k.ctrl && alt == k.alt && shift == k.shift) :
+        key == Key.ModChar ? (ctrl == k.ctrl && alt == k.alt && shift == k.shift && ch == k.ch) :
+        key > Key.ModChar ? (ctrl == k.ctrl && alt == k.alt && shift == k.shift) :
         true
        ) : false
       );
