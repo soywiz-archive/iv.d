@@ -19,7 +19,7 @@
 module iv.vfs.main;
 private:
 
-import iv.vfs.internal : usize;
+import iv.vfs.types : usize;
 import iv.vfs.config;
 import iv.vfs.augs;
 import iv.vfs.error;

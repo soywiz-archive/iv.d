@@ -18,7 +18,7 @@
 // data files from Temple of Elemental Evil (conflicts with Arcanum, so can't detect)
 module iv.vfs.arcs.toeedat;
 
-import iv.vfs.internal : usize, ssize, Seek;
+import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
 import iv.vfs.vfile;

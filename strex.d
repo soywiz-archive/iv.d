@@ -53,7 +53,11 @@ int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
 bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
   if (s0.length != s1.length) return false;
   foreach (immutable idx, char c0; s0) {
-    if (c0.tolower != s1.ptr[idx].tolower) return false;
+    if (__ctfe) {
+      if (c0.tolower != s1[idx].tolower) return false;
+    } else {
+      if (c0.tolower != s1.ptr[idx].tolower) return false;
+    }
   }
   return true;
 }

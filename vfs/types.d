@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.internal;
+module iv.vfs.types;
 
 static if (!is(typeof(object.usize))) {
   package alias usize = size_t;

@@ -17,7 +17,7 @@
  */
 module iv.vfs.streams.mem;
 
-private import iv.vfs.internal : ssize, usize, Seek;
+private import iv.vfs.types : ssize, usize, Seek;
 private import iv.vfs.error;
 private import iv.vfs.augs;
 

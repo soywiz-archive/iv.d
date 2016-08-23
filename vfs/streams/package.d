@@ -17,6 +17,6 @@
  */
 module iv.vfs.streams;
 
-public import iv.vfs.internal : Seek;
+public import iv.vfs.types : Seek;
 public import iv.vfs.augs;
 public import iv.vfs.streams.mem;

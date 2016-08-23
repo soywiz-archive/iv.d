@@ -18,7 +18,7 @@
 // data files from Arcanum (conflicts with ToEE, so can't detect)
 module iv.vfs.arcs.arcanum;
 
-import iv.vfs.internal : usize, ssize, Seek;
+import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
 import iv.vfs.vfile;

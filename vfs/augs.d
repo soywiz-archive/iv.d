@@ -19,13 +19,13 @@ module iv.vfs.augs;
 
 private import std.traits : isMutable;
 
-public import iv.vfs.internal : Seek;
+public import iv.vfs.types : Seek;
 public import iv.vfs.error;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // augmentation checks
-private import iv.vfs.internal : ssize, usize;
+private import iv.vfs.types : ssize, usize;
 
 /// is this "low-level" stream that can be read?
 enum isLowLevelStreamR(T) = is(typeof((inout int=0) {

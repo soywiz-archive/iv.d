@@ -17,7 +17,7 @@
  */
 module iv.vfs;
 
-public import iv.vfs.internal;
+public import iv.vfs.types;
 public import iv.vfs.config;
 public import iv.vfs.error;
 public import iv.vfs.augs;
