@@ -17,20 +17,20 @@
  */
 module iv.vfs.arcs.q1pak;
 
-import iv.vfs : usize, ssize, Seek;
+import iv.vfs.internal : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
 import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private import iv.vfs.arcs : VFSSimpleArchiveDetectorMixin;
+private import iv.vfs.arcs.internal : VFSSimpleArchiveDetectorMixin;
 mixin(VFSSimpleArchiveDetectorMixin!"Q1Pak");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverQ1Pak : VFSDriver {
-  private import iv.vfs.arcs : VFSSimpleArchiveDriverMixin;
+  private import iv.vfs.arcs.internal : VFSSimpleArchiveDriverMixin;
   mixin VFSSimpleArchiveDriverMixin;
 
 private:

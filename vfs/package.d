@@ -17,29 +17,7 @@
  */
 module iv.vfs;
 
-static if (!is(typeof(object.usize))) {
-  package alias usize = size_t;
-} else {
-  package import object : usize;
-}
-
-static if (!is(typeof(object.ssize))) {
-       static if (usize.sizeof == 8) package alias ssize = long;
-  else static if (usize.sizeof == 4) package alias ssize = int;
-  else static assert(0, "wtf?!");
-} else {
-  package import object : ssize;
-}
-
-
-private import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
-public enum Seek : int {
-  Set = SEEK_SET,
-  Cur = SEEK_CUR,
-  End = SEEK_END,
-}
-
-
+public import iv.vfs.internal;
 public import iv.vfs.config;
 public import iv.vfs.error;
 public import iv.vfs.augs;

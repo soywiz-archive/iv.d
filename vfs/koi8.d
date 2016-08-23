@@ -17,7 +17,7 @@
  */
 module iv.vfs.koi8;
 private:
-import iv.vfs : usize;
+import iv.vfs.internal : usize;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

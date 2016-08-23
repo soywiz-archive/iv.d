@@ -29,7 +29,7 @@ static import core.sys.posix.stdio;
 static import core.sys.posix.unistd;
 static import std.stdio;
 
-import iv.vfs : ssize, usize, Seek;
+import iv.vfs.internal : ssize, usize, Seek;
 import iv.vfs.config;
 import iv.vfs.error;
 import iv.vfs.augs;

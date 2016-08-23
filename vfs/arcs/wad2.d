@@ -17,20 +17,20 @@
  */
 module iv.vfs.arcs.wad2;
 
-import iv.vfs : usize, ssize, Seek;
+import iv.vfs.internal : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
 import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private import iv.vfs.arcs : VFSSimpleArchiveDetectorMixin;
+private import iv.vfs.arcs.internal : VFSSimpleArchiveDetectorMixin;
 mixin(VFSSimpleArchiveDetectorMixin!"Wad2");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverWad2 : VFSDriver {
-  private import iv.vfs.arcs : VFSSimpleArchiveDriverMixin;
+  private import iv.vfs.arcs.internal : VFSSimpleArchiveDriverMixin;
   mixin VFSSimpleArchiveDriverMixin;
 
 private:
