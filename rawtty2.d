@@ -82,14 +82,21 @@ __gshared bool xtermMetaSendsEscape = true; /// you should add `XTerm*metaSendsE
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void ttyEnableBracketedPaste () {
+void ttyBeep () nothrow @trusted @nogc {
+  import core.sys.posix.unistd : write;
+  enum str = "\x07";
+  write(1, str.ptr, str.length);
+}
+
+
+void ttyEnableBracketedPaste () nothrow @trusted @nogc {
   import core.sys.posix.unistd : write;
   enum str = "\x1b[?2004h";
   write(1, str.ptr, str.length);
 }
 
 
-void ttyDisableBracketedPaste () {
+void ttyDisableBracketedPaste () nothrow @trusted @nogc {
   import core.sys.posix.unistd : write;
   enum str = "\x1b[?2004l";
   write(1, str.ptr, str.length);
@@ -491,15 +498,25 @@ public struct TtyKey {
           if (w.length > 2 && w.ptr[0] == '<' && w[$-1] == '>') w = w[1..$-1];
           if (w.strEquCI("return")) w = "enter";
           if (w.strEquCI("esc")) w = "escape";
-          bool found = false;
-          foreach (string kn; __traits(allMembers, TtyKey.Key)) {
-            if (!found && w.strEquCI(kn)) {
-              found = true;
-              key.key = __traits(getMember, TtyKey.Key, kn);
-              break;
+          if (w.strEquCI("PasteStart")) {
+            key.key = TtyKey.Key.PasteStart;
+            key.ctrl = key.alt = key.shift = false;
+            key.ch = 0;
+          } else if (w.strEquCI("PasteEnd")) {
+            key.key = TtyKey.Key.PasteEnd;
+            key.ctrl = key.alt = key.shift = false;
+            key.ch = 0;
+          } else {
+            bool found = false;
+            foreach (string kn; __traits(allMembers, TtyKey.Key)) {
+              if (!found && w.strEquCI(kn)) {
+                found = true;
+                key.key = __traits(getMember, TtyKey.Key, kn);
+                break;
+              }
             }
+            if (!found || key.key < TtyKey.Key.Up) goto error;
           }
-          if (!found || key.key < TtyKey.Key.Up) goto error;
           // just in case
                if (key.key == TtyKey.Key.Enter) key.ch = 13;
           else if (key.key == TtyKey.Key.Tab) key.ch = 9;
