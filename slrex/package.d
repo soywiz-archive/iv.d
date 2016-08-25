@@ -35,6 +35,7 @@ struct Slre {
   // possible flags for match()
   enum Flag {
     IgnoreCase = 1<<0,
+    Multiline = 1<<1, // without this, dot will match '\n', and so on
   }
 
   // match() failure codes
@@ -91,6 +92,7 @@ struct Slre {
 private:
 char tolower (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch-'A'+'a') : ch); }
 bool isxdigit (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f') || (ch >= '0' && ch <= '9')); }
+bool iswordchar (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_'); }
 
 
 enum MAX_BRANCHES = 100;
@@ -221,7 +223,16 @@ int match_op(XS, SS) (XS re, SS s, regex_info* info) {
         case 'S': if (s[0] <= ' ') return Slre.Result.NoMatch; ++result; break;
         case 's': if (s[0] > ' ') return Slre.Result.NoMatch; ++result; break;
         case 'd': if (s[0] < '0' || s[0] > '9') return Slre.Result.NoMatch; ++result; break;
-        case 'b': if (s[0] != '\b') return Slre.Result.NoMatch; ++result; break;
+        case 'b': // word boundary
+          if (!iswordchar(s[0])) {
+            // non-word char: check next char
+            if (s.curofs > 0 && !iswordchar(s.origin[s.curofs-1])) return Slre.Result.NoMatch;
+          } else {
+            // word char: check previous char
+            if (s.curofs > 0 && iswordchar(s.origin[s.curofs-1])) return Slre.Result.NoMatch;
+          }
+          //++result;
+          break;
         case 'f': if (s[0] != '\f') return Slre.Result.NoMatch; ++result; break;
         case 'n': if (s[0] != '\n') return Slre.Result.NoMatch; ++result; break;
         case 'r': if (s[0] != '\r') return Slre.Result.NoMatch; ++result; break;
@@ -370,7 +381,8 @@ int bar(XS, SS) (XS re, SS s, regex_info* info, int bi) {
     } else {
       if (j >= s.length) return Slre.Result.NoMatch;
       n = match_op(re+i, s+j, info);
-      if (n <= 0) return n;
+      //if (n <= 0) return n;
+      if (n < 0) return n;
       j += n;
     }
   }
@@ -400,13 +412,36 @@ int doh(XS, SS) (XS re, SS s, regex_info* info, int bi) {
 
 
 int baz(XS, SS) (XS re, SS s, regex_info* info) {
-  int i, result = -1;
+  int result = -1;
   bool is_anchored = (re.origin[info.brackets[0].ptrofs] == '^');
   *info.sofs = -1;
-  for (i = 0; i <= s.length; ++i) {
-    result = doh(re, s+i, info, 0);
-    if (result >= 0) { *info.sofs = i; result += i; break; }
-    if (is_anchored) break;
+  if (info.flags&Slre.Flag.Multiline) {
+    int spos = 0;
+    while (spos <= s.length) {
+      // find EOL
+      int epos = spos;
+      while (epos < s.length && s[epos] != '\n') ++epos;
+     tryagain:
+      result = doh(re, s[spos..epos], info, 0);
+      if (result >= 0) { *info.sofs = spos; result += spos; break; }
+      if (is_anchored) {
+        // skip to next line
+        if (epos >= s.length) {
+          result = doh(re, s[spos..epos], info, 0);
+          if (result >= 0) { *info.sofs = spos; result += spos; break; }
+          break;
+        }
+        spos = epos+1;
+      } else {
+        if (++spos <= epos) goto tryagain;
+      }
+    }
+  } else {
+    for (int i = 0; i <= s.length; ++i) {
+      result = doh(re, s+i, info, 0);
+      if (result >= 0) { *info.sofs = i; result += i; break; }
+      if (is_anchored) break;
+    }
   }
   return result;
 }
