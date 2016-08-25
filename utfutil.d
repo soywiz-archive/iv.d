@@ -120,9 +120,9 @@ public:
   @property bool invalid () const { pragma(inline, true); return ((codep&State.Mask) == State.Reject); }
   @property bool completeOrInvalid () const { pragma(inline, true); return (complete || invalid); }
   @property dchar currCodePoint () const { pragma(inline, true); return (codep <= dchar.max ? codep : replacement); }
+  void reset () { codep = State.Accept; }
   // same as `decode`, never reaches `invalid` state, returns `replacement` for invalid chars
   // returns invalid dchar while it is "in progress" (i.e. result > dchar.max)
-  void reset () { codep = State.Accept; }
   dchar decode (ubyte b) @trusted {
     immutable ubyte type = Utf8DecoderFast.utf8dfa.ptr[b];
     ubyte state = (codep>>24)&0xff;
