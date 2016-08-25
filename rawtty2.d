@@ -20,6 +20,7 @@ module iv.rawtty2;
 
 import core.sys.posix.termios : termios;
 import iv.strex : strEquCI;
+import iv.utfutil;
 
 //version = rawtty_weighted_colors;
 
@@ -50,11 +51,15 @@ enum TermType {
 
 __gshared TermType termType = TermType.other; ///
 __gshared bool xtermMetaSendsEscape = true; /// you should add `XTerm*metaSendsEscape: true` to "~/.Xdefaults"
+private __gshared bool ttyIsFuckedFlag = false;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// is TTY stdin or stdout redirected?
 @property bool ttyIsRedirected () nothrow @trusted @nogc { pragma(inline, true); return redirected; }
+
+/// is TTY fucked with utfuck?
+@property bool ttyIsUtfucked () nothrow @trusted @nogc { pragma(inline, true); return ttyIsFuckedFlag; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -740,16 +745,30 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   } else {
     key.key = TtyKey.Key.Char;
     key.ch = cast(dchar)(ch);
-    // xterm does alt+letter with 7th bit set
-    if (!xtermMetaSendsEscape && termType == TermType.xterm && ch >= 0x80 && ch <= 0xff) {
-      ch -= 0x80;
-      if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
-        key.alt = true;
-        key.key = TtyKey.Key.ModChar;
-        key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
-        if (ch >= 'a' && ch <= 'z') ch -= 32;
-        key.ch = cast(dchar)ch;
-        return key;
+    if (ttyIsFuckedFlag && ch >= 0x80) {
+      Utf8Decoder udc;
+      for (;;) {
+        auto dch = udc.decode(cast(ubyte)ch);
+        if (dch <= dchar.max) break;
+        // want more shit!
+        ch = ttyReadKeyByte(toEscMSec);
+        if (ch < 0) break;
+      }
+      if (!udc.invalid) {
+        key.ch = uni2koi(udc.currCodePoint);
+      }
+    } else {
+      // xterm does alt+letter with 7th bit set
+      if (!xtermMetaSendsEscape && termType == TermType.xterm && ch >= 0x80 && ch <= 0xff) {
+        ch -= 0x80;
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
+          key.alt = true;
+          key.key = TtyKey.Key.ModChar;
+          key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
+          if (ch >= 'a' && ch <= 'z') ch -= 32;
+          key.ch = cast(dchar)ch;
+          return key;
+        }
       }
     }
   }
@@ -919,4 +938,179 @@ ubyte ttyRgb2Color(bool allow256=true) (ubyte r, ubyte g, ubyte b) pure nothrow 
     }
   }
   return resclr;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private immutable ubyte[0x458-0x401] uni2koiTable = [
+  0xB3,0x3F,0x3F,0xB4,0x3F,0xB6,0xB7,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0xE1,
+  0xE2,0xF7,0xE7,0xE4,0xE5,0xF6,0xFA,0xE9,0xEA,0xEB,0xEC,0xED,0xEE,0xEF,0xF0,0xF2,
+  0xF3,0xF4,0xF5,0xE6,0xE8,0xE3,0xFE,0xFB,0xFD,0xFF,0xF9,0xF8,0xFC,0xE0,0xF1,0xC1,
+  0xC2,0xD7,0xC7,0xC4,0xC5,0xD6,0xDA,0xC9,0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0xD0,0xD2,
+  0xD3,0xD4,0xD5,0xC6,0xC8,0xC3,0xDE,0xDB,0xDD,0xDF,0xD9,0xD8,0xDC,0xC0,0xD1,0x3F,
+  0xA3,0x3F,0x3F,0xA4,0x3F,0xA6,0xA7
+];
+
+
+// convert unicode to koi8-u
+public char uni2koi() (dchar ch) pure nothrow @trusted @nogc {
+  if (ch < 127) return cast(char)(ch&0xff);
+  if (ch > 0x400 && ch < 0x458) return cast(char)(uni2koiTable.ptr[ch-0x401]);
+  switch (ch) {
+    case 0x490: return 0xBD; // ukrainian G with upturn (upcase)
+    case 0x491: return 0xAD; // ukrainian G with upturn (locase)
+    case 0x2500: return 0x80; // BOX DRAWINGS LIGHT HORIZONTAL
+    case 0x2502: return 0x81; // BOX DRAWINGS LIGHT VERTICAL
+    case 0x250c: return 0x82; // BOX DRAWINGS LIGHT DOWN AND RIGHT
+    case 0x2510: return 0x83; // BOX DRAWINGS LIGHT DOWN AND LEFT
+    case 0x2514: return 0x84; // BOX DRAWINGS LIGHT UP AND RIGHT
+    case 0x2518: return 0x85; // BOX DRAWINGS LIGHT UP AND LEFT
+    case 0x251c: return 0x86; // BOX DRAWINGS LIGHT VERTICAL AND RIGHT
+    case 0x2524: return 0x87; // BOX DRAWINGS LIGHT VERTICAL AND LEFT
+    case 0x252c: return 0x88; // BOX DRAWINGS LIGHT DOWN AND HORIZONTAL
+    case 0x2534: return 0x89; // BOX DRAWINGS LIGHT UP AND HORIZONTAL
+    case 0x253c: return 0x8A; // BOX DRAWINGS LIGHT VERTICAL AND HORIZONTAL
+    case 0x2580: return 0x8B; // UPPER HALF BLOCK
+    case 0x2584: return 0x8C; // LOWER HALF BLOCK
+    case 0x2588: return 0x8D; // FULL BLOCK
+    case 0x258c: return 0x8E; // LEFT HALF BLOCK
+    case 0x2590: return 0x8F; // RIGHT HALF BLOCK
+    case 0x2591: return 0x90; // LIGHT SHADE
+    case 0x2592: return 0x91; // MEDIUM SHADE
+    case 0x2593: return 0x92; // DARK SHADE
+    case 0x2320: return 0x93; // TOP HALF INTEGRAL
+    case 0x25a0: return 0x94; // BLACK SQUARE
+    case 0x2219: return 0x95; // BULLET OPERATOR
+    case 0x221a: return 0x96; // SQUARE ROOT
+    case 0x2248: return 0x97; // ALMOST EQUAL TO
+    case 0x2264: return 0x98; // LESS-THAN OR EQUAL TO
+    case 0x2265: return 0x99; // GREATER-THAN OR EQUAL TO
+    case 0x00a0: return 0x9A; // NO-BREAK SPACE
+    case 0x2321: return 0x9B; // BOTTOM HALF INTEGRAL
+    case 0x00b0: return 0x9C; // DEGREE SIGN
+    case 0x00b2: return 0x9D; // SUPERSCRIPT TWO
+    case 0x00b7: return 0x9E; // MIDDLE DOT
+    case 0x00f7: return 0x9F; // DIVISION SIGN
+    case 0x2550: return 0xA0; // BOX DRAWINGS DOUBLE HORIZONTAL
+    case 0x2551: return 0xA1; // BOX DRAWINGS DOUBLE VERTICAL
+    case 0x2552: return 0xA2; // BOX DRAWINGS DOWN SINGLE AND RIGHT DOUBLE
+    case 0x2554: return 0xA5; // BOX DRAWINGS DOUBLE DOWN AND RIGHT
+    case 0x2557: return 0xA8; // BOX DRAWINGS DOUBLE DOWN AND LEFT
+    case 0x2558: return 0xA9; // BOX DRAWINGS UP SINGLE AND RIGHT DOUBLE
+    case 0x2559: return 0xAA; // BOX DRAWINGS UP DOUBLE AND RIGHT SINGLE
+    case 0x255a: return 0xAB; // BOX DRAWINGS DOUBLE UP AND RIGHT
+    case 0x255b: return 0xAC; // BOX DRAWINGS UP SINGLE AND LEFT DOUBLE
+    case 0x255d: return 0xAE; // BOX DRAWINGS DOUBLE UP AND LEFT
+    case 0x255e: return 0xAF; // BOX DRAWINGS VERTICAL SINGLE AND RIGHT DOUBLE
+    case 0x255f: return 0xB0; // BOX DRAWINGS VERTICAL DOUBLE AND RIGHT SINGLE
+    case 0x2560: return 0xB1; // BOX DRAWINGS DOUBLE VERTICAL AND RIGHT
+    case 0x2561: return 0xB2; // BOX DRAWINGS VERTICAL SINGLE AND LEFT DOUBLE
+    case 0x2563: return 0xB5; // BOX DRAWINGS DOUBLE VERTICAL AND LEFT
+    case 0x2566: return 0xB8; // BOX DRAWINGS DOUBLE DOWN AND HORIZONTAL
+    case 0x2567: return 0xB9; // BOX DRAWINGS UP SINGLE AND HORIZONTAL DOUBLE
+    case 0x2568: return 0xBA; // BOX DRAWINGS UP DOUBLE AND HORIZONTAL SINGLE
+    case 0x2569: return 0xBB; // BOX DRAWINGS DOUBLE UP AND HORIZONTAL
+    case 0x256a: return 0xBC; // BOX DRAWINGS VERTICAL SINGLE AND HORIZONTAL DOUBLE
+    case 0x256c: return 0xBE; // BOX DRAWINGS DOUBLE VERTICAL AND HORIZONTAL
+    case 0x00a9: return 0xBF; // COPYRIGHT SIGN
+    //
+    case 0x2562: return 0xB4; // BOX DRAWINGS DOUBLE VERTICAL AND LEFT SINGLE
+    case 0x2564: return 0xB6; // BOX DRAWINGS DOWN SINGLE AND DOUBLE HORIZONTAL
+    case 0x2565: return 0xB7; // BOX DRAWINGS DOWN DOUBLE AND SINGLE HORIZONTAL
+    case 0x256B: return 0xBD; // BOX DRAWINGS DOUBLE VERTICAL AND HORIZONTAL SINGLE
+    default:
+  }
+  return 0;
+}
+
+
+// convert koi8-u to unicode
+public dchar koi2uni() (char ch) pure nothrow @trusted @nogc {
+  if (ch < 127) return ch;
+  foreach (immutable idx, ubyte b; uni2koiTable) {
+    if (b == ch) return cast(dchar)(idx+0x401);
+  }
+  switch (ch) {
+    case 0xBD: return cast(dchar)0x490; // ukrainian G with upturn (upcase)
+    case 0xAD: return cast(dchar)0x491; // ukrainian G with upturn (locase)
+    case 0x80: return cast(dchar)0x2500; // BOX DRAWINGS LIGHT HORIZONTAL
+    case 0x81: return cast(dchar)0x2502; // BOX DRAWINGS LIGHT VERTICAL
+    case 0x82: return cast(dchar)0x250c; // BOX DRAWINGS LIGHT DOWN AND RIGHT
+    case 0x83: return cast(dchar)0x2510; // BOX DRAWINGS LIGHT DOWN AND LEFT
+    case 0x84: return cast(dchar)0x2514; // BOX DRAWINGS LIGHT UP AND RIGHT
+    case 0x85: return cast(dchar)0x2518; // BOX DRAWINGS LIGHT UP AND LEFT
+    case 0x86: return cast(dchar)0x251c; // BOX DRAWINGS LIGHT VERTICAL AND RIGHT
+    case 0x87: return cast(dchar)0x2524; // BOX DRAWINGS LIGHT VERTICAL AND LEFT
+    case 0x88: return cast(dchar)0x252c; // BOX DRAWINGS LIGHT DOWN AND HORIZONTAL
+    case 0x89: return cast(dchar)0x2534; // BOX DRAWINGS LIGHT UP AND HORIZONTAL
+    case 0x8A: return cast(dchar)0x253c; // BOX DRAWINGS LIGHT VERTICAL AND HORIZONTAL
+    case 0x8B: return cast(dchar)0x2580; // UPPER HALF BLOCK
+    case 0x8C: return cast(dchar)0x2584; // LOWER HALF BLOCK
+    case 0x8D: return cast(dchar)0x2588; // FULL BLOCK
+    case 0x8E: return cast(dchar)0x258c; // LEFT HALF BLOCK
+    case 0x8F: return cast(dchar)0x2590; // RIGHT HALF BLOCK
+    case 0x90: return cast(dchar)0x2591; // LIGHT SHADE
+    case 0x91: return cast(dchar)0x2592; // MEDIUM SHADE
+    case 0x92: return cast(dchar)0x2593; // DARK SHADE
+    case 0x93: return cast(dchar)0x2320; // TOP HALF INTEGRAL
+    case 0x94: return cast(dchar)0x25a0; // BLACK SQUARE
+    case 0x95: return cast(dchar)0x2219; // BULLET OPERATOR
+    case 0x96: return cast(dchar)0x221a; // SQUARE ROOT
+    case 0x97: return cast(dchar)0x2248; // ALMOST EQUAL TO
+    case 0x98: return cast(dchar)0x2264; // LESS-THAN OR EQUAL TO
+    case 0x99: return cast(dchar)0x2265; // GREATER-THAN OR EQUAL TO
+    case 0x9A: return cast(dchar)0x00a0; // NO-BREAK SPACE
+    case 0x9B: return cast(dchar)0x2321; // BOTTOM HALF INTEGRAL
+    case 0x9C: return cast(dchar)0x00b0; // DEGREE SIGN
+    case 0x9D: return cast(dchar)0x00b2; // SUPERSCRIPT TWO
+    case 0x9E: return cast(dchar)0x00b7; // MIDDLE DOT
+    case 0x9F: return cast(dchar)0x00f7; // DIVISION SIGN
+    case 0xA0: return cast(dchar)0x2550; // BOX DRAWINGS DOUBLE HORIZONTAL
+    case 0xA1: return cast(dchar)0x2551; // BOX DRAWINGS DOUBLE VERTICAL
+    case 0xA2: return cast(dchar)0x2552; // BOX DRAWINGS DOWN SINGLE AND RIGHT DOUBLE
+    case 0xA5: return cast(dchar)0x2554; // BOX DRAWINGS DOUBLE DOWN AND RIGHT
+    case 0xA8: return cast(dchar)0x2557; // BOX DRAWINGS DOUBLE DOWN AND LEFT
+    case 0xA9: return cast(dchar)0x2558; // BOX DRAWINGS UP SINGLE AND RIGHT DOUBLE
+    case 0xAA: return cast(dchar)0x2559; // BOX DRAWINGS UP DOUBLE AND RIGHT SINGLE
+    case 0xAB: return cast(dchar)0x255a; // BOX DRAWINGS DOUBLE UP AND RIGHT
+    case 0xAC: return cast(dchar)0x255b; // BOX DRAWINGS UP SINGLE AND LEFT DOUBLE
+    case 0xAE: return cast(dchar)0x255d; // BOX DRAWINGS DOUBLE UP AND LEFT
+    case 0xAF: return cast(dchar)0x255e; // BOX DRAWINGS VERTICAL SINGLE AND RIGHT DOUBLE
+    case 0xB0: return cast(dchar)0x255f; // BOX DRAWINGS VERTICAL DOUBLE AND RIGHT SINGLE
+    case 0xB1: return cast(dchar)0x2560; // BOX DRAWINGS DOUBLE VERTICAL AND RIGHT
+    case 0xB2: return cast(dchar)0x2561; // BOX DRAWINGS VERTICAL SINGLE AND LEFT DOUBLE
+    case 0xB5: return cast(dchar)0x2563; // BOX DRAWINGS DOUBLE VERTICAL AND LEFT
+    case 0xB8: return cast(dchar)0x2566; // BOX DRAWINGS DOUBLE DOWN AND HORIZONTAL
+    case 0xB9: return cast(dchar)0x2567; // BOX DRAWINGS UP SINGLE AND HORIZONTAL DOUBLE
+    case 0xBA: return cast(dchar)0x2568; // BOX DRAWINGS UP DOUBLE AND HORIZONTAL SINGLE
+    case 0xBB: return cast(dchar)0x2569; // BOX DRAWINGS DOUBLE UP AND HORIZONTAL
+    case 0xBC: return cast(dchar)0x256a; // BOX DRAWINGS VERTICAL SINGLE AND HORIZONTAL DOUBLE
+    case 0xBE: return cast(dchar)0x256c; // BOX DRAWINGS DOUBLE VERTICAL AND HORIZONTAL
+    case 0xBF: return cast(dchar)0x00a9; // COPYRIGHT SIGN
+    //
+    case 0xB4: return cast(dchar)0x2562; // BOX DRAWINGS DOUBLE VERTICAL AND LEFT SINGLE
+    case 0xB6: return cast(dchar)0x2564; // BOX DRAWINGS DOWN SINGLE AND DOUBLE HORIZONTAL
+    case 0xB7: return cast(dchar)0x2565; // BOX DRAWINGS DOWN DOUBLE AND SINGLE HORIZONTAL
+    //case 0xBD: return cast(dchar)0x256B; // BOX DRAWINGS DOUBLE VERTICAL AND HORIZONTAL SINGLE
+    default:
+  }
+  return '?';
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+shared static this () {
+  import core.sys.posix.stdlib : getenv;
+
+  ttyIsFuckedFlag = false;
+
+  auto lang = getenv("LANG");
+  if (lang is null) return;
+
+  static char tolower (char ch) pure nothrow @safe @nogc { return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch-'A'+'a') : ch); }
+
+  while (*lang) {
+    if (tolower(lang[0]) == 'u' && tolower(lang[1]) == 't' && tolower(lang[2]) == 'f') { ttyIsFuckedFlag = true; return; }
+    ++lang;
+  }
 }
