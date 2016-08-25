@@ -64,7 +64,7 @@ struct Slre {
    *
    * `flags` is a bitset of `Flag`s.
    */
-  public static int matchFirst(RR, RS) (RR regexp, RS s, Capture[] caps, int flags=0)
+  public static int matchFirst(RR, RS) (RR regexp, RS s, Capture[] caps=null, int flags=0)
   if (isGoodSlreRange!RR && isGoodSlreRange!RS)
   {
     if (s.length > int.max-1) return Result.StringTooBig;
@@ -345,7 +345,7 @@ int bar(XS, SS) (XS re, SS s, regex_info* info, int bi) {
       }
       //DBG(("CAPTURED [%.s[0]] [%.s[0]]:%d\n", step, re+i, s_len-j, s+j, n));
       if (n < 0) return n;
-      if (info.caps.length && n > 0) {
+      if (info.caps.length && n > 0 && bi-1 >= 0 && bi-1 < info.caps.length) {
         //info.caps[bi-1].ptr = s+j;
         //info.caps[bi-1].len = n;
         info.caps[bi-1].ofs = s.curofs+j;
@@ -465,7 +465,7 @@ int foo(XS, SS) (XS re, SS s, regex_info* info) {
       info.brackets[info.num_brackets].ptrofs = re.curofs+i+1;
       info.brackets[info.num_brackets].len = -1;
       ++info.num_brackets;
-      if (info.caps.length && info.num_brackets-1 > info.caps.length) return Slre.Result.CapsArrayTooSmall;
+      //!if (info.caps.length && info.num_brackets-1 > info.caps.length) return Slre.Result.CapsArrayTooSmall;
     } else if (re[i] == ')') {
       int ind = (info.brackets[info.num_brackets-1].len == -1 ? info.num_brackets-1 : depth);
       info.brackets[ind].len = re.curofs+i-info.brackets[ind].ptrofs;

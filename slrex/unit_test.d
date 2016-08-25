@@ -183,7 +183,10 @@ void main () {
   ASSERT(slre_match("ab(cd)+?ef", "abcdcdef", 8, null, 0, 0) == 8);
   ASSERT(slre_match("ab(cd)+?.", "abcdcdef", 8, null, 0, 0) == 5);
   ASSERT(slre_match("ab(cd)?", "abcdcdef", 8, null, 0, 0) == 4);
-  ASSERT(slre_match("a(b)(cd)", "abcdcdef", 8, caps.ptr, 1, 0) == Slre.Result.CapsArrayTooSmall);
+  //ASSERT(slre_match("a(b)(cd)", "abcdcdef", 8, caps.ptr, 1, 0) == Slre.Result.CapsArrayTooSmall);
+  ASSERT(slre_match("a(b)(cd)", "abcdcdef", 8, caps.ptr, 1, 0) == 4);
+  ASSERT(caps[0].ofs == 1);
+  ASSERT(caps[0].len == 1);
   ASSERT(slre_match("(.+/\\d+\\.\\d+)\\.jpg$", "/foo/bar/12.34.jpg", 18, caps.ptr, 1, 0) == 18);
   ASSERT(slre_match("(ab|cd).*\\.(xx|yy)", "ab.yy", 5, null, 0, 0) == 5);
   ASSERT(slre_match(".*a", "abcdef", 6, null, 0, 0) == 1);
