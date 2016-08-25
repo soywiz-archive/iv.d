@@ -29,7 +29,6 @@ enum isGoodSlreRange(T) =
 
 struct Slre {
   static struct Capture {
-    //const(char)[] ptr;
     int ofs, len;
   }
 
@@ -77,9 +76,8 @@ struct Slre {
     info.caps = caps[];
 
     //DBG(("========================> [%s] [%.*s]\n", regexp, s_len, s));
-    foreach (ref cp; caps) { cp.ofs = cp.len = -1; }
-    auto res = foo(XString!(typeof(regexp))(regexp), XString!(typeof(s))(s), &info);
-    return res;
+    foreach (ref cp; caps) { cp.ofs = 0; cp.len = -1; }
+    return foo(XString!(typeof(regexp))(regexp), XString!(typeof(s))(s), &info);
   }
 }
 
@@ -92,11 +90,9 @@ bool isxdigit (char ch) pure nothrow @trusted @nogc { pragma(inline, true); retu
 
 enum MAX_BRANCHES = 100;
 enum MAX_BRACKETS = 100;
-//#define FAIL_IF(condition, error_code) if (condition) return (error_code)
 
 
 struct bracket_pair {
-  //const(char)* ptr; // points to the first char after '(' in regex
   int ptrofs;       // points to the first char after '(' in regex
   int len;          // length of the text between '(' and ')'
   int branches;     // index in the branches array for this pair
@@ -105,29 +101,22 @@ struct bracket_pair {
 
 struct branch {
   int bracket_index; // index for 'struct bracket_pair brackets' array defined below
-  //const(char)* schlong; // points to the '|' character in the regex
   int schlongofs; // points to the '|' character in the regex
 }
 
 struct regex_info {
-  /*
-   * Describes all bracket pairs in the regular expression.
-   * First entry is always present, and grabs the whole regex.
-   */
+  // describes all bracket pairs in the regular expression; first entry is always present, and grabs the whole regex
   bracket_pair[MAX_BRACKETS] brackets;
   int num_brackets;
 
-  /*
-   * Describes alternations ('|' operators) in the regular expression.
-   * Each branch falls into a specific branch pair.
-   */
+  // describes alternations ('|' operators) in the regular expression; each branch falls into a specific branch pair
   branch[MAX_BRANCHES] branches;
   int num_branches;
 
-  /* Array of captures provided by the user */
+  // array of captures provided by the user
   Slre.Capture[] caps;
 
-  /* E.g. Slre.Flag.IgnoreCase. See enum below */
+  // e.g. Slre.Flag.IgnoreCase
   int flags;
 }
 
@@ -152,10 +141,10 @@ struct XString(T) {
     if (pos >= len) return 0;
     return rng[curofs+cast(int)pos];
   }
-  @property bool empty () { return (len < 1); }
-  @property char front () { return (len > 0 ? rng[curofs] : 0); }
-  void popFront () pure nothrow @safe @nogc { if (len > 0) { ++curofs; --len; } }
-  @property int length () { return len; }
+  //@property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (len < 1); }
+  //@property char front () { return (len > 0 ? rng[curofs] : 0); }
+  //void popFront () pure nothrow @safe @nogc { if (len > 0) { ++curofs; --len; } }
+  @property int length () const pure nothrow @safe @nogc { pragma(inline, true); return len; }
   alias opDollar = length;
   auto opBinary(string op : "+") (int n) {
     if (n < 0) assert(0);
@@ -178,12 +167,13 @@ struct XString(T) {
 }
 
 
-bool is_metacharacter (char stc) {
+bool is_metacharacter (char stc) pure nothrow @safe @nogc {
   foreach (char ch; "^$().[]*+?|\\Ssdbfnrtv") if (stc == ch) return true;
   return false;
 }
 
-bool is_quantifier (char ch) {
+bool is_quantifier (char ch) pure nothrow @safe @nogc {
+  pragma(inline, true);
   return (ch == '*' || ch == '+' || ch == '?');
 }
 
