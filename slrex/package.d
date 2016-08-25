@@ -20,11 +20,16 @@
  * This is a regular expression library that implements a subset of Perl RE.
  * Please refer to README.md for a detailed reference.
  */
-module iv.slre;
+module iv.slrex;
+
+enum isGoodSlreRange(T) =
+  is(typeof({ auto t = T.init; long len = t.length; })) &&
+  is(typeof({ auto t = T.init; char ch = t[2]; }));
+
 
 struct Slre {
   static struct Capture {
-    const(char)[] ptr;
+    //const(char)[] ptr;
     int ofs, len;
   }
 
@@ -60,7 +65,9 @@ struct Slre {
    *
    * `flags` is a bitset of `Flag`s.
    */
-  public static int matchFirst (const(char)[] regexp, const(char)[] s, Capture[] caps, int flags=0) {
+  public static int matchFirst(RR, RS) (RR regexp, RS s, Capture[] caps, int flags=0)
+  if (isGoodSlreRange!RR && isGoodSlreRange!RS)
+  {
     if (s.length > int.max-1) return Result.StringTooBig;
     if (regexp.length > int.max-1) return Result.RegexpTooBig;
 
@@ -70,15 +77,8 @@ struct Slre {
     info.caps = caps[];
 
     //DBG(("========================> [%s] [%.*s]\n", regexp, s_len, s));
-    foreach (ref cp; caps) { cp.ptr = null; cp.ofs = cp.len = 0; }
-    auto res = foo(regexp.ptr, cast(int)regexp.length, s.ptr, cast(int)s.length, &info);
-    // fix captures
-    foreach (ref cp; caps) {
-      if (cp.ptr.ptr !is null) {
-        cp.ofs = cast(int)(cp.ptr.ptr-s.ptr);
-        cp.len = cast(int)cp.ptr.length;
-      }
-    }
+    foreach (ref cp; caps) { cp.ofs = cp.len = -1; }
+    auto res = foo(XString!(typeof(regexp))(regexp), XString!(typeof(s))(s), &info);
     return res;
   }
 }
@@ -96,7 +96,8 @@ enum MAX_BRACKETS = 100;
 
 
 struct bracket_pair {
-  const(char)* ptr; // points to the first char after '(' in regex
+  //const(char)* ptr; // points to the first char after '(' in regex
+  int ptrofs;       // points to the first char after '(' in regex
   int len;          // length of the text between '(' and ')'
   int branches;     // index in the branches array for this pair
   int num_branches; // number of '|' in this bracket pair
@@ -104,7 +105,8 @@ struct bracket_pair {
 
 struct branch {
   int bracket_index; // index for 'struct bracket_pair brackets' array defined below
-  const(char)* schlong; // points to the '|' character in the regex
+  //const(char)* schlong; // points to the '|' character in the regex
+  int schlongofs; // points to the '|' character in the regex
 }
 
 struct regex_info {
@@ -130,28 +132,73 @@ struct regex_info {
 }
 
 
-bool is_metacharacter (const(char)* s) nothrow @nogc {
-  import core.stdc.string : memchr;
-  static immutable string metacharacters = "^$().[]*+?|\\Ssdbfnrtv";
-  return (memchr(metacharacters.ptr, *s, metacharacters.length) !is null);
+struct XString(T) {
+  T rng;
+  int curofs;
+  int len;
+  this (T arng) { rng = arng; len = cast(int)rng.length; }
+  this (T arng, int aofs, int alen) {
+    rng = arng;
+    if (aofs < 0 || alen < 1 || aofs >= arng.length) {
+      curofs = 0;
+      len = 0;
+    } else {
+      curofs = aofs;
+      if (rng.length-aofs < alen) alen = cast(int)(rng.length-aofs);
+      len = alen;
+    }
+  }
+  char opIndex (size_t pos) {
+    if (pos >= len) return 0;
+    return rng[curofs+cast(int)pos];
+  }
+  @property bool empty () { return (len < 1); }
+  @property char front () { return (len > 0 ? rng[curofs] : 0); }
+  void popFront () pure nothrow @safe @nogc { if (len > 0) { ++curofs; --len; } }
+  @property int length () { return len; }
+  alias opDollar = length;
+  auto opBinary(string op : "+") (int n) {
+    if (n < 0) assert(0);
+    if (n > len) n = len;
+    return typeof(this)(rng, curofs+n, len-n);
+  }
+  void opOpAssign(string op : "+") (int n) {
+    if (n < 0) assert(0);
+    if (n > len) n = len;
+    curofs += n;
+    len -= n;
+  }
+  auto opSlice (size_t lo, size_t hi) {
+    if (hi > len) hi = len;
+    if (len < 1 || lo >= len || lo >= hi) return typeof(this)(rng, 0, 0);
+    return typeof(this)(rng, cast(int)(curofs+lo), cast(int)(hi-lo));
+  }
+  auto origin () { return typeof(this)(rng); }
+  string toString () const { return (len > 0 ? rng[curofs..curofs+len].idup : ""); }
 }
 
-int op_len (const(char)* re) {
+
+bool is_metacharacter (char stc) {
+  foreach (char ch; "^$().[]*+?|\\Ssdbfnrtv") if (stc == ch) return true;
+  return false;
+}
+
+bool is_quantifier (char ch) {
+  return (ch == '*' || ch == '+' || ch == '?');
+}
+
+int op_len(XS) (XS re) {
   return (re[0] == '\\' && re[1] == 'x' ? 4 : re[0] == '\\' ? 2 : 1);
 }
 
-int set_len (const(char)* re, int re_len) {
+int set_len(XS) (XS re) {
   int len = 0;
-  while (len < re_len && re[len] != ']') len += op_len(re+len);
-  return (len <= re_len ? len+1 : -1);
+  while (len < re.length && re[len] != ']') len += op_len(re+len);
+  return (len <= re.length ? len+1 : -1);
 }
 
-int get_op_len (const(char)* re, int re_len) {
-  return (re[0] == '[' ? set_len(re+1, re_len-1)+1 : op_len(re));
-}
-
-bool is_quantifier (const(char)* re) {
-  return (re[0] == '*' || re[0] == '+' || re[0] == '?');
+int get_op_len(XS) (XS re) {
+  return (re[0] == '[' ? set_len(re+1)+1 : op_len(re));
 }
 
 int xtoi (int x) {
@@ -162,29 +209,30 @@ int xtoi (int x) {
     0;
 }
 
-int hextoi (const(char)* s) {
+int hextoi(XS) (XS s) {
   return (xtoi(s[0])<<4)|xtoi(s[1]);
 }
 
 
-int match_op (const(char)* re, const(char)* s, regex_info* info) {
+int match_op(XS, SS) (XS re, SS s, regex_info* info) {
   int result = 0;
-  switch (*re) {
+  if (s.length == 0) return Slre.Result.NoMatch;
+  switch (re[0]) {
     case '\\':
       // metacharacters
       switch (re[1]) {
-        case 'S': if (*s == 0 || *s <= ' ') return Slre.Result.NoMatch; ++result; break;
-        case 's': if (*s == 0 || *s > ' ') return Slre.Result.NoMatch; ++result; break;
-        case 'd': if (*s < '0' || *s > '9') return Slre.Result.NoMatch; ++result; break;
-        case 'b': if (*s != '\b') return Slre.Result.NoMatch; ++result; break;
-        case 'f': if (*s != '\f') return Slre.Result.NoMatch; ++result; break;
-        case 'n': if (*s != '\n') return Slre.Result.NoMatch; ++result; break;
-        case 'r': if (*s != '\r') return Slre.Result.NoMatch; ++result; break;
-        case 't': if (*s != '\t') return Slre.Result.NoMatch; ++result; break;
-        case 'v': if (*s != '\v') return Slre.Result.NoMatch; ++result; break;
+        case 'S': if (s[0] <= ' ') return Slre.Result.NoMatch; ++result; break;
+        case 's': if (s[0] > ' ') return Slre.Result.NoMatch; ++result; break;
+        case 'd': if (s[0] < '0' || s[0] > '9') return Slre.Result.NoMatch; ++result; break;
+        case 'b': if (s[0] != '\b') return Slre.Result.NoMatch; ++result; break;
+        case 'f': if (s[0] != '\f') return Slre.Result.NoMatch; ++result; break;
+        case 'n': if (s[0] != '\n') return Slre.Result.NoMatch; ++result; break;
+        case 'r': if (s[0] != '\r') return Slre.Result.NoMatch; ++result; break;
+        case 't': if (s[0] != '\t') return Slre.Result.NoMatch; ++result; break;
+        case 'v': if (s[0] != '\v') return Slre.Result.NoMatch; ++result; break;
         case 'x':
           // match byte, \xHH where HH is hexadecimal byte representaion
-          if (hextoi(re+2) != *s) return Slre.Result.NoMatch;
+          if (hextoi(re+2) != s[0]) return Slre.Result.NoMatch;
           ++result;
           break;
         default:
@@ -199,27 +247,31 @@ int match_op (const(char)* re, const(char)* s, regex_info* info) {
     case '.': ++result; break;
     default:
       if (info.flags&Slre.Flag.IgnoreCase) {
-        if (tolower(*re) != tolower(*s)) return Slre.Result.NoMatch;
+        if (tolower(re[0]) != tolower(s[0])) return Slre.Result.NoMatch;
       } else {
-        if (*re != *s) return Slre.Result.NoMatch;
+        if (re[0] != s[0]) return Slre.Result.NoMatch;
       }
       ++result;
       break;
   }
-  return result;
+  return (result <= s.length ? result : Slre.Result.NoMatch);
 }
 
 
-int match_set (const(char)* re, size_t re_len, const(char)* s, regex_info* info) {
+int match_set(XS, SS) (XS re, SS s, regex_info* info) {
+  debug(slre) { import std.stdio; writeln("match_set: re=<", re, ">; s=<", s, ">"); }
   int len = 0, result = -1;
   bool invert = (re[0] == '^');
-  if (invert) { ++re; --re_len; }
-  while (len <= re_len && re[len] != ']' && result <= 0) {
+  if (invert) {
+    re += 1;
+    debug(slre) { import std.stdio; writeln("  INV: re=<", re, ">; s=<", s, ">"); }
+  }
+  while (len <= re.length && re[len] != ']' && result <= 0) {
     // support character range
     if (re[len] != '-' && re[len+1] == '-' && re[len+2] != ']' && re[len+2] != '\0') {
       result = info.flags&Slre.Flag.IgnoreCase ?
-        tolower(*s) >= tolower(re[len]) && tolower(*s) <= tolower(re[len+2]) :
-        *s >= re[len] && *s <= re[len+2];
+        tolower(s[0]) >= tolower(re[len]) && tolower(s[0]) <= tolower(re[len+2]) :
+        s[0] >= re[len] && s[0] <= re[len+2];
       len += 3;
     } else {
       result = match_op(re+len, s, info);
@@ -230,48 +282,49 @@ int match_set (const(char)* re, size_t re_len, const(char)* s, regex_info* info)
 }
 
 
-int bar (const(char)* re, size_t re_len, const(char)* s, size_t s_len, regex_info* info, int bi) {
+int bar(XS, SS) (XS re, SS s, regex_info* info, int bi) {
   // i is offset in re, j is offset in s, bi is brackets index
   int i, j, n, step;
-  for (i = j = 0; i < re_len && j <= s_len; i += step) {
+  for (i = j = 0; i < re.length && j <= s.length; i += step) {
     // handle quantifiers; get the length of the chunk
-    step = (re[i] == '(' ? info.brackets[bi+1].len+2 : get_op_len(re+i, re_len-i));
-    //DBG(("%s [%.*s] [%.*s] re_len=%d step=%d i=%d j=%d\n", __func__, re_len-i, re+i, s_len-j, s+j, re_len, step, i, j));
-    if (is_quantifier(&re[i])) return Slre.Result.UnexpectedQuantifier;
+    step = (re[i] == '(' ? info.brackets[bi+1].len+2 : get_op_len(re+i));
+    debug(slre) { import std.stdio; writefln("%s <%s> <%s> re_len=%s step=%s i=%s j=%s", "bar", re+i, s+j, re.length, step, i, j); }
+    if (is_quantifier(re[i])) return Slre.Result.UnexpectedQuantifier;
     if (step <= 0) return Slre.Result.InvalidCharset;
 
-    if (i+step < re_len && is_quantifier(re+i+step)) {
-      //DBG(("QUANTIFIER: [%.*s]%c [%.*s]\n", step, re+i, re[i+step], s_len-j, s+j));
+    if (i+step < re.length && is_quantifier(re[i+step])) {
+      //DBG(("QUANTIFIER: [%.s[0]]%c [%.s[0]]\n", step, re+i, re[i+step], s_len-j, s+j));
       if (re[i+step] == '?') {
-        int result = bar(re+i, step, s+j, s_len-j, info, bi);
+        int result = bar(re[i..i+step], s+j, info, bi);
         j += (result > 0 ? result : 0);
         ++i;
       } else if (re[i+step] == '+' || re[i+step] == '*') {
-        int j2 = j, nj = j, n1, n2 = -1, ni, non_greedy = 0;
+        int j2 = j, nj = j, n1, n2 = -1, ni;
+        bool non_greedy = false;
         // points to the regexp code after the quantifier
         ni = i+step+1;
-        if (ni < re_len && re[ni] == '?') {
-          non_greedy = 1;
+        if (ni < re.length && re[ni] == '?') {
+          non_greedy = true;
           ++ni;
         }
         do {
-          if ((n1 = bar(re+i, step, s+j2, s_len-j2, info, bi)) > 0) j2 += n1;
+          if ((n1 = bar(re[i..i+step], s+j2, info, bi)) > 0) j2 += n1;
           if (re[i+step] == '+' && n1 < 0) break;
-          if (ni >= re_len) {
+          if (ni >= re.length) {
             // after quantifier, there is nothing
             nj = j2;
-          } else if ((n2 = bar(re+ni, re_len-ni, s+j2, s_len-j2, info, bi)) >= 0) {
+          } else if ((n2 = bar(re+ni, s+j2, info, bi)) >= 0) {
             // regex after quantifier matched
             nj = j2+n2;
           }
           if (nj > j && non_greedy) break;
         } while (n1 > 0);
         // even if we found one or more pattern, this branch will be executed, changing the next captures
-        if (n1 < 0 && n2 < 0 && re[i+step] == '*' && (n2 = bar(re+ni, re_len-ni, s+j, s_len-j, info, bi)) > 0) nj = j+n2;
+        if (n1 < 0 && n2 < 0 && re[i+step] == '*' && (n2 = bar(re+ni, s+j, info, bi)) > 0) nj = j+n2;
         //DBG(("STAR/PLUS END: %d %d %d %d %d\n", j, nj, re_len-ni, n1, n2));
         if (re[i+step] == '+' && nj == j) return Slre.Result.NoMatch;
         // if while loop body above was not executed for the * quantifier, make sure the rest of the regex matches
-        if (nj == j && ni < re_len && n2 < 0) return Slre.Result.NoMatch;
+        if (nj == j && ni < re.length && n2 < 0) return Slre.Result.NoMatch;
         // returning here cause we've matched the rest of RE already
         return nj;
       }
@@ -279,38 +332,46 @@ int bar (const(char)* re, size_t re_len, const(char)* s, size_t s_len, regex_inf
     }
 
     if (re[i] == '[') {
-      n = match_set(re+i+1, re_len-(i+2), s+j, info);
-      //DBG(("SET %.*s [%.*s] . %d\n", step, re+i, s_len-j, s+j, n));
-      if (n <= 0) return Slre.Result.NoMatch;
+      n = match_set(re+i+1, s+j, info);
+      debug(slre) { import std.stdio; writefln("SET <%s> <%s> . %s", re[i..i+step], s+j, n); }
+      if (n <= 0) {
+        debug(slre) { import std.stdio; writeln("  NO SET MATCH"); }
+        return Slre.Result.NoMatch;
+      }
       j += n;
     } else if (re[i] == '(') {
       n = Slre.Result.NoMatch;
       ++bi;
       if (bi >= info.num_brackets) return Slre.Result.InternalError;
-      //DBG(("CAPTURING [%.*s] [%.*s] [%s]\n", step, re+i, s_len-j, s+j, re+i+step));
-      if (re_len-(i+step) <= 0) {
+      //DBG(("CAPTURING [%.s[0]] [%.s[0]] [%s]\n", step, re+i, s_len-j, s+j, re+i+step));
+      if (re.length-(i+step) <= 0) {
         // nothing follows brackets
-        n = doh(s+j, s_len-j, info, bi);
+        n = doh(re, s+j, info, bi);
       } else {
         int j2;
-        for (j2 = 0; j2 <= s_len-j; ++j2) {
-          if ((n = doh(s+j, s_len-(j+j2), info, bi)) >= 0 && bar(re+i+step, re_len-(i+step), s+j+n, s_len-(j+n), info, bi) >= 0) break;
+        for (j2 = 0; j2 <= s.length-j; ++j2) {
+          if ((n = doh(re, s[j..$-(j+j2)+1], info, bi)) >= 0 && bar(re+i+step, s+j+n, info, bi) >= 0) break;
         }
       }
-      //DBG(("CAPTURED [%.*s] [%.*s]:%d\n", step, re+i, s_len-j, s+j, n));
+      //DBG(("CAPTURED [%.s[0]] [%.s[0]]:%d\n", step, re+i, s_len-j, s+j, n));
       if (n < 0) return n;
       if (info.caps.length && n > 0) {
         //info.caps[bi-1].ptr = s+j;
         //info.caps[bi-1].len = n;
-        info.caps[bi-1].ptr = s[j..j+n];
+        info.caps[bi-1].ofs = s.curofs+j;
+        info.caps[bi-1].len = n;
       }
       j += n;
     } else if (re[i] == '^') {
       if (j != 0) return Slre.Result.NoMatch;
     } else if (re[i] == '$') {
-      if (j != s_len) return Slre.Result.NoMatch;
+      if (j != s.length) {
+        debug(slre) { import std.stdio; writefln("NOT DOLLAR <%s> <%s> s_len=%s j=%s", re+i, s+j, s.length, j); }
+        return Slre.Result.NoMatch;
+      }
+      debug(slre) { import std.stdio; writefln("DOLLAR <%s> <%s> s_len=%s j=%s", re+i, s+j, s.length, j); }
     } else {
-      if (j >= s_len) return Slre.Result.NoMatch;
+      if (j >= s.length) return Slre.Result.NoMatch;
       n = match_op(re+i, s+j, info);
       if (n <= 0) return n;
       j += n;
@@ -322,28 +383,30 @@ int bar (const(char)* re, size_t re_len, const(char)* s, size_t s_len, regex_inf
 
 
 // process branch points
-int doh (const(char)* s, size_t s_len, regex_info* info, int bi) {
-  const(bracket_pair)* b = &info.brackets[bi];
+int doh(XS, SS) (XS re, SS s, regex_info* info, int bi) {
+  const(bracket_pair)* b = info.brackets.ptr+bi;
   int i = 0, len, result;
-  const(char)* p;
+  //const(char)* p;
+  XS p;
   do {
-    p = (i == 0 ? b.ptr : info.branches[b.branches+i-1].schlong+1);
+    //p = (i == 0 ? b.ptr : info.branches[b.branches+i-1].schlong+1);
+    p = (i == 0 ? re.origin+b.ptrofs : re.origin+info.branches[b.branches+i-1].schlongofs+1);
     len = b.num_branches == 0 ? b.len :
-      i == b.num_branches ? cast(int)(b.ptr+b.len-p) :
-      cast(int)(info.branches[b.branches+i].schlong-p);
-    //DBG(("%s %d %d [%.*s] [%.*s]\n", __func__, bi, i, len, p, s_len, s));
-    result = bar(p, len, s, s_len, info, bi);
+      i == b.num_branches ? cast(int)(b.ptrofs+b.len-p.curofs) :
+      cast(int)(info.branches[b.branches+i].schlongofs-p.curofs);
+    //DBG(("%s %d %d [%.s[0]] [%.s[0]]\n", __func__, bi, i, len, p, s_len, s));
+    result = bar(p[0..len], s, info, bi);
     //DBG(("%s <- %d\n", __func__, result));
   } while (result <= 0 && i++ < b.num_branches); // at least 1 iteration
   return result;
 }
 
 
-int baz (const(char)* s, size_t s_len, regex_info* info) {
+int baz(XS, SS) (XS re, SS s, regex_info* info) {
   int i, result = -1;
-  bool is_anchored = (info.brackets[0].ptr[0] == '^');
-  for (i = 0; i <= s_len; ++i) {
-    result = doh(s+i, s_len-i, info, 0);
+  bool is_anchored = (re.origin[info.brackets[0].ptrofs] == '^');
+  for (i = 0; i <= s.length; ++i) {
+    result = doh(re, s+i, info, 0);
     if (result >= 0) { result += i; break; }
     if (is_anchored) break;
   }
@@ -381,42 +444,42 @@ void setup_branch_points (regex_info* info) {
 }
 
 
-int foo (const(char)* re, size_t re_len, const(char)* s, size_t s_len, regex_info* info) {
+int foo(XS, SS) (XS re, SS s, regex_info* info) {
   int i, step, depth = 0;
 
   // first bracket captures everything
-  info.brackets[0].ptr = re;
-  info.brackets[0].len = re_len;
+  info.brackets[0].ptrofs = re.curofs;
+  info.brackets[0].len = re.length;
   info.num_brackets = 1;
 
   // make a single pass over regex string, memorize brackets and branches
-  for (i = 0; i < re_len; i += step) {
-    step = get_op_len(re+i, re_len-i);
+  for (i = 0; i < re.length; i += step) {
+    step = get_op_len(re+i);
     if (re[i] == '|') {
       if (info.num_branches >= info.branches.length) return Slre.Result.TooManyBranches;
       info.branches[info.num_branches].bracket_index = (info.brackets[info.num_brackets-1].len == -1 ? info.num_brackets-1 : depth);
-      info.branches[info.num_branches].schlong = &re[i];
+      info.branches[info.num_branches].schlongofs = re.curofs+i;
       ++info.num_branches;
     } else if (re[i] == '\\') {
-      if (i >= re_len-1) return Slre.Result.InvalidMetaChar;
+      if (i >= re.length-1) return Slre.Result.InvalidMetaChar;
       if (re[i+1] == 'x') {
         // hex digit specification must follow
-        if (re[i+1] == 'x' && i >= re_len-3) return Slre.Result.InvalidMetaChar;
-        if (re[i+1] ==  'x' && !(isxdigit(re[i+2]) && isxdigit(re[i+3]))) return Slre.Result.InvalidMetaChar;
+        if (re[i+1] == 'x' && i >= re.length-3) return Slre.Result.InvalidMetaChar;
+        if (re[i+1] == 'x' && !(isxdigit(re[i+2]) && isxdigit(re[i+3]))) return Slre.Result.InvalidMetaChar;
       } else {
-        if (!is_metacharacter(re+i+1)) return Slre.Result.InvalidMetaChar;
+        if (!is_metacharacter(re[i+1])) return Slre.Result.InvalidMetaChar;
       }
     } else if (re[i] == '(') {
       if (info.num_brackets >= info.brackets.length) return Slre.Result.TooManyBrackets;
       ++depth; // order is important here; depth increments first
-      info.brackets[info.num_brackets].ptr = re+i+1;
+      info.brackets[info.num_brackets].ptrofs = re.curofs+i+1;
       info.brackets[info.num_brackets].len = -1;
       ++info.num_brackets;
       if (info.caps.length && info.num_brackets-1 > info.caps.length) return Slre.Result.CapsArrayTooSmall;
     } else if (re[i] == ')') {
       int ind = (info.brackets[info.num_brackets-1].len == -1 ? info.num_brackets-1 : depth);
-      info.brackets[ind].len = cast(int)(&re[i]-info.brackets[ind].ptr);
-      //DBG(("SETTING BRACKET %d [%.*s]\n", ind, info.brackets[ind].len, info.brackets[ind].ptr));
+      info.brackets[ind].len = re.curofs+i-info.brackets[ind].ptrofs;
+      //{ import std.stdio; writefln("SETTING BRACKET %s [%s[0]]", ind, re.origin[info.brackets[ind].ptrofs..info.brackets[ind].ptrofs+info.brackets[ind].len]); }
       --depth;
       if (depth < 0) return Slre.Result.UnbalancedBrackets;
       if (i > 0 && re[i-1] == '(') return Slre.Result.NoMatch;
@@ -426,5 +489,5 @@ int foo (const(char)* re, size_t re_len, const(char)* s, size_t s_len, regex_inf
   if (depth != 0) return Slre.Result.UnbalancedBrackets;
   setup_branch_points(info);
 
-  return baz(s, s_len, info);
+  return baz(re, s, info);
 }
