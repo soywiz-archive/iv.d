@@ -56,24 +56,29 @@ struct Slre {
   /* Matches the string buffer `s` against the regular expression `regexp`,
    * which should conform the syntax. If the regular expression `regexp`
    * contains brackets, `match()` can capture the respective substrings
-   * into the array of `slre_cap` structures.
+   * into the array of `Capture` structures.
    *
    * Returns the number of bytes scanned from the beginning of the string.
    * If the return value is greater or equal to 0, there is a match.
    * If the return value is less then 0, there is no match, and error is from `Result` enum.
    *
    * `flags` is a bitset of `Flag`s.
+   * `sofs` is offset of the first matched byte
    */
-  public static int matchFirst(RR, RS) (RR regexp, RS s, Capture[] caps=null, int flags=0)
+  public static int matchFirst(RR, RS) (RR regexp, RS s, Capture[] caps=null, int flags=0, int *sofs=null)
   if (isGoodSlreRange!RR && isGoodSlreRange!RS)
   {
     if (s.length > int.max-1) return Result.StringTooBig;
     if (regexp.length > int.max-1) return Result.RegexpTooBig;
+    int dummy;
+    if (sofs is null) sofs = &dummy;
+    *sofs = -1;
 
     regex_info info;
     info.flags = flags;
     info.num_brackets = info.num_branches = 0;
     info.caps = caps[];
+    info.sofs = sofs;
 
     //DBG(("========================> [%s] [%.*s]\n", regexp, s_len, s));
     foreach (ref cp; caps) { cp.ofs = 0; cp.len = -1; }
@@ -118,6 +123,8 @@ struct regex_info {
 
   // e.g. Slre.Flag.IgnoreCase
   int flags;
+
+  int* sofs; // starting offset of the match
 }
 
 
@@ -163,7 +170,7 @@ struct XString(T) {
     return typeof(this)(rng, cast(int)(curofs+lo), cast(int)(hi-lo));
   }
   auto origin () { return typeof(this)(rng); }
-  string toString () const { return (len > 0 ? rng[curofs..curofs+len].idup : ""); }
+  debug(slrex) string toString () const { return (len > 0 ? rng[curofs..curofs+len].idup : ""); }
 }
 
 
@@ -345,7 +352,7 @@ int bar(XS, SS) (XS re, SS s, regex_info* info, int bi) {
       }
       //DBG(("CAPTURED [%.s[0]] [%.s[0]]:%d\n", step, re+i, s_len-j, s+j, n));
       if (n < 0) return n;
-      if (info.caps.length && n > 0 && bi-1 >= 0 && bi-1 < info.caps.length) {
+      if (/*info.caps.length &&*/ n > 0 && bi-1 >= 0 && bi-1 < info.caps.length) {
         //info.caps[bi-1].ptr = s+j;
         //info.caps[bi-1].len = n;
         info.caps[bi-1].ofs = s.curofs+j;
@@ -395,9 +402,10 @@ int doh(XS, SS) (XS re, SS s, regex_info* info, int bi) {
 int baz(XS, SS) (XS re, SS s, regex_info* info) {
   int i, result = -1;
   bool is_anchored = (re.origin[info.brackets[0].ptrofs] == '^');
+  *info.sofs = -1;
   for (i = 0; i <= s.length; ++i) {
     result = doh(re, s+i, info, 0);
-    if (result >= 0) { result += i; break; }
+    if (result >= 0) { *info.sofs = i; result += i; break; }
     if (is_anchored) break;
   }
   return result;
