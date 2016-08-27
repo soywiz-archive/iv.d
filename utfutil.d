@@ -205,3 +205,8 @@ size_t utf8Length (const(char)[] s) pure nothrow @trusted @nogc {
   }
   return res;
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+bool isUtf8Start() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0xC0); }
+bool isUtf8Cont() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0x80); }
