@@ -293,8 +293,9 @@ int ttyReadKeyByte (int toMSec=-1) @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// pressed key info
-public struct TtyKey {
-  enum Key {
+public align(1) struct TtyKey {
+align(1): // make it tightly packed
+  enum Key : ubyte{
     None, ///
     Error, /// error reading key
     Unknown, /// can't interpret escape code
@@ -342,14 +343,32 @@ public struct TtyKey {
     //N0, N1, N2, N3, N4, N5, N6, N7, N8, N9,
   }
 
-  Key key; ///
-  bool ctrl, alt, shift; /// for special keys
+  enum ModFlag : ubyte {
+    Ctrl  = 1<<0,
+    Alt   = 1<<1,
+    Shift = 1<<2,
+  }
+
+  Key key; /// key type/sym
+  ubyte mods; /// set of ModFlag
   dchar ch = 0; /// can be 0 for special key
+
+  @property const pure nothrow @safe @nogc {
+    bool ctrl () { pragma(inline, true); return ((mods&ModFlag.Ctrl) != 0); } ///
+    bool alt () { pragma(inline, true); return ((mods&ModFlag.Alt) != 0); } ///
+    bool shift () { pragma(inline, true); return ((mods&ModFlag.Shift) != 0); } ///
+  }
+
+  @property pure nothrow @safe @nogc {
+    void ctrl (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Ctrl; else mods &= ~ModFlag.Ctrl; } ///
+    void alt (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Alt; else mods &= ~ModFlag.Alt; } ///
+    void shift (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Shift; else mods &= ~ModFlag.Shift; } ///
+  }
 
   this (const(char)[] s) pure nothrow @safe @nogc {
     if (TtyKey.parse(this, s).length != 0) {
       key = Key.Error;
-      ctrl = alt = shift = false;
+      mods = 0;
       ch = 0;
     }
   }
@@ -372,11 +391,13 @@ public struct TtyKey {
     return (k == this);
   }
 
+  ///
   string toString () const nothrow {
     char[128] buf = void;
     return toCharBuf(buf[]).idup;
   }
 
+  ///
   char[] toCharBuf (char[] dest) const nothrow @trusted @nogc {
     static immutable string hexD = "0123456789abcdef";
     int dpos = 0;
@@ -426,12 +447,16 @@ public struct TtyKey {
     return dest[0..dpos];
   }
 
-  /*
+  /** parse key name. get first word, return rest of the string (with trailing spaces removed)
+   *
    * "C-<home>" (emacs-like syntax is recognized)
+   *
    * "C-M-x"
+   *
    * mods: C(trl), M(eta:alt), S(hift)
+   *
+   * `key` will be `TtyKey.Key.Error` on error, `TtyKey.Key.None` on empty string
    */
-  // return rest of the string, `TtyKey.Key.Error` on error, `TtyKey.Key.None` on empty string
   static const(char)[] parse (out TtyKey key, const(char)[] s) pure nothrow @trusted @nogc {
     while (s.length && s.ptr[0] <= ' ') s = s[1..$];
     if (s.length == 0) return s; // no more
@@ -511,11 +536,11 @@ public struct TtyKey {
           if (str.strEquCI("bs")) str = "backspace";
           if (str.strEquCI("PasteStart") || str.strEquCI("Paste-Start")) {
             key.key = TtyKey.Key.PasteStart;
-            key.ctrl = key.alt = key.shift = false;
+            key.mods = 0;
             key.ch = 0;
           } else if (str.strEquCI("PasteEnd") || str.strEquCI("Paste-End")) {
             key.key = TtyKey.Key.PasteEnd;
-            key.ctrl = key.alt = key.shift = false;
+            key.mods = 0;
             key.ch = 0;
           } else {
             bool found = false;
