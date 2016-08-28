@@ -427,44 +427,49 @@ public struct TtyKey {
   }
 
   /*
-    "control-f meta-p home"
-    "C-f M-p <home>" (emacs-like syntax is recognized)
-    "C-M-x"
-    "C-f any"
-  */
+   * "C-<home>" (emacs-like syntax is recognized)
+   * "C-M-x"
+   * mods: C(trl), M(eta:alt), S(hift)
+   */
   // return rest of the string, `TtyKey.Key.Error` on error, `TtyKey.Key.None` on empty string
   static const(char)[] parse (out TtyKey key, const(char)[] s) pure nothrow @trusted @nogc {
     while (s.length && s.ptr[0] <= ' ') s = s[1..$];
     if (s.length == 0) return s; // no more
-    // parse by words
+    // get space-delimited word
+    int pos = 1; // 0 is always non-space here
+    while (pos < 1024 && pos < s.length && s.ptr[pos] > ' ') ++pos;
+    if (pos >= 1020) return s; // too long, get out
     auto olds = s; // return this in case of error
-    alias LT = typeof(s.length);
-    while (s.length > 0) {
-      // get word
-      LT pos = 0;
-      while (pos < s.length && s.ptr[pos] > ' ' && s.ptr[pos] != '-') ++pos;
-      if (pos >= 64) goto error; // word too long
-      auto w = s[0..pos];
-      if (pos > 0 && pos < s.length && s.ptr[pos] == '-') {
+    auto str = s[0..pos]; // string to parse
+    // `s` will be result
+    s = s[pos..$];
+    // remove leading for convenience
+    while (s.length && s.ptr[0] <= ' ') s = s[1..$];
+    // parse word
+    while (str.length > 0) {
+      if (str.length >= 2 && str.ptr[1] == '-') {
         // modifier
-             if (w.strEquCI("control") || w.strEquCI("ctrl") || w.strEquCI("c")) key.ctrl = true;
-        else if (w.strEquCI("alt") || w.strEquCI("meta") || w.strEquCI("m")) key.alt = true;
-        else if (w.strEquCI("shift") || w.strEquCI("s")) key.shift = true;
-        else goto error; // invalid modifier
-        s = s[pos+1..$];
-      } else {
-        if (pos == 0) {
-          if (pos >= s.length || s.ptr[pos] != '-') goto error;
-          ++pos;
-          w = "-";
+        switch (str.ptr[0]) {
+          case 'C': case 'c': key.ctrl = true; break;
+          case 'M': case 'm': key.alt = true; break;
+          case 'S': case 's': key.shift = true; break;
+          default: goto error; // unknown modifier
         }
-        if (pos < s.length && s.ptr[pos] > ' ') goto error;
-        assert(w.length > 0);
-        if (w.strEquCI("space")) w = " ";
-        if (w.length > 1 && w.ptr[0] == '^') { key.ctrl = true; w = w[1..$]; }
-        if (w.length == 1) {
+        str = str[2..$];
+      } else {
+        // key
+        if (str.length > 1 && str.ptr[0] == '^') {
+          // ^A means C-A
+          key.ctrl = true;
+          str = str[1..$];
+        } else if (str.length > 2 && str.ptr[0] == '<' && str[$-1] == '>') {
+          str = str[1..$-1];
+        }
+        if (str.length == 0) goto error; // just in case
+        if (str.strEquCI("space")) str = " ";
+        if (str.length == 1) {
           // single char
-          key.ch = w.ptr[0];
+          key.ch = str.ptr[0];
           if (key.ctrl || key.alt) {
             key.key = TtyKey.Key.ModChar;
             if (key.ch >= 'a' && key.ch <= 'z') key.ch -= 32; // toupper
@@ -500,21 +505,22 @@ public struct TtyKey {
             }
           }
         } else {
-          if (w.length > 2 && w.ptr[0] == '<' && w[$-1] == '>') w = w[1..$-1];
-          if (w.strEquCI("return")) w = "enter";
-          if (w.strEquCI("esc")) w = "escape";
-          if (w.strEquCI("PasteStart")) {
+          // key name
+          if (str.strEquCI("return")) str = "enter";
+          if (str.strEquCI("esc")) str = "escape";
+          if (str.strEquCI("bs")) str = "backspace";
+          if (str.strEquCI("PasteStart") || str.strEquCI("Paste-Start")) {
             key.key = TtyKey.Key.PasteStart;
             key.ctrl = key.alt = key.shift = false;
             key.ch = 0;
-          } else if (w.strEquCI("PasteEnd")) {
+          } else if (str.strEquCI("PasteEnd") || str.strEquCI("Paste-End")) {
             key.key = TtyKey.Key.PasteEnd;
             key.ctrl = key.alt = key.shift = false;
             key.ch = 0;
           } else {
             bool found = false;
             foreach (string kn; __traits(allMembers, TtyKey.Key)) {
-              if (!found && w.strEquCI(kn)) {
+              if (!found && str.strEquCI(kn)) {
                 found = true;
                 key.key = __traits(getMember, TtyKey.Key, kn);
                 break;
@@ -528,12 +534,9 @@ public struct TtyKey {
           else if (key.key == TtyKey.Key.Escape) key.ch = 27;
           else if (key.key == TtyKey.Key.Backspace) key.ch = 8;
         }
-        s = s[pos..$];
         break;
       }
     }
-    // make life easier by remove leading blanks
-    while (s.length && s.ptr[0] <= ' ') s = s[1..$];
     return s;
   error:
     key = TtyKey.init;
