@@ -378,8 +378,8 @@ align(1): // make it tightly packed
     return
       (key == k.key ?
        (key == Key.Char ? (ch == k.ch) :
-        key == Key.ModChar ? (ctrl == k.ctrl && alt == k.alt && shift == k.shift && ch == k.ch) :
-        key > Key.ModChar ? (ctrl == k.ctrl && alt == k.alt && shift == k.shift) :
+        key == Key.ModChar ? (mods == k.mods && ch == k.ch) :
+        key > Key.ModChar ? (mods == k.mods) :
         true
        ) : false
       );
@@ -457,116 +457,117 @@ align(1): // make it tightly packed
    *
    * `key` will be `TtyKey.Key.Error` on error, `TtyKey.Key.None` on empty string
    */
-  static const(char)[] parse (out TtyKey key, const(char)[] s) pure nothrow @trusted @nogc {
-    while (s.length && s.ptr[0] <= ' ') s = s[1..$];
-    if (s.length == 0) return s; // no more
-    // get space-delimited word
-    int pos = 1; // 0 is always non-space here
-    while (pos < 1024 && pos < s.length && s.ptr[pos] > ' ') ++pos;
-    if (pos >= 1020) return s; // too long, get out
-    auto olds = s; // return this in case of error
-    auto str = s[0..pos]; // string to parse
-    // `s` will be result
-    s = s[pos..$];
-    // remove leading for convenience
-    while (s.length && s.ptr[0] <= ' ') s = s[1..$];
-    // parse word
-    while (str.length > 0) {
-      if (str.length >= 2 && str.ptr[1] == '-') {
-        // modifier
-        switch (str.ptr[0]) {
-          case 'C': case 'c': key.ctrl = true; break;
-          case 'M': case 'm': key.alt = true; break;
-          case 'S': case 's': key.shift = true; break;
-          default: goto error; // unknown modifier
-        }
-        str = str[2..$];
-      } else {
-        // key
-        if (str.length > 1 && str.ptr[0] == '^') {
-          // ^A means C-A
-          key.ctrl = true;
-          str = str[1..$];
-        } else if (str.length > 2 && str.ptr[0] == '<' && str[$-1] == '>') {
-          str = str[1..$-1];
-        }
-        if (str.length == 0) goto error; // just in case
-        if (str.strEquCI("space")) str = " ";
-        if (str.length == 1) {
-          // single char
-          key.ch = str.ptr[0];
-          if (key.ctrl || key.alt) {
-            key.key = TtyKey.Key.ModChar;
-            if (key.ch >= 'a' && key.ch <= 'z') key.ch -= 32; // toupper
-          } else {
-            key.key = TtyKey.Key.Char;
-            if (key.shift) {
-              if (key.ch >= 'a' && key.ch <= 'z') key.ch -= 32; // toupper
-              else switch (key.ch) {
-                case '`': key.ch = '~'; break;
-                case '1': key.ch = '!'; break;
-                case '2': key.ch = '@'; break;
-                case '3': key.ch = '#'; break;
-                case '4': key.ch = '$'; break;
-                case '5': key.ch = '%'; break;
-                case '6': key.ch = '^'; break;
-                case '7': key.ch = '&'; break;
-                case '8': key.ch = '*'; break;
-                case '9': key.ch = '('; break;
-                case '0': key.ch = ')'; break;
-                case '-': key.ch = '_'; break;
-                case '=': key.ch = '+'; break;
-                case '[': key.ch = '{'; break;
-                case ']': key.ch = '}'; break;
-                case ';': key.ch = ':'; break;
-                case '\'': key.ch = '"'; break;
-                case '\\': key.ch = '|'; break;
-                case ',': key.ch = '<'; break;
-                case '.': key.ch = '>'; break;
-                case '/': key.ch = '?'; break;
-                default:
-              }
-              key.shift = false;
-            }
+  static T parse(T) (out TtyKey key, T s) pure nothrow @trusted @nogc if (is(T : const(char)[])) {
+    static if (is(T == typeof(null))) {
+      return null;
+    } else {
+      while (s.length && s.ptr[0] <= ' ') s = s[1..$];
+      if (s.length == 0) return s; // no more
+      // get space-delimited word
+      int pos = 1; // 0 is always non-space here
+      while (pos < s.length && s.ptr[pos] > ' ') { if (++pos >= 1024) return s; }
+      auto olds = s; // return this in case of error
+      auto str = s[0..pos]; // string to parse
+      // `s` will be our result; remove leading spaces for convenience
+      while (pos < s.length && s.ptr[pos] <= ' ') ++pos;
+      s = s[pos..$];
+      // parse word
+      while (str.length > 0) {
+        if (str.length >= 2 && str.ptr[1] == '-') {
+          // modifier
+          switch (str.ptr[0]) {
+            case 'C': case 'c': key.ctrl = true; break;
+            case 'M': case 'm': key.alt = true; break;
+            case 'S': case 's': key.shift = true; break;
+            default: goto error; // unknown modifier
           }
+          str = str[2..$];
         } else {
-          // key name
-          if (str.strEquCI("return")) str = "enter";
-          if (str.strEquCI("esc")) str = "escape";
-          if (str.strEquCI("bs")) str = "backspace";
-          if (str.strEquCI("PasteStart") || str.strEquCI("Paste-Start")) {
-            key.key = TtyKey.Key.PasteStart;
-            key.mods = 0;
-            key.ch = 0;
-          } else if (str.strEquCI("PasteEnd") || str.strEquCI("Paste-End")) {
-            key.key = TtyKey.Key.PasteEnd;
-            key.mods = 0;
-            key.ch = 0;
-          } else {
-            bool found = false;
-            foreach (string kn; __traits(allMembers, TtyKey.Key)) {
-              if (!found && str.strEquCI(kn)) {
-                found = true;
-                key.key = __traits(getMember, TtyKey.Key, kn);
-                break;
+          // key
+          if (str.length > 1 && str.ptr[0] == '^') {
+            // ^A means C-A
+            key.ctrl = true;
+            str = str[1..$];
+          } else if (str.length > 2 && str.ptr[0] == '<' && str[$-1] == '>') {
+            str = str[1..$-1];
+          }
+          if (str.length == 0) goto error; // just in case
+          if (str.strEquCI("space")) str = " ";
+          if (str.length == 1) {
+            // single char
+            key.ch = str.ptr[0];
+            if (key.ctrl || key.alt) {
+              key.key = TtyKey.Key.ModChar;
+              if (key.ch >= 'a' && key.ch <= 'z') key.ch -= 32; // toupper
+            } else {
+              key.key = TtyKey.Key.Char;
+              if (key.shift) {
+                if (key.ch >= 'a' && key.ch <= 'z') key.ch -= 32; // toupper
+                else switch (key.ch) {
+                  case '`': key.ch = '~'; break;
+                  case '1': key.ch = '!'; break;
+                  case '2': key.ch = '@'; break;
+                  case '3': key.ch = '#'; break;
+                  case '4': key.ch = '$'; break;
+                  case '5': key.ch = '%'; break;
+                  case '6': key.ch = '^'; break;
+                  case '7': key.ch = '&'; break;
+                  case '8': key.ch = '*'; break;
+                  case '9': key.ch = '('; break;
+                  case '0': key.ch = ')'; break;
+                  case '-': key.ch = '_'; break;
+                  case '=': key.ch = '+'; break;
+                  case '[': key.ch = '{'; break;
+                  case ']': key.ch = '}'; break;
+                  case ';': key.ch = ':'; break;
+                  case '\'': key.ch = '"'; break;
+                  case '\\': key.ch = '|'; break;
+                  case ',': key.ch = '<'; break;
+                  case '.': key.ch = '>'; break;
+                  case '/': key.ch = '?'; break;
+                  default:
+                }
+                key.shift = false;
               }
             }
-            if (!found || key.key < TtyKey.Key.Up) goto error;
+          } else {
+            // key name
+            if (str.strEquCI("return")) str = "enter";
+            if (str.strEquCI("esc")) str = "escape";
+            if (str.strEquCI("bs")) str = "backspace";
+            if (str.strEquCI("PasteStart") || str.strEquCI("Paste-Start")) {
+              key.key = TtyKey.Key.PasteStart;
+              key.mods = 0;
+              key.ch = 0;
+            } else if (str.strEquCI("PasteEnd") || str.strEquCI("Paste-End")) {
+              key.key = TtyKey.Key.PasteEnd;
+              key.mods = 0;
+              key.ch = 0;
+            } else {
+              bool found = false;
+              foreach (string kn; __traits(allMembers, TtyKey.Key)) {
+                if (!found && str.strEquCI(kn)) {
+                  found = true;
+                  key.key = __traits(getMember, TtyKey.Key, kn);
+                  break;
+                }
+              }
+              if (!found || key.key < TtyKey.Key.Up) goto error;
+            }
+            // just in case
+                 if (key.key == TtyKey.Key.Enter) key.ch = 13;
+            else if (key.key == TtyKey.Key.Tab) key.ch = 9;
+            else if (key.key == TtyKey.Key.Escape) key.ch = 27;
+            else if (key.key == TtyKey.Key.Backspace) key.ch = 8;
           }
-          // just in case
-               if (key.key == TtyKey.Key.Enter) key.ch = 13;
-          else if (key.key == TtyKey.Key.Tab) key.ch = 9;
-          else if (key.key == TtyKey.Key.Escape) key.ch = 27;
-          else if (key.key == TtyKey.Key.Backspace) key.ch = 8;
+          return s;
         }
-        break;
       }
+    error:
+      key = TtyKey.init;
+      key.key = TtyKey.Key.Error;
+      return olds;
     }
-    return s;
-  error:
-    key = TtyKey.init;
-    key.key = TtyKey.Key.Error;
-    return olds;
   }
 }
 
