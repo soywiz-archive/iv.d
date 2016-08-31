@@ -104,6 +104,86 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 // not thread-safe
+public struct MemoryStreamRWRef {
+private:
+  ubyte[]* data;
+  usize curpos;
+  bool eofhit;
+  bool closed = false;
+
+public:
+  static if (usize.sizeof == 4) {
+    enum MaxSize = 0x7fff_ffffU;
+  } else {
+    enum MaxSize = 0x7fff_ffff_ffff_ffffUL;
+  }
+
+public:
+  this (ref ubyte[] adata) @trusted {
+    if (adata.length > MaxSize) throw new VFSException("buffer too big");
+    data = &adata;
+  }
+
+  @property ubyte[]* bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+
+  @property long size () const pure nothrow @safe @nogc { pragma(inline, true); return data.length; }
+  @property long tell () const pure nothrow @safe @nogc { pragma(inline, true); return curpos; }
+  @property bool eof () const pure nothrow @trusted @nogc { pragma(inline, true); return eofhit; }
+  @property bool isOpen () const pure nothrow @trusted @nogc { pragma(inline, true); return !closed; }
+
+  void seek (long offset, int origin=Seek.Set) @trusted {
+    if (closed) throw new VFSException("can't seek in closed stream");
+    switch (origin) {
+      case Seek.Set:
+        if (offset < 0 || offset > MaxSize) throw new VFSException("invalid offset");
+        curpos = cast(usize)offset;
+        break;
+      case Seek.Cur:
+        if (offset < -cast(long)curpos || offset > MaxSize-curpos) throw new VFSException("invalid offset");
+        curpos += offset;
+        break;
+      case Seek.End:
+        if (offset < -cast(long)data.length || offset > MaxSize-data.length) throw new VFSException("invalid offset");
+        curpos = cast(usize)(cast(long)data.length+offset);
+        break;
+      default: throw new VFSException("invalid offset origin");
+    }
+    eofhit = false;
+  }
+
+  ssize read (void* buf, usize count) {
+    if (closed) return -1;
+    if (curpos >= data.length) { eofhit = true; return 0; }
+    if (count > 0) {
+      import core.stdc.string : memcpy;
+      usize rlen = data.length-curpos;
+      if (rlen >= count) rlen = count; else eofhit = true;
+      assert(rlen != 0);
+      memcpy(buf, data.ptr+curpos, rlen);
+      curpos += rlen;
+      return cast(ssize)rlen;
+    } else {
+      return 0;
+    }
+  }
+
+  ssize write (in void* buf, usize count) {
+    import core.stdc.string : memcpy;
+    if (closed) return -1;
+    if (count == 0) return 0;
+    if (count > MaxSize-curpos) return -1;
+    if (data.length < curpos+count) data.length = curpos+count;
+    memcpy(data.ptr+curpos, buf, count);
+    curpos += count;
+    return count;
+  }
+
+  void close () pure nothrow @safe @nogc { curpos = 0; data = null; eofhit = true; closed = true; }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// not thread-safe
 public struct MemoryStreamRO {
 private:
   const(ubyte)[] data;
