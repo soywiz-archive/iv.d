@@ -112,7 +112,7 @@ Exception reParseError;
 static this () { reParseError = new Exception(""); }
 
 
-bool sre_isword (char c) pure nothrow @safe @nogc {
+bool isWordChar (char c) pure nothrow @safe @nogc {
   pragma(inline, true);
   return
     (c >= '0' && c <= '9') ||
@@ -125,6 +125,30 @@ bool sre_isword (char c) pure nothrow @safe @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 // parser
 struct REParser {
+  static immutable char[2] esc_d_ranges = [ '0', '9' ];
+  static immutable char[4] esc_D_ranges = [ 0, '0'-1, '9'+1, 255 ];
+  static immutable char[8] esc_w_ranges = [ 'A', 'Z', 'a', 'z', '0', '9', '_', '_' ];
+  static immutable char[10] esc_W_ranges = [ 0, 47, 58, 64, 91, 94, 96, 96, 123, 255 ];
+  static immutable char[10] esc_s_ranges = [ ' ', ' ', '\f', '\f', '\n', '\n', '\r', '\r', '\t', '\t' ];
+  static immutable char[8] esc_S_ranges = [ 0, 8, 11, 11, 14, 31, 33, 255 ];
+  static immutable char[6] esc_h_ranges = [ 0x09, 0x09, 0x20, 0x20, 0xa0, 0xa0 ];
+  static immutable char[8] esc_H_ranges = [ 0x00, 0x08, 0x0a, 0x1f, 0x21, 0x9f, 0xa1, 0xff ];
+  static immutable char[10] esc_v_ranges = [ 0x0a, 0x0a, 0x0b, 0x0b, 0x0c, 0x0c, 0x0d, 0x0d, 0x85, 0x85 ];
+  static immutable char[6] esc_V_ranges = [ 0x00, 0x09, 0x0e, 0x84, 0x86, 0xff ];
+  static immutable char[4] esc_N_ranges = [ 0, '\n'-1, '\n'+1, 255 ];
+
+  static bool isdigit (int ch) pure nothrow @safe @nogc { return (ch >= '0' && ch <= '9'); }
+  static bool isalpha (int ch) pure nothrow @safe @nogc { return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'); }
+  static bool isalnum (int ch) pure nothrow @safe @nogc { return (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'); }
+  static int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
+    pragma(inline, true);
+    return
+      base >= 1 && ch >= '0' && ch < '0'+base ? ch-'0' :
+      base > 10 && ch >= 'A' && ch < 'A'+base-10 ? ch-'A'+10 :
+      base > 10 && ch >= 'a' && ch < 'a'+base-10 ? ch-'a'+10 :
+      -1;
+  }
+
   enum int EOF = -1;
 
   MemPool pool;
@@ -156,8 +180,33 @@ struct REParser {
     return p;
   }
 
+  RegExpPart* buildRange (const(char)[] rng, bool normal) {
+    auto yyl = memoryfail(pool.reCreate((normal ? RegExpPart.Type.Class : RegExpPart.Type.NClass), null, null));
+    RERange* last;
+    foreach (immutable idx; 0..rng.length/2) {
+      auto range = memoryfail(pool.alloc!RERange);
+      range.from = rng[idx*2];
+      range.to = rng[idx*2+1];
+      if (last is null) yyl.range = range; else last.next = range;
+      last = range;
+    }
+    return yyl;
+  }
+
+  RegExpPart* metaAssert (RegExpPart.AssType att) {
+    auto yyl = memoryfail(pool.reCreate(RegExpPart.Type.Assert, null, null));
+    yyl.assertion = att;
+    return yyl;
+  }
+
+  RegExpPart* metaLit (char ch) {
+    auto yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
+    yyl.ch = ch;
+    return yyl;
+  }
+
   RegExpPart* parseAtom () {
-    RegExpPart* yyl;
+    if (yytok == '{' || yytok == '}' || yytok == '|') fail("invalid regexp special char");
 
     if (yytok == '(') {
       nextToken();
@@ -170,7 +219,7 @@ struct REParser {
       } else {
         gnum = ++ncaps;
       }
-      yyl = parseAlt();
+      auto yyl = parseAlt();
       if (yytok != ')') fail("unclosed group", stp);
       nextToken();
       if (gnum >= 0) {
@@ -181,27 +230,25 @@ struct REParser {
     }
 
     if (yytok == '.') {
-      yyl = memoryfail(pool.reCreate(RegExpPart.Type.Dot, null, null));
+      auto yyl = memoryfail(pool.reCreate(RegExpPart.Type.Dot, null, null));
       nextToken();
       return yyl;
     }
 
     if (yytok == '^') {
-      yyl = memoryfail(pool.reCreate(RegExpPart.Type.Assert, null, null));
-      yyl.assertion = RegExpPart.AssType.Bol;
+      auto yyl = metaAssert(RegExpPart.AssType.Bol);
       nextToken();
       return yyl;
     }
 
     if (yytok == '$') {
-      yyl = memoryfail(pool.reCreate(RegExpPart.Type.Assert, null, null));
-      yyl.assertion = RegExpPart.AssType.Eol;
+      auto yyl = metaAssert(RegExpPart.AssType.Eol);
       nextToken();
       return yyl;
     }
 
-    if ((flags&Flags.CaseInsensitive) && ((yytok >= 'A' && yytok <= 'Z') || (yytok >= 'a' && yytok <= 'z'))) {
-      yyl = memoryfail(pool.reCreate(RegExpPart.Type.Class, null, null));
+    if ((flags&Flags.CaseInsensitive) && isalpha(yytok)) {
+      auto yyl = memoryfail(pool.reCreate(RegExpPart.Type.Class, null, null));
       yyl.range = memoryfail(pool.alloc!RERange);
       yyl.range.from = cast(char)yytok;
       yyl.range.to = cast(char)yytok;
@@ -216,74 +263,26 @@ struct REParser {
         yyl.range.next.to = cast(char)(yytok-32);
       }
       yyl.range.next.next = null;
-    } else if (yytok == '\\') {
-      static immutable char[$] esc_D_ranges = [ 0, 47, 58, 255 ];
-      static immutable char[$] esc_w_ranges = [ 'A', 'Z', 'a', 'z', '0', '9', '_', '_' ];
-      static immutable char[$] esc_W_ranges = [ 0, 47, 58, 64, 91, 94, 96, 96, 123, 255 ];
-      static immutable char[$] esc_s_ranges = [ ' ', ' ', '\f', '\f', '\n', '\n', '\r', '\r', '\t', '\t' ];
-      static immutable char[$] esc_S_ranges = [ 0, 8, 11, 11, 14, 31, 33, 255 ];
-      static immutable char[$] esc_h_ranges = [ 0x09, 0x09, 0x20, 0x20, 0xa0, 0xa0 ];
-      static immutable char[$] esc_H_ranges = [ 0x00, 0x08, 0x0a, 0x1f, 0x21, 0x9f, 0xa1, 0xff ];
-      static immutable char[$] esc_v_ranges = [ 0x0a, 0x0a, 0x0b, 0x0b, 0x0c, 0x0c, 0x0d, 0x0d, 0x85, 0x85 ];
-      static immutable char[$] esc_V_ranges = [ 0x00, 0x09, 0x0e, 0x84, 0x86, 0xff ];
+      return yyl;
+    }
 
-      RegExpPart* buildRange (const(char)[] rng, bool normal) {
-        auto yyl = memoryfail(pool.reCreate((normal ? RegExpPart.Type.Class : RegExpPart.Type.NClass), null, null));
-        RERange* last;
-        foreach (immutable idx; 0..rng.length/2) {
-          auto range = memoryfail(pool.alloc!RERange);
-          range.from = rng[idx*2];
-          range.to = rng[idx*2+1];
-          if (last is null) yyl.range = range; else last.next = range;
-          last = range;
-        }
-        return yyl;
-      }
-
+    if (yytok == '\\') {
+      RegExpPart* yyl;
       // meta
       auto mt = yytok;
       nextToken();
       switch (mt) {
-        case EOF:
-          fail("metachar expected");
-          break;
-        case 'B':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Assert, null, null));
-          yyl.assertion = RegExpPart.AssType.NonWord;
-          break;
-        case 'b':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Assert, null, null));
-          yyl.assertion = RegExpPart.AssType.Word;
-          break;
-        case 'z':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Assert, null, null));
-          yyl.assertion = RegExpPart.AssType.StreamEnd;
-          break;
-        case 'A':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Assert, null, null));
-          yyl.assertion = RegExpPart.AssType.StreamStart;
-          break;
-        case 'd':
-        case 'D':
-          yyl = memoryfail(pool.reCreate((mt == 'd' ? RegExpPart.Type.Class : RegExpPart.Type.NClass), null, null));
-          auto range = memoryfail(pool.alloc!RERange);
-          range.from = '0';
-          range.to = '9';
-          range.next = null;
-          yyl.range = range;
-          break;
-        case 'w': // \w is defined as [A-Za-z0-9_]
-          yyl = buildRange(esc_w_ranges, true);
-          break;
-        case 'W': // \W is defined as [^A-Za-z0-9_]
-          yyl = buildRange(esc_w_ranges, false);
-          break;
-        case 's': // \s is defined as [ \f\n\r\t]
-          yyl = buildRange(esc_s_ranges, true);
-          break;
-        case 'S': // \S is defined as [^ \f\n\r\t]
-          yyl = buildRange(esc_s_ranges, false);
-          break;
+        case EOF: fail("metachar expected"); break;
+        case 'B': yyl = metaAssert(RegExpPart.AssType.NonWord); break;
+        case 'b': yyl = metaAssert(RegExpPart.AssType.Word); break;
+        case 'z': yyl = metaAssert(RegExpPart.AssType.StreamEnd); break;
+        case 'A': yyl = metaAssert(RegExpPart.AssType.StreamStart); break;
+        case 'd': yyl = buildRange(esc_d_ranges, true); break;
+        case 'D': yyl = buildRange(esc_d_ranges, false); break;
+        case 'w': yyl = buildRange(esc_w_ranges, true); break;
+        case 'W': yyl = buildRange(esc_w_ranges, false); break;
+        case 's': yyl = buildRange(esc_s_ranges, true); break;
+        case 'S': yyl = buildRange(esc_s_ranges, false); break;
         case 'N': // \N is defined as [^\n]
           yyl = memoryfail(pool.reCreate(RegExpPart.Type.NClass, null, null));
           auto range = memoryfail(pool.alloc!RERange);
@@ -292,63 +291,208 @@ struct REParser {
           range.next = null;
           yyl.range = range;
           break;
-        case 'C': // \C is defined as .
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Dot, null, null));
-          break;
-        case 'h':
-          yyl = buildRange(esc_h_ranges, true);
-          break;
-        case 'H':
-          yyl = buildRange(esc_h_ranges, false);
-          break;
-        case 'v':
-          yyl = buildRange(esc_v_ranges, true);
-          break;
-        case 'V':
-          yyl = buildRange(esc_v_ranges, false);
-          break;
-        case 't':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-          yyl.ch = '\t';
-          break;
-        case 'n':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-          yyl.ch = '\n';
-          break;
-        case 'r':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-          yyl.ch = '\r';
-          break;
-        case 'f':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-          yyl.ch = '\f';
-          break;
-        case 'a':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-          yyl.ch = '\a';
-          break;
-        case 'e':
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-          yyl.ch = '\x1b';
+        case 'C': yyl = memoryfail(pool.reCreate(RegExpPart.Type.Dot, null, null)); break; // \C is defined as .
+        case 'h': yyl = buildRange(esc_h_ranges, true); break;
+        case 'H': yyl = buildRange(esc_h_ranges, false); break;
+        case 'v': yyl = buildRange(esc_v_ranges, true); break;
+        case 'V': yyl = buildRange(esc_v_ranges, false); break;
+        case 't': yyl = metaLit('\t'); break;
+        case 'n': yyl = metaLit('\n'); break;
+        case 'r': yyl = metaLit('\r'); break;
+        case 'f': yyl = metaLit('\f'); break;
+        case 'a': yyl = metaLit('\a'); break;
+        case 'e': yyl = metaLit('\x1b'); break;
+        case 'x':
+          nextToken();
+          if (yytok < 0 || yytok > 255) fail("invalid meta");
+          int n = digitInBase(cast(char)yytok, 16);
+          if (n < 0) fail("invalid meta");
+          nextToken();
+          if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16)) {
+            n = n*16+digitInBase(cast(char)yytok, 16);
+            nextToken();
+          }
+          yyl = metaLit(cast(char)n);
           break;
         default: // other non-char escapes are literal
-          if ((mt >= '0' && mt <= '9') || (mt >= 'A' && mt <= 'Z') ||
-              (mt >= 'a' && mt <= 'z') || mt == '_') fail("invalid meta");
-          yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-          yyl.ch = cast(char)mt;
+          if (isalnum(mt)) fail("invalid meta");
+          yyl = metaLit(cast(char)mt);
           break;
       }
       if (yyl is null) fail("wtf?!");
-    } else {
-      yyl = memoryfail(pool.reCreate(RegExpPart.Type.Lit, null, null));
-      yyl.ch = cast(char)yytok;
-      nextToken();
-    }
-    if (flags&Flags.CaseInsensitive) {
-      if (yyl.type == RegExpPart.Type.Class || yyl.type == RegExpPart.Type.NClass) {
-        yyl.range = memoryfail(range2CI(pool, yyl.range));
+      if (flags&Flags.CaseInsensitive) {
+        if (yyl.type == RegExpPart.Type.Class || yyl.type == RegExpPart.Type.NClass) {
+          yyl.range = memoryfail(range2CI(pool, yyl.range));
+        }
       }
+      return yyl;
     }
+
+    if (yytok == '[') {
+      // range
+      auto stp = curpos;
+      nextToken();
+      if (yytok == EOF) fail("invalid range", stp);
+      auto type = RegExpPart.Type.Class;
+      if (yytok == '^') { type = RegExpPart.Type.NClass; nextToken(); }
+      if (yytok == ']') fail("empty ranges are not supported", stp);
+      bool[256] chars = false;
+      while (yytok != ']') {
+        char litch;
+        bool islit = false;
+        bool isrange = false;
+        if (yytok == EOF) fail("invalid range", stp);
+        if (yytok == '\\') {
+          nextToken();
+          if (yytok == EOF) fail("invalid range", stp);
+          switch (yytok) {
+            case 't': litch = '\t'; islit = true; break;
+            case 'n': litch = '\n'; islit = true; break;
+            case 'r': litch = '\r'; islit = true; break;
+            case 'f': litch = '\f'; islit = true; break;
+            case 'a': litch = '\a'; islit = true; break;
+            case 'e': litch = '\x1b'; islit = true; break;
+            case 'd':
+            case 'D':
+            case 's':
+            case 'S':
+            case 'N':
+            case 'w':
+            case 'W':
+            case 'h':
+            case 'H':
+            case 'v':
+            case 'V':
+              isrange = true;
+              break;
+            case 'x':
+              nextToken();
+              if (yytok < 0 || yytok > 255) fail("invalid meta");
+              int n = digitInBase(cast(char)yytok, 16);
+              if (n < 0) fail("invalid meta");
+              nextToken();
+              if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16)) {
+                n = n*16+digitInBase(cast(char)yytok, 16);
+                nextToken();
+              }
+              litch = cast(char)n;
+              islit = true;
+              break;
+            default:
+              if (isalnum(yytok)) fail("invalid escape");
+              litch = cast(char)yytok;
+              islit = true;
+              break;
+          }
+        } else {
+          islit = true;
+          litch = cast(char)yytok;
+        }
+        if (isrange) {
+          const(char)[] rng;
+          switch (yytok) {
+            case 'd': rng = esc_d_ranges; break;
+            case 'D': rng = esc_D_ranges; break;
+            case 's': rng = esc_s_ranges; break;
+            case 'S': rng = esc_S_ranges; break;
+            case 'N': rng = esc_N_ranges; break;
+            case 'w': rng = esc_w_ranges; break;
+            case 'W': rng = esc_W_ranges; break;
+            case 'h': rng = esc_h_ranges; break;
+            case 'H': rng = esc_H_ranges; break;
+            case 'v': rng = esc_v_ranges; break;
+            case 'V': rng = esc_V_ranges; break;
+            default: assert(0);
+          }
+          nextToken(); // skip range type
+          foreach (immutable idx; 0..rng.length/2) {
+            chars[rng[idx*2+0]..rng[idx*2+1]+1] = true;
+          }
+          if (yytok == '-') fail("no metaranges, please");
+          continue;
+        }
+        nextToken(); // skip literal
+        if (yytok != '-') {
+          chars[litch] = true;
+          continue;
+        }
+        nextToken(); // skip minus
+        if (yytok == EOF) fail("invalid range", stp);
+        char ech;
+        bool lxc = false;
+        if (yytok == '\\') {
+          nextToken();
+          if (yytok == EOF) fail("invalid range", stp);
+          switch (yytok) {
+            case 't': ech = '\t'; lxc = true; break;
+            case 'n': ech = '\n'; lxc = true; break;
+            case 'r': ech = '\r'; lxc = true; break;
+            case 'f': ech = '\f'; lxc = true; break;
+            case 'a': ech = '\a'; lxc = true; break;
+            case 'e': ech = '\x1b'; lxc = true; break;
+            case 'd':
+            case 'D':
+            case 's':
+            case 'S':
+            case 'N':
+            case 'w':
+            case 'W':
+            case 'h':
+            case 'H':
+            case 'v':
+            case 'V':
+              break;
+            case 'x':
+              nextToken();
+              if (yytok < 0 || yytok > 255) fail("invalid meta");
+              int n = digitInBase(cast(char)yytok, 16);
+              if (n < 0) fail("invalid meta");
+              nextToken();
+              if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16)) {
+                n = n*16+digitInBase(cast(char)yytok, 16);
+                nextToken();
+              }
+              ech = cast(char)n;
+              lxc = true;
+              break;
+            default:
+              if (isalnum(yytok)) fail("invalid escape");
+              ech = cast(char)yytok;
+              lxc = true;
+              break;
+          }
+        } else {
+          ech = cast(char)yytok;
+          lxc = true;
+        }
+        if (!lxc) fail("invalid range");
+        if (ech < litch) fail("invalid range");
+        nextToken(); // skip literal
+        chars[litch..ech+1] = true;
+      }
+      if (yytok != ']') fail("invalid range", stp);
+      nextToken();
+      auto yyl = memoryfail(pool.reCreate(type, null, null));
+      RERange* last;
+      int idx = 0;
+      while (idx < chars.length) {
+        if (!chars[idx]) { ++idx; continue; }
+        int ei = idx+1;
+        while (ei < chars.length && chars[ei]) ++ei;
+        auto range = memoryfail(pool.alloc!RERange);
+        range.from = cast(char)idx;
+        range.to = cast(char)(ei-1);
+        if (last is null) yyl.range = range; else last.next = range;
+        last = range;
+        idx = ei;
+      }
+      if (last is null) fail("invalid range", stp);
+      return yyl;
+    }
+
+    // literal char
+    auto yyl = metaLit(cast(char)yytok);
+    nextToken();
     return yyl;
   }
 
@@ -596,12 +740,14 @@ public:
     static if ((void*).sizeof > 4) { assert(T.sizeof < int.max/8); }
     import core.stdc.string : memcpy;
     T* res = cast(T*)xalloc(cast(uint)T.sizeof+addsize);
+    /*
     if (res !is null) {
       static if (is(T == struct) && T.sizeof > 0) {
         static immutable T i = T.init;
         memcpy(res, &i, T.sizeof);
       }
     }
+    */
     return res;
   }
 }
@@ -1591,7 +1737,7 @@ int execute (ThompsonCtx* ctx, const(char)* input, size_t size, bool eof) {
               if (sp != last && *sp != '\n') break;
               goto assertion_hold;
             case RegExpPart.AssType.NonWord:
-              if (cast(ubyte)t.seen_word ^ cast(ubyte)(sp != last && sre_isword(*sp))) {
+              if (cast(ubyte)t.seen_word ^ cast(ubyte)(sp != last && isWordChar(*sp))) {
                 //dd("\\B assertion failed: %u %c", t.seen_word, *sp);
                 break;
               }
@@ -1599,8 +1745,8 @@ int execute (ThompsonCtx* ctx, const(char)* input, size_t size, bool eof) {
               goto assertion_hold;
             case RegExpPart.AssType.Word:
               //dd("seen word: %d, sp == last: %d, char=%d", t.seen_word, sp == last, sp == last ? 0 : *sp);
-              if ((cast(ubyte)t.seen_word ^ cast(ubyte)(sp != last && sre_isword(*sp))) == 0) {
-                //dd("\\b assertion failed: %u %c, cur is word: %d, " "pc=%d", (int)t.seen_word, sp == last ? 0 : *sp, sp != last && sre_isword(*sp), (int)(pc-ctx.program.start));
+              if ((cast(ubyte)t.seen_word ^ cast(ubyte)(sp != last && isWordChar(*sp))) == 0) {
+                //dd("\\b assertion failed: %u %c, cur is word: %d, " "pc=%d", (int)t.seen_word, sp == last ? 0 : *sp, sp != last && isWordChar(*sp), (int)(pc-ctx.program.start));
                 break;
               }
               //dd("\\b assertion passed: %u %c", (int)t.seen_word, sp != last ? *sp : 0);
@@ -1681,7 +1827,7 @@ private void addThread (ThompsonCtx* ctx, ThompsonThreadList* l, VMInstr* pc, co
           return;
         case RegExpPart.AssType.Word:
         case RegExpPart.AssType.NonWord:
-          seen_word = (sp != ctx.buffer && sre_isword(sp[-1]));
+          seen_word = (sp != ctx.buffer && isWordChar(sp[-1]));
           //dd("pc=%d, setting seen word: %u %c", (int)(pc-ctx.program.start), (int)seen_word, (sp != ctx.buffer) ? sp[-1] : 0);
           break;
         default:
@@ -2067,12 +2213,12 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
               goto assertion_hold;
             case RegExpPart.AssType.NonWord:
               seen_word = (t.seen_word || (sp == input && ctx.seen_word));
-              if (cast(ubyte)seen_word ^ cast(ubyte)(sp != last && sre_isword(*sp))) break;
+              if (cast(ubyte)seen_word ^ cast(ubyte)(sp != last && isWordChar(*sp))) break;
               //dd("\\B assertion passed: %u %c", t.seen_word, *sp);
               goto assertion_hold;
             case RegExpPart.AssType.Word:
               seen_word = (t.seen_word || (sp == input && ctx.seen_word));
-              if ((cast(ubyte)seen_word ^ cast(ubyte)(sp != last && sre_isword(*sp))) == 0) break;
+              if ((cast(ubyte)seen_word ^ cast(ubyte)(sp != last && isWordChar(*sp))) == 0) break;
               goto assertion_hold;
             default:
               /* impossible to reach here */
@@ -2139,7 +2285,7 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
       //dd("diff: %d", (int)(ctx.last_matched_pos-ctx.processed_bytes));
       //dd("p=%p, input=%p", p, ctx.buffer);
       ctx.seen_newline = (p[-1] == '\n');
-      ctx.seen_word = sre_isword(p[-1]);
+      ctx.seen_word = isWordChar(p[-1]);
       //dd("set seen newline: %u", ctx.seen_newline);
       //dd("set seen word: %u", ctx.seen_word);
     }
@@ -2322,7 +2468,7 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
             seen_word = false;
           } else {
             char c = ctx.buffer[pos-1];
-            seen_word = sre_isword(c);
+            seen_word = isWordChar(c);
           }
           goto add;
 
