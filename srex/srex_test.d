@@ -40,7 +40,7 @@
 module srex_test;
 
 import iv.vfs.io;
-import srex;
+import iv.srex;
 
 
 void main () {
