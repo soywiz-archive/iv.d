@@ -269,6 +269,7 @@ struct REParser {
     if (yytok == '\\') {
       RegExpPart* yyl;
       // meta
+      nextToken();
       auto mt = yytok;
       nextToken();
       switch (mt) {
