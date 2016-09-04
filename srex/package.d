@@ -1862,6 +1862,7 @@ public:
   align(1) static struct Capture {
   align(1):
     int s, e; // starting and ending indicies
+    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (s < 0 || e < 0 || s >= e); }
   }
 
 private:
