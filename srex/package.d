@@ -69,17 +69,17 @@ public:
 public:
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (count > 0); }
 
-  static RegExp create(R) (auto ref R rng) if (isInputRange!R && is(ElementEncodingType!R : char)) {
+  static RegExp create(R) (auto ref R rng, uint flags=0) if (isInputRange!R && is(ElementEncodingType!R : char)) {
     RegExp res;
-    res.compile(rng);
+    res.compile(rng, flags);
     return res;
   }
 
-  bool compile (R) (auto ref R rng) if (isInputRange!R && is(ElementEncodingType!R : char)) {
+  bool compile (R) (auto ref R rng, uint flags=0) if (isInputRange!R && is(ElementEncodingType!R : char)) {
     if (!pool.active) pool = MemPool.create;
     if (pool.active) {
       pool.clear();
-      auto re = parseRegExp(rng, pool, lastError, lastErrorPos);
+      auto re = parseRegExp(rng, pool, flags, lastError, lastErrorPos);
       if (re is null) { pool = pool.init; return false; } // free pool and exit
       auto prgpool = MemPool.create;
       if (!prgpool.active) { pool = pool.init; lastError = "compile error"; lastErrorPos = 0; return false; } // free pool and exit
@@ -262,6 +262,7 @@ struct REParser {
         yyl.range.next.to = cast(char)(yytok-32);
       }
       yyl.range.next.next = null;
+      nextToken();
       return yyl;
     }
 
@@ -593,7 +594,6 @@ struct REParser {
 
   RegExpPart* parseMain () {
     ncaps = 0;
-    flags = 0;
     nextToken();
     auto yyl = parseAlt();
     if (yytok != EOF) fail("extra data at regexp");
@@ -602,7 +602,7 @@ struct REParser {
 }
 
 
-RegExpPart* parseRegExp(R) (auto ref R rng, ref MemPool pool, out string lasterr, out int lasterrpos)
+RegExpPart* parseRegExp(R) (auto ref R rng, ref MemPool pool, uint flags, out string lasterr, out int lasterrpos)
 if (isInputRange!R && is(ElementEncodingType!R : char))
 {
   if (!pool.active) return null;
@@ -619,7 +619,7 @@ if (isInputRange!R && is(ElementEncodingType!R : char))
   p.pool = pool;
   p.yytok = 0;
   p.ncaps = 0;
-  p.flags = 0;
+  p.flags = flags;
 
   RegExpPart* re;
   try {
