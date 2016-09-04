@@ -754,7 +754,7 @@ public:
 
 
 // ///////////////////////////////////////////////////////////////////////// //
-struct MemPool {
+public struct MemPool {
 private:
   static if ((void*).sizeof <= 4) {
     uint pi;
