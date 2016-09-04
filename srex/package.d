@@ -302,7 +302,7 @@ struct REParser {
         case 'f': yyl = metaLit('\f'); break;
         case 'a': yyl = metaLit('\a'); break;
         case 'e': yyl = metaLit('\x1b'); break;
-        case 'x':
+        case 'x': case 'X':
           nextToken();
           if (yytok < 0 || yytok > 255) fail("invalid meta");
           int n = digitInBase(cast(char)yytok, 16);
@@ -365,7 +365,7 @@ struct REParser {
             case 'V':
               isrange = true;
               break;
-            case 'x':
+            case 'x': case 'X':
               nextToken();
               if (yytok < 0 || yytok > 255) fail("invalid meta");
               int n = digitInBase(cast(char)yytok, 16);
@@ -442,7 +442,7 @@ struct REParser {
             case 'v':
             case 'V':
               break;
-            case 'x':
+            case 'x': case 'X':
               nextToken();
               if (yytok < 0 || yytok > 255) fail("invalid meta");
               int n = digitInBase(cast(char)yytok, 16);
