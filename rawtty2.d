@@ -408,9 +408,9 @@ align(1): // make it tightly packed
       }
     }
     void putMods () {
-      if (ctrl) put("ctrl-");
-      if (alt) put("alt-");
-      if (shift) put("shift-");
+      if (ctrl) put("C-");
+      if (alt) put("M-");
+      if (shift) put("S-");
     }
     if (key == Key.ModChar) putMods();
     if (key == Key.Char || key == Key.ModChar) {
@@ -467,7 +467,7 @@ align(1): // make it tightly packed
       int pos = 1; // 0 is always non-space here
       while (pos < s.length && s.ptr[pos] > ' ') { if (++pos >= 1024) return s; }
       auto olds = s; // return this in case of error
-      auto str = s[0..pos]; // string to parse
+      const(char)[] str = s[0..pos]; // string to parse
       // `s` will be our result; remove leading spaces for convenience
       while (pos < s.length && s.ptr[pos] <= ' ') ++pos;
       s = s[pos..$];
