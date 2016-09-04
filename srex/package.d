@@ -836,7 +836,7 @@ public:
 // ///////////////////////////////////////////////////////////////////////// //
 struct CaptureRec {
   uint rc; // reference count
-  size_t ovecsize;
+  uint ovecsize;
   int regex_id;
   int* vector;
   CaptureRec* next;
@@ -1252,7 +1252,7 @@ Program* reCompile (MemPool pool, RegExpPart* re) {
 
   n = re.prgLength;
 
-  multi_ncaps_size = (re.nregexes-1)*uint.sizeof;
+  multi_ncaps_size = (re.nregexes-1)*cast(int)uint.sizeof;
 
   p = pool.alloc!char(cast(uint)Program.sizeof+multi_ncaps_size+n*cast(uint)VMInstr.sizeof);
   if (p is null) return null;
@@ -1275,7 +1275,7 @@ Program* reCompile (MemPool pool, RegExpPart* re) {
     return null;
   }
 
-  prog.len = pc-prog.start;
+  prog.len = cast(uint)(pc-prog.start);
   prog.tag = 0;
   prog.lookahead_asserts = 0;
   prog.dup_threads = 0;
@@ -1628,7 +1628,10 @@ public:
     auto ctx = cast(ThompsonCtx*)pool.firstalloc;
     ctx.pool = pool;
     scope(exit) ctx.pool = MemPool.init; // fixup rc
-    return execute(ctx, input.ptr, input.length, eof);
+    static if (input.length.sizeof > 4) {
+      if (input.length > int.max) return SRes.Error;
+    }
+    return execute(ctx, input.ptr, cast(uint)input.length, eof);
   }
 }
 
@@ -1660,7 +1663,7 @@ struct ThompsonCtx {
 }
 
 
-int execute (ThompsonCtx* ctx, const(char)* input, size_t size, bool eof) {
+int execute (ThompsonCtx* ctx, const(char)* input, uint size, bool eof) {
   const(char)* sp, last;
   uint i, j;
   bool in_;
@@ -1934,7 +1937,10 @@ public:
     auto ctx = cast(PikeCtx*)pool.firstalloc;
     ctx.pool = pool;
     scope(exit) ctx.pool.release; // fixup rc
-    return execute(ctx, input.ptr, input.length, eof, null);
+    static if (input.length.sizeof > 4) {
+      if (input.length > int.max) return SRes.Error;
+    }
+    return execute(ctx, input.ptr, cast(uint)input.length, eof, null);
   }
 }
 
@@ -1970,7 +1976,7 @@ struct PikeCtx {
 
   int* pending_ovector;
   int* ovector;
-  size_t ovecsize;
+  uint ovecsize;
 
   PikeThreadList* current_threads;
   PikeThreadList *next_threads;
@@ -1989,7 +1995,7 @@ struct PikeCtx {
 }
 
 
-int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pending_matched) {
+int execute (PikeCtx* ctx, const(char)* input, uint size, bool eof, int** pending_matched) {
   const(char)* sp, last, p;
   int rc;
   uint i;
@@ -2524,12 +2530,12 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
 }
 
 
-private int prepareMatchedCaptures (PikeCtx* ctx, CaptureRec* matched, int* ovector, size_t ovecsize, bool complete) {
+private int prepareMatchedCaptures (PikeCtx* ctx, CaptureRec* matched, int* ovector, uint ovecsize, bool complete) {
   import core.stdc.string : memcpy, memset;
 
   Program* prog = ctx.program;
   uint ofs = 0;
-  size_t len;
+  uint len;
 
   if (matched.regex_id >= prog.nregexes) {
     //dd("bad regex id: %ld >= %ld", (long) matched.regex_id, (long) prog.nregexes);
@@ -2635,7 +2641,7 @@ void decref (PikeCtx* ctx, CaptureRec* cap) {
 }
 
 
-private CaptureRec* captureCreate (MemPool pool, size_t ovecsize, uint clear, CaptureRec** freecap) {
+private CaptureRec* captureCreate (MemPool pool, uint ovecsize, uint clear, CaptureRec** freecap) {
   char* p;
   CaptureRec* cap;
   if (*freecap) {
