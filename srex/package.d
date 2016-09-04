@@ -42,13 +42,12 @@ private:
 
 // ///////////////////////////////////////////////////////////////////////// //
 /// status code
-public enum {
-  SRE_OK       = 0, ///
-  SRE_ERROR    = -1, ///
-  SRE_AGAIN    = -2, ///
-  SRE_BUSY     = -3, ///
-  SRE_DONE     = -4, ///
-  SRE_DECLINED = -5, ///
+public enum SRes : int {
+  Ok      = 0, /// Match found
+  Again   = -1, /// EOF buffer wasn't seen, and it is still possible to find a match
+  NoMatch = -2, /// No match found, stop searching
+  Error   = -3, /// Some internal error occured (usually out of memory)
+  Done    = -4, /// Internal code, user should never see this
 }
 
 /// regex flags
@@ -1289,7 +1288,7 @@ Program* reCompile (MemPool pool, RegExpPart* re) {
   for (i = 0; i < prog.nregexes; ++i) prog.ovecsize += prog.multi_ncaps[i]+1;
   prog.ovecsize *= 2*uint.sizeof;
 
-  if (getLeadingBytes(pool, prog, &prog.leading_bytes) == SRE_ERROR) return null;
+  if (getLeadingBytes(pool, prog, &prog.leading_bytes) == SRes.Error) return null;
 
   if (prog.leading_bytes && prog.leading_bytes.next is null) {
     pc = cast(VMInstr*)prog.leading_bytes.data;
@@ -1317,10 +1316,10 @@ private int getLeadingBytes (MemPool pool, Program* prog, Chain** res) {
   uint tag = prog.tag+1;
   int rc = getLeadingBytesHelper(pool, prog.start, prog, res, tag);
   prog.tag = tag;
-  if (rc == SRE_ERROR) return SRE_ERROR;
-  if (rc == SRE_DECLINED || prog.nullable) {
+  if (rc == SRes.Error) return SRes.Error;
+  if (rc == SRes.NoMatch || prog.nullable) {
     *res = null;
-    return SRE_DECLINED;
+    return SRes.NoMatch;
   }
   return rc;
 }
@@ -1331,11 +1330,11 @@ private int getLeadingBytesHelper (MemPool pool, VMInstr* pc, Program* prog, Cha
   Chain* cl, ncl;
   VMInstr* bc;
 
-  if (pc.tag == tag) return SRE_OK;
+  if (pc.tag == tag) return SRes.Ok;
 
   if (pc == prog.start+1) {
     // skip the dot (.) in the initial boilerplate ".*?"
-    return SRE_OK;
+    return SRes.Ok;
   }
 
   pc.tag = tag;
@@ -1343,25 +1342,25 @@ private int getLeadingBytesHelper (MemPool pool, VMInstr* pc, Program* prog, Cha
   switch (pc.opcode) {
     case Opcode.Split:
       rc = getLeadingBytesHelper(pool, pc.x, prog, res, tag);
-      if (rc != SRE_OK) return rc;
+      if (rc != SRes.Ok) return rc;
       return getLeadingBytesHelper(pool, pc.y, prog, res, tag);
     case Opcode.Jump:
       return getLeadingBytesHelper(pool, pc.x, prog, res, tag);
     case Opcode.Save:
-      if (++pc == prog.start+prog.len) return SRE_OK;
+      if (++pc == prog.start+prog.len) return SRes.Ok;
       return getLeadingBytesHelper(pool, pc, prog, res, tag);
     case Opcode.Match:
       prog.nullable = 1;
-      return SRE_DONE;
+      return SRes.Done;
     case Opcode.Assert:
-      if (++pc == prog.start+prog.len) return SRE_OK;
+      if (++pc == prog.start+prog.len) return SRes.Ok;
       return getLeadingBytesHelper(pool, pc, prog, res, tag);
     case Opcode.Any:
-      return SRE_DECLINED;
+      return SRes.NoMatch;
     default:
       /* CHAR, ANY, IN, NOTIN */
       ncl = pool.alloc!Chain;
-      if (ncl is null) return SRE_ERROR;
+      if (ncl is null) return SRes.Error;
       ncl.data = pc;
       ncl.next = null;
       if (*res) {
@@ -1369,18 +1368,18 @@ private int getLeadingBytesHelper (MemPool pool, VMInstr* pc, Program* prog, Cha
           bc = cast(VMInstr*)cl.data;
           if (bc.opcode == pc.opcode) {
             if (bc.opcode == Opcode.Char) {
-              if (bc.ch == pc.ch) return SRE_OK;
+              if (bc.ch == pc.ch) return SRes.Ok;
             }
           }
           if (cl.next is null) {
             cl.next = ncl;
-            return SRE_OK;
+            return SRes.Ok;
           }
         }
       } else {
         *res = ncl;
       }
-      return SRE_OK;
+      return SRes.Ok;
   }
 }
 
@@ -1450,12 +1449,12 @@ private VMInstr* emit (MemPool pool, VMInstr* pc, RegExpPart* r) {
       break;
     case RegExpPart.Type.Class:
       pc.opcode = Opcode.In;
-      if (addCharClass(pool, pc, r.range) != SRE_OK) return null;
+      if (addCharClass(pool, pc, r.range) != SRes.Ok) return null;
       ++pc;
       break;
     case RegExpPart.Type.NClass:
       pc.opcode = Opcode.NotIn;
-      if (addCharClass(pool, pc, r.range) != SRE_OK) return null;
+      if (addCharClass(pool, pc, r.range) != SRes.Ok) return null;
       ++pc;
       break;
     case RegExpPart.Type.Dot:
@@ -1558,7 +1557,7 @@ private int addCharClass (MemPool pool, VMInstr* pc, RERange* range) {
   for (r = range; r; r = r.next) ++n;
 
   p = pool.alloc!char(cast(uint)RangesInVM.sizeof+n*cast(uint)Range2VM.sizeof);
-  if (p is null) return SRE_ERROR;
+  if (p is null) return SRes.Error;
 
   pc.ranges = cast(RangesInVM*)p;
 
@@ -1572,7 +1571,7 @@ private int addCharClass (MemPool pool, VMInstr* pc, RERange* range) {
     pc.ranges.head[i].to = r.to;
   }
 
-  return SRE_OK;
+  return SRes.Ok;
 }
 
 
@@ -1625,7 +1624,7 @@ public:
   }
 
   int exec (const(char)[] input, bool eof=true) {
-    if (!pool.active) return SRE_ERROR;
+    if (!pool.active) return SRes.Error;
     auto ctx = cast(ThompsonCtx*)pool.firstalloc;
     ctx.pool = pool;
     scope(exit) ctx.pool = MemPool.init; // fixup rc
@@ -1764,7 +1763,7 @@ int execute (ThompsonCtx* ctx, const(char)* input, size_t size, bool eof) {
           break;
         case Opcode.Match:
           prog.tag = ctx.tag;
-          return SRE_OK;
+          return SRes.Ok;
         default:
           /*
            * Jmp, Split, Save handled in addthread, so that
@@ -1788,9 +1787,9 @@ int execute (ThompsonCtx* ctx, const(char)* input, size_t size, bool eof) {
   ctx.current_threads = clist;
   ctx.next_threads = nlist;
 
-  if (eof) return SRE_DECLINED;
+  if (eof) return SRes.NoMatch;
 
-  return SRE_AGAIN;
+  return SRes.Again;
 }
 
 
@@ -1930,7 +1929,7 @@ public:
   }
 
   int exec (const(char)[] input, bool eof=true) {
-    if (!pool.active) return SRE_ERROR;
+    if (!pool.active) return SRes.Error;
     auto ctx = cast(PikeCtx*)pool.firstalloc;
     ctx.pool = pool;
     scope(exit) ctx.pool.release; // fixup rc
@@ -2005,7 +2004,7 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
 
   if (ctx.eof) {
     //dd("eof found");
-    return SRE_ERROR;
+    return SRes.Error;
   }
 
   pool = ctx.pool;
@@ -2023,9 +2022,9 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
     if (size == 0) {
       if (eof) {
         ctx.eof = true;
-        return SRE_DECLINED;
+        return SRes.NoMatch;
       }
-      return SRE_AGAIN;
+      return SRes.Again;
     }
     sp = input+1;
   } else {
@@ -2040,18 +2039,18 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
     ctx.first_buf = false;
 
     cap = captureCreate(pool, prog.ovecsize, 1, &ctx.free_capture);
-    if (cap is null) return SRE_ERROR;
+    if (cap is null) return SRes.Error;
 
     ctx.tag = prog.tag+1;
     rc = addThread(ctx, clist, prog.start, cap, cast(int)(sp-input), null);
-    if (rc != SRE_OK) {
+    if (rc != SRes.Ok) {
       prog.tag = ctx.tag;
-      return SRE_ERROR;
+      return SRes.Error;
     }
 
     ctx.initial_states_count = clist.count;
     ctx.initial_states = pool.alloc!(VMInstr*)(cast(uint)(VMInstr*).sizeof*clist.count); //k8: -1 is safe here
-    if (ctx.initial_states is null) return SRE_ERROR;
+    if (ctx.initial_states is null) return SRes.Error;
 
     /* we skip the last thread because it must always be .*? */
     for (i = 0, t = clist.head; t && t.next; i++, t = t.next) {
@@ -2100,12 +2099,12 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
         sp = p;
         clearThreadList(ctx, clist);
         cap = captureCreate(pool, prog.ovecsize, 1, &ctx.free_capture);
-        if (cap is null) return SRE_ERROR;
+        if (cap is null) return SRes.Error;
         ctx.tag++;
         rc = addThread(ctx, clist, prog.start, cap, cast(int)(sp-input), null);
-        if (rc != SRE_OK) {
+        if (rc != SRes.Ok) {
           prog.tag = ctx.tag;
-          return SRE_ERROR;
+          return SRes.Error;
         }
         if (sp == last) break;
       }
@@ -2147,10 +2146,10 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
             break;
           }
           rc = addThread(ctx, nlist, pc+1, cap, cast(int)(sp-input+1), &cap);
-          if (rc == SRE_DONE) goto matched;
-          if (rc != SRE_OK) {
+          if (rc == SRes.Done) goto matched;
+          if (rc != SRes.Ok) {
             prog.tag = ctx.tag;
-            return SRE_ERROR;
+            return SRes.Error;
           }
           break;
         case Opcode.NotIn:
@@ -2172,10 +2171,10 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
             break;
           }
           rc = addThread(ctx, nlist, pc+1, cap, cast(int)(sp-input+1), &cap);
-          if (rc == SRE_DONE) goto matched;
-          if (rc != SRE_OK) {
+          if (rc == SRes.Done) goto matched;
+          if (rc != SRes.Ok) {
             prog.tag = ctx.tag;
-            return SRE_ERROR;
+            return SRes.Error;
           }
           break;
         case Opcode.Char:
@@ -2185,10 +2184,10 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
             break;
           }
           rc = addThread(ctx, nlist, pc+1, cap, cast(int)(sp-input+1), &cap);
-          if (rc == SRE_DONE) goto matched;
-          if (rc != SRE_OK) {
+          if (rc == SRes.Done) goto matched;
+          if (rc != SRes.Ok) {
             prog.tag = ctx.tag;
-            return SRE_ERROR;
+            return SRes.Error;
           }
           break;
         case Opcode.Any:
@@ -2197,10 +2196,10 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
             break;
           }
           rc = addThread(ctx, nlist, pc+1, cap, cast(int)(sp-input+1), &cap);
-          if (rc == SRE_DONE) goto matched;
-          if (rc != SRE_OK) {
+          if (rc == SRes.Done) goto matched;
+          if (rc != SRes.Ok) {
             prog.tag = ctx.tag;
-            return SRE_ERROR;
+            return SRes.Error;
           }
           break;
         case Opcode.Assert:
@@ -2231,9 +2230,9 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
           list.head = null;
           list.count = 0;
           rc = addThread(ctx, &list, pc+1, cap, cast(int)(sp-input), null);
-          if (rc != SRE_OK) {
+          if (rc != SRes.Ok) {
             prog.tag = ctx.tag+1;
-            return SRE_ERROR;
+            return SRes.Error;
           }
           if (list.head) {
             *list.next = clist.head;
@@ -2299,7 +2298,7 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
 
   if (matched) {
     if (eof || clist.head is null) {
-      if (prepareMatchedCaptures(ctx, matched, ctx.ovector, ctx.ovecsize, true) != SRE_OK) return SRE_ERROR;
+      if (prepareMatchedCaptures(ctx, matched, ctx.ovector, ctx.ovecsize, true) != SRes.Ok) return SRes.Error;
 
       if (clist.head) {
         *clist.next = ctx.free_threads;
@@ -2328,16 +2327,16 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
     if (pending_matched) {
       if (ctx.pending_ovector is null) {
         ctx.pending_ovector = pool.alloc!int(2*cast(uint)int.sizeof); //k8: -1 is safe here
-        if (ctx.pending_ovector is null) return SRE_ERROR;
+        if (ctx.pending_ovector is null) return SRes.Error;
       }
       *pending_matched = ctx.pending_ovector;
-      if (prepareMatchedCaptures(ctx, matched, *pending_matched, 2, false) != SRE_OK) return SRE_ERROR;
+      if (prepareMatchedCaptures(ctx, matched, *pending_matched, 2, false) != SRes.Ok) return SRes.Error;
     }
   } else {
     if (eof) {
       ctx.eof = true;
       ctx.matched = null;
-      return SRE_DECLINED;
+      return SRes.NoMatch;
     }
     if (pending_matched) *pending_matched = null;
   }
@@ -2350,7 +2349,7 @@ int execute (PikeCtx* ctx, const(char)* input, size_t size, bool eof, int** pend
 
   prepareTempCaptures(prog, ctx);
 
-  return SRE_AGAIN;
+  return SRes.Again;
 }
 
 
@@ -2414,7 +2413,7 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
         return addThread(ctx, l, pc.y, capture, pos, pcap);
       }
     }
-    return SRE_OK;
+    return SRes.Ok;
   }
 
   //dd("adding thread: pc %d, bytecode %d", (int)(pc-ctx.program.start), pc.opcode);
@@ -2434,7 +2433,7 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
       ++capture.rc;
 
       rc = addThread(ctx, l, pc.x, capture, pos, pcap);
-      if (rc != SRE_OK) {
+      if (rc != SRes.Ok) {
           --capture.rc;
           return rc;
       }
@@ -2444,7 +2443,7 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
     case Opcode.Save:
       //dd("save %u: processed bytes: %u, pos: %u", (unsigned) pc.group, (unsigned) ctx.processed_bytes, (unsigned) pos);
       cap = captureUpdate(ctx.pool, capture, pc.group, ctx.processed_bytes+pos, &ctx.free_capture);
-      if (cap is null) return SRE_ERROR;
+      if (cap is null) return SRes.Error;
       return addThread(ctx, l, pc+1, cap, pos, pcap);
 
     case Opcode.Assert:
@@ -2484,7 +2483,7 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
       capture.regex_id = pc.regex_id;
       if (pcap) {
         *pcap = capture;
-        return SRE_DONE;
+        return SRes.Done;
       }
       goto default; //k8:???
 
@@ -2498,7 +2497,7 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
       } else {
         /* fprintf(stderr, "creating new thread\n"); */
         t = ctx.pool.alloc!PikeThread;
-        if (t is null) return SRE_ERROR;
+        if (t is null) return SRes.Error;
       }
 
       t.pc = pc;
@@ -2520,7 +2519,7 @@ private int addThread (PikeCtx* ctx, PikeThreadList* l, VMInstr* pc, CaptureRec*
       break;
   }
 
-  return SRE_OK;
+  return SRes.Ok;
 }
 
 
@@ -2533,10 +2532,10 @@ private int prepareMatchedCaptures (PikeCtx* ctx, CaptureRec* matched, int* ovec
 
   if (matched.regex_id >= prog.nregexes) {
     //dd("bad regex id: %ld >= %ld", (long) matched.regex_id, (long) prog.nregexes);
-    return SRE_ERROR;
+    return SRes.Error;
   }
 
-  if (ovecsize == 0) return SRE_OK;
+  if (ovecsize == 0) return SRes.Ok;
 
   foreach (uint i; 0..matched.regex_id) ofs += prog.multi_ncaps[i]+1;
 
@@ -2554,11 +2553,11 @@ private int prepareMatchedCaptures (PikeCtx* ctx, CaptureRec* matched, int* ovec
 
   memcpy(ovector, matched.vector+ofs, len*int.sizeof);
 
-  if (!complete) return SRE_OK;
+  if (!complete) return SRes.Ok;
 
   if (ovecsize > len) memset(cast(char*)ovector+len*int.sizeof, -1, (ctx.ovecsize-len)*int.sizeof);
 
-  return SRE_OK;
+  return SRes.Ok;
 }
 
 
