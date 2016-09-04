@@ -308,7 +308,7 @@ struct REParser {
           int n = digitInBase(cast(char)yytok, 16);
           if (n < 0) fail("invalid meta");
           nextToken();
-          if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16)) {
+          if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16) >= 0) {
             n = n*16+digitInBase(cast(char)yytok, 16);
             nextToken();
           }
@@ -371,7 +371,7 @@ struct REParser {
               int n = digitInBase(cast(char)yytok, 16);
               if (n < 0) fail("invalid meta");
               nextToken();
-              if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16)) {
+              if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16) >= 0) {
                 n = n*16+digitInBase(cast(char)yytok, 16);
                 nextToken();
               }
@@ -448,7 +448,7 @@ struct REParser {
               int n = digitInBase(cast(char)yytok, 16);
               if (n < 0) fail("invalid meta");
               nextToken();
-              if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16)) {
+              if (yytok >= 0 && yytok <= 255 && digitInBase(cast(char)yytok, 16) >= 0) {
                 n = n*16+digitInBase(cast(char)yytok, 16);
                 nextToken();
               }
