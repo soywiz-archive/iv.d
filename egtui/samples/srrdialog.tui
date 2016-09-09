@@ -1,0 +1,35 @@
+caption: "Replace"
+small-frame: false
+
+label: { caption: "&Search string:"  dest: "edsearch" }
+editline: { align: expand  id: "edsearch" }
+
+label: { caption: "&Replacement string:"  dest: "edreplace" }
+editline: { align: expand  id: "edreplace" }
+
+hline
+
+hbox: {
+  spacing: 1
+  vbox: {
+    flex: 1
+    radio: { caption: "No&rmal" }
+    radio: { caption: "Re&gular expression" }
+  }
+  vbox: {
+    flex: 1
+    checkbox: { caption: "Cas&e sensitive" }
+    checkbox: { caption: "&Backwards" disabled }
+    checkbox: { caption: "In se&lection" }
+  }
+}
+
+hline
+
+hbox: {
+  spacing: 1
+  hspan
+  button: { id: "btok"  caption: " O&K "  default }
+  button: { id: "btcancel"  caption: "&Cancel" }
+  hspan
+}

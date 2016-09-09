@@ -1,0 +1,206 @@
+caption: "Dialog"
+small-frame: false
+// box with two buttons
+hbox: {
+  flex: 0
+  hspan // left span to push buttons to center
+  button: {
+    id: "btn0"
+    caption: "button &0"
+  }
+  button: {
+    flex: 1
+    id: "btn1"
+    caption: "button &1"
+  }
+  // right span to push buttons to center, line break
+  hspan: { lineBreak: true }
+  // right span to push buttons to right
+  hspan
+  button: {
+    id: "btn2"
+    caption: "long button &2"
+    //clickMask: left
+    doubleMask: left
+  }
+}
+
+// horizontal box for the first text line
+hbox: {
+  flex: 0
+  label: {
+    id: "lbl0"
+    dest: "cb0"
+    caption: `\R&first label: `
+    hgroup: "lbl0"
+    vgroup: "lbl0"
+  }
+  checkbox: {
+    id: "cb0"
+    caption: "checkbox for f&irst label"
+    bind-var: cbval0
+    hgroup: "cb0"
+    vgroup: "lbl0"
+  }
+}
+
+// horizontal box for the second text line
+hbox: {
+  flex: 0
+  label: {
+    id: "lbl1"
+    dest: "cb1"
+    caption: `\R&second label: `
+    hgroup: "lbl0"
+    vgroup: "lbl0"
+  }
+  checkbox: {
+    id: "cb1"
+    caption: "checkbox for s&econd label"
+    bind-var: cbval1
+    bind-func: cb1action
+    hgroup: "cb0"
+    vgroup: "lbl0"
+  }
+}
+
+// horizontal box for the third text line
+hbox: {
+  flex: 0
+  label: {
+    id: "lbl2"
+    dest: "rb0"
+    caption: `\R&third label: `
+    hgroup: "lbl0"
+    vgroup: "lbl0"
+  }
+  radio: {
+    id: "rb0"
+    caption: "radio for third label"
+    bind-var: rbval
+    hgroup: "cb0"
+    vgroup: "lbl0"
+  }
+}
+
+// horizontal box for the fourth text line
+hbox: {
+  flex: 0
+  label: {
+    id: "lbl3"
+    dest: "rb1"
+    caption: `\Rf&ourth label: `
+    hgroup: "lbl0"
+    vgroup: "lbl0"
+  }
+  radio: {
+    id: "rb1"
+    caption: "radio for fourth label"
+    bind-var: rbval
+    hgroup: "cb0"
+    vgroup: "lbl0"
+  }
+}
+
+hline
+
+// editor hbox
+hbox: {
+  flex: 0
+  align: expand # expand to eat all available horizontal space
+  label: {
+    caption: "in&put: "
+    dest: "el0"
+  }
+  editline: {
+    id: "el0"
+    text: "defval"
+    flex: 1
+    bind-func: editchangecb
+  }
+}
+
+hline
+
+// test panels
+hbox: {
+  flex: 1
+  align: expand # expand to eat all available horizontal space
+  id: "hbx00"
+  spacing: 0
+  vbox: {
+    flex: 1
+    vpanel: {
+      flex: 1
+      align: expand # expand to eat all available horizontal space
+      caption: "test panel"
+      checkbox: { caption: "option 0" align: expand }
+      checkbox: { caption: "option 1" align: expand }
+    }
+    vpanel: {
+      flex: 1
+      //align: expand # expand to eat all available horizontal space
+      caption: "test panel"
+      checkbox: { caption: "option 2" align: expand }
+      checkbox: { caption: "option 3" align: expand }
+    }
+  }
+  vpanel: {
+    flex: 1
+    align: expand # expand to eat all available horizontal space
+    caption: "test panel"
+    checkbox: { caption: "option 4" align: expand }
+    checkbox: { caption: "option 5" align: expand }
+  }
+}
+
+// horizontal box to push last line down
+//hbox: { flex: 1 }
+
+hline
+
+hbox: {
+  spacing: 1
+  vpanel: {
+    textview: {
+      id: "text0"
+      text: "this is text view control\nit is not fully working now"
+    }
+  }
+  listbox: {
+    id: "lbox0"
+    height: 6
+    items: {
+      "item #0"
+      "item #1"
+      "item #2"
+      "item #3"
+      "item #4"
+      "item #5"
+      "item #6"
+      "item #7"
+      "item #8"
+      "item #9"
+      "item #10"
+      "item #11"
+      "item #12"
+    }
+  }
+}
+
+hline
+
+// horizontal box for the last line
+hbox: {
+  flex: 0
+  // left span to push button to right
+  hspan
+  button: {
+    flex: 0
+    id: "btn3"
+    caption: "last &long button"
+    //clickMask |= FuiLayoutProps.Buttons.Left;
+    doubleMask: left
+    default
+  }
+}
