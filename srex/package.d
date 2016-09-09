@@ -795,7 +795,7 @@ public:
     if (pi) ++(cast(PoolImpl*)pi).rc;
   }
 
-  this (this) @trusted { pragma(inline, true); if (pi) ++(cast(PoolImpl*)pi).rc; }
+  this (this) @trusted { static if (__VERSION__ > 2071) pragma(inline, true); if (pi) ++(cast(PoolImpl*)pi).rc; }
 
   ~this () { pragma(inline, true); if (pi) decref(); }
 

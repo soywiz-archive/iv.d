@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.editor.editor is aliced;
+module iv.egtui.editor.editor;
 
 import iv.rawtty2 : koi2uni, uni2koi;
 import iv.strex;
@@ -22,9 +22,11 @@ import iv.utfutil;
 import iv.vfs;
 debug import iv.vfs.io;
 
+import iv.egtui.types;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
-class GapBuffer {
+package(iv.egtui) class GapBuffer {
 public:
   static align(1) struct HighState {
   align(1) pure nothrow @safe @nogc:
@@ -809,10 +811,12 @@ private:
 
   void initTempFD () nothrow @nogc {
     import core.sys.posix.fcntl /*: open*/;
-    auto xfd = open("/tmp/_egundoz", O_RDWR|O_CLOEXEC|O_TMPFILE, 0o600);
-    if (xfd < 0) return;
-    tmpfd = xfd;
-    tmpsize = 0;
+    static if (is(typeof(O_CLOEXEC)) && is(typeof(O_TMPFILE))) {
+      auto xfd = open("/tmp/_egundoz", O_RDWR|O_CLOEXEC|O_TMPFILE, 0x1b6/*0o600*/);
+      if (xfd < 0) return;
+      tmpfd = xfd;
+      tmpsize = 0;
+    }
   }
 
   // returns record size
@@ -960,7 +964,7 @@ public:
       initTempFD();
       if (tmpfd < 0) {
         import iv.rawtty2;
-        ttyBeep();
+        version(aliced) ttyBeep();
       }
     }
   }

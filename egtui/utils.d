@@ -22,6 +22,8 @@ module iv.egtui.utils;
 import iv.strex;
 import iv.rawtty2;
 
+import iv.egtui.types;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // calculate text bounds (can call delegate to output string too ;-)
@@ -185,5 +187,3 @@ uint calcTextBoundsEx (out int cols, out int lines, char[] text, int maxwdt) {
 
   return dpos;
 }
-
-

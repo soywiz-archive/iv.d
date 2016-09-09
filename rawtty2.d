@@ -401,13 +401,13 @@ align(1): // make it tightly packed
   char[] toCharBuf (char[] dest) const nothrow @trusted @nogc {
     static immutable string hexD = "0123456789abcdef";
     int dpos = 0;
-    void put (const(char)[] s...) {
+    void put (const(char)[] s...) nothrow @nogc {
       foreach (char ch; s) {
         if (dpos >= dest.length) break;
         dest.ptr[dpos++] = ch;
       }
     }
-    void putMods () {
+    void putMods () nothrow @nogc {
       if (ctrl) put("C-");
       if (alt) put("M-");
       if (shift) put("S-");
@@ -587,7 +587,7 @@ align(1): // make it tightly packed
 TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   TtyKey key;
 
-  void skipCSI () {
+  void skipCSI () @nogc {
     key.key = TtyKey.Key.Unknown;
     for (;;) {
       auto ch = ttyReadKeyByte(toEscMSec);
@@ -596,12 +596,12 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     }
   }
 
-  void badCSI () {
+  void badCSI () @nogc {
     key = key.init;
     key.key = TtyKey.Key.Unknown;
   }
 
-  bool xtermMods (uint mci) {
+  bool xtermMods (uint mci) @nogc {
     switch (mci) {
       case 2: key.shift = true; return true;
       case 3: key.alt = true; return true;
@@ -615,7 +615,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     return false;
   }
 
-  void xtermSpecial (char ch) {
+  void xtermSpecial (char ch) @nogc {
     switch (ch) {
       case 'A': key.key = TtyKey.Key.Up; break;
       case 'B': key.key = TtyKey.Key.Down; break;
@@ -633,7 +633,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     }
   }
 
-  void csiSpecial (uint n) {
+  void csiSpecial (uint n) @nogc {
     switch (n) {
       case 1: key.key = TtyKey.Key.Home; return; // xterm
       case 2: key.key = TtyKey.Key.Insert; return;

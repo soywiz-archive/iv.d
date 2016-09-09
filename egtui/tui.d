@@ -22,9 +22,10 @@ module iv.egtui.tui;
 import iv.strex;
 import iv.rawtty2;
 
-import iv.egtui.tty;
-import iv.egtui.parser;
 import iv.egtui.editor;
+import iv.egtui.parser;
+import iv.egtui.tty;
+import iv.egtui.types;
 import iv.egtui.utils;
 
 //version = fui_many_asserts;
@@ -370,7 +371,7 @@ private:
 
     //debug(fui_mouse) { import core.stdc.stdio : printf; printf("NBS: bidx=%u; down=%d\n", bidx, cast(int)down); }
 
-    void resetActive () {
+    void resetActive() () {
       auto i = lastClick.ptr[bidx];
       if (i == -1) return;
       foreach (immutable idx, int lc; lastClick) {
@@ -379,7 +380,7 @@ private:
       layprops(i).active = false;
     }
 
-    void doRelease () {
+    void doRelease() () {
       resetActive();
       // did we released the button on the same control we pressed it?
       if (beventCount.ptr[bidx] == 0 || lastHover == -1 || (lastHover != lastClick.ptr[bidx])) {
@@ -427,7 +428,7 @@ private:
       lastClickDelta.ptr[bidx] = lastClickDelta[0].max;
     }
 
-    void doPress () {
+    void doPress() () {
       // void?
       if (lastHover == -1) {
         // reset all
@@ -795,7 +796,7 @@ public:
 
   // -1 or item id, iterating items backwards (so last drawn will be first hit)
   int itemAt (FuiPoint pt) {
-    int check (int id, FuiPoint g) {
+    int check() (int id, FuiPoint g) {
       if (auto lp = layprops(id)) {
         if (!lp.visible) return -1;
       } else {
@@ -938,7 +939,7 @@ public:
   // refcounting mechanics
   this (in FuiContext csrc) { ctxp = csrc.ctxp; incRef(); }
   ~this () { pragma(inline, true); decRef(); }
-  this (this) { pragma(inline, true); incRef(); }
+  this (this) { static if (__VERSION__ > 2071) pragma(inline, true); incRef(); }
   void opAssign (in FuiContext csrc) {
     if (csrc.ctxp) {
       // first increase refcounter for source
@@ -1050,7 +1051,7 @@ public:
 
     int hGroupLast = -1, vGroupLast = -1; // list tails
 
-    void resetValues () {
+    void resetValues() () {
       enum FixGroupEnum(string gvar) =
       "if (lp."~gvar~"Sibling != -1 && (cast(uint)(lp."~gvar~"Sibling)&0x8000_0000)) {\n"~
       "  // group start, fix list\n"~
@@ -1088,7 +1089,7 @@ public:
     // layout children in this item
     // `spareGroups`: don't touch widget sizes for hv groups
     // `spareAll`: don't fix this widget's size
-    void layit (int topid) {
+    void layit() (int topid) {
       auto lp = layprops(topid);
       if (lp is null) return;
       // if we do group relayouting, skip touched items

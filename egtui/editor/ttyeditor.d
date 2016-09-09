@@ -286,9 +286,9 @@ public:
       int pos = curpos+(domove ? incSearchDir : 0);
       PlainMatch mt;
       if (incSearchDir < 0) {
-        mt = findTextPlainBack(incSearchBuf, 0, pos, words:false, caseSens:true);
+        mt = findTextPlainBack(incSearchBuf, 0, pos, /*words:*/false, /*caseSens:*/true);
       } else {
-        mt = findTextPlain(incSearchBuf, pos, textsize, words:false, caseSens:true);
+        mt = findTextPlain(incSearchBuf, pos, textsize, /*words:*/false, /*caseSens:*/true);
       }
       if (!mt.empty) {
         incSearchHitPos = mt.s;
