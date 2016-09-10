@@ -145,10 +145,20 @@ align(1):
   int lineSpacing; // line spacing for horizontal boxes
 
   enum Buttons : ubyte {
-    None = 0,
-    Left   = 0x01,
-    Right  = 0x02,
-    Middle = 0x04,
+    None      = 0,
+    Left      = 0x01,
+    Right     = 0x02,
+    Middle    = 0x04,
+    WheelUp   = 0x08,
+    WheelDown = 0x10,
+  }
+
+  enum Button : ubyte {
+    Left,
+    Right,
+    Middle,
+    WheelUp,
+    WheelDown,
   }
 
   ubyte clickMask; // buttons that can be used to click this item to do some action
@@ -665,7 +675,15 @@ private:
         case ExternalEvent.Type.Mouse:
           auto ev = &extEvents.ptr[extevHead].kev;
           mouseAt(FuiPoint(ev.x, ev.y));
-          if (ev.button >= 0) newButtonState(ev.button, ev.mpress);
+          if (ev.button >= 0) {
+            if (!ev.mwheel) {
+              newButtonState(ev.button, ev.mpress);
+            } else {
+              // rawtty2 workaround
+              newButtonState(ev.button, true);
+              newButtonState(ev.button, false);
+            }
+          }
           /*
           switch (ev.type) {
             case MouseEventType.buttonPressed:
@@ -2429,6 +2447,7 @@ int textview (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) 
   with (ctx.layprops(item)) {
     flex = 1;
     aligning = FuiLayoutProps.Align.Stretch;
+    clickMask |= FuiLayoutProps.Buttons.WheelUp|FuiLayoutProps.Buttons.WheelDown;
     canBeFocused = true;
   }
   auto data = ctx.item!FuiCtlTextView(item);
@@ -2612,7 +2631,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
   with (ctx.layprops(item)) {
     flex = 1;
     aligning = FuiLayoutProps.Align.Stretch;
-    clickMask |= FuiLayoutProps.Buttons.Left;
+    clickMask |= FuiLayoutProps.Buttons.Left|FuiLayoutProps.Buttons.WheelUp|FuiLayoutProps.Buttons.WheelDown;
     canBeFocused = true;
     minSize = FuiSize(3, 0);
   }
@@ -2625,12 +2644,13 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
     auto lp = ctx.layprops(self);
     auto win = XtWindow.fullscreen;
     // get colors
-    uint atext, asel;
+    uint atext, asel, agauge;
     if (lp.enabled) {
       atext = ctx.palColor!"def"(self);
       asel = ctx.palColor!"sel"(self);
+      agauge = ctx.palColor!"gauge"(self);
     } else {
-      atext = asel = ctx.palColor!"disabled"(self);
+      atext = asel = agauge = ctx.palColor!"disabled"(self);
     }
     win.color = atext;
     win.fill(rc.x, rc.y, rc.w, rc.h);
@@ -2691,6 +2711,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
       x -= 2;
       win.color = atext;
       win.vline(x+1, rc.y, rc.h);
+      win.color = agauge; //atext;
       int last = data.topItem+rc.h;
       if (last > data.itemCount) last = data.itemCount;
       last = rc.h*last/data.itemCount;
@@ -2763,7 +2784,13 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
       case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
         if (auto lbox = ctx.itemAs!"listbox"(self)) {
           ctx.listboxNorm(self);
-          if (ev.x > 0) {
+          if (ev.bidx == FuiLayoutProps.Button.WheelUp) {
+            if (--lbox.curItem < 0) lbox.curItem = 0;
+          } else if (ev.bidx == FuiLayoutProps.Button.WheelDown) {
+            if (lbox.itemCount > 0) {
+              if (++lbox.curItem >= lbox.itemCount) lbox.curItem = lbox.itemCount-1;
+            }
+          } else if (ev.x > 0) {
             int it = ev.y-lbox.topItem;
             lbox.curItem = it;
             ctx.listboxNorm(self);
