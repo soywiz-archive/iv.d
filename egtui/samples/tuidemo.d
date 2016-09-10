@@ -306,7 +306,7 @@ void main (string[] args) {
     {
       xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0x00, 0x5f, 0xaf)); // 0,25
       //xtSetFB(TtyRgb2Color!(0x60, 0x60, 0x60), 0);
-      xtSetFB(8, 0);
+      //xtSetFB(8, 0);
       xtFill!true(0, 0, ttyw, ttyh, 'a');
     }
 

@@ -108,6 +108,20 @@ void ttyDisableBracketedPaste () nothrow @trusted @nogc {
 }
 
 
+void ttyEnableMouseReports () nothrow @trusted @nogc {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?1000h\x1b[?1006h";
+  write(1, str.ptr, str.length);
+}
+
+
+void ttyDisableMouseReports () nothrow @trusted @nogc {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?1006l\x1b[?1000l";
+  write(1, str.ptr, str.length);
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 /// get current TTY mode
 TTYMode ttyGetMode () nothrow @trusted @nogc {
@@ -341,6 +355,13 @@ align(1): // make it tightly packed
 
     //A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     //N0, N1, N2, N3, N4, N5, N6, N7, N8, N9,
+
+    MLeftDown,
+    MLeftUp,
+    MMiddleDown,
+    MMiddleUp,
+    MRightDown,
+    MRightUp,
   }
 
   enum ModFlag : ubyte {
@@ -349,11 +370,21 @@ align(1): // make it tightly packed
     Shift = 1<<2,
   }
 
+  enum MButton : int {
+    Left = 0,
+    Middle = 1,
+    Right = 2,
+  }
+
   Key key; /// key type/sym
   ubyte mods; /// set of ModFlag
   dchar ch = 0; /// can be 0 for special key
+  ushort x, y; // for mouse reports
 
   @property const pure nothrow @safe @nogc {
+    bool mouse () { pragma(inline, true); return (key >= Key.MLeftDown && key <= Key.MRightUp); } ///
+    int button () { pragma(inline, true); return (key == Key.MLeftDown || key == Key.MLeftUp ? 0 : key == Key.MRightDown || key == Key.MRightUp ? 1 : key == Key.MMiddleDown || key == Key.MMiddleUp ? 2 : -1); } ///
+    bool mpress () { pragma(inline, true); return (key == Key.MLeftDown || key == Key.MRightDown || key == Key.MMiddleDown); } ///
     bool ctrl () { pragma(inline, true); return ((mods&ModFlag.Ctrl) != 0); } ///
     bool alt () { pragma(inline, true); return ((mods&ModFlag.Alt) != 0); } ///
     bool shift () { pragma(inline, true); return ((mods&ModFlag.Shift) != 0); } ///
@@ -379,6 +410,7 @@ align(1): // make it tightly packed
       (key == k.key ?
        (key == Key.Char ? (ch == k.ch) :
         key == Key.ModChar ? (mods == k.mods && ch == k.ch) :
+        //key >= Key.MLeftDown && key <= MRightUp ? true :
         key > Key.ModChar ? (mods == k.mods) :
         true
        ) : false
@@ -659,6 +691,39 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     }
   }
 
+  // {\e}[<0;58;32M (button;x;y;[Mm])
+  void parseMouse () {
+    uint[3] nn;
+    uint nc = 0;
+    bool press = false;
+    for (;;) {
+      auto ch = ttyReadKeyByte(toEscMSec);
+      if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return; }
+      if (ch == ';') {
+        ++nc;
+      } else if (ch >= '0' && ch <= '9') {
+        if (nc < nn.length) nn.ptr[nc] = nn.ptr[nc]*10+ch-'0';
+      } else {
+             if (ch == 'M') press = true;
+        else if (ch == 'm') press = false;
+        else { key.key = TtyKey.Key.Unknown; return; }
+        break;
+      }
+    }
+    if (nn[1] < 1) nn[1] = 1;
+    if (nn[1] > ushort.max) nn[1] = ushort.max;
+    if (nn[2] < 1) nn[2] = 1;
+    if (nn[2] > ushort.max) nn[2] = ushort.max;
+    switch (nn[0]) {
+      case 0: key.key = (press ? TtyKey.Key.MLeftDown : TtyKey.Key.MLeftUp); break;
+      case 1: key.key = (press ? TtyKey.Key.MMiddleDown : TtyKey.Key.MMiddleUp); break;
+      case 2: key.key = (press ? TtyKey.Key.MRightDown : TtyKey.Key.MRightUp); break;
+      default: key.key = TtyKey.Key.Unknown; return;
+    }
+    key.x = cast(ushort)nn[1];
+    key.y = cast(ushort)nn[2];
+  }
+
   int ch = ttyReadKeyByte(toMSec);
   if (ch < 0) { key.key = TtyKey.Key.Error; return key; } // error
   if (ch == 0) { key.key = TtyKey.Key.ModChar; key.ctrl = true; key.ch = ' '; return key; }
@@ -684,9 +749,12 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       uint[2] nn;
       uint nc = 0;
       bool wasDigit = false;
+      bool firstChar = true;
       // parse csi
       for (;;) {
         ch = ttyReadKeyByte(toEscMSec);
+        if (firstChar && ch == '<') { parseMouse(); return key; }
+        firstChar = false;
         if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
         if (ch == ';') {
           ++nc;
