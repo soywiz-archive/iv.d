@@ -619,6 +619,17 @@ public class EditorHLTODO : EditorHLExt {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public class EditorHLGitCommit : EditorHLExt {
+  this () { super(null); }
+
+  protected override void rehighlightLine (int ls, int le) {
+    while (ls <= le && gb[ls] != '#') gb.hi(ls++) = HS(HiText);
+    while (ls <= le) gb.hi(ls++) = HS(HiCommentOneLine);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 abstract class EdHiTokens {
 private:
   ubyte[string] tokenMap; // tokens, by name, alphanum
@@ -1197,7 +1208,10 @@ public __gshared EditorHL getHiglighterFor (const(char)[] ext, const(char)[] ful
     if (toksc is null) toksc = new EdHiTokensC();
     return new EditorHLExt(toksc);
   }
-  import std.path;
-  if (fullname.baseName == "TODO") return new EditorHLTODO();
+  auto bnpos = fullname.length;
+  while (bnpos > 0 && fullname.ptr[bnpos-1] != '/') --bnpos;
+  auto name = fullname[bnpos..$];
+  if (name == "TODO") return new EditorHLTODO();
+  if (name == "COMMIT_EDITMSG") return new EditorHLGitCommit();
   return null;
 }
