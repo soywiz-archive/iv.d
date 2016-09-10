@@ -25,8 +25,10 @@ import iv.egtui.editor.editor;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public enum TextColor = XtColorFB!(TtyRgb2Color!(0xd0, 0xd0, 0xd0), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 252,237
-public enum TextKillColor = XtColorFB!(TtyRgb2Color!(0xe0, 0xe0, 0xe0), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 252,237
+public enum TextBG = TtyRgb2Color!(0x3a, 0x3a, 0x3a); // 237
+
+public enum TextColor = XtColorFB!(TtyRgb2Color!(0xd0, 0xd0, 0xd0), TextBG); // 252,237
+public enum TextKillColor = XtColorFB!(TtyRgb2Color!(0xe0, 0xe0, 0xe0), TextBG); // 252,237
 public enum BadColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x54), TtyRgb2Color!(0xb2, 0x18, 0x18)); // 11,1
 //public enum TrailSpaceColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x00), TtyRgb2Color!(0x00, 0x00, 0x87)); // 226,18
 public enum TrailSpaceColor = XtColorFB!(TtyRgb2Color!(0x6c, 0x6c, 0x6c), TtyRgb2Color!(0x26, 0x26, 0x26)); // 242,235
@@ -37,7 +39,7 @@ public enum IncSearchColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x00), TtyRgb2
 
 public enum UtfuckedColor = XtColorFB!(TtyRgb2Color!(0x6c, 0x6c, 0x6c), TtyRgb2Color!(0x26, 0x26, 0x26)); // 242,235
 
-public enum VLineColor = XtColorFB!(TtyRgb2Color!(0x60, 0x60, 0x60), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 252,237
+public enum VLineColor = XtColorFB!(TtyRgb2Color!(0x60, 0x60, 0x60), TextBG); // 252,237
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -73,6 +75,13 @@ public enum {
   HiAliced,
 
   HiRegExp, // js inline regexp
+
+  HiToDoOpen, // [.]
+  HiToDoUrgent, // [!]
+  HiToDoSemi, // [+]
+  HiToDoDone, // [*]
+  HiToDoDont, // [-]
+  HiToDoUnsure, // [?]
 }
 
 
@@ -84,39 +93,52 @@ public uint hiColor() (in auto ref GapBuffer.HighState hs) nothrow @safe @nogc {
 
     case HiCommentOneLine:
     case HiCommentMulti:
-      return XtColorFB!(TtyRgb2Color!(0xb2, 0x68, 0x18), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 3,237
+      return XtColorFB!(TtyRgb2Color!(0xb2, 0x68, 0x18), TextBG); // 3,237
 
     case HiNumber:
-      return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 2,237
+      return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TextBG); // 2,237
 
     case HiChar:
-      return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 14,237
+      return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TextBG); // 14,237
     case HiCharSpecial:
-      return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0x54), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 10,237; green
-      //return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 2,237
-      //return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 14,237
+      return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0x54), TextBG); // 10,237; green
+      //return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TextBG); // 2,237
+      //return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TextBG); // 14,237
 
     // normal string
     case HiString:
     case HiBQString:
     case HiRQString:
-      return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0xb2), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 6,237
+      return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0xb2), TextBG); // 6,237
     case HiStringSpecial:
-      return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 14,237
-      //return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 2,237
+      return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TextBG); // 14,237
+      //return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TextBG); // 2,237
 
-    case HiKeyword: return XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x54), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 11,237
-    case HiKeywordHi: return XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0xff), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 202,237
-    case HiBuiltin: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 202,237
-    case HiType: return XtColorFB!(TtyRgb2Color!(0xff, 0xaf, 0x00), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 214,237
-    case HiSpecial: return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0x54), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 10,237; green
-    case HiInternal: return XtColorFB!(TtyRgb2Color!(0xff, 0x54, 0x54), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 9,237; red
-    case HiPunct: return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 14,237
-    case HiSemi: return XtColorFB!(TtyRgb2Color!(0xff, 0x00, 0xff), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 201,237
-    case HiUDA: return XtColorFB!(TtyRgb2Color!(0x00, 0x87, 0xff), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 33,237
-    case HiAliced: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 202,237
+    case HiKeyword: return XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x54), TextBG); // 11,237
+    case HiKeywordHi: return XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0xff), TextBG); // 202,237
+    case HiBuiltin: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TextBG); // 202,237
+    case HiType: return XtColorFB!(TtyRgb2Color!(0xff, 0xaf, 0x00), TextBG); // 214,237
+    case HiSpecial: return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0x54), TextBG); // 10,237; green
+    case HiInternal: return XtColorFB!(TtyRgb2Color!(0xff, 0x54, 0x54), TextBG); // 9,237; red
+    case HiPunct: return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TextBG); // 14,237
+    case HiSemi: return XtColorFB!(TtyRgb2Color!(0xff, 0x00, 0xff), TextBG); // 201,237
+    case HiUDA: return XtColorFB!(TtyRgb2Color!(0x00, 0x87, 0xff), TextBG); // 33,237
+    case HiAliced: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TextBG); // 202,237
 
-    case HiRegExp: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TtyRgb2Color!(0x3a, 0x3a, 0x3a)); // 202,237
+    case HiRegExp: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TextBG); // 202,237
+
+    case HiToDoOpen: // [.]
+      return XtColorFB!(TtyRgb2Color!(0xff, 0x00, 0xff), TextBG);
+    case HiToDoUnsure: // [?]
+      return XtColorFB!(TtyRgb2Color!(0xc0, 0x00, 0xc0), TextBG);
+    case HiToDoUrgent: // [!]
+      return XtColorFB!(TtyRgb2Color!(0xff, 0x00, 0x00), TextBG);
+    case HiToDoSemi: // [+]
+      return XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x00), TextBG);
+    case HiToDoDone: // [*]
+      return XtColorFB!(TtyRgb2Color!(0x00, 0xa0, 0x00), TextBG);
+    case HiToDoDont: // [-]
+      return XtColorFB!(TtyRgb2Color!(0x90, 0x90, 0x00), TextBG);
 
     default: assert(0, "wtf?!");
   }
@@ -151,7 +173,7 @@ public:
   final bool redoLine (int ls, int le) {
     if (gb.hi(ls).kwtype == 0) {
       auto est = gb.hi(le);
-      rehighlightLine(ls, le);
+      if (ls < gb.textsize) rehighlightLine(ls, le);
       // need to fix next line?
       if (le+1 < gb.textsize && est != gb.hi(le)) {
         gb.hi(le+1).kwtype = 0;
@@ -165,7 +187,7 @@ public:
   override bool fixLine (int line) {
     if (validLines == 0) {
       // anyway
-      rehighlightLine(0, gb.lineend(0));
+      if (gb.textsize > 0) rehighlightLine(0, gb.lineend(0));
       validLines = 1;
       if (line == 0) return true;
     }
@@ -177,7 +199,7 @@ public:
           if (validLines == line) res = true;
           auto epos = gb.lineend(validLines);
           auto est = gb.hi(epos);
-          rehighlightLine(spos, epos);
+          if (spos < gb.textsize) rehighlightLine(spos, epos);
           // need to fix next line?
           if (epos+1 < gb.textsize && est != gb.hi(epos)) gb.hi(epos+1).kwtype = 0;
           spos = epos+1;
@@ -206,52 +228,9 @@ public:
     if (wasInsDel) validLines = line; // rehighlight the following text
   }
 
-private final:
-  // returns either 0 or "skip count"
-  int isGoodChar (int pos) nothrow @nogc {
-    if (gb[pos] != '\'') return 0;
-    if (gb[pos+1] == '\\') {
-      auto ch = gb[pos+2];
-      if (ch != 'x' && ch != 'X') return (gb[pos+3] == '\'' ? 4 : 0);
-      if (!gb[pos+3].isxdigit) return 0;
-      ch = gb[pos+4];
-      if (!ch.isxdigit) return (ch == '\'' ? 5 : 0);
-      return (gb[pos+5] == '\'' ? 6 : 0);
-    } else if (gb[pos+2] == '\'') {
-      return 3;
-    } else {
-      return 0;
-    }
-  }
-
-  bool isDecStart (int pos) nothrow @nogc {
-    auto ch = gb[pos];
-    if (ch == '-' || ch == '+') ch = gb[++pos];
-    return ch.isdigit;
-  }
-
-  // 0 or base
-  int isBasedStart (int pos) nothrow @nogc {
-    auto ch = gb[pos++];
-    if (ch == '-' || ch == '+') ch = gb[pos++];
-    if (ch != '0') return 0;
-    ch = gb[pos++];
-    int base = 0;
-         if (ch == 'x' || ch == 'X') base = 16;
-    else if (ch == 'o' || ch == 'O') base = 8;
-    else if (ch == 'b' || ch == 'B') base = 2;
-    else return 0;
-    if (!tks.optNum0x && base == 16) return 0;
-    if (!tks.optNum0o && base == 8) return 0;
-    if (!tks.optNum0b && base == 2) return 0;
-    return (gb[pos].digitInBase(base) >= 0 ? base : 0);
-  }
-
   // this is *inclusive* range
-  void rehighlightLine (int ls, int le) {
+  protected void rehighlightLine (int ls, int le) {
     auto tks = this.tks;
-
-    if (ls >= gb.textsize) return;
 
     // spos: at char
     // return: 0: error; 1: normal; >1: escape (length)
@@ -567,6 +546,74 @@ private final:
       st = HS(HiText);
       gb.hi(spos++) = st;
     }
+  }
+private final:
+  // returns either 0 or "skip count"
+  int isGoodChar (int pos) nothrow @nogc {
+    if (gb[pos] != '\'') return 0;
+    if (gb[pos+1] == '\\') {
+      auto ch = gb[pos+2];
+      if (ch != 'x' && ch != 'X') return (gb[pos+3] == '\'' ? 4 : 0);
+      if (!gb[pos+3].isxdigit) return 0;
+      ch = gb[pos+4];
+      if (!ch.isxdigit) return (ch == '\'' ? 5 : 0);
+      return (gb[pos+5] == '\'' ? 6 : 0);
+    } else if (gb[pos+2] == '\'') {
+      return 3;
+    } else {
+      return 0;
+    }
+  }
+
+  bool isDecStart (int pos) nothrow @nogc {
+    auto ch = gb[pos];
+    if (ch == '-' || ch == '+') ch = gb[++pos];
+    return ch.isdigit;
+  }
+
+  // 0 or base
+  int isBasedStart (int pos) nothrow @nogc {
+    auto ch = gb[pos++];
+    if (ch == '-' || ch == '+') ch = gb[pos++];
+    if (ch != '0') return 0;
+    ch = gb[pos++];
+    int base = 0;
+         if (ch == 'x' || ch == 'X') base = 16;
+    else if (ch == 'o' || ch == 'O') base = 8;
+    else if (ch == 'b' || ch == 'B') base = 2;
+    else return 0;
+    if (!tks.optNum0x && base == 16) return 0;
+    if (!tks.optNum0o && base == 8) return 0;
+    if (!tks.optNum0b && base == 2) return 0;
+    return (gb[pos].digitInBase(base) >= 0 ? base : 0);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class EditorHLTODO : EditorHLExt {
+  this () { super(null); }
+
+  protected override void rehighlightLine (int ls, int le) {
+    while (ls <= le && gb[ls] <= ' ') gb.hi(ls++) = HS(HiText);
+    if (le-ls+1 >= 3 && gb[ls] == '[' && gb[ls+2] == ']') {
+      auto st = HS(HiNone);
+      switch (gb[ls+1]) {
+        case '.': st = HS(HiToDoOpen); break;
+        case '!': st = HS(HiToDoUrgent); break;
+        case '+': st = HS(HiToDoSemi); break;
+        case '*': st = HS(HiToDoDone); break;
+        case '-': st = HS(HiToDoDont); break;
+        case '?': st = HS(HiToDoUnsure); break;
+        default:
+      }
+      if (st.kwtype != HiNone) {
+        gb.hi(ls++) = st;
+        gb.hi(ls++) = st;
+        gb.hi(ls++) = st;
+      }
+    }
+    while (ls <= le) gb.hi(ls++) = HS(HiText);
   }
 }
 
@@ -1134,7 +1181,7 @@ class EdHiTokensC : EdHiTokens {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // new higlighter instance for the file with the given extension
-public __gshared EditorHL getHiglighterFor (const(char)[] ext) {
+public __gshared EditorHL getHiglighterFor (const(char)[] ext, const(char)[] fullname) {
   if (ext.strEquCI(".d")) {
     __gshared EdHiTokensD toksd;
     if (toksd is null) toksd = new EdHiTokensD();
@@ -1150,5 +1197,7 @@ public __gshared EditorHL getHiglighterFor (const(char)[] ext) {
     if (toksc is null) toksc = new EdHiTokensC();
     return new EditorHLExt(toksc);
   }
+  import std.path;
+  if (fullname.baseName == "TODO") return new EditorHLTODO();
   return null;
 }
