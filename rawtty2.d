@@ -362,6 +362,9 @@ align(1): // make it tightly packed
     MMiddleUp,
     MRightDown,
     MRightUp,
+
+    MWheelUp,
+    MWheelDown,
   }
 
   enum ModFlag : ubyte {
@@ -382,9 +385,18 @@ align(1): // make it tightly packed
   ushort x, y; // for mouse reports
 
   @property const pure nothrow @safe @nogc {
-    bool mouse () { pragma(inline, true); return (key >= Key.MLeftDown && key <= Key.MRightUp); } ///
-    int button () { pragma(inline, true); return (key == Key.MLeftDown || key == Key.MLeftUp ? 0 : key == Key.MRightDown || key == Key.MRightUp ? 1 : key == Key.MMiddleDown || key == Key.MMiddleUp ? 2 : -1); } ///
+     ///
+    int button () { pragma(inline, true); return
+      key == Key.MLeftDown || key == Key.MLeftUp ? 0 :
+      key == Key.MRightDown || key == Key.MRightUp ? 1 :
+      key == Key.MMiddleDown || key == Key.MMiddleUp ? 2 :
+      key == Key.MWheelUp ? 3 :
+      key == Key.MWheelDown ? 4 :
+      -1;
+    }
+    bool mouse () { pragma(inline, true); return (key >= Key.MLeftDown && key <= Key.MWheelDown); } ///
     bool mpress () { pragma(inline, true); return (key == Key.MLeftDown || key == Key.MRightDown || key == Key.MMiddleDown); } ///
+    bool mwheel () { pragma(inline, true); return (key == Key.MWheelUp || key == Key.MWheelDown); } ///
     bool ctrl () { pragma(inline, true); return ((mods&ModFlag.Ctrl) != 0); } ///
     bool alt () { pragma(inline, true); return ((mods&ModFlag.Alt) != 0); } ///
     bool shift () { pragma(inline, true); return ((mods&ModFlag.Shift) != 0); } ///
@@ -410,7 +422,7 @@ align(1): // make it tightly packed
       (key == k.key ?
        (key == Key.Char ? (ch == k.ch) :
         key == Key.ModChar ? (mods == k.mods && ch == k.ch) :
-        //key >= Key.MLeftDown && key <= MRightUp ? true :
+        //key >= Key.MLeftDown && key <= MWheelDown ? true :
         key > Key.ModChar ? (mods == k.mods) :
         true
        ) : false
@@ -720,6 +732,8 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       case 0: key.key = (press ? TtyKey.Key.MLeftDown : TtyKey.Key.MLeftUp); break;
       case 1: key.key = (press ? TtyKey.Key.MMiddleDown : TtyKey.Key.MMiddleUp); break;
       case 2: key.key = (press ? TtyKey.Key.MRightDown : TtyKey.Key.MRightUp); break;
+      case 64: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MWheelUp; break;
+      case 65: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MWheelDown; break;
       default: key.key = TtyKey.Key.Unknown; return;
     }
     key.x = cast(ushort)nn[1];
