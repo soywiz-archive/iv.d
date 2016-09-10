@@ -819,11 +819,6 @@ public:
   // `pt` is global
   int itemAt (FuiPoint pt) {
     int check() (int id, FuiPoint g) {
-      if (auto lp = layprops(id)) {
-        if (!lp.visible) return -1;
-      } else {
-        return -1;
-      }
       // go to last sibling
       debug(fui_item_at) { import core.stdc.stdio : printf; printf("startsib: %d\n", id); }
       for (;;) {
@@ -849,7 +844,7 @@ public:
             }
             debug(fui_item_at) { import core.stdc.stdio : printf; printf("going down: fc=%d; lc=%d\n", lp.firstChild, lp.lastChild); }
             auto res = check(lp.lastChild, rc.pos);
-            if (res != -1) return res; // i found her!
+            return (res != -1 ? res : id); // i found her!
           } else {
             debug(fui_item_at) { import core.stdc.stdio : printf; printf("skip %d: pt=(%d,%d) g=(%d,%d) rc=(%d,%d|%d,%d)\n", id, pt.x, pt.y, g.x, g.y, rc.x, rc.y, rc.w, rc.h); }
           }
@@ -858,7 +853,8 @@ public:
         id = lp.prevSibling;
       }
     }
-    return check(0, /*layprops(0).position.pos*/FuiPoint(0, 0));
+    if (length == 0 || !layprops(0).visible) return -1;
+    return check(0, FuiPoint(0, 0));
   }
 
   // return id or -1
@@ -3245,6 +3241,15 @@ int modalDialog (FuiContext ctx) {
     ctx.draw;
     xtFlush(); // show screen
     auto key = ttyReadKey(-1, TtyDefaultEscWait);
+    /*
+    if (key.mouse) {
+      import std.format : format;
+      xtWriteStrAt(0, 0, "x=%s; y=%s; item=%s".format(key.x, key.y, ctx.itemAt(FuiPoint(key.x, key.y))));
+      xtFlush(); // show screen
+      ttyReadKey(-1, TtyDefaultEscWait);
+      continue;
+    }
+    */
     if (key.key == TtyKey.Key.Error) { return -1; }
     if (key.key == TtyKey.Key.Unknown) continue;
     if (key.key == TtyKey.Key.Escape) { return -1; }
