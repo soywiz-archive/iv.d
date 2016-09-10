@@ -1066,6 +1066,13 @@ public:
     return false;
   }
 
+  bool processClick (int button, int x, int y) {
+    if (x < 0 || y < 0 || x >= winw || y >= winh) return false;
+    if (button != 0) return false;
+    gotoXY(x, topline+y);
+    return true;
+  }
+
 final:
   void pasteToX11 () {
     import std.file;

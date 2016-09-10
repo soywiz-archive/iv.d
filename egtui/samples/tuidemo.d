@@ -291,7 +291,6 @@ void main (string[] args) {
 
     auto ttymode = ttyGetMode();
     scope(exit) {
-      ttyDisableBracketedPaste();
       normalScreen();
       ttySetMode(ttymode);
       writeln("result: ", itres);
@@ -301,7 +300,6 @@ void main (string[] args) {
     }
     ttySetRaw();
     altScreen();
-    ttyEnableBracketedPaste();
 
     {
       xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0x00, 0x5f, 0xaf)); // 0,25
@@ -323,13 +321,11 @@ void main (string[] args) {
 
     auto ttymode = ttyGetMode();
     scope(exit) {
-      ttyDisableBracketedPaste();
       normalScreen();
       ttySetMode(ttymode);
     }
     ttySetRaw();
     altScreen();
-    ttyEnableBracketedPaste();
 
     {
       xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0x00, 0x5f, 0xaf)); // 0,25

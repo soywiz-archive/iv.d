@@ -246,6 +246,7 @@ public static struct FuiEvent {
     struct {
       uint param0;
       uint param1;
+      uint param2; // coordinates *inside* item
     }
     TtyKey paramkey;
   }
@@ -260,6 +261,8 @@ public static struct FuiEvent {
   TtyKey key () { pragma(inline, true); return paramkey; }
   dchar ch () { pragma(inline, true); return cast(dchar)param0; }
   ubyte bidx () { pragma(inline, true); return cast(ubyte)param0; }
+  short x () { pragma(inline, true); return cast(short)(param2&0xffff); }
+  short y () { pragma(inline, true); return cast(short)((param2>>16)&0xffff); }
 }
 
 
@@ -317,7 +320,7 @@ public:
 
 nothrow @nogc:
 private:
-  void queueEvent (int aitem, FuiEvent.Type atype, uint aparam0=0, uint aparam1=0) nothrow @trusted @nogc {
+  void queueEvent (int aitem, FuiEvent.Type atype, uint aparam0=0, uint aparam1=0, uint aparam2=0) nothrow @trusted @nogc {
     if (eventPos >= events.length) return;
     auto nn = (eventHead+eventPos++)%events.length;
     with (events.ptr[nn]) {
@@ -325,6 +328,7 @@ private:
       item = aitem;
       param0 = aparam0;
       param1 = aparam1;
+      param2 = aparam2;
     }
   }
 
@@ -351,14 +355,27 @@ private:
     }
   }
 
-  void newMousePos (FuiPoint pt) {
-    import std.math : abs;
-    if (lastMouse == pt) return;
-    int hover = itemAt(pt);
-    // fix hovering info
-    if (auto lp = layprops(lastHover)) lp.hovered = false;
-    lastHover = hover;
-    if (auto lp = layprops(hover)) if (lp.enabled) lp.hovered = true;
+  // pt is inside item
+  FuiPoint toGlobal (int item, FuiPoint pt) {
+    while (item >= 0) {
+      if (auto lp = layprops(item)) {
+        pt.x += lp.position.x;
+        pt.y += lp.position.y;
+        if (item == 0) break;
+        item = lp.parent;
+      }
+    }
+    return pt;
+  }
+
+  uint mouseXY (int item) {
+    auto pt = toGlobal(item, FuiPoint(0, 0));
+    pt = FuiPoint(lastMouse.x-pt.x, lastMouse.y-pt.y);
+    if (pt.x < short.min) pt.x = short.min;
+    if (pt.x > short.max) pt.x = short.max;
+    if (pt.y < short.min) pt.y = short.min;
+    if (pt.y > short.max) pt.y = short.max;
+    return cast(uint)(((pt.y&0xffff)<<16)|(pt.x&0xffff));
   }
 
   // [0..7]
@@ -398,7 +415,7 @@ private:
         if (lastClickDelta.ptr[bidx] <= fuiDoubleTime) {
           debug(fui_mouse) { import core.stdc.stdio : printf; printf("  DOUBLE!\n"); }
           // it comes right in time too
-          queueEvent(lastHover, FuiEvent.Type.Double, bidx, lastButtons|(lastMods<<8));
+          queueEvent(lastHover, FuiEvent.Type.Double, bidx, lastButtons|(lastMods<<8), mouseXY(lastHover));
           // continue registering doubleclicks
           lastClickDelta.ptr[bidx] = 0;
           beventCount.ptr[bidx] = 2;
@@ -414,7 +431,7 @@ private:
       // try single click
       if (beventCount.ptr[bidx] == 1) {
         debug(fui_mouse) { import core.stdc.stdio : printf; printf("  SINGLE\n"); }
-        if (lp.clickMask&(1<<bidx)) queueEvent(lastHover, FuiEvent.Type.Click, bidx, lastButtons|(lastMods<<8));
+        if (lp.clickMask&(1<<bidx)) queueEvent(lastHover, FuiEvent.Type.Click, bidx, lastButtons|(lastMods<<8), mouseXY(lastHover));
         // start doubleclick timer
         beventCount.ptr[bidx] = 2;
         // start registering doubleclicks
@@ -508,6 +525,7 @@ private:
   // external actions
   void mouseAt (in FuiPoint pt) {
     if (lastMouse != pt) {
+      lastMouse = pt;
       auto nh = itemAt(pt);
       if (nh != lastHover) {
         if (auto lp = layprops(lastHover)) lp.hovered = false;
@@ -537,6 +555,8 @@ private:
     auto nn = (extevHead+extevPos++)%extEvents.length;
     if (ev.key == TtyKey.Key.Char) {
       with (extEvents.ptr[nn]) { type = ExternalEvent.Type.Char; cev = ev.ch; }
+    } else if (ev.mouse) {
+      with (extEvents.ptr[nn]) { type = ExternalEvent.Type.Mouse; kev = ev; }
     } else {
       with (extEvents.ptr[nn]) { type = ExternalEvent.Type.Key; kev = ev; }
     }
@@ -643,9 +663,10 @@ private:
           }
           break;
         case ExternalEvent.Type.Mouse:
-          /*
-          auto ev = &extEvents.ptr[extevHead].mev;
+          auto ev = &extEvents.ptr[extevHead].kev;
           mouseAt(FuiPoint(ev.x, ev.y));
+          if (ev.button >= 0) newButtonState(ev.button, ev.mpress);
+          /*
           switch (ev.type) {
             case MouseEventType.buttonPressed:
             case MouseEventType.buttonReleased:
@@ -795,6 +816,7 @@ public:
   }
 
   // -1 or item id, iterating items backwards (so last drawn will be first hit)
+  // `pt` is global
   int itemAt (FuiPoint pt) {
     int check() (int id, FuiPoint g) {
       if (auto lp = layprops(id)) {
@@ -836,7 +858,7 @@ public:
         id = lp.prevSibling;
       }
     }
-    return check(0, layprops(0).position.pos);
+    return check(0, /*layprops(0).position.pos*/FuiPoint(0, 0));
   }
 
   // return id or -1
@@ -1903,6 +1925,7 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
   with (ctx.layprops(item)) {
     flex = 0;
     horizontal = true;
+    clickMask |= FuiLayoutProps.Buttons.Left;
     canBeFocused = true;
     wantTab = false;
     //aligning = (ahorizontal ? FuiLayoutProps.Align.Stretch : FuiLayoutProps.Align.Start);
@@ -1978,9 +2001,10 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
         }
         return false;
       case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
-        return false;
+        if (eld.ed.processClick(ev.bidx, ev.x, ev.y)) return true;
+        return true;
       case FuiEvent.Type.Double: // mouse double-click; param0: buttton index; param1: mods&buttons
-        return false;
+        return true;
       case FuiEvent.Type.Close: // close dialog; param0: return id
         return false;
     }
@@ -2113,6 +2137,7 @@ private int buttonLike(T, FuiCtlType type) (FuiContext ctx, int parent, const(ch
   with (ctx.layprops(item)) {
     flex = 0;
     minSize = FuiSize(visStrLen(data.caption.getz), 1);
+    clickMask |= FuiLayoutProps.Buttons.Left;
   }
   data.eventcb = delegate (FuiContext ctx, int self, FuiEvent ev) {
     final switch (ev.type) {
@@ -2169,6 +2194,7 @@ int label (FuiContext ctx, int parent, const(char)[] id, const(char)[] text, con
   if (destid.length == 0) {
     data.hotchar = 0;
     ctx.layprops(res).minSize.w = visStrLen!false(data.caption.getz);
+    ctx.layprops(res).clickMask = 0;
   }
   data.spaceClicks = data.enterClicks = false;
   data.drawcb = delegate (FuiContext ctx, int self, FuiRect rc) {
@@ -2213,7 +2239,7 @@ int button (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) {
   auto item = ctx.buttonLike!(FuiCtlButton, FuiCtlType.Button)(parent, id, text);
   if (item >= 0) {
     with (ctx.layprops(item)) {
-      clickMask |= FuiLayoutProps.Buttons.Left;
+      //clickMask |= FuiLayoutProps.Buttons.Left;
       canBeFocused = true;
       minSize.w += 4;
     }
@@ -2321,7 +2347,7 @@ int checkbox (FuiContext ctx, int parent, const(char)[] id, const(char)[] text, 
     data.enterClicks = false;
     data.var = var;
     with (ctx.layprops(item)) {
-      clickMask |= FuiLayoutProps.Buttons.Left;
+      //clickMask |= FuiLayoutProps.Buttons.Left;
       canBeFocused = true;
       minSize.w += 4;
     }
@@ -2371,7 +2397,7 @@ int radio (FuiContext ctx, int parent, const(char)[] id, const(char)[] text, int
     data.gid = gid;
     with (ctx.layprops(item)) {
       flex = 0;
-      clickMask |= FuiLayoutProps.Buttons.Left;
+      //clickMask |= FuiLayoutProps.Buttons.Left;
       canBeFocused = true;
       minSize.w += 4;
     }
@@ -2549,6 +2575,39 @@ struct FuiCtlListBox {
 }
 
 
+// return `true` if it has scrollbar
+private bool listboxNorm (FuiContext ctx, int item) {
+  auto data = ctx.item!FuiCtlListBox(item);
+  if (data is null) return false;
+  auto lp = ctx.layprops(item);
+  // make current item visible
+  if (data.itemCount == 0) return false;
+  // sanitize current item (just in case, it should be sane always)
+  if (data.curItem < 0) data.curItem = 0;
+  if (data.curItem >= data.itemCount) data.curItem = data.itemCount-1;
+  int oldtop = data.topItem;
+  if (data.topItem > data.itemCount-lp.position.h) data.topItem = data.itemCount-lp.position.h;
+  if (data.topItem < 0) data.topItem = 0;
+  if (data.curItem < data.topItem) {
+    data.topItem = data.curItem;
+  } else if (data.topItem+lp.position.h <= data.curItem) {
+    data.topItem = data.curItem-lp.position.h+1;
+    if (data.topItem < 0) data.topItem = 0;
+  }
+  if (data.topItem != oldtop || data.topItemOffset == 0) {
+    data.topItemOffset = ctx.listboxItemOffset(item, data.topItem);
+    assert(data.topItemOffset != 0);
+  }
+  bool wantSBar = false;
+  // should i draw a scrollbar?
+  if (lp.position.w > 2 && (data.topItem > 0 || data.topItem+lp.position.h < data.itemCount)) {
+    // yes
+    wantSBar = true;
+  }
+  return wantSBar;
+}
+
+
 // `actcb` will be called *after* editor was changed (or not changed, who knows)
 int listbox (FuiContext ctx, int parent, const(char)[] id) {
   if (!ctx.valid) return -1;
@@ -2557,6 +2616,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
   with (ctx.layprops(item)) {
     flex = 1;
     aligning = FuiLayoutProps.Align.Stretch;
+    clickMask |= FuiLayoutProps.Buttons.Left;
     canBeFocused = true;
     minSize = FuiSize(3, 0);
   }
@@ -2705,7 +2765,15 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
         }
         return false;
       case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
-        return false;
+        if (auto lbox = ctx.itemAs!"listbox"(self)) {
+          ctx.listboxNorm(self);
+          if (ev.x > 0) {
+            int it = ev.y-lbox.topItem;
+            lbox.curItem = it;
+            ctx.listboxNorm(self);
+          }
+        }
+        return true;
       case FuiEvent.Type.Double: // mouse double-click; param0: buttton index; param1: mods&buttons
         return false;
       case FuiEvent.Type.Close: // close dialog; param0: return id
@@ -3166,6 +3234,9 @@ int modalDialog (FuiContext ctx) {
 
   saveArea();
   scope(exit) xtPopArea();
+
+  bool windowMoving;
+  int wmX, wmY;
 
   ctx.drawShadow();
   for (;;) {

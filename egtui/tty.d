@@ -803,6 +803,8 @@ public void altScreen () nothrow @nogc {
       "\x1b[?25h"~ // make cursor visible
       "\x1b(B"~ // G0 is ASCII
       "\x1b)0"~ // G1 is graphics
+      "\x1b[?2004h"~ // enable bracketed paste
+      "\x1b[?1000h\x1b[?1006h"~ // SGR mouse reports
       "";
     write(1, initStr.ptr, initStr.length);
     xtFullRefresh();
@@ -819,6 +821,8 @@ public void normalScreen () @trusted nothrow @nogc {
       "\x1b[0;37;40m"~ // set 'normal' attributes
       "\x1b[?1048l"~ // restore cursor position
       "\x1b[?25h"~ // make cursor visible
+      "\x1b[?2004l"~ // disable bracketed paste
+      "\x1b[?1006l\x1b[?1000l"~ // disable mouse reports
       "";
     write(1, deinitStr.ptr, deinitStr.length);
     xtFullRefresh();
