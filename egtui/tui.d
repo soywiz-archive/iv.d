@@ -164,8 +164,8 @@ align(1):
   ubyte clickMask; // buttons that can be used to click this item to do some action
   ubyte doubleMask; // buttons that can be used to double-click this item to do some action
 
-  mixin(GroupPropMixin!("hgroup", "hGroup"));
-  mixin(GroupPropMixin!("vgroup", "vGroup"));
+  @property void hgroup (int parent) nothrow @safe @nogc { setGroup(Group.H, parent); }
+  @property void vgroup (int parent) nothrow @safe @nogc { setGroup(Group.V, parent); }
 
 private:
   enum Flags : uint {
@@ -189,39 +189,36 @@ private:
       0,
   }
 
+  enum Group { H = 0, V = 1 }
+
   uint flags = Flags.None; // see Flags
   // "mark counter" for groups; also, bit 31 set means "group head"
-  int hGroupNext = -1; // next hgroup head
-  int vGroupNext = -1; // next vgroup head
-  int hGroupSibling = -1; // next item in this hgroup; not -1 and bit 31 set: head
-  int vGroupSibling = -1; // next item in this vgroup; not -1 and bit 31 set: head
-  //int tempLineHeight; // valid for item after tempLineBreak and first item
+  int[2] groupNext = -1; // next group head
+  int[2] groupSibling = -1; // next item in this hgroup; not -1 and bit 31 set: head
   FuiContextImpl* ctx;
 
-  enum GroupPropMixin(string name, string gvar) =
-    "void "~name~" (int parent) {\n"~
-    "  if (ctx is null || itemid < 0 || parent == itemid) return;\n"~
-    "  auto lp = ctx.layprops(parent);\n"~
-    "  if (lp is null) assert(0, \"invalid parent for hgroup\");\n"~
-    "  if (lp."~gvar~"Sibling == -1) {\n"~
-    "    // first item in new group\n"~
-    "    lp."~gvar~"Sibling = itemid|0x8000_0000;\n"~
-    "  } else {\n"~
-    "    // append to group\n"~
-    "    auto it = lp."~gvar~"Sibling&0x7fff_ffff;\n"~
-    "    version(fui_many_asserts) assert(it != 0x7fff_ffff);\n"~
-    "    for (;;) {\n"~
-    "      auto clp = ctx.layprops(it);\n"~
-    "      version(fui_many_asserts) assert(clp !is null);\n"~
-    "      if (clp."~gvar~"Sibling == -1) {\n"~
-    "        clp."~gvar~"Sibling = itemid;\n"~
-    "        return;\n"~
-    "      }\n"~
-    "      it = clp."~gvar~"Sibling;\n"~
-    "    }\n"~
-    "  }\n"~
-    "}\n"~
-    "";
+  void setGroup (int grp, int parent) nothrow @trusted @nogc {
+    if (ctx is null || itemid < 0 || parent == itemid || grp < 0 || grp > 1) return;
+    auto lp = ctx.layprops(parent);
+    if (lp is null) return; //assert(0, "invalid parent for group");
+    if (lp.groupSibling.ptr[grp] == -1) {
+      // first item in new group
+      lp.groupSibling.ptr[grp] = itemid|0x8000_0000;
+    } else {
+      // append to group
+      auto it = lp.groupSibling.ptr[grp]&0x7fff_ffff;
+      version(fui_many_asserts) assert(it != 0x7fff_ffff);
+      for (;;) {
+        auto clp = ctx.layprops(it);
+        version(fui_many_asserts) assert(clp !is null);
+        if (clp.groupSibling.ptr[grp] == -1) {
+          clp.groupSibling.ptr[grp] = itemid;
+          return;
+        }
+        it = clp.groupSibling.ptr[grp];
+      }
+    }
+  }
 
   @property pure nothrow @safe @nogc {
     void resetLayouterFlags () { pragma(inline, true); flags &= ~Flags.LayouterFlagsMask; }
@@ -1085,16 +1082,9 @@ public:
   void relayout () {
     import std.algorithm : min, max;
 
-    int hGroupLast = -1, vGroupLast = -1; // list tails
+    int[2] groupLast = -1; // list tails
 
     void resetValues() () {
-      enum FixGroupEnum(string gvar) =
-      "if (lp."~gvar~"Sibling != -1 && (cast(uint)(lp."~gvar~"Sibling)&0x8000_0000)) {\n"~
-      "  // group start, fix list\n"~
-      "  lp."~gvar~"Next = "~gvar~"Last;\n"~
-      "  "~gvar~"Last = idx;\n"~
-      "}\n"~
-      "";
       // reset sizes and positions for all controls
       // also, find and fix hgroups and vgroups
       foreach (int idx; 0..length) {
@@ -1102,21 +1092,26 @@ public:
         lp.resetLayouterFlags();
         lp.position = lp.position.init; // zero it out
         // setup group lists
-        mixin(FixGroupEnum!"hGroup");
-        mixin(FixGroupEnum!"vGroup");
+        foreach (immutable grp; 0..2) {
+          if (lp.groupSibling[grp] != -1 && (cast(uint)(lp.groupSibling[grp])&0x8000_0000)) {
+            // group start, fix list
+            lp.groupNext[grp] = groupLast[grp];
+            groupLast[grp] = idx;
+          }
+        }
       }
       version(none) {
-        { import core.stdc.stdio : printf; printf("hGroupLast=%d; vGroupLast=%d\n", hGroupLast, vGroupLast); }
-        for (int n = hGroupLast; n != -1; n = layprops(n).hGroupNext) {
+        { import core.stdc.stdio : printf; printf("hGroupLast=%d; vGroupLast=%d\n", groupLast[0], groupLast[1]); }
+        for (int n = groupLast[0]; n != -1; n = layprops(n).groupNext[0]) {
           import core.stdc.stdio : printf;
           printf("=== HGROUP #%d ===\n", n);
-          int id = hGroupLast;
+          int id = groupLast[0];
           for (;;) {
             auto lp = layprops(id);
             if (lp is null) break;
             printf("  item #%d\n", id);
-            if (lp.hGroupSibling == -1) break;
-            id = lp.hGroupSibling&0x7fff_ffff;
+            if (lp.groupSibling[0] == -1) break;
+            id = lp.groupSibling[0]&0x7fff_ffff;
           }
         }
       }
@@ -1397,43 +1392,54 @@ public:
     layit(0);
     bool resetTouched = false;
     for (;;) {
-      enum FixGroupsMixin(string group, string pkdim) = "{\n"~
-        "int gidx = "~group~"Last;\n"~
-        "while (layprops(gidx) !is null) {\n"~
-        "  int dim = 1;\n"~
-        "  int cidx = gidx;\n"~
-        "  // calcluate maximal dimension\n"~
-        "  for (;;) {\n"~
-        "    auto clp = layprops(cidx);\n"~
-        "    if (clp is null) break;\n"~
-        "    dim = max(dim, clp.position."~pkdim~");\n"~
-        "    if (clp."~group~"Sibling == -1) break;\n"~
-        "    cidx = clp."~group~"Sibling&0x7fff_ffff;\n"~
-        "  }\n"~
-        "  // fix dimensions\n"~
-        "  cidx = gidx;\n"~
-        "  for (;;) {\n"~
-        "    auto clp = layprops(cidx);\n"~
-        "    if (clp is null) break;\n"~
-        "    auto od = clp.position."~pkdim~";\n"~
-        "    clp.position."~pkdim~" = max(clp.position."~pkdim~", dim);\n"~
-        "    if (clp.maxSize."~pkdim~" > 0) clp.position."~pkdim~" = min(clp.position."~pkdim~", clp.maxSize."~pkdim~");\n"~
-        "    if (clp.position."~pkdim~" != od) {\n"~
-        "      doFix = true;\n"~
-        "      if (clp.parent == 0) doItAgain = true;\n"~
-        "    }\n"~
-        "    if (clp."~group~"Sibling == -1) break;\n"~
-        "    cidx = clp."~group~"Sibling&0x7fff_ffff;\n"~
-        "  }\n"~
-        "  // process next group\n"~
-        "  gidx = layprops(gidx)."~group~"Next;\n"~
-        "}\n"~
-        "}\n";
       bool doItAgain = false;
       bool doFix = false;
-      // fix groups
-      mixin(FixGroupsMixin!("hGroup", "w"));
-      mixin(FixGroupsMixin!("vGroup", "h"));
+
+      void fixGroups (int grp, scope int delegate (int item) nothrow @nogc getdim, scope void delegate (int item, int v) nothrow @nogc setdim, scope int delegate (int item) nothrow @nogc getmax) nothrow @nogc {
+        int gidx = groupLast[grp];
+        while (layprops(gidx) !is null) {
+          int dim = 1;
+          int cidx = gidx;
+          // calcluate maximal dimension
+          for (;;) {
+            auto clp = layprops(cidx);
+            if (clp is null) break;
+            dim = max(dim, getdim(cidx));
+            if (clp.groupSibling[grp] == -1) break;
+            cidx = clp.groupSibling[grp]&0x7fff_ffff;
+          }
+          // fix dimensions
+          cidx = gidx;
+          for (;;) {
+            auto clp = layprops(cidx);
+            if (clp is null) break;
+            auto od = getdim(cidx);
+            int nd = max(od, dim);
+            auto mx = getmax(cidx);
+            if (mx > 0) nd = min(nd, mx);
+            if (od != nd) {
+              doFix = true;
+              setdim(cidx, nd);
+              if (clp.parent == 0) doItAgain = true;
+            }
+            if (clp.groupSibling[grp] == -1) break;
+            cidx = clp.groupSibling[grp]&0x7fff_ffff;
+          }
+          // process next group
+          gidx = layprops(gidx).groupNext[grp];
+        }
+      }
+
+      fixGroups(FuiLayoutProps.Group.H,
+        (int item) => ctx.layprops(item).position.w,
+        (int item, int v) { ctx.layprops(item).position.wp = v; },
+        (int item) => ctx.layprops(item).maxSize.w,
+      );
+      fixGroups(FuiLayoutProps.Group.V,
+        (int item) => ctx.layprops(item).position.h,
+        (int item, int v) { ctx.layprops(item).position.wp = v; },
+        (int item) => ctx.layprops(item).maxSize.h,
+      );
       if (!doFix && !doItAgain) break; // nothing to do
       // reset "group touched" flag, if necessary
       if (resetTouched) {
@@ -1441,21 +1447,39 @@ public:
       } else {
         resetTouched = true;
       }
+
       // if we need to fix some parts of the layout, do it
       if (doFix) {
-        foreach (int idx; 0..length) {
-          auto lp = layprops(idx);
-          version(fui_many_asserts) assert(lp !is null);
-          if (lp.hGroupSibling != -1 || lp.vGroupSibling != -1) {
-            int pidx = lp.parent;
-            lp = layprops(pidx);
-            version(fui_many_asserts) assert(lp !is null);
-            if (!lp.touchedByGroup) {
-              lp.touchedByGroup = true;
-              layit(pidx);
+        foreach (int grp; 0..2) {
+          int gidx = groupLast[grp];
+          { import core.stdc.stdio : printf; printf("grp=%d; gidx=%d\n", grp, groupLast[grp]); }
+          while (layprops(gidx) !is null) {
+            int it = gidx;
+            while (layprops(it) !is null) {
+              { import core.stdc.stdio : printf; printf(" === it=%d ===\n", it); }
+              int itt = it;
+              for (;;) {
+                auto lp = layprops(itt);
+                if (lp is null) break;
+                { import core.stdc.stdio : printf; printf("  itt=%d\n", itt); }
+                if (!lp.touchedByGroup) {
+                  lp.touchedByGroup = true;
+                  auto ow = lp.position.w, oh = lp.position.h;
+                  layit(itt);
+                  if (itt != it && ow == lp.position.w && oh == lp.position.h) break;
+                } else {
+                  break;
+                }
+                itt = lp.parent;
+              }
+              auto lp = layprops(it);
+              if (lp.groupSibling[grp] == -1) break;
+              it = lp.groupSibling[grp]&0x7fff_ffff;
             }
+            gidx = layprops(gidx).groupNext[grp];
           }
         }
+        //doItAgain = true;
       }
       if (!doItAgain) break;
     }
