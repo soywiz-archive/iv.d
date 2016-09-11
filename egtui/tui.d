@@ -2895,7 +2895,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
               if (++lbox.curItem >= lbox.itemCount) lbox.curItem = lbox.itemCount-1;
             }
           } else if (ev.x > 0) {
-            int it = ev.y-lbox.topItem;
+            int it = lbox.topItem+ev.y;
             lbox.curItem = it;
           }
           ctx.listboxNorm(self);
