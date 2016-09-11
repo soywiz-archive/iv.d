@@ -66,7 +66,7 @@ enum laydsc = q{
       id: "cb1"
       caption: "checkbox for s&econd label"
       bind-var: cbval1
-      bind-func: cb1action
+      on-action: cb1action
       hgroup: "cb0"
       vgroup: "lbl0"
     }
@@ -124,7 +124,7 @@ enum laydsc = q{
       id: "el0"
       text: "defval"
       flex: 1
-      bind-func: editchangecb
+      on-action: editchangecb
     }
   }
 
