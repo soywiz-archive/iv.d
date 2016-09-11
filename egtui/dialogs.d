@@ -29,7 +29,7 @@ import iv.egtui.parser;
 void dialogMessage(string type, A...) (const(char)[] title, const(char)[] fmt, A args) {
   static assert(type == "error" || type == "info" || type == "debug", "invalid message dialog type");
 
-  enum reslay = q{
+  enum laydesc = q{
     caption: "$title"
     small-frame: false
 
@@ -51,7 +51,7 @@ void dialogMessage(string type, A...) (const(char)[] title, const(char)[] fmt, A
   static if (type == "error") {
     ctx.dialogPalette(TuiPaletteError/*TuiPaletteNormal*/);
   }
-  ctx.tuiParse!(title, msg)(reslay);
+  ctx.parse!(title, msg)(laydesc);
   ctx.relayout();
   ctx.modalDialog;
 }
@@ -59,7 +59,7 @@ void dialogMessage(string type, A...) (const(char)[] title, const(char)[] fmt, A
 
 // ///////////////////////////////////////////////////////////////////////// //
 int dialogTanOna (const(char)[] title, const(char)[] text, bool def) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: $title
     small-frame: false
     // hbox for text
@@ -72,17 +72,18 @@ int dialogTanOna (const(char)[] title, const(char)[] text, bool def) {
     hline
     // center buttons
     hbox: {
-      span: { flex: 1 }
+      spacing: 1
+      span //: { flex: 1 }
       button: { id: "bttan" caption: "&tan" }
-      spacer: { width: 1 } // this hack just inserts space
+      //spacer: { width: 1 } // this hack just inserts space
       button: { id: "btona" caption: "o&na" }
-      span: { flex: 1 }
+      span //: { flex: 1 }
     }
   };
 
   auto ctx = FuiContext.create();
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
-  ctx.tuiParse!(title, text)(reslay);
+  ctx.parse!(title, text)(laydesc);
   ctx.relayout();
   ctx.focused = ctx.findById(def ? "bttan" : "btona");
   auto res = ctx.modalDialog;
@@ -94,7 +95,7 @@ int dialogTanOna (const(char)[] title, const(char)[] text, bool def) {
 // ///////////////////////////////////////////////////////////////////////// //
 // result.ptr is null: calcelled
 string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: "Input query"
     small-frame: false
     // hbox for text
@@ -138,7 +139,7 @@ string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
     return -1;
   }
 
-  ctx.tuiParse!(msg, def)(reslay);
+  ctx.parse!(msg, def)(laydesc);
   ctx.relayout();
   if (ctx.layprops(0).position.w < ttyw/3*2) {
     ctx.layprops(0).minSize.w = ttyw/3*2;
@@ -162,7 +163,7 @@ string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
 
 // ///////////////////////////////////////////////////////////////////////// //
 void dialogTextView (const(char)[] title, const(char)[] text) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: "$title"
     small-frame: false
 
@@ -175,6 +176,7 @@ void dialogTextView (const(char)[] title, const(char)[] text) {
       max-width: $mw
       max-height: $mh
       flex: 1  // eat all possible vertical space
+      can-be-focused
     }
 
     hline
@@ -194,7 +196,7 @@ void dialogTextView (const(char)[] title, const(char)[] text) {
   //mh = 8;
 
   auto ctx = FuiContext.create();
-  ctx.tuiParse!(title, text, mw, mh, winmw, winmh)(reslay);
+  ctx.parse!(title, text, mw, mh, winmw, winmh)(laydesc);
   ctx.relayout();
   ctx.modalDialog;
 }

@@ -34,7 +34,7 @@ int dialogFileModified (const(char)[] filename, bool def, const(char)[] query="F
     filename = filename[$-(ttyw-13)..$];
   }
 
-  enum reslay = q{
+  enum laydesc = q{
     caption: "File was modified!"
     small-frame: false
     // hbox for text
@@ -57,7 +57,7 @@ int dialogFileModified (const(char)[] filename, bool def, const(char)[] query="F
 
   auto ctx = FuiContext.create();
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
-  ctx.tuiParse!(dotsdots, filename, query)(reslay);
+  ctx.parse!(dotsdots, filename, query)(laydesc);
   ctx.relayout();
   ctx.focused = ctx.findById(def ? "bttan" : "btona");
   auto res = ctx.modalDialog;
@@ -69,7 +69,7 @@ int dialogFileModified (const(char)[] filename, bool def, const(char)[] query="F
 // ///////////////////////////////////////////////////////////////////////// //
 // 0: invalid number
 int dialogLineNumber (int defval=-1) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: "Select line number"
     small-frame: false
     // hbox for text
@@ -81,7 +81,7 @@ int dialogLineNumber (int defval=-1) {
       editline: {
         flex: 1
         id: "lnum"
-        bind-func: validate
+        on-action: validate
       }
     }
     hline
@@ -119,7 +119,7 @@ int dialogLineNumber (int defval=-1) {
   }
 
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
-  ctx.tuiParse!(validate)(reslay);
+  ctx.parse!(validate)(laydesc);
   ctx.relayout();
   validate(ctx, ctx.findById("lnum"));
   //ctx.focused = ctx.findById("lnum");
@@ -156,15 +156,15 @@ struct SearchReplaceOptions {
 }
 
 bool dialogSearchReplace (ref SearchReplaceOptions opts) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: "Replace"
     small-frame: false
 
     label: { caption: "&Search string:"  dest: "edsearch" }
-    editline: { align: expand  id: "edsearch"  text: "$searchstr"  bind-func: validate  utfuck: $utfuck }
+    editline: { align: expand  id: "edsearch"  text: "$searchstr"  on-action: validate  utfuck: $utfuck }
 
     label: { caption: "Re&placement string:"  dest: "edreplace" }
-    editline: { align: expand  id: "edreplace"  text: "$replacestr"  bind-func: validate utfuck: $utfuck }
+    editline: { align: expand  id: "edreplace"  text: "$replacestr"  on-action: validate  utfuck: $utfuck }
 
     hline
 
@@ -220,7 +220,7 @@ bool dialogSearchReplace (ref SearchReplaceOptions opts) {
   //replacestr = "w";
   //opttype = SearchReplaceOptions.Type.Regex;
 
-  ctx.tuiParse!(opttype, optci, optback, optsel, searchstr, replacestr, validate, utfuck, optword)(reslay);
+  ctx.parse!(opttype, optci, optback, optsel, searchstr, replacestr, validate, utfuck, optword)(laydesc);
   ctx.relayout();
   if (ctx.layprops(0).position.w < ttyw/3*2) {
     ctx.layprops(0).minSize.w = ttyw/3*2;
@@ -251,7 +251,7 @@ enum DialogRepPromptResult {
 }
 
 DialogRepPromptResult dialogReplacePrompt (int sy=-1) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: "Confirm replace"
     small-frame: false
 
@@ -271,7 +271,7 @@ DialogRepPromptResult dialogReplacePrompt (int sy=-1) {
   };
 
   auto ctx = FuiContext.create();
-  ctx.tuiParse(reslay);
+  ctx.parse(laydesc);
   ctx.relayout();
   if (sy >= 0 && sy < ttyh) {
     if (sy+1+ctx.layprops(0).position.h < ttyh-1) {
@@ -293,7 +293,7 @@ DialogRepPromptResult dialogReplacePrompt (int sy=-1) {
 // ///////////////////////////////////////////////////////////////////////// //
 // <0: cancelled
 int dialogCodePage (int curcp) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: "Select codepage"
     small-frame: false
 
@@ -319,7 +319,7 @@ int dialogCodePage (int curcp) {
   };
 
   auto ctx = FuiContext.create();
-  ctx.tuiParse(reslay);
+  ctx.parse(laydesc);
   ctx.relayout();
   if (curcp < 0) curcp = 0; else if (curcp > 3) curcp = 3;
   ctx.listboxItemSetCurrent(ctx.findById("lbcp"), curcp);
@@ -371,7 +371,7 @@ int dialogSelectAC(T : const(char)[]) (T[] items, int winx, int winy, int idx=0,
   int winhgt = pgsize+2;
   int winwdt = maxlen+4;
 
-  enum reslay = q{
+  enum laydesc = q{
     //caption: "Completions"
     small-frame: true
     enter-close: true
@@ -386,7 +386,7 @@ int dialogSelectAC(T : const(char)[]) (T[] items, int winx, int winy, int idx=0,
   };
 
   auto ctx = FuiContext.create();
-  ctx.tuiParse!(winhgt, winwdt)(reslay);
+  ctx.parse!(winhgt, winwdt)(laydesc);
 
   // add items
   auto lbi = ctx.findById("lbac");

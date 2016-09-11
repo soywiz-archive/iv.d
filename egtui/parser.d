@@ -28,7 +28,7 @@ import iv.egtui.types;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void tuiParse(Vars...) (ref FuiContext ctx, const(char)[] text) {
+void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
   ctx.clearControls();
 
   auto rmd = ctx.maxDimensions;
@@ -339,7 +339,9 @@ void tuiParse(Vars...) (ref FuiContext ctx, const(char)[] text) {
     DynStr vgroup;
     DynStr dest;
     DynStr bindvar;
-    DynStr bindfunc;
+    DynStr bindfuncAction;
+    DynStr bindfuncDraw;
+    DynStr bindfuncEvent;
 
     void reset () {
       foreach (ref v; this.tupleof) {
@@ -384,14 +386,17 @@ void tuiParse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       if (ts.strEquCI("hgroup")) { getStr(hgroup); return true; }
       if (ts.strEquCI("vgroup")) { getStr(vgroup); return true; }
       if (ts.strEquCI("bindVar") || ts.strEquCI("bind-var")) { getStr(bindvar); return true; }
-      if (ts.strEquCI("bindFunc") || ts.strEquCI("bind-func")) { getStr(bindfunc); return true; }
+      //if (ts.strEquCI("bindFunc") || ts.strEquCI("bind-func")) { getStr(bindfuncAction); return true; }
+      if (ts.strEquCI("onaction") || ts.strEquCI("on-action")) { getStr(bindfuncAction); return true; }
+      if (ts.strEquCI("ondraw") || ts.strEquCI("on-draw")) { getStr(bindfuncDraw); return true; }
+      if (ts.strEquCI("onevent") || ts.strEquCI("on-event")) { getStr(bindfuncEvent); return true; }
       if (ts.strEquCI("paddingLeft") || ts.strEquCI("padding-left")) { paddingLeft = getInt(); return true; }
       if (ts.strEquCI("paddingTop") || ts.strEquCI("padding-top")) { paddingTop = getInt(); return true; }
       if (ts.strEquCI("paddingRight") || ts.strEquCI("padding-right")) { paddingRight = getInt(); return true; }
       if (ts.strEquCI("paddingBottom") || ts.strEquCI("padding-bottom")) { paddingBottom = getInt(); return true; }
       if (ts.strEquCI("spacing")) { spacing = getInt(); return true; }
-      if (ts.strEquCI("width")) { minw = getInt(); return true; }
-      if (ts.strEquCI("height")) { minh = getInt(); return true; }
+      if (ts.strEquCI("width")) { minw = maxw = getInt(); return true; }
+      if (ts.strEquCI("height")) { minh = maxh = getInt(); return true; }
       if (ts.strEquCI("min-width")) { minw = getInt(); return true; }
       if (ts.strEquCI("min-height")) { minh = getInt(); return true; }
       if (ts.strEquCI("max-width")) { maxw = getInt(); return true; }
@@ -424,18 +429,38 @@ void tuiParse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       s.strEquCI("radio") ||
       s.strEquCI("editline") || s.strEquCI("edittext") ||
       s.strEquCI("textview") ||
-      s.strEquCI("listbox");
+      s.strEquCI("listbox") ||
+      s.strEquCI("custombox");
   }
 
-  int bindFuncTo (int item) {
-    if (!props.bindfunc.empty) {
-      //{ import iv.vfs.io; writeln("bf: ", bindfunc.quote); }
+  int bindFuncTo(string type) (int item) {
+    static assert(type == "Action" || type == "Draw" || type == "Event", "invalid type");
+    static if (type == "Action") bool bfe = props.bindfuncAction.empty;
+    else static if (type == "Draw") bool bfe = props.bindfuncDraw.empty;
+    else static if (type == "Event") bool bfe = props.bindfuncEvent.empty;
+    if (!bfe) {
       foreach (immutable idx, var; Vars) {
         static if (is(typeof(var) == function) || is(typeof(var) == delegate)) {
-          static if (is(typeof((dg){int n = dg(FuiContext.init, 666);}(&Vars[idx])))) {
-            if ((&Vars[idx]).stringof[1..$].xstrip == props.bindfunc.getz) {
-              ctx.setActionCB(item, &Vars[idx]);
-              return item;
+          static if (type == "Action") {
+            static if (is(typeof((dg){int n = dg(FuiContext.init, 666);}(&Vars[idx])))) {
+              if ((&Vars[idx]).stringof[1..$].xstrip == props.bindfuncAction.getz) {
+                ctx.setActionCB(item, &Vars[idx]);
+                return item;
+              }
+            }
+          } else static if (type == "Draw") {
+            static if (is(typeof((dg){dg(FuiContext.init, 666, FuiRect.init);}(&Vars[idx])))) {
+              if ((&Vars[idx]).stringof[1..$].xstrip == props.bindfuncDraw.getz) {
+                ctx.setDrawCB(item, &Vars[idx]);
+                return item;
+              }
+            }
+          } else static if (type == "Event") {
+            static if (is(typeof((dg){bool b = dg(FuiContext.init, 666, FuiEvent.init);}(&Vars[idx])))) {
+              if ((&Vars[idx]).stringof[1..$].xstrip == props.bindfuncEvent.getz) {
+                ctx.setEventCB(item, &Vars[idx]);
+                return item;
+              }
             }
           }
         }
@@ -444,48 +469,56 @@ void tuiParse(Vars...) (ref FuiContext ctx, const(char)[] text) {
     return item;
   }
 
+  int bindFuncs (int item) {
+    bindFuncTo!"Action"(item);
+    bindFuncTo!"Draw"(item);
+    bindFuncTo!"Event"(item);
+    return item;
+  }
+
   int createWidget (int parent) {
     auto widn = widname.getz;
-    if (widn.strEquCI("span")) return bindFuncTo(ctx.span(parent, (props.hv <= 0)));
-    if (widn.strEquCI("hspan")) return bindFuncTo(ctx.hspan(parent));
-    if (widn.strEquCI("vspan")) return bindFuncTo(ctx.vspan(parent));
-    if (widn.strEquCI("spacer")) return bindFuncTo(ctx.spacer(parent));
-    if (widn.strEquCI("hline")) return bindFuncTo(ctx.hline(parent));
-    if (widn.strEquCI("box")) return bindFuncTo(ctx.box(parent, (props.hv <= 0), props.id.getz));
-    if (widn.strEquCI("hbox")) return bindFuncTo(ctx.hbox(parent, props.id.getz));
-    if (widn.strEquCI("vbox")) return bindFuncTo(ctx.vbox(parent, props.id.getz));
-    if (widn.strEquCI("panel")) return bindFuncTo(ctx.panel(parent, props.caption.getz, (props.hv <= 0), props.id.getz));
-    if (widn.strEquCI("hpanel")) return bindFuncTo(ctx.hpanel(parent, props.caption.getz, props.id.getz));
-    if (widn.strEquCI("vpanel")) return bindFuncTo(ctx.vpanel(parent, props.caption.getz, props.id.getz));
-    if (widn.strEquCI("label")) return bindFuncTo(ctx.label(parent, props.id.getz, props.caption.getz, props.dest.getz));
-    if (widn.strEquCI("button")) return bindFuncTo(ctx.button(parent, props.id.getz, props.caption.getz));
-    if (widn.strEquCI("editline")) return bindFuncTo(ctx.editline(parent, props.id.getz, props.caption.getz, props.utfuck > 0));
-    if (widn.strEquCI("edittext")) return bindFuncTo(ctx.edittext(parent, props.id.getz, props.caption.getz, props.utfuck > 0));
-    if (widn.strEquCI("textview")) return bindFuncTo(ctx.textview(parent, props.id.getz, props.caption.getz));
-    if (widn.strEquCI("listbox")) return bindFuncTo(ctx.listbox(parent, props.id.getz));
+    if (widn.strEquCI("span")) return bindFuncs(ctx.span(parent, (props.hv <= 0)));
+    if (widn.strEquCI("hspan")) return bindFuncs(ctx.hspan(parent));
+    if (widn.strEquCI("vspan")) return bindFuncs(ctx.vspan(parent));
+    if (widn.strEquCI("spacer")) return bindFuncs(ctx.spacer(parent));
+    if (widn.strEquCI("hline")) return bindFuncs(ctx.hline(parent));
+    if (widn.strEquCI("box")) return bindFuncs(ctx.box(parent, (props.hv <= 0), props.id.getz));
+    if (widn.strEquCI("hbox")) return bindFuncs(ctx.hbox(parent, props.id.getz));
+    if (widn.strEquCI("vbox")) return bindFuncs(ctx.vbox(parent, props.id.getz));
+    if (widn.strEquCI("panel")) return bindFuncs(ctx.panel(parent, props.caption.getz, (props.hv <= 0), props.id.getz));
+    if (widn.strEquCI("hpanel")) return bindFuncs(ctx.hpanel(parent, props.caption.getz, props.id.getz));
+    if (widn.strEquCI("vpanel")) return bindFuncs(ctx.vpanel(parent, props.caption.getz, props.id.getz));
+    if (widn.strEquCI("label")) return bindFuncs(ctx.label(parent, props.id.getz, props.caption.getz, props.dest.getz));
+    if (widn.strEquCI("button")) return bindFuncs(ctx.button(parent, props.id.getz, props.caption.getz));
+    if (widn.strEquCI("editline")) return bindFuncs(ctx.editline(parent, props.id.getz, props.caption.getz, props.utfuck > 0));
+    if (widn.strEquCI("edittext")) return bindFuncs(ctx.edittext(parent, props.id.getz, props.caption.getz, props.utfuck > 0));
+    if (widn.strEquCI("textview")) return bindFuncs(ctx.textview(parent, props.id.getz, props.caption.getz));
+    if (widn.strEquCI("listbox")) return bindFuncs(ctx.listbox(parent, props.id.getz));
+    if (widn.strEquCI("custombox")) return bindFuncs(ctx.custombox(parent, props.id.getz));
     if (widn.strEquCI("checkbox")) {
       if (!props.bindvar.empty) {
         foreach (int idx, var; Vars) {
           static if (is(typeof(var) == bool)) {
             if (Vars[idx].stringof == props.bindvar.getz) {
-              return bindFuncTo(ctx.checkbox(parent, props.id.getz, props.caption.getz, &Vars[idx]));
+              return bindFuncs(ctx.checkbox(parent, props.id.getz, props.caption.getz, &Vars[idx]));
             }
           }
         }
       }
-      return bindFuncTo(ctx.checkbox(parent, props.id.getz, props.caption.getz, null));
+      return bindFuncs(ctx.checkbox(parent, props.id.getz, props.caption.getz, null));
     }
     if (widn.strEquCI("radio")) {
       if (!props.bindvar.empty) {
         foreach (int idx, var; Vars) {
           static if (is(typeof(var) == int)) {
             if (Vars[idx].stringof == props.bindvar.getz) {
-              return bindFuncTo(ctx.radio(parent, props.id.getz, props.caption.getz, &Vars[idx]));
+              return bindFuncs(ctx.radio(parent, props.id.getz, props.caption.getz, &Vars[idx]));
             }
           }
         }
       }
-      return bindFuncTo(ctx.radio(parent, props.id.getz, props.caption.getz, null));
+      return bindFuncs(ctx.radio(parent, props.id.getz, props.caption.getz, null));
     }
     throw new Exception("unknown widget: '"~widn.idup~"'");
   }

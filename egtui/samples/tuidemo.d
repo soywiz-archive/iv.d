@@ -216,7 +216,7 @@ enum laydsc = q{
 
 
 void showResult (FuiContext cc, int res) {
-  enum reslay = q{
+  enum laydesc = q{
     caption: "Result"
     small-frame: false
     // hbox for label and text
@@ -235,7 +235,7 @@ void showResult (FuiContext cc, int res) {
   auto id = cc.itemId(res);
 
   auto ctx = FuiContext.create();
-  ctx.tuiParse!(res, id)(reslay);
+  ctx.parse!(res, id)(laydesc);
   ctx.relayout();
 
   ctx.modalDialog;
@@ -279,7 +279,7 @@ void main (string[] args) {
       return -666;
     }
 
-    ctx.tuiParse!(cbval0, cbval1, rbval, cb1action, editchangecb)(laydsc);
+    ctx.parse!(cbval0, cbval1, rbval, cb1action, editchangecb)(laydsc);
     ctx.relayout();
     debug(tui_dump) ctx.dumpLayout();
     //writeln(ctx.layprops(0).position.w, "x", ctx.layprops(0).position.h);
@@ -316,7 +316,7 @@ void main (string[] args) {
     auto buf = new char[](cast(int)fl.size);
     fl.rawReadExact(buf[]);
 
-    ctx.tuiParse(buf);
+    ctx.parse(buf);
     ctx.relayout();
 
     auto ttymode = ttyGetMode();

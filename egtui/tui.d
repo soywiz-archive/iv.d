@@ -1663,12 +1663,20 @@ enum FuiCtlType : ubyte {
   EditText,
   TextView,
   ListBox,
+  CustomBox,
   //WARNING: button-likes should be last!
   Label,
   Button,
   Check,
   Radio,
 }
+
+// onchange callback; return -666 to continue, -1 to exit via "esc", or control id to return from `modalDialog()`
+alias TuiActionCB = int delegate (FuiContext ctx, int self);
+// draw widget; rc is in global space
+alias TuiDrawCB = void delegate (FuiContext ctx, int self, FuiRect rc);
+// process event; return `true` if event was eaten
+alias TuiEventCB = bool delegate (FuiContext ctx, int self, FuiEvent ev);
 
 mixin template FuiCtlHeader() {
   FuiCtlType type;
@@ -1677,11 +1685,11 @@ mixin template FuiCtlHeader() {
   char[128] caption = 0; // widget caption
 align(8):
   // onchange callback; return -666 to continue, -1 to exit via "esc", or control id to return from `modalDialog()`
-  int delegate (FuiContext ctx, int self) actcb;
+  TuiActionCB actcb;
   // draw widget; rc is in global space
-  void delegate (FuiContext ctx, int self, FuiRect rc) drawcb;
+  TuiDrawCB drawcb;
   // process event; return `true` if event was eaten
-  bool delegate (FuiContext ctx, int self, FuiEvent ev) eventcb;
+  TuiEventCB eventcb;
 }
 
 
@@ -1692,13 +1700,34 @@ static assert(FuiCtlHead.actcb.offsetof%8 == 0);
 
 
 //TODO: make delegate this scoped?
-bool setActionCB (FuiContext ctx, int item, int delegate (FuiContext ctx, int self) actcb) {
+bool setActionCB (FuiContext ctx, int item, TuiActionCB cb) {
   if (auto data = ctx.item!FuiCtlHead(item)) {
-    data.actcb = actcb;
+    data.actcb = cb;
     return true;
   }
   return false;
 }
+
+
+//TODO: make delegate this scoped?
+bool setDrawCB (FuiContext ctx, int item, TuiDrawCB cb) {
+  if (auto data = ctx.item!FuiCtlHead(item)) {
+    data.drawcb = cb;
+    return true;
+  }
+  return false;
+}
+
+
+//TODO: make delegate this scoped?
+bool setEventCB (FuiContext ctx, int item, TuiEventCB cb) {
+  if (auto data = ctx.item!FuiCtlHead(item)) {
+    data.eventcb = cb;
+    return true;
+  }
+  return false;
+}
+
 
 bool setCaption (FuiContext ctx, int item, const(char)[] caption) {
   if (auto data = ctx.item!FuiCtlHead(item)) {
@@ -1778,6 +1807,42 @@ bool dialogEnterClose (FuiContext ctx) {
   if (!ctx.valid) return false;
   auto data = ctx.itemIntr!FuiCtlRootPanel(0);
   return data.enterclose;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+struct FuiCtlCustomBox {
+  mixin FuiCtlHeader;
+  align(8) void* udata;
+}
+
+
+int custombox (FuiContext ctx, int parent, const(char)[] id=null) {
+  if (!ctx.valid) return -1;
+  auto item = ctx.addItem!FuiCtlSpan(parent);
+  with (ctx.layprops(item)) {
+    //flex = 1;
+    visible = true;
+    horizontal = true;
+    aligning = FuiLayoutProps.Align.Stretch;
+    minSize.w = 1;
+    minSize.h = 1;
+    //clickMask |= FuiLayoutProps.Buttons.Left;
+    //canBeFocused = true;
+    wantTab = false;
+  }
+  auto data = ctx.item!FuiCtlCustomBox(item);
+  data.type = FuiCtlType.CustomBox;
+  data.id.setz(id);
+  /*
+  data.drawcb = delegate (FuiContext ctx, int self, FuiRect rc) {
+    auto win = XtWindow(rc.x, rc.y, rc.w, rc.h);
+    win.color = ctx.palColor!"def"(item);
+    win.bg = 1;
+    win.fill(0, 0, rc.w, rc.h);
+  };
+  */
+  return item;
 }
 
 
@@ -2448,7 +2513,7 @@ int textview (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) 
     flex = 1;
     aligning = FuiLayoutProps.Align.Stretch;
     clickMask |= FuiLayoutProps.Buttons.WheelUp|FuiLayoutProps.Buttons.WheelDown;
-    canBeFocused = true;
+    //canBeFocused = true;
   }
   auto data = ctx.item!FuiCtlTextView(item);
   data.type = FuiCtlType.TextView;
@@ -2633,7 +2698,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
     aligning = FuiLayoutProps.Align.Stretch;
     clickMask |= FuiLayoutProps.Buttons.Left|FuiLayoutProps.Buttons.WheelUp|FuiLayoutProps.Buttons.WheelDown;
     canBeFocused = true;
-    minSize = FuiSize(3, 0);
+    minSize = FuiSize(5, 2);
   }
   auto data = ctx.item!FuiCtlListBox(item);
   data.type = FuiCtlType.ListBox;
@@ -2732,58 +2797,72 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
           return false;
         }
         if (auto lbox = ctx.itemAs!"listbox"(self)) {
-          auto lp = ctx.layprops(ev.item);
-          if (ev.key == "Up") {
-            if (--lbox.curItem < 0) lbox.curItem = 0;
-            return true;
-          }
-          if (ev.key == "S-Up") {
-            if (--lbox.topItem < 0) lbox.topItem = 0;
-            lbox.topItemOffset = 0; // invalidate
-            return true;
-          }
-          if (ev.key == "Down") {
-            if (lbox.itemCount > 0) {
-              if (++lbox.curItem >= lbox.itemCount) lbox.curItem = lbox.itemCount-1;
+          bool procIt() () {
+            auto lp = ctx.layprops(ev.item);
+            if (ev.key == "Up") {
+              if (--lbox.curItem < 0) lbox.curItem = 0;
+              return true;
             }
-            return true;
-          }
-          if (ev.key == "S-Down") {
-            if (lbox.topItem+lp.position.h < lbox.itemCount) {
-              ++lbox.topItem;
+            if (ev.key == "S-Up") {
+              if (--lbox.topItem < 0) lbox.topItem = 0;
               lbox.topItemOffset = 0; // invalidate
+              return true;
             }
-            return true;
-          }
-          if (ev.key == "Home") {
-            lbox.curItem = 0;
-            return true;
-          }
-          if (ev.key == "End") {
-            if (lbox.itemCount > 0) lbox.curItem = lbox.itemCount-1;
-            return true;
-          }
-          if (ev.key == "PageUp") {
-            if (lbox.curItem > lbox.topItem) {
-              lbox.curItem = lbox.topItem;
-            } else if (lp.position.h > 1) {
-              if ((lbox.curItem -= lp.position.h-1) < 0) lbox.curItem = 0;
+            if (ev.key == "Down") {
+              if (lbox.itemCount > 0) {
+                if (++lbox.curItem >= lbox.itemCount) lbox.curItem = lbox.itemCount-1;
+              }
+              return true;
             }
-            return true;
-          }
-          if (ev.key == "PageDown") {
-            if (lbox.curItem < lbox.topItem+lp.position.h-1) {
-              lbox.curItem = lbox.topItem+lp.position.h-1;
-            } else if (lp.position.h > 1 && lbox.itemCount > 0) {
-              if ((lbox.curItem += lp.position.h-1) >= lbox.itemCount) lbox.curItem = lbox.itemCount-1;
+            if (ev.key == "S-Down") {
+              if (lbox.topItem+lp.position.h < lbox.itemCount) {
+                ++lbox.topItem;
+                lbox.topItemOffset = 0; // invalidate
+              }
+              return true;
             }
-            return true;
+            if (ev.key == "Home") {
+              lbox.curItem = 0;
+              return true;
+            }
+            if (ev.key == "End") {
+              if (lbox.itemCount > 0) lbox.curItem = lbox.itemCount-1;
+              return true;
+            }
+            if (ev.key == "PageUp") {
+              if (lbox.curItem > lbox.topItem) {
+                lbox.curItem = lbox.topItem;
+              } else if (lp.position.h > 1) {
+                if ((lbox.curItem -= lp.position.h-1) < 0) lbox.curItem = 0;
+              }
+              return true;
+            }
+            if (ev.key == "PageDown") {
+              if (lbox.curItem < lbox.topItem+lp.position.h-1) {
+                lbox.curItem = lbox.topItem+lp.position.h-1;
+              } else if (lp.position.h > 1 && lbox.itemCount > 0) {
+                if ((lbox.curItem += lp.position.h-1) >= lbox.itemCount) lbox.curItem = lbox.itemCount-1;
+              }
+              return true;
+            }
+            return false;
           }
+          ctx.listboxNorm(self);
+          auto oldCI = lbox.curItem;
+          if (procIt()) {
+            ctx.listboxNorm(self);
+            if (oldCI != lbox.curItem && lbox.actcb !is null) {
+              auto rr = lbox.actcb(ctx, self);
+              if (rr >= -1) ctx.queueEvent(ev.item, FuiEvent.Type.Close, rr);
+            }
+          }
+          return true;
         }
         return false;
       case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
         if (auto lbox = ctx.itemAs!"listbox"(self)) {
           ctx.listboxNorm(self);
+          auto oldCI = lbox.curItem;
           if (ev.bidx == FuiLayoutProps.Button.WheelUp) {
             if (--lbox.curItem < 0) lbox.curItem = 0;
           } else if (ev.bidx == FuiLayoutProps.Button.WheelDown) {
@@ -2793,7 +2872,11 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
           } else if (ev.x > 0) {
             int it = ev.y-lbox.topItem;
             lbox.curItem = it;
-            ctx.listboxNorm(self);
+          }
+          ctx.listboxNorm(self);
+          if (oldCI != lbox.curItem && lbox.actcb !is null) {
+            auto rr = lbox.actcb(ctx, self);
+            if (rr >= -1) ctx.queueEvent(ev.item, FuiEvent.Type.Close, rr);
           }
         }
         return true;
@@ -2829,6 +2912,11 @@ void listboxItemAdd (FuiContext ctx, int item, const(char)[] text) {
     }
     data.lastItemOffset = itofs;
     ++data.itemCount;
+    auto lp = ctx.layprops(item);
+    if (lp.minSize.w < len+3) lp.minSize.w = len+3;
+    if (lp.minSize.h < data.itemCount) lp.minSize.h = data.itemCount;
+    if (lp.minSize.w > lp.maxSize.w) lp.minSize.w = lp.maxSize.w;
+    if (lp.minSize.h > lp.maxSize.h) lp.minSize.h = lp.maxSize.h;
   }
 }
 
@@ -2934,6 +3022,9 @@ auto itemAs(string type) (FuiContext ctx, int item) nothrow @trusted @nogc {
   } else static if (type.strEquCI("listbox")) {
     enum ctp = FuiCtlType.ListBox;
     alias tp = FuiCtlListBox;
+  } else static if (type.strEquCI("custombox")) {
+    enum ctp = FuiCtlType.CustomBox;
+    alias tp = FuiCtlCustomBox;
   } else {
     static assert(0, "invalid control type: '"~type~"'");
   }
