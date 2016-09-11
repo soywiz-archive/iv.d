@@ -181,7 +181,7 @@ static assert(FuiCtlHead.actcb.offsetof%8 == 0);
 
 //TODO: make delegate this scoped?
 bool setActionCB (FuiContext ctx, int item, TuiActionCB cb) {
-  if (auto data = ctx.item!FuiCtlHead(item)) {
+  if (auto data = ctx.itemIntr!FuiCtlHead(item)) {
     data.actcb = cb;
     return true;
   }
@@ -191,7 +191,7 @@ bool setActionCB (FuiContext ctx, int item, TuiActionCB cb) {
 
 //TODO: make delegate this scoped?
 bool setDrawCB (FuiContext ctx, int item, TuiDrawCB cb) {
-  if (auto data = ctx.item!FuiCtlHead(item)) {
+  if (auto data = ctx.itemIntr!FuiCtlHead(item)) {
     data.drawcb = cb;
     return true;
   }
@@ -201,7 +201,7 @@ bool setDrawCB (FuiContext ctx, int item, TuiDrawCB cb) {
 
 //TODO: make delegate this scoped?
 bool setEventCB (FuiContext ctx, int item, TuiEventCB cb) {
-  if (auto data = ctx.item!FuiCtlHead(item)) {
+  if (auto data = ctx.itemIntr!FuiCtlHead(item)) {
     data.eventcb = cb;
     return true;
   }
@@ -218,6 +218,13 @@ bool setCaption (FuiContext ctx, int item, const(char)[] caption) {
     return true;
   }
   return false;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+void postClose (FuiContext ctx, int res) {
+  if (!ctx.valid) return;
+  ctx.queueEvent(0, FuiEvent.Type.Close, res);
 }
 
 
@@ -544,7 +551,7 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
         if (eld.ed.processKey(k)) {
           if (eld.actcb !is null) {
             auto rr = eld.actcb(ctx, ev.item);
-            if (rr >= -1) ctx.queueEvent(ev.item, FuiEvent.Type.Close, rr);
+            if (rr >= -1) ctx.postClose(rr);
           }
           return true;
         }
@@ -554,7 +561,7 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
         if (eld.ed.processKey(ev.key)) {
           if (eld.actcb !is null) {
             auto rr = eld.actcb(ctx, ev.item);
-            if (rr >= -1) ctx.queueEvent(ev.item, FuiEvent.Type.Close, rr);
+            if (rr >= -1) ctx.postClose(rr);
           }
           return true;
         }
@@ -665,12 +672,10 @@ private bool btnlikeClick (FuiContext ctx, int item, int clickButton=-1) {
       if (data.actcb !is null) {
         auto rr = data.actcb(ctx, item);
         if (rr >= -1) {
-          ctx.queueEvent(item, FuiEvent.Type.Close, rr);
+          ctx.postClose(rr);
           return true;
         }
       }
-      //ctx.queueEvent(item, FuiEvent.Type.Click, bidx, ctx.lastButtons|(ctx.lastMods<<8));
-      //ctx.queueEvent(item, FuiEvent.Type.Close, item);
       return true;
     }
   }
@@ -842,7 +847,7 @@ int button (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) {
     };
     data.doclickcb = delegate (FuiContext ctx, int self) {
       // send "close" to root
-      ctx.queueEvent(0, FuiEvent.Type.Close, self);
+      ctx.postClose(self);
       return true;
     };
   }
@@ -1333,7 +1338,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
             ctx.listboxNorm(self);
             if (oldCI != lbox.curItem && lbox.actcb !is null) {
               auto rr = lbox.actcb(ctx, self);
-              if (rr >= -1) ctx.queueEvent(ev.item, FuiEvent.Type.Close, rr);
+              if (rr >= -1) ctx.postClose(rr);
             }
             return true;
           }
@@ -1356,7 +1361,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
           ctx.listboxNorm(self);
           if (oldCI != lbox.curItem && lbox.actcb !is null) {
             auto rr = lbox.actcb(ctx, self);
-            if (rr >= -1) ctx.queueEvent(ev.item, FuiEvent.Type.Close, rr);
+            if (rr >= -1) ctx.postClose(rr);
           }
         }
         return true;
@@ -1758,7 +1763,7 @@ bool processEvent (FuiContext ctx, FuiEvent ev) {
     if (auto rd = ctx.itemIntr!FuiCtlRootPanel(0)) {
       if (rd.enterclose) {
         // send "close" to root with root as result
-        ctx.queueEvent(0, FuiEvent.Type.Close, 0);
+        ctx.postClose(0);
         return true;
       }
     }
