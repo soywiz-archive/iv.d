@@ -1395,6 +1395,7 @@ public:
       bool doItAgain = false;
       bool doFix = false;
 
+      //FIXME: mark changed items and process only those
       void fixGroups (int grp, scope int delegate (int item) nothrow @nogc getdim, scope void delegate (int item, int v) nothrow @nogc setdim, scope int delegate (int item) nothrow @nogc getmax) nothrow @nogc {
         int gidx = groupLast[grp];
         while (layprops(gidx) !is null) {
@@ -2879,8 +2880,8 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
               auto rr = lbox.actcb(ctx, self);
               if (rr >= -1) ctx.queueEvent(ev.item, FuiEvent.Type.Close, rr);
             }
+            return true;
           }
-          return true;
         }
         return false;
       case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
