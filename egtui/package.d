@@ -21,6 +21,7 @@ module iv.egtui;
 
 public import iv.egtui.tty;
 public import iv.egtui.editor;
+public import iv.egtui.layout;
 public import iv.egtui.tui;
 public import iv.egtui.dialogs;
 public import iv.egtui.parser;
