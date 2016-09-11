@@ -1453,16 +1453,16 @@ public:
       if (doFix) {
         foreach (int grp; 0..2) {
           int gidx = groupLast[grp];
-          { import core.stdc.stdio : printf; printf("grp=%d; gidx=%d\n", grp, groupLast[grp]); }
+          //{ import core.stdc.stdio : printf; printf("grp=%d; gidx=%d\n", grp, groupLast[grp]); }
           while (layprops(gidx) !is null) {
             int it = gidx;
             while (layprops(it) !is null) {
-              { import core.stdc.stdio : printf; printf(" === it=%d ===\n", it); }
+              //{ import core.stdc.stdio : printf; printf(" === it=%d ===\n", it); }
               int itt = it;
               for (;;) {
                 auto lp = layprops(itt);
                 if (lp is null) break;
-                { import core.stdc.stdio : printf; printf("  itt=%d\n", itt); }
+                //{ import core.stdc.stdio : printf; printf("  itt=%d\n", itt); }
                 if (!lp.touchedByGroup) {
                   lp.touchedByGroup = true;
                   auto ow = lp.position.w, oh = lp.position.h;
