@@ -1731,9 +1731,16 @@ void draw (FuiContext ctx) {
 // returns `true` if event was consumed
 bool processEvent (FuiContext ctx, FuiEvent ev) {
   if (!ctx.valid) return false;
+
+  if (auto rd = ctx.itemIntr!FuiCtlHead(0)) {
+    if (rd.eventcb !is null) {
+      if (rd.eventcb(ctx, ev.item, ev)) return true;
+    }
+  }
+
   if (auto lp = ctx.layprops(ev.item)) {
     if (lp.visible && !lp.disabled) {
-      auto data = ctx.item!FuiCtlHead(ev.item);
+      auto data = ctx.itemIntr!FuiCtlHead(ev.item);
       if (data.eventcb !is null) {
         if (data.eventcb(ctx, ev.item, ev)) return true;
       }
