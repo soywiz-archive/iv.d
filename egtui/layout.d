@@ -245,11 +245,12 @@ public static struct FuiEvent {
 
   Type type;
   int item;
-  union {
+
+  private union {
     struct {
       uint param0;
       uint param1;
-      uint param2; // coordinates *inside* item
+      short mx, my; // coordinates *inside* item
     }
     TtyKey paramkey;
   }
@@ -264,8 +265,10 @@ public static struct FuiEvent {
   TtyKey key () { pragma(inline, true); return paramkey; }
   dchar ch () { pragma(inline, true); return cast(dchar)param0; }
   ubyte bidx () { pragma(inline, true); return cast(ubyte)param0; }
-  short x () { pragma(inline, true); return cast(short)(param2&0xffff); }
-  short y () { pragma(inline, true); return cast(short)((param2>>16)&0xffff); }
+  short x () { pragma(inline, true); return mx; }
+  short y () { pragma(inline, true); return my; }
+
+  int result () { pragma(inline, true); return param0; }
 }
 
 
@@ -331,7 +334,8 @@ private:
       item = aitem;
       param0 = aparam0;
       param1 = aparam1;
-      param2 = aparam2;
+      mx = cast(short)(aparam2&0xffff);
+      my = cast(short)((aparam2>>16)&0xffff);
     }
   }
 
@@ -920,11 +924,6 @@ private:
   void decRef () { pragma(inline, true); if (ctxp) { FuiContextImpl.decRef(ctxp); ctxp = 0; } }
   void incRef () { pragma(inline, true); if (ctxp) ++(cast(FuiContextImpl*)ctxp).rc; }
 
-  package(iv.egtui) inout(T)* itemIntr(T) (int idx) inout if (!is(T == class)) {
-    pragma(inline, true);
-    return (ctxp && idx >= 0 && idx < length ? cast(typeof(return))(ctx.pmem+ctx.pidx[idx]+FuiLayoutProps.sizeof) : null);
-  }
-
   void addRootPanel () {
     import iv.egtui.tui : FuiCtlRootPanel, FuiCtlType;
     assert(ctx.length == 0);
@@ -1059,6 +1058,19 @@ public:
     }
   }
 
+  // copypaste to allow dmdfe to inline things
+  package(iv.egtui) inout(T)* itemIntr(T) (int idx) inout if (!is(T == class)) {
+    pragma(inline, true);
+    // size is aligned, so this static if
+    static if (FuiLayoutProps.sizeof%8 != 0) {
+      enum ofs = ((cast(uint)FuiLayoutProps.sizeof)|7)+1;
+    } else {
+      enum ofs = cast(uint)FuiLayoutProps.sizeof;
+    }
+    return (ctxp && idx >= 0 && idx < length ? cast(typeof(return))(ctx.pmem+ctx.pidx[idx]+ofs) : null);
+  }
+
+  // copypaste to allow dmdfe to inline things
   inout(T)* item(T) (int idx) inout if (!is(T == class)) {
     pragma(inline, true);
     // size is aligned, so this static if

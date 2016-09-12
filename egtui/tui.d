@@ -732,7 +732,7 @@ private int buttonLike(T, FuiCtlType type) (FuiContext ctx, int parent, const(ch
         ctx.btnlikeClick(self);
         return true;
       case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
-        if (ev.item == self) return ctx.btnlikeClick(self, ev.param0);
+        if (ev.item == self) return ctx.btnlikeClick(self, ev.bidx);
         return false;
       case FuiEvent.Type.Double: // mouse double-click; param0: buttton index; param1: mods&buttons
         return false;
@@ -1738,14 +1738,19 @@ bool processEvent (FuiContext ctx, FuiEvent ev) {
     }
   }
 
-  if (auto lp = ctx.layprops(ev.item)) {
-    if (lp.visible && !lp.disabled) {
-      auto data = ctx.itemIntr!FuiCtlHead(ev.item);
-      if (data.eventcb !is null) {
-        if (data.eventcb(ctx, ev.item, ev)) return true;
+  if (ev.item > 0) {
+    if (auto lp = ctx.layprops(ev.item)) {
+      if (lp.visible && !lp.disabled) {
+        auto data = ctx.itemIntr!FuiCtlHead(ev.item);
+        assert(data !is null);
+        if (data.eventcb !is null) {
+          //{ import iv.vfs.io; VFile("z00.log", "a").writeln("ev.item=", ev.item); }
+          if (data.eventcb(ctx, ev.item, ev)) return true;
+        }
       }
     }
   }
+
   // event is not processed
   if (ev.type == FuiEvent.Type.Char) {
     // broadcast char as ModChar
@@ -1821,7 +1826,7 @@ int modalDialog (FuiContext ctx) {
     ctx.update();
     while (ctx.hasEvents) {
       auto ev = ctx.getEvent();
-      if (ev.type == FuiEvent.Type.Close) return ev.param0;
+      if (ev.type == FuiEvent.Type.Close) return ev.result;
       if (ctx.processEvent(ev)) continue;
     }
     return -666;
