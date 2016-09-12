@@ -784,7 +784,7 @@ int label (FuiContext ctx, int parent, const(char)[] id, const(char)[] text, con
   };
   data.doclickcb = delegate (FuiContext ctx, int self) {
     auto data = ctx.item!FuiCtlLabel(self);
-    auto did = ctx.findById(data.dest.getz);
+    auto did = ctx[data.dest.getz];
     if (did <= 0) return false;
     if (auto lp = ctx.layprops(did)) {
       if (lp.canBeFocused && lp.visible && lp.enabled) {

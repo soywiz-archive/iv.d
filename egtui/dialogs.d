@@ -85,7 +85,7 @@ int dialogTanOna (const(char)[] title, const(char)[] text, bool def) {
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
   ctx.parse!(title, text)(laydesc);
   ctx.relayout();
-  ctx.focused = ctx.findById(def ? "bttan" : "btona");
+  ctx.focused = ctx[def ? "bttan" : "btona"];
   auto res = ctx.modalDialog;
   if (res >= 0) return (ctx.itemId(res) == "bttan" ? 1 : 0);
   return -1;
@@ -147,7 +147,7 @@ string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
   }
   auto res = ctx.modalDialog;
   if (res >= 0) {
-    if (auto edl = ctx.itemAs!"editline"(ctx.findById("ed"))) {
+    if (auto edl = ctx.itemAs!"editline"(ctx["ed"])) {
       auto ed = edl.ed;
       char[] rs;
       auto rng = ed[];

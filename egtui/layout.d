@@ -1584,4 +1584,10 @@ public:
 
   @property ubyte lastButtons () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastButtons : 0); }
   @property ubyte lastMods () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastMods : 0); }
+
+  int opIndex (const(char)[] id) nothrow @trusted @nogc {
+    pragma(inline, true);
+    import iv.egtui.tui : findById;
+    return this.findById(id);
+  }
 }

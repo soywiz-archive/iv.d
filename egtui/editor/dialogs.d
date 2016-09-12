@@ -59,7 +59,7 @@ int dialogFileModified (const(char)[] filename, bool def, const(char)[] query="F
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
   ctx.parse!(dotsdots, filename, query)(laydesc);
   ctx.relayout();
-  ctx.focused = ctx.findById(def ? "bttan" : "btona");
+  ctx.focused = ctx[def ? "bttan" : "btona"];
   auto res = ctx.modalDialog;
   if (res >= 0) return (ctx.itemId(res) == "bttan" ? 1 : 0);
   return -1;
@@ -114,15 +114,15 @@ int dialogLineNumber (int defval=-1) {
   }
 
   int validate (FuiContext ctx, int item) {
-    ctx.setEnabled(ctx.findById("btok"), edGetNum(item) > 0);
+    ctx.setEnabled(ctx["btok"], edGetNum(item) > 0);
     return -666;
   }
 
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
   ctx.parse!(validate)(laydesc);
   ctx.relayout();
-  validate(ctx, ctx.findById("lnum"));
-  //ctx.focused = ctx.findById("lnum");
+  validate(ctx, ctx["lnum"]);
+  //ctx.focused = ctx["lnum"];
   if (defval > 0) {
     import std.conv : to;
     with (ctx.itemAs!"editline"("lnum")) {
@@ -131,7 +131,7 @@ int dialogLineNumber (int defval=-1) {
     }
   }
   auto res = ctx.modalDialog;
-  if (res >= 0) return edGetNum(ctx.findById("lnum"));
+  if (res >= 0) return edGetNum(ctx["lnum"]);
   return -1;
 }
 
@@ -211,8 +211,8 @@ bool dialogSearchReplace (ref SearchReplaceOptions opts) {
     if (auto edl = ctx.itemAs!"editline"("edsearch")) {
       if (edl.ed.textsize == 0) ok = false;
     }
-    ctx.setEnabled(ctx.findById("btok"), ok);
-    ctx.setEnabled(ctx.findById("cbinsel"), opts.inselenabled);
+    ctx.setEnabled(ctx["btok"], ok);
+    ctx.setEnabled(ctx["cbinsel"], opts.inselenabled);
     return -666;
   }
 
@@ -234,8 +234,8 @@ bool dialogSearchReplace (ref SearchReplaceOptions opts) {
     opts.backwards = optback;
     opts.wholeword = optword;
     opts.inselection = optsel;
-    opts.search = ctx.editlineGetText(ctx.findById("edsearch"));
-    opts.replace = ctx.editlineGetText(ctx.findById("edreplace"));
+    opts.search = ctx.editlineGetText(ctx["edsearch"]);
+    opts.replace = ctx.editlineGetText(ctx["edreplace"]);
     return true;
   }
   return false;
@@ -322,11 +322,11 @@ int dialogCodePage (int curcp) {
   ctx.parse(laydesc);
   ctx.relayout();
   if (curcp < 0) curcp = 0; else if (curcp > 3) curcp = 3;
-  ctx.listboxItemSetCurrent(ctx.findById("lbcp"), curcp);
+  ctx.listboxItemSetCurrent(ctx["lbcp"], curcp);
   //ctx.setDialogPalette(TuiPaletteError);
   auto res = ctx.modalDialog;
   if (ctx.itemId(res) != "btok") return -1;
-  return ctx.listboxItemCurrent(ctx.findById("lbcp"));
+  return ctx.listboxItemCurrent(ctx["lbcp"]);
 }
 
 
@@ -389,7 +389,7 @@ int dialogSelectAC(T : const(char)[]) (T[] items, int winx, int winy, int idx=0,
   ctx.parse!(winhgt, winwdt)(laydesc);
 
   // add items
-  auto lbi = ctx.findById("lbac");
+  auto lbi = ctx["lbac"];
   assert(lbi > 0);
   foreach (const s; items) ctx.listboxItemAdd(lbi, s);
   //ctx.listboxItemSetCurrent(lbi, cast(int)items.length-1);

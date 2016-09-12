@@ -558,12 +558,12 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       if (props.maxh >= 0) lp.maxSize.h = props.maxh;
       if (props.disabled >= 0) lp.disabled = (props.disabled > 0);
       if (!props.hgroup.empty) {
-        auto id = ctx.findById(props.hgroup.getz);
+        auto id = ctx[props.hgroup.getz];
         if (id < 0) throw new Exception("no widget with id '"~props.hgroup.getz.idup~"'");
         lp.hgroup = id;
       }
       if (!props.vgroup.empty) {
-        auto id = ctx.findById(props.vgroup.getz);
+        auto id = ctx[props.vgroup.getz];
         if (id < 0) throw new Exception("no widget with id '"~props.vgroup.getz.idup~"'");
         lp.vgroup = id;
       }

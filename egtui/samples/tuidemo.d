@@ -258,11 +258,11 @@ void main (string[] args) {
     int rbval;
 
     void fixEnabledDisabled (FuiContext ctx) {
-      ctx.setEnabled(ctx.findById("rb0"), cbval1);
-      ctx.setEnabled(ctx.findById("rb1"), cbval1);
-      ctx.setEnabled(ctx.findById("el0"), !cbval1);
+      ctx.setEnabled(ctx["rb0"], cbval1);
+      ctx.setEnabled(ctx["rb1"], cbval1);
+      ctx.setEnabled(ctx["el0"], !cbval1);
       if (auto edl = ctx.itemAs!"editline"("el0")) {
-        ctx.setEnabled(ctx.findById("btn3"), (edl.ed.textsize > 0));
+        ctx.setEnabled(ctx["btn3"], (edl.ed.textsize > 0));
       }
       { import core.memory : GC; GC.collect; GC.minimize; }
     }
