@@ -704,7 +704,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   }
 
   // {\e}[<0;58;32M (button;x;y;[Mm])
-  void parseMouse () {
+  void parseMouse() () {
     uint[3] nn;
     uint nc = 0;
     bool press = false;
