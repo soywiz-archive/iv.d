@@ -753,6 +753,10 @@ struct FuiCtlLabel {
 
 int label (FuiContext ctx, int parent, const(char)[] id, const(char)[] text, const(char)[] destid=null) {
   auto res = ctx.buttonLike!(FuiCtlLabel, FuiCtlType.Label)(parent, id, text);
+  with (ctx.layprops(res)) {
+    clickMask = 0;
+    canBeFocused = false;
+  }
   auto data = ctx.item!FuiCtlLabel(res);
   data.dest.setz(destid);
   if (destid.length == 0) {
@@ -775,7 +779,7 @@ int label (FuiContext ctx, int parent, const(char)[] id, const(char)[] text, con
     if (data.hotchar) {
       win.tuiWriteStr!("right", false)(rc.x, rc.y, rc.w, data.caption.getz, anorm, ahot);
     } else {
-      win.tuiWriteStr!("right", false, false)(rc.x, rc.y, rc.w, data.caption.getz, anorm, ahot);
+      win.tuiWriteStr!("left", false, false)(rc.x, rc.y, rc.w, data.caption.getz, anorm, ahot);
     }
   };
   data.doclickcb = delegate (FuiContext ctx, int self) {
@@ -1141,7 +1145,7 @@ struct FuiCtlListBox {
 
 
 // return `true` if it has scrollbar
-private bool listboxNorm (FuiContext ctx, int item) {
+bool listboxNormPage (FuiContext ctx, int item) {
   auto data = ctx.item!FuiCtlListBox(item);
   if (data is null) return false;
   auto lp = ctx.layprops(item);
@@ -1332,10 +1336,10 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
             }
             return false;
           }
-          ctx.listboxNorm(self);
+          ctx.listboxNormPage(self);
           auto oldCI = lbox.curItem;
           if (procIt()) {
-            ctx.listboxNorm(self);
+            ctx.listboxNormPage(self);
             if (oldCI != lbox.curItem && lbox.actcb !is null) {
               auto rr = lbox.actcb(ctx, self);
               if (rr >= -1) ctx.postClose(rr);
@@ -1346,7 +1350,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
         return false;
       case FuiEvent.Type.Click: // mouse click; param0: buttton index; param1: mods&buttons
         if (auto lbox = ctx.itemAs!"listbox"(self)) {
-          ctx.listboxNorm(self);
+          ctx.listboxNormPage(self);
           auto oldCI = lbox.curItem;
           if (ev.bidx == FuiLayoutProps.Button.WheelUp) {
             if (--lbox.curItem < 0) lbox.curItem = 0;
@@ -1358,7 +1362,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
             int it = lbox.topItem+ev.y;
             lbox.curItem = it;
           }
-          ctx.listboxNorm(self);
+          ctx.listboxNormPage(self);
           if (oldCI != lbox.curItem && lbox.actcb !is null) {
             auto rr = lbox.actcb(ctx, self);
             if (rr >= -1) ctx.postClose(rr);

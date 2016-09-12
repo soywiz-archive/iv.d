@@ -1099,7 +1099,11 @@ public:
       foreach (int idx; 0..length) {
         auto lp = layprops(idx);
         lp.resetLayouterFlags();
-        lp.position = lp.position.init; // zero it out
+        if (idx > 0) {
+          lp.position = lp.position.init; // zero it out
+        } else {
+          lp.position.size = lp.position.size.init;
+        }
         // setup group lists
         foreach (immutable grp; 0..2) {
           if (lp.groupSibling[grp] != -1 && (cast(uint)(lp.groupSibling[grp])&0x8000_0000)) {
