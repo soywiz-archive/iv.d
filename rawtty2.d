@@ -358,10 +358,13 @@ align(1): // make it tightly packed
 
     MLeftDown,
     MLeftUp,
+    MLeftMotion,
     MMiddleDown,
     MMiddleUp,
+    MMiddleMotion,
     MRightDown,
     MRightUp,
+    MRightMotion,
 
     MWheelUp,
     MWheelDown,
@@ -387,15 +390,17 @@ align(1): // make it tightly packed
   @property const pure nothrow @safe @nogc {
      ///
     int button () { pragma(inline, true); return
-      key == Key.MLeftDown || key == Key.MLeftUp ? 0 :
-      key == Key.MRightDown || key == Key.MRightUp ? 1 :
-      key == Key.MMiddleDown || key == Key.MMiddleUp ? 2 :
+      key == Key.MLeftDown || key == Key.MLeftUp || key == Key.MLeftMotion ? 0 :
+      key == Key.MRightDown || key == Key.MRightUp || key == Key.MRightMotion ? 1 :
+      key == Key.MMiddleDown || key == Key.MMiddleUp || key == Key.MMiddleMotion ? 2 :
       key == Key.MWheelUp ? 3 :
       key == Key.MWheelDown ? 4 :
       -1;
     }
     bool mouse () { pragma(inline, true); return (key >= Key.MLeftDown && key <= Key.MWheelDown); } ///
     bool mpress () { pragma(inline, true); return (key == Key.MLeftDown || key == Key.MRightDown || key == Key.MMiddleDown); } ///
+    bool mrelease () { pragma(inline, true); return (key == Key.MLeftUp || key == Key.MRightUp || key == Key.MMiddleUp); } ///
+    bool mmotion () { pragma(inline, true); return (key == Key.MLeftMotion || key == Key.MRightMotion || key == Key.MMiddleMotion); } ///
     bool mwheel () { pragma(inline, true); return (key == Key.MWheelUp || key == Key.MWheelDown); } ///
     bool ctrl () { pragma(inline, true); return ((mods&ModFlag.Ctrl) != 0); } ///
     bool alt () { pragma(inline, true); return ((mods&ModFlag.Alt) != 0); } ///
@@ -732,6 +737,9 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       case 0: key.key = (press ? TtyKey.Key.MLeftDown : TtyKey.Key.MLeftUp); break;
       case 1: key.key = (press ? TtyKey.Key.MMiddleDown : TtyKey.Key.MMiddleUp); break;
       case 2: key.key = (press ? TtyKey.Key.MRightDown : TtyKey.Key.MRightUp); break;
+      case 32: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MLeftMotion; break;
+      case 33: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MMiddleMotion; break;
+      case 34: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MRightMotion; break;
       case 64: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MWheelUp; break;
       case 65: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MWheelDown; break;
       default: key.key = TtyKey.Key.Unknown; return;

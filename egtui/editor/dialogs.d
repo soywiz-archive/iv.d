@@ -397,7 +397,7 @@ int dialogSelectAC(T : const(char)[]) (T[] items, int winx, int winy, int idx=0,
   ctx.relayout();
   ctx.layprops(0).position.x = x0;
   ctx.layprops(0).position.y = y0;
-  auto res = ctx.modalDialog;
+  auto res = ctx.modalDialog!false; // don't center
   if (res < 0) return -1;
   return ctx.listboxItemCurrent(lbi);
 }

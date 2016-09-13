@@ -239,6 +239,21 @@ struct FuiCtlRootPanel {
   mixin FuiCtlHeader;
   FuiDialogFrameType frame;
   bool enterclose;
+  bool moving;
+}
+
+
+// purely cosmetic
+void dialogMoving (FuiContext ctx, bool v) {
+  if (!ctx.valid) return;
+  auto data = ctx.itemIntr!FuiCtlRootPanel(0);
+  data.moving = v;
+}
+
+bool dialogMoving (FuiContext ctx) {
+  if (!ctx.valid) return false;
+  auto data = ctx.itemIntr!FuiCtlRootPanel(0);
+  return data.moving;
 }
 
 
@@ -254,7 +269,6 @@ FuiDialogFrameType dialogFrame (FuiContext ctx) {
   auto data = ctx.itemIntr!FuiCtlRootPanel(0);
   return data.frame;
 }
-
 
 void dialogFrame (FuiContext ctx, FuiDialogFrameType t) {
   if (!ctx.valid) return;
@@ -1692,14 +1706,15 @@ void draw (FuiContext ctx) {
       rc.yp += g.y;
     }
 
-    if (item == 0) {
+    void drawRootFrame (bool secondpass=false) {
+      auto dlgdata = ctx.itemIntr!FuiCtlRootPanel(0);
       auto anorm = ctx.palColor!"def"(item);
       auto atitle = ctx.palColor!"title"(item);
       auto win = XtWindow.fullscreen;
-      win.color = anorm;
+      win.color = (!dlgdata.moving ? anorm : atitle);
       if (rc.w > 0 && rc.h > 0) {
         auto data = ctx.itemIntr!FuiCtlRootPanel(0);
-        win.fill(rc.x, rc.y, rc.w, rc.h);
+        if (!secondpass) win.fill(rc.x, rc.y, rc.w, rc.h);
         final switch (data.frame) {
           case FuiDialogFrameType.Normal:
             win.frame!false(rc.x+1, rc.y+1, rc.w-2, rc.h-2);
@@ -1711,19 +1726,29 @@ void draw (FuiContext ctx) {
             break;
         }
       }
-    } else {
-      auto head = ctx.item!FuiCtlHead(item);
+    }
+
+    bool root = (item == 0);
+    if (item == 0) drawRootFrame();
+    {
+      auto head = ctx.itemIntr!FuiCtlHead(item);
       if (head.drawcb !is null) head.drawcb(ctx, item, rc);
     }
 
     // draw children
     item = lp.firstChild;
     lp = ctx.layprops(item);
-    if (lp is null) return;
-    while (lp !is null) {
-      drawItem(item, rc.pos);
-      item = lp.nextSibling;
-      lp = ctx.layprops(item);
+    if (lp !is null) {
+      while (lp !is null) {
+        drawItem(item, rc.pos);
+        item = lp.nextSibling;
+        lp = ctx.layprops(item);
+      }
+    }
+
+    if (root) {
+      auto dlgdata = ctx.itemIntr!FuiCtlRootPanel(0);
+      if (dlgdata.moving) drawRootFrame(true);
     }
   }
 
@@ -1810,7 +1835,7 @@ bool processEvent (FuiContext ctx, FuiEvent ev) {
 __gshared FuiContext tuiCurrentContext;
 
 // returns clicked item or -1 for esc
-int modalDialog (FuiContext ctx) {
+int modalDialog(bool docenter=true) (FuiContext ctx) {
   if (!ctx.valid) return -1;
 
   scope(exit) {
@@ -1836,10 +1861,11 @@ int modalDialog (FuiContext ctx) {
     return -666;
   }
 
-  //FIXME: center if coords are zero
-  if (auto lp = ctx.layprops(0)) {
-    if (lp.position.x == 0) lp.position.x = (ttyw-lp.position.w)/2;
-    if (lp.position.y == 0) lp.position.y = (ttyh-lp.position.h)/2;
+  static if (docenter) {
+    if (auto lp = ctx.layprops(0)) {
+      if (lp.position.x == 0) lp.position.x = (ttyw-lp.position.w)/2;
+      if (lp.position.y == 0) lp.position.y = (ttyh-lp.position.h)/2;
+    }
   }
   ctx.focusFirst();
 
@@ -1857,18 +1883,11 @@ int modalDialog (FuiContext ctx) {
   for (;;) {
     int res = processContextEvents();
     if (res >= -1) return res;
+    if (windowMoving) ctx.dialogMoving = true;
     ctx.draw;
+    if (windowMoving) ctx.dialogMoving = false;
     xtFlush(); // show screen
     auto key = ttyReadKey(-1, TtyDefaultEscWait);
-    /*
-    if (key.mouse) {
-      import std.format : format;
-      xtWriteStrAt(0, 0, "x=%s; y=%s; item=%s".format(key.x, key.y, ctx.itemAt(FuiPoint(key.x, key.y))));
-      xtFlush(); // show screen
-      ttyReadKey(-1, TtyDefaultEscWait);
-      continue;
-    }
-    */
     if (key.key == TtyKey.Key.Error) { return -1; }
     if (key.key == TtyKey.Key.Unknown) continue;
     if (key.key == TtyKey.Key.Escape) { return -1; }
@@ -1878,6 +1897,17 @@ int modalDialog (FuiContext ctx) {
     if (key == "M-Right") dx = 1;
     if (key == "M-Up") dy = -1;
     if (key == "M-Down") dy = 1;
+    // move dialog with mouse
+    if (windowMoving && key.mouse) {
+      if (key.mrelease && key.button == 0) {
+        windowMoving = false;
+        continue;
+      }
+      dx = key.x-wmX;
+      dy = key.y-wmY;
+      wmX = key.x;
+      wmY = key.y;
+    }
     if (dx || dy) {
       xtPopArea();
       ctx.layprops(0).position.x = ctx.layprops(0).position.x+dx;
@@ -1885,6 +1915,16 @@ int modalDialog (FuiContext ctx) {
       saveArea();
       ctx.drawShadow();
       continue;
+    }
+    if (windowMoving) continue;
+    if (key.mouse) {
+      //TODO: check for no frame when we'll get that
+      if (key.mpress && key.button == 0 && key.y == ctx.layprops(0).position.y && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
+        windowMoving = true;
+        wmX = key.x;
+        wmY = key.y;
+        continue;
+      }
     }
     ctx.keyboardEvent(key);
   }

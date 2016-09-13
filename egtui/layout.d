@@ -673,9 +673,9 @@ private:
           auto ev = &extEvents.ptr[extevHead].kev;
           mouseAt(FuiPoint(ev.x, ev.y));
           if (ev.button >= 0) {
-            if (!ev.mwheel) {
+            if (ev.mpress || ev.mrelease) {
               newButtonState(ev.button, ev.mpress);
-            } else {
+            } else if (ev.mwheel) {
               // rawtty2 workaround
               newButtonState(ev.button, true);
               newButtonState(ev.button, false);
