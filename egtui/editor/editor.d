@@ -2478,7 +2478,22 @@ public:
     return (undo !is null ? undo.addCurMove(this) : false);
   }
 
-  void doWordLeft () {
+  // returns old state
+  enum SetupShiftMarkingMixin = q{
+    auto omb = markingBlock;
+    scope(exit) markingBlock = omb;
+    if (domark) {
+      if (!hasMarkedBlock) {
+        int pos = curpos;
+        bstart = bend = pos;
+        lastBGEnd = true;
+      }
+      markingBlock = true;
+    }
+  };
+
+  void doWordLeft (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     killTextOnChar = false;
     int pos = curpos;
     if (pos == 0) return;
@@ -2505,7 +2520,8 @@ public:
     growBlockMark();
   }
 
-  void doWordRight () {
+  void doWordRight (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     killTextOnChar = false;
     int pos = curpos;
     if (pos == gb.textsize) return;
@@ -2540,7 +2556,8 @@ public:
     growBlockMark();
   }
 
-  void doTextTop () {
+  void doTextTop (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
     killTextOnChar = false;
     if (mTopLine == 0 && cy == 0) return;
@@ -2549,7 +2566,8 @@ public:
     growBlockMark();
   }
 
-  void doTextBottom () {
+  void doTextBottom (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
     killTextOnChar = false;
     if (cy >= gb.linecount-1) return;
@@ -2558,7 +2576,8 @@ public:
     growBlockMark();
   }
 
-  void doPageTop () {
+  void doPageTop (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
     killTextOnChar = false;
     if (cy == mTopLine) return;
@@ -2567,7 +2586,8 @@ public:
     growBlockMark();
   }
 
-  void doPageBottom () {
+  void doPageBottom (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
     killTextOnChar = false;
     int ny = mTopLine+winh-1;
@@ -2579,7 +2599,8 @@ public:
     growBlockMark();
   }
 
-  void doScrollUp () {
+  void doScrollUp (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (mTopLine > 0) {
       killTextOnChar = false;
       pushUndoCurPos();
@@ -2593,7 +2614,8 @@ public:
     growBlockMark();
   }
 
-  void doScrollDown () {
+  void doScrollDown (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (mTopLine+winh < gb.linecount) {
       killTextOnChar = false;
       pushUndoCurPos();
@@ -2607,7 +2629,8 @@ public:
     growBlockMark();
   }
 
-  void doUp () {
+  void doUp (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (cy > 0) {
       killTextOnChar = false;
       pushUndoCurPos();
@@ -2616,7 +2639,8 @@ public:
     growBlockMark();
   }
 
-  void doDown () {
+  void doDown (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (cy < gb.linecount-1) {
       killTextOnChar = false;
       pushUndoCurPos();
@@ -2625,7 +2649,8 @@ public:
     growBlockMark();
   }
 
-  void doLeft () {
+  void doLeft (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     int rx, ry;
     killTextOnChar = false;
     gb.pos2xy(curpos, rx, ry);
@@ -2641,7 +2666,8 @@ public:
     growBlockMark();
   }
 
-  void doRight () {
+  void doRight (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     int rx, ry;
     killTextOnChar = false;
     gb.pos2xy(gb.xy2pos(cx+1, cy), rx, ry);
@@ -2658,7 +2684,8 @@ public:
     growBlockMark();
   }
 
-  void doPageUp () {
+  void doPageUp (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (winh < 2 || gb.mLineCount < 2) return;
     killTextOnChar = false;
     int ntl = mTopLine-(winh-1);
@@ -2673,7 +2700,8 @@ public:
     growBlockMark();
   }
 
-  void doPageDown () {
+  void doPageDown (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     if (winh < 2 || gb.mLineCount < 2) return;
     killTextOnChar = false;
     int ntl = mTopLine+(winh-1);
@@ -2689,7 +2717,8 @@ public:
     growBlockMark();
   }
 
-  void doHome (bool smart=true) {
+  void doHome (bool smart=true, bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     killTextOnChar = false;
     if (cx != 0) {
       pushUndoCurPos();
@@ -2713,7 +2742,8 @@ public:
     growBlockMark();
   }
 
-  void doEnd () {
+  void doEnd (bool domark=false) {
+    mixin(SetupShiftMarkingMixin);
     int rx, ry;
     killTextOnChar = false;
     auto ep = (cy >= gb.linecount-1 ? gb.textsize : gb.lineend(cy));

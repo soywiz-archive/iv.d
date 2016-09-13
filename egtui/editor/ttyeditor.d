@@ -1480,45 +1480,87 @@ final:
   @TEDKey("Up")
   @TEDMultiOnly
     void tedUp () { doUp(); }
+  @TEDKey("S-Up")
+  @TEDMultiOnly
+    void tedShiftUp () { doUp(true); }
   @TEDKey("^Up")
   @TEDMultiOnly
     void tedCtrlUp () { doScrollUp(); }
+  @TEDKey("S-^Up")
+  @TEDMultiOnly
+    void tedCtrlShiftUp () { doScrollUp(true); }
   @TEDKey("Down")
   @TEDMultiOnly
     void tedDown () { doDown(); }
+  @TEDKey("S-Down")
+  @TEDMultiOnly
+    void tedShiftDown () { doDown(true); }
   @TEDKey("^Down")
   @TEDMultiOnly
     void tedCtrlDown () { doScrollDown(); }
+  @TEDKey("S-^Down")
+  @TEDMultiOnly
+    void tedCtrlShiftDown () { doScrollDown(true); }
   @TEDKey("Left")
     void tedLeft () { doLeft(); }
+  @TEDKey("S-Left")
+    void tedShiftLeft () { doLeft(true); }
   @TEDKey("^Left")
     void tedCtrlLeft () { doWordLeft(); }
+  @TEDKey("S-^Left")
+    void tedCtrlShiftLeft () { doWordLeft(true); }
   @TEDKey("Right")
     void tedRight () { doRight(); }
+  @TEDKey("S-Right")
+    void tedShiftRight () { doRight(true); }
   @TEDKey("^Right")
     void tedCtrlRight () { doWordRight(); }
+  @TEDKey("S-^Right")
+    void tedCtrlShiftRight () { doWordRight(true); }
   @TEDKey("PageUp")
   @TEDMultiOnly
     void tedPageUp () { doPageUp(); }
+  @TEDKey("S-PageUp")
+  @TEDMultiOnly
+    void tedShiftPageUp () { doPageUp(true); }
   @TEDKey("^PageUp")
   @TEDMultiOnly
     void tedCtrlPageUp () { doTextTop(); }
+  @TEDKey("S-^PageUp")
+  @TEDMultiOnly
+    void tedCtrlShiftPageUp () { doTextTop(true); }
   @TEDKey("PageDown")
   @TEDMultiOnly
     void tedPageDown () { doPageDown(); }
+  @TEDKey("S-PageDown")
+  @TEDMultiOnly
+    void tedShiftPageDown () { doPageDown(true); }
   @TEDKey("^PageDown")
   @TEDMultiOnly
     void tedCtrlPageDown () { doTextBottom(); }
+  @TEDKey("S-^PageDown")
+  @TEDMultiOnly
+    void tedCtrlShiftPageDown () { doTextBottom(true); }
   @TEDKey("Home")
     void tedHome () { doHome(); }
+  @TEDKey("S-Home")
+    void tedShiftHome () { doHome(true, true); }
   @TEDKey("^Home")
   @TEDMultiOnly
     void tedCtrlHome () { doPageTop(); }
+  @TEDKey("S-^Home")
+  @TEDMultiOnly
+    void tedCtrlShiftHome () { doPageTop(true); }
   @TEDKey("End")
     void tedEnd () { doEnd(); }
+  @TEDKey("S-End")
+    void tedShifEnd () { doEnd(true); }
   @TEDKey("^End")
   @TEDMultiOnly
     void tedCtrlEnd () { doPageBottom(); }
+  @TEDKey("S-^End")
+  @TEDMultiOnly
+    void tedCtrlShiftEnd () { doPageBottom(true); }
   @TEDKey("Backspace")
   @TEDEditOnly
     void tedBackspace () { doBackspace(); }
@@ -1681,4 +1723,8 @@ final:
     void tedQmode2 () { utfuck = false; codepage = CodePage.cp1251; fullDirty(); }
   @TEDKey("^Q 3", "switch to cp866")
     void tedQmode3 () { utfuck = false; codepage = CodePage.cp866; fullDirty(); }
+  @TEDKey("^Q ^B", "go to block start")
+    void tedQmodeCtrlB () { if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; }
+  @TEDKey("^Q ^E", "go to block end")
+    void tedQmodeCtrlE () { if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; }
 }
