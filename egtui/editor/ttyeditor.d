@@ -1725,6 +1725,6 @@ final:
     void tedQmode3 () { utfuck = false; codepage = CodePage.cp866; fullDirty(); }
   @TEDKey("^Q ^B", "go to block start")
     void tedQmodeCtrlB () { if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; }
-  @TEDKey("^Q ^E", "go to block end")
+  @TEDKey("^Q ^K", "go to block end")
     void tedQmodeCtrlE () { if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; }
 }
