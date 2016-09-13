@@ -103,9 +103,7 @@ bool endsWithCI (const(char)[] str, const(char)[] pat) pure nothrow @trusted @no
 
 
 ptrdiff_t indexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure nothrow @trusted @nogc {
-  if (hay.length <= stIdx || need.length == 0 ||
-      need.length > hay.length-stIdx
-  ) {
+  if (hay.length <= stIdx || need.length == 0 || need.length > hay.length-stIdx) {
     return -1;
   } else {
     auto res = memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
@@ -113,9 +111,22 @@ ptrdiff_t indexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure n
   }
 }
 
-
 ptrdiff_t indexOf (const(char)[] hay, char ch, size_t stIdx=0) pure nothrow @trusted @nogc {
   return indexOf(hay, (&ch)[0..1], stIdx);
+}
+
+
+ptrdiff_t lastIndexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure nothrow @trusted @nogc {
+  if (hay.length <= stIdx || need.length == 0 || need.length > hay.length-stIdx) {
+    return -1;
+  } else {
+    auto res = memrmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
+    return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
+  }
+}
+
+ptrdiff_t lastIndexOf (const(char)[] hay, char ch, size_t stIdx=0) pure nothrow @trusted @nogc {
+  return lastIndexOf(hay, (&ch)[0..1], stIdx);
 }
 
 
@@ -133,6 +144,13 @@ version(test_strex) unittest {
 
   assert(indexOf("Alice & Miriel", "Miriel", 8) == 8);
   assert(indexOf("Alice & Miriel", "Miriel", 9) == -1);
+
+  assert(lastIndexOf("Alice & Miriel", "i") == 11);
+  assert(lastIndexOf("Alice & Miriel", "i", 6) == 11);
+  assert(lastIndexOf("Alice & Miriel", "i", 11) == 11);
+  assert(lastIndexOf("Alice & Miriel", "i", 12) == -1);
+
+  assert(lastIndexOf("iiii", "ii") == 2);
 }
 
 
@@ -280,22 +298,35 @@ void main() {
 }
 
 
-@system:
-nothrow:
-@nogc:
-pure:
+pure nothrow @system @nogc:
 version(linux) {
   extern(C) inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
 } else {
   inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
-    auto h = cast(const(ubyte)*)haystack;
-    auto n = cast(const(ubyte)*)needle;
     // size_t is unsigned
     if (needlelen > haystacklen) return null;
+    auto h = cast(const(ubyte)*)haystack;
+    auto n = cast(const(ubyte)*)needle;
     foreach (immutable i; 0..haystacklen-needlelen+1) {
       import core.stdc.string : memcmp;
       if (memcmp(h+i, n, needlelen) == 0) return cast(void*)(h+i);
     }
     return null;
   }
+}
+
+inout(void)* memrmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
+  if (needlelen > haystacklen) return null;
+  auto h = cast(const(ubyte)*)haystack;
+  const(ubyte)* res = null;
+  // size_t is unsigned
+  if (needlelen > haystacklen) return null;
+  size_t pos = 0;
+  while (pos < haystacklen-needlelen+1) {
+    auto ff = memmem(haystack+pos, haystacklen-pos, needle, needlelen);
+    if (ff is null) break;
+    res = cast(const(ubyte)*)ff;
+    pos = cast(size_t)(res-haystack)+1;
+  }
+  return cast(void*)res;
 }
