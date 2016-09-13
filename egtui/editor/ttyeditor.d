@@ -1712,6 +1712,16 @@ final:
   @TEDEditOnly
     void tedKmodeCtrlSpace () { doRemoveTailingSpaces(); }
 
+  @TEDKey("^K ^B") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlB () { doSetBlockStart(); }
+  @TEDKey("^K ^K") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlK () { doSetBlockEnd(); }
+
+  @TEDKey("^K ^C") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlC () { doBlockCopy(); }
+  @TEDKey("^K ^M") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlM () { doBlockMove(); }
+  @TEDKey("^K ^Y") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlY () { doBlockDelete(); }
+  @TEDKey("^K ^H") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlH () { doBlockResetMark(); }
+  // fuckin' vt100!
+  @TEDKey("^K Backspace") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlH1 () { doBlockResetMark(); }
+
   @TEDKey("^Q Tab")
   @TEDEditOnly
     void tedQmodeTab () { doPutChar('\t'); }

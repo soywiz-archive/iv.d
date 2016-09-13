@@ -1185,10 +1185,6 @@ public:
       ch;
   }
 
-public:
-  // mostly for single-line: remove all text on new char; will autoreset on move
-  bool killTextOnChar;
-
 protected:
   int prevTopLine = -1;
   int mTopLine = 0;
@@ -1207,6 +1203,7 @@ protected:
   bool txchanged;
   bool mReadOnly; // has any effect only if you are using `insertText()` and `deleteText()` API!
   bool mSingleLine; // has any effect only if you are using `insertText()` and `deleteText()` API!
+  bool mKillTextOnChar; // mostly for single-line: remove all text on new char; will autoreset on move
 
   char[] indentText; // this buffer is actively reused, do not expose!
   int inPasteMode;
@@ -1418,6 +1415,15 @@ public:
     // "buffer change counter"
     uint bufferCC () const pure nothrow @safe @nogc { pragma(inline, true); return gb.bufferChangeCounter; }
     void bufferCC (uint v) pure nothrow @safe @nogc { pragma(inline, true); gb.bufferChangeCounter = v; }
+
+    bool killTextOnChar () const pure nothrow @safe @nogc { pragma(inline, true); return mKillTextOnChar; }
+    void killTextOnChar (bool v) nothrow @safe @nogc {
+      pragma(inline, true);
+      if (mKillTextOnChar != v) {
+        mKillTextOnChar = v;
+        fullDirty();
+      }
+    }
   }
 
   // resize control
@@ -1972,7 +1978,7 @@ public:
   final bool insertText(string movecursor="none", bool doIndent=true) (int pos, const(char)[] str) {
     static assert(movecursor == "none" || movecursor == "start" || movecursor == "end");
     if (mReadOnly) return false;
-    if (killTextOnChar) {
+    if (mKillTextOnChar) {
       killTextOnChar = false;
       if (gb.textsize > 0) {
         undoGroupStart();
@@ -2075,7 +2081,7 @@ public:
     static assert(movecursor == "none" || movecursor == "start" || movecursor == "end");
     if (mReadOnly) return false;
     if (count < 0 || pos < 0) return false;
-    if (killTextOnChar) {
+    if (mKillTextOnChar) {
       killTextOnChar = false;
       if (gb.textsize > 0) {
         undoGroupStart();
@@ -2398,7 +2404,7 @@ public:
   }
 
   void doPasteStart () {
-    if (killTextOnChar) {
+    if (mKillTextOnChar) {
       killTextOnChar = false;
       if (gb.textsize > 0) {
         undoGroupStart();
@@ -2807,6 +2813,37 @@ public:
       markingBlock = false;
       dirtyLines[] = true; //FIXME: optimize
     }
+  }
+
+  void doSetBlockStart () {
+    killTextOnChar = false;
+    auto pos = curpos;
+    if ((hasMarkedBlock || (bstart == bend && bstart >= 0 && bstart < gb.textsize)) && pos < bend) {
+      //if (pos < bstart) markRangeDirty(pos, bstart-pos); else markRangeDirty(bstart, pos-bstart);
+      bstart = pos;
+      lastBGEnd = false;
+    } else {
+      doBlockResetMark();
+      bstart = bend = pos;
+      lastBGEnd = false;
+    }
+    markingBlock = false;
+    dirtyLines[] = true; //FIXME: optimize
+  }
+
+  void doSetBlockEnd () {
+    auto pos = curpos;
+    if ((hasMarkedBlock || (bstart == bend && bstart >= 0 && bstart < gb.textsize)) && pos > bstart) {
+      //if (pos < bend) markRangeDirty(pos, bend-pos); else markRangeDirty(bend, pos-bend);
+      bend = pos;
+      lastBGEnd = true;
+    } else {
+      doBlockResetMark();
+      bstart = bend = pos;
+      lastBGEnd = true;
+    }
+    markingBlock = false;
+    dirtyLines[] = true; //FIXME: optimize
   }
 
 protected:
