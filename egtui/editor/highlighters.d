@@ -75,6 +75,7 @@ public enum {
   HiSemi, // semicolon
   HiUDA, // bluish
   HiAliced,
+  HiPreprocessor,
 
   HiRegExp, // js inline regexp
 
@@ -128,6 +129,7 @@ public uint hiColor() (in auto ref GapBuffer.HighState hs) nothrow @safe @nogc {
     case HiSemi: return XtColorFB!(TtyRgb2Color!(0xff, 0x00, 0xff), TextBG); // 201,237
     case HiUDA: return XtColorFB!(TtyRgb2Color!(0x00, 0x87, 0xff), TextBG); // 33,237
     case HiAliced: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TextBG); // 202,237
+    case HiPreprocessor: return XtColorFB!(TtyRgb2Color!(0xff, 0x54, 0x54), TextBG); // 9,237; red
 
     case HiRegExp: return XtColorFB!(TtyRgb2Color!(0xff, 0x5f, 0x00), TextBG); // 202,237
 
@@ -269,6 +271,10 @@ public:
     char ch;
     int ofs;
     int spos = ls;
+    bool seenNonBlank = false; // comments are blanks
+    bool inPreprocessor = false;
+
+    if (st.kwtype == HiPreprocessor) inPreprocessor = true;
 
     void skipNumMods () {
       auto ch = gb[spos+ofs];
@@ -286,6 +292,7 @@ public:
     mainloop: while (spos <= le) {
       // in string?
       if (st.kwtype == HiString || st.kwtype == HiStringSpecial) {
+        seenNonBlank = true;
         while (spos <= le) {
           auto len = skipStrChar!(true, true)();
           if (len == 0) { st = HS(HiText); continue mainloop; }
@@ -303,6 +310,7 @@ public:
       }
       // in single-quoted string?
       if (st.kwtype == HiSQString || st.kwtype == HiSQStringSpecial) {
+        seenNonBlank = true;
         while (spos <= le) {
           auto len = skipStrChar!(true, true)();
           if (len == 0) { st = HS(HiText); continue mainloop; }
@@ -320,6 +328,7 @@ public:
       }
       // in backquoted string?
       if (st.kwtype == HiBQString) {
+        seenNonBlank = true;
         while (spos <= le) {
           auto len = skipStrChar!(true, false)();
           if (len == 0) { st = HS(HiText); continue mainloop; }
@@ -332,6 +341,7 @@ public:
       }
       // in rackquoted string?
       if (st.kwtype == HiRQString) {
+        seenNonBlank = true;
         while (spos <= le) {
           auto len = skipStrChar!(true, false)();
           if (len == 0) { st = HS(HiText); continue mainloop; }
@@ -408,6 +418,30 @@ public:
         st = HS(HiCommentMulti, 1);
         continue mainloop;
       }
+      // C preprocessor?
+      if (!inPreprocessor && ch == '#' && !seenNonBlank && (opt&EdHiTokens.Opt.CPreprocessor)) inPreprocessor = true;
+      if (inPreprocessor) {
+        // in preprocessor; eol?
+        if (ch == '\n') {
+          // check for continuation
+          if (spos-1 >= ls && gb[spos-1] == '\\') {
+            // yep
+            st = HS(HiPreprocessor);
+            gb.hi(spos++) = st;
+          } else {
+            // no
+            st = HS(HiText);
+            gb.hi(spos++) = st;
+          }
+          continue mainloop;
+        }
+        // not a EOL, go on
+        st = HS(HiPreprocessor);
+        gb.hi(spos++) = st;
+        continue mainloop;
+      }
+      // non-blank?
+      if (ch > ' ') seenNonBlank = true;
       // js inline regexp?
       if (ch == '/' && (opt&EdHiTokens.Opt.JSRegExp)) {
         int ep = spos+1;
@@ -423,11 +457,12 @@ public:
           continue mainloop;
         }
       }
-      // control char or non-ascii char?
+      // EOL?
       if (ch == '\n') {
         gb.hi(spos++) = st;
         continue mainloop;
       }
+      // control char or non-ascii char?
       if (ch <= ' ' || ch >= 127) {
         st = HS(HiText);
         gb.hi(spos++) = st;
@@ -577,6 +612,7 @@ public:
       gb.hi(spos++) = st;
     }
   }
+
 private final:
   // returns either 0 or "skip count"
   int isGoodChar (int pos) nothrow @nogc {
