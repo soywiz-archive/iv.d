@@ -1919,11 +1919,13 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
     if (windowMoving) continue;
     if (key.mouse) {
       //TODO: check for no frame when we'll get that
-      if (key.mpress && key.button == 0 && key.y == ctx.layprops(0).position.y && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
-        windowMoving = true;
-        wmX = key.x;
-        wmY = key.y;
-        continue;
+      if (key.mpress && key.button == 0 && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
+        if ((key.y == ctx.layprops(0).position.y) || (ctx.dialogFrame == FuiDialogFrameType.Normal && key.y == ctx.layprops(0).position.y+1)) {
+          windowMoving = true;
+          wmX = key.x;
+          wmY = key.y;
+          continue;
+        }
       }
     }
     ctx.keyboardEvent(key);

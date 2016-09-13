@@ -729,9 +729,9 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     }
     if (nn[1] > 0) --nn[1];
     if (nn[2] > 0) --nn[2];
-    if (nn[1] < 1) nn[1] = 1;
+    if (nn[1] < 0) nn[1] = 1;
     if (nn[1] > ushort.max) nn[1] = ushort.max;
-    if (nn[2] < 1) nn[2] = 1;
+    if (nn[2] < 0) nn[2] = 1;
     if (nn[2] > ushort.max) nn[2] = ushort.max;
     switch (nn[0]) {
       case 0: key.key = (press ? TtyKey.Key.MLeftDown : TtyKey.Key.MLeftUp); break;
