@@ -235,6 +235,7 @@ public:
   // this is *inclusive* range
   protected void rehighlightLine (int ls, int le) {
     auto tks = this.tks;
+    auto opt = this.tks.options;
 
     // spos: at char
     // return: 0: error; 1: normal; >1: escape (length)
@@ -378,7 +379,7 @@ public:
       }
       ch = gb[spos];
       // single-line comment?
-      if (ch == '/' && tks.optCSingleComment && gb[spos+1] == '/') {
+      if (ch == '/' && (opt&EdHiTokens.Opt.CSingleComment) && gb[spos+1] == '/') {
         gb.hi(spos++) = HS(HiCommentOneLine);
         gb.hi(spos++) = HS(HiCommentOneLine);
         st = HS(HiCommentOneLine);
@@ -386,7 +387,7 @@ public:
         continue mainloop;
       }
       // shell single-line comment?
-      if (ch == '#' && tks.optShellSingleComment) {
+      if (ch == '#' && (opt&EdHiTokens.Opt.ShellSingleComment)) {
         gb.hi(spos++) = HS(HiCommentOneLine);
         gb.hi(spos++) = HS(HiCommentOneLine);
         st = HS(HiCommentOneLine);
@@ -394,21 +395,21 @@ public:
         continue mainloop;
       }
       // multiline comment?
-      if (ch == '/' && tks.optCMultiComment && gb[spos+1] == '*') {
+      if (ch == '/' && (opt&EdHiTokens.Opt.CMultiComment) && gb[spos+1] == '*') {
         gb.hi(spos++) = HS(HiCommentMulti);
         gb.hi(spos++) = HS(HiCommentMulti);
         st = HS(HiCommentMulti);
         continue mainloop;
       }
       // nested multiline comment?
-      if (ch == '/' && tks.optDNestedComment && gb[spos+1] == '+') {
+      if (ch == '/' && (opt&EdHiTokens.Opt.DNestedComment) && gb[spos+1] == '+') {
         gb.hi(spos++) = HS(HiCommentMulti, 1);
         gb.hi(spos++) = HS(HiCommentMulti, 1);
         st = HS(HiCommentMulti, 1);
         continue mainloop;
       }
       // js inline regexp?
-      if (ch == '/' && tks.optJSRegExp) {
+      if (ch == '/' && (opt&EdHiTokens.Opt.JSRegExp)) {
         int ep = spos+1;
         while (ep <= le) {
           if (gb[ep] == '/') break;
@@ -433,7 +434,7 @@ public:
         continue mainloop;
       }
       // char?
-      if (ch == '\'' && !tks.optSQString) {
+      if (ch == '\'' && !(opt&EdHiTokens.Opt.SQString)) {
         auto xsp = spos;
         ++spos;
         auto len = skipStrChar!(false, true)();
@@ -463,19 +464,19 @@ public:
         continue mainloop;
       }
       // string?
-      if (ch == '\'' && tks.optSQString) {
+      if (ch == '\'' && (opt&EdHiTokens.Opt.SQString)) {
         gb.hi(spos++) = HS(HiSQString);
         st = HS(HiSQString);
         continue mainloop;
       }
       // bqstring?
-      if (ch == '`' && tks.optBQString) {
+      if (ch == '`' && (opt&EdHiTokens.Opt.BQString)) {
         gb.hi(spos++) = HS(HiBQString);
         st = HS(HiBQString);
         continue mainloop;
       }
       // rqstring?
-      if (ch == 'r' && tks.optRQString && gb[spos+1] == '"') {
+      if (ch == 'r' && (opt&EdHiTokens.Opt.RQString) && gb[spos+1] == '"') {
         gb.hi(spos++) = HS(HiRQString);
         gb.hi(spos++) = HS(HiRQString);
         st = HS(HiRQString);
@@ -498,7 +499,7 @@ public:
             st = HS(tknum);
           } else {
             // sorry
-            if (tk[0..tklen] == "body" && tks.optBodyIsSpecial) {
+            if (tk[0..tklen] == "body" && (opt&EdHiTokens.Opt.BodyIsSpecial)) {
               int xofs = spos+tklen;
               for (;;) {
                 ch = gb[xofs];
@@ -514,7 +515,7 @@ public:
       }
       // based number?
       if (auto base = isBasedStart(spos)) {
-        bool au = tks.optNumAllowUnder;
+        bool au = (opt&EdHiTokens.Opt.NumAllowUnder) != 0;
         ofs = (ch == '+' || ch == '-' ? 3 : 2);
         while (spos+ofs <= le) {
           ch = gb[spos+ofs];
@@ -529,7 +530,7 @@ public:
       }
       // decimal/floating number
       if (isDecStart(spos)) {
-        bool au = tks.optNumAllowUnder;
+        bool au = (opt&EdHiTokens.Opt.NumAllowUnder) != 0;
         ofs = 1;
         while (spos+ofs <= le) {
           ch = gb[spos+ofs];
@@ -597,7 +598,7 @@ private final:
   bool isDecStart (int pos) nothrow @nogc {
     auto ch = gb[pos];
     if (ch == '-' || ch == '+') {
-      if (!tks.optNumAllowSign) return false;
+      if (!(tks.options&EdHiTokens.Opt.NumAllowSign)) return false;
       ch = gb[++pos];
     }
     if (ch.isdigit) return true;
@@ -609,7 +610,7 @@ private final:
   int isBasedStart (int pos) nothrow @nogc {
     auto ch = gb[pos++];
     if (ch == '-' || ch == '+') {
-      if (!tks.optNumAllowSign) return 0;
+      if (!(tks.options&EdHiTokens.Opt.NumAllowSign)) return 0;
       ch = gb[pos++];
     }
     if (ch != '0') return 0;
@@ -619,9 +620,9 @@ private final:
     else if (ch == 'o' || ch == 'O') base = 8;
     else if (ch == 'b' || ch == 'B') base = 2;
     else return 0;
-    if (!tks.optNum0x && base == 16) return 0;
-    if (!tks.optNum0o && base == 8) return 0;
-    if (!tks.optNum0b && base == 2) return 0;
+    if (!(tks.options&EdHiTokens.Opt.Num0x) && base == 16) return 0;
+    if (!(tks.options&EdHiTokens.Opt.Num0o) && base == 8) return 0;
+    if (!(tks.options&EdHiTokens.Opt.Num0b) && base == 2) return 0;
     return (gb[pos].digitInBase(base) >= 0 ? base : 0);
   }
 }
@@ -677,36 +678,32 @@ private:
 public:
   enum NotFound = 0;
 
+  enum Opt : uint {
+    // number parsing options
+    Num0b         = 1U<<0,
+    Num0o         = 1U<<1,
+    Num0x         = 1U<<2,
+    NumAllowUnder = 1U<<3,
+    NumAllowSign  = 1U<<4,
+    SQString      = 1U<<5, // can string be single-quoted?
+    BQString      = 1U<<6, // allow D-style `...` strings
+    RQString      = 1U<<7, // allow D-style r"..." strings
+    // comment options
+    DNestedComment     = 1U<<8, // allow `/+ ... +/` newsted comments
+    ShellSingleComment = 1U<<9, // allow `# ` comments
+    CSingleComment     = 1U<<10, // allow `//` comments
+    CMultiComment      = 1U<<11, // allow `/* ... */` comments
+    // other options
+    BodyIsSpecial = 1U<<12, // is "body" token special? (aliced)
+    CPreprocessor = 1U<<13, // does this language use C preprocessor?
+    JSRegExp      = 1U<<14, // parse JS inline regexps?
+  }
+  static assert(Opt.max <= uint.max);
+
+  uint options;
+
 public:
   this () {}
-
-  // number parsing options
-  abstract @property bool optNum0b () const pure nothrow @safe @nogc;
-  abstract @property bool optNum0o () const pure nothrow @safe @nogc;
-  abstract @property bool optNum0x () const pure nothrow @safe @nogc;
-  abstract @property bool optNumAllowUnder () const pure nothrow @safe @nogc;
-  abstract @property bool optNumAllowSign () const pure nothrow @safe @nogc;
-
-  // true: string can be single-quoted
-  abstract @property bool optSQString () const pure nothrow @safe @nogc;
-
-  // allow D-style `...` strings
-  abstract @property bool optBQString () const pure nothrow @safe @nogc;
-  // allow D-style r"..." strings
-  abstract @property bool optRQString () const pure nothrow @safe @nogc;
-  // allow `/+ ... +/` newsted comments
-  abstract @property bool optDNestedComment () const pure nothrow @safe @nogc;
-  // allow `# ` comments
-  abstract @property bool optShellSingleComment () const pure nothrow @safe @nogc;
-  // allow `//` comments
-  abstract @property bool optCSingleComment () const pure nothrow @safe @nogc;
-  // allow `/* ... */` comments
-  abstract @property bool optCMultiComment () const pure nothrow @safe @nogc;
-  // "body" token is special? (aliced)
-  abstract @property bool optBodyIsSpecial () const pure nothrow @safe @nogc;
-
-  // parse JS inline regexps
-  abstract @property bool optJSRegExp () const pure nothrow @safe @nogc;
 
 final:
   @property int maxPunctLen () const pure nothrow @safe @nogc { pragma(inline, true); return mMaxPunctLen; }
@@ -750,35 +747,25 @@ final:
 
 // ////////////////////////////////////////////////////////////////////////// //
 class EdHiTokensD : EdHiTokens {
-  // number parsing options
-  override @property bool optNum0b () const pure nothrow @safe @nogc { return true; }
-  override @property bool optNum0o () const pure nothrow @safe @nogc { return true; }
-  override @property bool optNum0x () const pure nothrow @safe @nogc { return true; }
-  override @property bool optNumAllowUnder () const pure nothrow @safe @nogc { return true; }
-  override @property bool optNumAllowSign () const pure nothrow @safe @nogc { return false; }
-
-  // true: string can be single-quoted
-  override @property bool optSQString () const pure nothrow @safe @nogc { return false; }
-
-  // allow D-style `...` strings
-  override @property bool optBQString () const pure nothrow @safe @nogc { return true; }
-  // allow D-style r"..." strings
-  override @property bool optRQString () const pure nothrow @safe @nogc { return true; }
-  // allow `/+ ... +/` newsted comments
-  override @property bool optDNestedComment () const pure nothrow @safe @nogc { return true; }
-  // allow `# ` comments
-  override @property bool optShellSingleComment () const pure nothrow @safe @nogc { return false; }
-  // allow `//` comments
-  override @property bool optCSingleComment () const pure nothrow @safe @nogc { return true; }
-  // allow `/* ... */` comments
-  override @property bool optCMultiComment () const pure nothrow @safe @nogc { return true; }
-  // "body" token is special? (aliced)
-  override @property bool optBodyIsSpecial () const pure nothrow @safe @nogc { return true; }
-
-  // parse JS inline regexps
-  override @property bool optJSRegExp () const pure nothrow @safe @nogc { return false; }
-
   this () {
+    options =
+      Opt.Num0b|
+      Opt.Num0o|
+      Opt.Num0x|
+      Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      //Opt.SQString|
+      Opt.BQString|
+      Opt.RQString|
+      Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      Opt.BodyIsSpecial|
+      //Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      0;
+
     addToken("this", HiInternal);
     addToken("super", HiInternal);
 
@@ -998,34 +985,25 @@ class EdHiTokensD : EdHiTokens {
 
 // ////////////////////////////////////////////////////////////////////////// //
 class EdHiTokensJS : EdHiTokens {
-  // number parsing options
-  override @property bool optNum0b () const pure nothrow @safe @nogc { return false; }
-  override @property bool optNum0o () const pure nothrow @safe @nogc { return false; }
-  override @property bool optNum0x () const pure nothrow @safe @nogc { return true; }
-  override @property bool optNumAllowUnder () const pure nothrow @safe @nogc { return false; }
-  override @property bool optNumAllowSign () const pure nothrow @safe @nogc { return false; }
-
-  // true: string can be single-quoted
-  override @property bool optSQString () const pure nothrow @safe @nogc { return true; }
-
-  // allow D-style `...` strings
-  override @property bool optBQString () const pure nothrow @safe @nogc { return false; }
-  // allow D-style r"..." strings
-  override @property bool optRQString () const pure nothrow @safe @nogc { return false; }
-  // allow `/+ ... +/` newsted comments
-  override @property bool optDNestedComment () const pure nothrow @safe @nogc { return false; }
-  // allow `# ` comments
-  override @property bool optShellSingleComment () const pure nothrow @safe @nogc { return false; }
-  // allow `//` comments
-  override @property bool optCSingleComment () const pure nothrow @safe @nogc { return true; }
-  // allow `/* ... */` comments
-  override @property bool optCMultiComment () const pure nothrow @safe @nogc { return true; }
-  // "body" token is special? (aliced)
-  override @property bool optBodyIsSpecial () const pure nothrow @safe @nogc { return false; }
-
-  override @property bool optJSRegExp () const pure nothrow @safe @nogc { return true; }
-
   this () {
+    options =
+      //Opt.Num0b|
+      //Opt.Num0o|
+      Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      Opt.SQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      //Opt.BodyIsSpecial|
+      //Opt.CPreprocessor|
+      Opt.JSRegExp|
+      0;
+
     addToken("arguments", HiKeyword);
     addToken("break", HiKeyword);
     addToken("callee", HiKeyword);
@@ -1116,34 +1094,25 @@ class EdHiTokensJS : EdHiTokens {
 
 // ////////////////////////////////////////////////////////////////////////// //
 class EdHiTokensC : EdHiTokens {
-  // number parsing options
-  override @property bool optNum0b () const pure nothrow @safe @nogc { return true; }
-  override @property bool optNum0o () const pure nothrow @safe @nogc { return false; }
-  override @property bool optNum0x () const pure nothrow @safe @nogc { return true; }
-  override @property bool optNumAllowUnder () const pure nothrow @safe @nogc { return false; }
-  override @property bool optNumAllowSign () const pure nothrow @safe @nogc { return false; }
-
-  // true: string can be single-quoted
-  override @property bool optSQString () const pure nothrow @safe @nogc { return false; }
-
-  // allow D-style `...` strings
-  override @property bool optBQString () const pure nothrow @safe @nogc { return false; }
-  // allow D-style r"..." strings
-  override @property bool optRQString () const pure nothrow @safe @nogc { return false; }
-  // allow `/+ ... +/` newsted comments
-  override @property bool optDNestedComment () const pure nothrow @safe @nogc { return false; }
-  // allow `# ` comments
-  override @property bool optShellSingleComment () const pure nothrow @safe @nogc { return false; }
-  // allow `//` comments
-  override @property bool optCSingleComment () const pure nothrow @safe @nogc { return true; }
-  // allow `/* ... */` comments
-  override @property bool optCMultiComment () const pure nothrow @safe @nogc { return true; }
-  // "body" token is special? (aliced)
-  override @property bool optBodyIsSpecial () const pure nothrow @safe @nogc { return false; }
-
-  override @property bool optJSRegExp () const pure nothrow @safe @nogc { return false; }
-
   this () {
+    options =
+      Opt.Num0b|
+      Opt.Num0o|
+      Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      //Opt.SQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      //Opt.BodyIsSpecial|
+      Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      0;
+
     addToken("auto", HiKeyword);
     addToken("break", HiKeyword);
     addToken("case", HiKeyword);
@@ -1222,13 +1191,6 @@ class EdHiTokensC : EdHiTokens {
     addToken("wchar_t", HiType);
     addToken("size_t", HiType);
     addToken("ptrdiff_t", HiType);
-
-    addToken("#include", HiInternal);
-    addToken("#if", HiInternal);
-    addToken("#ifdef", HiInternal);
-    addToken("#else", HiInternal);
-    addToken("#elif", HiInternal);
-    addToken("#endif", HiInternal);
   }
 }
 
