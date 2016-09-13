@@ -185,5 +185,5 @@ uint calcTextBoundsEx (out int cols, out int lines, char[] text, int maxwdt) {
   }
   if (col > 0) ++lines;
 
-  return dpos;
+  return cast(uint)dpos;
 }

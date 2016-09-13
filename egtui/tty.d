@@ -324,7 +324,7 @@ private void ttzFlush () nothrow @nogc {
 private void ttzPut (const(char)[] str...) nothrow @nogc {
   import core.stdc.string : memcpy;
   while (str.length > 0) {
-    uint left = ttytbuf.length-ttytpos;
+    uint left = cast(uint)ttytbuf.length-ttytpos;
     if (left == 0) { ttzFlush(); left = cast(uint)ttytbuf.length; }
     if (left > str.length) left = cast(uint)str.length;
     memcpy(ttytbuf.ptr+ttytpos, str.ptr, left);
