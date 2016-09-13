@@ -110,14 +110,14 @@ void ttyDisableBracketedPaste () nothrow @trusted @nogc {
 
 void ttyEnableMouseReports () nothrow @trusted @nogc {
   import core.sys.posix.unistd : write;
-  enum str = "\x1b[?1000h\x1b[?1006h";
+  enum str = "\x1b[?1000h\x1b[?1006h\x1b[?1002h";
   write(1, str.ptr, str.length);
 }
 
 
 void ttyDisableMouseReports () nothrow @trusted @nogc {
   import core.sys.posix.unistd : write;
-  enum str = "\x1b[?1006l\x1b[?1000l";
+  enum str = "\x1b[?1002l\x1b[?1006l\x1b[?1000l";
   write(1, str.ptr, str.length);
 }
 
