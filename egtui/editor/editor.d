@@ -26,10 +26,10 @@ import iv.egtui.types;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-package(iv.egtui) class GapBuffer {
+package(iv.egtui) final class GapBuffer {
 public:
   static align(1) struct HighState {
-  align(1) pure nothrow @safe @nogc:
+  align(1):
     ubyte kwtype; // keyword number
     ubyte kwidx; // index in keyword
   }
@@ -47,14 +47,15 @@ protected:
   enum GrowGran = 0x1000; // must be power of 2
   static assert(GrowGran > MinGapSize);
 
+nothrow @trusted @nogc:
 public:
-  static bool hasEols (const(char)[] str) nothrow @trusted @nogc {
+  static bool hasEols (const(char)[] str) {
     import core.stdc.string : memchr;
     uint left = cast(uint)str.length;
     return (left > 0 && memchr(str.ptr, '\n', left) !is null);
   }
 
-  static int findEol (const(char)[] str) nothrow @trusted @nogc {
+  static int findEol (const(char)[] str) {
     int left = cast(int)str.length;
     if (left > 0) {
       import core.stdc.string : memchr;
@@ -64,7 +65,7 @@ public:
     return -1;
   }
 
-  static int countEols (const(char)[] str) nothrow @trusted @nogc {
+  static int countEols (const(char)[] str) {
     import core.stdc.string : memchr;
     int linecount = 0;
     //foreach (char ch; str) if (ch == '\n') ++linecount;
@@ -86,14 +87,20 @@ protected:
   HighState* hbuf; // highlight buffer
   uint tbused; // not including gap
   uint tbsize; // including gap
-  uint tbmax = 32*1024*1024+MinGapSize; // maximum buffer size
+  uint tbmax = 512*1024*1024+MinGapSize; // maximum buffer size
   uint gapstart, gapend; // tbuf[gapstart..gapend]; gap cannot be empty
   uint bufferChangeCounter; // will simply increase on each buffer change
 
+  // line offset cache
+  uint* lineofsc;
+  uint locused; // number of valid entries in lineofsc-1 (i.e. lineofsc[locused] is always valid)
+  uint locsize;
+  uint mLineCount; // number of lines in *text* buffer
 
+final:
   // size doesn't include gap buffer, but it is total new size
   // this also does initial alloc, which is awful
-  final bool growTBuf (uint size) nothrow @trusted @nogc {
+  bool growTBuf (uint size) {
     import core.stdc.stdlib : malloc, realloc, free;
     if (size > tbmax) return false; // too big
     if (tbsize == 0) {
@@ -125,13 +132,7 @@ protected:
     return true;
   }
 
-  // line offset cache
-  uint* lineofsc;
-  uint locused; // number of valid entries in lineofsc-1 (i.e. lineofsc[locused] is always valid)
-  uint locsize;
-  uint mLineCount; // number of lines in *text* buffer
-
-  final bool growLineCache (uint total) nothrow @trusted @nogc {
+  bool growLineCache (uint total) {
     assert(total != 0);
     ++total;
     if (locsize < total) {
@@ -154,7 +155,7 @@ protected:
   }
 
   // use `memchr`, jumps over gap
-  public final int fastFindChar (int pos, char ch) nothrow @trusted @nogc {
+  public int fastFindChar (int pos, char ch) {
     import core.stdc.string : memchr;
     auto ts = tbused;
     if (ts == 0 || pos >= ts) return ts;
@@ -180,7 +181,7 @@ protected:
   // this is hack for regexp searchers
   // do not store returned slice anywhere for a long time!
   // slice *will* be invalidated on next gap buffer operation!
-  public auto bufparts (int pos) nothrow @trusted @nogc {
+  public auto bufparts (int pos) {
     static struct Range {
     nothrow @trusted @nogc:
       GapBuffer gb;
@@ -215,33 +216,8 @@ protected:
     return Range(this, pos);
   }
 
-  // this is hack for regexp searchers
-  // do not store returned slice anywhere for a long time!
-  // slice *will* be invalidated on next gap buffer operation!
-  // can return empty slice
-  public final const(char)[] bufpart0 (int pos) nothrow @trusted @nogc {
-    auto ts = tbused;
-    if (ts == 0 || pos >= ts) return null;
-    if (pos < 0) pos = 0;
-    if (pos >= gapstart) return null; // our pos is after the gap
-    return tbuf[pos..gapstart];
-  }
-
-  // this is hack for regexp searchers
-  // do not store returned slice anywhere for a long time!
-  // slice *will* be invalidated on next gap buffer operation!
-  // can return empty slice
-  public final const(char)[] bufpart1 (int pos) nothrow @trusted @nogc {
-    auto ts = tbused;
-    if (ts == 0 || pos >= ts) return null;
-    if (pos < 0) pos = 0;
-    if (pos < gapstart) pos = gapstart;
-    int left = ts-pos;
-    return tbuf[gapend..gapend+left];
-  }
-
   // lineofsc[lidx] and lineofsc[lidx+1] should be valid after calling this
-  public final void updateCache (uint lidx) nothrow @trusted @nogc {
+  void updateCache (uint lidx) {
     auto ts = tbused;
     if (ts == 0) {
       // rare case, but...
@@ -275,7 +251,7 @@ protected:
     assert(locused == lidx+1);
   }
 
-  final void invalidateCacheFrom (uint lidx) nothrow @trusted @nogc {
+  void invalidateCacheFrom (uint lidx) {
     if (locsize == 0) { locused = 0; return; } // just in case
     if (lidx == 0) {
       lineofsc[0] = 0;
@@ -286,7 +262,7 @@ protected:
     }
   }
 
-  int findLineCacheIndex (uint pos) const nothrow @trusted @nogc {
+  int findLineCacheIndex (uint pos) const {
     if (locused == 0) return -1;
     if (pos >= tbused) return (locused != mLineCount ? -1 : locused-1);
     if (locused == 1) return (pos < lineofsc[1] ? 0 : -1);
@@ -306,22 +282,8 @@ protected:
     return -1;
   }
 
-  // debug function
-  debug public final void checkLineCache () {
-    moveGapAtEnd();
-    uint pos = 0;
-    if (locused > mLineCount) assert(0);
-    foreach (immutable lnum, uint ls; lineofsc[0..locused]) {
-      if (ls != pos) { import std.format : format; assert(0, "lnum=%s; ls=0x%08x; pos=0x%08x".format(lnum, ls, pos)); }
-      while (pos < tbused) {
-        auto dp = tbuf+(pos++);
-        if (*dp == '\n') break;
-      }
-    }
-  }
-
 protected:
-  final uint pos2real (uint pos) const pure nothrow @trusted @nogc {
+  uint pos2real (uint pos) const pure {
     pragma(inline, true);
     return pos+(pos >= gapstart ? gapend-gapstart : 0);
   }
@@ -329,7 +291,7 @@ protected:
 public:
   this () {
     // allocate minimal buffers
-    if (!growTBuf(0)) throw new Exception("out of memory for text buffers");
+    if (!growTBuf(0)) assert(0, "out of memory for text buffers");
     gapend = MinGapSize;
     mLineCount = 1; // we always have at least one line, even if it is empty
     lineofsc[0..1] = 0; // initial line cache
@@ -344,9 +306,19 @@ public:
   }
 
   // remove all text from buffer
-  final void clear () nothrow @trusted @nogc {
-    tbused = 0;
-    gapstart = 0;
+  void clear () {
+    import core.stdc.stdlib : free;
+    if (tbuf !is null) { free(tbuf); tbuf = null; }
+    if (hbuf !is null) { free(hbuf); hbuf = null; }
+    if (lineofsc !is null) { free(lineofsc); lineofsc = null; }
+    // clear various shit
+    tbused = tbsize = 0;
+    gapstart = gapend = 0;
+    ++bufferChangeCounter;
+    locused = locsize = 0;
+    mLineCount = 0;
+    // allocate new buffer
+    if (!growTBuf(0)) assert(0, "out of memory for text buffers");
     gapend = MinGapSize;
     mLineCount = 1; // we always have at least one line, even if it is empty
     lineofsc[0..1] = 0; // initial line cache
@@ -354,14 +326,14 @@ public:
   }
 
   // size of text without gap
-  final @property int textsize () const pure nothrow @safe @nogc { pragma(inline, true); return tbused; }
+  @property int textsize () const pure { pragma(inline, true); return tbused; }
   // there is always at least one line, so `linecount` is never zero
-  final @property int linecount () const pure nothrow @safe @nogc { pragma(inline, true); return mLineCount; }
+  @property int linecount () const pure { pragma(inline, true); return mLineCount; }
 
-  final @property char opIndex (uint pos) const pure nothrow @trusted @nogc { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\0'); }
-  final @property ref HighState hi (uint pos) pure nothrow @trusted @nogc { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : hidummy); }
+  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\0'); }
+  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : hidummy); }
 
-  final @property char utfuckAt (uint pos) const pure nothrow @trusted @nogc {
+  @property char utfuckAt (uint pos) const pure {
     if (pos >= tbsize) return 0;
     if (!utfuck) return this[pos];
     Utf8Decoder udc;
@@ -374,7 +346,7 @@ public:
   }
 
   // never returns zero
-  final int utfuckLenAt(bool alwaysPositive=true) (int pos) {
+  int utfuckLenAt(bool alwaysPositive=true) (int pos) {
     auto ts = tbused;
     if (pos < 0 || pos >= ts) {
       static if (alwaysPositive) return 1; else return -1;
@@ -393,7 +365,7 @@ public:
   }
 
   // get number of *symbols* to line end (this is not always equal to number of bytes for utfuck)
-  final int syms2eol (int pos) nothrow @trusted @nogc {
+  int syms2eol (int pos) {
     auto ts = tbused;
     if (pos < 0) pos = 0;
     if (pos >= ts) return 0;
@@ -409,7 +381,7 @@ public:
   }
 
   // get line for the given position
-  final int pos2line (int pos) nothrow @trusted @nogc {
+  int pos2line (int pos) {
     auto ts = tbused;
     if (pos < 0) return 0;
     if (pos == 0 || ts == 0) return 0;
@@ -428,7 +400,7 @@ public:
   }
 
   // get position (starting) for the given line
-  final int line2pos (int lidx) nothrow @trusted @nogc {
+  int line2pos (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
     if (lidx > mLineCount-1) return tbused;
     if (mLineCount == 1) {
@@ -440,7 +412,7 @@ public:
   }
 
   // get ending position for the given line
-  final int lineend (int lidx) nothrow @trusted @nogc {
+  int lineend (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
     if (lidx > mLineCount-1) return tbused;
     if (mLineCount == 1) {
@@ -455,7 +427,7 @@ public:
   // move by `x` utfucked chars
   // `pos` should point to line start
   // will never go beyond EOL
-  private final int utfuck_x2pos (int x, int pos) nothrow @trusted @nogc {
+  private int utfuck_x2pos (int x, int pos) {
     auto ts = tbused;
     if (pos < 0) pos = 0;
     mainloop: while (pos < ts && x > 0) {
@@ -472,7 +444,7 @@ public:
 
   // convert line offset to screen x coordinate
   // `pos` should point into line (somewhere)
-  private final int utfuck_pos2x (int pos) nothrow @trusted @nogc {
+  private int utfuck_pos2x (int pos) {
     auto ts = tbused;
     if (pos < 0) pos = 0;
     if (pos > ts) pos = ts;
@@ -493,7 +465,7 @@ public:
   }
 
   // get position for the given coordinates
-  final int xy2pos (int x, int y) nothrow @trusted @nogc {
+  int xy2pos (int x, int y) {
     auto ts = tbused;
     if (ts == 0 || y < 0) return 0;
     if (y > mLineCount-1) return ts;
@@ -521,7 +493,7 @@ public:
   }
 
   // get coordinates for the given position
-  final void pos2xy (int pos, out int x, out int y) nothrow @trusted @nogc {
+  void pos2xy (int pos, out int x, out int y) {
     auto ts = tbused;
     if (pos <= 0 || ts == 0) return; // x and y autoinited
     if (pos > ts) pos = ts;
@@ -552,7 +524,7 @@ public:
     x = (!utfuck ? pos-ls : utfuck_pos2x(pos));
   }
 
-  protected final void ensureGap () nothrow @trusted @nogc {
+  protected void ensureGap () {
     // if we have zero-sized gap, assume that it is at end; we always have a room for at least MinGapSize chars
     if (gapstart >= gapend) {
       assert(tbused-tbsize >= MinGapSize);
@@ -561,7 +533,7 @@ public:
   }
 
   // put the gap *before* `pos`
-  protected final void moveGapAtPos (int pos) nothrow @trusted @nogc {
+  protected void moveGapAtPos (int pos) {
     import core.stdc.string : memmove;
     auto ts = tbused; // i will need it in several places
     if (pos < 0) pos = 0;
@@ -613,8 +585,8 @@ public:
     }
   }
 
-  // move gap buffer at the end of the text, so i can use regexp to do, for example, searches
-  final void moveGapAtEnd () nothrow @trusted @nogc {
+  // put the gap at the end of the text
+  void moveGapAtEnd () {
     import core.stdc.string : memmove;
     auto ts = tbused; // i will need it in several places
     if (ts == 0) { gapstart = 0; gapend = MinGapSize; return; } // unlikely case, but...
@@ -633,11 +605,11 @@ public:
 
   // put text into buffer; will either put all the text, or nothing
   // returns success flag
-  final bool append (const(char)[] str...) nothrow @trusted @nogc { return (put(tbused, str) >= 0); }
+  bool append (const(char)[] str...) { return (put(tbused, str) >= 0); }
 
   // put text into buffer; will either put all the text, or nothing
   // returns new position or -1
-  final int put (int pos, const(char)[] str...) nothrow @trusted @nogc {
+  int put (int pos, const(char)[] str...) {
     import core.stdc.string : memchr, memcpy, memset;
     if (pos < 0) pos = 0;
     auto ts = tbused;
@@ -689,7 +661,7 @@ public:
 
   // remove count codepoints from the current position; will either remove all of 'em, or nothing
   // returns success flag
-  final bool remove (int pos, int count) nothrow @trusted @nogc {
+  bool remove (int pos, int count) {
     import core.stdc.string : memmove;
     if (count < 0) return false;
     if (count == 0) return true;
@@ -809,6 +781,7 @@ private:
   ubyte* undoBuffer;
   uint ubUsed, ubSize;
 
+final:
   void initTempFD () nothrow @nogc {
     import core.sys.posix.fcntl /*: open*/;
     static if (is(typeof(O_CLOEXEC)) && is(typeof(O_TMPFILE))) {
@@ -1195,7 +1168,7 @@ public:
   CodePage codepage = CodePage.koi8u;
 
   // from koi to codepage
-  final char recodeCharTo (char ch) pure nothrow @safe @nogc {
+  final char recodeCharTo (char ch) pure const nothrow @safe @nogc {
     pragma(inline, true);
     return
       codepage == CodePage.cp1251 ? uni2cp1251(koi2uni(ch)) :
@@ -1204,13 +1177,17 @@ public:
   }
 
   // from codepage to koi
-  final char recodeCharFrom (char ch) pure nothrow @safe @nogc {
+  final char recodeCharFrom (char ch) pure const nothrow @safe @nogc {
     pragma(inline, true);
     return
       codepage == CodePage.cp1251 ? uni2koi(cp12512uni(ch)) :
       codepage == CodePage.cp866 ? uni2koi(cp8662uni(ch)) :
       ch;
   }
+
+public:
+  // mostly for single-line: remove all text on new char; will autoreset on move
+  bool killTextOnChar;
 
 protected:
   int prevTopLine = -1;
@@ -1233,10 +1210,6 @@ protected:
 
   char[] indentText; // this buffer is actively reused, do not expose!
   int inPasteMode;
-
-public:
-  // mostly for single-line: remove all text on new char; will autoreset on move
-  bool killTextOnChar;
 
 protected:
   bool[int] linebookmarked; // is this line bookmarked?
@@ -1411,39 +1384,41 @@ public:
   protected void beforeUtfuckSwitch (bool newisutfuck) {}
   protected void afterUtfuckSwitch (bool newisutfuck) {}
 
-  // this switches "utfuck" mode
-  // note that utfuck mode is FUCKIN' SLOW and buggy
-  // you should not lose any text, but may encounder visual and positional glitches
-  final @property bool utfuck () const pure nothrow @safe @nogc { pragma(inline, true); return gb.utfuck; }
-  final @property void utfuck (bool v) {
-    if (gb.utfuck == v) return;
-    beforeUtfuckSwitch(v);
-    auto pos = curpos;
-    gb.utfuck = v;
-    gb.pos2xy(pos, cx, cy);
-    fullDirty();
-    afterUtfuckSwitch(v);
+  final @property {
+    // this switches "utfuck" mode
+    // note that utfuck mode is FUCKIN' SLOW and buggy
+    // you should not lose any text, but may encounder visual and positional glitches
+    bool utfuck () const pure nothrow @safe @nogc { pragma(inline, true); return gb.utfuck; }
+    void utfuck (bool v) {
+      if (gb.utfuck == v) return;
+      beforeUtfuckSwitch(v);
+      auto pos = curpos;
+      gb.utfuck = v;
+      gb.pos2xy(pos, cx, cy);
+      fullDirty();
+      afterUtfuckSwitch(v);
+    }
+
+    int x0 () const pure nothrow @safe @nogc { pragma(inline, true); return winx; }
+    int y0 () const pure nothrow @safe @nogc { pragma(inline, true); return winy; }
+    int width () const pure nothrow @safe @nogc { pragma(inline, true); return winw; }
+    int height () const pure nothrow @safe @nogc { pragma(inline, true); return winh; }
+
+    void x0 (int v) nothrow @safe @nogc { pragma(inline, true); move(v, winy); }
+    void y0 (int v) nothrow @safe @nogc { pragma(inline, true); move(winx, v); }
+    void width (int v) nothrow @safe { pragma(inline, true); resize(v, winh); }
+    void height (int v) nothrow @safe { pragma(inline, true); resize(winw, v); }
+
+    // has any effect only if you are using `insertText()` and `deleteText()` API!
+    bool readonly () const pure nothrow @safe @nogc { pragma(inline, true); return mReadOnly; }
+    void readonly (bool v) nothrow @safe @nogc { pragma(inline, true); mReadOnly = v; }
+
+    bool singleline () const pure nothrow @safe @nogc { pragma(inline, true); return mSingleLine; }
+
+    // "buffer change counter"
+    uint bufferCC () const pure nothrow @safe @nogc { pragma(inline, true); return gb.bufferChangeCounter; }
+    void bufferCC (uint v) pure nothrow @safe @nogc { pragma(inline, true); gb.bufferChangeCounter = v; }
   }
-
-  final @property int x0 () const pure nothrow @safe @nogc { pragma(inline, true); return winx; }
-  final @property int y0 () const pure nothrow @safe @nogc { pragma(inline, true); return winy; }
-  final @property int width () const pure nothrow @safe @nogc { pragma(inline, true); return winw; }
-  final @property int height () const pure nothrow @safe @nogc { pragma(inline, true); return winh; }
-
-  final @property void x0 (int v) nothrow @safe @nogc { pragma(inline, true); move(v, winy); }
-  final @property void y0 (int v) nothrow @safe @nogc { pragma(inline, true); move(winx, v); }
-  final @property void width (int v) nothrow @safe { pragma(inline, true); resize(v, winh); }
-  final @property void height (int v) nothrow @safe { pragma(inline, true); resize(winw, v); }
-
-  // has any effect only if you are using `insertText()` and `deleteText()` API!
-  final @property bool readonly () const pure nothrow @safe @nogc { pragma(inline, true); return mReadOnly; }
-  final @property void readonly (bool v) nothrow @safe @nogc { pragma(inline, true); mReadOnly = v; }
-
-  final @property bool singleline () const pure nothrow @safe @nogc { pragma(inline, true); return mSingleLine; }
-
-  // "buffer change counter"
-  final @property uint bufferCC () const pure nothrow @safe @nogc { pragma(inline, true); return gb.bufferChangeCounter; }
-  final @property void bufferCC (uint v) pure nothrow @safe @nogc { pragma(inline, true); gb.bufferChangeCounter = v; }
 
   // resize control
   void resize (int nw, int nh) nothrow @safe {
@@ -1474,63 +1449,61 @@ public:
     resize(nw, nh);
   }
 
-  // write editing action; count<0: delete
-  //void writeLogAction (int pos, int count) {}
+  final @property nothrow @safe @nogc {
+    // has active marked block?
+    bool hasMarkedBlock () const pure { pragma(inline, true); return (bstart < bend); }
 
-  // has active marked block?
-  final @property bool hasMarkedBlock () const pure nothrow @safe @nogc { pragma(inline, true); return (bstart < bend); }
+    int curx () const pure { pragma(inline, true); return cx; }
+    int cury () const pure { pragma(inline, true); return cy; }
 
-  final @property int curx () const pure nothrow @safe @nogc { pragma(inline, true); return cx; }
-  final @property int cury () const pure nothrow @safe @nogc { pragma(inline, true); return cy; }
+    int topline () const pure { pragma(inline, true); return mTopLine; }
+    int linecount () const pure { pragma(inline, true); return gb.linecount; }
+    int textsize () const pure { pragma(inline, true); return gb.textsize; }
 
-  final @property int topline () const pure nothrow @safe @nogc { pragma(inline, true); return mTopLine; }
-  final @property int linecount () const pure nothrow @safe @nogc { pragma(inline, true); return gb.linecount; }
-  final @property int textsize () const pure nothrow @safe @nogc { pragma(inline, true); return gb.textsize; }
+    char opIndex (int pos) const pure { pragma(inline, true); return gb[pos]; }
 
-  final @property char opIndex (int pos) const pure nothrow @trusted @nogc { pragma(inline, true); return gb[pos]; }
-
-  final @property dchar dcharAt (int pos) const pure nothrow @trusted @nogc {
-    auto ts = gb.textsize;
-    if (pos < 0 || pos >= ts) return 0;
-    if (!utfuck) {
-      final switch (codepage) {
-        case CodePage.koi8u: return koi2uni(this[pos]);
-        case CodePage.cp1251: return cp12512uni(this[pos]);
-        case CodePage.cp866: return cp8662uni(this[pos]);
+    dchar dcharAt (int pos) const pure {
+      auto ts = gb.textsize;
+      if (pos < 0 || pos >= ts) return 0;
+      if (!utfuck) {
+        final switch (codepage) {
+          case CodePage.koi8u: return koi2uni(this[pos]);
+          case CodePage.cp1251: return cp12512uni(this[pos]);
+          case CodePage.cp866: return cp8662uni(this[pos]);
+        }
+        assert(0);
       }
-      assert(0);
+      auto spos = pos;
+      Utf8Decoder udc;
+      dchar dch = '?';
+      while (pos < ts) {
+        dch = udc.decode(cast(ubyte)gb[pos++]);
+        if (dch <= dchar.max) break;
+      }
+      if (udc.invalid) return cast(dchar)(this[spos]);
+      return dch;
     }
-    auto spos = pos;
-    Utf8Decoder udc;
-    dchar dch = '?';
-    while (pos < ts) {
-      dch = udc.decode(cast(ubyte)gb[pos++]);
-      if (dch <= dchar.max) break;
+
+    bool textChanged () const pure { pragma(inline, true); return txchanged; }
+
+    void curx (int v) @system { gotoXY(v, cy); }
+    void cury (int v) @system { gotoXY(cx, v); }
+
+    void topline (int v) @system {
+      if (v < 0) v = 0;
+      if (v > gb.linecount) v = gb.linecount-1;
+      if (v+winh > gb.linecount) {
+        v = gb.linecount-winh;
+        if (v < 0) v = 0;
+      }
+      if (v != mTopLine) {
+        pushUndoCurPos();
+        mTopLine = v;
+      }
     }
-    if (udc.invalid) return cast(dchar)(this[spos]);
-    return dch;
   }
-
-
-  final @property bool textChanged () const pure nothrow @safe @nogc { pragma(inline, true); return txchanged; }
 
   final void fullDirty () nothrow @safe @nogc { dirtyLines[] = true; }
-
-  final @property void curx (int v) nothrow @nogc { gotoXY(v, cy); }
-  final @property void cury (int v) nothrow @nogc { gotoXY(cx, v); }
-
-  final @property void topline (int v) nothrow @nogc {
-    if (v < 0) v = 0;
-    if (v > gb.linecount) v = gb.linecount-1;
-    if (v+winh > gb.linecount) {
-      v = gb.linecount-winh;
-      if (v < 0) v = 0;
-    }
-    if (v != mTopLine) {
-      pushUndoCurPos();
-      mTopLine = v;
-    }
-  }
 
   final void gotoXY(bool vcenter=false) (int nx, int ny) nothrow @nogc {
     if (nx < 0) nx = 0;
@@ -1561,7 +1534,7 @@ public:
     if (redo !is null) redo.clear();
   }
 
-  void clear () {
+  void clear () nothrow @nogc {
     gb.clear();
     txchanged = false;
     if (undo !is null) undo.clear();
@@ -1701,7 +1674,7 @@ public:
     gb.pos2xy(curpos, cx, cy);
   }
 
-  protected final void makeCurXVisible () nothrow @safe @nogc {
+  final void makeCurXVisible () nothrow @safe @nogc {
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
     int rx, ry;
@@ -1746,7 +1719,7 @@ public:
   }
 
   // `updateDown`: update all the page (as new lines was inserted/removed)
-  protected final void lineChanged (int lidx, bool updateDown) {
+  final void lineChanged (int lidx, bool updateDown) {
     if (lidx < 0 || lidx >= gb.linecount) return;
     if (hl !is null) hl.lineChanged(lidx, updateDown);
     if (lidx < mTopLine) { if (updateDown) dirtyLines[] = true; return; }
@@ -1754,7 +1727,7 @@ public:
     if (updateDown) dirtyLines[lidx-mTopLine..$] = true; else dirtyLines[lidx-mTopLine] = true;
   }
 
-  protected final void lineChangedByPos (int pos, bool updateDown) { return lineChanged(gb.pos2line(pos), updateDown); }
+  final void lineChangedByPos (int pos, bool updateDown) { return lineChanged(gb.pos2line(pos), updateDown); }
 
   // `updateDown`: update all the page (as new lines was inserted/removed)
   //protected final void curLineChanged (bool updateDown) { lineChanged(cy, updateDown); }
@@ -1784,7 +1757,7 @@ public:
   }
 
   //FIXME: optimize updating with block boundaries
-  protected final void markBlockDirty () nothrow @safe @nogc {
+  final void markBlockDirty () nothrow @safe @nogc {
     if (bstart >= bend) return;
     markRangeDirty(bstart, bend-bstart);
   }
@@ -2346,15 +2319,7 @@ public:
     if (!mSingleLine && (ch == '\n' || ch == '\r')) { doLineSplit(inPasteMode <= 0); return; }
     if (ch > 127 && utfuck) {
       char[8] ubuf = void;
-      int len;
-      /*
-      final switch (codepage) {
-        case CodePage.koi8u: len = utf8Encode(ubuf[], koi2uni(ch)); break;
-        case CodePage.cp1251: len = utf8Encode(ubuf[], cp12512uni(ch)); break;
-        case CodePage.cp866: len = utf8Encode(ubuf[], cp8662uni(ch)); break;
-      }
-      */
-      len = utf8Encode(ubuf[], koi2uni(ch));
+      int len = utf8Encode(ubuf[], koi2uni(ch));
       if (len < 1) { ubuf[0] = '?'; len = 1; }
       insertText!("end", true)(curpos, ubuf[0..len]);
       return;
@@ -2389,15 +2354,7 @@ public:
         }
         while (str.length && str.ptr[0] >= 128) {
           char[8] ubuf = void;
-          int len;
-          /*
-          final switch (codepage) {
-            case CodePage.koi8u: len = utf8Encode(ubuf[], koi2uni(str.ptr[0])); break;
-            case CodePage.cp1251: len = utf8Encode(ubuf[], cp12512uni(str.ptr[0])); break;
-            case CodePage.cp866: len = utf8Encode(ubuf[], cp8662uni(str.ptr[0])); break;
-          }
-          */
-          len = utf8Encode(ubuf[], koi2uni(str.ptr[0]));
+          int len = utf8Encode(ubuf[], koi2uni(str.ptr[0]));
           if (len < 1) { ubuf[0] = '?'; len = 1; }
           if (inPasteMode <= 0) {
             insertText!("end", true)(curpos, ubuf[0..len]);
@@ -2517,7 +2474,7 @@ public:
 
   // ////////////////////////////////////////////////////////////////////// //
   // actions
-  protected final bool pushUndoCurPos () nothrow @nogc {
+  final bool pushUndoCurPos () nothrow @nogc {
     return (undo !is null ? undo.addCurMove(this) : false);
   }
 
@@ -2769,7 +2726,7 @@ public:
     growBlockMark();
   }
 
-  // "allMembers" trair: shut the fuck up!
+  // "allMembers" trait: shut the fuck up!
   /*private*/protected void doUndoRedo (UndoStack us) {
     if (us is null) return;
     killTextOnChar = false;
@@ -2905,11 +2862,11 @@ protected:
 public:
   // range interface to editor text
   // WARNING! do not change anything while range is active, or results *WILL* be UD
-  TextRange opSlice (usize lo, usize hi) nothrow @nogc { return TextRange(this, lo, hi); }
-  TextRange opSlice () nothrow @nogc { return TextRange(this, 0, gb.textsize); }
-  int opDollar () nothrow @nogc { return gb.textsize; }
+  final TextRange opSlice (usize lo, usize hi) nothrow @nogc { return TextRange(this, lo, hi); }
+  final TextRange opSlice () nothrow @nogc { return TextRange(this, 0, gb.textsize); }
+  final int opDollar () nothrow @nogc { return gb.textsize; }
 
-  TextRange markedBlockRange () nothrow @nogc {
+  final TextRange markedBlockRange () nothrow @nogc {
     if (!hasMarkedBlock) return TextRange.init;
     return TextRange(this, bstart, bend);
   }
