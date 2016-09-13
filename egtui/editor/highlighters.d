@@ -591,6 +591,7 @@ public:
       }
       // punctuation token
       if (tks.punctCanStartWith(ch)) {
+        bool isdollar = (ch == '$');
         ubyte tknum = ubyte.max;
         uint tkbest = 1;
         char[128] tk = void;
@@ -604,10 +605,40 @@ public:
             tkbest = tklen;
           }
         }
+        if (tknum == ubyte.max && isdollar && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) goto sigil;
         st = HS(tknum != ubyte.max ? tknum : HiPunct);
         foreach (immutable cp; 0..tkbest) gb.hi(spos++) = st;
         continue mainloop;
       }
+      // shell sigils
+      if (ch == '$' && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) {
+       sigil:
+        st = HS(HiSpecial);
+        gb.hi(spos++) = st;
+        if (gb[spos] == '{') {
+          // complex sigil
+          while (spos < le) {
+            ch = gb[spos];
+            if (ch != '}') {
+              gb.hi(spos++) = st;
+            } else {
+              break;
+            }
+          }
+        } else {
+          // simple sigil
+          while (spos < le) {
+            ch = gb[spos];
+            if (ch.isalnum || ch == '.' || ch == '_') {
+              gb.hi(spos++) = st;
+            } else {
+              break;
+            }
+          }
+        }
+        st = HS(HiText);
+      }
+      // normal text
       st = HS(HiText);
       gb.hi(spos++) = st;
     }
@@ -733,6 +764,7 @@ public:
     BodyIsSpecial = 1U<<12, // is "body" token special? (aliced)
     CPreprocessor = 1U<<13, // does this language use C preprocessor?
     JSRegExp      = 1U<<14, // parse JS inline regexps?
+    ShellSigil    = 1U<<15, // parse shell sigils?
   }
   static assert(Opt.max <= uint.max);
 
@@ -800,6 +832,7 @@ class EdHiTokensD : EdHiTokens {
       Opt.BodyIsSpecial|
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
+      //Opt.ShellSigil|
       0;
 
     addToken("this", HiInternal);
@@ -1038,6 +1071,7 @@ class EdHiTokensJS : EdHiTokens {
       //Opt.BodyIsSpecial|
       //Opt.CPreprocessor|
       Opt.JSRegExp|
+      //Opt.ShellSigil|
       0;
 
     addToken("arguments", HiKeyword);
@@ -1147,6 +1181,7 @@ class EdHiTokensC : EdHiTokens {
       //Opt.BodyIsSpecial|
       Opt.CPreprocessor|
       //Opt.JSRegExp|
+      //Opt.ShellSigil|
       0;
 
     addToken("auto", HiKeyword);
@@ -1232,6 +1267,79 @@ class EdHiTokensC : EdHiTokens {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+class EdHiTokensShell : EdHiTokens {
+  this () {
+    options =
+      //Opt.Num0b|
+      //Opt.Num0o|
+      //Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      Opt.SQString|
+      Opt.BQString|
+      //Opt.RQString|
+      //Opt.DNestedComment|
+      Opt.ShellSingleComment|
+      //Opt.CSingleComment|
+      //Opt.CMultiComment|
+      //Opt.BodyIsSpecial|
+      //Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      Opt.ShellSigil|
+      0;
+
+    addToken("{", HiPunct);
+    addToken("}", HiPunct);
+
+    addToken("$*", HiInternal);
+    addToken("$@", HiInternal);
+    addToken("$#", HiInternal);
+    addToken("$?", HiInternal);
+    addToken("$-", HiInternal);
+    addToken("$$", HiInternal);
+    addToken("$!", HiInternal);
+    addToken("$_", HiInternal);
+
+    addToken("2>&1", HiInternal);
+    addToken("2>&2", HiInternal);
+    addToken("2>", HiInternal);
+    addToken("1>", HiInternal);
+
+    addToken(";", HiSemi);
+
+    addToken("break", HiKeyword);
+    addToken("case", HiKeyword);
+    addToken("clear", HiKeyword);
+    addToken("continue", HiKeyword);
+    addToken("declare", HiKeyword);
+    addToken("done", HiKeyword);
+    addToken("do", HiKeyword);
+    addToken("elif", HiKeyword);
+    addToken("else", HiKeyword);
+    addToken("esac", HiKeyword);
+    addToken("exit", HiKeyword);
+    addToken("export", HiKeyword);
+    addToken("fi", HiKeyword);
+    addToken("for", HiKeyword);
+    addToken("getopts", HiKeyword);
+    addToken("if", HiKeyword);
+    addToken("in", HiKeyword);
+    addToken("read", HiKeyword);
+    addToken("return", HiKeyword);
+    addToken("select", HiKeyword);
+    addToken("shift", HiKeyword);
+    addToken("source", HiKeyword);
+    addToken("then", HiKeyword);
+    addToken("trap", HiKeyword);
+    addToken("until", HiKeyword);
+    addToken("unset", HiKeyword);
+    addToken("wait", HiKeyword);
+    addToken("while", HiKeyword);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 // new higlighter instance for the file with the given extension
 public __gshared EditorHL getHiglighterFor (const(char)[] ext, const(char)[] fullname) {
   if (ext.strEquCI(".d")) {
@@ -1248,6 +1356,11 @@ public __gshared EditorHL getHiglighterFor (const(char)[] ext, const(char)[] ful
     __gshared EdHiTokensC toksc;
     if (toksc is null) toksc = new EdHiTokensC();
     return new EditorHLExt(toksc);
+  }
+  if (ext.strEquCI(".sh") || ext.strEquCI(".profile")) {
+    __gshared EdHiTokensShell tokssh;
+    if (tokssh is null) tokssh = new EdHiTokensShell();
+    return new EditorHLExt(tokssh);
   }
   auto bnpos = fullname.length;
   while (bnpos > 0 && fullname.ptr[bnpos-1] != '/') --bnpos;

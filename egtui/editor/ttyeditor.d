@@ -1469,7 +1469,7 @@ final:
         epos -= caps[0].e-caps[0].s;
         epos += replen;
       } else {
-        epos = caps[0].s;
+        epos = caps[0].s+replen;
       }
       if (doAll) ++count;
     }
