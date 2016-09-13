@@ -58,6 +58,8 @@ public enum {
   // normal string
   HiString,
   HiStringSpecial,
+  HiSQString,
+  HiSQStringSpecial,
   // backquoted string
   HiBQString,
   // rquoted string
@@ -107,10 +109,12 @@ public uint hiColor() (in auto ref GapBuffer.HighState hs) nothrow @safe @nogc {
 
     // normal string
     case HiString:
+    case HiSQString:
     case HiBQString:
     case HiRQString:
       return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0xb2), TextBG); // 6,237
     case HiStringSpecial:
+    case HiSQStringSpecial:
       return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TextBG); // 14,237
       //return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TextBG); // 2,237
 
@@ -296,6 +300,23 @@ public:
         st = HS(HiString);
         continue mainloop;
       }
+      // in single-quoted string?
+      if (st.kwtype == HiSQString || st.kwtype == HiSQStringSpecial) {
+        while (spos <= le) {
+          auto len = skipStrChar!(true, true)();
+          if (len == 0) { st = HS(HiText); continue mainloop; }
+          if (len == 1) {
+            // normal
+            gb.hi(spos++) = HS(HiSQString);
+            if (gb[spos-1] == '\'') { st = HS(HiText); continue mainloop; }
+          } else {
+            // special
+            foreach (immutable _; 0..len) gb.hi(spos++) = HS(HiSQStringSpecial);
+          }
+        }
+        st = HS(HiSQString);
+        continue mainloop;
+      }
       // in backquoted string?
       if (st.kwtype == HiBQString) {
         while (spos <= le) {
@@ -439,6 +460,12 @@ public:
       if (ch == '"') {
         gb.hi(spos++) = HS(HiString);
         st = HS(HiString);
+        continue mainloop;
+      }
+      // string?
+      if (ch == '\'' && tks.optSQString) {
+        gb.hi(spos++) = HS(HiSQString);
+        st = HS(HiSQString);
         continue mainloop;
       }
       // bqstring?

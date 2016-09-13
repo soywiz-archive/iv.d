@@ -772,6 +772,8 @@ public:
       case HiCharSpecial:
       case HiString:
       case HiStringSpecial:
+      case HiSQString:
+      case HiSQStringSpecial:
       case HiBQString:
       case HiRQString:
         return false;
@@ -796,6 +798,8 @@ public:
         case HiCharSpecial:
         case HiString:
         case HiStringSpecial:
+        case HiSQString:
+        case HiSQStringSpecial:
         case HiBQString:
         case HiRQString:
           return false;
