@@ -273,6 +273,8 @@ public:
       } else if (ch == 'u' || ch == 'U') {
         ++ofs;
         if (gb[spos+ofs] == 'L') ++ofs;
+      } else if (ch == 'f') {
+        ++ofs;
       }
     }
 
@@ -469,7 +471,7 @@ public:
             st = HS(tknum);
           } else {
             // sorry
-            if (tks.optBodyIsSpecial && tk[0..tklen] == "body") {
+            if (tk[0..tklen] == "body" && tks.optBodyIsSpecial) {
               int xofs = spos+tklen;
               for (;;) {
                 ch = gb[xofs];
@@ -567,14 +569,22 @@ private final:
 
   bool isDecStart (int pos) nothrow @nogc {
     auto ch = gb[pos];
-    if (ch == '-' || ch == '+') ch = gb[++pos];
-    return ch.isdigit;
+    if (ch == '-' || ch == '+') {
+      if (!tks.optNumAllowSign) return false;
+      ch = gb[++pos];
+    }
+    if (ch.isdigit) return true;
+    // floating can start with '.<digit>'
+    return (ch == '.' && gb[pos+1].isdigit);
   }
 
   // 0 or base
   int isBasedStart (int pos) nothrow @nogc {
     auto ch = gb[pos++];
-    if (ch == '-' || ch == '+') ch = gb[pos++];
+    if (ch == '-' || ch == '+') {
+      if (!tks.optNumAllowSign) return 0;
+      ch = gb[pos++];
+    }
     if (ch != '0') return 0;
     ch = gb[pos++];
     int base = 0;
@@ -648,6 +658,7 @@ public:
   abstract @property bool optNum0o () const pure nothrow @safe @nogc;
   abstract @property bool optNum0x () const pure nothrow @safe @nogc;
   abstract @property bool optNumAllowUnder () const pure nothrow @safe @nogc;
+  abstract @property bool optNumAllowSign () const pure nothrow @safe @nogc;
 
   // true: string can be single-quoted
   abstract @property bool optSQString () const pure nothrow @safe @nogc;
@@ -667,6 +678,7 @@ public:
   // "body" token is special? (aliced)
   abstract @property bool optBodyIsSpecial () const pure nothrow @safe @nogc;
 
+  // parse JS inline regexps
   abstract @property bool optJSRegExp () const pure nothrow @safe @nogc;
 
 final:
@@ -716,6 +728,7 @@ class EdHiTokensD : EdHiTokens {
   override @property bool optNum0o () const pure nothrow @safe @nogc { return true; }
   override @property bool optNum0x () const pure nothrow @safe @nogc { return true; }
   override @property bool optNumAllowUnder () const pure nothrow @safe @nogc { return true; }
+  override @property bool optNumAllowSign () const pure nothrow @safe @nogc { return false; }
 
   // true: string can be single-quoted
   override @property bool optSQString () const pure nothrow @safe @nogc { return false; }
@@ -735,6 +748,7 @@ class EdHiTokensD : EdHiTokens {
   // "body" token is special? (aliced)
   override @property bool optBodyIsSpecial () const pure nothrow @safe @nogc { return true; }
 
+  // parse JS inline regexps
   override @property bool optJSRegExp () const pure nothrow @safe @nogc { return false; }
 
   this () {
@@ -962,6 +976,7 @@ class EdHiTokensJS : EdHiTokens {
   override @property bool optNum0o () const pure nothrow @safe @nogc { return false; }
   override @property bool optNum0x () const pure nothrow @safe @nogc { return true; }
   override @property bool optNumAllowUnder () const pure nothrow @safe @nogc { return false; }
+  override @property bool optNumAllowSign () const pure nothrow @safe @nogc { return false; }
 
   // true: string can be single-quoted
   override @property bool optSQString () const pure nothrow @safe @nogc { return true; }
@@ -1079,6 +1094,7 @@ class EdHiTokensC : EdHiTokens {
   override @property bool optNum0o () const pure nothrow @safe @nogc { return false; }
   override @property bool optNum0x () const pure nothrow @safe @nogc { return true; }
   override @property bool optNumAllowUnder () const pure nothrow @safe @nogc { return false; }
+  override @property bool optNumAllowSign () const pure nothrow @safe @nogc { return false; }
 
   // true: string can be single-quoted
   override @property bool optSQString () const pure nothrow @safe @nogc { return false; }
