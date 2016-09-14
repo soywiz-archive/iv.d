@@ -301,10 +301,11 @@ void main() {
 pure nothrow @system @nogc:
 version(linux) {
   extern(C) inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
+  extern(C) inout(void)* memrchr (inout(void)* s, int ch, size_t slen);
 } else {
   inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
     // size_t is unsigned
-    if (needlelen > haystacklen) return null;
+    if (needlelen > haystacklen || needlelen == 0) return null;
     auto h = cast(const(ubyte)*)haystack;
     auto n = cast(const(ubyte)*)needle;
     foreach (immutable i; 0..haystacklen-needlelen+1) {
@@ -320,13 +321,27 @@ inout(void)* memrmem (inout(void)* haystack, size_t haystacklen, inout(void)* ne
   auto h = cast(const(ubyte)*)haystack;
   const(ubyte)* res = null;
   // size_t is unsigned
-  if (needlelen > haystacklen) return null;
-  size_t pos = 0;
-  while (pos < haystacklen-needlelen+1) {
-    auto ff = memmem(haystack+pos, haystacklen-pos, needle, needlelen);
-    if (ff is null) break;
-    res = cast(const(ubyte)*)ff;
-    pos = cast(size_t)(res-haystack)+1;
+  if (needlelen > haystacklen || needlelen == 0) return null;
+  version(none) {
+    size_t pos = 0;
+    while (pos < haystacklen-needlelen+1) {
+      auto ff = memmem(haystack+pos, haystacklen-pos, needle, needlelen);
+      if (ff is null) break;
+      res = cast(const(ubyte)*)ff;
+      pos = cast(size_t)(res-haystack)+1;
+    }
+    return cast(void*)res;
+  } else {
+    auto n = cast(const(ubyte)*)needle;
+    size_t len = haystacklen-needlelen+1;
+    while (len > 0) {
+      import core.stdc.string : memcmp;
+      auto ff = cast(const(ubyte)*)memrchr(haystack, *n, len);
+      if (ff is null) break;
+      if (memcmp(ff, needle, needlelen) == 0) return cast(void*)ff;
+      //if (ff is h) break;
+      len = cast(size_t)(ff-haystack);
+    }
+    return null;
   }
-  return cast(void*)res;
 }
