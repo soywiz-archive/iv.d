@@ -82,7 +82,7 @@ shared static this () {
   tuiPalette[TuiPaletteError].title = XtColorFB!(ttyRgb2Color(0xff, 0xff, 0x5f), ttyRgb2Color(0x5f, 0x00, 0x00)); // 227,52
 
   if (termType == TermType.linux) {
-    ttyBeep();
+    //ttyBeep();
     tuiPalette[TuiPaletteNormal].def = XtColorFB!(ttyRgb2Color(0xd0, 0xd0, 0xd0), ttyRgb2Color(0x18, 0x18, 0xb2));
     tuiPalette[TuiPaletteNormal].title = XtColorFB!(ttyRgb2Color(0xd7, 0xaf, 0x87), ttyRgb2Color(0x18, 0x18, 0xb2));
     tuiPalette[TuiPaletteNormal].disabled = XtColorFB!(ttyRgb2Color(0x94, 0x94, 0x94), ttyRgb2Color(0x18, 0x18, 0xb2));
