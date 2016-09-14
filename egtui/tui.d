@@ -1870,7 +1870,7 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
       auto ev = ctx.getEvent();
       if (ev.type == FuiEvent.Type.Close) return ev.result;
       if (ctx.processEvent(ev)) continue;
-      if (ev.type == FuiEvent.Type.Key && ev.key == "^F3") windowMovingKeys = true;
+      if (ev.type == FuiEvent.Type.Key && (ev.key == "^F3" || ev.key == "S-F3")) windowMovingKeys = true;
     }
     return -666;
   }
