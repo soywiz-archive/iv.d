@@ -333,6 +333,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
     int alert = -1;
     int utfuck = -1;
     int enterclose = -1;
+    int resetsize = -1;
     DynStr id;
     DynStr caption;
     DynStr hgroup;
@@ -410,6 +411,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       if (ts.strEquCI("alert")) { alert = getBool(); return true; }
       if (ts.strEquCI("utfuck")) { utfuck = getBool(); return true; }
       if (ts.strEquCI("enter-close")) { enterclose = getBool(); return true; }
+      if (ts.strEquCI("reset-size")) { resetsize = getBool(); return true; }
       return false;
     }
   }
@@ -552,6 +554,10 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       if (props.hv >= 0) lp.vertical = (props.hv != 0);
       if (props.def >= 0) lp.userFlags = (lp.userFlags&~FuiCtlUserFlags.Default)|(props.def > 0 ? FuiCtlUserFlags.Default : 0);
       if (props.wpalign >= 0) lp.aligning = cast(FuiLayoutProps.Align)props.wpalign;
+      if (props.resetsize > 0) {
+        lp.minSize = FuiSize(1, 1);
+        lp.maxSize = FuiSize(int.max-1024, int.max-1024);
+      }
       if (props.minw >= 0) lp.minSize.w = props.minw;
       if (props.minh >= 0) lp.minSize.h = props.minh;
       if (props.maxw >= 0) lp.maxSize.w = props.maxw;

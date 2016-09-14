@@ -1017,6 +1017,25 @@ struct FuiCtlTextView {
 }
 
 
+// width (postition.w) must be already determined
+int textviewHeight (FuiContext ctx, int item) {
+  if (auto lp = ctx.layprops(item)) {
+    int w = lp.position.w;
+    if (w < 1) w = lp.minSize.w;
+    if (w < 1) w = lp.maxSize.w;
+    if (w < 1) return 0;
+    if (auto data = ctx.itemAs!"textview"(item)) {
+      if (data.textlen) {
+        int c, r;
+        data.textlen = calcTextBoundsEx(c, r, data.text.ptr[0..data.textlen], w);
+        return r;
+      }
+    }
+  }
+  return 0;
+}
+
+
 // `actcb` will be called *after* editor was changed (or not changed, who knows)
 int textview (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) {
   if (!ctx.valid) return -1;
@@ -1037,9 +1056,13 @@ int textview (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) 
     data.text.ptr[0..text.length] = text[];
     int c, r;
     data.textlen = calcTextBoundsEx(c, r, data.text.ptr[0..data.textlen], ttyw-8);
-    //with (ctx.layprops(item).maxSize) { w = c; h = r; }
-    with (ctx.layprops(item).minSize) { w = c+2; h = r; }
-    //with (ctx.layprops(item).minSize) { w = 2; h = 1; }
+    //!//with (ctx.layprops(item).maxSize) { w = c; h = r; }
+    //!//with (ctx.layprops(item).minSize) { w = 2; h = 1; }
+    //with (ctx.layprops(item).minSize) { w = c+2; h = r; }
+    //int minsz = r;
+    //if (minsz > ttyh-ttyh/3) minsz = ttyh-ttyh/3;
+    with (ctx.layprops(item).minSize) { w = c+2; h = 3; }
+    with (ctx.layprops(item).maxSize) { w = c+2; h = r; }
   }
   data.drawcb = delegate (FuiContext ctx, int self, FuiRect rc) {
     if (rc.w < 1 || rc.h < 1) return;
@@ -1056,7 +1079,7 @@ int textview (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) 
     win.fill(0, 0, rc.w, rc.h);
     if (data.textlen) {
       int c, r;
-      data.textlen = calcTextBoundsEx(c, r, data.text.ptr[0..data.textlen], rc.w-lp.padding.left-lp.padding.right);
+      data.textlen = calcTextBoundsEx(c, r, data.text.ptr[0..data.textlen], rc.w/*-lp.padding.left-lp.padding.right*/);
       if (data.topline < 0) data.topline = 0;
       if (data.topline+rc.h >= r) {
         data.topline = r-rc.h;

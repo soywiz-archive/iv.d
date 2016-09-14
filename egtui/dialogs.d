@@ -169,12 +169,13 @@ void dialogTextView (const(char)[] title, const(char)[] text) {
 
     max-width: $winmw
     max-height: $winmh
+    height: $winmh
 
     textview: {
       id: "text"
       text: "$text"
       max-width: $mw
-      max-height: $mh
+      //max-height: $mh
       flex: 1  // eat all possible vertical space
       can-be-focused
     }
@@ -189,7 +190,8 @@ void dialogTextView (const(char)[] title, const(char)[] text) {
   };
 
   int winmw = ttyw-8;
-  int winmh = ttyh-6;
+  int winmh = ttyh-4;
+  //winmh = 24;
 
   int mw = winmw-6;
   int mh = winmh-6;
@@ -197,5 +199,13 @@ void dialogTextView (const(char)[] title, const(char)[] text) {
   auto ctx = FuiContext.create();
   ctx.parse!(title, text, mw, mh, winmw, winmh)(laydesc);
   ctx.relayout();
+  int th = ctx.textviewHeight(ctx["text"]);
+  if (th < mh) {
+    // fix size and relayout
+    auto lpr = ctx.layprops(0);
+    lpr.minSize.h = lpr.maxSize.h = lpr.position.h-(mh-th);
+    lpr.position.y = 0; // make sure that `modalDialog()` will center it
+    ctx.relayout();
+  }
   ctx.modalDialog;
 }
