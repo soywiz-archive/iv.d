@@ -580,7 +580,7 @@ public:
         } else if (ch == ech) {
           if (--level == 0) {
             int rx, ry;
-            gb.pos2xy(pos, rx, ry);
+            gb.pos2xyVT(pos, rx, ry);
             if (rx >= mXOfs || rx < mXOfs+winw) {
               if (ry >= mTopLine && ry < mTopLine+winh) {
                 auto win = XtWindow(winx, winy, winw, winh);
@@ -623,10 +623,10 @@ public:
                   ls = lineFindFirstNonSpace(stpos);
                 } else if (dir < 0) {
                   // closing
-                  gb.pos2xy(stpos, rx, ry);
+                  gb.pos2xyVT(stpos, rx, ry);
                   ls = lineFindFirstNonSpace(pos);
                 }
-                gb.pos2xy(ls, stx, sty);
+                gb.pos2xyVT(ls, stx, sty);
                 if (stx == rx) {
                   markLinesDirtySE(sty+1, ry-1);
                   rx -= mXOfs;
@@ -650,7 +650,7 @@ public:
   protected final void drawPartHighlight (int pos, int count, uint clr) {
     if (pos >= 0 && count > 0 && pos < gb.textsize) {
       int rx, ry;
-      gb.pos2xy(pos, rx, ry);
+      gb.pos2xyVT(pos, rx, ry);
       auto oldclr = xtGetColor;
       scope(exit) xtSetColor(oldclr);
       if (ry >= topline && ry < topline+winh) {
@@ -905,7 +905,7 @@ public:
       acp = aclist[0];
     } else {
       int rx, ry;
-      gb.pos2xy(tkstpos, rx, ry);
+      gb.pos2xyVT(tkstpos, rx, ry);
       //int residx = promptSelect(aclist[0..acused], winx+(rx-mXOfs), winy+(ry-mTopLine)+1);
       int residx = dialogSelectAC(aclist[0..acused], winx+(rx-mXOfs), winy+(ry-mTopLine)+1);
       if (residx < 0) return;
