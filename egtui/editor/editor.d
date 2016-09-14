@@ -1650,6 +1650,15 @@ public:
         //gb.pos2xy(pos, cx, cy);
       }
     }
+
+    ubyte tabsize () const pure { pragma(inline, true); return gb.tabsize; }
+    void tabsize (ubyte v) {
+      pragma(inline, true);
+      if (gb.tabsize != v) {
+        gb.tabsize = v;
+        if (gb.visualtabs) fullDirty();
+      }
+    }
   }
 
   final void fullDirty () nothrow @safe @nogc { dirtyLines[] = true; }
