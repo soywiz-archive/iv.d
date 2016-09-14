@@ -1861,12 +1861,16 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
     );
   }
 
+  bool windowMovingMouse, windowMovingKeys;
+  int wmX, wmY;
+
   int processContextEvents () {
     ctx.update();
     while (ctx.hasEvents) {
       auto ev = ctx.getEvent();
       if (ev.type == FuiEvent.Type.Close) return ev.result;
       if (ctx.processEvent(ev)) continue;
+      if (ev.type == FuiEvent.Type.Key && ev.key == "^F3") windowMovingKeys = true;
     }
     return -666;
   }
@@ -1886,31 +1890,34 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
   saveArea();
   scope(exit) xtPopArea();
 
-  bool windowMoving;
-  int wmX, wmY;
-
   ctx.drawShadow();
   for (;;) {
     int res = processContextEvents();
     if (res >= -1) return res;
-    if (windowMoving) ctx.dialogMoving = true;
+    if (windowMovingMouse || windowMovingKeys) ctx.dialogMoving = true;
     ctx.draw;
-    if (windowMoving) ctx.dialogMoving = false;
+    if (windowMovingMouse || windowMovingKeys) ctx.dialogMoving = false;
     xtFlush(); // show screen
     auto key = ttyReadKey(-1, TtyDefaultEscWait);
     if (key.key == TtyKey.Key.Error) { return -1; }
     if (key.key == TtyKey.Key.Unknown) continue;
-    if (key.key == TtyKey.Key.Escape) { return -1; }
+    if (!windowMovingKeys && key.key == TtyKey.Key.Escape) { return -1; }
     if (key == "^L") { xtFullRefresh(); continue; }
     int dx = 0, dy = 0;
     if (key == "M-Left") dx = -1;
     if (key == "M-Right") dx = 1;
     if (key == "M-Up") dy = -1;
     if (key == "M-Down") dy = 1;
+    if (windowMovingKeys) {
+      if (key == "Left") dx = -1;
+      if (key == "Right") dx = 1;
+      if (key == "Up") dy = -1;
+      if (key == "Down") dy = 1;
+    }
     // move dialog with mouse
-    if (windowMoving && key.mouse) {
+    if (windowMovingMouse && key.mouse) {
       if (key.mrelease && key.button == 0) {
-        windowMoving = false;
+        windowMovingMouse = false;
         continue;
       }
       dx = key.x-wmX;
@@ -1926,12 +1933,16 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
       ctx.drawShadow();
       continue;
     }
-    if (windowMoving) continue;
+    if (windowMovingKeys) {
+      if (key == "Escape") windowMovingKeys = false;
+      continue;
+    }
+    if (windowMovingMouse) continue;
     if (key.mouse) {
       //TODO: check for no frame when we'll get that
       if (key.mpress && key.button == 0 && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
         if ((key.y == ctx.layprops(0).position.y) || (ctx.dialogFrame == FuiDialogFrameType.Normal && key.y == ctx.layprops(0).position.y+1)) {
-          windowMoving = true;
+          windowMovingMouse = true;
           wmX = key.x;
           wmY = key.y;
           continue;
