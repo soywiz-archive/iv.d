@@ -38,6 +38,7 @@ public:
   // utfuck-8 support
   // WARNING! this will SIGNIFICANTLY slow down coordinate calculations!
   bool utfuck = false;
+  bool visualtabs = false;
 
 private:
   HighState hidummy;
@@ -175,6 +176,39 @@ final:
       if (fp !is null) return pos+cast(int)(fp-stx);
     }
     return ts;
+  }
+
+  // use `memchr`, jumps over gap
+  public int fastFindCharIn (int pos, int len, char ch) {
+    import core.stdc.string : memchr;
+    auto ts = tbused;
+    if (len < 1) return -1;
+    if (ts == 0 || pos >= ts) return -1;
+    if (pos < 0) {
+      if (pos <= -len) return -1;
+      len += pos;
+      pos = 0;
+    }
+    int left;
+    // check text before gap
+    if (pos < gapstart) {
+      left = gapstart-pos;
+      if (left > len) left = len;
+      auto fp = cast(char*)memchr(tbuf+pos, ch, left);
+      if (fp !is null) return cast(int)(fp-tbuf);
+      if ((len -= left) == 0) return -1;
+      pos = gapstart; // new starting position
+    }
+    assert(pos >= gapstart);
+    // check after gap and to text end
+    left = ts-pos;
+    if (left > len) left = len;
+    if (left > 0) {
+      auto stx = tbuf+gapend+(pos-gapstart);
+      auto fp = cast(char*)memchr(stx, ch, left);
+      if (fp !is null) return pos+cast(int)(fp-stx);
+    }
+    return -1;
   }
 
   // bufparts range
@@ -756,15 +790,32 @@ public:
 private:
   static align(1) struct Action {
   align(1):
+    enum Flag : ubyte {
+      BlockMarking = 1<<0, // block marking state
+      LastBE = 1<<1, // last block move was at end?
+      Changed = 1<<2, // "changed" flag
+      VisTabs = 1<<3, // editor was in "visual tabs" mode
+    }
+
+    @property nothrow @safe @nogc pure {
+      bool bmarking () const { pragma(inline, true); return (flags&Flag.BlockMarking) != 0; }
+      bool lastbe () const { pragma(inline, true); return (flags&Flag.LastBE) != 0; }
+      bool txchanged () const { pragma(inline, true); return (flags&Flag.Changed) != 0; }
+      bool vistabs () const { pragma(inline, true); return (flags&Flag.VisTabs) != 0; }
+
+      void bmarking (bool v) { pragma(inline, true); if (v) flags |= Flag.BlockMarking; else flags &= ~Flag.BlockMarking; }
+      void lastbe (bool v) { pragma(inline, true); if (v) flags |= Flag.LastBE; else flags &= ~Flag.LastBE; }
+      void txchanged (bool v) { pragma(inline, true); if (v) flags |= Flag.Changed; else flags &= ~Flag.Changed; }
+      void vistabs (bool v) { pragma(inline, true); if (v) flags |= Flag.VisTabs; else flags &= ~Flag.VisTabs; }
+    }
+
     Type type;
     int pos;
     int len;
     // after undoing action
     int cx, cy, topline, xofs;
     int bs, be; // block position
-    bool bmarking; // block marking state
-    bool lastbe; // last block move was at end?
-    bool txchanged; // "changed" flag
+    ubyte flags;
     // data follows
     char[0] data;
   }
@@ -1018,6 +1069,7 @@ public:
 
   private void fillCurPos (Action* ua, Editor ed) nothrow @trusted @nogc {
     if (ua !is null && ed !is null) {
+      //TODO: correct x according to "visual tabs" mode (i.e. make it "normal x")
       ua.cx = ed.cx;
       ua.cy = ed.cy;
       ua.topline = ed.mTopLine;
@@ -1027,6 +1079,7 @@ public:
       ua.bmarking = ed.markingBlock;
       ua.lastbe = ed.lastBGEnd;
       ua.txchanged = ed.txchanged;
+      ua.vistabs = ed.visualtabs;
     }
   }
 
@@ -1034,7 +1087,8 @@ public:
     if (auto lu = lastUndoHead()) {
       if (lu.type == Type.CurMove) {
         if (lu.cx == ed.cx && lu.cy == ed.cy && lu.topline == ed.mTopLine && lu.xofs == ed.mXOfs &&
-            lu.bs == ed.bstart && lu.be == ed.bend && lu.bmarking == ed.markingBlock && lu.lastbe == ed.lastBGEnd) return true;
+            lu.bs == ed.bstart && lu.be == ed.bend && lu.bmarking == ed.markingBlock &&
+            lu.lastbe == ed.lastBGEnd && lu.vistabs == ed.visualtabs) return true;
       }
     }
     if (!asRedo && !fromRedo && ed.redo !is null) ed.redo.clear();
@@ -1147,6 +1201,8 @@ public:
     ed.bend = ua.be;
     ed.markingBlock = ua.bmarking;
     ed.lastBGEnd = ua.lastbe;
+    // don't restore "visual tabs" mode
+    //TODO: correct x according to "visual tabs" mode (i.e. make it "visual x")
     ed.cx = ua.cx;
     ed.cy = ua.cy;
     ed.mTopLine = ua.topline;
@@ -1488,6 +1544,7 @@ public:
       }
       if (udc.invalid) return cast(dchar)(this[spos]);
       return dch;
+
     }
 
     bool textChanged () const pure { pragma(inline, true); return txchanged; }
@@ -1505,6 +1562,16 @@ public:
       if (v != mTopLine) {
         pushUndoCurPos();
         mTopLine = v;
+      }
+    }
+
+    bool visualtabs () const pure { pragma(inline, true); return gb.visualtabs; }
+    void visualtabs (bool v) {
+      if (gb.visualtabs != v) {
+        auto pos = curpos;
+        gb.visualtabs = v;
+        fullDirty();
+        gb.pos2xy(pos, cx, cy);
       }
     }
   }

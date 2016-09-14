@@ -1715,6 +1715,8 @@ final:
   @TEDKey("^K C-space", "remove trailing spaces")
   @TEDEditOnly
     void tedKmodeCtrlSpace () { doRemoveTailingSpaces(); }
+  @TEDKey("^K ^T", /*"toggle \"visual tabs\" mode"*/)
+    void tedKmodeCtrlT () { visualtabs = !visualtabs; }
 
   @TEDKey("^K ^B") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlB () { doSetBlockStart(); }
   @TEDKey("^K ^K") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlK () { doSetBlockEnd(); }
