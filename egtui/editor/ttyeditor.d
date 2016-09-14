@@ -341,7 +341,7 @@ public:
     // draw prompt if it is active
     if (mPromptActive) { mPromptInput.drawCursor(); return; }
     int rx, ry;
-    gb.pos2xy(curpos, rx, ry);
+    gb.pos2xyVT(curpos, rx, ry);
     xtGotoXY(winx+rx-mXOfs, winy+ry-topline);
   }
 
@@ -350,20 +350,24 @@ public:
     xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0xb2, 0xb2, 0xb2)); // 0,7
     xtWriteCharsAt(winx, winy-1, winw, ' ');
     import core.stdc.stdio : snprintf;
-    int rx, ry;
     auto cp = curpos;
     auto c = cast(uint)gb[cp];
     char[512] buf = void;
+    auto sx = cx;
+    if (visualtabs) {
+      int ry;
+      gb.pos2xyVT(cp, sx, ry);
+    }
     if (!utfuck) {
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u",
-        (textChanged ? '*' : ' '), cx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
+        (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
       if (len > winw) len = winw;
       xtWriteStrAt(winx, winy-1, buf[0..len]);
     } else {
       dchar dch = dcharAt(cp);
       if (dch > dchar.max) dch = 0;
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u  U%04X",
-        (textChanged ? '*' : ' '), cx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
+        (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
       if (len > winw) len = winw;
       xtWriteStrAt(winx, winy-1, buf[0..len]);
     }
@@ -379,6 +383,8 @@ public:
   // use `winXXX` vars to know window dimensions
   //FIXME: clean this up!
   protected override void drawLine (int lidx, int yofs, int xskip) {
+    immutable vt = visualtabs;
+    immutable tabsz = gb.tabsize;
     auto pos = gb.line2pos(lidx);
     int x = -xskip;
     int y = winy+yofs;
@@ -414,7 +420,7 @@ public:
       } else if (hasHL) {
         // has highlighter
         if (pos-1 >= trspos) {
-          ch = '.';
+          if (ch != '\t') ch = '.';
           if (!killTextOnChar && !singleline) xtSetColor(TrailSpaceColor); else xtSetColor(sltextClr);
         } else if (ch < ' ' || ch == 127) {
           if (!killTextOnChar && !singleline) xtSetColor(BadColor); else xtSetColor(sltextClr);
@@ -425,7 +431,7 @@ public:
       } else {
         // no highlighter
         if (pos-1 >= trspos) {
-          ch = '.';
+          if (ch != '\t') ch = '.';
           if (!killTextOnChar && !singleline) xtSetColor(TrailSpaceColor); else xtSetColor(sltextClr);
         } else if (ch < ' ' || ch == 127) {
           if (!killTextOnChar && !singleline) xtSetColor(BadColor); else xtSetColor(sltextClr);
@@ -440,7 +446,20 @@ public:
       }
       if (ch == '\n') break;
       if (x < winw) {
-        if (!utfucked) {
+        if (vt && ch == '\t') {
+          int ex = ((x+tabsz)/tabsz)*tabsz;
+          if (ex > 0) {
+            int sz = ex-x;
+            if (sz > 1) {
+              xtWriteCharsAt(winx+x, y, 1, '<');
+              xtWriteCharsAt(winx+x+1, y, sz-2, '-');
+              xtWriteCharsAt(winx+ex-1, y, 1, '>');
+            } else {
+              xtWriteCharsAt(winx+x, y, 1, '\t');
+            }
+          }
+          x = ex-1; // compensate the following increment
+        } else if (!utfucked) {
           if (x >= 0) xtWriteCharsAt(winx+x, y, 1, recodeCharFrom(ch));
         } else {
           // utfuck
@@ -1711,7 +1730,7 @@ final:
     void tedKmodeTab () { doIndentBlock(); }
   @TEDKey("^K M-Tab", "untabify")
   @TEDEditOnly
-    void tedKmodeAltTab () { doUntabify(); } // alt+tab: untabify
+    void tedKmodeAltTab () { doUntabify(gb.tabsize ? gb.tabsize : 2); } // alt+tab: untabify
   @TEDKey("^K C-space", "remove trailing spaces")
   @TEDEditOnly
     void tedKmodeCtrlSpace () { doRemoveTailingSpaces(); }

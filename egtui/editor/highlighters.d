@@ -41,6 +41,8 @@ public enum UtfuckedColor = XtColorFB!(TtyRgb2Color!(0x6c, 0x6c, 0x6c), TtyRgb2C
 
 public enum VLineColor = XtColorFB!(TtyRgb2Color!(0x60, 0x60, 0x60), TextBG); // 252,237
 
+//public enum TabColor = XtColorFB!(TtyRgb2Color!(0x00, 0x00, 0x80), TextBG);
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 public enum {

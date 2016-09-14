@@ -39,6 +39,7 @@ public:
   // WARNING! this will SIGNIFICANTLY slow down coordinate calculations!
   bool utfuck = false;
   bool visualtabs = false;
+  ubyte tabsize = 4;
 
 private:
   HighState hidummy;
@@ -478,7 +479,7 @@ public:
 
   // convert line offset to screen x coordinate
   // `pos` should point into line (somewhere)
-  private int utfuck_pos2x (int pos) {
+  private int utfuck_pos2x(bool dotabs=false) (int pos) {
     auto ts = tbused;
     if (pos < 0) pos = 0;
     if (pos > ts) pos = ts;
@@ -489,11 +490,26 @@ public:
     int x = 0;
     mainloop: while (spos < pos) {
       auto len = utfuckLenAt(spos);
-      while (len-- > 0) {
-        if (tbuf[pos2real(spos)] == '\n') break mainloop;
+      if (len == 1) {
+        auto ch = tbuf[pos2real(spos)];
+        if (ch == '\n') break mainloop;
         ++spos;
+        static if (dotabs) {
+          if (ch == '\t' && visualtabs && tabsize > 0) {
+            x = ((x+tabsize)/tabsize)*tabsize;
+          } else {
+            ++x;
+          }
+        } else {
+          ++x;
+        }
+      } else {
+        while (len-- > 0) {
+          if (tbuf[pos2real(spos)] == '\n') break mainloop; // just in case
+          ++spos;
+        }
+        ++x;
       }
-      ++x;
     }
     return x;
   }
@@ -552,10 +568,70 @@ public:
     }
     //!assert(lcidx >= 0 && lcidx < mLineCount);
     auto ls = lineofsc[lcidx];
-    auto le = lineofsc[lcidx+1];
+    //auto le = lineofsc[lcidx+1];
     //!assert(pos >= ls && pos < le);
     y = cast(uint)lcidx;
     x = (!utfuck ? pos-ls : utfuck_pos2x(pos));
+  }
+
+  // get coordinates for the given position
+  void pos2xyVT (int pos, out int x, out int y) {
+    if (!utfuck && (!visualtabs || tabsize == 0)) { pos2xy(pos, x, y); return; }
+
+    void tabbedX() (int ls) {
+      x = 0;
+      version(none) {
+        //TODO:FIXME: fix this!
+        while (ls < pos) {
+          int tp = fastFindCharIn(ls, pos-ls, '\t');
+          if (tp < 0) { x += pos-ls; return; }
+          x += tp-ls;
+          ls = tp;
+          while (ls < pos && tbuf[pos2real(ls++)] == '\t') {
+            x = ((x+tabsize)/tabsize)*tabsize;
+          }
+        }
+      } else {
+        while (ls < pos) {
+          if (tbuf[pos2real(ls++)] == '\t') x = ((x+tabsize)/tabsize)*tabsize; else ++x;
+        }
+      }
+    }
+
+    auto ts = tbused;
+    if (pos <= 0 || ts == 0) return; // x and y autoinited
+    if (pos > ts) pos = ts;
+    if (mLineCount == 1) {
+      // y is autoinited
+      if (utfuck) { x = utfuck_pos2x!true(pos); return; }
+      if (!visualtabs || tabsize == 0) { x = pos; return; }
+      tabbedX(0);
+      return;
+    }
+    if (pos == ts) {
+      // end of text: no need to update line offset cache
+      y = mLineCount-1;
+      while (pos > 0 && tbuf[pos2real(--pos)] != '\n') ++x;
+      if (utfuck) { x = utfuck_pos2x!true(ts); return; }
+      if (visualtabs && tabsize != 0) { int ls = pos+1; pos = ts; tabbedX(ls); return; }
+      return;
+    }
+    int lcidx = findLineCacheIndex(pos);
+    if (lcidx < 0) {
+      // line cache is unusable, update it
+      updateCache(0);
+      while (locused < mLineCount && lineofsc[locused-1] < pos) updateCache(locused);
+      lcidx = findLineCacheIndex(pos);
+      if (lcidx < 0) assert(0, "internal line cache error");
+    }
+    //!assert(lcidx >= 0 && lcidx < mLineCount);
+    auto ls = lineofsc[lcidx];
+    //auto le = lineofsc[lcidx+1];
+    //!assert(pos >= ls && pos < le);
+    y = cast(uint)lcidx;
+    if (utfuck) { x = utfuck_pos2x!true(pos); return; }
+    if (visualtabs && tabsize > 0) { tabbedX(ls); return; }
+    x = pos-ls;
   }
 
   protected void ensureGap () {
@@ -794,19 +870,19 @@ private:
       BlockMarking = 1<<0, // block marking state
       LastBE = 1<<1, // last block move was at end?
       Changed = 1<<2, // "changed" flag
-      VisTabs = 1<<3, // editor was in "visual tabs" mode
+      //VisTabs = 1<<3, // editor was in "visual tabs" mode
     }
 
     @property nothrow @safe @nogc pure {
       bool bmarking () const { pragma(inline, true); return (flags&Flag.BlockMarking) != 0; }
       bool lastbe () const { pragma(inline, true); return (flags&Flag.LastBE) != 0; }
       bool txchanged () const { pragma(inline, true); return (flags&Flag.Changed) != 0; }
-      bool vistabs () const { pragma(inline, true); return (flags&Flag.VisTabs) != 0; }
+      //bool vistabs () const { pragma(inline, true); return (flags&Flag.VisTabs) != 0; }
 
       void bmarking (bool v) { pragma(inline, true); if (v) flags |= Flag.BlockMarking; else flags &= ~Flag.BlockMarking; }
       void lastbe (bool v) { pragma(inline, true); if (v) flags |= Flag.LastBE; else flags &= ~Flag.LastBE; }
       void txchanged (bool v) { pragma(inline, true); if (v) flags |= Flag.Changed; else flags &= ~Flag.Changed; }
-      void vistabs (bool v) { pragma(inline, true); if (v) flags |= Flag.VisTabs; else flags &= ~Flag.VisTabs; }
+      //void vistabs (bool v) { pragma(inline, true); if (v) flags |= Flag.VisTabs; else flags &= ~Flag.VisTabs; }
     }
 
     Type type;
@@ -1079,7 +1155,7 @@ public:
       ua.bmarking = ed.markingBlock;
       ua.lastbe = ed.lastBGEnd;
       ua.txchanged = ed.txchanged;
-      ua.vistabs = ed.visualtabs;
+      //ua.vistabs = ed.visualtabs;
     }
   }
 
@@ -1088,7 +1164,7 @@ public:
       if (lu.type == Type.CurMove) {
         if (lu.cx == ed.cx && lu.cy == ed.cy && lu.topline == ed.mTopLine && lu.xofs == ed.mXOfs &&
             lu.bs == ed.bstart && lu.be == ed.bend && lu.bmarking == ed.markingBlock &&
-            lu.lastbe == ed.lastBGEnd && lu.vistabs == ed.visualtabs) return true;
+            lu.lastbe == ed.lastBGEnd /*&& lu.vistabs == ed.visualtabs*/) return true;
       }
     }
     if (!asRedo && !fromRedo && ed.redo !is null) ed.redo.clear();
@@ -1565,13 +1641,13 @@ public:
       }
     }
 
-    bool visualtabs () const pure { pragma(inline, true); return gb.visualtabs; }
+    bool visualtabs () const pure { pragma(inline, true); return (gb.visualtabs && gb.tabsize > 0); }
     void visualtabs (bool v) {
       if (gb.visualtabs != v) {
-        auto pos = curpos;
+        //auto pos = curpos;
         gb.visualtabs = v;
         fullDirty();
-        gb.pos2xy(pos, cx, cy);
+        //gb.pos2xy(pos, cx, cy);
       }
     }
   }
@@ -1751,7 +1827,7 @@ public:
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
     int rx, ry;
-    gb.pos2xy(curpos, rx, ry);
+    gb.pos2xyVT(curpos, rx, ry);
     if (rx < mXOfs) mXOfs = rx;
     if (rx-mXOfs >= winw) mXOfs = rx-winw+1;
     if (mXOfs < 0) mXOfs = 0;
