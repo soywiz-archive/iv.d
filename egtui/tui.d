@@ -55,6 +55,8 @@ enum TuiPaletteError = 1;
 __gshared Palette[2] tuiPalette; // default palette
 
 shared static this () {
+
+
   tuiPalette[TuiPaletteNormal].def = XtColorFB!(ttyRgb2Color(0xd0, 0xd0, 0xd0), ttyRgb2Color(0x4e, 0x4e, 0x4e)); // 252,239
   // sel is also focus
   tuiPalette[TuiPaletteNormal].sel = XtColorFB!(ttyRgb2Color(0xda, 0xda, 0xda), ttyRgb2Color(0x00, 0x5f, 0x5f)); // 253,23
@@ -78,6 +80,14 @@ shared static this () {
   tuiPalette[TuiPaletteError].hot = XtColorFB!(ttyRgb2Color(0xff, 0x5f, 0x5f), ttyRgb2Color(0x5f, 0x00, 0x00)); // 203,52
   tuiPalette[TuiPaletteError].hotsel = XtColorFB!(ttyRgb2Color(0xff, 0x5f, 0x5f), ttyRgb2Color(0x00, 0x5f, 0x5f)); // 203,23
   tuiPalette[TuiPaletteError].title = XtColorFB!(ttyRgb2Color(0xff, 0xff, 0x5f), ttyRgb2Color(0x5f, 0x00, 0x00)); // 227,52
+
+  if (termType == TermType.linux) {
+    ttyBeep();
+    tuiPalette[TuiPaletteNormal].def = XtColorFB!(ttyRgb2Color(0xd0, 0xd0, 0xd0), ttyRgb2Color(0x18, 0x18, 0xb2));
+    tuiPalette[TuiPaletteNormal].title = XtColorFB!(ttyRgb2Color(0xd7, 0xaf, 0x87), ttyRgb2Color(0x18, 0x18, 0xb2));
+    tuiPalette[TuiPaletteNormal].disabled = XtColorFB!(ttyRgb2Color(0x94, 0x94, 0x94), ttyRgb2Color(0x18, 0x18, 0xb2));
+    tuiPalette[TuiPaletteNormal].hot = XtColorFB!(ttyRgb2Color(0xff, 0xaf, 0x00), ttyRgb2Color(0x18, 0x18, 0xb2));
+  }
 }
 
 

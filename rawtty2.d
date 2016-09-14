@@ -23,6 +23,7 @@ import iv.strex : strEquCI;
 import iv.utfutil;
 
 //version = rawtty_weighted_colors;
+//version = rawtty_disable_256_colors;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -47,6 +48,7 @@ enum TermType {
   other,
   rxvt,
   xterm,
+  linux, // linux console
 }
 
 __gshared TermType termType = TermType.other; ///
@@ -682,6 +684,16 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     }
   }
 
+  void linconSpecial (char ch) @nogc {
+    switch (ch) {
+      case 'A': key.key = TtyKey.Key.F1; break;
+      case 'B': key.key = TtyKey.Key.F2; break;
+      case 'C': key.key = TtyKey.Key.F3; break;
+      case 'D': key.key = TtyKey.Key.F4; break;
+      default: badCSI(); break;
+    }
+  }
+
   void csiSpecial (uint n) @nogc {
     switch (n) {
       case 1: key.key = TtyKey.Key.Home; return; // xterm
@@ -709,7 +721,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   }
 
   // {\e}[<0;58;32M (button;x;y;[Mm])
-  void parseMouse() () {
+  void parseMouse () @nogc {
     uint[3] nn;
     uint nc = 0;
     bool press = false;
@@ -774,10 +786,12 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       uint nc = 0;
       bool wasDigit = false;
       bool firstChar = true;
+      bool linuxCon = false;
       // parse csi
       for (;;) {
         ch = ttyReadKeyByte(toEscMSec);
         if (firstChar && ch == '<') { parseMouse(); return key; }
+        if (firstChar && ch == '[') { linuxCon = true; firstChar = false; continue; }
         firstChar = false;
         if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
         if (ch == ';') {
@@ -795,7 +809,8 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       debug(rawtty_show_csi) { import core.stdc.stdio : printf; printf("nc=%u", nc); foreach (uint idx; 0..nc) printf("; n%u=%u", idx, nn.ptr[idx]); printf("; ch=%c\n", ch); }
       // process specials
       if (nc == 0) {
-        if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
+             if (linuxCon) linconSpecial(cast(char)ch);
+        else if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
       } else if (nc == 1) {
         if (ch == '~' && nn.ptr[0] == 200) { key.key = TtyKey.Key.PasteStart; return key; }
         if (ch == '~' && nn.ptr[0] == 201) { key.key = TtyKey.Key.PasteEnd; return key; }
@@ -924,6 +939,7 @@ shared static this () {
       while (len < 5 && tt[len]) ++len;
            if (len >= 4 && tt[0..4] == "rxvt") termType = TermType.rxvt;
       else if (len >= 5 && tt[0..5] == "xterm") termType = TermType.xterm;
+      else if (len >= 5 && tt[0..5] == "linux") termType = TermType.linux;
     }
   }
   {
@@ -1025,7 +1041,8 @@ ubyte ttyRgb2Color(bool allow256=true) (ubyte r, ubyte g, ubyte b) pure nothrow 
   enum m2 = 1802; // 0.11*16384
   long dist = long.max;
   ubyte resclr = 0;
-  static if (allow256) enum lastc = 256; else enum lastc = 16;
+  version(rawtty_disable_256_colors) enum lastc = 16;
+  else { static if (allow256) enum lastc = 256; else enum lastc = 16; }
   foreach (immutable idx, uint cc; ttyRGB[0..lastc]) {
     version(rawtty_weighted_colors) {
       long dr = cast(int)((cc>>16)&0xff)-cast(int)r;

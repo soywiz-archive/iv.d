@@ -191,9 +191,8 @@ void dialogTextView (const(char)[] title, const(char)[] text) {
   int winmw = ttyw-8;
   int winmh = ttyh-6;
 
-  int mw = ttyw-8-2;
-  int mh = ttyh-6-2;
-  //mh = 8;
+  int mw = winmw-6;
+  int mh = winmh-6;
 
   auto ctx = FuiContext.create();
   ctx.parse!(title, text, mw, mh, winmw, winmh)(laydesc);
