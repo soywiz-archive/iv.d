@@ -551,10 +551,12 @@ public nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 public struct XtWindow {
+private:
   int x, y, w, h;
   ushort fgbg;
 
 nothrow @safe @nogc:
+public:
   this (int ax, int ay, int aw, int ah) @trusted {
     x = ax;
     y = ay;
@@ -587,8 +589,15 @@ nothrow @safe @nogc:
     if (y+h > ww.y+ww.h) y = ww.y+ww.h-y; // clip bottom
   }
 
+  @property int x0 () const pure { pragma(inline, true); return x; }
+  @property int y0 () const pure { pragma(inline, true); return y; }
   @property int width () const pure { pragma(inline, true); return (w > 0 ? w : 0); }
   @property int height () const pure { pragma(inline, true); return (h > 0 ? h : 0); }
+
+  @property void x0 (int v) pure { pragma(inline, true); x = v; }
+  @property void y0 (int v) pure { pragma(inline, true); y = v; }
+  @property void width (int v) pure { pragma(inline, true); w = v; }
+  @property void height (int v) pure { pragma(inline, true); h = v; }
 
   @property ubyte fg () const pure { pragma(inline, true); return cast(ubyte)(fgbg>>8); }
   @property ubyte bg () const pure { pragma(inline, true); return cast(ubyte)(fgbg&0xff); }

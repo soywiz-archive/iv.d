@@ -563,6 +563,7 @@ public:
         st = HS(HiText);
         if (!gb[spos+ofs].isalpha) st = HS(HiNumber); // number
         foreach (immutable cp; 0..ofs) gb.hi(spos++) = st;
+        st = HS(HiText);
         continue mainloop;
       }
       // decimal/floating number
