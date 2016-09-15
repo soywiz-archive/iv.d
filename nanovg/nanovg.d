@@ -2096,15 +2096,15 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
     path.nbevel = 0;
 
     foreach (int j; 0..path.count) {
-      float dlx0, dly0, dlx1, dly1, dmr2, cross, limit;
-      dlx0 = p0.dy;
-      dly0 = -p0.dx;
-      dlx1 = p1.dy;
-      dly1 = -p1.dx;
+      //float dlx0, dly0, dlx1, dly1, dmr2, cross, limit;
+      immutable float dlx0 = p0.dy;
+      immutable float dly0 = -p0.dx;
+      immutable float dlx1 = p1.dy;
+      immutable float dly1 = -p1.dx;
       // Calculate extrusions
       p1.dmx = (dlx0+dlx1)*0.5f;
       p1.dmy = (dly0+dly1)*0.5f;
-      dmr2 = p1.dmx*p1.dmx+p1.dmy*p1.dmy;
+      immutable float dmr2 = p1.dmx*p1.dmx+p1.dmy*p1.dmy;
       if (dmr2 > 0.000001f) {
         float scale = 1.0f/dmr2;
         if (scale > 600.0f) {
@@ -2118,16 +2118,15 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
       p1.flags = (p1.flags&NVGpointFlags.Corner) ? NVGpointFlags.Corner : 0;
 
       // Keep track of left turns.
-      cross = p1.dx*p0.dy-p0.dx*p1.dy;
+      immutable float cross = p1.dx*p0.dy-p0.dx*p1.dy;
       if (cross > 0.0f) {
         nleft++;
         p1.flags |= NVGpointFlags.Left;
       }
 
       // Calculate if we should use bevel or miter for inner join.
-      limit = nvg__max(1.01f, nvg__min(p0.len, p1.len)*iw);
-      if ((dmr2*limit*limit) < 1.0f)
-        p1.flags |= NVGpointFlags.InnerBevelPR;
+      immutable float limit = nvg__max(1.01f, nvg__min(p0.len, p1.len)*iw);
+      if ((dmr2*limit*limit) < 1.0f) p1.flags |= NVGpointFlags.InnerBevelPR;
 
       // Check to see if the corner needs to be beveled.
       if (p1.flags&NVGpointFlags.Corner) {
@@ -2136,8 +2135,7 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
         }
       }
 
-      if ((p1.flags&(NVGpointFlags.Bevel|NVGpointFlags.InnerBevelPR)) != 0)
-        path.nbevel++;
+      if ((p1.flags&(NVGpointFlags.Bevel|NVGpointFlags.InnerBevelPR)) != 0) path.nbevel++;
 
       p0 = p1++;
     }
@@ -4619,7 +4617,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
 }
 
 void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float scale, float spacing, float* x, float* y, FONSquad* q) {
-  float rx, ry, xoff, yoff, x0, y0, x1, y1;
+  //float rx, ry, xoff, yoff, x0, y0, x1, y1;
 
   if (prevGlyphIndex >= 0) {
     float adv = fons__tt_getGlyphKernAdvance(&font.font, prevGlyphIndex, glyph.index)*scale;
@@ -4629,16 +4627,16 @@ void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONS
   // Each glyph has 2px border to allow good interpolation,
   // one pixel to prevent leaking, and one to allow good interpolation for rendering.
   // Inset the texture region by one pixel for correct interpolation.
-  xoff = cast(short)(glyph.xoff+1);
-  yoff = cast(short)(glyph.yoff+1);
-  x0 = cast(float)(glyph.x0+1);
-  y0 = cast(float)(glyph.y0+1);
-  x1 = cast(float)(glyph.x1-1);
-  y1 = cast(float)(glyph.y1-1);
+  immutable float xoff = cast(short)(glyph.xoff+1);
+  immutable float yoff = cast(short)(glyph.yoff+1);
+  immutable float x0 = cast(float)(glyph.x0+1);
+  immutable float y0 = cast(float)(glyph.y0+1);
+  immutable float x1 = cast(float)(glyph.x1-1);
+  immutable float y1 = cast(float)(glyph.y1-1);
 
   if (stash.params.flags&FONS_ZERO_TOPLEFT) {
-    rx = cast(float)cast(int)(*x+xoff);
-    ry = cast(float)cast(int)(*y+yoff);
+    immutable float rx = cast(float)cast(int)(*x+xoff);
+    immutable float ry = cast(float)cast(int)(*y+yoff);
 
     q.x0 = rx;
     q.y0 = ry;
@@ -4650,8 +4648,8 @@ void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONS
     q.s1 = x1*stash.itw;
     q.t1 = y1*stash.ith;
   } else {
-    rx = cast(float)cast(int)(*x+xoff);
-    ry = cast(float)cast(int)(*y-yoff);
+    immutable float rx = cast(float)cast(int)(*x+xoff);
+    immutable float ry = cast(float)cast(int)(*y-yoff);
 
     q.x0 = rx;
     q.y0 = ry;
