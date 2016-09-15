@@ -1234,15 +1234,15 @@ void nsvg__addShape (Parser* p) {
   p.plist = null;
 
   // Calculate shape bounds
-  shape.bounds[0] = shape.paths.bounds[0];
-  shape.bounds[1] = shape.paths.bounds[1];
-  shape.bounds[2] = shape.paths.bounds[2];
-  shape.bounds[3] = shape.paths.bounds[3];
+  shape.bounds.ptr[0] = shape.paths.bounds.ptr[0];
+  shape.bounds.ptr[1] = shape.paths.bounds.ptr[1];
+  shape.bounds.ptr[2] = shape.paths.bounds.ptr[2];
+  shape.bounds.ptr[3] = shape.paths.bounds.ptr[3];
   for (path = shape.paths.next; path !is null; path = path.next) {
-    shape.bounds[0] = nsvg__minf(shape.bounds[0], path.bounds[0]);
-    shape.bounds[1] = nsvg__minf(shape.bounds[1], path.bounds[1]);
-    shape.bounds[2] = nsvg__maxf(shape.bounds[2], path.bounds[2]);
-    shape.bounds[3] = nsvg__maxf(shape.bounds[3], path.bounds[3]);
+    shape.bounds.ptr[0] = nsvg__minf(shape.bounds.ptr[0], path.bounds[0]);
+    shape.bounds.ptr[1] = nsvg__minf(shape.bounds.ptr[1], path.bounds[1]);
+    shape.bounds.ptr[2] = nsvg__maxf(shape.bounds.ptr[2], path.bounds[2]);
+    shape.bounds.ptr[3] = nsvg__maxf(shape.bounds.ptr[3], path.bounds[3]);
   }
 
   // Set fill
@@ -2946,18 +2946,18 @@ void nsvg__imageBounds (Parser* p, float* bounds) {
   NSVG.Shape* shape;
   shape = p.image.shapes;
   if (shape is null) {
-    bounds[0] = bounds[1] = bounds[2] = bounds[3] = 0.0;
+    bounds[0..4] = 0.0;
     return;
   }
-  bounds[0] = shape.bounds[0];
-  bounds[1] = shape.bounds[1];
-  bounds[2] = shape.bounds[2];
-  bounds[3] = shape.bounds[3];
+  bounds[0] = shape.bounds.ptr[0];
+  bounds[1] = shape.bounds.ptr[1];
+  bounds[2] = shape.bounds.ptr[2];
+  bounds[3] = shape.bounds.ptr[3];
   for (shape = shape.next; shape !is null; shape = shape.next) {
-    bounds[0] = nsvg__minf(bounds[0], shape.bounds[0]);
-    bounds[1] = nsvg__minf(bounds[1], shape.bounds[1]);
-    bounds[2] = nsvg__maxf(bounds[2], shape.bounds[2]);
-    bounds[3] = nsvg__maxf(bounds[3], shape.bounds[3]);
+    bounds[0] = nsvg__minf(bounds[0], shape.bounds.ptr[0]);
+    bounds[1] = nsvg__minf(bounds[1], shape.bounds.ptr[1]);
+    bounds[2] = nsvg__maxf(bounds[2], shape.bounds.ptr[2]);
+    bounds[3] = nsvg__maxf(bounds[3], shape.bounds.ptr[3]);
   }
 }
 
@@ -3035,10 +3035,10 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
   sy *= us;
   avgs = (sx+sy)/2.0f;
   for (shape = p.image.shapes; shape !is null; shape = shape.next) {
-    shape.bounds[0] = (shape.bounds[0]+tx)*sx;
-    shape.bounds[1] = (shape.bounds[1]+ty)*sy;
-    shape.bounds[2] = (shape.bounds[2]+tx)*sx;
-    shape.bounds[3] = (shape.bounds[3]+ty)*sy;
+    shape.bounds.ptr[0] = (shape.bounds.ptr[0]+tx)*sx;
+    shape.bounds.ptr[1] = (shape.bounds.ptr[1]+ty)*sy;
+    shape.bounds.ptr[2] = (shape.bounds.ptr[2]+tx)*sx;
+    shape.bounds.ptr[3] = (shape.bounds.ptr[3]+ty)*sy;
     for (path = shape.paths; path !is null; path = path.next) {
       path.bounds[0] = (path.bounds[0]+tx)*sx;
       path.bounds[1] = (path.bounds[1]+ty)*sy;
