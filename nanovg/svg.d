@@ -771,7 +771,12 @@ struct Parser {
 }
 
 const(char)[] fromAsciiz (const(char)[] s) {
-  foreach (immutable idx, char ch; s) if (!ch) return s[0..idx];
+  //foreach (immutable idx, char ch; s) if (!ch) return s[0..idx];
+  //return s;
+  if (s.length) {
+    import core.stdc.string : memchr;
+    if (auto zp = memchr(s.ptr, 0, s.length)) return s[0..cast(size_t)(zp-s.ptr)];
+  }
   return s;
 }
 
@@ -3414,35 +3419,32 @@ float nsvg__normalize (float *x, float* y) {
   return d;
 }
 
-void nsvg__flattenCubicBez (NSVGrasterizer r, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, int level, int type) {
-  //float x12, y12, x23, y23, x34, y34, x123, y123, x234, y234, x1234, y1234;
-  //float dx, dy, d2, d3;
-
+void nsvg__flattenCubicBez (NSVGrasterizer r, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) {
   if (level > 10) return;
 
-  float x12 = (x1+x2)*0.5f;
-  float y12 = (y1+y2)*0.5f;
-  float x23 = (x2+x3)*0.5f;
-  float y23 = (y2+y3)*0.5f;
-  float x34 = (x3+x4)*0.5f;
-  float y34 = (y3+y4)*0.5f;
-  float x123 = (x12+x23)*0.5f;
-  float y123 = (y12+y23)*0.5f;
+  immutable x12 = (x1+x2)*0.5f;
+  immutable y12 = (y1+y2)*0.5f;
+  immutable x23 = (x2+x3)*0.5f;
+  immutable y23 = (y2+y3)*0.5f;
+  immutable x34 = (x3+x4)*0.5f;
+  immutable y34 = (y3+y4)*0.5f;
+  immutable x123 = (x12+x23)*0.5f;
+  immutable y123 = (y12+y23)*0.5f;
 
-  float dx = x4-x1;
-  float dy = y4-y1;
-  float d2 = fabsf(((x2-x4)*dy-(y2-y4)*dx));
-  float d3 = fabsf(((x3-x4)*dy-(y3-y4)*dx));
+  immutable dx = x4-x1;
+  immutable dy = y4-y1;
+  immutable d2 = fabsf(((x2-x4)*dy-(y2-y4)*dx));
+  immutable d3 = fabsf(((x3-x4)*dy-(y3-y4)*dx));
 
   if ((d2+d3)*(d2+d3) < r.tessTol*(dx*dx+dy*dy)) {
     nsvg__addPathPoint(r, x4, y4, type);
     return;
   }
 
-  float x234 = (x23+x34)*0.5f;
-  float y234 = (y23+y34)*0.5f;
-  float x1234 = (x123+x234)*0.5f;
-  float y1234 = (y123+y234)*0.5f;
+  immutable x234 = (x23+x34)*0.5f;
+  immutable y234 = (y23+y34)*0.5f;
+  immutable x1234 = (x123+x234)*0.5f;
+  immutable y1234 = (y123+y234)*0.5f;
 
   nsvg__flattenCubicBez(r, x1, y1, x12, y12, x123, y123, x1234, y1234, level+1, 0);
   nsvg__flattenCubicBez(r, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
