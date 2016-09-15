@@ -36,9 +36,17 @@ void main (string[] args) {
   NVGContext vg = null;
   PerfGraph fps;
 
-  NSVG* svg = nsvgParseFromFile(args.length > 1 ? args[1] : "data/svg/tiger.svg");
+  NSVG* svg;
   scope(exit) svg.kill();
-  { import std.stdio; writeln(args.length > 1 ? args[1] : "data/svg/tiger.svg"); }
+  {
+    import std.stdio : writeln;
+    import core.time, std.datetime;
+    auto stt = MonoTime.currTime;
+    svg = nsvgParseFromFile(args.length > 1 ? args[1] : "data/svg/tiger.svg");
+    auto dur = (MonoTime.currTime-stt).total!"msecs";
+    writeln("loading took ", dur, " milliseconds (", dur/1000.0, " seconds)");
+    { import std.stdio; writeln(args.length > 1 ? args[1] : "data/svg/tiger.svg"); }
+  }
 
   //writefln("size: %f x %f", svg.width, svg.height);
   GWidth = cast(int)svg.width;
@@ -120,15 +128,21 @@ void main (string[] args) {
       ubyte[] svgraster;
       scope(exit) svgraster.destroy;
       {
+        import std.stdio : writeln;
         auto rst = nsvgCreateRasterizer();
         scope(exit) rst.kill();
         svgraster = new ubyte[](GWidth*GHeight*4);
+        import core.time, std.datetime;
+        auto stt = MonoTime.currTime;
+        writeln("rasterizing...");
         rst.rasterize(svg,
           0, 0, // ofs
           1, // scale
           svgraster.ptr, GWidth, GHeight);
+        auto dur = (MonoTime.currTime-stt).total!"msecs";
+        writeln("rasterizing took ", dur, " milliseconds (", dur/1000.0, " seconds)");
       }
-      vgimg = vg.createImageRGBA(GWidth, GHeight, 0, svgraster[]);
+      vgimg = vg.createImageRGBA(GWidth, GHeight, svgraster[]);
     }
     fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
     sdwindow.redrawOpenGlScene();
