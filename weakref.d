@@ -117,7 +117,7 @@ final class Weak(T : Object) {
 }
 
 
-unittest {
+version(weakref_test) unittest {
   import core.memory;
   import std.stdio;
 
