@@ -2511,15 +2511,15 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) {
  * Angles are specified in radians.
  */
 public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1, NVGWinding dir) {
-  float a = 0, da = 0, hda = 0, kappa = 0;
-  float dx = 0, dy = 0, x = 0, y = 0, tanx = 0, tany = 0;
-  float px = 0, py = 0, ptanx = 0, ptany = 0;
+  //float a = 0;
+  //float dx = 0, dy = 0, x = 0, y = 0, tanx = 0, tany = 0;
+  //float px = 0, py = 0, ptanx = 0, ptany = 0;
   float[3+5*7+100] vals = void;
-  int i, ndivs, nvals;
-  int move = ctx.ncommands > 0 ? NVGcommands.LineTo : NVGcommands.MoveTo;
+  //int i, ndivs, nvals;
+  int move = (ctx.ncommands > 0 ? NVGcommands.LineTo : NVGcommands.MoveTo);
 
   // Clamp angles
-  da = a1-a0;
+  float da = a1-a0;
   if (dir == NVGWinding.CW) {
     if (nvg__absf(da) >= NVG_PI*2) {
       da = NVG_PI*2;
@@ -2535,21 +2535,22 @@ public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1
   }
 
   // Split arc into max 90 degree segments.
-  ndivs = nvg__max(1, nvg__min(cast(int)(nvg__absf(da)/(NVG_PI*0.5f)+0.5f), 5));
-  hda = (da/cast(float)ndivs)/2.0f;
-  kappa = nvg__absf(4.0f/3.0f*(1.0f-nvg__cosf(hda))/nvg__sinf(hda));
+  immutable int ndivs = nvg__max(1, nvg__min(cast(int)(nvg__absf(da)/(NVG_PI*0.5f)+0.5f), 5));
+  immutable float hda = (da/cast(float)ndivs)/2.0f;
+  float kappa = nvg__absf(4.0f/3.0f*(1.0f-nvg__cosf(hda))/nvg__sinf(hda));
 
   if (dir == NVGWinding.CCW) kappa = -kappa;
 
-  nvals = 0;
-  for (i = 0; i <= ndivs; i++) {
-    a = a0+da*(i/cast(float)ndivs);
-    dx = nvg__cosf(a);
-    dy = nvg__sinf(a);
-    x = cx+dx*r;
-    y = cy+dy*r;
-    tanx = -dy*r*kappa;
-    tany = dx*r*kappa;
+  int nvals = 0;
+  float px = 0, py = 0, ptanx = 0, ptany = 0;
+  foreach (int i; 0..ndivs+1) {
+    immutable float a = a0+da*(i/cast(float)ndivs);
+    immutable float dx = nvg__cosf(a);
+    immutable float dy = nvg__sinf(a);
+    immutable float x = cx+dx*r;
+    immutable float y = cy+dy*r;
+    immutable float tanx = -dy*r*kappa;
+    immutable float tany = dx*r*kappa;
 
     if (i == 0) {
       vals[nvals++] = cast(float)move;
@@ -2589,7 +2590,6 @@ public void rect (NVGContext ctx, float x, float y, float w, float h) {
 public void roundedRect (NVGContext ctx, float x, float y, float w, float h, float r) {
   if (r < 0.1f) {
     ctx.rect(x, y, w, h);
-    return;
   } else {
     float rx = nvg__min(r, nvg__absf(w)*0.5f)*nvg__sign(w), ry = nvg__min(r, nvg__absf(h)*0.5f)*nvg__sign(h);
     float[44] vals = [
@@ -3645,12 +3645,12 @@ struct FONSparams {
 }
 
 struct FONSquad {
-  float x0, y0, s0, t0;
-  float x1, y1, s1, t1;
+  float x0=0, y0=0, s0=0, t0=0;
+  float x1=0, y1=0, s1=0, t1=0;
 }
 
 struct FONStextIter {
-  float x, y, nextx, nexty, scale, spacing;
+  float x=0, y=0, nextx=0, nexty=0, scale=0, spacing=0;
   uint codepoint;
   short isize, iblur;
   FONSfont* font;
@@ -4169,10 +4169,10 @@ void fons__addWhiteRect (FONScontext* stash, int w, int h) {
     dst += stash.params.width;
   }
 
-  stash.dirtyRect[0] = nvg__min(stash.dirtyRect[0], gx);
-  stash.dirtyRect[1] = nvg__min(stash.dirtyRect[1], gy);
-  stash.dirtyRect[2] = nvg__max(stash.dirtyRect[2], gx+w);
-  stash.dirtyRect[3] = nvg__max(stash.dirtyRect[3], gy+h);
+  stash.dirtyRect.ptr[0] = nvg__min(stash.dirtyRect.ptr[0], gx);
+  stash.dirtyRect.ptr[1] = nvg__min(stash.dirtyRect.ptr[1], gy);
+  stash.dirtyRect.ptr[2] = nvg__max(stash.dirtyRect.ptr[2], gx+w);
+  stash.dirtyRect.ptr[3] = nvg__max(stash.dirtyRect.ptr[3], gy+h);
 }
 
 public FONScontext* fonsCreateInternal (FONSparams* params) {
@@ -4213,10 +4213,10 @@ public FONScontext* fonsCreateInternal (FONSparams* params) {
   if (stash.texData is null) goto error;
   memset(stash.texData, 0, stash.params.width*stash.params.height);
 
-  stash.dirtyRect[0] = stash.params.width;
-  stash.dirtyRect[1] = stash.params.height;
-  stash.dirtyRect[2] = 0;
-  stash.dirtyRect[3] = 0;
+  stash.dirtyRect.ptr[0] = stash.params.width;
+  stash.dirtyRect.ptr[1] = stash.params.height;
+  stash.dirtyRect.ptr[2] = 0;
+  stash.dirtyRect.ptr[3] = 0;
 
   // Add white rect at 0, 0 for debug drawing.
   fons__addWhiteRect(stash, 2, 2);
@@ -4610,10 +4610,10 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
     fons__blur(stash, bdst, gw, gh, stash.params.width, iblur);
   }
 
-  stash.dirtyRect[0] = nvg__min(stash.dirtyRect[0], glyph.x0);
-  stash.dirtyRect[1] = nvg__min(stash.dirtyRect[1], glyph.y0);
-  stash.dirtyRect[2] = nvg__max(stash.dirtyRect[2], glyph.x1);
-  stash.dirtyRect[3] = nvg__max(stash.dirtyRect[3], glyph.y1);
+  stash.dirtyRect.ptr[0] = nvg__min(stash.dirtyRect.ptr[0], glyph.x0);
+  stash.dirtyRect.ptr[1] = nvg__min(stash.dirtyRect.ptr[1], glyph.y0);
+  stash.dirtyRect.ptr[2] = nvg__max(stash.dirtyRect.ptr[2], glyph.x1);
+  stash.dirtyRect.ptr[3] = nvg__max(stash.dirtyRect.ptr[3], glyph.y1);
 
   return glyph;
 }
@@ -4669,13 +4669,13 @@ void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONS
 
 void fons__flush (FONScontext* stash) {
   // Flush texture
-  if (stash.dirtyRect[0] < stash.dirtyRect[2] && stash.dirtyRect[1] < stash.dirtyRect[3]) {
+  if (stash.dirtyRect.ptr[0] < stash.dirtyRect.ptr[2] && stash.dirtyRect.ptr[1] < stash.dirtyRect.ptr[3]) {
     if (stash.params.renderUpdate !is null) stash.params.renderUpdate(stash.params.userPtr, stash.dirtyRect.ptr, stash.texData);
     // Reset dirty rect
-    stash.dirtyRect[0] = stash.params.width;
-    stash.dirtyRect[1] = stash.params.height;
-    stash.dirtyRect[2] = 0;
-    stash.dirtyRect[3] = 0;
+    stash.dirtyRect.ptr[0] = stash.params.width;
+    stash.dirtyRect.ptr[1] = stash.params.height;
+    stash.dirtyRect.ptr[2] = 0;
+    stash.dirtyRect.ptr[3] = 0;
   }
 
   // Flush triangles
@@ -5203,16 +5203,16 @@ public const(ubyte)* fonsGetTextureData (FONScontext* stash, int* width, int* he
 }
 
 public int fonsValidateTexture (FONScontext* stash, int* dirty) {
-  if (stash.dirtyRect[0] < stash.dirtyRect[2] && stash.dirtyRect[1] < stash.dirtyRect[3]) {
-    dirty[0] = stash.dirtyRect[0];
-    dirty[1] = stash.dirtyRect[1];
-    dirty[2] = stash.dirtyRect[2];
-    dirty[3] = stash.dirtyRect[3];
+  if (stash.dirtyRect.ptr[0] < stash.dirtyRect.ptr[2] && stash.dirtyRect.ptr[1] < stash.dirtyRect.ptr[3]) {
+    dirty[0] = stash.dirtyRect.ptr[0];
+    dirty[1] = stash.dirtyRect.ptr[1];
+    dirty[2] = stash.dirtyRect.ptr[2];
+    dirty[3] = stash.dirtyRect.ptr[3];
     // Reset dirty rect
-    stash.dirtyRect[0] = stash.params.width;
-    stash.dirtyRect[1] = stash.params.height;
-    stash.dirtyRect[2] = 0;
-    stash.dirtyRect[3] = 0;
+    stash.dirtyRect.ptr[0] = stash.params.width;
+    stash.dirtyRect.ptr[1] = stash.params.height;
+    stash.dirtyRect.ptr[2] = 0;
+    stash.dirtyRect.ptr[3] = 0;
     return 1;
   }
   return 0;
@@ -5281,10 +5281,10 @@ public int fonsExpandAtlas (FONScontext* stash, int width, int height) {
 
   // Add existing data as dirty.
   for (i = 0; i < stash.atlas.nnodes; i++) maxy = nvg__max(maxy, stash.atlas.nodes[i].y);
-  stash.dirtyRect[0] = 0;
-  stash.dirtyRect[1] = 0;
-  stash.dirtyRect[2] = stash.params.width;
-  stash.dirtyRect[3] = maxy;
+  stash.dirtyRect.ptr[0] = 0;
+  stash.dirtyRect.ptr[1] = 0;
+  stash.dirtyRect.ptr[2] = stash.params.width;
+  stash.dirtyRect.ptr[3] = maxy;
 
   stash.params.width = width;
   stash.params.height = height;
@@ -5315,10 +5315,10 @@ public int fonsResetAtlas (FONScontext* stash, int width, int height) {
   memset(stash.texData, 0, width*height);
 
   // Reset dirty rect
-  stash.dirtyRect[0] = width;
-  stash.dirtyRect[1] = height;
-  stash.dirtyRect[2] = 0;
-  stash.dirtyRect[3] = 0;
+  stash.dirtyRect.ptr[0] = width;
+  stash.dirtyRect.ptr[1] = height;
+  stash.dirtyRect.ptr[2] = 0;
+  stash.dirtyRect.ptr[3] = 0;
 
   // Reset cached glyphs
   for (i = 0; i < stash.nfonts; i++) {
@@ -6132,18 +6132,18 @@ bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) {
 void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) {
   version(nanosvg_asserts) assert(t.length > 5);
   version(nanosvg_asserts) assert(m3.length > 11);
-  m3[0] = t.ptr[0];
-  m3[1] = t.ptr[1];
-  m3[2] = 0.0f;
-  m3[3] = 0.0f;
-  m3[4] = t.ptr[2];
-  m3[5] = t.ptr[3];
-  m3[6] = 0.0f;
-  m3[7] = 0.0f;
-  m3[8] = t.ptr[4];
-  m3[9] = t.ptr[5];
-  m3[10] = 1.0f;
-  m3[11] = 0.0f;
+  m3.ptr[0] = t.ptr[0];
+  m3.ptr[1] = t.ptr[1];
+  m3.ptr[2] = 0.0f;
+  m3.ptr[3] = 0.0f;
+  m3.ptr[4] = t.ptr[2];
+  m3.ptr[5] = t.ptr[3];
+  m3.ptr[6] = 0.0f;
+  m3.ptr[7] = 0.0f;
+  m3.ptr[8] = t.ptr[4];
+  m3.ptr[9] = t.ptr[5];
+  m3.ptr[10] = 1.0f;
+  m3.ptr[11] = 0.0f;
 }
 
 NVGColor glnvg__premulColor (NVGColor c) {
