@@ -1716,25 +1716,26 @@ void nvg__vset (NVGvertex* vtx, float x, float y, float u, float v) {
   vtx.v = v;
 }
 
-void nvg__tesselateBezier (NVGContext ctx, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, int level, int type) {
-  float x12, y12, x23, y23, x34, y34, x123, y123, x234, y234, x1234, y1234;
-  float dx, dy, d2, d3;
+void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) {
+  import core.stdc.math : fabsf;
+  //float x12, y12, x23, y23, x34, y34, x123, y123, x234, y234, x1234, y1234;
+  //float dx, dy, d2, d3;
 
   if (level > 10) return;
 
-  x12 = (x1+x2)*0.5f;
-  y12 = (y1+y2)*0.5f;
-  x23 = (x2+x3)*0.5f;
-  y23 = (y2+y3)*0.5f;
-  x34 = (x3+x4)*0.5f;
-  y34 = (y3+y4)*0.5f;
-  x123 = (x12+x23)*0.5f;
-  y123 = (y12+y23)*0.5f;
+  immutable float x12 = (x1+x2)*0.5f;
+  immutable float y12 = (y1+y2)*0.5f;
+  immutable float x23 = (x2+x3)*0.5f;
+  immutable float y23 = (y2+y3)*0.5f;
+  immutable float x34 = (x3+x4)*0.5f;
+  immutable float y34 = (y3+y4)*0.5f;
+  immutable float x123 = (x12+x23)*0.5f;
+  immutable float y123 = (y12+y23)*0.5f;
 
-  dx = x4-x1;
-  dy = y4-y1;
-  d2 = nvg__absf(((x2-x4)*dy-(y2-y4)*dx));
-  d3 = nvg__absf(((x3-x4)*dy-(y3-y4)*dx));
+  immutable float dx = x4-x1;
+  immutable float dy = y4-y1;
+  immutable float d2 = fabsf(((x2-x4)*dy-(y2-y4)*dx));
+  immutable float d3 = fabsf(((x3-x4)*dy-(y3-y4)*dx));
 
   if ((d2+d3)*(d2+d3) < ctx.tessTol*(dx*dx+dy*dy)) {
     nvg__addPoint(ctx, x4, y4, type);
@@ -1748,10 +1749,10 @@ void nvg__tesselateBezier (NVGContext ctx, float x1, float y1, float x2, float y
   }
   */
 
-  x234 = (x23+x34)*0.5f;
-  y234 = (y23+y34)*0.5f;
-  x1234 = (x123+x234)*0.5f;
-  y1234 = (y123+y234)*0.5f;
+  immutable float x234 = (x23+x34)*0.5f;
+  immutable float y234 = (y23+y34)*0.5f;
+  immutable float x1234 = (x123+x234)*0.5f;
+  immutable float y1234 = (y123+y234)*0.5f;
 
   nvg__tesselateBezier(ctx, x1, y1, x12, y12, x123, y123, x1234, y1234, level+1, 0);
   nvg__tesselateBezier(ctx, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
