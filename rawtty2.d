@@ -390,7 +390,7 @@ align(1): // make it tightly packed
   ushort x, y; // for mouse reports
 
   @property const pure nothrow @safe @nogc {
-     ///
+    ///
     int button () { pragma(inline, true); return
       key == Key.MLeftDown || key == Key.MLeftUp || key == Key.MLeftMotion ? 0 :
       key == Key.MRightDown || key == Key.MRightUp || key == Key.MRightMotion ? 1 :
