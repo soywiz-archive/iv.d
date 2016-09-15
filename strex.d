@@ -63,6 +63,25 @@ bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
 }
 
 
+// ascii only
+int strCmpCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
+  if (s0.length < s1.length) return -1;
+  if (s0.length > s1.length) return 1;
+  char c1;
+  foreach (immutable idx, char c0; s0) {
+    c0 = c0.tolower;
+    if (__ctfe) {
+      c1 = s1[idx].tolower;
+    } else {
+      c1 = s1.ptr[idx].tolower;
+    }
+    if (c0 < c1) return -1;
+    if (c0 > c1) return 1;
+  }
+  return 0;
+}
+
+
 inout(char)[] xstrip (inout(char)[] s) pure nothrow @trusted @nogc {
   while (s.length && s.ptr[0] <= ' ') s = s[1..$];
   while (s.length && s[$-1] <= ' ') s = s[0..$-1];
