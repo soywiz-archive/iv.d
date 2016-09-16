@@ -110,6 +110,20 @@ void ttyDisableBracketedPaste () nothrow @trusted @nogc {
 }
 
 
+void ttyEnableFocusReports () nothrow @trusted @nogc {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?1004h";
+  write(1, str.ptr, str.length);
+}
+
+
+void ttyDisableFocusReports () nothrow @trusted @nogc {
+  import core.sys.posix.unistd : write;
+  enum str = "\x1b[?1004l";
+  write(1, str.ptr, str.length);
+}
+
+
 void ttyEnableMouseReports () nothrow @trusted @nogc {
   import core.sys.posix.unistd : write;
   enum str = "\x1b[?1000h\x1b[?1006h\x1b[?1002h";
@@ -370,6 +384,9 @@ align(1): // make it tightly packed
 
     MWheelUp,
     MWheelDown,
+
+    FocusIn,
+    FocusOut,
   }
 
   enum ModFlag : ubyte {
@@ -404,6 +421,8 @@ align(1): // make it tightly packed
     bool mrelease () { pragma(inline, true); return (key == Key.MLeftUp || key == Key.MRightUp || key == Key.MMiddleUp); } ///
     bool mmotion () { pragma(inline, true); return (key == Key.MLeftMotion || key == Key.MRightMotion || key == Key.MMiddleMotion); } ///
     bool mwheel () { pragma(inline, true); return (key == Key.MWheelUp || key == Key.MWheelDown); } ///
+    bool focusin () { pragma(inline, true); return (key == Key.FocusIn); } ///
+    bool focusout () { pragma(inline, true); return (key == Key.FocusOut); } ///
     bool ctrl () { pragma(inline, true); return ((mods&ModFlag.Ctrl) != 0); } ///
     bool alt () { pragma(inline, true); return ((mods&ModFlag.Alt) != 0); } ///
     bool shift () { pragma(inline, true); return ((mods&ModFlag.Shift) != 0); } ///
@@ -791,6 +810,8 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       for (;;) {
         ch = ttyReadKeyByte(toEscMSec);
         if (firstChar && ch == '<') { parseMouse(); return key; }
+        if (firstChar && ch == 'I') { key.key = TtyKey.Key.FocusIn; return key; }
+        if (firstChar && ch == 'O') { key.key = TtyKey.Key.FocusOut; return key; }
         if (firstChar && ch == '[') { linuxCon = true; firstChar = false; continue; }
         firstChar = false;
         if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
