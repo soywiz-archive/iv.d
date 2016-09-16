@@ -22,7 +22,7 @@ module iv.weakref is aliced;
 import core.atomic, core.memory;
 
 
-private alias void delegate(Object) DEvent;
+private alias void delegate (Object) DEvent;
 private extern (C) void rt_attachDisposeEvent (Object h, DEvent e);
 private extern (C) void rt_detachDisposeEvent (Object h, DEvent e);
 
