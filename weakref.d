@@ -61,7 +61,7 @@ final class Weak(T : Object) {
   }
 
   @property bool empty () const @trusted nothrow {
-    return (object !is null);
+    return (object is null);
   }
 
   void clear () @trusted => object = null;
