@@ -74,7 +74,7 @@ void EXTENTS (XBox r, XRegion idRect) {
  *   Check to see if there is enough memory in the present region.
  */
 bool MEMCHECK (XRegion reg, XBox rect, XBox firstrect) {
-  static void *Xrealloc (void *ptr, usize size) @trusted nothrow @nogc {
+  static void *Xrealloc (void *ptr, size_t size) @trusted nothrow @nogc {
     import core.stdc.stdlib : realloc;
     return realloc(ptr, (size == 0 ? 1 : size));
   }
