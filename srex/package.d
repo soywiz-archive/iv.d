@@ -51,7 +51,7 @@ public enum SRes : int {
 }
 
 /// regex flags
-public enum Flags : uint {
+public enum SRFlags : uint {
   CaseInsensitive = (1<<0), ///
 }
 
@@ -246,7 +246,7 @@ struct REParser {
       return yyl;
     }
 
-    if ((flags&Flags.CaseInsensitive) && isalpha(yytok)) {
+    if ((flags&SRFlags.CaseInsensitive) && isalpha(yytok)) {
       auto yyl = memoryfail(pool.reCreate(RegExpPart.Type.Class, null, null));
       yyl.range = memoryfail(pool.alloc!RERange);
       yyl.range.from = cast(char)yytok;
@@ -321,7 +321,7 @@ struct REParser {
           break;
       }
       if (yyl is null) fail("wtf?!");
-      if (flags&Flags.CaseInsensitive) {
+      if (flags&SRFlags.CaseInsensitive) {
         if (yyl.type == RegExpPart.Type.Class || yyl.type == RegExpPart.Type.NClass) {
           yyl.range = memoryfail(range2CI(pool, yyl.range));
         }

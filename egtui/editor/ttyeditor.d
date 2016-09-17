@@ -1357,7 +1357,7 @@ final:
     import std.utf : byChar;
     if (srr.search.length == 0) return;
     if (srr.inselection && !hasMarkedBlock) return;
-    auto re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : Flags.CaseInsensitive));
+    auto re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : SRFlags.CaseInsensitive));
     if (!re.valid) { ttyBeep; return; }
     scope(exit) fullDirty(); // to remove highlighting
     bool closeGroup = false;
