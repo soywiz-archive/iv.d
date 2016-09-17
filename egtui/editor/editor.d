@@ -1780,23 +1780,23 @@ public:
     return res;
   }
 
-  protected abstract void drawCursor ();
+  public abstract void drawCursor ();
 
-  protected abstract void drawStatus ();
+  public abstract void drawStatus ();
 
   // highlighting is done, other housekeeping is done, only draw
   // lidx is always valid
   // must repaint the whole line
   // use `winXXX` vars to know window dimensions
-  protected abstract void drawLine (int lidx, int yofs, int xskip);
+  public abstract void drawLine (int lidx, int yofs, int xskip);
 
   // just clear line
   // use `winXXX` vars to know window dimensions
-  protected abstract void drawEmptyLine (int yofs);
+  public abstract void drawEmptyLine (int yofs);
 
-  protected void drawPageBegin () {} // we are about to refresh page
-  protected void drawPageMisc () {} // before setting cursor
-  protected void drawPageEnd () {} // flush it, etc.
+  public void drawPageBegin () {} // we are about to refresh page
+  public void drawPageMisc () {} // before setting cursor
+  public void drawPageEnd () {} // flush it, etc.
 
   void drawPage () {
     makeCurLineVisible();

@@ -337,7 +337,7 @@ public:
     }
   }
 
-  protected override void drawCursor () {
+  public override void drawCursor () {
     if (dontSetCursor) return;
     // draw prompt if it is active
     if (mPromptActive) { mPromptInput.drawCursor(); return; }
@@ -346,7 +346,7 @@ public:
     xtGotoXY(winx+rx-mXOfs, winy+ry-topline);
   }
 
-  protected override void drawStatus () {
+  public override void drawStatus () {
     if (singleline || hideStatus) return;
     xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0xb2, 0xb2, 0xb2)); // 0,7
     xtWriteCharsAt(winx, winy-1, winw, ' ');
@@ -383,7 +383,7 @@ public:
   // must repaint the whole line
   // use `winXXX` vars to know window dimensions
   //FIXME: clean this up!
-  protected override void drawLine (int lidx, int yofs, int xskip) {
+  public override void drawLine (int lidx, int yofs, int xskip) {
     immutable vt = visualtabs;
     immutable tabsz = gb.tabsize;
     auto pos = gb.line2pos(lidx);
@@ -495,7 +495,7 @@ public:
 
   // just clear line
   // use `winXXX` vars to know window dimensions
-  protected override void drawEmptyLine (int yofs) {
+  public override void drawEmptyLine (int yofs) {
     if (singleline) {
       xtSetColor(clrText ? clrText : TextColor);
       if (killTextOnChar) xtSetColor(clrTextUnchanged ? clrTextUnchanged : TextKillColor);
@@ -505,7 +505,7 @@ public:
     xtWriteCharsAt(winx, winy+yofs, winw, ' ');
   }
 
-  protected override void drawPageBegin () {
+  public override void drawPageBegin () {
   }
 
   // check if line has only spaces (or comments, use highlighter) to begin/end (determined by dir)
@@ -688,7 +688,7 @@ public:
     }
   }
 
-  protected override void drawPageMisc () {
+  public override void drawPageMisc () {
     auto pos = curpos;
     if (isAnyTextChar(pos, false)) {
       auto ch = gb[pos];
@@ -706,7 +706,7 @@ public:
     drawScrollBar();
   }
 
-  protected override void drawPageEnd () {
+  public override void drawPageEnd () {
     if (mPromptActive) {
       int pty = (singleline || hideStatus ? winy : winy-1);
       xtSetColor(mPromptInput.clrText);
