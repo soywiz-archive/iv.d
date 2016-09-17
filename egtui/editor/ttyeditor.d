@@ -147,6 +147,7 @@ public:
   uint clrBlock, clrText, clrTextUnchanged;
   // other
   SearchReplaceOptions srrOptions;
+  bool hideStatus = false;
 
 public:
   this (int x0, int y0, int w, int h, bool asinglesine=false) {
@@ -322,7 +323,7 @@ public:
 
   final void drawScrollBar () {
     if (winx == 0) return;
-    if (singleline) return;
+    if (singleline || hideStatus) return;
     xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0x00, 0x5f, 0xaf)); // 0,25
     int filled;
     int total = gb.linecount-winh;
@@ -346,7 +347,7 @@ public:
   }
 
   protected override void drawStatus () {
-    if (singleline) return;
+    if (singleline || hideStatus) return;
     xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0xb2, 0xb2, 0xb2)); // 0,7
     xtWriteCharsAt(winx, winy-1, winw, ' ');
     import core.stdc.stdio : snprintf;
@@ -707,10 +708,11 @@ public:
 
   protected override void drawPageEnd () {
     if (mPromptActive) {
+      int pty = (singleline || hideStatus ? winy : winy-1);
       xtSetColor(mPromptInput.clrText);
-      xtWriteCharsAt(winx, winy-1, winw, ' ');
-      xtWriteStrAt(winx, winy-1, mPromptPrompt[0..mPromptLen]);
-      xtWriteCharsAt(winx+mPromptLen, winy-1, 1, ':');
+      xtWriteCharsAt(winx, pty, winw, ' ');
+      xtWriteStrAt(winx, pty, mPromptPrompt[0..mPromptLen]);
+      xtWriteCharsAt(winx+mPromptLen, pty, 1, ':');
       mPromptInput.fullDirty(); // force redraw
       mPromptInput.drawPage();
       return;
