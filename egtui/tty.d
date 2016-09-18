@@ -556,6 +556,7 @@ public:
 
   // clip this window to another window
   //FIXME: completely untested (and unused!)
+  /*
   void clipBy() (in auto ref XtWindow ww) {
     if (empty || ww.empty) { w = h = 0; return; }
     if (x+w <= ww.x || y+h <= ww.y || x >= ww.x+ww.w || y >= ww.y+ww.h) { w = h = 0; return; }
@@ -565,6 +566,7 @@ public:
     if (x+w > ww.x+ww.w) w = ww.x+ww.w-x; // clip right
     if (y+h > ww.y+ww.h) y = ww.y+ww.h-y; // clip bottom
   }
+  */
 
   @property int x0 () const pure { pragma(inline, true); return x; }
   @property int y0 () const pure { pragma(inline, true); return y; }
