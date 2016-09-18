@@ -49,6 +49,81 @@ public enum XtColorFB(ubyte fg, ubyte bg) = cast(uint)((fg<<8)|bg);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// global scissors
+public align(1) struct XtScissor {
+align(1) nothrow @trusted @nogc:
+private:
+  ushort mX0, mY0, mW, mH;
+
+public:
+  this (int ax0, int ay0, int aw, int ah) {
+    if (ay0 >= ttyhIntr || ax0 >= ttywIntr || aw < 1 || ah < 1) return;
+    if (ax0 < 0) {
+      if (ax0 <= -aw) return;
+      aw += ax0;
+      ax0 = 0;
+    }
+    if (ay0 < 0) {
+      if (ay0 <= -ah) return;
+      ah += ay0;
+      ay0 = 0;
+    }
+    if (aw > ttywIntr) aw = ttywIntr;
+    if (ah > ttyhIntr) ah = ttyhIntr;
+    if (ttywIntr-ax0 > aw) aw = ttywIntr-ax0;
+    if (ttyhIntr-ay0 > ah) ah = ttyhIntr-ay0;
+    if (aw > 0 && ah > 0) {
+      mX0 = cast(ushort)ax0;
+      mY0 = cast(ushort)ay0;
+      mW = cast(ushort)aw;
+      mH = cast(ushort)ah;
+    }
+  }
+
+  static XtScissor fullscreen () { return XtScissor(0, 0, ttywIntr, ttyhIntr); }
+
+pure const @safe:
+  // crop this scissor with another scissor
+  XtScissor crop (in XtScissor s) {
+    XtScissor res = void;
+    res.mX0 = this.mX0;
+    res.mY0 = this.mY0;
+    res.mW = this.mW;
+    res.mH = this.mH;
+    if (res.visible && s.visible) {
+      int rx0 = (mX0 >= s.mX0 ? mX0 : s.mX0);
+      int ry0 = (mY0 >= s.mY0 ? mY0 : s.mY0);
+      int rx1 = (x1 <= s.x1 ? x1 : s.x1);
+      int ry1 = (y1 <= s.x1 ? y1 : s.y1);
+      if (rx1 < rx0 || ry1 < ry0) {
+        res.mW = res.mH = 0;
+      } else {
+        res.mW = cast(ushort)(rx1-rx0+1);
+        res.mH = cast(ushort)(ry1-ry0+1);
+      }
+    }
+    return res;
+  }
+
+@property:
+  bool visible () { pragma(inline, true); return (mW > 0 && mH > 0); }
+  bool empty () { pragma(inline, true); return (mW == 0 && mH == 0); }
+  int x0 () { pragma(inline, true); return mX0; }
+  int y0 () { pragma(inline, true); return mY0; }
+  int x1 () { pragma(inline, true); return mX0+mW-1; } // may be negative for empty scissor
+  int y1 () { pragma(inline, true); return mY0+mH-1; } // may be negative for empty scissor
+  int width () { pragma(inline, true); return mW; }
+  int height () { pragma(inline, true); return mH; }
+}
+
+__gshared XtScissor ttyzScissor;
+
+
+@property XtScissor ttyScissor () nothrow @trusted @nogc { pragma(inline, true); return ttyzScissor; }
+@property void ttyScissor (in XtScissor sc) nothrow @trusted @nogc { pragma(inline, true); ttyzScissor = sc; }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum SIGWINCH = 28;
 
 __gshared bool winSizeChanged = false;
@@ -194,7 +269,7 @@ private ubyte* ttzSBAlloc (uint size) {
 }
 
 
-// push area contents and cursor position
+// push area contents and cursor position (unaffected by scissors)
 public void xtPushArea (int x, int y, int w, int h) {
   if (w < 1 || h < 1 || x >= ttywIntr || y >= ttyhIntr) { x = y = w = h = 0; }
   if (w > 0) {
@@ -240,6 +315,7 @@ public void xtPushArea (int x, int y, int w, int h) {
 }
 
 
+// pop (restore) area contents and cursor position (unaffected by scissors)
 public void xtPopArea () {
   if (ttySBUsed == 0) return;
   assert(ttySBUsed >= 4);
@@ -281,6 +357,7 @@ public void xtInit () {
   ttywb[] = Glyph.init;
   ttybc[] = Glyph.init;
   ttycx = ttycy = 0;
+  ttyzScissor = XtScissor.fullscreen;
   // clear screen
   enum initStr =
     "\x1b[?1034l"~ // xterm: disable "eightBitInput"
@@ -307,7 +384,9 @@ public bool xtNeedReinit () {
 }
 
 
+// this will reset scissors
 public void xtReinit () {
+  ttyzScissor = XtScissor.fullscreen;
   if (ttywIntr != ttyWidth || ttyhIntr != ttyHeight) {
     winSizeChanged = false;
     ttywIntr = ttyWidth;
@@ -404,6 +483,7 @@ public void xtFullRefresh () nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// this will reset scissors
 public void xtFlush () /*nothrow @nogc*/ {
   void gotoXY (int x, int y) {
     if (x == lastx && y == lasty) return;
@@ -447,6 +527,8 @@ public void xtFlush () /*nothrow @nogc*/ {
       lasty = y;
     }
   }
+
+  ttyzScissor = XtScissor.fullscreen;
 
   ubyte inG0G1 = 0;
   ttytpos = 0; // reset output position
@@ -610,7 +692,7 @@ public:
   // ofs: bytes to skip (if x is "before" window
   // x, y: will be translated to global coords
   int normXYLen (ref int x, ref int y, int len, out int ofs) const @trusted {
-    if (len < 1 || w < 1 || h < 1 || x >= w || y < 0 || y >= h || !visible) return 0; // nothing to do
+    if (len < 1 || w < 1 || h < 1 || x >= w || y < 0 || y >= h || !visible || !ttyzScissor.visible) return 0; // nothing to do
     // crop to window
     if (x < 0) {
       if (x <= -len) return 0;
@@ -624,14 +706,20 @@ public:
     // crop to global space
     x += this.x;
     y += this.y;
-    if (x+len <= 0 || x >= ttywIntr || y < 0 || y >= ttyhIntr) return 0;
+    if (x+len <= ttyzScissor.mX0 || x > ttyzScissor.x1 || y < ttyzScissor.mY0 || y > ttyzScissor.y1) return 0;
     if (x < 0) {
       if (x <= -len) return 0;
       len += x;
       ofs = -x;
       x = 0;
     }
-    left = ttywIntr-x;
+    if (x < ttyzScissor.mX0) {
+      auto z = ttyzScissor.mX0-x;
+      if (z >= len) return 0;
+      x += z;
+      len -= z;
+    }
+    if ((left = ttyzScissor.x1+1-x) < 1) return 0;
     if (left < len) len = left;
     return len;
   }
