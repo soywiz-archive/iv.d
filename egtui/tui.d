@@ -558,8 +558,8 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
       ed.clrText = ctx.palColor!"disabled"(self);
       ed.clrTextUnchanged = ctx.palColor!"disabled"(self);
     }
-    auto oldcolor = xtGetColor();
-    scope(exit) xtSetColor(oldcolor);
+    //auto oldcolor = xtGetColor();
+    //scope(exit) xtSetColor(oldcolor);
     ed.drawPage();
   };
   data.eventcb = delegate (FuiContext ctx, int self, FuiEvent ev) {
@@ -1718,8 +1718,11 @@ void drawShadow (FuiContext ctx) nothrow @trusted @nogc {
   auto lp = ctx.layprops(0);
   if (lp is null) return;
   auto rc = lp.position;
-  xtShadowBox(rc.x+rc.w, rc.y+1, 2, rc.h-1);
-  xtHShadow(rc.x+2, rc.y+rc.h, rc.w);
+  //xtShadowBox(rc.x+rc.w, rc.y+1, 2, rc.h-1);
+  //xtHShadow(rc.x+2, rc.y+rc.h, rc.w);
+  auto win = XtWindow(rc.x, rc.y, rc.w+2, rc.h+1);
+  win.shadowBox(rc.w, 1, 2, rc.h-1);
+  win.hshadow(2, rc.h, rc.w);
 }
 
 

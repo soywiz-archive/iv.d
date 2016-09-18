@@ -324,7 +324,9 @@ public:
   final void drawScrollBar () {
     if (winx == 0) return;
     if (singleline || hideStatus) return;
-    xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0x00, 0x5f, 0xaf)); // 0,25
+    auto win = XtWindow(winx-1, winy-1, 1, winh+1);
+    win.fg = TtyRgb2Color!(0x00, 0x00, 0x00);
+    win.bg = TtyRgb2Color!(0x00, 0x5f, 0xaf);
     int filled;
     int total = gb.linecount-winh;
     if (total <= 0) {
@@ -332,9 +334,7 @@ public:
     } else {
       filled = (winh+1)*mTopLine/total;
     }
-    foreach (immutable y; 0..winh+1) {
-      xtWriteCharsAt!true(winx-1, winy-1+y, 1, (y <= filled ? ' ' : 'a'));
-    }
+    foreach (immutable y; 0..winh+1) win.writeCharsAt!true(0, y, 1, (y <= filled ? ' ' : 'a'));
   }
 
   public override void drawCursor () {
@@ -343,13 +343,15 @@ public:
     if (mPromptActive) { mPromptInput.drawCursor(); return; }
     int rx, ry;
     gb.pos2xyVT(curpos, rx, ry);
-    xtGotoXY(winx+rx-mXOfs, winy+ry-topline);
+    XtWindow(winx, winy, winw, winh).gotoXY(rx-mXOfs, ry-topline);
   }
 
   public override void drawStatus () {
     if (singleline || hideStatus) return;
-    xtSetFB(TtyRgb2Color!(0x00, 0x00, 0x00), TtyRgb2Color!(0xb2, 0xb2, 0xb2)); // 0,7
-    xtWriteCharsAt(winx, winy-1, winw, ' ');
+    auto win = XtWindow(winx, winy-1, winw, 1);
+    win.fg = TtyRgb2Color!(0x00, 0x00, 0x00);
+    win.bg = TtyRgb2Color!(0xb2, 0xb2, 0xb2);
+    win.writeCharsAt(0, 0, win.width, ' ');
     import core.stdc.stdio : snprintf;
     auto cp = curpos;
     auto c = cast(uint)gb[cp];
@@ -363,18 +365,18 @@ public:
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u",
         (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
       if (len > winw) len = winw;
-      xtWriteStrAt(winx, winy-1, buf[0..len]);
+      win.writeStrAt(0, 0, buf[0..len]);
     } else {
       dchar dch = dcharAt(cp);
       if (dch > dchar.max) dch = 0;
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u  U%04X",
         (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
       if (len > winw) len = winw;
-      xtWriteStrAt(winx, winy-1, buf[0..len]);
+      win.writeStrAt(0, 0, buf[0..len]);
     }
     if (utfuck) {
-      xtSetFB(11, 9);
-      xtWriteCharsAt(winx, winy-1, 1, 'U');
+      win.fb(11, 9);
+      win.writeCharsAt(0, 0, 1, 'U');
     }
   }
 
@@ -386,19 +388,20 @@ public:
   public override void drawLine (int lidx, int yofs, int xskip) {
     immutable vt = visualtabs;
     immutable tabsz = gb.tabsize;
+    auto win = XtWindow(winx, winy, winw, winh);
     auto pos = gb.line2pos(lidx);
     int x = -xskip;
-    int y = winy+yofs;
+    int y = yofs;
     auto ts = gb.textsize;
     bool inBlock = (bstart < bend && pos >= bstart && pos < bend);
     bool bookmarked = isLineBookmarked(lidx);
     if (singleline) {
-      xtSetColor(clrText ? clrText : TextColor);
-      if (killTextOnChar) xtSetColor(clrTextUnchanged ? clrTextUnchanged : TextKillColor);
-      if (inBlock) xtSetColor(clrBlock ? clrBlock : BlockColor);
+      win.color = (clrText ? clrText : TextColor);
+      if (killTextOnChar) win.color = (clrTextUnchanged ? clrTextUnchanged : TextKillColor);
+      if (inBlock) win.color = (clrBlock ? clrBlock : BlockColor);
     } else {
-      xtSetColor(TextColor);
-      if (bookmarked) xtSetColor(BookmarkColor); else if (inBlock) xtSetColor(BlockColor);
+      win.color = TextColor;
+      if (bookmarked) win.color = BookmarkColor; else if (inBlock) win.color = BlockColor;
     }
     // if we have no highlighter, check for trailing spaces explicitly
     bool hasHL = (hl !is null); // do we have highlighter (just a cache)
@@ -417,33 +420,33 @@ public:
       inBlock = (bs < be && pos >= bs && pos < be);
       auto ch = gb[pos++];
       if (ch == '\n') {
-        if (!killTextOnChar && !singleline) xtSetColor(hasHL ? hiColor(gb.hi(pos-1)) : TextColor); else xtSetColor(sltextClr);
+        if (!killTextOnChar && !singleline) win.color = (hasHL ? hiColor(gb.hi(pos-1)) : TextColor); else win.color = sltextClr;
       } else if (hasHL) {
         // has highlighter
         if (pos-1 >= trspos) {
           if (ch != '\t') ch = '.';
-          if (!killTextOnChar && !singleline) xtSetColor(TrailSpaceColor); else xtSetColor(sltextClr);
+          if (!killTextOnChar && !singleline) win.color = TrailSpaceColor; else win.color = sltextClr;
         } else if (ch < ' ' || ch == 127) {
-          if (!killTextOnChar && !singleline) xtSetColor(BadColor); else xtSetColor(sltextClr);
+          if (!killTextOnChar && !singleline) win.color = BadColor; else win.color = sltextClr;
         } else {
           auto hs = gb.hi(pos-1);
-          if (!killTextOnChar && !singleline) xtSetColor(hiColor(hs)); else xtSetColor(sltextClr);
+          if (!killTextOnChar && !singleline) win.color = hiColor(hs); else win.color = sltextClr;
         }
       } else {
         // no highlighter
         if (pos-1 >= trspos) {
           if (ch != '\t') ch = '.';
-          if (!killTextOnChar && !singleline) xtSetColor(TrailSpaceColor); else xtSetColor(sltextClr);
+          if (!killTextOnChar && !singleline) win.color = TrailSpaceColor; else win.color = sltextClr;
         } else if (ch < ' ' || ch == 127) {
-          if (!killTextOnChar && !singleline) xtSetColor(BadColor); else xtSetColor(sltextClr);
+          if (!killTextOnChar && !singleline) win.color = BadColor; else win.color = sltextClr;
         } else {
-          xtSetColor(sltextClr);
+          win.color = sltextClr;
         }
       }
       if (!killTextOnChar && !singleline) {
-        if (bookmarked) xtSetColor(BookmarkColor); else if (inBlock) xtSetColor(blkClr);
+        if (bookmarked) win.color = BookmarkColor; else if (inBlock) win.color = blkClr;
       } else {
-        if (inBlock) xtSetColor(blkClr); else xtSetColor(sltextClr);
+        if (inBlock) win.color = blkClr; else win.color = sltextClr;
       }
       if (ch == '\n') break;
       if (x < winw) {
@@ -452,27 +455,28 @@ public:
           if (ex > 0) {
             int sz = ex-x;
             if (sz > 1) {
-              xtWriteCharsAt(winx+x, y, 1, '<');
-              xtWriteCharsAt(winx+x+1, y, sz-2, '-');
-              xtWriteCharsAt(winx+ex-1, y, 1, '>');
+              win.writeCharsAt(x, y, 1, '<');
+              win.writeCharsAt(x+1, y, sz-2, '-');
+              win.writeCharsAt(ex-1, y, 1, '>');
             } else {
-              xtWriteCharsAt(winx+x, y, 1, '\t');
+              win.writeCharsAt(x, y, 1, '\t');
             }
           }
           x = ex-1; // compensate the following increment
         } else if (!utfucked) {
-          if (x >= 0) xtWriteCharsAt(winx+x, y, 1, recodeCharFrom(ch));
+          if (x >= 0) win.writeCharsAt(x, y, 1, recodeCharFrom(ch));
         } else {
           // utfuck
           --pos;
           if (x >= 0) {
             dchar dch = dcharAt(pos);
             if (dch > dchar.max || dch == 0xFFFD) {
-              auto oc = xtGetColor();
-              if (!inBlock) xtSetColor(UtfuckedColor);
-              xtWriteCharsAt!true(winx+x, y, 1, '\x7e'); // dot
+              auto oc = win.color;
+              scope(exit) win.color = oc;
+              if (!inBlock) win.color = UtfuckedColor;
+              win.writeCharsAt!true(x, y, 1, '\x7e'); // dot
             } else {
-              xtWriteCharsAt(winx+x, y, 1, uni2koi(dch));
+              win.writeCharsAt(x, y, 1, uni2koi(dch));
             }
           }
           pos += gb.utfuckLenAt(pos);
@@ -483,26 +487,27 @@ public:
     if (x >= winw) return;
     if (x < 0) x = 0;
     if (pos >= ts) {
-      xtSetColor(TextColor);
+      win.color = TextColor;
       if (!killTextOnChar && !singleline) {
-        if (bookmarked) xtSetColor(BookmarkColor); else xtSetColor(sltextClr);
+        if (bookmarked) win.color = BookmarkColor; else win.color = sltextClr;
       } else {
-        xtSetColor(sltextClr);
+        win.color = sltextClr;
       }
     }
-    xtWriteCharsAt(winx+x, y, winw-x, ' ');
+    win.writeCharsAt(x, y, winw-x, ' ');
   }
 
   // just clear line
   // use `winXXX` vars to know window dimensions
   public override void drawEmptyLine (int yofs) {
+    auto win = XtWindow(winx, winy, winw, winh);
     if (singleline) {
-      xtSetColor(clrText ? clrText : TextColor);
-      if (killTextOnChar) xtSetColor(clrTextUnchanged ? clrTextUnchanged : TextKillColor);
+      win.color = (clrText ? clrText : TextColor);
+      if (killTextOnChar) win.color = (clrTextUnchanged ? clrTextUnchanged : TextKillColor);
     } else {
-      xtSetColor(TextColor);
+      win.color = TextColor;
     }
-    xtWriteCharsAt(winx, winy+yofs, winw, ' ');
+    win.writeCharsAt(0, yofs, winw, ' ');
   }
 
   public override void drawPageBegin () {
@@ -652,18 +657,19 @@ public:
     if (pos >= 0 && count > 0 && pos < gb.textsize) {
       int rx, ry;
       gb.pos2xyVT(pos, rx, ry);
-      auto oldclr = xtGetColor;
-      scope(exit) xtSetColor(oldclr);
+      //auto oldclr = xtGetColor;
+      //scope(exit) win.color = oldclr;
       if (ry >= topline && ry < topline+winh) {
         // visible, mark it
-        xtSetColor(clr);
+        auto win = XtWindow(winx, winy, winw, winh);
+        win.color = clr;
         if (count > gb.textsize-pos) count = gb.textsize-pos;
         rx -= mXOfs;
         ry -= topline;
-        ry += winy;
+        //ry += winy;
         if (!utfuck) {
           foreach (immutable _; 0..count) {
-            if (rx >= 0 && rx < winw) xtWriteCharsAt(winx+rx, ry, 1, recodeCharFrom(gb[pos++]));
+            if (rx >= 0 && rx < winw) win.writeCharsAt(rx, ry, 1, recodeCharFrom(gb[pos++]));
             ++rx;
           }
         } else {
@@ -674,10 +680,10 @@ public:
               dchar dch = dcharAt(pos);
               if (dch > dchar.max || dch == 0xFFFD) {
                 //auto oc = xtGetColor();
-                //xtSetColor(UtfuckedColor);
-                xtWriteCharsAt!true(winx+rx, ry, 1, '\x7e'); // dot
+                //win.color = UtfuckedColor;
+                win.writeCharsAt!true(rx, ry, 1, '\x7e'); // dot
               } else {
-                xtWriteCharsAt(winx+rx, ry, 1, uni2koi(dch));
+                win.writeCharsAt(rx, ry, 1, uni2koi(dch));
               }
             }
             ++rx;
@@ -708,11 +714,11 @@ public:
 
   public override void drawPageEnd () {
     if (mPromptActive) {
-      int pty = (singleline || hideStatus ? winy : winy-1);
-      xtSetColor(mPromptInput.clrText);
-      xtWriteCharsAt(winx, pty, winw, ' ');
-      xtWriteStrAt(winx, pty, mPromptPrompt[0..mPromptLen]);
-      xtWriteCharsAt(winx+mPromptLen, pty, 1, ':');
+      auto win = XtWindow(winx, winy-(singleline || hideStatus ? 0 : 1), winw, 1);
+      win.color = mPromptInput.clrText;
+      win.writeCharsAt(0, 0, winw, ' ');
+      win.writeStrAt(0, 0, mPromptPrompt[0..mPromptLen]);
+      win.writeCharsAt(mPromptLen, 0, 1, ':');
       mPromptInput.fullDirty(); // force redraw
       mPromptInput.drawPage();
       return;

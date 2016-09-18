@@ -512,6 +512,7 @@ public void xtFlush () /*nothrow @nogc*/ {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/*
 public void xtGotoXY (int x, int y) nothrow @trusted @nogc {
   if (x < 0) x = 0;
   if (y < 0) y = 0;
@@ -520,20 +521,23 @@ public void xtGotoXY (int x, int y) nothrow @trusted @nogc {
   ttycx = x;
   ttycy = y;
 }
+*/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public enum XtColorFB(ubyte fg, ubyte bg) = cast(uint)((fg<<8)|bg);
+/*
 public void xtSetF (ubyte fg) nothrow @trusted @nogc { curFG = fg; }
 public void xtSetB (ubyte bg) nothrow @trusted @nogc { curBG = bg; }
 public void xtSetFB (ubyte fg, ubyte bg) nothrow @trusted @nogc { curFG = fg; curBG = bg; }
 
-public enum XtColorFB(ubyte fg, ubyte bg) = cast(uint)((fg<<8)|bg);
-
 public void xtSetColor (uint c) nothrow @trusted @nogc { curFG = (c>>8)&0xff; curBG = c&0xff; }
 public uint xtGetColor () nothrow @trusted @nogc { return (curFG<<8)|curBG; }
+*/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/*
 public nothrow @trusted @nogc {
   void xtWriteStrAt(bool g1=false) (int x, int y, const(char)[] str...) { XtWindow.fullscreen.writeStrAt!g1(x, y, str); }
   void xtWriteCharsAt(bool g1=false) (int x, int y, int count, char ch) { XtWindow.fullscreen.writeCharsAt!g1(x, y, count, ch); }
@@ -547,7 +551,7 @@ public nothrow @trusted @nogc {
   void xtFrameShadowed(bool filled=false) (int x, int y, int w, int h) { XtWindow.fullscreen.frameShadowed!filled(x, y, w, h); }
   void xtFill(bool g1=false) (int x, int y, int w, int h, char ch=' ') { XtWindow.fullscreen.fill!g1(x, y, w, h, ch); }
 }
-
+*/
 
 // ////////////////////////////////////////////////////////////////////////// //
 public struct XtWindow {
@@ -608,8 +612,23 @@ public:
   @property uint color () const pure { pragma(inline, true); return fgbg; }
   @property void color (uint v) pure { pragma(inline, true); fgbg = cast(ushort)(v&0xffff); }
 
-  void gotoXY (int x, int y) {
-    xtGotoXY(x+this.x, y+this.y);
+  @property void fb (ubyte fg, ubyte bg) pure { pragma(inline, true); fgbg = cast(ushort)((fg<<8)|bg); }
+
+  void gotoXY (int x, int y) @trusted {
+    x += this.x;
+    y += this.y;
+    if (x >= this.x+this.w) x = this.x+this.w-1;
+    if (y >= this.y+this.h) y = this.y+this.h-1;
+    if (x < this.x) x = this.x;
+    if (y < this.y) y = this.y;
+    // now global
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x >= ttyw) x = ttyw-1;
+    if (y > ttyh) y = ttyh-1;
+    // set new coords
+    ttycx = x;
+    ttycy = y;
   }
 
   // returns new length (can be 0, and both `x` and `y` are undefined in this case)
