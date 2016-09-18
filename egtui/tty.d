@@ -25,8 +25,27 @@ import iv.utfutil;
 
 // ////////////////////////////////////////////////////////////////////////// //
 public __gshared int TtyDefaultEscWait = 50; // -1: forever
-public __gshared int ttyw, ttyh; // DO NOT CHANGE!
+private __gshared int ttywIntr, ttyhIntr; // DO NOT CHANGE!
 __gshared bool weAreFucked = false; // utfucked?
+__gshared string ttyzTitleSuffix;
+
+public @property int ttyw () nothrow @trusted @nogc { pragma(inline, true); return ttywIntr; }
+public @property int ttyh () nothrow @trusted @nogc { pragma(inline, true); return ttyhIntr; }
+
+public @property string ttyTitleSuffix () nothrow @trusted @nogc { return ttyzTitleSuffix; }
+public @property void ttyTitleSuffix(T : const(char)[]) (T s) nothrow {
+  static if (is(T == typeof(null))) {
+    ttyzTitleSuffix = null;
+  } else static if (is(T == string)) {
+    ttyzTitleSuffix = s;
+  } else {
+    ttyzTitleSuffix = s.idup;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public enum XtColorFB(ubyte fg, ubyte bg) = cast(uint)((fg<<8)|bg);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -177,13 +196,13 @@ private ubyte* ttzSBAlloc (uint size) {
 
 // push area contents and cursor position
 public void xtPushArea (int x, int y, int w, int h) {
-  if (w < 1 || h < 1 || x >= ttyw || y >= ttyh) { x = y = w = h = 0; }
+  if (w < 1 || h < 1 || x >= ttywIntr || y >= ttyhIntr) { x = y = w = h = 0; }
   if (w > 0) {
     int x0 = x, y0 = y, x1 = x+w-1, y1 = y+h-1;
-    if (x0 < 0) x0 = 0; else if (x0 >= ttyw) x0 = ttyw-1;
-    if (x1 < 0) x1 = 0; else if (x1 >= ttyw) x1 = ttyw-1;
-    if (y0 < 0) y0 = 0; else if (y0 >= ttyh) y0 = ttyh-1;
-    if (y1 < 0) y1 = 0; else if (y1 >= ttyh) y1 = ttyh-1;
+    if (x0 < 0) x0 = 0; else if (x0 >= ttywIntr) x0 = ttywIntr-1;
+    if (x1 < 0) x1 = 0; else if (x1 >= ttywIntr) x1 = ttywIntr-1;
+    if (y0 < 0) y0 = 0; else if (y0 >= ttyhIntr) y0 = ttyhIntr-1;
+    if (y1 < 0) y1 = 0; else if (y1 >= ttyhIntr) y1 = ttyhIntr-1;
     if (x0 <= x1 && y0 <= y1) {
       x = x0;
       y = y0;
@@ -206,13 +225,13 @@ public void xtPushArea (int x, int y, int w, int h) {
   st.w = w;
   st.h = h;
   if (w > 0 && h > 0) {
-    assert(x >= 0 && y >= 0 && x < ttyw && y < ttyh && x+w <= ttyw && y+h <= ttyh);
+    assert(x >= 0 && y >= 0 && x < ttywIntr && y < ttyhIntr && x+w <= ttywIntr && y+h <= ttyhIntr);
     import core.stdc.string : memcpy;
-    auto src = ttywb.ptr+y*ttyw+x;
+    auto src = ttywb.ptr+y*ttywIntr+x;
     auto dst = st.data.ptr;
     foreach (immutable _; 0..h) {
       memcpy(dst, src, Glyph.sizeof*w);
-      src += ttyw;
+      src += ttywIntr;
       dst += w;
     }
   }
@@ -236,14 +255,14 @@ public void xtPopArea () {
   auto w = st.w;
   auto h = st.h;
   if (w > 0 && h > 0) {
-    assert(x >= 0 && y >= 0 && x < ttyw && y < ttyh && x+w <= ttyw && y+h <= ttyh);
+    assert(x >= 0 && y >= 0 && x < ttywIntr && y < ttyhIntr && x+w <= ttywIntr && y+h <= ttyhIntr);
     import core.stdc.string : memcpy;
     auto src = st.data.ptr;
-    auto dst = ttywb.ptr+y*ttyw+x;
+    auto dst = ttywb.ptr+y*ttywIntr+x;
     foreach (immutable _; 0..h) {
       memcpy(dst, src, Glyph.sizeof*w);
       src += w;
-      dst += ttyw;
+      dst += ttywIntr;
     }
   }
 }
@@ -255,10 +274,10 @@ public void xtInit () {
   import core.sys.posix.unistd : write;
   weAreFucked = ttyIsUtfucked;
   setupWinch();
-  ttyw = ttyWidth;
-  ttyh = ttyHeight;
-  ttywb.length = ttyw*ttyh;
-  ttybc.length = ttyw*ttyh;
+  ttywIntr = ttyWidth;
+  ttyhIntr = ttyHeight;
+  ttywb.length = ttywIntr*ttyhIntr;
+  ttybc.length = ttywIntr*ttyhIntr;
   ttywb[] = Glyph.init;
   ttybc[] = Glyph.init;
   ttycx = ttycy = 0;
@@ -283,18 +302,18 @@ public void xtInit () {
 
 
 public bool xtNeedReinit () {
-  //return (ttyw != ttyWidth || ttyh != ttyHeight);
+  //return (ttywIntr != ttyWidth || ttyhIntr != ttyHeight);
   return winSizeChanged;
 }
 
 
 public void xtReinit () {
-  if (ttyw != ttyWidth || ttyh != ttyHeight) {
+  if (ttywIntr != ttyWidth || ttyhIntr != ttyHeight) {
     winSizeChanged = false;
-    ttyw = ttyWidth;
-    ttyh = ttyHeight;
-    ttywb.length = ttyw*ttyh;
-    ttybc.length = ttyw*ttyh;
+    ttywIntr = ttyWidth;
+    ttyhIntr = ttyHeight;
+    ttywb.length = ttywIntr*ttyhIntr;
+    ttybc.length = ttywIntr*ttyhIntr;
     ttywb[] = Glyph.init;
     ttybc[] = Glyph.init;
     ttycx = ttycy = 0;
@@ -363,7 +382,7 @@ public void xtSetTerminalTitle (const(char)[] title) {
   if (title.length > 500) title = title[0..500];
   enum titStart = "\x1b]2;";
   enum titEnd = "\x07";
-  enum suffix = " -- egedit";
+  //enum suffix = " -- egedit";
   bool good = true;
   foreach (char ch; title) if (ch < ' ' || ch == 127) { good = false; break; }
   write(1, titStart.ptr, titStart.length);
@@ -372,11 +391,7 @@ public void xtSetTerminalTitle (const(char)[] title) {
   } else {
     foreach (char ch; title) write(1, &ch, 1);
   }
-  if (title.length) {
-    write(1, suffix.ptr, suffix.length);
-  } else {
-    write(1, suffix.ptr+4, suffix.length-4);
-  }
+  if (ttyzTitleSuffix.length) write(1, ttyzTitleSuffix.ptr, ttyzTitleSuffix.length);
   write(1, titEnd.ptr, titEnd.length);
 }
 
@@ -441,7 +456,7 @@ public void xtFlush () /*nothrow @nogc*/ {
   }
   ttzPut("\x1b[0;38;5;7;48;5;0m");
   ubyte lastFG = 7, lastBG = 0;
-  int tsz = ttyw*ttyh;
+  int tsz = ttywIntr*ttyhIntr;
   // fix glyph chars
   auto tsrc = ttywb.ptr; // source buffer
   auto tdst = ttybc.ptr; // destination buffer
@@ -461,7 +476,7 @@ public void xtFlush () /*nothrow @nogc*/ {
         if (/*tsrc.ch == ' ' ||*/ tsrc.fg == tdst.fg) continue;
       }
     }
-    gotoXY(pos%ttyw, pos/ttyw);
+    gotoXY(pos%ttywIntr, pos/ttywIntr);
     if (inG0G1 != (tsrc.flags&Glyph.Flag.G1)) {
       if ((inG0G1 = (tsrc.flags&Glyph.Flag.G1)) != 0) ttzPut('\x0e'); else ttzPut('\x0f');
     }
@@ -496,7 +511,7 @@ public void xtFlush () /*nothrow @nogc*/ {
       ttzPut(ubuf[0..len]);
     }
     // adjust cursor position
-    if (++lastx == ttyw) {
+    if (++lastx == ttywIntr) {
       lastx = 0;
       ttzPut("\r");
     }
@@ -510,48 +525,6 @@ public void xtFlush () /*nothrow @nogc*/ {
   ttzFullRefresh = false;
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
-/*
-public void xtGotoXY (int x, int y) nothrow @trusted @nogc {
-  if (x < 0) x = 0;
-  if (y < 0) y = 0;
-  if (x >= ttyw) x = ttyw-1;
-  if (y > ttyh) y = ttyh-1;
-  ttycx = x;
-  ttycy = y;
-}
-*/
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-public enum XtColorFB(ubyte fg, ubyte bg) = cast(uint)((fg<<8)|bg);
-/*
-public void xtSetF (ubyte fg) nothrow @trusted @nogc { curFG = fg; }
-public void xtSetB (ubyte bg) nothrow @trusted @nogc { curBG = bg; }
-public void xtSetFB (ubyte fg, ubyte bg) nothrow @trusted @nogc { curFG = fg; curBG = bg; }
-
-public void xtSetColor (uint c) nothrow @trusted @nogc { curFG = (c>>8)&0xff; curBG = c&0xff; }
-public uint xtGetColor () nothrow @trusted @nogc { return (curFG<<8)|curBG; }
-*/
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-/*
-public nothrow @trusted @nogc {
-  void xtWriteStrAt(bool g1=false) (int x, int y, const(char)[] str...) { XtWindow.fullscreen.writeStrAt!g1(x, y, str); }
-  void xtWriteCharsAt(bool g1=false) (int x, int y, int count, char ch) { XtWindow.fullscreen.writeCharsAt!g1(x, y, count, ch); }
-  void xtWriteUIntAt (int x, int y, uint n) { XtWindow.fullscreen.writeUIntAt(x, y, n); }
-  void xtWriteUHexAt (int x, int y, uint n) { XtWindow.fullscreen.writeUHexAt(x, y, n); }
-  void xtHLine(bool setattr=true) (int x, int y, int len) { XtWindow.fullscreen.hline!setattr(x, y, len); }
-  void xtVLine(bool setattr=true) (int x, int y, int len) { XtWindow.fullscreen.vline!setattr(x, y, len); }
-  void xtFrame(bool filled=false) (int x, int y, int w, int h) { XtWindow.fullscreen.frame!filled(x, y, w, h); }
-  void xtHShadow (int x, int y, int len) { XtWindow.fullscreen.hshadow(x, y, len); }
-  void xtShadowBox (int x, int y, int w, int h) { XtWindow.fullscreen.shadowBox(x, y, w, h); }
-  void xtFrameShadowed(bool filled=false) (int x, int y, int w, int h) { XtWindow.fullscreen.frameShadowed!filled(x, y, w, h); }
-  void xtFill(bool g1=false) (int x, int y, int w, int h, char ch=' ') { XtWindow.fullscreen.fill!g1(x, y, w, h, ch); }
-}
-*/
 
 // ////////////////////////////////////////////////////////////////////////// //
 public struct XtWindow {
@@ -569,7 +542,7 @@ public:
     fgbg = cast(ushort)((curFG<<8)|curBG); // with current color
   }
 
-  static XtWindow fullscreen () @trusted { pragma(inline, true); return XtWindow(0, 0, ttyw, ttyh); }
+  static XtWindow fullscreen () @trusted { pragma(inline, true); return XtWindow(0, 0, ttywIntr, ttyhIntr); }
 
   @property bool valid () const pure { pragma(inline, true); return (w > 0 && h > 0); }
   // invalid windows are invisible ;-)
@@ -577,7 +550,7 @@ public:
     pragma(inline, true);
     return
       w > 0 && h > 0 && // valid
-      x < ttyw && y < ttyh && // not too right/bottom
+      x < ttywIntr && y < ttyhIntr && // not too right/bottom
       x+w > 0 && y+h > 0; // not too left/top
   }
 
@@ -624,8 +597,8 @@ public:
     // now global
     if (x < 0) x = 0;
     if (y < 0) y = 0;
-    if (x >= ttyw) x = ttyw-1;
-    if (y > ttyh) y = ttyh-1;
+    if (x >= ttywIntr) x = ttywIntr-1;
+    if (y > ttyhIntr) y = ttyhIntr-1;
     // set new coords
     ttycx = x;
     ttycy = y;
@@ -649,14 +622,14 @@ public:
     // crop to global space
     x += this.x;
     y += this.y;
-    if (x+len <= 0 || x >= ttyw || y < 0 || y >= ttyh) return 0;
+    if (x+len <= 0 || x >= ttywIntr || y < 0 || y >= ttyhIntr) return 0;
     if (x < 0) {
       if (x <= -len) return 0;
       len += x;
       ofs = -x;
       x = 0;
     }
-    left = ttyw-x;
+    left = ttywIntr-x;
     if (left < len) len = left;
     return len;
   }
@@ -674,7 +647,7 @@ public:
     if (len < 1) return;
     immutable f = fg, b = bg;
     auto src = cast(const(char)*)str.ptr+ofs;
-    auto dst = ttywb.ptr+y*ttyw+x;
+    auto dst = ttywb.ptr+y*ttywIntr+x;
     while (len-- > 0) {
       dst.fg = f;
       dst.bg = b;
@@ -693,7 +666,7 @@ public:
     auto len = normXYLen(x, y, count);
     if (len < 1) return;
     immutable f = fg, b = bg;
-    auto dst = ttywb.ptr+y*ttyw+x;
+    auto dst = ttywb.ptr+y*ttywIntr+x;
     while (len-- > 0) {
       dst.fg = f;
       dst.bg = b;
@@ -733,11 +706,11 @@ public:
     if (nlen < 1) return;
     immutable f = fg, b = bg;
     if (nlen == 1) {
-      ttywb.ptr[y*ttyw+x].g1line!setattr(Glyph.Flag.GraphLeft|Glyph.Flag.GraphRight, f, b);
+      ttywb.ptr[y*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphLeft|Glyph.Flag.GraphRight, f, b);
     } else {
-      ttywb.ptr[y*ttyw+x].g1line!setattr(Glyph.Flag.GraphRight, f, b);
-      foreach (ref gl; ttywb.ptr[y*ttyw+x+1..y*ttyw+x+nlen-1]) gl.g1line!setattr(Glyph.Flag.GraphLeft|Glyph.Flag.GraphRight, f, b);
-      ttywb.ptr[y*ttyw+x+nlen-1].g1line!setattr(Glyph.Flag.GraphLeft, f, b);
+      ttywb.ptr[y*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphRight, f, b);
+      foreach (ref gl; ttywb.ptr[y*ttywIntr+x+1..y*ttywIntr+x+nlen-1]) gl.g1line!setattr(Glyph.Flag.GraphLeft|Glyph.Flag.GraphRight, f, b);
+      ttywb.ptr[y*ttywIntr+x+nlen-1].g1line!setattr(Glyph.Flag.GraphLeft, f, b);
     }
   }
 
@@ -753,11 +726,11 @@ public:
     if (normXYLen(x, y, 1) != 1) return;
     immutable f = fg, b = bg;
     if (len == 1) {
-      ttywb.ptr[y*ttyw+x].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
+      ttywb.ptr[y*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
     } else {
-      ttywb.ptr[y*ttyw+x].g1line!setattr(Glyph.Flag.GraphDown, f, b);
-      foreach (int sy; y+1..y+len-1) ttywb.ptr[sy*ttyw+x].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
-      ttywb.ptr[(y+len-1)*ttyw+x].g1line!setattr(Glyph.Flag.GraphUp, f, b);
+      ttywb.ptr[y*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphDown, f, b);
+      foreach (int sy; y+1..y+len-1) ttywb.ptr[sy*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
+      ttywb.ptr[(y+len-1)*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphUp, f, b);
     }
   }
 
@@ -791,7 +764,7 @@ public:
 
     len = normXYLen(x, y, len);
     if (len < 1) return;
-    auto dst = ttywb.ptr+y*ttyw+x;
+    auto dst = ttywb.ptr+y*ttywIntr+x;
     while (len-- > 0) {
       dst.fg = shadowColor(dst.fg);
       dst.bg = shadowColor(dst.bg);
