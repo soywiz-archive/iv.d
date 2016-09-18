@@ -2573,3 +2573,81 @@ int tox_generate_dns3_string(void* dns3_object, ubyte* str, ushort string_max_le
  */
 int tox_decrypt_dns3_TXT(void* dns3_object, ubyte* tox_id, ubyte* id_record, uint id_record_len,
                          uint request_id);
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// Ketmar's added utilities
+import std.net.curl;
+
+bool tox_unhex (ubyte[] dest, const(char)[] str) nothrow @trusted @nogc {
+  if (dest.length == 0) return false;
+  typeof(dest.length) dpos = 0;
+  foreach (char ch; str) {
+    if (ch <= ' ' || ch == '_') continue;
+    if (dpos >= dest.length*2) return false;
+    int n;
+         if (ch >= '0' && ch <= '9') n = ch-'0';
+    else if (ch >= 'A' && ch <= 'F') n = ch-'A'+10;
+    else if (ch >= 'a' && ch <= 'f') n = ch-'a'+10;
+    else return false;
+    if (dpos%2 == 0) dest[dpos/2] = cast(ubyte)(n*16); else dest[dpos/2] |= cast(ubyte)n;
+    ++dpos;
+  }
+  return (dpos == dest.length*2);
+}
+
+
+string tox_hex (const(ubyte)[] src) nothrow @trusted {
+  assert(src.length < int.max/2);
+  if (src.length == 0) return null;
+  auto res = new char[](src.length*2);
+  int dpos = 0;
+  foreach (ubyte b; src) {
+    immutable hb = (b>>4);
+    b &= 0x0f;
+    res[dpos++] = cast(char)(hb+'0'+(hb > 9 ? 7 : 0));
+    res[dpos++] = cast(char)(b+'0'+(b > 9 ? 7 : 0));
+  }
+  return cast(string)res; // it is safe to cast here
+}
+
+
+struct ToxBootstrapServer {
+  string maintainer;
+  ubyte[32] pubkey;
+  string ipv4;
+  ushort port;
+  bool tcp;
+  bool udp;
+}
+
+
+ToxBootstrapServer[] tox_download_bootstrap_list (string url=null) {
+  import std.net.curl : get;
+  import std.json;
+  if (url.length == 0) url = "https://nodes.tox.chat/json";
+  auto lst = get(url);
+  auto js = parseJSON(lst);
+  ToxBootstrapServer[] res;
+  foreach (ref svx; js["nodes"].array) {
+    import std.conv : to;
+    auto sv = ToxBootstrapServer();
+    sv.maintainer = svx["maintainer"].str;
+    if (!tox_unhex(sv.pubkey, svx["public_key"].str)) continue;
+    //if (tox_hex(sv.pubkey) != svx["public_key"].str) assert(0, "wtf?!");
+    sv.ipv4 = svx["ipv4"].str;
+    if (!sv.ipv4.length) continue;
+    if (svx["port"].type == JSON_TYPE.INTEGER) {
+      auto pp = svx["port"].integer;
+      if (pp < 1 || pp > 65535) continue;
+      sv.port = cast(ushort)pp;
+    } else {
+      continue;
+    }
+    if (svx["status_udp"].type == JSON_TYPE.TRUE) sv.udp = true;
+    if (svx["status_tcp"].type == JSON_TYPE.TRUE) sv.tcp = true;
+    if (!sv.tcp && !sv.udp) continue;
+    res ~= sv;
+  }
+  return res;
+}
