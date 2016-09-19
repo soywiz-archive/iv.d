@@ -42,9 +42,9 @@ bool isxdigit (char ch) pure nothrow @trusted @nogc { pragma(inline, true); retu
 int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
   pragma(inline, true);
   return
-    base >= 1 && ch >= '0' && ch < '0'+base ? ch-'0' :
-    base > 10 && ch >= 'A' && ch < 'A'+base-10 ? ch-'A'+10 :
-    base > 10 && ch >= 'a' && ch < 'a'+base-10 ? ch-'a'+10 :
+    ch >= '0' && ch <= '9' && ch-'0' < base ? ch-'0' :
+    base > 10 && ch >= 'A' && ch < 'Z' && ch-'A'+10 < base ? ch-'A'+10 :
+    base > 10 && ch >= 'a' && ch < 'z' && ch-'a'+10 < base ? ch-'a'+10 :
     -1;
 }
 
