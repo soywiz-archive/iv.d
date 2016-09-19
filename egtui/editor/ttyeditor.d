@@ -376,7 +376,10 @@ public:
     }
     if (utfuck) {
       win.fb(11, 9);
-      win.writeCharsAt(0, 0, 1, 'U');
+      if (readonly) win.writeCharsAt(0, 0, 1, '/'); else win.writeCharsAt(0, 0, 1, 'U');
+    } else if (readonly) {
+      win.fb(11, 9);
+      win.writeCharsAt(0, 0, 1, 'R');
     }
   }
 
@@ -1785,4 +1788,6 @@ final:
       auto tsz = dialogTabSize(tabsize);
       if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
     }
+
+  @TEDKey("^Q ^R", "toggle read-only mode") void tedQmodeCtrlR () { readonly = !readonly; fullDirty(); /*FIXME*/ }
 }
