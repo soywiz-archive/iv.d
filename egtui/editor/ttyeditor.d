@@ -1344,9 +1344,9 @@ final:
       replaceText!"end"(mt.s, mt.e-mt.s, srr.replace);
       // fix search range
       if (!srr.backwards) {
-        spos += cast(int)srr.replace.length;
-        epos -= mt.e-mt.s;
-        epos += cast(int)srr.replace.length;
+        // forward
+        spos = mt.s+cast(int)srr.replace.length;
+        epos -= (mt.e-mt.s)-cast(int)srr.replace.length;
       } else {
         epos = mt.s;
       }
