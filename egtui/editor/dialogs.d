@@ -125,10 +125,77 @@ int dialogLineNumber (int defval=-1) {
   //ctx.focused = ctx["lnum"];
   if (defval > 0) {
     import std.conv : to;
-    with (ctx.itemAs!"editline"("lnum")) {
-      ed.doPutText(defval.to!string);
-      ed.clearUndo();
+    with (ctx.itemAs!"editline"("lnum")) ed.setNewText(defval.to!string);
+    validate(ctx, ctx["lnum"]);
+  }
+  auto res = ctx.modalDialog;
+  if (res >= 0) return edGetNum(ctx["lnum"]);
+  return -1;
+}
+
+
+// ///////////////////////////////////////////////////////////////////////// //
+// <=0: invalid number
+int dialogTabSize (int defval) {
+  enum laydesc = q{
+    caption: "Select Tab Size"
+    small-frame: false
+    // hbox for text
+    hbox: {
+      label: {
+        text: `\R&Tab size: `
+        dest: "lnum"
+      }
+      editline: {
+        flex: 1
+        id: "lnum"
+        on-action: validate
+      }
     }
+    hline
+    // center buttons
+    hbox: {
+      span: { flex: 1 }
+      button: { id: "btok" caption: " O&K " default }
+      span: { flex: 1 }
+    }
+  };
+
+  auto ctx = FuiContext.create();
+
+  int edGetNum (int item) {
+    if (auto edl = ctx.itemAs!"editline"(item)) {
+      auto ed = edl.ed;
+      if (ed is null) return -1;
+      int num = 0;
+      auto rng = ed[];
+      while (!rng.empty && rng.front <= ' ') rng.popFront();
+      if (rng.empty || !rng.front.isdigit) return -1;
+      while (!rng.empty && rng.front.isdigit) {
+        num = num*10+rng.front-'0';
+        rng.popFront();
+      }
+      while (!rng.empty && rng.front <= ' ') rng.popFront();
+      return (rng.empty ? num : -1);
+    }
+    return -1;
+  }
+
+  int validate (FuiContext ctx, int item) {
+    auto num = edGetNum(item);
+    ctx.setEnabled(ctx["btok"], (num > 0 && num <= 32));
+    return -666;
+  }
+
+  //ctx.maxDimensions = FuiSize(ttyw, ttyh);
+  ctx.parse!(validate)(laydesc);
+  ctx.relayout();
+  validate(ctx, ctx["lnum"]);
+  //ctx.focused = ctx["lnum"];
+  if (defval > 0) {
+    import std.conv : to;
+    with (ctx.itemAs!"editline"("lnum")) ed.setNewText(defval.to!string);
+    validate(ctx, ctx["lnum"]);
   }
   auto res = ctx.modalDialog;
   if (res >= 0) return edGetNum(ctx["lnum"]);

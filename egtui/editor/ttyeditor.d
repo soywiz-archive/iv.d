@@ -1779,4 +1779,9 @@ final:
     void tedQmodeCtrlB () { if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; }
   @TEDKey("^Q ^K", "go to block end")
     void tedQmodeCtrlE () { if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; }
+  @TEDKey("^Q ^T", "set tab size")
+    void tedQmodeCtrlT () {
+      auto tsz = dialogTabSize(tabsize);
+      if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
+    }
 }

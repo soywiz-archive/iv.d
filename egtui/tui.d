@@ -533,9 +533,7 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
   data.id.setz(id);
   data.ed = new TtyEditor(0, 0, 10, 1, !text); // size will be fixed later
   data.ed.utfuck = utfuck;
-  data.ed.doPutText(deftext);
-  data.ed.clearUndo();
-  static if (!text) data.ed.killTextOnChar = true;
+  data.ed.setNewText(deftext);
   data.drawcb = delegate (FuiContext ctx, int self, FuiRect rc) {
     auto data = ctx.item!FuiCtlEditLine(self);
     auto lp = ctx.layprops(self);

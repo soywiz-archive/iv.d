@@ -2125,6 +2125,17 @@ public:
     return true;
   }
 
+  // ugly name is intentional
+  // this replaces editor text, clears undo and sets `killTextOnChar` if necessary
+  final bool setNewText (const(char)[] text) {
+    clear();
+    auto res = insertText!"end"(0, text);
+    clearUndo();
+    if (singleline) killTextOnChar = true;
+    fullDirty();
+    return res;
+  }
+
   // insert text, save undo, mark updated lines
   // return `false` if operation cannot be performed
   final bool insertText(string movecursor="none", bool doIndent=true) (int pos, const(char)[] str) {
