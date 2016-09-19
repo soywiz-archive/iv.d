@@ -44,6 +44,7 @@ class TtyEditor : Editor {
   enum TEDSingleOnly; // only for single-line mode
   enum TEDMultiOnly; // only for multiline mode
   enum TEDEditOnly; // only for non-readonly mode
+  enum TEDROOnly; // only for readonly mode
 
   struct TEDKey { string key; string help; bool hidden; } // UDA
 
@@ -940,6 +941,7 @@ public:
                        static if (is(attrx == TEDSingleOnly)) { if (!singleline) goodMode = false; }
                   else static if (is(attrx == TEDMultiOnly)) { if (singleline) goodMode = false; }
                   else static if (is(attrx == TEDEditOnly)) { if (readonly) goodMode = false; }
+                  else static if (is(attrx == TEDROOnly)) { if (!readonly) goodMode = false; }
                 }
                 if (goodMode) {
                   //res ~= "|";
@@ -997,6 +999,7 @@ public:
           static if (hasUDA!(mx, TEDSingleOnly)) { if (!singleline) goodMode = false; }
           static if (hasUDA!(mx, TEDMultiOnly)) { if (singleline) goodMode = false; }
           static if (hasUDA!(mx, TEDEditOnly)) { if (readonly) goodMode = false; }
+          static if (hasUDA!(mx, TEDROOnly)) { if (!readonly) goodMode = false; }
           if (goodMode) {
             foreach (const TEDKey attr; getUDAs!(mx, TEDKey)) {
               auto cc = checkKeys(attr.key);
@@ -1689,10 +1692,8 @@ final:
     void tedCtrlV () { incSearchDir = -1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(-1); else doNextIncSearch(); }
   @TEDKey("^W", "remove previous word")
   @TEDEditOnly
-  @TEDEditOnly
     void tedCtrlW () { doDeleteWord(); }
   @TEDKey("^Y", "remove current line")
-  @TEDEditOnly
   @TEDEditOnly
     void tedCtrlY () { doKillLine(); }
   @TEDKey("^_", "start new incremental search, forward")
@@ -1789,5 +1790,13 @@ final:
       if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
     }
 
-  @TEDKey("^Q ^R", "toggle read-only mode") void tedQmodeCtrlR () { readonly = !readonly; fullDirty(); /*FIXME*/ }
+  @TEDKey("Space")
+  @TEDMultiOnly
+  @TEDROOnly
+    void tedROSpace () { doPageDown(); }
+
+  @TEDKey("^Space")
+  @TEDMultiOnly
+  @TEDROOnly
+    void tedROCtrlSpace () { doPageUp(); }
 }
