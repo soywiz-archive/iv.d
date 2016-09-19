@@ -298,7 +298,7 @@ public:
     } else if (incSearchBuf.length > 2 && incSearchBuf[$-1] == '/') {
       // regexp
       import std.utf : byChar;
-      auto re = RegExp.create(incSearchBuf[1..$-1].byChar);
+      auto re = RegExp.create(incSearchBuf[1..$-1].byChar, SRFlags.Multiline);
       if (!re.valid) { ttyBeep; return; }
       Pike.Capture[2] caps;
       bool found;
@@ -1363,7 +1363,7 @@ final:
     import std.utf : byChar;
     if (srr.search.length == 0) return;
     if (srr.inselection && !hasMarkedBlock) return;
-    auto re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : SRFlags.CaseInsensitive));
+    auto re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : SRFlags.CaseInsensitive)|SRFlags.Multiline);
     if (!re.valid) { ttyBeep; return; }
     scope(exit) fullDirty(); // to remove highlighting
     bool closeGroup = false;
