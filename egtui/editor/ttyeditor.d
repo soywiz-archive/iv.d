@@ -1615,6 +1615,7 @@ final:
   @TEDMultiOnly
   @TEDEditOnly
     void tedAltEnter () { doLineSplit(false); }
+
   @TEDKey("F2", "save file")
   @TEDMultiOnly
   @TEDEditOnly
@@ -1662,6 +1663,14 @@ final:
   @TEDKey("M-K", "toggle bookmark")
   @TEDMultiOnly
     void tedAltK () { doBookmarkToggle(); }
+  @TEDKey("M-L", "goto line")
+  @TEDMultiOnly
+    void tedAltL () {
+      auto lnum = dialogLineNumber();
+      if (lnum > 0 && lnum < linecount) {
+        gotoXY!true(curx, lnum-1); // vcenter
+      }
+    }
   @TEDKey("M-S-L", "force center current line")
   @TEDMultiOnly
     void tedAltShiftL () { makeCurLineVisibleCentered(true); }
