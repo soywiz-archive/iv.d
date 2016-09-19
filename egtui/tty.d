@@ -82,22 +82,27 @@ public:
 
   static XtScissor fullscreen () { return XtScissor(0, 0, ttywIntr, ttyhIntr); }
 
-pure const @safe:
+const @safe:
   // crop this scissor with another scissor
+  XtScissor crop (int x, int y, int w, int h) { return crop(XtScissor(x, y, w, h)); }
+pure:
   XtScissor crop (in XtScissor s) {
+    import std.algorithm : max, min;
     XtScissor res = void;
     res.mX0 = this.mX0;
     res.mY0 = this.mY0;
     res.mW = this.mW;
     res.mH = this.mH;
     if (res.visible && s.visible) {
-      int rx0 = (mX0 >= s.mX0 ? mX0 : s.mX0);
-      int ry0 = (mY0 >= s.mY0 ? mY0 : s.mY0);
-      int rx1 = (x1 <= s.x1 ? x1 : s.x1);
-      int ry1 = (y1 <= s.x1 ? y1 : s.y1);
+      int rx0 = max(mX0, s.mX0);
+      int ry0 = max(mY0, s.mY0);
+      int rx1 = min(x1, s.x1);
+      int ry1 = min(y1, s.y1);
       if (rx1 < rx0 || ry1 < ry0) {
         res.mW = res.mH = 0;
       } else {
+        res.mX0 = cast(ushort)rx0;
+        res.mY0 = cast(ushort)ry0;
         res.mW = cast(ushort)(rx1-rx0+1);
         res.mH = cast(ushort)(ry1-ry0+1);
       }
