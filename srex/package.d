@@ -52,7 +52,8 @@ public enum SRes : int {
 
 /// regex flags
 public enum SRFlags : uint {
-  CaseInsensitive = (1<<0), ///
+  CaseInsensitive = 1<<0, ///
+  Multiline = 1<<1, /// \s range will not include '\n', and dot will not match '\n' too
 }
 
 
@@ -129,7 +130,9 @@ struct REParser {
   static immutable char[8] esc_w_ranges = [ 'A', 'Z', 'a', 'z', '0', '9', '_', '_' ];
   static immutable char[10] esc_W_ranges = [ 0, 47, 58, 64, 91, 94, 96, 96, 123, 255 ];
   static immutable char[10] esc_s_ranges = [ ' ', ' ', '\f', '\f', '\n', '\n', '\r', '\r', '\t', '\t' ];
+  static immutable char[10] esc_sm_ranges = [ ' ', ' ', '\f', '\f', '\r', '\r', '\t', '\t' ];
   static immutable char[8] esc_S_ranges = [ 0, 8, 11, 11, 14, 31, 33, 255 ];
+  static immutable char[8] esc_SM_ranges = [ 0, 8, 10, 11, 14, 31, 33, 255 ];
   static immutable char[6] esc_h_ranges = [ 0x09, 0x09, 0x20, 0x20, 0xa0, 0xa0 ];
   static immutable char[8] esc_H_ranges = [ 0x00, 0x08, 0x0a, 0x1f, 0x21, 0x9f, 0xa1, 0xff ];
   static immutable char[10] esc_v_ranges = [ 0x0a, 0x0a, 0x0b, 0x0b, 0x0c, 0x0c, 0x0d, 0x0d, 0x85, 0x85 ];
@@ -229,7 +232,7 @@ struct REParser {
     }
 
     if (yytok == '.') {
-      auto yyl = memoryfail(pool.reCreate(RegExpPart.Type.Dot, null, null));
+      auto yyl = memoryfail(pool.reCreate((flags&SRFlags.Multiline ? RegExpPart.Type.DotML : RegExpPart.Type.Dot), null, null));
       nextToken();
       return yyl;
     }
@@ -282,8 +285,8 @@ struct REParser {
         case 'D': yyl = buildRange(esc_d_ranges, false); break;
         case 'w': yyl = buildRange(esc_w_ranges, true); break;
         case 'W': yyl = buildRange(esc_w_ranges, false); break;
-        case 's': yyl = buildRange(esc_s_ranges, true); break;
-        case 'S': yyl = buildRange(esc_s_ranges, false); break;
+        case 's': yyl = buildRange((flags&SRFlags.Multiline ? esc_sm_ranges : esc_s_ranges), true); break;
+        case 'S': yyl = buildRange((flags&SRFlags.Multiline ? esc_sm_ranges : esc_s_ranges), false); break;
         case 'N': // \N is defined as [^\n]
           yyl = memoryfail(pool.reCreate(RegExpPart.Type.NClass, null, null));
           auto range = memoryfail(pool.alloc!RERange);
@@ -394,8 +397,8 @@ struct REParser {
           switch (yytok) {
             case 'd': rng = esc_d_ranges; break;
             case 'D': rng = esc_D_ranges; break;
-            case 's': rng = esc_s_ranges; break;
-            case 'S': rng = esc_S_ranges; break;
+            case 's': rng = (flags&SRFlags.Multiline ? esc_sm_ranges : esc_s_ranges); break;
+            case 'S': rng = (flags&SRFlags.Multiline ? esc_SM_ranges : esc_S_ranges); break;
             case 'N': rng = esc_N_ranges; break;
             case 'w': rng = esc_w_ranges; break;
             case 'W': rng = esc_W_ranges; break;
@@ -852,6 +855,7 @@ enum Opcode : ubyte {
   In     = 7,
   NotIn  = 8,
   Assert = 9,
+  AnyML  = 10,
 }
 
 align(1) struct Range2VM {
@@ -952,6 +956,9 @@ void dump (VMInstr* pc, VMInstr* start) {
     case Opcode.Any:
       fprintf(f, "%2d. any", cast(int)(pc-start));
       break;
+    case Opcode.AnyML:
+      fprintf(f, "%2d. anyml", cast(int)(pc-start));
+      break;
     case Opcode.Match:
       fprintf(f, "%2d. match %d", cast(int)(pc-start), cast(int)pc.regex_id);
       break;
@@ -1022,6 +1029,7 @@ struct RegExpPart {
     NClass   = 10,
     Assert   = 11,
     TopLevel = 12,
+    DotML    = 13,
   }
 
   enum AssType : ubyte {
@@ -1076,6 +1084,9 @@ void dump (const(RegExpPart)* r) {
       break;
     case RegExpPart.Type.Dot:
       printf("Dot");
+      break;
+    case RegExpPart.Type.DotML:
+      printf("DotML");
       break;
     case RegExpPart.Type.Paren:
       printf("Paren(%lu, ", cast(uint)r.group);
@@ -1356,6 +1367,7 @@ private int getLeadingBytesHelper (MemPool pool, VMInstr* pc, Program* prog, Cha
       if (++pc == prog.start+prog.len) return SRes.Ok;
       return getLeadingBytesHelper(pool, pc, prog, res, tag);
     case Opcode.Any:
+    case Opcode.AnyML:
       return SRes.NoMatch;
     default:
       /* CHAR, ANY, IN, NOTIN */
@@ -1393,6 +1405,7 @@ private uint prgLength (RegExpPart* r) {
       return r.left.prgLength+r.right.prgLength;
     case RegExpPart.Type.Lit:
     case RegExpPart.Type.Dot:
+    case RegExpPart.Type.DotML:
     case RegExpPart.Type.Class:
     case RegExpPart.Type.NClass:
       return 1;
@@ -1459,6 +1472,10 @@ private VMInstr* emit (MemPool pool, VMInstr* pc, RegExpPart* r) {
       break;
     case RegExpPart.Type.Dot:
       pc.opcode = Opcode.Any;
+      ++pc;
+      break;
+    case RegExpPart.Type.DotML:
+      pc.opcode = Opcode.AnyML;
       ++pc;
       break;
     case RegExpPart.Type.Paren:
@@ -1729,6 +1746,10 @@ int execute (ThompsonCtx* ctx, const(char)* input, uint size, bool eof) {
           break;
         case Opcode.Any:
           if (sp == last) break;
+          addThread(ctx, nlist, pc+1, sp+1);
+          break;
+        case Opcode.AnyML:
+          if (sp == last || *sp == '\n') break;
           addThread(ctx, nlist, pc+1, sp+1);
           break;
         case Opcode.Assert:
@@ -2197,6 +2218,12 @@ int execute (PikeCtx* ctx, const(char)* input, uint size, bool eof, int** pendin
             return SRes.Error;
           }
           break;
+        case Opcode.AnyML:
+          if (sp == last || *sp == '\n') {
+            ctx.decref(cap);
+            break;
+          }
+          goto case;
         case Opcode.Any:
           if (sp == last) {
             ctx.decref(cap);
