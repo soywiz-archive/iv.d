@@ -119,8 +119,8 @@ pure const @safe:
 __gshared XtScissor ttyzScissor;
 
 
-@property XtScissor ttyScissor () nothrow @trusted @nogc { pragma(inline, true); return ttyzScissor; }
-@property void ttyScissor (in XtScissor sc) nothrow @trusted @nogc { pragma(inline, true); ttyzScissor = sc; }
+public @property XtScissor ttyScissor () nothrow @trusted @nogc { pragma(inline, true); return ttyzScissor; }
+public @property void ttyScissor (in XtScissor sc) nothrow @trusted @nogc { pragma(inline, true); ttyzScissor = sc; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

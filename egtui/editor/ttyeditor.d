@@ -149,6 +149,7 @@ public:
   // other
   SearchReplaceOptions srrOptions;
   bool hideStatus = false;
+  bool hideSBar = false; // hide scrollbar
 
 public:
   this (int x0, int y0, int w, int h, bool asinglesine=false) {
@@ -323,19 +324,21 @@ public:
   }
 
   final void drawScrollBar () {
-    if (winx == 0) return;
-    if (singleline || hideStatus) return;
-    auto win = XtWindow(winx-1, winy-1, 1, winh+1);
+    if (winx == 0) return; // it won't be visible anyway
+    if (singleline || hideSBar) return;
+    auto win = XtWindow(winx-1, winy-(hideStatus ? 0 : 1), 1, winh+(hideStatus ? 0 : 1));
+    if (win.height < 1) return; // it won't be visible anyway
     win.fg = TtyRgb2Color!(0x00, 0x00, 0x00);
     win.bg = TtyRgb2Color!(0x00, 0x5f, 0xaf);
     int filled;
-    int total = gb.linecount-winh;
-    if (total <= 0) {
-      filled = winh+1;
+    int botline = topline+winh-1;
+    if (botline >= linecount-1 || linecount == 0) {
+      filled = win.height;
     } else {
-      filled = (winh+1)*mTopLine/total;
+      filled = (win.height-1)*botline/linecount;
+      if (filled == win.height-1 && mTopLine+winh < linecount) --filled;
     }
-    foreach (immutable y; 0..winh+1) win.writeCharsAt!true(0, y, 1, (y <= filled ? ' ' : 'a'));
+    foreach (immutable y; 0..win.height) win.writeCharsAt!true(0, y, 1, (y <= filled ? ' ' : 'a'));
   }
 
   public override void drawCursor () {
