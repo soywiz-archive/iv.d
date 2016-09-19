@@ -561,8 +561,10 @@ public:
         }
         skipNumMods();
         st = HS(HiText);
-        if (!gb[spos+ofs].isalpha) st = HS(HiNumber); // number
-        foreach (immutable cp; 0..ofs) gb.hi(spos++) = st;
+        if (gb[spos+ofs].isalnum) { gb.hi(spos++) = st; continue mainloop; }
+        // good number
+        st = HS(HiNumber);
+        foreach (immutable _; 0..ofs) gb.hi(spos++) = st;
         st = HS(HiText);
         continue mainloop;
       }
@@ -588,8 +590,11 @@ public:
         }
         skipNumMods();
         st = HS(HiText);
-        if (!gb[spos+ofs].isalpha) st = HS(HiNumber); // number
+        if (gb[spos+ofs].isalnum) { gb.hi(spos++) = st; continue mainloop; }
+        // good number
+        st = HS(HiNumber);
         foreach (immutable _; 0..ofs) gb.hi(spos++) = st;
+        st = HS(HiText);
         continue mainloop;
       }
       // punctuation token
