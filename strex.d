@@ -35,10 +35,14 @@ string quote (const(char)[] s) {
 char tolower (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch-'A'+'a') : ch); }
 char toupper (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'a' && ch <= 'z' ? cast(char)(ch-'a'+'A') : ch); }
 
+bool islower (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'a' && ch <= 'z'); }
+bool isupper (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'A' && ch <= 'Z'); }
+
 bool isalpha (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')); }
 bool isdigit (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= '0' && ch <= '9'); }
 bool isalnum (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')); }
 bool isxdigit (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f') || (ch >= '0' && ch <= '9')); }
+
 int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
   pragma(inline, true);
   return

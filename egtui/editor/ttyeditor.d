@@ -1516,6 +1516,28 @@ final:
   }
 
 final:
+  void processWordWith (scope char delegate (char ch) dg) {
+    if (dg is null) return;
+    bool undoAdded = false;
+    scope(exit) if (undoAdded) undoGroupEnd();
+    auto pos = curpos;
+    if (!isWordChar(gb[pos])) return;
+    // find word start
+    while (pos > 0 && isWordChar(gb[pos-1])) --pos;
+    while (pos < gb.textsize) {
+      auto ch = gb[pos];
+      if (!isWordChar(gb[pos])) break;
+      auto nc = dg(ch);
+      if (ch != nc) {
+        if (!undoAdded) { undoAdded = true; undoGroupStart(); }
+        replaceText!"none"(pos, 1, (&nc)[0..1]);
+      }
+      ++pos;
+    }
+    gotoPos(pos);
+  }
+
+final:
   @TEDKey("Up")
   @TEDMultiOnly
     void tedUp () { doUp(); }
@@ -1679,6 +1701,23 @@ final:
         gotoXY!true(curx, lnum-1); // vcenter
       }
     }
+
+  @TEDKey("M-C", "capitalize word")
+  @TEDEditOnly
+    void tedAltC () {
+      bool first = true;
+      processWordWith((char ch) {
+        if (first) { first = false; ch = ch.toupper; }
+        return ch;
+      });
+    }
+  @TEDKey("M-Q", "lowercase word")
+  @TEDEditOnly
+    void tedAltQ () { processWordWith((char ch) => ch.tolower); }
+  @TEDKey("M-U", "uppercase word")
+  @TEDEditOnly
+    void tedAltU () { processWordWith((char ch) => ch.toupper); }
+
   @TEDKey("M-S-L", "force center current line")
   @TEDMultiOnly
     void tedAltShiftL () { makeCurLineVisibleCentered(true); }
