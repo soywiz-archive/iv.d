@@ -27,6 +27,7 @@ public import iv.egtui.layout;
 import iv.egtui.tty;
 import iv.egtui.types;
 import iv.egtui.utils;
+import iv.egtui.dialogs : dialogHistory;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -250,6 +251,8 @@ struct FuiCtlRootPanel {
   FuiDialogFrameType frame;
   bool enterclose;
   bool moving;
+  // history manager for this dialog
+  FuiHistoryManager hisman;
 }
 
 
@@ -318,6 +321,17 @@ bool dialogEnterClose (FuiContext ctx) {
   if (!ctx.valid) return false;
   auto data = ctx.itemIntr!FuiCtlRootPanel(0);
   return data.enterclose;
+}
+
+
+FuiHistoryManager dialogHistoryManager (FuiContext ctx) {
+  if (auto data = ctx.itemIntr!FuiCtlRootPanel(0)) return data.hisman;
+  return null;
+}
+
+
+void dialogHistoryManager (FuiContext ctx, FuiHistoryManager hisman) {
+  if (auto data = ctx.itemIntr!FuiCtlRootPanel(0)) data.hisman = hisman;
 }
 
 
@@ -579,6 +593,29 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
         }
         return false;
       case FuiEvent.Type.Key: // param0: sdpy keycode; param1: mods&buttons
+        // history
+        if (eld.ed.singleline) {
+          if (auto hisman = ctx.dialogHistoryManager) {
+            if (auto data = ctx.item!FuiCtlEditLine(self)) {
+              auto eid = data.id.getz;
+              if (eid.length && hisman.has(eid)) {
+                if (ev.key == "M-H") {
+                  // history dialog
+                  if (auto lp = ctx.layprops(self)) {
+                    auto pt = ctx.toGlobal(self, FuiPoint(0, 0));
+                    auto hidx = dialogHistory(hisman, eid, pt.x, pt.y);
+                    if (hidx >= 0) {
+                      auto s = hisman.item(eid, hidx);
+                      eld.ed.setNewText(s, false); // don't clear on type
+                      hisman.activate(eid, hidx);
+                    }
+                    return true;
+                  }
+                }
+              }
+            }
+          }
+        }
         // editline
         if (eld.ed.processKey(ev.key)) {
           if (eld.actcb !is null) {
@@ -1498,6 +1535,20 @@ private uint listboxItemOffset (FuiContext ctx, int item, int inum) {
     return itofs;
   }
   return 0;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// `id` is element id
+public class FuiHistoryManager {
+public:
+  this () {}
+  abstract bool has (const(char)[] id);
+  abstract int count (const(char)[] id);
+  abstract const(char)[] item (const(char)[] id, int idx); // 0: oldest
+  abstract void add (const(char)[] id, const(char)[] value); // this can shrink history; should correctly process duplicates
+  abstract void clear (const(char)[] id);
+  abstract void activate (const(char)[] id, int idx); // usually moves item to bottom
 }
 
 

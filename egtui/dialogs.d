@@ -209,3 +209,87 @@ void dialogTextView (const(char)[] title, const(char)[] text) {
   }
   ctx.modalDialog;
 }
+
+
+// ///////////////////////////////////////////////////////////////////////// //
+// return -1 on escape or index
+int dialogHistory (FuiHistoryManager hisman, const(char)[] hid, int winx, int winy, int startidx=-1) {
+  if (hisman is null || !hisman.has(hid)) return -1;
+
+  int hcount = hisman.count(hid);
+  if (hcount < 1) return -1; // just in case
+
+  int maxhgt = ttyh;
+  if (maxhgt < 3) maxhgt = 3;
+
+  int topline = 0;
+  int maxlen = 0;
+  foreach (int idx; 0..hcount) {
+    auto s = hisman.item(hid, idx);
+    if (s.length > maxlen) maxlen = cast(int)s.length;
+  }
+  if (maxlen > ttyw-4) maxlen = ttyw-4;
+
+  int pgsize = hcount;
+  if (pgsize > maxhgt-2) pgsize = maxhgt-2;
+
+  if (winx < 0) {
+    winx = (ttyw-(maxlen+4))/2;
+    if (winx < 0) winx = 0;
+  }
+  if (winy < 0) {
+    winy = (ttyh-(pgsize+2))/2;
+    if (winy < 0) winy = 0;
+  }
+
+  int x0 = winx;
+  int y0 = winy;
+  // no room to show it at the bottom?
+  if (y0+pgsize+1 > ttyh) {
+    y0 = winy-pgsize-2;
+    // no room to show it at the top? center it then
+    if (y0 < 0 || y0 >= ttyh) y0 = (ttyh-(pgsize+2))/2;
+  }
+  if (x0+maxlen+4 > ttyw) x0 = ttyw-maxlen-4;
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+
+  int winhgt = pgsize+2;
+  int winwdt = maxlen+4;
+
+  enum laydesc = q{
+    small-frame: true
+    enter-close: true
+    min-height: $winhgt
+    min-width: $winwdt
+
+    listbox: {
+      id: "lbhistory"
+      flex: 1
+      align: expand
+    }
+  };
+
+  auto ctx = FuiContext.create();
+  ctx.parse!(winhgt, winwdt)(laydesc);
+
+  // add items
+  auto lbi = ctx["lbhistory"];
+  assert(lbi > 0);
+  foreach (int idx; 0..hcount) {
+    auto s = hisman.item(hid, idx);
+    ctx.listboxItemAdd(lbi, s);
+  }
+  if (startidx < 0 || startidx >= hcount) {
+    ctx.listboxItemSetCurrent(lbi, hcount-1);
+  } else {
+    ctx.listboxItemSetCurrent(lbi, startidx);
+  }
+
+  ctx.relayout();
+  ctx.layprops(0).position.x = x0;
+  ctx.layprops(0).position.y = y0;
+  auto res = ctx.modalDialog!false; // don't center
+  if (res < 0) return -1;
+  return ctx.listboxItemCurrent(lbi);
+}

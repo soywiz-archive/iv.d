@@ -150,6 +150,7 @@ public:
   SearchReplaceOptions srrOptions;
   bool hideStatus = false;
   bool hideSBar = false; // hide scrollbar
+  FuiHistoryManager hisman; // history manager for dialogs
 
 public:
   this (int x0, int y0, int w, int h, bool asinglesine=false) {
@@ -1637,7 +1638,7 @@ final:
     void tedF4 () {
       srrOptions.inselenabled = hasMarkedBlock;
       srrOptions.utfuck = utfuck;
-      if (!dialogSearchReplace(srrOptions)) return;
+      if (!dialogSearchReplace(hisman, srrOptions)) return;
       if (srrOptions.type == SearchReplaceOptions.Type.Normal) { srrPlain(srrOptions); return; }
       if (srrOptions.type == SearchReplaceOptions.Type.Regex) { srrRegExp(srrOptions); return; }
       dialogMessage!"error"("Not Yet", "This S&R type is not supported yet!");
@@ -1673,7 +1674,7 @@ final:
   @TEDKey("M-L", "goto line")
   @TEDMultiOnly
     void tedAltL () {
-      auto lnum = dialogLineNumber();
+      auto lnum = dialogLineNumber(hisman);
       if (lnum > 0 && lnum < linecount) {
         gotoXY!true(curx, lnum-1); // vcenter
       }
@@ -1787,7 +1788,7 @@ final:
   @TEDKey("^Q ^T", "set tab size")
   @TEDMultiOnly
     void tedQmodeCtrlT () {
-      auto tsz = dialogTabSize(tabsize);
+      auto tsz = dialogTabSize(hisman, tabsize);
       if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
     }
 

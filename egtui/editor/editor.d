@@ -2127,11 +2127,11 @@ public:
 
   // ugly name is intentional
   // this replaces editor text, clears undo and sets `killTextOnChar` if necessary
-  final bool setNewText (const(char)[] text) {
+  final bool setNewText (const(char)[] text, bool killOnChar=true) {
     clear();
     auto res = insertText!"end"(0, text);
     clearUndo();
-    if (singleline) killTextOnChar = true;
+    if (singleline) killTextOnChar = killOnChar;
     fullDirty();
     return res;
   }

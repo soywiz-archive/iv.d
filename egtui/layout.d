@@ -1547,6 +1547,10 @@ public:
     dumpItem(0, 0);
   }
 
+  FuiPoint toGlobal (int item, FuiPoint pt) {
+    return (ctxp ? ctx.toGlobal(item, pt) : pt);
+  }
+
   // -1 or item id, iterating items backwards (so last drawn will be first hit)
   int itemAt (FuiPoint pt) { pragma(inline, true); return (ctxp ? ctx.itemAt(pt) : -1); }
 

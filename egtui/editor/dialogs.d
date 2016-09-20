@@ -25,6 +25,21 @@ import iv.egtui.tui;
 import iv.egtui.parser;
 
 
+/* history ids for editor dialogs:
+ * dlg-linenum-lnum
+ *  line number dialog
+ *
+ * dlg-tabsize-tabsize"
+ *  tab size dialog
+ *
+ * dlg-srr-edsearch
+ *  search-and-replace dialog, search pattern
+ *
+ * dlg-srr-edreplace
+ *  search-and-replace dialog, replace pattern
+ */
+
+
 // ///////////////////////////////////////////////////////////////////////// //
 int dialogFileModified (const(char)[] filename, bool def, const(char)[] query="File was modified. Save it?") {
   string dotsdots = "";
@@ -68,7 +83,7 @@ int dialogFileModified (const(char)[] filename, bool def, const(char)[] query="F
 
 // ///////////////////////////////////////////////////////////////////////// //
 // 0: invalid number
-int dialogLineNumber (int defval=-1) {
+int dialogLineNumber (FuiHistoryManager dghisman, int defval=-1) {
   enum laydesc = q{
     caption: "Select line number"
     small-frame: false
@@ -80,7 +95,7 @@ int dialogLineNumber (int defval=-1) {
       }
       editline: {
         flex: 1
-        id: "lnum"
+        id: "dlg-linenum-lnum"
         on-action: validate
       }
     }
@@ -120,23 +135,33 @@ int dialogLineNumber (int defval=-1) {
 
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
   ctx.parse!(validate)(laydesc);
+  ctx.dialogHistoryManager = dghisman;
   ctx.relayout();
-  validate(ctx, ctx["lnum"]);
-  //ctx.focused = ctx["lnum"];
+  validate(ctx, ctx["dlg-linenum-lnum"]);
+  //ctx.focused = ctx["dlg-linenum-lnum"];
   if (defval > 0) {
     import std.conv : to;
-    with (ctx.itemAs!"editline"("lnum")) ed.setNewText(defval.to!string);
-    validate(ctx, ctx["lnum"]);
+    with (ctx.itemAs!"editline"("dlg-linenum-lnum")) ed.setNewText(defval.to!string);
+    validate(ctx, ctx["dlg-linenum-lnum"]);
   }
   auto res = ctx.modalDialog;
-  if (res >= 0) return edGetNum(ctx["lnum"]);
+  if (res >= 0) {
+    auto ln = edGetNum(ctx["dlg-linenum-lnum"]);
+    if (ln > 0) {
+      if (auto hisman = ctx.dialogHistoryManager) {
+        import std.conv : to;
+        hisman.add("dlg-linenum-lnum", ln.to!string);
+      }
+    }
+    return ln;
+  }
   return -1;
 }
 
 
 // ///////////////////////////////////////////////////////////////////////// //
 // <=0: invalid number
-int dialogTabSize (int defval) {
+int dialogTabSize (FuiHistoryManager dghisman, int defval) {
   enum laydesc = q{
     caption: "Select Tab Size"
     small-frame: false
@@ -144,11 +169,11 @@ int dialogTabSize (int defval) {
     hbox: {
       label: {
         text: `\R&Tab size: `
-        dest: "lnum"
+        dest: "dlg-tabsize-tabsize"
       }
       editline: {
         flex: 1
-        id: "lnum"
+        id: "dlg-tabsize-tabsize"
         on-action: validate
       }
     }
@@ -189,16 +214,26 @@ int dialogTabSize (int defval) {
 
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
   ctx.parse!(validate)(laydesc);
+  ctx.dialogHistoryManager = dghisman;
   ctx.relayout();
-  validate(ctx, ctx["lnum"]);
-  //ctx.focused = ctx["lnum"];
+  validate(ctx, ctx["dlg-tabsize-tabsize"]);
+  //ctx.focused = ctx["dlg-tabsize-tabsize"];
   if (defval > 0) {
     import std.conv : to;
-    with (ctx.itemAs!"editline"("lnum")) ed.setNewText(defval.to!string);
-    validate(ctx, ctx["lnum"]);
+    with (ctx.itemAs!"editline"("dlg-tabsize-tabsize")) ed.setNewText(defval.to!string);
+    validate(ctx, ctx["dlg-tabsize-tabsize"]);
   }
   auto res = ctx.modalDialog;
-  if (res >= 0) return edGetNum(ctx["lnum"]);
+  if (res >= 0) {
+    auto ts = edGetNum(ctx["dlg-tabsize-tabsize"]);
+    if (ts > 0) {
+      if (auto hisman = ctx.dialogHistoryManager) {
+        import std.conv : to;
+        hisman.add("dlg-tabsize-tabsize", ts.to!string);
+      }
+    }
+    return ts;
+  }
   return -1;
 }
 
@@ -222,16 +257,16 @@ struct SearchReplaceOptions {
   bool inselection;
 }
 
-bool dialogSearchReplace (ref SearchReplaceOptions opts) {
+bool dialogSearchReplace (FuiHistoryManager dghisman, ref SearchReplaceOptions opts) {
   enum laydesc = q{
     caption: "Replace"
     small-frame: false
 
-    label: { caption: "&Search string:"  dest: "edsearch" }
-    editline: { align: expand  id: "edsearch"  text: "$searchstr"  on-action: validate  utfuck: $utfuck }
+    label: { caption: "&Search string:"  dest: "dlg-srr-edsearch" }
+    editline: { align: expand  id: "dlg-srr-edsearch"  text: "$searchstr"  on-action: validate  utfuck: $utfuck }
 
-    label: { caption: "Re&placement string:"  dest: "edreplace" }
-    editline: { align: expand  id: "edreplace"  text: "$replacestr"  on-action: validate  utfuck: $utfuck }
+    label: { caption: "Re&placement string:"  dest: "dlg-srr-edreplace" }
+    editline: { align: expand  id: "dlg-srr-edreplace"  text: "$replacestr"  on-action: validate  utfuck: $utfuck }
 
     hline
 
@@ -275,7 +310,7 @@ bool dialogSearchReplace (ref SearchReplaceOptions opts) {
 
   int validate (FuiContext ctx, int item=-1) {
     bool ok = true;
-    if (auto edl = ctx.itemAs!"editline"("edsearch")) {
+    if (auto edl = ctx.itemAs!"editline"("dlg-srr-edsearch")) {
       if (edl.ed.textsize == 0) ok = false;
     }
     ctx.setEnabled(ctx["btok"], ok);
@@ -288,6 +323,7 @@ bool dialogSearchReplace (ref SearchReplaceOptions opts) {
   //opttype = SearchReplaceOptions.Type.Regex;
 
   ctx.parse!(opttype, optci, optback, optsel, searchstr, replacestr, validate, utfuck, optword)(laydesc);
+  ctx.dialogHistoryManager = dghisman;
   ctx.relayout();
   if (ctx.layprops(0).position.w < ttyw/3*2) {
     ctx.layprops(0).minSize.w = ttyw/3*2;
@@ -301,8 +337,12 @@ bool dialogSearchReplace (ref SearchReplaceOptions opts) {
     opts.backwards = optback;
     opts.wholeword = optword;
     opts.inselection = optsel;
-    opts.search = ctx.editlineGetText(ctx["edsearch"]);
-    opts.replace = ctx.editlineGetText(ctx["edreplace"]);
+    opts.search = ctx.editlineGetText(ctx["dlg-srr-edsearch"]);
+    opts.replace = ctx.editlineGetText(ctx["dlg-srr-edreplace"]);
+    if (auto hisman = ctx.dialogHistoryManager) {
+      hisman.add("dlg-srr-edsearch", opts.search);
+      hisman.add("dlg-srr-edreplace", opts.replace);
+    }
     return true;
   }
   return false;
