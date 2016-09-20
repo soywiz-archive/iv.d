@@ -734,8 +734,8 @@ public:
 
   //TODO: fix cx if current line was changed
   final void doUntabify (int tabSize=2) {
-    if (mReadOnly) return;
-    if (tabSize < 1 || tabSize > 32) return;
+    if (mReadOnly || gb.textsize == 0) return;
+    if (tabSize < 1 || tabSize > 255) return;
     int pos = 0;
     auto ts = gb.textsize;
     int curx = 0;
@@ -746,17 +746,15 @@ public:
     if (pos >= ts) return;
     undoGroupStart();
     scope(exit) undoGroupEnd();
-    char[32] spaces = ' ';
+    char[255] spaces = ' ';
     txchanged = true;
     while (pos < ts) {
       // replace space
       assert(gb[pos] == '\t');
       int spc = tabSize-(curx%tabSize);
-      // delete tab
-      deleteText!"none"(pos, 1);
-      // insert spaces
-      insertText!"none"(pos, spaces[0..spc]);
+      replaceText!"none"(pos, 1, spaces[0..spc]);
       // find next tab
+      ts = gb.textsize;
       while (pos < ts && gb[pos] != '\t') {
         if (gb[pos] == '\n') curx = 0; else ++curx;
         ++pos;
@@ -767,7 +765,7 @@ public:
 
   //TODO: fix cx if current line was changed
   final void doRemoveTailingSpaces () {
-    if (mReadOnly) return;
+    if (mReadOnly || gb.textsize == 0) return;
     bool wasChanged = false;
     scope(exit) if (wasChanged) undoGroupEnd();
     foreach (int lidx; 0..linecount) {
