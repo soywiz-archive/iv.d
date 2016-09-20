@@ -16,6 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // This is CLIENT only at this point. Don't try to bind/accept with these.
+// based on opticron and Adam D. Ruppe work
 module iv.sslsocket;
 
 public import std.socket;
