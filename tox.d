@@ -1429,7 +1429,7 @@ enum TOX_FILE_KIND {
      * Arbitrary file data. Clients can choose to handle it based on the file name
      * or magic or any other way they choose.
      */
-    TOX_FILE_KIND_DATA,
+    /*TOX_FILE_KIND_*/DATA,
     /**
      * Avatar filename. This consists of tox_hash(image).
      * Avatar data. This consists of the image data.
@@ -1450,7 +1450,7 @@ enum TOX_FILE_KIND {
      * When file_size is set to 0 in the transfer request it means that the client has no
      * avatar.
      */
-    TOX_FILE_KIND_AVATAR
+    /*TOX_FILE_KIND_*/AVATAR
 };
 
 
@@ -1719,7 +1719,7 @@ enum TOX_ERR_FILE_SEND {
  *   On failure, this function returns UINT32_MAX. Any pattern in file numbers
  *   should not be relied on.
  */
-uint tox_file_send(Tox* tox, uint friend_number, uint kind, ulong file_size, const(void)* file_id,
+uint tox_file_send(Tox* tox, uint friend_number, TOX_FILE_KIND kind, ulong file_size, const(void)* file_id,
                        const(void)* filename, usize filename_length, TOX_ERR_FILE_SEND* error);
 
 
@@ -1843,7 +1843,7 @@ void tox_callback_file_chunk_request(Tox* tox, tox_file_chunk_request_cb func, v
  *   UINT64_MAX if unknown or streaming.
  * @param filename_length Size in bytes of the filename.
  */
-alias tox_file_recv_cb = void function (Tox* tox, uint friend_number, uint file_number, uint kind,
+alias tox_file_recv_cb = void function (Tox* tox, uint friend_number, uint file_number, TOX_FILE_KIND kind,
                               ulong file_size, const(char)* filename, usize filename_length, void* user_data) nothrow;
 
 /**
