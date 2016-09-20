@@ -608,6 +608,10 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
                       auto s = hisman.item(eid, hidx);
                       eld.ed.setNewText(s, false); // don't clear on type
                       hisman.activate(eid, hidx);
+                      if (eld.actcb !is null) {
+                        auto rr = eld.actcb(ctx, ev.item);
+                        if (rr >= -1) ctx.postClose(rr);
+                      }
                     }
                     return true;
                   }
