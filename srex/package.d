@@ -286,7 +286,7 @@ struct REParser {
         case 'w': yyl = buildRange(esc_w_ranges, true); break;
         case 'W': yyl = buildRange(esc_w_ranges, false); break;
         case 's': yyl = buildRange((flags&SRFlags.Multiline ? esc_sm_ranges : esc_s_ranges), true); break;
-        case 'S': yyl = buildRange((flags&SRFlags.Multiline ? esc_sm_ranges : esc_s_ranges), false); break;
+        case 'S': yyl = buildRange(esc_s_ranges, false); break;
         case 'N': // \N is defined as [^\n]
           yyl = memoryfail(pool.reCreate(RegExpPart.Type.NClass, null, null));
           auto range = memoryfail(pool.alloc!RERange);
@@ -398,7 +398,7 @@ struct REParser {
             case 'd': rng = esc_d_ranges; break;
             case 'D': rng = esc_D_ranges; break;
             case 's': rng = (flags&SRFlags.Multiline ? esc_sm_ranges : esc_s_ranges); break;
-            case 'S': rng = (flags&SRFlags.Multiline ? esc_SM_ranges : esc_S_ranges); break;
+            case 'S': rng = esc_S_ranges; break;
             case 'N': rng = esc_N_ranges; break;
             case 'w': rng = esc_w_ranges; break;
             case 'W': rng = esc_W_ranges; break;
