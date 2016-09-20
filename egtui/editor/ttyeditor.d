@@ -1783,6 +1783,26 @@ final:
     void tedQmode3 () { utfuck = false; codepage = CodePage.cp866; fullDirty(); }
   @TEDKey("^Q ^B", "go to block start")
     void tedQmodeCtrlB () { if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; }
+  @TEDKey("^Q ^F", "incremental search current word")
+  @TEDMultiOnly
+    void tedQmodeCtrlF () {
+      auto pos = curpos;
+      if (!isWordChar(gb[pos])) return;
+      // deactivate prompt
+      if (incInputActive) {
+        incInputActive = false;
+        promptDeactivate();
+        resetIncSearchPos();
+      }
+      // collect word
+      while (pos > 0 && isWordChar(gb[pos-1])) --pos;
+      incSearchBuf.length = 0;
+      incSearchBuf.assumeSafeAppend;
+      while (pos < gb.textsize && isWordChar(gb[pos])) incSearchBuf ~= gb[pos++];
+      incSearchDir = 1;
+      // get current word
+      doNextIncSearch();
+    }
   @TEDKey("^Q ^K", "go to block end")
     void tedQmodeCtrlE () { if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; }
   @TEDKey("^Q ^T", "set tab size")
