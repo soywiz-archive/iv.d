@@ -130,7 +130,7 @@ int dialogLineNumber (FuiHistoryManager dghisman, int defval=-1) {
 
   int validate (FuiContext ctx, int item) {
     ctx.setEnabled(ctx["btok"], edGetNum(item) > 0);
-    return -666;
+    return FuiContinue;
   }
 
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
@@ -209,7 +209,7 @@ int dialogTabSize (FuiHistoryManager dghisman, int defval) {
   int validate (FuiContext ctx, int item) {
     auto num = edGetNum(item);
     ctx.setEnabled(ctx["btok"], (num > 0 && num <= 32));
-    return -666;
+    return FuiContinue;
   }
 
   //ctx.maxDimensions = FuiSize(ttyw, ttyh);
@@ -315,7 +315,7 @@ bool dialogSearchReplace (FuiHistoryManager dghisman, ref SearchReplaceOptions o
     }
     ctx.setEnabled(ctx["btok"], ok);
     ctx.setEnabled(ctx["cbinsel"], opts.inselenabled);
-    return -666;
+    return FuiContinue;
   }
 
   //searchstr = "koi";

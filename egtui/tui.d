@@ -31,6 +31,10 @@ import iv.egtui.dialogs : dialogHistory;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+enum FuiContinue = -666;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 struct Palette {
   uint def; // default color
   uint sel; // sel is also focus
@@ -162,7 +166,7 @@ enum FuiCtlType : ubyte {
   Radio,
 }
 
-// onchange callback; return -666 to continue, -1 to exit via "esc", or control id to return from `modalDialog()`
+// onchange callback; return FuiContinue to continue, -1 to exit via "esc", or control id to return from `modalDialog()`
 alias TuiActionCB = int delegate (FuiContext ctx, int self);
 // draw widget; rc is in global space
 alias TuiDrawCB = void delegate (FuiContext ctx, int self, FuiRect rc);
@@ -175,7 +179,7 @@ mixin template FuiCtlHeader() {
   char[64] id = 0; // widget it
   char[128] caption = 0; // widget caption
 align(8):
-  // onchange callback; return -666 to continue, -1 to exit via "esc", or control id to return from `modalDialog()`
+  // onchange callback; return FuiContinue to continue, -1 to exit via "esc", or control id to return from `modalDialog()`
   TuiActionCB actcb;
   // draw widget; rc is in global space
   TuiDrawCB drawcb;
@@ -1921,27 +1925,76 @@ bool processEvent (FuiContext ctx, FuiEvent ev) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared FuiContext tuiCurrentContext;
+private __gshared bool windowMovingMouse, windowMovingKeys;
+private __gshared int wmX, wmY;
+private __gshared bool screenSaved;
+public __gshared int modalLastResult = -1;
 
-// returns clicked item or -1 for esc
-int modalDialog(bool docenter=true) (FuiContext ctx) {
-  if (!ctx.valid) return -1;
+private __gshared FuiContext[] modalStack;
 
-  scope(exit) {
-    import core.memory : GC;
-    GC.collect;
-    GC.minimize;
+@property bool modalHasOpenDialogs () nothrow @trusted @nogc { return (modalStack.length > 0); }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+void modalDialogRestoreScreen () {
+  if (screenSaved) {
+    screenSaved = false;
+    xtPopArea();
+  }
+}
+
+
+// this will restore old screen before saving it again
+void modalDialogSaveScreen () {
+  modalDialogRestoreScreen();
+  /*
+  if (modalStack.length == 0) return;
+  if (!ctx.valid) return false;
+  auto lp = ctx.layprops(0);
+  if (lp is null) return false;
+  xtPushArea(
+    lp.position.x, lp.position.y,
+    lp.position.w+2, lp.position.h+1
+  );
+  */
+  screenSaved = true;
+  xtPushArea(0, 0, ttyw, ttyh);
+}
+
+
+// redraw all dialogs
+void modalDialogDraw () {
+  modalDialogSaveScreen();
+  foreach_reverse (immutable idx, FuiContext ctx; modalStack) {
+    if (!ctx.valid) continue;
+    ctx.drawShadow();
+    if (idx == 0 && (windowMovingMouse || windowMovingKeys)) ctx.dialogMoving = true;
+    scope(exit) if (idx == 0 && (windowMovingMouse || windowMovingKeys)) ctx.dialogMoving = false;
+    ctx.draw();
+  }
+}
+
+
+// returns `true` if dialog was closed, and then `modalLastResult` will contain result
+// return FuiContinue, clicked item index or -1 for esc
+int modalDialogProcessKey (TtyKey key) {
+  FuiContext ctx;
+
+  while (modalStack.length > 0) {
+    if (modalStack[$-1].valid) break;
+    modalStack.length -= 1;
+    modalStack.assumeSafeAppend;
   }
 
-  void saveArea () {
-    xtPushArea(
-      ctx.layprops(0).position.x, ctx.layprops(0).position.y,
-      ctx.layprops(0).position.w+2, ctx.layprops(0).position.h+1
-    );
+  if (modalStack.length == 0) {
+    { import core.memory : GC; GC.collect; GC.minimize; }
+    windowMovingMouse = false;
+    windowMovingKeys = false;
+    modalLastResult = -1;
+    return FuiContinue;
   }
 
-  bool windowMovingMouse, windowMovingKeys;
-  int wmX, wmY;
+  ctx = modalStack[$-1];
 
   int processContextEvents () {
     ctx.update();
@@ -1951,8 +2004,108 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
       if (ctx.processEvent(ev)) continue;
       if (ev.type == FuiEvent.Type.Key && (ev.key == "^F3" || ev.key == "S-F3")) windowMovingKeys = true;
     }
-    return -666;
+    return FuiContinue;
   }
+
+  void closeTopDialog () {
+    windowMovingMouse = false;
+    windowMovingKeys = false;
+    modalStack[$-1] = FuiContext.init;
+    modalStack.length -= 1;
+    modalStack.assumeSafeAppend;
+    { import core.memory : GC; GC.collect; GC.minimize; }
+  }
+
+  int res = processContextEvents();
+  if (res >= -1) {
+    modalLastResult = res;
+    closeTopDialog();
+    return modalLastResult;
+  }
+
+  //auto key = ttyReadKey(-1, TtyDefaultEscWait);
+  if (key.key == TtyKey.Key.Error) return FuiContinue;
+  if (key.key == TtyKey.Key.Unknown) return FuiContinue;
+  if (!windowMovingKeys && key.key == TtyKey.Key.Escape) {
+    modalLastResult = -1;
+    closeTopDialog();
+    return modalLastResult;
+  }
+
+  //if (key == "^L") { xtFullRefresh(); continue; }
+
+  int dx = 0, dy = 0;
+
+  // move dialog with keys
+  if (key == "M-Left") dx = -1;
+  if (key == "M-Right") dx = 1;
+  if (key == "M-Up") dy = -1;
+  if (key == "M-Down") dy = 1;
+
+  if (windowMovingKeys) {
+    if (key == "Left") dx = -1;
+    if (key == "Right") dx = 1;
+    if (key == "Up") dy = -1;
+    if (key == "Down") dy = 1;
+  }
+
+  // move dialog with mouse
+  if (windowMovingMouse && key.mouse) {
+    if (key.mrelease && key.button == 0) {
+      windowMovingMouse = false;
+      return FuiContinue;
+    }
+    dx = key.x-wmX;
+    dy = key.y-wmY;
+    wmX = key.x;
+    wmY = key.y;
+  }
+
+  // do move
+  if (dx || dy) {
+    ctx.layprops(0).position.x = ctx.layprops(0).position.x+dx;
+    ctx.layprops(0).position.y = ctx.layprops(0).position.y+dy;
+    //saveArea();
+    //ctx.drawShadow();
+    return FuiContinue;
+  }
+
+  if (windowMovingKeys) {
+    if (key == "Escape") windowMovingKeys = false;
+    return FuiContinue;
+  }
+
+  if (windowMovingMouse) return FuiContinue;
+
+  if (key.mouse) {
+    //TODO: check for no frame when we'll get that
+    if (key.mpress && key.button == 0 && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
+      if ((key.y == ctx.layprops(0).position.y) || (ctx.dialogFrame == FuiDialogFrameType.Normal && key.y == ctx.layprops(0).position.y+1)) {
+        windowMovingMouse = true;
+        wmX = key.x;
+        wmY = key.y;
+        return FuiContinue;
+      }
+    }
+  }
+
+  ctx.keyboardEvent(key);
+
+  res = processContextEvents();
+  if (res >= -1) {
+    modalLastResult = res;
+    closeTopDialog();
+    return modalLastResult;
+  }
+
+  return FuiContinue;
+}
+
+
+// initialize and push dialog
+// return `false` if dialog was not initialized and pushed
+bool modalDialogInit(bool docenter=true) (FuiContext ctx) {
+  if (!ctx.valid) return false;
 
   static if (docenter) {
     if (auto lp = ctx.layprops(0)) {
@@ -1961,73 +2114,40 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
     }
   }
   ctx.focusFirst();
+  modalStack ~= ctx;
+  return true;
+}
 
-  auto octx = tuiCurrentContext;
-  tuiCurrentContext = ctx;
-  scope(exit) tuiCurrentContext = octx;
 
-  saveArea();
-  scope(exit) xtPopArea();
+// close top-level dialog
+// return `false` if there are no open dialogs
+bool modalCloseDialog () {
+  if (modalStack.length) {
+    modalLastResult = -1;
+    windowMovingMouse = false;
+    windowMovingKeys = false;
+    modalStack[$-1] = FuiContext.init;
+    modalStack.length -= 1;
+    modalStack.assumeSafeAppend;
+    { import core.memory : GC; GC.collect; GC.minimize; }
+    return true;
+  }
+  return false;
+}
 
-  ctx.drawShadow();
+
+// ////////////////////////////////////////////////////////////////////////// //
+// returns clicked item or -1 for esc
+int modalDialog(bool docenter=true) (FuiContext ctx) {
+  if (!ctx.modalDialogInit!docenter()) return -1;
+  scope(exit) modalDialogRestoreScreen();
   for (;;) {
-    int res = processContextEvents();
-    if (res >= -1) return res;
-    if (windowMovingMouse || windowMovingKeys) ctx.dialogMoving = true;
-    ctx.draw;
-    if (windowMovingMouse || windowMovingKeys) ctx.dialogMoving = false;
-    xtFlush(); // show screen
+    modalDialogDraw();
+    xtFlush();
     auto key = ttyReadKey(-1, TtyDefaultEscWait);
-    if (key.key == TtyKey.Key.Error) { return -1; }
-    if (key.key == TtyKey.Key.Unknown) continue;
-    if (!windowMovingKeys && key.key == TtyKey.Key.Escape) { return -1; }
-    if (key == "^L") { xtFullRefresh(); continue; }
-    int dx = 0, dy = 0;
-    if (key == "M-Left") dx = -1;
-    if (key == "M-Right") dx = 1;
-    if (key == "M-Up") dy = -1;
-    if (key == "M-Down") dy = 1;
-    if (windowMovingKeys) {
-      if (key == "Left") dx = -1;
-      if (key == "Right") dx = 1;
-      if (key == "Up") dy = -1;
-      if (key == "Down") dy = 1;
-    }
-    // move dialog with mouse
-    if (windowMovingMouse && key.mouse) {
-      if (key.mrelease && key.button == 0) {
-        windowMovingMouse = false;
-        continue;
-      }
-      dx = key.x-wmX;
-      dy = key.y-wmY;
-      wmX = key.x;
-      wmY = key.y;
-    }
-    if (dx || dy) {
-      xtPopArea();
-      ctx.layprops(0).position.x = ctx.layprops(0).position.x+dx;
-      ctx.layprops(0).position.y = ctx.layprops(0).position.y+dy;
-      saveArea();
-      ctx.drawShadow();
-      continue;
-    }
-    if (windowMovingKeys) {
-      if (key == "Escape") windowMovingKeys = false;
-      continue;
-    }
-    if (windowMovingMouse) continue;
-    if (key.mouse) {
-      //TODO: check for no frame when we'll get that
-      if (key.mpress && key.button == 0 && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
-        if ((key.y == ctx.layprops(0).position.y) || (ctx.dialogFrame == FuiDialogFrameType.Normal && key.y == ctx.layprops(0).position.y+1)) {
-          windowMovingMouse = true;
-          wmX = key.x;
-          wmY = key.y;
-          continue;
-        }
-      }
-    }
-    ctx.keyboardEvent(key);
+    if (key == "^L") { modalDialogRestoreScreen(); xtFullRefresh(); continue; }
+    if (key.key == TtyKey.Key.Error) { modalCloseDialog(); return -1; }
+    auto res = modalDialogProcessKey(key);
+    if (res >= -1) return res;
   }
 }
