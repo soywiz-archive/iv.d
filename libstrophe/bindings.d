@@ -367,12 +367,3 @@ void xmpp_sha1_to_digest (xmpp_sha1_t* sha1, void* digest);
 char* xmpp_base64_encode (xmpp_ctx_t* ctx, const(void)* data, size_t len);
 char* xmpp_base64_decode_str (xmpp_ctx_t* ctx, const(char)* base64, size_t len);
 void xmpp_base64_decode_bin (xmpp_ctx_t* ctx, const(char)* base64, size_t len, void** out_, size_t* outlen);
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-char* xmpp_toStrz (const(char)[] s) {
-  auto res = new char[](s.length+1);
-  res[] = 0;
-  res[0..s.length] = s[];
-  return res.ptr;
-}

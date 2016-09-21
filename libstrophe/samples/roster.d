@@ -12,73 +12,74 @@
 /* This example demonstrates basic handler functions by printing out
 ** the user's roster.
 */
-import iv.libstrophe;
+module roster is aliced;
 
-import core.stdc.stdio;
-import core.stdc.stdlib;
-import core.stdc.string;
+import iv.libstrophe;
+import iv.vfs.io;
 
 
 extern(C) int handle_reply (xmpp_conn_t* conn, const(xmpp_stanza_t)* stanza, void* userdata) nothrow {
-  xmpp_stanza_t* query, item;
-  const(char)* type, name;
-
-  type = xmpp_stanza_get_type(stanza);
-  if (strcmp(type, "error") == 0) {
-    fprintf(stderr, "ERROR: query failed\n");
-  } else {
-    query = xmpp_stanza_get_child_by_name(stanza, "query");
-    printf("Roster:\n");
-    for (item = xmpp_stanza_get_children(query); item !is null; item = xmpp_stanza_get_next(item)) {
-      if ((name = xmpp_stanza_get_attribute(item, "name")) !is null) {
-        printf("\t %s (%s) sub=%s\n", name, xmpp_stanza_get_attribute(item, "jid"), xmpp_stanza_get_attribute(item, "subscription"));
-      } else {
-        printf("\t %s sub=%s\n", xmpp_stanza_get_attribute(item, "jid"), xmpp_stanza_get_attribute(item, "subscription"));
+  try {
+    auto type = xmpp_stanza_get_type(stanza).xmpp_fromStrz;
+    if (type == "error") {
+      stderr.writeln("ERROR: query failed");
+    } else {
+      auto query = xmpp_stanza_get_child_by_name(stanza, "query");
+      writeln("Roster:");
+      for (auto item = xmpp_stanza_get_children(query); item !is null; item = xmpp_stanza_get_next(item)) {
+        if (auto namez = xmpp_stanza_get_attribute(item, "name")) {
+          auto name = namez.xmpp_fromStrz;
+          writefln("  name:%s (jid:%s) subscription:%s", name, xmpp_stanza_get_attribute(item, "jid").xmpp_fromStrz, xmpp_stanza_get_attribute(item, "subscription").xmpp_fromStrz);
+        } else {
+          writefln("    jid:%s subscription:%s", xmpp_stanza_get_attribute(item, "jid").xmpp_fromStrz, xmpp_stanza_get_attribute(item, "subscription").xmpp_fromStrz);
+        }
       }
+      writeln("END OF LIST");
     }
-    printf("END OF LIST\n");
+    // disconnect
+    xmpp_disconnect(conn);
+  } catch (Exception e) {
+    assert(0, e.msg);
   }
-
-  /* disconnect */
-  xmpp_disconnect(conn);
-
   return 0;
 }
 
 
 extern(C) void conn_handler (xmpp_conn_t* conn, xmpp_conn_event_t status, int error, xmpp_stream_error_t* stream_error, void* userdata) nothrow {
-  xmpp_ctx_t* ctx = cast(xmpp_ctx_t *)userdata;
-  xmpp_stanza_t* iq, query;
+  try {
+    xmpp_ctx_t* ctx = cast(xmpp_ctx_t *)userdata;
+    if (status == XMPP_CONN_CONNECT) {
+      stderr.writeln("DEBUG: connected");
 
-  if (status == XMPP_CONN_CONNECT) {
-    fprintf(stderr, "DEBUG: connected\n");
+      // create iq stanza for request
+      auto iq = xmpp_stanza_new(ctx);
+      xmpp_stanza_set_name(iq, "iq");
+      xmpp_stanza_set_type(iq, "get");
+      xmpp_stanza_set_id(iq, "roster1");
 
-    /* create iq stanza for request */
-    iq = xmpp_stanza_new(ctx);
-    xmpp_stanza_set_name(iq, "iq");
-    xmpp_stanza_set_type(iq, "get");
-    xmpp_stanza_set_id(iq, "roster1");
+      auto query = xmpp_stanza_new(ctx);
+      xmpp_stanza_set_name(query, "query");
+      xmpp_stanza_set_ns(query, XMPP_NS_ROSTER);
 
-    query = xmpp_stanza_new(ctx);
-    xmpp_stanza_set_name(query, "query");
-    xmpp_stanza_set_ns(query, XMPP_NS_ROSTER);
+      xmpp_stanza_add_child(iq, query);
 
-    xmpp_stanza_add_child(iq, query);
+      // we can release the stanza since it belongs to iq now
+      xmpp_stanza_release(query);
 
-    /* we can release the stanza since it belongs to iq now */
-    xmpp_stanza_release(query);
+      // set up reply handler
+      xmpp_id_handler_add(conn, &handle_reply, "roster1", ctx);
 
-    /* set up reply handler */
-    xmpp_id_handler_add(conn, &handle_reply, "roster1", ctx);
+      // send out the stanza
+      xmpp_send(conn, iq);
 
-    /* send out the stanza */
-    xmpp_send(conn, iq);
-
-    /* release the stanza */
-    xmpp_stanza_release(iq);
-  } else {
-    fprintf(stderr, "DEBUG: disconnected\n");
-    xmpp_stop(ctx);
+      // release the stanza
+      xmpp_stanza_release(iq);
+    } else {
+      stderr.writeln("DEBUG: disconnected");
+      xmpp_stop(ctx);
+    }
+  } catch (Exception e) {
+    assert(0, e.msg);
   }
 }
 
@@ -88,18 +89,21 @@ int main (string[] args) {
   xmpp_conn_t* conn;
 
   if (args.length != 3) {
-    fprintf(stderr, "Usage: roster <jid> <pass>\n\n");
+    stderr.writeln("Usage: roster <jid> <pass>");
     return 1;
   }
 
-  /* initialize lib */
+  // initialize lib
   xmpp_initialize();
+  scope(exit) xmpp_shutdown(); // shutdown lib
 
-  /* create a context */
+  // create a context
   ctx = xmpp_ctx_new(null, null);
+  scope(exit) xmpp_ctx_free(ctx);
 
-  /* create a connection */
+  // create a connection
   conn = xmpp_conn_new(ctx);
+  scope(exit) xmpp_conn_release(conn); // release our connection and context
 
   /*
    * also you can disable TLS support or force legacy SSL
@@ -108,22 +112,15 @@ int main (string[] args) {
    * see xmpp_conn_set_flags() or examples/basic.c
    */
 
-  /* setup authentication information */
+  // setup authentication information
   xmpp_conn_set_jid(conn, args[1].xmpp_toStrz);
   xmpp_conn_set_pass(conn, args[2].xmpp_toStrz);
 
-  /* initiate connection */
+  // initiate connection
   xmpp_connect_client(conn, null, 0, &conn_handler, ctx);
 
-  /* start the event loop */
+  // start the event loop
   xmpp_run(ctx);
-
-  /* release our connection and context */
-  xmpp_conn_release(conn);
-  xmpp_ctx_free(ctx);
-
-  /* shutdown lib */
-  xmpp_shutdown();
 
   return 0;
 }

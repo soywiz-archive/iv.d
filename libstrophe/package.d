@@ -11,3 +11,4 @@
 module iv.libstrophe;
 
 public import iv.libstrophe.bindings;
+public import iv.libstrophe.utils;
