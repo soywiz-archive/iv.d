@@ -166,6 +166,8 @@ enum FuiCtlType : ubyte {
   Radio,
 }
 
+// called when dialog is closed; -1 means "esc"; you can change `modalLastResult` to change dialog return value
+alias TuiDialogCloseCB = void delegate (FuiContext ctx, int res);
 // onchange callback; return FuiContinue to continue, -1 to exit via "esc", or control id to return from `modalDialog()`
 alias TuiActionCB = int delegate (FuiContext ctx, int self);
 // draw widget; rc is in global space
@@ -257,6 +259,21 @@ struct FuiCtlRootPanel {
   bool moving;
   // history manager for this dialog
   FuiHistoryManager hisman;
+  TuiDialogCloseCB closecb;
+}
+
+
+bool dialogCloseCB (FuiContext ctx, TuiDialogCloseCB dcb) {
+  if (auto data = ctx.itemIntr!FuiCtlRootPanel(0)) {
+    data.closecb = dcb;
+    return true;
+  }
+  return false;
+}
+
+TuiDialogCloseCB dialogCloseCB (FuiContext ctx) {
+  if (auto data = ctx.itemIntr!FuiCtlRootPanel(0)) return data.closecb;
+  return null;
 }
 
 
@@ -1975,10 +1992,29 @@ void modalDialogDraw () {
 }
 
 
+// modalLastResult should be set
+private void closeTopDialog () {
+  modalDialogRestoreScreen();
+  if (modalStack.length == 0) return;
+  auto ctx = modalStack[$-1];
+  windowMovingMouse = false;
+  windowMovingKeys = false;
+  modalStack[$-1] = FuiContext.init;
+  modalStack.length -= 1;
+  modalStack.assumeSafeAppend;
+  if (auto data = ctx.itemIntr!FuiCtlRootPanel(0)) {
+    if (data.closecb !is null) data.closecb(ctx, modalLastResult);
+  }
+  { import core.memory : GC; GC.collect; GC.minimize; }
+}
+
+
 // returns `true` if dialog was closed, and then `modalLastResult` will contain result
 // return FuiContinue, clicked item index or -1 for esc
-int modalDialogProcessKey (TtyKey key) {
+int modalDialogProcessKey (TtyKey key, bool* closed=null) {
   FuiContext ctx;
+
+  if (closed !is null) *closed = false;
 
   while (modalStack.length > 0) {
     if (modalStack[$-1].valid) break;
@@ -1991,6 +2027,7 @@ int modalDialogProcessKey (TtyKey key) {
     windowMovingMouse = false;
     windowMovingKeys = false;
     modalLastResult = -1;
+    if (closed !is null) *closed = true;
     return FuiContinue;
   }
 
@@ -2007,17 +2044,9 @@ int modalDialogProcessKey (TtyKey key) {
     return FuiContinue;
   }
 
-  void closeTopDialog () {
-    windowMovingMouse = false;
-    windowMovingKeys = false;
-    modalStack[$-1] = FuiContext.init;
-    modalStack.length -= 1;
-    modalStack.assumeSafeAppend;
-    { import core.memory : GC; GC.collect; GC.minimize; }
-  }
-
   int res = processContextEvents();
   if (res >= -1) {
+    if (closed !is null) *closed = true;
     modalLastResult = res;
     closeTopDialog();
     return modalLastResult;
@@ -2027,6 +2056,7 @@ int modalDialogProcessKey (TtyKey key) {
   if (key.key == TtyKey.Key.Error) return FuiContinue;
   if (key.key == TtyKey.Key.Unknown) return FuiContinue;
   if (!windowMovingKeys && key.key == TtyKey.Key.Escape) {
+    if (closed !is null) *closed = true;
     modalLastResult = -1;
     closeTopDialog();
     return modalLastResult;
@@ -2093,6 +2123,7 @@ int modalDialogProcessKey (TtyKey key) {
 
   res = processContextEvents();
   if (res >= -1) {
+    if (closed !is null) *closed = true;
     modalLastResult = res;
     closeTopDialog();
     return modalLastResult;
@@ -2124,12 +2155,7 @@ bool modalDialogInit(bool docenter=true) (FuiContext ctx) {
 bool modalCloseDialog () {
   if (modalStack.length) {
     modalLastResult = -1;
-    windowMovingMouse = false;
-    windowMovingKeys = false;
-    modalStack[$-1] = FuiContext.init;
-    modalStack.length -= 1;
-    modalStack.assumeSafeAppend;
-    { import core.memory : GC; GC.collect; GC.minimize; }
+    closeTopDialog();
     return true;
   }
   return false;
@@ -2141,13 +2167,14 @@ bool modalCloseDialog () {
 int modalDialog(bool docenter=true) (FuiContext ctx) {
   if (!ctx.modalDialogInit!docenter()) return -1;
   scope(exit) modalDialogRestoreScreen();
+  bool closed;
   for (;;) {
     modalDialogDraw();
     xtFlush();
     auto key = ttyReadKey(-1, TtyDefaultEscWait);
     if (key == "^L") { modalDialogRestoreScreen(); xtFullRefresh(); continue; }
-    if (key.key == TtyKey.Key.Error) { modalCloseDialog(); return -1; }
-    auto res = modalDialogProcessKey(key);
-    if (res >= -1) return res;
+    if (key.key == TtyKey.Key.Error) { modalCloseDialog(); return modalLastResult; }
+    modalDialogProcessKey(key, &closed);
+    if (closed) return modalLastResult;
   }
 }
