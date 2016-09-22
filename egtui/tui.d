@@ -573,7 +573,7 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
     auto data = ctx.item!FuiCtlEditLine(self);
     auto lp = ctx.layprops(self);
     auto ed = data.ed;
-    ed.moveResize(rc.x, rc.y, rc.w, rc.h);
+    ed.moveResize(rc.x+(ed.singleline ? 0 : 1), rc.y, rc.w, rc.h);
     ed.fullDirty;
     ed.dontSetCursor = (self != ctx.focused);
     if (lp.enabled) {
