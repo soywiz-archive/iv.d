@@ -330,7 +330,7 @@ public:
     auto win = XtWindow(winx-1, winy-(hideStatus ? 0 : 1), 1, winh+(hideStatus ? 0 : 1));
     if (win.height < 1) return; // it won't be visible anyway
     win.fg = TtyRgb2Color!(0x00, 0x00, 0x00);
-    win.bg = TtyRgb2Color!(0x00, 0x5f, 0xaf);
+    win.bg = (termType != TermType.linux ? TtyRgb2Color!(0x00, 0x5f, 0xaf) : TtyRgb2Color!(0x00, 0x5f, 0xcf));
     int filled;
     int botline = topline+winh-1;
     if (botline >= linecount-1 || linecount == 0) {

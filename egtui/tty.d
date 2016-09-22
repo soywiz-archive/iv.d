@@ -547,6 +547,8 @@ public void xtFlush () /*nothrow @nogc*/ {
   // fix glyph chars
   auto tsrc = ttywb.ptr; // source buffer
   auto tdst = ttybc.ptr; // destination buffer
+  //immutable doctrans = (termType == TermType.linux);
+  enum doctrans = false;
   for (uint pos = 0; pos < tsz; *tdst++ = *tsrc++, ++pos) {
          if (tsrc.ch == '\t') { tsrc.ch = '\x62'; tsrc.flags = Glyph.Flag.G1; }
          if (tsrc.ch == '\v') { tsrc.ch = '\x69'; tsrc.flags = Glyph.Flag.G1; }
@@ -570,18 +572,31 @@ public void xtFlush () /*nothrow @nogc*/ {
     // new attrs?
     if (tsrc.bg != lastBG || (/*tsrc.ch != ' ' &&*/ tsrc.fg != lastFG)) {
       ttzPut("\x1b[");
-      bool needSC = false;
-      if (tsrc.fg != lastFG) {
+      if (!doctrans) {
+        bool needSC = false;
+        if (tsrc.fg != lastFG) {
+          lastFG = tsrc.fg;
+          ttzPut("38;5;");
+          ttzPutUInt(lastFG);
+          needSC = true;
+        }
+        if (tsrc.bg != lastBG) {
+          lastBG = tsrc.bg;
+          if (needSC) ttzPut(';');
+          ttzPut("48;5;");
+          ttzPutUInt(lastBG);
+        }
+      } else {
         lastFG = tsrc.fg;
-        ttzPut("38;5;");
-        ttzPutUInt(lastFG);
-        needSC = true;
-      }
-      if (tsrc.bg != lastBG) {
         lastBG = tsrc.bg;
-        if (needSC) ttzPut(';');
-        ttzPut("48;5;");
-        ttzPutUInt(lastBG);
+        ttzPut("0;");
+        auto c0 = tty2linux(lastFG);
+        auto c1 = tty2linux(lastBG);
+        if (c0 > 7) ttzPut("1;");
+        ttzPut("3");
+        ttzPutUInt(c0);
+        ttzPut(";4");
+        ttzPutUInt(c1);
       }
       ttzPut('m');
     }
