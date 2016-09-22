@@ -1088,15 +1088,21 @@ version(rawtty_gamma_correct) {
   // color in sRGB space
   struct SRGB {
     float r=0, g=0, b=0; // [0..1]
-    alias x = r, y = g, z = b;
+    //alias x = r, y = g, z = b;
     this (float ar, float ag, float ab) pure nothrow @safe @nogc { r = ar; g = ag; b = ab; }
     this() (in auto ref FXYZ c) pure nothrow @safe @nogc {
-      immutable float xs = c.x* 3.2406+c.y*-1.5372+c.z*-0.4986;
-      immutable float ys = c.x*-0.9689+c.y* 1.8758+c.z* 0.0415;
-      immutable float zs = c.x* 0.0557+c.y*-0.2040+c.z* 1.0570;
-      r = valueFromLinear(xs);
-      g = valueFromLinear(ys);
-      b = valueFromLinear(zs);
+      version(tty_XYZ) {
+        immutable float xs = c.x* 3.2406+c.y*-1.5372+c.z*-0.4986;
+        immutable float ys = c.x*-0.9689+c.y* 1.8758+c.z* 0.0415;
+        immutable float zs = c.x* 0.0557+c.y*-0.2040+c.z* 1.0570;
+        r = valueFromLinear(xs);
+        g = valueFromLinear(ys);
+        b = valueFromLinear(zs);
+      } else {
+        r = valueFromLinear(c.x);
+        g = valueFromLinear(c.y);
+        b = valueFromLinear(c.z);
+      }
     }
 
     // linear to gamma conversion
@@ -1112,13 +1118,19 @@ version(rawtty_gamma_correct) {
     float x=0, y=0, z=0; // [0..1]
     this (float ax, float ay, float az) pure nothrow @safe @nogc { x = ax; y = ay; z = az; }
     this() (in auto ref SRGB c) pure nothrow @safe @nogc {
-      immutable float rl = valueFromGamma(c.r);
-      immutable float gl = valueFromGamma(c.g);
-      immutable float bl = valueFromGamma(c.b);
-      // observer. = 2degs, Illuminant = D65
-      x = rl*0.4124+gl*0.3576+bl*0.1805;
-      y = rl*0.2126+gl*0.7152+bl*0.0722;
-      z = rl*0.0193+gl*0.1192+bl*0.9505;
+      version(tty_XYZ) {
+        immutable float rl = valueFromGamma(c.r);
+        immutable float gl = valueFromGamma(c.g);
+        immutable float bl = valueFromGamma(c.b);
+        // observer. = 2degs, Illuminant = D65
+        x = rl*0.4124+gl*0.3576+bl*0.1805;
+        y = rl*0.2126+gl*0.7152+bl*0.0722;
+        z = rl*0.0193+gl*0.1192+bl*0.9505;
+      } else {
+        x = valueFromGamma(c.r);
+        y = valueFromGamma(c.g);
+        z = valueFromGamma(c.b);
+      }
     }
 
     // gamma to linear conversion
@@ -1209,9 +1221,9 @@ ubyte ttyRgb2Color(bool allow256=true, bool only8=false) (ubyte r, ubyte g, ubyt
     }
     double dist = double.max;
     ubyte resclr = 0;
-    immutable l0 = /*FXYZ*/(SRGB(r/255.0f, g/255.0f, b/255.0f));
+    immutable l0 = FXYZ(SRGB(r/255.0f, g/255.0f, b/255.0f));
     foreach (immutable idx, uint cc; rgbtbl[0..lastc]) {
-      auto linear = /*FXYZ*/(SRGB(((cc>>16)&0xff)/255.0f, ((cc>>8)&0xff)/255.0f, (cc&0xff)/255.0f));
+      auto linear = FXYZ(SRGB(((cc>>16)&0xff)/255.0f, ((cc>>8)&0xff)/255.0f, (cc&0xff)/255.0f));
       linear.x -= l0.x;
       linear.y -= l0.y;
       linear.z -= l0.z;
