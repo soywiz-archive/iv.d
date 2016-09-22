@@ -890,6 +890,7 @@ class EdHiTokensD : EdHiTokens {
     addToken("usize", HiType);
     addToken("size_t", HiInternal);
     addToken("ptrdiff_t", HiInternal);
+    addToken("cstring", HiType);
 
     addToken("delegate", HiKeyword);
     addToken("function", HiKeyword);
