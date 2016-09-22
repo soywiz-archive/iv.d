@@ -1832,7 +1832,8 @@ public:
     gb.pos2xy(curpos, cx, cy);
   }
 
-  final void makeCurXVisible () nothrow @safe @nogc {
+  // non-final, so i can do proprotional fonts in the future
+  void makeCurXVisible () nothrow @safe @nogc {
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
     int rx, ry;
