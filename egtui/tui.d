@@ -2172,10 +2172,12 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
   for (;;) {
     modalDialogDraw();
     xtFlush();
-    auto key = ttyReadKey(-1, TtyDefaultEscWait);
-    if (key == "^L") { modalDialogRestoreScreen(); xtFullRefresh(); continue; }
-    if (key.key == TtyKey.Key.Error) { modalCloseDialog(); return modalLastResult; }
-    modalDialogProcessKey(key, &closed);
-    if (closed) return modalLastResult;
+    do {
+      auto key = ttyReadKey(-1, TtyDefaultEscWait);
+      if (key == "^L") { modalDialogRestoreScreen(); xtFullRefresh(); break; }
+      if (key.key == TtyKey.Key.Error) { modalCloseDialog(); return modalLastResult; }
+      modalDialogProcessKey(key, &closed);
+      if (closed) return modalLastResult;
+    } while (ttyIsKeyHit);
   }
 }
