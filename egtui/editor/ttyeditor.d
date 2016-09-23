@@ -1500,11 +1500,10 @@ final:
       int replen = rereplace();
       // fix search range
       if (!srr.backwards) {
-        spos += replen;
-        epos -= caps[0].e-caps[0].s;
-        epos += replen;
+        spos = caps[0].s+(replen ? replen : 1);
+        epos += replen-(caps[0].e-caps[0].s);
       } else {
-        epos = caps[0].s+replen;
+        epos = caps[0].s;
       }
       if (doAll) ++count;
     }
