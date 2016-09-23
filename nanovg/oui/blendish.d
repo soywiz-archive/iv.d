@@ -1348,6 +1348,44 @@ public void bndScrollBar (NVGContext ctx, float x, float y, float w, float h, BN
     bndTransparent(bnd_theme.scrollBarTheme.outlineColor));
 }
 
+/** Draw scrollbar with its lower left origin at (x, y) and size of (w, h),
+ * where state denotes the widgets current UI state.
+ *
+ * offset is in the range 0..1 and controls the position of the scroll handle
+ *
+ * size is in the range 0..1 and controls the size of the scroll handle
+ *
+ * horizontal widget looks best when height is BND_SCROLLBAR_HEIGHT,
+ *
+ * vertical looks best when width is BND_SCROLLBAR_WIDTH
+ */
+public void bndScrollSlider (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, float offset, float size) {
+  bndBevelInset(ctx, x, y, w, h, BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS);
+  bndInnerBox(ctx, x, y, w, h,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    bndOffsetColor(bnd_theme.scrollBarTheme.innerColor, 3*bnd_theme.scrollBarTheme.shadeDown),
+    bndOffsetColor(bnd_theme.scrollBarTheme.innerColor, 3*bnd_theme.scrollBarTheme.shadeTop));
+  bndOutlineBox(ctx, x, y, w, h,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    bndTransparent(bnd_theme.scrollBarTheme.outlineColor));
+
+  NVGColor itemColor = bndOffsetColor(bnd_theme.scrollBarTheme.itemColor, (state == BND_ACTIVE ? BND_SCROLLBAR_ACTIVE_SHADE : 0));
+
+  bndScrollSliderRect(&x, &y, &w, &h, offset, size);
+
+  bndInnerBox(ctx, x, y, w, h,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    bndOffsetColor(itemColor, 3*bnd_theme.scrollBarTheme.shadeTop),
+    bndOffsetColor(itemColor, 3*bnd_theme.scrollBarTheme.shadeDown));
+  bndOutlineBox(ctx, x, y, w, h,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
+    bndTransparent(bnd_theme.scrollBarTheme.outlineColor));
+}
+
 /** Draw a menu background with its lower left origin at (x, y) and size of (w, h),
  * where flags is one or multiple flags from BNDcornerFlags.
  */
@@ -2129,6 +2167,24 @@ public void bndScrollHandleRect (float* x, float* y, float* w, float* h, float o
     float ws = bnd_fmaxf(size*(*w), (*h)-1);
     *x = (*x)+((*w)-ws)*offset;
     *w = ws;
+  }
+}
+
+/** computes the bounds of the scrollbar handle from the scrollbar size and the handles offset and size.
+ *
+ * offset is in the range 0..1 and defines the position of the scroll handle
+ *
+ * size is in the range 0..1 and defines the size of the scroll handle
+ */
+public void bndScrollSliderRect (float* x, float* y, float* w, float* h, float offset, float size) {
+  size = bnd_clamp(size, 0, 1);
+  offset = bnd_clamp(offset, 0, 1);
+  if (*h > *w) {
+    float hs = bnd_fmaxf(size*(*h), (*w)+1);
+    *h = ((*h)-hs)*offset+hs;
+  } else {
+    float ws = bnd_fmaxf(size*(*w), (*h)-1);
+    *w = ((*w)-ws)*offset+ws;
   }
 }
 
