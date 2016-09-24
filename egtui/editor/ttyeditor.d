@@ -49,7 +49,7 @@ class TtyEditor : Editor {
   struct TEDKey { string key; string help; bool hidden; } // UDA
 
 protected:
-  TtyKey[32] comboBuf;
+  TtyEvent[32] comboBuf;
   int comboCount; // number of items in `comboBuf`
   bool waitingInF5;
   bool incInputActive;
@@ -116,7 +116,7 @@ protected:
     fullDirty(); // just in case
   }
 
-  final bool promptProcessKey (TtyKey key, scope void delegate (Editor ed) onChange=null) {
+  final bool promptProcessKey (TtyEvent key, scope void delegate (Editor ed) onChange=null) {
     if (!mPromptActive) return false;
     auto lastCC = mPromptInput.bufferCC;
     auto res = mPromptInput.processKey(key);
@@ -972,21 +972,21 @@ public:
   // Combo: combo start
   // comboBuf should contain comboCount+1 keys!
   protected final Ecc checkKeys (const(char)[] keys) {
-    TtyKey k;
+    TtyEvent k;
     // check if current combo prefix is ok
-    foreach (const ref TtyKey ck; comboBuf[0..comboCount+1]) {
-      keys = TtyKey.parse(k, keys);
-      if (k.key == TtyKey.Key.Error || k.key == TtyKey.Key.None || k.key == TtyKey.Key.Unknown) return Ecc.None;
+    foreach (const ref TtyEvent ck; comboBuf[0..comboCount+1]) {
+      keys = TtyEvent.parse(k, keys);
+      if (k.key == TtyEvent.Key.Error || k.key == TtyEvent.Key.None || k.key == TtyEvent.Key.Unknown) return Ecc.None;
       if (k != ck) return Ecc.None;
     }
     return (keys.length == 0 ? Ecc.Eaten : Ecc.Combo);
   }
 
   // fuck! `(this ME)` trick doesn't work here
-  protected final Ecc doEditorCommandByUDA(ME=typeof(this)) (TtyKey key) {
+  protected final Ecc doEditorCommandByUDA(ME=typeof(this)) (TtyEvent key) {
     import std.traits;
-    if (key.key == TtyKey.Key.None) return Ecc.None;
-    if (key.key == TtyKey.Key.Error || key.key == TtyKey.Key.Unknown) { comboCount = 0; return Ecc.None; }
+    if (key.key == TtyEvent.Key.None) return Ecc.None;
+    if (key.key == TtyEvent.Key.Error || key.key == TtyEvent.Key.Unknown) { comboCount = 0; return Ecc.None; }
     bool possibleCombo = false;
     // temporarily add current key to combo
     comboBuf[comboCount] = key;
@@ -1027,7 +1027,7 @@ public:
     }
     // check if we can start/continue combo
     // combo can't start with normal char, but can include normal chars
-    if (possibleCombo && (comboCount > 0 || key.key != TtyKey.Key.Char)) {
+    if (possibleCombo && (comboCount > 0 || key.key != TtyEvent.Key.Char)) {
       if (++comboCount < comboBuf.length-1) return Ecc.Combo;
     }
     // if we have combo prefix, eat key unconditionally
@@ -1038,10 +1038,10 @@ public:
     return Ecc.None;
   }
 
-  bool processKey (TtyKey key) {
+  bool processKey (TtyEvent key) {
     // hack it here, so it won't interfere with normal keyboard processing
-    if (key.key == TtyKey.Key.PasteStart) { doPasteStart(); return true; }
-    if (key.key == TtyKey.Key.PasteEnd) { doPasteEnd(); return true; }
+    if (key.key == TtyEvent.Key.PasteStart) { doPasteStart(); return true; }
+    if (key.key == TtyEvent.Key.PasteEnd) { doPasteEnd(); return true; }
 
     if (waitingInF5) {
       waitingInF5 = false;
@@ -1053,10 +1053,10 @@ public:
       return true;
     }
 
-    if (key.key == TtyKey.Key.Error || key.key == TtyKey.Key.Unknown) { comboCount = 0; return false; }
+    if (key.key == TtyEvent.Key.Error || key.key == TtyEvent.Key.Unknown) { comboCount = 0; return false; }
 
     if (incInputActive) {
-      if (key.key == TtyKey.Key.ModChar) {
+      if (key.key == TtyEvent.Key.ModChar) {
         if (key == "^C") { incInputActive = false; resetIncSearchPos(); promptNoKillText(); return true; }
         if (key == "^R") { incSearchDir = 1; doNextIncSearch(); promptNoKillText(); return true; }
         if (key == "^V") { incSearchDir = -1; doNextIncSearch(); promptNoKillText(); return true; }
@@ -1096,7 +1096,7 @@ public:
         return true;
     }
 
-    if (key.key == TtyKey.Key.Char) {
+    if (key.key == TtyEvent.Key.Char) {
       if (readonly) return false;
       doPutChar(cast(char)key.ch);
       return true;

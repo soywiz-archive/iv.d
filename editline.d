@@ -405,9 +405,9 @@ public:
     for (;;) {
       drawLine();
       auto key = ttyReadKey();
-      if (key.key == TtyKey.Key.Error) { curline.clear(); return Result.CtrlD; }
-      if (key.key == TtyKey.Key.Unknown) continue;
-      if (key.key == TtyKey.Key.ModChar) {
+      if (key.key == TtyEvent.Key.Error) { curline.clear(); return Result.CtrlD; }
+      if (key.key == TtyEvent.Key.Unknown) continue;
+      if (key.key == TtyEvent.Key.ModChar) {
         if (!key.alt && key.ctrl && !key.shift && key.ch == 'W') { delPrevWord(); continue; }
         if (!key.alt && key.ctrl && !key.shift && key.ch == 'C') { curline.clear(); return Result.CtrlC; }
         if (!key.alt && key.ctrl && !key.shift && key.ch == 'D') { curline.clear(); return Result.CtrlD; }
@@ -418,7 +418,7 @@ public:
         continue;
       }
       switch (key.key) {
-        case TtyKey.Key.Left:
+        case TtyEvent.Key.Left:
           if (!key.alt && !key.shift) {
             if (key.ctrl) {
               if (curline.pos > 0) {
@@ -435,7 +435,7 @@ public:
             }
           }
           break;
-        case TtyKey.Key.Right:
+        case TtyEvent.Key.Right:
           if (!key.alt && !key.shift) {
             if (key.ctrl) {
               if (curline.pos < curline.length) {
@@ -452,20 +452,20 @@ public:
             }
           }
           break;
-        case TtyKey.Key.Home:
+        case TtyEvent.Key.Home:
           if (!key.ctrl && !key.alt && !key.shift) curline.movePos(-curline.MaxLen);
           break;
-        case TtyKey.Key.End:
+        case TtyEvent.Key.End:
           if (!key.ctrl && !key.alt && !key.shift) curline.movePos(curline.MaxLen);
           break;
-        case TtyKey.Key.Enter:
+        case TtyEvent.Key.Enter:
           fixCurLine();
           wrt("\r\n");
           return Result.Normal;
-        case TtyKey.Key.Tab:
+        case TtyEvent.Key.Tab:
           if (!key.ctrl && !key.alt && !key.shift) { fixCurLine(); autocomplete(); continue; }
           break;
-        case TtyKey.Key.Up:
+        case TtyEvent.Key.Up:
           if (!key.ctrl && !key.alt && !key.shift) {
             if (history.length == 0) continue;
             if (hpos == -1) {
@@ -482,7 +482,7 @@ public:
             curofs = 0;
           }
           break;
-        case TtyKey.Key.Down:
+        case TtyEvent.Key.Down:
           if (!key.ctrl && !key.alt && !key.shift) {
             if (history.length == 0) continue;
             if (hpos == 0) {
@@ -497,7 +497,7 @@ public:
             }
           }
           break;
-        case TtyKey.Key.Backspace:
+        case TtyEvent.Key.Backspace:
           if (!key.ctrl && !key.alt && !key.shift) {
             if (curline.length > 0 && curline.pos > 0) {
               fixCurLine();
@@ -507,7 +507,7 @@ public:
             delPrevWord();
           }
           break;
-        case TtyKey.Key.Delete:
+        case TtyEvent.Key.Delete:
           if (!key.ctrl && !key.alt && !key.shift) {
             if (curline.pos < curline.length) {
               fixCurLine();
@@ -515,7 +515,7 @@ public:
             }
           }
           break;
-        case TtyKey.Key.Char:
+        case TtyEvent.Key.Char:
           if (key.ch >= ' ' && key.ch < 127) {
             if (curline.length < Line.MaxLen) {
               fixCurLine();

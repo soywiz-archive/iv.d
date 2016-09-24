@@ -326,7 +326,7 @@ int ttyReadKeyByte (int toMSec=-1) @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// pressed key info
-public align(1) struct TtyKey {
+public align(1) struct TtyEvent {
 align(1): // make it tightly packed
   enum Key : ubyte{
     None, ///
@@ -388,6 +388,17 @@ align(1): // make it tightly packed
     MWheelUp,
     MWheelDown,
 
+    MMotion, // mouse motion without buttons, not read from tty by now, but can be useful for other backends
+
+    // synthesized events, used in tui
+    MLeftClick,
+    MMiddleClick,
+    MRightClick,
+
+    MLeftDouble,
+    MMiddleDouble,
+    MRightDouble,
+
     FocusIn,
     FocusOut,
   }
@@ -399,9 +410,13 @@ align(1): // make it tightly packed
   }
 
   enum MButton : int {
-    Left = 0,
-    Middle = 1,
-    Right = 2,
+    None = 0,
+    Left = 1,
+    Middle = 2,
+    Right = 3,
+    WheelUp = 4,
+    WheelDown = 5,
+    First = Left,
   }
 
   Key key; /// key type/sym
@@ -411,18 +426,20 @@ align(1): // make it tightly packed
 
   @property const pure nothrow @safe @nogc {
     ///
-    int button () { pragma(inline, true); return
-      key == Key.MLeftDown || key == Key.MLeftUp || key == Key.MLeftMotion ? 0 :
-      key == Key.MRightDown || key == Key.MRightUp || key == Key.MRightMotion ? 1 :
-      key == Key.MMiddleDown || key == Key.MMiddleUp || key == Key.MMiddleMotion ? 2 :
-      key == Key.MWheelUp ? 3 :
-      key == Key.MWheelDown ? 4 :
-      -1;
+    MButton button () { pragma(inline, true); return
+      key == Key.MLeftDown || key == Key.MLeftUp || key == Key.MLeftMotion || key == Key.MLeftClick || key == Key.MLeftDouble ? MButton.Left :
+      key == Key.MRightDown || key == Key.MRightUp || key == Key.MRightMotion || key == Key.MRightClick || key == Key.MRightDouble ? MButton.Right :
+      key == Key.MMiddleDown || key == Key.MMiddleUp || key == Key.MMiddleMotion || key == Key.MMiddleClick || key == Key.MMiddleDouble ? MButton.Middle :
+      key == Key.MWheelUp ? MButton.WheelUp :
+      key == Key.MWheelDown ? MButton.WheelDown :
+      MButton.None;
     }
-    bool mouse () { pragma(inline, true); return (key >= Key.MLeftDown && key <= Key.MWheelDown); } ///
+    bool mouse () { pragma(inline, true); return (key >= Key.MLeftDown && key <= Key.MRightDouble); } ///
     bool mpress () { pragma(inline, true); return (key == Key.MLeftDown || key == Key.MRightDown || key == Key.MMiddleDown); } ///
     bool mrelease () { pragma(inline, true); return (key == Key.MLeftUp || key == Key.MRightUp || key == Key.MMiddleUp); } ///
-    bool mmotion () { pragma(inline, true); return (key == Key.MLeftMotion || key == Key.MRightMotion || key == Key.MMiddleMotion); } ///
+    bool mclick () { pragma(inline, true); return (key == Key.MLeftClick || key == Key.MRightClick || key == Key.MMiddleClick); } ///
+    bool mdouble () { pragma(inline, true); return (key == Key.MLeftDouble || key == Key.MRightDouble || key == Key.MMiddleDouble); } ///
+    bool mmotion () { pragma(inline, true); return (key == Key.MLeftMotion || key == Key.MRightMotion || key == Key.MMiddleMotion || key == Key.MMotion); } ///
     bool mwheel () { pragma(inline, true); return (key == Key.MWheelUp || key == Key.MWheelDown); } ///
     bool focusin () { pragma(inline, true); return (key == Key.FocusIn); } ///
     bool focusout () { pragma(inline, true); return (key == Key.FocusOut); } ///
@@ -438,14 +455,14 @@ align(1): // make it tightly packed
   }
 
   this (const(char)[] s) pure nothrow @safe @nogc {
-    if (TtyKey.parse(this, s).length != 0) {
+    if (TtyEvent.parse(this, s).length != 0) {
       key = Key.Error;
       mods = 0;
       ch = 0;
     }
   }
 
-  bool opEquals (in TtyKey k) const pure nothrow @safe @nogc {
+  bool opEquals (in TtyEvent k) const pure nothrow @safe @nogc {
     pragma(inline, true);
     return
       (key == k.key ?
@@ -459,8 +476,8 @@ align(1): // make it tightly packed
   }
 
   bool opEquals (const(char)[] s) const pure nothrow @safe @nogc {
-    TtyKey k;
-    if (TtyKey.parse(k, s).length != 0) return false;
+    TtyEvent k;
+    if (TtyEvent.parse(k, s).length != 0) return false;
     return (k == this);
   }
 
@@ -509,8 +526,8 @@ align(1): // make it tightly packed
     if (key == Key.None) { put("none"); return dest[0..dpos]; }
     if (key == Key.Error) { put("error"); return dest[0..dpos]; }
     if (key == Key.Unknown) { put("unknown"); return dest[0..dpos]; }
-    foreach (string kn; __traits(allMembers, TtyKey.Key)) {
-      if (__traits(getMember, TtyKey.Key, kn) == key) {
+    foreach (string kn; __traits(allMembers, TtyEvent.Key)) {
+      if (__traits(getMember, TtyEvent.Key, kn) == key) {
         putMods();
         put(kn);
         return dest[0..dpos];
@@ -528,9 +545,9 @@ align(1): // make it tightly packed
    *
    * mods: C(trl), M(eta:alt), S(hift)
    *
-   * `key` will be `TtyKey.Key.Error` on error, `TtyKey.Key.None` on empty string
+   * `key` will be `TtyEvent.Key.Error` on error, `TtyEvent.Key.None` on empty string
    */
-  static T parse(T) (out TtyKey key, T s) pure nothrow @trusted @nogc if (is(T : const(char)[])) {
+  static T parse(T) (out TtyEvent key, T s) pure nothrow @trusted @nogc if (is(T : const(char)[])) {
     static if (is(T == typeof(null))) {
       return null;
     } else {
@@ -570,10 +587,10 @@ align(1): // make it tightly packed
             // single char
             key.ch = str.ptr[0];
             if (key.ctrl || key.alt) {
-              key.key = TtyKey.Key.ModChar;
+              key.key = TtyEvent.Key.ModChar;
               if (key.ch >= 'a' && key.ch <= 'z') key.ch -= 32; // toupper
             } else {
-              key.key = TtyKey.Key.Char;
+              key.key = TtyEvent.Key.Char;
               if (key.shift) {
                 if (key.ch >= 'a' && key.ch <= 'z') key.ch -= 32; // toupper
                 else switch (key.ch) {
@@ -609,36 +626,36 @@ align(1): // make it tightly packed
             if (str.strEquCI("esc")) str = "escape";
             if (str.strEquCI("bs")) str = "backspace";
             if (str.strEquCI("PasteStart") || str.strEquCI("Paste-Start")) {
-              key.key = TtyKey.Key.PasteStart;
+              key.key = TtyEvent.Key.PasteStart;
               key.mods = 0;
               key.ch = 0;
             } else if (str.strEquCI("PasteEnd") || str.strEquCI("Paste-End")) {
-              key.key = TtyKey.Key.PasteEnd;
+              key.key = TtyEvent.Key.PasteEnd;
               key.mods = 0;
               key.ch = 0;
             } else {
               bool found = false;
-              foreach (string kn; __traits(allMembers, TtyKey.Key)) {
+              foreach (string kn; __traits(allMembers, TtyEvent.Key)) {
                 if (!found && str.strEquCI(kn)) {
                   found = true;
-                  key.key = __traits(getMember, TtyKey.Key, kn);
+                  key.key = __traits(getMember, TtyEvent.Key, kn);
                   break;
                 }
               }
-              if (!found || key.key < TtyKey.Key.Up) goto error;
+              if (!found || key.key < TtyEvent.Key.Up) goto error;
             }
             // just in case
-                 if (key.key == TtyKey.Key.Enter) key.ch = 13;
-            else if (key.key == TtyKey.Key.Tab) key.ch = 9;
-            else if (key.key == TtyKey.Key.Escape) key.ch = 27;
-            else if (key.key == TtyKey.Key.Backspace) key.ch = 8;
+                 if (key.key == TtyEvent.Key.Enter) key.ch = 13;
+            else if (key.key == TtyEvent.Key.Tab) key.ch = 9;
+            else if (key.key == TtyEvent.Key.Escape) key.ch = 27;
+            else if (key.key == TtyEvent.Key.Backspace) key.ch = 8;
           }
           return s;
         }
       }
     error:
-      key = TtyKey.init;
-      key.key = TtyKey.Key.Error;
+      key = TtyEvent.init;
+      key.key = TtyEvent.Key.Error;
       return olds;
     }
   }
@@ -657,21 +674,21 @@ align(1): // make it tightly packed
  * Returns:
  *  null on error or keyname
  */
-TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
-  TtyKey key;
+TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
+  TtyEvent key;
 
   void skipCSI () @nogc {
-    key.key = TtyKey.Key.Unknown;
+    key.key = TtyEvent.Key.Unknown;
     for (;;) {
       auto ch = ttyReadKeyByte(toEscMSec);
-      if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; break; }
+      if (ch < 0 || ch == 27) { key.key = TtyEvent.Key.Escape; key.ch = 27; break; }
       if (ch != ';' && (ch < '0' || ch > '9')) break;
     }
   }
 
   void badCSI () @nogc {
     key = key.init;
-    key.key = TtyKey.Key.Unknown;
+    key.key = TtyEvent.Key.Unknown;
   }
 
   bool xtermMods (uint mci) @nogc {
@@ -690,54 +707,54 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
 
   void xtermSpecial (char ch) @nogc {
     switch (ch) {
-      case 'A': key.key = TtyKey.Key.Up; break;
-      case 'B': key.key = TtyKey.Key.Down; break;
-      case 'C': key.key = TtyKey.Key.Right; break;
-      case 'D': key.key = TtyKey.Key.Left; break;
-      case 'E': key.key = TtyKey.Key.Pad5; break;
-      case 'H': key.key = TtyKey.Key.Home; break;
-      case 'F': key.key = TtyKey.Key.End; break;
-      case 'P': key.key = TtyKey.Key.F1; break;
-      case 'Q': key.key = TtyKey.Key.F2; break;
-      case 'R': key.key = TtyKey.Key.F3; break;
-      case 'S': key.key = TtyKey.Key.F4; break;
-      case 'Z': key.key = TtyKey.Key.Tab; key.ch = 9; if (!key.shift && !key.alt && !key.ctrl) key.shift = true; break;
+      case 'A': key.key = TtyEvent.Key.Up; break;
+      case 'B': key.key = TtyEvent.Key.Down; break;
+      case 'C': key.key = TtyEvent.Key.Right; break;
+      case 'D': key.key = TtyEvent.Key.Left; break;
+      case 'E': key.key = TtyEvent.Key.Pad5; break;
+      case 'H': key.key = TtyEvent.Key.Home; break;
+      case 'F': key.key = TtyEvent.Key.End; break;
+      case 'P': key.key = TtyEvent.Key.F1; break;
+      case 'Q': key.key = TtyEvent.Key.F2; break;
+      case 'R': key.key = TtyEvent.Key.F3; break;
+      case 'S': key.key = TtyEvent.Key.F4; break;
+      case 'Z': key.key = TtyEvent.Key.Tab; key.ch = 9; if (!key.shift && !key.alt && !key.ctrl) key.shift = true; break;
       default: badCSI(); break;
     }
   }
 
   void linconSpecial (char ch) @nogc {
     switch (ch) {
-      case 'A': key.key = TtyKey.Key.F1; break;
-      case 'B': key.key = TtyKey.Key.F2; break;
-      case 'C': key.key = TtyKey.Key.F3; break;
-      case 'D': key.key = TtyKey.Key.F4; break;
+      case 'A': key.key = TtyEvent.Key.F1; break;
+      case 'B': key.key = TtyEvent.Key.F2; break;
+      case 'C': key.key = TtyEvent.Key.F3; break;
+      case 'D': key.key = TtyEvent.Key.F4; break;
       default: badCSI(); break;
     }
   }
 
   void csiSpecial (uint n) @nogc {
     switch (n) {
-      case 1: key.key = TtyKey.Key.Home; return; // xterm
-      case 2: key.key = TtyKey.Key.Insert; return;
-      case 3: key.key = TtyKey.Key.Delete; return;
-      case 4: key.key = TtyKey.Key.End; return;
-      case 5: key.key = TtyKey.Key.PageUp; return;
-      case 6: key.key = TtyKey.Key.PageDown; return;
-      case 7: key.key = TtyKey.Key.Home; return; // rxvt
-      case 8: key.key = TtyKey.Key.End; return;
-      case 1+10: key.key = TtyKey.Key.F1; return;
-      case 2+10: key.key = TtyKey.Key.F2; return;
-      case 3+10: key.key = TtyKey.Key.F3; return;
-      case 4+10: key.key = TtyKey.Key.F4; return;
-      case 5+10: key.key = TtyKey.Key.F5; return;
-      case 6+11: key.key = TtyKey.Key.F6; return;
-      case 7+11: key.key = TtyKey.Key.F7; return;
-      case 8+11: key.key = TtyKey.Key.F8; return;
-      case 9+11: key.key = TtyKey.Key.F9; return;
-      case 10+11: key.key = TtyKey.Key.F10; return;
-      case 11+12: key.key = TtyKey.Key.F11; return;
-      case 12+12: key.key = TtyKey.Key.F12; return;
+      case 1: key.key = TtyEvent.Key.Home; return; // xterm
+      case 2: key.key = TtyEvent.Key.Insert; return;
+      case 3: key.key = TtyEvent.Key.Delete; return;
+      case 4: key.key = TtyEvent.Key.End; return;
+      case 5: key.key = TtyEvent.Key.PageUp; return;
+      case 6: key.key = TtyEvent.Key.PageDown; return;
+      case 7: key.key = TtyEvent.Key.Home; return; // rxvt
+      case 8: key.key = TtyEvent.Key.End; return;
+      case 1+10: key.key = TtyEvent.Key.F1; return;
+      case 2+10: key.key = TtyEvent.Key.F2; return;
+      case 3+10: key.key = TtyEvent.Key.F3; return;
+      case 4+10: key.key = TtyEvent.Key.F4; return;
+      case 5+10: key.key = TtyEvent.Key.F5; return;
+      case 6+11: key.key = TtyEvent.Key.F6; return;
+      case 7+11: key.key = TtyEvent.Key.F7; return;
+      case 8+11: key.key = TtyEvent.Key.F8; return;
+      case 9+11: key.key = TtyEvent.Key.F9; return;
+      case 10+11: key.key = TtyEvent.Key.F10; return;
+      case 11+12: key.key = TtyEvent.Key.F11; return;
+      case 12+12: key.key = TtyEvent.Key.F12; return;
       default: badCSI(); break;
     }
   }
@@ -749,7 +766,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     bool press = false;
     for (;;) {
       auto ch = ttyReadKeyByte(toEscMSec);
-      if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return; }
+      if (ch < 0 || ch == 27) { key.key = TtyEvent.Key.Escape; key.ch = 27; return; }
       if (ch == ';') {
         ++nc;
       } else if (ch >= '0' && ch <= '9') {
@@ -757,7 +774,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       } else {
              if (ch == 'M') press = true;
         else if (ch == 'm') press = false;
-        else { key.key = TtyKey.Key.Unknown; return; }
+        else { key.key = TtyEvent.Key.Unknown; return; }
         break;
       }
     }
@@ -768,37 +785,37 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     if (nn[2] < 0) nn[2] = 1;
     if (nn[2] > ushort.max) nn[2] = ushort.max;
     switch (nn[0]) {
-      case 0: key.key = (press ? TtyKey.Key.MLeftDown : TtyKey.Key.MLeftUp); break;
-      case 1: key.key = (press ? TtyKey.Key.MMiddleDown : TtyKey.Key.MMiddleUp); break;
-      case 2: key.key = (press ? TtyKey.Key.MRightDown : TtyKey.Key.MRightUp); break;
-      case 32: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MLeftMotion; break;
-      case 33: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MMiddleMotion; break;
-      case 34: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MRightMotion; break;
-      case 64: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MWheelUp; break;
-      case 65: if (!press) { key.key = TtyKey.Key.Unknown; return; } key.key = TtyKey.Key.MWheelDown; break;
-      default: key.key = TtyKey.Key.Unknown; return;
+      case 0: key.key = (press ? TtyEvent.Key.MLeftDown : TtyEvent.Key.MLeftUp); break;
+      case 1: key.key = (press ? TtyEvent.Key.MMiddleDown : TtyEvent.Key.MMiddleUp); break;
+      case 2: key.key = (press ? TtyEvent.Key.MRightDown : TtyEvent.Key.MRightUp); break;
+      case 32: if (!press) { key.key = TtyEvent.Key.Unknown; return; } key.key = TtyEvent.Key.MLeftMotion; break;
+      case 33: if (!press) { key.key = TtyEvent.Key.Unknown; return; } key.key = TtyEvent.Key.MMiddleMotion; break;
+      case 34: if (!press) { key.key = TtyEvent.Key.Unknown; return; } key.key = TtyEvent.Key.MRightMotion; break;
+      case 64: if (!press) { key.key = TtyEvent.Key.Unknown; return; } key.key = TtyEvent.Key.MWheelUp; break;
+      case 65: if (!press) { key.key = TtyEvent.Key.Unknown; return; } key.key = TtyEvent.Key.MWheelDown; break;
+      default: key.key = TtyEvent.Key.Unknown; return;
     }
     key.x = cast(ushort)nn[1];
     key.y = cast(ushort)nn[2];
   }
 
   int ch = ttyReadKeyByte(toMSec);
-  if (ch < 0) { key.key = TtyKey.Key.Error; return key; } // error
-  if (ch == 0) { key.key = TtyKey.Key.ModChar; key.ctrl = true; key.ch = ' '; return key; }
-  if (ch == 8 || ch == 127) { key.key = TtyKey.Key.Backspace; key.ch = 8; return key; }
-  if (ch == 9) { key.key = TtyKey.Key.Tab; key.ch = 9; return key; }
-  if (ch == 10) { key.key = TtyKey.Key.Enter; key.ch = 13; return key; }
+  if (ch < 0) { key.key = TtyEvent.Key.Error; return key; } // error
+  if (ch == 0) { key.key = TtyEvent.Key.ModChar; key.ctrl = true; key.ch = ' '; return key; }
+  if (ch == 8 || ch == 127) { key.key = TtyEvent.Key.Backspace; key.ch = 8; return key; }
+  if (ch == 9) { key.key = TtyEvent.Key.Tab; key.ch = 9; return key; }
+  if (ch == 10) { key.key = TtyEvent.Key.Enter; key.ch = 13; return key; }
 
-  key.key = TtyKey.Key.Unknown;
+  key.key = TtyEvent.Key.Unknown;
 
   // escape?
   if (ch == 27) {
     ch = ttyReadKeyByte(toEscMSec);
-    if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
+    if (ch < 0 || ch == 27) { key.key = TtyEvent.Key.Escape; key.ch = 27; return key; }
     // xterm stupidity
     if (termType != TermType.rxvt && ch == 'O') {
       ch = ttyReadKeyByte(toEscMSec);
-      if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
+      if (ch < 0 || ch == 27) { key.key = TtyEvent.Key.Escape; key.ch = 27; return key; }
       if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
       return key;
     }
@@ -813,11 +830,11 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       for (;;) {
         ch = ttyReadKeyByte(toEscMSec);
         if (firstChar && ch == '<') { parseMouse(); return key; }
-        if (firstChar && ch == 'I') { key.key = TtyKey.Key.FocusIn; return key; }
-        if (firstChar && ch == 'O') { key.key = TtyKey.Key.FocusOut; return key; }
+        if (firstChar && ch == 'I') { key.key = TtyEvent.Key.FocusIn; return key; }
+        if (firstChar && ch == 'O') { key.key = TtyEvent.Key.FocusOut; return key; }
         if (firstChar && ch == '[') { linuxCon = true; firstChar = false; continue; }
         firstChar = false;
-        if (ch < 0 || ch == 27) { key.key = TtyKey.Key.Escape; key.ch = 27; return key; }
+        if (ch < 0 || ch == 27) { key.key = TtyEvent.Key.Escape; key.ch = 27; return key; }
         if (ch == ';') {
           ++nc;
           if (nc > nn.length) { skipCSI(); return key; }
@@ -836,21 +853,21 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
              if (linuxCon) linconSpecial(cast(char)ch);
         else if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
       } else if (nc == 1) {
-        if (ch == '~' && nn.ptr[0] == 200) { key.key = TtyKey.Key.PasteStart; return key; }
-        if (ch == '~' && nn.ptr[0] == 201) { key.key = TtyKey.Key.PasteEnd; return key; }
+        if (ch == '~' && nn.ptr[0] == 200) { key.key = TtyEvent.Key.PasteStart; return key; }
+        if (ch == '~' && nn.ptr[0] == 201) { key.key = TtyEvent.Key.PasteEnd; return key; }
         switch (ch) {
           case '~':
             switch (nn.ptr[0]) {
-              case 23: key.shift = true; key.key = TtyKey.Key.F1; return key;
-              case 24: key.shift = true; key.key = TtyKey.Key.F2; return key;
-              case 25: key.shift = true; key.key = TtyKey.Key.F3; return key;
-              case 26: key.shift = true; key.key = TtyKey.Key.F4; return key;
-              case 28: key.shift = true; key.key = TtyKey.Key.F5; return key;
-              case 29: key.shift = true; key.key = TtyKey.Key.F6; return key;
-              case 31: key.shift = true; key.key = TtyKey.Key.F7; return key;
-              case 32: key.shift = true; key.key = TtyKey.Key.F8; return key;
-              case 33: key.shift = true; key.key = TtyKey.Key.F9; return key;
-              case 34: key.shift = true; key.key = TtyKey.Key.F10; return key;
+              case 23: key.shift = true; key.key = TtyEvent.Key.F1; return key;
+              case 24: key.shift = true; key.key = TtyEvent.Key.F2; return key;
+              case 25: key.shift = true; key.key = TtyEvent.Key.F3; return key;
+              case 26: key.shift = true; key.key = TtyEvent.Key.F4; return key;
+              case 28: key.shift = true; key.key = TtyEvent.Key.F5; return key;
+              case 29: key.shift = true; key.key = TtyEvent.Key.F6; return key;
+              case 31: key.shift = true; key.key = TtyEvent.Key.F7; return key;
+              case 32: key.shift = true; key.key = TtyEvent.Key.F8; return key;
+              case 33: key.shift = true; key.key = TtyEvent.Key.F9; return key;
+              case 34: key.shift = true; key.key = TtyEvent.Key.F10; return key;
               default:
             }
             break;
@@ -873,22 +890,22 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       return key;
     }
     if (ch == 9) {
-      key.key = TtyKey.Key.Tab;
+      key.key = TtyEvent.Key.Tab;
       key.alt = true;
       key.ch = 9;
       return key;
     }
     if (ch >= 1 && ch <= 26) {
-      key.key = TtyKey.Key.ModChar;
+      key.key = TtyEvent.Key.ModChar;
       key.alt = true;
       key.ch = cast(dchar)(ch+64);
-           if (key.ch == 'H') { key.key = TtyKey.Key.Backspace; key.ch = 8; }
-      else if (key.ch == 'J') { key.key = TtyKey.Key.Enter; key.ch = 13; }
+           if (key.ch == 'H') { key.key = TtyEvent.Key.Backspace; key.ch = 8; }
+      else if (key.ch == 'J') { key.key = TtyEvent.Key.Enter; key.ch = 13; }
       return key;
     }
     if (/*(ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '`'*/true) {
       key.alt = true;
-      key.key = TtyKey.Key.ModChar;
+      key.key = TtyEvent.Key.ModChar;
       key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
       if (ch >= 'a' && ch <= 'z') ch -= 32;
       key.ch = cast(dchar)ch;
@@ -899,11 +916,11 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
 
   if (ch < 32) {
     // ctrl+letter
-    key.key = TtyKey.Key.ModChar;
+    key.key = TtyEvent.Key.ModChar;
     key.ctrl = true;
     key.ch = cast(dchar)(ch+64);
   } else {
-    key.key = TtyKey.Key.Char;
+    key.key = TtyEvent.Key.Char;
     key.ch = cast(dchar)(ch);
     if (ttyIsFuckedFlag && ch >= 0x80) {
       Utf8Decoder udc;
@@ -923,7 +940,7 @@ TtyKey ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
         ch -= 0x80;
         if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
           key.alt = true;
-          key.key = TtyKey.Key.ModChar;
+          key.key = TtyEvent.Key.ModChar;
           key.shift = (ch >= 'A' && ch <= 'Z'); // ignore capslock
           if (ch >= 'a' && ch <= 'z') ch -= 32;
           key.ch = cast(dchar)ch;

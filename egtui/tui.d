@@ -603,8 +603,8 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
       case FuiEvent.Type.None:
         return false;
       case FuiEvent.Type.Char: // param0: dchar; param1: mods&buttons
-        TtyKey k;
-        k.key = TtyKey.Key.Char;
+        TtyEvent k;
+        k.key = TtyEvent.Key.Char;
         k.ch = ev.ch;
         if (eld.ed.processKey(k)) {
           if (eld.actcb !is null) {
@@ -811,7 +811,7 @@ private int buttonLike(T, FuiCtlType type) (FuiContext ctx, int parent, const(ch
           if (lp.canBeFocused) ctx.focused = self;
           return ctx.btnlikeClick(self);
         }
-        if (ev.key.key != TtyKey.Key.ModChar || ev.key.ctrl || !ev.key.alt || ev.key.shift) return false;
+        if (ev.key.key != TtyEvent.Key.ModChar || ev.key.ctrl || !ev.key.alt || ev.key.shift) return false;
         if (data.hotchar != ev.key.ch) return false;
         if (lp.canBeFocused) ctx.focused = self;
         ctx.btnlikeClick(self);
@@ -1897,8 +1897,8 @@ bool processEvent (FuiContext ctx, FuiEvent ev) {
     auto ch = ev.ch;
     if (ch > ' ' && ch < 256) ch = toupper(cast(char)ch);
     ev.type = FuiEvent.Type.Key;
-    ev.keyp = TtyKey.init;
-    ev.keyp.key = TtyKey.Key.ModChar;
+    ev.keyp = TtyEvent.init;
+    ev.keyp.key = TtyEvent.Key.ModChar;
     ev.keyp.ctrl = false;
     ev.keyp.alt = true;
     ev.keyp.shift = false;
@@ -1924,7 +1924,7 @@ bool processEvent (FuiContext ctx, FuiEvent ev) {
   if (ev.key == "Up" || ev.key == "Left") { ctx.focusPrev(); return true; }
   if (ev.key == "Down" || ev.key == "Right") { ctx.focusNext(); return true; }
   // broadcast ModChar, so widgets can process hotkeys
-  if (ev.key.key == TtyKey.Key.ModChar && !ev.key.ctrl && ev.key.alt && !ev.key.shift) {
+  if (ev.key.key == TtyEvent.Key.ModChar && !ev.key.ctrl && ev.key.alt && !ev.key.shift) {
     auto res = ctx.findNextEx(0, (int id) {
       if (auto lp = ctx.layprops(id)) {
         if (lp.visible && !lp.disabled) {
@@ -2012,7 +2012,7 @@ private void closeTopDialog () {
 
 // returns `true` if dialog was closed, and then `modalLastResult` will contain result
 // return FuiContinue, clicked item index or -1 for esc
-int modalDialogProcessKey (TtyKey key, bool* closed=null) {
+int modalDialogProcessKey (TtyEvent key, bool* closed=null) {
   FuiContext ctx;
 
   if (closed !is null) *closed = false;
@@ -2054,9 +2054,9 @@ int modalDialogProcessKey (TtyKey key, bool* closed=null) {
   }
 
   //auto key = ttyReadKey(-1, TtyDefaultEscWait);
-  if (key.key == TtyKey.Key.Error) return FuiContinue;
-  if (key.key == TtyKey.Key.Unknown) return FuiContinue;
-  if (!windowMovingKeys && key.key == TtyKey.Key.Escape) {
+  if (key.key == TtyEvent.Key.Error) return FuiContinue;
+  if (key.key == TtyEvent.Key.Unknown) return FuiContinue;
+  if (!windowMovingKeys && key.key == TtyEvent.Key.Escape) {
     if (closed !is null) *closed = true;
     modalLastResult = -1;
     closeTopDialog();
@@ -2082,7 +2082,7 @@ int modalDialogProcessKey (TtyKey key, bool* closed=null) {
 
   // move dialog with mouse
   if (windowMovingMouse && key.mouse) {
-    if (key.mrelease && key.button == 0) {
+    if (key.mrelease && key.button == TtyEvent.MButton.Left) {
       windowMovingMouse = false;
       return FuiContinue;
     }
@@ -2110,7 +2110,7 @@ int modalDialogProcessKey (TtyKey key, bool* closed=null) {
 
   if (key.mouse) {
     //TODO: check for no frame when we'll get that
-    if (key.mpress && key.button == 0 && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
+    if (key.mpress && key.button == TtyEvent.MButton.Left && key.x >= ctx.layprops(0).position.x && key.x < ctx.layprops(0).position.x+ctx.layprops(0).position.w) {
       if ((key.y == ctx.layprops(0).position.y) || (ctx.dialogFrame == FuiDialogFrameType.Normal && key.y == ctx.layprops(0).position.y+1)) {
         windowMovingMouse = true;
         wmX = key.x;
@@ -2175,7 +2175,7 @@ int modalDialog(bool docenter=true) (FuiContext ctx) {
     do {
       auto key = ttyReadKey(-1, TtyDefaultEscWait);
       if (key == "^L") { modalDialogRestoreScreen(); xtFullRefresh(); break; }
-      if (key.key == TtyKey.Key.Error) { modalCloseDialog(); return modalLastResult; }
+      if (key.key == TtyEvent.Key.Error) { modalCloseDialog(); return modalLastResult; }
       modalDialogProcessKey(key, &closed);
       if (closed) return modalLastResult;
     } while (ttyIsKeyHit);

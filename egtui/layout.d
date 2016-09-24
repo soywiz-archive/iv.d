@@ -252,17 +252,17 @@ public static struct FuiEvent {
       uint param1;
       short mx, my; // coordinates *inside* item
     }
-    TtyKey paramkey;
+    TtyEvent paramkey;
   }
 
 @property pure nothrow @safe @nogc:
-  ref TtyKey keyp () { pragma(inline, true); return paramkey; }
+  ref TtyEvent keyp () { pragma(inline, true); return paramkey; }
 
 @property const pure nothrow @safe @nogc:
   ubyte mods () { pragma(inline, true); return cast(ubyte)(param1>>8); }
   ubyte buts () { pragma(inline, true); return cast(ubyte)param1; }
 
-  TtyKey key () { pragma(inline, true); return paramkey; }
+  TtyEvent key () { pragma(inline, true); return paramkey; }
   dchar ch () { pragma(inline, true); return cast(dchar)param0; }
   ubyte bidx () { pragma(inline, true); return cast(ubyte)param0; }
   short x () { pragma(inline, true); return mx; }
@@ -339,7 +339,7 @@ private:
     }
   }
 
-  void queueEvent (int aitem, FuiEvent.Type atype, TtyKey akey) nothrow @trusted @nogc {
+  void queueEvent (int aitem, FuiEvent.Type atype, TtyEvent akey) nothrow @trusted @nogc {
     if (eventPos >= events.length) return;
     auto nn = (eventHead+eventPos++)%events.length;
     with (events.ptr[nn]) {
@@ -549,18 +549,18 @@ private:
   static struct ExternalEvent {
     enum Type { Key, Char, Mouse }
     Type type;
-    TtyKey kev;
+    TtyEvent kev;
     //MouseEvent mev;
     dchar cev;
   }
   private ExternalEvent[MaxQueuedExternalEvents] extEvents;
   uint extevHead, extevPos;
 
-  void keyboardEvent (TtyKey ev) nothrow @trusted @nogc {
+  void keyboardEvent (TtyEvent ev) nothrow @trusted @nogc {
     if (extevPos >= extEvents.length) return;
-    if (ev.key == TtyKey.Key.None) return;
+    if (ev.key == TtyEvent.Key.None) return;
     auto nn = (extevHead+extevPos++)%extEvents.length;
-    if (ev.key == TtyKey.Key.Char) {
+    if (ev.key == TtyEvent.Key.Char) {
       with (extEvents.ptr[nn]) { type = ExternalEvent.Type.Char; cev = ev.ch; }
     } else if (ev.mouse) {
       with (extEvents.ptr[nn]) { type = ExternalEvent.Type.Mouse; kev = ev; }
@@ -656,7 +656,7 @@ private:
           break;
         case ExternalEvent.Type.Key:
           //if (!extEvents.ptr[extevHead].kev.pressed) break;
-          if (extEvents.ptr[extevHead].kev.key == TtyKey.Key.Tab) {
+          if (extEvents.ptr[extevHead].kev.key == TtyEvent.Key.Tab) {
             auto kk = extEvents.ptr[extevHead].kev;
             if (auto lc = layprops(focused)) {
               if (lc.visible && !lc.disabled && lc.wantTab) break;
@@ -672,13 +672,13 @@ private:
         case ExternalEvent.Type.Mouse:
           auto ev = &extEvents.ptr[extevHead].kev;
           mouseAt(FuiPoint(ev.x, ev.y));
-          if (ev.button >= 0) {
+          if (ev.button != TtyEvent.MButton.None) {
             if (ev.mpress || ev.mrelease) {
-              newButtonState(ev.button, ev.mpress);
+              newButtonState(ev.button-TtyEvent.MButton.First, ev.mpress);
             } else if (ev.mwheel) {
               // rawtty2 workaround
-              newButtonState(ev.button, true);
-              newButtonState(ev.button, false);
+              newButtonState(ev.button-TtyEvent.MButton.First, true);
+              newButtonState(ev.button-TtyEvent.MButton.First, false);
             }
           }
           /*
@@ -1575,7 +1575,7 @@ public:
   }
 
   // external actions
-  void keyboardEvent (TtyKey ev) { pragma(inline, true); if (ctxp) ctx.keyboardEvent(ev); }
+  void keyboardEvent (TtyEvent ev) { pragma(inline, true); if (ctxp) ctx.keyboardEvent(ev); }
   //void charEvent (dchar ch) { pragma(inline, true); if (ctxp) ctx.charEvent(ch); }
   //void mouseEvent (MouseEvent ev) { pragma(inline, true); if (ctxp) ctx.mouseEvent(ev); }
 
