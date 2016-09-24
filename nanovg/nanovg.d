@@ -2586,20 +2586,29 @@ public void rect (NVGContext ctx, float x, float y, float w, float h) {
 
 /// Creates new rounded rectangle shaped sub-path.
 public void roundedRect (NVGContext ctx, float x, float y, float w, float h, float r) {
-  if (r < 0.1f) {
+  ctx.roundedRectVarying(x, y, w, h, r, r, r, r);
+}
+
+void roundedRectVarying (NVGContext ctx, float x, float y, float w, float h, float radTopLeft, float radTopRight, float radBottomRight, float radBottomLeft) {
+  if (radTopLeft < 0.1f && radTopRight < 0.1f && radBottomRight < 0.1f && radBottomLeft < 0.1f) {
     ctx.rect(x, y, w, h);
   } else {
-    float rx = nvg__min(r, nvg__absf(w)*0.5f)*nvg__sign(w), ry = nvg__min(r, nvg__absf(h)*0.5f)*nvg__sign(h);
+    immutable float halfw = nvg__absf(w)*0.5f;
+    immutable float halfh = nvg__absf(h)*0.5f;
+    immutable float rxBL = nvg__min(radBottomLeft, halfw)*nvg__sign(w), ryBL = nvg__min(radBottomLeft, halfh)*nvg__sign(h);
+    immutable float rxBR = nvg__min(radBottomRight, halfw)*nvg__sign(w), ryBR = nvg__min(radBottomRight, halfh)*nvg__sign(h);
+    immutable float rxTR = nvg__min(radTopRight, halfw)*nvg__sign(w), ryTR = nvg__min(radTopRight, halfh)*nvg__sign(h);
+    immutable float rxTL = nvg__min(radTopLeft, halfw)*nvg__sign(w), ryTL = nvg__min(radTopLeft, halfh)*nvg__sign(h);
     float[44] vals = [
-      NVGcommands.MoveTo, x, y+ry,
-      NVGcommands.LineTo, x, y+h-ry,
-      NVGcommands.BezierTo, x, y+h-ry*(1-NVG_KAPPA90), x+rx*(1-NVG_KAPPA90), y+h, x+rx, y+h,
-      NVGcommands.LineTo, x+w-rx, y+h,
-      NVGcommands.BezierTo, x+w-rx*(1-NVG_KAPPA90), y+h, x+w, y+h-ry*(1-NVG_KAPPA90), x+w, y+h-ry,
-      NVGcommands.LineTo, x+w, y+ry,
-      NVGcommands.BezierTo, x+w, y+ry*(1-NVG_KAPPA90), x+w-rx*(1-NVG_KAPPA90), y, x+w-rx, y,
-      NVGcommands.LineTo, x+rx, y,
-      NVGcommands.BezierTo, x+rx*(1-NVG_KAPPA90), y, x, y+ry*(1-NVG_KAPPA90), x, y+ry,
+      NVGcommands.MoveTo, x, y+ryTL,
+      NVGcommands.LineTo, x, y+h-ryBL,
+      NVGcommands.BezierTo, x, y+h-ryBL*(1-NVG_KAPPA90), x+rxBL*(1-NVG_KAPPA90), y+h, x+rxBL, y+h,
+      NVGcommands.LineTo, x+w-rxBR, y+h,
+      NVGcommands.BezierTo, x+w-rxBR*(1-NVG_KAPPA90), y+h, x+w, y+h-ryBR*(1-NVG_KAPPA90), x+w, y+h-ryBR,
+      NVGcommands.LineTo, x+w, y+ryTR,
+      NVGcommands.BezierTo, x+w, y+ryTR*(1-NVG_KAPPA90), x+w-rxTR*(1-NVG_KAPPA90), y, x+w-rxTR, y,
+      NVGcommands.LineTo, x+rxTL, y,
+      NVGcommands.BezierTo, x+rxTL*(1-NVG_KAPPA90), y, x, y+ryTL*(1-NVG_KAPPA90), x, y+ryTL,
       NVGcommands.Close
     ];
     nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
