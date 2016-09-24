@@ -957,7 +957,7 @@ public:
     // each context always have top-level panel
     auto ct = cast(FuiContextImpl*)malloc(FuiContextImpl.sizeof);
     if (ct is null) assert(0, "out of memory for Fui context");
-    static FuiContextImpl i = FuiContextImpl.init;
+    static immutable FuiContextImpl i = FuiContextImpl.init;
     memcpy(ct, &i, FuiContextImpl.sizeof);
     res.ctxp = cast(usize)ct;
     res.addRootPanel();

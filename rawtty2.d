@@ -426,7 +426,7 @@ align(1): // make it tightly packed
   ubyte mods; /// set of ModFlag
   dchar ch = 0; /// can be 0 for special key
   short x, y; /// for mouse reports
-  void* udata; /// arbitrary user data
+  //void* udata; /// arbitrary user data
 
   @property const pure nothrow @safe @nogc {
     ///
