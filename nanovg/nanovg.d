@@ -6194,10 +6194,20 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     tex = glnvg__findTexture(gl, paint.image);
     if (tex is null) return false;
     if ((tex.flags&NVGImageFlags.FlipY) != 0) {
+      /*
       float[6] flipped;
       nvgTransformScale(flipped[], 1.0f, -1.0f);
       nvgTransformMultiply(flipped[], paint.xform[]);
       nvgTransformInverse(invxform[], flipped[]);
+      */
+      float[6] m1 = void, m2 = void;
+      nvgTransformTranslate(m1[], 0.0f, frag.extent.ptr[1]*0.5f);
+      nvgTransformMultiply(m1[], paint.xform[]);
+      nvgTransformScale(m2[], 1.0f, -1.0f);
+      nvgTransformMultiply(m2[], m1[]);
+      nvgTransformTranslate(m1[], 0.0f, -frag.extent.ptr[1]*0.5f);
+      nvgTransformMultiply(m1[], m2[]);
+      nvgTransformInverse(invxform[], m1[]);
     } else {
       nvgTransformInverse(invxform[], paint.xform[]);
     }
