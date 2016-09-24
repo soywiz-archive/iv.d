@@ -328,6 +328,7 @@ int ttyReadKeyByte (int toMSec=-1) @trusted @nogc {
 /// pressed key info
 public align(1) struct TtyEvent {
 align(1): // make it tightly packed
+  ///
   enum Key : ubyte{
     None, ///
     Error, /// error reading key
@@ -375,54 +376,57 @@ align(1): // make it tightly packed
     //A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     //N0, N1, N2, N3, N4, N5, N6, N7, N8, N9,
 
-    MLeftDown,
-    MLeftUp,
-    MLeftMotion,
-    MMiddleDown,
-    MMiddleUp,
-    MMiddleMotion,
-    MRightDown,
-    MRightUp,
-    MRightMotion,
+    MLeftDown, ///
+    MLeftUp, ///
+    MLeftMotion, ///
+    MMiddleDown, ///
+    MMiddleUp, ///
+    MMiddleMotion, ///
+    MRightDown, ///
+    MRightUp, ///
+    MRightMotion, ///
 
-    MWheelUp,
-    MWheelDown,
+    MWheelUp, ///
+    MWheelDown, ///
 
-    MMotion, // mouse motion without buttons, not read from tty by now, but can be useful for other backends
+    MMotion, /// mouse motion without buttons, not read from tty by now, but can be useful for other backends
 
     // synthesized events, used in tui
-    MLeftClick,
-    MMiddleClick,
-    MRightClick,
+    MLeftClick, ///
+    MMiddleClick, ///
+    MRightClick, ///
 
-    MLeftDouble,
-    MMiddleDouble,
-    MRightDouble,
+    MLeftDouble, ///
+    MMiddleDouble, ///
+    MRightDouble, ///
 
-    FocusIn,
-    FocusOut,
+    FocusIn, ///
+    FocusOut, ///
   }
 
+   ///
   enum ModFlag : ubyte {
-    Ctrl  = 1<<0,
-    Alt   = 1<<1,
-    Shift = 1<<2,
+    Ctrl  = 1<<0, ///
+    Alt   = 1<<1, ///
+    Shift = 1<<2, ///
   }
 
+   ///
   enum MButton : int {
-    None = 0,
-    Left = 1,
-    Middle = 2,
-    Right = 3,
-    WheelUp = 4,
-    WheelDown = 5,
-    First = Left,
+    None = 0, ///
+    Left = 1, ///
+    Middle = 2, ///
+    Right = 3, ///
+    WheelUp = 4, ///
+    WheelDown = 5, ///
+    First = Left, ///
   }
 
   Key key; /// key type/sym
   ubyte mods; /// set of ModFlag
   dchar ch = 0; /// can be 0 for special key
-  ushort x, y; // for mouse reports
+  short x, y; /// for mouse reports
+  void* udata; /// arbitrary user data
 
   @property const pure nothrow @safe @nogc {
     ///
@@ -781,9 +785,9 @@ TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     if (nn[1] > 0) --nn[1];
     if (nn[2] > 0) --nn[2];
     if (nn[1] < 0) nn[1] = 1;
-    if (nn[1] > ushort.max) nn[1] = ushort.max;
+    if (nn[1] > short.max) nn[1] = short.max;
     if (nn[2] < 0) nn[2] = 1;
-    if (nn[2] > ushort.max) nn[2] = ushort.max;
+    if (nn[2] > short.max) nn[2] = short.max;
     switch (nn[0]) {
       case 0: key.key = (press ? TtyEvent.Key.MLeftDown : TtyEvent.Key.MLeftUp); break;
       case 1: key.key = (press ? TtyEvent.Key.MMiddleDown : TtyEvent.Key.MMiddleUp); break;
@@ -795,8 +799,8 @@ TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       case 65: if (!press) { key.key = TtyEvent.Key.Unknown; return; } key.key = TtyEvent.Key.MWheelDown; break;
       default: key.key = TtyEvent.Key.Unknown; return;
     }
-    key.x = cast(ushort)nn[1];
-    key.y = cast(ushort)nn[2];
+    key.x = cast(short)nn[1];
+    key.y = cast(short)nn[2];
   }
 
   int ch = ttyReadKeyByte(toMSec);

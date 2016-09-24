@@ -256,13 +256,13 @@ public static struct FuiEvent {
   }
 
 @property pure nothrow @safe @nogc:
-  ref TtyEvent keyp () { pragma(inline, true); return paramkey; }
+  ref TtyEvent keyp () @trusted { pragma(inline, true); return paramkey; }
+  TtyEvent key () @trusted { pragma(inline, true); return paramkey; }
 
 @property const pure nothrow @safe @nogc:
   ubyte mods () { pragma(inline, true); return cast(ubyte)(param1>>8); }
   ubyte buts () { pragma(inline, true); return cast(ubyte)param1; }
 
-  TtyEvent key () { pragma(inline, true); return paramkey; }
   dchar ch () { pragma(inline, true); return cast(dchar)param0; }
   ubyte bidx () { pragma(inline, true); return cast(ubyte)param0; }
   short x () { pragma(inline, true); return mx; }
@@ -957,7 +957,7 @@ public:
     // each context always have top-level panel
     auto ct = cast(FuiContextImpl*)malloc(FuiContextImpl.sizeof);
     if (ct is null) assert(0, "out of memory for Fui context");
-    static immutable FuiContextImpl i = FuiContextImpl.init;
+    static FuiContextImpl i = FuiContextImpl.init;
     memcpy(ct, &i, FuiContextImpl.sizeof);
     res.ctxp = cast(usize)ct;
     res.addRootPanel();
