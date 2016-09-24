@@ -290,6 +290,44 @@ private:
 }
 
 ///
+enum NVGBlendFactor {
+  ZERO = 1<<0,
+  ONE = 1<<1,
+  SRC_COLOR = 1<<2,
+  ONE_MINUS_SRC_COLOR = 1<<3,
+  DST_COLOR = 1<<4,
+  ONE_MINUS_DST_COLOR = 1<<5,
+  SRC_ALPHA = 1<<6,
+  ONE_MINUS_SRC_ALPHA = 1<<7,
+  DST_ALPHA = 1<<8,
+  ONE_MINUS_DST_ALPHA = 1<<9,
+  SRC_ALPHA_SATURATE = 1<<10,
+}
+
+///
+enum NVGCompositeOperation {
+  SOURCE_OVER,
+  SOURCE_IN,
+  SOURCE_OUT,
+  ATOP,
+  DESTINATION_OVER,
+  DESTINATION_IN,
+  DESTINATION_OUT,
+  DESTINATION_ATOP,
+  LIGHTER,
+  COPY,
+  XOR,
+}
+
+///
+struct NVGCompositeOperationState {
+  NVGBlendFactor srcRGB;
+  NVGBlendFactor dstRGB;
+  NVGBlendFactor srcAlpha;
+  NVGBlendFactor dstAlpha;
+}
+
+///
 struct NVGGlyphPosition {
   size_t strpos;    /// Position of the glyph in the input string.
   float x;          /// The x-coordinate of the logical glyph position.
@@ -377,7 +415,7 @@ struct NVGparams {
   bool function (void* uptr, int image, int* w, int* h) renderGetTextureSize;
   void function (void* uptr, int width, int height) renderViewport;
   void function (void* uptr) renderCancel;
-  void function (void* uptr) renderFlush;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation) renderFlush;
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) renderFill;
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) renderStroke;
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) renderTriangles;
@@ -415,6 +453,7 @@ enum NVGpointFlags : int {
 }
 
 struct NVGstate {
+  NVGCompositeOperationState compositeOperation;
   NVGPaint fill;
   NVGPaint stroke;
   float strokeWidth;
@@ -554,6 +593,34 @@ void nvg__setDevicePixelRatio (NVGContext ctx, float ratio) {
   ctx.devicePxRatio = ratio;
 }
 
+NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation op) {
+  NVGBlendFactor sfactor, dfactor;
+       if (op == NVGCompositeOperation.SOURCE_OVER) { sfactor = NVGBlendFactor.ONE; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA;}
+  else if (op == NVGCompositeOperation.SOURCE_IN) { sfactor = NVGBlendFactor.DST_ALPHA; dfactor = NVGBlendFactor.ZERO; }
+  else if (op == NVGCompositeOperation.SOURCE_OUT) { sfactor = NVGBlendFactor.ONE_MINUS_DST_ALPHA; dfactor = NVGBlendFactor.ZERO; }
+  else if (op == NVGCompositeOperation.ATOP) { sfactor = NVGBlendFactor.DST_ALPHA; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA; }
+  else if (op == NVGCompositeOperation.DESTINATION_OVER) { sfactor = NVGBlendFactor.ONE_MINUS_DST_ALPHA; dfactor = NVGBlendFactor.ONE; }
+  else if (op == NVGCompositeOperation.DESTINATION_IN) { sfactor = NVGBlendFactor.ZERO; dfactor = NVGBlendFactor.SRC_ALPHA; }
+  else if (op == NVGCompositeOperation.DESTINATION_OUT) { sfactor = NVGBlendFactor.ZERO; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA; }
+  else if (op == NVGCompositeOperation.DESTINATION_ATOP) { sfactor = NVGBlendFactor.ONE_MINUS_DST_ALPHA; dfactor = NVGBlendFactor.SRC_ALPHA; }
+  else if (op == NVGCompositeOperation.LIGHTER) { sfactor = NVGBlendFactor.ONE; dfactor = NVGBlendFactor.ONE; }
+  else if (op == NVGCompositeOperation.COPY) { sfactor = NVGBlendFactor.ONE; dfactor = NVGBlendFactor.ZERO;  }
+  else if (op == NVGCompositeOperation.XOR) { sfactor = NVGBlendFactor.ONE_MINUS_DST_ALPHA; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA; }
+  else { sfactor = NVGBlendFactor.ONE; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA;} // default value for invalid op: SOURCE_OVER
+
+  NVGCompositeOperationState state;
+  state.srcRGB = sfactor;
+  state.dstRGB = dfactor;
+  state.srcAlpha = sfactor;
+  state.dstAlpha = dfactor;
+  return state;
+}
+
+NVGstate* nvg__getState (NVGContext ctx) {
+  //pragma(inline, true);
+  return ctx.states.ptr+(ctx.nstates-1);
+}
+
 // Constructor called by the render back-end.
 package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) {
   FONSparams fontParams;
@@ -674,7 +741,8 @@ public void cancelFrame (NVGContext ctx) {
 
 /// Ends drawing flushing remaining render state.
 public void endFrame (NVGContext ctx) {
-  ctx.params.renderFlush(ctx.params.userPtr);
+  NVGstate* state = nvg__getState(ctx);
+  ctx.params.renderFlush(ctx.params.userPtr, state.compositeOperation);
   if (ctx.fontImageIdx != 0) {
     int fontImage = ctx.fontImages[ctx.fontImageIdx];
     int j, iw, ih;
@@ -700,6 +768,38 @@ public void endFrame (NVGContext ctx) {
     ctx.fontImages[j..NVG_MAX_FONTIMAGES] = 0;
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/** <h1>Composite operation</h1>
+ * The composite operations in NanoVG are modeled after HTML Canvas API, and
+ * the blend func is based on OpenGL (see corresponding manuals for more info).
+ * The colors in the blending state have premultiplied alpha.
+ */
+public alias NVGSectionDummy00_00 = void;
+
+// Sets the composite operation. The op parameter should be one of NVGcompositeOperation.
+void globalCompositeOperation (NVGContext ctx, NVGCompositeOperation op) {
+  NVGstate* state = nvg__getState(ctx);
+  state.compositeOperation = nvg__compositeOperationState(op);
+}
+
+// Sets the composite operation with custom pixel arithmetic. The parameters should be one of NVGblendFactor.
+void globalCompositeBlendFunc (NVGContext ctx, NVGBlendFactor sfactor, NVGBlendFactor dfactor) {
+  ctx.globalCompositeBlendFuncSeparate(sfactor, dfactor, sfactor, dfactor);
+}
+
+// Sets the composite operation with custom pixel arithmetic for RGB and alpha components separately. The parameters should be one of NVGblendFactor.
+void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NVGBlendFactor dstRGB, NVGBlendFactor srcAlpha, NVGBlendFactor dstAlpha) {
+  NVGCompositeOperationState op;
+  op.srcRGB = srcRGB;
+  op.dstRGB = dstRGB;
+  op.srcAlpha = srcAlpha;
+  op.dstAlpha = dstAlpha;
+  NVGstate* state = nvg__getState(ctx);
+  state.compositeOperation = op;
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Color utils</h1>
@@ -811,11 +911,6 @@ public NVGColor nvgHSLA() (float h, float s, float l, float a) {
   return col;
 }
 
-
-NVGstate* nvg__getState (NVGContext ctx) {
-  //pragma(inline, true);
-  return &ctx.states[ctx.nstates-1];
-}
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Transforms</h1>
@@ -1009,6 +1104,7 @@ public void reset (NVGContext ctx) {
 
   nvg__setPaintColor(&state.fill, nvgRGBA(255, 255, 255, 255));
   nvg__setPaintColor(&state.stroke, nvgRGBA(0, 0, 0, 255));
+  state.compositeOperation = nvg__compositeOperationState(NVGCompositeOperation.SOURCE_OVER);
   state.strokeWidth = 1.0f;
   state.miterLimit = 10.0f;
   state.lineCap = NVGLineCap.Butt;
@@ -5372,6 +5468,8 @@ private extern(System) nothrow @nogc {
   alias GLfloat = float;
   alias GLsizeiptr = ptrdiff_t;
 
+  enum uint GL_INVALID_ENUM = 0x0500;
+
   enum uint GL_ZERO = 0;
   enum uint GL_ONE = 1;
 
@@ -5417,6 +5515,16 @@ private extern(System) nothrow @nogc {
   enum uint GL_TEXTURE0 = 0x84C0;
 
   enum uint GL_ARRAY_BUFFER = 0x8892;
+
+  enum uint GL_SRC_COLOR = 0x0300;
+  enum uint GL_ONE_MINUS_SRC_COLOR = 0x0301;
+  enum uint GL_SRC_ALPHA = 0x0302;
+  enum uint GL_ONE_MINUS_SRC_ALPHA = 0x0303;
+  enum uint GL_DST_ALPHA = 0x0304;
+  enum uint GL_ONE_MINUS_DST_ALPHA = 0x0305;
+  enum uint GL_DST_COLOR = 0x0306;
+  enum uint GL_ONE_MINUS_DST_COLOR = 0x0307;
+  enum uint GL_SRC_ALPHA_SATURATE = 0x0308;
 
   /*
   version(Windows) {
@@ -5507,6 +5615,8 @@ private extern(System) nothrow @nogc {
   __gshared glbfn_glDisableVertexAttribArray glDisableVertexAttribArray;
   alias glbfn_glDeleteBuffers = void function(GLsizei, const(GLuint)*);
   __gshared glbfn_glDeleteBuffers glDeleteBuffers;
+  alias glbfn_glBlendFuncSeparate = void function(GLenum, GLenum, GLenum, GLenum);
+  __gshared glbfn_glBlendFuncSeparate glBlendFuncSeparate;
 
   private void nanovgInitOpenGL () {
     __gshared bool initialized = false;
@@ -5581,6 +5691,8 @@ private extern(System) nothrow @nogc {
     if (glDisableVertexAttribArray is null) assert(0, `OpenGL function 'glDisableVertexAttribArray' not found!`);
     glDeleteBuffers = cast(glbfn_glDeleteBuffers)glGetProcAddress(`glDeleteBuffers`);
     if (glDeleteBuffers is null) assert(0, `OpenGL function 'glDeleteBuffers' not found!`);
+    glBlendFuncSeparate = cast(glbfn_glBlendFuncSeparate)glGetProcAddress(`glBlendFuncSeparate`);
+    if (glBlendFuncSeparate is null) assert(0, `OpenGL function 'glBlendFuncSeparate' not found!`);
     initialized = true;
   }
 }
@@ -6359,13 +6471,42 @@ void glnvg__renderCancel (void* uptr) {
   gl.nuniforms = 0;
 }
 
-void glnvg__renderFlush (void* uptr) {
+GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) {
+  if (factor == NVGBlendFactor.ZERO) return GL_ZERO;
+  if (factor == NVGBlendFactor.ONE) return GL_ONE;
+  if (factor == NVGBlendFactor.SRC_COLOR) return GL_SRC_COLOR;
+  if (factor == NVGBlendFactor.ONE_MINUS_SRC_COLOR) return GL_ONE_MINUS_SRC_COLOR;
+  if (factor == NVGBlendFactor.DST_COLOR) return GL_DST_COLOR;
+  if (factor == NVGBlendFactor.ONE_MINUS_DST_COLOR) return GL_ONE_MINUS_DST_COLOR;
+  if (factor == NVGBlendFactor.SRC_ALPHA) return GL_SRC_ALPHA;
+  if (factor == NVGBlendFactor.ONE_MINUS_SRC_ALPHA) return GL_ONE_MINUS_SRC_ALPHA;
+  if (factor == NVGBlendFactor.DST_ALPHA) return GL_DST_ALPHA;
+  if (factor == NVGBlendFactor.ONE_MINUS_DST_ALPHA) return GL_ONE_MINUS_DST_ALPHA;
+  if (factor == NVGBlendFactor.SRC_ALPHA_SATURATE) return GL_SRC_ALPHA_SATURATE;
+  return GL_INVALID_ENUM;
+}
+
+void glnvg__blendCompositeOperation (NVGCompositeOperationState op) {
+  //glBlendFuncSeparate(glnvg_convertBlendFuncFactor(op.srcRGB), glnvg_convertBlendFuncFactor(op.dstRGB), glnvg_convertBlendFuncFactor(op.srcAlpha), glnvg_convertBlendFuncFactor(op.dstAlpha));
+  GLenum srcRGB = glnvg_convertBlendFuncFactor(op.srcRGB);
+  GLenum dstRGB = glnvg_convertBlendFuncFactor(op.dstRGB);
+  GLenum srcAlpha = glnvg_convertBlendFuncFactor(op.srcAlpha);
+  GLenum dstAlpha = glnvg_convertBlendFuncFactor(op.dstAlpha);
+  if (srcRGB == GL_INVALID_ENUM || dstRGB == GL_INVALID_ENUM || srcAlpha == GL_INVALID_ENUM || dstAlpha == GL_INVALID_ENUM) {
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  } else {
+    glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+  }
+}
+
+void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperation) {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   if (gl.ncalls > 0) {
     // Setup require GL state.
     glUseProgram(gl.shader.prog);
 
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glnvg__blendCompositeOperation(compositeOperation);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
