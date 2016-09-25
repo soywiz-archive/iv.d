@@ -1827,19 +1827,22 @@ final:
   @TEDMultiOnly mixin TEDImpl!("S-PageDown", q{ doPageDown(true); });
   @TEDMultiOnly mixin TEDImpl!("^PageDown", q{ doTextBottom(); });
   @TEDMultiOnly mixin TEDImpl!("S-^PageDown", q{ doTextBottom(true); });
-  mixin TEDImpl!("Home", q{ doHome(); });
-  mixin TEDImpl!("S-Home", q{ doHome(true, true); });
+                mixin TEDImpl!("Home", q{ doHome(); });
+                mixin TEDImpl!("S-Home", q{ doHome(true, true); });
   @TEDMultiOnly mixin TEDImpl!("^Home", q{ doPageTop(); });
   @TEDMultiOnly mixin TEDImpl!("S-^Home", q{ doPageTop(true); });
-  mixin TEDImpl!("End", q{ doEnd(); });
-  mixin TEDImpl!("S-End", q{ doEnd(true); });
+                mixin TEDImpl!("End", q{ doEnd(); });
+                mixin TEDImpl!("S-End", q{ doEnd(true); });
   @TEDMultiOnly mixin TEDImpl!("^End", q{ doPageBottom(); });
   @TEDMultiOnly mixin TEDImpl!("S-^End", q{ doPageBottom(true); });
+
   @TEDEditOnly mixin TEDImpl!("Backspace", q{ doBackspace(); });
   @TEDSingleOnly @TEDEditOnly mixin TEDImpl!("M-Backspace", "delete previous word", q{ doDeleteWord(); });
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Backspace", "delete previous word or unindent", q{ doBackByIndent(); });
+
   mixin TEDImpl!("Delete", q{ doDelete(); });
   mixin TEDImpl!("^Insert", "copy block to clipboard file, reset block mark", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); doBlockResetMark(); });
+
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("Enter", q{ doPutChar('\n'); });
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Enter", "split line without autoindenting", q{ doLineSplit(false); });
 
@@ -1859,13 +1862,14 @@ final:
     (new EventEditorQuerySR(this, &srrOptions));
   });
   @TEDEditOnly mixin TEDImpl!("F5", "copy block", q{ doBlockCopy(); });
-  mixin TEDImpl!("^F5", "copy block to clipboard file", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); });
+               mixin TEDImpl!("^F5", "copy block to clipboard file", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); });
   @TEDEditOnly mixin TEDImpl!("S-F5", "insert block from clipboard file", q{ if (tempBlockFileName.length == 0) return; waitingInF5 = true; });
   @TEDEditOnly mixin TEDImpl!("F6", "move block", q{ doBlockMove(); });
   @TEDEditOnly mixin TEDImpl!("F8", "delete block", q{ doBlockDelete(); });
 
   mixin TEDImpl!("^A", "move to line start", q{ doHome(); });
   mixin TEDImpl!("^E", "move to line end", q{ doEnd(); });
+
   @TEDMultiOnly mixin TEDImpl!("M-I", "jump to previous bookmark", q{ doBookmarkJumpUp(); });
   @TEDMultiOnly mixin TEDImpl!("M-J", "jump to next bookmark", q{ doBookmarkJumpDown(); });
   @TEDMultiOnly mixin TEDImpl!("M-K", "toggle bookmark", q{ doBookmarkToggle(); });
