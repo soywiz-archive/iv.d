@@ -43,6 +43,7 @@ public class FuiWindow : FuiControl {
   Frame frame;
   FuiControl lastfct;
   FuiEventQueueDesk desk;
+  bool shadowed = true;
 
   this () {
     this.connectListeners();
@@ -141,10 +142,12 @@ public class FuiWindow : FuiControl {
 
   // this one is without scissors; used to draw shadows and hlines
   protected override void drawSelfPre (XtWindow win) {
-    win.width = win.width+2;
-    win.shadowBox(win.width-2, 1, 2, win.height);
-    win.height = win.height+1;
-    win.hshadow(2, win.height-1, win.width-2);
+    if (shadowed) {
+      win.width = win.width+2;
+      win.shadowBox(win.width-2, 1, 2, win.height);
+      win.height = win.height+1;
+      win.hshadow(2, win.height-1, win.width-2);
+    }
   }
 
   protected override void drawSelf (XtWindow win) {
