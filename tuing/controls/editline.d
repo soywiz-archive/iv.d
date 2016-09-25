@@ -29,6 +29,55 @@ import iv.tuing.tty;
 import iv.tuing.tui;
 import iv.tuing.types;
 import iv.tuing.ttyeditor;
+import iv.tuing.controls.box;
+import iv.tuing.controls.button;
+import iv.tuing.controls.hline;
+import iv.tuing.controls.listbox;
+import iv.tuing.controls.span;
+import iv.tuing.controls.window;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private class FuiHistoryWindow : FuiWindow {
+  FuiEditLine el;
+  this (FuiEditLine ael) {
+    this.connectListeners();
+    super();
+    el = ael;
+  }
+}
+
+
+private void createHistoryWin (FuiEditLine el) {
+  if (el is null) return;
+  auto desk = el.getDesk;
+  if (desk is null) return;
+  auto win = new FuiHistoryWindow(el);
+  //win.lp.minSize = FuiSize(30, 7);
+  win.caption = "History Window";
+  win.frame = win.Frame.Small;
+  if (auto box = new FuiHBox(win)) {
+    new FuiSpan(box);
+    (new FuiButton(box, "&OK")).defctl = true;
+    new FuiButton(box, "&Cancel");
+    new FuiSpan(box);
+  }
+  new FuiHLine(win);
+  if (auto lb = new FuiListBox(win)) {
+    //lb.minSize.w = 24;
+    //lb.minSize.h = 16;
+    lb.allowmarks = true;
+    foreach (immutable idx; 0..24) {
+      import std.format : format;
+      lb.addItem("item #%s".format(idx));
+    }
+  }
+  win.onBlur = (FuiControl self) { (new FuiEventClose(self, null)).post; };
+  fuiLayout(win);
+  import std.random : uniform;
+  win.lp.pos = FuiPoint(uniform!"[]"(0, ttyw-win.lp.size.w), uniform!"[]"(0, ttyh-win.lp.size.h));
+  tuidesk.addWindow(win, true);
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -98,6 +147,7 @@ public class FuiEditLine : FuiControl {
     if (auto hm = historymgr) {
       if (evt.key == "M-H") {
         // history dialog
+        createHistoryWin(this);
         /*
         if (auto lp = ctx.layprops(self)) {
           auto pt = ctx.toGlobal(self, FuiPoint(0, 0));

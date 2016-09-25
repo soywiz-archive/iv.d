@@ -43,12 +43,12 @@ public void fuiLayout (FuiControl ctl) { if (ctl !is null) iv.tuing.layout.fuiLa
 public class FuiHistoryManager {
 public:
   this () {}
-  abstract bool has (const(char)[] id);
-  abstract int count (const(char)[] id);
-  abstract const(char)[] item (const(char)[] id, int idx); // 0: oldest
-  abstract void add (const(char)[] id, const(char)[] value); // this can shrink history; should correctly process duplicates
-  abstract void clear (const(char)[] id);
-  abstract void activate (const(char)[] id, int idx); // usually moves item to bottom
+  abstract bool has (FuiControl ctl);
+  abstract int count (FuiControl ctl);
+  abstract const(char)[] item (FuiControl ctl, int idx); // 0: oldest
+  abstract void add (FuiControl ctl, const(char)[] value); // this can shrink history; should correctly process duplicates
+  abstract void clear (FuiControl ctl);
+  abstract void activate (FuiControl ctl, int idx); // usually moves item to bottom
 }
 
 
@@ -668,7 +668,11 @@ private:
 
 // ////////////////////////////////////////////////////////////////////////// //
 class FuiEventQueueDesk : FuiEventQueue {
-  FuiWindow[] winlist; // latest is on the top
+  static struct WinItem {
+    FuiWindow win;
+    bool modal;
+  }
+  WinItem[] winlist; // latest is on the top
   FuiWindow[] wintoplist; // "on top" windows, latest is on the top
   void delegate (FuiEventQueueDesk desk) drawDesk; // draw desktop background
 
@@ -682,14 +686,14 @@ class FuiEventQueueDesk : FuiEventQueue {
   final bool isNormalWindow (FuiControl ctl) {
     if (ctl is null) return false;
     ctl = ctl.toplevel;
-    foreach_reverse (FuiControl w; winlist) if (w is ctl) return true;
+    foreach_reverse (ref WinItem w; winlist) if (w.win is ctl) return true;
     return false;
   }
 
   // normal top-level window
   final bool isTopWindow (FuiControl ctl) {
     if (ctl is null || winlist.length == 0) return false;
-    return (ctl.toplevel is winlist[$-1]);
+    return (ctl.toplevel is winlist[$-1].win);
   }
 
   // `pt` is global
@@ -716,30 +720,31 @@ class FuiEventQueueDesk : FuiEventQueue {
       if (auto cc = descend(tw, pt)) return cc;
     }
     // check normal top-level window
-    if (winlist.length) return descend(winlist[$-1], pt);
+    if (winlist.length) return descend(winlist[$-1].win, pt);
     return null;
   }
 
   // prevw can be null, but should not be current top-level
   private void topwindowFocusJustChanged (FuiWindow prevw) {
-    if (winlist.length && prevw is winlist[$-1]) return; // just in case
+    if (winlist.length && prevw is winlist[$-1].win) return; // just in case
+    // don't send window blur for modals
     if (prevw !is null) {
       auto fcs = lastFocus.object;
       if (fcs !is null && fcs.toplevel is prevw) {
         lastFocus.object = null;
         if (fcs !is prevw) (new FuiEventBlur(fcs)).post;
-        (new FuiEventBlur(prevw)).post;
+        if (winlist.length == 0 || !winlist[$-1].modal) (new FuiEventBlur(prevw)).post;
       }
     }
     if (auto fcs = lastFocus.object) {
       if (fcs !is null) {
         lastFocus.object = null;
         if (fcs !is fcs.toplevel) (new FuiEventBlur(fcs)).post;
-        (new FuiEventBlur(fcs.toplevel)).post;
+        if (winlist.length == 0 || !winlist[$-1].modal) (new FuiEventBlur(fcs.toplevel)).post;
       }
     }
     if (winlist.length == 0) return;
-    auto w = winlist[$-1];
+    auto w = winlist[$-1].win;
     assert(w !is null);
     (new FuiEventFocus(w)).post;
     if (w.lastfct is null) w.lastfct = w.findFirstToFocus;
@@ -760,7 +765,10 @@ class FuiEventQueueDesk : FuiEventQueue {
     if (ofc is ctl) return;
     if (auto win = cast(FuiWindow)ctl.toplevel) {
       if (win.desk !is this) return;
-      if (!allowWindowSwitch && !isTopWindow(win)) return;
+      if (!isTopWindow(win)) {
+        if (!allowWindowSwitch) return;
+        if (winlist.length && winlist[$-1].modal) return;
+      }
     } else {
       // alase
       return;
@@ -775,14 +783,15 @@ class FuiEventQueueDesk : FuiEventQueue {
     // check if we should bring another window to top
     auto tl = ctl.toplevel;
     if (!isTopWindow(tl) && !isOnTopWindow(tl)) {
-      foreach_reverse (immutable idx, FuiWindow w; winlist) {
+      foreach_reverse (immutable idx, ref WinItem wi; winlist) {
+        auto w = wi.win;
         if (idx == winlist.length-1) continue;
         if (w is tl) {
           winFocusSent = true;
-          (new FuiEventBlur(winlist[$-1])).post;
+          (new FuiEventBlur(winlist[$-1].win)).post;
           (new FuiEventFocus(w)).post;
           foreach (immutable c; idx+1..winlist.length) winlist[c-1] = winlist[c];
-          winlist[$-1] = w;
+          winlist[$-1] = WinItem(w, false);
           break;
         }
       }
@@ -805,28 +814,27 @@ class FuiEventQueueDesk : FuiEventQueue {
     super();
   }
 
-  void addWindow (FuiWindow w) {
+  void addWindow (FuiWindow w, bool modal=false) {
     if (w is null) return;
     if (w.desk !is null) return;
-    //foreach (FuiWindow ww; winlist) if (w is ww) return;
-    //foreach (FuiWindow ww; wintoplist) if (w is ww) return;
-    auto lastWF = (winlist.length ? winlist[$-1] : null);
+    auto lastWF = (winlist.length ? winlist[$-1].win : null);
     w.desk = this;
-    winlist ~= w;
+    winlist ~= WinItem(w, modal);
     topwindowFocusJustChanged(lastWF);
     assert(lastFocus.object !is null);
   }
 
   override bool queue (TtyEvent key) {
-    if (key.mouse && winlist.length > 1) {
+    if (key.mouse && winlist.length > 1 && !winlist[$-1].modal) {
       auto pt = FuiPoint(key.x, key.y);
-      foreach_reverse (immutable idx, FuiWindow w; winlist) {
+      foreach_reverse (immutable idx, ref WinItem wi; winlist) {
+        auto w = wi.win;
         //if (!w.visible || !w.enabled) continue;
         if (pt.inside(w.lp.rect)) {
           if (idx != winlist.length-1) {
-            auto lastWF = winlist[$-1];
+            auto lastWF = winlist[$-1].win;
             foreach (immutable c; idx+1..winlist.length) winlist[c-1] = winlist[c];
-            winlist[$-1] = w;
+            winlist[$-1] = WinItem(w, false);
             topwindowFocusJustChanged(lastWF);
           }
           break;
@@ -845,7 +853,7 @@ class FuiEventQueueDesk : FuiEventQueue {
     } else {
       drawDesk(this);
     }
-    foreach (FuiWindow w; winlist) w.draw(XtWindow(w.lp.pos.x, w.lp.pos.y, w.lp.size.w, w.lp.size.h));
+    foreach (ref WinItem wi; winlist) wi.win.draw(XtWindow(wi.win.lp.pos.x, wi.win.lp.pos.y, wi.win.lp.size.w, wi.win.lp.size.h));
     foreach (FuiWindow w; wintoplist) w.draw(XtWindow(w.lp.pos.x, w.lp.pos.y, w.lp.size.w, w.lp.size.h));
   }
 
@@ -857,12 +865,13 @@ class FuiEventQueueDesk : FuiEventQueue {
       return;
     }
     // reverse usually faster
-    foreach_reverse (immutable idx, FuiWindow tw; winlist) {
+    foreach_reverse (immutable idx, ref WinItem twi; winlist) {
+      FuiWindow tw = twi.win;
       if (evt.source is tw) {
         // i found her!
         auto lastWF = (idx == winlist.length-1 ? tw : null);
         foreach (immutable c; idx+1..winlist.length) winlist[c-1] = winlist[c];
-        winlist[$-1] = null;
+        winlist[$-1].win = null;
         winlist.length -= 1;
         winlist.assumeSafeAppend;
         if (lastWF !is null) { topwindowFocusJustChanged(lastWF); lastWF.desk = null; }
