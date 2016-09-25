@@ -90,6 +90,14 @@ public class FuiEventWinFocusPrev : FuiEventWinFocusNextPrev { this (FuiWindow a
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public class EventEditorMessage : Event {
+  string msg;
+  this (TtyEditor aed, string amsg) { super(aed); msg = amsg; }
+  final @property pure nothrow @trusted @nogc {
+    inout(TtyEditor) sourceed () inout { return cast(typeof(return))osource; }
+  }
+}
+
 public class EventEditorQuery : Event {
   this (TtyEditor aed) { super(aed); }
   final @property pure nothrow @trusted @nogc {
@@ -124,4 +132,41 @@ public class EventEditorReplyAutocompletion : EventEditorReply {
   const(char)[] res;
   int pos, len;
   this (TtyEditor aed, int apos, int alen, const(char)[] ares) { super(aed); pos = apos; len = alen; res = ares; }
+}
+
+public class EventEditorQueryReplacement : EventEditorQuery {
+  void* opt; // SROptions
+  this (TtyEditor aed, void* aopt) { super(aed); opt = aopt; }
+}
+public class EventEditorReplyReplacement : EventEditorReply {
+  void* opt; // SROptions
+  this (TtyEditor aed, void* aopt) { super(aed); opt = aopt; }
+}
+
+// show search-and-replace dialog
+public class EventEditorQuerySR : EventEditorQuery {
+  void* opt; // SROptions
+  this (TtyEditor aed, void* aopt) { super(aed); opt = aopt; }
+}
+public class EventEditorReplySR : EventEditorReply {
+  void* opt; // SROptions
+  bool cancel;
+  this (TtyEditor aed, void* aopt, bool acancel) { super(aed); opt = aopt; cancel = acancel; }
+}
+
+public class EventEditorQueryGotoLine : EventEditorQuery {
+  this (TtyEditor aed) { super(aed); }
+}
+public class EventEditorReplyGotoLine : EventEditorReply {
+  int line;
+  this (TtyEditor aed, int aline) { super(aed); line = aline; }
+}
+
+public class EventEditorQueryCodePage : EventEditorQuery {
+  int cp;
+  this (TtyEditor aed, int acp) { super(aed); cp = acp; }
+}
+public class EventEditorReplyCodePage : EventEditorReply {
+  int cp;
+  this (TtyEditor aed, int acp) { super(aed); cp = acp; }
 }

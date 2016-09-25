@@ -44,21 +44,34 @@ private string normalizedAbsolutePath (string path) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 class TtyEditor : Editor {
-  static struct SearchReplaceOptions {
-    // WARNING! keep in sync with window layout!
+  static struct SROptions {
+    TtyEditor ed;
     enum Type : int {
       Normal,
       Regex,
     }
     const(char)[] search;
     const(char)[] replace;
-    bool inselenabled = true; // "in selection" enabled
-    bool utfuck;
     Type type;
     bool casesens;
     bool backwards;
     bool wholeword;
     bool inselection;
+    // the following fields are relevant for "replacement continuation"
+    int spos, epos;
+    int mts, mte; // match start and end
+    int repcount;
+    enum Cont {
+      Cancel = -1,
+      No = 0,
+      Yes = 1,
+      All = 2,
+    }
+    Cont cont;
+    bool closeGroup = false; // close undo group?
+    Pike.Capture[64] caps;
+    RegExp re;
+    char[] newtext;
   }
 
   static {
@@ -282,7 +295,7 @@ public:
   // colors; valid for singleline control
   uint clrBlock, clrText, clrTextUnchanged;
   // other
-  SearchReplaceOptions srrOptions;
+  SROptions srrOptions;
   bool hideStatus = false;
   bool hideSBar = false; // hide scrollbar
   FuiHistoryManager hisman; // history manager for dialogs
@@ -291,8 +304,19 @@ public:
   this (int x0, int y0, int w, int h, bool asinglesine=false) {
     // prompt should be created only for multiline editors
     super(x0, y0, w, h, null, asinglesine);
-    //srrOptions.type = SearchReplaceOptions.Type.Regex;
+    //srrOptions.type = SROptions.Type.Regex;
     srrOptions.casesens = true;
+    addEventListener(this, (EventEditorReplyGotoLine evt) {
+      if (evt.line > 0 && evt.line < linecount) gotoXY!true(curx, evt.line-1); // vcenter
+    });
+    addEventListener(this, (EventEditorReplyCodePage evt) {
+      auto ncp = evt.cp;
+      if (ncp < 0) return;
+      if (ncp > CodePage.max) { utfuck = true; return; }
+      utfuck = false;
+      codepage = cast(CodePage)ncp;
+      fullDirty();
+    });
   }
 
   // call this after setting `fullFileName`
@@ -339,20 +363,6 @@ public:
   final void checkDiskAndReloadPrompt () {
     if (fullFileName.length == 0) return;
     if (wasDiskFileChanged) {
-      /*
-      auto fn = fullFileName;
-      if (fn.length > ttyw-3) fn = "* ..."~fn[$-(ttyw-4)..$];
-      auto res = dialogFileModified(fullFileName, false, "Disk file was changed. Reload it?");
-      if (res != 1) return;
-      int rx = cx, ry = cy;
-      clear();
-      super.loadFile(VFile(fullFileName));
-      getDiskFileInfo();
-      cx = rx;
-      cy = ry;
-      normXY();
-      makeCurLineVisibleCentered();
-      */
       auto oldro = readonly;
       addEventListener(this, (EventEditorReplyReloadModified evt) {
         readonly = oldro;
@@ -1086,12 +1096,7 @@ public:
       int rx, ry;
       gb.pos2xyVT(tkstpos, rx, ry);
       (new EventEditorQueryAutocompletion(this, tkstpos, tklen, FuiPoint(winx+(rx-mXOfs), winy+(ry-mTopLine)+1), aclist[0..acused]));
-      //int residx = dialogSelectAC(aclist[0..acused], winx+(rx-mXOfs), winy+(ry-mTopLine)+1);
-      //if (residx < 0) return;
-      //acp = aclist[residx];
     }
-    //if (mReadOnly) return;
-    //replaceText!"end"(tkstpos, tklen, acp);
   }
 
   final char[] buildHelpText(this ME) () {
@@ -1463,16 +1468,12 @@ final:
     return true;
   }
 
-  //TODO: write event-based code
-  final void srrPlain (in ref SearchReplaceOptions srr) {
-    /+
-    if (srr.search.length == 0) return;
-    if (srr.inselection && !hasMarkedBlock) return;
-    scope(exit) fullDirty(); // to remove highlighting
-    bool closeGroup = false;
-    scope(exit) if (closeGroup) undoGroupEnd();
-    bool doAll = false;
-    // epos will be fixed on replacement
+  final void srrPlainStart (ref SROptions srr) {
+    if (srr.search.length == 0) { srr.ed = null; return; }
+    if (srr.inselection && !hasMarkedBlock) { srr.ed = null; return; }
+    //scope(exit) fullDirty(); // to remove highlighting
+    //bool closeGroup = false;
+    //scope(exit) if (closeGroup) undoGroupEnd();
     int spos, epos;
     if (srr.inselection) {
       spos = bstart;
@@ -1488,68 +1489,99 @@ final:
         epos = curpos;
       }
     }
-    int count = 0;
-    while (spos < epos) {
+    srr.spos = spos;
+    srr.epos = epos;
+    srr.repcount = 0;
+    srr.closeGroup = false;
+    srr.cont = SROptions.Cont.Yes;
+    srrPlainStep(srr);
+  }
+
+  final void srrPlainDoSkip (ref SROptions srr) {
+    if (!srr.backwards) srr.spos = srr.mts+1; else srr.epos = srr.mts;
+  }
+
+  final void srrPlainDoReplace (ref SROptions srr) {
+    ++srr.repcount;
+    replaceText!"end"(srr.mts, srr.mte-srr.mts, srr.replace);
+    // fix search range
+    if (!srr.backwards) {
+      // forward
+      srr.spos = srr.mts+cast(int)srr.replace.length;
+      srr.epos -= (srr.mte-srr.mts)-cast(int)srr.replace.length;
+    } else {
+      srr.epos = srr.mts;
+    }
+  }
+
+  //TODO: write event-based code
+  final void srrPlainStep (ref SROptions srr) {
+    while (srr.spos < srr.epos) {
       PlainMatch mt;
       if (srr.backwards) {
-        mt = findTextPlainBack(srr.search, spos, epos, srr.wholeword, srr.casesens);
+        mt = findTextPlainBack(srr.search, srr.spos, srr.epos, srr.wholeword, srr.casesens);
       } else {
-        mt = findTextPlain(srr.search, spos, epos, srr.wholeword, srr.casesens);
+        mt = findTextPlain(srr.search, srr.spos, srr.epos, srr.wholeword, srr.casesens);
       }
       if (mt.empty) break;
+      srr.mts = mt.s;
+      srr.mte = mt.e;
       // i found her!
-      if (!doAll) {
+      if (srr.cont != SROptions.Cont.All) {
         bool doundo = (mt.s != curpos);
         if (doundo) gotoPos!true(mt.s);
         fullDirty();
         drawPage();
         drawPartHighlight(mt.s, mt.e-mt.s, IncSearchColor);
-        auto act = dialogReplacePrompt(gb.pos2line(mt.s)-topline+winy);
-        //FIXME: do undo only if it was succesfully registered
-        //doUndo(); // undo cursor movement
-        if (act == DialogRepPromptResult.Cancel) break;
-        //if (doundo) doUndo();
-        if (act == DialogRepPromptResult.Skip) {
-          if (!srr.backwards) spos = mt.s+1; else epos = mt.s;
-          continue;
-        }
-        if (act == DialogRepPromptResult.All) { doAll = true; }
+        auto oldro = readonly;
+        addEventListener(this, (EventEditorReplyReplacement evt) {
+          readonly = oldro;
+          if (evt.opt is null) return;
+          srr = *cast(SROptions*)evt.opt;
+          assert(srr.ed is this);
+          final switch (srr.cont) {
+            case SROptions.Cont.Cancel:
+              assert(srr.closeGroup == false);
+              srr.ed = null;
+              return;
+            case SROptions.Cont.No:
+              srrPlainDoSkip(srr);
+              break;
+            case SROptions.Cont.All:
+              if (!srr.closeGroup) { undoGroupStart(); srr.closeGroup = true; }
+              goto case SROptions.Cont.Yes;
+            case SROptions.Cont.Yes:
+              srrPlainDoReplace(srr);
+              break;
+          }
+          // do it again
+          srrPlainStep(srr);
+        }, true);
+        (new EventEditorQueryReplacement(this, &srr)).post;
+        return;
       }
-      if (doAll && !closeGroup) { undoGroupStart(); closeGroup = true; }
-      replaceText!"end"(mt.s, mt.e-mt.s, srr.replace);
-      // fix search range
-      if (!srr.backwards) {
-        // forward
-        spos = mt.s+cast(int)srr.replace.length;
-        epos -= (mt.e-mt.s)-cast(int)srr.replace.length;
-      } else {
-        epos = mt.s;
-      }
-      if (doAll) ++count;
+      // all
+      srrPlainDoReplace(srr);
     }
-    if (doAll) {
+    srr.ed = null;
+    if (srr.cont == SROptions.Cont.All) {
+      import std.string : format;
+      if (srr.closeGroup) { srr.closeGroup = false; undoGroupEnd(); }
       fullDirty();
       drawPage();
-      dialogMessage!"info"("Search and Replace", "%s replacement%s made", count, (count != 1 ? "s" : ""));
+      (new EventEditorMessage(this, "%s replacement%s made".format(srr.repcount, (srr.repcount != 1 ? "s" : "")))).post;
+    } else {
+      assert(srr.closeGroup == false);
     }
-    +/
   }
 
-  //TODO: write event-based code
-  final void srrRegExp (in ref SearchReplaceOptions srr) {
-    /+
+  final void srrRegexStart (ref SROptions srr) {
     import std.utf : byChar;
-    if (srr.search.length == 0) return;
-    if (srr.inselection && !hasMarkedBlock) return;
-    auto re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : SRFlags.CaseInsensitive)|SRFlags.Multiline);
-    if (!re.valid) { ttyBeep; return; }
-    scope(exit) fullDirty(); // to remove highlighting
-    bool closeGroup = false;
-    scope(exit) if (closeGroup) undoGroupEnd();
-    bool doAll = false;
-    // epos will be fixed on replacement
+    if (srr.search.length == 0) { srr.ed = null; return; }
+    if (srr.inselection && !hasMarkedBlock) { srr.ed = null; return; }
+    srr.re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : SRFlags.CaseInsensitive)|SRFlags.Multiline);
+    if (!srr.re.valid) { ttyBeep; srr.re = RegExp.init; srr.ed = null; return; }
     int spos, epos;
-
     if (srr.inselection) {
       spos = bstart;
       epos = bend;
@@ -1564,20 +1596,28 @@ final:
         epos = curpos;
       }
     }
-    Pike.Capture[64] caps; // max captures
+    srr.spos = spos;
+    srr.epos = epos;
+    srr.repcount = 0;
+    srr.closeGroup = false;
+    srr.cont = SROptions.Cont.Yes;
+    srrRegExpStep(srr);
+  }
 
-    char[] newtext; // will be aggressively reused!
-    scope(exit) { delete newtext; newtext.length = 0; }
+  final void srrRegExpDoSkip (ref SROptions srr) {
+    if (!srr.backwards) srr.spos = srr.caps[0].s+1; else srr.epos = srr.caps[0].s;
+  }
 
+  final void srrRegExpDoReplace (ref SROptions srr) {
     int rereplace () {
-      if (newtext.length) { newtext.length = 0; newtext.assumeSafeAppend; }
+      if (srr.newtext.length) { srr.newtext.length = 0; srr.newtext.assumeSafeAppend; }
       auto reps = srr.replace;
       int spos = 0;
       mainloop: while (spos < reps.length) {
         if ((reps[spos] == '$' || reps[spos] == '\\') && reps.length-spos > 1 && reps[spos+1].isdigit) {
           int n = reps[spos+1]-'0';
           spos += 2;
-          if (!caps[n].empty) foreach (char ch; this[caps[n].s..caps[n].e]) newtext ~= ch;
+          if (!srr.caps[n].empty) foreach (char ch; this[srr.caps[n].s..srr.caps[n].e]) srr.newtext ~= ch;
         } else if ((reps[spos] == '$' || reps[spos] == '\\') && reps.length-spos > 2 && reps[spos+1] == '{' && reps[spos+2].isdigit) {
           bool toupper, tolower, capitalize, uncapitalize;
           spos += 2;
@@ -1594,28 +1634,28 @@ final:
             }
           }
           if (spos < reps.length && reps[spos] == '}') ++spos;
-          if (n < caps.length && !caps[n].empty) {
-            int tp = caps[n].s, ep = caps[n].e;
+          if (n < srr.caps.length && !srr.caps[n].empty) {
+            int tp = srr.caps[n].s, ep = srr.caps[n].e;
             char ch = gb[tp++];
                  if (capitalize || toupper) ch = ch.toupper;
             else if (uncapitalize || tolower) ch = ch.tolower;
-            newtext ~= ch;
+            srr.newtext ~= ch;
             while (tp < ep) {
               ch = gb[tp++];
                    if (toupper) ch = ch.toupper;
               else if (tolower) ch = ch.tolower;
-              newtext ~= ch;
+              srr.newtext ~= ch;
             }
           }
         } else if (reps[spos] == '\\' && reps.length-spos > 1) {
           spos += 2;
           switch (reps[spos-1]) {
-            case 't': newtext ~= '\t'; break;
-            case 'n': newtext ~= '\n'; break;
-            case 'r': newtext ~= '\r'; break;
-            case 'a': newtext ~= '\a'; break;
-            case 'b': newtext ~= '\b'; break;
-            case 'e': newtext ~= '\x1b'; break;
+            case 't': srr.newtext ~= '\t'; break;
+            case 'n': srr.newtext ~= '\n'; break;
+            case 'r': srr.newtext ~= '\r'; break;
+            case 'a': srr.newtext ~= '\a'; break;
+            case 'b': srr.newtext ~= '\b'; break;
+            case 'e': srr.newtext ~= '\x1b'; break;
             case 'x': case 'X':
               if (reps.length-spos < 1) break mainloop;
               int n = digitInBase(reps[spos], 16);
@@ -1625,64 +1665,87 @@ final:
                 n = n*16+digitInBase(reps[spos], 16);
                 ++spos;
               }
-              newtext ~= cast(char)n;
+              srr.newtext ~= cast(char)n;
               break;
             default:
-              newtext ~= reps[spos-1];
+              srr.newtext ~= reps[spos-1];
               break;
           }
         } else {
-          newtext ~= reps[spos++];
+          srr.newtext ~= reps[spos++];
         }
       }
-      replaceText!"end"(caps[0].s, caps[0].e-caps[0].s, newtext);
-      return cast(int)newtext.length;
+      replaceText!"end"(srr.caps[0].s, srr.caps[0].e-srr.caps[0].s, srr.newtext);
+      return cast(int)srr.newtext.length;
     }
 
-    int count = 0;
-    while (spos < epos) {
+    ++srr.repcount;
+    int replen = rereplace();
+    // fix search range
+    if (!srr.backwards) {
+      srr.spos = srr.caps[0].s+(replen ? replen : 1);
+      srr.epos += replen-(srr.caps[0].e-srr.caps[0].s);
+    } else {
+      srr.epos = srr.caps[0].s;
+    }
+  }
+
+  final void srrRegExpStep (ref SROptions srr) {
+    while (srr.spos < srr.epos) {
       bool found;
       if (srr.backwards) {
-        found = findTextRegExpBack(re, spos, epos, caps[]);
+        found = findTextRegExpBack(srr.re, srr.spos, srr.epos, srr.caps[]);
       } else {
-        found = findTextRegExp(re, spos, epos, caps[]);
+        found = findTextRegExp(srr.re, srr.spos, srr.epos, srr.caps[]);
       }
       if (!found) break;
       // i found her!
-      if (!doAll) {
-        bool doundo = (caps[0].s != curpos);
-        if (doundo) gotoPos!true(caps[0].s);
+      if (srr.cont != SROptions.Cont.All) {
+        bool doundo = (srr.caps[0].s != curpos);
+        if (doundo) gotoPos!true(srr.caps[0].s);
         fullDirty();
         drawPage();
-        drawPartHighlight(caps[0].s, caps[0].e-caps[0].s, IncSearchColor);
-        auto act = dialogReplacePrompt(gb.pos2line(caps[0].s)-topline+winy);
-        //FIXME: do undo only if it was succesfully registered
-        //doUndo(); // undo cursor movement
-        if (act == DialogRepPromptResult.Cancel) break;
-        //if (doundo) doUndo();
-        if (act == DialogRepPromptResult.Skip) {
-          if (!srr.backwards) spos = caps[0].s+1; else epos = caps[0].s;
-          continue;
-        }
-        if (act == DialogRepPromptResult.All) { doAll = true; }
+        drawPartHighlight(srr.caps[0].s, srr.caps[0].e-srr.caps[0].s, IncSearchColor);
+        auto oldro = readonly;
+        addEventListener(this, (EventEditorReplyReplacement evt) {
+          readonly = oldro;
+          if (evt.opt is null) return;
+          srr = *cast(SROptions*)evt.opt;
+          assert(srr.ed is this);
+          final switch (srr.cont) {
+            case SROptions.Cont.Cancel:
+              assert(srr.closeGroup == false);
+              srr.ed = null;
+              return;
+            case SROptions.Cont.No:
+              srrRegExpDoSkip(srr);
+              break;
+            case SROptions.Cont.All:
+              if (!srr.closeGroup) { undoGroupStart(); srr.closeGroup = true; }
+              goto case SROptions.Cont.Yes;
+            case SROptions.Cont.Yes:
+              srrRegExpDoReplace(srr);
+              break;
+          }
+          // do it again
+          srrRegExpStep(srr);
+        }, true);
+        (new EventEditorQueryReplacement(this, &srr)).post;
+        return;
       }
-      if (doAll && !closeGroup) { undoGroupStart(); closeGroup = true; }
-      int replen = rereplace();
-      // fix search range
-      if (!srr.backwards) {
-        spos = caps[0].s+(replen ? replen : 1);
-        epos += replen-(caps[0].e-caps[0].s);
-      } else {
-        epos = caps[0].s;
-      }
-      if (doAll) ++count;
+      // all
+      srrRegExpDoReplace(srr);
     }
-    if (doAll) {
+    srr.ed = null;
+    if (srr.cont == SROptions.Cont.All) {
+      import std.string : format;
+      if (srr.closeGroup) { srr.closeGroup = false; undoGroupEnd(); }
       fullDirty();
       drawPage();
-      dialogMessage!"info"("Search and Replace", "%s replacement%s made", count, (count != 1 ? "s" : ""));
+      (new EventEditorMessage(this, "%s replacement%s made".format(srr.repcount, (srr.repcount != 1 ? "s" : "")))).post;
+    } else {
+      assert(srr.closeGroup == false);
     }
-    +/
   }
 
 final:
@@ -1829,14 +1892,16 @@ final:
   @TEDEditOnly
     //TODO: write event-based code
     void tedF4 () {
-      /+
-      srrOptions.inselenabled = hasMarkedBlock;
-      srrOptions.utfuck = utfuck;
-      if (!dialogSearchReplace(hisman, srrOptions)) return;
-      if (srrOptions.type == SearchReplaceOptions.Type.Normal) { srrPlain(srrOptions); return; }
-      if (srrOptions.type == SearchReplaceOptions.Type.Regex) { srrRegExp(srrOptions); return; }
-      dialogMessage!"error"("Not Yet", "This S&R type is not supported yet!");
-      +/
+      if (srrOptions.ed !is null) return; // in progress
+      srrOptions.ed = this;
+      addEventListener(this, (EventEditorReplySR evt) {
+        if (evt.cancel) { srrOptions.ed = null; return; }
+        assert(evt.opt !is null);
+        srrOptions = *cast(SROptions*)evt.opt;
+        if (srrOptions.type == SROptions.Type.Normal) srrPlainStart(srrOptions);
+        if (srrOptions.type == SROptions.Type.Regex) srrRegexStart(srrOptions);
+      }, true);
+      (new EventEditorQuerySR(this, &srrOptions));
     }
   @TEDKey("F5", "copy block")
   @TEDEditOnly
@@ -1868,14 +1933,8 @@ final:
     void tedAltK () { doBookmarkToggle(); }
   @TEDKey("M-L", "goto line")
   @TEDMultiOnly
-    //TODO: write event-based code
     void tedAltL () {
-      /+
-      auto lnum = dialogLineNumber(hisman);
-      if (lnum > 0 && lnum < linecount) {
-        gotoXY!true(curx, lnum-1); // vcenter
-      }
-      +/
+      (new EventEditorQueryGotoLine(this)).post;
     }
 
   @TEDKey("M-C", "capitalize word")
@@ -1942,16 +2001,8 @@ final:
 
   @TEDKey("M-E", "select codepage")
   @TEDMultiOnly
-    //TODO: write event-based code
     void tedAltE () {
-      /+
-      auto ncp = dialogCodePage(utfuck ? 3 : codepage);
-      if (ncp < 0) return;
-      if (ncp > CodePage.max) { utfuck = true; return; }
-      utfuck = false;
-      codepage = cast(CodePage)ncp;
-      fullDirty();
-      +/
+      (new EventEditorQueryCodePage(this, (utfuck ? 3 : codepage))).post;
     }
 
   @TEDKey("^K ^I", "indent block")
