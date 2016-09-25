@@ -173,10 +173,6 @@ public class FuiEditLine : FuiControl {
 
   void onMyEvent (FuiEventKey evt) {
     if (disabled) return;
-    /*
-    if (evt.key == "Space") { evt.eat(); doAction(); return; }
-    if (tryHotKey(evt.key)) { evt.eat(); doAction(); return; }
-    */
     // history
     if (auto hm = historymgr) {
       if (evt.key == "M-H") {
