@@ -671,8 +671,14 @@ private:
 // ////////////////////////////////////////////////////////////////////////// //
 class FuiEventQueueDesk : FuiEventQueue {
   static struct WinItem {
+    enum Type { Normal, Modal, Popup }
     FuiWindow win;
-    bool modal;
+    Type type = Type.Normal;
+    @property const pure nothrow @safe @nogc {
+      bool shouldSendWindowBlurToOthers () { return (type == Type.Normal); }
+      bool shouldCloseOnBlur () { return (type == Type.Popup); }
+      bool canBeBlurred () { return (type == Type.Normal || type == Type.Popup); }
+    }
   }
   WinItem[] winlist; // latest is on the top
   FuiWindow[] wintoplist; // "on top" windows, latest is on the top
@@ -726,25 +732,38 @@ class FuiEventQueueDesk : FuiEventQueue {
     return null;
   }
 
-  // prevw can be null, but should not be current top-level
-  private void topwindowFocusJustChanged (FuiWindow prevw) {
-    if (winlist.length && prevw is winlist[$-1].win) return; // just in case
-    // don't send window blur for modals
-    if (prevw !is null) {
+  // pwi.win can be null, but should not be current top-level
+  // pwi is "previous active window"
+  private void topwindowFocusJustChanged (WinItem pwi=WinItem.init) {
+    if (winlist.length && pwi.win is winlist[$-1].win) return; // just in case
+    // send blur event to pwi.win
+    if (pwi.win !is null) {
       auto fcs = lastFocus.object;
-      if (fcs !is null && fcs.toplevel is prevw) {
+      if (fcs !is null && fcs.toplevel is pwi.win) {
         lastFocus.object = null;
-        if (fcs !is prevw) (new FuiEventBlur(fcs)).post;
-        if (winlist.length == 0 || !winlist[$-1].modal) (new FuiEventBlur(prevw)).post;
+        if (fcs !is pwi.win) (new FuiEventBlur(fcs)).post;
+        if (winlist.length == 0 || winlist[$-1].shouldSendWindowBlurToOthers) {
+          if (pwi.shouldCloseOnBlur) (new FuiEventClose(pwi.win, null)).post; else (new FuiEventBlur(pwi.win)).post;
+        }
       }
     }
+    // just in case: another blur attempt
     if (auto fcs = lastFocus.object) {
-      if (fcs !is null) {
+      if (fcs !is null && (winlist.length == 0 || fcs.toplevel !is winlist[$-1].win)) {
         lastFocus.object = null;
         if (fcs !is fcs.toplevel) (new FuiEventBlur(fcs)).post;
-        if (winlist.length == 0 || !winlist[$-1].modal) (new FuiEventBlur(fcs.toplevel)).post;
+        if (winlist.length == 0 || winlist[$-1].shouldSendWindowBlurToOthers) {
+          auto tl = fcs.toplevel;
+          foreach (ref WinItem wi; winlist) {
+            if (wi.win is tl) {
+              if (wi.shouldCloseOnBlur) (new FuiEventClose(wi.win, null)).post; else (new FuiEventBlur(wi.win)).post;
+              break;
+            }
+          }
+        }
       }
     }
+    // old active window is blurred, focus new one
     if (winlist.length == 0) return;
     auto w = winlist[$-1].win;
     assert(w !is null);
@@ -769,10 +788,10 @@ class FuiEventQueueDesk : FuiEventQueue {
       if (win.desk !is this) return;
       if (!isTopWindow(win)) {
         if (!allowWindowSwitch) return;
-        if (winlist.length && winlist[$-1].modal) return;
+        if (winlist.length && !winlist[$-1].canBeBlurred) return;
       }
     } else {
-      // alase
+      // alas
       return;
     }
     // remove focus from current focused ctl
@@ -790,10 +809,15 @@ class FuiEventQueueDesk : FuiEventQueue {
         if (idx == winlist.length-1) continue;
         if (w is tl) {
           winFocusSent = true;
-          (new FuiEventBlur(winlist[$-1].win)).post;
+          if (winlist[$-1].shouldCloseOnBlur) {
+            (new FuiEventClose(winlist[$-1].win, null)).post;
+          } else {
+            (new FuiEventBlur(winlist[$-1].win)).post;
+          }
           (new FuiEventFocus(w)).post;
+          auto xwi = wi;
           foreach (immutable c; idx+1..winlist.length) winlist[c-1] = winlist[c];
-          winlist[$-1] = WinItem(w, false);
+          winlist[$-1] = xwi;
           break;
         }
       }
@@ -816,30 +840,41 @@ class FuiEventQueueDesk : FuiEventQueue {
     super();
   }
 
-  void addWindow (FuiWindow w, bool modal=false) {
+  protected void addWindowWithType (FuiWindow w, WinItem.Type type) {
     if (w is null) return;
     if (w.desk !is null) return;
-    auto lastWF = (winlist.length ? winlist[$-1].win : null);
     w.desk = this;
-    winlist ~= WinItem(w, modal);
-    topwindowFocusJustChanged(lastWF);
+    winlist ~= WinItem(w, type);
+    topwindowFocusJustChanged();
     assert(lastFocus.object !is null);
   }
 
+  void addWindow (FuiWindow w) { addWindowWithType(w, WinItem.Type.Normal); }
+  void addModal (FuiWindow w) { addWindowWithType(w, WinItem.Type.Modal); }
+  void addPopup (FuiWindow w) { addWindowWithType(w, WinItem.Type.Popup); }
+
   override bool queue (TtyEvent key) {
-    if (key.mouse && winlist.length > 1 && !winlist[$-1].modal) {
+    // check if we clicked on another window and activate it
+    // but only if current top window can be blurred (i.e. deactivated) this way
+    if (key.mpress && winlist.length && winlist[$-1].canBeBlurred) {
       auto pt = FuiPoint(key.x, key.y);
-      foreach_reverse (immutable idx, ref WinItem wi; winlist) {
-        auto w = wi.win;
-        //if (!w.visible || !w.enabled) continue;
-        if (pt.inside(w.lp.rect)) {
-          if (idx != winlist.length-1) {
-            auto lastWF = winlist[$-1].win;
+      // if top window is popup, and user clicked outside of it, close it
+      if (winlist.length && winlist[$-1].type == WinItem.Type.Popup && !pt.inside(winlist[$-1].win.rect)) {
+        (new FuiEventClose(winlist[$-1].win, null)).post;
+      } else if (winlist.length && winlist[$-1].type == WinItem.Type.Modal && !pt.inside(winlist[$-1].win.rect)) {
+        // do nothing, as modal window cannot be dismissed this way
+      } else if (winlist.length > 1) {
+        foreach_reverse (immutable idx, ref WinItem wi; winlist[0..$-1]) {
+          auto w = wi.win;
+          if (w.hidden || w.disabled) continue;
+          if (pt.inside(w.lp.rect)) {
+            auto lastWF = winlist[$-1];
+            auto xwi = wi;
             foreach (immutable c; idx+1..winlist.length) winlist[c-1] = winlist[c];
-            winlist[$-1] = WinItem(w, false);
+            winlist[$-1] = xwi;
             topwindowFocusJustChanged(lastWF);
+            break;
           }
-          break;
         }
       }
     }
@@ -871,12 +906,12 @@ class FuiEventQueueDesk : FuiEventQueue {
       FuiWindow tw = twi.win;
       if (evt.source is tw) {
         // i found her!
-        auto lastWF = (idx == winlist.length-1 ? tw : null);
+        auto lastWF = (idx == winlist.length-1 ? twi : WinItem.init);
         foreach (immutable c; idx+1..winlist.length) winlist[c-1] = winlist[c];
-        winlist[$-1].win = null;
+        winlist[$-1] = WinItem.init;
         winlist.length -= 1;
         winlist.assumeSafeAppend;
-        if (lastWF !is null) { topwindowFocusJustChanged(lastWF); lastWF.desk = null; }
+        if (lastWF.win !is null) { topwindowFocusJustChanged(lastWF); lastWF.win.desk = null; }
         tw.desk = null;
         if (winlist.length == 0 && wintoplist.length == 0) (new FuiEventQuit).post;
         return;
@@ -890,7 +925,7 @@ class FuiEventQueueDesk : FuiEventQueue {
         wintoplist.length -= 1;
         wintoplist.assumeSafeAppend;
         if (auto fcs = lastFocus.object) {
-          if (fcs.toplevel is tw) topwindowFocusJustChanged(null);
+          if (fcs.toplevel is tw) topwindowFocusJustChanged();
         }
         tw.desk = null;
         if (winlist.length == 0 && wintoplist.length == 0) (new FuiEventQuit).post;

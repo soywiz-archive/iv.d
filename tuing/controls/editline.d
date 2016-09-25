@@ -50,11 +50,11 @@ private class FuiHistoryWindow : FuiWindow {
     this.connectListeners();
     super();
     el = ael;
-  }
-
-  override void onMyEvent (FuiEventBlur evt) {
-    (new FuiEventClose(this, null)).post;
-    super.onMyEvent(evt);
+    /*this works
+    addEventListener(this, (FuiEventClose evt) {
+      ttyBeep;
+    });
+    */
   }
 
   override void onBubbleEvent (FuiEventKey evt) {
@@ -100,7 +100,7 @@ private void createHistoryWin (FuiEditLine el) {
   auto pt = el.toGlobal(FuiPoint(0, 0));
   win.lp.pos.x = pt.x;
   win.lp.pos.y = pt.y+1;
-  tuidesk.addWindow(win, true);
+  tuidesk.addPopup(win);
 }
 
 

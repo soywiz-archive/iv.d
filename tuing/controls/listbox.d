@@ -203,6 +203,7 @@ public class FuiListBox : FuiControl {
       int last = mTopItem+win.height;
       if (last > items.length) last = cast(int)items.length;
       last = win.height*last/cast(int)items.length;
+      if (last >= win.height-1 && mTopItem+win.height < items.length) last = win.height-2;
       foreach (int yy; 0..win.height) win.writeCharsAt!true(x, yy, 1, (yy <= last ? 'a' : ' '));
     }
   }
