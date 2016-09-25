@@ -24,6 +24,7 @@ import iv.tuing.controls.window : FuiWindow;
 import iv.tuing.eventbus;
 import iv.tuing.layout : FuiPoint;
 import iv.tuing.tui : FuiControl;
+import iv.tuing.ttyeditor : TtyEditor;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -86,3 +87,41 @@ public class FuiEventWinFocusNextPrev : FuiEvent {
 
 public class FuiEventWinFocusNext : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
 public class FuiEventWinFocusPrev : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class EventEditorQuery : Event {
+  this (TtyEditor aed) { super(aed); }
+  final @property pure nothrow @trusted @nogc {
+    inout(TtyEditor) sourceed () inout { return cast(typeof(return))osource; }
+  }
+}
+
+// yes, source
+public class EventEditorReply : Event {
+  this (TtyEditor aed) { super(aed); }
+  final @property pure nothrow @trusted @nogc {
+    inout(TtyEditor) sourceed () inout { return cast(typeof(return))osource; }
+  }
+}
+
+
+// reply: <0: cancel; =0: no; >0: yes
+public class EventEditorQueryOverwriteModified : EventEditorQuery { this (TtyEditor aed) { super(aed); } }
+public class EventEditorReplyOverwriteModified : EventEditorReply { int res; this (TtyEditor aed, int ares) { super(aed); res = ares; } }
+
+// reply: <0: cancel; =0: no; >0: yes
+public class EventEditorQueryReloadModified : EventEditorQuery { this (TtyEditor aed) { super(aed); } }
+public class EventEditorReplyReloadModified : EventEditorReply { int res; this (TtyEditor aed, int ares) { super(aed); res = ares; } }
+
+public class EventEditorQueryAutocompletion : EventEditorQuery {
+  const(char)[][] list;
+  int pos, len;
+  FuiPoint pt;
+  this (TtyEditor aed, int apos, int alen, FuiPoint apt, const(char)[][] alist) { super(aed); pos = apos; len = alen; pt = apt; list = alist; }
+}
+public class EventEditorReplyAutocompletion : EventEditorReply {
+  const(char)[] res;
+  int pos, len;
+  this (TtyEditor aed, int apos, int alen, const(char)[] ares) { super(aed); pos = apos; len = alen; res = ares; }
+}

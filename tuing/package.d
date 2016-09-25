@@ -28,4 +28,5 @@ public import iv.tuing.tty; // independent
 
 public import iv.tuing.events;
 public import iv.tuing.tui;
+public import iv.tuing.ttyeditor;
 public import iv.tuing.controls;

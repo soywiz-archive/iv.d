@@ -1720,7 +1720,7 @@ public:
 
   void loadFile (const(char)[] fname) { loadFile(VFile(fname)); }
 
-  protected void loadFile (VFile fl) {
+  void loadFile (VFile fl) {
     import core.stdc.stdlib : malloc, free;
     clear();
     enum BufSize = 65536;
@@ -1737,7 +1737,7 @@ public:
 
   void saveFile (const(char)[] fname) { saveFile(VFile(fname, "w")); }
 
-  protected void saveFile (VFile fl) {
+  void saveFile (VFile fl) {
     //FIXME: this uses internals of gap buffer!
     gb.moveGapAtEnd();
     fl.rawWriteExact(gb.tbuf[0..gb.tbused]);

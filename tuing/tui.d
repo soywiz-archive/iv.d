@@ -39,6 +39,20 @@ public void fuiLayout (FuiControl ctl) { if (ctl !is null) iv.tuing.layout.fuiLa
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// `id` is element id
+public class FuiHistoryManager {
+public:
+  this () {}
+  abstract bool has (const(char)[] id);
+  abstract int count (const(char)[] id);
+  abstract const(char)[] item (const(char)[] id, int idx); // 0: oldest
+  abstract void add (const(char)[] id, const(char)[] value); // this can shrink history; should correctly process duplicates
+  abstract void clear (const(char)[] id);
+  abstract void activate (const(char)[] id, int idx); // usually moves item to bottom
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 struct FuiPalette {
   uint def; // default color
   uint sel; // sel is also focus
@@ -129,6 +143,7 @@ public class FuiControl : EventTarget {
   bool escctl; // set to `true` to make this control respond to "cancel"
   bool hotkeyed; // set to `true` to make `tryHotKey()` check for hotkey in caption
   protected string[2] groupid;
+  FuiHistoryManager hisman;
 
   void delegate (FuiControl self) onAction;
   void delegate (FuiControl self, XtWindow win) onDraw;
@@ -202,6 +217,13 @@ public class FuiControl : EventTarget {
         }
       }
       return cast(typeof(return))prev;
+    }
+
+    FuiHistoryManager historymgr () {
+      for (FuiControl ctl = this; ctl !is null; ctl = ctl.parent) {
+        if (ctl.hisman !is null) return ctl.hisman;
+      }
+      return null;
     }
   }
 

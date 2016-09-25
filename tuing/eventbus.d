@@ -83,18 +83,20 @@ const @property:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public uint addEventListener(E:Event) (void delegate (E evt) dg) {
-  return addEventListener!E(null, dg);
+public uint addEventListener(E:Event) (void delegate (E evt) dg, bool oneshot=false) {
+  return addEventListener!E(null, dg, oneshot);
 }
 
 // register event listener for *source* object `obj`
-public uint addEventListener(E:Event) (Object obj, void delegate (E evt) dg) {
+public uint addEventListener(E:Event) (Object obj, void delegate (E evt) dg, bool oneshot=false) {
   if (dg is null) return 0;
   synchronized (Event.classinfo) {
-    foreach (ref EventListenerInfo eli; llist) {
-      if (typeid(E) == eli.ti && eli.dg is cast(EventListenerInfo.DgType)dg) return eli.id;
+    if (!oneshot) {
+      foreach (ref EventListenerInfo eli; llist) {
+        if (typeid(E) == eli.ti && eli.dg is cast(EventListenerInfo.DgType)dg) return eli.id;
+      }
     }
-    llist ~= EventListenerInfo(obj, typeid(E), cast(EventListenerInfo.DgType)dg);
+    llist ~= EventListenerInfo(obj, typeid(E), cast(EventListenerInfo.DgType)dg, oneshot);
     return lastid;
   }
 }
@@ -394,16 +396,19 @@ struct EventListenerInfo {
   uint id;
   ObjDispatcher dobj;
   Weak!Object xsrc;
-  this (TypeInfo_Class ati, DgType adg) {
+  bool oneshot;
+  this (TypeInfo_Class ati, DgType adg, bool aoneshot) {
     id = getId;
     ti = ati;
     dg = adg;
+    oneshot = aoneshot;
   }
-  this (Object asrc, TypeInfo_Class ati, DgType adg) {
+  this (Object asrc, TypeInfo_Class ati, DgType adg, bool aoneshot) {
     id = getId;
     ti = ati;
     dg = adg;
     if (asrc !is null) xsrc = new Weak!Object(asrc);
+    oneshot = aoneshot;
   }
   this (ObjDispatcher adobj) {
     id = getId;
@@ -522,6 +527,7 @@ void callEventListeners (Event evt) {
     EventListenerInfo.DgType dg = null;
     TypeInfo_Class ti = null;
     Weak!Object xsrc = null;
+    bool oneshot = false;
     synchronized (Event.classinfo) {
       auto eli = &llist[idx];
       if (eli.id == 0) continue;
@@ -535,17 +541,20 @@ void callEventListeners (Event evt) {
         dg = eli.dg;
         ti = eli.ti;
       }
+      oneshot = eli.oneshot;
     }
     if (xsrc !is null) {
       if (xsrc.empty) continue;
       if (xsrc.object !is evt.osource) continue;
     }
     if (dobj !is null) {
+      if (oneshot) synchronized (Event.classinfo) { auto eli = &llist[idx]; needListenerCleanup = true; eli.id = 0; eli.dg = null; eli.dobj = null; eli.xsrc = null; }
       dobj.dispatch(evt);
       if (evt.processed) break;
     } else if (dg !is null && ti !is null) {
       auto ecc = _d_dynamic_cast(evt, ti);
       if (ecc !is null) {
+        if (oneshot) synchronized (Event.classinfo) { auto eli = &llist[idx]; needListenerCleanup = true; eli.id = 0; eli.dg = null; eli.dobj = null; eli.xsrc = null; }
         dg(ecc);
         if (evt.processed) break;
       }
