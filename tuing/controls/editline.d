@@ -83,23 +83,27 @@ private void createHistoryWin (FuiEditLine el) {
   if (!hm.has(el) || hm.count(el) < 1) return;
   auto win = new FuiHistoryWindow(el);
   //win.lp.minSize = FuiSize(30, 7);
-  win.caption = "History Window";
+  win.caption = "History";
   win.frame = win.Frame.Small;
+  win.minSize.w = 14;
   if (auto lb = new FuiListBox(win)) {
-    //lb.minSize.w = 24;
-    //lb.minSize.h = 16;
+    lb.aligning = lb.Align.Stretch;
     foreach_reverse (immutable idx; 0..hm.count(el)) lb.addItem(hm.item(el, idx));
     lb.curitem = lb.count-1;
     lb.defctl = true;
     lb.escctl = true;
+    lb.maxSize.w = ttyw-8;
+    lb.maxSize.h = ttyh-8;
     win.hlb = lb;
   }
   //win.onBlur = (FuiControl self) { (new FuiEventClose(self, null)).post; };
   fuiLayout(win);
   //import std.random : uniform;
-  auto pt = el.toGlobal(FuiPoint(0, 0));
-  win.lp.pos.x = pt.x;
-  win.lp.pos.y = pt.y+1;
+  auto pt = el.toGlobal(FuiPoint(0, 1));
+  if (pt.x+win.size.w > ttyw) pt.x = ttyw-win.size.w;
+  if (pt.y+win.size.h > ttyh) pt.y = ttyh-win.size.h;
+  win.pos.x = pt.x;
+  win.pos.y = pt.y;
   tuidesk.addPopup(win);
 }
 
@@ -175,7 +179,7 @@ public class FuiEditLine : FuiControl {
     if (disabled) return;
     // history
     if (auto hm = historymgr) {
-      if (evt.key == "M-H") {
+      if (evt.key == "M-H" || evt.key == "M-Down") {
         // history dialog
         createHistoryWin(this);
         evt.eat();
