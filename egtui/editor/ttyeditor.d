@@ -27,7 +27,8 @@ import iv.vfs.io;
 import iv.egtui.tty;
 import iv.egtui.tui;
 import iv.egtui.dialogs;
-import iv.egtui.editor.editor;
+import iv.egeditor.editor;
+import iv.egeditor.highlighters;
 import iv.egtui.editor.highlighters;
 import iv.egtui.editor.dialogs;
 

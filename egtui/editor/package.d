@@ -19,7 +19,7 @@
  */
 module iv.egtui.editor;
 
-public import iv.egtui.editor.editor;
+public import iv.egeditor;
 public import iv.egtui.editor.highlighters;
 public import iv.egtui.editor.ttyeditor;
 public import iv.egtui.editor.dialogs;
