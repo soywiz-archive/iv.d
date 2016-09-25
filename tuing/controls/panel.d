@@ -37,8 +37,8 @@ public class FuiPanel : FuiControl {
   this (FuiControl aparent) {
     this.connectListeners();
     super(aparent);
-    lp.orientation = lp.Orientation.Vertical;
-    lp.aligning = lp.Align.Start;
+    vertical = true;
+    aligning = Align.Start;
   }
   protected override void drawSelf (XtWindow win) {
     win.color = palColor!"def"();
@@ -48,10 +48,10 @@ public class FuiPanel : FuiControl {
 
 public class FuiHPanel : FuiPanel {
   alias onMyEvent = super.onMyEvent;
-  this (FuiControl aparent) { this.connectListeners(); super(aparent); lp.orientation = lp.Orientation.Horizontal; }
+  this (FuiControl aparent) { this.connectListeners(); super(aparent); horizontal = true; }
 }
 
 public class FuiVPanel : FuiPanel {
   alias onMyEvent = super.onMyEvent;
-  this (FuiControl aparent) { this.connectListeners(); super(aparent); lp.orientation = lp.Orientation.Vertical; }
+  this (FuiControl aparent) { this.connectListeners(); super(aparent); vertical = true; }
 }

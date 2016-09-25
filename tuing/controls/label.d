@@ -54,10 +54,10 @@ public class FuiLabel : FuiControl {
 
   final void doInit (string atext) {
     caption = atext;
-    lp.minSize.w = XtWindow.hotStrLen(atext);
-    lp.orientation = lp.Orientation.Horizontal;
-    lp.aligning = lp.Align.Start;
-    lp.minSize.h = lp.maxSize.h = 1;
+    minSize.w = XtWindow.hotStrLen(atext);
+    horizontal = true;
+    aligning = Align.Start;
+    minSize.h = maxSize.h = 1;
     hotkeyed = true;
   }
 

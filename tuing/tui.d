@@ -176,7 +176,7 @@ public class FuiControl : EventTarget {
 
   this (FuiControl aparent) {
     lp = new FuiCtlLayoutProps(this);
-    lp.visible = true;
+    visible = true;
     if (aparent !is null) {
       lp.parent = aparent.lp;
       auto lcc = aparent.lp.firstChild;
@@ -191,6 +191,9 @@ public class FuiControl : EventTarget {
     }
     this.connectListeners();
   }
+
+  alias Orientation = FuiLayoutProps.Orientation;
+  alias Align = FuiLayoutProps.Align;
 
   final @property pure nothrow @safe @nogc {
     inout(FuiControl) parent () inout { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return plp.ctl; else return null; }
@@ -273,23 +276,55 @@ public class FuiControl : EventTarget {
     bool lineBreak () const { pragma(inline, true); return lp.lineBreak; }
     void lineBreak (bool v) { pragma(inline, true); lp.lineBreak = v; }
 
-    private {
+    bool ignoreSpacing () const { pragma(inline, true); return lp.ignoreSpacing; }
+    void ignoreSpacing (bool v) { pragma(inline, true); lp.ignoreSpacing = v; }
+
+    bool horizontal () const { pragma(inline, true); return (lp.orientation == lp.Orientation.Horizontal); }
+    bool vertical () const { pragma(inline, true); return (lp.orientation == lp.Orientation.Vertical); }
+
+    void horizontal (bool v) { pragma(inline, true); lp.orientation = (v ? lp.Orientation.Horizontal : lp.Orientation.Vertical); }
+    void vertical (bool v) { pragma(inline, true); lp.orientation = (v ? lp.Orientation.Vertical : lp.Orientation.Horizontal); }
+
+    Align aligning () const { pragma(inline, true); return lp.aligning; }
+    void aligning (Align v) { pragma(inline, true); lp.aligning = v; }
+
+    int flex () const { pragma(inline, true); return lp.flex; }
+    void flex (int v) { pragma(inline, true); lp.flex = v; }
+
+    int spacing () const { pragma(inline, true); return lp.spacing; }
+    void spacing (int v) { pragma(inline, true); lp.spacing = v; }
+
+    int lineSpacing () const { pragma(inline, true); return lp.lineSpacing; }
+    void lineSpacing (int v) { pragma(inline, true); lp.lineSpacing = v; }
+
+    ref FuiMargin padding () { pragma(inline, true); return lp.padding; }
+    void padding (FuiMargin v) { pragma(inline, true); lp.padding = v; }
+
+    ref FuiSize minSize () { pragma(inline, true); return lp.minSize; }
+    void minSize (FuiSize v) { pragma(inline, true); lp.minSize = v; }
+
+    ref FuiSize maxSize () { pragma(inline, true); return lp.maxSize; }
+    void maxSize (FuiSize v) { pragma(inline, true); lp.maxSize = v; }
+
+    // calculated item dimensions
+    ref FuiPoint pos () { pragma(inline, true); return lp.pos; }
+    void pos (FuiPoint v) { pragma(inline, true); lp.pos = v; }
+
+    ref FuiSize size () { pragma(inline, true); return lp.size; }
+    void size (FuiSize v) { pragma(inline, true); lp.size = v; }
+
+    ref FuiRect rect () { pragma(inline, true); return lp.rect; }
+    void rect (FuiRect v) { pragma(inline, true); lp.rect = v; }
+
+    protected {
       void hovered (bool v) { pragma(inline, true); if (v) flags |= Flags.Hovered; else flags &= ~Flags.Hovered; }
       void active (bool v) { pragma(inline, true); if (v) flags |= Flags.Active; else flags &= ~Flags.Active; }
       void focused (bool v) { pragma(inline, true); if (v) flags |= Flags.Focused; else flags &= ~Flags.Focused; }
     }
   }
 
-  final @property pure nothrow @safe @nogc {
-    bool horizontal () const { pragma(inline, true); return (lp.orientation == lp.Orientation.Horizontal); }
-    bool vertical () const { pragma(inline, true); return (lp.orientation == lp.Orientation.Vertical); }
-
-    void horizontal (bool v) { pragma(inline, true); lp.orientation = (v ? lp.Orientation.Horizontal : lp.Orientation.Vertical); }
-    void vertical (bool v) { pragma(inline, true); lp.orientation = (v ? lp.Orientation.Vertical : lp.Orientation.Horizontal); }
-  }
-
-  private ubyte clickMask; // buttons that can be used to click this item to do some action
-  private ubyte doubleMask; // buttons that can be used to double-click this item to do some action
+  protected ubyte clickMask; // buttons that can be used to click this item to do some action
+  protected ubyte doubleMask; // buttons that can be used to double-click this item to do some action
 
   final bool acceptClick (TtyEvent.MButton bt) {
     return

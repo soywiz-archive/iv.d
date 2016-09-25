@@ -37,17 +37,16 @@ public class FuiBox : FuiControl {
   this (FuiControl aparent) {
     this.connectListeners();
     super(aparent);
-    lp.orientation = lp.Orientation.Vertical;
-    lp.aligning = lp.Align.Stretch;
+    vertical = true;
   }
 }
 
 public class FuiHBox : FuiBox {
   alias onMyEvent = super.onMyEvent;
-  this (FuiControl aparent) { this.connectListeners(); super(aparent); lp.orientation = lp.Orientation.Horizontal; lp.spacing = 1; }
+  this (FuiControl aparent) { this.connectListeners(); super(aparent); horizontal = true; aligning = Align.Stretch; spacing = 1; }
 }
 
 public class FuiVBox : FuiBox {
   alias onMyEvent = super.onMyEvent;
-  this (FuiControl aparent) { this.connectListeners(); super(aparent); lp.orientation = lp.Orientation.Vertical; }
+  this (FuiControl aparent) { this.connectListeners(); super(aparent); vertical = true; }
 }

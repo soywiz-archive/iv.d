@@ -45,10 +45,10 @@ public class FuiEditLine : FuiControl {
     ed.hideStatus = true;
     //ed.utfuck = utfuck;
     ed.setNewText(atext);
-    lp.minSize.w = 10;
-    lp.orientation = lp.Orientation.Horizontal;
-    lp.aligning = lp.Align.Start;
-    lp.minSize.h = lp.maxSize.h = 1;
+    minSize.w = 10;
+    horizontal = true;
+    aligning = Align.Start;
+    minSize.h = maxSize.h = 1;
     canBeFocused = true;
     hotkeyed = false;
     acceptClick(TtyEvent.MButton.Left);

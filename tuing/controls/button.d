@@ -39,10 +39,10 @@ public class FuiButton : FuiControl {
     this.connectListeners();
     super(aparent);
     caption = atext;
-    lp.minSize.w = XtWindow.hotStrLen(atext)+4;
-    lp.orientation = lp.Orientation.Horizontal;
-    lp.aligning = lp.Align.Start;
-    lp.minSize.h = lp.maxSize.h = 1;
+    minSize.w = XtWindow.hotStrLen(atext)+4;
+    horizontal = true;
+    aligning = Align.Start;
+    minSize.h = maxSize.h = 1;
     canBeFocused = true;
     hotkeyed = true;
     acceptClick(TtyEvent.MButton.Left);

@@ -38,13 +38,13 @@ public class FuiHLine : FuiControl {
   this (FuiControl aparent) {
     this.connectListeners();
     FuiControl ctl = (aparent !is null ? aparent.lastChild : null);
-    if (ctl !is null) ctl.lp.lineBreak = true;
+    if (ctl !is null) ctl.lineBreak = true;
     super(aparent);
-    lp.orientation = lp.Orientation.Horizontal;
-    lp.aligning = lp.Align.Stretch;
-    lp.minSize.h = lp.maxSize.h = 1;
-    lp.lineBreak = true;
-    lp.ignoreSpacing = true;
+    horizontal = true;
+    aligning = Align.Stretch;
+    minSize.h = maxSize.h = 1;
+    lineBreak = true;
+    ignoreSpacing = true;
   }
 
   protected override void drawSelfPre (XtWindow win) {

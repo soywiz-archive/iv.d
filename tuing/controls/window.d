@@ -48,10 +48,10 @@ public class FuiWindow : FuiControl {
   this () {
     this.connectListeners();
     super(null);
-    lp.orientation = lp.Orientation.Vertical;
-    lp.aligning = lp.Align.Start;
-    lp.maxSize.w = ttyw;
-    lp.maxSize.h = ttyh;
+    vertical = true;
+    aligning = Align.Start;
+    maxSize.w = ttyw;
+    maxSize.h = ttyh;
   }
 
   final pure nothrow @safe @nogc {
@@ -133,9 +133,9 @@ public class FuiWindow : FuiControl {
 
   protected override void layoutingStarted () {
     final switch (frame) {
-      case Frame.Normal: lp.padding = FuiMargin(3, 2, 3, 2); break;
-      case Frame.Small: lp.padding = FuiMargin(1, 1, 1, 1); break;
-      case Frame.None: lp.padding = FuiMargin(0, 0, 0, 0); break;
+      case Frame.Normal: padding = FuiMargin(3, 2, 3, 2); break;
+      case Frame.Small: padding = FuiMargin(1, 1, 1, 1); break;
+      case Frame.None: padding = FuiMargin(0, 0, 0, 0); break;
     }
     super.layoutingStarted();
   }

@@ -38,9 +38,9 @@ public class FuiSpan : FuiControl {
   this (FuiControl aparent) {
     this.connectListeners();
     super(aparent);
-    lp.orientation = lp.Orientation.Vertical;
-    lp.aligning = lp.Align.Start;
-    lp.ignoreSpacing = true;
-    lp.flex = 1;
+    vertical = true;
+    aligning = Align.Start;
+    ignoreSpacing = true;
+    flex = 1;
   }
 }
