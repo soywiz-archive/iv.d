@@ -194,7 +194,36 @@ class TtyEditor : Editor {
   enum TEDEditOnly; // only for non-readonly mode
   enum TEDROOnly; // only for readonly mode
 
-  struct TEDKey { string key; string help; bool hidden; } // UDA
+  static struct TEDKey { string key; string help; } // UDA
+
+  static string TEDImplX(string key, string help, string code, size_t ln) () {
+    static assert(key.length > 0, "wtf?!");
+    static assert(code.length > 0, "wtf?!");
+    string res = "@TEDKey("~key.stringof~", "~help.stringof~") void _ted_";
+    int pos = 0;
+    while (pos < key.length) {
+      char ch = key[pos++];
+      if (key.length-pos > 0 && key[pos] == '-') {
+        if (ch == 'C' || ch == 'c') { ++pos; res ~= "Ctrl"; continue; }
+        if (ch == 'M' || ch == 'm') { ++pos; res ~= "Alt"; continue; }
+        if (ch == 'S' || ch == 's') { ++pos; res ~= "Shift"; continue; }
+      }
+      if (ch == '^') { res ~= "Ctrl"; continue; }
+      if (ch >= 'a' && ch <= 'z') ch -= 32;
+      if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || ch == '_') res ~= ch; else res ~= '_';
+    }
+    res ~= ln.stringof;
+    res ~= " () {"~code~"}";
+    return res;
+  }
+
+  mixin template TEDImpl(string key, string help, string code, size_t ln=__LINE__) {
+    mixin(TEDImplX!(key, help, code, ln));
+  }
+
+  mixin template TEDImpl(string key, string code, size_t ln=__LINE__) {
+    mixin(TEDImplX!(key, "", code, ln));
+  }
 
 protected:
   TtyEvent[32] comboBuf;
@@ -1106,7 +1135,7 @@ public:
         static if (is(typeof(__traits(getMember, ME, memn)))) {
           foreach (const attr; __traits(getAttributes, __traits(getMember, ME, memn))) {
             static if (is(typeof(attr) == UDA)) {
-              static if (!attr.hidden && attr.help.length && attr.key.length) {
+              static if (attr.help.length && attr.key.length) {
                 // check modifiers
                 bool goodMode = true;
                 foreach (const attrx; __traits(getAttributes, __traits(getMember, ME, memn))) {
@@ -1771,326 +1800,159 @@ final:
   }
 
 final:
-  @TEDKey("Up")
-  @TEDMultiOnly
-    void tedUp () { doUp(); }
-  @TEDKey("S-Up")
-  @TEDMultiOnly
-    void tedShiftUp () { doUp(true); }
-  @TEDKey("^Up")
-  @TEDMultiOnly
-    void tedCtrlUp () { doScrollUp(); }
-  @TEDKey("S-^Up")
-  @TEDMultiOnly
-    void tedCtrlShiftUp () { doScrollUp(true); }
-  @TEDKey("Down")
-  @TEDMultiOnly
-    void tedDown () { doDown(); }
-  @TEDKey("S-Down")
-  @TEDMultiOnly
-    void tedShiftDown () { doDown(true); }
-  @TEDKey("^Down")
-  @TEDMultiOnly
-    void tedCtrlDown () { doScrollDown(); }
-  @TEDKey("S-^Down")
-  @TEDMultiOnly
-    void tedCtrlShiftDown () { doScrollDown(true); }
-  @TEDKey("Left")
-    void tedLeft () { doLeft(); }
-  @TEDKey("S-Left")
-    void tedShiftLeft () { doLeft(true); }
-  @TEDKey("^Left")
-    void tedCtrlLeft () { doWordLeft(); }
-  @TEDKey("S-^Left")
-    void tedCtrlShiftLeft () { doWordLeft(true); }
-  @TEDKey("Right")
-    void tedRight () { doRight(); }
-  @TEDKey("S-Right")
-    void tedShiftRight () { doRight(true); }
-  @TEDKey("^Right")
-    void tedCtrlRight () { doWordRight(); }
-  @TEDKey("S-^Right")
-    void tedCtrlShiftRight () { doWordRight(true); }
-  @TEDKey("PageUp")
-  @TEDMultiOnly
-    void tedPageUp () { doPageUp(); }
-  @TEDKey("S-PageUp")
-  @TEDMultiOnly
-    void tedShiftPageUp () { doPageUp(true); }
-  @TEDKey("^PageUp")
-  @TEDMultiOnly
-    void tedCtrlPageUp () { doTextTop(); }
-  @TEDKey("S-^PageUp")
-  @TEDMultiOnly
-    void tedCtrlShiftPageUp () { doTextTop(true); }
-  @TEDKey("PageDown")
-  @TEDMultiOnly
-    void tedPageDown () { doPageDown(); }
-  @TEDKey("S-PageDown")
-  @TEDMultiOnly
-    void tedShiftPageDown () { doPageDown(true); }
-  @TEDKey("^PageDown")
-  @TEDMultiOnly
-    void tedCtrlPageDown () { doTextBottom(); }
-  @TEDKey("S-^PageDown")
-  @TEDMultiOnly
-    void tedCtrlShiftPageDown () { doTextBottom(true); }
-  @TEDKey("Home")
-    void tedHome () { doHome(); }
-  @TEDKey("S-Home")
-    void tedShiftHome () { doHome(true, true); }
-  @TEDKey("^Home")
-  @TEDMultiOnly
-    void tedCtrlHome () { doPageTop(); }
-  @TEDKey("S-^Home")
-  @TEDMultiOnly
-    void tedCtrlShiftHome () { doPageTop(true); }
-  @TEDKey("End")
-    void tedEnd () { doEnd(); }
-  @TEDKey("S-End")
-    void tedShifEnd () { doEnd(true); }
-  @TEDKey("^End")
-  @TEDMultiOnly
-    void tedCtrlEnd () { doPageBottom(); }
-  @TEDKey("S-^End")
-  @TEDMultiOnly
-    void tedCtrlShiftEnd () { doPageBottom(true); }
-  @TEDKey("Backspace")
-  @TEDEditOnly
-    void tedBackspace () { doBackspace(); }
-  @TEDKey("M-Backspace", "delete previous word")
-  @TEDSingleOnly
-  @TEDEditOnly
-    void tedAltBackspace0 () { doDeleteWord(); }
-  @TEDKey("M-Backspace", "delete previous word or unindent")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedAltBackspace1 () { doBackByIndent(); }
-  @TEDKey("Delete")
-    void tedDelete () { doDelete(); }
-  @TEDKey("^Insert", "copy block to clipboard file, reset block mark")
-    bool tedCtrlInsert () { if (tempBlockFileName.length == 0) return false; doBlockWrite(tempBlockFileName); doBlockResetMark(); return true; }
-  @TEDKey("Enter")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedEnter () { doPutChar('\n'); }
-  @TEDKey("M-Enter", "split line without autoindenting")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedAltEnter () { doLineSplit(false); }
+  @TEDMultiOnly mixin TEDImpl!("Up", q{ doUp(); });
+  @TEDMultiOnly mixin TEDImpl!("S-Up", q{ doUp(true); });
+  @TEDMultiOnly mixin TEDImpl!("^Up", q{ doScrollUp(); });
+  @TEDMultiOnly mixin TEDImpl!("S-^Up", q{ doScrollUp(true); });
+  @TEDMultiOnly mixin TEDImpl!("Down", q{ doDown(); });
+  @TEDMultiOnly mixin TEDImpl!("S-Down", q{ doDown(true); });
+  @TEDMultiOnly mixin TEDImpl!("^Down", q{ doScrollDown(); });
+  @TEDMultiOnly mixin TEDImpl!("S-^Down", q{ doScrollDown(true); });
 
-  @TEDKey("F2", "save file")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedF2 () { saveFile(fullFileName); }
-  @TEDKey("F3", "start/stop/reset block marking")
-    void tedF3 () { doBlockMark(); }
-  @TEDKey("^F3", "reset block mark")
-    void tedCtrlF3 () { doBlockResetMark(); }
-  @TEDKey("F4", "search and relace text")
-  @TEDMultiOnly
-  @TEDEditOnly
-    //TODO: write event-based code
-    void tedF4 () {
-      if (srrOptions.ed !is null) return; // in progress
-      srrOptions.ed = this;
-      addEventListener(this, (EventEditorReplySR evt) {
-        if (evt.cancel) { srrOptions.ed = null; return; }
-        assert(evt.opt !is null);
-        srrOptions = *cast(SROptions*)evt.opt;
-        if (srrOptions.type == SROptions.Type.Normal) srrPlainStart(srrOptions);
-        if (srrOptions.type == SROptions.Type.Regex) srrRegexStart(srrOptions);
-      }, true);
-      (new EventEditorQuerySR(this, &srrOptions));
-    }
-  @TEDKey("F5", "copy block")
-  @TEDEditOnly
-    void tedF5 () { doBlockCopy(); }
-  @TEDKey("^F5", "copy block to clipboard file")
-    bool tedCtrlF5 () { if (tempBlockFileName.length == 0) return false; doBlockWrite(tempBlockFileName); return true; }
-  @TEDKey("S-F5", "insert block from clipboard file")
-  @TEDEditOnly
-    bool tedShiftF5 () { if (tempBlockFileName.length == 0) return false; waitingInF5 = true; return true; }
-  @TEDKey("F6", "move block")
-  @TEDEditOnly
-    void tedF6 () { doBlockMove(); }
-  @TEDKey("F8", "delete block")
-  @TEDEditOnly
-    void tedF8 () { doBlockDelete(); }
+  mixin TEDImpl!("Left", q{ doLeft(); });
+  mixin TEDImpl!("S-Left", q{ doLeft(true); });
 
-  @TEDKey("^A", "move to line start")
-    void tedCtrlA () { doHome(); }
-  @TEDKey("^E", "move to line end")
-    void tedCtrlE () { doEnd(); }
-  @TEDKey("M-I", "jump to previous bookmark")
-  @TEDMultiOnly
-    void tedAltI () { doBookmarkJumpUp(); }
-  @TEDKey("M-J", "jump to next bookmark")
-  @TEDMultiOnly
-    void tedAltJ () { doBookmarkJumpDown(); }
-  @TEDKey("M-K", "toggle bookmark")
-  @TEDMultiOnly
-    void tedAltK () { doBookmarkToggle(); }
-  @TEDKey("M-L", "goto line")
-  @TEDMultiOnly
-    void tedAltL () {
-      (new EventEditorQueryGotoLine(this)).post;
-    }
+  mixin TEDImpl!("^Left", q{ doWordLeft(); });
+  mixin TEDImpl!("S-^Left", q{ doWordLeft(true); });
+  mixin TEDImpl!("Right", q{ doRight(); });
+  mixin TEDImpl!("S-Right", q{ doRight(true); });
+  mixin TEDImpl!("^Right", q{ doWordRight(); });
+  mixin TEDImpl!("S-^Right", q{ doWordRight(true); });
 
-  @TEDKey("M-C", "capitalize word")
-  @TEDEditOnly
-    void tedAltC () {
-      bool first = true;
-      processWordWith((char ch) {
-        if (first) { first = false; ch = ch.toupper; }
-        return ch;
-      });
-    }
-  @TEDKey("M-Q", "lowercase word")
-  @TEDEditOnly
-    void tedAltQ () { processWordWith((char ch) => ch.tolower); }
-  @TEDKey("M-U", "uppercase word")
-  @TEDEditOnly
-    void tedAltU () { processWordWith((char ch) => ch.toupper); }
+  @TEDMultiOnly mixin TEDImpl!("PageUp", q{ doPageUp(); });
+  @TEDMultiOnly mixin TEDImpl!("S-PageUp", q{ doPageUp(true); });
+  @TEDMultiOnly mixin TEDImpl!("^PageUp", q{ doTextTop(); });
+  @TEDMultiOnly mixin TEDImpl!("S-^PageUp", q{ doTextTop(true); });
+  @TEDMultiOnly mixin TEDImpl!("PageDown", q{ doPageDown(); });
+  @TEDMultiOnly mixin TEDImpl!("S-PageDown", q{ doPageDown(true); });
+  @TEDMultiOnly mixin TEDImpl!("^PageDown", q{ doTextBottom(); });
+  @TEDMultiOnly mixin TEDImpl!("S-^PageDown", q{ doTextBottom(true); });
+  mixin TEDImpl!("Home", q{ doHome(); });
+  mixin TEDImpl!("S-Home", q{ doHome(true, true); });
+  @TEDMultiOnly mixin TEDImpl!("^Home", q{ doPageTop(); });
+  @TEDMultiOnly mixin TEDImpl!("S-^Home", q{ doPageTop(true); });
+  mixin TEDImpl!("End", q{ doEnd(); });
+  mixin TEDImpl!("S-End", q{ doEnd(true); });
+  @TEDMultiOnly mixin TEDImpl!("^End", q{ doPageBottom(); });
+  @TEDMultiOnly mixin TEDImpl!("S-^End", q{ doPageBottom(true); });
+  @TEDEditOnly mixin TEDImpl!("Backspace", q{ doBackspace(); });
+  @TEDSingleOnly @TEDEditOnly mixin TEDImpl!("M-Backspace", "delete previous word", q{ doDeleteWord(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Backspace", "delete previous word or unindent", q{ doBackByIndent(); });
+  mixin TEDImpl!("Delete", q{ doDelete(); });
+  mixin TEDImpl!("^Insert", "copy block to clipboard file, reset block mark", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); doBlockResetMark(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("Enter", q{ doPutChar('\n'); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Enter", "split line without autoindenting", q{ doLineSplit(false); });
 
-  @TEDKey("M-S-L", "force center current line")
-  @TEDMultiOnly
-    void tedAltShiftL () { makeCurLineVisibleCentered(true); }
-  @TEDKey("^R", "continue incremental search, forward")
-  @TEDMultiOnly
-    void tedCtrlR () { incSearchDir = 1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(1); else doNextIncSearch(); }
-  @TEDKey("^U", "undo")
-    void tedCtrlU () { doUndo(); }
-  @TEDKey("M-S-U", "redo")
-    void tedAltShiftU () { doRedo(); }
-  @TEDKey("^V", "continue incremental search, backward")
-  @TEDMultiOnly
-    void tedCtrlV () { incSearchDir = -1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(-1); else doNextIncSearch(); }
-  @TEDKey("^W", "remove previous word")
-  @TEDEditOnly
-    void tedCtrlW () { doDeleteWord(); }
-  @TEDKey("^Y", "remove current line")
-  @TEDEditOnly
-    void tedCtrlY () { doKillLine(); }
-  @TEDKey("^_", "start new incremental search, forward")
-  @TEDMultiOnly
-    void tedCtrlSlash () { doStartIncSearch(1); } // ctrl+slash, actually
-  @TEDKey("^\\", "start new incremental search, backward")
-  @TEDMultiOnly
-    void tedCtrlBackslash () { doStartIncSearch(-1); }
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("F2", "save file", q{ saveFile(fullFileName); });
+  mixin TEDImpl!("F3", "start/stop/reset block marking", q{ doBlockMark(); });
+  mixin TEDImpl!("^F3", "reset block mark", q{ doBlockResetMark(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("F4", "search and relace text", q{
+    if (srrOptions.ed !is null) return; // in progress
+    srrOptions.ed = this;
+    addEventListener(this, (EventEditorReplySR evt) {
+      if (evt.cancel) { srrOptions.ed = null; return; }
+      assert(evt.opt !is null);
+      srrOptions = *cast(SROptions*)evt.opt;
+      if (srrOptions.type == SROptions.Type.Normal) srrPlainStart(srrOptions);
+      if (srrOptions.type == SROptions.Type.Regex) srrRegexStart(srrOptions);
+    }, true);
+    (new EventEditorQuerySR(this, &srrOptions));
+  });
+  @TEDEditOnly mixin TEDImpl!("F5", "copy block", q{ doBlockCopy(); });
+  mixin TEDImpl!("^F5", "copy block to clipboard file", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); });
+  @TEDEditOnly mixin TEDImpl!("S-F5", "insert block from clipboard file", q{ if (tempBlockFileName.length == 0) return; waitingInF5 = true; });
+  @TEDEditOnly mixin TEDImpl!("F6", "move block", q{ doBlockMove(); });
+  @TEDEditOnly mixin TEDImpl!("F8", "delete block", q{ doBlockDelete(); });
 
-  @TEDKey("Tab")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedTab () { doPutText("  "); }
-  @TEDKey("M-Tab", "autocomplete word")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedAltTab () { doAutoComplete(); }
-  @TEDKey("C-Tab", "indent block")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedCtrlTab () { doIndentBlock(); }
-  @TEDKey("C-S-Tab", "unindent block")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedCtrlShiftTab () { doUnindentBlock(); }
+  mixin TEDImpl!("^A", "move to line start", q{ doHome(); });
+  mixin TEDImpl!("^E", "move to line end", q{ doEnd(); });
+  @TEDMultiOnly mixin TEDImpl!("M-I", "jump to previous bookmark", q{ doBookmarkJumpUp(); });
+  @TEDMultiOnly mixin TEDImpl!("M-J", "jump to next bookmark", q{ doBookmarkJumpDown(); });
+  @TEDMultiOnly mixin TEDImpl!("M-K", "toggle bookmark", q{ doBookmarkToggle(); });
+  @TEDMultiOnly mixin TEDImpl!("M-L", "goto line", q{ (new EventEditorQueryGotoLine(this)).post; });
 
-  @TEDKey("M-S-c", "copy block to X11 selections (all three)")
-    void tedAltShiftC () { pasteToX11(); doBlockResetMark(); }
+  @TEDEditOnly mixin TEDImpl!("M-C", "capitalize word", q{
+    bool first = true;
+    processWordWith((char ch) {
+      if (first) { first = false; ch = ch.toupper; }
+      return ch;
+    });
+  });
+  @TEDEditOnly mixin TEDImpl!("M-Q", "lowercase word", q{ processWordWith((char ch) => ch.tolower); });
+  @TEDEditOnly mixin TEDImpl!("M-U", "uppercase word", q{ processWordWith((char ch) => ch.toupper); });
 
-  @TEDKey("M-E", "select codepage")
-  @TEDMultiOnly
-    void tedAltE () {
-      (new EventEditorQueryCodePage(this, (utfuck ? 3 : codepage))).post;
-    }
+  @TEDMultiOnly mixin TEDImpl!("M-S-L", "force center current line", q{ makeCurLineVisibleCentered(true); });
+  @TEDMultiOnly mixin TEDImpl!("^R", "continue incremental search, forward", q{ incSearchDir = 1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(1); else doNextIncSearch(); });
+  @TEDEditOnly mixin TEDImpl!("^U", "undo", q{ doUndo(); });
+  @TEDEditOnly mixin TEDImpl!("M-S-U", "redo", q{ doRedo(); });
+  @TEDMultiOnly mixin TEDImpl!("^V", "continue incremental search, backward", q{ incSearchDir = -1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(-1); else doNextIncSearch(); });
+  @TEDEditOnly mixin TEDImpl!("^W", "remove previous word", q{ doDeleteWord(); });
+  @TEDEditOnly mixin TEDImpl!("^Y", "remove current line", q{ doKillLine(); });
+  @TEDMultiOnly mixin TEDImpl!("^_", "start new incremental search, forward", q{ doStartIncSearch(1); }); // ctrl+slash, actually
+  @TEDMultiOnly mixin TEDImpl!("^\\", "start new incremental search, backward", q{ doStartIncSearch(-1); });
 
-  @TEDKey("^K ^I", "indent block")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedKmodeI () { doIndentBlock(); }
-  @TEDKey("^K ^U", "unindent block")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedKmodeCtrlU () { doUnindentBlock(); }
-  @TEDKey("^K ^E", "clear from cursor to EOL")
-  @TEDEditOnly
-    void tedKmodeCtrlE () { doKillToEOL(); }
-  @TEDKey("^K Tab", "indent block")
-  @TEDMultiOnly
-  @TEDEditOnly
-    void tedKmodeTab () { doIndentBlock(); }
-  @TEDKey("^K M-Tab", "untabify")
-  @TEDEditOnly
-    void tedKmodeAltTab () { doUntabify(gb.tabsize ? gb.tabsize : 2); } // alt+tab: untabify
-  @TEDKey("^K C-space", "remove trailing spaces")
-  @TEDEditOnly
-    void tedKmodeCtrlSpace () { doRemoveTailingSpaces(); }
-  @TEDKey("^K ^T", /*"toggle \"visual tabs\" mode"*/)
-    void tedKmodeCtrlT () { visualtabs = !visualtabs; }
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("Tab", q{ doPutText("  "); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Tab", "autocomplete word", q{ doAutoComplete(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Tab", "indent block", q{ doIndentBlock(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-S-Tab", "unindent block", q{ doUnindentBlock(); });
 
-  @TEDKey("^K ^B") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlB () { doSetBlockStart(); }
-  @TEDKey("^K ^K") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlK () { doSetBlockEnd(); }
+  mixin TEDImpl!("M-S-c", "copy block to X11 selections (all three)", q{ pasteToX11(); doBlockResetMark(); });
 
-  @TEDKey("^K ^C") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlC () { doBlockCopy(); }
-  @TEDKey("^K ^M") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlM () { doBlockMove(); }
-  @TEDKey("^K ^Y") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlY () { doBlockDelete(); }
-  @TEDKey("^K ^H") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlH () { doBlockResetMark(); }
+  @TEDMultiOnly mixin TEDImpl!("M-E", "select codepage", q{ (new EventEditorQueryCodePage(this, (utfuck ? 3 : codepage))).post; });
+
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^I", "indent block", q{ doIndentBlock(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^U", "unindent block", q{ doUnindentBlock(); });
+  @TEDEditOnly mixin TEDImpl!("^K ^E", "clear from cursor to EOL", q{ doKillToEOL(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K Tab", "indent block", q{ doIndentBlock(); });
+  @TEDEditOnly mixin TEDImpl!("^K M-Tab", "untabify", q{ doUntabify(gb.tabsize ? gb.tabsize : 2); }); // alt+tab: untabify
+  @TEDEditOnly mixin TEDImpl!("^K C-space", "remove trailing spaces", q{ doRemoveTailingSpaces(); });
+  mixin TEDImpl!("^K ^T", /*"toggle \"visual tabs\" mode",*/ q{ visualtabs = !visualtabs; });
+
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^B", q{ doSetBlockStart(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^K", q{ doSetBlockEnd(); });
+
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^C", q{ doBlockCopy(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^M", q{ doBlockMove(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^Y", q{ doBlockDelete(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^H", q{ doBlockResetMark(); });
   // fuckin' vt100!
-  @TEDKey("^K Backspace") @TEDMultiOnly @TEDEditOnly void tedKmodeCtrlH1 () { doBlockResetMark(); }
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K Backspace", q{ doBlockResetMark(); });
 
-  @TEDKey("^Q Tab")
-  @TEDEditOnly
-    void tedQmodeTab () { doPutChar('\t'); }
-  @TEDKey("^Q ^U", "toggle utfuck mode")
-    void tedQmodeCtrlU () { utfuck = !utfuck; } // ^Q^U: switch utfuck mode
-  @TEDKey("^Q 1", "switch to koi8")
-    void tedQmode1 () { utfuck = false; codepage = CodePage.koi8u; fullDirty(); }
-  @TEDKey("^Q 2", "switch to cp1251")
-    void tedQmode2 () { utfuck = false; codepage = CodePage.cp1251; fullDirty(); }
-  @TEDKey("^Q 3", "switch to cp866")
-    void tedQmode3 () { utfuck = false; codepage = CodePage.cp866; fullDirty(); }
-  @TEDKey("^Q ^B", "go to block start")
-    void tedQmodeCtrlB () { if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; }
-  @TEDKey("^Q ^F", "incremental search current word")
-  @TEDMultiOnly
-    void tedQmodeCtrlF () {
-      auto pos = curpos;
-      if (!isWordChar(gb[pos])) return;
-      // deactivate prompt
-      if (incInputActive) {
-        incInputActive = false;
-        promptDeactivate();
-        resetIncSearchPos();
-      }
-      // collect word
-      while (pos > 0 && isWordChar(gb[pos-1])) --pos;
-      incSearchBuf.length = 0;
-      incSearchBuf.assumeSafeAppend;
-      while (pos < gb.textsize && isWordChar(gb[pos])) incSearchBuf ~= gb[pos++];
-      incSearchDir = 1;
-      // get current word
-      doNextIncSearch();
+  @TEDEditOnly mixin TEDImpl!("^Q Tab", q{ doPutChar('\t'); });
+  mixin TEDImpl!("^Q ^U", "toggle utfuck mode", q{ utfuck = !utfuck; }); // ^Q^U: switch utfuck mode
+  mixin TEDImpl!("^Q 1", "switch to koi8", q{ utfuck = false; codepage = CodePage.koi8u; fullDirty(); });
+  mixin TEDImpl!("^Q 2", "switch to cp1251", q{ utfuck = false; codepage = CodePage.cp1251; fullDirty(); });
+  mixin TEDImpl!("^Q 3", "switch to cp866", q{ utfuck = false; codepage = CodePage.cp866; fullDirty(); });
+  mixin TEDImpl!("^Q ^B", "go to block start", q{ if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; });
+
+  @TEDMultiOnly mixin TEDImpl!("^Q ^F", "incremental search current word", q{
+    auto pos = curpos;
+    if (!isWordChar(gb[pos])) return;
+    // deactivate prompt
+    if (incInputActive) {
+      incInputActive = false;
+      promptDeactivate();
+      resetIncSearchPos();
     }
-  @TEDKey("^Q ^K", "go to block end")
-    void tedQmodeCtrlE () { if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; }
-  @TEDKey("^Q ^T", "set tab size")
-  @TEDMultiOnly
+    // collect word
+    while (pos > 0 && isWordChar(gb[pos-1])) --pos;
+    incSearchBuf.length = 0;
+    incSearchBuf.assumeSafeAppend;
+    while (pos < gb.textsize && isWordChar(gb[pos])) incSearchBuf ~= gb[pos++];
+    incSearchDir = 1;
+    // get current word
+    doNextIncSearch();
+  });
+
+  mixin TEDImpl!("^Q ^K", "go to block end", q{ if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; });
+  mixin TEDImpl!("^Q ^T", "set tab size", q{
     //TODO: write event-based code
-    void tedQmodeCtrlT () {
-      /+
-      auto tsz = dialogTabSize(hisman, tabsize);
-      if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
-      +/
-    }
+    /+
+    auto tsz = dialogTabSize(hisman, tabsize);
+    if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
+    +/
+  });
 
-  @TEDKey("Space")
-  @TEDMultiOnly
-  @TEDROOnly
-    void tedROSpace () { doPageDown(); }
-
-  @TEDKey("^Space")
-  @TEDMultiOnly
-  @TEDROOnly
-    void tedROCtrlSpace () { doPageUp(); }
+  @TEDMultiOnly @TEDROOnly mixin TEDImpl!("Space", q{ doPageDown(); });
+  @TEDMultiOnly @TEDROOnly mixin TEDImpl!("^Space", q{ doPageUp(); });
 }

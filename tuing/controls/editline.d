@@ -187,6 +187,12 @@ public class FuiEditLine : FuiControl {
         return;
       }
     }
+    if (evt.key == "F1") {
+      import iv.vfs.io;
+      VFile("zhelp.log", "w").writeln(ed.buildHelpText);
+      evt.eat();
+      return;
+    }
     if (ed.processKey(evt.key)) {
       evt.eat();
       doAction();
