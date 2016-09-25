@@ -103,7 +103,6 @@ shared static this () {
   fuiPalette[FuiPaletteError].title = XtColorFB!(ttyRgb2Color(0xff, 0xff, 0x5f), ttyRgb2Color(0x5f, 0x00, 0x00)); // 227,52
 
   if (termType == TermType.linux) {
-    //ttyBeep();
     fuiPalette[FuiPaletteNormal].def = XtColorFB!(ttyRgb2Color(0xd0, 0xd0, 0xd0), ttyRgb2Color(0x18, 0x18, 0xb2));
     fuiPalette[FuiPaletteNormal].title = XtColorFB!(ttyRgb2Color(0xd7, 0xaf, 0x87), ttyRgb2Color(0x18, 0x18, 0xb2));
     fuiPalette[FuiPaletteNormal].disabled = XtColorFB!(ttyRgb2Color(0x94, 0x94, 0x94), ttyRgb2Color(0x18, 0x18, 0xb2));
@@ -326,34 +325,34 @@ public class FuiControl : EventTarget {
   protected ubyte clickMask; // buttons that can be used to click this item to do some action
   protected ubyte doubleMask; // buttons that can be used to double-click this item to do some action
 
-  final bool acceptClick (TtyEvent.MButton bt) {
+  final bool canAcceptClick (TtyEvent.MButton bt) {
     return
       (bt >= TtyEvent.MButton.First && bt-TtyEvent.MButton.First < 8 ?
          ((clickMask&(1<<bt-TtyEvent.MButton.First)) != 0) : false);
   }
 
-  final void acceptClick (TtyEvent.MButton bt, bool v) {
+  final void acceptClick (TtyEvent.MButton bt, bool v=true) {
     if (bt >= TtyEvent.MButton.First && bt-TtyEvent.MButton.First < 8) {
       if (v) {
-        clickMask |= cast(ubyte)(1<<bt-TtyEvent.MButton.First);
+        clickMask |= cast(ubyte)(1<<(bt-TtyEvent.MButton.First));
       } else {
-        clickMask &= cast(ubyte)~(1<<bt-TtyEvent.MButton.First);
+        clickMask &= cast(ubyte)~(1<<(bt-TtyEvent.MButton.First));
       }
     }
   }
 
-  final bool acceptDouble (TtyEvent.MButton bt) {
+  final bool canAcceptDouble (TtyEvent.MButton bt) {
     return
       (bt >= TtyEvent.MButton.First && bt-TtyEvent.MButton.First < 8 ?
-         ((doubleMask&(1<<bt-TtyEvent.MButton.First)) != 0) : false);
+         ((doubleMask&(1<<(bt-TtyEvent.MButton.First))) != 0) : false);
   }
 
-  final void acceptDouble (TtyEvent.MButton bt, bool v) {
+  final void acceptDouble (TtyEvent.MButton bt, bool v=true) {
     if (bt >= TtyEvent.MButton.First && bt-TtyEvent.MButton.First < 8) {
       if (v) {
-        doubleMask |= cast(ubyte)(1<<bt-TtyEvent.MButton.First);
+        doubleMask |= cast(ubyte)(1<<(bt-TtyEvent.MButton.First));
       } else {
-        doubleMask &= cast(ubyte)~(1<<bt-TtyEvent.MButton.First);
+        doubleMask &= cast(ubyte)~(1<<(bt-TtyEvent.MButton.First));
       }
     }
   }
@@ -454,6 +453,13 @@ public class FuiControl : EventTarget {
   void onMyEvent (FuiEventBlur evt) { focused = false; }
   void onMyEvent (FuiEventActive evt) { active = true; }
   void onMyEvent (FuiEventInactive evt) { active = false; }
+
+  /*
+  void onMyEvent (FuiEventClick evt) {
+    if (!canBeFocused) return;
+    if (auto desk = getDesk) desk.switchFocusTo(this);
+  }
+  */
 }
 
 
@@ -564,7 +570,7 @@ private:
         // we accepts doubleclicks, and this can be doubleclick
         if (lastClickDelta[bidx] <= fuiDoubleTime) {
           // it comes right in time too
-          if (lp.enabled) (new FuiEventDouble(lp, lp.lp.toLocal(lastMouse))).post;
+          if (lp.enabled) (new FuiEventDouble(lp, lp.lp.toLocal(lastMouse), cast(TtyEvent.MButton)(TtyEvent.MButton.First+bidx))).post;
           // continue registering doubleclicks
           lastClickDelta[bidx] = 0;
           beventCount[bidx] = 2;
@@ -578,10 +584,10 @@ private:
       // try single click
       if (beventCount[bidx] == 1) {
         if (lp.clickMask&(1<<bidx)) {
-          if (lp.enabled) (new FuiEventClick(lp, lp.lp.toLocal(lastMouse))).post;
+          if (lp.enabled) (new FuiEventClick(lp, lp.lp.toLocal(lastMouse), cast(TtyEvent.MButton)(TtyEvent.MButton.First+bidx))).post;
         }
         // start doubleclick timer
-        beventCount[bidx] = 2;
+        beventCount[bidx] = ((lp.doubleMask&(1<<bidx)) != 0 ? 2 : 0);
         // start registering doubleclicks
         lastClickDelta[bidx] = 0;
         return;
@@ -687,14 +693,15 @@ class FuiEventQueueDesk : FuiEventQueue {
 
   // `pt` is global
   override FuiControl atXY (FuiPoint pt) {
-    static FuiControl descent (FuiControl ctl, FuiPoint pt) {
+    static FuiControl descend (FuiControl ctl, FuiPoint pt) {
       FuiControl lasthit = null;
       if (ctl !is null && ctl.lp.visible) {
         pt -= ctl.lp.pos;
         if (pt.x >= 0 && pt.y >= 0 && pt.x < ctl.lp.size.w && pt.y < ctl.lp.size.h) {
+          lasthit = ctl;
           for (auto cx = ctl.firstChild; cx !is null; cx = cx.nextSibling) {
             if (!cx.visible) continue;
-            auto ht = descent(cx, pt);
+            auto ht = descend(cx, pt);
             if (ht !is null) lasthit = ht;
           }
         }
@@ -702,13 +709,13 @@ class FuiEventQueueDesk : FuiEventQueue {
       return lasthit;
     }
     auto lp = lastFocus.object;
-    if (lp !is null) return descent(lp.toplevel, pt);
+    if (lp !is null) return descend(lp.toplevel, pt);
     // check ontop windows
     foreach_reverse (FuiWindow tw; wintoplist) {
-      if (auto cc = descent(tw, pt)) return cc;
+      if (auto cc = descend(tw, pt)) return cc;
     }
     // check normal top-level window
-    if (winlist.length) return descent(winlist[$-1], pt);
+    if (winlist.length) return descend(winlist[$-1], pt);
     return null;
   }
 

@@ -46,6 +46,7 @@ public class FuiButton : FuiControl {
     canBeFocused = true;
     hotkeyed = true;
     acceptClick(TtyEvent.MButton.Left);
+    assert(clickMask != 0);
   }
 
   override void doAction () {
@@ -70,6 +71,13 @@ public class FuiButton : FuiControl {
       win.writeCharAt(win.width-1, 0, ']');
     }
     win.writeHotStrAt(2, 0, win.width-4, caption, (focused ? palColor!"hotsel"() : palColor!"hot"()), win.Align.Center, hotkeyed, focused);
+  }
+
+  void onMyEvent (FuiEventClick evt) {
+    if (evt.left) {
+      evt.eat();
+      doAction();
+    }
   }
 
   void onMyEvent (FuiEventKey evt) {

@@ -90,7 +90,7 @@ public class FuiListBox : FuiControl {
   final @property string opIndex (usize idx) const pure nothrow @trusted @nogc { return (idx < items.length ? items.ptr[idx] : null); }
 
   final bool isMarkedAt (usize idx) const pure nothrow @trusted @nogc { return (idx < marks.length ? marks.ptr[idx] : false); }
-  final void setMrkedAt (usize idx, bool v) pure nothrow @trusted {
+  final void setMarkedAt (usize idx, bool v) pure nothrow @trusted {
     if (idx >= items.length) return;
     if (marks.length <= idx) {
       if (!v) return;
@@ -207,6 +207,37 @@ public class FuiListBox : FuiControl {
     }
   }
 
+  void onMyEvent (FuiEventClick evt) {
+    auto oldCI = mCurItem;
+    if (evt.wheelup) {
+      evt.eat();
+      if (--mCurItem < 0) mCurItem = 0;
+    } else if (evt.wheeldown) {
+      evt.eat();
+      if (items.length > 0) {
+        if (++mCurItem >= items.length) mCurItem = cast(int)items.length-1;
+      }
+    } else {
+      int cnum = -1;
+      int sx = (needScrollBar ? 2 : 1);
+      if (evt.pt.x >= sx && evt.pt.x < size.w && evt.pt.y >= 0 && evt.pt.y < size.h) {
+        cnum = mTopItem+evt.pt.y;
+        if (cnum >= items.length) cnum = -1;
+      }
+      if (cnum >= 0 && cnum < items.length) {
+        if (evt.right && allowmarks) {
+          evt.eat();
+          setMarkedAt(cnum, true);
+        } else if (evt.left) {
+          evt.eat();
+          mCurItem = cnum;
+        }
+      }
+    }
+    normPage();
+    if (mCurItem != oldCI) doAction();
+  }
+
   void onMyEvent (FuiEventKey evt) {
     bool doKey() {
       if (items.length == 0) return false;
@@ -253,7 +284,7 @@ public class FuiListBox : FuiControl {
         return true;
       }
       if (allowmarks && evt.key == "Space") {
-        setMrkedAt(mCurItem, !isMarkedAt(mCurItem));
+        setMarkedAt(mCurItem, !isMarkedAt(mCurItem));
         return true;
       }
       return false;

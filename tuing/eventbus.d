@@ -167,8 +167,45 @@ private class ObjDispatcher {
 }
 
 
-private enum DispObjMixin = q{
-};
+private static template HasEventMethod(string EvtName, OT, ET:Event) {
+  static if (is(OT : Object)) {
+    static if (is(typeof(&__traits(getMember, OT, EvtName)))) {
+      private bool hasMethod () {
+        import std.traits;
+        foreach (immutable oidx, over; __traits(getOverloads, OT, EvtName)) {
+          alias tt = typeof(over);
+          static if (is(ReturnType!tt == void)) {
+            alias pars = Parameters!tt;
+            static if (pars.length == 1) {
+              static if (is(pars[0] == ET)) {
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }
+      enum HasEventMethod = hasMethod();
+    } else {
+      enum HasEventMethod = false;
+    }
+  } else {
+    enum HasEventMethod = false;
+  }
+}
+
+
+private static template HasEventMethodInParent(string EvtName, OT, ET:Event) {
+  static if (is(OT : Object)) {
+    static if (is(OT P == super)) {
+      enum HasEventMethodInParent = HasEventMethod!(EvtName, P, ET);
+    } else {
+      enum HasEventMethodInParent = false;
+    }
+  } else {
+    enum HasEventMethodInParent = false;
+  }
+}
 
 
 // void onEvent (EventXXX ev); // will receive any events
@@ -214,6 +251,29 @@ public void connectListeners(O:Object) (O obj) {
                 alias pars = Parameters!tt;
                 static if (pars.length == 1) {
                   static if (is(pars[0] : Event)) {
+                    /*
+                    static if (!__traits(isOverrideFunction, __traits(getOverloads, o, EvtName)[oidx])) {
+                      // not overriden, check if we have the same in parent
+                      static if (!HasEventMethodInParent!(EvtName, OT, pars[0])) {
+                        if (typeid(pars[0]) == ti) {
+                          if (auto ev = cast(pars[0])evt) {
+                            debug(tuing_eventbus) { import iv.vfs.io; VFile("zevtlog.log", "a").writefln("calling %s for %s 0x%08x (%s)", tp, o.classinfo.name, *cast(void**)&o, evt.classinfo.name); }
+                            __traits(getOverloads, o, EvtName)[oidx](ev);
+                            return;
+                          }
+                        }
+                      }
+                    } else {
+                      // overriden
+                      if (typeid(pars[0]) == ti) {
+                        if (auto ev = cast(pars[0])evt) {
+                          debug(tuing_eventbus) { import iv.vfs.io; VFile("zevtlog.log", "a").writefln("calling %s for %s 0x%08x (%s)", tp, o.classinfo.name, *cast(void**)&o, evt.classinfo.name); }
+                          __traits(getOverloads, o, EvtName)[oidx](ev);
+                          return;
+                        }
+                      }
+                    }
+                    */
                     if (typeid(pars[0]) == ti) {
                       if (auto ev = cast(pars[0])evt) {
                         debug(tuing_eventbus) { import iv.vfs.io; VFile("zevtlog.log", "a").writefln("calling %s for %s 0x%08x (%s)", tp, o.classinfo.name, *cast(void**)&o, evt.classinfo.name); }
@@ -601,6 +661,10 @@ class Obj : EventTarget {
     writefln("onMy: 0x%08x 0x%08x %s", cast(uint)cast(void*)this, cast(uint)cast(void*)evt.odest, evt.bubbling);
   }
 
+  void onMyEvent (EventEx evt) {
+    writefln("onMyEx: 0x%08x 0x%08x %s", cast(uint)cast(void*)this, cast(uint)cast(void*)evt.odest, evt.bubbling);
+  }
+
   void onSinkEvent (Event evt) {
     writefln("onSink: 0x%08x 0x%08x %s", cast(uint)cast(void*)this, cast(uint)cast(void*)evt.odest, evt.bubbling);
   }
@@ -610,11 +674,27 @@ class Obj : EventTarget {
   }
 }
 
+class Obj1 : Obj {
+  alias onMyEvent = super.onMyEvent;
+
+  this () {
+    this.connectListeners();
+    super();
+    //writefln("ctor: 0x%08x", cast(uint)cast(void*)this);
+  }
+
+  override void onMyEvent (EventEx evt) {
+    writefln("OVERRIDEN onMyEx: 0x%08x 0x%08x %s", cast(uint)cast(void*)this, cast(uint)cast(void*)evt.odest, evt.bubbling);
+    super.onMyEvent(evt);
+    writefln("EXITING OVERRIDEN onMyEx: 0x%08x 0x%08x %s", cast(uint)cast(void*)this, cast(uint)cast(void*)evt.odest, evt.bubbling);
+  }
+}
+
 
 void main () {
   Object o0 = new Obj;
   Obj o1 = new Obj;
-  Obj o2 = new Obj;
+  Obj o2 = new Obj1;
   o1.parent = o0;
   o2.parent = o1;
   addEventListener((Event evt) { writeln("!!! main handler!"); });

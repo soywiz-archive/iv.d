@@ -72,10 +72,18 @@ public class FuiEventKey : FuiEvent {
 // mouse clicks and doubleclicks
 public class FuiEventAnyClick : FuiEvent {
   FuiPoint pt;
-  this (FuiControl adest, FuiPoint apt) { super(null, adest); pt = apt; }
+  TtyEvent.MButton bt;
+  this (FuiControl adest, FuiPoint apt, TtyEvent.MButton abt) { super(null, adest); pt = apt; bt = abt; }
+  final @property const pure nothrow @trusted @nogc {
+    bool left () { return (bt == TtyEvent.MButton.Left); }
+    bool right () { return (bt == TtyEvent.MButton.Right); }
+    bool middle () { return (bt == TtyEvent.MButton.Middle); }
+    bool wheelup () { return (bt == TtyEvent.MButton.WheelUp); }
+    bool wheeldown () { return (bt == TtyEvent.MButton.WheelDown); }
+  }
 }
-public class FuiEventClick : FuiEventAnyClick { this (FuiControl adest, FuiPoint apt) { super(adest, apt); } }
-public class FuiEventDouble : FuiEventAnyClick { this (FuiControl adest, FuiPoint apt) { super(adest, apt); } }
+public class FuiEventClick : FuiEventAnyClick { this (FuiControl adest, FuiPoint apt, TtyEvent.MButton abt) { super(adest, apt, abt); } }
+public class FuiEventDouble : FuiEventAnyClick { this (FuiControl adest, FuiPoint apt, TtyEvent.MButton abt) { super(adest, apt, abt); } }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

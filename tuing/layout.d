@@ -31,6 +31,9 @@ align(1):
     mixin("x"~op~"=pt.x; y"~op~"=pt.y;");
     return this;
   }
+  FuiPoint opBinary(string op) (in auto ref FuiPoint pt) if (op == "+" || op == "-") {
+    mixin("return FuiPoint(x"~op~"pt.x, y"~op~"pt.y);");
+  }
   int opIndex (size_t idx) const { pragma(inline, true); return (idx == 0 ? x : idx == 1 ? y : 0); }
   void opIndexAssign (int v, size_t idx) { pragma(inline, true); if (idx == 0) x = v; else if (idx == 1) y = v; }
 }
