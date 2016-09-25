@@ -146,6 +146,7 @@ public class FuiControl : EventTarget {
 
   void delegate (FuiControl self) onAction;
   void delegate (FuiControl self, XtWindow win) onDraw;
+  void delegate (FuiControl self) onBlur;
 
   protected void layoutingStarted () {
     // setup groups
@@ -449,8 +450,8 @@ public class FuiControl : EventTarget {
     drawSelfPost(XtWindow(mgb.x, mgb.y, lp.size.w, lp.size.h));
   }
 
-  void onMyEvent (FuiEventFocus evt) { if (canBeFocused) focused = true; }
-  void onMyEvent (FuiEventBlur evt) { focused = false; }
+  void onMyEvent (FuiEventFocus evt) { if (canBeFocused || lp.parent is null) focused = true; }
+  void onMyEvent (FuiEventBlur evt) { focused = false; if (onBlur !is null) onBlur(this); }
   void onMyEvent (FuiEventActive evt) { active = true; }
   void onMyEvent (FuiEventInactive evt) { active = false; }
 
