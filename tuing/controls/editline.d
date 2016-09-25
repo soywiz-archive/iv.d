@@ -82,6 +82,13 @@ public class FuiEditLine : FuiControl {
     ed.drawPage();
   }
 
+  void onMyEvent (FuiEventClick evt) {
+    if (evt.left && ed.processClick(evt.bidx, evt.pt.x, evt.pt.y)) {
+      evt.eat();
+      doAction();
+    }
+  }
+
   void onMyEvent (FuiEventKey evt) {
     /*
     if (evt.key == "Space") { evt.eat(); doAction(); return; }
@@ -116,6 +123,5 @@ public class FuiEditLine : FuiControl {
       doAction();
       return;
     }
-    //if (eld.ed.processClick(ev.bidx, ev.x, ev.y)) return true;
   }
 }

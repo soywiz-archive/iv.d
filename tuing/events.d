@@ -75,6 +75,7 @@ public class FuiEventAnyClick : FuiEvent {
   TtyEvent.MButton bt;
   this (FuiControl adest, FuiPoint apt, TtyEvent.MButton abt) { super(null, adest); pt = apt; bt = abt; }
   final @property const pure nothrow @trusted @nogc {
+    int bidx () { return (bt-TtyEvent.MButton.First); }
     bool left () { return (bt == TtyEvent.MButton.Left); }
     bool right () { return (bt == TtyEvent.MButton.Right); }
     bool middle () { return (bt == TtyEvent.MButton.Middle); }
