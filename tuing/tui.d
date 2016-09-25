@@ -316,6 +316,8 @@ public class FuiControl : EventTarget {
     ref inout(FuiRect) rect () inout { pragma(inline, true); return lp.rect; }
     void rect (FuiRect v) { pragma(inline, true); lp.rect = v; }
 
+    FuiPoint toGlobal (FuiPoint pt) const { return lp.toGlobal(pt); }
+
     protected {
       void hovered (bool v) { pragma(inline, true); if (v) flags |= Flags.Hovered; else flags &= ~Flags.Hovered; }
       void active (bool v) { pragma(inline, true); if (v) flags |= Flags.Active; else flags &= ~Flags.Active; }

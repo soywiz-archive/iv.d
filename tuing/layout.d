@@ -135,8 +135,8 @@ public class FuiLayoutProps {
   FuiLayoutProps nextSibling; // null for last item
 
   // you can specify your own root if necessary
-  final FuiPoint toGlobal (FuiPoint pt, FuiLayoutProps root=null) nothrow @safe @nogc {
-    for (FuiLayoutProps it = this; it !is null; it = it.parent) {
+  final FuiPoint toGlobal (FuiPoint pt, FuiLayoutProps root=null) const pure nothrow @trusted @nogc {
+    for (FuiLayoutProps it = cast(FuiLayoutProps)this; it !is null; it = it.parent) {
       pt.x += it.pos.x;
       pt.y += it.pos.y;
       if (it is root) break;
@@ -145,8 +145,8 @@ public class FuiLayoutProps {
   }
 
   // you can specify your own root if necessary
-  final FuiPoint toLocal (FuiPoint pt, FuiLayoutProps root=null) nothrow @safe @nogc {
-    for (FuiLayoutProps it = this; it !is null; it = it.parent) {
+  final FuiPoint toLocal (FuiPoint pt, FuiLayoutProps root=null) const pure nothrow @trusted @nogc {
+    for (FuiLayoutProps it = cast(FuiLayoutProps)this; it !is null; it = it.parent) {
       pt.x -= it.pos.x;
       pt.y -= it.pos.y;
       if (it is root) break;

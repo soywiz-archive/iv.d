@@ -39,11 +39,37 @@ import iv.tuing.controls.window;
 
 // ////////////////////////////////////////////////////////////////////////// //
 private class FuiHistoryWindow : FuiWindow {
+  alias onMyEvent = super.onMyEvent;
+  alias onBubbleEvent = super.onBubbleEvent;
+
   FuiEditLine el;
+  FuiListBox hlb;
+
   this (FuiEditLine ael) {
+    assert(ael !is null);
     this.connectListeners();
     super();
     el = ael;
+  }
+
+  override void onMyEvent (FuiEventBlur evt) {
+    (new FuiEventClose(this, null)).post;
+    super.onMyEvent(evt);
+  }
+
+  override void onBubbleEvent (FuiEventKey evt) {
+    if (evt.key == "Enter" && hlb !is null) {
+      if (auto hm = el.historymgr) {
+        auto it = hlb.curitem;
+        if (it >= 0 && it < hm.count(el)) {
+          it = hm.count(el)-it-1;
+          el.ed.setNewText(hm.item(el, it));
+          hm.activate(el, it);
+          el.doAction();
+        }
+      }
+    }
+    super.onBubbleEvent(evt);
   }
 }
 
@@ -52,30 +78,28 @@ private void createHistoryWin (FuiEditLine el) {
   if (el is null) return;
   auto desk = el.getDesk;
   if (desk is null) return;
+  auto hm = el.historymgr;
+  if (hm is null) return;
+  if (!hm.has(el) || hm.count(el) < 1) return;
   auto win = new FuiHistoryWindow(el);
   //win.lp.minSize = FuiSize(30, 7);
   win.caption = "History Window";
   win.frame = win.Frame.Small;
-  if (auto box = new FuiHBox(win)) {
-    new FuiSpan(box);
-    (new FuiButton(box, "&OK")).defctl = true;
-    new FuiButton(box, "&Cancel");
-    new FuiSpan(box);
-  }
-  new FuiHLine(win);
   if (auto lb = new FuiListBox(win)) {
     //lb.minSize.w = 24;
     //lb.minSize.h = 16;
-    lb.allowmarks = true;
-    foreach (immutable idx; 0..24) {
-      import std.format : format;
-      lb.addItem("item #%s".format(idx));
-    }
+    foreach_reverse (immutable idx; 0..hm.count(el)) lb.addItem(hm.item(el, idx));
+    lb.curitem = lb.count-1;
+    lb.defctl = true;
+    lb.escctl = true;
+    win.hlb = lb;
   }
-  win.onBlur = (FuiControl self) { (new FuiEventClose(self, null)).post; };
+  //win.onBlur = (FuiControl self) { (new FuiEventClose(self, null)).post; };
   fuiLayout(win);
-  import std.random : uniform;
-  win.lp.pos = FuiPoint(uniform!"[]"(0, ttyw-win.lp.size.w), uniform!"[]"(0, ttyh-win.lp.size.h));
+  //import std.random : uniform;
+  auto pt = el.toGlobal(FuiPoint(0, 0));
+  win.lp.pos.x = pt.x;
+  win.lp.pos.y = pt.y+1;
   tuidesk.addWindow(win, true);
 }
 
@@ -100,6 +124,15 @@ public class FuiEditLine : FuiControl {
     canBeFocused = true;
     hotkeyed = false;
     acceptClick(TtyEvent.MButton.Left);
+  }
+
+  T getText(T:const(char)[]) () if (!is(T == typeof(null))) {
+    if (ed is null) return null;
+    char[] res;
+    auto rng = ed[];
+    res.reserve(rng.length);
+    foreach (char ch; rng) res ~= ch;
+    return cast(T)res;
   }
 
   // action called when editor processed any key
@@ -148,22 +181,11 @@ public class FuiEditLine : FuiControl {
       if (evt.key == "M-H") {
         // history dialog
         createHistoryWin(this);
-        /*
-        if (auto lp = ctx.layprops(self)) {
-          auto pt = ctx.toGlobal(self, FuiPoint(0, 0));
-          auto hidx = dialogHistory(hisman, eid, pt.x, pt.y);
-          if (hidx >= 0) {
-            auto s = hisman.item(eid, hidx);
-            eld.ed.setNewText(s, false); // don't clear on type
-            hisman.activate(eid, hidx);
-            if (eld.actcb !is null) {
-              auto rr = eld.actcb(ctx, ev.item);
-              if (rr >= -1) ctx.postClose(rr);
-            }
-          }
-          return true;
-        }
-        */
+        evt.eat();
+        return;
+      }
+      if (evt.key == "M-A") {
+        hm.add(this, getText!string);
         evt.eat();
         return;
       }

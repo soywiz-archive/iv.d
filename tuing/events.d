@@ -63,6 +63,7 @@ public class FuiEventActiveStateChanged : FuiEvent { this (FuiControl adest) { s
 public class FuiEventActive : FuiEventActiveStateChanged { this (FuiControl adest) { super(adest); } }
 public class FuiEventInactive : FuiEventActiveStateChanged { this (FuiControl adest) { super(adest); } }
 
+
 // all other rawtty2 events
 public class FuiEventKey : FuiEvent {
   TtyEvent key;
