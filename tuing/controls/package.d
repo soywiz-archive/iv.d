@@ -21,6 +21,7 @@ module iv.tuing.controls;
 
 public import iv.tuing.controls.box;
 public import iv.tuing.controls.button;
+public import iv.tuing.controls.editline;
 public import iv.tuing.controls.hline;
 public import iv.tuing.controls.label;
 public import iv.tuing.controls.panel;

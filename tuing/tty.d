@@ -754,7 +754,7 @@ public:
   }
 
 @trusted:
-  void writeHotStrAt (int x, int y, int w, const(char)[] s, uint hotattr, Align defalign=Align.Left, bool dohot=true) {
+  void writeHotStrAt (int x, int y, int w, const(char)[] s, uint hotattr, Align defalign=Align.Left, bool dohot=true, bool setcur=false) {
     if (w < 1) return;
     if (s.length && s.ptr[0] >= '\x01' && s.ptr[0] <= '\x03') {
       defalign = cast(Align)s.ptr[0];
@@ -768,6 +768,7 @@ public:
       case Align.Right: x += w-hotStrLen(s, dohot); break;
       case Align.Center: x += (w-hotStrLen(s, dohot))/2; break;
     }
+    if (setcur) gotoXY(x, y);
     if (dohot) {
       // with hotchar
       for (;;) {
@@ -776,6 +777,7 @@ public:
         if (ampos < 0 || s.length-ampos < 2) { writeStrAt(x, y, s); break; }
         if (ampos > 0) { writeStrAt(x, y, s[0..ampos]); x += cast(int)ampos; }
         if (s.ptr[ampos+1] != '&') {
+          if (setcur) { gotoXY(x, y); setcur = false; }
           auto oc = fgbg;
           fgbg = hotattr&0xffff;
           writeCharsAt(x, y, 1, s.ptr[ampos+1]);
@@ -978,6 +980,23 @@ const:
     }
     return 0;
   }
+
+  /*
+  static int hotCharOfs (const(char)[] s, bool dohot=true) nothrow @trusted @nogc {
+    if (dohot) {
+      if (s.length && s.ptr[0] >= '\x01' && s.ptr[0] <= '\x03') s = s[1..$];
+      int ofs = 0;
+      for (;;) {
+        import iv.strex : indexOf;
+        auto ampos = s.indexOf('&');
+        if (ampos < 0 || s.length-ampos < 2) return 0;
+        if (s.ptr[ampos+1] != '&') return ofs+cast(int)ampos;
+        s = s[ampos+2..$];
+      }
+    }
+    return 0;
+  }
+  */
 }
 
 
