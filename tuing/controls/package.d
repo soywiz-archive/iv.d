@@ -24,6 +24,7 @@ public import iv.tuing.controls.button;
 public import iv.tuing.controls.editline;
 public import iv.tuing.controls.hline;
 public import iv.tuing.controls.label;
+public import iv.tuing.controls.listbox;
 public import iv.tuing.controls.panel;
 public import iv.tuing.controls.span;
 public import iv.tuing.controls.window;

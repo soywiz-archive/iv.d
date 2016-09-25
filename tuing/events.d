@@ -21,6 +21,7 @@ module iv.tuing.events;
 
 import iv.rawtty2 : TtyEvent;
 import iv.tuing.controls.window : FuiWindow;
+import iv.tuing.controls.listbox : FuiListBox;
 import iv.tuing.eventbus;
 import iv.tuing.layout : FuiPoint;
 import iv.tuing.tui : FuiControl;
@@ -87,6 +88,25 @@ public class FuiEventWinFocusNextPrev : FuiEvent {
 
 public class FuiEventWinFocusNext : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
 public class FuiEventWinFocusPrev : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class FuiEventListBoxEvent : FuiEvent {
+  this (FuiListBox alb) { super(alb); }
+  final @property pure nothrow @trusted @nogc {
+    inout(FuiListBox) sourcelb () inout { return cast(typeof(return))osource; }
+  }
+}
+
+public class FuiEventListBoxCurIndexChanged : FuiEventListBoxEvent {
+  int idx; // new index (can be negative)
+  this (FuiListBox alb, int aidx) { super(alb); idx = aidx; }
+}
+
+public class FuiEventListBoxMarkChanged : FuiEventListBoxEvent {
+  int idx; // item index
+  this (FuiListBox alb, int aidx) { super(alb); idx = aidx; }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //

@@ -297,23 +297,23 @@ public class FuiControl : EventTarget {
     int lineSpacing () const { pragma(inline, true); return lp.lineSpacing; }
     void lineSpacing (int v) { pragma(inline, true); lp.lineSpacing = v; }
 
-    ref FuiMargin padding () { pragma(inline, true); return lp.padding; }
+    ref inout(FuiMargin) padding () inout { pragma(inline, true); return lp.padding; }
     void padding (FuiMargin v) { pragma(inline, true); lp.padding = v; }
 
-    ref FuiSize minSize () { pragma(inline, true); return lp.minSize; }
+    ref inout(FuiSize) minSize () inout { pragma(inline, true); return lp.minSize; }
     void minSize (FuiSize v) { pragma(inline, true); lp.minSize = v; }
 
-    ref FuiSize maxSize () { pragma(inline, true); return lp.maxSize; }
+    ref inout(FuiSize) maxSize () inout { pragma(inline, true); return lp.maxSize; }
     void maxSize (FuiSize v) { pragma(inline, true); lp.maxSize = v; }
 
     // calculated item dimensions
-    ref FuiPoint pos () { pragma(inline, true); return lp.pos; }
+    ref inout(FuiPoint) pos () inout { pragma(inline, true); return lp.pos; }
     void pos (FuiPoint v) { pragma(inline, true); lp.pos = v; }
 
-    ref FuiSize size () { pragma(inline, true); return lp.size; }
+    ref inout(FuiSize) size () inout { pragma(inline, true); return lp.size; }
     void size (FuiSize v) { pragma(inline, true); lp.size = v; }
 
-    ref FuiRect rect () { pragma(inline, true); return lp.rect; }
+    ref inout(FuiRect) rect () inout { pragma(inline, true); return lp.rect; }
     void rect (FuiRect v) { pragma(inline, true); lp.rect = v; }
 
     protected {

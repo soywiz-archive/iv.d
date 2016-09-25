@@ -124,8 +124,8 @@ public class FuiLayoutProps {
   //FuiPoint pos;
   //FuiSize size;
   FuiRect rect;
-  final @property ref FuiPoint pos () pure nothrow @safe @nogc { pragma(inline, true); return rect.pos; }
-  final @property ref FuiSize size () pure nothrow @safe @nogc { pragma(inline, true); return rect.size; }
+  final @property ref inout(FuiPoint) pos () pure inout nothrow @safe @nogc { pragma(inline, true); return rect.pos; }
+  final @property ref inout(FuiSize) size () pure inout nothrow @safe @nogc { pragma(inline, true); return rect.size; }
 
   FuiLayoutProps parent; // null for root element
   FuiLayoutProps firstChild; // null for "no children"
