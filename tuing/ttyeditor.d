@@ -1902,7 +1902,7 @@ final:
 
   mixin TEDImpl!("M-S-c", "copy block to X11 selections (all three)", q{ pasteToX11(); doBlockResetMark(); });
 
-  @TEDMultiOnly mixin TEDImpl!("M-E", "select codepage", q{ (new EventEditorQueryCodePage(this, (utfuck ? 3 : codepage))).post; });
+  mixin TEDImpl!("M-E", "select codepage", q{ (new EventEditorQueryCodePage(this, (utfuck ? 3 : codepage))).post; });
 
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^I", "indent block", q{ doIndentBlock(); });
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^U", "unindent block", q{ doUnindentBlock(); });

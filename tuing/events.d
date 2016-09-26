@@ -120,27 +120,27 @@ public class FuiEventListBoxMarkChanged : FuiEventListBoxEvent {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public class EventEditorMessage : Event {
+public class EventEditorEvent : Event {
   string msg;
-  this (TtyEditor aed, string amsg) { super(aed); msg = amsg; }
-  final @property pure nothrow @trusted @nogc {
-    inout(TtyEditor) sourceed () inout { return cast(typeof(return))osource; }
-  }
-}
-
-public class EventEditorQuery : Event {
   this (TtyEditor aed) { super(aed); }
   final @property pure nothrow @trusted @nogc {
     inout(TtyEditor) sourceed () inout { return cast(typeof(return))osource; }
+    inout(TtyEditor) ed () inout { return cast(typeof(return))osource; }
   }
+}
+
+public class EventEditorMessage : EventEditorEvent {
+  string msg;
+  this (TtyEditor aed, string amsg) { super(aed); msg = amsg; }
+}
+
+public class EventEditorQuery : EventEditorEvent {
+  this (TtyEditor aed) { super(aed); }
 }
 
 // yes, source
-public class EventEditorReply : Event {
+public class EventEditorReply : EventEditorEvent {
   this (TtyEditor aed) { super(aed); }
-  final @property pure nothrow @trusted @nogc {
-    inout(TtyEditor) sourceed () inout { return cast(typeof(return))osource; }
-  }
 }
 
 

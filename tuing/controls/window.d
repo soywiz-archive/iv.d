@@ -55,6 +55,10 @@ public class FuiWindow : FuiControl {
   }
 
   final pure nothrow @safe @nogc {
+    @property void defaultFocus (FuiControl c) {
+      if (c.toplevel is this) lastfct = c;
+    }
+
     FuiControl findLastToFocus () {
       FuiControl lastHit = null;
       // depth first

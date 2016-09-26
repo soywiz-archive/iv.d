@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.controls.editline;
+module iv.tuing.controls.editor;
 
 import iv.strex;
 import iv.rawtty2;
@@ -38,78 +38,59 @@ import iv.tuing.controls.window;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private class FuiHistoryWindow : FuiWindow {
+private class FuiEditorCPWindow : FuiWindow {
   alias onMyEvent = super.onMyEvent;
   alias onBubbleEvent = super.onBubbleEvent;
 
-  FuiEditLine el;
-  FuiListBox hlb;
+  FuiEditor ed;
+  FuiListBox lb;
 
-  this (FuiEditLine ael) {
-    assert(ael !is null);
+  this (FuiEditor aed) {
+    assert(aed !is null);
     this.connectListeners();
     super();
-    el = ael;
-    /*this works
-    addEventListener(this, (FuiEventClose evt) {
-      ttyBeep;
-    });
-    */
+    ed = aed;
   }
 
   override void onBubbleEvent (FuiEventKey evt) {
-    if (evt.key == "Enter" && hlb !is null) {
-      if (auto hm = el.historymgr) {
-        auto it = hlb.curitem;
-        if (it >= 0 && it < hm.count(el)) {
-          it = hm.count(el)-it-1;
-          el.ed.setNewText(hm.item(el, it));
-          hm.activate(el, it);
-          el.doAction();
-        }
-      }
+    if (evt.key == "Enter" && lb !is null) {
+      (new EventEditorReplyCodePage(ed.ed, lb.curitem)).post;
     }
     super.onBubbleEvent(evt);
   }
-}
 
-
-private void createHistoryWin (FuiEditLine el) {
-  if (el is null) return;
-  auto desk = el.getDesk;
-  if (desk is null) return;
-  auto hm = el.historymgr;
-  if (hm is null) return;
-  if (!hm.has(el) || hm.count(el) < 1) return;
-  auto win = new FuiHistoryWindow(el);
-  //win.lp.minSize = FuiSize(30, 7);
-  win.caption = "History";
-  win.frame = win.Frame.Small;
-  win.minSize.w = 14;
-  if (auto lb = new FuiListBox(win)) {
-    lb.aligning = lb.Align.Stretch;
-    foreach_reverse (immutable idx; 0..hm.count(el)) lb.addItem(hm.item(el, idx));
-    lb.curitem = lb.count-1;
-    lb.defctl = true;
-    lb.escctl = true;
-    lb.maxSize.w = ttyw-8;
-    lb.maxSize.h = ttyh-8;
-    win.hlb = lb;
+  static void create (FuiEditor aed, int ccp) {
+    if (aed is null) return;
+    auto desk = aed.getDesk;
+    if (desk is null) return;
+    auto win = new FuiEditorCPWindow(aed);
+    win.caption = "Codepage";
+    win.frame = win.Frame.Small;
+    //win.minSize.w = 14;
+    win.lb = new FuiListBox(win);
+    win.lb.aligning = lb.Align.Stretch;
+    win.lb.addItem("KOI8-U");
+    win.lb.addItem("CP1251");
+    win.lb.addItem("CP-866");
+    win.lb.addItem("UTFUCK");
+    win.lb.curitem = ccp;
+    win.lb.defctl = true;
+    win.lb.escctl = true;
+    win.lb.maxSize.w = ttyw-8;
+    win.lb.maxSize.h = ttyh-8;
+    fuiLayout(win);
+    auto pt = aed.toGlobal(FuiPoint(0, 1));
+    if (pt.x+win.size.w > ttyw) pt.x = ttyw-win.size.w;
+    if (pt.y+win.size.h > ttyh) pt.y = ttyh-win.size.h;
+    win.pos.x = pt.x;
+    win.pos.y = pt.y;
+    tuidesk.addPopup(win);
   }
-  //win.onBlur = (FuiControl self) { (new FuiEventClose(self, null)).post; };
-  fuiLayout(win);
-  //import std.random : uniform;
-  auto pt = el.toGlobal(FuiPoint(0, 1));
-  if (pt.x+win.size.w > ttyw) pt.x = ttyw-win.size.w;
-  if (pt.y+win.size.h > ttyh) pt.y = ttyh-win.size.h;
-  win.pos.x = pt.x;
-  win.pos.y = pt.y;
-  tuidesk.addPopup(win);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public class FuiEditLine : FuiControl {
+public class FuiEditor : FuiControl {
   alias onMyEvent = super.onMyEvent;
 
   TtyEditor ed;
@@ -117,17 +98,20 @@ public class FuiEditLine : FuiControl {
   this (FuiControl aparent, string atext=null) {
     this.connectListeners();
     super(aparent);
-    ed = new TtyEditor(0, 0, 10, 1, true); // size will be fixed later
-    ed.hideStatus = true;
+    ed = new TtyEditor(0, 0, 10, 1, false); // size will be fixed later
+    //ed.hideStatus = true;
     //ed.utfuck = utfuck;
     ed.setNewText(atext);
-    minSize.w = 10;
+    minSize.w = 30;
+    minSize.h = 6;
     horizontal = true;
-    aligning = Align.Start;
-    minSize.h = maxSize.h = 1;
+    aligning = Align.Stretch;
     canBeFocused = true;
     hotkeyed = false;
     acceptClick(TtyEvent.MButton.Left);
+    addEventListener(ed, (EventEditorQueryCodePage evt) {
+      FuiEditorCPWindow.create(this, evt.cp);
+    });
   }
 
   T getText(T:const(char)[]) () if (!is(T == typeof(null))) {
@@ -177,20 +161,6 @@ public class FuiEditLine : FuiControl {
 
   void onMyEvent (FuiEventKey evt) {
     if (disabled) return;
-    // history
-    if (auto hm = historymgr) {
-      if (evt.key == "M-H" || evt.key == "M-Down") {
-        // history dialog
-        createHistoryWin(this);
-        evt.eat();
-        return;
-      }
-      if (evt.key == "M-A") {
-        hm.add(this, getText!string);
-        evt.eat();
-        return;
-      }
-    }
     /*
     if (evt.key == "F1") {
       import iv.vfs.io;
