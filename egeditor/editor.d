@@ -1344,6 +1344,9 @@ protected:
   bool[int] linebookmarked; // is this line bookmarked?
 
 public:
+  final @property bool pasteMode () const pure nothrow @safe @nogc { return (inPasteMode > 0); }
+  final resetPasteMode () pure nothrow @safe @nogc { inPasteMode = 0; }
+
   final void clearBookmarks () nothrow {
     linebookmarked.clear();
   }

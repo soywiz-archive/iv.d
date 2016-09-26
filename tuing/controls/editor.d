@@ -273,6 +273,11 @@ public class FuiEditor : FuiControl {
     }
   }
 
+  override void onMyEvent (FuiEventBlur evt) {
+    ed.resetPasteMode();
+    super.onMyEvent(evt);
+  }
+
   void onMyEvent (FuiEventKey evt) {
     if (disabled) return;
     /*
