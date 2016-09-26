@@ -29,6 +29,7 @@ import iv.tuing.layout;
 import iv.tuing.tty;
 import iv.tuing.tui;
 import iv.tuing.types;
+import iv.tuing.controls.window : FuiWindow;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

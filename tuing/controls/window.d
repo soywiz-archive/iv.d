@@ -44,6 +44,8 @@ public class FuiWindow : FuiControl {
   FuiControl lastfct;
   FuiEventQueueDesk desk;
   bool shadowed = true;
+  int[string] radios; // radio groups
+  bool[string] checks; // checkboxes
 
   this () {
     this.connectListeners();
@@ -81,6 +83,52 @@ public class FuiWindow : FuiControl {
       if (pt.y+size.h > ttyh) pt.y = ttyh-size.h;
       pos.x = pt.x;
       pos.y = pt.y;
+    }
+  }
+
+  final nothrow @safe {
+    int radio(T : const(char)[]) (T id) {
+      static if (is(T == typeof(null))) {
+        return -1;
+      } else {
+        if (auto p = id in radios) return *p;
+        return -1;
+      }
+    }
+
+    void radio(T : const(char)[]) (T id, int v) {
+      static if (!is(T == typeof(null))) {
+        if (id.length > 0) {
+          if (v == -1) { radios.remove(id); return; }
+          static if (is(T == string)) {
+            radios[id] = v;
+          } else {
+            radios[id.idup] = v;
+          }
+        }
+      }
+    }
+
+    bool checkbox(T : const(char)[]) (T id) {
+      static if (is(T == typeof(null))) {
+        return false;
+      } else {
+        if (auto p = id in checks) return *p;
+        return false;
+      }
+    }
+
+    void checkbox(T : const(char)[]) (T id, bool v) {
+      static if (!is(T == typeof(null))) {
+        if (id.length > 0) {
+          if (!v) { checks.remove(id); return; }
+          static if (is(T == string)) {
+            checks[id] = v;
+          } else {
+            checks[id.idup] = v;
+          }
+        }
+      }
     }
   }
 

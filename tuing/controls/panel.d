@@ -34,24 +34,37 @@ import iv.tuing.types;
 // ////////////////////////////////////////////////////////////////////////// //
 public class FuiPanel : FuiControl {
   alias onMyEvent = super.onMyEvent;
-  this (FuiControl aparent) {
+
+  this (FuiControl aparent, string acaption) {
     this.connectListeners();
     super(aparent);
+    caption = acaption;
     vertical = true;
     aligning = Align.Start;
+    padding = FuiMargin(1, 1, 1, 1);
   }
+
   protected override void drawSelf (XtWindow win) {
-    win.color = palColor!"def"();
+    win.color = (enabled ? palColor!"def"() : palColor!"disabled"());
     win.frame!true(0, 0, win.width, win.height);
+    if (caption.length) {
+      win.x0 = win.x0+1;
+      win.width = win.width-2;
+      win.writeCharsAt(0, 0, cast(int)caption.length+2, ' ');
+      if (enabled) win.color = palColor!"title"();
+      win.x0 = win.x0+1;
+      win.width = win.width-2;
+      win.writeStrAt(0, 0, caption);
+    }
   }
 }
 
 public class FuiHPanel : FuiPanel {
   alias onMyEvent = super.onMyEvent;
-  this (FuiControl aparent) { this.connectListeners(); super(aparent); horizontal = true; }
+  this (FuiControl aparent, string acaption) { this.connectListeners(); super(aparent, acaption); horizontal = true; }
 }
 
 public class FuiVPanel : FuiPanel {
   alias onMyEvent = super.onMyEvent;
-  this (FuiControl aparent) { this.connectListeners(); super(aparent); vertical = true; }
+  this (FuiControl aparent, string acaption) { this.connectListeners(); super(aparent, acaption); vertical = true; }
 }

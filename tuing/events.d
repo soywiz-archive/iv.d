@@ -20,8 +20,9 @@
 module iv.tuing.events;
 
 import iv.rawtty2 : TtyEvent;
-import iv.tuing.controls.window : FuiWindow;
+import iv.tuing.controls.button : FuiCheckBox, FuiRadio;
 import iv.tuing.controls.listbox : FuiListBox;
+import iv.tuing.controls.window : FuiWindow;
 import iv.tuing.eventbus;
 import iv.tuing.layout : FuiPoint;
 import iv.tuing.tui : FuiControl;
@@ -86,6 +87,26 @@ public class FuiEventAnyClick : FuiEvent {
 }
 public class FuiEventClick : FuiEventAnyClick { this (FuiControl adest, FuiPoint apt, TtyEvent.MButton abt) { super(adest, apt, abt); } }
 public class FuiEventDouble : FuiEventAnyClick { this (FuiControl adest, FuiPoint apt, TtyEvent.MButton abt) { super(adest, apt, abt); } }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class FuiEventCheckBoxChanged : FuiEvent {
+  string gid; // group id
+  bool val; // new value
+  this (FuiCheckBox abt, string agid, bool aval) { super(abt); gid = agid; val = aval; }
+  final @property pure nothrow @trusted @nogc {
+    inout(FuiCheckBox) bt () inout { return cast(typeof(return))osource; }
+  }
+}
+
+public class FuiEventRadioChanged : FuiEvent {
+  string gid; // group id
+  int val; // new value
+  this (FuiRadio abt, string agid, int aval) { super(abt); gid = agid; val = aval; }
+  final @property pure nothrow @trusted @nogc {
+    inout(FuiRadio) bt () inout { return cast(typeof(return))osource; }
+  }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
