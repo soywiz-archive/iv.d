@@ -230,7 +230,7 @@ public void connectListeners(O:Object) (O obj) {
         else static if (tp == ObjDispatcher.Type.Bubble) enum EvtName = "onBubbleEvent";
         else static assert(0, "invalid type");
         Weak!OT obj;
-        this (OT aobj) { obj = new Weak!OT(aobj); }
+        this (OT aobj) { obj = new Weak!OT(aobj); obj.onDead = &ebusOnDeadCB; }
         override bool alive () { return !obj.empty; }
         override Type type () { return tp; }
         override bool isObject (Object o) {
@@ -291,13 +291,19 @@ public void connectListeners(O:Object) (O obj) {
       }
       synchronized (Event.classinfo) {
         bool found = false;
-        foreach (ref EventListenerInfo eli; llist) {
-          if (eli.dobj !is null && eli.dobj.type == tp && eli.dobj.isObject(obj)) { found = true; break; }
+        static if (tp == ObjDispatcher.Type.Broadcast) {
+          foreach (ref EventListenerInfo eli; llist) {
+            if (eli.dobj !is null && eli.dobj.type == tp && eli.dobj.isObject(obj)) { found = true; break; }
+          }
         }
         if (!found) {
           debug(tuing_eventbus) { import iv.vfs.io; VFile("zevtlog.log", "a").writefln("added %s for %s 0x%08x", tp, obj.classinfo.name, *cast(void**)&obj); }
           auto dp = new ObjDispatcherX!(O, tp)(obj);
-          llist ~= EventListenerInfo(dp);
+          static if (tp == ObjDispatcher.Type.Broadcast) {
+            llist ~= EventListenerInfo(dp);
+          } else {
+            llistsb ~= EventListenerInfo(dp);
+          }
         }
       }
     }
@@ -467,7 +473,10 @@ struct EventListenerInfo {
     id = getId;
     ti = ati;
     dg = adg;
-    if (asrc !is null) xsrc = new Weak!Object(asrc);
+    if (asrc !is null) {
+      xsrc = new Weak!Object(asrc);
+      xsrc.onDead = &ebusOnDeadCB;
+    }
     oneshot = aoneshot;
   }
   this (ObjDispatcher adobj) {
@@ -477,26 +486,48 @@ struct EventListenerInfo {
 }
 
 __gshared EventListenerInfo[] llist;
+__gshared EventListenerInfo[] llistsb; // sink/bubble
 __gshared bool needListenerCleanup = false;
+shared bool needListenerCleanupSB = false;
 
 
 void cleanupListeners () {
-  if (!needListenerCleanup) return;
-  needListenerCleanup = false;
-  int pos = 0;
-  while (pos < llist.length) {
-    auto ell = llist.ptr+pos;
-    if (ell.id != 0) {
-      if (ell.dobj !is null && !ell.dobj.alive) ell.id = 0;
-      if (ell.xsrc !is null && ell.xsrc.empty) ell.id = 0;
+  if (needListenerCleanup) {
+    needListenerCleanup = false;
+    int pos = 0;
+    while (pos < llist.length) {
+      auto ell = llist.ptr+pos;
+      if (ell.id != 0) {
+        if (ell.dobj !is null && !ell.dobj.alive) ell.id = 0;
+        if (ell.xsrc !is null && ell.xsrc.empty) ell.id = 0;
+      }
+      if (ell.id == 0) {
+        foreach (immutable c; pos+1..llist.length) llist.ptr[c-1] = llist.ptr[c];
+        llist[$-1] = EventListenerInfo.init;
+        llist.length -= 1;
+        llist.assumeSafeAppend;
+      } else {
+        ++pos;
+      }
     }
-    if (ell.id == 0) {
-      foreach (immutable c; pos+1..llist.length) llist.ptr[c-1] = llist.ptr[c];
-      llist[$-1] = EventListenerInfo.init;
-      llist.length -= 1;
-      llist.assumeSafeAppend;
-    } else {
-      ++pos;
+  }
+  import core.atomic : cas;
+  if (cas(&needListenerCleanupSB, true, false)) {
+    int pos = 0;
+    while (pos < llistsb.length) {
+      auto ell = llistsb.ptr+pos;
+      if (ell.id != 0) {
+        if (ell.dobj !is null && !ell.dobj.alive) ell.id = 0;
+        if (ell.xsrc !is null && ell.xsrc.empty) ell.id = 0;
+      }
+      if (ell.id == 0) {
+        foreach (immutable c; pos+1..llistsb.length) llistsb.ptr[c-1] = llistsb.ptr[c];
+        llistsb[$-1] = EventListenerInfo.init;
+        llistsb.length -= 1;
+        llistsb.assumeSafeAppend;
+      } else {
+        ++pos;
+      }
     }
   }
 }
@@ -522,14 +553,14 @@ void buildEvChain (Object obj) {
 void dispatchSinkBubble (Event evt) {
   void callOnTypeFor (ObjDispatcher.Type type, Object obj) {
     size_t llen;
-    synchronized (Event.classinfo) llen = llist.length;
+    synchronized (Event.classinfo) llen = llistsb.length;
     foreach (size_t idx; 0..llen) {
       ObjDispatcher dobj = null;
       synchronized (Event.classinfo) {
-        auto eli = &llist[idx];
+        auto eli = &llistsb[idx];
         if (eli.id == 0) continue;
         if (eli.dobj !is null) {
-          if (!eli.dobj.alive) { needListenerCleanup = true; eli.id = 0; eli.dobj = null; eli.xsrc = null; continue; }
+          if (!eli.dobj.alive) { import core.atomic; atomicStore(needListenerCleanupSB, true); eli.id = 0; eli.dobj = null; eli.xsrc = null; continue; }
           dobj = eli.dobj;
           if (dobj.type != type || !dobj.isObject(obj)) dobj = null;
         }
@@ -545,6 +576,7 @@ void dispatchSinkBubble (Event evt) {
     // sinking phase, backward
     foreach_reverse (Object o; evchain[1..$]) {
       callOnTypeFor(ObjDispatcher.Type.Sink, o);
+      if (evt.processed) return;
       if (auto itf = cast(EventTarget)o) {
         itf.eventbusOnEvent(evt);
         if (evt.processed) return;
@@ -556,12 +588,14 @@ void dispatchSinkBubble (Event evt) {
     // bubbling phase, forward
     foreach (immutable idx, Object o; evchain) {
       if (idx) callOnTypeFor(ObjDispatcher.Type.Bubble, o);
+      if (evt.processed) return;
       if (auto itf = cast(EventTarget)o) {
         itf.eventbusOnEvent(evt);
         if (evt.processed) return;
       }
     }
   } else {
+    if (evt.processed) return;
     evt.flags |= Event.PFlags.Bubbling;
     callOnTypeFor(ObjDispatcher.Type.My, evt.odest);
   }
@@ -580,6 +614,7 @@ void callEventListeners (Event evt) {
     if (evt.odest !is null) fo.writef("; dest=%s", evt.odest.classinfo.name);
     fo.writeln;
   }}
+  // broadcast listeners (they will also catch directed events w/o doing sink/bubble)
   size_t llen;
   synchronized (Event.classinfo) llen = llist.length;
   foreach (size_t idx; 0..llen) {
@@ -626,6 +661,20 @@ void callEventListeners (Event evt) {
     scope(exit) if (evchain.length) { evchain[] = null; evchain.length = 0; evchain.assumeSafeAppend; }
     buildEvChain(evt.odest);
     dispatchSinkBubble(evt);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+void ebusOnDeadCB (size_t ptr, size_t hash) nothrow @trusted @nogc {
+  import core.atomic;
+  atomicStore(needListenerCleanupSB, true);
+  version(none) {
+    import core.stdc.stdio;
+    if (auto fo = fopen("zweakdead.log", "a")) {
+      fo.fprintf("DEAD: ptr=0x%08x; hash=0x%08x\n", cast(uint)ptr, cast(uint)hash);
+      fo.fclose();
+    }
   }
 }
 

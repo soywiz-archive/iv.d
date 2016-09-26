@@ -863,7 +863,7 @@ class FuiEventQueueDesk : FuiEventQueue {
         (new FuiEventClose(winlist[$-1].win, null)).post;
       } else if (winlist.length && winlist[$-1].type == WinItem.Type.Modal && !pt.inside(winlist[$-1].win.rect)) {
         // do nothing, as modal window cannot be dismissed this way
-      } else if (winlist.length > 1) {
+      } else if (winlist.length > 1 && !pt.inside(winlist[$-1].win.rect)) {
         foreach_reverse (immutable idx, ref WinItem wi; winlist[0..$-1]) {
           auto w = wi.win;
           if (w.hidden || w.disabled) continue;
@@ -959,4 +959,8 @@ __gshared FuiEventQueueDesk tuidesk;
 
 shared static this () {
   tuidesk = new FuiEventQueueDesk();
+}
+
+shared static ~this () {
+  tuidesk = null;
 }

@@ -27,6 +27,8 @@ private extern (C) void rt_attachDisposeEvent (Object h, DEvent e);
 private extern (C) void rt_detachDisposeEvent (Object h, DEvent e);
 
 final class Weak(T : Object) {
+  enum PointerMask = 0xa5a5a5a5u;
+
   // Note: This class uses a clever trick which works fine for
   // a conservative GC that was never intended to do
   // compaction/copying in the first place. However, if compaction is
@@ -37,13 +39,12 @@ final class Weak(T : Object) {
   private size_t mObject;
   private size_t mPtr;
   private size_t mHash;
+  void function (size_t ptr, size_t hash) nothrow @safe @nogc onDead; // not a delegate, 'cause this object is not scanned by GC
 
-  this (T obj=null) @trusted {
-    hook(obj);
-  }
+  this (T obj=null) @trusted { hook(obj); }
 
-  @property T object () const @trusted nothrow {
-    auto obj = cast(T)cast(void*)(atomicLoad(*cast(shared)&mObject)^0xa5a5a5a5u);
+  @property T object () const nothrow @trusted {
+    auto obj = cast(T)cast(void*)(atomicLoad(*cast(shared)&mObject)^PointerMask);
     // we've moved obj into the GC-scanned stack space, so it's now
     // safe to ask the GC whether the object is still alive.
     // note that even if the cast and assignment of the obj local
@@ -54,15 +55,13 @@ final class Weak(T : Object) {
   }
 
   @property void object (T obj) @trusted {
-    auto oobj = cast(T)cast(void*)(atomicLoad(*cast(shared)&mObject)^0xa5a5a5a5u);
-    if (oobj !is null && GC.addrOf(cast(void*)oobj)) unhook(oobj);
+    auto oobj = cast(T)cast(void*)(atomicLoad(*cast(shared)&mObject)^PointerMask);
+    if (oobj !is null && GC.addrOf(cast(void*)oobj)) unhookNoDeadCall(oobj);
     oobj = null;
     hook(obj);
   }
 
-  @property bool empty () const @trusted nothrow {
-    return (object is null);
-  }
+  @property bool empty () const pure nothrow @trusted { pragma(inline, true); return (object is null); }
 
   void clear () @trusted { object = null; }
 
@@ -73,44 +72,50 @@ final class Weak(T : Object) {
       //auto ptr = cast(size_t)cast(void*)obj;
       // fix from Andrej Mitrovic
       auto ptr = cast(size_t)*(cast(void**)&obj);
+      ptr ^= PointerMask;
       // we use atomics because not all architectures may guarantee atomic store and load of these values
-      atomicStore(*cast(shared)&mObject, ptr^0xa5a5a5a5u);
+      atomicStore(*cast(shared)&mObject, ptr);
       // only assigned once, so no atomics
-      mPtr = ptr^0xa5a5a5a5u;
+      mPtr = ptr;
       mHash = typeid(T).getHash(&obj);
       rt_attachDisposeEvent(obj, &unhook);
       GC.setAttr(cast(void*)this, GC.BlkAttr.NO_SCAN);
     } else {
-      atomicStore(*cast(shared)&mObject, cast(size_t)0^0xa5a5a5a5u);
+      atomicStore(*cast(shared)&mObject, cast(size_t)0^PointerMask);
     }
   }
 
-  private void unhook (Object obj) @trusted {
+  private void unhookNoDeadCall (Object obj) @trusted {
     rt_detachDisposeEvent(obj, &unhook);
     // this assignment is important.
     // if we don't null mObject when it is collected, the check
     // in object could return false positives where the GC has
     // reused the memory for a new object.
-    atomicStore(*cast(shared)&mObject, cast(size_t)0^0xa5a5a5a5u);
+    atomicStore(*cast(shared)&mObject, cast(size_t)0^PointerMask);
   }
 
-  override bool opEquals (Object o) @trusted nothrow {
+  private void unhook (Object obj) @trusted {
+    unhookNoDeadCall(obj);
+    if (onDead !is null) onDead(mPtr^PointerMask, mHash);
+  }
+
+  override bool opEquals (Object o) nothrow @trusted {
     if (this is o) return true;
     if (auto weak = cast(Weak!T)o) return (mPtr == weak.mPtr);
     return false;
   }
 
-  override int opCmp (Object o) @trusted nothrow {
+  override int opCmp (Object o) nothrow @trusted {
     if (auto weak = cast(Weak!T)o) return (mPtr > weak.mPtr ? 1 : mPtr < weak.mPtr ? -1 : 0);
     return 1;
   }
 
-  override size_t toHash () @trusted nothrow {
+  override size_t toHash () nothrow @trusted {
     auto obj = object;
     return (obj ? typeid(T).getHash(&obj) : mHash);
   }
 
-  override string toString () @trusted {
+  override string toString () {
     auto obj = object;
     return (obj ? obj.toString() : toString());
   }
