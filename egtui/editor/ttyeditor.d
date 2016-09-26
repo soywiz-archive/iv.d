@@ -398,14 +398,14 @@ public:
     }
     if (!utfuck) {
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u",
-        (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
+        (textChanged ? '*' : ' '), sx+0, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
       if (len > winw) len = winw;
       win.writeStrAt(0, 0, buf[0..len]);
     } else {
       dchar dch = dcharAt(cp);
       if (dch > dchar.max) dch = 0;
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u  U%04X",
-        (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
+        (textChanged ? '*' : ' '), sx+0, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
       if (len > winw) len = winw;
       win.writeStrAt(0, 0, buf[0..len]);
     }
