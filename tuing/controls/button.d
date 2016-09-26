@@ -83,7 +83,7 @@ public class FuiButton : FuiControl {
   }
 
   void onMyEvent (FuiEventKey evt) {
-    if (evt.key == "Space") { evt.eat(); doAction(); return; }
+    if (evt.key == "Space" || evt.key == "Enter") { evt.eat(); doAction(); return; }
     if (tryHotKey(evt.key)) { evt.eat(); doAction(); return; }
   }
 }
@@ -98,6 +98,19 @@ public class FuiCheckBox : FuiControl {
   this (FuiControl aparent, string atext, string agroupid) {
     this.connectListeners();
     super(aparent);
+    cbSetup(atext, agroupid);
+  }
+
+  this (FuiControl aparent, string atext, string agroupid, bool defval) {
+    this.connectListeners();
+    super(aparent);
+    cbSetup(atext, agroupid);
+    if (agroupid.length) {
+      if (auto w = cast(FuiWindow)toplevel) w.checkbox(agroupid, defval);
+    }
+  }
+
+  private final void cbSetup (string atext, string agroupid) {
     groupid = agroupid;
     caption = atext;
     minSize.w = XtWindow.hotStrLen(atext)+4;
@@ -107,7 +120,6 @@ public class FuiCheckBox : FuiControl {
     canBeFocused = true;
     hotkeyed = true;
     acceptClick(TtyEvent.MButton.Left);
-    assert(clickMask != 0);
   }
 
   override void doAction () {
@@ -145,7 +157,7 @@ public class FuiCheckBox : FuiControl {
   }
 
   void onMyEvent (FuiEventKey evt) {
-    if (evt.key == "Space") { evt.eat(); doAction(); return; }
+    if (evt.key == "Space" /*|| evt.key == "Enter"*/) { evt.eat(); doAction(); return; }
     if (tryHotKey(evt.key)) { evt.eat(); doAction(); return; }
   }
 }
@@ -212,7 +224,7 @@ public class FuiRadio : FuiControl {
   }
 
   void onMyEvent (FuiEventKey evt) {
-    if (evt.key == "Space") { evt.eat(); doAction(); return; }
+    if (evt.key == "Space" /*|| evt.key == "Enter"*/) { evt.eat(); doAction(); return; }
     if (tryHotKey(evt.key)) { evt.eat(); doAction(); return; }
   }
 }

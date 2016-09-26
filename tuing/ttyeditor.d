@@ -422,7 +422,7 @@ public:
         }
       }, true); // oneshot
       editorlocked = true;
-      (new EventEditorQueryReloadModified(this));
+      (new EventEditorQueryReloadModified(this)).post;
     }
   }
 
@@ -453,7 +453,7 @@ public:
         }
       }, true); // oneshot
       editorlocked = true;
-      (new EventEditorQueryOverwriteModified(this));
+      (new EventEditorQueryOverwriteModified(this)).post;
     }
   }
 
@@ -1159,7 +1159,7 @@ public:
       editorlocked = true;
       int rx, ry;
       gb.pos2xyVT(tkstpos, rx, ry);
-      (new EventEditorQueryAutocompletion(this, tkstpos, tklen, FuiPoint(winx+(rx-mXOfs), winy+(ry-mTopLine)+1), aclist[0..acused]));
+      (new EventEditorQueryAutocompletion(this, tkstpos, tklen, FuiPoint(winx+(rx-mXOfs), winy+(ry-mTopLine)+1), aclist[0..acused])).post;
     }
   }
 
@@ -1902,14 +1902,14 @@ final:
     auto oldlk = editorlocked;
     addEventListener(this, (EventEditorReplySR evt) {
       editorlocked = oldlk;
-      if (evt.cancel) { srrOptions.ed = null; return; }
+      if (!evt.proceed) { srrOptions.ed = null; return; }
       assert(evt.opt !is null);
       srrOptions = *cast(SROptions*)evt.opt;
       if (srrOptions.type == SROptions.Type.Normal) srrPlainStart(srrOptions);
       if (srrOptions.type == SROptions.Type.Regex) srrRegexStart(srrOptions);
     }, true);
     editorlocked = true;
-    (new EventEditorQuerySR(this, &srrOptions));
+    (new EventEditorQuerySR(this, &srrOptions)).post;
   });
   @TEDEditOnly mixin TEDImpl!("F5", "copy block", q{ doBlockCopy(); });
                mixin TEDImpl!("^F5", "copy block to clipboard file", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); });

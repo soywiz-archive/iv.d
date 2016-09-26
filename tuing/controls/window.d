@@ -88,6 +88,15 @@ public class FuiWindow : FuiControl {
     }
   }
 
+  void positionAtGlobal (FuiPoint pt) {
+    if (pt.x+size.w > ttyw) pt.x = ttyw-size.w;
+    if (pt.y+size.h > ttyh) {
+      if (pt.y-size.h-2 >= 0) pt.y = pt.y-size.h-2; else pt.y = ttyh-size.h;
+    }
+    pos.x = pt.x;
+    pos.y = pt.y;
+  }
+
   final nothrow @safe {
     int radio(T : const(char)[]) (T id) {
       static if (is(T == typeof(null))) {

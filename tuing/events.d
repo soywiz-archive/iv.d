@@ -201,8 +201,8 @@ public class EventEditorQuerySR : EventEditorQuery {
 }
 public class EventEditorReplySR : EventEditorReply {
   void* opt; // SROptions
-  bool cancel;
-  this (TtyEditor aed, void* aopt, bool acancel) { super(aed); opt = aopt; cancel = acancel; }
+  bool proceed;
+  this (TtyEditor aed, void* aopt, bool aproceed) { super(aed); opt = aopt; proceed = aproceed; }
 }
 
 public class EventEditorQueryGotoLine : EventEditorQuery {

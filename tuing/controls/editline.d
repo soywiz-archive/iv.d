@@ -104,7 +104,7 @@ public class FuiEditLine : FuiControl {
 
   TtyEditor ed;
 
-  this (FuiControl aparent, string atext=null) {
+  this (FuiControl aparent, const(char)[] atext=null) {
     this.connectListeners();
     super(aparent);
     ed = new TtyEditor(0, 0, 10, 1, true); // size will be fixed later

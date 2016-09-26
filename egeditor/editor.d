@@ -1596,6 +1596,7 @@ public:
 
     int curx () const pure { pragma(inline, true); return cx; }
     int cury () const pure { pragma(inline, true); return cy; }
+    int xofs () const pure { pragma(inline, true); return mXOfs; }
 
     int topline () const pure { pragma(inline, true); return mTopLine; }
     int linecount () const pure { pragma(inline, true); return gb.linecount; }

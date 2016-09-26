@@ -116,12 +116,12 @@ private class FuiEditorNumInputWindow : FuiWindow {
     new FuiHLine(this);
     if (auto box = new FuiHBox(this)) {
       new FuiSpan(box);
-      btok = new FuiButton(box, "&OK");
+      btok = new FuiButton(box, "O&K");
       with (btok) {
         defctl = true;
         enabled = (defval > 0);
       }
-      with (new FuiButton(box, "&Close")) {
+      with (new FuiButton(box, "&Cancel")) {
         escctl = true;
       }
       new FuiSpan(box);
@@ -146,7 +146,7 @@ private void createTabSizeWindow (FuiEditor aed, int tabsize) {
   };
   fuiLayout(win);
   win.positionCenterInControl(aed);
-  tuidesk.addPopup(win);
+  tuidesk.addModal(win);
 }
 
 
@@ -201,6 +201,176 @@ private class FuiEditorCPWindow : FuiWindow {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private class FuiEditorSRWindow : FuiWindow {
+  FuiEditor ed;
+  TtyEditor.SROptions* srr;
+  FuiEditLine els, elr;
+  FuiCheckBox cbinsel;
+  FuiButton btok;
+
+  this (FuiEditor aed, TtyEditor.SROptions* asrr) {
+    assert(aed !is null);
+    this.connectListeners();
+    super();
+    ed = aed;
+    srr = asrr;
+    caption = "Search And Replace";
+    frame = Frame.Normal;
+    minSize.w = ttyw-(ttyw/3);
+
+    auto lbs = new FuiLabel(this, "&Search string:");
+    lbs.lineBreak = true;
+    els = new FuiEditLine(this, srr.search);
+    els.aligning = Align.Stretch;
+    els.lineBreak = true;
+    els.onAction = (FuiControl self) { btok.enabled = (els.ed.textsize > 0); };
+    lbs.dest = els;
+
+    auto lbr = new FuiLabel(this, "Re&placement string:");
+    lbr.lineBreak = true;
+    elr = new FuiEditLine(this, srr.replace);
+    elr.aligning = Align.Stretch;
+    elr.lineBreak = true;
+    lbr.dest = elr;
+
+    new FuiHLine(this);
+
+    if (auto box = new FuiHBox(this)) {
+      box.aligning = Align.Start;
+      radio("srrtype", cast(int)srr.type);
+      if (auto vb = new FuiVBox(box)) {
+        new FuiRadio(vb, "No&rmal", "srrtype", 0);
+        new FuiRadio(vb, "Re&gular expression", "srrtype", 1);
+      }
+      if (auto vb = new FuiVBox(box)) {
+        new FuiCheckBox(vb, "Cas&e sensitive", "casesens", srr.casesens);
+        new FuiCheckBox(vb, "&Backwards", "backwards", srr.backwards);
+        new FuiCheckBox(vb, "&Whole words", "wholeword", srr.wholeword);
+        cbinsel = new FuiCheckBox(vb, "In se&lection", "inselection", srr.inselection);
+        cbinsel.enabled = aed.ed.hasMarkedBlock;
+      }
+    }
+
+    new FuiHLine(this);
+    if (auto box = new FuiHBox(this)) {
+      new FuiSpan(box);
+      btok = new FuiButton(box, "O&K");
+      with (btok) {
+        defctl = true;
+        enabled = (srr.search.length > 0);
+        onAction = (FuiControl self) {
+          (new FuiEventClose(toplevel, null)).post;
+          auto rv = radio("srrtype");
+          if (rv < TtyEditor.SROptions.Type.min || rv > TtyEditor.SROptions.Type.max) {
+            (new FuiEventClose(toplevel, null)).post;
+            return;
+          }
+          srr.type = cast(TtyEditor.SROptions.Type)rv;
+          srr.casesens = checkbox("casesens");
+          srr.backwards = checkbox("backwards");
+          srr.wholeword = checkbox("wholeword");
+          srr.inselection = checkbox("inselection");
+          srr.search = els.getText!(const(char)[]);
+          srr.replace = elr.getText!(const(char)[]);
+          (new EventEditorReplySR(ed.ed, srr, true)).post;
+        };
+      }
+      with (new FuiButton(box, "&Cancel")) {
+        escctl = true;
+        onAction = (FuiControl self) {
+          (new FuiEventClose(toplevel, null)).post;
+          (new EventEditorReplySR(ed.ed, srr, false)).post;
+        };
+      }
+      new FuiSpan(box);
+    }
+  }
+
+  static void create (FuiEditor aed, TtyEditor.SROptions* srr) {
+    if (aed is null) return;
+    auto desk = aed.getDesk;
+    if (desk is null) return;
+    auto win = new FuiEditorSRWindow(aed, srr);
+    fuiLayout(win);
+    win.positionCenterInControl(aed);
+    tuidesk.addModal(win);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private class FuiEditorSRConfirmWindow : FuiWindow {
+  FuiEditor ed;
+  TtyEditor.SROptions* srr;
+
+  this (FuiEditor aed, TtyEditor.SROptions* asrr) {
+    assert(aed !is null);
+    this.connectListeners();
+    super();
+    ed = aed;
+    srr = asrr;
+    caption = "Confirm replace";
+    frame = Frame.Normal;
+
+    with (new FuiLabel(this, "\x03Pattern found. Select your action!")) aligning = Align.Stretch;
+
+    new FuiHLine(this);
+
+    if (auto box = new FuiHBox(this)) {
+      (new FuiSpan(box)).minSize.w = 1;
+      with (new FuiButton(box, "&Replace")) {
+        onAction = (FuiControl self) {
+          (new FuiEventClose(toplevel, null)).post;
+          srr.cont = TtyEditor.SROptions.Cont.Yes;
+          (new EventEditorReplyReplacement(ed.ed, srr)).post;
+        };
+      }
+      with (new FuiButton(box, "A&ll")) {
+        onAction = (FuiControl self) {
+          (new FuiEventClose(toplevel, null)).post;
+          srr.cont = TtyEditor.SROptions.Cont.All;
+          (new EventEditorReplyReplacement(ed.ed, srr)).post;
+        };
+      }
+      with (new FuiButton(box, "&Skip")) {
+        onAction = (FuiControl self) {
+          (new FuiEventClose(toplevel, null)).post;
+          srr.cont = TtyEditor.SROptions.Cont.No;
+          (new EventEditorReplyReplacement(ed.ed, srr)).post;
+        };
+      }
+      with (new FuiButton(box, "&Cancel")) {
+        escctl = true;
+        onAction = (FuiControl self) {
+          (new FuiEventClose(toplevel, null)).post;
+          srr.cont = TtyEditor.SROptions.Cont.Cancel;
+          (new EventEditorReplyReplacement(ed.ed, srr)).post;
+        };
+      }
+      (new FuiSpan(box)).minSize.w = 1;
+    }
+  }
+
+  static void create (FuiEditor aed, TtyEditor.SROptions* srr) {
+    if (aed is null) return;
+    auto desk = aed.getDesk;
+    if (desk is null) return;
+    auto win = new FuiEditorSRConfirmWindow(aed, srr);
+    fuiLayout(win);
+    //auto pt = FuiPoint(aed.ed.curx, aed.ed.cury);
+    auto pt = FuiPoint(0, aed.ed.cury);
+    pt.y -= aed.ed.topline;
+    pt.y = pt.y+1;
+    if (!aed.ed.hideSBar) pt.x = pt.x+1;
+    if (!aed.ed.hideStatus) pt.y = pt.y+1;
+    pt = aed.toGlobal(pt);
+    win.positionAtGlobal(pt);
+    tuidesk.addModal(win);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public class FuiEditor : FuiControl {
   alias onMyEvent = super.onMyEvent;
 
@@ -224,6 +394,8 @@ public class FuiEditor : FuiControl {
     addEventListener(ed, (EventEditorMessage evt) { FuiEditorMessageWindow.create(this, evt.msg); });
     addEventListener(ed, (EventEditorQueryCodePage evt) { FuiEditorCPWindow.create(this, evt.cp); });
     addEventListener(ed, (EventEditorQueryTabSize evt) { createTabSizeWindow(this, evt.tabsize); });
+    addEventListener(ed, (EventEditorQuerySR evt) { FuiEditorSRWindow.create(this, cast(TtyEditor.SROptions*)evt.opt); });
+    addEventListener(ed, (EventEditorQueryReplacement evt) { FuiEditorSRConfirmWindow.create(this, cast(TtyEditor.SROptions*)evt.opt); });
 
     //(new EventEditorQueryReplacement(this, &srr)).post;
     //(new EventEditorQueryGotoLine(this)).post;
