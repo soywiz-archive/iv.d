@@ -109,9 +109,11 @@ private class FuiEditorNumInputWindow : FuiWindow {
     caption = acaption;
     minSize.w = cast(int)caption.length+6;
     frame = Frame.Normal;
-    auto lb = new FuiLabel(this, alabel);
-    editline = new FuiEditLine(this, (defval > 0 ? "%s".format(defval) : ""));
-    editline.onAction = (FuiControl self) { btok.enabled = (getNum() > 0); };
+    if (auto box = new FuiHBox(this)) {
+      auto lb = new FuiLabel(box, alabel);
+      editline = new FuiEditLine(box, (defval > 0 ? "%s".format(defval) : ""));
+      editline.onAction = (FuiControl self) { btok.enabled = (getNum() > 0); };
+    }
     defaultFocus = editline;
     new FuiHLine(this);
     if (auto box = new FuiHBox(this)) {
@@ -140,6 +142,26 @@ private void createTabSizeWindow (FuiEditor aed, int tabsize) {
       int n = w.getNum();
       if (n > 0) {
         (new EventEditorReplyTabSize(w.edt.ed, n)).post;
+        (new FuiEventClose(w, self)).post;
+      }
+    }
+  };
+  fuiLayout(win);
+  win.positionCenterInControl(aed);
+  tuidesk.addModal(win);
+}
+
+
+private void createGotoLineWindow (FuiEditor aed) {
+  if (aed is null) return;
+  auto desk = aed.getDesk;
+  if (desk is null) return;
+  auto win = new FuiEditorNumInputWindow(aed, "Editor Query", "Line &number:", -1);
+  win.btok.onAction = (FuiControl self) {
+    if (auto w = cast(FuiEditorNumInputWindow)self.toplevel) {
+      int n = w.getNum();
+      if (n > 0) {
+        (new EventEditorReplyGotoLine(w.edt.ed, n)).post;
         (new FuiEventClose(w, self)).post;
       }
     }
@@ -394,11 +416,9 @@ public class FuiEditor : FuiControl {
     addEventListener(ed, (EventEditorMessage evt) { FuiEditorMessageWindow.create(this, evt.msg); });
     addEventListener(ed, (EventEditorQueryCodePage evt) { FuiEditorCPWindow.create(this, evt.cp); });
     addEventListener(ed, (EventEditorQueryTabSize evt) { createTabSizeWindow(this, evt.tabsize); });
+    addEventListener(ed, (EventEditorQueryGotoLine evt) { createGotoLineWindow(this); });
     addEventListener(ed, (EventEditorQuerySR evt) { FuiEditorSRWindow.create(this, cast(TtyEditor.SROptions*)evt.opt); });
     addEventListener(ed, (EventEditorQueryReplacement evt) { FuiEditorSRConfirmWindow.create(this, cast(TtyEditor.SROptions*)evt.opt); });
-
-    //(new EventEditorQueryReplacement(this, &srr)).post;
-    //(new EventEditorQueryGotoLine(this)).post;
   }
 
   T getText(T:const(char)[]) () if (!is(T == typeof(null))) {

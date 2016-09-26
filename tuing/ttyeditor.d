@@ -344,7 +344,7 @@ public:
     //srrOptions.type = SROptions.Type.Regex;
     srrOptions.casesens = true;
     addEventListener(this, (EventEditorReplyGotoLine evt) {
-      if (evt.line > 0 && evt.line < linecount) gotoXY!true(curx, evt.line-1); // vcenter
+      if (evt.line > 0 && evt.line <= linecount) gotoXY!true(curx, evt.line-1); // vcenter
     });
     addEventListener(this, (EventEditorReplyCodePage evt) {
       auto ncp = evt.cp;
