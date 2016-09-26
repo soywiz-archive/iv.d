@@ -293,5 +293,6 @@ public class FuiEditor : FuiControl {
       doAction();
       return;
     }
+    if (!evt.key.mouse && ed.pasteMode) { evt.eat(); return; }
   }
 }

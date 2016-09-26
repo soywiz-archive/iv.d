@@ -198,5 +198,6 @@ public class FuiEditLine : FuiControl {
       doAction();
       return;
     }
+    if (!evt.key.mouse && ed.pasteMode) { evt.eat(); return; }
   }
 }
