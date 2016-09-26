@@ -58,7 +58,8 @@ public class FuiButton : FuiControl {
   }
 
   protected override void drawSelf (XtWindow win) {
-    win.color = (focused ? palColor!"sel"() : palColor!"def"());
+    win.color = (focused ? palColor!"sel"() : disabled ? palColor!"disabled"() : palColor!"def"());
+    auto hotcolor = (focused ? palColor!"hotsel"() : disabled ? palColor!"disabled" : palColor!"hot"());
     win.fill(0, 0, win.width, win.height);
     if (defctl) {
       win.writeCharAt(0, 0, '<');
@@ -70,7 +71,7 @@ public class FuiButton : FuiControl {
       win.writeCharAt(0, 0, '[');
       win.writeCharAt(win.width-1, 0, ']');
     }
-    win.writeHotStrAt(2, 0, win.width-4, caption, (focused ? palColor!"hotsel"() : palColor!"hot"()), win.Align.Center, hotkeyed, focused);
+    win.writeHotStrAt(2, 0, win.width-4, caption, hotcolor, win.Align.Center, hotkeyed, focused);
   }
 
   void onMyEvent (FuiEventClick evt) {

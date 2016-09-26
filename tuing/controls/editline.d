@@ -50,6 +50,19 @@ private class FuiHistoryWindow : FuiWindow {
     this.connectListeners();
     super();
     el = ael;
+    auto hm = el.historymgr;
+    assert(hm !is null);
+    caption = "History";
+    frame = Frame.Small;
+    minSize.w = 14;
+    hlb = new FuiListBox(this);
+    hlb.aligning = hlb.Align.Stretch;
+    foreach_reverse (immutable idx; 0..hm.count(el)) hlb.addItem(hm.item(el, idx));
+    hlb.curitem = hlb.count-1;
+    hlb.defctl = true;
+    hlb.escctl = true;
+    hlb.maxSize.w = ttyw-8;
+    hlb.maxSize.h = ttyh-8;
     /*this works
     addEventListener(this, (FuiEventClose evt) {
       ttyBeep;
@@ -71,40 +84,19 @@ private class FuiHistoryWindow : FuiWindow {
     }
     super.onBubbleEvent(evt);
   }
-}
 
-
-private void createHistoryWin (FuiEditLine el) {
-  if (el is null) return;
-  auto desk = el.getDesk;
-  if (desk is null) return;
-  auto hm = el.historymgr;
-  if (hm is null) return;
-  if (!hm.has(el) || hm.count(el) < 1) return;
-  auto win = new FuiHistoryWindow(el);
-  //win.lp.minSize = FuiSize(30, 7);
-  win.caption = "History";
-  win.frame = win.Frame.Small;
-  win.minSize.w = 14;
-  if (auto lb = new FuiListBox(win)) {
-    lb.aligning = lb.Align.Stretch;
-    foreach_reverse (immutable idx; 0..hm.count(el)) lb.addItem(hm.item(el, idx));
-    lb.curitem = lb.count-1;
-    lb.defctl = true;
-    lb.escctl = true;
-    lb.maxSize.w = ttyw-8;
-    lb.maxSize.h = ttyh-8;
-    win.hlb = lb;
+  static void create (FuiEditLine el) {
+    if (el is null) return;
+    auto desk = el.getDesk;
+    if (desk is null) return;
+    auto hm = el.historymgr;
+    if (hm is null) return;
+    if (!hm.has(el) || hm.count(el) < 1) return;
+    auto win = new FuiHistoryWindow(el);
+    fuiLayout(win);
+    win.positionUnderControl(el);
+    tuidesk.addPopup(win);
   }
-  //win.onBlur = (FuiControl self) { (new FuiEventClose(self, null)).post; };
-  fuiLayout(win);
-  //import std.random : uniform;
-  auto pt = el.toGlobal(FuiPoint(0, 1));
-  if (pt.x+win.size.w > ttyw) pt.x = ttyw-win.size.w;
-  if (pt.y+win.size.h > ttyh) pt.y = ttyh-win.size.h;
-  win.pos.x = pt.x;
-  win.pos.y = pt.y;
-  tuidesk.addPopup(win);
 }
 
 
@@ -140,10 +132,7 @@ public class FuiEditLine : FuiControl {
   }
 
   // action called when editor processed any key
-  override void doAction () {
-    if (onAction !is null) { onAction(this); return; }
-    //(new FuiEventClose(toplevel, this)).post;
-  }
+  //override void doAction ();
 
   protected override void drawSelf (XtWindow win) {
     //ed.hideStatus = true;
@@ -181,7 +170,7 @@ public class FuiEditLine : FuiControl {
     if (auto hm = historymgr) {
       if (evt.key == "M-H" || evt.key == "M-Down") {
         // history dialog
-        createHistoryWin(this);
+        FuiHistoryWindow.create(this);
         evt.eat();
         return;
       }

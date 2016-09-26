@@ -54,6 +54,36 @@ public class FuiWindow : FuiControl {
     maxSize.h = ttyh;
   }
 
+  // call this after layouting
+  void positionUnderControl (FuiControl c) {
+    if (c is null) {
+      pos.x = (ttyw-size.w)/2;
+      pos.y = (ttyw-size.w)/2;
+    } else {
+      auto pt = c.toGlobal(FuiPoint(0, 1));
+      if (pt.x+size.w > ttyw) pt.x = ttyw-size.w;
+      if (pt.y+size.h > ttyh) pt.y = ttyh-size.h;
+      pos.x = pt.x;
+      pos.y = pt.y;
+    }
+  }
+
+  // call this after layouting
+  void positionCenterInControl (FuiControl c) {
+    if (c is null) {
+      pos.x = (ttyw-size.w)/2;
+      pos.y = (ttyw-size.w)/2;
+    } else {
+      auto pt = c.toGlobal(FuiPoint(0, 0));
+      pt.x += (c.size.w-size.w)/2;
+      pt.y += (c.size.h-size.h)/2;
+      if (pt.x+size.w > ttyw) pt.x = ttyw-size.w;
+      if (pt.y+size.h > ttyh) pt.y = ttyh-size.h;
+      pos.x = pt.x;
+      pos.y = pt.y;
+    }
+  }
+
   final pure nothrow @safe @nogc {
     @property void defaultFocus (FuiControl c) {
       if (c.toplevel is this) lastfct = c;
@@ -204,14 +234,14 @@ public class FuiWindow : FuiControl {
       if (evt.key == "Enter" || evt.key == "^Enter") {
         if (auto def = forEach((FuiControl ctl) => (ctl.visible && ctl.enabled && ctl.defctl))) {
           evt.eat();
-          (new FuiEventClose(this, def)).post;
+          if (def.onAction !is null) def.onAction(def); else (new FuiEventClose(this, def)).post;
           return;
         }
       }
       if (evt.key == "Escape") {
         if (auto def = forEach((FuiControl ctl) => (ctl.visible && ctl.enabled && ctl.escctl))) {
           evt.eat();
-          (new FuiEventClose(this, def)).post;
+          if (def.onAction !is null) def.onAction(def); else (new FuiEventClose(this, def)).post;
           return;
         }
       }

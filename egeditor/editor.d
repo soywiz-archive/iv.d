@@ -39,7 +39,7 @@ public:
   // WARNING! this will SIGNIFICANTLY slow down coordinate calculations!
   bool utfuck = false;
   bool visualtabs = false;
-  ubyte tabsize = 4;
+  ubyte tabsize = 2;
 
 private:
   HighState hidummy;
@@ -1653,7 +1653,6 @@ public:
 
     ubyte tabsize () const pure { pragma(inline, true); return gb.tabsize; }
     void tabsize (ubyte v) {
-      pragma(inline, true);
       if (gb.tabsize != v) {
         gb.tabsize = v;
         if (gb.visualtabs) fullDirty();

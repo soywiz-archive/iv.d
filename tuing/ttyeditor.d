@@ -226,6 +226,13 @@ class TtyEditor : Editor {
   }
 
 protected:
+  static struct TextHighlight {
+    int pos, count;
+    uint clr;
+    @property bool valid () const pure nothrow @safe @nogc { return (count > 0); }
+  }
+  TextHighlight texthi;
+
   TtyEvent[32] comboBuf;
   int comboCount; // number of items in `comboBuf`
   bool waitingInF5;
@@ -328,6 +335,7 @@ public:
   bool hideStatus = false;
   bool hideSBar = false; // hide scrollbar
   FuiHistoryManager hisman; // history manager for dialogs
+  bool editorlocked = false; // when editor send some message that needs action reply, it locks itself
 
 public:
   this (int x0, int y0, int w, int h, bool asinglesine=false) {
@@ -345,6 +353,13 @@ public:
       utfuck = false;
       codepage = cast(CodePage)ncp;
       fullDirty();
+      //(new EventEditorMessage(this, "codepage set")).post;
+    });
+    addEventListener(this, (EventEditorReplyTabSize evt) {
+      auto tsz = evt.tabsize;
+      if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
+      //import std.conv : to;
+      //(new EventEditorMessage(this, "tabsize set to "~tabsize.to!string)).post;
     });
   }
 
@@ -392,9 +407,9 @@ public:
   final void checkDiskAndReloadPrompt () {
     if (fullFileName.length == 0) return;
     if (wasDiskFileChanged) {
-      auto oldro = readonly;
+      auto oldlk = editorlocked;
       addEventListener(this, (EventEditorReplyReloadModified evt) {
-        readonly = oldro;
+        editorlocked = oldlk;
         if (evt.res > 0) {
           int rx = cx, ry = cy;
           clear();
@@ -406,7 +421,7 @@ public:
           makeCurLineVisibleCentered();
         }
       }, true); // oneshot
-      readonly = true;
+      editorlocked = true;
       (new EventEditorQueryReloadModified(this));
     }
   }
@@ -429,39 +444,41 @@ public:
     }
     if (fullFileName.length == 0) return;
     if (wasDiskFileChanged) {
-      auto oldro = readonly;
+      auto oldlk = editorlocked;
       addEventListener(this, (EventEditorReplyOverwriteModified evt) {
-        readonly = oldro;
+        editorlocked = oldlk;
         if (evt.res > 0) {
           super.saveFile(fullFileName);
           getDiskFileInfo();
         }
       }, true); // oneshot
-      readonly = true;
+      editorlocked = true;
       (new EventEditorQueryOverwriteModified(this));
     }
   }
 
   protected override void willBeDeleted (int pos, int len, int eolcount) {
-    if (len > 0) resetIncSearchPos();
+    if (len > 0) { resetIncSearchPos(); resetHighlight(); }
     super.willBeDeleted(pos, len, eolcount);
   }
 
   protected override void willBeInserted (int pos, int len, int eolcount) {
-    if (len > 0) resetIncSearchPos();
+    if (len > 0) { resetIncSearchPos(); resetHighlight(); }
     super.willBeInserted(pos, len, eolcount);
   }
 
-  final void resetIncSearchPos () nothrow @safe @nogc {
+  final void resetIncSearchPos (bool resethi=true) nothrow @safe @nogc {
     if (incSearchHitPos >= 0) {
       markLinesDirty(gb.pos2line(incSearchHitPos), 1);
       incSearchHitPos = -1;
       incSearchHitLen = -1;
+      if (resethi) resetHighlight();
     }
   }
 
   final void doStartIncSearch (int sdir=0) {
     resetIncSearchPos();
+    resetHighlight();
     incInputActive = true;
     incSearchDir = (sdir ? sdir : incSearchDir ? incSearchDir : 1);
     promptActivate("incsearch", incSearchBuf);
@@ -474,11 +491,13 @@ public:
   final void doNextIncSearch (bool domove=true) {
     if (incSearchDir == 0 || incSearchBuf.length == 0) {
       resetIncSearchPos();
+      resetHighlight();
       return;
     }
     //gb.moveGapAtEnd();
     //TODO: use `memr?chr()` here?
     resetIncSearchPos();
+    resetHighlight();
     if (incSearchBuf.ptr[0] != '/') {
       // plain text
       int pos = curpos+(domove ? incSearchDir : 0);
@@ -491,6 +510,9 @@ public:
       if (!mt.empty) {
         incSearchHitPos = mt.s;
         incSearchHitLen = mt.e-mt.s;
+        texthi.pos = incSearchHitPos;
+        texthi.count = incSearchHitLen;
+        texthi.clr = IncSearchColor;
       }
     } else if (incSearchBuf.length > 2 && incSearchBuf[$-1] == '/') {
       // regexp
@@ -508,6 +530,9 @@ public:
         // something was found
         incSearchHitPos = caps[0].s;
         incSearchHitLen = caps[0].e-caps[0].s;
+        texthi.pos = incSearchHitPos;
+        texthi.count = incSearchHitLen;
+        texthi.clr = IncSearchColor;
       }
     }
     if (incSearchHitPos >= 0 && incSearchHitLen > 0) {
@@ -562,14 +587,14 @@ public:
     }
     if (!utfuck) {
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u",
-        (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
+        (textChanged ? '*' : ' '), sx+0, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
       if (len > winw) len = winw;
       win.writeStrAt(0, 0, buf[0..len]);
     } else {
       dchar dch = dcharAt(cp);
       if (dch > dchar.max) dch = 0;
       auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u  U%04X",
-        (textChanged ? '*' : ' '), sx+1, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
+        (textChanged ? '*' : ' '), sx+0, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
       if (len > winw) len = winw;
       win.writeStrAt(0, 0, buf[0..len]);
     }
@@ -855,6 +880,19 @@ public:
     }
   }
 
+  // `fullreset` is false: keep insearch highlighting
+  protected final void resetHighlight (bool fullreset=true) nothrow @safe @nogc {
+    if (texthi.valid) {
+      texthi.count = 0;
+      fullDirty();
+    }
+    if (!fullreset) {
+      texthi.pos = incSearchHitPos;
+      texthi.count = incSearchHitLen;
+      texthi.clr = IncSearchColor;
+    }
+  }
+
   protected final void drawPartHighlight (int pos, int count, uint clr) {
     if (pos >= 0 && count > 0 && pos < gb.textsize) {
       int rx, ry;
@@ -907,10 +945,7 @@ public:
       else if (ch == '}') drawHiBracket(pos, cy, ch, '{', -1, true);
       else if (ch == ']') drawHiBracket(pos, cy, ch, '[', -1);
     }
-    // highlight search
-    if (incSearchHitPos >= 0 && incSearchHitLen > 0 && incSearchHitPos < gb.textsize) {
-      drawPartHighlight(incSearchHitPos, incSearchHitLen, IncSearchColor);
-    }
+    if (texthi.valid) drawPartHighlight(texthi.pos, texthi.count, texthi.clr);
     drawScrollBar();
   }
 
@@ -1116,12 +1151,12 @@ public:
       if (mReadOnly) return;
       replaceText!"end"(tkstpos, tklen, acp);
     } else {
-      auto oldro = readonly;
+      auto oldlk = editorlocked;
       addEventListener(this, (EventEditorReplyAutocompletion evt) {
-        readonly = oldro;
+        editorlocked = oldlk;
         if (evt.res.length) replaceText!"end"(evt.pos, evt.len, evt.res);
       }, true); // oneshot
-      readonly = true;
+      editorlocked = true;
       int rx, ry;
       gb.pos2xyVT(tkstpos, rx, ry);
       (new EventEditorQueryAutocompletion(this, tkstpos, tklen, FuiPoint(winx+(rx-mXOfs), winy+(ry-mTopLine)+1), aclist[0..acused]));
@@ -1241,6 +1276,7 @@ public:
     // hack it here, so it won't interfere with normal keyboard processing
     if (key.key == TtyEvent.Key.PasteStart) { doPasteStart(); return true; }
     if (key.key == TtyEvent.Key.PasteEnd) { doPasteEnd(); return true; }
+    if (editorlocked) return false;
 
     if (waitingInF5) {
       waitingInF5 = false;
@@ -1256,7 +1292,7 @@ public:
 
     if (incInputActive) {
       if (key.key == TtyEvent.Key.ModChar) {
-        if (key == "^C") { incInputActive = false; resetIncSearchPos(); promptNoKillText(); return true; }
+        if (key == "^C") { incInputActive = false; resetIncSearchPos(); resetHighlight(); promptNoKillText(); return true; }
         if (key == "^R") { incSearchDir = 1; doNextIncSearch(); promptNoKillText(); return true; }
         if (key == "^V") { incSearchDir = -1; doNextIncSearch(); promptNoKillText(); return true; }
         //return true;
@@ -1264,7 +1300,8 @@ public:
       if (key == "esc" || key == "enter") {
         incInputActive = false;
         promptDeactivate();
-        resetIncSearchPos();
+        resetIncSearchPos(false);
+        //resetHighlight();
         return true;
       }
       if (mPromptInput !is null) mPromptInput.utfuck = utfuck;
@@ -1286,17 +1323,19 @@ public:
       return true;
     }
 
-    resetIncSearchPos();
+    //resetIncSearchPos();
 
     final switch (doEditorCommandByUDA(key)) {
       case Ecc.None: break;
       case Ecc.Combo:
       case Ecc.Eaten:
+        resetHighlight(false);
         return true;
     }
 
     if (key.key == TtyEvent.Key.Char) {
       if (readonly) return false;
+      resetHighlight();
       doPutChar(cast(char)key.ch);
       return true;
     }
@@ -1561,10 +1600,13 @@ final:
         if (doundo) gotoPos!true(mt.s);
         fullDirty();
         drawPage();
-        drawPartHighlight(mt.s, mt.e-mt.s, IncSearchColor);
-        auto oldro = readonly;
+        texthi.pos = mt.s;
+        texthi.count = mt.e-mt.s;
+        texthi.clr = IncSearchColor;
+        drawPartHighlight(texthi.pos, texthi.count, texthi.clr);
+        auto oldlk = editorlocked;
         addEventListener(this, (EventEditorReplyReplacement evt) {
-          readonly = oldro;
+          editorlocked = oldlk;
           if (evt.opt is null) return;
           srr = *cast(SROptions*)evt.opt;
           assert(srr.ed is this);
@@ -1586,6 +1628,7 @@ final:
           // do it again
           srrPlainStep(srr);
         }, true);
+        editorlocked = true;
         (new EventEditorQueryReplacement(this, &srr)).post;
         return;
       }
@@ -1734,10 +1777,13 @@ final:
         if (doundo) gotoPos!true(srr.caps[0].s);
         fullDirty();
         drawPage();
-        drawPartHighlight(srr.caps[0].s, srr.caps[0].e-srr.caps[0].s, IncSearchColor);
-        auto oldro = readonly;
+        texthi.pos = srr.caps[0].s;
+        texthi.count = srr.caps[0].e-srr.caps[0].s;
+        texthi.clr = IncSearchColor;
+        drawPartHighlight(texthi.pos, texthi.count, texthi.clr);
+        auto oldlk = editorlocked;
         addEventListener(this, (EventEditorReplyReplacement evt) {
-          readonly = oldro;
+          editorlocked = oldlk;
           if (evt.opt is null) return;
           srr = *cast(SROptions*)evt.opt;
           assert(srr.ed is this);
@@ -1759,6 +1805,7 @@ final:
           // do it again
           srrRegExpStep(srr);
         }, true);
+        editorlocked = true;
         (new EventEditorQueryReplacement(this, &srr)).post;
         return;
       }
@@ -1852,13 +1899,16 @@ final:
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("F4", "search and relace text", q{
     if (srrOptions.ed !is null) return; // in progress
     srrOptions.ed = this;
+    auto oldlk = editorlocked;
     addEventListener(this, (EventEditorReplySR evt) {
+      editorlocked = oldlk;
       if (evt.cancel) { srrOptions.ed = null; return; }
       assert(evt.opt !is null);
       srrOptions = *cast(SROptions*)evt.opt;
       if (srrOptions.type == SROptions.Type.Normal) srrPlainStart(srrOptions);
       if (srrOptions.type == SROptions.Type.Regex) srrRegexStart(srrOptions);
     }, true);
+    editorlocked = true;
     (new EventEditorQuerySR(this, &srrOptions));
   });
   @TEDEditOnly mixin TEDImpl!("F5", "copy block", q{ doBlockCopy(); });
@@ -1937,6 +1987,7 @@ final:
       incInputActive = false;
       promptDeactivate();
       resetIncSearchPos();
+      resetHighlight();
     }
     // collect word
     while (pos > 0 && isWordChar(gb[pos-1])) --pos;
@@ -1949,13 +2000,7 @@ final:
   });
 
   mixin TEDImpl!("^Q ^K", "go to block end", q{ if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; });
-  mixin TEDImpl!("^Q ^T", "set tab size", q{
-    //TODO: write event-based code
-    /+
-    auto tsz = dialogTabSize(hisman, tabsize);
-    if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
-    +/
-  });
+  mixin TEDImpl!("^Q ^T", "set tab size", q{ (new EventEditorQueryTabSize(this, tabsize)).post; });
 
   @TEDMultiOnly @TEDROOnly mixin TEDImpl!("Space", q{ doPageDown(); });
   @TEDMultiOnly @TEDROOnly mixin TEDImpl!("^Space", q{ doPageUp(); });

@@ -31,10 +31,125 @@ import iv.tuing.types;
 import iv.tuing.ttyeditor;
 import iv.tuing.controls.box;
 import iv.tuing.controls.button;
+import iv.tuing.controls.editline;
 import iv.tuing.controls.hline;
+import iv.tuing.controls.label;
 import iv.tuing.controls.listbox;
 import iv.tuing.controls.span;
 import iv.tuing.controls.window;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private class FuiEditorMessageWindow : FuiWindow {
+  alias onMyEvent = super.onMyEvent;
+  alias onBubbleEvent = super.onBubbleEvent;
+
+  this (FuiEditor aed, string msg) {
+    assert(aed !is null);
+    this.connectListeners();
+    super();
+    caption = "Editor Message";
+    minSize.w = cast(int)caption.length+6;
+    frame = Frame.Normal;
+    if (auto lb = new FuiLabel(this, "\x03"~msg)) {
+      lb.hotkeyed = false;
+      lb.aligning = Align.Stretch;
+    }
+    new FuiHLine(this);
+    if (auto box = new FuiHBox(this)) {
+      new FuiSpan(box);
+      with (new FuiButton(box, "&Close")) {
+        defctl = true;
+        escctl = true;
+      }
+      new FuiSpan(box);
+    }
+  }
+
+  static void create (FuiEditor aed, string msg) {
+    if (aed is null) return;
+    auto desk = aed.getDesk;
+    if (desk is null) return;
+    auto win = new FuiEditorMessageWindow(aed, msg);
+    fuiLayout(win);
+    win.positionCenterInControl(aed);
+    tuidesk.addPopup(win);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private class FuiEditorNumInputWindow : FuiWindow {
+  alias onMyEvent = super.onMyEvent;
+  alias onBubbleEvent = super.onBubbleEvent;
+
+  FuiEditor edt;
+  FuiEditLine editline;
+  FuiButton btok;
+
+  int getNum () {
+    auto ed = editline.ed;
+    if (ed is null) return -1;
+    int num = 0;
+    auto rng = ed[];
+    while (!rng.empty && rng.front <= ' ') rng.popFront();
+    if (rng.empty || !rng.front.isdigit) return -1;
+    while (!rng.empty && rng.front.isdigit) {
+      num = num*10+rng.front-'0';
+      rng.popFront();
+    }
+    while (!rng.empty && rng.front <= ' ') rng.popFront();
+    return (rng.empty ? num : -1);
+  }
+
+  this (FuiEditor aed, string acaption, string alabel, int defval) {
+    import std.format : format;
+    assert(aed !is null);
+    this.connectListeners();
+    super();
+    edt = aed;
+    caption = acaption;
+    minSize.w = cast(int)caption.length+6;
+    frame = Frame.Normal;
+    auto lb = new FuiLabel(this, alabel);
+    editline = new FuiEditLine(this, (defval > 0 ? "%s".format(defval) : ""));
+    editline.onAction = (FuiControl self) { btok.enabled = (getNum() > 0); };
+    defaultFocus = editline;
+    new FuiHLine(this);
+    if (auto box = new FuiHBox(this)) {
+      new FuiSpan(box);
+      btok = new FuiButton(box, "&OK");
+      with (btok) {
+        defctl = true;
+        enabled = (defval > 0);
+      }
+      with (new FuiButton(box, "&Close")) {
+        escctl = true;
+      }
+      new FuiSpan(box);
+    }
+  }
+}
+
+
+private void createTabSizeWindow (FuiEditor aed, int tabsize) {
+  if (aed is null) return;
+  auto desk = aed.getDesk;
+  if (desk is null) return;
+  auto win = new FuiEditorNumInputWindow(aed, "Editor Query", "&Tab size:", tabsize);
+  win.btok.onAction = (FuiControl self) {
+    if (auto w = cast(FuiEditorNumInputWindow)self.toplevel) {
+      int n = w.getNum();
+      if (n > 0) {
+        (new EventEditorReplyTabSize(w.edt.ed, n)).post;
+        (new FuiEventClose(w, self)).post;
+      }
+    }
+  };
+  fuiLayout(win);
+  win.positionCenterInControl(aed);
+  tuidesk.addPopup(win);
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -45,11 +160,27 @@ private class FuiEditorCPWindow : FuiWindow {
   FuiEditor ed;
   FuiListBox lb;
 
-  this (FuiEditor aed) {
+  this (FuiEditor aed, int ccp) {
     assert(aed !is null);
     this.connectListeners();
     super();
     ed = aed;
+    caption = "Codepage";
+    frame = Frame.Small;
+    //minSize.w = 14;
+    lb = new FuiListBox(this);
+    with (lb) {
+      aligning = Align.Stretch;
+      addItem("KOI8-U");
+      addItem("CP1251");
+      addItem("CP-866");
+      addItem("UTFUCK");
+      curitem = ccp;
+      defctl = true;
+      escctl = true;
+      maxSize.w = ttyw-8;
+      maxSize.h = ttyh-8;
+    }
   }
 
   override void onBubbleEvent (FuiEventKey evt) {
@@ -63,27 +194,9 @@ private class FuiEditorCPWindow : FuiWindow {
     if (aed is null) return;
     auto desk = aed.getDesk;
     if (desk is null) return;
-    auto win = new FuiEditorCPWindow(aed);
-    win.caption = "Codepage";
-    win.frame = win.Frame.Small;
-    //win.minSize.w = 14;
-    win.lb = new FuiListBox(win);
-    win.lb.aligning = lb.Align.Stretch;
-    win.lb.addItem("KOI8-U");
-    win.lb.addItem("CP1251");
-    win.lb.addItem("CP-866");
-    win.lb.addItem("UTFUCK");
-    win.lb.curitem = ccp;
-    win.lb.defctl = true;
-    win.lb.escctl = true;
-    win.lb.maxSize.w = ttyw-8;
-    win.lb.maxSize.h = ttyh-8;
+    auto win = new FuiEditorCPWindow(aed, ccp);
     fuiLayout(win);
-    auto pt = aed.toGlobal(FuiPoint(0, 1));
-    if (pt.x+win.size.w > ttyw) pt.x = ttyw-win.size.w;
-    if (pt.y+win.size.h > ttyh) pt.y = ttyh-win.size.h;
-    win.pos.x = pt.x;
-    win.pos.y = pt.y;
+    win.positionCenterInControl(aed);
     tuidesk.addPopup(win);
   }
 }
@@ -109,9 +222,13 @@ public class FuiEditor : FuiControl {
     canBeFocused = true;
     hotkeyed = false;
     acceptClick(TtyEvent.MButton.Left);
-    addEventListener(ed, (EventEditorQueryCodePage evt) {
-      FuiEditorCPWindow.create(this, evt.cp);
-    });
+
+    addEventListener(ed, (EventEditorMessage evt) { FuiEditorMessageWindow.create(this, evt.msg); });
+    addEventListener(ed, (EventEditorQueryCodePage evt) { FuiEditorCPWindow.create(this, evt.cp); });
+    addEventListener(ed, (EventEditorQueryTabSize evt) { createTabSizeWindow(this, evt.tabsize); });
+
+    //(new EventEditorQueryReplacement(this, &srr)).post;
+    //(new EventEditorQueryGotoLine(this)).post;
   }
 
   T getText(T:const(char)[]) () if (!is(T == typeof(null))) {
@@ -124,14 +241,11 @@ public class FuiEditor : FuiControl {
   }
 
   // action called when editor processed any key
-  override void doAction () {
-    if (onAction !is null) { onAction(this); return; }
-    //(new FuiEventClose(toplevel, this)).post;
-  }
+  //override void doAction ()
 
   protected override void drawSelf (XtWindow win) {
     //ed.hideStatus = true;
-    ed.moveResize(win.x0, win.y0, win.width, win.height);
+    ed.moveResize(win.x0+(ed.hideSBar ? 0 : 1), win.y0+(ed.hideStatus ? 0 : 1), win.width-(ed.hideSBar ? 0 : 2), win.height-(ed.hideStatus ? 0 : 2));
     ed.fullDirty;
     ed.dontSetCursor = !focused;
     if (enabled) {

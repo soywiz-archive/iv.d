@@ -200,3 +200,12 @@ public class EventEditorReplyCodePage : EventEditorReply {
   int cp;
   this (TtyEditor aed, int acp) { super(aed); cp = acp; }
 }
+
+public class EventEditorQueryTabSize : EventEditorQuery {
+  int tabsize;
+  this (TtyEditor aed, int atabsize) { super(aed); tabsize = atabsize; }
+}
+public class EventEditorReplyTabSize : EventEditorReply {
+  int tabsize;
+  this (TtyEditor aed, int atabsize) { super(aed); tabsize = atabsize; }
+}
