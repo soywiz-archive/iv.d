@@ -31,9 +31,7 @@ import iv.tuing.types;
 import iv.tuing.ttyeditor;
 import iv.tuing.controls.box;
 import iv.tuing.controls.button;
-import iv.tuing.controls.hline;
 import iv.tuing.controls.listbox;
-import iv.tuing.controls.span;
 import iv.tuing.controls.window;
 
 
