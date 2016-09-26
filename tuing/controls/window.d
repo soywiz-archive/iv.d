@@ -47,6 +47,8 @@ public class FuiWindow : FuiControl {
   int[string] radios; // radio groups
   bool[string] checks; // checkboxes
 
+  protected bool kbmoving;
+
   this () {
     this.connectListeners();
     super(null);
@@ -233,7 +235,7 @@ public class FuiWindow : FuiControl {
   }
 
   protected override void drawSelf (XtWindow win) {
-    win.color = palColor!"def"();
+    win.color = (kbmoving ? palColor!"title" : palColor!"def"());
     win.fill(0, 0, win.width, win.height);
     final switch (frame) {
       case Frame.Normal:
@@ -298,6 +300,24 @@ public class FuiWindow : FuiControl {
         if (ctl.tryHotKey(evt.key)) { evt.eat(); ctl.doAction(); return true; }
         return false;
       });
+      if (evt.key == "M-F5") {
+        kbmoving = true;
+        evt.eat();
+        return;
+      }
+    }
+  }
+
+  override void onMyEvent (FuiEventBlur evt) { kbmoving = false; super.onMyEvent(evt); }
+
+  void onSinkEvent (FuiEventKey evt) {
+    if (kbmoving) {
+      evt.eat();
+      if (evt.key == "Left") pos.x = pos.x-1;
+      if (evt.key == "Right") pos.x = pos.x+1;
+      if (evt.key == "Up") pos.y = pos.y-1;
+      if (evt.key == "Down") pos.y = pos.y+1;
+      if (evt.key == "Escape") kbmoving = false;
     }
   }
 
