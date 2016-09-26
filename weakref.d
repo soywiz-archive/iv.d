@@ -39,7 +39,6 @@ final class Weak(T : Object) {
   private size_t mObject;
   private size_t mPtr;
   private size_t mHash;
-  void function (size_t ptr, size_t hash) nothrow @safe @nogc onDead; // not a delegate, 'cause this object is not scanned by GC
 
   this (T obj=null) @trusted { hook(obj); }
 
@@ -56,7 +55,7 @@ final class Weak(T : Object) {
 
   @property void object (T obj) @trusted {
     auto oobj = cast(T)cast(void*)(atomicLoad(*cast(shared)&mObject)^PointerMask);
-    if (oobj !is null && GC.addrOf(cast(void*)oobj)) unhookNoDeadCall(oobj);
+    if (oobj !is null && GC.addrOf(cast(void*)oobj)) unhook(oobj);
     oobj = null;
     hook(obj);
   }
@@ -85,18 +84,13 @@ final class Weak(T : Object) {
     }
   }
 
-  private void unhookNoDeadCall (Object obj) @trusted {
+  private void unhook (Object obj) @trusted {
     rt_detachDisposeEvent(obj, &unhook);
     // this assignment is important.
     // if we don't null mObject when it is collected, the check
     // in object could return false positives where the GC has
     // reused the memory for a new object.
     atomicStore(*cast(shared)&mObject, cast(size_t)0^PointerMask);
-  }
-
-  private void unhook (Object obj) @trusted {
-    unhookNoDeadCall(obj);
-    if (onDead !is null) onDead(mPtr^PointerMask, mHash);
   }
 
   override bool opEquals (Object o) nothrow @trusted {

@@ -230,7 +230,7 @@ public void connectListeners(O:Object) (O obj) {
         else static if (tp == ObjDispatcher.Type.Bubble) enum EvtName = "onBubbleEvent";
         else static assert(0, "invalid type");
         Weak!OT obj;
-        this (OT aobj) { obj = new Weak!OT(aobj); obj.onDead = &ebusOnDeadCB; }
+        this (OT aobj) { obj = new Weak!OT(aobj); /*obj.onDead = &ebusOnDeadCB;*/ }
         override bool alive () { return !obj.empty; }
         override Type type () { return tp; }
         override bool isObject (Object o) {
@@ -475,7 +475,7 @@ struct EventListenerInfo {
     dg = adg;
     if (asrc !is null) {
       xsrc = new Weak!Object(asrc);
-      xsrc.onDead = &ebusOnDeadCB;
+      //xsrc.onDead = &ebusOnDeadCB;
     }
     oneshot = aoneshot;
   }
@@ -585,9 +585,13 @@ void dispatchSinkBubble (Event evt) {
     evt.flags |= Event.PFlags.Bubbling;
     callOnTypeFor(ObjDispatcher.Type.My, evchain[0]);
     if (evt.processed) return;
+    if (auto itf = cast(EventTarget)evchain[0]) {
+      itf.eventbusOnEvent(evt);
+      if (evt.processed) return;
+    }
     // bubbling phase, forward
-    foreach (immutable idx, Object o; evchain) {
-      if (idx) callOnTypeFor(ObjDispatcher.Type.Bubble, o);
+    foreach (Object o; evchain[1..$]) {
+      callOnTypeFor(ObjDispatcher.Type.Bubble, o);
       if (evt.processed) return;
       if (auto itf = cast(EventTarget)o) {
         itf.eventbusOnEvent(evt);
@@ -666,7 +670,8 @@ void callEventListeners (Event evt) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void ebusOnDeadCB (size_t ptr, size_t hash) nothrow @trusted @nogc {
+/*
+private void ebusOnDeadCB (size_t ptr, size_t hash) nothrow @trusted @nogc {
   import core.atomic;
   atomicStore(needListenerCleanupSB, true);
   version(none) {
@@ -677,6 +682,7 @@ void ebusOnDeadCB (size_t ptr, size_t hash) nothrow @trusted @nogc {
     }
   }
 }
+*/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
