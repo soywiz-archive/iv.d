@@ -19,12 +19,13 @@
  */
 module iv.tuing.events;
 
+import iv.eventbus;
+import iv.flexlayout : FuiPoint;
 import iv.rawtty2 : TtyEvent;
+
 import iv.tuing.controls.button : FuiCheckBox, FuiRadio;
 import iv.tuing.controls.listbox : FuiListBox;
 import iv.tuing.controls.window : FuiWindow;
-import iv.tuing.eventbus;
-import iv.tuing.layout : FuiPoint;
 import iv.tuing.tui : FuiControl;
 import iv.tuing.ttyeditor : TtyEditor;
 

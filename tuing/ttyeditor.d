@@ -18,6 +18,8 @@ module iv.tuing.ttyeditor;
 
 import std.datetime : SysTime;
 
+import iv.eventbus;
+import iv.flexlayout;
 import iv.rawtty2;
 import iv.srex;
 import iv.strex;
@@ -28,8 +30,6 @@ import iv.egeditor.editor;
 import iv.egeditor.highlighters;
 
 import iv.tuing.types;
-import iv.tuing.eventbus;
-import iv.tuing.layout;
 import iv.tuing.tty;
 import iv.tuing.events;
 import iv.tuing.tui;

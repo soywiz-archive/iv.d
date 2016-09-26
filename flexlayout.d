@@ -18,7 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // this engine can layout any boxset (if it is valid)
-module iv.tuing.layout;
+module iv.flexlayout;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -181,7 +181,7 @@ private static void forEachItem (FuiLayoutProps root, scope void delegate (FuiLa
 }
 
 
-void fuiLayout (FuiLayoutProps aroot) {
+void flexLayout (FuiLayoutProps aroot) {
   import std.algorithm : min, max;
 
   if (aroot is null) return;
@@ -519,7 +519,7 @@ void fuiLayout (FuiLayoutProps aroot) {
 }
 
 
-/*debug(tui_dump)*/ void dumpLayout() (FuiLayoutProps mroot, const(char)[] foname=null) {
+debug(flexlayout_dump) void dumpLayout() (FuiLayoutProps mroot, const(char)[] foname=null) {
   import core.stdc.stdio : stderr, fopen, fclose, fprintf;
   import std.internal.cstring;
 

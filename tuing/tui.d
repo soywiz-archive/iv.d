@@ -19,13 +19,13 @@
  */
 module iv.tuing.tui;
 
+import iv.eventbus;
+import iv.flexlayout;
 import iv.strex;
 import iv.rawtty2;
 import iv.weakref;
 
 import iv.tuing.types;
-import iv.tuing.layout;
-import iv.tuing.eventbus;
 import iv.tuing.tty;
 import iv.tuing.events;
 import iv.tuing.controls.window;
@@ -35,7 +35,7 @@ import iv.tuing.controls.window;
 __gshared ushort fuiDoubleTime = 250; // 250 msecs to register doubleclick
 
 
-public void fuiLayout (FuiControl ctl) { if (ctl !is null) iv.tuing.layout.fuiLayout(ctl.lp); }
+public void fuiLayout (FuiControl ctl) { if (ctl !is null) flexLayout(ctl.lp); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

@@ -20,10 +20,10 @@
 module iv.tuing;
 
 public import iv.egeditor;
+public import iv.flexlayout;
+public import iv.eventbus;
 
 public import iv.tuing.types; // independent: usize, cstring
-public import iv.tuing.layout; // independent
-public import iv.tuing.eventbus; // independent
 public import iv.tuing.tty; // independent
 
 public import iv.tuing.events;

@@ -20,12 +20,12 @@
 // button
 module iv.tuing.controls.button;
 
+import iv.eventbus;
+import iv.flexlayout;
 import iv.strex;
 import iv.rawtty2;
 
-import iv.tuing.eventbus;
 import iv.tuing.events;
-import iv.tuing.layout;
 import iv.tuing.tty;
 import iv.tuing.tui;
 import iv.tuing.types;
