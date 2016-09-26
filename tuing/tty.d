@@ -872,22 +872,46 @@ const:
   }
 
   void vline(bool setattr=true) (int x, int y, int len) {
-    if (len < 1 || y >= h) return;
+    if (x < 0 || x >= w || len < 1 || y >= h || w < 1 || h < 1) return;
+    bool first = true;
+    bool last = true;
     if (y < 0) {
+      first = false;
       if (y <= -len) return;
       len += y;
       y = 0;
     }
-    if (len > h-y) len = h-y;
+    if (len > h-y) { last = false; len = h-y; }
     if (len < 1) return; // just in case
-    if (normXYLen(x, y, 1) != 1) return;
     immutable f = fg, b = bg;
+    /*
+    if (normXYLen(x, y, 1) != 1) return;
     if (len == 1) {
       ttywb.ptr[y*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
     } else {
       ttywb.ptr[y*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphDown, f, b);
       foreach (int sy; y+1..y+len-1) ttywb.ptr[sy*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
       ttywb.ptr[(y+len-1)*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphUp, f, b);
+    }
+    */
+    if (len == 1) {
+      if (normXYLen(x, y, 1) != 1) return;
+      ttywb.ptr[y*ttywIntr+x].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
+      return;
+    }
+    while (len-- > 0) {
+      int xx = x, yy = y;
+      if (normXYLen(xx, yy, 1) == 1) {
+        if (first) {
+          first = false;
+          ttywb.ptr[yy*ttywIntr+xx].g1line!setattr(Glyph.Flag.GraphDown, f, b);
+        } else if (last && len == 0) {
+          ttywb.ptr[yy*ttywIntr+xx].g1line!setattr(Glyph.Flag.GraphUp, f, b);
+        } else {
+          ttywb.ptr[yy*ttywIntr+xx].g1line!setattr(Glyph.Flag.GraphUp|Glyph.Flag.GraphDown, f, b);
+        }
+      }
+      ++y;
     }
   }
 

@@ -317,7 +317,11 @@ public class FuiWindow : FuiControl {
       if (evt.key == "Right") pos.x = pos.x+1;
       if (evt.key == "Up") pos.y = pos.y-1;
       if (evt.key == "Down") pos.y = pos.y+1;
-      if (evt.key == "Escape") kbmoving = false;
+      if (evt.key == "^Left") pos.x = pos.x-10;
+      if (evt.key == "^Right") pos.x = pos.x+10;
+      if (evt.key == "^Up") pos.y = pos.y-10;
+      if (evt.key == "^Down") pos.y = pos.y+10;
+      if (evt.key == "Escape" || evt.key == "Enter") kbmoving = false;
     }
   }
 

@@ -243,7 +243,7 @@ public class FuiEditor : FuiControl {
 
   protected override void drawSelf (XtWindow win) {
     //ed.hideStatus = true;
-    ed.moveResize(win.x0+(ed.hideSBar ? 0 : 1), win.y0+(ed.hideStatus ? 0 : 1), win.width-(ed.hideSBar ? 0 : 2), win.height-(ed.hideStatus ? 0 : 2));
+    ed.moveResize(win.x0+(ed.hideSBar ? 0 : 1), win.y0+(ed.hideStatus ? 0 : 1), win.width-(ed.hideSBar ? 0 : 1), win.height-(ed.hideStatus ? 0 : 1));
     ed.fullDirty;
     ed.dontSetCursor = !focused;
     if (enabled) {
