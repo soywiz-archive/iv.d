@@ -166,6 +166,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
           }
         }
       }
+      tkstr = true;
       return true;
     }
 
@@ -265,7 +266,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
     import std.conv : to;
     if (!hasValue) throw new Exception("number value expected");
     nextToken();
-    if (tkstr || eof) throw new Exception("number expected");
+    if (/*tkstr ||*/ eof) throw new Exception("number expected");
     if (hasValue) throw new Exception("number expected");
     auto t = token;
     if (t.length == 0 || !t.ptr[0].isdigit) throw new Exception("number expected");
@@ -275,7 +276,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
   int getBool () {
     if (!hasValue) return 1;
     nextToken();
-    if (tkstr || eof) throw new Exception("boolean expected");
+    if (/*tkstr ||*/ eof) throw new Exception("boolean expected");
     if (hasValue) throw new Exception("boolean expected");
     auto t = token;
     if (t.strEquCI("yes") || t.strEquCI("tan") || t.strEquCI("true") || t.strEquCI("y") || t.strEquCI("t")) return 1;
@@ -620,7 +621,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       for (;;) {
         nextToken();
         if (eof) break;
-        if (token == "}") break;
+        if (!tkstr && token == "}") break;
         if (!hasValue && !tkstr && token == ",") continue;
         if (isGoodWidgetName(token)) {
           readProps(item);
@@ -647,7 +648,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
             }
           }
         } else {
-          if (token == "{") throw new Exception("orphaned group");
+          if (!tkstr && token == "{") throw new Exception("orphaned group");
         }
       }
     } else {
