@@ -28,15 +28,33 @@ public enum SRZNonDefaultOnly; // write only if it has non-default value
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+template arrayElementType(T) {
+  private import std.traits : isArray, Unqual;
+  static if (isArray!T) {
+    alias arrayElementType = arrayElementType!(typeof(T.init[0]));
+  } else static if (is(typeof(T))) {
+    alias arrayElementType = Unqual!(typeof(T));
+  } else {
+    alias arrayElementType = Unqual!T;
+  }
+}
+static assert(is(arrayElementType!string == char));
+
 template isSimpleType(T) {
   private import std.traits : Unqual;
   private alias UT = Unqual!T;
   enum isSimpleType = __traits(isIntegral, UT) || __traits(isFloating, UT) || is(UT == bool);
 }
 
+template isCharType(T) {
+  private import std.traits : Unqual;
+  private alias UT = Unqual!T;
+  enum isCharType = is(UT == char) || is(UT == wchar) || is(UT == dchar);
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!is(T == class) && isWriteableStream!ST) {
+public void txtser(T, ST) (in auto ref T v, auto ref ST fl, int indent=0) if (!is(T == class) && isWriteableStream!ST) {
   enum Indent = 2;
 
   void quote (const(char)[] s) {
@@ -132,8 +150,9 @@ public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!i
       } else {
         fl.write("{}");
       }
+    } else static if (isCharType!UT) {
+      fl.write(cast(uint)v);
     } else static if (isSimpleType!UT) {
-      // simple type
       fl.write(v);
     } else static if (is(UT == struct)) {
       // struct
@@ -171,7 +190,7 @@ public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!i
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void txtunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isReadableStream!ST) {
+public void txtunser(T, ST) (out T v, auto ref ST fl) if (!is(T == class) && isReadableStream!ST) {
   import std.traits : Unqual;
 
   char curCh = ' ', peekCh = ' ';
@@ -360,8 +379,15 @@ public void txtunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isR
         v[key] = value;
       }
       expectChar('}');
+    } else static if (isCharType!T) {
+      import std.conv : to;
+      auto id = expectId;
+      try {
+        v = id.to!uint.to!T;
+      } catch (Exception e) {
+        error("type conversion error for type '"~T.stringof~"' ("~id.idup~")");
+      }
     } else static if (isSimpleType!T) {
-      // simple type
       import std.conv : to;
       auto id = expectId;
       try {
@@ -433,20 +459,6 @@ public void txtunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isR
 
   unserData(v);
 }
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-template arrayElementType(T) {
-  private import std.traits : isArray, Unqual;
-  static if (isArray!T) {
-    alias arrayElementType = arrayElementType!(typeof(T.init[0]));
-  } else static if (is(typeof(T))) {
-    alias arrayElementType = Unqual!(typeof(T));
-  } else {
-    alias arrayElementType = Unqual!T;
-  }
-}
-static assert(is(arrayElementType!string == char));
 
 
 // ////////////////////////////////////////////////////////////////////////// //

@@ -17,4 +17,9 @@
 // very simple (de)serializer to json-like text format
 module iv.egtui.txtser;
 
-public import iv.txtser;
+static import iv.txtser;
+public import iv.txtser : SRZIgnore, SRZName, SRZNonDefaultOnly;
+private import iv.vfs.augs;
+
+public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!is(T == class) && isWriteableStream!ST) { iv.txtser.txtser(v, fl, indent); }
+public void txtunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isReadableStream!ST) { iv.txtser.txtunser(v, fl); }
