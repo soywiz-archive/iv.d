@@ -246,7 +246,7 @@ private class FuiEditorACWindow : FuiWindow {
       defctl = true;
       escctl = true;
       maxSize.w = ttyw-8;
-      maxSize.h = ttyh-8;
+      maxSize.h = 16;//ttyh-8;
     }
   }
 

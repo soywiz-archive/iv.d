@@ -81,6 +81,8 @@ public class FuiWindow : FuiControl {
       auto pt = c.toGlobal(FuiPoint(0, 0));
       pt.x += (c.size.w-size.w)/2;
       pt.y += (c.size.h-size.h)/2;
+      if (pt.x < 0) pt.x = 0;
+      if (pt.y < 0) pt.y = 0;
       if (pt.x+size.w > ttyw) pt.x = ttyw-size.w;
       if (pt.y+size.h > ttyh) pt.y = ttyh-size.h;
       pos.x = pt.x;
@@ -89,6 +91,8 @@ public class FuiWindow : FuiControl {
   }
 
   void positionAtGlobal (FuiPoint pt) {
+    if (pt.x < 0) pt.x = 0;
+    if (pt.y < 0) pt.y = 0;
     if (pt.x+size.w > ttyw) pt.x = ttyw-size.w;
     if (pt.y+size.h > ttyh) {
       if (pt.y-size.h-2 >= 0) pt.y = pt.y-size.h-2; else pt.y = ttyh-size.h;
