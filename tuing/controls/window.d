@@ -224,6 +224,8 @@ public class FuiWindow : FuiControl {
     FuiControl findNextToFocus () { return nextFocusableControl(lastfct); }
   }
 
+  void close (FuiControl closectl=null) { (new FuiEventClose(this, closectl)).post; }
+
   protected override void layoutingStarted () {
     final switch (frame) {
       case Frame.Normal: padding = FuiMargin(3, 2, 3, 2); break;

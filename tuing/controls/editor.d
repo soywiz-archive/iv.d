@@ -281,12 +281,9 @@ private class FuiEditorSRWindow : FuiWindow {
         defctl = true;
         enabled = (srr.search.length > 0);
         onAction = (FuiControl self) {
-          (new FuiEventClose(toplevel, null)).post;
+          self.closetop;
           auto rv = radio("srrtype");
-          if (rv < TtyEditor.SROptions.Type.min || rv > TtyEditor.SROptions.Type.max) {
-            (new FuiEventClose(toplevel, null)).post;
-            return;
-          }
+          if (rv < TtyEditor.SROptions.Type.min || rv > TtyEditor.SROptions.Type.max) return;
           srr.type = cast(TtyEditor.SROptions.Type)rv;
           srr.casesens = checkbox("casesens");
           srr.backwards = checkbox("backwards");
@@ -300,7 +297,7 @@ private class FuiEditorSRWindow : FuiWindow {
       with (new FuiButton(box, "&Cancel")) {
         escctl = true;
         onAction = (FuiControl self) {
-          (new FuiEventClose(toplevel, null)).post;
+          self.closetop;
           (new EventEditorReplySR(ed.ed, srr, false)).post;
         };
       }
@@ -342,21 +339,21 @@ private class FuiEditorSRConfirmWindow : FuiWindow {
       (new FuiSpan(box)).minSize.w = 1;
       with (new FuiButton(box, "&Replace")) {
         onAction = (FuiControl self) {
-          (new FuiEventClose(toplevel, null)).post;
+          self.closetop;
           srr.cont = TtyEditor.SROptions.Cont.Yes;
           (new EventEditorReplyReplacement(ed.ed, srr)).post;
         };
       }
       with (new FuiButton(box, "A&ll")) {
         onAction = (FuiControl self) {
-          (new FuiEventClose(toplevel, null)).post;
+          self.closetop;
           srr.cont = TtyEditor.SROptions.Cont.All;
           (new EventEditorReplyReplacement(ed.ed, srr)).post;
         };
       }
       with (new FuiButton(box, "&Skip")) {
         onAction = (FuiControl self) {
-          (new FuiEventClose(toplevel, null)).post;
+          self.closetop;
           srr.cont = TtyEditor.SROptions.Cont.No;
           (new EventEditorReplyReplacement(ed.ed, srr)).post;
         };
@@ -364,7 +361,7 @@ private class FuiEditorSRConfirmWindow : FuiWindow {
       with (new FuiButton(box, "&Cancel")) {
         escctl = true;
         onAction = (FuiControl self) {
-          (new FuiEventClose(toplevel, null)).post;
+          self.closetop;
           srr.cont = TtyEditor.SROptions.Cont.Cancel;
           (new EventEditorReplyReplacement(ed.ed, srr)).post;
         };

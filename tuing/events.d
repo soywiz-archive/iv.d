@@ -42,11 +42,16 @@ public class FuiEvent : Event {
   }
 }
 
+// broadcast this event to stop event loop
 public class FuiEventQuit : FuiEvent { this () {} }
 
+// post this event to close current window; `ares` is the control that caused it; may be null
 public class FuiEventClose : FuiEvent {
   FuiControl res;
-  this (FuiControl asrc, FuiControl ares) { super(asrc, null); res = ares; }
+  this (FuiWindow awin, FuiControl ares=null) { super(awin); res = ares; }
+  final @property pure nothrow @trusted @nogc {
+    inout(FuiWindow) win () inout { return cast(typeof(return))osource; }
+  }
 }
 
 

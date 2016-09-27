@@ -196,6 +196,9 @@ public class FuiControl : EventTarget {
   alias Align = FuiLayoutProps.Align;
 
   final @property pure nothrow @safe @nogc {
+    // this may return null if you screwed the things
+    inout(FuiWindow) topwindow () inout @trusted { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return cast(typeof(return))plp.ctl.toplevel; else return null; }
+
     inout(FuiControl) parent () inout { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return plp.ctl; else return null; }
     inout(FuiControl) toplevel () inout { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return plp.ctl.toplevel; else return this; }
     inout(FuiControl) nextSibling () inout { if (auto nlp = cast(inout(FuiCtlLayoutProps))lp.nextSibling) return nlp.ctl; else return null; }
@@ -227,6 +230,16 @@ public class FuiControl : EventTarget {
         if (ctl.hisman !is null) return ctl.hisman;
       }
       return null;
+    }
+  }
+
+  void closetop(bool withme=true) () {
+    if (auto w = topwindow) {
+      static if (withme) {
+        (new FuiEventClose(w, this)).post;
+      } else {
+        (new FuiEventClose(w, null)).post;
+      }
     }
   }
 

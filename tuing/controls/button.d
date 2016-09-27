@@ -55,7 +55,7 @@ public class FuiButton : FuiControl {
       if (auto desk = getDesk) desk.switchFocusTo(this, false);
     }
     if (onAction !is null) { onAction(this); return; }
-    (new FuiEventClose(toplevel, this)).post;
+    closetop;
   }
 
   protected override void drawSelf (XtWindow win) {
