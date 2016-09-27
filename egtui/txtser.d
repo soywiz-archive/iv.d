@@ -49,23 +49,36 @@ public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!i
       fl.write(s);
     } else {
       // hard time
-      //FIXME: make it faster
-      foreach (char ch; s) {
-        if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') {
-          switch (ch) {
-            case '\x1b': fl.write(`\e`); break;
-            case '\r': fl.write(`\r`); break;
-            case '\n': fl.write(`\n`); break;
-            case '\t': fl.write(`\t`); break;
-            case '"': case '\\': fl.write(`\`, ch); break;
-            default:
-              fl.write(`\x`);
-              fl.write(hexd[(ch>>4)&0x0f]);
-              fl.write(hexd[ch&0x0f]);
-              break;
+      size_t pos = 0;
+      while (pos < s.length) {
+        auto epos = pos;
+        while (epos < s.length) {
+          auto ch = s.ptr[epos];
+          if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') break;
+          ++epos;
+        }
+        if (epos > pos) {
+          fl.write(s[pos..epos]);
+          pos = epos;
+        }
+        if (pos < s.length) {
+          auto ch = s.ptr[pos++];
+          if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') {
+            switch (ch) {
+              case '\x1b': fl.write(`\e`); break;
+              case '\r': fl.write(`\r`); break;
+              case '\n': fl.write(`\n`); break;
+              case '\t': fl.write(`\t`); break;
+              case '"': case '\\': fl.write(`\`, ch); break;
+              default:
+                fl.write(`\x`);
+                fl.write(hexd[(ch>>4)&0x0f]);
+                fl.write(hexd[ch&0x0f]);
+                break;
+            }
+          } else {
+            fl.write(ch);
           }
-        } else {
-          fl.write(ch);
         }
       }
     }
@@ -77,7 +90,7 @@ public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!i
     foreach (immutable _; 0..indent) fl.write(' ');
   }
 
-  void serData(T) (in ref T v) {
+  void serData(bool skipstructname=false, T) (in ref T v) {
     alias UT = arrayElementType!T;
     static if (is(T : const(char)[])) {
       // string
@@ -85,39 +98,51 @@ public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!i
     } else static if (is(T : V[], V)) {
       // array
       void writeMArray(AT) (AT arr) {
-        fl.write("[ // ", arr.length);
-        indent += Indent;
-        foreach (const ref it; arr) {
-          newline();
-          serData(it);
-          fl.write(",");
+        if (arr.length) {
+          fl.write("[ // ", arr.length);
+          indent += Indent;
+          foreach (const ref it; arr) {
+            newline();
+            serData!true(it);
+            fl.write(",");
+          }
+          indent -= Indent;
+          newline;
+          fl.write("]");
+        } else {
+          fl.write("[]");
         }
-        indent -= Indent;
-        newline;
-        fl.write("]");
       }
       writeMArray(v);
     } else static if (is(T : V[K], K, V)) {
       // associative array
-      fl.write("{ // ", v.length);
-      indent += Indent;
-      foreach (const kv; v.byKeyValue) {
+      if (v.length) {
+        fl.write("{ // ", v.length);
+        indent += Indent;
+        foreach (const kv; v.byKeyValue) {
+          newline;
+          serData!true(kv.key);
+          fl.write(": ");
+          serData!true(kv.value);
+          fl.write(",");
+        }
+        indent -= Indent;
         newline;
-        serData(kv.key);
-        fl.write(": ");
-        serData(kv.value);
-        fl.write(",");
+        fl.write("}");
+      } else {
+        fl.write("{}");
       }
-      indent -= Indent;
-      newline;
-      fl.write("}");
     } else static if (isSimpleType!UT) {
       // simple type
       fl.write(v);
     } else static if (is(UT == struct)) {
       // struct
       import std.traits : FieldNameTuple, getUDAs, hasUDA;
-      fl.write(UT.stringof, ": {");
+      static if (skipstructname) {
+        fl.write("{");
+      } else {
+        fl.write(UT.stringof, ": {");
+      }
       indent += Indent;
       foreach (string fldname; FieldNameTuple!UT) {
         static if (!hasUDA!(__traits(getMember, UT, fldname), SRZIgnore)) {
@@ -129,7 +154,7 @@ public void txtser(T, ST) (auto ref ST fl, in auto ref T v, int indent=0) if (!i
           }
           newline;
           fl.write(xname, ": ");
-          serData(__traits(getMember, v, fldname));
+          serData!true(__traits(getMember, v, fldname));
           fl.write(",");
         }
       }
@@ -348,11 +373,12 @@ public void txtunser(T, ST) (auto ref ST fl, out T v) if (!is(T == class) && isR
       // struct
       import std.traits : FieldNameTuple, getUDAs, hasUDA;
 
-      {
+      skipBlanks();
+      if (curCh != '{') {
         auto nm = expectId();
         if (nm != (Unqual!T).stringof) error("'"~(Unqual!T).stringof~"' struct expected, but got '"~nm.idup~"'");
+        expectChar(':');
       }
-      expectChar(':');
       expectChar('{');
 
       ulong[(FieldNameTuple!T.length+ulong.sizeof-1)/ulong.sizeof] fldseen = 0;
