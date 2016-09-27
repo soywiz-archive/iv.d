@@ -223,6 +223,58 @@ private class FuiEditorCPWindow : FuiWindow {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private class FuiEditorACWindow : FuiWindow {
+  alias onMyEvent = super.onMyEvent;
+  alias onBubbleEvent = super.onBubbleEvent;
+
+  FuiEditor ed;
+  FuiListBox lb;
+  int pos, len;
+
+  this (FuiEditor aed, int apos, int alen, const(char)[][] list) {
+    assert(aed !is null);
+    this.connectListeners();
+    super();
+    ed = aed;
+    pos = apos;
+    len = alen;
+    frame = Frame.Small;
+    lb = new FuiListBox(this);
+    with (lb) {
+      aligning = Align.Stretch;
+      foreach (const(char)[] s; list) addItem(s);
+      defctl = true;
+      escctl = true;
+      maxSize.w = ttyw-8;
+      maxSize.h = ttyh-8;
+    }
+  }
+
+  override void onBubbleEvent (FuiEventKey evt) {
+    if (evt.key == "Enter" && lb !is null) {
+      (new EventEditorReplyAutocompletion(ed.ed, pos, len, lb[lb.curitem])).post;
+    } else if (evt.key == "Escape") {
+      (new EventEditorReplyAutocompletion(ed.ed, pos, len, null)).post;
+    }
+    super.onBubbleEvent(evt);
+  }
+
+  static void create (FuiEditor aed, FuiPoint pt, int apos, int alen, const(char)[][] list) {
+    if (aed is null) return;
+    auto desk = aed.getDesk;
+    if (desk is null) return;
+    auto win = new FuiEditorACWindow(aed, apos, alen, list);
+    fuiLayout(win);
+    pt = aed.toGlobal(pt);
+    if (!aed.ed.hideSBar) pt.x = pt.x+1;
+    if (!aed.ed.hideStatus) pt.y = pt.y+1;
+    win.positionAtGlobal(pt);
+    tuidesk.addPopup(win);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 private class FuiEditorSRWindow : FuiWindow {
   FuiEditor ed;
   TtyEditor.SROptions* srr;
@@ -416,6 +468,7 @@ public class FuiEditor : FuiControl {
     addEventListener(ed, (EventEditorQueryGotoLine evt) { createGotoLineWindow(this); });
     addEventListener(ed, (EventEditorQuerySR evt) { FuiEditorSRWindow.create(this, cast(TtyEditor.SROptions*)evt.opt); });
     addEventListener(ed, (EventEditorQueryReplacement evt) { FuiEditorSRConfirmWindow.create(this, cast(TtyEditor.SROptions*)evt.opt); });
+    addEventListener(ed, (EventEditorQueryAutocompletion evt) { FuiEditorACWindow.create(this, evt.pt, evt.pos, evt.len, evt.list); });
   }
 
   T getText(T:const(char)[]) () if (!is(T == typeof(null))) {

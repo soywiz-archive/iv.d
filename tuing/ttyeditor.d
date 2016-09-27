@@ -1159,7 +1159,7 @@ public:
       editorlocked = true;
       int rx, ry;
       gb.pos2xyVT(tkstpos, rx, ry);
-      (new EventEditorQueryAutocompletion(this, tkstpos, tklen, FuiPoint(winx+(rx-mXOfs), winy+(ry-mTopLine)+1), aclist[0..acused])).post;
+      (new EventEditorQueryAutocompletion(this, tkstpos, tklen, FuiPoint((rx-mXOfs), (ry-mTopLine)+1), aclist[0..acused])).post;
     }
   }
 
