@@ -538,9 +538,8 @@ __gshared Object[] evchain;
 void buildEvChain (Object obj) {
   if (evchain.length) { evchain[] = null; evchain.length = 0; evchain.assumeSafeAppend; }
   while (obj !is null) {
-    if (auto itfp = _d_dynamic_cast(obj, EventTarget.classinfo)) {
-      auto itf = *cast(EventTarget*)&itfp;
-      evchain ~= obj;
+    evchain ~= obj;
+    if (auto itf = cast(EventTarget)(obj)) {
       obj = itf.eventbusParent();
     } else {
       break;
