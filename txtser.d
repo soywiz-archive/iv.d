@@ -441,6 +441,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
         if (curCh == 'n' && peekCh == 'u') {
           auto id = expectId;
           if (id != "null") error("`null` expected");
+          continue; // skip null key
         } else {
           unserData(value);
         }
