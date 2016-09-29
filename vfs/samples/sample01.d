@@ -8,5 +8,6 @@ void main () {
 
   vfsForEachFile((in ref de) {
     writeln("FILE: ", de.size, " : ", de.name);
+    return 0;
   });
 }
