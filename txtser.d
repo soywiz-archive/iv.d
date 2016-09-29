@@ -18,7 +18,8 @@
 module iv.txtser;
 private:
 
-import iv.vfs.io;
+import std.range : ElementEncodingType, isInputRange, isOutputRange;
+import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -54,17 +55,28 @@ template isCharType(T) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void txtser(T, ST) (in auto ref T v, auto ref ST fl, int indent=0) if (!is(T == class) && isWriteableStream!ST) {
+public void txtser(T, ST) (in auto ref T v, auto ref ST fl, int indent=0, bool skipstname=false)
+if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
+{
   enum Indent = 2;
+
+  void xput (const(char)[] s...) {
+    if (s.length == 0) return;
+    static if (isWriteableStream!ST) {
+      fl.rawWriteExact(s[]);
+    } else {
+      foreach (char ch; s) fl.put(ch);
+    }
+  }
 
   void quote (const(char)[] s) {
     static immutable string hexd = "0123456789abcdef";
-    fl.write('"');
+    xput('"');
     bool goodString = true;
     foreach (char ch; s) if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') { goodString = false; break; }
     if (goodString) {
       // easy deal
-      fl.write(s);
+      xput(s);
     } else {
       // hard time
       size_t pos = 0;
@@ -76,36 +88,36 @@ public void txtser(T, ST) (in auto ref T v, auto ref ST fl, int indent=0) if (!i
           ++epos;
         }
         if (epos > pos) {
-          fl.write(s[pos..epos]);
+          xput(s[pos..epos]);
           pos = epos;
         }
         if (pos < s.length) {
           auto ch = s.ptr[pos++];
           if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') {
             switch (ch) {
-              case '\x1b': fl.write(`\e`); break;
-              case '\r': fl.write(`\r`); break;
-              case '\n': fl.write(`\n`); break;
-              case '\t': fl.write(`\t`); break;
-              case '"': case '\\': fl.write(`\`, ch); break;
+              case '\x1b': xput(`\e`); break;
+              case '\r': xput(`\r`); break;
+              case '\n': xput(`\n`); break;
+              case '\t': xput(`\t`); break;
+              case '"': case '\\': xput(`\`); xput(ch); break;
               default:
-                fl.write(`\x`);
-                fl.write(hexd[(ch>>4)&0x0f]);
-                fl.write(hexd[ch&0x0f]);
+                xput(`\x`);
+                xput(hexd[(ch>>4)&0x0f]);
+                xput(hexd[ch&0x0f]);
                 break;
             }
           } else {
-            fl.write(ch);
+            xput(ch);
           }
         }
       }
     }
-    fl.write('"');
+    xput('"');
   }
 
   void newline () {
-    fl.writeln;
-    foreach (immutable _; 0..indent) fl.write(' ');
+    xput('\n');
+    foreach (immutable _; 0..indent) xput(' ');
   }
 
   void serData(bool skipstructname=false, T) (in ref T v) {
@@ -117,50 +129,52 @@ public void txtser(T, ST) (in auto ref T v, auto ref ST fl, int indent=0) if (!i
       // array
       void writeMArray(AT) (AT arr) {
         if (arr.length) {
-          fl.write("[ // ", arr.length);
+          xput("["); // ", arr.length);
           indent += Indent;
           foreach (const ref it; arr) {
             newline();
             serData!true(it);
-            fl.write(",");
+            xput(",");
           }
           indent -= Indent;
           newline;
-          fl.write("]");
+          xput("]");
         } else {
-          fl.write("[]");
+          xput("[]");
         }
       }
       writeMArray(v);
     } else static if (is(T : V[K], K, V)) {
       // associative array
       if (v.length) {
-        fl.write("{ // ", v.length);
+        xput("{"); // ", v.length);
         indent += Indent;
         foreach (const kv; v.byKeyValue) {
           newline;
           serData!true(kv.key);
-          fl.write(": ");
+          xput(": ");
           serData!true(kv.value);
-          fl.write(",");
+          xput(",");
         }
         indent -= Indent;
         newline;
-        fl.write("}");
+        xput("}");
       } else {
-        fl.write("{}");
+        xput("{}");
       }
     } else static if (isCharType!UT) {
-      fl.write(cast(uint)v);
+      import std.conv : to;
+      xput((cast(uint)v).to!string);
     } else static if (isSimpleType!UT) {
-      fl.write(v);
+      import std.conv : to;
+      xput(v.to!string);
     } else static if (is(UT == struct)) {
-      // struct
       import std.traits : FieldNameTuple, getUDAs, hasUDA;
       static if (skipstructname) {
-        fl.write("{");
+        xput("{");
       } else {
-        fl.write(UT.stringof, ": {");
+        xput(UT.stringof);
+        xput(": {");
       }
       indent += Indent;
       foreach (string fldname; FieldNameTuple!UT) {
@@ -172,25 +186,28 @@ public void txtser(T, ST) (in auto ref T v, auto ref ST fl, int indent=0) if (!i
             if (__traits(getMember, v, fldname) == __traits(getMember, v, fldname).init) continue;
           }
           newline;
-          fl.write(xname, ": ");
+          xput(xname);
+          xput(": ");
           serData!true(__traits(getMember, v, fldname));
-          fl.write(",");
+          xput(",");
         }
       }
       indent -= Indent;
       newline;
-      fl.write("}");
+      xput("}");
     } else {
       static assert(0, "can't serialize type '"~T.stringof~"'");
     }
   }
 
-  serData(v);
+  if (skipstname) serData!true(v); else serData(v);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void txtunser(T, ST) (out T v, auto ref ST fl) if (!is(T == class) && isReadableStream!ST) {
+public void txtunser(T, ST) (out T v, auto ref ST fl)
+if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(ElementEncodingType!ST == char))))
+{
   import std.traits : Unqual;
 
   char curCh = ' ', peekCh = ' ';
@@ -200,10 +217,20 @@ public void txtunser(T, ST) (out T v, auto ref ST fl) if (!is(T == class) && isR
     if (curCh == '\n') ++linenum;
     if (peekCh) {
       curCh = peekCh;
-      if (fl.rawRead((&peekCh)[0..1]).length) {
-        if (peekCh == 0) peekCh = ' ';
+      static if (isReadableStream!ST) {
+        if (fl.rawRead((&peekCh)[0..1]).length) {
+          if (peekCh == 0) peekCh = ' ';
+        } else {
+          peekCh = 0;
+        }
       } else {
-        peekCh = 0;
+        if (!fl.empty) {
+          peekCh = fl.front;
+          fl.popFront;
+          if (peekCh == 0) peekCh = ' ';
+        } else {
+          peekCh = 0;
+        }
       }
     } else {
       curCh = peekCh = 0;
@@ -281,9 +308,23 @@ public void txtunser(T, ST) (out T v, auto ref ST fl) if (!is(T == class) && isR
   char[64] buf = 0;
   int bpos = 0;
 
-  const(char)[] expectId () {
+  const(char)[] expectId(bool allowquoted=false) () {
     bpos = 0;
     skipBlanks();
+    static if (allowquoted) {
+      if (curCh == '"') {
+        nextChar();
+        while (curCh != '"') {
+          if (curCh == '\\') error("simple string expected");
+          if (bpos >= buf.length) error("identifier or number too long");
+          buf[bpos++] = curCh;
+          nextChar();
+        }
+        if (curCh != '"') error("simple string expected");
+        nextChar();
+        return buf[0..bpos];
+      }
+    }
     if (!isGoodIdChar(curCh)) error("identifier or number expected");
     while (isGoodIdChar(curCh)) {
       if (bpos >= buf.length) error("identifier or number too long");
@@ -401,7 +442,7 @@ public void txtunser(T, ST) (out T v, auto ref ST fl) if (!is(T == class) && isR
 
       skipBlanks();
       if (curCh != '{') {
-        auto nm = expectId();
+        auto nm = expectId!true();
         if (nm != (Unqual!T).stringof) error("'"~(Unqual!T).stringof~"' struct expected, but got '"~nm.idup~"'");
         expectChar(':');
       }
@@ -441,7 +482,7 @@ public void txtunser(T, ST) (out T v, auto ref ST fl) if (!is(T == class) && isR
         static if (!hasUDA!(__traits(getMember, T, fldname), SRZIgnore)) {
           skipBlanks();
           if (curCh == '}') break;
-          auto name = expectId();
+          auto name = expectId!true();
           expectChar(':');
           if (!tryField!(idx, fldname)(name)) tryAllFields(name);
           skipComma();
