@@ -19,6 +19,7 @@ module iv.txtser;
 private:
 
 import std.range : ElementEncodingType, isInputRange, isOutputRange;
+import std.traits : Unqual;
 import iv.vfs;
 
 
@@ -210,7 +211,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
 
 // ////////////////////////////////////////////////////////////////////////// //
 public void txtunser(T, ST) (out T v, auto ref ST fl)
-if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(ElementEncodingType!ST == char))))
+if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(ElementEncodingType!ST) == char))))
 {
   import std.traits : Unqual;
 
@@ -355,14 +356,14 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(ElementEnc
       }
       skipBlanks();
       // `null` is empty string
-      if (curCh == 'n' && peekCh == 'u') {
-        // this MUST be `null`
-        nextChar();
-        nextChar();
-        if (curCh != 'l' || peekCh != 'l') error("`null` expected");
-        nextChar();
-        nextChar();
-        if (isGoodIdChar(curCh)) error("`null` expected");
+      if (curCh != '"') {
+        if (!isGoodIdChar(curCh)) error("string expected");
+        char[] ss;
+        while (isGoodIdChar(curCh)) {
+          ss ~= curCh;
+          nextChar();
+        }
+        if (ss != "null") foreach (char ch; ss) put(ch);
       } else {
         // not a null
         if (curCh != '"') error("string expected");
@@ -424,7 +425,14 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(ElementEnc
         if (curCh == '}') break;
         unserData(key);
         expectChar(':');
-        unserData(value);
+        skipBlanks();
+        // `null`?
+        if (curCh == 'n' && peekCh == 'u') {
+          auto id = expectId;
+          if (id != "null") error("`null` expected");
+        } else {
+          unserData(value);
+        }
         skipComma();
         v[key] = value;
       }
