@@ -65,7 +65,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
     static if (isWriteableStream!ST) {
       fl.rawWriteExact(s[]);
     } else {
-      foreach (char ch; s) fl.put(ch);
+      fl.put(s);
     }
   }
 
@@ -124,7 +124,11 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
     alias UT = arrayElementType!T;
     static if (is(T : const(char)[])) {
       // string
-      quote(v);
+      static if (is(T == string) || is(T == const(char)[])) {
+        if (v.ptr is null) xput("null"); else quote(v);
+      } else {
+        quote(v);
+      }
     } else static if (is(T : V[], V)) {
       // array
       void writeMArray(AT) (AT arr) {
@@ -347,64 +351,69 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(ElementEnc
           }
         }
       } else {
-        void put (const(char)[] s...) {
-          if (s.length) v ~= s;
-        }
+        void put (const(char)[] s...) { if (s.length) v ~= s; }
       }
       skipBlanks();
-      if (curCh != '"') error("string expected");
-      nextChar();
-      while (curCh != '"') {
-        if (curCh < ' ') error("invalid string");
-        if (curCh == '"') break;
-        if (curCh == '\\') {
-          nextChar();
-          switch (curCh) {
-            case 'e': put('\x1b'); nextChar(); break;
-            case 'r': put('\r'); nextChar(); break;
-            case 'n': put('\n'); nextChar(); break;
-            case 't': put('\t'); nextChar(); break;
-            case '"': case '\\': put(curCh); nextChar(); break;
-            case 'x':
-              nextChar();
-              if (digitInBase(curCh, 16) < 0 || digitInBase(peekCh, 16) < 0) error("invalid hex escape");
-              put(cast(char)(digitInBase(curCh, 16)*16+digitInBase(peekCh, 16)));
-              nextChar();
-              nextChar();
-              break;
-            default: error("invalid escape");
+      // `null` is empty string
+      if (curCh == 'n' && peekCh == 'u') {
+        // this MUST be `null`
+        nextChar();
+        nextChar();
+        if (curCh != 'l' || peekCh != 'l') error("`null` expected");
+        nextChar();
+        nextChar();
+        if (isGoodIdChar(curCh)) error("`null` expected");
+      } else {
+        // not a null
+        if (curCh != '"') error("string expected");
+        nextChar();
+        while (curCh != '"') {
+          if (curCh < ' ') error("invalid string");
+          if (curCh == '"') break;
+          if (curCh == '\\') {
+            nextChar();
+            switch (curCh) {
+              case 'e': put('\x1b'); nextChar(); break;
+              case 'r': put('\r'); nextChar(); break;
+              case 'n': put('\n'); nextChar(); break;
+              case 't': put('\t'); nextChar(); break;
+              case '"': case '\\': put(curCh); nextChar(); break;
+              case 'x':
+                nextChar();
+                if (digitInBase(curCh, 16) < 0 || digitInBase(peekCh, 16) < 0) error("invalid hex escape");
+                put(cast(char)(digitInBase(curCh, 16)*16+digitInBase(peekCh, 16)));
+                nextChar();
+                nextChar();
+                break;
+              default: error("invalid escape");
+            }
+          } else {
+            put(curCh);
+            nextChar();
           }
-        } else {
-          put(curCh);
-          nextChar();
         }
+        expectChar('"');
       }
-      expectChar('"');
     } else static if (is(T : V[], V)) {
       // array
-      void readMArray(AT) (out AT arr) {
-        expectChar('[');
-        static if (__traits(isStaticArray, AT)) {
-          //arr[] = arr[0].init; // clear it
-          foreach (ref it; arr) {
-            skipBlanks();
-            if (curCh == ']') break;
-            unserData(it);
-            skipComma();
-          }
-        } else {
-          for (;;) {
-            skipBlanks();
-            if (curCh == ']') break;
-            arr.length += 1;
-            //readMArray(arr[$-1]);
-            unserData(arr[$-1]);
-            skipComma();
-          }
+      expectChar('[');
+      static if (__traits(isStaticArray, T)) {
+        foreach (ref it; v) {
+          skipBlanks();
+          if (curCh == ']') break;
+          unserData(it);
+          skipComma();
         }
-        expectChar(']');
+      } else {
+        for (;;) {
+          skipBlanks();
+          if (curCh == ']') break;
+          v.length += 1;
+          unserData(v[$-1]);
+          skipComma();
+        }
       }
-      readMArray(v);
+      expectChar(']');
     } else static if (is(T : V[K], K, V)) {
       // associative array
       K key = void;
