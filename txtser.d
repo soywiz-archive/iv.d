@@ -397,24 +397,35 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
       }
     } else static if (is(T : V[], V)) {
       // array
-      expectChar('[');
-      static if (__traits(isStaticArray, T)) {
-        foreach (ref it; v) {
-          skipBlanks();
-          if (curCh == ']') break;
-          unserData(it);
-          skipComma();
-        }
-      } else {
-        for (;;) {
-          skipBlanks();
-          if (curCh == ']') break;
+      skipBlanks();
+      if (curCh == '{') {
+        // only one element
+        static if (__traits(isStaticArray, T)) {
+          if (v.length == 0) error("array too small");
+        } else {
           v.length += 1;
-          unserData(v[$-1]);
-          skipComma();
         }
+        unserData(v[0]);
+      } else {
+        expectChar('[');
+        static if (__traits(isStaticArray, T)) {
+          foreach (ref it; v) {
+            skipBlanks();
+            if (curCh == ']') break;
+            unserData(it);
+            skipComma();
+          }
+        } else {
+          for (;;) {
+            skipBlanks();
+            if (curCh == ']') break;
+            v.length += 1;
+            unserData(v[$-1]);
+            skipComma();
+          }
+        }
+        expectChar(']');
       }
-      expectChar(']');
     } else static if (is(T : V[K], K, V)) {
       // associative array
       K key = void;
