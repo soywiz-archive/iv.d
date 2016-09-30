@@ -675,6 +675,70 @@ class FuiEventQueueDesk : FuiEventQueue {
   FuiWindow[] wintoplist; // "on top" windows, latest is on the top
   void delegate (FuiEventQueueDesk desk) drawDesk; // draw desktop background
 
+  static struct HotKey {
+    TtyEvent[] combo;
+    void delegate () handler;
+  }
+  HotKey[] hkcombos;
+  TtyEvent[] hkcurcombo;
+
+  final TtyEvent[] parseHotCombo (TtyEvent[] dest, const(char)[] hkstr) {
+    int cp = 0;
+    TtyEvent key;
+    auto ostr = hkstr;
+    while (hkstr.length) {
+      hkstr = TtyEvent.parse(key, hkstr);
+      if (key.key == TtyEvent.Key.Error) throw new Exception("invalid hotkey '"~ostr.idup~"'");
+      if (key.key == TtyEvent.Key.None) break;
+      if (cp >= dest.length) throw new Exception("hotkey combo too long: '"~ostr.idup~"'");
+      dest.ptr[cp++] = key;
+    }
+    return dest[0..cp];
+  }
+
+  final bool hasHotKey (const(char)[] hkstr) {
+    TtyEvent[64] cbuf;
+    try {
+      auto cb = parseHotCombo(cbuf[], hkstr);
+      foreach (const ref hk; hkcombos) if (hk.combo == cb) return true;
+    } catch (Exception) {
+    }
+    return false;
+  }
+
+  final bool removeHotKey (const(char)[] hkstr) {
+    TtyEvent[64] cbuf;
+    try {
+      auto cb = parseHotCombo(cbuf[], hkstr);
+      foreach (immutable idx, ref hk; hkcombos) {
+        if (hk.combo == cb) {
+          foreach (immutable c; idx+1..hkcombos.length) hkcombos[c-1] = hkcombos[c];
+          hkcombos[$-1] = HotKey.init;
+          hkcombos.length -= 1;
+          hkcombos.assumeSafeAppend;
+          return true;
+        }
+      }
+    } catch (Exception) {
+    }
+    return false;
+  }
+
+  // return `true` if hotkey was overriden
+  final bool registerHotKey(bool allowOverride=true) (const(char)[] hkstr, void delegate () hh) {
+    if (hh is null) throw new Exception("empty handler for hotkey");
+    TtyEvent[64] cbuf;
+    auto cb = parseHotCombo(cbuf[], hkstr);
+    foreach (ref hk; hkcombos) {
+      if (hk.combo == cb) {
+        static if (allowOverride) hk.handler = hh;
+        return true;
+      }
+    }
+    hkcombos ~= HotKey(cb.dup, hh);
+    return false;
+  }
+
   final WinInfo* findWinInfo (FuiWindow w) {
     foreach_reverse (ref WinInfo wi; winlist) if (wi.win is w) return &wi;
     return null;
@@ -845,6 +909,28 @@ class FuiEventQueueDesk : FuiEventQueue {
   void addPopup (FuiWindow w) { addWindowWithType(w, WinInfo.Type.Popup); }
 
   override bool queue (TtyEvent key) {
+    // check hotkeys
+    if (hkcombos.length) {
+      hkcurcombo ~= key;
+      bool wasHit;
+      foreach (ref hk; hkcombos) {
+        if (hk.combo == hkcurcombo) {
+          hkcurcombo.length = 0;
+          hkcurcombo.assumeSafeAppend;
+          hk.handler();
+          return true;
+        } else if (!wasHit && hk.combo.length > hkcurcombo.length && hk.combo[0..hkcurcombo.length] == hkcurcombo) {
+          wasHit = true;
+        }
+      }
+      if (wasHit) return true; // combo in progress
+      // no combo in progress; exit if we have some previous combo keys
+      auto doexit = (hkcurcombo.length > 1);
+      hkcurcombo.length = 0;
+      hkcurcombo.assumeSafeAppend;
+      if (doexit) return true;
+      // no previous combo keys, continue
+    }
     // check if we clicked on another window and activate it
     // but only if current top window can be blurred (i.e. deactivated) this way
     if (key.mpress && winlist.length && winlist[$-1].canBeBlurred) {
@@ -943,6 +1029,9 @@ class FuiEventQueueDesk : FuiEventQueue {
       if (nfc !is null) switchFocusTo(nfc);
     }
   }
+
+  @property FuiControl focused () { return lastFocus.object; }
+  @property void focused (FuiControl ctl) { switchFocusTo(ctl); }
 }
 
 
