@@ -36,69 +36,6 @@ import iv.tuing.controls.window;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private class FuiHistoryWindow : FuiWindow {
-  alias onMyEvent = super.onMyEvent;
-  alias onBubbleEvent = super.onBubbleEvent;
-
-  FuiEditLine el;
-  FuiListBox hlb;
-
-  this (FuiEditLine ael) {
-    assert(ael !is null);
-    this.connectListeners();
-    super();
-    el = ael;
-    auto hm = el.historymgr;
-    assert(hm !is null);
-    caption = "History";
-    frame = Frame.Small;
-    minSize.w = 14;
-    hlb = new FuiListBox(this);
-    hlb.aligning = hlb.Align.Stretch;
-    foreach_reverse (immutable idx; 0..hm.count(el)) hlb.addItem(hm.item(el, idx));
-    hlb.curitem = hlb.count-1;
-    hlb.defctl = true;
-    hlb.escctl = true;
-    hlb.maxSize.w = ttyw-8;
-    hlb.maxSize.h = ttyh-8;
-    /*this works
-    addEventListener(this, (FuiEventClose evt) {
-      ttyBeep;
-    });
-    */
-  }
-
-  override void onBubbleEvent (FuiEventKey evt) {
-    if (evt.key == "Enter" && hlb !is null) {
-      if (auto hm = el.historymgr) {
-        auto it = hlb.curitem;
-        if (it >= 0 && it < hm.count(el)) {
-          it = hm.count(el)-it-1;
-          el.ed.setNewText(hm.item(el, it));
-          hm.activate(el, it);
-          el.doAction();
-        }
-      }
-    }
-    super.onBubbleEvent(evt);
-  }
-
-  static void create (FuiEditLine el) {
-    if (el is null) return;
-    auto desk = el.getDesk;
-    if (desk is null) return;
-    auto hm = el.historymgr;
-    if (hm is null) return;
-    if (!hm.has(el) || hm.count(el) < 1) return;
-    auto win = new FuiHistoryWindow(el);
-    fuiLayout(win);
-    win.positionUnderControl(el);
-    tuidesk.addPopup(win);
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 public class FuiEditLine : FuiControl {
   alias onMyEvent = super.onMyEvent;
 
@@ -167,21 +104,20 @@ public class FuiEditLine : FuiControl {
     super.onMyEvent(evt);
   }
 
+  void onMyEvent (FuiEventHistoryReply evt) {
+    evt.eat();
+    ed.setNewText(evt.text);
+    doAction();
+  }
+
   void onMyEvent (FuiEventKey evt) {
     if (disabled) return;
     // history
-    if (auto hm = historymgr) {
-      if (evt.key == "M-H" || evt.key == "M-Down") {
-        // history dialog
-        FuiHistoryWindow.create(this);
-        evt.eat();
-        return;
-      }
-      if (evt.key == "M-A") {
-        hm.add(this, getText!string);
-        evt.eat();
-        return;
-      }
+    if (evt.key == "M-H" || evt.key == "M-Down") {
+      // history dialog
+      (new FuiEventHistoryQuery(this)).post;
+      evt.eat();
+      return;
     }
     /*
     if (evt.key == "F1") {

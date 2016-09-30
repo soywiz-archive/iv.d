@@ -334,7 +334,6 @@ public:
   SROptions srrOptions;
   bool hideStatus = false;
   bool hideSBar = false; // hide scrollbar
-  FuiHistoryManager hisman; // history manager for dialogs
   bool editorlocked = false; // when editor send some message that needs action reply, it locks itself
 
 public:

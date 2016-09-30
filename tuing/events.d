@@ -42,9 +42,12 @@ public class FuiEvent : Event {
   }
 }
 
+// ////////////////////////////////////////////////////////////////////////// //
 // broadcast this event to stop event loop
 public class FuiEventQuit : FuiEvent { this () {} }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 // post this event to close current window; `ares` is the control that caused it; may be null
 public class FuiEventClose : FuiEvent {
   FuiControl res;
@@ -55,6 +58,7 @@ public class FuiEventClose : FuiEvent {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 // can be unbalanced
 public class FuiEventHover : FuiEvent { this (FuiControl adest) { super(null, adest); } }
 public class FuiEventEnter : FuiEventHover { this (FuiControl adest) { super(adest); } }
@@ -71,6 +75,7 @@ public class FuiEventActive : FuiEventActiveStateChanged { this (FuiControl ades
 public class FuiEventInactive : FuiEventActiveStateChanged { this (FuiControl adest) { super(adest); } }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 // all other rawtty2 events
 public class FuiEventKey : FuiEvent {
   TtyEvent key;
@@ -125,6 +130,19 @@ public class FuiEventWinFocusNextPrev : FuiEvent {
 
 public class FuiEventWinFocusNext : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
 public class FuiEventWinFocusPrev : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// sent when control wants to show history selection (broadcast)
+// control should not block (event handler will take care of that)
+public class FuiEventHistoryQuery : FuiEvent { this (FuiControl asrc) { super(asrc); } }
+
+// control should update itself with this new string
+// this even may be omited if history manager did all the work itself
+public class FuiEventHistoryReply : FuiEvent {
+  const(char)[] text;
+  this (FuiControl adest, const(char)[] atext) { super(null, adest); text = atext; }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
