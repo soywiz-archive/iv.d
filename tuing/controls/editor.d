@@ -248,6 +248,10 @@ private class FuiEditorACWindow : FuiWindow {
       maxSize.w = ttyw-8;
       maxSize.h = 16;//ttyh-8;
     }
+    // cancel autocompletion on close
+    addEventListener(this, (FuiEventClose evt) {
+      (new EventEditorReplyAutocompletion(ed.ed, pos, len, null)).post;
+    });
   }
 
   override void onBubbleEvent (FuiEventKey evt) {

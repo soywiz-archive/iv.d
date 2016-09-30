@@ -83,6 +83,7 @@ const @property:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// register listener for all events (both targeted and not, and for anonymous too)
 public uint addEventListener(E:Event) (void delegate (E evt) dg, bool oneshot=false) {
   return addEventListener!E(null, dg, oneshot);
 }
@@ -167,49 +168,10 @@ private class ObjDispatcher {
 }
 
 
-private static template HasEventMethod(string EvtName, OT, ET:Event) {
-  static if (is(OT : Object)) {
-    static if (is(typeof(&__traits(getMember, OT, EvtName)))) {
-      private bool hasMethod () {
-        import std.traits;
-        foreach (immutable oidx, over; __traits(getOverloads, OT, EvtName)) {
-          alias tt = typeof(over);
-          static if (is(ReturnType!tt == void)) {
-            alias pars = Parameters!tt;
-            static if (pars.length == 1) {
-              static if (is(pars[0] == ET)) {
-                return true;
-              }
-            }
-          }
-        }
-        return false;
-      }
-      enum HasEventMethod = hasMethod();
-    } else {
-      enum HasEventMethod = false;
-    }
-  } else {
-    enum HasEventMethod = false;
-  }
-}
-
-
-private static template HasEventMethodInParent(string EvtName, OT, ET:Event) {
-  static if (is(OT : Object)) {
-    static if (is(OT P == super)) {
-      enum HasEventMethodInParent = HasEventMethod!(EvtName, P, ET);
-    } else {
-      enum HasEventMethodInParent = false;
-    }
-  } else {
-    enum HasEventMethodInParent = false;
-  }
-}
-
-
 // void onEvent (EventXXX ev); // will receive any events
 // void onMyEvent (EventXXX ev); // will receive only events targeted to this object (dest is this), when they sinked
+// void onSinkEvent (EventXXX ev); // will receive sinking events (but not "my")
+// void onBubbleEvent (EventXXX ev); // will receive bubbling events (but not "my")
 public void connectListeners(O:Object) (O obj) {
   if (obj is null) return;
 
@@ -251,29 +213,6 @@ public void connectListeners(O:Object) (O obj) {
                 alias pars = Parameters!tt;
                 static if (pars.length == 1) {
                   static if (is(pars[0] : Event)) {
-                    /*
-                    static if (!__traits(isOverrideFunction, __traits(getOverloads, o, EvtName)[oidx])) {
-                      // not overriden, check if we have the same in parent
-                      static if (!HasEventMethodInParent!(EvtName, OT, pars[0])) {
-                        if (typeid(pars[0]) == ti) {
-                          if (auto ev = cast(pars[0])evt) {
-                            debug(tuing_eventbus) { import iv.vfs.io; VFile("zevtlog.log", "a").writefln("calling %s for %s 0x%08x (%s)", tp, o.classinfo.name, *cast(void**)&o, evt.classinfo.name); }
-                            __traits(getOverloads, o, EvtName)[oidx](ev);
-                            return;
-                          }
-                        }
-                      }
-                    } else {
-                      // overriden
-                      if (typeid(pars[0]) == ti) {
-                        if (auto ev = cast(pars[0])evt) {
-                          debug(tuing_eventbus) { import iv.vfs.io; VFile("zevtlog.log", "a").writefln("calling %s for %s 0x%08x (%s)", tp, o.classinfo.name, *cast(void**)&o, evt.classinfo.name); }
-                          __traits(getOverloads, o, EvtName)[oidx](ev);
-                          return;
-                        }
-                      }
-                    }
-                    */
                     if (typeid(pars[0]) == ti) {
                       if (auto ev = cast(pars[0])evt) {
                         debug(tuing_eventbus) { import iv.vfs.io; VFile("zevtlog.log", "a").writefln("calling %s for %s 0x%08x (%s)", tp, o.classinfo.name, *cast(void**)&o, evt.classinfo.name); }
@@ -317,13 +256,13 @@ public void connectListeners(O:Object) (O obj) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// WARNING! this MUST be called only in main processing thread!
 private import core.thread : Thread, ThreadID;
 
 private __gshared bool nowProcessing = false;
 private __gshared ThreadID peLastTID = 0;
 
 
+// WARNING! this MUST be called only in main processing thread!
 public void processEvents () {
   size_t left;
   synchronized (Event.classinfo) {
@@ -388,7 +327,7 @@ public void processEvents () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// returns mseconds until next postponed event or -1 if there are none
+// returns milliseconds until next postponed event or -1 if there are none
 public int ebusSafeDelay () {
   synchronized (Event.classinfo) {
     if (events.length > 0) return 0; // we have something to process
@@ -666,22 +605,6 @@ void callEventListeners (Event evt) {
     dispatchSinkBubble(evt);
   }
 }
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-/*
-private void ebusOnDeadCB (size_t ptr, size_t hash) nothrow @trusted @nogc {
-  import core.atomic;
-  atomicStore(needListenerCleanupSB, true);
-  version(none) {
-    import core.stdc.stdio;
-    if (auto fo = fopen("zweakdead.log", "a")) {
-      fo.fprintf("DEAD: ptr=0x%08x; hash=0x%08x\n", cast(uint)ptr, cast(uint)hash);
-      fo.fclose();
-    }
-  }
-}
-*/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
