@@ -76,6 +76,7 @@ class FlacChannel : TflChannel {
       uint commentLength;
       const(char)* pComment;
       while ((pComment = drflac_next_vorbis_comment(&i, &commentLength)) !is null) {
+        if (commentLength > 1024*1024*2) break; // just in case
         comments ~= pComment[0..commentLength].idup;
       }
     }
