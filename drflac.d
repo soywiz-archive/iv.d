@@ -3146,9 +3146,9 @@ public long drflac_vorbis_comment_size (uint commentCount, const(char)* pComment
   uint res = 0;
   while (commentCount-- > 0) {
     uint length = drflac__le2host_32(*cast(uint*)pComments);
-    res += length;
     pComments += 4;
     pComments += length;
+    res += length+4;
   }
   return res;
 }
