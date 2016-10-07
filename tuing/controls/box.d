@@ -29,7 +29,7 @@ import iv.tuing.events;
 import iv.tuing.tty;
 import iv.tuing.tui;
 import iv.tuing.types;
-import iv.tuing.controls.window : FuiWindow;
+import iv.tuing.controls.window : FuiDeskWindow;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -125,17 +125,17 @@ public class FuiHLine : FuiControl {
 
   protected override void drawSelfPre (XtWindow win) {
     win.color = palColor!"def"();
-    if (auto w = cast(FuiWindow)parent) {
+    if (auto w = cast(FuiDeskWindow)parent) {
       final switch (w.frame) {
-        case FuiWindow.Frame.Normal:
+        case FuiDeskWindow.Frame.Normal:
           win.x0 = win.x0-2;
           win.width = win.width+4;
           break;
-        case FuiWindow.Frame.Small:
+        case FuiDeskWindow.Frame.Small:
           win.x0 = win.x0-1;
           win.width = win.width+1;
           break;
-        case FuiWindow.Frame.None: break;
+        case FuiDeskWindow.Frame.None: break;
       }
     }
     win.hline(0, 0, win.width);

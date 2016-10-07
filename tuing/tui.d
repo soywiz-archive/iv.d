@@ -182,7 +182,7 @@ public class FuiControl : EventTarget {
 
   final @property pure nothrow @safe @nogc {
     // this may return null if you screwed the things
-    inout(FuiWindow) topwindow () inout @trusted { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return cast(typeof(return))plp.ctl.toplevel; else return null; }
+    inout(FuiDeskWindow) topwindow () inout @trusted { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return cast(typeof(return))plp.ctl.toplevel; else return null; }
 
     inout(FuiControl) parent () inout { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return plp.ctl; else return null; }
     inout(FuiControl) toplevel () inout { if (auto plp = cast(inout(FuiCtlLayoutProps))lp.parent) return plp.ctl.toplevel; else return this; }
@@ -367,7 +367,7 @@ public class FuiControl : EventTarget {
   }
 
   final FuiEventQueueDesk getDesk () {
-    if (auto win = cast(FuiWindow)toplevel) return win.desk;
+    if (auto win = cast(FuiDeskWindow)toplevel) return win.desk;
     return null;
   }
 
@@ -663,7 +663,7 @@ private:
 class FuiEventQueueDesk : FuiEventQueue {
   static struct WinInfo {
     enum Type { Normal, Modal, Popup }
-    FuiWindow win;
+    FuiDeskWindow win;
     Type type = Type.Normal;
     @property const pure nothrow @safe @nogc {
       bool shouldSendWindowBlurToOthers () { return (type == Type.Normal); }
@@ -672,7 +672,7 @@ class FuiEventQueueDesk : FuiEventQueue {
     }
   }
   WinInfo[] winlist; // latest is on the top
-  FuiWindow[] wintoplist; // "on top" windows, latest is on the top
+  FuiDeskWindow[] wintoplist; // "on top" windows, latest is on the top
   void delegate (FuiEventQueueDesk desk) drawDesk; // draw desktop background
 
   static struct HotKey {
@@ -739,7 +739,7 @@ class FuiEventQueueDesk : FuiEventQueue {
     return false;
   }
 
-  final WinInfo* findWinInfo (FuiWindow w) {
+  final WinInfo* findWinInfo (FuiDeskWindow w) {
     foreach_reverse (ref WinInfo wi; winlist) if (wi.win is w) return &wi;
     return null;
   }
@@ -784,7 +784,7 @@ class FuiEventQueueDesk : FuiEventQueue {
     auto lp = lastFocus.object;
     if (lp !is null) return descend(lp.toplevel, pt);
     // check ontop windows
-    foreach_reverse (FuiWindow tw; wintoplist) {
+    foreach_reverse (FuiDeskWindow tw; wintoplist) {
       if (auto cc = descend(tw, pt)) return cc;
     }
     // check normal top-level window
@@ -895,7 +895,7 @@ class FuiEventQueueDesk : FuiEventQueue {
     super();
   }
 
-  protected void addWindowWithType (FuiWindow w, WinInfo.Type type) {
+  protected void addWindowWithType (FuiDeskWindow w, WinInfo.Type type) {
     if (w is null) return;
     if (w.desk !is null) return;
     w.desk = this;
@@ -904,9 +904,9 @@ class FuiEventQueueDesk : FuiEventQueue {
     assert(lastFocus.object !is null);
   }
 
-  void addWindow (FuiWindow w) { addWindowWithType(w, WinInfo.Type.Normal); }
-  void addModal (FuiWindow w) { addWindowWithType(w, WinInfo.Type.Modal); }
-  void addPopup (FuiWindow w) { addWindowWithType(w, WinInfo.Type.Popup); }
+  void addWindow (FuiDeskWindow w) { addWindowWithType(w, WinInfo.Type.Normal); }
+  void addModal (FuiDeskWindow w) { addWindowWithType(w, WinInfo.Type.Modal); }
+  void addPopup (FuiDeskWindow w) { addWindowWithType(w, WinInfo.Type.Popup); }
 
   override bool queue (TtyEvent key) {
     // check hotkeys
@@ -968,19 +968,19 @@ class FuiEventQueueDesk : FuiEventQueue {
       drawDesk(this);
     }
     foreach (ref WinInfo wi; winlist) wi.win.draw(XtWindow(wi.win.lp.pos.x, wi.win.lp.pos.y, wi.win.lp.size.w, wi.win.lp.size.h));
-    foreach (FuiWindow w; wintoplist) w.draw(XtWindow(w.lp.pos.x, w.lp.pos.y, w.lp.size.w, w.lp.size.h));
+    foreach (FuiDeskWindow w; wintoplist) w.draw(XtWindow(w.lp.pos.x, w.lp.pos.y, w.lp.size.w, w.lp.size.h));
   }
 
   void onEvent (FuiEventClose evt) {
     if (evt.source is null) return;
-    if (auto ww = cast(FuiWindow)evt.source) {
+    if (auto ww = cast(FuiDeskWindow)evt.source) {
       if (ww.desk !is this) return;
     } else {
       return;
     }
     // reverse usually faster
     foreach_reverse (immutable idx, ref WinInfo twi; winlist) {
-      FuiWindow tw = twi.win;
+      FuiDeskWindow tw = twi.win;
       if (evt.source is tw) {
         // i found her!
         auto lastWF = (idx == winlist.length-1 ? twi : WinInfo.init);
@@ -994,7 +994,7 @@ class FuiEventQueueDesk : FuiEventQueue {
         return;
       }
     }
-    foreach_reverse (immutable idx, FuiWindow tw; wintoplist) {
+    foreach_reverse (immutable idx, FuiDeskWindow tw; wintoplist) {
       if (evt.source is tw) {
         // i found her!
         foreach (immutable c; idx+1..wintoplist.length) wintoplist[c-1] = wintoplist[c];

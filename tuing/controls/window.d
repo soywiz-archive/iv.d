@@ -32,7 +32,7 @@ import iv.tuing.types;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public class FuiWindow : FuiControl {
+public class FuiDeskWindow : FuiControl {
   alias onMyEvent = super.onMyEvent;
 
   enum Frame : ubyte {
@@ -280,21 +280,6 @@ public class FuiWindow : FuiControl {
   }
 
   void doEventKey (FuiEventKey evt) {
-    if (evt.key == "M-F4") {
-      evt.eat();
-      (new FuiEventClose(this, null)).post;
-      return;
-    }
-    if (evt.key == "Tab" || evt.key == "Right" || evt.key == "Down") {
-      evt.eat();
-      (new FuiEventWinFocusNext(this)).post;
-      return;
-    }
-    if (evt.key == "S-Tab" || evt.key == "C-Tab" || evt.key == "Up" || evt.key == "Left") {
-      evt.eat();
-      (new FuiEventWinFocusPrev(this)).post;
-      return;
-    }
     if (evt.bubbling) {
       if (evt.key == "Enter" || evt.key == "^Enter") {
         if (auto def = forEach((FuiControl ctl) => (ctl.visible && ctl.enabled && ctl.defctl))) {
@@ -315,11 +300,6 @@ public class FuiWindow : FuiControl {
         if (ctl.tryHotKey(evt.key)) { evt.eat(); ctl.doAction(); return true; }
         return false;
       });
-      if (evt.key == "M-F5") {
-        kbmoving = true;
-        evt.eat();
-        return;
-      }
     }
   }
 
@@ -347,5 +327,37 @@ public class FuiWindow : FuiControl {
     if (auto ctl = cast(FuiControl)evt.source) {
       if (ctl !is this && ctl.toplevel is this) lastfct = ctl;
     }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class FuiWindow : FuiDeskWindow {
+  alias onMyEvent = super.onMyEvent;
+
+  override void doEventKey (FuiEventKey evt) {
+    if (evt.bubbling) {
+      if (evt.key == "M-F4") {
+        evt.eat();
+        (new FuiEventClose(this, null)).post;
+        return;
+      }
+      if (evt.key == "Tab" || evt.key == "Right" || evt.key == "Down") {
+        evt.eat();
+        (new FuiEventWinFocusNext(this)).post;
+        return;
+      }
+      if (evt.key == "S-Tab" || evt.key == "C-Tab" || evt.key == "Up" || evt.key == "Left") {
+        evt.eat();
+        (new FuiEventWinFocusPrev(this)).post;
+        return;
+      }
+      if (evt.key == "M-F5") {
+        kbmoving = true;
+        evt.eat();
+        return;
+      }
+    }
+    super.doEventKey(evt);
   }
 }

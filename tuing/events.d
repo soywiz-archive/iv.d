@@ -25,7 +25,7 @@ import iv.rawtty2 : TtyEvent;
 
 import iv.tuing.controls.button : FuiCheckBox, FuiRadio;
 import iv.tuing.controls.listbox : FuiListBox;
-import iv.tuing.controls.window : FuiWindow;
+import iv.tuing.controls.window : FuiDeskWindow;
 import iv.tuing.tui : FuiControl;
 import iv.tuing.ttyeditor : TtyEditor;
 
@@ -51,9 +51,9 @@ public class FuiEventQuit : FuiEvent { this () {} }
 // post this event to close current window; `ares` is the control that caused it; may be null
 public class FuiEventClose : FuiEvent {
   FuiControl res;
-  this (FuiWindow awin, FuiControl ares=null) { super(awin); res = ares; }
+  this (FuiDeskWindow awin, FuiControl ares=null) { super(awin); res = ares; }
   final @property pure nothrow @trusted @nogc {
-    inout(FuiWindow) win () inout { return cast(typeof(return))osource; }
+    inout(FuiDeskWindow) win () inout { return cast(typeof(return))osource; }
   }
 }
 
@@ -122,14 +122,14 @@ public class FuiEventRadioChanged : FuiEvent {
 
 // ////////////////////////////////////////////////////////////////////////// //
 public class FuiEventWinFocusNextPrev : FuiEvent {
-  this (FuiWindow awin) { super(awin); }
+  this (FuiDeskWindow awin) { super(awin); }
   final @property pure nothrow @trusted @nogc {
-    inout(FuiWindow) sourcewin () inout { return cast(typeof(return))osource; }
+    inout(FuiDeskWindow) sourcewin () inout { return cast(typeof(return))osource; }
   }
 }
 
-public class FuiEventWinFocusNext : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
-public class FuiEventWinFocusPrev : FuiEventWinFocusNextPrev { this (FuiWindow awin) { super(awin); } }
+public class FuiEventWinFocusNext : FuiEventWinFocusNextPrev { this (FuiDeskWindow awin) { super(awin); } }
+public class FuiEventWinFocusPrev : FuiEventWinFocusNextPrev { this (FuiDeskWindow awin) { super(awin); } }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

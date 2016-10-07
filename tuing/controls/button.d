@@ -29,7 +29,6 @@ import iv.tuing.events;
 import iv.tuing.tty;
 import iv.tuing.tui;
 import iv.tuing.types;
-import iv.tuing.controls.window : FuiWindow;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -106,7 +105,7 @@ public class FuiCheckBox : FuiControl {
     super(aparent);
     cbSetup(atext, agroupid);
     if (agroupid.length) {
-      if (auto w = cast(FuiWindow)toplevel) w.checkbox(agroupid, defval);
+      if (auto w = topwindow) w.checkbox(agroupid, defval);
     }
   }
 
@@ -128,7 +127,7 @@ public class FuiCheckBox : FuiControl {
     }
     if (onAction !is null) { onAction(this); return; }
     if (groupid.length) {
-      if (auto w = cast(FuiWindow)toplevel) {
+      if (auto w = topwindow) {
         auto nv = !w.checkbox(groupid);
         static assert(is(typeof(nv) == bool));
         w.checkbox(groupid, nv);
@@ -142,7 +141,7 @@ public class FuiCheckBox : FuiControl {
     auto hotcolor = (focused ? palColor!"hotsel"() : disabled ? palColor!"disabled" : palColor!"hot"());
     win.fill(0, 0, win.width, win.height);
     win.writeStrAt(0, 0, "[ ]");
-    if (auto w = cast(FuiWindow)toplevel) {
+    if (auto w = topwindow) {
       if (w.checkbox(groupid)) win.writeCharAt(1, 0, 'x');
     }
     win.writeHotStrAt(4, 0, win.width-4, caption, hotcolor, win.Align.Center, hotkeyed);
@@ -192,7 +191,7 @@ public class FuiRadio : FuiControl {
     }
     if (onAction !is null) { onAction(this); return; }
     if (groupid.length && myval >= 0) {
-      if (auto w = cast(FuiWindow)toplevel) {
+      if (auto w = topwindow) {
         auto nv = w.radio(groupid);
         if (nv != myval) {
           w.radio(groupid, myval);
@@ -208,7 +207,7 @@ public class FuiRadio : FuiControl {
     win.fill(0, 0, win.width, win.height);
     win.writeStrAt(0, 0, "( )");
     if (myval >= 0) {
-      if (auto w = cast(FuiWindow)toplevel) {
+      if (auto w = topwindow) {
         if (w.radio(groupid) == myval) win.writeCharAt(1, 0, '*');
       }
     }
