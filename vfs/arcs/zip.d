@@ -123,7 +123,10 @@ private:
       cdsize = e64.cdsize;
     } else {
       if (eocd.diskno != 0 || eocd.diskcd != 0) throw new VFSNamedException!"ZipArchive"("multidisk archive");
-      if (eocd.diskfileno != eocd.fileno || ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize != flsize) throw new VFSNamedException!"ZipArchive"("corrupted archive");
+      //debug(ziparc) writefln("flsize: 0x%08x  expected: 0x%08x", cast(uint)flsize, cast(uint)(ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize));
+      if (eocd.diskfileno != eocd.fileno) throw new VFSNamedException!"ZipArchive"("corrupted archive");
+      // relax it a little
+      if (ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize > flsize) throw new VFSNamedException!"ZipArchive"("corrupted archive");
       cdofs = eocd.cdofs;
       cdsize = eocd.cdsize;
       if (cdofs >= ubufpos+pos || flsize-cdofs < cdsize) throw new VFSNamedException!"ZipArchive"("corrupted archive");
@@ -139,10 +142,15 @@ private:
     char[4] sign;
     dir.assumeSafeAppend; // yep
     while (bleft > 0) {
+      debug(ziparc) writefln("pos: 0x%08x (%s bytes left)", cast(uint)fl.tell, bleft);
       if (bleft < 4) break;
       if (fl.rawRead(sign[]).length != sign.length) throw new VFSNamedException!"ZipArchive"("reading error");
       bleft -= 4;
-      if (sign[0] != 'P' || sign[1] != 'K') throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
+      if (sign[0] != 'P' || sign[1] != 'K') {
+        debug(ziparc) writeln("SIGN: NOT PK!");
+        throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
+      }
+      debug(ziparc) writefln("SIGN: 0x%02x 0x%02x", cast(ubyte)sign[2], cast(ubyte)sign[3]);
       // digital signature?
       if (sign[2] == 5 && sign[3] == 5) {
         // yes, skip it
