@@ -2024,7 +2024,7 @@ public:
     if (pos < bstart) {
       if (lastBGEnd) {
         // move end
-        ry = gb.pos2line(bstart);
+        ry = gb.pos2line(bend);
         bend = bstart;
         bstart = pos;
         lastBGEnd = false;
