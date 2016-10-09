@@ -141,21 +141,21 @@ class K8ByteEncoding(alias charMap) : EncodingScheme {
 
 // ////////////////////////////////////////////////////////////////////////// //
 class KBBCWindows1251 : K8ByteEncoding!charMap1251 {
-  shared static this () { EncodingScheme.register("iv.encoding.KBBCWindows1251"); }
+  shared static this () { EncodingScheme.register!KBBCWindows1251; }
   override string toString () const @safe pure nothrow @nogc { return "windows-1251"; }
   override string[] names () const @safe pure nothrow { return ["windows-1251", "cp-1251", "cp1251"]; }
 }
 
 
 class KBBCP866 : K8ByteEncoding!charMap866 {
-  shared static this () { EncodingScheme.register("iv.encoding.KBBCP866"); }
+  shared static this () { EncodingScheme.register!KBBCP866; }
   override string toString () const @safe pure nothrow @nogc { return "windows-866"; }
   override string[] names () const @safe pure nothrow { return ["windows-866", "cp-866", "cp866"]; }
 }
 
 
 class KBBCKOI8 : K8ByteEncoding!charMapKOI8 {
-  shared static this () { EncodingScheme.register("iv.encoding.KBBCKOI8"); }
+  shared static this () { EncodingScheme.register!KBBCKOI8; }
   override string toString () const @safe pure nothrow @nogc { return "koi8-u"; }
   override string[] names () const @safe pure nothrow { return ["koi8-u", "koi8-r", "koi8", "koi8u", "koi8r"]; }
 }
