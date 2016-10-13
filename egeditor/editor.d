@@ -341,6 +341,7 @@ public:
   }
 
   // remove all text from buffer
+  // WILL NOT call deletion hooks!
   void clear () {
     import core.stdc.stdlib : free;
     if (tbuf !is null) { free(tbuf); tbuf = null; }
@@ -1924,12 +1925,12 @@ public:
     markRangeDirty(bstart, bend-bstart);
   }
 
-  //FIXME: optimize updating with block boundaries
-  // fix block boundaries
-  // coords *may* be already changed
-  // should be called before text deletion
-  // eolcount: number of eols in deleted block
+  // do various fixups before text deletion
+  // cursor coords *may* be already changed
+  // will be called before text deletion by `deleteText` or `replaceText` APIs
+  // eolcount: number of eols in (to be) deleted block
   protected void willBeDeleted (int pos, int len, int eolcount) nothrow {
+    //FIXME: optimize updating with block boundaries
     if (len < 1) return; // just in case
     assert(pos >= 0 && cast(long)pos+len <= gb.textsize);
     bookmarkDeletionFix(pos, len, eolcount);
@@ -1968,26 +1969,27 @@ public:
     }
   }
 
-  //FIXME: optimize updating with block boundaries
-  // coords *may* be already changed
-  // should be called after text insertion
+  // do various fixups after text deletion
+  // cursor coords *may* be already changed
+  // will be called after text deletion by `deleteText` or `replaceText` APIs
   // eolcount: number of eols in deleted block
+  // pos and len: they were valid *before* deletion!
   protected void wasDeleted (int pos, int len, int eolcount) nothrow {
   }
 
-  //FIXME: optimize updating with block boundaries
-  // coords *may* be already changed
-  // should be called before text insertion
-  // eolcount: number of eols in inserted block
+  // do various fixups before text insertion
+  // cursor coords *may* be already changed
+  // will be called before text insertion by `insertText` or `replaceText` APIs
+  // eolcount: number of eols in (to be) inserted block
   protected void willBeInserted (int pos, int len, int eolcount) nothrow {
   }
 
-  //FIXME: optimize updating with block boundaries
-  // fix block boundaries
-  // coords *may* be already changed
-  // should be called after text insertion
+  // do various fixups after text insertion
+  // cursor coords *may* be already changed
+  // will be called after text insertion by `insertText` or `replaceText` APIs
   // eolcount: number of eols in inserted block
   protected void wasInserted (int pos, int len, int eolcount) nothrow {
+    //FIXME: optimize updating with block boundaries
     if (len < 1) return;
     assert(pos >= 0 && cast(long)pos+len <= gb.textsize);
     bookmarkInsertionFix(pos, len, eolcount);
