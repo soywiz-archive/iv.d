@@ -64,9 +64,13 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
   void xput (const(char)[] s...) {
     if (s.length == 0) return;
     static if (isWriteableStream!ST) {
-      fl.rawWriteExact(s[]);
+      fl.rawWrite(s[]);
     } else {
-      fl.put(s);
+      static if (is(typeof(fl.put(s)))) {
+        fl.put(s);
+      } else {
+        foreach (char ch; s) fl.put(ch);
+      }
     }
   }
 
@@ -132,34 +136,32 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
       }
     } else static if (is(T : V[], V)) {
       // array
-      void writeMArray(AT) (AT arr) {
-        if (arr.length) {
-          xput("["); // ", arr.length);
-          indent += Indent;
-          foreach (const ref it; arr) {
-            newline();
-            serData!true(it);
-            xput(",");
-          }
-          indent -= Indent;
-          newline;
-          xput("]");
-        } else {
-          xput("[]");
+      if (v.length) {
+        xput("[");
+        indent += Indent;
+        foreach (immutable idx, const ref it; v) {
+          newline();
+          serData!true(it);
+          if (idx != v.length-1) xput(",");
         }
+        indent -= Indent;
+        newline;
+        xput("]");
+      } else {
+        xput("[]");
       }
-      writeMArray(v);
     } else static if (is(T : V[K], K, V)) {
       // associative array
       if (v.length) {
-        xput("{"); // ", v.length);
+        xput("{");
         indent += Indent;
+        auto len = v.length;
         foreach (const kv; v.byKeyValue) {
           newline;
           serData!true(kv.key);
           xput(": ");
           serData!true(kv.value);
-          xput(",");
+          if (--len) xput(",");
         }
         indent -= Indent;
         newline;
@@ -182,6 +184,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
         xput(": {");
       }
       indent += Indent;
+      bool needComma = false;
       foreach (string fldname; FieldNameTuple!UT) {
         static if (!hasUDA!(__traits(getMember, UT, fldname), SRZIgnore)) {
           enum names = getUDAs!(__traits(getMember, UT, fldname), SRZName);
@@ -190,11 +193,12 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
           static if (hasUDA!(__traits(getMember, UT, fldname), SRZNonDefaultOnly)) {
             if (__traits(getMember, v, fldname) == __traits(getMember, v, fldname).init) continue;
           }
+          if (needComma) xput(",");
           newline;
           xput(xname);
           xput(": ");
           serData!true(__traits(getMember, v, fldname));
-          xput(",");
+          needComma = true;
         }
       }
       indent -= Indent;
@@ -343,7 +347,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
     static if (is(T : const(char)[])) {
       // quoted string
       static if (__traits(isStaticArray, T)) {
-        usize dpos = 0;
+        size_t dpos = 0;
         void put (const(char)[] s...) {
           if (s.length) {
             if (v.length-dpos < s.length) error("value too long");
@@ -533,18 +537,35 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
 
 // ////////////////////////////////////////////////////////////////////////// //
 version(egserial_test) unittest {
-  import iv.vfs;
+  version(no_vfs) import std.stdio; else { import iv.vfs.io; import iv.vfs.streams; }
 
-  import iv.vfs.streams;
+  version(no_vfs) static struct InRng {
+    char[] src;
+    @property char front () { return src[0]; }
+    @property bool empty () { return (src.length == 0); }
+    void popFront () { src = src[1..$]; }
+  }
 
   char[] s2s(T) (in auto ref T v) {
-    ubyte[] res;
-    auto buf = MemoryStreamRWRef(res);
-    {
-      auto fl = wrapStream(buf);
-      fl.txtser(v);
+    version(no_vfs) {
+      char[] res;
+      static struct OutRng {
+        char[]* dest;
+        //void put (const(char)[] ch...) { *dest ~= ch; }
+        void put (char ch) { *dest ~= ch; }
+      }
+      auto or = OutRng(&res);
+      v.txtser(or);
+      return res;
+    } else {
+      ubyte[] res;
+      auto buf = MemoryStreamRWRef(res);
+      {
+        auto fl = wrapStream(buf);
+        v.txtser(fl);
+      }
+      return cast(char[])*buf.bytes;
     }
-    return cast(char[])*buf.bytes;
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
@@ -567,29 +588,33 @@ version(egserial_test) unittest {
   void test0 () {
     ReplyAsmInfo ri;
     ri.cmd = 42;
-    ri.list[0] ~= AssemblyInfo(666, "hell");
-    ri.list[1] ~= AssemblyInfo(69, "fuck");
+    ri.list[0] ~= AssemblyInfo(665, "limbo");
+    ri.list[1] ~= AssemblyInfo(69, "pleasure");
     ri.dict["foo"] = 42;
-    ri.dict["boo"] = 666;
+    ri.dict["boo"] = 665;
     //ri.fbool = true;
     ri.ext = "elf";
     auto srs = s2s(ri);
     writeln(srs);
     {
       ReplyAsmInfo xf;
-      wrapMemoryRO(srs).txtunser(xf);
+      version(no_vfs) {
+        xf.txtunser(InRng(srs));
+      } else {
+        xf.txtunser(wrapMemoryRO(srs));
+      }
       //assert(fl.tell == fl.size);
       assert(xf.cmd == 42);
       assert(xf.list.length == 2);
       assert(xf.list[0].length == 1);
       assert(xf.list[1].length == 1);
-      assert(xf.list[0][0].id == 666);
-      assert(xf.list[0][0].name == "hell");
+      assert(xf.list[0][0].id == 665);
+      assert(xf.list[0][0].name == "limbo");
       assert(xf.list[1][0].id == 69);
-      assert(xf.list[1][0].name == "fuck");
+      assert(xf.list[1][0].name == "pleasure");
       assert(xf.dict.length == 2);
       assert(xf.dict["foo"] == 42);
-      assert(xf.dict["boo"] == 666);
+      assert(xf.dict["boo"] == 665);
       //assert(xf.fbool == true);
       assert(xf.fbool == false);
       assert(xf.ext == "elf");
@@ -599,7 +624,7 @@ version(egserial_test) unittest {
   /*void main ()*/ {
     test0();
     write("string: ");
-    stdout.txtser("Alice");
+    "Alice".txtser(stdout);
     writeln;
   }
 }
