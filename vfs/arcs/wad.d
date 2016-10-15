@@ -43,7 +43,9 @@ private:
   VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size); }
 
   void open (VFile fl, const(char)[] prefixpath) {
-    static immutable string[12] mapfiles = ["things", "linedefs", "sidedefs", "vertexes", "segs", "ssectors", "nodes", "sectors", "reject", "blockmap", "behavior", "scripts"];
+    static immutable string[16] mapfiles = [
+      "things", "linedefs", "sidedefs", "vertexes", "segs", "ssectors", "nodes", "sectors", "reject", "blockmap",
+      "behavior", "scripts", "textmap", "znodes", "dialogue", "endmap"];
     static bool isMapPart (const(char)[] s) {
       foreach (immutable idx, char ch; s) if (ch == 0) { s = s[0..idx]; break; }
       if (s.length > 8) return false; // wtf?!
