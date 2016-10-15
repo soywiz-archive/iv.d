@@ -173,6 +173,7 @@ private:
         if ((cdfh.method != 0 && cdfh.method != 8) || cdfh.namelen == 0 || (cdfh.gflags&0b10_0000_0110_0001) != 0 || (cdfh.attr&0x58) != 0 ||
             cast(long)cdfh.hdrofs+(cdfh.method ? cdfh.pksize : cdfh.size) >= ubufpos+pos)
         {
+          debug(ziparc) writeln("  ignored: method=", cdfh.method);
           // ignore this
           fl.seek(cdfh.namelen+cdfh.extlen+cdfh.cmtlen, Seek.Cur);
           bleft -= cdfh.namelen+cdfh.extlen+cdfh.cmtlen;
