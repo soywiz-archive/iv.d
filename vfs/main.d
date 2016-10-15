@@ -30,6 +30,7 @@ static import core.sync.mutex;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private shared int vfsLockedFlag = 0; // !0: can't add/remove drivers
 shared bool vflagIgnoreCase = true; // ignore file name case
 shared bool vflagIgnoreCaseNoDat = false; // ignore file name case when no archive files are connected
 
@@ -50,6 +51,38 @@ shared bool vflagIgnoreCaseNoDat = false; // ignore file name case when no archi
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared core.sync.mutex.Mutex ptlock;
 shared static this () { ptlock = new core.sync.mutex.Mutex; }
+
+// non-empty msg: check lockflag
+private struct VFSLock {
+  int locked = 0;
+
+  @disable this (this);
+
+  ~this () {
+    if (locked) {
+      import core.atomic;
+      if (locked < 0) assert(0, "vfs: internal error");
+      atomicOp!"-="(vfsLockedFlag, 1);
+      ptlock.unlock();
+      locked = -1;
+    }
+  }
+
+  static VFSLock lock (string msg=null) {
+    import core.atomic;
+    ptlock.lock();
+    if (msg.length) {
+      if (atomicLoad(vfsLockedFlag)) {
+        ptlock.unlock();
+        throw new VFSException(msg);
+      }
+    }
+    VFSLock lk;
+    lk.locked = 1;
+    atomicOp!"+="(vfsLockedFlag, 1);
+    return lk;
+  }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -222,8 +255,7 @@ public VFSDriverId vfsRegister(string mode="normal") (VFSDriver drv, const(char)
   static assert(mode == "normal" || mode == "last" || mode == "first");
   import core.atomic : atomicOp;
   if (drv is null) return VFSDriverId.init;
-  ptlock.lock();
-  scope(exit) ptlock.unlock();
+  auto lock = VFSLock.lock("can't register drivers in list operations");
   VFSDriverId did = VFSDriverId.create;
   static if (mode == "normal") {
     // normal
@@ -252,8 +284,7 @@ public VFSDriverId vfsRegister(string mode="normal") (VFSDriver drv, const(char)
 /// find driver. returns invalid VFSDriverId if the driver was not found.
 /// WARNING: don't add new drivers while this is in process!
 public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=null) {
-  ptlock.lock();
-  scope(exit) ptlock.unlock();
+  auto lock = VFSLock.lock();
   foreach_reverse (immutable idx, ref drv; drivers) {
     if (drv.fname == fname && drv.prefixpath == prefixpath) return drv.drvid;
   }
@@ -265,8 +296,7 @@ public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=
 /// unregister driver
 /// WARNING: don't add new drivers while this is in process!
 public bool vfsUnregister (VFSDriverId id) {
-  ptlock.lock();
-  scope(exit) ptlock.unlock();
+  auto lock = VFSLock.lock("can't unregister drivers in list operations");
   foreach_reverse (immutable idx, ref drv; drivers) {
     if (drv.drvid == id) {
       // i found her!
@@ -286,9 +316,7 @@ public VFSDriver.DirEntry[] vfsFileList () {
   usize[string] filesSeen;
   VFSDriver.DirEntry[] res;
 
-  ptlock.lock();
-  scope(exit) ptlock.unlock();
-
+  auto lock = VFSLock.lock();
   foreach_reverse (ref drvnfo; drivers) {
     foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
       auto de = drvnfo.drv.dirEntry(idx);
@@ -301,7 +329,6 @@ public VFSDriver.DirEntry[] vfsFileList () {
       }
     }
   }
-
   return res;
 }
 
@@ -311,9 +338,7 @@ public VFSDriver.DirEntry[] vfsFileList () {
 public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb) {
   if (cb is null) return 0;
 
-  ptlock.lock();
-  scope(exit) ptlock.unlock();
-
+  auto lock = VFSLock.lock();
   bool[string] filesSeen;
   foreach_reverse (ref drvnfo; drivers) {
     foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
@@ -324,7 +349,6 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb)
       }
     }
   }
-
   return 0;
 }
 
@@ -334,9 +358,7 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb)
 public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de, VFSDriverId drvid) cb) {
   if (cb is null) return 0;
 
-  ptlock.lock();
-  scope(exit) ptlock.unlock();
-
+  auto lock = VFSLock.lock();
   bool[string] filesSeen;
   foreach_reverse (ref drvnfo; drivers) {
     foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
@@ -347,7 +369,6 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de, VFS
       }
     }
   }
-
   return 0;
 }
 
@@ -426,9 +447,7 @@ public VFile vfsOpenFile (const(char)[] fname, const(char)[] mode=null) {
   auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
 
   {
-    ptlock.lock();
-    scope(exit) ptlock.unlock();
-
+    auto lock = VFSLock.lock();
     // try all drivers
     foreach_reverse (ref di; drivers) {
       try {
@@ -464,8 +483,7 @@ __gshared DetectorInfo[] detectors;
 public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
   static assert(mode == "normal" || mode == "last" || mode == "first");
   if (dt is null) return;
-  ptlock.lock();
-  scope(exit) ptlock.unlock();
+  auto lock = VFSLock.lock("can't register drivers in list operations");
   static if (mode == "normal") {
     // normal
     usize ipos = detectors.length;
@@ -527,15 +545,19 @@ public VFSDriverId vfsAddPak(string mode="normal", T : const(char)[]) (VFile fl,
 
     if (!fl.isOpen) error();
 
-    ptlock.lock();
-    scope(exit) ptlock.unlock();
-
+    auto lock = VFSLock.lock("can't register drivers in list operations");
     // try all detectors
     foreach (ref di; detectors) {
       try {
         fl.seek(0);
         auto drv = di.dt.tryOpen(fl, prefixpath);
-        if (drv !is null) return vfsRegister!mode(drv, fname, prefixpath);
+        if (drv !is null) {
+          // hack!
+          import core.atomic;
+          atomicOp!"-="(vfsLockedFlag, 1);
+          scope(exit) atomicOp!"+="(vfsLockedFlag, 1);
+          return vfsRegister!mode(drv, fname, prefixpath);
+        }
       } catch (Exception e) {
         // chain
         error(e);
@@ -561,8 +583,7 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
   nbuf[fname.length] = '\0';
   static if (VFS_NORMAL_OS) if (ignoreCase) {
     // we have to lock here, as `findPathCI()` is not thread-safe
-    ptlock.lock();
-    scope(exit) ptlock.unlock();
+    auto lock = VFSLock.lock();
     auto pt = findPathCI(nbuf[0..fname.length]);
     if (pt is null) {
       // restore filename for correct error message
