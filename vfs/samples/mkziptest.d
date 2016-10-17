@@ -15,16 +15,21 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import std.stdio;
+module mkziptest;
 
-import iv.vfs;
+import iv.strex;
+import iv.vfs.io;
+import iv.vfs.writers.zip;
+
 
 void main () {
-  vfsRegister!"first"(new VFSDriverDiskListed("..")); // data dir, will be looked last
-  //vfsAddPak("data/base.pk3"); // disk name, will not be looked in VFS
-
-  vfsForEachFile((in ref de) {
-    writeln("FILE: ", de.size, " : ", de.name);
-    return 0;
-  });
+  auto fo = VFile("z00.zip", "w");
+  vfsRegister!"first"(new VFSDriverDiskListed(".")); // data dir, will be looked last
+  ZipFileInfo[] files;
+  foreach (const ref de; vfsAllFiles()) {
+    if (de.name.endsWithCI(".zip")) continue;
+    writeln(de.name);
+    files ~= zipOne(fo, de.name, VFile(de.name));
+  }
+  zipFinish(fo, files);
 }
