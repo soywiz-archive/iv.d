@@ -201,12 +201,14 @@ private:
   }
 
   static void unpackBlock (void* dest, uint destlen, const(void)* src, uint srclen, uint blocksize, bool useBalz) {
-    static if (arcz_has_balz) {
-      if (useBalz) unpackBlockBalz(dest, destlen, src, srclen, blocksize);
-      else unpackBlockZLib(dest, destlen, src, srclen, blocksize);
+    if (useBalz) {
+      static if (arcz_has_balz) {
+        unpackBlockBalz(dest, destlen, src, srclen, blocksize);
+      } else {
+        throw new Exception("no Balz support was compiled in ArcZ");
+      }
     } else {
-      if (useBalz) throw new Exception("no Balz support was compiled in ArcZ");
-      else unpackBlockZLib(dest, destlen, src, srclen, blocksize);
+      unpackBlockZLib(dest, destlen, src, srclen, blocksize);
     }
   }
 
@@ -695,7 +697,7 @@ public:
     ZLib, // default
     Balz,
     BalzMax, // Balz, maximum compression
-    Zopfli,
+    Zopfli, // this will fallback to zlib if no zopfli support was compiled in
   }
 
 private:
@@ -842,10 +844,12 @@ private:
       case Compressor.Zopfli:
         static if (arcz_has_zopfli) {
           res = writePackedZopfli(upbuf);
-          break;
+          //break;
         } else {
-          new Exception("no Zopfli support was compiled in ArcZ");
+          //new Exception("no Zopfli support was compiled in ArcZ");
+          res = writePackedZLib(upbuf);
         }
+        break;
     }
     if (res > uint.max) throw new Exception("output archive too big");
     return cast(uint)res;
@@ -964,7 +968,7 @@ public:
       if (acpr == Compressor.Balz || acpr == Compressor.BalzMax) throw new Exception("no Balz support was compiled in ArcZ");
     }
     static if (!arcz_has_zopfli) {
-      if (acpr == Compressor.Zopfli) throw new Exception("no Zopfli support was compiled in ArcZ");
+      //if (acpr == Compressor.Zopfli) throw new Exception("no Zopfli support was compiled in ArcZ");
     }
     cpr = acpr;
     arcfl = fopen(fname.tempCString, "wb");
@@ -1029,3 +1033,36 @@ public:
     }
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/* arcz file format:
+header
+======
+db 'CZA1'     ; signature
+db version    ; 0: zlib; 1: balz
+dd indexofs   ; offset to packed index
+dd pkindexsz  ; size of packed index
+dd upindexsz  ; size of unpacked index
+
+
+index
+=====
+dd chunksize    ; unpacked chunk size in bytes
+dd chunkcount   ; number of chunks in file
+dd lastchunksz  ; size of last chunk (it may be incomplete); 0: last chunk is completely used (all `chunksize` bytes)
+
+then chunk offsets and sizes follows:
+  dd chunkofs   ; from file start
+  dd pkchunksz  ; size of (possibly packed) chunk data; if it equals to `chunksize`, this chunk is not packed
+
+then file list follows:
+dd filecount  ; number of files in archive
+
+then file info follows:
+  db namelen     ; length of name (can't be 0)
+    db name(namelen)
+  dd firstchunk  ; chunk where file starts
+  dd firstofs    ; offset in first chunk (unpacked) where file starts
+  dd filesize    ; unpacked file size
+*/

@@ -332,6 +332,9 @@ public VFSDriver.DirEntry[] vfsFileList () {
   return res;
 }
 
+/// ditto.
+public alias vfsAllFiles = vfsFileList;
+
 
 /// call callback for each known file in VFS. return non-zero from callback to stop.
 /// WARNING: don't add new drivers while this is in process!
