@@ -95,6 +95,18 @@ uint zpack (VFile ds, VFile ss, out bool aborted) {
       }
     }
   }
+  // empty write buffer (just in case)
+  if (zst.avail_out < OBSize) {
+    if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+      // this will be overwritten anyway
+      aborted = true;
+      return 0;
+    }
+    outsize += OBSize-zst.avail_out;
+    ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
+    zst.next_out = ob;
+    zst.avail_out = OBSize;
+  }
   // do leftovers
   for (;;) {
     zst.avail_in = 0;
