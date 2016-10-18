@@ -58,6 +58,7 @@ class VorbisChannel : TflChannel {
       vf = null;
       return;
     }
+    stereo = (vf.chans == 2);
 
     sampleRate = vf.sampleRate;
     { import core.stdc.stdio; printf("%uHz, %u channels\n", vf.sampleRate, vf.chans); }

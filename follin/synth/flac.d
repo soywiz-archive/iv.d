@@ -96,6 +96,7 @@ class FlacChannel : TflChannel {
       ff = null;
       return;
     }
+    stereo = (ff.channels == 2);
 
     sampleRate = ff.sampleRate;
     { import core.stdc.stdio; printf("%uHz, %u channels\n", ff.sampleRate, ff.channels); }
