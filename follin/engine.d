@@ -144,7 +144,7 @@ public void tflShort2Float (in short[] input, float[] output) nothrow @trusted @
 public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @nogc {
   auto s = input.ptr;
   auto d = output.ptr;
-  version(follin_use_sse) {
+  /+ALIGN NOT WORKING YET: version(follin_use_sse) {
     auto blen = cast(uint)input.length;
     if (blen > 0) {
       //TODO: use aligned instructions
@@ -228,7 +228,7 @@ public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @
         asm nothrow @safe @nogc { emms; }
       }
     }
-  } else {
+  } else +/{
     mixin(declfcvar!"temp");
     foreach (immutable _; 0..input.length) {
       mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
