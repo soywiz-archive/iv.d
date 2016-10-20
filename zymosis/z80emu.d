@@ -1171,7 +1171,7 @@ final:
    *  none
    *
    * Returns:
-   *  number of tstates taken by interrupt initiation or 0 if interrupts was disabled
+   *  number of tstates taken by interrupt initiation or 0 if interrupts was disabled/ignored
    */
   int intr () {
     ushort a;
@@ -1225,12 +1225,13 @@ final:
    *  none
    *
    * Returns:
-   *  number of tstates taken by interrupt initiation or 0 (why?)
+   *  number of tstates taken by interrupt initiation or 0 if interrupts was disabled/ignored
    */
   int nmi () {
     int ots = tstates;
-    /*??? emulate Z80 bug with interrupted LD A,I/R */
-    prevWasEIDDR = EIDDR.Normal; /* don't care */
+    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* emulate Z80 bug with interrupted LD A,I/R */
+    if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; /* not accepted */
+    /*prevWasEIDDR = EIDDR.Normal;*/ /* don't care */
     if (halted) { halted = false; ++PC; }
     mixin(IncRMixin);
     IFF1 = false; /* IFF2 is not changed */
