@@ -340,6 +340,7 @@ mixin(genRGBGetSet!"Green");
 mixin(genRGBGetSet!"Blue");
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 void putPixel(TX, TY) (TX x, TY y, VColor col) @trusted
 if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
 {
@@ -377,6 +378,71 @@ if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+void clear (VColor col) @trusted {
+  vbuf.ptr[0..vbufW*vbufH] = col;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+void drawRect (int x, int y, int w, int h, immutable VColor col) {
+  if (w < 1 || h < 1) return;
+  if (x <= -w || y <= -h || x >= vbufW || y >= vbufH || isTransparent(col)) return;
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; h = 0; }
+  if (x+w >= vbufW) w = vbufW-x;
+  if (y+h >= vbufH) h = vbufH-y;
+  assert(x >= 0 && y >= 0 && x < vbufW && y < vbufH && w > 0 && h > 0 && x+w <= vbufW && y+h <= vbufH);
+  if (isOpaque(col)) {
+    uint d = y*vbufW+x;
+    vbuf[d..d+w] = col;
+    d += vbufW;
+    foreach (immutable yy; y+1..y+h-1) {
+      vbuf[d] = col;
+      vbuf[d+w-1] = col;
+      d += vbufW;
+    }
+    if (h > 1) vbuf[d..d+w] = col;
+  } else {
+    foreach (immutable yy; y..y+h) {
+      putPixel(x, yy, col);
+      putPixel(x+w-1, yy, col);
+    }
+    foreach (immutable xx; x+1..x+w-1) {
+      putPixel(xx, y, col);
+      if (h > 1) putPixel(xx, y+h-1, col);
+    }
+  }
+}
+
+void fillRect (int x, int y, int w, int h, immutable VColor col) {
+  if (w < 1 || h < 1) return;
+  if (x <= -w || y <= -h || x >= vbufW || y >= vbufH || isTransparent(col)) return;
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; h = 0; }
+  if (x+w >= vbufW) w = vbufW-x;
+  if (y+h >= vbufH) h = vbufH-y;
+  assert(x >= 0 && y >= 0 && x < vbufW && y < vbufH && w > 0 && h > 0 && x+w <= vbufW && y+h <= vbufH);
+  if (isOpaque(col)) {
+    uint d = y*vbufW+x;
+    foreach (immutable yy; y..y+h) {
+      vbuf[d..d+w] = col;
+      d += vbufW;
+    }
+  } else {
+    foreach (immutable yy; y..y+h) {
+      foreach (immutable xx; x..x+w) {
+        putPixel(xx, yy, col);
+      }
+    }
+  }
+}
+
+void hline (int x, int y, int len, immutable VColor col) { drawRect(x, y, len, 1, col); }
+void vline (int x, int y, int len, immutable VColor col) { drawRect(x, y, 1, len, col); }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 void drawLine(bool lastPoint=true) (int x0, int y0, int x1, int y1, immutable VColor col) {
   enum swap(string a, string b) = "{int tmp_="~a~";"~a~"="~b~";"~b~"=tmp_;}";
 
@@ -522,6 +588,107 @@ void drawLine(bool lastPoint=true) (int x0, int y0, int x1, int y1, immutable VC
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+private void plot4points() (int cx, int cy, int x, int y, VColor clr) @trusted {
+  putPixel(cx+x, cy+y, clr);
+  if (x != 0) putPixel(cx-x, cy+y, clr);
+  if (y != 0) putPixel(cx+x, cy-y, clr);
+  putPixel(cx-x, cy-y, clr);
+}
+
+
+void drawCircle (int cx, int cy, int radius, VColor clr) @trusted {
+  if (radius > 0 && !isTransparent(clr)) {
+    int error = -radius, x = radius, y = 0;
+    if (radius == 1) { putPixel(cx, cy, clr); return; }
+    while (x > y) {
+      plot4points(cx, cy, x, y, clr);
+      plot4points(cx, cy, y, x, clr);
+      error += y*2+1;
+      ++y;
+      if (error >= 0) { --x; error -= x*2; }
+    }
+    plot4points(cx, cy, x, y, clr);
+  }
+}
+
+void fillCircle (int cx, int cy, int radius, VColor clr) @trusted {
+  if (radius > 0 && !isTransparent(clr)) {
+    int error = -radius, x = radius, y = 0;
+    if (radius == 1) { putPixel(cx, cy, clr); return; }
+    while (x >= y) {
+      int last_y = y;
+      error += y;
+      ++y;
+      error += y;
+      hline(cx-x, cy+last_y, 2*x+1, clr);
+      if (x != 0 && last_y != 0) hline(cx-x, cy-last_y, 2*x+1, clr);
+      if (error >= 0) {
+        if (x != last_y) {
+          hline(cx-last_y, cy+x, 2*last_y+1, clr);
+          if (last_y != 0 && x != 0) hline(cx-last_y, cy-x, 2*last_y+1, clr);
+        }
+        error -= x;
+        --x;
+        error -= x;
+      }
+    }
+  }
+}
+
+
+void drawEllipse (int x0, int y0, int x1, int y1, VColor clr) @trusted {
+  import std.math : abs;
+  int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
+  long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
+  long err = dx+dy+b1*a*a; // error of 1.step
+  if (x0 > x1) { x0 = x1; x1 += a; } // if called with swapped points...
+  if (y0 > y1) y0 = y1; // ...exchange them
+  y0 += (b+1)/2; y1 = y0-b1;  // starting pixel
+  a *= 8*a; b1 = 8*b*b;
+  do {
+    long e2;
+    putPixel(x1, y0, clr); //   I. Quadrant
+    putPixel(x0, y0, clr); //  II. Quadrant
+    putPixel(x0, y1, clr); // III. Quadrant
+    putPixel(x1, y1, clr); //  IV. Quadrant
+    e2 = 2*err;
+    if (e2 >= dx) { ++x0; --x1; err += dx += b1; } // x step
+    if (e2 <= dy) { ++y0; --y1; err += dy += a; }  // y step
+  } while (x0 <= x1);
+  while (y0-y1 < b) {
+    // too early stop of flat ellipses a=1
+    putPixel(x0-1, ++y0, clr); // complete tip of ellipse
+    putPixel(x0-1, --y1, clr);
+  }
+}
+
+void fillEllipse (int x0, int y0, int x1, int y1, VColor clr) @trusted {
+  import std.math : abs;
+  int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
+  long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
+  long err = dx+dy+b1*a*a; // error of 1.step
+  int prev_y0 = -1, prev_y1 = -1;
+  if (x0 > x1) { x0 = x1; x1 += a; } // if called with swapped points...
+  if (y0 > y1) y0 = y1; // ...exchange them
+  y0 += (b+1)/2; y1 = y0-b1; // starting pixel
+  a *= 8*a; b1 = 8*b*b;
+  do {
+    long e2;
+    if (y0 != prev_y0) { hline(x0, y0, x1-x0+1, clr); prev_y0 = y0; }
+    if (y1 != y0 && y1 != prev_y1) { hline(x0, y1, x1-x0+1, clr); prev_y1 = y1; }
+    e2 = 2*err;
+    if (e2 >= dx) { ++x0; --x1; err += dx += b1; } // x step
+    if (e2 <= dy) { ++y0; --y1; err += dy += a; }  // y step
+  } while (x0 <= x1);
+  while (y0-y1 < b) {
+    // too early stop of flat ellipses a=1
+    putPixel(x0-1, ++y0, clr); // complete tip of ellipse
+    putPixel(x0-1, --y1, clr);
+  }
+}
+
+
 // //////////////////////////////////////////////////////////////////////// //
 int charWidth(string type="msx") () {
        static if (type == "msx") return 6;
@@ -537,35 +704,20 @@ int charHeight(string type="msx") () {
   else static assert(0, "invalid font type");
 }
 
-/**
- * Draw character onto virtual screen in KOI8 encoding.
- *
- * Params:
- *  x = x coordinate
- *  y = y coordinate
- *  wdt = char width
- *  shift = shl count
- *  ch = character
- *  col = foreground color
- *  bkcol = background color
- *
- * Returns:
- *  nothing
- */
-void drawCharWdt(string type="msx") (int x, int y, int wdt, int shift, char ch, VColor col, VColor bkcol=Transparent) @trusted {
+void drawCharWdt(string type="msx") (int x, int y, int wdt, int shift, char ch, VColor fgcol, VColor bgcol=Transparent) @trusted {
        static if (type == "msx") { alias fontb8 = vlFont6; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
   else static if (type == "dos") { alias fontb8 = dosFont8; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
   else static if (type == "d10") { alias fontb8 = dosFont10; enum fwdt = 10; enum fhgt = 10; enum fmask = 0x8000; }
   else static assert(0, "invalid font type");
   size_t pos = ch*fhgt;
   if (wdt < 1 || shift >= fwdt) return;
-  if (col == Transparent && bkcol == Transparent) return;
+  if (fgcol == Transparent && bgcol == Transparent) return;
   if (wdt > fwdt) wdt = fwdt;
   if (shift < 0) shift = 0;
   foreach (immutable int dy; 0..fhgt) {
     ushort b = cast(ushort)(fontb8[pos++]<<shift);
     foreach (immutable int dx; 0..wdt) {
-      VColor c = (b&fmask ? col : bkcol);
+      VColor c = (b&fmask ? fgcol : bgcol);
       if (!isTransparent(c)) putPixel(x+dx, y+dy, c);
       b <<= 1;
     }
@@ -585,31 +737,15 @@ enum : ubyte {
   OutAll    = 0xff,
 }
 
-/**
- * Draw outlined character onto virtual screen in KOI8 encoding.
- *
- * Params:
- *  x = x coordinate
- *  y = y coordinate
- *  wdt = char width
- *  shift = shl count
- *  ch = character
- *  col = foreground color
- *  outcol = outline color
- *  ot = outline type, OutXXX, ored
- *
- * Returns:
- *  nothing
- */
-void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char ch, VColor col, VColor outcol=Transparent, ubyte ot=0) @trusted {
+void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char ch, VColor fgcol, VColor outcol=Transparent, ubyte ot=0) @trusted {
        static if (type == "msx") { alias fontb8 = vlFont6; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
   else static if (type == "dos") { alias fontb8 = dosFont8; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
   else static if (type == "d10") { alias fontb8 = dosFont10; enum fwdt = 10; enum fhgt = 10; enum fmask = 0x8000; }
   else static assert(0, "invalid font type");
-  if (col == Transparent && outcol == Transparent) return;
+  if (fgcol == Transparent && outcol == Transparent) return;
   if (ot == 0 || outcol == Transparent) {
     // no outline? simple draw
-    drawCharWdt(x, y, wdt, shift, ch, col, Transparent);
+    drawCharWdt(x, y, wdt, shift, ch, fgcol, Transparent);
     return;
   }
   size_t pos = ch*fhgt;
@@ -641,42 +777,29 @@ void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char c
   --y;
   foreach (immutable int dy; 0..fhgt+2) {
     foreach (immutable int dx; 0..fwdt+2) {
-      if (auto t = bmp[dy][dx]) putPixel(x+dx, y+dy, (t == 1 ? col : outcol));
+      if (auto t = bmp[dy][dx]) putPixel(x+dx, y+dy, (t == 1 ? fgcol : outcol));
     }
   }
 }
 
-/**
- * Draw 6x8 character onto virtual screen in KOI8 encoding.
- *
- * Params:
- *  x = x coordinate
- *  y = y coordinate
- *  ch = character
- *  col = foreground color
- *  bkcol = background color
- *
- * Returns:
- *  nothing
- */
-void drawChar(string type="msx") (int x, int y, char ch, VColor col, VColor bkcol=Transparent) @trusted {
-  drawCharWdt!type(x, y, charWidth!type, 0, ch, col, bkcol);
+void drawChar(string type="msx") (int x, int y, char ch, VColor fgcol, VColor bgcol=Transparent) @trusted {
+  drawCharWdt!type(x, y, charWidth!type, 0, ch, fgcol, bgcol);
 }
 
-void drawCharOut(string type="msx") (int x, int y, char ch, VColor col, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
-  drawCharWdtOut!type(x, y, charWidth!type, 0, ch, col, outcol, ot);
+void drawCharOut(string type="msx") (int x, int y, char ch, VColor fgcol, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
+  drawCharWdtOut!type(x, y, charWidth!type, 0, ch, fgcol, outcol, ot);
 }
 
-void drawStr(string type="msx") (int x, int y, const(char)[] str, VColor col, VColor bkcol=Transparent) @trusted {
+void drawStr(string type="msx") (int x, int y, const(char)[] str, VColor fgcol, VColor bgcol=Transparent) @trusted {
   foreach (immutable char ch; str) {
-    drawChar!type(x, y, ch, col, bkcol);
+    drawChar!type(x, y, ch, fgcol, bgcol);
     x += charWidth!type;
   }
 }
 
-void drawStrOut(string type="msx") (int x, int y, const(char)[] str, VColor col, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
+void drawStrOut(string type="msx") (int x, int y, const(char)[] str, VColor fgcol, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
   foreach (immutable char ch; str) {
-    drawCharOut!type(x, y, ch, col, outcol, ot);
+    drawCharOut!type(x, y, ch, fgcol, outcol, ot);
     x += charWidth!type;
   }
 }
@@ -702,51 +825,45 @@ int strWidthProp(string type="msx") (const(char)[] str) @trusted pure {
   return wdt;
 }
 
-int drawCharProp(string type="msx") (int x, int y, char ch, VColor col, VColor bkcol=Transparent) @trusted {
+int drawCharProp(string type="msx") (int x, int y, char ch, VColor fgcol, VColor bgcol=Transparent) @trusted {
        static if (type == "msx") { alias fontw8 = vlFontPropWidth; }
   else static if (type == "dos") { alias fontw8 = dosFontPropWidth; }
   else static assert(0, "invalid font type");
   immutable int wdt = (fontw8[ch]&0x0f);
-  drawCharWdt!type(x, y, wdt, fontw8[ch]>>4, ch, col, bkcol);
+  drawCharWdt!type(x, y, wdt, fontw8[ch]>>4, ch, fgcol, bgcol);
   return wdt;
 }
 
-int drawCharPropOut(string type="msx") (int x, int y, char ch, VColor col, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
+int drawCharPropOut(string type="msx") (int x, int y, char ch, VColor fgcol, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
        static if (type == "msx") { alias fontw8 = vlFontPropWidth; }
   else static if (type == "dos") { alias fontw8 = dosFontPropWidth; }
   else static assert(0, "invalid font type");
   immutable int wdt = (fontw8[ch]&0x0f);
-  drawCharWdtOut!type(x, y, wdt, fontw8[ch]>>4, ch, col, outcol, ot);
+  drawCharWdtOut!type(x, y, wdt, fontw8[ch]>>4, ch, fgcol, outcol, ot);
   return wdt;
 }
 
-int drawStrProp(string type="msx") (int x, int y, const(char)[] str, VColor col, VColor bkcol=Transparent) @trusted {
+int drawStrProp(string type="msx") (int x, int y, const(char)[] str, VColor fgcol, VColor bgcol=Transparent) @trusted {
   bool vline = false;
   int sx = x;
   foreach (immutable char ch; str) {
     if (vline) {
-      if (!isTransparent(bkcol)) foreach (int dy; 0..8) putPixel(x, y+dy, bkcol);
+      if (!isTransparent(bgcol)) foreach (int dy; 0..8) putPixel(x, y+dy, bgcol);
       ++x;
     }
     vline = true;
-    x += drawCharProp!type(x, y, ch, col, bkcol);
+    x += drawCharProp!type(x, y, ch, fgcol, bgcol);
   }
   return x-sx;
 }
 
-int drawStrPropOut(string type="msx") (int x, int y, const(char)[] str, VColor col, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
+int drawStrPropOut(string type="msx") (int x, int y, const(char)[] str, VColor fgcol, VColor outcol=Transparent, ubyte ot=OutAll) @trusted {
   int sx = x;
   foreach (immutable char ch; str) {
-    x += drawCharPropOut!type(x, y, ch, col, outcol, ot)+1;
+    x += drawCharPropOut!type(x, y, ch, fgcol, outcol, ot)+1;
   }
   if (x > sx) --x; // don't count last empty pixel
   return x-sx;
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-void clear (VColor col) @trusted {
-  vbuf.ptr[0..vbufW*vbufH] = col;
 }
 
 
