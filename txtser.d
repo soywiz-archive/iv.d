@@ -464,6 +464,12 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
     } else static if (isSimpleType!T) {
       import std.conv : to;
       auto id = expectId;
+      // try bool->int conversions
+      static if (is(T : ulong) || is(T : real)) {
+        // char, int, etc.
+        if (id == "true") { v = 1; return; }
+        if (id == "false") { v = 0; return; }
+      }
       try {
         v = id.to!T;
       } catch (Exception e) {
@@ -626,5 +632,15 @@ version(egserial_test) unittest {
     write("string: ");
     "Alice".txtser(stdout);
     writeln;
+  }
+
+  {
+    import std.utf : byChar;
+    static struct Boo {
+      int n = -1;
+    }
+    Boo boo;
+    boo.txtunser("{ n:true }".byChar);
+    writeln(boo.n);
   }
 }
