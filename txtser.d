@@ -140,7 +140,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
         xput("[");
         indent += Indent;
         foreach (immutable idx, const ref it; v) {
-          newline();
+          if (idx == 0 || (v.length >= 56 && idx%42 == 41)) newline();
           serData!true(it);
           if (idx != v.length-1) xput(",");
         }
@@ -643,4 +643,10 @@ version(egserial_test) unittest {
     boo.txtunser("{ n:true }".byChar);
     writeln(boo.n);
   }
+
+  /*{
+    long[94] n;
+    foreach (immutable idx, ref v; n) v = idx;
+    n.txtser(stdout);
+  }*/
 }
