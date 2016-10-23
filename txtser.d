@@ -465,7 +465,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
       import std.conv : to;
       auto id = expectId;
       // try bool->int conversions
-      static if (is(T : ulong) || is(T : real)) {
+      static if ((is(T : ulong) || is(T : real)) && is(typeof((){v=0;}))  && is(typeof((){v=1;}))) {
         // char, int, etc.
         if (id == "true") { v = 1; return; }
         if (id == "false") { v = 0; return; }
