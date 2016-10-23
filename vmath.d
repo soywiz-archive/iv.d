@@ -1071,7 +1071,7 @@ public:
     return vec3(pitch, yaw, roll);
   }
 
-  vec3 opBinary(string op : "*") (in auto ref vec3 v) const {
+  vec3 opBinary(string op:"*") (in auto ref vec3 v) const {
     //pragma(inline, true);
     return vec3(
       mt.ptr[0*4+0]*v.x+mt.ptr[1*4+0]*v.y+mt.ptr[2*4+0]*v.z+mt.ptr[3*4+0],
@@ -1079,7 +1079,7 @@ public:
       mt.ptr[0*4+2]*v.x+mt.ptr[1*4+2]*v.y+mt.ptr[2*4+2]*v.z+mt.ptr[3*4+2]);
   }
 
-  vec3 opBinaryRight(string op : "*") (in auto ref vec3 v) const {
+  vec3 opBinaryRight(string op:"*") (in auto ref vec3 v) const {
     //pragma(inline, true);
     return vec3(
       mt.ptr[0*4+0]*v.x+mt.ptr[0*4+1]*v.y+mt.ptr[0*4+2]*v.z+mt.ptr[0*4+3],
@@ -1087,7 +1087,7 @@ public:
       mt.ptr[2*4+0]*v.x+mt.ptr[2*4+1]*v.y+mt.ptr[2*4+2]*v.z+mt.ptr[2*4+3]);
   }
 
-  mat4 opBinary(string op : "*") (in auto ref mat4 m) const {
+  mat4 opBinary(string op:"*") (in auto ref mat4 m) const {
     //pragma(inline, true);
     return mat4(
       mt.ptr[0]*m.mt.ptr[0] +mt.ptr[4]*m.mt.ptr[1] +mt.ptr[8]*m.mt.ptr[2] +mt.ptr[12]*m.mt.ptr[3], mt.ptr[1]*m.mt.ptr[0] +mt.ptr[5]*m.mt.ptr[1] +mt.ptr[9]*m.mt.ptr[2] +mt.ptr[13]*m.mt.ptr[3], mt.ptr[2]*m.mt.ptr[0] +mt.ptr[6]*m.mt.ptr[1] +mt.ptr[10]*m.mt.ptr[2] +mt.ptr[14]*m.mt.ptr[3], mt.ptr[3]*m.mt.ptr[0] +mt.ptr[7]*m.mt.ptr[1] +mt.ptr[11]*m.mt.ptr[2] +mt.ptr[15]*m.mt.ptr[3],
@@ -1097,19 +1097,19 @@ public:
     );
   }
 
-  mat4 opBinary(string op : "+") (in auto ref mat4 m) const {
+  mat4 opBinary(string op:"+") (in auto ref mat4 m) const {
     auto res = mat4(this);
     res.mt[] += m.mt[];
     return res;
   }
 
-  mat4 opBinary(string op : "*") (FloatType a) const {
+  mat4 opBinary(string op:"*") (FloatType a) const {
     auto res = mat4(this);
     res.mt[] *= a;
     return res;
   }
 
-  mat4 opBinary(string op : "/") (FloatType a) const {
+  mat4 opBinary(string op:"/") (FloatType a) const {
     import std.math : abs;
     auto res = mat4(this);
     if (abs(a) >= FLTEPS) {
@@ -1121,7 +1121,7 @@ public:
     return res;
   }
 
-  ref vec2 opOpAssign(string op : "*") (in auto ref mat4 m) {
+  ref vec2 opOpAssign(string op:"*") (in auto ref mat4 m) {
     mat4 res;
     foreach (immutable i; 0..4) {
       foreach (immutable j; 0..4) {
@@ -1154,7 +1154,7 @@ public:
 
   void negate () { foreach (ref v; mt) v = -v; }
 
-  mat4 opUnary(string op : "-") () const {
+  mat4 opUnary(string op:"-") () const {
     return mat4(
       -mt.ptr[0], -mt.ptr[1], -mt.ptr[2], -mt.ptr[3],
       -mt.ptr[4], -mt.ptr[5], -mt.ptr[6], -mt.ptr[7],
