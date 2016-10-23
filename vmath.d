@@ -309,7 +309,7 @@ const pure:
   // cross product
   auto opBinary(string op:"%", VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
-         static if (dims == 2 && isVector2!VT) return v3(0, 0, x*a.y-y*a.x);
+         static if (dims == 2 && isVector2!VT) return /*v3(0, 0, x*a.y-y*a.x)*/x*a.y-y*a.x;
     else static if (dims == 2 && isVector3!VT) return v3(y*a.z, -x*a.z, x*a.y-y*a.x);
     else static if (dims == 3 && isVector2!VT) return v3(-z*a.y, z*a.x, x*a.y-y*a.x);
     else static if (dims == 3 && isVector3!VT) return v3(y*a.z-z*a.y, z*a.x-x*a.z, x*a.y-y*a.x);
