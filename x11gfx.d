@@ -637,8 +637,13 @@ void fillCircle (int cx, int cy, int radius, VColor clr) @trusted {
 }
 
 
-void drawEllipse (int x0, int y0, int x1, int y1, VColor clr) @trusted {
+void drawEllipse (int x0, int y0, int w, int h, VColor clr) @trusted {
   import std.math : abs;
+  if (w == 0 && h == 0) return;
+  if (w == 1) { vline(x0, y0, h, clr); return; }
+  if (h == 1) { hline(x0, y0, w, clr); return; }
+  int x1 = x0+w-1;
+  int y1 = y0+h-1;
   int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
   long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
   long err = dx+dy+b1*a*a; // error of 1.step
@@ -663,8 +668,13 @@ void drawEllipse (int x0, int y0, int x1, int y1, VColor clr) @trusted {
   }
 }
 
-void fillEllipse (int x0, int y0, int x1, int y1, VColor clr) @trusted {
+void fillEllipse (int x0, int y0, int w, int h, VColor clr) @trusted {
   import std.math : abs;
+  if (w == 0 && h == 0) return;
+  if (w == 1) { vline(x0, y0, h, clr); return; }
+  if (h == 1) { hline(x0, y0, w, clr); return; }
+  int x1 = x0+w-1;
+  int y1 = y0+h-1;
   int a = abs(x1-x0), b = abs(y1-y0), b1 = b&1; // values of diameter
   long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; // error increment
   long err = dx+dy+b1*a*a; // error of 1.step
