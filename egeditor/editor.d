@@ -1065,7 +1065,7 @@ public:
       initTempFD();
       if (tmpfd < 0) {
         import iv.rawtty2;
-        version(aliced) ttyBeep();
+        //version(aliced) ttyBeep();
       }
     }
   }
