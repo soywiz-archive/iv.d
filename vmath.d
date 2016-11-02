@@ -389,6 +389,24 @@ const pure:
     }
   }
 
+  // box2dlite port support
+  static if (dims == 2) {
+    // returns a perpendicular vector (90 degree rotation)
+    auto perp() () { pragma(inline, true); return v2(-y, x); }
+
+    // returns a perpendicular vector (-90 degree rotation)
+    auto rperp() () { pragma(inline, true); return v2(y, -x); }
+
+    // returns the vector projection of this onto v
+    auto projectTo() (in auto ref v2 v) { pragma(inline, true); return v*(this.dot(v)/v.dot(v)); }
+
+    // returns the unit length vector for the given angle (in radians)
+    auto forAngle (in VFloat a) { pragma(inline, true); import std.math : cos, sin; return v2(cos(a), sin(a)); }
+
+    // returns the angular direction v is pointing in (in radians)
+    VFloat toAngle() (in auto ref v2 v) { pragma(inline, true); import std.math : atan2; return atan2(y, x); }
+  }
+
   // swizzling
   auto opDispatch(string fld) ()
   if ((dims == 2 && isGoodSwizzling!(fld, "xy", 2, 3)) ||
