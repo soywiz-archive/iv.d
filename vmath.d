@@ -330,10 +330,10 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op:"/") (FloatType a) {
+  auto opBinary(string op:"/") (FloatType aa) {
     pragma(inline, true);
     import std.math : abs;
-    immutable FloatType a = (abs(a) >= EPSILON!FloatType ? 1.0/a : FloatType.nan);
+    immutable FloatType a = (abs(aa) >= EPSILON!FloatType ? 1.0/aa : FloatType.nan);
          static if (dims == 2) return v2(x*a, y*a);
     else static if (dims == 3) return v3(x*a, y*a, z*a);
     else static assert(0, "invalid dimension count for vector");
