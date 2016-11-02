@@ -401,10 +401,12 @@ const pure:
     auto projectTo() (in auto ref v2 v) { pragma(inline, true); return v*(this.dot(v)/v.dot(v)); }
 
     // returns the unit length vector for the given angle (in radians)
-    auto forAngle (in VFloat a) { pragma(inline, true); import std.math : cos, sin; return v2(cos(a), sin(a)); }
+    auto forAngle (in FloatType a) { pragma(inline, true); import std.math : cos, sin; return v2(cos(a), sin(a)); }
 
     // returns the angular direction v is pointing in (in radians)
-    VFloat toAngle() (in auto ref v2 v) { pragma(inline, true); import std.math : atan2; return atan2(y, x); }
+    FloatType toAngle() (in auto ref v2 v) { pragma(inline, true); import std.math : atan2; return atan2(y, x); }
+
+    auto scross() (FloatType s) { pragma(inline, true); return v2(-s*y, s*x); }
   }
 
   // swizzling
