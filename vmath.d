@@ -72,6 +72,7 @@ public:
   enum isVector(VT) = (is(VT == VecN!(2, FloatType)) || is(VT == VecN!(3, FloatType)));
   enum isVector2(VT) = is(VT == VecN!(2, FloatType));
   enum isVector3(VT) = is(VT == VecN!(3, FloatType));
+  enum isSameVector(VT) = is(VT == VecN!(dims, FloatType));
 
   alias v2 = VecN!(2, FloatType);
   alias v3 = VecN!(3, FloatType);
@@ -420,6 +421,15 @@ const pure:
       return mixin(SwizzleCtor!("v3", fld));
     }
   }
+
+static:
+  // linearly interpolate between v1 and v2
+  /*
+  VT lerp(VT) (in auto ref VT v1, in auto ref VT v2, const FloatType t) if (isSameVector!VT) {
+    pragma(inline, true);
+    return (v1*cast(FloatType)1.0f-t)+(v2*t);
+  }
+  */
 }
 
 
