@@ -511,7 +511,20 @@ public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
 // ////////////////////////////////////////////////////////////////////////// //
 /// `prefixpath`: this will be prepended to each name from archive, unmodified.
 public VFSDriverId vfsAddPak(string mode="normal") (const(char)[] fname, const(char)[] prefixpath=null) {
-  return vfsAddPak!mode(vfsDiskOpen(fname), fname, prefixpath);
+  foreach (char ch; fname) {
+    if (ch == ':') {
+      try {
+        auto fl = vfsOpenFile(fname);
+        return vfsAddPak!mode(fl, fname, prefixpath);
+      } catch (Exception) {}
+      break;
+    }
+  }
+  try {
+    auto fl = vfsDiskOpen(fname);
+    return vfsAddPak!mode(fl, fname, prefixpath);
+  } catch (Exception) {}
+  return vfsAddPak!mode(vfsOpenFile(fname), fname, prefixpath);
 }
 
 
