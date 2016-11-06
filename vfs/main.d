@@ -514,15 +514,13 @@ public VFSDriverId vfsAddPak(string mode="normal") (const(char)[] fname, const(c
   foreach (char ch; fname) {
     if (ch == ':') {
       try {
-        auto fl = vfsOpenFile(fname);
-        return vfsAddPak!mode(fl, fname, prefixpath);
+        return vfsAddPak!mode(vfsOpenFile(fname), fname, prefixpath);
       } catch (Exception) {}
       return vfsAddPak!mode(vfsDiskOpen(fname), fname, prefixpath);
     }
   }
   try {
-    auto fl = vfsDiskOpen(fname);
-    return vfsAddPak!mode(fl, fname, prefixpath);
+    return vfsAddPak!mode(vfsDiskOpen(fname), fname, prefixpath);
   } catch (Exception) {}
   return vfsAddPak!mode(vfsOpenFile(fname), fname, prefixpath);
 }
