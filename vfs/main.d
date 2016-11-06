@@ -517,7 +517,7 @@ public VFSDriverId vfsAddPak(string mode="normal") (const(char)[] fname, const(c
         auto fl = vfsOpenFile(fname);
         return vfsAddPak!mode(fl, fname, prefixpath);
       } catch (Exception) {}
-      break;
+      return vfsAddPak!mode(vfsDiskOpen(fname), fname, prefixpath);
     }
   }
   try {
