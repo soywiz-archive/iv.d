@@ -269,6 +269,7 @@ body {
  *
  * Params:
  *  c = output slice
+ *  msg = message
  *  nonce = nonce
  *  key = secret key
  *
@@ -396,6 +397,7 @@ body {
  *
  * Params:
  *  c = resulting cyphertext
+ *  msg = message
  *  key = secret key
  *  nonce = nonce
  *
