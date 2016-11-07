@@ -17,25 +17,18 @@
 /* contains very simple compile-time format writer
  * understands [+|-]width[.maxlen]
  *   negative width: add spaces to right
+ *   + signed width: center
  *   negative maxlen: get right part
  * specifiers:
  *   's': use to!string to write argument
- *        note that writer can print strings, bools and integrals without allocation
- *   'S': print asciiz C string
+ *        note that writer can print strings, bools, integrals and floats without allocation
  *   'x': write integer as hex
  *   'X': write integer as HEX
- *   '|': write all arguments that's left with "%s"
- *   '@': go to argument with number 'width' (use sign to relative goto)
- *        argument count starts with '1'
  *   '!': skip all arguments that's left, no width allowed
  *   '%': just a percent sign, no width allowed
- *   '$': go to argument with number 'width' (use sign to relative goto), continue parsing
- *        argument count starts with '1'
  * options (must immediately follow '%'):
- *   '/': center string; negative width means "add extra space (if any) to the right"
  *   '~': fill with the following char instead of space
  *        second '~': right filling char for 'center'
- *   '\0'...'\0': separator string for '%|'
  */
 module iv.cmdcon is aliced;
 private:
@@ -223,729 +216,445 @@ void conwriter (scope ConString str) nothrow @trusted @nogc {
 }
 
 
-// width<0: pad right
-// width == int.min: no width specified
-// maxlen == int.min: no maxlen specified
-private void wrWriteWidth(char lfill=' ', char rfill=' ')
-               (int width,
-                int maxlen,
-                bool center,
-                const(char[]) s,
-                bool leftIsMinus=false) {
-  static immutable char[64] spacesl = () { char[64] r; foreach (immutable p; 0..64) r[p] = lfill; return r; }();
-  static immutable char[64] spacesr = () { char[64] r; foreach (immutable p; 0..64) r[p] = rfill; return r; }();
-  usize stpos = 0;
-  // fix maxlen
-  if (maxlen != int.min) {
-    if (maxlen < 0) {
-      maxlen = -maxlen;
-      if (maxlen > s.length) {
-        maxlen = cast(int)s.length;
-      } else {
-        stpos = s.length-maxlen;
-      }
-    } else if (maxlen > 0) {
-      if (maxlen > s.length) maxlen = cast(int)s.length;
-    }
-  } else {
-    // no maxlen specified
-    maxlen = cast(int)s.length;
+// ////////////////////////////////////////////////////////////////////////// //
+private void cwrxputch (scope const(char)[] s...) nothrow @trusted @nogc {
+  pragma(inline, true);
+  if (s.length) cbufPut(s);
+}
+
+
+private void cwrxputstr (scope const(char)[] str, char signw, char lchar, char rchar, int wdt, int maxwdt, bool cutsign=false) nothrow @trusted @nogc {
+  if (maxwdt < 0) {
+    if (maxwdt == maxwdt.min) ++maxwdt; // alas
+    maxwdt = -maxwdt;
+    if (str.length > maxwdt) str = str[$-maxwdt..$];
+  } else if (maxwdt > 0) {
+    if (str.length > maxwdt) str = str[0..maxwdt];
   }
-  // fuck overflows
-  if (maxlen < 0) maxlen = 666;
-  // fix width
-  if (width == int.min) {
-    // no width specified, defaults to visible string width
-    width = cast(int)(s.length-stpos);
-    // fuck overflows
-    if (width < 0) width = 666;
+  if (cutsign && signw == ' ' && wdt && str.length && str.length < wdt) {
+    if (str.ptr[0] == '-' || str.ptr[0] == '+') {
+      cwrxputch(str.ptr[0]);
+      str = str[1..$];
+      --wdt;
+    }
   }
-  // centering?
-  if (center && ((width > 0 && width > maxlen) || (width < 0 && -width > maxlen))) {
-    // center string
-    int wdt = (width > 0 ? width : -width)-maxlen;
-    int spleft = wdt/2+(width > 0 && wdt%2);
-    int spright = wdt-spleft;
-    while (spleft > 0) {
-      if (spleft > spacesl.length) {
-        conwriter(spacesl);
-        spleft -= spacesl.length;
-        continue;
-      } else {
-        conwriter(spacesl[0..spleft]);
-        break;
-      }
+  if (str.length < wdt) {
+    // '+' means "center"
+    if (signw == '+') {
+      foreach (immutable _; 0..(wdt-str.length)/2) cwrxputch(lchar);
+    } else if (signw != '-') {
+      foreach (immutable _; 0..wdt-str.length) cwrxputch(lchar);
     }
-    if (maxlen > 0) conwriter(s[stpos..stpos+maxlen]);
-    while (spright > 0) {
-      if (spright > spacesr.length) {
-        conwriter(spacesr);
-        spright -= spacesr.length;
-        continue;
-      } else {
-        conwriter(spacesr[0..spright]);
-        break;
-      }
+  }
+  cwrxputch(str);
+  if (str.length < wdt) {
+    // '+' means "center"
+    if (signw == '+') {
+      foreach (immutable _; ((wdt-str.length)/2)+str.length..wdt) cwrxputch(rchar);
+    } else if (signw == '-') {
+      foreach (immutable _; 0..wdt-str.length) cwrxputch(rchar);
     }
+  }
+}
+
+
+private void cwrxputchar (char ch, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+  cwrxputstr((&ch)[0..1], signw, lchar, rchar, wdt, maxwdt);
+}
+
+
+private void cwrxputint(T) (T n, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+  char[32] buf = ' ';
+
+  static if (is(T == long)) {
+    if (n == 0x8000_0000_0000_0000uL) { cwrxputstr("-9223372036854775808", signw, lchar, rchar, wdt, maxwdt); return; }
+  } else static if (is(T == int)) {
+    if (n == 0x8000_0000u) { cwrxputstr("-2147483648", signw, lchar, rchar, wdt, maxwdt); return; }
+  } else static if (is(T == short)) {
+    if (n == 0x8000u) { cwrxputstr("-32768", signw, lchar, rchar, wdt, maxwdt); return; }
+  } else static if (is(T == byte)) {
+    if (n == 0x80u) { cwrxputstr("-128", signw, lchar, rchar, wdt, maxwdt); return; }
+  }
+
+  static if (__traits(isUnsigned, T)) {
+    enum neg = false;
   } else {
-    // pad string
-    bool writeS = true;
-    if (width < 0) {
-      // right padding, write string
-      width = -width;
-      if (maxlen > 0) conwriter(s[stpos..stpos+maxlen]);
-      writeS = false;
+    bool neg = (n < 0);
+    if (neg) n = -n;
+  }
+
+  int bpos = buf.length;
+  do {
+    //if (bpos == 0) assert(0, "internal printer error");
+    buf.ptr[--bpos] = cast(char)('0'+n%10);
+    n /= 10;
+  } while (n != 0);
+  if (neg) {
+    //if (bpos == 0) assert(0, "internal printer error");
+    buf.ptr[--bpos] = '-';
+  }
+  cwrxputstr(buf[bpos..$], signw, lchar, rchar, wdt, maxwdt, true);
+}
+
+
+private void cwrxputhex(T) (T n, bool upcase, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+  char[32] buf = ' ';
+
+  static if (is(T == long)) {
+    if (n == 0x8000_0000_0000_0000uL) { cwrxputstr("-8000000000000000", signw, lchar, rchar, wdt, maxwdt); return; }
+  } else static if (is(T == int)) {
+    if (n == 0x8000_0000u) { cwrxputstr("-80000000", signw, lchar, rchar, wdt, maxwdt); return; }
+  } else static if (is(T == short)) {
+    if (n == 0x8000u) { cwrxputstr("-8000", signw, lchar, rchar, wdt, maxwdt); return; }
+  } else static if (is(T == byte)) {
+    if (n == 0x80u) { cwrxputstr("-80", signw, lchar, rchar, wdt, maxwdt); return; }
+  }
+
+  static if (__traits(isUnsigned, T)) {
+    enum neg = false;
+  } else {
+    bool neg = (n < 0);
+    if (neg) n = -n;
+  }
+
+  int bpos = buf.length;
+  do {
+    //if (bpos == 0) assert(0, "internal printer error");
+    immutable ubyte b = n&0x0f;
+    n >>= 4;
+    if (b < 10) buf.ptr[--bpos] = cast(char)('0'+b); else buf.ptr[--bpos] = cast(char)((upcase ? 'A' : 'a')+(b-10));
+  } while (n != 0);
+  if (neg) {
+    //if (bpos == 0) assert(0, "internal printer error");
+    buf.ptr[--bpos] = '-';
+  }
+  cwrxputstr(buf[bpos..$], signw, lchar, rchar, wdt, maxwdt, true);
+}
+
+
+private void cwrxputfloat(T) (T n, bool simple, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+  import core.stdc.stdlib : malloc, realloc;
+
+  static char* buf;
+  static usize buflen = 0;
+  char[256] fmtstr;
+  int fspos = 0;
+
+  if (buf is null) {
+    buflen = 256;
+    buf = cast(char*)malloc(buflen);
+    if (buf is null) assert(0, "out of memory");
+  }
+
+  void putNum (int n) {
+    if (n == n.min) assert(0, "oops");
+    if (n < 0) { fmtstr.ptr[fspos++] = '-'; n = -n; }
+    char[24] buf = void;
+    int bpos = buf.length;
+    do {
+      buf.ptr[--bpos] = cast(char)('0'+n%10);
+      n /= 10;
+    } while (n != 0);
+    if (fmtstr.length-fspos < buf.length-bpos) assert(0, "internal printer error");
+    fmtstr.ptr[fspos..fspos+(buf.length-bpos)] = buf[bpos..$];
+    fspos += buf.length-bpos;
+  }
+
+  fmtstr.ptr[fspos++] = '%';
+  if (!simple) {
+    if (wdt) {
+      if (signw == '-') fmtstr.ptr[fspos++] = '-';
+      putNum(wdt);
     }
-    if (maxlen < width) {
-      width -= maxlen;
-      if (writeS && stpos == 0 && leftIsMinus && width > 0) {
-        conwriter("-");
-        // remove '-'
-        ++stpos;
-        --maxlen;
-      }
-      for (;;) {
-        if (width > spacesl.length) {
-          if (writeS) conwriter(spacesl); else conwriter(spacesr);
-          width -= spacesl.length;
-        } else {
-          if (writeS) conwriter(spacesl[0..width]); else conwriter(spacesr[0..width]);
-          break;
+    if (maxwdt) {
+      fmtstr.ptr[fspos++] = '.';
+      putNum(maxwdt);
+    }
+    fmtstr.ptr[fspos++] = 'f';
+    maxwdt = 0;
+  } else {
+    fmtstr.ptr[fspos++] = 'g';
+  }
+  fmtstr.ptr[fspos++] = '\x00';
+  //{ import core.stdc.stdio; printf("<%s>", fmtstr.ptr); }
+
+  for (;;) {
+    import core.stdc.stdio : snprintf;
+    auto plen = snprintf(buf, buflen, fmtstr.ptr, cast(double)n);
+    if (plen >= buflen) {
+      buflen = plen+2;
+      buf = cast(char*)realloc(buf, buflen);
+      if (buf is null) assert(0, "out of memory");
+    } else {
+      if (lchar != ' ') {
+        foreach (ref ch; buf[0..plen]) {
+          if (ch != ' ') break;
+          ch = lchar;
         }
       }
+      if (rchar != ' ') {
+        foreach_reverse (ref ch; buf[0..plen]) {
+          if (ch != ' ') break;
+          ch = rchar;
+        }
+      }
+      //{ import core.stdc.stdio; printf("<{%s}>", buf); }
+      cwrxputstr(buf[0..plen], signw, lchar, rchar, wdt, maxwdt, true);
+      return;
     }
-    if (writeS && maxlen > 0) conwriter(s[stpos..stpos+maxlen]);
   }
-}
-
-// width<0: pad right
-// width == int.min: no width specified
-// maxlen == int.min: no maxlen specified
-private void wrWriteWidthStrZ(char lfill=' ', char rfill=' ')
-               (int width,
-                int maxlen,
-                bool center,
-                const(char)* s,
-                bool leftIsMinus=false) {
-  usize end = 0;
-  while (s[end]) ++end;
-  wrWriteWidth!(lfill, rfill)(width, maxlen, center, s[0..end], leftIsMinus);
-}
-
-
-private void wrWriteWidthHex(char lfill=' ', char rfill=' ', T)
-               (int width,
-                int maxlen,
-                bool center,
-                bool upcase,
-                T numm)
-if (isIntegral!T)
-{
-  import std.traits : isSigned, isMutable, Unqual;
-  static if (isMutable!T) alias num = numm; else Unqual!T num = cast(Unqual!T)numm;
-  char[18] hstr = void;
-  auto pos = hstr.length;
-  static if (isSigned!T) {
-    static if (T.sizeof == 8) {
-      if (num == 0x8000_0000_0000_0000uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-8000000000000000", (lfill == '0')); return; }
-    } else static if (T.sizeof == 4) {
-      if (num == 0x8000_0000uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-80000000", (lfill == '0')); return; }
-    } else static if (T.sizeof == 2) {
-      if (num == 0x8000uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-8000", (lfill == '0')); return; }
-    } else static if (T.sizeof == 1) {
-      if (num == 0x80uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-80", (lfill == '0')); return; }
-    }
-    bool neg = (num < 0);
-    if (neg) num = -num;
-  }
-  do {
-    assert(pos > 0);
-    ubyte b = num&0x0f;
-    num >>= 4;
-    if (b < 10) {
-      hstr[--pos] = cast(char)('0'+b);
-    } else if (upcase) {
-      hstr[--pos] = cast(char)('A'+b-10);
-    } else {
-      hstr[--pos] = cast(char)('a'+b-10);
-    }
-  } while (num);
-  static if (isSigned!T) {
-    if (neg) {
-      assert(pos > 0);
-      hstr[--pos] = '-';
-    }
-    wrWriteWidth!(lfill, rfill)(width, maxlen, center, hstr[pos..$], (neg && lfill == '0'));
-  } else {
-    wrWriteWidth!(lfill, rfill)(width, maxlen, center, hstr[pos..$]);
-  }
-}
-
-
-// 2**64: 18446744073709551616 (20 chars)
-// 2**64: 0x1_0000_0000_0000_0000
-// width<0: pad right
-private void wrWriteWidthInt(char lfill=' ', char rfill=' ', T)
-               (int width,
-                int maxlen,
-                bool center,
-                T numm)
-if (isIntegral!T)
-{
-  import std.traits : isSigned, isMutable, Unqual;
-  static if (isMutable!T) alias num = numm; else Unqual!T num = cast(Unqual!T)numm;
-  char[22] hstr = void;
-  auto pos = hstr.length;
-  static if (isSigned!T) {
-    static if (T.sizeof == 8) {
-      if (num == 0x8000_0000_0000_0000uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-9223372036854775808", (lfill == '0')); return; }
-    } else static if (T.sizeof == 4) {
-      if (num == 0x8000_0000uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-2147483648", (lfill == '0')); return; }
-    } else static if (T.sizeof == 2) {
-      if (num == 0x8000uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-32768", (lfill == '0')); return; }
-    } else static if (T.sizeof == 1) {
-      if (num == 0x80uL) { wrWriteWidth!(lfill, rfill)(width, maxlen, center, "-128", (lfill == '0')); return; }
-    }
-    bool neg = (num < 0);
-    if (neg) num = -num;
-  }
-  do {
-    assert(pos > 0);
-    ubyte b = cast(ubyte)(num%10);
-    num /= 10;
-    hstr[--pos] = cast(char)('0'+b);
-  } while (num);
-  static if (isSigned!T) {
-    if (neg) {
-      assert(pos > 0);
-      hstr[--pos] = '-';
-    }
-    wrWriteWidth!(lfill, rfill)(width, maxlen, center, hstr[pos..$], (neg && lfill == '0'));
-  } else {
-    wrWriteWidth!(lfill, rfill)(width, maxlen, center, hstr[pos..$]);
-  }
-}
-
-
-private void wrWriteWidthBool(char lfill=' ', char rfill=' ', T)
-               (int width,
-                int maxlen,
-                bool center,
-                T v)
-if (isBoolean!T)
-{
-  wrWriteWidth!(lfill, rfill)(width, maxlen, center, (v ? "true" : "false"));
-}
-
-
-import std.traits : Unqual;
-private void wrWriteWidthChar(char lfill=' ', char rfill=' ', T)
-               (int width,
-                int maxlen,
-                bool center,
-                T v)
-if (is(Unqual!T == char))
-{
-  char[1] s = v;
-  wrWriteWidth!(lfill, rfill)(width, maxlen, center, s);
-}
-
-private void wrWriteWidthFloat(char lfill=' ', char rfill=' ', T)
-               (int width,
-                int maxlen,
-                bool center,
-                T numm) nothrow @trusted @nogc
-if (is(T == float) || is(T == double) || is(T == const float) || is(T == const double) || is(T == immutable float) || is(T == immutable double))
-{
-  import core.stdc.stdio : snprintf;
-  char[256] hstr = void;
-  auto len = snprintf(hstr.ptr, hstr.length, "%g", cast(double)numm);
-  wrWriteWidth!(lfill, rfill)(width, maxlen, center, hstr[0..len], (numm < 0 && lfill == '0'));
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
-private auto WrData (int alen) {
-  static struct Data {
-    int aidx; // current arg index
-    int alen; // number of args
-    // changeable
-    int width = int.min; // this means 'not specified'
-    char widthSign = ' '; // '+', '-', '*' (no sign), ' ' (absent)
-    bool widthZeroStarted;
-    bool widthWasDigits;
-    int maxlen = int.min; // this means 'not specified'
-    char maxlenSign = ' '; // '+', '-', '*' (no sign), ' ' (absent)
-    bool maxlenZeroStarted;
-    bool maxlenWasDigits;
-    bool optCenter; // center string?
-    char lfchar = ' '; // "left fill"
-    char rfchar = ' '; // "right fill"
-    int fillhcharIdx; // 0: next will be lfchar, 1: next will be rfchar; 2: no more fills
-    string wsep; // separator string for "%|"
+public template conwritef(string fmt, A...) {
+  private string gen() () {
+    string res;
+    usize pos;
 
-    @disable this ();
-
-    this (usize aalen) {
-      if (aalen >= 1024) assert(0, "too many arguments for writer");
-      alen = cast(int)aalen;
+    void putNum(bool hex=false) (int n, int minlen=-1) {
+      if (n == n.min) assert(0, "oops");
+      if (n < 0) { res ~= '-'; n = -n; }
+      char[24] buf;
+      int bpos = buf.length;
+      do {
+        static if (hex) {
+          buf[--bpos] = "0123456789abcdef"[n&0x0f];
+          n /= 16;
+        } else {
+          buf[--bpos] = cast(char)('0'+n%10);
+          n /= 10;
+        }
+        --minlen;
+      } while (n != 0 || minlen > 0);
+      res ~= buf[bpos..$];
     }
 
-    // set named field
-    auto set(string name, T) (in T value) if (__traits(hasMember, this, name)) {
-      __traits(getMember, this, name) = value;
-      return this;
+    int parseNum (ref char sign, ref bool leadzero) {
+      sign = ' ';
+      leadzero = false;
+      if (pos >= fmt.length) return 0;
+      if (fmt[pos] == '-' || fmt[pos] == '+') sign = fmt[pos++];
+      if (pos >= fmt.length) return 0;
+      int res = 0;
+      if (pos < fmt.length && fmt[pos] == '0') leadzero = true;
+      while (pos < fmt.length && fmt[pos] >= '0' && fmt[pos] <= '9') res = res*10+fmt[pos++]-'0';
+      return res;
     }
 
-    // increment current index
-    auto incAIdx () {
-      ++aidx;
-      if (aidx > alen) aidx = alen;
-      return this;
-    }
-
-    // prepare for next formatted output (reset all format params)
-    auto resetFmt () {
-      // trick with saving necessary fields
-      auto saidx = aidx;
-      auto salen = alen;
-      this = this.init;
-      aidx = saidx;
-      alen = salen;
-      return this;
-    }
-
-    // set filling char
-    auto setFillChar (char ch) {
-      switch (fillhcharIdx) {
-        case 0: lfchar = ch; break;
-        case 1: rfchar = ch; break;
-        default:
-      }
-      ++fillhcharIdx;
-      return this;
-    }
-
-    // prepare to parse integer field
-    auto initInt(string name) (char sign) if (__traits(hasMember, this, name)) {
-      __traits(getMember, this, name) = (sign == '-' ? -1 : 0);
-      __traits(getMember, this, name~"Sign") = sign;
-      __traits(getMember, this, name~"ZeroStarted") = false;
-      __traits(getMember, this, name~"WasDigits") = false;
-      return this;
-    }
-
-    // integer field parsing: process next char
-    auto putIntChar(string name) (char ch) if (__traits(hasMember, this, name)) {
-      bool wd = __traits(getMember, this, name~"WasDigits");
-      if (!wd) {
-        __traits(getMember, this, name~"ZeroStarted") = (ch == '0');
-        __traits(getMember, this, name~"WasDigits") = true;
-      }
-      int n = __traits(getMember, this, name);
-      if (n == int.min) n = 0;
-      if (n < 0) {
-        n = -(n+1);
-        immutable nn = n*10+ch-'0';
-        if (nn < n || nn == int.max) assert(0, "integer overflow");
-        n = (-nn)-1;
-      } else {
-        immutable nn = n*10+ch-'0';
-        if (nn < n || nn == int.max) assert(0, "integer overflow");
-        n = nn;
-      }
-      __traits(getMember, this, name) = n;
-      return this;
-    }
-
-    //TODO: do more checks on getInt, getBool, etc.
-    auto getInt(string name) () if (__traits(hasMember, this, name)) {
-      import std.traits;
-      immutable n = __traits(getMember, this, name);
-      static if (isSigned!(typeof(n))) {
-        return (n < 0 && n != n.min ? n+1 : n);
-      } else {
-        return n;
+    void processUntilFSp () {
+      while (pos < fmt.length) {
+        usize epos = pos;
+        while (epos < fmt.length && fmt[epos] != '%') {
+          if (fmt[epos] < ' ' && fmt[epos] != '\t' && fmt[epos] != '\n') break;
+          if (fmt[epos] >= 127 || fmt[epos] == '`') break;
+          ++epos;
+        }
+        if (epos > pos) {
+          res ~= "cwrxputch(`"~fmt[pos..epos]~"`);\n";
+          pos = epos;
+          if (pos >= fmt.length) break;
+        }
+        if (fmt[pos] != '%') {
+          res ~= "cwrxputch('\\x";
+          putNum!true(cast(ubyte)fmt[pos], 2);
+          res ~= "');\n";
+          ++pos;
+          continue;
+        }
+        if (fmt.length-pos < 2 || fmt[pos+1] == '%') { res ~= "cwrxputch('%');\n"; pos += 2; continue; }
+        return;
       }
     }
 
-    auto getIntDef(string name) () if (__traits(hasMember, this, name)) {
-      import std.traits;
-      immutable n = __traits(getMember, this, name);
-      static if (isSigned!(typeof(n))) {
-        if (n == n.min) return 0;
-        else if (n < 0) return n+1;
-        else return n;
-      } else {
-        return n;
+    bool simples = false;
+    char lchar=' ', rchar=' ';
+    char signw = ' ';
+    bool leadzerow = false;
+    int wdt, maxwdt;
+    char fmtch;
+
+    argloop: foreach (immutable argnum, auto at; A) {
+      if (!simples) {
+        processUntilFSp();
+        if (pos >= fmt.length) assert(0, "out of format specifiers for arguments");
+        assert(fmt[pos] == '%');
+        ++pos;
+        if (pos < fmt.length && fmt[pos] == '!') { ++pos; break; } // skip rest
+        if (pos < fmt.length && fmt[pos] == '|') {
+          ++pos;
+          simples = true;
+        } else {
+          lchar = rchar = ' ';
+          bool lrset = false;
+          if (pos < fmt.length && fmt[pos] == '~') {
+            lrset = true;
+            if (fmt.length-pos < 2) assert(0, "invalid format string");
+            lchar = fmt[pos+1];
+            pos += 2;
+            if (pos < fmt.length && fmt[pos] == '~') {
+              if (fmt.length-pos < 2) assert(0, "invalid format string");
+              rchar = fmt[pos+1];
+              pos += 2;
+            }
+          }
+          wdt = parseNum(signw, leadzerow);
+          if (pos >= fmt.length) assert(0, "invalid format string");
+          if (!lrset && leadzerow) lchar = '0';
+          if (fmt[pos] == '.') {
+            char mws;
+            bool lzw;
+            ++pos;
+            maxwdt = parseNum(mws, lzw);
+            if (mws == '-') maxwdt = -maxwdt;
+          } else {
+            maxwdt = 0;
+          }
+          if (pos >= fmt.length) assert(0, "invalid format string");
+          fmtch = fmt[pos++];
+        }
       }
-    }
-
-    string getIntStr(string name) () if (__traits(hasMember, this, name)) {
-      import std.conv : to;
-      return to!string(getInt!name());
-    }
-
-    string getBoolStr(string name) () if (__traits(hasMember, this, name)) {
-      return (__traits(getMember, this, name) ? "true" : "false");
-    }
-
-   // set fillchar according to width flags
-   auto fixWidthFill () {
-      if (fillhcharIdx == 0 && widthZeroStarted) {
-        lfchar = '0';
-        fillhcharIdx = 1;
+      if (simples) {
+        lchar = rchar = signw = ' ';
+        leadzerow = false;
+        wdt =  maxwdt = 0;
+        fmtch = 's';
       }
-      return this;
-    }
-  }
-
-  return Data(alen);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-// parse (possibly signed) number
-template conwritefImpl(string state, string field, string fmt, alias data, AA...)
-if (state == "parse-int")
-{
-  static assert(fmt.length > 0, "invalid format string");
-  static if (fmt[0] == '-' || fmt[0] == '+') {
-    static assert(fmt.length > 1 && fmt[1] >= '0' && fmt[1] <= '9', "invalid number for '"~field~"'");
-    enum conwritefImpl = conwritefImpl!("parse-digits", field, fmt[1..$], data.initInt!field(fmt[0]), AA);
-  } else static if (fmt[0] >= '0' && fmt[0] <= '9') {
-    enum conwritefImpl = conwritefImpl!("parse-digits", field, fmt, data.initInt!field('*'), AA);
-  } else {
-    enum conwritefImpl = conwritefImpl!("got-"~field, fmt, data.initInt!field(' '), AA);
-  }
-}
-
-
-// parse integer digits
-template conwritefImpl(string state, string field, string fmt, alias data, AA...)
-if (state == "parse-digits")
-{
-  static assert(fmt.length > 0, "invalid format string");
-  static if (fmt[0] >= '0' && fmt[0] <= '9') {
-    enum conwritefImpl = conwritefImpl!(state, field, fmt[1..$], data.putIntChar!field(fmt[0]), AA);
-  } else {
-    enum conwritefImpl = conwritefImpl!("got-"~field, fmt, data, AA);
-  }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-// got maxlen, done with width parsing
-template conwritefImpl(string state, string fmt, alias data, AA...)
-if (state == "parse-format")
-{
-  static assert(fmt.length > 0, "invalid format string");
-  static assert(fmt[0] == '%', "internal error");
-  enum conwritefImpl = conwritefImpl!("parse-options", fmt[1..$], data, AA);
-}
-
-
-// parse options
-template conwritefImpl(string state, string fmt, alias data, AA...)
-if (state == "parse-options")
-{
-  import std.string : indexOf;
-  static if (fmt[0] == '/') {
-    enum conwritefImpl = conwritefImpl!(state, fmt[1..$], data.set!"optCenter"(true), AA);
-  } else static if (fmt[0] == '~') {
-    static assert(fmt.length > 1, "invalid format option: '~'");
-    enum conwritefImpl = conwritefImpl!(state, fmt[2..$], data.setFillChar(fmt[1]), AA);
-  } else static if (fmt[0] == '\0') {
-    enum epos = fmt.indexOf('\0', 1);
-    static assert(epos > 0, "unterminated separator option");
-    static assert(fmt[epos] == '\0');
-    enum conwritefImpl = conwritefImpl!(state, fmt[epos+1..$], data.set!"wsep"(fmt[1..epos]), AA);
-  } else {
-    enum conwritefImpl = conwritefImpl!("parse-int", "width", fmt, data, AA);
-  }
-}
-
-
-// got width, try maxlen
-template conwritefImpl(string state, string fmt, alias data, AA...)
-if (state == "got-width")
-{
-  static assert(fmt.length > 0, "invalid format string");
-  static if (fmt[0] == '.') {
-    // got maxlen, parse it
-    enum conwritefImpl = conwritefImpl!("parse-int", "maxlen", fmt[1..$], data.fixWidthFill(), AA);
-  } else {
-    enum conwritefImpl = conwritefImpl!("got-maxlen", fmt, data.fixWidthFill(), AA);
-  }
-}
-
-
-// got maxlen, done with width parsing
-template conwritefImpl(string state, string fmt, alias data, AA...)
-if (state == "got-maxlen")
-{
-  static assert(fmt.length > 0, "invalid format string");
-  enum conwritefImpl = conwritefImpl!("format-spec", fmt, data, AA);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-static template isStaticNarrowString(T) {
-  import std.traits : isStaticArray;
-  static if (isStaticArray!T) {
-    import std.traits : Unqual;
-    static alias ArrayElementType(T: T[]) = Unqual!T;
-    enum isStaticNarrowString = is(ArrayElementType!T == char);
-  } else {
-    enum isStaticNarrowString = false;
-  }
-}
-
-template conwritefImpl(string state, alias data, AA...)
-if (state == "write-argument-s")
-{
-  import std.traits : Unqual;
-  import std.conv : to;
-  static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
-  enum aidx = data.aidx;
-  alias aatype = /*StripTypedef!*/AA[aidx];
-  //pragma(msg, "TYPE: ", Unqual!aatype);
-  static if (is(Unqual!aatype == char[]) ||
-             is(Unqual!aatype == ConString) ||
-             is(aatype == string) ||
-             isStaticNarrowString!aatype) {
-    //pragma(msg, "STRING!");
-    enum callFunc = "wrWriteWidth";
-    enum func = "";
-  } else static if (isIntegral!aatype) {
-    enum callFunc = "wrWriteWidthInt";
-    enum func = "";
-  } else static if (is(aatype == float) || is(aatype == double) || is(aatype == const float) || is(aatype == const double) || is(aatype == immutable float) || is(aatype == immutable double)) {
-    enum callFunc = "wrWriteWidthFloat";
-    enum func = "";
-  } else static if (isBoolean!aatype) {
-    enum callFunc = "wrWriteWidthBool";
-    enum func = "";
-  } else static if (is(Unqual!aatype == char)) {
-    enum callFunc = "wrWriteWidthChar";
-    enum func = "";
-  } else {
-    // this may allocate!
-    enum callFunc = "wrWriteWidth";
-    enum func = "to!string";
-  }
-  enum lfchar = data.lfchar;
-  enum rfchar = data.rfchar;
-  enum conwritefImpl =
-    callFunc~"!("~lfchar.stringof~","~rfchar.stringof~")("~
-      data.getIntStr!"width"()~","~
-      data.getIntStr!"maxlen"()~","~
-      data.getBoolStr!"optCenter"()~","~
-      func~"(args["~to!string(aidx)~"]));\n";
-}
-
-
-template conwritefImpl(string state, alias data, AA...)
-if (state == "write-argument-S")
-{
-  import std.traits : Unqual;
-  import std.conv : to;
-  static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
-  enum aidx = data.aidx;
-  alias aatype = /*StripTypedef!*/AA[aidx];
-  //pragma(msg, "TYPE: ", Unqual!aatype);
-  static if (is(Unqual!aatype == char*) ||
-             is(Unqual!aatype == const(char)*) ||
-             is(Unqual!aatype == immutable(char)*) ||
-             is(Unqual!aatype == const(char*)) ||
-             is(Unqual!aatype == immutable(char*))) {
-    enum lfchar = data.lfchar;
-    enum rfchar = data.rfchar;
-    enum conwritefImpl =
-      "wrWriteWidthStrZ!("~lfchar.stringof~","~rfchar.stringof~")("~
-        data.getIntStr!"width"()~","~
-        data.getIntStr!"maxlen"()~","~
-        data.getBoolStr!"optCenter"()~","~
-        "(cast(const char*)args["~to!string(aidx)~"]));\n";
-  } else {
-    enum conwritefImpl = conwritefImpl!"write-argument-s"(state, data, AA);
-  }
-}
-
-
-template conwritefImpl(string state, bool upcase, alias data, AA...)
-if (state == "write-argument-xx")
-{
-  import std.traits : Unqual;
-  import std.conv : to;
-  static assert(data.aidx >= 0 && data.aidx < data.alen, "argument index out of range");
-  enum aidx = data.aidx;
-  private alias TTA = /*StripTypedef!*/AA[aidx];
-  static assert(isIntegral!TTA || isPointer!TTA, "'x' expects integer or pointer argument");
-  enum lfchar = data.lfchar;
-  enum rfchar = data.rfchar;
-  enum conwritefImpl =
-    "wrWriteWidthHex!("~lfchar.stringof~","~rfchar.stringof~")("~
-      data.getIntStr!"width"()~","~
-      data.getIntStr!"maxlen"()~","~
-      data.getBoolStr!"optCenter"()~","~
-      (upcase ? "true," : "false,")~
-      (isPointer!TTA ? "cast(usize)" : "cast("~TTA.stringof~")")~
-      "(args["~to!string(aidx)~"]));\n";
-}
-
-
-template conwritefImpl(string state, alias data, AA...)
-if (state == "write-argument-x")
-{
-  enum conwritefImpl = conwritefImpl!("write-argument-xx", false, data, AA);
-}
-
-
-template conwritefImpl(string state, alias data, AA...)
-if (state == "write-argument-X")
-{
-  enum conwritefImpl = conwritefImpl!("write-argument-xx", true, data, AA);
-}
-
-
-template conwritefImpl(string state, string field, alias data)
-if (state == "write-field")
-{
-  enum fld = __traits(getMember, data, field);
-  static if (fld.length > 0) {
-    enum conwritefImpl = "conwriter("~fld.stringof~");\n";
-  } else {
-    enum conwritefImpl = "";
-  }
-}
-
-
-template conwritefImpl(string state, string str, alias data)
-if (state == "write-strlit")
-{
-  static if (str.length > 0) {
-    enum conwritefImpl = "conwriter("~str.stringof~");\n";
-  } else {
-    enum conwritefImpl = "";
-  }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-template conwritefImpl(string state, string fmt, alias data, AA...)
-if (state == "format-spec")
-{
-  static assert(fmt.length > 0, "invalid format string");
-  static if (fmt[0] == 's' || fmt[0] == 'x' || fmt[0] == 'X' || fmt[0] == 'S') {
-    // known specs
-    enum conwritefImpl =
-      conwritefImpl!("write-argument-"~fmt[0], data, AA)~
-      conwritefImpl!("main", fmt[1..$], data.incAIdx(), AA);
-  } else static if (fmt[0] == '|') {
-    // write all unprocessed arguments
-    static if (data.aidx < data.alen) {
-      // has argument to process
-      static if (data.aidx+1 < data.alen && data.wsep.length > 0) {
-        // has separator
-        enum conwritefImpl =
-          conwritefImpl!("write-argument-s", data, AA)~
-          conwritefImpl!("write-field", "wsep", data)~
-          conwritefImpl!(state, fmt, data.incAIdx(), AA);
-      } else {
-        // has no separator
-        enum conwritefImpl =
-          conwritefImpl!("write-argument-s", data, AA)~
-          conwritefImpl!(state, fmt, data.incAIdx(), AA);
+      switch (fmtch) {
+        case 's':
+          static if (is(at == char)) {
+            res ~= "cwrxputchar(args[";
+            putNum(argnum);
+            res ~= "]";
+          } else static if (is(at == wchar) || is(at == dchar)) {
+            res ~= "import std.conv : to; cwrxputstr(to!string(args[";
+            putNum(argnum);
+            res ~= "])";
+          } else static if (is(at == bool)) {
+            res ~= "cwrxputstr((args[";
+            putNum(argnum);
+            res ~= "] ? `true` : `false`)";
+          } else static if (is(at == float) || is(at == double) || is(at == real)) {
+            res ~= "cwrxputfloat(args[";
+            putNum(argnum);
+            res ~= "], true";
+          } else static if (is(at : const(char)[])) {
+            res ~= "cwrxputstr(args[";
+            putNum(argnum);
+            res ~= "]";
+          } else static if (is(at : T*, T)) {
+            //res ~= "cwrxputch(`0x`); ";
+            if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
+            res ~= "cwrxputhex(cast(size_t)args[";
+            putNum(argnum);
+            res ~= "], false";
+          } else static if (is(at : long)) {
+            res ~= "cwrxputint(args[";
+            putNum(argnum);
+            res ~= "]";
+          } else {
+            res ~= "import std.conv : to; cwrxputstr(to!string(args[";
+            putNum(argnum);
+            res ~= "])";
+          }
+          break;
+        case 'x':
+          static if (is(at == char) || is(at == wchar) || is(at == dchar)) {
+            res ~= "cwrxputhex(cast(uint)args[";
+            putNum(argnum);
+            res ~= "], false";
+          } else static if (is(at == bool)) {
+            res ~= "cwrxputstr((args[";
+            putNum(argnum);
+            res ~= "] ? `1` : `0`)";
+          } else static if (is(at == float) || is(at == double) || is(at == real)) {
+            assert(0, "can't hexprint floats yet");
+          } else static if (is(at : T*, T)) {
+            if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
+            res ~= "cwrxputhex(cast(size_t)args[";
+            putNum(argnum);
+            res ~= "], false";
+          } else static if (is(at : long)) {
+            res ~= "cwrxputhex(args[";
+            putNum(argnum);
+            res ~= "], false";
+          } else {
+            assert(0, "can't print '"~at.stringof~"' as hex");
+          }
+          break;
+        case 'X':
+          static if (is(at == char) || is(at == wchar) || is(at == dchar)) {
+            res ~= "cwrxputhex(cast(uint)args[";
+            putNum(argnum);
+            res ~= "], true";
+          } else static if (is(at == bool)) {
+            res ~= "cwrxputstr((args[";
+            putNum(argnum);
+            res ~= "] ? `1` : `0`)";
+          } else static if (is(at == float) || is(at == double) || is(at == real)) {
+            assert(0, "can't hexprint floats yet");
+          } else static if (is(at : T*, T)) {
+            if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
+            res ~= "cwrxputhex(cast(size_t)args[";
+            putNum(argnum);
+            res ~= "], true";
+          } else static if (is(at : long)) {
+            res ~= "cwrxputhex(args[";
+            putNum(argnum);
+            res ~= "], true";
+          } else {
+            assert(0, "can't print '"~at.stringof~"' as hex");
+          }
+          break;
+        case 'f':
+          static if (is(at == float) || is(at == double) || is(at == real)) {
+            res ~= "cwrxputfloat(args[";
+            putNum(argnum);
+            res ~= "], false";
+          } else {
+            assert(0, "can't print '"~at.stringof~"' as float");
+          }
+          break;
+        default: assert(0, "invalid format specifier: '"~fmtch~"'");
       }
-    } else {
-      // no more arguments
-      enum conwritefImpl = conwritefImpl!("main", fmt[1..$], data, AA);
+      res ~= ", '";
+      res ~= signw;
+      res ~= "', '\\x";
+      putNum!true(cast(uint)lchar, 2);
+      res ~= "', '\\x";
+      putNum!true(cast(uint)rchar, 2);
+      res ~= "', ";
+      putNum(wdt);
+      res ~= ", ";
+      putNum(maxwdt);
+      res ~= ");\n";
     }
-  } else static if (fmt[0] == '@' || fmt[0] == '$') {
-    // set current argument index
-    // we must have no maxlen here
-    static assert(data.maxlenSign == ' ', "invalid position for '@'");
-    static if (data.widthSign == '+' || data.widthSign == '-')
-      enum newpos = data.aidx+data.getIntDef!"width"()+1;
-    else
-      enum newpos = data.getIntDef!"width"();
-    static assert(newpos >= 1 && newpos <= data.alen+1, "position out of range for '"~fmt[0]~"'");
-    static if (fmt[0] == '@' || (fmt.length > 1 && fmt[1] == '%')) {
-      enum conwritefImpl = conwritefImpl!("main", fmt[1..$], data.set!"aidx"(newpos-1), AA);
-    } else {
-      enum conwritefImpl = conwritefImpl!("main", "%"~fmt[1..$], data.set!"aidx"(newpos-1), AA);
+    while (pos < fmt.length) {
+      processUntilFSp();
+      if (pos >= fmt.length) break;
+      assert(fmt[pos] == '%');
+      ++pos;
+      if (pos < fmt.length && fmt[pos] == '!') { ++pos; continue; } // skip rest
+      assert(0, "too many format specifiers");
     }
-  } else {
-    static assert(0, "invalid format specifier: '"~fmt[0]~"'");
+    return res;
   }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-template conwritefImpl(string state, string accum, string fmt, alias data, AA...)
-if (state == "main-with-accum")
-{
-  static if (fmt.length == 0) {
-    static assert(data.aidx == data.alen, "too many arguments to writer");
-    enum conwritefImpl = conwritefImpl!("write-strlit", accum, data);
-  } else static if (fmt[0] == '%') {
-    static assert (fmt.length > 1, "invalid format string");
-    static if (fmt[1] == '%') {
-      // '%%'
-      enum conwritefImpl = conwritefImpl!(state, accum~"%", fmt[2..$], data, AA);
-    } else static if (fmt[1] == '!') {
-      // '%!'
-      enum conwritefImpl = conwritefImpl!(state, accum, fmt[2..$], data.set!"aidx"(data.alen), AA);
-    } else {
-      // other format specifiers
-      enum conwritefImpl =
-        conwritefImpl!("write-strlit", accum, data)~
-        conwritefImpl!("parse-format", fmt, data, AA);
-    }
-  } else {
-    import std.string : indexOf;
-    enum ppos = fmt.indexOf('%');
-    static if (ppos < 0) {
-      // no format specifiers
-      enum conwritefImpl = conwritefImpl!("write-strlit", accum~fmt, data);
-    } else {
-      enum conwritefImpl = conwritefImpl!(state, accum~fmt[0..ppos], fmt[ppos..$], data, AA);
-    }
+  void conwritef (A args) {
+    enum code = gen();
+    //pragma(msg, code);
+    //pragma(msg, "===========");
+    mixin(code);
   }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-template conwritefImpl(string state, string fmt, alias data, AA...)
-if (state == "main")
-{
-  enum conwritefImpl = conwritefImpl!("main-with-accum", "", fmt, data.resetFmt(), AA);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-void fdwritef(string fmt, AA...) (AA args) {
-  import std.string : indexOf;
-  static if (fmt.indexOf('%') < 0) {
-    conwriter(fmt);
-  } else {
-    import std.conv : to;
-    enum mixstr = conwritefImpl!("main", fmt, WrData(AA.length), AA);
-    //pragma(msg, "-------\n"~mixstr~"-------");
-    mixin(mixstr);
-  }
-  //conwriter(null);
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 public:
 
-void conwritef(string fmt, A...) (A args) { fdwritef!(fmt)(args); }
-void conwritefln(string fmt, A...) (A args) { fdwritef!(fmt~"\n")(args); }
-void conwrite(A...) (A args) { fdwritef!("%|")(args); }
-void conwriteln(A...) (A args) { fdwritef!("%|\n")(args); }
+//void conwritef(string fmt, A...) (A args) { fdwritef!(fmt)(args); }
+void conwritefln(string fmt, A...) (A args) { conwritef!(fmt)(args); cwrxputch('\n'); }
+void conwrite(A...) (A args) { conwritef!("%|")(args); }
+void conwriteln(A...) (A args) { conwritef!("%|\n")(args); }
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -961,21 +670,21 @@ unittest {
   conwritef!"`%%`\n"();
   conwritef!"`%-3s`\n"(42);
   conwritef!"<`%3s`%%{str=%s}%|>\n"(cast(int)42, "[a]", new A(), n, t[]);
-  conwritefln!"<`%3@%3s`>%!"(cast(int)42, "[a]", new A(), n, t);
+  //conwritefln!"<`%3@%3s`>%!"(cast(int)42, "[a]", new A(), n, t);
   //errwriteln("stderr");
   conwritefln!"`%-3s`"(42);
-  conwritefln!"`%!z%-2@%-3s`%!"(69, 42, 666);
-  conwritefln!"`%!%1@%-3s%!`"(69, 42, 666);
-  conwritefln!"`%!%-1@%+0@%-3s%!`"(69, 42, 666);
+  //conwritefln!"`%!z%-2@%-3s`%!"(69, 42, 666);
+  //conwritefln!"`%!%1@%-3s%!`"(69, 42, 666);
+  //conwritefln!"`%!%-1@%+0@%-3s%!`"(69, 42, 666);
   conwritefln!"`%3.5s`"("a");
   conwritefln!"`%7.5s`"("abcdefgh");
   conwritef!"%|\n"(42, 666);
-  conwritefln!"`%/10.5s`"("abcdefgh");
-  conwritefln!"`%/-10.-5s`"("abcdefgh");
-  conwritefln!"`%/~+-10.-5s`"("abcdefgh");
-  conwritefln!"`%/~+~:-10.-5s`"("abcdefgh");
-  conwritef!"%\0<>\0|\n"(42, 666, 999);
-  conwritef!"%\0\t\0|\n"(42, 666, 999);
+  conwritefln!"`%+10.5s`"("abcdefgh");
+  conwritefln!"`%+10.-5s`"("abcdefgh");
+  conwritefln!"`%~++10.-5s`"("abcdefgh");
+  conwritefln!"`%~+~:+10.-5s`"("abcdefgh");
+  //conwritef!"%\0<>\0|\n"(42, 666, 999);
+  //conwritef!"%\0\t\0|\n"(42, 666, 999);
   conwritefln!"`%~*05s %~.5s`"(42, 666);
   conwritef!"`%s`\n"(t);
   conwritef!"`%08s`\n"("alice");
@@ -986,37 +695,14 @@ unittest {
   conwritefln!"[%06s]"(cast(long)0x8000_0000_0000_0000uL);
   conwritefln!"[%06x]"(cast(long)0x8000_0000_0000_0000uL);
 
-  version(aliced) {
-    enum TypedefTestStr = q{
-      typedef MyInt = int;
-      typedef MyString = string;
-
-      MyInt mi = 42;
-      MyString ms = cast(MyString)"hurry";
-      conwritefln!"%s"(mi);
-      conwritefln!"%x"(mi);
-      conwritefln!"%s"(ms);
-
-      void testBool () @nogc {
-        conwritefln!"%s"(true);
-        conwritefln!"%s"(false);
-      }
-      testBool();
-
-      conwritefln!"Hello, %2$s, I'm %1$s."("Alice", "Miriel");
-      conwritef!"%2$7s|\n%1$%7s|\n%||\n"("Alice", "Miriel");
-    };
-    //mixin(TypedefTestStr);
-  }
-
   void wrflt () nothrow @nogc {
     conwriteln(42.666f);
     conwriteln(cast(double)42.666);
   }
   wrflt();
 
-  immutable char *strz = "stringz\0s";
-  conwritefln!"[%S]"(strz);
+  //immutable char *strz = "stringz\0s";
+  //conwritefln!"[%S]"(strz);
 }
 
 
@@ -1024,13 +710,13 @@ unittest {
 /// dump variables. use like this: `mixin condump!("x", "y")` ==> "x = 5, y = 3"
 mixin template condump (Names...) {
   auto _xdump_tmp_ = {
-    import conwrt : conwrite;
+    import iv.cmdcon : conwrite;
     foreach (auto i, auto name; Names) conwrite(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
     return false;
   }();
 }
 
-version(conwriter_test)
+version(conwriter_test_dump)
 unittest {
   int x = 5;
   int y = 3;
