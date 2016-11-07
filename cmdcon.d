@@ -53,6 +53,13 @@ shared static this () { consoleLocker = new Mutex(); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+enum isGShared(alias v) = !__traits(compiles, ()@safe{auto _=&v;}());
+enum isShared(alias v) = is(typeof(v) == shared);
+enum isGoodVar(alias v) = isGShared!v || isShared!v;
+//alias isGoodVar = isGShared;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 version(test_cbuf)
   enum ConBufSize = 64;
 else
@@ -271,8 +278,17 @@ private void cwrxputchar (char ch, char signw, char lchar, char rchar, int wdt, 
 }
 
 
-private void cwrxputint(T) (T n, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   char[32] buf = ' ';
+
+  static if (is(TT == shared)) {
+    import core.atomic;
+    auto n = atomicLoad(nn);
+    alias T = typeof(n);
+  } else {
+    alias n = nn;
+    alias T = TT;
+  }
 
   static if (is(T == long)) {
     if (n == 0x8000_0000_0000_0000uL) { cwrxputstr("-9223372036854775808", signw, lchar, rchar, wdt, maxwdt); return; }
@@ -305,8 +321,17 @@ private void cwrxputint(T) (T n, char signw, char lchar, char rchar, int wdt, in
 }
 
 
-private void cwrxputhex(T) (T n, bool upcase, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   char[32] buf = ' ';
+
+  static if (is(TT == shared)) {
+    import core.atomic;
+    auto n = atomicLoad(nn);
+    alias T = typeof(n);
+  } else {
+    alias n = nn;
+    alias T = TT;
+  }
 
   static if (is(T == long)) {
     if (n == 0x8000_0000_0000_0000uL) { cwrxputstr("-8000000000000000", signw, lchar, rchar, wdt, maxwdt); return; }
@@ -340,8 +365,17 @@ private void cwrxputhex(T) (T n, bool upcase, char signw, char lchar, char rchar
 }
 
 
-private void cwrxputfloat(T) (T n, bool simple, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+private void cwrxputfloat(TT) (TT nn, bool simple, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc, realloc;
+
+  static if (is(TT == shared)) {
+    import core.atomic;
+    auto n = atomicLoad(nn);
+    alias T = typeof(n);
+  } else {
+    alias n = nn;
+    alias T = TT;
+  }
 
   static char* buf;
   static usize buflen = 0;
@@ -1355,7 +1389,8 @@ protected:
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// console will use this to register console variables
-final class ConVar(T) : ConVarBase {
+final class ConVar(T, bool strashex=false) : ConVarBase {
+  enum useAtomic = is(T == shared);
   T* vptr;
   static if (isIntegral!T) {
     T minv = T.min;
@@ -1384,7 +1419,12 @@ final class ConVar(T) : ConVarBase {
       while (cmdline.length && cmdline[0] <= 32) cmdline = cmdline[1..$];
       while (cmdline.length && cmdline[$-1] <= 32) cmdline = cmdline[0..$-1];
       if (cmdline == "toggle") {
-        *vptr = !(*vptr);
+        static if (useAtomic) {
+          import core.atomic;
+          atomicStore(*vptr, !atomicLoad(*vptr));
+        } else {
+          *vptr = !(*vptr);
+        }
         return;
       }
     }
@@ -1394,7 +1434,12 @@ final class ConVar(T) : ConVarBase {
       if (val < minv) val = minv;
       if (val > maxv) val = maxv;
     }
-    *vptr = val;
+    static if (useAtomic) {
+      import core.atomic;
+      atomicStore(*vptr, val);
+    } else {
+      *vptr = val;
+    }
   }
 
   override bool isString () const pure nothrow @nogc {
@@ -1405,70 +1450,92 @@ final class ConVar(T) : ConVarBase {
     }
   }
 
+  final private T getv () nothrow @nogc {
+    pragma(inline, true);
+    import core.atomic;
+    static if (useAtomic) return atomicLoad(*vptr); else return *vptr;
+  }
+
   override ConString strval () nothrow @nogc {
     //conwriteln("*** strval for '", name, "'");
     import core.stdc.stdio : snprintf;
     static if (is(T : ConString)) {
-      return *vptr;
+      return getv();
     } else static if (is(T == bool)) {
-      return (*vptr ? "tan" : "ona");
+      return (getv() ? "tan" : "ona");
     } else static if (isIntegral!T) {
       static if (isSigned!T) {
-        auto len = snprintf(vbuf.ptr, vbuf.length, "%lld", cast(long)(*vptr));
+        auto len = snprintf(vbuf.ptr, vbuf.length, "%lld", cast(long)(getv()));
       } else {
-        auto len = snprintf(vbuf.ptr, vbuf.length, "%llu", cast(long)(*vptr));
+        static if (strashex) {
+          auto len = snprintf(vbuf.ptr, vbuf.length, "0x%llx", cast(ulong)(getv()));
+        } else {
+          auto len = snprintf(vbuf.ptr, vbuf.length, "0x%llu", cast(ulong)(getv()));
+        }
       }
       return (len >= 0 ? vbuf[0..len] : "?");
     } else static if (isFloatingPoint!T) {
-      auto len = snprintf(vbuf.ptr, vbuf.length, "%f", cast(double)(*vptr));
+      auto len = snprintf(vbuf.ptr, vbuf.length, "%f", cast(double)(getv()));
       return (len >= 0 ? vbuf[0..len] : "?");
     }
   }
 
   protected override ulong getIntValue () nothrow @nogc {
-    static if (is(T : ulong) || is(T : double)) return cast(ulong)(*vptr); else return ulong.init;
+    static if (is(T : ulong) || is(T : double)) return cast(ulong)(getv()); else return ulong.init;
   }
 
   protected override double getDoubleValue () nothrow @nogc {
-    static if (is(T : double) || is(T : ulong)) return cast(double)(*vptr); else return double.init;
+    static if (is(T : double) || is(T : ulong)) return cast(double)(getv()); else return double.init;
+  }
+
+  private template PutVMx(string val) {
+    static if (useAtomic) {
+      enum PutVMx = "{ import core.atomic; atomicStore(*vptr, "~val~"); }";
+    } else {
+      enum PutVMx = "*vptr = "~val~";";
+    }
   }
 
   protected override void setIntValue (ulong v, bool signed) nothrow @nogc {
+    import core.atomic;
     static if (is(T : ulong) || is(T : double)) {
-      *vptr = cast(T)v;
+      mixin(PutVMx!"cast(T)v");
     } else static if (is(T : ConString)) {
       import core.stdc.stdio : snprintf;
       auto len = snprintf(tvbuf.ptr, tvbuf.length, (signed ? "%lld" : "%llu"), v);
-           static if (is(T == string)) *vptr = cast(string)(tvbuf[0..len]); // not really safe, but...
-      else static if (is(T == ConString)) *vptr = cast(ConString)(tvbuf[0..len]);
-      else static if (is(T == char[])) *vptr = tvbuf[0..len];
+           static if (is(T == string)) mixin(PutVMx!"cast(string)(tvbuf[0..len])"); // not really safe, but...
+      else static if (is(T == ConString)) mixin(PutVMx!"cast(ConString)(tvbuf[0..len])");
+      else static if (is(T == char[])) mixin(PutVMx!"tvbuf[0..len]");
     }
   }
 
   protected override void setDoubleValue (double v) nothrow @nogc {
+    import core.atomic;
     static if (is(T : ulong) || is(T : double)) {
-      *vptr = cast(T)v;
+      mixin(PutVMx!"cast(T)v");
     } else static if (is(T : ConString)) {
       import core.stdc.stdio : snprintf;
       auto len = snprintf(tvbuf.ptr, tvbuf.length, "%g", v);
-           static if (is(T == string)) *vptr = cast(string)(tvbuf[0..len]); // not really safe, but...
-      else static if (is(T == ConString)) *vptr = cast(ConString)(tvbuf[0..len]);
-      else static if (is(T == char[])) *vptr = tvbuf[0..len];
+           static if (is(T == string)) mixin(PutVMx!"cast(string)(tvbuf[0..len])"); // not really safe, but...
+      else static if (is(T == ConString)) mixin(PutVMx!"cast(ConString)(tvbuf[0..len])");
+      else static if (is(T == char[])) mixin(PutVMx!"tvbuf[0..len]");
     }
   }
 
   protected override void setStrValue (string v) nothrow {
+    import core.atomic;
     static if (is(T == string) || is(T == ConString)) {
-      *vptr = cast(T)v;
+      mixin(PutVMx!"cast(T)v");
     } else static if (is(T == char[])) {
-      *vptr = v.dup;
+      mixin(PutVMx!"v.dup");
     }
   }
 
   protected override void setCharValue (ConString v) nothrow {
-         static if (is(T == string)) *vptr = v.idup;
-    else static if (is(T == ConString)) *vptr = v;
-    else static if (is(T == char[])) *vptr = v.dup;
+    import core.atomic;
+         static if (is(T == string)) mixin(PutVMx!"v.idup");
+    else static if (is(T == ConString)) mixin(PutVMx!"v");
+    else static if (is(T == char[])) mixin(PutVMx!"v.dup");
   }
 
   override void printValue () {
@@ -1477,13 +1544,13 @@ final class ConVar(T) : ConVarBase {
     static if (is(T : ConString)) {
       wrt(name);
       wrt(" ");
-      writeQuotedString(*vptr);
+      writeQuotedString(getv());
       wrt("\n");
       //wrt(null); // flush
     } else static if (is(T == bool)) {
-      conwriteln(name, " ", (*vptr ? "tan" : "ona"));
+      conwriteln(name, " ", (getv() ? "tan" : "ona"));
     } else {
-      conwriteln(name, " ", *vptr);
+      conwriteln(name, " ", strval);
     }
   }
 }
@@ -1529,35 +1596,74 @@ void addName (string name) {
 }
 
 
-/** register integral console variable.
+void conRegVarIntrInt(bool strashex, alias v, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(v)) && isIntegral!T) {
+  static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
+  if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
+  if (aname.length > 0) {
+    addName(aname);
+    cmdlist[aname] = new ConVar!(typeof(v), strashex)(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp);
+  }
+}
+
+
+/** register integral console variable with bounded value.
  *
  * Params:
- *   fn = symbol
+ *   v = variable symbol
  *   aminv = minimum value
  *   amaxv = maximum value
  *   aname = variable name
  *   ahelp = help text
  */
-public void conRegVar(alias fn, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(fn)) && isIntegral!T) {
-  if (aname.length == 0) aname = (&fn).stringof[2..$]; // HACK
-  if (aname.length > 0) {
-    addName(aname);
-    cmdlist[aname] = new ConVar!(typeof(fn))(&fn, cast(typeof(fn))aminv, cast(typeof(fn))amaxv, aname, ahelp);
-  }
+public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(v)) && isIntegral!T) {
+  conRegVarIntrInt!(false, v, T)(aminv, amaxv, aname, ahelp);
 }
 
-/** register non-integral console variable.
+
+/** register integral console variable with bounded value, dump it as hex.
  *
  * Params:
- *   fn = symbol
+ *   v = variable symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
  *   aname = variable name
  *   ahelp = help text
  */
-public void conRegVar(alias fn) (string aname, string ahelp=null) if (!isCallable!(typeof(fn))) {
-  if (aname.length == 0) aname = (&fn).stringof[2..$]; // HACK
+public void conRegVarHex(alias v, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(v)) && isIntegral!T) {
+  conRegVarIntrInt!(true, v, T)(aminv, amaxv, aname, ahelp);
+}
+
+
+/** register console variable.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aname = variable name
+ *   ahelp = help text
+ */
+public void conRegVar(alias v) (string aname, string ahelp=null) if (!isCallable!(typeof(v))) {
+  static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
+  if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
   if (aname.length > 0) {
     addName(aname);
-    cmdlist[aname] = new ConVar!(typeof(fn))(&fn, aname, ahelp);
+    cmdlist[aname] = new ConVar!(typeof(v), false)(&v, aname, ahelp);
+  }
+}
+
+
+/** register console variable, dump it as hex.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aname = variable name
+ *   ahelp = help text
+ */
+public void conRegVarHex(alias v) (string aname, string ahelp=null) if (!isCallable!(typeof(v))) {
+  static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
+  if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
+  if (aname.length > 0) {
+    addName(aname);
+    cmdlist[aname] = new ConVar!(typeof(v), true)(&v, aname, ahelp);
   }
 }
 
@@ -2129,7 +2235,7 @@ public enum ConInputChar : char {
   Home = '\x05',
   End = '\x06',
   PageUp = '\x07',
-  BackSpace = '\x08',
+  Backspace = '\x08',
   Tab = '\x09',
   // 0a
   PageDown = '\x0b',
@@ -2196,7 +2302,7 @@ public void conAddInputChar (char ch) {
   // process other keys
   prevWasEmptyAndTab = 0;
   // remove last char
-  if (ch == ConInputChar.BackSpace) {
+  if (ch == ConInputChar.Backspace) {
     if (conclilen > 0) { --conclilen; conInputIncLastChange(); }
     return;
   }
