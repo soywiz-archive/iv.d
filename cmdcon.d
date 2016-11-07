@@ -35,14 +35,15 @@ private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// use this in conGetVar, for example, to avoid allocations
+/// use this in conGetVar, for example, to avoid allocations
 alias ConString = const(char)[];
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-shared bool conStdoutFlag = true;
-public @property bool conStdout () nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicLoad; return atomicLoad(conStdoutFlag); }
-public @property void conStdout (bool v) nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicStore; atomicStore(conStdoutFlag, v); }
+enum ConDump : int { None, Stdout, Stderr }
+shared ConDump conStdoutFlag = ConDump.Stderr;
+public @property ConDump conDump () nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicLoad; return atomicLoad(conStdoutFlag); } /// write console output to ...
+public @property void conDump (ConDump v) nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicStore; atomicStore(conStdoutFlag, v); } /// ditto
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -66,12 +67,12 @@ __gshared bool cbufLastWasCR = false;
 shared static this () { cbuf.ptr[0] = '\n'; }
 
 shared uint changeCount = 1;
-public @property uint cbufLastChange () nothrow @trusted @nogc { import core.atomic; return atomicLoad(changeCount); }
+public @property uint cbufLastChange () nothrow @trusted @nogc { import core.atomic; return atomicLoad(changeCount); } /// changed when something was written to console buffer
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void consoleLock() () { pragma(inline, true); consoleLocker.lock(); }
-public void consoleUnlock() () { pragma(inline, true); consoleLocker.unlock(); }
+public void consoleLock() () { pragma(inline, true); consoleLocker.lock(); } /// multithread lock
+public void consoleUnlock() () { pragma(inline, true); consoleLocker.unlock(); } /// multithread unlock
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -81,9 +82,16 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
     import core.atomic : atomicLoad, atomicOp;
     consoleLock();
     scope(exit) consoleUnlock();
-    if (atomicLoad(conStdoutFlag)) {
-      import core.sys.posix.unistd : STDOUT_FILENO, write;
-      write(STDOUT_FILENO, chrs.ptr, chrs.length);
+    final switch (atomicLoad(conStdoutFlag)) {
+      case ConDump.None: break;
+      case ConDump.Stdout:
+        import core.sys.posix.unistd : STDOUT_FILENO, write;
+        write(STDOUT_FILENO, chrs.ptr, chrs.length);
+        break;
+      case ConDump.Stderr:
+        import core.sys.posix.unistd : STDERR_FILENO, write;
+        write(STDERR_FILENO, chrs.ptr, chrs.length);
+        break;
     }
     atomicOp!"+="(changeCount, 1);
     foreach (char ch; chrs) {
@@ -406,7 +414,8 @@ private void cwrxputfloat(T) (T n, bool simple, char signw, char lchar, char rch
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////// //
+/// write formatted string to console with compile-time format string
 public template conwritef(string fmt, A...) {
   private string gen() () {
     string res;
@@ -648,16 +657,16 @@ public template conwritef(string fmt, A...) {
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////// //
 public:
 
 //void conwritef(string fmt, A...) (A args) { fdwritef!(fmt)(args); }
-void conwritefln(string fmt, A...) (A args) { conwritef!(fmt)(args); cwrxputch('\n'); }
-void conwrite(A...) (A args) { conwritef!("%|")(args); }
-void conwriteln(A...) (A args) { conwritef!("%|\n")(args); }
+void conwritefln(string fmt, A...) (A args) { conwritef!(fmt)(args); cwrxputch('\n'); } /// write formatted string to console with compile-time format string
+void conwrite(A...) (A args) { conwritef!("%|")(args); } /// write formatted string to console with compile-time format string
+void conwriteln(A...) (A args) { conwritef!("%|\n")(args); } /// write formatted string to console with compile-time format string
 
 
-////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////// //
 version(conwriter_test)
 unittest {
   class A {
@@ -706,7 +715,7 @@ unittest {
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////// //
 /// dump variables. use like this: `mixin condump!("x", "y")` ==> "x = 5, y = 3"
 mixin template condump (Names...) {
   auto _xdump_tmp_ = {
@@ -716,6 +725,7 @@ mixin template condump (Names...) {
   }();
 }
 
+///
 version(conwriter_test_dump)
 unittest {
   int x = 5;
@@ -734,13 +744,13 @@ unittest {
 // ////////////////////////////////////////////////////////////////////////// //
 // command console
 
-// base console command class
+/// base console command class
 public class ConCommand {
 private:
   public import std.conv : ConvException, ConvOverflowException;
   import std.range;
   // this is hack to avoid allocating error exceptions
-  // don't do this at home!
+  // don't do that at home!
 
   __gshared ConvException exBadNum;
   __gshared ConvException exBadStr;
@@ -770,15 +780,15 @@ private:
   __gshared char[] wordBuf;
 
 public:
-  string name;
-  string help;
+  string name; ///
+  string help; ///
 
-  this (string aname, string ahelp=null) { name = aname; help = ahelp; }
+  this (string aname, string ahelp=null) { name = aname; help = ahelp; } ///
 
-  void showHelp () { conwriteln(name, " -- ", help); }
+  void showHelp () { conwriteln(name, " -- ", help); } ///
 
-  // can throw, yep
-  // cmdline doesn't contain command name
+  /// can throw, yep
+  /// cmdline doesn't contain command name
   void exec (ConString cmdline) {
     auto w = getWord(cmdline);
     if (w == "?") showHelp;
@@ -1292,7 +1302,7 @@ version(contest_parser) unittest {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// variable of some type
+/// variable of some type
 public class ConVarBase : ConCommand {
   this (string aname, string ahelp=null) { super(aname, ahelp); }
 
@@ -1344,7 +1354,8 @@ protected:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-class ConVar(T) : ConVarBase {
+/// console will use this to register console variables
+final class ConVar(T) : ConVarBase {
   T* vptr;
   static if (isIntegral!T) {
     T minv = T.min;
@@ -1478,6 +1489,7 @@ class ConVar(T) : ConVarBase {
 }
 
 
+///
 version(contest_vars) unittest {
   __gshared int vi = 42;
   __gshared string vs = "str";
@@ -1517,6 +1529,15 @@ void addName (string name) {
 }
 
 
+/** register integral console variable.
+ *
+ * Params:
+ *   fn = symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
+ *   aname = variable name
+ *   ahelp = help text
+ */
 public void conRegVar(alias fn, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(fn)) && isIntegral!T) {
   if (aname.length == 0) aname = (&fn).stringof[2..$]; // HACK
   if (aname.length > 0) {
@@ -1525,6 +1546,13 @@ public void conRegVar(alias fn, T) (T aminv, T amaxv, string aname, string ahelp
   }
 }
 
+/** register non-integral console variable.
+ *
+ * Params:
+ *   fn = symbol
+ *   aname = variable name
+ *   ahelp = help text
+ */
 public void conRegVar(alias fn) (string aname, string ahelp=null) if (!isCallable!(typeof(fn))) {
   if (aname.length == 0) aname = (&fn).stringof[2..$]; // HACK
   if (aname.length > 0) {
@@ -1545,8 +1573,16 @@ public struct ConFuncVA {
   ConString cmdline;
 }
 
-// we have to make the class nested, so we can use `dg`, which keeps default args
+/** register console command.
+ *
+ * Params:
+ *   fn = symbol
+ *   aname = variable name
+ *   ahelp = help text
+ */
 public void conRegFunc(alias fn) (string aname, string ahelp=null) if (isCallable!fn) {
+  // we have to make the class nested, so we can use `dg`, which keeps default args
+
   // hack for inline lambdas
   static if (is(typeof(&fn))) {
     auto dg = &fn;
@@ -1620,8 +1656,9 @@ __gshared string[] cmdlistSorted;
 
 // ////////////////////////////////////////////////////////////////////////// //
 // all following API is thread-unsafe, if the opposite is not written
-public bool conHasCommand (ConString name) { pragma(inline, true); return ((name in cmdlist) !is null); }
+public bool conHasCommand (ConString name) { pragma(inline, true); return ((name in cmdlist) !is null); } /// check if console has a command with a given name (thread-unsafe)
 
+/// known console commands range (thread-unsafe)
 public auto conByCommand () {
   static struct Range {
   private:
@@ -1641,6 +1678,8 @@ public auto conByCommand () {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // thread-safe
+
+/// get console variable value (thread-safe)
 public T conGetVar(T=ConString) (ConString s) {
   consoleLock();
   scope(exit) consoleUnlock();
@@ -1651,6 +1690,7 @@ public T conGetVar(T=ConString) (ConString s) {
 }
 
 
+/// set console variable value (thread-safe)
 public void conSetVar(T) (ConString s, T val) {
   consoleLock();
   scope(exit) consoleUnlock();
@@ -1662,6 +1702,8 @@ public void conSetVar(T) (ConString s, T val) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // thread-safe
+
+/// execute console command (thread-safe)
 public void conExecute (ConString s) {
   auto ss = s;
   consoleLock();
@@ -1689,10 +1731,10 @@ public void conExecute (ConString s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+///
 version(contest_func) unittest {
   static void xfunc (int v, int x=42) { conwriteln("xfunc: v=", v, "; x=", x); }
 
-  //pragma(msg, typeof(&xfunc), " ", ParameterDefaultValueTuple!xfunc);
   conRegFunc!xfunc("", "function with two int args (last has default value '42')");
   conExecute("xfunc ?");
   conExecute("xfunc 666");
@@ -1715,7 +1757,13 @@ version(contest_func) unittest {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// return `null` when there is no command
+/** get console commad from array of text.
+ *
+ * console commands are delimited with newlines, but can include various quoted chars and such.
+ * this function will take care of that, and return something suitable for passing to `conExecute`.
+ *
+ * it will return `null` if there is no command (i.e. end-of-text reached).
+ */
 public ConString conGetCommandStr (ref ConString s) {
   for (;;) {
     while (s.length > 0 && s[0] <= 32) s = s[1..$];
@@ -1771,6 +1819,7 @@ public ConString conGetCommandStr (ref ConString s) {
   return res;
 }
 
+///
 version(contest_cpx) unittest {
   ConString s = "boo; woo \";\" 42#cmt\ntest\nfoo";
   {
@@ -1793,6 +1842,7 @@ version(contest_cpx) unittest {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// console always has "echo" command, no need to register it.
 public class ConCommandEcho : ConCommand {
   this () { super("echo", "write string to console"); }
 
@@ -1872,6 +1922,14 @@ shared static this () {
 }
 
 
+/** replace "$var" in string.
+ *
+ * this function will replace "$var" in string with console var values.
+ *
+ * Params:
+ *   dest = destination buffer
+ *   s = source string
+ */
 public char[] conFormatStr (char[] dest, ConString s) {
   usize dpos = 0;
 
@@ -1942,6 +2000,7 @@ public char[] conFormatStr (char[] dest, ConString s) {
 }
 
 
+///
 version(contest_echo) unittest {
   __gshared int vi = 42;
   __gshared string vs = "str";
@@ -1972,6 +2031,7 @@ version(contest_echo) unittest {
 }
 
 
+///
 version(contest_cmdlist) unittest {
   auto cl = conByCommand;
   while (!cl.empty) {
@@ -1990,11 +2050,20 @@ __gshared char[4096] concli = 0;
 __gshared uint conclilen = 0;
 
 shared uint inchangeCount = 1;
-public @property ulong conInputLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(inchangeCount); }
-public void conInputIncLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; atomicOp!"+="(inchangeCount, 1); }
+public @property ulong conInputLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(inchangeCount); } /// changed when something was put to console input buffer
+public void conInputIncLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; atomicOp!"+="(inchangeCount, 1); } /// increment console input buffer change flag
 
-// return current input buffer
-public @property ConString conInputBuffer() () @trusted { pragma(inline, true); return concli[0..conclilen]; }
+
+public @property ConString conInputBuffer() () @trusted { pragma(inline, true); return concli[0..conclilen]; } /// returns console input buffer
+
+/** clear console input buffer.
+ *
+ * call this function with `addToHistory:true` to add current input buffer to history.
+ * it is safe to call this for empty input buffer, history won't get empty line.
+ *
+ * Params:
+ *   addToHistory = true if current buffer should be "added to history", so current history index should be reset and history will be updated
+ */
 public void conInputBufferClear() (bool addToHistory=false) @trusted {
   if (conclilen > 0) {
     if (addToHistory) conhisAdd(conInputBuffer);
@@ -2010,6 +2079,7 @@ __gshared int conhisidx = -1;
 shared static this () { foreach (ref hb; concmdhistory) hb[] = 0; }
 
 
+/// returns input buffer history item (0 is oldest) or null if there are no more items
 ConString conhisAt (int idx) {
   if (idx < 0 || idx >= concmdhistory.length) return null;
   ConString res = concmdhistory.ptr[idx][];
@@ -2019,6 +2089,7 @@ ConString conhisAt (int idx) {
 }
 
 
+/// find command in input history, return index or -1
 int conhisFind (ConString cmd) {
   while (cmd.length && cmd[$-1] <= 32) cmd = cmd[0..$-1];
   if (cmd.length > concmdhistory.ptr[0].length) cmd = cmd[0..concmdhistory.ptr[0].length];
@@ -2032,6 +2103,7 @@ int conhisFind (ConString cmd) {
 }
 
 
+/// add command to history. will take care about duplicate commands.
 void conhisAdd (ConString cmd) {
   while (cmd.length && cmd[$-1] <= 32) cmd = cmd[0..$-1];
   if (cmd.length > concmdhistory.ptr[0].length) cmd = cmd[0..concmdhistory.ptr[0].length];
@@ -2048,6 +2120,7 @@ void conhisAdd (ConString cmd) {
 }
 
 
+/// special characters for `conAddInputChar()`
 public enum ConInputChar : char {
   Up = '\x01',
   Down = '\x02',
@@ -2061,13 +2134,14 @@ public enum ConInputChar : char {
   // 0a
   PageDown = '\x0b',
   Delete = '\x0c',
-  Return = '\x0d',
+  Enter = '\x0d',
   Insert = '\x0e',
   //
   CtrlY = '\x19',
 }
 
 
+/// process console input char (won't execute commands, but will do autocompletion and history)
 public void conAddInputChar (char ch) {
   __gshared int prevWasEmptyAndTab = 0;
   // autocomplete
