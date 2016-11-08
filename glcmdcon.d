@@ -37,7 +37,8 @@ __gshared uint scrwdt, scrhgt;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public VFile openFileEx (const(char)[] name) {
+/// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
+public VFile openFileEx (ConString name) {
   VFSDriverId[128] dids;
   int didcount;
   scope(exit) foreach_reverse (VFSDriverId did; dids[0..didcount]) vfsRemovePack(did);
@@ -80,23 +81,23 @@ public bool isQuitRequested () nothrow @trusted @nogc { pragma(inline, true); im
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// add console command to execution queue
-public void concmd (const(char)[] cmd) {
+/// add console command to execution queue
+public void concmd (ConString cmd) {
   //if (!atomicLoad(renderThreadStarted)) return;
   consoleLock();
   scope(exit) consoleUnlock();
   concmdAdd(cmd);
 }
 
-// get console variable value; doesn't do complex conversions!
-public T convar(T) (const(char)[] s) {
+/// get console variable value; doesn't do complex conversions!
+public T convar(T) (ConString s) {
   consoleLock();
   scope(exit) consoleUnlock();
   return conGetVar!T(s);
 }
 
-// set console variable value; doesn't do complex conversions!
-public void convar(T) (const(char)[] s, T val) {
+/// set console variable value; doesn't do complex conversions!
+public void convar(T) (ConString s, T val) {
   consoleLock();
   scope(exit) consoleUnlock();
   conSetVar!T(s, val);
@@ -104,7 +105,7 @@ public void convar(T) (const(char)[] s, T val) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// you may call this in char event, but `conCharEvent()` will do that for you
+/// you may call this in char event, but `conCharEvent()` will do that for you
 public void concliChar (char ch) {
   if (!ch) return;
   consoleLock();
@@ -155,7 +156,7 @@ shared static this () { concmdbuf.length = 65536; }
 __gshared int conskiplines = 0;
 
 
-void concmdAdd (const(char)[] s) {
+void concmdAdd (ConString s) {
   if (s.length) {
     if (concmdbuf.length-concmdbufpos < s.length+1) {
       concmdbuf.assumeSafeAppend.length += s.length-(concmdbuf.length-concmdbufpos)+512;
@@ -167,18 +168,28 @@ void concmdAdd (const(char)[] s) {
 }
 
 
-//FIXME! multithreading!
-// all new commands will be postponed for the next call
-public void concmdDoAll () {
-  if (concmdbufpos == 0) return;
+/** execute commands added with `concmd()`.
+ *
+ * all new commands will be postponed for the next call.
+ * call this in your main loop to process all accumulated console commands.
+ * WARNING! this is NOT thread-safe, you MUST call this in your "processing thread", and
+ *          you MUST put `consoleLock()/consoleUnlock()` around the call!
+ *
+ * Returns:
+ *   "has more commands" flag
+ */
+public bool concmdDoAll () {
+  if (concmdbufpos == 0) return false;
   auto ebuf = concmdbufpos;
-  const(char)[] s = concmdbuf[0..ebuf];
+  ConString s = concmdbuf[0..ebuf];
+  //conwriteln("===================");
   while (s.length) {
     auto cmd = conGetCommandStr(s);
     if (cmd is null) break;
     try {
       //consoleLock();
       //scope(exit) consoleUnlock();
+      //conwriteln("  <", cmd, ">");
       conExecute(cmd);
     } catch (Exception e) {
       conwriteln("***ERROR: ", e.msg);
@@ -193,8 +204,10 @@ public void concmdDoAll () {
     concmdbufpos -= ebuf;
     //s = concmdbuf[0..concmdbufpos];
     //ebuf = concmdbufpos;
+    return true;
   } else {
     concmdbufpos = 0;
+    return false;
   }
 }
 
@@ -214,6 +227,7 @@ __gshared uint rConStarColor = 0x3f0000; // rgb
 shared bool vquitRequested = false;
 
 
+/// initialize glcmdcon variables and commands, sets screen size and scale
 public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   if (winScale != 0) assert(0, "cmdcon already initialized");
   if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) assert(0, "invalid cmdcon dimensions");
@@ -221,7 +235,7 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   scrwdt = ascrwdt;
   scrhgt = ascrhgt;
   winScale = ascale;
-  conRegFunc!((const(char)[] fname, bool silent=false) {
+  conRegFunc!((ConString fname, bool silent=false) {
     try {
       auto fl = openFileEx(fname);
       auto sz = fl.size;
@@ -256,6 +270,7 @@ __gshared uint* convbuf = null; // RGBA
 __gshared uint convbufTexId = 0;
 
 
+/// initialize OpenGL part of glcmdcon, should be called after `initConsole()`
 public void oglInitConsole () {
   import core.stdc.stdlib;
   //import iv.glbinds;
@@ -293,6 +308,7 @@ public void oglInitConsole () {
 }
 
 
+/// render console (if it is visible). tries hard to not change OpenGL state.
 public void oglDrawConsole () {
   if (!rConsoleVisible) return;
   if (convbufTexId && convbuf !is null) {
@@ -646,7 +662,8 @@ void renderConsole () nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptGlCmdConHasSdpy) {
 import arsd.simpledisplay : KeyEvent;
-// true: eaten
+
+/// process keyboard event. returns `true` if event was eaten.
 public bool conKeyEvent (KeyEvent event) {
   import arsd.simpledisplay;
   if (!rConsoleVisible) return false;
@@ -673,7 +690,7 @@ public bool conKeyEvent (KeyEvent event) {
 }
 
 
-// true: eaten
+/// process character event. returns `true` if event was eaten.
 public bool conCharEvent (dchar ch) {
   if (!rConsoleVisible) return false;
   if (ch >= ' ' && ch < 128) concliChar(cast(char)ch);
