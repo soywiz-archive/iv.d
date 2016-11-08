@@ -281,13 +281,14 @@ private void cwrxputchar (char ch, char signw, char lchar, char rchar, int wdt, 
 private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   char[32] buf = ' ';
 
+  import std.traits : Unqual;
   static if (is(TT == shared)) {
     import core.atomic;
-    auto n = atomicLoad(nn);
-    alias T = typeof(n);
+    alias T = Unqual!TT;
+    T n = atomicLoad(nn);
   } else {
-    alias n = nn;
-    alias T = TT;
+    alias T = Unqual!TT;
+    T n = nn;
   }
 
   static if (is(T == long)) {
@@ -324,13 +325,14 @@ private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt,
 private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   char[32] buf = ' ';
 
+  import std.traits : Unqual;
   static if (is(TT == shared)) {
     import core.atomic;
-    auto n = atomicLoad(nn);
-    alias T = typeof(n);
+    alias T = Unqual!TT;
+    T n = atomicLoad(nn);
   } else {
-    alias n = nn;
-    alias T = TT;
+    alias T = Unqual!TT;
+    T n = nn;
   }
 
   static if (is(T == long)) {
@@ -368,13 +370,14 @@ private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rc
 private void cwrxputfloat(TT) (TT nn, bool simple, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc, realloc;
 
+  import std.traits : Unqual;
   static if (is(TT == shared)) {
     import core.atomic;
-    auto n = atomicLoad(nn);
-    alias T = typeof(n);
+    alias T = Unqual!TT;
+    T n = atomicLoad(nn);
   } else {
-    alias n = nn;
-    alias T = TT;
+    alias T = Unqual!TT;
+    T n = nn;
   }
 
   static char* buf;
