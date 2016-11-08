@@ -36,11 +36,11 @@ private:
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// use this in conGetVar, for example, to avoid allocations
-alias ConString = const(char)[];
+public alias ConString = const(char)[];
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum ConDump : int { None, Stdout, Stderr }
+public enum ConDump : int { None, Stdout, Stderr }
 shared ConDump conStdoutFlag = ConDump.Stderr;
 public @property ConDump conDump () nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicLoad; return atomicLoad(conStdoutFlag); } /// write console output to ...
 public @property void conDump (ConDump v) nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicStore; atomicStore(conStdoutFlag, v); } /// ditto
