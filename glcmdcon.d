@@ -17,15 +17,22 @@
 module iv.glcmdcon is aliced;
 private:
 
-import arsd.color;
-import arsd.simpledisplay;
+//import arsd.color;
+//import arsd.simpledisplay;
 
 public import iv.cmdcon;
 public import iv.vfs;
+import iv.glbinds;
+
+static if (__traits(compiles, (){import arsd.simpledisplay;}())) {
+  enum OptGlCmdConHasSdpy = true;
+} else {
+  enum OptGlCmdConHasSdpy = false;
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared uint winScale = 1;
+__gshared uint winScale = 0;
 __gshared uint scrwdt, scrhgt;
 
 
@@ -192,7 +199,7 @@ public void concmdDoAll () {
 }
 
 
-static int conCharWidth (char ch) { return 10; }
+static int conCharWidth() (char ch) { pragma(inline, true); return 10; }
 enum conCharHeight = 10;
 
 
@@ -203,11 +210,13 @@ __gshared uint rConTextColor = 0x00ff00; // rgb
 __gshared uint rConCursorColor = 0xff7f00; // rgb
 __gshared uint rConInputColor = 0xffff00; // rgb
 __gshared uint rConPromptColor = 0xffffff; // rgb
-//__gshared bool renderVBL = true;
 shared bool vquitRequested = false;
 
 
 public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+  if (winScale != 0) assert(0, "cmdcon already initialized");
+  if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) assert(0, "invalid cmdcon dimensions");
+  if (ascale < 1 || ascale > 64) assert(0, "invalid cmdcon scale");
   scrwdt = ascrwdt;
   scrhgt = ascrhgt;
   winScale = ascale;
@@ -241,23 +250,34 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared TrueColorImage convbuf;
-__gshared uint convbufTexId;
+__gshared uint* convbuf = null; // RGBA
+__gshared uint convbufTexId = 0;
 
 
 public void oglInitConsole () {
-  import iv.glbinds;
+  import core.stdc.stdlib;
+  //import iv.glbinds;
 
-  convbuf = new TrueColorImage(scrwdt, scrhgt);
+  //conwriteln("scrwdt=", scrwdt, "; scrhgt=", scrhgt, "; scale=", winScale);
+
+  convbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
+  if (convbuf is null) assert(0, "out of memory");
+  convbuf[0..scrwdt*scrhgt] = 0xff000000;
+
+  if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
 
   GLuint wrapOpt = GL_REPEAT;
   GLuint filterOpt = GL_NEAREST; //GL_LINEAR;
   GLuint ttype = GL_UNSIGNED_BYTE;
 
   glGenTextures(1, &convbufTexId);
-  glBindTexture(GL_TEXTURE_2D, convbufTexId);
-  scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
+  if (convbufTexId == 0) assert(0, "can't create cmdcon texture");
 
+  GLint gltextbinding;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
+  scope(exit) glBindTexture(GL_TEXTURE_2D, gltextbinding);
+
+  glBindTexture(GL_TEXTURE_2D, convbufTexId);
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
@@ -267,18 +287,19 @@ public void oglInitConsole () {
 
   GLfloat[4] bclr = 0.0;
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
-  glTexImage2D(GL_TEXTURE_2D, 0, (ttype == GL_FLOAT ? GL_RGBA16F : GL_RGBA), convbuf.width, convbuf.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf.imageData.bytes.ptr);
+  glTexImage2D(GL_TEXTURE_2D, 0, (ttype == GL_FLOAT ? GL_RGBA16F : GL_RGBA), scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
 }
 
 
 public void oglDrawConsole () {
   if (!rConsoleVisible) return;
   if (convbufTexId && convbuf !is null) {
-    import iv.glbinds;
+    //import iv.glbinds;
     consoleLock();
     scope(exit) consoleUnlock();
+
+    //conwriteln("scrwdt=", scrwdt, "; scrhgt=", scrhgt, "; scale=", winScale, "; tid=", convbufTexId);
     renderConsole();
-    glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, convbuf.width, convbuf.height, GL_RGBA, GL_UNSIGNED_BYTE, convbuf.imageData.bytes.ptr);
 
     GLint glmatmode;
     GLint gltextbinding;
@@ -302,6 +323,8 @@ public void oglDrawConsole () {
       glBindTexture(GL_TEXTURE_2D, gltextbinding);
       glViewport(glviewport.ptr[0], glviewport.ptr[1], glviewport.ptr[2], glviewport.ptr[3]);
     }
+
+    glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
 
     enum x = 0;
     int y = 0;
@@ -327,19 +350,19 @@ public void oglDrawConsole () {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     //glDisable(GL_BLEND);
 
-    int ofs = (convbuf.height-rConsoleHeight)*winScale;
+    int ofs = (scrhgt-rConsoleHeight)*winScale;
     y -= ofs;
     h -= ofs;
     glColor4f(1, 1, 1, 0.8);
     glBindTexture(GL_TEXTURE_2D, convbufTexId);
-    scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
+    //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
     glBegin(GL_QUADS);
       glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y); // top-left
       glTexCoord2f(1.0f, 0.0f); glVertex2i(w, y); // top-right
       glTexCoord2f(1.0f, 1.0f); glVertex2i(w, h); // bottom-right
       glTexCoord2f(0.0f, 1.0f); glVertex2i(x, h); // bottom-left
     glEnd();
-    glDisable(GL_BLEND);
+    //glDisable(GL_BLEND);
   }
 }
 
@@ -347,32 +370,38 @@ public void oglDrawConsole () {
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared uint conLastChange = 0;
 
+static void vsetPixel (int x, int y, uint c) nothrow @trusted @nogc {
+  pragma(inline, true);
+  if (x >= 0 && y >= 0 && x < scrwdt && y < scrhgt) convbuf[y*scrwdt+x] = c;
+}
+
 
 import iv.x11gfx : dosFont10;
 
-void renderConsole () {
+void renderConsole () nothrow @trusted @nogc {
   static int conDrawX, conDrawY;
-  static Color conColor;
+  static uint conColor;
 
-  static void conDrawChar (char ch) {
+  static void conDrawChar (char ch) nothrow @trusted @nogc {
     foreach (immutable y; 0..10) {
       ushort v = dosFont10.ptr[cast(uint)ch*10+y];
       foreach (immutable x; 0..10) {
-        if (v&0x8000) convbuf.setPixel(conDrawX+x, conDrawY+y, conColor);
+        if (v&0x8000) vsetPixel(conDrawX+x, conDrawY+y, conColor);
         v <<= 1;
       }
     }
     conDrawX += 10;
   }
 
-  static void conSetColor (uint c) {
-    conColor = Color(cast(ubyte)((c>>16)&0xff), cast(ubyte)((c>>8)&0xff), cast(ubyte)(c&0xff));
+  static void conSetColor (uint c) nothrow @trusted @nogc {
+    pragma(inline, true);
+    conColor = (c&0x00ff00)|((c>>16)&0xff)|((c&0xff)<<16)|0xff000000;
   }
 
-  static void conRect (int w, int h) {
+  static void conRect (int w, int h) nothrow @trusted @nogc {
     foreach (immutable y; 0..h) {
       foreach (immutable x; 0..w) {
-        convbuf.setPixel(conDrawX+x, conDrawY+y, conColor);
+        vsetPixel(conDrawX+x, conDrawY+y, conColor);
       }
     }
     conDrawX += 10;
@@ -380,17 +409,14 @@ void renderConsole () {
 
   enum XOfs = 0;
   if (conLastChange == cbufLastChange) return;
-  //consoleLock();
-  //scope(exit) consoleUnlock();
   // rerender console
   conLastChange = cbufLastChange;
-  //foreach (auto s; conbufLinesRev) stdout.writeln(s, "|");
   int skipLines = conskiplines;
-  convbuf.imageData.colors[] = Color.black;
+  convbuf[0..scrwdt*scrhgt] = 0xff000000;
   {
     // draw command line
     //int y = /*convbuf.height*/rConsoleHeight-conCharHeight/*-2*/;
-    int y = convbuf.height-conCharHeight;
+    int y = scrhgt-conCharHeight;
     {
       conDrawX = XOfs;
       conDrawY = y;
@@ -400,7 +426,7 @@ void renderConsole () {
       uint spos = conclilen;
       while (spos > 0) {
         char ch = concli.ptr[spos-1];
-        if (w+conCharWidth(ch) > convbuf.width-XOfs*2-12) break;
+        if (w+conCharWidth(ch) > scrwdt-XOfs*2-12) break;
         w += conCharWidth(ch);
         --spos;
       }
@@ -423,7 +449,7 @@ void renderConsole () {
       while (sp < line.length) {
         char ch = line[sp++];
         int cw = conCharWidth(ch);
-        if ((w += cw) > convbuf.width-XOfs) { w -= cw; --sp; break; }
+        if ((w += cw) > scrwdt-XOfs) { w -= cw; --sp; break; }
       }
       if (sp < line.length) putLine(line, sp); // recursive put tail
       // draw line
@@ -444,8 +470,11 @@ void renderConsole () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+static if (OptGlCmdConHasSdpy) {
+import arsd.simpledisplay : KeyEvent;
 // true: eaten
 public bool conKeyEvent (KeyEvent event) {
+  import arsd.simpledisplay;
   if (!rConsoleVisible) return false;
   if (!event.pressed) return true;
   if (event.key == Key.Escape) { concmd("r_console 0"); return true; }
@@ -475,4 +504,5 @@ public bool conCharEvent (dchar ch) {
   if (!rConsoleVisible) return false;
   if (ch >= ' ' && ch < 128) concliChar(cast(char)ch);
   return true;
+}
 }
