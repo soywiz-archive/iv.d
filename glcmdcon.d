@@ -210,6 +210,7 @@ __gshared uint rConTextColor = 0x00ff00; // rgb
 __gshared uint rConCursorColor = 0xff7f00; // rgb
 __gshared uint rConInputColor = 0xffff00; // rgb
 __gshared uint rConPromptColor = 0xffffff; // rgb
+__gshared uint rConStarColor = 0x3f0000; // rgb
 shared bool vquitRequested = false;
 
 
@@ -240,6 +241,7 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   conRegVarHex!rConCursorColor("r_concursorcolor", "console cursor color, 0xrrggbb");
   conRegVarHex!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb");
   conRegVarHex!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb");
+  conRegVarHex!rConStarColor("r_constarcolor", "console star color, 0xrrggbb");
   //rConsoleHeight = scrhgt-scrhgt/3;
   rConsoleHeight = scrhgt/2;
   conRegFunc!({
@@ -407,12 +409,184 @@ void renderConsole () nothrow @trusted @nogc {
     conDrawX += 10;
   }
 
+  // ////////////////////////////////////////////////////////////////////// //
+  static void drawStar (int x0, int y0, int radius) nothrow @trusted @nogc {
+    if (radius < 32) return;
+    //conSetColor(color);
+
+    static void drawLine(bool lastPoint=true) (int x0, int y0, int x1, int y1) nothrow @trusted @nogc {
+      enum swap(string a, string b) = "{int tmp_="~a~";"~a~"="~b~";"~b~"=tmp_;}";
+
+      if (x0 == x1 && y0 == y1) {
+        static if (lastPoint) vsetPixel(x0, y0, conColor);
+        return;
+      }
+
+      // clip rectange
+      int wx0 = 0, wy0 = 0, wx1 = scrwdt-1, wy1 = scrhgt-1;
+      // other vars
+      int stx, sty; // "steps" for x and y axes
+      int dsx, dsy; // "lengthes" for x and y axes
+      int dx2, dy2; // "double lengthes" for x and y axes
+      int xd, yd; // current coord
+      int e; // "error" (as in bresenham algo)
+      int rem;
+      int term;
+      int *d0, d1;
+      // horizontal setup
+      if (x0 < x1) {
+        // from left to right
+        if (x0 > wx1 || x1 < wx0) return; // out of screen
+        stx = 1; // going right
+      } else {
+        // from right to left
+        if (x1 > wx1 || x0 < wx0) return; // out of screen
+        stx = -1; // going left
+        x0 = -x0;
+        x1 = -x1;
+        wx0 = -wx0;
+        wx1 = -wx1;
+        mixin(swap!("wx0", "wx1"));
+      }
+      // vertical setup
+      if (y0 < y1) {
+        // from top to bottom
+        if (y0 > wy1 || y1 < wy0) return; // out of screen
+        sty = 1; // going down
+      } else {
+        // from bottom to top
+        if (y1 > wy1 || y0 < wy0) return; // out of screen
+        sty = -1; // going up
+        y0 = -y0;
+        y1 = -y1;
+        wy0 = -wy0;
+        wy1 = -wy1;
+        mixin(swap!("wy0", "wy1"));
+      }
+      dsx = x1-x0;
+      dsy = y1-y0;
+      if (dsx < dsy) {
+        d0 = &yd;
+        d1 = &xd;
+        mixin(swap!("x0", "y0"));
+        mixin(swap!("x1", "y1"));
+        mixin(swap!("dsx", "dsy"));
+        mixin(swap!("wx0", "wy0"));
+        mixin(swap!("wx1", "wy1"));
+        mixin(swap!("stx", "sty"));
+      } else {
+        d0 = &xd;
+        d1 = &yd;
+      }
+      dx2 = 2*dsx;
+      dy2 = 2*dsy;
+      xd = x0;
+      yd = y0;
+      e = 2*dsy-dsx;
+      term = x1;
+      bool xfixed = false;
+      if (y0 < wy0) {
+        // clip at top
+        int temp = dx2*(wy0-y0)-dsx;
+        xd += temp/dy2;
+        rem = temp%dy2;
+        if (xd > wx1) return; // x is moved out of clipping rect, nothing to do
+        if (xd+1 >= wx0) {
+          yd = wy0;
+          e -= rem+dsx;
+          if (rem > 0) { ++xd; e += dy2; }
+          xfixed = true;
+        }
+      }
+      if (!xfixed && x0 < wx0) {
+        // clip at left
+        int temp = dy2*(wx0-x0);
+        yd += temp/dx2;
+        rem = temp%dx2;
+        if (yd > wy1 || yd == wy1 && rem >= dsx) return;
+        xd = wx0;
+        e += rem;
+        if (rem >= dsx) { ++yd; e -= dx2; }
+      }
+      if (y1 > wy1) {
+        // clip at bottom
+        int temp = dx2*(wy1-y0)+dsx;
+        term = x0+temp/dy2;
+        rem = temp%dy2;
+        if (rem == 0) --term;
+      }
+      if (term > wx1) term = wx1; // clip at right
+      static if (lastPoint) {
+        // draw last point
+        ++term;
+      } else {
+        if (term == xd) return; // this is the only point, get out of here
+      }
+      if (sty == -1) yd = -yd;
+      if (stx == -1) { xd = -xd; term = -term; }
+      dx2 -= dy2;
+      // draw it; `vsetPixel()` can omit checks
+      while (xd != term) {
+        vsetPixel(*d0, *d1, conColor);
+        // done drawing, move coords
+        if (e >= 0) {
+          yd += sty;
+          e -= dx2;
+        } else {
+          e += dy2;
+        }
+        xd += stx;
+      }
+    }
+
+    static void drawCircle (int cx, int cy, int radius) nothrow @trusted @nogc {
+      static void plot4points() (int cx, int cy, int x, int y) nothrow @trusted @nogc {
+        vsetPixel(cx+x, cy+y, conColor);
+        if (x != 0) vsetPixel(cx-x, cy+y, conColor);
+        if (y != 0) vsetPixel(cx+x, cy-y, conColor);
+        vsetPixel(cx-x, cy-y, conColor);
+      }
+
+      if (radius > 0) {
+        int error = -radius, x = radius, y = 0;
+        if (radius == 1) { vsetPixel(cx, cy, conColor); return; }
+        while (x > y) {
+          plot4points(cx, cy, x, y);
+          plot4points(cx, cy, y, x);
+          error += y*2+1;
+          ++y;
+          if (error >= 0) { --x; error -= x*2; }
+        }
+        plot4points(cx, cy, x, y);
+      }
+    }
+
+    static auto deg2rad(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*PI/180.0; }
+
+    drawCircle(x0, y0, radius);
+    foreach (immutable n; 0..5) {
+      import std.math;
+      auto a0 = deg2rad(360.0/5*n+18);
+      auto a1 = deg2rad(360.0/5*(n+2)+18);
+      drawLine(
+        cast(uint)(x0+cos(a0)*radius), cast(uint)(y0+sin(a0)*radius),
+        cast(uint)(x0+cos(a1)*radius), cast(uint)(y0+sin(a1)*radius),
+      );
+    }
+  }
+
   enum XOfs = 0;
   if (conLastChange == cbufLastChange) return;
   // rerender console
   conLastChange = cbufLastChange;
   int skipLines = conskiplines;
   convbuf[0..scrwdt*scrhgt] = 0xff000000;
+  {
+    import std.algorithm : min;
+    conSetColor(rConStarColor);
+    int radius = min(scrwdt, scrhgt)/3;
+    drawStar(scrwdt/2, /*scrhgt/2*/scrhgt-radius-16, radius);
+  }
   {
     // draw command line
     //int y = /*convbuf.height*/rConsoleHeight-conCharHeight/*-2*/;
