@@ -35,6 +35,9 @@ import iv.vfs.error;
 import iv.vfs.augs;
 import iv.vfs.streams.mem;
 
+version(LDC) {}
+else { version = vfs_stdio_wrapper; }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// wrapper structure for various streams. kinda like `std.stdio.File`,
@@ -72,6 +75,7 @@ public:
     if (wstp) wst.incRef();
   }
 
+  version(vfs_stdio_wrapper)
   this (std.stdio.File fl) {
     try {
       wstp = WrapStdioFile(fl);
@@ -338,6 +342,7 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version(vfs_stdio_wrapper)
 final class WrappedStreamStdioFile : WrappedStreamRC {
 private:
   std.stdio.File fl;
@@ -366,6 +371,7 @@ protected:
 }
 
 
+version(vfs_stdio_wrapper)
 usize WrapStdioFile (std.stdio.File fl) {
   return newWS!WrappedStreamStdioFile(fl);
 }
@@ -599,6 +605,7 @@ protected:
 
 
 /// wrap `std.stdio.File` into `VFile`
+version(vfs_stdio_wrapper)
 public VFile wrapStream (std.stdio.File st) { return VFile(st); }
 
 /// wrap another `VFile` into `VFile`

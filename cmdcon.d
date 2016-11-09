@@ -30,7 +30,7 @@
  *   '~': fill with the following char instead of space
  *        second '~': right filling char for 'center'
  */
-module iv.cmdcon is aliced;
+module iv.cmdcon /*is aliced*/;
 private:
 
 
@@ -78,8 +78,8 @@ public @property uint cbufLastChange () nothrow @trusted @nogc { import core.ato
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void consoleLock() () { pragma(inline, true); consoleLocker.lock(); } /// multithread lock
-public void consoleUnlock() () { pragma(inline, true); consoleLocker.unlock(); } /// multithread unlock
+public void consoleLock() () { pragma(inline, true); version(aliced) consoleLocker.lock(); } /// multithread lock
+public void consoleUnlock() () { pragma(inline, true); version(aliced) consoleLocker.unlock(); } /// multithread unlock
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -538,7 +538,7 @@ public template conwritef(string fmt, A...) {
     int wdt, maxwdt;
     char fmtch;
 
-    argloop: foreach (immutable argnum, auto att; A) {
+    argloop: foreach (immutable argnum, /*auto*/ att; A) {
       alias at = XUQQ!att;
       if (!simples) {
         processUntilFSp();
@@ -776,7 +776,7 @@ unittest {
 mixin template condump (Names...) {
   auto _xdump_tmp_ = {
     import iv.cmdcon : conwrite;
-    foreach (auto i, auto name; Names) conwrite(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
+    foreach (/*auto*/ i, /*auto*/ name; Names) conwrite(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
     return false;
   }();
 }
@@ -1178,7 +1178,7 @@ static:
         case '\x00': wrt("0"); break;
         case '\a': wrt("a"); break;
         case '\b': wrt("b"); break;
-        case '\e': wrt("e"); break;
+        case '\x1b': wrt("e"); break;
         case '\f': wrt("f"); break;
         case '\n': wrt("n"); break;
         case '\r': wrt("r"); break;
@@ -1450,7 +1450,7 @@ final class ConVar(T, bool strashex=false) : ConVarBase {
         return;
       }
     }
-    T val = parseType!T(ref cmdline);
+    T val = parseType!T(/*ref*/ cmdline);
     if (hasArgs(cmdline)) throw exTooManyArgs;
     static if (isIntegral!T) {
       if (val < minv) val = minv;
@@ -1737,7 +1737,7 @@ public void conRegFunc(alias fn) (string aname, string ahelp=null) if (isCallabl
         alias defaultArguments = ParameterDefaultValueTuple!fn;
         //pragma(msg, "defs: ", defaultArguments);
         import std.conv : to;
-        foreach (auto idx, ref arg; args) {
+        foreach (/*auto*/ idx, ref arg; args) {
           // populate arguments, with user data if available,
           // default if not, and throw if no argument provided
           if (hasArgs(cmdline)) {
@@ -2242,7 +2242,7 @@ void conhisAdd (ConString cmd) {
     foreach (immutable c; idx+1..concmdhistory.length) concmdhistory.ptr[c-1][] = concmdhistory.ptr[c][];
   }
   // make room
-  foreach (immutable c; 1..concmdhistory.length; reverse) concmdhistory.ptr[c][] = concmdhistory.ptr[c-1][];
+  foreach_reverse (immutable c; 1..concmdhistory.length) concmdhistory.ptr[c][] = concmdhistory.ptr[c-1][];
   concmdhistory.ptr[0][] = 0;
   concmdhistory.ptr[0][0..cmd.length] = cmd[];
 }
@@ -2282,12 +2282,12 @@ public void conAddInputChar (char ch) {
     if (conclilen > 0) {
       string minPfx = null;
       // find longest command
-      foreach (auto name; conByCommand) {
+      foreach (/*auto*/ name; conByCommand) {
         if (name.length >= conclilen && name.length > minPfx.length && name[0..conclilen] == concli[0..conclilen]) minPfx = name;
       }
       //conwriteln("longest command: [", minPfx, "]");
       // find longest prefix
-      foreach (auto name; conByCommand) {
+      foreach (/*auto*/ name; conByCommand) {
         if (name.length < conclilen) continue;
         if (name[0..conclilen] != concli[0..conclilen]) continue;
         usize pos = 0;
@@ -2311,7 +2311,7 @@ public void conAddInputChar (char ch) {
     }
     // nope, print all available commands
     bool needDelimiter = true;
-    foreach (auto name; conByCommand) {
+    foreach (/*auto*/ name; conByCommand) {
       if (conclilen > 0) {
         if (name.length < conclilen) continue;
         if (name[0..conclilen] != concli[0..conclilen]) continue;

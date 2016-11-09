@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.glcmdcon is aliced;
+module iv.glcmdcon /*is aliced*/;
 private:
 
 //import arsd.color;
@@ -651,7 +651,7 @@ void renderConsole () nothrow @trusted @nogc {
       }
     }
 
-    foreach (auto line; conbufLinesRev) {
+    foreach (/*auto*/ line; conbufLinesRev) {
       putLine(line);
       if (y+conCharHeight <= 0) break;
     }
