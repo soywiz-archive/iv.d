@@ -232,6 +232,27 @@ void conwriter (scope ConString str) nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// i am VERY sorry for this!
+private template XUQQ(T) {
+  static if (is(T : shared TT, TT)) {
+         static if (is(TT : const TX, TX)) alias XUQQ = TX;
+    else static if (is(TT : immutable TX, TX)) alias XUQQ = TX;
+    else alias XUQQ = TT;
+  } else static if (is(T : const TT, TT)) {
+         static if (is(TT : shared TX, TX)) alias XUQQ = TX;
+    else static if (is(TT : immutable TX, TX)) alias XUQQ = TX;
+    else alias XUQQ = TT;
+  } else static if (is(T : immutable TT, TT)) {
+         static if (is(TT : const TX, TX)) alias XUQQ = TX;
+    else static if (is(TT : shared TX, TX)) alias XUQQ = TX;
+    else alias XUQQ = TT;
+  } else {
+    alias XUQQ = T;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 private void cwrxputch (scope const(char)[] s...) nothrow @trusted @nogc {
   pragma(inline, true);
   if (s.length) cbufPut(s);
@@ -281,13 +302,12 @@ private void cwrxputchar (char ch, char signw, char lchar, char rchar, int wdt, 
 private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   char[32] buf = ' ';
 
-  import std.traits : Unqual;
   static if (is(TT == shared)) {
     import core.atomic;
-    alias T = Unqual!TT;
+    alias T = XUQQ!TT;
     T n = atomicLoad(nn);
   } else {
-    alias T = Unqual!TT;
+    alias T = XUQQ!TT;
     T n = nn;
   }
 
@@ -325,13 +345,12 @@ private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt,
 private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   char[32] buf = ' ';
 
-  import std.traits : Unqual;
   static if (is(TT == shared)) {
     import core.atomic;
-    alias T = Unqual!TT;
+    alias T = XUQQ!TT;
     T n = atomicLoad(nn);
   } else {
-    alias T = Unqual!TT;
+    alias T = XUQQ!TT;
     T n = nn;
   }
 
@@ -370,13 +389,12 @@ private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rc
 private void cwrxputfloat(TT) (TT nn, bool simple, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc, realloc;
 
-  import std.traits : Unqual;
   static if (is(TT == shared)) {
     import core.atomic;
-    alias T = Unqual!TT;
+    alias T = XUQQ!TT;
     T n = atomicLoad(nn);
   } else {
-    alias T = Unqual!TT;
+    alias T = XUQQ!TT;
     T n = nn;
   }
 
@@ -520,7 +538,8 @@ public template conwritef(string fmt, A...) {
     int wdt, maxwdt;
     char fmtch;
 
-    argloop: foreach (immutable argnum, auto at; A) {
+    argloop: foreach (immutable argnum, auto att; A) {
+      alias at = XUQQ!att;
       if (!simples) {
         processUntilFSp();
         if (pos >= fmt.length) assert(0, "out of format specifiers for arguments");
