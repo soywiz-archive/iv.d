@@ -30,6 +30,8 @@ static if (__traits(compiles, (){import arsd.simpledisplay;}())) {
   enum OptGlCmdConHasSdpy = false;
 }
 
+version(aliced) {} else { private alias usize = size_t; }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared uint winScale = 0;
