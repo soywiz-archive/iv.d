@@ -620,23 +620,22 @@ private:
   GifPalette pal;
 
 public:
-  /** Creates a gif file.
+  /** Creates a gif writer.
    *
    * The delay value is the time between frames in hundredths of a second.
    * Note that not all viewers pay much attention to this value.
    *
    * USAGE:
-   * Create a GifContext struct. Pass it to gifBegin() to initialize and write the header.
-   * Pass subsequent frames to gifWriteFrame().
-   * Finally, call gifEnd() to close the file handle and free memory.
+   * Create a GifWriter class. Pass subsequent frames to writeFrame().
+   * Finally, call finish() to close the file handle and free memory.
    *
    * Params:
-   *   writeButesCB = file write delegate; should write the whole buffer or throw; will never be called with zero-length buffer
+   *   writeBytesCB = file write delegate; should write the whole buffer or throw; will never be called with zero-length buffer
    *   width = maximum picture width
    *   height = maximum picture height
    *   delay = delay between frames, in 1/100 of second
-   *   bitDepth = don't touch this
-   *   dither = don't touch this
+   *   bitDepth = resulting image bit depth; [1..8]
+   *   dither = dither resulting image (image may or may not look better when dithered ;-)
    */
   this (WriterCB writeBytesCB, uint width, uint height, uint delay, ubyte bitDepth=8, bool dither=false) {
     if (writeBytesCB is null) throw new Exception("no write delegate");
@@ -654,13 +653,7 @@ public:
 
   /** Writes out a new frame to a GIF in progress.
    *
-   * The GIFWriter should have been created by GIFBegin.
-   * AFAIK, it is legal to use different bit depths for different frames of an image;
-   * this may be handy to save bits in animations that don't change much. But you'd
-   * better don't do that.
-   *
    * Params:
-   *   writer = writer "context"
    *   image = frame RGBA data, width*height*4 bytes
    *   delay = delay between frames, in 1/100 of second
    *   width = frame width
@@ -688,14 +681,8 @@ public:
   static if (GifWriterHasArsdColor) {
     /** Writes out a new frame to a GIF in progress.
      *
-     * The GIFWriter should have been created by GIFBegin.
-     * AFAIK, it is legal to use different bit depths for different frames of an image;
-     * this may be handy to save bits in animations that don't change much. But you'd
-     * better don't do that.
-     *
      * Params:
-     *   writer = writer "context"
-     *   image = frame data, width*height pixels
+     *   mimage = frame data, width*height pixels
      *   delay = delay between frames, in 1/100 of second
      */
     void writeFrame() (MemoryImage mimage, uint delay=uint.max) {
@@ -710,7 +697,7 @@ public:
     }
   }
 
-  /** Writes the EOF code, closes the file handle, and frees temp memory used by a GIF.
+  /** Writes the EOF code.
    *
    * Many if not most viewers will still display a GIF properly if the EOF code is missing,
    * but it's still a good idea to write it out.
@@ -729,7 +716,7 @@ public:
    * This can be used to flip result of `glReadPixels()`, for example.
    *
    * Params:
-   *   image = frame RGBA data, width*height*4 bytes
+   *   img = frame RGBA data, width*height*4 bytes
    *   width = frame width
    *   height = frame height
    */
