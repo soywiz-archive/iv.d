@@ -699,7 +699,7 @@ public template conwritef(string fmt, A...) {
       if (pos >= fmt.length) break;
       assert(fmt[pos] == '%');
       ++pos;
-      if (pos < fmt.length && fmt[pos] == '!') { ++pos; continue; } // skip rest
+      if (pos < fmt.length && (fmt[pos] == '!' || fmt[pos] == '|')) { ++pos; continue; } // skip rest
       assert(0, "too many format specifiers");
     }
     return res;
