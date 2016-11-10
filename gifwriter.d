@@ -1,5 +1,4 @@
-// gif.h
-// by Charlie Tangora
+// based on gif.h by Charlie Tangora
 // Public domain.
 // Email me : ctangora -at- gmail -dot- com
 //
@@ -14,22 +13,13 @@
 // as a quick and easily-integrated way for programs to spit out animations.
 //
 // Only RGBA8 is currently supported as an input format. (The alpha is ignored.)
-//
-// USAGE:
-// Create a GifContext struct. Pass it to gifBegin() to initialize and write the header.
-// Pass subsequent frames to gifWriteFrame().
-// Finally, call gifEnd() to close the file handle and free memory.
-//
 module iv.gifwriter;
 private:
 
-import iv.vfs;
-
-
 enum kGifTransIndex = 0;
 
-struct gifPalette {
-  int bitDepth;
+struct GifPalette {
+  ubyte bitDepth;
 
   ubyte[256] r;
   ubyte[256] g;
@@ -51,15 +41,15 @@ int gifIAbs() (int i) { pragma(inline, true); return (i < 0 ? -i : i); }
 // Takes as in/out parameters the current best color and its error -
 // only changes them if it finds a better color in its subtree.
 // this is the major hotspot in the code at the moment.
-void gifGetClosestPaletteColor (gifPalette* pPal, int r, int g, int b, ref int bestInd, ref int bestDiff, int treeRoot=1) {
+void gifGetClosestPaletteColor (GifPalette* pPal, int r, int g, int b, ref int bestInd, ref int bestDiff, int treeRoot=1) {
   // base case, reached the bottom of the tree
   if (treeRoot > (1<<pPal.bitDepth)-1) {
     int ind = treeRoot-(1<<pPal.bitDepth);
     if (ind == kGifTransIndex) return;
     // check whether this color is better than the current winner
-    int r_err = r-(cast(int)pPal.r[ind]);
-    int g_err = g-(cast(int)pPal.g[ind]);
-    int b_err = b-(cast(int)pPal.b[ind]);
+    int r_err = r-(cast(int)pPal.r.ptr[ind]);
+    int g_err = g-(cast(int)pPal.g.ptr[ind]);
+    int b_err = b-(cast(int)pPal.b.ptr[ind]);
     int diff = gifIAbs(r_err)+gifIAbs(g_err)+gifIAbs(b_err);
     if (diff < bestDiff) {
       bestInd = ind;
@@ -72,9 +62,9 @@ void gifGetClosestPaletteColor (gifPalette* pPal, int r, int g, int b, ref int b
   comps[0] = r;
   comps[1] = g;
   comps[2] = b;
-  int splitComp = comps[pPal.treeSplitElt[treeRoot]];
+  int splitComp = comps[pPal.treeSplitElt.ptr[treeRoot]];
 
-  int splitPos = pPal.treeSplit[treeRoot];
+  int splitPos = pPal.treeSplit.ptr[treeRoot];
   if (splitPos > splitComp) {
     // check the left subtree
     gifGetClosestPaletteColor(pPal, r, g, b, bestInd, bestDiff, treeRoot*2);
@@ -151,7 +141,7 @@ void gifPartitionByMedian (ubyte* image, int left, int right, int com, int neede
 
 
 // builds a palette by creating a balanced k-d tree of all pixels in the image
-void gifSplitPalette (ubyte* image, int numPixels, int firstElt, int lastElt, int splitElt, int splitDist, int treeNode, bool buildForDither, gifPalette* pal) {
+void gifSplitPalette (ubyte* image, int numPixels, int firstElt, int lastElt, int splitElt, int splitDist, int treeNode, bool buildForDither, GifPalette* pal) {
   if (lastElt <= firstElt || numPixels == 0) return;
   // base case, bottom of the tree
   if (lastElt == firstElt+1) {
@@ -166,9 +156,9 @@ void gifSplitPalette (ubyte* image, int numPixels, int firstElt, int lastElt, in
            g = gifIMin(g, image[ii*4+1]);
            b = gifIMin(b, image[ii*4+2]);
         }
-        pal.r[firstElt] = cast(ubyte)r;
-        pal.g[firstElt] = cast(ubyte)g;
-        pal.b[firstElt] = cast(ubyte)b;
+        pal.r.ptr[firstElt] = cast(ubyte)r;
+        pal.g.ptr[firstElt] = cast(ubyte)g;
+        pal.b.ptr[firstElt] = cast(ubyte)b;
         return;
       }
       if (firstElt == (1<<pal.bitDepth)-1) {
@@ -179,9 +169,9 @@ void gifSplitPalette (ubyte* image, int numPixels, int firstElt, int lastElt, in
           g = gifIMax(g, image[ii*4+1]);
           b = gifIMax(b, image[ii*4+2]);
         }
-        pal.r[firstElt] = cast(ubyte)r;
-        pal.g[firstElt] = cast(ubyte)g;
-        pal.b[firstElt] = cast(ubyte)b;
+        pal.r.ptr[firstElt] = cast(ubyte)r;
+        pal.g.ptr[firstElt] = cast(ubyte)g;
+        pal.b.ptr[firstElt] = cast(ubyte)b;
         return;
       }
     }
@@ -202,9 +192,9 @@ void gifSplitPalette (ubyte* image, int numPixels, int firstElt, int lastElt, in
     g /= numPixels;
     b /= numPixels;
 
-    pal.r[firstElt] = cast(ubyte)r;
-    pal.g[firstElt] = cast(ubyte)g;
-    pal.b[firstElt] = cast(ubyte)b;
+    pal.r.ptr[firstElt] = cast(ubyte)r;
+    pal.g.ptr[firstElt] = cast(ubyte)g;
+    pal.b.ptr[firstElt] = cast(ubyte)b;
 
     return;
   }
@@ -239,8 +229,8 @@ void gifSplitPalette (ubyte* image, int numPixels, int firstElt, int lastElt, in
 
   gifPartitionByMedian(image, 0, numPixels, splitCom, subPixelsA);
 
-  pal.treeSplitElt[treeNode] = cast(ubyte)splitCom;
-  pal.treeSplit[treeNode] = image[subPixelsA*4+splitCom];
+  pal.treeSplitElt.ptr[treeNode] = cast(ubyte)splitCom;
+  pal.treeSplit.ptr[treeNode] = image[subPixelsA*4+splitCom];
 
   gifSplitPalette(image,              subPixelsA, firstElt, splitElt, splitElt-splitDist, splitDist/2, treeNode*2,   buildForDither, pal);
   gifSplitPalette(image+subPixelsA*4, subPixelsB, splitElt, lastElt,  splitElt+splitDist, splitDist/2, treeNode*2+1, buildForDither, pal);
@@ -271,7 +261,7 @@ int gifPickChangedPixels (const(ubyte)* lastFrame, ubyte* frame, int numPixels) 
 
 // Creates a palette by placing all the image pixels in a k-d tree and then averaging the blocks at the bottom.
 // This is known as the "modified median split" technique
-void gifMakePalette (const(ubyte)* lastFrame, const(ubyte)* nextFrame, uint width, uint height, int bitDepth, bool buildForDither, gifPalette* pPal) {
+void gifMakePalette (const(ubyte)* lastFrame, const(ubyte)* nextFrame, uint width, uint height, ubyte bitDepth, bool buildForDither, GifPalette* pPal) {
   import core.stdc.stdlib : malloc, free;
   import core.stdc.string : memcpy;
 
@@ -297,15 +287,15 @@ void gifMakePalette (const(ubyte)* lastFrame, const(ubyte)* nextFrame, uint widt
   //GIF_TEMP_FREE(destroyableImage);
 
   // add the bottom node for the transparency index
-  pPal.treeSplit[1<<(bitDepth-1)] = 0;
-  pPal.treeSplitElt[1<<(bitDepth-1)] = 0;
+  pPal.treeSplit.ptr[1<<(bitDepth-1)] = 0;
+  pPal.treeSplitElt.ptr[1<<(bitDepth-1)] = 0;
 
-  pPal.r[0] = pPal.g[0] = pPal.b[0] = 0;
+  pPal.r.ptr[0] = pPal.g.ptr[0] = pPal.b.ptr[0] = 0;
 }
 
 
 // Implements Floyd-Steinberg dithering, writes palette value to alpha
-void gifDitherImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte* outFrame, uint width, uint height, gifPalette* pPal) {
+void gifDitherImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte* outFrame, uint width, uint height, GifPalette* pPal) {
   import core.stdc.stdlib : malloc, free;
   int numPixels = width*height;
 
@@ -348,13 +338,13 @@ void gifDitherImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte* ou
       gifGetClosestPaletteColor(pPal, rr, gg, bb, bestInd, bestDiff);
 
       // Write the result to the temp buffer
-      int r_err = nextPix[0]-cast(int)(pPal.r[bestInd])*256;
-      int g_err = nextPix[1]-cast(int)(pPal.g[bestInd])*256;
-      int b_err = nextPix[2]-cast(int)(pPal.b[bestInd])*256;
+      int r_err = nextPix[0]-cast(int)(pPal.r.ptr[bestInd])*256;
+      int g_err = nextPix[1]-cast(int)(pPal.g.ptr[bestInd])*256;
+      int b_err = nextPix[2]-cast(int)(pPal.b.ptr[bestInd])*256;
 
-      nextPix[0] = pPal.r[bestInd];
-      nextPix[1] = pPal.g[bestInd];
-      nextPix[2] = pPal.b[bestInd];
+      nextPix[0] = pPal.r.ptr[bestInd];
+      nextPix[1] = pPal.g.ptr[bestInd];
+      nextPix[2] = pPal.b.ptr[bestInd];
       nextPix[3] = bestInd;
 
       // Propagate the error to the four adjacent locations
@@ -366,30 +356,30 @@ void gifDitherImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte* ou
 
       if (quantloc_7 < numPixels) {
         int* pix7 = quantPixels+4*quantloc_7;
-        pix7[0] += gifIMax( -pix7[0], r_err * 7 / 16 );
-        pix7[1] += gifIMax( -pix7[1], g_err * 7 / 16 );
-        pix7[2] += gifIMax( -pix7[2], b_err * 7 / 16 );
+        pix7[0] += gifIMax(-pix7[0], r_err*7/16);
+        pix7[1] += gifIMax(-pix7[1], g_err*7/16);
+        pix7[2] += gifIMax(-pix7[2], b_err*7/16);
       }
 
       if (quantloc_3 < numPixels) {
         int* pix3 = quantPixels+4*quantloc_3;
-        pix3[0] += gifIMax( -pix3[0], r_err * 3 / 16 );
-        pix3[1] += gifIMax( -pix3[1], g_err * 3 / 16 );
-        pix3[2] += gifIMax( -pix3[2], b_err * 3 / 16 );
+        pix3[0] += gifIMax(-pix3[0], r_err*3/16);
+        pix3[1] += gifIMax(-pix3[1], g_err*3/16);
+        pix3[2] += gifIMax(-pix3[2], b_err*3/16);
       }
 
       if (quantloc_5 < numPixels) {
         int* pix5 = quantPixels+4*quantloc_5;
-        pix5[0] += gifIMax( -pix5[0], r_err * 5 / 16 );
-        pix5[1] += gifIMax( -pix5[1], g_err * 5 / 16 );
-        pix5[2] += gifIMax( -pix5[2], b_err * 5 / 16 );
+        pix5[0] += gifIMax(-pix5[0], r_err*5/16);
+        pix5[1] += gifIMax(-pix5[1], g_err*5/16);
+        pix5[2] += gifIMax(-pix5[2], b_err*5/16);
       }
 
       if (quantloc_1 < numPixels) {
         int* pix1 = quantPixels+4*quantloc_1;
-        pix1[0] += gifIMax( -pix1[0], r_err / 16 );
-        pix1[1] += gifIMax( -pix1[1], g_err / 16 );
-        pix1[2] += gifIMax( -pix1[2], b_err / 16 );
+        pix1[0] += gifIMax(-pix1[0], r_err/16);
+        pix1[1] += gifIMax(-pix1[1], g_err/16);
+        pix1[2] += gifIMax(-pix1[2], b_err/16);
       }
     }
   }
@@ -401,7 +391,7 @@ void gifDitherImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte* ou
 
 
 // Picks palette colors for the image using simple thresholding, no dithering
-void gifThresholdImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte* outFrame, uint width, uint height, gifPalette* pPal) {
+void gifThresholdImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte* outFrame, uint width, uint height, GifPalette* pPal) {
   uint numPixels = width*height;
   for (uint ii = 0; ii < numPixels; ++ii) {
     // if a previous color is available, and it matches the current color, set the pixel to transparent
@@ -416,9 +406,9 @@ void gifThresholdImage (const(ubyte)* lastFrame, const(ubyte)* nextFrame, ubyte*
       int bestInd = 1;
       gifGetClosestPaletteColor(pPal, nextFrame[0], nextFrame[1], nextFrame[2], bestInd, bestDiff);
       // Write the resulting color to the output buffer
-      outFrame[0] = pPal.r[bestInd];
-      outFrame[1] = pPal.g[bestInd];
-      outFrame[2] = pPal.b[bestInd];
+      outFrame[0] = pPal.r.ptr[bestInd];
+      outFrame[1] = pPal.g.ptr[bestInd];
+      outFrame[2] = pPal.b.ptr[bestInd];
       outFrame[3] = cast(ubyte)bestInd;
     }
     if (lastFrame) lastFrame += 4;
@@ -455,20 +445,21 @@ void gifWriteBit (ref gifBitStatus stat, uint bit) {
 
 
 // write all bytes so far to the file
-void gifWriteChunk (VFile f, ref gifBitStatus stat) {
-  f.writeNum!ubyte(cast(ubyte)stat.chunkIndex);
-  f.rawWriteExact(stat.chunk[0..stat.chunkIndex]);
+void gifWriteChunk (GifWriter.WriterCB wr, ref gifBitStatus stat) {
+  ubyte[1] b = cast(ubyte)stat.chunkIndex;
+  wr(b[]);
+  wr(stat.chunk[0..stat.chunkIndex]);
   stat.bitIndex = 0;
   stat.bytev = 0;
   stat.chunkIndex = 0;
 }
 
 
-void gifWriteCode (VFile f, ref gifBitStatus stat, uint code, uint length) {
+void gifWriteCode (GifWriter.WriterCB wr, ref gifBitStatus stat, uint code, uint length) {
   for (uint ii = 0; ii < length; ++ii) {
     gifWriteBit(stat, code);
     code = code>>1;
-    if (stat.chunkIndex == 255) gifWriteChunk(f, stat);
+    if (stat.chunkIndex == 255) gifWriteChunk(wr, stat);
   }
 }
 
@@ -480,60 +471,63 @@ struct gifLzwNode {
 
 
 // write a 256-color (8-bit) image palette to the file
-void gifWritePalette (const(gifPalette)* pPal, VFile f) {
+void gifWritePalette (const(GifPalette)* pPal, GifWriter.WriterCB wr) {
   // first color: transparency
-  f.writeNum!ubyte(0);
-  f.writeNum!ubyte(0);
-  f.writeNum!ubyte(0);
-  for (int ii = 1; ii < (1<<pPal.bitDepth); ++ii) {
-    f.writeNum!ubyte(cast(ubyte)pPal.r[ii]);
-    f.writeNum!ubyte(cast(ubyte)pPal.g[ii]);
-    f.writeNum!ubyte(cast(ubyte)pPal.b[ii]);
+  int ii;
+  ubyte[256*3] b = 0;
+  assert(pPal.bitDepth <= 8);
+  for (ii = 1; ii < (1<<pPal.bitDepth); ++ii) {
+    b.ptr[ii*3+0] = cast(ubyte)pPal.r.ptr[ii];
+    b.ptr[ii*3+1] = cast(ubyte)pPal.g.ptr[ii];
+    b.ptr[ii*3+2] = cast(ubyte)pPal.b.ptr[ii];
   }
+  wr(b[0..ii*3]);
 }
 
 
 // write the image header, LZW-compress and write out the image
-void gifWriteLzwImage (VFile f, ubyte* image, uint left, uint top,  uint width, uint height, uint delay, gifPalette* pPal) {
-  import core.stdc.stdlib : malloc, free;
+void gifWriteLzwImage (GifWriter.WriterCB wr, gifLzwNode* codetree, ubyte* image, uint left, uint top,  uint width, uint height, uint delay, GifPalette* pPal) {
+  //import core.stdc.stdlib : malloc, free;
   import core.stdc.string : memset;
 
+  void writeByte (ubyte b) { wr((&b)[0..1]); }
+
   // graphics control extension
-  f.writeNum!ubyte(cast(ubyte)(0x21));
-  f.writeNum!ubyte(cast(ubyte)(0xf9));
-  f.writeNum!ubyte(cast(ubyte)(0x04));
-  f.writeNum!ubyte(cast(ubyte)(0x05)); // leave prev frame in place, this frame has transparency
-  f.writeNum!ubyte(cast(ubyte)(delay & 0xff));
-  f.writeNum!ubyte(cast(ubyte)((delay >> 8) & 0xff));
-  f.writeNum!ubyte(cast(ubyte)(kGifTransIndex)); // transparent color index
-  f.writeNum!ubyte(cast(ubyte)(0));
+  writeByte(cast(ubyte)(0x21));
+  writeByte(cast(ubyte)(0xf9));
+  writeByte(cast(ubyte)(0x04));
+  writeByte(cast(ubyte)(0x05)); // leave prev frame in place, this frame has transparency
+  writeByte(cast(ubyte)(delay&0xff));
+  writeByte(cast(ubyte)((delay>>8)&0xff));
+  writeByte(cast(ubyte)(kGifTransIndex)); // transparent color index
+  writeByte(cast(ubyte)(0));
 
-  f.writeNum!ubyte(cast(ubyte)(0x2c)); // image descriptor block
+  writeByte(cast(ubyte)(0x2c)); // image descriptor block
 
-  f.writeNum!ubyte(cast(ubyte)(left & 0xff));           // corner of image in canvas space
-  f.writeNum!ubyte(cast(ubyte)((left >> 8) & 0xff));
-  f.writeNum!ubyte(cast(ubyte)(top & 0xff));
-  f.writeNum!ubyte(cast(ubyte)((top >> 8) & 0xff));
+  writeByte(cast(ubyte)(left&0xff));           // corner of image in canvas space
+  writeByte(cast(ubyte)((left>>8)&0xff));
+  writeByte(cast(ubyte)(top&0xff));
+  writeByte(cast(ubyte)((top>>8)&0xff));
 
-  f.writeNum!ubyte(cast(ubyte)(width & 0xff));          // width and height of image
-  f.writeNum!ubyte(cast(ubyte)((width >> 8) & 0xff));
-  f.writeNum!ubyte(cast(ubyte)(height & 0xff));
-  f.writeNum!ubyte(cast(ubyte)((height >> 8) & 0xff));
+  writeByte(cast(ubyte)(width&0xff));          // width and height of image
+  writeByte(cast(ubyte)((width>>8)&0xff));
+  writeByte(cast(ubyte)(height&0xff));
+  writeByte(cast(ubyte)((height>>8)&0xff));
 
-  //f.writeNum!ubyte(cast(ubyte)(0)); // no local color table, no transparency
-  //f.writeNum!ubyte(cast(ubyte)(0x80)); // no local color table, but transparency
+  //writeByte(cast(ubyte)(0)); // no local color table, no transparency
+  //writeByte(cast(ubyte)(0x80)); // no local color table, but transparency
 
-  f.writeNum!ubyte(cast(ubyte)(0x80 + pPal.bitDepth-1)); // local color table present, 2 ^ bitDepth entries
-  gifWritePalette(pPal, f);
+  writeByte(cast(ubyte)(0x80+pPal.bitDepth-1)); // local color table present, 2^bitDepth entries
+  gifWritePalette(pPal, wr);
 
   immutable int minCodeSize = pPal.bitDepth;
-  immutable uint clearCode = 1 << pPal.bitDepth;
+  immutable uint clearCode = 1<<pPal.bitDepth;
 
-  f.writeNum!ubyte(cast(ubyte)(minCodeSize)); // min code size 8 bits
+  writeByte(cast(ubyte)(minCodeSize)); // min code size 8 bits
 
-  gifLzwNode* codetree = cast(gifLzwNode*)malloc(gifLzwNode.sizeof*4096);
-  if (codetree is null) assert(0, "out of memory");
-  scope(exit) free(codetree);
+  //gifLzwNode* codetree = cast(gifLzwNode*)malloc(gifLzwNode.sizeof*4096);
+  //if (codetree is null) assert(0, "out of memory");
+  //scope(exit) free(codetree);
 
   memset(codetree, 0, gifLzwNode.sizeof*4096);
   int curCode = -1;
@@ -545,7 +539,7 @@ void gifWriteLzwImage (VFile f, ubyte* image, uint left, uint top,  uint width, 
   stat.bitIndex = 0;
   stat.chunkIndex = 0;
 
-  gifWriteCode(f, stat, clearCode, codeSize);  // start with a fresh LZW dictionary
+  gifWriteCode(wr, stat, clearCode, codeSize);  // start with a fresh LZW dictionary
 
   for (uint yy = 0; yy < height; ++yy) {
     for (uint xx = 0; xx < width; ++xx) {
@@ -563,7 +557,7 @@ void gifWriteLzwImage (VFile f, ubyte* image, uint left, uint top,  uint width, 
         curCode = codetree[curCode].m_next[nextValue];
       } else {
         // finish the current run, write a code
-        gifWriteCode(f, stat, curCode, codeSize);
+        gifWriteCode(wr, stat, curCode, codeSize);
         // insert the new run into the dictionary
         codetree[curCode].m_next[nextValue] = cast(ushort)(++maxCode);
         if (maxCode >= (1UL<<codeSize)) {
@@ -572,7 +566,7 @@ void gifWriteLzwImage (VFile f, ubyte* image, uint left, uint top,  uint width, 
         }
         if (maxCode == 4095) {
           // the dictionary is full, clear it out and begin anew
-          gifWriteCode(f, stat, clearCode, codeSize); // clear tree
+          gifWriteCode(wr, stat, clearCode, codeSize); // clear tree
           memset(codetree, 0, gifLzwNode.sizeof*4096);
           curCode = -1;
           codeSize = minCodeSize+1;
@@ -584,162 +578,188 @@ void gifWriteLzwImage (VFile f, ubyte* image, uint left, uint top,  uint width, 
   }
 
   // compression footer
-  gifWriteCode(f, stat, curCode, codeSize);
-  gifWriteCode(f, stat, clearCode, codeSize);
-  gifWriteCode(f, stat, clearCode+1, minCodeSize+1);
+  gifWriteCode(wr, stat, curCode, codeSize);
+  gifWriteCode(wr, stat, clearCode, codeSize);
+  gifWriteCode(wr, stat, clearCode+1, minCodeSize+1);
 
   // write out the last partial chunk
   while (stat.bitIndex) gifWriteBit(stat, 0);
-  if (stat.chunkIndex) gifWriteChunk(f, stat);
+  if (stat.chunkIndex) gifWriteChunk(wr, stat);
 
-  f.writeNum!ubyte(cast(ubyte)(0)); // image block terminator
+  writeByte(cast(ubyte)(0)); // image block terminator
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// gif writer "context"
-public struct GifContext {
-  @disable this (this); // no copies! MPAA is watching you!
+/// gif writer class
+public final class GifWriter {
+public:
+  alias WriterCB = void delegate (const(ubyte)[] buf); /// buffer writer
+
 private:
-  VFile f;
-  ubyte* oldImage;
+  WriterCB writeBytes;
+  ubyte[] oldImage;
   bool firstFrame;
-}
+  bool errored;
+  bool finished;
+  ubyte origBitDepth;
+  bool origDither;
+  uint origW, origH;
+  uint origDelay;
+  gifLzwNode[4096] codetree;
+  GifPalette pal;
 
-
-/** Creates a gif file.
- *
- * The input GIFWriter is assumed to be uninitialized (unused).
- * The delay value is the time between frames in hundredths of a second.
- * Note that not all viewers pay much attention to this value.
- *
- * USAGE:
- * Create a GifContext struct. Pass it to gifBegin() to initialize and write the header.
- * Pass subsequent frames to gifWriteFrame().
- * Finally, call gifEnd() to close the file handle and free memory.
- *
- * Params:
- *   writer = writer "context"
- *   fl = ouput file
- *   width = maximum picture width
- *   height = maximum picture height
- *   delay = delay between frames, in 1/100 of second
- *   bitDepth = don't touch this
- *   dither = don't touch this
- */
-public void gifBegin (ref GifContext writer, VFile fl, uint width, uint height, uint delay, int bitDepth=8, bool dither=false) {
-  import core.stdc.stdlib : malloc;
-
-  writer.f = fl;
-
-  writer.firstFrame = true;
-
-  // allocate
-  writer.oldImage = cast(ubyte*)malloc(width*height*4);
-  if (writer.oldImage is null) assert(0, "out of memory");
-
-  writer.f.rawWriteExact("GIF89a");
-
-  // screen descriptor
-  writer.f.writeNum!ubyte(cast(ubyte)(width & 0xff));
-  writer.f.writeNum!ubyte(cast(ubyte)((width >> 8) & 0xff));
-  writer.f.writeNum!ubyte(cast(ubyte)(height & 0xff));
-  writer.f.writeNum!ubyte(cast(ubyte)((height >> 8) & 0xff));
-
-  writer.f.writeNum!ubyte(cast(ubyte)(0xf0));  // there is an unsorted global color table of 2 entries
-  writer.f.writeNum!ubyte(cast(ubyte)(0));     // background color
-  writer.f.writeNum!ubyte(cast(ubyte)(0));     // pixels are square (we need to specify this because it's 1989)
-
-  // now the "global" palette (really just a dummy palette)
-  // color 0: black
-  writer.f.writeNum!ubyte(cast(ubyte)(0));
-  writer.f.writeNum!ubyte(cast(ubyte)(0));
-  writer.f.writeNum!ubyte(cast(ubyte)(0));
-  // color 1: also black
-  writer.f.writeNum!ubyte(cast(ubyte)(0));
-  writer.f.writeNum!ubyte(cast(ubyte)(0));
-  writer.f.writeNum!ubyte(cast(ubyte)(0));
-
-  if (delay != 0) {
-    // animation header
-    writer.f.writeNum!ubyte(cast(ubyte)(0x21)); // extension
-    writer.f.writeNum!ubyte(cast(ubyte)(0xff)); // application specific
-    writer.f.writeNum!ubyte(cast(ubyte)(11)); // length 11
-    writer.f.rawWriteExact("NETSCAPE2.0"); // yes, really
-    writer.f.writeNum!ubyte(cast(ubyte)(3)); // 3 bytes of NETSCAPE2.0 data
-
-    writer.f.writeNum!ubyte(cast(ubyte)(1)); // JUST BECAUSE
-    writer.f.writeNum!ubyte(cast(ubyte)(0)); // loop infinitely (byte 0)
-    writer.f.writeNum!ubyte(cast(ubyte)(0)); // loop infinitely (byte 1)
-
-    writer.f.writeNum!ubyte(cast(ubyte)(0)); // block terminator
+public:
+  /** Creates a gif file.
+   *
+   * The delay value is the time between frames in hundredths of a second.
+   * Note that not all viewers pay much attention to this value.
+   *
+   * USAGE:
+   * Create a GifContext struct. Pass it to gifBegin() to initialize and write the header.
+   * Pass subsequent frames to gifWriteFrame().
+   * Finally, call gifEnd() to close the file handle and free memory.
+   *
+   * Params:
+   *   writeButesCB = file write delegate; should write the whole buffer or throw; will never be called with zero-length buffer
+   *   width = maximum picture width
+   *   height = maximum picture height
+   *   delay = delay between frames, in 1/100 of second
+   *   bitDepth = don't touch this
+   *   dither = don't touch this
+   */
+  this (WriterCB writeBytesCB, uint width, uint height, uint delay, ubyte bitDepth=8, bool dither=false) {
+    if (writeBytesCB is null) throw new Exception("no write delegate");
+    if (width < 1 || height < 1 || width > 16383 || height > 16383) throw new Exception("invalid dimensions");
+    if (bitDepth < 1 || bitDepth > 8) throw new Exception("invalid bit depth");
+    writeBytes = writeBytesCB;
+    origBitDepth = bitDepth;
+    origDither = dither;
+    origW = width;
+    origH = height;
+    origDelay = delay;
+    scope(failure) errored = true;
+    setup(width, height, delay, bitDepth, dither);
   }
-}
 
-
-/** Writes out a new frame to a GIF in progress.
- *
- * The GIFWriter should have been created by GIFBegin.
- * AFAIK, it is legal to use different bit depths for different frames of an image;
- * this may be handy to save bits in animations that don't change much. But you'd
- * better don't do that.
- *
- * Params:
- *   writer = writer "context"
- *   image = frame RGBA data, width*height*4 bytes
- *   width = frame width
- *   height = frame height
- *   delay = delay between frames, in 1/100 of second
- *   bitDepth = don't touch this
- *   dither = don't touch this
- */
-public void gifWriteFrame (ref GifContext writer, const(ubyte)* image, uint width, uint height, uint delay, int bitDepth=8, bool dither=false) {
-  const(ubyte)* oldImage = (writer.firstFrame ? null : writer.oldImage);
-  writer.firstFrame = false;
-  gifPalette pal;
-  gifMakePalette((dither ? null : oldImage), image, width, height, bitDepth, dither, &pal);
-  if (dither) {
-    gifDitherImage(oldImage, image, writer.oldImage, width, height, &pal);
-  } else {
-    gifThresholdImage(oldImage, image, writer.oldImage, width, height, &pal);
-  }
-  gifWriteLzwImage(writer.f, writer.oldImage, 0, 0, width, height, delay, &pal);
-}
-
-
-/** Writes the EOF code, closes the file handle, and frees temp memory used by a GIF.
- *
- * Many if not most viewers will still display a GIF properly if the EOF code is missing,
- * but it's still a good idea to write it out.
- */
-public void gifEnd (ref GifContext writer) {
-  import core.stdc.stdlib : free;
-  writer.f.writeNum!ubyte(cast(ubyte)(0x3b)); // end of file
-  writer.f.close();
-  free(writer.oldImage);
-  writer.oldImage = null;
-}
-
-
-/** Flips image data vertically.
- *
- * This can be used to flip result of `glReadPixels()`, for example.
- *
- * Params:
- *   image = frame RGBA data, width*height*4 bytes
- *   width = frame width
- *   height = frame height
- */
-public void gifFlipY (ubyte* image, uint width, uint height) {
-  uint spos = 0;
-  uint dpos = (height-1)*(width*4);
-  foreach (immutable y; 0..height/2) {
-    foreach (immutable x; 0..width*4) {
-      ubyte t = image[spos+x];
-      image[spos+x] = image[dpos+x];
-      image[dpos+x] = t;
+  /** Writes out a new frame to a GIF in progress.
+   *
+   * The GIFWriter should have been created by GIFBegin.
+   * AFAIK, it is legal to use different bit depths for different frames of an image;
+   * this may be handy to save bits in animations that don't change much. But you'd
+   * better don't do that.
+   *
+   * Params:
+   *   writer = writer "context"
+   *   image = frame RGBA data, width*height*4 bytes
+   *   delay = delay between frames, in 1/100 of second
+   *   width = frame width
+   *   height = frame height
+   */
+  void writeFrame (const(void)[] image, uint delay=uint.max, uint width=0, uint height=0) {
+    if (errored) throw new Exception("error writing gif data");
+    if (finished) throw new Exception("can't add frame to finished gif");
+    if (width == 0) width = origW;
+    if (height == 0) height = origH;
+    if (delay == uint.max) delay = origDelay;
+    if (image.length < width*height*4) throw new Exception("image buffer too small");
+    scope(failure) errored = true;
+    const(ubyte)* oldImg = (firstFrame ? null : oldImage.ptr);
+    firstFrame = false;
+    gifMakePalette((origDither ? null : oldImg), cast(const(ubyte)*)image.ptr, width, height, origBitDepth, origDither, &pal);
+    if (origDither) {
+      gifDitherImage(oldImg, cast(const(ubyte)*)image.ptr, oldImage.ptr, width, height, &pal);
+    } else {
+      gifThresholdImage(oldImg, cast(const(ubyte)*)image, oldImage.ptr, width, height, &pal);
     }
-    spos += width*4;
-    dpos -= width*4;
+    gifWriteLzwImage(writeBytes, codetree.ptr, oldImage.ptr, 0, 0, width, height, delay, &pal);
+  }
+
+  /** Writes the EOF code, closes the file handle, and frees temp memory used by a GIF.
+   *
+   * Many if not most viewers will still display a GIF properly if the EOF code is missing,
+   * but it's still a good idea to write it out.
+   */
+  void finish () {
+    if (errored) throw new Exception("error writing gif data");
+    if (finished) throw new Exception("can't finish finished gif");
+    scope(failure) errored = true;
+    writeByte(0x3b); // end of file
+    oldImage = null;
+    finished = true;
+  }
+
+  /** Flips image data vertically.
+   *
+   * This can be used to flip result of `glReadPixels()`, for example.
+   *
+   * Params:
+   *   image = frame RGBA data, width*height*4 bytes
+   *   width = frame width
+   *   height = frame height
+   */
+  static void flipY (void[] img, uint width, uint height) {
+    if (width < 1 || height < 1) return;
+    if (img.length < width*height*4) throw new Exception("image buffer too small");
+    uint spos = 0;
+    uint dpos = (height-1)*(width*4);
+    auto image = cast(ubyte*)img.ptr;
+    foreach (immutable y; 0..height/2) {
+      foreach (immutable x; 0..width*4) {
+        ubyte t = image[spos+x];
+        image[spos+x] = image[dpos+x];
+        image[dpos+x] = t;
+      }
+      spos += width*4;
+      dpos -= width*4;
+    }
+  }
+
+private:
+  void writeByte (ubyte b) { writeBytes((&b)[0..1]); }
+  void writeBuf (const(void)[] buf) { if (buf.length) writeBytes(cast(const(ubyte)[])buf); }
+
+  void setup (uint width, uint height, uint delay, ubyte bitDepth, bool dither) {
+    firstFrame = true;
+
+    // allocate
+    oldImage.length = width*height*4;
+
+    writeBuf("GIF89a");
+
+    // screen descriptor
+    writeByte(cast(ubyte)(width&0xff));
+    writeByte(cast(ubyte)((width>>8)&0xff));
+    writeByte(cast(ubyte)(height&0xff));
+    writeByte(cast(ubyte)((height>>8)&0xff));
+
+    writeByte(cast(ubyte)(0xf0)); // there is an unsorted global color table of 2 entries
+    writeByte(cast(ubyte)(0));    // background color
+    writeByte(cast(ubyte)(0));    // pixels are square (we need to specify this because it's 1989)
+
+    // now the "global" palette (really just a dummy palette)
+    // color 0: black
+    writeByte(cast(ubyte)(0));
+    writeByte(cast(ubyte)(0));
+    writeByte(cast(ubyte)(0));
+    // color 1: also black
+    writeByte(cast(ubyte)(0));
+    writeByte(cast(ubyte)(0));
+    writeByte(cast(ubyte)(0));
+
+    if (delay != 0) {
+      // animation header
+      writeByte(cast(ubyte)(0x21)); // extension
+      writeByte(cast(ubyte)(0xff)); // application specific
+      writeByte(cast(ubyte)(11)); // length 11
+      writeBuf("NETSCAPE2.0"); // yes, really
+      writeByte(cast(ubyte)(3)); // 3 bytes of NETSCAPE2.0 data
+
+      writeByte(cast(ubyte)(1)); // JUST BECAUSE
+      writeByte(cast(ubyte)(0)); // loop infinitely (byte 0)
+      writeByte(cast(ubyte)(0)); // loop infinitely (byte 1)
+
+      writeByte(cast(ubyte)(0)); // block terminator
+    }
   }
 }
