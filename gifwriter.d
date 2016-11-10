@@ -16,6 +16,16 @@
 module iv.gifwriter;
 private:
 
+// ////////////////////////////////////////////////////////////////////////// //
+static if (__traits(compiles, (){import arsd.color;})) {
+  import arsd.color;
+  enum GifWriterHasArsdColor = true;
+} else {
+  enum GifWriterHasArsdColor = false;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum kGifTransIndex = 0;
 
 struct GifPalette {
@@ -670,9 +680,34 @@ public:
     if (origDither) {
       gifDitherImage(oldImg, cast(const(ubyte)*)image.ptr, oldImage.ptr, width, height, &pal);
     } else {
-      gifThresholdImage(oldImg, cast(const(ubyte)*)image, oldImage.ptr, width, height, &pal);
+      gifThresholdImage(oldImg, cast(const(ubyte)*)image.ptr, oldImage.ptr, width, height, &pal);
     }
     gifWriteLzwImage(writeBytes, codetree.ptr, oldImage.ptr, 0, 0, width, height, delay, &pal);
+  }
+
+  static if (GifWriterHasArsdColor) {
+    /** Writes out a new frame to a GIF in progress.
+     *
+     * The GIFWriter should have been created by GIFBegin.
+     * AFAIK, it is legal to use different bit depths for different frames of an image;
+     * this may be handy to save bits in animations that don't change much. But you'd
+     * better don't do that.
+     *
+     * Params:
+     *   writer = writer "context"
+     *   image = frame data, width*height pixels
+     *   delay = delay between frames, in 1/100 of second
+     */
+    void writeFrame (MemoryImage mimage, uint delay=uint.max) {
+      if (errored) throw new Exception("error writing gif data");
+      if (finished) throw new Exception("can't add frame to finished gif");
+      if (mimage is null || mimage.width < 1 || mimage.height < 1) return;
+      if (mimage.width != origW || mimage.height != origH) throw new Exception("invalid image dimensions");
+      if (delay == uint.max) delay = origDelay;
+      scope(failure) errored = true;
+      auto tcimg = mimage.getAsTrueColorImage();
+      writeFrame(tcimg.imageData.bytes, delay, 0, 0);
+    }
   }
 
   /** Writes the EOF code, closes the file handle, and frees temp memory used by a GIF.
