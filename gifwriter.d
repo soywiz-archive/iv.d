@@ -698,7 +698,7 @@ public:
      *   image = frame data, width*height pixels
      *   delay = delay between frames, in 1/100 of second
      */
-    void writeFrame (MemoryImage mimage, uint delay=uint.max) {
+    void writeFrame() (MemoryImage mimage, uint delay=uint.max) {
       if (errored) throw new Exception("error writing gif data");
       if (finished) throw new Exception("can't add frame to finished gif");
       if (mimage is null || mimage.width < 1 || mimage.height < 1) return;
