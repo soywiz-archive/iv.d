@@ -259,7 +259,7 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   conRegVarHex!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb");
   conRegVarHex!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb");
   conRegVarHex!rConStarColor("r_constarcolor", "console star color, 0xrrggbb");
-  conRegVarHex!rPromptChar("r_promptchar", "console prompt character");
+  conRegVarHex!rPromptChar("r_conpromptchar", "console prompt character");
   //rConsoleHeight = scrhgt-scrhgt/3;
   rConsoleHeight = scrhgt/2;
   conRegFunc!({
