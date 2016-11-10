@@ -26,6 +26,8 @@
  *   'X': write integer as HEX
  *   '!': skip all arguments that's left, no width allowed
  *   '%': just a percent sign, no width allowed
+ *   '|': print all arguments that's left with simple "%s", no width allowed
+ *   '<...>': print all arguments that's left with simple "%s", delimited with "...", no width allowed
  * options (must immediately follow '%'):
  *   '~': fill with the following char instead of space
  *        second '~': right filling char for 'center'
@@ -534,6 +536,8 @@ public template conwritef(string fmt, A...) {
     }
 
     bool simples = false;
+    bool putsimpledelim = false;
+    string simpledelim;
     char lchar=' ', rchar=' ';
     char signw = ' ';
     bool leadzerow = false;
@@ -551,6 +555,39 @@ public template conwritef(string fmt, A...) {
         if (pos < fmt.length && fmt[pos] == '|') {
           ++pos;
           simples = true;
+        } else if (pos < fmt.length && fmt[pos] == '<') {
+          ++pos;
+          auto ep = pos;
+          while (ep < fmt.length) {
+            if (fmt[ep] == '>') break;
+            if (fmt[ep] == '\\') ++ep;
+            ++ep;
+          }
+          if (ep >= fmt.length) assert(0, "invalid format string");
+          simples = true;
+          if (ep-pos > 0) {
+            bool hasQuote = false;
+            foreach (char ch; fmt[pos..ep]) if (ch == '\\' || (ch < ' ' && ch != '\n' && ch != '\t') || ch >= 127 || ch == '`') { hasQuote = true; break; }
+            if (!hasQuote) {
+              simpledelim = "cwrxputch(`"~fmt[pos..ep]~"`);\n";
+            } else {
+              //FIXME: get rid of char-by-char processing!
+              simpledelim = "cwrxputch(\"";
+              while (pos < ep) {
+                char ch = fmt[pos++];
+                if (ch == '\\') ch = fmt[pos++];
+                if (ch == '\\' || ch < ' ' || ch >= 127 || ch == '"') {
+                  simpledelim ~= "\\x";
+                  simpledelim ~= "0123456789abcdef"[ch>>4];
+                  simpledelim ~= "0123456789abcdef"[ch&0x0f];
+                } else {
+                  simpledelim ~= ch;
+                }
+              }
+              simpledelim ~= "\");\n";
+            }
+          }
+          pos = ep+1;
         } else {
           lchar = rchar = ' ';
           bool lrset = false;
@@ -586,6 +623,11 @@ public template conwritef(string fmt, A...) {
         leadzerow = false;
         wdt =  maxwdt = 0;
         fmtch = 's';
+        if (putsimpledelim && simpledelim.length) {
+          res ~= simpledelim;
+        } else {
+          putsimpledelim = true;
+        }
       }
       switch (fmtch) {
         case 's':
@@ -702,6 +744,16 @@ public template conwritef(string fmt, A...) {
       assert(fmt[pos] == '%');
       ++pos;
       if (pos < fmt.length && (fmt[pos] == '!' || fmt[pos] == '|')) { ++pos; continue; } // skip rest
+      if (pos < fmt.length && fmt[pos] == '<') {
+        // skip it
+        while (pos < fmt.length) {
+          if (fmt[pos] == '>') break;
+          if (fmt[pos] == '\\') ++pos;
+          ++pos;
+        }
+        ++pos;
+        continue;
+      }
       assert(0, "too many format specifiers");
     }
     return res;
