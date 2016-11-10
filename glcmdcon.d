@@ -220,6 +220,7 @@ enum conCharHeight = 10;
 
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared char rPromptChar = '>';
+__gshared float rConAlpha = 0.8;
 __gshared bool rConsoleVisible = false;
 __gshared int rConsoleHeight = 10*3;
 __gshared uint rConTextColor = 0x00ff00; // rgb
@@ -260,6 +261,7 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   conRegVarHex!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb");
   conRegVarHex!rConStarColor("r_constarcolor", "console star color, 0xrrggbb");
   conRegVarHex!rPromptChar("r_conpromptchar", "console prompt character");
+  conRegVarHex!rConAlpha("r_conalpha", "console transparency (0 is fully transparent, 1 is opaque)");
   //rConsoleHeight = scrhgt-scrhgt/3;
   rConsoleHeight = scrhgt/2;
   conRegFunc!({
@@ -375,7 +377,9 @@ public void oglDrawConsole () {
     int ofs = (scrhgt-rConsoleHeight)*winScale;
     y -= ofs;
     h -= ofs;
-    glColor4f(1, 1, 1, 0.8);
+    float alpha = rConAlpha;
+    if (alpha < 0) alpha = 0; else if (alpha > 1) alpha = 1;
+    glColor4f(1, 1, 1, alpha);
     glBindTexture(GL_TEXTURE_2D, convbufTexId);
     //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
     glBegin(GL_QUADS);
