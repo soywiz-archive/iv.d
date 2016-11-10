@@ -259,7 +259,7 @@ private void cwrxputch (scope const(char)[] s...) nothrow @trusted @nogc {
 }
 
 
-private void cwrxputstr (scope const(char)[] str, char signw, char lchar, char rchar, int wdt, int maxwdt, bool cutsign=false) nothrow @trusted @nogc {
+private void cwrxputstr(bool cutsign=false) (scope const(char)[] str, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   if (maxwdt < 0) {
     if (maxwdt == maxwdt.min) ++maxwdt; // alas
     maxwdt = -maxwdt;
@@ -267,11 +267,13 @@ private void cwrxputstr (scope const(char)[] str, char signw, char lchar, char r
   } else if (maxwdt > 0) {
     if (str.length > maxwdt) str = str[0..maxwdt];
   }
-  if (cutsign && signw == ' ' && wdt && str.length && str.length < wdt) {
-    if (str.ptr[0] == '-' || str.ptr[0] == '+') {
-      cwrxputch(str.ptr[0]);
-      str = str[1..$];
-      --wdt;
+  static if (cutsign) {
+    if (signw == ' ' && wdt && str.length && str.length < wdt) {
+      if (str.ptr[0] == '-' || str.ptr[0] == '+') {
+        cwrxputch(str.ptr[0]);
+        str = str[1..$];
+        --wdt;
+      }
     }
   }
   if (str.length < wdt) {
@@ -312,13 +314,13 @@ private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt,
   }
 
   static if (is(T == long)) {
-    if (n == 0x8000_0000_0000_0000uL) { cwrxputstr("-9223372036854775808", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x8000_0000_0000_0000uL) { cwrxputstr!true("-9223372036854775808", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == int)) {
-    if (n == 0x8000_0000u) { cwrxputstr("-2147483648", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x8000_0000u) { cwrxputstr!true("-2147483648", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == short)) {
-    if (n == 0x8000u) { cwrxputstr("-32768", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x8000u) { cwrxputstr!true("-32768", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == byte)) {
-    if (n == 0x80u) { cwrxputstr("-128", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x80u) { cwrxputstr!true("-128", signw, lchar, rchar, wdt, maxwdt); return; }
   }
 
   static if (__traits(isUnsigned, T)) {
@@ -338,7 +340,7 @@ private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt,
     //if (bpos == 0) assert(0, "internal printer error");
     buf.ptr[--bpos] = '-';
   }
-  cwrxputstr(buf[bpos..$], signw, lchar, rchar, wdt, maxwdt, true);
+  cwrxputstr!true(buf[bpos..$], signw, lchar, rchar, wdt, maxwdt);
 }
 
 
@@ -355,13 +357,13 @@ private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rc
   }
 
   static if (is(T == long)) {
-    if (n == 0x8000_0000_0000_0000uL) { cwrxputstr("-8000000000000000", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x8000_0000_0000_0000uL) { cwrxputstr!true("-8000000000000000", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == int)) {
-    if (n == 0x8000_0000u) { cwrxputstr("-80000000", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x8000_0000u) { cwrxputstr!true("-80000000", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == short)) {
-    if (n == 0x8000u) { cwrxputstr("-8000", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x8000u) { cwrxputstr!true("-8000", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == byte)) {
-    if (n == 0x80u) { cwrxputstr("-80", signw, lchar, rchar, wdt, maxwdt); return; }
+    if (n == 0x80u) { cwrxputstr!true("-80", signw, lchar, rchar, wdt, maxwdt); return; }
   }
 
   static if (__traits(isUnsigned, T)) {
@@ -382,7 +384,7 @@ private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rc
     //if (bpos == 0) assert(0, "internal printer error");
     buf.ptr[--bpos] = '-';
   }
-  cwrxputstr(buf[bpos..$], signw, lchar, rchar, wdt, maxwdt, true);
+  cwrxputstr!true(buf[bpos..$], signw, lchar, rchar, wdt, maxwdt);
 }
 
 
@@ -462,7 +464,7 @@ private void cwrxputfloat(TT) (TT nn, bool simple, char signw, char lchar, char 
         }
       }
       //{ import core.stdc.stdio; printf("<{%s}>", buf); }
-      cwrxputstr(buf[0..plen], signw, lchar, rchar, wdt, maxwdt, true);
+      cwrxputstr!true(buf[0..plen], signw, lchar, rchar, wdt, maxwdt);
       return;
     }
   }
