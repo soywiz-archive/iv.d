@@ -219,6 +219,7 @@ enum conCharHeight = 10;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+__gshared char rPromptChar = '>';
 __gshared bool rConsoleVisible = false;
 __gshared int rConsoleHeight = 10*3;
 __gshared uint rConTextColor = 0x00ff00; // rgb
@@ -258,6 +259,7 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   conRegVarHex!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb");
   conRegVarHex!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb");
   conRegVarHex!rConStarColor("r_constarcolor", "console star color, 0xrrggbb");
+  conRegVarHex!rPromptChar("r_promptchar", "console prompt character");
   //rConsoleHeight = scrhgt-scrhgt/3;
   rConsoleHeight = scrhgt/2;
   conRegFunc!({
@@ -599,64 +601,82 @@ void renderConsole () nothrow @trusted @nogc {
   conLastChange = cbufLastChange;
   int skipLines = conskiplines;
   convbuf[0..scrwdt*scrhgt] = 0xff000000;
+  immutable sw = scrwdt, sh = scrhgt;
   {
     import std.algorithm : min;
     conSetColor(rConStarColor);
-    int radius = min(scrwdt, scrhgt)/3;
-    drawStar(scrwdt/2, /*scrhgt/2*/scrhgt-radius-16, radius);
+    int radius = min(sw, sh)/3;
+    drawStar(sw/2, /*sh/2*/sh-radius-16, radius);
   }
+
+  int y = sh-conCharHeight;
+  // draw command line
   {
-    // draw command line
-    //int y = /*convbuf.height*/rConsoleHeight-conCharHeight/*-2*/;
-    int y = scrhgt-conCharHeight;
-    {
-      conDrawX = XOfs;
-      conDrawY = y;
-      int w = conCharWidth('>');
-      conSetColor(rConPromptColor);
-      conDrawChar('>');
-      uint spos = conclilen;
-      while (spos > 0) {
-        char ch = concli.ptr[spos-1];
-        if (w+conCharWidth(ch) > scrwdt-XOfs*2-12) break;
-        w += conCharWidth(ch);
-        --spos;
-      }
-      conSetColor(rConInputColor);
-      foreach (char ch; concli[spos..conclilen]) conDrawChar(ch);
-      // cursor
-      conSetColor(rConCursorColor);
-      conRect(conCharWidth('W'), conCharHeight);
-      y -= conCharHeight;
-    }
-    // draw console text
-    conSetColor(rConTextColor);
     conDrawX = XOfs;
     conDrawY = y;
+    int curWidth = conCharWidth('W');
+    int w = XOfs;
+    if (rPromptChar >= ' ') {
+      w += conCharWidth(rPromptChar);
+      conSetColor(rConPromptColor);
+      conDrawChar(rPromptChar);
+    }
+    uint spos = conclilen;
+    while (spos > 0) {
+      char ch = concli.ptr[spos-1];
+      if (w+conCharWidth(ch) > sw-XOfs*2-curWidth) break;
+      w += conCharWidth(ch);
+      --spos;
+    }
+    conSetColor(rConInputColor);
+    foreach (char ch; concli[spos..conclilen]) conDrawChar(ch);
+    // cursor
+    conSetColor(rConCursorColor);
+    conRect(curWidth, conCharHeight);
+    y -= conCharHeight;
+  }
 
-    void putLine(T) (auto ref T line, usize pos=0) {
-      if (y+conCharHeight <= 0) return;
-      int w = XOfs;
-      usize sp = pos;
-      while (sp < line.length) {
-        char ch = line[sp++];
-        int cw = conCharWidth(ch);
-        if ((w += cw) > scrwdt-XOfs) { w -= cw; --sp; break; }
+  // draw console text
+  conSetColor(rConTextColor);
+  conDrawX = XOfs;
+  conDrawY = y;
+
+  void putLine(T) (auto ref T line, usize pos=0) {
+    if (y+conCharHeight <= 0 || pos >= line.length) return;
+    int w = XOfs, lastWordW = -1;
+    usize sp = pos, lastWordEnd = 0;
+    while (sp < line.length) {
+      char ch = line[sp++];
+      int cw = conCharWidth(ch);
+      // remember last word position
+      if (/*lastWordW < 0 &&*/ (ch == ' ' || ch == '\t')) {
+        lastWordEnd = sp-1; // space will be put on next line (rough indication of line wrapping)
+        lastWordW = w;
       }
-      if (sp < line.length) putLine(line, sp); // recursive put tail
-      // draw line
-      if (skipLines-- <= 0) {
-        while (pos < sp) conDrawChar(line[pos++]);
-        y -= conCharHeight;
-        conDrawX = XOfs;
-        conDrawY = y;
+      if ((w += cw) > sw-XOfs*2) {
+        w -= cw;
+        --sp;
+        // current char is non-space, and, previous char is non-space, and we have a complete word?
+        if (lastWordW > 0 && ch != ' ' && ch != '\t' && sp > pos && line[sp-1] != ' ' && line[sp-1] != '\t') {
+          // yes, split on last word boundary
+          sp = lastWordEnd;
+        }
+        break;
       }
     }
-
-    foreach (/*auto*/ line; conbufLinesRev) {
-      putLine(line);
-      if (y+conCharHeight <= 0) break;
+    if (sp < line.length) putLine(line, sp); // recursive put tail
+    // draw line
+    if (skipLines-- <= 0) {
+      while (pos < sp) conDrawChar(line[pos++]);
+      y -= conCharHeight;
+      conDrawX = XOfs;
+      conDrawY = y;
     }
+  }
+
+  foreach (/*auto*/ line; conbufLinesRev) {
+    putLine(line);
+    if (y+conCharHeight <= 0) break;
   }
 }
 

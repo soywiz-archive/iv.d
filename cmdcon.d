@@ -966,6 +966,12 @@ static:
         else static if (is(T == string)) return w.idup;
         else return w.dup;
       }
+    } else static if (is(T : char)) {
+      bool stemp = false;
+      auto w = getWord(s);
+      if (w is null || w.length != 1) throw exNoArg;
+      if (s.length && s.ptr[0] > 32) throw exBadStr;
+      return w.ptr[0];
     } else {
       throw exBadArgType;
     }
@@ -1499,6 +1505,11 @@ final class ConVar(T, bool strashex=false) : ConVarBase {
     } else static if (isFloatingPoint!T) {
       auto len = snprintf(vbuf.ptr, vbuf.length, "%f", cast(double)(getv()));
       return (len >= 0 ? vbuf[0..len] : "?");
+    } else static if (is(T : char)) {
+      vbuf.ptr[0] = cast(char)getv();
+      return vbuf[0..1];
+    } else {
+      static assert(0, "can't get string value of convar with type '"~T.stringof~"'");
     }
   }
 
