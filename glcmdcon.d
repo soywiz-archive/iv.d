@@ -23,6 +23,7 @@ private:
 public import iv.cmdcon;
 public import iv.vfs;
 import iv.glbinds;
+import iv.strex;
 
 static if (__traits(compiles, (){import arsd.simpledisplay;}())) {
   enum OptGlCmdConHasSdpy = true;
@@ -245,8 +246,26 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
       auto sz = fl.size;
       if (sz > 1024*1024*64) throw new Exception("script file too big");
       if (sz > 0) {
+        enum AbortCmd = "!!abort!!";
         auto s = new char[](cast(uint)sz);
         fl.rawReadExact(s);
+        if (s.indexOf(AbortCmd) >= 0) {
+          auto apos = s.indexOf(AbortCmd);
+          while (apos >= 0) {
+            if (s.length-apos <= AbortCmd.length || s[apos+AbortCmd.length] <= ' ') {
+              bool good = true;
+              // it should be the first command, not commented
+              auto pos = apos;
+              while (pos > 0 && s[pos-1] != '\n') {
+                if (s[pos-1] != ' ' && s[pos-1] != '\t') { good = false; break; }
+                --pos;
+              }
+              if (good) { s = s[0..apos]; break; }
+            }
+            // check next
+            apos = s.indexOf(AbortCmd, apos+1);
+          }
+        }
         concmd(s);
       }
     } catch (Exception e) {
@@ -327,10 +346,15 @@ public void oglDrawConsole () {
 
     GLint glmatmode;
     GLint gltextbinding;
+    GLint oldprg;
+    GLint oldfbr, oldfbw;
     GLint[4] glviewport;
     glGetIntegerv(GL_MATRIX_MODE, &glmatmode);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
     glGetIntegerv(GL_VIEWPORT, glviewport.ptr);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &oldprg);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldfbr);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldfbw);
     glMatrixMode(GL_PROJECTION); glPushMatrix();
     glMatrixMode(GL_MODELVIEW); glPushMatrix();
     glMatrixMode(GL_TEXTURE); glPushMatrix();
@@ -344,7 +368,10 @@ public void oglDrawConsole () {
       glMatrixMode(GL_TEXTURE); glPopMatrix();
       glMatrixMode(GL_COLOR); glPopMatrix();
       glMatrixMode(glmatmode);
+      glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, oldfbr);
+      glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, oldfbw);
       glBindTexture(GL_TEXTURE_2D, gltextbinding);
+      glUseProgram(oldprg);
       glViewport(glviewport.ptr[0], glviewport.ptr[1], glviewport.ptr[2], glviewport.ptr[3]);
     }
 
@@ -354,6 +381,10 @@ public void oglDrawConsole () {
     int y = 0;
     int w = scrwdt*winScale;
     int h = scrhgt*winScale;
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+    glUseProgram(0);
 
     glMatrixMode(GL_PROJECTION); // for ortho camera
     glLoadIdentity();
