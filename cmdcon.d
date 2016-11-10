@@ -1364,9 +1364,37 @@ version(contest_parser) unittest {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// convar attributes
+public enum ConVarAttr {
+  None = 0, ///
+  Archive = 0, /// for convenience
+  NoArchive = 1U<<0, /// don't save on change (saving must be done by library user)
+  Hex = 1U<<1, /// dump this variable as hex value (valid for integrals)
+}
+
+
 /// variable of some type
 public class ConVarBase : ConCommand {
+protected:
+  uint mAttrs;
+
+public:
   this (string aname, string ahelp=null) { super(aname, ahelp); }
+
+  /// replaces current attributes
+  final void setAttrs (const(ConVarAttr)[] attrs...) pure nothrow @safe @nogc {
+    mAttrs = 0;
+    foreach (const ConVarAttr a; attrs) mAttrs |= a;
+  }
+
+  @property pure nothrow @safe @nogc final {
+    uint attrs () const { pragma(inline, true); return mAttrs; }
+    void attrs (uint v) { pragma(inline, true); mAttrs = v; }
+
+    bool attrArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.NoArchive) == 0); }
+    bool attrNoArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.NoArchive) != 0); }
+    bool attrHexDump () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Hex) != 0); }
+  }
 
   abstract void printValue ();
   abstract bool isString () const pure nothrow @nogc;
@@ -1400,7 +1428,7 @@ public class ConVarBase : ConCommand {
       // floats
       setDoubleValue(cast(double)val);
     } else static if (is(T : ConString)) {
-      static if (is(T == string)) setStrValue(val); else setCharValue(val);
+      static if (is(T == string)) setStrValue(val); else setCCharValue(val);
     }
   }
 
@@ -1411,13 +1439,13 @@ protected:
   abstract void setIntValue (ulong v, bool signed) nothrow @nogc;
   abstract void setDoubleValue (double v) nothrow @nogc;
   abstract void setStrValue (string v) nothrow;
-  abstract void setCharValue (ConString v) nothrow;
+  abstract void setCCharValue (ConString v) nothrow;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// console will use this to register console variables
-final class ConVar(T, bool strashex=false) : ConVarBase {
+final class ConVar(T) : ConVarBase {
   enum useAtomic = is(T == shared);
   T* vptr;
   static if (isIntegral!T) {
@@ -1443,7 +1471,7 @@ final class ConVar(T, bool strashex=false) : ConVarBase {
   override void exec (ConString cmdline) {
     if (checkHelp(cmdline)) { showHelp; return; }
     if (!hasArgs(cmdline)) { printValue; return; }
-    static if (is(T == bool)) {
+    static if (is(XUQQ!T == bool)) {
       while (cmdline.length && cmdline[0] <= 32) cmdline = cmdline[1..$];
       while (cmdline.length && cmdline[$-1] <= 32) cmdline = cmdline[0..$-1];
       if (cmdline == "toggle") {
@@ -1489,23 +1517,19 @@ final class ConVar(T, bool strashex=false) : ConVarBase {
     import core.stdc.stdio : snprintf;
     static if (is(T : ConString)) {
       return getv();
-    } else static if (is(T == bool)) {
+    } else static if (is(XUQQ!T == bool)) {
       return (getv() ? "tan" : "ona");
     } else static if (isIntegral!T) {
       static if (isSigned!T) {
         auto len = snprintf(vbuf.ptr, vbuf.length, "%lld", cast(long)(getv()));
       } else {
-        static if (strashex) {
-          auto len = snprintf(vbuf.ptr, vbuf.length, "0x%llx", cast(ulong)(getv()));
-        } else {
-          auto len = snprintf(vbuf.ptr, vbuf.length, "0x%llu", cast(ulong)(getv()));
-        }
+        auto len = snprintf(vbuf.ptr, vbuf.length, (attrHexDump ? "0x%06llx".ptr : "%llu".ptr), cast(ulong)(getv()));
       }
       return (len >= 0 ? vbuf[0..len] : "?");
     } else static if (isFloatingPoint!T) {
       auto len = snprintf(vbuf.ptr, vbuf.length, "%f", cast(double)(getv()));
       return (len >= 0 ? vbuf[0..len] : "?");
-    } else static if (is(T : char)) {
+    } else static if (is(XUQQ!T == char)) {
       vbuf.ptr[0] = cast(char)getv();
       return vbuf[0..1];
     } else {
@@ -1564,7 +1588,7 @@ final class ConVar(T, bool strashex=false) : ConVarBase {
     }
   }
 
-  protected override void setCharValue (ConString v) nothrow {
+  protected override void setCCharValue (ConString v) nothrow {
     import core.atomic;
          static if (is(T == string)) mixin(PutVMx!"v.idup");
     else static if (is(T == ConString)) mixin(PutVMx!"v");
@@ -1580,6 +1604,18 @@ final class ConVar(T, bool strashex=false) : ConVarBase {
       writeQuotedString(getv());
       wrt("\n");
       //wrt(null); // flush
+    } else static if (is(XUQQ!T == char)) {
+      wrt(name);
+      wrt(" ");
+      char[1] st = getv();
+      if (st[0] <= ' ' || st[0] == 127 || st[0] == '"' || st[0] == '\\') {
+        writeQuotedString(st[]);
+      } else {
+        wrt(`"`);
+        wrt(st[]);
+        wrt(`"`);
+      }
+      wrt("\n");
     } else static if (is(T == bool)) {
       conwriteln(name, " ", (getv() ? "tan" : "ona"));
     } else {
@@ -1629,12 +1665,24 @@ void addName (string name) {
 }
 
 
-void conRegVarIntrInt(bool strashex, alias v, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(v)) && isIntegral!T) {
+/** register integral console variable with bounded value.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
+ *   aname = variable name
+ *   ahelp = help text
+ *   attrs = convar attributes (see ConVarAttr)
+ */
+public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
   static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
   if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
   if (aname.length > 0) {
     addName(aname);
-    cmdlist[aname] = new ConVar!(typeof(v), strashex)(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp);
+    auto v = new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp);
+    v.setAttrs(attrs);
+    cmdlist[aname] = v;
   }
 }
 
@@ -1646,25 +1694,8 @@ void conRegVarIntrInt(bool strashex, alias v, T) (T aminv, T amaxv, string aname
  *   aminv = minimum value
  *   amaxv = maximum value
  *   aname = variable name
- *   ahelp = help text
  */
-public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(v)) && isIntegral!T) {
-  conRegVarIntrInt!(false, v, T)(aminv, amaxv, aname, ahelp);
-}
-
-
-/** register integral console variable with bounded value, dump it as hex.
- *
- * Params:
- *   v = variable symbol
- *   aminv = minimum value
- *   amaxv = maximum value
- *   aname = variable name
- *   ahelp = help text
- */
-public void conRegVarHex(alias v, T) (T aminv, T amaxv, string aname, string ahelp=null) if (isIntegral!(typeof(v)) && isIntegral!T) {
-  conRegVarIntrInt!(true, v, T)(aminv, amaxv, aname, ahelp);
-}
+public void conRegVar(alias v, T) (T aminv, T amaxv, string aname) if (isIntegral!(typeof(v)) && isIntegral!T) { conRegVar!(v, T)(aminv, amaxv, aname, null); }
 
 
 /** register console variable.
@@ -1673,32 +1704,27 @@ public void conRegVarHex(alias v, T) (T aminv, T amaxv, string aname, string ahe
  *   v = variable symbol
  *   aname = variable name
  *   ahelp = help text
+ *   attrs = convar attributes (see ConVarAttr)
  */
-public void conRegVar(alias v) (string aname, string ahelp=null) if (!isCallable!(typeof(v))) {
+public void conRegVar(alias v) (string aname, string ahelp, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
   static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
   if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
   if (aname.length > 0) {
     addName(aname);
-    cmdlist[aname] = new ConVar!(typeof(v), false)(&v, aname, ahelp);
+    auto v = new ConVar!(typeof(v))(&v, aname, ahelp);
+    v.setAttrs(attrs);
+    cmdlist[aname] = v;
   }
 }
 
 
-/** register console variable, dump it as hex.
+/** register console variable.
  *
  * Params:
  *   v = variable symbol
  *   aname = variable name
- *   ahelp = help text
  */
-public void conRegVarHex(alias v) (string aname, string ahelp=null) if (!isCallable!(typeof(v))) {
-  static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
-  if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
-  if (aname.length > 0) {
-    addName(aname);
-    cmdlist[aname] = new ConVar!(typeof(v), true)(&v, aname, ahelp);
-  }
-}
+public void conRegVar(alias v) (string aname) if (!isCallable!(typeof(v))) { conRegVar!(v)(aname, null); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

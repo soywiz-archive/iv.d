@@ -255,13 +255,13 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   })("exec", "execute console script (name [silent_failure_flag])");
   conRegVar!rConsoleVisible("r_console", "console visibility");
   conRegVar!rConsoleHeight(10*3, scrhgt, "r_conheight");
-  conRegVarHex!rConTextColor("r_contextcolor", "console log text color, 0xrrggbb");
-  conRegVarHex!rConCursorColor("r_concursorcolor", "console cursor color, 0xrrggbb");
-  conRegVarHex!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb");
-  conRegVarHex!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb");
-  conRegVarHex!rConStarColor("r_constarcolor", "console star color, 0xrrggbb");
-  conRegVarHex!rPromptChar("r_conpromptchar", "console prompt character");
-  conRegVarHex!rConAlpha("r_conalpha", "console transparency (0 is fully transparent, 1 is opaque)");
+  conRegVar!rConTextColor("r_contextcolor", "console log text color, 0xrrggbb", ConVarAttr.Hex);
+  conRegVar!rConCursorColor("r_concursorcolor", "console cursor color, 0xrrggbb", ConVarAttr.Hex);
+  conRegVar!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb", ConVarAttr.Hex);
+  conRegVar!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb", ConVarAttr.Hex);
+  conRegVar!rConStarColor("r_constarcolor", "console star color, 0xrrggbb", ConVarAttr.Hex);
+  conRegVar!rPromptChar("r_conpromptchar", "console prompt character");
+  conRegVar!rConAlpha("r_conalpha", "console transparency (0 is fully transparent, 1 is opaque)");
   //rConsoleHeight = scrhgt-scrhgt/3;
   rConsoleHeight = scrhgt/2;
   conRegFunc!({
