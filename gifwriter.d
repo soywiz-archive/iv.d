@@ -13,6 +13,37 @@
 // as a quick and easily-integrated way for programs to spit out animations.
 //
 // Only RGBA8 is currently supported as an input format. (The alpha is ignored.)
+/**
+ * Example:
+ * ---
+ *   import std.stdio;
+ *   import arsd.color;
+ *   import iv.gifwriter;
+ *   void main () {
+ *     auto tc = new TrueColorImage(100, 50);
+ *     auto fo = File("zgif.gif", "w");
+ *     auto gw = new GifWriter((buf) { fo.rawWrite(buf); }, tc.width, tc.height, 2);
+ *     gw.writeFrame(tc);
+ *     foreach (immutable n; 0..tc.width) {
+ *       tc.setPixel(n, 0, Color.red);
+ *       gw.writeFrame(tc);
+ *     }
+ *     foreach (immutable n; 1..tc.height) {
+ *       tc.setPixel(tc.width-1, n, Color.green);
+ *       gw.writeFrame(tc);
+ *     }
+ *     foreach_reverse (immutable n; 0..tc.width-1) {
+ *       tc.setPixel(n, tc.height-1, Color.blue);
+ *       gw.writeFrame(tc);
+ *     }
+ *     foreach_reverse (immutable n; 0..tc.height-1) {
+ *       tc.setPixel(0, n, Color.white);
+ *       gw.writeFrame(tc);
+ *     }
+ *     gw.finish();
+ *   }
+ * ---
+ */
 module iv.gifwriter;
 private:
 
