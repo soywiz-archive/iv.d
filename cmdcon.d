@@ -2457,6 +2457,23 @@ public void conAddInputChar (char ch) {
     }
     return;
   }
+  // delete char
+  if (ch == ConInputChar.Delete) {
+    if (concurx < conclilen) {
+      if (conclilen > 1) {
+        import core.stdc.string : memmove;
+        memmove(concli.ptr+concurx, concli.ptr+concurx+1, conclilen-concurx-1);
+      }
+      --conclilen;
+      conInputIncLastChange();
+    }
+    return;
+  }
+  // ^Y (delete line)
+  if (ch == ConInputChar.CtrlY) {
+    if (conclilen > 0) { conclilen = 0; concurx = 0; conInputIncLastChange(); }
+    return;
+  }
   // home
   if (ch == ConInputChar.Home) {
     if (concurx > 0) {
@@ -2471,21 +2488,6 @@ public void conAddInputChar (char ch) {
       concurx = conclilen;
       conInputIncLastChange();
     }
-    return;
-  }
-  // delete char
-  if (ch == ConInputChar.Delete) {
-    if (concurx < conclilen) {
-      import core.stdc.string : memmove;
-      memmove(concli.ptr+concurx, concli.ptr+concurx+1, conclilen-concurx-1);
-      --conclilen;
-      conInputIncLastChange();
-    }
-    return;
-  }
-  // ^Y
-  if (ch == ConInputChar.CtrlY) {
-    if (conclilen > 0) { conclilen = 0; concurx = 0; conInputIncLastChange(); }
     return;
   }
   // up
