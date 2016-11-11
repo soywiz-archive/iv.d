@@ -249,7 +249,9 @@ shared bool vquitRequested = false;
 
 
 /// initialize glcmdcon variables and commands, sets screen size and scale
-public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+/// NOT THREAD-SAFE! also, should be called only once.
+/// screen dimensions can be fixed later by calling `oglResizeConsole()`.
+public void initConsole (uint ascrwdt=800, uint ascrhgt=600, uint ascale=1) {
   if (winScale != 0) assert(0, "cmdcon already initialized");
   if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) assert(0, "invalid cmdcon dimensions");
   if (ascale < 1 || ascale > 64) assert(0, "invalid cmdcon scale");
@@ -288,15 +290,15 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
       if (!silent) conwriteln("ERROR loading script \"", fname, "\"");
     }
   })("exec", "execute console script (name [silent_failure_flag])");
-  conRegVar!rConsoleVisible("r_console", "console visibility");
-  conRegVar!rConsoleHeight(10*3, scrhgt, "r_conheight");
-  conRegVar!rConTextColor("r_contextcolor", "console log text color, 0xrrggbb", ConVarAttr.Hex);
-  conRegVar!rConCursorColor("r_concursorcolor", "console cursor color, 0xrrggbb", ConVarAttr.Hex);
-  conRegVar!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb", ConVarAttr.Hex);
-  conRegVar!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb", ConVarAttr.Hex);
-  conRegVar!rConStarColor("r_constarcolor", "console star color, 0xrrggbb", ConVarAttr.Hex);
-  conRegVar!rPromptChar("r_conpromptchar", "console prompt character");
-  conRegVar!rConAlpha("r_conalpha", "console transparency (0 is fully transparent, 1 is opaque)");
+  conRegVar!rConsoleVisible("r_console", "console visibility", ConVarAttr.Archive);
+  conRegVar!rConsoleHeight(10*3, scrhgt, "r_conheight", "console height", ConVarAttr.Archive);
+  conRegVar!rConTextColor("r_contextcolor", "console log text color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
+  conRegVar!rConCursorColor("r_concursorcolor", "console cursor color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
+  conRegVar!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
+  conRegVar!rConPromptColor("r_conpromptcolor", "console prompt color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
+  conRegVar!rConStarColor("r_constarcolor", "console star color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
+  conRegVar!rPromptChar("r_conpromptchar", "console prompt character", ConVarAttr.Archive);
+  conRegVar!rConAlpha("r_conalpha", "console transparency (0 is fully transparent, 1 is opaque)", ConVarAttr.Archive);
   //rConsoleHeight = scrhgt-scrhgt/3;
   rConsoleHeight = scrhgt/2;
   conRegFunc!({
@@ -307,17 +309,36 @@ public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// call this if window was resized. will return `true` if resize was successfull.
+/// NOT THREAD-SAFE!
+/// can be called instead of `oglInitConsole()`. it is ok to call it with the same dimensions repeatedly.
+public bool oglResizeConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+  if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return false;
+  if (ascale < 1 || ascale > 64) return false;
+  if (scrwdt == ascrwdt && scrhgt == ascrhgt) { winScale = ascale; return true; }
+  scrwdt = ascrwdt;
+  scrhgt = ascrhgt;
+  winScale = ascale;
+  if (rConsoleHeight > scrhgt) rConsoleHeight = scrhgt;
+  oglInitConsole(); // reallocate back buffer and texture
+  return true;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 __gshared uint* convbuf = null; // RGBA, malloced
 __gshared uint convbufTexId = 0;
 
 
-/// initialize OpenGL part of glcmdcon, should be called after `initConsole()`
+/// initialize OpenGL part of glcmdcon, should be called after `initConsole()`.
+/// NOT THREAD-SAFE!
 public void oglInitConsole () {
   import core.stdc.stdlib;
 
   convbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
   if (convbuf is null) assert(0, "out of memory");
   convbuf[0..scrwdt*scrhgt] = 0xff000000;
+  conLastChange = 0;
 
   if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
 
@@ -350,11 +371,9 @@ public void oglInitConsole () {
 public void oglDrawConsole () {
   if (!rConsoleVisible) return;
   if (convbufTexId && convbuf !is null) {
-    //import iv.glbinds;
     consoleLock();
     scope(exit) consoleUnlock();
 
-    //conwriteln("scrwdt=", scrwdt, "; scrhgt=", scrhgt, "; scale=", winScale, "; tid=", convbufTexId);
     renderConsole();
 
     GLint glmatmode;

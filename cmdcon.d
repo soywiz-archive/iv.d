@@ -1419,11 +1419,12 @@ version(contest_parser) unittest {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// convar attributes
-public enum ConVarAttr {
+public enum ConVarAttr : uint {
   None = 0, ///
-  Archive = 0, /// for convenience
-  NoArchive = 1U<<0, /// don't save on change (saving must be done by library user)
+  Archive = 1U<<0, /// save on change (saving must be done by library user)
   Hex = 1U<<1, /// dump this variable as hex value (valid for integrals)
+  //TODO:
+  //ReadOnly = 1U<<31,
 }
 
 
@@ -1445,8 +1446,8 @@ public:
     uint attrs () const { pragma(inline, true); return mAttrs; }
     void attrs (uint v) { pragma(inline, true); mAttrs = v; }
 
-    bool attrArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.NoArchive) == 0); }
-    bool attrNoArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.NoArchive) != 0); }
+    bool attrArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) != 0); }
+    bool attrNoArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) == 0); }
     bool attrHexDump () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Hex) != 0); }
   }
 
