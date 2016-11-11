@@ -134,6 +134,20 @@ public void concliChar (char ch) {
     return;
   }
 
+  if (ch == ConInputChar.LineUp) {
+    ++conskiplines;
+    conLastChange = 0;
+    return;
+  }
+
+  if (ch == ConInputChar.LineDown) {
+    if (conskiplines > 0) {
+      --conskiplines;
+      conLastChange = 0;
+    }
+    return;
+  }
+
   if (ch == ConInputChar.Enter) {
     if (conskiplines) { conskiplines = 0; conLastChange = 0; }
     auto s = conInputBuffer;
@@ -217,7 +231,7 @@ public bool concmdDoAll () {
 }
 
 
-static int conCharWidth() (char ch) { pragma(inline, true); return 10; }
+enum conCharWidth = 10;
 enum conCharHeight = 10;
 
 
@@ -429,14 +443,15 @@ public void oglDrawConsole () {
 
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared uint conLastChange = 0;
+__gshared uint conLastIBChange = 0;
+__gshared int prevCurX = -1;
+__gshared int prevIXOfs = 0;
 
 static void vsetPixel (int x, int y, uint c) nothrow @trusted @nogc {
   pragma(inline, true);
   if (x >= 0 && y >= 0 && x < scrwdt && y < scrhgt) convbuf[y*scrwdt+x] = c;
 }
 
-
-//import iv.x11gfx : dosFont10;
 
 void renderConsole () nothrow @trusted @nogc {
   static int conDrawX, conDrawY;
@@ -634,12 +649,13 @@ void renderConsole () nothrow @trusted @nogc {
   }
 
   enum XOfs = 0;
-  if (conLastChange == cbufLastChange) return;
+  if (conLastChange == cbufLastChange && conLastIBChange == conInputLastChange) return;
   // rerender console
-  conLastChange = cbufLastChange;
-  int skipLines = conskiplines;
-  convbuf[0..scrwdt*scrhgt] = 0xff000000;
   immutable sw = scrwdt, sh = scrhgt;
+  int skipLines = conskiplines;
+  convbuf[0..sw*sh] = 0xff000000;
+  conLastChange = cbufLastChange;
+  conLastIBChange = conInputLastChange;
   {
     import std.algorithm : min;
     conSetColor(rConStarColor);
@@ -647,30 +663,50 @@ void renderConsole () nothrow @trusted @nogc {
     drawStar(sw/2, /*sh/2*/sh-radius-16, radius);
   }
 
+  auto concli = conInputBuffer;
+  int conclilen = cast(int)concli.length;
+  int concurx = conInputBufferCurX();
+
   int y = sh-conCharHeight;
   // draw command line
   {
     conDrawX = XOfs;
     conDrawY = y;
-    int curWidth = conCharWidth('W');
-    int w = XOfs;
+    int charsInLine = (sw-XOfs*2)/conCharWidth-1; // reserve room for cursor
+    if (rPromptChar >= ' ') --charsInLine;
+    if (charsInLine < 2) charsInLine = 2; // just in case
+    int stpos = prevIXOfs;
+    if (concurx == conclilen) {
+      stpos = conclilen-charsInLine;
+      prevCurX = concurx;
+    } else if (prevCurX != concurx) {
+      // cursor position changed, fix x offset
+      if (concurx <= prevIXOfs) {
+        stpos = concurx-1;
+      } else if (concurx-prevIXOfs >= charsInLine-1) {
+        stpos = concurx-charsInLine+1;
+      }
+    }
+    if (stpos < 0) stpos = 0;
+    prevCurX = concurx;
+    prevIXOfs = stpos;
+
     if (rPromptChar >= ' ') {
-      w += conCharWidth(rPromptChar);
       conSetColor(rConPromptColor);
       conDrawChar(rPromptChar);
     }
-    uint spos = conclilen;
-    while (spos > 0) {
-      char ch = concli.ptr[spos-1];
-      if (w+conCharWidth(ch) > sw-XOfs*2-curWidth) break;
-      w += conCharWidth(ch);
-      --spos;
-    }
     conSetColor(rConInputColor);
-    foreach (char ch; concli[spos..conclilen]) conDrawChar(ch);
-    // cursor
-    conSetColor(rConCursorColor);
-    conRect(curWidth, conCharHeight);
+    foreach (int pos; stpos..stpos+charsInLine+1) {
+      if (pos < concurx) {
+        if (pos < conclilen) conDrawChar(concli.ptr[pos]);
+      } else if (pos == concurx) {
+        conSetColor(rConCursorColor);
+        conRect(conCharWidth, conCharHeight);
+        conSetColor(rConInputColor);
+      } else {
+        if (pos-1 < conclilen) conDrawChar(concli.ptr[pos-1]);
+      }
+    }
     y -= conCharHeight;
   }
 
@@ -685,7 +721,7 @@ void renderConsole () nothrow @trusted @nogc {
     usize sp = pos, lastWordEnd = 0;
     while (sp < line.length) {
       char ch = line[sp++];
-      int cw = conCharWidth(ch);
+      enum cw = conCharWidth;
       // remember last word position
       if (/*lastWordW < 0 &&*/ (ch == ' ' || ch == '\t')) {
         lastWordEnd = sp-1; // space will be put on next line (rough indication of line wrapping)
@@ -730,14 +766,38 @@ public bool conKeyEvent (KeyEvent event) {
   if (!event.pressed) return true;
   if (event.key == Key.Escape) { concmd("r_console 0"); return true; }
   switch (event.key) {
-    case Key.Up: concliChar(ConInputChar.Up); return true;
-    case Key.Down: concliChar(ConInputChar.Down); return true;
+    case Key.Up:
+      if (event.modifierState&ModifierState.alt) {
+        concliChar(ConInputChar.LineUp);
+      } else {
+        concliChar(ConInputChar.Up);
+      }
+      return true;
+    case Key.Down:
+      if (event.modifierState&ModifierState.alt) {
+        concliChar(ConInputChar.LineDown);
+      } else {
+        concliChar(ConInputChar.Down);
+      }
+      return true;
     case Key.Left: concliChar(ConInputChar.Left); return true;
     case Key.Right: concliChar(ConInputChar.Right); return true;
     case Key.Home: concliChar(ConInputChar.Home); return true;
     case Key.End: concliChar(ConInputChar.End); return true;
-    case Key.PageUp: concliChar(ConInputChar.PageUp); return true;
-    case Key.PageDown: concliChar(ConInputChar.PageDown); return true;
+    case Key.PageUp:
+      if (event.modifierState&ModifierState.alt) {
+        concliChar(ConInputChar.LineUp);
+      } else {
+        concliChar(ConInputChar.PageUp);
+      }
+      return true;
+    case Key.PageDown:
+      if (event.modifierState&ModifierState.alt) {
+        concliChar(ConInputChar.LineDown);
+      } else {
+        concliChar(ConInputChar.PageDown);
+      }
+      return true;
     case Key.Backspace: concliChar(ConInputChar.Backspace); return true;
     case Key.Tab: concliChar(ConInputChar.Tab); return true;
     case Key.Enter: concliChar(ConInputChar.Enter); return true;
@@ -753,7 +813,7 @@ public bool conKeyEvent (KeyEvent event) {
 /// process character event. returns `true` if event was eaten.
 public bool conCharEvent (dchar ch) {
   if (!rConsoleVisible) return false;
-  if (ch >= ' ' && ch < 128) concliChar(cast(char)ch);
+  if (ch >= ' ' && ch < 127) concliChar(cast(char)ch);
   return true;
 }
 }

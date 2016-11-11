@@ -2265,15 +2265,18 @@ version(contest_cmdlist) unittest {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // simple input buffer for console
+private:
 __gshared char[4096] concli = 0;
 __gshared uint conclilen = 0;
+__gshared int concurx = 0;
 
 shared uint inchangeCount = 1;
-public @property ulong conInputLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(inchangeCount); } /// changed when something was put to console input buffer
+public @property uint conInputLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(inchangeCount); } /// changed when something was put to console input buffer
 public void conInputIncLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; atomicOp!"+="(inchangeCount, 1); } /// increment console input buffer change flag
 
 
 public @property ConString conInputBuffer() () @trusted { pragma(inline, true); return concli[0..conclilen]; } /// returns console input buffer
+public @property int conInputBufferCurX() () @trusted { pragma(inline, true); return concurx; } /// returns cursor position in input buffer: [0..conclilen]
 
 /** clear console input buffer.
  *
@@ -2287,6 +2290,7 @@ public void conInputBufferClear() (bool addToHistory=false) @trusted {
   if (conclilen > 0) {
     if (addToHistory) conhisAdd(conInputBuffer);
     conclilen = 0;
+    concurx = 0;
     conInputIncLastChange();
   }
   if (addToHistory) conhisidx = -1;
@@ -2295,6 +2299,7 @@ public void conInputBufferClear() (bool addToHistory=false) @trusted {
 
 __gshared char[4096][128] concmdhistory = void;
 __gshared int conhisidx = -1;
+
 shared static this () { foreach (ref hb; concmdhistory) hb[] = 0; }
 
 
@@ -2357,55 +2362,80 @@ public enum ConInputChar : char {
   Insert = '\x0e',
   //
   CtrlY = '\x19',
+  LineUp = '\x1a',
+  LineDown = '\x1b',
 }
 
 
 /// process console input char (won't execute commands, but will do autocompletion and history)
 public void conAddInputChar (char ch) {
   __gshared int prevWasEmptyAndTab = 0;
+
+  bool insChars (const(char)[] s...) {
+    if (s.length == 0) return false;
+    if (concli.length-conclilen < s.length) return false;
+    foreach (char ch; s) {
+      if (concurx == conclilen) {
+        concli.ptr[conclilen++] = ch;
+        ++concurx;
+      } else {
+        import core.stdc.string : memmove;
+        memmove(concli.ptr+concurx+1, concli.ptr+concurx, conclilen-concurx);
+        concli.ptr[concurx++] = ch;
+        ++conclilen;
+      }
+    }
+    return true;
+  }
+
   // autocomplete
   if (ch == ConInputChar.Tab) {
-    if (conclilen == 0) {
+    if (concurx == 0) {
       if (++prevWasEmptyAndTab < 2) return;
     } else {
       prevWasEmptyAndTab = 0;
     }
-    if (conclilen > 0) {
+    if (concurx > 0) {
       string minPfx = null;
       // find longest command
       foreach (/*auto*/ name; conByCommand) {
-        if (name.length >= conclilen && name.length > minPfx.length && name[0..conclilen] == concli[0..conclilen]) minPfx = name;
+        if (name.length >= concurx && name.length > minPfx.length && name[0..concurx] == concli[0..concurx]) minPfx = name;
       }
       //conwriteln("longest command: [", minPfx, "]");
       // find longest prefix
       foreach (/*auto*/ name; conByCommand) {
-        if (name.length < conclilen) continue;
-        if (name[0..conclilen] != concli[0..conclilen]) continue;
+        if (name.length < concurx) continue;
+        if (name[0..concurx] != concli[0..concurx]) continue;
         usize pos = 0;
         while (pos < name.length && pos < minPfx.length && minPfx.ptr[pos] == name.ptr[pos]) ++pos;
         if (pos < minPfx.length) minPfx = minPfx[0..pos];
       }
       if (minPfx.length > concli.length) minPfx = minPfx[0..concli.length];
       //conwriteln("longest prefix : [", minPfx, "]");
-      if (minPfx.length >= conclilen) {
-        // wow!
-        bool doRet = (minPfx.length > conclilen);
-        concli[0..minPfx.length] = minPfx[];
-        conclilen = cast(uint)minPfx.length;
-        if (conclilen < concli.length && conHasCommand(minPfx)) {
-          concli.ptr[conclilen++] = ' ';
-          doRet = true;
+      if (minPfx.length >= concurx) {
+        // wow! has something to add
+        bool doRet = (minPfx.length > concurx);
+        if (insChars(minPfx[concurx..$])) {
+          // insert space after complete command
+          if (conHasCommand(minPfx)) {
+            if (concurx >= conclilen || concli.ptr[concurx] > ' ') {
+              doRet = insChars(' ');
+            } else {
+              ++concurx;
+              doRet = true;
+            }
+          }
+          conInputIncLastChange();
+          if (doRet) return;
         }
-        conInputIncLastChange();
-        if (doRet) return;
       }
     }
     // nope, print all available commands
     bool needDelimiter = true;
     foreach (/*auto*/ name; conByCommand) {
-      if (conclilen > 0) {
-        if (name.length < conclilen) continue;
-        if (name[0..conclilen] != concli[0..conclilen]) continue;
+      if (concurx > 0) {
+        if (name.length < concurx) continue;
+        if (name[0..concurx] != concli[0..concurx]) continue;
       }
       if (needDelimiter) { conwriteln("----------------"); needDelimiter = false; }
       conwriteln(name);
@@ -2416,12 +2446,46 @@ public void conAddInputChar (char ch) {
   prevWasEmptyAndTab = 0;
   // remove last char
   if (ch == ConInputChar.Backspace) {
-    if (conclilen > 0) { --conclilen; conInputIncLastChange(); }
+    if (concurx > 0) {
+      if (concurx < conclilen) {
+        import core.stdc.string : memmove;
+        memmove(concli.ptr+concurx-1, concli.ptr+concurx, conclilen-concurx);
+      }
+      --concurx;
+      --conclilen;
+      conInputIncLastChange();
+    }
+    return;
+  }
+  // home
+  if (ch == ConInputChar.Home) {
+    if (concurx > 0) {
+      concurx = 0;
+      conInputIncLastChange();
+    }
+    return;
+  }
+  // end
+  if (ch == ConInputChar.End) {
+    if (concurx < conclilen) {
+      concurx = conclilen;
+      conInputIncLastChange();
+    }
+    return;
+  }
+  // delete char
+  if (ch == ConInputChar.Delete) {
+    if (concurx < conclilen) {
+      import core.stdc.string : memmove;
+      memmove(concli.ptr+concurx, concli.ptr+concurx+1, conclilen-concurx-1);
+      --conclilen;
+      conInputIncLastChange();
+    }
     return;
   }
   // ^Y
   if (ch == ConInputChar.CtrlY) {
-    if (conclilen > 0) { conInputIncLastChange(); conclilen = 0; }
+    if (conclilen > 0) { conclilen = 0; concurx = 0; conInputIncLastChange(); }
     return;
   }
   // up
@@ -2433,6 +2497,7 @@ public void conAddInputChar (char ch) {
     } else {
       concli[0..cmd.length] = cmd[];
       conclilen = cast(uint)cmd.length;
+      concurx = conclilen;
       conInputIncLastChange();
     }
     return;
@@ -2446,13 +2511,28 @@ public void conAddInputChar (char ch) {
     } else {
       concli[0..cmd.length] = cmd[];
       conclilen = cast(uint)cmd.length;
+      concurx = conclilen;
+      conInputIncLastChange();
+    }
+    return;
+  }
+  // left
+  if (ch == ConInputChar.Left) {
+    if (concurx > 0) {
+      --concurx;
+      conInputIncLastChange();
+    }
+    return;
+  }
+  // right
+  if (ch == ConInputChar.Right) {
+    if (concurx < conclilen) {
+      ++concurx;
       conInputIncLastChange();
     }
     return;
   }
   // other
   if (ch < ' ' || ch > 127) return;
-  if (conclilen >= concli.length) return;
-  concli.ptr[conclilen++] = ch;
-  conInputIncLastChange();
+  if (insChars(ch)) conInputIncLastChange();
 }
