@@ -1110,42 +1110,34 @@ public class EdHiTokensC : EdHiTokens {
     addToken("auto", HiKeyword);
     addToken("break", HiKeyword);
     addToken("case", HiKeyword);
-    addToken("char", HiKeyword);
     addToken("const", HiKeyword);
     addToken("continue", HiKeyword);
     addToken("do", HiKeyword);
-    addToken("double", HiKeyword);
     addToken("else", HiKeyword);
     addToken("enum", HiKeyword);
     addToken("extern", HiKeyword);
-    addToken("float", HiKeyword);
     addToken("for", HiKeyword);
     addToken("goto", HiKeyword);
     addToken("if", HiKeyword);
-    addToken("int", HiKeyword);
-    addToken("long", HiKeyword);
-    addToken("register", HiKeyword);
     addToken("return", HiKeyword);
     addToken("short", HiKeyword);
-    addToken("signed", HiKeyword);
     addToken("sizeof", HiKeyword);
     addToken("static", HiKeyword);
     addToken("struct", HiKeyword);
     addToken("switch", HiKeyword);
     addToken("typedef", HiKeyword);
     addToken("union", HiKeyword);
-    addToken("unsigned", HiKeyword);
-    addToken("void", HiKeyword);
     addToken("volatile", HiKeyword);
     addToken("while", HiKeyword);
     addToken("asm", HiKeyword);
     addToken("inline", HiKeyword);
-    addToken("wchar_t", HiKeyword);
     addToken("...", HiKeyword);
     addToken("class", HiKeyword);
     addToken("protected", HiKeyword);
     addToken("private", HiKeyword);
     addToken("public", HiKeyword);
+
+    addToken("register", HiInternal);
 
     addToken("!", HiPunct);
     addToken("%", HiPunct);
@@ -1185,6 +1177,8 @@ public class EdHiTokensC : EdHiTokens {
     addToken("wchar_t", HiType);
     addToken("size_t", HiType);
     addToken("ptrdiff_t", HiType);
+    addToken("signed", HiType);
+    addToken("unsigned", HiType);
   }
 }
 
@@ -1258,5 +1252,115 @@ public class EdHiTokensShell : EdHiTokens {
     addToken("unset", HiKeyword);
     addToken("wait", HiKeyword);
     addToken("while", HiKeyword);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class EdHiTokensFrag : EdHiTokens {
+  this () {
+    options =
+      Opt.Num0b|
+      Opt.Num0o|
+      Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      //Opt.SQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      //Opt.BodyIsSpecial|
+      Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      //Opt.ShellSigil|
+      0;
+
+    addToken("break", HiKeyword);
+    addToken("case", HiKeyword);
+    addToken("const", HiKeyword);
+    addToken("continue", HiKeyword);
+    addToken("do", HiKeyword);
+    addToken("else", HiKeyword);
+    addToken("enum", HiKeyword);
+    addToken("for", HiKeyword);
+    addToken("goto", HiKeyword);
+    addToken("if", HiKeyword);
+    addToken("return", HiKeyword);
+    addToken("sizeof", HiKeyword);
+    addToken("struct", HiKeyword);
+    addToken("switch", HiKeyword);
+    addToken("union", HiKeyword);
+    addToken("while", HiKeyword);
+
+    addToken("!", HiPunct);
+    addToken("%", HiPunct);
+    addToken("&&", HiPunct);
+    addToken("&", HiPunct);
+    addToken("(", HiPunct);
+    addToken(")", HiPunct);
+    addToken("*", HiPunct);
+    addToken("+", HiPunct);
+    addToken(",", HiPunct);
+    addToken("-", HiPunct);
+    addToken("/", HiPunct);
+    addToken(":", HiPunct);
+    addToken(";", HiSemi);
+    addToken("<", HiPunct);
+    addToken("=", HiPunct);
+    addToken(">", HiPunct);
+    addToken("?", HiPunct);
+    addToken("[", HiPunct);
+    addToken("]", HiPunct);
+    addToken("^", HiPunct);
+    addToken("{", HiPunct);
+    addToken("||", HiPunct);
+    addToken("|", HiPunct);
+    addToken("}", HiPunct);
+    addToken("~", HiPunct);
+    addToken(".", HiPunct);
+    addToken("->", HiInternal);
+
+    addToken("uniform", HiInternal);
+    addToken("varying", HiInternal);
+    addToken("attribute", HiInternal);
+
+    addToken("precision", HiInternal);
+
+    addToken("gl_FragColor", HiInternal);
+    addToken("gl_FragData", HiInternal);
+    addToken("gl_FrontFacing", HiInternal);
+    addToken("gl_PointCoord", HiInternal);
+    addToken("gl_PointSize", HiInternal);
+    addToken("gl_Position", HiInternal);
+    addToken("gl_MaxVertexAttribs", HiInternal);
+    addToken("gl_MaxVertexUniformVectors", HiInternal);
+    addToken("gl_MaxVaryingVectors", HiInternal);
+    addToken("gl_MaxVertexTextureImageUnits", HiInternal);
+    addToken("gl_MaxCombinedTextureImageUnits", HiInternal);
+    addToken("gl_MaxFragmentUniformVectors", HiInternal);
+    addToken("gl_MaxDrawBuffers", HiInternal);
+    addToken("gl_Vertex", HiInternal);
+    addToken("gl_Normal", HiInternal);
+    addToken("gl_Color", HiInternal);
+    addToken("gl_FogCoodr", HiInternal);
+    addToken("gl_MultiTexCoord0", HiInternal);
+    addToken("gl_MultiTexCoord1", HiInternal);
+    addToken("gl_MultiTexCoord2", HiInternal);
+    addToken("gl_MultiTexCoord3", HiInternal);
+    addToken("gl_MultiTexCoord4", HiInternal);
+    addToken("gl_MultiTexCoord5", HiInternal);
+    addToken("gl_MultiTexCoord6", HiInternal);
+    addToken("gl_MultiTexCoord7", HiInternal);
+
+    addToken("void", HiType);
+    addToken("int", HiType);
+    addToken("float", HiType);
+    addToken("double", HiType);
+    addToken("vec2", HiType);
+    addToken("vec3", HiType);
+    addToken("vec4", HiType);
   }
 }
