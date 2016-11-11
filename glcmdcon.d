@@ -316,6 +316,9 @@ public bool oglResizeConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return false;
   if (ascale < 1 || ascale > 64) return false;
   if (scrwdt == ascrwdt && scrhgt == ascrhgt) { winScale = ascale; return true; }
+  if (rConsoleHeight > 0) {
+    rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
+  }
   scrwdt = ascrwdt;
   scrhgt = ascrhgt;
   winScale = ascale;
