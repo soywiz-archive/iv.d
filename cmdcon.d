@@ -1742,17 +1742,6 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
 }
 
 
-/** register integral console variable with bounded value.
- *
- * Params:
- *   v = variable symbol
- *   aminv = minimum value
- *   amaxv = maximum value
- *   aname = variable name
- */
-public void conRegVar(alias v, T) (T aminv, T amaxv, string aname) if (isIntegral!(typeof(v)) && isIntegral!T) { conRegVar!(v, T)(aminv, amaxv, aname, null); }
-
-
 /** register console variable.
  *
  * Params:
@@ -1773,15 +1762,6 @@ public void conRegVar(alias v) (string aname, string ahelp, const(ConVarAttr)[] 
 }
 
 
-/** register console variable.
- *
- * Params:
- *   v = variable symbol
- *   aname = variable name
- */
-public void conRegVar(alias v) (string aname) if (!isCallable!(typeof(v))) { conRegVar!(v)(aname, null); }
-
-
 // ////////////////////////////////////////////////////////////////////////// //
 // delegate
 public class ConFuncBase : ConCommand {
@@ -1800,7 +1780,7 @@ public struct ConFuncVA {
  *   aname = variable name
  *   ahelp = help text
  */
-public void conRegFunc(alias fn) (string aname, string ahelp=null) if (isCallable!fn) {
+public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn) {
   // we have to make the class nested, so we can use `dg`, which keeps default args
 
   // hack for inline lambdas
@@ -1878,21 +1858,49 @@ __gshared string[] cmdlistSorted;
 // all following API is thread-unsafe, if the opposite is not written
 public bool conHasCommand (ConString name) { pragma(inline, true); return ((name in cmdlist) !is null); } /// check if console has a command with a given name (thread-unsafe)
 
-/// known console commands range (thread-unsafe)
-public auto conByCommand () {
-  static struct Range {
+/// known console commands (funcs and vars) range (thread-unsafe)
+/// type: "all", "vars", "funcs"
+public auto conByCommand(string type="all") () if (type == "all" || type == "vars" || type == "funcs") {
+  static struct Range(string type) {
   private:
     usize idx;
+
+  private:
+    this (usize stidx) {
+      static if (type == "all") {
+        idx = stidx;
+      } else static if (type == "vars") {
+        while (stidx < cmdlistSorted.length && (cast(ConVarBase)cmdlist[cmdlistSorted.ptr[stidx]]) is null) ++stidx;
+        idx = stidx;
+      } else static if (type == "funcs") {
+        while (stidx < cmdlistSorted.length && (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[stidx]]) is null) ++stidx;
+        idx = stidx;
+      } else {
+        static assert(0, "wtf?!");
+      }
+    }
 
   public:
     @property bool empty() () { pragma(inline, true); return (idx >= cmdlistSorted.length); }
     @property string front() () { pragma(inline, true); return (idx < cmdlistSorted.length ? cmdlistSorted.ptr[idx] : null); }
     @property bool frontIsVar() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConVarBase)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
     @property bool frontIsFunc() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
-    void popFront () { pragma(inline, true); if (idx < cmdlistSorted.length) ++idx; }
+    void popFront () {
+      static if (type == "all") { 
+       pragma(inline, true);
+        ++idx;
+      } else static if (type == "vars") {
+        ++idx;
+        while (idx < cmdlistSorted.length && (cast(ConVarBase)cmdlist[cmdlistSorted.ptr[idx]]) is null) ++idx;
+      } else static if (type == "funcs") {
+        ++idx;
+        while (idx < cmdlistSorted.length && (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[idx]]) is null) ++idx;
+      } else {
+        static assert(0, "wtf?!");
+      }
+    }
   }
-  Range res;
-  return res;
+  return Range!type(0);
 }
 
 
@@ -1960,7 +1968,7 @@ version(contest_func) unittest {
   conExecute("xfunc 666");
   conExecute("xfunc");
 
-  conRegFunc!({conwriteln("!!!");})("bang");
+  conRegFunc!({conwriteln("!!!");})("bang", "dummy function");
   conExecute("bang");
 
   conRegFunc!((ConFuncVA va) {
@@ -1971,7 +1979,7 @@ version(contest_func) unittest {
       conwriteln("#", idx, ": [", w, "]");
       ++idx;
     }
-  })("doo");
+  })("doo", "another dummy function");
   conExecute("doo 1 2 ' 34 '");
 }
 
@@ -2225,10 +2233,10 @@ version(contest_echo) unittest {
   __gshared int vi = 42;
   __gshared string vs = "str";
   __gshared bool vb = true;
-  conRegVar!vi("vi");
-  conRegVar!vs("vs");
-  conRegVar!vb("vb");
-  conRegVar!vb("r_interpolation");
+  conRegVar!vi("vi", "int var");
+  conRegVar!vs("vs", "string var");
+  conRegVar!vb("vb", "bool var");
+  conRegVar!vb("r_interpolation", "bool var");
   conwriteln("=================");
   conExecute("r_interpolation");
   conExecute("echo ?");
@@ -2253,14 +2261,23 @@ version(contest_echo) unittest {
 
 ///
 version(contest_cmdlist) unittest {
-  auto cl = conByCommand;
-  while (!cl.empty) {
-         if (cl.frontIsVar) conwrite("VAR  ");
-    else if (cl.frontIsFunc) conwrite("FUNC ");
-    else conwrite("UNK  ");
-    conwriteln("[", cl.front, "]");
-    cl.popFront();
+  {
+    auto cl = conByCommand;
+    conwriteln("=== all ===");
+    while (!cl.empty) {
+           if (cl.frontIsVar) conwrite("VAR  ");
+      else if (cl.frontIsFunc) conwrite("FUNC ");
+      else conwrite("UNK  ");
+      conwriteln("[", cl.front, "]");
+      cl.popFront();
+    }
   }
+
+  conwriteln("=== funcs ===");
+  foreach (/*auto*/ clx; conByCommand!"funcs") conwriteln("  [", clx, "]");
+
+  conwriteln("=== vars ===");
+  foreach (/*auto*/ clx; conByCommand!"vars") conwriteln("  [", clx, "]");
 }
 
 
