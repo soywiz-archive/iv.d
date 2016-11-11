@@ -887,7 +887,8 @@ private:
   }
 
 private:
-  __gshared char[] wordBuf;
+  __gshared char[] wordBuf; // buffer for `getWord()`
+  void delegate (ConCommand self) argcomplete; // this delegate will be called to do argument autocompletion
 
 public:
   string name; ///
@@ -904,7 +905,7 @@ public:
     if (w == "?") showHelp;
   }
 
-protected:
+public:
 static:
   //private import std.traits : isSomeChar;
   int digit(TC) (TC ch, uint base) pure nothrow @safe @nogc if (isSomeChar!TC) {
@@ -1769,9 +1770,11 @@ public class ConFuncBase : ConCommand {
 }
 
 
+/// use `conRegFunc!((ConFuncVA va) {...}, ...)` to switch off automatic argument parsing
 public struct ConFuncVA {
   ConString cmdline;
 }
+
 
 /** register console command.
  *
@@ -1854,6 +1857,18 @@ __gshared ConCommand[string] cmdlist;
 __gshared string[] cmdlistSorted;
 
 
+/** set argument completion delegate for command.
+ *
+ * delegate will be called from `conAddInputChar()`.
+ * delegate can use `conInputBuffer()` to get current input buffer,
+ * `conInputBufferCurX()` to get cursor position, and
+ * `conAddInputChar()` itself to put new chars into buffer.
+ */
+void conSetArgCompleter (ConString cmdname, void delegate (ConCommand self) ac) {
+  if (auto cp = cmdname in cmdlist) (*cp).argcomplete = ac;
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // all following API is thread-unsafe, if the opposite is not written
 public bool conHasCommand (ConString name) { pragma(inline, true); return ((name in cmdlist) !is null); } /// check if console has a command with a given name (thread-unsafe)
@@ -1886,7 +1901,7 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
     @property bool frontIsVar() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConVarBase)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
     @property bool frontIsFunc() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
     void popFront () {
-      static if (type == "all") { 
+      static if (type == "all") {
        pragma(inline, true);
         ++idx;
       } else static if (type == "vars") {
@@ -2414,6 +2429,26 @@ public void conAddInputChar (char ch) {
       prevWasEmptyAndTab = 0;
     }
     if (concurx > 0) {
+      // if there are space(s) before cursor position, this is argument completion
+      bool doArgAC = false;
+      {
+        int p = concurx;
+        while (p > 0 && concli.ptr[p-1] > ' ') --p;
+        doArgAC = (p > 0);
+      }
+      if (doArgAC) {
+        prevWasEmptyAndTab = 0;
+        // yeah, arguments; first, get command name
+        int stp = 0;
+        while (stp < concurx && concli.ptr[stp] <= ' ') ++stp;
+        if (stp >= concurx) return; // alas
+        auto ste = stp+1;
+        while (ste < concurx && concli.ptr[ste] > ' ') ++ste;
+        if (auto cp = concli[stp..ste] in cmdlist) {
+          if (cp.argcomplete) try { cp.argcomplete(*cp); } catch (Exception) {} // sorry
+        }
+        return;
+      }
       string minPfx = null;
       // find longest command
       foreach (/*auto*/ name; conByCommand) {
