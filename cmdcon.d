@@ -2236,7 +2236,7 @@ version(contest_echo) unittest {
     char[44] buf;
     auto s = buf.conFormatStr("vs=$vs,  vi=${vi},  vb=${vb}!");
     conwriteln("[", s, "]");
-    foreach (auto kv; cmdlist.byKeyValue) conwriteln(" ", kv.key);
+    foreach (/*auto*/ kv; cmdlist.byKeyValue) conwriteln(" ", kv.key);
     assert("r_interpolation" in cmdlist);
     s = buf.conFormatStr("Interpolation: $r_interpolation");
     conwriteln("[", s, "]");

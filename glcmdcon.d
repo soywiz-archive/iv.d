@@ -102,6 +102,7 @@ public T convar(T) (ConString s) {
 }
 
 /// set console variable value; doesn't do complex conversions!
+/// WARNING! this is instant action, execution queue is ignored!
 public void convar(T) (ConString s, T val) {
   consoleLock();
   scope(exit) consoleUnlock();
