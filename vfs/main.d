@@ -19,6 +19,7 @@
 module iv.vfs.main;
 private:
 
+import core.time;
 import iv.vfs.types : usize;
 import iv.vfs.config;
 import iv.vfs.augs;
@@ -241,9 +242,43 @@ struct DriverInfo {
   string fname;
   string prefixpath;
   VFSDriverId drvid;
+  bool temp; // temporary? will not be used in listing, and eventually removed
+  MonoTime tempUsedTime; // last used time for temp paks
+
+  this (Mode amode, VFSDriver adrv, string afname, string apfxpath, VFSDriverId adid, bool atemp) {
+    mode = amode;
+    drv = adrv;
+    fname = afname;
+    prefixpath = apfxpath;
+    drvid = adid;
+    temp = atemp;
+    if (atemp) tempUsedTime = MonoTime.currTime;
+  }
 }
 
 __gshared DriverInfo[] drivers;
+__gshared uint tempDrvCount = 0;
+
+private void cleanupDrivers () {
+  if (tempDrvCount == 0) return;
+  bool ctValid = false;
+  MonoTime ct;
+  auto idx = drivers.length;
+  while (idx > 0) {
+    --idx;
+    if (!drivers.ptr[idx].temp) continue;
+    if (!ctValid) { ct = MonoTime.currTime; ctValid = true; }
+    if ((ct-drivers.ptr[idx].tempUsedTime).total!"seconds" >= 5) {
+      // remove it
+      --tempDrvCount;
+      foreach (immutable c; idx+1..drivers.length) drivers.ptr[c-1] = drivers.ptr[c];
+      drivers.length -= 1;
+      drivers.assumeSafeAppend;
+      if (idx == 0 || tempDrvCount == 0) return;
+      --idx;
+    }
+  }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -251,28 +286,30 @@ __gshared DriverInfo[] drivers;
 /// driver order is: firsts, normals, lasts (obviously ;-).
 /// search order is from first to last, in reverse order.
 /// you can use returned driver id to unregister the driver later.
-public VFSDriverId vfsRegister(string mode="normal") (VFSDriver drv, const(char)[] fname=null, const(char)[] prefixpath=null) {
+public VFSDriverId vfsRegister(string mode="normal", bool temp=false) (VFSDriver drv, const(char)[] fname=null, const(char)[] prefixpath=null) {
   static assert(mode == "normal" || mode == "last" || mode == "first");
   import core.atomic : atomicOp;
   if (drv is null) return VFSDriverId.init;
   auto lock = VFSLock.lock("can't register drivers in list operations");
+  cleanupDrivers();
   VFSDriverId did = VFSDriverId.create;
+  static if (temp) ++tempDrvCount;
   static if (mode == "normal") {
     // normal
     usize ipos = drivers.length;
     while (ipos > 0 && drivers[ipos-1].mode == DriverInfo.Mode.First) --ipos;
     if (ipos == drivers.length) {
-      drivers ~= DriverInfo(DriverInfo.Mode.Normal, drv, fname.idup, prefixpath.idup, did);
+      drivers ~= DriverInfo(DriverInfo.Mode.Normal, drv, fname.idup, prefixpath.idup, did, temp);
     } else {
       drivers.length += 1;
       foreach_reverse (immutable c; ipos+1..drivers.length) drivers[c] = drivers[c-1];
-      drivers[ipos] = DriverInfo(DriverInfo.Mode.Normal, drv, fname.idup, prefixpath.idup, did);
+      drivers[ipos] = DriverInfo(DriverInfo.Mode.Normal, drv, fname.idup, prefixpath.idup, did, temp);
     }
   } else static if (mode == "first") {
     // first
-    drivers ~= DriverInfo(DriverInfo.Mode.First, drv, fname.idup, prefixpath.idup, did);
+    drivers ~= DriverInfo(DriverInfo.Mode.First, drv, fname.idup, prefixpath.idup, did, temp);
   } else static if (mode == "last") {
-    drivers = [DriverInfo(DriverInfo.Mode.Last, drv, fname.idup, prefixpath.idup, did)]~drivers;
+    drivers = [DriverInfo(DriverInfo.Mode.Last, drv, fname.idup, prefixpath.idup, did, temp)]~drivers;
   } else {
     static assert(0, "wtf?!");
   }
@@ -286,7 +323,7 @@ public VFSDriverId vfsRegister(string mode="normal") (VFSDriver drv, const(char)
 public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=null) {
   auto lock = VFSLock.lock();
   foreach_reverse (immutable idx, ref drv; drivers) {
-    if (drv.fname == fname && drv.prefixpath == prefixpath) return drv.drvid;
+    if (!drv.temp && drv.fname == fname && drv.prefixpath == prefixpath) return drv.drvid;
   }
   return VFSDriverId.init;
 }
@@ -297,11 +334,13 @@ public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=
 /// WARNING: don't add new drivers while this is in process!
 public bool vfsUnregister (VFSDriverId id) {
   auto lock = VFSLock.lock("can't unregister drivers in list operations");
+  cleanupDrivers();
   foreach_reverse (immutable idx, ref drv; drivers) {
     if (drv.drvid == id) {
       // i found her!
       foreach (immutable c; idx+1..drivers.length) drivers[c-1] = drivers[c];
       drivers.length -= 1;
+      drivers.assumeSafeAppend;
       return true;
     }
   }
@@ -317,7 +356,9 @@ public VFSDriver.DirEntry[] vfsFileList () {
   VFSDriver.DirEntry[] res;
 
   auto lock = VFSLock.lock();
+  cleanupDrivers();
   foreach_reverse (ref drvnfo; drivers) {
+    if (drvnfo.temp) continue;
     foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
       auto de = drvnfo.drv.dirEntry(idx);
       if (de.name.length == 0) continue;
@@ -342,8 +383,10 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb)
   if (cb is null) return 0;
 
   auto lock = VFSLock.lock();
+  cleanupDrivers();
   bool[string] filesSeen;
   foreach_reverse (ref drvnfo; drivers) {
+    if (drvnfo.temp) continue;
     foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
       auto de = drvnfo.drv.dirEntry(idx);
       if (de.name !in filesSeen) {
@@ -362,8 +405,10 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de, VFS
   if (cb is null) return 0;
 
   auto lock = VFSLock.lock();
+  cleanupDrivers();
   bool[string] filesSeen;
   foreach_reverse (ref drvnfo; drivers) {
+    if (drvnfo.temp) continue;
     foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
       auto de = drvnfo.drv.dirEntry(idx);
       if (de.name !in filesSeen) {
@@ -451,11 +496,13 @@ public VFile vfsOpenFile (const(char)[] fname, const(char)[] mode=null) {
 
   {
     auto lock = VFSLock.lock();
+    cleanupDrivers();
     // try all drivers
     foreach_reverse (ref di; drivers) {
       try {
         auto fl = di.drv.tryOpen(fname, ignoreCase);
         if (fl.isOpen) {
+          if (di.temp) di.tempUsedTime = MonoTime.currTime;
           if (!isROMode(mdb)) errorfn("can't open file '!' in non-binary non-readonly mode");
           return fl;
         }
@@ -510,19 +557,19 @@ public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// `prefixpath`: this will be prepended to each name from archive, unmodified.
-public VFSDriverId vfsAddPak(string mode="normal") (const(char)[] fname, const(char)[] prefixpath=null) {
+public VFSDriverId vfsAddPak(string mode="normal", bool temp=false) (const(char)[] fname, const(char)[] prefixpath=null) {
   foreach (char ch; fname) {
     if (ch == ':') {
       try {
-        return vfsAddPak!mode(vfsOpenFile(fname), fname, prefixpath);
+        return vfsAddPak!(mode, temp)(vfsOpenFile(fname), fname, prefixpath);
       } catch (Exception) {}
-      return vfsAddPak!mode(vfsDiskOpen(fname), fname, prefixpath);
+      return vfsAddPak!(mode, temp)(vfsDiskOpen(fname), fname, prefixpath);
     }
   }
   try {
-    return vfsAddPak!mode(vfsDiskOpen(fname), fname, prefixpath);
+    return vfsAddPak!(mode, temp)(vfsDiskOpen(fname), fname, prefixpath);
   } catch (Exception) {}
-  return vfsAddPak!mode(vfsOpenFile(fname), fname, prefixpath);
+  return vfsAddPak!(mode, temp)(vfsOpenFile(fname), fname, prefixpath);
 }
 
 
@@ -539,21 +586,17 @@ public bool vfsRemovePack (VFSDriverId id) {
 
 
 /// `prefixpath`: this will be prepended to each name from archive, unmodified.
-public VFSDriverId vfsAddPak(string mode="normal", T : const(char)[]) (VFile fl, T fname="", const(char)[] prefixpath=null) {
+public VFSDriverId vfsAddPak(string mode="normal", bool temp=false, T : const(char)[]) (VFile fl, T fname="", const(char)[] prefixpath=null) {
   static assert(mode == "normal" || mode == "last" || mode == "first");
   static if (is(T == typeof(null))) {
-    return vfsAddPak(fl, "", prefixpath);
+    return vfsAddPak!(mode, temp, T)(fl, "", prefixpath);
   } else {
     void error (Throwable e=null, string file=__FILE__, usize line=__LINE__) {
       if (fname.length == 0) {
         throw new VFSException("can't open pak file", file, line, e);
       } else {
-        import std.array : appender;
-        auto s = appender!string();
-        s.put("can't open pak file '");
-        s.put(fname);
-        s.put("'");
-        throw new VFSException(s.data, file, line, e);
+        import std.format : format;
+        throw new VFSException("can't open pak file '%s'".format(fname), file, line, e);
       }
     }
 
@@ -570,7 +613,7 @@ public VFSDriverId vfsAddPak(string mode="normal", T : const(char)[]) (VFile fl,
           import core.atomic;
           atomicOp!"-="(vfsLockedFlag, 1);
           scope(exit) atomicOp!"+="(vfsLockedFlag, 1);
-          return vfsRegister!mode(drv, fname, prefixpath);
+          return vfsRegister!(mode, temp)(drv, fname, prefixpath);
         }
       } catch (Exception e) {
         // chain
@@ -616,4 +659,51 @@ public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
     // chain
     throw new VFSException("can't open file '"~fname.idup~"'", __FILE__, __LINE__, e);
   }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
+public VFile openFileEx (const(char)[] name) {
+  if (name.length >= int.max/4) throw new VFSException("name too long");
+
+  // check if name has any prefix at all
+  int pfxend = cast(int)name.length;
+  while (pfxend > 0 && name.ptr[pfxend-1] != ':') --pfxend;
+  if (pfxend == 0) return VFile(name); // easy case
+
+  auto lock = VFSLock.lock();
+
+  // cpos: after last succesfull prefix
+  VFile openit (int cpos) {
+    while (cpos < name.length) {
+      auto ep = cpos;
+      while (ep < name.length && name.ptr[ep] != ':') ++ep;
+      if (ep >= name.length) return VFile(name);
+      if (name.length-ep == 1) throw new VFSException("can't open file '"~name.idup~"'");
+      {
+        // hack!
+        import core.atomic;
+        atomicOp!"-="(vfsLockedFlag, 1);
+        scope(exit) atomicOp!"+="(vfsLockedFlag, 1);
+        vfsAddPak!("normal", true)(name[0..ep], name[0..ep+1]);
+      }
+      cpos = ep+1;
+    }
+    throw new VFSException("can't open file '"~name.idup~"'"); // just in case
+  }
+
+  // try to find the longest prefix which already exists
+  while (pfxend > 0) {
+    foreach (ref di; drivers) {
+      if (di.prefixpath == name[0..pfxend]) {
+        // i found her!
+        if (di.temp) di.tempUsedTime = MonoTime.currTime;
+        return openit(pfxend);
+      }
+    }
+    --pfxend;
+    while (pfxend > 0 && name.ptr[pfxend-1] != ':') --pfxend;
+  }
+  return openit(0);
 }

@@ -40,7 +40,9 @@ __gshared uint scrwdt, scrhgt;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
+// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
+// moved to iv.vfs
+/+
 public VFile openFileEx (ConString name) {
   VFSDriverId[128] dids;
   int didcount;
@@ -64,7 +66,7 @@ public VFile openFileEx (ConString name) {
   }
   throw new VFSException("empty name");
 }
-
++/
 
 // ////////////////////////////////////////////////////////////////////////// //
 // public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1); -- call at startup
