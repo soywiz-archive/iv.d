@@ -1483,7 +1483,8 @@ public enum ConVarAttr : uint {
   Archive = 1U<<0, /// save on change (saving must be done by library user)
   Hex = 1U<<1, /// dump this variable as hex value (valid for integrals)
   //TODO:
-  //ReadOnly = 1U<<31,
+  User = 1U<<30, /// user-created
+  ReadOnly = 1U<<31, /// can't be changed with console command (direct change is still possible)
 }
 
 
@@ -1496,18 +1497,35 @@ public:
   this (string aname, string ahelp=null) { super(aname, ahelp); }
 
   /// replaces current attributes
-  final void setAttrs (const(ConVarAttr)[] attrs...) pure nothrow @safe @nogc {
+  final void setAttrs(bool any=false) (const(ConVarAttr)[] attrs...) pure nothrow @safe @nogc {
     mAttrs = 0;
-    foreach (const ConVarAttr a; attrs) mAttrs |= a;
+    foreach (const ConVarAttr a; attrs) {
+      static if (any) {
+        if (a == ConVarAttr.User) continue;
+      }
+      mAttrs |= a;
+    }
   }
 
   @property pure nothrow @safe @nogc final {
     uint attrs () const { pragma(inline, true); return mAttrs; }
-    void attrs (uint v) { pragma(inline, true); mAttrs = v; }
+    void attrs(bool any=false) (uint v) {
+      pragma(inline, true);
+      static if (any) mAttrs = v; else mAttrs = v&~(ConVarAttr.User);
+    }
 
     bool attrArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) != 0); }
     bool attrNoArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) == 0); }
+
+    void attrArchive (bool v) { pragma(inline, true); if (v) mAttrs |= ConVarAttr.Archive; else mAttrs &= ~ConVarAttr.Archive; }
+    void attrNoArchive (bool v) { pragma(inline, true); if (!v) mAttrs |= ConVarAttr.Archive; else mAttrs &= ~ConVarAttr.Archive; }
+
     bool attrHexDump () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Hex) != 0); }
+
+    bool attrReadOnly () const { pragma(inline, true); return ((mAttrs&ConVarAttr.ReadOnly) != 0); }
+    void attrReadOnly (bool v) { pragma(inline, true); if (v) mAttrs |= ConVarAttr.ReadOnly; else mAttrs &= ~ConVarAttr.ReadOnly; }
+
+    bool attrUser () const { pragma(inline, true); return ((mAttrs&ConVarAttr.User) != 0); }
   }
 
   abstract void printValue ();
@@ -2277,9 +2295,59 @@ public class ConCommandEcho : ConCommand {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+/// console always has "userconvar" command, no need to register it.
+public class ConCommandUserConVar : ConCommand {
+  this () { super("userconvar", "create user convar \"<type> <name>\"; type is <int|str|bool|float|double>"); }
+
+  override void exec (ConString cmdline) {
+    if (checkHelp(cmdline)) { showHelp; return; }
+    if (!hasArgs(cmdline)) return;
+    auto type = getWord(cmdline);
+    auto name = getWord(cmdline);
+    if (type.length == 0 || name.length == 0) return;
+    if (name in cmdlist) { conwriteln("console variable '", name, "' already exists"); return; }
+    ConVarBase v;
+    string aname = name.idup;
+    switch (type) {
+      case "int":
+        int* var = new int;
+        v = new ConVar!int(var, aname, null);
+        break;
+      case "str":
+        //string* var = new string; // alas
+        string[] var;
+        var.length = 1;
+        v = new ConVar!string(&var[0], aname, null);
+        break;
+      case "bool":
+        bool* var = new bool;
+        v = new ConVar!bool(var, aname, null);
+        break;
+      case "float":
+        float* var = new float;
+        v = new ConVar!float(var, aname, null);
+        break;
+      case "double":
+        double* var = new double;
+        v = new ConVar!double(var, aname, null);
+        break;
+      default:
+        conwriteln("can't create console variable '", name, "' of unknown type '", type, "'");
+        return;
+    }
+    v.setAttrs!true(ConVarAttr.User);
+    addName(aname);
+    cmdlist[aname] = v;
+  }
+}
+
+
 shared static this () {
   addName("echo");
   cmdlist["echo"] = new ConCommandEcho();
+  addName("userconvar");
+  cmdlist["userconvar"] = new ConCommandUserConVar();
 }
 
 

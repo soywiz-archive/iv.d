@@ -654,9 +654,9 @@ void conDrawChar (char ch) nothrow @trusted @nogc {
       if (v&0x8000) vsetPixel(conDrawX+x, conDrawY+y, cc);
       v <<= 1;
     }
-    if ((r -= 6) < 0) r = rr;
-    if ((g -= 6) < 0) g = gg;
-    if ((b -= 6) < 0) b = bb;
+    if ((r -= 7) < 0) r = rr;
+    if ((g -= 7) < 0) g = gg;
+    if ((b -= 7) < 0) b = bb;
   }
   conDrawX += 10;
 }
