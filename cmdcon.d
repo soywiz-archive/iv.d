@@ -1611,6 +1611,7 @@ final class ConVar(T) : ConVarBase {
   override void exec (ConString cmdline) {
     if (checkHelp(cmdline)) { showHelp; return; }
     if (!hasArgs(cmdline)) { printValue; return; }
+    if (attrReadOnly) return; // can't change read-only var with console commands
     static if (is(XUQQ!T == bool)) {
       while (cmdline.length && cmdline[0] <= 32) cmdline = cmdline[1..$];
       while (cmdline.length && cmdline[$-1] <= 32) cmdline = cmdline[0..$-1];
