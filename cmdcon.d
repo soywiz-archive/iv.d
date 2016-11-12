@@ -1500,7 +1500,7 @@ public:
   final void setAttrs(bool any=false) (const(ConVarAttr)[] attrs...) pure nothrow @safe @nogc {
     mAttrs = 0;
     foreach (const ConVarAttr a; attrs) {
-      static if (any) {
+      static if (!any) {
         if (a == ConVarAttr.User) continue;
       }
       mAttrs |= a;
@@ -2222,7 +2222,7 @@ version(contest_cpx) unittest {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// console always has "echo" command, no need to register it.
+// console always has "echo" command, no need to register it.
 public class ConCommandEcho : ConCommand {
   this () { super("echo", "write string to console"); }
 
@@ -2297,9 +2297,9 @@ public class ConCommandEcho : ConCommand {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// console always has "userconvar" command, no need to register it.
+// console always has "userconvar" command, no need to register it.
 public class ConCommandUserConVar : ConCommand {
-  this () { super("userconvar", "create user convar \"<type> <name>\"; type is <int|str|bool|float|double>"); }
+  this () { super("userconvar", "create user convar: userconvar \"<type> <name>\"; type is <int|str|bool|float|double>"); }
 
   override void exec (ConString cmdline) {
     if (checkHelp(cmdline)) { showHelp; return; }
@@ -2344,11 +2344,49 @@ public class ConCommandUserConVar : ConCommand {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+// console always has "killuserconvar" command, no need to register it.
+public class ConCommandKillUserConVar : ConCommand {
+  this () { super("killuserconvar", "remove user convar: killuserconvar \"<name>\""); }
+
+  override void exec (ConString cmdline) {
+    if (checkHelp(cmdline)) { showHelp; return; }
+    if (!hasArgs(cmdline)) return;
+    auto name = getWord(cmdline);
+    if (name.length == 0) return;
+    if (auto vp = name in cmdlist) {
+      if (auto var = cast(ConVarBase)(*vp)) {
+        if (!var.attrUser) {
+          conwriteln("console command '", name, "' is not a uservar");
+          return;
+        }
+        // remove it
+        cmdlist.remove(cast(string)name); // it is safe to cast here
+        foreach (immutable idx, string n; cmdlistSorted) {
+          if (n == name) {
+            foreach (immutable c; idx+1..cmdlistSorted.length) cmdlistSorted[c-1] = cmdlistSorted[c];
+            return;
+          }
+        }
+      } else {
+        conwriteln("console command '", name, "' is not a var");
+        return;
+      }
+    } else {
+      conwriteln("console variable '", name, "' doesn't exist");
+      return;
+    }
+  }
+}
+
+
 shared static this () {
   addName("echo");
   cmdlist["echo"] = new ConCommandEcho();
   addName("userconvar");
   cmdlist["userconvar"] = new ConCommandUserConVar();
+  addName("killuserconvar");
+  cmdlist["killuserconvar"] = new ConCommandKillUserConVar();
 }
 
 
