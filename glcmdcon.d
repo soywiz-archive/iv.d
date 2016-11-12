@@ -69,7 +69,6 @@ public VFile openFileEx (ConString name) {
 +/
 
 // ////////////////////////////////////////////////////////////////////////// //
-// public void initConsole (uint ascrwdt, uint ascrhgt, uint ascale=1); -- call at startup
 // public void oglInitConsole (); -- call in `visibleForTheFirstTime`
 // public void oglDrawConsole (); -- call in `redrawOpenGlScene` (it should not modify render modes)
 // public bool conKeyEvent (KeyEvent event); -- returns `true` if event was eaten
@@ -248,10 +247,13 @@ __gshared uint rConStarColor = 0x3f0000; // rgb
 shared bool vquitRequested = false;
 
 
-/// initialize glcmdcon variables and commands, sets screen size and scale
-/// NOT THREAD-SAFE! also, should be called only once.
-/// screen dimensions can be fixed later by calling `oglResizeConsole()`.
-public void initConsole (uint ascrwdt=800, uint ascrhgt=600, uint ascale=1) {
+// initialize glcmdcon variables and commands, sets screen size and scale
+// NOT THREAD-SAFE! also, should be called only once.
+// screen dimensions can be fixed later by calling `oglResizeConsole()`.
+private void initConsole () {
+  enum ascrwdt = 800;
+  enum ascrhgt = 600;
+  enum ascale = 1;
   if (winScale != 0) assert(0, "cmdcon already initialized");
   if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) assert(0, "invalid cmdcon dimensions");
   if (ascale < 1 || ascale > 64) assert(0, "invalid cmdcon scale");
@@ -307,24 +309,15 @@ public void initConsole (uint ascrwdt=800, uint ascrhgt=600, uint ascale=1) {
   })("quit", "quit");
 }
 
+shared static this () { initConsole(); }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// call this if window was resized. will return `true` if resize was successfull.
 /// NOT THREAD-SAFE!
 /// can be called instead of `oglInitConsole()`. it is ok to call it with the same dimensions repeatedly.
-public bool oglResizeConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
-  if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return false;
-  if (ascale < 1 || ascale > 64) return false;
-  if (scrwdt == ascrwdt && scrhgt == ascrhgt) { winScale = ascale; return true; }
-  if (rConsoleHeight > 0) {
-    rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
-  }
-  scrwdt = ascrwdt;
-  scrhgt = ascrhgt;
-  winScale = ascale;
-  if (rConsoleHeight > scrhgt) rConsoleHeight = scrhgt;
-  oglInitConsole(); // reallocate back buffer and texture
-  return true;
+public void oglResizeConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+  oglInitConsole(ascrwdt, ascrhgt, ascale); // reallocate back buffer and texture
 }
 
 
@@ -333,40 +326,51 @@ __gshared uint* convbuf = null; // RGBA, malloced
 __gshared uint convbufTexId = 0;
 
 
-/// initialize OpenGL part of glcmdcon, should be called after `initConsole()`.
+/// initialize OpenGL part of glcmdcon. it is ok to call it with the same dimensions repeatedly.
 /// NOT THREAD-SAFE!
-public void oglInitConsole () {
-  import core.stdc.stdlib;
+public void oglInitConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+  if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return;
+  if (ascale < 1 || ascale > 64) return;
+  winScale = ascale;
+  if (scrwdt != ascrwdt || scrhgt != ascrhgt || convbuf is null) {
+    import core.stdc.stdlib : realloc;
 
-  convbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
-  if (convbuf is null) assert(0, "out of memory");
-  convbuf[0..scrwdt*scrhgt] = 0xff000000;
-  conLastChange = 0;
+    if (rConsoleHeight > 0) rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
+    scrwdt = ascrwdt;
+    scrhgt = ascrhgt;
+    if (rConsoleHeight > scrhgt) rConsoleHeight = scrhgt;
 
-  if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
+    convbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
+    if (convbuf is null) assert(0, "out of memory");
+    convbuf[0..scrwdt*scrhgt] = 0xff000000;
 
-  GLuint wrapOpt = GL_REPEAT;
-  GLuint filterOpt = GL_NEAREST; //GL_LINEAR;
-  GLuint ttype = GL_UNSIGNED_BYTE;
+    if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
 
-  glGenTextures(1, &convbufTexId);
-  if (convbufTexId == 0) assert(0, "can't create cmdcon texture");
+    GLuint wrapOpt = GL_REPEAT;
+    GLuint filterOpt = GL_NEAREST; //GL_LINEAR;
+    GLuint ttype = GL_UNSIGNED_BYTE;
 
-  GLint gltextbinding;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
-  scope(exit) glBindTexture(GL_TEXTURE_2D, gltextbinding);
+    glGenTextures(1, &convbufTexId);
+    if (convbufTexId == 0) assert(0, "can't create cmdcon texture");
 
-  glBindTexture(GL_TEXTURE_2D, convbufTexId);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterOpt);
-  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    GLint gltextbinding;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
+    scope(exit) glBindTexture(GL_TEXTURE_2D, gltextbinding);
 
-  GLfloat[4] bclr = 0.0;
-  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
-  glTexImage2D(GL_TEXTURE_2D, 0, (ttype == GL_FLOAT ? GL_RGBA16F : GL_RGBA), scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+    glBindTexture(GL_TEXTURE_2D, convbufTexId);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterOpt);
+    //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+    GLfloat[4] bclr = 0.0;
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, (ttype == GL_FLOAT ? GL_RGBA16F : GL_RGBA), scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+
+    conLastChange = 0;
+  }
 }
 
 
@@ -654,9 +658,15 @@ void conDrawChar (char ch) nothrow @trusted @nogc {
       if (v&0x8000) vsetPixel(conDrawX+x, conDrawY+y, cc);
       v <<= 1;
     }
-    if ((r -= 7) < 0) r = rr;
-    if ((g -= 7) < 0) g = gg;
-    if ((b -= 7) < 0) b = bb;
+    static if (false) {
+      if ((r += 8) > 255) r = 255;
+      if ((g += 8) > 255) g = 255;
+      if ((b += 8) > 255) b = 255;
+    } else {
+      if ((r -= 7) < 0) r = rr;
+      if ((g -= 7) < 0) g = gg;
+      if ((b -= 7) < 0) b = bb;
+    }
   }
   conDrawX += 10;
 }
@@ -668,7 +678,7 @@ void conRect (int w, int h) nothrow @trusted @nogc {
   int b = (conColor>>16)&0xff;
   foreach_reverse (immutable y; 0..h) {
     immutable uint cc = (b<<16)|(g<<8)|r|0xff000000;
-    foreach (immutable x; 0..w) vsetPixel(conDrawX+x, conDrawY+y, cc);
+    foreach (immutable x; conDrawX..conDrawX+w) vsetPixel(x, conDrawY+y, cc);
     if ((r -= 8) < 0) r = 0;
     if ((g -= 8) < 0) g = 0;
     if ((b -= 8) < 0) b = 0;
