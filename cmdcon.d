@@ -62,6 +62,19 @@ enum isGoodVar(alias v) = isGShared!v || isShared!v;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
+  if (s0.length != s1.length) return false;
+  foreach (immutable idx, char c0; s0) {
+    if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man's tolower()
+    char c1 = s1.ptr[idx];
+    if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's tolower()
+    if (c0 != c1) return false;
+  }
+  return true;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 version(test_cbuf)
   enum ConBufSize = 64;
 else
@@ -866,6 +879,7 @@ private:
   __gshared ConvException exBadStr;
   __gshared ConvException exBadBool;
   __gshared ConvException exBadInt;
+  __gshared ConvException exBadEnum;
   __gshared ConvOverflowException exIntOverflow;
   __gshared ConvException exBadHexEsc;
   __gshared ConvException exBadEscChar;
@@ -878,6 +892,7 @@ private:
     exBadStr = new ConvException("invalid string");
     exBadBool = new ConvException("invalid boolean");
     exBadInt = new ConvException("invalid integer number");
+    exBadEnum = new ConvException("invalid enumeration value");
     exIntOverflow = new ConvOverflowException("overflow in integral conversion");
     exBadHexEsc = new ConvException("invalid hex escape");
     exBadEscChar = new ConvException("invalid escape char");
@@ -907,7 +922,7 @@ public:
 
 public:
 static:
-  //private import std.traits : isSomeChar;
+  /// parse ch as digit in given base. return -1 if ch is not a valid digit.
   int digit(TC) (TC ch, uint base) pure nothrow @safe @nogc if (isSomeChar!TC) {
     int res = void;
          if (ch >= '0' && ch <= '9') res = ch-'0';
@@ -917,10 +932,14 @@ static:
     return (res >= base ? -1 : res);
   }
 
-  // get word from command line
-  // note that next call to `getWord()` can destroy result
-  // returns `null` if there are no more words
-  // `*strtemp` will be `true` if temporary string storage was used
+  /** get word from string.
+   *
+   * it will correctly parse quoted strings.
+   *
+   * note that next call to `getWord()` can destroy result.
+   * returns `null` if there are no more words.
+   * `*strtemp` will be `true` if temporary string storage was used.
+   */
   ConString getWord (ref ConString s, bool *strtemp=null) {
     if (strtemp !is null) *strtemp = false;
     usize pos;
@@ -990,38 +1009,73 @@ static:
     }
   }
 
+  /// parse value of type T.
   T parseType(T) (ref ConString s) {
     import std.utf : byCodeUnit;
-    // number
-    static if (is(T == bool)) {
+    alias UT = XUQQ!T;
+    static if (is(UT == enum)) {
+      // enum
+      auto w = getWord(s);
+      // case-sensitive
+      foreach (string mname; __traits(allMembers, UT)) {
+        if (mname == w) return __traits(getMember, UT, mname);
+      }
+      // case-insensitive
+      foreach (string mname; __traits(allMembers, UT)) {
+        if (strEquCI(mname, w)) return __traits(getMember, UT, mname);
+      }
+      // integer
+      if (w.length < 1) throw exBadEnum;
+      auto ns = w;
+      try {
+        if (w[0] == '-') {
+          long num = parseInt!long(ns);
+          if (ns.length > 0) throw exBadEnum;
+          foreach (string mname; __traits(allMembers, UT)) {
+            if (__traits(getMember, UT, mname) == num) return __traits(getMember, UT, mname);
+          }
+        } else {
+          ulong num = parseInt!ulong(ns);
+          if (ns.length > 0) throw exBadEnum;
+          foreach (string mname; __traits(allMembers, UT)) {
+            if (__traits(getMember, UT, mname) == num) return __traits(getMember, UT, mname);
+          }
+        }
+      } catch (Exception) {}
+      throw exBadEnum;
+    } else static if (is(UT == bool)) {
+      // boolean
       auto w = getWord(s);
       if (w is null) throw exNoArg;
       bool good = false;
       auto res = parseBool(w, true, &good);
       if (!good) throw exBadBool;
       return res;
-    } else static if ((isIntegral!T || isFloatingPoint!T) && !is(T == enum)) {
+    } else static if ((isIntegral!UT || isFloatingPoint!UT) && !is(UT == enum)) {
+      // number
       auto w = getWord(s);
       if (w is null) throw exNoArg;
       auto ss = w.byCodeUnit;
-      auto res = parseNum!T(ss);
+      auto res = parseNum!UT(ss);
       if (!ss.empty) throw exBadNum;
       return res;
-    } else static if (is(T : ConString)) {
+    } else static if (is(UT : ConString)) {
+      // string
       bool stemp = false;
       auto w = getWord(s);
       if (w is null) throw exNoArg;
       if (s.length && s.ptr[0] > 32) throw exBadStr;
       if (stemp) {
         // temp storage was used
-        static if (is(T == string)) return w.idup; else return w.dup;
+        static if (is(UT == string)) return w.idup; else return w.dup;
       } else {
         // no temp storage was used
-        static if (is(T == ConString)) return w;
-        else static if (is(T == string)) return w.idup;
+        static if (is(UT == ConString)) return w;
+        else static if (is(UT == string)) return w.idup;
         else return w.dup;
       }
-    } else static if (is(T : char)) {
+    } else static if (is(UT : char)) {
+      // char
       bool stemp = false;
       auto w = getWord(s);
       if (w is null || w.length != 1) throw exNoArg;
@@ -1458,7 +1512,9 @@ public:
 
   @property T value(T) () nothrow @nogc {
     pragma(inline, true);
-    static if (is(T : ulong)) {
+    static if (is(T == enum)) {
+      return cast(T)getIntValue;
+    } else static if (is(T : ulong)) {
       // integer, xchar, boolean
       return cast(T)getIntValue;
     } else static if (is(T : double)) {
@@ -1485,6 +1541,8 @@ public:
       setDoubleValue(cast(double)val);
     } else static if (is(T : ConString)) {
       static if (is(T == string)) setStrValue(val); else setCCharValue(val);
+    } else {
+      static assert(0, "invalid type");
     }
   }
 
@@ -1514,7 +1572,11 @@ final class ConVar(T) : ConVarBase {
     char[256] tvbuf; // temp value
   }
 
-  this (T* avptr, string aname, string ahelp=null) { vptr = avptr; super(aname, ahelp); }
+  this (T* avptr, string aname, string ahelp=null) {
+    vptr = avptr;
+    super(aname, ahelp);
+  }
+
   static if (isIntegral!T) {
     this (T* avptr, T aminv, T amaxv, string aname, string ahelp=null) {
       vptr = avptr;
@@ -1611,7 +1673,17 @@ final class ConVar(T) : ConVarBase {
 
   protected override void setIntValue (ulong v, bool signed) nothrow @nogc {
     import core.atomic;
-    static if (is(T : ulong) || is(T : double)) {
+    static if (is(XUQQ!T == enum)) {
+      alias UT = XUQQ!T;
+      foreach (string mname; __traits(allMembers, UT)) {
+        if (__traits(getMember, UT, mname) == v) {
+          mixin(PutVMx!"cast(T)v");
+          return;
+        }
+      }
+      // alas
+      conwriteln("invalid enum value '", v, "' for variable '", name, "'");
+    } else static if (is(T : ulong) || is(T : double)) {
       mixin(PutVMx!"cast(T)v");
     } else static if (is(T : ConString)) {
       import core.stdc.stdio : snprintf;
@@ -1624,7 +1696,17 @@ final class ConVar(T) : ConVarBase {
 
   protected override void setDoubleValue (double v) nothrow @nogc {
     import core.atomic;
-    static if (is(T : ulong) || is(T : double)) {
+    static if (is(XUQQ!T == enum)) {
+      alias UT = XUQQ!T;
+      foreach (string mname; __traits(allMembers, UT)) {
+        if (__traits(getMember, UT, mname) == v) {
+          mixin(PutVMx!"cast(T)v");
+          return;
+        }
+      }
+      // alas
+      conwriteln("invalid enum value '", v, "' for variable '", name, "'");
+    } else static if (is(T : ulong) || is(T : double)) {
       mixin(PutVMx!"cast(T)v");
     } else static if (is(T : ConString)) {
       import core.stdc.stdio : snprintf;
@@ -1637,7 +1719,15 @@ final class ConVar(T) : ConVarBase {
 
   protected override void setStrValue (string v) nothrow {
     import core.atomic;
-    static if (is(T == string) || is(T == ConString)) {
+    static if (is(XUQQ!T == enum)) {
+      try {
+        ConString ss = v;
+        auto vv = ConCommand.parseType!T(ss);
+        mixin(PutVMx!"cast(T)vv");
+      } catch (Exception) {
+        conwriteln("invalid enum value '", v, "' for variable '", name, "'");
+      }
+    } else static if (is(T == string) || is(T == ConString)) {
       mixin(PutVMx!"cast(T)v");
     } else static if (is(T == char[])) {
       mixin(PutVMx!"v.dup");
@@ -1646,7 +1736,16 @@ final class ConVar(T) : ConVarBase {
 
   protected override void setCCharValue (ConString v) nothrow {
     import core.atomic;
-         static if (is(T == string)) mixin(PutVMx!"v.idup");
+    static if (is(XUQQ!T == enum)) {
+      try {
+        ConString ss = v;
+        auto vv = ConCommand.parseType!T(ss);
+        mixin(PutVMx!"cast(T)vv");
+      } catch (Exception) {
+        conwriteln("invalid enum value '", v, "' for variable '", name, "'");
+      }
+    }
+    else static if (is(T == string)) mixin(PutVMx!"v.idup");
     else static if (is(T == ConString)) mixin(PutVMx!"v");
     else static if (is(T == char[])) mixin(PutVMx!"v.dup");
   }
@@ -1654,7 +1753,22 @@ final class ConVar(T) : ConVarBase {
   override void printValue () {
     //auto wrt = ConWriter;
     alias wrt = conwriter;
-    static if (is(T : ConString)) {
+    static if (is(T == enum)) {
+      auto vx = getv();
+      alias UT = XUQQ!T;
+      foreach (string mname; __traits(allMembers, UT)) {
+        if (__traits(getMember, UT, mname) == vx) {
+          wrt(name);
+          wrt(" ");
+          //writeQuotedString(mname);
+          wrt(mname);
+          wrt("\n");
+          return;
+        }
+      }
+      //FIXME: doubles?
+      conwriteln(name, " ", cast(ulong)getv());
+    } else static if (is(T : ConString)) {
       wrt(name);
       wrt(" ");
       writeQuotedString(getv());
