@@ -42,10 +42,14 @@ public alias ConString = const(char)[];
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public enum ConDump : int { None, Stdout, Stderr }
-shared ConDump conStdoutFlag = ConDump.Stderr;
+public enum ConDump : int { none, stdout, stderr }
+shared ConDump conStdoutFlag = ConDump.stdout;
 public @property ConDump conDump () nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicLoad; return atomicLoad(conStdoutFlag); } /// write console output to ...
 public @property void conDump (ConDump v) nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicStore; atomicStore(conStdoutFlag, v); } /// ditto
+
+shared static this () {
+  conRegVar!conStdoutFlag("console_dump", "dump console output (none, stdout, stderr)");
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -105,12 +109,12 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
     consoleLock();
     scope(exit) consoleUnlock();
     final switch (atomicLoad(conStdoutFlag)) {
-      case ConDump.None: break;
-      case ConDump.Stdout:
+      case ConDump.none: break;
+      case ConDump.stdout:
         import core.sys.posix.unistd : STDOUT_FILENO, write;
         write(STDOUT_FILENO, chrs.ptr, chrs.length);
         break;
-      case ConDump.Stderr:
+      case ConDump.stderr:
         import core.sys.posix.unistd : STDERR_FILENO, write;
         write(STDERR_FILENO, chrs.ptr, chrs.length);
         break;
