@@ -1656,7 +1656,14 @@ final class ConVar(T) : ConVarBase {
   override ConString strval () nothrow @nogc {
     //conwriteln("*** strval for '", name, "'");
     import core.stdc.stdio : snprintf;
-    static if (is(T : ConString)) {
+    static if (is(T == enum)) {
+      alias UT = XUQQ!T;
+      auto v = getv();
+      foreach (string mname; __traits(allMembers, UT)) {
+        if (__traits(getMember, UT, mname) == v) return mname;
+      }
+      return "???";
+    } else static if (is(T : ConString)) {
       return getv();
     } else static if (is(XUQQ!T == bool)) {
       return (getv() ? "tan" : "ona");
@@ -1858,6 +1865,56 @@ void addName (string name) {
 }
 
 
+void enumComplete(T) (ConCommand self) if (is(T == enum)) {
+  auto cs = conInputBuffer[0..conInputBufferCurX];
+  ConCommand.getWord(cs); // skip command
+  while (cs.length && cs[0] <= ' ') cs = cs[1..$];
+  if (cs.length == 0) {
+    conwriteln(self.name, ":");
+    foreach (string mname; __traits(allMembers, T)) conwriteln("  ", mname);
+  } else {
+    if (cs[0] == '"' || cs[0] == '\'') return; // alas
+    ConString pfx = ConCommand.getWord(cs);
+    while (cs.length && cs[0] <= ' ') cs = cs[1..$];
+    if (cs.length) return; // alas
+    string bestPfx;
+    int count = 0;
+    foreach (string mname; __traits(allMembers, T)) {
+      if (mname.length >= pfx.length && strEquCI(mname[0..pfx.length], pfx)) {
+        if (count == 0) {
+          bestPfx = mname;
+        } else {
+          //if (mname.length < bestPfx.length) bestPfx = bestPfx[0..mname.length];
+          size_t pos = 0;
+          while (pos < bestPfx.length && pos < mname.length) {
+            char c0 = bestPfx[pos];
+            char c1 = mname[pos];
+            if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man's tolower()
+            if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's tolower()
+            if (c0 != c1) break;
+            ++pos;
+          }
+          if (pos < bestPfx.length) bestPfx = bestPfx[0..pos];
+        }
+        ++count;
+      }
+    }
+    if (count == 0 || bestPfx.length < pfx.length) { conwriteln(self.name, ": ???"); return; }
+    foreach (char ch; bestPfx[pfx.length..$]) conAddInputChar(ch);
+    if (count == 1) {
+      conAddInputChar(' ');
+    } else {
+      conwriteln(self.name, ":");
+      foreach (string mname; __traits(allMembers, T)) {
+        if (mname.length >= bestPfx.length && mname[0..bestPfx.length] == bestPfx) {
+          conwriteln("  ", mname);
+        }
+      }
+    }
+  }
+}
+
+
 /** register integral console variable with bounded value.
  *
  * Params:
@@ -1873,9 +1930,13 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
   if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
   if (aname.length > 0) {
     addName(aname);
-    auto v = new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp);
-    v.setAttrs(attrs);
-    cmdlist[aname] = v;
+    auto cv = new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp);
+    cv.setAttrs(attrs);
+    static if (is(XUQQ!(typeof(v)) == enum)) {
+      import std.functional : toDelegate;
+      cv.argcomplete = toDelegate(&enumComplete!(XUQQ!(typeof(v))));
+    }
+    cmdlist[aname] = cv;
   }
 }
 
@@ -1893,9 +1954,13 @@ public void conRegVar(alias v) (string aname, string ahelp, const(ConVarAttr)[] 
   if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
   if (aname.length > 0) {
     addName(aname);
-    auto v = new ConVar!(typeof(v))(&v, aname, ahelp);
-    v.setAttrs(attrs);
-    cmdlist[aname] = v;
+    auto cv = new ConVar!(typeof(v))(&v, aname, ahelp);
+    cv.setAttrs(attrs);
+    static if (is(XUQQ!(typeof(v)) == enum)) {
+      import std.functional : toDelegate;
+      cv.argcomplete = toDelegate(&enumComplete!(XUQQ!(typeof(v))));
+    }
+    cmdlist[aname] = cv;
   }
 }
 
