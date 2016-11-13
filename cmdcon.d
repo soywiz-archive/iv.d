@@ -905,9 +905,12 @@ private:
     exBadArgType = new ConvException("can't parse given argument type (internal error)");
   }
 
+public:
+  alias ArgCompleteCB = void delegate (ConCommand self); /// prototype for argument completion callback
+
 private:
   __gshared char[] wordBuf; // buffer for `getWord()`
-  void delegate (ConCommand self) argcomplete; // this delegate will be called to do argument autocompletion
+  ArgCompleteCB argcomplete; // this delegate will be called to do argument autocompletion
 
 public:
   string name; ///
@@ -1494,6 +1497,14 @@ protected:
   uint mAttrs;
 
 public:
+  alias PreChangeHookCB = bool delegate (ConVarBase self, ConString newval); /// prototype for "before value change hook"; return `false` to abort; `newval` is not parsed
+  alias PostChangeHookCB = void delegate (ConVarBase self, ConString newval); /// prototype for "after value change hook"; `newval` is not parsed
+
+private:
+  PreChangeHookCB hookBeforeChange;
+  PostChangeHookCB hookAfterChange;
+
+public:
   this (string aname, string ahelp=null) { super(aname, ahelp); }
 
   /// replaces current attributes
@@ -1508,30 +1519,32 @@ public:
   }
 
   @property pure nothrow @safe @nogc final {
-    uint attrs () const { pragma(inline, true); return mAttrs; }
+    uint attrs () const { pragma(inline, true); return mAttrs; } /// attributes (see ConVarAttr enum)
+    /// replaces current attributes
     void attrs(bool any=false) (uint v) {
       pragma(inline, true);
       static if (any) mAttrs = v; else mAttrs = v&~(ConVarAttr.User);
     }
 
-    bool attrArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) != 0); }
-    bool attrNoArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) == 0); }
+    bool attrArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) != 0); } ///
+    bool attrNoArchive () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Archive) == 0); } ///
 
-    void attrArchive (bool v) { pragma(inline, true); if (v) mAttrs |= ConVarAttr.Archive; else mAttrs &= ~ConVarAttr.Archive; }
-    void attrNoArchive (bool v) { pragma(inline, true); if (!v) mAttrs |= ConVarAttr.Archive; else mAttrs &= ~ConVarAttr.Archive; }
+    void attrArchive (bool v) { pragma(inline, true); if (v) mAttrs |= ConVarAttr.Archive; else mAttrs &= ~ConVarAttr.Archive; } ///
+    void attrNoArchive (bool v) { pragma(inline, true); if (!v) mAttrs |= ConVarAttr.Archive; else mAttrs &= ~ConVarAttr.Archive; } ///
 
-    bool attrHexDump () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Hex) != 0); }
+    bool attrHexDump () const { pragma(inline, true); return ((mAttrs&ConVarAttr.Hex) != 0); } ///
 
-    bool attrReadOnly () const { pragma(inline, true); return ((mAttrs&ConVarAttr.ReadOnly) != 0); }
-    void attrReadOnly (bool v) { pragma(inline, true); if (v) mAttrs |= ConVarAttr.ReadOnly; else mAttrs &= ~ConVarAttr.ReadOnly; }
+    bool attrReadOnly () const { pragma(inline, true); return ((mAttrs&ConVarAttr.ReadOnly) != 0); } ///
+    void attrReadOnly (bool v) { pragma(inline, true); if (v) mAttrs |= ConVarAttr.ReadOnly; else mAttrs &= ~ConVarAttr.ReadOnly; } ///
 
-    bool attrUser () const { pragma(inline, true); return ((mAttrs&ConVarAttr.User) != 0); }
+    bool attrUser () const { pragma(inline, true); return ((mAttrs&ConVarAttr.User) != 0); } ///
   }
 
   abstract void printValue ();
   abstract bool isString () const pure nothrow @nogc;
   abstract ConString strval () nothrow @nogc;
 
+  /// get variable value, converted to the given type (if it is possible).
   @property T value(T) () nothrow @nogc {
     pragma(inline, true);
     static if (is(T == enum)) {
@@ -1553,6 +1566,8 @@ public:
     }
   }
 
+  /// set variable value, converted from the given type (if it is possible).
+  /// ReadOnly is ignored, no hooks will be called.
   @property void value(T) (T val) nothrow {
     pragma(inline, true);
     static if (is(T : ulong)) {
@@ -1608,6 +1623,7 @@ final class ConVar(T) : ConVarBase {
     }
   }
 
+  /// this method will respect `ReadOnly` flag, and will call before/after hooks.
   override void exec (ConString cmdline) {
     if (checkHelp(cmdline)) { showHelp; return; }
     if (!hasArgs(cmdline)) { printValue; return; }
@@ -1616,27 +1632,32 @@ final class ConVar(T) : ConVarBase {
       while (cmdline.length && cmdline[0] <= 32) cmdline = cmdline[1..$];
       while (cmdline.length && cmdline[$-1] <= 32) cmdline = cmdline[0..$-1];
       if (cmdline == "toggle") {
+        if (hookBeforeChange !is null) { if (!hookBeforeChange(this, cmdline)) return; }
         static if (useAtomic) {
           import core.atomic;
           atomicStore(*vptr, !atomicLoad(*vptr));
         } else {
           *vptr = !(*vptr);
         }
+        if (hookAfterChange !is null) hookAfterChange(this, cmdline);
         return;
       }
     }
+    auto newvals = cmdline;
     T val = parseType!T(/*ref*/ cmdline);
     if (hasArgs(cmdline)) throw exTooManyArgs;
     static if (isIntegral!T) {
       if (val < minv) val = minv;
       if (val > maxv) val = maxv;
     }
+    if (hookBeforeChange !is null) { if (!hookBeforeChange(this, newvals)) return; }
     static if (useAtomic) {
       import core.atomic;
       atomicStore(*vptr, val);
     } else {
       *vptr = val;
     }
+    if (hookAfterChange !is null) hookAfterChange(this, newvals);
   }
 
   override bool isString () const pure nothrow @nogc {
@@ -1915,6 +1936,21 @@ void enumComplete(T) (ConCommand self) if (is(T == enum)) {
 }
 
 
+private enum RegVarMixin(string cvcreate) =
+  `static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");`~
+  `if (aname.length == 0) aname = (&v).stringof[2..$]; /*HACK*/`~
+  `if (aname.length > 0) {`~
+  `  addName(aname);`~
+  `  auto cv = `~cvcreate~`;`~
+  `  cv.setAttrs(attrs);`~
+  `  static if (is(XUQQ!(typeof(v)) == enum)) {`~
+  `    import std.functional : toDelegate;`~
+  `    cv.argcomplete = toDelegate(&enumComplete!(XUQQ!(typeof(v))));`~
+  `  }`~
+  `  cmdlist[aname] = cv;`~
+  `}`;
+
+
 /** register integral console variable with bounded value.
  *
  * Params:
@@ -1923,21 +1959,72 @@ void enumComplete(T) (ConCommand self) if (is(T == enum)) {
  *   amaxv = maximum value
  *   aname = variable name
  *   ahelp = help text
- *   attrs = convar attributes (see ConVarAttr)
+ *   attrs = convar attributes (see `ConVarAttr`)
  */
 public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
-  static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
-  if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
-  if (aname.length > 0) {
-    addName(aname);
-    auto cv = new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp);
-    cv.setAttrs(attrs);
-    static if (is(XUQQ!(typeof(v)) == enum)) {
-      import std.functional : toDelegate;
-      cv.argcomplete = toDelegate(&enumComplete!(XUQQ!(typeof(v))));
-    }
-    cmdlist[aname] = cv;
-  }
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp)`);
+}
+
+/** register integral console variable with bounded value.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
+ *   aname = variable name
+ *   ahelp = help text
+ *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
+ *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
+}
+
+/** register integral console variable with bounded value.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
+ *   aname = variable name
+ *   ahelp = help text
+ *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
+ *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PostChangeHookCB acb, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
+}
+
+/** register integral console variable with bounded value.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
+ *   aname = variable name
+ *   ahelp = help text
+ *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookBeforeChange = bcb`);
+}
+
+/** register integral console variable with bounded value.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
+ *   aname = variable name
+ *   ahelp = help text
+ *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookAfterChange = acb`);
 }
 
 
@@ -1947,21 +2034,64 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
  *   v = variable symbol
  *   aname = variable name
  *   ahelp = help text
- *   attrs = convar attributes (see ConVarAttr)
+ *   attrs = convar attributes (see `ConVarAttr`)
  */
 public void conRegVar(alias v) (string aname, string ahelp, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
-  static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");
-  if (aname.length == 0) aname = (&v).stringof[2..$]; // HACK
-  if (aname.length > 0) {
-    addName(aname);
-    auto cv = new ConVar!(typeof(v))(&v, aname, ahelp);
-    cv.setAttrs(attrs);
-    static if (is(XUQQ!(typeof(v)) == enum)) {
-      import std.functional : toDelegate;
-      cv.argcomplete = toDelegate(&enumComplete!(XUQQ!(typeof(v))));
-    }
-    cmdlist[aname] = cv;
-  }
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp)`);
+}
+
+/** register console variable.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aname = variable name
+ *   ahelp = help text
+ *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
+ *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
+}
+
+/** register console variable.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aname = variable name
+ *   ahelp = help text
+ *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
+ *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PostChangeHookCB acb, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
+}
+
+/** register console variable.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aname = variable name
+ *   ahelp = help text
+ *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookBeforeChange = bcb`);
+}
+
+/** register console variable.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aname = variable name
+ *   ahelp = help text
+ *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookAfterChange = acb`);
 }
 
 
@@ -2066,7 +2196,7 @@ __gshared string[] cmdlistSorted;
  * `conInputBufferCurX()` to get cursor position, and
  * `conAddInputChar()` itself to put new chars into buffer.
  */
-void conSetArgCompleter (ConString cmdname, void delegate (ConCommand self) ac) {
+void conSetArgCompleter (ConString cmdname, ConCommand.ArgCompleteCB ac) {
   if (auto cp = cmdname in cmdlist) (*cp).argcomplete = ac;
 }
 
