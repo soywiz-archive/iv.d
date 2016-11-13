@@ -2799,24 +2799,24 @@ void conhisAdd (ConString cmd) {
 
 /// special characters for `conAddInputChar()`
 public enum ConInputChar : char {
-  Up = '\x01',
-  Down = '\x02',
-  Left = '\x03',
-  Right = '\x04',
-  Home = '\x05',
-  End = '\x06',
-  PageUp = '\x07',
-  Backspace = '\x08',
-  Tab = '\x09',
+  Up = '\x01', ///
+  Down = '\x02', ///
+  Left = '\x03', ///
+  Right = '\x04', ///
+  Home = '\x05', ///
+  End = '\x06', ///
+  PageUp = '\x07', ///
+  Backspace = '\x08', ///
+  Tab = '\x09', ///
   // 0a
-  PageDown = '\x0b',
-  Delete = '\x0c',
-  Enter = '\x0d',
-  Insert = '\x0e',
+  PageDown = '\x0b', ///
+  Delete = '\x0c', ///
+  Enter = '\x0d', ///
+  Insert = '\x0e', ///
   //
-  CtrlY = '\x19',
-  LineUp = '\x1a',
-  LineDown = '\x1b',
+  CtrlY = '\x19', ///
+  LineUp = '\x1a', ///
+  LineDown = '\x1b', ///
 }
 
 
