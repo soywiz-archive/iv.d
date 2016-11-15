@@ -1062,10 +1062,16 @@ static:
       // number
       auto w = getWord(s);
       if (w is null) throw exNoArg;
-      auto ss = w.byCodeUnit;
-      auto res = parseNum!UT(ss);
-      if (!ss.empty) throw exBadNum;
-      return res;
+      bool goodbool = false;
+      auto bv = parseBool(w, false, &goodbool); // no numbers
+      if (goodbool) {
+        return cast(UT)(bv ? 1 : 0);
+      } else {
+        auto ss = w.byCodeUnit;
+        auto res = parseNum!UT(ss);
+        if (!ss.empty) throw exBadNum;
+        return res;
+      }
     } else static if (is(UT : ConString)) {
       // string
       bool stemp = false;
@@ -1628,7 +1634,8 @@ final class ConVar(T) : ConVarBase {
     if (checkHelp(cmdline)) { showHelp; return; }
     if (!hasArgs(cmdline)) { printValue; return; }
     if (attrReadOnly) return; // can't change read-only var with console commands
-    static if (is(XUQQ!T == bool)) {
+    alias TT = XUQQ!T;
+    static if ((is(TT == bool) || isIntegral!TT || isFloatingPoint!TT) && !is(TT == enum)) {
       while (cmdline.length && cmdline[0] <= 32) cmdline = cmdline[1..$];
       while (cmdline.length && cmdline[$-1] <= 32) cmdline = cmdline[0..$-1];
       if (cmdline == "toggle") {
@@ -1644,9 +1651,9 @@ final class ConVar(T) : ConVarBase {
       }
     }
     auto newvals = cmdline;
-    T val = parseType!T(/*ref*/ cmdline);
+    TT val = parseType!TT(/*ref*/ cmdline);
     if (hasArgs(cmdline)) throw exTooManyArgs;
-    static if (isIntegral!T) {
+    static if (isIntegral!TT) {
       if (val < minv) val = minv;
       if (val > maxv) val = maxv;
     }
