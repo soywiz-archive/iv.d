@@ -17,11 +17,8 @@
 module iv.glcmdcon /*is aliced*/;
 private:
 
-//import arsd.color;
-//import arsd.simpledisplay;
-
 public import iv.cmdcon;
-public import iv.vfs;
+import iv.vfs;
 import iv.glbinds;
 import iv.strex;
 
@@ -40,41 +37,12 @@ __gshared uint scrwdt, scrhgt;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
-// moved to iv.vfs
-/+
-public VFile openFileEx (ConString name) {
-  VFSDriverId[128] dids;
-  int didcount;
-  scope(exit) foreach_reverse (VFSDriverId did; dids[0..didcount]) vfsRemovePack(did);
-
-  if (name.length >= int.max/4) throw new VFSException("name too long");
-  int cp = 0;
-  while (cp < name.length) {
-    auto ep = cp;
-    while (ep < name.length && name[ep] != ':') ++ep;
-    if (ep >= name.length) return VFile(name);
-    //{ writeln("pak: '", name[0..ep], "'; prefix: '", name[0..ep+1], "'"); }
-    vfsAddPak(name[0..ep], name[0..ep+1]);
-    /*
-    vfsForEachFile((in ref VFSDriver.DirEntry de) {
-      writeln("  ", de.name);
-      return 0;
-    });
-    */
-    cp = ep+1;
-  }
-  throw new VFSException("empty name");
-}
-+/
-
-// ////////////////////////////////////////////////////////////////////////// //
 // public void oglInitConsole (); -- call in `visibleForTheFirstTime`
-// public void oglDrawConsole (); -- call in `redrawOpenGlScene` (it should not modify render modes)
+// public void oglDrawConsole (); -- call in `redrawOpenGlScene` (it tries hard to not modify render modes)
 // public bool conKeyEvent (KeyEvent event); -- returns `true` if event was eaten
 // public bool conCharEvent (dchar ch); -- returns `true` if event was eaten
 //
-// public void concmdDoAll ();
+// public bool concmdDoQueued (); (from iv.cmdcon)
 //   call this in your main loop to process all accumulated console commands.
 //   WARNING! this is NOT thread-safe, you MUST call this in your "processing thread", and
 //            you MUST put `consoleLock()/consoleUnlock()` around the call!
@@ -82,31 +50,6 @@ public VFile openFileEx (ConString name) {
 // ////////////////////////////////////////////////////////////////////////// //
 public bool isConsoleVisible () nothrow @trusted @nogc { pragma(inline, true); return rConsoleVisible; }
 public bool isQuitRequested () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(vquitRequested); }
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-/// add console command to execution queue
-public void concmd (ConString cmd) {
-  //if (!atomicLoad(renderThreadStarted)) return;
-  consoleLock();
-  scope(exit) consoleUnlock();
-  concmdAdd(cmd);
-}
-
-/// get console variable value; doesn't do complex conversions!
-public T convar(T) (ConString s) {
-  consoleLock();
-  scope(exit) consoleUnlock();
-  return conGetVar!T(s);
-}
-
-/// set console variable value; doesn't do complex conversions!
-/// WARNING! this is instant action, execution queue is ignored!
-public void convar(T) (ConString s, T val) {
-  consoleLock();
-  scope(exit) consoleUnlock();
-  conSetVar!T(s, val);
-}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -168,70 +111,6 @@ public void concliChar (char ch) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared char[] concmdbuf;
-__gshared uint concmdbufpos;
-shared static this () { concmdbuf.length = 65536; }
-
-__gshared int conskiplines = 0;
-
-
-void concmdAdd (ConString s) {
-  if (s.length) {
-    if (concmdbuf.length-concmdbufpos < s.length+1) {
-      concmdbuf.assumeSafeAppend.length += s.length-(concmdbuf.length-concmdbufpos)+512;
-    }
-    if (concmdbufpos > 0 && concmdbuf[concmdbufpos-1] != '\n') concmdbuf.ptr[concmdbufpos++] = '\n';
-    concmdbuf[concmdbufpos..concmdbufpos+s.length] = s[];
-    concmdbufpos += s.length;
-  }
-}
-
-
-/** execute commands added with `concmd()`.
- *
- * all new commands will be postponed for the next call.
- * call this in your main loop to process all accumulated console commands.
- * WARNING! this is NOT thread-safe, you MUST call this in your "processing thread", and
- *          you MUST put `consoleLock()/consoleUnlock()` around the call!
- *
- * Returns:
- *   "has more commands" flag
- */
-public bool concmdDoAll () {
-  if (concmdbufpos == 0) return false;
-  auto ebuf = concmdbufpos;
-  ConString s = concmdbuf[0..ebuf];
-  //conwriteln("===================");
-  while (s.length) {
-    auto cmd = conGetCommandStr(s);
-    if (cmd is null) break;
-    try {
-      //consoleLock();
-      //scope(exit) consoleUnlock();
-      //conwriteln("  <", cmd, ">");
-      conExecute(cmd);
-    } catch (Exception e) {
-      conwriteln("***ERROR: ", e.msg);
-    }
-  }
-  // shift postponed commands
-  if (concmdbufpos > ebuf) {
-    import core.stdc.string : memmove;
-    //consoleLock();
-    //scope(exit) consoleUnlock();
-    memmove(concmdbuf.ptr, concmdbuf.ptr+ebuf, concmdbufpos-ebuf);
-    concmdbufpos -= ebuf;
-    //s = concmdbuf[0..concmdbufpos];
-    //ebuf = concmdbufpos;
-    return true;
-  } else {
-    concmdbufpos = 0;
-    return false;
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 enum conCharWidth = 10;
 enum conCharHeight = 10;
 
@@ -245,6 +124,8 @@ __gshared uint rConInputColor = 0xffff00; // rgb
 __gshared uint rConPromptColor = 0xffffff; // rgb
 __gshared uint rConStarColor = 0x3f0000; // rgb
 shared bool vquitRequested = false;
+
+__gshared int conskiplines = 0;
 
 
 // initialize glcmdcon variables and commands, sets screen size and scale

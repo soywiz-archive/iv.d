@@ -490,6 +490,30 @@ private void cwrxputfloat(TT) (TT nn, bool simple, char signw, char lchar, char 
 }
 
 
+private void cwrxputenum(TT) (TT nn, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+  static if (is(TT == shared)) {
+    import core.atomic;
+    alias T = XUQQ!TT;
+    T n = atomicLoad(nn);
+  } else {
+    alias T = XUQQ!TT;
+    T n = nn;
+  }
+
+  foreach (string mname; __traits(allMembers, T)) {
+    if (n == __traits(getMember, T, mname)) {
+      cwrxputstr!false(mname, signw, lchar, rchar, wdt, maxwdt);
+      return;
+    }
+  }
+  static if (isUnsigned!TT) {
+    cwrxputint!long(cast(long)n, signw, lchar, rchar, wdt, maxwdt);
+  } else {
+    cwrxputint!ulong(cast(ulong)n, signw, lchar, rchar, wdt, maxwdt);
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 /// write formatted string to console with compile-time format string
 public template conwritef(string fmt, A...) {
@@ -660,6 +684,10 @@ public template conwritef(string fmt, A...) {
             res ~= "cwrxputstr((args[";
             putNum(argnum);
             res ~= "] ? `true` : `false`)";
+          } else static if (is(at == enum)) {
+            res ~= "cwrxputenum(args[";
+            putNum(argnum);
+            res ~= "]";
           } else static if (is(at == float) || is(at == double) || is(at == real)) {
             res ~= "cwrxputfloat(args[";
             putNum(argnum);
@@ -3017,4 +3045,307 @@ public void conAddInputChar (char ch) {
   // other
   if (ch < ' ' || ch > 127) return;
   if (insChars(ch)) conInputIncLastChange();
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private:
+
+/// add console command to execution queue (thread-safe)
+public void concmd (ConString cmd) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  concmdAdd(cmd);
+}
+
+
+/// add console command to execution queue (thread-safe)
+/// this understands '%s' and '%q' (quoted string, but without surroinding quotes)
+public void concmdf(string fmt, A...) (A args) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+
+  usize pos = 0;
+  bool ensureCmd = true;
+
+  void puts(bool quote=false) (const(char)[] s...) {
+    if (s.length) {
+      if (ensureCmd) { concmdEnsureNewCommand(); ensureCmd = false; }
+      static if (quote) {
+        char[8] buf;
+        foreach (immutable idx, char ch; s) {
+          if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') {
+            import core.stdc.stdio : snprintf;
+            auto len = snprintf(buf.ptr, buf.length, "\\x%02x", cast(uint)ch);
+            concmdAdd!false(buf[0..len]);
+          } else {
+            concmdAdd!false(s[idx..idx+1]);
+          }
+        }
+      } else {
+        concmdAdd!false(s);
+      }
+    }
+  }
+
+  void putint(TT) (TT nn) {
+    char[32] buf = ' ';
+
+    static if (is(TT == shared)) {
+      import core.atomic;
+      alias T = XUQQ!TT;
+      T n = atomicLoad(nn);
+    } else {
+      alias T = XUQQ!TT;
+      T n = nn;
+    }
+
+    static if (is(T == long)) {
+      if (n == 0x8000_0000_0000_0000uL) { puts("-9223372036854775808"); return; }
+    } else static if (is(T == int)) {
+      if (n == 0x8000_0000u) { puts("-2147483648"); return; }
+    } else static if (is(T == short)) {
+      if (n == 0x8000u) { puts("-32768"); return; }
+    } else static if (is(T == byte)) {
+      if (n == 0x80u) { puts("-128"); return; }
+    }
+
+    static if (__traits(isUnsigned, T)) {
+      enum neg = false;
+    } else {
+      bool neg = (n < 0);
+      if (neg) n = -n;
+    }
+
+    int bpos = buf.length;
+    do {
+      //if (bpos == 0) assert(0, "internal printer error");
+      buf.ptr[--bpos] = cast(char)('0'+n%10);
+      n /= 10;
+    } while (n != 0);
+    if (neg) {
+      //if (bpos == 0) assert(0, "internal printer error");
+      buf.ptr[--bpos] = '-';
+    }
+    puts(buf[bpos..$]);
+  }
+
+  void putfloat(TT) (TT nn) {
+    import core.stdc.stdlib : malloc, realloc;
+
+    static if (is(TT == shared)) {
+      import core.atomic;
+      alias T = XUQQ!TT;
+      T n = atomicLoad(nn);
+    } else {
+      alias T = XUQQ!TT;
+      T n = nn;
+    }
+
+    static char* buf;
+    static usize buflen = 0;
+
+    if (buf is null) {
+      buflen = 256;
+      buf = cast(char*)malloc(buflen);
+      if (buf is null) assert(0, "out of memory");
+    }
+
+    for (;;) {
+      import core.stdc.stdio : snprintf;
+      auto plen = snprintf(buf, buflen, "%g", cast(double)n);
+      if (plen >= buflen) {
+        buflen = plen+2;
+        buf = cast(char*)realloc(buf, buflen);
+        if (buf is null) assert(0, "out of memory");
+      } else {
+        puts(buf[0..plen]);
+        return;
+      }
+    }
+  }
+
+  void processUntilFSp () {
+    while (pos < fmt.length) {
+      usize epos = pos;
+      while (epos < fmt.length && fmt[epos] != '%') ++epos;
+      if (epos > pos) {
+        puts(fmt[pos..epos]);
+        pos = epos;
+        if (pos >= fmt.length) break;
+      }
+      if (fmt.length-pos < 2 || fmt[pos+1] == '%') { puts('%'); pos += 2; continue; }
+      break;
+    }
+  }
+
+  foreach (immutable argnum, /*auto*/ att; A) {
+    processUntilFSp();
+    if (pos >= fmt.length) assert(0, "out of format specifiers for arguments");
+    assert(fmt[pos] == '%');
+    ++pos;
+    if (pos >= fmt.length) assert(0, "out of format specifiers for arguments");
+    alias at = XUQQ!att;
+    bool doQuote = false;
+    switch (fmt[pos++]) {
+      case 'q':
+        static if (is(at == char)) {
+          puts!true(arg[argnum]);
+        } else static if (is(at == wchar) || is(at == dchar)) {
+          import std.conv : to;
+          puts!true(to!string(args[argnum]));
+        } else static if (is(at == bool)) {
+          putsq(args[argnum] ? "true" : "false");
+        } else static if (is(at == enum)) {
+          bool dumpNum = true;
+          foreach (string mname; __traits(allMembers, at)) {
+            if (args[argnum] == __traits(getMember, at, mname)) {
+              puts(mname);
+              dumpNum = false;
+              break;
+            }
+          }
+          //FIXME: check sign
+          if (dumpNum) putint!long(cast(long)args[argnum]);
+        } else static if (is(at == float) || is(at == double) || is(at == real)) {
+          putfloat(args[argnum]);
+        } else static if (is(at : const(char)[])) {
+          puts!true(args[argnum]);
+        } else static if (is(at : T*, T)) {
+          assert(0, "can't put pointers");
+        } else {
+          import std.conv : to;
+          puts!true(to!string(args[argnum]));
+        }
+        break;
+      case 's':
+        static if (is(at == char)) {
+          puts(arg[argnum]);
+        } else static if (is(at == wchar) || is(at == dchar)) {
+          import std.conv : to;
+          puts(to!string(args[argnum]));
+        } else static if (is(at == bool)) {
+          puts(args[argnum] ? "true" : "false");
+        } else static if (is(at == enum)) {
+          bool dumpNum = true;
+          foreach (string mname; __traits(allMembers, at)) {
+            if (args[argnum] == __traits(getMember, at, mname)) {
+              puts(mname);
+              dumpNum = false;
+              break;
+            }
+          }
+          //FIXME: check sign
+          if (dumpNum) putint!long(cast(long)args[argnum]);
+        } else static if (is(at == float) || is(at == double) || is(at == real)) {
+          putfloat(args[argnum]);
+        } else static if (is(at : const(char)[])) {
+          puts(args[argnum]);
+        } else static if (is(at : T*, T)) {
+          assert(0, "can't put pointers");
+        } else {
+          import std.conv : to;
+          puts(to!string(args[argnum]));
+        }
+        break;
+      default:
+        assert(0, "invalid format specifier");
+    }
+  }
+
+  while (pos < fmt.length) {
+    processUntilFSp();
+    if (pos >= fmt.length) break;
+    assert(0, "out of args for format specifier");
+  }
+}
+
+
+/// get console variable value; doesn't do complex conversions! (thread-safe)
+public T convar(T) (ConString s) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  return conGetVar!T(s);
+}
+
+/// set console variable value; doesn't do complex conversions! (thread-safe)
+/// WARNING! this is instant action, execution queue and r/o (and other) flags are ignored!
+public void convar(T) (ConString s, T val) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  conSetVar!T(s, val);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+__gshared char[] concmdbuf;
+__gshared uint concmdbufpos;
+shared static this () { concmdbuf.length = 65536; }
+
+
+void concmdEnsureNewCommand () {
+  if (concmdbufpos > 0 && concmdbuf[concmdbufpos-1] != '\n') {
+    if (concmdbuf.length-concmdbufpos < 1) concmdbuf.length += 512;
+  }
+  concmdbuf.ptr[concmdbufpos++] = '\n';
+}
+
+
+package(iv) void concmdAdd(bool ensureNewCommand=true) (ConString s) {
+  if (s.length) {
+    if (concmdbuf.length-concmdbufpos < s.length+1) {
+      concmdbuf.length += s.length-(concmdbuf.length-concmdbufpos)+512;
+    }
+    static if (ensureNewCommand) {
+      if (concmdbufpos > 0 && concmdbuf[concmdbufpos-1] != '\n') concmdbuf.ptr[concmdbufpos++] = '\n';
+    }
+    concmdbuf[concmdbufpos..concmdbufpos+s.length] = s[];
+    concmdbufpos += s.length;
+  }
+}
+
+
+/** execute commands added with `concmd()`.
+ *
+ * all commands added during execution of this function will be postponed for the next call.
+ * call this function in your main loop to process all accumulated console commands.
+ *
+ * WARNING:
+ * this is NOT thread-safe! you MUST call this in your "processing thread", and you MUST
+ * put `consoleLock()/consoleUnlock()` around the call!
+ *
+ * Returns:
+ *   "has more commands" flag (i.e. some new commands were added to queue)
+ */
+public bool concmdDoQueued () {
+  if (concmdbufpos == 0) return false;
+  auto ebuf = concmdbufpos;
+  ConString s = concmdbuf[0..ebuf];
+  //conwriteln("===================");
+  while (s.length) {
+    auto cmd = conGetCommandStr(s);
+    if (cmd is null) break;
+    try {
+      //consoleLock();
+      //scope(exit) consoleUnlock();
+      //conwriteln("  <", cmd, ">");
+      conExecute(cmd);
+    } catch (Exception e) {
+      conwriteln("***ERROR: ", e.msg);
+    }
+  }
+  // shift postponed commands
+  if (concmdbufpos > ebuf) {
+    import core.stdc.string : memmove;
+    //consoleLock();
+    //scope(exit) consoleUnlock();
+    memmove(concmdbuf.ptr, concmdbuf.ptr+ebuf, concmdbufpos-ebuf);
+    concmdbufpos -= ebuf;
+    //s = concmdbuf[0..concmdbufpos];
+    //ebuf = concmdbufpos;
+    return true;
+  } else {
+    concmdbufpos = 0;
+    return false;
+  }
 }
