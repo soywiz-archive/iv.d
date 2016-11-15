@@ -227,9 +227,9 @@ public void oglInitConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
 
     if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
 
-    GLuint wrapOpt = GL_REPEAT;
-    GLuint filterOpt = GL_NEAREST; //GL_LINEAR;
-    GLuint ttype = GL_UNSIGNED_BYTE;
+    enum wrapOpt = GL_REPEAT;
+    enum filterOpt = GL_NEAREST; //GL_LINEAR;
+    enum ttype = GL_UNSIGNED_BYTE;
 
     glGenTextures(1, &convbufTexId);
     if (convbufTexId == 0) assert(0, "can't create cmdcon texture");
@@ -248,7 +248,7 @@ public void oglInitConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
 
     GLfloat[4] bclr = 0.0;
     glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
-    glTexImage2D(GL_TEXTURE_2D, 0, (ttype == GL_FLOAT ? GL_RGBA16F : GL_RGBA), scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
 
     conLastChange = 0;
   }
@@ -533,7 +533,7 @@ void conDrawChar (char ch) nothrow @trusted @nogc {
   int b = (conColor>>16)&0xff;
   immutable int rr = r, gg = g, bb = b;
   foreach_reverse (immutable y; 0..10) {
-    ushort v = dosFont10.ptr[cast(uint)ch*10+y];
+    ushort v = glConFont10.ptr[cast(uint)ch*10+y];
     immutable uint cc = (b<<16)|(g<<8)|r|0xff000000;
     foreach (immutable x; 0..10) {
       if (v&0x8000) vsetPixel(conDrawX+x, conDrawY+y, cc);
@@ -759,7 +759,7 @@ public bool conCharEvent (dchar ch) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-static private immutable ushort[256*10] dosFont10 = [
+static public immutable ushort[256*10] glConFont10 = [
   /* 0x00 */
   0b_0000000000_000000,
   0b_0000000000_000000,

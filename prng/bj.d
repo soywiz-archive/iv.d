@@ -15,19 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.prng_old is aliced;
-
-
-private uint xyzzyPRNGHashU32() (uint a) {
-  a -= (a<<6);
-  a ^= (a>>17);
-  a -= (a<<9);
-  a ^= (a<<4);
-  a -= (a<<3);
-  a ^= (a<<10);
-  a ^= (a>>15);
-  return a;
-}
+module iv.prng.bj;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -42,7 +30,7 @@ private:
   uint c = 0x1ceca1b1u;
   uint d = 0x32744417u;
 
-nothrow: @nogc:
+nothrow @nogc:
 public:
   void randomize () @trusted {
     version(Windows) {
@@ -64,18 +52,22 @@ public:
     }
   }
 
-@safe:
-  enum empty = false;
-  @property uint front () const => d;
-  alias popFront = next;
-  @property auto save () inout => this;
+pure @safe:
+  enum bool isUniformRandom = true;
+  enum uint min = uint.min;
+  enum uint max = uint.max;
 
-  this (uint aseed) => seed(aseed);
+  enum bool empty = false;
+  @property uint front () const { pragma(inline, true); return d; }
+  alias popFront = next;
+  @property auto save () const { BJRng res = void; res.a = this.a; res.b = this.b; res.c = this.c; res.d = this.d; return res; }
+
+  this (uint aseed) { pragma(inline, true); seed(aseed); }
 
   void seed (uint seed) {
     a = 0xf1ea5eed;
     b = c = d = seed;
-    foreach (; 0..20) next;
+    foreach (immutable _; 0..20) next;
   }
 
   @property uint next () {
@@ -99,6 +91,38 @@ public:
 }
 
 
+version(test_bj) unittest {
+  static immutable uint[8] checkValues = [
+    3079471771u,
+    2798213162u,
+    3360187034u,
+    3739077647u,
+    1276142743u,
+    771570220u,
+    1864333648u,
+    1915806440u,
+  ];
+  {
+    auto rng = BJRng(0);
+    foreach (ulong v; checkValues) {
+      if (v != rng.front) assert(0);
+      //import std.stdio; writeln(rng.front, "u");
+      rng.popFront();
+    }
+  }
+  // std.random test
+  {
+    import std.random : uniform;
+    auto rng = BJRng(0);
+    foreach (immutable _; 0..8) {
+      import std.stdio;
+      auto v = uniform!"[)"(0, 4, rng);
+      writeln(v, "uL");
+    }
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // One of the by George Marsaglia's prng generators.
 // It is based on George Marsaglia's MWC (multiply with carry) generator.
@@ -115,7 +139,7 @@ private:
   uint z = DefaultZ;
   uint lastnum = (DefaultZ<<16)+DefaultW;
 
-nothrow: @nogc:
+nothrow @nogc:
 public:
   void randomize () @trusted {
     version(Windows) {
@@ -137,13 +161,17 @@ public:
     }
   }
 
-@safe:
-  enum empty = false;
-  @property uint front () const => lastnum;
-  alias popFront = next;
-  @property auto save () inout => this;
+pure @safe:
+  enum bool isUniformRandom = true;
+  enum uint min = uint.min;
+  enum uint max = uint.max;
 
-  this (ulong aseed) => seed(aseed);
+  enum bool empty = false;
+  @property uint front () const { pragma(inline, true); return lastnum; }
+  alias popFront = next;
+  @property auto save () const { GMRngSeed64 res = void; res.w = this.w; res.z = this.z; res.lastnum = this.lastnum; return res; }
+
+  this (ulong aseed) { pragma(inline, true); seed(aseed); }
 
   void seed (ulong seed) {
     z = cast(uint)(seed>>32);
@@ -162,6 +190,37 @@ public:
   }
 }
 
+version(test_gms64) unittest {
+  static immutable uint[8] checkValues = [
+    1962359733u,
+    820856226u,
+    2331188998u,
+    4033440000u,
+    3169966213u,
+    2572821606u,
+    100826968u,
+    1697244543u,
+  ];
+  {
+    auto rng = GMRngSeed64(0);
+    foreach (ulong v; checkValues) {
+      if (v != rng.front) assert(0);
+      //import std.stdio; writeln(rng.front, "u");
+      rng.popFront();
+    }
+  }
+  // std.random test
+  {
+    import std.random : uniform;
+    auto rng = GMRngSeed64(0);
+    foreach (immutable _; 0..8) {
+      import std.stdio;
+      auto v = uniform!"[)"(0, 4, rng);
+      writeln(v, "uL");
+    }
+  }
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // one of the by George Marsaglia's prng generators, period about 2^160. fast.
@@ -175,7 +234,7 @@ private:
   uint v = 0x359c34a7u;
   uint lastnum = 0x4d00381eu; // almost arbitrary
 
-nothrow: @nogc:
+nothrow @nogc:
 public:
   void randomize () @trusted {
     version(Windows) {
@@ -198,13 +257,17 @@ public:
     }
   }
 
-@safe:
-  enum empty = false;
-  @property uint front () const => lastnum;
-  alias popFront = next;
-  @property auto save () inout => this;
+pure @safe:
+  enum bool isUniformRandom = true;
+  enum uint min = uint.min;
+  enum uint max = uint.max;
 
-  this (uint aseed) => seed(aseed);
+  enum bool empty = false;
+  @property uint front () const { pragma(inline, true); return lastnum; }
+  alias popFront = next;
+  @property auto save () const { GMRng res = void; res.x = this.x; res.y = this.y; res.z = this.z; res.w = this.w; res.v = this.v; res.lastnum = this.lastnum; return res; }
+
+  this (uint aseed) { pragma(inline, true); seed(aseed); }
 
   void seed (uint seed) {
     x = (seed ? seed : 0xdeadf00du);
@@ -255,9 +318,40 @@ public:
   }
 }
 
+version(test_gms) unittest {
+  static immutable uint[8] checkValues = [
+    2329293526u,
+    2821973934u,
+    2640992451u,
+    1004589151u,
+    3902251129u,
+    2922888142u,
+    3947715136u,
+    3516368807u,
+  ];
+  {
+    auto rng = GMRng(0);
+    foreach (ulong v; checkValues) {
+      if (v != rng.front) assert(0);
+      //import std.stdio; writeln(rng.front, "u");
+      rng.popFront();
+    }
+  }
+  // std.random test
+  {
+    import std.random : uniform;
+    auto rng = GMRng(0);
+    foreach (immutable _; 0..8) {
+      import std.stdio;
+      auto v = uniform!"[)"(0, 4, rng);
+      writeln(v, "uL");
+    }
+  }
+}
 
-version(test_prng)
-unittest {
+
+// ////////////////////////////////////////////////////////////////////////// //
+version(test_prng) unittest {
   import std.range;
   template checkRng(T) {
     static assert(isInfinite!T, T.stringof~" is not infinite range");
@@ -268,50 +362,17 @@ unittest {
   static assert(checkRng!BJRng);
   static assert(checkRng!GMRngSeed64);
   static assert(checkRng!GMRng);
+}
 
-  import iv.writer;
-  /*
-  {
-    BJRng r;
-    r.seed(0xdeadf00du);
-    writefln!"  uint a = 0x%08xu;"(r.a);
-    writefln!"  uint b = 0x%08xu;"(r.b);
-    writefln!"  uint c = 0x%08xu;"(r.c);
-    writefln!"  uint d = 0x%08xu;"(r.d);
-  }
-  */
-  /*
-  {
-    GMRngSeed64 r;
-    r.seed(0xdeadf00d_fee1deadul);
-    writefln!"  uint w = 0x%08xu;"(r.w);
-    writefln!"  uint z = 0x%08xu;"(r.z);
-  }
-  */
-  /*
-  {
-    GMRng r;
-    r.seed(0xdeadf00du);
-    writefln!"  uint x = 0x%08xu;"(r.x);
-    writefln!"  uint y = 0x%08xu;"(r.y);
-    writefln!"  uint z = 0x%08xu;"(r.z);
-    writefln!"  uint w = 0x%08xu;"(r.w);
-    writefln!"  uint v = 0x%08xu;"(r.v);
-  }
-  */
-  {
-    BJRng r;
-    r.randomize();
-    writefln!"0x%08x"(r.next);
-  }
-  {
-    GMRngSeed64 r;
-    r.randomize();
-    writefln!"0x%08x"(r.next);
-  }
-  {
-    GMRng r;
-    r.randomize();
-    writefln!"0x%08x"(r.next);
-  }
+
+// ////////////////////////////////////////////////////////////////////////// //
+private uint xyzzyPRNGHashU32() (uint a) {
+  a -= (a<<6);
+  a ^= (a>>17);
+  a -= (a<<9);
+  a ^= (a<<4);
+  a -= (a<<3);
+  a ^= (a<<10);
+  a ^= (a>>15);
+  return a;
 }
