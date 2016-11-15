@@ -3317,7 +3317,7 @@ package(iv) void concmdAdd(bool ensureNewCommand=true) (ConString s) {
  * Returns:
  *   "has more commands" flag (i.e. some new commands were added to queue)
  */
-public bool concmdDoQueued () {
+public bool conProcessQueue () {
   if (concmdbufpos == 0) return false;
   auto ebuf = concmdbufpos;
   ConString s = concmdbuf[0..ebuf];

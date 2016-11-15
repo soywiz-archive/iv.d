@@ -42,7 +42,7 @@ __gshared uint scrwdt, scrhgt;
 // public bool conKeyEvent (KeyEvent event); -- returns `true` if event was eaten
 // public bool conCharEvent (dchar ch); -- returns `true` if event was eaten
 //
-// public bool concmdDoQueued (); (from iv.cmdcon)
+// public bool conProcessQueue (); (from iv.cmdcon)
 //   call this in your main loop to process all accumulated console commands.
 //   WARNING! this is NOT thread-safe, you MUST call this in your "processing thread", and
 //            you MUST put `consoleLock()/consoleUnlock()` around the call!
