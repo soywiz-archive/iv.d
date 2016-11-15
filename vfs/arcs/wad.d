@@ -82,6 +82,7 @@ private:
     if (sign != "IWAD" && sign != "PWAD") throw new VFSNamedException!"WadArchive"("not a WAD file");
     auto flCount = fl.readNum!uint;
     auto dirOfs = fl.readNum!uint;
+    if (flCount == 0) return;
     if (flCount > 0x3fff_ffff || dirOfs >= flsize || dirOfs+flCount*16 > flsize) throw new VFSNamedException!"WadArchive"("invalid archive file");
     //{ import core.stdc.stdio; printf("[%.*s]\n", 4, sign.ptr); }
     // read directory
