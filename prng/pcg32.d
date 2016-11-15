@@ -24,8 +24,8 @@ struct PCG32 {
 private:
   // for 0x29a, 42
   // state
-  ulong state = 0x83a6d64d022268cdUL;
-  ulong inc = 0x00000055UL;
+  ulong state = 0x83a6d64d022268cdUL; // current state: PCG32 iterates through all 2^^64 possible internal states
+  ulong inc = 0x00000055UL; // sequence constant: a value that defines which of 2^^63 possible random sequences the current state is iterating through; it holds the same value over the lifetime of the PCG32
   // current value
   uint s = 0xe1ad5be5UL;
 
