@@ -22,14 +22,14 @@ module iv.vmath /*is aliced*/;
 
 // ////////////////////////////////////////////////////////////////////////// //
 private template isGoodSwizzling(string s, string comps, int minlen, int maxlen) {
-  private static template hasChar(string str, char ch, size_t idx=0) {
+  private static template hasChar(string str, char ch, uint idx=0) {
          static if (idx >= str.length) enum hasChar = false;
     else static if (str[idx] == ch) enum hasChar = true;
     else enum hasChar = hasChar!(str, ch, idx+1);
   }
   private static template swz(string str, string comps, uint idx=0) {
          static if (idx >= str.length) enum swz = true;
-    else static if (hasChar!(str, comps)) enum swz = swz(str, comps, idx+1);
+    else static if (hasChar!(comps, str[idx])) enum swz = swz!(str, comps, idx+1);
     else enum swz = false;
   }
   static if (s.length >= minlen && s.length <= maxlen) enum isGoodSwizzling = swz!(s, comps);
@@ -39,9 +39,9 @@ private template isGoodSwizzling(string s, string comps, int minlen, int maxlen)
 private template SwizzleCtor(string stn, string s) {
   private static template buildCtor (string s, uint idx) {
     static if (idx >= s.length) enum buildCtor = "";
-    else enum buildCtor = s[0]~","~buildCtor!(s, idx+1);
+    else enum buildCtor = s[idx]~","~buildCtor!(s, idx+1);
   }
-  enum SwizzleCtor = stn~"("~buildCtor!(s)~")";
+  enum SwizzleCtor = stn~"("~buildCtor!(s, 0)~")";
 }
 
 
@@ -340,6 +340,13 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  auto opBinaryRight(string op:"/") (FloatType aa) {
+    pragma(inline, true);
+         static if (dims == 2) return v2(aa/x, aa/y);
+    else static if (dims == 3) return v3(aa/x, aa/y, aa/z);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
   auto opUnary(string op:"-") () {
     pragma(inline, true);
          static if (dims == 2) return v2(-x, -y);
@@ -352,6 +359,13 @@ const pure:
     import std.math : abs;
          static if (dims == 2) return v2(abs(x), abs(y));
     else static if (dims == 3) return v3(abs(x), abs(y), abs(z));
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  auto sign () {
+    pragma(inline, true);
+         static if (dims == 2) return v2((x < 0 ? -1 : x > 0 ? 1 : 0), (y < 0 ? -1 : y > 0 ? 1 : 0));
+    else static if (dims == 3) return v3((x < 0 ? -1 : x > 0 ? 1 : 0), (y < 0 ? -1 : y > 0 ? 1 : 0), (z < 0 ? -1 : z > 0 ? 1 : 0));
     else static assert(0, "invalid dimension count for vector");
   }
 
