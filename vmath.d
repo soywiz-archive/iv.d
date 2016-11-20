@@ -92,9 +92,9 @@ public:
   enum VFloatNum(real v) = cast(FloatType)v;
 
 public:
-  FloatType x = 0.0;
-  FloatType y = 0.0;
-  static if (dims >= 3) FloatType z = 0.0;
+  FloatType x = 0;
+  FloatType y = 0;
+  static if (dims >= 3) FloatType z = 0;
 
 nothrow @safe:
   string toString () const {
@@ -754,7 +754,7 @@ nothrow @safe:
   string toString () const @trusted {
     import std.string : format;
     try {
-      return "0:[%s,%s,%s,%s]\n4:[%s,%s,%s,%s]\n8:[%s,%s,%s,%s]\nc:[%s,%s,%s,%s]".format(
+      return "0:[%g,%g,%g,%g]\n4:[%g,%g,%g,%g]\n8:[%g,%g,%g,%g]\nc:[%g,%g,%g,%g]".format(
         mt.ptr[ 0], mt.ptr[ 1], mt.ptr[ 2], mt.ptr[ 3],
         mt.ptr[ 4], mt.ptr[ 5], mt.ptr[ 6], mt.ptr[ 7],
         mt.ptr[ 8], mt.ptr[ 9], mt.ptr[10], mt.ptr[11],
@@ -768,18 +768,18 @@ nothrow @safe:
   @property FloatType opIndex (size_t x, size_t y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : FloatType.nan); }
 
 @nogc @trusted:
-  this() (in FloatType[] vals...) { pragma(inline, true); if (vals.length >= 16) mt[] = vals[0..16]; else { mt[] = 0; mt[0..vals.length] = vals[]; } }
-  this() (in auto ref mat4 m) { pragma(inline, true); mt[] = m.mt[]; }
+  this() (in FloatType[] vals...) { pragma(inline, true); if (vals.length >= 16) mt.ptr[0..16] = vals.ptr[0..16]; else { mt.ptr[0..16] = 0; mt.ptr[0..vals.length] = vals.ptr[0..vals.length]; } }
+  this() (in auto ref mat4 m) { pragma(inline, true); mt.ptr[0..16] = m.mt.ptr[0..16]; }
   this() (in auto ref vec3 v) {
-    mt[] = 0;
+    //mt.ptr[0..16] = 0;
     mt.ptr[0*4+0] = v.x;
     mt.ptr[1*4+1] = v.y;
     mt.ptr[2*4+2] = v.z;
-    mt.ptr[3*4+3] = 1; // just in case
+    //mt.ptr[3*4+3] = 1; // just in case
   }
 
-  static mat4 Zero () pure { pragma(inline, true); return mat4(); }
-  static mat4 Identity () pure { pragma(inline, true); mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res; }
+  static mat4 Zero () pure { pragma(inline, true); return mat4(0); }
+  static mat4 Identity () pure { pragma(inline, true); /*mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res;*/ return mat4(); }
 
   private enum SinCosImportMixin = q{
     static if (is(FloatType == float)) {
@@ -793,7 +793,7 @@ nothrow @safe:
 
   static mat4 RotateX() (FloatType angle) {
     mixin(SinCosImportMixin);
-    mat4 res = Zero;
+    auto res = mat4(0);
     res.mt.ptr[0*4+0] = 1.0;
     res.mt.ptr[1*4+1] = cos(angle);
     res.mt.ptr[2*4+1] = -sin(angle);
@@ -805,7 +805,7 @@ nothrow @safe:
 
   static mat4 RotateY() (FloatType angle) {
     mixin(SinCosImportMixin);
-    mat4 res = Zero;
+    auto res = mat4(0);
     res.mt.ptr[0*4+0] = cos(angle);
     res.mt.ptr[2*4+0] = sin(angle);
     res.mt.ptr[1*4+1] = 1.0;
@@ -817,7 +817,7 @@ nothrow @safe:
 
   static mat4 RotateZ() (FloatType angle) {
     mixin(SinCosImportMixin);
-    mat4 res = Zero;
+    auto res = mat4(0);
     res.mt.ptr[0*4+0] = cos(angle);
     res.mt.ptr[1*4+0] = -sin(angle);
     res.mt.ptr[0*4+1] = sin(angle);
@@ -828,7 +828,7 @@ nothrow @safe:
   }
 
   static mat4 Translate() (in auto ref vec3 v) {
-    mat4 res = Zero;
+    auto res = mat4(0);
     res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = 1;
     res.mt.ptr[3*4+0] = v.x;
     res.mt.ptr[3*4+1] = v.y;
@@ -838,7 +838,7 @@ nothrow @safe:
   }
 
   static mat4 Scale() (in auto ref vec3 v) {
-    mat4 res = Zero;
+    auto res = mat4(0);
     res.mt.ptr[0*4+0] = v.x;
     res.mt.ptr[1*4+1] = v.y;
     res.mt.ptr[2*4+2] = v.z;
@@ -855,7 +855,7 @@ nothrow @safe:
 
   // same as `glFrustum()`
   static mat4 Frustum() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
-    Matrix4 res = Zero;
+    auto res = mat4(0);
     res.mt.ptr[0]  = 2*nearVal/(right-left);
     res.mt.ptr[5]  = 2*nearVal/(top-bottom);
     res.mt.ptr[8]  = (right+left)/(right-left);
@@ -869,7 +869,7 @@ nothrow @safe:
 
   // same as `glOrtho()`
   static mat4 Ortho() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
-    Matrix4 res = Zero;
+    auto res = mat4(0);
     res.mt.ptr[0]  = 2/(right-left);
     res.mt.ptr[5]  = 2/(top-bottom);
     res.mt.ptr[10] = -2/(farVal-nearVal);
@@ -987,15 +987,15 @@ public:
       import std.math : abs;
     }
     vec3 position = vec3(mt.ptr[12], mt.ptr[13], mt.ptr[14]);
-    vec3 forward = (target-position).normalize;
+    vec3 forward = (target-position).normalized;
     vec3 up;
     if (abs(forward.x) < EPSILON!FloatType && abs(forward.z) < EPSILON!FloatType) {
       up.z = (forward.y > 0 ? -1 : 1);
     } else {
       up.y = 1;
     }
-    vec3 left = up.cross(forward).normalize;
-    up = forward.cross(left)/*.normalize*/;
+    vec3 left = up.cross(forward).normalized;
+    up = forward.cross(left).normalized; //k8: `normalized` was commented out; why?
     mt.ptr[0*4+0] = left.x;
     mt.ptr[0*4+1] = left.y;
     mt.ptr[0*4+2] = left.z;
@@ -1010,9 +1010,9 @@ public:
 
   ref mat4 lookingAt() (in auto ref vec3 target, in auto ref vec3 upVec) {
     vec3 position = vec3(mt.ptr[12], mt.ptr[13], mt.ptr[14]);
-    vec3 forward = (target-position).normalize;
-    vec3 left = upVec.cross(forward).normalize;
-    vec3 up = forward.cross(left).normalize;
+    vec3 forward = (target-position).normalized;
+    vec3 left = upVec.cross(forward).normalized;
+    vec3 up = forward.cross(left).normalized;
     mt.ptr[0*4+0] = left.x;
     mt.ptr[0*4+1] = left.y;
     mt.ptr[0*4+2] = left.z;
