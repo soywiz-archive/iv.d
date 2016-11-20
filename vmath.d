@@ -326,6 +326,22 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  // vector elements operation
+  auto op(string opr, VT) (in auto ref VT a) if (isVector!VT && (opr == "+" || opr == "-" || opr == "*" || opr == "/")) {
+    pragma(inline, true);
+    static if (dims == 2) {
+           static if (isVector2!VT) mixin("return v2(x"~opr~"a.x, y"~opr~"a.y);");
+      else static if (isVector3!VT) mixin("return v2(x"~opr~"a.x, y"~opr~"a.y);");
+      else static assert(0, "invalid dimension count for vector");
+    } else static if (dims == 3) {
+           static if (isVector2!VT) mixin("return v3(x"~opr~"a.x, y"~opr~"a.y, 0);");
+      else static if (isVector3!VT) mixin("return v3(x"~opr~"a.x, y"~opr~"a.y, z"~opr~"a.z);");
+      else static assert(0, "invalid dimension count for vector");
+    } else {
+      static assert(0, "invalid dimension count for vector");
+    }
+  }
+
   // dot product
   FloatType opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
