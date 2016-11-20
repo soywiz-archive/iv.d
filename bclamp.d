@@ -19,6 +19,7 @@
 module iv.bclamp;
 
 
+// this is actually branch-less for ints on x86, and even for longs on x86_64
 ubyte clampToByte(T) (T n) pure nothrow @safe @nogc if (__traits(isIntegral, T)) {
   pragma(inline, true);
   static if (T.sizeof == 2 || T.sizeof == 4) {
