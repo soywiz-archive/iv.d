@@ -39,6 +39,7 @@ private:
 // ////////////////////////////////////////////////////////////////////////// //
 /// use this in conGetVar, for example, to avoid allocations
 public alias ConString = const(char)[];
+static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -237,7 +238,6 @@ version(test_cbuf) unittest {
 // ////////////////////////////////////////////////////////////////////////// //
 // writer
 private import std.traits/* : isBoolean, isIntegral, isPointer*/;
-static if (!is(typeof(usize))) private alias usize = size_t;
 //private alias StripTypedef(T) = T;
 
 //__gshared void delegate (scope const(char[])) @trusted nothrow @nogc  conwriter;
@@ -1941,7 +1941,7 @@ void enumComplete(T) (ConCommand self) if (is(T == enum)) {
           bestPfx = mname;
         } else {
           //if (mname.length < bestPfx.length) bestPfx = bestPfx[0..mname.length];
-          size_t pos = 0;
+          usize pos = 0;
           while (pos < bestPfx.length && pos < mname.length) {
             char c0 = bestPfx[pos];
             char c1 = mname[pos];
@@ -3097,7 +3097,7 @@ public void concmdf(string fmt, A...) (A args) {
       static if (quote) {
         char[8] buf;
         foreach (immutable idx, char ch; s) {
-          if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') {
+          if (ch < ' ' || ch == 127 || ch == '#' || ch == '"' || ch == '\\') {
             import core.stdc.stdio : snprintf;
             auto len = snprintf(buf.ptr, buf.length, "\\x%02x", cast(uint)ch);
             concmdAdd!false(buf[0..len]);
@@ -3371,4 +3371,97 @@ public bool conProcessQueue () {
     concmdbufpos = 0;
     return false;
   }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/** process command-line arguments, put 'em to console queue, remove from array (thread-safe).
+ *
+ * just call this function from `main (string[] args)`, with `args`.
+ *
+ * console args looks like:
+ *  +cmd arg arg +cmd arg arg
+ *
+ * Returns:
+ *   `true` is any command was added to queue.
+ */
+public bool conProcessArgs (ref string[] args) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+
+  bool ensureCmd = true;
+  auto ocbpos = concmdbufpos;
+
+  void puts (const(char)[] s...) {
+    if (s.length) {
+      if (ensureCmd) {
+        concmdEnsureNewCommand();
+        ensureCmd = false;
+      } else {
+        concmdAdd!false(" "); // argument delimiter
+      }
+      // check if we need to quote arg
+      bool doQuote = false;
+      foreach (char ch; s) if (ch <= ' ' || ch == 127 || ch == '"' || ch == '#') { doQuote = true; break; }
+      if (doQuote) {
+        concmdAdd!false("\"");
+        foreach (immutable idx, char ch; s) {
+          if (ch < ' ' || ch == 127 || ch == '"' || ch == '\\') {
+            import core.stdc.stdio : snprintf;
+            char[8] buf = 0;
+            auto len = snprintf(buf.ptr, buf.length, "\\x%02x", cast(uint)ch);
+            if (len <= 0) assert(0, "concmd: ooooops!");
+            concmdAdd!false(buf[0..len]);
+          } else {
+            concmdAdd!false(s[idx..idx+1]);
+          }
+        }
+        concmdAdd!false("\"");
+      } else {
+        concmdAdd!false(s);
+      }
+    }
+  }
+
+  usize idx = 1;
+  while (idx < args.length) {
+    string a = args[idx++];
+    if (a.length == 0) continue;
+    if (a == "--") break; // no more
+    if (a[0] == '+') {
+      scope(exit) ensureCmd = true;
+      auto xidx = idx-1;
+      puts(a[1..$]);
+      while (idx < args.length) {
+        a = args[idx];
+        if (a.length > 0) {
+          if (a[0] == '+') break;
+          puts(a);
+        }
+        ++idx;
+      }
+      foreach (immutable c; idx..args.length) args[xidx+c-idx] = args[c];
+      args.length -= idx-xidx;
+      idx = xidx;
+    }
+  }
+
+  debug(concmd_procargs) {
+    import core.stdc.stdio : snprintf;
+    import core.sys.posix.unistd : STDERR_FILENO, write;
+    if (concmdbufpos > ocbpos) {
+      write(STDERR_FILENO, "===\n".ptr, 4);
+      write(STDERR_FILENO, concmdbuf.ptr+ocbpos, concmdbufpos-ocbpos);
+      write(STDERR_FILENO, "\n".ptr, 1);
+    }
+    foreach (immutable aidx, string a; args) {
+      char[16] buf;
+      auto len = snprintf(buf.ptr, buf.length, "%u: ", cast(uint)aidx);
+      write(STDERR_FILENO, buf.ptr, len);
+      write(STDERR_FILENO, a.ptr, a.length);
+      write(STDERR_FILENO, "\n".ptr, 1);
+    }
+  }
+
+  return (concmdbufpos > ocbpos);
 }
