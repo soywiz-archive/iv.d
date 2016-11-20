@@ -1971,6 +1971,25 @@ void enumComplete(T) (ConCommand self) if (is(T == enum)) {
 }
 
 
+void boolComplete(T) (ConCommand self) if (is(T == bool)) {
+  auto cs = conInputBuffer[0..conInputBufferCurX];
+  ConCommand.getWord(cs); // skip command
+  while (cs.length && cs[0] <= ' ') cs = cs[1..$];
+  if (cs.length > 0) {
+    enum Cmd = "toggle";
+    foreach (immutable idx, char ch; Cmd) {
+      if (idx >= cs.length) break;
+      if (cs[idx] != ch) return; // alas
+    }
+    if (cs.length > Cmd.length) return;
+    foreach (char ch; Cmd[cs.length..$]) conAddInputChar(ch);
+    conAddInputChar(' ');
+  } else {
+    conwriteln("  toggle?");
+  }
+}
+
+
 private enum RegVarMixin(string cvcreate) =
   `static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");`~
   `if (aname.length == 0) aname = (&v).stringof[2..$]; /*HACK*/`~
@@ -1978,9 +1997,13 @@ private enum RegVarMixin(string cvcreate) =
   `  addName(aname);`~
   `  auto cv = `~cvcreate~`;`~
   `  cv.setAttrs(attrs);`~
-  `  static if (is(XUQQ!(typeof(v)) == enum)) {`~
+  `  alias UT = XUQQ!(typeof(v));`~
+  `  static if (is(UT == enum)) {`~
   `    import std.functional : toDelegate;`~
-  `    cv.argcomplete = toDelegate(&enumComplete!(XUQQ!(typeof(v))));`~
+  `    cv.argcomplete = toDelegate(&enumComplete!UT);`~
+  `  } else static if (is(UT == bool)) {`~
+  `    import std.functional : toDelegate;`~
+  `    cv.argcomplete = toDelegate(&boolComplete!UT);`~
   `  }`~
   `  cmdlist[aname] = cv;`~
   `}`;
