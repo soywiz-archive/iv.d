@@ -2782,14 +2782,14 @@ __gshared uint conclilen = 0;
 __gshared int concurx = 0;
 
 shared uint inchangeCount = 1;
-public @property uint conInputLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(inchangeCount); } /// changed when something was put to console input buffer
-public void conInputIncLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; atomicOp!"+="(inchangeCount, 1); } /// increment console input buffer change flag
+public @property uint conInputLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(inchangeCount); } /// changed when something was put to console input buffer (thread-safe)
+public void conInputIncLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; atomicOp!"+="(inchangeCount, 1); } /// increment console input buffer change flag (thread-safe)
+
+public @property ConString conInputBuffer() () @trusted { pragma(inline, true); return concli[0..conclilen]; } /// returns console input buffer (not thread-safe)
+public @property int conInputBufferCurX() () @trusted { pragma(inline, true); return concurx; } /// returns cursor position in input buffer: [0..conclilen] (not thread-safe)
 
 
-public @property ConString conInputBuffer() () @trusted { pragma(inline, true); return concli[0..conclilen]; } /// returns console input buffer
-public @property int conInputBufferCurX() () @trusted { pragma(inline, true); return concurx; } /// returns cursor position in input buffer: [0..conclilen]
-
-/** clear console input buffer.
+/** clear console input buffer. (not thread-safe)
  *
  * call this function with `addToHistory:true` to add current input buffer to history.
  * it is safe to call this for empty input buffer, history won't get empty line.
@@ -2799,7 +2799,7 @@ public @property int conInputBufferCurX() () @trusted { pragma(inline, true); re
  */
 public void conInputBufferClear() (bool addToHistory=false) @trusted {
   if (conclilen > 0) {
-    if (addToHistory) conhisAdd(conInputBuffer);
+    if (addToHistory) conHistoryAdd(conInputBuffer);
     conclilen = 0;
     concurx = 0;
     conInputIncLastChange();
@@ -2808,50 +2808,178 @@ public void conInputBufferClear() (bool addToHistory=false) @trusted {
 }
 
 
-__gshared char[4096][128] concmdhistory = void;
-__gshared int conhisidx = -1;
-
-shared static this () { foreach (ref hb; concmdhistory) hb[] = 0; }
-
-
-/// returns input buffer history item (0 is oldest) or null if there are no more items
-ConString conhisAt (int idx) {
-  if (idx < 0 || idx >= concmdhistory.length) return null;
-  ConString res = concmdhistory.ptr[idx][];
-  usize pos = 0;
-  while (pos < res.length && res.ptr[pos]) ++pos;
-  return res[0..pos];
+private struct ConHistItem {
+  char* dbuf; // without trailing 0
+  char[256] sbuf = 0; // static buffer
+  uint len; // of dbuf or sbuf, without trailing 0
+  uint alloted; // !0: `dbuf` is used
+nothrow @trusted @nogc:
+  void releaseMemory () { import core.stdc.stdlib : free; if (dbuf !is null) free(dbuf); dbuf = null; alloted = len = 0; }
+  @property const(char)[] str () { pragma(inline, true); return (alloted ? dbuf : sbuf.ptr)[0..len]; }
+  @property void str (const(char)[] s) {
+    import core.stdc.stdlib : malloc, realloc;
+    if (s.length > 65536) s = s[0..65536]; // just in case
+    if (s.length == 0) { len = 0; return; }
+    // try to put in allocated space
+    if (alloted) {
+      if (s.length > alloted) {
+        auto np = cast(char*)realloc(dbuf, s.length);
+        if (np is null) {
+          // can't allocate memory
+          dbuf[0..alloted] = s[0..alloted];
+          len = alloted;
+          return;
+        }
+        alloted = cast(uint)s.length;
+      }
+      // it fits!
+      dbuf[0..s.length] = s[];
+      len = cast(uint)s.length;
+      return;
+    }
+    // fit in static buf?
+    if (s.length <= sbuf.length) {
+      sbuf.ptr[0..s.length] = s[];
+      len = cast(uint)s.length;
+      return;
+    }
+    // allocate dynamic buffer
+    dbuf = cast(char*)malloc(s.length);
+    if (dbuf is null) {
+      // alas; trim and use static one
+      sbuf[] = s[0..sbuf.length];
+      len = cast(uint)sbuf.length;
+    } else {
+      // ok, use dynamic buffer
+      alloted = len = cast(uint)s.length;
+      dbuf[0..len] = s[];
+    }
+  }
 }
 
 
-/// find command in input history, return index or -1
-int conhisFind (ConString cmd) {
+//TODO: make circular buffer
+private enum ConHistMax = 8192;
+__gshared ConHistItem* concmdhistory = null;
+__gshared int conhisidx = -1;
+__gshared uint conhismax = 128;
+__gshared uint conhisused = 0;
+__gshared uint conhisalloted = 0;
+
+
+shared static this () {
+  conRegVar!conhismax(1, ConHistMax, "r_conhistmax", "maximum commands in console input history");
+}
+
+
+// free unused slots if `conhismax` was changed
+private void conHistShrinkBuf () {
+  import core.stdc.stdlib : realloc;
+  import core.stdc.string : memmove, memset;
+  if (conhisalloted <= conhismax) return;
+  auto tokill = conhisalloted-conhismax;
+  debug(concmd_history) conwriteln("removing ", tokill, " items out of ", conhisalloted);
+  // discard old items
+  if (conhisused > conhismax) {
+    auto todis = conhisused-conhismax;
+    debug(concmd_history) conwriteln("discarding ", todis, " items out of ", conhisused);
+    // free used memory
+    foreach (ref ConHistItem it; concmdhistory[0..todis]) it.releaseMemory();
+    // move array elements
+    memmove(concmdhistory, concmdhistory+todis, ConHistItem.sizeof*conhismax);
+    // clear what is left
+    memset(concmdhistory+conhismax, 0, ConHistItem.sizeof*todis);
+    conhisused = conhismax;
+  }
+  // resize array
+  auto np = cast(ConHistItem*)realloc(concmdhistory, ConHistItem.sizeof*conhismax);
+  if (np !is null) concmdhistory = np;
+  conhisalloted = conhismax;
+}
+
+
+// allocate space for new command, return it's index or -1 on error
+private int conHistAllot () {
+  import core.stdc.stdlib : realloc;
+  import core.stdc.string : memmove, memset;
+  conHistShrinkBuf(); // shrink buffer, if necessary
+  if (conhisused >= conhisalloted && conhisused < conhismax) {
+    // we need more!
+    uint newsz = conhisalloted+64;
+    if (newsz > conhismax) newsz = conhismax;
+    debug(concmd_history) conwriteln("adding ", newsz-conhisalloted, " items (now: ", conhisalloted, ")");
+    auto np = cast(ConHistItem*)realloc(concmdhistory, ConHistItem.sizeof*newsz);
+    if (np !is null) {
+      // yay! we did it!
+      concmdhistory = np;
+      // clear new items
+      memset(concmdhistory+conhisalloted, 0, ConHistItem.sizeof*(newsz-conhisalloted));
+      conhisalloted = newsz; // fix it! ;-)
+      return conhisused++;
+    }
+    // alas, have to move
+  }
+  if (conhisalloted == 0) return -1; // no memory
+  if (conhisalloted == 1) { conhisused = 1; return 0; } // always
+  assert(conhisused <= conhisalloted);
+  if (conhisused == conhisalloted) {
+    ConHistItem tmp = concmdhistory[0];
+    // move items up
+    --conhisused;
+    memmove(concmdhistory, concmdhistory+1, ConHistItem.sizeof*conhisused);
+    //memset(concmdhistory+conhisused, 0, ConHistItem.sizeof);
+    memmove(concmdhistory+conhisused, &tmp, ConHistItem.sizeof);
+  }
+  return conhisused++;
+}
+
+
+/// returns input buffer history item (0 is oldest) or null if there are no more items (not thread-safe)
+public ConString conHistoryAt (int idx) {
+  if (idx < 0 || idx >= conhisused) return null;
+  return concmdhistory[conhisused-idx-1].str;
+}
+
+
+/// find command in input history, return index or -1 (not thread-safe)
+public int conHistoryFind (ConString cmd) {
+  while (cmd.length && cmd[0] <= 32) cmd = cmd[1..$];
   while (cmd.length && cmd[$-1] <= 32) cmd = cmd[0..$-1];
-  if (cmd.length > concmdhistory.ptr[0].length) cmd = cmd[0..concmdhistory.ptr[0].length];
   if (cmd.length == 0) return -1;
-  foreach (int idx; 0..cast(int)concmdhistory.length) {
-    auto c = conhisAt(idx);
+  foreach (int idx; 0..conhisused) {
+    auto c = concmdhistory[idx].str;
+    while (c.length > 0 && c[0] <= 32) c = c[1..$];
     while (c.length > 0 && c[$-1] <= 32) c = c[0..$-1];
-    if (c == cmd) return idx;
+    if (c == cmd) return conhisused-idx-1;
   }
   return -1;
 }
 
 
-/// add command to history. will take care about duplicate commands.
-void conhisAdd (ConString cmd) {
+/// add command to history. will take care about duplicate commands. (not thread-safe)
+public void conHistoryAdd (ConString cmd) {
+  import core.stdc.string : memmove, memset;
+  while (cmd.length && cmd[0] <= 32) cmd = cmd[1..$];
   while (cmd.length && cmd[$-1] <= 32) cmd = cmd[0..$-1];
-  if (cmd.length > concmdhistory.ptr[0].length) cmd = cmd[0..concmdhistory.ptr[0].length];
   if (cmd.length == 0) return;
-  auto idx = conhisFind(cmd);
+  auto idx = conHistoryFind(cmd);
   if (idx >= 0) {
-    // remove command
-    foreach (immutable c; idx+1..concmdhistory.length) concmdhistory.ptr[c-1][] = concmdhistory.ptr[c][];
+    debug(concmd_history) conwriteln("command found! idx=", idx, "; real idx=", conhisused-idx-1, "; used=", conhisused);
+    idx = conhisused-idx-1; // fix index
+    // move command to bottom
+    if (idx == conhisused-1) return; // nothing to do
+    // cheatmove! ;-)
+    ConHistItem tmp = concmdhistory[idx];
+    // move items up
+    memmove(concmdhistory+idx, concmdhistory+idx+1, ConHistItem.sizeof*(conhisused-idx-1));
+    //memset(concmdhistory+conhisused, 0, ConHistItem.sizeof);
+    memmove(concmdhistory+conhisused-1, &tmp, ConHistItem.sizeof);
+  } else {
+    // new command
+    idx = conHistAllot();
+    if (idx < 0) return; // alas
+    concmdhistory[idx].str = cmd;
   }
-  // make room
-  foreach_reverse (immutable c; 1..concmdhistory.length) concmdhistory.ptr[c][] = concmdhistory.ptr[c-1][];
-  concmdhistory.ptr[0][] = 0;
-  concmdhistory.ptr[0][0..cmd.length] = cmd[];
 }
 
 
@@ -2878,7 +3006,7 @@ public enum ConInputChar : char {
 }
 
 
-/// process console input char (won't execute commands, but will do autocompletion and history)
+/// process console input char (won't execute commands, but will do autocompletion and history) (not thread-safe)
 public void conAddInputChar (char ch) {
   __gshared int prevWasEmptyAndTab = 0;
 
@@ -3024,7 +3152,7 @@ public void conAddInputChar (char ch) {
   // up
   if (ch == ConInputChar.Up) {
     ++conhisidx;
-    auto cmd = conhisAt(conhisidx);
+    auto cmd = conHistoryAt(conhisidx);
     if (cmd.length == 0) {
       --conhisidx;
     } else {
@@ -3038,7 +3166,7 @@ public void conAddInputChar (char ch) {
   // down
   if (ch == ConInputChar.Down) {
     --conhisidx;
-    auto cmd = conhisAt(conhisidx);
+    auto cmd = conHistoryAt(conhisidx);
     if (cmd.length == 0 && conhisidx < -1) {
       ++conhisidx;
     } else {
@@ -3341,6 +3469,7 @@ package(iv) void concmdAdd(bool ensureNewCommand=true) (ConString s) {
  *   "has more commands" flag (i.e. some new commands were added to queue)
  */
 public bool conProcessQueue () {
+  scope(exit) conHistShrinkBuf(); // do it here
   if (concmdbufpos == 0) return false;
   auto ebuf = concmdbufpos;
   ConString s = concmdbuf[0..ebuf];
