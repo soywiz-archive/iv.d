@@ -21,6 +21,18 @@ module iv.vmath /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version(vmath_double) {
+  alias VFloat = double;
+} else {
+  alias VFloat = float;
+}
+enum VFloatNum(long v) = cast(VFloat)v;
+enum VFloatNum(float v) = cast(VFloat)v;
+enum VFloatNum(double v) = cast(VFloat)v;
+enum VFloatNum(real v) = cast(VFloat)v;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 private template isGoodSwizzling(string s, string comps, int minlen, int maxlen) {
   private static template hasChar(string str, char ch, uint idx=0) {
          static if (idx >= str.length) enum hasChar = false;
@@ -64,7 +76,7 @@ alias vec3 = VecN!3;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-align(1) struct VecN(ubyte dims, FloatType=float) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
+align(1) struct VecN(ubyte dims, FloatType=VFloat) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
 align(1):
 public:
   alias VFloat = FloatType;
@@ -182,8 +194,8 @@ nothrow @safe:
   ref auto normalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) immutable FloatType invlength = 1.0/sqrt(x*x+y*y);
-    else static if (dims == 3) immutable FloatType invlength = 1.0/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) immutable FloatType invlength = VFloatNum!1.0/sqrt(x*x+y*y);
+    else static if (dims == 3) immutable FloatType invlength = VFloatNum!1.0/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
     x *= invlength;
     y *= invlength;
@@ -191,14 +203,15 @@ nothrow @safe:
     return this;
   }
 
+  /+
   ref auto safeNormalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) FloatType invlength = 1.0/sqrt(x*x+y*y);
-    else static if (dims == 3) FloatType invlength = 1.0/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) FloatType invlength = sqrt(x*x+y*y);
+    else static if (dims == 3) FloatType invlength = sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
     if (invlength >= EPSILON!FloatType) {
-      invlength = 1.0/invlength;
+      invlength = VFloatNum!1.0/invlength;
       x *= invlength;
       y *= invlength;
       static if (dims == 3) z *= invlength;
@@ -209,6 +222,7 @@ nothrow @safe:
     }
     return this;
   }
+  +/
 
   ref auto opOpAssign(string op, VT) (in auto ref VT a) if (isVector!VT && (op == "+" || op == "-" || op == "*")) {
     //pragma(inline, true);
@@ -227,9 +241,10 @@ nothrow @safe:
   }
 
   ref auto opOpAssign(string op:"/") (FloatType a) {
-    import std.math : abs;
+    //import std.math : abs;
     //pragma(inline, true);
-    a = (abs(a) >= EPSILON!FloatType ? 1.0/a : FloatType.nan);
+    //a = (abs(a) >= EPSILON!FloatType ? 1.0/a : FloatType.nan);
+    a = VFloatNum!1.0/a;
     x *= a;
     y *= a;
     static if (dims == 3) z *= a;
@@ -247,10 +262,12 @@ const pure:
     static if (dims == 2) return v2(x, y).normalize; else return v3(x, y, z).normalize;
   }
 
+  /+
   auto safeNormalized () {
     pragma(inline, true);
     static if (dims == 2) return v2(x, y).safeNormalize; else return v3(x, y, z).safeNormalize;
   }
+  +/
 
   @property FloatType length () {
     pragma(inline, true);
@@ -278,6 +295,22 @@ const pure:
     } else static if (dims == 3) {
            static if (isVector2!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+z*z);
       else static if (isVector3!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+(z-a.z)*(z-a.z));
+      else static assert(0, "invalid dimension count for vector");
+    } else {
+      static assert(0, "invalid dimension count for vector");
+    }
+  }
+
+  // distance
+  FloatType distanceSquared(VT) (in auto ref VT a) if (isVector!VT) {
+    pragma(inline, true);
+    static if (dims == 2) {
+           static if (isVector2!VT) return (x-a.x)*(x-a.x)+(y-a.y)*(y-a.y);
+      else static if (isVector3!VT) return (x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+a.z*a.z;
+      else static assert(0, "invalid dimension count for vector");
+    } else static if (dims == 3) {
+           static if (isVector2!VT) return (x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+z*z;
+      else static if (isVector3!VT) return (x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+(z-a.z)*(z-a.z);
       else static assert(0, "invalid dimension count for vector");
     } else {
       static assert(0, "invalid dimension count for vector");
@@ -331,10 +364,12 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op:"/") (FloatType aa) {
+  auto opBinary(string op:"/") (FloatType a) {
     pragma(inline, true);
-    import std.math : abs;
-    immutable FloatType a = (abs(aa) >= EPSILON!FloatType ? 1.0/aa : FloatType.nan);
+    //import std.math : abs;
+    //immutable FloatType a = (abs(aa) >= EPSILON!FloatType ? 1.0/aa : FloatType.nan);
+    //immutable FloatType a = VFloatNum!1.0/aa; // 1/0 == inf
+    a = VFloatNum!1.0/aa; // 1/0 == inf
          static if (dims == 2) return v2(x*a, y*a);
     else static if (dims == 3) return v3(x*a, y*a, z*a);
     else static assert(0, "invalid dimension count for vector");
@@ -342,6 +377,12 @@ const pure:
 
   auto opBinaryRight(string op:"/") (FloatType aa) {
     pragma(inline, true);
+    /*
+    import std.math : abs;
+         static if (dims == 2) return v2((abs(x) >= EPSILON!FloatType ? aa/x : 0), (abs(y) >= EPSILON!FloatType ? aa/y : 0));
+    else static if (dims == 3) return v3((abs(x) >= EPSILON!FloatType ? aa/x : 0), (abs(y) >= EPSILON!FloatType ? aa/y : 0), (abs(z) >= EPSILON!FloatType ? aa/z : 0));
+    else static assert(0, "invalid dimension count for vector");
+    */
          static if (dims == 2) return v2(aa/x, aa/y);
     else static if (dims == 3) return v3(aa/x, aa/y, aa/z);
     else static assert(0, "invalid dimension count for vector");
@@ -366,6 +407,14 @@ const pure:
     pragma(inline, true);
          static if (dims == 2) return v2((x < 0 ? -1 : x > 0 ? 1 : 0), (y < 0 ? -1 : y > 0 ? 1 : 0));
     else static if (dims == 3) return v3((x < 0 ? -1 : x > 0 ? 1 : 0), (y < 0 ? -1 : y > 0 ? 1 : 0), (z < 0 ? -1 : z > 0 ? 1 : 0));
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  // `this` is edge; see glsl reference
+  auto step() (in auto ref vec3 val) {
+    pragma(inline, true);
+         static if (dims == 2) return v2((val.x < this.x ? 0f : 1f), (val.y < this.y ? 0f : 1f));
+    else static if (dims == 3) return v3((val.x < this.x ? 0f : 1f), (val.y < this.y ? 0f : 1f), (val.z < this.z ? 0f : 1f));
     else static assert(0, "invalid dimension count for vector");
   }
 
@@ -449,7 +498,7 @@ static:
 
 // ////////////////////////////////////////////////////////////////////////// //
 // plane in 3D space: Ax+By+Cz+D=0
-align(1) struct Plane3(FloatType=float, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
+align(1) struct Plane3(FloatType=VFloat, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
 align(1):
 public:
   alias plane3 = Plane3!(FloatType, PlaneEps, enableSwizzling);
@@ -670,7 +719,7 @@ pure nothrow @safe @nogc:
 // ////////////////////////////////////////////////////////////////////////// //
 alias mat4 = Mat4!float;
 
-align(1) struct Mat4(FloatType=float) if (is(FloatType == FloatType) || is(FloatType == double)) {
+align(1) struct Mat4(FloatType=VFloat) if (is(FloatType == FloatType) || is(FloatType == double)) {
 align(1):
 public:
   alias mat4 = Mat4!FloatType;
@@ -1363,7 +1412,7 @@ public:
 // ////////////////////////////////////////////////////////////////////////// //
 alias quat4 = Quat4!float;
 
-align(1) struct Quat4(FloatType=float) {
+align(1) struct Quat4(FloatType=VFloat) {
 align(1):
   alias quat4 = Quat4!FloatType;
 
