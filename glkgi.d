@@ -446,7 +446,7 @@ public bool kgiInit (int awdt, int ahgt, string title, bool a2x, uint afps) { re
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private uint glgfxCompileShader (const(char)[] src) {
+private uint glgfxCompileShader (const(char)[] fragsrc, const(char)[] vertsrc=null) nothrow @trusted @nogc {
   import iv.glbinds;
 
   if (shaderVersionOk < 0) {
@@ -476,11 +476,11 @@ private uint glgfxCompileShader (const(char)[] src) {
     shaderVersionOk = 1;
   }
   if (shaderVersionOk == 0) return 0;
-  return createFragShader(src);
+  return compileShaders(fragsrc, vertsrc);
 }
 
 
-private void glgfxInitTexture () {
+private void glgfxInitTexture () nothrow @trusted @nogc {
   import iv.glbinds;
 
   if (vbTexId) { glDeleteTextures(1, &vbTexId); vbTexId = 0; }
@@ -509,8 +509,6 @@ private void glgfxInitTexture () {
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, TexType, GL_UNSIGNED_BYTE, vbuf);
-
-  if (scanlines) sdrScanlineId = createFragShader(sdrScanlineSrc);
 }
 
 
@@ -579,7 +577,7 @@ private void glgfxBlit () nothrow @trusted @nogc {
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 
-  if (scanlines && shaderVersionOk < 0) sdrScanlineId = createFragShader(sdrScanlineSrc);
+  if (scanlines && shaderVersionOk < 0) sdrScanlineId = glgfxCompileShader(sdrScanlineSrc);
   glUseProgram(scanlines ? sdrScanlineId : 0);
 
   glMatrixMode(GL_PROJECTION); // for ortho camera
@@ -1787,10 +1785,58 @@ static string sdrScanlineSrc = q{
 
 
 // returns 0 or programid
-uint createFragShader (const(char)[] src) {
+uint compileShaders (const(char)[] fragsrc, const(char)[] vertsrc) nothrow @trusted @nogc {
   import iv.glbinds;
+
   GLuint prg = 0;
-  auto shaderId = glCreateShader(GL_FRAGMENT_SHADER);
+  GLuint fsid = 0, vsid = 0;
+
+  if (fragsrc.length == 0 && vertsrc.length == 0) return 0;
+
+  if (fragsrc.length) {
+    fsid = createShader!GL_FRAGMENT_SHADER(fragsrc);
+    if (fsid == 0) return 0;
+  }
+
+  if (vertsrc.length) {
+    vsid = createShader!GL_VERTEX_SHADER(vertsrc);
+    if (vsid == 0) {
+      if (fsid != 0) glDeleteShader(fsid);
+      return 0;
+    }
+  }
+
+  prg = glCreateProgram();
+  if (prg == 0) {
+    if (fsid != 0) glDeleteShader(fsid);
+    if (vsid != 0) glDeleteShader(vsid);
+    conwriteln("GLKGI ERROR: can't create shader program.");
+    return 0;
+  }
+
+  if (fsid) glAttachShader(prg, fsid);
+  if (vsid) glAttachShader(prg, vsid);
+  glLinkProgram(prg);
+
+  GLint lres = 0;
+  glGetProgramiv(prg, GL_LINK_STATUS, &lres);
+  if (lres != GL_TRUE) {
+    glDeleteProgram(prg);
+    if (fsid != 0) glDeleteShader(fsid);
+    if (vsid != 0) glDeleteShader(vsid);
+    conwriteln("GLKGI ERROR: can't link shader program.");
+    return 0;
+  }
+
+  return prg;
+}
+
+
+// returns 0 or programid
+uint createShader(uint type) (const(char)[] src) nothrow @trusted @nogc {
+  import iv.glbinds;
+
+  auto shaderId = glCreateShader(type);
   if (!shaderId) {
     conwriteln("GLKGI ERROR: can't create shader.");
     return 0;
@@ -1822,21 +1868,5 @@ uint createFragShader (const(char)[] src) {
     conwriteln("GLKGI ERROR: can't compile shader.");
     return 0;
   }
-  prg = glCreateProgram();
-  if (prg == 0) {
-    glDeleteShader(shaderId);
-    conwriteln("GLKGI ERROR: can't create shader program.");
-    return 0;
-  }
-  glAttachShader(prg, shaderId);
-  glLinkProgram(prg);
-  GLint lres = 0;
-  glGetProgramiv(prg, GL_LINK_STATUS, &lres);
-  if (lres != GL_TRUE) {
-    glDeleteProgram(prg);
-    glDeleteShader(shaderId);
-    conwriteln("GLKGI ERROR: can't link shader program.");
-    return 0;
-  }
-  return prg;
+  return shaderId;
 }
