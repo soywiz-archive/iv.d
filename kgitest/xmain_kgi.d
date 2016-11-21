@@ -22,12 +22,10 @@ import iv.glkgi;
 
 
 void main (string[] args) {
-  __gshared bool scale2x = false;
-  conRegVar!scale2x("v_scale2x", "video window scale");
   if (conProcessArgs(args)) while (conProcessQueue()) {}
-  conSealVar("v_scale2x");
 
-  kgiInit(640, 480, "KGI Test", scale2x);
+  //kgiInit(640, 480, "KGI Test", scale2x);
+  kgiInit();
   //scope(exit) kgiDeinit();
 
   void buildScreen () {

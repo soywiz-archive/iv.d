@@ -45,17 +45,17 @@ version(glkgi_rgba) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // 0:b; 1:g; 2:r; 3: nothing
-private __gshared int vbufW = 0, vbufH = 0;
+private __gshared int vbufW = 800, vbufH = 600;
 __gshared uint* vbuf; // see KGIRGBA
 private __gshared bool blit2x = false;
-private enum BlitType { Normal, BlackWhite, Green, Red }
-private __gshared int blitType = BlitType.Normal;
-private __gshared int blitShine = 0; // adds this to non-black colors
+//private enum BlitType { Normal, BlackWhite, Green, Red }
+//private __gshared int blitType = BlitType.Normal;
 private __gshared SimpleWindow vbwin;
 private __gshared uint vbTexId = 0;
-private __gshared string kgiTitle;
+private __gshared string kgiTitle = "KGI Graphics";
 private __gshared uint vupcounter = 0;
 private shared bool updateTexture = true;
+private __gshared uint fps = 35; // average FPS
 
 private shared bool vWantMotionEvents = false;
 private shared bool vWantCharEvents = false;
@@ -73,6 +73,15 @@ public @property int kgiHeight () nothrow @trusted @nogc { pragma(inline, true);
 
 //FIXME! turn this to proper setter
 public __gshared bool delegate () onKGICloseRequest;
+
+
+shared static this () {
+  conRegVar!blit2x("v_scale2x", "video window scale");
+  conRegVar!vbufW(64, 4096, "v_width", "video window width");
+  conRegVar!vbufH(64, 4096, "v_height", "video window height");
+  conRegVar!fps(1, 60, "v_fps", "video update rate");
+  conRegVar!kgiTitle("v_title", "video window title");
+}
 
 
 ///
@@ -219,6 +228,7 @@ void kgiWaitKey () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+///
 public void kgiDeinit () {
   concmd("quit");
 }
@@ -323,7 +333,7 @@ private void kgiThread (Tid starterTid) {
       conProcessQueue();
     }
 
-    vbwin.eventLoop(1000/60,
+    vbwin.eventLoop(1000/fps,
       delegate () {
         if (vbwin.closed) return;
         if (isQuitRequested) { vbwin.close(); return; }
@@ -384,6 +394,7 @@ private void kgiThread (Tid starterTid) {
     evbufused = 0;
     pushEventIntr(ev);
   }
+  //atomicSet(kgiThreadStarted, false);
 }
 
 
@@ -406,7 +417,8 @@ private void startKGIThread () {
 }
 
 
-public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=false) {
+///
+public bool kgiInitEx (int awdt, int ahgt, string title, bool a2x, uint afps) {
   import core.stdc.stdlib : malloc;
   import arsd.simpledisplay;
 
@@ -419,6 +431,14 @@ public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=f
 
   if (vbwin !is null) assert(0, "double initialization");
 
+  if (afps < 1) afps = 1; else if (afps > 60) afps = 60;
+
+  conSealVar("v_scale2x");
+  conSealVar("v_width");
+  conSealVar("v_height");
+  conSealVar("v_title");
+  conSealVar("v_fps");
+
   vbuf = cast(typeof(vbuf))malloc(vbuf[0].sizeof*awdt*ahgt);
   if (vbuf is null) assert(0, "KGI: out of memory");
   vbuf[0..awdt*ahgt] = 0;
@@ -426,16 +446,23 @@ public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=f
   vbufW = awdt;
   vbufH = ahgt;
   blit2x = a2x;
+  fps = afps;
+  kgiTitle = title;
 
   setOpenGLContextVersion(3, 2); // up to GLSL 150
   //openGLContextCompatible = false;
-
-  kgiTitle = title;
 
   startKGIThread();
 
   return true;
 }
+
+
+public bool kgiInit () { return kgiInitEx(vbufW, vbufH, kgiTitle, blit2x, fps); }
+public bool kgiInit (int awdt, int ahgt) { return kgiInitEx(awdt, ahgt, kgiTitle, blit2x, fps); }
+public bool kgiInit (int awdt, int ahgt, string title) { return kgiInitEx(awdt, ahgt, title, blit2x, fps); }
+public bool kgiInit (int awdt, int ahgt, string title, bool a2x) { return kgiInitEx(awdt, ahgt, title, a2x, fps); }
+public bool kgiInit (int awdt, int ahgt, string title, bool a2x, uint afps) { return kgiInitEx(awdt, ahgt, title, a2x, afps); }
 
 
 private void glgfxInitTexture () {
