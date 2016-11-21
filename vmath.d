@@ -79,8 +79,6 @@ alias vec3 = VecN!3;
 align(1) struct VecN(ubyte dims, FloatType=VFloat) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
 align(1):
 public:
-  alias VFloat = FloatType;
-
   enum isVector(VT) = (is(VT == VecN!(2, FloatType)) || is(VT == VecN!(3, FloatType)));
   enum isVector2(VT) = is(VT == VecN!(2, FloatType));
   enum isVector3(VT) = is(VT == VecN!(3, FloatType));
@@ -88,8 +86,6 @@ public:
 
   alias v2 = VecN!(2, FloatType);
   alias v3 = VecN!(3, FloatType);
-
-  enum VFloatNum(real v) = cast(FloatType)v;
 
 public:
   FloatType x = 0;
@@ -194,8 +190,8 @@ nothrow @safe:
   ref auto normalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) immutable FloatType invlength = VFloatNum!1.0/sqrt(x*x+y*y);
-    else static if (dims == 3) immutable FloatType invlength = VFloatNum!1.0/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) immutable FloatType invlength = cast(FloatType)1/sqrt(x*x+y*y);
+    else static if (dims == 3) immutable FloatType invlength = cast(FloatType)1/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
     x *= invlength;
     y *= invlength;
@@ -211,7 +207,7 @@ nothrow @safe:
     else static if (dims == 3) FloatType invlength = sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
     if (invlength >= EPSILON!FloatType) {
-      invlength = VFloatNum!1.0/invlength;
+      invlength = cast(FloatType)1/invlength;
       x *= invlength;
       y *= invlength;
       static if (dims == 3) z *= invlength;
@@ -244,7 +240,7 @@ nothrow @safe:
     //import std.math : abs;
     //pragma(inline, true);
     //a = (abs(a) >= EPSILON!FloatType ? 1.0/a : FloatType.nan);
-    a = VFloatNum!1.0/a;
+    a = cast(FloatType)1/a;
     x *= a;
     y *= a;
     static if (dims == 3) z *= a;
@@ -384,8 +380,8 @@ const pure:
     pragma(inline, true);
     //import std.math : abs;
     //immutable FloatType a = (abs(aa) >= EPSILON!FloatType ? 1.0/aa : FloatType.nan);
-    //immutable FloatType a = VFloatNum!1.0/aa; // 1/0 == inf
-    a = VFloatNum!1.0/aa; // 1/0 == inf
+    //immutable FloatType a = cast(FloatType)1/aa; // 1/0 == inf
+    a = cast(FloatType)1/a; // 1/0 == inf
          static if (dims == 2) return v2(x*a, y*a);
     else static if (dims == 3) return v3(x*a, y*a, z*a);
     else static assert(0, "invalid dimension count for vector");
