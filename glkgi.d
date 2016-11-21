@@ -54,6 +54,7 @@ private __gshared bool scanlines = false;
 private __gshared SimpleWindow vbwin;
 private __gshared uint vbTexId = 0;
 private __gshared uint sdrScanlineId = 0;
+private __gshared int shaderVersionOk = -1; // <0: not checked; 0: fail; >0: ok
 private __gshared string kgiTitle = "KGI Graphics";
 private __gshared uint vupcounter = 0;
 private shared bool updateTexture = true;
@@ -444,6 +445,41 @@ public bool kgiInit (int awdt, int ahgt, string title, bool a2x) { return kgiIni
 public bool kgiInit (int awdt, int ahgt, string title, bool a2x, uint afps) { return kgiInitEx(awdt, ahgt, title, a2x, afps); }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+private uint glgfxCompileShader (const(char)[] src) {
+  import iv.glbinds;
+
+  if (shaderVersionOk < 0) {
+    // check if we have sufficient shader version here
+    shaderVersionOk = 0;
+    bool found = false;
+    GLint svcount;
+    glGetIntegerv(GL_NUM_SHADING_LANGUAGE_VERSIONS, &svcount);
+    if (svcount > 0) {
+      foreach (GLuint n; 0..svcount) {
+        import core.stdc.string : strncmp;
+        auto v = glGetStringi(GL_SHADING_LANGUAGE_VERSION, n);
+        if (v is null) continue;
+        if (strncmp(v, "130", 3) != 0) continue;
+        if (v[3] > ' ') continue;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return 0; //assert(0, "can't find OpenGL GLSL 120");
+    /*
+    {
+      auto adr = glGetProcAddress("glTexParameterf");
+      if (adr is null) return 0;
+    }
+    */
+    shaderVersionOk = 1;
+  }
+  if (shaderVersionOk == 0) return 0;
+  return createFragShader(src);
+}
+
+
 private void glgfxInitTexture () {
   import iv.glbinds;
 
@@ -474,32 +510,7 @@ private void glgfxInitTexture () {
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, TexType, GL_UNSIGNED_BYTE, vbuf);
 
-
-  // check if we have sufficient shader version here
-  {
-    bool found = false;
-    GLint svcount;
-    glGetIntegerv(GL_NUM_SHADING_LANGUAGE_VERSIONS, &svcount);
-    if (svcount > 0) {
-      foreach (GLuint n; 0..svcount) {
-        import core.stdc.string : strncmp;
-        auto v = glGetStringi(GL_SHADING_LANGUAGE_VERSION, n);
-        if (v is null) continue;
-        if (strncmp(v, "130", 3) != 0) continue;
-        if (v[3] > ' ') continue;
-        found = true;
-        break;
-      }
-    }
-    if (!found) return; //assert(0, "can't find OpenGL GLSL 120");
-    /*
-    {
-      auto adr = glGetProcAddress("glTexParameterf");
-      if (adr is null) return;
-    }
-    */
-  }
-  sdrScanlineId = createFragShader(sdrScanlineSrc);
+  if (scanlines) sdrScanlineId = createFragShader(sdrScanlineSrc);
 }
 
 
@@ -568,6 +579,7 @@ private void glgfxBlit () nothrow @trusted @nogc {
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 
+  if (scanlines && shaderVersionOk < 0) sdrScanlineId = createFragShader(sdrScanlineSrc);
   glUseProgram(scanlines ? sdrScanlineId : 0);
 
   glMatrixMode(GL_PROJECTION); // for ortho camera
