@@ -2333,6 +2333,16 @@ public void conSetVar(T) (ConString s, T val) {
 }
 
 
+/// "seal" console variable (i.e. make it read-only) (thread-safe)
+public void conSealVar (ConString s) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  if (auto cc = s in cmdlist) {
+    if (auto cv = cast(ConVarBase)(*cc)) cv.attrReadOnly = true;
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // thread-safe
 
