@@ -460,13 +460,14 @@ private uint glgfxCompileShader (const(char)[] fragsrc, const(char)[] vertsrc=nu
         import core.stdc.string : strncmp;
         auto v = glGetStringi(GL_SHADING_LANGUAGE_VERSION, n);
         if (v is null) continue;
-        if (strncmp(v, "130", 3) != 0) continue;
+        //if (strncmp(v, "130", 3) != 0) continue;
+        if (strncmp(v, "150", 3) != 0) continue;
         if (v[3] > ' ') continue;
         found = true;
         break;
       }
     }
-    if (!found) return 0; //assert(0, "can't find OpenGL GLSL 120");
+    if (!found) return 0; //assert(0, "can't find OpenGL GLSL 150");
     /*
     {
       auto adr = glGetProcAddress("glTexParameterf");
@@ -1762,27 +1763,9 @@ public immutable ubyte[256] kgiFont8PropWidth = () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// shaders
 private:
-static string sdrScanlineSrc = q{
-  #version 130
-
-  uniform sampler2D tex;
-  //uniform bool scanlines;
-
-  void main () {
-    vec4 color = texture2D(tex, gl_TexCoord[0].xy);
-    //gl_FragColor = vec4(intens, intens, intens, color.w);
-    //color = vec4(1.0, 0.0, 0.0, 1.0);
-    if (/*scanlines &&*/ mod(floor(gl_FragCoord.y), 2) == 1) { color.x *= 0.75; color.y *= 0.75; color.z *= 0.75; }
-    gl_FragColor = color;
-  }
-};
-
-
 // find var id: glGetUniformLocation(prg, bufasciiz.ptr)
 // set var: glUniformXXX()
-
 
 // returns 0 or programid
 uint compileShaders (const(char)[] fragsrc, const(char)[] vertsrc) nothrow @trusted @nogc {
@@ -1870,3 +1853,18 @@ uint createShader(uint type) (const(char)[] src) nothrow @trusted @nogc {
   }
   return shaderId;
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// shaders
+static string sdrScanlineSrc = q{
+  #version 130
+
+  uniform sampler2D tex;
+
+  void main () {
+    vec4 color = texture2D(tex, gl_TexCoord[0].xy);
+    if (mod(floor(gl_FragCoord.y), 2) == 1) { color.x *= 0.75; color.y *= 0.75; color.z *= 0.75; }
+    gl_FragColor = color;
+  }
+};
