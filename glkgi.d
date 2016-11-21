@@ -39,7 +39,6 @@ private __gshared bool blit2x = false;
 private enum BlitType { Normal, BlackWhite, Green, Red }
 private __gshared int blitType = BlitType.Normal;
 private __gshared int blitShine = 0; // adds this to non-black colors
-private __gshared uint* vbimg = null; // RGBA
 private __gshared SimpleWindow vbwin;
 private __gshared uint vbTexId = 0;
 private __gshared string kgiTitle;
@@ -408,10 +407,6 @@ public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=f
   if (vbuf is null) assert(0, "KGI: out of memory");
   vbuf[0..awdt*ahgt] = 0;
 
-  vbimg = cast(typeof(vbimg))malloc(vbimg[0].sizeof*awdt*ahgt);
-  if (vbimg is null) assert(0, "KGI: out of memory");
-  vbimg[0..awdt*ahgt] = 0xff000000;
-
   vbufW = awdt;
   vbufH = ahgt;
   blit2x = a2x;
@@ -436,22 +431,7 @@ private void glgfxUpdateTexture () nothrow @trusted @nogc {
   atomicFence();
   vupcounter = 0;
 
-  //if (vbwin is null || vbwin.closed || vbTexId == 0) return;
-
-  {
-    auto sp = cast(const(ubyte)*)vbuf;
-    auto dp = cast(ubyte*)vbimg;
-    foreach (immutable _; 0..vbufW*vbufH) {
-      dp[0] = sp[2];
-      dp[1] = sp[1];
-      dp[2] = sp[0];
-      dp[3] = 0xff;
-      sp += 4;
-      dp += 4;
-    }
-  }
-
-  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, GL_RGBA, GL_UNSIGNED_BYTE, vbimg);
+  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, GL_BGRA, GL_UNSIGNED_BYTE, vbuf);
 
   atomicStore(updateTexture, false);
 }
@@ -564,7 +544,7 @@ private void glgfxInitTexture () {
 
   GLfloat[4] bclr = 0.0;
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, GL_RGBA, GL_UNSIGNED_BYTE, vbimg);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, GL_BGRA, GL_UNSIGNED_BYTE, vbuf);
 }
 
 
