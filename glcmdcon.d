@@ -48,8 +48,9 @@ __gshared uint scrwdt, scrhgt;
 //            you MUST put `consoleLock()/consoleUnlock()` around the call!
 
 // ////////////////////////////////////////////////////////////////////////// //
-public bool isConsoleVisible () nothrow @trusted @nogc { pragma(inline, true); return rConsoleVisible; }
-public bool isQuitRequested () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(vquitRequested); }
+public bool isConsoleVisible () nothrow @trusted @nogc { pragma(inline, true); return rConsoleVisible; } ///
+public bool isQuitRequested () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(vquitRequested); } ///
+public void setQuitRequested () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; atomicStore(vquitRequested, true); } ///
 
 
 // ////////////////////////////////////////////////////////////////////////// //
