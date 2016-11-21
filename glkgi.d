@@ -34,15 +34,16 @@ import iv.glbinds;
 // ////////////////////////////////////////////////////////////////////////// //
 // 0:b; 1:g; 2:r; 3: nothing
 private __gshared int vbufW = 600, vbufH = 600;
-__gshared uint[] vbuf; // ABGR
+__gshared uint* vbuf; // ABGR
 private __gshared bool blit2x = false;
-enum BlitType { Normal, BlackWhite, Green, Red }
+private enum BlitType { Normal, BlackWhite, Green, Red }
 private __gshared int blitType = BlitType.Normal;
 private __gshared int blitShine = 0; // adds this to non-black colors
-private __gshared uint[] vbimg; // RGBA
+private __gshared uint* vbimg = null; // RGBA
 private __gshared SimpleWindow vbwin;
 private __gshared uint vbTexId = 0;
 private __gshared string kgiTitle;
+private __gshared uint vupcounter = 0;
 private shared bool updateTexture = true;
 
 private shared bool vWantMotionEvents = false;
@@ -89,7 +90,8 @@ private __gshared uint evbufused;
 public bool kgiHasEvent () {
   consoleLock();
   scope(exit) consoleUnlock();
-  atomicStore(updateTexture, true); // just in case
+  atomicFence();
+  if (vupcounter) atomicStore(updateTexture, true); // just in case
   return (evbufused > 0);
 }
 
@@ -98,7 +100,8 @@ public bool kgiHasEvent () {
 public KGIEvent kgiPeekEvent () {
   consoleLock();
   scope(exit) consoleUnlock();
-  atomicStore(updateTexture, true); // just in case
+  atomicFence();
+  if (vupcounter) atomicStore(updateTexture, true); // just in case
   if (evbufused > 0) return evbuf[0];
   return KGIEvent();
 }
@@ -108,7 +111,8 @@ public KGIEvent kgiPeekEvent () {
 public KGIEvent kgiGetEvent () {
   import core.thread;
   import core.time;
-  atomicStore(updateTexture, true); // just in case
+  atomicFence();
+  if (vupcounter) atomicStore(updateTexture, true); // just in case
   for (;;) {
     {
       consoleLock();
@@ -168,16 +172,6 @@ public void kgiPushEvent (dchar ch) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 public void kgiDeinit () {
-  /*
-  import arsd.simpledisplay;
-  flushGui();
-  if (vbwin !is null) { if (!vbwin.closed) vbwin.close(); delete vbwin; flushGui(); }
-  if (vbimg !is null) delete vbimg;
-  if (vbuf !is null) delete vbuf;
-  vbimg = null;
-  vbwin = null;
-  vbuf = null;
-  */
   concmd("quit");
 }
 
@@ -249,7 +243,7 @@ private void kgiThread (Tid starterTid) {
       }
       +/
       glgfxInitTexture();
-      oglInitConsole(vbufW, vbufH, (blit2x ? 2: 1));
+      oglInitConsole(vbufW, vbufH, (blit2x ? 2 : 1));
       glgfxUpdateTexture();
       vbwin.redrawOpenGlSceneNow();
 
@@ -286,8 +280,9 @@ private void kgiThread (Tid starterTid) {
         if (vbwin.closed) return;
         if (isQuitRequested) { vbwin.close(); return; }
         if (receiveMessages()) { vbwin.close(); return; }
+        bool oldconvis = isConsoleVisible;
         processConsoleCommands();
-        if (updateTexture) {
+        if (atomicLoad(updateTexture) || isConsoleVisible || oldconvis) {
           glgfxUpdateTexture();
           vbwin.redrawOpenGlSceneNow();
         }
@@ -358,11 +353,12 @@ private void startKGIThread () {
       if (ok != 42) assert(0, "wtf?!");
     },
   );
-  conwriteln("rendering thread started");
+  //conwriteln("rendering thread started");
 }
 
 
 public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=false) {
+  import core.stdc.stdlib : malloc;
   import arsd.simpledisplay;
 
   if (awdt < 1 || ahgt < 1 || awdt > 4096 || ahgt > 4096) {
@@ -374,15 +370,17 @@ public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=f
 
   if (vbwin !is null) assert(0, "double initialization");
 
+  vbuf = cast(typeof(vbuf))malloc(vbuf[0].sizeof*awdt*ahgt);
+  if (vbuf is null) assert(0, "KGI: out of memory");
+  vbuf[0..awdt*ahgt] = 0;
+
+  vbimg = cast(typeof(vbimg))malloc(vbimg[0].sizeof*awdt*ahgt);
+  if (vbimg is null) assert(0, "KGI: out of memory");
+  vbimg[0..awdt*ahgt] = 0xff000000;
+
   vbufW = awdt;
   vbufH = ahgt;
   blit2x = a2x;
-
-  vbuf.length = vbufW*vbufH;
-  vbuf[] = 0;
-  vbimg.length = vbufW*vbufH;
-  vbimg[] = 0xff000000;
-  vbimg[] = 0xffffffff;
 
   setOpenGLContextVersion(3, 2); // up to GLSL 150
   //openGLContextCompatible = false;
@@ -395,17 +393,20 @@ public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=f
 }
 
 
-private void glgfxUpdateTexture () {
+private void glgfxUpdateTexture () nothrow @trusted @nogc {
   import iv.glbinds;
 
   consoleLock();
   scope(exit) consoleUnlock();
 
-  if (vbwin is null || vbwin.closed || vbTexId == 0) return;
+  atomicFence();
+  vupcounter = 0;
+
+  //if (vbwin is null || vbwin.closed || vbTexId == 0) return;
 
   {
-    auto sp = cast(const(ubyte)*)vbuf.ptr;
-    auto dp = cast(ubyte*)vbimg.ptr;
+    auto sp = cast(const(ubyte)*)vbuf;
+    auto dp = cast(ubyte*)vbimg;
     foreach (immutable _; 0..vbufW*vbufH) {
       dp[0] = sp[2];
       dp[1] = sp[1];
@@ -416,20 +417,21 @@ private void glgfxUpdateTexture () {
     }
   }
 
-  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, GL_RGBA, GL_UNSIGNED_BYTE, vbimg.ptr);
+  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, GL_RGBA, GL_UNSIGNED_BYTE, vbimg);
 
   atomicStore(updateTexture, false);
 }
 
 
-private void glgfxBlit () {
+private void glgfxBlit () nothrow @trusted @nogc {
   import iv.glbinds;
 
   consoleLock();
   scope(exit) consoleUnlock();
 
-  if (vbwin is null || vbwin.closed || vbTexId == 0) return;
+  //if (vbwin is null || vbwin.closed || vbTexId == 0) return;
 
+  /+
   GLint glmatmode;
   GLint gltextbinding;
   GLint oldprg;
@@ -460,6 +462,7 @@ private void glgfxBlit () {
     glUseProgram(oldprg);
     glViewport(glviewport.ptr[0], glviewport.ptr[1], glviewport.ptr[2], glviewport.ptr[3]);
   }
+  +/
 
   enum x = 0;
   enum y = 0;
@@ -473,8 +476,8 @@ private void glgfxBlit () {
   glMatrixMode(GL_PROJECTION); // for ortho camera
   glLoadIdentity();
   // left, right, bottom, top, near, far
+  glViewport(0, 0, w*(blit2x ? 2 : 1), h*(blit2x ? 2 : 1));
   glOrtho(0, w, h, 0, -1, 1); // top-to-bottom
-  glViewport(0, 0, w, h);
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
 
@@ -527,7 +530,7 @@ private void glgfxInitTexture () {
 
   GLfloat[4] bclr = 0.0;
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, GL_RGBA, GL_UNSIGNED_BYTE, vbimg.ptr);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, GL_RGBA, GL_UNSIGNED_BYTE, vbimg);
 }
 
 
@@ -560,18 +563,18 @@ enum : VColor {
 enum VColor Transparent = vlAMask; /// completely transparent pixel color
 
 
-bool isTransparent(T : VColor) (T col) @safe pure nothrow @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+bool isTransparent(T : VColor) (T col) pure nothrow @safe @nogc {
+  pragma(inline, true);
   return ((col&vlAMask) == vlAMask);
 }
 
-bool isOpaque(T : VColor) (T col) @safe pure nothrow @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+bool isOpaque(T : VColor) (T col) pure nothrow @safe @nogc {
+  pragma(inline, true);
   return ((col&vlAMask) == 0);
 }
 
 // a=0: opaque
-VColor rgbcol(TR, TG, TB, TA=ubyte) (TR r, TG g, TB b, TA a=0) @safe pure nothrow @nogc
+VColor rgbcol(TR, TG, TB, TA=ubyte) (TR r, TG g, TB b, TA a=0) pure nothrow @safe @nogc
 if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB) && __traits(isIntegral, TA)) {
   static if (__VERSION__ > 2067) pragma(inline, true);
   return
@@ -584,13 +587,13 @@ if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral,
 alias rgbacol = rgbcol;
 
 
-// generate some templates
+// generate some templates (rgbRed, rgbSetRed, etc.)
 private enum genRGBGetSet(string cname) =
-  "ubyte rgb"~cname~"() (VColor clr) @safe pure nothrow @nogc {\n"~
+  "ubyte rgb"~cname~"() (VColor clr) pure nothrow @safe @nogc {\n"~
   "  static if (__VERSION__ > 2067) pragma(inline, true);\n"~
   "  return ((clr>>vl"~cname[0]~"Shift)&0xff);\n"~
   "}\n"~
-  "VColor rgbSet"~cname~"(T) (VColor clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) {\n"~
+  "VColor rgbSet"~cname~"(T) (VColor clr, T v) pure nothrow @safe @nogc if (__traits(isIntegral, T)) {\n"~
   "  static if (__VERSION__ > 2067) pragma(inline, true);\n"~
   "  return (clr&~vl"~cname[0]~"Mask)|(clampToByte(v)<<vl"~cname[0]~"Shift);\n"~
   "}\n";
@@ -602,14 +605,11 @@ mixin(genRGBGetSet!"Blue");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void putPixel(TX, TY) (TX x, TY y, VColor col) @trusted
-if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
-{
-  static if (__VERSION__ > 2067) pragma(inline, true);
-  immutable long xx = cast(long)x;
-  immutable long yy = cast(long)y;
+nothrow @trusted @nogc:
+private void putPixelIntr (int xx, int yy, VColor col) nothrow @trusted @nogc {
+  pragma(inline, true);
   if ((col&vlAMask) != vlAMask && xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
-    uint* da = vbuf.ptr+yy*vbufW+xx;
+    uint* da = vbuf+yy*vbufW+xx;
     if (col&vlAMask) {
       immutable uint a = 256-(col>>24); // to not loose bits
       immutable uint dc = (*da)&0xffffff;
@@ -626,22 +626,52 @@ if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
   }
 }
 
-void setPixel(TX, TY) (TX x, TY y, VColor col) @trusted
-if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
-{
-  static if (__VERSION__ > 2067) pragma(inline, true);
-  immutable long xx = cast(long)x;
-  immutable long yy = cast(long)y;
+void putPixel (int xx, int yy, VColor col) nothrow @trusted @nogc {
+  pragma(inline, true);
+  if ((col&vlAMask) != vlAMask && xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
+    uint* da = vbuf+yy*vbufW+xx;
+    if (col&vlAMask) {
+      immutable uint a = 256-(col>>24); // to not loose bits
+      immutable uint dc = (*da)&0xffffff;
+      immutable uint srb = (col&0xff00ff);
+      immutable uint sg = (col&0x00ff00);
+      immutable uint drb = (dc&0xff00ff);
+      immutable uint dg = (dc&0x00ff00);
+      immutable uint orb = (drb+(((srb-drb)*a+0x800080)>>8))&0xff00ff;
+      immutable uint og = (dg+(((sg-dg)*a+0x008000)>>8))&0x00ff00;
+      *da = orb|og;
+    } else {
+      *da = col;
+    }
+    atomicFence();
+    ++vupcounter;
+  }
+}
+
+private void setPixelIntr (int xx, int yy, VColor col) nothrow @trusted @nogc {
+  pragma(inline, true);
   if (xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
-    uint* da = vbuf.ptr+yy*vbufW+xx;
+    uint* da = vbuf+yy*vbufW+xx;
     *da = col;
+  }
+}
+
+void setPixel (int xx, int yy, VColor col) nothrow @trusted @nogc {
+  pragma(inline, true);
+  if (xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
+    uint* da = vbuf+yy*vbufW+xx;
+    *da = col;
+    atomicFence();
+    ++vupcounter;
   }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void clear (VColor col) @trusted {
-  vbuf.ptr[0..vbufW*vbufH] = col;
+void clear (VColor col) nothrow @trusted @nogc {
+  vbuf[0..vbufW*vbufH] = col;
+  atomicFence();
+  ++vupcounter;
 }
 
 
@@ -666,14 +696,16 @@ void drawRect (int x, int y, int w, int h, immutable VColor col) {
     if (h > 1) vbuf[d..d+w] = col;
   } else {
     foreach (immutable yy; y..y+h) {
-      putPixel(x, yy, col);
-      putPixel(x+w-1, yy, col);
+      putPixelIntr(x, yy, col);
+      putPixelIntr(x+w-1, yy, col);
     }
     foreach (immutable xx; x+1..x+w-1) {
-      putPixel(xx, y, col);
-      if (h > 1) putPixel(xx, y+h-1, col);
+      putPixelIntr(xx, y, col);
+      if (h > 1) putPixelIntr(xx, y+h-1, col);
     }
   }
+  atomicFence();
+  ++vupcounter;
 }
 
 void fillRect (int x, int y, int w, int h, immutable VColor col) {
@@ -693,10 +725,12 @@ void fillRect (int x, int y, int w, int h, immutable VColor col) {
   } else {
     foreach (immutable yy; y..y+h) {
       foreach (immutable xx; x..x+w) {
-        putPixel(xx, yy, col);
+        putPixelIntr(xx, yy, col);
       }
     }
   }
+  atomicFence();
+  ++vupcounter;
 }
 
 void hline (int x, int y, int len, immutable VColor col) { drawRect(x, y, len, 1, col); }
@@ -823,7 +857,7 @@ void drawLine(bool lastPoint=true) (int x0, int y0, int x1, int y1, immutable VC
     // this can be made even faster by precalculating `da` and making
     // separate code branches for mixing and non-mixing drawing, but...
     // ah, screw it!
-    uint* da = vbuf.ptr+(*d1)*vbufW+(*d0);
+    uint* da = vbuf+(*d1)*vbufW+(*d0);
     if (col&vlAMask) {
       immutable uint a = 256-(col>>24); // to not loose bits
       immutable uint dc = (*da)&0xffffff;
@@ -846,22 +880,24 @@ void drawLine(bool lastPoint=true) (int x0, int y0, int x1, int y1, immutable VC
     }
     xd += stx;
   }
+  atomicFence();
+  ++vupcounter;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 private void plot4points() (int cx, int cy, int x, int y, VColor clr) @trusted {
-  putPixel(cx+x, cy+y, clr);
-  if (x != 0) putPixel(cx-x, cy+y, clr);
-  if (y != 0) putPixel(cx+x, cy-y, clr);
-  putPixel(cx-x, cy-y, clr);
+  putPixelIntr(cx+x, cy+y, clr);
+  if (x != 0) putPixelIntr(cx-x, cy+y, clr);
+  if (y != 0) putPixelIntr(cx+x, cy-y, clr);
+  putPixelIntr(cx-x, cy-y, clr);
 }
 
 
 void drawCircle (int cx, int cy, int radius, VColor clr) @trusted {
   if (radius > 0 && !isTransparent(clr)) {
     int error = -radius, x = radius, y = 0;
-    if (radius == 1) { putPixel(cx, cy, clr); return; }
+    if (radius == 1) { putPixelIntr(cx, cy, clr); return; }
     while (x > y) {
       plot4points(cx, cy, x, y, clr);
       plot4points(cx, cy, y, x, clr);
@@ -870,13 +906,15 @@ void drawCircle (int cx, int cy, int radius, VColor clr) @trusted {
       if (error >= 0) { --x; error -= x*2; }
     }
     plot4points(cx, cy, x, y, clr);
+    atomicFence();
+    ++vupcounter;
   }
 }
 
 void fillCircle (int cx, int cy, int radius, VColor clr) @trusted {
   if (radius > 0 && !isTransparent(clr)) {
     int error = -radius, x = radius, y = 0;
-    if (radius == 1) { putPixel(cx, cy, clr); return; }
+    if (radius == 1) { putPixelIntr(cx, cy, clr); return; }
     while (x >= y) {
       int last_y = y;
       error += y;
@@ -894,6 +932,8 @@ void fillCircle (int cx, int cy, int radius, VColor clr) @trusted {
         error -= x;
       }
     }
+    atomicFence();
+    ++vupcounter;
   }
 }
 
@@ -914,19 +954,21 @@ void drawEllipse (int x0, int y0, int w, int h, VColor clr) @trusted {
   a *= 8*a; b1 = 8*b*b;
   do {
     long e2;
-    putPixel(x1, y0, clr); //   I. Quadrant
-    putPixel(x0, y0, clr); //  II. Quadrant
-    putPixel(x0, y1, clr); // III. Quadrant
-    putPixel(x1, y1, clr); //  IV. Quadrant
+    putPixelIntr(x1, y0, clr); //   I. Quadrant
+    putPixelIntr(x0, y0, clr); //  II. Quadrant
+    putPixelIntr(x0, y1, clr); // III. Quadrant
+    putPixelIntr(x1, y1, clr); //  IV. Quadrant
     e2 = 2*err;
     if (e2 >= dx) { ++x0; --x1; err += dx += b1; } // x step
     if (e2 <= dy) { ++y0; --y1; err += dy += a; }  // y step
   } while (x0 <= x1);
   while (y0-y1 < b) {
     // too early stop of flat ellipses a=1
-    putPixel(x0-1, ++y0, clr); // complete tip of ellipse
-    putPixel(x0-1, --y1, clr);
+    putPixelIntr(x0-1, ++y0, clr); // complete tip of ellipse
+    putPixelIntr(x0-1, --y1, clr);
   }
+  atomicFence();
+  ++vupcounter;
 }
 
 void fillEllipse (int x0, int y0, int w, int h, VColor clr) @trusted {
@@ -954,9 +996,11 @@ void fillEllipse (int x0, int y0, int w, int h, VColor clr) @trusted {
   } while (x0 <= x1);
   while (y0-y1 < b) {
     // too early stop of flat ellipses a=1
-    putPixel(x0-1, ++y0, clr); // complete tip of ellipse
-    putPixel(x0-1, --y1, clr);
+    putPixelIntr(x0-1, ++y0, clr); // complete tip of ellipse
+    putPixelIntr(x0-1, --y1, clr);
   }
+  atomicFence();
+  ++vupcounter;
 }
 
 
@@ -976,9 +1020,9 @@ int charHeight(string type="msx") () {
 }
 
 void drawCharWdt(string type="msx") (int x, int y, int wdt, int shift, char ch, VColor fgcol, VColor bgcol=Transparent) @trusted {
-       static if (type == "msx") { alias fontb8 = vlFont6; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
-  else static if (type == "dos") { alias fontb8 = dosFont8; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
-  else static if (type == "d10") { alias fontb8 = dosFont10; enum fwdt = 10; enum fhgt = 10; enum fmask = 0x8000; }
+       static if (type == "msx") { alias fontb8 = kgiFont6; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
+  else static if (type == "dos") { alias fontb8 = kgiFont8; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
+  else static if (type == "d10") { alias fontb8 = kgiFont10; enum fwdt = 10; enum fhgt = 10; enum fmask = 0x8000; }
   else static assert(0, "invalid font type");
   size_t pos = ch*fhgt;
   if (wdt < 1 || shift >= fwdt) return;
@@ -986,13 +1030,15 @@ void drawCharWdt(string type="msx") (int x, int y, int wdt, int shift, char ch, 
   if (wdt > fwdt) wdt = fwdt;
   if (shift < 0) shift = 0;
   foreach (immutable int dy; 0..fhgt) {
-    ushort b = cast(ushort)(fontb8[pos++]<<shift);
+    ushort b = cast(ushort)(fontb8.ptr[pos++]<<shift);
     foreach (immutable int dx; 0..wdt) {
       VColor c = (b&fmask ? fgcol : bgcol);
-      if (!isTransparent(c)) putPixel(x+dx, y+dy, c);
+      if (!isTransparent(c)) putPixelIntr(x+dx, y+dy, c);
       b <<= 1;
     }
   }
+  atomicFence();
+  ++vupcounter;
 }
 
 // outline types
@@ -1009,9 +1055,9 @@ enum : ubyte {
 }
 
 void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char ch, VColor fgcol, VColor outcol=Transparent, ubyte ot=0) @trusted {
-       static if (type == "msx") { alias fontb8 = vlFont6; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
-  else static if (type == "dos") { alias fontb8 = dosFont8; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
-  else static if (type == "d10") { alias fontb8 = dosFont10; enum fwdt = 10; enum fhgt = 10; enum fmask = 0x8000; }
+       static if (type == "msx") { alias fontb8 = kgiFont6; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
+  else static if (type == "dos") { alias fontb8 = kgiFont8; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
+  else static if (type == "d10") { alias fontb8 = kgiFont10; enum fwdt = 10; enum fhgt = 10; enum fmask = 0x8000; }
   else static assert(0, "invalid font type");
   if (fgcol == Transparent && outcol == Transparent) return;
   if (ot == 0 || outcol == Transparent) {
@@ -1025,7 +1071,7 @@ void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char c
   if (shift < 0) shift = 0;
   ubyte[fhgt+2][fwdt+2] bmp = 0; // char bitmap; 0: empty; 1: char; 2: outline
   foreach (immutable dy; 1..fhgt+1) {
-    ushort b = cast(ushort)(fontb8[pos++]<<shift);
+    ushort b = cast(ushort)(fontb8.ptr[pos++]<<shift);
     foreach (immutable dx; 1..wdt+1) {
       if (b&fmask) {
         // put pixel
@@ -1048,9 +1094,11 @@ void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char c
   --y;
   foreach (immutable int dy; 0..fhgt+2) {
     foreach (immutable int dx; 0..fwdt+2) {
-      if (auto t = bmp[dy][dx]) putPixel(x+dx, y+dy, (t == 1 ? fgcol : outcol));
+      if (auto t = bmp[dy][dx]) putPixelIntr(x+dx, y+dy, (t == 1 ? fgcol : outcol));
     }
   }
+  atomicFence();
+  ++vupcounter;
 }
 
 void drawChar(string type="msx") (int x, int y, char ch, VColor fgcol, VColor bgcol=Transparent) @trusted {
@@ -1119,7 +1167,11 @@ int drawStrProp(string type="msx") (int x, int y, const(char)[] str, VColor fgco
   int sx = x;
   foreach (immutable char ch; str) {
     if (vline) {
-      if (!isTransparent(bgcol)) foreach (int dy; 0..8) putPixel(x, y+dy, bgcol);
+      if (!isTransparent(bgcol)) {
+        foreach (int dy; 0..8) putPixelIntr(x, y+dy, bgcol);
+        atomicFence();
+        ++vupcounter;
+      }
       ++x;
     }
     vline = true;
@@ -1139,7 +1191,7 @@ int drawStrPropOut(string type="msx") (int x, int y, const(char)[] str, VColor f
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public static immutable ubyte[256*8] vlFont6 = [
+public static immutable ubyte[256*8] kgiFont6 = [
 /* 0 */
 0b_00000000,
 0b_00000000,
@@ -3462,7 +3514,7 @@ public immutable ubyte[256] vlFontPropWidth = () {
     if (doshift) {
       shift = 8;
       foreach (immutable dy; 0..8) {
-        immutable b = vlFont6[cnum*8+dy];
+        immutable b = kgiFont6[cnum*8+dy];
         if (b) {
           immutable mn = 7-bsr(b);
           if (mn < shift) shift = mn;
@@ -3471,7 +3523,7 @@ public immutable ubyte[256] vlFontPropWidth = () {
     }
     ubyte wdt = 0;
     foreach (immutable dy; 0..8) {
-      immutable b = (vlFont6[cnum*8+dy]<<shift);
+      immutable b = (kgiFont6[cnum*8+dy]<<shift);
       immutable cwdt = (b ? 8-bsf(b) : 0);
       if (cwdt > wdt) wdt = cast(ubyte)cwdt;
     }
@@ -3491,7 +3543,7 @@ public immutable ubyte[256] vlFontPropWidth = () {
 }();
 
 
-public static immutable ubyte[256*8] dosFont8 = [
+public static immutable ubyte[256*8] kgiFont8 = [
 /* 0x00 */
 0b_00000000,
 0b_00000000,
@@ -5814,7 +5866,7 @@ public immutable ubyte[256] dosFontPropWidth = () {
     if (doshift) {
       shift = 8;
       foreach (immutable dy; 0..8) {
-        immutable b = dosFont8[cnum*8+dy];
+        immutable b = kgiFont8[cnum*8+dy];
         if (b) {
           immutable mn = 7-bsr(b);
           if (mn < shift) shift = mn;
@@ -5823,7 +5875,7 @@ public immutable ubyte[256] dosFontPropWidth = () {
     }
     ubyte wdt = 0;
     foreach (immutable dy; 0..8) {
-      immutable b = (dosFont8[cnum*8+dy]<<shift);
+      immutable b = (kgiFont8[cnum*8+dy]<<shift);
       immutable cwdt = (b ? 8-bsf(b) : 0);
       if (cwdt > wdt) wdt = cast(ubyte)cwdt;
     }
@@ -5840,7 +5892,7 @@ public immutable ubyte[256] dosFontPropWidth = () {
 }();
 
 
-static public immutable ushort[256*10] dosFont10 = [
+static public immutable ushort[256*10] kgiFont10 = [
 /* 0x00 */
 0b_0000000000_000000,
 0b_0000000000_000000,
