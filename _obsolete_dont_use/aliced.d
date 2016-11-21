@@ -15,12 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.fucktrace /*is aliced*/;
+module iv.aliced;
 
-
-// this needs to be `static` due to bug in druntime, or
-// each thread creation will reset it back to default handler
-static this () {
-  import core.runtime;
-  Runtime.traceHandler = null; // fuck it off
-}
+static if (!is(typeof(usize))) private alias usize = size_t;

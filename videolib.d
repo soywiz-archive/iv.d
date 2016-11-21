@@ -20,7 +20,7 @@ module iv.videolib is aliced;
 
 version(videolib_opengl) {} else { version = videolib_sdl; }
 
-public import iv.gccattrs;
+//public import iv.gccattrs;
 
 import std.traits;
 
@@ -98,8 +98,8 @@ void frameChanged () @trusted nothrow @nogc {
 private shared int vsWidth = 320;
 private shared int vsHeight = 240;
 
-@gcc_inline @property int vlWidth() () @trusted nothrow @nogc => vsWidth; /// get current screen width
-@gcc_inline @property int vlHeight() () @trusted nothrow @nogc => vsHeight; /// get current screen height
+/*@gcc_inline*/ @property int vlWidth() () @trusted nothrow @nogc => vsWidth; /// get current screen width
+/*@gcc_inline*/ @property int vlHeight() () @trusted nothrow @nogc => vsHeight; /// get current screen height
 
 /// set screen width; must be used before initVideo()
 @property void vlWidth (int wdt) @trusted {
@@ -125,7 +125,7 @@ __gshared uint* vscr = null; /// current SDL 'virtual screen', ARGB format for L
 private __gshared uint* vscr2x = null; // this is used in magnifying blitters
 private __gshared VLOverlay ovlVScr = null;
 
-@gcc_inline VLOverlay vscrOvl() () @trusted nothrow @nogc => ovlVScr;
+/*@gcc_inline*/ VLOverlay vscrOvl() () @trusted nothrow @nogc => ovlVScr;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -362,7 +362,7 @@ void postQuitMessage () @trusted nothrow @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-@gcc_inline ubyte clampToByte() (int n) @safe pure nothrow @nogc {
+/*@gcc_inline*/ ubyte clampToByte() (int n) @safe pure nothrow @nogc {
   n &= -cast(int)(n >= 0);
   return cast(ubyte)(n|((255-n)>>31));
 }
@@ -416,7 +416,7 @@ enum Color Transparent = AMask; /// completely transparent pixel color
  * Returns:
  *  'transparent' flag
  */
-@gcc_inline bool isTransparent(T : Color) (T col) @safe pure nothrow @nogc => ((col&AMask) == AMask);
+/*@gcc_inline*/ bool isTransparent(T : Color) (T col) @safe pure nothrow @nogc => ((col&AMask) == AMask);
 
 
 /**
@@ -428,7 +428,7 @@ enum Color Transparent = AMask; /// completely transparent pixel color
  * Returns:
  *  'transparent' flag
  */
-@gcc_inline bool isOpaque(T : Color) (T col) @safe pure nothrow @nogc => ((col&AMask) == 0);
+/*@gcc_inline*/ bool isOpaque(T : Color) (T col) @safe pure nothrow @nogc => ((col&AMask) == 0);
 
 
 /**
@@ -442,7 +442,7 @@ enum Color Transparent = AMask; /// completely transparent pixel color
  * Returns:
  *  rgba color
  */
-@gcc_inline Color rgb2col(TR, TG, TB) (TR r, TG g, TB b) @safe pure nothrow @nogc
+/*@gcc_inline*/ Color rgb2col(TR, TG, TB) (TR r, TG g, TB b) @safe pure nothrow @nogc
 if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB)) =>
   ((r&0xff)<<RShift)|((g&0xff)<<GShift)|((b&0xff)<<BShift);
 
@@ -458,14 +458,14 @@ if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral,
  * Returns:
  *  rgba color
  */
-@gcc_inline Color rgba2col(TR, TG, TB, TA) (TR r, TG g, TB b, TA a) @safe pure nothrow @nogc
+/*@gcc_inline*/ Color rgba2col(TR, TG, TB, TA) (TR r, TG g, TB b, TA a) @safe pure nothrow @nogc
 if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB) && __traits(isIntegral, TA)) =>
   ((a&0xff)<<AShift)|((r&0xff)<<RShift)|((g&0xff)<<GShift)|((b&0xff)<<BShift);
 
 // generate some templates
 private enum genRGBGetSet(string cname) =
-  `@gcc_inline ubyte rgb`~cname~`() (Color clr) @safe pure nothrow @nogc => ((clr>>`~cname[0]~`Shift)&0xff);`~
-  `@gcc_inline Color rgbSet`~cname~`(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) =>`~
+  `/*@gcc_inline*/ ubyte rgb`~cname~`() (Color clr) @safe pure nothrow @nogc => ((clr>>`~cname[0]~`Shift)&0xff);`~
+  `/*@gcc_inline*/ Color rgbSet`~cname~`(T) (Color clr, T v) @safe pure nothrow @nogc if (__traits(isIntegral, T)) =>`~
     `(clr&~`~cname[0]~`Mask)|((v&0xff)<<`~cname[0]~`Shift);`;
 
 mixin(genRGBGetSet!"Alpha");
@@ -1078,7 +1078,7 @@ nothrow:
    * Returns:
    *  nothing
    */
-  @gcc_inline void putPixel(TX, TY) (TX x, TY y, Color col) @trusted
+  /*@gcc_inline*/ void putPixel(TX, TY) (TX x, TY y, Color col) @trusted
   if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
   {
     immutable long xx = cast(long)x+mXOfs;
@@ -1112,7 +1112,7 @@ nothrow:
    * Returns:
    *  nothing
    */
-  @gcc_inline void setPixel(TX, TY) (TX x, TY y, Color col) @trusted
+  /*@gcc_inline*/ void setPixel(TX, TY) (TX x, TY y, Color col) @trusted
   if (__traits(isIntegral, TX) && __traits(isIntegral, TY))
   {
     immutable long xx = cast(long)x+mXOfs;
@@ -1741,7 +1741,7 @@ private immutable ubyte[0x458-0x401] utf2koiTable = [
 
 
 /// Convert utf-8 to koi8-u
-@gcc_inline ubyte utf2koi() (dchar ch) @safe pure nothrow @nogc {
+/*@gcc_inline*/ ubyte utf2koi() (dchar ch) @safe pure nothrow @nogc {
   if (ch < 127) return ch&0xff;
   if (ch > 0x400 && ch < 0x458) return utf2koiTable[ch-0x401];
   if (ch == 0x490) return 0xBD;
