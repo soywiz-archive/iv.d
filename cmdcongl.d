@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.glcmdcon /*is aliced*/;
+module iv.cmdcongl /*is aliced*/;
 private:
 
 public import iv.cmdcon;
@@ -23,9 +23,9 @@ import iv.glbinds;
 import iv.strex;
 
 static if (__traits(compiles, (){import arsd.simpledisplay;}())) {
-  enum OptGlCmdConHasSdpy = true;
+  enum OptCmdConGlHasSdpy = true;
 } else {
-  enum OptGlCmdConHasSdpy = false;
+  enum OptCmdConGlHasSdpy = false;
 }
 
 version(aliced) {} else { private alias usize = size_t; }
@@ -37,10 +37,10 @@ __gshared uint scrwdt, scrhgt;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// public void oglInitConsole (); -- call in `visibleForTheFirstTime`
-// public void oglDrawConsole (); -- call in `redrawOpenGlScene` (it tries hard to not modify render modes)
-// public bool conKeyEvent (KeyEvent event); -- returns `true` if event was eaten
-// public bool conCharEvent (dchar ch); -- returns `true` if event was eaten
+// public void glconInit (); -- call in `visibleForTheFirstTime`
+// public void glconDraw (); -- call in `redrawOpenGlScene` (it tries hard to not modify render modes)
+// public bool glconKeyEvent (KeyEvent event); -- returns `true` if event was eaten
+// public bool glconCharEvent (dchar ch); -- returns `true` if event was eaten
 //
 // public bool conProcessQueue (); (from iv.cmdcon)
 //   call this in your main loop to process all accumulated console commands.
@@ -54,8 +54,8 @@ public void setQuitRequested () nothrow @trusted @nogc { pragma(inline, true); i
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// you may call this in char event, but `conCharEvent()` will do that for you
-public void concliChar (char ch) {
+/// you may call this in char event, but `glconCharEvent()` will do that for you
+public void glconCharInput (char ch) {
   if (!ch) return;
   consoleLock();
   scope(exit) consoleUnlock();
@@ -131,7 +131,7 @@ __gshared int conskiplines = 0;
 
 // initialize glcmdcon variables and commands, sets screen size and scale
 // NOT THREAD-SAFE! also, should be called only once.
-// screen dimensions can be fixed later by calling `oglResizeConsole()`.
+// screen dimensions can be fixed later by calling `glconResize()`.
 private void initConsole () {
   enum ascrwdt = 800;
   enum ascrhgt = 600;
@@ -197,9 +197,9 @@ shared static this () { initConsole(); }
 // ////////////////////////////////////////////////////////////////////////// //
 /// call this if window was resized. will return `true` if resize was successfull.
 /// NOT THREAD-SAFE!
-/// can be called instead of `oglInitConsole()`. it is ok to call it with the same dimensions repeatedly.
-public void oglResizeConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
-  oglInitConsole(ascrwdt, ascrhgt, ascale); // reallocate back buffer and texture
+/// can be called instead of `glconInit()`. it is ok to call it with the same dimensions repeatedly.
+public void glconResize (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+  glconInit(ascrwdt, ascrhgt, ascale); // reallocate back buffer and texture
 }
 
 
@@ -210,7 +210,7 @@ __gshared uint convbufTexId = 0;
 
 /// initialize OpenGL part of glcmdcon. it is ok to call it with the same dimensions repeatedly.
 /// NOT THREAD-SAFE!
-public void oglInitConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+public void glconInit (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return;
   if (ascale < 1 || ascale > 64) return;
   winScale = ascale;
@@ -257,7 +257,7 @@ public void oglInitConsole (uint ascrwdt, uint ascrhgt, uint ascale=1) {
 
 
 /// render console (if it is visible). tries hard to not change OpenGL state.
-public void oglDrawConsole () {
+public void glconDraw () {
   if (!rConsoleVisible) return;
   if (convbufTexId && convbuf !is null) {
     consoleLock();
@@ -696,14 +696,14 @@ void renderConsole () nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-static if (OptGlCmdConHasSdpy) {
+static if (OptCmdConGlHasSdpy) {
 import arsd.simpledisplay : KeyEvent, Key;
 
 public __gshared glconShowKey = Key.Grave; /// this key will be eaten
 
 
 /// process keyboard event. returns `true` if event was eaten.
-public bool conKeyEvent (KeyEvent event) {
+public bool glconKeyEvent (KeyEvent event) {
   import arsd.simpledisplay;
   if (!rConsoleVisible) {
     if (event.key == glconShowKey) {
@@ -725,42 +725,42 @@ public bool conKeyEvent (KeyEvent event) {
   switch (event.key) {
     case Key.Up:
       if (event.modifierState&ModifierState.alt) {
-        concliChar(ConInputChar.LineUp);
+        glconCharInput(ConInputChar.LineUp);
       } else {
-        concliChar(ConInputChar.Up);
+        glconCharInput(ConInputChar.Up);
       }
       return true;
     case Key.Down:
       if (event.modifierState&ModifierState.alt) {
-        concliChar(ConInputChar.LineDown);
+        glconCharInput(ConInputChar.LineDown);
       } else {
-        concliChar(ConInputChar.Down);
+        glconCharInput(ConInputChar.Down);
       }
       return true;
-    case Key.Left: concliChar(ConInputChar.Left); return true;
-    case Key.Right: concliChar(ConInputChar.Right); return true;
-    case Key.Home: concliChar(ConInputChar.Home); return true;
-    case Key.End: concliChar(ConInputChar.End); return true;
+    case Key.Left: glconCharInput(ConInputChar.Left); return true;
+    case Key.Right: glconCharInput(ConInputChar.Right); return true;
+    case Key.Home: glconCharInput(ConInputChar.Home); return true;
+    case Key.End: glconCharInput(ConInputChar.End); return true;
     case Key.PageUp:
       if (event.modifierState&ModifierState.alt) {
-        concliChar(ConInputChar.LineUp);
+        glconCharInput(ConInputChar.LineUp);
       } else {
-        concliChar(ConInputChar.PageUp);
+        glconCharInput(ConInputChar.PageUp);
       }
       return true;
     case Key.PageDown:
       if (event.modifierState&ModifierState.alt) {
-        concliChar(ConInputChar.LineDown);
+        glconCharInput(ConInputChar.LineDown);
       } else {
-        concliChar(ConInputChar.PageDown);
+        glconCharInput(ConInputChar.PageDown);
       }
       return true;
-    case Key.Backspace: concliChar(ConInputChar.Backspace); return true;
-    case Key.Tab: concliChar(ConInputChar.Tab); return true;
-    case Key.Enter: concliChar(ConInputChar.Enter); return true;
-    case Key.Delete: concliChar(ConInputChar.Delete); return true;
-    case Key.Insert: concliChar(ConInputChar.Insert); return true;
-    case Key.Y: if (event.modifierState&ModifierState.ctrl) concliChar(ConInputChar.CtrlY); return true;
+    case Key.Backspace: glconCharInput(ConInputChar.Backspace); return true;
+    case Key.Tab: glconCharInput(ConInputChar.Tab); return true;
+    case Key.Enter: glconCharInput(ConInputChar.Enter); return true;
+    case Key.Delete: glconCharInput(ConInputChar.Delete); return true;
+    case Key.Insert: glconCharInput(ConInputChar.Insert); return true;
+    case Key.Y: if (event.modifierState&ModifierState.ctrl) glconCharInput(ConInputChar.CtrlY); return true;
     default:
   }
   return true;
@@ -768,7 +768,7 @@ public bool conKeyEvent (KeyEvent event) {
 
 
 /// process character event. returns `true` if event was eaten.
-public bool conCharEvent (dchar ch) {
+public bool glconCharEvent (dchar ch) {
   if (!rConsoleVisible) {
     if (glconShowKey >= ' ' && glconShowKey < 128) {
       if (ch == glconShowKey) return true;
@@ -777,7 +777,7 @@ public bool conCharEvent (dchar ch) {
     return false;
   }
   if (glconShowKey >= ' ' && glconShowKey < 128 && ch == glconShowKey && conInputBuffer.length == 0) return true; // HACK!
-  if (ch >= ' ' && ch < 127) concliChar(cast(char)ch);
+  if (ch >= ' ' && ch < 127) glconCharInput(cast(char)ch);
   return true;
 }
 }

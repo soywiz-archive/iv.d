@@ -19,7 +19,7 @@
 module iv.glgfx0;
 
 import arsd.simpledisplay : SimpleWindow;
-import iv.glcmdcon;
+import iv.cmdcongl;
 import iv.glbinds;
 
 
@@ -64,13 +64,13 @@ SimpleWindow glgfxInitWindow (string title) {
 
   vbwin.redrawOpenGlScene = delegate () {
     glgfxBlit();
-    oglDrawConsole();
+    glconDraw();
   };
 
   vbwin.visibleForTheFirstTime = delegate () {
     vbwin.setAsCurrentOpenGlContext();
     glgfxInitTexture();
-    oglInitConsole(vbufW, vbufH, (blit2x ? 2: 1));
+    glconInit(vbufW, vbufH, (blit2x ? 2: 1));
     vbwin.redrawOpenGlScene();
   };
   return vbwin;

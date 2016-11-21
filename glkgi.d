@@ -27,7 +27,7 @@ public import arsd.simpledisplay;
 //public import arsd.image;
 
 import iv.bclamp;
-public import iv.glcmdcon;
+public import iv.cmdcongl;
 import iv.glbinds;
 
 //version=glkgi_rgba; // default, has priority
@@ -241,7 +241,7 @@ private void kgiThread (Tid starterTid) {
 
     vbwin.redrawOpenGlScene = delegate () {
       glgfxBlit();
-      oglDrawConsole();
+      glconDraw();
     };
 
     vbwin.closeQuery = delegate () {
@@ -301,7 +301,7 @@ private void kgiThread (Tid starterTid) {
       }
       +/
       glgfxInitTexture();
-      oglInitConsole(vbufW, vbufH, (blit2x ? 2 : 1));
+      glconInit(vbufW, vbufH, (blit2x ? 2 : 1));
       glgfxUpdateTexture();
       vbwin.redrawOpenGlSceneNow();
 
@@ -348,7 +348,7 @@ private void kgiThread (Tid starterTid) {
       delegate (KeyEvent event) {
         if (vbwin.closed) return;
         if (isQuitRequested) { vbwin.close(); return; }
-        if (conKeyEvent(event)) return;
+        if (glconKeyEvent(event)) return;
         //if (event.pressed && event.key == Key.Escape) { concmd("quit"); return; }
         kgiPushEvent(event);
       },
@@ -360,7 +360,7 @@ private void kgiThread (Tid starterTid) {
       },
       delegate (dchar ch) {
         if (vbwin.closed) return;
-        if (conCharEvent(ch)) return;
+        if (glconCharEvent(ch)) return;
         if (ch == '`') concmd("r_console tan");
         if (!kgiCharEvents) return;
         kgiPushEvent(ch);
