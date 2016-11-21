@@ -16,7 +16,8 @@
  */
 module xmain_fed;
 
-import iv.cmdcon;
+import std.random : uniform;
+
 import iv.glkgi;
 
 
@@ -25,19 +26,43 @@ void main (string[] args) {
   conRegVar!scale2x("v_scale2x", "video window scale");
   if (conProcessArgs(args)) while (conProcessQueue()) {}
   conSealVar("v_scale2x");
+
   kgiInit(640, 480, "KGI Test", scale2x);
   //scope(exit) kgiDeinit();
+
+  void buildScreen () {
+    cls(0);
+    drawCircle(kgiWidth/2, kgiHeight/2, 100, rgbcol(255, 255, 255));
+    foreach (immutable _; 0.. 10) {
+      drawCircle(uniform(0, kgiWidth), uniform(0, kgiHeight), uniform!"[]"(10, 50), rgbcol(255, 255, 255));
+    }
+  }
+
   kgiMotionEvents = true;
   for (;;) {
     auto ev = kgiGetEvent();
     if (ev.isClose) break;
     if (ev.isKey && ev.k.pressed && ev.k.key == Key.Escape) break;
+    if (ev.isKey && ev.k.pressed && ev.k.key == Key.R) { buildScreen(); continue; }
+    if (ev.isKey && ev.k.pressed && ev.k.key == Key.C) { drawCircle(uniform(0, kgiWidth), uniform(0, kgiHeight), uniform!"[]"(10, 50), rgbcol(255, 255, 255)); continue; }
     if (ev.isKey && ev.k.pressed) {
       import std.random : uniform;
       drawStr(uniform!"[]"(0, kgiWidth), uniform!"[]"(0, kgiHeight), "Boo!", rgbcol(255, 127, 0));
     }
     if (ev.isMouse && ev.m.type == MouseEventType.buttonPressed && ev.m.button == MouseButton.left) {
       fillCircle(ev.m.x, ev.m.y, 4, rgbcol(255, 255, 0, 127));
+    }
+    if (ev.isMouse && ev.m.type == MouseEventType.buttonPressed && ev.m.button == MouseButton.right) {
+      floodFillEx(ev.m.x, ev.m.y,
+        // isBorder
+        (int x, int y) {
+          return (getPixel(x, y) == rgbcol(255, 255, 255));
+        },
+        // patColor
+        (int x, int y) {
+          return rgbcol(255, 127, 0);
+        },
+      );
     }
     if (ev.isMouse && ev.m.type == MouseEventType.motion && ev.m.modifierState&ModifierState.leftButtonDown) {
       fillCircle(ev.m.x, ev.m.y, 4, rgbcol(255, 255, 255, 127));

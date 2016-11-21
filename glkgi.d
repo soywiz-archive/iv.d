@@ -27,7 +27,7 @@ public import arsd.simpledisplay;
 //public import arsd.image;
 
 import iv.bclamp;
-import iv.glcmdcon;
+public import iv.glcmdcon;
 import iv.glbinds;
 
 
@@ -167,6 +167,40 @@ public void kgiPushEvent (dchar ch) {
   consoleLock();
   scope(exit) consoleUnlock();
   pushEventIntr(ev);
+}
+
+
+/// remove all keypresses from input queue
+void kgiKeyFlush () {
+  uint sidx = 0, didx = 0;
+  consoleLock();
+  scope(exit) consoleUnlock();
+  while (sidx < evbufused) {
+    if (!evbuf[sidx].isKey) {
+      if (sidx != didx) evbuf[didx] = evbuf[sidx];
+      ++didx;
+    }
+    ++sidx;
+  }
+  evbufused = didx;
+}
+
+
+/// wait for keypress (and eat it)
+void kgiWaitKey () {
+  for (;;) {
+    auto ev = kgiGetEvent();
+    if (ev.isClose) {
+      consoleLock();
+      scope(exit) consoleUnlock();
+      evbufused = 1;
+      evbuf[0] = ev;
+      return;
+    }
+    if (!ev.isKey) continue;
+    if (!ev.k.pressed) continue;
+    break;
+  }
 }
 
 
@@ -549,7 +583,8 @@ enum : VColor {
   vlAMask = 0xff000000u,
   vlRMask = 0x00ff0000u,
   vlGMask = 0x0000ff00u,
-  vlBMask = 0x000000ffu
+  vlBMask = 0x000000ffu,
+  vlColorMask = vlRMask|vlGMask|vlBMask,
 }
 
 enum : VColor {
@@ -667,8 +702,14 @@ void setPixel (int xx, int yy, VColor col) nothrow @trusted @nogc {
 }
 
 
+VColor getPixel (int xx, int yy) nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH ? vbuf[yy*vbufW+xx]&vlColorMask : Transparent);
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
-void clear (VColor col) nothrow @trusted @nogc {
+void cls (VColor col) nothrow @trusted @nogc {
   vbuf[0..vbufW*vbufH] = col;
   atomicFence();
   ++vupcounter;
@@ -1187,6 +1228,96 @@ int drawStrPropOut(string type="msx") (int x, int y, const(char)[] str, VColor f
   }
   if (x > sx) --x; // don't count last empty pixel
   return x-sx;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/** floodfill area; based on Tarry's maze algorithm.
+ *
+ * fill area with color/pattern. trades memory for speed: doesn't recurse, doesn't allocate.
+ * will use "transparency" byte as temporary, and will leave it dirty.
+ *
+ * NOTES:
+ *   neither `isBorder` nor `patColor` will be called with out-of-range coordinates.
+ */
+void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc isBorder, scope VColor delegate (int x, int y) nothrow @nogc patColor) nothrow @trusted @nogc {
+  enum : ubyte {
+    DirMask = 0x03,
+    Seed = 0x08, // must be in lo nibble
+    Scanned = 0x10,
+    Fill = 0x20,
+  }
+
+  static ubyte getmark (int x, int y) {
+    pragma(inline, true);
+    return cast(ubyte)(x >= 0 && y >= 0 && x < vbufW && y < vbufH ? vbuf[y*vbufW+x]>>24 : Scanned);
+  }
+
+  static void setmark (int x, int y, ubyte mark) {
+    pragma(inline, true);
+    if (x >= 0 && y >= 0 && x < vbufW && y < vbufH) vbuf[y*vbufW+x] = (vbuf[y*vbufW+x]&0xffffff)|(mark<<24);
+  }
+
+  if (x < 0 || y < 0 || x >= vbufW || y >= vbufH) return; // nothing to do
+  if (isBorder(x, y)) return; // nothing to do
+
+  //setPixel(x, y, getPixel(x, y)); // set update flag
+
+  // one can mark bounding rectangle with Scanned
+  // reset flags
+  auto p = vbuf;
+  foreach (immutable dy; 0..vbufH) {
+    foreach (immutable dx; 0..vbufW) {
+      *p &= 0xffffff; // "not visited" mark
+      ++p;
+    }
+  }
+
+  setmark(x, y, Scanned|Fill|Seed);
+
+  ubyte dir = 0; // direction: right, left, up, down
+  ubyte mk;
+
+  for (;;) {
+    x += (dir == 0 ? 1 : dir == 1 ? -1 : 0);
+    y += (dir == 3 ? 1 : dir == 2 ? -1 : 0);
+    mk = getmark(x, y);
+    if (mk == 0) {
+      // not yet visited, check for border
+      mk = (isBorder(x, y) ? Scanned : 0);
+      setmark(x, y, mk);
+    }
+    if ((mk&Scanned) == 0) {
+      // not scanned
+      setmark(x, y, Scanned|Fill|dir);
+      if (dir != 1) dir = 0; // make exit direction
+      continue;
+    }
+    // already scanned
+    for (;;) {
+      x -= (dir == 0 ? 1 : dir == 1 ? -1 : 0);
+      y -= (dir == 3 ? 1 : dir == 2 ? -1 : 0);
+      ++dir;
+      mk = getmark(x, y)&0x0f;
+      if (mk == (dir^1)) ++dir; // skip entry-direction
+      if (dir <= 3) break; // next pixel
+      dir = mk;
+      if (dir&Seed) {
+        // done, fill pixels
+        p = vbuf;
+        foreach (immutable dy; 0..vbufH) {
+          foreach (immutable dx; 0..vbufW) {
+            if ((*p>>24)&Fill) *p = patColor(dx, dy);
+            ++p;
+          }
+        }
+        // set update flag
+        atomicFence();
+        ++vupcounter;
+        return;
+      }
+    }
+  }
 }
 
 
