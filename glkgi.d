@@ -30,11 +30,23 @@ import iv.bclamp;
 public import iv.glcmdcon;
 import iv.glbinds;
 
+//version=glkgi_rgba; // default, has priority
+//version=glkgi_bgra;
+
+version(BigEndian) static assert(0, "sorry, big-endian platforms aren't supported yet");
+
+version(glkgi_rgba) {
+  public enum KGIRGBA = true;
+} else version(glkgi_bgra) {
+  public enum KGIRGBA = false;
+} else {
+  public enum KGIRGBA = true;
+}
 
 // ////////////////////////////////////////////////////////////////////////// //
 // 0:b; 1:g; 2:r; 3: nothing
-private __gshared int vbufW = 600, vbufH = 600;
-__gshared uint* vbuf; // ABGR
+private __gshared int vbufW = 0, vbufH = 0;
+__gshared uint* vbuf; // see KGIRGBA
 private __gshared bool blit2x = false;
 private enum BlitType { Normal, BlackWhite, Green, Red }
 private __gshared int blitType = BlitType.Normal;
@@ -91,7 +103,7 @@ public bool kgiHasEvent () {
   scope(exit) consoleUnlock();
   atomicFence();
   if (vupcounter) atomicStore(updateTexture, true); // just in case
-  return (evbufused > 0);
+  return (evbufused > 0 || vbwin is null); // no vbwin --> always has Quit
 }
 
 
@@ -102,6 +114,7 @@ public KGIEvent kgiPeekEvent () {
   atomicFence();
   if (vupcounter) atomicStore(updateTexture, true); // just in case
   if (evbufused > 0) return evbuf[0];
+  if (vbwin is null) return KGIEvent(KGIEvent.Type.Close);
   return KGIEvent();
 }
 
@@ -125,6 +138,8 @@ public KGIEvent kgiGetEvent () {
         --evbufused;
         evbuf[evbufused].type = KGIEvent.Type.None;
         return ev;
+      } else if (vbwin is null) {
+        return KGIEvent(KGIEvent.Type.Close);
       }
     }
     Thread.sleep(10.msecs);
@@ -354,6 +369,7 @@ private void kgiThread (Tid starterTid) {
     abort(); // die, you bitch!
   }
   flushGui();
+  vbwin = null;
   /*
   {
     import core.stdc.stdlib : exit;
@@ -422,6 +438,38 @@ public bool kgiInit (int awdt, int ahgt, string title="KGI Graphics", bool a2x=f
 }
 
 
+private void glgfxInitTexture () {
+  import iv.glbinds;
+
+  if (vbTexId) { glDeleteTextures(1, &vbTexId); vbTexId = 0; }
+
+  enum wrapOpt = GL_REPEAT;
+  enum filterOpt = GL_NEAREST; //GL_LINEAR;
+  enum ttype = GL_UNSIGNED_BYTE;
+
+  glGenTextures(1, &vbTexId);
+  if (vbTexId == 0) assert(0, "can't create cmdcon texture");
+
+  GLint gltextbinding;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
+  scope(exit) glBindTexture(GL_TEXTURE_2D, gltextbinding);
+
+  glBindTexture(GL_TEXTURE_2D, vbTexId);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterOpt);
+  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+  GLfloat[4] bclr = 0.0;
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
+
+  static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, TexType, GL_UNSIGNED_BYTE, vbuf);
+}
+
+
 private void glgfxUpdateTexture () nothrow @trusted @nogc {
   import iv.glbinds;
 
@@ -431,7 +479,8 @@ private void glgfxUpdateTexture () nothrow @trusted @nogc {
   atomicFence();
   vupcounter = 0;
 
-  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, GL_BGRA, GL_UNSIGNED_BYTE, vbuf);
+  static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
+  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, TexType, GL_UNSIGNED_BYTE, vbuf);
 
   atomicStore(updateTexture, false);
 }
@@ -518,60 +567,45 @@ private void glgfxBlit () nothrow @trusted @nogc {
 }
 
 
-private void glgfxInitTexture () {
-  import iv.glbinds;
-
-  if (vbTexId) { glDeleteTextures(1, &vbTexId); vbTexId = 0; }
-
-  enum wrapOpt = GL_REPEAT;
-  enum filterOpt = GL_NEAREST; //GL_LINEAR;
-  enum ttype = GL_UNSIGNED_BYTE;
-
-  glGenTextures(1, &vbTexId);
-  if (vbTexId == 0) assert(0, "can't create cmdcon texture");
-
-  GLint gltextbinding;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
-  scope(exit) glBindTexture(GL_TEXTURE_2D, gltextbinding);
-
-  glBindTexture(GL_TEXTURE_2D, vbTexId);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterOpt);
-  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-  GLfloat[4] bclr = 0.0;
-  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, GL_BGRA, GL_UNSIGNED_BYTE, vbuf);
-}
-
-
 // ////////////////////////////////////////////////////////////////////////// //
 alias VColor = uint;
 
 /// vlRGBA struct to ease color components extraction/replacing
 align(1) struct vlRGBA {
 align(1):
-  ubyte b, g, r, a;
+  static if (KGIRGBA) {
+    ubyte b, g, r, a;
+  } else {
+    ubyte r, g, b, a;
+  }
 }
 static assert(vlRGBA.sizeof == VColor.sizeof);
 
 
-enum : VColor {
-  vlAMask = 0xff000000u,
-  vlRMask = 0x00ff0000u,
-  vlGMask = 0x0000ff00u,
-  vlBMask = 0x000000ffu,
-  vlColorMask = vlRMask|vlGMask|vlBMask,
+static if (KGIRGBA) {
+  enum : VColor {
+    vlAShift = 24,
+    vlRShift = 0,
+    vlGShift = 8,
+    vlBShift = 16,
+  }
+} else {
+  enum : VColor {
+    vlAShift = 24,
+    vlRShift = 16,
+    vlGShift = 8,
+    vlBShift = 0,
+  }
 }
+static assert(vlAShift == 24, "invalid A position in color"); // alas
+
 
 enum : VColor {
-  vlAShift = 24,
-  vlRShift = 16,
-  vlGShift = 8,
-  vlBShift = 0
+  vlAMask = 0xffu<<vlAShift,
+  vlRMask = 0xffu<<vlRShift,
+  vlGMask = 0xffu<<vlGShift,
+  vlBMask = 0xffu<<vlBShift,
+  vlColorMask = vlRMask|vlGMask|vlBMask,
 }
 
 
@@ -591,7 +625,7 @@ bool isOpaque(T : VColor) (T col) pure nothrow @safe @nogc {
 // a=0: opaque
 VColor rgbcol(TR, TG, TB, TA=ubyte) (TR r, TG g, TB b, TA a=0) pure nothrow @safe @nogc
 if (__traits(isIntegral, TR) && __traits(isIntegral, TG) && __traits(isIntegral, TB) && __traits(isIntegral, TA)) {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  pragma(inline, true);
   return
     (clampToByte(a)<<vlAShift)|
     (clampToByte(r)<<vlRShift)|
@@ -605,11 +639,11 @@ alias rgbacol = rgbcol;
 // generate some templates (rgbRed, rgbSetRed, etc.)
 private enum genRGBGetSet(string cname) =
   "ubyte rgb"~cname~"() (VColor clr) pure nothrow @safe @nogc {\n"~
-  "  static if (__VERSION__ > 2067) pragma(inline, true);\n"~
+  "  pragma(inline, true);\n"~
   "  return ((clr>>vl"~cname[0]~"Shift)&0xff);\n"~
   "}\n"~
   "VColor rgbSet"~cname~"(T) (VColor clr, T v) pure nothrow @safe @nogc if (__traits(isIntegral, T)) {\n"~
-  "  static if (__VERSION__ > 2067) pragma(inline, true);\n"~
+  "  pragma(inline, true);\n"~
   "  return (clr&~vl"~cname[0]~"Mask)|(clampToByte(v)<<vl"~cname[0]~"Shift);\n"~
   "}\n";
 
@@ -621,7 +655,26 @@ mixin(genRGBGetSet!"Blue");
 
 // ////////////////////////////////////////////////////////////////////////// //
 nothrow @trusted @nogc:
-private void putPixelIntr (int xx, int yy, VColor col) nothrow @trusted @nogc {
+
+private void putPixelIntrNoCheck (in int xx, in int yy, in VColor col) {
+  pragma(inline, true);
+  uint* da = vbuf+yy*vbufW+xx;
+  if (col&vlAMask) {
+    immutable uint a = 256-(col>>24); // to not loose bits
+    immutable uint dc = (*da)&0xffffff;
+    immutable uint srb = (col&0xff00ff);
+    immutable uint sg = (col&0x00ff00);
+    immutable uint drb = (dc&0xff00ff);
+    immutable uint dg = (dc&0x00ff00);
+    immutable uint orb = (drb+(((srb-drb)*a+0x800080)>>8))&0xff00ff;
+    immutable uint og = (dg+(((sg-dg)*a+0x008000)>>8))&0x00ff00;
+    *da = orb|og;
+  } else {
+    *da = col;
+  }
+}
+
+private void putPixelIntr (int xx, int yy, VColor col) {
   pragma(inline, true);
   if ((col&vlAMask) != vlAMask && xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
     uint* da = vbuf+yy*vbufW+xx;
@@ -641,7 +694,7 @@ private void putPixelIntr (int xx, int yy, VColor col) nothrow @trusted @nogc {
   }
 }
 
-void putPixel (int xx, int yy, VColor col) nothrow @trusted @nogc {
+void putPixel (int xx, int yy, VColor col) {
   pragma(inline, true);
   if ((col&vlAMask) != vlAMask && xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
     uint* da = vbuf+yy*vbufW+xx;
@@ -663,7 +716,7 @@ void putPixel (int xx, int yy, VColor col) nothrow @trusted @nogc {
   }
 }
 
-private void setPixelIntr (int xx, int yy, VColor col) nothrow @trusted @nogc {
+private void setPixelIntr (int xx, int yy, VColor col) {
   pragma(inline, true);
   if (xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
     uint* da = vbuf+yy*vbufW+xx;
@@ -671,7 +724,7 @@ private void setPixelIntr (int xx, int yy, VColor col) nothrow @trusted @nogc {
   }
 }
 
-void setPixel (int xx, int yy, VColor col) nothrow @trusted @nogc {
+void setPixel (int xx, int yy, VColor col) {
   pragma(inline, true);
   if (xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
     uint* da = vbuf+yy*vbufW+xx;
@@ -682,14 +735,14 @@ void setPixel (int xx, int yy, VColor col) nothrow @trusted @nogc {
 }
 
 
-VColor getPixel (int xx, int yy) nothrow @trusted @nogc {
+VColor getPixel (int xx, int yy) {
   pragma(inline, true);
   return (xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH ? vbuf[yy*vbufW+xx]&vlColorMask : Transparent);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void cls (VColor col) nothrow @trusted @nogc {
+void cls (VColor col) {
   vbuf[0..vbufW*vbufH] = col;
   atomicFence();
   ++vupcounter;
@@ -874,24 +927,7 @@ void drawLine(bool lastPoint=true) (int x0, int y0, int x1, int y1, immutable VC
   dx2 -= dy2;
   // draw it; `putPixel()` can omit checks
   while (xd != term) {
-    // inlined `putPixel(*d0, *d1, col)`
-    // this can be made even faster by precalculating `da` and making
-    // separate code branches for mixing and non-mixing drawing, but...
-    // ah, screw it!
-    uint* da = vbuf+(*d1)*vbufW+(*d0);
-    if (col&vlAMask) {
-      immutable uint a = 256-(col>>24); // to not loose bits
-      immutable uint dc = (*da)&0xffffff;
-      immutable uint srb = (col&0xff00ff);
-      immutable uint sg = (col&0x00ff00);
-      immutable uint drb = (dc&0xff00ff);
-      immutable uint dg = (dc&0x00ff00);
-      immutable uint orb = (drb+(((srb-drb)*a+0x800080)>>8))&0xff00ff;
-      immutable uint og = (dg+(((sg-dg)*a+0x008000)>>8))&0x00ff00;
-      *da = orb|og;
-    } else {
-      *da = col;
-    }
+    putPixelIntrNoCheck(*d0, *d1, col);
     // done drawing, move coords
     if (e >= 0) {
       yd += sty;
@@ -1054,7 +1090,7 @@ void drawCharWdt(string type="msx") (int x, int y, int wdt, int shift, char ch, 
     ushort b = cast(ushort)(fontb8.ptr[pos++]<<shift);
     foreach (immutable int dx; 0..wdt) {
       VColor c = (b&fmask ? fgcol : bgcol);
-      if (!isTransparent(c)) putPixelIntr(x+dx, y+dy, c);
+      putPixelIntr(x+dx, y+dy, c);
       b <<= 1;
     }
   }
@@ -1190,8 +1226,9 @@ int drawStrProp(string type="msx") (int x, int y, const(char)[] str, VColor fgco
     if (vline) {
       if (!isTransparent(bgcol)) {
         foreach (int dy; 0..8) putPixelIntr(x, y+dy, bgcol);
-        atomicFence();
-        ++vupcounter;
+        // no need to advance vupcounter, 'cause `drawCharProp` will do it
+        //atomicFence();
+        //++vupcounter;
       }
       ++x;
     }
@@ -1229,12 +1266,12 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
 
   static ubyte getmark (int x, int y) {
     pragma(inline, true);
-    return cast(ubyte)(x >= 0 && y >= 0 && x < vbufW && y < vbufH ? vbuf[y*vbufW+x]>>24 : Scanned);
+    return cast(ubyte)(x >= 0 && y >= 0 && x < vbufW && y < vbufH ? vbuf[y*vbufW+x]>>vlAShift : Scanned);
   }
 
   static void setmark (int x, int y, ubyte mark) {
     pragma(inline, true);
-    if (x >= 0 && y >= 0 && x < vbufW && y < vbufH) vbuf[y*vbufW+x] = (vbuf[y*vbufW+x]&0xffffff)|(mark<<24);
+    if (x >= 0 && y >= 0 && x < vbufW && y < vbufH) vbuf[y*vbufW+x] = (vbuf[y*vbufW+x]&vlColorMask)|(mark<<vlAShift);
   }
 
   if (x < 0 || y < 0 || x >= vbufW || y >= vbufH) return; // nothing to do
@@ -1247,13 +1284,13 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
   auto p = vbuf;
   foreach (immutable dy; 0..vbufH) {
     foreach (immutable dx; 0..vbufW) {
-      *p &= 0xffffff; // "not visited" mark
+      *p &= vlColorMask; // "not visited" mark
       ++p;
     }
   }
 
   //setmark(x, y, Scanned|Fill|Seed);
-  vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|Seed)<<24);
+  vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|Seed)<<vlAShift);
 
   ubyte dir = 0; // direction: right, left, up, down
   for (;;) {
@@ -1267,7 +1304,7 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
     if ((mk&Scanned) == 0) {
       // not scanned
       //setmark(x, y, Scanned|Fill|dir);
-      vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|dir)<<24);
+      vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|dir)<<vlAShift);
       if (dir != 1) dir = 0; // make exit direction
     } else {
       // already scanned
