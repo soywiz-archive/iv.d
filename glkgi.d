@@ -1243,9 +1243,8 @@ int drawStrPropOut(string type="msx") (int x, int y, const(char)[] str, VColor f
 void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc isBorder, scope VColor delegate (int x, int y) nothrow @nogc patColor) nothrow @trusted @nogc {
   enum : ubyte {
     DirMask = 0x03,
-    Seed = 0x08, // must be in lo nibble
-    Scanned = 0x10,
-    Fill = 0x20,
+    Seed = 0x10,
+    Scanned = 0x80,
   }
 
   static ubyte getmark (int x, int y) {
@@ -1273,48 +1272,40 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
     }
   }
 
-  setmark(x, y, Scanned|Fill|Seed);
+  //setmark(x, y, Scanned|Fill|Seed);
+  vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|Seed)<<24);
 
   ubyte dir = 0; // direction: right, left, up, down
-  ubyte mk;
-
   for (;;) {
     x += (dir == 0 ? 1 : dir == 1 ? -1 : 0);
     y += (dir == 3 ? 1 : dir == 2 ? -1 : 0);
-    mk = getmark(x, y);
+    auto mk = getmark(x, y);
     if (mk == 0) {
       // not yet visited, check for border
-      mk = (isBorder(x, y) ? Scanned : 0);
-      setmark(x, y, mk);
+      if (isBorder(x, y)) { mk = Scanned; setmark(x, y, Scanned); }
     }
     if ((mk&Scanned) == 0) {
       // not scanned
-      setmark(x, y, Scanned|Fill|dir);
+      //setmark(x, y, Scanned|Fill|dir);
+      vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|dir)<<24);
       if (dir != 1) dir = 0; // make exit direction
-      continue;
-    }
-    // already scanned
-    for (;;) {
-      x -= (dir == 0 ? 1 : dir == 1 ? -1 : 0);
-      y -= (dir == 3 ? 1 : dir == 2 ? -1 : 0);
-      ++dir;
-      mk = getmark(x, y)&0x0f;
-      if (mk == (dir^1)) ++dir; // skip entry-direction
-      if (dir <= 3) break; // next pixel
-      dir = mk;
-      if (dir&Seed) {
-        // done, fill pixels
-        p = vbuf;
-        foreach (immutable dy; 0..vbufH) {
-          foreach (immutable dx; 0..vbufW) {
-            if ((*p>>24)&Fill) *p = patColor(dx, dy);
-            ++p;
-          }
+    } else {
+      // already scanned
+      for (;;) {
+        x -= (dir == 0 ? 1 : dir == 1 ? -1 : 0);
+        y -= (dir == 3 ? 1 : dir == 2 ? -1 : 0);
+        mk = getmark(x, y);
+        if (mk&Seed) {
+          // done, fill pixels (you can set Fill flag and check all pixels here)
+          // set update flag
+          atomicFence();
+          ++vupcounter;
+          return;
         }
-        // set update flag
-        atomicFence();
-        ++vupcounter;
-        return;
+        ++dir;
+        if ((mk&DirMask) == (dir^1)) ++dir; // skip entry-direction
+        if (dir <= 3) break; // next pixel
+        dir = mk&DirMask;
       }
     }
   }
