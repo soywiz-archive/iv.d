@@ -48,10 +48,12 @@ version(glkgi_rgba) {
 private __gshared int vbufW = 800, vbufH = 600;
 __gshared uint* vbuf; // see KGIRGBA
 private __gshared bool blit2x = false;
-//private enum BlitType { Normal, BlackWhite, Green, Red }
-//private __gshared int blitType = BlitType.Normal;
+//private enum BlitType { normal, bw, green, red }
+//private __gshared BlitType blitType = BlitType.normal;
+private __gshared bool scanlines = false;
 private __gshared SimpleWindow vbwin;
 private __gshared uint vbTexId = 0;
+private __gshared uint sdrScanlineId = 0;
 private __gshared string kgiTitle = "KGI Graphics";
 private __gshared uint vupcounter = 0;
 private shared bool updateTexture = true;
@@ -77,6 +79,7 @@ public __gshared bool delegate () onKGICloseRequest;
 
 shared static this () {
   conRegVar!blit2x("v_scale2x", "video window scale");
+  conRegVar!scanlines("v_scanlines", "emulate old CRT scanline effect");
   conRegVar!vbufW(64, 4096, "v_width", "video window width");
   conRegVar!vbufH(64, 4096, "v_height", "video window height");
   conRegVar!fps(1, 60, "v_fps", "video update rate");
@@ -276,30 +279,6 @@ private void kgiThread (Tid starterTid) {
         */
       }
       +/
-      // check if we have sufficient shader version here
-      /+
-      {
-        bool found = false;
-        GLint svcount;
-        glGetIntegerv(GL_NUM_SHADING_LANGUAGE_VERSIONS, &svcount);
-        if (svcount > 0) {
-          foreach (GLuint n; 0..svcount) {
-            import core.stdc.string : strncmp;
-            auto v = glGetStringi(GL_SHADING_LANGUAGE_VERSION, n);
-            if (v is null) continue;
-            if (strncmp(v, "130", 3) != 0) continue;
-            if (v[3] > ' ') continue;
-            found = true;
-            break;
-          }
-        }
-        if (!found) assert(0, "can't find OpenGL GLSL 120");
-        {
-          auto adr = glGetProcAddress("glTexParameterf");
-          if (adr is null) assert(0);
-        }
-      }
-      +/
       glgfxInitTexture();
       glconInit(vbufW, vbufH, (blit2x ? 2 : 1));
       glgfxUpdateTexture();
@@ -494,6 +473,33 @@ private void glgfxInitTexture () {
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, TexType, GL_UNSIGNED_BYTE, vbuf);
+
+
+  // check if we have sufficient shader version here
+  {
+    bool found = false;
+    GLint svcount;
+    glGetIntegerv(GL_NUM_SHADING_LANGUAGE_VERSIONS, &svcount);
+    if (svcount > 0) {
+      foreach (GLuint n; 0..svcount) {
+        import core.stdc.string : strncmp;
+        auto v = glGetStringi(GL_SHADING_LANGUAGE_VERSION, n);
+        if (v is null) continue;
+        if (strncmp(v, "130", 3) != 0) continue;
+        if (v[3] > ' ') continue;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return; //assert(0, "can't find OpenGL GLSL 120");
+    /*
+    {
+      auto adr = glGetProcAddress("glTexParameterf");
+      if (adr is null) return;
+    }
+    */
+  }
+  sdrScanlineId = createFragShader(sdrScanlineSrc);
 }
 
 
@@ -561,7 +567,8 @@ private void glgfxBlit () nothrow @trusted @nogc {
 
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
-  glUseProgram(0);
+
+  glUseProgram(scanlines ? sdrScanlineId : 0);
 
   glMatrixMode(GL_PROJECTION); // for ortho camera
   glLoadIdentity();
@@ -1742,3 +1749,82 @@ public immutable ubyte[256] kgiFont8PropWidth = () {
   }
   return res;
 }();
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// shaders
+private:
+static string sdrScanlineSrc = q{
+  #version 130
+
+  uniform sampler2D tex;
+  //uniform bool scanlines;
+
+  void main () {
+    vec4 color = texture2D(tex, gl_TexCoord[0].xy);
+    //gl_FragColor = vec4(intens, intens, intens, color.w);
+    //color = vec4(1.0, 0.0, 0.0, 1.0);
+    if (/*scanlines &&*/ mod(floor(gl_FragCoord.y), 2) == 1) { color.x *= 0.75; color.y *= 0.75; color.z *= 0.75; }
+    gl_FragColor = color;
+  }
+};
+
+
+// find var id: glGetUniformLocation(prg, bufasciiz.ptr)
+// set var: glUniformXXX()
+
+
+// returns 0 or programid
+uint createFragShader (const(char)[] src) {
+  import iv.glbinds;
+  GLuint prg = 0;
+  auto shaderId = glCreateShader(GL_FRAGMENT_SHADER);
+  if (!shaderId) {
+    conwriteln("GLKGI ERROR: can't create shader.");
+    return 0;
+  }
+  auto sptr = src.ptr;
+  GLint slen = cast(int)src.length;
+  glShaderSource(shaderId, 1, &sptr, &slen);
+  glCompileShader(shaderId);
+  GLint success = 0;
+  glGetShaderiv(shaderId, GL_COMPILE_STATUS, &success);
+  if (!success /*|| glutilsShowShaderWarnings*/) {
+    import core.stdc.stdlib : malloc, free;
+    GLint logSize = 0;
+    glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &logSize);
+    if (logSize > 0) {
+      auto logStrZ = cast(GLchar*)malloc(logSize);
+      if (logStrZ !is null) {
+        //import core.stdc.stdio : printf;
+        scope(exit) free(logStrZ);
+        glGetShaderInfoLog(shaderId, logSize, null, logStrZ);
+        if (logSize > 0 && logStrZ[logSize-1] == 0) --logSize;
+        //printf("shader '%.*s' compilation messages:\n%s\n", cast(uint)ashaderName.length, ashaderName.ptr, logStrZ);
+        conwriteln("GLKGI: shader compilation messages:\n", logStrZ[0..logSize]);
+      }
+    }
+  }
+  if (!success) {
+    glDeleteShader(shaderId);
+    conwriteln("GLKGI ERROR: can't compile shader.");
+    return 0;
+  }
+  prg = glCreateProgram();
+  if (prg == 0) {
+    glDeleteShader(shaderId);
+    conwriteln("GLKGI ERROR: can't create shader program.");
+    return 0;
+  }
+  glAttachShader(prg, shaderId);
+  glLinkProgram(prg);
+  GLint lres = 0;
+  glGetProgramiv(prg, GL_LINK_STATUS, &lres);
+  if (lres != GL_TRUE) {
+    glDeleteProgram(prg);
+    glDeleteShader(shaderId);
+    conwriteln("GLKGI ERROR: can't link shader program.");
+    return 0;
+  }
+  return prg;
+}
