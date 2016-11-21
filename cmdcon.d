@@ -2343,6 +2343,16 @@ public void conSealVar (ConString s) {
 }
 
 
+/// "seal" console variable (i.e. make it r/w) (thread-safe)
+public void conUnsealVar (ConString s) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  if (auto cc = s in cmdlist) {
+    if (auto cv = cast(ConVarBase)(*cc)) cv.attrReadOnly = false;
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // thread-safe
 
