@@ -1552,7 +1552,17 @@ public:
     }
   }
 
+  final ConVarBase setBeforeHook (PreChangeHookCB cb) { hookBeforeChange = cb; return this; }
+  final ConVarBase setAfterHook (PostChangeHookCB cb) { hookAfterChange = cb; return this; }
+
+
   @property pure nothrow @safe @nogc final {
+    PreChangeHookCB beforeHook (void) { return hookBeforeChange; }
+    PostChangeHookCB afterHook (void) { return hookAfterChange; }
+
+    void beforeHook (PreChangeHookCB cb) { hookBeforeChange = cb; }
+    void afterHook (PostChangeHookCB cb) { hookAfterChange = cb; }
+
     uint attrs () const { pragma(inline, true); return mAttrs; } /// attributes (see ConVarAttr enum)
     /// replaces current attributes
     void attrs(bool any=false) (uint v) {
@@ -2006,6 +2016,9 @@ private enum RegVarMixin(string cvcreate) =
   `    cv.argcomplete = toDelegate(&boolComplete!UT);`~
   `  }`~
   `  cmdlist[aname] = cv;`~
+  `  return cv;`~
+  `} else {`~
+  `  return null;`~
   `}`;
 
 
@@ -2019,7 +2032,7 @@ private enum RegVarMixin(string cvcreate) =
  *   ahelp = help text
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp)`);
 }
 
@@ -2035,7 +2048,7 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
  *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
 }
 
@@ -2051,7 +2064,7 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
  *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PostChangeHookCB acb, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PostChangeHookCB acb, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
 }
 
@@ -2066,7 +2079,7 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
  *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookBeforeChange = bcb`);
 }
 
@@ -2081,7 +2094,7 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
  *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp); cv.hookAfterChange = acb`);
 }
 
@@ -2094,7 +2107,7 @@ public void conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp,
  *   ahelp = help text
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v) (string aname, string ahelp, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+public ConVarBase conRegVar(alias v) (string aname, string ahelp, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp)`);
 }
 
@@ -2108,7 +2121,7 @@ public void conRegVar(alias v) (string aname, string ahelp, const(ConVarAttr)[] 
  *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+public ConVarBase conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
 }
 
@@ -2122,7 +2135,7 @@ public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChange
  *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PostChangeHookCB acb, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+public ConVarBase conRegVar(alias v) (string aname, string ahelp, ConVarBase.PostChangeHookCB acb, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookBeforeChange = bcb; cv.hookAfterChange = acb`);
 }
 
@@ -2135,7 +2148,7 @@ public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PostChang
  *   bcb = "before value change" hook: `bool (ConVarBase self, ConString valstr)`, return `false` to block change
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+public ConVarBase conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChangeHookCB bcb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookBeforeChange = bcb`);
 }
 
@@ -2148,7 +2161,7 @@ public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PreChange
  *   acb = "after value change" hook: `(ConVarBase self, ConString valstr)`
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public void conRegVar(alias v) (string aname, string ahelp, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
+public ConVarBase conRegVar(alias v) (string aname, string ahelp, ConVarBase.PostChangeHookCB acb, const(ConVarAttr)[] attrs...) if (!isCallable!(typeof(v))) {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookAfterChange = acb`);
 }
 
