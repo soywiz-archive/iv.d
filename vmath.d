@@ -75,6 +75,39 @@ alias vec2 = VecN!2;
 alias vec3 = VecN!3;
 
 
+template IsVector(VT) {
+  static if (is(VT == VecN!(D, T), ubyte D, T)) {
+    enum IsVector = true;
+  } else {
+    enum IsVector = false;
+  }
+}
+
+template IsVector(VT, FT) {
+  static if (is(VT == VecN!(D, T), ubyte D, T)) {
+    enum IsVector = is(T == FT);
+  } else {
+    enum IsVector = false;
+  }
+}
+
+template VectorDims(VT) {
+  static if (is(VT == VecN!(D, F), ubyte D, F)) {
+    enum VectorDims = D;
+  } else {
+    enum VectorDims = 0;
+  }
+}
+
+template VectorFloat(VT) {
+  static if (is(VT == VecN!(D, F), ubyte D, F)) {
+    alias VectorFloat = F;
+  } else {
+    static assert(0, "not a vector");
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 align(1) struct VecN(ubyte dims, FloatType=VFloat) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
 align(1):
