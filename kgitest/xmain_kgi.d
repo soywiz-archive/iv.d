@@ -61,7 +61,7 @@ void main (string[] args) {
         },
         // patColor
         (int x, int y) {
-          return rgbcol(255, 127, 0);
+          return rgbcol(255, 127, 0, 127);
         },
       );
     }

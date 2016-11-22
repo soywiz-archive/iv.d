@@ -1504,7 +1504,14 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
   }
 
   //setmark(x, y, Scanned|Fill|Seed);
-  vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|Seed)<<vlAShift);
+  VColor pc = patColor(x, y);
+  if (isOpaque(pc)) {
+    vbuf[y*vbufW+x] = (pc&vlColorMask)|((Scanned|Seed)<<vlAShift);
+  } else {
+    // do alpha
+    putPixelIntrNoCheck(x, y, pc);
+    setmark(x, y, Scanned|Seed);
+  }
 
   ubyte dir = 0; // direction: right, left, up, down
   for (;;) {
@@ -1521,7 +1528,14 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
     if ((mk&Scanned) == 0) {
       // not scanned
       //setmark(x, y, Scanned|Fill|dir);
-      vbuf[y*vbufW+x] = (patColor(x, y)&vlColorMask)|((Scanned|dir)<<vlAShift);
+      pc = patColor(x, y);
+      if (isOpaque(pc)) {
+        vbuf[y*vbufW+x] = (pc&vlColorMask)|((Scanned|dir)<<vlAShift);
+      } else {
+        // do alpha
+        putPixelIntrNoCheck(x, y, pc);
+        setmark(x, y, Scanned|dir);
+      }
       if (dir != 1) dir = 0; // make exit direction
     } else {
       // already scanned
