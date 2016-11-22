@@ -63,6 +63,12 @@ version(nanovg_use_arsd_image) {
   void stbi_image_free (void* retval_from_stbi_load) {}
 }
 
+version(nanovg_no_font_aa) {
+  __gshared bool NVG_INVERT_FONT_AA = true;
+} else {
+  __gshared bool NVG_INVERT_FONT_AA = false;
+}
+
 
 ///
 align(1) struct NVGColor {
@@ -372,6 +378,7 @@ enum NVGImageFlags {
   RepeatY         = 1<<2, /// Repeat image in Y direction.
   FlipY           = 1<<3, /// Flips (inverses) image in Y direction when rendered.
   Premultiplied   = 1<<4, /// Image data has premultiplied alpha.
+  NoFiltering     = 1<<8, /// use GL_NEAREST instead of GL_LINEAR
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -408,6 +415,7 @@ struct NVGpath {
 struct NVGparams {
   void* userPtr;
   bool edgeAntiAlias;
+  bool fontAA;
   bool function (void* uptr) renderCreate;
   int function (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) renderCreateTexture;
   bool function (void* uptr, int image) renderDeleteTexture;
@@ -660,7 +668,7 @@ package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) {
   if (ctx.fs is null) goto error;
 
   // Create font texture
-  ctx.fontImages[0] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, 0, null);
+  ctx.fontImages[0] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, (ctx.params.fontAA ? 0 : NVGImageFlags.NoFiltering), null);
   if (ctx.fontImages[0] == 0) goto error;
   ctx.fontImageIdx = 0;
 
@@ -3016,7 +3024,7 @@ bool nvg__allocTextAtlas (NVGContext ctx) {
     ctx.imageSize(ctx.fontImages[ctx.fontImageIdx], &iw, &ih);
     if (iw > ih) ih *= 2; else iw *= 2;
     if (iw > NVG_MAX_FONTIMAGE_SIZE || ih > NVG_MAX_FONTIMAGE_SIZE) iw = ih = NVG_MAX_FONTIMAGE_SIZE;
-    ctx.fontImages[ctx.fontImageIdx+1] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, 0, null);
+    ctx.fontImages[ctx.fontImageIdx+1] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, (ctx.params.fontAA ? 0 : NVGImageFlags.NoFiltering), null);
   }
   ++ctx.fontImageIdx;
   fonsResetAtlas(ctx.fs, iw, ih);
@@ -4697,12 +4705,11 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
 
   // Debug code to color the glyph background
   version(none) {
-    ubyte* fdst = &stash.texData[glyph.x0+glyph.y0*stash.params.width];
     foreach (immutable yy; 0..gh) {
       foreach (immutable xx; 0..gw) {
-        int a = cast(int)fdst[xx+yy*stash.params.width]+20;
+        int a = cast(int)dst[xx+yy*stash.params.width]+42;
         if (a > 255) a = 255;
-        fdst[xx+yy*stash.params.width] = cast(ubyte)a;
+        dst[xx+yy*stash.params.width] = cast(ubyte)a;
       }
     }
   }
@@ -5709,6 +5716,8 @@ enum /*NVGcreateFlags*/ {
   NVG_STENCIL_STROKES = 1<<1,
   /// Flag indicating that additional debug checks are done.
   NVG_DEBUG = 1<<2,
+  /// Don't filter (antialias) fonts
+  NVG_FONT_NOAA = 1<<8,
 }
 
 enum NANOVG_GL_USE_STATE_FILTER = true;
@@ -6168,7 +6177,7 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
   glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
 
   // GL 1.4 and later has support for generating mipmaps using a tex parameter.
-  if (imageFlags&NVGImageFlags.GenerateMipmaps) glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+  if ((imageFlags&(NVGImageFlags.GenerateMipmaps|NVGImageFlags.NoFiltering)) == NVGImageFlags.GenerateMipmaps) glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 
   if (type == NVGtexture.RGBA) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
@@ -6176,12 +6185,12 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, data);
   }
 
-  if (imageFlags&NVGImageFlags.GenerateMipmaps) {
+  if ((imageFlags&(NVGImageFlags.GenerateMipmaps|NVGImageFlags.NoFiltering)) == NVGImageFlags.GenerateMipmaps) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (imageFlags&NVGImageFlags.NoFiltering ? GL_NEAREST : GL_LINEAR));
   }
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (imageFlags&NVGImageFlags.NoFiltering ? GL_NEAREST : GL_LINEAR));
 
   if (imageFlags&NVGImageFlags.RepeatX) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -6850,6 +6859,7 @@ public NVGContext createGL2NVG (int flags) {
   params.renderDelete = &glnvg__renderDelete;
   params.userPtr = gl;
   params.edgeAntiAlias = (flags&NVG_ANTIALIAS ? true : false);
+  params.fontAA = (flags&NVG_FONT_NOAA ? NVG_INVERT_FONT_AA : !NVG_INVERT_FONT_AA);
 
   gl.flags = flags;
 
