@@ -2979,6 +2979,7 @@ public int conHistoryFind (ConString cmd) {
 /// add command to history. will take care about duplicate commands. (not thread-safe)
 public void conHistoryAdd (ConString cmd) {
   import core.stdc.string : memmove, memset;
+  auto orgcmd = cmd;
   while (cmd.length && cmd[0] <= 32) cmd = cmd[1..$];
   while (cmd.length && cmd[$-1] <= 32) cmd = cmd[0..$-1];
   if (cmd.length == 0) return;
@@ -2998,7 +2999,7 @@ public void conHistoryAdd (ConString cmd) {
     // new command
     idx = conHistAllot();
     if (idx < 0) return; // alas
-    concmdhistory[idx].str = cmd;
+    concmdhistory[idx].str = orgcmd;
   }
 }
 
