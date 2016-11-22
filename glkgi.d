@@ -59,6 +59,7 @@ private __gshared string kgiTitle = "KGI Graphics";
 private __gshared uint vupcounter = 0;
 private shared bool updateTexture = true;
 private __gshared uint fps = 35; // average FPS
+private __gshared bool showShaderWarnings = false;
 
 private shared bool vWantMotionEvents = false;
 private shared bool vWantCharEvents = false;
@@ -85,6 +86,7 @@ shared static this () {
   conRegVar!vbufH(64, 4096, "v_height", "video window height");
   conRegVar!fps(1, 60, "v_fps", "video update rate");
   conRegVar!kgiTitle("v_title", "video window title");
+  conRegVar!showShaderWarnings("v_shader_warnings", "show warnings from shader compilation");
 }
 
 
@@ -446,7 +448,7 @@ public bool kgiInit (int awdt, int ahgt, string title, bool a2x, uint afps) { re
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private uint glgfxCompileShader (const(char)[] fragsrc, const(char)[] vertsrc=null) nothrow @trusted @nogc {
+private uint glgfxCompileShader (const(char)[] src) nothrow @trusted @nogc {
   import iv.glbinds;
 
   if (shaderVersionOk < 0) {
@@ -477,7 +479,7 @@ private uint glgfxCompileShader (const(char)[] fragsrc, const(char)[] vertsrc=nu
     shaderVersionOk = 1;
   }
   if (shaderVersionOk == 0) return 0;
-  return compileShaders(fragsrc, vertsrc);
+  return compileShaders(src);
 }
 
 
@@ -1764,15 +1766,62 @@ public immutable ubyte[256] kgiFont8PropWidth = () {
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
+
+const(char)[] sdrGetPart(string typepfx) (const(char)[] s) nothrow @trusted @nogc {
+  // skips prefix "---"
+  static usize findMark(string at) (const(char)[] s, uint idx=0) nothrow @trusted @nogc {
+    while (idx < s.length) {
+      if (idx == 0 || s.ptr[idx-1] == '\n') {
+        while (idx < s.length && (s.ptr[idx] == ' ' || s.ptr[idx] == '\t')) ++idx;
+        if (s.length-idx >= 3 && s.ptr[idx] == '-' && s.ptr[idx+1] == '-' && s.ptr[idx+2] == '-') {
+          static if (at == "start") {
+            while (idx > 0 && s.ptr[idx-1] != '\n') --idx;
+          } else static if (at == "end") {
+            idx += 3;
+            while (idx < s.length && s.ptr[idx] == '-') ++idx;
+            while (idx < s.length && (s.ptr[idx] == ' ' || s.ptr[idx] == '\t')) ++idx;
+          } else {
+            static assert(0, "wtf?!");
+          }
+          return idx;
+        }
+      }
+      ++idx;
+    }
+    return idx;
+  }
+
+  usize idx = findMark!"end"(s);
+  while (idx < s.length) {
+    if (s.length-idx >= typepfx.length && s[idx..idx+typepfx.length] == typepfx) {
+      while (idx < s.length && s.ptr[idx] != '\n') ++idx;
+      while (idx < s.length && s.ptr[idx] <= ' ') ++idx;
+      if (idx >= s.length) return null;
+      auto eidx = findMark!"start"(s, idx);
+      if (eidx > s.length) eidx = s.length;
+      while (eidx > idx && s.ptr[eidx-1] <= ' ') --eidx;
+      return (eidx > idx ? s[idx..eidx] : null);
+    } else {
+      while (idx < s.length && s.ptr[idx] != '\n') ++idx;
+      idx = findMark!"end"(s, idx);
+    }
+  }
+  return null;
+}
+
+
 // find var id: glGetUniformLocation(prg, bufasciiz.ptr)
 // set var: glUniformXXX()
 
 // returns 0 or programid
-uint compileShaders (const(char)[] fragsrc, const(char)[] vertsrc) nothrow @trusted @nogc {
+uint compileShaders (const(char)[] src) nothrow @trusted @nogc {
   import iv.glbinds;
 
   GLuint prg = 0;
   GLuint fsid = 0, vsid = 0;
+
+  auto fragsrc = sdrGetPart!"frag"(src);
+  auto vertsrc = sdrGetPart!"vert"(src);
 
   if (fragsrc.length == 0 && vertsrc.length == 0) return 0;
 
@@ -1830,7 +1879,7 @@ uint createShader(uint type) (const(char)[] src) nothrow @trusted @nogc {
   glCompileShader(shaderId);
   GLint success = 0;
   glGetShaderiv(shaderId, GL_COMPILE_STATUS, &success);
-  if (!success /*|| glutilsShowShaderWarnings*/) {
+  if (!success || showShaderWarnings) {
     import core.stdc.stdlib : malloc, free;
     GLint logSize = 0;
     glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &logSize);
@@ -1858,13 +1907,23 @@ uint createShader(uint type) (const(char)[] src) nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 // shaders
 static string sdrScanlineSrc = q{
-  #version 130
+---frag---
+#version 120
 
-  uniform sampler2D tex;
+uniform sampler2D tex;
 
-  void main () {
-    vec4 color = texture2D(tex, gl_TexCoord[0].xy);
-    if (mod(floor(gl_FragCoord.y), 2) == 1) { color.x *= 0.75; color.y *= 0.75; color.z *= 0.75; }
-    gl_FragColor = color;
-  }
+void main () {
+  vec4 color = texture2D(tex, gl_TexCoord[0].xy);
+  if (mod(floor(gl_FragCoord.y), 2) == 1) { color.x *= 0.75; color.y *= 0.75; color.z *= 0.75; }
+  gl_FragColor = color;
+}
+
+---vert---
+#version 120
+
+void main () {
+  gl_TexCoord[0] = gl_MultiTexCoord0;
+  //gl_Position = gl_ProjectionMatrix*gl_ModelViewMatrix*gl_Vertex;
+  gl_Position = gl_ProjectionMatrix*gl_Vertex;
+}
 };
