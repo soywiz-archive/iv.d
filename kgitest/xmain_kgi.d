@@ -28,6 +28,9 @@ void main (string[] args) {
   kgiInit();
   //scope(exit) kgiDeinit();
 
+  kgiSetDefaultCursor();
+  kgiShowCursor();
+
   void buildScreen () {
     cls(0);
     drawCircle(kgiWidth/2, kgiHeight/2, 100, rgbcol(255, 255, 255));

@@ -45,23 +45,36 @@ version(glkgi_rgba) {
   public enum KGIRGBA = true;
 }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
+public enum kgiMaxCurW = 64;
+public enum kgiMaxCurH = 64;
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // 0:b; 1:g; 2:r; 3: nothing
 private __gshared int vbufW = 800, vbufH = 600;
 __gshared uint* vbuf; // see KGIRGBA
+private __gshared uint* vcurbuf;
 private __gshared bool blit2x = false;
 //private enum BlitType { normal, bw, green, red }
 //private __gshared BlitType blitType = BlitType.normal;
 private __gshared bool scanlines = false;
 private __gshared SimpleWindow vbwin;
 private __gshared uint vbTexId = 0;
+private __gshared uint vbCurTexId = 0;
 private __gshared uint sdrScanlineId = 0;
 private __gshared int shaderVersionOk = -1; // <0: not checked; 0: fail; >0: ok
 private __gshared string kgiTitle = "KGI Graphics";
 private __gshared uint vupcounter = 0;
 private shared bool updateTexture = true;
+private shared bool updateCurTexture = true;
 private __gshared uint fps = 35; // average FPS
 private __gshared bool showShaderWarnings = false;
+
+private __gshared int mcurX = 0, mcurY = 0;
+private __gshared int mhotX = 0, mhotY = 0;
+private __gshared int mcurHidden = 1;
 
 private shared bool vWantMotionEvents = false;
 private shared bool vWantCharEvents = false;
@@ -92,6 +105,83 @@ shared static this () {
 }
 
 
+///
+public void kgiHideCursor () {
+  bool csc;
+  {
+    consoleLock();
+    scope(exit) consoleUnlock();
+    ++mcurHidden;
+    csc = (vbwin !is null && (mcurHidden == -1 || mcurHidden == 1));
+  }
+  if (csc) vbwin.showCursor();
+}
+
+
+///
+public void kgiShowCursor () {
+  bool csc;
+  {
+    consoleLock();
+    scope(exit) consoleUnlock();
+    --mcurHidden;
+    csc = (vbwin !is null && mcurHidden == 0);
+  }
+  if (csc) vbwin.hideCursor();
+}
+
+
+///
+public void kgiSetCursor (int wdt, int hgt, const(VColor)[] img, int hotx=0, int hoty=0) nothrow @trusted @nogc {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  mhotX = hotx;
+  mhotY = hoty;
+  if (vcurbuf is null) return;
+  atomicStore(updateCurTexture, true);
+  vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
+  if (wdt < 1 || hgt < 1) return;
+  foreach (immutable dy; 0..64) {
+    if (dy >= hgt) break;
+    foreach (immutable dx; 0..64) {
+      if (dx >= wdt) break;
+      uint sp = dy*wdt+dx;
+      if (sp >= img.length) break;
+      vcurbuf[dy*kgiMaxCurW+dx] = img.ptr[sp];
+    }
+  }
+}
+
+
+///
+public void kgiSetDefaultCursor () nothrow @trusted @nogc {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  mhotX = 2;
+  mhotY = 0;
+  if (vcurbuf is null) return;
+  atomicStore(updateCurTexture, true);
+  vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
+  foreach (immutable dy; 0..defaultCurHeight) {
+    foreach (immutable dx; 0..defaultCurWidth) {
+      uint sp = dy*defaultCurWidth+dx;
+      vcurbuf[dy*kgiMaxCurW+dx] = defaultCurPal.ptr[defaultCurImg.ptr[sp]];
+    }
+  }
+}
+
+
+public void kgiSetBlankCursor () nothrow @trusted @nogc {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  atomicStore(updateCurTexture, true);
+  mhotX = mhotY = 0;
+  if (vcurbuf is null) return;
+  vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 ///
 public struct KGIEvent {
   enum Type { None, Key, Mouse, Char, Close }
@@ -256,7 +346,7 @@ public void kgiDeinit () {
 private void kgiThread (Tid starterTid) {
   try {
     vbwin = new SimpleWindow(vbufW*(blit2x ? 2 : 1), vbufH*(blit2x ? 2 : 1), kgiTitle, OpenGlOptions.yes, Resizablity.fixedSize);
-    //vbwin.hideCursor();
+    if (mcurHidden == 0) vbwin.hideCursor();
 
     vbwin.redrawOpenGlScene = delegate () {
       glgfxBlit();
@@ -338,6 +428,9 @@ private void kgiThread (Tid starterTid) {
         if (atomicLoad(updateTexture) || isConsoleVisible || oldconvis) {
           glgfxUpdateTexture();
           vbwin.redrawOpenGlSceneNow();
+        } else if (mcurHidden == 0) {
+          glgfxUpdateCurTexture();
+          vbwin.redrawOpenGlSceneNow();
         }
       },
       delegate (KeyEvent event) {
@@ -349,6 +442,8 @@ private void kgiThread (Tid starterTid) {
       },
       delegate (MouseEvent event) {
         if (vbwin.closed) return;
+        mcurX = event.x/(blit2x ? 2 : 1);
+        mcurY = event.y/(blit2x ? 2 : 1);
         if (event.type == MouseEventType.motion && !kgiMotionEvents) return;
         if (blit2x) { event.x /= 2; event.y /= 2; }
         kgiPushEvent(event);
@@ -438,6 +533,10 @@ public bool kgiInitEx (int awdt, int ahgt, string title, bool a2x, uint afps) {
   if (vbuf is null) assert(0, "KGI: out of memory");
   vbuf[0..awdt*ahgt] = 0;
 
+  vcurbuf = cast(typeof(vcurbuf))malloc(vcurbuf[0].sizeof*kgiMaxCurW*kgiMaxCurH);
+  if (vbuf is null) assert(0, "KGI: out of memory");
+  vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
+
   vbufW = awdt;
   vbufH = ahgt;
   blit2x = a2x;
@@ -499,14 +598,17 @@ private uint glgfxCompileShader (const(char)[] src) nothrow @trusted @nogc {
 private void glgfxInitTexture () nothrow @trusted @nogc {
   import iv.glbinds;
 
-  if (vbTexId) { glDeleteTextures(1, &vbTexId); vbTexId = 0; }
+  //if (vbTexId) { glDeleteTextures(1, &vbTexId); vbTexId = 0; }
 
   enum wrapOpt = GL_REPEAT;
   enum filterOpt = GL_NEAREST; //GL_LINEAR;
   enum ttype = GL_UNSIGNED_BYTE;
 
   glGenTextures(1, &vbTexId);
-  if (vbTexId == 0) assert(0, "can't create cmdcon texture");
+  if (vbTexId == 0) assert(0, "can't create kgi texture");
+
+  glGenTextures(1, &vbCurTexId);
+  if (vbTexId == 0) assert(0, "can't create kgicursor texture");
 
   GLint gltextbinding;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
@@ -525,6 +627,21 @@ private void glgfxInitTexture () nothrow @trusted @nogc {
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, TexType, GL_UNSIGNED_BYTE, vbuf);
+
+
+  glBindTexture(GL_TEXTURE_2D, vbCurTexId);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterOpt);
+  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+  //GLfloat[4] bclr = 0.0;
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
+
+  //static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kgiMaxCurW, kgiMaxCurH, 0, TexType, GL_UNSIGNED_BYTE, vcurbuf);
 }
 
 
@@ -539,8 +656,27 @@ private void glgfxUpdateTexture () nothrow @trusted @nogc {
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
   glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, TexType, GL_UNSIGNED_BYTE, vbuf);
-
   atomicStore(updateTexture, false);
+
+  if (atomicLoad(updateCurTexture)) {
+    glTextureSubImage2D(vbCurTexId, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+    atomicStore(updateCurTexture, false);
+  }
+}
+
+
+private void glgfxUpdateCurTexture () nothrow @trusted @nogc {
+  import iv.glbinds;
+
+  if (atomicLoad(updateCurTexture)) {
+    consoleLock();
+    scope(exit) consoleUnlock();
+
+    static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
+    glTextureSubImage2D(vbCurTexId, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+
+    atomicStore(updateCurTexture, false);
+  }
 }
 
 
@@ -624,6 +760,24 @@ private void glgfxBlit () nothrow @trusted @nogc {
     glTexCoord2f(1.0f, 1.0f); glVertex2i(w, h); // bottom-right
     glTexCoord2f(0.0f, 1.0f); glVertex2i(x, h); // bottom-left
   glEnd();
+
+  if (mcurHidden == 0) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBindTexture(GL_TEXTURE_2D, vbCurTexId);
+
+    int cx0 = mcurX-mhotX;
+    int cy0 = mcurY-mhotY;
+
+    glBegin(GL_QUADS);
+      glTexCoord2f(0.0f, 0.0f); glVertex2i(cx0, cy0); // top-left
+      glTexCoord2f(1.0f, 0.0f); glVertex2i(cx0+kgiMaxCurW, cy0); // top-right
+      glTexCoord2f(1.0f, 1.0f); glVertex2i(cx0+kgiMaxCurW, cy0+kgiMaxCurH); // bottom-right
+      glTexCoord2f(0.0f, 1.0f); glVertex2i(cx0, cy0+kgiMaxCurH); // bottom-left
+    glEnd();
+
+    glDisable(GL_BLEND);
+  }
 }
 
 
@@ -1940,3 +2094,45 @@ void main () {
   gl_Position = gl_ProjectionMatrix*gl_Vertex;
 }
 };
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// default cursor (hi, Death Track!)
+private enum defaultCurWidth = 17;
+private enum defaultCurHeight = 23;
+private static immutable ubyte[defaultCurWidth*defaultCurHeight] defaultCurImg = [
+  0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,0,3,2,2,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,1,3,3,2,2,0,0,0,0,0,0,0,0,0,0,0,
+  1,1,3,3,4,2,2,0,0,0,0,0,0,0,0,0,0,
+  1,1,3,3,4,4,2,2,0,0,0,0,0,0,0,0,0,
+  1,1,3,3,4,4,4,2,2,0,0,0,0,0,0,0,0,
+  1,1,3,3,4,4,4,4,2,2,0,0,0,0,0,0,0,
+  1,1,3,3,4,4,4,5,6,2,2,0,0,0,0,0,0,
+  1,1,3,3,4,4,5,6,7,5,2,2,0,0,0,0,0,
+  1,1,3,3,4,5,6,7,5,4,5,2,2,0,0,0,0,
+  1,1,3,3,5,6,7,5,4,5,6,7,2,2,0,0,0,
+  1,1,3,3,6,7,5,4,5,6,7,7,7,2,2,0,0,
+  1,1,3,3,7,5,4,5,6,7,7,7,7,7,2,2,0,
+  1,1,3,3,5,4,5,6,8,8,8,8,8,8,8,8,2,
+  1,1,3,3,4,5,6,3,8,8,8,8,8,8,8,8,8,
+  1,1,3,3,5,6,3,3,1,1,1,1,1,1,1,0,0,
+  1,1,3,3,6,3,3,1,1,1,1,1,1,1,1,0,0,
+  1,1,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,
+  1,1,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,1,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+];
+private static immutable VColor[9] defaultCurPal = [
+  rgbacol(  0,  0,  0,  0),
+  rgbacol(  0,  0,  0,127),
+  rgbacol( 85,255,255,255),
+  rgbacol( 85, 85,255,255),
+  rgbacol(255, 85, 85,255),
+  rgbacol(170,  0,170,255),
+  rgbacol( 85, 85, 85,255),
+  rgbacol(  0,  0,  0,255),
+  rgbacol(  0,  0,170,255),
+];
