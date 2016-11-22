@@ -35,6 +35,8 @@ import iv.glbinds;
 
 version(BigEndian) static assert(0, "sorry, big-endian platforms aren't supported yet");
 
+version(aliced) {} else private alias usize = size_t;
+
 version(glkgi_rgba) {
   public enum KGIRGBA = true;
 } else version(glkgi_bgra) {
@@ -116,7 +118,7 @@ private __gshared uint evbufused;
 public bool kgiHasEvent () {
   consoleLock();
   scope(exit) consoleUnlock();
-  atomicFence();
+  version(LDC) {} else atomicFence();
   if (vupcounter) atomicStore(updateTexture, true); // just in case
   return (evbufused > 0 || vbwin is null); // no vbwin --> always has Quit
 }
@@ -126,7 +128,7 @@ public bool kgiHasEvent () {
 public KGIEvent kgiPeekEvent () {
   consoleLock();
   scope(exit) consoleUnlock();
-  atomicFence();
+  version(LDC) {} else atomicFence();
   if (vupcounter) atomicStore(updateTexture, true); // just in case
   if (evbufused > 0) return evbuf[0];
   if (vbwin is null) return KGIEvent(KGIEvent.Type.Close);
@@ -138,7 +140,7 @@ public KGIEvent kgiPeekEvent () {
 public KGIEvent kgiGetEvent () {
   import core.thread;
   import core.time;
-  atomicFence();
+  version(LDC) {} else atomicFence();
   if (vupcounter) atomicStore(updateTexture, true); // just in case
   for (;;) {
     {
@@ -532,7 +534,7 @@ private void glgfxUpdateTexture () nothrow @trusted @nogc {
   consoleLock();
   scope(exit) consoleUnlock();
 
-  atomicFence();
+  version(LDC) {} else atomicFence();
   vupcounter = 0;
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
@@ -769,7 +771,7 @@ void putPixel (int xx, int yy, VColor col) {
     } else {
       *da = col;
     }
-    atomicFence();
+    version(LDC) {} else atomicFence();
     ++vupcounter;
   }
 }
@@ -787,7 +789,7 @@ void setPixel (int xx, int yy, VColor col) {
   if (xx >= 0 && yy >= 0 && xx < vbufW && yy < vbufH) {
     uint* da = vbuf+yy*vbufW+xx;
     *da = col;
-    atomicFence();
+    version(LDC) {} else atomicFence();
     ++vupcounter;
   }
 }
@@ -802,7 +804,7 @@ VColor getPixel (int xx, int yy) {
 // ////////////////////////////////////////////////////////////////////////// //
 void cls (VColor col) {
   vbuf[0..vbufW*vbufH] = col;
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -836,7 +838,7 @@ void drawRect (int x, int y, int w, int h, immutable VColor col) {
       if (h > 1) putPixelIntr(xx, y+h-1, col);
     }
   }
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -861,7 +863,7 @@ void fillRect (int x, int y, int w, int h, immutable VColor col) {
       }
     }
   }
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -995,7 +997,7 @@ void drawLine(bool lastPoint=true) (int x0, int y0, int x1, int y1, immutable VC
     }
     xd += stx;
   }
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -1021,7 +1023,7 @@ void drawCircle (int cx, int cy, int radius, VColor clr) @trusted {
       if (error >= 0) { --x; error -= x*2; }
     }
     plot4points(cx, cy, x, y, clr);
-    atomicFence();
+    version(LDC) {} else atomicFence();
     ++vupcounter;
   }
 }
@@ -1047,7 +1049,7 @@ void fillCircle (int cx, int cy, int radius, VColor clr) @trusted {
         error -= x;
       }
     }
-    atomicFence();
+    version(LDC) {} else atomicFence();
     ++vupcounter;
   }
 }
@@ -1082,7 +1084,7 @@ void drawEllipse (int x0, int y0, int w, int h, VColor clr) @trusted {
     putPixelIntr(x0-1, ++y0, clr); // complete tip of ellipse
     putPixelIntr(x0-1, --y1, clr);
   }
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -1114,7 +1116,7 @@ void fillEllipse (int x0, int y0, int w, int h, VColor clr) @trusted {
     putPixelIntr(x0-1, ++y0, clr); // complete tip of ellipse
     putPixelIntr(x0-1, --y1, clr);
   }
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -1152,7 +1154,7 @@ void drawCharWdt(string type="msx") (int x, int y, int wdt, int shift, char ch, 
       b <<= 1;
     }
   }
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -1212,7 +1214,7 @@ void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char c
       if (auto t = bmp[dy][dx]) putPixelIntr(x+dx, y+dy, (t == 1 ? fgcol : outcol));
     }
   }
-  atomicFence();
+  version(LDC) {} else atomicFence();
   ++vupcounter;
 }
 
@@ -1285,7 +1287,7 @@ int drawStrProp(string type="msx") (int x, int y, const(char)[] str, VColor fgco
       if (!isTransparent(bgcol)) {
         foreach (int dy; 0..8) putPixelIntr(x, y+dy, bgcol);
         // no need to advance vupcounter, 'cause `drawCharProp` will do it
-        //atomicFence();
+        //version(LDC) {} else atomicFence();
         //++vupcounter;
       }
       ++x;
@@ -1322,12 +1324,12 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
     Scanned = 0x80,
   }
 
-  static ubyte getmark (int x, int y) {
+  static ubyte getmark (int x, int y) nothrow @trusted @nogc {
     pragma(inline, true);
     return cast(ubyte)(x >= 0 && y >= 0 && x < vbufW && y < vbufH ? vbuf[y*vbufW+x]>>vlAShift : Scanned);
   }
 
-  static void setmark (int x, int y, ubyte mark) {
+  static void setmark (int x, int y, ubyte mark) nothrow @trusted @nogc {
     pragma(inline, true);
     if (x >= 0 && y >= 0 && x < vbufW && y < vbufH) vbuf[y*vbufW+x] = (vbuf[y*vbufW+x]&vlColorMask)|(mark<<vlAShift);
   }
@@ -1373,7 +1375,7 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
         if (mk&Seed) {
           // done, fill pixels (you can set Fill flag and check all pixels here)
           // set update flag
-          atomicFence();
+          version(LDC) {} else atomicFence();
           ++vupcounter;
           return;
         }
