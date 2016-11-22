@@ -1513,7 +1513,10 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
     auto mk = getmark(x, y);
     if (mk == 0) {
       // not yet visited, check for border
-      if (isBorder(x, y)) { mk = Scanned; setmark(x, y, Scanned); }
+      if (isBorder(x, y)) {
+        mk = Scanned;
+        setmark(x, y, Scanned);
+      }
     }
     if ((mk&Scanned) == 0) {
       // not scanned
@@ -1528,10 +1531,17 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
         mk = getmark(x, y);
         if (mk&Seed) {
           // done, fill pixels (you can set Fill flag and check all pixels here)
-          // set update flag
-          version(LDC) {} else atomicFence();
-          ++vupcounter;
-          return;
+          if ((mk&DirMask) == 3) {
+            // set update flag
+            version(LDC) {} else atomicFence();
+            ++vupcounter;
+            return;
+          }
+          // remember new dir
+          ++mk;
+          setmark(x, y, mk);
+          dir = mk&DirMask;
+          break; // next pixel
         }
         ++dir;
         if ((mk&DirMask) == (dir^1)) ++dir; // skip entry-direction
