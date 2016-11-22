@@ -200,7 +200,7 @@ public void kgiPushEvent (dchar ch) {
 
 
 /// remove all keypresses from input queue
-void kgiKeyFlush () {
+public void kgiKeyFlush () {
   uint sidx = 0, didx = 0;
   consoleLock();
   scope(exit) consoleUnlock();
@@ -216,7 +216,7 @@ void kgiKeyFlush () {
 
 
 /// wait for keypress (and eat it)
-void kgiWaitKey () {
+public void kgiWaitKey () {
   for (;;) {
     auto ev = kgiGetEvent();
     if (ev.isClose) {
@@ -229,6 +229,17 @@ void kgiWaitKey () {
     if (!ev.isKey) continue;
     if (!ev.k.pressed) continue;
     break;
+  }
+}
+
+
+/// flush drawing buffer (copy it to actual screen)
+public void kgiFlush () {
+  atomicStore(updateTexture, true);
+  while (atomicLoad(updateTexture)) {
+    import core.thread;
+    import core.time;
+    Thread.sleep(1.msecs);
   }
 }
 
