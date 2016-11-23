@@ -1539,9 +1539,9 @@ private:
   PostChangeHookCB hookAfterChange;
 
 public:
-  this (string aname, string ahelp=null) { super(aname, ahelp); }
+  this (string aname, string ahelp=null) { super(aname, ahelp); } ///
 
-  /// replaces current attributes
+  /// replaces current attributes (can't set `ConVarAttr.User` w/o !true)
   final void setAttrs(bool any=false) (const(ConVarAttr)[] attrs...) pure nothrow @safe @nogc {
     mAttrs = 0;
     foreach (const ConVarAttr a; attrs) {
@@ -1552,19 +1552,19 @@ public:
     }
   }
 
-  final ConVarBase setBeforeHook (PreChangeHookCB cb) { hookBeforeChange = cb; return this; }
-  final ConVarBase setAfterHook (PostChangeHookCB cb) { hookAfterChange = cb; return this; }
-
+  final ConVarBase setBeforeHook (PreChangeHookCB cb) { hookBeforeChange = cb; return this; } /// this can be chained
+  final ConVarBase setAfterHook (PostChangeHookCB cb) { hookAfterChange = cb; return this; } /// this can be chained
 
   @property pure nothrow @safe @nogc final {
-    PreChangeHookCB beforeHook (void) { return hookBeforeChange; }
-    PostChangeHookCB afterHook (void) { return hookAfterChange; }
+    PreChangeHookCB beforeHook (void) { return hookBeforeChange; } ///
+    PostChangeHookCB afterHook (void) { return hookAfterChange; } ///
 
-    void beforeHook (PreChangeHookCB cb) { hookBeforeChange = cb; }
-    void afterHook (PostChangeHookCB cb) { hookAfterChange = cb; }
+    void beforeHook (PreChangeHookCB cb) { hookBeforeChange = cb; } ///
+    void afterHook (PostChangeHookCB cb) { hookAfterChange = cb; } ///
 
-    uint attrs () const { pragma(inline, true); return mAttrs; } /// attributes (see ConVarAttr enum)
-    /// replaces current attributes
+    /// attributes (see ConVarAttr enum)
+    uint attrs () const { pragma(inline, true); return mAttrs; }
+    /// replaces current attributes (can't set/remove `ConVarAttr.User` w/o !true)
     void attrs(bool any=false) (uint v) {
       pragma(inline, true);
       static if (any) mAttrs = v; else mAttrs = v&~(ConVarAttr.User);
@@ -1584,9 +1584,9 @@ public:
     bool attrUser () const { pragma(inline, true); return ((mAttrs&ConVarAttr.User) != 0); } ///
   }
 
-  abstract void printValue ();
-  abstract bool isString () const pure nothrow @nogc;
-  abstract ConString strval () nothrow @nogc;
+  abstract void printValue (); /// print variable value to console
+  abstract bool isString () const pure nothrow @nogc; /// is this string variable?
+  abstract ConString strval () nothrow @nogc; /// get string value (for any var)
 
   /// get variable value, converted to the given type (if it is possible).
   @property T value(T) () nothrow @nogc {
@@ -1706,11 +1706,7 @@ final class ConVar(T) : ConVarBase {
   }
 
   override bool isString () const pure nothrow @nogc {
-    static if (is(T : ConString)) {
-      return true;
-    } else {
-      return false;
-    }
+    static if (is(T : ConString)) return true; else return false;
   }
 
   final private T getv () nothrow @nogc {
@@ -1847,41 +1843,38 @@ final class ConVar(T) : ConVarBase {
   }
 
   override void printValue () {
-    //auto wrt = ConWriter;
-    alias wrt = conwriter;
     static if (is(T == enum)) {
       auto vx = getv();
       alias UT = XUQQ!T;
       foreach (string mname; __traits(allMembers, UT)) {
         if (__traits(getMember, UT, mname) == vx) {
-          wrt(name);
-          wrt(" ");
+          conwrite(name);
+          conwrite(" ");
           //writeQuotedString(mname);
-          wrt(mname);
-          wrt("\n");
+          conwrite(mname);
+          conwrite("\n");
           return;
         }
       }
       //FIXME: doubles?
       conwriteln(name, " ", cast(ulong)getv());
     } else static if (is(T : ConString)) {
-      wrt(name);
-      wrt(" ");
+      conwrite(name);
+      conwrite(" ");
       writeQuotedString(getv());
-      wrt("\n");
-      //wrt(null); // flush
+      conwrite("\n");
     } else static if (is(XUQQ!T == char)) {
-      wrt(name);
-      wrt(" ");
+      conwrite(name);
+      conwrite(" ");
       char[1] st = getv();
       if (st[0] <= ' ' || st[0] == 127 || st[0] == '"' || st[0] == '\\') {
         writeQuotedString(st[]);
       } else {
-        wrt(`"`);
-        wrt(st[]);
-        wrt(`"`);
+        conwrite(`"`);
+        conwrite(st[]);
+        conwrite(`"`);
       }
-      wrt("\n");
+      conwrite("\n");
     } else static if (is(T == bool)) {
       conwriteln(name, " ", (getv() ? "tan" : "ona"));
     } else {
@@ -2382,13 +2375,10 @@ public void conExecute (ConString s) {
       //conwriteln("'", s, "'");
       (*cmd).exec(s);
     } else {
-      //auto wrt = ConWriter;
-      alias wrt = conwriter;
-      wrt("command ");
+      conwrite("command ");
       ConCommand.writeQuotedString(w);
-      wrt(" not found");
-      wrt("\n");
-      //wrt(null); // flush
+      conwrite(" not found");
+      conwrite("\n");
     }
   } catch (Exception) {
     conwriteln("error executing console command:\n ", s);
@@ -2516,25 +2506,23 @@ public class ConCommandEcho : ConCommand {
     if (checkHelp(cmdline)) { showHelp; return; }
     if (!hasArgs(cmdline)) return;
     bool needSpace = false;
-    //auto wrt = ConWriter;
-    alias wrt = conwriter;
     for (;;) {
       auto w = getWord(cmdline);
       if (w is null) break;
-      if (needSpace) wrt(" "); else needSpace = true;
+      if (needSpace) conwrite(" "); else needSpace = true;
       while (w.length) {
         usize pos = 0;
         while (pos < w.length && w.ptr[pos] != '$') ++pos;
         if (w.length-pos > 1 && w.ptr[pos+1] == '$') {
-          wrt(w[0..pos+1]);
+          conwrite(w[0..pos+1]);
           w = w[pos+2..$];
         } else if (w.length-pos <= 1) {
-          wrt(w);
+          conwrite(w);
           break;
         } else {
           // variable name
           ConString vname;
-          if (pos > 0) wrt(w[0..pos]);
+          if (pos > 0) conwrite(w[0..pos]);
           ++pos;
           if (w.ptr[pos] == '{') {
             w = w[pos+1..$];
@@ -2561,23 +2549,22 @@ public class ConCommandEcho : ConCommand {
             if (auto cc = vname in cmdlist) {
               if (auto cv = cast(ConVarBase)(*cc)) {
                 auto v = cv.strval;
-                wrt(v);
+                conwrite(v);
               } else {
-                wrt("${!");
-                wrt(vname);
-                wrt("}");
+                conwrite("${!");
+                conwrite(vname);
+                conwrite("}");
               }
             } else {
-              wrt("${");
-              wrt(vname);
-              wrt("}");
+              conwrite("${");
+              conwrite(vname);
+              conwrite("}");
             }
           }
         }
       }
     }
-    wrt("\n");
-    //wrt(null); // flush
+    conwrite("\n");
   }
 }
 
