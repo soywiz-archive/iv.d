@@ -2055,7 +2055,7 @@ uint compileShaders (const(char)[] src) nothrow @trusted @nogc {
 }
 
 
-// returns 0 or programid
+// returns 0 or shaderid
 uint createShader(uint type) (const(char)[] src) nothrow @trusted @nogc {
   import iv.glbinds;
 
