@@ -32,7 +32,7 @@ version(aliced) {} else { private alias usize = size_t; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared uint winScale = 0;
+__gshared uint conScale = 0;
 __gshared uint scrwdt, scrhgt;
 
 
@@ -136,12 +136,12 @@ private void initConsole () {
   enum ascrwdt = 800;
   enum ascrhgt = 600;
   enum ascale = 1;
-  if (winScale != 0) assert(0, "cmdcon already initialized");
+  if (conScale != 0) assert(0, "cmdcon already initialized");
   if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) assert(0, "invalid cmdcon dimensions");
   if (ascale < 1 || ascale > 64) assert(0, "invalid cmdcon scale");
   scrwdt = ascrwdt;
   scrhgt = ascrhgt;
-  winScale = ascale;
+  conScale = ascale;
   conRegFunc!((ConString fname, bool silent=false) {
     try {
       auto fl = openFileEx(fname);
@@ -213,7 +213,7 @@ __gshared uint convbufTexId = 0;
 public void glconInit (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return;
   if (ascale < 1 || ascale > 64) return;
-  winScale = ascale;
+  conScale = ascale;
   if (scrwdt != ascrwdt || scrhgt != ascrhgt || convbuf is null) {
     import core.stdc.stdlib : realloc;
 
@@ -300,8 +300,8 @@ public void glconDraw () {
 
     enum x = 0;
     int y = 0;
-    int w = scrwdt*winScale;
-    int h = scrhgt*winScale;
+    int w = scrwdt*conScale;
+    int h = scrhgt*conScale;
 
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
     glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
@@ -327,7 +327,7 @@ public void glconDraw () {
     //glDisable(GL_BLEND);
     glDisable(GL_STENCIL_TEST);
 
-    int ofs = (scrhgt-rConsoleHeight)*winScale;
+    int ofs = (scrhgt-rConsoleHeight)*conScale;
     y -= ofs;
     h -= ofs;
     float alpha = rConAlpha;
