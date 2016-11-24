@@ -263,7 +263,7 @@ public void glconDraw () {
     consoleLock();
     scope(exit) consoleUnlock();
 
-    renderConsole();
+    auto updatetex = renderConsole();
 
     GLint glmatmode;
     GLint gltextbinding;
@@ -296,7 +296,7 @@ public void glconDraw () {
       glViewport(glviewport.ptr[0], glviewport.ptr[1], glviewport.ptr[2], glviewport.ptr[3]);
     }
 
-    glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+    if (updatetex) glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
 
     enum x = 0;
     int y = 0;
@@ -575,8 +575,8 @@ __gshared int prevCurX = -1;
 __gshared int prevIXOfs = 0;
 
 
-void renderConsole () nothrow @trusted @nogc {
-  if (conLastChange == cbufLastChange && conLastIBChange == conInputLastChange) return;
+bool renderConsole () nothrow @trusted @nogc {
+  if (conLastChange == cbufLastChange && conLastIBChange == conInputLastChange) return false;
 
   enum XOfs = 0;
   immutable sw = scrwdt, sh = scrhgt;
@@ -692,6 +692,8 @@ void renderConsole () nothrow @trusted @nogc {
     putLine(line);
     if (y+conCharHeight <= 0) break;
   }
+
+  return true;
 }
 
 
