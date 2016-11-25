@@ -16,7 +16,7 @@
  */
 module iv.egtui.dialogs;
 
-import iv.rawtty2;
+import iv.rawtty;
 import iv.strex;
 import iv.vfs.io;
 

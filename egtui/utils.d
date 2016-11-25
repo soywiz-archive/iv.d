@@ -20,7 +20,7 @@
 module iv.egtui.utils;
 
 import iv.strex;
-import iv.rawtty2;
+import iv.rawtty;
 
 import iv.egtui.types;
 

@@ -23,7 +23,7 @@ module iv.tuing.controls.label;
 import iv.eventbus;
 import iv.flexlayout;
 import iv.strex;
-import iv.rawtty2;
+import iv.rawtty;
 
 import iv.tuing.events;
 import iv.tuing.tty;

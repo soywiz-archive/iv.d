@@ -16,7 +16,7 @@
  */
 module iv.egeditor.editor;
 
-import iv.rawtty2 : koi2uni, uni2koi;
+import iv.rawtty : koi2uni, uni2koi;
 import iv.strex;
 import iv.utfutil;
 import iv.vfs;
@@ -1064,8 +1064,7 @@ public:
     if (aIntoFile) {
       initTempFD();
       if (tmpfd < 0) {
-        import iv.rawtty2;
-        //version(aliced) ttyBeep();
+        version(aliced) { import iv.rawtty2; ttyBeep(); }
       }
     }
   }

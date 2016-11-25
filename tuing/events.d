@@ -21,7 +21,7 @@ module iv.tuing.events;
 
 import iv.eventbus;
 import iv.flexlayout : FuiPoint;
-import iv.rawtty2 : TtyEvent;
+import iv.rawtty : TtyEvent;
 
 import iv.tuing.controls.button : FuiCheckBox, FuiRadio;
 import iv.tuing.controls.listbox : FuiListBox;
@@ -76,7 +76,7 @@ public class FuiEventInactive : FuiEventActiveStateChanged { this (FuiControl ad
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// all other rawtty2 events
+// all other rawtty events
 public class FuiEventKey : FuiEvent {
   TtyEvent key;
   this (FuiControl adest, TtyEvent akey) { key = akey; super(null, adest); }

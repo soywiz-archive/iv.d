@@ -17,7 +17,7 @@
 import iv.strex;
 import iv.vfs.io;
 
-import iv.rawtty2;
+import iv.rawtty;
 import iv.egtui;
 import iv.egtui.utils;
 

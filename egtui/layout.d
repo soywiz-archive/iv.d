@@ -20,7 +20,7 @@
 module iv.egtui.layout;
 
 import iv.strex;
-import iv.rawtty2;
+import iv.rawtty;
 
 import iv.egtui.types;
 
@@ -676,7 +676,7 @@ private:
             if (ev.mpress || ev.mrelease) {
               newButtonState(ev.button-TtyEvent.MButton.First, ev.mpress);
             } else if (ev.mwheel) {
-              // rawtty2 workaround
+              // rawtty workaround
               newButtonState(ev.button-TtyEvent.MButton.First, true);
               newButtonState(ev.button-TtyEvent.MButton.First, false);
             }

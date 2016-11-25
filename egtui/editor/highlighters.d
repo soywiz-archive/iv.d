@@ -17,7 +17,7 @@
 module iv.egtui.editor.highlighters;
 private:
 
-import iv.rawtty2;
+import iv.rawtty;
 import iv.strex;
 import iv.egtui.tty;
 import iv.egeditor.editor;

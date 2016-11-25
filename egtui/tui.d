@@ -20,7 +20,7 @@
 module iv.egtui.tui;
 
 import iv.strex;
-import iv.rawtty2;
+import iv.rawtty;
 
 import iv.egtui.editor;
 public import iv.egtui.layout;

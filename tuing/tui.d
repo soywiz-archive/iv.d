@@ -22,7 +22,7 @@ module iv.tuing.tui;
 import iv.eventbus;
 import iv.flexlayout;
 import iv.strex;
-import iv.rawtty2;
+import iv.rawtty;
 import iv.weakref;
 
 import iv.tuing.types;
@@ -510,7 +510,7 @@ public:
         if (key.mpress || key.mrelease) {
           newButtonState(key.button-TtyEvent.MButton.First, key.mpress);
         } else if (key.mwheel) {
-          // rawtty2 workaround: send press and release
+          // rawtty workaround: send press and release
           newButtonState(key.button-TtyEvent.MButton.First, true);
           newButtonState(key.button-TtyEvent.MButton.First, false);
         }

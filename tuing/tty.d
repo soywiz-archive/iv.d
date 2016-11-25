@@ -18,7 +18,7 @@
 module iv.tuing.tty;
 private:
 
-public import iv.rawtty2;
+public import iv.rawtty;
 import iv.strex;
 import iv.utfutil;
 

@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // linux tty utilities
-module iv.rawtty2;
+module iv.rawtty;
 
 import core.sys.posix.termios : termios;
 import iv.strex : strEquCI;

@@ -18,7 +18,7 @@
  */
 module iv.editline;
 
-import iv.rawtty2;
+import iv.rawtty;
 import iv.strex;
 
 

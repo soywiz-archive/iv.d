@@ -18,7 +18,7 @@ module iv.egtui.editor.ttyeditor;
 
 import std.datetime : SysTime;
 
-import iv.rawtty2;
+import iv.rawtty;
 import iv.srex;
 import iv.strex;
 import iv.utfutil;
