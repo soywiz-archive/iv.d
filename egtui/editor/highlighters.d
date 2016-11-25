@@ -125,7 +125,7 @@ public __gshared EditorHL getHiglighterFor (const(char)[] ext, const(char)[] ful
     if (toksc is null) toksc = new EdHiTokensC();
     return new EditorHLExt(toksc);
   }
-  if (ext.strEquCI(".frag") || ext.strEquCI(".vert")) {
+  if (ext.strEquCI(".frag") || ext.strEquCI(".vert") || ext.strEquCI(".shad") || ext.strEquCI(".shader")) {
     __gshared EdHiTokensFrag tokf;
     if (tokf is null) tokf = new EdHiTokensFrag();
     return new EditorHLExt(tokf);

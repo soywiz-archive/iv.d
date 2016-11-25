@@ -1983,7 +1983,7 @@ void modalDialogSaveScreen () {
 // redraw all dialogs
 void modalDialogDraw () {
   modalDialogSaveScreen();
-  foreach_reverse (immutable idx, FuiContext ctx; modalStack) {
+  foreach (immutable idx, FuiContext ctx; modalStack) {
     if (!ctx.valid) continue;
     ctx.drawShadow();
     if (idx == 0 && (windowMovingMouse || windowMovingKeys)) ctx.dialogMoving = true;

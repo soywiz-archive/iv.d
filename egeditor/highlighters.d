@@ -1355,12 +1355,38 @@ public class EdHiTokensFrag : EdHiTokens {
     addToken("gl_MultiTexCoord6", HiInternal);
     addToken("gl_MultiTexCoord7", HiInternal);
 
+    addToken("layout", HiInternal);
+    addToken("location", HiInternal);
+
     addToken("void", HiType);
     addToken("int", HiType);
+    addToken("bool", HiType);
+    addToken("unsigneg", HiType);
     addToken("float", HiType);
     addToken("double", HiType);
+    addToken("vec1", HiType);
     addToken("vec2", HiType);
     addToken("vec3", HiType);
     addToken("vec4", HiType);
+    addToken("bvec1", HiType);
+    addToken("bvec2", HiType);
+    addToken("bvec3", HiType);
+    addToken("bvec4", HiType);
+    addToken("ivec1", HiType);
+    addToken("ivec2", HiType);
+    addToken("ivec3", HiType);
+    addToken("ivec4", HiType);
+    addToken("uvec1", HiType);
+    addToken("uvec2", HiType);
+    addToken("uvec3", HiType);
+    addToken("uvec4", HiType);
+    addToken("dvec1", HiType);
+    addToken("dvec2", HiType);
+    addToken("dvec3", HiType);
+    addToken("dvec4", HiType);
+
+    addToken("in", HiSpecial);
+    addToken("out", HiSpecial);
+    addToken("inout", HiSpecial);
   }
 }
