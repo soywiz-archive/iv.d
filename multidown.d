@@ -118,22 +118,26 @@ struct PBar2 {
     // first write [0] and [1] progress
     usize cpos = min(len[0], len[1]);
     // no cursor
-    write("\x1b[?25l");
+    ttyRawWrite("\x1b[?25l");
     // green
-    write("\r\x1b[0;1;42m", wrt[0..cpos]);
+    ttyRawWrite("\r\x1b[0;1;42m");
+    ttyRawWrite(wrt[0..cpos]);
     if (cpos < len[0]) {
       // haz more [0]
       // magenta
-      write("\x1b[1;45m", wrt[cpos..len[0]]);
+      ttyRawWrite("\x1b[1;45m");
+      ttyRawWrite(wrt[cpos..len[0]]);
       cpos = len[0];
     } else if (cpos < len[1]) {
       // haz more [1]
       // brown
-      write("\x1b[1;43m", wrt[cpos..len[1]]);
+      ttyRawWrite("\x1b[1;43m");
+      ttyRawWrite(wrt[cpos..len[1]]);
       cpos = len[1];
     }
     // what is left is emptiness
-    write("\x1b[0m", wrt[cpos..$]);
+    ttyRawWrite("\x1b[0m");
+    ttyRawWrite(wrt[cpos..$]);
     // and return cursor
     //write("\x1b[K\r\x1b[", text.length+4, "C");
   }
@@ -154,15 +158,15 @@ void cursorToInfoLine (usize tnum) {
     curInfoLine = 0;
   }
   // move cursor to bottom
-  if (curInfoLine) write("\x1b[", curInfoLine, "B");
+  if (curInfoLine) { ttyRawWrite("\x1b["); ttyRawWriteInt(curInfoLine); ttyRawWrite("B"); }
   // add status lines if necessary
   while (prevThreadCount < threadCount) {
     // mark as idle
-    write("\r\x1b[0;1;33mIDLE\x1b[0m\x1b[K\n");
+    ttyRawWrite("\r\x1b[0;1;33mIDLE\x1b[0m\x1b[K\n");
     ++prevThreadCount;
   }
   // move cursor to required line from bottom
-  if (tnum > 0) write("\x1b[", tnum, "A");
+  if (tnum > 0) { ttyRawWrite("\x1b["); ttyRawWriteInt(tnum); ttyRawWrite("A"); }
   curInfoLine = tnum;
 }
 
@@ -170,10 +174,10 @@ void cursorToInfoLine (usize tnum) {
 void removeInfoLines () {
   if (curInfoLine != usize.max) {
     // move cursor to bottom
-    if (curInfoLine) write("\x1b[", curInfoLine, "B");
+    if (curInfoLine) { ttyRawWrite("\x1b["); ttyRawWriteInt(curInfoLine); ttyRawWrite("B"); }
     // erase info lines
-    while (threadCount-- > 1) write("\r\x1b[0m\x1b[K\x1b[A");
-    write("\r\x1b[0m\x1b[K\x1b[?25h");
+    while (threadCount-- > 1) ttyRawWrite("\r\x1b[0m\x1b[K\x1b[A");
+    ttyRawWrite("\r\x1b[0m\x1b[K\x1b[?25h");
   }
 }
 
@@ -201,7 +205,7 @@ void downloadThread (usize tnum, Tid ownerTid) {
     /*
     synchronized {
       cursorToInfoLine(tnum);
-      write("\r\x1b[0;1;33mIDLE\x1b[0m\x1b[K");
+      ttyRawWrite("\r\x1b[0;1;33mIDLE\x1b[0m\x1b[K");
     }
     */
     string url;
@@ -214,7 +218,7 @@ void downloadThread (usize tnum, Tid ownerTid) {
             // url index too big? done with it all
             done = true;
             cursorToInfoLine(tnum);
-            write("\r\x1b[0;1;31mDONE\x1b[0m\x1b[K");
+            ttyRawWrite("\r\x1b[0;1;31mDONE\x1b[0m\x1b[K");
           } else {
             url = urlList[unum];
             utotal = urlList.length;
@@ -251,7 +255,7 @@ void downloadThread (usize tnum, Tid ownerTid) {
         try {
           auto pbar = PBar2(line, atomicLoad(urlDone), utotal);
           //pbar.draw();
-          //write("\r", line, "  0%");
+          //ttyRawWrite("\r", line, "  0%");
           // down it
           int oldPrc = -1, oldPos = -1;
           auto conn = HTTP();
@@ -281,8 +285,7 @@ void downloadThread (usize tnum, Tid ownerTid) {
             }
             if (ok) break;
             if (--retries <= 0) {
-              import iv.writer;
-              errwriteln("\n\n\n\n\x1b[0mFUCK!");
+              ttyRawWrite("\n\n\n\n\x1b[0mFUCK!\n");
               static if (is(typeof(() { import core.exception : ExitError; }()))) {
                 import core.exception : ExitError;
                 throw new ExitError();
@@ -379,7 +382,7 @@ public string downloadAll (uint tcount=4) {
   import core.stdc.signal;
   auto oldh = signal(SIGINT, &sigtermh);
   scope(exit) signal(SIGINT, oldh);
-  scope(exit) { import iv.writer; write("\x1b[?25h"); }
+  scope(exit) { ttyRawWrite("\x1b[?25h"); }
   // do it!
   //auto oldTTYMode = ttySetRaw();
   //scope(exit) ttySetMode(oldTTYMode);
@@ -426,7 +429,7 @@ public string downloadAll (uint tcount=4) {
   stopThreads();
   timer.stop();
   removeInfoLines();
-  { import iv.writer; write("\r\x1b[0m\x1b[K\x1b[?25h"); }
+  { ttyRawWrite("\r\x1b[0m\x1b[K\x1b[?25h"); }
   {
     import std.string : format;
     return format("%s files downloaded; time: %s", atomicLoad(urlDone), timer.toString);

@@ -92,6 +92,33 @@ private __gshared bool ttyIsFuckedFlag = false;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+void ttyRawWrite (const(char)[] str...) nothrow @trusted @nogc {
+  import core.sys.posix.unistd : write;
+  if (str.length) write(1, str.ptr, str.length);
+}
+
+
+void ttyRawWriteInt(T) (T n) nothrow @trusted @nogc if (is(__traits(isIntegral, T)) && !is(T == char) && !is(T == wchar) && !is(T == dchar) && !!is(T == bool) && !!is(T == enum)) {
+  import core.stdc.stdio : snprintf;
+  import core.sys.posix.unistd : write;
+  char[64] buf = void;
+  static if (__traits(isUnsigned, T)) {
+    static if (T.sizeof > 4) {
+      auto len = snprintf(buf.ptr, buf.length, "%llu", n);
+    } else {
+      auto len = snprintf(buf.ptr, buf.length, "%u", cast(uint)n);
+    }
+  } else {
+    static if (T.sizeof > 4) {
+      auto len = snprintf(buf.ptr, buf.length, "%lld", n);
+    } else {
+      auto len = snprintf(buf.ptr, buf.length, "%d", cast(int)n);
+    }
+  }
+  if (len > 0) write(1, buf.ptr, len);
+}
+
+
 void ttyBeep () nothrow @trusted @nogc {
   import core.sys.posix.unistd : write;
   enum str = "\x07";
