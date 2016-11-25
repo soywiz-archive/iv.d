@@ -163,36 +163,38 @@ Action playOgg() () {
     // process keys
     if (ttyWaitKey(200)) {
       auto key = ttyReadKey();
-      switch (key) {
-        case " ":
+      if (key.key != TtyEvent.Key.Char) continue;
+      if (key.ch > 127) continue;
+      switch (cast(char)key.ch) {
+        case ' ':
           tflPaused = !tflPaused;
           break;
-        case "p":
+        case 'p':
           if (auto oc = tflChannelObject("ogg")) {
             auto p = !oc.paused;
             oc.paused = p;
           }
           break;
-        case "q":
+        case 'q':
           tflKillChannel("ogg");
           res = Action.Quit;
           break;
-        case "<":
+        case '<':
           tflKillChannel("ogg");
           res = Action.Prev;
           break;
-        case ">":
+        case '>':
           tflKillChannel("ogg");
           res = Action.Next;
           break;
-        case "9":
+        case '9':
           if (vrVolume > 0) {
             --vrVolume;
             chan.volume = vrVolume;
             forceUp = true;
           }
           break;
-        case "0":
+        case '0':
           if (vrVolume < 255) {
             ++vrVolume;
             chan.volume = vrVolume;
