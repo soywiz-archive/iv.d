@@ -1556,8 +1556,8 @@ public:
   final ConVarBase setAfterHook (PostChangeHookCB cb) { hookAfterChange = cb; return this; } /// this can be chained
 
   @property pure nothrow @safe @nogc final {
-    PreChangeHookCB beforeHook (void) { return hookBeforeChange; } ///
-    PostChangeHookCB afterHook (void) { return hookAfterChange; } ///
+    PreChangeHookCB beforeHook () { return hookBeforeChange; } ///
+    PostChangeHookCB afterHook () { return hookAfterChange; } ///
 
     void beforeHook (PreChangeHookCB cb) { hookBeforeChange = cb; } ///
     void afterHook (PostChangeHookCB cb) { hookAfterChange = cb; } ///
