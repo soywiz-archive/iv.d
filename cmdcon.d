@@ -1646,6 +1646,9 @@ final class ConVar(T) : ConVarBase {
   static if (isIntegral!T) {
     T minv = T.min;
     T maxv = T.max;
+  } else static if (isFloatingPoint!T) {
+    T minv = -T.max;
+    T maxv = T.max;
   }
   static if (!is(T : ConString)) {
     char[256] vbuf;
@@ -1658,7 +1661,7 @@ final class ConVar(T) : ConVarBase {
     super(aname, ahelp);
   }
 
-  static if (isIntegral!T) {
+  static if (isIntegral!T || isFloatingPoint!T) {
     this (T* avptr, T aminv, T amaxv, string aname, string ahelp=null) {
       vptr = avptr;
       minv = aminv;
@@ -2025,7 +2028,9 @@ private enum RegVarMixin(string cvcreate) =
  *   ahelp = help text
  *   attrs = convar attributes (see `ConVarAttr`)
  */
-public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, const(ConVarAttr)[] attrs...) if (isIntegral!(typeof(v)) && isIntegral!T) {
+public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string ahelp, const(ConVarAttr)[] attrs...)
+if ((isIntegral!(typeof(v)) && isIntegral!T) || (isFloatingPoint!(typeof(v)) && (isIntegral!T || isFloatingPoint!T)))
+{
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp)`);
 }
 
