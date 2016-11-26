@@ -1,7 +1,5 @@
 /* coded by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * Understanding is not required. Only obedience.
- * Based on Jet-Set Willy, v1.0.1 by <Florent.Guillaume@ens.fr>
- * Linux port and preliminary sound by jmd@dcs.ed.ac.uk
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
