@@ -280,6 +280,41 @@ nothrow @safe:
     return this;
   }
 
+  static if (dims == 2) {
+    // radians
+    ref auto rotate (float angle) {
+      static if (is(FloatType == float)) {
+        import core.stdc.math : cos=cosf, sin=sinf;
+      } else static if (is(FloatType == double)) {
+        import core.stdc.math : cos, sin;
+      } else {
+        import std.math : cos, sin;
+      }
+      pragma(inline, true);
+      immutable FloatType c = cos(angle);
+      immutable FloatType s = sin(angle);
+      immutable FloatType nx = x*c-y*s;
+      immutable FloatType ny = x*s+y*c;
+      x = nx;
+      y = ny;
+      return this;
+    }
+
+    auto rotated (float angle) const {
+      static if (is(FloatType == float)) {
+        import core.stdc.math : cos=cosf, sin=sinf;
+      } else static if (is(FloatType == double)) {
+        import core.stdc.math : cos, sin;
+      } else {
+        import std.math : cos, sin;
+      }
+      pragma(inline, true);
+      immutable FloatType c = cos(angle);
+      immutable FloatType s = sin(angle);
+      return v2(x*c-y*s, x*s+y*c);
+    }
+  }
+
 const pure:
   auto lerp(VT) (in auto ref VT a, in FloatType t) if (isVector!VT) {
     pragma(inline, true);
