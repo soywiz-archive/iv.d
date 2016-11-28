@@ -1640,3 +1640,272 @@ align(1):
     );
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// very simple (and mostly not tested) 3x3 matrix
+align(1) struct Mat3F(FloatType=VFloat) if (is(FloatType == float) || is(FloatType == double)) {
+align(1):
+
+private:
+  alias m3 = mat3!FloatType;
+  alias v2 = VecN!(2, FloatType);
+  alias v3 = VecN!(3, FloatType);
+
+  enum isVector(VT) = (is(VT == VecN!(2, FloatType)) || is(VT == VecN!(3, FloatType)));
+  enum isVector2(VT) = is(VT == VecN!(2, FloatType));
+  enum isVector3(VT) = is(VT == VecN!(3, FloatType));
+
+private:
+  // 3x3 matrix components
+  FloatType[3*3] m = [
+    1, 0, 0,
+    0, 1, 0,
+    0, 0, 1,
+  ];
+
+public:
+  string toString () const nothrow @trusted {
+    import std.string : format;
+    try {
+      return "0:[%g,%g,%g]\n3:[%g,%g,%g]\n6:[%g,%g,%g]".format(
+        m.ptr[0], m.ptr[1], m.ptr[2],
+        m.ptr[3], m.ptr[4], m.ptr[5],
+        m.ptr[6], m.ptr[7], m.ptr[8],
+      );
+    } catch (Exception) {
+      assert(0);
+    }
+  }
+
+public:
+nothrow @trusted @nogc:
+  this (const(FloatType)[] vals...) {
+    pragma(inline, true);
+    if (vals.length >= 3*3) {
+      m.ptr[0..9] = vals.ptr[0..9];
+    } else {
+      m.ptr[0..9] = 0;
+      m.ptr[0..vals.length] = vals[];
+    }
+  }
+
+  FloatType opIndex (size_t x, size_t y) const {
+    pragma(inline, true);
+    return (x < 3 && y < 3 ? m.ptr[y*3+x] : FloatType.nan);
+  }
+
+  void opIndexAssign (FloatType v, size_t x, size_t y) {
+    pragma(inline, true);
+    if (x < 3 && y < 3) m.ptr[y*3+x] = v;
+  }
+
+  auto opUnary(string op:"-") () const {
+    pragma(inline, true);
+    return m3(
+      -m.ptr[0], -m.ptr[1], -m.ptr[2],
+      -m.ptr[3], -m.ptr[4], -m.ptr[5],
+      -m.ptr[6], -m.ptr[7], -m.ptr[8],
+    );
+  }
+
+  auto opBinary(string op) (in auto ref m3 b) const if (op == "+" || op == "-") {
+    pragma(inline, true);
+    m3 res;
+    mixin("res.m.ptr[0] = m.ptr[0]"~op~"b.m.ptr[0];");
+    mixin("res.m.ptr[1] = m.ptr[1]"~op~"b.m.ptr[1];");
+    mixin("res.m.ptr[2] = m.ptr[2]"~op~"b.m.ptr[2];");
+    mixin("res.m.ptr[3] = m.ptr[3]"~op~"b.m.ptr[3];");
+    mixin("res.m.ptr[4] = m.ptr[4]"~op~"b.m.ptr[4];");
+    mixin("res.m.ptr[5] = m.ptr[5]"~op~"b.m.ptr[5];");
+    mixin("res.m.ptr[6] = m.ptr[6]"~op~"b.m.ptr[6];");
+    mixin("res.m.ptr[7] = m.ptr[7]"~op~"b.m.ptr[7];");
+    mixin("res.m.ptr[8] = m.ptr[8]"~op~"b.m.ptr[8];");
+    return m3;
+  }
+
+  ref auto opOpAssign(string op) (in auto ref m3 b) if (op == "+" || op == "-") {
+    pragma(inline, true);
+    mixin("m.ptr[0]"~op~"=b.m.ptr[0]; m.ptr[1]"~op~"=b.m.ptr[1]; m.ptr[2]"~op~"=b.m.ptr[2];");
+    mixin("m.ptr[3]"~op~"=b.m.ptr[3]; m.ptr[4]"~op~"=b.m.ptr[4]; m.ptr[5]"~op~"=b.m.ptr[5];");
+    mixin("m.ptr[6]"~op~"=b.m.ptr[6]; m.ptr[7]"~op~"=b.m.ptr[7]; m.ptr[8]"~op~"=b.m.ptr[8];");
+    return this;
+  }
+
+  auto opBinary(string op) (in FloatType b) const if (op == "*" || op == "/") {
+    pragma(inline, true);
+    m3 res;
+    mixin("res.m.ptr[0] = m.ptr[0]"~op~"b;");
+    mixin("res.m.ptr[1] = m.ptr[1]"~op~"b;");
+    mixin("res.m.ptr[2] = m.ptr[2]"~op~"b;");
+    mixin("res.m.ptr[3] = m.ptr[3]"~op~"b;");
+    mixin("res.m.ptr[4] = m.ptr[4]"~op~"b;");
+    mixin("res.m.ptr[5] = m.ptr[5]"~op~"b;");
+    mixin("res.m.ptr[6] = m.ptr[6]"~op~"b;");
+    mixin("res.m.ptr[7] = m.ptr[7]"~op~"b;");
+    mixin("res.m.ptr[8] = m.ptr[8]"~op~"b;");
+    return res;
+  }
+
+  auto opBinaryRight(string op) (in FloatType b) const if (op == "*" || op == "/") {
+    pragma(inline, true);
+    m3 res;
+    mixin("res.m.ptr[0] = m.ptr[0]"~op~"b;");
+    mixin("res.m.ptr[1] = m.ptr[1]"~op~"b;");
+    mixin("res.m.ptr[2] = m.ptr[2]"~op~"b;");
+    mixin("res.m.ptr[3] = m.ptr[3]"~op~"b;");
+    mixin("res.m.ptr[4] = m.ptr[4]"~op~"b;");
+    mixin("res.m.ptr[5] = m.ptr[5]"~op~"b;");
+    mixin("res.m.ptr[6] = m.ptr[6]"~op~"b;");
+    mixin("res.m.ptr[7] = m.ptr[7]"~op~"b;");
+    mixin("res.m.ptr[8] = m.ptr[8]"~op~"b;");
+    return res;
+  }
+
+  ref auto opOpAssign(string op) (in FloatType b) if (op == "*" || op == "/") {
+    pragma(inline, true);
+    mixin("m.ptr[0]"~op~"=b; m.ptr[1]"~op~"=b; m.ptr[2]"~op~"=b;");
+    mixin("m.ptr[3]"~op~"=b; m.ptr[4]"~op~"=b; m.ptr[5]"~op~"=b;");
+    mixin("m.ptr[6]"~op~"=b; m.ptr[7]"~op~"=b; m.ptr[8]"~op~"=b;");
+    return this;
+  }
+
+  auto opBinary(string op:"*") (in auto ref v2 v) const {
+    pragma(inline, true);
+    return v2(
+      v.x*m.ptr[3*0+0]+v.y*m.ptr[3*1+0]+m.ptr[3*2+0],
+      v.x*m.ptr[3*0+1]+v.y*m.ptr[3*1+1]+m.ptr[3*2+1],
+    );
+  }
+
+  /*
+  auto opBinary(string op:"*") (in auto ref v3 v) const {
+    pragma(inline, true);
+    return v3(
+      v.x*m.ptr[3*0+0]+v.y*m.ptr[3*1+0]+v.z*m.ptr[3*2+0],
+      v.x*m.ptr[3*0+1]+v.y*m.ptr[3*1+1]+v.z*m.ptr[3*2+1],
+      v.x*m.ptr[3*0+2]+v.y*m.ptr[3*1+2]+v.z*m.ptr[3*2+2],
+    );
+  }
+  */
+
+  auto opBinaryRight(string op:"*") (in auto ref v2 v) const { pragma(inline, true); return this*v; }
+  //auto opBinaryRight(string op:"*") (in auto ref v3 v) const { pragma(inline, true); return this*v; }
+
+  auto opBinary(string op:"*") (in auto ref m3 b) const {
+    //pragma(inline, true);
+    m3 res;
+    res.m.ptr[3*0+0] = m.ptr[3*0+0]*b.m.ptr[3*0+0]+m.ptr[3*0+1]*b.m.ptr[3*1+0]+m.ptr[3*0+2]*b.m.ptr[3*2+0];
+    res.m.ptr[3*0+1] = m.ptr[3*0+0]*b.m.ptr[3*0+1]+m.ptr[3*0+1]*b.m.ptr[3*1+1]+m.ptr[3*0+2]*b.m.ptr[3*2+1];
+    res.m.ptr[3*0+2] = m.ptr[3*0+0]*b.m.ptr[3*0+2]+m.ptr[3*0+1]*b.m.ptr[3*1+2]+m.ptr[3*0+2]*b.m.ptr[3*2+2];
+    res.m.ptr[3*1+0] = m.ptr[3*1+0]*b.m.ptr[3*0+0]+m.ptr[3*1+1]*b.m.ptr[3*1+0]+m.ptr[3*1+2]*b.m.ptr[3*2+0];
+    res.m.ptr[3*1+1] = m.ptr[3*1+0]*b.m.ptr[3*0+1]+m.ptr[3*1+1]*b.m.ptr[3*1+1]+m.ptr[3*1+2]*b.m.ptr[3*2+1];
+    res.m.ptr[3*1+2] = m.ptr[3*1+0]*b.m.ptr[3*0+2]+m.ptr[3*1+1]*b.m.ptr[3*1+2]+m.ptr[3*1+2]*b.m.ptr[3*2+2];
+    res.m.ptr[3*2+0] = m.ptr[3*2+0]*b.m.ptr[3*0+0]+m.ptr[3*2+1]*b.m.ptr[3*1+0]+m.ptr[3*2+2]*b.m.ptr[3*2+0];
+    res.m.ptr[3*2+1] = m.ptr[3*2+0]*b.m.ptr[3*0+1]+m.ptr[3*2+1]*b.m.ptr[3*1+1]+m.ptr[3*2+2]*b.m.ptr[3*2+1];
+    res.m.ptr[3*2+2] = m.ptr[3*2+0]*b.m.ptr[3*0+2]+m.ptr[3*2+1]*b.m.ptr[3*1+2]+m.ptr[3*2+2]*b.m.ptr[3*2+2];
+    return res;
+  }
+
+  // sum of the diagonal components
+  FloatType trace () const { pragma(inline, true); return m.ptr[3*0+0]+m.ptr[3*1+1]+m.ptr[3*2+2]; }
+
+  // determinant
+  FloatType det () const {
+    pragma(inline, true);
+    FloatType res = 0;
+    res += m.ptr[3*0+0]*(m.ptr[3*1+1]*m.ptr[3*2+2]-m.ptr[3*2+1]*m.ptr[3*1+2]);
+    res -= m.ptr[3*0+1]*(m.ptr[3*1+0]*m.ptr[3*2+2]-m.ptr[3*2+0]*m.ptr[3*1+2]);
+    res += m.ptr[3*0+2]*(m.ptr[3*1+0]*m.ptr[3*2+1]-m.ptr[3*2+0]*m.ptr[3*1+1]);
+    return res;
+  }
+
+  auto transposed () const {
+    pragma(inline, true);
+    m3 res;
+    res.m.ptr[3*0+0] = m.ptr[3*0+0];
+    res.m.ptr[3*0+1] = m.ptr[3*1+0];
+    res.m.ptr[3*0+2] = m.ptr[3*2+0];
+    res.m.ptr[3*1+0] = m.ptr[3*0+1];
+    res.m.ptr[3*1+1] = m.ptr[3*1+1];
+    res.m.ptr[3*1+2] = m.ptr[3*2+1];
+    res.m.ptr[3*2+0] = m.ptr[3*0+2];
+    res.m.ptr[3*2+1] = m.ptr[3*1+2];
+    res.m.ptr[3*2+2] = m.ptr[3*2+2];
+    return res;
+  }
+
+  auto inv () const {
+    //pragma(inline, true);
+    immutable mtp = this.transposed;
+    m3 res;
+    res.m.ptr[3*0+0] = mtp.m.ptr[3*1+1]*mtp.m.ptr[3*2+2]-mtp.m.ptr[3*2+1]*mtp.m.ptr[3*1+2];
+    res.m.ptr[3*0+1] = mtp.m.ptr[3*1+0]*mtp.m.ptr[3*2+2]-mtp.m.ptr[3*2+0]*mtp.m.ptr[3*1+2];
+    res.m.ptr[3*0+2] = mtp.m.ptr[3*1+0]*mtp.m.ptr[3*2+1]-mtp.m.ptr[3*2+0]*mtp.m.ptr[3*1+1];
+    res.m.ptr[3*1+0] = mtp.m.ptr[3*0+1]*mtp.m.ptr[3*2+2]-mtp.m.ptr[3*2+1]*mtp.m.ptr[3*0+2];
+    res.m.ptr[3*1+1] = mtp.m.ptr[3*0+0]*mtp.m.ptr[3*2+2]-mtp.m.ptr[3*2+0]*mtp.m.ptr[3*0+2];
+    res.m.ptr[3*1+2] = mtp.m.ptr[3*0+0]*mtp.m.ptr[3*2+1]-mtp.m.ptr[3*2+0]*mtp.m.ptr[3*0+1];
+    res.m.ptr[3*2+0] = mtp.m.ptr[3*0+1]*mtp.m.ptr[3*1+2]-mtp.m.ptr[3*1+1]*mtp.m.ptr[3*0+2];
+    res.m.ptr[3*2+1] = mtp.m.ptr[3*0+0]*mtp.m.ptr[3*1+2]-mtp.m.ptr[3*1+0]*mtp.m.ptr[3*0+2];
+    res.m.ptr[3*2+2] = mtp.m.ptr[3*0+0]*mtp.m.ptr[3*1+1]-mtp.m.ptr[3*1+0]*mtp.m.ptr[3*0+1];
+
+    res.m.ptr[3*0+1] *= -1;
+    res.m.ptr[3*1+0] *= -1;
+    res.m.ptr[3*1+2] *= -1;
+    res.m.ptr[3*2+1] *= -1;
+
+    return res/this.det;
+  }
+
+static:
+  auto Identity () { pragma(inline, true); return m3(); }
+  auto Zero () { pragma(inline, true); return m3(0); }
+
+  auto Rotate (in FloatType angle) {
+    pragma(inline, true);
+    mixin(SinCosImportMixin);
+    immutable FloatType c = cos(angle);
+    immutable FloatType s = sin(angle);
+    m3 res;
+    res.m.ptr[3*0+0] =  c; res.m.ptr[3*0+1] = s;
+    res.m.ptr[3*1+0] = -s; res.m.ptr[3*1+1] = c;
+    return res;
+  }
+
+  auto Scale (in FloatType sx, in FloatType sy) {
+    pragma(inline, true);
+    m3 res;
+    res.m.ptr[3*0+0] = sx;
+    res.m.ptr[3*1+1] = sy;
+    return res;
+  }
+
+  auto Translate (in FloatType dx, in FloatType dy) {
+    pragma(inline, true);
+    m3 res;
+    res.m.ptr[3*2+0] = dx;
+    res.m.ptr[3*2+1] = dy;
+    return res;
+  }
+
+  auto Translate() (in auto ref v2 v) {
+    pragma(inline, true);
+    m3 res;
+    res.m.ptr[3*2+0] = v.x;
+    res.m.ptr[3*2+1] = v.y;
+    return res;
+  }
+
+private:
+  private enum SinCosImportMixin = q{
+    static if (is(FloatType == float)) {
+      import core.stdc.math : cos=cosf, sin=sinf;
+    } else static if (is(FloatType == double)) {
+      import core.stdc.math : cos, sin;
+    } else {
+      import std.math : cos, sin;
+    }
+  };
+}
+
+alias mat3 = Mat3F!VFloat;
