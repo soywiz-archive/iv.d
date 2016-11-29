@@ -1740,7 +1740,7 @@ final class ConVar(T) : ConVarBase {
       }
       return (len >= 0 ? vbuf[0..len] : "?");
     } else static if (isFloatingPoint!T) {
-      auto len = snprintf(vbuf.ptr, vbuf.length, "%f", cast(double)(getv()));
+      auto len = snprintf(vbuf.ptr, vbuf.length, "%g", cast(double)(getv()));
       return (len >= 0 ? vbuf[0..len] : "?");
     } else static if (is(XUQQ!T == char)) {
       vbuf.ptr[0] = cast(char)getv();
