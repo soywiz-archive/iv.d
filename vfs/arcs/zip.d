@@ -55,8 +55,12 @@ private:
     auto stpos = xpos+zfh.namelen+zfh.extlen;
     auto size = dir[idx].size;
     auto pksize = dir[idx].pksize;
-    VFSZLibMode mode = (dir[idx].packed ? VFSZLibMode.Zip : VFSZLibMode.Raw);
-    return wrapZLibStreamRO(st, mode, size, stpos, pksize, dir[idx].name);
+    if (zfh.method == 6) {
+      return wrapStream(ExplodeLowLevelRO(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+    } else {
+      VFSZLibMode mode = (dir[idx].packed ? VFSZLibMode.Zip : VFSZLibMode.Raw);
+      return wrapZLibStreamRO(st, mode, size, stpos, pksize, dir[idx].name);
+    }
   }
 
   void open (VFile fl, const(char)[] prefixpath) {
@@ -170,11 +174,11 @@ private:
         if (cdfh.disk != 0) throw new VFSNamedException!"ZipArchive"("invalid central directory entry (disk number)");
         if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
         // skip bad files
-        if (cdfh.method != 0 && cdfh.method != 8) {
+        if (cdfh.method != 0 && cdfh.method != 8 && cdfh.method != 6) {
           debug(ziparc) writeln("  INVALID: method=", cdfh.method);
           throw new VFSNamedException!"ZipArchive"("invalid method");
         }
-        if ((cdfh.method != 0 && cdfh.method != 8) || cdfh.namelen == 0 || (cdfh.gflags&0b10_0000_0110_0001) != 0 || (cdfh.attr&0x58) != 0 ||
+        if (cdfh.namelen == 0 || (cdfh.gflags&0b10_0000_0110_0001) != 0 || (cdfh.attr&0x58) != 0 ||
             cast(long)cdfh.hdrofs+(cdfh.method ? cdfh.pksize : cdfh.size) >= ubufpos+pos)
         {
           debug(ziparc) writeln("  ignored: method=", cdfh.method);
@@ -184,6 +188,7 @@ private:
           continue;
         }
         FileInfo fi;
+        //fi.gflags = cdfh.gflags;
         fi.packed = (cdfh.method != 0);
         fi.pksize = cdfh.pksize;
         fi.size = cdfh.size;
@@ -474,5 +479,359 @@ align(1):
       pksize = swapEndian(pksize);
       disk = swapEndian(disk);
     }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// slow and stupid "implode" unpacker
+struct Exploder {
+  static struct HufNode {
+    ushort b0; // 0-branch value + leaf node flag
+    ushort b1; // 1-branch value + leaf node flag
+    HufNode* jump; // 1-branch jump address
+  }
+
+  enum LITERALS = 288;
+
+  HufNode[LITERALS] literalTree;
+  HufNode[32] distanceTree;
+  HufNode* Places = null;
+
+  HufNode[64] impDistanceTree;
+  HufNode[64] impLengthTree;
+  ubyte len = 0;
+  short[17] fpos = 0;
+  int* flens;
+  short fmax;
+
+  int[256] ll;
+
+  int minMatchLen = 3;
+  ushort gflags;
+
+  VFile zfl;
+  long zflpos;
+  long zflorg;
+  long zflsize;
+  long zflleft;
+  uint upkleft;
+  uint upktotalsize;
+  ubyte[32768] inbuf;
+  uint ibpos, ibused;
+  ubyte bb = 1; // getbit mask
+  bool ateof;
+
+  ubyte[32768] buf32k;
+  uint bIdx;
+
+  ubyte[512] upkbuf; // way too much
+  uint upkbufused, upkbufpos;
+
+  //this () {}
+
+//final:
+  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+    zfl = fl;
+    bb = 1;
+    ibpos = ibused = 0;
+    ateof = false;
+    zflpos = zflorg = apos;
+    zflsize = apksize;
+    gflags = agflags;
+    upktotalsize = aupksize;
+    reset();
+  }
+
+  void reset () {
+    bb = 1;
+    ibpos = ibused = 0;
+    ateof = false;
+    zflpos = zflorg;
+    zflleft = zflsize;
+    buf32k[] = 0;
+    bIdx = 0;
+    upkleft = upktotalsize;
+    upkbufused = 0;
+    if (upktotalsize == 0) return;
+    if ((gflags&4) != 0) {
+      // 3 trees: literals, lenths, distance top 6
+      minMatchLen = 3;
+      createTree(literalTree.ptr, decodeSF(ll.ptr), ll.ptr);
+    } else {
+      // 2 trees: lenths, distance top 6
+      minMatchLen = 2;
+    }
+    createTree(impLengthTree.ptr, decodeSF(ll.ptr), ll.ptr);
+    createTree(impDistanceTree.ptr, decodeSF(ll.ptr), ll.ptr);
+  }
+
+  // has more bytes to unpack?
+  @property bool hasBytes () const pure nothrow @safe @nogc { pragma(inline, true); return (upkbufpos < upkbufused || upkleft != 0); }
+
+  // get next unpacked byte
+  ubyte getByte () {
+    if (upkbufpos < upkbufused) return upkbuf.ptr[upkbufpos++];
+    upkbufpos = upkbufused = 0;
+    if (upkleft == 0) return 0; // just in case
+    implodeStep();
+    if (upkbufpos >= upkbufused) throw new Exception("wtf?!");
+    return upkbuf.ptr[upkbufpos++];
+  }
+
+private:
+  T readPackedByte(T=int) () if (is(T == int) || is(T == ubyte)) {
+    if (ateof) {
+      static if (is(T == int)) return -1; else throw new Exception("unexpected EOF");
+    }
+    if (ibpos >= ibused) {
+      ibpos = ibused = 0;
+      auto rd = cast(uint)(zflleft > inbuf.length ? inbuf.length : zflleft);
+      if (rd == 0) { ateof = true; return readPackedByte!T(); }
+      zfl.seek(zflpos);
+      zfl.rawReadExact(inbuf[0..rd]);
+      ibused = rd;
+      zflpos += rd;
+      zflleft -= rd;
+      //{ import core.stdc.stdio; printf("XPL: read %u bytes\n", rd); }
+    }
+    return inbuf.ptr[ibpos++];
+  }
+
+  ubyte readPackedBit () {
+    ubyte res = (bb&1);
+    bb >>= 1;
+    if (bb == 0) {
+      bb = readPackedByte!ubyte();
+      res = bb&1;
+      bb = (bb>>1)|0x80;
+    }
+    return res;
+  }
+
+  ubyte readPackedBits (ubyte count) {
+    ubyte res = 0, mask = 1;
+    if (count > 8) assert(0, "wtf?!");
+    while (count--) {
+      if (readPackedBit()) res |= mask;
+      mask <<= 1;
+    }
+    return res;
+  }
+
+  void bufferUpkByte (ubyte a) {
+    //CRC = updcrc(cast(ubyte)a, CRC);
+    buf32k[bIdx++] = a;
+    bIdx &= 0x7fff;
+    if (upkleft) {
+      if (upkbufused >= upkbuf.length) assert(0, "wtf?!");
+      upkbuf.ptr[upkbufused++] = a;
+      --upkleft;
+    }
+  }
+
+  int decodeSFValue (HufNode *currentTree) {
+    HufNode* x = currentTree;
+    // decode one symbol of the data
+    for (;;) {
+      if (!readPackedBit()) {
+        // only the decision is reversed!
+        if ((x.b1&0x8000) == 0) return x.b1; // If leaf node, return data
+        x = x.jump;
+      } else {
+        if ((x.b0&0x8000) == 0) return x.b0; // If leaf node, return data
+        ++x;
+      }
+    }
+    return -1;
+  }
+
+  int decodeSF (int* table) {
+    int v = 0;
+    immutable n = readPackedByte()+1;
+    foreach (immutable i; 0..n) {
+      auto a = readPackedByte();
+      auto nv = ((a >> 4)&15)+1;
+      auto bl = (a & 15)+1;
+      while (nv--) table[v++] = bl;
+    }
+    return v; // entries used
+  }
+
+  /*
+    Note:
+        The tree create and distance code trees <= 32 entries
+        and could be represented with the shorter tree algorithm.
+        I.e. use a X/Y-indexed table for each struct member.
+  */
+  void createTree (HufNode* currentTree, int numval, int* lengths) {
+    // create the Huffman decode tree/table
+    Places = currentTree;
+    flens = lengths;
+    fmax  = cast(short)numval;
+    fpos[0..17] = 0;
+    len = 0;
+
+    /*
+     * A recursive routine which creates the Huffman decode tables
+     *
+     * No presorting of code lengths are needed, because a counting sort is perfomed on the fly.
+     *
+     * Maximum recursion depth is equal to the maximum Huffman code length, which is 15 in the deflate algorithm.
+     * (16 in Inflate!) */
+    void rec () {
+      int isPat () {
+        for (;;) {
+          if (fpos[len] >= fmax) return -1;
+          if (flens[fpos[len]] == len) return fpos[len]++;
+          ++fpos[len];
+        }
+      }
+
+      HufNode* curplace = Places;
+      int tmp;
+
+      if (len == 17) throw new Exception("invalid huffman tree");
+      ++Places;
+      ++len;
+
+      tmp = isPat();
+      if (tmp >= 0) {
+        curplace.b0 = cast(ushort)tmp; // leaf cell for 0-bit
+      } else {
+        // not a Leaf cell
+        curplace.b0 = 0x8000;
+        rec();
+      }
+      tmp = isPat();
+      if (tmp >= 0) {
+        curplace.b1 = cast(ushort)tmp; // leaf cell for 1-bit
+        curplace.jump = null; // Just for the display routine
+      } else {
+        // Not a Leaf cell
+        curplace.b1 = 0x8000;
+        curplace.jump = Places;
+        rec();
+      }
+      --len;
+    }
+
+    rec();
+  }
+
+  /* Note: Imploding could use the lighter huffman tree routines, as the
+         max number of entries is 256. But too much code would need to
+         be duplicated.
+   * gflags: CDFileHeader.gflags
+   */
+  void implodeStep () {
+    //CRC = 0xffffffff;
+    if (upkleft == 0) return;
+    int c = readPackedBits(1);
+    if (c) {
+      // literal data
+      if ((gflags&4) != 0) {
+        c = decodeSFValue(literalTree.ptr);
+      } else {
+        c = readPackedBits(8);
+      }
+      bufferUpkByte(cast(ubyte)c);
+    } else {
+      int dist;
+      if ((gflags&2) != 0) {
+        // 8k dictionary
+        dist = readPackedBits(7);
+        c = decodeSFValue(impDistanceTree.ptr);
+        dist |= (c<<7);
+      } else {
+        // 4k dictionary
+        dist = readPackedBits(6);
+        c = decodeSFValue(impDistanceTree.ptr);
+        dist |= (c<<6);
+      }
+      int len = decodeSFValue(impLengthTree.ptr);
+      if (len == 63) len += readPackedBits(8);
+      len += minMatchLen;
+      ++dist;
+      foreach (immutable i; 0..len) bufferUpkByte(buf32k.ptr[(bIdx-dist)&0x7fff]);
+    }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+struct ExplodeLowLevelRO {
+  Exploder epl;
+  long size; // unpacked size
+  long pos; // current file position
+  long prpos; // previous file position
+  bool eofhit;
+  string fname;
+
+  this (VFile fl, ushort agflags, long aupsize, long astpos, long asize, string aname) {
+    if (aupsize > uint.max) aupsize = uint.max;
+    if (asize > uint.max) asize = uint.max;
+    epl.setup(fl, agflags, astpos, cast(uint)asize, cast(uint)aupsize);
+    eofhit = (aupsize == 0);
+    size = aupsize;
+    fname = aname;
+  }
+
+  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : epl.zfl.name); }
+  @property bool isOpen () { pragma(inline, true); return epl.zfl.isOpen; }
+  @property bool eof () { pragma(inline, true); return eofhit; }
+
+  void close () {
+    eofhit = true;
+    if (epl.zfl.isOpen) epl.zfl.close();
+  }
+
+  ssize read (void* buf, usize count) {
+    if (buf is null) return -1;
+    if (count == 0 || size == 0) return 0;
+    if (!isOpen) return -1; // read error
+    if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
+    // do we want to seek backward?
+    if (prpos > pos) {
+      // yes, rewind
+      epl.reset();
+      eofhit = (size == 0);
+      prpos = 0;
+    }
+    // do we need to seek forward?
+    if (prpos < pos) {
+      // yes, skip data
+      foreach (immutable _; 0..pos-prpos) epl.getByte();
+      prpos = pos;
+    }
+    // unpack data
+    if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+    ubyte* dst = cast(ubyte*)buf;
+    foreach (immutable _; 0..count) {
+      *dst++ = epl.getByte();
+      prpos = ++pos;
+    }
+    return count;
+  }
+
+  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+
+  long lseek (long ofs, int origin) {
+    if (!isOpen) return -1;
+    //TODO: overflow checks
+    switch (origin) {
+      case Seek.Set: break;
+      case Seek.Cur: ofs += pos; break;
+      case Seek.End:
+        if (ofs > 0) ofs = 0;
+        ofs += size;
+        break;
+      default:
+        return -1;
+    }
+    if (ofs < 0) return -1;
+    if (ofs >= size) { eofhit = true; ofs = size; } else eofhit = false;
+    pos = ofs;
+    return pos;
   }
 }

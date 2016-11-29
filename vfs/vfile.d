@@ -136,6 +136,8 @@ public:
     doDecRef(wst);
   }
 
+  @property bool opCast(T) () if (is(T == bool)) { pragma(inline, true); return this.isOpen; }
+
   @property const(char)[] name () {
     if (!wstp) return null;
     try {
@@ -341,11 +343,13 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
   import core.exception : onOutOfMemoryErrorNoGC;
   import core.memory : GC;
   import core.stdc.stdlib : malloc;
+  import core.stdc.string : memset;
   import std.conv : emplace;
   enum instSize = __traits(classInstanceSize, CT);
   // let's hope that malloc() aligns returned memory right
   auto mem = malloc(instSize);
   if (mem is null) onOutOfMemoryErrorNoGC(); // oops
+  memset(mem, 0, instSize);
   GC.addRoot(mem);
   GC.addRange(mem, instSize);
   emplace!CT(mem[0..instSize], args);
