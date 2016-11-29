@@ -53,6 +53,7 @@ public enum kgiMaxCurH = 64;
 // 0:b; 1:g; 2:r; 3: nothing
 private __gshared int vbufW = 800, vbufH = 600;
 __gshared uint* vbuf; // see KGIRGBA
+__gshared uint* vbufsaved; // saved before updating texture
 private __gshared uint* vcurbuf;
 private __gshared bool blit2x = false;
 //private enum BlitType { normal, bw, green, red }
@@ -65,6 +66,7 @@ private __gshared uint sdrScanlineId = 0;
 private __gshared int shaderVersionOk = -1; // <0: not checked; 0: fail; >0: ok
 private __gshared string kgiTitle = "KGI Graphics";
 private __gshared uint vupcounter = 0;
+private __gshared uint vupcounterlast = 0;
 private shared bool updateTexture = true;
 private shared bool updateCurTexture = true;
 private __gshared uint fps = 35; // average FPS
@@ -103,6 +105,20 @@ shared static this () {
 }
 
 
+private void setUpdateTextureFlag () {
+  pragma(inline, true);
+  if (vbuf !is null) {
+    atomicFence();
+    auto c = vupcounter;
+    if (vupcounterlast != c) {
+      vupcounterlast = c;
+      vbufsaved[0..vbufW*vbufH] = vbuf[0..vbufW*vbufH];
+    }
+    atomicStore(updateTexture, true);
+  }
+}
+
+
 ///
 public void kgiHideCursor () {
   bool csc;
@@ -136,7 +152,6 @@ public void kgiSetCursor (int wdt, int hgt, const(VColor)[] img, int hotx=0, int
   mhotX = hotx;
   mhotY = hoty;
   if (vcurbuf is null) return;
-  atomicStore(updateCurTexture, true);
   vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
   if (wdt < 1 || hgt < 1) return;
   foreach (immutable dy; 0..64) {
@@ -148,6 +163,7 @@ public void kgiSetCursor (int wdt, int hgt, const(VColor)[] img, int hotx=0, int
       vcurbuf[dy*kgiMaxCurW+dx] = img.ptr[sp];
     }
   }
+  atomicStore(updateCurTexture, true);
 }
 
 
@@ -158,7 +174,6 @@ public void kgiSetDefaultCursor () nothrow @trusted @nogc {
   mhotX = 2;
   mhotY = 0;
   if (vcurbuf is null) return;
-  atomicStore(updateCurTexture, true);
   vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
   foreach (immutable dy; 0..defaultCurHeight) {
     foreach (immutable dx; 0..defaultCurWidth) {
@@ -166,16 +181,17 @@ public void kgiSetDefaultCursor () nothrow @trusted @nogc {
       vcurbuf[dy*kgiMaxCurW+dx] = defaultCurPal.ptr[defaultCurImg.ptr[sp]];
     }
   }
+  atomicStore(updateCurTexture, true);
 }
 
 
 public void kgiSetBlankCursor () nothrow @trusted @nogc {
   consoleLock();
   scope(exit) consoleUnlock();
-  atomicStore(updateCurTexture, true);
   mhotX = mhotY = 0;
   if (vcurbuf is null) return;
   vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
+  atomicStore(updateCurTexture, true);
 }
 
 
@@ -207,7 +223,7 @@ public bool kgiHasEvent () {
   consoleLock();
   scope(exit) consoleUnlock();
   version(LDC) {} else atomicFence();
-  if (vupcounter) atomicStore(updateTexture, true); // just in case
+  if (vupcounter) setUpdateTextureFlag(); // just in case
   return (evbufused > 0 || vbwin is null); // no vbwin --> always has Quit
 }
 
@@ -217,7 +233,7 @@ public KGIEvent kgiPeekEvent () {
   consoleLock();
   scope(exit) consoleUnlock();
   version(LDC) {} else atomicFence();
-  if (vupcounter) atomicStore(updateTexture, true); // just in case
+  if (vupcounter) setUpdateTextureFlag(); // just in case
   if (evbufused > 0) return evbuf[0];
   if (vbwin is null) return KGIEvent(KGIEvent.Type.Close);
   return KGIEvent();
@@ -229,7 +245,7 @@ public KGIEvent kgiGetEvent () {
   import core.thread;
   import core.time;
   version(LDC) {} else atomicFence();
-  if (vupcounter) atomicStore(updateTexture, true); // just in case
+  if (vupcounter) setUpdateTextureFlag(); // just in case
   for (;;) {
     {
       consoleLock();
@@ -325,7 +341,7 @@ public void kgiWaitKey () {
 
 /// flush drawing buffer (copy it to actual screen)
 public void kgiFlush () {
-  atomicStore(updateTexture, true);
+  setUpdateTextureFlag();
   while (atomicLoad(updateTexture)) {
     import core.thread;
     import core.time;
@@ -531,6 +547,10 @@ public bool kgiInitEx (int awdt, int ahgt, string title, bool a2x, uint afps) {
   if (vbuf is null) assert(0, "KGI: out of memory");
   vbuf[0..awdt*ahgt] = 0;
 
+  vbufsaved = cast(typeof(vbuf))malloc(vbufsaved[0].sizeof*awdt*ahgt);
+  if (vbufsaved is null) assert(0, "KGI: out of memory");
+  vbufsaved[0..awdt*ahgt] = vbuf[0..awdt*ahgt];
+
   vcurbuf = cast(typeof(vcurbuf))malloc(vcurbuf[0].sizeof*kgiMaxCurW*kgiMaxCurH);
   if (vbuf is null) assert(0, "KGI: out of memory");
   vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
@@ -624,7 +644,7 @@ private void glgfxInitTexture () nothrow @trusted @nogc {
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, TexType, GL_UNSIGNED_BYTE, vbuf);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vbufW, vbufH, 0, TexType, GL_UNSIGNED_BYTE, vbufsaved);
 
 
   glBindTexture(GL_TEXTURE_2D, vbCurTexId);
@@ -653,8 +673,9 @@ private void glgfxUpdateTexture () nothrow @trusted @nogc {
   vupcounter = 0;
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
-  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, TexType, GL_UNSIGNED_BYTE, vbuf);
+  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, TexType, GL_UNSIGNED_BYTE, vbufsaved);
   atomicStore(updateTexture, false);
+  vupcounterlast = vupcounterlast.max;
 
   if (atomicLoad(updateCurTexture)) {
     glTextureSubImage2D(vbCurTexId, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
