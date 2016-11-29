@@ -485,6 +485,7 @@ align(1):
 
 // ////////////////////////////////////////////////////////////////////////// //
 // slow and stupid "implode" unpacker
+// based on the code from gunzip.c by Pasi Ojala, a1bert@iki.fi (http://www.iki.fi/a1bert/)
 struct Exploder {
   static struct HufNode {
     ushort b0; // 0-branch value + leaf node flag
