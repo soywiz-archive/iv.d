@@ -40,7 +40,7 @@ private:
     string name; // with path
   }
 
-  VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size); }
+  VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size, dir[idx].name); }
 
   void open (VFile fl, const(char)[] prefixpath) {
     debug(dunepakarc) import std.stdio : writeln, writefln;

@@ -475,47 +475,57 @@ bool isROMode (char[] modebuf) {
 }
 
 
-public VFile vfsOpenFile (const(char)[] fname, const(char)[] mode=null) {
+public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
 
   void error (string msg, Throwable e=null, string file=__FILE__, usize line=__LINE__) { throw new VFSException(msg, file, line, e); }
 
-  void errorfn (const(char)[] msg, Throwable e=null, string file=__FILE__, usize line=__LINE__) {
+  void errorfn(T:const(char)[]) (T msg, Throwable e=null, string file=__FILE__, usize line=__LINE__) {
+    static assert(!is(T == typeof(null)), "wtf?!");
     import std.array : appender;
-    auto s = appender!string();
-    foreach (char ch; msg) {
-      if (ch == '!') s.put(fname); else s.put(ch);
-    }
-    throw new VFSException(s.data, file, line, e);
-  }
-
-  if (fname.length == 0) error("can't open file ''");
-
-  bool ignoreCase;
-  char[16] modebuf;
-  auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
-
-  {
-    auto lock = VFSLock.lock();
-    cleanupDrivers();
-    // try all drivers
-    foreach_reverse (ref di; drivers) {
-      try {
-        auto fl = di.drv.tryOpen(fname, ignoreCase);
-        if (fl.isOpen) {
-          if (di.temp) di.tempUsedTime = MonoTime.currTime;
-          if (!isROMode(mdb)) errorfn("can't open file '!' in non-binary non-readonly mode");
-          return fl;
+    foreach (char cc; msg) {
+      if (cc == '!') {
+        auto s = appender!string();
+        foreach (char ch; msg) {
+          if (ch == '!') s.put(fname); else s.put(ch);
         }
-      } catch (Exception e) {
-        // chain
-        errorfn("can't open file '!'", e);
+        throw new VFSException(s.data, file, line, e);
       }
     }
+    throw new VFSException(msg, file, line, e);
   }
 
-  // no drivers found, try disk file
-  return vfsDiskOpen(fname, mode);
+  static if (is(T == typeof(null))) {
+    error("can't open file ''");
+  } else {
+    if (fname.length == 0) error("can't open file ''");
+
+    bool ignoreCase;
+    char[16] modebuf = 0;
+    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
+
+    {
+      auto lock = VFSLock.lock();
+      cleanupDrivers();
+      // try all drivers
+      foreach_reverse (ref di; drivers) {
+        try {
+          auto fl = di.drv.tryOpen(fname, ignoreCase);
+          if (fl.isOpen) {
+            if (di.temp) di.tempUsedTime = MonoTime.currTime;
+            if (!isROMode(mdb)) errorfn("can't open file '!' in non-binary non-readonly mode");
+            return fl;
+          }
+        } catch (Exception e) {
+          // chain
+          errorfn("can't open file '!'", e);
+        }
+      }
+    }
+
+    // no drivers found, try disk file
+    return vfsDiskOpen!(T, usefname)(fname, mode);
+  }
 }
 
 
@@ -629,36 +639,44 @@ public VFSDriverId vfsAddPak(string mode="normal", bool temp=false, T : const(ch
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// takes into account `vfsIgnoreCase` flag. you can override it with 'i' (on) or 'I' (off) mode letter.
-public VFile vfsDiskOpen (const(char)[] fname, const(char)[] mode=null) {
+public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
-  if (fname.length == 0) throw new VFSException("can't open file ''");
-  if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
-  bool ignoreCase;
-  char[16] modebuf;
-  auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
-  char[2049] nbuf;
-  nbuf[0..fname.length] = fname[];
-  nbuf[fname.length] = '\0';
-  static if (VFS_NORMAL_OS) if (ignoreCase) {
-    // we have to lock here, as `findPathCI()` is not thread-safe
-    auto lock = VFSLock.lock();
-    auto pt = findPathCI(nbuf[0..fname.length]);
-    if (pt is null) {
-      // restore filename for correct error message
-      nbuf[0..fname.length] = fname[];
-      nbuf[fname.length] = '\0';
-    } else {
-      nbuf[pt.length] = '\0';
+  static if (is(T == typeof(null))) {
+    throw new VFSException("can't open file ''");
+  } else {
+    if (fname.length == 0) throw new VFSException("can't open file ''");
+    if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
+    bool ignoreCase;
+    char[16] modebuf;
+    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
+    char[2049] nbuf;
+    nbuf[0..fname.length] = fname[];
+    nbuf[fname.length] = '\0';
+    static if (VFS_NORMAL_OS) if (ignoreCase) {
+      // we have to lock here, as `findPathCI()` is not thread-safe
+      auto lock = VFSLock.lock();
+      auto pt = findPathCI(nbuf[0..fname.length]);
+      if (pt is null) {
+        // restore filename for correct error message
+        nbuf[0..fname.length] = fname[];
+        nbuf[fname.length] = '\0';
+      } else {
+        nbuf[pt.length] = '\0';
+      }
     }
-  }
-  auto fl = core.stdc.stdio.fopen(nbuf.ptr, mdb.ptr);
-  if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
-  scope(failure) core.stdc.stdio.fclose(fl); // just in case
-  try {
-    return VFile(fl);
-  } catch (Exception e) {
-    // chain
-    throw new VFSException("can't open file '"~fname.idup~"'", __FILE__, __LINE__, e);
+    auto fl = core.stdc.stdio.fopen(nbuf.ptr, mdb.ptr);
+    if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
+    scope(failure) core.stdc.stdio.fclose(fl); // just in case
+    try {
+      static if (usefname) {
+        static if (is(T == string)) return VFile(fl, fname); else return VFile(fl, fname.idup);
+      } else {
+        return VFile(fl);
+      }
+    } catch (Exception e) {
+      // chain
+      throw new VFSException("can't open file '"~fname.idup~"'", __FILE__, __LINE__, e);
+    }
   }
 }
 

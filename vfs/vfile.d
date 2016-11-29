@@ -76,9 +76,9 @@ public:
   }
 
   version(vfs_stdio_wrapper)
-  this (std.stdio.File fl) {
+  this (std.stdio.File fl, string fname=null) {
     try {
-      wstp = WrapStdioFile(fl);
+      wstp = WrapStdioFile(fl, fname);
     } catch (Exception e) {
       // chain exception
       throw new VFSException("can't open file", __FILE__, __LINE__, e);
@@ -88,13 +88,25 @@ public:
   /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
   this (core.stdc.stdio.FILE* fl, bool own=true) {
     if (fl is null) throw new VFSException("can't open file");
-    if (own) wstp = WrapLibcFile!true(fl); else wstp = WrapLibcFile!false(fl);
+    if (own) wstp = WrapLibcFile!true(fl, null); else wstp = WrapLibcFile!false(fl, null);
+  }
+
+  /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
+  this (core.stdc.stdio.FILE* fl, string fname, bool own=true) {
+    if (fl is null) throw new VFSException("can't open file");
+    if (own) wstp = WrapLibcFile!true(fl, fname); else wstp = WrapLibcFile!false(fl, fname);
   }
 
   /// wrap file descriptor; `fd` is owned by VFile now; can throw
   static if (VFS_NORMAL_OS) this (int fd, bool own=true) {
     if (fd < 0) throw new VFSException("can't open file");
-    if (own) wstp = WrapFD!true(fd); else wstp = WrapFD!true(fd);
+    if (own) wstp = WrapFD!true(fd, null); else wstp = WrapFD!true(fd, null);
+  }
+
+  /// wrap file descriptor; `fd` is owned by VFile now; can throw
+  static if (VFS_NORMAL_OS) this (int fd, string fname, bool own=true) {
+    if (fd < 0) throw new VFSException("can't open file");
+    if (own) wstp = WrapFD!true(fd, fname); else wstp = WrapFD!true(fd, fname);
   }
 
   /// open named file with VFS engine; start with "/" or "./" to use only disk files
@@ -280,6 +292,7 @@ package class WrappedStreamRC {
 protected:
   shared uint rc = 1;
   bool eofhit;
+  string fname;
 
   this () pure nothrow @safe @nogc {}
 
@@ -313,7 +326,7 @@ protected:
   }
 
 protected:
-  @property const(char)[] name () { return null; }
+  @property const(char)[] name () { return fname; }
   @property bool eof () { return eofhit; }
   abstract @property bool isOpen ();
   abstract void close ();
@@ -347,10 +360,10 @@ final class WrappedStreamStdioFile : WrappedStreamRC {
 private:
   std.stdio.File fl;
 
-  public this (std.stdio.File afl) { fl = afl; } // fuck! emplace needs it
+  public this (std.stdio.File afl, string afname=null) { fl = afl; fname = afname; } // fuck! emplace needs it
 
 protected:
-  override @property const(char)[] name () { return fl.name; }
+  override @property const(char)[] name () { return (fname !is null ? fname : fl.name); }
   override @property bool isOpen () { return fl.isOpen; }
   override @property bool eof () { return fl.eof; }
 
@@ -372,8 +385,8 @@ protected:
 
 
 version(vfs_stdio_wrapper)
-usize WrapStdioFile (std.stdio.File fl) {
-  return newWS!WrappedStreamStdioFile(fl);
+usize WrapStdioFile (std.stdio.File fl, string fname=null) {
+  return newWS!WrappedStreamStdioFile(fl, fname);
 }
 
 
@@ -384,7 +397,7 @@ final class WrappedStreamLibcFile(bool ownfl=true) : WrappedStreamRC {
 private:
   core.stdc.stdio.FILE* fl;
 
-  public this (core.stdc.stdio.FILE* afl) { fl = afl; } // fuck! emplace needs it
+  public this (core.stdc.stdio.FILE* afl, string afname=null) { fl = afl; fname = afname; } // fuck! emplace needs it
 
 protected:
   override @property bool isOpen () { return (fl !is null); }
@@ -438,8 +451,8 @@ protected:
 }
 
 
-usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl) {
-  return newWS!(WrappedStreamLibcFile!ownfl)(fl);
+usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl, string fname=null) {
+  return newWS!(WrappedStreamLibcFile!ownfl)(fl, fname);
 }
 
 
@@ -448,7 +461,7 @@ static if (VFS_NORMAL_OS) final class WrappedStreamFD(bool own) : WrappedStreamR
 private:
   int fd;
 
-  public this (int afd) { fd = afd; eofhit = (afd < 0); } // fuck! emplace needs it
+  public this (int afd, string afname=null) { fd = afd; eofhit = (afd < 0); fname = afname; } // fuck! emplace needs it
 
 protected:
   override @property bool isOpen () { return (fd >= 0); }
@@ -496,8 +509,8 @@ protected:
 }
 
 
-static if (VFS_NORMAL_OS) usize WrapFD(bool own) (int fd) {
-  return newWS!(WrappedStreamFD!own)(fd);
+static if (VFS_NORMAL_OS) usize WrapFD(bool own) (int fd, string fname=null) {
+  return newWS!(WrappedStreamFD!own)(fd, fname);
 }
 
 
@@ -508,8 +521,9 @@ private:
   bool closed;
 
    // fuck! emplace needs it
-  public this() (auto ref ST ast) {
+  public this() (auto ref ST ast, string afname) {
     st = ast;
+    fname = afname;
     static if (streamHasIsOpen!ST) {
       closed = !st.isOpen;
     } else {
@@ -520,9 +534,9 @@ private:
 protected:
   override @property const(char)[] name () {
     static if (streamHasName!ST) {
-      return (closed ? null : st.name);
+      return (closed ? null : (fname !is null ? fname : st.name));
     } else {
-      return null;
+      return fname;
     }
   }
 
@@ -606,17 +620,17 @@ protected:
 
 /// wrap `std.stdio.File` into `VFile`
 version(vfs_stdio_wrapper)
-public VFile wrapStream (std.stdio.File st) { return VFile(st); }
+public VFile wrapStream (std.stdio.File st, string fname=null) { return VFile(st, fname); }
 
 /// wrap another `VFile` into `VFile`
 public VFile wrapStream (VFile st) { return VFile(st); }
 
 /// wrap libc `FILE*` into `VFile`
-public VFile wrapStream (core.stdc.stdio.FILE* st) { return VFile(st); }
+public VFile wrapStream (core.stdc.stdio.FILE* st, string fname=null) { return VFile(st, fname); }
 
 static if (VFS_NORMAL_OS) {
 /// wrap file descriptor into `VFile`
-public VFile wrapStream (int st) { return VFile(st); }
+public VFile wrapStream (int st, string fname=null) { return VFile(st, fname); }
 }
 
 /** wrap any valid i/o stream into `VFile`.
@@ -693,7 +707,7 @@ public VFile wrapStream (int st) { return VFile(st); }
  *   streams that returns `false` from `isOpen()`, but you'd better
  *   handle this situation yourself.
  */
-public VFile wrapStream(ST) (auto ref ST st) if (isReadableStream!ST || isWriteableStream!ST) { return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st)); }
+public VFile wrapStream(ST) (auto ref ST st, string fname=null) if (isReadableStream!ST || isWriteableStream!ST) { return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st, fname)); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -703,14 +717,16 @@ private struct PartialLowLevelRO {
   long size; // unpacked size
   long pos; // current file position
   bool eofhit;
+  string fname;
 
-  this (VFile fl, long astpos, long asize) {
+  this (VFile fl, long astpos, long asize, string aname) {
     stpos = astpos;
     size = asize;
     zfl = fl;
+    fname = aname;
   }
 
-  //@property const(char)[] name () { pragma(inline, true); return zfl.name; }
+  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
   @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
   @property bool eof () { pragma(inline, true); return eofhit; }
 
@@ -757,11 +773,11 @@ private struct PartialLowLevelRO {
 
 /// wrap VFile into read-only stream, with given offset and length.
 /// if `len` == -1, wrap from starting position to file end.
-public VFile wrapStreamRO (VFile st, long stpos=0, long len=-1) {
+public VFile wrapStreamRO (VFile st, long stpos=0, long len=-1, string fname=null) {
   if (stpos < 0) throw new VFSException("invalid starting position");
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
-  return wrapStream(PartialLowLevelRO(st, stpos, len));
+  return wrapStream(PartialLowLevelRO(st, stpos, len, fname), fname);
 }
 
 
@@ -792,16 +808,19 @@ struct ZLibLowLevelRO {
   z_stream zs;
   bool eoz;
   bool eofhit;
+  string fname;
 
-  this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize) {
+  this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
     if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
     zfl = fl;
     stpos = astpos;
     size = aupsize;
     pksize = asize;
     mode = amode;
+    fname = aname;
   }
 
+  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
   @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
   @property bool eof () { pragma(inline, true); return eofhit; }
 
@@ -965,17 +984,17 @@ struct ZLibLowLevelRO {
 /// wrap VFile into read-only zlib-packed stream, with given offset and length.
 /// if `len` == -1, wrap from starting position to file end.
 /// `upsize`: size of unpacked file (-1: size unknown)
-public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stpos=0, long len=-1) {
+public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stpos=0, long len=-1, string fname=null) {
   if (stpos < 0) throw new VFSException("invalid starting position");
   if (upsize < 0 && upsize != -1) throw new VFSException("invalid unpacked size");
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
-  return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len));
+  return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len, fname), fname);
 }
 
 /// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
-public VFile wrapZLibStreamRO (VFile st, long upsize, long stpos=0, long len=-1) {
-  return wrapZLibStreamRO(st, VFSZLibMode.ZLib, upsize, stpos, len);
+public VFile wrapZLibStreamRO (VFile st, long upsize, long stpos=0, long len=-1, string fname=null) {
+  return wrapZLibStreamRO(st, VFSZLibMode.ZLib, upsize, stpos, len, fname);
 }
 
 
@@ -994,16 +1013,19 @@ struct ZLibLowLevelWO {
   z_stream zs;
   bool eofhit;
   int complevel;
+  string fname;
 
-  this (VFile fl, VFSZLibMode amode, int acomplevel=-1) {
+  this (VFile fl, VFSZLibMode amode, int acomplevel=-1, string aname=null) {
     zfl = fl;
     stpos = fl.tell;
     mode = amode;
     if (acomplevel < 0) acomplevel = 6;
     if (acomplevel > 9) acomplevel = 9;
     complevel = 9;
+    fname = aname;
   }
 
+  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
   @property bool isOpen () { pragma(inline, true); return !eofhit && zfl.isOpen; }
   @property bool eof () { pragma(inline, true); return isOpen; }
 
@@ -1137,22 +1159,22 @@ struct ZLibLowLevelWO {
 
 /// wrap VFile into write-only zlib-packing stream.
 /// default compression mode is 9.
-public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9) {
-  return wrapStream(ZLibLowLevelWO(st, mode, complevel));
+public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9, string fname=null) {
+  return wrapStream(ZLibLowLevelWO(st, mode, complevel, fname), fname);
 }
 
 /// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
-public VFile wrapZLibStreamWO (VFile st, int complevel=9) {
-  return wrapZLibStreamWO(st, VFSZLibMode.ZLib, complevel);
+public VFile wrapZLibStreamWO (VFile st, int complevel=9, string fname=null) {
+  return wrapZLibStreamWO(st, VFSZLibMode.ZLib, complevel, fname);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// wrap read-only memory buffer into VFile
-public VFile wrapMemoryRO (const(void)[] buf) { return wrapStream(MemoryStreamRO(buf)); }
+public VFile wrapMemoryRO (const(void)[] buf, string fname=null) { return wrapStream(MemoryStreamRO(buf), fname); }
 
 /// wrap read-write memory buffer into VFile; duplicates data
-public VFile wrapMemoryRW (const(void)[] buf) { return wrapStream(MemoryStreamRW(buf)); }
+public VFile wrapMemoryRW (const(void)[] buf, string fname=null) { return wrapStream(MemoryStreamRW(buf), fname); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

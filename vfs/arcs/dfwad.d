@@ -47,7 +47,7 @@ private:
     auto size = -1;
     auto pksize = dir[idx].pksize;
     VFSZLibMode mode = VFSZLibMode.ZLib;
-    return wrapZLibStreamRO(st, mode, size, stpos, pksize);
+    return wrapZLibStreamRO(st, mode, size, stpos, pksize, dir[idx].name);
   }
 
   void open (VFile fl, const(char)[] prefixpath) {

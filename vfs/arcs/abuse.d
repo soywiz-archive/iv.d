@@ -45,7 +45,7 @@ private:
     if (dir[idx].link.length != 0) {
       return vfsOpenFile(dir[idx].link);
     } else {
-      return wrapStreamRO(st, dir[idx].ofs, dir[idx].size);
+      return wrapStreamRO(st, dir[idx].ofs, dir[idx].size, dir[idx].name);
     }
   }
 

@@ -101,7 +101,7 @@ private:
     auto size = dir[idx].size;
     auto pksize = dir[idx].pksize;
     VFSZLibMode mode = (dir[idx].packed ? VFSZLibMode.ZLib : VFSZLibMode.Raw);
-    return wrapZLibStreamRO(st, mode, size, stpos, pksize);
+    return wrapZLibStreamRO(st, mode, size, stpos, pksize, dir[idx].name);
   }
 
   void open (VFile fl, const(char)[] prefixpath) {

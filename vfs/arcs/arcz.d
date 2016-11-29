@@ -656,7 +656,7 @@ private:
     uint aidx;
   }
 
-  VFile wrap (usize idx) { return wrapStream(arc.openByIndex(dir[idx].aidx)); }
+  VFile wrap (usize idx) { return wrapStream(arc.openByIndex(dir[idx].aidx), dir[idx].name); }
 
   void open (VFile fl, const(char)[] prefixpath) {
     arc.openArchive(fl);
