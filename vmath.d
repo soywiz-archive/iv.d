@@ -1880,6 +1880,14 @@ static:
     return res;
   }
 
+  auto Scale() (in auto ref v2 sc) {
+    pragma(inline, true);
+    m3 res;
+    res.m.ptr[3*0+0] = sc.x;
+    res.m.ptr[3*1+1] = sc.y;
+    return res;
+  }
+
   auto Translate (in FloatType dx, in FloatType dy) {
     pragma(inline, true);
     m3 res;
