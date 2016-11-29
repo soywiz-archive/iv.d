@@ -228,6 +228,7 @@ private:
   uint id;
   static VFSDriverId create () nothrow @trusted @nogc { pragma(inline, true); return VFSDriverId(++lastIdNumber); }
 
+  public bool opCast(T) () const pure nothrow @safe @nogc if (is(T == bool)) { pragma(inline, true); return (id != 0); }
   public @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (id != 0); }
   public bool opEquals() (const VFSDriverId b) const pure nothrow @safe @nogc { pragma(inline, true); return (id == b.id); }
 

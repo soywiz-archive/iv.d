@@ -633,15 +633,17 @@ public VFile wrapStream (int st) { return VFile(st); }
  *
  * [mandatory] `ssize write (in void* buf, usize count);`
  *
- *   write bytes; should write exactly `count` bytes and return number of bytes read.
+ *   write bytes; should write exactly `count` bytes and return number of bytes written.
  *   should return -1 on error. can't be called with `count == 0`. note that if you
- *   will return something except `count` (i.e. will write less bytes than requested),
- *   `VFile` will throw.
+ *   will return something that is not equal to `count` (i.e. will write less bytes than
+ *   requested), `VFile` will throw.
  *
  * [mandatory] `long lseek (long offset, int origin);`
  *
- *   seek into stream. `origin` is one of `Seek.Set`, `Seek.Cur`, or `Seek.End`.
- *   should return resulting offset from stream start or -1 on error.
+ *   seek into stream. `origin` is one of `Seek.Set`, `Seek.Cur`, or `Seek.End` (can't be
+ *   called with another values). should return resulting offset from stream start or -1
+ *   on error. note that this method will be used to implement `tell()` and `size()`
+ *   VFile APIs, so make it as fast as you can.
  *
  * or high-level interface:
  *
@@ -653,13 +655,13 @@ public VFile wrapStream (int st) { return VFile(st); }
  * [mandatory] `void rawWrite (in void[] buf);`
  *
  *   write bytes; should write exactly `buf.length` bytes.
- *   should throw on error (note that if it wrote less bytes than requested, it's an
+ *   should throw on error (note that if it wrote less bytes than requested, it is an
  *   error too).
  *
  * [mandatory] `void seek (long offset, int origin);`
  *
  *   seek into stream. `origin` is one of `Seek.Set`, `Seek.Cur`, or `Seek.End`.
- *   should throw on error.
+ *   should throw on error (including invalid `origin`).
  *
  * [mandatory] `@property long tell ();`
  *
@@ -673,7 +675,7 @@ public VFile wrapStream (int st) { return VFile(st); }
  *
  * [optional] `@property const(char)[] name ();`
  *
- *   should return stream name, or throw on error.
+ *   should return stream name, or throw on error. can return empty name.
  *
  * [optional] `@property bool isOpen ();`
  *
@@ -682,10 +684,14 @@ public VFile wrapStream (int st) { return VFile(st); }
  * [optional] `@property bool eof ();`
  *
  *   should return `true` if end of stream is reached, or throw on error.
+ *   note that EOF flag may be set in i/o methods, so you can be at EOF,
+ *   but this method can still return `false`. i.e. it is unreliable.
  *
  * [optional] `void close ();`
  *
- *   should close stream, or throw on error.
+ *   should close stream, or throw on error. VFile won't call that on
+ *   streams that returns `false` from `isOpen()`, but you'd better
+ *   handle this situation yourself.
  */
 public VFile wrapStream(ST) (auto ref ST st) if (isReadableStream!ST || isWriteableStream!ST) { return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st)); }
 

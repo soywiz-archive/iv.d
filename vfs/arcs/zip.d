@@ -170,6 +170,10 @@ private:
         if (cdfh.disk != 0) throw new VFSNamedException!"ZipArchive"("invalid central directory entry (disk number)");
         if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
         // skip bad files
+        if (cdfh.method != 0 && cdfh.method != 8) {
+          debug(ziparc) writeln("  INVALID: method=", cdfh.method);
+          throw new VFSNamedException!"ZipArchive"("invalid method");
+        }
         if ((cdfh.method != 0 && cdfh.method != 8) || cdfh.namelen == 0 || (cdfh.gflags&0b10_0000_0110_0001) != 0 || (cdfh.attr&0x58) != 0 ||
             cast(long)cdfh.hdrofs+(cdfh.method ? cdfh.pksize : cdfh.size) >= ubufpos+pos)
         {
