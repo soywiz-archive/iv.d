@@ -595,7 +595,7 @@ public VFSDriverId vfsFindPack (const(char)[] fname, const(char)[] prefixpath=nu
 
 
 /// `prefixpath`: this was be prepended to each name from archive.
-public bool vfsRemovePack (VFSDriverId id) {
+public bool vfsRemovePak (VFSDriverId id) {
   return vfsUnregister(id);
 }
 
