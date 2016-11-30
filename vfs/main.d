@@ -487,7 +487,11 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
       if (cc == '!') {
         auto s = appender!string();
         foreach (char ch; msg) {
-          if (ch == '!') s.put(fname); else s.put(ch);
+          if (ch == '!') {
+            foreach (char xch; fname) s.put(xch);
+          } else {
+            s.put(ch);
+          }
         }
         throw new VFSException(s.data, file, line, e);
       }
