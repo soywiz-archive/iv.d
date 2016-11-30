@@ -160,7 +160,8 @@ private:
         }
         foreach (char ch; nbuf[]) {
           if (ch == 0) break;
-          if (ch == '\\' || ch == '/') ch = '^'; // arbitrary replacement
+          if (ch == '\\') ch = '#'; // arbitrary replacement
+          if (ch == '/') ch = '~'; // arbitrary replacement
           if (ch >= 'A' && ch <= 'Z') ch += 32; // original WADs has all names uppercased
           //if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
           name.ptr[nbpos++] = ch;
