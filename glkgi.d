@@ -432,14 +432,25 @@ private void kgiThread (Tid starterTid) {
       conProcessQueue();
     }
 
+    bool lastConVisible = isConsoleVisible;
+
     vbwin.eventLoop(1000/fps,
       delegate () {
         if (vbwin.closed) return;
         if (isQuitRequested) { vbwin.close(); return; }
         if (receiveMessages()) { vbwin.close(); return; }
-        bool oldconvis = isConsoleVisible;
         processConsoleCommands();
-        if (atomicLoad(updateTexture) || isConsoleVisible || oldconvis) {
+        if (lastConVisible != isConsoleVisible) {
+          lastConVisible = !lastConVisible;
+          setUpdateTextureFlag();
+          consoleLock();
+          scope(exit) consoleUnlock();
+          if (evbufused == 0) {
+            KGIEvent kev;
+            pushEventIntr(kev);
+          }
+        }
+        if (atomicLoad(updateTexture)) {
           glgfxUpdateTexture();
           vbwin.redrawOpenGlSceneNow();
         } else if (mcurHidden == 0) {
