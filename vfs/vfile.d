@@ -353,6 +353,16 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
   //GC.addRoot(mem);
   GC.addRange(mem, instSize);
   emplace!CT(mem[0..instSize], args);
+  debug(iv_vfs_pbm) {
+    import core.stdc.stdio : printf;
+    auto pbm = __traits(getPointerBitmap, CT);
+    printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
+    immutable(ubyte)* p = cast(immutable(ubyte)*)(pbm.ptr+1);
+    foreach (immutable bitnum; 0..pbm[0]/size_t.sizeof) {
+      auto sv = p[bitnum/8];
+      if (sv&(1U<<(bitnum%8))) printf("  #%u\n", cast(uint)bitnum);
+    }
+  }
   //{ import core.stdc.stdio : printf; printf("CREATED WRAPPER 0x%08x\n", mem); }
   return cast(usize)mem;
 }

@@ -497,7 +497,7 @@ struct Exploder {
 
   HufNode[LITERALS] literalTree;
   HufNode[32] distanceTree;
-  HufNode* Places = null;
+  //HufNode* places = null;
 
   HufNode[64] impDistanceTree;
   HufNode[64] impLengthTree;
@@ -574,7 +574,7 @@ struct Exploder {
     auto dest = buf.ptr;
     auto left = buf.length;
     while (left > 0) {
-      // use data that left from previous step
+      // use the data that left from the previous step
       if (upkbufpos < upkbufused) {
         auto pkx = upkbufused-upkbufpos;
         if (pkx > left) pkx = left;
@@ -642,12 +642,12 @@ private:
       ibused = rd;
       zflpos += rd;
       zflleft -= rd;
-      //{ import core.stdc.stdio; printf("XPL: read %u bytes\n", rd); }
     }
     return inbuf.ptr[ibpos++];
   }
 
   ubyte readPackedBit () {
+    pragma(inline, true);
     ubyte res = (bb&1);
     bb >>= 1;
     if (bb == 0) {
@@ -660,7 +660,7 @@ private:
 
   ubyte readPackedBits (ubyte count) {
     ubyte res = 0, mask = 1;
-    if (count > 8) assert(0, "wtf?!");
+    //if (count > 8) assert(0, "wtf?!");
     while (count--) {
       if (readPackedBit()) res |= mask;
       mask <<= 1;
@@ -668,17 +668,16 @@ private:
     return res;
   }
 
-  int decodeSFValue (HufNode *currentTree) {
-    HufNode* x = currentTree;
-    // decode one symbol of the data
+  // decode one symbol of the data
+  int decodeSFValue (const(HufNode)* tree) {
     for (;;) {
       if (!readPackedBit()) {
         // only the decision is reversed!
-        if ((x.b1&0x8000) == 0) return x.b1; // If leaf node, return data
-        x = x.jump;
+        if ((tree.b1&0x8000) == 0) return tree.b1; // If leaf node, return data
+        tree = tree.jump;
       } else {
-        if ((x.b0&0x8000) == 0) return x.b0; // If leaf node, return data
-        ++x;
+        if ((tree.b0&0x8000) == 0) return tree.b0; // If leaf node, return data
+        ++tree;
       }
     }
     return -1;
@@ -708,7 +707,7 @@ private:
    */
   void createTree (HufNode* currentTree, int numval, int* lengths) {
     // create the Huffman decode tree/table
-    Places = currentTree;
+    HufNode* places = currentTree;
     flens = lengths;
     fmax  = cast(short)numval;
     fpos[0..17] = 0;
@@ -730,18 +729,18 @@ private:
         }
       }
 
-      HufNode* curplace = Places;
+      HufNode* curplace = places;
       int tmp;
 
       if (len == 17) throw new Exception("invalid huffman tree");
-      ++Places;
+      ++places;
       ++len;
 
       tmp = isPat();
       if (tmp >= 0) {
         curplace.b0 = cast(ushort)tmp; // leaf cell for 0-bit
       } else {
-        // not a Leaf cell
+        // not a leaf cell
         curplace.b0 = 0x8000;
         rec();
       }
@@ -750,9 +749,9 @@ private:
         curplace.b1 = cast(ushort)tmp; // leaf cell for 1-bit
         curplace.jump = null; // Just for the display routine
       } else {
-        // Not a Leaf cell
+        // not a leaf cell
         curplace.b1 = 0x8000;
-        curplace.jump = Places;
+        curplace.jump = places;
         rec();
       }
       --len;
