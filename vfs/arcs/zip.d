@@ -56,7 +56,7 @@ private:
     auto size = dir[idx].size;
     auto pksize = dir[idx].pksize;
     if (zfh.method == 6) {
-      return wrapStream(ExplodeLowLevelRO(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+      return wrapStream(ExplodeLowLevelRO!Exploder(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
     } else {
       VFSZLibMode mode = (dir[idx].packed ? VFSZLibMode.Zip : VFSZLibMode.Raw);
       return wrapZLibStreamRO(st, mode, size, stpos, pksize, dir[idx].name);
@@ -764,8 +764,8 @@ private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct ExplodeLowLevelRO {
-  Exploder epl;
+struct ExplodeLowLevelRO(XPS) {
+  XPS epl;
   long size; // unpacked size
   long pos; // current file position
   long prpos; // previous file position
