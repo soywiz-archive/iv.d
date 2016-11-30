@@ -545,6 +545,7 @@ struct Exploder {
   }
 
   void reset () {
+    //CRC = 0xffffffff;
     bb = 1;
     ibpos = ibused = 0;
     ateof = false;
@@ -556,28 +557,75 @@ struct Exploder {
     upkbufused = 0;
     if (upktotalsize == 0) return;
     if ((gflags&4) != 0) {
-      // 3 trees: literals, lenths, distance top 6
+      // 3 trees: literals, lengths, distance top 6
       minMatchLen = 3;
       createTree(literalTree.ptr, decodeSF(ll.ptr), ll.ptr);
     } else {
-      // 2 trees: lenths, distance top 6
+      // 2 trees: lengths, distance top 6
       minMatchLen = 2;
     }
     createTree(impLengthTree.ptr, decodeSF(ll.ptr), ll.ptr);
     createTree(impDistanceTree.ptr, decodeSF(ll.ptr), ll.ptr);
   }
 
-  // has more bytes to unpack?
-  @property bool hasBytes () const pure nothrow @safe @nogc { pragma(inline, true); return (upkbufpos < upkbufused || upkleft != 0); }
-
-  // get next unpacked byte
-  ubyte getByte () {
-    if (upkbufpos < upkbufused) return upkbuf.ptr[upkbufpos++];
-    upkbufpos = upkbufused = 0;
-    if (upkleft == 0) return 0; // just in case
-    implodeStep();
-    if (upkbufpos >= upkbufused) throw new Exception("wtf?!");
-    return upkbuf.ptr[upkbufpos++];
+  // not more than buf, but can unpack less if EOF was hit
+  ubyte[] unpackBuf (ubyte[] buf) {
+    if (buf.length == 0) return buf;
+    auto dest = buf.ptr;
+    auto left = buf.length;
+    while (left > 0) {
+      // use data that left from previous step
+      if (upkbufpos < upkbufused) {
+        auto pkx = upkbufused-upkbufpos;
+        if (pkx > left) pkx = left;
+        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
+        dest += pkx;
+        upkbufpos += pkx;
+        left -= pkx;
+      } else {
+        if (upkleft == 0) break; // packed file EOF
+        int c = readPackedBits(1);
+        if (c) {
+          // literal data
+          if ((gflags&4) != 0) {
+            c = decodeSFValue(literalTree.ptr);
+          } else {
+            c = readPackedBits(8);
+          }
+          //bufferUpkByte(cast(ubyte)c);
+          buf32k.ptr[bIdx++] = cast(ubyte)c;
+          bIdx &= 0x7fff;
+          *dest++ = cast(ubyte)c;
+          --left;
+        } else {
+          int dist;
+          if ((gflags&2) != 0) {
+            // 8k dictionary
+            dist = readPackedBits(7);
+            c = decodeSFValue(impDistanceTree.ptr);
+            dist |= (c<<7);
+          } else {
+            // 4k dictionary
+            dist = readPackedBits(6);
+            c = decodeSFValue(impDistanceTree.ptr);
+            dist |= (c<<6);
+          }
+          int len = decodeSFValue(impLengthTree.ptr);
+          if (len == 63) len += readPackedBits(8);
+          len += minMatchLen;
+          ++dist;
+          upkbufpos = upkbufused = 0;
+          foreach (immutable i; 0..len) {
+            ubyte b = buf32k.ptr[(bIdx-dist)&0x7fff];
+            //bufferUpkByte(b);
+            buf32k.ptr[bIdx++] = b;
+            bIdx &= 0x7fff;
+            upkbuf.ptr[upkbufused++] = b;
+          }
+        }
+      }
+    }
+    return buf[0..$-left];
   }
 
 private:
@@ -620,6 +668,7 @@ private:
     return res;
   }
 
+  /+
   void bufferUpkByte (ubyte a) {
     //CRC = updcrc(cast(ubyte)a, CRC);
     buf32k[bIdx++] = a;
@@ -630,6 +679,7 @@ private:
       --upkleft;
     }
   }
+  +/
 
   int decodeSFValue (HufNode *currentTree) {
     HufNode* x = currentTree;
@@ -665,6 +715,10 @@ private:
         and could be represented with the shorter tree algorithm.
         I.e. use a X/Y-indexed table for each struct member.
   */
+  /* Note: Imploding could use the lighter huffman tree routines, as the
+         max number of entries is 256. But too much code would need to
+         be duplicated.
+   */
   void createTree (HufNode* currentTree, int numval, int* lengths) {
     // create the Huffman decode tree/table
     Places = currentTree;
@@ -719,44 +773,6 @@ private:
 
     rec();
   }
-
-  /* Note: Imploding could use the lighter huffman tree routines, as the
-         max number of entries is 256. But too much code would need to
-         be duplicated.
-   * gflags: CDFileHeader.gflags
-   */
-  void implodeStep () {
-    //CRC = 0xffffffff;
-    if (upkleft == 0) return;
-    int c = readPackedBits(1);
-    if (c) {
-      // literal data
-      if ((gflags&4) != 0) {
-        c = decodeSFValue(literalTree.ptr);
-      } else {
-        c = readPackedBits(8);
-      }
-      bufferUpkByte(cast(ubyte)c);
-    } else {
-      int dist;
-      if ((gflags&2) != 0) {
-        // 8k dictionary
-        dist = readPackedBits(7);
-        c = decodeSFValue(impDistanceTree.ptr);
-        dist |= (c<<7);
-      } else {
-        // 4k dictionary
-        dist = readPackedBits(6);
-        c = decodeSFValue(impDistanceTree.ptr);
-        dist |= (c<<6);
-      }
-      int len = decodeSFValue(impLengthTree.ptr);
-      if (len == 63) len += readPackedBits(8);
-      len += minMatchLen;
-      ++dist;
-      foreach (immutable i; 0..len) bufferUpkByte(buf32k.ptr[(bIdx-dist)&0x7fff]);
-    }
-  }
 }
 
 
@@ -802,17 +818,25 @@ struct ExplodeLowLevelRO {
     // do we need to seek forward?
     if (prpos < pos) {
       // yes, skip data
-      foreach (immutable _; 0..pos-prpos) epl.getByte();
+      ubyte[512] tmp = 0;
+      auto left = pos-prpos;
+      while (left > 0) {
+        if (left >= tmp.length) {
+          epl.unpackBuf(tmp[]);
+          left -= tmp.length;
+        } else {
+          epl.unpackBuf(tmp[0..cast(uint)left]);
+          break;
+        }
+      }
       prpos = pos;
     }
     // unpack data
     if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
     ubyte* dst = cast(ubyte*)buf;
-    foreach (immutable _; 0..count) {
-      *dst++ = epl.getByte();
-      prpos = ++pos;
-    }
-    return count;
+    auto rd = epl.unpackBuf(dst[0..count]);
+    pos = (prpos += rd.length);
+    return rd.length;
   }
 
   ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
