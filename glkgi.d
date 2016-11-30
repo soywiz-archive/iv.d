@@ -426,10 +426,12 @@ private void kgiThread (Tid starterTid) {
       return res;
     }
 
-    void processConsoleCommands () {
+    bool processConsoleCommands () {
       consoleLock();
       scope(exit) consoleUnlock();
+      auto ccwasempty = conQueueEmpty();
       conProcessQueue();
+      return (!ccwasempty && conQueueEmpty());
     }
 
     bool lastConVisible = isConsoleVisible;
@@ -439,9 +441,9 @@ private void kgiThread (Tid starterTid) {
         if (vbwin.closed) return;
         if (isQuitRequested) { vbwin.close(); return; }
         if (receiveMessages()) { vbwin.close(); return; }
-        processConsoleCommands();
-        if (lastConVisible != isConsoleVisible) {
-          lastConVisible = !lastConVisible;
+        auto conexeced = processConsoleCommands();
+        if (lastConVisible != isConsoleVisible || conexeced) {
+          lastConVisible = isConsoleVisible;
           setUpdateTextureFlag();
           consoleLock();
           scope(exit) consoleUnlock();
