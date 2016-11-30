@@ -58,7 +58,7 @@ private:
         import core.memory : GC;
         import core.stdc.stdlib : free;
         GC.removeRange(cast(void*)st);
-        GC.removeRoot(cast(void*)st);
+        //GC.removeRoot(cast(void*)st);
         free(cast(void*)st);
         return true;
       }
@@ -350,7 +350,7 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
   auto mem = malloc(instSize);
   if (mem is null) onOutOfMemoryErrorNoGC(); // oops
   memset(mem, 0, instSize);
-  GC.addRoot(mem);
+  //GC.addRoot(mem);
   GC.addRange(mem, instSize);
   emplace!CT(mem[0..instSize], args);
   //{ import core.stdc.stdio : printf; printf("CREATED WRAPPER 0x%08x\n", mem); }
