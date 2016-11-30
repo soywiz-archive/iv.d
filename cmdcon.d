@@ -1586,10 +1586,10 @@ public:
 
   abstract void printValue (); /// print variable value to console
   abstract bool isString () const pure nothrow @nogc; /// is this string variable?
-  abstract ConString strval () nothrow @nogc; /// get string value (for any var)
+  abstract ConString strval () /*nothrow @nogc*/; /// get string value (for any var)
 
   /// get variable value, converted to the given type (if it is possible).
-  @property T value(T) () nothrow @nogc {
+  @property T value(T) () /*nothrow @nogc*/ {
     pragma(inline, true);
     static if (is(T == enum)) {
       return cast(T)getIntValue;
@@ -1612,7 +1612,7 @@ public:
 
   /// set variable value, converted from the given type (if it is possible).
   /// ReadOnly is ignored, no hooks will be called.
-  @property void value(T) (T val) nothrow {
+  @property void value(T) (T val) /*nothrow*/ {
     pragma(inline, true);
     static if (is(T : ulong)) {
       // integer, xchar, boolean
@@ -1628,13 +1628,13 @@ public:
   }
 
 protected:
-  abstract ulong getIntValue () nothrow @nogc;
-  abstract double getDoubleValue () nothrow @nogc;
+  abstract ulong getIntValue () /*nothrow @nogc*/;
+  abstract double getDoubleValue () /*nothrow @nogc*/;
 
-  abstract void setIntValue (ulong v, bool signed) nothrow @nogc;
-  abstract void setDoubleValue (double v) nothrow @nogc;
-  abstract void setStrValue (string v) nothrow;
-  abstract void setCCharValue (ConString v) nothrow;
+  abstract void setIntValue (ulong v, bool signed) /*nothrow @nogc*/;
+  abstract void setDoubleValue (double v) /*nothrow @nogc*/;
+  abstract void setStrValue (string v) /*nothrow*/;
+  abstract void setCCharValue (ConString v) /*nothrow*/;
 }
 
 
@@ -1655,6 +1655,9 @@ final class ConVar(T) : ConVarBase {
   } else {
     char[256] tvbuf; // temp value
   }
+
+  T delegate (ConVarBase self) cvGetter;
+  void delegate (ConVarBase self, T nv) cvSetter;
 
   this (T* avptr, string aname, string ahelp=null) {
     vptr = avptr;
@@ -1681,11 +1684,15 @@ final class ConVar(T) : ConVarBase {
       while (cmdline.length && cmdline[$-1] <= 32) cmdline = cmdline[0..$-1];
       if (cmdline == "toggle") {
         if (hookBeforeChange !is null) { if (!hookBeforeChange(this, cmdline)) return; }
-        static if (useAtomic) {
-          import core.atomic;
-          atomicStore(*vptr, !atomicLoad(*vptr));
+        if (cvSetter !is null) {
+          cvSetter(this, !getv());
         } else {
-          *vptr = !(*vptr);
+          static if (useAtomic) {
+            import core.atomic;
+            atomicStore(*vptr, !getv);
+          } else {
+            *vptr = !getv;
+          }
         }
         if (hookAfterChange !is null) hookAfterChange(this, cmdline);
         return;
@@ -1699,11 +1706,15 @@ final class ConVar(T) : ConVarBase {
       if (val > maxv) val = maxv;
     }
     if (hookBeforeChange !is null) { if (!hookBeforeChange(this, newvals)) return; }
-    static if (useAtomic) {
-      import core.atomic;
-      atomicStore(*vptr, val);
+    if (cvSetter !is null) {
+      cvSetter(this, val);
     } else {
-      *vptr = val;
+      static if (useAtomic) {
+        import core.atomic;
+        atomicStore(*vptr, val);
+      } else {
+        *vptr = val;
+      }
     }
     if (hookAfterChange !is null) hookAfterChange(this, newvals);
   }
@@ -1712,13 +1723,17 @@ final class ConVar(T) : ConVarBase {
     static if (is(T : ConString)) return true; else return false;
   }
 
-  final private T getv () nothrow @nogc {
+  final private T getv() () /*nothrow @nogc*/ {
     pragma(inline, true);
     import core.atomic;
-    static if (useAtomic) return atomicLoad(*vptr); else return *vptr;
+    if (cvGetter !is null) {
+      return cvGetter(this);
+    } else {
+      static if (useAtomic) return atomicLoad(*vptr); else return *vptr;
+    }
   }
 
-  override ConString strval () nothrow @nogc {
+  override ConString strval () /*nothrow @nogc*/ {
     //conwriteln("*** strval for '", name, "'");
     import core.stdc.stdio : snprintf;
     static if (is(T == enum)) {
@@ -1750,23 +1765,23 @@ final class ConVar(T) : ConVarBase {
     }
   }
 
-  protected override ulong getIntValue () nothrow @nogc {
+  protected override ulong getIntValue () /*nothrow @nogc*/ {
     static if (is(T : ulong) || is(T : double)) return cast(ulong)(getv()); else return ulong.init;
   }
 
-  protected override double getDoubleValue () nothrow @nogc {
+  protected override double getDoubleValue () /*nothrow @nogc*/ {
     static if (is(T : double) || is(T : ulong)) return cast(double)(getv()); else return double.init;
   }
 
   private template PutVMx(string val) {
     static if (useAtomic) {
-      enum PutVMx = "{ import core.atomic; atomicStore(*vptr, "~val~"); }";
+      enum PutVMx = "{ import core.atomic; if (cvSetter !is null) cvSetter(this, "~val~"); else atomicStore(*vptr, "~val~"); }";
     } else {
-      enum PutVMx = "*vptr = "~val~";";
+      enum PutVMx = "{ if (cvSetter !is null) cvSetter(this, "~val~"); else *vptr = "~val~"; }";
     }
   }
 
-  protected override void setIntValue (ulong v, bool signed) nothrow @nogc {
+  protected override void setIntValue (ulong v, bool signed) /*nothrow @nogc*/ {
     import core.atomic;
     static if (is(XUQQ!T == enum)) {
       alias UT = XUQQ!T;
@@ -1789,7 +1804,7 @@ final class ConVar(T) : ConVarBase {
     }
   }
 
-  protected override void setDoubleValue (double v) nothrow @nogc {
+  protected override void setDoubleValue (double v) /*nothrow @nogc*/ {
     import core.atomic;
     static if (is(XUQQ!T == enum)) {
       alias UT = XUQQ!T;
@@ -1812,7 +1827,7 @@ final class ConVar(T) : ConVarBase {
     }
   }
 
-  protected override void setStrValue (string v) nothrow {
+  protected override void setStrValue (string v) /*nothrow*/ {
     import core.atomic;
     static if (is(XUQQ!T == enum)) {
       try {
@@ -1829,7 +1844,7 @@ final class ConVar(T) : ConVarBase {
     }
   }
 
-  protected override void setCCharValue (ConString v) nothrow {
+  protected override void setCCharValue (ConString v) /*nothrow*/ {
     import core.atomic;
     static if (is(XUQQ!T == enum)) {
       try {
@@ -1992,6 +2007,33 @@ void boolComplete(T) (ConCommand self) if (is(T == bool)) {
     conAddInputChar(' ');
   } else {
     conwriteln("  toggle?");
+  }
+}
+
+
+/** register console variable with getter and setter.
+ *
+ * Params:
+ *   aname = variable name
+ *   ahelp = help text
+ *   dgg = getter
+ *   dgs = setter
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+public ConVarBase conRegVar(T) (string aname, string ahelp, T delegate (ConVarBase self) dgg, void delegate (ConVarBase self, T nv) dgs, const(ConVarAttr)[] attrs...)
+if (!is(T == struct) && !is(T == class))
+{
+  if (dgg is null || dgs is null) assert(0, "cmdcon: both getter and setter should be defined for convar");
+  if (aname.length > 0) {
+    addName(aname);
+    auto cv = new ConVar!T(null, aname, ahelp);
+    cv.setAttrs(attrs);
+    cv.cvGetter = dgg;
+    cv.cvSetter = dgs;
+    cmdlist[aname] = cv;
+    return cv;
+  } else {
+    return null;
   }
 }
 
