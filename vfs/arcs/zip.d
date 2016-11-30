@@ -668,19 +668,6 @@ private:
     return res;
   }
 
-  /+
-  void bufferUpkByte (ubyte a) {
-    //CRC = updcrc(cast(ubyte)a, CRC);
-    buf32k[bIdx++] = a;
-    bIdx &= 0x7fff;
-    if (upkleft) {
-      if (upkbufused >= upkbuf.length) assert(0, "wtf?!");
-      upkbuf.ptr[upkbufused++] = a;
-      --upkleft;
-    }
-  }
-  +/
-
   int decodeSFValue (HufNode *currentTree) {
     HufNode* x = currentTree;
     // decode one symbol of the data
@@ -702,8 +689,8 @@ private:
     immutable n = readPackedByte()+1;
     foreach (immutable i; 0..n) {
       auto a = readPackedByte();
-      auto nv = ((a >> 4)&15)+1;
-      auto bl = (a & 15)+1;
+      auto nv = ((a>>4)&15)+1;
+      auto bl = (a&15)+1;
       while (nv--) table[v++] = bl;
     }
     return v; // entries used
