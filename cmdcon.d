@@ -3546,7 +3546,19 @@ package(iv) void concmdAdd(bool ensureNewCommand=true) (ConString s) {
 }
 
 
-/** execute commands added with `concmd()`.
+/** does console has anything in command queue? (not thread-safe)
+ *
+ * note that it can be anything, including comment or some blank chars.
+ *
+ * Returns:
+ *   `true` is queue is empty.
+ */
+public bool conQueueEmpty () {
+  return (concmdbufpos == 0);
+}
+
+
+/** execute commands added with `concmd()`. (not thread-safe)
  *
  * all commands added during execution of this function will be postponed for the next call.
  * call this function in your main loop to process all accumulated console commands.
