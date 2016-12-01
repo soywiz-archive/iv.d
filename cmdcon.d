@@ -3182,9 +3182,14 @@ public void conAddInputChar (char ch) {
     // nope, print all available commands
     bool needDelimiter = true;
     foreach (/*auto*/ name; conByCommand) {
+      if (name.length == 0) continue;
       if (concurx > 0) {
         if (name.length < concurx) continue;
         if (name[0..concurx] != concli[0..concurx]) continue;
+      } else {
+        // skip "unusal" commands"
+        ch = name[0];
+        if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_')) continue;
       }
       if (needDelimiter) { conwriteln("----------------"); needDelimiter = false; }
       conwriteln(name);
@@ -3431,7 +3436,7 @@ public void concmdf(string fmt, A...) (A args) {
     switch (fmt[pos++]) {
       case 'q':
         static if (is(at == char)) {
-          puts!true(arg[argnum]);
+          puts!true(args[argnum]);
         } else static if (is(at == wchar) || is(at == dchar)) {
           import std.conv : to;
           puts!true(to!string(args[argnum]));
@@ -3461,7 +3466,7 @@ public void concmdf(string fmt, A...) (A args) {
         break;
       case 's':
         static if (is(at == char)) {
-          puts(arg[argnum]);
+          puts(args[argnum]);
         } else static if (is(at == wchar) || is(at == dchar)) {
           import std.conv : to;
           puts(to!string(args[argnum]));
@@ -3567,41 +3572,50 @@ public bool conQueueEmpty () {
  * this is NOT thread-safe! you MUST call this in your "processing thread", and you MUST
  * put `consoleLock()/consoleUnlock()` around the call!
  *
+ * Params:
+ *   maxlen = maximum queue size to process (0: don't process commands added while processing ;-)
+ *
  * Returns:
  *   "has more commands" flag (i.e. some new commands were added to queue)
  */
-public bool conProcessQueue () {
+public bool conProcessQueue (uint maxlen=0) {
   scope(exit) conHistShrinkBuf(); // do it here
   if (concmdbufpos == 0) return false;
-  auto ebuf = concmdbufpos;
-  ConString s = concmdbuf[0..ebuf];
-  //conwriteln("===================");
-  while (s.length) {
-    auto cmd = conGetCommandStr(s);
-    if (cmd is null) break;
-    try {
+  bool once = (maxlen == 0);
+  for (;;) {
+    auto ebuf = concmdbufpos;
+    ConString s = concmdbuf[0..ebuf];
+    while (s.length) {
+      auto cmd = conGetCommandStr(s);
+      if (cmd is null) break;
+      try {
+        //consoleLock();
+        //scope(exit) consoleUnlock();
+        //conwriteln("  <", cmd, ">");
+        conExecute(cmd);
+      } catch (Exception e) {
+        conwriteln("***ERROR: ", e.msg);
+      }
+    }
+    auto pbc = concmdbufpos-ebuf;
+    // shift postponed commands
+    if (concmdbufpos > ebuf) {
+      import core.stdc.string : memmove;
       //consoleLock();
       //scope(exit) consoleUnlock();
-      //conwriteln("  <", cmd, ">");
-      conExecute(cmd);
-    } catch (Exception e) {
-      conwriteln("***ERROR: ", e.msg);
+      memmove(concmdbuf.ptr, concmdbuf.ptr+ebuf, concmdbufpos-ebuf);
+      concmdbufpos -= ebuf;
+      //s = concmdbuf[0..concmdbufpos];
+      //ebuf = concmdbufpos;
+      //return true;
+    } else {
+      concmdbufpos = 0;
+      break;
     }
+    if (once || pbc >= maxlen) break;
+    maxlen -= pbc;
   }
-  // shift postponed commands
-  if (concmdbufpos > ebuf) {
-    import core.stdc.string : memmove;
-    //consoleLock();
-    //scope(exit) consoleUnlock();
-    memmove(concmdbuf.ptr, concmdbuf.ptr+ebuf, concmdbufpos-ebuf);
-    concmdbufpos -= ebuf;
-    //s = concmdbuf[0..concmdbufpos];
-    //ebuf = concmdbufpos;
-    return true;
-  } else {
-    concmdbufpos = 0;
-    return false;
-  }
+  return (concmdbufpos == 0);
 }
 
 
