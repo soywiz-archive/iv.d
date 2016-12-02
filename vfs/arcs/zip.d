@@ -57,6 +57,8 @@ private:
     auto pksize = dir[idx].pksize;
     if (zfh.method == 6) {
       return wrapStream(ExplodeLowLevelRO!Exploder(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+    } else if (zfh.method == 1) {
+      return wrapStream(ExplodeLowLevelRO!Deshrinker(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
     } else {
       VFSZLibMode mode = (dir[idx].packed ? VFSZLibMode.Zip : VFSZLibMode.Raw);
       return wrapZLibStreamRO(st, mode, size, stpos, pksize, dir[idx].name);
@@ -174,7 +176,7 @@ private:
         if (cdfh.disk != 0) throw new VFSNamedException!"ZipArchive"("invalid central directory entry (disk number)");
         if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
         // skip bad files
-        if (cdfh.method != 0 && cdfh.method != 8 && cdfh.method != 6) {
+        if (cdfh.method != 0 && cdfh.method != 8 && cdfh.method != 6 && cdfh.method != 1) {
           debug(ziparc) writeln("  INVALID: method=", cdfh.method);
           throw new VFSNamedException!"ZipArchive"("invalid method");
         }
@@ -484,33 +486,7 @@ align(1):
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// slow and stupid "implode" unpacker
-// based on the code from gunzip.c by Pasi Ojala, a1bert@iki.fi (http://www.iki.fi/a1bert/)
-struct Exploder {
-  static struct HufNode {
-    ushort b0; // 0-branch value + leaf node flag
-    ushort b1; // 1-branch value + leaf node flag
-    HufNode* jump; // 1-branch jump address
-  }
-
-  enum LITERALS = 288;
-
-  HufNode[LITERALS] literalTree;
-  HufNode[32] distanceTree;
-  //HufNode* places = null;
-
-  HufNode[64] impDistanceTree;
-  HufNode[64] impLengthTree;
-  ubyte len = 0;
-  short[17] fpos = 0;
-  int* flens;
-  short fmax;
-
-  int[256] ll;
-
-  int minMatchLen = 3;
-  ushort gflags;
-
+struct BitReader {
   VFile zfl;
   long zflpos;
   long zflorg;
@@ -523,112 +499,15 @@ struct Exploder {
   ubyte bb = 1; // getbit mask
   bool ateof;
 
-  ubyte[32768] buf32k;
-  uint bIdx;
-
-  ubyte[512] upkbuf; // way too much
-  uint upkbufused, upkbufpos;
-
-  //this () {}
-
-//final:
-  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
-    zfl = fl;
-    bb = 1;
-    ibpos = ibused = 0;
-    ateof = false;
-    zflpos = zflorg = apos;
-    zflsize = apksize;
-    gflags = agflags;
-    upktotalsize = aupksize;
-    reset();
-  }
-
   void reset () {
-    //CRC = 0xffffffff;
     bb = 1;
     ibpos = ibused = 0;
     ateof = false;
     zflpos = zflorg;
     zflleft = zflsize;
-    buf32k[] = 0;
-    bIdx = 0;
     upkleft = upktotalsize;
-    upkbufused = 0;
-    if (upktotalsize == 0) return;
-    if ((gflags&4) != 0) {
-      // 3 trees: literals, lengths, distance top 6
-      minMatchLen = 3;
-      createTree(literalTree.ptr, decodeSF(ll.ptr), ll.ptr);
-    } else {
-      // 2 trees: lengths, distance top 6
-      minMatchLen = 2;
-    }
-    createTree(impLengthTree.ptr, decodeSF(ll.ptr), ll.ptr);
-    createTree(impDistanceTree.ptr, decodeSF(ll.ptr), ll.ptr);
   }
 
-  // not more than buf, but can unpack less if EOF was hit
-  ubyte[] unpackBuf (ubyte[] buf) {
-    if (buf.length == 0) return buf;
-    auto dest = buf.ptr;
-    auto left = buf.length;
-    while (left > 0) {
-      // use the data that left from the previous step
-      if (upkbufpos < upkbufused) {
-        auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = left;
-        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
-        dest += pkx;
-        upkbufpos += pkx;
-        left -= pkx;
-      } else {
-        if (upkleft == 0) break; // packed file EOF
-        int c = readPackedBits(1);
-        if (c) {
-          // literal data
-          if ((gflags&4) != 0) {
-            c = decodeSFValue(literalTree.ptr);
-          } else {
-            c = readPackedBits(8);
-          }
-          //bufferUpkByte(cast(ubyte)c);
-          buf32k.ptr[bIdx++] = cast(ubyte)c;
-          bIdx &= 0x7fff;
-          *dest++ = cast(ubyte)c;
-          --left;
-        } else {
-          int dist;
-          if ((gflags&2) != 0) {
-            // 8k dictionary
-            dist = readPackedBits(7);
-            c = decodeSFValue(impDistanceTree.ptr);
-            dist |= (c<<7);
-          } else {
-            // 4k dictionary
-            dist = readPackedBits(6);
-            c = decodeSFValue(impDistanceTree.ptr);
-            dist |= (c<<6);
-          }
-          int len = decodeSFValue(impLengthTree.ptr);
-          if (len == 63) len += readPackedBits(8);
-          len += minMatchLen;
-          ++dist;
-          upkbufpos = upkbufused = 0;
-          foreach (immutable i; 0..len) {
-            ubyte b = buf32k.ptr[(bIdx-dist)&0x7fff];
-            //bufferUpkByte(b);
-            buf32k.ptr[bIdx++] = b;
-            bIdx &= 0x7fff;
-            upkbuf.ptr[upkbufused++] = b;
-          }
-        }
-      }
-    }
-    return buf[0..$-left];
-  }
-
-private:
   T readPackedByte(T=int) () if (is(T == int) || is(T == ubyte)) {
     if (ateof) {
       static if (is(T == int)) return -1; else throw new Exception("unexpected EOF");
@@ -667,11 +546,143 @@ private:
     }
     return res;
   }
+}
 
+
+// slow and stupid "implode" unpacker
+// based on the code from gunzip.c by Pasi Ojala, a1bert@iki.fi (http://www.iki.fi/a1bert/)
+struct Exploder {
+  BitReader br;
+
+  static struct HufNode {
+    ushort b0; // 0-branch value + leaf node flag
+    ushort b1; // 1-branch value + leaf node flag
+    HufNode* jump; // 1-branch jump address
+  }
+
+  enum LITERALS = 288;
+
+  HufNode[LITERALS] literalTree;
+  HufNode[32] distanceTree;
+  //HufNode* places = null;
+
+  HufNode[64] impDistanceTree;
+  HufNode[64] impLengthTree;
+  ubyte len = 0;
+  short[17] fpos = 0;
+  int* flens;
+  short fmax;
+
+  int[256] ll;
+
+  int minMatchLen = 3;
+  ushort gflags;
+
+  ubyte[32768] buf32k;
+  uint bIdx;
+
+  ubyte[512] upkbuf; // way too much
+  uint upkbufused, upkbufpos;
+
+  //this () {}
+
+//final:
+  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+    br.zfl = fl;
+    br.bb = 1;
+    br.ibpos = br.ibused = 0;
+    br.ateof = false;
+    br.zflpos = br.zflorg = apos;
+    br.zflsize = apksize;
+    gflags = agflags;
+    br.upktotalsize = aupksize;
+    reset();
+  }
+
+  void reset () {
+    //CRC = 0xffffffff;
+    br.reset();
+    buf32k[] = 0;
+    bIdx = 0;
+    upkbufused = 0;
+    if (br.upktotalsize == 0) return;
+    if ((gflags&4) != 0) {
+      // 3 trees: literals, lengths, distance top 6
+      minMatchLen = 3;
+      createTree(literalTree.ptr, decodeSF(ll.ptr), ll.ptr);
+    } else {
+      // 2 trees: lengths, distance top 6
+      minMatchLen = 2;
+    }
+    createTree(impLengthTree.ptr, decodeSF(ll.ptr), ll.ptr);
+    createTree(impDistanceTree.ptr, decodeSF(ll.ptr), ll.ptr);
+  }
+
+  // not more than buf, but can unpack less if EOF was hit
+  ubyte[] unpackBuf (ubyte[] buf) {
+    if (buf.length == 0) return buf;
+    auto dest = buf.ptr;
+    auto left = buf.length;
+    while (left > 0) {
+      // use the data that left from the previous step
+      if (upkbufpos < upkbufused) {
+        auto pkx = upkbufused-upkbufpos;
+        if (pkx > left) pkx = left;
+        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
+        dest += pkx;
+        upkbufpos += pkx;
+        left -= pkx;
+      } else {
+        if (br.upkleft == 0) break; // packed file EOF
+        int c = br.readPackedBits(1);
+        if (c) {
+          // literal data
+          if ((gflags&4) != 0) {
+            c = decodeSFValue(literalTree.ptr);
+          } else {
+            c = br.readPackedBits(8);
+          }
+          //bufferUpkByte(cast(ubyte)c);
+          buf32k.ptr[bIdx++] = cast(ubyte)c;
+          bIdx &= 0x7fff;
+          *dest++ = cast(ubyte)c;
+          --left;
+        } else {
+          int dist;
+          if ((gflags&2) != 0) {
+            // 8k dictionary
+            dist = br.readPackedBits(7);
+            c = decodeSFValue(impDistanceTree.ptr);
+            dist |= (c<<7);
+          } else {
+            // 4k dictionary
+            dist = br.readPackedBits(6);
+            c = decodeSFValue(impDistanceTree.ptr);
+            dist |= (c<<6);
+          }
+          int len = decodeSFValue(impLengthTree.ptr);
+          if (len == 63) len += br.readPackedBits(8);
+          len += minMatchLen;
+          ++dist;
+          upkbufpos = upkbufused = 0;
+          foreach (immutable i; 0..len) {
+            ubyte b = buf32k.ptr[(bIdx-dist)&0x7fff];
+            //bufferUpkByte(b);
+            buf32k.ptr[bIdx++] = b;
+            bIdx &= 0x7fff;
+            upkbuf.ptr[upkbufused++] = b;
+          }
+        }
+      }
+    }
+    return buf[0..$-left];
+  }
+
+private:
   // decode one symbol of the data
   int decodeSFValue (const(HufNode)* tree) {
     for (;;) {
-      if (!readPackedBit()) {
+      if (!br.readPackedBit()) {
         // only the decision is reversed!
         if ((tree.b1&0x8000) == 0) return tree.b1; // If leaf node, return data
         tree = tree.jump;
@@ -685,9 +696,9 @@ private:
 
   int decodeSF (int* table) {
     int v = 0;
-    immutable n = readPackedByte()+1;
+    immutable n = br.readPackedByte()+1;
     foreach (immutable i; 0..n) {
-      auto a = readPackedByte();
+      auto a = br.readPackedByte();
       auto nv = ((a>>4)&15)+1;
       auto bl = (a&15)+1;
       while (nv--) table[v++] = bl;
@@ -763,6 +774,160 @@ private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+struct Deshrinker {
+  // HSIZE is defined as 2^13 (8192) in unzip.h
+  enum HSIZE     = 8192;
+  enum BOGUSCODE = 256;
+  enum CODE_MASK = HSIZE-1;  // 0x1fff (lower bits are parent's index)
+  enum FREE_CODE = HSIZE;    // 0x2000 (code is unused or was cleared)
+  enum HAS_CHILD = HSIZE<<1; // 0x4000 (code has a child--do not clear)
+
+  BitReader br;
+
+  ubyte[32768] upkbuf; // way too much
+  uint upkbufused, upkbufpos;
+
+  ushort[HSIZE] parent;
+  ubyte[HSIZE] value;
+  ubyte[HSIZE] stack;
+
+  ubyte* newstr;
+  int len;
+  char KwKwK, codesize = 1; // start at 9 bits/code
+  short code, oldcode, freecode, curcode;
+
+//final:
+  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+    br.zfl = fl;
+    br.bb = 1;
+    br.ibpos = br.ibused = 0;
+    br.ateof = false;
+    br.zflpos = br.zflorg = apos;
+    br.zflsize = apksize;
+    br.upktotalsize = aupksize;
+    reset();
+  }
+
+  void reset () {
+    //CRC = 0xffffffff;
+    br.reset();
+    upkbufused = 0;
+    if (br.upktotalsize == 0) return;
+    codesize = 1; // start at 9 bits/code
+    freecode = BOGUSCODE;
+    for (code = 0; code < BOGUSCODE; code++) {
+      value[code] = cast(ubyte)code;
+      parent[code] = BOGUSCODE;
+    }
+    for (code = BOGUSCODE+1; code < HSIZE; code++) parent[code] = FREE_CODE;
+
+    oldcode = cast(short)br.readPackedBits(8);
+    oldcode |= (br.readPackedBits(codesize)<<8);
+    //if (SIZE < size) putUnpackedByte(oldcode, outfp);
+    putUnpackedByte(cast(ubyte)oldcode);
+  }
+
+  // not more than buf, but can unpack less if EOF was hit
+  ubyte[] unpackBuf (ubyte[] buf) {
+    if (buf.length == 0) return buf;
+    auto dest = buf.ptr;
+    auto left = buf.length;
+    while (left > 0) {
+      // use the data that left from the previous step
+      if (upkbufpos < upkbufused) {
+        auto pkx = upkbufused-upkbufpos;
+        if (pkx > left) pkx = left;
+        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
+        dest += pkx;
+        upkbufpos += pkx;
+        left -= pkx;
+      } else {
+        if (br.upkleft == 0) break; // packed file EOF
+        upkbufused = upkbufpos = 0;
+        for (;;) {
+          code = cast(short)br.readPackedBits(8);
+          code |= (br.readPackedBits(codesize)<<8);
+          if (code == BOGUSCODE) {
+            // possible to have consecutive escapes?
+            code = cast(short)br.readPackedBits(8);
+            code |= (br.readPackedBits(codesize)<<8);
+            if (code == 1) {
+              ++codesize;
+            } else if (code == 2) {
+              // clear leafs (nodes with no children)
+
+              // first loop: mark each parent as such
+              for (code = BOGUSCODE+1; code < HSIZE; ++code) {
+                curcode = (parent[code]&CODE_MASK);
+                if (curcode > BOGUSCODE) parent[curcode] |= HAS_CHILD; // set parent's child-bit
+              }
+              // second loop:  clear all nodes *not* marked as parents; reset flag bits
+              for (code = BOGUSCODE+1;  code < HSIZE;  ++code) {
+                if (parent[code]&HAS_CHILD) {
+                  // just clear child-bit
+                  parent[code] &= ~HAS_CHILD;
+                } else {
+                  // leaf: lose it
+                  parent[code] = FREE_CODE;
+                }
+              }
+              freecode = BOGUSCODE;
+            }
+            continue;
+          }
+
+          newstr = &stack[HSIZE-1];
+          curcode = code;
+
+          if (parent[curcode] == FREE_CODE) {
+            KwKwK = 1;
+            --newstr; // last character will be same as first character
+            curcode = oldcode;
+            len = 1;
+          } else {
+            KwKwK = 0;
+            len = 0;
+          }
+
+          do {
+            *newstr-- = value[curcode];
+            ++len;
+            curcode = (parent[curcode]&CODE_MASK);
+          } while (curcode != BOGUSCODE);
+
+          ++newstr;
+          if (KwKwK) stack[HSIZE-1] = *newstr;
+
+          do {
+            ++freecode;
+          } while (parent[freecode] != FREE_CODE);
+
+          parent[freecode] = oldcode;
+          value[freecode] = *newstr;
+          oldcode = code;
+
+          debug(ziparc) { import core.stdc.stdio : printf; printf("deshrinker: len=%d\n", len); }
+          while (len--) {
+            putUnpackedByte(*newstr);
+            ++newstr;
+          }
+
+          break;
+        }
+      }
+    }
+    return buf[0..$-left];
+  }
+
+private:
+  void putUnpackedByte (ubyte ub) {
+    if (upkbufused >= upkbuf.length) throw new Exception("deshrinker internal bug");
+    upkbuf.ptr[upkbufused++] = ub;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 struct ExplodeLowLevelRO(XPS) {
   XPS epl;
   long size; // unpacked size
@@ -780,13 +945,13 @@ struct ExplodeLowLevelRO(XPS) {
     fname = aname;
   }
 
-  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : epl.zfl.name); }
-  @property bool isOpen () { pragma(inline, true); return epl.zfl.isOpen; }
+  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : epl.br.zfl.name); }
+  @property bool isOpen () { pragma(inline, true); return epl.br.zfl.isOpen; }
   @property bool eof () { pragma(inline, true); return eofhit; }
 
   void close () {
     eofhit = true;
-    if (epl.zfl.isOpen) epl.zfl.close();
+    if (epl.br.zfl.isOpen) epl.br.zfl.close();
   }
 
   ssize read (void* buf, usize count) {
