@@ -269,6 +269,8 @@ private template XUQQ(T) {
     alias XUQQ = T;
   }
 }
+static assert(is(XUQQ!string == string));
+static assert(is(XUQQ!(const(char)[]) == const(char)[]));
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1641,31 +1643,34 @@ protected:
 // ////////////////////////////////////////////////////////////////////////// //
 /// console will use this to register console variables
 final class ConVar(T) : ConVarBase {
+  alias TT = XUQQ!T;
   enum useAtomic = is(T == shared);
   T* vptr;
-  static if (isIntegral!T) {
-    T minv = T.min;
-    T maxv = T.max;
-  } else static if (isFloatingPoint!T) {
-    T minv = -T.max;
-    T maxv = T.max;
+  static if (isIntegral!TT) {
+    TT minv = TT.min;
+    TT maxv = TT.max;
+  } else static if (isFloatingPoint!TT) {
+    TT minv = -TT.max;
+    TT maxv = TT.max;
   }
-  static if (!is(T : ConString)) {
+  static if (!is(TT : ConString)) {
     char[256] vbuf;
   } else {
     char[256] tvbuf; // temp value
   }
 
-  T delegate (ConVarBase self) cvGetter;
-  void delegate (ConVarBase self, T nv) cvSetter;
+  TT delegate (ConVarBase self) cvGetter;
+  void delegate (ConVarBase self, TT nv) cvSetter;
+
+  void delegate (ConVarBase self, TT pv, TT nv) hookAfterChangeVV;
 
   this (T* avptr, string aname, string ahelp=null) {
     vptr = avptr;
     super(aname, ahelp);
   }
 
-  static if (isIntegral!T || isFloatingPoint!T) {
-    this (T* avptr, T aminv, T amaxv, string aname, string ahelp=null) {
+  static if (isIntegral!TT || isFloatingPoint!TT) {
+    this (T* avptr, TT aminv, TT amaxv, string aname, string ahelp=null) {
       vptr = avptr;
       minv = aminv;
       maxv = amaxv;
@@ -1678,22 +1683,23 @@ final class ConVar(T) : ConVarBase {
     if (checkHelp(cmdline)) { showHelp; return; }
     if (!hasArgs(cmdline)) { printValue; return; }
     if (attrReadOnly) return; // can't change read-only var with console commands
-    alias TT = XUQQ!T;
     static if ((is(TT == bool) || isIntegral!TT || isFloatingPoint!TT) && !is(TT == enum)) {
       while (cmdline.length && cmdline[0] <= 32) cmdline = cmdline[1..$];
       while (cmdline.length && cmdline[$-1] <= 32) cmdline = cmdline[0..$-1];
       if (cmdline == "toggle") {
         if (hookBeforeChange !is null) { if (!hookBeforeChange(this, cmdline)) return; }
+        auto prval = getv();
         if (cvSetter !is null) {
-          cvSetter(this, !getv());
+          cvSetter(this, !prval);
         } else {
           static if (useAtomic) {
             import core.atomic;
-            atomicStore(*vptr, !getv);
+            atomicStore(*vptr, !prval);
           } else {
-            *vptr = !getv;
+            *vptr = !prval;
           }
         }
+        if (hookAfterChangeVV !is null) hookAfterChangeVV(this, prval, !prval);
         if (hookAfterChange !is null) hookAfterChange(this, cmdline);
         return;
       }
@@ -1706,6 +1712,8 @@ final class ConVar(T) : ConVarBase {
       if (val > maxv) val = maxv;
     }
     if (hookBeforeChange !is null) { if (!hookBeforeChange(this, newvals)) return; }
+    TT oval;
+    if (hookAfterChangeVV !is null) oval = getv();
     if (cvSetter !is null) {
       cvSetter(this, val);
     } else {
@@ -1716,14 +1724,15 @@ final class ConVar(T) : ConVarBase {
         *vptr = val;
       }
     }
+    if (hookAfterChangeVV !is null) hookAfterChangeVV(this, oval, val);
     if (hookAfterChange !is null) hookAfterChange(this, newvals);
   }
 
   override bool isString () const pure nothrow @nogc {
-    static if (is(T : ConString)) return true; else return false;
+    static if (is(TT : ConString)) return true; else return false;
   }
 
-  final private T getv() () /*nothrow @nogc*/ {
+  final private TT getv() () /*nothrow @nogc*/ {
     pragma(inline, true);
     import core.atomic;
     if (cvGetter !is null) {
@@ -1736,11 +1745,10 @@ final class ConVar(T) : ConVarBase {
   override ConString strval () /*nothrow @nogc*/ {
     //conwriteln("*** strval for '", name, "'");
     import core.stdc.stdio : snprintf;
-    static if (is(T == enum)) {
-      alias UT = XUQQ!T;
+    static if (is(TT == enum)) {
       auto v = getv();
-      foreach (string mname; __traits(allMembers, UT)) {
-        if (__traits(getMember, UT, mname) == v) return mname;
+      foreach (string mname; __traits(allMembers, TT)) {
+        if (__traits(getMember, TT, mname) == v) return mname;
       }
       return "???";
     } else static if (is(T : ConString)) {
@@ -1784,9 +1792,8 @@ final class ConVar(T) : ConVarBase {
   protected override void setIntValue (ulong v, bool signed) /*nothrow @nogc*/ {
     import core.atomic;
     static if (is(XUQQ!T == enum)) {
-      alias UT = XUQQ!T;
-      foreach (string mname; __traits(allMembers, UT)) {
-        if (__traits(getMember, UT, mname) == v) {
+      foreach (string mname; __traits(allMembers, TT)) {
+        if (__traits(getMember, TT, mname) == v) {
           mixin(PutVMx!"cast(T)v");
           return;
         }
@@ -1807,9 +1814,8 @@ final class ConVar(T) : ConVarBase {
   protected override void setDoubleValue (double v) /*nothrow @nogc*/ {
     import core.atomic;
     static if (is(XUQQ!T == enum)) {
-      alias UT = XUQQ!T;
-      foreach (string mname; __traits(allMembers, UT)) {
-        if (__traits(getMember, UT, mname) == v) {
+      foreach (string mname; __traits(allMembers, TT)) {
+        if (__traits(getMember, TT, mname) == v) {
           mixin(PutVMx!"cast(T)v");
           return;
         }
@@ -1863,9 +1869,8 @@ final class ConVar(T) : ConVarBase {
   override void printValue () {
     static if (is(T == enum)) {
       auto vx = getv();
-      alias UT = XUQQ!T;
-      foreach (string mname; __traits(allMembers, UT)) {
-        if (__traits(getMember, UT, mname) == vx) {
+      foreach (string mname; __traits(allMembers, TT)) {
+        if (__traits(getMember, TT, mname) == vx) {
           conwrite(name);
           conwrite(" ");
           //writeQuotedString(mname);
@@ -2074,6 +2079,36 @@ public ConVarBase conRegVar(alias v, T) (T aminv, T amaxv, string aname, string 
 if ((isIntegral!(typeof(v)) && isIntegral!T) || (isFloatingPoint!(typeof(v)) && (isIntegral!T || isFloatingPoint!T)))
 {
   mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, cast(typeof(v))aminv, cast(typeof(v))amaxv, aname, ahelp)`);
+}
+
+/** register integral console variable with old/new delegate.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aname = variable name
+ *   ahelp = help text
+ *   cdg = old/new change delegate
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+ConVarBase conRegVar(alias v) (string aname, string ahelp, void delegate (ConVarBase self, XUQQ!(typeof(v)) oldv, XUQQ!(typeof(v)) newv) cdg, const(ConVarAttr)[] attrs...)
+if (is(XUQQ!(typeof(v)) : long) || is(XUQQ!(typeof(v)) : double) || is(XUQQ!(typeof(v)) : ConString) || is(XUQQ!(typeof(v)) == bool) || is(XUQQ!(typeof(v)) == enum)) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, aname, ahelp); cv.hookAfterChangeVV = cdg`);
+}
+
+/** register integral console variable with bounded value and old/new delegate.
+ *
+ * Params:
+ *   v = variable symbol
+ *   aminv = minimum value
+ *   amaxv = maximum value
+ *   aname = variable name
+ *   ahelp = help text
+ *   cdg = old/new change delegate
+ *   attrs = convar attributes (see `ConVarAttr`)
+ */
+ConVarBase conRegVar(alias v) (XUQQ!(typeof(v)) amin, XUQQ!(typeof(v)) amax, string aname, string ahelp, void delegate (ConVarBase self, XUQQ!(typeof(v)) oldv, XUQQ!(typeof(v)) newv) cdg, const(ConVarAttr)[] attrs...)
+if (is(XUQQ!(typeof(v)) : long) || is(XUQQ!(typeof(v)) : double) && !is(XUQQ!(typeof(v)) == bool) && !is(XUQQ!(typeof(v)) == enum)) {
+  mixin(RegVarMixin!`new ConVar!(typeof(v))(&v, amin, amax, aname, ahelp); cv.hookAfterChangeVV = cdg`);
 }
 
 /** register integral console variable with bounded value.
