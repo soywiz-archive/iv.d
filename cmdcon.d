@@ -161,11 +161,16 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
           auto nbuf = cast(char*)realloc(cbuf, newsz);
           if (nbuf !is null) {
             // yay, we got some room; move text down, so there will be more room
-            import core.stdc.string : memmove;
-            auto tsz = cbufcursize-np;
-            version(test_cbuf) { import core.stdc.stdio : stderr, fprintf; stderr.fprintf("np=%u; cbufcursize=%u; cbufmaxsize=%u; newsz=%u; tsz=%u; newroom=%u; ndest=%u\n", np, cbufcursize, cbufmaxsize, newsz, tsz, newsz-cbufcursize, newsz-tsz, cbuf+np); }
-            if (tsz > 0) memmove(cbuf+newsz-tsz, cbuf+np, tsz);
-            cbufhead += newsz-cbufcursize;
+            version(test_cbuf) { import core.stdc.stdio : stderr, fprintf; stderr.fprintf("np=%u; cbufcursize=%u; cbufmaxsize=%u; newsz=%u; ndest=%u\n", np, cbufcursize, cbufmaxsize, newsz, newsz-cbufcursize, cbuf+np); }
+            if (np == 0) {
+              // yay, we can do some trickery here
+              np = cbuftail+1; // yep, that easy
+            } else {
+              import core.stdc.string : memmove;
+              auto tsz = cbufcursize-np;
+              if (tsz > 0) memmove(cbuf+newsz-tsz, cbuf+np, tsz);
+              cbufhead += newsz-cbufcursize;
+            }
             cbufcursize = newsz;
             cbuf = nbuf;
             removelines = false;
