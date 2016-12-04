@@ -80,18 +80,39 @@ private bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/*
 version(test_cbuf)
   enum ConBufSize = 64;
 else
   enum ConBufSize = 256*1024;
+*/
 
 // each line in buffer ends with '\n'; we don't keep offsets or lengthes, as
 // it's fairly easy to search in buffer, and drawing console is not a common
 // thing, so it doesn't have to be superfast.
-__gshared char[ConBufSize] cbuf = 0;
+__gshared char* cbuf = null;
 __gshared int cbufhead, cbuftail; // `cbuftail` points *at* last char
 __gshared bool cbufLastWasCR = false;
-shared static this () { cbuf.ptr[0] = '\n'; }
+__gshared uint cbufcursize = 0;
+__gshared uint cbufmaxsize = 256*1024;
+
+shared static this () {
+  import core.stdc.stdlib : malloc;
+  //cbuf.ptr[0] = '\n';
+  version(test_cbuf) {
+    cbufcursize = 32;
+    cbufmaxsize = 256;
+  } else {
+    cbufcursize = 8192;
+  }
+  cbuf = cast(char*)malloc(cbufcursize);
+  if (cbuf is null) assert(0, "cmdcon: out of memory!"); // unlikely case
+  cbuf[0..cbufcursize] = 0;
+  cbuf[0] = '\n';
+
+  conRegVar("con_bufsize", "current size of console output buffer", (ConVarBase self) => cbufcursize, (ConVarBase self, uint nv) {}, ConVarAttr.ReadOnly);
+  conRegVar!cbufmaxsize(8192, 512*1024*1024, "con_bufmaxsize", "maximum size of console output buffer");
+}
 
 shared uint changeCount = 1;
 public @property uint cbufLastChange () nothrow @trusted @nogc { import core.atomic; return atomicLoad(changeCount); } /// changed when something was written to console buffer
@@ -124,16 +145,42 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
     foreach (char ch; chrs) {
       if (cbufLastWasCR && ch == '\x0a') { cbufLastWasCR = false; continue; }
       if ((cbufLastWasCR = (ch == '\x0d')) != false) ch = '\x0a';
-      int np = (cbuftail+1)%ConBufSize;
+      int np = (cbuftail+1)%cbufcursize;
       if (np == cbufhead) {
         // we have to make some room; delete top line for this
-        for (;;) {
-          char och = cbuf.ptr[cbufhead];
-          cbufhead = (cbufhead+1)%ConBufSize;
-          if (cbufhead == np || och == '\n') break;
+        bool removelines = true;
+        // first, try grow cosole buffer if we can
+        if (cbufcursize < cbufmaxsize) {
+          import core.stdc.stdlib : realloc;
+          version(test_cbuf) {
+            auto newsz = cbufcursize+13;
+          } else {
+            auto newsz = cbufcursize*2;
+          }
+          if (newsz > cbufmaxsize) newsz = cbufmaxsize;
+          auto nbuf = cast(char*)realloc(cbuf, newsz);
+          if (nbuf !is null) {
+            // yay, we got some room; move text down, so there will be more room
+            import core.stdc.string : memmove;
+            auto tsz = cbufcursize-np;
+            version(test_cbuf) { import core.stdc.stdio : stderr, fprintf; stderr.fprintf("np=%u; cbufcursize=%u; cbufmaxsize=%u; newsz=%u; tsz=%u; newroom=%u; ndest=%u\n", np, cbufcursize, cbufmaxsize, newsz, tsz, newsz-cbufcursize, newsz-tsz, cbuf+np); }
+            if (tsz > 0) memmove(cbuf+newsz-tsz, cbuf+np, tsz);
+            cbufhead += newsz-cbufcursize;
+            cbufcursize = newsz;
+            cbuf = nbuf;
+            removelines = false;
+            version(test_cbuf) { import core.stdc.stdio : stderr, fprintf; stderr.fprintf("  cbufhead=%u; cbuftail=%u\n", cbufhead, cbuftail); }
+          }
+        }
+        if (removelines) {
+          for (;;) {
+            char och = cbuf[cbufhead];
+            cbufhead = (cbufhead+1)%cbufcursize;
+            if (cbufhead == np || och == '\n') break;
+          }
         }
       }
-      cbuf.ptr[np] = ch;
+      cbuf[np] = ch;
       cbuftail = np;
     }
   }
@@ -151,13 +198,13 @@ public auto conbufLinesRev () nothrow @trusted @nogc {
     int sp = -1, ep;
 
   public:
-    @property auto front () const { pragma(inline, true); return (sp >= 0 ? cbuf.ptr[sp] : '\x00'); }
+    @property auto front () const { pragma(inline, true); return (sp >= 0 ? cbuf[sp] : '\x00'); }
     @property bool empty () const { pragma(inline, true); return (sp < 0 || h != cbufhead || t != cbuftail); }
     @property auto save () { pragma(inline, true); return Line(h, t, sp, ep); }
-    void popFront () { pragma(inline, true); if (sp < 0 || (sp = (sp+1)%ConBufSize) == ep) sp = -1; }
-    @property usize opDollar () { pragma(inline, true); return (sp >= 0 ? (sp > ep ? ep+ConBufSize-sp : ep-sp) : 0); }
+    void popFront () { pragma(inline, true); if (sp < 0 || (sp = (sp+1)%cbufcursize) == ep) sp = -1; }
+    @property usize opDollar () { pragma(inline, true); return (sp >= 0 ? (sp > ep ? ep+cbufcursize-sp : ep-sp) : 0); }
     alias length = opDollar;
-    char opIndex (usize pos) { pragma(inline, true); return (sp >= 0 ? cbuf.ptr[sp+pos] : '\x00'); }
+    char opIndex (usize pos) { pragma(inline, true); return (sp >= 0 ? cbuf[sp+pos] : '\x00'); }
   }
 
   static struct Range {
@@ -170,8 +217,8 @@ public auto conbufLinesRev () nothrow @trusted @nogc {
     void toLineStart () {
       line.ep = pos;
       while (pos != cbufhead) {
-        int p = (pos+ConBufSize-1)%ConBufSize;
-        if (cbuf.ptr[p] == '\n') break;
+        int p = (pos+cbufcursize-1)%cbufcursize;
+        if (cbuf[p] == '\n') break;
         pos = p;
       }
       line.sp = pos;
@@ -185,7 +232,7 @@ public auto conbufLinesRev () nothrow @trusted @nogc {
     @property auto save () { pragma(inline, true); return Range(h, t, pos, line); }
     void popFront () {
       if (pos < 0 || pos == h || h != cbufhead || t != cbuftail) { line = Line.init; h = t = pos = -1; return; }
-      pos = (pos+ConBufSize-1)%ConBufSize;
+      pos = (pos+cbufcursize-1)%cbufcursize;
       toLineStart();
     }
   }
@@ -193,7 +240,7 @@ public auto conbufLinesRev () nothrow @trusted @nogc {
   Range res;
   res.h = cbufhead;
   res.pos = res.t = cbuftail;
-  if (cbuf.ptr[res.pos] != '\n') res.pos = (res.pos+1)%ConBufSize;
+  if (cbuf[res.pos] != '\n') res.pos = (res.pos+1)%cbufcursize;
   res.toLineStart();
   //{ import std.stdio; writeln("pos=", res.pos, "; head=", res.h, "; tail=", res.t, "; llen=", res.line.length, "; [", res.line, "]"); }
   return res;
@@ -206,13 +253,13 @@ version(unittest) public void conbufDump () {
   int pp = cbufhead;
   stdout.writeln("==========================");
   for (;;) {
-    if (cbuf.ptr[pp] == '\n') stdout.write('|');
-    stdout.write(cbuf.ptr[pp]);
+    if (cbuf[pp] == '\n') stdout.write('|');
+    stdout.write(cbuf[pp]);
     if (pp == cbuftail) {
-      if (cbuf.ptr[pp] != '\n') stdout.write('\n');
+      if (cbuf[pp] != '\n') stdout.write('\n');
       break;
     }
-    pp = (pp+1)%ConBufSize;
+    pp = (pp+1)%cbufcursize;
   }
   //foreach (auto s; conbufLinesRev) stdout.writeln(s, "|");
 }
