@@ -2673,6 +2673,27 @@ ConVarBase conRegUserVar(T) (string aname, string help) {
 }
 
 
+/// create bounded "user console variable"
+ConVarBase conRegUserVar(T) (T amin, T amax, string aname, string help) if (is(T : long) || is(T : double)) {
+  if (aname.length == 0) return null;
+  ConVarBase v;
+  static if (is(T : long) || is(T : double)) {
+    T* var = new T;
+    v = new ConVar!T(var, amin, amax, aname, help);
+  } else static if (is(T : const(char)[])) {
+    T[] var;
+    var.length = 1;
+    v = new ConVar!T(&var[0], aname, help);
+  } else {
+    static assert(0, "can't create uservar of type '"~T.stringof~"'");
+  }
+  v.setAttrs!true(ConVarAttr.User);
+  addName(aname);
+  cmdlist[aname] = v;
+  return v;
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // console always has "userconvar" command, no need to register it.
 public class ConCommandUserConVar : ConCommand {
