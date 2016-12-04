@@ -167,10 +167,7 @@ public void kgiSetCursor (int wdt, int hgt, const(VColor)[] img, int hotx=0, int
 }
 
 
-///
-public void kgiSetDefaultCursor () nothrow @trusted @nogc {
-  consoleLock();
-  scope(exit) consoleUnlock();
+private void unpackDefaultCursor () nothrow @trusted @nogc {
   mhotX = 2;
   mhotY = 0;
   if (vcurbuf is null) return;
@@ -181,6 +178,13 @@ public void kgiSetDefaultCursor () nothrow @trusted @nogc {
       vcurbuf[dy*kgiMaxCurW+dx] = defaultCurPal.ptr[defaultCurImg.ptr[sp]];
     }
   }
+}
+
+///
+public void kgiSetDefaultCursor () nothrow @trusted @nogc {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  unpackDefaultCursor();
   atomicStore(updateCurTexture, true);
 }
 
@@ -567,6 +571,7 @@ public bool kgiInitEx (int awdt, int ahgt, string title, bool a2x, uint afps) {
   vcurbuf = cast(typeof(vcurbuf))malloc(vcurbuf[0].sizeof*kgiMaxCurW*kgiMaxCurH);
   if (vbuf is null) assert(0, "KGI: out of memory");
   vcurbuf[0..kgiMaxCurW*kgiMaxCurH] = 0;
+  unpackDefaultCursor();
 
   vbufW = awdt;
   vbufH = ahgt;
