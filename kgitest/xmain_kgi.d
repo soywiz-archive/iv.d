@@ -22,7 +22,7 @@ import iv.glkgi;
 
 
 void main (string[] args) {
-  if (conProcessArgs(args)) while (conProcessQueue()) {}
+  conProcessArgs!true(args);
 
   //kgiInit(640, 480, "KGI Test", scale2x);
   kgiInit();

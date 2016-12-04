@@ -3730,10 +3730,14 @@ public bool conProcessQueue (uint maxlen=0) {
  * console args looks like:
  *  +cmd arg arg +cmd arg arg
  *
+ * Params:
+ *   immediate = immediately call `conProcessQueue()` with some big limit
+ *   args = those arg vector passed to `main()`
+ *
  * Returns:
  *   `true` is any command was added to queue.
  */
-public bool conProcessArgs (ref string[] args) {
+public bool conProcessArgs(bool immediate=false) (ref string[] args) {
   consoleLock();
   scope(exit) consoleUnlock();
 
@@ -3811,5 +3815,11 @@ public bool conProcessArgs (ref string[] args) {
     }
   }
 
-  return (concmdbufpos > ocbpos);
+  static if (immediate) {
+    bool res = (concmdbufpos > ocbpos);
+    conProcessQueue(256*1024);
+    return res;
+  } else {
+    return (concmdbufpos > ocbpos);
+  }
 }
