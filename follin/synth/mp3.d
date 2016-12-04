@@ -85,9 +85,7 @@ class MP3Channel : TflChannel {
 
   final @property bool closed () const nothrow @nogc { return (mp3 is null || fi is null || !mp3.valid); }
 
-  final @property uint totalFrames () nothrow @nogc {
-    return cast(uint)vrtotalFrames;
-  }
+  override @property long totalMsecs () { return (vrtotalFrames >= 0 ? vrtotalFrames*1000/sampleRate : -1); }
 
   override uint fillFrames (float[] buf) nothrow @nogc {
     if (closed) return 0;

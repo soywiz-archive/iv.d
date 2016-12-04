@@ -127,9 +127,7 @@ class FlacChannel : TflChannel {
     if (frsmpbuf !is null) free(frsmpbuf);
   }
 
-  final @property uint totalFrames () nothrow @nogc {
-    return cast(uint)vrtotalFrames;
-  }
+  override @property long totalMsecs () { return (vrtotalFrames >= 0 ? vrtotalFrames*1000/sampleRate : -1); }
 
   // `false`: no more frames
   final bool moreFrames () nothrow @nogc {

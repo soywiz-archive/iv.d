@@ -19,9 +19,7 @@
 module iv.follin.synth.dmm;
 
 import iv.follin.engine : TflChannel;
-
-static if (__traits(compiles, () { import iv.stream; })) {
-import iv.stream;
+import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -49,7 +47,7 @@ class DmmInstrument {
 
   @property bool hasloop () const pure nothrow @safe @nogc { return (loopstart < loopend); }
 
-  void saveDMI2(ST) (auto ref ST st) if (isWriteableStream!ST) {
+  final void saveDMI2 (VFile st) {
     st.rawWriteExact("DMI2");
     st.writeNum!ubyte(0); // version
     st.writeNum!ubyte(cast(ubyte)name.length);
@@ -61,7 +59,7 @@ class DmmInstrument {
     st.rawWriteExact(s8data[]);
   }
 
-  void loadDMI2(ST) (auto ref ST st) if (isReadableStream!ST) {
+  final void loadDMI2 (VFile st) {
     char[4] sign;
     st.rawRead(sign[]);
     if (sign != "DMI2") throw new Exception("invalid DMI2 instrument signature");
@@ -80,13 +78,13 @@ class DmmInstrument {
     load(st, true);
   }
 
-  void loadDMI(ST) (auto ref ST st, string aname="") if (isReadableStream!ST) {
+  final void loadDMI (VFile st, string aname="") {
     name = aname;
     load(st, true);
   }
 
 private:
-  void load(ST) (auto ref ST st, bool asDMI2) if (isReadableStream!ST) {
+  void load (VFile st, bool asDMI2) {
     if (name.length > 255) name = name[0..255];
     uint lenbytes = st.readNum!ushort();
     srate = st.readNum!ushort();
@@ -369,7 +367,7 @@ public:
 
   @property uint songLengthMsecs () const pure nothrow @safe @nogc { pragma(inline, true); return songLenMsecs; }
 
-  void saveDM2(ST) (auto ref ST st) if (isWriteableStream!ST) {
+  void saveDM2 (VFile st) {
     st.rawWriteExact("DMM\0");
     st.writeNum!ubyte(1); // version
     st.writeNum!ubyte(cast(ubyte)patCount);
@@ -570,7 +568,7 @@ private:
     }
   }
 
-  void loadIntr(ST) (string basepath, auto ref ST st) if (isReadableStream!ST) {
+  void loadIntr (string basepath, VFile st) {
     char[4] sign;
     st.rawReadExact(sign[]);
     if (sign != "DMM\0") throw new Exception("not a DMM module");
@@ -707,6 +705,8 @@ public class DmmChannel : TflChannel {
     smppos = uint.max-1;
   }
 
+  override @property long totalMsecs () { return (mod !is null ? mod.songLengthMsecs : 0); }
+
   override uint fillFrames (float[] buf) nothrow @nogc {
     //buf[] = 0; return buf.length;
     //{ import core.stdc.stdio; printf("frm=%u\n", buf.length); }
@@ -727,5 +727,4 @@ public class DmmChannel : TflChannel {
     }
     return count; // return number of mono frames
   }
-}
 }

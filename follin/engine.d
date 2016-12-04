@@ -265,7 +265,7 @@ class TflChannel {
   // if channel is paused, `fillFrames` will not be called
 
   // override this if you can provide floating buffer
-  // Folling will provide `tmpbuf` of the same size as `buf`
+  // Follin will provide `tmpbuf` of the same size as `buf`
   // return number of *frames* (not samples!) written
   // 0 means "this channel is no more"
   uint fillFrames (float[] buf) nothrow @nogc { return 0; }
@@ -274,6 +274,11 @@ class TflChannel {
   // note that sound engine is locked, so you can't call `tflAddChan()` here
   // also, this can (and will) be called from different threads
   void discarded () nothrow @nogc {}
+
+  // can be overriden by channel if it knows it's length
+  // this is purely for infomation purposes, Follin will not use this for anything
+  // return -1 for "unknown", or total channel duration in milliseconds
+  long totalMsecs () { return -1; }
 }
 
 

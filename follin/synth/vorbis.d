@@ -30,7 +30,7 @@ class VorbisChannel : TflChannel {
   const(float)* left, right;
   int hasframes; // 0: eof
   int frused;
-  long vrtotalFrames = -1;
+  long vrtotalFrames = -666;
 
   this (string fname) {
     import core.stdc.stdio;
@@ -65,18 +65,18 @@ class VorbisChannel : TflChannel {
 
     hasframes = 1;
     frused = 1; // hoax
-    vrtotalFrames = -1;
+    vrtotalFrames = -666;
   }
 
   ~this () {}
 
-  final @property uint totalFrames () nothrow @nogc {
-    if (vrtotalFrames < 0) {
+  override @property long totalMsecs () {
+    if (vrtotalFrames == -666) {
       vrtotalFrames = (vf !is null ? vf.streamLengthInSamples : 0);
       //{ import core.stdc.stdio; printf("vorbis: got %u frames\n", cast(int)vrtotalFrames); }
-      if (vrtotalFrames < 0) vrtotalFrames = 0;
+      if (vrtotalFrames < 0) vrtotalFrames = -1;
     }
-    return cast(uint)vrtotalFrames;
+    return (vrtotalFrames >= 0 ? vrtotalFrames*1000/sampleRate : -1);
   }
 
   // `false`: no more frames
