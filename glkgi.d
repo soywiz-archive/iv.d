@@ -180,6 +180,7 @@ private void unpackDefaultCursor () nothrow @trusted @nogc {
   }
 }
 
+
 ///
 public void kgiSetDefaultCursor () nothrow @trusted @nogc {
   consoleLock();
@@ -440,13 +441,21 @@ private void kgiThread (Tid starterTid) {
 
     bool lastConVisible = isConsoleVisible;
 
-    vbwin.eventLoop(1000/fps,
+    //FIXME: FPS time calculations are totally broken
+    import core.time;
+    uint rfps = (fps < 0 ? 1 : fps > 120 ? 120 : fps);
+    uint msfull = 1000/fps;
+    auto lastFrameTime = MonoTime.currTime;
+    auto lastCursorTime = MonoTime.currTime;
+
+    vbwin.eventLoop(8,
       delegate () {
         if (vbwin.closed) return;
         if (isQuitRequested) { vbwin.close(); return; }
         if (receiveMessages()) { vbwin.close(); return; }
         auto conexeced = processConsoleCommands();
-        if (lastConVisible != isConsoleVisible || conexeced) {
+        bool convis = isConsoleVisible;
+        if (lastConVisible != convis || conexeced) {
           lastConVisible = isConsoleVisible;
           setUpdateTextureFlag();
           consoleLock();
@@ -456,12 +465,30 @@ private void kgiThread (Tid starterTid) {
             pushEventIntr(kev);
           }
         }
-        if (atomicLoad(updateTexture)) {
+        bool newFrame = false;
+        auto ctt = MonoTime.currTime;
+        if (lastConVisible != convis || conexeced) {
+          newFrame = true;
+        } else if (convis) {
+          // visible console should be updated at least 35 times per second
+          newFrame = ((ctt-lastFrameTime).total!"msecs" >= 28);
+        } else {
+          // fps
+          if ((ctt-lastFrameTime).total!"msecs" >= msfull) newFrame = true;
+        }
+        //if (newFrame) atomicStore(updateTexture, true);
+        if (newFrame || atomicLoad(updateTexture)) {
+          lastFrameTime = ctt;
+          lastCursorTime = ctt;
           glgfxUpdateTexture();
           vbwin.redrawOpenGlSceneNow();
         } else if (mcurHidden == 0) {
-          glgfxUpdateCurTexture();
-          vbwin.redrawOpenGlSceneNow();
+          // ~60 FPS for mouse cursor
+          if ((ctt-lastCursorTime).total!"msecs" >= 16) {
+            lastCursorTime = ctt;
+            glgfxUpdateCurTexture();
+            vbwin.redrawOpenGlSceneNow();
+          }
         }
       },
       delegate (KeyEvent event) {
