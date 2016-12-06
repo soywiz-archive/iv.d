@@ -535,6 +535,9 @@ struct BitReader {
   uint ibpos, ibused;
   ubyte gbyte = 1;
   bool ateof;
+  VStreamDecoderLowLevelROPutBytesDg putUnpackedBytes;
+
+  void setPDG (VStreamDecoderLowLevelROPutBytesDg pdg) nothrow @trusted @nogc { pragma(inline, true); putUnpackedBytes = pdg; }
 
   void setup (VFile afl, long apos, long apksize, long aupksize) {
     zfl = afl;
@@ -616,6 +619,8 @@ struct BitReader {
 // slow and stupid "implode" unpacker
 // based on the code from gunzip.c by Pasi Ojala, a1bert@iki.fi (http://www.iki.fi/a1bert/)
 struct Exploder {
+  public enum InitUpkBufSize = 512; // way too much
+
   BitReader br;
 
   static struct HufNode {
@@ -645,15 +650,12 @@ struct Exploder {
   ubyte[32768] buf32k;
   uint bIdx;
 
-  ubyte[512] upkbuf; // way too much
-  uint upkbufused, upkbufpos;
-
 public:
   void close () { br.close(); }
 
-  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
+  void setup (VFile fl, ulong agflags, long apos, uint apksize, uint aupksize) {
     br.setup(fl, apos, apksize, aupksize);
-    gflags = agflags;
+    gflags = cast(uint)agflags;
     reset();
   }
 
@@ -661,7 +663,6 @@ public:
     br.reset();
     buf32k[] = 0;
     bIdx = 0;
-    upkbufused = 0;
     if (br.upktotalsize == 0) return;
     if ((gflags&4) != 0) {
       // 3 trees: literals, lengths, distance top 6
@@ -675,64 +676,47 @@ public:
     createTree(impDistanceTree.ptr, decodeSF(ll.ptr), ll.ptr);
   }
 
-  // not more than buf, but can unpack less if EOF was hit
-  ubyte[] unpackBuf (ubyte[] buf) {
-    if (buf.length == 0) return buf;
-    auto dest = buf.ptr;
-    auto left = buf.length;
-    while (left > 0) {
-      // use the data that left from the previous step
-      if (upkbufpos < upkbufused) {
-        auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = cast(uint)left;
-        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
-        dest += pkx;
-        upkbufpos += pkx;
-        left -= pkx;
+  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+    if (br.upkleft == 0) return false; // packed file EOF
+    br.setPDG(pdg);
+    int c = br.readPackedBits(1);
+    if (c) {
+      // literal data
+      if ((gflags&4) != 0) {
+        c = decodeSFValue(literalTree.ptr);
       } else {
-        if (br.upkleft == 0) break; // packed file EOF
-        int c = br.readPackedBits(1);
-        if (c) {
-          // literal data
-          if ((gflags&4) != 0) {
-            c = decodeSFValue(literalTree.ptr);
-          } else {
-            c = br.readPackedBits(8);
-          }
-          //bufferUpkByte(cast(ubyte)c);
-          buf32k.ptr[bIdx++] = cast(ubyte)c;
-          bIdx &= 0x7fff;
-          *dest++ = cast(ubyte)c;
-          --left;
-        } else {
-          int dist;
-          if ((gflags&2) != 0) {
-            // 8k dictionary
-            dist = br.readPackedBits(7);
-            c = decodeSFValue(impDistanceTree.ptr);
-            dist |= (c<<7);
-          } else {
-            // 4k dictionary
-            dist = br.readPackedBits(6);
-            c = decodeSFValue(impDistanceTree.ptr);
-            dist |= (c<<6);
-          }
-          int len = decodeSFValue(impLengthTree.ptr);
-          if (len == 63) len += br.readPackedBits(8);
-          len += minMatchLen;
-          ++dist;
-          upkbufpos = upkbufused = 0;
-          foreach (immutable i; 0..len) {
-            ubyte b = buf32k.ptr[(bIdx-dist)&0x7fff];
-            //bufferUpkByte(b);
-            buf32k.ptr[bIdx++] = b;
-            bIdx &= 0x7fff;
-            upkbuf.ptr[upkbufused++] = b;
-          }
-        }
+        c = br.readPackedBits(8);
+      }
+      //bufferUpkByte(cast(ubyte)c);
+      buf32k.ptr[bIdx++] = cast(ubyte)c;
+      bIdx &= 0x7fff;
+      br.putUnpackedBytes(cast(ubyte)c);
+    } else {
+      int dist;
+      if ((gflags&2) != 0) {
+        // 8k dictionary
+        dist = br.readPackedBits(7);
+        c = decodeSFValue(impDistanceTree.ptr);
+        dist |= (c<<7);
+      } else {
+        // 4k dictionary
+        dist = br.readPackedBits(6);
+        c = decodeSFValue(impDistanceTree.ptr);
+        dist |= (c<<6);
+      }
+      int len = decodeSFValue(impLengthTree.ptr);
+      if (len == 63) len += br.readPackedBits(8);
+      len += minMatchLen;
+      ++dist;
+      foreach (immutable i; 0..len) {
+        ubyte b = buf32k.ptr[(bIdx-dist)&0x7fff];
+        //bufferUpkByte(b);
+        buf32k.ptr[bIdx++] = b;
+        bIdx &= 0x7fff;
+        br.putUnpackedBytes(b);
       }
     }
-    return buf[0..$-left];
+    return true;
   }
 
 private:
@@ -832,6 +816,8 @@ private:
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct Deshrinker {
+  public enum InitUpkBufSize = 8192; // way too much
+
   // HSIZE is defined as 2^13 (8192) in unzip.h
   enum HSIZE     = 8192;
   enum BOGUSCODE = 256;
@@ -840,9 +826,6 @@ struct Deshrinker {
   enum HAS_CHILD = HSIZE<<1; // 0x4000 (code has a child--do not clear)
 
   BitReader br;
-
-  ubyte[32768] upkbuf; // way too much
-  uint upkbufused, upkbufpos;
 
   ushort[HSIZE] parent;
   ubyte[HSIZE] value;
@@ -856,14 +839,13 @@ struct Deshrinker {
 public:
   void close () { br.close(); }
 
-  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
+  void setup (VFile fl, ulong agflags, long apos, uint apksize, uint aupksize) {
     br.setup(fl, apos, apksize, aupksize);
     reset();
   }
 
   void reset () {
     br.reset();
-    upkbufused = 0;
     if (br.upktotalsize == 0) return;
     codesize = 1; // start at 9 bits/code
     freecode = BOGUSCODE;
@@ -875,120 +857,97 @@ public:
 
     oldcode = cast(short)br.readPackedBits(8);
     oldcode |= (br.readPackedBits(codesize)<<8);
-    //if (SIZE < size) putUnpackedByte(oldcode, outfp);
-    putUnpackedByte(cast(ubyte)oldcode);
+    br.putUnpackedBytes(cast(ubyte)oldcode);
   }
 
-  // not more than buf, but can unpack less if EOF was hit
-  ubyte[] unpackBuf (ubyte[] buf) {
-    if (buf.length == 0) return buf;
-    auto dest = buf.ptr;
-    auto left = buf.length;
-    while (left > 0) {
-      // use the data that left from the previous step
-      if (upkbufpos < upkbufused) {
-        auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = cast(uint)left;
-        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
-        dest += pkx;
-        upkbufpos += pkx;
-        left -= pkx;
-      } else {
-        if (br.upkleft == 0) break; // packed file EOF
-        upkbufused = upkbufpos = 0;
-        for (;;) {
-          code = cast(short)br.readPackedBits(8);
-          code |= (br.readPackedBits(codesize)<<8);
-          if (code == BOGUSCODE) {
-            // possible to have consecutive escapes?
-            code = cast(short)br.readPackedBits(8);
-            code |= (br.readPackedBits(codesize)<<8);
-            if (code == 1) {
-              ++codesize;
-            } else if (code == 2) {
-              // clear leafs (nodes with no children)
+  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+    if (br.upkleft == 0) return false; // packed file EOF
+    br.setPDG(pdg);
+    for (;;) {
+      code = cast(short)br.readPackedBits(8);
+      code |= (br.readPackedBits(codesize)<<8);
+      if (code == BOGUSCODE) {
+        // possible to have consecutive escapes?
+        code = cast(short)br.readPackedBits(8);
+        code |= (br.readPackedBits(codesize)<<8);
+        if (code == 1) {
+          ++codesize;
+        } else if (code == 2) {
+          // clear leafs (nodes with no children)
 
-              // first loop: mark each parent as such
-              for (code = BOGUSCODE+1; code < HSIZE; ++code) {
-                curcode = (parent[code]&CODE_MASK);
-                if (curcode > BOGUSCODE) parent[curcode] |= HAS_CHILD; // set parent's child-bit
-              }
-              // second loop:  clear all nodes *not* marked as parents; reset flag bits
-              for (code = BOGUSCODE+1;  code < HSIZE;  ++code) {
-                if (parent[code]&HAS_CHILD) {
-                  // just clear child-bit
-                  parent[code] &= ~HAS_CHILD;
-                } else {
-                  // leaf: lose it
-                  parent[code] = FREE_CODE;
-                }
-              }
-              freecode = BOGUSCODE;
+          // first loop: mark each parent as such
+          for (code = BOGUSCODE+1; code < HSIZE; ++code) {
+            curcode = (parent[code]&CODE_MASK);
+            if (curcode > BOGUSCODE) parent[curcode] |= HAS_CHILD; // set parent's child-bit
+          }
+          // second loop:  clear all nodes *not* marked as parents; reset flag bits
+          for (code = BOGUSCODE+1;  code < HSIZE;  ++code) {
+            if (parent[code]&HAS_CHILD) {
+              // just clear child-bit
+              parent[code] &= ~HAS_CHILD;
+            } else {
+              // leaf: lose it
+              parent[code] = FREE_CODE;
             }
-            continue;
           }
-
-          newstr = &stack[HSIZE-1];
-          curcode = code;
-
-          if (parent[curcode] == FREE_CODE) {
-            KwKwK = 1;
-            --newstr; // last character will be same as first character
-            curcode = oldcode;
-            len = 1;
-          } else {
-            KwKwK = 0;
-            len = 0;
-          }
-
-          do {
-            *newstr-- = value[curcode];
-            ++len;
-            curcode = (parent[curcode]&CODE_MASK);
-          } while (curcode != BOGUSCODE);
-
-          ++newstr;
-          if (KwKwK) stack[HSIZE-1] = *newstr;
-
-          do {
-            ++freecode;
-          } while (parent[freecode] != FREE_CODE);
-
-          parent[freecode] = oldcode;
-          value[freecode] = *newstr;
-          oldcode = code;
-
-          debug(ziparc) { import core.stdc.stdio : printf; printf("deshrinker: len=%d\n", len); }
-          while (len--) {
-            putUnpackedByte(*newstr);
-            ++newstr;
-          }
-
-          break;
+          freecode = BOGUSCODE;
         }
+        continue;
       }
-    }
-    return buf[0..$-left];
-  }
 
-private:
-  void putUnpackedByte (ubyte ub) {
-    if (upkbufused >= upkbuf.length) throw new Exception("deshrinker internal bug");
-    upkbuf.ptr[upkbufused++] = ub;
+      newstr = &stack[HSIZE-1];
+      curcode = code;
+
+      if (parent[curcode] == FREE_CODE) {
+        KwKwK = 1;
+        --newstr; // last character will be same as first character
+        curcode = oldcode;
+        len = 1;
+      } else {
+        KwKwK = 0;
+        len = 0;
+      }
+
+      do {
+        *newstr-- = value[curcode];
+        ++len;
+        curcode = (parent[curcode]&CODE_MASK);
+      } while (curcode != BOGUSCODE);
+
+      ++newstr;
+      if (KwKwK) stack[HSIZE-1] = *newstr;
+
+      do {
+        ++freecode;
+      } while (parent[freecode] != FREE_CODE);
+
+      parent[freecode] = oldcode;
+      value[freecode] = *newstr;
+      oldcode = code;
+
+      debug(ziparc) { import core.stdc.stdio : printf; printf("deshrinker: len=%d\n", len); }
+      while (len--) {
+        br.putUnpackedBytes(*newstr);
+        ++newstr;
+      }
+
+      break;
+    }
+
+    return true;
   }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct Inductor {
+  public enum InitUpkBufSize = 1024; // way too much
+
   BitReader br;
 
   ubyte[16384] buf32k;
 
-  ubyte[1024] upkbuf; // way too much
-  uint upkbufused, upkbufpos;
-
-  ubyte[32][256] S; //[256][32];
+  ubyte[32][256] S;
   ubyte[256] N;
   static immutable ubyte[64] B = [
     0,
@@ -1009,7 +968,7 @@ struct Inductor {
 public:
   void close () { br.close(); }
 
-  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
+  void setup (VFile fl, ulong agflags, long apos, uint apksize, uint aupksize) {
     br.setup(fl, apos, apksize, aupksize);
     if (agflags < 2) agflags = 2; else if (agflags > 5) agflags = 5;
     level = cast(ubyte)(agflags-2); //FIXME: don't abuse agflags
@@ -1018,7 +977,6 @@ public:
 
   void reset () {
     br.reset();
-    upkbufused = 0;
     if (br.upktotalsize == 0) return;
     buf32k[] = 0;
     bIdx = 0;
@@ -1029,73 +987,56 @@ public:
     loadFollowers();
   }
 
-  // not more than buf, but can unpack less if EOF was hit
-  ubyte[] unpackBuf (ubyte[] buf) {
-    if (buf.length == 0) return buf;
-    auto dest = buf.ptr;
-    auto left = buf.length;
-    while (left > 0) {
-      // use the data that left from the previous step
-      if (upkbufpos < upkbufused) {
-        auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = cast(uint)left;
-        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
-        dest += pkx;
-        upkbufpos += pkx;
-        left -= pkx;
+  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+    if (br.upkleft == 0) return false; // packed file EOF
+    br.setPDG(pdg);
+    uint c;
+    if (!N[lastC]) {
+      c = br.readPackedBits(8);
+    } else {
+      if (br.readPackedBits(1)) {
+        c = br.readPackedBits(8);
       } else {
-        if (br.upkleft == 0) break; // packed file EOF
-        upkbufused = upkbufpos = 0;
-        uint c;
-        if (!N[lastC]) {
-          c = br.readPackedBits(8);
-        } else {
-          if (br.readPackedBits(1)) {
-            c = br.readPackedBits(8);
-          } else {
-            c = 0;
-            if (N[lastC] != 0) c = br.readPackedBits(B[N[lastC]]);
-            c = S[lastC][c];
-          }
-        }
-        lastC = c;
-        switch (state) {
-          case 0:
-            if (c != DLE) putUnpackedByte(c); else state = 1;
-            break;
-          case 1:
-            if (c) {
-              upsdist = (c>>(7-level))<<8;
-              upslen = c&(0x7f>>level);
-              state = (upslen == (0x7f>>level) ? 2 : 3);
-            } else {
-              putUnpackedByte(144);
-              state = 0;
-            }
-            break;
-          case 2:
-            upslen += c;
-            state = 3;
-            break;
-          case 3:
-            upsdist += c+1;
-            upslen += 3;
-            while (upslen--) putUnpackedByte(buf32k[(bIdx-upsdist)&0x3fff]);
-            state = 0;
-            break;
-          default:
-        }
+        c = 0;
+        if (N[lastC] != 0) c = br.readPackedBits(B[N[lastC]]);
+        c = S[lastC][c];
       }
     }
-    return buf[0..$-left];
+    lastC = c;
+    switch (state) {
+      case 0:
+        if (c != DLE) putUB(c); else state = 1;
+        break;
+      case 1:
+        if (c) {
+          upsdist = (c>>(7-level))<<8;
+          upslen = c&(0x7f>>level);
+          state = (upslen == (0x7f>>level) ? 2 : 3);
+        } else {
+          putUB(144);
+          state = 0;
+        }
+        break;
+      case 2:
+        upslen += c;
+        state = 3;
+        break;
+      case 3:
+        upsdist += c+1;
+        upslen += 3;
+        while (upslen--) putUB(buf32k[(bIdx-upsdist)&0x3fff]);
+        state = 0;
+        break;
+      default:
+    }
+    return true;
   }
 
 private:
-  void putUnpackedByte (uint c) {
-    if (upkbufused >= upkbuf.length) throw new Exception("deshrinker internal bug");
-    upkbuf.ptr[upkbufused++] = cast(ubyte)c;
+  void putUB (uint c) {
     buf32k[bIdx++] = cast(ubyte)c;
     bIdx &= 0x3fff;
+    br.putUnpackedBytes(cast(ubyte)c);
   }
 
   void loadFollowers () {
@@ -2142,16 +2083,15 @@ void inflateBack9End (zd64_stream* strm) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct Inflater64 {
+  public enum InitUpkBufSize = WSIZE; // way too much
+
   zd64_stream zs;
   BitReader br;
-
-  ubyte[WSIZE] upkbuf;
-  uint upkbufused, upkbufpos;
 
 public:
   void close () { inflateBack9End(&zs); br.close(); }
 
-  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
+  void setup (VFile fl, ulong agflags, long apos, uint apksize, uint aupksize) {
     if (inflateBack9Init(&zs) != Z_OK) throw new VFSException("can't init inflate9");
     br.setup(fl, apos, apksize, aupksize);
     reset();
@@ -2160,52 +2100,31 @@ public:
   void reset () {
     inflateBack9Reset(&zs);
     br.reset();
-    upkbufused = 0;
     if (br.upktotalsize == 0) return;
     zs.next_in = null;
     zs.avail_in = 0;
   }
 
-  // not more than buf, but can unpack less if EOF was hit
-  ubyte[] unpackBuf (ubyte[] buf) {
-    if (buf.length == 0) return buf;
-    auto dest = buf.ptr;
-    auto left = buf.length;
-    while (left > 0) {
-      // use the data that left from the previous step
-      if (upkbufpos < upkbufused) {
-        auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = cast(uint)left;
-        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
-        dest += pkx;
-        upkbufpos += pkx;
-        left -= pkx;
-      } else {
-        if (br.upkleft == 0) break; // packed file EOF
-        upkbufused = upkbufpos = 0;
-        while (upkbufused == 0) {
-          auto res = inflateBack9(&zs,
-            (ubyte** ibp) {
-              auto rd = br.readNewBuffer();
-              *ibp = br.inbuf.ptr;
-              return rd;
-            },
-            (const(ubyte)* buf, uint len) {
-              if (len == 0) return 0; // just in case
-              if (upkbuf.length-upkbufused < len) assert(0, "inflate9 internal error");
-              upkbuf[upkbufused..upkbufused+len] = buf[0..len];
-              upkbufused += len;
-              return 0;
-            },
-          );
-          if (res != 0) {
-            if (res == Z_STREAM_END) break;
-            throw new Exception("inflate9 packed data corrupted");
-          }
-        }
-      }
+  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+    if (br.upkleft == 0) return false; // packed file EOF
+    br.setPDG(pdg);
+    auto res = inflateBack9(&zs,
+      (ubyte** ibp) {
+        auto rd = br.readNewBuffer();
+        *ibp = br.inbuf.ptr;
+        return rd;
+      },
+      (const(ubyte)* buf, uint len) {
+        if (len == 0) return 0; // just in case
+        br.putUnpackedBytes(buf[0..len]);
+        return 0;
+      },
+    );
+    if (res != Z_OK) {
+      if (res == Z_STREAM_END) return false;
+      throw new Exception("inflate9 packed data corrupted");
     }
-    return buf[0..$-left];
+    return true;
   }
 }
 
@@ -2657,33 +2576,27 @@ private:
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct Unlzmaer {
+  public enum InitUpkBufSize = 0; // dynamic
+
   BitReader br;
   CLzmaDecoder lzmaDecoder;
   uint upsize;
 
-  ubyte* upkbuf;
-  uint upkbufused, upkbufpos, upkbufsize;
-
 public:
   void close () {
-    import core.stdc.stdlib : free;
-    if (upkbuf !is null) free(upkbuf);
-    upkbuf = null;
-    upkbufused = upkbufpos = upkbufsize = 0;
     br.close();
   }
 
-  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
+  void setup (VFile fl, ulong agflags, long apos, uint apksize, uint aupksize) {
     br.setup(fl, apos, apksize, aupksize);
     upsize = aupksize;
-    lzmaDecoder.setupIO(&getPackedByte, &putUnpackedByte);
+    lzmaDecoder.setupIO(&getPackedByte, &putUB);
     debug(ziparc) { import core.stdc.stdio : printf; printf("::: LZMA this=0x%08x\n", &this); }
     reset();
   }
 
   void reset () {
     br.reset();
-    upkbufused = 0;
     if (br.upktotalsize == 0) return;
     ubyte[4] ziplzmahdr;
     foreach (ref ubyte b; ziplzmahdr[]) b = br.readPackedByte!ubyte;
@@ -2699,66 +2612,29 @@ public:
     lzmaDecoder.setup(true, upsize);
   }
 
-  // not more than buf, but can unpack less if EOF was hit
-  ubyte[] unpackBuf (ubyte[] buf) {
-    if (buf.length == 0) return buf;
-    auto dest = buf.ptr;
-    auto left = buf.length;
-    while (left > 0) {
-      // use the data that left from the previous step
-      if (upkbufpos < upkbufused) {
-        auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = cast(uint)left;
-        dest[0..pkx] = upkbuf[upkbufpos..upkbufpos+pkx];
-        dest += pkx;
-        upkbufpos += pkx;
-        left -= pkx;
-      } else {
-        if (br.upkleft == 0) break; // packed file EOF
-        upkbufused = upkbufpos = 0;
-        //debug(ziparc) { import core.stdc.stdio : printf; printf(">>> LZMA: upkbufused=%u; upkbufpos=%u; upkbufsize=%u\n", upkbufused, upkbufpos, upkbufsize); }
-        lzmaDecoder.setupIO(&getPackedByte, &putUnpackedByte);
-        upkloop: while (upkbufused == 0) {
-          auto res = lzmaDecoder.decodeStep();
-          //debug(ziparc) { import core.stdc.stdio : printf; printf(">>>000 LZMA: upkbufused=%u; upkbufpos=%u; upkbufsize=%u\n", upkbufused, upkbufpos, upkbufsize); }
-          switch (res) {
-            case CLzmaDecoder.Result.Continue: break;
-            case CLzmaDecoder.Result.Error: throw new VFSException("LZMA stream corrupted");
-            case CLzmaDecoder.Result.FinishedWithMarker:
-            case CLzmaDecoder.Result.FinishedWithoutMarker:
-              br.upkleft = 0; //HACK!
-              break upkloop;
-            default: assert(0, "LZMA internal error");
-          }
-        }
-      }
+  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+    if (br.upkleft == 0) return false; // packed file EOF
+    br.setPDG(pdg);
+    lzmaDecoder.setupIO(&getPackedByte, &putUB);
+    auto res = lzmaDecoder.decodeStep();
+    switch (res) {
+      case CLzmaDecoder.Result.Continue: return true;
+      case CLzmaDecoder.Result.Error: throw new VFSException("LZMA stream corrupted");
+      case CLzmaDecoder.Result.FinishedWithMarker:
+      case CLzmaDecoder.Result.FinishedWithoutMarker:
+        br.upkleft = 0; //HACK!
+        return false;
+      default: assert(0, "LZMA internal error");
     }
-    return buf[0..$-left];
+    return true;
   }
 
 private:
   ubyte getPackedByte () {
-    //debug(ziparc) { import core.stdc.stdio : printf; printf("R:: LZMA this=0x%08x (%u)\n", &this, upsize); }
-    //debug(ziparc) { import core.stdc.stdio : printf; printf("=== LZMA: upkbufused=%u; upkbufpos=%u; upkbufsize=%u\n", upkbufused, upkbufpos, upkbufsize); }
     return br.readPackedByte!ubyte;
   }
 
-  void putUnpackedByte (ubyte b) {
-    //debug(ziparc) { import core.stdc.stdio : printf; printf("W:: LZMA this=0x%08x (%u)\n", &this, upsize); }
-    //debug(ziparc) { import core.stdc.stdio : printf; printf("=== LZMA: upkbufused=%u; upkbufpos=%u; upkbufsize=%u\n", upkbufused, upkbufpos, upkbufsize); }
-    if (upkbufused >= upkbufsize) {
-      // allocate more memory for unpacked data buffer
-      import core.stdc.stdlib : realloc;
-      auto newsz = (upkbufsize ? upkbufsize*2 : 256*1024);
-      debug(ziparc) { import core.stdc.stdio : printf; printf("*** LZMA realloc from %u to %u\n", upkbufsize, newsz); }
-      if (newsz <= upkbufsize) throw new Exception("LZMA: out of memory");
-      auto nbuf = cast(ubyte*)realloc(upkbuf, newsz);
-      if (nbuf is null) throw new Exception("LZMA: out of memory");
-      upkbuf = nbuf;
-      upkbufsize = newsz;
-    }
-    assert(upkbufused < upkbufsize);
-    assert(upkbuf !is null);
-    upkbuf[upkbufused++] = b;
+  void putUB (ubyte b) {
+    br.putUnpackedBytes(b);
   }
 }

@@ -1230,7 +1230,14 @@ public VFile wrapStdin () {
 /* handy building block for various unpackers/decoders
  * XPS API:
  *
- * void setup (VFile fl, uint agflags, long apos, long apksize, long aupksize);
+ * XPS.InitUpkBufSize = initial size of intermediate "unpack buffer", which will be used
+ *                      to store unpacked data chunks
+ *
+ *   -1 means "allocate as much as necessary" (with -upkbufsize as initial size)
+ *    0 means "allocate as much as necessary" (with no initial allocation)
+ *   >0 means "this is exact size, we will never need more than that"
+ *
+ * void setup (VFile fl, ulong agflags, long apos, long apksize, long aupksize);
  *   initialize decoder
  *     fl = input file; store it somewhere
  *     agflags = flags, decoder should know what they are for
@@ -1245,27 +1252,53 @@ public VFile wrapStdin () {
  * void close ();
  *   close fl, shutdown decoder, free memory, etc. nothing else will be called after this
  *
- * ubyte[] unpackBuf (ubyte[] buf);
- *   decode bytes to buf; returns decoded slice; 0 means EOF
+ * bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg);
+ *   decode chunk of arbitrary size, use `putUnpackedBytes()` to put unpacked bytes into
+ *   buffer. return `false` if EOF was hit, otherwise emit at least one byte.
+ *   i.e. `unpackChunk()` can emit no bytes and return `true` to note that it can be called
+ *   to get more data.
+ *     pdg = delegate that should be called to emit decoded bytes
  */
+public alias VStreamDecoderLowLevelROPutBytesDg = void delegate (const(ubyte)[] bts...) @trusted;
+
 public struct VStreamDecoderLowLevelRO(XPS) {
+private:
+  static assert(XPS.InitUpkBufSize != int.min, "are you insane?");
   XPS epl;
   long size; // unpacked size
   long pos; // current file position
   long prpos; // previous file position
   bool eofhit;
+  bool epleof;
   bool closed;
   string fname;
+  static if (XPS.InitUpkBufSize <= 0) {
+    ubyte* upkbuf;
+    uint upkbufsize;
+  } else {
+    ubyte[XPS.InitUpkBufSize] upkbuf;
+    enum upkbufsize = cast(uint)XPS.InitUpkBufSize;
+  }
+  uint upkbufused, upkbufpos;
 
-  this (VFile fl, uint agflags, long aupsize, long astpos, long asize, string aname) {
+public:
+  this (VFile fl, ulong agflags, long aupsize, long astpos, long asize, string aname) {
     if (aupsize > uint.max) aupsize = uint.max;
     if (asize > uint.max) asize = uint.max;
     epl.setup(fl, agflags, astpos, cast(uint)asize, cast(uint)aupsize);
-    eofhit = (aupsize == 0);
+    epleof = eofhit = (aupsize == 0);
     size = aupsize;
     fname = aname;
     if (fname is null) fname = fl.name.idup;
     closed = !fl.isOpen;
+    static if (XPS.InitUpkBufSize < 0) {
+      if (!closed) {
+        import core.stdc.stdlib : malloc;
+        upkbuf = cast(ubyte*)malloc(-XPS.InitUpkBufSize);
+        if (upkbuf is null) throw new VFSException("out of memory");
+        upkbufsize = -XPS.InitUpkBufSize;
+      }
+    }
   }
 
   @property const(char)[] name () const pure nothrow @safe @nogc { pragma(inline, true); return (closed ? null : fname); }
@@ -1274,43 +1307,86 @@ public struct VStreamDecoderLowLevelRO(XPS) {
 
   void close () {
     if (!closed) {
-      eofhit = true;
+      //{ import core.stdc.stdio : printf; printf("CLOSED!\n"); }
+      epleof = eofhit = true;
       closed = true;
+      static if (XPS.InitUpkBufSize <= 0) {
+        import core.stdc.stdlib : free;
+        if (upkbuf !is null) free(upkbuf);
+        upkbuf = null;
+        upkbufsize = 0;
+      }
+      upkbufused = upkbufpos = 0;
       epl.close();
     }
+  }
+
+  private void reset () {
+    upkbufused = 0;
+    epl.reset();
+  }
+
+  private ssize doRealRead (void* buf, usize count) {
+    if (count == 0) return 0; // the thing that should not be
+    if (closed) return -1;
+    auto dest = cast(ubyte*)buf;
+    auto left = count;
+    while (left > 0 && !closed) {
+      // use the data that left from the unpacked chunk
+      if (upkbufpos < upkbufused) {
+        auto pkx = upkbufused-upkbufpos;
+        if (pkx > left) pkx = cast(uint)left;
+        dest[0..pkx] = upkbuf[upkbufpos..upkbufpos+pkx];
+        dest += pkx;
+        upkbufpos += pkx;
+        left -= pkx;
+      } else {
+        if (epleof) break;
+        // no data in unpacked chunk, request new
+        upkbufused = upkbufpos = 0;
+        while (upkbufused == 0 && !closed && !epleof) {
+          if (!epl.unpackChunk(&putUnpackedByte)) epleof = true;
+        }
+      }
+    }
+    return count-left;
   }
 
   ssize read (void* buf, usize count) {
     if (buf is null) return -1;
     if (count == 0 || size == 0) return 0;
     if (!isOpen) return -1; // read error
+    if (count > ssize.max) count = ssize.max;
     if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
     // do we want to seek backward?
     if (prpos > pos) {
       // yes, rewind
-      epl.reset();
-      eofhit = (size == 0);
+      reset();
+      epleof = eofhit = (size == 0);
       prpos = 0;
     }
     // do we need to seek forward?
     if (prpos < pos) {
       // yes, skip data
       ubyte[512] tmp = 0;
-      auto left = pos-prpos;
-      while (left > 0) {
-        auto rd = epl.unpackBuf(tmp[0..(left >= tmp.length ? tmp.length : cast(uint)left)]);
-        if (rd.length == 0) return -1;
-        left -= rd.length;
-        prpos += rd.length;
+      while (prpos < pos) {
+        auto xrd = pos-prpos;
+        auto rd = doRealRead(tmp.ptr, cast(uint)(xrd > tmp.length ? tmp.length : xrd));
+        if (rd <= 0) return -1;
+        prpos += rd;
       }
       if (prpos != pos) return -1;
     }
+    assert(prpos == pos);
     // unpack data
-    if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
-    ubyte* dst = cast(ubyte*)buf;
-    auto rd = epl.unpackBuf(dst[0..count]);
-    pos = (prpos += rd.length);
-    return rd.length;
+    if (size >= 0 && size-pos < count) {
+      count = cast(usize)(size-pos);
+      if (count == 0) return 0;
+      if (count > ssize.max) count = ssize.max;
+    }
+    auto rd = doRealRead(buf, count);
+    pos = (prpos += rd);
+    return rd;
   }
 
   ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
@@ -1329,8 +1405,35 @@ public struct VStreamDecoderLowLevelRO(XPS) {
         return -1;
     }
     if (ofs < 0) return -1;
-    if (ofs >= size) { eofhit = true; ofs = size; } else eofhit = false;
+    eofhit = (size >= 0 && ofs >= size);
     pos = ofs;
     return pos;
+  }
+
+private:
+  void putUnpackedByte (const(ubyte)[] bts...) @trusted {
+    //{ import core.stdc.stdio : printf; printf("putUnpackedByte: %u; upkbufused=%u; upkbufsize=%u\n", cast(uint)bts.length, upkbufused, upkbufsize); }
+    if (closed) return; // just in case
+    foreach (ubyte b; bts[]) {
+      static if (XPS.InitUpkBufSize <= 0) {
+        if (upkbufused >= upkbufsize) {
+          // allocate more memory for unpacked data buffer
+          import core.stdc.stdlib : realloc;
+          auto newsz = (upkbufsize ? upkbufsize*2 : 256*1024);
+          if (newsz <= upkbufsize) throw new Exception("out of memory");
+          auto nbuf = cast(ubyte*)realloc(upkbuf, newsz);
+          if (nbuf is null) throw new Exception("out of memory");
+          upkbuf = nbuf;
+          upkbufsize = newsz;
+          //{ import core.stdc.stdio : printf; printf("  grow: upkbufsize=%u\n", upkbufsize); }
+        }
+        assert(upkbufused < upkbufsize);
+        assert(upkbuf !is null);
+        upkbuf[upkbufused++] = b;
+      } else {
+        if (upkbufused >= upkbuf.length) throw new Exception("out of unpack buffer");
+        upkbuf.ptr[upkbufused++] = b;
+      }
+    }
   }
 }
