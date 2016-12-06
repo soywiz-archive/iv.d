@@ -64,7 +64,7 @@ private:
       case 1: // shrink
         return wrapStream(VStreamDecoderLowLevelRO!Deshrinker(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
       case 2: case 3: case 4: case 5: // reduce
-        return wrapStream(StreamDecoderLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
       case 9: // deflate64
         debug(ziparc) { import core.stdc.stdio : printf; printf("I64!\n"); }
         return wrapStream(VStreamDecoderLowLevelRO!Inflater64(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
@@ -526,21 +526,34 @@ struct BitReader {
   long zflorg;
   long zflsize;
   long zflleft;
-  uint upkleft;
-  uint upktotalsize;
-  ubyte[32768] inbuf;
+  long upkleft;
+  long upktotalsize;
+  ubyte[4096] inbuf;
   uint ibpos, ibused;
-  ubyte bb = 1; // getbit mask
+  ubyte gbyte = 1;
   bool ateof;
 
+  void setup (VFile afl, long apos, long apksize, long aupksize) {
+    zfl = afl;
+    gbyte = 1;
+    ibpos = ibused = 0;
+    ateof = (aupksize == 0);
+    zflpos = zflorg = apos;
+    zflsize = apksize;
+    upktotalsize = aupksize;
+    upkleft = 0;
+  }
+
   void reset () {
-    bb = 1;
+    gbyte = 1;
     ibpos = ibused = 0;
     ateof = false;
     zflpos = zflorg;
     zflleft = zflsize;
     upkleft = upktotalsize;
   }
+
+  void close () { zfl = VFile.init; }
 
   // 0: eof
   uint readNewBuffer () {
@@ -574,12 +587,12 @@ struct BitReader {
 
   ubyte readPackedBit () {
     pragma(inline, true);
-    ubyte res = (bb&1);
-    bb >>= 1;
-    if (bb == 0) {
-      bb = readPackedByte!ubyte();
-      res = bb&1;
-      bb = (bb>>1)|0x80;
+    ubyte res = (gbyte&1);
+    gbyte >>= 1;
+    if (gbyte == 0) {
+      gbyte = readPackedByte!ubyte();
+      res = gbyte&1;
+      gbyte = (gbyte>>1)|0x80;
     }
     return res;
   }
@@ -624,7 +637,7 @@ struct Exploder {
   int[256] ll;
 
   int minMatchLen = 3;
-  ushort gflags;
+  uint gflags;
 
   ubyte[32768] buf32k;
   uint bIdx;
@@ -632,25 +645,16 @@ struct Exploder {
   ubyte[512] upkbuf; // way too much
   uint upkbufused, upkbufpos;
 
-  //this () {}
-
-//final:
-  void close () { if (br.fl.isOpen) br.fl.close(); }
+public:
+  void close () { br.close(); }
 
   void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
-    br.zfl = fl;
-    br.bb = 1;
-    br.ibpos = br.ibused = 0;
-    br.ateof = false;
-    br.zflpos = br.zflorg = apos;
-    br.zflsize = apksize;
+    br.setup(fl, apos, apksize, aupksize);
     gflags = agflags;
-    br.upktotalsize = aupksize;
     reset();
   }
 
   void reset () {
-    //CRC = 0xffffffff;
     br.reset();
     buf32k[] = 0;
     bIdx = 0;
@@ -846,22 +850,15 @@ struct Deshrinker {
   char KwKwK, codesize = 1; // start at 9 bits/code
   short code, oldcode, freecode, curcode;
 
-//final:
-  void close () { if (br.fl.isOpen) br.fl.close(); }
+public:
+  void close () { br.close(); }
 
   void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
-    br.zfl = fl;
-    br.bb = 1;
-    br.ibpos = br.ibused = 0;
-    br.ateof = false;
-    br.zflpos = br.zflorg = apos;
-    br.zflsize = apksize;
-    br.upktotalsize = aupksize;
+    br.setup(fl, apos, apksize, aupksize);
     reset();
   }
 
   void reset () {
-    //CRC = 0xffffffff;
     br.reset();
     upkbufused = 0;
     if (br.upktotalsize == 0) return;
@@ -1006,17 +1003,11 @@ struct Inductor {
 
   enum DLE = 144;
 
-//final:
-  void close () { if (br.fl.isOpen) br.fl.close(); }
+public:
+  void close () { br.close(); }
 
   void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
-    br.zfl = fl;
-    br.bb = 1;
-    br.ibpos = br.ibused = 0;
-    br.ateof = false;
-    br.zflpos = br.zflorg = apos;
-    br.zflsize = apksize;
-    br.upktotalsize = aupksize;
+    br.setup(fl, apos, apksize, aupksize);
     if (agflags < 2) agflags = 2; else if (agflags > 5) agflags = 5;
     level = cast(ubyte)(agflags-2); //FIXME: don't abuse agflags
     reset();
@@ -2155,17 +2146,11 @@ struct Inflater64 {
   uint upkbufused, upkbufpos;
 
 //final:
-  void close () { inflateBack9End(&zs); if (br.fl.isOpen) br.fl.close(); }
+  void close () { inflateBack9End(&zs); br.close(); }
 
   void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
     if (inflateBack9Init(&zs) != Z_OK) throw new VFSException("can't init inflate9");
-    br.zfl = fl;
-    br.bb = 1;
-    br.ibpos = br.ibused = 0;
-    br.ateof = false;
-    br.zflpos = br.zflorg = apos;
-    br.zflsize = apksize;
-    br.upktotalsize = aupksize;
+    br.setup(fl, apos, apksize, aupksize);
     reset();
   }
 

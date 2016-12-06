@@ -1230,7 +1230,7 @@ public VFile wrapStdin () {
 /* handy building block for various unpackers/decoders
  * XPS API:
  *
- * void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize);
+ * void setup (VFile fl, uint agflags, long apos, long apksize, long aupksize);
  *   initialize decoder
  *     fl = input file; store it somewhere
  *     agflags = flags, decoder should know what they are for
@@ -1264,7 +1264,7 @@ public struct VStreamDecoderLowLevelRO(XPS) {
     eofhit = (aupsize == 0);
     size = aupsize;
     fname = aname;
-    if (fname is null) fname = fl.name;
+    if (fname is null) fname = fl.name.idup;
     closed = !fl.isOpen;
   }
 
