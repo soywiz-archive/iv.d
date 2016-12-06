@@ -1224,3 +1224,113 @@ public VFile wrapStdin () {
     return VFile.init;
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/* handy building block for various unpackers/decoders
+ * XPS API:
+ *
+ * void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize);
+ *   initialize decoder
+ *     fl = input file; store it somewhere
+ *     agflags = flags, decoder should know what they are for
+ *     apos = encoded data offset in fl
+ *     apksize = encoded data size
+ *     aupksize = decoded data size
+ *
+ * void reset ();
+ *   reset decoder; will be called when engine wants to start decoding again from apos
+ *   should reset all necessary vars, etc.
+ *
+ * void close ();
+ *   close fl, shutdown decoder, free memory, etc. nothing else will be called after this
+ *
+ * ubyte[] unpackBuf (ubyte[] buf);
+ *   decode bytes to buf; returns decoded slice; 0 means EOF
+ */
+public struct VStreamDecoderLowLevelRO(XPS) {
+  XPS epl;
+  long size; // unpacked size
+  long pos; // current file position
+  long prpos; // previous file position
+  bool eofhit;
+  bool closed;
+  string fname;
+
+  this (VFile fl, uint agflags, long aupsize, long astpos, long asize, string aname) {
+    if (aupsize > uint.max) aupsize = uint.max;
+    if (asize > uint.max) asize = uint.max;
+    epl.setup(fl, agflags, astpos, cast(uint)asize, cast(uint)aupsize);
+    eofhit = (aupsize == 0);
+    size = aupsize;
+    fname = aname;
+    if (fname is null) fname = fl.name;
+    closed = !fl.isOpen;
+  }
+
+  @property const(char)[] name () const pure nothrow @safe @nogc { pragma(inline, true); return (closed ? null : fname); }
+  @property bool isOpen () const pure nothrow @safe @nogc { pragma(inline, true); return !closed; }
+  @property bool eof () const pure nothrow @safe @nogc { pragma(inline, true); return eofhit; }
+
+  void close () {
+    if (!closed) {
+      eofhit = true;
+      closed = true;
+      epl.close();
+    }
+  }
+
+  ssize read (void* buf, usize count) {
+    if (buf is null) return -1;
+    if (count == 0 || size == 0) return 0;
+    if (!isOpen) return -1; // read error
+    if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
+    // do we want to seek backward?
+    if (prpos > pos) {
+      // yes, rewind
+      epl.reset();
+      eofhit = (size == 0);
+      prpos = 0;
+    }
+    // do we need to seek forward?
+    if (prpos < pos) {
+      // yes, skip data
+      ubyte[512] tmp = 0;
+      auto left = pos-prpos;
+      while (left > 0) {
+        auto rd = epl.unpackBuf(tmp[0..(left >= tmp.length ? tmp.length : cast(uint)left)]);
+        if (rd.length == 0) return -1;
+        left -= rd.length;
+        prpos += rd.length;
+      }
+      if (prpos != pos) return -1;
+    }
+    // unpack data
+    if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+    ubyte* dst = cast(ubyte*)buf;
+    auto rd = epl.unpackBuf(dst[0..count]);
+    pos = (prpos += rd.length);
+    return rd.length;
+  }
+
+  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+
+  long lseek (long ofs, int origin) {
+    if (!isOpen) return -1;
+    //TODO: overflow checks
+    switch (origin) {
+      case Seek.Set: break;
+      case Seek.Cur: ofs += pos; break;
+      case Seek.End:
+        if (ofs > 0) ofs = 0;
+        ofs += size;
+        break;
+      default:
+        return -1;
+    }
+    if (ofs < 0) return -1;
+    if (ofs >= size) { eofhit = true; ofs = size; } else eofhit = false;
+    pos = ofs;
+    return pos;
+  }
+}

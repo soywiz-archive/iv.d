@@ -60,17 +60,17 @@ private:
       case 0: // store
         return wrapZLibStreamRO(st, VFSZLibMode.Raw, size, stpos, pksize, dir[idx].name);
       case 6: // implode
-        return wrapStream(ExplodeLowLevelRO!Exploder(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Exploder(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
       case 1: // shrink
-        return wrapStream(ExplodeLowLevelRO!Deshrinker(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Deshrinker(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
       case 2: case 3: case 4: case 5: // reduce
-        return wrapStream(ExplodeLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(StreamDecoderLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
       case 9: // deflate64
         debug(ziparc) { import core.stdc.stdio : printf; printf("I64!\n"); }
-        return wrapStream(ExplodeLowLevelRO!Inflater64(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
-        /*
+        return wrapStream(VStreamDecoderLowLevelRO!Inflater64(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
+      case 14: // lzma
         {
-          auto fo = VFile("/tmp/300/zip/_/zd64.d64", "w");
+          auto fo = VFile("/tmp/300/zip/lzma/zzz.lzma", "w");
           ubyte[1024] buf;
           st.seek(stpos);
           auto left = pksize;
@@ -83,7 +83,6 @@ private:
           }
         }
         assert(0);
-        */
       default: break;
     }
     throw new VFSException("unsupported ZIP method");
@@ -173,6 +172,7 @@ private:
       if (m == 1) return true; // shrink
       if (m >= 2 && m <= 5) return true; // reduce
       if (m == 9) return true; // deflate64
+      if (m == 14) return true; // lzma
       return false;
     }
 
@@ -635,7 +635,9 @@ struct Exploder {
   //this () {}
 
 //final:
-  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+  void close () { if (br.fl.isOpen) br.fl.close(); }
+
+  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
     br.zfl = fl;
     br.bb = 1;
     br.ibpos = br.ibused = 0;
@@ -665,8 +667,6 @@ struct Exploder {
     createTree(impLengthTree.ptr, decodeSF(ll.ptr), ll.ptr);
     createTree(impDistanceTree.ptr, decodeSF(ll.ptr), ll.ptr);
   }
-
-  void close () {}
 
   // not more than buf, but can unpack less if EOF was hit
   ubyte[] unpackBuf (ubyte[] buf) {
@@ -847,7 +847,9 @@ struct Deshrinker {
   short code, oldcode, freecode, curcode;
 
 //final:
-  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+  void close () { if (br.fl.isOpen) br.fl.close(); }
+
+  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
     br.zfl = fl;
     br.bb = 1;
     br.ibpos = br.ibused = 0;
@@ -876,8 +878,6 @@ struct Deshrinker {
     //if (SIZE < size) putUnpackedByte(oldcode, outfp);
     putUnpackedByte(cast(ubyte)oldcode);
   }
-
-  void close () {}
 
   // not more than buf, but can unpack less if EOF was hit
   ubyte[] unpackBuf (ubyte[] buf) {
@@ -1007,7 +1007,9 @@ struct Inductor {
   enum DLE = 144;
 
 //final:
-  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+  void close () { if (br.fl.isOpen) br.fl.close(); }
+
+  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
     br.zfl = fl;
     br.bb = 1;
     br.ibpos = br.ibused = 0;
@@ -1032,8 +1034,6 @@ struct Inductor {
     upsdist = 0;
     loadFollowers();
   }
-
-  void close () {}
 
   // not more than buf, but can unpack less if EOF was hit
   ubyte[] unpackBuf (ubyte[] buf) {
@@ -1110,93 +1110,6 @@ private:
       if (N[j] > 32) { /*errfp.writef("Follower set %d too large: %d\n", j, N[j]);*/ N[j] = 32; }
       for (int i = 0; i < N[j]; ++i) S[j][i] = cast(ubyte)br.readPackedBits(8);
     }
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-struct ExplodeLowLevelRO(XPS) {
-  XPS epl;
-  long size; // unpacked size
-  long pos; // current file position
-  long prpos; // previous file position
-  bool eofhit;
-  string fname;
-
-  this (VFile fl, ushort agflags, long aupsize, long astpos, long asize, string aname) {
-    if (aupsize > uint.max) aupsize = uint.max;
-    if (asize > uint.max) asize = uint.max;
-    epl.setup(fl, agflags, astpos, cast(uint)asize, cast(uint)aupsize);
-    eofhit = (aupsize == 0);
-    size = aupsize;
-    fname = aname;
-  }
-
-  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : epl.br.zfl.name); }
-  @property bool isOpen () { pragma(inline, true); return epl.br.zfl.isOpen; }
-  @property bool eof () { pragma(inline, true); return eofhit; }
-
-  void close () {
-    eofhit = true;
-    epl.close();
-    if (epl.br.zfl.isOpen) epl.br.zfl.close();
-  }
-
-  ssize read (void* buf, usize count) {
-    if (buf is null) return -1;
-    if (count == 0 || size == 0) return 0;
-    if (!isOpen) return -1; // read error
-    if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
-    // do we want to seek backward?
-    if (prpos > pos) {
-      // yes, rewind
-      epl.reset();
-      eofhit = (size == 0);
-      prpos = 0;
-    }
-    // do we need to seek forward?
-    if (prpos < pos) {
-      // yes, skip data
-      ubyte[512] tmp = 0;
-      auto left = pos-prpos;
-      while (left > 0) {
-        if (left >= tmp.length) {
-          epl.unpackBuf(tmp[]);
-          left -= tmp.length;
-        } else {
-          epl.unpackBuf(tmp[0..cast(uint)left]);
-          break;
-        }
-      }
-      prpos = pos;
-    }
-    // unpack data
-    if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
-    ubyte* dst = cast(ubyte*)buf;
-    auto rd = epl.unpackBuf(dst[0..count]);
-    pos = (prpos += rd.length);
-    return rd.length;
-  }
-
-  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
-
-  long lseek (long ofs, int origin) {
-    if (!isOpen) return -1;
-    //TODO: overflow checks
-    switch (origin) {
-      case Seek.Set: break;
-      case Seek.Cur: ofs += pos; break;
-      case Seek.End:
-        if (ofs > 0) ofs = 0;
-        ofs += size;
-        break;
-      default:
-        return -1;
-    }
-    if (ofs < 0) return -1;
-    if (ofs >= size) { eofhit = true; ofs = size; } else eofhit = false;
-    pos = ofs;
-    return pos;
   }
 }
 
@@ -2242,7 +2155,9 @@ struct Inflater64 {
   uint upkbufused, upkbufpos;
 
 //final:
-  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+  void close () { inflateBack9End(&zs); if (br.fl.isOpen) br.fl.close(); }
+
+  void setup (VFile fl, uint agflags, long apos, uint apksize, uint aupksize) {
     if (inflateBack9Init(&zs) != Z_OK) throw new VFSException("can't init inflate9");
     br.zfl = fl;
     br.bb = 1;
@@ -2261,10 +2176,6 @@ struct Inflater64 {
     if (br.upktotalsize == 0) return;
     zs.next_in = null;
     zs.avail_in = 0;
-  }
-
-  void close () {
-    inflateBack9End(&zs);
   }
 
   // not more than buf, but can unpack less if EOF was hit
