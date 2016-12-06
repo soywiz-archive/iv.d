@@ -531,7 +531,7 @@ private:
       curcpos += skip;
     }
 
-    int read (void* buf, uint count) {
+    ssize read (void* buf, usize count) {
       if (buf is null) return -1;
       if (count == 0 || totalsize == 0) return 0;
       if (totalsize >= 0 && pos >= totalsize) return 0; // EOF
@@ -547,7 +547,7 @@ private:
           debug(iv_vfs_arcz_read) { import core.stdc.stdio : printf; printf(" *reading %u bytes; pos=%u; lastrdpos=%u; curcpos=%u; curcsize=%u\n", count, pos, lastrdpos, curcpos, curcsize); }
         }
         assert(curcpos < curcsize && curcsize != 0);
-        int rd = (curcsize-curcpos >= count ? count : curcsize-curcpos);
+        ssize rd = (curcsize-curcpos >= count ? count : curcsize-curcpos);
         assert(rd > 0);
         memcpy(buf, chunkData+curcpos, rd);
         curcpos += rd;

@@ -677,7 +677,7 @@ struct Exploder {
       // use the data that left from the previous step
       if (upkbufpos < upkbufused) {
         auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = left;
+        if (pkx > left) pkx = cast(uint)left;
         dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
         dest += pkx;
         upkbufpos += pkx;
@@ -888,7 +888,7 @@ struct Deshrinker {
       // use the data that left from the previous step
       if (upkbufpos < upkbufused) {
         auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = left;
+        if (pkx > left) pkx = cast(uint)left;
         dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
         dest += pkx;
         upkbufpos += pkx;
@@ -1044,7 +1044,7 @@ struct Inductor {
       // use the data that left from the previous step
       if (upkbufpos < upkbufused) {
         auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = left;
+        if (pkx > left) pkx = cast(uint)left;
         dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
         dest += pkx;
         upkbufpos += pkx;
@@ -2276,7 +2276,7 @@ struct Inflater64 {
       // use the data that left from the previous step
       if (upkbufpos < upkbufused) {
         auto pkx = upkbufused-upkbufpos;
-        if (pkx > left) pkx = left;
+        if (pkx > left) pkx = cast(uint)left;
         dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
         dest += pkx;
         upkbufpos += pkx;
