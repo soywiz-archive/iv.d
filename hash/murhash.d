@@ -56,9 +56,7 @@ private:
   uint totallen; // to match the original Murmur3A
 
 public:
-@trusted:
-nothrow:
-@nogc:
+nothrow @trusted @nogc:
   /// construct state with seed
   this (uint aseed) { hash = seed = aseed; }
 

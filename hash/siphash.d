@@ -37,14 +37,14 @@ public template SipHashImpl(usize C, usize D) {
    * Returns:
    *  a 8 byte hash value.
    */
-  ulong sipHashOf(TK, TM) (auto ref in TK[16] key, in TM[] message) @safe pure nothrow @nogc
+  ulong sipHashOf(TK, TM) (auto ref in TK[16] key, in TM[] message) pure nothrow @trusted @nogc
   if (TK.sizeof == 1 && TM.sizeof == 1)
   {
     return sipHashOf(SipHashU8to64LE(key.ptr), SipHashU8to64LE(key.ptr, SipHashBlockSize), message);
   }
 
   /// ditto
-  ulong sipHashOf(TM) (in ulong k0, in ulong k1, in TM[] message) @safe pure nothrow @nogc
+  ulong sipHashOf(TM) (in ulong k0, in ulong k1, in TM[] message) pure nothrow @trusted @nogc
   if (TM.sizeof == 1)
   {
     ulong v0 = k0^0x736f6d6570736575UL;
@@ -111,10 +111,7 @@ private:
   ubyte[SipHashBlockSize] message; // actually, this is an accummulator; bits 0..2 of [$-1] is a counter
 
 public:
-@safe:
-pure:
-nothrow:
-@nogc:
+pure nothrow @trusted @nogc:
   /// Constructs SipHash with 16 byte key.
   this(TK) (auto ref in TK[16] key) @nogc if (TK.sizeof == 1) {
     this(SipHashU8to64LE(key.ptr), SipHashU8to64LE(key.ptr, SipHashBlockSize));
@@ -260,7 +257,7 @@ nothrow:
 }
 
 
-ulong SipHashU8to64LE(T) (in T* ptr, in usize i=0) @trusted pure nothrow @nogc if (T.sizeof == 1) {
+ulong SipHashU8to64LE(T) (in T* ptr, in usize i=0) pure nothrow @trusted @nogc if (T.sizeof == 1) {
   if (__ctfe) {
     version(LittleEndian) {
       return
@@ -288,7 +285,7 @@ ulong SipHashU8to64LE(T) (in T* ptr, in usize i=0) @trusted pure nothrow @nogc i
   }
 }
 
-ulong sipHashROTL (in ulong u, in uint s) @safe pure nothrow @nogc { return (u<<s)|(u>>(64-s)); }
+ulong sipHashROTL (in ulong u, in uint s) pure nothrow @trusted @nogc { pragma(inline, true); return (u<<s)|(u>>(64-s)); }
 
 enum SipHashBlockSize = ulong.sizeof;
 

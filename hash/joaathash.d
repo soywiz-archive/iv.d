@@ -45,9 +45,7 @@ private:
   }
 
 public:
-@trusted:
-nothrow:
-@nogc:
+nothrow @trusted @nogc:
   /// construct state with seed
   this (uint aseed) { hash = seed = aseed; }
 

@@ -49,9 +49,7 @@ private:
   ulong totallen;
 
 public:
-@trusted:
-nothrow:
-@nogc:
+nothrow @trusted @nogc:
   /// construct state with seed
   this (ulong aseed) { hash = seed = aseed; }
 
