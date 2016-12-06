@@ -327,7 +327,7 @@ public void kgiKeyFlush () {
 
 
 /// wait for keypress (and eat it)
-public void kgiWaitKey () {
+public KGIEvent kgiWaitKey () {
   for (;;) {
     auto ev = kgiGetEvent();
     if (ev.isClose) {
@@ -335,11 +335,11 @@ public void kgiWaitKey () {
       scope(exit) consoleUnlock();
       evbufused = 1;
       evbuf[0] = ev;
-      return;
+      return ev;
     }
     if (!ev.isKey) continue;
     if (!ev.k.pressed) continue;
-    break;
+    return ev;
   }
 }
 
