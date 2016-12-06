@@ -59,6 +59,8 @@ private:
       return wrapStream(ExplodeLowLevelRO!Exploder(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
     } else if (zfh.method == 1) {
       return wrapStream(ExplodeLowLevelRO!Deshrinker(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+    } else if (zfh.method >= 2 && zfh.method <= 5) {
+      return wrapStream(ExplodeLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
     } else {
       VFSZLibMode mode = (dir[idx].packed ? VFSZLibMode.Zip : VFSZLibMode.Raw);
       return wrapZLibStreamRO(st, mode, size, stpos, pksize, dir[idx].name);
@@ -176,7 +178,7 @@ private:
         if (cdfh.disk != 0) throw new VFSNamedException!"ZipArchive"("invalid central directory entry (disk number)");
         if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new VFSNamedException!"ZipArchive"("invalid central directory entry");
         // skip bad files
-        if (cdfh.method != 0 && cdfh.method != 8 && cdfh.method != 6 && cdfh.method != 1) {
+        if (!(cdfh.method == 0 || cdfh.method == 8 || cdfh.method == 6 || cdfh.method == 1 || (cdfh.method >= 2 && cdfh.method <= 5))) {
           debug(ziparc) writeln("  INVALID: method=", cdfh.method);
           throw new VFSNamedException!"ZipArchive"("invalid method");
         }
@@ -923,6 +925,139 @@ private:
   void putUnpackedByte (ubyte ub) {
     if (upkbufused >= upkbuf.length) throw new Exception("deshrinker internal bug");
     upkbuf.ptr[upkbufused++] = ub;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+struct Inductor {
+  BitReader br;
+
+  ubyte[16384] buf32k;
+
+  ubyte[1024] upkbuf; // way too much
+  uint upkbufused, upkbufpos;
+
+  ubyte[32][256] S; //[256][32];
+  ubyte[256] N;
+  static immutable ubyte[64] B = [
+    0,
+    1,1,2,2,3,3,3,3, 4,4,4,4,4,4,4,4,
+    5,5,5,5,5,5,5,5, 5,5,5,5,5,5,5,5,
+    6
+  ];
+
+  ubyte level;
+  int lastC = 0;
+  short nchar;
+  short state = 0;
+  int upslen = 0, upsdist = 0;
+  uint bIdx = 0;
+
+  enum DLE = 144;
+
+//final:
+  void setup (VFile fl, ushort agflags, long apos, uint apksize, uint aupksize) {
+    br.zfl = fl;
+    br.bb = 1;
+    br.ibpos = br.ibused = 0;
+    br.ateof = false;
+    br.zflpos = br.zflorg = apos;
+    br.zflsize = apksize;
+    br.upktotalsize = aupksize;
+    if (agflags < 2) agflags = 2; else if (agflags > 5) agflags = 5;
+    level = cast(ubyte)(agflags-2); //FIXME: don't abuse agflags
+    reset();
+  }
+
+  void reset () {
+    br.reset();
+    upkbufused = 0;
+    if (br.upktotalsize == 0) return;
+    buf32k[] = 0;
+    bIdx = 0;
+    state = 0;
+    lastC = 0;
+    upslen = 0;
+    upsdist = 0;
+    loadFollowers();
+  }
+
+  // not more than buf, but can unpack less if EOF was hit
+  ubyte[] unpackBuf (ubyte[] buf) {
+    if (buf.length == 0) return buf;
+    auto dest = buf.ptr;
+    auto left = buf.length;
+    while (left > 0) {
+      // use the data that left from the previous step
+      if (upkbufpos < upkbufused) {
+        auto pkx = upkbufused-upkbufpos;
+        if (pkx > left) pkx = left;
+        dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
+        dest += pkx;
+        upkbufpos += pkx;
+        left -= pkx;
+      } else {
+        if (br.upkleft == 0) break; // packed file EOF
+        upkbufused = upkbufpos = 0;
+        uint c;
+        if (!N[lastC]) {
+          c = br.readPackedBits(8);
+        } else {
+          if (br.readPackedBits(1)) {
+            c = br.readPackedBits(8);
+          } else {
+            c = 0;
+            if (N[lastC] != 0) c = br.readPackedBits(B[N[lastC]]);
+            c = S[lastC][c];
+          }
+        }
+        lastC = c;
+        switch (state) {
+          case 0:
+            if (c != DLE) putUnpackedByte(c); else state = 1;
+            break;
+          case 1:
+            if (c) {
+              upsdist = (c>>(7-level))<<8;
+              upslen = c&(0x7f>>level);
+              state = (upslen == (0x7f>>level) ? 2 : 3);
+            } else {
+              putUnpackedByte(144);
+              state = 0;
+            }
+            break;
+          case 2:
+            upslen += c;
+            state = 3;
+            break;
+          case 3:
+            upsdist += c+1;
+            upslen += 3;
+            while (upslen--) putUnpackedByte(buf32k[(bIdx-upsdist)&0x3fff]);
+            state = 0;
+            break;
+          default:
+        }
+      }
+    }
+    return buf[0..$-left];
+  }
+
+private:
+  void putUnpackedByte (uint c) {
+    if (upkbufused >= upkbuf.length) throw new Exception("deshrinker internal bug");
+    upkbuf.ptr[upkbufused++] = cast(ubyte)c;
+    buf32k[bIdx++] = cast(ubyte)c;
+    bIdx &= 0x3fff;
+  }
+
+  void loadFollowers () {
+    for (int j = 255; j >= 0; --j) {
+      N[j] = cast(ubyte)br.readPackedBits(6);
+      if (N[j] > 32) { /*errfp.writef("Follower set %d too large: %d\n", j, N[j]);*/ N[j] = 32; }
+      for (int i = 0; i < N[j]; ++i) S[j][i] = cast(ubyte)br.readPackedBits(8);
+    }
   }
 }
 
