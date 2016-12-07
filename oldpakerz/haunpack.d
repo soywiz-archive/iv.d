@@ -90,7 +90,7 @@ struct haunp_s {
   // unpacker
   int done;
 }
-//pragma(msg, haunp_s.sizeof);
+version(oldpack_sizes) pragma(msg, haunp_s.sizeof);
 
 
 // ////////////////////////////////////////////////////////////////////////// //

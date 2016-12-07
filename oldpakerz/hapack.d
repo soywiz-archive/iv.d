@@ -348,6 +348,7 @@ struct libha_s {
   ushort fldOmlf, fldObpos;
   int phase; // 0: not initialized; 1: in progress; <0: error
 }
+version(oldpack_sizes) pragma(msg, libha_s.sizeof); // ~200 KB, wow!
 
 
 void setup_buffers (libha_t asc) {
