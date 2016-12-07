@@ -38,25 +38,28 @@ void main () {
 
   uint crc = 0;
 
-  libha_t ha = libha_alloc(
-    (void *buf, int buf_len, void *udata) {
-      auto b = cast(ubyte*)buf;
-      auto rd = fi.rawRead(b[0..buf_len]);
-      crc = wdx_crc32(rd, crc);
-      return cast(int)rd.length;
-    },
-    (const(void)* buf, int buf_len, void *udata) {
-      auto b = cast(const(ubyte)*)buf;
-      fo.rawWriteExact(b[0..buf_len]);
-      return buf_len;
-    },
-  );
+  libha_t ha = libha_create();
   scope(exit) libha_free(ha);
 
   conwriteln("packing...");
-  libha_pack_start(ha);
-  while (libha_pack_step(ha)) {}
-  libha_pack_finish(ha);
+
+  for (;;) {
+    auto goon = libha_pack_step(ha,
+      (void *buf, int buf_len) {
+        auto b = cast(ubyte*)buf;
+        auto rd = fi.rawRead(b[0..buf_len]);
+        crc = wdx_crc32(rd, crc);
+        return cast(int)rd.length;
+      },
+      (const(void)* buf, int buf_len) {
+        auto b = cast(const(ubyte)*)buf;
+        fo.rawWriteExact(b[0..buf_len]);
+        return buf_len;
+      },
+    );
+    if (!goon) break;
+  }
+
   conwriteln(fi.tell, " --> ", fo.tell);
   conwritefln!"crc: 0x%08x"(crc);
 }

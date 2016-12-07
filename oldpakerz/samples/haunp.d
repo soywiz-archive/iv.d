@@ -41,19 +41,20 @@ void main () {
 
   uint crc = 0;
 
-  haunp_t ha = haunp_open_io(
-    (void* buf, int buf_len) {
-      auto b = cast(ubyte*)buf;
-      auto rd = fi.rawRead(b[0..buf_len]);
-      return cast(int)rd.length;
-    }
-  );
+  haunp_t ha = haunp_create();
+  scope(exit) haunp_free(ha);
 
   conwriteln("unpacking...");
 
   ubyte[1024] buf;
   for (;;) {
-    auto rd = ha.haunp_read(buf.ptr, cast(int)buf.length);
+    auto rd = ha.haunp_read(buf[],
+      (void* buf, int buf_len) {
+        auto b = cast(ubyte*)buf;
+        auto rd = fi.rawRead(b[0..buf_len]);
+        return cast(int)rd.length;
+      }
+    );
     if (rd > 0) {
       crc = wdx_crc32(buf[0..rd], crc);
       fo.rawWriteExact(buf[0..rd]);

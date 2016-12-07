@@ -22,28 +22,12 @@ private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct libha_io_t {
-  int delegate (void *buf, int buf_len, void *udata) bread; // return number of bytes read; 0: EOF; <0: error; can be less than buf_len
-  int delegate (const(void)* buf, int buf_len, void *udata) bwrite; // result != buf_len: error
-}
+alias libha_read_fn = int delegate (void *buf, int buf_len); // return number of bytes read; 0: EOF; <0: error; can be less than buf_len
+alias libha_write_fn = int delegate (const(void)* buf, int buf_len); // result != buf_len: error
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public alias libha_t = libha_s*;
-
-/+
-extern libha_t libha_alloc (const libha_io_t *iot, void *udata);
-extern void libha_free (libha_t asc);
-
-extern const libha_io_t *libha_get_iot (libha_t asc);
-extern int libha_set_iot (libha_t asc, const libha_io_t *iot); // <0: error; 0: ok
-
-extern void *libha_get_udata (libha_t asc);
-extern int libha_set_udata (libha_t asc, void *udata); // <0: error; 0: ok
-
-// you need to set i/o structure before calling pack or unpack
-extern int libha_pack (libha_t asc); // LIBHA_ERR_xxx
-+/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -90,21 +74,9 @@ enum HASH(string p) = "((swd.b["~p~"]^((swd.b["~p~"+1]^(swd.b["~p~"+2]<<HSHIFT))
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/*
-static int dummy_bread (void *buf, int buf_len, void *udata) { return -1; }
-static int dummy_bwrite (const(void)* buf, int buf_len, void *udata) { return -1; }
-
-
-static const libha_io_t dummy_iot = {
-  .bread = dummy_bread,
-  .bwrite = dummy_bwrite,
-};
-*/
-
-
 struct io_t {
-  libha_io_t *io;
-  void *udata;
+  libha_read_fn bread;
+  libha_write_fn bwrite;
   // input buffer
   ubyte *bufin;
   int bufin_pos;
@@ -122,7 +94,7 @@ int get_byte (io_t *io) {
   if (io.bufin_pos >= io.bufin_max) {
     if (io.bufin_pos < io.bufin_size+1) {
       io.bufin_pos = 0;
-      io.bufin_max = io.io.bread(io.bufin, io.bufin_size, io.udata);
+      io.bufin_max = io.bread(io.bufin, io.bufin_size);
       if (io.bufin_max < 0) throw new Exception("read error");
       if (io.bufin_max == 0) { io.bufin_pos = io.bufin_size+42; return -1; } // EOF
     } else {
@@ -135,7 +107,7 @@ int get_byte (io_t *io) {
 
 void put_byte (io_t *io, int c) {
   if (io.bufout_pos >= io.bufout_size) {
-    int res = io.io.bwrite(io.bufout, io.bufout_pos, io.udata);
+    int res = io.bwrite(io.bufout, io.bufout_pos);
     if (res != io.bufout_pos) throw new Exception("write error");
     io.bufout_pos = 0;
   }
@@ -145,7 +117,7 @@ void put_byte (io_t *io, int c) {
 
 void flush (io_t *io) {
   if (io.bufout_pos > 0) {
-    int res = io.io.bwrite(io.bufout, io.bufout_pos, io.udata);
+    int res = io.bwrite(io.bufout, io.bufout_pos);
     if (res != io.bufout_pos) throw new Exception("write error");
     io.bufout_pos = 0;
   }
@@ -351,8 +323,9 @@ void ac_end_encode (ari_t *ari) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum BUFIN_SIZE = 64*1024;
-enum BUFOUT_SIZE = 64*1024;
+enum BUFIN_SIZE = 1024;
+enum BUFOUT_SIZE = 1024;
+
 
 struct libha_s {
   ushort[2*LTCODES] ltab;
@@ -367,15 +340,13 @@ struct libha_s {
   ushort ttcon;
   swd_t swd;
   ari_t ari;
-  libha_io_t iot;
   io_t io;
   ubyte[BUFIN_SIZE] bufin;
   ubyte[BUFOUT_SIZE] bufout;
-  void *udata;
   // step
   short fldOc;
   ushort fldOmlf, fldObpos;
-  bool stepComplete;
+  int phase; // 0: not initialized; 1: in progress; <0: error
 }
 
 
@@ -387,72 +358,6 @@ void setup_buffers (libha_t asc) {
   asc.io.bufout = asc.bufout.ptr;
   asc.io.bufout_size = asc.bufout.sizeof;
   asc.io.bufout_pos = 0;
-}
-
-
-public libha_t libha_alloc (libha_io_t *iot, void *udata) {
-  import core.stdc.stdlib : calloc;
-  libha_t res = cast(libha_t)calloc(1, libha_s.sizeof);
-  if (res != null) {
-    if (iot !is null) {
-      res.iot = *iot;
-    } else {
-      res.iot.bread = (void *buf, int buf_len, void *udata) => -1;
-      res.iot.bwrite = (const(void)* buf, int buf_len, void *udata) => -1;
-    }
-    res.udata = udata;
-  }
-  return res;
-}
-
-
-public libha_t libha_alloc (int delegate (void *buf, int buf_len, void *udata) rd, int delegate (const(void)* buf, int buf_len, void *udata) wr) {
-  import core.stdc.stdlib : calloc;
-  libha_t res = cast(libha_t)calloc(1, libha_s.sizeof);
-  if (res != null) {
-    res.iot.bread = rd;
-    res.iot.bwrite = wr;
-  }
-  return res;
-}
-
-
-public void libha_free (libha_t asc) {
-  import core.stdc.stdlib : free;
-  if (asc != null) free(asc);
-}
-
-
-public libha_io_t *libha_get_iot (libha_t asc) {
-  return (asc != null ? &asc.iot : null);
-}
-
-
-public int libha_set_iot (libha_t asc, const libha_io_t *iot) {
-  if (asc != null) {
-    if (iot !is null) {
-      asc.iot = *iot;
-    } else {
-      asc.iot.bread = (void *buf, int buf_len, void *udata) => -1;
-      asc.iot.bwrite = (const(void)* buf, int buf_len, void *udata) => -1;
-    }
-    return 0;
-  }
-  return -1;
-}
-
-
-public void *libha_get_udata (libha_t asc) {
-  return (asc != null ? asc.udata : null);
-}
-
-
-public int libha_set_udata (libha_t asc, void *udata) {
-  if (asc != null) {
-    asc.udata = udata;
-    return 0;
-  }
-  return -1;
 }
 
 
@@ -619,31 +524,56 @@ void codechar (libha_t asc, short c) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void libha_pack_start (libha_t asc) {
-  asc.io.io = &asc.iot;
-  asc.io.udata = asc.udata;
-  asc.swd.io = asc.ari.io = &asc.io;
-  asc.stepComplete = false;
-  setup_buffers(asc);
-  swd_init(&asc.swd);
-  swd_first_bytes(&asc.swd); // reads MAXFLEN bytes
-  pack_init(asc);
-  swd_findbest(&asc.swd);
+public libha_t libha_create () {
+  import core.stdc.stdlib : calloc;
+  return cast(libha_t)calloc(1, libha_s.sizeof);
 }
 
 
-public void libha_pack_finish (libha_t asc) {
-  if (!asc.stepComplete) throw new Exception("can't finish incomplete coder");
-  ac_out(&asc.ari, cast(ushort)(asc.ttab[asc.ttcon][0]+asc.ttab[asc.ttcon][1]), cast(ushort)(asc.ttab[asc.ttcon][0]+asc.ttab[asc.ttcon][1]+1), cast(ushort)(asc.ttab[asc.ttcon][0]+asc.ttab[asc.ttcon][1]+1));
-  ac_end_encode(&asc.ari);
+public void libha_free (libha_t asc) {
+  import core.stdc.stdlib : free;
+  if (asc != null) free(asc);
 }
 
 
-// return `false` when finished
-public bool libha_pack_step (libha_t asc) {
+public void libha_reset (libha_t asc) {
+  if (asc !is null) {
+    import core.stdc.string : memset;
+    memset(asc, 0, (*asc).sizeof);
+  }
+}
+
+
+// return `false` when finished, or `true` if packer needs more steps
+public bool libha_pack_step (libha_t asc, libha_read_fn rd, libha_write_fn wr) {
   //swd_findbest(): reads
-  if (asc.stepComplete) return false;
-  if (asc.swd.swd_char < 0) { asc.stepComplete = true; return false; }
+  if (asc is null || asc.phase < 0 || rd is null || wr is null) throw new Exception("hapack error");
+  asc.io.bread = rd;
+  asc.io.bwrite = wr;
+  asc.swd.io = asc.ari.io = &asc.io;
+  scope(exit) {
+    asc.io.bread = null;
+    asc.io.bwrite = null;
+    asc.swd.io = asc.ari.io = null;
+  }
+  // init?
+  if (asc.phase == 0) {
+    asc.phase = -1; // so throw will end up in error
+    setup_buffers(asc);
+    swd_init(&asc.swd);
+    swd_first_bytes(&asc.swd); // reads MAXFLEN bytes
+    pack_init(asc);
+    swd_findbest(&asc.swd);
+    asc.phase = 1;
+  }
+  assert(asc.phase == 1);
+  if (asc.swd.swd_char < 0) {
+    // finish
+    asc.phase = -1; // so next call will end up in error
+    ac_out(&asc.ari, cast(ushort)(asc.ttab[asc.ttcon][0]+asc.ttab[asc.ttcon][1]), cast(ushort)(asc.ttab[asc.ttcon][0]+asc.ttab[asc.ttcon][1]+1), cast(ushort)(asc.ttab[asc.ttcon][0]+asc.ttab[asc.ttcon][1]+1));
+    ac_end_encode(&asc.ari);
+    return false;
+  }
   if (asc.swd.swd_mlf > MINLEN || (asc.swd.swd_mlf == MINLEN && asc.swd.swd_bpos < MINLENLIM)) {
     asc.fldOmlf = asc.swd.swd_mlf;
     asc.fldObpos = asc.swd.swd_bpos;
@@ -661,5 +591,6 @@ public bool libha_pack_step (libha_t asc) {
     codechar(asc, asc.swd.swd_char);
     swd_findbest(&asc.swd); // reads
   }
+  asc.phase = 1; // go on
   return true;
 }

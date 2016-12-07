@@ -23,6 +23,15 @@ private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// <0: error; 0: EOF; >0: bytes read (can be less that buf_len)
+// buf_len can never be negative or zero; it will not be more that INT_MAX/2-1 either
+public alias haunp_bread_fn_t = int delegate (void* buf, int buf_len);
+
+
+public alias haunp_t = haunp_s*;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum POSCODES = 31200;
 enum SLCODES = 16;
 enum LLCODES = 48;
@@ -47,17 +56,10 @@ enum CCUTOFF = 3*CTSTEP;
 enum CPLEN = 8;
 enum LPLEN = 4;
 
-enum RD_BUF_SIZE = 32*1024;
 
-
-// <0: error; 0: EOF; >0: bytes read (can be less that buf_len)
-// buf_len can never be negative or zero; it will not be more that INT_MAX/2-1 either
-alias haunp_bread_fn_t = int delegate (void* buf, int buf_len);
-
-
-public alias haunp_t = haunp_s*;
-
+// ////////////////////////////////////////////////////////////////////////// //
 struct haunp_s {
+  enum RD_BUF_SIZE = 1024;
   // hup
   ushort[2*LTCODES] ltab;
   ushort[2*LTCODES] eltab;
@@ -82,34 +84,13 @@ struct haunp_s {
   // reader
   haunp_bread_fn_t reader;
   ubyte[RD_BUF_SIZE] rd_buf;
-  int rd_size;
   int rd_pos;
   int rd_max;
   bool no_more; // high-level flag: don't call read callback anymore
   // unpacker
   int done;
 }
-
-
-/+
-// <0: error; 0: EOF; >0: bytes read (can be less that buf_len)
-// buf_len can never be negative or zero; it will not be more that INT_MAX/2-1 either
-typedef int (*haunp_bread_fn_t) (void *buf, int buf_len, void *udata);
-
-
-// return null on error (out of memory)
-extern haunp_t haunp_open_io (haunp_bread_fn_t reader, void *udata);
-extern haunp_t haunp_open_buf (const void *buf, int buf_len); // buf MUST be alive until haunp_close() called!
-
-// return 0 if ok or -1 on error
-extern int haunp_reset_io (haunp_t hup, haunp_bread_fn_t reader, void *udata);
-extern int haunp_reset_buf (haunp_t hup, const void *buf, int buf_len); // buf MUST be alive until haunp_close() called!
-
-extern int haunp_close (haunp_t hup);
-
-// return number of bytes read (<len: end of data) or -1 on error
-extern int haunp_read (haunp_t hup, void *buf, int len);
-+/
+//pragma(msg, haunp_s.sizeof);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -172,7 +153,7 @@ int swd_do_pair (haunp_t hup, ubyte* obuf, int olen) {
 enum getbyte(string bto) = "{
   if (hup.rd_pos >= hup.rd_max && !hup.no_more) {
     hup.rd_pos = 0;
-    hup.rd_max = hup.reader(hup.rd_buf.ptr, hup.rd_size);
+    hup.rd_max = hup.reader(hup.rd_buf.ptr, hup.RD_BUF_SIZE);
     hup.no_more = (hup.rd_max <= 0);
     if (hup.rd_max < 0) throw new Exception(`read error`);
   }
@@ -224,88 +205,6 @@ ushort ac_threshold_val (haunp_t hup, ushort tot) {
   uint r = cast(uint)(hup.ari_h-hup.ari_l)+1;
   if (r == 0) throw new Exception("bad data");
   return cast(ushort)(((cast(uint)(hup.ari_v-hup.ari_l)+1)*tot-1)/r);
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-public int haunp_reset_io (haunp_t hup, haunp_bread_fn_t reader) {
-  if (hup !is null) {
-    import core.stdc.string : memset;
-    memset(hup, 0, (*hup).sizeof);
-    hup.reader = reader;
-    // init dictionary
-    hup.dict_pos = 0;
-    // init model
-    hup.ces = CTSTEP;
-    hup.les = LTSTEP;
-    hup.accnt = 0;
-    hup.ttcon = 0;
-    hup.npt = hup.pmax = 1;
-    for (int i = 0; i < TTORD; ++i) hup.ttab[i][0] = hup.ttab[i][1] = TTSTEP;
-    tabinit(hup.ltab, LTCODES, 0);
-    tabinit(hup.eltab, LTCODES, 1);
-    tabinit(hup.ctab, CTCODES, 0);
-    tabinit(hup.ectab, CTCODES, 1);
-    tabinit(hup.ptab, PTCODES, 0);
-    tupd(hup.ptab, PTCODES, MAXPT, PTSTEP, 0);
-    // init arithmetic decoder
-    hup.ari_h = 0xffff;
-    hup.ari_l = 0;
-    hup.ari_gpat = 0;
-    hup.ari_init_done = 0; // defer initialization
-    // read buffer
-    hup.rd_size = RD_BUF_SIZE;
-    hup.no_more = false;
-    return 0;
-  }
-  return -1;
-}
-
-
-public int haunp_reset_buf (haunp_t hup, const(void)* abuf, int abuf_len) {
-  if (hup !is null) {
-    if (abuf_len < 0) abuf_len = 0;
-    import std.functional : toDelegate;
-    haunp_reset_io(hup,
-      (void* buf, int buf_len) {
-        if (abuf_len > 0) {
-          import core.stdc.string : memcpy;
-          if (buf_len > abuf_len) buf_len = abuf_len;
-          memcpy(buf, abuf, buf_len);
-          abuf += buf_len;
-          abuf_len -= buf_len;
-          return buf_len;
-        }
-        return 0;
-      }
-    );
-    hup.no_more = (abuf_len == 0);
-    return 0;
-  }
-  return -1;
-}
-
-
-public haunp_t haunp_open_io (haunp_bread_fn_t reader) {
-  import core.stdc.stdlib : calloc;
-  haunp_t hup = cast(haunp_t)calloc(1, (*haunp_t).sizeof);
-  if (hup != null) haunp_reset_io(hup, reader);
-  return hup;
-}
-
-
-public haunp_t haunp_open_buf (const(void)* buf, int buf_len) {
-  import core.stdc.stdlib : calloc;
-  haunp_t hup = cast(haunp_t)calloc(1, (*haunp_t).sizeof);
-  if (hup != null) haunp_reset_buf(hup, buf, buf_len);
-  return hup;
-}
-
-
-public int haunp_close (haunp_t hup) {
-  import core.stdc.stdlib : free;
-  if (hup !is null) free(hup);
-  return 0;
 }
 
 
@@ -468,13 +367,70 @@ void libha_unpack (haunp_t hup, ubyte* obuf, int olen) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// return number of bytes read (<len: end of data) or -1 on error
-public int haunp_read (haunp_t hup, void* buf, int len) {
-  if (buf is null && len < 1) return 0;
+public haunp_t haunp_create () {
+  import core.stdc.stdlib : calloc;
+  haunp_t hup = cast(haunp_t)calloc(1, (*haunp_t).sizeof);
+  if (hup != null) haunp_reset(hup);
+  return hup;
+}
+
+
+public void haunp_free (haunp_t hup) {
+  import core.stdc.stdlib : free;
+  if (hup !is null) free(hup);
+}
+
+
+public void haunp_reset (haunp_t hup) {
   if (hup !is null) {
-    hup.done = 0;
-    libha_unpack(hup, cast(ubyte*)buf, len);
-    return hup.done;
+    import core.stdc.string : memset;
+    memset(hup, 0, (*hup).sizeof);
+    hup.reader = null;
+    // init dictionary
+    hup.dict_pos = 0;
+    // init model
+    hup.ces = CTSTEP;
+    hup.les = LTSTEP;
+    hup.accnt = 0;
+    hup.ttcon = 0;
+    hup.npt = hup.pmax = 1;
+    for (int i = 0; i < TTORD; ++i) hup.ttab[i][0] = hup.ttab[i][1] = TTSTEP;
+    tabinit(hup.ltab, LTCODES, 0);
+    tabinit(hup.eltab, LTCODES, 1);
+    tabinit(hup.ctab, CTCODES, 0);
+    tabinit(hup.ectab, CTCODES, 1);
+    tabinit(hup.ptab, PTCODES, 0);
+    tupd(hup.ptab, PTCODES, MAXPT, PTSTEP, 0);
+    // init arithmetic decoder
+    hup.ari_h = 0xffff;
+    hup.ari_l = 0;
+    hup.ari_gpat = 0;
+    hup.ari_init_done = 0; // defer initialization
+    // read buffer
+    hup.no_more = false;
+  }
+}
+
+
+// return number of bytes read (<len: end of data), throws on error
+public size_t haunp_read (haunp_t hup, void[] buf, haunp_bread_fn_t reader) {
+  if (buf.length == 0) return 0;
+  if (hup !is null && reader !is null) {
+    hup.reader = reader;
+    scope(exit) hup.reader = null;
+    size_t res = 0;
+    auto d = cast(ubyte*)buf.ptr;
+    auto left = buf.length;
+    while (left > 0) {
+      hup.done = 0;
+      auto rd = cast(int)(left > int.max/8 ? int.max/8 : left);
+      libha_unpack(hup, d, rd);
+      d += hup.done;
+      left -= hup.done;
+      res += hup.done;
+      if (hup.done != rd) break;
+    }
+    return res;
   }
   throw new Exception("haunpack error");
 }
