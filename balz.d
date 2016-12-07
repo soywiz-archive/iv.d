@@ -71,7 +71,7 @@ private:
   uint* tab; // [TabSize][TabCntSize]
   int* cnt; // [TabCntSize]
 
-  bool inProgress; // we are currently doing compressing or decompressing (and can't reinit engine)
+  bool inProgress; // we are currently doing compressing or decompressing (and can't reinit the engine)
 
 private:
   static T* xalloc(T) (uint mem) if (T.sizeof > 0) {
@@ -122,7 +122,7 @@ public:
   @property ubyte dictBits () const pure nothrow @safe @nogc { pragma(inline, true); return SlDictBits; }
   @property uint dictSize () const pure nothrow @safe @nogc { pragma(inline, true); return (1U<<SlDictBits); }
 
-  /// reinit engine with new dictionary size
+  /// reinit the engine with new dictionary size
   bool reinit (ubyte dictbits) pure nothrow @safe @nogc {
     if (dictbits < MinDictBits || dictbits > MaxDictBits) return false;
     if (inProgress) return false;
@@ -153,7 +153,7 @@ public:
     assert(getBuf !is null);
     assert(putBuf !is null);
 
-    // i moved those functions here 'cause they need to do i/o
+    // i moved the following functions here 'cause they need to do i/o
     void encodeWithCounter (int bit, Counter* counter) {
       immutable mid = cast(uint)(low+((cast(ulong)(high-low)*(counter.p<<15))>>32));
       if (bit) {
@@ -224,8 +224,8 @@ public:
         immutable uint hash = getHash(p);
         int len = MinMatchLen-1;
         int idx = TabSize;
-        int max_match = n-p;
-        if (max_match > MaxMatchLen) max_match = MaxMatchLen;
+        int maxMatch = n-p;
+        if (maxMatch > MaxMatchLen) maxMatch = MaxMatchLen;
         // hash search
         foreach (uint x; 0..TabSize) {
           immutable uint d = tab[c2*TabSize+((cnt[c2]-x)&TabMask)];
@@ -234,12 +234,12 @@ public:
           immutable int s = d&SlDictMask;
           if (sldict[(s+len)&SlDictMask] != sldict[(p+len)&SlDictMask] || sldict[s] != sldict[p&SlDictMask]) continue;
           int l = 0;
-          while (++l < max_match) if (sldict[(s+l)&SlDictMask] != sldict[(p+l)&SlDictMask]) break;
+          while (++l < maxMatch) if (sldict[(s+l)&SlDictMask] != sldict[(p+l)&SlDictMask]) break;
           if (l > len) {
             for (int i = l; i > len; --i) bestIdx.ptr[i] = x;
             idx = x;
             len = l;
-            if (l == max_match) break;
+            if (l == maxMatch) break;
           }
         }
         // check match
@@ -289,7 +289,7 @@ public:
     assert(putBuf !is null);
     //assert(flen >= 0);
 
-    // i moved those functions here 'cause they need to do i/o
+    // i moved the following functions here 'cause they need to do i/o
     ubyte getb () {
       if (ibufPos >= ibufUsed) {
         ibufPos = ibufUsed = 0;
@@ -444,8 +444,8 @@ private:
       immutable uint hash = getHash(p);
       int len = MinMatchLen-1;
       int idx = TabSize;
-      int max_match = n-p;
-      if (max_match > MaxMatchLen) max_match = MaxMatchLen;
+      int maxMatch = n-p;
+      if (maxMatch > MaxMatchLen) maxMatch = MaxMatchLen;
       foreach (int x; 0..TabSize) {
         immutable uint d = tab[c2*TabSize+((cnt[c2]-x)&TabMask)];
         if (!d) break;
@@ -453,11 +453,11 @@ private:
         immutable int s = d&SlDictMask;
         if (sldict[(s+len)&SlDictMask] != sldict[(p+len)&SlDictMask] || sldict[s] != sldict[p]) continue;
         int l = 0;
-        while (++l < max_match) if (sldict[(s+l)&SlDictMask] != sldict[(p+l)&SlDictMask]) break;
+        while (++l < maxMatch) if (sldict[(s+l)&SlDictMask] != sldict[(p+l)&SlDictMask]) break;
         if (l > len) {
           idx = x;
           len = l;
-          if (l == max_match) break;
+          if (l == maxMatch) break;
         }
       }
       return getPts(len, idx);
