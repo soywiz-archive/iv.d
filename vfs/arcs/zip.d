@@ -1089,7 +1089,7 @@ struct zd64_stream {
   // /*const(ubyte)* */ubyte* next_in; // next input byte
   mixin VFSHiddenPointerHelper!(ubyte, "next_in");
   uint avail_in; // number of bytes available at next_in
-  string msg; // last error message, NULL if no error
+  //string msg; // last error message, NULL if no error
   //private void* state; // not visible by applications
   private mixin VFSHiddenPointerHelper!(void, "state");
 }
@@ -1738,7 +1738,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
             mode = TABLE;
             break;
           case 3:
-            strm.msg = "invalid block type";
+            //strm.msg = "invalid block type";
             mode = BAD;
             break;
           default: assert(0, "wtf?!");
@@ -1751,7 +1751,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
         mixin(BYTEBITS); // go to byte boundary
         mixin(NEEDBITS!"32");
         if ((hold&0xffff) != ((hold>>16)^0xffff)) {
-          strm.msg = "invalid stored block lengths";
+          //strm.msg = "invalid stored block lengths";
           mode = BAD;
           break;
         }
@@ -1797,7 +1797,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
         state.ncode = mixin(BITS!"4")+4;
         mixin(DROPBITS!"4");
         if (state.nlen > 286) {
-          strm.msg = "too many length symbols";
+          //strm.msg = "too many length symbols";
           mode = BAD;
           break;
         }
@@ -1815,7 +1815,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
         lenbits = 7;
         ret = inflate_table9(CODES, state.lens.ptr, 19, &(state.next_), &(lenbits), state.work.ptr);
         if (ret) {
-          strm.msg = "invalid code lengths set";
+          //strm.msg = "invalid code lengths set";
           mode = BAD;
           break;
         }
@@ -1837,7 +1837,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
               mixin(NEEDBITS!"here.bits+2");
               mixin(DROPBITS!"here.bits");
               if (state.have_ == 0) {
-                strm.msg = "invalid bit length repeat";
+                //strm.msg = "invalid bit length repeat";
                 mode = BAD;
                 break;
               }
@@ -1858,7 +1858,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
               mixin(DROPBITS!"7");
             }
             if (state.have_+copy > state.nlen+state.ndist) {
-              strm.msg = "invalid bit length repeat";
+              //strm.msg = "invalid bit length repeat";
               mode = BAD;
               break;
             }
@@ -1871,7 +1871,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
 
         // check for end-of-block code (better have one)
         if (state.lens[256] == 0) {
-          strm.msg = "invalid code -- missing end-of-block";
+          //strm.msg = "invalid code -- missing end-of-block";
           mode = BAD;
           break;
         }
@@ -1884,7 +1884,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
         lenbits = 9;
         ret = inflate_table9(LENS, state.lens.ptr, state.nlen, &(state.next_), &(lenbits), state.work.ptr);
         if (ret) {
-          strm.msg = "invalid literal/lengths set";
+          //strm.msg = "invalid literal/lengths set";
           mode = BAD;
           break;
         }
@@ -1892,7 +1892,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
         distbits = 6;
         ret = inflate_table9(DISTS, state.lens.ptr+state.nlen, state.ndist, &(state.next_), &(distbits), state.work.ptr);
         if (ret) {
-          strm.msg = "invalid distances set";
+          //strm.msg = "invalid distances set";
           mode = BAD;
           break;
         }
@@ -1935,7 +1935,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
 
         // invalid code
         if (here.op&64) {
-          strm.msg = "invalid literal/length code";
+          //strm.msg = "invalid literal/length code";
           mode = BAD;
           break;
         }
@@ -1965,7 +1965,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
         }
         mixin(DROPBITS!"here.bits");
         if (here.op&64) {
-          strm.msg = "invalid distance code";
+          //strm.msg = "invalid distance code";
           mode = BAD;
           break;
         }
@@ -1979,7 +1979,7 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
           mixin(DROPBITS!"extra");
         }
         if (offset > WSIZE-(wrap ? 0: left)) {
-          strm.msg = "invalid distance too far back";
+          //strm.msg = "invalid distance too far back";
           mode = BAD;
           break;
         }
@@ -2032,13 +2032,13 @@ int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope in
 int inflateBack9Reset (zd64_stream* strm) {
   import core.stdc.string : memset;
   if (strm is null || strm.state is null) return Z_STREAM_ERROR;
-  strm.msg = null; // in case we return an error
+  //strm.msg = null; // in case we return an error
   inflate_state* state = cast(inflate_state*)strm.state;
   memset(state, 0, inflate_state.sizeof);
   state.window_[] = 0; // just in case
   with (state) {
     // Reset the state
-    strm.msg = null;
+    //strm.msg = null;
     mode = TYPE;
     lastblock = 0;
     wrap = 0;
@@ -2067,9 +2067,9 @@ int inflateBack9Init (zd64_stream* strm) {
   inflate_state *state;
 
   if (strm is null) return Z_STREAM_ERROR;
-  strm.msg = null; // in case we return an error
-  state = cast(inflate_state *)malloc(inflate_state.sizeof);
-  if (state is null) { strm.msg = "out of memory"; return Z_MEM_ERROR; }
+  //strm.msg = null; // in case we return an error
+  state = cast(inflate_state*)malloc(inflate_state.sizeof);
+  if (state is null) { /*strm.msg = "out of memory";*/ return Z_MEM_ERROR; }
   strm.state = cast(void*)state;
 
   return inflateBack9Reset(strm);

@@ -382,8 +382,6 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
   auto mem = malloc(instSize);
   if (mem is null) onOutOfMemoryErrorNoGC(); // oops
   memset(mem, 0, instSize);
-  //GC.addRoot(mem);
-  GC.addRange(mem, instSize);
   emplace!CT(mem[0..instSize], args);
   bool createUnregister = false;
   {
