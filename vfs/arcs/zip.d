@@ -17,7 +17,7 @@
  */
 module iv.vfs.arcs.zip;
 
-import iv.vfs.types : usize, ssize, Seek;
+import iv.vfs.types : usize, ssize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.augs;
 import iv.vfs.main;
 import iv.vfs.vfile;
@@ -1083,16 +1083,15 @@ static immutable string inflate9_copyright = " inflate9 1.2.8 Copyright 1995-201
  */
 
 
-alias in_func = uint delegate (ubyte**);
-alias out_func = int delegate (const(ubyte)*, uint);
-
 alias c_ulong = uint;
 
 struct zd64_stream {
-  /*const(ubyte)* */ubyte* next_in; // next input byte
+  // /*const(ubyte)* */ubyte* next_in; // next input byte
+  mixin VFSHiddenPointerHelper!(ubyte, "next_in");
   uint avail_in; // number of bytes available at next_in
   string msg; // last error message, NULL if no error
-  private void* state; // not visible by applications
+  //private void* state; // not visible by applications
+  private mixin VFSHiddenPointerHelper!(void, "state");
 }
 
 // Possible inflate modes between inflate() calls
@@ -1704,7 +1703,7 @@ enum ROOM = q{
    inflateBack() can also return Z_STREAM_ERROR if the input parameters
    are not correct, i.e. strm is Z_NULL or the state was not initialized.
  */
-int inflateBack9 (zd64_stream* strm, in_func in_, out_func out_) {
+int inflateBack9 (zd64_stream* strm, scope uint delegate (ubyte**) in_, scope int delegate (const(ubyte)*, uint) out_) {
   inflate_state* state;
 
   // Check that the strm exists and that the state was initialized

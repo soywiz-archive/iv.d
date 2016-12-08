@@ -29,7 +29,7 @@ static import core.sys.posix.stdio;
 static import core.sys.posix.unistd;
 static import std.stdio;
 
-import iv.vfs.types : ssize, usize, Seek;
+import iv.vfs.types : ssize, usize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.config;
 import iv.vfs.error;
 import iv.vfs.augs;
@@ -1359,7 +1359,7 @@ private:
   bool epleof;
   bool closed;
   static if (XPS.InitUpkBufSize <= 0) {
-    size_t upkbuf; // ubyte*
+    mixin VFSHiddenPointerHelper!(ubyte, "upkbuf");
     uint upkbufsize;
   } else {
     ubyte[XPS.InitUpkBufSize] upkbuf;
@@ -1380,7 +1380,7 @@ public:
       if (!closed) {
         import core.stdc.stdlib : malloc;
         upkbuf = cast(ubyte*)malloc(-XPS.InitUpkBufSize);
-        if (!upkbuf) throw new VFSException("out of memory");
+        if (upkbuf is null) throw new VFSException("out of memory");
         upkbufsize = -XPS.InitUpkBufSize;
       }
     }
@@ -1396,8 +1396,8 @@ public:
       closed = true;
       static if (XPS.InitUpkBufSize <= 0) {
         import core.stdc.stdlib : free;
-        if (upkbuf) free(cast(void*)upkbuf);
-        upkbuf = 0;
+        if (upkbuf !is null) free(upkbuf);
+        upkbuf = null;
         upkbufsize = 0;
       }
       upkbufused = upkbufpos = 0;
@@ -1421,7 +1421,7 @@ public:
         auto pkx = upkbufused-upkbufpos;
         if (pkx > left) pkx = cast(uint)left;
         static if (XPS.InitUpkBufSize <= 0) {
-          dest[0..pkx] = (cast(ubyte*)upkbuf)[upkbufpos..upkbufpos+pkx];
+          dest[0..pkx] = upkbuf[upkbufpos..upkbufpos+pkx];
         } else {
           dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
         }
@@ -1509,7 +1509,7 @@ private:
           import core.stdc.stdlib : realloc;
           auto newsz = (upkbufsize ? upkbufsize*2 : 256*1024);
           if (newsz <= upkbufsize) throw new Exception("out of memory");
-          auto nbuf = cast(size_t)realloc(cast(void*)upkbuf, newsz);
+          auto nbuf = cast(ubyte*)realloc(upkbuf, newsz);
           if (!nbuf) throw new Exception("out of memory");
           upkbuf = nbuf;
           upkbufsize = newsz;
@@ -1517,7 +1517,7 @@ private:
         }
         //assert(upkbufused < upkbufsize);
         //assert(upkbuf);
-        (cast(ubyte*)upkbuf)[upkbufused++] = b;
+        upkbuf[upkbufused++] = b;
       } else {
         if (upkbufused >= upkbuf.length) throw new Exception("out of unpack buffer");
         upkbuf.ptr[upkbufused++] = b;
