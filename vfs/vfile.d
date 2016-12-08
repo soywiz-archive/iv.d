@@ -297,9 +297,33 @@ package class WrappedStreamRC {
 protected:
   shared uint rc = 1;
   bool eofhit;
-  string fname;
+  //string fname;
+  char[512] fnamebuf=0;
+  size_t fnameptr;
+  size_t fnamelen;
 
   this () pure nothrow @safe @nogc {}
+
+  final void setFileName (const(char)[] aname) {
+    if (aname.length) {
+      if (aname.length <= fnamebuf.length) {
+        if (fnameptr) { import core.stdc.stdlib : free; free(cast(void*)fnameptr); fnameptr = 0; }
+        fnamebuf[0..aname.length] = aname;
+        fnamelen = aname.length;
+      } else {
+        import core.stdc.stdlib : realloc;
+        auto nb = cast(char*)realloc(cast(void*)fnameptr, aname.length);
+        if (nb !is null) {
+          nb[0..aname.length] = aname[];
+          fnameptr = cast(size_t)nb;
+          fnamelen = aname.length;
+        }
+      }
+    } else {
+      if (fnameptr) { import core.stdc.stdlib : free; free(cast(void*)fnameptr); fnameptr = 0; }
+      fnamelen = 0;
+    }
+  }
 
   // this shouldn't be called, ever
   ~this () nothrow @trusted {
@@ -335,7 +359,8 @@ protected:
   void function (void* self) nothrow gcUnregister;
 
 protected:
-  @property const(char)[] name () { return fname; }
+  final bool hasName () const pure nothrow @safe @nogc { pragma(inline, true); return (fnamelen != 0); }
+  @property const(char)[] name () { return (fnamelen ? (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf.ptr[0..fnamelen]) : ""); }
   @property bool eof () { return eofhit; }
   abstract @property bool isOpen ();
   abstract void close ();
@@ -415,10 +440,10 @@ final class WrappedStreamStdioFile : WrappedStreamRC {
 private:
   std.stdio.File fl;
 
-  public this (std.stdio.File afl, string afname=null) { fl = afl; fname = afname; } // fuck! emplace needs it
+  public this (std.stdio.File afl, const(char)[] afname) { fl = afl; setFileName(afname); } // fuck! emplace needs it
 
 protected:
-  override @property const(char)[] name () { return (fname !is null ? fname : fl.name); }
+  override @property const(char)[] name () { return (hasName ? super.name : fl.name); }
   override @property bool isOpen () { return fl.isOpen; }
   override @property bool eof () { return fl.eof; }
 
@@ -450,9 +475,12 @@ private import core.stdc.errno;
 
 final class WrappedStreamLibcFile(bool ownfl=true) : WrappedStreamRC {
 private:
-  core.stdc.stdio.FILE* fl;
+  //core.stdc.stdio.FILE* fl;
+  size_t flp; // hide from GC
+  final @property core.stdc.stdio.FILE* fl () const pure nothrow @trusted @nogc { pragma(inline, true); return cast(core.stdc.stdio.FILE*)flp; }
+  final @property void fl (core.stdc.stdio.FILE* afl) pure nothrow @trusted @nogc { pragma(inline, true); flp = cast(size_t)afl; }
 
-  public this (core.stdc.stdio.FILE* afl, string afname=null) { fl = afl; fname = afname; } // fuck! emplace needs it
+  public this (core.stdc.stdio.FILE* afl, const(char)[] afname) { fl = afl; setFileName(afname); } // fuck! emplace needs it
 
 protected:
   override @property bool isOpen () { return (fl !is null); }
@@ -516,7 +544,7 @@ static if (VFS_NORMAL_OS) final class WrappedStreamFD(bool own) : WrappedStreamR
 private:
   int fd;
 
-  public this (int afd, string afname=null) { fd = afd; eofhit = (afd < 0); fname = afname; } // fuck! emplace needs it
+  public this (int afd, const(char)[] afname) { fd = afd; eofhit = (afd < 0); setFileName(afname); } // fuck! emplace needs it
 
 protected:
   override @property bool isOpen () { return (fd >= 0); }
@@ -576,9 +604,9 @@ private:
   bool closed;
 
    // fuck! emplace needs it
-  public this() (auto ref ST ast, string afname) {
+  public this() (auto ref ST ast, const(char)[] afname) {
     st = ast;
-    fname = afname;
+    setFileName(afname);
     static if (streamHasIsOpen!ST) {
       closed = !st.isOpen;
     } else {
@@ -589,9 +617,9 @@ private:
 protected:
   override @property const(char)[] name () {
     static if (streamHasName!ST) {
-      return (closed ? null : (fname !is null ? fname : st.name));
+      return (closed ? null : (hasName ? super.name : st.name));
     } else {
-      return fname;
+      return super.name;
     }
   }
 
@@ -772,21 +800,39 @@ private struct PartialLowLevelRO {
   long size; // unpacked size
   long pos; // current file position
   bool eofhit;
-  string fname;
+  //string fname;
+  char[512] fnamebuf=0;
+  size_t fnameptr;
+  size_t fnamelen;
 
-  this (VFile fl, long astpos, long asize, string aname) {
+  this (VFile fl, long astpos, long asize, const(char)[] aname) {
     stpos = astpos;
     size = asize;
     zfl = fl;
-    fname = aname;
+    if (aname.length) {
+      if (aname.length <= fnamebuf.length) {
+        fnamebuf[0..aname.length] = aname;
+        fnamelen = aname.length;
+      } else {
+        import core.stdc.stdlib : malloc;
+        auto nb = cast(char*)malloc(aname.length+1);
+        if (nb !is null) {
+          nb[0..aname.length] = 0;
+          nb[0..aname.length] = aname[];
+          fnameptr = cast(size_t)nb;
+          fnamelen = aname.length;
+        }
+      }
+    }
   }
 
-  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
+  @property const(char)[] name () { pragma(inline, true); return (fnamelen ? (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf[0..fnamelen]) : zfl.name); }
   @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
   @property bool eof () { pragma(inline, true); return eofhit; }
 
   void close () {
     eofhit = true;
+    if (fnameptr) { import core.stdc.stdlib : free; free(cast(void*)fnameptr); fnameptr = 0; }
     if (zfl.isOpen) zfl.close();
   }
 
@@ -1312,9 +1358,8 @@ private:
   bool eofhit;
   bool epleof;
   bool closed;
-  string fname;
   static if (XPS.InitUpkBufSize <= 0) {
-    ubyte* upkbuf;
+    size_t upkbuf; // ubyte*
     uint upkbufsize;
   } else {
     ubyte[XPS.InitUpkBufSize] upkbuf;
@@ -1323,27 +1368,24 @@ private:
   uint upkbufused, upkbufpos;
 
 public:
-  this (VFile fl, ulong agflags, long aupsize, long astpos, long asize, string aname) {
-    debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("upkbuf ofs=%u\n", (cast(uint)&upkbuf)-(cast(uint)&this)); }
+  this (VFile fl, ulong agflags, long aupsize, long astpos, long asize) {
+    //debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("upkbuf ofs=%u\n", (cast(uint)&upkbuf)-(cast(uint)&this)); }
     if (aupsize > uint.max) aupsize = uint.max;
     if (asize > uint.max) asize = uint.max;
     epl.setup(fl, agflags, astpos, cast(uint)asize, cast(uint)aupsize);
     epleof = eofhit = (aupsize == 0);
     size = aupsize;
-    fname = aname;
-    if (fname is null) fname = fl.name.idup;
     closed = !fl.isOpen;
     static if (XPS.InitUpkBufSize < 0) {
       if (!closed) {
         import core.stdc.stdlib : malloc;
         upkbuf = cast(ubyte*)malloc(-XPS.InitUpkBufSize);
-        if (upkbuf is null) throw new VFSException("out of memory");
+        if (!upkbuf) throw new VFSException("out of memory");
         upkbufsize = -XPS.InitUpkBufSize;
       }
     }
   }
 
-  @property const(char)[] name () const pure nothrow @safe @nogc { pragma(inline, true); return (closed ? null : fname); }
   @property bool isOpen () const pure nothrow @safe @nogc { pragma(inline, true); return !closed; }
   @property bool eof () const pure nothrow @safe @nogc { pragma(inline, true); return eofhit; }
 
@@ -1354,8 +1396,8 @@ public:
       closed = true;
       static if (XPS.InitUpkBufSize <= 0) {
         import core.stdc.stdlib : free;
-        if (upkbuf !is null) free(upkbuf);
-        upkbuf = null;
+        if (upkbuf) free(cast(void*)upkbuf);
+        upkbuf = 0;
         upkbufsize = 0;
       }
       upkbufused = upkbufpos = 0;
@@ -1467,7 +1509,7 @@ private:
           import core.stdc.stdlib : realloc;
           auto newsz = (upkbufsize ? upkbufsize*2 : 256*1024);
           if (newsz <= upkbufsize) throw new Exception("out of memory");
-          auto nbuf = cast(ubyte*)realloc(cast(void*)upkbuf, newsz);
+          auto nbuf = cast(size_t)realloc(cast(void*)upkbuf, newsz);
           if (!nbuf) throw new Exception("out of memory");
           upkbuf = nbuf;
           upkbufsize = newsz;

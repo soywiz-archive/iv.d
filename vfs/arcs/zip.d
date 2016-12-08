@@ -60,16 +60,16 @@ private:
       case 0: // store
         return wrapZLibStreamRO(st, VFSZLibMode.Raw, size, stpos, pksize, dir[idx].name);
       case 6: // implode
-        return wrapStream(VStreamDecoderLowLevelRO!Exploder(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Exploder(st, zfh.gflags, size, stpos, pksize), dir[idx].name);
       case 1: // shrink
-        return wrapStream(VStreamDecoderLowLevelRO!Deshrinker(st, zfh.gflags, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Deshrinker(st, zfh.gflags, size, stpos, pksize), dir[idx].name);
       case 2: case 3: case 4: case 5: // reduce
-        return wrapStream(VStreamDecoderLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize), dir[idx].name);
       case 9: // deflate64
         debug(ziparc) { import core.stdc.stdio : printf; printf("I64!\n"); }
-        return wrapStream(VStreamDecoderLowLevelRO!Inflater64(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Inflater64(st, zfh.method, size, stpos, pksize), dir[idx].name);
       case 14: // lzma
-        return wrapStream(VStreamDecoderLowLevelRO!Unlzmaer(st, zfh.method, size, stpos, pksize, dir[idx].name), dir[idx].name);
+        return wrapStream(VStreamDecoderLowLevelRO!Unlzmaer(st, zfh.method, size, stpos, pksize), dir[idx].name);
         /*
         {
           auto fo = VFile("/tmp/300/zip/lzma/zzz.lzma", "w");
@@ -535,9 +535,6 @@ struct BitReader {
   uint ibpos, ibused;
   ubyte gbyte = 1;
   bool ateof;
-  VStreamDecoderLowLevelROPutBytesDg putUnpackedBytes;
-
-  void setPDG (VStreamDecoderLowLevelROPutBytesDg pdg) nothrow @trusted @nogc { pragma(inline, true); putUnpackedBytes = pdg; }
 
   void setup (VFile afl, long apos, long apksize, long aupksize) {
     zfl = afl;
@@ -626,7 +623,12 @@ struct Exploder {
   static struct HufNode {
     ushort b0; // 0-branch value + leaf node flag
     ushort b1; // 1-branch value + leaf node flag
-    HufNode* jump; // 1-branch jump address
+    //HufNode* jump; // 1-branch jump address
+    size_t jumpptr; // hide this from GC
+    @property nothrow @trusted @nogc {
+      HufNode* jump () const { pragma(inline, true); return cast(HufNode*)jumpptr; }
+      void jump (HufNode* v) { pragma(inline, true); jumpptr = cast(size_t)v; }
+    }
   }
 
   enum LITERALS = 288;
@@ -639,10 +641,11 @@ struct Exploder {
   HufNode[64] impLengthTree;
   ubyte len = 0;
   short[17] fpos = 0;
-  int* flens;
+  //int* flens;
   short fmax;
 
   int[256] ll;
+  alias flens = ll;
 
   int minMatchLen = 3;
   uint gflags;
@@ -676,9 +679,8 @@ public:
     createTree(impDistanceTree.ptr, decodeSF(ll.ptr), ll.ptr);
   }
 
-  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+  bool unpackChunk (scope VStreamDecoderLowLevelROPutBytesDg putUB) {
     if (br.upkleft == 0) return false; // packed file EOF
-    br.setPDG(pdg);
     int c = br.readPackedBits(1);
     if (c) {
       // literal data
@@ -690,7 +692,7 @@ public:
       //bufferUpkByte(cast(ubyte)c);
       buf32k.ptr[bIdx++] = cast(ubyte)c;
       bIdx &= 0x7fff;
-      br.putUnpackedBytes(cast(ubyte)c);
+      putUB(cast(ubyte)c);
     } else {
       int dist;
       if ((gflags&2) != 0) {
@@ -713,7 +715,7 @@ public:
         //bufferUpkByte(b);
         buf32k.ptr[bIdx++] = b;
         bIdx &= 0x7fff;
-        br.putUnpackedBytes(b);
+        putUB(b);
       }
     }
     return true;
@@ -760,7 +762,7 @@ private:
   void createTree (HufNode* currentTree, int numval, int* lengths) {
     // create the Huffman decode tree/table
     HufNode* places = currentTree;
-    flens = lengths;
+    //flens = lengths;
     fmax  = cast(short)numval;
     fpos[0..17] = 0;
     len = 0;
@@ -835,6 +837,7 @@ struct Deshrinker {
   int len;
   char KwKwK, codesize = 1; // start at 9 bits/code
   short code, oldcode, freecode, curcode;
+  bool inited = false;
 
 public:
   void close () { br.close(); }
@@ -854,15 +857,17 @@ public:
       parent[code] = BOGUSCODE;
     }
     for (code = BOGUSCODE+1; code < HSIZE; code++) parent[code] = FREE_CODE;
-
-    oldcode = cast(short)br.readPackedBits(8);
-    oldcode |= (br.readPackedBits(codesize)<<8);
-    br.putUnpackedBytes(cast(ubyte)oldcode);
+    inited = false;
   }
 
-  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+  bool unpackChunk (scope VStreamDecoderLowLevelROPutBytesDg putUB) {
     if (br.upkleft == 0) return false; // packed file EOF
-    br.setPDG(pdg);
+    if (!inited) {
+      inited = true;
+      oldcode = cast(short)br.readPackedBits(8);
+      oldcode |= (br.readPackedBits(codesize)<<8);
+      putUB(cast(ubyte)oldcode);
+    }
     for (;;) {
       code = cast(short)br.readPackedBits(8);
       code |= (br.readPackedBits(codesize)<<8);
@@ -927,7 +932,7 @@ public:
 
       debug(ziparc) { import core.stdc.stdio : printf; printf("deshrinker: len=%d\n", len); }
       while (len--) {
-        br.putUnpackedBytes(*newstr);
+        putUB(*newstr);
         ++newstr;
       }
 
@@ -987,9 +992,13 @@ public:
     loadFollowers();
   }
 
-  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+  bool unpackChunk (scope VStreamDecoderLowLevelROPutBytesDg pdg) {
     if (br.upkleft == 0) return false; // packed file EOF
-    br.setPDG(pdg);
+    void putUB (uint c) {
+      buf32k[bIdx++] = cast(ubyte)c;
+      bIdx &= 0x3fff;
+      pdg(cast(ubyte)c);
+    }
     uint c;
     if (!N[lastC]) {
       c = br.readPackedBits(8);
@@ -1033,12 +1042,6 @@ public:
   }
 
 private:
-  void putUB (uint c) {
-    buf32k[bIdx++] = cast(ubyte)c;
-    bIdx &= 0x3fff;
-    br.putUnpackedBytes(cast(ubyte)c);
-  }
-
   void loadFollowers () {
     for (int j = 255; j >= 0; --j) {
       N[j] = cast(ubyte)br.readPackedBits(6);
@@ -2105,9 +2108,8 @@ public:
     zs.avail_in = 0;
   }
 
-  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+  bool unpackChunk (scope VStreamDecoderLowLevelROPutBytesDg putUB) {
     if (br.upkleft == 0) return false; // packed file EOF
-    br.setPDG(pdg);
     auto res = inflateBack9(&zs,
       (ubyte** ibp) {
         auto rd = br.readNewBuffer();
@@ -2116,7 +2118,7 @@ public:
       },
       (const(ubyte)* buf, uint len) {
         if (len == 0) return 0; // just in case
-        br.putUnpackedBytes(buf[0..len]);
+        putUB(buf[0..len]);
         return 0;
       },
     );
@@ -2141,8 +2143,8 @@ private:
   ubyte* buf;
   uint pos;
   uint size;
+  uint bufsize;
   bool isFull;
-  void delegate (ubyte b) writeByte;
 
 public:
   uint totalPos;
@@ -2154,9 +2156,12 @@ public:
 
   void create (uint dictSize) @trusted {
     import core.stdc.stdlib : realloc;
-    auto nb = cast(ubyte*)realloc(buf, dictSize);
-    if (nb is null) throw new Exception("LZMA: cannot allocate sliding window");
-    buf = nb;
+    if (buf is null || bufsize < dictSize) {
+      auto nb = cast(ubyte*)realloc(buf, dictSize);
+      if (nb is null) throw new Exception("LZMA: cannot allocate sliding window");
+      buf = nb;
+      bufsize = dictSize;
+    }
     size = dictSize;
     reset();
   }
@@ -2167,18 +2172,18 @@ public:
     totalPos = 0;
   }
 
-  void putByte (ubyte b) {
-    ++totalPos;
-    buf[pos++] = b;
-    if (pos == size) { pos = 0; isFull = true; }
-    writeByte(b);
-  }
-
   ubyte getByte (uint dist) const pure nothrow @trusted @nogc { pragma(inline, true); return (buf[dist <= pos ? pos-dist : size-dist+pos]); }
 
-  void copyMatch (uint dist, uint len) {
+  void copyMatch (uint dist, uint len, scope void delegate (ubyte b) writeByte) {
     pragma(inline, true);
-    while (len--) putByte(getByte(dist));
+    while (len--) {
+      //putByte(getByte(dist));
+      ubyte b = getByte(dist);
+      ++totalPos;
+      buf[pos++] = b;
+      if (pos == size) { pos = 0; isFull = true; }
+      writeByte(b);
+    }
   }
 
   bool checkDistance (uint dist) const pure nothrow @trusted @nogc { pragma(inline, true); return (dist <= pos || isFull); }
@@ -2202,10 +2207,8 @@ private:
   uint range;
   uint code;
 
-  ubyte delegate () readByte;
-
 private:
-  void normalize () {
+  void normalize (scope ubyte delegate () readByte) {
     if (range < kTopValue) {
       range <<= 8;
       code = (code<<8)|readByte();
@@ -2215,7 +2218,7 @@ private:
 public:
   bool corrupted;
 
-  bool init () {
+  bool initialize (scope ubyte delegate () readByte) {
     corrupted = false;
     range = 0xFFFFFFFFU;
     code = 0;
@@ -2225,9 +2228,9 @@ public:
     return (b == 0);
   }
 
-  bool isFinishedOK () const { return (code == 0); }
+  bool isFinishedOK () const pure nothrow @safe @nogc { pragma(inline, true); return (code == 0); }
 
-  uint decodeDirectBits (uint numBits) {
+  uint decodeDirectBits (uint numBits, scope ubyte delegate () readByte) {
     uint res = 0;
     do {
       range >>= 1;
@@ -2235,14 +2238,14 @@ public:
       uint t = 0U-(cast(uint)code>>31);
       code += range&t;
       if (code == range) corrupted = true;
-      normalize();
+      normalize(readByte);
       res <<= 1;
       res += t+1;
     } while (--numBits);
     return res;
   }
 
-  uint decodeBit (CProb* prob) {
+  uint decodeBit (CProb* prob, scope ubyte delegate () readByte) {
     uint v = *prob;
     uint bound = (range>>kNumBitModelTotalBits)*v;
     uint symbol;
@@ -2257,17 +2260,17 @@ public:
       symbol = 1;
     }
     *prob = cast(CProb)v;
-    normalize();
+    normalize(readByte);
     return symbol;
   }
 }
 
 
-uint bitTreeReverseDecode (CProb* probs, uint numBits, ref CRangeDecoder rc) {
+uint bitTreeReverseDecode (CProb* probs, uint numBits, ref CRangeDecoder rc, scope ubyte delegate () readByte) {
   uint m = 1;
   uint symbol = 0;
   for (uint i = 0; i < numBits; ++i) {
-    uint bit = rc.decodeBit(probs+m);
+    uint bit = rc.decodeBit(probs+m, readByte);
     m <<= 1;
     m += bit;
     symbol |= bit<<i;
@@ -2280,15 +2283,15 @@ struct CBitTreeDecoder(uint NumBits) {
   CProb[1U<<NumBits] probs = ProbInitValue;
 
 public:
-  void init () { probs[] = ProbInitValue; }
+  void initialize () { probs[] = ProbInitValue; }
 
-  uint decode (ref CRangeDecoder rc) {
+  uint decode (ref CRangeDecoder rc, scope ubyte delegate () readByte) {
     uint m = 1;
-    for (uint i = 0; i < NumBits; ++i) m = (m<<1)+rc.decodeBit(&probs[m]);
+    for (uint i = 0; i < NumBits; ++i) m = (m<<1)+rc.decodeBit(&probs[m], readByte);
     return m-(1U<<NumBits);
   }
 
-  uint reverseDecode (ref CRangeDecoder rc) { pragma(inline, true); return bitTreeReverseDecode(probs.ptr, NumBits, rc); }
+  uint reverseDecode (ref CRangeDecoder rc, scope ubyte delegate () readByte) { pragma(inline, true); return bitTreeReverseDecode(probs.ptr, NumBits, rc, readByte); }
 }
 
 
@@ -2311,20 +2314,20 @@ struct CLenDecoder {
   CBitTreeDecoder!8 highCoder;
 
 public:
-  void init () {
+  void initialize () {
     choice = ProbInitValue;
     choice2 = ProbInitValue;
-    highCoder.init();
+    highCoder.initialize();
     for (uint i = 0; i < (1<<kNumPosBitsMax); ++i) {
-      lowCoder[i].init();
-      midCoder[i].init();
+      lowCoder[i].initialize();
+      midCoder[i].initialize();
     }
   }
 
-  uint decode (ref CRangeDecoder rc, uint posState) {
-    if (rc.decodeBit(&choice) == 0) return lowCoder[posState].decode(rc);
-    if (rc.decodeBit(&choice2) == 0) return 8+midCoder[posState].decode(rc);
-    return 16+highCoder.decode(rc);
+  uint decode (ref CRangeDecoder rc, uint posState, scope ubyte delegate () readByte) {
+    if (rc.decodeBit(&choice, readByte) == 0) return lowCoder[posState].decode(rc, readByte);
+    if (rc.decodeBit(&choice2, readByte) == 0) return 8+midCoder[posState].decode(rc, readByte);
+    return 16+highCoder.decode(rc, readByte);
   }
 }
 
@@ -2364,6 +2367,7 @@ private:
   CLenDecoder repLenDecoder;
 
   CProb* litProbs;
+  size_t litProbsAllotedBytes;
   CBitTreeDecoder!6[kNumLenToPosStates] posSlotDecoder;
   CBitTreeDecoder!kNumAlignBits alignDecoder;
   CProb[1+kNumFullDistances-kEndPosModelIndex] posDecoders;
@@ -2381,24 +2385,14 @@ public:
   uint lc, pb, lp;
   uint dictSize;
   uint dictSizeInProperties;
-
-  void setupIO (ubyte delegate () readByteCB, void delegate (ubyte b) writeByteCB) {
-    outWindow.writeByte = writeByteCB;
-    rangeDec.readByte = readByteCB;
-  }
+  bool inited;
 
   void close () {
     import core.stdc.stdlib : free;
     if (litProbs !is null) free(litProbs);
     litProbs = null;
+    inited = false;
     outWindow.close();
-  }
-
-  void reset () {
-    if (!rangeDec.init()) throw new Exception("can't init lzma range decoder");
-    init();
-    rep0 = rep1 = rep2 = rep3 = 0;
-    state = 0;
   }
 
   void decodeProperties (const(ubyte)* properties) {
@@ -2415,103 +2409,13 @@ public:
     if (dictSize < LZMAMinDictSize) dictSize = LZMAMinDictSize;
   }
 
-  void create () {
-    outWindow.create(dictSize);
-    createLiterals();
-  }
-
-  void setup (bool aunpackSizeDefined, ulong aunpackSize) {
+  void create (bool aunpackSizeDefined, ulong aunpackSize) {
+    inited = false;
     unpackSizeDefined = aunpackSizeDefined;
     unpackSize = aunpackSize;
-    reset();
   }
 
-  Result decodeStep () {
-    if (unpackSizeDefined && unpackSize == 0 && !markerIsMandatory) {
-      if (rangeDec.isFinishedOK()) return Result.FinishedWithoutMarker;
-    }
-
-    uint posState = outWindow.totalPos&((1<<pb)-1);
-
-    if (rangeDec.decodeBit(&isMatch[(state<<kNumPosBitsMax)+posState]) == 0) {
-      if (unpackSizeDefined && unpackSize == 0) return Result.Error;
-      decodeLiteral(state, rep0);
-      state = updateStateLiteral(state);
-      --unpackSize;
-      return Result.Continue;
-    }
-
-    uint len;
-
-    if (rangeDec.decodeBit(&isRep[state]) != 0) {
-      if (unpackSizeDefined && unpackSize == 0) return Result.Error;
-      if (outWindow.isEmpty()) return Result.Error;
-      if (rangeDec.decodeBit(&isRepG0[state]) == 0) {
-        if (rangeDec.decodeBit(&isRep0Long[(state<<kNumPosBitsMax)+posState]) == 0) {
-          state = updateStateShortRep(state);
-          outWindow.putByte(outWindow.getByte(rep0+1));
-          --unpackSize;
-          return Result.Continue;
-        }
-      } else {
-        uint dist;
-        if (rangeDec.decodeBit(&isRepG1[state]) == 0) {
-          dist = rep1;
-        } else {
-          if (rangeDec.decodeBit(&isRepG2[state]) == 0) {
-            dist = rep2;
-          } else {
-            dist = rep3;
-            rep3 = rep2;
-          }
-          rep2 = rep1;
-        }
-        rep1 = rep0;
-        rep0 = dist;
-      }
-      len = repLenDecoder.decode(rangeDec, posState);
-      state = updateStateRep(state);
-    } else {
-      rep3 = rep2;
-      rep2 = rep1;
-      rep1 = rep0;
-      len = lenDecoder.decode(rangeDec, posState);
-      state = updateStateMatch(state);
-      rep0 = decodeDistance(len);
-      if (rep0 == 0xFFFFFFFF) return (rangeDec.isFinishedOK() ? Result.FinishedWithMarker : Result.Error);
-      if (unpackSizeDefined && unpackSize == 0) return Result.Error;
-      if (rep0 >= dictSize || !outWindow.checkDistance(rep0)) return Result.Error;
-    }
-    len += kMatchMinLen;
-    bool isError = false;
-    if (unpackSizeDefined && unpackSize < len) {
-      len = cast(uint)unpackSize;
-      isError = true;
-    }
-    outWindow.copyMatch(rep0+1, len);
-    unpackSize -= len;
-    if (isError) return Result.Error;
-    return Result.Continue;
-  }
-
-private:
-  void createLiterals () {
-    //litProbs = new CProb[](0x300U<<(lc+lp));
-    import core.stdc.stdlib : realloc;
-    //import core.stdc.string : memset;
-    auto nb = cast(CProb*)realloc(litProbs, (0x300U<<(lc+lp))*CProb.sizeof);
-    if (nb is null) throw new Exception("LZMA: out of memory");
-    litProbs = nb;
-    //memset(litProbs, 0, (0x300U<<(lc+lp))*CProb.sizeof);
-  }
-
-  void initLiterals () {
-    uint num = 0x300U<<(lc+lp);
-    //for (uint i = 0; i < num; ++i) litProbs[i] = ProbInitValue;
-    litProbs[0..num] = ProbInitValue;
-  }
-
-  void decodeLiteral (uint state, uint rep0) {
+  void decodeLiteral (uint state, uint rep0, scope ubyte delegate () readByte, scope void delegate (ubyte b) writeByte) {
     uint prevByte = 0;
     if (!outWindow.isEmpty()) prevByte = outWindow.getByte(1);
 
@@ -2524,40 +2428,141 @@ private:
       do {
         uint matchBit = (matchByte>>7)&1;
         matchByte <<= 1;
-        uint bit = rangeDec.decodeBit(&probs[((1+matchBit)<<8)+symbol]);
+        uint bit = rangeDec.decodeBit(&probs[((1+matchBit)<<8)+symbol], readByte);
         symbol = (symbol<<1)|bit;
         if (matchBit != bit) break;
       } while (symbol < 0x100);
     } while (symbol < 0x100)
-    symbol = (symbol<<1)|rangeDec.decodeBit(&probs[symbol]);
-    outWindow.putByte(cast(ubyte)(symbol-0x100));
+    symbol = (symbol<<1)|rangeDec.decodeBit(&probs[symbol], readByte);
+    writeByte(cast(ubyte)(symbol-0x100));
   }
 
-  void initDist () {
-    for (uint i = 0; i < kNumLenToPosStates; i++) posSlotDecoder[i].init();
-    alignDecoder.init();
-    posDecoders[] = ProbInitValue;
-  }
-
-  uint decodeDistance (uint len) {
+  uint decodeDistance (uint len, scope ubyte delegate () readByte) {
     uint lenState = len;
     if (lenState > kNumLenToPosStates-1) lenState = kNumLenToPosStates-1;
 
-    uint posSlot = posSlotDecoder[lenState].decode(rangeDec);
+    uint posSlot = posSlotDecoder[lenState].decode(rangeDec, readByte);
     if (posSlot < 4) return posSlot;
 
     uint numDirectBits = cast(uint)((posSlot>>1)-1);
     uint dist = ((2|(posSlot&1))<<numDirectBits);
     if (posSlot < kEndPosModelIndex) {
-      dist += bitTreeReverseDecode(posDecoders.ptr+dist-posSlot, numDirectBits, rangeDec);
+      dist += bitTreeReverseDecode(posDecoders.ptr+dist-posSlot, numDirectBits, rangeDec, readByte);
     } else {
-      dist += rangeDec.decodeDirectBits(numDirectBits-kNumAlignBits)<<kNumAlignBits;
-      dist += alignDecoder.reverseDecode(rangeDec);
+      dist += rangeDec.decodeDirectBits(numDirectBits-kNumAlignBits, readByte)<<kNumAlignBits;
+      dist += alignDecoder.reverseDecode(rangeDec, readByte);
     }
     return dist;
   }
 
-  void init () {
+  Result decodeStep (scope ubyte delegate () readByte, scope void delegate (ubyte b) writeByte) {
+    if (!inited) {
+      { import core.stdc.stdio : printf; printf("##################\n"); }
+      inited = true;
+      outWindow.create(dictSize);
+      createLiterals();
+      if (!rangeDec.initialize(readByte)) throw new Exception("can't init lzma range decoder");
+      initialize();
+      rep0 = rep1 = rep2 = rep3 = 0;
+      state = 0;
+      { import core.stdc.stdio : printf; printf("++++++++++++++++++\n"); }
+    }
+
+    if (unpackSizeDefined && unpackSize == 0 && !markerIsMandatory) {
+      if (rangeDec.isFinishedOK()) return Result.FinishedWithoutMarker;
+    }
+
+    uint posState = outWindow.totalPos&((1<<pb)-1);
+
+    if (rangeDec.decodeBit(&isMatch[(state<<kNumPosBitsMax)+posState], readByte) == 0) {
+      if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
+      decodeLiteral(state, rep0, readByte, writeByte);
+      state = updateStateLiteral(state);
+      --unpackSize;
+      return Result.Continue;
+    }
+
+    uint len;
+
+    if (rangeDec.decodeBit(&isRep[state], readByte) != 0) {
+      if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
+      if (outWindow.isEmpty()) { assert(0); return Result.Error; }
+      if (rangeDec.decodeBit(&isRepG0[state], readByte) == 0) {
+        if (rangeDec.decodeBit(&isRep0Long[(state<<kNumPosBitsMax)+posState], readByte) == 0) {
+          state = updateStateShortRep(state);
+          writeByte(outWindow.getByte(rep0+1));
+          --unpackSize;
+          return Result.Continue;
+        }
+      } else {
+        uint dist;
+        if (rangeDec.decodeBit(&isRepG1[state], readByte) == 0) {
+          dist = rep1;
+        } else {
+          if (rangeDec.decodeBit(&isRepG2[state], readByte) == 0) {
+            dist = rep2;
+          } else {
+            dist = rep3;
+            rep3 = rep2;
+          }
+          rep2 = rep1;
+        }
+        rep1 = rep0;
+        rep0 = dist;
+      }
+      len = repLenDecoder.decode(rangeDec, posState, readByte);
+      state = updateStateRep(state);
+    } else {
+      rep3 = rep2;
+      rep2 = rep1;
+      rep1 = rep0;
+      len = lenDecoder.decode(rangeDec, posState, readByte);
+      state = updateStateMatch(state);
+      rep0 = decodeDistance(len, readByte);
+      if (rep0 == 0xFFFFFFFF) return (rangeDec.isFinishedOK() ? Result.FinishedWithMarker : Result.Error);
+      if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
+      if (rep0 >= dictSize || !outWindow.checkDistance(rep0)) { assert(0); return Result.Error; }
+    }
+    len += kMatchMinLen;
+    bool isError = false;
+    if (unpackSizeDefined && unpackSize < len) {
+      len = cast(uint)unpackSize;
+      isError = true;
+    }
+    outWindow.copyMatch(rep0+1, len, writeByte);
+    unpackSize -= len;
+    if (isError) { assert(0); return Result.Error; }
+    return Result.Continue;
+  }
+
+private:
+  void createLiterals () {
+    //litProbs = new CProb[](0x300U<<(lc+lp));
+    import core.stdc.stdlib : realloc;
+    //import core.stdc.string : memset;
+    size_t toalloc = (0x300U<<(lc+lp))*CProb.sizeof;
+    if (litProbs is null || toalloc > litProbsAllotedBytes) {
+      auto nb = cast(CProb*)realloc(litProbs, toalloc);
+      if (nb is null) throw new Exception("LZMA: out of memory");
+      litProbsAllotedBytes = toalloc;
+      litProbs = nb;
+    }
+    //memset(litProbs, 0, (0x300U<<(lc+lp))*CProb.sizeof);
+  }
+
+  void initLiterals () {
+    uint num = 0x300U<<(lc+lp);
+    //for (uint i = 0; i < num; ++i) litProbs[i] = ProbInitValue;
+    litProbs[0..num] = ProbInitValue;
+  }
+
+  void initDist () {
+    for (uint i = 0; i < kNumLenToPosStates; i++) posSlotDecoder[i].initialize();
+    alignDecoder.initialize();
+    posDecoders[] = ProbInitValue;
+  }
+
+  void initialize () {
     initLiterals();
     initDist();
 
@@ -2568,8 +2573,8 @@ private:
     isRepG2[] = ProbInitValue;
     isRep0Long[] = ProbInitValue;
 
-    lenDecoder.init();
-    repLenDecoder.init();
+    lenDecoder.initialize();
+    repLenDecoder.initialize();
   }
 }
 
@@ -2578,9 +2583,9 @@ private:
 struct Unlzmaer {
   public enum InitUpkBufSize = 0; // dynamic
 
-  BitReader br;
   CLzmaDecoder lzmaDecoder;
-  uint upsize;
+  BitReader br;
+  bool inited;
 
 public:
   void close () {
@@ -2589,8 +2594,6 @@ public:
 
   void setup (VFile fl, ulong agflags, long apos, uint apksize, uint aupksize) {
     br.setup(fl, apos, apksize, aupksize);
-    upsize = aupksize;
-    lzmaDecoder.setupIO(&getPackedByte, &putUB);
     debug(ziparc) { import core.stdc.stdio : printf; printf("::: LZMA this=0x%08x\n", &this); }
     reset();
   }
@@ -2598,25 +2601,33 @@ public:
   void reset () {
     br.reset();
     if (br.upktotalsize == 0) return;
-    ubyte[4] ziplzmahdr;
-    foreach (ref ubyte b; ziplzmahdr[]) b = br.readPackedByte!ubyte;
-    if (ziplzmahdr[3] != 0) throw new Exception("LZMA: invalid header");
-    //conwriteln("version: ", ziplzmahdr[0], ".", ziplzmahdr[1]);
-    //conwriteln("props size: ", ziplzmahdr[2]);
-    if (ziplzmahdr[2] == 0 || ziplzmahdr[2] > 13) throw new Exception("LZMA: invalid header size");
-    ubyte[13] header = 0;
-    foreach (ref ubyte b; header[0..ziplzmahdr[2]]) b = br.readPackedByte!ubyte;
-    lzmaDecoder.decodeProperties(header.ptr);
-    lzmaDecoder.markerIsMandatory = false;
-    lzmaDecoder.create();
-    lzmaDecoder.setup(true, upsize);
+    inited = false;
   }
 
-  bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg) {
+  bool unpackChunk (scope VStreamDecoderLowLevelROPutBytesDg putUB) {
     if (br.upkleft == 0) return false; // packed file EOF
-    br.setPDG(pdg);
-    lzmaDecoder.setupIO(&getPackedByte, &putUB);
-    auto res = lzmaDecoder.decodeStep();
+    if (!inited) {
+      inited = true;
+      ubyte[4] ziplzmahdr;
+      foreach (ref ubyte b; ziplzmahdr[]) b = br.readPackedByte!ubyte;
+      if (ziplzmahdr[3] != 0) throw new Exception("LZMA: invalid header");
+      { import core.stdc.stdio : printf; printf("LZMA version: %u.%u\nprops size: %u\n", ziplzmahdr[0], ziplzmahdr[1], ziplzmahdr[2]); }
+      if (ziplzmahdr[2] == 0 || ziplzmahdr[2] > 13) throw new Exception("LZMA: invalid header size");
+      ubyte[13] header = 0;
+      foreach (ref ubyte b; header[0..ziplzmahdr[2]]) b = br.readPackedByte!ubyte;
+      lzmaDecoder.decodeProperties(header.ptr);
+      lzmaDecoder.markerIsMandatory = false;
+      { import core.stdc.stdio : printf; printf("================== (%llu)\n", br.upktotalsize); }
+      lzmaDecoder.create(true, br.upktotalsize);
+      { import core.stdc.stdio : printf; printf("------------------\n"); }
+    }
+    auto res = lzmaDecoder.decodeStep(
+      delegate () {
+        { import core.stdc.stdio : printf; printf("******************\n"); }
+        return br.readPackedByte!ubyte;
+      },
+      (ubyte b) => putUB(b),
+    );
     switch (res) {
       case CLzmaDecoder.Result.Continue: return true;
       case CLzmaDecoder.Result.Error: throw new VFSException("LZMA stream corrupted");
@@ -2627,14 +2638,5 @@ public:
       default: assert(0, "LZMA internal error");
     }
     return true;
-  }
-
-private:
-  ubyte getPackedByte () {
-    return br.readPackedByte!ubyte;
-  }
-
-  void putUB (ubyte b) {
-    br.putUnpackedBytes(b);
   }
 }
