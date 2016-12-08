@@ -57,8 +57,11 @@ private:
         // free `wst` itself
         import core.memory : GC;
         import core.stdc.stdlib : free;
-        GC.removeRange(cast(void*)st);
-        //GC.removeRoot(cast(void*)st);
+        debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("REMOVING WRAPPER 0x%08x\n", st); }
+        if (st.gcUnregister !is null) {
+          debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("CALLING GC CLEANUP DELEGATE FOR WRAPPER 0x%08x\n", st); }
+          st.gcUnregister(cast(void*)st);
+        }
         free(cast(void*)st);
         return true;
       }
@@ -299,8 +302,9 @@ protected:
   this () pure nothrow @safe @nogc {}
 
   // this shouldn't be called, ever
-  ~this () nothrow @safe @nogc {
+  ~this () nothrow @trusted {
     assert(0); // why we are here?!
+    //if (gcUnregister !is null) gcUnregister(cast(void*)this);
   }
 
   final void incRef () {
@@ -328,6 +332,9 @@ protected:
   }
 
 protected:
+  void function (void* self) nothrow gcUnregister;
+
+protected:
   @property const(char)[] name () { return fname; }
   @property bool eof () { return eofhit; }
   abstract @property bool isOpen ();
@@ -353,17 +360,51 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
   //GC.addRoot(mem);
   GC.addRange(mem, instSize);
   emplace!CT(mem[0..instSize], args);
-  debug(iv_vfs_pbm) {
-    import core.stdc.stdio : printf;
+  bool createUnregister = false;
+  {
+    debug(vfs_vfile_gc) import core.stdc.stdio : printf;
     auto pbm = __traits(getPointerBitmap, CT);
-    printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
+    debug(vfs_vfile_gc) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
     immutable(ubyte)* p = cast(immutable(ubyte)*)(pbm.ptr+1);
-    foreach (immutable bitnum; 0..pbm[0]/size_t.sizeof) {
-      auto sv = p[bitnum/8];
-      if (sv&(1U<<(bitnum%8))) printf("  #%u\n", cast(uint)bitnum);
+    size_t bitnum = 0;
+    immutable end = pbm[0]/size_t.sizeof;
+    while (bitnum < end) {
+      if (p[bitnum/8]&(1U<<(bitnum%8))) {
+        size_t len = 1;
+        while (bitnum+len < end && (p[(bitnum+len)/8]&(1U<<((bitnum+len)%8))) != 0) ++len;
+        debug(vfs_vfile_gc) printf("  #%u (%u)\n", cast(uint)(bitnum*size_t.sizeof), cast(uint)len);
+        GC.addRange((cast(size_t*)mem)+bitnum, size_t.sizeof*len);
+        createUnregister = true;
+        bitnum += len;
+      } else {
+        ++bitnum;
+      }
     }
   }
-  //{ import core.stdc.stdio : printf; printf("CREATED WRAPPER 0x%08x\n", mem); }
+  if (createUnregister) {
+    debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("REGISTERING CG CLEANUP DELEGATE FOR WRAPPER 0x%08x\n", cast(uint)mem); }
+    (*cast(CT*)&mem).gcUnregister = function (void* self) {
+      debug(vfs_vfile_gc) import core.stdc.stdio : printf;
+      debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("DESTROYING WRAPPER 0x%08x\n", cast(uint)self); }
+      auto pbm = __traits(getPointerBitmap, CT);
+      debug(vfs_vfile_gc) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
+      immutable(ubyte)* p = cast(immutable(ubyte)*)(pbm.ptr+1);
+      size_t bitnum = 0;
+      immutable end = pbm[0]/size_t.sizeof;
+      while (bitnum < end) {
+        if (p[bitnum/8]&(1U<<(bitnum%8))) {
+          size_t len = 1;
+          while (bitnum+len < end && (p[(bitnum+len)/8]&(1U<<((bitnum+len)%8))) != 0) ++len;
+          debug(vfs_vfile_gc) printf("  #%u (%u)\n", cast(uint)(bitnum*size_t.sizeof), cast(uint)len);
+          GC.removeRange((cast(size_t*)self)+bitnum);
+          bitnum += len;
+        } else {
+          ++bitnum;
+        }
+      }
+    };
+  }
+  debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("CREATED WRAPPER 0x%08x\n", mem); }
   return cast(usize)mem;
 }
 
@@ -1283,6 +1324,7 @@ private:
 
 public:
   this (VFile fl, ulong agflags, long aupsize, long astpos, long asize, string aname) {
+    debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("upkbuf ofs=%u\n", (cast(uint)&upkbuf)-(cast(uint)&this)); }
     if (aupsize > uint.max) aupsize = uint.max;
     if (asize > uint.max) asize = uint.max;
     epl.setup(fl, agflags, astpos, cast(uint)asize, cast(uint)aupsize);
@@ -1336,7 +1378,11 @@ public:
       if (upkbufpos < upkbufused) {
         auto pkx = upkbufused-upkbufpos;
         if (pkx > left) pkx = cast(uint)left;
-        dest[0..pkx] = upkbuf[upkbufpos..upkbufpos+pkx];
+        static if (XPS.InitUpkBufSize <= 0) {
+          dest[0..pkx] = (cast(ubyte*)upkbuf)[upkbufpos..upkbufpos+pkx];
+        } else {
+          dest[0..pkx] = upkbuf.ptr[upkbufpos..upkbufpos+pkx];
+        }
         dest += pkx;
         upkbufpos += pkx;
         left -= pkx;
@@ -1421,15 +1467,15 @@ private:
           import core.stdc.stdlib : realloc;
           auto newsz = (upkbufsize ? upkbufsize*2 : 256*1024);
           if (newsz <= upkbufsize) throw new Exception("out of memory");
-          auto nbuf = cast(ubyte*)realloc(upkbuf, newsz);
-          if (nbuf is null) throw new Exception("out of memory");
+          auto nbuf = cast(ubyte*)realloc(cast(void*)upkbuf, newsz);
+          if (!nbuf) throw new Exception("out of memory");
           upkbuf = nbuf;
           upkbufsize = newsz;
           //{ import core.stdc.stdio : printf; printf("  grow: upkbufsize=%u\n", upkbufsize); }
         }
-        assert(upkbufused < upkbufsize);
-        assert(upkbuf !is null);
-        upkbuf[upkbufused++] = b;
+        //assert(upkbufused < upkbufsize);
+        //assert(upkbuf);
+        (cast(ubyte*)upkbuf)[upkbufused++] = b;
       } else {
         if (upkbufused >= upkbuf.length) throw new Exception("out of unpack buffer");
         upkbuf.ptr[upkbufused++] = b;
