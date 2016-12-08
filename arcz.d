@@ -262,7 +262,7 @@ public:
     char[4] sign;
     bool useBalz;
     readBuf(fl, sign[]);
-    if (sign != "CZA1") throw new Exception("invalid archive file '"~filename.idup~"'");
+    if (sign != "CZA2") throw new Exception("invalid archive file '"~filename.idup~"'");
     switch (readUbyte(fl)) {
       case 0: useBalz = false; break;
       case 1: useBalz = true; break;
@@ -344,10 +344,15 @@ public:
     // read file count and info
     auto fcount = getUint;
     if (fcount == 0) throw new Exception("empty archive file '"~filename.idup~"'");
+    // calc name buffer position and size
+    //immutable uint nbofs = idxbufpos+fcount*(5*4);
+    //if (nbofs >= idxsize) throw new Exception("invalid index in archive file '"~filename.idup~"'");
+    //immutable uint nbsize = idxsize-nbofs;
     debug(arcz_dirread) printf("file count: %u\n", fcount);
     foreach (immutable _; 0..fcount) {
-      ubyte nlen = getUbyte;
-      if (nlen == 0) {
+      uint nameofs = getUint;
+      uint namelen = getUint;
+      if (namelen == 0) {
         // skip unnamed file
         //throw new Exception("invalid archive file '"~filename.idup~"'");
         getUint; // chunk number
@@ -355,9 +360,11 @@ public:
         getUint; // unpacked size
         debug(arcz_dirread) printf("skipped empty file\n");
       } else {
+        //if (nameofs >= nbsize || namelen > nbsize || nameofs+namelen > nbsize) throw new Exception("invalid index in archive file '"~filename.idup~"'");
+        if (nameofs >= idxsize || namelen > idxsize || nameofs+namelen > idxsize) throw new Exception("invalid index in archive file '"~filename.idup~"'");
         FileInfo fi;
-        auto nb = new char[](nlen);
-        getBuf(nb[]);
+        auto nb = new char[](namelen);
+        nb[0..namelen] = (cast(char*)idxbuf)[nameofs..nameofs+namelen];
         fi.name = cast(string)(nb); // it is safe here
         fi.chunk = getUint; // chunk number
         fi.chunkofs = getUint; // offset in chunk
@@ -926,18 +933,27 @@ private:
       }
       // file count
       putUint(cast(uint)files.length);
+      uint nbofs = cast(uint)index.length+cast(uint)files.length*(5*4);
+      //uint nbofs = 0;
       // files
       foreach (ref fi; files) {
         // name: length(byte), chars
-        assert(fi.name.length > 0 && fi.name.length <= 255);
-        putUbyte(cast(ubyte)fi.name.length);
-        putBuf(fi.name[]);
+        assert(fi.name.length > 0 && fi.name.length <= 16384);
+        putUint(nbofs);
+        putUint(cast(uint)fi.name.length);
+        nbofs += cast(uint)fi.name.length+1; // put zero byte there to ease C interfacing
+        //putBuf(fi.name[]);
         // chunk number
         putUint(fi.chunk);
         // offset in unpacked chunk
         putUint(fi.chunkofs);
         // unpacked size
         putUint(fi.size);
+      }
+      // names
+      foreach (ref fi; files) {
+        putBuf(fi.name[]);
+        putUbyte(0); // this means nothing, it is here just for convenience (hello, C!)
       }
       assert(index.length < uint.max);
     }
@@ -976,7 +992,7 @@ public:
     cdpos = 0;
     chunkdata.length = chunkSize;
     scope(failure) { fclose(arcfl); arcfl = null; }
-    writeBuf("CZA1"); // signature
+    writeBuf("CZA2"); // signature
     if (cpr == Compressor.Balz || cpr == Compressor.BalzMax) {
       writeUbyte(1); // version
     } else {
@@ -1039,7 +1055,7 @@ public:
 /* arcz file format:
 header
 ======
-db 'CZA1'     ; signature
+db 'CZA2'     ; signature
 db version    ; 0: zlib; 1: balz
 dd indexofs   ; offset to packed index
 dd pkindexsz  ; size of packed index
@@ -1060,9 +1076,11 @@ then file list follows:
 dd filecount  ; number of files in archive
 
 then file info follows:
-  db namelen     ; length of name (can't be 0)
-    db name(namelen)
+  dd nameofs     ; (in index)
+  dd namelen     ; length of name (can't be 0)
   dd firstchunk  ; chunk where file starts
   dd firstofs    ; offset in first chunk (unpacked) where file starts
   dd filesize    ; unpacked file size
+
+then name buffer follows -- just bytes
 */

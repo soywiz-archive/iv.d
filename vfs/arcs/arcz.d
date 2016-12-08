@@ -40,13 +40,19 @@ private:
   static assert(size_t.sizeof >= (void*).sizeof);
   private import etc.c.zlib;
 
-  static struct ChunkInfo {
+  static align(1) struct ChunkInfo {
+  align(1):
     uint ofs; // offset in file
     uint pksize; // packed chunk size (same as chunk size: chunk is unpacked)
   }
 
-  static struct FileInfo {
-    string name;
+  static align(1) struct FileInfo {
+  align(1):
+    //string name;
+    uint nameofs; // in index
+    uint namelen;
+    const(char)[] name (const(void)* index) const pure nothrow @trusted @nogc { pragma(inline, true); return (cast(const(char)*)index)[nameofs..nameofs+namelen]; }
+    // this is copied from index
     uint chunk;
     uint chunkofs; // offset of first file byte in unpacked chunk
     uint size; // unpacked file size
@@ -54,8 +60,11 @@ private:
 
   static struct Nfo {
     uint rc = 1; // refcounter
-    ChunkInfo[] chunks;
-    FileInfo[] files;
+    ubyte* index; // unpacked archive index
+    ChunkInfo* chunks; // in index, not allocated
+    FileInfo* files; // in index, not allocated
+    uint fcount; // number of valid entries in files
+    uint ccount; // number of valid entries in chunks
     uint chunkSize;
     uint lastChunkSize;
     bool useBalz;
@@ -71,9 +80,8 @@ private:
           import core.memory : GC;
           import core.stdc.stdlib : free;
           if (nfo.afl.isOpen) nfo.afl.close();
-          nfo.chunks.destroy;
-          nfo.files.destroy;
-          GC.removeRange(cast(void*)nfo/*, Nfo.sizeof*/);
+          if (nfo.index !is null) free(nfo.index);
+          //GC.removeRange(cast(void*)nfo/*, Nfo.sizeof*/);
           free(nfo);
           debug(iv_vfs_arcz_rc) { import core.stdc.stdio : printf; printf("Nfo %p freed\n", nfo); }
         }
@@ -252,7 +260,7 @@ public:
     char[4] sign;
     bool useBalz;
     readBuf(fl, sign[]);
-    if (sign != "CZA1") throw new Exception("invalid arcz archive file");
+    if (sign != "CZA2") throw new Exception("invalid arcz archive file");
     switch (readUbyte(fl)) {
       case 0: useBalz = false; break;
       case 1: useBalz = true; break;
@@ -264,7 +272,7 @@ public:
     if (pkidxsize == 0 || idxsize == 0 || indexofs == 0) throw new Exception("invalid arcz archive file");
     // now read index
     ubyte* idxbuf = null;
-    scope(exit) xfree(idxbuf);
+    scope(failure) xfree(idxbuf);
     {
       auto pib = xalloc!ubyte(pkidxsize);
       scope(exit) xfree(pib);
@@ -307,16 +315,25 @@ public:
       }
     }
 
+    void skipBuf (uint len) {
+      if (len > 0) {
+        if (idxsize-idxbufpos < len) throw new Exception("invalid index for arcz archive file");
+        idxbufpos += len;
+      }
+    }
+
     // allocate shared info struct
     Nfo* nfo = xalloc!Nfo(1);
     assert(nfo.rc == 1);
     debug(iv_vfs_arcz_rc) { import core.stdc.stdio : printf; printf("Nfo %p allocated\n", nfo); }
     scope(failure) decRef();
     nfop = cast(size_t)nfo;
+    /* no need to, there is nothing that needs GC there
     {
       import core.memory : GC;
       GC.addRange(nfo, Nfo.sizeof);
     }
+    */
 
     // read chunk info and data
     nfo.useBalz = useBalz;
@@ -325,47 +342,59 @@ public:
     nfo.lastChunkSize = getUint;
     debug(iv_vfs_arcz_dirread) printf("chunk size: %u\nchunk count: %u\nlast chunk size:%u\n", nfo.chunkSize, ccount, nfo.lastChunkSize);
     if (ccount == 0 || nfo.chunkSize < 1 || nfo.lastChunkSize < 1 || nfo.lastChunkSize > nfo.chunkSize) throw new Exception("invalid arcz archive file");
+    /*
     nfo.chunks.length = ccount;
     // chunk offsets and sizes
     foreach (ref ci; nfo.chunks) {
       ci.ofs = getUint;
       ci.pksize = getUint;
     }
+    */
+    nfo.chunks = cast(ChunkInfo*)(idxbuf+idxbufpos);
+    nfo.ccount = ccount;
+    skipBuf(ccount*8);
+    // fix endianness
+    version(BigEndian) {
+      foreach (ref ChunkInfo ci; nfo.chunks[0..ccount]) {
+        import core.bitop : bswap;
+        ci.ofs = bswap(ci.ofs);
+        ci.pksize = bswap(ci.pksize);
+      }
+    }
     // read file count and info
     auto fcount = getUint;
-    if (fcount == 0) throw new Exception("empty arcz archive file");
+    if (fcount == 0) throw new Exception("empty arcz archive");
     debug(iv_vfs_arcz_dirread) printf("file count: %u\n", fcount);
-    foreach (immutable _; 0..fcount) {
-      ubyte nlen = getUbyte;
-      if (nlen == 0) {
-        // skip unnamed file
-        //throw new Exception("invalid archive file '"~filename.idup~"'");
-        getUint; // chunk number
-        getUint; // offset in chunk
-        getUint; // unpacked size
-        debug(iv_vfs_arcz_dirread) printf("skipped empty file\n");
-      } else {
-        FileInfo fi;
-        auto nb = new char[](nlen);
-        getBuf(nb[]);
-        fi.name = cast(string)(nb); // it is safe here
-        fi.chunk = getUint; // chunk number
-        fi.chunkofs = getUint; // offset in chunk
-        fi.size = getUint; // unpacked size
-        debug(iv_vfs_arcz_dirread) printf("file size: %u\nfile chunk: %u\noffset in chunk:%u; name: [%.*s]\n", fi.size, fi.chunk, fi.chunkofs, cast(uint)fi.name.length, fi.name.ptr);
-        nfo.files ~= fi;
+    if (fcount >= uint.max/(5*4)) throw new Exception("too many files in arcz archive");
+    if (fcount*(5*4) > idxsize-idxbufpos) throw new Exception("invalid index in arcz archive");
+    nfo.files = cast(FileInfo*)(idxbuf+idxbufpos);
+    nfo.fcount = fcount;
+    skipBuf(fcount*(5*4));
+    //immutable uint ubofs = idxbufpos;
+    //immutable uint ubsize = idxsize-ubofs;
+    foreach (ref FileInfo fi; nfo.files[0..fcount]) {
+      // fix endianness
+      version(BigEndian) {
+        import core.bitop : bswap;
+        fi.nameofs = bswap(fi.nameofs);
+        fi.namelen = bswap(fi.namelen);
+        fi.chunk = bswap(fi.chunk);
+        fi.chunkofs = bswap(fi.chunkofs);
+        fi.size = bswap(fi.size);
       }
+      if (fi.namelen > idxsize || fi.nameofs > idxsize || fi.nameofs+fi.namelen > idxsize) throw new Exception("invalid index in arcz archive");
     }
     // transfer achive file ownership
     nfo.afl = fl;
+    nfo.index = idxbuf;
   }
 
   //bool exists (const(char)[] name) { if (nfop) return ((name in nfo.files) !is null); else return false; }
 
   AZFile openByIndex (uint idx) {
     if (!nfop) throw new Exception("can't open file from non-opened archive");
-    if (idx >= nfo.files.length) throw new Exception("can't open non-existing file");
-    auto fi = &nfo.files[idx];
+    if (idx >= nfo.fcount) throw new Exception("can't open non-existing file");
+    auto fi = nfo.files+idx;
     auto zl = xalloc!LowLevelPackedRO(1);
     scope(failure) xfree(zl);
     debug(iv_vfs_arcz_rc) { import core.stdc.stdio : printf; printf("Zl %p allocated\n", zl); }
@@ -476,7 +505,7 @@ private:
         }
         nfo.afl.seek(chunk.ofs, Seek.Set);
         nfo.afl.rawReadExact(pkd[0..chunk.pksize]);
-        uint upsize = (nextchunk == nfo.chunks.length-1 ? nfo.lastChunkSize : nfo.chunkSize); // unpacked chunk size
+        uint upsize = (nextchunk == nfo.ccount-1 ? nfo.lastChunkSize : nfo.chunkSize); // unpacked chunk size
         immutable uint cksz = upsize;
         immutable uint jem = justEnoughMemory;
         if (upsize > jem) upsize = jem;
@@ -660,15 +689,16 @@ private:
 
   void open (VFile fl, const(char)[] prefixpath) {
     arc.openArchive(fl);
-    debug(iv_vfs_arcz_dirread) { import core.stdc.stdio; printf("files: %u\n", cast(uint)arc.nfo.files.length); }
-    foreach (immutable aidx, ref afi; arc.nfo.files) {
-      if (afi.name.length == 0) continue;
+    debug(iv_vfs_arcz_dirread) { import core.stdc.stdio; printf("files: %u\n", cast(uint)arc.nfo.fcount); }
+    foreach (immutable aidx, ref afi; arc.nfo.files[0..arc.nfo.fcount]) {
+      auto xname = afi.name(arc.nfo.index);
+      if (xname.length == 0) continue; // just in case
       FileInfo fi;
       fi.size = afi.size;
       fi.aidx = cast(uint)aidx;
-      auto name = new char[](prefixpath.length+afi.name.length);
+      auto name = new char[](prefixpath.length+xname.length);
       if (prefixpath.length) name[0..prefixpath.length] = prefixpath;
-      name[prefixpath.length..$] = afi.name;
+      name[prefixpath.length..$] = xname[];
       fi.name = cast(string)name; // it is safe to cast here
       dir ~= fi;
     }
@@ -680,7 +710,7 @@ private:
 /* arcz file format:
 header
 ======
-db 'CZA1'     ; signature
+db 'CZA2'     ; signature
 db version    ; 0: zlib; 1: balz
 dd indexofs   ; offset to packed index
 dd pkindexsz  ; size of packed index
@@ -701,9 +731,11 @@ then file list follows:
 dd filecount  ; number of files in archive
 
 then file info follows:
-  db namelen     ; length of name (can't be 0)
-    db name(namelen)
+  dd nameofs     ; (in index)
+  dd namelen     ; length of name (can't be 0)
   dd firstchunk  ; chunk where file starts
   dd firstofs    ; offset in first chunk (unpacked) where file starts
   dd filesize    ; unpacked file size
+
+then name buffer follows -- just bytes
 */
