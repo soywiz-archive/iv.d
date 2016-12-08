@@ -2274,7 +2274,7 @@ public:
     uint posState = outWindow.totalPos&((1<<pb)-1);
 
     if (rangeDec.decodeBit(&isMatch[(state<<kNumPosBitsMax)+posState], readByte) == 0) {
-      if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
+      if (unpackSizeDefined && unpackSize == 0) return Result.Error;
       decodeLiteral(state, rep0);
       state = updateStateLiteral(state);
       --unpackSize;
@@ -2284,8 +2284,8 @@ public:
     uint len;
 
     if (rangeDec.decodeBit(&isRep[state], readByte) != 0) {
-      if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
-      if (outWindow.isEmpty()) { assert(0); return Result.Error; }
+      if (unpackSizeDefined && unpackSize == 0) return Result.Error;
+      if (outWindow.isEmpty()) return Result.Error;
       if (rangeDec.decodeBit(&isRepG0[state], readByte) == 0) {
         if (rangeDec.decodeBit(&isRep0Long[(state<<kNumPosBitsMax)+posState], readByte) == 0) {
           state = updateStateShortRep(state);
@@ -2319,8 +2319,8 @@ public:
       state = updateStateMatch(state);
       rep0 = decodeDistance(len);
       if (rep0 == 0xFFFFFFFF) return (rangeDec.isFinishedOK() ? Result.FinishedWithMarker : Result.Error);
-      if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
-      if (rep0 >= dictSize || !outWindow.checkDistance(rep0)) { assert(0); return Result.Error; }
+      if (unpackSizeDefined && unpackSize == 0) return Result.Error;
+      if (rep0 >= dictSize || !outWindow.checkDistance(rep0)) return Result.Error;
     }
     len += kMatchMinLen;
     bool isError = false;
@@ -2330,7 +2330,7 @@ public:
     }
     outWindow.copyMatch(rep0+1, len, writeByte);
     unpackSize -= len;
-    if (isError) { assert(0); return Result.Error; }
+    if (isError) return Result.Error;
     return Result.Continue;
   }
 
