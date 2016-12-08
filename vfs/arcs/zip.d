@@ -2137,214 +2137,6 @@ private:
 
 // This code implements LZMA file decoding according to LZMA specification.
 // This code is not optimized for speed.
-struct COutWindow {
-private:
-  ubyte* buf;
-  uint pos;
-  uint size;
-  uint bufsize;
-  bool isFull;
-
-public:
-  uint totalPos;
-
-  void close () {
-    import core.stdc.stdlib : free;
-    if (buf !is null) { free(buf); buf = null; }
-  }
-
-  void create (uint dictSize) @trusted {
-    import core.stdc.stdlib : realloc;
-    if (buf is null || bufsize < dictSize) {
-      auto nb = cast(ubyte*)realloc(buf, dictSize);
-      if (nb is null) throw new Exception("LZMA: cannot allocate sliding window");
-      buf = nb;
-      bufsize = dictSize;
-    }
-    size = dictSize;
-    reset();
-  }
-
-  void reset () {
-    pos = 0;
-    isFull = false;
-    totalPos = 0;
-  }
-
-  ubyte getByte (uint dist) const pure nothrow @trusted @nogc { pragma(inline, true); return (buf[dist <= pos ? pos-dist : size-dist+pos]); }
-
-  void copyMatch (uint dist, uint len, scope void delegate (ubyte b) writeByte) {
-    pragma(inline, true);
-    while (len--) {
-      //putByte(getByte(dist));
-      ubyte b = getByte(dist);
-      ++totalPos;
-      buf[pos++] = b;
-      if (pos == size) { pos = 0; isFull = true; }
-      writeByte(b);
-    }
-  }
-
-  bool checkDistance (uint dist) const pure nothrow @trusted @nogc { pragma(inline, true); return (dist <= pos || isFull); }
-
-  bool isEmpty () const pure nothrow @trusted @nogc { pragma(inline, true); return (pos == 0 && !isFull); }
-}
-
-
-enum kNumBitModelTotalBits = 11;
-enum kNumMoveBits = 5;
-
-alias CProb = ushort;
-
-enum ProbInitValue = (1U<<kNumBitModelTotalBits)/2;
-
-
-struct CRangeDecoder {
-private:
-  enum kTopValue = 1U<<24;
-
-  uint range;
-  uint code;
-
-private:
-  void normalize (scope ubyte delegate () readByte) {
-    if (range < kTopValue) {
-      range <<= 8;
-      code = (code<<8)|readByte();
-    }
-  }
-
-public:
-  bool corrupted;
-
-  bool initialize (scope ubyte delegate () readByte) {
-    corrupted = false;
-    range = 0xFFFFFFFFU;
-    code = 0;
-    ubyte b = readByte();
-    for (int i = 0; i < 4; i++) code = (code<<8)|readByte();
-    if (b != 0 || code == range) corrupted = true;
-    return (b == 0);
-  }
-
-  bool isFinishedOK () const pure nothrow @safe @nogc { pragma(inline, true); return (code == 0); }
-
-  uint decodeDirectBits (uint numBits, scope ubyte delegate () readByte) {
-    uint res = 0;
-    do {
-      range >>= 1;
-      code -= range;
-      uint t = 0U-(cast(uint)code>>31);
-      code += range&t;
-      if (code == range) corrupted = true;
-      normalize(readByte);
-      res <<= 1;
-      res += t+1;
-    } while (--numBits);
-    return res;
-  }
-
-  uint decodeBit (CProb* prob, scope ubyte delegate () readByte) {
-    uint v = *prob;
-    uint bound = (range>>kNumBitModelTotalBits)*v;
-    uint symbol;
-    if (code < bound) {
-      v += ((1<<kNumBitModelTotalBits)-v)>>kNumMoveBits;
-      range = bound;
-      symbol = 0;
-    } else {
-      v -= v>>kNumMoveBits;
-      code -= bound;
-      range -= bound;
-      symbol = 1;
-    }
-    *prob = cast(CProb)v;
-    normalize(readByte);
-    return symbol;
-  }
-}
-
-
-uint bitTreeReverseDecode (CProb* probs, uint numBits, ref CRangeDecoder rc, scope ubyte delegate () readByte) {
-  uint m = 1;
-  uint symbol = 0;
-  for (uint i = 0; i < numBits; ++i) {
-    uint bit = rc.decodeBit(probs+m, readByte);
-    m <<= 1;
-    m += bit;
-    symbol |= bit<<i;
-  }
-  return symbol;
-}
-
-
-struct CBitTreeDecoder(uint NumBits) {
-  CProb[1U<<NumBits] probs = ProbInitValue;
-
-public:
-  void initialize () { probs[] = ProbInitValue; }
-
-  uint decode (ref CRangeDecoder rc, scope ubyte delegate () readByte) {
-    uint m = 1;
-    for (uint i = 0; i < NumBits; ++i) m = (m<<1)+rc.decodeBit(&probs[m], readByte);
-    return m-(1U<<NumBits);
-  }
-
-  uint reverseDecode (ref CRangeDecoder rc, scope ubyte delegate () readByte) { pragma(inline, true); return bitTreeReverseDecode(probs.ptr, NumBits, rc, readByte); }
-}
-
-
-enum kNumPosBitsMax = 4;
-
-enum kNumStates = 12;
-enum kNumLenToPosStates = 4;
-enum kNumAlignBits = 4;
-enum kStartPosModelIndex = 4;
-enum kEndPosModelIndex = 14;
-enum kNumFullDistances = 1U<<(kEndPosModelIndex>>1);
-enum kMatchMinLen = 2;
-
-
-struct CLenDecoder {
-  CProb choice;
-  CProb choice2;
-  CBitTreeDecoder!3[1U<<kNumPosBitsMax] lowCoder;
-  CBitTreeDecoder!3[1U<<kNumPosBitsMax] midCoder;
-  CBitTreeDecoder!8 highCoder;
-
-public:
-  void initialize () {
-    choice = ProbInitValue;
-    choice2 = ProbInitValue;
-    highCoder.initialize();
-    for (uint i = 0; i < (1<<kNumPosBitsMax); ++i) {
-      lowCoder[i].initialize();
-      midCoder[i].initialize();
-    }
-  }
-
-  uint decode (ref CRangeDecoder rc, uint posState, scope ubyte delegate () readByte) {
-    if (rc.decodeBit(&choice, readByte) == 0) return lowCoder[posState].decode(rc, readByte);
-    if (rc.decodeBit(&choice2, readByte) == 0) return 8+midCoder[posState].decode(rc, readByte);
-    return 16+highCoder.decode(rc, readByte);
-  }
-}
-
-
-uint updateStateLiteral (uint state) pure nothrow @safe @nogc {
-  pragma(inline, true);
-  /*
-  if (state < 4) return 0;
-  if (state < 10) return state-3;
-  return state-6;
-  */
-  return (state < 4 ? 0 : state < 10 ? state-3 : state-6);
-}
-uint updateStateMatch (uint state) pure nothrow @safe @nogc { pragma(inline, true); return (state < 7 ? 7 : 10); }
-uint updateStateRep (uint state) pure nothrow @safe @nogc { pragma(inline, true); return (state < 7 ? 8 : 11); }
-uint updateStateShortRep (uint state) pure nothrow @safe @nogc { pragma(inline, true); return (state < 7 ? 9 : 11); }
-
-
 struct CLzmaDecoder {
 public:
   enum Result {
@@ -2365,7 +2157,8 @@ private:
   CLenDecoder lenDecoder;
   CLenDecoder repLenDecoder;
 
-  CProb* litProbs;
+  //CProb* litProbs;
+  mixin VFSHiddenPointerHelper!(CProb, "litProbs");
   size_t litProbsAllotedBytes;
   CBitTreeDecoder!6[kNumLenToPosStates] posSlotDecoder;
   CBitTreeDecoder!kNumAlignBits alignDecoder;
@@ -2385,6 +2178,8 @@ public:
   uint dictSize;
   uint dictSizeInProperties;
   bool inited;
+
+  //@disable this (this);
 
   void close () {
     import core.stdc.stdlib : free;
@@ -2408,63 +2203,68 @@ public:
     if (dictSize < LZMAMinDictSize) dictSize = LZMAMinDictSize;
   }
 
-  void create (bool aunpackSizeDefined, ulong aunpackSize) {
+  void create (ulong aunpackSize) {
     inited = false;
-    unpackSizeDefined = aunpackSizeDefined;
+    unpackSizeDefined = true;
     unpackSize = aunpackSize;
   }
 
-  void decodeLiteral (uint state, uint rep0, scope ubyte delegate () readByte, scope void delegate (ubyte b) writeByte) {
-    uint prevByte = 0;
-    if (!outWindow.isEmpty()) prevByte = outWindow.getByte(1);
-
-    uint symbol = 1;
-    uint litState = ((outWindow.totalPos&((1<<lp)-1))<<lc)+(prevByte>>(8-lc));
-    CProb* probs = litProbs+(0x300U*litState);
-
-    if (state >= 7) {
-      uint matchByte = outWindow.getByte(rep0+1);
-      do {
-        uint matchBit = (matchByte>>7)&1;
-        matchByte <<= 1;
-        uint bit = rangeDec.decodeBit(&probs[((1+matchBit)<<8)+symbol], readByte);
-        symbol = (symbol<<1)|bit;
-        if (matchBit != bit) break;
-      } while (symbol < 0x100);
-    } while (symbol < 0x100)
-    symbol = (symbol<<1)|rangeDec.decodeBit(&probs[symbol], readByte);
-    writeByte(cast(ubyte)(symbol-0x100));
+  void create () {
+    inited = false;
+    unpackSizeDefined = false;
+    unpackSize = 0;
   }
 
-  uint decodeDistance (uint len, scope ubyte delegate () readByte) {
-    uint lenState = len;
-    if (lenState > kNumLenToPosStates-1) lenState = kNumLenToPosStates-1;
-
-    uint posSlot = posSlotDecoder[lenState].decode(rangeDec, readByte);
-    if (posSlot < 4) return posSlot;
-
-    uint numDirectBits = cast(uint)((posSlot>>1)-1);
-    uint dist = ((2|(posSlot&1))<<numDirectBits);
-    if (posSlot < kEndPosModelIndex) {
-      dist += bitTreeReverseDecode(posDecoders.ptr+dist-posSlot, numDirectBits, rangeDec, readByte);
-    } else {
-      dist += rangeDec.decodeDirectBits(numDirectBits-kNumAlignBits, readByte)<<kNumAlignBits;
-      dist += alignDecoder.reverseDecode(rangeDec, readByte);
-    }
-    return dist;
-  }
 
   Result decodeStep (scope ubyte delegate () readByte, scope void delegate (ubyte b) writeByte) {
+    void decodeLiteral (uint state, uint rep0) {
+      uint prevByte = 0;
+      if (!outWindow.isEmpty()) prevByte = outWindow.getByte(1);
+
+      uint symbol = 1;
+      uint litState = ((outWindow.totalPos&((1<<lp)-1))<<lc)+(prevByte>>(8-lc));
+      CProb* probs = litProbs+(0x300U*litState);
+
+      if (state >= 7) {
+        uint matchByte = outWindow.getByte(rep0+1);
+        do {
+          uint matchBit = (matchByte>>7)&1;
+          matchByte <<= 1;
+          uint bit = rangeDec.decodeBit(&probs[((1+matchBit)<<8)+symbol], readByte);
+          symbol = (symbol<<1)|bit;
+          if (matchBit != bit) break;
+        } while (symbol < 0x100);
+      } while (symbol < 0x100)
+      symbol = (symbol<<1)|rangeDec.decodeBit(&probs[symbol], readByte);
+      outWindow.putByte(cast(ubyte)(symbol-0x100), writeByte);
+    }
+
+    uint decodeDistance (uint len) {
+      uint lenState = len;
+      if (lenState > kNumLenToPosStates-1) lenState = kNumLenToPosStates-1;
+
+      uint posSlot = posSlotDecoder[lenState].decode(rangeDec, readByte);
+      if (posSlot < 4) return posSlot;
+
+      uint numDirectBits = cast(uint)((posSlot>>1)-1);
+      uint dist = ((2|(posSlot&1))<<numDirectBits);
+      if (posSlot < kEndPosModelIndex) {
+        dist += bitTreeReverseDecode(posDecoders.ptr+dist-posSlot, numDirectBits, rangeDec, readByte);
+      } else {
+        dist += rangeDec.decodeDirectBits(numDirectBits-kNumAlignBits, readByte)<<kNumAlignBits;
+        dist += alignDecoder.reverseDecode(rangeDec, readByte);
+      }
+      return dist;
+    }
+
     if (!inited) {
-      { import core.stdc.stdio : printf; printf("##################\n"); }
       inited = true;
       outWindow.create(dictSize);
       createLiterals();
-      if (!rangeDec.initialize(readByte)) throw new Exception("can't init lzma range decoder");
+      if (!rangeDec.initialize(readByte)) throw new Exception("can't initialize lzma range decoder");
       initialize();
       rep0 = rep1 = rep2 = rep3 = 0;
       state = 0;
-      { import core.stdc.stdio : printf; printf("++++++++++++++++++\n"); }
     }
 
     if (unpackSizeDefined && unpackSize == 0 && !markerIsMandatory) {
@@ -2475,7 +2275,7 @@ public:
 
     if (rangeDec.decodeBit(&isMatch[(state<<kNumPosBitsMax)+posState], readByte) == 0) {
       if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
-      decodeLiteral(state, rep0, readByte, writeByte);
+      decodeLiteral(state, rep0);
       state = updateStateLiteral(state);
       --unpackSize;
       return Result.Continue;
@@ -2489,7 +2289,7 @@ public:
       if (rangeDec.decodeBit(&isRepG0[state], readByte) == 0) {
         if (rangeDec.decodeBit(&isRep0Long[(state<<kNumPosBitsMax)+posState], readByte) == 0) {
           state = updateStateShortRep(state);
-          writeByte(outWindow.getByte(rep0+1));
+          outWindow.putByte(outWindow.getByte(rep0+1), writeByte);
           --unpackSize;
           return Result.Continue;
         }
@@ -2517,7 +2317,7 @@ public:
       rep1 = rep0;
       len = lenDecoder.decode(rangeDec, posState, readByte);
       state = updateStateMatch(state);
-      rep0 = decodeDistance(len, readByte);
+      rep0 = decodeDistance(len);
       if (rep0 == 0xFFFFFFFF) return (rangeDec.isFinishedOK() ? Result.FinishedWithMarker : Result.Error);
       if (unpackSizeDefined && unpackSize == 0) { assert(0); return Result.Error; }
       if (rep0 >= dictSize || !outWindow.checkDistance(rep0)) { assert(0); return Result.Error; }
@@ -2575,6 +2375,231 @@ private:
     lenDecoder.initialize();
     repLenDecoder.initialize();
   }
+
+static:
+  struct COutWindow {
+  private:
+    //ubyte* buf;
+    mixin VFSHiddenPointerHelper!(ubyte, "buf");
+    uint pos;
+    uint size;
+    uint bufsize;
+    bool isFull;
+
+  public:
+    uint totalPos;
+
+    //@disable this (this);
+
+    void close () {
+      import core.stdc.stdlib : free;
+      if (buf !is null) { free(buf); buf = null; }
+    }
+
+    void create (uint dictSize) @trusted {
+      import core.stdc.stdlib : realloc;
+      if (buf is null || bufsize < dictSize) {
+        auto nb = cast(ubyte*)realloc(buf, dictSize);
+        if (nb is null) throw new Exception("LZMA: cannot allocate sliding window");
+        buf = nb;
+        bufsize = dictSize;
+      }
+      size = dictSize;
+      reset();
+    }
+
+    void reset () {
+      pos = 0;
+      isFull = false;
+      totalPos = 0;
+      buf[0..size] = 0; // just in case
+    }
+
+    ubyte getByte (uint dist) const pure nothrow @trusted @nogc { pragma(inline, true); return (buf[dist <= pos ? pos-dist : size-dist+pos]); }
+
+    void putByte (ubyte b, scope void delegate (ubyte b) writeByte) {
+      ++totalPos;
+      buf[pos++] = b;
+      if (pos == size) { pos = 0; isFull = true; }
+      writeByte(b);
+    }
+
+    void copyMatch (uint dist, uint len, scope void delegate (ubyte b) writeByte) {
+      pragma(inline, true);
+      while (len--) {
+        //putByte(getByte(dist));
+        ubyte b = getByte(dist);
+        ++totalPos;
+        buf[pos++] = b;
+        if (pos == size) { pos = 0; isFull = true; }
+        writeByte(b);
+      }
+    }
+
+    bool checkDistance (uint dist) const pure nothrow @trusted @nogc { pragma(inline, true); return (dist <= pos || isFull); }
+
+    bool isEmpty () const pure nothrow @trusted @nogc { pragma(inline, true); return (pos == 0 && !isFull); }
+  }
+
+
+  enum kNumBitModelTotalBits = 11;
+  enum kNumMoveBits = 5;
+
+  alias CProb = ushort;
+
+  enum ProbInitValue = (1U<<kNumBitModelTotalBits)/2;
+
+
+  struct CRangeDecoder {
+  private:
+    enum kTopValue = 1U<<24;
+
+    uint range;
+    uint code;
+
+  private:
+    void normalize (scope ubyte delegate () readByte) {
+      if (range < kTopValue) {
+        range <<= 8;
+        code = (code<<8)|readByte();
+      }
+    }
+
+  public:
+    bool corrupted;
+
+    //@disable this (this);
+
+    bool initialize (scope ubyte delegate () readByte) {
+      corrupted = false;
+      range = 0xFFFFFFFFU;
+      code = 0;
+      ubyte b = readByte();
+      for (int i = 0; i < 4; i++) code = (code<<8)|readByte();
+      if (b != 0 || code == range) corrupted = true;
+      return (b == 0);
+    }
+
+    bool isFinishedOK () const pure nothrow @safe @nogc { pragma(inline, true); return (code == 0); }
+
+    uint decodeDirectBits (uint numBits, scope ubyte delegate () readByte) {
+      uint res = 0;
+      do {
+        range >>= 1;
+        code -= range;
+        uint t = 0U-(cast(uint)code>>31);
+        code += range&t;
+        if (code == range) corrupted = true;
+        normalize(readByte);
+        res <<= 1;
+        res += t+1;
+      } while (--numBits);
+      return res;
+    }
+
+    uint decodeBit (CProb* prob, scope ubyte delegate () readByte) {
+      uint v = *prob;
+      uint bound = (range>>kNumBitModelTotalBits)*v;
+      uint symbol;
+      if (code < bound) {
+        v += ((1<<kNumBitModelTotalBits)-v)>>kNumMoveBits;
+        range = bound;
+        symbol = 0;
+      } else {
+        v -= v>>kNumMoveBits;
+        code -= bound;
+        range -= bound;
+        symbol = 1;
+      }
+      *prob = cast(CProb)v;
+      normalize(readByte);
+      return symbol;
+    }
+  }
+
+
+  uint bitTreeReverseDecode (CProb* probs, uint numBits, ref CRangeDecoder rc, scope ubyte delegate () readByte) {
+    uint m = 1;
+    uint symbol = 0;
+    for (uint i = 0; i < numBits; ++i) {
+      uint bit = rc.decodeBit(probs+m, readByte);
+      m <<= 1;
+      m += bit;
+      symbol |= bit<<i;
+    }
+    return symbol;
+  }
+
+
+  struct CBitTreeDecoder(uint NumBits) {
+    CProb[1U<<NumBits] probs = ProbInitValue;
+
+  public:
+    //@disable this (this);
+
+    void initialize () { probs[] = ProbInitValue; }
+
+    uint decode (ref CRangeDecoder rc, scope ubyte delegate () readByte) {
+      uint m = 1;
+      for (uint i = 0; i < NumBits; ++i) m = (m<<1)+rc.decodeBit(&probs[m], readByte);
+      return m-(1U<<NumBits);
+    }
+
+    uint reverseDecode (ref CRangeDecoder rc, scope ubyte delegate () readByte) { pragma(inline, true); return bitTreeReverseDecode(probs.ptr, NumBits, rc, readByte); }
+  }
+
+
+  enum kNumPosBitsMax = 4;
+
+  enum kNumStates = 12;
+  enum kNumLenToPosStates = 4;
+  enum kNumAlignBits = 4;
+  enum kStartPosModelIndex = 4;
+  enum kEndPosModelIndex = 14;
+  enum kNumFullDistances = 1U<<(kEndPosModelIndex>>1);
+  enum kMatchMinLen = 2;
+
+
+  struct CLenDecoder {
+    CProb choice;
+    CProb choice2;
+    CBitTreeDecoder!3[1U<<kNumPosBitsMax] lowCoder;
+    CBitTreeDecoder!3[1U<<kNumPosBitsMax] midCoder;
+    CBitTreeDecoder!8 highCoder;
+
+  public:
+    //@disable this (this);
+
+    void initialize () {
+      choice = ProbInitValue;
+      choice2 = ProbInitValue;
+      highCoder.initialize();
+      for (uint i = 0; i < (1<<kNumPosBitsMax); ++i) {
+        lowCoder[i].initialize();
+        midCoder[i].initialize();
+      }
+    }
+
+    uint decode (ref CRangeDecoder rc, uint posState, scope ubyte delegate () readByte) {
+      if (rc.decodeBit(&choice, readByte) == 0) return lowCoder[posState].decode(rc, readByte);
+      if (rc.decodeBit(&choice2, readByte) == 0) return 8+midCoder[posState].decode(rc, readByte);
+      return 16+highCoder.decode(rc, readByte);
+    }
+  }
+
+
+  uint updateStateLiteral (uint state) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    /*
+    if (state < 4) return 0;
+    if (state < 10) return state-3;
+    return state-6;
+    */
+    return (state < 4 ? 0 : state < 10 ? state-3 : state-6);
+  }
+  uint updateStateMatch (uint state) pure nothrow @safe @nogc { pragma(inline, true); return (state < 7 ? 7 : 10); }
+  uint updateStateRep (uint state) pure nothrow @safe @nogc { pragma(inline, true); return (state < 7 ? 8 : 11); }
+  uint updateStateShortRep (uint state) pure nothrow @safe @nogc { pragma(inline, true); return (state < 7 ? 9 : 11); }
 }
 
 
@@ -2610,21 +2635,17 @@ public:
       ubyte[4] ziplzmahdr;
       foreach (ref ubyte b; ziplzmahdr[]) b = br.readPackedByte!ubyte;
       if (ziplzmahdr[3] != 0) throw new Exception("LZMA: invalid header");
-      { import core.stdc.stdio : printf; printf("LZMA version: %u.%u\nprops size: %u\n", ziplzmahdr[0], ziplzmahdr[1], ziplzmahdr[2]); }
-      if (ziplzmahdr[2] == 0 || ziplzmahdr[2] > 13) throw new Exception("LZMA: invalid header size");
-      ubyte[13] header = 0;
-      foreach (ref ubyte b; header[0..ziplzmahdr[2]]) b = br.readPackedByte!ubyte;
+      //{ import core.stdc.stdio : printf; printf("LZMA version: %u.%u\nprops size: %u\n", ziplzmahdr[0], ziplzmahdr[1], ziplzmahdr[2]); }
+      if (ziplzmahdr[2] == 0 || ziplzmahdr[2] < 5) throw new Exception("LZMA: invalid header size");
+      ubyte[5] header = 0;
+      foreach (ref ubyte b; header[0..5]) b = br.readPackedByte!ubyte;
+      foreach (immutable _; 5..ziplzmahdr[2]) br.readPackedByte!ubyte; // skip other bytes
       lzmaDecoder.decodeProperties(header.ptr);
       lzmaDecoder.markerIsMandatory = false;
-      { import core.stdc.stdio : printf; printf("================== (%llu)\n", br.upktotalsize); }
-      lzmaDecoder.create(true, br.upktotalsize);
-      { import core.stdc.stdio : printf; printf("------------------\n"); }
+      lzmaDecoder.create(br.upktotalsize);
     }
     auto res = lzmaDecoder.decodeStep(
-      delegate () {
-        { import core.stdc.stdio : printf; printf("******************\n"); }
-        return br.readPackedByte!ubyte;
-      },
+      delegate () => br.readPackedByte!ubyte,
       (ubyte b) => putUB(b),
     );
     switch (res) {
