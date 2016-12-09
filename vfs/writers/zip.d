@@ -18,6 +18,14 @@
 module iv.vfs.writers.zip;
 private:
 
+version(aliced) {
+  public enum VFSZipWriterSupportsLZMA = true;
+  pragma(lib, "lzma");
+  import etc.c.lzma;
+} else {
+  public enum VFSZipWriterSupportsLZMA = false;
+}
+
 import iv.utfutil;
 import iv.vfs;
 
@@ -30,6 +38,59 @@ public struct ZipFileInfo {
   ulong pksize;
   uint crc; // crc32(0, null, 0);
   ushort method;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class ZipWriter {
+public:
+  enum Method {
+    Store,
+    Deflate,
+    Lzma,
+  }
+
+public:
+  VFile fo; // do not use
+  ZipFileInfo[] files; // do not modify
+
+public:
+  this (VFile afo) { fo = afo; }
+
+  @property bool isOpen () { return fo.isOpen; }
+
+  // return index in `files` array
+  uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate) {
+    if (!fo.isOpen) throw new VFSException("no archive file");
+    if (!fl.isOpen) throw new VFSException("no source file");
+    scope(failure) { files = null; fo = VFile.init; }
+    if (fname.length == 0) throw new VFSException("empty name");
+    if (fname[$-1] == '/') throw new VFSException("directories not supported");
+    foreach (char ch; fname) if (ch == '\\') throw new VFSException("shitdoze path delimiters not supported");
+    static if (is(T == string)) {
+      alias pkname = fname;
+    } else {
+      string pkname = fname.idup;
+    }
+    final switch (method) {
+      case Method.Store: files ~= zipOne!"store"(fo, pkname, fl); break;
+      case Method.Deflate: files ~= zipOne!"deflate"(fo, pkname, fl); break;
+      case Method.Lzma: files ~= zipOne!"lzma"(fo, pkname, fl); break;
+    }
+    return cast(uint)files.length-1;
+  }
+
+  void finish () {
+    if (!fo.isOpen) throw new VFSException("no archive file");
+    scope(exit) { files = null; fo = VFile.init; }
+    zipFinish(fo, files);
+  }
+
+  void abort () {
+    if (!fo.isOpen) throw new VFSException("no archive file");
+    files = null;
+    fo = VFile.init;
+  }
 }
 
 
@@ -134,6 +195,112 @@ uint zpack (VFile ds, VFile ss, out bool aborted) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// returs crc
+static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool aborted) {
+  import etc.c.zlib;
+  import core.stdc.stdlib;
+
+  enum IBSize = 65536;
+  enum OBSize = 65536;
+
+  lzma_stream zst;
+  ubyte* ib, ob;
+  int err;
+  uint crc;
+  uint prpsize;
+  lzma_options_lzma lzmaopts;
+
+  aborted = false;
+  crc = crc32(0, null, 0);
+
+  ib = cast(ubyte*)malloc(IBSize);
+  if (ib is null) assert(0, "out of memory");
+  scope(exit) free(ib);
+
+  ob = cast(ubyte*)malloc(OBSize);
+  if (ob is null) assert(0, "out of memory");
+  scope(exit) free(ob);
+
+  ulong srcsize = ss.size, outsize = 0;
+
+  lzma_lzma_preset(&lzmaopts, 9|LZMA_PRESET_EXTREME);
+  auto[2] filters = [lzma_filter(LZMA_FILTER_LZMA1, &lzmaopts), lzma_filter(LZMA_VLI_UNKNOWN)];
+  if (lzma_properties_size(&prpsize, filters.ptr) != LZMA_OK) throw new Exception("LZMA error");
+  if (prpsize != 5) throw new Exception("LZMA error");
+  ubyte[5] props;
+  if (lzma_properties_encode(filters.ptr, props.ptr) != LZMA_OK) throw new Exception("LZMA error");
+
+  if (lzma_raw_encoder(&zst, filters.ptr) != LZMA_OK) throw new Exception("LZMA error");
+  scope(exit) lzma_end(&zst);
+
+  // zip lzma header
+  ubyte[4] ziplzmahdr = 0;
+  // lzma version
+  ziplzmahdr[0] = 9;
+  ziplzmahdr[1] = 15;
+  ziplzmahdr[2] = cast(ubyte)prpsize;
+  outsize += ziplzmahdr.length;
+  ds.rawWriteExact(ziplzmahdr[]);
+
+  // lzma properties
+  outsize += prpsize;
+  ds.rawWriteExact(props[]);
+
+  zst.next_out = ob;
+  zst.avail_out = OBSize;
+  zst.next_in = ib;
+  zst.avail_in = 0;
+
+  bool eof = false;
+  while (!eof) {
+    if (zst.avail_in == 0) {
+      // read input buffer part
+      auto rd = ss.rawRead(ib[0..IBSize]);
+      eof = (rd.length == 0);
+      if (rd.length != 0) { crc = crc32(crc, ib, cast(uint)rd.length); }
+      zst.next_in = ib;
+      zst.avail_in = cast(uint)rd.length;
+    }
+    // now process the whole input
+    while (zst.avail_in > 0) {
+      if (lzma_code(&zst, LZMA_RUN) != LZMA_OK) throw new Exception("LZMA error");
+      if (zst.avail_out < OBSize) {
+        if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+          // this will be overwritten anyway
+          aborted = true;
+          return 0;
+        }
+        outsize += OBSize-zst.avail_out;
+        ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
+        zst.next_out = ob;
+        zst.avail_out = OBSize;
+      }
+    }
+  }
+  // empty write buffer
+  for (;;) {
+    zst.next_in = null;
+    zst.avail_in = 0;
+    auto res = lzma_code(&zst, LZMA_FINISH);
+    if (res != LZMA_OK && res != LZMA_STREAM_END) throw new Exception("LZMA error");
+    if (zst.avail_out < OBSize) {
+      if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+        // this will be overwritten anyway
+        aborted = true;
+        return 0;
+      }
+      outsize += OBSize-zst.avail_out;
+      ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
+      zst.next_out = ob;
+      zst.avail_out = OBSize;
+    }
+    if (res == LZMA_STREAM_END) break;
+  }
+  return crc;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 string toUtf8 (const(char)[] s) {
   import iv.utfutil;
   char[] res;
@@ -176,7 +343,8 @@ ubyte[] buildUtfExtra (const(char)[] fname) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public ZipFileInfo zipOne (VFile ds, const(char)[] fname, VFile st, bool dopack=true) {
+public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st) {
+  static assert(mtname == "store" || mtname == "deflate" || mtname == "lzma", "invalid method: '"~mtname~"'");
   ZipFileInfo res;
   ubyte[] ef;
   char[4] sign;
@@ -185,8 +353,20 @@ public ZipFileInfo zipOne (VFile ds, const(char)[] fname, VFile st, bool dopack=
 
   res.pkofs = ds.tell;
   res.size = st.size;
-  res.method = (res.size > 0 ? 8 : 0);
-  if (res.method == 0) dopack = false;
+  static if (mtname == "store") {
+    res.method = 0;
+  } else static if (mtname == "deflate") {
+    res.method = (res.size > 0 ? 8 : 0);
+  } else static if (mtname == "lzma") {
+    static if (VFSZipWriterSupportsLZMA) {
+      res.method = (res.size > 0 ? 14 : 0);
+    } else {
+      static assert(0, "LZMA method is not supported");
+    }
+  } else {
+    static assert(0, "wtf?!");
+  }
+  bool dopack = (res.method != 0);
   if (!dopack) { res.method = 0; res.pksize = res.size; }
   res.name = fname.idup;
   ef = buildUtfExtra(res.name);
@@ -216,14 +396,18 @@ public ZipFileInfo zipOne (VFile ds, const(char)[] fname, VFile st, bool dopack=
       bool aborted;
       auto pkdpos = ds.tell;
       st.seek(0);
-      res.crc = zpack(ds, st, aborted);
+      static if (mtname == "deflate") {
+        res.crc = zpack(ds, st, aborted);
+      } else static if (mtname == "lzma") {
+        res.crc = lzmapack(ds, st, aborted);
+      }
       res.pksize = ds.tell-pkdpos;
       if (aborted) {
         // there's no sense to pack this file, just store it
         st.seek(0);
         ds.seek(res.pkofs);
         // store it
-        return zipOne(ds, fname, st, false);
+        return zipOne!"store"(ds, fname, st);
       }
     }
   } else {
@@ -297,7 +481,7 @@ public void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
 }
 
 
-/*
+/+
 void main () {
   auto fo = VFile("z00.zip", "w");
   vfsRegister!"first"(new VFSDriverDiskListed(".")); // data dir, will be looked last
@@ -305,8 +489,8 @@ void main () {
   foreach (const ref de; vfsAllFiles()) {
     if (de.name.endsWithCI(".zip")) continue;
     writeln(de.name);
-    files ~= zipOne(fo, de.name, VFile(de.name));
+    files ~= zipOne!"lzma"(fo, de.name, VFile(de.name));
   }
   zipFinish(fo, files);
 }
-*/
++/

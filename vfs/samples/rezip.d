@@ -3,7 +3,7 @@ module rezip is aliced;
 
 import iv.cmdcon;
 import iv.vfs;
-import iv.vfs.writers.ziplzma;
+import iv.vfs.writers.zip;
 
 
 string n2s (ulong n) {
@@ -30,21 +30,23 @@ void repackZip (string infname, string outfname) {
   outfname = outfname.expandTilde;
   collectException(outfname.remove());
   auto fo = VFile(outfname, "w");
-  ZipFileInfo[] files;
+  auto zw = new ZipWriter(fo);
+  scope(failure) if (zw.isOpen) zw.abort();
   bool[string] fileseen;
   foreach_reverse (const ref de; vfsFileList) {
     if (de.name in fileseen) continue;
     fileseen[de.name] = true;
     conwrite("  ", de.name, " ... ");
     try {
-      files ~= zipOne!"lzma"(fo, de.name, VFile(de.name));
+      auto fl = VFile(de.name);
+      zw.pack(fl, de.name, zw.Method.Lzma);
+      conwriteln("OK");
     } catch (Exception e) {
       conwriteln("ERROR: ", e.msg);
       throw e;
     }
-    conwriteln("OK");
   }
-  zipFinish(fo, files);
+  zw.finish();
 }
 
 

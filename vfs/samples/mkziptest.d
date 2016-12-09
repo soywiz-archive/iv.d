@@ -25,11 +25,14 @@ import iv.vfs.writers.zip;
 void main () {
   auto fo = VFile("z00.zip", "w");
   vfsRegister!"first"(new VFSDriverDiskListed(".")); // data dir, will be looked last
-  ZipFileInfo[] files;
+
+  auto zw = new ZipWriter(fo);
+  scope(failure) if (zw.isOpen) zw.abort();
+
   foreach (const ref de; vfsAllFiles()) {
     if (de.name.endsWithCI(".zip")) continue;
     writeln(de.name);
-    files ~= zipOne(fo, de.name, VFile(de.name));
+    zw.pack(VFile(de.name), de.name);
   }
-  zipFinish(fo, files);
+  zw.finish();
 }
