@@ -367,6 +367,8 @@ static protected:
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
+int within (int n, int l, int h) pure nothrow @safe @nogc { pragma(inline, true); return (n < l ? l : n > h ? h : n); }
+
 align(1) static struct ZipFileHeader {
 align(1):
   char[4] sign; // "PK\x03\x04"
@@ -400,7 +402,7 @@ align(1):
   // unixtime
   @property ulong modtime() const {
     import std.datetime;
-    return SysTime(DateTime(year, month+1, day+1, hour, min, sec), UTC()).toUnixTime();
+    return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
   }
 
 @property pure const nothrow @safe @nogc:
@@ -457,7 +459,7 @@ align(1):
   // unixtime
   @property ulong modtime() const {
     import std.datetime;
-    return SysTime(DateTime(year, month+1, day+1, hour, min, sec), UTC()).toUnixTime();
+    return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
   }
 
 @property pure const nothrow @safe @nogc:

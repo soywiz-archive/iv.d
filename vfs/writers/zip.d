@@ -38,6 +38,45 @@ public struct ZipFileInfo {
   ulong pksize;
   uint crc; // crc32(0, null, 0);
   ushort method;
+  ZipFileTime time;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public struct ZipFileTime {
+  ushort mtime; // last mod file time
+  ushort mdate; // last mod file date
+
+  // create from unixtime
+  this() (ulong unixtime, bool utc=true) {
+    import std.datetime;
+    SysTime tm = (utc ? SysTime.fromUnixTime(unixtime, UTC()) : SysTime.fromUnixTime(unixtime));
+    //TODO: validity checks
+    //{ import core.stdc.stdio : printf; printf("year=%u; month=%u; day=%u; hour=%u; min=%u; day=%u\n", tm.year, tm.month, tm.day, tm.hour, tm.minute, tm.second); }
+    year = tm.year;
+    month = tm.month;
+    day = tm.day;
+    hour = tm.hour;
+    min = tm.minute;
+    sec = tm.second;
+  }
+
+@property pure nothrow @safe @nogc:
+  ubyte hour () const { pragma(inline, true); return (mtime>>11); }
+  ubyte min () const { pragma(inline, true); return (mtime>>5)&0x3f; }
+  ubyte sec () const { pragma(inline, true); return (mtime&0x1f)*2; }
+
+  ushort year () const { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
+  ubyte month () const { pragma(inline, true); return (mdate>>5)&0x0f; }
+  ubyte day () const { pragma(inline, true); return (mdate&0x1f); }
+
+  void hour (int v) { if (v < 0) v = 0; else if (v > 23) v = 23; mtime = cast(ushort)((mtime&~(0x1f<<11))|(v<<11)); }
+  void min (int v) { if (v < 0) v = 0; else if (v > 59) v = 59; mtime = cast(ushort)((mtime&~(0x1f<<5))|(v<<5)); }
+  void sec (int v) { if (v < 0) v = 0; else if (v > 59) v = 59; mtime = cast(ushort)((mtime&~0x3f)|v); }
+
+  void year (int v) { if (v < 1980) v = 1980; else if (v > 2107) v = 2107; v -= 1980; mdate = cast(ushort)((mdate&~(0x7f<<9))|(v<<9)); }
+  void month (int v) { if (v < 0) v = 0; else if (v > 11) v = 11; mdate = cast(ushort)((mdate&~(0x0f<<5))|(v<<5)); }
+  void day (int v) { if (v < 0) v = 0; else if (v > 30) v = 30; mdate = cast(ushort)((mdate&~0x1f)|v); }
 }
 
 
@@ -60,7 +99,7 @@ public:
   @property bool isOpen () { return fo.isOpen; }
 
   // return index in `files` array
-  uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate) {
+  uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate) {
     if (!fo.isOpen) throw new VFSException("no archive file");
     if (!fl.isOpen) throw new VFSException("no source file");
     scope(failure) { files = null; fo = VFile.init; }
@@ -73,12 +112,14 @@ public:
       string pkname = fname.idup;
     }
     final switch (method) {
-      case Method.Store: files ~= zipOne!"store"(fo, pkname, fl); break;
-      case Method.Deflate: files ~= zipOne!"deflate"(fo, pkname, fl); break;
-      case Method.Lzma: files ~= zipOne!"lzma"(fo, pkname, fl); break;
+      case Method.Store: files ~= zipOne!"store"(fo, pkname, fl, ftime); break;
+      case Method.Deflate: files ~= zipOne!"deflate"(fo, pkname, fl, ftime); break;
+      case Method.Lzma: files ~= zipOne!"lzma"(fo, pkname, fl, ftime); break;
     }
     return cast(uint)files.length-1;
   }
+
+  uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate) { return pack!T(fl, fname, ZipFileTime.init, method); }
 
   void finish () {
     if (!fo.isOpen) throw new VFSException("no archive file");
@@ -343,7 +384,9 @@ ubyte[] buildUtfExtra (const(char)[] fname) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st) {
+public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st) { return zipOne!mtname(ds, fname, st, ZipFileTime.init); }
+
+public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, in auto ref ZipFileTime ftime) {
   static assert(mtname == "store" || mtname == "deflate" || mtname == "lzma", "invalid method: '"~mtname~"'");
   ZipFileInfo res;
   ubyte[] ef;
@@ -351,6 +394,7 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
 
   if (fname.length == 0 || fname.length > ushort.max) throw new Exception("inalid file name");
 
+  res.time = ftime;
   res.pkofs = ds.tell;
   res.size = st.size;
   static if (mtname == "store") {
@@ -380,8 +424,8 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
   ds.writeNum!ushort(0x0310); // version to extract
   ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
   ds.writeNum!ushort(res.method); // compression method
-  ds.writeNum!ushort(0); // file time
-  ds.writeNum!ushort(0); // file date
+  ds.writeNum!ushort(res.time.mtime); // file time
+  ds.writeNum!ushort(res.time.mdate); // file date
   auto nfoofs = ds.tell;
   ds.writeNum!uint(res.crc); // crc32
   ds.writeNum!uint(0/*res.pksize*/); // packed size
@@ -452,8 +496,8 @@ public void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
     ds.writeNum!ushort(0x0010); // version to extract
     ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
     ds.writeNum!ushort(fi.method); // compression method
-    ds.writeNum!ushort(0); // file time
-    ds.writeNum!ushort(0); // file date
+    ds.writeNum!ushort(fi.time.mtime); // file time
+    ds.writeNum!ushort(fi.time.mdate); // file date
     ds.writeNum!uint(fi.crc);
     ds.writeNum!uint(cast(uint)fi.pksize);
     ds.writeNum!uint(cast(uint)fi.size);

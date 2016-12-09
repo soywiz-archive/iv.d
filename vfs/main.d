@@ -214,7 +214,7 @@ protected:
         if (de.name.length <= dataPath.length) continue;
         if (needTimes) {
           import std.datetime;
-          files ~= DirEntry(de.name[dataPath.length..$], de.size, 0, de.timeLastModified.toUnixTime());
+          files ~= DirEntry(de.name[dataPath.length..$], de.size, 0, de.timeLastModified.toUTC.toUnixTime());
         } else {
           files ~= DirEntry(de.name[dataPath.length..$], de.size);
         }
