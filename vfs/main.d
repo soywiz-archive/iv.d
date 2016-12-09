@@ -93,6 +93,12 @@ public abstract class VFSDriver {
   public static struct DirEntry {
     string name; // for disk: doesn't include base path; ends with '/'
     long size; // can be -1 if size is not known; for dirs means nothing
+    ulong crtime; // 0: unknown; unixtime
+    ulong modtime; // 0: unknown; unixtime
+    @property const pure nothrow @safe @nogc {
+      bool hasCreationTime () { pragma(inline, true); return (crtime != 0); }
+      bool hasModTime () { pragma(inline, true); return (modtime != 0); }
+    }
   }
 
   /// this constructor is used for disk drivers
@@ -196,6 +202,7 @@ public class VFSDriverDiskListed : VFSDriverDisk {
 protected:
   DirEntry[] files;
   bool flistInited;
+  bool needTimes;
 
 protected:
   final void buildFileList () {
@@ -205,15 +212,20 @@ protected:
       foreach (DE de; dirEntries(dataPath, SpanMode./*breadth*/depth)) {
         if (!de.isFile) continue;
         if (de.name.length <= dataPath.length) continue;
-        files ~= DirEntry(de.name[dataPath.length..$], de.size);
+        if (needTimes) {
+          import std.datetime;
+          files ~= DirEntry(de.name[dataPath.length..$], de.size, 0, de.timeLastModified.toUnixTime());
+        } else {
+          files ~= DirEntry(de.name[dataPath.length..$], de.size);
+        }
       }
     } catch (Exception e) {}
     flistInited = true;
   }
 
 public:
-  this () { super(); }
-  this(T : const(char)[]) (T dpath) { super(dpath); }
+  this (bool aNeedTimes=false) { needTimes = aNeedTimes; super(); }
+  this(T : const(char)[]) (T dpath, bool aNeedTimes=false) { needTimes = aNeedTimes; super(dpath); }
 
   /// get number of entries in archive directory.
   override @property usize dirLength () { buildFileList(); return files.length; }

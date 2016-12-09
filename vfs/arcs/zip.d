@@ -38,6 +38,7 @@ private:
     long pksize;
     long size;
     long hdrofs;
+    ulong modtime;
     string name;
   }
 
@@ -134,6 +135,7 @@ private:
     bool zip64 = false;
     // zip64?
     if (eocd.cdofs == 0xffff_ffffu) {
+      debug(ziparc) writeln("  ZIP64 archive");
       zip64 = true;
       if (pos < Z64Locator.sizeof) throw new VFSNamedException!"ZipArchive"("corrupted archive");
       auto lt64 = *cast(Z64Locator*)&buf[pos-Z64Locator.sizeof];
@@ -232,6 +234,7 @@ private:
         fi.pksize = cdfh.pksize;
         fi.size = cdfh.size;
         fi.hdrofs = cdfh.hdrofs;
+        try { fi.modtime = cdfh.modtime; } catch (Exception e) {}
         if (cdfh.method == 0) fi.pksize = fi.size;
         // now, this is valid file, so read it's name
         if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new VFSNamedException!"ZipArchive"("reading error");
@@ -247,7 +250,18 @@ private:
         bool doSkip = false;
         // should we parse extra field?
         debug(ziparc) writefln("size=0x%08x; pksize=0x%08x", fi.size, fi.pksize);
+        debug(ziparc) {{
+          import std.datetime;
+          try {
+            writeln("  year: ", cdfh.year, "; month: ", cdfh.month, "; day: ", cdfh.day, "; hour: ", cdfh.hour, "; min: ", cdfh.min, "; sec: ", cdfh.sec);
+            writeln("  time: ", SysTime(DateTime(cdfh.year, cdfh.month+1, cdfh.day+1, cdfh.hour, cdfh.min, cdfh.sec), UTC()));
+          } catch (Exception e) {
+            writeln("SHIT: ", e.msg);
+            throw e;
+          }
+        }}
         if (zip64 && (fi.size == 0xffff_ffffu || fi.pksize == 0xffff_ffffu || fi.hdrofs == 0xffff_ffffu)) {
+          debug(ziparc) writeln("  ZIP64 record");
           // yep, do it
           bool found = false;
           //Z64Extra z64e = void;
@@ -382,6 +396,21 @@ align(1):
       extlen = swapEndian(extlen);
     }
   }
+
+  // unixtime
+  @property ulong modtime() const {
+    import std.datetime;
+    return SysTime(DateTime(year, month+1, day+1, hour, min, sec), UTC()).toUnixTime();
+  }
+
+@property pure const nothrow @safe @nogc:
+  ubyte hour () { pragma(inline, true); return (mtime>>11); }
+  ubyte min () { pragma(inline, true); return (mtime>>5)&0x3f; }
+  ubyte sec () { pragma(inline, true); return (mtime&0x1f)*2; }
+
+  ushort year () { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
+  ubyte month () { pragma(inline, true); return (mdate>>5)&0x0f; }
+  ubyte day () { pragma(inline, true); return (mdate&0x1f); }
 }
 
 align(1) static struct CDFileHeader {
@@ -404,15 +433,6 @@ align(1):
   uint attr; // external file attributes
   uint hdrofs; // relative offset of local header
 
-@property pure const nothrow @safe @nogc:
-  ubyte hour () { return (mtime>>11); }
-  ubyte min () { return (mtime>>5)&0x3f; }
-  ubyte sec () { return (mtime&0x1f)*2; }
-
-  ushort year () { return cast(ushort)((mdate>>9)+1980); }
-  ubyte month () { return (mdate>>5)&0x0f; }
-  ubyte day () { return (mdate&0x1f); }
-
   void fixEndian () nothrow @trusted @nogc {
     version(BigEndian) {
       import std.bitmanip : swapEndian;
@@ -433,6 +453,21 @@ align(1):
       hdrofs = swapEndian(hdrofs);
     }
   }
+
+  // unixtime
+  @property ulong modtime() const {
+    import std.datetime;
+    return SysTime(DateTime(year, month+1, day+1, hour, min, sec), UTC()).toUnixTime();
+  }
+
+@property pure const nothrow @safe @nogc:
+  ubyte hour () { pragma(inline, true); return (mtime>>11); }
+  ubyte min () { pragma(inline, true); return (mtime>>5)&0x3f; }
+  ubyte sec () { pragma(inline, true); return (mtime&0x1f)*2; }
+
+  ushort year () { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
+  ubyte month () { pragma(inline, true); return (mdate>>5)&0x0f; }
+  ubyte day () { pragma(inline, true); return (mdate&0x1f); }
 }
 
 align(1) static struct EOCDHeader {
