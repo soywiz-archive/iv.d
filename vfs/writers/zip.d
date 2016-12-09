@@ -451,7 +451,7 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
         st.seek(0);
         ds.seek(res.pkofs);
         // store it
-        return zipOne!"store"(ds, fname, st);
+        return zipOne!"store"(ds, fname, st, ftime);
       }
     }
   } else {
