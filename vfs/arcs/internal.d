@@ -47,7 +47,8 @@ public:
   override DirEntry dirEntry (usize idx) {
     static if (is(typeof(dir.ptr[idx].modtime))) ulong modtime = dir.ptr[idx].modtime; else enum modtime = 0;
     static if (is(typeof(dir.ptr[idx].crtime))) ulong crtime = dir.ptr[idx].modtime; else enum crtime = 0;
-    return (idx < dir.length ? DirEntry(dir.ptr[idx].name, dir.ptr[idx].size, crtime, modtime) : DirEntry.init); }
+    static if (is(typeof(dir.ptr[idx].pksize))) long pksize = dir.ptr[idx].pksize; else enum pksize = -1;
+    return (idx < dir.length ? DirEntry(dir.ptr[idx].name, dir.ptr[idx].size, crtime, modtime, pksize) : DirEntry.init); }
 }
 
 

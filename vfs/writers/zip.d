@@ -39,6 +39,16 @@ public struct ZipFileInfo {
   uint crc; // crc32(0, null, 0);
   ushort method;
   ZipFileTime time;
+
+  @property string methodName () const pure nothrow @safe @nogc {
+    switch (method) {
+      case 0: return "store";
+      case 8: return "deflate";
+      case 14: return "lzma";
+      default:
+    }
+    return "unknown";
+  }
 }
 
 
@@ -99,7 +109,7 @@ public:
   @property bool isOpen () { return fo.isOpen; }
 
   // return index in `files` array
-  uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate) {
+  uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate, ulong oldsize=ulong.max) {
     if (!fo.isOpen) throw new VFSException("no archive file");
     if (!fl.isOpen) throw new VFSException("no source file");
     scope(failure) { files = null; fo = VFile.init; }
@@ -112,14 +122,14 @@ public:
       string pkname = fname.idup;
     }
     final switch (method) {
-      case Method.Store: files ~= zipOne!"store"(fo, pkname, fl, ftime); break;
-      case Method.Deflate: files ~= zipOne!"deflate"(fo, pkname, fl, ftime); break;
-      case Method.Lzma: files ~= zipOne!"lzma"(fo, pkname, fl, ftime); break;
+      case Method.Store: files ~= zipOne!"store"(fo, pkname, fl, ftime, oldsize); break;
+      case Method.Deflate: files ~= zipOne!"deflate"(fo, pkname, fl, ftime, oldsize); break;
+      case Method.Lzma: files ~= zipOne!"lzma"(fo, pkname, fl, ftime, oldsize); break;
     }
     return cast(uint)files.length-1;
   }
 
-  uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate) { return pack!T(fl, fname, ZipFileTime.init, method); }
+  uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate, ulong oldsize=ulong.max) { return pack!T(fl, fname, ZipFileTime.init, method, oldsize); }
 
   void finish () {
     if (!fo.isOpen) throw new VFSException("no archive file");
@@ -384,9 +394,9 @@ ubyte[] buildUtfExtra (const(char)[] fname) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st) { return zipOne!mtname(ds, fname, st, ZipFileTime.init); }
+ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, ulong oldsize=ulong.max) { return zipOne!mtname(ds, fname, st, ZipFileTime.init, oldsize); }
 
-public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, in auto ref ZipFileTime ftime) {
+ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, in auto ref ZipFileTime ftime, ulong oldsize=ulong.max) {
   static assert(mtname == "store" || mtname == "deflate" || mtname == "lzma", "invalid method: '"~mtname~"'");
   ZipFileInfo res;
   ubyte[] ef;
@@ -429,7 +439,7 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
   ds.writeNum!ushort(res.time.mdate); // file date
   auto nfoofs = ds.tell;
   ds.writeNum!uint(res.crc); // crc32
-  ds.writeNum!uint(0/*res.pksize*/); // packed size
+  ds.writeNum!uint(res.method ? 0 : cast(uint)res.size); // packed size
   ds.writeNum!uint(cast(uint)res.size); // unpacked size
   ds.writeNum!ushort(cast(ushort)fname.length); // name length
   ds.writeNum!ushort(cast(ushort)ef.length); // extra field length
@@ -453,14 +463,19 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
           // try deflate, it may work
           st.seek(0);
           ds.seek(res.pkofs);
-          return zipOne!"deflate"(ds, fname, st, ftime);
+          return zipOne!"deflate"(ds, fname, st, ftime, oldsize);
         } else {
           // just store it
           st.seek(0);
           ds.seek(res.pkofs);
-          // store it
-          return zipOne!"store"(ds, fname, st, ftime);
+          return zipOne!"store"(ds, fname, st, ftime, oldsize);
         }
+      } else if (res.pksize == oldsize) {
+        //{ import core.stdc.stdio : printf; printf("  size=%u; pksize=%u; oldsize=%u\n", cast(uint)res.size, cast(uint)res.pksize, cast(uint)oldsize); }
+        // if file got the same size, just store it
+        st.seek(0);
+        ds.seek(res.pkofs);
+        return zipOne!"store"(ds, fname, st, ftime, oldsize);
       }
     }
   } else {
@@ -487,13 +502,13 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
   scope(exit) ds.seek(oldofs);
   ds.seek(nfoofs);
   ds.writeNum!uint(res.crc); // crc32
-  ds.writeNum!uint(cast(uint)res.pksize);
+  if (dopack) ds.writeNum!uint(cast(uint)res.pksize);
   return res;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
+void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
   if (files.length > ushort.max) throw new Exception("too many files");
   char[4] sign;
   auto cdofs = ds.tell;
@@ -532,18 +547,3 @@ public void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
   ds.writeNum!uint(cast(uint)cdofs); // central directory offset
   ds.writeNum!ushort(0); // archive comment length
 }
-
-
-/+
-void main () {
-  auto fo = VFile("z00.zip", "w");
-  vfsRegister!"first"(new VFSDriverDiskListed(".")); // data dir, will be looked last
-  ZipFileInfo[] files;
-  foreach (const ref de; vfsAllFiles()) {
-    if (de.name.endsWithCI(".zip")) continue;
-    writeln(de.name);
-    files ~= zipOne!"lzma"(fo, de.name, VFile(de.name));
-  }
-  zipFinish(fo, files);
-}
-+/

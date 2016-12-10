@@ -95,6 +95,18 @@ public abstract class VFSDriver {
     long size; // can be -1 if size is not known; for dirs means nothing
     ulong crtime; // 0: unknown; unixtime
     ulong modtime; // 0: unknown; unixtime
+    long pksize; // packed size; should be equal to size if archive is not packed
+
+    this(T:const(char)[]) (T aname, long asize, ulong acrtime=0, ulong amodtime=0, long apksize=-1) {
+           static if (is(T == typeof(null))) name = null;
+      else static if (is(T == string)) name = aname;
+      else name = aname.idup;
+      size = asize;
+      crtime = acrtime;
+      modtime = amodtime;
+      pksize = (apksize >= 0 ? apksize : size);
+    }
+
     @property const pure nothrow @safe @nogc {
       bool hasCreationTime () { pragma(inline, true); return (crtime != 0); }
       bool hasModTime () { pragma(inline, true); return (modtime != 0); }
