@@ -448,11 +448,19 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
       }
       res.pksize = ds.tell-pkdpos;
       if (aborted) {
-        // there's no sense to pack this file, just store it
-        st.seek(0);
-        ds.seek(res.pkofs);
-        // store it
-        return zipOne!"store"(ds, fname, st, ftime);
+        // there's no sense to pack this file
+        static if (mtname == "lzma") {
+          // try deflate, it may work
+          st.seek(0);
+          ds.seek(res.pkofs);
+          return zipOne!"deflate"(ds, fname, st, ftime);
+        } else {
+          // just store it
+          st.seek(0);
+          ds.seek(res.pkofs);
+          // store it
+          return zipOne!"store"(ds, fname, st, ftime);
+        }
       }
     }
   } else {
