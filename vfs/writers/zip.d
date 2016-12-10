@@ -515,7 +515,7 @@ public void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
     ds.writeNum!ushort(0); // comment length
     ds.writeNum!ushort(0); // disk start
     ds.writeNum!ushort(0); // internal attributes
-    ds.writeNum!uint(0); // external attributes
+    ds.writeNum!uint(0b1000_000_110110000_0000000000_000000); // external attributes
     ds.writeNum!uint(cast(uint)fi.pkofs); // header offset
     ds.rawWriteExact(fi.name[]);
     if (ef.length > 0) ds.rawWriteExact(ef[]);
