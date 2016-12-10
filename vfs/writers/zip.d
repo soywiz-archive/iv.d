@@ -421,7 +421,8 @@ public ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fnam
   // write local header
   sign = "PK\x03\x04";
   ds.rawWriteExact(sign[]);
-  ds.writeNum!ushort(0x0310); // version to extract
+  //ds.writeNum!ushort(0x0310); // version to extract
+  ds.writeNum!ushort(res.method > 8 ? 0x003f : 0x0014); // version to extract
   ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
   ds.writeNum!ushort(res.method); // compression method
   ds.writeNum!ushort(res.time.mtime); // file time
@@ -493,7 +494,7 @@ public void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
     sign = "PK\x01\x02";
     ds.rawWriteExact(sign[]);
     ds.writeNum!ushort(0x0310); // version made by
-    ds.writeNum!ushort(0x0010); // version to extract
+    ds.writeNum!ushort(fi.method > 8 ? 0x003f : 0x0014); // version to extract
     ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
     ds.writeNum!ushort(fi.method); // compression method
     ds.writeNum!ushort(fi.time.mtime); // file time

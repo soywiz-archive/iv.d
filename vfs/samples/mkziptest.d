@@ -22,17 +22,60 @@ import iv.vfs.io;
 import iv.vfs.writers.zip;
 
 
-void main () {
-  auto fo = VFile("z00.zip", "w");
-  vfsRegister!"first"(new VFSDriverDiskListed(".", true)); // data dir, will be looked last
+void main (string[] args) {
+  auto method = ZipWriter.Method.Deflate;
+
+  if (args.length < 2) {
+    writeln("usage: mkziptest arc.zip [files...]");
+    throw new Exception("boom");
+  }
+
+  for (size_t idx = 1; idx < args.length;) {
+    string arg = args[idx];
+    if (arg == "--") {
+      import std.algorithm : remove;
+      args = args.remove(idx);
+      break;
+    }
+    if (arg.length == 0) {
+      import std.algorithm : remove;
+      args = args.remove(idx);
+      continue;
+    }
+    if (arg[0] == '-') {
+      switch (arg) {
+        case "--lzma": method = ZipWriter.Method.Lzma; break;
+        case "--store": method = ZipWriter.Method.Store; break;
+        case "--deflate": method = ZipWriter.Method.Deflate; break;
+        default: writeln("invalid argument: '", arg, "'"); throw new Exception("boom");
+      }
+      import std.algorithm : remove;
+      args = args.remove(idx);
+      continue;
+    }
+    ++idx;
+  }
+
+  auto fo = VFile(args[1], "w");
 
   auto zw = new ZipWriter(fo);
   scope(failure) if (zw.isOpen) zw.abort();
 
-  foreach (const ref de; vfsAllFiles()) {
-    if (de.name.endsWithCI(".zip")) continue;
-    writeln(de.name);
-    zw.pack(VFile(de.name), de.name, ZipFileTime(de.modtime));
+  if (args.length == 2) {
+    vfsRegister!"first"(new VFSDriverDiskListed(".", true)); // data dir, will be looked last
+    foreach (const ref de; vfsAllFiles()) {
+      if (de.name.endsWithCI(".zip")) continue;
+      writeln(de.name);
+      zw.pack(VFile(de.name), de.name, ZipFileTime(de.modtime), method);
+    }
+  } else {
+    foreach (string fname; args[2..$]) {
+      import std.file;
+      import std.datetime;
+      writeln(fname);
+      zw.pack(VFile(fname), fname, ZipFileTime(fname.timeLastModified.toUTC.toUnixTime()), method);
+    }
   }
+
   zw.finish();
 }
