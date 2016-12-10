@@ -25,11 +25,6 @@ import iv.vfs.writers.zip;
 void main (string[] args) {
   auto method = ZipWriter.Method.Deflate;
 
-  if (args.length < 2) {
-    writeln("usage: mkziptest arc.zip [files...]");
-    throw new Exception("boom");
-  }
-
   for (size_t idx = 1; idx < args.length;) {
     string arg = args[idx];
     if (arg == "--") {
@@ -54,6 +49,11 @@ void main (string[] args) {
       continue;
     }
     ++idx;
+  }
+
+  if (args.length < 2) {
+    writeln("usage: mkziptest arc.zip [files...]");
+    throw new Exception("boom");
   }
 
   auto fo = VFile(args[1], "w");
