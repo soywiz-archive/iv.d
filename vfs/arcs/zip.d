@@ -568,7 +568,7 @@ struct BitReader {
   long zflleft;
   long upkleft;
   long upktotalsize;
-  ubyte[4096] inbuf;
+  ubyte[1024] inbuf;
   uint ibpos, ibused;
   ubyte gbyte = 1;
   bool ateof;
