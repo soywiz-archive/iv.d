@@ -572,12 +572,34 @@ private void cwrxputenum(TT) (TT nn, char signw, char lchar, char rchar, int wdt
 /// write formatted string to console with compile-time format string
 public template conwritef(string fmt, A...) {
   private string gen() () {
-    string res;
     usize pos;
+    char[] res;
+    usize respos;
+    //string simpledelim;
+    char[] simpledelim;
+    uint simpledelimpos;
+
+    res.length = fmt.length+128;
+
+    void putRes (const(char)[] s...) {
+      //if (respos+s.length > res.length) res.length = respos+s.length+256;
+      foreach (char ch; s) {
+        if (respos >= res.length) res.length = res.length*2;
+        res[respos++] = ch;
+      }
+    }
+
+    void putSD (const(char)[] s...) {
+      if (simpledelim.length == 0) simpledelim.length = 128;
+      foreach (char ch; s) {
+        if (simpledelimpos >= simpledelim.length) simpledelim.length = simpledelim.length*2;
+        simpledelim[simpledelimpos++] = ch;
+      }
+    }
 
     void putNum(bool hex=false) (int n, int minlen=-1) {
       if (n == n.min) assert(0, "oops");
-      if (n < 0) { res ~= '-'; n = -n; }
+      if (n < 0) { putRes('-'); n = -n; }
       char[24] buf;
       int bpos = buf.length;
       do {
@@ -590,7 +612,7 @@ public template conwritef(string fmt, A...) {
         }
         --minlen;
       } while (n != 0 || minlen > 0);
-      res ~= buf[bpos..$];
+      putRes(buf[bpos..$]);
     }
 
     int parseNum (ref char sign, ref bool leadzero) {
@@ -614,25 +636,26 @@ public template conwritef(string fmt, A...) {
           ++epos;
         }
         if (epos > pos) {
-          res ~= "cwrxputch(`"~fmt[pos..epos]~"`);\n";
+          putRes("cwrxputch(`");
+          putRes(fmt[pos..epos]);
+          putRes("`);\n");
           pos = epos;
           if (pos >= fmt.length) break;
         }
         if (fmt[pos] != '%') {
-          res ~= "cwrxputch('\\x";
+          putRes("cwrxputch('\\x");
           putNum!true(cast(ubyte)fmt[pos], 2);
-          res ~= "');\n";
+          putRes("');\n");
           ++pos;
           continue;
         }
-        if (fmt.length-pos < 2 || fmt[pos+1] == '%') { res ~= "cwrxputch('%');\n"; pos += 2; continue; }
+        if (fmt.length-pos < 2 || fmt[pos+1] == '%') { putRes("cwrxputch('%');\n"); pos += 2; continue; }
         return;
       }
     }
 
     bool simples = false;
     bool putsimpledelim = false;
-    string simpledelim;
     char lchar=' ', rchar=' ';
     char signw = ' ';
     bool leadzerow = false;
@@ -652,6 +675,7 @@ public template conwritef(string fmt, A...) {
           simples = true;
         } else if (pos < fmt.length && fmt[pos] == '<') {
           ++pos;
+          simples = true;
           auto ep = pos;
           while (ep < fmt.length) {
             if (fmt[ep] == '>') break;
@@ -659,27 +683,29 @@ public template conwritef(string fmt, A...) {
             ++ep;
           }
           if (ep >= fmt.length) assert(0, "invalid format string");
-          simples = true;
+          simpledelimpos = 0;
           if (ep-pos > 0) {
             bool hasQuote = false;
             foreach (char ch; fmt[pos..ep]) if (ch == '\\' || (ch < ' ' && ch != '\n' && ch != '\t') || ch >= 127 || ch == '`') { hasQuote = true; break; }
             if (!hasQuote) {
-              simpledelim = "cwrxputch(`"~fmt[pos..ep]~"`);\n";
+              putSD("cwrxputch(`");
+              putSD(fmt[pos..ep]);
+              putSD("`);\n");
             } else {
               //FIXME: get rid of char-by-char processing!
-              simpledelim = "cwrxputch(\"";
+              putSD("cwrxputch(\"");
               while (pos < ep) {
                 char ch = fmt[pos++];
                 if (ch == '\\') ch = fmt[pos++];
                 if (ch == '\\' || ch < ' ' || ch >= 127 || ch == '"') {
-                  simpledelim ~= "\\x";
-                  simpledelim ~= "0123456789abcdef"[ch>>4];
-                  simpledelim ~= "0123456789abcdef"[ch&0x0f];
+                  putSD("\\x");
+                  putSD("0123456789abcdef"[ch>>4]);
+                  putSD("0123456789abcdef"[ch&0x0f]);
                 } else {
-                  simpledelim ~= ch;
+                  putSD(ch);
                 }
               }
-              simpledelim ~= "\");\n";
+              putSD("\");\n");
             }
           }
           pos = ep+1;
@@ -718,8 +744,8 @@ public template conwritef(string fmt, A...) {
         leadzerow = false;
         wdt =  maxwdt = 0;
         fmtch = 's';
-        if (putsimpledelim && simpledelim.length) {
-          res ~= simpledelim;
+        if (putsimpledelim && simpledelimpos > 0) {
+          putRes(simpledelim[0..simpledelimpos]);
         } else {
           putsimpledelim = true;
         }
@@ -727,115 +753,115 @@ public template conwritef(string fmt, A...) {
       switch (fmtch) {
         case 's':
           static if (is(at == char)) {
-            res ~= "cwrxputchar(args[";
+            putRes("cwrxputchar(args[");
             putNum(argnum);
-            res ~= "]";
+            putRes("]");
           } else static if (is(at == wchar) || is(at == dchar)) {
-            res ~= "import std.conv : to; cwrxputstr(to!string(args[";
+            putRes("import std.conv : to; cwrxputstr(to!string(args[");
             putNum(argnum);
-            res ~= "])";
+            putRes("])");
           } else static if (is(at == bool)) {
-            res ~= "cwrxputstr((args[";
+            putRes("cwrxputstr((args[");
             putNum(argnum);
-            res ~= "] ? `true` : `false`)";
+            putRes("] ? `true` : `false`)");
           } else static if (is(at == enum)) {
-            res ~= "cwrxputenum(args[";
+            putRes("cwrxputenum(args[");
             putNum(argnum);
-            res ~= "]";
+            putRes("]");
           } else static if (is(at == float) || is(at == double) || is(at == real)) {
-            res ~= "cwrxputfloat(args[";
+            putRes("cwrxputfloat(args[");
             putNum(argnum);
-            res ~= "], true";
+            putRes("], true");
           } else static if (is(at : const(char)[])) {
-            res ~= "cwrxputstr(args[";
+            putRes("cwrxputstr(args[");
             putNum(argnum);
-            res ~= "]";
+            putRes("]");
           } else static if (is(at : T*, T)) {
-            //res ~= "cwrxputch(`0x`); ";
+            //putRes("cwrxputch(`0x`); ");
             if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
-            res ~= "cwrxputhex(cast(size_t)args[";
+            putRes("cwrxputhex(cast(size_t)args[");
             putNum(argnum);
-            res ~= "], false";
+            putRes("], false");
           } else static if (is(at : long)) {
-            res ~= "cwrxputint(args[";
+            putRes("cwrxputint(args[");
             putNum(argnum);
-            res ~= "]";
+            putRes("]");
           } else {
-            res ~= "import std.conv : to; cwrxputstr(to!string(args[";
+            putRes("import std.conv : to; cwrxputstr(to!string(args[");
             putNum(argnum);
-            res ~= "])";
+            putRes("])");
           }
           break;
         case 'x':
           static if (is(at == char) || is(at == wchar) || is(at == dchar)) {
-            res ~= "cwrxputhex(cast(uint)args[";
+            putRes("cwrxputhex(cast(uint)args[");
             putNum(argnum);
-            res ~= "], false";
+            putRes("], false");
           } else static if (is(at == bool)) {
-            res ~= "cwrxputstr((args[";
+            putRes("cwrxputstr((args[");
             putNum(argnum);
-            res ~= "] ? `1` : `0`)";
+            putRes("] ? `1` : `0`)");
           } else static if (is(at == float) || is(at == double) || is(at == real)) {
             assert(0, "can't hexprint floats yet");
           } else static if (is(at : T*, T)) {
             if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
-            res ~= "cwrxputhex(cast(size_t)args[";
+            putRes("cwrxputhex(cast(size_t)args[");
             putNum(argnum);
-            res ~= "], false";
+            putRes("], false");
           } else static if (is(at : long)) {
-            res ~= "cwrxputhex(args[";
+            putRes("cwrxputhex(args[");
             putNum(argnum);
-            res ~= "], false";
+            putRes("], false");
           } else {
             assert(0, "can't print '"~at.stringof~"' as hex");
           }
           break;
         case 'X':
           static if (is(at == char) || is(at == wchar) || is(at == dchar)) {
-            res ~= "cwrxputhex(cast(uint)args[";
+            putRes("cwrxputhex(cast(uint)args[");
             putNum(argnum);
-            res ~= "], true";
+            putRes("], true");
           } else static if (is(at == bool)) {
-            res ~= "cwrxputstr((args[";
+            putRes("cwrxputstr((args[");
             putNum(argnum);
-            res ~= "] ? `1` : `0`)";
+            putRes("] ? `1` : `0`)");
           } else static if (is(at == float) || is(at == double) || is(at == real)) {
             assert(0, "can't hexprint floats yet");
           } else static if (is(at : T*, T)) {
             if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
-            res ~= "cwrxputhex(cast(size_t)args[";
+            putRes("cwrxputhex(cast(size_t)args[");
             putNum(argnum);
-            res ~= "], true";
+            putRes("], true");
           } else static if (is(at : long)) {
-            res ~= "cwrxputhex(args[";
+            putRes("cwrxputhex(args[");
             putNum(argnum);
-            res ~= "], true";
+            putRes("], true");
           } else {
             assert(0, "can't print '"~at.stringof~"' as hex");
           }
           break;
         case 'f':
           static if (is(at == float) || is(at == double) || is(at == real)) {
-            res ~= "cwrxputfloat(args[";
+            putRes("cwrxputfloat(args[");
             putNum(argnum);
-            res ~= "], false";
+            putRes("], false");
           } else {
             assert(0, "can't print '"~at.stringof~"' as float");
           }
           break;
         default: assert(0, "invalid format specifier: '"~fmtch~"'");
       }
-      res ~= ", '";
-      res ~= signw;
-      res ~= "', '\\x";
+      putRes(", '");
+      putRes(signw);
+      putRes("', '\\x");
       putNum!true(cast(uint)lchar, 2);
-      res ~= "', '\\x";
+      putRes("', '\\x");
       putNum!true(cast(uint)rchar, 2);
-      res ~= "', ";
+      putRes("', ");
       putNum(wdt);
-      res ~= ", ";
+      putRes(", ");
       putNum(maxwdt);
-      res ~= ");\n";
+      putRes(");\n");
     }
     while (pos < fmt.length) {
       processUntilFSp();
@@ -855,7 +881,7 @@ public template conwritef(string fmt, A...) {
       }
       assert(0, "too many format specifiers");
     }
-    return res;
+    return res[0..respos];
   }
   void conwritef (A args) {
     enum code = gen();
