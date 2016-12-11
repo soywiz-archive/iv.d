@@ -2430,14 +2430,21 @@ static:
 
     void close () {
       import core.stdc.stdlib : free;
-      if (buf !is null) { free(buf); buf = null; }
+      if (buf !is null) {
+        //{ import core.stdc.stdio : printf; printf("LZMA: freeing: buf=%p; bufsize=%u\n", buf, bufsize); }
+        free(buf);
+        buf = null;
+      }
     }
 
     void create (uint dictSize) @trusted {
       import core.stdc.stdlib : realloc;
       if (buf is null || bufsize < dictSize) {
         auto nb = cast(ubyte*)realloc(buf, dictSize);
-        if (nb is null) throw new Exception("LZMA: cannot allocate sliding window");
+        if (nb is null) {
+          //{ import core.stdc.stdio : printf; printf("*** buf=%p; nb=%p; bufsize=%u; dictSize=%u\n", buf, nb, bufsize, dictSize); }
+          throw new Exception("LZMA: cannot allocate sliding window");
+        }
         buf = nb;
         bufsize = dictSize;
       }
@@ -2650,6 +2657,7 @@ struct Unlzmaer {
 
 public:
   void close () {
+    lzmaDecoder.close();
     br.close();
   }
 
