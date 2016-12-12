@@ -455,6 +455,10 @@ ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFil
         res.crc = zpack(ds, st, aborted);
       } else static if (mtname == "lzma") {
         res.crc = lzmapack(ds, st, aborted);
+      } else static if (mtname == "store") {
+        assert(0, "wtf?!");
+      } else {
+        static assert(0, "wtf?!");
       }
       res.pksize = ds.tell-pkdpos;
       if (aborted) {
