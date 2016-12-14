@@ -410,6 +410,13 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
           v.length += 1;
         }
         unserData(v[0]);
+      } else if (curCh == 'n') {
+        // this should be 'null'
+        nextChar(); if (curCh != 'u') error("'null' expected");
+        nextChar(); if (curCh != 'l') error("'null' expected");
+        nextChar(); if (curCh != 'l') error("'null' expected");
+        nextChar(); if (isGoodIdChar(curCh)) error("'null' expected");
+        static if (__traits(isStaticArray, T)) if (v.length != 0) error("static array too big");
       } else {
         expectChar('[');
         static if (__traits(isStaticArray, T)) {
