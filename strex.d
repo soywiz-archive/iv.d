@@ -93,6 +93,18 @@ inout(char)[] xstrip (inout(char)[] s) pure nothrow @trusted @nogc {
 }
 
 
+inout(char)[] xstripleft (inout(char)[] s) pure nothrow @trusted @nogc {
+  while (s.length && s.ptr[0] <= ' ') s = s[1..$];
+  return s;
+}
+
+
+inout(char)[] xstripright (inout(char)[] s) pure nothrow @trusted @nogc {
+  while (s.length && s[$-1] <= ' ') s = s[0..$-1];
+  return s;
+}
+
+
 bool startsWith (const(char)[] str, const(char)[] pat) pure nothrow @trusted @nogc {
   import core.stdc.string : memcmp;
   if (pat.length > str.length) return false;
