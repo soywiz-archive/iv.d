@@ -13,7 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * D translation by Ketmar // Vampire Avalon
+ * D translation by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
 // CDB key/value database reader
 module iv.tinycdb;

@@ -11,7 +11,7 @@
  *
  * Author: Kenneth Oksanen <cessu@iki.fi>, 2008.
  * Copyright (C) Helsinki University of Technology.
- * D conversion by Ketmar // Vampire Avalon
+ * D conversion by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  *
  * This code borrows many ideas and some paragraphs of comments from
  * Matt Mahoney's s symbol ranking compression program SR2 and Peter
