@@ -3854,3 +3854,75 @@ public bool conProcessArgs(bool immediate=false) (ref string[] args) {
     return (concmdbufpos > ocbpos);
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// "exec" command
+static if (__traits(compiles, (){import iv.vfs;}())) {
+  enum CmdConHasVFS = true;
+  import iv.vfs;
+} else {
+  enum CmdConHasVFS = false;
+  import std.stdio : File;
+}
+private int xindexof (const(char)[] s, const(char)[] pat, int stpos=0) nothrow @trusted @nogc {
+  if (pat.length == 0 || pat.length > s.length) return -1;
+  if (stpos < 0) stpos = 0;
+  if (s.length > int.max/4) s = s[0..int.max/4];
+  while (stpos < s.length) {
+    if (s.length-stpos < pat.length) break;
+    if (s.ptr[stpos] == pat.ptr[0]) {
+      if (s.ptr[stpos..stpos+pat.length] == pat[]) return stpos;
+    }
+    ++stpos;
+  }
+  return -1;
+}
+
+shared static this () {
+  conRegFunc!((ConString fname, bool silent=false) {
+    try {
+      static if (CmdConHasVFS) {
+        auto fl = openFileEx(fname);
+      } else {
+        auto fl = File(fname.idup);
+      }
+      auto sz = fl.size;
+      if (sz > 1024*1024*64) throw new Exception("script file too big");
+      if (sz > 0) {
+        enum AbortCmd = "!!abort!!";
+        auto s = new char[](cast(uint)sz);
+        static if (CmdConHasVFS) {
+          fl.rawReadExact(s);
+        } else {
+          auto tbuf = s;
+          while (tbuf.length) {
+            auto rd = fl.rawRead(tbuf);
+            if (rd.length == 0) throw new Exception("read error");
+            tbuf = tbuf[rd.length..$];
+          }
+        }
+        if (s.xindexof(AbortCmd) >= 0) {
+          auto apos = s.xindexof(AbortCmd);
+          while (apos >= 0) {
+            if (s.length-apos <= AbortCmd.length || s[apos+AbortCmd.length] <= ' ') {
+              bool good = true;
+              // it should be the first command, not commented
+              auto pos = apos;
+              while (pos > 0 && s[pos-1] != '\n') {
+                if (s[pos-1] != ' ' && s[pos-1] != '\t') { good = false; break; }
+                --pos;
+              }
+              if (good) { s = s[0..apos]; break; }
+            }
+            // check next
+            apos = s.xindexof(AbortCmd, apos+1);
+          }
+        }
+        concmd(s);
+      }
+    } catch (Exception e) {
+      if (!silent) conwriteln("ERROR loading script \"", fname, "\"");
+    }
+  })("exec", "execute console script (name [silent_failure_flag])");
+}

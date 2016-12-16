@@ -59,7 +59,7 @@ public string koi8lotranslit (string s) {
     else if (ch == '\xf9' || ch == '\xd9') res ~= "y";
     else if (ch == '\xf8' || ch == '\xd8') res ~= "w";
     else if (ch == '\xfc' || ch == '\xdc') res ~= "e";
-    else if (ch == '\xe0' || ch == '\xc0') res ~= "hu";
+    else if (ch == '\xe0' || ch == '\xc0') res ~= "ju";
     else if (ch == '\xf1' || ch == '\xd1') res ~= "ja";
     else res ~= ch;
   }

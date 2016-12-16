@@ -155,7 +155,7 @@ class FlacChannel : TflChannel {
     //{ import core.stdc.stdio; printf("vorbis: writing %u frames; follin wanted %u frames\n", fr2put, cast(uint)(buf.length)); }
     buf[0..fr2put] = frsmpbuf[frused..frused+fr2put];
     frused += fr2put;
-    return fr2put/2; // frames, not samples
+    return cast(uint)(fr2put/ff.channels); // frames, not samples
   }
 }
 }

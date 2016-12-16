@@ -142,38 +142,6 @@ private void initConsole () {
   scrwdt = ascrwdt;
   scrhgt = ascrhgt;
   conScale = ascale;
-  conRegFunc!((ConString fname, bool silent=false) {
-    try {
-      auto fl = openFileEx(fname);
-      auto sz = fl.size;
-      if (sz > 1024*1024*64) throw new Exception("script file too big");
-      if (sz > 0) {
-        enum AbortCmd = "!!abort!!";
-        auto s = new char[](cast(uint)sz);
-        fl.rawReadExact(s);
-        if (s.indexOf(AbortCmd) >= 0) {
-          auto apos = s.indexOf(AbortCmd);
-          while (apos >= 0) {
-            if (s.length-apos <= AbortCmd.length || s[apos+AbortCmd.length] <= ' ') {
-              bool good = true;
-              // it should be the first command, not commented
-              auto pos = apos;
-              while (pos > 0 && s[pos-1] != '\n') {
-                if (s[pos-1] != ' ' && s[pos-1] != '\t') { good = false; break; }
-                --pos;
-              }
-              if (good) { s = s[0..apos]; break; }
-            }
-            // check next
-            apos = s.indexOf(AbortCmd, apos+1);
-          }
-        }
-        concmd(s);
-      }
-    } catch (Exception e) {
-      if (!silent) conwriteln("ERROR loading script \"", fname, "\"");
-    }
-  })("exec", "execute console script (name [silent_failure_flag])");
   conRegVar!rConsoleVisible("r_console", "console visibility", ConVarAttr.Archive);
   conRegVar!rConsoleHeight(10*3, scrhgt, "r_conheight", "console height", ConVarAttr.Archive);
   conRegVar!rConTextColor("r_contextcolor", "console log text color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
