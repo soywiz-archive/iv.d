@@ -612,9 +612,9 @@ void makeOggs (string flacfile, ref CueFile cue, ubyte quality) {
     string ofname = "ogg/%02d_%s.ogg".format(tidx, fname);
     write("[", tidx+1, "/", cue.tracks.length, "] ", (trk.title.length ? trk.title.recodeToKOI8 : "untitled"), " -> ", ofname, "  ");
     ulong smpstart, smpend;
-    if (tidx == 0) smpstart = 0; else smpstart = cast(uint)((trk.startmsecs/1000.0)*flc.sampleRate*flc.channels);
+    if (tidx == 0) smpstart = 0; else smpstart = cast(ulong)((trk.startmsecs/1000.0)*flc.sampleRate)*flc.channels;
     if (smpstart != samplesProcessed) assert(0, "index fucked");
-    if (tidx == cue.tracks.length-1) smpend = flc.totalSampleCount; else smpend = cast(uint)((cue.tracks[tidx+1].startmsecs/1000.0)*flc.sampleRate*flc.channels);
+    if (tidx == cue.tracks.length-1) smpend = flc.totalSampleCount; else smpend = cast(ulong)((cue.tracks[tidx+1].startmsecs/1000.0)*flc.sampleRate)*flc.channels;
     if (smpend <= samplesProcessed) assert(0, "index fucked");
     samplesProcessed = smpend;
     encodeSamples(VFile(ofname, "w"), tidx, smpend-smpstart);
