@@ -3811,6 +3811,13 @@ public bool conProcessArgs(bool immediate=false) (ref string[] args) {
     string a = args[idx++];
     if (a.length == 0) continue;
     if (a == "--") break; // no more
+    if (a == "++" || a == "+--") {
+      // normal parsing, remove this
+      --idx;
+      foreach (immutable c; idx+1..args.length) args[c-1] = args[c];
+      args.length -= 1;
+      continue;
+    }
     if (a[0] == '+') {
       scope(exit) ensureCmd = true;
       auto xidx = idx-1;
