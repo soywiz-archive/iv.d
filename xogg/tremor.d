@@ -38,7 +38,19 @@ import core.stdc.stdio;
 import core.stdc.string : memchr, memcmp, memcpy, memset, memmove, strlen, strcpy, strcat;
 import core.stdc.stdlib : ogg_malloc_ = malloc, ogg_realloc_ = realloc, ogg_free_ = free, ogg_calloc_ = calloc;
 
-version(aliced) import iv.vfs;
+version(XoggTremorNoVFS) {
+  enum XoggTremorHasVFS = false;
+} else {
+  static if (is(typeof((){import iv.vfs;}()))) {
+    enum XoggTremorHasVFS = true;
+    import iv.vfs;
+    version = XoggTremorHasVFS;
+  } else {
+    version = XoggTremorNoVFS;
+    enum XoggTremorHasVFS = false;
+  }
+}
+
 
 alias ogg_int64_t = long;
 alias ogg_int32_t = int;
@@ -50,8 +62,8 @@ alias trm_ulong = uint;
 enum LONG_MAX = trm_long.max;
 
 extern(C) {
-  private alias compare_fp_t_ = int function (in void*, in void*) /*nothrow @trusted @nogc*/;
-  private extern(C) void qsort (void* base, size_t nmemb, size_t size, compare_fp_t_ compar) /*nothrow @trusted @nogc*/;
+  private alias compare_fp_t_ = int function (in void*, in void*) nothrow @trusted @nogc;
+  private extern(C) void qsort (void* base, size_t nmemb, size_t size, compare_fp_t_ compar) nothrow @trusted @nogc;
 }
 
 alias vorbis_info_floor = void;
@@ -4088,7 +4100,7 @@ static int flr_ilog(uint v) /*nothrow @trusted @nogc*/ {
   return(ret);
 }
 
-private extern(C) int icomp(in void *a,in void *b) /*nothrow @trusted @nogc*/ {
+private extern(C) int icomp(in void *a,in void *b) nothrow @trusted @nogc {
   return(**cast(int **)a-**cast(int **)b);
 }
 
@@ -6728,7 +6740,7 @@ private ogg_uint32_t bitreverse(ogg_uint32_t x){
 }
 */
 
-extern(C) int sort32a(const void *a,const void *b) /*nothrow @trusted @nogc*/ {
+extern(C) int sort32a(const void *a,const void *b) nothrow @trusted @nogc {
   return (**cast(ogg_uint32_t **)a>**cast(ogg_uint32_t **)b)-(**cast(ogg_uint32_t **)a<**cast(ogg_uint32_t **)b);
 }
 
@@ -7175,7 +7187,7 @@ enum READSIZE  = 1024;
  * the right values. For seek_func(), you *MUST* return -1 if the stream is
  * unseekable
  */
-version(aliced) {} else {
+static if (!XoggTremorHasVFS) {
 ///
 public struct ov_callbacks {
 extern(C) /*nothrow @trusted @nogc*/:
@@ -7194,7 +7206,7 @@ enum INITSET   = 4;
 
 ///
 public struct OggVorbis_File {
-  version(aliced) {
+  static if (XoggTremorHasVFS) {
     VFile datasource;
   } else {
     void* datasource; /// Pointer to a FILE *, etc.
@@ -7226,7 +7238,7 @@ public struct OggVorbis_File {
   private vorbis_dsp_state vd; // central working state for the packet.PCM decoder
   private vorbis_block vb; // local working space for packet.PCM decode
 
-  version(aliced) {} else {
+  static if (!XoggTremorHasVFS) {
     ov_callbacks callbacks; /// DO NOT CHANGE!
   }
 }
@@ -7263,7 +7275,7 @@ public struct OggVorbis_File {
 
 // read a little more data from the file/pipe into the ogg_sync framer
 private trm_long get_data_ (OggVorbis_File* vf) {
-  version(aliced) {
+  static if (XoggTremorHasVFS) {
     if (!vf.datasource.isOpen) return -1;
     try {
       char* buffer = ogg_sync_buffer(&vf.oy, READSIZE);
@@ -7292,7 +7304,7 @@ private trm_long get_data_ (OggVorbis_File* vf) {
 
 // save a tiny smidge of verbosity to make the code more readable
 private int seek_helper_ (OggVorbis_File* vf, ogg_int64_t offset) {
-  version(aliced) {
+  static if (XoggTremorHasVFS) {
     if (!vf.datasource.isOpen) return OV_EFAULT;
     try {
       if (vf.offset != offset) {
@@ -7847,7 +7859,7 @@ private int open_seekable2_ (OggVorbis_File* vf) {
   ogg_int64_t pcmoffset = initial_pcmoffset_(vf,vf.vi);
 
   /* we can seek, so set out learning all about this file */
-  version(aliced) {
+  static if (XoggTremorHasVFS) {
     vf.offset = vf.end = -1;
     if (vf.datasource.isOpen) {
       try {
@@ -8107,9 +8119,9 @@ private int fseek64_wrap_(FILE *f,ogg_int64_t off,int whence){
   return fseek(f,cast(int)off,whence);
 }
 
-version(aliced) alias ov_callbacks_x = VFile; else alias ov_callbacks_x = ov_callbacks*;
+static if (XoggTremorHasVFS) alias ov_callbacks_x = VFile; else alias ov_callbacks_x = ov_callbacks*;
 private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long ibytes, ov_callbacks_x callbacks) {
-  version(aliced) {
+  static if (XoggTremorHasVFS) {
     int offsettest;
     try {
       callbacks.seek(0, Seek.Cur);
@@ -8125,7 +8137,7 @@ private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long i
   int ret;
 
   memset(vf,0,(*vf).sizeof);
-  version(aliced) {
+  static if (XoggTremorHasVFS) {
     vf.datasource = callbacks;
   } else {
     vf.datasource=f;
@@ -8158,7 +8170,7 @@ private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long i
   /* Fetch all BOS pages, store the vorbis header and all seen serial
      numbers, load subsequent vorbis setup headers */
   if((ret=fetch_headers_(vf,vf.vi,vf.vc,&serialno_list,&serialno_list_size,null))<0){
-    version(aliced) vf.datasource = VFile.init; else vf.datasource = null;
+    static if (XoggTremorHasVFS) vf.datasource = VFile.init; else vf.datasource = null;
     ov_clear(vf);
   }else{
     /* serial number list for first link needs to be held somewhere
@@ -8186,7 +8198,7 @@ private int ov_open2_(OggVorbis_File *vf){
   if(vf.seekable){
     int ret=open_seekable2_(vf);
     if(ret){
-      version(aliced) vf.datasource = VFile.init; else vf.datasource = null;
+      static if (XoggTremorHasVFS) vf.datasource = VFile.init; else vf.datasource = null;
       ov_clear(vf);
     }
     return(ret);
@@ -8218,7 +8230,7 @@ public int ov_clear(OggVorbis_File *vf){
     if(vf.serialnos)ogg_free_(vf.serialnos);
     if(vf.offsets)ogg_free_(vf.offsets);
     ogg_sync_clear(&vf.oy);
-    version(aliced) {
+    static if (XoggTremorHasVFS) {
       vf.datasource = VFile.init;
     } else {
       if (vf.datasource && vf.callbacks.close_func !is null) vf.callbacks.close_func(vf.datasource);
@@ -8228,7 +8240,7 @@ public int ov_clear(OggVorbis_File *vf){
   return(0);
 }
 
-version(aliced) {
+static if (XoggTremorHasVFS) {
   /* inspects the OggVorbis file and finds/documents all the logical
      bitstreams contained in it.  Tries to be tolerant of logical
      bitstream sections that are truncated/woogie.
