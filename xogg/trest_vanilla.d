@@ -30,7 +30,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import std.stdio;
 import iv.alsa;
-import iv.vfs;
 
 import iv.xogg.tremor;
 
@@ -83,7 +82,7 @@ void main (string[] args) {
   int eof = 0;
   int current_section;
 
-  err = ov_fopen(VFile(args[1]), &vf);
+  err = ov_fopen(args[1].toStringz, &vf);
   if (err != 0) {
     assert(0, "Error opening file");
   } else {
