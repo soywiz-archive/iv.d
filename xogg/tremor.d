@@ -137,12 +137,12 @@ struct codec_setup_info {
 
 
 struct vorbis_func_floor {
-  vorbis_info_floor* function (vorbis_info *,oggpack_buffer *) nothrow @trusted @nogc unpack;
-  vorbis_look_floor* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_floor *) nothrow @trusted @nogc look;
+  vorbis_info_floor* function (vorbis_info *, oggpack_buffer *) nothrow @trusted @nogc unpack;
+  vorbis_look_floor* function (vorbis_dsp_state *, vorbis_info_mode *, vorbis_info_floor *) nothrow @trusted @nogc look;
   void function (vorbis_info_floor *) nothrow @trusted @nogc free_info;
   void function (vorbis_look_floor *) nothrow @trusted @nogc free_look;
-  void* function (vorbis_block *,vorbis_look_floor *) nothrow @trusted @nogc inverse1;
-  int function (vorbis_block *,vorbis_look_floor *, void *buffer,ogg_int32_t *) nothrow @trusted @nogc inverse2;
+  void* function (vorbis_block *, vorbis_look_floor *) nothrow @trusted @nogc inverse1;
+  int function (vorbis_block *, vorbis_look_floor *, void *buffer, ogg_int32_t *) nothrow @trusted @nogc inverse2;
 }
 
 struct vorbis_info_floor0 {
@@ -179,11 +179,11 @@ struct vorbis_info_floor1 {
 
 /* Residue backend generic *****************************************/
 struct vorbis_func_residue {
-  vorbis_info_residue* function (vorbis_info *,oggpack_buffer *) nothrow @trusted @nogc unpack;
-  vorbis_look_residue* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_residue *) nothrow @trusted @nogc look;
+  vorbis_info_residue* function (vorbis_info *, oggpack_buffer *) nothrow @trusted @nogc unpack;
+  vorbis_look_residue* function (vorbis_dsp_state *, vorbis_info_mode *, vorbis_info_residue *) nothrow @trusted @nogc look;
   void function (vorbis_info_residue *) nothrow @trusted @nogc free_info;
   void function (vorbis_look_residue *) nothrow @trusted @nogc free_look;
-  int function (vorbis_block *,vorbis_look_residue *, ogg_int32_t **,int *,int) nothrow @trusted @nogc inverse;
+  int function (vorbis_block *, vorbis_look_residue *, ogg_int32_t **, int *, int) nothrow @trusted @nogc inverse;
 }
 
 struct vorbis_info_residue0 {
@@ -202,11 +202,11 @@ struct vorbis_info_residue0 {
 
 /* Mapping backend generic *****************************************/
 struct vorbis_func_mapping {
-  vorbis_info_mapping* function (vorbis_info *,oggpack_buffer *) nothrow @trusted @nogc unpack;
-  vorbis_look_mapping* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_mapping *) nothrow @trusted @nogc look;
+  vorbis_info_mapping* function (vorbis_info *, oggpack_buffer *) nothrow @trusted @nogc unpack;
+  vorbis_look_mapping* function (vorbis_dsp_state *, vorbis_info_mode *, vorbis_info_mapping *) nothrow @trusted @nogc look;
   void function (vorbis_info_mapping *) nothrow @trusted @nogc free_info;
   void function (vorbis_look_mapping *) nothrow @trusted @nogc free_look;
-  int function (vorbis_block *vb,vorbis_look_mapping *) nothrow @trusted @nogc inverse;
+  int function (vorbis_block *vb, vorbis_look_mapping *) nothrow @trusted @nogc inverse;
 }
 
 struct vorbis_info_mapping0 {
@@ -431,7 +431,7 @@ version(LOW_ACCURACY__) {
 
   /*STIN*/ ogg_int32_t MULT31 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
     pragma(inline, true);
-    return MULT32(x,y)<<1;
+    return MULT32(x, y)<<1;
   }
 
   /*STIN*/ ogg_int32_t MULT31_SHIFT15 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
@@ -485,8 +485,8 @@ version(LOW_ACCURACY__) {
   return(ret);
 }
 
-/*STIN*/ ogg_int32_t VFLOAT_MULT(ogg_int32_t a,ogg_int32_t ap,
-              ogg_int32_t b,ogg_int32_t bp,
+/*STIN*/ ogg_int32_t VFLOAT_MULT(ogg_int32_t a, ogg_int32_t ap,
+              ogg_int32_t b, ogg_int32_t bp,
               ogg_int32_t *p) nothrow @trusted @nogc {
   pragma(inline, true);
   if(a && b){
@@ -495,7 +495,7 @@ version(LOW_ACCURACY__) {
       return (a>>15)*(b>>16);
     } else {
       *p=ap+bp+32;
-      return MULT32(a,b);
+      return MULT32(a, b);
     }
   } else
     return 0;
@@ -511,17 +511,17 @@ private int ilog_ (uint v) nothrow @trusted @nogc {
 }
 
 
-/*STIN*/ ogg_int32_t VFLOAT_MULTI(ogg_int32_t a,ogg_int32_t ap,
+/*STIN*/ ogg_int32_t VFLOAT_MULTI(ogg_int32_t a, ogg_int32_t ap,
               ogg_int32_t i,
               ogg_int32_t *p) nothrow @trusted @nogc {
   pragma(inline, true);
   import std.math : abs;
   int ip=ilog_(abs(i))-31;
-  return VFLOAT_MULT(a,ap,i<<-ip,ip,p);
+  return VFLOAT_MULT(a, ap, i<<-ip, ip, p);
 }
 
-/*STIN*/ ogg_int32_t VFLOAT_ADD(ogg_int32_t a,ogg_int32_t ap,
-              ogg_int32_t b,ogg_int32_t bp,
+/*STIN*/ ogg_int32_t VFLOAT_ADD(ogg_int32_t a, ogg_int32_t ap,
+              ogg_int32_t b, ogg_int32_t bp,
               ogg_int32_t *p) nothrow @trusted @nogc {
 
   if(!a){
@@ -2826,7 +2826,7 @@ private int block_ilog(uint v){
 enum WORD_ALIGN = 8;
 
 int vorbis_block_init(vorbis_dsp_state *v, vorbis_block *vb){
-  memset(vb,0,(*vb).sizeof);
+  memset(vb, 0, (*vb).sizeof);
   vb.vd=v;
   vb.localalloc=0;
   vb.localstore=null;
@@ -2834,7 +2834,7 @@ int vorbis_block_init(vorbis_dsp_state *v, vorbis_block *vb){
   return(0);
 }
 
-void *vorbis_block_alloc_(vorbis_block *vb,/*trm_long*/size_t bytes) nothrow @trusted @nogc {
+void *vorbis_block_alloc_(vorbis_block *vb, /*trm_long*/size_t bytes) nothrow @trusted @nogc {
   bytes=(bytes+(WORD_ALIGN-1)) & ~(WORD_ALIGN-1);
   if(bytes+vb.localtop>vb.localalloc){
     /* can't just ogg_realloc_... there are outstanding pointers */
@@ -2865,13 +2865,13 @@ void vorbis_block_ripcord_(vorbis_block *vb){
   while(reap){
     alloc_chain *next=reap.next;
     ogg_free_(reap.ptr);
-    memset(reap,0,(*reap).sizeof);
+    memset(reap, 0, (*reap).sizeof);
     ogg_free_(reap);
     reap=next;
   }
   /* consolidate storage */
   if(vb.totaluse){
-    vb.localstore=ogg_realloc_(vb.localstore,vb.totaluse+vb.localalloc);
+    vb.localstore=ogg_realloc_(vb.localstore, vb.totaluse+vb.localalloc);
     vb.localalloc+=vb.totaluse;
     vb.totaluse=0;
   }
@@ -2885,34 +2885,34 @@ int vorbis_block_clear(vorbis_block *vb){
   vorbis_block_ripcord_(vb);
   if(vb.localstore)ogg_free_(vb.localstore);
 
-  memset(vb,0,(*vb).sizeof);
+  memset(vb, 0, (*vb).sizeof);
   return(0);
 }
 
-private int vds_init_(vorbis_dsp_state *v,vorbis_info *vi){
+private int vds_init_(vorbis_dsp_state *v, vorbis_info *vi){
   int i;
   codec_setup_info *ci=cast(codec_setup_info *)vi.codec_setup;
   private_state *b=null;
 
   if(ci==null) return 1;
 
-  memset(v,0,(*v).sizeof);
-  b=cast(private_state *)(v.backend_state=ogg_calloc_(1,(*b).sizeof));
+  memset(v, 0, (*v).sizeof);
+  b=cast(private_state *)(v.backend_state=ogg_calloc_(1, (*b).sizeof));
 
   v.vi=vi;
   b.modebits=block_ilog(ci.modes);
 
   /* Vorbis I uses only window type 0 */
-  b.window[0]=vorbis_window_(0,ci.blocksizes[0]/2);
-  b.window[1]=vorbis_window_(0,ci.blocksizes[1]/2);
+  b.window[0]=vorbis_window_(0, ci.blocksizes[0]/2);
+  b.window[1]=vorbis_window_(0, ci.blocksizes[1]/2);
 
   /* finish the codebooks */
   if(!ci.fullbooks){
-    ci.fullbooks=cast(codebook *)ogg_calloc_(ci.books,(*ci.fullbooks).sizeof);
+    ci.fullbooks=cast(codebook *)ogg_calloc_(ci.books, (*ci.fullbooks).sizeof);
     for(i=0;i<ci.books;i++){
       if(ci.book_param[i]==null)
         goto abort_books;
-      if(vorbis_book_init_decode(ci.fullbooks+i,ci.book_param[i]))
+      if(vorbis_book_init_decode(ci.fullbooks+i, ci.book_param[i]))
         goto abort_books;
       /* decode codebooks are now standalone after init */
       vorbis_staticbook_destroy(ci.book_param[i]);
@@ -2924,7 +2924,7 @@ private int vds_init_(vorbis_dsp_state *v,vorbis_info *vi){
   v.pcm=cast(ogg_int32_t **)ogg_malloc_(vi.channels*(*v.pcm).sizeof);
   v.pcmret=cast(ogg_int32_t **)ogg_malloc_(vi.channels*(*v.pcmret).sizeof);
   for(i=0;i<vi.channels;i++)
-    v.pcm[i]=cast(ogg_int32_t *)ogg_calloc_(v.pcm_storage,(*v.pcm[i]).sizeof);
+    v.pcm[i]=cast(ogg_int32_t *)ogg_calloc_(v.pcm_storage, (*v.pcm[i]).sizeof);
 
   /* all 1 (large block) or 0 (small block) */
   /* explicitly set for the sake of clarity */
@@ -2932,11 +2932,11 @@ private int vds_init_(vorbis_dsp_state *v,vorbis_info *vi){
   v.W=0;  /* current window size */
 
   /* initialize all the mapping/backend lookups */
-  b.mode=cast(vorbis_look_mapping **)ogg_calloc_(ci.modes,(*b.mode).sizeof);
+  b.mode=cast(vorbis_look_mapping **)ogg_calloc_(ci.modes, (*b.mode).sizeof);
   for(i=0;i<ci.modes;i++){
     int mapnum=ci.mode_param[i].mapping;
     int maptype=ci.map_type[mapnum];
-    b.mode[i]=mapping_P_[maptype].look(v,ci.mode_param[i],
+    b.mode[i]=mapping_P_[maptype].look(v, ci.mode_param[i],
            ci.map_param[mapnum]);
   }
   return 0;
@@ -2971,8 +2971,8 @@ int vorbis_synthesis_restart(vorbis_dsp_state *v){
   return(0);
 }
 
-int vorbis_synthesis_init(vorbis_dsp_state *v,vorbis_info *vi){
-  if(vds_init_(v,vi))return 1;
+int vorbis_synthesis_init(vorbis_dsp_state *v, vorbis_info *vi){
+  if(vds_init_(v, vi))return 1;
   vorbis_synthesis_restart(v);
 
   return 0;
@@ -3006,7 +3006,7 @@ void vorbis_dsp_clear(vorbis_dsp_state *v){
       ogg_free_(b);
     }
 
-    memset(v,0,(*v).sizeof);
+    memset(v, 0, (*v).sizeof);
   }
 }
 
@@ -3014,11 +3014,11 @@ void vorbis_dsp_clear(vorbis_dsp_state *v){
    block.  The time domain envelope is not yet handled at the point of
    calling (as it relies on the previous block). */
 
-int vorbis_synthesis_blockin(vorbis_dsp_state *v,vorbis_block *vb){
+int vorbis_synthesis_blockin(vorbis_dsp_state *v, vorbis_block *vb){
   vorbis_info *vi=v.vi;
   codec_setup_info *ci=cast(codec_setup_info *)vi.codec_setup;
   private_state *b=cast(private_state *)v.backend_state;
-  int i,j;
+  int i, j;
 
   if(v.pcm_current>v.pcm_returned  && v.pcm_returned!=-1)return(OV_EINVAL);
 
@@ -3221,7 +3221,7 @@ int vorbis_synthesis_blockin(vorbis_dsp_state *v,vorbis_block *vb){
 }
 
 /* pcm==null indicates we just want the pending samples, no more */
-int vorbis_synthesis_pcmout(vorbis_dsp_state *v,ogg_int32_t ***pcm){
+int vorbis_synthesis_pcmout(vorbis_dsp_state *v, ogg_int32_t ***pcm){
   vorbis_info *vi=v.vi;
   if(v.pcm_returned>-1 && v.pcm_returned<v.pcm_current){
     if(pcm){
@@ -3235,7 +3235,7 @@ int vorbis_synthesis_pcmout(vorbis_dsp_state *v,ogg_int32_t ***pcm){
   return(0);
 }
 
-int vorbis_synthesis_read(vorbis_dsp_state *v,int bytes){
+int vorbis_synthesis_read(vorbis_dsp_state *v, int bytes){
   if(bytes && v.pcm_returned+bytes>v.pcm_current)return(OV_EINVAL);
   v.pcm_returned+=bytes;
   return(0);
@@ -3305,26 +3305,26 @@ struct codebook {
 /* unpacks a codebook from the packet buffer into the codebook struct,
    readies the codebook auxiliary structures for decode *************/
 static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
-  trm_long i,j;
+  trm_long i, j;
   static_codebook *s;
-  s=cast(static_codebook *)ogg_calloc_(1,(*s).sizeof);
+  s=cast(static_codebook *)ogg_calloc_(1, (*s).sizeof);
 
   /* make sure alignment is correct */
-  if(oggpack_read(opb,24)!=0x564342)goto eofout_;
+  if(oggpack_read(opb, 24)!=0x564342)goto eofout_;
 
   /* first the basic parameters */
-  s.dim=oggpack_read(opb,16);
-  s.entries=oggpack_read(opb,24);
+  s.dim=oggpack_read(opb, 16);
+  s.entries=oggpack_read(opb, 24);
   if(s.entries==-1)goto eofout_;
 
   if(ilog_(s.dim)+ilog_(s.entries)>24)goto eofout_;
 
   /* codeword ordering.... length ordered or unordered? */
-  switch(cast(int)oggpack_read(opb,1)){
+  switch(cast(int)oggpack_read(opb, 1)){
   case 0:{
     trm_long unused;
     /* allocated but unused entries? */
-    unused=oggpack_read(opb,1);
+    unused=oggpack_read(opb, 1);
     if((s.entries*(unused?1:5)+7)>>3>opb.storage-oggpack_bytes(opb))
       goto eofout_;
     /* unordered */
@@ -3335,8 +3335,8 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
       /* yes, unused entries */
 
       for(i=0;i<s.entries;i++){
-        if(oggpack_read(opb,1)){
-          trm_long num=oggpack_read(opb,5);
+        if(oggpack_read(opb, 1)){
+          trm_long num=oggpack_read(opb, 5);
           if(num==-1)goto eofout_;
           s.lengthlist[i]=num+1;
         }else
@@ -3345,7 +3345,7 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
     }else{
       /* all entries used; no tagging */
       for(i=0;i<s.entries;i++){
-        trm_long num=oggpack_read(opb,5);
+        trm_long num=oggpack_read(opb, 5);
         if(num==-1)goto eofout_;
         s.lengthlist[i]=num+1;
       }
@@ -3356,18 +3356,18 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
   case 1:
     /* ordered */
     {
-      trm_long length=oggpack_read(opb,5)+1;
+      trm_long length=oggpack_read(opb, 5)+1;
       if(length==0)goto eofout_;
       s.lengthlist=cast(trm_long *)ogg_malloc_((*s.lengthlist).sizeof*s.entries);
 
       for(i=0;i<s.entries;){
-        trm_long num=oggpack_read(opb,ilog_(s.entries-i));
+        trm_long num=oggpack_read(opb, ilog_(s.entries-i));
         if(num==-1)goto eofout_;
         if(length>32 || num>s.entries-i ||
            (num>0 && (num-1)>>(length>>1)>>((length+1)>>1))>0){
           goto errout_;
         }
-        for(j=0;j<num;j++,i++)
+        for(j=0;j<num;j++, i++)
           s.lengthlist[i]=length;
         length++;
       }
@@ -3379,7 +3379,7 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
   }
 
   /* Do we have a mapping to unpack? */
-  switch((s.maptype=oggpack_read(opb,4))){
+  switch((s.maptype=oggpack_read(opb, 4))){
   case 0:
     /* no mapping */
     break;
@@ -3387,10 +3387,10 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
     /* implicitly populated value mapping */
     /* explicitly populated value mapping */
 
-    s.q_min=oggpack_read(opb,32);
-    s.q_delta=oggpack_read(opb,32);
-    s.q_quant=oggpack_read(opb,4)+1;
-    s.q_sequencep=oggpack_read(opb,1);
+    s.q_min=oggpack_read(opb, 32);
+    s.q_delta=oggpack_read(opb, 32);
+    s.q_quant=oggpack_read(opb, 4)+1;
+    s.q_sequencep=oggpack_read(opb, 1);
     if(s.q_sequencep==-1)goto eofout_;
 
     {
@@ -3410,7 +3410,7 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
         goto eofout_;
       s.quantlist=cast(trm_long *)ogg_malloc_((*s.quantlist).sizeof*quantvals);
       for(i=0;i<quantvals;i++)
-        s.quantlist[i]=oggpack_read(opb,s.q_quant);
+        s.quantlist[i]=oggpack_read(opb, s.q_quant);
 
       if(quantvals&&s.quantlist[quantvals-1]==-1)goto eofout_;
     }
@@ -3448,8 +3448,8 @@ private ogg_uint32_t bitreverse(ogg_uint32_t x) nothrow @trusted @nogc {
 /*STIN*/ trm_long decode_packed_entry_number(codebook *book,
                                               oggpack_buffer *b) nothrow @trusted @nogc {
   int  read=book.dec_maxlength;
-  trm_long lo,hi;
-  trm_long lok = oggpack_look(b,book.dec_firsttablen);
+  trm_long lo, hi;
+  trm_long lok = oggpack_look(b, book.dec_firsttablen);
 
   if (lok >= 0) {
     trm_long entry = book.dec_firsttable[lok];
@@ -3471,7 +3471,7 @@ private ogg_uint32_t bitreverse(ogg_uint32_t x) nothrow @trusted @nogc {
     lok = oggpack_look(b, --read);
 
   if(lok<0){
-    oggpack_adv(b,1); /* force eop */
+    oggpack_adv(b, 1); /* force eop */
     return -1;
   }
 
@@ -3513,7 +3513,7 @@ private ogg_uint32_t bitreverse(ogg_uint32_t x) nothrow @trusted @nogc {
 /* returns the [original, not compacted] entry number or -1 on eof *********/
 trm_long vorbis_book_decode(codebook *book, oggpack_buffer *b) nothrow @trusted @nogc {
   if(book.used_entries>0){
-    trm_long packed_entry=decode_packed_entry_number(book,b);
+    trm_long packed_entry=decode_packed_entry_number(book, b);
     if(packed_entry>=0)
       return(book.dec_index[packed_entry]);
   }
@@ -3524,8 +3524,8 @@ trm_long vorbis_book_decode(codebook *book, oggpack_buffer *b) nothrow @trusted 
 
 /* returns 0 on OK or -1 on eof *************************************/
 /* decode vector / dim granularity gaurding is done in the upper layer */
-trm_long vorbis_book_decodevs_add(codebook *book,ogg_int32_t *a,
-                              oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
+trm_long vorbis_book_decodevs_add(codebook *book, ogg_int32_t *a,
+                              oggpack_buffer *b, int n, int point) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
   if(book.used_entries>0){
     int step=n/book.dim;
@@ -3533,25 +3533,25 @@ trm_long vorbis_book_decodevs_add(codebook *book,ogg_int32_t *a,
     entry = cast(trm_long *)alloca((*entry).sizeof*step);
     ogg_int32_t **t;
     t = cast(ogg_int32_t **)alloca((*t).sizeof*step);
-    int i,j,o;
+    int i, j, o;
     int shift=point-book.binarypoint;
 
     if(shift>=0){
       for (i = 0; i < step; i++) {
-        entry[i]=decode_packed_entry_number(book,b);
+        entry[i]=decode_packed_entry_number(book, b);
         if(entry[i]==-1)return(-1);
         t[i] = book.valuelist+entry[i]*book.dim;
       }
-      for(i=0,o=0;i<book.dim;i++,o+=step)
+      for(i=0, o=0;i<book.dim;i++, o+=step)
         for (j=0;j<step;j++)
           a[o+j]+=t[j][i]>>shift;
     }else{
       for (i = 0; i < step; i++) {
-        entry[i]=decode_packed_entry_number(book,b);
+        entry[i]=decode_packed_entry_number(book, b);
         if(entry[i]==-1)return(-1);
         t[i] = book.valuelist+entry[i]*book.dim;
       }
-      for(i=0,o=0;i<book.dim;i++,o+=step)
+      for(i=0, o=0;i<book.dim;i++, o+=step)
         for (j=0;j<step;j++)
           a[o+j]+=t[j][i]<<-shift;
     }
@@ -3560,16 +3560,16 @@ trm_long vorbis_book_decodevs_add(codebook *book,ogg_int32_t *a,
 }
 
 /* decode vector / dim granularity gaurding is done in the upper layer */
-trm_long vorbis_book_decodev_add(codebook *book,ogg_int32_t *a,
-                             oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
+trm_long vorbis_book_decodev_add(codebook *book, ogg_int32_t *a,
+                             oggpack_buffer *b, int n, int point) nothrow @trusted @nogc {
   if(book.used_entries>0){
-    int i,j,entry;
+    int i, j, entry;
     ogg_int32_t *t;
     int shift=point-book.binarypoint;
 
     if(shift>=0){
       for(i=0;i<n;){
-        entry = decode_packed_entry_number(book,b);
+        entry = decode_packed_entry_number(book, b);
         if(entry==-1)return(-1);
         t     = book.valuelist+entry*book.dim;
         for (j=0;j<book.dim;)
@@ -3577,7 +3577,7 @@ trm_long vorbis_book_decodev_add(codebook *book,ogg_int32_t *a,
       }
     }else{
       for(i=0;i<n;){
-        entry = decode_packed_entry_number(book,b);
+        entry = decode_packed_entry_number(book, b);
         if(entry==-1)return(-1);
         t     = book.valuelist+entry*book.dim;
         for (j=0;j<book.dim;)
@@ -3591,17 +3591,17 @@ trm_long vorbis_book_decodev_add(codebook *book,ogg_int32_t *a,
 /* unlike the others, we guard against n not being an integer number
    of <dim> internally rather than in the upper layer (called only by
    floor0) */
-trm_long vorbis_book_decodev_set(codebook *book,ogg_int32_t *a,
-                             oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
+trm_long vorbis_book_decodev_set(codebook *book, ogg_int32_t *a,
+                             oggpack_buffer *b, int n, int point) nothrow @trusted @nogc {
   if(book.used_entries>0){
-    int i,j,entry;
+    int i, j, entry;
     ogg_int32_t *t;
     int shift=point-book.binarypoint;
 
     if(shift>=0){
 
       for(i=0;i<n;){
-        entry = decode_packed_entry_number(book,b);
+        entry = decode_packed_entry_number(book, b);
         if(entry==-1)return(-1);
         t     = book.valuelist+entry*book.dim;
         for (j=0;i<n && j<book.dim;){
@@ -3611,7 +3611,7 @@ trm_long vorbis_book_decodev_set(codebook *book,ogg_int32_t *a,
     }else{
 
       for(i=0;i<n;){
-        entry = decode_packed_entry_number(book,b);
+        entry = decode_packed_entry_number(book, b);
         if(entry==-1)return(-1);
         t     = book.valuelist+entry*book.dim;
         for (j=0;i<n && j<book.dim;){
@@ -3621,7 +3621,7 @@ trm_long vorbis_book_decodev_set(codebook *book,ogg_int32_t *a,
     }
   }else{
 
-    int i,j;
+    int i, j;
     for(i=0;i<n;){
       a[i++]=0;
     }
@@ -3630,18 +3630,18 @@ trm_long vorbis_book_decodev_set(codebook *book,ogg_int32_t *a,
 }
 
 /* decode vector / dim granularity gaurding is done in the upper layer */
-trm_long vorbis_book_decodevv_add(codebook *book,ogg_int32_t **a,
-                              trm_long offset,int ch,
-                              oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
+trm_long vorbis_book_decodevv_add(codebook *book, ogg_int32_t **a,
+                              trm_long offset, int ch,
+                              oggpack_buffer *b, int n, int point) nothrow @trusted @nogc {
   if(book.used_entries>0){
-    trm_long i,j,entry;
+    trm_long i, j, entry;
     int chptr=0;
     int shift=point-book.binarypoint;
 
     if(shift>=0){
 
       for(i=offset;i<offset+n;){
-        entry = decode_packed_entry_number(book,b);
+        entry = decode_packed_entry_number(book, b);
         if(entry==-1)return(-1);
         {
           const ogg_int32_t *t = book.valuelist+entry*book.dim;
@@ -3657,7 +3657,7 @@ trm_long vorbis_book_decodevv_add(codebook *book,ogg_int32_t **a,
     }else{
 
       for(i=offset;i<offset+n;){
-        entry = decode_packed_entry_number(book,b);
+        entry = decode_packed_entry_number(book, b);
         if(entry==-1)return(-1);
         {
           const ogg_int32_t *t = book.valuelist+entry*book.dim;
@@ -3697,9 +3697,9 @@ struct vorbis_look_floor0 {
    16.16 format
    returns in m.8 format */
 
-static immutable trm_long[2] ADJUST_SQRT2=[8192,5792];
+static immutable trm_long[2] ADJUST_SQRT2=[8192, 5792];
 
-/*STIN*/ ogg_int32_t vorbis_invsqlook_i(trm_long a,trm_long e) nothrow @trusted @nogc {
+/*STIN*/ ogg_int32_t vorbis_invsqlook_i(trm_long a, trm_long e) nothrow @trusted @nogc {
   pragma(inline, true);
   trm_long i=(a&0x7fff)>>(INVSQ_LOOKUP_I_SHIFT-1);
   trm_long d=a&INVSQ_LOOKUP_I_MASK;                              /*  0.10 */
@@ -3788,8 +3788,8 @@ static immutable ubyte[64] MLOOP_2=[
 
 static immutable ubyte[8] MLOOP_3=[0,1,2,2,3,3,3,3];
 
-void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
-                         ogg_int32_t *lsp,int m,
+void vorbis_lsp_to_curve(ogg_int32_t *curve, int *map, int n, int ln,
+                         ogg_int32_t *lsp, int m,
                          ogg_int32_t amp,
                          ogg_int32_t ampoffset,
                          ogg_int32_t *icos) nothrow @trusted @nogc
@@ -3808,11 +3808,11 @@ void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
     version(LOW_ACCURACY__)
       ogg_int32_t val=((lsp[i]>>10)*0x517d)>>14;
     else
-      ogg_int32_t val=MULT32(lsp[i],0x517cc2);
+      ogg_int32_t val=MULT32(lsp[i], 0x517cc2);
 
     /* safeguard against a malicious stream */
     if(val<0 || (val>>COS_LOOKUP_I_SHIFT)>=COS_LOOKUP_I_SZ){
-      memset(curve,0,(*curve).sizeof*n);
+      memset(curve, 0, (*curve).sizeof*n);
       return;
     }
 
@@ -3821,10 +3821,10 @@ void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
 
   i=0;
   while(i<n){
-    int j,k=map[i];
+    int j, k=map[i];
     ogg_uint32_t pi=46341; /* 2**-.5 in 0.16 */
     ogg_uint32_t qi=46341;
-    ogg_int32_t qexp=0,shift;
+    ogg_int32_t qexp=0, shift;
     ogg_int32_t wi=icos[k];
 
     j=1;
@@ -3846,7 +3846,7 @@ void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
       if((shift=MLOOP_2[(pi|qi)>>19])==0)
         shift=MLOOP_3[(pi|qi)>>16];
 
-    /* pi,qi normalized collectively, both tracked using qexp */
+    /* pi, qi normalized collectively, both tracked using qexp */
 
     if(m&1){
       /* odd order filter; slightly assymetric */
@@ -3904,14 +3904,14 @@ void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
       }
 
     amp=vorbis_fromdBlook_i(ampi*                     /*  n.4         */
-                            vorbis_invsqlook_i(qi,qexp)-
+                            vorbis_invsqlook_i(qi, qexp)-
                                                       /*  m.8, m+n<=8 */
                             ampoffseti);              /*  8.12[0]     */
 
     version(LOW_ACCURACY__)
       amp>>=9;
-    curve[i]= MULT31_SHIFT15(curve[i],amp);
-    while(map[++i]==k) curve[i]= MULT31_SHIFT15(curve[i],amp);
+    curve[i]= MULT31_SHIFT15(curve[i], amp);
+    while(map[++i]==k) curve[i]= MULT31_SHIFT15(curve[i], amp);
   }
 }
 
@@ -3920,7 +3920,7 @@ void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
 private void floor0_free_info(vorbis_info_floor *i) nothrow @trusted @nogc {
   vorbis_info_floor0 *info=cast(vorbis_info_floor0 *)i;
   if(info){
-    memset(info,0,(*info).sizeof);
+    memset(info, 0, (*info).sizeof);
     ogg_free_(info);
   }
 }
@@ -3931,23 +3931,23 @@ private void floor0_free_look(vorbis_look_floor *i) nothrow @trusted @nogc {
 
     if(look.linearmap)ogg_free_(look.linearmap);
     if(look.lsp_look)ogg_free_(look.lsp_look);
-    memset(look,0,(*look).sizeof);
+    memset(look, 0, (*look).sizeof);
     ogg_free_(look);
   }
 }
 
-private vorbis_info_floor *floor0_unpack (vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
+private vorbis_info_floor *floor0_unpack (vorbis_info *vi, oggpack_buffer *opb) nothrow @trusted @nogc {
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   int j;
 
   vorbis_info_floor0 *info;
   info=cast(vorbis_info_floor0 *)ogg_malloc_((*info).sizeof);
-  info.order=oggpack_read(opb,8);
-  info.rate=oggpack_read(opb,16);
-  info.barkmap=oggpack_read(opb,16);
-  info.ampbits=oggpack_read(opb,6);
-  info.ampdB=oggpack_read(opb,8);
-  info.numbooks=oggpack_read(opb,4)+1;
+  info.order=oggpack_read(opb, 8);
+  info.rate=oggpack_read(opb, 16);
+  info.barkmap=oggpack_read(opb, 16);
+  info.ampbits=oggpack_read(opb, 6);
+  info.ampdB=oggpack_read(opb, 8);
+  info.numbooks=oggpack_read(opb, 4)+1;
 
   if(info.order<1)goto err_out;
   if(info.rate<1)goto err_out;
@@ -3955,7 +3955,7 @@ private vorbis_info_floor *floor0_unpack (vorbis_info *vi,oggpack_buffer *opb) n
   if(info.numbooks<1)goto err_out;
 
   for(j=0;j<info.numbooks;j++){
-    info.books[j]=oggpack_read(opb,8);
+    info.books[j]=oggpack_read(opb, 8);
     if(info.books[j]<0 || info.books[j]>=ci.books)goto err_out;
     if(ci.book_param[info.books[j]].maptype==0)goto err_out;
     if(ci.book_param[info.books[j]].dim<1)goto err_out;
@@ -3975,14 +3975,14 @@ private vorbis_info_floor *floor0_unpack (vorbis_info *vi,oggpack_buffer *opb) n
    Note that the scale depends on the sampling rate as well as the
    linear block and mapping sizes */
 
-private vorbis_look_floor *floor0_look (vorbis_dsp_state *vd,vorbis_info_mode *mi,
+private vorbis_look_floor *floor0_look (vorbis_dsp_state *vd, vorbis_info_mode *mi,
                               vorbis_info_floor *i) nothrow @trusted @nogc {
   int j;
   vorbis_info        *vi=vd.vi;
   codec_setup_info   *ci=cast(codec_setup_info *)vi.codec_setup;
   vorbis_info_floor0 *info=cast(vorbis_info_floor0 *)i;
   vorbis_look_floor0 *look;
-  look=cast(vorbis_look_floor0 *)ogg_calloc_(1,(*look).sizeof);
+  look=cast(vorbis_look_floor0 *)ogg_calloc_(1, (*look).sizeof);
   look.m=info.order;
   look.n=ci.blocksizes[mi.blockflag]/2;
   look.ln=info.barkmap;
@@ -4012,27 +4012,27 @@ private vorbis_look_floor *floor0_look (vorbis_dsp_state *vd,vorbis_info_mode *m
   return look;
 }
 
-private void *floor0_inverse1(vorbis_block *vb,vorbis_look_floor *i) nothrow @trusted @nogc {
+private void *floor0_inverse1(vorbis_block *vb, vorbis_look_floor *i) nothrow @trusted @nogc {
   vorbis_look_floor0 *look=cast(vorbis_look_floor0 *)i;
   vorbis_info_floor0 *info=look.vi;
-  int j,k;
+  int j, k;
 
-  int ampraw=oggpack_read(&vb.opb,info.ampbits);
+  int ampraw=oggpack_read(&vb.opb, info.ampbits);
   if(ampraw>0){ /* also handles the -1 out of data case */
     trm_long maxval=(1<<info.ampbits)-1;
     int amp=((ampraw*info.ampdB)<<4)/maxval;
-    int booknum=oggpack_read(&vb.opb,ilog_(info.numbooks));
+    int booknum=oggpack_read(&vb.opb, ilog_(info.numbooks));
 
     if(booknum!=-1 && booknum<info.numbooks){ /* be paranoid */
       codec_setup_info  *ci=cast(codec_setup_info *)vb.vd.vi.codec_setup;
       codebook *b=ci.fullbooks+info.books[booknum];
       ogg_int32_t last=0;
       ogg_int32_t *lsp;
-      lsp=cast(ogg_int32_t *)vorbis_block_alloc_(vb,(*lsp).sizeof*(look.m+1));
+      lsp=cast(ogg_int32_t *)vorbis_block_alloc_(vb, (*lsp).sizeof*(look.m+1));
 
-      if(vorbis_book_decodev_set(b,lsp,&vb.opb,look.m,-24)==-1)goto eop;
+      if(vorbis_book_decodev_set(b, lsp, &vb.opb, look.m, -24)==-1)goto eop;
       for(j=0;j<look.m;){
-        for(k=0;j<look.m && k<b.dim;k++,j++)lsp[j]+=last;
+        for(k=0;j<look.m && k<b.dim;k++, j++)lsp[j]+=last;
         last=lsp[j-1];
       }
 
@@ -4044,8 +4044,8 @@ private void *floor0_inverse1(vorbis_block *vb,vorbis_look_floor *i) nothrow @tr
   return(null);
 }
 
-private int floor0_inverse2(vorbis_block *vb,vorbis_look_floor *i,
-                           void *memo,ogg_int32_t *out_) nothrow @trusted @nogc {
+private int floor0_inverse2(vorbis_block *vb, vorbis_look_floor *i,
+                           void *memo, ogg_int32_t *out_) nothrow @trusted @nogc {
   vorbis_look_floor0 *look=cast(vorbis_look_floor0 *)i;
   vorbis_info_floor0 *info=look.vi;
 
@@ -4054,18 +4054,18 @@ private int floor0_inverse2(vorbis_block *vb,vorbis_look_floor *i,
     ogg_int32_t amp=lsp[look.m];
 
     /* take the coefficients back to a spectral envelope curve */
-    vorbis_lsp_to_curve(out_,look.linearmap,look.n,look.ln,
-                        lsp,look.m,amp,info.ampdB,look.lsp_look);
+    vorbis_lsp_to_curve(out_, look.linearmap, look.n, look.ln,
+                        lsp, look.m, amp, info.ampdB, look.lsp_look);
     return(1);
   }
-  memset(out_,0,(*out_).sizeof*look.n);
+  memset(out_, 0, (*out_).sizeof*look.n);
   return(0);
 }
 
 /* export hooks */
 static immutable vorbis_func_floor floor0_exportbundle={
-  &floor0_unpack,&floor0_look,&floor0_free_info,
-  &floor0_free_look,&floor0_inverse1,&floor0_inverse2
+  &floor0_unpack, &floor0_look, &floor0_free_info,
+  &floor0_free_look, &floor0_inverse1, &floor0_inverse2
 };
 
 
@@ -4092,7 +4092,7 @@ struct vorbis_look_floor1 {
 private void floor1_free_info(vorbis_info_floor *i) nothrow @trusted @nogc {
   vorbis_info_floor1 *info=cast(vorbis_info_floor1 *)i;
   if(info){
-    memset(info,0,(*info).sizeof);
+    memset(info, 0, (*info).sizeof);
     ogg_free_(info);
   }
 }
@@ -4100,7 +4100,7 @@ private void floor1_free_info(vorbis_info_floor *i) nothrow @trusted @nogc {
 private void floor1_free_look(vorbis_look_floor *i) nothrow @trusted @nogc {
   vorbis_look_floor1 *look=cast(vorbis_look_floor1 *)i;
   if(look){
-    memset(look,0,(*look).sizeof);
+    memset(look, 0, (*look).sizeof);
     ogg_free_(look);
   }
 }
@@ -4114,50 +4114,50 @@ static int flr_ilog(uint v) nothrow @trusted @nogc {
   return(ret);
 }
 
-private extern(C) int icomp(in void *a,in void *b) nothrow @trusted @nogc {
+private extern(C) int icomp(in void *a, in void *b) nothrow @trusted @nogc {
   return(**cast(int **)a-**cast(int **)b);
 }
 
-private vorbis_info_floor *floor1_unpack (vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
+private vorbis_info_floor *floor1_unpack (vorbis_info *vi, oggpack_buffer *opb) nothrow @trusted @nogc {
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
-  int j,k,count=0,maxclass=-1,rangebits;
+  int j, k, count=0, maxclass=-1, rangebits;
 
   vorbis_info_floor1 *info;
-  info=cast(vorbis_info_floor1 *)ogg_calloc_(1,(*info).sizeof);
+  info=cast(vorbis_info_floor1 *)ogg_calloc_(1, (*info).sizeof);
   /* read partitions */
-  info.partitions=oggpack_read(opb,5); /* only 0 to 31 legal */
+  info.partitions=oggpack_read(opb, 5); /* only 0 to 31 legal */
   for(j=0;j<info.partitions;j++){
-    info.partitionclass[j]=oggpack_read(opb,4); /* only 0 to 15 legal */
+    info.partitionclass[j]=oggpack_read(opb, 4); /* only 0 to 15 legal */
     if(info.partitionclass[j]<0)goto err_out;
     if(maxclass<info.partitionclass[j])maxclass=info.partitionclass[j];
   }
 
   /* read partition classes */
   for(j=0;j<maxclass+1;j++){
-    info.class_dim[j]=oggpack_read(opb,3)+1; /* 1 to 8 */
-    info.class_subs[j]=oggpack_read(opb,2); /* 0,1,2,3 bits */
+    info.class_dim[j]=oggpack_read(opb, 3)+1; /* 1 to 8 */
+    info.class_subs[j]=oggpack_read(opb, 2); /* 0,1,2,3 bits */
     if(info.class_subs[j]<0)
       goto err_out;
-    if(info.class_subs[j])info.class_book[j]=oggpack_read(opb,8);
+    if(info.class_subs[j])info.class_book[j]=oggpack_read(opb, 8);
     if(info.class_book[j]<0 || info.class_book[j]>=ci.books)
       goto err_out;
     for(k=0;k<(1<<info.class_subs[j]);k++){
-      info.class_subbook[j][k]=oggpack_read(opb,8)-1;
+      info.class_subbook[j][k]=oggpack_read(opb, 8)-1;
       if(info.class_subbook[j][k]<-1 || info.class_subbook[j][k]>=ci.books)
         goto err_out;
     }
   }
 
   /* read the post list */
-  info.mult=oggpack_read(opb,2)+1;     /* only 1,2,3,4 legal now */
-  rangebits=oggpack_read(opb,4);
+  info.mult=oggpack_read(opb, 2)+1;     /* only 1,2,3,4 legal now */
+  rangebits=oggpack_read(opb, 4);
   if(rangebits<0)goto err_out;
 
-  for(j=0,k=0;j<info.partitions;j++){
+  for(j=0, k=0;j<info.partitions;j++){
     count+=info.class_dim[info.partitionclass[j]];
     if(count>VIF_POSIT)goto err_out;
     for(;k<count;k++){
-      int t=info.postlist[k+2]=oggpack_read(opb,rangebits);
+      int t=info.postlist[k+2]=oggpack_read(opb, rangebits);
       if(t<0 || t>=(1<<rangebits))
         goto err_out;
     }
@@ -4183,14 +4183,14 @@ private vorbis_info_floor *floor1_unpack (vorbis_info *vi,oggpack_buffer *opb) n
   return(null);
 }
 
-private vorbis_look_floor *floor1_look(vorbis_dsp_state *vd,vorbis_info_mode *mi,
+private vorbis_look_floor *floor1_look(vorbis_dsp_state *vd, vorbis_info_mode *mi,
                               vorbis_info_floor *in_) nothrow @trusted @nogc {
 
   int*[VIF_POSIT+2] sortpointer;
   vorbis_info_floor1 *info=cast(vorbis_info_floor1 *)in_;
   vorbis_look_floor1 *look;
-  look=cast(vorbis_look_floor1 *)ogg_calloc_(1,(*look).sizeof);
-  int i,j,n=0;
+  look=cast(vorbis_look_floor1 *)ogg_calloc_(1, (*look).sizeof);
+  int i, j, n=0;
 
   look.vi=info;
   look.n=info.postlist[1];
@@ -4208,7 +4208,7 @@ private vorbis_look_floor *floor1_look(vorbis_dsp_state *vd,vorbis_info_mode *mi
 
   /* also store a sorted position index */
   for(i=0;i<n;i++)sortpointer[i]=info.postlist.ptr+i;
-  qsort(sortpointer.ptr,n,(sortpointer[0]).sizeof,&icomp);
+  qsort(sortpointer.ptr, n, (sortpointer[0]).sizeof, &icomp);
 
   /* points from sort order back to range number */
   for(i=0;i<n;i++)look.forward_index[i]=sortpointer[i]-info.postlist.ptr;
@@ -4256,7 +4256,7 @@ private vorbis_look_floor *floor1_look(vorbis_dsp_state *vd,vorbis_info_mode *mi
   return(look);
 }
 
-private int render_point(int x0,int x1,int y0,int y1,int x) nothrow @trusted @nogc {
+private int render_point(int x0, int x1, int y0, int y1, int x) nothrow @trusted @nogc {
   y0&=0x7fff; /* mask off flag */
   y1&=0x7fff;
 
@@ -4346,7 +4346,7 @@ static immutable ogg_int32_t[256] FLOOR_fromdB_LOOKUP=[
   XdB(0x69f80e9a), XdB(0x70dafda8), XdB(0x78307d76), XdB(0x7fffffff),
 ];
 
-private void render_line(int n, int x0,int x1,int y0,int y1,ogg_int32_t *d) nothrow @trusted @nogc {
+private void render_line(int n, int x0, int x1, int y0, int y1, ogg_int32_t *d) nothrow @trusted @nogc {
   import std.math : abs;
   int dy=y1-y0;
   int adx=x1-x0;
@@ -4361,7 +4361,7 @@ private void render_line(int n, int x0,int x1,int y0,int y1,ogg_int32_t *d) noth
   ady-=abs(base*adx);
 
   if(x<n)
-    d[x]= MULT31_SHIFT15(d[x],FLOOR_fromdB_LOOKUP[y]);
+    d[x]= MULT31_SHIFT15(d[x], FLOOR_fromdB_LOOKUP[y]);
 
   while(++x<n){
     err=err+ady;
@@ -4371,29 +4371,29 @@ private void render_line(int n, int x0,int x1,int y0,int y1,ogg_int32_t *d) noth
     }else{
       y+=base;
     }
-    d[x]= MULT31_SHIFT15(d[x],FLOOR_fromdB_LOOKUP[y]);
+    d[x]= MULT31_SHIFT15(d[x], FLOOR_fromdB_LOOKUP[y]);
   }
 }
 
-private void *floor1_inverse1(vorbis_block *vb,vorbis_look_floor *in_) nothrow @trusted @nogc {
+private void *floor1_inverse1(vorbis_block *vb, vorbis_look_floor *in_) nothrow @trusted @nogc {
   vorbis_look_floor1 *look=cast(vorbis_look_floor1 *)in_;
   vorbis_info_floor1 *info=look.vi;
   codec_setup_info   *ci=cast(codec_setup_info *)vb.vd.vi.codec_setup;
 
-  int i,j,k;
+  int i, j, k;
   codebook *books=ci.fullbooks;
 
   /* unpack wrapped/predicted values from stream */
-  if(oggpack_read(&vb.opb,1)==1){
+  if(oggpack_read(&vb.opb, 1)==1){
     int *fit_value;
-    fit_value=cast(int *)vorbis_block_alloc_(vb,(look.posts)*(*fit_value).sizeof);
+    fit_value=cast(int *)vorbis_block_alloc_(vb, (look.posts)*(*fit_value).sizeof);
 
-    fit_value[0]=oggpack_read(&vb.opb,flr_ilog(look.quant_q-1));
-    fit_value[1]=oggpack_read(&vb.opb,flr_ilog(look.quant_q-1));
+    fit_value[0]=oggpack_read(&vb.opb, flr_ilog(look.quant_q-1));
+    fit_value[1]=oggpack_read(&vb.opb, flr_ilog(look.quant_q-1));
 
     /* partition by partition */
     /* partition by partition */
-    for(i=0,j=2;i<info.partitions;i++){
+    for(i=0, j=2;i<info.partitions;i++){
       int classv=info.partitionclass[i];
       int cdim=info.class_dim[classv];
       int csubbits=info.class_subs[classv];
@@ -4402,7 +4402,7 @@ private void *floor1_inverse1(vorbis_block *vb,vorbis_look_floor *in_) nothrow @
 
       /* decode the partition's first stage cascade value */
       if(csubbits){
-        cval=vorbis_book_decode(books+info.class_book[classv],&vb.opb);
+        cval=vorbis_book_decode(books+info.class_book[classv], &vb.opb);
 
         if(cval==-1)goto eop;
       }
@@ -4411,7 +4411,7 @@ private void *floor1_inverse1(vorbis_block *vb,vorbis_look_floor *in_) nothrow @
         int book=info.class_subbook[classv][cval&(csub-1)];
         cval>>=csubbits;
         if(book>=0){
-          if((fit_value[j+k]=vorbis_book_decode(books+book,&vb.opb))==-1)
+          if((fit_value[j+k]=vorbis_book_decode(books+book, &vb.opb))==-1)
             goto eop;
         }else{
           fit_value[j+k]=0;
@@ -4463,7 +4463,7 @@ private void *floor1_inverse1(vorbis_block *vb,vorbis_look_floor *in_) nothrow @
   return(null);
 }
 
-private int floor1_inverse2(vorbis_block *vb,vorbis_look_floor *in_,void *memo,
+private int floor1_inverse2(vorbis_block *vb, vorbis_look_floor *in_, void *memo,
                           ogg_int32_t *out_) nothrow @trusted @nogc {
   vorbis_look_floor1 *look=cast(vorbis_look_floor1 *)in_;
   vorbis_info_floor1 *info=look.vi;
@@ -4491,7 +4491,7 @@ private int floor1_inverse2(vorbis_block *vb,vorbis_look_floor *in_,void *memo,
         /* guard lookup against out-of-range values */
         hy=(hy<0?0:hy>255?255:hy);
 
-        render_line(n,lx,hx,ly,hy,out_);
+        render_line(n, lx, hx, ly, hy, out_);
 
         lx=hx;
         ly=hy;
@@ -4500,14 +4500,14 @@ private int floor1_inverse2(vorbis_block *vb,vorbis_look_floor *in_,void *memo,
     for(j=hx;j<n;j++)out_[j]*=ly; /* be certain */
     return(1);
   }
-  memset(out_,0,(*out_).sizeof*n);
+  memset(out_, 0, (*out_).sizeof*n);
   return(0);
 }
 
 /* export hooks */
 static immutable vorbis_func_floor floor1_exportbundle={
-  &floor1_unpack,&floor1_look,&floor1_free_info,
-  &floor1_free_look,&floor1_inverse1,&floor1_inverse2
+  &floor1_unpack, &floor1_look, &floor1_free_info,
+  &floor1_free_look, &floor1_inverse1, &floor1_inverse2
 };
 
 
@@ -4516,30 +4516,30 @@ static immutable vorbis_func_floor floor1_exportbundle={
  ****************************************************************** */
 
 /* helpers */
-private void v_readstring_(oggpack_buffer *o,char *buf,int bytes){
+private void v_readstring_(oggpack_buffer *o, char *buf, int bytes){
   while(bytes--){
-    *buf++=cast(char)oggpack_read(o,8);
+    *buf++=cast(char)oggpack_read(o, 8);
   }
 }
 
 /* Header packing/unpacking ********************************************/
 
-private int vorbis_unpack_info_(vorbis_info *vi,oggpack_buffer *opb){
+private int vorbis_unpack_info_(vorbis_info *vi, oggpack_buffer *opb){
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   if(!ci)return(OV_EFAULT);
 
-  vi.ver=oggpack_read(opb,32);
+  vi.ver=oggpack_read(opb, 32);
   if(vi.ver!=0)return(OV_EVERSION);
 
-  vi.channels=oggpack_read(opb,8);
-  vi.rate=oggpack_read(opb,32);
+  vi.channels=oggpack_read(opb, 8);
+  vi.rate=oggpack_read(opb, 32);
 
-  vi.bitrate_upper=oggpack_read(opb,32);
-  vi.bitrate_nominal=oggpack_read(opb,32);
-  vi.bitrate_lower=oggpack_read(opb,32);
+  vi.bitrate_upper=oggpack_read(opb, 32);
+  vi.bitrate_nominal=oggpack_read(opb, 32);
+  vi.bitrate_lower=oggpack_read(opb, 32);
 
-  ci.blocksizes[0]=1<<oggpack_read(opb,4);
-  ci.blocksizes[1]=1<<oggpack_read(opb,4);
+  ci.blocksizes[0]=1<<oggpack_read(opb, 4);
+  ci.blocksizes[1]=1<<oggpack_read(opb, 4);
 
   if(vi.rate<1)goto err_out;
   if(vi.channels<1)goto err_out;
@@ -4547,7 +4547,7 @@ private int vorbis_unpack_info_(vorbis_info *vi,oggpack_buffer *opb){
   if(ci.blocksizes[1]<ci.blocksizes[0])goto err_out;
   if(ci.blocksizes[1]>8192)goto err_out;
 
-  if(oggpack_read(opb,1)!=1)goto err_out; /* EOP check */
+  if(oggpack_read(opb, 1)!=1)goto err_out; /* EOP check */
 
   return(0);
  err_out:
@@ -4555,34 +4555,34 @@ private int vorbis_unpack_info_(vorbis_info *vi,oggpack_buffer *opb){
   return(OV_EBADHEADER);
 }
 
-private int vorbis_unpack_comment_(vorbis_comment *vc,oggpack_buffer *opb){
+private int vorbis_unpack_comment_(vorbis_comment *vc, oggpack_buffer *opb){
   int i;
   int vendorlen;
-  vendorlen=oggpack_read(opb,32);
+  vendorlen=oggpack_read(opb, 32);
   if(vendorlen<0)goto err_out;
   if(vendorlen>opb.storage-oggpack_bytes(opb))goto err_out;
-  vc.vendor=cast(char *)ogg_calloc_(vendorlen+1,1);
+  vc.vendor=cast(char *)ogg_calloc_(vendorlen+1, 1);
   if(vc.vendor==null)goto err_out;
-  v_readstring_(opb,vc.vendor,vendorlen);
-  i=oggpack_read(opb,32);
+  v_readstring_(opb, vc.vendor, vendorlen);
+  i=oggpack_read(opb, 32);
   if(i<0||i>=int.max||i>(opb.storage-oggpack_bytes(opb))>>2)goto err_out;
-  vc.user_comments=cast(char **)ogg_calloc_(i+1,(*vc.user_comments).sizeof);
+  vc.user_comments=cast(char **)ogg_calloc_(i+1, (*vc.user_comments).sizeof);
   vc.comment_lengths=cast(int *)ogg_calloc_(i+1, (*vc.comment_lengths).sizeof);
   if(vc.user_comments==null||vc.comment_lengths==null)goto err_out;
   vc.comments=i;
 
   for(i=0;i<vc.comments;i++){
-    int len=oggpack_read(opb,32);
+    int len=oggpack_read(opb, 32);
     if(len<0||len>opb.storage-oggpack_bytes(opb))goto err_out;
     vc.comment_lengths[i]=len;
-    vc.user_comments[i]=cast(char *)ogg_calloc_(len+1,1);
+    vc.user_comments[i]=cast(char *)ogg_calloc_(len+1, 1);
     if(vc.user_comments[i]==null){
       vc.comments=i;
       goto err_out;
     }
-    v_readstring_(opb,vc.user_comments[i],len);
+    v_readstring_(opb, vc.user_comments[i], len);
   }
-  if(oggpack_read(opb,1)!=1)goto err_out; /* EOP check */
+  if(oggpack_read(opb, 1)!=1)goto err_out; /* EOP check */
 
   return(0);
  err_out:
@@ -4592,13 +4592,13 @@ private int vorbis_unpack_comment_(vorbis_comment *vc,oggpack_buffer *opb){
 
 /* all of the real encoding details are here.  The modes, books,
    everything */
-private int vorbis_unpack_books_(vorbis_info *vi,oggpack_buffer *opb){
+private int vorbis_unpack_books_(vorbis_info *vi, oggpack_buffer *opb){
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   int i;
   if(!ci)return(OV_EFAULT);
 
   /* codebooks */
-  ci.books=oggpack_read(opb,8)+1;
+  ci.books=oggpack_read(opb, 8)+1;
   if(ci.books<=0)goto err_out;
   for(i=0;i<ci.books;i++){
     ci.book_param[i]=vorbis_staticbook_unpack(opb);
@@ -4606,55 +4606,55 @@ private int vorbis_unpack_books_(vorbis_info *vi,oggpack_buffer *opb){
   }
 
   /* time backend settings */
-  ci.times=oggpack_read(opb,6)+1;
+  ci.times=oggpack_read(opb, 6)+1;
   if(ci.times<=0)goto err_out;
   for(i=0;i<ci.times;i++){
-    ci.time_type[i]=oggpack_read(opb,16);
+    ci.time_type[i]=oggpack_read(opb, 16);
     if(ci.time_type[i]<0 || ci.time_type[i]>=VI_TIMEB)goto err_out;
-    /* ci.time_param[i]=time_P_[ci.time_type[i]].unpack(vi,opb);
+    /* ci.time_param[i]=time_P_[ci.time_type[i]].unpack(vi, opb);
        Vorbis I has no time backend */
     /*if(!ci.time_param[i])goto err_out;*/
   }
 
   /* floor backend settings */
-  ci.floors=oggpack_read(opb,6)+1;
+  ci.floors=oggpack_read(opb, 6)+1;
   if(ci.floors<=0)goto err_out;
   for(i=0;i<ci.floors;i++){
-    ci.floor_type[i]=oggpack_read(opb,16);
+    ci.floor_type[i]=oggpack_read(opb, 16);
     if(ci.floor_type[i]<0 || ci.floor_type[i]>=VI_FLOORB)goto err_out;
-    ci.floor_param[i]=floor_P_[ci.floor_type[i]].unpack(vi,opb);
+    ci.floor_param[i]=floor_P_[ci.floor_type[i]].unpack(vi, opb);
     if(!ci.floor_param[i])goto err_out;
   }
 
   /* residue backend settings */
-  ci.residues=oggpack_read(opb,6)+1;
+  ci.residues=oggpack_read(opb, 6)+1;
   if(ci.residues<=0)goto err_out;
   for(i=0;i<ci.residues;i++){
-    ci.residue_type[i]=oggpack_read(opb,16);
+    ci.residue_type[i]=oggpack_read(opb, 16);
     if(ci.residue_type[i]<0 || ci.residue_type[i]>=VI_RESB)goto err_out;
-    ci.residue_param[i]=residue_P_[ci.residue_type[i]].unpack(vi,opb);
+    ci.residue_param[i]=residue_P_[ci.residue_type[i]].unpack(vi, opb);
     if(!ci.residue_param[i])goto err_out;
   }
 
   /* map backend settings */
-  ci.maps=oggpack_read(opb,6)+1;
+  ci.maps=oggpack_read(opb, 6)+1;
   if(ci.maps<=0)goto err_out;
   for(i=0;i<ci.maps;i++){
-    ci.map_type[i]=oggpack_read(opb,16);
+    ci.map_type[i]=oggpack_read(opb, 16);
     if(ci.map_type[i]<0 || ci.map_type[i]>=VI_MAPB)goto err_out;
-    ci.map_param[i]=mapping_P_[ci.map_type[i]].unpack(vi,opb);
+    ci.map_param[i]=mapping_P_[ci.map_type[i]].unpack(vi, opb);
     if(!ci.map_param[i])goto err_out;
   }
 
   /* mode settings */
-  ci.modes=oggpack_read(opb,6)+1;
+  ci.modes=oggpack_read(opb, 6)+1;
   if(ci.modes<=0)goto err_out;
   for(i=0;i<ci.modes;i++){
-    ci.mode_param[i]=cast(vorbis_info_mode *)ogg_calloc_(1,(*ci.mode_param[i]).sizeof);
-    ci.mode_param[i].blockflag=oggpack_read(opb,1);
-    ci.mode_param[i].windowtype=oggpack_read(opb,16);
-    ci.mode_param[i].transformtype=oggpack_read(opb,16);
-    ci.mode_param[i].mapping=oggpack_read(opb,8);
+    ci.mode_param[i]=cast(vorbis_info_mode *)ogg_calloc_(1, (*ci.mode_param[i]).sizeof);
+    ci.mode_param[i].blockflag=oggpack_read(opb, 1);
+    ci.mode_param[i].windowtype=oggpack_read(opb, 16);
+    ci.mode_param[i].transformtype=oggpack_read(opb, 16);
+    ci.mode_param[i].mapping=oggpack_read(opb, 8);
 
     if(ci.mode_param[i].windowtype>=VI_WINDOWB)goto err_out;
     if(ci.mode_param[i].transformtype>=VI_WINDOWB)goto err_out;
@@ -4662,7 +4662,7 @@ private int vorbis_unpack_books_(vorbis_info *vi,oggpack_buffer *opb){
     if(ci.mode_param[i].mapping<0)goto err_out;
   }
 
-  if(oggpack_read(opb,1)!=1)goto err_out; /* top level EOP check */
+  if(oggpack_read(opb, 1)!=1)goto err_out; /* top level EOP check */
 
   return(0);
  err_out:
@@ -4676,17 +4676,17 @@ int vorbis_synthesis_idheader(ogg_packet *op){
   char[6] buffer=void;
 
   if(op){
-    oggpack_readinit(&opb,op.packet,op.bytes);
+    oggpack_readinit(&opb, op.packet, op.bytes);
 
     if(!op.b_o_s)
       return(0); /* Not the initial packet */
 
-    if(oggpack_read(&opb,8) != 1)
+    if(oggpack_read(&opb, 8) != 1)
       return 0; /* not an ID header */
 
-    memset(buffer.ptr,0,6);
-    v_readstring_(&opb,buffer.ptr,6);
-    if(memcmp(buffer.ptr,"vorbis".ptr,6))
+    memset(buffer.ptr, 0, 6);
+    v_readstring_(&opb, buffer.ptr, 6);
+    if(memcmp(buffer.ptr, "vorbis".ptr, 6))
       return 0; /* not vorbis */
 
     return 1;
@@ -4700,20 +4700,20 @@ int vorbis_synthesis_idheader(ogg_packet *op){
    with bitstream comments and a third packet that holds the
    codebook. */
 
-int vorbis_synthesis_headerin(vorbis_info *vi,vorbis_comment *vc,ogg_packet *op){
+int vorbis_synthesis_headerin(vorbis_info *vi, vorbis_comment *vc, ogg_packet *op){
   oggpack_buffer opb;
 
   if(op){
-    oggpack_readinit(&opb,op.packet,op.bytes);
+    oggpack_readinit(&opb, op.packet, op.bytes);
 
     /* Which of the three types of header is this? */
     /* Also verify header-ness, vorbis */
     {
       char[6] buffer=void;
-      int packtype=oggpack_read(&opb,8);
-      memset(buffer.ptr,0,6);
-      v_readstring_(&opb,buffer.ptr,6);
-      if(memcmp(buffer.ptr,"vorbis".ptr,6)){
+      int packtype=oggpack_read(&opb, 8);
+      memset(buffer.ptr, 0, 6);
+      v_readstring_(&opb, buffer.ptr, 6);
+      if(memcmp(buffer.ptr, "vorbis".ptr, 6)){
         /* not a vorbis header */
         return(OV_ENOTVORBIS);
       }
@@ -4728,7 +4728,7 @@ int vorbis_synthesis_headerin(vorbis_info *vi,vorbis_comment *vc,ogg_packet *op)
           return(OV_EBADHEADER);
         }
 
-        return(vorbis_unpack_info_(vi,&opb));
+        return(vorbis_unpack_info_(vi, &opb));
 
       case 0x03: /* least significant *bit* is read first */
         if(vi.rate==0){
@@ -4736,7 +4736,7 @@ int vorbis_synthesis_headerin(vorbis_info *vi,vorbis_comment *vc,ogg_packet *op)
           return(OV_EBADHEADER);
         }
 
-        return(vorbis_unpack_comment_(vc,&opb));
+        return(vorbis_unpack_comment_(vc, &opb));
 
       case 0x05: /* least significant *bit* is read first */
         if(vi.rate==0 || vc.vendor==null){
@@ -4744,7 +4744,7 @@ int vorbis_synthesis_headerin(vorbis_info *vi,vorbis_comment *vc,ogg_packet *op)
           return(OV_EBADHEADER);
         }
 
-        return(vorbis_unpack_books_(vi,&opb));
+        return(vorbis_unpack_books_(vi, &opb));
 
       default:
         /* Not a valid vorbis header type */
@@ -4789,7 +4789,7 @@ struct vorbis_look_mapping0 {
 private void mapping0_free_info(vorbis_info_mapping *i) nothrow @trusted @nogc {
   vorbis_info_mapping0 *info=cast(vorbis_info_mapping0 *)i;
   if(info){
-    memset(info,0,(*info).sizeof);
+    memset(info, 0, (*info).sizeof);
     ogg_free_(info);
   }
 }
@@ -4808,37 +4808,37 @@ private void mapping0_free_look(vorbis_look_mapping *look) nothrow @trusted @nog
     ogg_free_(l.residue_func);
     ogg_free_(l.floor_look);
     ogg_free_(l.residue_look);
-    memset(l,0,(*l).sizeof);
+    memset(l, 0, (*l).sizeof);
     ogg_free_(l);
   }
 }
 
-private vorbis_look_mapping *mapping0_look(vorbis_dsp_state *vd,vorbis_info_mode *vm,
+private vorbis_look_mapping *mapping0_look(vorbis_dsp_state *vd, vorbis_info_mode *vm,
                           vorbis_info_mapping *m) nothrow @trusted @nogc {
   int i;
   vorbis_info          *vi=vd.vi;
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   vorbis_look_mapping0 *look;
-  look=cast(vorbis_look_mapping0 *)ogg_calloc_(1,(*look).sizeof);
+  look=cast(vorbis_look_mapping0 *)ogg_calloc_(1, (*look).sizeof);
   vorbis_info_mapping0 *info=look.map=cast(vorbis_info_mapping0 *)m;
   look.mode=vm;
 
-  look.floor_look=cast(vorbis_look_floor **)ogg_calloc_(info.submaps,(*look.floor_look).sizeof);
+  look.floor_look=cast(vorbis_look_floor **)ogg_calloc_(info.submaps, (*look.floor_look).sizeof);
 
-  look.residue_look=cast(vorbis_look_residue **)ogg_calloc_(info.submaps,(*look.residue_look).sizeof);
+  look.residue_look=cast(vorbis_look_residue **)ogg_calloc_(info.submaps, (*look.residue_look).sizeof);
 
-  look.floor_func=cast(vorbis_func_floor **)ogg_calloc_(info.submaps,(*look.floor_func).sizeof);
-  look.residue_func=cast(vorbis_func_residue **)ogg_calloc_(info.submaps,(*look.residue_func).sizeof);
+  look.floor_func=cast(vorbis_func_floor **)ogg_calloc_(info.submaps, (*look.floor_func).sizeof);
+  look.residue_func=cast(vorbis_func_residue **)ogg_calloc_(info.submaps, (*look.residue_func).sizeof);
 
   for(i=0;i<info.submaps;i++){
     int floornum=info.floorsubmap[i];
     int resnum=info.residuesubmap[i];
 
     look.floor_func[i]=cast(vorbis_func_floor*)(floor_P_[ci.floor_type[floornum]]);
-    look.floor_look[i]=look.floor_func[i].look(vd,vm,ci.floor_param[floornum]);
+    look.floor_look[i]=look.floor_func[i].look(vd, vm, ci.floor_param[floornum]);
     look.residue_func[i]=cast(vorbis_func_residue*)residue_P_[ci.residue_type[resnum]];
     look.residue_look[i]=look.residue_func[i].
-      look(vd,vm,ci.residue_param[resnum]);
+      look(vd, vm, ci.residue_param[resnum]);
 
   }
 
@@ -4858,30 +4858,30 @@ private int mapping_ilog(uint v) nothrow @trusted @nogc {
 }
 
 /* also responsible for range checking */
-private vorbis_info_mapping *mapping0_unpack(vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
+private vorbis_info_mapping *mapping0_unpack(vorbis_info *vi, oggpack_buffer *opb) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
-  int i,b;
+  int i, b;
   vorbis_info_mapping0 *info;
-  info=cast(vorbis_info_mapping0 *)ogg_calloc_(1,(*info).sizeof);
+  info=cast(vorbis_info_mapping0 *)ogg_calloc_(1, (*info).sizeof);
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
-  memset(info,0,(*info).sizeof);
+  memset(info, 0, (*info).sizeof);
 
-  b=oggpack_read(opb,1);
+  b=oggpack_read(opb, 1);
   if(b<0)goto err_out;
   if(b){
-    info.submaps=oggpack_read(opb,4)+1;
+    info.submaps=oggpack_read(opb, 4)+1;
     if(info.submaps<=0)goto err_out;
   }else
     info.submaps=1;
 
-  b=oggpack_read(opb,1);
+  b=oggpack_read(opb, 1);
   if(b<0)goto err_out;
   if(b){
-    info.coupling_steps=oggpack_read(opb,8)+1;
+    info.coupling_steps=oggpack_read(opb, 8)+1;
     if(info.coupling_steps<=0)goto err_out;
     for(i=0;i<info.coupling_steps;i++){
-      int testM=info.coupling_mag[i]=oggpack_read(opb,mapping_ilog(vi.channels));
-      int testA=info.coupling_ang[i]=oggpack_read(opb,mapping_ilog(vi.channels));
+      int testM=info.coupling_mag[i]=oggpack_read(opb, mapping_ilog(vi.channels));
+      int testA=info.coupling_ang[i]=oggpack_read(opb, mapping_ilog(vi.channels));
 
       if(testM<0 ||
          testA<0 ||
@@ -4892,20 +4892,20 @@ private vorbis_info_mapping *mapping0_unpack(vorbis_info *vi,oggpack_buffer *opb
 
   }
 
-  if(oggpack_read(opb,2)!=0)goto err_out; /* 2,3:reserved */
+  if(oggpack_read(opb, 2)!=0)goto err_out; /* 2,3:reserved */
 
   if(info.submaps>1){
     for(i=0;i<vi.channels;i++){
-      info.chmuxlist[i]=oggpack_read(opb,4);
+      info.chmuxlist[i]=oggpack_read(opb, 4);
       if(info.chmuxlist[i]>=info.submaps || info.chmuxlist[i]<0)goto err_out;
     }
   }
   for(i=0;i<info.submaps;i++){
-    int temp=oggpack_read(opb,8);
+    int temp=oggpack_read(opb, 8);
     if(temp>=ci.times)goto err_out;
-    info.floorsubmap[i]=oggpack_read(opb,8);
+    info.floorsubmap[i]=oggpack_read(opb, 8);
     if(info.floorsubmap[i]>=ci.floors || info.floorsubmap[i]<0)goto err_out;
-    info.residuesubmap[i]=oggpack_read(opb,8);
+    info.residuesubmap[i]=oggpack_read(opb, 8);
     if(info.residuesubmap[i]>=ci.residues || info.residuesubmap[i]<0)
       goto err_out;
   }
@@ -4918,7 +4918,7 @@ private vorbis_info_mapping *mapping0_unpack(vorbis_info *vi,oggpack_buffer *opb
 }
 
 //static int seq=0;
-private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) nothrow @trusted @nogc {
+private int mapping0_inverse(vorbis_block *vb, vorbis_look_mapping *l) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
   vorbis_dsp_state     *vd=vb.vd;
   vorbis_info          *vi=vd.vi;
@@ -4927,7 +4927,7 @@ private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) nothrow @t
   vorbis_look_mapping0 *look=cast(vorbis_look_mapping0 *)l;
   vorbis_info_mapping0 *info=look.map;
 
-  int                   i,j;
+  int                   i, j;
   trm_long                  n=vb.pcmend=ci.blocksizes[vb.W];
 
   ogg_int32_t **pcmbundle;
@@ -4949,12 +4949,12 @@ private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) nothrow @t
   for(i=0;i<vi.channels;i++){
     int submap=info.chmuxlist[i];
     floormemo[i]=look.floor_func[submap].
-      inverse1(vb,look.floor_look[submap]);
+      inverse1(vb, look.floor_look[submap]);
     if(floormemo[i])
       nonzero[i]=1;
     else
       nonzero[i]=0;
-    memset(vb.pcm[i],0,(*vb.pcm[i]).sizeof*n/2);
+    memset(vb.pcm[i], 0, (*vb.pcm[i]).sizeof*n/2);
   }
 
   /* channel coupling can 'dirty' the nonzero listing */
@@ -4979,12 +4979,11 @@ private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) nothrow @t
       }
     }
 
-    look.residue_func[i].inverse(vb,look.residue_look[i],
-                                   pcmbundle,zerobundle,ch_in_bundle);
+    look.residue_func[i].inverse(vb, look.residue_look[i], pcmbundle, zerobundle, ch_in_bundle);
   }
 
   //for(j=0;j<vi.channels;j++)
-  //analysis_output_("coupled",seq+j,vb.pcm[j],-8,n/2,0,0);
+  //analysis_output_("coupled", seq+j, vb.pcm[j], -8, n/2, 0, 0);
 
 
   /* channel coupling */
@@ -5016,34 +5015,34 @@ private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) nothrow @t
   }
 
   //for(j=0;j<vi.channels;j++)
-  //analysis_output_("residue",seq+j,vb.pcm[j],-8,n/2,0,0);
+  //analysis_output_("residue", seq+j, vb.pcm[j], -8, n/2, 0, 0);
 
   /* compute and apply spectral envelope */
   for(i=0;i<vi.channels;i++){
     ogg_int32_t *pcm=vb.pcm[i];
     int submap=info.chmuxlist[i];
     look.floor_func[submap].
-      inverse2(vb,look.floor_look[submap],floormemo[i],pcm);
+      inverse2(vb, look.floor_look[submap], floormemo[i], pcm);
   }
 
   //for(j=0;j<vi.channels;j++)
-  //analysis_output_("mdct",seq+j,vb.pcm[j],-24,n/2,0,1);
+  //analysis_output_("mdct", seq+j, vb.pcm[j], -24, n/2, 0, 1);
 
   /* transform the PCM data; takes PCM vector, vb; modifies PCM vector */
   /* only MDCT right now.... */
   for(i=0;i<vi.channels;i++){
     ogg_int32_t *pcm=vb.pcm[i];
-    mdct_backward(n,pcm,pcm);
+    mdct_backward(n, pcm, pcm);
   }
 
   //for(j=0;j<vi.channels;j++)
-  //analysis_output_("imdct",seq+j,vb.pcm[j],-24,n,0,0);
+  //analysis_output_("imdct", seq+j, vb.pcm[j], -24, n, 0, 0);
 
   /* window the data */
   for(i=0;i<vi.channels;i++){
     ogg_int32_t *pcm=vb.pcm[i];
     if(nonzero[i])
-      vorbis_apply_window_(pcm,b.window.ptr,ci.blocksizes.ptr,vb.lW,vb.W,vb.nW);
+      vorbis_apply_window_(pcm, b.window.ptr, ci.blocksizes.ptr, vb.lW, vb.W, vb.nW);
     else
       for(j=0;j<n;j++)
         pcm[j]=0;
@@ -5051,7 +5050,7 @@ private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) nothrow @t
   }
 
   //for(j=0;j<vi.channels;j++)
-  //analysis_output_("window",seq+j,vb.pcm[j],-24,n,0,0);
+  //analysis_output_("window", seq+j, vb.pcm[j], -24, n, 0, 0);
 
   //seq+=vi.channels;
   /* all done! */
@@ -5210,7 +5209,7 @@ version(LOW_ACCURACY__) {
 }
 
 /* N/stage point generic N stage butterfly (in place, 2 register) */
-/*STIN*/ void mdct_butterfly_generic(DATA_TYPE *x,int points,int step) nothrow @trusted @nogc {
+/*STIN*/ void mdct_butterfly_generic(DATA_TYPE *x, int points, int step) nothrow @trusted @nogc {
 
   immutable(LOOKUP_T)*T   = sincos_lookup0.ptr;
   DATA_TYPE *x1        = x + points      - 8;
@@ -5296,14 +5295,14 @@ version(LOW_ACCURACY__) {
   }while(T>sincos_lookup0.ptr);
 }
 
-/*STIN*/ void mdct_butterflies(DATA_TYPE *x,int points,int shift) nothrow @trusted @nogc {
+/*STIN*/ void mdct_butterflies(DATA_TYPE *x, int points, int shift) nothrow @trusted @nogc {
 
   int stages=8-shift;
-  int i,j;
+  int i, j;
 
   for(i=0;--stages>0;i++){
     for(j=0;j<(1<<i);j++)
-      mdct_butterfly_generic(x+(points>>i)*j,points>>i,4<<(i+shift));
+      mdct_butterfly_generic(x+(points>>i)*j, points>>i, 4<<(i+shift));
   }
 
   for(j=0;j<points;j+=32)
@@ -5318,7 +5317,7 @@ static immutable ubyte[16] bitrev=[0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15];
   return bitrev.ptr[x>>8]|(bitrev.ptr[(x&0x0f0)>>4]<<4)|((cast(int)bitrev.ptr[x&0x00f])<<8);
 }
 
-/*STIN*/ void mdct_bitreverse(DATA_TYPE *x,int n,int step,int shift) nothrow @trusted @nogc {
+/*STIN*/ void mdct_bitreverse(DATA_TYPE *x, int n, int step, int shift) nothrow @trusted @nogc {
 
   int          bit   = 0;
   DATA_TYPE   *w0    = x;
@@ -5453,8 +5452,8 @@ void mdct_backward(int n, DATA_TYPE *in_, DATA_TYPE *out_) nothrow @trusted @nog
     oX+=4;
   }while(iX>=in_);
 
-  mdct_butterflies(out_+n2,n2,shift);
-  mdct_bitreverse(out_,n,step,shift);
+  mdct_butterflies(out_+n2, n2, shift);
+  mdct_bitreverse(out_, n, step, shift);
 
   /* rotate + window */
 
@@ -5481,7 +5480,7 @@ void mdct_backward(int n, DATA_TYPE *in_, DATA_TYPE *out_) nothrow @trusted @nog
 
       case 1: {
         /* linear interpolation between table values: offset=0.5, step=1 */
-        REG_TYPE  t0,t1,v0,v1;
+        REG_TYPE  t0, t1, v0, v1;
         T         = sincos_lookup0.ptr;
         V         = sincos_lookup1.ptr;
         t0        = (*T++)>>1;
@@ -5510,7 +5509,7 @@ void mdct_backward(int n, DATA_TYPE *in_, DATA_TYPE *out_) nothrow @trusted @nog
 
       case 0: {
         /* linear interpolation between table values: offset=0.25, step=0.5 */
-        REG_TYPE  t0,t1,v0,v1,q0,q1;
+        REG_TYPE  t0, t1, v0, v1, q0, q1;
         T         = sincos_lookup0.ptr;
         V         = sincos_lookup1.ptr;
         t0        = *T++;
@@ -6123,7 +6122,7 @@ struct vorbis_look_residue0 {
 void res0_free_info(vorbis_info_residue *i) nothrow @trusted @nogc {
   vorbis_info_residue0 *info=cast(vorbis_info_residue0 *)i;
   if(info){
-    memset(info,0,(*info).sizeof);
+    memset(info, 0, (*info).sizeof);
     ogg_free_(info);
   }
 }
@@ -6141,7 +6140,7 @@ void res0_free_look(vorbis_look_residue *i) nothrow @trusted @nogc {
       ogg_free_(look.decodemap[j]);
     ogg_free_(look.decodemap);
 
-    memset(look,0,(*look).sizeof);
+    memset(look, 0, (*look).sizeof);
     ogg_free_(look);
   }
 }
@@ -6165,27 +6164,27 @@ private int icount(uint v) nothrow @trusted @nogc {
 }
 
 /* vorbis_info is for range checking */
-vorbis_info_residue *res0_unpack(vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
-  int j,acc=0;
+vorbis_info_residue *res0_unpack(vorbis_info *vi, oggpack_buffer *opb) nothrow @trusted @nogc {
+  int j, acc=0;
   vorbis_info_residue0 *info;
-  info=cast(vorbis_info_residue0 *)ogg_calloc_(1,(*info).sizeof);
+  info=cast(vorbis_info_residue0 *)ogg_calloc_(1, (*info).sizeof);
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
 
-  info.begin=oggpack_read(opb,24);
-  info.end=oggpack_read(opb,24);
-  info.grouping=oggpack_read(opb,24)+1;
-  info.partitions=oggpack_read(opb,6)+1;
-  info.groupbook=oggpack_read(opb,8);
+  info.begin=oggpack_read(opb, 24);
+  info.end=oggpack_read(opb, 24);
+  info.grouping=oggpack_read(opb, 24)+1;
+  info.partitions=oggpack_read(opb, 6)+1;
+  info.groupbook=oggpack_read(opb, 8);
 
   /* check for premature EOP */
   if(info.groupbook<0)goto errout;
 
   for(j=0;j<info.partitions;j++){
-    int cascade=oggpack_read(opb,3);
-    int cflag=oggpack_read(opb,1);
+    int cascade=oggpack_read(opb, 3);
+    int cflag=oggpack_read(opb, 1);
     if(cflag<0) goto errout;
     if(cflag){
-      int c=oggpack_read(opb,5);
+      int c=oggpack_read(opb, 5);
       if(c<0) goto errout;
       cascade|=(c<<3);
     }
@@ -6194,7 +6193,7 @@ vorbis_info_residue *res0_unpack(vorbis_info *vi,oggpack_buffer *opb) nothrow @t
     acc+=icount(cascade);
   }
   for(j=0;j<acc;j++){
-    int book=oggpack_read(opb,8);
+    int book=oggpack_read(opb, 8);
     if(book<0) goto errout;
     info.booklist[j]=book;
   }
@@ -6230,14 +6229,14 @@ vorbis_info_residue *res0_unpack(vorbis_info *vi,oggpack_buffer *opb) nothrow @t
   return(null);
 }
 
-vorbis_look_residue *res0_look(vorbis_dsp_state *vd,vorbis_info_mode *vm,
+vorbis_look_residue *res0_look(vorbis_dsp_state *vd, vorbis_info_mode *vm,
                           vorbis_info_residue *vr) nothrow @trusted @nogc {
   vorbis_info_residue0 *info=cast(vorbis_info_residue0 *)vr;
   vorbis_look_residue0 *look;
-  look=cast(vorbis_look_residue0 *)ogg_calloc_(1,(*look).sizeof);
+  look=cast(vorbis_look_residue0 *)ogg_calloc_(1, (*look).sizeof);
   codec_setup_info     *ci=cast(codec_setup_info *)vd.vi.codec_setup;
 
-  int j,k,acc=0;
+  int j, k, acc=0;
   int dim;
   int maxstage=0;
   look.info=info;
@@ -6248,13 +6247,13 @@ vorbis_look_residue *res0_look(vorbis_dsp_state *vd,vorbis_info_mode *vm,
   look.phrasebook=ci.fullbooks+info.groupbook;
   dim=look.phrasebook.dim;
 
-  look.partbooks=cast(codebook ***)ogg_calloc_(look.parts,(*look.partbooks).sizeof);
+  look.partbooks=cast(codebook ***)ogg_calloc_(look.parts, (*look.partbooks).sizeof);
 
   for(j=0;j<look.parts;j++){
     int stages=res_ilog(info.secondstages[j]);
     if(stages){
       if(stages>maxstage)maxstage=stages;
-      look.partbooks[j]=cast(codebook **)ogg_calloc_(stages,(*look.partbooks[j]).sizeof);
+      look.partbooks[j]=cast(codebook **)ogg_calloc_(stages, (*look.partbooks[j]).sizeof);
       for(k=0;k<stages;k++)
         if(info.secondstages[j]&(1<<k)){
           look.partbooks[j][k]=ci.fullbooks+info.booklist[acc++];
@@ -6286,12 +6285,12 @@ vorbis_look_residue *res0_look(vorbis_dsp_state *vd,vorbis_info_mode *vm,
 
 
 /* a truncated packet here just means 'stop working'; it's not an error */
-private int xx01inverse_(vorbis_block *vb,vorbis_look_residue *vl,
-                      ogg_int32_t **in_,int ch,
-                      trm_long function (codebook *, ogg_int32_t *, oggpack_buffer *,int,int) nothrow @trusted @nogc decodepart) nothrow @trusted @nogc {
+private int xx01inverse_(vorbis_block *vb, vorbis_look_residue *vl,
+                      ogg_int32_t **in_, int ch,
+                      trm_long function (codebook *, ogg_int32_t *, oggpack_buffer *, int, int) nothrow @trusted @nogc decodepart) nothrow @trusted @nogc {
 
   import core.stdc.stdlib : alloca;
-  trm_long i,j,k,l,s;
+  trm_long i, j, k, l, s;
   vorbis_look_residue0 *look=cast(vorbis_look_residue0 *)vl;
   vorbis_info_residue0 *info=look.info;
 
@@ -6309,17 +6308,17 @@ private int xx01inverse_(vorbis_block *vb,vorbis_look_residue *vl,
     partword=cast(int ***)alloca(ch*(*partword).sizeof);
 
     for(j=0;j<ch;j++)
-      partword[j]=cast(int **)vorbis_block_alloc_(vb,partwords*(*partword[j]).sizeof);
+      partword[j]=cast(int **)vorbis_block_alloc_(vb, partwords*(*partword[j]).sizeof);
 
     for(s=0;s<look.stages;s++){
 
       /* each loop decodes on partition codeword containing
          partitions_pre_word partitions */
-      for(i=0,l=0;i<partvals;l++){
+      for(i=0, l=0;i<partvals;l++){
         if(s==0){
           /* fetch the partition word for each channel */
           for(j=0;j<ch;j++){
-            int temp=vorbis_book_decode(look.phrasebook,&vb.opb);
+            int temp=vorbis_book_decode(look.phrasebook, &vb.opb);
             if(temp==-1 || temp>=info.partvals)goto eopbreak;
             partword[j][l]=look.decodemap[temp];
             if(partword[j][l]==null)goto errout;
@@ -6327,14 +6326,13 @@ private int xx01inverse_(vorbis_block *vb,vorbis_look_residue *vl,
         }
 
         /* now we decode residual values for the partitions */
-        for(k=0;k<partitions_per_word && i<partvals;k++,i++)
+        for(k=0;k<partitions_per_word && i<partvals;k++, i++)
           for(j=0;j<ch;j++){
             trm_long offset=info.begin+i*samples_per_partition;
             if(info.secondstages[partword[j][l][k]]&(1<<s)){
               codebook *stagebook=look.partbooks[partword[j][l][k]][s];
               if(stagebook){
-                if(decodepart(stagebook,in_[j]+offset,&vb.opb,
-                              samples_per_partition,-8)==-1)goto eopbreak;
+                if(decodepart(stagebook, in_[j]+offset, &vb.opb, samples_per_partition, -8)==-1)goto eopbreak;
               }
             }
           }
@@ -6346,34 +6344,34 @@ private int xx01inverse_(vorbis_block *vb,vorbis_look_residue *vl,
   return(0);
 }
 
-int res0_inverse(vorbis_block *vb,vorbis_look_residue *vl,
-                 ogg_int32_t **in_,int *nonzero,int ch) nothrow @trusted @nogc {
-  int i,used=0;
+int res0_inverse(vorbis_block *vb, vorbis_look_residue *vl,
+                 ogg_int32_t **in_, int *nonzero, int ch) nothrow @trusted @nogc {
+  int i, used=0;
   for(i=0;i<ch;i++)
     if(nonzero[i])
       in_[used++]=in_[i];
   if(used)
-    return(xx01inverse_(vb,vl,in_,used,&vorbis_book_decodevs_add));
+    return(xx01inverse_(vb, vl, in_, used, &vorbis_book_decodevs_add));
   else
     return(0);
 }
 
-int res1_inverse(vorbis_block *vb,vorbis_look_residue *vl,
-                 ogg_int32_t **in_,int *nonzero,int ch) nothrow @trusted @nogc {
-  int i,used=0;
+int res1_inverse(vorbis_block *vb, vorbis_look_residue *vl,
+                 ogg_int32_t **in_, int *nonzero, int ch) nothrow @trusted @nogc {
+  int i, used=0;
   for(i=0;i<ch;i++)
     if(nonzero[i])
       in_[used++]=in_[i];
   if(used)
-    return(xx01inverse_(vb,vl,in_,used,&vorbis_book_decodev_add));
+    return(xx01inverse_(vb, vl, in_, used, &vorbis_book_decodev_add));
   else
     return(0);
 }
 
 /* duplicate code here as speed is somewhat more important */
-int res2_inverse(vorbis_block *vb,vorbis_look_residue *vl,
-                 ogg_int32_t **in_,int *nonzero,int ch) nothrow @trusted @nogc {
-  trm_long i,k,l,s;
+int res2_inverse(vorbis_block *vb, vorbis_look_residue *vl,
+                 ogg_int32_t **in_, int *nonzero, int ch) nothrow @trusted @nogc {
+  trm_long i, k, l, s;
   vorbis_look_residue0 *look=cast(vorbis_look_residue0 *)vl;
   vorbis_info_residue0 *info=look.info;
 
@@ -6389,7 +6387,7 @@ int res2_inverse(vorbis_block *vb,vorbis_look_residue *vl,
     int partvals=n/samples_per_partition;
     int partwords=(partvals+partitions_per_word-1)/partitions_per_word;
     int **partword;
-    partword=cast(int **)vorbis_block_alloc_(vb,partwords*(*partword).sizeof);
+    partword=cast(int **)vorbis_block_alloc_(vb, partwords*(*partword).sizeof);
     int beginoff=info.begin/ch;
 
     for(i=0;i<ch;i++)if(nonzero[i])break;
@@ -6398,26 +6396,26 @@ int res2_inverse(vorbis_block *vb,vorbis_look_residue *vl,
     samples_per_partition/=ch;
 
     for(s=0;s<look.stages;s++){
-      for(i=0,l=0;i<partvals;l++){
+      for(i=0, l=0;i<partvals;l++){
 
         if(s==0){
           /* fetch the partition word */
-          int temp=vorbis_book_decode(look.phrasebook,&vb.opb);
+          int temp=vorbis_book_decode(look.phrasebook, &vb.opb);
           if(temp==-1 || temp>=info.partvals)goto eopbreak;
           partword[l]=look.decodemap[temp];
           if(partword[l]==null)goto errout;
         }
 
         /* now we decode residual values for the partitions */
-        for(k=0;k<partitions_per_word && i<partvals;k++,i++)
+        for(k=0;k<partitions_per_word && i<partvals;k++, i++)
           if(info.secondstages[partword[l][k]]&(1<<s)){
             codebook *stagebook=look.partbooks[partword[l][k]][s];
 
             if(stagebook){
-              if(vorbis_book_decodevv_add(stagebook,in_,
-                                          i*samples_per_partition+beginoff,ch,
+              if(vorbis_book_decodevv_add(stagebook, in_,
+                                          i*samples_per_partition+beginoff, ch,
                                           &vb.opb,
-                                          samples_per_partition,-8)==-1)
+                                          samples_per_partition, -8)==-1)
                 goto eopbreak;
             }
           }
@@ -6468,7 +6466,7 @@ enum VQ_FEXP = 10;
 enum VQ_FMAN = 21;
 enum VQ_FEXP_BIAS = 768; /* bias toward values smaller than 1. */
 
-private ogg_int32_t float32_unpack_(trm_long val,int *point){
+private ogg_int32_t float32_unpack_(trm_long val, int *point){
   trm_long   mant=val&0x1fffff;
   int    sign=val&0x80000000;
   trm_long   exp =(val&0x7fe00000L)>>VQ_FMAN;
@@ -6494,12 +6492,12 @@ private ogg_int32_t float32_unpack_(trm_long val,int *point){
 /* given a list of word lengths, generate a list of codewords.  Works
    for length ordered or unordered, always assigns the lowest valued
    codewords first.  Extended to handle unused entries (length 0) */
-ogg_uint32_t *make_words_(const(trm_long)*l,trm_long n,trm_long sparsecount){
-  trm_long i,j,count=0;
+ogg_uint32_t *make_words_(const(trm_long)*l, trm_long n, trm_long sparsecount){
+  trm_long i, j, count=0;
   ogg_uint32_t[33] marker;
   ogg_uint32_t *r;
   r=cast(ogg_uint32_t *)ogg_malloc_((sparsecount?sparsecount:n)*(*r).sizeof);
-  memset(marker.ptr,0,(marker).sizeof);
+  memset(marker.ptr, 0, (marker).sizeof);
 
   for(i=0;i<n;i++){
     trm_long length=l[i];
@@ -6565,7 +6563,7 @@ ogg_uint32_t *make_words_(const(trm_long)*l,trm_long n,trm_long sparsecount){
 
   /* bitreverse the words because our bitwise packer/unpacker is LSb
      endian */
-  for(i=0,count=0;i<n;i++){
+  for(i=0, count=0;i<n;i++){
     ogg_uint32_t temp=0;
     for(j=0;j<l[i];j++){
       temp<<=1;
@@ -6619,18 +6617,18 @@ trm_long book_maptype1_quantvals_(const static_codebook *b){
    the values in the quant vector). in map type 2, all the values came
    in in an explicit list.  Both value lists must be unpacked */
 
-ogg_int32_t *book_unquantize_(const static_codebook *b,int n,int *sparsemap,
+ogg_int32_t *book_unquantize_(const static_codebook *b, int n, int *sparsemap,
                               int *maxpoint){
-  trm_long j,k,count=0;
+  trm_long j, k, count=0;
   if(b.maptype==1 || b.maptype==2){
     int quantvals;
-    int minpoint,delpoint;
-    ogg_int32_t mindel=float32_unpack_(b.q_min,&minpoint);
-    ogg_int32_t delta=float32_unpack_(b.q_delta,&delpoint);
+    int minpoint, delpoint;
+    ogg_int32_t mindel=float32_unpack_(b.q_min, &minpoint);
+    ogg_int32_t delta=float32_unpack_(b.q_delta, &delpoint);
     ogg_int32_t *r;
-    r=cast(ogg_int32_t *)ogg_calloc_(n*b.dim,(*r).sizeof);
+    r=cast(ogg_int32_t *)ogg_calloc_(n*b.dim, (*r).sizeof);
     int *rp;
-    rp=cast(int *)ogg_calloc_(n*b.dim,(*rp).sizeof);
+    rp=cast(int *)ogg_calloc_(n*b.dim, (*rp).sizeof);
 
     *maxpoint=minpoint;
 
@@ -6655,10 +6653,10 @@ ogg_int32_t *book_unquantize_(const static_codebook *b,int n,int *sparsemap,
             import std.math : abs;
             int index= (j/indexdiv)%quantvals;
             int point=0;
-            int val=VFLOAT_MULTI(delta,delpoint, abs(b.quantlist[index]),&point);
+            int val=VFLOAT_MULTI(delta, delpoint, abs(b.quantlist[index]), &point);
 
-            val=VFLOAT_ADD(mindel,minpoint,val,point,&point);
-            val=VFLOAT_ADD(last,lastpoint,val,point,&point);
+            val=VFLOAT_ADD(mindel, minpoint, val, point, &point);
+            val=VFLOAT_ADD(last, lastpoint, val, point, &point);
 
             if(b.q_sequencep){
               last=val;
@@ -6689,10 +6687,10 @@ ogg_int32_t *book_unquantize_(const static_codebook *b,int n,int *sparsemap,
           for(k=0;k<b.dim;k++){
             import std.math : abs;
             int point=0;
-            int val=VFLOAT_MULTI(delta,delpoint, abs(b.quantlist[j*b.dim+k]),&point);
+            int val=VFLOAT_MULTI(delta, delpoint, abs(b.quantlist[j*b.dim+k]), &point);
 
-            val=VFLOAT_ADD(mindel,minpoint,val,point,&point);
-            val=VFLOAT_ADD(last,lastpoint,val,point,&point);
+            val=VFLOAT_ADD(mindel, minpoint, val, point, &point);
+            val=VFLOAT_ADD(last, lastpoint, val, point, &point);
 
             if(b.q_sequencep){
               last=val;
@@ -6725,14 +6723,14 @@ ogg_int32_t *book_unquantize_(const static_codebook *b,int n,int *sparsemap,
   return(null);
 }
 
-void vorbis_staticbook_destroy(static_codebook *b){
+void vorbis_staticbook_destroy(static_codebook *b) nothrow @trusted @nogc {
   if(b.quantlist)ogg_free_(b.quantlist);
   if(b.lengthlist)ogg_free_(b.lengthlist);
-  memset(b,0,(*b).sizeof);
+  memset(b, 0, (*b).sizeof);
   ogg_free_(b);
 }
 
-void vorbis_book_clear(codebook *b){
+void vorbis_book_clear(codebook *b) nothrow @trusted @nogc {
   /* static book is not cleared; we're likely called on the lookup and
      the static codebook belongs to the info struct */
   if(b.valuelist)ogg_free_(b.valuelist);
@@ -6742,7 +6740,7 @@ void vorbis_book_clear(codebook *b){
   if(b.dec_codelengths)ogg_free_(b.dec_codelengths);
   if(b.dec_firsttable)ogg_free_(b.dec_firsttable);
 
-  memset(b,0,(*b).sizeof);
+  memset(b, 0, (*b).sizeof);
 }
 
 /*
@@ -6755,16 +6753,16 @@ private ogg_uint32_t bitreverse(ogg_uint32_t x){
 }
 */
 
-extern(C) int sort32a(const void *a,const void *b) nothrow @trusted @nogc {
+extern(C) int sort32a(const void *a, const void *b) nothrow @trusted @nogc {
   return (**cast(ogg_uint32_t **)a>**cast(ogg_uint32_t **)b)-(**cast(ogg_uint32_t **)a<**cast(ogg_uint32_t **)b);
 }
 
 /* decode codebook arrangement is more heavily optimized than encode */
-int vorbis_book_init_decode(codebook *c,const static_codebook *s){
+int vorbis_book_init_decode(codebook *c, const static_codebook *s){
   import core.stdc.stdlib : alloca;
-  int i,j,n=0,tabn;
+  int i, j, n=0, tabn;
   int *sortindex;
-  memset(c,0,(*c).sizeof);
+  memset(c, 0, (*c).sizeof);
 
   /* count actually used entries */
   for(i=0;i<s.entries;i++)
@@ -6787,7 +6785,7 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
        by sorted bitreversed codeword to allow treeless decode. */
 
     /* perform sort */
-    ogg_uint32_t *codes=make_words_(s.lengthlist,s.entries,c.used_entries);
+    ogg_uint32_t *codes=make_words_(s.lengthlist, s.entries, c.used_entries);
     ogg_uint32_t **codep;
     codep=cast(ogg_uint32_t **)alloca((*codep).sizeof*n);
 
@@ -6798,7 +6796,7 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
       codep[i]=codes+i;
     }
 
-    qsort(codep,n,(*codep).sizeof,&sort32a);
+    qsort(codep, n, (*codep).sizeof, &sort32a);
 
     sortindex=cast(int *)alloca(n*(*sortindex).sizeof);
     c.codelist=cast(ogg_uint32_t *)ogg_malloc_(n*(*c.codelist).sizeof);
@@ -6814,15 +6812,15 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
 
 
 
-    c.valuelist=book_unquantize_(s,n,sortindex,&c.binarypoint);
+    c.valuelist=book_unquantize_(s, n, sortindex, &c.binarypoint);
     c.dec_index=cast(int *)ogg_malloc_(n*(*c.dec_index).sizeof);
 
-    for(n=0,i=0;i<s.entries;i++)
+    for(n=0, i=0;i<s.entries;i++)
       if(s.lengthlist[i]>0)
         c.dec_index[sortindex[n++]]=i;
 
     c.dec_codelengths=cast(char *)ogg_malloc_(n*(*c.dec_codelengths).sizeof);
-    for(n=0,i=0;i<s.entries;i++)
+    for(n=0, i=0;i<s.entries;i++)
       if(s.lengthlist[i]>0)
         c.dec_codelengths[sortindex[n++]]=cast(char)s.lengthlist[i];
 
@@ -6831,7 +6829,7 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
     if(c.dec_firsttablen>8)c.dec_firsttablen=8;
 
     tabn=1<<c.dec_firsttablen;
-    c.dec_firsttable=cast(ogg_uint32_t *)ogg_calloc_(tabn,(*c.dec_firsttable).sizeof);
+    c.dec_firsttable=cast(ogg_uint32_t *)ogg_calloc_(tabn, (*c.dec_firsttable).sizeof);
     c.dec_maxlength=0;
 
     for(i=0;i<n;i++){
@@ -6848,7 +6846,7 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
        hints for the non-direct-hits */
     {
       ogg_uint32_t mask=0xfffffffeU<<(31-c.dec_firsttablen);
-      trm_long lo=0,hi=0;
+      trm_long lo=0, hi=0;
 
       for(i=0;i<tabn;i++){
         ogg_uint32_t word=i<<(32-c.dec_firsttablen);
@@ -6884,13 +6882,13 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
  function: single-block PCM synthesis
  ****************************************************************** */
 
-private int vorbis_synthesis1_(vorbis_block *vb,ogg_packet *op,int decodep){
+private int vorbis_synthesis1_(vorbis_block *vb, ogg_packet *op, int decodep){
   vorbis_dsp_state     *vd= vb ? vb.vd : null;
   private_state        *b= vd ? cast(private_state *)vd.backend_state: null;
   vorbis_info          *vi= vd ? vd.vi : null;
   codec_setup_info     *ci= vi ? cast(codec_setup_info *)vi.codec_setup : null;
   oggpack_buffer       *opb=vb ? &vb.opb : null;
-  int                   type,mode,i;
+  int                   type, mode, i;
 
   if (!vd || !b || !vi || !ci || !opb) {
     return OV_EBADPACKET;
@@ -6898,16 +6896,16 @@ private int vorbis_synthesis1_(vorbis_block *vb,ogg_packet *op,int decodep){
 
   /* first things first.  Make sure decode is ready */
   vorbis_block_ripcord_(vb);
-  oggpack_readinit(opb,op.packet,op.bytes);
+  oggpack_readinit(opb, op.packet, op.bytes);
 
   /* Check the packet type */
-  if(oggpack_read(opb,1)!=0){
+  if(oggpack_read(opb, 1)!=0){
     /* Oops.  This is not an audio data packet */
     return(OV_ENOTAUDIO);
   }
 
   /* read our mode and pre/post windowsize */
-  mode=oggpack_read(opb,b.modebits);
+  mode=oggpack_read(opb, b.modebits);
   if(mode==-1)return(OV_EBADPACKET);
 
   vb.mode=mode;
@@ -6917,8 +6915,8 @@ private int vorbis_synthesis1_(vorbis_block *vb,ogg_packet *op,int decodep){
 
   vb.W=ci.mode_param[mode].blockflag;
   if(vb.W){
-    vb.lW=oggpack_read(opb,1);
-    vb.nW=oggpack_read(opb,1);
+    vb.lW=oggpack_read(opb, 1);
+    vb.nW=oggpack_read(opb, 1);
     if(vb.nW==-1)   return(OV_EBADPACKET);
   }else{
     vb.lW=0;
@@ -6933,14 +6931,14 @@ private int vorbis_synthesis1_(vorbis_block *vb,ogg_packet *op,int decodep){
   if(decodep){
     /* alloc pcm passback storage */
     vb.pcmend=ci.blocksizes[vb.W];
-    vb.pcm=cast(ogg_int32_t **)vorbis_block_alloc_(vb,(*vb.pcm).sizeof*vi.channels);
+    vb.pcm=cast(ogg_int32_t **)vorbis_block_alloc_(vb, (*vb.pcm).sizeof*vi.channels);
     for(i=0;i<vi.channels;i++)
-      vb.pcm[i]=cast(ogg_int32_t *)vorbis_block_alloc_(vb,vb.pcmend*(*vb.pcm[i]).sizeof);
+      vb.pcm[i]=cast(ogg_int32_t *)vorbis_block_alloc_(vb, vb.pcmend*(*vb.pcm[i]).sizeof);
 
     /* unpack_header enforces range checking */
     type=ci.map_type[ci.mode_param[mode].mapping];
 
-    return(mapping_P_[type].inverse(vb,b.mode[mode]));
+    return(mapping_P_[type].inverse(vb, b.mode[mode]));
   }else{
     /* no pcm */
     vb.pcmend=0;
@@ -6950,25 +6948,25 @@ private int vorbis_synthesis1_(vorbis_block *vb,ogg_packet *op,int decodep){
   }
 }
 
-int vorbis_synthesis(vorbis_block *vb,ogg_packet *op){
-  return vorbis_synthesis1_(vb,op,1);
+int vorbis_synthesis(vorbis_block *vb, ogg_packet *op){
+  return vorbis_synthesis1_(vb, op, 1);
 }
 
 /* used to track pcm position without actually performing decode.
    Useful for sequential 'fast forward' */
-int vorbis_synthesis_trackonly(vorbis_block *vb,ogg_packet *op){
-  return vorbis_synthesis1_(vb,op,0);
+int vorbis_synthesis_trackonly(vorbis_block *vb, ogg_packet *op){
+  return vorbis_synthesis1_(vb, op, 0);
 }
 
-trm_long vorbis_packet_blocksize(vorbis_info *vi,ogg_packet *op){
+trm_long vorbis_packet_blocksize(vorbis_info *vi, ogg_packet *op){
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   oggpack_buffer       opb;
   int                  mode;
 
-  oggpack_readinit(&opb,op.packet,op.bytes);
+  oggpack_readinit(&opb, op.packet, op.bytes);
 
   /* Check the packet type */
-  if(oggpack_read(&opb,1)!=0){
+  if(oggpack_read(&opb, 1)!=0){
     /* Oops.  This is not an audio data packet */
     return(OV_ENOTAUDIO);
   }
@@ -6982,7 +6980,7 @@ trm_long vorbis_packet_blocksize(vorbis_info *vi,ogg_packet *op){
     }
 
     /* read our mode and pre/post windowsize */
-    mode=oggpack_read(&opb,modebits);
+    mode=oggpack_read(&opb, modebits);
   }
   if(mode==-1 || !ci.mode_param[mode])return(OV_EBADPACKET);
   return(ci.blocksizes[ci.mode_param[mode].blockflag]);
@@ -7025,11 +7023,11 @@ const(void)* vorbis_window_(int type, int left){
   }
 }
 
-void vorbis_apply_window_(ogg_int32_t *d,/*const void *window_p[2],*/ const(void)** window_p,
+void vorbis_apply_window_(ogg_int32_t *d, /*const void *window_p[2], */ const(void)** window_p,
                           trm_long *blocksizes,
-                          int lW,int W,int nW) nothrow @trusted @nogc {
+                          int lW, int W, int nW) nothrow @trusted @nogc {
 
-  immutable(LOOKUP_T)*[2] window=[cast(immutable(LOOKUP_T)*)window_p[0],cast(immutable(LOOKUP_T)*)window_p[1]];
+  immutable(LOOKUP_T)*[2] window=[cast(immutable(LOOKUP_T)*)window_p[0], cast(immutable(LOOKUP_T)*)window_p[1]];
   trm_long n=blocksizes[W];
   trm_long ln=blocksizes[lW];
   trm_long rn=blocksizes[nW];
@@ -7040,16 +7038,16 @@ void vorbis_apply_window_(ogg_int32_t *d,/*const void *window_p[2],*/ const(void
   trm_long rightbegin=n/2+n/4-rn/4;
   trm_long rightend=rightbegin+rn/2;
 
-  int i,p;
+  int i, p;
 
   for(i=0;i<leftbegin;i++)
     d[i]=0;
 
-  for(p=0;i<leftend;i++,p++)
-    d[i]=MULT31(d[i],window[lW][p]);
+  for(p=0;i<leftend;i++, p++)
+    d[i]=MULT31(d[i], window[lW][p]);
 
-  for(i=rightbegin,p=rn/2-1;i<rightend;i++,p--)
-    d[i]=MULT31(d[i],window[nW][p]);
+  for(i=rightbegin, p=rn/2-1;i<rightend;i++, p--)
+    d[i]=MULT31(d[i], window[nW][p]);
 
   for(;i<n;i++)
     d[i]=0;
@@ -7060,13 +7058,13 @@ void vorbis_apply_window_(ogg_int32_t *d,/*const void *window_p[2],*/ const(void
  function: maintain the info structure, info <. header packets
  ****************************************************************** */
 ///
-public void vorbis_comment_init(vorbis_comment *vc){
-  memset(vc,0,(*vc).sizeof);
+public void vorbis_comment_init(vorbis_comment *vc) nothrow @trusted @nogc {
+  memset(vc, 0, (*vc).sizeof);
 }
 
 /* This is more or less the same as strncasecmp - but that doesn't exist
  * everywhere, and this is a fairly trivial function, so we include it */
-private int tagcompare(const char *s1, const char *s2, size_t n){
+private int tagcompare (const(char)* s1, const(char)* s2, size_t n) nothrow @trusted @nogc {
   int c=0;
   while(c < n){
     char c0 = s1[c];
@@ -7080,7 +7078,7 @@ private int tagcompare(const char *s1, const char *s2, size_t n){
 }
 
 ///
-public char *vorbis_comment_query(vorbis_comment *vc, char *tag, int count){
+public char *vorbis_comment_query (vorbis_comment *vc, char *tag, int count) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
   trm_long i;
   int found = 0;
@@ -7103,12 +7101,12 @@ public char *vorbis_comment_query(vorbis_comment *vc, char *tag, int count){
 }
 
 ///
-public int vorbis_comment_query_count(vorbis_comment *vc, char *tag){
+public int vorbis_comment_query_count (vorbis_comment *vc, char *tag) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
-  int i,count=0;
+  int i, count=0;
   auto taglen = strlen(tag)+1; /* +1 for the = we append */
   char *fulltag = cast(char *)alloca(taglen+1);
-  strcpy(fulltag,tag);
+  strcpy(fulltag, tag);
   strcat(fulltag, "=");
 
   for(i=0;i<vc.comments;i++){
@@ -7120,7 +7118,7 @@ public int vorbis_comment_query_count(vorbis_comment *vc, char *tag){
 }
 
 ///
-public void vorbis_comment_clear(vorbis_comment *vc){
+public void vorbis_comment_clear (vorbis_comment *vc) nothrow @trusted @nogc {
   if(vc){
     trm_long i;
     if(vc.user_comments){
@@ -7130,24 +7128,24 @@ public void vorbis_comment_clear(vorbis_comment *vc){
     }
     if(vc.comment_lengths)ogg_free_(vc.comment_lengths);
     if(vc.vendor)ogg_free_(vc.vendor);
-    memset(vc,0,(*vc).sizeof);
+    memset(vc, 0, (*vc).sizeof);
   }
 }
 
 /// blocksize 0 is guaranteed to be short, 1 is guarantted to be trm_long. They may be equal, but short will never ge greater than long
-public int vorbis_info_blocksize(vorbis_info *vi,int zo){
+public int vorbis_info_blocksize (vorbis_info *vi, int zo) nothrow @trusted @nogc {
   codec_setup_info *ci = cast(codec_setup_info *)vi.codec_setup;
   return ci ? ci.blocksizes[zo] : -1;
 }
 
 /// used by synthesis, which has a full, alloced vi
-public void vorbis_info_init(vorbis_info *vi){
-  memset(vi,0,(*vi).sizeof);
-  vi.codec_setup=cast(codec_setup_info *)ogg_calloc_(1,(codec_setup_info).sizeof);
+public void vorbis_info_init (vorbis_info *vi) nothrow @trusted @nogc {
+  memset(vi, 0, (*vi).sizeof);
+  vi.codec_setup=cast(codec_setup_info *)ogg_calloc_(1, (codec_setup_info).sizeof);
 }
 
 ///
-public void vorbis_info_clear(vorbis_info *vi){
+public void vorbis_info_clear (vorbis_info *vi) nothrow @trusted @nogc {
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   int i;
 
@@ -7182,7 +7180,7 @@ public void vorbis_info_clear(vorbis_info *vi){
     ogg_free_(ci);
   }
 
-  memset(vi,0,(*vi).sizeof);
+  memset(vi, 0, (*vi).sizeof);
 }
 
 
@@ -7360,14 +7358,14 @@ private int seek_helper_ (OggVorbis_File* vf, ogg_int64_t offset) {
    return:   <0) did not find a page (OV_FALSE, OV_EOF, OV_EREAD)
               n) found a page at absolute offset n */
 
-private ogg_int64_t get_next_page_(OggVorbis_File *vf,ogg_page *og,
+private ogg_int64_t get_next_page_(OggVorbis_File *vf, ogg_page *og,
                                   ogg_int64_t boundary){
   if(boundary>0)boundary+=vf.offset;
   while(1){
     trm_long more;
 
     if(boundary>0 && vf.offset>=boundary)return(OV_FALSE);
-    more=ogg_sync_pageseek(&vf.oy,og);
+    more=ogg_sync_pageseek(&vf.oy, og);
 
     if(more<0){
       /* skipped n bytes */
@@ -7397,7 +7395,7 @@ private ogg_int64_t get_next_page_(OggVorbis_File *vf,ogg_page *og,
    dirtier than the above as Ogg doesn't have any backward search
    linkage.  no 'readp' as it will certainly have to read. */
 /* returns offset or OV_EREAD, OV_FAULT */
-private ogg_int64_t get_prev_page_(OggVorbis_File *vf,ogg_int64_t begin,ogg_page *og){
+private ogg_int64_t get_prev_page_(OggVorbis_File *vf, ogg_int64_t begin, ogg_page *og){
   ogg_int64_t end = begin;
   ogg_int64_t ret;
   ogg_int64_t offset=-1;
@@ -7407,12 +7405,12 @@ private ogg_int64_t get_prev_page_(OggVorbis_File *vf,ogg_int64_t begin,ogg_page
     if(begin<0)
       begin=0;
 
-    ret=seek_helper_(vf,begin);
+    ret=seek_helper_(vf, begin);
     if(ret)return(ret);
 
     while(vf.offset<end){
-      memset(og,0,(*og).sizeof);
-      ret=get_next_page_(vf,og,end-vf.offset);
+      memset(og, 0, (*og).sizeof);
+      ret=get_next_page_(vf, og, end-vf.offset);
       if(ret==OV_EREAD)return(OV_EREAD);
       if(ret<0){
         break;
@@ -7426,10 +7424,10 @@ private ogg_int64_t get_prev_page_(OggVorbis_File *vf,ogg_int64_t begin,ogg_page
      holding the last page.  In multiplexed (or noncompliant streams),
      we will probably have to re-read the last page we saw */
   if(og.header_len==0){
-    ret=seek_helper_(vf,offset);
+    ret=seek_helper_(vf, offset);
     if(ret)return(ret);
 
-    ret=get_next_page_(vf,og,CHUNKSIZE);
+    ret=get_next_page_(vf, og, CHUNKSIZE);
     if(ret<0)
       /* this shouldn't be possible */
       return(OV_EFAULT);
@@ -7438,7 +7436,7 @@ private ogg_int64_t get_prev_page_(OggVorbis_File *vf,ogg_int64_t begin,ogg_page
   return(offset);
 }
 
-private void add_serialno_(ogg_page *og,ogg_uint32_t **serialno_list, int *n){
+private void add_serialno_(ogg_page *og, ogg_uint32_t **serialno_list, int *n){
   ogg_uint32_t s = ogg_page_serialno(og);
   (*n)++;
 
@@ -7464,7 +7462,7 @@ private int lookup_serialno_(ogg_uint32_t s, ogg_uint32_t *serialno_list, int n)
 
 private int lookup_page_serialno_(ogg_page *og, ogg_uint32_t *serialno_list, int n){
   ogg_uint32_t s = ogg_page_serialno(og);
-  return lookup_serialno_(s,serialno_list,n);
+  return lookup_serialno_(s, serialno_list, n);
 }
 
 /* performs the same search as get_prev_page_, but prefers pages of
@@ -7490,11 +7488,11 @@ private ogg_int64_t get_prev_page_serial_(OggVorbis_File *vf, ogg_int64_t begin,
     if(begin<0)
       begin=0;
 
-    ret=seek_helper_(vf,begin);
+    ret=seek_helper_(vf, begin);
     if(ret)return(ret);
 
     while(vf.offset<end){
-      ret=get_next_page_(vf,&og,end-vf.offset);
+      ret=get_next_page_(vf, &og, end-vf.offset);
       if(ret==OV_EREAD)return(OV_EREAD);
       if(ret<0){
         break;
@@ -7508,7 +7506,7 @@ private ogg_int64_t get_prev_page_serial_(OggVorbis_File *vf, ogg_int64_t begin,
           *granpos=ret_gran;
         }
 
-        if(!lookup_serialno_(cast(ogg_uint32_t)ret_serialno,serial_list,serial_n)){
+        if(!lookup_serialno_(cast(ogg_uint32_t)ret_serialno, serial_list, serial_n)){
           /* we fell off the end of the link, which means we seeked
              back too far and shouldn't have been looking in that link
              to begin with.  If we found the preferred serial number,
@@ -7530,16 +7528,16 @@ private ogg_int64_t get_prev_page_serial_(OggVorbis_File *vf, ogg_int64_t begin,
 
 /* uses the local ogg_stream storage in vf; this is important for
    non-streaming input sources */
-private int fetch_headers_(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc,
+private int fetch_headers_(OggVorbis_File *vf, vorbis_info *vi, vorbis_comment *vc,
                           ogg_uint32_t **serialno_list, int *serialno_n,
                           ogg_page *og_ptr){
   ogg_page og;
   ogg_packet op;
-  int i,ret;
+  int i, ret;
   int allbos=0;
 
   if(!og_ptr){
-    ogg_int64_t llret=get_next_page_(vf,&og,CHUNKSIZE);
+    ogg_int64_t llret=get_next_page_(vf, &og, CHUNKSIZE);
     if(llret==OV_EREAD)return(OV_EREAD);
     if(llret<0)return(OV_ENOTVORBIS);
     og_ptr=&og;
@@ -7554,7 +7552,7 @@ private int fetch_headers_(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc
 
   while(ogg_page_bos(og_ptr)){
     if(serialno_list){
-      if(lookup_page_serialno_(og_ptr,*serialno_list,*serialno_n)){
+      if(lookup_page_serialno_(og_ptr, *serialno_list, *serialno_n)){
         /* a dupe serialnumber in an initial header packet set == invalid stream */
         if(*serialno_list)ogg_free_(*serialno_list);
         *serialno_list=null;
@@ -7563,20 +7561,20 @@ private int fetch_headers_(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc
         goto bail_header;
       }
 
-      add_serialno_(og_ptr,serialno_list,serialno_n);
+      add_serialno_(og_ptr, serialno_list, serialno_n);
     }
 
     if(vf.ready_state<STREAMSET){
       /* we don't have a vorbis stream in this link yet, so begin
          prospective stream setup. We need a stream to get packets */
-      ogg_stream_reset_serialno(&vf.os,ogg_page_serialno(og_ptr));
-      ogg_stream_pagein(&vf.os,og_ptr);
+      ogg_stream_reset_serialno(&vf.os, ogg_page_serialno(og_ptr));
+      ogg_stream_pagein(&vf.os, og_ptr);
 
-      if(ogg_stream_packetout(&vf.os,&op) > 0 &&
+      if(ogg_stream_packetout(&vf.os, &op) > 0 &&
          vorbis_synthesis_idheader(&op)){
         /* vorbis header; continue setup */
         vf.ready_state=STREAMSET;
-        if((ret=vorbis_synthesis_headerin(vi,vc,&op)) != 0){
+        if((ret=vorbis_synthesis_headerin(vi, vc, &op)) != 0){
           ret=OV_EBADHEADER;
           goto bail_header;
         }
@@ -7585,7 +7583,7 @@ private int fetch_headers_(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc
 
     /* get next page */
     {
-      ogg_int64_t llret=get_next_page_(vf,og_ptr,CHUNKSIZE);
+      ogg_int64_t llret=get_next_page_(vf, og_ptr, CHUNKSIZE);
       if(llret==OV_EREAD){
         ret=OV_EREAD;
         goto bail_header;
@@ -7598,7 +7596,7 @@ private int fetch_headers_(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc
       /* if this page also belongs to our vorbis stream, submit it and break */
       if(vf.ready_state==STREAMSET &&
          vf.os.serialno == ogg_page_serialno(og_ptr)){
-        ogg_stream_pagein(&vf.os,og_ptr);
+        ogg_stream_pagein(&vf.os, og_ptr);
         break;
       }
     }
@@ -7616,28 +7614,28 @@ private int fetch_headers_(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc
 
       while(i<2){ /* get a packet loop */
 
-        int result=ogg_stream_packetout(&vf.os,&op);
+        int result=ogg_stream_packetout(&vf.os, &op);
         if(result==0)break;
         if(result==-1){
           ret=OV_EBADHEADER;
           goto bail_header;
         }
 
-        if((ret=vorbis_synthesis_headerin(vi,vc,&op)) != 0)
+        if((ret=vorbis_synthesis_headerin(vi, vc, &op)) != 0)
           goto bail_header;
 
         i++;
       }
 
       while(i<2){
-        if(get_next_page_(vf,og_ptr,CHUNKSIZE)<0){
+        if(get_next_page_(vf, og_ptr, CHUNKSIZE)<0){
           ret=OV_EBADHEADER;
           goto bail_header;
         }
 
         /* if this page belongs to the correct stream, go parse it */
         if(vf.os.serialno == ogg_page_serialno(og_ptr)){
-          ogg_stream_pagein(&vf.os,og_ptr);
+          ogg_stream_pagein(&vf.os, og_ptr);
           break;
         }
 
@@ -7679,17 +7677,17 @@ private ogg_int64_t initial_pcmoffset_(OggVorbis_File *vf, vorbis_info *vi){
 
   while(1){
     ogg_packet op;
-    if(get_next_page_(vf,&og,-1)<0)
+    if(get_next_page_(vf, &og, -1)<0)
       break; /* should not be possible unless the file is truncated/mangled */
 
     if(ogg_page_bos(&og)) break;
     if(ogg_page_serialno(&og)!=serialno) continue;
 
     /* count blocksizes of all frames in the page */
-    ogg_stream_pagein(&vf.os,&og);
-    while((result=ogg_stream_packetout(&vf.os,&op)) != 0){
+    ogg_stream_pagein(&vf.os, &og);
+    while((result=ogg_stream_packetout(&vf.os, &op)) != 0){
       if(result>0){ /* ignore holes */
-        trm_long thisblock=vorbis_packet_blocksize(vi,&op);
+        trm_long thisblock=vorbis_packet_blocksize(vi, &op);
         if(lastblock!=-1)
           accumulated+=(lastblock+thisblock)>>2;
         lastblock=thisblock;
@@ -7729,7 +7727,7 @@ private int bisect_forward_serialno_(OggVorbis_File *vf,
   ogg_int64_t next=end;
   ogg_int64_t searchgran=-1;
   ogg_page og;
-  ogg_int64_t ret,last;
+  ogg_int64_t ret, last;
   int serialno = vf.os.serialno;
 
   /* invariants:
@@ -7739,7 +7737,7 @@ private int bisect_forward_serialno_(OggVorbis_File *vf,
   */
 
   /* Is the last page in our list of current serialnumbers? */
-  if(lookup_serialno_(endserial,currentno_list,currentnos)){
+  if(lookup_serialno_(endserial, currentno_list, currentnos)){
 
     /* last page is in the starting serialno list, so we've bisected
        down to (or just started with) a single link.  Now we need to
@@ -7748,7 +7746,7 @@ private int bisect_forward_serialno_(OggVorbis_File *vf,
     searched = end;
     while(endserial != serialno){
       endserial = serialno;
-      searched=get_prev_page_serial_(vf,searched,currentno_list,currentnos,&endserial,&endgran);
+      searched=get_prev_page_serial_(vf, searched, currentno_list, currentnos, &endserial, &endgran);
     }
 
     vf.links=m+1;
@@ -7757,8 +7755,8 @@ private int bisect_forward_serialno_(OggVorbis_File *vf,
     if(vf.dataoffsets)ogg_free_(vf.dataoffsets);
 
     vf.offsets=cast(long*)ogg_malloc_((vf.links+1)*(*vf.offsets).sizeof);
-    vf.vi=cast(vorbis_info*)ogg_realloc_(vf.vi,vf.links*(*vf.vi).sizeof);
-    vf.vc=cast(vorbis_comment*)ogg_realloc_(vf.vc,vf.links*(*vf.vc).sizeof);
+    vf.vi=cast(vorbis_info*)ogg_realloc_(vf.vi, vf.links*(*vf.vi).sizeof);
+    vf.vc=cast(vorbis_comment*)ogg_realloc_(vf.vc, vf.links*(*vf.vc).sizeof);
     vf.serialnos=cast(uint*)ogg_malloc_(vf.links*(*vf.serialnos).sizeof);
     vf.dataoffsets=cast(long*)ogg_malloc_(vf.links*(*vf.dataoffsets).sizeof);
     vf.pcmlengths=cast(long*)ogg_malloc_(vf.links*2*(*vf.pcmlengths).sizeof);
@@ -7790,12 +7788,12 @@ private int bisect_forward_serialno_(OggVorbis_File *vf,
         bisect=(searched+endsearched)/2;
       }
 
-      ret=seek_helper_(vf,bisect);
+      ret=seek_helper_(vf, bisect);
       if(ret)return cast(typeof(return))(ret);
 
-      last=get_next_page_(vf,&og,-1);
+      last=get_next_page_(vf, &og, -1);
       if(last==OV_EREAD)return(OV_EREAD);
-      if(last<0 || !lookup_page_serialno_(&og,currentno_list,currentnos)){
+      if(last<0 || !lookup_page_serialno_(&og, currentno_list, currentnos)){
         endsearched=bisect;
         if(last>=0)next=last;
       }else{
@@ -7808,23 +7806,23 @@ private int bisect_forward_serialno_(OggVorbis_File *vf,
     searched = next;
     while(testserial != serialno){
       testserial = serialno;
-      searched = get_prev_page_serial_(vf,searched,currentno_list,currentnos,&testserial,&searchgran);
+      searched = get_prev_page_serial_(vf, searched, currentno_list, currentnos, &testserial, &searchgran);
     }
 
-    ret=seek_helper_(vf,next);
+    ret=seek_helper_(vf, next);
     if(ret)return cast(typeof(return))(ret);
 
-    ret=fetch_headers_(vf,&vi,&vc,&next_serialno_list,&next_serialnos,null);
+    ret=fetch_headers_(vf, &vi, &vc, &next_serialno_list, &next_serialnos, null);
     if(ret)return cast(typeof(return))(ret);
     serialno = vf.os.serialno;
     dataoffset = vf.offset;
 
     /* this will consume a page, however the next bisection always
        starts with a raw seek */
-    pcmoffset = initial_pcmoffset_(vf,&vi);
+    pcmoffset = initial_pcmoffset_(vf, &vi);
 
-    ret=bisect_forward_serialno_(vf,next,vf.offset,end,endgran,endserial,
-                                 next_serialno_list,next_serialnos,m+1);
+    ret=bisect_forward_serialno_(vf, next, vf.offset, end, endgran, endserial,
+                                 next_serialno_list, next_serialnos, m+1);
     if(ret)return cast(typeof(return))(ret);
 
     if(next_serialno_list)ogg_free_(next_serialno_list);
@@ -7849,13 +7847,13 @@ private int make_decode_ready_(OggVorbis_File *vf){
   if(vf.ready_state>STREAMSET)return 0;
   if(vf.ready_state<STREAMSET)return OV_EFAULT;
   if(vf.seekable){
-    if(vorbis_synthesis_init(&vf.vd,vf.vi+vf.current_link))
+    if(vorbis_synthesis_init(&vf.vd, vf.vi+vf.current_link))
       return OV_EBADLINK;
   }else{
-    if(vorbis_synthesis_init(&vf.vd,vf.vi))
+    if(vorbis_synthesis_init(&vf.vd, vf.vi))
       return OV_EBADLINK;
   }
-  vorbis_block_init(&vf.vd,&vf.vb);
+  vorbis_block_init(&vf.vd, &vf.vb);
   vf.ready_state=INITSET;
   vf.bittrack=0;
   vf.samptrack=0;
@@ -7870,7 +7868,7 @@ private int open_seekable2_ (OggVorbis_File* vf) {
   /* we're partially open and have a first link header state in storage in vf */
 
   /* fetch initial PCM offset */
-  ogg_int64_t pcmoffset = initial_pcmoffset_(vf,vf.vi);
+  ogg_int64_t pcmoffset = initial_pcmoffset_(vf, vf.vi);
 
   /* we can seek, so set out learning all about this file */
   static if (XoggTremorHasVFS) {
@@ -7885,7 +7883,7 @@ private int open_seekable2_ (OggVorbis_File* vf) {
     }
   } else {
     if(vf.callbacks.seek_func !is null && vf.callbacks.tell_func !is null){
-      vf.callbacks.seek_func(vf.datasource,0,SEEK_END);
+      vf.callbacks.seek_func(vf.datasource, 0, SEEK_END);
       vf.offset=vf.end=vf.callbacks.tell_func(vf.datasource);
     }else{
       vf.offset=vf.end=-1;
@@ -7898,12 +7896,12 @@ private int open_seekable2_ (OggVorbis_File* vf) {
   /* Get the offset of the last page of the physical bitstream, or, if
      we're lucky the last vorbis page of this link as most OggVorbis
      files will contain a single logical bitstream */
-  end=get_prev_page_serial_(vf,vf.end,vf.serialnos+2,vf.serialnos[1],&endserial,&endgran);
+  end=get_prev_page_serial_(vf, vf.end, vf.serialnos+2, vf.serialnos[1], &endserial, &endgran);
   if(end<0)return cast(typeof(return))(end);
 
   /* now determine bitstream structure recursively */
-  if(bisect_forward_serialno_(vf,0,dataoffset,end,endgran,endserial,
-                              vf.serialnos+2,vf.serialnos[1],0)<0)return(OV_EREAD);
+  if(bisect_forward_serialno_(vf, 0, dataoffset, end, endgran, endserial,
+                              vf.serialnos+2, vf.serialnos[1], 0)<0)return(OV_EREAD);
 
   vf.offsets[0]=0;
   vf.serialnos[0]=serialno;
@@ -7912,7 +7910,7 @@ private int open_seekable2_ (OggVorbis_File* vf) {
   vf.pcmlengths[1]-=pcmoffset;
   if(vf.pcmlengths[1]<0)vf.pcmlengths[1]=0;
 
-  return(ov_raw_seek(vf,dataoffset));
+  return(ov_raw_seek(vf, dataoffset));
 }
 
 /* clear out the current logical bitstream decoder */
@@ -7954,7 +7952,7 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
       while(1) {
               ogg_packet op;
               ogg_packet *op_ptr=(op_in?op_in:&op);
-        int result=ogg_stream_packetout(&vf.os,op_ptr);
+        int result=ogg_stream_packetout(&vf.os, op_ptr);
         ogg_int64_t granulepos;
 
         op_in=null;
@@ -7962,7 +7960,7 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
         if(result>0){
           /* got a packet.  process it */
           granulepos=op_ptr.granulepos;
-          if(!vorbis_synthesis(&vf.vb,op_ptr)){ /* lazy check for lazy
+          if(!vorbis_synthesis(&vf.vb, op_ptr)){ /* lazy check for lazy
                                                     header handling.  The
                                                     header packets aren't
                                                     audio, so if/when we
@@ -7972,20 +7970,20 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
 
             /* suck in the synthesis data and track bitrate */
             {
-              int oldsamples=vorbis_synthesis_pcmout(&vf.vd,null);
+              int oldsamples=vorbis_synthesis_pcmout(&vf.vd, null);
               /* for proper use of libvorbis within libvorbisfile,
                  oldsamples will always be zero. */
               if(oldsamples)return(OV_EFAULT);
 
-              vorbis_synthesis_blockin(&vf.vd,&vf.vb);
-              vf.samptrack+=vorbis_synthesis_pcmout(&vf.vd,null);
+              vorbis_synthesis_blockin(&vf.vd, &vf.vb);
+              vf.samptrack+=vorbis_synthesis_pcmout(&vf.vd, null);
               vf.bittrack+=op_ptr.bytes*8;
             }
 
             /* update the pcm offset. */
             if(granulepos!=-1 && !op_ptr.e_o_s){
               int link=(vf.seekable?vf.current_link:0);
-              int i,samples;
+              int i, samples;
 
               /* this packet has a pcm_offset on it (the last packet
                  completed on a page carries the offset) After processing
@@ -8007,7 +8005,7 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
                                                here unless the stream
                                                is very broken */
 
-              samples=vorbis_synthesis_pcmout(&vf.vd,null);
+              samples=vorbis_synthesis_pcmout(&vf.vd, null);
 
               granulepos-=samples;
               for(i=0;i<link;i++)
@@ -8033,7 +8031,7 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
            we get one with the correct serialno */
 
         if(!readp)return(0);
-        if((ret=get_next_page_(vf,&og,-1))<0){
+        if((ret=get_next_page_(vf, &og, -1))<0){
           return(OV_EOF); /* eof. leave unitialized */
         }
 
@@ -8103,14 +8101,14 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
           vf.current_serialno=serialno;
           vf.current_link=link;
 
-          ogg_stream_reset_serialno(&vf.os,vf.current_serialno);
+          ogg_stream_reset_serialno(&vf.os, vf.current_serialno);
           vf.ready_state=STREAMSET;
 
         }else{
           /* we're streaming */
           /* fetch the three header packets, build the info struct */
 
-          int ret=fetch_headers_(vf,vf.vi,vf.vc,null,null,&og);
+          int ret=fetch_headers_(vf, vf.vi, vf.vc, null, null, &og);
           if(ret)return(ret);
           vf.current_serialno=vf.os.serialno;
           vf.current_link++;
@@ -8121,13 +8119,13 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
 
     /* the buffered page is the data we want, and we're ready for it;
        add it to the stream state */
-    ogg_stream_pagein(&vf.os,&og);
+    ogg_stream_pagein(&vf.os, &og);
 
   }
 }
 
 static if (XoggTremorHasVFS) alias ov_callbacks_x = VFile; else alias ov_callbacks_x = ov_callbacks*;
-private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long ibytes, ov_callbacks_x callbacks) {
+private int ov_open1_(void *f, OggVorbis_File *vf, const(char)* initial, trm_long ibytes, ov_callbacks_x callbacks) {
   static if (XoggTremorHasVFS) {
     int offsettest;
     try {
@@ -8143,7 +8141,7 @@ private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long i
   int serialno_list_size=0;
   int ret;
 
-  memset(vf,0,(*vf).sizeof);
+  memset(vf, 0, (*vf).sizeof);
   static if (XoggTremorHasVFS) {
     vf.datasource = callbacks;
   } else {
@@ -8159,9 +8157,9 @@ private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long i
      previously read data (especially as we may be reading from a
      non-seekable stream) */
   if(initial){
-    char *buffer=ogg_sync_buffer(&vf.oy,ibytes);
-    memcpy(buffer,initial,ibytes);
-    ogg_sync_wrote(&vf.oy,ibytes);
+    char *buffer=ogg_sync_buffer(&vf.oy, ibytes);
+    memcpy(buffer, initial, ibytes);
+    ogg_sync_wrote(&vf.oy, ibytes);
   }
 
   /* can we seek? Stevens suggests the seek test was portable */
@@ -8170,26 +8168,26 @@ private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long i
   /* No seeking yet; Set up a 'single' (current) logical bitstream
      entry for partial open */
   vf.links=1;
-  vf.vi=cast(vorbis_info*)ogg_calloc_(vf.links,(*vf.vi).sizeof);
-  vf.vc=cast(vorbis_comment*)ogg_calloc_(vf.links,(*vf.vc).sizeof);
-  ogg_stream_init(&vf.os,-1); /* fill in the serialno later */
+  vf.vi=cast(vorbis_info*)ogg_calloc_(vf.links, (*vf.vi).sizeof);
+  vf.vc=cast(vorbis_comment*)ogg_calloc_(vf.links, (*vf.vc).sizeof);
+  ogg_stream_init(&vf.os, -1); /* fill in the serialno later */
 
   /* Fetch all BOS pages, store the vorbis header and all seen serial
      numbers, load subsequent vorbis setup headers */
-  if((ret=fetch_headers_(vf,vf.vi,vf.vc,&serialno_list,&serialno_list_size,null))<0){
+  if((ret=fetch_headers_(vf, vf.vi, vf.vc, &serialno_list, &serialno_list_size, null))<0){
     static if (XoggTremorHasVFS) vf.datasource = VFile.init; else vf.datasource = null;
     ov_clear(vf);
   }else{
     /* serial number list for first link needs to be held somewhere
        for second stage of seekable stream open; this saves having to
        seek/reread first link's serialnumber data then. */
-    vf.serialnos=cast(uint*)ogg_calloc_(serialno_list_size+2,(*vf.serialnos).sizeof);
+    vf.serialnos=cast(uint*)ogg_calloc_(serialno_list_size+2, (*vf.serialnos).sizeof);
     vf.serialnos[0]=vf.current_serialno=vf.os.serialno;
     vf.serialnos[1]=serialno_list_size;
-    memcpy(vf.serialnos+2,serialno_list,serialno_list_size*(*vf.serialnos).sizeof);
+    memcpy(vf.serialnos+2, serialno_list, serialno_list_size*(*vf.serialnos).sizeof);
 
-    vf.offsets=cast(long*)ogg_calloc_(1,(*vf.offsets).sizeof);
-    vf.dataoffsets=cast(long*)ogg_calloc_(1,(*vf.dataoffsets).sizeof);
+    vf.offsets=cast(long*)ogg_calloc_(1, (*vf.offsets).sizeof);
+    vf.dataoffsets=cast(long*)ogg_calloc_(1, (*vf.dataoffsets).sizeof);
     vf.offsets[0]=0;
     vf.dataoffsets[0]=vf.offset;
 
@@ -8242,7 +8240,7 @@ public int ov_clear(OggVorbis_File *vf){
     } else {
       if (vf.datasource && vf.callbacks.close_func !is null) vf.callbacks.close_func(vf.datasource);
     }
-    memset(vf,0,(*vf).sizeof);
+    memset(vf, 0, (*vf).sizeof);
   }
   return(0);
 }
@@ -8288,8 +8286,8 @@ static if (XoggTremorHasVFS) {
      return: -1: error
               0: OK
   */
-  public int ov_open_callbacks(void *f,OggVorbis_File *vf, const(char)*initial, trm_long ibytes,ov_callbacks callbacks) {
-    int ret=ov_open1_(f,vf,initial,ibytes,&callbacks);
+  public int ov_open_callbacks(void *f, OggVorbis_File *vf, const(char)*initial, trm_long ibytes, ov_callbacks callbacks) {
+    int ret=ov_open1_(f, vf, initial, ibytes, &callbacks);
     if(ret)return ret;
     return ov_open2_(vf);
   }
@@ -8314,20 +8312,19 @@ static if (XoggTremorHasVFS) {
   }
 
   ///
-  public int ov_open(FILE *f,OggVorbis_File *vf,const char *initial,trm_long ibytes){
+  public int ov_open(FILE *f, OggVorbis_File *vf, const(char)* initial, trm_long ibytes){
     ov_callbacks callbacks;
     ov_setup_file_callbacks_(callbacks);
     return ov_open_callbacks(cast(void *)f, vf, initial, ibytes, callbacks);
   }
 
   ///
-  public int ov_fopen(const char *path,OggVorbis_File *vf){
-    int ret;
-    FILE *f = fopen(path,"rb");
-    if(!f) return -1;
-
-    ret = ov_open(f,vf,null,0);
-    if(ret) fclose(f);
+  public int ov_fopen(const(char)[] path, OggVorbis_File *vf){
+    import std.internal.cstring : tempCString;
+    FILE* f = fopen(path.tempCString, "rb");
+    if (f is null) return -1;
+    auto ret = ov_open(f, vf, null, 0);
+    if (ret) fclose(f);
     return ret;
   }
 
@@ -8335,14 +8332,13 @@ static if (XoggTremorHasVFS) {
      the headers for the first chain.  Do not seek (although test for
      seekability).  Use ov_test_open to finish opening the file, else
      ov_clear to close/free it. Same return codes as open. */
-  public int ov_test_callbacks(void *f,OggVorbis_File *vf,
-      const char *initial,trm_long ibytes,ov_callbacks callbacks)
+  public int ov_test_callbacks(void *f, OggVorbis_File *vf, const(char)* initial, trm_long ibytes, ov_callbacks callbacks)
   {
-    return ov_open1_(f,vf,initial,ibytes,&callbacks);
+    return ov_open1_(f, vf, initial, ibytes, &callbacks);
   }
 
   ///
-  public int ov_test(FILE *f,OggVorbis_File *vf,const char *initial,trm_long ibytes){
+  public int ov_test(FILE *f, OggVorbis_File *vf, const(char)* initial, trm_long ibytes){
     ov_callbacks callbacks;
     ov_setup_file_callbacks_(callbacks);
     return ov_test_callbacks(cast(void *)f, vf, initial, ibytes, callbacks);
@@ -8373,24 +8369,24 @@ public trm_long ov_seekable (OggVorbis_File* vf) {
 
    If you want the actual bitrate field settings, get them from the
    vorbis_info structs */
-public trm_long ov_bitrate(OggVorbis_File *vf,int i=-1){
+public trm_long ov_bitrate(OggVorbis_File *vf, int i=-1){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(i>=vf.links)return(OV_EINVAL);
-  if(!vf.seekable && i!=0)return(ov_bitrate(vf,0));
+  if(!vf.seekable && i!=0)return(ov_bitrate(vf, 0));
   if(i<0){
     ogg_int64_t bits=0;
     //int i;
     for(i=0;i<vf.links;i++)
       bits+=(vf.offsets[i+1]-vf.dataoffsets[i])*8;
-    /* This once read: return(rint(bits/ov_time_total(vf,-1)));
+    /* This once read: return(rint(bits/ov_time_total(vf, -1)));
      * gcc 3.x on x86 miscompiled this at optimisation level 2 and above,
      * so this is slightly transformed to make it work.
      */
-    return cast(typeof(return))(bits*1000/ov_time_total(vf,-1));
+    return cast(typeof(return))(bits*1000/ov_time_total(vf, -1));
   }else{
     if(vf.seekable){
       /* return the actual bitrate */
-      return cast(typeof(return))((vf.offsets[i+1]-vf.dataoffsets[i])*8000/ov_time_total(vf,i));
+      return cast(typeof(return))((vf.offsets[i+1]-vf.dataoffsets[i])*8000/ov_time_total(vf, i));
     }else{
       /* return nominal if set */
       if(vf.vi[i].bitrate_nominal>0){
@@ -8425,9 +8421,9 @@ public trm_long ov_bitrate_instant(OggVorbis_File *vf){
 }
 
 /// Guess
-public trm_long ov_serialnumber(OggVorbis_File *vf,int i){
-  if(i>=vf.links)return(ov_serialnumber(vf,vf.links-1));
-  if(!vf.seekable && i>=0)return(ov_serialnumber(vf,-1));
+public trm_long ov_serialnumber(OggVorbis_File *vf, int i){
+  if(i>=vf.links)return(ov_serialnumber(vf, vf.links-1));
+  if(!vf.seekable && i>=0)return(ov_serialnumber(vf, -1));
   if(i<0){
     return(vf.current_serialno);
   }else{
@@ -8440,14 +8436,14 @@ public trm_long ov_serialnumber(OggVorbis_File *vf,int i){
              OV_EINVAL if the stream is not seekable (we can't know the length)
              or if stream is only partially open
 */
-public ogg_int64_t ov_raw_total(OggVorbis_File *vf,int i){
+public ogg_int64_t ov_raw_total(OggVorbis_File *vf, int i){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(!vf.seekable || i>=vf.links)return(OV_EINVAL);
   if(i<0){
     ogg_int64_t acc=0;
     //int i;
     for(i=0;i<vf.links;i++)
-      acc+=ov_raw_total(vf,i);
+      acc+=ov_raw_total(vf, i);
     return(acc);
   }else{
     return(vf.offsets[i+1]-vf.offsets[i]);
@@ -8459,14 +8455,14 @@ public ogg_int64_t ov_raw_total(OggVorbis_File *vf,int i){
             OV_EINVAL if the stream is not seekable (we can't know the
             length) or only partially open
 */
-public ogg_int64_t ov_pcm_total(OggVorbis_File *vf,int i){
+public ogg_int64_t ov_pcm_total(OggVorbis_File *vf, int i){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(!vf.seekable || i>=vf.links)return(OV_EINVAL);
   if(i<0){
     ogg_int64_t acc=0;
     //int i;
     for(i=0;i<vf.links;i++)
-      acc+=ov_pcm_total(vf,i);
+      acc+=ov_pcm_total(vf, i);
     return(acc);
   }else{
     return(vf.pcmlengths[i*2+1]);
@@ -8478,14 +8474,14 @@ public ogg_int64_t ov_pcm_total(OggVorbis_File *vf,int i){
              OV_EINVAL if the stream is not seekable (we can't know the
              length) or only partially open
 */
-public ogg_int64_t ov_time_total(OggVorbis_File *vf,int i=-1){
+public ogg_int64_t ov_time_total(OggVorbis_File *vf, int i=-1){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(!vf.seekable || i>=vf.links)return(OV_EINVAL);
   if(i<0){
     ogg_int64_t acc=0;
     //int i;
     for(i=0;i<vf.links;i++)
-      acc+=ov_time_total(vf,i);
+      acc+=ov_time_total(vf, i);
     return(acc);
   }else{
     return((cast(ogg_int64_t)vf.pcmlengths[i*2+1])*1000/vf.vi[i].rate);
@@ -8498,7 +8494,7 @@ public ogg_int64_t ov_time_total(OggVorbis_File *vf,int i=-1){
     tail of the bitstream we seek to (so no surprises).
 
     returns zero on success, nonzero on failure */
-public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
+public int ov_raw_seek(OggVorbis_File *vf, ogg_int64_t pos){
   ogg_stream_state work_os;
   int ret;
 
@@ -8523,7 +8519,7 @@ public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
                             vf.current_serialno); /* must set serialno */
   vorbis_synthesis_restart(&vf.vd);
 
-  ret=seek_helper_(vf,pos);
+  ret=seek_helper_(vf, pos);
   if(ret)goto seek_error;
 
   /* we need to make sure the pcm_offset is set, but we don't want to
@@ -8551,7 +8547,7 @@ public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
     int firstflag=0;
     ogg_int64_t pagepos=-1;
 
-    ogg_stream_init(&work_os,vf.current_serialno); /* get the memory ready */
+    ogg_stream_init(&work_os, vf.current_serialno); /* get the memory ready */
     ogg_stream_reset(&work_os); /* eliminate the spurious OV_HOLE
                                    return from not necessarily
                                    starting from the beginning */
@@ -8559,14 +8555,14 @@ public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
     while(1){
       if(vf.ready_state>=STREAMSET){
         /* snarf/scan a packet if we can */
-        int result=ogg_stream_packetout(&work_os,&op);
+        int result=ogg_stream_packetout(&work_os, &op);
 
         if(result>0){
 
           if(vf.vi[vf.current_link].codec_setup){
-            thisblock=vorbis_packet_blocksize(vf.vi+vf.current_link,&op);
+            thisblock=vorbis_packet_blocksize(vf.vi+vf.current_link, &op);
             if(thisblock<0){
-              ogg_stream_packetout(&vf.os,null);
+              ogg_stream_packetout(&vf.os, null);
               thisblock=0;
             }else{
 
@@ -8578,13 +8574,13 @@ public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
                  only that, but for first==last, the EOS page must be treated
                  as if its a normal first page for the stream to open/play. */
               if(lastflag && !firstflag)
-                ogg_stream_packetout(&vf.os,null);
+                ogg_stream_packetout(&vf.os, null);
               else
                 if(lastblock)accblock+=(lastblock+thisblock)>>2;
             }
 
             if(op.granulepos!=-1){
-              int i,link=vf.current_link;
+              int i, link=vf.current_link;
               ogg_int64_t granulepos=op.granulepos-vf.pcmlengths[link*2];
               if(granulepos<0)granulepos=0;
 
@@ -8597,14 +8593,14 @@ public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
             lastblock=thisblock;
             continue;
           }else
-            ogg_stream_packetout(&vf.os,null);
+            ogg_stream_packetout(&vf.os, null);
         }
       }
 
       if(!lastblock){
-        pagepos=get_next_page_(vf,&og,-1);
+        pagepos=get_next_page_(vf, &og, -1);
         if(pagepos<0){
-          vf.pcm_offset=ov_pcm_total(vf,-1);
+          vf.pcm_offset=ov_pcm_total(vf, -1);
           break;
         }
       }else{
@@ -8641,14 +8637,14 @@ public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
                                          trying */
         vf.current_link=link;
         vf.current_serialno=serialno;
-        ogg_stream_reset_serialno(&vf.os,serialno);
-        ogg_stream_reset_serialno(&work_os,serialno);
+        ogg_stream_reset_serialno(&vf.os, serialno);
+        ogg_stream_reset_serialno(&work_os, serialno);
         vf.ready_state=STREAMSET;
         firstflag=(pagepos<=vf.dataoffsets[link]);
       }
 
-      ogg_stream_pagein(&vf.os,&og);
-      ogg_stream_pagein(&work_os,&og);
+      ogg_stream_pagein(&vf.os, &og);
+      ogg_stream_pagein(&work_os, &og);
       lastflag=ogg_page_eos(&og);
 
     }
@@ -8703,10 +8699,10 @@ ogg_int64_t rescale64(ogg_int64_t x, ogg_int64_t from, ogg_int64_t to){
     Seek to the last [granule marked] page preceding the specified pos
     location, such that decoding past the returned point will quickly
     arrive at the requested position. */
-public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
+public int ov_pcm_seek_page(OggVorbis_File *vf, ogg_int64_t pos){
   int link=-1;
   ogg_int64_t result=0;
-  ogg_int64_t total=ov_pcm_total(vf,-1);
+  ogg_int64_t total=ov_pcm_total(vf, -1);
 
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(!vf.seekable)return(OV_ENOSEEK);
@@ -8744,10 +8740,10 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
 
     /* if we have only one page, there will be no bisection.  Grab the page here */
     if(begin==end){
-      result=seek_helper_(vf,begin);
+      result=seek_helper_(vf, begin);
       if(result) goto seek_error;
 
-      result=get_next_page_(vf,&og,1);
+      result=get_next_page_(vf, &og, 1);
       if(result<0) goto seek_error;
 
       got_page=1;
@@ -8768,12 +8764,12 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
           bisect=begin;
       }
 
-      result=seek_helper_(vf,bisect);
+      result=seek_helper_(vf, bisect);
       if(result) goto seek_error;
 
       /* read loop within the bisection loop */
       while(begin<end){
-        result=get_next_page_(vf,&og,end-vf.offset);
+        result=get_next_page_(vf, &og, end-vf.offset);
         if(result==OV_EREAD) goto seek_error;
         if(result<0){
           /* there is no next page! */
@@ -8791,7 +8787,7 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
             if(bisect<=begin)bisect=begin+1;
 
             /* seek and continue bisection */
-            result=seek_helper_(vf,bisect);
+            result=seek_helper_(vf, bisect);
             if(result) goto seek_error;
           }
         }else{
@@ -8838,7 +8834,7 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
                 end=result;
                 bisect-=CHUNKSIZE;
                 if(bisect<=begin)bisect=begin+1;
-                result=seek_helper_(vf,bisect);
+                result=seek_helper_(vf, bisect);
                 if(result) goto seek_error;
               }else{
                 /* Normal bisection */
@@ -8881,8 +8877,8 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
           vorbis_synthesis_restart(&vf.vd);
         }
 
-        ogg_stream_reset_serialno(&vf.os,vf.current_serialno);
-        ogg_stream_pagein(&vf.os,&og);
+        ogg_stream_reset_serialno(&vf.os, vf.current_serialno);
+        ogg_stream_pagein(&vf.os, &og);
 
       }else
         goto seek_error;
@@ -8896,10 +8892,10 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
       ogg_packet op;
 
       /* seek */
-      result=seek_helper_(vf,best);
+      result=seek_helper_(vf, best);
       vf.pcm_offset=-1;
       if(result) goto seek_error;
-      result=get_next_page_(vf,&og,-1);
+      result=get_next_page_(vf, &og, -1);
       if(result<0) goto seek_error;
 
       if(link!=vf.current_link){
@@ -8914,12 +8910,12 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
         vorbis_synthesis_restart(&vf.vd);
       }
 
-      ogg_stream_reset_serialno(&vf.os,vf.current_serialno);
-      ogg_stream_pagein(&vf.os,&og);
+      ogg_stream_reset_serialno(&vf.os, vf.current_serialno);
+      ogg_stream_pagein(&vf.os, &og);
 
       /* pull out all but last packet; the one with granulepos */
       while(1){
-        result=ogg_stream_packetpeek(&vf.os,&op);
+        result=ogg_stream_packetpeek(&vf.os, &op);
         if(result==0){
           /* No packet returned; we exited the bisection with 'best'
              pointing to a page with a granule position, so the packet
@@ -8931,12 +8927,12 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
              it's either a bug or a broken stream */
           result=best;
           while(result>vf.dataoffsets[link]){
-            result=get_prev_page_(vf,result,&og);
+            result=get_prev_page_(vf, result, &og);
             if(result<0) goto seek_error;
             if(ogg_page_serialno(&og)==vf.current_serialno &&
                (ogg_page_granulepos(&og)>-1 ||
                 !ogg_page_continued(&og))){
-              return ov_raw_seek(vf,result);
+              return ov_raw_seek(vf, result);
             }
           }
         }
@@ -8950,13 +8946,13 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
           vf.pcm_offset+=total;
           break;
         }else
-          result=ogg_stream_packetout(&vf.os,null);
+          result=ogg_stream_packetout(&vf.os, null);
       }
     }
   }
 
   /* verify result */
-  if(vf.pcm_offset>pos || pos>ov_pcm_total(vf,-1)){
+  if(vf.pcm_offset>pos || pos>ov_pcm_total(vf, -1)){
     result=OV_EFAULT;
     goto seek_error;
   }
@@ -8973,9 +8969,9 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
 
 /** seek to a sample offset relative to the decompressed pcm stream
     returns zero on success, nonzero on failure */
-public int ov_pcm_seek(OggVorbis_File *vf,ogg_int64_t pos){
-  int thisblock,lastblock=0;
-  int ret=ov_pcm_seek_page(vf,pos);
+public int ov_pcm_seek(OggVorbis_File *vf, ogg_int64_t pos){
+  int thisblock, lastblock=0;
+  int ret=ov_pcm_seek_page(vf, pos);
   if(ret<0)return(ret);
   if((ret=make_decode_ready_(vf)) != 0)return ret;
 
@@ -8986,24 +8982,23 @@ public int ov_pcm_seek(OggVorbis_File *vf,ogg_int64_t pos){
     ogg_packet op;
     ogg_page og;
 
-    /*int*/ ret=ogg_stream_packetpeek(&vf.os,&op);
+    /*int*/ ret=ogg_stream_packetpeek(&vf.os, &op);
     if(ret>0){
-      thisblock=vorbis_packet_blocksize(vf.vi+vf.current_link,&op);
+      thisblock=vorbis_packet_blocksize(vf.vi+vf.current_link, &op);
       if(thisblock<0){
-        ogg_stream_packetout(&vf.os,null);
+        ogg_stream_packetout(&vf.os, null);
         continue; /* non audio packet */
       }
       if(lastblock)vf.pcm_offset+=(lastblock+thisblock)>>2;
 
-      if(vf.pcm_offset+((thisblock+
-                          vorbis_info_blocksize(vf.vi,1))>>2)>=pos)break;
+      if(vf.pcm_offset+((thisblock+vorbis_info_blocksize(vf.vi, 1))>>2)>=pos)break;
 
       /* remove the packet from packet queue and track its granulepos */
-      ogg_stream_packetout(&vf.os,null);
-      vorbis_synthesis_trackonly(&vf.vb,&op);  /* set up a vb with
+      ogg_stream_packetout(&vf.os, null);
+      vorbis_synthesis_trackonly(&vf.vb, &op);  /* set up a vb with
                                                    only tracking, no
                                                    pcm_decode */
-      vorbis_synthesis_blockin(&vf.vd,&vf.vb);
+      vorbis_synthesis_blockin(&vf.vd, &vf.vb);
 
       /* end of logical stream case is hard, especially with exact
          length positioning. */
@@ -9023,7 +9018,7 @@ public int ov_pcm_seek(OggVorbis_File *vf,ogg_int64_t pos){
       if(ret<0 && ret!=OV_HOLE)break;
 
       /* suck in a new page */
-      if(get_next_page_(vf,&og,-1)<0)break;
+      if(get_next_page_(vf, &og, -1)<0)break;
       if(ogg_page_bos(&og))decode_clear_(vf);
 
       if(vf.ready_state<STREAMSET){
@@ -9037,13 +9032,13 @@ public int ov_pcm_seek(OggVorbis_File *vf,ogg_int64_t pos){
 
         vf.ready_state=STREAMSET;
         vf.current_serialno=ogg_page_serialno(&og);
-        ogg_stream_reset_serialno(&vf.os,serialno);
+        ogg_stream_reset_serialno(&vf.os, serialno);
         ret=make_decode_ready_(vf);
         if(ret)return ret;
         lastblock=0;
       }
 
-      ogg_stream_pagein(&vf.os,&og);
+      ogg_stream_pagein(&vf.os, &og);
     }
   }
 
@@ -9053,22 +9048,22 @@ public int ov_pcm_seek(OggVorbis_File *vf,ogg_int64_t pos){
      logical bitstream boundary with abandon is OK. */
   while(vf.pcm_offset<pos){
     ogg_int64_t target=pos-vf.pcm_offset;
-    trm_long samples=vorbis_synthesis_pcmout(&vf.vd,null);
+    trm_long samples=vorbis_synthesis_pcmout(&vf.vd, null);
 
     if(samples>target)samples=cast(trm_long)target;
-    vorbis_synthesis_read(&vf.vd,samples);
+    vorbis_synthesis_read(&vf.vd, samples);
     vf.pcm_offset+=samples;
 
     if(samples<target)
-      if(fetch_and_process_packet_(vf,null,1,1)<=0)
-        vf.pcm_offset=ov_pcm_total(vf,-1); /* eof */
+      if(fetch_and_process_packet_(vf, null, 1, 1)<=0)
+        vf.pcm_offset=ov_pcm_total(vf, -1); /* eof */
   }
   return 0;
 }
 
 /** seek to a playback time relative to the decompressed pcm stream
     returns zero on success, nonzero on failure */
-public int ov_time_seek(OggVorbis_File *vf,ogg_int64_t milliseconds){
+public int ov_time_seek(OggVorbis_File *vf, ogg_int64_t milliseconds){
   /* translate time to PCM position and call ov_pcm_seek */
 
   int link=-1;
@@ -9081,7 +9076,7 @@ public int ov_time_seek(OggVorbis_File *vf,ogg_int64_t milliseconds){
 
   /* which bitstream section does this time offset occur in? */
   for(link=0;link<vf.links;link++){
-    ogg_int64_t addsec = ov_time_total(vf,link);
+    ogg_int64_t addsec = ov_time_total(vf, link);
     if(milliseconds<time_total+addsec)break;
     time_total+=addsec;
     pcm_total+=vf.pcmlengths[link*2+1];
@@ -9092,13 +9087,13 @@ public int ov_time_seek(OggVorbis_File *vf,ogg_int64_t milliseconds){
   /* enough information to convert time offset to pcm offset */
   {
     ogg_int64_t target=pcm_total+(milliseconds-time_total)*vf.vi[link].rate/1000;
-    return(ov_pcm_seek(vf,target));
+    return(ov_pcm_seek(vf, target));
   }
 }
 
 /** page-granularity version of ov_time_seek
     returns zero on success, nonzero on failure */
-public int ov_time_seek_page(OggVorbis_File *vf,ogg_int64_t milliseconds){
+public int ov_time_seek_page(OggVorbis_File *vf, ogg_int64_t milliseconds){
   /* translate time to PCM position and call ov_pcm_seek */
 
   int link=-1;
@@ -9111,7 +9106,7 @@ public int ov_time_seek_page(OggVorbis_File *vf,ogg_int64_t milliseconds){
 
   /* which bitstream section does this time offset occur in? */
   for(link=0;link<vf.links;link++){
-    ogg_int64_t addsec = ov_time_total(vf,link);
+    ogg_int64_t addsec = ov_time_total(vf, link);
     if(milliseconds<time_total+addsec)break;
     time_total+=addsec;
     pcm_total+=vf.pcmlengths[link*2+1];
@@ -9122,7 +9117,7 @@ public int ov_time_seek_page(OggVorbis_File *vf,ogg_int64_t milliseconds){
   /* enough information to convert time offset to pcm offset */
   {
     ogg_int64_t target=pcm_total+(milliseconds-time_total)*vf.vi[link].rate/1000;
-    return(ov_pcm_seek_page(vf,target));
+    return(ov_pcm_seek_page(vf, target));
   }
 }
 
@@ -9147,13 +9142,13 @@ public ogg_int64_t ov_time_tell(OggVorbis_File *vf){
 
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(vf.seekable){
-    pcm_total=ov_pcm_total(vf,-1);
-    time_total=ov_time_total(vf,-1);
+    pcm_total=ov_pcm_total(vf, -1);
+    time_total=ov_time_total(vf, -1);
 
     /* which bitstream section does this time offset occur in? */
     for(link=vf.links-1;link>=0;link--){
       pcm_total-=vf.pcmlengths[link*2+1];
-      time_total-=ov_time_total(vf,link);
+      time_total-=ov_time_total(vf, link);
       if(vf.pcm_offset>=pcm_total)break;
     }
   }
@@ -9168,7 +9163,7 @@ public ogg_int64_t ov_time_tell(OggVorbis_File *vf){
      In the case of a non-seekable bitstream, any call returns the
      current bitstream.  null in the case that the machine is not
      initialized */
-public vorbis_info *ov_info(OggVorbis_File *vf,int link=-1){
+public vorbis_info *ov_info(OggVorbis_File *vf, int link=-1){
   if(vf.seekable){
     if(link<0)
       if(vf.ready_state>=STREAMSET)
@@ -9187,7 +9182,7 @@ public vorbis_info *ov_info(OggVorbis_File *vf,int link=-1){
 
 /* grr, strong typing, grr, no templates/inheritence, grr */
 ///
-public vorbis_comment *ov_comment(OggVorbis_File *vf,int link=-1){
+public vorbis_comment *ov_comment(OggVorbis_File *vf, int link=-1){
   if(vf.seekable){
     if(link<0)
       if(vf.ready_state>=STREAMSET)
@@ -9234,8 +9229,8 @@ public vorbis_comment *ov_comment(OggVorbis_File *vf,int link=-1){
       in, just guaranteed to fit.
 
       *bitstream: set to the logical bitstream number */
-public trm_long ov_read(OggVorbis_File *vf,ubyte *buffer,int bytes_req,int *bitstream){
-  int i,j;
+public trm_long ov_read(OggVorbis_File *vf, ubyte *buffer, int bytes_req, int *bitstream){
+  int i, j;
 
   ogg_int32_t **pcm;
   trm_long samples;
@@ -9244,13 +9239,13 @@ public trm_long ov_read(OggVorbis_File *vf,ubyte *buffer,int bytes_req,int *bits
 
   while(1){
     if(vf.ready_state==INITSET){
-      samples=vorbis_synthesis_pcmout(&vf.vd,&pcm);
+      samples=vorbis_synthesis_pcmout(&vf.vd, &pcm);
       if(samples)break;
     }
 
     /* suck in another packet */
     {
-      int ret=fetch_and_process_packet_(vf,null,1,1);
+      int ret=fetch_and_process_packet_(vf, null, 1, 1);
       if(ret==OV_EOF)
         return(0);
       if(ret<=0)
@@ -9263,7 +9258,7 @@ public trm_long ov_read(OggVorbis_File *vf,ubyte *buffer,int bytes_req,int *bits
 
     /* yay! proceed to pack data into the byte buffer */
 
-    trm_long channels=ov_info(vf,-1).channels;
+    trm_long channels=ov_info(vf, -1).channels;
 
     if(samples>(bytes_req/(2*channels)))
       samples=bytes_req/(2*channels);
@@ -9277,7 +9272,7 @@ public trm_long ov_read(OggVorbis_File *vf,ubyte *buffer,int bytes_req,int *bits
       }
     }
 
-    vorbis_synthesis_read(&vf.vd,samples);
+    vorbis_synthesis_read(&vf.vd, samples);
     vf.pcm_offset+=samples;
     if(bitstream)*bitstream=vf.current_link;
     return(samples*2*channels);
@@ -9409,7 +9404,7 @@ struct ogg_sync_state {
 
 
 /* bits <= 32 */
-trm_long oggpack_read(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
+trm_long oggpack_read(oggpack_buffer *b, int bits) nothrow @trusted @nogc {
   trm_long ret;
   trm_ulong m;
 
@@ -9458,7 +9453,7 @@ trm_long oggpack_bytes(oggpack_buffer *b) /*nothrow @trusted @nogc*/ {
 }
 
 /* Read in bits without advancing the bitptr; bits <= 32 */
-trm_long oggpack_look(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
+trm_long oggpack_look(oggpack_buffer *b, int bits) nothrow @trusted @nogc {
   trm_ulong ret;
   trm_ulong m;
 
@@ -9489,7 +9484,7 @@ trm_long oggpack_look(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
   return(m&ret);
 }
 
-void oggpack_adv(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
+void oggpack_adv(oggpack_buffer *b, int bits) nothrow @trusted @nogc {
   bits+=b.endbit;
 
   if(b.endbyte > b.storage-((bits+7)>>3)) goto overflow;
@@ -9505,8 +9500,8 @@ void oggpack_adv(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
   b.endbit=1;
 }
 
-void oggpack_readinit(oggpack_buffer *b,ubyte *buf,int bytes) /*nothrow @trusted @nogc*/ {
-  memset(b,0,(*b).sizeof);
+void oggpack_readinit(oggpack_buffer *b, ubyte *buf, int bytes) /*nothrow @trusted @nogc*/ {
+  memset(b, 0, (*b).sizeof);
   b.buffer=b.ptr=buf;
   b.storage=bytes;
 }
@@ -9518,7 +9513,7 @@ char *ogg_sync_buffer(ogg_sync_state *oy, trm_long size) /*nothrow @trusted @nog
   if(oy.returned){
     oy.fill-=oy.returned;
     if(oy.fill>0)
-      memmove(oy.data,oy.data+oy.returned,oy.fill);
+      memmove(oy.data, oy.data+oy.returned, oy.fill);
     oy.returned=0;
   }
 
@@ -9528,7 +9523,7 @@ char *ogg_sync_buffer(ogg_sync_state *oy, trm_long size) /*nothrow @trusted @nog
     void *ret;
 
     if(oy.data)
-      ret=ogg_realloc_(oy.data,newsize);
+      ret=ogg_realloc_(oy.data, newsize);
     else
       ret=ogg_malloc_(newsize);
     if(!ret){
@@ -9562,7 +9557,7 @@ int ogg_sync_reset(ogg_sync_state *oy) /*nothrow @trusted @nogc*/ {
   return(0);
 }
 
-trm_long ogg_sync_pageseek(ogg_sync_state *oy,ogg_page *og) /*nothrow @trusted @nogc*/ {
+trm_long ogg_sync_pageseek(ogg_sync_state *oy, ogg_page *og) /*nothrow @trusted @nogc*/ {
   ubyte *page=oy.data+oy.returned;
   ubyte *next;
   trm_long bytes=oy.fill-oy.returned;
@@ -9570,11 +9565,11 @@ trm_long ogg_sync_pageseek(ogg_sync_state *oy,ogg_page *og) /*nothrow @trusted @
   if(ogg_sync_check(oy))return 0;
 
   if(oy.headerbytes==0){
-    int headerbytes,i;
+    int headerbytes, i;
     if(bytes<27)return(0); /* not enough for a header */
 
     /* verify capture pattern */
-    if(memcmp(page,"OggS".ptr,4))goto sync_fail;
+    if(memcmp(page, "OggS".ptr, 4))goto sync_fail;
 
     headerbytes=page[26]+27;
     if(bytes<headerbytes)return(0); /* not enough for header + seg table */
@@ -9594,8 +9589,8 @@ trm_long ogg_sync_pageseek(ogg_sync_state *oy,ogg_page *og) /*nothrow @trusted @
     char[4] chksum = 0;
     ogg_page log;
 
-    memcpy(chksum.ptr,page+22,4);
-    memset(page+22,0,4);
+    memcpy(chksum.ptr, page+22, 4);
+    memset(page+22, 0, 4);
 
     /* set up a temp page struct and recompute the checksum */
     log.header=page;
@@ -9605,11 +9600,11 @@ trm_long ogg_sync_pageseek(ogg_sync_state *oy,ogg_page *og) /*nothrow @trusted @
     ogg_page_checksum_set(&log);
 
     /* Compare */
-    if(memcmp(chksum.ptr,page+22,4)){
+    if(memcmp(chksum.ptr, page+22, 4)){
       /* D'oh.  Mismatch! Corrupt page (or miscapture and not a page
          at all) */
       /* replace the computed checksum with the one actually read in */
-      memcpy(page+22,chksum.ptr,4);
+      memcpy(page+22, chksum.ptr, 4);
 
       /* Bad checksum. Lose sync */
       goto sync_fail;
@@ -9641,7 +9636,7 @@ trm_long ogg_sync_pageseek(ogg_sync_state *oy,ogg_page *og) /*nothrow @trusted @
   oy.bodybytes=0;
 
   /* search for possible capture */
-  next=cast(ubyte*)memchr(page+1,'O',bytes-1);
+  next=cast(ubyte*)memchr(page+1, 'O', bytes-1);
   if(!next)
     next=oy.data+oy.fill;
 
@@ -9692,7 +9687,7 @@ int ogg_page_eos(const ogg_page *og) /*nothrow @trusted @nogc*/ {
   return(cast(int)(og.header[5]&0x04));
 }
 
-int ogg_stream_reset_serialno(ogg_stream_state *os,int serialno) /*nothrow @trusted @nogc*/ {
+int ogg_stream_reset_serialno(ogg_stream_state *os, int serialno) /*nothrow @trusted @nogc*/ {
   if(ogg_stream_check(os)) return -1;
   ogg_stream_reset(os);
   os.serialno=serialno;
@@ -9727,16 +9722,16 @@ int ogg_stream_pagein(ogg_stream_state *os, ogg_page *og) /*nothrow @trusted @no
     if(br){
       os.body_fill-=br;
       if(os.body_fill)
-        memmove(os.body_data,os.body_data+br,os.body_fill);
+        memmove(os.body_data, os.body_data+br, os.body_fill);
       os.body_returned=0;
     }
 
     if(lr){
       /* segment table */
       if(os.lacing_fill-lr){
-        memmove(os.lacing_vals,os.lacing_vals+lr,
+        memmove(os.lacing_vals, os.lacing_vals+lr,
                 (os.lacing_fill-lr)*(*os.lacing_vals).sizeof);
-        memmove(os.granule_vals,os.granule_vals+lr,
+        memmove(os.granule_vals, os.granule_vals+lr,
                 (os.lacing_fill-lr)*(*os.granule_vals).sizeof);
       }
       os.lacing_fill-=lr;
@@ -9749,7 +9744,7 @@ int ogg_stream_pagein(ogg_stream_state *os, ogg_page *og) /*nothrow @trusted @no
   if(serialno!=os.serialno)return(-1);
   if(ver>0)return(-1);
 
-  if(os_lacing_expand_(os,segments+1)) return -1;
+  if(os_lacing_expand_(os, segments+1)) return -1;
 
   /* are we in sequence? */
   if(pageno!=os.pageno){
@@ -9786,8 +9781,8 @@ int ogg_stream_pagein(ogg_stream_state *os, ogg_page *og) /*nothrow @trusted @no
   }
 
   if(bodysize){
-    if(os_body_expand_(os,bodysize)) return -1;
-    memcpy(os.body_data+os.body_fill,body_,bodysize);
+    if(os_body_expand_(os, bodysize)) return -1;
+    memcpy(os.body_data+os.body_fill, body_, bodysize);
     os.body_fill+=bodysize;
   }
 
@@ -9829,25 +9824,25 @@ int ogg_stream_pagein(ogg_stream_state *os, ogg_page *og) /*nothrow @trusted @no
   return(0);
 }
 
-int ogg_stream_packetout(ogg_stream_state *os,ogg_packet *op) /*nothrow @trusted @nogc*/ {
+int ogg_stream_packetout(ogg_stream_state *os, ogg_packet *op) /*nothrow @trusted @nogc*/ {
   if(ogg_stream_check(os)) return 0;
-  return packetout_(os,op,1);
+  return packetout_(os, op, 1);
 }
 
 /* initialize the struct to a known state */
 int ogg_sync_init(ogg_sync_state *oy) /*nothrow @trusted @nogc*/ {
   if(oy){
     oy.storage = -1; /* used as a readiness flag */
-    memset(oy,0,(*oy).sizeof);
+    memset(oy, 0, (*oy).sizeof);
   }
   return(0);
 }
 
 /* init the encode/decode logical stream state */
 
-int ogg_stream_init(ogg_stream_state *os,int serialno) /*nothrow @trusted @nogc*/ {
+int ogg_stream_init(ogg_stream_state *os, int serialno) /*nothrow @trusted @nogc*/ {
   if(os){
-    memset(os,0,(*os).sizeof);
+    memset(os, 0, (*os).sizeof);
     os.body_storage=16*1024;
     os.lacing_storage=1024;
 
@@ -9874,7 +9869,7 @@ int ogg_stream_clear(ogg_stream_state *os) /*nothrow @trusted @nogc*/ {
     if(os.lacing_vals)ogg_free_(os.lacing_vals);
     if(os.granule_vals)ogg_free_(os.granule_vals);
 
-    memset(os,0,(*os).sizeof);
+    memset(os, 0, (*os).sizeof);
   }
   return(0);
 }
@@ -9883,7 +9878,7 @@ int ogg_stream_clear(ogg_stream_state *os) /*nothrow @trusted @nogc*/ {
 int ogg_sync_clear(ogg_sync_state *oy) /*nothrow @trusted @nogc*/ {
   if(oy){
     if(oy.data)ogg_free_(oy.data);
-    memset(oy,0,(*oy).sizeof);
+    memset(oy, 0, (*oy).sizeof);
   }
   return(0);
 }
@@ -9909,9 +9904,9 @@ int ogg_stream_reset(ogg_stream_state *os) /*nothrow @trusted @nogc*/ {
   return(0);
 }
 
-int ogg_stream_packetpeek(ogg_stream_state *os,ogg_packet *op) /*nothrow @trusted @nogc*/ {
+int ogg_stream_packetpeek(ogg_stream_state *os, ogg_packet *op) /*nothrow @trusted @nogc*/ {
   if(ogg_stream_check(os)) return 0;
-  return packetout_(os,op,0);
+  return packetout_(os, op, 0);
 }
 
 int ogg_sync_check(ogg_sync_state *oy) /*nothrow @trusted @nogc*/ {
@@ -9948,7 +9943,7 @@ int ogg_stream_check(ogg_stream_state *os) /*nothrow @trusted @nogc*/ {
   return 0;
 }
 
-private int packetout_(ogg_stream_state *os,ogg_packet *op,int adv) /*nothrow @trusted @nogc*/ {
+private int packetout_(ogg_stream_state *os, ogg_packet *op, int adv) /*nothrow @trusted @nogc*/ {
 
   /* The last part of decode. We have the stream broken into packet
      segments.  Now we need to group them into packets (or return the
@@ -10002,7 +9997,7 @@ private int packetout_(ogg_stream_state *os,ogg_packet *op,int adv) /*nothrow @t
   return(1);
 }
 
-private int os_lacing_expand_(ogg_stream_state *os,trm_long needed) /*nothrow @trusted @nogc*/ {
+private int os_lacing_expand_(ogg_stream_state *os, trm_long needed) /*nothrow @trusted @nogc*/ {
   if(os.lacing_storage-needed<=os.lacing_fill){
     trm_long lacing_storage;
     void *ret;
@@ -10012,13 +10007,13 @@ private int os_lacing_expand_(ogg_stream_state *os,trm_long needed) /*nothrow @t
     }
     lacing_storage=os.lacing_storage+needed;
     if(lacing_storage<LONG_MAX-32)lacing_storage+=32;
-    ret=ogg_realloc_(os.lacing_vals,lacing_storage*(*os.lacing_vals).sizeof);
+    ret=ogg_realloc_(os.lacing_vals, lacing_storage*(*os.lacing_vals).sizeof);
     if(!ret){
       ogg_stream_clear(os);
       return -1;
     }
     os.lacing_vals=cast(int*)ret;
-    ret=ogg_realloc_(os.granule_vals,lacing_storage*
+    ret=ogg_realloc_(os.granule_vals, lacing_storage*
                      (*os.granule_vals).sizeof);
     if(!ret){
       ogg_stream_clear(os);
@@ -10030,7 +10025,7 @@ private int os_lacing_expand_(ogg_stream_state *os,trm_long needed) /*nothrow @t
   return 0;
 }
 
-private int os_body_expand_(ogg_stream_state *os,trm_long needed) /*nothrow @trusted @nogc*/ {
+private int os_body_expand_(ogg_stream_state *os, trm_long needed) /*nothrow @trusted @nogc*/ {
   if(os.body_storage-needed<=os.body_fill){
     trm_long body_storage;
     void *ret;
@@ -10040,7 +10035,7 @@ private int os_body_expand_(ogg_stream_state *os,trm_long needed) /*nothrow @tru
     }
     body_storage=os.body_storage+needed;
     if(body_storage<LONG_MAX-1024)body_storage+=1024;
-    ret=ogg_realloc_(os.body_data,body_storage*(*os.body_data).sizeof);
+    ret=ogg_realloc_(os.body_data, body_storage*(*os.body_data).sizeof);
     if(!ret){
       ogg_stream_clear(os);
       return -1;

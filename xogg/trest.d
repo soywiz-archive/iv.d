@@ -83,8 +83,6 @@ ubyte[BUF_SIZE] buffer;
 
 
 void main (string[] args) {
-  import std.string : toStringz;
-
   if (args.length != 2) assert(0, "file?!");
 
   int err;
@@ -99,7 +97,7 @@ void main (string[] args) {
     err = ov_fopen(VFile(args[1]), &vf);
   } else {
     pragma(msg, "TREMOR: NO VFS!");
-    err = ov_fopen(args[1].toStringz, &vf);
+    err = ov_fopen(args[1], &vf);
   }
   if (err != 0) {
     assert(0, "Error opening file");
