@@ -39,15 +39,15 @@ import core.stdc.string : memchr, memcmp, memcpy, memset, memmove, strlen, strcp
 import core.stdc.stdlib : ogg_malloc_ = malloc, ogg_realloc_ = realloc, ogg_free_ = free, ogg_calloc_ = calloc;
 
 version(XoggTremorNoVFS) {
-  enum XoggTremorHasVFS = false;
+  public enum XoggTremorHasVFS = false;
 } else {
   static if (is(typeof((){import iv.vfs;}()))) {
-    enum XoggTremorHasVFS = true;
+    public enum XoggTremorHasVFS = true;
     import iv.vfs;
     version = XoggTremorHasVFS;
   } else {
     version = XoggTremorNoVFS;
-    enum XoggTremorHasVFS = false;
+    public enum XoggTremorHasVFS = false;
   }
 }
 
@@ -7205,7 +7205,6 @@ enum READSIZE  = 1024;
 static if (!XoggTremorHasVFS) {
 ///
 public struct ov_callbacks {
-extern(C) /*nothrow @trusted @nogc*/:
   size_t function (void *ptr, size_t size, size_t nmemb, void *datasource) read_func;
   int function (void *datasource, ogg_int64_t offset, int whence) seek_func;
   int function (void *datasource) close_func;
@@ -7885,7 +7884,7 @@ private int open_seekable2_ (OggVorbis_File* vf) {
       }
     }
   } else {
-    if(vf.callbacks.seek_func && vf.callbacks.tell_func){
+    if(vf.callbacks.seek_func !is null && vf.callbacks.tell_func !is null){
       vf.callbacks.seek_func(vf.datasource,0,SEEK_END);
       vf.offset=vf.end=vf.callbacks.tell_func(vf.datasource);
     }else{
@@ -8127,13 +8126,6 @@ private int fetch_and_process_packet_(OggVorbis_File *vf,
   }
 }
 
-/* if, eg, 64 bit stdio is configured by default, this will build with
-   fseek64 */
-private int fseek64_wrap_(FILE *f,ogg_int64_t off,int whence){
-  if(f==null)return(-1);
-  return fseek(f,cast(int)off,whence);
-}
-
 static if (XoggTremorHasVFS) alias ov_callbacks_x = VFile; else alias ov_callbacks_x = ov_callbacks*;
 private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long ibytes, ov_callbacks_x callbacks) {
   static if (XoggTremorHasVFS) {
@@ -8145,7 +8137,7 @@ private int ov_open1_(void *f,OggVorbis_File *vf,const char *initial, trm_long i
       offsettest = -1;
     }
   } else {
-    int offsettest = (f && callbacks.seek_func !is null ? callbacks.seek_func(f, 0, SEEK_CUR) : -1);
+    int offsettest = (f !is null && callbacks.seek_func !is null ? callbacks.seek_func(f, 0, SEEK_CUR) : -1);
   }
   ogg_uint32_t *serialno_list=null;
   int serialno_list_size=0;
@@ -8302,14 +8294,29 @@ static if (XoggTremorHasVFS) {
     return ov_open2_(vf);
   }
 
+  private void ov_setup_file_callbacks_ (ref ov_callbacks callbacks) {
+    callbacks.read_func = /*size_t*/ function (void *ptr, size_t size, size_t nmemb, void *datasource) {
+      if (datasource is null) return -1;
+      return cast(size_t)fread(ptr, size, nmemb, cast(FILE*)datasource);
+    };
+    callbacks.seek_func = /*int*/ function (void *datasource, ogg_int64_t offset, int whence) {
+      if (datasource is null) return -1;
+      return cast(int)fseek(cast(FILE*)datasource, cast(int)offset, whence);
+    };
+    callbacks.close_func = /*int*/ function (void *datasource) {
+      if (datasource !is null) return cast(int)fclose(cast(FILE*)datasource);
+      return 0;
+    };
+    callbacks.tell_func = /*trm_long*/ function (void *datasource) {
+      if (datasource is null) return cast(trm_long)-1;
+      return cast(trm_long)ftell(cast(FILE*)datasource);
+    };
+  }
+
   ///
   public int ov_open(FILE *f,OggVorbis_File *vf,const char *initial,trm_long ibytes){
     ov_callbacks callbacks;
-    callbacks.read_func = cast(typeof(callbacks.read_func))&fread;
-    callbacks.seek_func = cast(typeof(callbacks.seek_func))&fseek64_wrap_;
-    callbacks.close_func = cast(typeof(callbacks.close_func))&fclose;
-    callbacks.tell_func = cast(typeof(callbacks.tell_func))&ftell;
-
+    ov_setup_file_callbacks_(callbacks);
     return ov_open_callbacks(cast(void *)f, vf, initial, ibytes, callbacks);
   }
 
@@ -8337,11 +8344,7 @@ static if (XoggTremorHasVFS) {
   ///
   public int ov_test(FILE *f,OggVorbis_File *vf,const char *initial,trm_long ibytes){
     ov_callbacks callbacks;
-    callbacks.read_func = cast(typeof(callbacks.read_func))&fread;
-    callbacks.seek_func = cast(typeof(callbacks.seek_func))&fseek64_wrap_;
-    callbacks.close_func = cast(typeof(callbacks.close_func))&fclose;
-    callbacks.tell_func = cast(typeof(callbacks.tell_func))&ftell;
-
+    ov_setup_file_callbacks_(callbacks);
     return ov_test_callbacks(cast(void *)f, vf, initial, ibytes, callbacks);
   }
 }

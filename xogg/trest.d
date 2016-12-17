@@ -34,6 +34,17 @@ import iv.vfs.io;
 
 import iv.xogg.tremor;
 
+version(XoggTremorNoVFS) {
+  enum TremorHasVFS = false;
+} else {
+  static if (is(typeof((){import iv.vfs;}()))) {
+    enum TremorHasVFS = true;
+    import iv.vfs;
+  } else {
+    enum TremorHasVFS = false;
+  }
+}
+
 
 string recodeToKOI8 (const(char)[] s) {
   immutable wchar[128] charMapKOI8 = [
@@ -83,7 +94,12 @@ void main (string[] args) {
   int eof = 0;
   int current_section;
 
-  err = ov_fopen(VFile(args[1]), &vf);
+  static if (TremorHasVFS) {
+    err = ov_fopen(VFile(args[1]), &vf);
+  } else {
+    pragma(msg, "TREMOR: NO VFS!");
+    err = ov_fopen(args[1].toStringz, &vf);
+  }
   if (err != 0) {
     assert(0, "Error opening file");
   } else {
