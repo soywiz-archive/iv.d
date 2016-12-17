@@ -214,12 +214,13 @@ struct vorbis_info_mapping0 {
 /* ******************************************************************
  function: libvorbis codec headers
  ****************************************************************** */
+///
 public struct vorbis_info {
-  int ver;
-  int channels;
-  int rate;
+  int ver; ///
+  int channels; ///
+  int rate; ///
 
-  /* The below bitrate declarations are *hints*.
+  /** The below bitrate declarations are *hints*.
      Combinations of the three values carry the following implications:
 
      all three set to the same value:
@@ -233,13 +234,12 @@ public struct vorbis_info {
      none set:
        the coder does not care to speculate.
   */
+  int bitrate_upper; ///
+  int bitrate_nominal; ///
+  int bitrate_lower; ///
+  int bitrate_window; ///
 
-  int bitrate_upper;
-  int bitrate_nominal;
-  int bitrate_lower;
-  int bitrate_window;
-
-  void *codec_setup;
+  private void *codec_setup;
 }
 
 /* vorbis_dsp_state buffers the current vorbis audio
@@ -309,36 +309,35 @@ struct alloc_chain {
    etc). vorbis_info and substructures are in backends.h.
 *********************************************************************/
 
-/* the comments are not part of vorbis_info so that vorbis_info can be
-   static storage */
+/* the comments are not part of vorbis_info so that vorbis_info can be static storage */
+///
 public struct vorbis_comment {
-  /* unlimited user comment fields.  libvorbis writes 'libvorbis'
-     whatever vendor is set to in encode */
-  char** user_comments;
-  int* comment_lengths;
-  int comments;
-  char* vendor;
+  // unlimited user comment fields. libvorbis writes 'libvorbis' whatever vendor is set to in encode
+  char** user_comments; ///
+  int* comment_lengths; ///
+  int comments; ///
+  char* vendor; ///
 }
 
 
 /* Vorbis ERRORS and return codes ***********************************/
-
+///
 public {
-  enum OV_FALSE      = -1;
-  enum OV_EOF        = -2;
-  enum OV_HOLE       = -3;
+  enum OV_FALSE      = -1; ///
+  enum OV_EOF        = -2; ///
+  enum OV_HOLE       = -3; ///
 
-  enum OV_EREAD      = -128;
-  enum OV_EFAULT     = -129;
-  enum OV_EIMPL      = -130;
-  enum OV_EINVAL     = -131;
-  enum OV_ENOTVORBIS = -132;
-  enum OV_EBADHEADER = -133;
-  enum OV_EVERSION   = -134;
-  enum OV_ENOTAUDIO  = -135;
-  enum OV_EBADPACKET = -136;
-  enum OV_EBADLINK   = -137;
-  enum OV_ENOSEEK    = -138;
+  enum OV_EREAD      = -128; ///
+  enum OV_EFAULT     = -129; ///
+  enum OV_EIMPL      = -130; ///
+  enum OV_EINVAL     = -131; ///
+  enum OV_ENOTVORBIS = -132; ///
+  enum OV_EBADHEADER = -133; ///
+  enum OV_EVERSION   = -134; ///
+  enum OV_ENOTAUDIO  = -135; ///
+  enum OV_EBADPACKET = -136; ///
+  enum OV_EBADLINK   = -137; ///
+  enum OV_ENOSEEK    = -138; ///
 }
 
 
@@ -4495,6 +4494,7 @@ private void v_readstring_(oggpack_buffer *o,char *buf,int bytes){
   }
 }
 
+///
 public void vorbis_comment_init(vorbis_comment *vc){
   memset(vc,0,(*vc).sizeof);
 }
@@ -4514,6 +4514,7 @@ private int tagcompare(const char *s1, const char *s2, size_t n){
   return 0;
 }
 
+///
 public char *vorbis_comment_query(vorbis_comment *vc, char *tag, int count){
   import core.stdc.stdlib : alloca;
   c_long i;
@@ -4536,6 +4537,7 @@ public char *vorbis_comment_query(vorbis_comment *vc, char *tag, int count){
   return null; /* didn't find anything */
 }
 
+///
 public int vorbis_comment_query_count(vorbis_comment *vc, char *tag){
   import core.stdc.stdlib : alloca;
   int i,count=0;
@@ -4552,6 +4554,7 @@ public int vorbis_comment_query_count(vorbis_comment *vc, char *tag){
   return count;
 }
 
+///
 public void vorbis_comment_clear(vorbis_comment *vc){
   if(vc){
     c_long i;
@@ -4566,19 +4569,19 @@ public void vorbis_comment_clear(vorbis_comment *vc){
   }
 }
 
-/* blocksize 0 is guaranteed to be short, 1 is guarantted to be c_long.
-   They may be equal, but short will never ge greater than c_long */
+// blocksize 0 is guaranteed to be short, 1 is guarantted to be c_long. They may be equal, but short will never ge greater than long
 public int vorbis_info_blocksize(vorbis_info *vi,int zo){
   codec_setup_info *ci = cast(codec_setup_info *)vi.codec_setup;
   return ci ? ci.blocksizes[zo] : -1;
 }
 
-/* used by synthesis, which has a full, alloced vi */
+/// used by synthesis, which has a full, alloced vi
 public void vorbis_info_init(vorbis_info *vi){
   memset(vi,0,(*vi).sizeof);
   vi.codec_setup=cast(codec_setup_info *)ogg_calloc_(1,(codec_setup_info).sizeof);
 }
 
+///
 public void vorbis_info_clear(vorbis_info *vi){
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   int i;
@@ -7158,14 +7161,15 @@ enum CHUNKSIZE = 65535;
 enum READSIZE  = 1024;
 /* The function prototypes for the callbacks are basically the same as for
  * the stdio functions fread, fseek, fclose, ftell.
- * The one difference is that the FILE * arguments have been replaced with
- * a void * - this is to be used as a pointer to whatever internal data these
- * functions might need. In the stdio case, it's just a FILE * cast to a void *
+ * The one difference is that the FILE* arguments have been replaced with
+ * a void* - this is to be used as a pointer to whatever internal data these
+ * functions might need. In the stdio case, it's just a FILE* cast to a void*
  *
  * If you use other functions, check the docs for these functions and return
  * the right values. For seek_func(), you *MUST* return -1 if the stream is
  * unseekable
  */
+///
 public struct ov_callbacks {
 extern(C) nothrow @trusted @nogc:
   size_t function (void *ptr, size_t size, size_t nmemb, void *datasource) read_func;
@@ -7180,39 +7184,37 @@ enum OPENED    = 2;
 enum STREAMSET = 3;
 enum INITSET   = 4;
 
+///
 public struct OggVorbis_File {
-  void            *datasource; /* Pointer to a FILE *, etc. */
-  int              seekable;
-  ogg_int64_t      offset;
-  ogg_int64_t      end;
-  ogg_sync_state   oy;
+  void* datasource; /// Pointer to a FILE *, etc.
+  int seekable; ///
+  ogg_int64_t offset; ///
+  ogg_int64_t end; ///
+  private ogg_sync_state oy;
 
-  /* If the FILE handle isn't seekable (eg, a pipe), only the current
-     stream appears */
-  int              links;
-  ogg_int64_t     *offsets;
-  ogg_int64_t     *dataoffsets;
-  ogg_uint32_t    *serialnos;
-  ogg_int64_t     *pcmlengths;
-  vorbis_info     *vi;
-  vorbis_comment  *vc;
+  // If the FILE handle isn't seekable (eg, a pipe), only the current stream appears
+  private int links;
+  private ogg_int64_t* offsets;
+  private ogg_int64_t* dataoffsets;
+  private ogg_uint32_t* serialnos;
+  private ogg_int64_t* pcmlengths;
+  vorbis_info* vi; ///
+  vorbis_comment* vc; ///
 
-  /* Decoding working state local storage */
-  ogg_int64_t      pcm_offset;
-  int              ready_state;
-  ogg_uint32_t     current_serialno;
-  int              current_link;
+  // Decoding working state local storage
+  private ogg_int64_t pcm_offset;
+  private int ready_state;
+  private ogg_uint32_t current_serialno;
+  private int current_link;
 
-  ogg_int64_t      bittrack;
-  ogg_int64_t      samptrack;
+  private ogg_int64_t bittrack;
+  private ogg_int64_t samptrack;
 
-  ogg_stream_state os; /* take physical pages, weld into a logical
-                          stream of packets */
-  vorbis_dsp_state vd; /* central working state for the packet.PCM decoder */
-  vorbis_block     vb; /* local working space for packet.PCM decode */
+  private ogg_stream_state os; // take physical pages, weld into a logical stream of packets
+  private vorbis_dsp_state vd; // central working state for the packet.PCM decoder
+  private vorbis_block vb; // local working space for packet.PCM decode
 
-  ov_callbacks callbacks;
-
+  ov_callbacks callbacks; ///
 }
 
 /* A 'chained bitstream' is a Vorbis bitstream that contains more than
@@ -8128,7 +8130,7 @@ private int ov_open2_(OggVorbis_File *vf){
 }
 
 
-/* clear out the OggVorbis_File struct */
+/// clear out the OggVorbis_File struct
 public int ov_clear(OggVorbis_File *vf){
   if(vf){
     vorbis_block_clear(&vf.vb);
@@ -8156,29 +8158,21 @@ public int ov_clear(OggVorbis_File *vf){
   return(0);
 }
 
-/* inspects the OggVorbis file and finds/documents all the logical
+/** inspects the OggVorbis file and finds/documents all the logical
    bitstreams contained in it.  Tries to be tolerant of logical
    bitstream sections that are truncated/woogie.
 
-   return: -1) error
-            0) OK
+   return: -1: error
+            0: OK
 */
-
 public int ov_open_callbacks(void *f,OggVorbis_File *vf, const(char)*initial, c_long ibytes,ov_callbacks callbacks) {
   int ret=ov_open1_(f,vf,initial,ibytes,callbacks);
   if(ret)return ret;
   return ov_open2_(vf);
 }
 
+///
 public int ov_open(FILE *f,OggVorbis_File *vf,const char *initial,c_long ibytes){
-  /+
-  ov_callbacks callbacks = {
-    /*(size_t (*)(void *, size_t, size_t, void *))*/  &fread,
-    /*(int (*)(void *, ogg_int64_t, int))*/ &fseek64_wrap_,
-    /*(int (*)(void *))*/ &fclose,
-    /*(c_long (*)(void *))*/ &ftell
-  };
-  +/
   ov_callbacks callbacks;
   callbacks.read_func = cast(typeof(callbacks.read_func))&fread;
   callbacks.seek_func = cast(typeof(callbacks.seek_func))&fseek64_wrap_;
@@ -8188,6 +8182,7 @@ public int ov_open(FILE *f,OggVorbis_File *vf,const char *initial,c_long ibytes)
   return ov_open_callbacks(cast(void *)f, vf, initial, ibytes, callbacks);
 }
 
+///
 public int ov_fopen(const char *path,OggVorbis_File *vf){
   int ret;
   FILE *f = fopen(path,"rb");
@@ -8199,26 +8194,18 @@ public int ov_fopen(const char *path,OggVorbis_File *vf){
 }
 
 
-/* Only partially open the vorbis file; test for Vorbisness, and load
+/** Only partially open the vorbis file; test for Vorbisness, and load
    the headers for the first chain.  Do not seek (although test for
    seekability).  Use ov_test_open to finish opening the file, else
    ov_clear to close/free it. Same return codes as open. */
-
 public int ov_test_callbacks(void *f,OggVorbis_File *vf,
     const char *initial,c_long ibytes,ov_callbacks callbacks)
 {
   return ov_open1_(f,vf,initial,ibytes,callbacks);
 }
 
+///
 public int ov_test(FILE *f,OggVorbis_File *vf,const char *initial,c_long ibytes){
-  /+
-  ov_callbacks callbacks = {
-    /*(size_t (*)(void *, size_t, size_t, void *))*/ &fread,
-    /*(int (*)(void *, ogg_int64_t, int))*/ &fseek64_wrap_,
-    /*(int (*)(void *))*/ &fclose,
-    /*(c_long (*)(void *))*/ &ftell
-  };
-  +/
   ov_callbacks callbacks;
   callbacks.read_func = cast(typeof(callbacks.read_func))&fread;
   callbacks.seek_func = cast(typeof(callbacks.seek_func))&fseek64_wrap_;
@@ -8228,22 +8215,23 @@ public int ov_test(FILE *f,OggVorbis_File *vf,const char *initial,c_long ibytes)
   return ov_test_callbacks(cast(void *)f, vf, initial, ibytes, callbacks);
 }
 
+///
 public int ov_test_open(OggVorbis_File *vf){
   if(vf.ready_state!=PARTOPEN)return(OV_EINVAL);
   return ov_open2_(vf);
 }
 
-/* How many logical bitstreams in this physical bitstream? */
+/// How many logical bitstreams in this physical bitstream?
 public c_long ov_streams(OggVorbis_File *vf){
   return vf.links;
 }
 
-/* Is the FILE * associated with vf seekable? */
+/// Is the FILE* associated with vf seekable?
 public c_long ov_seekable(OggVorbis_File *vf){
   return vf.seekable;
 }
 
-/* returns the bitrate for a given logical bitstream or the entire
+/** returns the bitrate for a given logical bitstream or the entire
    physical bitstream.  If the file is open for random access, it will
    find the *actual* average bitrate.  If the file is streaming, it
    returns the nominal bitrate (if set) else the average of the
@@ -8251,7 +8239,6 @@ public c_long ov_seekable(OggVorbis_File *vf){
 
    If you want the actual bitrate field settings, get them from the
    vorbis_info structs */
-
 public c_long ov_bitrate(OggVorbis_File *vf,int i){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(i>=vf.links)return(OV_EINVAL);
@@ -8288,7 +8275,7 @@ public c_long ov_bitrate(OggVorbis_File *vf,int i){
   }
 }
 
-/* returns the actual bitrate since last call.  returns -1 if no
+/** returns the actual bitrate since last call.  returns -1 if no
    additional data to offer since last call (or at beginning of stream),
    EINVAL if stream is only partially open
 */
@@ -8303,7 +8290,7 @@ public c_long ov_bitrate_instant(OggVorbis_File *vf){
   return(ret);
 }
 
-/* Guess */
+/// Guess
 public c_long ov_serialnumber(OggVorbis_File *vf,int i){
   if(i>=vf.links)return(ov_serialnumber(vf,vf.links-1));
   if(!vf.seekable && i>=0)return(ov_serialnumber(vf,-1));
@@ -8314,10 +8301,10 @@ public c_long ov_serialnumber(OggVorbis_File *vf,int i){
   }
 }
 
-/* returns: total raw (compressed) length of content if i==-1
-            raw (compressed) length of that logical bitstream for i==0 to n
-            OV_EINVAL if the stream is not seekable (we can't know the length)
-            or if stream is only partially open
+/** returns: total raw (compressed) length of content if i==-1
+             raw (compressed) length of that logical bitstream for i==0 to n
+             OV_EINVAL if the stream is not seekable (we can't know the length)
+             or if stream is only partially open
 */
 public ogg_int64_t ov_raw_total(OggVorbis_File *vf,int i){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
@@ -8352,10 +8339,10 @@ public ogg_int64_t ov_pcm_total(OggVorbis_File *vf,int i){
   }
 }
 
-/* returns: total milliseconds of content if i==-1
-            milliseconds in that logical bitstream for i==0 to n
-            OV_EINVAL if the stream is not seekable (we can't know the
-            length) or only partially open
+/** returns: total milliseconds of content if i==-1
+             milliseconds in that logical bitstream for i==0 to n
+             OV_EINVAL if the stream is not seekable (we can't know the
+             length) or only partially open
 */
 public ogg_int64_t ov_time_total(OggVorbis_File *vf,int i){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
@@ -8371,13 +8358,12 @@ public ogg_int64_t ov_time_total(OggVorbis_File *vf,int i){
   }
 }
 
-/* seek to an offset relative to the *compressed* data. This also
-   scans packets to update the PCM cursor. It will cross a logical
-   bitstream boundary, but only if it can't get any packets out of the
-   tail of the bitstream we seek to (so no surprises).
+/** seek to an offset relative to the *compressed* data. This also
+    scans packets to update the PCM cursor. It will cross a logical
+    bitstream boundary, but only if it can't get any packets out of the
+    tail of the bitstream we seek to (so no surprises).
 
-   returns zero on success, nonzero on failure */
-
+    returns zero on success, nonzero on failure */
 public int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
   ogg_stream_state work_os;
   int ret;
@@ -8577,12 +8563,12 @@ ogg_int64_t rescale64(ogg_int64_t x, ogg_int64_t from, ogg_int64_t to){
   return ret;
 }
 
-/* Page granularity seek (faster than sample granularity because we
-   don't do the last bit of decode to find a specific sample).
+/** Page granularity seek (faster than sample granularity because we
+    don't do the last bit of decode to find a specific sample).
 
-   Seek to the last [granule marked] page preceding the specified pos
-   location, such that decoding past the returned point will quickly
-   arrive at the requested position. */
+    Seek to the last [granule marked] page preceding the specified pos
+    location, such that decoding past the returned point will quickly
+    arrive at the requested position. */
 public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
   int link=-1;
   ogg_int64_t result=0;
@@ -8851,9 +8837,8 @@ public int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
   return cast(int)result;
 }
 
-/* seek to a sample offset relative to the decompressed pcm stream
-   returns zero on success, nonzero on failure */
-
+/** seek to a sample offset relative to the decompressed pcm stream
+    returns zero on success, nonzero on failure */
 public int ov_pcm_seek(OggVorbis_File *vf,ogg_int64_t pos){
   int thisblock,lastblock=0;
   int ret=ov_pcm_seek_page(vf,pos);
@@ -8947,8 +8932,8 @@ public int ov_pcm_seek(OggVorbis_File *vf,ogg_int64_t pos){
   return 0;
 }
 
-/* seek to a playback time relative to the decompressed pcm stream
-   returns zero on success, nonzero on failure */
+/** seek to a playback time relative to the decompressed pcm stream
+    returns zero on success, nonzero on failure */
 public int ov_time_seek(OggVorbis_File *vf,ogg_int64_t milliseconds){
   /* translate time to PCM position and call ov_pcm_seek */
 
@@ -8977,8 +8962,8 @@ public int ov_time_seek(OggVorbis_File *vf,ogg_int64_t milliseconds){
   }
 }
 
-/* page-granularity version of ov_time_seek
-   returns zero on success, nonzero on failure */
+/** page-granularity version of ov_time_seek
+    returns zero on success, nonzero on failure */
 public int ov_time_seek_page(OggVorbis_File *vf,ogg_int64_t milliseconds){
   /* translate time to PCM position and call ov_pcm_seek */
 
@@ -9007,20 +8992,20 @@ public int ov_time_seek_page(OggVorbis_File *vf,ogg_int64_t milliseconds){
   }
 }
 
-/* tell the current stream offset cursor.  Note that seek followed by
-   tell will likely not give the set offset due to caching */
+/** tell the current stream offset cursor.  Note that seek followed by
+    tell will likely not give the set offset due to caching */
 public ogg_int64_t ov_raw_tell(OggVorbis_File *vf){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   return(vf.offset);
 }
 
-/* return PCM offset (sample) of next PCM sample to be read */
+/// return PCM offset (sample) of next PCM sample to be read
 public ogg_int64_t ov_pcm_tell(OggVorbis_File *vf){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   return(vf.pcm_offset);
 }
 
-/* return time offset (milliseconds) of next PCM sample to be read */
+/// return time offset (milliseconds) of next PCM sample to be read
 public ogg_int64_t ov_time_tell(OggVorbis_File *vf){
   int link=0;
   ogg_int64_t pcm_total=0;
@@ -9042,14 +9027,13 @@ public ogg_int64_t ov_time_tell(OggVorbis_File *vf){
   return(time_total+(1000*vf.pcm_offset-pcm_total)/vf.vi[link].rate);
 }
 
-/*  link:   -1) return the vorbis_info struct for the bitstream section
-                currently being decoded
-           0-n) to request information for a specific bitstream section
+/**  link:   -1: return the vorbis_info struct for the bitstream section
+                 currently being decoded
+            0-n: to request information for a specific bitstream section
 
-    In the case of a non-seekable bitstream, any call returns the
-    current bitstream.  null in the case that the machine is not
-    initialized */
-
+     In the case of a non-seekable bitstream, any call returns the
+     current bitstream.  null in the case that the machine is not
+     initialized */
 public vorbis_info *ov_info(OggVorbis_File *vf,int link){
   if(vf.seekable){
     if(link<0)
@@ -9068,6 +9052,7 @@ public vorbis_info *ov_info(OggVorbis_File *vf,int link){
 }
 
 /* grr, strong typing, grr, no templates/inheritence, grr */
+///
 public vorbis_comment *ov_comment(OggVorbis_File *vf,int link){
   if(vf.seekable){
     if(link<0)
@@ -9085,33 +9070,36 @@ public vorbis_comment *ov_comment(OggVorbis_File *vf,int link){
   }
 }
 
-/* up to this point, everything could more or less hide the multiple
-   logical bitstream nature of chaining from the toplevel application
-   if the toplevel application didn't particularly care.  However, at
-   the point that we actually read audio back, the multiple-section
-   nature must surface: Multiple bitstream sections do not necessarily
-   have to have the same number of channels or sampling rate.
+/** read data from ogg file
 
-   ov_read returns the sequential logical bitstream number currently
-   being decoded along with the PCM data in order that the toplevel
-   application can take action on channel/sample rate changes.  This
-   number will be incremented even for streamed (non-seekable) streams
-   (for seekable streams, it represents the actual logical bitstream
-   index within the physical bitstream.  Note that the accessor
-   functions above are aware of this dichotomy).
+    up to this point, everything could more or less hide the multiple
+    logical bitstream nature of chaining from the toplevel application
+    if the toplevel application didn't particularly care.  However, at
+    the point that we actually read audio back, the multiple-section
+    nature must surface: Multiple bitstream sections do not necessarily
+    have to have the same number of channels or sampling rate.
 
-   input values: buffer) a buffer to hold packed PCM data for return
-                 bytes_req) the byte length requested to be placed into buffer
+    ov_read returns the sequential logical bitstream number currently
+    being decoded along with the PCM data in order that the toplevel
+    application can take action on channel/sample rate changes.  This
+    number will be incremented even for streamed (non-seekable) streams
+    (for seekable streams, it represents the actual logical bitstream
+    index within the physical bitstream.  Note that the accessor
+    functions above are aware of this dichotomy).
 
-   return values: <0) error/hole in data (OV_HOLE), partial open (OV_EINVAL)
-                   0) EOF
-                   n) number of bytes of PCM actually returned.  The
-                   below works on a packet-by-packet basis, so the
-                   return length is not related to the 'length' passed
-                   in, just guaranteed to fit.
+    input values:
+      buffer: a buffer to hold packed PCM data for return
+      bytes_req: the byte length requested to be placed into buffer
 
-            *section) set to the logical bitstream number */
+    return values:
+      <0: error/hole in data (OV_HOLE), partial open (OV_EINVAL)
+       0: EOF
+      >0: number of bytes of PCM actually returned.  The
+      below works on a packet-by-packet basis, so the
+      return length is not related to the 'length' passed
+      in, just guaranteed to fit.
 
+      *bitstream: set to the logical bitstream number */
 public c_long ov_read(OggVorbis_File *vf,ubyte *buffer,int bytes_req,int *bitstream){
   int i,j;
 

@@ -100,6 +100,8 @@ void main (string[] args) {
     if (vi.channels < 1 || vi.channels > 2) assert(0, "vorbis channels");
     if (vi.rate < 1024 || vi.rate > 96000) assert(0, "vorbis rate");
 
+    //writeln("pcmlengths=", vf.pcmlengths);
+
     if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
       import core.stdc.stdio : printf;
       import core.stdc.stdlib : exit, EXIT_FAILURE;
