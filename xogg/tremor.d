@@ -8215,25 +8215,24 @@ private int ov_open2_(OggVorbis_File *vf){
 
 
 /// clear out the OggVorbis_File struct
-public int ov_clear(OggVorbis_File *vf){
-  if(vf){
+public int ov_clear (OggVorbis_File* vf) {
+  if (vf !is null) {
     vorbis_block_clear(&vf.vb);
     vorbis_dsp_clear(&vf.vd);
     ogg_stream_clear(&vf.os);
 
-    if(vf.vi && vf.links){
-      int i;
-      for(i=0;i<vf.links;i++){
+    if (vf.vi && vf.links) {
+      foreach (immutable i; 0..vf.links) {
         vorbis_info_clear(vf.vi+i);
         vorbis_comment_clear(vf.vc+i);
       }
       ogg_free_(vf.vi);
       ogg_free_(vf.vc);
     }
-    if(vf.dataoffsets)ogg_free_(vf.dataoffsets);
-    if(vf.pcmlengths)ogg_free_(vf.pcmlengths);
-    if(vf.serialnos)ogg_free_(vf.serialnos);
-    if(vf.offsets)ogg_free_(vf.offsets);
+    if (vf.dataoffsets !is null) ogg_free_(vf.dataoffsets);
+    if (vf.pcmlengths !is null) ogg_free_(vf.pcmlengths);
+    if (vf.serialnos !is null) ogg_free_(vf.serialnos);
+    if (vf.offsets !is null) ogg_free_(vf.offsets);
     ogg_sync_clear(&vf.oy);
     static if (XoggTremorHasVFS) {
       vf.datasource = VFile.init;
@@ -8242,7 +8241,7 @@ public int ov_clear(OggVorbis_File *vf){
     }
     memset(vf, 0, (*vf).sizeof);
   }
-  return(0);
+  return 0;
 }
 
 static if (XoggTremorHasVFS) {
