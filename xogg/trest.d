@@ -157,6 +157,7 @@ void main (string[] args) {
           if (tm != prevtime) {
             prevtime = tm;
             writef("\r%d:%02d / %d:%02d", tm/60, tm%60, totaltime/60, totaltime%60);
+            static if (!TremorHasVFS) stdout.flush();
           }
         }
         //if (frames > 0 && frames < ret/(2*vi.channels)) printf("Short write (expected %li, wrote %li)\n", ret, frames);
