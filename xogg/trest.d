@@ -29,19 +29,20 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import iv.alsa;
-import iv.vfs;
-import iv.vfs.io;
 
 import iv.xogg.tremor;
 
 version(XoggTremorNoVFS) {
   enum TremorHasVFS = false;
+  import std.stdio;
 } else {
   static if (is(typeof((){import iv.vfs;}()))) {
     enum TremorHasVFS = true;
     import iv.vfs;
+    import iv.vfs.io;
   } else {
     enum TremorHasVFS = false;
+    import std.stdio;
   }
 }
 
