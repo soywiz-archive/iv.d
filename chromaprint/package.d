@@ -6,10 +6,10 @@
  * Introduction:
  *
  * Chromaprint is a library for generating audio fingerprints, mainly to be used with the <a href="https://acoustid.org">AcoustID</a> service.
- *
+ *<br><br>
  * It needs raw audio stream (16-bit signed int) on input. The audio can have any sampling rate and any number of channels. Typically,
  * you would use some native library for decoding compressed audio files and feed the result into Chromaprint.
- *
+ *<br><br>
  * Audio fingerprints returned from the library can be represented either as
  * base64-encoded strings or 32-bit integer arrays. The base64-encoded strings
  * are usually what's used externally when you need to send the fingerprint
@@ -17,12 +17,12 @@
  * The 32-bit integer arrays are also called "raw fingerprints" and they
  * represent the internal structure of the fingerprints. If you want to
  * compare two fingerprints yourself, you probably want them in this form.
- *
+ *<br><br>
  * Generating fingerprints:
- *
+ *<br><br>
  * Here is a simple example code that generates a fingerprint from audio samples in memory:
- *
- * Example
+ *<br><br>
+ * Example:
  * -------
  *     ChromaprintContext *ctx;
  *     char *fp;
@@ -117,8 +117,8 @@ enum /*ChromaprintAlgorithm*/:int {
  *
  * DO NOT USE THIS FUNCTION IF YOU ARE PLANNING TO USE
  * THE GENERATED FINGERPRINTS WITH THE ACOUSTID SERVICE.
- *
- * Possible options:
+ *<br><br>
+ * Possible options:<br>
  *  - silence_threshold: threshold for detecting silence, 0-32767
  *
  * params:
