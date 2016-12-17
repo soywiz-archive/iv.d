@@ -123,7 +123,7 @@ void main (string[] args) {
         // error in the stream
       } else {
         frames = snd_pcm_writei(handle, buffer.ptr, ret/(2*vi.channels));
-        if (frames < 0) frames = snd_pcm_recover(handle, frames, 0);
+        if (frames < 0) frames = snd_pcm_recover(handle, cast(int)frames, 0);
         if (frames < 0) {
           import core.stdc.stdio : printf;
           printf("snd_pcm_writei failed: %s\n", snd_strerror(err));

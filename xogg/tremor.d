@@ -288,7 +288,7 @@ struct vorbis_block {
   /* local storage to avoid remallocing; it's up to the mapping to structure it */
   void* localstore;
   int localtop;
-  int localalloc;
+  /*int*/size_t localalloc;
   int totaluse;
   alloc_chain* reap;
 }
@@ -2812,7 +2812,7 @@ int vorbis_block_init(vorbis_dsp_state *v, vorbis_block *vb){
   return(0);
 }
 
-void *vorbis_block_alloc_(vorbis_block *vb,c_long bytes) nothrow @trusted @nogc {
+void *vorbis_block_alloc_(vorbis_block *vb,/*c_long*/size_t bytes) nothrow @trusted @nogc {
   bytes=(bytes+(WORD_ALIGN-1)) & ~(WORD_ALIGN-1);
   if(bytes+vb.localtop>vb.localalloc){
     /* can't just ogg_realloc_... there are outstanding pointers */
@@ -4049,7 +4049,7 @@ static immutable vorbis_func_floor floor0_exportbundle={
 enum floor1_rangedB = 140; /* floor 1 fixed at -140dB to 0dB range */
 
 struct vorbis_look_floor1 {
-  int[VIF_POSIT+2] forward_index;
+  /*int*/size_t[VIF_POSIT+2] forward_index;
 
   int[VIF_POSIT] hineighbor;
   int[VIF_POSIT] loneighbor;
@@ -4455,7 +4455,7 @@ private int floor1_inverse2(vorbis_block *vb,vorbis_look_floor *in_,void *memo,
     ly=(ly<0?0:ly>255?255:ly);
 
     for(j=1;j<look.posts;j++){
-      int current=look.forward_index[j];
+      auto current=look.forward_index[j];
       int hy=fit_value[current]&0x7fff;
       if(hy==fit_value[current]){
 
@@ -4501,12 +4501,14 @@ public void vorbis_comment_init(vorbis_comment *vc){
 
 /* This is more or less the same as strncasecmp - but that doesn't exist
  * everywhere, and this is a fairly trivial function, so we include it */
-import iv.strex : toupper;
-private int tagcompare(const char *s1, const char *s2, int n){
+private int tagcompare(const char *s1, const char *s2, size_t n){
   int c=0;
   while(c < n){
-    if(toupper(s1[c]) != toupper(s2[c]))
-      return !0;
+    char c0 = s1[c];
+    char c1 = s2[c];
+    if (c0 >= 'a' && c0 <= 'z') c0 -= 32;
+    if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+    if (c0 != c1) return !0;
     c++;
   }
   return 0;
@@ -4516,7 +4518,7 @@ public char *vorbis_comment_query(vorbis_comment *vc, char *tag, int count){
   import core.stdc.stdlib : alloca;
   c_long i;
   int found = 0;
-  int taglen = strlen(tag)+1; /* +1 for the = we append */
+  auto taglen = strlen(tag)+1; /* +1 for the = we append */
   char *fulltag = cast(char *)alloca(taglen+ 1);
 
   strcpy(fulltag, tag);
@@ -4537,7 +4539,7 @@ public char *vorbis_comment_query(vorbis_comment *vc, char *tag, int count){
 public int vorbis_comment_query_count(vorbis_comment *vc, char *tag){
   import core.stdc.stdlib : alloca;
   int i,count=0;
-  int taglen = strlen(tag)+1; /* +1 for the = we append */
+  auto taglen = strlen(tag)+1; /* +1 for the = we append */
   char *fulltag = cast(char *)alloca(taglen+1);
   strcpy(fulltag,tag);
   strcat(fulltag, "=");
@@ -6896,7 +6898,7 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
     c.codelist=cast(ogg_uint32_t *)ogg_malloc_(n*(*c.codelist).sizeof);
     /* the index is a reverse index */
     for(i=0;i<n;i++){
-      int position=codep[i]-codes;
+      auto position=codep[i]-codes;
       sortindex[position]=i;
     }
 
@@ -7249,7 +7251,7 @@ private c_long get_data_(OggVorbis_File *vf){
   if(!(vf.callbacks.read_func))return(-1);
   if(vf.datasource){
     char *buffer=ogg_sync_buffer(&vf.oy,READSIZE);
-    c_long bytes=vf.callbacks.read_func(buffer,1,READSIZE,vf.datasource);
+    /*c_long*/int bytes=cast(int)vf.callbacks.read_func(buffer,1,READSIZE,vf.datasource);
     if(bytes>0)ogg_sync_wrote(&vf.oy,bytes);
     if(bytes==0 && errno)return(-1);
     return(bytes);
