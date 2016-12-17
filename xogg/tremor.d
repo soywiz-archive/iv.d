@@ -8343,7 +8343,7 @@ public trm_long ov_seekable (OggVorbis_File* vf) {
 
    If you want the actual bitrate field settings, get them from the
    vorbis_info structs */
-public trm_long ov_bitrate(OggVorbis_File *vf,int i){
+public trm_long ov_bitrate(OggVorbis_File *vf,int i=-1){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(i>=vf.links)return(OV_EINVAL);
   if(!vf.seekable && i!=0)return(ov_bitrate(vf,0));
@@ -8448,7 +8448,7 @@ public ogg_int64_t ov_pcm_total(OggVorbis_File *vf,int i){
              OV_EINVAL if the stream is not seekable (we can't know the
              length) or only partially open
 */
-public ogg_int64_t ov_time_total(OggVorbis_File *vf,int i){
+public ogg_int64_t ov_time_total(OggVorbis_File *vf,int i=-1){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(!vf.seekable || i>=vf.links)return(OV_EINVAL);
   if(i<0){
@@ -9138,7 +9138,7 @@ public ogg_int64_t ov_time_tell(OggVorbis_File *vf){
      In the case of a non-seekable bitstream, any call returns the
      current bitstream.  null in the case that the machine is not
      initialized */
-public vorbis_info *ov_info(OggVorbis_File *vf,int link){
+public vorbis_info *ov_info(OggVorbis_File *vf,int link=-1){
   if(vf.seekable){
     if(link<0)
       if(vf.ready_state>=STREAMSET)
@@ -9157,7 +9157,7 @@ public vorbis_info *ov_info(OggVorbis_File *vf,int link){
 
 /* grr, strong typing, grr, no templates/inheritence, grr */
 ///
-public vorbis_comment *ov_comment(OggVorbis_File *vf,int link){
+public vorbis_comment *ov_comment(OggVorbis_File *vf,int link=-1){
   if(vf.seekable){
     if(link<0)
       if(vf.ready_state>=STREAMSET)

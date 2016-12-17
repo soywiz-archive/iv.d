@@ -28,9 +28,9 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-import std.stdio;
 import iv.alsa;
 import iv.vfs;
+import iv.vfs.io;
 
 import iv.xogg.tremor;
 
@@ -91,6 +91,9 @@ void main (string[] args) {
     vorbis_info *vi = ov_info(&vf, -1);
     writeln("Bitstream is ", vi.channels, " channel, ", vi.rate, "Hz");
     writeln("Encoded by: ", ov_comment(&vf, -1).vendor.fromStringz.recodeToKOI8);
+    writeln("streams: ", ov_streams(&vf));
+    writeln("bitrate: ", ov_bitrate(&vf));
+    writefln("time: %d:%02d", ov_time_total(&vf)/1000/60, ov_time_total(&vf)/1000%60);
 
     if (auto vc = ov_comment(&vf, -1)) {
       foreach (immutable idx; 0..vc.comments) {
@@ -117,6 +120,8 @@ void main (string[] args) {
       exit(EXIT_FAILURE);
     }
 
+    long prevtime = -1;
+    long totaltime = ov_time_total(&vf)/1000;
     while (!eof) {
       auto ret = ov_read(&vf, buffer.ptr, BUF_SIZE, /*0, 2, 1,*/ &current_section);
       if (ret == 0) {
@@ -132,9 +137,17 @@ void main (string[] args) {
           printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
           break;
         }
+        {
+          long tm = ov_time_tell(&vf)/1000;
+          if (tm != prevtime) {
+            prevtime = tm;
+            writef("\r%d:%02d / %d:%02d", tm/60, tm%60, totaltime/60, totaltime%60);
+          }
+        }
         //if (frames > 0 && frames < ret/(2*vi.channels)) printf("Short write (expected %li, wrote %li)\n", ret, frames);
       }
     }
+    if (prevtime != -1) writeln;
     ov_clear(&vf);
   }
 
