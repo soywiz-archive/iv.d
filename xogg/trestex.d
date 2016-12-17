@@ -163,6 +163,8 @@ Action playFile () {
 
     scope(exit) snd_pcm_close(handle);
     scope(exit) writeln;
+    bool oldpaused = !paused;
+    int oldgain = gain+1;
 
     int ret;
     while (!eof) {
@@ -197,8 +199,10 @@ Action playFile () {
         }
         {
           long tm = ov_time_tell(&vf);
-          if (tm != prevtime) {
+          if (tm != prevtime || paused != oldpaused || gain != oldgain) {
             prevtime = tm;
+            oldpaused = paused;
+            oldgain = gain;
             writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", tm/1000/60, tm/1000%60, totaltime/1000/60, totaltime/1000%60, gain, (paused ? " !" : ""));
             static if (!TremorHasVFS) stdout.flush();
           }
