@@ -87,8 +87,9 @@ ubyte[BUF_SIZE] buffer;
 string[] playlist;
 int plidx = 0;
 
-bool paused = false;
-int gain = 0;
+__gshared bool paused = false;
+__gshared int gain = 0;
+__gshared uint latencyms = 100;
 
 
 enum Action { Quit, Prev, Next }
@@ -154,7 +155,7 @@ Action playFile () {
       exit(EXIT_FAILURE);
     }
 
-    if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, /*2*/vi.channels, /*44100*/vi.rate, 1, 500000)) < 0) {
+    if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, /*2*/vi.channels, /*44100*/vi.rate, 1, /*500000*//*20000*/latencyms*1000)) < 0) {
       import core.stdc.stdio : printf;
       import core.stdc.stdlib : exit, EXIT_FAILURE;
       printf("Playback open error: %s\n", snd_strerror(err));
@@ -162,6 +163,16 @@ Action playFile () {
     }
 
     scope(exit) snd_pcm_close(handle);
+
+    {
+      snd_pcm_uframes_t bufsize, periodsize;
+      if (snd_pcm_get_params(handle, &bufsize, &periodsize) == 0) {
+        writeln("desired latency: ", latencyms);
+        writeln("buffer size: ", bufsize);
+        writeln("period size: ", periodsize);
+      }
+    }
+
     scope(exit) writeln;
     bool oldpaused = !paused;
     int oldgain = gain+1;
@@ -263,6 +274,10 @@ extern(C) void atExitRestoreTty () {
 
 void main (string[] args) {
   conRegUserVar!bool("shuffle", "shuffle playlist");
+
+  conRegVar!paused("paused", "is playback paused?");
+  conRegVar!gain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
+  conRegVar!latencyms(5, 5000, "latency", "playback latency, in milliseconds");
 
   concmd("exec .config.rc tan");
   conProcessArgs!true(args);

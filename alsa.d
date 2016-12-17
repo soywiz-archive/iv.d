@@ -412,3 +412,4 @@ int snd_mixer_selem_set_playback_switch_all(snd_mixer_elem_t*, int);
 
 
 int snd_pcm_set_params (snd_pcm_t *pcm, snd_pcm_format format, snd_pcm_access_t access, uint channels, uint rate, int soft_resample, uint latency);
+int snd_pcm_get_params (snd_pcm_t *pcm, snd_pcm_uframes_t *buffer_size, snd_pcm_uframes_t *period_size);
