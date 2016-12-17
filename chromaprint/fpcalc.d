@@ -62,6 +62,7 @@ void main (string[] args) {
     if (chromaprint_start(cct, vi.rate, vi.channels) == 0) throw new Exception("can't initialize ChromaPrint context");
     //scope(exit) chromaprint_finish(cct);
 
+    ulong total = 0;
     while (!eof) {
       auto ret = ov_read(&vf, buffer.ptr, BUF_SIZE, /*0, 2, 1,*/ &currstream);
       if (ret == 0) {
@@ -71,8 +72,13 @@ void main (string[] args) {
         // error in the stream
       } else {
         if (chromaprint_feed(cct, cast(const(short)*)buffer.ptr, ret/2) == 0) throw new Exception("error feeding ChromaPrint context");
+        total += ret;
+        //stderr.writeln(total/2.0/vi.channels/vi.rate*1000.0);
+        //if (total >= 1024*1024*3) { stderr.writeln("ABORT!"); break; }
+        if (total/2.0/vi.channels/vi.rate >= 20) { stderr.writeln("ABORT at ", total, "!"); break; }
       }
     }
+    stderr.writeln("TOTAL=", total);
 
     chromaprint_finish(cct);
 
