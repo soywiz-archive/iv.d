@@ -75,7 +75,7 @@ void main (string[] args) {
         total += ret;
         //stderr.writeln(total/2.0/vi.channels/vi.rate*1000.0);
         //if (total >= 1024*1024*3) { stderr.writeln("ABORT!"); break; }
-        if (total/2.0/vi.channels/vi.rate >= 20) { stderr.writeln("ABORT at ", total, "!"); break; }
+        if (total/2.0/vi.channels/vi.rate >= 2*60) { stderr.writeln("ABORT at ", total, "!"); break; }
       }
     }
     stderr.writeln("TOTAL=", total);

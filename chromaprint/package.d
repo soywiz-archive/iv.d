@@ -61,7 +61,7 @@ alias ChromaprintMatcherContext = ChromaprintMatcherContextPrivate;
 
 enum CHROMAPRINT_VERSION_MAJOR = 1;
 enum CHROMAPRINT_VERSION_MINOR = 4;
-enum CHROMAPRINT_VERSION_PATCH = 0;
+enum CHROMAPRINT_VERSION_PATCH = 1;
 
 ///
 alias  ChromaprintAlgorithm = int;
