@@ -137,12 +137,12 @@ struct codec_setup_info {
 
 
 struct vorbis_func_floor {
-  vorbis_info_floor* function (vorbis_info *,oggpack_buffer *) /*nothrow @trusted @nogc*/ unpack;
-  vorbis_look_floor* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_floor *) /*nothrow @trusted @nogc*/ look;
-  void function (vorbis_info_floor *) /*nothrow @trusted @nogc*/ free_info;
-  void function (vorbis_look_floor *) /*nothrow @trusted @nogc*/ free_look;
-  void* function (vorbis_block *,vorbis_look_floor *) /*nothrow @trusted @nogc*/ inverse1;
-  int function (vorbis_block *,vorbis_look_floor *, void *buffer,ogg_int32_t *) /*nothrow @trusted @nogc*/ inverse2;
+  vorbis_info_floor* function (vorbis_info *,oggpack_buffer *) nothrow @trusted @nogc unpack;
+  vorbis_look_floor* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_floor *) nothrow @trusted @nogc look;
+  void function (vorbis_info_floor *) nothrow @trusted @nogc free_info;
+  void function (vorbis_look_floor *) nothrow @trusted @nogc free_look;
+  void* function (vorbis_block *,vorbis_look_floor *) nothrow @trusted @nogc inverse1;
+  int function (vorbis_block *,vorbis_look_floor *, void *buffer,ogg_int32_t *) nothrow @trusted @nogc inverse2;
 }
 
 struct vorbis_info_floor0 {
@@ -179,11 +179,11 @@ struct vorbis_info_floor1 {
 
 /* Residue backend generic *****************************************/
 struct vorbis_func_residue {
-  vorbis_info_residue* function (vorbis_info *,oggpack_buffer *) /*nothrow @trusted @nogc*/ unpack;
-  vorbis_look_residue* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_residue *) /*nothrow @trusted @nogc*/ look;
-  void function (vorbis_info_residue *) /*nothrow @trusted @nogc*/ free_info;
-  void function (vorbis_look_residue *) /*nothrow @trusted @nogc*/ free_look;
-  int function (vorbis_block *,vorbis_look_residue *, ogg_int32_t **,int *,int) /*nothrow @trusted @nogc*/ inverse;
+  vorbis_info_residue* function (vorbis_info *,oggpack_buffer *) nothrow @trusted @nogc unpack;
+  vorbis_look_residue* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_residue *) nothrow @trusted @nogc look;
+  void function (vorbis_info_residue *) nothrow @trusted @nogc free_info;
+  void function (vorbis_look_residue *) nothrow @trusted @nogc free_look;
+  int function (vorbis_block *,vorbis_look_residue *, ogg_int32_t **,int *,int) nothrow @trusted @nogc inverse;
 }
 
 struct vorbis_info_residue0 {
@@ -202,11 +202,11 @@ struct vorbis_info_residue0 {
 
 /* Mapping backend generic *****************************************/
 struct vorbis_func_mapping {
-  vorbis_info_mapping* function (vorbis_info *,oggpack_buffer *) /*nothrow @trusted @nogc*/ unpack;
-  vorbis_look_mapping* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_mapping *) /*nothrow @trusted @nogc*/ look;
-  void function (vorbis_info_mapping *) /*nothrow @trusted @nogc*/ free_info;
-  void function (vorbis_look_mapping *) /*nothrow @trusted @nogc*/ free_look;
-  int function (vorbis_block *vb,vorbis_look_mapping *) /*nothrow @trusted @nogc*/ inverse;
+  vorbis_info_mapping* function (vorbis_info *,oggpack_buffer *) nothrow @trusted @nogc unpack;
+  vorbis_look_mapping* function (vorbis_dsp_state *,vorbis_info_mode *, vorbis_info_mapping *) nothrow @trusted @nogc look;
+  void function (vorbis_info_mapping *) nothrow @trusted @nogc free_info;
+  void function (vorbis_look_mapping *) nothrow @trusted @nogc free_look;
+  int function (vorbis_block *vb,vorbis_look_mapping *) nothrow @trusted @nogc inverse;
 }
 
 struct vorbis_info_mapping0 {
@@ -383,15 +383,18 @@ version(LOW_ACCURACY__) {
    * tables in this case.
    */
 
-  /*STIN*/ ogg_int32_t MULT32 (ogg_int32_t x, ogg_int32_t y) /*nothrow @trusted @nogc*/ {
+  /*STIN*/ ogg_int32_t MULT32 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
+    pragma(inline, true);
     return (x >> 9) * y;  /* y preshifted >>23 */
   }
 
-  /*STIN*/ ogg_int32_t MULT31 (ogg_int32_t x, ogg_int32_t y) /*nothrow @trusted @nogc*/ {
+  /*STIN*/ ogg_int32_t MULT31 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
+    pragma(inline, true);
     return (x >> 8) * y;  /* y preshifted >>23 */
   }
 
-  /*STIN*/ ogg_int32_t MULT31_SHIFT15 (ogg_int32_t x, ogg_int32_t y) /*nothrow @trusted @nogc*/ {
+  /*STIN*/ ogg_int32_t MULT31_SHIFT15 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
+    pragma(inline, true);
     return (x >> 6) * y;  /* y preshifted >>9 */
   }
 } else {
@@ -419,17 +422,20 @@ version(LOW_ACCURACY__) {
     }
   }
 
-  /*STIN*/ ogg_int32_t MULT32 (ogg_int32_t x, ogg_int32_t y) /*nothrow @trusted @nogc*/ {
+  /*STIN*/ ogg_int32_t MULT32 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
+    pragma(inline, true);
     magic_u magic;
     magic.whole = cast(ogg_int64_t)x * y;
     return magic/*.halves*/.hi;
   }
 
-  /*STIN*/ ogg_int32_t MULT31 (ogg_int32_t x, ogg_int32_t y) /*nothrow @trusted @nogc*/ {
+  /*STIN*/ ogg_int32_t MULT31 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
+    pragma(inline, true);
     return MULT32(x,y)<<1;
   }
 
-  /*STIN*/ ogg_int32_t MULT31_SHIFT15 (ogg_int32_t x, ogg_int32_t y) /*nothrow @trusted @nogc*/ {
+  /*STIN*/ ogg_int32_t MULT31_SHIFT15 (ogg_int32_t x, ogg_int32_t y) nothrow @trusted @nogc {
+    pragma(inline, true);
     magic_u magic;
     magic.whole  = cast(ogg_int64_t)x * y;
     return (cast(ogg_uint32_t)(magic/*.halves*/.lo)>>15) | ((magic/*.halves*/.hi)<<17);
@@ -445,30 +451,34 @@ version(LOW_ACCURACY__) {
 
 /*STIN*/ void XPROD32(ogg_int32_t  a, ogg_int32_t  b,
          ogg_int32_t  t, ogg_int32_t  v,
-         ogg_int32_t *x, ogg_int32_t *y) /*nothrow @trusted @nogc*/
+         ogg_int32_t *x, ogg_int32_t *y) nothrow @trusted @nogc
 {
+  pragma(inline, true);
   *x = MULT32(a, t) + MULT32(b, v);
   *y = MULT32(b, t) - MULT32(a, v);
 }
 
 /*STIN*/ void XPROD31(ogg_int32_t  a, ogg_int32_t  b,
          ogg_int32_t  t, ogg_int32_t  v,
-         ogg_int32_t *x, ogg_int32_t *y) /*nothrow @trusted @nogc*/
+         ogg_int32_t *x, ogg_int32_t *y) nothrow @trusted @nogc
 {
+  pragma(inline, true);
   *x = MULT31(a, t) + MULT31(b, v);
   *y = MULT31(b, t) - MULT31(a, v);
 }
 
 /*STIN*/ void XNPROD31(ogg_int32_t  a, ogg_int32_t  b,
           ogg_int32_t  t, ogg_int32_t  v,
-          ogg_int32_t *x, ogg_int32_t *y) /*nothrow @trusted @nogc*/
+          ogg_int32_t *x, ogg_int32_t *y) nothrow @trusted @nogc
 {
+  pragma(inline, true);
   *x = MULT31(a, t) - MULT31(b, v);
   *y = MULT31(b, t) + MULT31(a, v);
 }
 
 
-/*STIN*/ ogg_int32_t CLIP_TO_15(ogg_int32_t x) /*nothrow @trusted @nogc*/ {
+/*STIN*/ ogg_int32_t CLIP_TO_15(ogg_int32_t x) nothrow @trusted @nogc {
+  pragma(inline, true);
   int ret=x;
   ret-= ((x<=32767)-1)&(x-32767);
   ret-= ((x>=-32768)-1)&(x+32768);
@@ -477,7 +487,8 @@ version(LOW_ACCURACY__) {
 
 /*STIN*/ ogg_int32_t VFLOAT_MULT(ogg_int32_t a,ogg_int32_t ap,
               ogg_int32_t b,ogg_int32_t bp,
-              ogg_int32_t *p) /*nothrow @trusted @nogc*/ {
+              ogg_int32_t *p) nothrow @trusted @nogc {
+  pragma(inline, true);
   if(a && b){
     version(LOW_ACCURACY__) {
       *p=ap+bp+31;
@@ -490,9 +501,7 @@ version(LOW_ACCURACY__) {
     return 0;
 }
 
-//!int ilog_(unsigned int);
-
-private int ilog_ (uint v) /*nothrow @trusted @nogc*/ {
+private int ilog_ (uint v) nothrow @trusted @nogc {
   int ret = 0;
   while (v) {
     ++ret;
@@ -504,8 +513,8 @@ private int ilog_ (uint v) /*nothrow @trusted @nogc*/ {
 
 /*STIN*/ ogg_int32_t VFLOAT_MULTI(ogg_int32_t a,ogg_int32_t ap,
               ogg_int32_t i,
-              ogg_int32_t *p) /*nothrow @trusted @nogc*/ {
-
+              ogg_int32_t *p) nothrow @trusted @nogc {
+  pragma(inline, true);
   import std.math : abs;
   int ip=ilog_(abs(i))-31;
   return VFLOAT_MULT(a,ap,i<<-ip,ip,p);
@@ -513,7 +522,7 @@ private int ilog_ (uint v) /*nothrow @trusted @nogc*/ {
 
 /*STIN*/ ogg_int32_t VFLOAT_ADD(ogg_int32_t a,ogg_int32_t ap,
               ogg_int32_t b,ogg_int32_t bp,
-              ogg_int32_t *p) /*nothrow @trusted @nogc*/ {
+              ogg_int32_t *p) nothrow @trusted @nogc {
 
   if(!a){
     *p=bp;
@@ -2825,7 +2834,7 @@ int vorbis_block_init(vorbis_dsp_state *v, vorbis_block *vb){
   return(0);
 }
 
-void *vorbis_block_alloc_(vorbis_block *vb,/*trm_long*/size_t bytes) /*nothrow @trusted @nogc*/ {
+void *vorbis_block_alloc_(vorbis_block *vb,/*trm_long*/size_t bytes) nothrow @trusted @nogc {
   bytes=(bytes+(WORD_ALIGN-1)) & ~(WORD_ALIGN-1);
   if(bytes+vb.localtop>vb.localalloc){
     /* can't just ogg_realloc_... there are outstanding pointers */
@@ -3427,7 +3436,8 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
    be.  The first-stage decode table catches most words so that
    bitreverse is not in the main execution path. */
 
-private ogg_uint32_t bitreverse(ogg_uint32_t x) /*nothrow @trusted @nogc*/ {
+private ogg_uint32_t bitreverse(ogg_uint32_t x) nothrow @trusted @nogc {
+  pragma(inline, true);
   x=    ((x>>16)&0x0000ffff) | ((x<<16)&0xffff0000);
   x=    ((x>> 8)&0x00ff00ff) | ((x<< 8)&0xff00ff00);
   x=    ((x>> 4)&0x0f0f0f0f) | ((x<< 4)&0xf0f0f0f0);
@@ -3436,7 +3446,7 @@ private ogg_uint32_t bitreverse(ogg_uint32_t x) /*nothrow @trusted @nogc*/ {
 }
 
 /*STIN*/ trm_long decode_packed_entry_number(codebook *book,
-                                              oggpack_buffer *b) /*nothrow @trusted @nogc*/ {
+                                              oggpack_buffer *b) nothrow @trusted @nogc {
   int  read=book.dec_maxlength;
   trm_long lo,hi;
   trm_long lok = oggpack_look(b,book.dec_firsttablen);
@@ -3501,7 +3511,7 @@ private ogg_uint32_t bitreverse(ogg_uint32_t x) /*nothrow @trusted @nogc*/ {
    addmul==2 . multiplicitive */
 
 /* returns the [original, not compacted] entry number or -1 on eof *********/
-trm_long vorbis_book_decode(codebook *book, oggpack_buffer *b) /*nothrow @trusted @nogc*/ {
+trm_long vorbis_book_decode(codebook *book, oggpack_buffer *b) nothrow @trusted @nogc {
   if(book.used_entries>0){
     trm_long packed_entry=decode_packed_entry_number(book,b);
     if(packed_entry>=0)
@@ -3515,7 +3525,7 @@ trm_long vorbis_book_decode(codebook *book, oggpack_buffer *b) /*nothrow @truste
 /* returns 0 on OK or -1 on eof *************************************/
 /* decode vector / dim granularity gaurding is done in the upper layer */
 trm_long vorbis_book_decodevs_add(codebook *book,ogg_int32_t *a,
-                              oggpack_buffer *b,int n,int point) /*nothrow @trusted @nogc*/ {
+                              oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
   if(book.used_entries>0){
     int step=n/book.dim;
@@ -3551,7 +3561,7 @@ trm_long vorbis_book_decodevs_add(codebook *book,ogg_int32_t *a,
 
 /* decode vector / dim granularity gaurding is done in the upper layer */
 trm_long vorbis_book_decodev_add(codebook *book,ogg_int32_t *a,
-                             oggpack_buffer *b,int n,int point) /*nothrow @trusted @nogc*/ {
+                             oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
   if(book.used_entries>0){
     int i,j,entry;
     ogg_int32_t *t;
@@ -3582,7 +3592,7 @@ trm_long vorbis_book_decodev_add(codebook *book,ogg_int32_t *a,
    of <dim> internally rather than in the upper layer (called only by
    floor0) */
 trm_long vorbis_book_decodev_set(codebook *book,ogg_int32_t *a,
-                             oggpack_buffer *b,int n,int point) /*nothrow @trusted @nogc*/ {
+                             oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
   if(book.used_entries>0){
     int i,j,entry;
     ogg_int32_t *t;
@@ -3622,7 +3632,7 @@ trm_long vorbis_book_decodev_set(codebook *book,ogg_int32_t *a,
 /* decode vector / dim granularity gaurding is done in the upper layer */
 trm_long vorbis_book_decodevv_add(codebook *book,ogg_int32_t **a,
                               trm_long offset,int ch,
-                              oggpack_buffer *b,int n,int point) /*nothrow @trusted @nogc*/ {
+                              oggpack_buffer *b,int n,int point) nothrow @trusted @nogc {
   if(book.used_entries>0){
     trm_long i,j,entry;
     int chptr=0;
@@ -3689,7 +3699,8 @@ struct vorbis_look_floor0 {
 
 static immutable trm_long[2] ADJUST_SQRT2=[8192,5792];
 
-/*STIN*/ ogg_int32_t vorbis_invsqlook_i(trm_long a,trm_long e) /*nothrow @trusted @nogc*/ {
+/*STIN*/ ogg_int32_t vorbis_invsqlook_i(trm_long a,trm_long e) nothrow @trusted @nogc {
+  pragma(inline, true);
   trm_long i=(a&0x7fff)>>(INVSQ_LOOKUP_I_SHIFT-1);
   trm_long d=a&INVSQ_LOOKUP_I_MASK;                              /*  0.10 */
   trm_long val=INVSQ_LOOKUP_I[i]-                                /*  1.16 */
@@ -3701,7 +3712,8 @@ static immutable trm_long[2] ADJUST_SQRT2=[8192,5792];
 
 /* interpolated lookup based fromdB function, domain -140dB to 0dB only */
 /* a is in n.12 format */
-/*STIN*/ ogg_int32_t vorbis_fromdBlook_i(trm_long a) /*nothrow @trusted @nogc*/ {
+/*STIN*/ ogg_int32_t vorbis_fromdBlook_i(trm_long a) nothrow @trusted @nogc {
+  //pragma(inline, true);
   int i=(-a)>>(12-FROMdB2_SHIFT);
   if(i<0) return 0x7fffffff;
   if(i>=(FROMdB_LOOKUP_SZ<<FROMdB_SHIFT))return 0;
@@ -3711,7 +3723,8 @@ static immutable trm_long[2] ADJUST_SQRT2=[8192,5792];
 
 /* interpolated lookup based cos function, domain 0 to PI only */
 /* a is in 0.16 format, where 0==0, 2^^16-1==PI, return 0.14 */
-/*STIN*/ ogg_int32_t vorbis_coslook_i(trm_long a) /*nothrow @trusted @nogc*/ {
+/*STIN*/ ogg_int32_t vorbis_coslook_i(trm_long a) nothrow @trusted @nogc {
+  pragma(inline, true);
   int i=a>>COS_LOOKUP_I_SHIFT;
   int d=a&COS_LOOKUP_I_MASK;
   return COS_LOOKUP_I[i]- ((d*(COS_LOOKUP_I[i]-COS_LOOKUP_I[i+1]))>>
@@ -3720,7 +3733,8 @@ static immutable trm_long[2] ADJUST_SQRT2=[8192,5792];
 
 /* interpolated lookup based cos function */
 /* a is in 0.16 format, where 0==0, 2^^16==PI, return .LSP_FRACBITS */
-/*STIN*/ ogg_int32_t vorbis_coslook2_i(trm_long a) /*nothrow @trusted @nogc*/ {
+/*STIN*/ ogg_int32_t vorbis_coslook2_i(trm_long a) nothrow @trusted @nogc {
+  pragma(inline, true);
   a=a&0x1ffff;
 
   if(a>0x10000)a=0x20000-a;
@@ -3743,7 +3757,7 @@ static immutable int[28] barklook=[
 ];
 
 /* used in init only; interpolate the trm_long way */
-/*STIN*/ ogg_int32_t toBARK(int n) /*nothrow @trusted @nogc*/ {
+/*STIN*/ ogg_int32_t toBARK(int n) nothrow @trusted @nogc {
   int i;
   for(i=0;i<27;i++)
     if(n>=barklook[i] && n<barklook[i+1])break;
@@ -3778,7 +3792,7 @@ void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
                          ogg_int32_t *lsp,int m,
                          ogg_int32_t amp,
                          ogg_int32_t ampoffset,
-                         ogg_int32_t *icos) /*nothrow @trusted @nogc*/
+                         ogg_int32_t *icos) nothrow @trusted @nogc
 {
   import core.stdc.stdlib : alloca;
   /* 0 <= m < 256 */
@@ -3903,7 +3917,7 @@ void vorbis_lsp_to_curve(ogg_int32_t *curve,int *map,int n,int ln,
 
 /* ************* vorbis decode glue ********** */
 
-private void floor0_free_info(vorbis_info_floor *i) /*nothrow @trusted @nogc*/ {
+private void floor0_free_info(vorbis_info_floor *i) nothrow @trusted @nogc {
   vorbis_info_floor0 *info=cast(vorbis_info_floor0 *)i;
   if(info){
     memset(info,0,(*info).sizeof);
@@ -3911,7 +3925,7 @@ private void floor0_free_info(vorbis_info_floor *i) /*nothrow @trusted @nogc*/ {
   }
 }
 
-private void floor0_free_look(vorbis_look_floor *i) /*nothrow @trusted @nogc*/ {
+private void floor0_free_look(vorbis_look_floor *i) nothrow @trusted @nogc {
   vorbis_look_floor0 *look=cast(vorbis_look_floor0 *)i;
   if(look){
 
@@ -3922,7 +3936,7 @@ private void floor0_free_look(vorbis_look_floor *i) /*nothrow @trusted @nogc*/ {
   }
 }
 
-private vorbis_info_floor *floor0_unpack (vorbis_info *vi,oggpack_buffer *opb) /*nothrow @trusted @nogc*/ {
+private vorbis_info_floor *floor0_unpack (vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   int j;
 
@@ -3962,7 +3976,7 @@ private vorbis_info_floor *floor0_unpack (vorbis_info *vi,oggpack_buffer *opb) /
    linear block and mapping sizes */
 
 private vorbis_look_floor *floor0_look (vorbis_dsp_state *vd,vorbis_info_mode *mi,
-                              vorbis_info_floor *i) /*nothrow @trusted @nogc*/ {
+                              vorbis_info_floor *i) nothrow @trusted @nogc {
   int j;
   vorbis_info        *vi=vd.vi;
   codec_setup_info   *ci=cast(codec_setup_info *)vi.codec_setup;
@@ -3998,7 +4012,7 @@ private vorbis_look_floor *floor0_look (vorbis_dsp_state *vd,vorbis_info_mode *m
   return look;
 }
 
-private void *floor0_inverse1(vorbis_block *vb,vorbis_look_floor *i) /*nothrow @trusted @nogc*/ {
+private void *floor0_inverse1(vorbis_block *vb,vorbis_look_floor *i) nothrow @trusted @nogc {
   vorbis_look_floor0 *look=cast(vorbis_look_floor0 *)i;
   vorbis_info_floor0 *info=look.vi;
   int j,k;
@@ -4031,7 +4045,7 @@ private void *floor0_inverse1(vorbis_block *vb,vorbis_look_floor *i) /*nothrow @
 }
 
 private int floor0_inverse2(vorbis_block *vb,vorbis_look_floor *i,
-                           void *memo,ogg_int32_t *out_) /*nothrow @trusted @nogc*/ {
+                           void *memo,ogg_int32_t *out_) nothrow @trusted @nogc {
   vorbis_look_floor0 *look=cast(vorbis_look_floor0 *)i;
   vorbis_info_floor0 *info=look.vi;
 
@@ -4075,7 +4089,7 @@ struct vorbis_look_floor1 {
 
 /* ******************************************* */
 
-private void floor1_free_info(vorbis_info_floor *i) /*nothrow @trusted @nogc*/ {
+private void floor1_free_info(vorbis_info_floor *i) nothrow @trusted @nogc {
   vorbis_info_floor1 *info=cast(vorbis_info_floor1 *)i;
   if(info){
     memset(info,0,(*info).sizeof);
@@ -4083,7 +4097,7 @@ private void floor1_free_info(vorbis_info_floor *i) /*nothrow @trusted @nogc*/ {
   }
 }
 
-private void floor1_free_look(vorbis_look_floor *i) /*nothrow @trusted @nogc*/ {
+private void floor1_free_look(vorbis_look_floor *i) nothrow @trusted @nogc {
   vorbis_look_floor1 *look=cast(vorbis_look_floor1 *)i;
   if(look){
     memset(look,0,(*look).sizeof);
@@ -4091,7 +4105,7 @@ private void floor1_free_look(vorbis_look_floor *i) /*nothrow @trusted @nogc*/ {
   }
 }
 
-static int flr_ilog(uint v) /*nothrow @trusted @nogc*/ {
+static int flr_ilog(uint v) nothrow @trusted @nogc {
   int ret=0;
   while(v){
     ret++;
@@ -4104,7 +4118,7 @@ private extern(C) int icomp(in void *a,in void *b) nothrow @trusted @nogc {
   return(**cast(int **)a-**cast(int **)b);
 }
 
-private vorbis_info_floor *floor1_unpack (vorbis_info *vi,oggpack_buffer *opb) /*nothrow @trusted @nogc*/ {
+private vorbis_info_floor *floor1_unpack (vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
   int j,k,count=0,maxclass=-1,rangebits;
 
@@ -4170,7 +4184,7 @@ private vorbis_info_floor *floor1_unpack (vorbis_info *vi,oggpack_buffer *opb) /
 }
 
 private vorbis_look_floor *floor1_look(vorbis_dsp_state *vd,vorbis_info_mode *mi,
-                              vorbis_info_floor *in_) /*nothrow @trusted @nogc*/ {
+                              vorbis_info_floor *in_) nothrow @trusted @nogc {
 
   int*[VIF_POSIT+2] sortpointer;
   vorbis_info_floor1 *info=cast(vorbis_info_floor1 *)in_;
@@ -4242,7 +4256,7 @@ private vorbis_look_floor *floor1_look(vorbis_dsp_state *vd,vorbis_info_mode *mi
   return(look);
 }
 
-private int render_point(int x0,int x1,int y0,int y1,int x) /*nothrow @trusted @nogc*/ {
+private int render_point(int x0,int x1,int y0,int y1,int x) nothrow @trusted @nogc {
   y0&=0x7fff; /* mask off flag */
   y1&=0x7fff;
 
@@ -4332,7 +4346,7 @@ static immutable ogg_int32_t[256] FLOOR_fromdB_LOOKUP=[
   XdB(0x69f80e9a), XdB(0x70dafda8), XdB(0x78307d76), XdB(0x7fffffff),
 ];
 
-private void render_line(int n, int x0,int x1,int y0,int y1,ogg_int32_t *d) /*nothrow @trusted @nogc*/ {
+private void render_line(int n, int x0,int x1,int y0,int y1,ogg_int32_t *d) nothrow @trusted @nogc {
   import std.math : abs;
   int dy=y1-y0;
   int adx=x1-x0;
@@ -4361,7 +4375,7 @@ private void render_line(int n, int x0,int x1,int y0,int y1,ogg_int32_t *d) /*no
   }
 }
 
-private void *floor1_inverse1(vorbis_block *vb,vorbis_look_floor *in_) /*nothrow @trusted @nogc*/ {
+private void *floor1_inverse1(vorbis_block *vb,vorbis_look_floor *in_) nothrow @trusted @nogc {
   vorbis_look_floor1 *look=cast(vorbis_look_floor1 *)in_;
   vorbis_info_floor1 *info=look.vi;
   codec_setup_info   *ci=cast(codec_setup_info *)vb.vd.vi.codec_setup;
@@ -4450,7 +4464,7 @@ private void *floor1_inverse1(vorbis_block *vb,vorbis_look_floor *in_) /*nothrow
 }
 
 private int floor1_inverse2(vorbis_block *vb,vorbis_look_floor *in_,void *memo,
-                          ogg_int32_t *out_) /*nothrow @trusted @nogc*/ {
+                          ogg_int32_t *out_) nothrow @trusted @nogc {
   vorbis_look_floor1 *look=cast(vorbis_look_floor1 *)in_;
   vorbis_info_floor1 *info=look.vi;
 
@@ -4772,7 +4786,7 @@ struct vorbis_look_mapping0 {
                      invalidate decay */
 }
 
-private void mapping0_free_info(vorbis_info_mapping *i) /*nothrow @trusted @nogc*/ {
+private void mapping0_free_info(vorbis_info_mapping *i) nothrow @trusted @nogc {
   vorbis_info_mapping0 *info=cast(vorbis_info_mapping0 *)i;
   if(info){
     memset(info,0,(*info).sizeof);
@@ -4780,7 +4794,7 @@ private void mapping0_free_info(vorbis_info_mapping *i) /*nothrow @trusted @nogc
   }
 }
 
-private void mapping0_free_look(vorbis_look_mapping *look) /*nothrow @trusted @nogc*/ {
+private void mapping0_free_look(vorbis_look_mapping *look) nothrow @trusted @nogc {
   int i;
   vorbis_look_mapping0 *l=cast(vorbis_look_mapping0 *)look;
   if(l){
@@ -4800,7 +4814,7 @@ private void mapping0_free_look(vorbis_look_mapping *look) /*nothrow @trusted @n
 }
 
 private vorbis_look_mapping *mapping0_look(vorbis_dsp_state *vd,vorbis_info_mode *vm,
-                          vorbis_info_mapping *m) /*nothrow @trusted @nogc*/ {
+                          vorbis_info_mapping *m) nothrow @trusted @nogc {
   int i;
   vorbis_info          *vi=vd.vi;
   codec_setup_info     *ci=cast(codec_setup_info *)vi.codec_setup;
@@ -4833,7 +4847,7 @@ private vorbis_look_mapping *mapping0_look(vorbis_dsp_state *vd,vorbis_info_mode
   return(look);
 }
 
-private int mapping_ilog(uint v) /*nothrow @trusted @nogc*/ {
+private int mapping_ilog(uint v) nothrow @trusted @nogc {
   int ret=0;
   if(v)--v;
   while(v){
@@ -4844,7 +4858,7 @@ private int mapping_ilog(uint v) /*nothrow @trusted @nogc*/ {
 }
 
 /* also responsible for range checking */
-private vorbis_info_mapping *mapping0_unpack(vorbis_info *vi,oggpack_buffer *opb) /*nothrow @trusted @nogc*/ {
+private vorbis_info_mapping *mapping0_unpack(vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
   int i,b;
   vorbis_info_mapping0 *info;
@@ -4904,7 +4918,7 @@ private vorbis_info_mapping *mapping0_unpack(vorbis_info *vi,oggpack_buffer *opb
 }
 
 //static int seq=0;
-private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) /*nothrow @trusted @nogc*/ {
+private int mapping0_inverse(vorbis_block *vb,vorbis_look_mapping *l) nothrow @trusted @nogc {
   import core.stdc.stdlib : alloca;
   vorbis_dsp_state     *vd=vb.vd;
   vorbis_info          *vi=vd.vi;
@@ -5091,7 +5105,7 @@ version(LOW_ACCURACY__) {
 }
 
 /* 8 point butterfly (in place) */
-/*STIN*/ void mdct_butterfly_8(DATA_TYPE *x) /*nothrow @trusted @nogc*/ {
+/*STIN*/ void mdct_butterfly_8(DATA_TYPE *x) nothrow @trusted @nogc {
 
   REG_TYPE r0   = x[4] + x[0];
   REG_TYPE r1   = x[4] - x[0];
@@ -5114,7 +5128,7 @@ version(LOW_ACCURACY__) {
 }
 
 /* 16 point butterfly (in place, 4 register) */
-/*STIN*/ void mdct_butterfly_16(DATA_TYPE *x) /*nothrow @trusted @nogc*/ {
+/*STIN*/ void mdct_butterfly_16(DATA_TYPE *x) nothrow @trusted @nogc {
 
   REG_TYPE r0, r1;
 
@@ -5145,7 +5159,7 @@ version(LOW_ACCURACY__) {
 }
 
 /* 32 point butterfly (in place, 4 register) */
-/*STIN*/ void mdct_butterfly_32(DATA_TYPE *x) /*nothrow @trusted @nogc*/ {
+/*STIN*/ void mdct_butterfly_32(DATA_TYPE *x) nothrow @trusted @nogc {
 
   REG_TYPE r0, r1;
 
@@ -5196,7 +5210,7 @@ version(LOW_ACCURACY__) {
 }
 
 /* N/stage point generic N stage butterfly (in place, 2 register) */
-/*STIN*/ void mdct_butterfly_generic(DATA_TYPE *x,int points,int step) /*nothrow @trusted @nogc*/ {
+/*STIN*/ void mdct_butterfly_generic(DATA_TYPE *x,int points,int step) nothrow @trusted @nogc {
 
   immutable(LOOKUP_T)*T   = sincos_lookup0.ptr;
   DATA_TYPE *x1        = x + points      - 8;
@@ -5282,7 +5296,7 @@ version(LOW_ACCURACY__) {
   }while(T>sincos_lookup0.ptr);
 }
 
-/*STIN*/ void mdct_butterflies(DATA_TYPE *x,int points,int shift) /*nothrow @trusted @nogc*/ {
+/*STIN*/ void mdct_butterflies(DATA_TYPE *x,int points,int shift) nothrow @trusted @nogc {
 
   int stages=8-shift;
   int i,j;
@@ -5299,11 +5313,12 @@ version(LOW_ACCURACY__) {
 
 static immutable ubyte[16] bitrev=[0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15];
 
-/*STIN*/ int bitrev12(int x) /*nothrow @trusted @nogc*/ {
-  return bitrev[x>>8]|(bitrev[(x&0x0f0)>>4]<<4)|((cast(int)bitrev[x&0x00f])<<8);
+/*STIN*/ int bitrev12(int x) nothrow @trusted @nogc {
+  pragma(inline, true);
+  return bitrev.ptr[x>>8]|(bitrev.ptr[(x&0x0f0)>>4]<<4)|((cast(int)bitrev.ptr[x&0x00f])<<8);
 }
 
-/*STIN*/ void mdct_bitreverse(DATA_TYPE *x,int n,int step,int shift) /*nothrow @trusted @nogc*/ {
+/*STIN*/ void mdct_bitreverse(DATA_TYPE *x,int n,int step,int shift) nothrow @trusted @nogc {
 
   int          bit   = 0;
   DATA_TYPE   *w0    = x;
@@ -5388,7 +5403,7 @@ static immutable ubyte[16] bitrev=[0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15];
   }while(w0<w1);
 }
 
-void mdct_backward(int n, DATA_TYPE *in_, DATA_TYPE *out_) /*nothrow @trusted @nogc*/ {
+void mdct_backward(int n, DATA_TYPE *in_, DATA_TYPE *out_) nothrow @trusted @nogc {
   int n2=n>>1;
   int n4=n>>2;
   DATA_TYPE *iX;
@@ -6105,7 +6120,7 @@ struct vorbis_look_residue0 {
 
 }
 
-void res0_free_info(vorbis_info_residue *i) /*nothrow @trusted @nogc*/ {
+void res0_free_info(vorbis_info_residue *i) nothrow @trusted @nogc {
   vorbis_info_residue0 *info=cast(vorbis_info_residue0 *)i;
   if(info){
     memset(info,0,(*info).sizeof);
@@ -6113,7 +6128,7 @@ void res0_free_info(vorbis_info_residue *i) /*nothrow @trusted @nogc*/ {
   }
 }
 
-void res0_free_look(vorbis_look_residue *i) /*nothrow @trusted @nogc*/ {
+void res0_free_look(vorbis_look_residue *i) nothrow @trusted @nogc {
   int j;
   if(i){
 
@@ -6131,7 +6146,7 @@ void res0_free_look(vorbis_look_residue *i) /*nothrow @trusted @nogc*/ {
   }
 }
 
-private int res_ilog(uint v) /*nothrow @trusted @nogc*/ {
+private int res_ilog(uint v) nothrow @trusted @nogc {
   int ret=0;
   while(v){
     ret++;
@@ -6140,7 +6155,7 @@ private int res_ilog(uint v) /*nothrow @trusted @nogc*/ {
   return(ret);
 }
 
-private int icount(uint v) /*nothrow @trusted @nogc*/ {
+private int icount(uint v) nothrow @trusted @nogc {
   int ret=0;
   while(v){
     ret+=v&1;
@@ -6150,7 +6165,7 @@ private int icount(uint v) /*nothrow @trusted @nogc*/ {
 }
 
 /* vorbis_info is for range checking */
-vorbis_info_residue *res0_unpack(vorbis_info *vi,oggpack_buffer *opb) /*nothrow @trusted @nogc*/ {
+vorbis_info_residue *res0_unpack(vorbis_info *vi,oggpack_buffer *opb) nothrow @trusted @nogc {
   int j,acc=0;
   vorbis_info_residue0 *info;
   info=cast(vorbis_info_residue0 *)ogg_calloc_(1,(*info).sizeof);
@@ -6216,7 +6231,7 @@ vorbis_info_residue *res0_unpack(vorbis_info *vi,oggpack_buffer *opb) /*nothrow 
 }
 
 vorbis_look_residue *res0_look(vorbis_dsp_state *vd,vorbis_info_mode *vm,
-                          vorbis_info_residue *vr) /*nothrow @trusted @nogc*/ {
+                          vorbis_info_residue *vr) nothrow @trusted @nogc {
   vorbis_info_residue0 *info=cast(vorbis_info_residue0 *)vr;
   vorbis_look_residue0 *look;
   look=cast(vorbis_look_residue0 *)ogg_calloc_(1,(*look).sizeof);
@@ -6273,7 +6288,7 @@ vorbis_look_residue *res0_look(vorbis_dsp_state *vd,vorbis_info_mode *vm,
 /* a truncated packet here just means 'stop working'; it's not an error */
 private int xx01inverse_(vorbis_block *vb,vorbis_look_residue *vl,
                       ogg_int32_t **in_,int ch,
-                      trm_long function (codebook *, ogg_int32_t *, oggpack_buffer *,int,int) /*nothrow @trusted @nogc*/ decodepart) /*nothrow @trusted @nogc*/ {
+                      trm_long function (codebook *, ogg_int32_t *, oggpack_buffer *,int,int) nothrow @trusted @nogc decodepart) nothrow @trusted @nogc {
 
   import core.stdc.stdlib : alloca;
   trm_long i,j,k,l,s;
@@ -6332,7 +6347,7 @@ private int xx01inverse_(vorbis_block *vb,vorbis_look_residue *vl,
 }
 
 int res0_inverse(vorbis_block *vb,vorbis_look_residue *vl,
-                 ogg_int32_t **in_,int *nonzero,int ch) /*nothrow @trusted @nogc*/ {
+                 ogg_int32_t **in_,int *nonzero,int ch) nothrow @trusted @nogc {
   int i,used=0;
   for(i=0;i<ch;i++)
     if(nonzero[i])
@@ -6344,7 +6359,7 @@ int res0_inverse(vorbis_block *vb,vorbis_look_residue *vl,
 }
 
 int res1_inverse(vorbis_block *vb,vorbis_look_residue *vl,
-                 ogg_int32_t **in_,int *nonzero,int ch) /*nothrow @trusted @nogc*/ {
+                 ogg_int32_t **in_,int *nonzero,int ch) nothrow @trusted @nogc {
   int i,used=0;
   for(i=0;i<ch;i++)
     if(nonzero[i])
@@ -6357,7 +6372,7 @@ int res1_inverse(vorbis_block *vb,vorbis_look_residue *vl,
 
 /* duplicate code here as speed is somewhat more important */
 int res2_inverse(vorbis_block *vb,vorbis_look_residue *vl,
-                 ogg_int32_t **in_,int *nonzero,int ch) /*nothrow @trusted @nogc*/ {
+                 ogg_int32_t **in_,int *nonzero,int ch) nothrow @trusted @nogc {
   trm_long i,k,l,s;
   vorbis_look_residue0 *look=cast(vorbis_look_residue0 *)vl;
   vorbis_info_residue0 *info=look.info;
@@ -7012,7 +7027,7 @@ const(void)* vorbis_window_(int type, int left){
 
 void vorbis_apply_window_(ogg_int32_t *d,/*const void *window_p[2],*/ const(void)** window_p,
                           trm_long *blocksizes,
-                          int lW,int W,int nW) /*nothrow @trusted @nogc*/ {
+                          int lW,int W,int nW) nothrow @trusted @nogc {
 
   immutable(LOOKUP_T)*[2] window=[cast(immutable(LOOKUP_T)*)window_p[0],cast(immutable(LOOKUP_T)*)window_p[1]];
   trm_long n=blocksizes[W];
@@ -9391,7 +9406,7 @@ struct ogg_sync_state {
 
 
 /* bits <= 32 */
-trm_long oggpack_read(oggpack_buffer *b,int bits) /*nothrow @trusted @nogc*/ {
+trm_long oggpack_read(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
   trm_long ret;
   trm_ulong m;
 
@@ -9440,7 +9455,7 @@ trm_long oggpack_bytes(oggpack_buffer *b) /*nothrow @trusted @nogc*/ {
 }
 
 /* Read in bits without advancing the bitptr; bits <= 32 */
-trm_long oggpack_look(oggpack_buffer *b,int bits) /*nothrow @trusted @nogc*/ {
+trm_long oggpack_look(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
   trm_ulong ret;
   trm_ulong m;
 
@@ -9471,7 +9486,7 @@ trm_long oggpack_look(oggpack_buffer *b,int bits) /*nothrow @trusted @nogc*/ {
   return(m&ret);
 }
 
-void oggpack_adv(oggpack_buffer *b,int bits) /*nothrow @trusted @nogc*/ {
+void oggpack_adv(oggpack_buffer *b,int bits) nothrow @trusted @nogc {
   bits+=b.endbit;
 
   if(b.endbyte > b.storage-((bits+7)>>3)) goto overflow;

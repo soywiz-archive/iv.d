@@ -401,8 +401,12 @@ align(1):
 
   // unixtime
   @property ulong modtime() const {
-    import std.datetime;
-    return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+    version(LDC) {
+      return 0;
+    } else {
+      import std.datetime;
+      return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+    }
   }
 
 @property pure const nothrow @safe @nogc:
@@ -458,8 +462,12 @@ align(1):
 
   // unixtime
   @property ulong modtime() const {
-    import std.datetime;
-    return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+    version(LDC) {
+      return 0;
+    } else {
+      import std.datetime;
+      return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+    }
   }
 
 @property pure const nothrow @safe @nogc:
