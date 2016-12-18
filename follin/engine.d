@@ -268,7 +268,8 @@ class TflChannel {
   // Follin will provide `tmpbuf` of the same size as `buf`
   // return number of *frames* (not samples!) written
   // 0 means "this channel is no more"
-  uint fillFrames (float[] buf) nothrow @nogc { return 0; }
+  // note that this function SHOULD NOT ALLOCATE, despite commented out @nogc
+  uint fillFrames (float[] buf) nothrow /*@nogc*/ { return 0; }
 
   // called when the channel is discarded (due to being `done` or by replacing with another channel)
   // note that sound engine is locked, so you can't call `tflAddChan()` here

@@ -711,7 +711,7 @@ public class SfxChannel : TflChannel {
 
   this() (in auto ref Sfxr sfxr) { smp.reset(sfxr); }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     if (!smp.playing) return 0; // no more
     //{ import core.stdc.stdio; printf("filling sfx buffer... (%u)\n", (smp.playing ? 1 : 0)); }
     smp.fillBuffer!"stereo"(buf[]);

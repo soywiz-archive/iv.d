@@ -17,6 +17,8 @@
  */
 module iv.follin.synth.flac;
 
+import iv.vfs;
+
 import iv.follin.engine : TflChannel;
 
 static if (__traits(compiles, { import iv.drflac; })) {
@@ -36,14 +38,13 @@ class FlacChannel : TflChannel {
 
   this (string fname) {
     import core.stdc.stdio;
-    import std.string : toStringz;
     import core.stdc.stdlib : malloc, free;
 
     uint commentCount;
     char* fcmts;
     scope(exit) if (fcmts !is null) free(fcmts);
 
-    ff = drflac_open_file_with_metadata(fname.toStringz, (void* pUserData, drflac_metadata* pMetadata) {
+    ff = drflac_open_file(VFile(fname), (void* pUserData, drflac_metadata* pMetadata) {
       if (pMetadata.type == DRFLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT) {
         /*
         */
@@ -130,7 +131,7 @@ class FlacChannel : TflChannel {
   override @property long totalMsecs () { return (vrtotalFrames >= 0 ? vrtotalFrames*1000/sampleRate : -1); }
 
   // `false`: no more frames
-  final bool moreFrames () nothrow @nogc {
+  final bool moreFrames () nothrow {
     if (ff is null) return false;
     if (frused >= hasframes) {
       auto rd = drflac_read_s32(ff, smpbufsize, smpbuf);
@@ -148,7 +149,7 @@ class FlacChannel : TflChannel {
 
   final @property uint framesLeft () nothrow @nogc { return (ff !is null ? hasframes-frused : 0); }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     if (!moreFrames) return 0;
     auto fr2put = framesLeft;
     if (fr2put > buf.length) fr2put = cast(uint)(buf.length);

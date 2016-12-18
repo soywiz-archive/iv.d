@@ -6,7 +6,7 @@
 //
 // D translation by Ketmar // Invisible Vector
 module iv.drflac;
-nothrow @nogc:
+//nothrow @nogc:
 
 // USAGE
 //
@@ -100,6 +100,14 @@ nothrow @nogc:
 //   knows where I can find some test files for this, let me know.
 // - Perverse and erroneous files have not been tested. Again, if you know where I can get some test files let me know.
 // - dr_flac is not thread-safe, but it's APIs can be called from any thread so long as you do your own synchronization.
+
+
+static if (is(typeof((){import iv.vfs;}()))) {
+  enum DrFlacHasVFS = true;
+  import iv.vfs;
+} else {
+  enum DrFlacHasVFS = false;
+}
 
 
 // As data is read from the client it is placed into an internal buffer for fast access. This controls the
@@ -289,13 +297,15 @@ struct drflac__memory_stream {
 // Structure for internal use. Used for bit streaming.
 struct drflac_bs {
   // The function to call when more data needs to be read.
-  drflac_read_proc onRead;
+  //drflac_read_proc onRead;
 
   // The function to call when the current read position needs to be moved.
-  drflac_seek_proc onSeek;
+  //drflac_seek_proc onSeek;
 
   // The user data to pass around to onRead and onSeek.
-  void* pUserData;
+  //void* pUserData;
+
+  ReadStruct rs;
 
   bool stdio; //k8: it is drflac's stdio shit
 
@@ -526,12 +536,12 @@ struct drflac {
 // same time.
 //
 // See also: drflac_open(), drflac_open_file_with_metadata(), drflac_close()
-//drflac* drflac_open_file(const(char)* filename);
+//drflac* drflac_open_file(const(char)[] filename);
 
 // Opens a FLAC decoder from the file at the given path and notifies the caller of the metadata chunks (album art, etc.)
 //
 // Look at the documentation for drflac_open_with_metadata() for more information on how metadata is handled.
-//drflac* drflac_open_file_with_metadata(const(char)* filename, drflac_meta_proc onMeta, void* pUserData);
+//drflac* drflac_open_file_with_metadata(const(char)[] filename, drflac_meta_proc onMeta, void* pUserData);
 
 // Opens a FLAC decoder from a pre-allocated block of memory
 //
@@ -559,7 +569,7 @@ struct drflac {
 
 //#ifndef DR_FLAC_NO_STDIO
 // Same as drflac_open_and_decode() except opens the decoder from a file.
-//int* drflac_open_and_decode_file(const(char)* filename, uint* sampleRate, uint* channels, ulong* totalSampleCount);
+//int* drflac_open_and_decode_file(const(char)[] filename, uint* sampleRate, uint* channels, ulong* totalSampleCount);
 //#endif
 
 // Same as drflac_open_and_decode() except opens the decoder from a block of memory.
@@ -589,7 +599,7 @@ struct drflac_vorbis_comment_iterator {
 // IMPLEMENTATION
 //
 ///////////////////////////////////////////////////////////////////////////////
-private:
+private: nothrow {
 enum DRFLAC_SUBFRAME_CONSTANT = 0;
 enum DRFLAC_SUBFRAME_VERBATIM = 1;
 enum DRFLAC_SUBFRAME_FIXED = 8;
@@ -608,7 +618,7 @@ enum DRFLAC_CHANNEL_ASSIGNMENT_MID_SIDE = 10;
 //// Endian Management ////
 version(LittleEndian) enum drflac__is_little_endian = true; else enum drflac__is_little_endian = false;
 
-ushort drflac__be2host_16 (ushort n) {
+ushort drflac__be2host_16 (ushort n) pure nothrow @safe @nogc {
   static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     return cast(ushort)((n>>8)|((n&0xff)<<8));
@@ -617,7 +627,7 @@ ushort drflac__be2host_16 (ushort n) {
   }
 }
 
-uint drflac__be2host_32 (uint n) {
+uint drflac__be2host_32 (uint n) pure nothrow @safe @nogc {
   static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     import core.bitop : bswap;
@@ -627,7 +637,7 @@ uint drflac__be2host_32 (uint n) {
   }
 }
 
-ulong drflac__be2host_64 (ulong n) {
+ulong drflac__be2host_64 (ulong n) pure nothrow @safe @nogc {
   static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     import core.bitop : bswap;
@@ -644,7 +654,7 @@ ulong drflac__be2host_64 (ulong n) {
 }
 
 
-uint drflac__le2host_32 (uint n) {
+uint drflac__le2host_32 (uint n) pure nothrow @safe @nogc {
   static if (__VERSION__ > 2067) pragma(inline, true);
   version(LittleEndian) {
     return n;
@@ -693,7 +703,7 @@ bool drflac__reload_l1_cache_from_l2 (drflac_bs* bs) {
   // If we get here it means we've run out of data in the L2 cache. We'll need to fetch more from the client, if there's any left.
   if (bs.unalignedByteCount > 0) return false; // If we have any unaligned bytes it means there's not more aligned bytes left in the client.
 
-  size_t bytesRead = bs.onRead(bs.pUserData, bs.cacheL2.ptr, mixin(DRFLAC_CACHE_L2_SIZE_BYTES!"bs"));
+  size_t bytesRead = bs.rs.read(bs.cacheL2.ptr, mixin(DRFLAC_CACHE_L2_SIZE_BYTES!"bs"));
 
   bs.nextL2Line = 0;
   if (bytesRead == mixin(DRFLAC_CACHE_L2_SIZE_BYTES!"bs")) {
@@ -786,7 +796,7 @@ bool drflac__seek_bits (drflac_bs* bs, size_t bitsToSeek) {
         bitsToSeek -= mixin(DRFLAC_CACHE_L2_LINES_REMAINING!"bs")*mixin(DRFLAC_CACHE_L1_SIZE_BITS!"bs");
         bs.nextL2Line += mixin(DRFLAC_CACHE_L2_LINES_REMAINING!"bs");
         if (wholeBytesRemaining > 0) {
-          bs.onSeek(bs.pUserData, cast(int)wholeBytesRemaining, drflac_seek_origin_current);
+          if (!bs.rs.seek(cast(int)wholeBytesRemaining, drflac_seek_origin_current)) return false;
           bitsToSeek -= wholeBytesRemaining*8;
         }
       }
@@ -965,17 +975,17 @@ bool drflac__seek_to_byte (drflac_bs* bs, ulong offsetFromStart) {
   // To resolve we just need to do an initial seek from the start, and then a series of offset seeks to make up the remainder.
   if (offsetFromStart > 0x7FFFFFFF) {
     ulong bytesRemaining = offsetFromStart;
-    if (!bs.onSeek(bs.pUserData, 0x7FFFFFFF, drflac_seek_origin_start)) return false;
+    if (!bs.rs.seek(0x7FFFFFFF, drflac_seek_origin_start)) return false;
     bytesRemaining -= 0x7FFFFFFF;
     while (bytesRemaining > 0x7FFFFFFF) {
-      if (!bs.onSeek(bs.pUserData, 0x7FFFFFFF, drflac_seek_origin_current)) return false;
+      if (!bs.rs.seek(0x7FFFFFFF, drflac_seek_origin_current)) return false;
       bytesRemaining -= 0x7FFFFFFF;
     }
     if (bytesRemaining > 0) {
-      if (!bs.onSeek(bs.pUserData, cast(int)bytesRemaining, drflac_seek_origin_current)) return false;
+      if (!bs.rs.seek(cast(int)bytesRemaining, drflac_seek_origin_current)) return false;
     }
   } else {
-    if (!bs.onSeek(bs.pUserData, cast(int)offsetFromStart, drflac_seek_origin_start)) return false;
+    if (!bs.rs.seek(cast(int)offsetFromStart, drflac_seek_origin_start)) return false;
   }
   // The cache should be reset to force a reload of fresh data from the client.
   drflac__reset_cache(bs);
@@ -1808,10 +1818,11 @@ struct drflac_ogg_page_header {
 //#endif
 
 struct drflac_init_info {
-  drflac_read_proc onRead;
-  drflac_seek_proc onSeek;
+  //drflac_read_proc onRead;
+  //drflac_seek_proc onSeek;
+  //void* pUserData;
+  ReadStruct rs;
   drflac_meta_proc onMeta;
-  void* pUserData;
   void* pUserDataMD;
   drflac_container container;
   uint sampleRate;
@@ -1829,6 +1840,59 @@ struct drflac_init_info {
 //#endif
 }
 
+private struct ReadStruct {
+  static if (DrFlacHasVFS) VFile srcfile;
+  drflac_read_proc onReadCB;
+  drflac_seek_proc onSeekCB;
+  void* pUserData;
+
+  size_t read (void* pBufferOut, size_t bytesToRead) nothrow {
+    auto b = cast(ubyte*)pBufferOut;
+    auto res = 0;
+    try {
+      while (bytesToRead > 0) {
+        size_t rd = 0;
+        if (onReadCB !is null) {
+          rd = onReadCB(pUserData, b, bytesToRead);
+        } else {
+          static if (DrFlacHasVFS) {
+            if (srcfile.isOpen) rd = srcfile.rawRead(b[0..bytesToRead]).length;
+          }
+        }
+        if (rd == 0) break;
+        b += rd;
+        res += rd;
+        bytesToRead -= rd;
+      }
+      return res;
+    } catch (Exception e) {
+      return 0;
+    }
+  }
+
+  bool seek (int offset, drflac_seek_origin origin) nothrow {
+    try {
+      if (onSeekCB !is null) {
+        return onSeekCB(pUserData, offset, origin);
+      } else {
+        static if (DrFlacHasVFS) {
+          if (srcfile.isOpen) {
+            switch (origin) {
+              case drflac_seek_origin_start: srcfile.seek(offset, Seek.Set); return true;
+              case drflac_seek_origin_current: srcfile.seek(offset, Seek.Cur); return true;
+              default: return false;
+            }
+          }
+        }
+      }
+      return false;
+    } catch (Exception e) {
+      return 0;
+    }
+  }
+}
+
+
 void drflac__decode_block_header (uint blockHeader, ubyte* isLastBlock, ubyte* blockType, uint* blockSize) {
   blockHeader = drflac__be2host_32(blockHeader);
   *isLastBlock = (blockHeader&(0x01<<31))>>31;
@@ -1836,27 +1900,27 @@ void drflac__decode_block_header (uint blockHeader, ubyte* isLastBlock, ubyte* b
   *blockSize   = (blockHeader&0xFFFFFF);
 }
 
-bool drflac__read_and_decode_block_header (drflac_read_proc onRead, void* pUserData, ubyte* isLastBlock, ubyte* blockType, uint* blockSize) {
+bool drflac__read_and_decode_block_header (ref ReadStruct rs, ubyte* isLastBlock, ubyte* blockType, uint* blockSize) {
   uint blockHeader;
-  if (onRead(pUserData, &blockHeader, 4) != 4) return false;
+  if (rs.read(&blockHeader, 4) != 4) return false;
   drflac__decode_block_header(blockHeader, isLastBlock, blockType, blockSize);
   return true;
 }
 
-bool drflac__read_streaminfo (drflac_read_proc onRead, void* pUserData, drflac_streaminfo* pStreamInfo) {
+bool drflac__read_streaminfo (ref ReadStruct rs, drflac_streaminfo* pStreamInfo) {
   import core.stdc.string : memcpy;
   // min/max block size.
   uint blockSizes;
-  if (onRead(pUserData, &blockSizes, 4) != 4) return false;
+  if (rs.read(&blockSizes, 4) != 4) return false;
   // min/max frame size.
   ulong frameSizes = 0;
-  if (onRead(pUserData, &frameSizes, 6) != 6) return false;
+  if (rs.read(&frameSizes, 6) != 6) return false;
   // Sample rate, channels, bits per sample and total sample count.
   ulong importantProps;
-  if (onRead(pUserData, &importantProps, 8) != 8) return false;
+  if (rs.read(&importantProps, 8) != 8) return false;
   // MD5
   ubyte[16] md5;
-  if (onRead(pUserData, md5.ptr, md5.sizeof) != md5.sizeof) return false;
+  if (rs.read(md5.ptr, md5.sizeof) != md5.sizeof) return false;
 
   blockSizes     = drflac__be2host_32(blockSizes);
   frameSizes     = drflac__be2host_64(frameSizes);
@@ -1889,7 +1953,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
     ubyte isLastBlock = 0;
     ubyte blockType;
     uint blockSize;
-    if (!drflac__read_and_decode_block_header(pFlac.bs.onRead, pFlac.bs.pUserData, &isLastBlock, &blockType, &blockSize)) return false;
+    if (!drflac__read_and_decode_block_header(pFlac.bs.rs, &isLastBlock, &blockType, &blockSize)) return false;
     runningFilePos += 4;
 
     drflac_metadata metadata;
@@ -1901,23 +1965,17 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
       case DRFLAC_METADATA_BLOCK_TYPE_APPLICATION:
         if (pFlac.onMeta) {
             void* pRawData = malloc(blockSize);
-            if (pRawData is null) {
-                return false;
-            }
+            if (pRawData is null) return false;
+            scope(exit) free(pRawData);
 
-            if (pFlac.bs.onRead(pFlac.bs.pUserData, pRawData, blockSize) != blockSize) {
-                free(pRawData);
-                return false;
-            }
+            if (pFlac.bs.rs.read(pRawData, blockSize) != blockSize) return false;
 
             metadata.pRawData = pRawData;
             metadata.rawDataSize = blockSize;
             metadata.data.application.id       = drflac__be2host_32(*cast(uint*)pRawData);
             metadata.data.application.pData    = cast(const(void)*)(cast(ubyte*)pRawData+uint.sizeof);
             metadata.data.application.dataSize = blockSize-cast(uint)uint.sizeof;
-            pFlac.onMeta(pFlac.pUserDataMD, &metadata);
-
-            free(pRawData);
+            try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
@@ -1928,11 +1986,9 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
         if (pFlac.onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
+          scope(exit) free(pRawData);
 
-          if (pFlac.bs.onRead(pFlac.bs.pUserData, pRawData, blockSize) != blockSize) {
-            free(pRawData);
-            return false;
-          }
+          if (pFlac.bs.rs.read(pRawData, blockSize) != blockSize) return false;
 
           metadata.pRawData = pRawData;
           metadata.rawDataSize = blockSize;
@@ -1947,9 +2003,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
             pSeekpoint.sampleCount = drflac__be2host_16(pSeekpoint.sampleCount);
           }
 
-          pFlac.onMeta(pFlac.pUserDataMD, &metadata);
-
-          free(pRawData);
+          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
@@ -1957,11 +2011,9 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
         if (pFlac.onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
+          scope(exit) free(pRawData);
 
-          if (pFlac.bs.onRead(pFlac.bs.pUserData, pRawData, blockSize) != blockSize) {
-            free(pRawData);
-            return false;
-          }
+          if (pFlac.bs.rs.read(pRawData, blockSize) != blockSize) return false;
 
           metadata.pRawData = pRawData;
           metadata.rawDataSize = blockSize;
@@ -1971,9 +2023,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
           metadata.data.vorbis_comment.vendor       = pRunningData;                                 pRunningData += metadata.data.vorbis_comment.vendorLength;
           metadata.data.vorbis_comment.commentCount = drflac__le2host_32(*cast(uint*)pRunningData); pRunningData += 4;
           metadata.data.vorbis_comment.comments     = pRunningData;
-          pFlac.onMeta(pFlac.pUserDataMD, &metadata);
-
-          free(pRawData);
+          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
@@ -1982,11 +2032,9 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
           import core.stdc.string : memcpy;
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
+          scope(exit) free(pRawData);
 
-          if (pFlac.bs.onRead(pFlac.bs.pUserData, pRawData, blockSize) != blockSize) {
-            free(pRawData);
-            return false;
-          }
+          if (pFlac.bs.rs.read(pRawData, blockSize) != blockSize) return false;
 
           metadata.pRawData = pRawData;
           metadata.rawDataSize = blockSize;
@@ -1997,9 +2045,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
           metadata.data.cuesheet.isCD              = ((pRunningData[0]&0x80)>>7) != 0;         pRunningData += 259;
           metadata.data.cuesheet.trackCount        = pRunningData[0];                              pRunningData += 1;
           metadata.data.cuesheet.pTrackData        = cast(const(ubyte)*)pRunningData;
-          pFlac.onMeta(pFlac.pUserDataMD, &metadata);
-
-          free(pRawData);
+          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
@@ -2007,11 +2053,9 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
         if (pFlac.onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
+          scope(exit) free(pRawData);
 
-          if (pFlac.bs.onRead(pFlac.bs.pUserData, pRawData, blockSize) != blockSize) {
-            free(pRawData);
-            return false;
-          }
+          if (pFlac.bs.rs.read(pRawData, blockSize) != blockSize) return false;
 
           metadata.pRawData = pRawData;
           metadata.rawDataSize = blockSize;
@@ -2028,9 +2072,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
           metadata.data.picture.indexColorCount   = drflac__be2host_32(*cast(uint*)pRunningData); pRunningData += 4;
           metadata.data.picture.pictureDataSize   = drflac__be2host_32(*cast(uint*)pRunningData); pRunningData += 4;
           metadata.data.picture.pPictureData      = cast(const(ubyte)*)pRunningData;
-          pFlac.onMeta(pFlac.pUserDataMD, &metadata);
-
-          free(pRawData);
+          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
@@ -2038,15 +2080,15 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
         if (pFlac.onMeta) {
           metadata.data.padding.unused = 0;
           // Padding doesn't have anything meaningful in it, so just skip over it.
-          if (!pFlac.bs.onSeek(pFlac.bs.pUserData, blockSize, drflac_seek_origin_current)) return false;
-          pFlac.onMeta(pFlac.pUserDataMD, &metadata);
+          if (!pFlac.bs.rs.seek(blockSize, drflac_seek_origin_current)) return false;
+          //pFlac.onMeta(pFlac.pUserDataMD, &metadata);
         }
         break;
 
       case DRFLAC_METADATA_BLOCK_TYPE_INVALID:
         // Invalid chunk. Just skip over this one.
         if (pFlac.onMeta) {
-          if (!pFlac.bs.onSeek(pFlac.bs.pUserData, blockSize, drflac_seek_origin_current)) return false;
+          if (!pFlac.bs.rs.seek(blockSize, drflac_seek_origin_current)) return false;
         }
         goto default;
 
@@ -2056,24 +2098,20 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
         if (pFlac.onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
+          scope(exit) free(pRawData);
 
-          if (pFlac.bs.onRead(pFlac.bs.pUserData, pRawData, blockSize) != blockSize) {
-            free(pRawData);
-            return false;
-          }
+          if (pFlac.bs.rs.read(pRawData, blockSize) != blockSize) return false;
 
           metadata.pRawData = pRawData;
           metadata.rawDataSize = blockSize;
-          pFlac.onMeta(pFlac.pUserDataMD, &metadata);
-
-          free(pRawData);
+          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
     }
 
     // If we're not handling metadata, just skip over the block. If we are, it will have been handled earlier in the switch statement above.
     if (pFlac.onMeta is null) {
-      if (!pFlac.bs.onSeek(pFlac.bs.pUserData, blockSize, drflac_seek_origin_current)) return false;
+      if (!pFlac.bs.rs.seek(blockSize, drflac_seek_origin_current)) return false;
     }
 
     runningFilePos += blockSize;
@@ -2087,7 +2125,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
   return true;
 }
 
-bool drflac__init_private__native (drflac_init_info* pInit, drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD) {
+bool drflac__init_private__native (drflac_init_info* pInit, ref ReadStruct rs, drflac_meta_proc onMeta, void* pUserDataMD) {
   // Pre: The bit stream should be sitting just past the 4-byte id header.
 
   pInit.container = drflac_container_native;
@@ -2096,12 +2134,12 @@ bool drflac__init_private__native (drflac_init_info* pInit, drflac_read_proc onR
   ubyte isLastBlock;
   ubyte blockType;
   uint blockSize;
-  if (!drflac__read_and_decode_block_header(onRead, pUserData, &isLastBlock, &blockType, &blockSize)) return false;
+  if (!drflac__read_and_decode_block_header(rs, &isLastBlock, &blockType, &blockSize)) return false;
 
   if (blockType != DRFLAC_METADATA_BLOCK_TYPE_STREAMINFO || blockSize != 34) return false;    // Invalid block type. First block must be the STREAMINFO block.
 
   drflac_streaminfo streaminfo;
-  if (!drflac__read_streaminfo(onRead, pUserData, &streaminfo)) return false;
+  if (!drflac__read_streaminfo(rs, &streaminfo)) return false;
 
   pInit.sampleRate       = streaminfo.sampleRate;
   pInit.channels         = streaminfo.channels;
@@ -2109,13 +2147,13 @@ bool drflac__init_private__native (drflac_init_info* pInit, drflac_read_proc onR
   pInit.totalSampleCount = streaminfo.totalSampleCount;
   pInit.maxBlockSize     = streaminfo.maxBlockSize;    // Don't care about the min block size - only the max (used for determining the size of the memory allocation).
 
-  if (onMeta) {
+  if (onMeta !is null) {
     drflac_metadata metadata;
     metadata.type = DRFLAC_METADATA_BLOCK_TYPE_STREAMINFO;
     metadata.pRawData = null;
     metadata.rawDataSize = 0;
     metadata.data.streaminfo = streaminfo;
-    onMeta(pUserDataMD, &metadata);
+    try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
   }
 
   pInit.hasMetadataBlocks = !isLastBlock;
@@ -2137,24 +2175,24 @@ uint drflac_ogg__get_page_body_size (drflac_ogg_page_header* pHeader) {
   return pageBodySize;
 }
 
-bool drflac_ogg__read_page_header_after_capture_pattern (drflac_read_proc onRead, void* pUserData, drflac_ogg_page_header* pHeader, uint* pHeaderSize) {
-  if (onRead(pUserData, &pHeader.structureVersion, 1) != 1 || pHeader.structureVersion != 0) return false;   // Unknown structure version. Possibly corrupt stream.
-  if (onRead(pUserData, &pHeader.headerType, 1) != 1) return false;
-  if (onRead(pUserData, &pHeader.granulePosition, 8) != 8) return false;
-  if (onRead(pUserData, &pHeader.serialNumber, 4) != 4) return false;
-  if (onRead(pUserData, &pHeader.sequenceNumber, 4) != 4) return false;
-  if (onRead(pUserData, &pHeader.checksum, 4) != 4) return false;
-  if (onRead(pUserData, &pHeader.segmentCount, 1) != 1 || pHeader.segmentCount == 0) return false;   // Should not have a segment count of 0.
-  if (onRead(pUserData, &pHeader.segmentTable, pHeader.segmentCount) != pHeader.segmentCount) return false;
+bool drflac_ogg__read_page_header_after_capture_pattern (ref ReadStruct rs, drflac_ogg_page_header* pHeader, uint* pHeaderSize) {
+  if (rs.read(&pHeader.structureVersion, 1) != 1 || pHeader.structureVersion != 0) return false;   // Unknown structure version. Possibly corrupt stream.
+  if (rs.read(&pHeader.headerType, 1) != 1) return false;
+  if (rs.read(&pHeader.granulePosition, 8) != 8) return false;
+  if (rs.read(&pHeader.serialNumber, 4) != 4) return false;
+  if (rs.read(&pHeader.sequenceNumber, 4) != 4) return false;
+  if (rs.read(&pHeader.checksum, 4) != 4) return false;
+  if (rs.read(&pHeader.segmentCount, 1) != 1 || pHeader.segmentCount == 0) return false;   // Should not have a segment count of 0.
+  if (rs.read(&pHeader.segmentTable, pHeader.segmentCount) != pHeader.segmentCount) return false;
   if (pHeaderSize) *pHeaderSize = (27+pHeader.segmentCount);
   return true;
 }
 
-bool drflac_ogg__read_page_header (drflac_read_proc onRead, void* pUserData, drflac_ogg_page_header* pHeader, uint* pHeaderSize) {
+bool drflac_ogg__read_page_header (ref ReadStruct rs, drflac_ogg_page_header* pHeader, uint* pHeaderSize) {
   ubyte[4] id;
-  if (onRead(pUserData, id.ptr, 4) != 4) return false;
+  if (rs.read(id.ptr, 4) != 4) return false;
   if (id.ptr[0] != 'O' || id.ptr[1] != 'g' || id.ptr[2] != 'g' || id.ptr[3] != 'S') return false;
-  return drflac_ogg__read_page_header_after_capture_pattern(onRead, pUserData, pHeader, pHeaderSize);
+  return drflac_ogg__read_page_header_after_capture_pattern(rs, pHeader, pHeaderSize);
 }
 
 
@@ -2164,9 +2202,10 @@ bool drflac_ogg__read_page_header (drflac_read_proc onRead, void* pUserData, drf
 // dr_flac is supporting there needs to be a layer sitting on top of the onRead and onSeek callbacks that ensures the bits read from
 // the physical Ogg bitstream are converted and delivered in native FLAC format.
 struct drflac_oggbs {
-  drflac_read_proc onRead;    // The original onRead callback from drflac_open() and family.
-  drflac_seek_proc onSeek;    // The original onSeek callback from drflac_open() and family.
-  void* pUserData;            // The user data passed on onRead and onSeek. This is the user data that was passed on drflac_open() and family.
+  //drflac_read_proc onRead;    // The original onRead callback from drflac_open() and family.
+  //drflac_seek_proc onSeek;    // The original onSeek callback from drflac_open() and family.
+  //void* pUserData;            // The user data passed on onRead and onSeek. This is the user data that was passed on drflac_open() and family.
+  ReadStruct rs;
   ulong currentBytePos;    // The position of the byte we are sitting on in the physical byte stream. Used for efficient seeking.
   ulong firstBytePos;      // The position of the first byte in the physical bitstream. Points to the start of the "OggS" identifier of the FLAC bos page.
   uint serialNumber;      // The serial number of the FLAC audio pages. This is determined by the initial header page that was read during initialization.
@@ -2177,7 +2216,7 @@ struct drflac_oggbs {
 } // oggbs = Ogg Bitstream
 
 size_t drflac_oggbs__read_physical (drflac_oggbs* oggbs, void* bufferOut, size_t bytesToRead) {
-  size_t bytesActuallyRead = oggbs.onRead(oggbs.pUserData, bufferOut, bytesToRead);
+  size_t bytesActuallyRead = oggbs.rs.read(bufferOut, bytesToRead);
   oggbs.currentBytePos += bytesActuallyRead;
   return bytesActuallyRead;
 }
@@ -2185,21 +2224,21 @@ size_t drflac_oggbs__read_physical (drflac_oggbs* oggbs, void* bufferOut, size_t
 bool drflac_oggbs__seek_physical (drflac_oggbs* oggbs, ulong offset, drflac_seek_origin origin) {
   if (origin == drflac_seek_origin_start) {
     if (offset <= 0x7FFFFFFF) {
-      if (!oggbs.onSeek(oggbs.pUserData, cast(int)offset, drflac_seek_origin_start)) return false;
+      if (!oggbs.rs.seek(cast(int)offset, drflac_seek_origin_start)) return false;
       oggbs.currentBytePos = offset;
       return true;
     } else {
-      if (!oggbs.onSeek(oggbs.pUserData, 0x7FFFFFFF, drflac_seek_origin_start)) return false;
+      if (!oggbs.rs.seek(0x7FFFFFFF, drflac_seek_origin_start)) return false;
       oggbs.currentBytePos = offset;
       return drflac_oggbs__seek_physical(oggbs, offset-0x7FFFFFFF, drflac_seek_origin_current);
     }
   } else {
     while (offset > 0x7FFFFFFF) {
-      if (!oggbs.onSeek(oggbs.pUserData, 0x7FFFFFFF, drflac_seek_origin_current)) return false;
+      if (!oggbs.rs.seek(0x7FFFFFFF, drflac_seek_origin_current)) return false;
       oggbs.currentBytePos += 0x7FFFFFFF;
       offset -= 0x7FFFFFFF;
     }
-    if (!oggbs.onSeek(oggbs.pUserData, cast(int)offset, drflac_seek_origin_current)) return false; // <-- Safe cast thanks to the loop above.
+    if (!oggbs.rs.seek(cast(int)offset, drflac_seek_origin_current)) return false; // <-- Safe cast thanks to the loop above.
     oggbs.currentBytePos += offset;
     return true;
   }
@@ -2209,7 +2248,7 @@ bool drflac_oggbs__goto_next_page (drflac_oggbs* oggbs) {
   drflac_ogg_page_header header;
   for (;;) {
     uint headerSize;
-    if (!drflac_ogg__read_page_header(oggbs.onRead, oggbs.pUserData, &header, &headerSize)) return false;
+    if (!drflac_ogg__read_page_header(oggbs.rs, &header, &headerSize)) return false;
     oggbs.currentBytePos += headerSize;
     uint pageBodySize = drflac_ogg__get_page_body_size(&header);
     if (header.serialNumber == oggbs.serialNumber) {
@@ -2234,14 +2273,14 @@ size_t drflac__on_read_ogg (void* pUserData, void* bufferOut, size_t bytesToRead
     size_t bytesRemainingToRead = bytesToRead-bytesRead;
 
     if (oggbs.bytesRemainingInPage >= bytesRemainingToRead) {
-      bytesRead += oggbs.onRead(oggbs.pUserData, pRunningBufferOut, bytesRemainingToRead);
+      bytesRead += oggbs.rs.read(pRunningBufferOut, bytesRemainingToRead);
       oggbs.bytesRemainingInPage -= cast(uint)bytesRemainingToRead;
       break;
     }
 
     // If we get here it means some of the requested data is contained in the next pages.
     if (oggbs.bytesRemainingInPage > 0) {
-      size_t bytesJustRead = oggbs.onRead(oggbs.pUserData, pRunningBufferOut, oggbs.bytesRemainingInPage);
+      size_t bytesJustRead = oggbs.rs.read(pRunningBufferOut, oggbs.bytesRemainingInPage);
       bytesRead += bytesJustRead;
       pRunningBufferOut += bytesJustRead;
       if (bytesJustRead != oggbs.bytesRemainingInPage) break;  // Ran out of data.
@@ -2394,7 +2433,7 @@ bool drflac_ogg__seek_to_sample (drflac* pFlac, ulong sample) {
 }
 
 
-bool drflac__init_private__ogg (drflac_init_info* pInit, drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD) {
+bool drflac__init_private__ogg (drflac_init_info* pInit, ref ReadStruct rs, drflac_meta_proc onMeta, void* pUserDataMD) {
   // Pre: The bit stream should be sitting just past the 4-byte OggS capture pattern.
 
   pInit.container = drflac_container_ogg;
@@ -2406,7 +2445,7 @@ bool drflac__init_private__ogg (drflac_init_info* pInit, drflac_read_proc onRead
   drflac_ogg_page_header header;
 
   uint headerSize;
-  if (!drflac_ogg__read_page_header_after_capture_pattern(onRead, pUserData, &header, &headerSize)) return false;
+  if (!drflac_ogg__read_page_header_after_capture_pattern(rs, &header, &headerSize)) return false;
   pInit.runningFilePos = headerSize;
 
   for (;;) {
@@ -2420,40 +2459,40 @@ bool drflac__init_private__ogg (drflac_init_info* pInit, drflac_read_proc onRead
       uint bytesRemainingInPage = pageBodySize;
 
       ubyte packetType;
-      if (onRead(pUserData, &packetType, 1) != 1) return false;
+      if (rs.read(&packetType, 1) != 1) return false;
 
       bytesRemainingInPage -= 1;
       if (packetType == 0x7F) {
         // Increasingly more likely to be a FLAC page...
         ubyte[4] sig;
-        if (onRead(pUserData, sig.ptr, 4) != 4) return false;
+        if (rs.read(sig.ptr, 4) != 4) return false;
 
         bytesRemainingInPage -= 4;
         if (sig.ptr[0] == 'F' && sig.ptr[1] == 'L' && sig.ptr[2] == 'A' && sig.ptr[3] == 'C') {
           // Almost certainly a FLAC page...
           ubyte[2] mappingVersion;
-          if (onRead(pUserData, mappingVersion.ptr, 2) != 2) return false;
+          if (rs.read(mappingVersion.ptr, 2) != 2) return false;
 
           if (mappingVersion.ptr[0] != 1) return false;   // Only supporting version 1.x of the Ogg mapping.
 
           // The next 2 bytes are the non-audio packets, not including this one. We don't care about this because we're going to
           // be handling it in a generic way based on the serial number and packet types.
-          if (!onSeek(pUserData, 2, drflac_seek_origin_current)) return false;
+          if (!rs.seek(2, drflac_seek_origin_current)) return false;
 
           // Expecting the native FLAC signature "fLaC".
-          if (onRead(pUserData, sig.ptr, 4) != 4) return false;
+          if (rs.read(sig.ptr, 4) != 4) return false;
 
           if (sig.ptr[0] == 'f' && sig.ptr[1] == 'L' && sig.ptr[2] == 'a' && sig.ptr[3] == 'C') {
             // The remaining data in the page should be the STREAMINFO block.
             ubyte isLastBlock;
             ubyte blockType;
             uint blockSize;
-            if (!drflac__read_and_decode_block_header(onRead, pUserData, &isLastBlock, &blockType, &blockSize)) return false;
+            if (!drflac__read_and_decode_block_header(rs, &isLastBlock, &blockType, &blockSize)) return false;
 
             if (blockType != DRFLAC_METADATA_BLOCK_TYPE_STREAMINFO || blockSize != 34) return false;    // Invalid block type. First block must be the STREAMINFO block.
 
             drflac_streaminfo streaminfo;
-            if (drflac__read_streaminfo(onRead, pUserData, &streaminfo)) {
+            if (drflac__read_streaminfo(rs, &streaminfo)) {
               // Success!
               pInit.sampleRate       = streaminfo.sampleRate;
               pInit.channels         = streaminfo.channels;
@@ -2461,13 +2500,13 @@ bool drflac__init_private__ogg (drflac_init_info* pInit, drflac_read_proc onRead
               pInit.totalSampleCount = streaminfo.totalSampleCount;
               pInit.maxBlockSize     = streaminfo.maxBlockSize;
 
-              if (onMeta) {
+              if (onMeta !is null) {
                 drflac_metadata metadata;
                 metadata.type = DRFLAC_METADATA_BLOCK_TYPE_STREAMINFO;
                 metadata.pRawData = null;
                 metadata.rawDataSize = 0;
                 metadata.data.streaminfo = streaminfo;
-                onMeta(pUserDataMD, &metadata);
+                try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
               }
 
               pInit.runningFilePos  += pageBodySize;
@@ -2485,20 +2524,20 @@ bool drflac__init_private__ogg (drflac_init_info* pInit, drflac_read_proc onRead
           }
         } else {
           // Not a FLAC header. Skip it.
-          if (!onSeek(pUserData, bytesRemainingInPage, drflac_seek_origin_current)) return false;
+          if (!rs.seek(bytesRemainingInPage, drflac_seek_origin_current)) return false;
         }
       } else {
         // Not a FLAC header. Seek past the entire page and move on to the next.
-        if (!onSeek(pUserData, bytesRemainingInPage, drflac_seek_origin_current)) return false;
+        if (!rs.seek(bytesRemainingInPage, drflac_seek_origin_current)) return false;
       }
     } else {
-      if (!onSeek(pUserData, pageBodySize, drflac_seek_origin_current)) return false;
+      if (!rs.seek(pageBodySize, drflac_seek_origin_current)) return false;
     }
 
     pInit.runningFilePos += pageBodySize;
 
     // Read the header of the next page.
-    if (!drflac_ogg__read_page_header(onRead, pUserData, &header, &headerSize)) return false;
+    if (!drflac_ogg__read_page_header(rs, &header, &headerSize)) return false;
     pInit.runningFilePos += headerSize;
   }
 
@@ -2511,37 +2550,54 @@ bool drflac__init_private__ogg (drflac_init_info* pInit, drflac_read_proc onRead
 }
 //#endif
 
-bool drflac__init_private (drflac_init_info* pInit, drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD) {
-  if (pInit is null || onRead is null || onSeek is null) return false;
-
-  pInit.onRead        = onRead;
-  pInit.onSeek        = onSeek;
-  pInit.onMeta        = onMeta;
-  pInit.pUserData     = pUserData;
-  pInit.pUserDataMD   = pUserDataMD;
-
+bool drflac__check_init_private (drflac_init_info* pInit, drflac_meta_proc onMeta, void* pUserDataMD) {
   ubyte[4] id;
-  if (onRead(pUserData, id.ptr, 4) != 4) return false;
-
-  if (id.ptr[0] == 'f' && id.ptr[1] == 'L' && id.ptr[2] == 'a' && id.ptr[3] == 'C') return drflac__init_private__native(pInit, onRead, onSeek, onMeta, pUserData, pUserDataMD);
-
+  if (pInit.rs.read(id.ptr, 4) != 4) return false;
+  if (id.ptr[0] == 'f' && id.ptr[1] == 'L' && id.ptr[2] == 'a' && id.ptr[3] == 'C') return drflac__init_private__native(pInit, pInit.rs, onMeta, pUserDataMD);
 //#ifndef DR_FLAC_NO_OGG
-  if (id.ptr[0] == 'O' && id.ptr[1] == 'g' && id.ptr[2] == 'g' && id.ptr[3] == 'S') return drflac__init_private__ogg(pInit, onRead, onSeek, onMeta, pUserData, pUserDataMD);
+  if (id.ptr[0] == 'O' && id.ptr[1] == 'g' && id.ptr[2] == 'g' && id.ptr[3] == 'S') return drflac__init_private__ogg(pInit, pInit.rs, onMeta, pUserDataMD);
 //#endif
-
-  // Unsupported container.
+  // unsupported container
   return false;
 }
 
+bool drflac__init_private (drflac_init_info* pInit, drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD) {
+  if (pInit is null || onRead is null || onSeek is null) return false;
+
+  pInit.rs.onReadCB  = onRead;
+  pInit.rs.onSeekCB  = onSeek;
+  pInit.rs.pUserData = pUserData;
+  pInit.onMeta       = onMeta;
+  pInit.pUserDataMD  = pUserDataMD;
+
+  return drflac__check_init_private(pInit, onMeta, pUserDataMD);
+}
+
+} //nothrow
+
+static if (DrFlacHasVFS)
+bool drflac__init_private (drflac_init_info* pInit, VFile fl, drflac_meta_proc onMeta, void* pUserDataMD) {
+  //import core.stdc.string : memset;
+  //memset(&pInit.rs.srcfile, 0, pInit.rs.srcfile.sizeof); // just in case
+
+  pInit.rs.srcfile   = fl;
+  pInit.rs.onReadCB  = null;
+  pInit.rs.onSeekCB  = null;
+  pInit.rs.pUserData = null;
+  pInit.onMeta       = onMeta;
+  pInit.pUserDataMD  = pUserDataMD;
+
+  return drflac__check_init_private(pInit, onMeta, pUserDataMD);
+}
+
+nothrow {
 void drflac__init_from_info (drflac* pFlac, drflac_init_info* pInit) {
-  import core.stdc.string : memset;
+  import core.stdc.string : memcpy, memset;
   assert(pFlac !is null);
   assert(pInit !is null);
 
   memset(pFlac, 0, (*pFlac).sizeof);
-  pFlac.bs.onRead        = pInit.onRead;
-  pFlac.bs.onSeek        = pInit.onSeek;
-  pFlac.bs.pUserData     = pInit.pUserData;
+  pFlac.bs.rs            = pInit.rs;
   pFlac.bs.nextL2Line    = (pFlac.bs.cacheL2).sizeof/(pFlac.bs.cacheL2.ptr[0]).sizeof; // <-- Initialize to this to force a client-side data retrieval right from the start.
   pFlac.bs.consumedBits  = (pFlac.bs.cache).sizeof*8;
 
@@ -2555,12 +2611,10 @@ void drflac__init_from_info (drflac* pFlac, drflac_init_info* pInit) {
   pFlac.container        = pInit.container;
 }
 
-drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD, bool stdio) {
+drflac* drflac_open_with_metadata_private_xx (drflac_init_info* init, drflac_meta_proc onMeta, void* pUserDataMD, bool stdio) {
   import core.stdc.stdlib : malloc, free;
+  import core.stdc.string : memset;
   import std.functional : toDelegate;
-
-  drflac_init_info init;
-  if (!drflac__init_private(&init, onRead, onSeek, onMeta, pUserData, pUserDataMD)) return null;
 
   size_t allocationSize = (drflac).sizeof;
   allocationSize += init.maxBlockSize*init.channels*(int).sizeof;
@@ -2572,16 +2626,15 @@ drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_
 //#endif
 
   drflac* pFlac = cast(drflac*)malloc(allocationSize);
-  drflac__init_from_info(pFlac, &init);
+  memset(pFlac, 0, (*pFlac).sizeof);
+  drflac__init_from_info(pFlac, init);
   pFlac.pDecodedSamples = cast(int*)pFlac.pExtraData;
 
 //#ifndef DR_FLAC_NO_OGG
   if (init.container == drflac_container_ogg) {
     drflac_oggbs* oggbs = cast(drflac_oggbs*)((cast(int*)pFlac.pExtraData)+init.maxBlockSize*init.channels);
     oggbs.stdio = stdio;
-    oggbs.onRead = onRead;
-    oggbs.onSeek = onSeek;
-    oggbs.pUserData = pUserData;
+    oggbs.rs = init.rs;
     oggbs.currentBytePos = init.oggFirstBytePos;
     oggbs.firstBytePos = init.oggFirstBytePos;
     oggbs.serialNumber = init.oggSerial;
@@ -2589,9 +2642,9 @@ drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_
     oggbs.bytesRemainingInPage = 0;
 
     // The Ogg bistream needs to be layered on top of the original bitstream.
-    pFlac.bs.onRead = toDelegate(&drflac__on_read_ogg);
-    pFlac.bs.onSeek = toDelegate(&drflac__on_seek_ogg);
-    pFlac.bs.pUserData = cast(void*)oggbs;
+    pFlac.bs.rs.onReadCB = toDelegate(&drflac__on_read_ogg);
+    pFlac.bs.rs.onSeekCB = toDelegate(&drflac__on_seek_ogg);
+    pFlac.bs.rs.pUserData = cast(void*)oggbs;
   }
 //#endif
 
@@ -2607,6 +2660,23 @@ drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_
 }
 
 
+drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD, bool stdio) {
+  drflac_init_info init;
+  if (!drflac__init_private(&init, onRead, onSeek, onMeta, pUserData, pUserDataMD)) return null;
+  return drflac_open_with_metadata_private_xx(&init, onMeta, pUserDataMD, stdio);
+}
+
+} //nothrow
+
+static if (DrFlacHasVFS)
+drflac* drflac_open_with_metadata_private (VFile fl, drflac_meta_proc onMeta, void* pUserDataMD, bool stdio) {
+  drflac_init_info init;
+  if (!drflac__init_private(&init, fl, onMeta, pUserDataMD)) return null;
+  return drflac_open_with_metadata_private_xx(&init, onMeta, pUserDataMD, stdio);
+}
+
+
+nothrow {
 alias drflac_file = void*;
 
 size_t drflac__on_read_stdio (void* pUserData, void* bufferOut, size_t bytesToRead) {
@@ -2620,9 +2690,10 @@ bool drflac__on_seek_stdio (void* pUserData, int offset, drflac_seek_origin orig
   return fseek(cast(FILE*)pUserData, offset, (origin == drflac_seek_origin_current) ? SEEK_CUR : SEEK_SET) == 0;
 }
 
-drflac_file drflac__open_file_handle (const(char)* filename) {
+drflac_file drflac__open_file_handle (const(char)[] filename) {
+  import std.internal.cstring : tempCString;
   import core.stdc.stdio;
-  FILE* pFile = fopen(filename, "rb");
+  FILE* pFile = fopen(filename.tempCString, "rb");
   if (pFile is null) return null;
   return cast(drflac_file)pFile;
 }
@@ -2632,7 +2703,7 @@ void drflac__close_file_handle (drflac_file file) {
   fclose(cast(FILE*)file);
 }
 
-public drflac* drflac_open_file (const(char)* filename) {
+public drflac* drflac_open_file (const(char)[] filename) {
   import std.functional : toDelegate;
 
   drflac_file file = drflac__open_file_handle(filename);
@@ -2648,7 +2719,7 @@ public drflac* drflac_open_file (const(char)* filename) {
   return pFlac;
 }
 
-public drflac* drflac_open_file_with_metadata (const(char)* filename, drflac_meta_proc onMeta, void* pUserData=null) {
+public drflac* drflac_open_file_with_metadata (const(char)[] filename, drflac_meta_proc onMeta, void* pUserData=null) {
   import std.functional : toDelegate;
 
   drflac_file file = drflac__open_file_handle(filename);
@@ -2663,6 +2734,27 @@ public drflac* drflac_open_file_with_metadata (const(char)* filename, drflac_met
 
   return pFlac;
 }
+
+} //nothrow
+
+static if (DrFlacHasVFS) {
+  public drflac* drflac_open_file (VFile fl, drflac_meta_proc onMeta=null) {
+    import std.functional : toDelegate;
+
+    drflac* pFlac;
+    if (onMeta !is null) {
+      pFlac = drflac_open_with_metadata_private(fl, onMeta, null, true);
+    } else {
+      pFlac = drflac_open(fl);
+    }
+    if (pFlac is null) return null;
+    pFlac.bs.stdio = false;
+
+    return pFlac;
+  }
+}
+
+nothrow {
 
 size_t drflac__on_read_memory (void* pUserData, void* bufferOut, size_t bytesToRead) {
   drflac__memory_stream* memoryStream = cast(drflac__memory_stream*)pUserData;
@@ -2720,12 +2812,12 @@ public drflac* drflac_open_memory (const(void)* data, size_t dataSize) {
 //#ifndef DR_FLAC_NO_OGG
   if (pFlac.container == drflac_container_ogg) {
     drflac_oggbs* oggbs = cast(drflac_oggbs*)((cast(int*)pFlac.pExtraData)+pFlac.maxBlockSize*pFlac.channels);
-    oggbs.pUserData = &pFlac.memoryStream;
+    oggbs.rs.pUserData = &pFlac.memoryStream;
   }
   else
 //#endif
   {
-    pFlac.bs.pUserData = &pFlac.memoryStream;
+    pFlac.bs.rs.pUserData = &pFlac.memoryStream;
   }
 
   return pFlac;
@@ -2748,11 +2840,11 @@ public drflac* drflac_open_memory_with_metadata (const void* data, size_t dataSi
 //#ifndef DR_FLAC_NO_OGG
   if (pFlac.container == drflac_container_ogg) {
     drflac_oggbs* oggbs = cast(drflac_oggbs*)((cast(int*)pFlac.pExtraData)+pFlac.maxBlockSize*pFlac.channels);
-    oggbs.pUserData = &pFlac.memoryStream;
+    oggbs.rs.pUserData = &pFlac.memoryStream;
   } else
 //#endif
   {
-    pFlac.bs.pUserData = &pFlac.memoryStream;
+    pFlac.bs.rs.pUserData = &pFlac.memoryStream;
   }
 
   return pFlac;
@@ -2761,6 +2853,15 @@ public drflac* drflac_open_memory_with_metadata (const void* data, size_t dataSi
 public drflac* drflac_open (drflac_read_proc onRead, drflac_seek_proc onSeek, void* pUserData) {
   return drflac_open_with_metadata_private(onRead, onSeek, null, pUserData, pUserData, false);
 }
+
+} //nothrow
+
+static if (DrFlacHasVFS)
+public drflac* drflac_open (VFile fl) {
+  return drflac_open_with_metadata_private(fl, null, null, false);
+}
+
+nothrow {
 
 public drflac* drflac_open_with_metadata (drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData) {
   return drflac_open_with_metadata_private(onRead, onSeek, onMeta, pUserData, pUserData, false);
@@ -2773,7 +2874,7 @@ public void drflac_close (drflac* pFlac) {
   // If we opened the file with drflac_open_file() we will want to close the file handle. We can know whether or not drflac_open_file()
   // was used by looking at the callbacks.
   //if (pFlac.bs.onRead == drflac__on_read_stdio) drflac__close_file_handle(cast(drflac_file)pFlac.bs.pUserData);
-  if (pFlac.bs.stdio) drflac__close_file_handle(cast(drflac_file)pFlac.bs.pUserData);
+  if (pFlac.bs.stdio) drflac__close_file_handle(cast(drflac_file)pFlac.bs.rs.pUserData);
 
 //#ifndef DR_FLAC_NO_OGG
   // Need to clean up Ogg streams a bit differently due to the way the bit streaming is chained.
@@ -2781,7 +2882,7 @@ public void drflac_close (drflac* pFlac) {
     //assert(pFlac.bs.onRead == drflac__on_read_ogg);
     drflac_oggbs* oggbs = cast(drflac_oggbs*)(cast(int*)pFlac.pExtraData+pFlac.maxBlockSize*pFlac.channels);
     //if (oggbs.onRead == drflac__on_read_stdio) drflac__close_file_handle(cast(drflac_file)oggbs.pUserData);
-    if (oggbs.stdio) drflac__close_file_handle(cast(drflac_file)oggbs.pUserData);
+    if (oggbs.stdio) drflac__close_file_handle(cast(drflac_file)oggbs.rs.pUserData);
   }
 //#endif
   free(pFlac);
@@ -3090,7 +3191,7 @@ public int* drflac_open_and_decode (drflac_read_proc onRead, drflac_seek_proc on
   return drflac__full_decode_and_close(pFlac, sampleRate, channels, totalSampleCount);
 }
 
-public int* drflac_open_and_decode_file (const(char)* filename, uint* sampleRate, uint* channels, ulong* totalSampleCount) {
+public int* drflac_open_and_decode_file (const(char)[] filename, uint* sampleRate, uint* channels, ulong* totalSampleCount) {
   if (sampleRate) *sampleRate = 0;
   if (channels) *channels = 0;
   if (totalSampleCount) *totalSampleCount = 0;
@@ -3153,6 +3254,7 @@ public long drflac_vorbis_comment_size (uint commentCount, const(char)* pComment
   return res;
 }
 
+}
 
 // REVISION HISTORY
 //

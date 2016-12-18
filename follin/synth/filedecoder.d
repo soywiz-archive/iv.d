@@ -17,6 +17,8 @@
  */
 module iv.follin.synth.filedecoder;
 
+import iv.vfs;
+
 import iv.follin.engine : TflChannel;
 
 import iv.follin.synth.vorbis;
@@ -64,8 +66,7 @@ class FileChannel : TflChannel {
         FileChannel chan = null;
         // determine format
         static if (IFSF_FLAC_IS_HERE) {
-          auto namez = fname.toStringz;
-          if (auto flc = drflac_open_file(namez)) {
+          if (auto flc = drflac_open_file(VFile(fname))) {
             drflac_close(flc);
             return new FileChannelImpl(new FlacChannel(namestr));
           }
@@ -116,7 +117,7 @@ public:
   // in milliseconds; -1: unknown
   override long totalMsecs () { return (chan !is null ? chan.totalMsecs : -1); }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     if (chan is null) { buf[] = 0; return 0; }
     return chan.fillFrames(buf);
   }

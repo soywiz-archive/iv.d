@@ -87,7 +87,7 @@ class MP3Channel : TflChannel {
 
   override @property long totalMsecs () { return (vrtotalFrames >= 0 ? vrtotalFrames*1000/sampleRate : -1); }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     if (closed) return 0;
     uint res = 0;
     auto dest = buf.ptr;

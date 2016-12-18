@@ -80,7 +80,7 @@ class VorbisChannel : TflChannel {
   }
 
   // `false`: no more frames
-  final bool moreFrames () nothrow @nogc {
+  final bool moreFrames () nothrow {
     if (hasframes == 0) return false;
     if (frused >= hasframes) {
       int haschans;
@@ -98,7 +98,7 @@ class VorbisChannel : TflChannel {
 
   final @property uint framesLeft () nothrow @nogc { return (hasframes ? hasframes-frused : 0); }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     if (!moreFrames) return 0;
     auto fr2put = framesLeft;
     if (fr2put > buf.length/2) fr2put = cast(uint)(buf.length/2);

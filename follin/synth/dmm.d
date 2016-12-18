@@ -707,7 +707,7 @@ public class DmmChannel : TflChannel {
 
   override @property long totalMsecs () { return (mod !is null ? mod.songLengthMsecs : 0); }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     //buf[] = 0; return buf.length;
     //{ import core.stdc.stdio; printf("frm=%u\n", buf.length); }
     if (mod is null) return 0;

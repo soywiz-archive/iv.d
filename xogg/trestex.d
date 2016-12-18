@@ -1,3 +1,4 @@
+#!/usr/bin/env rdmd
 /*
 Copyright (c) 2016, Ketmar // Invisible Vector
 

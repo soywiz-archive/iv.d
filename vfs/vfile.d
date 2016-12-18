@@ -123,7 +123,7 @@ public:
     //this = fl;
   }
 
-  this (this) {
+  this (this) nothrow @trusted @nogc {
     debug(vfs_rc) { import core.stdc.stdio : printf; printf("POSTBLIT(0x%08x)\n", cast(void*)wstp); }
     debug(vfs_rc_trace) {
       try { throw new Exception("stack trace"); } catch (Exception e) { import std.stdio; writeln("*** ", e.toString); }
@@ -131,12 +131,16 @@ public:
     if (wst !is null) wst.incRef();
   }
 
-  ~this () {
+  // WARNING: dtor hides exceptions!
+  ~this () nothrow {
     debug(vfs_rc) { import core.stdc.stdio : printf; printf("DTOR(0x%08x)\n", cast(void*)wstp); }
     debug(vfs_rc_trace) {
       try { throw new Exception("stack trace"); } catch (Exception e) { import std.stdio; writeln("*** ", e.toString); }
     }
-    doDecRef(wst);
+    try {
+      doDecRef(wst);
+    } catch (Exception e) {
+    }
   }
 
   @property bool opCast(T) () if (is(T == bool)) { pragma(inline, true); return this.isOpen; }
@@ -253,7 +257,7 @@ public:
     return p;
   }
 
-  void opAssign (VFile src) {
+  void opAssign (VFile src) nothrow {
     if (!wstp && !src.wstp) return;
     try {
       debug(vfs_rc) { import core.stdc.stdio : printf; printf("***OPASSIGN(0x%08x -> 0x%08x)\n", cast(void*)src.wstp, cast(void*)wstp); }
@@ -282,7 +286,7 @@ public:
       }
     } catch (Exception e) {
       // chain exception
-      throw new VFSException("read error", __FILE__, __LINE__, e);
+      //throw new VFSException("read error", __FILE__, __LINE__, e);
     }
   }
 
@@ -331,7 +335,7 @@ protected:
     //if (gcUnregister !is null) gcUnregister(cast(void*)this);
   }
 
-  final void incRef () {
+  final void incRef () nothrow @trusted @nogc {
     import core.atomic;
     if (atomicOp!"+="(rc, 1) == 0) assert(0); // hey, this is definitely a bug!
     debug(vfs_rc) { import core.stdc.stdio : printf; printf("INCREF(0x%08x): %u (was %u)...\n", cast(void*)this, rc, rc-1); }

@@ -166,7 +166,7 @@ public class KSSString : TflChannel {
     stereo = false;
   }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     uint pos = 0;
     while (pos < buf.length) {
       if (timeleft <= 0) {

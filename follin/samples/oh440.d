@@ -33,7 +33,7 @@ public class Oh440Hertz : TflChannel {
     volume = 128;
   }
 
-  override uint fillFrames (float[] buf) nothrow @nogc {
+  override uint fillFrames (float[] buf) nothrow {
     foreach (ref f; buf) {
       import std.math : sin, PI;
       float t = cast(float)smpnum/sampleRate;
