@@ -1,5 +1,6 @@
 #!/usr/bin/env rdmd
 
+import iv.cmdcon;
 import iv.chromaprint;
 import iv.encoding;
 import iv.vfs.io;
@@ -9,8 +10,14 @@ import iv.xogg.tremor;
 enum BUF_SIZE = 4096;
 ubyte[BUF_SIZE] buffer;
 
+__gshared uint seconds = 0;
 
 void main (string[] args) {
+  conRegVar!seconds("seconds", "how many seconds to process (0: whole song)");
+
+  concmd("exec .config.rc tan");
+  conProcessArgs!true(args);
+
   if (args.length != 2) assert(0, "filename?");
   string fname = args[1];
 
@@ -75,7 +82,9 @@ void main (string[] args) {
         total += ret;
         //stderr.writeln(total/2.0/vi.channels/vi.rate*1000.0);
         //if (total >= 1024*1024*3) { stderr.writeln("ABORT!"); break; }
-        if (total/2.0/vi.channels/vi.rate >= 2*60) { stderr.writeln("ABORT at ", total, "!"); break; }
+        if (seconds > 0) {
+          if (total/2.0/vi.channels/vi.rate >= seconds) { stderr.writeln("ABORT at ", total, "!"); break; }
+        }
       }
     }
     stderr.writeln("TOTAL=", total);
