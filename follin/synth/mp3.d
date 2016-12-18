@@ -32,6 +32,14 @@ class MP3Channel : TflChannel {
   long vrtotalFrames = -1;
   FILE* fi;
 
+  int reader (void[] buf) nothrow @nogc {
+    if (fi is null) return -1;
+    auto rd = fread(buf.ptr, 1, buf.length, fi);
+    //{ import core.stdc.stdio; printf("*** reading %u bytes, got %d bytes\n", cast(uint)buf.length, cast(int)rd); }
+    if (rd < 0) return -1;
+    return cast(int)rd;
+  }
+
   this (string fname) {
     import core.stdc.stdio;
     import std.string : toStringz;
@@ -39,13 +47,7 @@ class MP3Channel : TflChannel {
     fi = fopen(fname.toStringz, "rb");
     if (fi is null) return;
 
-    mp3 = new MP3DecoderNoGC((void[] buf) {
-      if (fi is null) return -1;
-      auto rd = fread(buf.ptr, 1, buf.length, fi);
-      //{ import core.stdc.stdio; printf("*** reading %u bytes, got %d bytes\n", cast(uint)buf.length, cast(int)rd); }
-      if (rd < 0) return -1;
-      return cast(int)rd;
-    });
+    mp3 = new MP3DecoderNoGC(&reader);
     if (!mp3.valid) { fclose(fi); fi = null; return; }
 
     // scan file to determine number of frames
@@ -106,7 +108,7 @@ class MP3Channel : TflChannel {
       } else {
         frused = 0;
         //{ import core.stdc.stdio; printf("*** decoding...\n"); }
-        if (mp3.decodeNextFrame()) {
+        if (mp3.decodeNextFrame(&reader)) {
           //{ import core.stdc.stdio; printf("*** decoded!\n"); }
           hasframes = cast(uint)mp3.frameSamples.length;
         } else {

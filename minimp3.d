@@ -201,7 +201,7 @@ public:
 
 private:
   void* dec;
-  ReadBufFn readBuf;
+  //ReadBufFn readBuf;
   ubyte* inbuf;
   uint inbufsize; // will allocate enough bytes for one frame
   uint inbufpos, inbufused;
@@ -214,7 +214,7 @@ private:
 
 private enum ObjectCodeMixin = q{
 private:
-  uint ensureBytes (uint size) {
+  uint ensureBytes (scope ReadBufFn readBuf, uint size) {
     import core.stdc.string : memmove;
     for (;;) {
       assert(inbufused >= inbufpos);
@@ -262,9 +262,9 @@ private:
   bool skipTagCheck;
 
 private:
-  bool decodeOneFrame (bool first=false) {
+  bool decodeOneFrame (scope ReadBufFn readBuf, bool first=false) {
     for (;;) {
-      if (!eofhit && inbufused-inbufpos < 1441) ensureBytes(64*1024);
+      if (!eofhit && inbufused-inbufpos < 1441) ensureBytes(readBuf, 64*1024);
       int res, size = -1;
 
       // check for tags
@@ -278,7 +278,7 @@ private:
             uint sz = (inbuf[inbufpos+9]|(inbuf[inbufpos+8]<<7)|(inbuf[inbufpos+7]<<14)|(inbuf[inbufpos+6]<<21))+10;
             // skip `sz` bytes, it's a tag
             while (sz > 0 && !eofhit) {
-              ensureBytes(64*1024);
+              ensureBytes(readBuf, 64*1024);
               auto left = inbufused-inbufpos;
               if (left > sz) left = sz;
               removeBytes(left);
@@ -293,7 +293,7 @@ private:
           // this may be ID3v1, just skip 128 bytes
           uint sz = 128;
           while (sz > 0 && !eofhit) {
-            ensureBytes(64*1024);
+            ensureBytes(readBuf, 64*1024);
             auto left = inbufused-inbufpos;
             if (left > sz) left = sz;
             removeBytes(left);
@@ -336,13 +336,17 @@ private:
   }
 
 public:
-  this (ReadBufFn reader) {
-    assert(reader !is null);
-    readBuf = reader;
+  this (scope ReadBufFn reader) {
+    static if (allowGC) {
+      if (reader is null) throw new Exception("reader is null");
+    } else {
+      if (reader is null) assert(0, "reader is null");
+    }
+    //readBuf = reader;
     dec = libc_calloc(mp3_context_t.sizeof, 1);
     if (dec is null) assert(0, "out of memory"); // no, really! ;-)
     //mp3_decode_init(cast(mp3_context_t*)dec);
-    if (!decodeOneFrame(true)) close();
+    if (!decodeOneFrame(reader, true)) close();
   }
 
   ~this () { close(); }
@@ -352,9 +356,11 @@ public:
     if (inbuf !is null) { libc_free(inbuf); inbuf = null; }
   }
 
-  bool decodeNextFrame () {
+  bool decodeNextFrame (scope ReadBufFn reader) {
     if (!valid) return false;
-    if (!decodeOneFrame()) {
+    static if (allowGC) scope(failure) close();
+    if (reader is null) return false;
+    if (!decodeOneFrame(reader)) {
       close();
       return false;
     }
@@ -3013,4 +3019,3 @@ retry:
   s.frame_size += extra_bytes;
   return buf_size;
 }
-
