@@ -83,7 +83,7 @@ struct MP3Info {
 }
 
 
-MP3Info mp3Scan(RDG) (RDG rdg) if (is(typeof({
+MP3Info mp3Scan(RDG) (scope RDG rdg) if (is(typeof({
   ubyte[2] buf;
   int rd = rdg(buf[]);
 }))) {
@@ -354,6 +354,14 @@ public:
   void close () {
     if (dec !is null) { libc_free(dec); dec = null; }
     if (inbuf !is null) { libc_free(inbuf); inbuf = null; }
+  }
+
+  // empty read buffers, so `decodeOneFrame()` won't use stale data
+  void reset () {
+    inbufpos = inbufused = 0;
+    eofhit = false;
+    info.audio_bytes = 0;
+    scanLeft = 256*1024+16;
   }
 
   bool decodeNextFrame (scope ReadBufFn reader) {

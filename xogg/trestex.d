@@ -32,25 +32,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import iv.alsa;
 import iv.cmdcon;
 import iv.rawtty;
+import iv.vfs;
+import iv.vfs.io;
 
+import iv.drflac;
+import iv.minimp3;
 import iv.xogg.tremor;
 
 
-version(XoggTremorNoVFS) {
-  enum TremorHasVFS = false;
-  import std.stdio;
-} else {
-  static if (is(typeof((){import iv.vfs;}()))) {
-    enum TremorHasVFS = true;
-    import iv.vfs;
-    import iv.vfs.io;
-  } else {
-    enum TremorHasVFS = false;
-    import std.stdio;
-  }
-}
-
-
+// ////////////////////////////////////////////////////////////////////////// //
 string recodeToKOI8 (const(char)[] s) {
   immutable wchar[128] charMapKOI8 = [
     '\u2500','\u2502','\u250C','\u2510','\u2514','\u2518','\u251C','\u2524','\u252C','\u2534','\u253C','\u2580','\u2584','\u2588','\u258C','\u2590',
@@ -80,6 +70,7 @@ string recodeToKOI8 (const(char)[] s) {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 enum device = "plug:default";
 
 enum BUF_SIZE = 4096;
@@ -93,6 +84,272 @@ __gshared int gain = 0;
 __gshared uint latencyms = 100;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+struct StreamIO {
+private:
+  VFile fl;
+  string type;
+
+public:
+  long timetotal; // in milliseconds
+  uint rate;
+  ubyte channels;
+
+public:
+  bool valid () {
+    if (type.length == 0) return false;
+    switch (type[0]) {
+      case 'f': return (ff !is null);
+      case 'v': return (vi !is null);
+      case 'm': return mp3.valid;
+      default:
+    }
+    return false;
+  }
+
+  @property string typestr () const pure nothrow @safe @nogc { return type; }
+
+  void close () {
+    if (type.length == 0) return;
+    switch (type[0]) {
+      case 'f': if (ff !is null) { drflac_close(ff); ff = null; } break;
+      case 'v': if (vi !is null) { vi = null; ov_clear(&vf); } break;
+      case 'm': if (mp3.valid) mp3.close(); break;
+      default:
+    }
+  }
+
+  int readFrames (void* buf, int count) {
+    if (count < 1) return 0;
+    if (count > int.max/4) count = int.max/4;
+    if (!valid) return 0;
+    switch (type[0]) {
+      case 'f':
+        if (ff is null) return 0;
+        int[512] flcbuf;
+        int res = 0;
+        count *= channels;
+        short* bp = cast(short*)buf;
+        while (count > 0) {
+          int xrd = (count <= flcbuf.length ? count : cast(int)flcbuf.length);
+          auto rd = drflac_read_s32(ff, xrd, flcbuf.ptr); // samples
+          foreach (int v; flcbuf[0..cast(int)rd]) *bp++ = cast(short)(v>>16);
+          res += rd;
+          count -= rd;
+        }
+        return cast(int)(res/channels); // number of frames read
+      case 'v':
+        if (vi is null) return 0;
+        int currstream = 0;
+        auto ret = ov_read(&vf, cast(ubyte*)buf, count*2*channels, &currstream);
+        if (ret <= 0) return 0; // error or eof
+        return ret/2/channels; // number of frames read
+      case 'm':
+        if (!mp3.valid) return 0;
+        if (mp3smpused+2 > mp3.frameSamples.length) {
+          if (!mp3.decodeNextFrame(&reader)) return 0;
+          mp3smpused = 0;
+        }
+        int res = 0;
+        ushort* b = cast(ushort*)buf;
+        while (count > 0 && mp3smpused+2 <= mp3.frameSamples.length) {
+          *b++ = mp3.frameSamples[mp3smpused++];
+          *b++ = mp3.frameSamples[mp3smpused++];
+          --count;
+          ++res;
+        }
+        return res;
+      default: break;
+    }
+    return 0;
+  }
+
+  // return new frame index
+  ulong seekToTime (uint msecs) {
+    if (!valid) return 0;
+    ulong snum = cast(ulong)msecs*rate/1000*channels; // sample number
+    switch (type[0]) {
+      case 'f':
+        if (ff is null) return 0;
+        if (ff.totalSampleCount < 1) return 0;
+        if (snum >= ff.totalSampleCount) {
+          drflac_seek_to_sample(ff, 0);
+          return 0;
+        }
+        if (!drflac_seek_to_sample(ff, snum)) {
+          drflac_seek_to_sample(ff, 0);
+          return 0;
+        }
+        return snum/channels;
+      case 'v':
+        if (vi is null) return 0;
+        if (ov_time_seek(&vf, msecs) == 0) return ov_time_tell(&vf)*rate/1000;
+        ov_time_seek(&vf, 0);
+        return 0;
+      case 'm':
+        if (!mp3.valid) return 0;
+        // alas, we cannot seek here, so do it slow
+        mp3smpused = 0;
+        ulong smpleft = snum;
+        fl.seek(0);
+        mp3.reset();
+        while (smpleft > 0) {
+          if (!mp3.decodeNextFrame(&reader)) {
+            fl.seek(0);
+            mp3.reset();
+            mp3.decodeNextFrame(&reader);
+            return 0;
+          }
+          auto smp = mp3.frameSamples;
+          if (smp.length < smpleft) {
+            smpleft -= cast(int)smp.length;
+          } else if (smp.length == smpleft) {
+            mp3smpused = cast(int)smp.length;
+            break;
+          } else {
+            mp3smpused = cast(int)smpleft;
+            break;
+          }
+        }
+        return snum/channels;
+      default: break;
+    }
+    return 0;
+  }
+
+private:
+  drflac* ff;
+  MP3Decoder mp3;
+  uint mp3smpused;
+  OggVorbis_File vf;
+  vorbis_info* vi;
+
+  int reader (void[] buf) {
+    try {
+      auto rd = fl.rawRead(buf);
+      return cast(int)rd.length;
+    } catch (Exception e) {}
+    return -1;
+  }
+
+public:
+  static StreamIO open (VFile fl) {
+    import std.string : fromStringz;
+    StreamIO sio;
+    fl.seek(0);
+    // determine format
+    try {
+      auto fpos = fl.tell;
+      // flac
+      try {
+        import core.stdc.stdio;
+        import core.stdc.stdlib : malloc, free;
+        uint commentCount;
+        char* fcmts;
+        scope(exit) if (fcmts !is null) free(fcmts);
+        sio.ff = drflac_open_file(fl, (void* pUserData, drflac_metadata* pMetadata) {
+          if (pMetadata.type == DRFLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT) {
+            if (fcmts !is null) free(fcmts);
+            auto csz = drflac_vorbis_comment_size(pMetadata.data.vorbis_comment.commentCount, pMetadata.data.vorbis_comment.comments);
+            if (csz > 0 && csz < 0x100_0000) {
+              fcmts = cast(char*)malloc(cast(uint)csz);
+            } else {
+              fcmts = null;
+            }
+            if (fcmts is null) {
+              commentCount = 0;
+            } else {
+              import core.stdc.string : memcpy;
+              commentCount = pMetadata.data.vorbis_comment.commentCount;
+              memcpy(fcmts, pMetadata.data.vorbis_comment.comments, cast(uint)csz);
+            }
+          }
+        });
+        if (sio.ff !is null) {
+          scope(failure) drflac_close(sio.ff);
+          if (sio.ff.sampleRate < 1024 || sio.ff.sampleRate > 96000) throw new Exception("fucked flac");
+          if (sio.ff.channels < 1 || sio.ff.channels > 2) throw new Exception("fucked flac");
+          sio.rate = cast(uint)sio.ff.sampleRate;
+          sio.channels = cast(ubyte)sio.ff.channels;
+          sio.type = "flac";
+          sio.fl = fl;
+          sio.timetotal = (sio.ff.totalSampleCount/sio.ff.channels)*1000/sio.ff.sampleRate;
+          writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (flac)");
+          {
+            drflac_vorbis_comment_iterator i;
+            drflac_init_vorbis_comment_iterator(&i, commentCount, fcmts);
+            uint commentLength;
+            const(char)* pComment;
+            while ((pComment = drflac_next_vorbis_comment(&i, &commentLength)) !is null) {
+              if (commentLength > 1024*1024*2) break; // just in case
+              writeln("  ", pComment[0..commentLength].recodeToKOI8);
+            }
+          }
+          writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+          return sio;
+        }
+      } catch (Exception) {}
+      fl.seek(fpos);
+      // vorbis
+      try {
+        if (ov_fopen(fl, &sio.vf) == 0) {
+          scope(failure) scope(exit) ov_clear(&sio.vf);
+          sio.type = "vorbis";
+          sio.fl = fl;
+          sio.vi = ov_info(&sio.vf, -1);
+          if (sio.vi.rate < 1024 || sio.vi.rate > 96000) throw new Exception("fucked vorbis");
+          if (sio.vi.channels < 1 || sio.vi.channels > 2) throw new Exception("fucked vorbis");
+          sio.rate = sio.vi.rate;
+          sio.channels = cast(ubyte)sio.vi.channels;
+          writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (vorbis)");
+          writeln("streams: ", ov_streams(&sio.vf));
+          writeln("bitrate: ", ov_bitrate(&sio.vf));
+          sio.timetotal = ov_time_total(&sio.vf);
+          if (auto vc = ov_comment(&sio.vf, -1)) {
+            writeln("Encoded by: ", vc.vendor.fromStringz.recodeToKOI8);
+            foreach (immutable idx; 0..vc.comments) {
+              writeln("  ", vc.user_comments[idx][0..vc.comment_lengths[idx]].recodeToKOI8);
+            }
+          }
+          writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+          return sio;
+        }
+      } catch (Exception) {}
+      fl.seek(fpos);
+      // mp3
+      try {
+        sio.fl = fl;
+        sio.mp3 = new MP3Decoder(&sio.reader);
+        sio.type = "mp3";
+        if (sio.mp3.valid) {
+          // scan file to determine number of frames
+          fl.seek(fpos);
+          auto info = mp3Scan((void[] buf) {
+            return cast(int)fl.rawRead(buf).length;
+          });
+          fl.seek(fpos);
+          if (info.valid) {
+            if (sio.mp3.sampleRate < 1024 || sio.mp3.sampleRate > 96000) throw new Exception("fucked mp3");
+            if (sio.mp3.channels < 1 || sio.mp3.channels > 2) throw new Exception("fucked mp3");
+            sio.rate = sio.mp3.sampleRate;
+            sio.channels = sio.mp3.channels;
+            sio.timetotal = info.samples*1000/info.sampleRate;
+            writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (mp3)");
+            writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+            return sio;
+          }
+        }
+        sio.mp3 = null;
+      } catch (Exception) {}
+      sio.mp3 = null;
+      fl.seek(fpos);
+    } catch (Exception) {}
+    return StreamIO.init;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum Action { Quit, Prev, Next }
 
 Action playFile () {
@@ -104,164 +361,122 @@ Action playFile () {
   if (plidx >= playlist.length) return Action.Quit;
   auto fname = playlist[plidx];
 
-  OggVorbis_File vf;
-  bool eof = false;
-  int currstream;
+  StreamIO sio = StreamIO.open(VFile(fname));
+  if (!sio.valid) return Action.Next;
+  scope(exit) sio.close();
 
-  static if (TremorHasVFS) {
-    err = ov_fopen(VFile(fname), &vf);
-  } else {
-    pragma(msg, "TREMOR: NO VFS!");
-    err = ov_fopen(args[1], &vf);
+  long prevtime = -1;
+  long doneframes = 0;
+
+  if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+    import core.stdc.stdio : printf;
+    import core.stdc.stdlib : exit, EXIT_FAILURE;
+    printf("Playback open error: %s\n", snd_strerror(err));
+    exit(EXIT_FAILURE);
   }
-  if (err != 0) {
-    writeln("Error opening file '", fname, "'");
-    return Action.Next;
-  } else {
-    scope(exit) ov_clear(&vf);
+  scope(exit) snd_pcm_close(handle);
 
-    import std.string : fromStringz;
+  if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, sio.channels, sio.rate, 1, /*500000*//*20000*/latencyms*1000)) < 0) {
+    import core.stdc.stdio : printf;
+    import core.stdc.stdlib : exit, EXIT_FAILURE;
+    printf("Playback open error: %s\n", snd_strerror(err));
+    exit(EXIT_FAILURE);
+  }
 
-    vorbis_info* vi = ov_info(&vf, -1);
+  version(none) {
+    snd_pcm_uframes_t bufsize, periodsize;
+    if (snd_pcm_get_params(handle, &bufsize, &periodsize) == 0) {
+      writeln("desired latency: ", latencyms);
+      writeln("buffer size: ", bufsize);
+      writeln("period size: ", periodsize);
+    }
+  }
 
-    long prevtime = -1;
-    long totaltime = ov_time_total(&vf);
+  scope(exit) writeln;
+  bool oldpaused = !paused;
+  int oldgain = gain+1;
+  writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", 0, 0, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !" : ""));
 
-    writeln("Bitstream is ", vi.channels, " channel, ", vi.rate, "Hz");
-    writeln("Encoded by: ", ov_comment(&vf, -1).vendor.fromStringz.recodeToKOI8);
-    writeln("streams: ", ov_streams(&vf));
-    writeln("bitrate: ", ov_bitrate(&vf));
-    writefln("time: %d:%02d", totaltime/1000/60, totaltime/1000%60);
+  mainloop: for (;;) {
+    int frmread = 0;
+    if (!paused) {
+      frmread = sio.readFrames(buffer.ptr, BUF_SIZE/2/sio.channels);
+      if (frmread > 0) doneframes += frmread;
+    } else {
+      frmread = BUF_SIZE/2/sio.channels;
+      buffer[] = 0;
+    }
 
-    if (auto vc = ov_comment(&vf, -1)) {
-      foreach (immutable idx; 0..vc.comments) {
-        writeln("  ", vc.user_comments[idx][0..vc.comment_lengths[idx]].recodeToKOI8);
+    if (frmread <= 0) break;
+
+    if (gain) {
+      auto bp = cast(short*)buffer.ptr;
+      foreach (ref short v; bp[0..frmread/sio.channels]) {
+        double d = cast(double)v*gain/100.0;
+        d += v;
+        if (d < -32767) d = -32767;
+        if (d > 32767) d = 32767;
+        v = cast(short)d;
       }
     }
 
-    if (vi.channels < 1 || vi.channels > 2) {
-      writeln("ERROR: vorbis channels (", vi.channels, ")");
-      return Action.Next;
-    }
-
-    if (vi.rate < 1024 || vi.rate > 96000) {
-      writeln("ERROR: vorbis sample rate (", vi.rate, ")");
-      return Action.Next;
-    }
-
-    if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-      import core.stdc.stdio : printf;
-      import core.stdc.stdlib : exit, EXIT_FAILURE;
-      printf("Playback open error: %s\n", snd_strerror(err));
-      exit(EXIT_FAILURE);
-    }
-
-    if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, /*2*/vi.channels, /*44100*/vi.rate, 1, /*500000*//*20000*/latencyms*1000)) < 0) {
-      import core.stdc.stdio : printf;
-      import core.stdc.stdlib : exit, EXIT_FAILURE;
-      printf("Playback open error: %s\n", snd_strerror(err));
-      exit(EXIT_FAILURE);
-    }
-
-    scope(exit) snd_pcm_close(handle);
-
-    {
-      snd_pcm_uframes_t bufsize, periodsize;
-      if (snd_pcm_get_params(handle, &bufsize, &periodsize) == 0) {
-        writeln("desired latency: ", latencyms);
-        writeln("buffer size: ", bufsize);
-        writeln("period size: ", periodsize);
-      }
-    }
-
-    scope(exit) writeln;
-    bool oldpaused = !paused;
-    int oldgain = gain+1;
-
-    int ret;
-    while (!eof) {
-      if (!paused) {
-        ret = ov_read(&vf, buffer.ptr, BUF_SIZE, /*0, 2, 1,*/ &currstream);
-      } else {
-        ret = BUF_SIZE;
-        buffer[] = 0;
-      }
-      if (ret == 0) {
-        // EOF
-        eof = true;
-      } else if (ret < 0) {
-        // error in the stream
-      } else {
-        if (gain) {
-          auto bp = cast(short*)buffer.ptr;
-          foreach (ref short v; bp[0..ret/2]) {
-            double d = cast(double)v*gain/100.0;
-            d += v;
-            if (d < -32767) d = -32767;
-            if (d > 32767) d = 32767;
-            v = cast(short)d;
-          }
-        }
-        frames = snd_pcm_writei(handle, buffer.ptr, ret/(2*vi.channels));
-        if (frames < 0) frames = snd_pcm_recover(handle, cast(int)frames, 0);
+    for (;;) {
+      frames = snd_pcm_writei(handle, buffer.ptr, frmread);
+      if (frames < 0) {
+        frames = snd_pcm_recover(handle, cast(int)frames, 0);
         if (frames < 0) {
           import core.stdc.stdio : printf;
           printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
-          break;
+          break mainloop;
         }
-        {
-          long tm = ov_time_tell(&vf);
-          if (tm != prevtime || paused != oldpaused || gain != oldgain) {
-            prevtime = tm;
-            oldpaused = paused;
-            oldgain = gain;
-            writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", tm/1000/60, tm/1000%60, totaltime/1000/60, totaltime/1000%60, gain, (paused ? " !" : ""));
-            static if (!TremorHasVFS) stdout.flush();
-          }
-        }
-        //if (frames > 0 && frames < ret/(2*vi.channels)) printf("Short write (expected %li, wrote %li)\n", ret, frames);
-      }
-      if (ttyIsKeyHit) {
-        auto key = ttyReadKey();
-        switch (key.key) {
-          case TtyEvent.Key.Left:
-            long tm = ov_time_tell(&vf);
-            tm -= 10*1000;
-            if (tm < 0) tm = 0;
-            ov_time_seek(&vf, tm);
-            break;
-          case TtyEvent.Key.Right:
-            long tm = ov_time_tell(&vf);
-            tm += 10*1000;
-            if (totaltime > 0 && tm > totaltime) tm = totaltime;
-            ov_time_seek(&vf, tm);
-            break;
-          case TtyEvent.Key.Down:
-            long tm = ov_time_tell(&vf);
-            tm -= 60*1000;
-            if (tm < 0) tm = 0;
-            ov_time_seek(&vf, tm);
-            break;
-          case TtyEvent.Key.Up:
-            long tm = ov_time_tell(&vf);
-            tm += 60*1000;
-            if (totaltime > 0 && tm > totaltime) tm = totaltime;
-            ov_time_seek(&vf, tm);
-            break;
-          case TtyEvent.Key.Char:
-            if (key.ch == '<') return Action.Prev;
-            if (key.ch == '>') return Action.Next;
-            if (key.ch == 'q') return Action.Quit;
-            if (key.ch == ' ') paused = !paused;
-            if (key.ch == '0') gain = 0;
-            if (key.ch == '-') { gain -= 10; if (gain < -100) gain = -100; }
-            if (key.ch == '+') { gain += 10; if (gain > 1000) gain = 1000; }
-            break;
-          default: break;
-        }
+      } else {
+        import core.stdc.string : memmove;
+        if (frames >= frmread) break;
+        memmove(buffer.ptr, buffer.ptr+cast(uint)frames*2*sio.channels, (frmread-frames)*2*sio.channels);
+        frmread -= frames;
       }
     }
-    //if (prevtime != -1) writeln;
+
+    long tm = doneframes*1000/sio.rate;
+    if (tm != prevtime || paused != oldpaused || gain != oldgain) {
+      prevtime = tm;
+      oldpaused = paused;
+      oldgain = gain;
+      writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", tm/1000/60, tm/1000%60, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !" : ""));
+    }
+
+    if (ttyIsKeyHit) {
+      auto key = ttyReadKey();
+      auto oldtm = tm;
+      switch (key.key) {
+        case TtyEvent.Key.Left:
+          tm -= 10*1000;
+          if (tm < 0) tm = 0;
+          break;
+        case TtyEvent.Key.Right:
+          tm += 10*1000;
+          break;
+        case TtyEvent.Key.Down:
+          tm -= 60*1000;
+          break;
+        case TtyEvent.Key.Up:
+          tm += 60*1000;
+          break;
+        case TtyEvent.Key.Char:
+          if (key.ch == '<') return Action.Prev;
+          if (key.ch == '>') return Action.Next;
+          if (key.ch == 'q') return Action.Quit;
+          if (key.ch == ' ') paused = !paused;
+          if (key.ch == '0') gain = 0;
+          if (key.ch == '-') { gain -= 10; if (gain < -100) gain = -100; }
+          if (key.ch == '+') { gain += 10; if (gain > 1000) gain = 1000; }
+          break;
+        default: break;
+      }
+      if (tm < 0) tm = 0;
+      if (tm >= sio.timetotal) tm = (sio.timetotal ? sio.timetotal-1 : 0);
+      if (oldtm != tm) doneframes = sio.seekToTime(cast(uint)tm);
+    }
   }
 
   return Action.Next;

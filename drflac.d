@@ -387,10 +387,10 @@ struct drflac_frame {
 
 struct drflac {
   // The function to call when a metadata block is read.
-  drflac_meta_proc onMeta;
+  //drflac_meta_proc onMeta;
 
   // The user data posted to the metadata callback function.
-  void* pUserDataMD;
+  //void* pUserDataMD;
 
 
   // The sample rate. Will be set to something like 44100.
@@ -1822,8 +1822,8 @@ struct drflac_init_info {
   //drflac_seek_proc onSeek;
   //void* pUserData;
   ReadStruct rs;
-  drflac_meta_proc onMeta;
-  void* pUserDataMD;
+  //drflac_meta_proc onMeta;
+  //void* pUserDataMD;
   drflac_container container;
   uint sampleRate;
   ubyte  channels;
@@ -1939,7 +1939,7 @@ bool drflac__read_streaminfo (ref ReadStruct rs, drflac_streaminfo* pStreamInfo)
   return true;
 }
 
-bool drflac__read_and_decode_metadata (drflac* pFlac) {
+bool drflac__read_and_decode_metadata (drflac* pFlac, scope drflac_meta_proc onMeta, void* pUserDataMD) {
   import core.stdc.stdlib : malloc, free;
   assert(pFlac !is null);
 
@@ -1963,7 +1963,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
 
     switch (blockType) {
       case DRFLAC_METADATA_BLOCK_TYPE_APPLICATION:
-        if (pFlac.onMeta) {
+        if (onMeta) {
             void* pRawData = malloc(blockSize);
             if (pRawData is null) return false;
             scope(exit) free(pRawData);
@@ -1975,7 +1975,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
             metadata.data.application.id       = drflac__be2host_32(*cast(uint*)pRawData);
             metadata.data.application.pData    = cast(const(void)*)(cast(ubyte*)pRawData+uint.sizeof);
             metadata.data.application.dataSize = blockSize-cast(uint)uint.sizeof;
-            try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
+            try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
@@ -1983,7 +1983,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
         seektablePos  = runningFilePos;
         seektableSize = blockSize;
 
-        if (pFlac.onMeta) {
+        if (onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
           scope(exit) free(pRawData);
@@ -2003,12 +2003,12 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
             pSeekpoint.sampleCount = drflac__be2host_16(pSeekpoint.sampleCount);
           }
 
-          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
+          try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
       case DRFLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT:
-        if (pFlac.onMeta) {
+        if (onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
           scope(exit) free(pRawData);
@@ -2023,12 +2023,12 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
           metadata.data.vorbis_comment.vendor       = pRunningData;                                 pRunningData += metadata.data.vorbis_comment.vendorLength;
           metadata.data.vorbis_comment.commentCount = drflac__le2host_32(*cast(uint*)pRunningData); pRunningData += 4;
           metadata.data.vorbis_comment.comments     = pRunningData;
-          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
+          try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
       case DRFLAC_METADATA_BLOCK_TYPE_CUESHEET:
-        if (pFlac.onMeta) {
+        if (onMeta) {
           import core.stdc.string : memcpy;
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
@@ -2045,12 +2045,12 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
           metadata.data.cuesheet.isCD              = ((pRunningData[0]&0x80)>>7) != 0;         pRunningData += 259;
           metadata.data.cuesheet.trackCount        = pRunningData[0];                              pRunningData += 1;
           metadata.data.cuesheet.pTrackData        = cast(const(ubyte)*)pRunningData;
-          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
+          try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
       case DRFLAC_METADATA_BLOCK_TYPE_PICTURE:
-        if (pFlac.onMeta) {
+        if (onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
           scope(exit) free(pRawData);
@@ -2072,22 +2072,22 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
           metadata.data.picture.indexColorCount   = drflac__be2host_32(*cast(uint*)pRunningData); pRunningData += 4;
           metadata.data.picture.pictureDataSize   = drflac__be2host_32(*cast(uint*)pRunningData); pRunningData += 4;
           metadata.data.picture.pPictureData      = cast(const(ubyte)*)pRunningData;
-          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
+          try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
 
       case DRFLAC_METADATA_BLOCK_TYPE_PADDING:
-        if (pFlac.onMeta) {
+        if (onMeta) {
           metadata.data.padding.unused = 0;
           // Padding doesn't have anything meaningful in it, so just skip over it.
           if (!pFlac.bs.rs.seek(blockSize, drflac_seek_origin_current)) return false;
-          //pFlac.onMeta(pFlac.pUserDataMD, &metadata);
+          //onMeta(pUserDataMD, &metadata);
         }
         break;
 
       case DRFLAC_METADATA_BLOCK_TYPE_INVALID:
         // Invalid chunk. Just skip over this one.
-        if (pFlac.onMeta) {
+        if (onMeta) {
           if (!pFlac.bs.rs.seek(blockSize, drflac_seek_origin_current)) return false;
         }
         goto default;
@@ -2095,7 +2095,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
       default:
         // It's an unknown chunk, but not necessarily invalid. There's a chance more metadata blocks might be defined later on, so we
         // can at the very least report the chunk to the application and let it look at the raw data.
-        if (pFlac.onMeta) {
+        if (onMeta) {
           void* pRawData = malloc(blockSize);
           if (pRawData is null) return false;
           scope(exit) free(pRawData);
@@ -2104,13 +2104,13 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
 
           metadata.pRawData = pRawData;
           metadata.rawDataSize = blockSize;
-          try { pFlac.onMeta(pFlac.pUserDataMD, &metadata); } catch (Exception e) { return false; }
+          try { onMeta(pUserDataMD, &metadata); } catch (Exception e) { return false; }
         }
         break;
     }
 
     // If we're not handling metadata, just skip over the block. If we are, it will have been handled earlier in the switch statement above.
-    if (pFlac.onMeta is null) {
+    if (onMeta is null) {
       if (!pFlac.bs.rs.seek(blockSize, drflac_seek_origin_current)) return false;
     }
 
@@ -2125,7 +2125,7 @@ bool drflac__read_and_decode_metadata (drflac* pFlac) {
   return true;
 }
 
-bool drflac__init_private__native (drflac_init_info* pInit, ref ReadStruct rs, drflac_meta_proc onMeta, void* pUserDataMD) {
+bool drflac__init_private__native (drflac_init_info* pInit, ref ReadStruct rs, scope drflac_meta_proc onMeta, void* pUserDataMD) {
   // Pre: The bit stream should be sitting just past the 4-byte id header.
 
   pInit.container = drflac_container_native;
@@ -2433,7 +2433,7 @@ bool drflac_ogg__seek_to_sample (drflac* pFlac, ulong sample) {
 }
 
 
-bool drflac__init_private__ogg (drflac_init_info* pInit, ref ReadStruct rs, drflac_meta_proc onMeta, void* pUserDataMD) {
+bool drflac__init_private__ogg (drflac_init_info* pInit, ref ReadStruct rs, scope drflac_meta_proc onMeta, void* pUserDataMD) {
   // Pre: The bit stream should be sitting just past the 4-byte OggS capture pattern.
 
   pInit.container = drflac_container_ogg;
@@ -2550,7 +2550,7 @@ bool drflac__init_private__ogg (drflac_init_info* pInit, ref ReadStruct rs, drfl
 }
 //#endif
 
-bool drflac__check_init_private (drflac_init_info* pInit, drflac_meta_proc onMeta, void* pUserDataMD) {
+bool drflac__check_init_private (drflac_init_info* pInit, scope drflac_meta_proc onMeta, void* pUserDataMD) {
   ubyte[4] id;
   if (pInit.rs.read(id.ptr, 4) != 4) return false;
   if (id.ptr[0] == 'f' && id.ptr[1] == 'L' && id.ptr[2] == 'a' && id.ptr[3] == 'C') return drflac__init_private__native(pInit, pInit.rs, onMeta, pUserDataMD);
@@ -2561,14 +2561,14 @@ bool drflac__check_init_private (drflac_init_info* pInit, drflac_meta_proc onMet
   return false;
 }
 
-bool drflac__init_private (drflac_init_info* pInit, drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD) {
+bool drflac__init_private (drflac_init_info* pInit, drflac_read_proc onRead, drflac_seek_proc onSeek, scope drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD) {
   if (pInit is null || onRead is null || onSeek is null) return false;
 
   pInit.rs.onReadCB  = onRead;
   pInit.rs.onSeekCB  = onSeek;
   pInit.rs.pUserData = pUserData;
-  pInit.onMeta       = onMeta;
-  pInit.pUserDataMD  = pUserDataMD;
+  //pInit.onMeta       = onMeta;
+  //pInit.pUserDataMD  = pUserDataMD;
 
   return drflac__check_init_private(pInit, onMeta, pUserDataMD);
 }
@@ -2576,7 +2576,7 @@ bool drflac__init_private (drflac_init_info* pInit, drflac_read_proc onRead, drf
 } //nothrow
 
 static if (DrFlacHasVFS)
-bool drflac__init_private (drflac_init_info* pInit, VFile fl, drflac_meta_proc onMeta, void* pUserDataMD) {
+bool drflac__init_private (drflac_init_info* pInit, VFile fl, scope drflac_meta_proc onMeta, void* pUserDataMD) {
   //import core.stdc.string : memset;
   //memset(&pInit.rs.srcfile, 0, pInit.rs.srcfile.sizeof); // just in case
 
@@ -2584,8 +2584,8 @@ bool drflac__init_private (drflac_init_info* pInit, VFile fl, drflac_meta_proc o
   pInit.rs.onReadCB  = null;
   pInit.rs.onSeekCB  = null;
   pInit.rs.pUserData = null;
-  pInit.onMeta       = onMeta;
-  pInit.pUserDataMD  = pUserDataMD;
+  //pInit.onMeta       = onMeta;
+  //pInit.pUserDataMD  = pUserDataMD;
 
   return drflac__check_init_private(pInit, onMeta, pUserDataMD);
 }
@@ -2601,8 +2601,8 @@ void drflac__init_from_info (drflac* pFlac, drflac_init_info* pInit) {
   pFlac.bs.nextL2Line    = (pFlac.bs.cacheL2).sizeof/(pFlac.bs.cacheL2.ptr[0]).sizeof; // <-- Initialize to this to force a client-side data retrieval right from the start.
   pFlac.bs.consumedBits  = (pFlac.bs.cache).sizeof*8;
 
-  pFlac.onMeta           = pInit.onMeta;
-  pFlac.pUserDataMD      = pInit.pUserDataMD;
+  //pFlac.onMeta           = pInit.onMeta;
+  //pFlac.pUserDataMD      = pInit.pUserDataMD;
   pFlac.maxBlockSize     = pInit.maxBlockSize;
   pFlac.sampleRate       = pInit.sampleRate;
   pFlac.channels         = cast(ubyte)pInit.channels;
@@ -2611,7 +2611,7 @@ void drflac__init_from_info (drflac* pFlac, drflac_init_info* pInit) {
   pFlac.container        = pInit.container;
 }
 
-drflac* drflac_open_with_metadata_private_xx (drflac_init_info* init, drflac_meta_proc onMeta, void* pUserDataMD, bool stdio) {
+drflac* drflac_open_with_metadata_private_xx (drflac_init_info* init, scope drflac_meta_proc onMeta, void* pUserDataMD, bool stdio) {
   import core.stdc.stdlib : malloc, free;
   import core.stdc.string : memset;
   import std.functional : toDelegate;
@@ -2650,7 +2650,7 @@ drflac* drflac_open_with_metadata_private_xx (drflac_init_info* init, drflac_met
 
   // Decode metadata before returning.
   if (init.hasMetadataBlocks) {
-    if (!drflac__read_and_decode_metadata(pFlac)) {
+    if (!drflac__read_and_decode_metadata(pFlac, onMeta, pUserDataMD)) {
       free(pFlac);
       return null;
     }
@@ -2660,7 +2660,7 @@ drflac* drflac_open_with_metadata_private_xx (drflac_init_info* init, drflac_met
 }
 
 
-drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD, bool stdio) {
+drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_proc onSeek, scope drflac_meta_proc onMeta, void* pUserData, void* pUserDataMD, bool stdio) {
   drflac_init_info init;
   if (!drflac__init_private(&init, onRead, onSeek, onMeta, pUserData, pUserDataMD)) return null;
   return drflac_open_with_metadata_private_xx(&init, onMeta, pUserDataMD, stdio);
@@ -2669,7 +2669,7 @@ drflac* drflac_open_with_metadata_private (drflac_read_proc onRead, drflac_seek_
 } //nothrow
 
 static if (DrFlacHasVFS)
-drflac* drflac_open_with_metadata_private (VFile fl, drflac_meta_proc onMeta, void* pUserDataMD, bool stdio) {
+drflac* drflac_open_with_metadata_private (VFile fl, scope drflac_meta_proc onMeta, void* pUserDataMD, bool stdio) {
   drflac_init_info init;
   if (!drflac__init_private(&init, fl, onMeta, pUserDataMD)) return null;
   return drflac_open_with_metadata_private_xx(&init, onMeta, pUserDataMD, stdio);
@@ -2719,7 +2719,7 @@ public drflac* drflac_open_file (const(char)[] filename) {
   return pFlac;
 }
 
-public drflac* drflac_open_file_with_metadata (const(char)[] filename, drflac_meta_proc onMeta, void* pUserData=null) {
+public drflac* drflac_open_file_with_metadata (const(char)[] filename, scope drflac_meta_proc onMeta, void* pUserData=null) {
   import std.functional : toDelegate;
 
   drflac_file file = drflac__open_file_handle(filename);
@@ -2738,7 +2738,7 @@ public drflac* drflac_open_file_with_metadata (const(char)[] filename, drflac_me
 } //nothrow
 
 static if (DrFlacHasVFS) {
-  public drflac* drflac_open_file (VFile fl, drflac_meta_proc onMeta=null) {
+  public drflac* drflac_open_file (VFile fl, scope drflac_meta_proc onMeta=null) {
     import std.functional : toDelegate;
 
     drflac* pFlac;
@@ -2823,7 +2823,7 @@ public drflac* drflac_open_memory (const(void)* data, size_t dataSize) {
   return pFlac;
 }
 
-public drflac* drflac_open_memory_with_metadata (const void* data, size_t dataSize, drflac_meta_proc onMeta, void* pUserData) {
+public drflac* drflac_open_memory_with_metadata (const(void)* data, size_t dataSize, scope drflac_meta_proc onMeta, void* pUserData) {
   import std.functional : toDelegate;
 
   drflac__memory_stream memoryStream;
@@ -2863,7 +2863,7 @@ public drflac* drflac_open (VFile fl) {
 
 nothrow {
 
-public drflac* drflac_open_with_metadata (drflac_read_proc onRead, drflac_seek_proc onSeek, drflac_meta_proc onMeta, void* pUserData) {
+public drflac* drflac_open_with_metadata (drflac_read_proc onRead, drflac_seek_proc onSeek, scope drflac_meta_proc onMeta, void* pUserData) {
   return drflac_open_with_metadata_private(onRead, onSeek, onMeta, pUserData, pUserData, false);
 }
 
