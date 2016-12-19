@@ -39,6 +39,7 @@ import iv.vfs.io;
 
 import iv.drflac;
 import iv.minimp3;
+import iv.mp3scan;
 import iv.xogg.tremor;
 
 
@@ -169,9 +170,17 @@ private:
   string type;
 
 public:
-  long timetotal; // in milliseconds
-  uint rate;
-  ubyte channels;
+  //long timetotal; // in milliseconds
+  uint rate = 1; // just in case
+  ubyte channels = 1; // just in case
+  ulong samplestotal; // multiplied by channels
+  ulong samplesread;  // samples read so far, multiplied by channels
+
+  @property ulong framesread () const pure nothrow @safe @nogc { pragma(inline, true); return samplesread/channels; }
+  @property ulong framestotal () const pure nothrow @safe @nogc { pragma(inline, true); return samplestotal/channels; }
+
+  @property uint timeread () const pure nothrow @safe @nogc { pragma(inline, true); return cast(uint)(samplesread*1000/rate/channels); }
+  @property uint timetotal () const pure nothrow @safe @nogc { pragma(inline, true); return cast(uint)(samplestotal*1000/rate/channels); }
 
 public:
   bool valid () {
@@ -212,6 +221,7 @@ public:
           int xrd = (count <= flcbuf.length ? count : cast(int)flcbuf.length);
           auto rd = drflac_read_s32(ff, xrd, flcbuf.ptr); // samples
           if (rd <= 0) break;
+          samplesread += rd; // number of samples read
           foreach (int v; flcbuf[0..cast(int)rd]) *bp++ = cast(short)(v>>16);
           res += rd;
           count -= rd;
@@ -222,21 +232,27 @@ public:
         int currstream = 0;
         auto ret = ov_read(&vf, cast(ubyte*)buf, count*2*channels, &currstream);
         if (ret <= 0) return 0; // error or eof
+        samplesread += ret/2; // number of samples read
         return ret/2/channels; // number of frames read
       case 'm':
         if (!mp3.valid) return 0;
-        if (mp3smpused+2 > mp3.frameSamples.length) {
-          if (!mp3.decodeNextFrame(&reader)) return 0;
+        auto mfm = mp3.frameSamples;
+        if (mp3smpused+channels > mfm.length) {
           mp3smpused = 0;
+          if (!mp3.decodeNextFrame(&reader)) return 0;
+          mfm = mp3.frameSamples;
+          if (mp3.sampleRate != rate || mp3.channels != channels) return 0;
         }
         int res = 0;
         ushort* b = cast(ushort*)buf;
-        while (count > 0 && mp3smpused+2 <= mp3.frameSamples.length) {
-          *b++ = mp3.frameSamples[mp3smpused++];
-          *b++ = mp3.frameSamples[mp3smpused++];
+        auto oldmpu = mp3smpused;
+        while (count > 0 && mp3smpused+channels <= mfm.length) {
+          *b++ = mfm[mp3smpused++];
+          if (channels == 2) *b++ = mfm[mp3smpused++];
           --count;
           ++res;
         }
+        samplesread += mp3smpused-oldmpu; // number of samples read
         return res;
       default: break;
     }
@@ -262,35 +278,42 @@ public:
         return snum/channels;
       case 'v':
         if (vi is null) return 0;
-        if (ov_time_seek(&vf, msecs) == 0) return ov_time_tell(&vf)*rate/1000;
-        ov_time_seek(&vf, 0);
+        if (ov_pcm_seek(&vf, snum) == 0) return ov_pcm_tell(&vf)*1000/rate/channels;
+        ov_pcm_seek(&vf, 0);
         return 0;
       case 'm':
         if (!mp3.valid) return 0;
-        // alas, we cannot seek here, so do it slow
         mp3smpused = 0;
-        ulong smpleft = snum;
-        fl.seek(0);
-        mp3.reset();
-        while (smpleft > 0) {
-          if (!mp3.decodeNextFrame(&reader)) {
-            fl.seek(0);
-            mp3.reset();
-            mp3.decodeNextFrame(&reader);
-            return 0;
-          }
-          auto smp = mp3.frameSamples;
-          if (smp.length < smpleft) {
-            smpleft -= cast(int)smp.length;
-          } else if (smp.length == smpleft) {
-            mp3smpused = cast(int)smp.length;
-            break;
-          } else {
-            mp3smpused = cast(int)smpleft;
-            break;
-          }
+        if (mp3info.index.length == 0 || snum == 0) {
+          // alas, we cannot seek here
+          samplesread = 0;
+          fl.seek(0);
+          mp3.restart(&reader);
+          return 0;
         }
-        return snum/channels;
+        // find frame containing our sample
+        // stupid binary search; ignore overflow bug
+        ulong start = 0;
+        ulong end = mp3info.index.length-1;
+        while (start <= end) {
+          ulong mid = (start+end)/2;
+          auto smps = mp3info.index[cast(size_t)mid].samples;
+          auto smpe = (mp3info.index.length-mid > 0 ? mp3info.index[cast(size_t)(mid+1)].samples : samplestotal);
+          if (snum >= smps && snum < smpe) {
+            // i found her!
+            samplesread = snum;
+            fl.seek(mp3info.index[cast(size_t)mid].fpos);
+            mp3smpused = cast(uint)(snum-smps);
+            mp3.sync(&reader);
+            return snum;
+          }
+          if (snum < smps) end = mid-1; else start = mid+1;
+        }
+        // alas, we cannot seek
+        samplesread = 0;
+        fl.seek(0);
+        mp3.restart(&reader);
+        return 0;
       default: break;
     }
     return 0;
@@ -299,6 +322,7 @@ public:
 private:
   drflac* ff;
   MP3Decoder mp3;
+  Mp3Info mp3info; // scanned info, frame index
   uint mp3smpused;
   OggVorbis_File vf;
   vorbis_info* vi;
@@ -352,7 +376,7 @@ public:
           sio.channels = cast(ubyte)sio.ff.channels;
           sio.type = "flac";
           sio.fl = fl;
-          sio.timetotal = (sio.ff.totalSampleCount/sio.ff.channels)*1000/sio.ff.sampleRate;
+          sio.samplestotal = sio.ff.totalSampleCount;
           writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (flac)");
           {
             drflac_vorbis_comment_iterator i;
@@ -383,7 +407,7 @@ public:
           writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (vorbis)");
           writeln("streams: ", ov_streams(&sio.vf));
           writeln("bitrate: ", ov_bitrate(&sio.vf));
-          sio.timetotal = ov_time_total(&sio.vf);
+          sio.samplestotal = ov_pcm_total(&sio.vf);
           if (auto vc = ov_comment(&sio.vf, -1)) {
             writeln("Encoded by: ", vc.vendor.fromStringz.recodeToKOI8);
             foreach (immutable idx; 0..vc.comments) {
@@ -402,17 +426,16 @@ public:
         sio.type = "mp3";
         if (sio.mp3.valid) {
           // scan file to determine number of frames
+          auto xfp = fl.tell;
           fl.seek(fpos);
-          auto info = mp3Scan((void[] buf) {
-            return cast(int)fl.rawRead(buf).length;
-          });
-          fl.seek(fpos);
-          if (info.valid) {
+          sio.mp3info = mp3Scan!true((void[] buf) => cast(int)fl.rawRead(buf).length); // build index too
+          fl.seek(xfp);
+          if (sio.mp3info.valid) {
             if (sio.mp3.sampleRate < 1024 || sio.mp3.sampleRate > 96000) throw new Exception("fucked mp3");
             if (sio.mp3.channels < 1 || sio.mp3.channels > 2) throw new Exception("fucked mp3");
             sio.rate = sio.mp3.sampleRate;
             sio.channels = sio.mp3.channels;
-            sio.timetotal = info.samples*1000/info.sampleRate;
+            sio.samplestotal = sio.mp3info.samples;
             writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (mp3)");
             writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
             return sio;
@@ -477,7 +500,7 @@ Action playFile () {
   }
 
   long prevtime = -1;
-  long doneframes = 0;
+  //long doneframes = 0;
 
   if ((err = snd_pcm_open(&pcm, device.tempCString, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
     import core.stdc.stdlib : exit, EXIT_FAILURE;
@@ -508,12 +531,15 @@ Action playFile () {
 
   mainloop: for (;;) {
     int frmread = 0;
+    bool silence = false;
+
     if (!paused) {
       frmread = sio.readFrames(buffer.ptr, BUF_SIZE/2/sio.channels);
-      if (frmread > 0) doneframes += frmread;
+      //if (frmread > 0) doneframes += frmread;
     } else {
       frmread = BUF_SIZE/2/sio.channels;
       buffer[] = 0;
+      silence = true;
     }
 
     if (frmread <= 0) break;
@@ -529,7 +555,8 @@ Action playFile () {
       }
     }
 
-    if (realRate == sio.rate || !allowresampling) {
+    // no need to resample silence ;-)
+    if (realRate == sio.rate || !allowresampling || silence) {
       for (;;) {
         frames = snd_pcm_writei(pcm, buffer.ptr, frmread);
         if (frames < 0) {
@@ -664,7 +691,8 @@ Action playFile () {
       }
     }
 
-    long tm = doneframes*1000/sio.rate;
+    //long tm = doneframes*1000/sio.rate;
+    long tm = sio.timeread;
     if (tm/1000 != prevtime/1000 || paused != oldpaused || gain != oldgain) {
       prevtime = tm;
       oldpaused = paused;
@@ -702,7 +730,7 @@ Action playFile () {
       }
       if (tm < 0) tm = 0;
       if (tm >= sio.timetotal) tm = (sio.timetotal ? sio.timetotal-1 : 0);
-      if (oldtm != tm) doneframes = sio.seekToTime(cast(uint)tm);
+      if (oldtm != tm) /*doneframes =*/ sio.seekToTime(cast(uint)tm);
     }
   }
 

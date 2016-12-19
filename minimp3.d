@@ -74,6 +74,8 @@ alias MP3DecoderNoGC = MP3DecoderImpl!false;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// see iv.mp3scan
+/+
 struct MP3Info {
   uint sampleRate;
   ubyte channels;
@@ -177,6 +179,7 @@ MP3Info mp3Scan(RDG) (scope RDG rdg) if (is(typeof({
   if (headersCount < 6) info = info.init;
   return info;
 }
++/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -316,11 +319,10 @@ private:
         curFrameIsOk = false;
         return false;
       }
-      scanLeft = 256*1024+16;
+      info.audio_bytes = size;
       if (first) {
         info.sample_rate = s.sample_rate;
         info.channels = s.nb_channels;
-        info.audio_bytes = size;
         if ((info.sample_rate < 1024 || info.sample_rate > 96000) ||
             (info.channels < 1 || info.channels > 2) ||
             (info.audio_bytes < 2 || info.audio_bytes > MaxSamplesPerFrame*2 || info.audio_bytes%2 != 0))
@@ -328,10 +330,28 @@ private:
           curFrameIsOk = false;
           return false;
         }
+        curFrameIsOk = true;
+      } else {
+        if ((s.sample_rate < 1024 || s.sample_rate > 96000) ||
+            (s.nb_channels < 1 || s.nb_channels > 2) ||
+            (size < 2 || size > MaxSamplesPerFrame*2 || size%2 != 0))
+        {
+          curFrameIsOk = false;
+        } else {
+          curFrameIsOk = true;
+        }
       }
-      removeBytes(s.frame_size);
-      curFrameIsOk = true;
-      return /*s.frame_size*/true;
+      if (curFrameIsOk) {
+        scanLeft = 256*1024+16;
+        removeBytes(s.frame_size);
+        return /*s.frame_size*/true;
+      }
+      if (scanLeft >= 1024) {
+        scanLeft -= 1024;
+        removeBytes(1024);
+        continue;
+      }
+      return false;
     }
   }
 
@@ -354,14 +374,27 @@ public:
   void close () {
     if (dec !is null) { libc_free(dec); dec = null; }
     if (inbuf !is null) { libc_free(inbuf); inbuf = null; }
+    info.audio_bytes = 0;
   }
 
-  // empty read buffers, so `decodeOneFrame()` won't use stale data
-  void reset () {
+  // restart decoding
+  void restart (scope ReadBufFn reader) {
     inbufpos = inbufused = 0;
     eofhit = false;
     info.audio_bytes = 0;
     scanLeft = 256*1024+16;
+    skipTagCheck = false;
+    if (!decodeOneFrame(reader, true)) close();
+  }
+
+  // empty read buffers and decode next frame; should be used to sync after seeking in input stream
+  void sync (scope ReadBufFn reader) {
+    inbufpos = inbufused = 0;
+    eofhit = false;
+    info.audio_bytes = 0;
+    scanLeft = 256*1024+16;
+    skipTagCheck = false;
+    if (!decodeOneFrame(reader)) close();
   }
 
   bool decodeNextFrame (scope ReadBufFn reader) {
@@ -2993,6 +3026,7 @@ retry:
 }
 
 
+/+
 int mp3_skip_frame (mp3_context_t *s, uint8_t *buf, int buf_size) {
   uint32_t header;
   int out_size;
@@ -3027,3 +3061,4 @@ retry:
   s.frame_size += extra_bytes;
   return buf_size;
 }
++/

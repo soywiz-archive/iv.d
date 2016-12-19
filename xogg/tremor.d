@@ -8435,7 +8435,7 @@ public trm_long ov_serialnumber(OggVorbis_File *vf, int i){
              OV_EINVAL if the stream is not seekable (we can't know the length)
              or if stream is only partially open
 */
-public ogg_int64_t ov_raw_total(OggVorbis_File *vf, int i){
+public ogg_int64_t ov_raw_total(OggVorbis_File *vf, int i=-1){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(!vf.seekable || i>=vf.links)return(OV_EINVAL);
   if(i<0){
@@ -8454,7 +8454,7 @@ public ogg_int64_t ov_raw_total(OggVorbis_File *vf, int i){
             OV_EINVAL if the stream is not seekable (we can't know the
             length) or only partially open
 */
-public ogg_int64_t ov_pcm_total(OggVorbis_File *vf, int i){
+public ogg_int64_t ov_pcm_total(OggVorbis_File *vf, int i=-1){
   if(vf.ready_state<OPENED)return(OV_EINVAL);
   if(!vf.seekable || i>=vf.links)return(OV_EINVAL);
   if(i<0){
