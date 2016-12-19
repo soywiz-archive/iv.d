@@ -73,6 +73,8 @@ package(iv.follin) void sndInit (const(char)* alsaDev, uint srate) {
     }
   }
 
+  fuck_alsa_messages();
+
   alsaCall(snd_pcm_open(&apcm, alsaDev, SND_PCM_STREAM_PLAYBACK, 0), "cannot open audio device");
   alsaCall(snd_pcm_hw_params_malloc(&hw_params), "cannot allocate hardware parameter structure");
   alsaCall(snd_pcm_hw_params_any(apcm, hw_params), "cannot initialize hardware parameter structure");
@@ -333,3 +335,9 @@ void snd_pcm_sw_params_free (snd_pcm_sw_params_t* params);
 int snd_pcm_sw_params_malloc (snd_pcm_sw_params_t** params);
 int snd_pcm_sw_params_set_avail_min (snd_pcm_t* pcm, snd_pcm_sw_params_t* params, snd_pcm_uframes_t val);
 int snd_pcm_sw_params_set_start_threshold (snd_pcm_t* pcm, snd_pcm_sw_params_t* params, snd_pcm_uframes_t val);
+
+private void alsa_message_fucker (const(char)* file, int line, const(char)* function_, int err, const(char)* fmt, ...) {}
+
+private void fuck_alsa_messages () {
+  snd_lib_error_set_handler(&alsa_message_fucker);
+}

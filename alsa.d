@@ -417,3 +417,12 @@ int snd_pcm_get_params (snd_pcm_t *pcm, snd_pcm_uframes_t *buffer_size, snd_pcm_
 int snd_pcm_hw_params_test_rate (snd_pcm_t* pcm, snd_pcm_hw_params_t* params, uint val, int dir);
 int snd_pcm_hw_params_get_rate_min (const(snd_pcm_hw_params_t)* params, uint* val, int* dir);
 int snd_pcm_hw_params_get_rate_max (const(snd_pcm_hw_params_t)* params, uint* val, int* dir);
+
+alias snd_lib_error_handler_t = void function (const(char)* file, int line, const(char)* function_, int err, const(char)* fmt, ...);
+int snd_lib_error_set_handler (snd_lib_error_handler_t handler);
+
+private void alsa_message_fucker (const(char)* file, int line, const(char)* function_, int err, const(char)* fmt, ...) {}
+
+void fuck_alsa_messages () {
+  snd_lib_error_set_handler(&alsa_message_fucker);
+}

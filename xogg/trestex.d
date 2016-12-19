@@ -748,6 +748,8 @@ void main (string[] args) {
     playlist.randomShuffle;
   }
 
+  fuck_alsa_messages();
+
   ttySetRaw();
   {
     import core.stdc.stdlib : atexit;
