@@ -211,6 +211,7 @@ public:
         while (count > 0) {
           int xrd = (count <= flcbuf.length ? count : cast(int)flcbuf.length);
           auto rd = drflac_read_s32(ff, xrd, flcbuf.ptr); // samples
+          if (rd <= 0) break;
           foreach (int v; flcbuf[0..cast(int)rd]) *bp++ = cast(short)(v>>16);
           res += rd;
           count -= rd;
@@ -457,6 +458,7 @@ Action playFile () {
   uint rsbufused;
   uint rsibufused, rsobufused;
 
+  rsbufused = rsibufused = rsobufused = 0;
   if (realRate != sio.rate && allowresampling) {
     if (rstype == ResamplerType.simple) {
       rsl = new Resampler();
@@ -557,12 +559,17 @@ Action playFile () {
         }
         --frmread;
       }
-      if (rsfbufi.length*2 > rsfbufo.length) rsfbufo.length = rsfbufi.length*2;
-      if (rsobufused >= rsfbufo.length) rsfbufo.length *= 2;
+      if (rsfbufi.length*4 > rsfbufo.length) rsfbufo.length = rsfbufi.length*4;
+      //if (rsobufused >= rsfbufo.length) rsfbufo.length = rsobufused*2;
+      int ibu0count = 0;
       for (;;) {
+        if (rsibufused == 0) {
+          if (++ibu0count > 2) break;
+        }
+        srbdata = srbdata.init; // just in case
         srbdata.dataIn = rsfbufi[0..rsibufused];
         srbdata.dataOut = rsfbufo[rsobufused..$];
-        if (srb.process(srbdata)) {
+        if (srb.process(srbdata) != 0) {
           conwriteln("  RESAMPLING ERROR!");
           return Action.Quit;
         }
@@ -571,7 +578,7 @@ Action playFile () {
         if (srbdata.inputSamplesUsed > 0) {
           if (srbdata.inputSamplesUsed < rsibufused) {
             import core.stdc.string : memmove;
-            memmove(rsfbufi.ptr, rsfbufi.ptr+srbdata.inputSamplesUsed, rsibufused-srbdata.inputSamplesUsed);
+            memmove(rsfbufi.ptr, rsfbufi.ptr+srbdata.inputSamplesUsed, (rsibufused-srbdata.inputSamplesUsed)*rsfbufi[0].sizeof);
             rsibufused -= srbdata.inputSamplesUsed;
           } else {
             rsibufused = 0;
@@ -604,14 +611,14 @@ Action playFile () {
           if (srbdata.outputSamplesUsed > 0) {
             if (srbdata.outputSamplesUsed < rsobufused) {
               import core.stdc.string : memmove;
-              memmove(rsfbufo.ptr, rsfbufo.ptr+srbdata.outputSamplesUsed, rsobufused-srbdata.outputSamplesUsed);
+              memmove(rsfbufo.ptr, rsfbufo.ptr+srbdata.outputSamplesUsed, (rsobufused-srbdata.outputSamplesUsed)*rsfbufi[0].sizeof);
               rsobufused -= srbdata.outputSamplesUsed;
             } else {
               rsobufused = 0;
             }
           }
         } else {
-          if (srbdata.inputSamplesUsed == 0) break;
+          /*if (srbdata.inputSamplesUsed == 0)*/ break;
         }
       }
     } else {
@@ -715,7 +722,7 @@ void main (string[] args) {
   conRegVar!paused("paused", "is playback paused?");
   conRegVar!gain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
   conRegVar!latencyms(5, 5000, "latency", "playback latency, in milliseconds");
-  conRegVar!allowresampling("allow_resampling", "allow audio resampling?");
+  conRegVar!allowresampling("use_resampling", "allow audio resampling?");
   conRegVar!rstype("resampler_type", "resampler to use (speex or simple)");
 
   concmd("exec .config.rc tan");
