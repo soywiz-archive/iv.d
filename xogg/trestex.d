@@ -235,6 +235,8 @@ public:
         samplesread += ret/2; // number of samples read
         return ret/2/channels; // number of frames read
       case 'm':
+        // yes, i know that frames are not independend, and i should actually
+        // seek to a frame with a correct sync word. meh.
         if (!mp3.valid) return 0;
         auto mfm = mp3.frameSamples;
         if (mp3smpused+channels > mfm.length) {
