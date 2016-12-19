@@ -504,7 +504,6 @@ Action playFile () {
   }
 
   long prevtime = -1;
-  //long doneframes = 0;
 
   if ((err = snd_pcm_open(&pcm, device.tempCString, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
     import core.stdc.stdlib : exit, EXIT_FAILURE;
@@ -539,7 +538,6 @@ Action playFile () {
 
     if (!paused) {
       frmread = sio.readFrames(buffer.ptr, BUF_SIZE/2/sio.channels);
-      //if (frmread > 0) doneframes += frmread;
     } else {
       frmread = BUF_SIZE/2/sio.channels;
       buffer[] = 0;
@@ -695,7 +693,6 @@ Action playFile () {
       }
     }
 
-    //long tm = doneframes*1000/sio.rate;
     long tm = sio.timeread;
     if (tm/1000 != prevtime/1000 || paused != oldpaused || gain != oldgain) {
       prevtime = tm;
@@ -734,7 +731,7 @@ Action playFile () {
       }
       if (tm < 0) tm = 0;
       if (tm >= sio.timetotal) tm = (sio.timetotal ? sio.timetotal-1 : 0);
-      if (oldtm != tm) /*doneframes =*/ sio.seekToTime(cast(uint)tm);
+      if (oldtm != tm) sio.seekToTime(cast(uint)tm);
     }
   }
 
