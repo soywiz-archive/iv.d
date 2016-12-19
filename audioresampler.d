@@ -154,7 +154,9 @@ public:
     } else {
       smp = cast(int)bufferOut.ptr[readPos];
     }
-    assert(smp >= short.min && smp <= short.max);
+    //assert(smp >= short.min && smp <= short.max);
+         if (smp < short.min) smp = short.min;
+    else if (smp > short.max) smp = short.max;
     return cast(short)smp;
   }
 

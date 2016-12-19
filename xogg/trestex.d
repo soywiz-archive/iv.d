@@ -30,6 +30,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import iv.alsa;
+import iv.audioresampler;
 import iv.cmdcon;
 import iv.rawtty;
 import iv.vfs;
@@ -38,6 +39,79 @@ import iv.vfs.io;
 import iv.drflac;
 import iv.minimp3;
 import iv.xogg.tremor;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+//__gshared string device = "plug:default";
+__gshared string device = "default";
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+uint getBestSampleRate (uint wantedRate) {
+  import std.internal.cstring : tempCString;
+
+  if (wantedRate == 0) wantedRate = 44110;
+
+  snd_pcm_t* pcm;
+  snd_pcm_hw_params_t* hwparams;
+
+  auto err = snd_pcm_open(&pcm, device.tempCString, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+  if (err < 0) {
+    import core.stdc.stdlib : exit, EXIT_FAILURE;
+    conwriteln("cannot open device '%s': %s", device, snd_strerror(err));
+    exit(EXIT_FAILURE);
+  }
+  scope(exit) snd_pcm_close(pcm);
+
+  err = snd_pcm_hw_params_malloc(&hwparams);
+  if (err < 0) {
+    import core.stdc.stdlib : exit, EXIT_FAILURE;
+    conwriteln("cannot malloc hardware parameters: %s", snd_strerror(err));
+    exit(EXIT_FAILURE);
+  }
+  scope(exit) snd_pcm_hw_params_free(hwparams);
+
+  err = snd_pcm_hw_params_any(pcm, hwparams);
+  if (err < 0) {
+    import core.stdc.stdlib : exit, EXIT_FAILURE;
+    conwriteln("cannot get hardware parameters: %s", snd_strerror(err));
+    exit(EXIT_FAILURE);
+  }
+
+  //printf("Device: %s (type: %s)\n", device_name, snd_pcm_type_name(snd_pcm_type(pcm)));
+
+  if (snd_pcm_hw_params_test_rate(pcm, hwparams, wantedRate, 0) == 0) return wantedRate;
+
+  uint min, max;
+
+  err = snd_pcm_hw_params_get_rate_min(hwparams, &min, null);
+  if (err < 0) {
+    import core.stdc.stdlib : exit, EXIT_FAILURE;
+    conwriteln("cannot get minimum rate: %s", snd_strerror(err));
+    exit(EXIT_FAILURE);
+  }
+
+  err = snd_pcm_hw_params_get_rate_max(hwparams, &max, null);
+  if (err < 0) {
+    import core.stdc.stdlib : exit, EXIT_FAILURE;
+    conwriteln("cannot get maximum rate: %s", snd_strerror(err));
+    exit(EXIT_FAILURE);
+  }
+
+  if (wantedRate < min) return min;
+  if (wantedRate > max) return max;
+
+  for (int delta = 1; delta < wantedRate; ++delta) {
+    if (wantedRate-delta < min && wantedRate+delta > max) break;
+    if (wantedRate-delta > min) {
+      if (snd_pcm_hw_params_test_rate(pcm, hwparams, wantedRate-delta, 0) == 0) return wantedRate-delta;
+    }
+    if (wantedRate+delta < max) {
+      if (snd_pcm_hw_params_test_rate(pcm, hwparams, wantedRate+delta, 0) == 0) return wantedRate+delta;
+    }
+  }
+  return (wantedRate-min < max-wantedRate ? min : max);
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -71,7 +145,6 @@ string recodeToKOI8 (const(char)[] s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum device = "plug:default";
 
 enum BUF_SIZE = 4096;
 ubyte[BUF_SIZE] buffer;
@@ -82,6 +155,7 @@ int plidx = 0;
 __gshared bool paused = false;
 __gshared int gain = 0;
 __gshared uint latencyms = 100;
+__gshared bool allowresampling = true;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -353,9 +427,13 @@ public:
 enum Action { Quit, Prev, Next }
 
 Action playFile () {
+  import std.internal.cstring : tempCString;
+
   int err;
-  snd_pcm_t* handle;
+  snd_pcm_t* pcm;
   snd_pcm_sframes_t frames;
+
+  Resampler rsl, rsr;
 
   if (plidx < 0) plidx = 0;
   if (plidx >= playlist.length) return Action.Quit;
@@ -365,27 +443,39 @@ Action playFile () {
   if (!sio.valid) return Action.Next;
   scope(exit) sio.close();
 
+  uint realRate = getBestSampleRate(sio.rate);
+  conwriteln("real sampling rate: ", realRate);
+
+  short[] rsbuf;
+  uint rsbufused;
+
+  if (realRate != sio.rate && allowresampling) {
+    rsl = new Resampler();
+    rsl.rate = cast(double)sio.rate/cast(double)realRate;
+    rsr = new Resampler();
+    rsr.rate = cast(double)sio.rate/cast(double)realRate;
+    rsbuf.length = 8192;
+  }
+
   long prevtime = -1;
   long doneframes = 0;
 
-  if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-    import core.stdc.stdio : printf;
+  if ((err = snd_pcm_open(&pcm, device.tempCString, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
     import core.stdc.stdlib : exit, EXIT_FAILURE;
-    printf("Playback open error: %s\n", snd_strerror(err));
+    conwriteln("Playback open error for device '%s': %s", device, snd_strerror(err));
     exit(EXIT_FAILURE);
   }
-  scope(exit) snd_pcm_close(handle);
+  scope(exit) snd_pcm_close(pcm);
 
-  if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, sio.channels, sio.rate, 1, /*500000*//*20000*/latencyms*1000)) < 0) {
-    import core.stdc.stdio : printf;
+  if ((err = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, sio.channels, /*sio.rate*/realRate, 1, /*500000*//*20000*/latencyms*1000)) < 0) {
     import core.stdc.stdlib : exit, EXIT_FAILURE;
-    printf("Playback open error: %s\n", snd_strerror(err));
+    conwriteln("Playback open error: %s", snd_strerror(err));
     exit(EXIT_FAILURE);
   }
 
   version(none) {
     snd_pcm_uframes_t bufsize, periodsize;
-    if (snd_pcm_get_params(handle, &bufsize, &periodsize) == 0) {
+    if (snd_pcm_get_params(pcm, &bufsize, &periodsize) == 0) {
       writeln("desired latency: ", latencyms);
       writeln("buffer size: ", bufsize);
       writeln("period size: ", periodsize);
@@ -411,7 +501,7 @@ Action playFile () {
 
     if (gain) {
       auto bp = cast(short*)buffer.ptr;
-      foreach (ref short v; bp[0..frmread/sio.channels]) {
+      foreach (ref short v; bp[0..frmread*sio.channels]) {
         double d = cast(double)v*gain/100.0;
         d += v;
         if (d < -32767) d = -32767;
@@ -420,25 +510,71 @@ Action playFile () {
       }
     }
 
-    for (;;) {
-      frames = snd_pcm_writei(handle, buffer.ptr, frmread);
-      if (frames < 0) {
-        frames = snd_pcm_recover(handle, cast(int)frames, 0);
+    if (realRate == sio.rate || !allowresampling) {
+      for (;;) {
+        frames = snd_pcm_writei(pcm, buffer.ptr, frmread);
         if (frames < 0) {
-          import core.stdc.stdio : printf;
-          printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
-          break mainloop;
+          frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+          if (frames < 0) {
+            import core.stdc.stdio : printf;
+            printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
+            break mainloop;
+          }
+        } else {
+          import core.stdc.string : memmove;
+          if (frames >= frmread) break;
+          memmove(buffer.ptr, buffer.ptr+cast(uint)frames*2*sio.channels, (frmread-frames)*2*sio.channels);
+          frmread -= frames;
         }
-      } else {
-        import core.stdc.string : memmove;
-        if (frames >= frmread) break;
-        memmove(buffer.ptr, buffer.ptr+cast(uint)frames*2*sio.channels, (frmread-frames)*2*sio.channels);
-        frmread -= frames;
+      }
+    } else {
+      // resampling
+      assert(rsl !is null);
+      if (sio.channels == 2) assert(rsr !is null);
+      short* sb = cast(short*)buffer.ptr;
+      while (frmread > 0) {
+        // feed resampler
+        while (frmread > 0 && rsl.freeCount > 0) {
+          rsl.writeSampleFixed(*sb++, 1);
+          if (sio.channels == 2) {
+            if (rsr.freeCount == 0) assert(0, "wtf?!");
+            rsr.writeSampleFixed(*sb++, 1);
+          }
+          --frmread;
+        }
+        //conwriteln("left: ", frmread, "; freecount=", rsl.freeCount);
+        // get resampled data
+        if (rsl.ready) {
+          rsbufused = 0;
+          while (rsl.sampleCount > 0) {
+            auto smp = rsl.sample; // 16-bit sample
+            rsl.removeSample();
+            if (rsbufused >= rsbuf.length) rsbuf.length *= 2;
+            rsbuf.ptr[rsbufused++] = smp;
+            if (sio.channels == 2) {
+              if (rsr.sampleCount == 0) assert(0, "wtf?!");
+              smp = rsr.sample; // 16-bit sample
+              rsr.removeSample();
+              if (rsbufused >= rsbuf.length) rsbuf.length *= 2;
+              rsbuf.ptr[rsbufused++] = smp;
+            }
+          }
+          //conwriteln("  got: ", rsbufused/sio.channels);
+          frames = snd_pcm_writei(pcm, rsbuf.ptr, rsbufused/sio.channels);
+          if (frames < 0) {
+            frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+            if (frames < 0) {
+              import core.stdc.stdio : printf;
+              printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
+              break mainloop;
+            }
+          }
+        }
       }
     }
 
     long tm = doneframes*1000/sio.rate;
-    if (tm != prevtime || paused != oldpaused || gain != oldgain) {
+    if (tm/1000 != prevtime/1000 || paused != oldpaused || gain != oldgain) {
       prevtime = tm;
       oldpaused = paused;
       oldgain = gain;
@@ -491,9 +627,11 @@ extern(C) void atExitRestoreTty () {
 void main (string[] args) {
   conRegUserVar!bool("shuffle", "shuffle playlist");
 
+  conRegVar!device("device", "audio output device");
   conRegVar!paused("paused", "is playback paused?");
   conRegVar!gain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
   conRegVar!latencyms(5, 5000, "latency", "playback latency, in milliseconds");
+  conRegVar!allowresampling("allow_resampling", "allow audio resampling?");
 
   concmd("exec .config.rc tan");
   conProcessArgs!true(args);

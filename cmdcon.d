@@ -369,6 +369,17 @@ private void cwrxputstr(bool cutsign=false) (scope const(char)[] str, char signw
 }
 
 
+private void cwrxputstrz(bool cutsign=false) (scope const(char)* str, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
+  if (str is null) {
+    cwrxputstr!cutsign("", signw, lchar, rchar, wdt, maxwdt);
+  } else {
+    auto end = str;
+    while (*end) ++end;
+    cwrxputstr!cutsign(str[0..cast(usize)(end-str)], signw, lchar, rchar, wdt, maxwdt);
+  }
+}
+
+
 private void cwrxputchar (char ch, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   cwrxputstr((&ch)[0..1], signw, lchar, rchar, wdt, maxwdt);
 }
@@ -778,10 +789,16 @@ public template conwritef(string fmt, A...) {
             putRes("]");
           } else static if (is(at : T*, T)) {
             //putRes("cwrxputch(`0x`); ");
-            if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
-            putRes("cwrxputhex(cast(size_t)args[");
-            putNum(argnum);
-            putRes("], false");
+            static if (is(T == char)) {
+              putRes("cwrxputstrz(args[");
+              putNum(argnum);
+              putRes("]");
+            } else {
+              if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
+              putRes("cwrxputhex(cast(size_t)args[");
+              putNum(argnum);
+              putRes("], false");
+            }
           } else static if (is(at : long)) {
             putRes("cwrxputint(args[");
             putNum(argnum);
