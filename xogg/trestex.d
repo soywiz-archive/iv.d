@@ -452,9 +452,9 @@ Action playFile () {
   uint realRate = getBestSampleRate(sio.rate);
   conwriteln("real sampling rate: ", realRate);
 
-  short[] rsbuf;
+  static short[] rsbuf;
+  static float[] rsfbufi, rsfbufo;
   uint rsbufused;
-  float[] rsfbufi, rsfbufo;
   uint rsibufused, rsobufused;
 
   if (realRate != sio.rate && allowresampling) {
@@ -468,10 +468,10 @@ Action playFile () {
       //srb.setRate(sio.rate, realRate);
       srb.setup(sio.channels, sio.rate, realRate, /*SpeexResampler.Quality.Desktop*/8);
       srb.skipZeros();
-      rsfbufi.length = 8192;
-      rsfbufo.length = 8192;
+      if (rsfbufi.length == 0) rsfbufi.length = 8192;
+      if (rsfbufo.length == 0) rsfbufo.length = 8192;
     }
-    rsbuf.length = 8192;
+    if (rsbuf.length == 0) rsbuf.length = 8192;
   }
 
   long prevtime = -1;
