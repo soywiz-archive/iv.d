@@ -32,6 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import iv.alsa;
 import iv.audioresampler;
 import iv.cmdcon;
+import iv.follin.resampler;
 import iv.rawtty;
 import iv.vfs;
 import iv.vfs.io;
@@ -156,6 +157,9 @@ __gshared bool paused = false;
 __gshared int gain = 0;
 __gshared uint latencyms = 100;
 __gshared bool allowresampling = true;
+
+enum ResamplerType { speex, simple }
+__gshared ResamplerType rstype = ResamplerType.speex;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -434,6 +438,8 @@ Action playFile () {
   snd_pcm_sframes_t frames;
 
   Resampler rsl, rsr;
+  SpeexResampler srb;
+  SpeexResampler.Data srbdata;
 
   if (plidx < 0) plidx = 0;
   if (plidx >= playlist.length) return Action.Quit;
@@ -448,12 +454,23 @@ Action playFile () {
 
   short[] rsbuf;
   uint rsbufused;
+  float[] rsfbufi, rsfbufo;
+  uint rsibufused, rsobufused;
 
   if (realRate != sio.rate && allowresampling) {
-    rsl = new Resampler();
-    rsl.rate = cast(double)sio.rate/cast(double)realRate;
-    rsr = new Resampler();
-    rsr.rate = cast(double)sio.rate/cast(double)realRate;
+    if (rstype == ResamplerType.simple) {
+      rsl = new Resampler();
+      rsl.rate = cast(double)sio.rate/cast(double)realRate;
+      rsr = new Resampler();
+      rsr.rate = cast(double)sio.rate/cast(double)realRate;
+    } else {
+      //srb.reset();
+      //srb.setRate(sio.rate, realRate);
+      srb.setup(sio.channels, sio.rate, realRate, /*SpeexResampler.Quality.Desktop*/8);
+      srb.skipZeros();
+      rsfbufi.length = 8192;
+      rsfbufo.length = 8192;
+    }
     rsbuf.length = 8192;
   }
 
@@ -527,10 +544,77 @@ Action playFile () {
           frmread -= frames;
         }
       }
-    } else {
+    } else if (rsl is null) {
       // resampling
-      assert(rsl !is null);
-      if (sio.channels == 2) assert(rsr !is null);
+      // feed resampler
+      short* sb = cast(short*)buffer.ptr;
+      while (frmread > 0) {
+        if (rsibufused >= rsfbufi.length) rsfbufi.length *= 2;
+        rsfbufi.ptr[rsibufused++] = (*sb++)/32768.0f;
+        if (sio.channels == 2) {
+          if (rsibufused >= rsfbufi.length) rsfbufi.length *= 2;
+          rsfbufi.ptr[rsibufused++] = (*sb++)/32768.0f;
+        }
+        --frmread;
+      }
+      if (rsfbufi.length*2 > rsfbufo.length) rsfbufo.length = rsfbufi.length*2;
+      if (rsobufused >= rsfbufo.length) rsfbufo.length *= 2;
+      for (;;) {
+        srbdata.dataIn = rsfbufi[0..rsibufused];
+        srbdata.dataOut = rsfbufo[rsobufused..$];
+        if (srb.process(srbdata)) {
+          conwriteln("  RESAMPLING ERROR!");
+          return Action.Quit;
+        }
+        rsobufused += srbdata.outputSamplesUsed;
+        // shift input buffer
+        if (srbdata.inputSamplesUsed > 0) {
+          if (srbdata.inputSamplesUsed < rsibufused) {
+            import core.stdc.string : memmove;
+            memmove(rsfbufi.ptr, rsfbufi.ptr+srbdata.inputSamplesUsed, rsibufused-srbdata.inputSamplesUsed);
+            rsibufused -= srbdata.inputSamplesUsed;
+          } else {
+            rsibufused = 0;
+          }
+        }
+        if (rsobufused > rsbuf.length) rsbuf.length = rsobufused;
+        if (rsobufused > 0) {
+          assert(rsobufused%sio.channels == 0);
+          sb = rsbuf.ptr;
+          foreach (float ov; rsfbufo[0..rsobufused]) {
+            if (ov < -1.0f) ov = -1.0f; else if (ov > 1.0f) ov = 1.0f;
+            int n = cast(int)(ov*32767.0f);
+            if (n < short.min) n = short.min; else if (n > short.max) n = short.max;
+            *sb++ = cast(short)n;
+          }
+          uint rsopos = 0;
+          while (rsopos < rsobufused/sio.channels) {
+            frames = snd_pcm_writei(pcm, rsbuf.ptr+rsopos*sio.channels, (rsobufused-rsopos)/sio.channels);
+            if (frames < 0) {
+              frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+              if (frames < 0) {
+                import core.stdc.stdio : printf;
+                printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
+                break mainloop;
+              }
+            }
+            rsopos += cast(uint)frames;
+          }
+          // shift output buffer
+          if (srbdata.outputSamplesUsed > 0) {
+            if (srbdata.outputSamplesUsed < rsobufused) {
+              import core.stdc.string : memmove;
+              memmove(rsfbufo.ptr, rsfbufo.ptr+srbdata.outputSamplesUsed, rsobufused-srbdata.outputSamplesUsed);
+              rsobufused -= srbdata.outputSamplesUsed;
+            } else {
+              rsobufused = 0;
+            }
+          }
+        } else {
+          if (srbdata.inputSamplesUsed == 0) break;
+        }
+      }
+    } else {
       short* sb = cast(short*)buffer.ptr;
       while (frmread > 0) {
         // feed resampler
@@ -632,6 +716,7 @@ void main (string[] args) {
   conRegVar!gain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
   conRegVar!latencyms(5, 5000, "latency", "playback latency, in milliseconds");
   conRegVar!allowresampling("allow_resampling", "allow audio resampling?");
+  conRegVar!rstype("resampler_type", "resampler to use (speex or simple)");
 
   concmd("exec .config.rc tan");
   conProcessArgs!true(args);
