@@ -275,10 +275,14 @@ public:
           drflac_seek_to_sample(ff, 0);
           return 0;
         }
+        samplesread = snum;
         return snum/channels;
       case 'v':
         if (vi is null) return 0;
-        if (ov_pcm_seek(&vf, snum) == 0) return ov_pcm_tell(&vf)*1000/rate/channels;
+        if (ov_pcm_seek(&vf, snum/channels) == 0) {
+          samplesread = ov_pcm_tell(&vf)*channels;
+          return samplesread;
+        }
         ov_pcm_seek(&vf, 0);
         return 0;
       case 'm':
@@ -407,7 +411,7 @@ public:
           writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (vorbis)");
           writeln("streams: ", ov_streams(&sio.vf));
           writeln("bitrate: ", ov_bitrate(&sio.vf));
-          sio.samplestotal = ov_pcm_total(&sio.vf);
+          sio.samplestotal = ov_pcm_total(&sio.vf)*sio.channels;
           if (auto vc = ov_comment(&sio.vf, -1)) {
             writeln("Encoded by: ", vc.vendor.fromStringz.recodeToKOI8);
             foreach (immutable idx; 0..vc.comments) {
