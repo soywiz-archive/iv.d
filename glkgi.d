@@ -452,8 +452,15 @@ private void kgiThread (Tid starterTid) {
     auto lastFrameTime = MonoTime.currTime;
     auto lastCursorTime = MonoTime.currTime;
 
+    version(Windows) {
+      // windoze eats shit! if we won't awake event loop here, it will fuck itself.
+      import core.sys.windows.winuser;
+      PostMessage(null, WM_USER, 0, 0);
+    }
+
     vbwin.eventLoop(8,
       delegate () {
+        //version(Windows) { {import core.stdc.stdio : printf; printf("xxx\n"); } }
         if (vbwin.closed) return;
         if (isQuitRequested) { vbwin.close(); return; }
         if (receiveMessages()) { vbwin.close(); return; }
@@ -485,12 +492,14 @@ private void kgiThread (Tid starterTid) {
           lastFrameTime = ctt;
           lastCursorTime = ctt;
           glgfxUpdateTexture();
+          //version(Windows) { {import core.stdc.stdio : printf; printf("000\n"); } }
           vbwin.redrawOpenGlSceneNow();
         } else if (mcurHidden == 0) {
           // ~60 FPS for mouse cursor
           if ((ctt-lastCursorTime).total!"msecs" >= 16) {
             lastCursorTime = ctt;
             glgfxUpdateCurTexture();
+            //version(Windows) { {import core.stdc.stdio : printf; printf("001\n"); } }
             vbwin.redrawOpenGlSceneNow();
           }
         }
