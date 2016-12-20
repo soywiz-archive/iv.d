@@ -345,7 +345,18 @@ version(linux) {
     auto n = cast(const(ubyte)*)needle;
     foreach (immutable i; 0..haystacklen-needlelen+1) {
       import core.stdc.string : memcmp;
-      if (memcmp(h+i, n, needlelen) == 0) return cast(void*)(h+i);
+      if (memcmp(h+i, n, needlelen) == 0) return cast(typeof(return))(h+i);
+    }
+    return null;
+  }
+
+  inout(void)* memrchr (inout(void)* haystack, int ch, size_t haystacklen) {
+    // size_t is unsigned
+    if (haystacklen == 0) return null;
+    auto h = cast(const(ubyte)*)haystack;
+    ch &= 0xff;
+    foreach_reverse (immutable idx, ubyte v; h[0..haystacklen]) {
+      if (v == ch) return cast(typeof(return))(h+idx);
     }
     return null;
   }

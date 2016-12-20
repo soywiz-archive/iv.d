@@ -372,10 +372,14 @@ private void kgiThread (Tid starterTid) {
       glconDraw();
     };
 
-    vbwin.closeQuery = delegate () {
-      if (onKGICloseRequest !is null) try { if (!onKGICloseRequest()) return; } catch (Throwable e) {}
-      concmd("quit");
-    };
+    version(Windows) {
+      // eat shit
+    } else {
+      vbwin.closeQuery = delegate () {
+        if (onKGICloseRequest !is null) try { if (!onKGICloseRequest()) return; } catch (Throwable e) {}
+        concmd("quit");
+      };
+    }
 
     vbwin.visibleForTheFirstTime = delegate () {
       vbwin.setAsCurrentOpenGlContext();

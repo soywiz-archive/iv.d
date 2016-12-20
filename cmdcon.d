@@ -133,12 +133,36 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
     final switch (atomicLoad(conStdoutFlag)) {
       case ConDump.none: break;
       case ConDump.stdout:
-        import core.sys.posix.unistd : STDOUT_FILENO, write;
-        write(STDOUT_FILENO, chrs.ptr, chrs.length);
+        version(Windows) {
+          //fuck
+          import core.sys.windows.winbase;
+          import core.sys.windows.windef;
+          import core.sys.windows.wincon;
+          auto hh = GetStdHandle(STD_OUTPUT_HANDLE);
+          if (hh != INVALID_HANDLE_VALUE) {
+            DWORD ww;
+            WriteConsoleA(hh, chrs.ptr, cast(DWORD)chrs.length, &ww, null);
+          }
+        } else {
+          import core.sys.posix.unistd : STDOUT_FILENO, write;
+          write(STDOUT_FILENO, chrs.ptr, chrs.length);
+        }
         break;
       case ConDump.stderr:
-        import core.sys.posix.unistd : STDERR_FILENO, write;
-        write(STDERR_FILENO, chrs.ptr, chrs.length);
+        version(Windows) {
+          //fuck
+          import core.sys.windows.winbase;
+          import core.sys.windows.windef;
+          import core.sys.windows.wincon;
+          auto hh = GetStdHandle(STD_ERROR_HANDLE);
+          if (hh != INVALID_HANDLE_VALUE) {
+            DWORD ww;
+            WriteConsoleA(hh, chrs.ptr, cast(DWORD)chrs.length, &ww, null);
+          }
+        } else {
+          import core.sys.posix.unistd : STDERR_FILENO, write;
+          write(STDERR_FILENO, chrs.ptr, chrs.length);
+        }
         break;
     }
     atomicOp!"+="(changeCount, 1);
@@ -402,9 +426,9 @@ private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt,
   } else static if (is(T == int)) {
     if (n == 0x8000_0000u) { cwrxputstr!true("-2147483648", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == short)) {
-    if (n == 0x8000u) { cwrxputstr!true("-32768", signw, lchar, rchar, wdt, maxwdt); return; }
+    if ((n&0xffff) == 0x8000u) { cwrxputstr!true("-32768", signw, lchar, rchar, wdt, maxwdt); return; }
   } else static if (is(T == byte)) {
-    if (n == 0x80u) { cwrxputstr!true("-128", signw, lchar, rchar, wdt, maxwdt); return; }
+    if ((n&0xff) == 0x80u) { cwrxputstr!true("-128", signw, lchar, rchar, wdt, maxwdt); return; }
   }
 
   static if (__traits(isUnsigned, T)) {
@@ -3502,9 +3526,9 @@ public void concmdf(string fmt, A...) (A args) {
     } else static if (is(T == int)) {
       if (n == 0x8000_0000u) { puts("-2147483648"); return; }
     } else static if (is(T == short)) {
-      if (n == 0x8000u) { puts("-32768"); return; }
+      if ((n&0xffff) == 0x8000u) { puts("-32768"); return; }
     } else static if (is(T == byte)) {
-      if (n == 0x80u) { puts("-128"); return; }
+      if ((n&0xff) == 0x80u) { puts("-128"); return; }
     }
 
     static if (__traits(isUnsigned, T)) {
