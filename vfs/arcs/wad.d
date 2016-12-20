@@ -159,10 +159,12 @@ private:
           if (curPath.length) { name[nbpos..nbpos+curPath.length] = curPath; nbpos += curPath.length; }
         }
         foreach (char ch; nbuf[]) {
+          import iv.vfs.koi8;
           if (ch == 0) break;
           if (ch == '\\') ch = '#'; // arbitrary replacement
           if (ch == '/') ch = '~'; // arbitrary replacement
           if (ch >= 'A' && ch <= 'Z') ch += 32; // original WADs has all names uppercased
+          ch = koi8from866Table.ptr[cast(ubyte)ch];
           //if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
           name.ptr[nbpos++] = ch;
         }

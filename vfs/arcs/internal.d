@@ -34,10 +34,27 @@ public:
     if (fname.length == 0) return VFile.init;
     import iv.vfs.koi8 : koi8StrCaseEqu;
     foreach_reverse (immutable idx, ref fi; dir) {
-      if (ignoreCase) {
-        if (koi8StrCaseEqu(fi.name, fname)) return wrap(idx);
+      version(Windows) {
+        static bool xequ (const(char)[] s0, const(char)[] s1, bool icase) {
+          import iv.vfs.koi8;
+          if (s0.length != s1.length) return false;
+          foreach (immutable idx, char c0; s0) {
+            char c1 = koi8from1251Table[s1.ptr[idx]];
+            if (icase) {
+              c0 = koi8tolowerTable.ptr[cast(ubyte)c0];
+              c1 = koi8tolowerTable.ptr[cast(ubyte)c1];
+            }
+            if (c0 != c1) return false;
+          }
+          return true;
+        }
+        if (xequ(fi.name, fname, ignoreCase)) return wrap(idx);
       } else {
-        if (fi.name == fname) return wrap(idx);
+        if (ignoreCase) {
+          if (koi8StrCaseEqu(fi.name, fname)) return wrap(idx);
+        } else {
+          if (fi.name == fname) return wrap(idx);
+        }
       }
     }
     return VFile.init;
