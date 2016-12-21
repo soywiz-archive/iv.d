@@ -538,11 +538,13 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
       // try all drivers
       foreach_reverse (ref di; drivers) {
         try {
-          auto fl = di.drv.tryOpen(fname, ignoreCase);
-          if (fl.isOpen) {
-            if (di.temp) di.tempUsedTime = MonoTime.currTime;
-            if (!isROMode(mdb)) errorfn("can't open file '!' in non-binary non-readonly mode");
-            return fl;
+          if (isROMode(mdb) || cast(VFSDriverDisk)di.drv is null) {
+            auto fl = di.drv.tryOpen(fname, ignoreCase);
+            if (fl.isOpen) {
+              if (di.temp) di.tempUsedTime = MonoTime.currTime;
+              if (!isROMode(mdb)) errorfn("can't open file '!' in non-binary non-readonly mode");
+              return fl;
+            }
           }
         } catch (Exception e) {
           // chain
