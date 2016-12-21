@@ -736,12 +736,24 @@ private void glgfxUpdateTexture () nothrow @trusted @nogc {
   vupcounter = 0;
 
   static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
-  glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, TexType, GL_UNSIGNED_BYTE, vbufsaved);
+  if (!oldogl) {
+    glTextureSubImage2D(vbTexId, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, TexType, GL_UNSIGNED_BYTE, vbufsaved);
+  } else {
+    glBindTexture(GL_TEXTURE_2D, vbTexId);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, vbufW, vbufH, TexType, GL_UNSIGNED_BYTE, vbufsaved);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
   atomicStore(updateTexture, false);
   vupcounterlast = vupcounterlast.max;
 
   if (atomicLoad(updateCurTexture)) {
-    glTextureSubImage2D(vbCurTexId, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+    if (!oldogl) {
+      glTextureSubImage2D(vbCurTexId, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+    } else {
+      glBindTexture(GL_TEXTURE_2D, vbCurTexId);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+      glBindTexture(GL_TEXTURE_2D, 0);
+    }
     atomicStore(updateCurTexture, false);
   }
 }
@@ -755,7 +767,13 @@ private void glgfxUpdateCurTexture () nothrow @trusted @nogc {
     scope(exit) consoleUnlock();
 
     static if (KGIRGBA) enum TexType = GL_RGBA; else enum TexType = GL_BGRA;
-    glTextureSubImage2D(vbCurTexId, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+    if (!oldogl) {
+      glTextureSubImage2D(vbCurTexId, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+    } else {
+      glBindTexture(GL_TEXTURE_2D, vbCurTexId);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, kgiMaxCurW, kgiMaxCurH, TexType, GL_UNSIGNED_BYTE, vcurbuf);
+      glBindTexture(GL_TEXTURE_2D, 0);
+    }
 
     atomicStore(updateCurTexture, false);
   }
