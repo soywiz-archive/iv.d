@@ -307,7 +307,7 @@ private T staticError(T, Args...) (auto ref Args args) if (is(T : Error)) {
   // pure hack, what we actually need is @noreturn and allow to call that in pure functions
   static T get () {
     static assert(__traits(classInstanceSize, T) <= stestore_.length, T.stringof~" is too large for staticError()");
-    stestore_[0..__traits(classInstanceSize, T)] = typeid(T).init[];
+    stestore_[0..__traits(classInstanceSize, T)] = typeid(T).initializer[];
     return cast(T) stestore_.ptr;
   }
   auto res = (cast(T function() @trusted pure nothrow @nogc) &get)();
