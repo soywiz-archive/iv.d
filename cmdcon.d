@@ -359,7 +359,7 @@ private void cwrxputch (scope const(char)[] s...) nothrow @trusted @nogc {
 private void cwrxputstr(bool cutsign=false) (scope const(char)[] str, char signw, char lchar, char rchar, int wdt, int maxwdt) nothrow @trusted @nogc {
   if (maxwdt < 0) {
     if (maxwdt == maxwdt.min) ++maxwdt; // alas
-    maxwdt = -maxwdt;
+    maxwdt = -(maxwdt);
     if (str.length > maxwdt) str = str[$-maxwdt..$];
   } else if (maxwdt > 0) {
     if (str.length > maxwdt) str = str[0..maxwdt];
@@ -435,7 +435,7 @@ private void cwrxputint(TT) (TT nn, char signw, char lchar, char rchar, int wdt,
     enum neg = false;
   } else {
     bool neg = (n < 0);
-    if (neg) n = -n;
+    if (neg) n = -(n);
   }
 
   int bpos = buf.length;
@@ -478,7 +478,7 @@ private void cwrxputhex(TT) (TT nn, bool upcase, char signw, char lchar, char rc
     enum neg = false;
   } else {
     bool neg = (n < 0);
-    if (neg) n = -n;
+    if (neg) n = -(n);
   }
 
   int bpos = buf.length;
@@ -521,7 +521,7 @@ private void cwrxputfloat(TT) (TT nn, bool simple, char signw, char lchar, char 
 
   void putNum (int n) {
     if (n == n.min) assert(0, "oops");
-    if (n < 0) { fmtstr.ptr[fspos++] = '-'; n = -n; }
+    if (n < 0) { fmtstr.ptr[fspos++] = '-'; n = -(n); }
     char[24] buf = void;
     int bpos = buf.length;
     do {
@@ -634,7 +634,7 @@ public template conwritef(string fmt, A...) {
 
     void putNum(bool hex=false) (int n, int minlen=-1) {
       if (n == n.min) assert(0, "oops");
-      if (n < 0) { putRes('-'); n = -n; }
+      if (n < 0) { putRes('-'); n = -(n); }
       char[24] buf;
       int bpos = buf.length;
       do {
@@ -1378,7 +1378,7 @@ static:
       if (neg) {
         // special case: negative 0x8000_0000_0000_0000uL is ok
         if (num > 0x8000_0000_0000_0000uL) throw exIntOverflow;
-        if (num != 0x8000_0000_0000_0000uL) n = -n;
+        if (num != 0x8000_0000_0000_0000uL) n = -(n);
       } else {
         if (num >= 0x8000_0000_0000_0000uL) throw exIntOverflow;
       }
@@ -3535,7 +3535,7 @@ public void concmdf(string fmt, A...) (A args) {
       enum neg = false;
     } else {
       bool neg = (n < 0);
-      if (neg) n = -n;
+      if (neg) n = -(n);
     }
 
     int bpos = buf.length;
