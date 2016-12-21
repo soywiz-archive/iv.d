@@ -336,6 +336,9 @@ int snd_pcm_sw_params_malloc (snd_pcm_sw_params_t** params);
 int snd_pcm_sw_params_set_avail_min (snd_pcm_t* pcm, snd_pcm_sw_params_t* params, snd_pcm_uframes_t val);
 int snd_pcm_sw_params_set_start_threshold (snd_pcm_t* pcm, snd_pcm_sw_params_t* params, snd_pcm_uframes_t val);
 
+alias snd_lib_error_handler_t = void function (const(char)* file, int line, const(char)* function_, int err, const(char)* fmt, ...);
+int snd_lib_error_set_handler (snd_lib_error_handler_t handler);
+
 private void alsa_message_fucker (const(char)* file, int line, const(char)* function_, int err, const(char)* fmt, ...) {}
 
 private void fuck_alsa_messages () {

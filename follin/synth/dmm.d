@@ -41,7 +41,7 @@ class DmmInstrument {
     name = aname;
     if (fname.length) {
       import std.stdio : File;
-      load(File(fname), false);
+      load(VFile(fname), false);
     }
   }
 
@@ -349,16 +349,16 @@ public:
     tickbuf.length = chans[0].mix.samplesInTick+8; // +dummy values for sse
     scope(failure) ver = 255;
     import std.stdio : File;
-    loadIntr(instrumentBaseDir, File(fname));
+    loadIntr(instrumentBaseDir, VFile(fname));
   }
 
   ubyte getVersion () const pure nothrow @safe @nogc { pragma(inline, true); return ver; }
 
-  @property uint samplesInTick () const nothrow @safe @nogc { pragma(inline, true); return chans.ptr[0].mix.samplesInTick; }
-  @property inout(float)[] soundBuffer () inout pure nothrow @safe @nogc { pragma(inline, true); return tickbuf[0..chans.ptr[0].mix.samplesInTick]; }
+  @property uint samplesInTick () const nothrow @trusted @nogc { pragma(inline, true); return chans.ptr[0].mix.samplesInTick; }
+  @property inout(float)[] soundBuffer () inout pure nothrow @trusted @nogc { pragma(inline, true); return tickbuf[0..chans.ptr[0].mix.samplesInTick]; }
 
-  @property uint destRate () const nothrow @safe @nogc { pragma(inline, true); return chans.ptr[0].mix.destRate; }
-  @property void destRate (uint srate) nothrow @safe {
+  @property uint destRate () const nothrow @trusted @nogc { pragma(inline, true); return chans.ptr[0].mix.destRate; }
+  @property void destRate (uint srate) nothrow @trusted {
     if (srate != chans.ptr[0].mix.destRate) {
       foreach (ref ch; chans) ch.mix.setupDestRate(srate);
       tickbuf.length = chans[0].mix.samplesInTick+8; // +dummy values for sse

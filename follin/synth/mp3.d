@@ -21,6 +21,7 @@ import iv.follin.engine : TflChannel, tflShort2Float;
 
 static if (__traits(compiles, { import iv.minimp3; })) {
 import iv.minimp3;
+import iv.mp3scan;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
