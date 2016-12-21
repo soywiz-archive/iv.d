@@ -141,7 +141,14 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
           auto hh = GetStdHandle(STD_OUTPUT_HANDLE);
           if (hh != INVALID_HANDLE_VALUE) {
             DWORD ww;
-            WriteConsoleA(hh, chrs.ptr, cast(DWORD)chrs.length, &ww, null);
+            usize xpos = 0;
+            while (xpos < chrs.length) {
+              usize epos = xpos;
+              while (epos < chrs.length && chrs.ptr[epos] != '\n') ++epos;
+              if (epos > xpos) WriteConsoleA(hh, chrs.ptr, cast(DWORD)chrs.length, &ww, null);
+              if (epos < chrs.length) WriteConsoleA(hh, "\r\n".ptr, cast(DWORD)2, &ww, null);
+              xpos = epos+1;
+            }
           }
         } else {
           import core.sys.posix.unistd : STDOUT_FILENO, write;
@@ -157,7 +164,14 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
           auto hh = GetStdHandle(STD_ERROR_HANDLE);
           if (hh != INVALID_HANDLE_VALUE) {
             DWORD ww;
-            WriteConsoleA(hh, chrs.ptr, cast(DWORD)chrs.length, &ww, null);
+            usize xpos = 0;
+            while (xpos < chrs.length) {
+              usize epos = xpos;
+              while (epos < chrs.length && chrs.ptr[epos] != '\n') ++epos;
+              if (epos > xpos) WriteConsoleA(hh, chrs.ptr, cast(DWORD)chrs.length, &ww, null);
+              if (epos < chrs.length) WriteConsoleA(hh, "\r\n".ptr, cast(DWORD)2, &ww, null);
+              xpos = epos+1;
+            }
           }
         } else {
           import core.sys.posix.unistd : STDERR_FILENO, write;
@@ -3035,6 +3049,29 @@ version(contest_cmdlist) unittest {
 
   conwriteln("=== vars ===");
   foreach (/*auto*/ clx; conByCommand!"vars") conwriteln("  [", clx, "]");
+}
+
+
+shared static this () {
+  conRegFunc!(() {
+    uint maxlen = 0;
+    foreach (string name; cmdlistSorted[]) {
+      if (auto ccp = name in cmdlist) {
+        if (name.length > 64) {
+          if (maxlen < 64) maxlen = 64;
+        } else {
+          if (name.length > maxlen) maxlen = cast(uint)name.length;
+        }
+      }
+    }
+    foreach (string name; cmdlistSorted[]) {
+      if (auto ccp = name in cmdlist) {
+        conwrite(name);
+        foreach (immutable _; name.length..maxlen) conwrite(" ");
+        conwriteln(" -- ", (*ccp).help);
+      }
+    }
+  })("cmdlist", "list all known commands and variables");
 }
 
 
