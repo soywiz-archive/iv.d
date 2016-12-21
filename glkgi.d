@@ -72,6 +72,8 @@ private shared bool updateCurTexture = true;
 private __gshared uint fps = 35; // average FPS
 private __gshared bool showShaderWarnings = false;
 
+private __gshared bool oldogl = false;
+
 private __gshared int mcurX = 0, mcurY = 0;
 private __gshared int mhotX = 0, mhotY = 0;
 private __gshared int mcurHidden = 1;
@@ -102,6 +104,7 @@ shared static this () {
   conRegVar!fps(1, 60, "v_fps", "video update rate");
   conRegVar!kgiTitle("v_title", "video window title");
   conRegVar!showShaderWarnings("v_shader_warnings", "show warnings from shader compilation");
+  conRegVar!oldogl("v_legacygl", "set to true to use legacy OpenGL");
 }
 
 
@@ -619,8 +622,10 @@ public bool kgiInitEx (int awdt, int ahgt, string title, bool a2x, uint afps) {
   fps = afps;
   kgiTitle = title;
 
-  setOpenGLContextVersion(3, 2); // up to GLSL 150
-  //openGLContextCompatible = false;
+  if (!oldogl) {
+    setOpenGLContextVersion(3, 2); // up to GLSL 150
+    //openGLContextCompatible = false;
+  }
 
   startKGIThread();
 
@@ -803,11 +808,13 @@ private void glgfxBlit () nothrow @trusted @nogc {
   immutable w = vbufW;
   immutable h = vbufH;
 
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+  if (!oldogl) {
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 
-  if (scanlines && shaderVersionOk < 0) sdrScanlineId = glgfxCompileShader(sdrScanlineSrc);
-  glUseProgram(scanlines ? sdrScanlineId : 0);
+    if (scanlines && shaderVersionOk < 0) sdrScanlineId = glgfxCompileShader(sdrScanlineSrc);
+    glUseProgram(scanlines ? sdrScanlineId : 0);
+  }
 
   glMatrixMode(GL_PROJECTION); // for ortho camera
   glLoadIdentity();

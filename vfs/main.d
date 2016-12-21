@@ -309,7 +309,7 @@ private void cleanupDrivers () {
 // ////////////////////////////////////////////////////////////////////////// //
 /// register new VFS driver
 /// driver order is: firsts, normals, lasts (obviously ;-).
-/// search order is from first to last, in reverse order.
+/// search order is from first to last, in reverse order inside each driver.
 /// you can use returned driver id to unregister the driver later.
 public VFSDriverId vfsRegister(string mode="normal", bool temp=false) (VFSDriver drv, const(char)[] fname=null, const(char)[] prefixpath=null) {
   static assert(mode == "normal" || mode == "last" || mode == "first");
