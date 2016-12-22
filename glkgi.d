@@ -389,6 +389,10 @@ private void kgiThread (Tid starterTid) {
     vbwin = new SimpleWindow(vbufW*(blit2x ? 2 : 1), vbufH*(blit2x ? 2 : 1), kgiTitle, OpenGlOptions.yes, Resizablity.fixedSize);
     if (mcurHidden == 0) vbwin.hideCursor();
 
+    static if (is(typeof(openGLContextFallbackActivated))) {
+      if (openGLContextFallbackActivated) oldogl = true;
+    }
+
     vbwin.redrawOpenGlScene = delegate () {
       glgfxBlit();
       glconDraw();
@@ -637,6 +641,9 @@ public bool kgiInitEx (int awdt, int ahgt, string title, bool a2x, uint afps) {
   if (!oldogl) {
     setOpenGLContextVersion(3, 2); // up to GLSL 150
     //openGLContextCompatible = false;
+    static if (is(typeof(openGLContextAllowFallback))) {
+      openGLContextAllowFallback = true;
+    }
   }
 
   startKGIThread();
