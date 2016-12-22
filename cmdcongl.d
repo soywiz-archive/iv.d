@@ -257,14 +257,12 @@ public void glconDraw () {
       glMatrixMode(GL_TEXTURE); glPopMatrix();
       glMatrixMode(GL_COLOR); glPopMatrix();
       glMatrixMode(glmatmode);
-      glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, oldfbr);
-      glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, oldfbw);
+      if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, oldfbr);
+      if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, oldfbw);
       glBindTexture(GL_TEXTURE_2D, gltextbinding);
-      glUseProgram(oldprg);
+      if (glHasFunc!"glUseProgram") glUseProgram(oldprg);
       glViewport(glviewport.ptr[0], glviewport.ptr[1], glviewport.ptr[2], glviewport.ptr[3]);
     }
-
-    if (updatetex) glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
 
     enum x = 0;
     int y = 0;
@@ -272,8 +270,8 @@ public void glconDraw () {
     int h = scrhgt*conScale;
 
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
-    glUseProgram(0);
+    if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+    if (glHasFunc!"glUseProgram") glUseProgram(0);
 
     glMatrixMode(GL_PROJECTION); // for ortho camera
     glLoadIdentity();
@@ -295,13 +293,18 @@ public void glconDraw () {
     //glDisable(GL_BLEND);
     glDisable(GL_STENCIL_TEST);
 
+    glBindTexture(GL_TEXTURE_2D, convbufTexId);
+    if (updatetex) {
+      //glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+    }
+
     int ofs = (scrhgt-rConsoleHeight)*conScale;
     y -= ofs;
     h -= ofs;
     float alpha = rConAlpha;
     if (alpha < 0) alpha = 0; else if (alpha > 1) alpha = 1;
     glColor4f(1, 1, 1, alpha);
-    glBindTexture(GL_TEXTURE_2D, convbufTexId);
     //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
     glBegin(GL_QUADS);
       glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y); // top-left

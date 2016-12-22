@@ -36,6 +36,20 @@ version(Windows) {
   alias glbindGetProcAddress = glXGetProcAddress;
 }
 
+public bool glHasFunction (const(char)[] name) {
+  if (name.length == 0 || name.length > 255) return false; // arbitrary limit
+  char[256] xname = 0;
+  xname[0..name.length] = name[];
+  return (glbindGetProcAddress(xname.ptr) !is null);
+}
+
+// convenient template checker
+public bool glHasFunc(string name) () {
+  static int flag = -1;
+  if (flag < 0) flag = (glHasFunction(name) ? 1 : 0);
+  return (flag == 1);
+}
+
 
 alias GLvoid = void;
 alias GLintptr = ptrdiff_t;

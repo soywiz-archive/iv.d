@@ -213,6 +213,11 @@ public struct KGIEvent {
     MouseEvent m;
     dchar ch;
   }
+  static createClose () pure nothrow @trusted @nogc {
+    KGIEvent ev = void;
+    ev.type = KGIEvent.Type.Close;
+    return ev;
+  }
 @property const pure nothrow @trusted @nogc:
   bool isMouse () { pragma(inline, true); return (type == Type.Mouse); }
   bool isKey () { pragma(inline, true); return (type == Type.Key); }
@@ -241,6 +246,7 @@ public KGIEvent kgiPeekEvent () {
   consoleLock();
   scope(exit) consoleUnlock();
   version(LDC) {} else atomicFence();
+  if (!atomicLoad(kgiThreadStarted)) return KGIEvent.createClose();
   if (vupcounter) setUpdateTextureFlag(); // just in case
   if (evbufused > 0) return evbuf[0];
   if (vbwin is null) return KGIEvent(KGIEvent.Type.Close);
@@ -258,6 +264,7 @@ public KGIEvent kgiGetEvent () {
     {
       consoleLock();
       scope(exit) consoleUnlock();
+      if (!atomicLoad(kgiThreadStarted)) return KGIEvent.createClose();
       if (evbufused > 0) {
         auto ev = evbuf[0];
         if (evbufused > 1) {
@@ -271,7 +278,7 @@ public KGIEvent kgiGetEvent () {
         return KGIEvent(KGIEvent.Type.Close);
       }
     }
-    Thread.sleep(10.msecs);
+    Thread.sleep(10.msecs); //FIXME
   }
 }
 
@@ -313,11 +320,22 @@ public void kgiPushEvent (dchar ch) {
 }
 
 
+public void kgiPushCloseEvent(bool clearQueue=true) () {
+  KGIEvent ev = void;
+  ev.type = KGIEvent.Type.Close;
+  consoleLock();
+  scope(exit) consoleUnlock();
+  static if (clearQueue) evbufused = 0;
+  pushEventIntr(ev);
+}
+
+
 /// remove all keypresses from input queue
 public void kgiKeyFlush () {
   uint sidx = 0, didx = 0;
   consoleLock();
   scope(exit) consoleUnlock();
+  if (!atomicLoad(kgiThreadStarted)) return;
   while (sidx < evbufused) {
     if (!evbuf[sidx].isKey) {
       if (sidx != didx) evbuf[didx] = evbuf[sidx];
@@ -353,6 +371,7 @@ public void kgiFlush () {
   while (atomicLoad(updateTexture)) {
     import core.thread;
     import core.time;
+    if (!atomicLoad(kgiThreadStarted)) return;
     Thread.sleep(1.msecs);
   }
 }
@@ -465,8 +484,8 @@ private void kgiThread (Tid starterTid) {
       delegate () {
         //version(Windows) { {import core.stdc.stdio : printf; printf("xxx\n"); } }
         if (vbwin.closed) return;
-        if (isQuitRequested) { vbwin.close(); return; }
-        if (receiveMessages()) { vbwin.close(); return; }
+        if (isQuitRequested) { kgiPushCloseEvent(); vbwin.close(); return; }
+        if (receiveMessages()) { kgiPushCloseEvent(); vbwin.close(); return; }
         auto conexeced = processConsoleCommands();
         bool convis = isConsoleVisible;
         if (lastConVisible != convis || conexeced) {
@@ -509,7 +528,7 @@ private void kgiThread (Tid starterTid) {
       },
       delegate (KeyEvent event) {
         if (vbwin.closed) return;
-        if (isQuitRequested) { vbwin.close(); return; }
+        if (isQuitRequested) { kgiPushCloseEvent(); vbwin.close(); return; }
         if (glconKeyEvent(event)) return;
         //if (event.pressed && event.key == Key.Escape) { concmd("quit"); return; }
         kgiPushEvent(event);
@@ -550,15 +569,8 @@ private void kgiThread (Tid starterTid) {
     exit(0);
   }
   */
-  {
-    consoleLock();
-    scope(exit) consoleUnlock();
-    KGIEvent ev;
-    ev.type = KGIEvent.Type.Close;
-    evbufused = 0;
-    pushEventIntr(ev);
-  }
-  //atomicSet(kgiThreadStarted, false);
+  kgiPushCloseEvent();
+  atomicStore(kgiThreadStarted, false);
 }
 
 
