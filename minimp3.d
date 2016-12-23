@@ -1364,7 +1364,7 @@ int build_table (
       } else {
         n -= table_nb_bits;
         j = (code >> n) & ((1 << table_nb_bits) - 1);
-        n1 = -table[j][1]; //bits
+        n1 = -cast(int)table[j][1]; //bits
         if (n > n1)
             n1 = n;
         table[j][1] = cast(short)(-n1); //bits
