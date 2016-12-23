@@ -255,6 +255,7 @@ struct SearchReplaceOptions {
   bool backwards;
   bool wholeword;
   bool inselection;
+  bool nocomments;
 }
 
 bool dialogSearchReplace (FuiHistoryManager dghisman, ref SearchReplaceOptions opts) {
@@ -283,6 +284,7 @@ bool dialogSearchReplace (FuiHistoryManager dghisman, ref SearchReplaceOptions o
         checkbox: { caption: "&Backwards"  bind-var: optback }
         checkbox: { caption: "&Whole words"  bind-var: optword }
         checkbox: { caption: "In se&lection"  id: "cbinsel"  bind-var: optsel }
+        checkbox: { caption: "S&kip comments"  id: "cbnocom"  bind-var: optnocom }
       }
     }
 
@@ -303,6 +305,7 @@ bool dialogSearchReplace (FuiHistoryManager dghisman, ref SearchReplaceOptions o
   bool optback = opts.backwards;
   bool optword = opts.wholeword;
   bool optsel = opts.inselection;
+  bool optnocom = opts.nocomments;
   auto searchstr = opts.search;
   auto replacestr = opts.replace;
 
@@ -322,7 +325,7 @@ bool dialogSearchReplace (FuiHistoryManager dghisman, ref SearchReplaceOptions o
   //replacestr = "w";
   //opttype = SearchReplaceOptions.Type.Regex;
 
-  ctx.parse!(opttype, optci, optback, optsel, searchstr, replacestr, validate, utfuck, optword)(laydesc);
+  ctx.parse!(opttype, optci, optback, optsel, searchstr, replacestr, validate, utfuck, optword, optnocom)(laydesc);
   ctx.dialogHistoryManager = dghisman;
   ctx.relayout();
   if (ctx.layprops(0).position.w < ttyw/3*2) {
@@ -337,6 +340,7 @@ bool dialogSearchReplace (FuiHistoryManager dghisman, ref SearchReplaceOptions o
     opts.backwards = optback;
     opts.wholeword = optword;
     opts.inselection = optsel;
+    opts.nocomments = optnocom;
     opts.search = ctx.editlineGetText(ctx["dlg-srr-edsearch"]);
     opts.replace = ctx.editlineGetText(ctx["dlg-srr-edreplace"]);
     if (auto hisman = ctx.dialogHistoryManager) {

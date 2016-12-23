@@ -284,6 +284,7 @@ private class FuiEditorSRWindow : FuiWindow {
   TtyEditor.SROptions* srr;
   FuiEditLine els, elr;
   FuiCheckBox cbinsel;
+  FuiCheckBox cbnocom;
   FuiButton btok;
 
   this (FuiEditor aed, TtyEditor.SROptions* asrr) {
@@ -326,6 +327,7 @@ private class FuiEditorSRWindow : FuiWindow {
         new FuiCheckBox(vb, "&Whole words", "wholeword", srr.wholeword);
         cbinsel = new FuiCheckBox(vb, "In se&lection", "inselection", srr.inselection);
         cbinsel.enabled = aed.ed.hasMarkedBlock;
+        cbnocom = new FuiCheckBox(vb, "S&kip comments", "nocomments", srr.nocomments);
       }
     }
 
@@ -345,6 +347,7 @@ private class FuiEditorSRWindow : FuiWindow {
           srr.backwards = checkbox("backwards");
           srr.wholeword = checkbox("wholeword");
           srr.inselection = checkbox("inselection");
+          srr.nocomments = checkbox("nocomments");
           srr.search = els.getText!(const(char)[]);
           srr.replace = elr.getText!(const(char)[]);
           (new EventEditorReplySR(ed.ed, srr, true)).post;

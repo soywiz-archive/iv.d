@@ -1360,6 +1360,16 @@ final:
         mt = findTextPlain(srr.search, spos, epos, srr.wholeword, srr.casesens);
       }
       if (mt.empty) break;
+      // if i need to skip comments, do highlighting
+      if (srr.nocomments && hl !is null) {
+        auto lidx = gb.pos2line(mt.s);
+        if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
+        if (hiIsComment(gb.hi(mt.s))) {
+          // skip
+          if (!srr.backwards) spos = mt.s+1; else epos = mt.s;
+          continue;
+        }
+      }
       // i found her!
       if (!doAll) {
         bool doundo = (mt.s != curpos);
@@ -1509,6 +1519,15 @@ final:
       }
       if (!found) break;
       // i found her!
+      if (srr.nocomments && hl !is null) {
+        auto lidx = gb.pos2line(caps[0].s);
+        if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
+        if (hiIsComment(gb.hi(caps[0].s))) {
+          // skip
+          if (!srr.backwards) spos = caps[0].s+1; else epos = caps[0].s;
+          continue;
+        }
+      }
       if (!doAll) {
         bool doundo = (caps[0].s != curpos);
         if (doundo) gotoPos!true(caps[0].s);

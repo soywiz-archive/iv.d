@@ -57,6 +57,7 @@ class TtyEditor : Editor {
     bool backwards;
     bool wholeword;
     bool inselection;
+    bool nocomments;
     // the following fields are relevant for "replacement continuation"
     int spos, epos;
     int mts, mte; // match start and end
@@ -1594,6 +1595,14 @@ final:
       srr.mts = mt.s;
       srr.mte = mt.e;
       // i found her!
+      if (srr.nocomments && hl !is null) {
+        auto lidx = gb.pos2line(mt.s);
+        if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
+        if (hiIsComment(gb.hi(mt.s))) {
+          srrPlainDoSkip(srr);
+          continue;
+        }
+      }
       if (srr.cont != SROptions.Cont.All) {
         bool doundo = (mt.s != curpos);
         if (doundo) gotoPos!true(mt.s);
@@ -1771,6 +1780,14 @@ final:
       }
       if (!found) break;
       // i found her!
+      if (srr.nocomments && hl !is null) {
+        auto lidx = gb.pos2line(caps[0].s);
+        if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
+        if (hiIsComment(gb.hi(caps[0].s))) {
+          srrRegExpDoSkip(srr);
+          continue;
+        }
+      }
       if (srr.cont != SROptions.Cont.All) {
         bool doundo = (srr.caps[0].s != curpos);
         if (doundo) gotoPos!true(srr.caps[0].s);
