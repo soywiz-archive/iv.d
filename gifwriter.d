@@ -582,6 +582,23 @@ void gifWriteLzwImage (GifWriter.WriterCB wr, gifLzwNode* codetree, ubyte* image
 
   gifWriteCode(wr, stat, clearCode, codeSize);  // start with a fresh LZW dictionary
 
+  bool fixCodeSize () {
+    if (maxCode >= (1U<<codeSize)) {
+      // dictionary entry count has broken a size barrier, we need more bits for codes
+      ++codeSize;
+    }
+    if (maxCode == 4095) {
+      // the dictionary is full, clear it out and begin anew
+      gifWriteCode(wr, stat, clearCode, codeSize); // clear tree
+      memset(codetree, 0, gifLzwNode.sizeof*4096);
+      curCode = -1;
+      codeSize = minCodeSize+1;
+      maxCode = clearCode+1;
+      return true;
+    }
+    return false;
+  }
+
   for (uint yy = 0; yy < height; ++yy) {
     for (uint xx = 0; xx < width; ++xx) {
       ubyte nextValue = image[(yy*width+xx)*4+3];
@@ -601,18 +618,7 @@ void gifWriteLzwImage (GifWriter.WriterCB wr, gifLzwNode* codetree, ubyte* image
         gifWriteCode(wr, stat, curCode, codeSize);
         // insert the new run into the dictionary
         codetree[curCode].m_next[nextValue] = cast(ushort)(++maxCode);
-        if (maxCode >= (1UL<<codeSize)) {
-          // dictionary entry count has broken a size barrier, we need more bits for codes
-          ++codeSize;
-        }
-        if (maxCode == 4095) {
-          // the dictionary is full, clear it out and begin anew
-          gifWriteCode(wr, stat, clearCode, codeSize); // clear tree
-          memset(codetree, 0, gifLzwNode.sizeof*4096);
-          curCode = -1;
-          codeSize = minCodeSize+1;
-          maxCode = clearCode+1;
-        }
+        fixCodeSize();
         curCode = nextValue;
       }
     }
@@ -620,7 +626,8 @@ void gifWriteLzwImage (GifWriter.WriterCB wr, gifLzwNode* codetree, ubyte* image
 
   // compression footer
   gifWriteCode(wr, stat, curCode, codeSize);
-  gifWriteCode(wr, stat, clearCode, codeSize);
+  ++maxCode;
+  if (!fixCodeSize()) gifWriteCode(wr, stat, clearCode, codeSize);
   gifWriteCode(wr, stat, clearCode+1, minCodeSize+1);
 
   // write out the last partial chunk
