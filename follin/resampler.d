@@ -1,35 +1,35 @@
 /* Copyright (C) 2007-2008 Jean-Marc Valin
-   Copyright (C) 2008      Thorvald Natvig
-   D port by Ketmar // Invisible Vector
-
-   Arbitrary resampling code
-
-   Redistribution and use in source and binary forms, with or without
-   modification, are permitted provided that the following conditions are
-   met:
-
-   1. Redistributions of source code must retain the above copyright notice,
-   this list of conditions and the following disclaimer.
-
-   2. Redistributions in binary form must reproduce the above copyright
-   notice, this list of conditions and the following disclaimer in the
-   documentation and/or other materials provided with the distribution.
-
-   3. The name of the author may not be used to endorse or promote products
-   derived from this software without specific prior written permission.
-
-   THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-   IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-   OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-   DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
-   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-   HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-   STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-   ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-   POSSIBILITY OF SUCH DAMAGE.
-*/
+ * Copyright (C) 2008      Thorvald Natvig
+ * D port by Ketmar // Invisible Vector
+ *
+ * Arbitrary resampling code
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * 3. The name of the author may not be used to endorse or promote products
+ * derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /* A-a-a-and now... D port is covered by the following license!
  *
@@ -321,23 +321,25 @@ public:
    * Returns:
    *  Input latency;
    */
-  int getInputLatency () { return filterLen/2; }
+  int inputLatency () { return filterLen/2; }
 
   /** Get the latency introduced by the resampler measured in output samples.
    *
    * Returns:
    *  Output latency.
    */
-  int getOutputLatency () { return ((filterLen/2)*denRate+(numRate>>1))/numRate; }
+  int outputLatency () { return ((filterLen/2)*denRate+(numRate>>1))/numRate; }
 
-  /** Make sure that the first samples to go out of the resamplers don't have
+  /* Make sure that the first samples to go out of the resamplers don't have
    * leading zeros. This is only useful before starting to use a newly created
    * resampler. It is recommended to use that when resampling an audio file, as
    * it will generate a file with the same length. For real-time processing,
    * it is probably easier not to use this call (so that the output duration
    * is the same for the first frame).
+   *
+   * Setup/reset sequence will automatically call this, so it is private.
    */
-  void skipZeros () { foreach (immutable i; 0..chanCount) lastSample.ptr[i] = filterLen/2; }
+  private void skipZeros () { foreach (immutable i; 0..chanCount) lastSample.ptr[i] = filterLen/2; }
 
   static struct Data {
     const(float)[] dataIn;
@@ -350,6 +352,7 @@ public:
    * `data.dataIn` can be empty, but `data.dataOut` can't.
    * Function will return number of consumed samples (*not* *frames*!) in `data.inputSamplesUsed`,
    * and number of produced samples in `data.outputSamplesUsed`.
+   * You should provide enough samples for all channels, and all channels will be processed.
    *
    * Params:
    *  data = input and output buffers, number of frames consumed and produced
@@ -380,8 +383,7 @@ public:
     return Error.OK;
   }
 
-  /** Reset a resampler so a new (unrelated) stream can be processed.
-   */
+  /// Reset a resampler so a new (unrelated) stream can be processed.
   void reset () {
     lastSample[] = 0;
     magicSamples[] = 0;
@@ -615,7 +617,7 @@ private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-immutable double[68] kaiser12Table = [
+static immutable double[68] kaiser12Table = [
   0.99859849, 1.00000000, 0.99859849, 0.99440475, 0.98745105, 0.97779076,
   0.96549770, 0.95066529, 0.93340547, 0.91384741, 0.89213598, 0.86843014,
   0.84290116, 0.81573067, 0.78710866, 0.75723148, 0.72629970, 0.69451601,
@@ -629,7 +631,7 @@ immutable double[68] kaiser12Table = [
   0.00105297, 0.00069463, 0.00043489, 0.00025272, 0.00013031, 0.0000527734,
   0.00001000, 0.00000000];
 
-immutable double[36] kaiser10Table = [
+static immutable double[36] kaiser10Table = [
   0.99537781, 1.00000000, 0.99537781, 0.98162644, 0.95908712, 0.92831446,
   0.89005583, 0.84522401, 0.79486424, 0.74011713, 0.68217934, 0.62226347,
   0.56155915, 0.50119680, 0.44221549, 0.38553619, 0.33194107, 0.28205962,
@@ -637,7 +639,7 @@ immutable double[36] kaiser10Table = [
   0.05731132, 0.04193980, 0.02979584, 0.02044510, 0.01345224, 0.00839739,
   0.00488951, 0.00257636, 0.00115101, 0.00035515, 0.00000000, 0.00000000];
 
-immutable double[36] kaiser8Table = [
+static immutable double[36] kaiser8Table = [
   0.99635258, 1.00000000, 0.99635258, 0.98548012, 0.96759014, 0.94302200,
   0.91223751, 0.87580811, 0.83439927, 0.78875245, 0.73966538, 0.68797126,
   0.63451750, 0.58014482, 0.52566725, 0.47185369, 0.41941150, 0.36897272,
@@ -645,7 +647,7 @@ immutable double[36] kaiser8Table = [
   0.10562887, 0.08273982, 0.06335451, 0.04724088, 0.03412321, 0.02369490,
   0.01563093, 0.00959968, 0.00527363, 0.00233883, 0.00050000, 0.00000000];
 
-immutable double[36] kaiser6Table = [
+static immutable double[36] kaiser6Table = [
   0.99733006, 1.00000000, 0.99733006, 0.98935595, 0.97618418, 0.95799003,
   0.93501423, 0.90755855, 0.87598009, 0.84068475, 0.80211977, 0.76076565,
   0.71712752, 0.67172623, 0.62508937, 0.57774224, 0.53019925, 0.48295561,
@@ -658,10 +660,11 @@ struct FuncDef {
   int oversample;
 }
 
-immutable FuncDef Kaiser12 = FuncDef(kaiser12Table.ptr, 64);
-immutable FuncDef Kaiser10 = FuncDef(kaiser10Table.ptr, 32);
-immutable FuncDef Kaiser8 = FuncDef(kaiser8Table.ptr, 32);
-immutable FuncDef Kaiser6 = FuncDef(kaiser6Table.ptr, 32);
+static immutable FuncDef Kaiser12 = FuncDef(kaiser12Table.ptr, 64);
+static immutable FuncDef Kaiser10 = FuncDef(kaiser10Table.ptr, 32);
+static immutable FuncDef Kaiser8 = FuncDef(kaiser8Table.ptr, 32);
+static immutable FuncDef Kaiser6 = FuncDef(kaiser6Table.ptr, 32);
+
 
 struct QualityMapping {
   int baseLength;
@@ -681,7 +684,7 @@ struct QualityMapping {
       by the sinusoids/noise just below the Nyquist rate (guaranteed only for
       up-sampling).
 */
-immutable QualityMapping[11] qualityMap = [
+static immutable QualityMapping[11] qualityMap = [
   QualityMapping(  8,  4, 0.830f, 0.860f, &Kaiser6 ), /* Q0 */
   QualityMapping( 16,  4, 0.850f, 0.880f, &Kaiser6 ), /* Q1 */
   QualityMapping( 32,  4, 0.882f, 0.910f, &Kaiser6 ), /* Q2 */  /* 82.3% cutoff ( ~60 dB stop) 6  */
@@ -701,23 +704,20 @@ nothrow @trusted @nogc:
 double computeFunc (float x, immutable FuncDef* func) {
   import core.stdc.math : lrintf;
   import std.math : floor;
-  float y, frac;
-  double[4] interp;
-  int ind;
-  y = x*func.oversample;
-  ind = lrintf(floor(y));
-  frac = (y-ind);
+  //double[4] interp;
+  float y = x*func.oversample;
+  int ind = lrintf(floor(y));
+  float frac = (y-ind);
   immutable f2 = frac*frac;
   immutable f3 = f2*frac;
-  interp.ptr[3] = -0.1666666667*frac+0.1666666667*(f3);
-  interp.ptr[2] = frac+0.5*(f2)-0.5*(f3);
-  //interp.ptr[2] = 1.0f-0.5f*frac-f2+0.5f*f3;
-  interp.ptr[0] = -0.3333333333*frac+0.5*(f2)-0.1666666667*(f3);
+  double interp3 = -0.1666666667*frac+0.1666666667*(f3);
+  double interp2 = frac+0.5*(f2)-0.5*(f3);
+  //double interp2 = 1.0f-0.5f*frac-f2+0.5f*f3;
+  double interp0 = -0.3333333333*frac+0.5*(f2)-0.1666666667*(f3);
   // just to make sure we don't have rounding problems
-  interp.ptr[1] = 1.0f-interp.ptr[3]-interp.ptr[2]-interp.ptr[0];
-
+  double interp1 = 1.0f-interp3-interp2-interp0;
   //sum = frac*accum[1]+(1-frac)*accum[2];
-  return interp.ptr[0]*func.table[ind]+interp.ptr[1]*func.table[ind+1]+interp.ptr[2]*func.table[ind+2]+interp.ptr[3]*func.table[ind+3];
+  return interp0*func.table[ind]+interp1*func.table[ind+1]+interp2*func.table[ind+2]+interp3*func.table[ind+3];
 }
 
 
@@ -750,7 +750,7 @@ float sinc (float cutoff, float x, int N, immutable FuncDef *windowFunc) {
 }
 
 
-void cubicCoef (float frac, float* interp) {
+void cubicCoef (in float frac, float* interp) {
   immutable f2 = frac*frac;
   immutable f3 = f2*frac;
   // compute interpolation coefficients; i'm not sure whether this corresponds to cubic interpolation but I know it's MMSE-optimal on a sinc
@@ -786,7 +786,7 @@ if (is(T == float) || is(T == double))
       if (N%4 == 0) {
         version(sincresample_use_sse) {
           //align(64) __gshared float[4] zero = 0;
-          align(64) __gshared float[4+32] zeroesBuf = 0; // dmd cannot into such aligns, alas
+          align(64) __gshared float[4+128] zeroesBuf = 0; // dmd cannot into such aligns, alas
           __gshared uint zeroesptr = 0;
           if (zeroesptr == 0) {
             zeroesptr = cast(uint)zeroesBuf.ptr;
@@ -925,7 +925,7 @@ if (is(T == float) || is(T == double))
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-uint gcd() (uint a, uint b) {
+uint gcd (uint a, uint b) pure {
   if (a == 0) return b;
   if (b == 0) return a;
   for (;;) {
