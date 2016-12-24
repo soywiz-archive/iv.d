@@ -555,7 +555,7 @@ Action playFile () {
       auto bp = cast(short*)buffer.ptr;
       tflShort2Float(bp[0..frmread*sio.channels], flbuf[0..frmread*sio.channels]);
       immutable float gg = gain/100.0f;
-      foreach (ref float v; flbuf[0..frmread*sio.channels]) v *= gain;
+      foreach (ref float v; flbuf[0..frmread*sio.channels]) v += v*gg;
       tflFloat2Short(flbuf[0..frmread*sio.channels], bp[0..frmread*sio.channels]);
     }
 
