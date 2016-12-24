@@ -33,6 +33,7 @@ import iv.alsa;
 import iv.audioresampler;
 import iv.cmdcon;
 import iv.follin.resampler;
+import iv.follin.utils;
 import iv.rawtty;
 import iv.vfs;
 import iv.vfs.io;
@@ -46,6 +47,7 @@ import iv.xogg.tremor;
 // ////////////////////////////////////////////////////////////////////////// //
 //__gshared string device = "plug:default";
 __gshared string device = "default";
+__gshared ubyte rsquality = 8;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -497,8 +499,7 @@ Action playFile () {
     } else {
       //srb.reset();
       //srb.setRate(sio.rate, realRate);
-      srb.setup(sio.channels, sio.rate, realRate, /*SpeexResampler.Quality.Desktop*/8);
-      srb.skipZeros();
+      srb.setup(sio.channels, sio.rate, realRate, /*SpeexResampler.Quality.Desktop*/rsquality);
       if (rsfbufi.length == 0) rsfbufi.length = 8192;
       if (rsfbufo.length == 0) rsfbufo.length = 8192;
     }
@@ -549,14 +550,13 @@ Action playFile () {
     if (frmread <= 0) break;
 
     if (gain) {
+      static float[] flbuf;
+      if (flbuf.length < frmread*sio.channels) flbuf.length = frmread*sio.channels;
       auto bp = cast(short*)buffer.ptr;
-      foreach (ref short v; bp[0..frmread*sio.channels]) {
-        double d = cast(double)v*gain/100.0;
-        d += v;
-        if (d < -32767) d = -32767;
-        if (d > 32767) d = 32767;
-        v = cast(short)d;
-      }
+      tflShort2Float(bp[0..frmread*sio.channels], flbuf[0..frmread*sio.channels]);
+      immutable float gg = gain/100.0f;
+      foreach (ref float v; flbuf[0..frmread*sio.channels]) v *= gain;
+      tflFloat2Short(flbuf[0..frmread*sio.channels], bp[0..frmread*sio.channels]);
     }
 
     // no need to resample silence ;-)
@@ -749,6 +749,7 @@ extern(C) void atExitRestoreTty () {
 void main (string[] args) {
   conRegUserVar!bool("shuffle", "shuffle playlist");
 
+  conRegVar!rsquality(0, 10, "rsquality", "resampling quality; 0=worst, 10=best, default is 8");
   conRegVar!device("device", "audio output device");
   conRegVar!paused("paused", "is playback paused?");
   conRegVar!gain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
