@@ -110,23 +110,79 @@ public void tflFloat2Short (in float[] input, short[] output) nothrow @trusted @
       version(follin_use_sse2) {} else {
         asm nothrow @safe @nogc { emms; }
       }
-      if ((blen &= 3) != 0) {
-        mixin(declfcvar!"temp");
-        while (blen-- > 0) {
+      mixin(declfcvar!"temp");
+      switch ((blen &= 3)) {
+        case 3:
           mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
           if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
           *d++ = cast(short)v;
           ++s;
-        }
+          goto case;
+        case 2:
+          mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+          if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+          *d++ = cast(short)v;
+          ++s;
+          goto case;
+        case 1:
+          mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+          if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+          *d++ = cast(short)v;
+          ++s;
+          break;
+        default: break;
       }
     }
   } else {
     mixin(declfcvar!"temp");
-    foreach (immutable _; 0..input.length) {
-      mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
-      if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
-      *d++ = cast(short)v;
-      ++s;
+    auto len = input.length;
+    while (len >= 4) {
+      {
+        mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+        if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+        *d++ = cast(short)v;
+        ++s;
+      }
+      {
+        mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+        if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+        *d++ = cast(short)v;
+        ++s;
+      }
+      {
+        mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+        if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+        *d++ = cast(short)v;
+        ++s;
+      }
+      {
+        mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+        if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+        *d++ = cast(short)v;
+        ++s;
+      }
+      len -= 4;
+    }
+    switch (len) {
+      case 3:
+        mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+        if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+        *d++ = cast(short)v;
+        ++s;
+        goto case;
+      case 2:
+        mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+        if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+        *d++ = cast(short)v;
+        ++s;
+        goto case;
+      case 1:
+        mixin(FAST_SCALED_FLOAT_TO_INT!("*s", "15"));
+        if (cast(uint)(v+32768) > 65535) v = (v < 0 ? -32768 : 32767);
+        *d++ = cast(short)v;
+        ++s;
+        break;
+      default: break;
     }
   }
 }
