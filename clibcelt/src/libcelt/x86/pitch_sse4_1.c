@@ -32,7 +32,7 @@
 #include <xmmintrin.h>
 #include <emmintrin.h>
 
-#include "macros.h"
+//#include "macros.h"
 #include "celt_lpc.h"
 #include "stack_alloc.h"
 #include "mathops.h"

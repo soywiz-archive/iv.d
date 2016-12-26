@@ -30,7 +30,7 @@
 #endif
 
 #include "cpu_support.h"
-#include "macros.h"
+//#include "macros.h"
 /*
 #if defined(OPUS_X86_MAY_HAVE_SSE4_1)
 #include "main_sse.h"
