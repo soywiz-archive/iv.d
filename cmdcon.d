@@ -196,6 +196,7 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
             auto newsz = cbufcursize*2;
           }
           if (newsz > cbufmaxsize) newsz = cbufmaxsize;
+          //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("*** CON: %u -> %u; head=%u; tail=%u; np=%u\n", cbufcursize, newsz, cbufhead, cbuftail, np); }
           auto nbuf = cast(char*)realloc(cbuf, newsz);
           if (nbuf !is null) {
             // yay, we got some room; move text down, so there will be more room
@@ -213,6 +214,7 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
             cbuf = nbuf;
             removelines = false;
             version(test_cbuf) { import core.stdc.stdio : stderr, fprintf; stderr.fprintf("  cbufhead=%u; cbuftail=%u\n", cbufhead, cbuftail); }
+            assert(np < cbufcursize);
           }
         }
         if (removelines) {

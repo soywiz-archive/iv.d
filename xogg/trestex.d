@@ -682,13 +682,19 @@ Action playFile () {
             }
           }
           //conwriteln("  got: ", rsbufused/sio.channels);
-          frames = snd_pcm_writei(pcm, rsbuf.ptr, rsbufused/sio.channels);
-          if (frames < 0) {
-            frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+          uint left = rsbufused/sio.channels;
+          uint pos = 0;
+          while (pos < left) {
+            frames = snd_pcm_writei(pcm, rsbuf.ptr+pos*sio.channels, left-pos);
             if (frames < 0) {
-              import core.stdc.stdio : printf;
-              printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
-              break mainloop;
+              frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+              if (frames < 0) {
+                import core.stdc.stdio : printf;
+                printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
+                break mainloop;
+              }
+            } else {
+              pos += frames;
             }
           }
         }

@@ -188,6 +188,7 @@ public:
     super(x0, y0, w, h, null, asinglesine);
     //srrOptions.type = SearchReplaceOptions.Type.Regex;
     srrOptions.casesens = true;
+    srrOptions.nocomments = true;
   }
 
   // call this after setting `fullFileName`
