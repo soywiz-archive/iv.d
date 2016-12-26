@@ -1,0 +1,9 @@
+SubDir TOP src ;
+
+
+LINKFLAGS += -lm ;
+
+Main custom_demo : custom_demo.c libcelt.a ;
+
+
+SubInclude TOP src libcelt ;
