@@ -28,7 +28,7 @@ import avmem;
 import avfft;
 import opus_celt;
 import opus_silk;
-import iv.follin.resampler;
+import opus_resampler;
 
 static immutable uint64_t[9] ff_vorbis_channel_layouts = [
     AV_CH_LAYOUT_MONO,

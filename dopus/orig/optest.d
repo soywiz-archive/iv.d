@@ -28,6 +28,12 @@ void main (string[] args) {
   OggStream ogg;
   ogg.setup(VFile(args[1]));
 
+  ogg.PageInfo lastpage;
+  if (!ogg.findLastPage(lastpage)) assert(0, "can't find last ogg page");
+  conwriteln("last page seqnum: ", lastpage.seqnum);
+  conwriteln("last page granule: ", lastpage.granule);
+  conwriteln("last page filepos: ", lastpage.pgfpos);
+
   for (;;) {
     auto r = opus_header(&ctx, ogg);
     if (r < 0) assert(0);
@@ -41,10 +47,12 @@ void main (string[] args) {
   assert(c.streams[0].output_channels >= 1 && c.streams[0].output_channels <= 2);
   //assert(c.streams[0].output_channels == 2);
 
+  /+
   foreach (immutable chn; 0..c.streams[0].output_channels) {
     conwriteln("output buf for chan #", chn);
     //c.streams.out_[chn] = av_mallocz!float(Rate);
   }
+  +/
 
   float[][2] obuf;
   foreach (ref obb; obuf[]) obb.length = Rate;
@@ -54,6 +62,9 @@ void main (string[] args) {
   version(noplay) {} else alsaOpen(c.streams[0].output_channels);
   version(noplay) {} else scope(exit) alsaClose();
 
+  //ogg.seekPCM(lastpage.granule/4);
+
+  ulong lastgran = 0;
   for (;;) {
     auto r = opus_packet(&ctx, ogg);
     if (r < 0) break;
@@ -76,6 +87,8 @@ void main (string[] args) {
     if (gotfrptr) ++frames;
     //conwriteln("  ", c.streams.out_size);
     //conwriteln("dc=", r);
+    if (ogg.packetGranule && ogg.packetGranule != -1) lastgran = ogg.packetGranule;
+    conwritef!"\r%s:%02s / %s:%02s"((lastgran/48000)/60, (lastgran/48000)%60, (lastpage.granule/48000)/60, (lastpage.granule/48000)%60);
     version(noplay) {} else alsaWrite2B(eptr.ptr, r);
 
     ++packets;

@@ -41,7 +41,7 @@ import avfft;
 import opus;
 import opus_celt;
 import opus_silk;
-import iv.follin.resampler;
+import opus_resampler;
 
 
 enum AV_SAMPLE_FMT_FLTP = 8; //HACK
