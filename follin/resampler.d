@@ -282,6 +282,11 @@ public:
     aoutRate = outRate;
   }
 
+  @property uint getInRate () { return inRate; }
+  @property uint getOutRate () { return outRate; }
+
+  @property uint getChans () { return chanCount; }
+
   /** Get the current resampling ratio. This will be reduced to the least common denominator.
    *
    * Params:
@@ -348,7 +353,7 @@ public:
     uint outputSamplesUsed; // out value, in samples (i.e. multiplied by channel count)
   }
 
-  /** Resample an interleaved float array. The input and output buffers must *not* overlap.
+  /** Resample (an interleaved) float array. The input and output buffers must *not* overlap.
    * `data.dataIn` can be empty, but `data.dataOut` can't.
    * Function will return number of consumed samples (*not* *frames*!) in `data.inputSamplesUsed`,
    * and number of produced samples in `data.outputSamplesUsed`.
@@ -360,27 +365,63 @@ public:
    * Returns:
    *  0 or error code
    */
-  Error process (ref Data data) {
+  Error process(string mode="interleaved") (ref Data data) {
+    static assert(mode == "interleaved" || mode == "sequential");
+
     data.inputSamplesUsed = data.outputSamplesUsed = 0;
     if (!inited) return Error.BadState;
-    if (data.dataIn.length%chanCount || data.dataOut.length < 1 || data.dataOut.length%chanCount) return Error.BadData;
-    static if (data.dataIn.length.sizeof > 4) {
-      if (data.dataIn.length > uint.max || data.dataOut.length > uint.max) return Error.BadData;
-    }
 
-    inStride = outStride = chanCount;
+    if (data.dataIn.length%chanCount || data.dataOut.length < 1 || data.dataOut.length%chanCount) return Error.BadData;
+    if (data.dataIn.length > uint.max/4 || data.dataOut.length > uint.max/4) return Error.BadData;
+
+    static if (mode == "interleaved") {
+      inStride = outStride = chanCount;
+    } else {
+      inStride = outStride = 1;
+    }
+    uint iofs = 0, oofs = 0;
+    immutable uint idclen = cast(uint)(data.dataIn.length/chanCount);
+    immutable uint odclen = cast(uint)(data.dataOut.length/chanCount);
     foreach (immutable i; 0..chanCount) {
-      data.inputSamplesUsed = cast(uint)(data.dataIn.length/chanCount);
-      data.outputSamplesUsed = cast(uint)(data.dataOut.length/chanCount);
+      data.inputSamplesUsed = idclen;
+      data.outputSamplesUsed = odclen;
       if (data.dataIn.length) {
-        processOneChannel(i, data.dataIn.ptr+i, &data.inputSamplesUsed, data.dataOut.ptr+i, &data.outputSamplesUsed);
+        processOneChannel(i, data.dataIn.ptr+iofs, &data.inputSamplesUsed, data.dataOut.ptr+oofs, &data.outputSamplesUsed);
       } else {
-        processOneChannel(i, null, &data.inputSamplesUsed, data.dataOut.ptr+i, &data.outputSamplesUsed);
+        processOneChannel(i, null, &data.inputSamplesUsed, data.dataOut.ptr+oofs, &data.outputSamplesUsed);
+      }
+      static if (mode == "interleaved") {
+        ++iofs;
+        ++oofs;
+      } else {
+        iofs += idclen;
+        oofs += odclen;
       }
     }
     data.inputSamplesUsed *= chanCount;
     data.outputSamplesUsed *= chanCount;
     return Error.OK;
+  }
+
+
+  //HACK for libswresample
+  // return -1 or number of outframes
+  int swrconvert (float** outbuf, int outframes, const(float)**inbuf, int inframes) {
+    if (!inited || outframes < 1 || inframes < 0) return -1;
+    inStride = outStride = 1;
+    Data data;
+    foreach (immutable i; 0..chanCount) {
+      data.dataIn = (inframes ? inbuf[i][0..inframes] : null);
+      data.dataOut = (outframes ? outbuf[i][0..outframes] : null);
+      data.inputSamplesUsed = inframes;
+      data.outputSamplesUsed = outframes;
+      if (inframes > 0) {
+        processOneChannel(i, data.dataIn.ptr, &data.inputSamplesUsed, data.dataOut.ptr, &data.outputSamplesUsed);
+      } else {
+        processOneChannel(i, null, &data.inputSamplesUsed, data.dataOut.ptr, &data.outputSamplesUsed);
+      }
+    }
+    return data.outputSamplesUsed;
   }
 
   /// Reset a resampler so a new (unrelated) stream can be processed.
