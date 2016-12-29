@@ -610,17 +610,17 @@ struct AVPacket {
 }
 
 
+//__gshared Exception eobserr;
+//shared static this () { eobserr = new Exception("out of bits in stream"); }
+
 struct GetBitContext {
+nothrow @nogc:
 private:
   const(ubyte)* buffer;
   uint pos;
   uint bytestotal;
   ubyte curv;
   ubyte bleft;
-
-  __gshared Exception eobs;
-
-  shared static this () { eobs = new Exception("out of bits in stream"); }
 
 public:
   int init_get_bits8 (const(void)* buf, uint bytelen) nothrow @trusted @nogc {
@@ -641,7 +641,7 @@ public:
           curv = buffer[pos++];
         } else {
           curv = 0;
-          //throw eobs;
+          //throw eobserr;
         }
         bleft = 8;
       }
@@ -756,10 +756,6 @@ struct OpusRangeCoder {
     uint value;
     uint total_read_bits;
 }
-
-//typedef struct SilkContext SilkContext;
-
-//typedef struct CeltContext CeltContext;
 
 struct OpusPacket {
     int packet_size;                /**< packet size */
@@ -5446,6 +5442,7 @@ version(X86) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 public struct OpusResampler {
+nothrow @nogc:
 public:
   alias Quality = int;
   enum : uint {
@@ -7113,7 +7110,8 @@ private:
 
 private:
   VFile fl;
-  ubyte[] buf;
+  //ubyte[] buf;
+  ubyte[65536*2] buf;
   uint bufpos, bufused;
   uint serno, seqno;
   bool eofhit; // "end-of-stream" hit
@@ -7145,6 +7143,16 @@ public:
   uint packetLength;
 
 private:
+  void moveBuf () {
+    if (bufpos >= bufused) { bufpos = bufused = 0; return; }
+    if (bufpos > 0) {
+      import core.stdc.string : memmove;
+      memmove(buf.ptr, buf.ptr+bufpos, bufused-bufpos);
+      bufused -= bufpos;
+      bufpos = 0;
+    }
+  }
+
   bool ensureBytes (uint len) {
     import core.stdc.string : memmove;
     if (len > buf.length) assert(0, "internal OggStream error");
@@ -7233,7 +7241,8 @@ private:
         } else {
           bufpos = bufused = 0;
         }
-        uint rdx = cast(uint)buf.length-bufused;
+        assert(bufused <= MaxPageSize);
+        uint rdx = MaxPageSize-bufused;
         if (rdx > maxbytes) rdx = cast(uint)maxbytes;
         auto rd = fl.rawRead(buf[bufused..bufused+rdx]);
         if (rd.length == 0) break;
@@ -7329,7 +7338,7 @@ public:
   void setup (VFile afl) {
     scope(failure) close();
     close();
-    if (buf.length < MaxPageSize) buf.length = MaxPageSize;
+    //if (buf.length < MaxPageSize) buf.length = MaxPageSize;
     fl = afl;
     eofhit = false;
     if (!nextPage!true()) throw new Exception("can't find valid Ogg page");
@@ -7349,7 +7358,9 @@ public:
       return true;
     }
     enum ChunkSize = 65535;
-    if (buf.length-bufused < ChunkSize) buf.length = bufused+ChunkSize;
+    //if (buf.length-bufused < ChunkSize) buf.length = bufused+ChunkSize;
+    moveBuf();
+    assert(buf.length-bufused >= ChunkSize);
     auto lastfpos = fl.tell;
     scope(success) fl.seek(lastfpos);
     auto flsize = fl.size;
@@ -7548,7 +7559,7 @@ public:
 
     if (pos > lastpage.granule) pos = lastpage.granule;
 
-    if (buf.length < ChunkSize) buf.length = ChunkSize;
+    //if (buf.length < ChunkSize) buf.length = ChunkSize;
 
     long total = lastpage.granule;
 
