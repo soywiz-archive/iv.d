@@ -366,10 +366,8 @@ final:
         /* t1: setting /MREQ & /RD */
         /* t2: memory read */
         /* t3, t4: decode command, increment R */
-        if (contended) {
-          memContention(PC, 4, MemIO.Opcode, MemIOReq.Read);
-          origPC = PC; // in case memContention messed it
-        }
+        z80_contention(PC, 4, MemIO.Opcode, MemIOReq.Read);
+        origPC = PC; // in case memContention messed it
         if (evenM1 && (tstates&0x01)) ++tstates;
         opcode = memRead(PC, MemIO.Opcode);
         origPC = PC; // in case memRead messed it
@@ -663,7 +661,7 @@ final:
             case 3: tmpB = DE.e; break;
             case 4: tmpB = HL.h; break;
             case 5: tmpB = HL.l; break;
-            case 6: tmpB = z80_peekb_3ts(HL); if (contended) memContention(HL, 1, MemIO.Data, MemIOReq.Read); break;
+            case 6: tmpB = z80_peekb_3ts(HL); z80_contention(HL, 1, MemIO.Data, MemIOReq.Read); break;
             case 7: tmpB = AF.a; break;
           }
         }
@@ -1357,13 +1355,15 @@ private:
   // t2: memory read
   @gcc_inline ubyte z80_peekb_3ts (ushort addr) {
     pragma(inline, true);
-    if (contended) memContention(addr, 3, MemIO.Data, MemIOReq.Read);
+    //if (contended) memContention(addr, 3, MemIO.Data, MemIOReq.Read);
+    z80_contention(addr, 3, MemIO.Data, MemIOReq.Read);
     return memRead(addr, MemIO.Data);
   }
 
   @gcc_inline ubyte z80_peekb_3ts_args () {
     pragma(inline, true);
-    if (contended) memContention(PC, 3, MemIO.OpArg, MemIOReq.Read);
+    //if (contended) memContention(PC, 3, MemIO.OpArg, MemIOReq.Read);
+    z80_contention(PC, 3, MemIO.OpArg, MemIOReq.Read);
     return memRead(PC, MemIO.Data);
   }
 
@@ -1424,7 +1424,8 @@ private:
 
   @gcc_inline ubyte fetchOpcodeExt () {
     pragma(inline, true);
-    if (contended) memContention(PC, 4, MemIO.OpExt, MemIOReq.Read);
+    //if (contended) memContention(PC, 4, MemIO.OpExt, MemIOReq.Read);
+    z80_contention(PC, 4, MemIO.OpExt, MemIOReq.Read);
     ubyte opcode = memRead(PC, MemIO.OpExt);
     ++PC;
     R = ((R&0x7f)+1)|(R&0x80);
@@ -1600,9 +1601,11 @@ private:
     return b;
   }
 
+  static immutable ubyte[8] hct = [ 0, Z80Flags.H, Z80Flags.H, Z80Flags.H, 0, 0, 0, Z80Flags.H ];
+
   // ddvalue+value
   @gcc_inline ushort ADD_DD (ushort value, ushort ddvalue) {
-    static immutable ubyte[8] hct = [ 0, Z80Flags.H, Z80Flags.H, Z80Flags.H, 0, 0, 0, Z80Flags.H ];
+    pragma(inline, true);
     uint res = cast(uint)value+cast(uint)ddvalue;
     ubyte b = ((value&0x0800)>>11)|((ddvalue&0x0800)>>10)|((res&0x0800)>>9);
     MEMPTR = (ddvalue+1)&0xffff;
