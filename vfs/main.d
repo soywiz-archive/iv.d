@@ -614,13 +614,13 @@ public VFSDriverId vfsAddPak(string mode="normal", bool temp=false) (const(char)
 }
 
 
-/// `prefixpath`: this was be prepended to each name from archive.
+/// `prefixpath`: this was prepended to each name from archive.
 public VFSDriverId vfsFindPack (const(char)[] fname, const(char)[] prefixpath=null) {
   return vfsFindDriver(fname, prefixpath);
 }
 
 
-/// `prefixpath`: this was be prepended to each name from archive.
+///
 public bool vfsRemovePak (VFSDriverId id) {
   return vfsUnregister(id);
 }
