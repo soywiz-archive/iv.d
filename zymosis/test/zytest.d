@@ -49,14 +49,14 @@ class MyZ80 : ZymCPU {
   }
 
   override ubyte portRead (ushort port, PortIO pio) {
-    if (pio != PortIO.INTERNAL) {
+    if (pio != PortIO.Internal) {
       writefln("%5d PR %04x %02x", tstates, port, port>>8);
     }
     return port>>8;
   }
 
   override void portWrite (ushort port, ubyte value, PortIO pio) {
-    if (pio != PortIO.INTERNAL) {
+    if (pio != PortIO.Internal) {
       writefln("%5d PW %04x %02x", tstates, port, value);
     }
   }
@@ -132,11 +132,40 @@ private string read_test (ref File fl) {
     memory[f+2] = 0xbe;
     memory[f+3] = 0xef;
   }
+
+  int readint () {
+    char ch;
+    bool neg;
+    int res;
+    for (;;) {
+      if (fl.rawRead((&ch)[0..1]).length != 1) throw new Exception("out of data");
+      if (ch >= ' ') break;
+    }
+    if (ch == '-') {
+      neg = true;
+      if (fl.rawRead((&ch)[0..1]).length != 1) throw new Exception("out of data");
+    }
+    for (;;) {
+           if (ch >= '0' && ch <= '9') res = res*16+ch-'0';
+      else if (ch >= 'A' && ch <= 'F') res = res*16+ch-'A'+10;
+      else if (ch >= 'a' && ch <= 'f') res = res*16+ch-'a'+10;
+      else {
+        //{ import std.stdio; writeln("ch=", cast(ubyte)ch); }
+        if (ch > ' ') throw new Exception("invalid data");
+        break;
+      }
+      if (fl.rawRead((&ch)[0..1]).length == 0) break;
+    }
+    if (neg) res = -res;
+    return res;
+  }
+
   // read memory
   for (;;) {
     static import std.conv;
     int iv;
     ushort addr;
+    /*
     try {
       fl.readf(" %x ", &iv);
     } catch (std.conv.ConvException e) {
@@ -144,10 +173,13 @@ private string read_test (ref File fl) {
       //writeln(" eaddr=", iv);
       break;
     }
+    */
+    iv = readint();
     //writeln("iv=", iv);
     if (iv < 0) break;
     addr = cast(ushort)iv;
     for (;;) {
+      /*
       try {
         fl.readf(" %x ", &iv);
       } catch (std.conv.ConvException e) {
@@ -155,6 +187,8 @@ private string read_test (ref File fl) {
         //writeln(" eiv=", iv);
         break;
       }
+      */
+      iv = readint();
       //writeln(" byte=", iv);
       if (iv < 0) break;
       memory[addr++] = cast(ubyte)iv;
