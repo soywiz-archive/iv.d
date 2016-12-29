@@ -805,7 +805,7 @@ struct OpusStreamContext {
     int    out_dummy_allocated_size;
 
     //SwrContext *swr;
-    SpeexResampler flr;
+    OpusResampler flr;
     AVAudioFifo *celt_delay;
     int silk_samplerate;
     /* number of samples we still want to get from the resampler */
@@ -5445,7 +5445,7 @@ version(X86) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct SpeexResampler {
+public struct OpusResampler {
 public:
   alias Quality = int;
   enum : uint {
@@ -5466,7 +5466,7 @@ public:
 
 private:
 nothrow @trusted @nogc:
-  alias ResamplerFn = int function (ref SpeexResampler st, uint chanIdx, const(float)* indata, uint *indataLen, float *outdata, uint *outdataLen);
+  alias ResamplerFn = int function (ref OpusResampler st, uint chanIdx, const(float)* indata, uint *indataLen, float *outdata, uint *outdataLen);
 
 private:
   uint inRate;
@@ -5568,7 +5568,7 @@ public:
 
     deinit();
     if (aquality < 0) aquality = 0;
-    if (aquality > SpeexResampler.Best) aquality = SpeexResampler.Best;
+    if (aquality > OpusResampler.Best) aquality = OpusResampler.Best;
     if (chans < 1 || chans > 16) return Error.BadArgument;
 
     started = false;
@@ -5673,7 +5673,7 @@ public:
    */
   Error setQuality (Quality aquality) {
     if (aquality < 0) aquality = 0;
-    if (aquality > SpeexResampler.Best) aquality = SpeexResampler.Best;
+    if (aquality > OpusResampler.Best) aquality = OpusResampler.Best;
     if (srQuality == aquality) return Error.OK;
     srQuality = aquality;
     return (inited ? updateFilter() : Error.OK);
@@ -6170,7 +6170,7 @@ void cubicCoef (in float frac, float* interp) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-int resamplerBasicDirect(T) (ref SpeexResampler st, uint chanIdx, const(float)* indata, uint* indataLen, float* outdata, uint* outdataLen)
+int resamplerBasicDirect(T) (ref OpusResampler st, uint chanIdx, const(float)* indata, uint* indataLen, float* outdata, uint* outdataLen)
 if (is(T == float) || is(T == double))
 {
   auto N = st.filterLen;
@@ -6282,7 +6282,7 @@ if (is(T == float) || is(T == double))
 }
 
 
-int resamplerBasicInterpolate(T) (ref SpeexResampler st, uint chanIdx, const(float)* indata, uint *indataLen, float *outdata, uint *outdataLen)
+int resamplerBasicInterpolate(T) (ref OpusResampler st, uint chanIdx, const(float)* indata, uint *indataLen, float *outdata, uint *outdataLen)
 if (is(T == float) || is(T == double))
 {
   immutable N = st.filterLen;
