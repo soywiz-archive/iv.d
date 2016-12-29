@@ -14,8 +14,11 @@ void main (string[] args) {
   OpusFile of = opusOpen(VFile(args[1]));
   scope(exit) opusClose(of);
 
+  conwriteln("vendor: [", of.vendor, "]");
   conwriteln("channels: ", of.channels);
   conwritefln!"duration: %s:%02s"(of.duration/1000/60, of.duration/1000%60);
+  conwriteln("comment count: ", of.commentCount);
+  foreach (immutable cidx; 0..of.commentCount) conwriteln("  #", cidx, ": [", of.comment(cidx), "]");
 
   version(noplay) {} else alsaOpen(of.channels);
   version(noplay) {} else scope(exit) alsaClose();

@@ -7916,6 +7916,8 @@ import iv.vfs;
 struct OpusFileCtx {
 private:
   AVCtx ctx;
+  ubyte* commbuf;
+  uint cblen;
   OpusContext c;
   OggStream ogg;
   OggStream.PageInfo lastpage;
@@ -7925,6 +7927,7 @@ private:
   ulong curpcm; // for page end; let's hope that nobody will create huge ogg pages
 
   void close () {
+    av_freep(&commbuf);
     av_freep(&ctx.extradata);
     opus_decode_close(&c);
     ogg.close();
@@ -7940,6 +7943,53 @@ public:
   // in samples, not multiplied by channel count
   @property long smpduration () const pure nothrow @safe @nogc { pragma(inline, true); return lastpage.granule; }
   @property long smpcurtime () const pure nothrow @safe @nogc { pragma(inline, true); return curpcm; }
+
+  @property const(char)[] vendor () const pure nothrow @trusted @nogc {
+    if (commbuf is null || cblen < 4) return null;
+    uint len = commbuf[0]|(commbuf[1]<<8)|(commbuf[2]<<16)|(commbuf[3]<<24);
+    if (len > cblen || cblen-len < 4) return null;
+    return cast(const(char)[])(commbuf[4..4+len]);
+  }
+
+  @property uint commentCount () const pure nothrow @trusted @nogc {
+    if (commbuf is null || cblen < 4) return 0;
+    uint len = commbuf[0]|(commbuf[1]<<8)|(commbuf[2]<<16)|(commbuf[3]<<24);
+    if (len > cblen || cblen-len < 4) return 0;
+    uint cpos = 4+len;
+    if (cpos >= cblen || cblen-cpos < 4) return 0;
+    uint count = commbuf[cpos+0]|(commbuf[cpos+1]<<8)|(commbuf[cpos+2]<<16)|(commbuf[cpos+3]<<24);
+    cpos += 4;
+    uint res = 0;
+    while (count > 0 && cpos+4 <= cblen) {
+      len = commbuf[cpos+0]|(commbuf[cpos+1]<<8)|(commbuf[cpos+2]<<16)|(commbuf[cpos+3]<<24);
+      cpos += 4;
+      if (cpos > cblen || cblen-cpos < len) break;
+      ++res;
+      cpos += len;
+      --count;
+    }
+    return res;
+  }
+
+  const(char)[] comment (uint cidx) const pure nothrow @trusted @nogc {
+    if (commbuf is null || cblen < 4) return null;
+    uint len = commbuf[0]|(commbuf[1]<<8)|(commbuf[2]<<16)|(commbuf[3]<<24);
+    if (len > cblen || cblen-len < 4) return null;
+    uint cpos = 4+len;
+    if (cpos >= cblen || cblen-cpos < 4) return null;
+    uint count = commbuf[cpos+0]|(commbuf[cpos+1]<<8)|(commbuf[cpos+2]<<16)|(commbuf[cpos+3]<<24);
+    cpos += 4;
+    while (count > 0 && cpos+4 <= cblen) {
+      len = commbuf[cpos+0]|(commbuf[cpos+1]<<8)|(commbuf[cpos+2]<<16)|(commbuf[cpos+3]<<24);
+      cpos += 4;
+      if (cpos > cblen || cblen-cpos < len) break;
+      if (cidx == 0) return cast(const(char)[])(commbuf[cpos..cpos+len]);
+      --cidx;
+      cpos += len;
+      --count;
+    }
+    return null;
+  }
 
   void seek (long newtime) {
     if (newtime < 0) newtime = 0;
@@ -7997,7 +8047,7 @@ public OpusFile opusOpen (VFile fl) {
   OpusFile of = av_mallocz!OpusFileCtx(1);
   if (of is null) throw new Exception("out of memory");
   *of = OpusFileCtx.init; // just in case
-  scope(failure) { av_freep(&of.ctx.extradata); av_free(of); }
+  scope(failure) { av_freep(&of.commbuf); av_freep(&of.ctx.extradata); av_free(of); }
 
   fl.seek(0);
   of.ogg.setup(fl);
@@ -8008,6 +8058,15 @@ public OpusFile opusOpen (VFile fl) {
   for (;;) {
     auto r = opus_header(&of.ctx, of.ogg);
     if (r < 0) throw new Exception("can't find opus header");
+    // current packet is tags?
+    if (of.ogg.packetLength >= 12 && of.commbuf is null && cast(const(char)[])(of.ogg.packetData[0..8]) == "OpusTags") {
+      of.commbuf = av_mallocz!ubyte(of.ogg.packetLength-8);
+      if (of.commbuf !is null) {
+        import core.stdc.string : memcpy;
+        memcpy(of.commbuf, of.ogg.packetData.ptr+8, of.ogg.packetLength-8);
+        of.cblen = of.ogg.packetLength-8;
+      }
+    }
     if (!of.ogg.loadPacket()) throw new Exception("invalid opus file");
     if (r == 1) break;
   }
