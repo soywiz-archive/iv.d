@@ -5445,7 +5445,7 @@ version(X86) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public struct SpeexResampler {
+struct SpeexResampler {
 public:
   alias Quality = int;
   enum : uint {
@@ -6709,7 +6709,7 @@ finish:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public int opus_decode_packet (/*AVCtx* avctx,*/ OpusContext* c, AVFrame* frame, int* got_frame_ptr, AVPacket* avpkt) {
+int opus_decode_packet (/*AVCtx* avctx,*/ OpusContext* c, AVFrame* frame, int* got_frame_ptr, AVPacket* avpkt) {
   import core.stdc.string : memcpy, memset;
   //AVFrame *frame      = data;
   const(uint8_t)*buf  = avpkt.data;
@@ -6850,7 +6850,7 @@ public int opus_decode_packet (/*AVCtx* avctx,*/ OpusContext* c, AVFrame* frame,
 }
 
 
-public void opus_decode_flush (OpusContext* c) {
+void opus_decode_flush (OpusContext* c) {
   import core.stdc.string : memset;
   for (int i = 0; i < c.nb_streams; i++) {
     OpusStreamContext *s = &c.streams[i];
@@ -6869,7 +6869,7 @@ public void opus_decode_flush (OpusContext* c) {
   }
 }
 
-public int opus_decode_close (OpusContext* c) {
+int opus_decode_close (OpusContext* c) {
   int i;
 
   for (i = 0; i < c.nb_streams; i++) {
@@ -6904,7 +6904,7 @@ public int opus_decode_close (OpusContext* c) {
   return 0;
 }
 
-public int opus_decode_init (AVCtx* avctx, OpusContext* c) {
+int opus_decode_init (AVCtx* avctx, OpusContext* c) {
   int ret, i, j;
 
   avctx.sample_fmt  = AV_SAMPLE_FMT_FLTP;
@@ -7011,7 +7011,7 @@ fail:
 }
 
 
-public int opus_decode_init_ll (OpusContext* c) {
+int opus_decode_init_ll (OpusContext* c) {
   int channels = 2;
   c.gain_i = 0;
   c.gain = 0;
@@ -7092,7 +7092,7 @@ public int opus_decode_init_ll (OpusContext* c) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public struct OggStream {
+struct OggStream {
 private:
   enum MaxPageSize = 65025+Offsets.Lacing+255;
   //pragma(msg, MaxPageSize); // 65307 bytes
@@ -7923,6 +7923,10 @@ public:
   // all timing is in milliseconds
   @property long duration () const pure nothrow @safe @nogc { pragma(inline, true); return (lastpage.granule/48); }
   @property long curtime () const pure nothrow @safe @nogc { pragma(inline, true); return (curpcm/48); }
+
+  // in samples, not multiplied by channel count
+  @property long smpduration () const pure nothrow @safe @nogc { pragma(inline, true); return lastpage.granule; }
+  @property long smpcurtime () const pure nothrow @safe @nogc { pragma(inline, true); return curpcm; }
 
   void seek (long newtime) {
     if (newtime < 0) newtime = 0;

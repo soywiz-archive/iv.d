@@ -42,6 +42,7 @@ import iv.drflac;
 import iv.minimp3;
 import iv.mp3scan;
 import iv.xogg.tremor;
+import iv.dopus;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -191,6 +192,7 @@ public:
       case 'f': return (ff !is null);
       case 'v': return (vi !is null);
       case 'm': return mp3.valid;
+      case 'o': return (of !is null);
       default:
     }
     return false;
@@ -236,6 +238,27 @@ public:
         if (ret <= 0) return 0; // error or eof
         samplesread += ret/2; // number of samples read
         return ret/2/channels; // number of frames read
+      case 'o':
+        auto dptr = cast(short*)buf;
+        if (of is null) return 0;
+        int total = 0;
+        while (count > 0) {
+          while (count > 0 && smpbufpos < smpbufused) {
+            *dptr++ = smpbuf.ptr[smpbufpos++];
+            if (channels == 2) *dptr++ = smpbuf.ptr[smpbufpos++];
+            --count;
+            ++total;
+            samplesread += channels;
+          }
+          if (count == 0) break;
+          auto rd = of.readFrame();
+          if (rd.length == 0) break;
+          if (rd.length > smpbuf.length) smpbuf.length = rd.length;
+          smpbuf[0..rd.length] = rd[];
+          smpbufpos = 0;
+          smpbufused = cast(uint)rd.length;
+        }
+        return total;
       case 'm':
         // yes, i know that frames are not independend, and i should actually
         // seek to a frame with a correct sync word. meh.
@@ -285,10 +308,15 @@ public:
         if (vi is null) return 0;
         if (ov_pcm_seek(&vf, snum/channels) == 0) {
           samplesread = ov_pcm_tell(&vf)*channels;
-          return samplesread;
+          return samplesread/channels;
         }
         ov_pcm_seek(&vf, 0);
         return 0;
+      case 'o':
+        if (of is null) return 0;
+        of.seek(msecs);
+        samplesread = of.smpcurtime*channels;
+        return samplesread/channels;
       case 'm':
         if (!mp3.valid) return 0;
         mp3smpused = 0;
@@ -334,6 +362,9 @@ private:
   uint mp3smpused;
   OggVorbis_File vf;
   vorbis_info* vi;
+  OpusFile of;
+  short[] smpbuf;
+  uint smpbufpos, smpbufused;
 
   int reader (void[] buf) {
     try {
@@ -404,7 +435,7 @@ public:
       // vorbis
       try {
         if (ov_fopen(fl, &sio.vf) == 0) {
-          scope(failure) scope(exit) ov_clear(&sio.vf);
+          scope(failure) ov_clear(&sio.vf);
           sio.type = "vorbis";
           sio.fl = fl;
           sio.vi = ov_info(&sio.vf, -1);
@@ -425,6 +456,24 @@ public:
           writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
           return sio;
         }
+      } catch (Exception) {}
+      fl.seek(fpos);
+      // opus
+      try {
+        OpusFile of = opusOpen(fl);
+        scope(failure) opusClose(of);
+        if (of.rate < 1024 || of.rate > 96000) throw new Exception("fucked opus");
+        if (of.channels < 1 || of.channels > 2) throw new Exception("fucked opus");
+        sio.of = of;
+        sio.type = "opus";
+        sio.fl = fl;
+        sio.rate = of.rate;
+        sio.channels = of.channels;
+        writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (opus)");
+        sio.samplestotal = of.smpduration*sio.channels;
+        //TODO: comments
+        writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+        return sio;
       } catch (Exception) {}
       fl.seek(fpos);
       // mp3
