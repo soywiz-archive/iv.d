@@ -1313,7 +1313,7 @@ static int channel_reorder_unknown(int nb_channels, int channel_idx)
 }
 
 
-int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s) {
+int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
   static immutable ubyte[2] default_channel_map = [ 0, 1 ];
 
   int function (int, int) nothrow @nogc channel_reorder = &channel_reorder_unknown;
@@ -1354,7 +1354,11 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s) {
     return AVERROR_INVALIDDATA;
   }
 
-  s.gain_i = AV_RL16(extradata + 16);
+  int ii = AV_RL16(extradata + 16);
+  ii += cmtgain;
+  if (ii < short.min) ii = short.min; else if (ii > short.max) ii = short.max;
+
+  s.gain_i = cast(short)ii;
   if (s.gain_i) s.gain = ff_exp10(s.gain_i / (20.0 * 256));
 
   map_type = extradata[18];
@@ -6901,7 +6905,7 @@ int opus_decode_close (OpusContext* c) {
   return 0;
 }
 
-int opus_decode_init (AVCtx* avctx, OpusContext* c) {
+int opus_decode_init (AVCtx* avctx, OpusContext* c, short cmtgain) {
   int ret, i, j;
 
   avctx.sample_fmt  = AV_SAMPLE_FMT_FLTP;
@@ -6911,7 +6915,7 @@ int opus_decode_init (AVCtx* avctx, OpusContext* c) {
   //if (!c.fdsp) return AVERROR(ENOMEM);
 
   // find out the channel configuration
-  ret = ff_opus_parse_extradata(avctx, c);
+  ret = ff_opus_parse_extradata(avctx, c, cmtgain);
   if (ret < 0) {
     av_freep(&c.channel_maps);
     //av_freep(&c.fdsp);
@@ -7991,6 +7995,56 @@ public:
     return null;
   }
 
+  private short getGain () const pure nothrow @trusted @nogc {
+    if (commbuf is null || cblen < 4) return 0;
+    uint len = commbuf[0]|(commbuf[1]<<8)|(commbuf[2]<<16)|(commbuf[3]<<24);
+    if (len > cblen || cblen-len < 4) return 0;
+    uint cpos = 4+len;
+    if (cpos >= cblen || cblen-cpos < 4) return 0;
+    uint count = commbuf[cpos+0]|(commbuf[cpos+1]<<8)|(commbuf[cpos+2]<<16)|(commbuf[cpos+3]<<24);
+    cpos += 4;
+    while (count > 0 && cpos+4 <= cblen) {
+      len = commbuf[cpos+0]|(commbuf[cpos+1]<<8)|(commbuf[cpos+2]<<16)|(commbuf[cpos+3]<<24);
+      cpos += 4;
+      if (cpos > cblen || cblen-cpos < len) break;
+      {
+        auto cmt = cast(const(char)[])(commbuf[cpos..cpos+len]);
+        enum GainName = "R128_TRACK_GAIN="; //-573
+        while (cmt.length && cmt.ptr[0] <= ' ') cmt = cmt[1..$];
+        while (cmt.length && cmt[$-1] <= ' ') cmt = cmt[0..$-1];
+        if (cmt.length > GainName.length) {
+          bool ok = true;
+          foreach (immutable xidx, char ch; cmt[0..GainName.length]) {
+            if (ch >= 'a' && ch <= 'z') ch -= 32;
+            if (ch != GainName[xidx]) { ok = false; break; }
+          }
+          if (ok) {
+            bool neg = false;
+            int v = 0;
+            cmt = cmt[GainName.length..$];
+                 if (cmt.length && cmt[0] == '-') { neg = true; cmt = cmt[1..$]; }
+            else if (cmt.length && cmt[0] == '+') cmt = cmt[1..$];
+            if (cmt.length == 0) v = -1;
+            while (cmt.length) {
+              int c = cmt.ptr[0];
+              cmt = cmt[1..$];
+              if (c < '0' || c > '9') { v = -1; break; }
+              v = v*10+c-'0';
+              if ((neg && v > 32768) || (!neg && v > 32767)) { v = -1; break; }
+            }
+            if (v >= 0) {
+              if (neg) v = -v;
+              return cast(short)v;
+            }
+          }
+        }
+      }
+      cpos += len;
+      --count;
+    }
+    return 0;
+  }
+
   void seek (long newtime) {
     if (newtime < 0) newtime = 0;
     if (newtime >= duration) newtime = duration;
@@ -8075,7 +8129,7 @@ public OpusFile opusOpen (VFile fl) {
   if (of.lastpage.granule < of.ctx.preskip) throw new Exception("invalid ending granule");
   of.lastpage.granule -= of.ctx.preskip;
 
-  if (opus_decode_init(&of.ctx, &of.c) < 0) throw new Exception("can't init opus decoder");
+  if (opus_decode_init(&of.ctx, &of.c, of.getGain) < 0) throw new Exception("can't init opus decoder");
   scope(failure) opus_decode_close(&of.c);
 
   if (of.c.nb_streams != 1) throw new Exception("only mono and stereo opus streams are supported");

@@ -471,6 +471,8 @@ public:
         sio.channels = of.channels;
         writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (opus)");
         sio.samplestotal = of.smpduration*sio.channels;
+        if (of.vendor.length) writeln("Encoded by: ", of.vendor.recodeToKOI8);
+        foreach (immutable cidx; 0..of.commentCount) writeln("  ", of.comment(cidx).recodeToKOI8);
         //TODO: comments
         writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
         return sio;
