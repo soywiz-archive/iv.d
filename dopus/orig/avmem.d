@@ -301,6 +301,7 @@ struct AVCtx {
   int delay;
   ulong channel_layout;
   void* priv;
+  int preskip;
 }
 
 
@@ -357,101 +358,6 @@ struct AVPacket {
   long duration;
 
   long pos;                            ///< byte position in stream, -1 if unknown
-}
-
-
-/+
-struct GetBitContext {
-private:
-  const(ubyte)* buffer;
-  uint bytesleft;
-  ubyte mask;
-
-  __gshared Exception eobs;
-
-  shared static this () { eobs = new Exception("out of bits in stream"); }
-
-public:
-  int init_get_bits8 (const(void)* buf, uint bytelen) nothrow @trusted @nogc {
-    if (bytelen >= int.max/16) assert(0, "too big");
-    buffer = cast(const(ubyte)*)buf;
-    bytesleft = bytelen;
-    mask = (bytelen ? 0x80 : 0x00);
-    return 0;
-  }
-
-  T get_bits(T=uint) (uint n) @trusted if (__traits(isIntegral, T)) {
-    if (n == 0 || n > T.sizeof*8) assert(0, "too many bits requested");
-    static if (T.sizeof > 4) {
-      ulong xmask = 1UL<(n-1);
-      ulong v = 0;
-    } else {
-      uint xmask = 1UL<(n-1);
-      uint v = 0;
-    }
-    //FIXME: optimize this!
-    while (xmask != 0) {
-      if (mask == 0) {
-        if (bytesleft == 0) throw eobs;
-        ++buffer;
-        mask = 0x80;
-      }
-      if (*buffer&mask) v |= xmask;
-      mask >>= 1;
-      xmask >>= 1;
-    }
-    return cast(T)v;
-  }
-}
-+/
-
-
-struct GetBitContext00 {
-private:
-  const(ubyte)* buffer;
-  uint pos;
-  uint bytestotal;
-  uint curv;
-  ubyte bleft;
-
-  __gshared Exception eobs;
-
-  shared static this () { eobs = new Exception("out of bits in stream"); }
-
-public:
-  int init_get_bits8 (const(void)* buf, uint bytelen) nothrow @trusted @nogc {
-    if (bytelen >= int.max/16) assert(0, "too big");
-    buffer = cast(const(ubyte)*)buf;
-    bytestotal = bytelen;
-    bleft = 0;
-    pos = 0;
-    return 0;
-  }
-
-  private void ensureBits (uint count) {
-    while (bleft < count) {
-      if (pos >= bytestotal) {
-        //throw eobs;
-        //curv <<= 8;
-        bleft += 8;
-      } else {
-        //curv <<= 8;
-        //curv |= buffer[pos++];
-        curv |= buffer[pos++]<<bleft;
-        bleft += 8;
-      }
-    }
-  }
-
-  T get_bits(T=uint) (uint n) @trusted if (__traits(isIntegral, T)) {
-    if (n == 0 || n > 8) assert(0, "invalid number of bits requested");
-    ensureBits(n);
-    assert(n <= bleft);
-    uint res = curv&((1U<<(n-1))-1);
-    curv >>= n;
-    bleft -= n;
-    return res;
-  }
 }
 
 

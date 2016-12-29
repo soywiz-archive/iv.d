@@ -875,6 +875,7 @@ static int opus_header (AVCtx* avf, ref OggStream ogg) {
       //st.codecpar.channels   = ost.packetData[8];
 
       priv.pre_skip        = ogg.getMemInt!ushort(ogg.packetData.ptr+10);
+      avf.preskip = priv.pre_skip;
       //!!!st.codecpar.initial_padding = priv.pre_skip;
       /*orig_sample_rate    = AV_RL32(packet + 12);*/
       /*gain                = AV_RL16(packet + 16);*/

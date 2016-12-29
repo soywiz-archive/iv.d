@@ -30,6 +30,7 @@ void main (string[] args) {
 
   ogg.PageInfo lastpage;
   if (!ogg.findLastPage(lastpage)) assert(0, "can't find last ogg page");
+  lastpage.granule -= ctx.preskip;
   conwriteln("last page seqnum: ", lastpage.seqnum);
   conwriteln("last page granule: ", lastpage.granule);
   conwriteln("last page filepos: ", lastpage.pgfpos);
@@ -62,7 +63,8 @@ void main (string[] args) {
   version(noplay) {} else alsaOpen(c.streams[0].output_channels);
   version(noplay) {} else scope(exit) alsaClose();
 
-  //ogg.seekPCM(lastpage.granule/4);
+  //ogg.seekPCM(lastpage.granule/4+ctx.preskip);
+  //ogg.seekPCM(lastpage.granule/6+ctx.preskip);
 
   ulong lastgran = 0;
   for (;;) {
@@ -87,7 +89,7 @@ void main (string[] args) {
     if (gotfrptr) ++frames;
     //conwriteln("  ", c.streams.out_size);
     //conwriteln("dc=", r);
-    if (ogg.packetGranule && ogg.packetGranule != -1) lastgran = ogg.packetGranule;
+    if (ogg.packetGranule && ogg.packetGranule != -1) lastgran = ogg.packetGranule-ctx.preskip;
     conwritef!"\r%s:%02s / %s:%02s"((lastgran/48000)/60, (lastgran/48000)%60, (lastpage.granule/48000)/60, (lastpage.granule/48000)%60);
     version(noplay) {} else alsaWrite2B(eptr.ptr, r);
 
