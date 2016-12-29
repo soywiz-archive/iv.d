@@ -7255,7 +7255,7 @@ private:
         maxbytes -= cast(uint)rd.length;
       }
       //conwriteln("1: bufpos=", bufpos, "; bufused=", bufused, "; bleft=", bufused-bufpos);
-      if (bufpos >= bufused || bufused < 4) { eofhit = true; return false; }
+      if (bufpos >= bufused || bufused-bufpos < 4) { eofhit = true; return false; }
       uint bleft = bufused-bufpos;
       auto b = (cast(const(ubyte)*)buf.ptr)+bufpos;
       while (bleft >= 4) {
@@ -7511,6 +7511,7 @@ public:
   // return PCM (granule) position for loaded packet
   public long seekPCM (long pos) {
     enum ChunkSize = 65535;
+    eofhit = false;
 
     // rescales the number x from the range of [0,from] to [0,to] x is in the range [0,from] from, to are in the range [1, 1<<62-1]
     static long rescale64 (long x, long from, long to) {
@@ -7541,15 +7542,16 @@ public:
       pglength = 0;
       curseg = 0;
       fl.seek(firstpagepos);
+      eofhit = false;
       if (!nextPage!true()) throw new Exception("can't find valid Ogg page");
       if (pgcont || !pgbos) throw new Exception("invalid starting Ogg page");
       for (;;) {
         if (pggranule && pggranule != -1) {
           curseg = 0;
-          for (int p = 0; p < segments; ++p) if (seglen[p] < 255) curseg = p+1;
-          auto rtg = pggranule;
+          //for (int p = 0; p < segments; ++p) if (seglen[p] < 255) curseg = p+1;
+          //auto rtg = pggranule;
           if (!loadPacket()) throw new Exception("can't load Ogg packet");
-          return rtg;
+          return 0;
         }
         if (!nextPage!false()) throw new Exception("can't find valid Ogg page");
       }
@@ -7582,6 +7584,7 @@ public:
       pglength = 0;
       curseg = 0;
       fl.seek(begin);
+      eofhit = false;
       if (!nextPage!false()) return false;
       if (!loadPacket()) return false;
       return true;
@@ -7604,6 +7607,7 @@ public:
       pglength = 0;
       curseg = 0;
       fl.seek(bisect);
+      eofhit = false;
 
       // read loop within the bisection loop
       while (begin < end) {
@@ -7667,6 +7671,7 @@ public:
                 pglength = 0;
                 curseg = 0;
                 fl.seek(bisect);
+                eofhit = false;
               } else {
                 // normal bisection
                 end = bisect;
@@ -7684,7 +7689,9 @@ public:
       bufused = bufpos = 0;
       pglength = 0;
       curseg = 0;
+      //{ import core.stdc.stdio; printf("fpp=%lld\n", firstpagepos); }
       fl.seek(firstpagepos);
+      eofhit = false;
       if (!nextPage!true()) throw new Exception("can't find valid Ogg page");
       if (pgcont || !pgbos) throw new Exception("invalid starting Ogg page");
       for (;;) {
@@ -7695,6 +7702,7 @@ public:
         }
         if (!nextPage!false()) throw new Exception("can't find valid Ogg page");
       }
+      return 0;
     }
 
     // bisection found our page. seek to it, update pcm offset; easier case than raw_seek, don't keep packets preceding granulepos
@@ -8048,9 +8056,23 @@ public:
   void seek (long newtime) {
     if (newtime < 0) newtime = 0;
     if (newtime >= duration) newtime = duration;
-    auto np = ogg.seekPCM(newtime*48+ctx.preskip);
-    if (np < ctx.preskip) throw new Exception("wtf?!");
+    if (newtime >= duration) {
+      ogg.bufused = ogg.bufpos = 0;
+      ogg.pglength = 0;
+      ogg.curseg = 0;
+      ogg.fl.seek(ogg.lastpage.pgfpos);
+      ogg.eofhit = false;
+      if (!ogg.nextPage!false()) throw new Exception("can't find valid Ogg page");
+      ogg.curseg = 0;
+      for (int p = 0; p < ogg.segments; ++p) if (ogg.seglen[p] < 255) ogg.curseg = p+1;
+      curpcm = ogg.pggranule;
+      wantNewPacket = true;
+      return;
+    }
+    long np = ogg.seekPCM(newtime ? newtime*48+ctx.preskip : 0);
+    if (np < ctx.preskip) np = ctx.preskip; //throw new Exception("wtf?!");
     curpcm = np-ctx.preskip;
+    wantNewPacket = false;
   }
 
   // read and decode one sound frame; return samples or null
