@@ -8074,10 +8074,19 @@ public:
       wantNewPacket = true;
       return;
     }
-    long np = ogg.seekPCM(newtime ? newtime*48+ctx.preskip : 0);
-    if (np < ctx.preskip) np = ctx.preskip; //throw new Exception("wtf?!");
-    curpcm = np-ctx.preskip;
+    long np = ogg.seekPCM(newtime*48 < ctx.preskip ? 0 : newtime*48-ctx.preskip);
     wantNewPacket = false;
+    if (np < ctx.preskip) {
+      curpcm = 0;
+    } else {
+      curpcm = np-ctx.preskip;
+      // skip 80 msecs, as per specs (buggy, but...)
+      auto oldpcm = curpcm;
+      while (curpcm-oldpcm < 3840) {
+        if (readFrame().length == 0) break;
+        //{ import core.stdc.stdio; printf("frdiff=%lld\n", curpcm-oldpcm); }
+      }
+    }
   }
 
   // read and decode one sound frame; return samples or null
