@@ -23,7 +23,7 @@ void main (string[] args) {
   version(noplay) {} else alsaOpen(of.channels);
   version(noplay) {} else scope(exit) alsaClose();
 
-  of.seek(25000);
+  //of.seek(25000);
 
   long lasttime = -1;
   for (;;) {

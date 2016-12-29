@@ -7375,9 +7375,12 @@ public:
     if (flpos < firstpagepos) flpos = firstpagepos;
     for (;;) {
       fl.seek(flpos);
-      fl.rawReadExact(buf[bufused..bufused+ChunkSize]);
-      uint pos = bufused+ChunkSize-27;
-      uint pend = bufused+ChunkSize;
+      uint bulen = (flpos+ChunkSize <= flsize ? ChunkSize : cast(uint)(flsize-flpos));
+      if (bulen < 27) break;
+      //{ import core.stdc.stdio; printf("bulen=%u\n", bulen); }
+      fl.rawReadExact(buf[bufused..bufused+bulen]);
+      uint pos = bufused+bulen-27;
+      uint pend = bufused+bulen;
       for (;;) {
         if (buf.ptr[pos] == 'O' && buf.ptr[pos+1] == 'g' && buf.ptr[pos+2] == 'g' && buf.ptr[pos+3] == 'S') {
           ulong gran = getMemInt!ulong(buf.ptr+pos+Offsets.Granulepos);
@@ -8061,8 +8064,10 @@ public:
       ogg.pglength = 0;
       ogg.curseg = 0;
       ogg.fl.seek(ogg.lastpage.pgfpos);
+      //{ import core.stdc.stdio; printf("lpofs=0x%08llx\n", ogg.lastpage.pgfpos); }
       ogg.eofhit = false;
-      if (!ogg.nextPage!false()) throw new Exception("can't find valid Ogg page");
+      if (!ogg.nextPage!(false, true)()) throw new Exception("can't find valid Ogg page");
+      ogg.seqno = ogg.pgseqno;
       ogg.curseg = 0;
       for (int p = 0; p < ogg.segments; ++p) if (ogg.seglen[p] < 255) ogg.curseg = p+1;
       curpcm = ogg.pggranule;
