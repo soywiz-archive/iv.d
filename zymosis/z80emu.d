@@ -289,18 +289,8 @@ public:
     reset();
   }
 
-// ////////////////////////////////////////////////////////////////////////// //
-final:
-  @property ubyte IM () const @safe pure nothrow @nogc { return mIM; } /** get Interrupt Mode (0-2) */
-  @property void IM (in ubyte v) @safe nothrow @nogc { mIM = (v > 2 ? 0 : v); } /** set Interrupt Mode (0-2) */
-
-  enum IncRMixin = `R = ((R&0x7f)+1)|(R&0x80);`;
-
-  /** increment R register. note that Z80 never changes the high bit of R. */
-  @gcc_inline void incR() () @safe nothrow @nogc { pragma(inline, true); mixin(IncRMixin); }
-
   /** Reset emulated CPU. Will NOT reset tstate counter. */
-  void reset () @safe nothrow @nogc {
+  void reset () {
     PC = prevPC = origPC = 0;
     BC = DE = HL = AF = SP = IX = IY = 0;
     BCx = DEx = HLx = AFx = 0;
@@ -314,6 +304,16 @@ final:
     bpHit = false;
     refetch = false;
   }
+
+// ////////////////////////////////////////////////////////////////////////// //
+final:
+  @property ubyte IM () const pure nothrow @safe @nogc { pragma(inline, true); return mIM; } /** get Interrupt Mode (0-2) */
+  @property void IM (in ubyte v) pure nothrow @safe @nogc { pragma(inline, true); mIM = (v > 2 ? 0 : v); } /** set Interrupt Mode (0-2) */
+
+  enum IncRMixin = `R = ((R&0x7f)+1)|(R&0x80);`;
+
+  /** increment R register. note that Z80 never changes the high bit of R. */
+  @gcc_inline void incR() () nothrow @safe @nogc { pragma(inline, true); mixin(IncRMixin); }
 
   /**
    * Execute emulated CPU instructions.
