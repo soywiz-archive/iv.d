@@ -2550,6 +2550,14 @@ public T conGetVar(T=ConString) (ConString s) {
   return T.init;
 }
 
+/// ditto
+public T conGetVar(T=ConString) (ConVarBase v) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  if (v !is null) return v.value!T;
+  return T.init;
+}
+
 
 /// set console variable value (thread-safe)
 public void conSetVar(T) (ConString s, T val) {
@@ -2558,6 +2566,13 @@ public void conSetVar(T) (ConString s, T val) {
   if (auto cc = s in cmdlist) {
     if (auto cv = cast(ConVarBase)(*cc)) cv.value = val;
   }
+}
+
+/// ditto
+public void conSetVar(T) (ConVarBase v, T val) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  if (v !is null) v.value = val;
 }
 
 
@@ -2570,6 +2585,13 @@ public void conSealVar (ConString s) {
   }
 }
 
+/// ditto
+public void conSealVar (ConVarBase v) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  if (v !is null) v.attrReadOnly = true;
+}
+
 
 /// "seal" console variable (i.e. make it r/w) (thread-safe)
 public void conUnsealVar (ConString s) {
@@ -2578,6 +2600,13 @@ public void conUnsealVar (ConString s) {
   if (auto cc = s in cmdlist) {
     if (auto cv = cast(ConVarBase)(*cc)) cv.attrReadOnly = false;
   }
+}
+
+/// ditto
+public void conUnsealVar (ConVarBase v) {
+  consoleLock();
+  scope(exit) consoleUnlock();
+  if (v !is null) v.attrReadOnly = false;
 }
 
 
@@ -3526,12 +3555,16 @@ public void concmd (ConString cmd) {
 
 /// add console command to execution queue (thread-safe)
 /// this understands '%s' and '%q' (quoted string, but without surroinding quotes)
+/// it also understands '$var', '${var}', '${var:ifabsent}', '${var?ifempty}'
+/// var substitution in quotes will be automatically quoted
+/// string substitution in quotes will be automatically quoted
 public void concmdf(string fmt, A...) (A args) {
   consoleLock();
   scope(exit) consoleUnlock();
 
   usize pos = 0;
   bool ensureCmd = true;
+  char inQ = 0;
 
   void puts(bool quote=false) (const(char)[] s...) {
     if (s.length) {
@@ -3630,10 +3663,77 @@ public void concmdf(string fmt, A...) (A args) {
     }
   }
 
+  static bool isGoodIdChar (char ch) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return
+      (ch >= '0' && ch <= '9') ||
+      (ch >= 'A' && ch <= 'Z') ||
+      (ch >= 'a' && ch <= 'z') ||
+      ch == '_';
+  }
+
   void processUntilFSp () {
     while (pos < fmt.length) {
       usize epos = pos;
-      while (epos < fmt.length && fmt[epos] != '%') ++epos;
+      while (epos < fmt.length && fmt[epos] != '%') {
+        if (fmt[epos] == '\\' && fmt.length-epos > 1 /*&& (fmt[epos+1] == '"' || fmt[epos+1] == '$')*/) {
+          puts(fmt[pos..epos]);
+          puts(fmt[epos+1]);
+          pos = (epos += 2);
+          continue;
+        }
+        if (inQ && fmt[epos] == inQ) inQ = 0;
+        if (fmt[epos] == '"') {
+          inQ = '"';
+        } else if (fmt[epos] == '$') {
+          puts(fmt[pos..epos]);
+          pos = epos;
+          if (fmt.length-epos > 0 && fmt[epos+1] != '{') {
+            // simple
+            ++epos;
+            while (epos < fmt.length && isGoodIdChar(fmt[epos])) ++epos;
+            if (epos-pos > 1) {
+              if (auto cc = fmt[pos+1..epos] in cmdlist) {
+                if (auto cv = cast(ConVarBase)(*cc)) {
+                  if (inQ) puts!true(cv.strval); else puts!false(cv.strval);
+                  pos = epos;
+                  continue;
+                }
+              }
+            }
+            // go on
+          } else {
+            // complex
+            epos += 2;
+            //FIXME: allow escaping of '}'
+            while (epos < fmt.length && fmt[epos] != '}') ++epos;
+            if (epos >= fmt.length) { epos = pos+1; continue; } // no '}'
+            pos += 2;
+            usize cpos = pos;
+            while (cpos < epos && fmt[cpos] != ':' && fmt[cpos] != '?') ++cpos;
+            if (auto cc = fmt[pos..cpos] in cmdlist) {
+              if (auto cv = cast(ConVarBase)(*cc)) {
+                auto sv = cv.strval;
+                // process replacement value for empty strings
+                if (cpos < epos && fmt[cpos] == '?' && sv.length == 0) {
+                  if (inQ) puts!true(fmt[cpos+1..epos]); else puts!false(fmt[cpos+1..epos]);
+                } else {
+                  if (inQ) puts!true(sv); else puts!false(sv);
+                }
+                pos = epos+1;
+                continue;
+              }
+            }
+            // either no such command, or it's not a var
+            if (cpos < epos && (fmt[cpos] == '?' || fmt[cpos] == ':')) {
+              if (inQ) puts!true(fmt[cpos+1..epos]); else puts!false(fmt[cpos+1..epos]);
+            }
+            pos = epos+1;
+            continue;
+          }
+        }
+        ++epos;
+      }
       if (epos > pos) {
         puts(fmt[pos..epos]);
         pos = epos;
@@ -3684,6 +3784,7 @@ public void concmdf(string fmt, A...) (A args) {
         }
         break;
       case 's':
+        if (inQ) goto case 'q';
         static if (is(at == char)) {
           puts(args[argnum]);
         } else static if (is(at == wchar) || is(at == dchar)) {
@@ -3723,6 +3824,8 @@ public void concmdf(string fmt, A...) (A args) {
     if (pos >= fmt.length) break;
     assert(0, "out of args for format specifier");
   }
+
+  conwriteln(concmdbuf[0..concmdbufpos]);
 }
 
 
