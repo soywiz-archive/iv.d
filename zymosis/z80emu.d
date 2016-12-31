@@ -15,32 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.zymosis.z80emu is aliced;
-
-
-// define zymosis_enable_inlining to speed up Zymosis on GDC
-version(GNU) {
-  version(zymosis_disable_inlining) version=zymosis_enable_inlining_off_;
-  else version=zymosis_enable_inlining_on_;
-} else {
-  version=zymosis_enable_inlining_off_;
-}
-
-version(zymosis_enable_inlining_on_) {
-  static import gcc.attribute;
-  private enum gcc_inline = gcc.attribute.attribute("forceinline");
-  private enum gcc_noinline = gcc.attribute.attribute("noinline");
-  private enum gcc_flatten = gcc.attribute.attribute("flatten");
-} else {
-  // hackery for non-gcc compilers
-  private enum gcc_inline;
-  private enum gcc_noinline;
-  private enum gcc_flatten;
-}
+module iv.zymosis.z80emu;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-class ZymCPU {
+public class ZymCPU {
 public:
   /// flag masks
   enum Z80Flags {
@@ -104,7 +83,7 @@ public:
   }
 
 private:
-  RegPair* DD; // pointer to current HL/IX/IY (inside this struct) for the current command
+  RegPair* DD; // pointer to current HL/IX/IY (inside this class) for the current command
   ubyte mIM; // Interrupt Mode (0-2)
 
 public:
@@ -145,6 +124,8 @@ public:
    * opcode from the necessary page and don't call refetch().
    */
   bool refetch;
+  // exactly what was written. used to better emulate SCF/CCF.
+  bool prevOpChangedFlags;
 
 public:
   /**
@@ -286,14 +267,12 @@ public:
     bpHit = false;
     bpWasHit = false;
     tstates = 0;
-    reset();
+    reset(true);
   }
 
-  /** Reset emulated CPU. Will NOT reset tstate counter. */
-  void reset () {
+  /** "Soft" reset: clear only absolutely necessary things. */
+  void softReset () {
     PC = prevPC = origPC = 0;
-    BC = DE = HL = AF = SP = IX = IY = 0;
-    BCx = DEx = HLx = AFx = 0;
     DD = &HL;
     MEMPTR = 0;
     I = R = 0;
@@ -305,6 +284,14 @@ public:
     refetch = false;
   }
 
+  /** Reset emulated CPU. Will NOT reset tstate counter. */
+  void reset (bool poweron=false) {
+    //TODO: don't touch IX and IY values?
+    BC = DE = HL = AF = SP = IX = IY = (poweron ? 0xFFFF: 0);
+    BCx = DEx = HLx = AFx = (poweron ? 0xFFFF: 0);
+    softReset();
+  }
+
 // ////////////////////////////////////////////////////////////////////////// //
 final:
   @property ubyte IM () const pure nothrow @safe @nogc { pragma(inline, true); return mIM; } /** get Interrupt Mode (0-2) */
@@ -313,7 +300,7 @@ final:
   enum IncRMixin = `R = ((R&0x7f)+1)|(R&0x80);`;
 
   /** increment R register. note that Z80 never changes the high bit of R. */
-  @gcc_inline void incR() () nothrow @safe @nogc { pragma(inline, true); mixin(IncRMixin); }
+  void incR() () nothrow @safe @nogc { pragma(inline, true); mixin(IncRMixin); }
 
   /**
    * Execute emulated CPU instructions.
@@ -353,6 +340,7 @@ final:
     ubyte tmpB, tmpC, rsrc, rdst;
     ushort tmpW;
     int tstart = tstates;
+    bool prevOpChangedFlagsXX;
     /* main loop */
     while ((nextEventTS < 0 || tstates < nextEventTS) && (tscount < 0 || tstates-tstart <= tscount)) {
       prevPC = origPC;
@@ -379,6 +367,8 @@ final:
         // rollback tstates
         tstates = ots;
       }
+      prevOpChangedFlagsXX = prevOpChangedFlags;
+      prevOpChangedFlags = false;
       prevWasEIDDR = EIDDR.Normal;
       disp = gotDD = false;
       DD = &HL;
@@ -401,13 +391,14 @@ final:
         } else if (opcode == 0xdd && opcode == 0xfd) {
           /* double prefix; restart main loop */
           prevWasEIDDR = EIDDR.BlockInt;
+          prevOpChangedFlags = prevOpChangedFlagsXX; // dunno
           continue;
         }
         gotDD = true;
       }
       /* ED-prefixed instructions */
       if (opcode == 0xed) {
-        DD = &HL; /* а нас -- рать! */
+        DD = &HL; /* п╟ пҐп╟я│ -- я─п╟я┌я▄! */
         /* read opcode -- OCR(4) */
         opcode = fetchOpcodeExt();
         switch (opcode) {
@@ -419,6 +410,7 @@ final:
             z80_contention_by1ts(DE, 2);
             --BC;
             tmpB = (tmpB+AF.a)&0xff;
+            prevOpChangedFlags = true;
             AF.f = /* BOO! FEAR THE MIGHTY BITS! */
               (tmpB&Z80Flags.F3)|(AF.f&(Z80Flags.C|Z80Flags.Z|Z80Flags.S))|
               (BC != 0 ? Z80Flags.PV : 0)|
@@ -446,6 +438,7 @@ final:
             /*IOP(5)*/
             z80_contention_by1ts(HL, 5);
             --BC;
+            prevOpChangedFlags = true;
             AF.f = /* BOO! FEAR THE MIGHTY BITS! */
               Z80Flags.N|
               (AF.f&Z80Flags.C)|
@@ -489,6 +482,7 @@ final:
               --BC.b;
               if (is_backward(opcode)) tmpC = (cast(int)tmpB+cast(int)BC.c-1)&0xff; else tmpC = (tmpB+BC.c+1)&0xff;
             }
+            prevOpChangedFlags = true;
             AF.f =
               (tmpB&0x80 ? Z80Flags.N : 0)|
               (tmpC < tmpB ? Z80Flags.H|Z80Flags.C : 0)|
@@ -515,6 +509,7 @@ final:
                 case 0:
                   MEMPTR = cast(ushort)(BC+1);
                   tmpB = z80_port_read(BC);
+                  prevOpChangedFlags = true;
                   AF.f = tblSZP53.ptr[tmpB]|(AF.f&Z80Flags.C);
                   final switch ((opcode>>3)&0x07) {
                     case 0: BC.b = tmpB; break;
@@ -901,15 +896,20 @@ final:
                 case 4: DAA(); break;
                 case 5: /* CPL */
                   AF.a ^= 0xff;
+                  prevOpChangedFlags = true;
                   AF.f = (AF.a&Z80Flags.F35)|(Z80Flags.N|Z80Flags.H)|(AF.f&(Z80Flags.C|Z80Flags.PV|Z80Flags.Z|Z80Flags.S));
                   break;
                 case 6: /* SCF */
-                  AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|(AF.a&Z80Flags.F35)|Z80Flags.C;
+                  ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
+                  AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35)|Z80Flags.C;
+                  prevOpChangedFlags = true;
                   break;
                 case 7: /* CCF */
+                  ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
                   tmpB = AF.f&Z80Flags.C;
-                  AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|(AF.a&Z80Flags.F35);
+                  AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35);
                   AF.f |= tmpB ? Z80Flags.H : Z80Flags.C;
+                  prevOpChangedFlags = true;
                   break;
                 /* SCF/CCF:
                  * Patrik Rak however later discovered that the way how the flags 5 and 3 are affected after SCF/CCF actually depends on
@@ -1180,6 +1180,7 @@ final:
   int intr () {
     ushort a;
     int ots = tstates;
+    prevOpChangedFlags = false;
     if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* Z80 bug, NMOS only */
     if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; /* not accepted */
     if (halted) { halted = false; ++PC; }
@@ -1233,6 +1234,7 @@ final:
    */
   int nmi () {
     int ots = tstates;
+    prevOpChangedFlags = false;
     if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* emulate Z80 bug with interrupted LD A,I/R, NMOS only */
     if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; /* not accepted */
     /*prevWasEIDDR = EIDDR.Normal;*/ /* don't care */
@@ -1295,12 +1297,12 @@ private:
   /* simulate contented memory access */
   /* (tstates = tstates+contention+1)*cnt */
   /* (ushort addr, int tstates, MemIO mio) */
-  @gcc_inline void z80_contention (ushort addr, int atstates, MemIO mio, MemIOReq mreq) {
+  void z80_contention (ushort addr, int atstates, MemIO mio, MemIOReq mreq) {
     pragma(inline, true);
     if (contended) memContention(addr, atstates, mio, mreq); else tstates += atstates;
   }
 
-  @gcc_inline void z80_contention_by1ts (ushort addr, int cnt) {
+  void z80_contention_by1ts (ushort addr, int cnt) {
     if (contended) {
       while (cnt-- > 0) memContention(addr, 1, MemIO.Other, MemIOReq.None);
     } else {
@@ -1308,23 +1310,23 @@ private:
     }
   }
 
-  @gcc_inline void z80_contention_by1ts_ir (int cnt) {
+  void z80_contention_by1ts_ir (int cnt) {
     pragma(inline, true);
     z80_contention_by1ts(((cast(ushort)I)<<8)|R, cnt);
   }
 
-  @gcc_inline void z80_contention_by1ts_pc (int cnt) {
+  void z80_contention_by1ts_pc (int cnt) {
     pragma(inline, true);
     z80_contention_by1ts(PC, cnt);
   }
 
-  @gcc_inline ubyte z80_peekb_i (ushort addr) {
+  ubyte z80_peekb_i (ushort addr) {
     pragma(inline, true);
     return memRead(addr, MemIO.Other);
   }
 
   /******************************************************************************/
-  @gcc_inline ubyte z80_port_read (ushort port) {
+  ubyte z80_port_read (ushort port) {
     ubyte value;
     if (contended) {
       portContention(port, 1, true, true); // 'IN', early
@@ -1337,8 +1339,7 @@ private:
     return value;
   }
 
-
-  @gcc_inline void z80_port_write (ushort port, ubyte value) {
+  void z80_port_write (ushort port, ubyte value) {
     if (contended) {
       portContention(port, 1, false, true); // 'OUT', early
     } else {
@@ -1354,19 +1355,19 @@ private:
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
-  @gcc_inline void z80_pokeb (ushort addr, ubyte b) { pragma(inline, true); return memWrite(addr, b, MemIO.Data); }
-  @gcc_inline void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); return memWrite(addr, b, MemIO.Other); }
+  void z80_pokeb (ushort addr, ubyte b) { pragma(inline, true); return memWrite(addr, b, MemIO.Data); }
+  void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); return memWrite(addr, b, MemIO.Other); }
 
   // t1: setting /MREQ & /RD
   // t2: memory read
-  @gcc_inline ubyte z80_peekb_3ts (ushort addr) {
+  ubyte z80_peekb_3ts (ushort addr) {
     pragma(inline, true);
     //if (contended) memContention(addr, 3, MemIO.Data, MemIOReq.Read);
     z80_contention(addr, 3, MemIO.Data, MemIOReq.Read);
     return memRead(addr, MemIO.Data);
   }
 
-  @gcc_inline ubyte z80_peekb_3ts_args () {
+  ubyte z80_peekb_3ts_args () {
     pragma(inline, true);
     //if (contended) memContention(PC, 3, MemIO.OpArg, MemIOReq.Read);
     z80_contention(PC, 3, MemIO.OpArg, MemIOReq.Read);
@@ -1375,31 +1376,31 @@ private:
 
   // t1: setting /MREQ & /WR
   // t2: memory write
-  @gcc_inline void z80_pokeb_3ts (ushort addr, ubyte b) {
+  void z80_pokeb_3ts (ushort addr, ubyte b) {
     pragma(inline, true);
     z80_contention(addr, 3, MemIO.Data, MemIOReq.Write);
     z80_pokeb(addr, b);
   }
 
-  @gcc_inline ushort z80_peekw_6ts (ushort addr) {
+  ushort z80_peekw_6ts (ushort addr) {
     pragma(inline, true);
     ushort res = z80_peekb_3ts(addr);
     return res|((cast(ushort)z80_peekb_3ts((addr+1)&0xffff))<<8);
   }
 
-  @gcc_inline void z80_pokew_6ts (ushort addr, ushort value) {
+  void z80_pokew_6ts (ushort addr, ushort value) {
     pragma(inline, true);
     z80_pokeb_3ts(addr, value&0xff);
     z80_pokeb_3ts((addr+1)&0xffff, (value>>8)&0xff);
   }
 
-  @gcc_inline void z80_pokew_6ts_inverted (ushort addr, ushort value) {
+  void z80_pokew_6ts_inverted (ushort addr, ushort value) {
     pragma(inline, true);
     z80_pokeb_3ts((addr+1)&0xffff, (value>>8)&0xff);
     z80_pokeb_3ts(addr, value&0xff);
   }
 
-  @gcc_inline ushort z80_getpcw (int wait1) {
+  ushort z80_getpcw (int wait1) {
     //pragma(inline, true);
     ushort res = z80_peekb_3ts_args();
     PC = (PC+1)&0xffff;
@@ -1409,7 +1410,7 @@ private:
     return res;
   }
 
-  @gcc_inline ushort z80_pop_6ts () {
+  ushort z80_pop_6ts () {
     pragma(inline, true);
     ushort res = z80_peekb_3ts(SP);
     SP = (SP+1)&0xffff;
@@ -1420,7 +1421,7 @@ private:
 
   // 3 T states write high byte of PC to the stack and decrement SP
   // 3 T states write the low byte of PC and jump to #0066
-  @gcc_inline void z80_push_6ts (ushort value) {
+  void z80_push_6ts (ushort value) {
     pragma(inline, true);
     SP = ((cast(int)SP)-1)&0xffff;
     z80_pokeb_3ts(SP, (value>>8)&0xff);
@@ -1428,7 +1429,7 @@ private:
     z80_pokeb_3ts(SP, value&0xff);
   }
 
-  @gcc_inline ubyte fetchOpcodeExt () {
+  ubyte fetchOpcodeExt () {
     pragma(inline, true);
     //if (contended) memContention(PC, 4, MemIO.OpExt, MemIOReq.Read);
     z80_contention(PC, 4, MemIO.OpExt, MemIOReq.Read);
@@ -1442,10 +1443,11 @@ private:
   // the only thing you want to know that IT WORKS; just believe me and testing suite
 
  nothrow @trusted @nogc {
-  @gcc_inline void ADC_A (ubyte b) {
+  void ADC_A (ubyte b) {
     pragma(inline, true);
     ushort newv, o = AF.a;
     AF.a = (newv = cast(ushort)(o+b+(AF.f&Z80Flags.C)))&0xff; // Z80Flags.C is 0x01, so it's safe
+    prevOpChangedFlags = true;
     AF.f =
       tblSZ53.ptr[newv&0xff]|
       (newv > 0xff ? Z80Flags.C : 0)|
@@ -1453,10 +1455,11 @@ private:
       ((o&0x0f)+(b&0x0f)+(AF.f&Z80Flags.C) >= 0x10 ? Z80Flags.H : 0);
   }
 
-  @gcc_inline void SBC_A (ubyte b) {
+  void SBC_A (ubyte b) {
     pragma(inline, true);
     ushort newv, o = AF.a;
     AF.a = (newv = (cast(int)o-cast(int)b-cast(int)(AF.f&Z80Flags.C))&0xffff)&0xff; // Z80Flags.C is 0x01, so it's safe
+    prevOpChangedFlags = true;
     AF.f =
       Z80Flags.N|
       tblSZ53.ptr[newv&0xff]|
@@ -1465,21 +1468,22 @@ private:
       (cast(int)(o&0x0f)-cast(int)(b&0x0f)-cast(int)(AF.f&Z80Flags.C) < 0 ? Z80Flags.H : 0);
   }
 
-  @gcc_inline void ADD_A (ubyte b) {
+  void ADD_A (ubyte b) {
     pragma(inline, true);
     AF.f &= ~Z80Flags.C;
     ADC_A(b);
   }
 
-  @gcc_inline void SUB_A (ubyte b) {
+  void SUB_A (ubyte b) {
     pragma(inline, true);
     AF.f &= ~Z80Flags.C;
     SBC_A(b);
   }
 
-  @gcc_inline void CP_A (ubyte b) {
+  void CP_A (ubyte b) {
     pragma(inline, true);
     ubyte o = AF.a, newv = (cast(int)o-cast(int)b)&0xff;
+    prevOpChangedFlags = true;
     AF.f =
       Z80Flags.N|
       (newv&Z80Flags.S)|
@@ -1490,13 +1494,14 @@ private:
       (cast(int)(o&0x0f)-cast(int)(b&0x0f) < 0 ? Z80Flags.H : 0);
   }
 
-  @gcc_inline void AND_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a &= b]|Z80Flags.H; }
-  @gcc_inline void OR_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a |= b]; }
-  @gcc_inline void XOR_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a ^= b]; }
+  void AND_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a &= b]|Z80Flags.H; prevOpChangedFlags = true; }
+  void OR_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a |= b]; prevOpChangedFlags = true; }
+  void XOR_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a ^= b]; prevOpChangedFlags = true; }
 
   // carry unchanged
-  @gcc_inline ubyte DEC8 (ubyte b) {
+  ubyte DEC8 (ubyte b) {
     pragma(inline, true);
+    prevOpChangedFlags = true;
     AF.f &= Z80Flags.C;
     AF.f |= Z80Flags.N|
       (b == 0x80 ? Z80Flags.PV : 0)|
@@ -1506,8 +1511,9 @@ private:
   }
 
   // carry unchanged
-  @gcc_inline ubyte INC8 (ubyte b) {
+  ubyte INC8 (ubyte b) {
     pragma(inline, true);
+    prevOpChangedFlags = true;
     AF.f &= Z80Flags.C;
     AF.f |=
       (b == 0x7f ? Z80Flags.PV : 0)|
@@ -1517,92 +1523,104 @@ private:
   }
 
   // cyclic, carry reflects shifted bit
-  @gcc_inline void RLCA () {
+  void RLCA () {
     pragma(inline, true);
     ubyte c = ((AF.a>>7)&0x01);
     AF.a = cast(ubyte)((AF.a<<1)|c);
+    prevOpChangedFlags = true;
     AF.f = cast(ubyte)(c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S)));
   }
 
   // cyclic, carry reflects shifted bit
-  @gcc_inline void RRCA () {
+  void RRCA () {
     pragma(inline, true);
     ubyte c = (AF.a&0x01);
     AF.a = cast(ubyte)((AF.a>>1)|(c<<7));
+    prevOpChangedFlags = true;
     AF.f = cast(ubyte)(c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S)));
   }
 
   // cyclic thru carry
-  @gcc_inline void RLA () {
+  void RLA () {
     pragma(inline, true);
     ubyte c = ((AF.a>>7)&0x01);
     AF.a = cast(ubyte)((AF.a<<1)|(AF.f&Z80Flags.C));
+    prevOpChangedFlags = true;
     AF.f = cast(ubyte)(c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S)));
   }
 
   // cyclic thru carry
-  @gcc_inline void RRA () {
+  void RRA () {
     pragma(inline, true);
     ubyte c = (AF.a&0x01);
     AF.a = (AF.a>>1)|((AF.f&Z80Flags.C)<<7);
+    prevOpChangedFlags = true;
     AF.f = c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S));
   }
 
   // cyclic thru carry
-  @gcc_inline ubyte RL (ubyte b) {
+  ubyte RL (ubyte b) {
     pragma(inline, true);
     ubyte c = (b>>7)&Z80Flags.C;
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b = ((b<<1)&0xff)|(AF.f&Z80Flags.C))]|c;
     return b;
   }
 
-  @gcc_inline ubyte RR (ubyte b) {
+  ubyte RR (ubyte b) {
     pragma(inline, true);
     ubyte c = (b&0x01);
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b = (b>>1)|((AF.f&Z80Flags.C)<<7))]|c;
     return b;
   }
 
   // cyclic, carry reflects shifted bit
-  @gcc_inline ubyte RLC (ubyte b) {
+  ubyte RLC (ubyte b) {
     pragma(inline, true);
     ubyte c = ((b>>7)&Z80Flags.C);
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b = ((b<<1)&0xff)|c)]|c;
     return b;
   }
 
   // cyclic, carry reflects shifted bit
-  @gcc_inline ubyte RRC (ubyte b) {
+  ubyte RRC (ubyte b) {
     pragma(inline, true);
     ubyte c = (b&0x01);
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b = cast(ubyte)((b>>1)|(c<<7)))]|c;
     return b;
   }
 
-  @gcc_inline ubyte SLA (ubyte b) {
+  ubyte SLA (ubyte b) {
     pragma(inline, true);
     ubyte c = ((b>>7)&0x01);
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b <<= 1)]|c;
     return b;
   }
 
-  @gcc_inline ubyte SRA (ubyte b) {
+  ubyte SRA (ubyte b) {
     pragma(inline, true);
     ubyte c = (b&0x01);
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b = (b>>1)|(b&0x80))]|c;
     return b;
   }
 
-  @gcc_inline ubyte SLL (ubyte b) {
+  ubyte SLL (ubyte b) {
     pragma(inline, true);
     ubyte c = ((b>>7)&0x01);
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b = cast(ubyte)((b<<1)|0x01))]|c;
     return b;
   }
 
-  @gcc_inline ubyte SLR (ubyte b) {
+  ubyte SLR (ubyte b) {
     pragma(inline, true);
     ubyte c = (b&0x01);
+    prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b >>= 1)]|c;
     return b;
   }
@@ -1610,11 +1628,12 @@ private:
   static immutable ubyte[8] hct = [ 0, Z80Flags.H, Z80Flags.H, Z80Flags.H, 0, 0, 0, Z80Flags.H ];
 
   // ddvalue+value
-  @gcc_inline ushort ADD_DD (ushort value, ushort ddvalue) {
+  ushort ADD_DD (ushort value, ushort ddvalue) {
     pragma(inline, true);
     uint res = cast(uint)value+cast(uint)ddvalue;
     ubyte b = ((value&0x0800)>>11)|((ddvalue&0x0800)>>10)|((res&0x0800)>>9);
     MEMPTR = (ddvalue+1)&0xffff;
+    prevOpChangedFlags = true;
     AF.f =
       (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|
       (res > 0xffff ? Z80Flags.C : 0)|
@@ -1624,12 +1643,13 @@ private:
   }
 
   // ddvalue+value
-  @gcc_inline ushort ADC_DD (ushort value, ushort ddvalue) {
+  ushort ADC_DD (ushort value, ushort ddvalue) {
     pragma(inline, true);
     ubyte c = (AF.f&Z80Flags.C);
     uint newv = cast(uint)value+cast(uint)ddvalue+cast(uint)c;
     ushort res = (newv&0xffff);
     MEMPTR = (ddvalue+1)&0xffff;
+    prevOpChangedFlags = true;
     AF.f =
       ((res>>8)&Z80Flags.S35)|
       (res == 0 ? Z80Flags.Z : 0)|
@@ -1640,7 +1660,7 @@ private:
   }
 
   // ddvalue-value
-  @gcc_inline ushort SBC_DD (ushort value, ushort ddvalue) {
+  ushort SBC_DD (ushort value, ushort ddvalue) {
     //pragma(inline, true);
     ubyte tmpB = AF.a;
     MEMPTR = (ddvalue+1)&0xffff;
@@ -1655,8 +1675,9 @@ private:
     return res;
   }
 
-  @gcc_inline void BIT (ubyte bit, ubyte num, int mptr) {
+  void BIT (ubyte bit, ubyte num, int mptr) {
     pragma(inline, true);
+    prevOpChangedFlags = true;
     AF.f =
       Z80Flags.H|
       (AF.f&Z80Flags.C)|
@@ -1666,18 +1687,19 @@ private:
     if (mptr) AF.f = (AF.f&~Z80Flags.F35)|(MEMPTR.h&Z80Flags.F35);
   }
 
-  @gcc_inline void DAA () {
+  void DAA () {
     //pragma(inline, true);
     ubyte tmpI = 0, tmpC = (AF.f&Z80Flags.C), tmpA = AF.a;
     if ((AF.f&Z80Flags.H) || (tmpA&0x0f) > 9) tmpI = 6;
     if (tmpC != 0 || tmpA > 0x99) tmpI |= 0x60;
     if (tmpA > 0x99) tmpC = Z80Flags.C;
     if (AF.f&Z80Flags.N) SUB_A(tmpI); else ADD_A(tmpI);
+    prevOpChangedFlags = true;
     AF.f = (AF.f&~(Z80Flags.C|Z80Flags.PV))|tmpC|tblParity.ptr[AF.a];
   }
  } // //
 
-  @gcc_inline void RRD_A () {
+  void RRD_A () {
     pragma(inline, true);
     ubyte tmpB = z80_peekb_3ts(HL);
     //IOP(4)
@@ -1685,10 +1707,11 @@ private:
     z80_contention_by1ts(HL, 4);
     z80_pokeb_3ts(HL, cast(ubyte)((AF.a<<4)|(tmpB>>4)));
     AF.a = (AF.a&0xf0)|(tmpB&0x0f);
+    prevOpChangedFlags = true;
     AF.f = (AF.f&Z80Flags.C)|tblSZP53.ptr[AF.a];
   }
 
-  @gcc_inline void RLD_A () {
+  void RLD_A () {
     pragma(inline, true);
     ubyte tmpB = z80_peekb_3ts(HL);
     //IOP(4)
@@ -1696,15 +1719,16 @@ private:
     z80_contention_by1ts(HL, 4);
     z80_pokeb_3ts(HL, cast(ubyte)((tmpB<<4)|(AF.a&0x0f)));
     AF.a = (AF.a&0xf0)|(tmpB>>4);
+    prevOpChangedFlags = true;
     AF.f = (AF.f&Z80Flags.C)|tblSZP53.ptr[AF.a];
   }
 
-
-  @gcc_inline void LD_A_IR (ubyte ir) {
+  void LD_A_IR (ubyte ir) {
     pragma(inline, true);
     AF.a = ir;
     prevWasEIDDR = EIDDR.LdIorR;
     z80_contention_by1ts_ir(1);
+    prevOpChangedFlags = true;
     AF.f = tblSZ53.ptr[AF.a]|(AF.f&Z80Flags.C)|(IFF2 ? Z80Flags.PV : 0);
   }
 
@@ -1811,7 +1835,7 @@ public:
     }
     // instructions
     if (opcode == 0xed) {
-      ixy = 0; // � ��� -- ����!
+      ixy = 0; // а нас -- рать!
       opcode = memRead(pc++, MemIO.Other);
       switch (opcode) {
         /* LDI, LDIR, LDD, LDDR */
