@@ -537,7 +537,7 @@ final:
                     case 3: tmpB = DE.e; break;
                     case 4: tmpB = HL.h; break;
                     case 5: tmpB = HL.l; break;
-                    case 6: tmpB = 0; break;
+                    case 6: tmpB = 0; break; // 0 on NMOS, 255 on CMOS
                     case 7: tmpB = AF.a; break;
                   }
                   z80_port_write(BC, tmpB);
@@ -911,6 +911,12 @@ final:
                   AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|(AF.a&Z80Flags.F35);
                   AF.f |= tmpB ? Z80Flags.H : Z80Flags.C;
                   break;
+                /* SCF/CCF:
+                 * Patrik Rak however later discovered that the way how the flags 5 and 3 are affected after SCF/CCF actually depends on
+                 * the previous instruction completed. In case of genuine Zilog CPU, if an instruction modifies the flags, the immediately
+                 * following SCF/CCF does move of bits 5 and 3 from A to F, whereas if an instruction doesn't modify the flags (and after
+                 * interrupt), the SCF/CCF does OR of bits 5 and 3 from A to F. In case of NEC and other clones, it is similar, except that
+                 * instead of OR it does AND with some unknown value, making the result unreliable. */
               }
               break;
           }
@@ -1174,7 +1180,7 @@ final:
   int intr () {
     ushort a;
     int ots = tstates;
-    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* Z80 bug */
+    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* Z80 bug, NMOS only */
     if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; /* not accepted */
     if (halted) { halted = false; ++PC; }
     IFF1 = IFF2 = false; /* disable interrupts */
@@ -1227,7 +1233,7 @@ final:
    */
   int nmi () {
     int ots = tstates;
-    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* emulate Z80 bug with interrupted LD A,I/R */
+    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* emulate Z80 bug with interrupted LD A,I/R, NMOS only */
     if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; /* not accepted */
     /*prevWasEIDDR = EIDDR.Normal;*/ /* don't care */
     if (halted) { halted = false; ++PC; }

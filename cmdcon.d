@@ -125,12 +125,14 @@ public void consoleUnlock() () { pragma(inline, true); version(aliced) consoleLo
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// put characters to console buffer (and, possibly, STDOUT_FILENO). thread-safe.
-public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
+public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc { pragma(inline, true); if (chrs.length) cbufPutIntr!true(chrs); }
+
+public void cbufPutIntr(bool dolock) (scope ConString chrs...) nothrow @trusted @nogc {
   if (chrs.length) {
     import core.atomic : atomicLoad, atomicOp;
-    consoleLock();
-    scope(exit) consoleUnlock();
-    final switch (atomicLoad(conStdoutFlag)) {
+    static if (dolock) consoleLock();
+    static if (dolock) scope(exit) consoleUnlock();
+    final switch (/*atomicLoad(conStdoutFlag)*/cast(ConDump)conStdoutFlag) {
       case ConDump.none: break;
       case ConDump.stdout:
         version(Windows) {
@@ -179,7 +181,8 @@ public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc {
         }
         break;
     }
-    atomicOp!"+="(changeCount, 1);
+    //atomicOp!"+="(changeCount, 1);
+    (*cast(uint*)&changeCount)++;
     foreach (char ch; chrs) {
       if (cbufLastWasCR && ch == '\x0a') { cbufLastWasCR = false; continue; }
       if ((cbufLastWasCR = (ch == '\x0d')) != false) ch = '\x0a';
@@ -368,7 +371,7 @@ static assert(is(XUQQ!(const(char)[]) == const(char)[]));
 // ////////////////////////////////////////////////////////////////////////// //
 private void cwrxputch (scope const(char)[] s...) nothrow @trusted @nogc {
   pragma(inline, true);
-  if (s.length) cbufPut(s);
+  if (s.length) cbufPutIntr!false(s); // no locking
 }
 
 
@@ -941,10 +944,12 @@ public template conwritef(string fmt, A...) {
     return res[0..respos];
   }
   void conwritef (A args) {
-    enum code = gen();
+    //enum code = gen();
     //pragma(msg, code);
     //pragma(msg, "===========");
-    mixin(code);
+    consoleLock();
+    scope(exit) consoleUnlock();
+    mixin(gen());
   }
 }
 
