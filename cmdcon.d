@@ -2490,6 +2490,7 @@ void conSetArgCompleter (ConString cmdname, ConCommand.ArgCompleteCB ac) {
 // ////////////////////////////////////////////////////////////////////////// //
 // all following API is thread-unsafe, if the opposite is not written
 public bool conHasCommand (ConString name) { pragma(inline, true); return ((name in cmdlist) !is null); } /// check if console has a command with a given name (thread-unsafe)
+public bool conHasVar (ConString name) { if (auto cc = name in cmdlist) return (cast(ConVarBase)(*cc) !is null); else return false; } /// check if console has a variable with a given name (thread-unsafe)
 
 /// known console commands (funcs and vars) range (thread-unsafe)
 /// type: "all", "vars", "funcs"
