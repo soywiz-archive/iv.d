@@ -1312,6 +1312,56 @@ static:
       base > 10 && ch >= 'a' && ch < 'z' && ch-'a'+10 < base ? ch-'a'+10 :
       -1;
   }
+
+  bool strEquCI (const(char)[] s0, const(char)[] s1) {
+    if (s0.length != s1.length) return false;
+    foreach (immutable idx, char c0; s0) {
+      if (c0 >= 'a' && c0 <= 'z') c0 -= 32;
+      char c1 = s1.ptr[idx];
+      if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+      if (c0 != c1) return false;
+    }
+    return true;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+///
+public bool delegate (const(char)[] lbl) nothrow @trusted @nogc urIsValidLabelName;
+
+static this () { import std.functional : toDelegate; urIsValidLabelName = toDelegate(&urIsValidLabelNameDef); }
+
+///
+public bool urIsValidLabelNameDef (const(char)[] lbl) nothrow @trusted @nogc {
+  if (lbl.length == 0) return false;
+  if (URAsmParser.isalpha(lbl.ptr[0])) {
+    foreach (char ch; lbl[1..$]) {
+      if (ch < 128 && !URAsmParser.isalnum(ch) && ch != '$' && ch != '.' && ch != '_' && ch != '@') return false;
+    }
+    foreach (string s; URMnemonics) if (URAsmParser.strEquCI(s, lbl)) return false;
+    foreach (string s; URRegs8) if (URAsmParser.strEquCI(s, lbl)) return false;
+    foreach (string s; URRegs16) if (URAsmParser.strEquCI(s, lbl)) return false;
+    foreach (string s; URRegs16a) if (URAsmParser.strEquCI(s, lbl)) return false;
+    foreach (string s; URCond) if (URAsmParser.strEquCI(s, lbl)) return false;
+    if (URAsmParser.strEquCI("DB", lbl)) return false;
+    if (URAsmParser.strEquCI("DW", lbl)) return false;
+    if (URAsmParser.strEquCI("DS", lbl)) return false;
+    if (URAsmParser.strEquCI("DZ", lbl)) return false;
+    if (URAsmParser.strEquCI("DEFB", lbl)) return false;
+    if (URAsmParser.strEquCI("DEFW", lbl)) return false;
+    if (URAsmParser.strEquCI("DEFS", lbl)) return false;
+    if (URAsmParser.strEquCI("DEFZ", lbl)) return false;
+    if (URAsmParser.strEquCI("DEFM", lbl)) return false;
+    if (URAsmParser.strEquCI("ORG", lbl)) return false;
+    if (URAsmParser.strEquCI("ENT", lbl)) return false;
+  } else {
+    if (lbl.ptr[0] != '$' && lbl.ptr[0] != '.' && lbl.ptr[0] != '_' && lbl.ptr[0] != '@') return false;
+    foreach (char ch; lbl[1..$]) {
+      if (ch < 128 && !URAsmParser.isalnum(ch) && ch != '$' && ch != '.' && ch != '_' && ch != '@') return false;
+    }
+  }
+  return true;
 }
 
 
@@ -1323,6 +1373,15 @@ public enum URAsmFixup {
   LoByte, ///
   HiByte, ///
 }
+
+
+public int delegate (const(char)[] lbl, ushort addr, out bool defined, out URAsmFixup fixtype) urFindLabelByNameFn; ///
+
+/// pr is right after '(', spaces skipped; should parse all args and stop on closing ')'
+public void delegate (const(char)[] lbl, ref URAsmParser pr, out URExprValue res, ushort addr) urCallFunctionFn;
+
+/// get "special value" started with '*' or '=', pr is right after valtype, spaces skipped; should parse whole name
+public void delegate (char valtype, ref URAsmParser pr, out URExprValue res, ushort addr) urGetValueFn;
 
 
 enum URAsmExprError {
@@ -1353,7 +1412,7 @@ static immutable string[URAsmExprError.max+1] URAsmExprErrorMsg = [
   "term expected",
   "function expected",
   "invalid type",
-  "invalid argument",
+  "invalid special argument",
   "invalid fixup",
   "invalid memory access",
   "invalid operand",
@@ -1368,10 +1427,11 @@ public struct URExprValue {
   int val; ///
   char[] str; /// null: non-string value; val is set for strings too
   URAsmFixup fixuptype; /// can be changed only by low() and high()
+  bool defined = true;
 
   @property bool isString () const pure nothrow @trusted @nogc { pragma(inline, true); return (str !is null); } ///
 
-  void clear () pure nothrow @trusted @nogc { val = 0; str = null; fixuptype = URAsmFixup.None; } ///
+  void clear () pure nothrow @trusted @nogc { val = 0; str = null; fixuptype = URAsmFixup.None; defined = true; } ///
 }
 
 struct URAOperand {
@@ -1390,7 +1450,7 @@ struct URAOperand {
 
 struct ExprInfo {
   ushort addr; // current address
-  bool defined; // !0: all used labels are defined
+  bool defined; // true: all used labels are defined
   bool logDone;
   bool logRes;
 }
@@ -1642,39 +1702,30 @@ void parseNumber (ref URAsmParser pr, ref URExprValue res) {
 
 
 void getAddr (const(char)[] lbl, ref URExprValue res, ref ExprInfo ei) {
-  /*
-  int defined = 0, found = 0;
-  int val = 0;
-  //
-  if (urFindLabelByNameFn == null) EERROR(URAsmExprError.Label);
+  if (urFindLabelByNameFn is null) EERROR(URAsmExprError.Label);
   res.fixuptype = URAsmFixup.None;
-  val = urFindLabelByNameFn(lbl, ei.addr, &defined, &found, &res.fixuptype);
-  if (!found) EERROR(URAsmExprError.Label);
-  if (!defined) ei.defined = 0;
-  res.val = val;
-  */
-  EERROR(URAsmExprError.Label);
+  res.val = urFindLabelByNameFn(lbl, ei.addr, res.defined, res.fixuptype);
+  if (!res.defined) ei.defined = false;
 }
 
 
-// null: invalid label
-char[] readLabelName (ref URAsmParser pr, ref ExprInfo ei) {
-  char[] res;
+// throw on invalid label, or return slice of `dbuf`
+char[] readLabelName (char[] dbuf, ref URAsmParser pr) {
+  uint dbpos = 0;
   while (!pr.empty) {
     char ch = pr.front;
-    if (URAsmParser.isalnum(ch) || ch == '$' || ch == '.' || ch == '_' || ch == '@') {
-      res ~= ch;
+    if (URAsmParser.isalnum(ch) || ch == '$' || ch == '.' || ch == '_' || ch == '@' || ch >= 128) {
+      if (dbpos >= dbuf.length) EERROR(URAsmExprError.Label);
+      dbuf[dbpos++] = ch;
       pr.popFront();
     } else {
       break;
     }
   }
-  if (res.length < 1) return null;
-  //buf[pos] = '\0';
-  //if (!urIsValidLabelName(buf)) return -1;
-  //return 0;
-  return res;
+  if (dbpos < 1 || !urIsValidLabelName(dbuf[0..dbpos])) EERROR(URAsmExprError.Label);
+  return dbuf[0..dbpos];
 }
+
 
 void term (ref URAsmParser pr, ref URExprValue res, ref ExprInfo ei) {
   res.str = null;
@@ -1733,30 +1784,28 @@ void term (ref URAsmParser pr, ref URExprValue res, ref ExprInfo ei) {
       return;
     case '=':
     case '*':
-      /*if (urGetValueFn != null) {
-        ei.expr = urGetValueFn(res, ei.expr, ei.addr, ei.logDone, &ei.defined, &ei.error);
-        if (ei.error != URAsmExprError.None) EERROR(ei.error);
-      } else */{
+      pr.popFront();
+      if (pr.empty || pr.front <= ' ' || pr.eol) EERROR(URAsmExprError.Marg);
+      if (urGetValueFn !is null) {
+        urGetValueFn(ch, pr, res, ei.addr);
+      } else {
         EERROR(URAsmExprError.Marg);
       }
       break;
     default:
-      auto lbl = readLabelName(pr, ei);
+      char[64] lblbuf;
+      auto lbl = readLabelName(lblbuf[], pr);
       if (lbl is null) EERROR(URAsmExprError.Label);
       pr.skipBlanks();
       if (!pr.empty && pr.front == '(') {
         // function call
-        /*
-        URFunctionCB fn = urExpressionFindFunction(lbl.ptr);
-        const(char)* e;
-        //
-        if (fn == null) EERROR(URAsmExprError.Func);
-        ++(ei.expr); // skip '('
-        e = fn(res, ei.expr, ei.addr, ei.logDone, &ei.defined, &ei.error);
-        if (ei.error != URAsmExprError.None) EERROR(ei.error);
-        else if (e == null) EERROR(URAsmExprError.Func);
-        else ei.expr = e;
-        */
+        pr.popFront();
+        pr.skipBlanks();
+        if (urCallFunctionFn !is null) {
+          urCallFunctionFn(lbl, pr, res, ei.addr);
+          pr.skipBlanks();
+          if (!pr.empty && pr.front == ')') { pr.popFront(); break; }
+        }
         EERROR(URAsmExprError.Func);
       } else {
         // just a label
@@ -1874,7 +1923,7 @@ void expression (ref URAsmParser pr, ref URExprValue res, ref ExprInfo ei) {
 }
 
 
-public void urExpressionEx (ref URAsmParser pr, ref URExprValue res, ushort addr, out bool defined) {
+public void urExpressionEx (ref URAsmParser pr, ref URExprValue res, ushort addr) {
   ExprInfo ei;
   res.clear();
   if (pr.empty) EERROR(URAsmExprError.Eos);
@@ -1883,19 +1932,19 @@ public void urExpressionEx (ref URAsmParser pr, ref URExprValue res, ushort addr
   ei.logDone = false;
   ei.logRes = 0;
   expression(pr, res, ei);
-  defined = ei.defined;
+  res.defined = ei.defined;
 }
 
 
 public int urExpression (ref URAsmParser pr, ushort addr, out bool defined, out URAsmFixup fixuptype) {
-  URExprValue r;
+  URExprValue res;
   defined = true;
   fixuptype = URAsmFixup.None;
-  r.clear();
-  urExpressionEx(pr, r, addr, defined);
-  fixuptype = r.fixuptype;
-  if (r.str !is null && r.str.length > 2) EERROR(URAsmExprError.Type);
-  return r.val;
+  urExpressionEx(pr, res, addr);
+  fixuptype = res.fixuptype;
+  defined = res.defined;
+  if (res.str !is null && res.str.length > 2) EERROR(URAsmExprError.Type);
+  return res.val;
 }
 
 
