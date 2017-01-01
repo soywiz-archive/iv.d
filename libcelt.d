@@ -1,1 +1,1 @@
-/home/ketmar/back/D/iv/clibcelt/d/libcelt.d
+clibcelt/d/libcelt.d
