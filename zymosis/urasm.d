@@ -19,6 +19,8 @@
  */
 module iv.zymosis.urasm;
 
+//version = urasm_test;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 enum URMnemo {
@@ -1265,19 +1267,57 @@ public int urDisassembleOne (ref URDisState ctx, ushort addr, scope URGetByteCB 
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// assembler errors
-enum URAsmError {
-  None = 0,
-  Generic = -1,
-  BadMnemo = -2,
-  BadOperand = -3,
-  ExtraText = -4,
-  BadInstruction = -5,
+///
+public struct URAsmParser {
+private:
+  const(char)[] text;
+  uint textpos;
+
+pure nothrow @trusted @nogc:
+  this (const(char)[] atext) { text = atext; }
+  void setup (const(char)[] atext) { text = atext; }
+  URAsmParser opSlice (uint lo, uint hi) pure const {
+    if (hi <= lo || lo >= text.length) return URAsmParser.init;
+    if (hi > text.length) hi = cast(uint)text.length;
+    return URAsmParser(text[lo..hi]);
+  }
+  @property uint tell () pure const { pragma(inline, true); return textpos; }
+  void seek (uint pos) pure { pragma(inline, true); if (pos > text.length) pos = cast(uint)text.length; textpos = pos; }
+  URAsmParser slice (uint len) pure const {
+    if (len > text.length) len = cast(uint)text.length;
+    if (textpos >= text.length) return URAsmParser.init;
+    if (text.length-textpos < len) len = cast(uint)text.length-textpos;
+    return URAsmParser(text[textpos..textpos+len]);
+  }
+  @property bool empty () const { pragma(inline, true); return (textpos >= text.length); }
+  @property bool eol () const { pragma(inline, true); return (textpos >= text.length || text.ptr[textpos] == ':' || text.ptr[textpos] == ';'); }
+  @property char front () const { pragma(inline, true); return (textpos < text.length ? text.ptr[textpos] : '\x00'); }
+  @property char ahead () const { pragma(inline, true); return (textpos+1 < text.length ? text.ptr[textpos+1] : '\x00'); }
+  @property char peek (uint ofs) const { pragma(inline, true); return (ofs < text.length && textpos+ofs < text.length ? text.ptr[textpos+ofs] : '\x00'); }
+  void popFront () { if (textpos < text.length) ++textpos; }
+  void skipBlanks () { while (textpos < text.length && text.ptr[textpos] <= ' ') ++textpos; }
+
+static:
+  char tolower (char ch) { pragma(inline, true); return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch+32) : ch); }
+  char toupper (char ch) { pragma(inline, true); return (ch >= 'a' && ch <= 'z' ? cast(char)(ch-32) : ch); }
+  bool isdigit (char ch) { pragma(inline, true); return (ch >= '0' && ch <= '9'); }
+  bool isalpha (char ch) { pragma(inline, true); return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'); }
+  bool isalnum (char ch) { pragma(inline, true); return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9'); }
+
+  int digitInBase (char ch, int base=10) {
+    pragma(inline, true);
+    return
+      ch >= '0' && ch <= '9' && ch-'0' < base ? ch-'0' :
+      base > 10 && ch >= 'A' && ch < 'Z' && ch-'A'+10 < base ? ch-'A'+10 :
+      base > 10 && ch >= 'a' && ch < 'z' && ch-'a'+10 < base ? ch-'a'+10 :
+      -1;
+  }
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 /// fixup types
-enum URAsmFixup {
+public enum URAsmFixup {
   None, ///
   Word, ///
   LoByte, ///
@@ -1323,71 +1363,15 @@ void EERROR (URAsmExprError code) { throw new Exception("urasm expression error:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
-  pragma(inline, true);
-  return
-    ch >= '0' && ch <= '9' && ch-'0' < base ? ch-'0' :
-    base > 10 && ch >= 'A' && ch < 'Z' && ch-'A'+10 < base ? ch-'A'+10 :
-    base > 10 && ch >= 'a' && ch < 'z' && ch-'a'+10 < base ? ch-'a'+10 :
-    -1;
-}
+/// expression parser
+public struct URExprValue {
+  int val; ///
+  char[] str; /// null: non-string value; val is set for strings too
+  URAsmFixup fixuptype; /// can be changed only by low() and high()
 
-struct URAsmParser {
-  //@disable this (this);
-  const(char)[] text;
-  uint textpos;
+  @property bool isString () const pure nothrow @trusted @nogc { pragma(inline, true); return (str !is null); } ///
 
-  char[] getOrPeekId(bool eat) () pure nothrow @trusted {
-    char[] res = null;
-    if (textpos >= text.length) return null;
-    uint epos = textpos;
-    while (epos < text.length) {
-      char ch = text.ptr[epos];
-      if (ch >= 'a' && ch <= 'z') ch -= 32;
-      if ((ch >= 'A' && ch <= 'Z') || ch == '_') { res ~= ch; ++epos; continue; }
-      if (res.length > 0 && ch >= '0' && ch <= '9') { res ~= ch; ++epos; continue; }
-      break;
-    }
-    static if (eat) textpos = epos;
-    return res;
-  }
-
-  char[] peekId () pure nothrow @trusted { return getOrPeekId!false(); }
-  char[] getId () pure nothrow @trusted { return getOrPeekId!true(); }
-
-nothrow @trusted @nogc:
-  URAsmParser opSlice (uint lo, uint hi) pure const {
-    if (hi <= lo || lo >= text.length) return URAsmParser.init;
-    if (hi > text.length) hi = cast(uint)text.length;
-    return URAsmParser(text[lo..hi], 0);
-  }
-  @property uint tell () pure const { pragma(inline, true); return textpos; }
-  void seek (uint pos) pure { pragma(inline, true); if (pos > text.length) pos = cast(uint)text.length; textpos = pos; }
-  URAsmParser slice (uint len) pure const {
-    if (len > text.length) len = cast(uint)text.length;
-    if (textpos >= text.length) return URAsmParser.init;
-    if (text.length-textpos < len) len = cast(uint)text.length-textpos;
-    return URAsmParser(text[textpos..textpos+len], 0);
-  }
-  @property bool empty () pure const { pragma(inline, true); return (textpos >= text.length); }
-  @property bool eol () pure const { pragma(inline, true); return (textpos >= text.length || text.ptr[textpos] == ':' || text.ptr[textpos] == ';'); }
-  @property char front () pure const { pragma(inline, true); return (textpos < text.length ? text.ptr[textpos] : '\x00'); }
-  @property char ahead () pure const { pragma(inline, true); return (textpos+1 < text.length ? text.ptr[textpos+1] : '\x00'); }
-  @property char peek (uint ofs) pure const { pragma(inline, true); return (ofs < text.length && textpos+ofs < text.length ? text.ptr[textpos+ofs] : '\x00'); }
-  void popFront () pure { if (textpos < text.length) ++textpos; }
-  void skipBlanks () pure { while (textpos < text.length && text.ptr[textpos] <= ' ') ++textpos; }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-// expression parser
-
-struct URExprValue {
-  int val; // for now
-  char[] str; // null: non-string value; val is set for strings too (see dox, hehe)
-  URAsmFixup fixuptype; // can be changed only by low() and high()
-
-  void clear () pure nothrow @trusted @nogc { val = 0; str = null; fixuptype = URAsmFixup.None; }
+  void clear () pure nothrow @trusted @nogc { val = 0; str = null; fixuptype = URAsmFixup.None; } ///
 }
 
 struct URAOperand {
@@ -1555,7 +1539,7 @@ void parseStr (ref URAsmParser pr, ref URExprValue res) {
           if (pr.empty) EERROR(URAsmExprError.Eos);
           for (n = 0; f > 0; --f) {
             if (pr.empty) break;
-            int d = digitInBase(pr.front, base);
+            int d = URAsmParser.digitInBase(pr.front, base);
             if (d < 0) break;
             n *= base;
             n += d;
@@ -1616,24 +1600,24 @@ void parseNumber (ref URAsmParser pr, ref URExprValue res) {
   }
   // if base != 0, parse in dec and in hex, and check last char
   if (pr.empty) EERROR(URAsmExprError.Eos);
-  if (digitInBase(pr.front, (base ? base : 16)) < 0) EERROR(URAsmExprError.Number);
+  if (URAsmParser.digitInBase(pr.front, (base ? base : 16)) < 0) EERROR(URAsmExprError.Number);
   while (!pr.empty) {
     int d;
     ch = pr.front;
     if (ch == '_') { pr.popFront(); continue; }
     if (base) {
-      d = digitInBase(ch, base);
+      d = URAsmParser.digitInBase(ch, base);
       if (d < 0) break;
       n = n*base+d;
     } else {
       if (wantTrailingH) {
-        d = digitInBase(ch, 16);
+        d = URAsmParser.digitInBase(ch, 16);
         if (d < 0) break;
         nhex = nhex*16+d;
       } else {
-        d = digitInBase(ch, 10);
+        d = URAsmParser.digitInBase(ch, 10);
         if (d < 0) {
-          d = digitInBase(ch, 16);
+          d = URAsmParser.digitInBase(ch, 16);
           if (d < 0) break;
           wantTrailingH = true;
           nhex = nhex*16+d;
@@ -1678,7 +1662,7 @@ char[] readLabelName (ref URAsmParser pr, ref ExprInfo ei) {
   char[] res;
   while (!pr.empty) {
     char ch = pr.front;
-    if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '$' || ch == '.' || ch == '_' || ch == '@') {
+    if (URAsmParser.isalnum(ch) || ch == '$' || ch == '.' || ch == '_' || ch == '@') {
       res ~= ch;
       pr.popFront();
     } else {
@@ -1710,7 +1694,7 @@ void term (ref URAsmParser pr, ref URExprValue res, ref ExprInfo ei) {
       parseNumber(pr, res);
       break;
     case '$':
-      if (digitInBase(pr.ahead, 16) >= 0) {
+      if (URAsmParser.digitInBase(pr.ahead, 16) >= 0) {
         parseNumber(pr, res);
       } else {
         res.val = ei.addr;
@@ -1890,7 +1874,7 @@ void expression (ref URAsmParser pr, ref URExprValue res, ref ExprInfo ei) {
 }
 
 
-void urExpressionEx (ref URAsmParser pr, ref URExprValue res, ushort addr, out bool defined) {
+public void urExpressionEx (ref URAsmParser pr, ref URExprValue res, ushort addr, out bool defined) {
   ExprInfo ei;
   res.clear();
   if (pr.empty) EERROR(URAsmExprError.Eos);
@@ -1903,7 +1887,7 @@ void urExpressionEx (ref URAsmParser pr, ref URExprValue res, ushort addr, out b
 }
 
 
-int urExpression (ref URAsmParser pr, ushort addr, out bool defined, out URAsmFixup fixuptype) {
+public int urExpression (ref URAsmParser pr, ushort addr, out bool defined, out URAsmFixup fixuptype) {
   URExprValue r;
   defined = true;
   fixuptype = URAsmFixup.None;
@@ -2083,7 +2067,6 @@ void urNextOperand (ref URAsmParser pr, out URAOperand op, ushort addr) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // assembler
-
 bool urIsValidOp (ref URAOperand op, ushort addr, int opt) {
   if (opt == UROpType.NONE) return (op.type == UROpType.NONE);
   if (op.type == UROpType.NONE) return false;
@@ -2204,52 +2187,65 @@ bool urIsValidOp (ref URAOperand op, ushort addr, int opt) {
 }
 
 
-// mem size should be at least 7 bytes
-// returns size of the assembled code
-// result <0 on error
-// understands comments
-ubyte[] urAssembleOne (ubyte[] dest, const(char)[] expr, ushort addr) {
-  ubyte[8] buf;
+/// buffer to keep assembled code
+public struct URAsmBuf {
+  ubyte[] dest; /// can be of any length, will grow
+  URAsmFixup[] dfixs; /// fixups
+  uint destused;
+  ubyte[] code; /// result of `urAssembleOne()` call, always slice of `dest`
+  URAsmFixup[] fixup; /// result of `urAssembleOne()` call, always slice of `dfixs`
+
+  void reset () pure nothrow @safe @nogc { destused = 0; code = null; fixup = null; }
+
+  void putByte (ubyte v, URAsmFixup fix=URAsmFixup.None) pure nothrow @safe {
+    if (destused >= dest.length) dest.length += 64; // way too much! ;-)
+    if (destused >= dfixs.length) dfixs.length += 64; // way too much! ;-)
+    dest[destused] = v;
+    dfixs[destused] = fix;
+    ++destused;
+    code = dest[0..destused];
+    fixup = dfixs[0..destused];
+  }
+
+  void putWord (ushort v, URAsmFixup fix=URAsmFixup.None) pure nothrow @safe {
+    putByte(v&0xff, fix);
+    putByte((v>>8)&0xff, URAsmFixup.None);
+  }
+}
+
+
+/// understands comments
+void urAssembleOne (ref URAsmBuf dbuf, ref URAsmParser pr, ushort addr) {
   char[6] mnem;
   int tkn;
   URAOperand[3] ops;
   const(URAsmCmdInfo)* cm;
 
-  URAsmParser pr;
-  pr.text = expr;
+  dbuf.reset();
 
-  void doOperand (int idx, ref uint code, ref int len) {
+  void doOperand (int idx, ref uint code) {
     const(URAOperand)* op = ops.ptr+idx;
     switch (cm.ops[idx]) {
       case UROpType.IMM8:
-        /*
-        if (op.fixuptype != UR_FIXUP_NONE && urAsmFixupOperandFn !is null) {
-          if (op.fixuptype == UR_FIXUP_WORD) return -1;
-          urAsmFixupOperandFn(op, (destaddr+len)&0xffff, (destaddr+len)&0xffff, op.fixuptype, 1);
-        }
-        */
-        // fallthru
-        goto case;
       case UROpType.PORTIMM:
-        buf[len++] = op.v&0xFFU;
+        if (op.fixuptype != URAsmFixup.None) {
+          if (op.fixuptype == URAsmFixup.Word) throw new Exception("invalid fixup");
+        }
+        dbuf.putByte(op.v&0xFFU, op.fixuptype);
         break;
       case UROpType.ADDR8:
-        //buf[len++] = op.v&0xFFU;
         if (op.defined) {
           int dist = op.v-(addr+2);
           if (dist < byte.min || dist > byte.max) throw new Exception("invalid jr destination");
-          //conwriteln("dist=", dist);
-          buf[len++] = dist&0xff;
+          dbuf.putByte(dist&0xff);
         } else {
-          buf[len++] = 0;
+          dbuf.putByte(0);
         }
         break;
       case UROpType.IMM16:
       case UROpType.ADDR16:
       case UROpType.MEM16:
-        //if (op.fixuptype != UR_FIXUP_NONE && urAsmFixupOperandFn != null) urAsmFixupOperandFn(op, (destaddr+len)&0xffff, (destaddr+len)&0xffff, op.fixuptype, 2);
-        buf[len++] = op.v&0xFFU;
-        buf[len++] = ((op.v&0xFFFFU)>>8)&0xFFU;
+        dbuf.putWord(op.v&0xFFFFU, op.fixuptype);
         break;
       case UROpType.R8:
       case UROpType.R8NOM:
@@ -2271,77 +2267,80 @@ ubyte[] urAssembleOne (ubyte[] dest, const(char)[] expr, ushort addr) {
         break;
       case UROpType.MIX:
       case UROpType.MIY:
-        buf[len++] = cast(ubyte)op.v;
+        dbuf.putByte(cast(ubyte)op.v);
         break;
       default: break;
     }
   }
 
-  ubyte[] genCode (void) {
+  void genCode (void) {
     cmdloop: for (int pos = cast(int)URInstructionsTable.length-1; pos >= 0; --pos) {
       if (tkn != URInstructionsTable.ptr[pos].mnemo) continue;
       foreach (immutable oprn, ref op; ops[]) {
         if (!urIsValidOp(op, addr, URInstructionsTable.ptr[pos].ops.ptr[oprn])) continue cmdloop;
       }
       // command found, generate code
-      int len = 0;
       cm = URInstructionsTable.ptr+pos;
       uint code = cm.code;
       uint mask = cm.mask;
       if ((code&0xFFFFU) == 0xCBDDU || (code&0xFFFFU) == 0xCBFDU) {
         // special commands
         // emit unmasked code
-        buf[0] = code&0xFFU;
-        buf[1] = 0xCB;
+        dbuf.putByte(code&0xFFU);
+        dbuf.putByte(0xCB);
+        dbuf.putByte(0);
+        dbuf.putByte(0);
         foreach (immutable oprn; 0..3) {
           if (cm.ops[oprn] == UROpType.MIX || cm.ops[oprn] == UROpType.MIY) {
             if (ops[oprn].defined && (ops[oprn].v < byte.min || ops[oprn].v > byte.max)) throw new Exception("invalid displacement");
-            if (ops[oprn].defined) buf[2] = cast(ubyte)ops[oprn].v;
+            if (ops[oprn].defined) dbuf.dest[dbuf.destused-2] = cast(ubyte)ops[oprn].v;
             break;
           }
         }
-        len = 4;
+        auto ccpos = dbuf.destused-1;
+        //len = 4;
         code >>= 24;
         mask >>= 24;
         if ((mask&0xFFU) != 0xFFU) {
-          foreach (immutable oprn; 0..3) if (cm.ops[oprn] != UROpType.MIX && cm.ops[oprn] != UROpType.MIY) doOperand(oprn, code, len);
+          foreach (immutable oprn; 0..3) if (cm.ops[oprn] != UROpType.MIX && cm.ops[oprn] != UROpType.MIY) doOperand(oprn, code);
         }
-        buf[3] = cast(ubyte)code;
+        dbuf.dest[ccpos] = cast(ubyte)code;
         // that's all
-        return buf[0..len];
+        return;
       } else {
         // normal commands
         // emit unmasked code
         while ((mask&0xFFU) == 0xFFU) {
-          buf[len++] = code&0xFFU;
+          dbuf.putByte(code&0xFFU);
           code >>= 8;
           mask >>= 8;
         }
         //ASSERT((code&0xFFFFFF00UL) == 0);
         if (mask == 0) {
           //ASSERT(len > 0);
-          code = buf[--len];
+          code = dbuf.dest[--dbuf.destused];
         }
-        uint opcPos = len++;
-        doOperand(0, code, len);
-        doOperand(1, code, len);
-        doOperand(2, code, len);
-        buf[opcPos] = cast(ubyte)code;
+        uint ccpos = dbuf.destused;
+        dbuf.putByte(0);
+        doOperand(0, code);
+        doOperand(1, code);
+        doOperand(2, code);
+        dbuf.dest[ccpos] = cast(ubyte)code;
         // that's all
-        return buf[0..len];
+        return;
       }
     }
     throw new Exception("invalid instruction");
   }
 
-  ubyte[] doPushPop () {
-    int len = 0;
+  void doPushPop () {
+    bool first = true;
     for (;;) {
       pr.skipBlanks();
       if (pr.eol) {
-        if (len == 0) throw new Exception("invalid operand");
+        if (first) throw new Exception("invalid operand");
         break;
-      } else if (len != 0) {
+      } else if (!first) {
         if (pr.empty || pr.front != ',') throw new Exception("invalid operand");
         pr.popFront();
         pr.skipBlanks();
@@ -2349,22 +2348,19 @@ ubyte[] urAssembleOne (ubyte[] dest, const(char)[] expr, ushort addr) {
       }
       ops[] = URAOperand.init;
       urNextOperand(pr, ops[0], addr);
-      auto rb = genCode();
-      if (len+rb.length > dest.length) throw new Exception("output buffer too small");
-      dest[len..len+rb.length] = rb[];
-      len += rb.length;
+      genCode();
+      first = false;
     }
-    return dest[0..len];
   }
 
-  ubyte[] dorep (int opcnt) {
-    int len = 0;
+  void dorep (int opcnt) {
+    bool first = true;
     for (;;) {
       pr.skipBlanks();
       if (pr.eol) {
-        if (len == 0) throw new Exception("invalid operand");
+        if (first) throw new Exception("invalid operand");
         break;
-      } else if (len != 0) {
+      } else if (!first) {
         if (pr.empty || pr.front != ',') throw new Exception("invalid operand");
         pr.popFront();
         pr.skipBlanks();
@@ -2384,28 +2380,27 @@ ubyte[] urAssembleOne (ubyte[] dest, const(char)[] expr, ushort addr) {
       // shifts has special (I?+n),r8 forms
       if (opcnt == 1 && tkn != URMnemo.INC && tkn != URMnemo.DEC) {
         if (ops[0].type == UROpType.MIX || ops[0].type == UROpType.MIY || ops[0].type == UROpType.MIX0 || ops[0].type == UROpType.MIY0) {
-          if (len != 0) throw new Exception("invalid operand mix");
+          if (!first) throw new Exception("invalid operand mix");
           pr.skipBlanks();
           if (!pr.empty && pr.front == ',') urNextOperand(pr, ops[1], addr);
           pr.skipBlanks();
           if (!pr.eol) throw new Exception("invalid operand");
-          assert(len == 0);
-          auto rb = genCode();
-          if (dest.length < rb.length) throw new Exception("output buffer too small");
-          dest[0..rb.length] = rb[];
-          return dest[0..rb.length];
+          genCode();
+          return;
         }
       }
-      auto rb = genCode();
-      if (len+rb.length > dest.length) throw new Exception("output buffer too small");
-      dest[len..len+rb.length] = rb[];
-      len += rb.length;
+      genCode();
+      first = false;
     }
-    return dest[0..len];
   }
 
-  pr.skipBlanks();
-  if (pr.empty || pr.front == ';') return null;
+  for (;;) {
+    pr.skipBlanks();
+    if (pr.empty || pr.front == ';') return;
+    if (URAsmParser.isalpha(pr.front)) break;
+    if (pr.front == ':') { pr.popFront(); continue; }
+    throw new Exception("invalid instruction");
+  }
 
   //if (expr[0] == ':') { if (errpos) *errpos = expr; return 0; }
   // get mnemonics
@@ -2468,11 +2463,7 @@ ubyte[] urAssembleOne (ubyte[] dest, const(char)[] expr, ushort addr) {
   pr.skipBlanks();
   if (!pr.eol) throw new Exception("invalid operand");
 
-  auto rb = genCode();
-  if (rb.length == 0) assert(0, "internal URASM error");
-  if (dest.length < rb.length) throw new Exception("output buffer too small");
-  dest[0..rb.length] = rb[];
-  return dest[0..rb.length];
+  genCode();
 }
 
 
@@ -2484,7 +2475,6 @@ import iv.vfs.io;
 
 void testOne (string xname) {
   conwriteln("=== ", xname, " ===");
-  ubyte[16] buf;
   ubyte[] eta;
   {
     auto fi = VFile("_urtests/"~xname~"_0000.bin");
@@ -2492,18 +2482,22 @@ void testOne (string xname) {
     fi.rawReadExact(eta[]);
   }
   ushort addr = 0;
-  ubyte[] res;
+  //ubyte[] res;
   foreach (string s; VFile("_urtests/"~xname~".asm").byLineCopy) {
     //conwritefln!"%04X: %s: %s"(addr, addr, s);
-    auto db = urAssembleOne(buf[], s, addr);
-    foreach (immutable idx, ubyte b; db[]) {
+    URAsmBuf abuf;
+    auto pr = URAsmParser(s);
+    urAssembleOne(abuf, pr, addr);
+    pr.skipBlanks();
+    if (!pr.empty && pr.front != ';') assert(0, "extra text");
+    foreach (immutable idx, ubyte b; abuf.code) {
       if (b != eta[addr+idx]) {
         conwritefln!"%04X: %02X %02X"(addr+idx, eta[addr+idx], b);
         assert(0, "fucked");
       }
     }
-    res ~= db;
-    addr += db.length;
+    //res ~= db;
+    addr += abuf.code.length;
   }
   //auto fo = VFile("zres.bin", "w");
   //fo.rawWriteExact(res);
