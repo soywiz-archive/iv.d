@@ -335,6 +335,7 @@ int snd_pcm_hw_params_set_format(snd_pcm_t*, snd_pcm_hw_params_t*, snd_pcm_forma
 int snd_pcm_hw_params_set_rate_near(snd_pcm_t*, snd_pcm_hw_params_t*, uint*, int*);
 int snd_pcm_hw_params_set_rate (snd_pcm_t* pcm, snd_pcm_hw_params_t* params, uint val, int dir);
 int snd_pcm_hw_params_set_buffer_size_near (snd_pcm_t* pcm, snd_pcm_hw_params_t* params, snd_pcm_uframes_t* val);
+int snd_pcm_hw_params_set_buffer_size (snd_pcm_t* pcm, snd_pcm_hw_params_t* params, snd_pcm_uframes_t val);
 
 int snd_pcm_hw_params_set_rate_resample (snd_pcm_t* pcm, snd_pcm_hw_params_t* params, uint val);
 
