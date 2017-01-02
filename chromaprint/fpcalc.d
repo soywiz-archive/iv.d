@@ -4,7 +4,7 @@ import iv.cmdcon;
 import iv.chromaprint;
 import iv.encoding;
 import iv.vfs.io;
-import iv.xogg.tremor;
+import iv.tremor;
 
 
 enum BUF_SIZE = 4096;

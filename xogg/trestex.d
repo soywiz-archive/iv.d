@@ -40,7 +40,7 @@ import iv.vfs.io;
 import iv.drflac;
 import iv.minimp3;
 import iv.mp3scan;
-import iv.xogg.tremor;
+import iv.tremor;
 import iv.dopus;
 
 

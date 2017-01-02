@@ -29,7 +29,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 // quick-and-dirty D translation by Ketmar // Invisible Vector
-module iv.xogg.tremor;
+module iv.tremor;
 //version = LOW_ACCURACY__;
 private:
 

@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 import iv.alsa;
 
-import iv.xogg.tremor;
+import iv.tremor;
 
 version(XoggTremorNoVFS) {
   enum TremorHasVFS = false;
