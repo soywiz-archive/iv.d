@@ -17,20 +17,23 @@
  */
 module iv.vfs.posixci;
 
-private import core.sys.posix.dirent;
-import iv.vfs.koi8;
 import iv.vfs.config;
 
 static if (VFS_NORMAL_OS) {
 
+import core.sys.posix.dirent;
+import iv.vfs.koi8;
+
+
 // `name` will be modified
-package bool findFileCI (const(char)[] path, char[] name, bool asDir) {
+package bool findFileCI (const(char)[] path, char[] name, bool asDir) nothrow @nogc {
   import core.sys.posix.dirent;
+  import core.stdc.stdlib : alloca;
   if (path.length == 0) path = ".";
   while (path.length && path[$-1] == '/') path = path[0..$-1];
   if (path.length == 0) path = "/";
   if (path.length+name.length > 4094) return false;
-  char[4096] tmpbuf;
+  char* tmpbuf = cast(char*)alloca(path.length+name.length+2);
   tmpbuf[0..path.length] = path[];
   // check if we have perfect match
   {
@@ -39,7 +42,7 @@ package bool findFileCI (const(char)[] path, char[] name, bool asDir) {
     tmpbuf[path.length+1..path.length+1+name.length] = name[];
     tmpbuf[path.length+1+name.length] = '\0';
     stat_t st = void;
-    auto res = stat(tmpbuf.ptr, &st);
+    auto res = stat(tmpbuf, &st);
     if (res == 0) {
       // the file is here
       if ((asDir && (st.st_mode&(S_IFDIR|S_IFLNK)) != 0) || (!asDir && (st.st_mode&(S_IFREG|S_IFLNK)) != 0)) {
@@ -50,7 +53,7 @@ package bool findFileCI (const(char)[] path, char[] name, bool asDir) {
   // vanilla dmd has bug in dirent definition: it's not aligned
   static if (dirent.d_name.offsetof == 19) {
     tmpbuf[path.length] = '\0';
-    auto dir = opendir(tmpbuf.ptr);
+    auto dir = opendir(tmpbuf);
     if (dir is null) return false;
     scope(exit) closedir(dir);
     for (;;) {
@@ -68,7 +71,7 @@ package bool findFileCI (const(char)[] path, char[] name, bool asDir) {
         tmpbuf[path.length+1..path.length+1+dename.length] = dename[];
         tmpbuf[path.length+1+dename.length] = '\0';
         stat_t st = void;
-        auto res = stat(tmpbuf.ptr, &st);
+        auto res = stat(tmpbuf, &st);
         if (res == 0) {
           // the file is here
           if ((asDir && (st.st_mode&(S_IFDIR|S_IFLNK)) != 0) || (!asDir && (st.st_mode&(S_IFREG|S_IFLNK)) != 0)) {
@@ -84,8 +87,8 @@ package bool findFileCI (const(char)[] path, char[] name, bool asDir) {
 
 
 // `path` will be modified; returns new path (slice of `path`) or `null` (and `path` is not modified)
-package char[] dirNormalize (char[] path) {
-  char[4096] tmpbuf;
+package char[] dirNormalize (char[] path) nothrow @nogc {
+  char[1024*3] tmpbuf;
   uint tpos, ppos;
   if (path.length && path[0] == '/') tmpbuf.ptr[tpos++] = '/';
   while (ppos < path.length) {
@@ -119,10 +122,9 @@ package char[] dirNormalize (char[] path) {
 
 // `asDir`: should last element be threated as directory?
 // `path` will be modified; returns new path (slice of `path`) or `null`
-package char[] findPathCI (char[] path, bool asDir=false) {
+package char[] findPathCI (char[] path, bool asDir=false) nothrow @nogc {
   path = dirNormalize(path);
   if (path is null) return null;
-  char[4096] tmpbuf;
   if (path.length == 0) return null;
   uint ppos = 0;
   while (ppos < path.length) {
@@ -140,6 +142,79 @@ package char[] findPathCI (char[] path, bool asDir=false) {
   return path;
 }
 
+
+// name can be "~", "~uname", or just "uname"
+// return empty slice or slice of `dest`
+char[] findSystemUserPath (char[] dest, const(char)[] name) nothrow @nogc {
+  if (name.length == 0) return null;
+
+  if (name[0] == '~') {
+    if (name.length == 1) {
+      // take from $HOME
+      import core.stdc.stdlib : getenv;
+      import core.stdc.string : strlen;
+      auto home = getenv("HOME");
+      if (home == null) return null;
+      auto len = strlen(home);
+      if (len == 0 || len > dest.length) return null;
+      dest[0..len] = home[0..len];
+      return dest[0..len];
+    }
+    name = name[1..$];
+  }
+
+  if (name.length >= 128) return null; // arbitrary limit
+  char[128] qnamebuf = 0;
+  qnamebuf[0..name.length] = name[];
+
+  import core.stdc.stdlib : malloc, realloc, free;
+  import core.sys.posix.pwd : passwd, getpwnam_r;
+  //import std.string : indexOf;
+
+  char[2048] stkbuf = 0;
+  char* pwbuf = stkbuf.ptr;
+  uint pwbufsize = cast(uint)stkbuf.length;
+
+  passwd result;
+  for (;;) {
+    import core.stdc.errno;
+    passwd* verify;
+    errno = 0;
+    if (getpwnam_r(qnamebuf.ptr, &result, pwbuf, pwbufsize, &verify) == 0) {
+      // succeeded if verify points at result
+      if (verify == &result) {
+        if (result.pw_dir !is null) {
+          import core.stdc.string : strlen;
+          auto len = strlen(result.pw_dir);
+          if (len > 0 && len <= dest.length) {
+            dest[0..len] = result.pw_dir[0..len];
+            if (pwbuf !is stkbuf.ptr) free(pwbuf);
+            return dest[0..len];
+          }
+        }
+      }
+      if (pwbuf !is stkbuf.ptr) free(pwbuf);
+      return null;
+    }
+    if (errno != ERANGE || pwbufsize > 1024*1024*4) {
+      if (pwbuf !is stkbuf.ptr) free(pwbuf);
+      return null;
+    }
+    if (pwbuf is stkbuf.ptr) {
+      pwbufsize = 4096;
+      pwbuf = cast(char*)malloc(pwbufsize);
+      if (pwbuf is null) return null;
+    } else {
+      pwbufsize *= 2;
+      auto nb = cast(char*)realloc(pwbuf, pwbufsize);
+      if (nb is null) { free(pwbuf); return null; }
+      pwbuf = nb;
+    }
+  }
+}
+
+} else {
+  char[] findSystemUserPath (char[] dest, const(char)[] name) nothrow @nogc { return null; }
 }
 
 

@@ -165,6 +165,11 @@ public:
         dataPath = "./";
       } else if (dpath[$-1] == '/') {
         static if (is(T == string)) dataPath = dpath; else dataPath = dpath.idup;
+      } else if (dpath[0] == '~') {
+        import std.path : expandTilde;
+        dataPath = dpath.expandTilde;
+        if (dataPath.length == 0) dataPath = "./";
+        else if (dataPath[$-1] != '/') dataPath ~= "/";
       } else {
         dataPath = dpath~"/";
       }
@@ -174,33 +179,54 @@ public:
   /// doesn't do any security checks, 'cause i don't care
   override VFile tryOpen (const(char)[] fname, bool ignoreCase) {
     static import core.stdc.stdio;
+    import core.stdc.stdlib : alloca;
     if (fname.length == 0) return VFile.init;
-    char[2049] nbuf;
+    if (fname.length > 1024*3) return VFile.init; // arbitrary limit
+    char* nbuf;
     if (fname[0] == '/') {
       if (dataPath[0] != '/' || fname.length <= dataPath.length) {
         bool hit = (ignoreCase ? koi8StrCaseEqu(fname[0..dataPath.length], dataPath) : fname[0..dataPath.length] == dataPath);
         if (!hit) return VFile.init;
       }
-      if (fname.length > 2048) return VFile.init;
+      nbuf = cast(char*)alloca(fname.length+1);
       nbuf[0..fname.length] = fname[];
       nbuf[fname.length] = '\0';
+    } else if (fname[0] == '~') {
+      uint nepos = 1;
+      while (nepos < fname.length && fname[nepos] != '/') ++nepos;
+      uint len = cast(uint)fname.length-nepos+257;
+      if (len > 1024*3) return VFile.init;
+      nbuf = cast(char*)alloca(len);
+      auto up = findSystemUserPath(nbuf[0..255], fname[0..nepos]);
+      if (up.length == 0) return VFile.init;
+      len = cast(uint)up.length;
+      if (nbuf[len-1] != '/') nbuf[len++] = '/';
+      while (nepos < fname.length && fname[nepos] == '/') ++nepos;
+      if (nepos < fname.length) {
+        fname = fname[nepos..$];
+        nbuf[len..len+fname.length] = fname[];
+        nbuf[len+fname.length] = '\0';
+      } else {
+        nbuf[len] = '\0';
+      }
     } else {
-      if (fname.length+dataPath.length < fname.length || fname.length+dataPath.length > 2048) return VFile.init;
+      if (dataPath.length > 4096 || fname.length > 4096 || dataPath.length+fname.length > 1024*3) return VFile.init;
+      nbuf = cast(char*)alloca(dataPath.length+fname.length+1);
       nbuf[0..dataPath.length] = dataPath[];
       nbuf[dataPath.length..dataPath.length+fname.length] = fname[];
       nbuf[dataPath.length+fname.length] = '\0';
     }
     static if (VFS_NORMAL_OS) if (ignoreCase) {
-      uint len;
-      while (len < nbuf.length && nbuf.ptr[len]) ++len;
+      import core.stdc.string : strlen;
+      uint len = cast(uint)strlen(nbuf);
       auto pt = findPathCI(nbuf[0..len]);
       if (pt is null) return VFile.init;
       nbuf[pt.length] = '\0';
     }
     static if (VFS_NORMAL_OS) {
-      auto fl = core.stdc.stdio.fopen(nbuf.ptr, "r");
+      auto fl = core.stdc.stdio.fopen(nbuf, "r");
     } else {
-      auto fl = core.stdc.stdio.fopen(nbuf.ptr, "rb");
+      auto fl = core.stdc.stdio.fopen(nbuf, "rb");
     }
     if (fl is null) return VFile.init;
     try { return VFile(fl); } catch (Exception e) {}
@@ -453,14 +479,17 @@ public void vfsForEachFile (scope void delegate (in ref VFSDriver.DirEntry de, V
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase) {
+char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase, ref bool allowPaks) {
   bool[128] got;
   uint mpos;
+  allowPaks = true;
   ignoreCase = (drivers.length ? vfsIgnoreCase : vfsIgnoreCaseNoDat);
   foreach (char ch; mode) {
     if (ch < 128 && !got[ch]) {
       if (ch == 'i') { ignoreCase = true; continue; }
       if (ch == 'I') { ignoreCase = false; continue; }
+      if (ch == 'X') { allowPaks = false; continue; }
+      if (ch == 'x') { allowPaks = true; continue; }
       static if (VFS_NORMAL_OS) if (ch == 'b'/* || ch == 't'*/) continue;
       if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
       got[ch] = true;
@@ -529,8 +558,9 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
     if (fname.length == 0) error("can't open file ''");
 
     bool ignoreCase;
+    bool allowPaks;
     char[16] modebuf = 0;
-    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
+    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase, allowPaks);
 
     {
       auto lock = VFSLock.lock();
@@ -677,11 +707,26 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
     if (fname.length == 0) throw new VFSException("can't open file ''");
     if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
     bool ignoreCase;
+    bool allowPaks;
     char[16] modebuf;
-    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase);
+    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase, allowPaks);
     char[2049] nbuf;
-    nbuf[0..fname.length] = fname[];
-    nbuf[fname.length] = '\0';
+    if (fname[0] == '~') {
+      uint nepos = 1;
+      while (nepos < fname.length && fname[nepos] != '/') ++nepos;
+      auto up = findSystemUserPath(nbuf[0..$-2], fname[0..nepos]);
+      if (up.length == 0) throw new VFSException("can't open file '"~fname.idup~"'");
+      uint len = cast(uint)up.length;
+      if (nbuf[len-1] != '/') nbuf[len++] = '/';
+      while (nepos < fname.length && fname[nepos] == '/') ++nepos;
+      auto nfn = (nepos < fname.length ? fname[nepos..$] : null);
+      if (len+nfn.length >= nbuf.length-1) throw new VFSException("can't open file '"~fname.idup~"'");
+      if (nfn.length) { nbuf[len..len+nfn.length] = nfn[]; len += nfn.length; }
+      nbuf[len] = '\0';
+    } else {
+      nbuf[0..fname.length] = fname[];
+      nbuf[fname.length] = '\0';
+    }
     static if (VFS_NORMAL_OS) if (ignoreCase) {
       // we have to lock here, as `findPathCI()` is not thread-safe
       auto lock = VFSLock.lock();
@@ -694,6 +739,24 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
         nbuf[pt.length] = '\0';
       }
     }
+    // try packs?
+    if (allowPaks && isROMode(mdb[])) {
+      uint colonpos = 0;
+      version(Windows) {
+        // idiotic shitdoze
+        if (nbuf[0] && nbuf[1] == ':') colonpos = 2;
+      }
+      while (nbuf[colonpos] && nbuf[colonpos] != ':') ++colonpos;
+      if (nbuf[colonpos]) {
+        try {
+          import core.stdc.string : strlen;
+          auto fl = openFileWithPaks!(char[])(nbuf[0..strlen(nbuf.ptr)]); //FIXME: usefname!
+          if (fl.isOpen) return fl;
+        } catch (Exception e) {
+        }
+      }
+    }
+    // normal disk file
     auto fl = core.stdc.stdio.fopen(nbuf.ptr, mdb.ptr);
     if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
     scope(failure) core.stdc.stdio.fclose(fl); // just in case
@@ -711,6 +774,66 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
 }
 
 
+//FIXME: usefname!
+VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name) {
+  static assert(!is(T == typeof(null)));
+  assert(name.length < int.max/4);
+
+  // check if name has any prefix at all
+  int pfxend = cast(int)name.length;
+  while (pfxend > 0 && name.ptr[pfxend-1] != ':') --pfxend;
+  version(Windows) {
+    // idiotic shitdoze
+    if (pfxend <= 1) return VFile.init; // easy case
+  } else {
+    if (pfxend == 0) return VFile.init; // easy case
+  }
+
+  auto lock = VFSLock.lock();
+
+  // cpos: after last succesfull prefix
+  VFile openit (int cpos) {
+    version(Windows) {
+      // idiotic shitdoze
+      if (cpos == 0 && name.length > 2 && name.ptr[1] == ':') cpos = 2;
+    }
+    while (cpos < name.length) {
+      auto ep = cpos;
+      while (ep < name.length && name.ptr[ep] != ':') ++ep;
+      if (ep >= name.length) return VFile(name, "rXI");
+      if (name.length-ep == 1) throw new VFSException("can't open file '"~name.idup~"'");
+      {
+        // hack!
+        import core.atomic;
+        atomicOp!"-="(vfsLockedFlag, 1);
+        scope(exit) atomicOp!"+="(vfsLockedFlag, 1);
+        vfsAddPak!("normal", true)(name[0..ep], name[0..ep+1]);
+      }
+      cpos = ep+1;
+    }
+    throw new VFSException("can't open file '"~name.idup~"'"); // just in case
+  }
+
+  // try to find the longest prefix which already exists
+  while (pfxend > 0) {
+    foreach (ref di; drivers) {
+      if (di.prefixpath == name[0..pfxend]) {
+        // i found her!
+        if (di.temp) di.tempUsedTime = MonoTime.currTime;
+        return openit(pfxend);
+      }
+    }
+    --pfxend;
+    while (pfxend > 0 && name.ptr[pfxend-1] != ':') --pfxend;
+    version(Windows) {
+      // idiotic shitdoze
+      if (pfxend <= 1) break;
+    }
+  }
+  return openit(0);
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 /// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
 public VFile openFileEx (const(char)[] name) {
@@ -719,12 +842,21 @@ public VFile openFileEx (const(char)[] name) {
   // check if name has any prefix at all
   int pfxend = cast(int)name.length;
   while (pfxend > 0 && name.ptr[pfxend-1] != ':') --pfxend;
-  if (pfxend == 0) return VFile(name); // easy case
+  version(Windows) {
+    // idiotic shitdoze
+    if (pfxend <= 1) return VFile(name); // easy case
+  } else {
+    if (pfxend == 0) return VFile(name); // easy case
+  }
 
   auto lock = VFSLock.lock();
 
   // cpos: after last succesfull prefix
   VFile openit (int cpos) {
+    version(Windows) {
+      // idiotic shitdoze
+      if (cpos == 0 && name.length > 2 && name.ptr[1] == ':') cpos = 2;
+    }
     while (cpos < name.length) {
       auto ep = cpos;
       while (ep < name.length && name.ptr[ep] != ':') ++ep;
@@ -753,6 +885,10 @@ public VFile openFileEx (const(char)[] name) {
     }
     --pfxend;
     while (pfxend > 0 && name.ptr[pfxend-1] != ':') --pfxend;
+    version(Windows) {
+      // idiotic shitdoze
+      if (pfxend <= 1) break;
+    }
   }
   return openit(0);
 }
