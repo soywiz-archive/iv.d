@@ -836,6 +836,7 @@ VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
+/// kept for compatibility with old code, standard `VFile(path)` can do that now.
 public VFile openFileEx (const(char)[] name) {
   if (name.length >= int.max/4) throw new VFSException("name too long");
 
