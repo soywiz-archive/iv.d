@@ -144,7 +144,7 @@ public:
   bool checkBreakpoint () nothrow @trusted @nogc { return false; }
 
   /**
-   * Will be called when port contention is necessary and if 'contended' flag is set.
+   * Will be called when port contention is necessary.
    * Function must increase z80.tstates by at least 'atstates' arg.
    *
    * Default: tstates += atstates;
@@ -1278,9 +1278,9 @@ private:
   static string z80_contention_by1ts(string addrs, ubyte cnt) () {
     if (!__ctfe) assert(0, "oops");
     import std.conv : to;
-    string res = "if (mem.ptr[("~addrs~")/MemPage.Size].contended) {";
+    string res = "if (ulacont.length && mem.ptr[("~addrs~")/MemPage.Size].contended) {";
     foreach (immutable _; 0..cnt) {
-      res ~= "if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];++tstates;";
+      res ~= "if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates]; ++tstates;";
     }
     return res~"} else { tstates += "~cnt.to!string~"; }";
   }
@@ -1295,7 +1295,7 @@ private nothrow @trusted @nogc:
   /* (ushort addr, int tstates, MemIO mio) */
   void z80_contention (ushort addr, int atstates, bool mreq) {
     pragma(inline, true);
-    if (mem.ptr[addr/MemPage.Size].contended) {
+    if (/*(mreq ? ulacont.length : ulacontnomreq.length) != 0 &&*/ mem.ptr[addr/MemPage.Size].contended) {
       if (mreq) {
         if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
       } else /*if (mreq == MemIOReq.Write)*/ {
@@ -1354,7 +1354,6 @@ private nothrow @trusted @nogc:
   // t2: memory read
   ubyte z80_peekb_3ts (ushort addr) {
     pragma(inline, true);
-    //if (contended) memContention(addr, 3, MemIO.Data, MemIOReq.Read);
     z80_contention(addr, 3, /*MemIO.Data, MemIOReq.Read*/ true);
     //return memRead(addr, MemIO.Data);
     return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
@@ -1362,7 +1361,6 @@ private nothrow @trusted @nogc:
 
   ubyte z80_peekb_3ts_args () {
     pragma(inline, true);
-    //if (contended) memContention(PC, 3, MemIO.OpArg, MemIOReq.Read);
     z80_contention(PC, 3, /*MemIO.OpArg, MemIOReq.Read*/ true);
     //return memRead(PC, MemIO.Data);
     return mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
@@ -1401,7 +1399,7 @@ private nothrow @trusted @nogc:
     res |= z80_peekb_3ts_args()<<8;
     if (wait1) {
       //z80_contention_by1ts_pc(wait1);
-      if (mem.ptr[PC/MemPage.Size].contended) {
+      if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
         while (wait1--) { if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates]; ++tstates; }
       } else {
         tstates += wait1;
