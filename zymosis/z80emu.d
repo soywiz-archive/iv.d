@@ -120,15 +120,17 @@ public:
    * Page enter hook. Will be called before opcode fetching and tstate changing.
    *
    * prevPC is previous instruction address, PC is current instruction address (to be fetched).
+   * Entering page `mpage`.
    */
-  void execEnterHook () nothrow @trusted @nogc {}
+  void execEnterHook (uint mpage) nothrow @trusted @nogc {}
 
   /**
    * Page leave hook. Will be called before opcode fetching and tstate changing.
    *
    * prevPC is previous instruction address, PC is current instruction address (to be fetched).
+   * Leaving page `mpage`.
    */
-  void execLeaveHook () nothrow @trusted @nogc {}
+  void execLeaveHook (uint mpage) nothrow @trusted @nogc {}
 
   /** Port access type for portRead() and portWrite(). */
   enum PortIO {
@@ -331,8 +333,8 @@ final:
       uint mpage = PC/MemPage.Size;
       // process enter/leave hooks
       if (prevPC/MemPage.Size != mpage) {
-        if (mem.ptr[prevPC/MemPage.Size].leaveHook) execLeaveHook();
-        if (mem.ptr[mpage].enterHook) execEnterHook();
+        if (mem.ptr[prevPC/MemPage.Size].leaveHook) execLeaveHook(prevPC/MemPage.Size);
+        if (mem.ptr[mpage].enterHook) execEnterHook(mpage);
       }
       // process breakpoints
       if (bpmap[PC] && checkBreakpoint()) { bpHit = true; return tstates-tstart; }
