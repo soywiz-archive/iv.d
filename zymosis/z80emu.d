@@ -625,7 +625,7 @@ final:
           //opcode = memRead(PC, MemIO.OpExt);
           //FIXME: call enter/leave hooks here too?
           opcode = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
-          mixin(z80_contention_by1ts_pc!(2));
+          mixin(z80_contention_by1ts_pc!(2, "ulacont"));
           ++PC;
         }
         if (gotDD) {
@@ -716,7 +716,7 @@ final:
                   /* execute branch (relative) */
                   /*IOP(5)*/
                   if (disp > 127) disp -= 256; /* convert to int8_t */
-                  mixin(z80_contention_by1ts_pc!(5));
+                  mixin(z80_contention_by1ts_pc!(5, "ulacont"));
                   ++PC;
                   PC += disp;
                   MEMPTR = PC;
@@ -821,7 +821,7 @@ final:
                 case 4: DD.h = INC8(DD.h); break;
                 case 5: DD.l = INC8(DD.l); break;
                 case 6:
-                  if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5)); ++PC; }
+                  if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5, "ulacont")); ++PC; }
                   tmpW = cast(ushort)(cast(int)DD.w+disp);
                   tmpB = z80_peekb_3ts(tmpW);
                   mixin(z80_contention_by1ts!("tmpW", 1));
@@ -841,7 +841,7 @@ final:
                 case 4: DD.h = DEC8(DD.h); break;
                 case 5: DD.l = DEC8(DD.l); break;
                 case 6:
-                  if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5)); ++PC; }
+                  if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5, "ulacont")); ++PC; }
                   tmpW = cast(ushort)(cast(int)DD.w+disp);
                   tmpB = z80_peekb_3ts(tmpW);
                   mixin(z80_contention_by1ts!("tmpW", 1));
@@ -863,7 +863,7 @@ final:
                 case 4: DD.h = tmpB; break;
                 case 5: DD.l = tmpB; break;
                 case 6:
-                  if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(2)); ++PC; }
+                  if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(2, "ulacont")); ++PC; }
                   tmpW = cast(ushort)(cast(int)DD.w+disp);
                   z80_pokeb_3ts(tmpW, tmpB);
                   break;
@@ -918,7 +918,7 @@ final:
             case 4: tmpB = (gotDD && rdst == 6 ? HL.h : DD.h); break;
             case 5: tmpB = (gotDD && rdst == 6 ? HL.l : DD.l); break;
             case 6:
-              if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5)); ++PC; }
+              if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5, "ulacont")); ++PC; }
               tmpW = cast(ushort)(cast(int)DD.w+disp);
               tmpB = z80_peekb_3ts(tmpW);
               break;
@@ -932,7 +932,7 @@ final:
             case 4: if (gotDD && rsrc == 6) HL.h = tmpB; else DD.h = tmpB; break;
             case 5: if (gotDD && rsrc == 6) HL.l = tmpB; else DD.l = tmpB; break;
             case 6:
-              if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5)); ++PC; }
+              if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5, "ulacont")); ++PC; }
               tmpW = cast(ushort)(cast(int)DD.w+disp);
               z80_pokeb_3ts(tmpW, tmpB);
               break;
@@ -949,7 +949,7 @@ final:
             case 4: tmpB = DD.h; break;
             case 5: tmpB = DD.l; break;
             case 6:
-              if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5)); ++PC; }
+              if (gotDD) { --PC; mixin(z80_contention_by1ts_pc!(5, "ulacont")); ++PC; }
               tmpW = cast(ushort)(cast(int)DD.w+disp);
               tmpB = z80_peekb_3ts(tmpW);
               break;
@@ -1277,18 +1277,18 @@ final:
   }
 
 private:
-  static string z80_contention_by1ts(string addrs, ubyte cnt) () {
+  static string z80_contention_by1ts(string addrs, ubyte cnt, string carr="ulacont") () {
     if (!__ctfe) assert(0, "oops");
     import std.conv : to;
-    string res = "if (ulacont.length && mem.ptr[("~addrs~")/MemPage.Size].contended) {";
+    string res = "if ("~carr~".length && mem.ptr[("~addrs~")/MemPage.Size].contended) {";
     foreach (immutable _; 0..cnt) {
-      res ~= "if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates]; ++tstates;";
+      res ~= "if (tstates >= 0 && tstates < "~carr~".length) tstates += "~carr~".ptr[tstates]; ++tstates;";
     }
     return res~"} else { tstates += "~cnt.to!string~"; }";
   }
 
-  static string z80_contention_by1ts_ir(ubyte cnt) () { return z80_contention_by1ts!("((cast(ushort)I)<<8)|R", cnt); }
-  static string z80_contention_by1ts_pc(ubyte cnt) () { return z80_contention_by1ts!("PC", cnt); }
+  static string z80_contention_by1ts_ir(ubyte cnt) () { return z80_contention_by1ts!("((cast(ushort)I)<<8)|R", cnt, "ulacontnomreq"); }
+  static string z80_contention_by1ts_pc(ubyte cnt, string carr) () { return z80_contention_by1ts!("PC", cnt, carr); }
 
 private nothrow @trusted @nogc:
   /******************************************************************************/
