@@ -44,7 +44,7 @@ mdir=`dirname "$0"`
 cd "$mdir"
 if [ "$use_dmd" = "tan" ]; then
   echo "using DMD"
-  rdmd -O -release -inline -I../../.. zytest.d >z10.out
+  rdmd -O -release -I../../.. zytest.d >z10.out
 else
   echo "using GDC"
   rgdc -g -O2 -frelease -I../../.. zytest.d >z10.out

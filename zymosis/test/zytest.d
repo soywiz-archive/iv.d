@@ -71,7 +71,7 @@ class MyZ80 : ZymCPUImpl!true {
     } else {
       if (port&0x0001) {
         if ((port&0xc000) == 0x4000) {
-          for (int f = 0; f < 3; ++f) conwritefln!"%5s PC %04x"(tstates+f, port);
+          foreach (int f; 0..3) conwritefln!"%5s PC %04x"(tstates+f, port);
         }
       } else {
         conwritefln!"%5s PC %04x"(tstates, port);

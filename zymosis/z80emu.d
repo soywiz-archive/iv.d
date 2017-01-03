@@ -50,11 +50,18 @@ public:
     S35 = S|F35
   }
 
-  // Previous instruction type.
+  /// Previous instruction type.
   enum EIDDR {
     LdIorR = -1, /// LD A,I or LD A,R
     Normal, /// normal instruction
     BlockInt /// EI/FD/DD (they blocks /INT)
+  }
+
+  ///
+  enum PortContention {
+    Normal, /// Spectrum48-alike
+    None, /// no contended ports
+    Timex, /// TC2048-alike (TC2048, TC2068, SE)
   }
 
   /// register pair
@@ -117,6 +124,7 @@ public:
    * Zymosis will never reset bpWasHit flag.
    */
   bool bpHit; /// was emulation loop stopped due to BP hit?
+  PortContention portContentionType = PortContention.Normal; /// port contention style
 
 public:
   /**
@@ -159,7 +167,7 @@ public:
    * Returns:
    *  nothing
    */
-  void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc { tstates += atstates; }
+  static if (testing) void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc { tstates += atstates; }
 
   static if (testing) void memContention (ushort addr, bool mreq) nothrow @trusted @nogc {}
   static if (testing) void memReading (ushort addr) nothrow @trusted @nogc {}
@@ -642,6 +650,7 @@ final:
           tmpW = cast(ushort)(cast(int)DD.w+disp);
           tmpB = z80_peekb_3ts(tmpW);
           mixin(z80_contention_by1ts!("tmpW", 1));
+          MEMPTR = tmpW; //???MEMPTR
         } else {
           final switch (opcode&0x07) {
             case 0: tmpB = BC.b; break;
@@ -650,7 +659,7 @@ final:
             case 3: tmpB = DE.e; break;
             case 4: tmpB = HL.h; break;
             case 5: tmpB = HL.l; break;
-            case 6: tmpB = z80_peekb_3ts(HL); z80_contention(HL, 1, /*MemIO.Data, MemIOReq.Read*/ true); break;
+            case 6: tmpB = z80_peekb_3ts(HL); z80_contention(HL, 1, /*MemIO.Data, MemIOReq.Read*/ false); MEMPTR = HL; /*???MEMPTR*/ break;
             case 7: tmpB = AF.a; break;
           }
         }
@@ -665,7 +674,7 @@ final:
           case 7: tmpB = SLR(tmpB); break;
           default:
             final switch ((opcode>>6)&0x03) {
-              case 1: BIT((opcode>>3)&0x07, tmpB, (gotDD || (opcode&0x07) == 6)); break;
+              case 1: BIT((opcode>>3)&0x07, tmpB, gotDD, ((opcode&0x07) == 6)); break;
               case 2: tmpB &= ~(1<<((opcode>>3)&0x07)); break; /* RES */
               case 3: tmpB |= (1<<((opcode>>3)&0x07)); break; /* SET */
             }
@@ -721,9 +730,10 @@ final:
                     trueCC = 1;
                   }
                 }
-                disp = z80_peekb_3ts_args();
+                //???disp = z80_peekb_3ts_args(); // FUSE reads it only if condition was taken
                 if (trueCC) {
                   /* execute branch (relative) */
+                  disp = z80_peekb_3ts_args(); // FUSE reads it only if condition was taken
                   /*IOP(5)*/
                   if (disp > 127) disp -= 256; /* convert to int8_t */
                   mixin(z80_contention_by1ts_pc!(5, "ulacont"));
@@ -731,6 +741,7 @@ final:
                   PC += disp;
                   MEMPTR = PC;
                 } else {
+                  z80_peekb_3ts_args_noread(); // FUSE reads it only if condition was taken
                   ++PC;
                 }
               } else {
@@ -894,12 +905,20 @@ final:
                   AF.f = (AF.a&Z80Flags.F35)|(Z80Flags.N|Z80Flags.H)|(AF.f&(Z80Flags.C|Z80Flags.PV|Z80Flags.Z|Z80Flags.S));
                   break;
                 case 6: /* SCF */
-                  ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
+                  static if (testing) {
+                    enum fff = 0;
+                  } else {
+                    ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
+                  }
                   AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35)|Z80Flags.C;
                   prevOpChangedFlags = true;
                   break;
                 case 7: /* CCF */
-                  ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
+                  static if (testing) {
+                    enum fff = 0;
+                  } else {
+                    ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
+                  }
                   tmpB = AF.f&Z80Flags.C;
                   AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35);
                   AF.f |= tmpB ? Z80Flags.H : Z80Flags.C;
@@ -1017,7 +1036,8 @@ final:
             /* JP cc,nn */
             case 2:
               mixin(SET_TRUE_CC);
-              MEMPTR = z80_getpcw(0);
+              MEMPTR = z80_getpcw_cc(0, trueCC);
+              //MEMPTR = z80_getpcw(0);
               if (trueCC) PC = MEMPTR;
               break;
             /* special1/special3 */
@@ -1067,7 +1087,7 @@ final:
             /* CALL cc,nn */
             case 4:
               mixin(SET_TRUE_CC);
-              MEMPTR = z80_getpcw(trueCC);
+              MEMPTR = z80_getpcw_cc((trueCC ? 1 : 0), trueCC);
               if (trueCC) {
                 z80_push_6ts(PC);
                 PC = MEMPTR;
@@ -1355,20 +1375,56 @@ private nothrow @trusted @nogc:
   */
 
   /******************************************************************************/
+  static if (testing) {
+    enum PortOpMixin(string ope, string opl, string pccf) =
+      "portContention(port, 1, "~pccf~", true); /* early */"
+      ~ope~
+      "portContention(port, 2, "~pccf~", false); /* normal */"
+      ~opl~
+      "++tstates;";
+  } else {
+    enum PortOpMixin(string ope, string opl, string pccf) =
+      "/* early */
+      uint pg = port/MemPage.Size;
+      if (mem.ptr[pg].contended && tstates >= 0 && tstates < ulacontnomreq.length) tstates += ulacontnomreq.ptr[tstates];
+      ++tstates;"
+      ~ope~
+      "/* late */
+      bool fromUla = false;
+      final switch (portContentionType) {
+        case PortContention.Normal: fromUla = ((port&0x01) == 0); break;
+        case PortContention.None: break;
+        case PortContention.Timex: fromUla = ((port&0xff) == 0xf4 || (port&0xff) == 0xfe || (port&0xff) == 0xff); break; // ports F4 (HSR), FE (SCLD) and FF (DEC) supplied by ULA
+      }
+      if (fromUla) {
+        if (tstates >= 0 && tstates < ulacontnomreq.length) tstates += ulacontnomreq.ptr[tstates];
+        tstates += 2;
+      } else {
+        if (mem.ptr[pg].contended) {
+          if (tstates >= 0 && tstates < ulacontnomreq.length) tstates += ulacontnomreq.ptr[tstates];
+          ++tstates;
+          if (tstates >= 0 && tstates < ulacontnomreq.length) tstates += ulacontnomreq.ptr[tstates];
+          ++tstates;
+          if (tstates >= 0 && tstates < ulacontnomreq.length) tstates += ulacontnomreq.ptr[tstates];
+        } else {
+          tstates += 2;
+        }
+      }"
+      ~opl~
+      "++tstates;";
+  }
+
   ubyte z80_port_read (ushort port) {
-    ubyte value;
-    portContention(port, 1, true, true); // 'IN', early
-    portContention(port, 2, true, false); // 'IN', normal
-    value = portRead(port);
-    ++tstates;
+    static if (testing) {
+      mixin(PortOpMixin!("ubyte value = portRead(port);", "", "true"));
+    } else {
+      mixin(PortOpMixin!("", "ubyte value = portRead(port);", "true"));
+    }
     return value;
   }
 
   void z80_port_write (ushort port, ubyte value) {
-    portContention(port, 1, false, true); // 'OUT', early
-    portWrite(port, value);
-    portContention(port, 2, false, false); // 'OUT', normal
-    ++tstates;
+    mixin(PortOpMixin!("portWrite(port, value);", "", "false"));
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
@@ -1391,6 +1447,11 @@ private nothrow @trusted @nogc:
     //return memRead(addr, MemIO.Data);
     static if (testing) memReading(addr);
     return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
+  }
+
+  void z80_peekb_3ts_args_noread () {
+    static if (!testing) pragma(inline, true);
+    z80_contention(PC, 3, /*MemIO.OpArg, MemIOReq.Read*/ true);
   }
 
   ubyte z80_peekb_3ts_args () {
@@ -1449,6 +1510,35 @@ private nothrow @trusted @nogc:
       }
     }
     PC = (PC+1)&0xffff;
+    return res;
+  }
+
+  ushort z80_getpcw_cc (int wait1, bool truecc) {
+    //pragma(inline, true);
+    z80_peekb_3ts_args_noread();
+    static if (testing) { if (truecc) memReading(PC); }
+    ushort res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+    ++PC;
+    z80_peekb_3ts_args_noread();
+    static if (testing) { if (truecc) memReading(PC); }
+    res |= (mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size])<<8;
+    if (wait1) {
+      //z80_contention_by1ts_pc(wait1);
+      if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
+        while (wait1--) {
+          static if (testing) memContention(PC, true);
+          if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
+          ++tstates;
+        }
+      } else {
+        static if (testing) {
+          while (wait1--) { memContention(PC, true); ++tstates; }
+        } else {
+          tstates += wait1;
+        }
+      }
+    }
+    ++PC;
     return res;
   }
 
@@ -1707,16 +1797,17 @@ private nothrow @trusted @nogc:
     return res;
   }
 
-  void BIT (ubyte bit, ubyte num, int mptr) {
+  void BIT (ubyte bit, ubyte num, bool gotDD, bool mptr) {
     pragma(inline, true);
     prevOpChangedFlags = true;
     AF.f =
       Z80Flags.H|
       (AF.f&Z80Flags.C)|
-      (num&Z80Flags.F35)|
+      ((gotDD /*|| mptr*/ ? MEMPTR.h : num)&Z80Flags.F35)|
       (num&(1<<bit) ? 0 : Z80Flags.PV|Z80Flags.Z)|
-      (bit == 7 ? num&Z80Flags.S : 0);
-    if (mptr) AF.f = (AF.f&~Z80Flags.F35)|(MEMPTR.h&Z80Flags.F35);
+      (num&((1<<bit)&Z80Flags.S))
+      /*(bit == 7 ? num&Z80Flags.S : 0)*/;
+    //if (mptr) AF.f = (AF.f&~Z80Flags.F35)|(MEMPTR.h&Z80Flags.F35);
   }
 
   void DAA () {
