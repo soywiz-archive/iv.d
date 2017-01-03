@@ -17,6 +17,7 @@
  */
 module iv.zymosis.z80emu;
 
+//version = Zymosis_Like_FUSE;
 
 // ////////////////////////////////////////////////////////////////////////// //
 alias ZymCPU = ZymCPUImpl!false;
@@ -908,7 +909,10 @@ final:
                   static if (testing) {
                     enum fff = 0;
                   } else {
-                    ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
+                    version(Zymosis_Like_FUSE)
+                      enum fff = 0;
+                    else
+                      ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
                   }
                   AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35)|Z80Flags.C;
                   prevOpChangedFlags = true;
@@ -917,7 +921,10 @@ final:
                   static if (testing) {
                     enum fff = 0;
                   } else {
-                    ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
+                    version(Zymosis_Like_FUSE)
+                      enum fff = 0;
+                    else
+                      ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
                   }
                   tmpB = AF.f&Z80Flags.C;
                   AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35);
@@ -1192,7 +1199,6 @@ final:
    *  number of tstates taken by interrupt initiation or 0 if interrupts was disabled/ignored
    */
   int intr () {
-    ushort a;
     int ots = tstates;
     prevOpChangedFlags = false;
     if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* Z80 bug, NMOS only */
@@ -1230,7 +1236,7 @@ final:
         z80_push_6ts(PC);
         /* M4 cycle: 3 T to read high byte from the interrupt vector */
         /* M5 cycle: 3 T to read low byte from bus and jump to interrupt routine */
-        a = ((cast(ushort)I)<<8)|0xff;
+        ushort a = ((cast(ushort)I)<<8)|0xff;
         MEMPTR = PC = z80_peekw_6ts(a);
         break;
     }
@@ -1563,7 +1569,6 @@ private nothrow @trusted @nogc:
 
   // you are not expected to understand the following bitmess
   // the only thing you want to know that IT WORKS; just believe me and testing suite
-
  nothrow @trusted @nogc {
   void ADC_A (ubyte b) {
     pragma(inline, true);
