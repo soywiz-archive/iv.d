@@ -17,65 +17,64 @@
  */
 module zytest is aliced;
 
-import core.runtime : Runtime;
-import std.stdio;
-import std.string;
+//import core.runtime : Runtime;
+//import std.string;
 
+import iv.vfs.io;
+import iv.cmdcon;
+import iv.strex;
 import iv.zymosis;
 
 
-private ZymCPU z80;
-private ubyte[65536] memory, memsave;
+ZymCPUImpl!true z80;
+ubyte[65536] memory, memsave;
 
 
-class MyZ80 : ZymCPU {
+class MyZ80 : ZymCPUImpl!true {
   this () {
     super();
-    contended = true;
   }
 
-  @trusted override ubyte memRead (ushort addr, MemIO mio) {
-    if (mio != MemIO.Other) {
-      writefln("%5d MR %04x %02x", tstates, addr, memory[addr]);
+  override void setupMemory () {
+    foreach (immutable idx; 0..65536/MemPage.Size) {
+      mem[idx] = MemPage.init;
+      mem[idx].mem = memory.ptr+idx*MemPage.Size;
     }
-    return memory[addr];
+    //foreach (immutable idx; 0..16384/MemPage.Size) mem[idx].rom = true;
+    //foreach (immutable idx; 0x4000..0x5B00) mem[idx/MemPage.Size].writeHook = true;
   }
 
-  @trusted override void memWrite (ushort addr, ubyte value, MemIO mio) {
-    if (mio != MemIO.Other) {
-      writefln("%5d MW %04x %02x", tstates, addr, value);
-    }
-    memory[addr] = value;
+  override void memContention (ushort addr, bool mreq) nothrow @trusted @nogc {
+    conwritefln!"%5s MC %04x"(tstates, addr);
   }
 
-  override ubyte portRead (ushort port, PortIO pio) {
-    if (pio != PortIO.Internal) {
-      writefln("%5d PR %04x %02x", tstates, port, port>>8);
-    }
+  override void memReading (ushort addr) nothrow @trusted @nogc {
+    conwritefln!"%5s MR %04x %02x"(tstates, addr, memory[addr]);
+  }
+
+  override void memWriting (ushort addr, ubyte b) nothrow @trusted @nogc {
+    conwritefln!"%5s MW %04x %02x"(tstates, addr, b);
+  }
+
+  override ubyte portRead (ushort port) nothrow @trusted @nogc {
+    conwritefln!"%5s PR %04x %02x"(tstates, port, port>>8);
     return port>>8;
   }
 
-  override void portWrite (ushort port, ubyte value, PortIO pio) {
-    if (pio != PortIO.Internal) {
-      writefln("%5d PW %04x %02x", tstates, port, value);
-    }
+  override void portWrite (ushort port, ubyte value) nothrow @trusted @nogc {
+    conwritefln!"%5s PW %04x %02x"(tstates, port, value);
   }
 
-  override void memContention (ushort addr, int atstates, MemIO mio, MemIOReq mreq) {
-    writefln("%5d MC %04x", tstates, addr);
-    tstates += atstates;
-  }
-
-  override void portContention (ushort port, int atstates, bool doIN, bool early) {
+  override void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc {
     if (early) {
-      if ((port&0xc000) == 0x4000) writefln("%5d PC %04x", tstates, port);
+      if ((port&0xc000) == 0x4000) conwritefln!"%5s PC %04x"(tstates, port);
     } else {
       if (port&0x0001) {
         if ((port&0xc000) == 0x4000) {
-          for (int f = 0; f < 3; ++f) writefln("%5d PC %04x", tstates+f, port);
+          for (int f = 0; f < 3; ++f) conwritefln!"%5s PC %04x"(tstates+f, port);
         }
       } else {
-        writefln("%5d PC %04x", tstates, port);
+        conwritefln!"%5s PC %04x"(tstates, port);
       }
     }
     tstates += atstates;
@@ -84,7 +83,7 @@ class MyZ80 : ZymCPU {
 
 
 // null: error or done
-private string read_test (ref File fl) {
+private string read_test (VFile fl) {
   ubyte i, r;
   int i1, i2, im, hlt, ts;
   ushort af, bc, de, hl, afx, bcx, dex, hlx, ix, iy, sp, pc;
@@ -93,7 +92,7 @@ private string read_test (ref File fl) {
   string s;
   // read test description, skipping empty lines (useless)
   while (!fl.eof) {
-    s = fl.readln().strip();
+    s = fl.readln().xstrip();
     if (s.length > 0) { done = false; break; }
   }
   if (fl.eof || done) return null;
@@ -116,8 +115,8 @@ private string read_test (ref File fl) {
   z80.SP = sp;
   z80.PC = pc;
   // more registers and state
-  fl.readf(" %x %x %d %d %d %d %d", &i, &r, &i1, &i2, &im, &hlt, &ts);
-  //writefln(":%02x %02x %d %d %d %d %d", i, r, i1, i2, im, hlt, ts);
+  fl.readf(" %x %x %s %s %s %s %s", &i, &r, &i1, &i2, &im, &hlt, &ts);
+  //writefln(":%02x %02x %s %s %s %s %s", i, r, i1, i2, im, hlt, ts);
   z80.I = i;
   z80.R = r;
   z80.IFF1 = (i1 != 0);
@@ -169,7 +168,7 @@ private string read_test (ref File fl) {
     try {
       fl.readf(" %x ", &iv);
     } catch (std.conv.ConvException e) {
-      fl.readf(" %d ", &iv);
+      fl.readf(" %s ", &iv);
       //writeln(" eaddr=", iv);
       break;
     }
@@ -183,7 +182,7 @@ private string read_test (ref File fl) {
       try {
         fl.readf(" %x ", &iv);
       } catch (std.conv.ConvException e) {
-        fl.readf(" %d ", &iv);
+        fl.readf(" %s ", &iv);
         //writeln(" eiv=", iv);
         break;
       }
@@ -200,29 +199,29 @@ private string read_test (ref File fl) {
 
 
 private void dump_state () {
-  writefln("%04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x",
+  conwritefln!"%04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x"(
     z80.AF, z80.BC, z80.DE, z80.HL, z80.AFx, z80.BCx, z80.DEx, z80.HLx, z80.IX, z80.IY, z80.SP, z80.PC);
-  writefln("%02x %02x %d %d %d %d %d", z80.I, z80.R, z80.IFF1, z80.IFF2, z80.IM, z80.halted, z80.tstates);
+  conwritefln!"%02x %02x %s %s %s %s %s"(z80.I, z80.R, (z80.IFF1 ? 1 : 0), (z80.IFF2 ? 1 : 0), z80.IM, (z80.halted ? 1 : 0), z80.tstates);
   for (int f = 0; f < 65536; ++f) {
     if (memory[f] != memsave[f]) {
-      writef("%04x ", cast(ushort)f);
-      while (f < 65536 && memory[f] != memsave[f]) writef("%02x ", memory[f++]);
-      writeln("-1");
+      conwritef!"%04x "(cast(ushort)f);
+      while (f < 65536 && memory[f] != memsave[f]) conwritef!"%02x "(memory[f++]);
+      conwriteln("-1");
       --f;
     }
   }
-  writeln();
+  conwriteln();
 }
 
 
 void main (string[] args) {
-  version(DigitalMars) Runtime.traceHandlerAllowTrace = 1;
+  //version(DigitalMars) Runtime.traceHandlerAllowTrace = 1;
   string finame = "testdata/tests.in";
   if (args.length > 1) finame = args[1];
   z80 = new MyZ80();
-  auto fl = File(finame, "r");
+  auto fl = VFile(finame);
   int count = 0;
-  stderr.writeln("running tests...");
+  { import core.stdc.stdio; stderr.fprintf("running tests...\n"); }
   for (;;) {
     string title = read_test(fl);
     if (title is null) break;
@@ -231,5 +230,5 @@ void main (string[] args) {
     dump_state();
     ++count;
   }
-  stderr.writefln("%d tests complete.", count);
+  { import core.stdc.stdio; stderr.fprintf("%d tests complete.\n", count); }
 }

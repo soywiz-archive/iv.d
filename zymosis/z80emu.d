@@ -19,7 +19,9 @@ module iv.zymosis.z80emu;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public class ZymCPU {
+alias ZymCPU = ZymCPUImpl!false;
+
+public class ZymCPUImpl(bool testing) {
 public:
   ///
   static struct MemPage {
@@ -29,6 +31,7 @@ public:
     bool rom; /// read-only?
     bool enterHook; /// call enter hook before first opcode fetching from this page
     bool leaveHook; /// call leave hook before opcode fetching from another page
+    bool writeHook; /// call write hook after something was written to this page
   }
 
 public:
@@ -132,11 +135,7 @@ public:
    */
   void execLeaveHook (uint mpage) nothrow @trusted @nogc {}
 
-  /** Port access type for portRead() and portWrite(). */
-  enum PortIO {
-    Normal,  /** normal call in Z80 execution loop */
-    Internal /** call from debugger or other place outside of Z80 execution loop */
-  }
+  void memWriteHook (ushort addr) nothrow @trusted @nogc {}
 
   /**
    * Breakpoint hook
@@ -162,6 +161,10 @@ public:
    */
   void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc { tstates += atstates; }
 
+  static if (testing) void memContention (ushort addr, bool mreq) nothrow @trusted @nogc {}
+  static if (testing) void memReading (ushort addr) nothrow @trusted @nogc {}
+  static if (testing) void memWriting (ushort addr, ubyte b) nothrow @trusted @nogc {}
+
   /**
    * Read byte from emulated port.
    *
@@ -172,7 +175,7 @@ public:
    * Returns:
    *  readed byte from emulated port
    */
-  abstract ubyte portRead (ushort port, PortIO pio) nothrow @trusted @nogc;
+  abstract ubyte portRead (ushort port) nothrow @trusted @nogc;
 
   /**
    * Write byte to emulated port.
@@ -185,7 +188,7 @@ public:
    * Returns:
    *  Nothing
    */
-  abstract void portWrite (ushort port, ubyte value, PortIO pio) nothrow @trusted @nogc;
+  abstract void portWrite (ushort port, ubyte value) nothrow @trusted @nogc;
 
   /// get byte from memory, don't trigger any breakpoints or such
   public final ubyte memByte (ushort addr) nothrow @trusted @nogc {
@@ -254,6 +257,7 @@ public:
     halted = false;
     prevWasEIDDR = EIDDR.Normal;
     bpHit = false;
+    setupMemory();
   }
 
   /** Reset emulated CPU. Will NOT reset tstate counter. */
@@ -263,6 +267,9 @@ public:
     BCx = DEx = HLx = AFx = (poweron ? 0xFFFF: 0);
     softReset();
   }
+
+  /** This will be called before reset seqience is complete. */
+  abstract void setupMemory ();
 
 // ////////////////////////////////////////////////////////////////////////// //
 final:
@@ -320,6 +327,7 @@ final:
       //pragma(inline, true);
       z80_contention(PC, 4, /*MemIO.OpExt, MemIOReq.Read*/ true);
       //ubyte res = memRead(PC, MemIO.OpExt);
+      static if (testing) memReading(PC);
       ubyte res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
       ++PC;
       mixin(IncRMixin);
@@ -346,6 +354,7 @@ final:
       if (evenM1 && (tstates&0x01)) ++tstates;
       // read opcode
       //opcode = memRead(PC, MemIO.Opcode);
+      static if (testing) memReading(PC);
       opcode = mem.ptr[mpage].mem[PC%MemPage.Size];
       ++PC;
       mixin(IncRMixin);
@@ -624,6 +633,7 @@ final:
           z80_contention(PC, 3, /*MemIO.OpExt, MemIOReq.Read*/ true);
           //opcode = memRead(PC, MemIO.OpExt);
           //FIXME: call enter/leave hooks here too?
+          static if (testing) memReading(PC);
           opcode = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
           mixin(z80_contention_by1ts_pc!(2, "ulacont"));
           ++PC;
@@ -1282,9 +1292,21 @@ private:
     import std.conv : to;
     string res = "if ("~carr~".length && mem.ptr[("~addrs~")/MemPage.Size].contended) {";
     foreach (immutable _; 0..cnt) {
+      static if (testing) {
+        static if (carr == "ulacont") res ~= "memContention("~addrs~", true);"; else res ~= "memContention("~addrs~", false);";
+      }
       res ~= "if (tstates >= 0 && tstates < "~carr~".length) tstates += "~carr~".ptr[tstates]; ++tstates;";
     }
-    return res~"} else { tstates += "~cnt.to!string~"; }";
+    static if (testing) {
+      res ~= "} else {";
+      foreach (immutable _; 0..cnt) {
+        static if (carr == "ulacont") res ~= "memContention("~addrs~", true);"; else res ~= "memContention("~addrs~", false);";
+        res ~= "++tstates;";
+      }
+      return res~"}";
+    } else {
+      return res~"} else { tstates += "~cnt.to!string~"; }";
+    }
   }
 
   static string z80_contention_by1ts_ir(ubyte cnt) () { return z80_contention_by1ts!("((cast(ushort)I)<<8)|R", cnt, "ulacontnomreq"); }
@@ -1296,7 +1318,8 @@ private nothrow @trusted @nogc:
   /* (tstates = tstates+contention+atstates)*cnt */
   /* (ushort addr, int tstates, MemIO mio) */
   void z80_contention (ushort addr, int atstates, bool mreq) {
-    pragma(inline, true);
+    static if (!testing) pragma(inline, true);
+    static if (testing) memContention(addr, mreq);
     if (/*(mreq ? ulacont.length : ulacontnomreq.length) != 0 &&*/ mem.ptr[addr/MemPage.Size].contended) {
       if (mreq) {
         if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
@@ -1336,35 +1359,45 @@ private nothrow @trusted @nogc:
     ubyte value;
     portContention(port, 1, true, true); // 'IN', early
     portContention(port, 2, true, false); // 'IN', normal
-    value = portRead(port, PortIO.Normal);
+    value = portRead(port);
     ++tstates;
     return value;
   }
 
   void z80_port_write (ushort port, ubyte value) {
     portContention(port, 1, false, true); // 'OUT', early
-    portWrite(port, value, PortIO.Normal);
+    portWrite(port, value);
     portContention(port, 2, false, false); // 'OUT', normal
     ++tstates;
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
-  void z80_pokeb (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Data);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
   void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Other);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
+  void z80_pokeb (ushort addr, ubyte b) {
+    pragma(inline, true);
+    /*memWrite(addr, b, MemIO.Data);*/
+    static if (testing) memWriting(addr, b);
+    if (!mem.ptr[addr/MemPage.Size].rom) {
+      mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b;
+      if (mem.ptr[addr/MemPage.Size].writeHook) memWriteHook(addr);
+    }
+  }
 
   // t1: setting /MREQ & /RD
   // t2: memory read
   ubyte z80_peekb_3ts (ushort addr) {
-    pragma(inline, true);
+    static if (!testing) pragma(inline, true);
     z80_contention(addr, 3, /*MemIO.Data, MemIOReq.Read*/ true);
     //return memRead(addr, MemIO.Data);
+    static if (testing) memReading(addr);
     return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
   }
 
   ubyte z80_peekb_3ts_args () {
-    pragma(inline, true);
+    static if (!testing) pragma(inline, true);
     z80_contention(PC, 3, /*MemIO.OpArg, MemIOReq.Read*/ true);
     //return memRead(PC, MemIO.Data);
+    static if (testing) memReading(PC);
     return mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
   }
 
@@ -1402,9 +1435,17 @@ private nothrow @trusted @nogc:
     if (wait1) {
       //z80_contention_by1ts_pc(wait1);
       if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
-        while (wait1--) { if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates]; ++tstates; }
+        while (wait1--) {
+          static if (testing) memContention(PC, true);
+          if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
+          ++tstates;
+        }
       } else {
-        tstates += wait1;
+        static if (testing) {
+          while (wait1--) { memContention(PC, true); ++tstates; }
+        } else {
+          tstates += wait1;
+        }
       }
     }
     PC = (PC+1)&0xffff;
