@@ -1439,12 +1439,12 @@ private nothrow @trusted @nogc:
   // ////////////////////////////////////////////////////////////////////////// //
   void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Other);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
   void z80_pokeb (ushort addr, ubyte b) {
-    pragma(inline, true);
+    //pragma(inline, true);
     /*memWrite(addr, b, MemIO.Data);*/
     static if (testing) memWriting(addr, b);
-    if (!mem.ptr[addr/MemPage.Size].rom) {
-      mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b;
-      if (mem.ptr[addr/MemPage.Size].writeHook) memWriteHook(addr);
+    if (auto mpg = mem.ptr+addr/MemPage.Size) {
+      mpg.mem[addr%MemPage.Size] = b;
+      if (mpg.writeHook) memWriteHook(addr);
     }
   }
 
