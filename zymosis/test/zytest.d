@@ -25,12 +25,13 @@ import iv.cmdcon;
 import iv.strex;
 import iv.zymosis;
 
+version(Zymosis_Testing) {} else static assert(0, "use -version=Zymosis_Testing to run test suite");
 
-ZymCPUImpl!true z80;
+ZymCPU z80;
 ubyte[65536] memory, memsave;
 
 
-class MyZ80 : ZymCPUImpl!true {
+class MyZ80 : ZymCPU {
   this () {
     super();
   }

@@ -18,11 +18,11 @@
 module iv.zymosis.z80emu;
 
 //version = Zymosis_Like_FUSE;
+version = Zymosis_Testing;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
-alias ZymCPU = ZymCPUImpl!false;
-
-public class ZymCPUImpl(bool testing) {
+public class ZymCPU {
 public:
   ///
   static struct MemPage {
@@ -153,26 +153,28 @@ public:
    */
   bool checkBreakpoint () nothrow @trusted @nogc { return false; }
 
-  /**
-   * Will be called when port contention is necessary.
-   * Function must increase z80.tstates by at least 'atstates' arg.
-   *
-   * Default: tstates += atstates;
-   *
-   * Params:
-   *  port = port address
-   *  atstates = how much tstates we should spend (always 1 when 'early' is set and 2 otherwise)
-   *  doIN = true, if this is 'IN' instruction and false if this is 'OUT' instruction
-   *  early = true, if doing 'early' port contention (yes, ZX Spectrum port contention is complex)
-   *
-   * Returns:
-   *  nothing
-   */
-  static if (testing) void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc { tstates += atstates; }
+  version(Zymosis_Testing) {
+    /**
+     * Will be called when port contention is necessary.
+     * Function must increase z80.tstates by at least 'atstates' arg.
+     *
+     * Default: tstates += atstates;
+     *
+     * Params:
+     *  port = port address
+     *  atstates = how much tstates we should spend (always 1 when 'early' is set and 2 otherwise)
+     *  doIN = true, if this is 'IN' instruction and false if this is 'OUT' instruction
+     *  early = true, if doing 'early' port contention (yes, ZX Spectrum port contention is complex)
+     *
+     * Returns:
+     *  nothing
+     */
+    void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc { tstates += atstates; }
 
-  static if (testing) void memContention (ushort addr, bool mreq) nothrow @trusted @nogc {}
-  static if (testing) void memReading (ushort addr) nothrow @trusted @nogc {}
-  static if (testing) void memWriting (ushort addr, ubyte b) nothrow @trusted @nogc {}
+    void memContention (ushort addr, bool mreq) nothrow @trusted @nogc {}
+    void memReading (ushort addr) nothrow @trusted @nogc {}
+    void memWriting (ushort addr, ubyte b) nothrow @trusted @nogc {}
+  }
 
   /**
    * Read byte from emulated port.
@@ -336,7 +338,7 @@ final:
       //pragma(inline, true);
       z80_contention(PC, 4, /*MemIO.OpExt, MemIOReq.Read*/ true);
       //ubyte res = memRead(PC, MemIO.OpExt);
-      static if (testing) memReading(PC);
+      version(Zymosis_Testing) memReading(PC);
       ubyte res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
       ++PC;
       mixin(IncRMixin);
@@ -363,7 +365,7 @@ final:
       if (evenM1 && (tstates&0x01)) ++tstates;
       // read opcode
       //opcode = memRead(PC, MemIO.Opcode);
-      static if (testing) memReading(PC);
+      version(Zymosis_Testing) memReading(PC);
       opcode = mem.ptr[mpage].mem[PC%MemPage.Size];
       version(Zymosis_Run_Log) {
         { import core.stdc.stdio; stderr.fprintf("PC=%04X; OP:%02X; tstates=%d\n", PC, opcode, tstates); }
@@ -645,7 +647,7 @@ final:
           z80_contention(PC, 3, /*MemIO.OpExt, MemIOReq.Read*/ true);
           //opcode = memRead(PC, MemIO.OpExt);
           //FIXME: call enter/leave hooks here too?
-          static if (testing) memReading(PC);
+          version(Zymosis_Testing) memReading(PC);
           opcode = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
           mixin(z80_contention_by1ts_pc!(2, "ulacont"));
           ++PC;
@@ -909,7 +911,7 @@ final:
                   AF.f = (AF.a&Z80Flags.F35)|(Z80Flags.N|Z80Flags.H)|(AF.f&(Z80Flags.C|Z80Flags.PV|Z80Flags.Z|Z80Flags.S));
                   break;
                 case 6: /* SCF */
-                  static if (testing) {
+                  version(Zymosis_Testing) {
                     enum fff = 0;
                   } else {
                     version(Zymosis_Like_FUSE)
@@ -921,7 +923,7 @@ final:
                   prevOpChangedFlags = true;
                   break;
                 case 7: /* CCF */
-                  static if (testing) {
+                  version(Zymosis_Testing) {
                     enum fff = 0;
                   } else {
                     version(Zymosis_Like_FUSE)
@@ -1321,12 +1323,12 @@ private:
     import std.conv : to;
     string res = "if ("~carr~".length && mem.ptr[("~addrs~")/MemPage.Size].contended) {";
     foreach (immutable _; 0..cnt) {
-      static if (testing) {
+      version(Zymosis_Testing) {
         static if (carr == "ulacont") res ~= "memContention("~addrs~", true);"; else res ~= "memContention("~addrs~", false);";
       }
       res ~= "if (tstates >= 0 && tstates < "~carr~".length) tstates += "~carr~".ptr[tstates]; ++tstates;";
     }
-    static if (testing) {
+    version(Zymosis_Testing) {
       res ~= "} else {";
       foreach (immutable _; 0..cnt) {
         static if (carr == "ulacont") res ~= "memContention("~addrs~", true);"; else res ~= "memContention("~addrs~", false);";
@@ -1347,8 +1349,7 @@ private nothrow @trusted @nogc:
   /* (tstates = tstates+contention+atstates)*cnt */
   /* (ushort addr, int tstates, MemIO mio) */
   void z80_contention (ushort addr, int atstates, bool mreq) {
-    static if (!testing) pragma(inline, true);
-    static if (testing) memContention(addr, mreq);
+    version(Zymosis_Testing) memContention(addr, mreq); else pragma(inline, true);
     if (/*(mreq ? ulacont.length : ulacontnomreq.length) != 0 &&*/ mem.ptr[addr/MemPage.Size].contended) {
       if (mreq) {
         if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
@@ -1384,7 +1385,7 @@ private nothrow @trusted @nogc:
   */
 
   /******************************************************************************/
-  static if (testing) {
+  version(Zymosis_Testing) {
     enum PortOpMixin(string ope, string opl, string pccf) =
       "portContention(port, 1, "~pccf~", true); /* early */"
       ~ope~
@@ -1424,7 +1425,7 @@ private nothrow @trusted @nogc:
   }
 
   ubyte z80_port_read (ushort port) {
-    static if (testing) {
+    version(Zymosis_Testing) {
       mixin(PortOpMixin!("ubyte value = portRead(port);", "", "true"));
     } else {
       mixin(PortOpMixin!("", "ubyte value = portRead(port);", "true"));
@@ -1441,7 +1442,7 @@ private nothrow @trusted @nogc:
   void z80_pokeb (ushort addr, ubyte b) {
     //pragma(inline, true);
     /*memWrite(addr, b, MemIO.Data);*/
-    static if (testing) memWriting(addr, b);
+    version(Zymosis_Testing) memWriting(addr, b);
     if (auto mpg = mem.ptr+addr/MemPage.Size) {
       mpg.mem[addr%MemPage.Size] = b;
       if (mpg.writeHook) memWriteHook(addr);
@@ -1451,23 +1452,23 @@ private nothrow @trusted @nogc:
   // t1: setting /MREQ & /RD
   // t2: memory read
   ubyte z80_peekb_3ts (ushort addr) {
-    static if (!testing) pragma(inline, true);
+    version(Zymosis_Testing) {} else pragma(inline, true);
     z80_contention(addr, 3, /*MemIO.Data, MemIOReq.Read*/ true);
     //return memRead(addr, MemIO.Data);
-    static if (testing) memReading(addr);
+    version(Zymosis_Testing) memReading(addr);
     return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
   }
 
   void z80_peekb_3ts_args_noread () {
-    static if (!testing) pragma(inline, true);
+    version(Zymosis_Testing) {} else pragma(inline, true);
     z80_contention(PC, 3, /*MemIO.OpArg, MemIOReq.Read*/ true);
   }
 
   ubyte z80_peekb_3ts_args () {
-    static if (!testing) pragma(inline, true);
+    version(Zymosis_Testing) {} else pragma(inline, true);
     z80_contention(PC, 3, /*MemIO.OpArg, MemIOReq.Read*/ true);
     //return memRead(PC, MemIO.Data);
-    static if (testing) memReading(PC);
+    version(Zymosis_Testing) memReading(PC);
     return mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
   }
 
@@ -1480,7 +1481,7 @@ private nothrow @trusted @nogc:
   }
 
   ushort z80_peekw_6ts (ushort addr) {
-    pragma(inline, true);
+    version(Zymosis_Testing) {} else pragma(inline, true);
     ushort res = z80_peekb_3ts(addr);
     return res|((cast(ushort)z80_peekb_3ts((addr+1)&0xffff))<<8);
   }
@@ -1506,12 +1507,12 @@ private nothrow @trusted @nogc:
       //z80_contention_by1ts_pc(wait1);
       if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
         while (wait1--) {
-          static if (testing) memContention(PC, true);
+          version(Zymosis_Testing) memContention(PC, true);
           if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
           ++tstates;
         }
       } else {
-        static if (testing) {
+        version(Zymosis_Testing) {
           while (wait1--) { memContention(PC, true); ++tstates; }
         } else {
           tstates += wait1;
@@ -1525,22 +1526,22 @@ private nothrow @trusted @nogc:
   ushort z80_getpcw_cc (int wait1, bool truecc) {
     //pragma(inline, true);
     z80_peekb_3ts_args_noread();
-    static if (testing) { if (truecc) memReading(PC); }
+    version(Zymosis_Testing) { if (truecc) memReading(PC); }
     ushort res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
     ++PC;
     z80_peekb_3ts_args_noread();
-    static if (testing) { if (truecc) memReading(PC); }
+    version(Zymosis_Testing) { if (truecc) memReading(PC); }
     res |= (mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size])<<8;
     if (wait1) {
       //z80_contention_by1ts_pc(wait1);
       if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
         while (wait1--) {
-          static if (testing) memContention(PC, true);
+          version(Zymosis_Testing) memContention(PC, true);
           if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
           ++tstates;
         }
       } else {
-        static if (testing) {
+        version(Zymosis_Testing) {
           while (wait1--) { memContention(PC, true); ++tstates; }
         } else {
           tstates += wait1;
