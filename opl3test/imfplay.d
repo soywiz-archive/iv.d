@@ -5,16 +5,15 @@ import iv.nukedopl3;
 import xalsa;
 
 
-__gshared opl3_chip opl;
+__gshared OPL3Chip opl;
 __gshared short[4096] smpbuf;
 __gshared uint smpbufpos;
-__gshared double gain = 1;
 
 
 void playbuf () {
   if (smpbufpos == 0) return;
   foreach (ref short v; smpbuf[0..smpbufpos]) {
-    int n = cast(int)(cast(double)v*gain);
+    int n = v*4;
     if (n < short.min) n = short.min;
     if (n > short.max) n = short.max;
     v = cast(short)n;
@@ -25,17 +24,14 @@ void playbuf () {
 
 
 void main (string[] args) {
-  conRegVar!gain(0.0f, 20.0f, "gain", "replay gain (multiplier)");
-  conProcessArgs!true(args);
-
-  if (args.length < 2) assert(0);
+  if (args.length < 2) args ~= "../01_shadows_dont_scare_commander_keen.imf";
   auto fl = VFile(args[1]);
   uint flen = fl.readNum!ushort;
   if (flen == 0) {
     flen = cast(uint)fl.size;
     fl.seek(0);
   }
-  OPL3_Reset(&opl, 48000);
+  opl.reset(48000);
   alsaOpen(2);
   scope(exit) alsaClose();
   uint samplesLeft = 0;
@@ -47,11 +43,11 @@ void main (string[] args) {
       ubyte val = fl.readNum!ubyte;
       samplesLeft = fl.readNum!ushort;
       //conwritefln!"reg=0x%02x; val=0x%02x; delay=%s (%s)"(reg, val, samplesLeft, samplesLeft*48000/560);
-      OPL3_WriteReg(&opl, reg, val);
+      opl.writeReg(reg, val);
       if (samplesLeft) { samplesLeft = samplesLeft*48000/560; break; }
     }
     --samplesLeft;
-    OPL3_GenerateStream(&opl, smpbuf.ptr+smpbufpos, 1);
+    opl.generateStream(smpbuf[smpbufpos..smpbufpos+2]);
     smpbufpos += 2;
     if (smpbufpos >= smpbuf.length) playbuf();
   }

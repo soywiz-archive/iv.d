@@ -30,9 +30,11 @@ enum OPL_WRITEBUF_SIZE = 1024;
 enum OPL_WRITEBUF_DELAY = 2;
 
 
-struct opl3_slot {
-  opl3_channel* channel;
-  opl3_chip* chip;
+// ////////////////////////////////////////////////////////////////////////// //
+private:
+struct OPL3Slot {
+  OPL3Channel* channel;
+  OPL3Chip* chip;
   short out_;
   short fbmod;
   short* mod;
@@ -60,10 +62,10 @@ struct opl3_slot {
   uint timer;
 }
 
-struct opl3_channel {
-  opl3_slot*[2] slots;
-  opl3_channel* pair;
-  opl3_chip* chip;
+struct OPL3Channel {
+  OPL3Slot*[2] slots;
+  OPL3Channel* pair;
+  OPL3Chip* chip;
   short*[4] out_;
   ubyte chtype;
   ushort f_num;
@@ -75,15 +77,17 @@ struct opl3_channel {
   ushort cha, chb;
 }
 
-struct opl3_writebuf {
+struct OPL3WriteBuf {
   ulong time;
   ushort reg;
   ubyte data;
 }
 
-struct opl3_chip {
-  opl3_channel[18] channel;
-  opl3_slot[36] slot;
+///
+public struct OPL3Chip {
+private:
+  OPL3Channel[18] channel;
+  OPL3Slot[36] slot;
   ushort timer;
   ubyte newm;
   ubyte nts;
@@ -106,7 +110,7 @@ struct opl3_chip {
   uint writebuf_cur;
   uint writebuf_last;
   ulong writebuf_lasttime;
-  opl3_writebuf[OPL_WRITEBUF_SIZE] writebuf;
+  OPL3WriteBuf[OPL_WRITEBUF_SIZE] writebuf;
 }
 
 
@@ -281,7 +285,7 @@ static immutable ubyte[18] ch_slot = [
 //
 
 alias envelope_sinfunc = short function (ushort phase, ushort envelope) nothrow @trusted @nogc;
-alias envelope_genfunc = void function (opl3_slot *slott) nothrow @trusted @nogc;
+alias envelope_genfunc = void function (OPL3Slot *slott) nothrow @trusted @nogc;
 
 private short OPL3_EnvelopeCalcExp (uint level) {
   if (level > 0x1fff) level = 0x1fff;
@@ -387,20 +391,20 @@ enum /*envelope_gen_num*/:int {
   envelope_gen_num_release = 4
 }
 
-private ubyte OPL3_EnvelopeCalcRate (opl3_slot* slot, ubyte reg_rate) {
+private ubyte OPL3_EnvelopeCalcRate (OPL3Slot* slot, ubyte reg_rate) {
   if (reg_rate == 0x00) return 0x00;
   ubyte rate = cast(ubyte)((reg_rate<<2)+(slot.reg_ksr ? slot.channel.ksv : (slot.channel.ksv>>2)));
   if (rate > 0x3c) rate = 0x3c;
   return rate;
 }
 
-private void OPL3_EnvelopeUpdateKSL (opl3_slot* slot) {
+private void OPL3_EnvelopeUpdateKSL (OPL3Slot* slot) {
   short ksl = (kslrom.ptr[slot.channel.f_num>>6]<<2)-((0x08-slot.channel.block)<<5);
   if (ksl < 0) ksl = 0;
   slot.eg_ksl = cast(ubyte)ksl;
 }
 
-private void OPL3_EnvelopeUpdateRate (opl3_slot* slot) {
+private void OPL3_EnvelopeUpdateRate (OPL3Slot* slot) {
   switch (slot.eg_gen) {
     case envelope_gen_num_off:
     case envelope_gen_num_attack:
@@ -417,11 +421,11 @@ private void OPL3_EnvelopeUpdateRate (opl3_slot* slot) {
   }
 }
 
-private void OPL3_EnvelopeGenOff (opl3_slot* slot) {
+private void OPL3_EnvelopeGenOff (OPL3Slot* slot) {
   slot.eg_rout = 0x1ff;
 }
 
-private void OPL3_EnvelopeGenAttack (opl3_slot* slot) {
+private void OPL3_EnvelopeGenAttack (OPL3Slot* slot) {
   if (slot.eg_rout == 0x00) {
     slot.eg_gen = envelope_gen_num_decay;
     OPL3_EnvelopeUpdateRate(slot);
@@ -431,7 +435,7 @@ private void OPL3_EnvelopeGenAttack (opl3_slot* slot) {
   }
 }
 
-private void OPL3_EnvelopeGenDecay (opl3_slot* slot) {
+private void OPL3_EnvelopeGenDecay (OPL3Slot* slot) {
   if (slot.eg_rout >= slot.reg_sl<<4) {
     slot.eg_gen = envelope_gen_num_sustain;
     OPL3_EnvelopeUpdateRate(slot);
@@ -440,11 +444,11 @@ private void OPL3_EnvelopeGenDecay (opl3_slot* slot) {
   }
 }
 
-private void OPL3_EnvelopeGenSustain (opl3_slot* slot) {
+private void OPL3_EnvelopeGenSustain (OPL3Slot* slot) {
   if (!slot.reg_type) OPL3_EnvelopeGenRelease(slot);
 }
 
-private void OPL3_EnvelopeGenRelease (opl3_slot* slot) {
+private void OPL3_EnvelopeGenRelease (OPL3Slot* slot) {
   if (slot.eg_rout >= 0x1ff) {
     slot.eg_gen = envelope_gen_num_off;
     slot.eg_rout = 0x1ff;
@@ -454,7 +458,7 @@ private void OPL3_EnvelopeGenRelease (opl3_slot* slot) {
   }
 }
 
-private void OPL3_EnvelopeCalc (opl3_slot* slot) {
+private void OPL3_EnvelopeCalc (OPL3Slot* slot) {
   ubyte rate_h, rate_l;
   ubyte inc = 0;
   rate_h = slot.eg_rate>>2;
@@ -471,7 +475,7 @@ private void OPL3_EnvelopeCalc (opl3_slot* slot) {
   envelope_gen[slot.eg_gen](slot);
 }
 
-private void OPL3_EnvelopeKeyOn (opl3_slot* slot, ubyte type) {
+private void OPL3_EnvelopeKeyOn (OPL3Slot* slot, ubyte type) {
   if (!slot.key) {
     slot.eg_gen = envelope_gen_num_attack;
     OPL3_EnvelopeUpdateRate(slot);
@@ -485,7 +489,7 @@ private void OPL3_EnvelopeKeyOn (opl3_slot* slot, ubyte type) {
   slot.key |= type;
 }
 
-private void OPL3_EnvelopeKeyOff (opl3_slot* slot, ubyte type) {
+private void OPL3_EnvelopeKeyOff (OPL3Slot* slot, ubyte type) {
   if (slot.key) {
     slot.key &= (~type);
     if (!slot.key) {
@@ -499,7 +503,7 @@ private void OPL3_EnvelopeKeyOff (opl3_slot* slot, ubyte type) {
 // Phase Generator
 //
 
-private void OPL3_PhaseGenerate (opl3_slot* slot) {
+private void OPL3_PhaseGenerate (OPL3Slot* slot) {
   ushort f_num;
   uint basefreq;
 
@@ -526,7 +530,7 @@ private void OPL3_PhaseGenerate (opl3_slot* slot) {
 // Noise Generator
 //
 
-private void OPL3_NoiseGenerate (opl3_chip* chip) {
+private void OPL3_NoiseGenerate (OPL3Chip* chip) {
   if (chip.noise&0x01) chip.noise ^= 0x800302;
   chip.noise >>= 1;
 }
@@ -535,7 +539,7 @@ private void OPL3_NoiseGenerate (opl3_chip* chip) {
 // Slot
 //
 
-private void OPL3_SlotWrite20 (opl3_slot* slot, ubyte data) {
+private void OPL3_SlotWrite20 (OPL3Slot* slot, ubyte data) {
   slot.trem = ((data>>7)&0x01 ? &slot.chip.tremolo : cast(ubyte*)&slot.chip.zeromod);
   slot.reg_vib = (data>>6)&0x01;
   slot.reg_type = (data>>5)&0x01;
@@ -544,43 +548,43 @@ private void OPL3_SlotWrite20 (opl3_slot* slot, ubyte data) {
   OPL3_EnvelopeUpdateRate(slot);
 }
 
-private void OPL3_SlotWrite40 (opl3_slot* slot, ubyte data) {
+private void OPL3_SlotWrite40 (OPL3Slot* slot, ubyte data) {
   slot.reg_ksl = (data>>6)&0x03;
   slot.reg_tl = data&0x3f;
   OPL3_EnvelopeUpdateKSL(slot);
 }
 
-private void OPL3_SlotWrite60 (opl3_slot* slot, ubyte data) {
+private void OPL3_SlotWrite60 (OPL3Slot* slot, ubyte data) {
   slot.reg_ar = (data>>4)&0x0f;
   slot.reg_dr = data&0x0f;
   OPL3_EnvelopeUpdateRate(slot);
 }
 
-private void OPL3_SlotWrite80 (opl3_slot* slot, ubyte data) {
+private void OPL3_SlotWrite80 (OPL3Slot* slot, ubyte data) {
   slot.reg_sl = (data>>4)&0x0f;
   if (slot.reg_sl == 0x0f) slot.reg_sl = 0x1f;
   slot.reg_rr = data&0x0f;
   OPL3_EnvelopeUpdateRate(slot);
 }
 
-private void OPL3_SlotWriteE0 (opl3_slot* slot, ubyte data) {
+private void OPL3_SlotWriteE0 (OPL3Slot* slot, ubyte data) {
   slot.reg_wf = data&0x07;
   if (slot.chip.newm == 0x00) slot.reg_wf &= 0x03;
 }
 
-private void OPL3_SlotGeneratePhase (opl3_slot* slot, ushort phase) {
+private void OPL3_SlotGeneratePhase (OPL3Slot* slot, ushort phase) {
   slot.out_ = envelope_sin[slot.reg_wf](phase, slot.eg_out);
 }
 
-private void OPL3_SlotGenerate (opl3_slot* slot) {
+private void OPL3_SlotGenerate (OPL3Slot* slot) {
   OPL3_SlotGeneratePhase(slot, cast(ushort)(cast(ushort)(slot.pg_phase>>9)+*slot.mod));
 }
 
-private void OPL3_SlotGenerateZM (opl3_slot* slot) {
+private void OPL3_SlotGenerateZM (OPL3Slot* slot) {
   OPL3_SlotGeneratePhase(slot, cast(ushort)(slot.pg_phase>>9));
 }
 
-private void OPL3_SlotCalcFB (opl3_slot* slot) {
+private void OPL3_SlotCalcFB (OPL3Slot* slot) {
   slot.fbmod = (slot.channel.fb != 0x00 ? cast(short)((slot.prout+slot.out_)>>(0x09-slot.channel.fb)) : 0);
   slot.prout = slot.out_;
 }
@@ -589,17 +593,17 @@ private void OPL3_SlotCalcFB (opl3_slot* slot) {
 // Channel
 //
 
-private void OPL3_ChannelUpdateRhythm (opl3_chip* chip, ubyte data) {
-  opl3_channel* channel6;
-  opl3_channel* channel7;
-  opl3_channel* channel8;
+private void OPL3_ChannelUpdateRhythm (OPL3Chip* chip, ubyte data) {
+  OPL3Channel* channel6;
+  OPL3Channel* channel7;
+  OPL3Channel* channel8;
   ubyte chnum;
 
   chip.rhy = data&0x3f;
   if (chip.rhy&0x20) {
-    channel6 = &chip.channel[6];
-    channel7 = &chip.channel[7];
-    channel8 = &chip.channel[8];
+    channel6 = &chip.channel.ptr[6];
+    channel7 = &chip.channel.ptr[7];
+    channel8 = &chip.channel.ptr[8];
     channel6.out_.ptr[0] = &channel6.slots.ptr[1].out_;
     channel6.out_.ptr[1] = &channel6.slots.ptr[1].out_;
     channel6.out_.ptr[2] = &chip.zeromod;
@@ -612,7 +616,7 @@ private void OPL3_ChannelUpdateRhythm (opl3_chip* chip, ubyte data) {
     channel8.out_.ptr[1] = &channel8.slots.ptr[0].out_;
     channel8.out_.ptr[2] = &channel8.slots.ptr[1].out_;
     channel8.out_.ptr[3] = &channel8.slots.ptr[1].out_;
-    for (chnum = 6; chnum < 9; ++chnum) chip.channel[chnum].chtype = ch_drum;
+    for (chnum = 6; chnum < 9; ++chnum) chip.channel.ptr[chnum].chtype = ch_drum;
     OPL3_ChannelSetupAlg(channel6);
     //hh
     if (chip.rhy&0x01) {
@@ -648,15 +652,15 @@ private void OPL3_ChannelUpdateRhythm (opl3_chip* chip, ubyte data) {
     }
   } else {
     for (chnum = 6; chnum < 9; ++chnum) {
-      chip.channel[chnum].chtype = ch_2op;
-      OPL3_ChannelSetupAlg(&chip.channel[chnum]);
-      OPL3_EnvelopeKeyOff(chip.channel[chnum].slots.ptr[0], egk_drum);
-      OPL3_EnvelopeKeyOff(chip.channel[chnum].slots.ptr[1], egk_drum);
+      chip.channel.ptr[chnum].chtype = ch_2op;
+      OPL3_ChannelSetupAlg(&chip.channel.ptr[chnum]);
+      OPL3_EnvelopeKeyOff(chip.channel.ptr[chnum].slots.ptr[0], egk_drum);
+      OPL3_EnvelopeKeyOff(chip.channel.ptr[chnum].slots.ptr[1], egk_drum);
     }
   }
 }
 
-private void OPL3_ChannelWriteA0 (opl3_channel* channel, ubyte data) {
+private void OPL3_ChannelWriteA0 (OPL3Channel* channel, ubyte data) {
   if (channel.chip.newm && channel.chtype == ch_4op2) return;
   channel.f_num = (channel.f_num&0x300)|data;
   channel.ksv = cast(ubyte)((channel.block<<1)|((channel.f_num>>(0x09-channel.chip.nts))&0x01));
@@ -674,7 +678,7 @@ private void OPL3_ChannelWriteA0 (opl3_channel* channel, ubyte data) {
   }
 }
 
-private void OPL3_ChannelWriteB0 (opl3_channel* channel, ubyte data) {
+private void OPL3_ChannelWriteB0 (OPL3Channel* channel, ubyte data) {
   if (channel.chip.newm && channel.chtype == ch_4op2) return;
   channel.f_num = (channel.f_num&0xff)|((data&0x03)<<8);
   channel.block = (data>>2)&0x07;
@@ -694,7 +698,7 @@ private void OPL3_ChannelWriteB0 (opl3_channel* channel, ubyte data) {
   }
 }
 
-private void OPL3_ChannelSetupAlg (opl3_channel* channel) {
+private void OPL3_ChannelSetupAlg (OPL3Channel* channel) {
   if (channel.chtype == ch_drum) {
     final switch (channel.alg&0x01) {
       case 0x00:
@@ -778,7 +782,7 @@ private void OPL3_ChannelSetupAlg (opl3_channel* channel) {
   }
 }
 
-private void OPL3_ChannelWriteC0 (opl3_channel* channel, ubyte data) {
+private void OPL3_ChannelWriteC0 (OPL3Channel* channel, ubyte data) {
   channel.fb = (data&0x0e)>>1;
   channel.con = data&0x01;
   channel.alg = channel.con;
@@ -805,7 +809,7 @@ private void OPL3_ChannelWriteC0 (opl3_channel* channel, ubyte data) {
   }
 }
 
-private void OPL3_ChannelKeyOn (opl3_channel* channel) {
+private void OPL3_ChannelKeyOn (OPL3Channel* channel) {
   if (channel.chip.newm) {
     if (channel.chtype == ch_4op) {
       OPL3_EnvelopeKeyOn(channel.slots.ptr[0], egk_norm);
@@ -822,7 +826,7 @@ private void OPL3_ChannelKeyOn (opl3_channel* channel) {
   }
 }
 
-private void OPL3_ChannelKeyOff (opl3_channel* channel) {
+private void OPL3_ChannelKeyOff (OPL3Channel* channel) {
   if (channel.chip.newm) {
     if (channel.chtype == ch_4op) {
       OPL3_EnvelopeKeyOff(channel.slots.ptr[0], egk_norm);
@@ -839,18 +843,18 @@ private void OPL3_ChannelKeyOff (opl3_channel* channel) {
   }
 }
 
-private void OPL3_ChannelSet4Op (opl3_chip* chip, ubyte data) {
+private void OPL3_ChannelSet4Op (OPL3Chip* chip, ubyte data) {
   ubyte bit;
   ubyte chnum;
   for (bit = 0; bit < 6; ++bit) {
     chnum = bit;
     if (bit >= 3) chnum += 9-3;
     if ((data>>bit)&0x01) {
-      chip.channel[chnum].chtype = ch_4op;
-      chip.channel[chnum+3].chtype = ch_4op2;
+      chip.channel.ptr[chnum].chtype = ch_4op;
+      chip.channel.ptr[chnum+3].chtype = ch_4op2;
     } else {
-      chip.channel[chnum].chtype = ch_2op;
-      chip.channel[chnum+3].chtype = ch_2op;
+      chip.channel.ptr[chnum].chtype = ch_2op;
+      chip.channel.ptr[chnum+3].chtype = ch_2op;
     }
   }
 }
@@ -862,18 +866,18 @@ private short OPL3_ClipSample (int sample) pure {
   return cast(short)sample;
 }
 
-private void OPL3_GenerateRhythm1 (opl3_chip* chip) {
-  opl3_channel* channel6;
-  opl3_channel* channel7;
-  opl3_channel* channel8;
+private void OPL3_GenerateRhythm1 (OPL3Chip* chip) {
+  OPL3Channel* channel6;
+  OPL3Channel* channel7;
+  OPL3Channel* channel8;
   ushort phase14;
   ushort phase17;
   ushort phase;
   ushort phasebit;
 
-  channel6 = &chip.channel[6];
-  channel7 = &chip.channel[7];
-  channel8 = &chip.channel[8];
+  channel6 = &chip.channel.ptr[6];
+  channel7 = &chip.channel.ptr[7];
+  channel8 = &chip.channel.ptr[8];
   OPL3_SlotGenerate(channel6.slots.ptr[0]);
   phase14 = (channel7.slots.ptr[0].pg_phase>>9)&0x3ff;
   phase17 = (channel8.slots.ptr[1].pg_phase>>9)&0x3ff;
@@ -887,18 +891,18 @@ private void OPL3_GenerateRhythm1 (opl3_chip* chip) {
   OPL3_SlotGenerateZM(channel8.slots.ptr[0]);
 }
 
-private void OPL3_GenerateRhythm2 (opl3_chip* chip) {
-  opl3_channel* channel6;
-  opl3_channel* channel7;
-  opl3_channel* channel8;
+private void OPL3_GenerateRhythm2 (OPL3Chip* chip) {
+  OPL3Channel* channel6;
+  OPL3Channel* channel7;
+  OPL3Channel* channel8;
   ushort phase14;
   ushort phase17;
   ushort phase;
   ushort phasebit;
 
-  channel6 = &chip.channel[6];
-  channel7 = &chip.channel[7];
-  channel8 = &chip.channel[8];
+  channel6 = &chip.channel.ptr[6];
+  channel7 = &chip.channel.ptr[7];
+  channel8 = &chip.channel.ptr[8];
   OPL3_SlotGenerate(channel6.slots.ptr[1]);
   phase14 = (channel7.slots.ptr[0].pg_phase>>9)&0x3ff;
   phase17 = (channel8.slots.ptr[1].pg_phase>>9)&0x3ff;
@@ -915,8 +919,8 @@ private void OPL3_GenerateRhythm2 (opl3_chip* chip) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-///
-public void OPL3_Generate (opl3_chip* chip, short* buf) {
+/// OPL3_Generate
+public void generate (ref OPL3Chip chip, short* buf) {
   ubyte ii;
   ubyte jj;
   short accm;
@@ -937,7 +941,7 @@ public void OPL3_Generate (opl3_chip* chip, short* buf) {
   }
 
   if (chip.rhy&0x20) {
-    OPL3_GenerateRhythm1(chip);
+    OPL3_GenerateRhythm1(&chip);
   } else {
     OPL3_SlotGenerate(&chip.slot.ptr[12]);
     OPL3_SlotGenerate(&chip.slot.ptr[13]);
@@ -947,8 +951,8 @@ public void OPL3_Generate (opl3_chip* chip, short* buf) {
   chip.mixbuff.ptr[0] = 0;
   for (ii = 0; ii < 18; ++ii) {
     accm = 0;
-    for (jj = 0; jj < 4; ++jj) accm += *chip.channel[ii].out_.ptr[jj];
-    chip.mixbuff.ptr[0] += cast(short)(accm&chip.channel[ii].cha);
+    for (jj = 0; jj < 4; ++jj) accm += *chip.channel.ptr[ii].out_.ptr[jj];
+    chip.mixbuff.ptr[0] += cast(short)(accm&chip.channel.ptr[ii].cha);
   }
 
   for (ii = 15; ii < 18; ++ii) {
@@ -958,7 +962,7 @@ public void OPL3_Generate (opl3_chip* chip, short* buf) {
   }
 
   if (chip.rhy&0x20) {
-    OPL3_GenerateRhythm2(chip);
+    OPL3_GenerateRhythm2(&chip);
   } else {
     OPL3_SlotGenerate(&chip.slot.ptr[15]);
     OPL3_SlotGenerate(&chip.slot.ptr[16]);
@@ -977,8 +981,8 @@ public void OPL3_Generate (opl3_chip* chip, short* buf) {
   chip.mixbuff.ptr[1] = 0;
   for (ii = 0; ii < 18; ++ii) {
     accm = 0;
-    for (jj = 0; jj < 4; jj++) accm += *chip.channel[ii].out_.ptr[jj];
-    chip.mixbuff.ptr[1] += cast(short)(accm&chip.channel[ii].chb);
+    for (jj = 0; jj < 4; jj++) accm += *chip.channel.ptr[ii].out_.ptr[jj];
+    chip.mixbuff.ptr[1] += cast(short)(accm&chip.channel.ptr[ii].chb);
   }
 
   for (ii = 33; ii < 36; ++ii) {
@@ -988,7 +992,7 @@ public void OPL3_Generate (opl3_chip* chip, short* buf) {
     OPL3_SlotGenerate(&chip.slot.ptr[ii]);
   }
 
-  OPL3_NoiseGenerate(chip);
+  OPL3_NoiseGenerate(&chip);
 
   if ((chip.timer&0x3f) == 0x3f) chip.tremolopos = (chip.tremolopos+1)%210;
   chip.tremolo = (chip.tremolopos < 105 ? chip.tremolopos>>chip.tremoloshift : cast(ubyte)((210-chip.tremolopos)>>chip.tremoloshift));
@@ -996,22 +1000,22 @@ public void OPL3_Generate (opl3_chip* chip, short* buf) {
 
   ++chip.timer;
 
-  while (chip.writebuf[chip.writebuf_cur].time <= chip.writebuf_samplecnt) {
-    if (!(chip.writebuf[chip.writebuf_cur].reg&0x200)) break;
-    chip.writebuf[chip.writebuf_cur].reg &= 0x1ff;
-    OPL3_WriteReg(chip, chip.writebuf[chip.writebuf_cur].reg, chip.writebuf[chip.writebuf_cur].data);
+  while (chip.writebuf.ptr[chip.writebuf_cur].time <= chip.writebuf_samplecnt) {
+    if (!(chip.writebuf.ptr[chip.writebuf_cur].reg&0x200)) break;
+    chip.writebuf.ptr[chip.writebuf_cur].reg &= 0x1ff;
+    chip.writeReg(chip.writebuf.ptr[chip.writebuf_cur].reg, chip.writebuf.ptr[chip.writebuf_cur].data);
     chip.writebuf_cur = (chip.writebuf_cur+1)%OPL_WRITEBUF_SIZE;
   }
   ++chip.writebuf_samplecnt;
 }
 
 
-///
-public void OPL3_GenerateResampled (opl3_chip* chip, short* buf) {
+/// OPL3_GenerateResampled
+public void generateResampled (ref OPL3Chip chip, short* buf) {
   while (chip.samplecnt >= chip.rateratio) {
     chip.oldsamples.ptr[0] = chip.samples.ptr[0];
     chip.oldsamples.ptr[1] = chip.samples.ptr[1];
-    OPL3_Generate(chip, chip.samples.ptr);
+    chip.generate(chip.samples.ptr);
     chip.samplecnt -= chip.rateratio;
   }
   buf[0] = cast(short)((chip.oldsamples.ptr[0]*(chip.rateratio-chip.samplecnt)+chip.samples.ptr[0]*chip.samplecnt)/chip.rateratio);
@@ -1020,16 +1024,17 @@ public void OPL3_GenerateResampled (opl3_chip* chip, short* buf) {
 }
 
 
-///
-public void OPL3_Reset (opl3_chip* chip, uint samplerate) {
+/// OPL3_Reset
+public void reset (ref OPL3Chip chip, uint samplerate) {
   ubyte slotnum;
   ubyte channum;
 
-  ubyte* cc = cast(ubyte*)chip;
-  cc[0..opl3_chip.sizeof] = 0;
+  //ubyte* cc = cast(ubyte*)chip;
+  //cc[0..OPL3Chip.sizeof] = 0;
+  chip = chip.init;
 
   for (slotnum = 0; slotnum < 36; ++slotnum) {
-    chip.slot.ptr[slotnum].chip = chip;
+    chip.slot.ptr[slotnum].chip = &chip;
     chip.slot.ptr[slotnum].mod = &chip.zeromod;
     chip.slot.ptr[slotnum].eg_rout = 0x1ff;
     chip.slot.ptr[slotnum].eg_out = 0x1ff;
@@ -1037,21 +1042,21 @@ public void OPL3_Reset (opl3_chip* chip, uint samplerate) {
     chip.slot.ptr[slotnum].trem = cast(ubyte*)&chip.zeromod;
   }
   for (channum = 0; channum < 18; ++channum) {
-    chip.channel[channum].slots.ptr[0] = &chip.slot.ptr[ch_slot.ptr[channum]];
-    chip.channel[channum].slots.ptr[1] = &chip.slot.ptr[ch_slot.ptr[channum]+3];
-    chip.slot.ptr[ch_slot.ptr[channum]].channel = &chip.channel[channum];
-    chip.slot.ptr[ch_slot.ptr[channum]+3].channel = &chip.channel[channum];
-         if ((channum%9) < 3) chip.channel[channum].pair = &chip.channel[channum+3];
-    else if ((channum%9) < 6) chip.channel[channum].pair = &chip.channel[channum-3];
-    chip.channel[channum].chip = chip;
-    chip.channel[channum].out_.ptr[0] = &chip.zeromod;
-    chip.channel[channum].out_.ptr[1] = &chip.zeromod;
-    chip.channel[channum].out_.ptr[2] = &chip.zeromod;
-    chip.channel[channum].out_.ptr[3] = &chip.zeromod;
-    chip.channel[channum].chtype = ch_2op;
-    chip.channel[channum].cha = ushort.max;
-    chip.channel[channum].chb = ushort.max;
-    OPL3_ChannelSetupAlg(&chip.channel[channum]);
+    chip.channel.ptr[channum].slots.ptr[0] = &chip.slot.ptr[ch_slot.ptr[channum]];
+    chip.channel.ptr[channum].slots.ptr[1] = &chip.slot.ptr[ch_slot.ptr[channum]+3];
+    chip.slot.ptr[ch_slot.ptr[channum]].channel = &chip.channel.ptr[channum];
+    chip.slot.ptr[ch_slot.ptr[channum]+3].channel = &chip.channel.ptr[channum];
+         if ((channum%9) < 3) chip.channel.ptr[channum].pair = &chip.channel.ptr[channum+3];
+    else if ((channum%9) < 6) chip.channel.ptr[channum].pair = &chip.channel.ptr[channum-3];
+    chip.channel.ptr[channum].chip = &chip;
+    chip.channel.ptr[channum].out_.ptr[0] = &chip.zeromod;
+    chip.channel.ptr[channum].out_.ptr[1] = &chip.zeromod;
+    chip.channel.ptr[channum].out_.ptr[2] = &chip.zeromod;
+    chip.channel.ptr[channum].out_.ptr[3] = &chip.zeromod;
+    chip.channel.ptr[channum].chtype = ch_2op;
+    chip.channel.ptr[channum].cha = ushort.max;
+    chip.channel.ptr[channum].chb = ushort.max;
+    OPL3_ChannelSetupAlg(&chip.channel.ptr[channum]);
   }
   chip.noise = 0x306600;
   chip.rateratio = (samplerate<<RSM_FRAC)/49716;
@@ -1060,8 +1065,8 @@ public void OPL3_Reset (opl3_chip* chip, uint samplerate) {
 }
 
 
-///
-public void OPL3_WriteReg (opl3_chip* chip, ushort reg, ubyte v) {
+/// OPL3_WriteReg
+public void writeReg (ref OPL3Chip chip, ushort reg, ubyte v) {
   ubyte high = (reg>>8)&0x01;
   ubyte regm = reg&0xff;
   switch (regm&0xf0) {
@@ -1069,7 +1074,7 @@ public void OPL3_WriteReg (opl3_chip* chip, ushort reg, ubyte v) {
       if (high) {
         switch (regm&0x0f) {
           case 0x04:
-            OPL3_ChannelSet4Op(chip, v);
+            OPL3_ChannelSet4Op(&chip, v);
             break;
           case 0x05:
             chip.newm = v&0x01;
@@ -1106,53 +1111,54 @@ public void OPL3_WriteReg (opl3_chip* chip, ushort reg, ubyte v) {
       if (ad_slot.ptr[regm&0x1f] >= 0) OPL3_SlotWriteE0(&chip.slot.ptr[18*high+ad_slot.ptr[regm&0x1f]], v);
       break;
     case 0xa0:
-      if ((regm&0x0f) < 9) OPL3_ChannelWriteA0(&chip.channel[9*high+(regm&0x0f)], v);
+      if ((regm&0x0f) < 9) OPL3_ChannelWriteA0(&chip.channel.ptr[9*high+(regm&0x0f)], v);
       break;
     case 0xb0:
       if (regm == 0xbd && !high) {
         chip.tremoloshift = (((v>>7)^1)<<1)+2;
         chip.vibshift = ((v>>6)&0x01)^1;
-        OPL3_ChannelUpdateRhythm(chip, v);
+        OPL3_ChannelUpdateRhythm(&chip, v);
       } else if ((regm&0x0f) < 9) {
-        OPL3_ChannelWriteB0(&chip.channel[9*high+(regm&0x0f)], v);
-        if (v&0x20) OPL3_ChannelKeyOn(&chip.channel[9*high+(regm&0x0f)]); else OPL3_ChannelKeyOff(&chip.channel[9*high+(regm&0x0f)]);
+        OPL3_ChannelWriteB0(&chip.channel.ptr[9*high+(regm&0x0f)], v);
+        if (v&0x20) OPL3_ChannelKeyOn(&chip.channel.ptr[9*high+(regm&0x0f)]); else OPL3_ChannelKeyOff(&chip.channel.ptr[9*high+(regm&0x0f)]);
       }
       break;
     case 0xc0:
-      if ((regm&0x0f) < 9) OPL3_ChannelWriteC0(&chip.channel[9*high+(regm&0x0f)], v);
+      if ((regm&0x0f) < 9) OPL3_ChannelWriteC0(&chip.channel.ptr[9*high+(regm&0x0f)], v);
       break;
     default: break;
   }
 }
 
 
-///
-public void OPL3_WriteRegBuffered (opl3_chip* chip, ushort reg, ubyte v) {
+/// OPL3_WriteRegBuffered
+public void writeRegBuffered (ref OPL3Chip chip, ushort reg, ubyte v) {
   ulong time1, time2;
 
-  if (chip.writebuf[chip.writebuf_last].reg&0x200) {
-    OPL3_WriteReg(chip, chip.writebuf[chip.writebuf_last].reg&0x1ff, chip.writebuf[chip.writebuf_last].data);
+  if (chip.writebuf.ptr[chip.writebuf_last].reg&0x200) {
+    chip.writeReg(chip.writebuf.ptr[chip.writebuf_last].reg&0x1ff, chip.writebuf.ptr[chip.writebuf_last].data);
     chip.writebuf_cur = (chip.writebuf_last+1)%OPL_WRITEBUF_SIZE;
-    chip.writebuf_samplecnt = chip.writebuf[chip.writebuf_last].time;
+    chip.writebuf_samplecnt = chip.writebuf.ptr[chip.writebuf_last].time;
   }
 
-  chip.writebuf[chip.writebuf_last].reg = reg|0x200;
-  chip.writebuf[chip.writebuf_last].data = v;
+  chip.writebuf.ptr[chip.writebuf_last].reg = reg|0x200;
+  chip.writebuf.ptr[chip.writebuf_last].data = v;
   time1 = chip.writebuf_lasttime+OPL_WRITEBUF_DELAY;
   time2 = chip.writebuf_samplecnt;
 
   if (time1 < time2) time1 = time2;
 
-  chip.writebuf[chip.writebuf_last].time = time1;
+  chip.writebuf.ptr[chip.writebuf_last].time = time1;
   chip.writebuf_lasttime = time1;
   chip.writebuf_last = (chip.writebuf_last+1)%OPL_WRITEBUF_SIZE;
 }
 
 
-///
-public void OPL3_GenerateStream (opl3_chip* chip, short* sndptr, uint numsamples) {
-  foreach (immutable _; 0..numsamples) {
-    OPL3_GenerateResampled(chip, sndptr);
+/// OPL3_GenerateStream; outputs STEREO stream
+public void generateStream (ref OPL3Chip chip, short[] smpbuf) {
+  auto sndptr = smpbuf.ptr;
+  foreach (immutable _; 0..smpbuf.length/2) {
+    chip.generateResampled(sndptr);
     sndptr += 2;
   }
 }
