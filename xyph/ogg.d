@@ -14,6 +14,7 @@ pragma(lib, "ogg");
 
 import core.stdc.config;
 
+alias ogg_int64_t = long;
 
 struct ogg_iovec_t {
   void* iov_base;

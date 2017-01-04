@@ -24,7 +24,7 @@
    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-module iv.libopus;
+module iv.xyph.opus;
 pragma(lib, "opus");
 
 extern(C) nothrow @nogc:
@@ -38,6 +38,8 @@ alias opus_int16 = short;
 alias opus_uint16 = ushort;
 alias opus_int32 = int;
 alias opus_uint32 = uint;
+alias opus_int64 = long;
+alias opus_uint64 = ulong;
 
 
 /**

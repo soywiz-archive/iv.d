@@ -365,6 +365,9 @@ final:
       //opcode = memRead(PC, MemIO.Opcode);
       static if (testing) memReading(PC);
       opcode = mem.ptr[mpage].mem[PC%MemPage.Size];
+      version(Zymosis_Run_Log) {
+        { import core.stdc.stdio; stderr.fprintf("PC=%04X; OP:%02X; tstates=%d\n", PC, opcode, tstates); }
+      }
       ++PC;
       mixin(IncRMixin);
       prevOpChangedFlagsXX = prevOpChangedFlags;
