@@ -3342,6 +3342,7 @@ public enum ConInputChar : char {
   CtrlY = '\x19', ///
   LineUp = '\x1a', ///
   LineDown = '\x1b', ///
+  CtrlW = '\x1c', ///
 }
 
 
@@ -3469,6 +3470,27 @@ public void conAddInputChar (char ch) {
       }
       --conclilen;
       conInputIncLastChange();
+    }
+    return;
+  }
+  // ^W (delete previous word)
+  if (ch == ConInputChar.CtrlW) {
+    if (concurx > 0) {
+      int stp = concurx;
+      // skip spaces
+      while (stp > 0 && concli.ptr[stp-1] <= ' ') --stp;
+      // skip non-spaces
+      while (stp > 0 && concli.ptr[stp-1] > ' ') --stp;
+      if (stp < concurx) {
+        import core.stdc.string : memmove;
+        // delete from stp to concurx
+        int dlen = concurx-stp;
+        assert(concurx <= conclilen);
+        if (concurx < conclilen) memmove(concli.ptr+stp, concli.ptr+concurx, conclilen-concurx);
+        conclilen -= dlen;
+        concurx = stp;
+        conInputIncLastChange();
+      }
     }
     return;
   }

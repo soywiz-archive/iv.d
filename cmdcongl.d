@@ -733,6 +733,7 @@ public bool glconKeyEvent (KeyEvent event) {
     case Key.Enter: glconCharInput(ConInputChar.Enter); return true;
     case Key.Delete: glconCharInput(ConInputChar.Delete); return true;
     case Key.Insert: glconCharInput(ConInputChar.Insert); return true;
+    case Key.W: if (event.modifierState&ModifierState.ctrl) glconCharInput(ConInputChar.CtrlW); return true;
     case Key.Y: if (event.modifierState&ModifierState.ctrl) glconCharInput(ConInputChar.CtrlY); return true;
     default:
   }
