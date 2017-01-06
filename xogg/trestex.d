@@ -584,18 +584,13 @@ Action playFile () {
     }
   }
 
-  scope(exit) writeln;
-  bool oldpaused = !paused;
-  int oldgain = gain+1;
-  writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", 0, 0, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !" : ""));
-
   mbeqInit(14);
   //mbeqInit(12);
   scope(exit) mbeqQuit();
 
   bool mbeqActive = false;
-  foreach (immutable idx, immutable v; mbeqLSliders) if (v != 0) { mbeqActive = true; break; }
-  if (!mbeqActive) foreach (immutable idx, immutable v; mbeqRSliders) if (v != 0) { mbeqActive = true; break; }
+  foreach (immutable v; mbeqLSliders[]) if (v != 0) { mbeqActive = true; break; }
+  if (!mbeqActive) foreach (immutable v; mbeqRSliders[]) if (v != 0) { mbeqActive = true; break; }
 
   mbeqSampleRate = sio.rate;
   /+
@@ -607,6 +602,12 @@ Action playFile () {
   //mbeqRSliders[0] = -6;
   +/
   mbeqSetBandsFromSliders();
+  conwriteln("equalizer is ", (mbeqActive ? "" : "not "), "active");
+
+  scope(exit) writeln;
+  bool oldpaused = !paused;
+  int oldgain = gain+1;
+  writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", 0, 0, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !" : ""));
 
   mainloop: for (;;) {
     int frmread = 0;
@@ -834,6 +835,8 @@ extern(C) void atExitRestoreTty () {
 
 
 void main (string[] args) {
+  mbeqLSliders[] = mbeqRSliders[] = 0;
+
   conRegUserVar!bool("shuffle", "shuffle playlist");
 
   conRegVar!rsquality(0, 10, "rsquality", "resampling quality; 0=worst, 10=best, default is 8");
