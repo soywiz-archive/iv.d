@@ -7,6 +7,9 @@ nothrow @trusted @nogc:
 // ////////////////////////////////////////////////////////////////////////// //
 //version = FFTW3;
 
+version = mbeq_39;
+
+
 version(FFTW3) {
   pragma(lib, "fftw3f");
   alias fft_plan = void*;
@@ -29,7 +32,11 @@ public struct MBEQ {
 public:
   enum FFT_LENGTH = 1024;
   enum OVER_SAMP = 4;
-  enum BANDS = 15;
+  version(mbeq_39) {
+    enum BANDS = 39;
+  } else {
+    enum BANDS = 15;
+  }
 
 public:
   // [-70..30]
@@ -143,14 +150,11 @@ public:
         ++bin;
       }
     }
+    //{ import core.stdc.stdio; printf("bin=%d (%d)\n", bin, FFT_LENGTH/2); }
     for (; bin < FFT_LENGTH/2; ++bin) {
       bin_base[bin] = BANDS-1;
       bin_delta[bin] = 0.0f;
     }
-  }
-
-  void activate () {
-    fifo_pos = 0;
   }
 
   void cleanup () {
@@ -261,11 +265,19 @@ public:
     latency = fft_latency;
   }
 
-private static immutable float[BANDS] bandfrqs = [
-   50.00f,  100.00f,  155.56f,  220.00f,  311.13f, 440.00f, 622.25f,
-  880.00f, 1244.51f, 1760.00f, 2489.02f, 3519.95, 4978.04f, 9956.08f,
-  19912.16f
-];
+  version(mbeq_39) {
+    private static immutable float[BANDS] bandfrqs = [
+      12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100, 125, 150, 175, 200, 250, 300, 350, 400,
+      500, 600, 700, 800, 1000, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 4000, 4800,
+      5600, 6400, 8000, 9600, 11200, 12800, 16000, 19200, 22400
+    ];
+  } else {
+    private static immutable float[BANDS] bandfrqs = [
+       50.00f,  100.00f,  155.56f,  220.00f,  311.13f, 440.00f, 622.25f,
+      880.00f, 1244.51f, 1760.00f, 2489.02f, 3519.95, 4978.04f, 9956.08f,
+      19912.16f
+    ];
+  }
 
 private:
 static:

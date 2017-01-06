@@ -45,11 +45,11 @@ import iv.mp3scan;
 import iv.tremor;
 import iv.dopus;
 
-version(altereq) {
+version(supereq) {
+  import mbandeq;
+} else {
   import mbeq_1197;
   float[MBEQ.BANDS] eqbands = 0;
-} else {
-  import mbandeq;
 }
 
 
@@ -637,12 +637,7 @@ Action playFile () {
     }
   }
 
-  version(altereq) {
-    auto mbeql = MBEQ(sio.rate);
-    auto mbeqr = MBEQ(sio.rate);
-    bool mbeqActive = false;
-    foreach (immutable v; eqbands[]) if (v != 0) { mbeqActive = true; break; }
-  } else {
+  version(supereq) {
     mbeqInit(14);
     //mbeqInit(12);
     scope(exit) mbeqQuit();
@@ -653,6 +648,11 @@ Action playFile () {
 
     mbeqSampleRate = sio.rate;
     mbeqSetBandsFromSliders();
+  } else {
+    auto mbeql = MBEQ(sio.rate);
+    auto mbeqr = MBEQ(sio.rate);
+    bool mbeqActive = false;
+    foreach (immutable v; eqbands[]) if (v != 0) { mbeqActive = true; break; }
   }
   conwriteln("equalizer is ", (mbeqActive ? "" : "not "), "active");
 
@@ -680,7 +680,14 @@ Action playFile () {
       }
 
       if (mbeqActive) {
-        version(altereq) {
+        version(supereq) {
+          //conwriteln("frmread=", frmread);
+          if (frmread > 8191) assert(0, "oops");
+          auto eqsr = mbeqModifySamples(buffer.ptr, frmread, sio.channels, 16);
+          //conwriteln("frmread=", frmread, "; eqsr=", eqsr);
+          if (eqsr > frmread) assert(0, "wtf?!");
+          frmread = eqsr;
+        } else {
           if (rsfbufi.length < frmread*sio.channels) rsfbufi.length = frmread*sio.channels;
           if (rsfbufo.length < frmread*sio.channels) rsfbufo.length = frmread*sio.channels;
           tflShort2Float((cast(const(short)*)buffer.ptr)[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels]);
@@ -693,13 +700,6 @@ Action playFile () {
             mbeqr.run(rsfbufo[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels], 2, 1);
           }
           tflFloat2Short(rsfbufo[0..frmread*sio.channels], (cast(short*)buffer.ptr)[0..frmread*sio.channels]);
-        } else {
-          //conwriteln("frmread=", frmread);
-          if (frmread > 8191) assert(0, "oops");
-          auto eqsr = mbeqModifySamples(buffer.ptr, frmread, sio.channels, 16);
-          //conwriteln("frmread=", frmread, "; eqsr=", eqsr);
-          if (eqsr > frmread) assert(0, "wtf?!");
-          frmread = eqsr;
         }
       }
     } else {
@@ -867,10 +867,10 @@ extern(C) void atExitRestoreTty () {
 
 
 void main (string[] args) {
-  version(altereq) {
-    eqbands[] = 0;
-  } else {
+  version(supereq) {
     mbeqLSliders[] = mbeqRSliders[] = 0;
+  } else {
+    eqbands[] = 0;
   }
 
   conRegUserVar!bool("shuffle", "shuffle playlist");
@@ -885,15 +885,15 @@ void main (string[] args) {
 
   // lol, `std.trait : ParameterDefaults()` blocks using argument with name `value`
   conRegFunc!((int idx, byte value) {
-    version(altereq) {
-      if (idx >= 0 && idx < eqbands.length) {
-        eqbands[idx] = value;
+    version(supereq) {
+      if (idx >= 0 && idx < mbeqBandCount) {
+        mbeqLSliders[idx] = mbeqRSliders[idx] = value;
       } else {
         conwriteln("invalid equalizer band index: ", idx);
       }
     } else {
-      if (idx >= 0 && idx < mbeqBandCount) {
-        mbeqLSliders[idx] = mbeqRSliders[idx] = value;
+      if (idx >= 0 && idx < eqbands.length) {
+        eqbands[idx] = value;
       } else {
         conwriteln("invalid equalizer band index: ", idx);
       }
@@ -901,10 +901,10 @@ void main (string[] args) {
   })("eq_band", "set equalizer band #n to v (band 0 is preamp)");
 
   concmd("exec .config.rc tan");
-  version(altereq) {
-    concmd("exec mbeqa.rc tan");
+  version(supereq) {
+    concmd("exec mbeqs.rc tan");
   } else {
-    concmd("exec mbeq.rc tan");
+    concmd("exec mbeqa.rc tan");
   }
   conProcessArgs!true(args);
 
