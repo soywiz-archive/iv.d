@@ -592,10 +592,12 @@ Action playFile () {
   scope(exit) mbeqQuit();
 
   mbeqSampleRate = sio.rate;
-  mbeqLSliders[8..13] = -40;
-  mbeqRSliders[8..13] = -40;
-  mbeqLSliders[0] = -6;
-  mbeqRSliders[0] = -6;
+  //mbeqLSliders[8..13] = -40;
+  //mbeqRSliders[8..13] = -40;
+  mbeqLSliders[9..14] = 96;
+  mbeqRSliders[9..14] = 96;
+  //mbeqLSliders[0] = -6;
+  //mbeqRSliders[0] = -6;
   mbeqSetBandsFromSliders();
 
   mainloop: for (;;) {
