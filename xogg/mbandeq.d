@@ -517,4 +517,4 @@ public void mbeqSetBandsFromSliders () {
 public int mbeqBandCount () { pragma(inline, true); return NBANDS+2; } ///
 
 /// last band is equal to samling rate
-public int mbeqBandFreq (int idx) { pragma(inline, true); return (idx >= 0 && idx < NBANDS+1 ? mbeqBandFreqs[idx] : (idx == NBANDS+1 ? 48000 : 0)); }
+public int mbeqBandFreq (int idx) { pragma(inline, true); return (idx > 1 && idx < NBANDS+1 ? mbeqBandFreqs[idx-1] : (idx == NBANDS+1 ? 48000 : 0)); }
