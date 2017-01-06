@@ -591,13 +591,19 @@ Action playFile () {
   //mbeqInit(12);
   scope(exit) mbeqQuit();
 
+  bool mbeqActive = false;
+  foreach (immutable idx, immutable v; mbeqLSliders) if (v != 0) { mbeqActive = true; break; }
+  if (!mbeqActive) foreach (immutable idx, immutable v; mbeqRSliders) if (v != 0) { mbeqActive = true; break; }
+
   mbeqSampleRate = sio.rate;
+  /+
   //mbeqLSliders[8..13] = -40;
   //mbeqRSliders[8..13] = -40;
-  mbeqLSliders[9..14] = 96;
-  mbeqRSliders[9..14] = 96;
+  mbeqLSliders[6..14] = 96;
+  mbeqRSliders[6..14] = 96;
   //mbeqLSliders[0] = -6;
   //mbeqRSliders[0] = -6;
+  +/
   mbeqSetBandsFromSliders();
 
   mainloop: for (;;) {
@@ -618,12 +624,14 @@ Action playFile () {
         tflFloat2Short(flbuf[0..frmread*sio.channels], bp[0..frmread*sio.channels]);
       }
 
-      //conwriteln("frmread=", frmread);
-      if (frmread > 8191) assert(0, "oops");
-      auto eqsr = mbeqModifySamples(buffer.ptr, frmread, sio.channels, 16);
-      //conwriteln("frmread=", frmread, "; eqsr=", eqsr);
-      if (eqsr > frmread) assert(0, "wtf?!");
-      frmread = eqsr;
+      if (mbeqActive) {
+        //conwriteln("frmread=", frmread);
+        if (frmread > 8191) assert(0, "oops");
+        auto eqsr = mbeqModifySamples(buffer.ptr, frmread, sio.channels, 16);
+        //conwriteln("frmread=", frmread, "; eqsr=", eqsr);
+        if (eqsr > frmread) assert(0, "wtf?!");
+        frmread = eqsr;
+      }
     } else {
       frmread = BUF_SIZE/2/sio.channels;
       buffer[] = 0;
@@ -834,7 +842,16 @@ void main (string[] args) {
   conRegVar!allowresampling("use_resampling", "allow audio resampling?");
   conRegVar!rstype("resampler_type", "resampler to use (speex or simple)");
 
+  conRegFunc!((int idx, byte value) {
+    if (idx >= 0 && idx < mbeqBandCount) {
+      mbeqLSliders[idx] = mbeqRSliders[idx] = value;
+    } else {
+      conwriteln("invalid equalizer band index: ", idx);
+    }
+  })("eq_band", "set equalizer band #n to v (band 0 is preamp)");
+
   concmd("exec .config.rc tan");
+  concmd("exec mbeq.rc tan");
   conProcessArgs!true(args);
 
   foreach (string fname; args[1..$]) {
