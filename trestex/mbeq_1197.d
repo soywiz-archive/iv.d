@@ -174,9 +174,10 @@ public:
 
   // input: input (array of floats of length sample_count)
   // output: output (array of floats of length sample_count)
-  void run (fftw_real[] output, const(fftw_real)[] input) {
+  void run (fftw_real[] output, const(fftw_real)[] input, uint stride=1, uint ofs=0) {
     if (output.length < input.length) assert(0, "wtf?!");
-    if (input.length == 0) return;
+    if (stride == 0) assert(0, "wtf?!");
+    if (ofs >= input.length || input.length < stride) return;
 
     float[BANDS+1] gains = void;
     gains[0..$-1] = bands[];
@@ -202,9 +203,9 @@ public:
 
     if (fifo_pos == 0) fifo_pos = fft_latency;
 
-    foreach (immutable pos; 0..input.length) {
-      in_fifo[fifo_pos] = input.ptr[pos];
-      output.ptr[pos] = out_fifo[fifo_pos-fft_latency];
+    foreach (immutable pos; 0..input.length/stride) {
+      in_fifo[fifo_pos] = input.ptr[pos*stride+ofs];
+      output.ptr[pos*stride+ofs] = out_fifo[fifo_pos-fft_latency];
       ++fifo_pos;
 
       // if the FIFO is full

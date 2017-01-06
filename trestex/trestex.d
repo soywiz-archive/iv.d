@@ -681,31 +681,18 @@ Action playFile () {
 
       if (mbeqActive) {
         version(altereq) {
+          if (rsfbufi.length < frmread*sio.channels) rsfbufi.length = frmread*sio.channels;
+          if (rsfbufo.length < frmread*sio.channels) rsfbufo.length = frmread*sio.channels;
+          tflShort2Float((cast(const(short)*)buffer.ptr)[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels]);
           mbeql.bands[] = eqbands[];
-          mbeqr.bands[] = eqbands[];
-          foreach (immutable chan; 0..sio.channels) {
-            if (rsfbufi.length < frmread) rsfbufi.length = frmread;
-            if (rsfbufo.length < frmread) rsfbufo.length = frmread;
-            if (rsbuf.length < frmread) rsbuf.length = frmread;
-            {
-              auto sp = (cast(const(short)*)buffer.ptr)+chan;
-              auto dp = rsbuf.ptr;
-              foreach (immutable _; 0..frmread) { *dp++ = *sp++; if (sio.channels > 1) ++sp; }
-            }
-            //mbeql.input = mbeqr.input = rsfbufi.ptr;
-            //mbeql.output = mbeqr.output = rsfbufo.ptr;
-            tflShort2Float(rsbuf[0..frmread], rsfbufi[0..frmread]);
-            final switch (chan) {
-              case 0: mbeql.run(rsfbufo[0..frmread], rsfbufi[0..frmread]); break;
-              case 1: mbeqr.run(rsfbufo[0..frmread], rsfbufi[0..frmread]); break;
-            }
-            tflFloat2Short(rsfbufo[0..frmread], rsbuf[0..frmread]);
-            {
-              auto sp = rsbuf.ptr;
-              auto dp = (cast(short*)buffer.ptr)+chan;
-              foreach (immutable _; 0..frmread) { *dp++ = *sp++; if (sio.channels > 1) ++dp; }
-            }
+          if (sio.channels == 1) {
+            mbeql.run(rsfbufo[0..frmread], rsfbufi[0..frmread]);
+          } else {
+            mbeqr.bands[] = eqbands[];
+            mbeql.run(rsfbufo[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels], 2, 0);
+            mbeqr.run(rsfbufo[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels], 2, 1);
           }
+          tflFloat2Short(rsfbufo[0..frmread*sio.channels], (cast(short*)buffer.ptr)[0..frmread*sio.channels]);
         } else {
           //conwriteln("frmread=", frmread);
           if (frmread > 8191) assert(0, "oops");
