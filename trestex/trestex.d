@@ -153,7 +153,53 @@ string recodeToKOI8 (const(char)[] s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+enum XXBUF_SIZE = 4096;
+ubyte[XXBUF_SIZE] xxbuffer;
+uint xxbufused;
+uint xxoutchans;
 
+
+void outSoundInit (uint chans) {
+  if (chans < 1 || chans > 2) assert(0, "invalid number of channels");
+  xxbufused = 0;
+  xxoutchans = chans;
+}
+
+
+void outSoundFlush (snd_pcm_t* pcm) {
+  while (xxbufused/2/xxoutchans > 0) {
+    auto frames = snd_pcm_writei(pcm, xxbuffer.ptr, xxbufused/2/xxoutchans);
+    if (frames < 0) {
+      frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+      if (frames < 0) {
+        import core.stdc.stdio : printf;
+        printf("snd_pcm_writei failed: %s\n", snd_strerror(cast(int)frames));
+      }
+    } else {
+      import core.stdc.string : memmove;
+      auto bwr = cast(uint)(frames*2*xxoutchans);
+      if (bwr >= xxbufused) { xxbufused = 0; break; }
+      memmove(xxbuffer.ptr, xxbuffer.ptr+bwr, xxbufused-bwr);
+      xxbufused -= bwr;
+    }
+  }
+}
+
+
+void outSound (snd_pcm_t* pcm, const(void)* buf, uint bytes) {
+  //conwriteln("xxbufused=", xxbufused, "; left=", xxbuffer.length-xxbufused, "; bytes=", bytes);
+  auto src = cast(const(ubyte)*)buf;
+  while (bytes > 0) {
+    while (bytes > 0 && xxbufused < xxbuffer.length) {
+      xxbuffer.ptr[xxbufused++] = *src++;
+      --bytes;
+    }
+    if (xxbufused == xxbuffer.length) outSoundFlush(pcm);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum BUF_SIZE = 4096;
 ubyte[BUF_SIZE] buffer;
 
@@ -538,6 +584,8 @@ Action playFile () {
   uint realRate = getBestSampleRate(sio.rate);
   conwriteln("real sampling rate: ", realRate);
 
+  outSoundInit(sio.channels);
+
   static short[] rsbuf;
   static float[] rsfbufi, rsfbufo;
   uint rsbufused;
@@ -593,14 +641,6 @@ Action playFile () {
   if (!mbeqActive) foreach (immutable v; mbeqRSliders[]) if (v != 0) { mbeqActive = true; break; }
 
   mbeqSampleRate = sio.rate;
-  /+
-  //mbeqLSliders[8..13] = -40;
-  //mbeqRSliders[8..13] = -40;
-  mbeqLSliders[6..14] = 96;
-  mbeqRSliders[6..14] = 96;
-  //mbeqLSliders[0] = -6;
-  //mbeqRSliders[0] = -6;
-  +/
   mbeqSetBandsFromSliders();
   conwriteln("equalizer is ", (mbeqActive ? "" : "not "), "active");
 
@@ -643,35 +683,13 @@ Action playFile () {
 
     // no need to resample silence ;-)
     if (realRate == sio.rate || !allowresampling || silence) {
-      for (;;) {
-        frames = snd_pcm_writei(pcm, buffer.ptr, frmread);
-        if (frames < 0) {
-          frames = snd_pcm_recover(pcm, cast(int)frames, 0);
-          if (frames < 0) {
-            import core.stdc.stdio : printf;
-            printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
-            break mainloop;
-          }
-        } else {
-          import core.stdc.string : memmove;
-          if (frames >= frmread) break;
-          memmove(buffer.ptr, buffer.ptr+cast(uint)frames*2*sio.channels, (frmread-frames)*2*sio.channels);
-          frmread -= frames;
-        }
-      }
+      outSound(pcm, buffer.ptr, frmread*2*sio.channels);
     } else if (rsl is null) {
       // resampling
       // feed resampler
-      short* sb = cast(short*)buffer.ptr;
-      while (frmread > 0) {
-        if (rsibufused >= rsfbufi.length) rsfbufi.length *= 2;
-        rsfbufi.ptr[rsibufused++] = (*sb++)/32768.0f;
-        if (sio.channels == 2) {
-          if (rsibufused >= rsfbufi.length) rsfbufi.length *= 2;
-          rsfbufi.ptr[rsibufused++] = (*sb++)/32768.0f;
-        }
-        --frmread;
-      }
+      rsibufused = cast(uint)frmread*sio.channels;
+      if (rsfbufi.length < rsibufused) rsfbufi.length = rsibufused;
+      tflShort2Float((cast(short*)buffer.ptr)[0..rsibufused], rsfbufi[0..rsibufused]);
       if (rsfbufi.length*4 > rsfbufo.length) rsfbufo.length = rsfbufi.length*4;
       //if (rsobufused >= rsfbufo.length) rsfbufo.length = rsobufused*2;
       int ibu0count = 0;
@@ -700,26 +718,9 @@ Action playFile () {
         if (rsobufused > rsbuf.length) rsbuf.length = rsobufused;
         if (rsobufused > 0) {
           assert(rsobufused%sio.channels == 0);
-          sb = rsbuf.ptr;
-          foreach (float ov; rsfbufo[0..rsobufused]) {
-            if (ov < -1.0f) ov = -1.0f; else if (ov > 1.0f) ov = 1.0f;
-            int n = cast(int)(ov*32767.0f);
-            if (n < short.min) n = short.min; else if (n > short.max) n = short.max;
-            *sb++ = cast(short)n;
-          }
-          uint rsopos = 0;
-          while (rsopos < rsobufused/sio.channels) {
-            frames = snd_pcm_writei(pcm, rsbuf.ptr+rsopos*sio.channels, (rsobufused-rsopos)/sio.channels);
-            if (frames < 0) {
-              frames = snd_pcm_recover(pcm, cast(int)frames, 0);
-              if (frames < 0) {
-                import core.stdc.stdio : printf;
-                printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
-                break mainloop;
-              }
-            }
-            rsopos += cast(uint)frames;
-          }
+          if (rsbuf.length < rsobufused) rsbuf.length = rsobufused;
+          tflFloat2Short(rsfbufo[0..rsobufused], rsbuf[0..rsobufused]);
+          outSound(pcm, rsbuf.ptr, rsobufused*2);
           // shift output buffer
           if (srbdata.outputSamplesUsed > 0) {
             if (srbdata.outputSamplesUsed < rsobufused) {
@@ -764,6 +765,7 @@ Action playFile () {
             }
           }
           //conwriteln("  got: ", rsbufused/sio.channels);
+          /*
           uint left = rsbufused/sio.channels;
           uint pos = 0;
           while (pos < left) {
@@ -779,6 +781,8 @@ Action playFile () {
               pos += frames;
             }
           }
+          */
+          outSound(pcm, rsbuf.ptr, rsbufused*2);
         }
       }
     }
@@ -824,6 +828,7 @@ Action playFile () {
       if (oldtm != tm) sio.seekToTime(cast(uint)tm);
     }
   }
+  outSoundFlush(pcm);
 
   return Action.Next;
 }
