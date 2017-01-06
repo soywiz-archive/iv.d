@@ -7236,6 +7236,7 @@ private:
     clearPage();
     while (maxbytes >= Offsets.Lacing) {
       //conwriteln("0: bufpos=", bufpos, "; bufused=", bufused);
+      //{ import core.stdc.stdio; printf("0: bufpos=%u; bufused=%u\n", bufpos, bufused); }
       while (bufpos >= bufused || bufused-bufpos < 4) {
         if (eofhit) break;
         if (bufpos < bufused) {
@@ -7255,6 +7256,7 @@ private:
         maxbytes -= cast(uint)rd.length;
       }
       //conwriteln("1: bufpos=", bufpos, "; bufused=", bufused, "; bleft=", bufused-bufpos);
+      //{ import core.stdc.stdio; printf("1: bufpos=%u; bufused=%u\n", bufpos, bufused); }
       if (bufpos >= bufused || bufused-bufpos < 4) { eofhit = true; return false; }
       uint bleft = bufused-bufpos;
       auto b = (cast(const(ubyte)*)buf.ptr)+bufpos;
@@ -7305,6 +7307,7 @@ private:
         ++b;
         --bleft;
       }
+      bufpos = bufused;
     }
     return false;
   }
