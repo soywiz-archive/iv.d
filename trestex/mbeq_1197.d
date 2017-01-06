@@ -49,8 +49,8 @@ public:
   // 10000Hz gain (float value)
   // 20000Hz gain (float value)
   float[BANDS] bands = 0;
-  float* input;
-  float* output;
+  //float* input;
+  //float* output;
   int latency;
   int* bin_base;
   float* bin_delta;
@@ -174,7 +174,10 @@ public:
 
   // input: input (array of floats of length sample_count)
   // output: output (array of floats of length sample_count)
-  void run (uint sample_count) {
+  void run (fftw_real[] output, const(fftw_real)[] input) {
+    if (output.length < input.length) assert(0, "wtf?!");
+    if (input.length == 0) return;
+
     float[BANDS+1] gains = void;
     gains[0..$-1] = bands[];
     gains[$-1] = 0.0f;
@@ -199,9 +202,9 @@ public:
 
     if (fifo_pos == 0) fifo_pos = fft_latency;
 
-    foreach (immutable pos; 0..sample_count) {
-      in_fifo[fifo_pos] = input[pos];
-      output[pos] = out_fifo[fifo_pos-fft_latency];
+    foreach (immutable pos; 0..input.length) {
+      in_fifo[fifo_pos] = input.ptr[pos];
+      output.ptr[pos] = out_fifo[fifo_pos-fft_latency];
       ++fifo_pos;
 
       // if the FIFO is full

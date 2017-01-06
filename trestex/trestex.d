@@ -692,12 +692,12 @@ Action playFile () {
               auto dp = rsbuf.ptr;
               foreach (immutable _; 0..frmread) { *dp++ = *sp++; if (sio.channels > 1) ++sp; }
             }
-            mbeql.input = mbeqr.input = rsfbufi.ptr;
-            mbeql.output = mbeqr.output = rsfbufo.ptr;
+            //mbeql.input = mbeqr.input = rsfbufi.ptr;
+            //mbeql.output = mbeqr.output = rsfbufo.ptr;
             tflShort2Float(rsbuf[0..frmread], rsfbufi[0..frmread]);
             final switch (chan) {
-              case 0: mbeql.run(frmread); break;
-              case 1: mbeqr.run(frmread); break;
+              case 0: mbeql.run(rsfbufo[0..frmread], rsfbufi[0..frmread]); break;
+              case 1: mbeqr.run(rsfbufo[0..frmread], rsfbufi[0..frmread]); break;
             }
             tflFloat2Short(rsfbufo[0..frmread], rsbuf[0..frmread]);
             {
