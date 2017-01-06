@@ -15,9 +15,9 @@ version(mbeq_debug_output) import iv.cmdcon;
 // Real Discrete Fourier Transform wrapper
 void rfft (int n, int isign, REAL* x) {
   import std.math : sqrt;
-  static int ipsize = 0, wsize=0;
-  static int* ip = null;
-  static REAL* w = null;
+  __gshared int ipsize = 0, wsize=0;
+  __gshared int* ip = null;
+  __gshared REAL* w = null;
   int newipsize, newwsize;
 
   if (n == 0) {
