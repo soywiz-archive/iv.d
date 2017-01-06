@@ -51,7 +51,7 @@ package bool findFileCI (const(char)[] path, char[] name, bool asDir) nothrow @n
     }
   }
   // vanilla dmd has bug in dirent definition: it's not aligned
-  static if (dirent.d_name.offsetof == 19) {
+  /*static if (dirent.d_name.offsetof == 19)*/ {
     tmpbuf[path.length] = '\0';
     auto dir = opendir(tmpbuf);
     if (dir is null) return false;
