@@ -1,520 +1,882 @@
-// Shibatch Super Equalizer ver 0.03 for winamp
-// written by Naoki Shibata  shibatch@users.sourceforge.net
-// LGPL
+// code from LADSPA plugins project: http://plugin.org.uk/
+// GNU GPLv3
 module mbandeq;
 private:
+nothrow @trusted @nogc:
 
-import fftsg;
+// ////////////////////////////////////////////////////////////////////////// //
+//version = FFTW3;
 
-//version = mbeq_debug_output;
+version = mbandeq_extended;
 
-version(mbeq_debug_output) import iv.cmdcon;
+
+version(FFTW3) {
+  pragma(lib, "fftw3f");
+  alias fft_plan = void*;
+  alias fftw_real = float;
+  extern(C) nothrow @trusted @nogc {
+    enum FFTW_MEASURE = 0;
+    enum { FFTW_R2HC=0, FFTW_HC2R=1, FFTW_DHT=2 }
+    fft_plan fftwf_plan_r2r_1d (int n, fftw_real* inp, fftw_real* outp, size_t kind, uint flags);
+    void fftwf_execute (fft_plan plan);
+  }
+} else {
+  //import kissfft;
+  alias fft_plan = kiss_fftr_cfg;
+  alias fftw_real = kiss_fft_scalar;
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// Real Discrete Fourier Transform wrapper
-void rfft (int n, int isign, REAL* x) {
-  import std.math : sqrt;
-  __gshared int ipsize = 0, wsize=0;
-  __gshared int* ip = null;
-  __gshared REAL* w = null;
-  int newipsize, newwsize;
+public struct MBandEq {
+private:
+  enum FFT_LENGTH = 1024;
+  enum OVER_SAMP = 4;
+  enum STEP_SIZE = FFT_LENGTH/OVER_SAMP;
 
-  if (n == 0) {
+public:
+  version(mbandeq_extended) {
+    enum Bands = 39;
+  } else {
+    enum Bands = 15;
+  }
+  enum Latency = FFT_LENGTH-STEP_SIZE;
+
+public:
+  float[Bands] bands = 0; // [-70..30)
+  int* bin_base;
+  float* bin_delta;
+  fftw_real* comp;
+  float* db_table;
+  uint fifo_pos;
+  float* in_fifo;
+  float* out_accum;
+  float* out_fifo;
+  fft_plan plan_cr;
+  fft_plan plan_rc;
+  fftw_real* realx;
+  float* window;
+  int smpRate;
+
+  this (int asrate) {
+    setup(asrate);
+  }
+
+  ~this () {
+    cleanup();
+  }
+
+  void setup (int asrate) {
+    import std.math : cos, pow, PI;
+
+    cleanup();
+    //scope(failure) cleanup();
+
+    if (asrate < 1024 || asrate > 48000) assert(0, "invalid sampling rate");
+    smpRate = asrate;
+    float hz_per_bin = cast(float)asrate/cast(float)FFT_LENGTH;
+
+    zalloc(in_fifo, FFT_LENGTH);
+    zalloc(out_fifo, FFT_LENGTH);
+    zalloc(out_accum, FFT_LENGTH*2);
+    zalloc(realx, FFT_LENGTH+16);
+    zalloc(comp, FFT_LENGTH+16);
+    zalloc(window, FFT_LENGTH);
+    zalloc(bin_base, FFT_LENGTH/2);
+    zalloc(bin_delta, FFT_LENGTH/2);
+    fifo_pos = 0;
+
+    version(FFTW3) {
+      plan_rc = fftwf_plan_r2r_1d(FFT_LENGTH, realx, comp, FFTW_R2HC, FFTW_MEASURE);
+      plan_cr = fftwf_plan_r2r_1d(FFT_LENGTH, comp, realx, FFTW_HC2R, FFTW_MEASURE);
+    } else {
+      plan_rc = kiss_fftr_alloc(FFT_LENGTH, 0, null, null);
+      plan_cr = kiss_fftr_alloc(FFT_LENGTH, 1, null, null);
+    }
+
+    // create raised cosine window table
+    foreach (immutable i; 0..FFT_LENGTH) {
+      window[i] = -0.5f*cos(2.0f*PI*cast(double)i/cast(double)FFT_LENGTH)+0.5f;
+      window[i] *= 2.0f;
+    }
+
+    // create db->coeffiecnt lookup table
+    zalloc(db_table, 1000);
+    foreach (immutable i; 0..1000) {
+      float db = (cast(float)i/10)-70;
+      db_table[i] = pow(10.0f, db/20.0f);
+    }
+
+    // create FFT bin -> band+delta tables
+    int bin = 0;
+    while (bin <= bandfrqs[0]/hz_per_bin) {
+      bin_base[bin] = 0;
+      bin_delta[bin++] = 0.0f;
+    }
+    for (int i = 1; i < Bands-1 && bin < (FFT_LENGTH/2)-1 && bandfrqs[i+1] < asrate/2; ++i) {
+      float last_bin = bin;
+      float next_bin = (bandfrqs[i+1])/hz_per_bin;
+      while (bin <= next_bin) {
+        bin_base[bin] = i;
+        bin_delta[bin] = cast(float)(bin-last_bin)/cast(float)(next_bin-last_bin);
+        ++bin;
+      }
+    }
+    //{ import core.stdc.stdio; printf("bin=%d (%d)\n", bin, FFT_LENGTH/2); }
+    for (; bin < FFT_LENGTH/2; ++bin) {
+      bin_base[bin] = Bands-1;
+      bin_delta[bin] = 0.0f;
+    }
+  }
+
+  void cleanup () {
+    xfree(in_fifo);
+    xfree(out_fifo);
+    xfree(out_accum);
+    xfree(realx);
+    xfree(comp);
+    xfree(window);
+    xfree(bin_base);
+    xfree(bin_delta);
+    xfree(db_table);
+    version(FFTW3) {
+      //??? no need to do FFTW cleanup?
+    } else {
+      kiss_fft_free(plan_rc);
+      kiss_fft_free(plan_cr);
+      plan_rc = null;
+      plan_cr = null;
+    }
+  }
+
+  // input: input (array of floats of length sample_count)
+  // output: output (array of floats of length sample_count)
+  void run (fftw_real[] output, const(fftw_real)[] input, uint stride=1, uint ofs=0) {
+    import core.stdc.string : memmove;
+
+    if (output.length < input.length) assert(0, "wtf?!");
+    if (stride == 0) assert(0, "wtf?!");
+    if (ofs >= input.length || input.length < stride) return;
+
+    float[Bands+1] gains = void;
+    gains[0..$-1] = bands[];
+    gains[$-1] = 0.0f;
+
+    float[FFT_LENGTH/2] coefs = void;
+
+    // convert gains from dB to co-efficents
+    foreach (immutable i; 0..Bands) {
+      int gain_idx = cast(int)((gains[i]*10)+700);
+      if (gain_idx < 0) gain_idx = 0; else if (gain_idx > 999) gain_idx = 999;
+      gains[i] = db_table[gain_idx];
+    }
+
+    // calculate coefficients for each bin of FFT
+    coefs[0] = 0.0f;
+    for (int bin = 1; bin < FFT_LENGTH/2-1; ++bin) {
+      coefs[bin] = ((1.0f-bin_delta[bin])*gains[bin_base[bin]])+(bin_delta[bin]*gains[bin_base[bin]+1]);
+    }
+
+    if (fifo_pos == 0) fifo_pos = Latency;
+
+    foreach (immutable pos; 0..input.length/stride) {
+      in_fifo[fifo_pos] = input.ptr[pos*stride+ofs];
+      output.ptr[pos*stride+ofs] = out_fifo[fifo_pos-Latency];
+      ++fifo_pos;
+      // if the FIFO is full
+      if (fifo_pos >= FFT_LENGTH) {
+        fifo_pos = Latency;
+        // window input FIFO
+        foreach (immutable i; 0..FFT_LENGTH) realx[i] = in_fifo[i]*window[i];
+        version(FFTW3) {
+          // run the real->complex transform
+          fftwf_execute(plan_rc);
+          // multiply the bins magnitudes by the coeficients
+          comp[0] *= coefs[0];
+          foreach (immutable i; 1..FFT_LENGTH/2) {
+            comp[i] *= coefs[i];
+            comp[FFT_LENGTH-i] *= coefs[i];
+          }
+          // run the complex->real transform
+          fftwf_execute(plan_cr);
+        } else {
+          // run the real->complex transform
+          //rfftw_one(plan_rc, realx, comp);
+          realx[FFT_LENGTH..FFT_LENGTH+16] = 0; // just in case
+          comp[FFT_LENGTH-16..FFT_LENGTH+16] = 0; // just in case
+          kiss_fftr(plan_rc, realx, cast(kiss_fft_cpx*)comp);
+          // multiply the bins magnitudes by the coeficients
+          comp[0*2+0] *= coefs[0];
+          foreach (immutable i; 1..FFT_LENGTH/2) {
+            comp[i*2+0] *= coefs[i];
+            comp[i*2+1] *= coefs[i];
+          }
+          // run the complex->real transform
+          //rfftw_one(plan_cr, comp, realx);
+          kiss_fftri(plan_cr, cast(const(kiss_fft_cpx)*)comp, realx);
+        }
+        // window into the output accumulator
+        foreach (immutable i; 0..FFT_LENGTH) out_accum[i] += 0.9186162f*window[i]*realx[i]/(FFT_LENGTH*OVER_SAMP);
+        foreach (immutable i; 0..STEP_SIZE) out_fifo[i] = out_accum[i];
+        // shift output accumulator
+        memmove(out_accum, out_accum+STEP_SIZE, FFT_LENGTH*float.sizeof);
+        // shift input fifo
+        foreach (immutable i; 0..Latency) in_fifo[i] = in_fifo[i+STEP_SIZE];
+      }
+    }
+  }
+
+private:
+  version(mbandeq_extended) {
+    static immutable float[Bands] bandfrqs = [
+      12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100, 125, 150, 175, 200, 250, 300, 350, 400,
+      500, 600, 700, 800, 1000, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 4000, 4800,
+      5600, 6400, 8000, 9600, 11200, 12800, 16000, 19200, 22400
+    ];
+  } else {
+    static immutable float[Bands] bandfrqs = [
+       50.00f,  100.00f,  155.56f,  220.00f,  311.13f, 440.00f, 622.25f,
+      880.00f, 1244.51f, 1760.00f, 2489.02f, 3519.95, 4978.04f, 9956.08f,
+      19912.16f
+    ];
+  }
+
+private:
+  /*
+  static T* xalloc(T) (uint count=1) nothrow @trusted @nogc {
+    import core.stdc.stdlib : malloc;
+    import core.stdc.string : memcpy, memset;
+    if (count == 0 || count > 1024*1024*8) assert(0, "wtf?!");
+    auto res = cast(T*)malloc(T.sizeof*count);
+    if (res is null) assert(0, "out of memory");
+    auto iv = typeid(T).initializer;
+    if (iv.ptr is null) {
+      memset(res, 0, T.sizeof*count);
+    } else if (iv.length == T.sizeof) {
+      foreach (immutable idx; 0..count) memcpy(res+idx, iv.ptr, T.sizeof);
+    } else if (iv.length == 0) {
+      memset(res, 0, T.sizeof*count);
+    } else if (iv.length%T.sizeof == 0) {
+      foreach (immutable idx; 0..count) {
+        auto dp = cast(ubyte*)(res+idx);
+        foreach (immutable c; 0..iv.length/T.sizeof) { memcpy(dp, iv.ptr, iv.length); dp += iv.length; }
+      }
+    } else {
+      assert(0, "!!!");
+    }
+    return res;
+  }
+  */
+
+  static void zalloc(T) (ref T* res, uint count) nothrow @trusted @nogc {
+    import core.stdc.stdlib : malloc;
+    import core.stdc.string : memcpy, memset;
+    if (count == 0 || count > 1024*1024*8) assert(0, "wtf?!");
+    res = cast(T*)malloc(T.sizeof*count);
+    if (res is null) assert(0, "out of memory");
+    memset(res, 0, T.sizeof*count);
+  }
+
+  static void xfree(T) (ref T* ptr) nothrow @trusted @nogc {
     import core.stdc.stdlib : free;
-    free(ip); ip = null; ipsize = 0;
-    free(w); w = null; wsize  = 0;
-    return;
+    if (ptr !is null) { free(ptr); ptr = null; }
   }
-
-  newipsize = 2+cast(int)sqrt(cast(REAL)(n/2));
-  if (newipsize > ipsize) {
-    import core.stdc.stdlib : realloc;
-    ipsize = newipsize;
-    ip = cast(int*)realloc(ip, int.sizeof*ipsize);
-    ip[0] = 0;
-  }
-
-  newwsize = n/2;
-  if (newwsize > wsize) {
-    import core.stdc.stdlib : realloc;
-    wsize = newwsize;
-    w = cast(REAL*)realloc(w, REAL.sizeof*wsize);
-  }
-
-  rdft(n, isign, x, ip, w);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum M = 15;
+// kissfft
+version(FFTW3) {} else {
+/*
+ * Copyright (c) 2003-2010, Mark Borgerding
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *  * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the
+ *    distribution.
+ *
+ *  * Neither the author nor the names of any contributors may be used to
+ *    endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+//module kissfft;
+private:
+nothrow @trusted @nogc:
 
-//#define RINT(x) ((x) >= 0 ? ((int)((x)+0.5)) : ((int)((x)-0.5)))
-int RINT (REAL x) pure nothrow @safe @nogc { pragma(inline, true); return (x >= 0 ? cast(int)(x+0.5f) : cast(int)(x-0.5f)); }
-
-enum DITHERLEN = 65536;
-
-__gshared REAL[M+1] fact;
-__gshared REAL aa = 96;
-__gshared REAL iza;
-__gshared REAL* lires, lires1, lires2;
-__gshared REAL* rires, rires1, rires2;
-__gshared REAL* irest;
-__gshared REAL* fsamples;
-__gshared int chg_ires, cur_ires;
-__gshared int winlen, winlenbit, tabsize, nbufsamples;
-__gshared short* inbuf;
-__gshared REAL* outbuf;
-enum dither = false;
-static if (dither) {
-  __gshared REAL* ditherbuf;
-  __gshared uint ditherptr = 0;
-  __gshared REAL smphm1 = 0, smphm2 = 0;
-}
-
-enum NCH = 2;
-
-enum NBANDS = 17;
-static immutable REAL[NBANDS] bands = [
-  65.406392, 92.498606, 130.81278, 184.99721, 261.62557, 369.99442, 523.25113,
-  739.9884 , 1046.5023, 1479.9768, 2093.0045, 2959.9536, 4186.0091, 5919.9072,
-  8372.0181, 11839.814, 16744.036,
-];
-
-
-REAL alpha (REAL a) nothrow @trusted @nogc {
-  import std.math : pow;
-  if (a <= 21) return 0;
-  if (a <= 50) return 0.5842*pow(a-21, 0.4)+0.07886*(a-21);
-  return 0.1102*(a-8.7);
-}
-
-
-REAL izero (REAL x) nothrow @trusted @nogc {
-  import std.math : pow;
-  REAL ret = 1;
-  foreach (immutable m; 1..M+1) {
-    REAL t = pow(x/2, m)/fact[m];
-    ret += t*t;
-  }
-  return ret;
-}
+// ////////////////////////////////////////////////////////////////////////// //
+///
+public alias kiss_fft_scalar = float;
 
 
-/// wb: window length, bits
-public void mbeqInit (int wb=14) {
-  import core.stdc.stdlib : malloc, calloc, free;
-
-  if (lires1 !is null) free(lires1);
-  if (lires2 !is null) free(lires2);
-  if (rires1 !is null) free(rires1);
-  if (rires2 !is null) free(rires2);
-  if (irest !is null) free(irest);
-  if (fsamples !is null) free(fsamples);
-  if (inbuf !is null) free(inbuf);
-  if (outbuf !is null) free(outbuf);
-  static if (dither) { if (ditherbuf !is null) free(ditherbuf); }
-
-  winlen = (1<<(wb-1))-1;
-  winlenbit = wb;
-  tabsize = 1<<wb;
-
-  //{ import core.stdc.stdio; printf("winlen=%u\n", winlen); }
-
-  lires1 = cast(REAL*)malloc(REAL.sizeof*tabsize);
-  lires2 = cast(REAL*)malloc(REAL.sizeof*tabsize);
-  rires1 = cast(REAL*)malloc(REAL.sizeof*tabsize);
-  rires2 = cast(REAL*)malloc(REAL.sizeof*tabsize);
-  irest = cast(REAL*)malloc(REAL.sizeof*tabsize);
-  fsamples = cast(REAL*)malloc(REAL.sizeof*tabsize);
-  inbuf = cast(short*)calloc(winlen*NCH, int.sizeof);
-  outbuf = cast(REAL*)calloc(tabsize*NCH, REAL.sizeof);
-  static if (dither) { ditherbuf = cast(REAL*)malloc(REAL.sizeof*DITHERLEN); }
-
-  lires = lires1;
-  rires = rires1;
-  cur_ires = 1;
-  chg_ires = 1;
-
-  static if (dither) {
-    foreach (immutable i; 0..DITHERLEN) {
-      import std.random;
-      //ditherbuf[i] = (REAL(rand())/RAND_MAX-0.5);
-      ditherbuf[i] = uniform!"[]"(0, 32760)/32760.0f-0.5f;
-    }
-  }
-
-  foreach (immutable i; 0..M+1) {
-    fact[i] = 1;
-    foreach (immutable j; 1..i+1) fact[i] *= j;
-  }
-
-  iza = izero(alpha(aa));
-}
-
-
-// -(N-1)/2 <= n <= (N-1)/2
-REAL win (REAL n, int N) nothrow @trusted @nogc {
-  pragma(inline, true);
-  import std.math : sqrt;
-  return izero(alpha(aa)*sqrt(1-4*n*n/((N-1)*(N-1))))/iza;
-}
-
-
-REAL sinc (REAL x) nothrow @trusted @nogc {
-  pragma(inline, true);
-  import std.math : sin;
-  return (x == 0 ? 1 : sin(x)/x);
-}
-
-
-REAL hn_lpf (int n, REAL f, REAL fs) nothrow @trusted @nogc {
-  pragma(inline, true);
-  import std.math : PI;
-  immutable REAL t = 1/fs;
-  immutable REAL omega = 2*PI*f;
-  return 2*f*t*sinc(n*omega*t);
-}
-
-
-REAL hn_imp (int n) nothrow @trusted @nogc {
-  pragma(inline, true);
-  return (n == 0 ? 1.0 : 0.0);
-}
-
-
-REAL getLower (int i) nothrow @trusted @nogc {
-  pragma(inline, true);
-  if (i < 0) assert(0, "wtf?");
-  if (i > NBANDS+1) assert(0, "wtf?");
-  return (i == 0 ? 0 : bands[i-1]);
-}
-
-
-REAL getUpper (int i) nothrow @trusted @nogc {
-  pragma(inline, true);
-  if (i < 0) assert(0, "wtf?");
-  if (i > NBANDS+1) assert(0, "wtf?");
-  return (i == NBANDS ? 48000/2 : bands[i]);
-}
-
-
-REAL hn (int n, const(REAL)[] gains, REAL fs) nothrow @trusted @nogc {
-  REAL lhn = hn_lpf(n, bands[0], fs);
-  REAL ret = gains[0]*lhn;
-  foreach (immutable i, REAL gv; gains) {
-    if (i == 0) continue;
-    assert(i <= NBANDS);
-    //immutable REAL lower = getLower(i);
-    immutable REAL upper = getUpper(i);
-    if (upper >= fs/2) {
-      // the last one
-      ret += gv*(hn_imp(n)-lhn);
-      return ret;
-    }
-    REAL lhn2 = hn_lpf(n, upper, fs);
-    ret += gv*(lhn2-lhn);
-    lhn = lhn2;
-  }
-  assert(0, "wtf?!");
-}
-
-
-void processParam (REAL[] gains, const(REAL)[] bc, const(REAL)[] gainmods=null) {
-  import std.math : pow;
-  foreach (immutable i; 0..NBANDS+1) {
-    gains[i] = bc[i];
-    immutable REAL gm = (i < gainmods.length ? gainmods[i] : 1);
-    gains[i] *= pow(10, gm/20);
-    //if (i < gainmods.length) gains[i] *= pow(10, gainmods[i]/20);
-  }
+///
+public align(1) struct kiss_fft_cpx {
+align(1):
+  kiss_fft_scalar r;
+  kiss_fft_scalar i;
 }
 
 
 ///
-public void mbeqMakeTable (const(REAL)[] lbc, const(REAL)[] rbc, REAL fs, const(REAL)[] gainmods=null) {
-  int i, cires = cur_ires;
-  REAL* nires;
-  REAL[NBANDS+1] gains;
-
-  if (fs <= 0) return;
-
-  // left
-  processParam(gains[], lbc, gainmods);
-  version(mbeq_debug_output) foreach (immutable gi, immutable REAL gv; gains[]) conwriteln("L: ", getLower(gi, fs), "Hz to ", getUpper(gi, fs), "Hz, ", gv);
-  for (i = 0; i < winlen; ++i) irest[i] = hn(i-winlen/2, gains[], fs)*win(i-winlen/2, winlen);
-  for (; i < tabsize; ++i) irest[i] = 0;
-  rfft(tabsize, 1, irest);
-  nires = (cires == 1 ? lires2 : lires1);
-  for (i = 0; i < tabsize; ++i) nires[i] = irest[i];
-
-  // right
-  processParam(gains[], rbc, gainmods);
-  version(mbeq_debug_output) foreach (immutable gi, immutable REAL gv; gains[]) conwriteln("R: ", getLower(gi, fs), "Hz to ", getUpper(gi, fs), "Hz, ", gv);
-  for (i = 0; i < winlen; ++i) irest[i] = hn(i-winlen/2, gains[], fs)*win(i-winlen/2, winlen);
-  for (; i < tabsize; ++i) irest[i] = 0;
-  rfft(tabsize, 1, irest);
-  nires = (cires == 1 ? rires2 : rires1);
-  for (i = 0; i < tabsize; ++i) nires[i] = irest[i];
-
-  // done
-  chg_ires = (cires == 1 ? 2 : 1);
-}
+public alias kiss_fft_cfg = kiss_fft_state*;
 
 
-///
-public void mbeqQuit () {
-  import core.stdc.stdlib : free;
+// ////////////////////////////////////////////////////////////////////////// //
+enum MAXFACTORS = 32;
+/* e.g. an fft of length 128 has 4 factors
+ as far as kissfft is concerned
+ 4*4*4*2
+ */
 
-  if (lires1 !is null) free(lires1);
-  if (lires2 !is null) free(lires2);
-  if (rires1 !is null) free(rires1);
-  if (rires2 !is null) free(rires2);
-  if (irest !is null) free(irest);
-  if (fsamples !is null) free(fsamples);
-  if (inbuf !is null) free(inbuf);
-  if (outbuf !is null) free(outbuf);
-
-  lires1 = null;
-  lires2 = null;
-  rires1 = null;
-  rires2 = null;
-  irest = null;
-  fsamples = null;
-  inbuf = null;
-  outbuf = null;
-
-  rfft(0, 0, null);
-}
-
-
-///
-public void mbeqClearbuf (int bps, int srate) {
-  nbufsamples = 0;
-  //foreach (immutable i; 0..tabsize*NCH) outbuf[i] = 0;
-  outbuf[0..tabsize*NCH] = 0;
-}
-
-
-///
-public int mbeqModifySamples (void* buf, int nsamples, int nch, int bps) {
-  int i, p, ch;
-  REAL* ires;
-  int amax = (1<<(bps-1))-1;
-  int amin = -(1<<(bps-1));
-  //static REAL smphm1 = 0, smphm2 = 0;
-
-  if (chg_ires) {
-    cur_ires = chg_ires;
-    lires = (cur_ires == 1 ? lires1 : lires2);
-    rires = (cur_ires == 1 ? rires1 : rires2);
-    chg_ires = 0;
-  }
-
-  p = 0;
-
-  while (nbufsamples+nsamples >= winlen) {
-    //version(mbeq_debug_output) conwriteln("nbufsamples+nsamples=", nbufsamples+nsamples, "; winlen=", winlen);
-    switch (bps) {
-      case 8:
-        for (i = 0; i < (winlen-nbufsamples)*nch; ++i) {
-          inbuf[nbufsamples*nch+i] = (cast(ubyte*)buf)[i+p*nch]-0x80;
-          REAL s = outbuf[nbufsamples*nch+i];
-          static if (dither) {
-            s -= smphm1;
-            REAL u = s;
-            s += ditherbuf[(ditherptr++)&(DITHERLEN-1)];
-            if (s < amin) s = amin;
-            if (amax < s) s = amax;
-            s = RINT(s);
-            smphm1 = s-u;
-            (cast(ubyte*)buf)[i+p*nch] = cast(ubyte)(s+0x80);
-          } else {
-            if (s < amin) s = amin;
-            if (amax < s) s = amax;
-            (cast(ubyte*)buf)[i+p*nch] = cast(ubyte)(RINT(s)+0x80);
-          }
-        }
-        for( i = winlen*nch; i < tabsize*nch; ++i) outbuf[i-winlen*nch] = outbuf[i];
-        break;
-      case 16:
-        for (i = 0; i < (winlen-nbufsamples)*nch; ++i) {
-          inbuf[nbufsamples*nch+i] = (cast(short*)buf)[i+p*nch];
-          REAL s = outbuf[nbufsamples*nch+i];
-          static if (dither) {
-            s -= smphm1;
-            REAL u = s;
-            s += ditherbuf[(ditherptr++)&(DITHERLEN-1)];
-            if (s < amin) s = amin;
-            if (amax < s) s = amax;
-            s = RINT(s);
-            smphm1 = s-u;
-            (cast(short*)buf)[i+p*nch] = cast(short)s;
-          } else {
-            if (s < amin) s = amin;
-            if (amax < s) s = amax;
-            (cast(short*)buf)[i+p*nch] = cast(short)RINT(s);
-          }
-        }
-        for (i = winlen*nch; i < tabsize*nch; ++i) outbuf[i-winlen*nch] = outbuf[i];
-        break;
-
-      case 24:
-        for (i = 0; i < (winlen-nbufsamples)*nch; ++i) {
-          (cast(int*)inbuf)[nbufsamples*nch+i] =
-            ((cast(ubyte*)buf)[(i+p*nch)*3])|
-            ((cast(ubyte*)buf)[(i+p*nch)*3+1]<<8)|
-            ((cast(byte*)buf)[(i+p*nch)*3+2]<<16);
-          REAL s = outbuf[nbufsamples*nch+i];
-          //static if (dither) s += ditherbuf[(ditherptr++)&(DITHERLEN-1)];
-          if (s < amin) s = amin;
-          if (amax < s) s = amax;
-          int s2 = RINT(s);
-          (cast(ubyte*)buf)[(i+p*nch)*3+0] = s2&255; s2 >>= 8;
-          (cast(ubyte*)buf)[(i+p*nch)*3+1] = s2&255; s2 >>= 8;
-          (cast(ubyte*)buf)[(i+p*nch)*3+2] = s2&255;
-        }
-        for (i = winlen*nch; i < tabsize*nch; ++i) outbuf[i-winlen*nch] = outbuf[i];
-        break;
-      default: assert(0);
-    }
-
-    p += winlen-nbufsamples;
-    //{ import core.stdc.stdio; printf("old nsamples: %d\n", nsamples); }
-    nsamples -= winlen-nbufsamples;
-    //{ import core.stdc.stdio; printf("new nsamples: %d\n", nsamples); }
-    nbufsamples = 0;
-
-    for (ch = 0; ch < nch; ++ch) {
-      ires = (ch == 0 ? lires : rires);
-
-      if (bps == 24) {
-        for (i = 0; i < winlen; ++i) fsamples[i] = (cast(int*)inbuf)[nch*i+ch];
-      } else {
-        for (i = 0; i < winlen; ++i) fsamples[i] = inbuf[nch*i+ch];
-      }
-
-      //for (i = winlen; i < tabsize; ++i) fsamples[i] = 0;
-      fsamples[winlen..tabsize] = 0;
-
-      rfft(tabsize, 1, fsamples);
-      fsamples[0] = ires[0]*fsamples[0];
-      fsamples[1] = ires[1]*fsamples[1];
-      for (i = 1; i < tabsize/2; ++i) {
-        REAL re = ires[i*2  ]*fsamples[i*2]-ires[i*2+1]*fsamples[i*2+1];
-        REAL im = ires[i*2+1]*fsamples[i*2]+ires[i*2  ]*fsamples[i*2+1];
-        fsamples[i*2  ] = re;
-        fsamples[i*2+1] = im;
-      }
-      rfft(tabsize, -1, fsamples);
-      /*if disabled:
-      {
-        for (i = winlen-1+winlen/2; i >= winlen/2; --i) fsamples[i] = fsamples[i-winlen/2]*tabsize/2;
-        for (; i >= 0; --i) fsamples[i] = 0;
-      }
-      */
-
-      for (i = 0; i < winlen; ++i) outbuf[i*nch+ch] += fsamples[i]/tabsize*2;
-      for (i = winlen; i < tabsize; ++i) outbuf[i*nch+ch] = fsamples[i]/tabsize*2;
-    }
-  }
-
-  switch (bps) {
-    case 8:
-      for (i = 0; i < nsamples*nch; ++i) {
-        inbuf[nbufsamples*nch+i] = (cast(ubyte*)buf)[i+p*nch]-0x80;
-        REAL s = outbuf[nbufsamples*nch+i];
-        static if (dither) {
-          s -= smphm1;
-          REAL u = s;
-          s += ditherbuf[(ditherptr++)&(DITHERLEN-1)];
-          if (s < amin) s = amin;
-          if (amax < s) s = amax;
-          s = RINT(s);
-          smphm1 = s-u;
-          (cast(ubyte*)buf)[i+p*nch] = cast(ubyte)(s+0x80);
-        } else {
-          if (s < amin) s = amin;
-          if (amax < s) s = amax;
-          (cast(ubyte*)buf)[i+p*nch] = cast(ubyte)(RINT(s)+0x80);
-        }
-      }
-      break;
-    case 16:
-      for (i = 0; i < nsamples*nch; ++i) {
-        //{ import core.stdc.stdio; printf("i=%u; nsamples*nch=%u; nbufsamples*nch+i=%u; i+p*nch=%u\n", i, nsamples*nch, nbufsamples*nch+i, i+p*nch); }
-        inbuf[nbufsamples*nch+i] = (cast(short*)buf)[i+p*nch];
-        REAL s = outbuf[nbufsamples*nch+i];
-        static if (dither) {
-          s -= smphm1;
-          REAL u = s;
-          s += ditherbuf[(ditherptr++)&(DITHERLEN-1)];
-          if (s < amin) s = amin;
-          if (amax < s) s = amax;
-          s = RINT(s);
-          smphm1 = s-u;
-          (cast(short*)buf)[i+p*nch] = cast(short)s;
-        } else {
-          if (s < amin) s = amin;
-          if (amax < s) s = amax;
-          (cast(short*)buf)[i+p*nch] = cast(short)RINT(s);
-        }
-      }
-      break;
-    case 24:
-      for (i = 0; i < nsamples*nch; ++i) {
-        (cast(int*)inbuf)[nbufsamples*nch+i] =
-          ((cast(ubyte*)buf)[(i+p*nch)*3])|
-          ((cast(ubyte*)buf)[(i+p*nch)*3+1]<<8)|
-          ((cast(byte*)buf)[(i+p*nch)*3+2]<<16);
-        REAL s = outbuf[nbufsamples*nch+i];
-        //static if (dither) s += ditherbuf[(ditherptr++)&(DITHERLEN-1)];
-        if (s < amin) s = amin;
-        if (amax < s) s = amax;
-        int s2 = RINT(s);
-        (cast(ubyte*)buf)[(i+p*nch)*3+0] = s2&255; s2 >>= 8;
-        (cast(ubyte*)buf)[(i+p*nch)*3+1] = s2&255; s2 >>= 8;
-        (cast(ubyte*)buf)[(i+p*nch)*3+2] = s2&255;
-      }
-      break;
-    default: assert(0);
-  }
-
-  p += nsamples;
-  nbufsamples += nsamples;
-
-  return p;
+struct kiss_fft_state {
+  int nfft;
+  int inverse;
+  int[2*MAXFACTORS] factors;
+  kiss_fft_cpx[1] twiddles;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private static immutable int[NBANDS+1] mbeqBandFreqs = [55, 77, 110, 156, 220, 311, 440, 622, 880, 1244, 1760, 2489, 3520, 4978, 7040, 9956, 14080, 19912]; ///
-public __gshared int[NBANDS+2] mbeqLSliders; /// [0..96]; 0: preamp; 1..18: bands
-public __gshared int[NBANDS+2] mbeqRSliders; /// [0..96]; 0: preamp; 1..18: bands
-public __gshared REAL mbeqSampleRate = 48000; ///
-
-
-public void mbeqSetBandsFromSliders () {
-  import std.math : pow;
-
-  REAL[NBANDS+1] lbands = 1.0;
-  REAL[NBANDS+1] rbands = 1.0;
-
-  immutable REAL lpreamp = (mbeqLSliders[0] == 96 ? 0 : pow(10, mbeqLSliders[0]/-20.0f));
-  immutable REAL rpreamp = (mbeqRSliders[0] == 96 ? 0 : pow(10, mbeqRSliders[0]/-20.0f));
-  version(mbeq_debug_output) conwriteln("lpreamp=", lpreamp, "; rpreamp=", rpreamp);
-  foreach (immutable i; 0..NBANDS+1) {
-    lbands[i] = (mbeqLSliders[i+1] == 96 ? 0 : lpreamp*pow(10, mbeqLSliders[i+1]/-20.0f));
-    rbands[i] = (mbeqRSliders[i+1] == 96 ? 0 : rpreamp*pow(10, mbeqRSliders[i+1]/-20.0f));
-  }
-  //mbeq_makeTable(lbands.ptr, rbands.ptr, paramroot, last_srate);
-  mbeqMakeTable(lbands[], rbands[], mbeqSampleRate);
-  version(mbeq_debug_output) conwriteln("lbands=", lbands);
-  version(mbeq_debug_output) conwriteln("rbands=", rbands);
+private void kf_bfly2 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, int m) {
+  kiss_fft_cpx* Fout2;
+  const(kiss_fft_cpx)* tw1 = st.twiddles.ptr;
+  kiss_fft_cpx t;
+  Fout2 = Fout+m;
+  do {
+    mixin(C_MUL!("t", "*Fout2", "*tw1"));
+    tw1 += fstride;
+    mixin(C_SUB!("*Fout2", "*Fout", "t"));
+    mixin(C_ADDTO!("*Fout", "t"));
+    ++Fout2;
+    ++Fout;
+  } while (--m);
 }
 
 
-public int mbeqBandCount () { pragma(inline, true); return NBANDS+2; } ///
+private void kf_bfly4 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, in size_t m) {
+  const(kiss_fft_cpx)* tw1, tw2, tw3;
+  kiss_fft_cpx[6] scratch = void;
+  size_t k = m;
+  immutable size_t m2 = 2*m;
+  immutable size_t m3 = 3*m;
+  tw3 = tw2 = tw1 = st.twiddles.ptr;
+  do {
+    mixin(C_MUL!("scratch[0]", "Fout[m]", "*tw1"));
+    mixin(C_MUL!("scratch[1]", "Fout[m2]", "*tw2"));
+    mixin(C_MUL!("scratch[2]", "Fout[m3]", "*tw3"));
 
-/// last band is equal to samling rate
-public int mbeqBandFreq (int idx) { pragma(inline, true); return (idx > 1 && idx < NBANDS+1 ? mbeqBandFreqs[idx-1] : (idx == NBANDS+1 ? 48000 : 0)); }
+    mixin(C_SUB!("scratch[5]", "*Fout", "scratch[1]"));
+    mixin(C_ADDTO!("*Fout", "scratch[1]"));
+    mixin(C_ADD!("scratch[3]", "scratch[0]", "scratch[2]"));
+    mixin(C_SUB!("scratch[4]", "scratch[0]", "scratch[2]"));
+    mixin(C_SUB!("Fout[m2]", "*Fout", "scratch[3]"));
+    tw1 += fstride;
+    tw2 += fstride*2;
+    tw3 += fstride*3;
+    mixin(C_ADDTO!("*Fout", "scratch[3]"));
+
+    if (st.inverse) {
+      Fout[m].r = scratch[5].r-scratch[4].i;
+      Fout[m].i = scratch[5].i+scratch[4].r;
+      Fout[m3].r = scratch[5].r+scratch[4].i;
+      Fout[m3].i = scratch[5].i-scratch[4].r;
+    } else {
+      Fout[m].r = scratch[5].r+scratch[4].i;
+      Fout[m].i = scratch[5].i-scratch[4].r;
+      Fout[m3].r = scratch[5].r-scratch[4].i;
+      Fout[m3].i = scratch[5].i+scratch[4].r;
+    }
+    ++Fout;
+  } while (--k);
+}
+
+
+private void kf_bfly3 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, size_t m) {
+  size_t k = m;
+  immutable size_t m2 = 2*m;
+  const(kiss_fft_cpx)* tw1, tw2;
+  kiss_fft_cpx[5] scratch = void;
+  kiss_fft_cpx epi3;
+  epi3 = st.twiddles[fstride*m];
+  tw1 = tw2 = st.twiddles.ptr;
+  do {
+    mixin(C_MUL!("scratch[1]", "Fout[m]", "*tw1"));
+    mixin(C_MUL!("scratch[2]", "Fout[m2]", "*tw2"));
+
+    mixin(C_ADD!("scratch[3]", "scratch[1]", "scratch[2]"));
+    mixin(C_SUB!("scratch[0]", "scratch[1]", "scratch[2]"));
+    tw1 += fstride;
+    tw2 += fstride*2;
+
+    Fout[m].r = Fout.r-mixin(HALF_OF!"scratch[3].r");
+    Fout[m].i = Fout.i-mixin(HALF_OF!"scratch[3].i");
+
+    mixin(C_MULBYSCALAR!("scratch[0]", "epi3.i"));
+
+    mixin(C_ADDTO!("*Fout", "scratch[3]"));
+
+    Fout[m2].r = Fout[m].r+scratch[0].i;
+    Fout[m2].i = Fout[m].i-scratch[0].r;
+
+    Fout[m].r -= scratch[0].i;
+    Fout[m].i += scratch[0].r;
+
+    ++Fout;
+  } while (--k);
+}
+
+
+private void kf_bfly5 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, int m) {
+  kiss_fft_cpx* Fout0, Fout1, Fout2, Fout3, Fout4;
+  int u;
+  kiss_fft_cpx[13] scratch = void;
+  const(kiss_fft_cpx)* twiddles = st.twiddles.ptr;
+  const(kiss_fft_cpx)* tw;
+  kiss_fft_cpx ya, yb;
+  ya = twiddles[fstride*m];
+  yb = twiddles[fstride*2*m];
+
+  Fout0 = Fout;
+  Fout1 = Fout0+m;
+  Fout2 = Fout0+2*m;
+  Fout3 = Fout0+3*m;
+  Fout4 = Fout0+4*m;
+
+  tw = st.twiddles.ptr;
+  for (u = 0; u < m; ++u) {
+    scratch[0] = *Fout0;
+
+    mixin(C_MUL!("scratch[1]", "*Fout1", "tw[u*fstride]"));
+    mixin(C_MUL!("scratch[2]", "*Fout2", "tw[2*u*fstride]"));
+    mixin(C_MUL!("scratch[3]", "*Fout3", "tw[3*u*fstride]"));
+    mixin(C_MUL!("scratch[4]", "*Fout4", "tw[4*u*fstride]"));
+
+    mixin(C_ADD!("scratch[7]", "scratch[1]", "scratch[4]"));
+    mixin(C_SUB!("scratch[10]", "scratch[1]", "scratch[4]"));
+    mixin(C_ADD!("scratch[8]", "scratch[2]", "scratch[3]"));
+    mixin(C_SUB!("scratch[9]", "scratch[2]", "scratch[3]"));
+
+    Fout0.r += scratch[7].r+scratch[8].r;
+    Fout0.i += scratch[7].i+scratch[8].i;
+
+    scratch[5].r = scratch[0].r+scratch[7].r*ya.r+scratch[8].r*yb.r;
+    scratch[5].i = scratch[0].i+scratch[7].i*ya.r+scratch[8].i*yb.r;
+
+    scratch[6].r =  scratch[10].i*ya.i+scratch[9].i*yb.i;
+    scratch[6].i = -scratch[10].r*ya.i-scratch[9].r*yb.i;
+
+    mixin(C_SUB!("*Fout1", "scratch[5]", "scratch[6]"));
+    mixin(C_ADD!("*Fout4", "scratch[5]", "scratch[6]"));
+
+    scratch[11].r = scratch[0].r+scratch[7].r*yb.r+scratch[8].r*ya.r;
+    scratch[11].i = scratch[0].i+scratch[7].i*yb.r+scratch[8].i*ya.r;
+    scratch[12].r = -scratch[10].i*yb.i+scratch[9].i*ya.i;
+    scratch[12].i =  scratch[10].r*yb.i-scratch[9].r*ya.i;
+
+    mixin(C_ADD!("*Fout2", "scratch[11]", "scratch[12]"));
+    mixin(C_SUB!("*Fout3", "scratch[11]", "scratch[12]"));
+
+    ++Fout0;
+    ++Fout1;
+    ++Fout2;
+    ++Fout3;
+    ++Fout4;
+  }
+}
+
+// perform the butterfly for one stage of a mixed radix FFT
+private void kf_bfly_generic (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, int m, int p) {
+  import core.stdc.stdlib : alloca;
+  int u, k, q1, q;
+  const(kiss_fft_cpx)* twiddles = st.twiddles.ptr;
+  kiss_fft_cpx t;
+  int Norig = st.nfft;
+
+  //kiss_fft_cpx* scratch = cast(kiss_fft_cpx*)KISS_FFT_TMP_ALLOC(kiss_fft_cpx.sizeof*p);
+  kiss_fft_cpx* scratch = cast(kiss_fft_cpx*)alloca(kiss_fft_cpx.sizeof*p);
+
+  for (u = 0; u < m; ++u) {
+    k = u;
+    for (q1 = 0; q1 < p; ++q1) {
+      scratch[q1] = Fout[k];
+      k += m;
+    }
+
+    k = u;
+    for (q1 = 0; q1 < p; ++q1) {
+      int twidx = 0;
+      Fout[k] = scratch[0];
+      for (q = 1; q < p; ++q) {
+        twidx += fstride*k;
+        if (twidx >= Norig) twidx -= Norig;
+        mixin(C_MUL!("t", "scratch[q]", "twiddles[twidx]"));
+        mixin(C_ADDTO!("Fout[k]", "t"));
+      }
+      k += m;
+    }
+  }
+  //KISS_FFT_TMP_FREE(scratch);
+}
+
+
+private void kf_work (kiss_fft_cpx* Fout, const(kiss_fft_cpx)* f, in size_t fstride, int in_stride, int* factors, const(kiss_fft_cfg) st) {
+  kiss_fft_cpx* Fout_beg = Fout;
+  immutable int p = *factors++; // the radix
+  immutable int m = *factors++; // stage's fft length/p
+  const(kiss_fft_cpx)* Fout_end = Fout+p*m;
+
+  if (m == 1) {
+    do {
+      *Fout = *f;
+      f += fstride*in_stride;
+    } while (++Fout != Fout_end);
+  } else {
+    do {
+      // recursive call:
+      // DFT of size m*p performed by doing
+      // p instances of smaller DFTs of size m,
+      // each one takes a decimated version of the input
+      kf_work (Fout, f, fstride*p, in_stride, factors, st);
+      f += fstride*in_stride;
+    } while ((Fout += m) != Fout_end);
+  }
+
+  Fout = Fout_beg;
+
+  // recombine the p smaller DFTs
+  switch (p) {
+    case 2: kf_bfly2(Fout, fstride, st, m); break;
+    case 3: kf_bfly3(Fout, fstride, st, m); break;
+    case 4: kf_bfly4(Fout, fstride, st, m); break;
+    case 5: kf_bfly5(Fout, fstride, st, m); break;
+    default: kf_bfly_generic(Fout, fstride, st, m, p); break;
+  }
+}
+
+
+/* facbuf is populated by p1, m1, p2, m2, ...
+ * where
+ *   p[i]*m[i] = m[i-1]
+ *   m0 = n
+ */
+private void kf_factor (int n, int* facbuf) {
+  import std.math : floor, sqrt;
+  immutable double floor_sqrt = floor(sqrt(cast(double)n));
+  int p = 4;
+  // factor out powers of 4, powers of 2, then any remaining primes
+  do {
+    while (n%p) {
+      switch (p) {
+        case 4: p = 2; break;
+        case 2: p = 3; break;
+        default: p += 2; break;
+      }
+      if (p > floor_sqrt) p = n; // no more factors, skip to end
+    }
+    n /= p;
+    *facbuf++ = p;
+    *facbuf++ = n;
+  } while (n > 1);
+}
+
+
+/** Initialize a FFT (or IFFT) algorithm's cfg/state buffer.
+ *
+ * typical usage: `kiss_fft_cfg mycfg = kiss_fft_alloc(1024, 0, null, null);`
+ *
+ * The return value from fft_alloc is a cfg buffer used internally by the fft routine or `null`.
+ *
+ * If lenmem is `null`, then kiss_fft_alloc will allocate a cfg buffer using malloc.
+ * The returned value should be `kiss_fft_free()`d when done to avoid memory leaks.
+ *
+ * The state can be placed in a user supplied buffer `mem`:
+ * If lenmem is not `null` and `mem` is not `null` and `*lenmem` is large enough,
+ * then the function places the cfg in `mem` and the size used in `*lenmem`,
+ * and returns mem.
+ *
+ * If lenmem is not `null` and (`mem` is `null` or `*lenmem` is not large enough),
+ *  then the function returns `null` and places the minimum cfg buffer size in `*lenmem`.
+ */
+public kiss_fft_cfg kiss_fft_alloc (int nfft, int inverse_fft, void* mem, size_t* lenmem) {
+  kiss_fft_cfg st = null;
+  size_t memneeded = kiss_fft_state.sizeof+kiss_fft_cpx.sizeof*(nfft-1); /* twiddle factors*/
+
+  if (lenmem is null) {
+    import core.stdc.stdlib : malloc;
+    st = cast(kiss_fft_cfg)malloc(memneeded);
+  } else {
+    if (mem !is null && *lenmem >= memneeded) st = cast(kiss_fft_cfg)mem;
+    *lenmem = memneeded;
+  }
+  if (st) {
+    st.nfft = nfft;
+    st.inverse = inverse_fft;
+    for (int i = 0; i < nfft; ++i) {
+      enum pi = 3.141592653589793238462643383279502884197169399375105820974944;
+      double phase = -2*pi*i/nfft;
+      if (st.inverse) phase *= -1;
+      mixin(kf_cexp!("st.twiddles.ptr+i", "phase"));
+    }
+    kf_factor(nfft, st.factors.ptr);
+  }
+  return st;
+}
+
+
+/** If kiss_fft_alloc allocated a buffer, it is one contiguous
+ * buffer and can be simply free()d when no longer needed
+ */
+public void kiss_fft_free (void *p) {
+  if (p !is null) {
+    import core.stdc.stdlib : free;
+    free(p);
+  }
+}
+
+
+/** Perform an FFT on a complex input buffer.
+ *
+ * for a forward FFT,
+ * fin should be  f[0] , f[1] , ... ,f[nfft-1]
+ * fout will be   F[0] , F[1] , ... ,F[nfft-1]
+ * Note that each element is complex and can be accessed like f[k].r and f[k].i
+ */
+public void kiss_fft (kiss_fft_cfg cfg, const(kiss_fft_cpx)* fin, kiss_fft_cpx* fout) {
+  kiss_fft_stride(cfg, fin, fout, 1);
+}
+
+
+/** A more generic version of the above function. It reads its input from every Nth sample. */
+public void kiss_fft_stride (kiss_fft_cfg st, const(kiss_fft_cpx)* fin, kiss_fft_cpx* fout, int in_stride) {
+  import core.stdc.stdlib : alloca;
+  if (fin is fout) {
+    import core.stdc.string : memcpy;
+    //NOTE: this is not really an in-place FFT algorithm.
+    //It just performs an out-of-place FFT into a temp buffer
+    //kiss_fft_cpx* tmpbuf = cast(kiss_fft_cpx*)KISS_FFT_TMP_ALLOC(kiss_fft_cpx.sizeof*st.nfft);
+    kiss_fft_cpx* tmpbuf = cast(kiss_fft_cpx*)alloca(kiss_fft_cpx.sizeof*st.nfft);
+    kf_work(tmpbuf, fin, 1, in_stride, st.factors.ptr, st);
+    memcpy(fout, tmpbuf, kiss_fft_cpx.sizeof*st.nfft);
+    //KISS_FFT_TMP_FREE(tmpbuf);
+  } else {
+    kf_work(fout, fin, 1, in_stride, st.factors.ptr, st);
+  }
+}
+
+
+/** Returns the smallest integer k, such that k>=n and k has only "fast" factors (2,3,5) */
+public int kiss_fft_next_fast_size (int n) {
+  for (;;) {
+    int m = n;
+    while ((m%2) == 0) m /= 2;
+    while ((m%3) == 0) m /= 3;
+    while ((m%5) == 0) m /= 5;
+    if (m <= 1) break; // n is completely factorable by twos, threes, and fives
+    ++n;
+  }
+  return n;
+}
+
+
+/** for real ffts, we need an even size */
+public int kiss_fftr_next_fast_size_real (int n) {
+  return kiss_fft_next_fast_size((n+1)>>1)<<1;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// kissfft_guts
+/*
+  Explanation of macros dealing with complex math:
+
+   C_MUL(m,a,b)         : m = a*b
+   C_FIXDIV( c , div )  : if a fixed point impl., c /= div. noop otherwise
+   C_SUB( res, a,b)     : res = a-b
+   C_SUBFROM( res , a)  : res -= a
+   C_ADDTO( res , a)    : res += a
+ */
+//enum S_MUL(string a, string b) = "(("~a~")*("~b~"))";
+enum C_MUL(string m, string a, string b) =
+  "{ ("~m~").r = ("~a~").r*("~b~").r-("~a~").i*("~b~").i;
+     ("~m~").i = ("~a~").r*("~b~").i+("~a~").i*("~b~").r; }";
+enum C_MULBYSCALAR(string c, string s) = " { ("~c~").r *= ("~s~"); ("~c~").i *= ("~s~"); }";
+
+enum C_ADD(string res, string a, string b) = "{ ("~res~").r=("~a~").r+("~b~").r; ("~res~").i=("~a~").i+("~b~").i; }";
+enum C_SUB(string res, string a, string b) = "{ ("~res~").r=("~a~").r-("~b~").r; ("~res~").i=("~a~").i-("~b~").i; }";
+enum C_ADDTO(string res, string a) = "{ ("~res~").r += ("~a~").r; ("~res~").i += ("~a~").i; }";
+enum C_SUBFROM(string res, string a) = "{ ("~res~").r -= ("~a~").r; ("~res~").i -= ("~a~").i; }";
+
+
+//kiss_fft_scalar KISS_FFT_COS(T) (T phase) { import std.math : cos; return cos(phase); }
+//kiss_fft_scalar KISS_FFT_SIN(T) (T phase) { import std.math : sin; return sin(phase); }
+//kiss_fft_scalar HALF_OF (kiss_fft_scalar x) { return x*cast(kiss_fft_scalar)0.5; }
+enum HALF_OF(string x) = "(cast(kiss_fft_scalar)(("~x~")*cast(kiss_fft_scalar)0.5))";
+
+//enum kf_cexp(string x, string phase) = "{ ("~x~").r = KISS_FFT_COS("~phase~"); ("~x~").i = KISS_FFT_SIN("~phase~"); }";
+enum kf_cexp(string x, string phase) = "{ import std.math : cos, sin; ("~x~").r = cos("~phase~"); ("~x~").i = sin("~phase~"); }";
+
+
+/+
+#ifdef KISS_FFT_USE_ALLOCA
+// define this to allow use of alloca instead of malloc for temporary buffers
+// Temporary buffers are used in two case:
+// 1. FFT sizes that have "bad" factors. i.e. not 2,3 and 5
+// 2. "in-place" FFTs.  Notice the quotes, since kissfft does not really do an in-place transform.
+#include <alloca.h>
+#define  KISS_FFT_TMP_ALLOC(nbytes) alloca(nbytes)
+#define  KISS_FFT_TMP_FREE(ptr)
+#else
+#define  KISS_FFT_TMP_ALLOC(nbytes) KISS_FFT_MALLOC(nbytes)
+#define  KISS_FFT_TMP_FREE(ptr) KISS_FFT_FREE(ptr)
+#endif
++/
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// kissfftr
+// Real optimized version can save about 45% cpu time vs. complex fft of a real seq.
+public alias kiss_fftr_cfg = kiss_fftr_state*;
+
+struct kiss_fftr_state {
+  kiss_fft_cfg substate;
+  kiss_fft_cpx* tmpbuf;
+  kiss_fft_cpx* super_twiddles;
+}
+
+
+/*
+ ** nfft must be even
+ *
+ * If you don't care to allocate space, use mem = lenmem = null
+ */
+public kiss_fftr_cfg kiss_fftr_alloc (int nfft, int inverse_fft, void* mem, size_t* lenmem) {
+  kiss_fftr_cfg st = null;
+  size_t subsize, memneeded;
+
+  if (nfft&1) assert(0, "real FFT optimization must be even");
+  nfft >>= 1;
+
+  kiss_fft_alloc(nfft, inverse_fft, null, &subsize);
+  memneeded = kiss_fftr_state.sizeof+subsize+kiss_fft_cpx.sizeof*(nfft*3/2);
+
+  if (lenmem is null) {
+    import core.stdc.stdlib : malloc;
+    st = cast(kiss_fftr_cfg)malloc(memneeded);
+  } else {
+    if (*lenmem >= memneeded) st = cast(kiss_fftr_cfg)mem;
+    *lenmem = memneeded;
+  }
+  if (st is null) return null;
+
+  st.substate = cast(kiss_fft_cfg)(st+1); // just beyond kiss_fftr_state struct
+  st.tmpbuf = cast(kiss_fft_cpx*)((cast(ubyte*)st.substate)+subsize);
+  st.super_twiddles = st.tmpbuf+nfft;
+  kiss_fft_alloc(nfft, inverse_fft, st.substate, &subsize);
+
+  foreach (immutable i; 0..nfft/2) {
+    double phase = -3.14159265358979323846264338327*(cast(double)(i+1)/nfft+0.5);
+    if (inverse_fft) phase *= -1;
+    mixin(kf_cexp!("st.super_twiddles+i", "phase"));
+  }
+
+  return st;
+}
+
+
+/** input timedata has nfft scalar points
+ * output freqdata has nfft/2+1 complex points
+ */
+public void kiss_fftr (kiss_fftr_cfg st, const(kiss_fft_scalar)* timedata, kiss_fft_cpx* freqdata) {
+  // input buffer timedata is stored row-wise
+  int k, ncfft;
+  kiss_fft_cpx fpnk, fpk, f1k, f2k, tw, tdc;
+
+  if (st.substate.inverse) assert(0, "kiss fft usage error: improper alloc");
+
+  ncfft = st.substate.nfft;
+
+  // perform the parallel fft of two real signals packed in real,imag
+  kiss_fft(st.substate, cast(const(kiss_fft_cpx)*)timedata, st.tmpbuf);
+  /* The real part of the DC element of the frequency spectrum in st->tmpbuf
+   * contains the sum of the even-numbered elements of the input time sequence
+   * The imag part is the sum of the odd-numbered elements
+   *
+   * The sum of tdc.r and tdc.i is the sum of the input time sequence.
+   *      yielding DC of input time sequence
+   * The difference of tdc.r - tdc.i is the sum of the input (dot product) [1,-1,1,-1...
+   *      yielding Nyquist bin of input time sequence
+   */
+
+  tdc.r = st.tmpbuf[0].r;
+  tdc.i = st.tmpbuf[0].i;
+  freqdata[0].r = tdc.r+tdc.i;
+  freqdata[ncfft].r = tdc.r-tdc.i;
+  freqdata[ncfft].i = freqdata[0].i = 0;
+
+  for (k = 1; k <= ncfft/2; ++k) {
+    fpk = st.tmpbuf[k];
+    fpnk.r = st.tmpbuf[ncfft-k].r;
+    fpnk.i = -st.tmpbuf[ncfft-k].i;
+
+    mixin(C_ADD!("f1k", "fpk", "fpnk"));
+    mixin(C_SUB!("f2k", "fpk", "fpnk"));
+    mixin(C_MUL!("tw", "f2k", "st.super_twiddles[k-1]"));
+
+    freqdata[k].r = mixin(HALF_OF!"f1k.r+tw.r");
+    freqdata[k].i = mixin(HALF_OF!"f1k.i+tw.i");
+    freqdata[ncfft-k].r = mixin(HALF_OF!"f1k.r-tw.r");
+    freqdata[ncfft-k].i = mixin(HALF_OF!"tw.i-f1k.i");
+  }
+}
+
+
+/** input freqdata has  nfft/2+1 complex points
+ * output timedata has nfft scalar points
+ */
+public void kiss_fftri (kiss_fftr_cfg st, const(kiss_fft_cpx)* freqdata, kiss_fft_scalar* timedata) {
+  // input buffer timedata is stored row-wise
+  int k, ncfft;
+
+  if (st.substate.inverse == 0) assert(0, "kiss fft usage error: improper alloc");
+
+  ncfft = st.substate.nfft;
+
+  st.tmpbuf[0].r = freqdata[0].r+freqdata[ncfft].r;
+  st.tmpbuf[0].i = freqdata[0].r-freqdata[ncfft].r;
+
+  for (k = 1; k <= ncfft/2; ++k) {
+    kiss_fft_cpx fk, fnkc, fek, fok, tmp;
+    fk = freqdata[k];
+    fnkc.r = freqdata[ncfft-k].r;
+    fnkc.i = -freqdata[ncfft-k].i;
+
+    mixin(C_ADD!("fek", "fk", "fnkc"));
+    mixin(C_SUB!("tmp", "fk", "fnkc"));
+    mixin(C_MUL!("fok", "tmp", "st.super_twiddles[k-1]"));
+    mixin(C_ADD!("st.tmpbuf[k]", "fek", "fok"));
+    mixin(C_SUB!("st.tmpbuf[ncfft-k]", "fek", "fok"));
+    st.tmpbuf[ncfft-k].i *= -1;
+  }
+  kiss_fft(st.substate, st.tmpbuf, cast(kiss_fft_cpx*)timedata);
+}
+} // version, kissfft

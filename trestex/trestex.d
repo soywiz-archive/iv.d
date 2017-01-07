@@ -46,10 +46,10 @@ import iv.tremor;
 import iv.dopus;
 
 version(supereq) {
-  import mbandeq;
+  import mbandeq_j;
 } else {
-  import mbeq_1197;
-  float[MBEQ.BANDS] eqbands = 0;
+  import mbandeq;
+  float[MBandEq.Bands] eqbands = 0;
 }
 
 
@@ -649,8 +649,8 @@ Action playFile () {
     mbeqSampleRate = sio.rate;
     mbeqSetBandsFromSliders();
   } else {
-    auto mbeql = MBEQ(sio.rate);
-    auto mbeqr = MBEQ(sio.rate);
+    auto mbeql = MBandEq(sio.rate);
+    auto mbeqr = MBandEq(sio.rate);
     bool mbeqActive = false;
     foreach (immutable v; eqbands[]) if (v != 0) { mbeqActive = true; break; }
   }
