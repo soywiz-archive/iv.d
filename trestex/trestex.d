@@ -33,6 +33,7 @@ module trestex is aliced; // due to Phobos bug
 import iv.alsa;
 import iv.audioresampler;
 import iv.cmdcon;
+import iv.cmdcontty;
 import iv.follin.resampler;
 import iv.follin.utils;
 import iv.rawtty;
@@ -823,37 +824,53 @@ Action playFile () {
     }
 
     if (ttyIsKeyHit) {
-      auto key = ttyReadKey();
-      auto oldtm = tm;
-      switch (key.key) {
-        case TtyEvent.Key.Left:
-          tm -= 10*1000;
-          if (tm < 0) tm = 0;
-          break;
-        case TtyEvent.Key.Right:
-          tm += 10*1000;
-          break;
-        case TtyEvent.Key.Down:
-          tm -= 60*1000;
-          break;
-        case TtyEvent.Key.Up:
-          tm += 60*1000;
-          break;
-        case TtyEvent.Key.Char:
-          if (key.ch == '<') return Action.Prev;
-          if (key.ch == '>') return Action.Next;
-          if (key.ch == 'q') return Action.Quit;
-          if (key.ch == ' ') paused = !paused;
-          if (key.ch == '0') gain = 0;
-          if (key.ch == '-') { gain -= 10; if (gain < -100) gain = -100; }
-          if (key.ch == '+') { gain += 10; if (gain > 1000) gain = 1000; }
-          break;
-        default: break;
+      {
+        auto conoldcdump = conDump;
+        scope(exit) conDump = conoldcdump;
+        conDump = ConDump.none;
+        conProcessQueue();
       }
-      if (tm < 0) tm = 0;
-      if (tm >= sio.timetotal) tm = (sio.timetotal ? sio.timetotal-1 : 0);
-      if (oldtm != tm) sio.seekToTime(cast(uint)tm);
+      auto key = ttyReadKey();
+      if (!ttyconEvent(key)) {
+        auto oldtm = tm;
+        switch (key.key) {
+          case TtyEvent.Key.Left:
+            tm -= 10*1000;
+            if (tm < 0) tm = 0;
+            break;
+          case TtyEvent.Key.Right:
+            tm += 10*1000;
+            break;
+          case TtyEvent.Key.Down:
+            tm -= 60*1000;
+            break;
+          case TtyEvent.Key.Up:
+            tm += 60*1000;
+            break;
+          case TtyEvent.Key.Char:
+            if (key.ch == '<') return Action.Prev;
+            if (key.ch == '>') return Action.Next;
+            if (key.ch == 'q') return Action.Quit;
+            if (key.ch == ' ') paused = !paused;
+            if (key.ch == '0') gain = 0;
+            if (key.ch == '-') { gain -= 10; if (gain < -100) gain = -100; }
+            if (key.ch == '+') { gain += 10; if (gain > 1000) gain = 1000; }
+            break;
+          default: break;
+        }
+        if (tm < 0) tm = 0;
+        if (tm >= sio.timetotal) tm = (sio.timetotal ? sio.timetotal-1 : 0);
+        if (oldtm != tm) sio.seekToTime(cast(uint)tm);
+      }
     }
+    {
+      auto conoldcdump = conDump;
+      scope(exit) conDump = conoldcdump;
+      conDump = ConDump.none;
+      conProcessQueue();
+    }
+    ttyconDraw();
+    if (isQuitRequested) return Action.Quit;
   }
   outSoundFlush(pcm);
 
@@ -942,6 +959,7 @@ void main (string[] args) {
     import core.stdc.stdlib : atexit;
     atexit(&atExitRestoreTty);
   }
+  ttyconInit();
 
   mainloop: for (;;) {
     final switch (playFile()) with (Action) {

@@ -4101,7 +4101,7 @@ shared static this () {
   conRegFunc!((ConString fname, bool silent=false) {
     try {
       static if (CmdConHasVFS) {
-        auto fl = openFileEx(fname);
+        auto fl = VFile(fname);
       } else {
         auto fl = File(fname.idup);
       }

@@ -98,7 +98,7 @@ void ttyRawWrite (const(char)[] str...) nothrow @trusted @nogc {
 }
 
 
-void ttyRawWriteInt(T) (T n) nothrow @trusted @nogc if (__traits(isIntegral, T) && !is(T == char) && !is(T == wchar) && !is(T == dchar) && !!is(T == bool) && !!is(T == enum)) {
+void ttyRawWriteInt(T) (T n) nothrow @trusted @nogc if (__traits(isIntegral, T) && !is(T == char) && !is(T == wchar) && !is(T == dchar) && !is(T == bool) && !is(T == enum)) {
   import core.stdc.stdio : snprintf;
   import core.sys.posix.unistd : write;
   char[64] buf = void;
