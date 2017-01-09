@@ -88,6 +88,7 @@ public:
     Voip = 3,
     Default = 4,
     Desktop = 5,
+    Music = 8,
     Best = 10,
   }
 
@@ -439,24 +440,32 @@ private:
     uint ilen = *indataLen;
     uint olen = *outdataLen;
     float* x = mem+chanIdx*memAllocSize;
-    const int filterOfs = filterLen-1;
-    const uint xlen = memAllocSize-filterOfs;
-    const int istride = inStride;
+    immutable int filterOfs = filterLen-1;
+    immutable uint xlen = memAllocSize-filterOfs;
+    immutable int istride = inStride;
     if (magicSamples.ptr[chanIdx]) olen -= magic(chanIdx, &outdata, olen);
     if (!magicSamples.ptr[chanIdx]) {
       while (ilen && olen) {
         uint ichunk = (ilen > xlen ? xlen : ilen);
         uint ochunk = olen;
         if (indata !is null) {
-          foreach (immutable j; 0..ichunk) x[j+filterOfs] = indata[j*istride];
+          //foreach (immutable j; 0..ichunk) x[j+filterOfs] = indata[j*istride];
+          if (istride == 1) {
+            x[filterOfs..filterOfs+ichunk] = indata[0..ichunk];
+          } else {
+            auto sp = indata;
+            auto dp = x+filterOfs;
+            foreach (immutable j; 0..ichunk) { *dp++ = *sp; sp += istride; }
+          }
         } else {
-          foreach (immutable j; 0..ichunk) x[j+filterOfs] = 0;
+          //foreach (immutable j; 0..ichunk) x[j+filterOfs] = 0;
+          x[filterOfs..filterOfs+ichunk] = 0;
         }
         processNative(chanIdx, &ichunk, outdata, &ochunk);
         ilen -= ichunk;
         olen -= ochunk;
         outdata += ochunk*outStride;
-        if (indata) indata += ichunk*istride;
+        if (indata !is null) indata += ichunk*istride;
       }
     }
     *indataLen -= ilen;
@@ -469,20 +478,14 @@ private:
     int outSample = 0;
     float* x = mem+chanIdx*memAllocSize;
     uint ilen;
-
     started = true;
-
     // call the right resampler through the function ptr
     outSample = resampler(this, chanIdx, x, indataLen, outdata, outdataLen);
-
     if (lastSample.ptr[chanIdx] < cast(int)*indataLen) *indataLen = lastSample.ptr[chanIdx];
     *outdataLen = outSample;
     lastSample.ptr[chanIdx] -= *indataLen;
-
     ilen = *indataLen;
-
     foreach (immutable j; 0..N-1) x[j] = x[j+ilen];
-
     return Error.OK;
   }
 
@@ -517,7 +520,7 @@ private:
       cutoff = qualityMap.ptr[srQuality].downsampleBandwidth*denRate/numRate;
       // FIXME: divide the numerator and denominator by a certain amount if they're too large
       filterLen = filterLen*numRate/denRate;
-      // Round up to make sure we have a multiple of 8 for SSE
+      // round up to make sure we have a multiple of 8 for SSE
       filterLen = ((filterLen-1)&(~0x7))+8;
       if (2*denRate < numRate) oversample >>= 1;
       if (4*denRate < numRate) oversample >>= 1;
