@@ -38,7 +38,7 @@ import iv.follin.resampler;
 import iv.follin.utils;
 import iv.rawtty;
 import iv.vfs;
-import iv.vfs.io;
+//import iv.vfs.io;
 
 import iv.drflac;
 import iv.minimp3;
@@ -52,6 +52,7 @@ version(supereq) {
   import mbandeq;
   float[MBandEq.Bands] eqbands = 0;
 }
+__gshared bool eqchanged = false;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -471,7 +472,7 @@ public:
           sio.type = "flac";
           sio.fl = fl;
           sio.samplestotal = sio.ff.totalSampleCount;
-          writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (flac)");
+          conwriteln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (flac)");
           {
             drflac_vorbis_comment_iterator i;
             drflac_init_vorbis_comment_iterator(&i, commentCount, fcmts);
@@ -479,10 +480,10 @@ public:
             const(char)* pComment;
             while ((pComment = drflac_next_vorbis_comment(&i, &commentLength)) !is null) {
               if (commentLength > 1024*1024*2) break; // just in case
-              writeln("  ", pComment[0..commentLength].recodeToKOI8);
+              conwriteln("  ", pComment[0..commentLength].recodeToKOI8);
             }
           }
-          writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+          conwritefln!"time: %d:%02d"(sio.timetotal/1000/60, sio.timetotal/1000%60);
           return sio;
         }
       } catch (Exception) {}
@@ -498,17 +499,17 @@ public:
           if (sio.vi.channels < 1 || sio.vi.channels > 2) throw new Exception("fucked vorbis");
           sio.rate = sio.vi.rate;
           sio.channels = cast(ubyte)sio.vi.channels;
-          writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (vorbis)");
-          writeln("streams: ", ov_streams(&sio.vf));
-          writeln("bitrate: ", ov_bitrate(&sio.vf));
+          conwriteln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (vorbis)");
+          conwriteln("streams: ", ov_streams(&sio.vf));
+          conwriteln("bitrate: ", ov_bitrate(&sio.vf));
           sio.samplestotal = ov_pcm_total(&sio.vf)*sio.channels;
           if (auto vc = ov_comment(&sio.vf, -1)) {
-            writeln("Encoded by: ", vc.vendor.fromStringz.recodeToKOI8);
+            conwriteln("Encoded by: ", vc.vendor.fromStringz.recodeToKOI8);
             foreach (immutable idx; 0..vc.comments) {
-              writeln("  ", vc.user_comments[idx][0..vc.comment_lengths[idx]].recodeToKOI8);
+              conwriteln("  ", vc.user_comments[idx][0..vc.comment_lengths[idx]].recodeToKOI8);
             }
           }
-          writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+          conwritefln!"time: %d:%02d"(sio.timetotal/1000/60, sio.timetotal/1000%60);
           return sio;
         }
       } catch (Exception) {}
@@ -524,12 +525,12 @@ public:
         sio.fl = fl;
         sio.rate = of.rate;
         sio.channels = of.channels;
-        writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (opus)");
+        conwriteln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (opus)");
         sio.samplestotal = of.smpduration*sio.channels;
-        if (of.vendor.length) writeln("Encoded by: ", of.vendor.recodeToKOI8);
-        foreach (immutable cidx; 0..of.commentCount) writeln("  ", of.comment(cidx).recodeToKOI8);
+        if (of.vendor.length) conwriteln("Encoded by: ", of.vendor.recodeToKOI8);
+        foreach (immutable cidx; 0..of.commentCount) conwriteln("  ", of.comment(cidx).recodeToKOI8);
         //TODO: comments
-        writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+        conwritefln!"time: %d:%02d"(sio.timetotal/1000/60, sio.timetotal/1000%60);
         return sio;
       } catch (Exception) {}
       fl.seek(fpos);
@@ -550,8 +551,8 @@ public:
             sio.rate = sio.mp3.sampleRate;
             sio.channels = sio.mp3.channels;
             sio.samplestotal = sio.mp3info.samples;
-            writeln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (mp3)");
-            writefln("time: %d:%02d", sio.timetotal/1000/60, sio.timetotal/1000%60);
+            conwriteln("Bitstream is ", sio.channels, " channel, ", sio.rate, "Hz (mp3)");
+            conwritefln!"time: %d:%02d"(sio.timetotal/1000/60, sio.timetotal/1000%60);
             return sio;
           }
         }
@@ -566,7 +567,9 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum Action { Quit, Prev, Next }
+enum Action { None, Quit, Prev, Next }
+__gshared Action conaction;
+
 
 Action playFile () {
   import std.internal.cstring : tempCString;
@@ -632,9 +635,9 @@ Action playFile () {
   version(none) {
     snd_pcm_uframes_t bufsize, periodsize;
     if (snd_pcm_get_params(pcm, &bufsize, &periodsize) == 0) {
-      writeln("desired latency: ", latencyms);
-      writeln("buffer size: ", bufsize);
-      writeln("period size: ", periodsize);
+      conwriteln("desired latency: ", latencyms);
+      conwriteln("buffer size: ", bufsize);
+      conwriteln("period size: ", periodsize);
     }
   }
 
@@ -642,11 +645,9 @@ Action playFile () {
     mbeqInit(14);
     //mbeqInit(12);
     scope(exit) mbeqQuit();
-
     bool mbeqActive = false;
     foreach (immutable v; mbeqLSliders[]) if (v != 0) { mbeqActive = true; break; }
     if (!mbeqActive) foreach (immutable v; mbeqRSliders[]) if (v != 0) { mbeqActive = true; break; }
-
     mbeqSampleRate = sio.rate;
     mbeqSetBandsFromSliders();
   } else {
@@ -657,11 +658,41 @@ Action playFile () {
   }
   conwriteln("equalizer is ", (mbeqActive ? "" : "not "), "active");
 
-  scope(exit) writeln;
+
+  void checkReinitEq () {
+    if (!eqchanged) return;
+    auto oldact = mbeqActive;
+    version(supereq) {
+      mbeqSetBandsFromSliders();
+      mbeqActive = false;
+      foreach (immutable v; mbeqLSliders[]) if (v != 0) { mbeqActive = true; break; }
+      if (!mbeqActive) foreach (immutable v; mbeqRSliders[]) if (v != 0) { mbeqActive = true; break; }
+    } else {
+      mbeqActive = false;
+      foreach (immutable v; eqbands[]) if (v != 0) { mbeqActive = true; break; }
+    }
+    eqchanged = false;
+    if (oldact != mbeqActive) conwriteln("equalizer is ", (mbeqActive ? "" : "not "), "active");
+  }
+
+
   bool oldpaused = !paused;
   int oldgain = gain+1;
-  writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", 0, 0, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !" : ""));
 
+  bool timeWritten = false;
+
+  void writeTime () {
+    import core.stdc.stdio : snprintf;
+    char[128] xbuf;
+    //auto len = snprintf(xbuf.ptr, xbuf.length, "\r%d:%02d / %d:%02d (%d)%s\x1b[K", 0, 0, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !".ptr : "".ptr));
+    long tm = sio.timeread;
+    auto len = snprintf(xbuf.ptr, xbuf.length, "\r%d:%02d / %d:%02d (%d)%s\x1b[K", cast(uint)(tm/1000/60), cast(uint)(tm/1000%60), cast(uint)(sio.timetotal/1000/60), cast(uint)(sio.timetotal/1000%60), gain, (paused ? " !".ptr : "".ptr));
+    ttyRawWrite(xbuf[0..len]);
+    timeWritten = true;
+  }
+  scope(exit) if (timeWritten) ttyRawWrite("\n");
+
+  writeTime();
   mainloop: for (;;) {
     int frmread = 0;
     bool silence = false;
@@ -820,7 +851,7 @@ Action playFile () {
       prevtime = tm;
       oldpaused = paused;
       oldgain = gain;
-      writef("\r%d:%02d / %d:%02d (%d)%s\x1b[K", tm/1000/60, tm/1000%60, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !" : ""));
+      writeTime();
     }
 
     if (ttyIsKeyHit) {
@@ -830,7 +861,7 @@ Action playFile () {
         conDump = ConDump.none;
         conProcessQueue();
       }
-      auto key = ttyReadKey();
+      auto key = ttyReadKey(0, 20);
       if (!ttyconEvent(key)) {
         auto oldtm = tm;
         switch (key.key) {
@@ -868,9 +899,11 @@ Action playFile () {
       scope(exit) conDump = conoldcdump;
       conDump = ConDump.none;
       conProcessQueue();
+      checkReinitEq();
     }
     ttyconDraw();
     if (isQuitRequested) return Action.Quit;
+    if (conaction != Action.None) { auto res = conaction; conaction = Action.None; return res; }
   }
   outSoundFlush(pcm);
 
@@ -904,18 +937,38 @@ void main (string[] args) {
   conRegFunc!((int idx, byte value) {
     version(supereq) {
       if (idx >= 0 && idx < mbeqBandCount) {
-        mbeqLSliders[idx] = mbeqRSliders[idx] = value;
+        if (mbeqLSliders[idx] != value || mbeqRSliders[idx] != value) {
+          mbeqLSliders[idx] = mbeqRSliders[idx] = value;
+          eqchanged = true;
+        }
       } else {
         conwriteln("invalid equalizer band index: ", idx);
       }
     } else {
+      if (value < -70) value = -70;
+      if (value > 30) value = 30;
       if (idx >= 0 && idx < eqbands.length) {
-        eqbands[idx] = value;
+        if (eqbands[idx] != value) {
+          eqbands[idx] = value;
+          eqchanged = true;
+        }
       } else {
         conwriteln("invalid equalizer band index: ", idx);
       }
     }
   })("eq_band", "set equalizer band #n to v (band 0 is preamp)");
+
+  conRegFunc!(() {
+    version(supereq) {
+      mbeqLSliders[idx] = mbeqRSliders[idx] = value;
+    } else {
+      eqbands[] = 0;
+    }
+    eqchanged = true;
+  })("eq_reset", "reset equalizer");
+
+  conRegFunc!(() { conaction = Action.Next; })("next", "next song");
+  conRegFunc!(() { conaction = Action.Prev; })("prev", "previous song");
 
   concmd("exec .config.rc tan");
   version(supereq) {
@@ -924,6 +977,7 @@ void main (string[] args) {
     concmd("exec mbeqa.rc tan");
   }
   conProcessArgs!true(args);
+  eqchanged = false;
 
   foreach (string fname; args[1..$]) {
     import std.file;
@@ -964,6 +1018,7 @@ void main (string[] args) {
   mainloop: for (;;) {
     final switch (playFile()) with (Action) {
       case Prev: if (plidx > 0) --plidx; break;
+      case None:
       case Next: ++plidx; break;
       case Quit: break mainloop;
     }

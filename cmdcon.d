@@ -806,6 +806,8 @@ public template conwritef(string fmt, A...) {
       }
       switch (fmtch) {
         case 's':
+        case 'd': // oops
+        case 'u': // oops
           static if (is(at == char)) {
             putRes("cwrxputchar(args[");
             putNum(argnum);
@@ -3807,6 +3809,8 @@ public void concmdf(string fmt, A...) (A args) {
         }
         break;
       case 's':
+      case 'd': // oops
+      case 'u': // oops
         if (inQ) goto case 'q';
         static if (is(at == char)) {
           puts(args[argnum]);
