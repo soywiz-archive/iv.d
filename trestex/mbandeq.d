@@ -334,6 +334,33 @@ public align(1) struct kiss_fft_cpx {
 align(1):
   kiss_fft_scalar r;
   kiss_fft_scalar i;
+
+pure nothrow @safe @nogc:
+  // C_MULBYSCALAR
+  void opOpAssign(string op:"*") (in kiss_fft_scalar s) {
+    pragma(inline, true);
+    r *= s;
+    i *= s;
+  }
+
+  // C_ADDTO, C_SUBFROM
+  void opOpAssign(string op) (in kiss_fft_cpx b) if (op == "+" || op == "-") {
+    pragma(inline, true);
+    mixin("r"~op~"=b.r;");
+    mixin("i"~op~"=b.i;");
+  }
+
+  // C_MUL
+  kiss_fft_cpx opBinary(string op:"*") (in auto ref kiss_fft_cpx b) const {
+    pragma(inline, true);
+    return kiss_fft_cpx(r*b.r-i*b.i, r*b.i+i*b.r);
+  }
+
+  // C_ADD, C_SUB
+  kiss_fft_cpx opBinary(string op) (in auto ref kiss_fft_cpx b) const if (op == "+" || op == "-") {
+    pragma(inline, true);
+    mixin("return kiss_fft_cpx(r"~op~"b.r, i"~op~"b.i);");
+  }
 }
 
 
@@ -363,10 +390,10 @@ private void kf_bfly2 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
   kiss_fft_cpx t;
   Fout2 = Fout+m;
   do {
-    mixin(C_MUL!("t", "*Fout2", "*tw1"));
+    t = (*Fout2)*(*tw1);
     tw1 += fstride;
-    mixin(C_SUB!("*Fout2", "*Fout", "t"));
-    mixin(C_ADDTO!("*Fout", "t"));
+    (*Fout2) = (*Fout)-t;
+    (*Fout) += t;
     ++Fout2;
     ++Fout;
   } while (--m);
@@ -381,30 +408,30 @@ private void kf_bfly4 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
   immutable size_t m3 = 3*m;
   tw3 = tw2 = tw1 = st.twiddles.ptr;
   do {
-    mixin(C_MUL!("scratch[0]", "Fout[m]", "*tw1"));
-    mixin(C_MUL!("scratch[1]", "Fout[m2]", "*tw2"));
-    mixin(C_MUL!("scratch[2]", "Fout[m3]", "*tw3"));
+    scratch.ptr[0] = Fout[m]*(*tw1);
+    scratch.ptr[1] = Fout[m2]*(*tw2);
+    scratch.ptr[2] = Fout[m3]*(*tw3);
 
-    mixin(C_SUB!("scratch[5]", "*Fout", "scratch[1]"));
-    mixin(C_ADDTO!("*Fout", "scratch[1]"));
-    mixin(C_ADD!("scratch[3]", "scratch[0]", "scratch[2]"));
-    mixin(C_SUB!("scratch[4]", "scratch[0]", "scratch[2]"));
-    mixin(C_SUB!("Fout[m2]", "*Fout", "scratch[3]"));
+    scratch.ptr[5] = (*Fout)-scratch.ptr[1];
+    (*Fout) += scratch.ptr[1];
+    scratch.ptr[3] = scratch.ptr[0]+scratch.ptr[2];
+    scratch.ptr[4] = scratch.ptr[0]-scratch.ptr[2];
+    Fout[m2] = (*Fout)-scratch.ptr[3];
     tw1 += fstride;
     tw2 += fstride*2;
     tw3 += fstride*3;
-    mixin(C_ADDTO!("*Fout", "scratch[3]"));
+    (*Fout) += scratch.ptr[3];
 
     if (st.inverse) {
-      Fout[m].r = scratch[5].r-scratch[4].i;
-      Fout[m].i = scratch[5].i+scratch[4].r;
-      Fout[m3].r = scratch[5].r+scratch[4].i;
-      Fout[m3].i = scratch[5].i-scratch[4].r;
+      Fout[m].r = scratch.ptr[5].r-scratch.ptr[4].i;
+      Fout[m].i = scratch.ptr[5].i+scratch.ptr[4].r;
+      Fout[m3].r = scratch.ptr[5].r+scratch.ptr[4].i;
+      Fout[m3].i = scratch.ptr[5].i-scratch.ptr[4].r;
     } else {
-      Fout[m].r = scratch[5].r+scratch[4].i;
-      Fout[m].i = scratch[5].i-scratch[4].r;
-      Fout[m3].r = scratch[5].r-scratch[4].i;
-      Fout[m3].i = scratch[5].i+scratch[4].r;
+      Fout[m].r = scratch.ptr[5].r+scratch.ptr[4].i;
+      Fout[m].i = scratch.ptr[5].i-scratch.ptr[4].r;
+      Fout[m3].r = scratch.ptr[5].r-scratch.ptr[4].i;
+      Fout[m3].i = scratch.ptr[5].i+scratch.ptr[4].r;
     }
     ++Fout;
   } while (--k);
@@ -420,26 +447,26 @@ private void kf_bfly3 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
   epi3 = st.twiddles.ptr[fstride*m];
   tw1 = tw2 = st.twiddles.ptr;
   do {
-    mixin(C_MUL!("scratch[1]", "Fout[m]", "*tw1"));
-    mixin(C_MUL!("scratch[2]", "Fout[m2]", "*tw2"));
+    scratch.ptr[1] = Fout[m]*(*tw1);
+    scratch.ptr[2] = Fout[m2]*(*tw2);
 
-    mixin(C_ADD!("scratch[3]", "scratch[1]", "scratch[2]"));
-    mixin(C_SUB!("scratch[0]", "scratch[1]", "scratch[2]"));
+    scratch.ptr[3] = scratch.ptr[1]+scratch.ptr[2];
+    scratch.ptr[0] = scratch.ptr[1]-scratch.ptr[2];
     tw1 += fstride;
     tw2 += fstride*2;
 
-    Fout[m].r = Fout.r-mixin(HALF_OF!"scratch[3].r");
-    Fout[m].i = Fout.i-mixin(HALF_OF!"scratch[3].i");
+    Fout[m].r = Fout.r-(scratch.ptr[3].r*cast(kiss_fft_scalar)0.5);
+    Fout[m].i = Fout.i-(scratch.ptr[3].i*cast(kiss_fft_scalar)0.5);
 
-    mixin(C_MULBYSCALAR!("scratch[0]", "epi3.i"));
+    scratch.ptr[0] *= epi3.i;
 
-    mixin(C_ADDTO!("*Fout", "scratch[3]"));
+    (*Fout) += scratch.ptr[3];
 
-    Fout[m2].r = Fout[m].r+scratch[0].i;
-    Fout[m2].i = Fout[m].i-scratch[0].r;
+    Fout[m2].r = Fout[m].r+scratch.ptr[0].i;
+    Fout[m2].i = Fout[m].i-scratch.ptr[0].r;
 
-    Fout[m].r -= scratch[0].i;
-    Fout[m].i += scratch[0].r;
+    Fout[m].r -= scratch.ptr[0].i;
+    Fout[m].i += scratch.ptr[0].r;
 
     ++Fout;
   } while (--k);
@@ -464,37 +491,37 @@ private void kf_bfly5 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
 
   tw = st.twiddles.ptr;
   for (u = 0; u < m; ++u) {
-    scratch[0] = *Fout0;
+    scratch.ptr[0] = *Fout0;
 
-    mixin(C_MUL!("scratch[1]", "*Fout1", "tw[u*fstride]"));
-    mixin(C_MUL!("scratch[2]", "*Fout2", "tw[2*u*fstride]"));
-    mixin(C_MUL!("scratch[3]", "*Fout3", "tw[3*u*fstride]"));
-    mixin(C_MUL!("scratch[4]", "*Fout4", "tw[4*u*fstride]"));
+    scratch.ptr[1] = (*Fout1)*tw[u*fstride];
+    scratch.ptr[2] = (*Fout2)*tw[2*u*fstride];
+    scratch.ptr[3] = (*Fout3)*tw[3*u*fstride];
+    scratch.ptr[4] = (*Fout4)*tw[4*u*fstride];
 
-    mixin(C_ADD!("scratch[7]", "scratch[1]", "scratch[4]"));
-    mixin(C_SUB!("scratch[10]", "scratch[1]", "scratch[4]"));
-    mixin(C_ADD!("scratch[8]", "scratch[2]", "scratch[3]"));
-    mixin(C_SUB!("scratch[9]", "scratch[2]", "scratch[3]"));
+    scratch.ptr[7] = scratch.ptr[1]+scratch.ptr[4];
+    scratch.ptr[10] = scratch.ptr[1]-scratch.ptr[4];
+    scratch.ptr[8] = scratch.ptr[2]+scratch.ptr[3];
+    scratch.ptr[9] = scratch.ptr[2]-scratch.ptr[3];
 
-    Fout0.r += scratch[7].r+scratch[8].r;
-    Fout0.i += scratch[7].i+scratch[8].i;
+    Fout0.r += scratch.ptr[7].r+scratch.ptr[8].r;
+    Fout0.i += scratch.ptr[7].i+scratch.ptr[8].i;
 
-    scratch[5].r = scratch[0].r+scratch[7].r*ya.r+scratch[8].r*yb.r;
-    scratch[5].i = scratch[0].i+scratch[7].i*ya.r+scratch[8].i*yb.r;
+    scratch.ptr[5].r = scratch.ptr[0].r+scratch.ptr[7].r*ya.r+scratch.ptr[8].r*yb.r;
+    scratch.ptr[5].i = scratch.ptr[0].i+scratch.ptr[7].i*ya.r+scratch.ptr[8].i*yb.r;
 
-    scratch[6].r =  scratch[10].i*ya.i+scratch[9].i*yb.i;
-    scratch[6].i = -scratch[10].r*ya.i-scratch[9].r*yb.i;
+    scratch.ptr[6].r =  scratch.ptr[10].i*ya.i+scratch.ptr[9].i*yb.i;
+    scratch.ptr[6].i = -scratch.ptr[10].r*ya.i-scratch.ptr[9].r*yb.i;
 
-    mixin(C_SUB!("*Fout1", "scratch[5]", "scratch[6]"));
-    mixin(C_ADD!("*Fout4", "scratch[5]", "scratch[6]"));
+    (*Fout1) = scratch.ptr[5]-scratch.ptr[6];
+    (*Fout4) = scratch.ptr[5]+scratch.ptr[6];
 
-    scratch[11].r = scratch[0].r+scratch[7].r*yb.r+scratch[8].r*ya.r;
-    scratch[11].i = scratch[0].i+scratch[7].i*yb.r+scratch[8].i*ya.r;
-    scratch[12].r = -scratch[10].i*yb.i+scratch[9].i*ya.i;
-    scratch[12].i =  scratch[10].r*yb.i-scratch[9].r*ya.i;
+    scratch.ptr[11].r = scratch.ptr[0].r+scratch.ptr[7].r*yb.r+scratch.ptr[8].r*ya.r;
+    scratch.ptr[11].i = scratch.ptr[0].i+scratch.ptr[7].i*yb.r+scratch.ptr[8].i*ya.r;
+    scratch.ptr[12].r = -scratch.ptr[10].i*yb.i+scratch.ptr[9].i*ya.i;
+    scratch.ptr[12].i =  scratch.ptr[10].r*yb.i-scratch.ptr[9].r*ya.i;
 
-    mixin(C_ADD!("*Fout2", "scratch[11]", "scratch[12]"));
-    mixin(C_SUB!("*Fout3", "scratch[11]", "scratch[12]"));
+    (*Fout2) = scratch.ptr[11]+scratch.ptr[12];
+    (*Fout3) = scratch.ptr[11]-scratch.ptr[12];
 
     ++Fout0;
     ++Fout1;
@@ -503,6 +530,7 @@ private void kf_bfly5 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
     ++Fout4;
   }
 }
+
 
 // perform the butterfly for one stage of a mixed radix FFT
 private void kf_bfly_generic (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, int m, int p) {
@@ -529,8 +557,8 @@ private void kf_bfly_generic (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_
       for (q = 1; q < p; ++q) {
         twidx += fstride*k;
         if (twidx >= Norig) twidx -= Norig;
-        mixin(C_MUL!("t", "scratch[q]", "twiddles[twidx]"));
-        mixin(C_ADDTO!("Fout[k]", "t"));
+        t = scratch[q]*twiddles[twidx];
+        Fout[k] += t;
       }
       k += m;
     }
@@ -556,7 +584,7 @@ private void kf_work (kiss_fft_cpx* Fout, const(kiss_fft_cpx)* f, in size_t fstr
       // DFT of size m*p performed by doing
       // p instances of smaller DFTs of size m,
       // each one takes a decimated version of the input
-      kf_work (Fout, f, fstride*p, in_stride, factors, st);
+      kf_work(Fout, f, fstride*p, in_stride, factors, st);
       f += fstride*in_stride;
     } while ((Fout += m) != Fout_end);
   }
@@ -632,10 +660,12 @@ public kiss_fft_cfg kiss_fft_alloc (int nfft, int inverse_fft, void* mem, size_t
     st.nfft = nfft;
     st.inverse = inverse_fft;
     for (int i = 0; i < nfft; ++i) {
-      enum pi = 3.141592653589793238462643383279502884197169399375105820974944;
-      double phase = -2*pi*i/nfft;
+      import std.math : cos, sin, PI;
+      double phase = -2*PI*i/nfft;
       if (st.inverse) phase *= -1;
-      mixin(kf_cexp!("st.twiddles.ptr+i", "phase"));
+      st.twiddles.ptr[i].r = cos(phase);
+      st.twiddles.ptr[i].i = sin(phase);
+
     }
     kf_factor(nfft, st.factors.ptr);
   }
@@ -705,54 +735,6 @@ public int kiss_fftr_next_fast_size_real (int n) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// kissfft_guts
-/*
-  Explanation of macros dealing with complex math:
-
-   C_MUL(m,a,b)         : m = a*b
-   C_FIXDIV( c , div )  : if a fixed point impl., c /= div. noop otherwise
-   C_SUB( res, a,b)     : res = a-b
-   C_SUBFROM( res , a)  : res -= a
-   C_ADDTO( res , a)    : res += a
- */
-//enum S_MUL(string a, string b) = "(("~a~")*("~b~"))";
-enum C_MUL(string m, string a, string b) =
-  "{ ("~m~").r = ("~a~").r*("~b~").r-("~a~").i*("~b~").i;
-     ("~m~").i = ("~a~").r*("~b~").i+("~a~").i*("~b~").r; }";
-enum C_MULBYSCALAR(string c, string s) = " { ("~c~").r *= ("~s~"); ("~c~").i *= ("~s~"); }";
-
-enum C_ADD(string res, string a, string b) = "{ ("~res~").r=("~a~").r+("~b~").r; ("~res~").i=("~a~").i+("~b~").i; }";
-enum C_SUB(string res, string a, string b) = "{ ("~res~").r=("~a~").r-("~b~").r; ("~res~").i=("~a~").i-("~b~").i; }";
-enum C_ADDTO(string res, string a) = "{ ("~res~").r += ("~a~").r; ("~res~").i += ("~a~").i; }";
-enum C_SUBFROM(string res, string a) = "{ ("~res~").r -= ("~a~").r; ("~res~").i -= ("~a~").i; }";
-
-
-//kiss_fft_scalar KISS_FFT_COS(T) (T phase) { import std.math : cos; return cos(phase); }
-//kiss_fft_scalar KISS_FFT_SIN(T) (T phase) { import std.math : sin; return sin(phase); }
-//kiss_fft_scalar HALF_OF (kiss_fft_scalar x) { return x*cast(kiss_fft_scalar)0.5; }
-enum HALF_OF(string x) = "(cast(kiss_fft_scalar)(("~x~")*cast(kiss_fft_scalar)0.5))";
-
-//enum kf_cexp(string x, string phase) = "{ ("~x~").r = KISS_FFT_COS("~phase~"); ("~x~").i = KISS_FFT_SIN("~phase~"); }";
-enum kf_cexp(string x, string phase) = "{ import std.math : cos, sin; ("~x~").r = cos("~phase~"); ("~x~").i = sin("~phase~"); }";
-
-
-/+
-#ifdef KISS_FFT_USE_ALLOCA
-// define this to allow use of alloca instead of malloc for temporary buffers
-// Temporary buffers are used in two case:
-// 1. FFT sizes that have "bad" factors. i.e. not 2,3 and 5
-// 2. "in-place" FFTs.  Notice the quotes, since kissfft does not really do an in-place transform.
-#include <alloca.h>
-#define  KISS_FFT_TMP_ALLOC(nbytes) alloca(nbytes)
-#define  KISS_FFT_TMP_FREE(ptr)
-#else
-#define  KISS_FFT_TMP_ALLOC(nbytes) KISS_FFT_MALLOC(nbytes)
-#define  KISS_FFT_TMP_FREE(ptr) KISS_FFT_FREE(ptr)
-#endif
-+/
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 // kissfftr
 // Real optimized version can save about 45% cpu time vs. complex fft of a real seq.
 public alias kiss_fftr_cfg = kiss_fftr_state*;
@@ -794,9 +776,11 @@ public kiss_fftr_cfg kiss_fftr_alloc (int nfft, int inverse_fft, void* mem, size
   kiss_fft_alloc(nfft, inverse_fft, st.substate, &subsize);
 
   foreach (immutable i; 0..nfft/2) {
-    double phase = -3.14159265358979323846264338327*(cast(double)(i+1)/nfft+0.5);
+    import std.math : cos, sin, PI;
+    double phase = -PI*(cast(double)(i+1)/nfft+0.5);
     if (inverse_fft) phase *= -1;
-    mixin(kf_cexp!("st.super_twiddles+i", "phase"));
+    st.super_twiddles[i].r = cos(phase);
+    st.super_twiddles[i].i = sin(phase);
   }
 
   return st;
@@ -838,14 +822,14 @@ public void kiss_fftr (kiss_fftr_cfg st, const(kiss_fft_scalar)* timedata, kiss_
     fpnk.r = st.tmpbuf[ncfft-k].r;
     fpnk.i = -st.tmpbuf[ncfft-k].i;
 
-    mixin(C_ADD!("f1k", "fpk", "fpnk"));
-    mixin(C_SUB!("f2k", "fpk", "fpnk"));
-    mixin(C_MUL!("tw", "f2k", "st.super_twiddles[k-1]"));
+    f1k = fpk+fpnk;
+    f2k = fpk-fpnk;
+    tw = f2k*st.super_twiddles[k-1];
 
-    freqdata[k].r = mixin(HALF_OF!"f1k.r+tw.r");
-    freqdata[k].i = mixin(HALF_OF!"f1k.i+tw.i");
-    freqdata[ncfft-k].r = mixin(HALF_OF!"f1k.r-tw.r");
-    freqdata[ncfft-k].i = mixin(HALF_OF!"tw.i-f1k.i");
+    freqdata[k].r = (f1k.r+tw.r)*cast(kiss_fft_scalar)0.5;
+    freqdata[k].i = (f1k.i+tw.i)*cast(kiss_fft_scalar)0.5;
+    freqdata[ncfft-k].r = (f1k.r-tw.r)*cast(kiss_fft_scalar)0.5;
+    freqdata[ncfft-k].i = (tw.i-f1k.i)*cast(kiss_fft_scalar)0.5;
   }
 }
 
@@ -870,11 +854,11 @@ public void kiss_fftri (kiss_fftr_cfg st, const(kiss_fft_cpx)* freqdata, kiss_ff
     fnkc.r = freqdata[ncfft-k].r;
     fnkc.i = -freqdata[ncfft-k].i;
 
-    mixin(C_ADD!("fek", "fk", "fnkc"));
-    mixin(C_SUB!("tmp", "fk", "fnkc"));
-    mixin(C_MUL!("fok", "tmp", "st.super_twiddles[k-1]"));
-    mixin(C_ADD!("st.tmpbuf[k]", "fek", "fok"));
-    mixin(C_SUB!("st.tmpbuf[ncfft-k]", "fek", "fok"));
+    fek = fk+fnkc;
+    tmp = fk-fnkc;
+    fok = tmp*st.super_twiddles[k-1];
+    st.tmpbuf[k] = fek+fok;
+    st.tmpbuf[ncfft-k] = fek-fok;
     st.tmpbuf[ncfft-k].i *= -1;
   }
   kiss_fft(st.substate, st.tmpbuf, cast(kiss_fft_cpx*)timedata);
