@@ -218,9 +218,6 @@ __gshared int gain = 0;
 __gshared uint latencyms = 100;
 __gshared bool allowresampling = true;
 
-enum ResamplerType { speex, simple }
-__gshared ResamplerType rstype = ResamplerType.speex;
-
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct StreamIO {
@@ -578,7 +575,6 @@ Action playFile () {
   snd_pcm_t* pcm;
   snd_pcm_sframes_t frames;
 
-  Resampler rsl, rsr;
   SpeexResampler srb;
   SpeexResampler.Data srbdata;
 
@@ -602,18 +598,9 @@ Action playFile () {
 
   rsbufused = rsibufused = rsobufused = 0;
   if (realRate != sio.rate && allowresampling) {
-    if (rstype == ResamplerType.simple) {
-      rsl = new Resampler();
-      rsl.rate = cast(double)sio.rate/cast(double)realRate;
-      rsr = new Resampler();
-      rsr.rate = cast(double)sio.rate/cast(double)realRate;
-    } else {
-      //srb.reset();
-      //srb.setRate(sio.rate, realRate);
-      srb.setup(sio.channels, sio.rate, realRate, /*SpeexResampler.Quality.Desktop*/rsquality);
-      if (rsfbufi.length == 0) rsfbufi.length = 8192;
-      if (rsfbufo.length == 0) rsfbufo.length = 8192;
-    }
+    srb.setup(sio.channels, sio.rate, realRate, rsquality);
+    if (rsfbufi.length == 0) rsfbufi.length = 8192;
+    if (rsfbufo.length == 0) rsfbufo.length = 8192;
     if (rsbuf.length == 0) rsbuf.length = 8192;
   }
 
@@ -743,107 +730,39 @@ Action playFile () {
     // no need to resample silence ;-)
     if (realRate == sio.rate || !allowresampling || silence) {
       outSound(pcm, buffer.ptr, frmread*2*sio.channels);
-    } else if (rsl is null) {
+    } else {
       // resampling
-      // feed resampler
       rsibufused = cast(uint)frmread*sio.channels;
       if (rsfbufi.length < rsibufused) rsfbufi.length = rsibufused;
       tflShort2Float((cast(short*)buffer.ptr)[0..rsibufused], rsfbufi[0..rsibufused]);
-      if (rsfbufi.length*4 > rsfbufo.length) rsfbufo.length = rsfbufi.length*4;
-      //if (rsobufused >= rsfbufo.length) rsfbufo.length = rsobufused*2;
-      int ibu0count = 0;
-      for (;;) {
-        if (rsibufused == 0) {
-          if (++ibu0count > 2) break;
+      uint inpos = 0;
+
+      void flushOutFBuf () {
+        if (rsobufused > 0) {
+          if (rsbuf.length < rsobufused) rsbuf.length = rsobufused;
+          tflFloat2Short(rsfbufo[0..rsobufused], rsbuf[0..rsobufused]);
+          outSound(pcm, rsbuf.ptr, rsobufused*2);
+          rsobufused = 0;
         }
+      }
+
+      for (;;) {
+        if (rsobufused >= rsfbufo.length) flushOutFBuf();
         srbdata = srbdata.init; // just in case
-        srbdata.dataIn = rsfbufi[0..rsibufused];
+        srbdata.dataIn = rsfbufi[inpos..rsibufused];
         srbdata.dataOut = rsfbufo[rsobufused..$];
         if (srb.process(srbdata) != 0) {
           conwriteln("  RESAMPLING ERROR!");
           return Action.Quit;
         }
         rsobufused += srbdata.outputSamplesUsed;
-        // shift input buffer
-        if (srbdata.inputSamplesUsed > 0) {
-          if (srbdata.inputSamplesUsed < rsibufused) {
-            import core.stdc.string : memmove;
-            memmove(rsfbufi.ptr, rsfbufi.ptr+srbdata.inputSamplesUsed, (rsibufused-srbdata.inputSamplesUsed)*rsfbufi[0].sizeof);
-            rsibufused -= srbdata.inputSamplesUsed;
-          } else {
-            rsibufused = 0;
-          }
-        }
-        if (rsobufused > rsbuf.length) rsbuf.length = rsobufused;
-        if (rsobufused > 0) {
-          assert(rsobufused%sio.channels == 0);
-          if (rsbuf.length < rsobufused) rsbuf.length = rsobufused;
-          tflFloat2Short(rsfbufo[0..rsobufused], rsbuf[0..rsobufused]);
-          outSound(pcm, rsbuf.ptr, rsobufused*2);
-          // shift output buffer
-          if (srbdata.outputSamplesUsed > 0) {
-            if (srbdata.outputSamplesUsed < rsobufused) {
-              import core.stdc.string : memmove;
-              memmove(rsfbufo.ptr, rsfbufo.ptr+srbdata.outputSamplesUsed, (rsobufused-srbdata.outputSamplesUsed)*rsfbufi[0].sizeof);
-              rsobufused -= srbdata.outputSamplesUsed;
-            } else {
-              rsobufused = 0;
-            }
-          }
+        if (inpos < rsibufused) {
+          inpos += cast(uint)srbdata.inputSamplesUsed;
         } else {
-          /*if (srbdata.inputSamplesUsed == 0)*/ break;
+          if (srbdata.outputSamplesUsed == 0) break; // nothing more to do now
         }
       }
-    } else {
-      short* sb = cast(short*)buffer.ptr;
-      while (frmread > 0) {
-        // feed resampler
-        while (frmread > 0 && rsl.freeCount > 0) {
-          rsl.writeSampleFixed(*sb++, 1);
-          if (sio.channels == 2) {
-            if (rsr.freeCount == 0) assert(0, "wtf?!");
-            rsr.writeSampleFixed(*sb++, 1);
-          }
-          --frmread;
-        }
-        //conwriteln("left: ", frmread, "; freecount=", rsl.freeCount);
-        // get resampled data
-        if (rsl.ready) {
-          rsbufused = 0;
-          while (rsl.sampleCount > 0) {
-            auto smp = rsl.sample; // 16-bit sample
-            rsl.removeSample();
-            if (rsbufused >= rsbuf.length) rsbuf.length *= 2;
-            rsbuf.ptr[rsbufused++] = smp;
-            if (sio.channels == 2) {
-              if (rsr.sampleCount == 0) assert(0, "wtf?!");
-              smp = rsr.sample; // 16-bit sample
-              rsr.removeSample();
-              if (rsbufused >= rsbuf.length) rsbuf.length *= 2;
-              rsbuf.ptr[rsbufused++] = smp;
-            }
-          }
-          //conwriteln("  got: ", rsbufused/sio.channels);
-          /*
-          uint left = rsbufused/sio.channels;
-          uint pos = 0;
-          while (pos < left) {
-            frames = snd_pcm_writei(pcm, rsbuf.ptr+pos*sio.channels, left-pos);
-            if (frames < 0) {
-              frames = snd_pcm_recover(pcm, cast(int)frames, 0);
-              if (frames < 0) {
-                import core.stdc.stdio : printf;
-                printf("snd_pcm_writei failed: %s\n", snd_strerror(err));
-                break mainloop;
-              }
-            } else {
-              pos += frames;
-            }
-          }
-          */
-          outSound(pcm, rsbuf.ptr, rsbufused*2);
-        }
-      }
+      flushOutFBuf();
     }
 
     long tm = sio.timeread;
@@ -931,7 +850,6 @@ void main (string[] args) {
   conRegVar!gain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
   conRegVar!latencyms(5, 5000, "latency", "playback latency, in milliseconds");
   conRegVar!allowresampling("use_resampling", "allow audio resampling?");
-  conRegVar!rstype("resampler_type", "resampler to use (speex or simple)");
 
   // lol, `std.trait : ParameterDefaults()` blocks using argument with name `value`
   conRegFunc!((int idx, byte value) {
