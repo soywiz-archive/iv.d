@@ -417,7 +417,7 @@ private void kf_bfly3 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
   const(kiss_fft_cpx)* tw1, tw2;
   kiss_fft_cpx[5] scratch = void;
   kiss_fft_cpx epi3;
-  epi3 = st.twiddles[fstride*m];
+  epi3 = st.twiddles.ptr[fstride*m];
   tw1 = tw2 = st.twiddles.ptr;
   do {
     mixin(C_MUL!("scratch[1]", "Fout[m]", "*tw1"));
