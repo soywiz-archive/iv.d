@@ -1,6 +1,6 @@
 // code from LADSPA plugins project: http://plugin.org.uk/
 // GNU GPLv3
-module mbandeq;
+module iv.mbandeq;
 private:
 nothrow @trusted @nogc:
 

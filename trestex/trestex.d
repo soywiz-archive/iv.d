@@ -49,8 +49,8 @@ import iv.dopus;
 version(supereq) {
   import mbandeq_j;
 } else {
-  import mbandeq;
-  float[MBandEq.Bands] eqbands = 0;
+  import iv.mbandeq;
+  __gshared float[MBandEq.Bands] eqbands = 0;
 }
 __gshared bool eqchanged = false;
 
