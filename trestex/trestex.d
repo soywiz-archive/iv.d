@@ -30,103 +30,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 module trestex is aliced; // due to Phobos bug
 
-import iv.alsa;
-import iv.audioresampler;
 import iv.cmdcon;
 import iv.cmdcontty;
-import iv.follin.resampler;
-import iv.follin.utils;
 import iv.rawtty;
+import iv.simplealsa;
 import iv.vfs;
-//import iv.vfs.io;
 
 import iv.drflac;
 import iv.minimp3;
 import iv.mp3scan;
 import iv.tremor;
 import iv.dopus;
-
-version(supereq) {
-  import mbandeq_j;
-} else {
-  import iv.mbandeq;
-  __gshared int[MBandEq.Bands] eqbands = 0;
-}
-__gshared bool eqchanged = false;
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-//__gshared string device = "plug:default";
-__gshared string device = "default";
-__gshared ubyte rsquality = SpeexResampler.Music;
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-uint getBestSampleRate (uint wantedRate) {
-  import std.internal.cstring : tempCString;
-
-  if (wantedRate == 0) wantedRate = 44110;
-
-  snd_pcm_t* pcm;
-  snd_pcm_hw_params_t* hwparams;
-
-  auto err = snd_pcm_open(&pcm, device.tempCString, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
-  if (err < 0) {
-    import core.stdc.stdlib : exit, EXIT_FAILURE;
-    conwriteln("cannot open device '%s': %s", device, snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
-  scope(exit) snd_pcm_close(pcm);
-
-  err = snd_pcm_hw_params_malloc(&hwparams);
-  if (err < 0) {
-    import core.stdc.stdlib : exit, EXIT_FAILURE;
-    conwriteln("cannot malloc hardware parameters: %s", snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
-  scope(exit) snd_pcm_hw_params_free(hwparams);
-
-  err = snd_pcm_hw_params_any(pcm, hwparams);
-  if (err < 0) {
-    import core.stdc.stdlib : exit, EXIT_FAILURE;
-    conwriteln("cannot get hardware parameters: %s", snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
-
-  //printf("Device: %s (type: %s)\n", device_name, snd_pcm_type_name(snd_pcm_type(pcm)));
-
-  if (snd_pcm_hw_params_test_rate(pcm, hwparams, wantedRate, 0) == 0) return wantedRate;
-
-  uint min, max;
-
-  err = snd_pcm_hw_params_get_rate_min(hwparams, &min, null);
-  if (err < 0) {
-    import core.stdc.stdlib : exit, EXIT_FAILURE;
-    conwriteln("cannot get minimum rate: %s", snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
-
-  err = snd_pcm_hw_params_get_rate_max(hwparams, &max, null);
-  if (err < 0) {
-    import core.stdc.stdlib : exit, EXIT_FAILURE;
-    conwriteln("cannot get maximum rate: %s", snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
-
-  if (wantedRate < min) return min;
-  if (wantedRate > max) return max;
-
-  for (int delta = 1; delta < wantedRate; ++delta) {
-    if (wantedRate-delta < min && wantedRate+delta > max) break;
-    if (wantedRate-delta > min) {
-      if (snd_pcm_hw_params_test_rate(pcm, hwparams, wantedRate-delta, 0) == 0) return wantedRate-delta;
-    }
-    if (wantedRate+delta < max) {
-      if (snd_pcm_hw_params_test_rate(pcm, hwparams, wantedRate+delta, 0) == 0) return wantedRate+delta;
-    }
-  }
-  return (wantedRate-min < max-wantedRate ? min : max);
-}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -157,66 +71,6 @@ string recodeToKOI8 (const(char)[] s) {
   }
   return res;
 }
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-enum XXBUF_SIZE = 4096;
-ubyte[XXBUF_SIZE] xxbuffer;
-uint xxbufused;
-uint xxoutchans;
-
-
-void outSoundInit (uint chans) {
-  if (chans < 1 || chans > 2) assert(0, "invalid number of channels");
-  xxbufused = 0;
-  xxoutchans = chans;
-}
-
-
-void outSoundFlush (snd_pcm_t* pcm) {
-  while (xxbufused/2/xxoutchans > 0) {
-    auto frames = snd_pcm_writei(pcm, xxbuffer.ptr, xxbufused/2/xxoutchans);
-    if (frames < 0) {
-      frames = snd_pcm_recover(pcm, cast(int)frames, 0);
-      if (frames < 0) {
-        import core.stdc.stdio : printf;
-        printf("snd_pcm_writei failed: %s\n", snd_strerror(cast(int)frames));
-      }
-    } else {
-      import core.stdc.string : memmove;
-      auto bwr = cast(uint)(frames*2*xxoutchans);
-      if (bwr >= xxbufused) { xxbufused = 0; break; }
-      memmove(xxbuffer.ptr, xxbuffer.ptr+bwr, xxbufused-bwr);
-      xxbufused -= bwr;
-    }
-  }
-}
-
-
-void outSound (snd_pcm_t* pcm, const(void)* buf, uint bytes) {
-  //conwriteln("xxbufused=", xxbufused, "; left=", xxbuffer.length-xxbufused, "; bytes=", bytes);
-  auto src = cast(const(ubyte)*)buf;
-  while (bytes > 0) {
-    while (bytes > 0 && xxbufused < xxbuffer.length) {
-      xxbuffer.ptr[xxbufused++] = *src++;
-      --bytes;
-    }
-    if (xxbufused == xxbuffer.length) outSoundFlush(pcm);
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-enum BUF_SIZE = 4096;
-ubyte[BUF_SIZE] buffer;
-
-string[] playlist;
-int plidx = 0;
-
-__gshared bool paused = false;
-__gshared int gain = 0;
-__gshared uint latencyms = 100;
-__gshared bool allowresampling = true;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -564,20 +418,21 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+enum BUF_SIZE = 4096;
+short[BUF_SIZE] buffer;
+
+string[] playlist;
+int plidx = 0;
+
+__gshared bool paused = false;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum Action { None, Quit, Prev, Next }
 __gshared Action conaction;
 
 
 Action playFile () {
-  import std.internal.cstring : tempCString;
-
-  int err;
-  snd_pcm_t* pcm;
-  snd_pcm_sframes_t frames;
-
-  SpeexResampler srb;
-  SpeexResampler.Data srbdata;
-
   if (plidx < 0) plidx = 0;
   if (plidx >= playlist.length) return Action.Quit;
   auto fname = playlist[plidx];
@@ -586,190 +441,53 @@ Action playFile () {
   if (!sio.valid) return Action.Next;
   scope(exit) sio.close();
 
-  uint realRate = getBestSampleRate(sio.rate);
+  uint realRate = alsaGetBestSampleRate(sio.rate);
   conwriteln("real sampling rate: ", realRate);
-
-  outSoundInit(sio.channels);
-
-  static short[] rsbuf;
-  static float[] rsfbufi, rsfbufo;
-  uint rsbufused;
-  uint rsibufused, rsobufused;
-
-  rsbufused = rsibufused = rsobufused = 0;
-  if (realRate != sio.rate && allowresampling) {
-    srb.setup(sio.channels, sio.rate, realRate, rsquality);
-    if (rsfbufi.length == 0) rsfbufi.length = 8192;
-    if (rsfbufo.length == 0) rsfbufo.length = 8192;
-    if (rsbuf.length == 0) rsbuf.length = 8192;
-  }
 
   long prevtime = -1;
 
-  if ((err = snd_pcm_open(&pcm, device.tempCString, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-    import core.stdc.stdlib : exit, EXIT_FAILURE;
-    conwriteln("Playback open error for device '%s': %s", device, snd_strerror(err));
-    exit(EXIT_FAILURE);
+  if (!alsaIsOpen || alsaRate != sio.rate || alsaChannels != sio.channels) {
+    if (!alsaInit(sio.rate, sio.channels)) assert(0, "cannot init ALSA playback");
   }
-  scope(exit) snd_pcm_close(pcm);
-
-  if ((err = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, sio.channels, /*sio.rate*/realRate, 1, /*500000*//*20000*/latencyms*1000)) < 0) {
-    import core.stdc.stdlib : exit, EXIT_FAILURE;
-    conwriteln("Playback open error: %s", snd_strerror(err));
-    exit(EXIT_FAILURE);
-  }
-
-  version(none) {
-    snd_pcm_uframes_t bufsize, periodsize;
-    if (snd_pcm_get_params(pcm, &bufsize, &periodsize) == 0) {
-      conwriteln("desired latency: ", latencyms);
-      conwriteln("buffer size: ", bufsize);
-      conwriteln("period size: ", periodsize);
-    }
-  }
-
-  version(supereq) {
-    mbeqInit(14);
-    //mbeqInit(12);
-    scope(exit) mbeqQuit();
-    bool mbeqActive = false;
-    foreach (immutable v; mbeqLSliders[]) if (v != 0) { mbeqActive = true; break; }
-    if (!mbeqActive) foreach (immutable v; mbeqRSliders[]) if (v != 0) { mbeqActive = true; break; }
-    mbeqSampleRate = sio.rate;
-    mbeqSetBandsFromSliders();
-  } else {
-    auto mbeql = MBandEq(sio.rate);
-    auto mbeqr = MBandEq(sio.rate);
-    bool mbeqActive = false;
-    foreach (immutable v; eqbands[]) if (v != 0) { mbeqActive = true; break; }
-  }
-  conwriteln("equalizer is ", (mbeqActive ? "" : "not "), "active");
-
-
-  void checkReinitEq () {
-    if (!eqchanged) return;
-    auto oldact = mbeqActive;
-    version(supereq) {
-      mbeqSetBandsFromSliders();
-      mbeqActive = false;
-      foreach (immutable v; mbeqLSliders[]) if (v != 0) { mbeqActive = true; break; }
-      if (!mbeqActive) foreach (immutable v; mbeqRSliders[]) if (v != 0) { mbeqActive = true; break; }
-    } else {
-      mbeqActive = false;
-      foreach (immutable v; eqbands[]) if (v != 0) { mbeqActive = true; break; }
-    }
-    eqchanged = false;
-    if (oldact != mbeqActive) conwriteln("equalizer is ", (mbeqActive ? "" : "not "), "active");
-  }
-
 
   bool oldpaused = !paused;
-  int oldgain = gain+1;
-
-  bool timeWritten = false;
+  int oldgain = alsaGain+1;
 
   void writeTime () {
     import core.stdc.stdio : snprintf;
     char[128] xbuf;
     //auto len = snprintf(xbuf.ptr, xbuf.length, "\r%d:%02d / %d:%02d (%d)%s\x1b[K", 0, 0, sio.timetotal/1000/60, sio.timetotal/1000%60, gain, (paused ? " !".ptr : "".ptr));
     long tm = sio.timeread;
-    auto len = snprintf(xbuf.ptr, xbuf.length, "\r%d:%02d / %d:%02d (%d)%s\x1b[K", cast(uint)(tm/1000/60), cast(uint)(tm/1000%60), cast(uint)(sio.timetotal/1000/60), cast(uint)(sio.timetotal/1000%60), gain, (paused ? " !".ptr : "".ptr));
+    auto len = snprintf(xbuf.ptr, xbuf.length, "\r%d:%02d / %d:%02d (%d)%s\x1b[K", cast(uint)(tm/1000/60), cast(uint)(tm/1000%60), cast(uint)(sio.timetotal/1000/60), cast(uint)(sio.timetotal/1000%60), alsaGain, (paused ? " !".ptr : "".ptr));
     ttyRawWrite(xbuf[0..len]);
-    timeWritten = true;
   }
-  scope(exit) if (timeWritten) ttyRawWrite("\n");
+  scope(exit) ttyRawWrite("\n");
 
   writeTime();
+
   mainloop: for (;;) {
     int frmread = 0;
-    bool silence = false;
 
     if (!paused) {
-      frmread = sio.readFrames(buffer.ptr, BUF_SIZE/2/sio.channels);
+      if (!alsaIsOpen) {
+        if (!alsaInit(sio.rate, sio.channels)) assert(0, "cannot init ALSA playback");
+      }
+
+      frmread = sio.readFrames(buffer.ptr, BUF_SIZE/sio.channels);
       if (frmread <= 0) break;
 
-      if (gain) {
-        static float[] flbuf;
-        if (flbuf.length < frmread*sio.channels) flbuf.length = frmread*sio.channels;
-        auto bp = cast(short*)buffer.ptr;
-        tflShort2Float(bp[0..frmread*sio.channels], flbuf[0..frmread*sio.channels]);
-        immutable float gg = gain/100.0f;
-        foreach (ref float v; flbuf[0..frmread*sio.channels]) v += v*gg;
-        tflFloat2Short(flbuf[0..frmread*sio.channels], bp[0..frmread*sio.channels]);
-      }
-
-      if (mbeqActive) {
-        version(supereq) {
-          //conwriteln("frmread=", frmread);
-          if (frmread > 8191) assert(0, "oops");
-          auto eqsr = mbeqModifySamples(buffer.ptr, frmread, sio.channels, 16);
-          //conwriteln("frmread=", frmread, "; eqsr=", eqsr);
-          if (eqsr > frmread) assert(0, "wtf?!");
-          frmread = eqsr;
-        } else {
-          if (rsfbufi.length < frmread*sio.channels) rsfbufi.length = frmread*sio.channels;
-          if (rsfbufo.length < frmread*sio.channels) rsfbufo.length = frmread*sio.channels;
-          tflShort2Float((cast(const(short)*)buffer.ptr)[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels]);
-          mbeql.bands[] = eqbands[];
-          if (sio.channels == 1) {
-            mbeql.run(rsfbufo[0..frmread], rsfbufi[0..frmread]);
-          } else {
-            mbeqr.bands[] = eqbands[];
-            mbeql.run(rsfbufo[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels], 2, 0);
-            mbeqr.run(rsfbufo[0..frmread*sio.channels], rsfbufi[0..frmread*sio.channels], 2, 1);
-          }
-          tflFloat2Short(rsfbufo[0..frmread*sio.channels], (cast(short*)buffer.ptr)[0..frmread*sio.channels]);
-        }
-      }
+      alsaWriteShort(buffer[0..frmread*sio.channels]);
     } else {
-      frmread = BUF_SIZE/2/sio.channels;
-      buffer[] = 0;
-      silence = true;
-    }
-
-    // no need to resample silence ;-)
-    if (realRate == sio.rate || !allowresampling || silence) {
-      outSound(pcm, buffer.ptr, frmread*2*sio.channels);
-    } else {
-      // resampling
-      rsibufused = cast(uint)frmread*sio.channels;
-      if (rsfbufi.length < rsibufused) rsfbufi.length = rsibufused;
-      tflShort2Float((cast(short*)buffer.ptr)[0..rsibufused], rsfbufi[0..rsibufused]);
-      uint inpos = 0;
-
-      void flushOutFBuf () {
-        if (rsobufused > 0) {
-          if (rsbuf.length < rsobufused) rsbuf.length = rsobufused;
-          tflFloat2Short(rsfbufo[0..rsobufused], rsbuf[0..rsobufused]);
-          outSound(pcm, rsbuf.ptr, rsobufused*2);
-          rsobufused = 0;
-        }
-      }
-
-      for (;;) {
-        if (rsobufused >= rsfbufo.length) flushOutFBuf();
-        srbdata = srbdata.init; // just in case
-        srbdata.dataIn = rsfbufi[inpos..rsibufused];
-        srbdata.dataOut = rsfbufo[rsobufused..$];
-        if (srb.process(srbdata) != 0) {
-          conwriteln("  RESAMPLING ERROR!");
-          return Action.Quit;
-        }
-        rsobufused += srbdata.outputSamplesUsed;
-        if (inpos < rsibufused) {
-          inpos += cast(uint)srbdata.inputSamplesUsed;
-        } else {
-          if (srbdata.outputSamplesUsed == 0) break; // nothing more to do now
-        }
-      }
-      flushOutFBuf();
+      if (alsaIsOpen) alsaShutdown();
+      import core.thread, core.time;
+      Thread.sleep(100.msecs);
     }
 
     long tm = sio.timeread;
-    if (tm/1000 != prevtime/1000 || paused != oldpaused || gain != oldgain) {
+    if (tm/1000 != prevtime/1000 || paused != oldpaused || alsaGain != oldgain) {
       prevtime = tm;
       oldpaused = paused;
-      oldgain = gain;
+      oldgain = alsaGain;
       writeTime();
     }
 
@@ -802,9 +520,9 @@ Action playFile () {
             if (key.ch == '>') return Action.Next;
             if (key.ch == 'q') return Action.Quit;
             if (key.ch == ' ') paused = !paused;
-            if (key.ch == '0') gain = 0;
-            if (key.ch == '-') { gain -= 10; if (gain < -100) gain = -100; }
-            if (key.ch == '+') { gain += 10; if (gain > 1000) gain = 1000; }
+            if (key.ch == '0') alsaGain = 0;
+            if (key.ch == '-') { alsaGain -= 10; if (alsaGain < -100) alsaGain = -100; }
+            if (key.ch == '+') { alsaGain += 10; if (alsaGain > 1000) alsaGain = 1000; }
             break;
           default: break;
         }
@@ -818,13 +536,11 @@ Action playFile () {
       scope(exit) conDump = conoldcdump;
       conDump = ConDump.none;
       conProcessQueue();
-      checkReinitEq();
     }
     ttyconDraw();
     if (isQuitRequested) return Action.Quit;
     if (conaction != Action.None) { auto res = conaction; conaction = Action.None; return res; }
   }
-  outSoundFlush(pcm);
 
   return Action.Next;
 }
@@ -836,66 +552,42 @@ extern(C) void atExitRestoreTty () {
 
 
 void main (string[] args) {
-  version(supereq) {
-    mbeqLSliders[] = mbeqRSliders[] = 0;
-  } else {
-    eqbands[] = 0;
-  }
+  alsaEqBands[] = 0;
 
   conRegUserVar!bool("shuffle", "shuffle playlist");
 
-  conRegVar!rsquality(0, 10, "rsquality", "resampling quality; 0=worst, 10=best, default is 8");
-  conRegVar!device("device", "audio output device");
+  conRegVar!alsaRQuality(0, 10, "rsquality", "resampling quality; 0=worst, 10=best, default is 8");
+  conRegVar!alsaDevice("device", "audio output device");
+  conRegVar!alsaGain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
+  conRegVar!alsaLatencyms(5, 5000, "latency", "playback latency, in milliseconds");
+  conRegVar!alsaEnableResampling("use_resampling", "allow audio resampling?");
+  conRegVar!alsaEnableEqualizer("use_equalizer", "allow audio equalizer?");
+
   conRegVar!paused("paused", "is playback paused?");
-  conRegVar!gain(-100, 1000, "gain", "playback gain (0: normal; -100: silent; 100: 2x)");
-  conRegVar!latencyms(5, 5000, "latency", "playback latency, in milliseconds");
-  conRegVar!allowresampling("use_resampling", "allow audio resampling?");
 
   // lol, `std.trait : ParameterDefaults()` blocks using argument with name `value`
   conRegFunc!((int idx, byte value) {
-    version(supereq) {
-      if (idx >= 0 && idx < mbeqBandCount) {
-        if (mbeqLSliders[idx] != value || mbeqRSliders[idx] != value) {
-          mbeqLSliders[idx] = mbeqRSliders[idx] = value;
-          eqchanged = true;
-        }
-      } else {
-        conwriteln("invalid equalizer band index: ", idx);
+    if (value < -70) value = -70;
+    if (value > 30) value = 30;
+    if (idx >= 0 && idx < alsaEqBands.length) {
+      if (alsaEqBands[idx] != value) {
+        alsaEqBands[idx] = value;
       }
     } else {
-      if (value < -70) value = -70;
-      if (value > 30) value = 30;
-      if (idx >= 0 && idx < eqbands.length) {
-        if (eqbands[idx] != value) {
-          eqbands[idx] = value;
-          eqchanged = true;
-        }
-      } else {
-        conwriteln("invalid equalizer band index: ", idx);
-      }
+      conwriteln("invalid equalizer band index: ", idx);
     }
   })("eq_band", "set equalizer band #n to v (band 0 is preamp)");
 
   conRegFunc!(() {
-    version(supereq) {
-      mbeqLSliders[idx] = mbeqRSliders[idx] = value;
-    } else {
-      eqbands[] = 0;
-    }
-    eqchanged = true;
+    alsaEqBands[] = 0;
   })("eq_reset", "reset equalizer");
 
   conRegFunc!(() { conaction = Action.Next; })("next", "next song");
   conRegFunc!(() { conaction = Action.Prev; })("prev", "previous song");
 
   concmd("exec .config.rc tan");
-  version(supereq) {
-    concmd("exec mbeqs.rc tan");
-  } else {
-    concmd("exec mbeqa.rc tan");
-  }
+  concmd("exec mbeqa.rc tan");
   conProcessArgs!true(args);
-  eqchanged = false;
 
   foreach (string fname; args[1..$]) {
     import std.file;
@@ -923,8 +615,6 @@ void main (string[] args) {
     import std.random;
     playlist.randomShuffle;
   }
-
-  fuck_alsa_messages();
 
   ttySetRaw();
   {

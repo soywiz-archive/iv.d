@@ -39,12 +39,16 @@ public __gshared string alsaDevice = "default"; /// output device
 public __gshared ubyte alsaRQuality = SpeexResampler.Music; /// resampling quality (if required); [0..10]; default is 8
 public __gshared int[MBandEq.Bands] alsaEqBands = 0; /// 39-band equalizer options; [-70..30$(RPAREN)
 public __gshared int alsaGain = 0; /// sound gain, in %
-public __gshared uint latencyms = 100; /// output latency, in milliseconds
+public __gshared uint alsaLatencyms = 100; /// output latency, in milliseconds
+public __gshared bool alsaEnableResampling = true; /// set to `false` to disable resampling (sound can be distorted)
+public __gshared bool alsaEnableEqualizer = true; /// set to `false` to disable resampling (sound can be distorted)
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public @property bool alsaIsOpen () nothrow @trusted @nogc { return (pcm !is null); } ///
+public @property uint alsaRate () nothrow @trusted @nogc { return srate; } ///
 public @property uint alsaRealRate () nothrow @trusted @nogc { return realsrate; } ///
+public @property ubyte alsaChannels () nothrow @trusted @nogc { return cast(ubyte)xxoutchans; } ///
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -160,7 +164,7 @@ void outSoundFlush () {
   // equalizer
   bool doeq = false;
   foreach (int v; alsaEqBands[]) if (v != 0) { doeq = true; break; }
-  if (doeq) {
+  if (doeq && alsaEnableEqualizer) {
     tflShort2Float(b[0..smpCount], rsfbufi[0..smpCount]);
     mbeql.bands[] = alsaEqBands[];
     if (xxoutchans == 1) {
@@ -175,7 +179,7 @@ void outSoundFlush () {
 
   //{ import core.stdc.stdio; printf("smpCount: %u\n", cast(uint)smpCount); }
   // need resampling?
-  if (srate == realsrate) {
+  if (srate == realsrate || !alsaEnableResampling) {
     // easy deal, no resampling required
     outSoundFlushX(b, smpCount*2);
   } else {
@@ -239,6 +243,7 @@ public void alsaShutdown (bool immediate=false) {
     pcm = null;
   }
   srate = realsrate = 0;
+  xxoutchans = 0;
 }
 
 
@@ -248,6 +253,7 @@ public bool alsaInit (uint asrate, ubyte chans) {
   import std.internal.cstring : tempCString;
 
   alsaShutdown(true);
+  fuck_alsa_messages();
 
   if (asrate < 1024 || asrate > 96000) return false;
   if (chans < 1 || chans > 2) return false;
@@ -279,7 +285,7 @@ public bool alsaInit (uint asrate, ubyte chans) {
   }
   //scope(exit) snd_pcm_close(pcm);
 
-  if ((err = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, chans, /*sio.rate*/realsrate, 1, /*500000*//*20000*/latencyms*1000)) < 0) {
+  if ((err = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, chans, /*sio.rate*/realsrate, 1, /*500000*//*20000*/alsaLatencyms*1000)) < 0) {
     //import core.stdc.stdlib : exit, EXIT_FAILURE;
     //conwriteln("Playback open error: %s", snd_strerror(err));
     //exit(EXIT_FAILURE);
