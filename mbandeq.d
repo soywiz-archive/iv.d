@@ -210,9 +210,12 @@ public:
           kiss_fftr(plan_rc, realx, cast(kiss_fft_cpx*)comp);
           // multiply the bins magnitudes by the coeficients
           comp[0*2+0] *= coefs[0];
+          kiss_fft_cpx* cc = cast(kiss_fft_cpx*)comp;
           foreach (immutable i; 1..FFT_LENGTH/2) {
-            comp[i*2+0] *= coefs[i];
-            comp[i*2+1] *= coefs[i];
+            //comp[i*2+0] *= coefs[i];
+            //comp[i*2+1] *= coefs[i];
+            cc[i].r *= coefs[i];
+            cc[i].i *= coefs[i];
           }
           // run the complex->real transform
           //rfftw_one(plan_cr, comp, realx);
