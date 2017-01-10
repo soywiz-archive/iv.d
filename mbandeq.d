@@ -44,16 +44,16 @@ public:
 
 public:
   int[Bands] bands = 0; // [-70..30)
-  int* bin_base;
-  float* bin_delta;
+  int* binBase;
+  float* binDelta;
   fftw_real* comp;
-  float* db_table;
-  uint fifo_pos;
-  float* in_fifo;
-  float* out_accum;
-  float* out_fifo;
-  fft_plan plan_cr;
-  fft_plan plan_rc;
+  float* dbtable;
+  uint fifoPos;
+  float* inFifo;
+  float* outAccum;
+  float* outFifo;
+  fft_plan planRC;
+  fft_plan planCR;
   fftw_real* realx;
   float* window;
   int smpRate;
@@ -74,24 +74,24 @@ public:
 
     if (asrate < 1024 || asrate > 48000) assert(0, "invalid sampling rate");
     smpRate = asrate;
-    float hz_per_bin = cast(float)asrate/cast(float)FFT_LENGTH;
+    float hzPerBin = cast(float)asrate/cast(float)FFT_LENGTH;
 
-    zalloc(in_fifo, FFT_LENGTH);
-    zalloc(out_fifo, FFT_LENGTH);
-    zalloc(out_accum, FFT_LENGTH*2);
+    zalloc(inFifo, FFT_LENGTH);
+    zalloc(outFifo, FFT_LENGTH);
+    zalloc(outAccum, FFT_LENGTH*2);
     zalloc(realx, FFT_LENGTH+16);
     zalloc(comp, FFT_LENGTH+16);
     zalloc(window, FFT_LENGTH);
-    zalloc(bin_base, FFT_LENGTH/2);
-    zalloc(bin_delta, FFT_LENGTH/2);
-    fifo_pos = 0;
+    zalloc(binBase, FFT_LENGTH/2);
+    zalloc(binDelta, FFT_LENGTH/2);
+    fifoPos = 0;
 
     version(FFTW3) {
-      plan_rc = fftwf_plan_r2r_1d(FFT_LENGTH, realx, comp, FFTW_R2HC, FFTW_MEASURE);
-      plan_cr = fftwf_plan_r2r_1d(FFT_LENGTH, comp, realx, FFTW_HC2R, FFTW_MEASURE);
+      planRC = fftwf_plan_r2r_1d(FFT_LENGTH, realx, comp, FFTW_R2HC, FFTW_MEASURE);
+      planCR = fftwf_plan_r2r_1d(FFT_LENGTH, comp, realx, FFTW_HC2R, FFTW_MEASURE);
     } else {
-      plan_rc = kiss_fftr_alloc(FFT_LENGTH, 0, null, null);
-      plan_cr = kiss_fftr_alloc(FFT_LENGTH, 1, null, null);
+      planRC = kiss_fftr_alloc(FFT_LENGTH, false); // normal
+      planCR = kiss_fftr_alloc(FFT_LENGTH, true); // inverse
     }
 
     // create raised cosine window table
@@ -101,51 +101,51 @@ public:
     }
 
     // create db->coeffiecnt lookup table
-    zalloc(db_table, 1000);
+    zalloc(dbtable, 1000);
     foreach (immutable i; 0..1000) {
       float db = (cast(float)i/10)-70;
-      db_table[i] = pow(10.0f, db/20.0f);
+      dbtable[i] = pow(10.0f, db/20.0f);
     }
 
     // create FFT bin -> band+delta tables
     int bin = 0;
-    while (bin <= bandfrqs[0]/hz_per_bin) {
-      bin_base[bin] = 0;
-      bin_delta[bin++] = 0.0f;
+    while (bin <= bandfrqs[0]/hzPerBin) {
+      binBase[bin] = 0;
+      binDelta[bin++] = 0.0f;
     }
     for (int i = 1; i < Bands-1 && bin < (FFT_LENGTH/2)-1 && bandfrqs[i+1] < asrate/2; ++i) {
-      float last_bin = bin;
-      float next_bin = (bandfrqs[i+1])/hz_per_bin;
-      while (bin <= next_bin) {
-        bin_base[bin] = i;
-        bin_delta[bin] = cast(float)(bin-last_bin)/cast(float)(next_bin-last_bin);
+      float lastBin = bin;
+      float nextBin = (bandfrqs[i+1])/hzPerBin;
+      while (bin <= nextBin) {
+        binBase[bin] = i;
+        binDelta[bin] = cast(float)(bin-lastBin)/cast(float)(nextBin-lastBin);
         ++bin;
       }
     }
     //{ import core.stdc.stdio; printf("bin=%d (%d)\n", bin, FFT_LENGTH/2); }
     for (; bin < FFT_LENGTH/2; ++bin) {
-      bin_base[bin] = Bands-1;
-      bin_delta[bin] = 0.0f;
+      binBase[bin] = Bands-1;
+      binDelta[bin] = 0.0f;
     }
   }
 
   void cleanup () {
-    xfree(in_fifo);
-    xfree(out_fifo);
-    xfree(out_accum);
+    xfree(inFifo);
+    xfree(outFifo);
+    xfree(outAccum);
     xfree(realx);
     xfree(comp);
     xfree(window);
-    xfree(bin_base);
-    xfree(bin_delta);
-    xfree(db_table);
+    xfree(binBase);
+    xfree(binDelta);
+    xfree(dbtable);
     version(FFTW3) {
       //??? no need to do FFTW cleanup?
     } else {
-      kiss_fft_free(plan_rc);
-      kiss_fft_free(plan_cr);
-      plan_rc = null;
-      plan_cr = null;
+      kiss_fft_free(planRC);
+      kiss_fft_free(planCR);
+      //planRC = null;
+      //planCR = null;
     }
   }
 
@@ -171,29 +171,29 @@ public:
     foreach (immutable i; 0..Bands) {
       int gain_idx = cast(int)((gains.ptr[i]*10)+700);
       if (gain_idx < 0) gain_idx = 0; else if (gain_idx > 999) gain_idx = 999;
-      gains.ptr[i] = db_table[gain_idx];
+      gains.ptr[i] = dbtable[gain_idx];
     }
 
     // calculate coefficients for each bin of FFT
     coefs[0] = 0.0f;
     for (int bin = 1; bin < FFT_LENGTH/2-1; ++bin) {
-      coefs[bin] = ((1.0f-bin_delta[bin])*gains.ptr[bin_base[bin]])+(bin_delta[bin]*gains.ptr[bin_base[bin]+1]);
+      coefs[bin] = ((1.0f-binDelta[bin])*gains.ptr[binBase[bin]])+(binDelta[bin]*gains.ptr[binBase[bin]+1]);
     }
 
-    if (fifo_pos == 0) fifo_pos = Latency;
+    if (fifoPos == 0) fifoPos = Latency;
 
     foreach (immutable pos; 0..input.length/stride) {
-      in_fifo[fifo_pos] = input.ptr[pos*stride+ofs];
-      output.ptr[pos*stride+ofs] = out_fifo[fifo_pos-Latency];
-      ++fifo_pos;
+      inFifo[fifoPos] = input.ptr[pos*stride+ofs];
+      output.ptr[pos*stride+ofs] = outFifo[fifoPos-Latency];
+      ++fifoPos;
       // if the FIFO is full
-      if (fifo_pos >= FFT_LENGTH) {
-        fifo_pos = Latency;
+      if (fifoPos >= FFT_LENGTH) {
+        fifoPos = Latency;
         // window input FIFO
-        foreach (immutable i; 0..FFT_LENGTH) realx[i] = in_fifo[i]*window[i];
+        foreach (immutable i; 0..FFT_LENGTH) realx[i] = inFifo[i]*window[i];
         version(FFTW3) {
           // run the real->complex transform
-          fftwf_execute(plan_rc);
+          fftwf_execute(planRC);
           // multiply the bins magnitudes by the coeficients
           comp[0] *= coefs[0];
           foreach (immutable i; 1..FFT_LENGTH/2) {
@@ -201,13 +201,12 @@ public:
             comp[FFT_LENGTH-i] *= coefs[i];
           }
           // run the complex->real transform
-          fftwf_execute(plan_cr);
+          fftwf_execute(planCR);
         } else {
           // run the real->complex transform
-          //rfftw_one(plan_rc, realx, comp);
           realx[FFT_LENGTH..FFT_LENGTH+16] = 0; // just in case
           comp[FFT_LENGTH-16..FFT_LENGTH+16] = 0; // just in case
-          kiss_fftr(plan_rc, realx, cast(kiss_fft_cpx*)comp);
+          kiss_fftr(planRC, realx, cast(kiss_fft_cpx*)comp);
           // multiply the bins magnitudes by the coeficients
           comp[0*2+0] *= coefs[0];
           kiss_fft_cpx* cc = cast(kiss_fft_cpx*)comp;
@@ -218,16 +217,15 @@ public:
             cc[i].i *= coefs[i];
           }
           // run the complex->real transform
-          //rfftw_one(plan_cr, comp, realx);
-          kiss_fftri(plan_cr, cast(const(kiss_fft_cpx)*)comp, realx);
+          kiss_fftri(planCR, cast(const(kiss_fft_cpx)*)comp, realx);
         }
         // window into the output accumulator
-        foreach (immutable i; 0..FFT_LENGTH) out_accum[i] += 0.9186162f*window[i]*realx[i]/(FFT_LENGTH*OVER_SAMP);
-        foreach (immutable i; 0..STEP_SIZE) out_fifo[i] = out_accum[i];
+        foreach (immutable i; 0..FFT_LENGTH) outAccum[i] += 0.9186162f*window[i]*realx[i]/(FFT_LENGTH*OVER_SAMP);
+        foreach (immutable i; 0..STEP_SIZE) outFifo[i] = outAccum[i];
         // shift output accumulator
-        memmove(out_accum, out_accum+STEP_SIZE, FFT_LENGTH*float.sizeof);
+        memmove(outAccum, outAccum+STEP_SIZE, FFT_LENGTH*float.sizeof);
         // shift input fifo
-        foreach (immutable i; 0..Latency) in_fifo[i] = in_fifo[i+STEP_SIZE];
+        foreach (immutable i; 0..Latency) inFifo[i] = inFifo[i+STEP_SIZE];
       }
     }
   }
@@ -248,32 +246,6 @@ private:
   }
 
 private:
-  /*
-  static T* xalloc(T) (uint count=1) nothrow @trusted @nogc {
-    import core.stdc.stdlib : malloc;
-    import core.stdc.string : memcpy, memset;
-    if (count == 0 || count > 1024*1024*8) assert(0, "wtf?!");
-    auto res = cast(T*)malloc(T.sizeof*count);
-    if (res is null) assert(0, "out of memory");
-    auto iv = typeid(T).initializer;
-    if (iv.ptr is null) {
-      memset(res, 0, T.sizeof*count);
-    } else if (iv.length == T.sizeof) {
-      foreach (immutable idx; 0..count) memcpy(res+idx, iv.ptr, T.sizeof);
-    } else if (iv.length == 0) {
-      memset(res, 0, T.sizeof*count);
-    } else if (iv.length%T.sizeof == 0) {
-      foreach (immutable idx; 0..count) {
-        auto dp = cast(ubyte*)(res+idx);
-        foreach (immutable c; 0..iv.length/T.sizeof) { memcpy(dp, iv.ptr, iv.length); dp += iv.length; }
-      }
-    } else {
-      assert(0, "!!!");
-    }
-    return res;
-  }
-  */
-
   static void zalloc(T) (ref T* res, uint count) nothrow @trusted @nogc {
     import core.stdc.stdlib : malloc;
     import core.stdc.string : memcpy, memset;
@@ -383,7 +355,7 @@ enum MAXFACTORS = 32;
 
 struct kiss_fft_state {
   int nfft;
-  int inverse;
+  bool inverse;
   int[2*MAXFACTORS] factors;
   kiss_fft_cpx[1] twiddles;
 }
@@ -649,12 +621,11 @@ private void kf_factor (int n, int* facbuf) {
  * and returns mem.
  *
  * If lenmem is not `null` and (`mem` is `null` or `*lenmem` is not large enough),
- *  then the function returns `null` and places the minimum cfg buffer size in `*lenmem`.
+ * then the function returns `null` and places the minimum cfg buffer size in `*lenmem`.
  */
-public kiss_fft_cfg kiss_fft_alloc (int nfft, int inverse_fft, void* mem, size_t* lenmem) {
+public kiss_fft_cfg kiss_fft_alloc (int nfft, bool inverse_fft, void* mem=null, size_t* lenmem=null) {
   kiss_fft_cfg st = null;
-  size_t memneeded = kiss_fft_state.sizeof+kiss_fft_cpx.sizeof*(nfft-1); /* twiddle factors*/
-
+  size_t memneeded = kiss_fft_state.sizeof+kiss_fft_cpx.sizeof*(nfft-1); // twiddle factors
   if (lenmem is null) {
     import core.stdc.stdlib : malloc;
     st = cast(kiss_fft_cfg)malloc(memneeded);
@@ -662,7 +633,7 @@ public kiss_fft_cfg kiss_fft_alloc (int nfft, int inverse_fft, void* mem, size_t
     if (mem !is null && *lenmem >= memneeded) st = cast(kiss_fft_cfg)mem;
     *lenmem = memneeded;
   }
-  if (st) {
+  if (st !is null) {
     st.nfft = nfft;
     st.inverse = inverse_fft;
     for (int i = 0; i < nfft; ++i) {
@@ -682,10 +653,11 @@ public kiss_fft_cfg kiss_fft_alloc (int nfft, int inverse_fft, void* mem, size_t
 /** If kiss_fft_alloc allocated a buffer, it is one contiguous
  * buffer and can be simply free()d when no longer needed
  */
-public void kiss_fft_free (void *p) {
+public void kiss_fft_free(T) (ref T* p) {
   if (p !is null) {
     import core.stdc.stdlib : free;
     free(p);
+    p = null;
   }
 }
 
@@ -757,7 +729,7 @@ struct kiss_fftr_state {
  *
  * If you don't care to allocate space, use mem = lenmem = null
  */
-public kiss_fftr_cfg kiss_fftr_alloc (int nfft, int inverse_fft, void* mem, size_t* lenmem) {
+public kiss_fftr_cfg kiss_fftr_alloc (int nfft, bool inverse_fft, void* mem=null, size_t* lenmem=null) {
   kiss_fftr_cfg st = null;
   size_t subsize, memneeded;
 
@@ -847,7 +819,7 @@ public void kiss_fftri (kiss_fftr_cfg st, const(kiss_fft_cpx)* freqdata, kiss_ff
   // input buffer timedata is stored row-wise
   int k, ncfft;
 
-  if (st.substate.inverse == 0) assert(0, "kiss fft usage error: improper alloc");
+  if (!st.substate.inverse) assert(0, "kiss fft usage error: improper alloc");
 
   ncfft = st.substate.nfft;
 
