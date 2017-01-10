@@ -116,7 +116,7 @@ public:
   EIDDR prevWasEIDDR;
   bool prevOpChangedFlags; /// did previous instruction affected F? used to better emulate SCF/CCF.
   bool evenM1; /// emulate 128K/Scorpion M1 contention?
-  bool bpHit; /// will be set if execution loop was stopped by breakpoint; no autoreset
+  bool bpHit; /// will be set if execution loop was stopped by breakpoint; autoreset
   PortContention portContentionType = PortContention.Normal; /// port contention style
 
 public:
@@ -173,7 +173,6 @@ public:
    *
    * Params:
    *  addr = port address
-   *  pio = access type
    *
    * Returns:
    *  readed byte from emulated port
@@ -185,7 +184,6 @@ public:
    *
    * Params:
    *  addr = port address
-   *  pio = access type
    *  value = byte to store
    *
    * Returns:
@@ -314,8 +312,8 @@ final:
       case 7: trueCC = (AF.f&Z80Flags.S) != 0; break;
       default:
     }`;
-    static bool is_repeated (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
-    static bool is_backward (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x08) != 0); }
+    static bool isRepeated (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
+    static bool isBackward (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x08) != 0); }
     ubyte opcode;
     bool gotDD, trueCC;
     int disp;
@@ -337,7 +335,7 @@ final:
       return res;
     }
 
-    /* main loop */
+    // main loop
     while ((nextEventTS < 0 || tstates < nextEventTS) && (tscount < 0 || tstates-tstart <= tscount)) {
       prevPC = origPC;
       origPC = PC;
@@ -349,10 +347,10 @@ final:
       }
       // process breakpoints
       if (bpmap[PC] && checkBreakpoint()) { bpHit = true; return tstates-tstart; }
-      /* read opcode -- OCR(4) */
-      /* t1: setting /MREQ & /RD */
-      /* t2: memory read */
-      /* t3, t4: decode command, increment R */
+      // read opcode -- OCR(4)
+      // t1: setting /MREQ & /RD
+      // t2: memory read
+      // t3, t4: decode command, increment R
       mixin(z80_contention!("PC", "4"));
       if (evenM1 && (tstates&0x01)) ++tstates;
       // read opcode
@@ -367,76 +365,77 @@ final:
       prevOpChangedFlagsXX = prevOpChangedFlags;
       prevOpChangedFlags = false;
       prevWasEIDDR = EIDDR.Normal;
-      disp = gotDD = false;
+      disp = 0;
+      gotDD = false;
       DD = &HL;
       if (halted) { --PC; continue; }
-      /* check for I[XY] prefix */
+      // check for I[XY] prefix
       if (opcode == 0xdd || opcode == 0xfd) {
         //TODO: generate this table in compile time
         static immutable uint[8] withIndexBmp = [0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00];
-        /* IX/IY prefix */
+        // IX/IY prefix
         DD = (opcode == 0xdd ? &IX : &IY);
-        /* read opcode -- OCR(4) */
+        // read opcode -- OCR(4)
         opcode = fetchOpcodeExt();
-        /* test if this instruction have (HL) */
+        // test if this instruction have (HL)
         if (withIndexBmp[opcode>>5]&(1<<(opcode&0x1f))) {
-          /* 3rd byte is always DISP here */
+          // 3rd byte is always DISP here
           disp = z80_peekb_3ts_args();
           if (disp > 127) disp -= 256;
           ++PC;
           MEMPTR = (cast(int)DD.w+disp)&0xffff;
         } else if (opcode == 0xdd && opcode == 0xfd) {
-          /* double prefix; restart main loop */
+          // double prefix; restart main loop
           prevWasEIDDR = EIDDR.BlockInt;
           prevOpChangedFlags = prevOpChangedFlagsXX; // dunno
           continue;
         }
         gotDD = true;
       }
-      /* ED-prefixed instructions */
+      // ED-prefixed instructions
       if (opcode == 0xed) {
-        DD = &HL; /* п╟ пҐп╟я│ -- я─п╟я┌я▄! */
-        /* read opcode -- OCR(4) */
+        DD = &HL; // а нас -- рать!
+        // read opcode -- OCR(4)
         opcode = fetchOpcodeExt();
         switch (opcode) {
-          /* LDI, LDIR, LDD, LDDR */
+          // LDI, LDIR, LDD, LDDR
           case 0xa0: case 0xb0: case 0xa8: case 0xb8:
             tmpB = z80_peekb_3ts(HL);
             z80_pokeb_3ts(DE, tmpB);
-            /*MWR(5)*/
+            // MWR(5)
             mixin(z80_contention_by1ts!("DE", 2));
             --BC;
             tmpB = (tmpB+AF.a)&0xff;
             prevOpChangedFlags = true;
-            AF.f = /* BOO! FEAR THE MIGHTY BITS! */
+            AF.f = // BOO! FEAR THE MIGHTY BITS!
               (tmpB&Z80Flags.F3)|(AF.f&(Z80Flags.C|Z80Flags.Z|Z80Flags.S))|
               (BC != 0 ? Z80Flags.PV : 0)|
               (tmpB&0x02 ? Z80Flags.F5 : 0);
-            if (is_repeated(opcode)) {
+            if (isRepeated(opcode)) {
               if (BC != 0) {
-                /*IOP(5)*/
+                // IOP(5)
                 mixin(z80_contention_by1ts!("DE", 5));
-                /* do it again */
+                // do it again
                 PC -= 2;
                 MEMPTR = (PC+1)&0xffff;
               }
             }
-            if (!is_backward(opcode)) { ++HL; ++DE; } else { --HL; --DE; }
+            if (!isBackward(opcode)) { ++HL; ++DE; } else { --HL; --DE; }
             break;
-          /* CPI, CPIR, CPD, CPDR */
+          // CPI, CPIR, CPD, CPDR
           case 0xa1: case 0xb1: case 0xa9: case 0xb9:
-            /* MEMPTR */
-            if (is_repeated(opcode) && (!(BC == 1 || memByte(HL) == AF.a))) {
+            // MEMPTR
+            if (isRepeated(opcode) && (!(BC == 1 || memByte(HL) == AF.a))) {
               MEMPTR = cast(ushort)(origPC+1);
             } else {
-              MEMPTR = cast(ushort)(MEMPTR+(is_backward(opcode) ? -1 : 1));
+              MEMPTR = cast(ushort)(MEMPTR+(isBackward(opcode) ? -1 : 1));
             }
             tmpB = z80_peekb_3ts(HL);
-            /*IOP(5)*/
+            // IOP(5)
             mixin(z80_contention_by1ts!("HL", 5));
             --BC;
             prevOpChangedFlags = true;
-            AF.f = /* BOO! FEAR THE MIGHTY BITS! */
+            AF.f = // BOO! FEAR THE MIGHTY BITS!
               Z80Flags.N|
               (AF.f&Z80Flags.C)|
               (BC != 0 ? Z80Flags.PV : 0)|
@@ -445,39 +444,39 @@ final:
             AF.f |= (tmpB == 0 ? Z80Flags.Z : 0)|(tmpB&Z80Flags.S);
             if (AF.f&Z80Flags.H) tmpB = (cast(ushort)tmpB-1)&0xff;
             AF.f |= (tmpB&Z80Flags.F3)|(tmpB&0x02 ? Z80Flags.F5 : 0);
-            if (is_repeated(opcode)) {
-              /* repeated */
+            if (isRepeated(opcode)) {
+              // repeated
               if ((AF.f&(Z80Flags.Z|Z80Flags.PV)) == Z80Flags.PV) {
-                /*IOP(5)*/
+                // IOP(5)
                 mixin(z80_contention_by1ts!("HL", 5));
-                /* do it again */
+                // do it again
                 PC -= 2;
               }
             }
-            if (is_backward(opcode)) --HL; else ++HL;
+            if (isBackward(opcode)) --HL; else ++HL;
             break;
-          /* OUTI, OTIR, OUTD, OTDR */
+          // OUTI, OTIR, OUTD, OTDR
           case 0xa3: case 0xb3: case 0xab: case 0xbb:
             --BC.b;
-            /* fallthru */
+            // fallthru
             goto case 0xa2;
-          /* INI, INIR, IND, INDR */
+          // INI, INIR, IND, INDR
           case 0xa2: case 0xb2: case 0xaa: case 0xba:
-            MEMPTR = cast(ushort)(BC+(is_backward(opcode) ? -1 : 1));
-            /*OCR(5)*/
+            MEMPTR = cast(ushort)(BC+(isBackward(opcode) ? -1 : 1));
+            // OCR(5)
             mixin(z80_contention_by1ts_ir!(1));
             if (opcode&0x01) {
-              /* OUT* */
-              tmpB = z80_peekb_3ts(HL);/*MRD(3)*/
+              // OUT*
+              tmpB = z80_peekb_3ts(HL); // MRD(3)
               z80_port_write(BC, tmpB);
-              tmpW = cast(ushort)(HL+(is_backward(opcode) ? -1 : 1));
+              tmpW = cast(ushort)(HL+(isBackward(opcode) ? -1 : 1));
               tmpC = (tmpB+tmpW)&0xff;
             } else {
-              /* IN* */
+              // IN*
               tmpB = z80_port_read(BC);
-              z80_pokeb_3ts(HL, tmpB);/*MWR(3)*/
+              z80_pokeb_3ts(HL, tmpB); // MWR(3)
               --BC.b;
-              if (is_backward(opcode)) tmpC = (cast(int)tmpB+cast(int)BC.c-1)&0xff; else tmpC = (tmpB+BC.c+1)&0xff;
+              if (isBackward(opcode)) tmpC = (cast(int)tmpB+cast(int)BC.c-1)&0xff; else tmpC = (tmpB+BC.c+1)&0xff;
             }
             prevOpChangedFlags = true;
             AF.f =
@@ -485,24 +484,24 @@ final:
               (tmpC < tmpB ? Z80Flags.H|Z80Flags.C : 0)|
               tblParity.ptr[(tmpC&0x07)^BC.b]|
               tblSZ53.ptr[BC.b];
-            if (is_repeated(opcode)) {
-              /* repeating commands */
+            if (isRepeated(opcode)) {
+              // repeating commands
               if (BC.b != 0) {
                 ushort a = (opcode&0x01 ? BC : HL);
-                /*IOP(5)*/
+                // IOP(5)
                 mixin(z80_contention_by1ts!("a", 5));
-                /* do it again */
+                // do it again
                 PC -= 2;
               }
             }
-            if (is_backward(opcode)) --HL; else ++HL;
+            if (isBackward(opcode)) --HL; else ++HL;
             break;
-          /* not strings, but some good instructions anyway */
+          // not strings, but some good instructions anyway
           default:
             if ((opcode&0xc0) == 0x40) {
-              /* 0x40...0x7f */
+              // 0x40...0x7f
               final switch (opcode&0x07) {
-                /* IN r8,(C) */
+                // IN r8,(C)
                 case 0:
                   MEMPTR = cast(ushort)(BC+1);
                   tmpB = z80_port_read(BC);
@@ -515,11 +514,11 @@ final:
                     case 3: DE.e = tmpB; break;
                     case 4: HL.h = tmpB; break;
                     case 5: HL.l = tmpB; break;
-                    case 6: break; /* 6 affects only flags */
+                    case 6: break; // 6 affects only flags
                     case 7: AF.a = tmpB; break;
                   }
                   break;
-                /* OUT (C),r8 */
+                // OUT (C),r8
                 case 1:
                   MEMPTR = cast(ushort)(BC+1);
                   final switch ((opcode>>3)&0x07) {
@@ -534,9 +533,9 @@ final:
                   }
                   z80_port_write(BC, tmpB);
                   break;
-                /* SBC HL,rr/ADC HL,rr */
+                // SBC HL,rr/ADC HL,rr
                 case 2:
-                  /*IOP(4),IOP(3)*/
+                  // IOP(4),IOP(3)
                   mixin(z80_contention_by1ts_ir!(7));
                   switch ((opcode>>4)&0x03) {
                     case 0: tmpW = BC; break;
@@ -546,12 +545,12 @@ final:
                   }
                   HL = (opcode&0x08 ? ADC_DD(tmpW, HL) : SBC_DD(tmpW, HL));
                   break;
-                /* LD (nn),rr/LD rr,(nn) */
+                // LD (nn),rr/LD rr,(nn)
                 case 3:
                   tmpW = z80_getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
                   if (opcode&0x08) {
-                    /* LD rr,(nn) */
+                    // LD rr,(nn)
                     final switch ((opcode>>4)&0x03) {
                       case 0: BC = z80_peekw_6ts(tmpW); break;
                       case 1: DE = z80_peekw_6ts(tmpW); break;
@@ -559,7 +558,7 @@ final:
                       case 3: SP = z80_peekw_6ts(tmpW); break;
                     }
                   } else {
-                    /* LD (nn),rr */
+                    // LD (nn),rr
                     final switch ((opcode>>4)&0x03) {
                       case 0: z80_pokew_6ts(tmpW, BC); break;
                       case 1: z80_pokew_6ts(tmpW, DE); break;
@@ -568,27 +567,27 @@ final:
                     }
                   }
                   break;
-                /* NEG */
+                // NEG
                 case 4:
                   tmpB = AF.a;
                   AF.a = 0;
                   SUB_A(tmpB);
                   break;
-                /* RETI/RETN */
+                // RETI/RETN
                 case 5:
-                  /*RETI: 0x4d, 0x5d, 0x6d, 0x7d*/
-                  /*RETN: 0x45, 0x55, 0x65, 0x75*/
+                  // RETI: 0x4d, 0x5d, 0x6d, 0x7d
+                  // RETN: 0x45, 0x55, 0x65, 0x75
                   IFF1 = IFF2;
                   MEMPTR = PC = z80_pop_6ts();
                   if (opcode&0x08) {
-                    /* RETI */
+                    // RETI
                     if (trapRETI(opcode)) return tstates-tstart;
                   } else {
-                    /* RETN */
+                    // RETN
                     if (trapRETN(opcode)) return tstates-tstart;
                   }
                   break;
-                /* IM n */
+                // IM n
                 case 6:
                   switch (opcode) {
                     case 0x56: case 0x76: mIM = 1; break;
@@ -596,43 +595,43 @@ final:
                     default: mIM = 0; break;
                   }
                   break;
-                /* specials */
+                // specials
                 case 7:
                   final switch (opcode) {
-                    /* LD I,A */
+                    // LD I,A
                     case 0x47:
-                      /*OCR(5)*/
+                      // OCR(5)
                       mixin(z80_contention_by1ts_ir!(1));
                       I = AF.a;
                       break;
-                    /* LD R,A */
+                    // LD R,A
                     case 0x4f:
-                      /*OCR(5)*/
+                      // OCR(5)
                       mixin(z80_contention_by1ts_ir!(1));
                       R = AF.a;
                       break;
-                    /* LD A,I */
+                    // LD A,I
                     case 0x57: LD_A_IR(I); break;
-                    /* LD A,R */
+                    // LD A,R
                     case 0x5f: LD_A_IR(R); break;
-                    /* RRD */
+                    // RRD
                     case 0x67: RRD_A(); break;
-                    /* RLD */
+                    // RLD
                     case 0x6F: RLD_A(); break;
                   }
               }
             } else {
-              /* slt and other traps */
+              // slt and other traps
               if (trapED(opcode)) return tstates-tstart;
             }
             break;
         }
         continue;
-      } /* 0xed done */
-      /* CB-prefixed instructions */
+      } // 0xed done
+      // CB-prefixed instructions
       if (opcode == 0xcb) {
-        /* shifts and bit operations */
-        /* read opcode -- OCR(4) */
+        // shifts and bit operations
+        // read opcode -- OCR(4)
         if (!gotDD) {
           opcode = fetchOpcodeExt();
         } else {
@@ -673,15 +672,15 @@ final:
           default:
             final switch ((opcode>>6)&0x03) {
               case 1: BIT((opcode>>3)&0x07, tmpB, gotDD, ((opcode&0x07) == 6)); break;
-              case 2: tmpB &= ~(1<<((opcode>>3)&0x07)); break; /* RES */
-              case 3: tmpB |= (1<<((opcode>>3)&0x07)); break; /* SET */
+              case 2: tmpB &= ~(1<<((opcode>>3)&0x07)); break; // RES
+              case 3: tmpB |= (1<<((opcode>>3)&0x07)); break; // SET
             }
             break;
         }
         if ((opcode&0xc0) != 0x40) {
-          /* BITs are not welcome here */
+          // BITs are not welcome here
           if (gotDD) {
-            /* tmpW was set earlier */
+            // tmpW was set earlier
             if ((opcode&0x07) != 6) z80_pokeb_3ts(tmpW, tmpB);
           }
           final switch (opcode&0x07) {
@@ -696,18 +695,18 @@ final:
           }
         }
         continue;
-      } /* 0xcb done */
-      /* normal things */
+      } // 0xcb done
+      // normal things
       final switch (opcode&0xc0) {
-        /* 0x00..0x3F */
+        // 0x00..0x3F
         case 0x00:
           final switch (opcode&0x07) {
-            /* misc,DJNZ,JR,JR cc */
+            // misc,DJNZ,JR,JR cc
             case 0:
               if (opcode&0x30) {
-                /* branches */
+                // branches
                 if (opcode&0x20) {
-                  /* JR cc */
+                  // JR cc
                   switch ((opcode>>3)&0x03) {
                     case 0: trueCC = (AF.f&Z80Flags.Z) == 0; break;
                     case 1: trueCC = (AF.f&Z80Flags.Z) != 0; break;
@@ -716,24 +715,24 @@ final:
                     default: trueCC = 0; break;
                   }
                 } else {
-                  /* DJNZ/JR */
+                  // DJNZ/JR
                   if ((opcode&0x08) == 0) {
-                    /* DJNZ */
-                    /*OCR(5)*/
+                    // DJNZ
+                    // OCR(5)
                     mixin(z80_contention_by1ts_ir!(1));
                     --BC.b;
                     trueCC = (BC.b != 0);
                   } else {
-                    /* JR */
+                    // JR
                     trueCC = 1;
                   }
                 }
                 //???disp = z80_peekb_3ts_args(); // FUSE reads it only if condition was taken
                 if (trueCC) {
-                  /* execute branch (relative) */
+                  // execute branch (relative)
                   disp = z80_peekb_3ts_args(); // FUSE reads it only if condition was taken
-                  /*IOP(5)*/
-                  if (disp > 127) disp -= 256; /* convert to int8_t */
+                  // IOP(5)
+                  if (disp > 127) disp -= 256; // convert to int8_t
                   mixin(z80_contention_by1ts_pc!(5, "ulacont"));
                   ++PC;
                   PC += disp;
@@ -743,15 +742,15 @@ final:
                   ++PC;
                 }
               } else {
-                /* EX AF,AF' or NOP */
+                // EX AF,AF' or NOP
                 if (opcode != 0) exafaf();
               }
               break;
-            /* LD rr,nn/ADD HL,rr */
+            // LD rr,nn/ADD HL,rr
             case 1:
               if (opcode&0x08) {
-                /* ADD HL,rr */
-                /*IOP(4),IOP(3)*/
+                // ADD HL,rr
+                // IOP(4),IOP(3)
                 mixin(z80_contention_by1ts_ir!(7));
                 final switch ((opcode>>4)&0x03) {
                   case 0: DD.w = ADD_DD(BC, DD.w); break;
@@ -760,7 +759,7 @@ final:
                   case 3: DD.w = ADD_DD(SP, DD.w); break;
                 }
               } else {
-                /* LD rr,nn */
+                // LD rr,nn
                 tmpW = z80_getpcw(0);
                 final switch ((opcode>>4)&0x03) {
                   case 0: BC = tmpW; break;
@@ -770,37 +769,37 @@ final:
                 }
               }
               break;
-            /* LD xxx,xxx */
+            // LD xxx,xxx
             case 2:
               final switch ((opcode>>3)&0x07) {
-                /* LD (BC),A */
+                // LD (BC),A
                 case 0: z80_pokeb_3ts(BC, AF.a); MEMPTR.l = (BC.c+1)&0xff; MEMPTR.h = AF.a; break;
-                /* LD A,(BC) */
+                // LD A,(BC)
                 case 1: AF.a = z80_peekb_3ts(BC); MEMPTR = (BC+1)&0xffff; break;
-                /* LD (DE),A */
+                // LD (DE),A
                 case 2: z80_pokeb_3ts(DE, AF.a); MEMPTR.l = (DE.e+1)&0xff; MEMPTR.h = AF.a; break;
-                /* LD A,(DE) */
+                // LD A,(DE)
                 case 3: AF.a = z80_peekb_3ts(DE); MEMPTR = (DE+1)&0xffff; break;
-                /* LD (nn),HL */
+                // LD (nn),HL
                 case 4:
                   tmpW = z80_getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
                   z80_pokew_6ts(tmpW, DD.w);
                   break;
-                /* LD HL,(nn) */
+                // LD HL,(nn)
                 case 5:
                   tmpW = z80_getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
                   DD.w = z80_peekw_6ts(tmpW);
                   break;
-                /* LD (nn),A */
+                // LD (nn),A
                 case 6:
                   tmpW = z80_getpcw(0);
                   MEMPTR.l = (tmpW+1)&0xff;
                   MEMPTR.h = AF.a;
                   z80_pokeb_3ts(tmpW, AF.a);
                   break;
-                /* LD A,(nn) */
+                // LD A,(nn)
                 case 7:
                   tmpW = z80_getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
@@ -808,12 +807,12 @@ final:
                   break;
               }
               break;
-            /* INC rr/DEC rr */
+            // INC rr/DEC rr
             case 3:
-              /*OCR(6)*/
+              // OCR(6)
               mixin(z80_contention_by1ts_ir!(2));
               if (opcode&0x08) {
-                /*DEC*/
+                // DEC
                 final switch ((opcode>>4)&0x03) {
                   case 0: --BC; break;
                   case 1: --DE; break;
@@ -821,7 +820,7 @@ final:
                   case 3: --SP; break;
                 }
               } else {
-                /*INC*/
+                // INC
                 final switch ((opcode>>4)&0x03) {
                   case 0: ++BC; break;
                   case 1: ++DE; break;
@@ -830,7 +829,7 @@ final:
                 }
               }
               break;
-            /* INC r8 */
+            // INC r8
             case 4:
               final switch ((opcode>>3)&0x07) {
                 case 0: BC.b = INC8(BC.b); break;
@@ -850,7 +849,7 @@ final:
                 case 7: AF.a = INC8(AF.a); break;
               }
               break;
-            /* DEC r8 */
+            // DEC r8
             case 5:
               final switch ((opcode>>3)&0x07) {
                 case 0: BC.b = DEC8(BC.b); break;
@@ -870,7 +869,7 @@ final:
                 case 7: AF.a = DEC8(AF.a); break;
               }
               break;
-            /* LD r8,n */
+            // LD r8,n
             case 6:
               tmpB = z80_peekb_3ts_args();
               ++PC;
@@ -889,7 +888,7 @@ final:
                 case 7: AF.a = tmpB; break;
               }
               break;
-            /* swim-swim-hungry */
+            // swim-swim-hungry
             case 7:
               final switch ((opcode>>3)&0x07) {
                 case 0: RLCA(); break;
@@ -897,12 +896,12 @@ final:
                 case 2: RLA(); break;
                 case 3: RRA(); break;
                 case 4: DAA(); break;
-                case 5: /* CPL */
+                case 5: // CPL
                   AF.a ^= 0xff;
                   prevOpChangedFlags = true;
                   AF.f = (AF.a&Z80Flags.F35)|(Z80Flags.N|Z80Flags.H)|(AF.f&(Z80Flags.C|Z80Flags.PV|Z80Flags.Z|Z80Flags.S));
                   break;
-                case 6: /* SCF */
+                case 6: // SCF
                   version(Zymosis_Testing) {
                     enum fff = 0;
                   } else {
@@ -914,7 +913,7 @@ final:
                   AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35)|Z80Flags.C;
                   prevOpChangedFlags = true;
                   break;
-                case 7: /* CCF */
+                case 7: // CCF
                   version(Zymosis_Testing) {
                     enum fff = 0;
                   } else {
@@ -938,9 +937,9 @@ final:
               break;
           }
           break;
-        /* 0x40..0x7F (LD r8,r8) */
+        // 0x40..0x7F: LD r8,r8
         case 0x40:
-          if (opcode == 0x76) { halted = true; --PC; continue; } /* HALT */
+          if (opcode == 0x76) { halted = true; --PC; continue; } // HALT
           rsrc = (opcode&0x07);
           rdst = ((opcode>>3)&0x07);
           final switch (rsrc) {
@@ -972,7 +971,7 @@ final:
             case 7: AF.a = tmpB; break;
           }
           break;
-        /* 0x80..0xBF (ALU A,r8) */
+        // 0x80..0xBF: ALU A,r8
         case 0x80:
           final switch (opcode&0x07) {
             case 0: tmpB = BC.b; break;
@@ -999,35 +998,35 @@ final:
             case 7: CP_A(tmpB); break;
           }
           break;
-        /* 0xC0..0xFF */
+        // 0xC0..0xFF
         case 0xC0:
           final switch (opcode&0x07) {
-            /* RET cc */
+            // RET cc
             case 0:
               mixin(z80_contention_by1ts_ir!(1));
               mixin(SET_TRUE_CC);
               if (trueCC) MEMPTR = PC = z80_pop_6ts();
               break;
-            /* POP rr/special0 */
+            // POP rr/special0
             case 1:
               if (opcode&0x08) {
-                /* special 0 */
+                // special 0
                 final switch ((opcode>>4)&0x03) {
-                  /* RET */
+                  // RET
                   case 0: MEMPTR = PC = z80_pop_6ts(); break;
-                  /* EXX */
+                  // EXX
                   case 1: exx(); break;
-                  /* JP (HL) */
+                  // JP (HL)
                   case 2: PC = DD.w; break;
-                  /* LD SP,HL */
+                  // LD SP,HL
                   case 3:
-                    /*OCR(6)*/
+                    // OCR(6)
                     mixin(z80_contention_by1ts_ir!(2));
                     SP = DD.w;
                     break;
                 }
               } else {
-                /* POP rr */
+                // POP rr
                 tmpW = z80_pop_6ts();
                 final switch ((opcode>>4)&0x03) {
                   case 0: BC = tmpW; break;
@@ -1037,19 +1036,19 @@ final:
                 }
               }
               break;
-            /* JP cc,nn */
+            // JP cc,nn
             case 2:
               mixin(SET_TRUE_CC);
               MEMPTR = z80_getpcw_cc(0, trueCC);
               //MEMPTR = z80_getpcw(0);
               if (trueCC) PC = MEMPTR;
               break;
-            /* special1/special3 */
+            // special1/special3
             case 3:
               final switch ((opcode>>3)&0x07) {
-                /* JP nn */
+                // JP nn
                 case 0: MEMPTR = PC = z80_getpcw(0); break;
-                /* OUT (n),A */
+                // OUT (n),A
                 case 2:
                   tmpW = z80_peekb_3ts_args();
                   ++PC;
@@ -1058,7 +1057,7 @@ final:
                   tmpW |= AF.a<<8;
                   z80_port_write(tmpW, AF.a);
                   break;
-                /* IN A,(n) */
+                // IN A,(n)
                 case 3:
                   tmpB = z80_peekb_3ts_args();
                   tmpW = cast(ushort)((AF.a<<8)|tmpB);
@@ -1066,29 +1065,29 @@ final:
                   MEMPTR = (tmpW+1)&0xffff;
                   AF.a = z80_port_read(tmpW);
                   break;
-                /* EX (SP),HL */
+                // EX (SP),HL
                 case 4:
-                  /*SRL(3),SRH(4)*/
+                  // SRL(3),SRH(4)
                   tmpW = z80_peekw_6ts(SP);
                   mixin(z80_contention_by1ts!("(SP+1)&0xffff", 1));
-                  /*SWL(3),SWH(5)*/
+                  // SWL(3),SWH(5)
                   z80_pokew_6ts_inverted(SP, DD.w);
                   mixin(z80_contention_by1ts!("SP", 2));
                   MEMPTR = DD.w = tmpW;
                   break;
-                /* EX DE,HL */
+                // EX DE,HL
                 case 5:
                   tmpW = DE;
                   DE = HL;
                   HL = tmpW;
                   break;
-                /* DI */
+                // DI
                 case 6: IFF1 = IFF2 = 0; break;
-                /* EI */
+                // EI
                 case 7: IFF1 = IFF2 = 1; prevWasEIDDR = EIDDR.BlockInt; break;
               }
               break;
-            /* CALL cc,nn */
+            // CALL cc,nn
             case 4:
               mixin(SET_TRUE_CC);
               MEMPTR = z80_getpcw_cc((trueCC ? 1 : 0), trueCC);
@@ -1097,18 +1096,18 @@ final:
                 PC = MEMPTR;
               }
               break;
-            /* PUSH rr/special2 */
+            // PUSH rr/special2
             case 5:
               if (opcode&0x08) {
                 if (((opcode>>4)&0x03) == 0) {
-                  /* CALL */
+                  // CALL
                   MEMPTR = tmpW = z80_getpcw(1);
                   z80_push_6ts(PC);
                   PC = tmpW;
                 }
               } else {
-                /* PUSH rr */
-                /*OCR(5)*/
+                // PUSH rr
+                // OCR(5)
                 mixin(z80_contention_by1ts_ir!(1));
                 switch ((opcode>>4)&0x03) {
                   case 0: tmpW = BC; break;
@@ -1119,7 +1118,7 @@ final:
                 z80_push_6ts(tmpW);
               }
               break;
-            /* ALU A,n */
+            // ALU A,n
             case 6:
               tmpB = z80_peekb_3ts_args();
               ++PC;
@@ -1134,16 +1133,16 @@ final:
                 case 7: CP_A(tmpB); break;
               }
               break;
-            /* RST nnn */
+            // RST nnn
             case 7:
-              /*OCR(5)*/
+              // OCR(5)
               mixin(z80_contention_by1ts_ir!(1));
               z80_push_6ts(PC);
               MEMPTR = PC = opcode&0x38;
               break;
           }
           break;
-      } /* end switch */
+      } // end switch
     }
     return tstates-tstart;
   }
@@ -1198,46 +1197,46 @@ final:
   int intr () {
     int ots = tstates;
     prevOpChangedFlags = false;
-    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* Z80 bug, NMOS only */
-    if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; /* not accepted */
+    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } // Z80 bug, NMOS only
+    if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; // not accepted
     if (halted) { halted = false; ++PC; }
-    IFF1 = IFF2 = false; /* disable interrupts */
+    IFF1 = IFF2 = false; // disable interrupts
     final switch (mIM&0x03) {
       case 3: /* ??? */ /*IM = 0;*/ /* fallthru */ goto case 0;
-      case 0: /* take instruction from the bus (for now we assume that reading from bus always returns 0xff) */
-        /* with a CALL nnnn on the data bus, it takes 19 cycles: */
-        /* M1 cycle: 7 T to acknowledge interrupt (where exactly data bus reading occures?) */
-        /* M2 cycle: 3 T to read low byte of 'nnnn' from data bus */
-        /* M3 cycle: 3 T to read high byte of 'nnnn' and decrement SP */
-        /* M4 cycle: 3 T to write high byte of PC to the stack and decrement SP */
-        /* M5 cycle: 3 T to write low byte of PC and jump to 'nnnn' */
-        /* BUT! FUSE says this: */
-        /* Only the first byte is provided directly to the Z80: all remaining bytes */
-        /* of the instruction are fetched from memory using PC, which is incremented as normal. */
+      case 0: // take instruction from the bus (for now we assume that reading from bus always returns 0xff)
+        // with a CALL nnnn on the data bus, it takes 19 cycles:
+        // M1 cycle: 7 T to acknowledge interrupt (where exactly data bus reading occures?)
+        // M2 cycle: 3 T to read low byte of 'nnnn' from data bus
+        // M3 cycle: 3 T to read high byte of 'nnnn' and decrement SP
+        // M4 cycle: 3 T to write high byte of PC to the stack and decrement SP
+        // M5 cycle: 3 T to write low byte of PC and jump to 'nnnn'
+        // BUT! FUSE says this:
+        // Only the first byte is provided directly to the Z80: all remaining bytes
+        // of the instruction are fetched from memory using PC, which is incremented as normal.
         tstates += 6;
-        /* fallthru */
+        // fallthru
         goto case 1;
-      case 1: /* just do RST #38 */
+      case 1: // just do RST #38
         mixin(IncRMixin);
-        tstates += 7; /* M1 cycle: 7 T to acknowledge interrupt and decrement SP */
-        /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
-        /* M3 cycle: 3 T states write the low byte of PC and jump to #0038 */
+        tstates += 7; // M1 cycle: 7 T to acknowledge interrupt and decrement SP
+        // M2 cycle: 3 T states write high byte of PC to the stack and decrement SP
+        // M3 cycle: 3 T states write the low byte of PC and jump to #0038
         z80_push_6ts(PC);
         MEMPTR = PC = 0x38;
         break;
       case 2:
         mixin(IncRMixin);
-        tstates += 7; /* M1 cycle: 7 T to acknowledge interrupt and decrement SP */
-        /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
-        /* M3 cycle: 3 T states write the low byte of PC */
+        tstates += 7; // M1 cycle: 7 T to acknowledge interrupt and decrement SP
+        // M2 cycle: 3 T states write high byte of PC to the stack and decrement SP
+        // M3 cycle: 3 T states write the low byte of PC
         z80_push_6ts(PC);
-        /* M4 cycle: 3 T to read high byte from the interrupt vector */
-        /* M5 cycle: 3 T to read low byte from bus and jump to interrupt routine */
+        // M4 cycle: 3 T to read high byte from the interrupt vector
+        // M5 cycle: 3 T to read low byte from bus and jump to interrupt routine
         ushort a = ((cast(ushort)I)<<8)|0xff;
         MEMPTR = PC = z80_peekw_6ts(a);
         break;
     }
-    return tstates-ots; /* accepted */
+    return tstates-ots; // accepted
   }
 
   /** Initiate non-maskable interrupt.
@@ -1252,15 +1251,15 @@ final:
   int nmi () {
     int ots = tstates;
     prevOpChangedFlags = false;
-    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } /* emulate Z80 bug with interrupted LD A,I/R, NMOS only */
-    if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; /* not accepted */
-    /*prevWasEIDDR = EIDDR.Normal;*/ /* don't care */
+    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } // emulate Z80 bug with interrupted LD A,I/R, NMOS only
+    if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; // not accepted
+    /*prevWasEIDDR = EIDDR.Normal;*/ // don't care
     if (halted) { halted = false; ++PC; }
     mixin(IncRMixin);
-    IFF1 = false; /* IFF2 is not changed */
-    tstates += 5; /* M1 cycle: 5 T states to do an opcode read and decrement SP */
-    /* M2 cycle: 3 T states write high byte of PC to the stack and decrement SP */
-    /* M3 cycle: 3 T states write the low byte of PC and jump to #0066 */
+    IFF1 = false; // IFF2 is not changed
+    tstates += 5; // M1 cycle: 5 T states to do an opcode read and decrement SP
+    // M2 cycle: 3 T states write high byte of PC to the stack and decrement SP
+    // M3 cycle: 3 T states write the low byte of PC and jump to #0066
     z80_push_6ts(PC);
     MEMPTR = PC = 0x66;
     return tstates-ots;
@@ -1335,8 +1334,8 @@ private:
   static string z80_contention_by1ts_ir(ubyte cnt) () { return z80_contention_by1ts!("((cast(ushort)I)<<8)|R", cnt, "ulacontnomreq"); }
   static string z80_contention_by1ts_pc(ubyte cnt, string carr) () { return z80_contention_by1ts!("PC", cnt, carr); }
 
-private nothrow @trusted @nogc:
-  /******************************************************************************/
+protected nothrow @trusted @nogc:
+  /* ************************************************************************** */
   /* simulate contented memory access */
   /* (tstates = tstates+contention+atstates)*cnt */
   /* (ushort addr, int tstates, MemIO mio) */
@@ -1380,7 +1379,7 @@ private nothrow @trusted @nogc:
   }
   */
 
-  /******************************************************************************/
+  /* ************************************************************************** */
   version(Zymosis_Testing) {
     enum PortOpMixin(string ope, string opl, string pccf) =
       "portContention(port, 1, "~pccf~", true); /* early */"
@@ -1873,7 +1872,7 @@ public:
   }
 
   /// indirect memory access type
-  enum ZOIMemIO {
+  enum ZOIMemIO : int {
     None = -666, ///
     SP = -6, ///
     BC = -5, ///
@@ -1884,7 +1883,7 @@ public:
   }
 
   /// indirect jump type
-  enum ZOIJump {
+  enum ZOIJump : int {
     None = -666, ///
     RET = -4, ///
     IY = -3, ///
@@ -1893,7 +1892,7 @@ public:
   }
 
   /// port i/o type
-  enum ZOIPortIO {
+  enum ZOIPortIO : int {
     None = -666, ///
     BC = -1, ///
     BCM1 = -2 /// (B-1)C, for OUT*
@@ -1909,42 +1908,33 @@ public:
 
   /// opcode info
   struct ZOInfo {
-    int len; /// instruction length
-    int memrwword; /// !0: reading word
-    int memread; /// ZOIMemIO or addr
-    int memwrite; /// ZOIMemIO or addr
-    int jump; /// ZOIJump or addr
-    ZOICond cond; /// ZOICond
-    int portread; /// ZOIPortIO or addr; if addr is specified, high byte must be taken from A
-    int portwrite; /// ZOIPortIO or addr; if addr is specified, high byte must be taken from A
-    ZOIStack push; /// ZOIStack; CALL/RST will set ZOIStack.PC
-    ZOIStack pop; /// ZOIStack; RET will set ZOIStack.PC
-    int disp; /// for (IX+n) / (IY+n), else ZOIDisp.None
-    int trap; /// slt and other trap opcode or -1
+    int len = 0; /// instruction length
+    bool memrwword = false; /// true: reading word
+    int memread = ZOIMemIO.None; /// ZOIMemIO or addr
+    int memwrite = ZOIMemIO.None; /// ZOIMemIO or addr
+    int jump = ZOIJump.None; /// ZOIJump or addr
+    ZOICond cond = ZOICond.None; /// ZOICond
+    int portread = ZOIPortIO.None; /// ZOIPortIO or addr; if addr is specified, high byte must be taken from A
+    int portwrite = ZOIPortIO.None; /// ZOIPortIO or addr; if addr is specified, high byte must be taken from A
+    ZOIStack push = ZOIStack.None; /// ZOIStack; CALL/RST will set ZOIStack.PC
+    ZOIStack pop = ZOIStack.None; /// ZOIStack; RET will set ZOIStack.PC
+    int disp = ZOIDisp.None; /// for (IX+n) / (IY+n), else ZOIDisp.None
+    int trap = -1; /// slt and other trap opcode or -1
   }
 
   /// Get opcode information. Useful for debuggers.
-  void opcodeInfo (ref ZOInfo nfo, ushort pc) nothrow @trusted @nogc {
+  final void opcodeInfo (ref ZOInfo nfo, ushort pc) nothrow @trusted @nogc {
     //enum Z80OPI_WPC = `tmpW = memRead(pc, MemIO.Other)|(memRead(cast(ushort)((pc+1)&0xffff), MemIO.Other)<<8);pc += 2;`;
-    enum Z80OPI_WPC = `tmpW = memReadPC; tmpW |= memReadPC<<8;`;
-    static bool is_repeated() (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
+    enum ReadPCW = `tmpW = memReadPC; tmpW |= memReadPC<<8;`;
+    static bool isRepeated() (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
     ubyte opcode;
     ushort tmpW;
     ushort orgpc = pc;
     int ixy = -1, disp = 0, gotDD = 0; // 0: ix; 1: iy
-    nfo.len = 0;
-    nfo.memrwword = 0;
-    nfo.memread = nfo.memwrite = ZOIMemIO.None;
-    nfo.jump = ZOIJump.None;
-    nfo.cond = ZOICond.None;
-    nfo.portread = nfo.portwrite = ZOIPortIO.None;
-    nfo.push = nfo.pop = ZOIStack.None;
-    nfo.disp = ZOIDisp.None;
-    nfo.trap = -1;
+    nfo = nfo.init;
 
-    ubyte memReadPC () nothrow @trusted @nogc { /*pragma(inline, true);*/ ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
+    ubyte memReadPC () nothrow @trusted @nogc { /*pragma(inline, true);*/ immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
 
-    //opcode = memRead(pc++, MemIO.Other);
     opcode = memReadPC;
     if (opcode == 0xdd || opcode == 0xfd) {
       static immutable uint[8] withIndexBmp = [0x00u,0x700000u,0x40404040u,0x40bf4040u,0x40404040u,0x40404040u,0x0800u,0x00u];
@@ -1954,7 +1944,6 @@ public:
       opcode = memReadPC;
       if (withIndexBmp[opcode>>5]&(1<<(opcode&0x1f))) {
         // 3rd byte is always DISP here
-        //disp = memRead(pc++, MemIO.Other);
         disp = memReadPC;
         if (disp > 127) disp -= 256; // convert to int8_t
         nfo.disp = disp;
@@ -1969,68 +1958,67 @@ public:
     // instructions
     if (opcode == 0xed) {
       ixy = 0; // а нас -- рать!
-      //opcode = memRead(pc++, MemIO.Other);
       opcode = memReadPC;
       switch (opcode) {
-        /* LDI, LDIR, LDD, LDDR */
+        // LDI, LDIR, LDD, LDDR
         case 0xa0: case 0xb0: case 0xa8: case 0xb8:
           nfo.memwrite = ZOIMemIO.DE;
           goto case;
-        /* CPI, CPIR, CPD, CPDR */
+        // CPI, CPIR, CPD, CPDR
         case 0xa1: case 0xb1: case 0xa9: case 0xb9:
           nfo.memread = ZOIMemIO.HL;
-          if (is_repeated(opcode)) { nfo.cond = ZOICond.BNZ; nfo.jump = orgpc; }
+          if (isRepeated(opcode)) { nfo.cond = ZOICond.BNZ; nfo.jump = orgpc; }
           break;
-        /* INI, INIR, IND, INDR */
+        // INI, INIR, IND, INDR
         case 0xa2: case 0xb2: case 0xaa: case 0xba:
           goto case;
-        /* OUTI, OTIR, OUTD, OTDR */
+        // OUTI, OTIR, OUTD, OTDR
         case 0xa3: case 0xb3: case 0xab: case 0xbb:
           if (opcode&0x01) nfo.portwrite = ZOIPortIO.BCM1; else nfo.portread = ZOIPortIO.BC;
-          if (is_repeated(opcode)) { nfo.cond = ZOICond.BNZ; nfo.jump = orgpc; }
+          if (isRepeated(opcode)) { nfo.cond = ZOICond.BNZ; nfo.jump = orgpc; }
           break;
-        /* not strings, but some good instructions anyway */
-        default: /* traps */
+        // not strings, but some good instructions anyway
+        default: // traps
           if ((opcode&0xc0) == 0x40) {
             switch (opcode&0x07) {
-              /* IN r8,(C) */
+              // IN r8,(C)
               case 0: nfo.portread = ZOIPortIO.BC; break;
-              /* OUT (C),r8 */
+              // OUT (C),r8
               case 1: nfo.portwrite = ZOIPortIO.BC; break;
-              /* SBC HL,rr/ADC HL,rr */
+              // SBC HL,rr/ADC HL,rr
               /*case 2: break;*/
-              /* LD (nn),rr/LD rr,(nn) */
+              // LD (nn),rr/LD rr,(nn)
               case 3:
-                mixin(Z80OPI_WPC);
+                mixin(ReadPCW);
                 if (opcode&0x08) nfo.memread = tmpW; else nfo.memwrite = tmpW;
-                nfo.memrwword = 1;
+                nfo.memrwword = true;
                 break;
-              /* NEG */
+              // NEG
               /*case 4: break;*/
-              /* RETI/RETN */
+              // RETI/RETN
               case 5:
                 nfo.jump = ZOIJump.RET;
                 nfo.pop = ZOIStack.PC;
                 nfo.cond = (opcode&0x08 ? ZOICond.RETI : ZOICond.RETN);
                 nfo.memread = ZOIMemIO.SP;
-                nfo.memrwword = 1;
+                nfo.memrwword = true;
                 break;
-              /* IM n */
+              // IM n
               /*case 6: break;*/
-              /* specials */
+              // specials
               case 7:
                 switch (opcode) {
-                  /* LD I,A */
+                  // LD I,A
                   /*case 0x47: break;*/
-                  /* LD R,A */
+                  // LD R,A
                   /*case 0x4f: break;*/
-                  /* LD A,I */
+                  // LD A,I
                   /*case 0x57: break;*/
-                  /* LD A,R */
+                  // LD A,R
                   /*case break;*/
-                  /* RRD */
+                  // RRD
                   case 0x67:
-                  /* RLD */
+                  // RLD
                   case 0x6F:
                     nfo.memread = nfo.memwrite = ZOIMemIO.HL;
                     break;
@@ -2044,89 +2032,89 @@ public:
           }
           break;
       }
-      /* 0xed done */
+      // 0xed done
     } else if (opcode == 0xcb) {
-      /* shifts and bit operations */
+      // shifts and bit operations
       //opcode = memRead(pc++, MemIO.Other);
       opcode = memReadPC;
       if (!gotDD && (opcode&0x07) == 6) nfo.memread = nfo.memwrite = ZOIMemIO.HL;
       if ((opcode&0xc0) != 0x40) {
-        if (gotDD) nfo.memwrite = nfo.memread; /* all except BIT writes back */
+        if (gotDD) nfo.memwrite = nfo.memread; // all except BIT writes back
       } else {
         nfo.memwrite = ZOIMemIO.None;
       }
-      /* 0xcb done */
+      // 0xcb done
     } else {
-      /* normal things */
+      // normal things
       final switch (opcode&0xc0) {
-        /* 0x00..0x3F */
+        // 0x00..0x3F
         case 0x00:
           switch (opcode&0x07) {
-            /* misc,DJNZ,JR,JR cc */
+            // misc,DJNZ,JR,JR cc
             case 0:
               if (opcode&0x30) {
-                /* branches */
-                if (opcode&0x20) nfo.cond = cast(ZOICond)((opcode>>3)&0x03); /* JR cc */
-                else if ((opcode&0x08) == 0) nfo.cond = ZOICond.BNZ; /* DJNZ ; else -- JR */
+                // branches
+                     if (opcode&0x20) nfo.cond = cast(ZOICond)((opcode>>3)&0x03); // JR cc
+                else if ((opcode&0x08) == 0) nfo.cond = ZOICond.BNZ; // DJNZ ; else -- JR
                 //disp = memRead(pc++, MemIO.Other);
                 disp = memReadPC;
-                if (disp > 127) disp -= 256; /* convert to int8_t */
+                if (disp > 127) disp -= 256; // convert to byte
                 nfo.jump = (pc+disp)&0xffff;
-              } /* else EX AF,AF' or NOP */
+              } // else EX AF,AF' or NOP
               break;
-            /* LD rr,nn/ADD HL,rr */
+            // LD rr,nn/ADD HL,rr
             case 1:
               if (!(opcode&0x08)) pc = (pc+2)&0xffff;
               break;
-            /* LD xxx,xxx */
+            // LD xxx,xxx
             case 2:
               final switch ((opcode>>3)&0x07) {
-                /* LD (BC),A */
+                // LD (BC),A
                 case 0: nfo.memwrite = ZOIMemIO.BC; break;
-                /* LD A,(BC) */
+                // LD A,(BC)
                 case 1: nfo.memread = ZOIMemIO.BC; break;
-                /* LD (DE),A */
+                // LD (DE),A
                 case 2: nfo.memwrite = ZOIMemIO.DE; break;
-                /* LD A,(DE) */
+                // LD A,(DE)
                 case 3: nfo.memread = ZOIMemIO.DE; break;
-                /* LD (nn),HL */
+                // LD (nn),HL
                 case 4:
-                  mixin(Z80OPI_WPC);
+                  mixin(ReadPCW);
                   nfo.memwrite = tmpW;
-                  nfo.memrwword = 1;
+                  nfo.memrwword = true;
                   break;
-                /* LD HL,(nn) */
+                // LD HL,(nn)
                 case 5:
-                  mixin(Z80OPI_WPC);
+                  mixin(ReadPCW);
                   nfo.memread = tmpW;
-                  nfo.memrwword = 1;
+                  nfo.memrwword = true;
                   break;
-                /* LD (nn),A */
+                // LD (nn),A
                 case 6:
-                  mixin(Z80OPI_WPC);
+                  mixin(ReadPCW);
                   nfo.memwrite = tmpW;
                   break;
-                /* LD A,(nn) */
+                // LD A,(nn)
                 case 7:
-                  mixin(Z80OPI_WPC);
+                  mixin(ReadPCW);
                   nfo.memread = tmpW;
                   break;
               }
               break;
-            /* INC rr/DEC rr */
+            // INC rr/DEC rr
             /*case 3: break;*/
-            /* INC r8 */
+            // INC r8
             case 4:
               goto case;
-            /* DEC r8 */
+            // DEC r8
             case 5:
               if (((opcode>>3)&0x07) == 6) {
-                /* (HL) or (IXY+n) */
+                // (HL) or (IXY+n)
                 if (gotDD) nfo.memwrite = nfo.memread;
                 else nfo.memwrite = nfo.memread = ZOIMemIO.HL;
               }
               break;
-            /* LD r8,n */
+            // LD r8,n
             case 6:
               ++pc;
               if (((opcode>>3)&0x07) == 6) {
@@ -2134,59 +2122,59 @@ public:
                 else { nfo.memwrite = nfo.memread; nfo.memread = ZOIMemIO.None; }
               }
               break;
-            /* swim-swim-hungry */
+            // swim-swim-hungry
             /*case 7: break;*/
             default:
           }
           break;
-        /* 0x40..0x7F (LD r8,r8) */
+        // 0x40..0x7F: LD r8,r8
         case 0x40:
           if (opcode != 0x76) {
             if (!gotDD && (opcode&0x07) == 6) nfo.memread = ZOIMemIO.HL;
             if (((opcode>>3)&0x07) == 6) { nfo.memwrite = (gotDD ? nfo.memread : ZOIMemIO.HL); nfo.memread = ZOIMemIO.None; }
           }
           break;
-        /* 0x80..0xBF (ALU A,r8) */
+        // 0x80..0xBF: ALU A,r8
         case 0x80:
           if (!gotDD && (opcode&0x07) == 6) nfo.memread = ZOIMemIO.HL;
           break;
-        /* 0xC0..0xFF */
+        // 0xC0..0xFF
         case 0xC0:
           final switch (opcode&0x07) {
-            /* RET cc */
+            // RET cc
             case 0:
               nfo.jump = ZOIJump.RET;
               nfo.pop = ZOIStack.PC;
               nfo.cond = cast(ZOICond)((opcode>>3)&0x07);
               nfo.memread = ZOIMemIO.SP;
-              nfo.memrwword = 1;
+              nfo.memrwword = true;
               break;
-            /* POP rr/special0 */
+            // POP rr/special0
             case 1:
               if (opcode&0x08) {
-                /* special 0 */
+                // special 0
                 switch ((opcode>>4)&0x03) {
-                  /* RET */
+                  // RET
                   case 0:
                     nfo.jump = ZOIJump.RET;
                     nfo.pop = ZOIStack.PC;
                     nfo.memread = ZOIMemIO.SP;
-                    nfo.memrwword = 1;
+                    nfo.memrwword = true;
                     break;
-                  /* EXX */
+                  // EXX
                   /*case 1: break;*/
-                  /* JP (HL) */
+                  // JP (HL)
                   case 2:
                     nfo.jump = (ixy < 0 ? ZOIJump.HL : (ixy ? ZOIJump.IY : ZOIJump.IX));
                     break;
-                  /* LD SP,HL */
+                  // LD SP,HL
                   /*case 3: break;*/
                   default:
                 }
               } else {
-                /* POP rr */
+                // POP rr
                 nfo.memread = ZOIMemIO.SP;
-                nfo.memrwword = 1;
+                nfo.memrwword = true;
                 final switch ((opcode>>4)&0x03) {
                   case 0: nfo.pop = ZOIStack.BC; break;
                   case 1: nfo.pop = ZOIStack.DE; break;
@@ -2195,68 +2183,68 @@ public:
                 }
               }
               break;
-            /* JP cc,nn */
+            // JP cc,nn
             case 2:
-              mixin(Z80OPI_WPC);
+              mixin(ReadPCW);
               nfo.jump = tmpW;
               nfo.cond = cast(ZOICond)((opcode>>3)&0x07);
               break;
-            /* special1/special3 */
+            // special1/special3
             case 3:
               switch ((opcode>>3)&0x07) {
-                /* JP nn */
+                // JP nn
                 case 0:
-                  mixin(Z80OPI_WPC);
+                  mixin(ReadPCW);
                   nfo.jump = tmpW;
                   break;
-                /* OUT (n),A */
+                // OUT (n),A
                 case 2:
                   //nfo.portwrite = memRead(pc++, MemIO.Other);
                   nfo.portwrite = memReadPC;
                   break;
-                /* IN A,(n) */
+                // IN A,(n)
                 case 3:
                   //nfo.portread = memRead(pc++, MemIO.Other);
                   nfo.portread = memReadPC;
                   break;
-                /* EX (SP),HL */
+                // EX (SP),HL
                 case 4:
                   nfo.memread = nfo.memwrite = ZOIMemIO.SP;
-                  nfo.memrwword = 1;
+                  nfo.memrwword = true;
                   break;
-                /* EX DE,HL */
+                // EX DE,HL
                 /*case 5: break;*/
-                /* DI */
+                // DI
                 /*case 6: break;*/
-                /* EI */
+                // EI
                 /*case 7: break;*/
                 default:
               }
               break;
-            /* CALL cc,nn */
+            // CALL cc,nn
             case 4:
-              mixin(Z80OPI_WPC);
+              mixin(ReadPCW);
               nfo.jump = tmpW;
               nfo.push = ZOIStack.PC;
               nfo.cond = cast(ZOICond)((opcode>>3)&0x07);
               nfo.memwrite = ZOIMemIO.SP;
-              nfo.memrwword = 1;
+              nfo.memrwword = true;
               break;
-            /* PUSH rr/special2 */
+            // PUSH rr/special2
             case 5:
               if (opcode&0x08) {
                 if (((opcode>>4)&0x03) == 0) {
-                  /* CALL */
-                  mixin(Z80OPI_WPC);
+                  // CALL
+                  mixin(ReadPCW);
                   nfo.jump = tmpW;
                   nfo.push = ZOIStack.PC;
                   nfo.memwrite = ZOIMemIO.SP;
-                  nfo.memrwword = 1;
+                  nfo.memrwword = true;
                 }
               } else {
-                /* PUSH rr */
+                // PUSH rr
                 nfo.memwrite = ZOIMemIO.SP;
-                nfo.memrwword = 1;
+                nfo.memrwword = true;
                 final switch ((opcode>>4)&0x03) {
                   case 0: nfo.push = ZOIStack.BC; break;
                   case 1: nfo.push = ZOIStack.DE; break;
@@ -2265,22 +2253,665 @@ public:
                 }
               }
               break;
-            /* ALU A,n */
+            // ALU A,n
             case 6:
               ++pc;
               break;
-            /* RST nnn */
+            // RST nnn
             case 7:
               nfo.jump = (opcode&0x38);
               nfo.push = ZOIStack.PC;
               nfo.memwrite = ZOIMemIO.SP;
-              nfo.memrwword = 1;
+              nfo.memrwword = true;
               break;
           }
           break;
       }
     }
     nfo.len = (pc >= orgpc ? pc-orgpc : pc+0x10000-orgpc);
+  }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// simple disasm
+public:
+  /// disassembled opcode
+  struct ZDisop {
+    int len; /// instruction length
+    char[128] disbuf; /// buffer that holds disassembled text
+    const(char)[] mnemo; /// points into disbuf
+    const(char)[][3] args; /// points into disbuf
+    // disassembler options
+    bool decimal; /// use decimal numbers instead of #XXXX
+    bool locase; /// use lower-cased text
+  }
+
+  /// Disassemble command
+  final void disasm (ref ZDisop nfo, ushort pc) nothrow @trusted @nogc {
+    ubyte memReadPC () nothrow @trusted @nogc { /*pragma(inline, true);*/ immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
+    ushort memReadPCW () nothrow @trusted @nogc {
+      ushort w = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size];
+      ++pc;
+      w |= mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]<<8;
+      ++pc;
+      return w;
+    }
+
+    uint stpc = pc;
+    scope(exit) nfo.len = (pc < stpc ? pc+0x10000-stpc : pc-stpc);
+
+    bool gotDD;
+    int disp;
+    string DD = "HL";
+
+    nfo.len = 0;
+    nfo.mnemo = null;
+    nfo.args[] = null;
+    uint dbpos = 0;
+    uint dbstpos = 0;
+    ubyte curarg = 0;
+
+    void endMnemo () {
+      if (nfo.mnemo.length) assert(0, "internal error");
+      nfo.mnemo = nfo.disbuf[0..dbpos];
+      dbstpos = dbpos;
+    }
+
+    void endArg () {
+      if (curarg >= nfo.args.length) assert(0, "internal error");
+      nfo.args[curarg++] = nfo.disbuf[dbstpos..dbpos];
+      dbstpos = dbpos;
+    }
+
+    void putKeepCase (const(char)[] s...) nothrow @trusted @nogc {
+      assert(s.length <= 1024);
+      if (dbpos+s.length > nfo.disbuf.length) s = s[0..nfo.disbuf.length-dbpos];
+      if (s.length) {
+        nfo.disbuf[dbpos..dbpos+s.length] = s[];
+        dbpos += cast(uint)s.length;
+      }
+    }
+
+    void put (const(char)[] s...) nothrow @trusted @nogc {
+      assert(s.length <= 1024);
+      if (dbpos+s.length > nfo.disbuf.length) s = s[0..nfo.disbuf.length-dbpos];
+      foreach (char ch; s) {
+        if (nfo.locase) {
+          if (ch >= 'A' && ch <= 'Z') ch += 32;
+        } else {
+          if (ch >= 'a' && ch <= 'z') ch -= 32;
+        }
+        nfo.disbuf.ptr[dbpos++] = ch;
+      }
+    }
+
+    void putMnemo (string s) nothrow @trusted @nogc {
+      put(s);
+      endMnemo();
+    }
+
+    void putArg (string s) nothrow @trusted @nogc {
+      put(s);
+      endArg();
+    }
+
+    void putUIntDec (uint n) nothrow @trusted @nogc {
+      char[16] buf = void;
+      uint bpos = cast(uint)buf.length;
+      do { buf.ptr[--bpos] = cast(char)('0'+n%10); } while ((n /= 10) != 0);
+      put(buf[bpos..$]);
+    }
+
+    void putUIntHex (uint n, int len) nothrow @trusted @nogc {
+      char[16] buf = void;
+      uint bpos = cast(uint)buf.length;
+      do { buf.ptr[--bpos] = cast(char)('0'+n%16+(n%16 > 9 ? 7 : 0)); } while ((n /= 16) != 0);
+      while (buf.length-bpos < len) buf.ptr[--bpos] = '0';
+      buf.ptr[--bpos] = '#';
+      put(buf[bpos..$]);
+    }
+
+    void putUInt (uint n, int len) nothrow @trusted @nogc {
+      if (nfo.decimal) putUIntDec(n); else putUIntHex(n, len);
+    }
+
+    void putDisp (int n) nothrow @trusted @nogc {
+      if (n < 0) {
+        put("-");
+        putUIntDec(-n);
+      } else {
+        put("+");
+        putUIntDec(n);
+      }
+    }
+
+    void putCC (uint n) {
+      final switch (n) {
+        case 0: putArg("NZ"); break;
+        case 1: putArg("Z"); break;
+        case 2: putArg("NC"); break;
+        case 3: putArg("C"); break;
+        case 4: putArg("PO"); break;
+        case 5: putArg("PE"); break;
+        case 6: putArg("P"); break;
+        case 7: putArg("M"); break;
+      }
+    }
+
+    void putR8(string hlspec=null) (uint n) {
+      final switch (n) {
+        case 0: putArg("B"); break;
+        case 1: putArg("C"); break;
+        case 2: putArg("D"); break;
+        case 3: putArg("E"); break;
+        case 4: putArg("H"); break;
+        case 5: putArg("L"); break;
+        case 6:
+          static if (hlspec.length) {
+            putArg(hlspec);
+          } else {
+            put("(");
+            put(DD);
+            if (gotDD) putDisp(disp);
+            put(")");
+          }
+          break;
+        case 7: putArg("A"); break;
+      }
+    }
+
+    void putR16SP(string hlspec=null) (uint n) {
+      final switch (n) {
+        case 0: putArg("BC"); break;
+        case 1: putArg("DE"); break;
+        case 2: static if (hlspec.length) putArg(hlspec); else putArg(DD); break;
+        case 3: putArg("SP"); break;
+      }
+    }
+
+    void putR16AF(string hlspec=null) (uint n) {
+      final switch (n) {
+        case 0: putArg("BC"); break;
+        case 1: putArg("DE"); break;
+        case 2: static if (hlspec.length) putArg(hlspec); else putArg(DD); break;
+        case 3: putArg("AF"); break;
+      }
+    }
+
+    ubyte opcode = memReadPC;
+    disp = 0;
+    gotDD = false;
+    //DD = &HL;
+    // check for I[XY] prefix
+    if (opcode == 0xdd || opcode == 0xfd) {
+      //TODO: generate this table in compile time
+      static immutable uint[8] withIndexBmp = [0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00];
+      // IX/IY prefix
+      DD = (opcode == 0xdd ? "IX" : "IY");
+      // read opcode -- OCR(4)
+      opcode = memReadPC;
+      // test if this instruction have (HL)
+      if (withIndexBmp[opcode>>5]&(1<<(opcode&0x1f))) {
+        // 3rd byte is always DISP here
+        disp = memReadPC;
+        if (disp > 127) disp -= 256;
+      } else if (opcode == 0xdd && opcode == 0xfd) {
+        // double prefix; put special NOP
+        --pc; // rollback for correct length
+        putMnemo("NOP");
+        if (opcode == 0xdd) putArg("#DD"); else putArg("#FD");
+        return;
+      }
+      gotDD = true;
+    }
+    // ED-prefixed instructions
+    if (opcode == 0xed) {
+      DD = "HL"; // а нас -- рать!
+      // read opcode -- OCR(4)
+      opcode = memReadPC;
+      switch (opcode) {
+        // LDI, LDIR, LDD, LDDR
+        case 0xa0: putMnemo("LDI"); return;
+        case 0xb0: putMnemo("LDIR"); return;
+        case 0xa8: putMnemo("LDD"); return;
+        case 0xb8: putMnemo("LDDR"); return;
+        // CPI, CPIR, CPD, CPDR
+        case 0xa1: putMnemo("CPI"); return;
+        case 0xb1: putMnemo("CPIR"); return;
+        case 0xa9: putMnemo("CPD"); return;
+        case 0xb9: putMnemo("CPDR"); return;
+        // OUTI, OTIR, OUTD, OTDR
+        case 0xa3: putMnemo("OUTI"); return;
+        case 0xb3: putMnemo("OTIR"); return;
+        case 0xab: putMnemo("OUTD"); return;
+        case 0xbb: putMnemo("OTDR"); return;
+        // INI, INIR, IND, INDR
+        case 0xa2: putMnemo("INI"); return;
+        case 0xb2: putMnemo("INIR"); return;
+        case 0xaa: putMnemo("IND"); return;
+        case 0xba: putMnemo("INDR"); return;
+        // not strings, but some good instructions anyway
+        default:
+          if ((opcode&0xc0) == 0x40) {
+            // 0x40...0x7f
+            final switch (opcode&0x07) {
+              case 0: // IN r8,(C)
+              case 1: // OUT (C),r8
+                if (opcode&0x07) { putMnemo("OUT"); putArg("(C)"); } else putMnemo("IN");
+                if (opcode&0x07) putR8!"0"((opcode>>3)&0x07); else putR8!"F"((opcode>>3)&0x07); // 0 on NMOS, 255 on CMOS
+                if ((opcode&0x07) == 0) putArg("(C)");
+                return;
+              // SBC HL,rr/ADC HL,rr
+              case 2:
+                putMnemo(opcode&0x08 ? "ADC" : "SBC");
+                putArg("HL");
+                putR16SP!"HL"((opcode>>4)&0x03);
+                return;
+              // LD (nn),rr/LD rr,(nn)
+              case 3:
+                putMnemo("LD");
+                if ((opcode&0x08) == 0) {
+                  // LD (nn),rr
+                  put("(");
+                  putUInt(memReadPC, 4);
+                  put(")");
+                  endArg();
+                }
+                putR16SP!"HL"((opcode>>4)&0x03);
+                if ((opcode&0x08) != 0) {
+                  // LD rr,(nn)
+                  put("(");
+                  putUInt(memReadPC, 4);
+                  put(")");
+                  endArg();
+                }
+                return;
+              // NEG
+              case 4:
+                putMnemo("NEG");
+                return;
+              // RETI/RETN
+              case 5:
+                // RETI: 0x4d, 0x5d, 0x6d, 0x7d
+                // RETN: 0x45, 0x55, 0x65, 0x75
+                if (opcode&0x08) putMnemo("RETI"); else putMnemo("RETN");
+                return;
+              // IM n
+              case 6:
+                putMnemo("IM");
+                switch (opcode) {
+                  case 0x56: case 0x76: putArg("1"); break;
+                  case 0x5e: case 0x7e: putArg("2"); break;
+                  default: putArg("0"); break;
+                }
+                return;
+              // specials
+              case 7:
+                final switch (opcode) {
+                  case 0x47: // LD I,A
+                    putMnemo("LD");
+                    putArg("I");
+                    putArg("A");
+                    return;
+                  case 0x4f: // LD R,A
+                    putMnemo("LD");
+                    putArg("R");
+                    putArg("A");
+                    return;
+                  case 0x57: // LD A,I
+                    putMnemo("LD");
+                    putArg("A");
+                    putArg("I");
+                    return;
+                  case 0x5f: // LD A,R
+                    putMnemo("LD");
+                    putArg("A");
+                    putArg("R");
+                    return;
+                  case 0x67: // RRD
+                    putMnemo("RRD");
+                    return;
+                  case 0x6F: // RLD
+                    putMnemo("RLD");
+                    return;
+                }
+            }
+          } else {
+            // slt and other traps
+            if (opcode == 0xFB) {
+              putMnemo("TSLT");
+            } else {
+              putMnemo("TRAP");
+              putUIntHex(opcode, 2);
+              endArg();
+            }
+          }
+          return;
+      }
+      // NOP
+      putMnemo("NOP");
+      putArg("#ED");
+      putUIntHex(opcode, 2);
+      endArg();
+      return;
+    } // 0xed done
+    // CB-prefixed instructions
+    if (opcode == 0xcb) {
+      // shifts and bit operations
+      // read opcode
+      opcode = memReadPC;
+      // mnemonics
+      switch ((opcode>>3)&0x1f) {
+        case 0: putMnemo("RLC"); break;
+        case 1: putMnemo("RRC"); break;
+        case 2: putMnemo("RL"); break;
+        case 3: putMnemo("RR"); break;
+        case 4: putMnemo("SLA"); break;
+        case 5: putMnemo("SRA"); break;
+        case 6: putMnemo("SLL"); break;
+        case 7: putMnemo("SLR"); break;
+        default:
+          final switch ((opcode>>6)&0x03) {
+            case 1: putMnemo("BIT"); break;
+            case 2: putMnemo("RES"); break;
+            case 3: putMnemo("SET"); break;
+          }
+          putUIntDec((opcode>>3)&0x07);
+          endArg();
+          break;
+      }
+      // R8X arg
+      if (gotDD) {
+        put("(");
+        put(DD);
+        putDisp(disp);
+        put(")");
+        endArg();
+      } else {
+        putR8!"(HL)"(opcode&0x07);
+      }
+      // possible extra operand
+      if ((opcode&0xc0) != 0x40) {
+        // BITs are not welcome here
+        putR8(opcode&0x07);
+      }
+      return;
+    } // 0xcb done
+    // normal things
+    final switch (opcode&0xc0) {
+      // 0x00..0x3F
+      case 0x00:
+        final switch (opcode&0x07) {
+          // misc,DJNZ,JR,JR cc
+          case 0:
+            if (opcode&0x30) {
+              // branches
+              if (opcode&0x20) {
+                // JR cc
+                putMnemo("JR");
+                putCC((opcode>>3)&0x03);
+              } else {
+                // DJNZ/JR
+                putMnemo(opcode&0x08 ? "JR" : "DJNZ");
+              }
+              disp = memReadPC;
+              if (disp > 127) disp -= 256; // convert to int8_t
+              ushort addr = cast(ushort)(pc+disp);
+              putUInt(addr, 4);
+              endArg();
+            } else {
+              // EX AF,AF' or NOP
+              if (opcode != 0) {
+                putMnemo("EX");
+                putArg("AF");
+                putArg("AF'");
+              } else {
+                putMnemo("NOP");
+              }
+            }
+            return;
+          // LD rr,nn/ADD HL,rr
+          case 1:
+            if (opcode&0x08) {
+              // ADD HL,rr
+              putMnemo("ADD");
+              putArg(DD);
+              putR16SP((opcode>>4)&0x03);
+            } else {
+              // LD rr,nn
+              putMnemo("LD");
+              putR16SP((opcode>>4)&0x03);
+              putUInt(memReadPCW, 4);
+              endArg();
+            }
+            return;
+          // LD xxx,xxx
+          case 2:
+            putMnemo("LD");
+            final switch ((opcode>>3)&0x07) {
+              // LD (BC),A
+              case 0: putArg("(BC)"); putArg("A"); break;
+              // LD A,(BC)
+              case 1: putArg("A"); putArg("(BC)"); break;
+              // LD (DE),A
+              case 2: putArg("(DE)"); putArg("A"); break;
+              // LD A,(DE)
+              case 3: putArg("A"); putArg("(DE)"); break;
+              // LD (nn),HL
+              case 4: put("("); putUInt(memReadPCW, 4); put(")"); endArg(); put(DD); endArg(); break;
+              // LD HL,(nn)
+              case 5: put(DD); endArg(); put("("); putUInt(memReadPCW, 4); put(")"); endArg(); break;
+              // LD (nn),A
+              case 6: put("("); putUInt(memReadPCW, 4); put(")"); endArg(); putArg("A"); break;
+              // LD A,(nn)
+              case 7: putArg("A"); put("("); putUInt(memReadPCW, 4); put(")"); endArg(); break;
+            }
+            return;
+          // INC rr/DEC rr
+          case 3:
+            putMnemo(opcode&0x08 ? "DEC" : "INC");
+            putR16SP((opcode>>4)&0x03);
+            return;
+          // INC/DEC r8; LD r8,n
+          case 4: // INC r8
+          case 5: // DEC r8
+          case 6: // LD r8,n
+            final switch (opcode&0x07) {
+              case 4: putMnemo("INC"); break;
+              case 5: putMnemo("DEC"); break;
+              case 6: putMnemo("LD"); break;
+            }
+            final switch ((opcode>>3)&0x07) {
+              case 0: putArg("B"); break;
+              case 1: putArg("C"); break;
+              case 2: putArg("D"); break;
+              case 3: putArg("E"); break;
+              case 4: if (DD[0] != 'H') put(DD); putArg("H"); endArg(); break;
+              case 5: if (DD[0] != 'H') put(DD); putArg("L"); endArg(); break;
+              case 6:
+                put("(");
+                put(DD);
+                if (gotDD) putDisp(disp);
+                put(")");
+                endArg();
+                break;
+              case 7: putArg("A"); break;
+            }
+            // LD?
+            if ((opcode&0x07) == 6) {
+              putUInt(memReadPC, 2);
+              endArg();
+            }
+            return;
+          // swim-swim-hungry
+          case 7:
+            final switch ((opcode>>3)&0x07) {
+              case 0: putMnemo("RLCA"); break;
+              case 1: putMnemo("RRCA"); break;
+              case 2: putMnemo("RLA"); break;
+              case 3: putMnemo("RRA"); break;
+              case 4: putMnemo("DAA"); break;
+              case 5: putMnemo("CPL"); break;
+              case 6: putMnemo("SCF"); break;
+              case 7: putMnemo("CCF"); break;
+            }
+            return;
+        }
+        assert(0);
+      // 0x40..0x7F: LD r8,r8
+      case 0x40:
+        if (opcode == 0x76) { putMnemo("HALT"); return; }
+        putMnemo("LD");
+        immutable ubyte rsrc = (opcode&0x07);
+        immutable ubyte rdst = ((opcode>>3)&0x07);
+        final switch (rsrc) {
+          case 0: putArg("B"); break;
+          case 1: putArg("C"); break;
+          case 2: putArg("D"); break;
+          case 3: putArg("E"); break;
+          case 4: if (gotDD && rdst != 6) put(DD); put("H"); endArg(); break;
+          case 5: if (gotDD && rdst != 6) put(DD); put("L"); endArg(); break;
+          case 6:
+            put("(");
+            put(DD);
+            if (gotDD) putDisp(disp);
+            put(")");
+            endArg();
+            break;
+          case 7: putArg("A"); break;
+        }
+        final switch (rdst) {
+          case 0: putArg("B"); break;
+          case 1: putArg("C"); break;
+          case 2: putArg("D"); break;
+          case 3: putArg("E"); break;
+          case 4: if (gotDD && rsrc != 6) put(DD); put("H"); endArg(); break;
+          case 5: if (gotDD && rsrc != 6) put(DD); put("L"); endArg(); break;
+          case 6:
+            put("(");
+            put(DD);
+            if (gotDD) putDisp(disp);
+            put(")");
+            endArg();
+            break;
+          case 7: putArg("A"); break;
+        }
+        return;
+      // 0x80..0xBF: ALU A,r8
+      case 0x80:
+        final switch ((opcode>>3)&0x07) {
+          case 0: putMnemo("ADD"); putArg("A"); break;
+          case 1: putMnemo("ADC"); putArg("A"); break;
+          case 2: putMnemo("SUB"); putArg("A"); break;
+          case 3: putMnemo("SBC"); putArg("A"); break;
+          case 4: putMnemo("AND"); break;
+          case 5: putMnemo("XOR"); break;
+          case 6: putMnemo("OR"); break;
+          case 7: putMnemo("CP"); break;
+        }
+        //putArg("A");
+        putR8(opcode&0x07);
+        return;
+      // 0xC0..0xFF
+      case 0xC0:
+        final switch (opcode&0x07) {
+          // RET cc
+          case 0:
+            putMnemo("RET");
+            putCC((opcode>>3)&0x07);
+            break;
+          // POP rr/special0
+          case 1:
+            if (opcode&0x08) {
+              // special 0
+              final switch ((opcode>>4)&0x03) {
+                // RET
+                case 0: putMnemo("RET"); break;
+                // EXX
+                case 1: putMnemo("EXX"); break;
+                // JP (HL)
+                case 2: putMnemo("JP"); put("("); put(DD); put(")"); endArg(); break;
+                // LD SP,HL
+                case 3: putMnemo("LD"); putArg("SP"); put(DD); endArg(); break;
+              }
+            } else {
+              // POP rr
+              putMnemo("POP");
+              putR16AF((opcode>>4)&0x03);
+            }
+            break;
+          // JP cc,nn
+          case 2:
+            putMnemo("JP");
+            putCC((opcode>>3)&0x07);
+            putUInt(memReadPCW, 4);
+            endArg();
+            break;
+          // special1/special3
+          case 3:
+            final switch ((opcode>>3)&0x07) {
+              // JP nn
+              case 0: putMnemo("JP"); putUInt(memReadPCW, 4); endArg(); break;
+              // OUT (n),A
+              case 2: putMnemo("OUT"); put("("); putUInt(memReadPC, 2); put(")"); endArg(); putArg("A"); break;
+              // IN A,(n)
+              case 3: putMnemo("IN"); putArg("A"); put("("); putUInt(memReadPC, 2); put(")"); endArg(); break;
+              // EX (SP),HL
+              case 4: putMnemo("EX"); putArg("(SP)"); put(DD); endArg(); break;
+              // EX DE,HL
+              case 5: putMnemo("EX"); putArg("DE"); putArg("HL"); break;
+              // DI
+              case 6: putMnemo("DI"); break;
+              // EI
+              case 7: putMnemo("EI"); break;
+            }
+            break;
+          // CALL cc,nn
+          case 4:
+            putMnemo("CALL");
+            putCC((opcode>>3)&0x07);
+            putUInt(memReadPCW, 4);
+            endArg();
+            break;
+          // PUSH rr/special2
+          case 5:
+            if (opcode&0x08) {
+              if (((opcode>>4)&0x03) == 0) {
+                // CALL
+                putMnemo("CALL");
+                putUInt(memReadPCW, 4);
+                endArg();
+              }
+            } else {
+              // PUSH rr
+              putMnemo("PUSH");
+              putR16AF((opcode>>4)&0x03);
+            }
+            break;
+          // ALU A,n
+          case 6:
+            final switch ((opcode>>3)&0x07) {
+              case 0: putMnemo("ADD"); putArg("A"); break;
+              case 1: putMnemo("ADC"); putArg("A"); break;
+              case 2: putMnemo("SUB"); putArg("A"); break;
+              case 3: putMnemo("SBC"); putArg("A"); break;
+              case 4: putMnemo("AND"); break;
+              case 5: putMnemo("XOR"); break;
+              case 6: putMnemo("OR"); break;
+              case 7: putMnemo("CP"); break;
+            }
+            //putArg("A");
+            putUInt(memReadPC, 2);
+            endArg();
+            break;
+          // RST nnn
+          case 7:
+            putMnemo("RST");
+            putUInt(opcode&0x38, 2);
+            break;
+        }
+        break;
+    } // end switch
   }
 }
 
