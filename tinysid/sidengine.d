@@ -1134,9 +1134,9 @@ public int cpuJSR (ushort npc, ubyte na) {
 }
 
 
-public void c64Init (uint srate) {
-  if (srate < 44100 || srate > 48000) assert(0, "invalid sampling rate");
-  synth_init(srate);
+public void c64Init () {
+  //if (srate < 44100 || srate > 48000) assert(0, "invalid sampling rate");
+  synth_init(44100);
   memory[] = 0;
   cpuReset();
 }

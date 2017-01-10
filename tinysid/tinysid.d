@@ -22,11 +22,7 @@ void main (string[] args) {
     return;
   }
 
-  //auto srate = alsaGetBestSampleRate(48000);
-  //if (srate == 0) assert(0, "error determining ALSA sampling rate");
-  //if (srate < 44100) srate = 44100; else if (srate > 48000) srate = 48000;
-
-  c64Init(44100);
+  c64Init();
 
   if (!alsaInit(44100, 1)) assert(0, "error initializing ALSA");
   scope(exit) alsaShutdown(true);
