@@ -2726,8 +2726,8 @@ public:
               case 1: putArg("C"); break;
               case 2: putArg("D"); break;
               case 3: putArg("E"); break;
-              case 4: if (DD[0] != 'H') put(DD); putArg("H"); endArg(); break;
-              case 5: if (DD[0] != 'H') put(DD); putArg("L"); endArg(); break;
+              case 4: if (gotDD) put(DD); putArg("H"); endArg(); break;
+              case 5: if (gotDD) put(DD); putArg("L"); endArg(); break;
               case 6:
                 put("(");
                 put(DD);
