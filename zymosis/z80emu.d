@@ -116,15 +116,7 @@ public:
   EIDDR prevWasEIDDR;
   bool prevOpChangedFlags; /// did previous instruction affected F? used to better emulate SCF/CCF.
   bool evenM1; /// emulate 128K/Scorpion M1 contention?
-  /** set to true in memRead/memWrite/portRead/portWrite to stop execution.
-   * Debugger can set this flag to true in memRead memRead/memWrite/portRead/portWrite/etc
-   * to stop emulation loop. If memRead was called with MemIO.Opcode, CPI's PC will not be
-   * changed, all tstate changes will be rolled back (to compensate possible contention) and
-   * no instruction will be executed.
-   * Zymosis will automatically reset this flag and set bpWasHit flag.
-   * Zymosis will never reset bpWasHit flag.
-   */
-  bool bpHit; /// was emulation loop stopped due to BP hit?
+  bool bpHit; /// will be set if execution loop was stopped by breakpoint; no autoreset
   PortContention portContentionType = PortContention.Normal; /// port contention style
 
 public:
@@ -154,7 +146,7 @@ public:
   bool checkBreakpoint () nothrow @trusted @nogc { return false; }
 
   version(Zymosis_Testing) {
-    /**
+    /*
      * Will be called when port contention is necessary.
      * Function must increase z80.tstates by at least 'atstates' arg.
      *
@@ -336,7 +328,7 @@ final:
     //FIXME: call enter/leave hooks here too?
     ubyte fetchOpcodeExt () nothrow @trusted @nogc {
       //pragma(inline, true);
-      z80_contention(PC, 4, /*MemIO.OpExt, MemIOReq.Read*/ true);
+      mixin(z80_contention!("PC", "4"));
       //ubyte res = memRead(PC, MemIO.OpExt);
       version(Zymosis_Testing) memReading(PC);
       ubyte res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
@@ -361,7 +353,7 @@ final:
       /* t1: setting /MREQ & /RD */
       /* t2: memory read */
       /* t3, t4: decode command, increment R */
-      z80_contention(PC, 4, /*MemIO.Opcode, MemIOReq.Read,*/ true);
+      mixin(z80_contention!("PC", "4"));
       if (evenM1 && (tstates&0x01)) ++tstates;
       // read opcode
       //opcode = memRead(PC, MemIO.Opcode);
@@ -644,7 +636,7 @@ final:
         if (!gotDD) {
           opcode = fetchOpcodeExt();
         } else {
-          z80_contention(PC, 3, /*MemIO.OpExt, MemIOReq.Read*/ true);
+          mixin(z80_contention!("PC", "3"));
           //opcode = memRead(PC, MemIO.OpExt);
           //FIXME: call enter/leave hooks here too?
           version(Zymosis_Testing) memReading(PC);
@@ -665,7 +657,7 @@ final:
             case 3: tmpB = DE.e; break;
             case 4: tmpB = HL.h; break;
             case 5: tmpB = HL.l; break;
-            case 6: tmpB = z80_peekb_3ts(HL); z80_contention(HL, 1, /*MemIO.Data, MemIOReq.Read*/ false); MEMPTR = HL; /*???MEMPTR*/ break;
+            case 6: tmpB = z80_peekb_3ts(HL); mixin(z80_contention!("HL", "1", false)); MEMPTR = HL; /*???MEMPTR*/ break;
             case 7: tmpB = AF.a; break;
           }
         }
@@ -1348,16 +1340,20 @@ private nothrow @trusted @nogc:
   /* simulate contented memory access */
   /* (tstates = tstates+contention+atstates)*cnt */
   /* (ushort addr, int tstates, MemIO mio) */
-  void z80_contention (ushort addr, int atstates, bool mreq) {
-    version(Zymosis_Testing) memContention(addr, mreq); else pragma(inline, true);
-    if (/*(mreq ? ulacont.length : ulacontnomreq.length) != 0 &&*/ mem.ptr[addr/MemPage.Size].contended) {
-      if (mreq) {
-        if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
-      } else /*if (mreq == MemIOReq.Write)*/ {
-        if (tstates >= 0 && tstates < ulacontnomreq.length) tstates += ulacontnomreq.ptr[tstates];
+  template xiff(bool v, string st, string sf) {
+    static if (v) enum xiff = st; else enum xiff = sf;
+  }
+  version(Zymosis_Testing) {
+    enum z80_contention(string addr, string atstates, bool mreq=true) = "{memContention(("~addr~"), "~xiff!(mreq, "true", "false")~");tstates += "~atstates~";}";
+  } else {
+    enum z80_contention(string addr, string atstates, bool mreq=true) = "{
+      if (mem.ptr[("~addr~")/MemPage.Size].contended) {
+        if (tstates >= 0 && tstates < "~xiff!(mreq, "ulacont", "ulacontnomreq")~".length) {
+          tstates += "~xiff!(mreq, "ulacont", "ulacontnomreq")~".ptr[tstates];
+        }
       }
-    }
-    tstates += atstates;
+      tstates += "~atstates~";
+    }\n";
   }
 
   /*
@@ -1439,9 +1435,9 @@ private nothrow @trusted @nogc:
 
   // ////////////////////////////////////////////////////////////////////////// //
   void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Other);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
+
   void z80_pokeb (ushort addr, ubyte b) {
     //pragma(inline, true);
-    /*memWrite(addr, b, MemIO.Data);*/
     version(Zymosis_Testing) memWriting(addr, b);
     if (auto mpg = mem.ptr+addr/MemPage.Size) {
       mpg.mem[addr%MemPage.Size] = b;
@@ -1453,21 +1449,19 @@ private nothrow @trusted @nogc:
   // t2: memory read
   ubyte z80_peekb_3ts (ushort addr) {
     version(Zymosis_Testing) {} else pragma(inline, true);
-    z80_contention(addr, 3, /*MemIO.Data, MemIOReq.Read*/ true);
-    //return memRead(addr, MemIO.Data);
+    mixin(z80_contention!("addr", "3"));
     version(Zymosis_Testing) memReading(addr);
     return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
   }
 
   void z80_peekb_3ts_args_noread () {
     version(Zymosis_Testing) {} else pragma(inline, true);
-    z80_contention(PC, 3, /*MemIO.OpArg, MemIOReq.Read*/ true);
+    mixin(z80_contention!("PC", "3"));
   }
 
   ubyte z80_peekb_3ts_args () {
     version(Zymosis_Testing) {} else pragma(inline, true);
-    z80_contention(PC, 3, /*MemIO.OpArg, MemIOReq.Read*/ true);
-    //return memRead(PC, MemIO.Data);
+    mixin(z80_contention!("PC", "3"));
     version(Zymosis_Testing) memReading(PC);
     return mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
   }
@@ -1476,7 +1470,7 @@ private nothrow @trusted @nogc:
   // t2: memory write
   void z80_pokeb_3ts (ushort addr, ubyte b) {
     pragma(inline, true);
-    z80_contention(addr, 3, /*MemIO.Data, MemIOReq.Write*/ true);
+    mixin(z80_contention!("addr", "3"));
     z80_pokeb(addr, b);
   }
 
