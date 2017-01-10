@@ -43,7 +43,7 @@ public:
   enum Latency = FFT_LENGTH-STEP_SIZE;
 
 public:
-  float[Bands] bands = 0; // [-70..30)
+  int[Bands] bands = 0; // [-70..30)
   int* bin_base;
   float* bin_delta;
   fftw_real* comp;
@@ -159,22 +159,25 @@ public:
     if (ofs >= input.length || input.length < stride) return;
 
     float[Bands+1] gains = void;
-    gains[0..$-1] = bands[];
+    foreach (immutable idx, int v; bands[]) {
+      if (v < -70) v = -70; else if (v > 30) v = 30;
+      gains.ptr[idx] = cast(float)v;
+    }
     gains[$-1] = 0.0f;
 
     float[FFT_LENGTH/2] coefs = void;
 
     // convert gains from dB to co-efficents
     foreach (immutable i; 0..Bands) {
-      int gain_idx = cast(int)((gains[i]*10)+700);
+      int gain_idx = cast(int)((gains.ptr[i]*10)+700);
       if (gain_idx < 0) gain_idx = 0; else if (gain_idx > 999) gain_idx = 999;
-      gains[i] = db_table[gain_idx];
+      gains.ptr[i] = db_table[gain_idx];
     }
 
     // calculate coefficients for each bin of FFT
     coefs[0] = 0.0f;
     for (int bin = 1; bin < FFT_LENGTH/2-1; ++bin) {
-      coefs[bin] = ((1.0f-bin_delta[bin])*gains[bin_base[bin]])+(bin_delta[bin]*gains[bin_base[bin]+1]);
+      coefs[bin] = ((1.0f-bin_delta[bin])*gains.ptr[bin_base[bin]])+(bin_delta[bin]*gains.ptr[bin_base[bin]+1]);
     }
 
     if (fifo_pos == 0) fifo_pos = Latency;

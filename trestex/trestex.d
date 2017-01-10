@@ -50,7 +50,7 @@ version(supereq) {
   import mbandeq_j;
 } else {
   import iv.mbandeq;
-  __gshared float[MBandEq.Bands] eqbands = 0;
+  __gshared int[MBandEq.Bands] eqbands = 0;
 }
 __gshared bool eqchanged = false;
 
