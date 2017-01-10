@@ -465,42 +465,14 @@ Action playFile () {
 
   writeTime();
 
-  mainloop: for (;;) {
-    int frmread = 0;
-
-    if (!paused) {
-      if (!alsaIsOpen) {
-        if (!alsaInit(sio.rate, sio.channels)) assert(0, "cannot init ALSA playback");
-      }
-
-      frmread = sio.readFrames(buffer.ptr, BUF_SIZE/sio.channels);
-      if (frmread <= 0) break;
-
-      alsaWriteShort(buffer[0..frmread*sio.channels]);
-    } else {
-      if (alsaIsOpen) alsaShutdown();
-      import core.thread, core.time;
-      Thread.sleep(100.msecs);
-    }
-
-    long tm = sio.timeread;
-    if (tm/1000 != prevtime/1000 || paused != oldpaused || alsaGain != oldgain) {
-      prevtime = tm;
-      oldpaused = paused;
-      oldgain = alsaGain;
-      writeTime();
-    }
-
-    if (ttyIsKeyHit) {
-      {
-        auto conoldcdump = conDump;
-        scope(exit) conDump = conoldcdump;
-        conDump = ConDump.none;
-        conProcessQueue();
-      }
-      auto key = ttyReadKey(0, 20);
+  void processKeys (bool dowait) {
+    for (;;) {
+      if (!dowait && !ttyIsKeyHit) return;
+      dowait = false; // only first iteration should be blocking
+      auto key = ttyReadKey(-1, 20);
       if (!ttyconEvent(key)) {
-        auto oldtm = tm;
+        auto oldtm = sio.timeread;
+        auto tm = oldtm;
         switch (key.key) {
           case TtyEvent.Key.Left:
             tm -= 10*1000;
@@ -516,10 +488,10 @@ Action playFile () {
             tm += 60*1000;
             break;
           case TtyEvent.Key.Char:
-            if (key.ch == '<') return Action.Prev;
-            if (key.ch == '>') return Action.Next;
-            if (key.ch == 'q') return Action.Quit;
-            if (key.ch == ' ') paused = !paused;
+            if (key.ch == '<') { concmd("prev"); return; }
+            if (key.ch == '>') { concmd("next"); return; }
+            if (key.ch == 'q') { concmd("quit"); return; }
+            if (key.ch == ' ') { concmd("paused toggle"); return; }
             if (key.ch == '0') alsaGain = 0;
             if (key.ch == '-') { alsaGain -= 10; if (alsaGain < -100) alsaGain = -100; }
             if (key.ch == '+') { alsaGain += 10; if (alsaGain > 1000) alsaGain = 1000; }
@@ -531,6 +503,33 @@ Action playFile () {
         if (oldtm != tm) sio.seekToTime(cast(uint)tm);
       }
     }
+  }
+
+  mainloop: for (;;) {
+    if (!paused) {
+      if (!alsaIsOpen) {
+        if (!alsaInit(sio.rate, sio.channels)) assert(0, "cannot init ALSA playback");
+      }
+
+      auto frmread = sio.readFrames(buffer.ptr, BUF_SIZE/sio.channels);
+      if (frmread <= 0) break;
+
+      alsaWriteShort(buffer[0..frmread*sio.channels]);
+    } else {
+      if (alsaIsOpen) alsaShutdown();
+      //import core.thread, core.time;
+      //Thread.sleep(100.msecs);
+    }
+
+    long tm = sio.timeread;
+    if (tm/1000 != prevtime/1000 || paused != oldpaused || alsaGain != oldgain) {
+      prevtime = tm;
+      oldpaused = paused;
+      oldgain = alsaGain;
+      writeTime();
+    }
+
+    processKeys(paused);
     {
       auto conoldcdump = conDump;
       scope(exit) conDump = conoldcdump;
