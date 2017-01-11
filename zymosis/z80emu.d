@@ -1439,8 +1439,10 @@ protected nothrow @trusted @nogc:
     //pragma(inline, true);
     version(Zymosis_Testing) memWriting(addr, b);
     if (auto mpg = mem.ptr+addr/MemPage.Size) {
-      mpg.mem[addr%MemPage.Size] = b;
-      if (mpg.writeHook) memWriteHook(addr);
+      if (!mpg.rom) {
+        mpg.mem[addr%MemPage.Size] = b;
+        if (mpg.writeHook) memWriteHook(addr);
+      }
     }
   }
 
