@@ -26,12 +26,12 @@ public class ZymCPU {
 public:
   ///
   static struct MemPage {
-    enum Size = 4096; /// in page
+    //enum Size = 4096; /// in page
+    enum Size = 16384; /// in page
     ubyte* mem; /// pointer to Size bytes
     bool contended; /// is this page contended?
     bool rom; /// read-only?
-    bool enterHook; /// call enter hook before first opcode fetching from this page
-    bool leaveHook; /// call leave hook before opcode fetching from another page
+    //bool execHook; /// call execute hook before opcode fetching from this page
     bool writeHook; /// call write hook after something was written to this page
   }
 
@@ -93,7 +93,7 @@ private:
   ubyte mIM; // Interrupt Mode (0-2)
 
 public:
-  MemPage[65536/MemPage.Size] mem; /// machine memory; MUST be initialized before executing anything
+  MemPage[65536/MemPage.Size+1] mem; /// machine memory; MUST be initialized before executing anything
   bool[65536] bpmap; /// breakpoint map; breakpoint hook will be called if this is true; no autoreset
   ubyte[] ulacont; /// contention for memory access, with mreq; indexed by `tstates`
   ubyte[] ulacontnomreq; /// contention for memory access operation, without mreq; indexed by `tstates`
@@ -103,8 +103,8 @@ public:
   ubyte I, R; /// C.O.: I and R registers respectively
   ushort SP; /// stack pointer
   ushort PC; /// program counter
-  ushort prevPC; /// first byte of the last executed command
-  ushort origPC; /// first byte of the current executing command
+  ushort prevPC; /// first byte of the previous (before last) executed command
+  ushort lastPC; /// first byte of the last executed command
   bool IFF1, IFF2; /// interrupt flip-flops
   /** is CPU halted? main progam must manually reset this flag when it's appropriate
     * Zymosis will automatically reset it in intr() and nmi(). */
@@ -121,20 +121,12 @@ public:
 
 public:
   /**
-   * Page enter hook. Will be called before opcode fetching and tstate changing.
+   * Page execute hook. Will be called before opcode fetching and tstate changing.
+   * Ideal place to switch ROMs.
    *
-   * prevPC is previous instruction address, PC is current instruction address (to be fetched).
-   * Entering page `mpage`.
+   * PC is current instruction address (to be fetched). Entering page `mpage`.
    */
-  void execEnterHook (uint mpage) nothrow @trusted @nogc {}
-
-  /**
-   * Page leave hook. Will be called before opcode fetching and tstate changing.
-   *
-   * prevPC is previous instruction address, PC is current instruction address (to be fetched).
-   * Leaving page `mpage`.
-   */
-  void execLeaveHook (uint mpage) nothrow @trusted @nogc {}
+  void execHook () nothrow @trusted @nogc {}
 
   void memWriteHook (ushort addr) nothrow @trusted @nogc {}
 
@@ -249,7 +241,7 @@ public:
 
   /** "Soft" reset: clear only absolutely necessary things. */
   void softReset () {
-    PC = prevPC = origPC = 0;
+    PC = prevPC = lastPC = 0;
     DD = &HL;
     MEMPTR = 0;
     I = R = 0;
@@ -329,7 +321,8 @@ final:
       mixin(z80_contention!("PC", "4"));
       //ubyte res = memRead(PC, MemIO.OpExt);
       version(Zymosis_Testing) memReading(PC);
-      ubyte res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+      //ubyte res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+      ubyte res = z80_peekb_i(PC);
       ++PC;
       mixin(IncRMixin);
       return res;
@@ -337,14 +330,8 @@ final:
 
     // main loop
     while ((nextEventTS < 0 || tstates < nextEventTS) && (tscount < 0 || tstates-tstart <= tscount)) {
-      prevPC = origPC;
-      origPC = PC;
-      uint mpage = PC/MemPage.Size;
       // process enter/leave hooks
-      if (prevPC/MemPage.Size != mpage) {
-        if (mem.ptr[prevPC/MemPage.Size].leaveHook) execLeaveHook(prevPC/MemPage.Size);
-        if (mem.ptr[mpage].enterHook) execEnterHook(mpage);
-      }
+      execHook();
       // process breakpoints
       if (bpmap[PC] && checkBreakpoint()) { bpHit = true; return tstates-tstart; }
       // read opcode -- OCR(4)
@@ -356,7 +343,10 @@ final:
       // read opcode
       //opcode = memRead(PC, MemIO.Opcode);
       version(Zymosis_Testing) memReading(PC);
-      opcode = mem.ptr[mpage].mem[PC%MemPage.Size];
+      //opcode = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+      prevPC = lastPC;
+      lastPC = PC;
+      opcode = z80_peekb_i(PC);
       version(Zymosis_Run_Log) {
         { import core.stdc.stdio; stderr.fprintf("PC=%04X; OP:%02X; tstates=%d\n", PC, opcode, tstates); }
       }
@@ -426,7 +416,7 @@ final:
           case 0xa1: case 0xb1: case 0xa9: case 0xb9:
             // MEMPTR
             if (isRepeated(opcode) && (!(BC == 1 || memByte(HL) == AF.a))) {
-              MEMPTR = cast(ushort)(origPC+1);
+              MEMPTR = cast(ushort)(lastPC+1);
             } else {
               MEMPTR = cast(ushort)(MEMPTR+(isBackward(opcode) ? -1 : 1));
             }
@@ -639,7 +629,8 @@ final:
           //opcode = memRead(PC, MemIO.OpExt);
           //FIXME: call enter/leave hooks here too?
           version(Zymosis_Testing) memReading(PC);
-          opcode = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+          //opcode = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+          opcode = z80_peekb_i(PC);
           mixin(z80_contention_by1ts_pc!(2, "ulacont"));
           ++PC;
         }
@@ -1433,6 +1424,8 @@ protected nothrow @trusted @nogc:
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
+  final ubyte z80_peekb_i (ushort addr) { pragma(inline, true); return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size]; }
+
   void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Other);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
 
   void z80_pokeb (ushort addr, ubyte b) {
@@ -1452,7 +1445,8 @@ protected nothrow @trusted @nogc:
     version(Zymosis_Testing) {} else pragma(inline, true);
     mixin(z80_contention!("addr", "3"));
     version(Zymosis_Testing) memReading(addr);
-    return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
+    //return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
+    return z80_peekb_i(addr);
   }
 
   void z80_peekb_3ts_args_noread () {
@@ -1464,7 +1458,8 @@ protected nothrow @trusted @nogc:
     version(Zymosis_Testing) {} else pragma(inline, true);
     mixin(z80_contention!("PC", "3"));
     version(Zymosis_Testing) memReading(PC);
-    return mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+    //return mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+    return z80_peekb_i(PC);
   }
 
   // t1: setting /MREQ & /WR
@@ -1522,11 +1517,13 @@ protected nothrow @trusted @nogc:
     //pragma(inline, true);
     z80_peekb_3ts_args_noread();
     version(Zymosis_Testing) { if (truecc) memReading(PC); }
-    ushort res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+    //ushort res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
+    ushort res = z80_peekb_i(PC);
     ++PC;
     z80_peekb_3ts_args_noread();
     version(Zymosis_Testing) { if (truecc) memReading(PC); }
-    res |= (mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size])<<8;
+    //res |= (mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size])<<8;
+    res |= z80_peekb_i(PC)<<8;
     if (wait1) {
       //z80_contention_by1ts_pc(wait1);
       if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
