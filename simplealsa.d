@@ -161,20 +161,25 @@ void outSoundFlush () {
   xxbufused = 0;
   //{ import core.stdc.stdio; printf("smpCount: %u\n", cast(uint)smpCount); }
 
+  bool didFloat = false;
   short* b = cast(short*)xxbuffer.ptr;
   // do gain
   if (alsaGain) {
+    didFloat = true;
     tflShort2Float(b[0..smpCount], rsfbufi[0..smpCount]);
     immutable float gg = alsaGain/100.0f;
     foreach (ref float v; rsfbufi[0..smpCount]) v += v*gg;
-    tflFloat2Short(rsfbufi[0..smpCount], b[0..smpCount]);
+    //tflFloat2Short(rsfbufi[0..smpCount], b[0..smpCount]);
   }
 
   // equalizer
   bool doeq = false;
   foreach (int v; alsaEqBands[]) if (v != 0) { doeq = true; break; }
   if (doeq && alsaEnableEqualizer) {
-    tflShort2Float(b[0..smpCount], rsfbufi[0..smpCount]);
+    if (!didFloat) {
+      didFloat = true;
+      tflShort2Float(b[0..smpCount], rsfbufi[0..smpCount]);
+    }
     mbeql.bands[] = alsaEqBands[];
     if (xxoutchans == 1) {
       mbeql.run(rsfbufo[0..smpCount], rsfbufi[0..smpCount]);
@@ -183,18 +188,23 @@ void outSoundFlush () {
       mbeql.run(rsfbufo[0..smpCount], rsfbufi[0..smpCount], 2, 0);
       mbeqr.run(rsfbufo[0..smpCount], rsfbufi[0..smpCount], 2, 1);
     }
-    tflFloat2Short(rsfbufo[0..smpCount], b[0..smpCount]);
+    rsfbufi[0..smpCount] = rsfbufo[0..smpCount];
+    //tflFloat2Short(rsfbufo[0..smpCount], b[0..smpCount]);
   }
 
   //{ import core.stdc.stdio; printf("smpCount: %u\n", cast(uint)smpCount); }
   // need resampling?
   if (srate == realsrate || !alsaEnableResampling) {
     // easy deal, no resampling required
+    if (didFloat) tflFloat2Short(rsfbufi[0..smpCount], b[0..smpCount]);
     outSoundFlushX(b, smpCount*2);
   } else {
     // oops, must resample
     SpeexResampler.Data srbdata;
-    tflShort2Float(b[0..smpCount], rsfbufi[0..smpCount]);
+    if (!didFloat) {
+      didFloat = true;
+      tflShort2Float(b[0..smpCount], rsfbufi[0..smpCount]);
+    }
     uint inpos = 0;
     for (;;) {
       srbdata = srbdata.init; // just in case

@@ -175,9 +175,9 @@ public:
     }
 
     // calculate coefficients for each bin of FFT
-    coefs[0] = 0.0f;
+    coefs.ptr[0] = 0.0f;
     for (int bin = 1; bin < FFT_LENGTH/2-1; ++bin) {
-      coefs[bin] = ((1.0f-binDelta[bin])*gains.ptr[binBase[bin]])+(binDelta[bin]*gains.ptr[binBase[bin]+1]);
+      coefs.ptr[bin] = ((1.0f-binDelta[bin])*gains.ptr[binBase[bin]])+(binDelta[bin]*gains.ptr[binBase[bin]+1]);
     }
 
     if (fifoPos == 0) fifoPos = Latency;
@@ -195,10 +195,10 @@ public:
           // run the real->complex transform
           fftwf_execute(planRC);
           // multiply the bins magnitudes by the coeficients
-          comp[0] *= coefs[0];
+          comp[0] *= coefs.ptr[0];
           foreach (immutable i; 1..FFT_LENGTH/2) {
-            comp[i] *= coefs[i];
-            comp[FFT_LENGTH-i] *= coefs[i];
+            comp[i] *= coefs.ptr[i];
+            comp[FFT_LENGTH-i] *= coefs.ptr[i];
           }
           // run the complex->real transform
           fftwf_execute(planCR);
@@ -208,13 +208,13 @@ public:
           comp[FFT_LENGTH-16..FFT_LENGTH+16] = 0; // just in case
           kiss_fftr(planRC, realx, cast(kiss_fft_cpx*)comp);
           // multiply the bins magnitudes by the coeficients
-          comp[0*2+0] *= coefs[0];
+          comp[0*2+0] *= coefs.ptr[0];
           kiss_fft_cpx* cc = cast(kiss_fft_cpx*)comp;
           foreach (immutable i; 1..FFT_LENGTH/2) {
-            //comp[i*2+0] *= coefs[i];
-            //comp[i*2+1] *= coefs[i];
-            cc[i].r *= coefs[i];
-            cc[i].i *= coefs[i];
+            //comp[i*2+0] *= coefs.ptr[i];
+            //comp[i*2+1] *= coefs.ptr[i];
+            cc[i].r *= coefs.ptr[i];
+            cc[i].i *= coefs.ptr[i];
           }
           // run the complex->real transform
           kiss_fftri(planCR, cast(const(kiss_fft_cpx)*)comp, realx);
