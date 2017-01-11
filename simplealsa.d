@@ -28,10 +28,13 @@
 module iv.simplealsa;
 private:
 
+//version = simplealsa_writefile;
+
 import iv.alsa;
 import iv.follin.resampler;
 import iv.follin.utils;
-import iv.mbandeq;
+version(mbandeq_slow) import iv.mbandeq_slow; else import iv.mbandeq;
+version(simplealsa_writefile) import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -101,6 +104,7 @@ public uint alsaGetBestSampleRate (uint wantedRate) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version(simplealsa_writefile) VFile fo;
 __gshared snd_pcm_t* pcm;
 
 __gshared SpeexResampler srb;
@@ -123,19 +127,24 @@ void outSoundInit (uint chans) {
 
 
 void outSoundFlushX (const(void)* buf, uint bytes) {
-  auto bb = cast(const(short)*)buf;
-  auto fleft = bytes/(2*xxoutchans);
-  while (fleft > 0) {
-    auto frames = snd_pcm_writei(pcm, bb, fleft);
-    if (frames < 0) {
-      frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+  version(simplealsa_writefile) {
+    auto bb = cast(const(ubyte)*)buf;
+    fo.rawWriteExact(bb[0..bytes]);
+  } else {
+    auto bb = cast(const(short)*)buf;
+    auto fleft = bytes/(2*xxoutchans);
+    while (fleft > 0) {
+      auto frames = snd_pcm_writei(pcm, bb, fleft);
       if (frames < 0) {
-        //import core.stdc.stdio : printf;
-        //printf("snd_pcm_writei failed: %s\n", snd_strerror(cast(int)frames));
+        frames = snd_pcm_recover(pcm, cast(int)frames, 0);
+        if (frames < 0) {
+          //import core.stdc.stdio : printf;
+          //printf("snd_pcm_writei failed: %s\n", snd_strerror(cast(int)frames));
+        }
+      } else {
+        bb += cast(uint)frames*xxoutchans;
+        fleft -= cast(uint)frames;
       }
-    } else {
-      bb += cast(uint)frames*xxoutchans;
-      fleft -= cast(uint)frames;
     }
   }
 }
@@ -244,6 +253,7 @@ public void alsaShutdown (bool immediate=false) {
   }
   srate = realsrate = 0;
   xxoutchans = 0;
+  version(simplealsa_writefile) fo.close();
 }
 
 
@@ -293,6 +303,8 @@ public bool alsaInit (uint asrate, ubyte chans) {
     pcm = null;
     return false;
   }
+
+  version(simplealsa_writefile) fo = VFile("./zout.raw", "w");
 
   return true;
 }

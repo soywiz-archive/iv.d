@@ -32,6 +32,7 @@ module trestex is aliced; // due to Phobos bug
 
 import iv.cmdcon;
 import iv.cmdcontty;
+import iv.mbandeq;
 import iv.rawtty;
 import iv.simplealsa;
 import iv.vfs;
@@ -428,6 +429,227 @@ __gshared bool paused = false;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+enum BandHeight = 20;
+__gshared int eqCurBand = 0, eqCurBandOld = 0;
+__gshared bool eqBandEditor = false;
+__gshared bool eqBandEditorOld = false;
+__gshared int[MBandEq.Bands] eqOldBands = int.min;
+
+
+void drawEqBands () {
+  static int eqclamp (int v) { pragma(inline, true); return (v < -70 ? -70 : v > 30 ? 30 : v); }
+
+  __gshared char[65536] cobuf = void;
+  uint cobufpos = 0;
+
+  void conOReset () nothrow @trusted @nogc { cobufpos = 0; }
+
+  void conOFlush () nothrow @trusted @nogc { if (cobufpos) ttyRawWrite(cobuf[0..cobufpos]); cobufpos = 0; }
+
+  void conOPut (const(char)[] s...) nothrow @trusted @nogc {
+    while (s.length) {
+      auto left = cast(uint)cobuf.length-cobufpos;
+      if (left == 0) {
+        conOFlush();
+      } else {
+        if (s.length < left) left = cast(uint)s.length;
+        cobuf[cobufpos..cobufpos+left] = s[0..left];
+        s = s[left..$];
+        cobufpos += left;
+      }
+    }
+  }
+
+  void conOInt(T) (T n) nothrow @trusted @nogc if (__traits(isIntegral, T) && !is(T == char) && !is(T == wchar) && !is(T == dchar) && !is(T == bool) && !is(T == enum)) {
+    import core.stdc.stdio : snprintf;
+    char[64] buf = void;
+    static if (__traits(isUnsigned, T)) {
+      static if (T.sizeof > 4) {
+        auto len = snprintf(buf.ptr, buf.length, "%llu", n);
+      } else {
+        auto len = snprintf(buf.ptr, buf.length, "%u", cast(uint)n);
+      }
+    } else {
+      static if (T.sizeof > 4) {
+        auto len = snprintf(buf.ptr, buf.length, "%lld", n);
+      } else {
+        auto len = snprintf(buf.ptr, buf.length, "%d", cast(int)n);
+      }
+    }
+    if (len > 0) conOPut(buf[0..len]);
+  }
+
+  void conOColorFG (uint c) nothrow @trusted @nogc {
+    conOPut("\x1b[38;5;");
+    conOInt(ttyRgb2Color((c>>16)&0xff, (c>>8)&0xff, c&0xff));
+    conOPut("m");
+  }
+
+  void conOColorBG (uint c) nothrow @trusted @nogc {
+    conOPut("\x1b[48;5;");
+    conOInt(ttyRgb2Color((c>>16)&0xff, (c>>8)&0xff, c&0xff));
+    conOPut("m");
+  }
+
+  void conOAt (int x, int y) nothrow @trusted @nogc {
+    conOPut("\x1b[");
+    conOInt(y);
+    conOPut(";");
+    conOInt(x);
+    conOPut("H");
+  }
+
+  if (eqBandEditor != eqBandEditorOld && !eqBandEditor) {
+    // erase editor and exit
+    eqBandEditorOld = eqBandEditor;
+    eqCurBandOld = eqCurBand;
+    eqOldBands[] = int.min;
+    conOReset();
+    scope(exit) { conOPut("\x1b8"); conOFlush(); } // restore
+    conOPut("\x1b7\x1b[0m\x1b[H"); // save, reset color, goto top
+    foreach (immutable y; 0..BandHeight+2) conOPut("\x1b[K\r\n");
+    return;
+  }
+
+  // did something changed?
+  if (eqBandEditor == eqBandEditorOld && eqCurBand == eqCurBandOld) {
+    bool changed = false;
+    foreach (immutable idx, int v; alsaEqBands[]) if (v != eqOldBands[idx]) { changed = true; break; }
+    if (!changed) return;
+    if (!eqBandEditor) return;
+  }
+
+  bool drawFull = false;
+
+  if (eqBandEditor != eqBandEditorOld) drawFull = true;
+
+  eqBandEditorOld = eqBandEditor;
+
+  conOReset();
+  scope(exit) { conOPut("\x1b8"); conOFlush(); } // restore
+
+  conOPut("\x1b7\x1b[0m\x1b[H"); // save, reset color, goto top
+
+  conOColorBG(0x00_00_c0);
+  conOColorFG(0x80_80_80);
+
+  if (drawFull) {
+    foreach (immutable y; 0..BandHeight) {
+      conOPut("   ");
+      foreach (immutable x; 0..MBandEq.Bands) {
+        if (x == eqCurBand) conOColorFG(0xff_ff_00);
+        conOPut("|   ");
+        if (x == eqCurBand) conOColorFG(0x80_80_80);
+      }
+      conOPut("\x1b[K\r\n");
+    }
+    conOPut("\x1b[K\r\n");
+    conOPut("\x1b[K\r\n");
+
+    foreach (immutable x; 0..MBandEq.Bands) {
+      if (x%2 != 0) continue;
+      conOPut("\x1b[");
+      conOInt(BandHeight+1);
+      conOPut(";");
+      conOInt(3+x*4);
+      conOPut("H");
+      conOInt(cast(int)MBandEq.bandfrqs[x]);
+    }
+
+    foreach (immutable x; 0..MBandEq.Bands) {
+      if (x%2 == 0) continue;
+      conOPut("\x1b[");
+      conOInt(BandHeight+2);
+      conOPut(";");
+      conOInt(3+x*4);
+      conOPut("H");
+      conOInt(cast(int)MBandEq.bandfrqs[x]);
+    }
+
+    foreach (immutable x; 0..MBandEq.Bands) {
+      if (x == eqCurBand) conOColorFG(0xff_ff_00);
+      int bv = alsaEqBands[x];
+      if (bv < -70) bv = -70; else if (bv > 30) bv = 30;
+      bv += 70;
+      int y = BandHeight-BandHeight*bv/100;
+      conOPut("\x1b[");
+      conOInt(y);
+      conOPut(";");
+      conOInt(3+x*4);
+      conOPut("H");
+      conOPut("===");
+      if (y != BandHeight-BandHeight*(0+70)/100) {
+        conOPut("\x1b[");
+        conOInt(BandHeight-BandHeight*(0+70)/100);
+        conOPut(";");
+        conOInt(3+x*4);
+        conOPut("H");
+        conOPut("---");
+      }
+      if (x == eqCurBand) conOColorFG(0x80_80_80);
+    }
+  } else {
+    // remove highlight from old band
+    if (eqCurBandOld >= 0 && eqCurBand != eqCurBandOld) {
+      //conOColorFG(0x80_80_80);
+      foreach (immutable y; 0..BandHeight) {
+        conOAt(3+eqCurBandOld*4, y+1);
+        conOPut(" | ");
+      }
+      conOAt(3+eqCurBandOld*4, BandHeight-BandHeight*(0+70)/100);
+      conOPut("---");
+      conOAt(3+eqCurBandOld*4, BandHeight-BandHeight*(eqclamp(alsaEqBands[eqCurBandOld])+70)/100);
+      conOPut("===");
+    }
+    // repaint new band
+    conOColorFG(0xff_ff_00);
+    foreach (immutable y; 0..BandHeight) {
+      conOAt(3+eqCurBand*4, y+1);
+      conOPut(" | ");
+    }
+    conOAt(3+eqCurBand*4, BandHeight-BandHeight*(0+70)/100);
+    conOPut("---");
+    conOAt(3+eqCurBand*4, BandHeight-BandHeight*(eqclamp(alsaEqBands[eqCurBand])+70)/100);
+    conOPut("===");
+  }
+
+  eqCurBandOld = eqCurBand;
+  eqOldBands[] = alsaEqBands[];
+}
+
+
+bool eqProcessKey (TtyEvent key) {
+  static int eqclamp (int v) { pragma(inline, true); return (v < -70 ? -70 : v > 30 ? 30 : v); }
+
+  if (!eqBandEditor) return false;
+  switch (key.key) {
+    case TtyEvent.Key.Left: if (eqCurBand > 0) --eqCurBand; return true;
+    case TtyEvent.Key.Right: if (++eqCurBand >= MBandEq.Bands) eqCurBand = MBandEq.Bands-1; return true;
+    case TtyEvent.Key.Up: alsaEqBands[eqCurBand] = eqclamp(alsaEqBands[eqCurBand]+10); return true;
+    case TtyEvent.Key.Down: alsaEqBands[eqCurBand] = eqclamp(alsaEqBands[eqCurBand]-10); return true;
+    case TtyEvent.Key.Home: alsaEqBands[eqCurBand] = 30; return true;
+    case TtyEvent.Key.End: alsaEqBands[eqCurBand] = -70; return true;
+    case TtyEvent.Key.Insert: alsaEqBands[eqCurBand] = 0; return true;
+    default:
+      if (key == "S" || key == "s") {
+        try {
+          import iv.vfs.io;
+          auto fo = VFile("./mbeqa.rc", "w");
+          fo.writeln("eq_reset");
+          foreach (immutable idx, int v; alsaEqBands[]) fo.writeln("eq_band ", idx, " ", v);
+        } catch (Exception) {}
+      } else if (key == "L" || key == "l") {
+        concmd("exec mbeqa.rc");
+      } else if (key == "R" || key == "r") {
+        concmd("eq_reset");
+      }
+      break;
+  }
+  return false;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum Action { None, Quit, Prev, Next }
 __gshared Action conaction;
 
@@ -461,7 +683,7 @@ Action playFile () {
     auto len = snprintf(xbuf.ptr, xbuf.length, "\r%d:%02d / %d:%02d (%d)%s\x1b[K", cast(uint)(tm/1000/60), cast(uint)(tm/1000%60), cast(uint)(sio.timetotal/1000/60), cast(uint)(sio.timetotal/1000%60), alsaGain, (paused ? " !".ptr : "".ptr));
     ttyRawWrite(xbuf[0..len]);
   }
-  scope(exit) ttyRawWrite("\n");
+  scope(exit) ttyRawWrite("\r\x1b[0m\x1b[K\n");
 
   writeTime();
 
@@ -470,7 +692,7 @@ Action playFile () {
       if (!dowait && !ttyIsKeyHit) return;
       dowait = false; // only first iteration should be blocking
       auto key = ttyReadKey(-1, 20);
-      if (!ttyconEvent(key)) {
+      if (!ttyconEvent(key) && !eqProcessKey(key)) {
         auto oldtm = sio.timeread;
         auto tm = oldtm;
         switch (key.key) {
@@ -486,6 +708,9 @@ Action playFile () {
             break;
           case TtyEvent.Key.Up:
             tm += 60*1000;
+            break;
+          case TtyEvent.Key.F1:
+            concmd("eq_editor toggle");
             break;
           case TtyEvent.Key.Char:
             if (key.ch == '<') { concmd("prev"); return; }
@@ -536,6 +761,7 @@ Action playFile () {
       conDump = ConDump.none;
       conProcessQueue();
     }
+    drawEqBands();
     ttyconDraw();
     if (isQuitRequested) return Action.Quit;
     if (conaction != Action.None) { auto res = conaction; conaction = Action.None; return res; }
@@ -563,6 +789,8 @@ void main (string[] args) {
   conRegVar!alsaEnableEqualizer("use_equalizer", "allow audio equalizer?");
 
   conRegVar!paused("paused", "is playback paused?");
+
+  conRegVar!eqBandEditor("eq_editor", "is eq band editor active?");
 
   // lol, `std.trait : ParameterDefaults()` blocks using argument with name `value`
   conRegFunc!((int idx, byte value) {

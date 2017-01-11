@@ -36,7 +36,7 @@ private:
 
 public:
   version(mbandeq_extended) {
-    enum Bands = 39;
+    enum Bands = 30;
   } else {
     enum Bands = 15;
   }
@@ -230,12 +230,19 @@ public:
     }
   }
 
-private:
+public:
   version(mbandeq_extended) {
+    /*
     static immutable float[Bands] bandfrqs = [
       12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100, 125, 150, 175, 200, 250, 300, 350, 400,
       500, 600, 700, 800, 1000, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 4000, 4800,
       5600, 6400, 8000, 9600, 11200, 12800, 16000, 19200, 22400
+    ];
+    */
+    static immutable float[Bands] bandfrqs = [
+      50, 75, 125, 150, 200, 250, 300, 350, 400,
+      500, 600, 700, 800, 1000, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 4000, 4800,
+      5600, 6400, 8000, 9600, 11200, 12800, 16000
     ];
   } else {
     static immutable float[Bands] bandfrqs = [
