@@ -693,8 +693,8 @@ Action playFile () {
       dowait = false; // only first iteration should be blocking
       auto key = ttyReadKey(-1, 20);
       if (!ttyconEvent(key) && !eqProcessKey(key)) {
-        auto oldtm = sio.timeread;
-        auto tm = oldtm;
+        long oldtm = sio.timeread;
+        long tm = oldtm;
         switch (key.key) {
           case TtyEvent.Key.Left:
             tm -= 10*1000;
@@ -725,7 +725,10 @@ Action playFile () {
         }
         if (tm < 0) tm = 0;
         if (tm >= sio.timetotal) tm = (sio.timetotal ? sio.timetotal-1 : 0);
-        if (oldtm != tm) sio.seekToTime(cast(uint)tm);
+        if (oldtm != tm) {
+          //conwriteln("seek to: ", tm);
+          sio.seekToTime(cast(uint)tm);
+        }
       }
     }
   }
