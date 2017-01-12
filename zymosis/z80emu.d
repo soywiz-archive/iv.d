@@ -269,7 +269,7 @@ final:
   @property ubyte IM () const pure nothrow @safe @nogc { pragma(inline, true); return mIM; } /** get Interrupt Mode (0-2) */
   @property void IM (in ubyte v) pure nothrow @safe @nogc { pragma(inline, true); mIM = (v > 2 ? 0 : v); } /** set Interrupt Mode (0-2) */
 
-  enum IncRMixin = `R = ((R&0x7f)+1)|(R&0x80);`;
+  enum IncRMixin = `R = ((R+1)&0x7f)|(R&0x80);`;
 
   /** increment R register. note that Z80 never changes the high bit of R. */
   void incR () pure nothrow @safe @nogc { pragma(inline, true); mixin(IncRMixin); }
