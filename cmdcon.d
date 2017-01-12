@@ -3852,7 +3852,7 @@ public void concmdf(string fmt, A...) (A args) {
     assert(0, "out of args for format specifier");
   }
 
-  conwriteln(concmdbuf[0..concmdbufpos]);
+  //conwriteln(concmdbuf[0..concmdbufpos]);
 }
 
 

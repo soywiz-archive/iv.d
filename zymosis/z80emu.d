@@ -293,7 +293,7 @@ final:
    */
   int exec (int tscount=-1) nothrow @trusted @nogc {
     enum SET_TRUE_CC =
-    `switch ((opcode>>3)&0x07) {
+    `final switch ((opcode>>3)&0x07) {
       case 0: trueCC = (AF.f&Z80Flags.Z) == 0; break;
       case 1: trueCC = (AF.f&Z80Flags.Z) != 0; break;
       case 2: trueCC = (AF.f&Z80Flags.C) == 0; break;
@@ -302,7 +302,6 @@ final:
       case 5: trueCC = (AF.f&Z80Flags.PV) != 0; break;
       case 6: trueCC = (AF.f&Z80Flags.S) == 0; break;
       case 7: trueCC = (AF.f&Z80Flags.S) != 0; break;
-      default:
     }`;
     static bool isRepeated (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
     static bool isBackward (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x08) != 0); }
@@ -1264,11 +1263,9 @@ final:
    * Returns:
    *  popped word
    */
-  ushort pop () {
-    ushort res = memByte(SP);
-    SP = (SP+1)&0xffff;
-    res |= memByte(SP)<<8;
-    SP = (SP+1)&0xffff;
+  ushort pop () nothrow @trusted @nogc {
+    ushort res = memByte(SP++);
+    res |= memByte(SP++)<<8;
     return res;
   }
 
@@ -1280,11 +1277,9 @@ final:
    * Returns:
    *  nothing
    */
-  void push (ushort value) {
-    SP = (cast(int)SP-1)&0xffff;
-    z80_pokeb_i(SP, (value>>8)&0xff);
-    SP = (cast(int)SP-1)&0xffff;
-    z80_pokeb_i(SP, value&0xff);
+  void push (ushort value) nothrow @trusted @nogc {
+    z80_pokeb_i(--SP, (value>>8)&0xff);
+    z80_pokeb_i(--SP, value&0xff);
   }
 
   /** Execute EXX command. */
@@ -1298,6 +1293,9 @@ final:
   void exafaf () @safe nothrow @nogc {
     ushort t = AF; AF = AFx; AFx = t;
   }
+
+  alias pokeb = z80_pokeb_i;
+  alias peekb = memByte;
 
 private:
   static string z80_contention_by1ts(string addrs, ubyte cnt, string carr="ulacont") () {
@@ -1426,7 +1424,7 @@ protected nothrow @trusted @nogc:
   // ////////////////////////////////////////////////////////////////////////// //
   final ubyte z80_peekb_i (ushort addr) { pragma(inline, true); return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size]; }
 
-  void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Other);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
+  final public void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Other);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
 
   void z80_pokeb (ushort addr, ubyte b) {
     //pragma(inline, true);
