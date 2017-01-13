@@ -36,7 +36,7 @@ public:
     ubyte* mem; /// pointer to Size bytes
     bool contended; /// is this page contended?
     bool rom; /// read-only?
-    bool writeHook; /// call write hook after something was written to this page
+    bool writeHook; /// call write hook before something was written to this page
   }
 
 public:
@@ -124,7 +124,8 @@ public:
    */
   void execHook () nothrow @trusted @nogc {}
 
-  void memWriteHook (ushort addr) nothrow @trusted @nogc {}
+  /// this will be called before writing occurs
+  void memWriteHook (ushort addr, ubyte b) nothrow @trusted @nogc {}
 
   /**
    * Breakpoint hook
@@ -1337,34 +1338,36 @@ protected nothrow @trusted @nogc:
     //       If A0 is low, the 1st T-state is also contended, 3rd and 4th are not.
     //       If A0 is high, all T-states are contended
     //   Reading the floating bus returns the second attribute byte of fetched pair (the last byte fetched), or 0xFF.
-    final void doPortOp(bool input) (ushort port, scope void delegate () nothrow @trusted @nogc doio) nothrow @trusted @nogc {
+    final void doPortOp(bool lateio) (ushort port, scope void delegate () nothrow @trusted @nogc doio) nothrow @trusted @nogc {
       bool ulaPort = ((port&0x01) == 0);
       if (mem.ptr[port/MemPage.Size].contended) {
         // the port looks like contended memory address
         // first tstate is contended
-        if (tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
-        ++tstates;
+        if (tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates]; ++tstates;
+        static if (!lateio) doio();
         // second tstate is contended
-        if (tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
-        ++tstates;
+        if (tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates]; ++tstates;
         // here port i/o occurs, at third tstate
-        doio();
+        //static if (lateio) doio();
         // third and fourth tstates are contended for non-ULA ports
+        if (!ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates]; ++tstates;
         if (!ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
-        ++tstates;
-        if (!ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
+        static if (lateio) doio(); // and FUSE says that it is here
         ++tstates;
       } else {
         // the port doesn't look like contended memory address
         // first tstate is not contended
         ++tstates;
+        static if (!lateio) doio();
         // second tstate is contended for all ULA ports
-        if (ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
-        ++tstates;
+        if (ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates]; ++tstates;
         // here port i/o occurs, at third tstate
-        doio();
+        //static if (lateio) doio();
         // third and fourth tstates are not contended
-        tstates += 2;
+        //tstates += 2;
+        ++tstates;
+        static if (lateio) doio(); // and FUSE says that it is here
+        ++tstates;
       }
     }
   }
@@ -1405,8 +1408,8 @@ protected nothrow @trusted @nogc:
     version(Zymosis_Testing) memWriting(addr, b);
     if (auto mpg = mem.ptr+addr/MemPage.Size) {
       if (!mpg.rom) {
+        if (mpg.writeHook) memWriteHook(addr, b);
         mpg.mem[addr%MemPage.Size] = b;
-        if (mpg.writeHook) memWriteHook(addr);
       }
     }
   }
