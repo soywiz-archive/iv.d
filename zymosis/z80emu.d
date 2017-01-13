@@ -18,7 +18,10 @@
 module iv.zymosis.z80emu;
 
 //version = Zymosis_Like_FUSE;
-//version = Zymosis_Testing;
+//version = Zymosis_Testing; // to use with FUSE testing suite
+
+version(Zymosis_Testing) pragma(msg, "Zymosis: building test version");
+version(Zymosis_Like_FUSE) pragma(msg, "Zymosis: building simplified SCF/CCF");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
