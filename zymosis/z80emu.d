@@ -1330,32 +1330,36 @@ protected nothrow @trusted @nogc:
 
   /* ************************************************************************** */
   version(Zymosis_Testing) {} else {
+    // port contention:
+    //   Ports with A0 low are contended at the 2nd T-state
+    //   Ports with A0 high are uncontended
+    //   Ports with a high byte between 0x40 and 0x7F comply with 1 and 2 above, but are additionally contended:
+    //       If A0 is low, the 1st T-state is also contended, 3rd and 4th are not.
+    //       If A0 is high, all T-states are contended
+    //   Reading the floating bus returns the second attribute byte of fetched pair (the last byte fetched), or 0xFF.
     final void doPortOp(bool input) (ushort port, scope void delegate () nothrow @trusted @nogc doio) nothrow @trusted @nogc {
+      bool ulaPort = ((port&0x01) == 0);
       if (mem.ptr[port/MemPage.Size].contended) {
         // the port looks like contended memory address
         // first tstate is contended
-        if ((port&0x01) == 0 && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
+        if (tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
         ++tstates;
-        // second tstate is contended for all ULA ports
-        if ((port&0x01) == 0 && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
+        // second tstate is contended
+        if (tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
         ++tstates;
         // here port i/o occurs, at third tstate
         doio();
         // third and fourth tstates are contended for non-ULA ports
-        if ((port&0x01) == 0) {
-          tstates += 2;
-        } else {
-          if ((port&0x01) == 0 && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
-          ++tstates;
-          if ((port&0x01) == 0 && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
-          ++tstates;
-        }
+        if (!ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
+        ++tstates;
+        if (!ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
+        ++tstates;
       } else {
         // the port doesn't look like contended memory address
         // first tstate is not contended
         ++tstates;
         // second tstate is contended for all ULA ports
-        if ((port&0x01) == 0 && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
+        if (ulaPort && tstates >= 0 && tstates < ulacontport.length) tstates += ulacontport.ptr[tstates];
         ++tstates;
         // here port i/o occurs, at third tstate
         doio();
