@@ -18,7 +18,7 @@
 module iv.zymosis.z80emu;
 
 //version = Zymosis_Like_FUSE;
-version = Zymosis_Testing;
+//version = Zymosis_Testing;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -31,7 +31,6 @@ public:
     ubyte* mem; /// pointer to Size bytes
     bool contended; /// is this page contended?
     bool rom; /// read-only?
-    //bool execHook; /// call execute hook before opcode fetching from this page
     bool writeHook; /// call write hook after something was written to this page
   }
 
@@ -176,10 +175,15 @@ public:
   abstract void portWrite (ushort port, ubyte value) nothrow @trusted @nogc;
 
   /// get byte from memory, don't trigger any breakpoints or such
-  public final ubyte memByte (ushort addr) nothrow @trusted @nogc {
+  public final ubyte memPeekB (ushort addr) nothrow @trusted @nogc {
     pragma(inline, true);
-    //return memRead(addr, MemIO.Other);
     return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
+  }
+
+  /// set byte in memory, don't trigger any breakpoints or such, but respect ROM
+  public final void memPokeB (ushort addr, ubyte b) nothrow @trusted @nogc {
+    pragma(inline, true);
+    if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b;
   }
 
   /**
@@ -261,10 +265,8 @@ final:
   @property ubyte IM () const pure nothrow @safe @nogc { pragma(inline, true); return mIM; } /** get Interrupt Mode (0-2) */
   @property void IM (in ubyte v) pure nothrow @safe @nogc { pragma(inline, true); mIM = (v > 2 ? 0 : v); } /** set Interrupt Mode (0-2) */
 
-  enum IncRMixin = `R = ((R+1)&0x7f)|(R&0x80);`;
-
   /** increment R register. note that Z80 never changes the high bit of R. */
-  void incR () pure nothrow @safe @nogc { pragma(inline, true); mixin(IncRMixin); }
+  void incR () pure nothrow @safe @nogc { pragma(inline, true); R = ((R+1)&0x7f)|(R&0x80); }
 
   /**
    * Execute emulated CPU instructions.
@@ -284,17 +286,6 @@ final:
    *  number of tstates actually spent
    */
   int exec (int tscount=-1) nothrow @trusted @nogc {
-    enum SET_TRUE_CC =
-    `final switch ((opcode>>3)&0x07) {
-      case 0: trueCC = (AF.f&Z80Flags.Z) == 0; break;
-      case 1: trueCC = (AF.f&Z80Flags.Z) != 0; break;
-      case 2: trueCC = (AF.f&Z80Flags.C) == 0; break;
-      case 3: trueCC = (AF.f&Z80Flags.C) != 0; break;
-      case 4: trueCC = (AF.f&Z80Flags.PV) == 0; break;
-      case 5: trueCC = (AF.f&Z80Flags.PV) != 0; break;
-      case 6: trueCC = (AF.f&Z80Flags.S) == 0; break;
-      case 7: trueCC = (AF.f&Z80Flags.S) != 0; break;
-    }`;
     static bool isRepeated (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
     static bool isBackward (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x08) != 0); }
     ubyte opcode;
@@ -306,22 +297,33 @@ final:
     bool prevOpChangedFlagsXX;
     bpHit = false;
 
+    bool doCond (ubyte code) {
+      final switch (code&0x07) {
+        case 0: return (AF.f&Z80Flags.Z) == 0;
+        case 1: return (AF.f&Z80Flags.Z) != 0;
+        case 2: return (AF.f&Z80Flags.C) == 0;
+        case 3: return (AF.f&Z80Flags.C) != 0;
+        case 4: return (AF.f&Z80Flags.PV) == 0;
+        case 5: return (AF.f&Z80Flags.PV) != 0;
+        case 6: return (AF.f&Z80Flags.S) == 0;
+        case 7: return (AF.f&Z80Flags.S) != 0;
+      }
+      assert(0);
+    }
+
     //FIXME: call enter/leave hooks here too?
     ubyte fetchOpcodeExt () nothrow @trusted @nogc {
       //pragma(inline, true);
-      version(Zymosis_Testing) {
-        z80_contention(PC, 4, true);
-        memReading(PC);
-      } else {
-        z80_contention(PC, 4, true);
-        //z80_contention(((I<<8)|R), 2, false); // memory refresh
+      contention(PC, 4, true);
+      version(Zymosis_Testing) {} else {
+        //contention(((I<<8)|R), 2, false); // memory refresh
         if (mem.ptr[PC/MemPage.Size].contended && tstates >= 0 && tstates < ulacont.length) {
           if (ulacont.ptr[tstates] != 0) assert(0, "intertal error: contention tables are wrong");
         }
       }
       // it doesn't really matter when R is incremented here
-      mixin(IncRMixin);
-      return z80_peekb_i(PC++);
+      incR();
+      return peekb(PC++);
     }
 
     // main loop
@@ -338,17 +340,16 @@ final:
       //        then if following cycles have internal operations before placing another address on the address bus
       //        then the ULA continues to see IR and contends as normal as it would with any other register paired address.
       // it doesn't matter if we will really emulate IR here, 'cause T1 contention should end up in "non-contended" state
-      z80_contention(PC, 4, true);
-      //z80_contention(((I<<8)|R), 2, false); // memory refresh
+      contention(PC, 4, true);
+      //contention(((I<<8)|R), 2, false); // memory refresh
       if (evenM1 && (tstates&0x01)) ++tstates;
       // read opcode
-      version(Zymosis_Testing) memReading(PC);
       prevPC = lastPC;
       lastPC = PC;
-      opcode = z80_peekb_i(PC);
+      opcode = peekb(PC);
       version(Zymosis_Run_Log) { { import core.stdc.stdio; stderr.fprintf("PC=%04X; OP:%02X; tstates=%d\n", PC, opcode, tstates); } }
       ++PC;
-      mixin(IncRMixin);
+      incR();
       prevOpChangedFlagsXX = prevOpChangedFlags;
       prevOpChangedFlags = false;
       prevWasEIDDR = EIDDR.Normal;
@@ -367,7 +368,7 @@ final:
         // test if this instruction have (HL)
         if (withIndexBmp[opcode>>5]&(1<<(opcode&0x1f))) {
           // 3rd byte is always DISP here
-          disp = z80_peekb_3ts_args();
+          disp = peekb_3ts_args();
           if (disp > 127) disp -= 256;
           ++PC;
           MEMPTR = (cast(int)DD.w+disp)&0xffff;
@@ -387,10 +388,10 @@ final:
         switch (opcode) {
           // LDI, LDIR, LDD, LDDR
           case 0xa0: case 0xb0: case 0xa8: case 0xb8:
-            tmpB = z80_peekb_3ts(HL);
-            z80_pokeb_3ts(DE, tmpB);
+            tmpB = peekb_3ts(HL);
+            pokeb_3ts(DE, tmpB);
             // MWR(5)
-            z80_contention_by1ts(DE, 2);
+            contention_by1ts(DE, 2);
             --BC;
             tmpB = (tmpB+AF.a)&0xff;
             prevOpChangedFlags = true;
@@ -401,7 +402,7 @@ final:
             if (isRepeated(opcode)) {
               if (BC != 0) {
                 // IOP(5)
-                z80_contention_by1ts(DE, 5);
+                contention_by1ts(DE, 5);
                 // do it again
                 PC -= 2;
                 MEMPTR = (PC+1)&0xffff;
@@ -412,14 +413,14 @@ final:
           // CPI, CPIR, CPD, CPDR
           case 0xa1: case 0xb1: case 0xa9: case 0xb9:
             // MEMPTR
-            if (isRepeated(opcode) && (!(BC == 1 || memByte(HL) == AF.a))) {
+            if (isRepeated(opcode) && (!(BC == 1 || memPeekB(HL) == AF.a))) {
               MEMPTR = cast(ushort)(lastPC+1);
             } else {
               MEMPTR = cast(ushort)(MEMPTR+(isBackward(opcode) ? -1 : 1));
             }
-            tmpB = z80_peekb_3ts(HL);
+            tmpB = peekb_3ts(HL);
             // IOP(5)
-            z80_contention_by1ts(HL, 5);
+            contention_by1ts(HL, 5);
             --BC;
             prevOpChangedFlags = true;
             AF.f = // BOO! FEAR THE MIGHTY BITS!
@@ -435,7 +436,7 @@ final:
               // repeated
               if ((AF.f&(Z80Flags.Z|Z80Flags.PV)) == Z80Flags.PV) {
                 // IOP(5)
-                z80_contention_by1ts(HL, 5);
+                contention_by1ts(HL, 5);
                 // do it again
                 PC -= 2;
               }
@@ -451,17 +452,17 @@ final:
           case 0xa2: case 0xb2: case 0xaa: case 0xba:
             MEMPTR = cast(ushort)(BC+(isBackward(opcode) ? -1 : 1));
             // OCR(5)
-            z80_contention_by1ts_ir(1);
+            contention_by1ts_ir(1);
             if (opcode&0x01) {
               // OUT*
-              tmpB = z80_peekb_3ts(HL); // MRD(3)
-              z80_port_write(BC, tmpB);
+              tmpB = peekb_3ts(HL); // MRD(3)
+              port_write(BC, tmpB);
               tmpW = cast(ushort)(HL+(isBackward(opcode) ? -1 : 1));
               tmpC = (tmpB+tmpW)&0xff;
             } else {
               // IN*
-              tmpB = z80_port_read(BC);
-              z80_pokeb_3ts(HL, tmpB); // MWR(3)
+              tmpB = port_read(BC);
+              pokeb_3ts(HL, tmpB); // MWR(3)
               --BC.b;
               if (isBackward(opcode)) tmpC = (cast(int)tmpB+cast(int)BC.c-1)&0xff; else tmpC = (tmpB+BC.c+1)&0xff;
             }
@@ -476,7 +477,7 @@ final:
               if (BC.b != 0) {
                 ushort a = (opcode&0x01 ? BC : HL);
                 // IOP(5)
-                z80_contention_by1ts(a, 5);
+                contention_by1ts(a, 5);
                 // do it again
                 PC -= 2;
               }
@@ -491,7 +492,7 @@ final:
                 // IN r8,(C)
                 case 0:
                   MEMPTR = cast(ushort)(BC+1);
-                  tmpB = z80_port_read(BC);
+                  tmpB = port_read(BC);
                   prevOpChangedFlags = true;
                   AF.f = tblSZP53.ptr[tmpB]|(AF.f&Z80Flags.C);
                   final switch ((opcode>>3)&0x07) {
@@ -518,12 +519,12 @@ final:
                     case 6: tmpB = 0; break; // 0 on NMOS, 255 on CMOS
                     case 7: tmpB = AF.a; break;
                   }
-                  z80_port_write(BC, tmpB);
+                  port_write(BC, tmpB);
                   break;
                 // SBC HL,rr/ADC HL,rr
                 case 2:
                   // IOP(4),IOP(3)
-                  z80_contention_by1ts_ir(7);
+                  contention_by1ts_ir(7);
                   switch ((opcode>>4)&0x03) {
                     case 0: tmpW = BC; break;
                     case 1: tmpW = DE; break;
@@ -534,23 +535,23 @@ final:
                   break;
                 // LD (nn),rr/LD rr,(nn)
                 case 3:
-                  tmpW = z80_getpcw(0);
+                  tmpW = getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
                   if (opcode&0x08) {
                     // LD rr,(nn)
                     final switch ((opcode>>4)&0x03) {
-                      case 0: BC = z80_peekw_6ts(tmpW); break;
-                      case 1: DE = z80_peekw_6ts(tmpW); break;
-                      case 2: HL = z80_peekw_6ts(tmpW); break;
-                      case 3: SP = z80_peekw_6ts(tmpW); break;
+                      case 0: BC = peekw_6ts(tmpW); break;
+                      case 1: DE = peekw_6ts(tmpW); break;
+                      case 2: HL = peekw_6ts(tmpW); break;
+                      case 3: SP = peekw_6ts(tmpW); break;
                     }
                   } else {
                     // LD (nn),rr
                     final switch ((opcode>>4)&0x03) {
-                      case 0: z80_pokew_6ts(tmpW, BC); break;
-                      case 1: z80_pokew_6ts(tmpW, DE); break;
-                      case 2: z80_pokew_6ts(tmpW, HL); break;
-                      case 3: z80_pokew_6ts(tmpW, SP); break;
+                      case 0: pokew_6ts(tmpW, BC); break;
+                      case 1: pokew_6ts(tmpW, DE); break;
+                      case 2: pokew_6ts(tmpW, HL); break;
+                      case 3: pokew_6ts(tmpW, SP); break;
                     }
                   }
                   break;
@@ -565,7 +566,7 @@ final:
                   // RETI: 0x4d, 0x5d, 0x6d, 0x7d
                   // RETN: 0x45, 0x55, 0x65, 0x75
                   IFF1 = IFF2;
-                  MEMPTR = PC = z80_pop_6ts();
+                  MEMPTR = PC = pop_6ts();
                   if (opcode&0x08) {
                     // RETI
                     if (trapRETI(opcode)) return tstates-tstart;
@@ -588,13 +589,13 @@ final:
                     // LD I,A
                     case 0x47:
                       // OCR(5)
-                      z80_contention_by1ts_ir(1);
+                      contention_by1ts_ir(1);
                       I = AF.a;
                       break;
                     // LD R,A
                     case 0x4f:
                       // OCR(5)
-                      z80_contention_by1ts_ir(1);
+                      contention_by1ts_ir(1);
                       R = AF.a;
                       break;
                     // LD A,I
@@ -622,17 +623,16 @@ final:
         if (!gotDD) {
           opcode = fetchOpcodeExt();
         } else {
-          z80_contention(PC, 3, true);
+          contention(PC, 3, true);
           //FIXME: call enter/leave hooks here too?
-          version(Zymosis_Testing) memReading(PC);
-          opcode = z80_peekb_i(PC);
-          z80_contention_by1ts_pc(2, true);
+          opcode = peekb(PC);
+          contention_by1ts_pc(2, true);
           ++PC;
         }
         if (gotDD) {
           tmpW = cast(ushort)(cast(int)DD.w+disp);
-          tmpB = z80_peekb_3ts(tmpW);
-          z80_contention_by1ts(tmpW, 1);
+          tmpB = peekb_3ts(tmpW);
+          contention_by1ts(tmpW, 1);
           MEMPTR = tmpW; //???MEMPTR
         } else {
           final switch (opcode&0x07) {
@@ -642,7 +642,7 @@ final:
             case 3: tmpB = DE.e; break;
             case 4: tmpB = HL.h; break;
             case 5: tmpB = HL.l; break;
-            case 6: tmpB = z80_peekb_3ts(HL); z80_contention(HL, 1, false); MEMPTR = HL; /*???MEMPTR*/ break;
+            case 6: tmpB = peekb_3ts(HL); contention(HL, 1, false); MEMPTR = HL; /*???MEMPTR*/ break;
             case 7: tmpB = AF.a; break;
           }
         }
@@ -667,7 +667,7 @@ final:
           // BITs are not welcome here
           if (gotDD) {
             // tmpW was set earlier
-            if ((opcode&0x07) != 6) z80_pokeb_3ts(tmpW, tmpB);
+            if ((opcode&0x07) != 6) pokeb_3ts(tmpW, tmpB);
           }
           final switch (opcode&0x07) {
             case 0: BC.b = tmpB; break;
@@ -676,7 +676,7 @@ final:
             case 3: DE.e = tmpB; break;
             case 4: HL.h = tmpB; break;
             case 5: HL.l = tmpB; break;
-            case 6: z80_pokeb_3ts(cast(ushort)(cast(int)DD.w+disp), tmpB); break;
+            case 6: pokeb_3ts(cast(ushort)(cast(int)DD.w+disp), tmpB); break;
             case 7: AF.a = tmpB; break;
           }
         }
@@ -693,38 +693,32 @@ final:
                 // branches
                 if (opcode&0x20) {
                   // JR cc
-                  switch ((opcode>>3)&0x03) {
-                    case 0: trueCC = (AF.f&Z80Flags.Z) == 0; break;
-                    case 1: trueCC = (AF.f&Z80Flags.Z) != 0; break;
-                    case 2: trueCC = (AF.f&Z80Flags.C) == 0; break;
-                    case 3: trueCC = (AF.f&Z80Flags.C) != 0; break;
-                    default: trueCC = 0; break;
-                  }
+                  trueCC = doCond((opcode>>3)&0x03);
                 } else {
                   // DJNZ/JR
                   if ((opcode&0x08) == 0) {
                     // DJNZ
                     // OCR(5)
-                    z80_contention_by1ts_ir(1);
+                    contention_by1ts_ir(1);
                     --BC.b;
                     trueCC = (BC.b != 0);
                   } else {
                     // JR
-                    trueCC = 1;
+                    trueCC = true;
                   }
                 }
-                //???disp = z80_peekb_3ts_args(); // FUSE reads it only if condition was taken
+                //???disp = peekb_3ts_args(); // FUSE reads it only if condition was taken
                 if (trueCC) {
                   // execute branch (relative)
-                  disp = z80_peekb_3ts_args(); // FUSE reads it only if condition was taken
+                  disp = peekb_3ts_args(); // FUSE reads it only if condition was taken
                   // IOP(5)
                   if (disp > 127) disp -= 256; // convert to int8_t
-                  z80_contention_by1ts_pc(5, false);
+                  contention_by1ts_pc(5, false);
                   ++PC;
                   PC += disp;
                   MEMPTR = PC;
                 } else {
-                  z80_peekb_3ts_args_noread(); // FUSE reads it only if condition was taken
+                  peekb_3ts_args_noread(); // FUSE reads it only if condition was taken
                   ++PC;
                 }
               } else {
@@ -737,7 +731,7 @@ final:
               if (opcode&0x08) {
                 // ADD HL,rr
                 // IOP(4),IOP(3)
-                z80_contention_by1ts_ir(7);
+                contention_by1ts_ir(7);
                 final switch ((opcode>>4)&0x03) {
                   case 0: DD.w = ADD_DD(BC, DD.w); break;
                   case 1: DD.w = ADD_DD(DE, DD.w); break;
@@ -746,7 +740,7 @@ final:
                 }
               } else {
                 // LD rr,nn
-                tmpW = z80_getpcw(0);
+                tmpW = getpcw(0);
                 final switch ((opcode>>4)&0x03) {
                   case 0: BC = tmpW; break;
                   case 1: DE = tmpW; break;
@@ -759,44 +753,44 @@ final:
             case 2:
               final switch ((opcode>>3)&0x07) {
                 // LD (BC),A
-                case 0: z80_pokeb_3ts(BC, AF.a); MEMPTR.l = (BC.c+1)&0xff; MEMPTR.h = AF.a; break;
+                case 0: pokeb_3ts(BC, AF.a); MEMPTR.l = (BC.c+1)&0xff; MEMPTR.h = AF.a; break;
                 // LD A,(BC)
-                case 1: AF.a = z80_peekb_3ts(BC); MEMPTR = (BC+1)&0xffff; break;
+                case 1: AF.a = peekb_3ts(BC); MEMPTR = (BC+1)&0xffff; break;
                 // LD (DE),A
-                case 2: z80_pokeb_3ts(DE, AF.a); MEMPTR.l = (DE.e+1)&0xff; MEMPTR.h = AF.a; break;
+                case 2: pokeb_3ts(DE, AF.a); MEMPTR.l = (DE.e+1)&0xff; MEMPTR.h = AF.a; break;
                 // LD A,(DE)
-                case 3: AF.a = z80_peekb_3ts(DE); MEMPTR = (DE+1)&0xffff; break;
+                case 3: AF.a = peekb_3ts(DE); MEMPTR = (DE+1)&0xffff; break;
                 // LD (nn),HL
                 case 4:
-                  tmpW = z80_getpcw(0);
+                  tmpW = getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
-                  z80_pokew_6ts(tmpW, DD.w);
+                  pokew_6ts(tmpW, DD.w);
                   break;
                 // LD HL,(nn)
                 case 5:
-                  tmpW = z80_getpcw(0);
+                  tmpW = getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
-                  DD.w = z80_peekw_6ts(tmpW);
+                  DD.w = peekw_6ts(tmpW);
                   break;
                 // LD (nn),A
                 case 6:
-                  tmpW = z80_getpcw(0);
+                  tmpW = getpcw(0);
                   MEMPTR.l = (tmpW+1)&0xff;
                   MEMPTR.h = AF.a;
-                  z80_pokeb_3ts(tmpW, AF.a);
+                  pokeb_3ts(tmpW, AF.a);
                   break;
                 // LD A,(nn)
                 case 7:
-                  tmpW = z80_getpcw(0);
+                  tmpW = getpcw(0);
                   MEMPTR = (tmpW+1)&0xffff;
-                  AF.a = z80_peekb_3ts(tmpW);
+                  AF.a = peekb_3ts(tmpW);
                   break;
               }
               break;
             // INC rr/DEC rr
             case 3:
               // OCR(6)
-              z80_contention_by1ts_ir(2);
+              contention_by1ts_ir(2);
               if (opcode&0x08) {
                 // DEC
                 final switch ((opcode>>4)&0x03) {
@@ -825,12 +819,12 @@ final:
                 case 4: DD.h = INC8(DD.h); break;
                 case 5: DD.l = INC8(DD.l); break;
                 case 6:
-                  if (gotDD) { --PC; z80_contention_by1ts_pc(5, false); ++PC; }
+                  if (gotDD) { --PC; contention_by1ts_pc(5, false); ++PC; }
                   tmpW = cast(ushort)(cast(int)DD.w+disp);
-                  tmpB = z80_peekb_3ts(tmpW);
-                  z80_contention_by1ts(tmpW, 1);
+                  tmpB = peekb_3ts(tmpW);
+                  contention_by1ts(tmpW, 1);
                   tmpB = INC8(tmpB);
-                  z80_pokeb_3ts(tmpW, tmpB);
+                  pokeb_3ts(tmpW, tmpB);
                   break;
                 case 7: AF.a = INC8(AF.a); break;
               }
@@ -845,19 +839,19 @@ final:
                 case 4: DD.h = DEC8(DD.h); break;
                 case 5: DD.l = DEC8(DD.l); break;
                 case 6:
-                  if (gotDD) { --PC; z80_contention_by1ts_pc(5, false); ++PC; }
+                  if (gotDD) { --PC; contention_by1ts_pc(5, false); ++PC; }
                   tmpW = cast(ushort)(cast(int)DD.w+disp);
-                  tmpB = z80_peekb_3ts(tmpW);
-                  z80_contention_by1ts(tmpW, 1);
+                  tmpB = peekb_3ts(tmpW);
+                  contention_by1ts(tmpW, 1);
                   tmpB = DEC8(tmpB);
-                  z80_pokeb_3ts(tmpW, tmpB);
+                  pokeb_3ts(tmpW, tmpB);
                   break;
                 case 7: AF.a = DEC8(AF.a); break;
               }
               break;
             // LD r8,n
             case 6:
-              tmpB = z80_peekb_3ts_args();
+              tmpB = peekb_3ts_args();
               ++PC;
               final switch ((opcode>>3)&0x07) {
                 case 0: BC.b = tmpB; break;
@@ -867,9 +861,9 @@ final:
                 case 4: DD.h = tmpB; break;
                 case 5: DD.l = tmpB; break;
                 case 6:
-                  if (gotDD) { --PC; z80_contention_by1ts_pc(2, false); ++PC; }
+                  if (gotDD) { --PC; contention_by1ts_pc(2, false); ++PC; }
                   tmpW = cast(ushort)(cast(int)DD.w+disp);
-                  z80_pokeb_3ts(tmpW, tmpB);
+                  pokeb_3ts(tmpW, tmpB);
                   break;
                 case 7: AF.a = tmpB; break;
               }
@@ -936,9 +930,9 @@ final:
             case 4: tmpB = (gotDD && rdst == 6 ? HL.h : DD.h); break;
             case 5: tmpB = (gotDD && rdst == 6 ? HL.l : DD.l); break;
             case 6:
-              if (gotDD) { --PC; z80_contention_by1ts_pc(5, false); ++PC; }
+              if (gotDD) { --PC; contention_by1ts_pc(5, false); ++PC; }
               tmpW = cast(ushort)(cast(int)DD.w+disp);
-              tmpB = z80_peekb_3ts(tmpW);
+              tmpB = peekb_3ts(tmpW);
               break;
             case 7: tmpB = AF.a; break;
           }
@@ -950,9 +944,9 @@ final:
             case 4: if (gotDD && rsrc == 6) HL.h = tmpB; else DD.h = tmpB; break;
             case 5: if (gotDD && rsrc == 6) HL.l = tmpB; else DD.l = tmpB; break;
             case 6:
-              if (gotDD) { --PC; z80_contention_by1ts_pc(5, false); ++PC; }
+              if (gotDD) { --PC; contention_by1ts_pc(5, false); ++PC; }
               tmpW = cast(ushort)(cast(int)DD.w+disp);
-              z80_pokeb_3ts(tmpW, tmpB);
+              pokeb_3ts(tmpW, tmpB);
               break;
             case 7: AF.a = tmpB; break;
           }
@@ -967,9 +961,9 @@ final:
             case 4: tmpB = DD.h; break;
             case 5: tmpB = DD.l; break;
             case 6:
-              if (gotDD) { --PC; z80_contention_by1ts_pc(5, false); ++PC; }
+              if (gotDD) { --PC; contention_by1ts_pc(5, false); ++PC; }
               tmpW = cast(ushort)(cast(int)DD.w+disp);
-              tmpB = z80_peekb_3ts(tmpW);
+              tmpB = peekb_3ts(tmpW);
               break;
             case 7: tmpB = AF.a; break;
           }
@@ -989,9 +983,9 @@ final:
           final switch (opcode&0x07) {
             // RET cc
             case 0:
-              z80_contention_by1ts_ir(1);
-              mixin(SET_TRUE_CC);
-              if (trueCC) MEMPTR = PC = z80_pop_6ts();
+              contention_by1ts_ir(1);
+              trueCC = doCond((opcode>>3)&0x07);
+              if (trueCC) MEMPTR = PC = pop_6ts();
               break;
             // POP rr/special0
             case 1:
@@ -999,7 +993,7 @@ final:
                 // special 0
                 final switch ((opcode>>4)&0x03) {
                   // RET
-                  case 0: MEMPTR = PC = z80_pop_6ts(); break;
+                  case 0: MEMPTR = PC = pop_6ts(); break;
                   // EXX
                   case 1: exx(); break;
                   // JP (HL)
@@ -1007,13 +1001,13 @@ final:
                   // LD SP,HL
                   case 3:
                     // OCR(6)
-                    z80_contention_by1ts_ir(2);
+                    contention_by1ts_ir(2);
                     SP = DD.w;
                     break;
                 }
               } else {
                 // POP rr
-                tmpW = z80_pop_6ts();
+                tmpW = pop_6ts();
                 final switch ((opcode>>4)&0x03) {
                   case 0: BC = tmpW; break;
                   case 1: DE = tmpW; break;
@@ -1024,41 +1018,41 @@ final:
               break;
             // JP cc,nn
             case 2:
-              mixin(SET_TRUE_CC);
-              MEMPTR = z80_getpcw_cc(0, trueCC);
-              //MEMPTR = z80_getpcw(0);
+              trueCC = doCond((opcode>>3)&0x07);
+              MEMPTR = getpcw_cc(0, trueCC);
+              //MEMPTR = getpcw(0);
               if (trueCC) PC = MEMPTR;
               break;
             // special1/special3
             case 3:
               final switch ((opcode>>3)&0x07) {
                 // JP nn
-                case 0: MEMPTR = PC = z80_getpcw(0); break;
+                case 0: MEMPTR = PC = getpcw(0); break;
                 // OUT (n),A
                 case 2:
-                  tmpW = z80_peekb_3ts_args();
+                  tmpW = peekb_3ts_args();
                   ++PC;
                   MEMPTR.l = (tmpW+1)&0xff;
                   MEMPTR.h = AF.a;
                   tmpW |= AF.a<<8;
-                  z80_port_write(tmpW, AF.a);
+                  port_write(tmpW, AF.a);
                   break;
                 // IN A,(n)
                 case 3:
-                  tmpB = z80_peekb_3ts_args();
+                  tmpB = peekb_3ts_args();
                   tmpW = cast(ushort)((AF.a<<8)|tmpB);
                   ++PC;
                   MEMPTR = (tmpW+1)&0xffff;
-                  AF.a = z80_port_read(tmpW);
+                  AF.a = port_read(tmpW);
                   break;
                 // EX (SP),HL
                 case 4:
                   // SRL(3),SRH(4)
-                  tmpW = z80_peekw_6ts(SP);
-                  z80_contention_by1ts((SP+1)&0xffff, 1);
+                  tmpW = peekw_6ts(SP);
+                  contention_by1ts((SP+1)&0xffff, 1);
                   // SWL(3),SWH(5)
-                  z80_pokew_6ts_inverted(SP, DD.w);
-                  z80_contention_by1ts(SP, 2);
+                  pokew_6ts_inverted(SP, DD.w);
+                  contention_by1ts(SP, 2);
                   MEMPTR = DD.w = tmpW;
                   break;
                 // EX DE,HL
@@ -1075,10 +1069,10 @@ final:
               break;
             // CALL cc,nn
             case 4:
-              mixin(SET_TRUE_CC);
-              MEMPTR = z80_getpcw_cc((trueCC ? 1 : 0), trueCC);
+              trueCC = doCond((opcode>>3)&0x07);
+              MEMPTR = getpcw_cc((trueCC ? 1 : 0), trueCC);
               if (trueCC) {
-                z80_push_6ts(PC);
+                push_6ts(PC);
                 PC = MEMPTR;
               }
               break;
@@ -1087,26 +1081,26 @@ final:
               if (opcode&0x08) {
                 if (((opcode>>4)&0x03) == 0) {
                   // CALL
-                  MEMPTR = tmpW = z80_getpcw(1);
-                  z80_push_6ts(PC);
+                  MEMPTR = tmpW = getpcw(1);
+                  push_6ts(PC);
                   PC = tmpW;
                 }
               } else {
                 // PUSH rr
                 // OCR(5)
-                z80_contention_by1ts_ir(1);
+                contention_by1ts_ir(1);
                 switch ((opcode>>4)&0x03) {
                   case 0: tmpW = BC; break;
                   case 1: tmpW = DE; break;
                   case 2: tmpW = DD.w; break;
                   default: tmpW = AF; break;
                 }
-                z80_push_6ts(tmpW);
+                push_6ts(tmpW);
               }
               break;
             // ALU A,n
             case 6:
-              tmpB = z80_peekb_3ts_args();
+              tmpB = peekb_3ts_args();
               ++PC;
               final switch ((opcode>>3)&0x07) {
                 case 0: ADD_A(tmpB); break;
@@ -1122,8 +1116,8 @@ final:
             // RST nnn
             case 7:
               // OCR(5)
-              z80_contention_by1ts_ir(1);
-              z80_push_6ts(PC);
+              contention_by1ts_ir(1);
+              push_6ts(PC);
               MEMPTR = PC = opcode&0x38;
               break;
           }
@@ -1203,23 +1197,23 @@ final:
         // fallthru
         goto case 1;
       case 1: // just do RST #38
-        mixin(IncRMixin);
+        incR();
         tstates += 7; // M1 cycle: 7 T to acknowledge interrupt and decrement SP
         // M2 cycle: 3 T states write high byte of PC to the stack and decrement SP
         // M3 cycle: 3 T states write the low byte of PC and jump to #0038
-        z80_push_6ts(PC);
+        push_6ts(PC);
         MEMPTR = PC = 0x38;
         break;
       case 2:
-        mixin(IncRMixin);
+        incR();
         tstates += 7; // M1 cycle: 7 T to acknowledge interrupt and decrement SP
         // M2 cycle: 3 T states write high byte of PC to the stack and decrement SP
         // M3 cycle: 3 T states write the low byte of PC
-        z80_push_6ts(PC);
+        push_6ts(PC);
         // M4 cycle: 3 T to read high byte from the interrupt vector
         // M5 cycle: 3 T to read low byte from bus and jump to interrupt routine
         ushort a = ((cast(ushort)I)<<8)|0xff;
-        MEMPTR = PC = z80_peekw_6ts(a);
+        MEMPTR = PC = peekw_6ts(a);
         break;
     }
     return tstates-ots; // accepted
@@ -1241,17 +1235,17 @@ final:
     if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; // not accepted
     /*prevWasEIDDR = EIDDR.Normal;*/ // don't care
     if (halted) { halted = false; ++PC; }
-    mixin(IncRMixin);
+    incR();
     IFF1 = false; // IFF2 is not changed
     tstates += 5; // M1 cycle: 5 T states to do an opcode read and decrement SP
     // M2 cycle: 3 T states write high byte of PC to the stack and decrement SP
     // M3 cycle: 3 T states write the low byte of PC and jump to #0066
-    z80_push_6ts(PC);
+    push_6ts(PC);
     MEMPTR = PC = 0x66;
     return tstates-ots;
   }
 
-  /** Pop 16-bit word from stack without contention, using MemIO.Other. Changes SP.
+  /** Pop 16-bit word from stack without contention and breakpoint triggering. Changes SP.
    *
    * Params:
    *  none
@@ -1260,12 +1254,12 @@ final:
    *  popped word
    */
   ushort pop () nothrow @trusted @nogc {
-    ushort res = memByte(SP++);
-    res |= memByte(SP++)<<8;
+    ushort res = memPeekB(SP++);
+    res |= memPeekB(SP++)<<8;
     return res;
   }
 
-  /** Push 16-bit word to stack without contention, using MemIO.Other. Changes SP.
+  /** Push 16-bit word to stack without contention and breakpoint triggering. Changes SP.
    *
    * Params:
    *  value = word to push
@@ -1274,8 +1268,8 @@ final:
    *  nothing
    */
   void push (ushort value) nothrow @trusted @nogc {
-    z80_pokeb_i(--SP, (value>>8)&0xff);
-    z80_pokeb_i(--SP, value&0xff);
+    memPokeB(--SP, (value>>8)&0xff);
+    memPokeB(--SP, value&0xff);
   }
 
   /** Execute EXX command. */
@@ -1290,15 +1284,13 @@ final:
     ushort t = AF; AF = AFx; AFx = t;
   }
 
-  alias pokeb = z80_pokeb_i;
-  alias peekb = memByte;
-
 protected nothrow @trusted @nogc:
   /* ************************************************************************** */
   /* simulate contented memory access */
   /* (tstates = tstates+contention+atstates)*cnt */
   /* (ushort addr, int tstates, MemIO mio) */
-  final void z80_contention (ushort addr, int cnt, bool mreq) {
+  final void contention (ushort addr, int cnt, bool mreq) {
+    version(Zymosis_Testing) memContention(addr, mreq);
     if (mem.ptr[addr/MemPage.Size].contended) {
       auto cc = (mreq ? ulacont : ulacontport);
       if (tstates >= 0 && tstates < cc.length) {
@@ -1310,7 +1302,7 @@ protected nothrow @trusted @nogc:
     tstates += cnt;
   }
 
-  final void z80_contention_by1ts (ushort addr, int cnt, bool mreq=true) {
+  final void contention_by1ts (ushort addr, int cnt, bool mreq=true) {
     if (mem.ptr[addr/MemPage.Size].contended) {
       auto cc = (mreq ? ulacont : ulacontport);
       while (cnt-- > 0) {
@@ -1330,8 +1322,8 @@ protected nothrow @trusted @nogc:
     }
   }
 
-  final void z80_contention_by1ts_ir (int cnt) { z80_contention_by1ts(((I<<8)|R), cnt, false); }
-  final void z80_contention_by1ts_pc (int cnt, bool mreq) { z80_contention_by1ts(PC, cnt, mreq); }
+  final void contention_by1ts_ir (int cnt) { contention_by1ts(((I<<8)|R), cnt, false); }
+  final void contention_by1ts_pc (int cnt, bool mreq) { contention_by1ts(PC, cnt, mreq); }
 
   /* ************************************************************************** */
   version(Zymosis_Testing) {} else {
@@ -1370,7 +1362,7 @@ protected nothrow @trusted @nogc:
     }
   }
 
-  ubyte z80_port_read (ushort port) {
+  ubyte port_read (ushort port) {
     ubyte value;
     version(Zymosis_Testing) {
       portContention(port, 1, true, true); /* early */
@@ -1383,7 +1375,7 @@ protected nothrow @trusted @nogc:
     return value;
   }
 
-  void z80_port_write (ushort port, ubyte value) {
+  void port_write (ushort port, ubyte value) {
     version(Zymosis_Testing) {
       portContention(port, 1, false, true); /* early */
       portWrite(port, value);
@@ -1395,12 +1387,14 @@ protected nothrow @trusted @nogc:
   }
 
   // ////////////////////////////////////////////////////////////////////////// //
-  final ubyte z80_peekb_i (ushort addr) { pragma(inline, true); return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size]; }
+  //TODO: memory breakpoints
+  ubyte peekb (ushort addr) {
+    pragma(inline, true);
+    version(Zymosis_Testing) memReading(addr);
+    return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
+  }
 
-  final public void z80_pokeb_i (ushort addr, ubyte b) { pragma(inline, true); /*memWrite(addr, b, MemIO.Other);*/ if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b; }
-
-  void z80_pokeb (ushort addr, ubyte b) {
-    //pragma(inline, true);
+  void pokeb (ushort addr, ubyte b) {
     version(Zymosis_Testing) memWriting(addr, b);
     if (auto mpg = mem.ptr+addr/MemPage.Size) {
       if (!mpg.rom) {
@@ -1412,124 +1406,96 @@ protected nothrow @trusted @nogc:
 
   // t1: setting /MREQ & /RD
   // t2: memory read
-  ubyte z80_peekb_3ts (ushort addr) {
+  ubyte peekb_3ts (ushort addr) {
+    pragma(inline, true);
     version(Zymosis_Testing) {} else pragma(inline, true);
-    z80_contention(addr, 3, true);
-    version(Zymosis_Testing) memReading(addr);
-    return z80_peekb_i(addr);
+    contention(addr, 3, true);
+    return peekb(addr);
   }
 
-  void z80_peekb_3ts_args_noread () {
+  void peekb_3ts_args_noread () {
     version(Zymosis_Testing) {} else pragma(inline, true);
-    z80_contention(PC, 3, false); //FIXME???
+    contention(PC, 3, false); //FIXME???
   }
 
-  ubyte z80_peekb_3ts_args () {
+  ubyte peekb_3ts_args () {
+    pragma(inline, true);
     version(Zymosis_Testing) {} else pragma(inline, true);
-    z80_contention(PC, 3, true);
-    version(Zymosis_Testing) memReading(PC);
-    return z80_peekb_i(PC);
+    contention(PC, 3, true);
+    return peekb(PC);
   }
 
   // t1: setting /MREQ & /WR
   // t2: memory write
-  void z80_pokeb_3ts (ushort addr, ubyte b) {
+  void pokeb_3ts (ushort addr, ubyte b) {
     //pragma(inline, true);
-    z80_contention(addr, 3, true);
-    z80_pokeb(addr, b);
+    contention(addr, 3, true);
+    pokeb(addr, b);
   }
 
-  ushort z80_peekw_6ts (ushort addr) {
+  ushort peekw_6ts (ushort addr) {
     version(Zymosis_Testing) {} else pragma(inline, true);
-    ushort res = z80_peekb_3ts(addr);
-    return res|((cast(ushort)z80_peekb_3ts((addr+1)&0xffff))<<8);
-  }
-
-  void z80_pokew_6ts (ushort addr, ushort value) {
-    //pragma(inline, true);
-    z80_pokeb_3ts(addr, value&0xff);
-    z80_pokeb_3ts((addr+1)&0xffff, (value>>8)&0xff);
-  }
-
-  void z80_pokew_6ts_inverted (ushort addr, ushort value) {
-    //pragma(inline, true);
-    z80_pokeb_3ts((addr+1)&0xffff, (value>>8)&0xff);
-    z80_pokeb_3ts(addr, value&0xff);
-  }
-
-  ushort z80_getpcw (int wait1) {
-    //pragma(inline, true);
-    ushort res = z80_peekb_3ts_args();
-    PC = (PC+1)&0xffff;
-    res |= z80_peekb_3ts_args()<<8;
-    if (wait1) {
-      //z80_contention_by1ts_pc(wait1);
-      if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
-        while (wait1--) {
-          version(Zymosis_Testing) memContention(PC, true);
-          if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
-          ++tstates;
-        }
-      } else {
-        version(Zymosis_Testing) {
-          while (wait1--) { memContention(PC, true); ++tstates; }
-        } else {
-          tstates += wait1;
-        }
-      }
-    }
-    PC = (PC+1)&0xffff;
+    ushort res = peekb_3ts(addr++);
+    res |= peekb_3ts(addr)<<8;
     return res;
   }
 
-  ushort z80_getpcw_cc (int wait1, bool truecc) {
+  void pokew_6ts (ushort addr, ushort value) {
     //pragma(inline, true);
-    z80_peekb_3ts_args_noread();
-    version(Zymosis_Testing) { if (truecc) memReading(PC); }
-    //ushort res = mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size];
-    ushort res = z80_peekb_i(PC);
+    pokeb_3ts(addr, value&0xff);
+    pokeb_3ts((addr+1)&0xffff, (value>>8)&0xff);
+  }
+
+  void pokew_6ts_inverted (ushort addr, ushort value) {
+    //pragma(inline, true);
+    pokeb_3ts((addr+1)&0xffff, (value>>8)&0xff);
+    pokeb_3ts(addr, value&0xff);
+  }
+
+  ushort getpcw (int wait1) {
+    //pragma(inline, true);
+    ushort res = peekb_3ts_args();
     ++PC;
-    z80_peekb_3ts_args_noread();
-    version(Zymosis_Testing) { if (truecc) memReading(PC); }
-    //res |= (mem.ptr[PC/MemPage.Size].mem[PC%MemPage.Size])<<8;
-    res |= z80_peekb_i(PC)<<8;
-    if (wait1) {
-      //z80_contention_by1ts_pc(wait1);
-      if (ulacont.length && mem.ptr[PC/MemPage.Size].contended) {
-        while (wait1--) {
-          version(Zymosis_Testing) memContention(PC, true);
-          if (tstates >= 0 && tstates < ulacont.length) tstates += ulacont.ptr[tstates];
-          ++tstates;
-        }
-      } else {
-        version(Zymosis_Testing) {
-          while (wait1--) { memContention(PC, true); ++tstates; }
-        } else {
-          tstates += wait1;
-        }
-      }
-    }
+    res |= peekb_3ts_args()<<8;
+    if (wait1) contention_by1ts(PC, wait1, true);
     ++PC;
     return res;
   }
 
-  ushort z80_pop_6ts () {
+  ushort getpcw_cc (int wait1, bool truecc) {
     //pragma(inline, true);
-    ushort res = z80_peekb_3ts(SP);
-    SP = (SP+1)&0xffff;
-    res |= z80_peekb_3ts(SP)<<8;
-    SP = (SP+1)&0xffff;
+    peekb_3ts_args_noread();
+    version(Zymosis_Testing) {
+      if (truecc) memReading(PC);
+      ushort res = memPeekB(PC++);
+    } else {
+      ushort res = peekb(PC++);
+    }
+    peekb_3ts_args_noread();
+    version(Zymosis_Testing) {
+      if (truecc) memReading(PC);
+      res |= memPeekB(PC)<<8;
+    } else {
+      res |= peekb(PC)<<8;
+    }
+    if (wait1) contention_by1ts_pc(wait1, true);
+    ++PC;
+    return res;
+  }
+
+  ushort pop_6ts () {
+    pragma(inline, true);
+    ushort res = peekb_3ts(SP++);
+    res |= peekb_3ts(SP++)<<8;
     return res;
   }
 
   // 3 T states write high byte of PC to the stack and decrement SP
   // 3 T states write the low byte of PC and jump to #0066
-  void z80_push_6ts (ushort value) {
+  void push_6ts (ushort value) {
     //pragma(inline, true);
-    SP = (cast(int)SP-1)&0xffff;
-    z80_pokeb_3ts(SP, (value>>8)&0xff);
-    SP = (cast(int)SP-1)&0xffff;
-    z80_pokeb_3ts(SP, value&0xff);
+    pokeb_3ts(--SP, (value>>8)&0xff);
+    pokeb_3ts(--SP, value&0xff);
   }
 
   // you are not expected to understand the following bitmess
@@ -1739,7 +1705,7 @@ protected nothrow @trusted @nogc:
     pragma(inline, true);
     ubyte c = (AF.f&Z80Flags.C);
     uint newv = cast(uint)value+cast(uint)ddvalue+cast(uint)c;
-    ushort res = (newv&0xffff);
+    ushort res = newv&0xffff;
     MEMPTR = (ddvalue+1)&0xffff;
     prevOpChangedFlags = true;
     AF.f =
@@ -1794,11 +1760,11 @@ protected nothrow @trusted @nogc:
 
   void RRD_A () {
     //pragma(inline, true);
-    ubyte tmpB = z80_peekb_3ts(HL);
+    ubyte tmpB = peekb_3ts(HL);
     //IOP(4)
     MEMPTR = (HL+1)&0xffff;
-    z80_contention_by1ts(HL, 4, true);
-    z80_pokeb_3ts(HL, cast(ubyte)((AF.a<<4)|(tmpB>>4)));
+    contention_by1ts(HL, 4, true);
+    pokeb_3ts(HL, cast(ubyte)((AF.a<<4)|(tmpB>>4)));
     AF.a = (AF.a&0xf0)|(tmpB&0x0f);
     prevOpChangedFlags = true;
     AF.f = (AF.f&Z80Flags.C)|tblSZP53.ptr[AF.a];
@@ -1806,11 +1772,11 @@ protected nothrow @trusted @nogc:
 
   void RLD_A () {
     //pragma(inline, true);
-    ubyte tmpB = z80_peekb_3ts(HL);
+    ubyte tmpB = peekb_3ts(HL);
     //IOP(4)
     MEMPTR = (HL+1)&0xffff;
-    z80_contention_by1ts(HL, 4, true);
-    z80_pokeb_3ts(HL, cast(ubyte)((tmpB<<4)|(AF.a&0x0f)));
+    contention_by1ts(HL, 4, true);
+    pokeb_3ts(HL, cast(ubyte)((tmpB<<4)|(AF.a&0x0f)));
     AF.a = (AF.a&0xf0)|(tmpB>>4);
     prevOpChangedFlags = true;
     AF.f = (AF.f&Z80Flags.C)|tblSZP53.ptr[AF.a];
@@ -1820,7 +1786,7 @@ protected nothrow @trusted @nogc:
     pragma(inline, true);
     AF.a = ir;
     prevWasEIDDR = EIDDR.LdIorR;
-    z80_contention_by1ts_ir(1);
+    contention_by1ts_ir(1);
     prevOpChangedFlags = true;
     AF.f = tblSZ53.ptr[AF.a]|(AF.f&Z80Flags.C)|(IFF2 ? Z80Flags.PV : 0);
   }
@@ -1892,18 +1858,18 @@ public:
 
   /// Get opcode information. Useful for debuggers.
   final void opcodeInfo (ref ZOInfo nfo, ushort pc) nothrow @trusted @nogc {
-    //enum Z80OPI_WPC = `tmpW = memRead(pc, MemIO.Other)|(memRead(cast(ushort)((pc+1)&0xffff), MemIO.Other)<<8);pc += 2;`;
-    enum ReadPCW = `tmpW = memReadPC; tmpW |= memReadPC<<8;`;
     static bool isRepeated() (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
-    ubyte opcode;
-    ushort tmpW;
+
     ushort orgpc = pc;
-    int ixy = -1, disp = 0, gotDD = 0; // 0: ix; 1: iy
+    int ixy = -1; // 0: ix; 1: iy
+    int disp = 0;
+    bool gotDD = false;
     nfo = nfo.init;
 
-    ubyte memReadPC () nothrow @trusted @nogc { /*pragma(inline, true);*/ immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
+    ubyte memReadPC () nothrow @trusted @nogc { immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
+    ushort readPCW () nothrow @trusted @nogc { ushort res = memReadPC; res |= memReadPC<<8; return res; }
 
-    opcode = memReadPC;
+    ubyte opcode = memReadPC;
     if (opcode == 0xdd || opcode == 0xfd) {
       static immutable uint[8] withIndexBmp = [0x00u,0x700000u,0x40404040u,0x40bf4040u,0x40404040u,0x40404040u,0x0800u,0x00u];
       // IX/IY prefix
@@ -1957,8 +1923,7 @@ public:
               /*case 2: break;*/
               // LD (nn),rr/LD rr,(nn)
               case 3:
-                mixin(ReadPCW);
-                if (opcode&0x08) nfo.memread = tmpW; else nfo.memwrite = tmpW;
+                if (opcode&0x08) nfo.memread = readPCW; else nfo.memwrite = readPCW;
                 nfo.memrwword = true;
                 break;
               // NEG
@@ -2047,25 +2012,21 @@ public:
                 case 3: nfo.memread = ZOIMemIO.DE; break;
                 // LD (nn),HL
                 case 4:
-                  mixin(ReadPCW);
-                  nfo.memwrite = tmpW;
+                  nfo.memwrite = readPCW;
                   nfo.memrwword = true;
                   break;
                 // LD HL,(nn)
                 case 5:
-                  mixin(ReadPCW);
-                  nfo.memread = tmpW;
+                  nfo.memread = readPCW;
                   nfo.memrwword = true;
                   break;
                 // LD (nn),A
                 case 6:
-                  mixin(ReadPCW);
-                  nfo.memwrite = tmpW;
+                  nfo.memwrite = readPCW;
                   break;
                 // LD A,(nn)
                 case 7:
-                  mixin(ReadPCW);
-                  nfo.memread = tmpW;
+                  nfo.memread = readPCW;
                   break;
               }
               break;
@@ -2153,8 +2114,7 @@ public:
               break;
             // JP cc,nn
             case 2:
-              mixin(ReadPCW);
-              nfo.jump = tmpW;
+              nfo.jump = readPCW;
               nfo.cond = cast(ZOICond)((opcode>>3)&0x07);
               break;
             // special1/special3
@@ -2162,8 +2122,7 @@ public:
               switch ((opcode>>3)&0x07) {
                 // JP nn
                 case 0:
-                  mixin(ReadPCW);
-                  nfo.jump = tmpW;
+                  nfo.jump = readPCW;
                   break;
                 // OUT (n),A
                 case 2:
@@ -2191,8 +2150,7 @@ public:
               break;
             // CALL cc,nn
             case 4:
-              mixin(ReadPCW);
-              nfo.jump = tmpW;
+              nfo.jump = readPCW;
               nfo.push = ZOIStack.PC;
               nfo.cond = cast(ZOICond)((opcode>>3)&0x07);
               nfo.memwrite = ZOIMemIO.SP;
@@ -2203,8 +2161,7 @@ public:
               if (opcode&0x08) {
                 if (((opcode>>4)&0x03) == 0) {
                   // CALL
-                  mixin(ReadPCW);
-                  nfo.jump = tmpW;
+                  nfo.jump = readPCW;
                   nfo.push = ZOIStack.PC;
                   nfo.memwrite = ZOIMemIO.SP;
                   nfo.memrwword = true;
@@ -2238,7 +2195,6 @@ public:
     }
     nfo.len = (pc >= orgpc ? pc-orgpc : pc+0x10000-orgpc);
   }
-
 
 // ////////////////////////////////////////////////////////////////////////// //
 // simple disasm
