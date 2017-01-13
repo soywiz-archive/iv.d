@@ -19,9 +19,11 @@ module iv.zymosis.z80emu;
 
 //version = Zymosis_Like_FUSE;
 //version = Zymosis_Testing; // to use with FUSE testing suite
+//version = Zymosis_Check_Contention;
 
 version(Zymosis_Testing) pragma(msg, "Zymosis: building test version");
 version(Zymosis_Like_FUSE) pragma(msg, "Zymosis: building simplified SCF/CCF");
+version(Zymosis_Check_Contention) pragma(msg, "Zymosis: do some sanity checks for contention tables");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -318,12 +320,7 @@ final:
     ubyte fetchOpcodeExt () nothrow @trusted @nogc {
       //pragma(inline, true);
       contention(PC, 4, true);
-      version(Zymosis_Testing) {} else {
-        //contention(((I<<8)|R), 2, false); // memory refresh
-        if (mem.ptr[PC/MemPage.Size].contended && tstates >= 0 && tstates < ulacont.length) {
-          if (ulacont.ptr[tstates] != 0) assert(0, "intertal error: contention tables are wrong");
-        }
-      }
+      //contention(((I<<8)|R), 2, false); // memory refresh
       // it doesn't really matter when R is incremented here
       incR();
       return peekb(PC++);
@@ -1299,7 +1296,7 @@ protected nothrow @trusted @nogc:
       if (tstates >= 0 && tstates < cc.length) {
         tstates += cc.ptr[tstates];
         //{ import core.stdc.stdio; printf("CT: #%04X ts:%u; (%u)\n", cast(uint)PC, cast(uint)(tstates-3), cast(uint)ulacont.ptr[tstates-3]); }
-        //if (cc.ptr[tstates] != 0) assert(0, "intertal error: contention tables are wrong");
+        version(Zymosis_Check_Contention) if (cc.ptr[tstates] != 0) assert(0, "intertal error: contention tables are wrong");
       }
     }
     tstates += cnt;
@@ -1310,7 +1307,10 @@ protected nothrow @trusted @nogc:
       auto cc = (mreq ? ulacont : ulacontport);
       while (cnt-- > 0) {
         version(Zymosis_Testing) memContention(addr, mreq);
-        if (tstates >= 0 && tstates < cc.length) tstates += cc.ptr[tstates];
+        if (tstates >= 0 && tstates < cc.length) {
+          tstates += cc.ptr[tstates];
+          version(Zymosis_Check_Contention) if (cc.ptr[tstates] != 0) assert(0, "intertal error: contention tables are wrong");
+        }
         ++tstates;
       }
     } else {
