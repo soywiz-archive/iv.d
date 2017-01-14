@@ -63,30 +63,20 @@ public:
   }
 
   /// register pair
-  union RegPair {
+  union RegPair(string hi, string lo) {
   align(1):
     ushort w;
    version(LittleEndian) {
-    struct { align(1): ubyte c, b; }
-    struct { align(1): ubyte e, d; }
-    struct { align(1): ubyte l, h; }
-    struct { align(1): ubyte f, a; }
-    struct { align(1): ubyte xl, xh; }
-    struct { align(1): ubyte yl, yh; }
+    mixin("struct { align(1): ubyte "~lo~", "~hi~"; }");
    }
    version(BigEndian) {
-    struct { align(1): ubyte b, c; }
-    struct { align(1): ubyte d, e; }
-    struct { align(1): ubyte h, l; }
-    struct { align(1): ubyte a, f; }
-    struct { align(1): ubyte xh, xl; }
-    struct { align(1): ubyte yh, yl; }
+    mixin("struct { align(1): ubyte "~hi~", "~lo~"; }");
    }
    alias w this; // allow to use RegPair as ushort
   }
 
 private:
-  RegPair* DD; // pointer to current HL/IX/IY (inside this class) for the current command
+  RegPair!("h", "l")* DD; // pointer to current HL/IX/IY (inside this class) for the current command
   ubyte mIM; // Interrupt Mode (0-2)
 
 public:
@@ -94,9 +84,19 @@ public:
   bool[65536] bpmap; /// breakpoint map; breakpoint hook will be called if this is true; no autoreset
   ubyte[] ulacont; /// contention for memory access, with mreq; indexed by `tstates`
   ubyte[] ulacontport; /// contention for memory access operation, without mreq; indexed by `tstates`
-  RegPair BC, DE, HL, AF, IX, IY; /// registers
-  RegPair BCx, DEx, HLx, AFx; /// alternate registers
-  RegPair MEMPTR; /// special MEMPTR register
+  /// registers
+  RegPair!("b", "c") BC; ///
+  RegPair!("d", "e") DE; ///
+  RegPair!("h", "l") HL; ///
+  RegPair!("a", "f") AF; ///
+  RegPair!("xh", "xl") IX; ///
+  RegPair!("yh", "yl") IY; ///
+  /// alternate registers
+  RegPair!("b", "c") BCx; ///
+  RegPair!("d", "e") DEx; ///
+  RegPair!("h", "l") HLx; ///
+  RegPair!("a", "f") AFx; ///
+  RegPair!("h", "l") MEMPTR; /// special MEMPTR register
   ubyte I, R; /// C.O.: I and R registers respectively
   ushort SP; /// stack pointer
   ushort PC; /// program counter
@@ -363,7 +363,7 @@ final:
         //TODO: generate this table in compile time
         static immutable uint[8] withIndexBmp = [0x00,0x700000,0x40404040,0x40bf4040,0x40404040,0x40404040,0x0800,0x00];
         // IX/IY prefix
-        DD = (opcode == 0xdd ? &IX : &IY);
+        DD = (opcode == 0xdd ? cast(RegPair!("h", "l")*)&IX : cast(RegPair!("h", "l")*)&IY);
         // read opcode -- OCR(4)
         opcode = fetchOpcodeExt();
         // test if this instruction have (HL)
