@@ -1781,9 +1781,9 @@ final:
       if (!found) break;
       // i found her!
       if (srr.nocomments && hl !is null) {
-        auto lidx = gb.pos2line(caps[0].s);
+        auto lidx = gb.pos2line(srr.caps[0].s);
         if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
-        if (hiIsComment(gb.hi(caps[0].s))) {
+        if (hiIsComment(gb.hi(srr.caps[0].s))) {
           srrRegExpDoSkip(srr);
           continue;
         }
