@@ -17,11 +17,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-// this engine can layout any boxset (if it is valid)
+/// this engine can layout any boxset (if it is valid)
 module iv.flexlayout;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// point
 public align(1) struct FuiPoint {
 align(1):
   int x, y;
@@ -37,6 +38,8 @@ align(1):
   int opIndex (size_t idx) const { pragma(inline, true); return (idx == 0 ? x : idx == 1 ? y : 0); }
   void opIndexAssign (int v, size_t idx) { pragma(inline, true); if (idx == 0) x = v; else if (idx == 1) y = v; }
 }
+
+/// size
 public align(1) struct FuiSize {
 align(1):
   int w, h;
@@ -44,6 +47,9 @@ align(1):
   int opIndex (size_t idx) const { pragma(inline, true); return (idx == 0 ? w : idx == 1 ? h : 0); }
   void opIndexAssign (int v, size_t idx) { pragma(inline, true); if (idx == 0) w = v; else if (idx == 1) h = v; }
 }
+
+
+/// rectangle
 public align(1) struct FuiRect {
 align(1):
   FuiPoint pos;
@@ -65,6 +71,9 @@ align(1):
 
   bool inside (in FuiPoint pt) const { pragma(inline, true); return (pt.x >= pos.x && pt.y >= pos.y && pt.x < pos.x+size.w && pt.y < pos.y+size.h); }
 }
+
+
+/// margins
 public align(1) struct FuiMargin {
 align(1):
   int[4] ltrb;
@@ -85,56 +94,55 @@ pure nothrow @trusted @nogc:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// properties for layouter
+/// properties for layouter
 public class FuiLayoutProps {
+  ///
   enum Orientation {
-    Horizontal,
-    Vertical,
+    Horizontal, ///
+    Vertical, ///
   }
 
-  // "NPD" means "non-packing direction"
+  /// "NPD" means "non-packing direction"
   enum Align {
-    Center, // the available space is divided evenly
-    Start, // the NPD edge of each box is placed along the NPD of the parent box
-    End, // the opposite-NPD edge of each box is placed along the opposite-NPD of the parent box
-    Stretch, // the NPD-size of each boxes is adjusted to fill the parent box
+    Center, /// the available space is divided evenly
+    Start, /// the NPD edge of each box is placed along the NPD of the parent box
+    End, /// the opposite-NPD edge of each box is placed along the opposite-NPD of the parent box
+    Stretch, /// the NPD-size of each boxes is adjusted to fill the parent box
   }
 
-  void layoutingStarted () {} // called when layouter starts it's work
-  void layoutingComplete () {} // called when layouter complete it's work
+  void layoutingStarted () {} /// called before layouting starts
+  void layoutingComplete () {} /// called after layouting complete
 
   //WARNING! the following properties should be set to correct values before layouting
   //         you can use `layoutingStarted()` method to do this
 
-  bool visible; // invisible controls will be ignored by layouter
-  bool lineBreak; // layouter should start a new line after this control
-  bool ignoreSpacing;
+  bool visible; /// invisible controls will be ignored by layouter (should be set to correct values before layouting; you can use `layoutingStarted()` method to do this)
+  bool lineBreak; /// layouter should start a new line after this control (should be set to correct values before layouting; you can use `layoutingStarted()` method to do this)
+  bool ignoreSpacing; /// (should be set to correct values before layouting; you can use `layoutingStarted()` method to do this)
 
-  Orientation orientation = Orientation.Horizontal; // box orientation
-  Align aligning = Align.Start; // NPD for children; sadly, "align" keyword is reserved
-  int flex; // <=0: not flexible
+  Orientation orientation = Orientation.Horizontal; /// box orientation
+  Align aligning = Align.Start; /// NPD for children; sadly, "align" keyword is reserved
+  int flex; /// <=0: not flexible
 
-  FuiMargin padding; // padding for this widget
-  int spacing; // spacing for children
-  int lineSpacing; // line spacing for horizontal boxes
-  FuiSize minSize; // minimal control size
-  FuiSize maxSize; // maximal control size (0 means "unlimited")
+  FuiMargin padding; /// padding for this widget
+  int spacing; /// spacing for children
+  int lineSpacing; /// line spacing for horizontal boxes
+  FuiSize minSize; /// minimal control size
+  FuiSize maxSize; /// maximal control size (0 means "unlimited")
 
-  // controls in ahorizontal group has the same width, and the same height in a vertical group
-  FuiLayoutProps[Orientation.max+1] groupNext; // next sibling for this control's group or null
+  /// controls in ahorizontal group has the same width, and the same height in a vertical group
+  FuiLayoutProps[Orientation.max+1] groupNext; /// next sibling for this control's group or null
 
-  // calculated item dimensions
-  //FuiPoint pos;
-  //FuiSize size;
+  /// calculated item dimensions
   FuiRect rect;
-  final @property ref inout(FuiPoint) pos () pure inout nothrow @safe @nogc { pragma(inline, true); return rect.pos; }
-  final @property ref inout(FuiSize) size () pure inout nothrow @safe @nogc { pragma(inline, true); return rect.size; }
+  final @property ref inout(FuiPoint) pos () pure inout nothrow @safe @nogc { pragma(inline, true); return rect.pos; } ///
+  final @property ref inout(FuiSize) size () pure inout nothrow @safe @nogc { pragma(inline, true); return rect.size; } ///
 
-  FuiLayoutProps parent; // null for root element
-  FuiLayoutProps firstChild; // null for "no children"
-  FuiLayoutProps nextSibling; // null for last item
+  FuiLayoutProps parent; /// null for root element
+  FuiLayoutProps firstChild; /// null for "no children"
+  FuiLayoutProps nextSibling; /// null for last item
 
-  // you can specify your own root if necessary
+  /// you can specify your own root if necessary
   final FuiPoint toGlobal (FuiPoint pt, FuiLayoutProps root=null) const pure nothrow @trusted @nogc {
     for (FuiLayoutProps it = cast(FuiLayoutProps)this; it !is null; it = it.parent) {
       pt.x += it.pos.x;
@@ -144,7 +152,7 @@ public class FuiLayoutProps {
     return pt;
   }
 
-  // you can specify your own root if necessary
+  /// you can specify your own root if necessary
   final FuiPoint toLocal (FuiPoint pt, FuiLayoutProps root=null) const pure nothrow @trusted @nogc {
     for (FuiLayoutProps it = cast(FuiLayoutProps)this; it !is null; it = it.parent) {
       pt.x -= it.pos.x;
@@ -181,6 +189,7 @@ private static void forEachItem (FuiLayoutProps root, scope void delegate (FuiLa
 }
 
 
+/// do layouting
 void flexLayout (FuiLayoutProps aroot) {
   import std.algorithm : min, max;
 
