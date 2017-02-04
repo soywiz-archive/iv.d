@@ -130,7 +130,7 @@ public class FuiLayoutProps {
   FuiSize minSize; /// minimal control size
   FuiSize maxSize; /// maximal control size (0 means "unlimited")
 
-  /// controls in ahorizontal group has the same width, and the same height in a vertical group
+  /// controls in a horizontal group has the same width, and the same height in a vertical group
   FuiLayoutProps[Orientation.max+1] groupNext; /// next sibling for this control's group or null
 
   /// calculated item dimensions
