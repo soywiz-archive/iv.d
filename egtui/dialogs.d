@@ -222,6 +222,9 @@ int dialogHistory (FuiHistoryManager hisman, const(char)[] hid, int winx, int wi
   int maxhgt = ttyh;
   if (maxhgt < 3) maxhgt = 3;
 
+  int maxwdt = ttyw;
+  if (maxwdt < 3) maxwdt = 3;
+
   int topline = 0;
   int maxlen = 0;
   foreach (int idx; 0..hcount) {
@@ -257,11 +260,15 @@ int dialogHistory (FuiHistoryManager hisman, const(char)[] hid, int winx, int wi
   int winhgt = pgsize+2;
   int winwdt = maxlen+4;
 
+  if (winwdt > maxwdt) winwdt = maxwdt;
+
   enum laydesc = q{
     small-frame: true
     enter-close: true
     min-height: $winhgt
+    max-height: $maxhgt
     min-width: $winwdt
+    max-width: $maxwdt
 
     listbox: {
       id: "lbhistory"
@@ -271,7 +278,7 @@ int dialogHistory (FuiHistoryManager hisman, const(char)[] hid, int winx, int wi
   };
 
   auto ctx = FuiContext.create();
-  ctx.parse!(winhgt, winwdt)(laydesc);
+  ctx.parse!(winhgt, winwdt, maxwdt, maxhgt)(laydesc);
 
   // add items
   auto lbi = ctx["lbhistory"];

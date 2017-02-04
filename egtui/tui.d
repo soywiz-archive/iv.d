@@ -1510,10 +1510,22 @@ void listboxItemAdd (FuiContext ctx, int item, const(char)[] text) {
     data.lastItemOffset = itofs;
     ++data.itemCount;
     auto lp = ctx.layprops(item);
-    if (lp.minSize.w < len+3) lp.minSize.w = len+3;
-    if (lp.minSize.h < data.itemCount) lp.minSize.h = data.itemCount;
-    if (lp.minSize.w > lp.maxSize.w) lp.minSize.w = lp.maxSize.w;
-    if (lp.minSize.h > lp.maxSize.h) lp.minSize.h = lp.maxSize.h;
+    if (lp.parent >= 0) {
+      auto pp = ctx.layprops(lp.parent);
+      assert(pp !is null);
+      int maxW = pp.maxSize.w-(lp.parent == 0 ? 2 : 0);
+      if (lp.minSize.w < len+3) lp.minSize.w = len+3;
+      if (maxW > 0 && lp.minSize.w > maxW) lp.minSize.w = maxW;
+      int maxH = pp.maxSize.h-(lp.parent == 0 ? 2 : 0);
+      if (lp.minSize.h < data.itemCount) lp.minSize.h = data.itemCount;
+      if (maxH > 0 && lp.minSize.h > maxH) lp.minSize.h = maxH;
+      if (lp.minSize.h > lp.maxSize.h) lp.minSize.h = lp.maxSize.h;
+    } else {
+      if (lp.minSize.w < len+3) lp.minSize.w = len+3;
+      if (lp.minSize.w > lp.maxSize.w) lp.minSize.w = lp.maxSize.w;
+      if (lp.minSize.h < data.itemCount) lp.minSize.h = data.itemCount;
+      if (lp.minSize.h > lp.maxSize.h) lp.minSize.h = lp.maxSize.h;
+    }
   }
 }
 
