@@ -450,6 +450,9 @@ int dialogSelectAC(T : const(char)[]) (T[] items, int winx, int winy, int idx=0,
   if (maxhgt < 0 || maxhgt > ttyh) maxhgt = ttyh;
   if (maxhgt < 3) maxhgt = 3;
 
+  int maxwdt = ttyw;
+  if (maxwdt < 3) maxwdt = 3;
+
   int topline = 0;
   int maxlen = 0;
   foreach (const s; items) if (s.length > maxlen) maxlen = cast(int)s.length;
@@ -488,6 +491,8 @@ int dialogSelectAC(T : const(char)[]) (T[] items, int winx, int winy, int idx=0,
     enter-close: true
     min-height: $winhgt
     min-width: $winwdt
+    max-height: $maxhgt
+    max-width: $maxwdt
 
     listbox: {
       id: "lbac"
@@ -497,7 +502,7 @@ int dialogSelectAC(T : const(char)[]) (T[] items, int winx, int winy, int idx=0,
   };
 
   auto ctx = FuiContext.create();
-  ctx.parse!(winhgt, winwdt)(laydesc);
+  ctx.parse!(winhgt, winwdt, maxwdt, maxhgt)(laydesc);
 
   // add items
   auto lbi = ctx["lbac"];
