@@ -379,6 +379,7 @@ enum NVGImageFlags {
   FlipY           = 1<<3, /// Flips (inverses) image in Y direction when rendered.
   Premultiplied   = 1<<4, /// Image data has premultiplied alpha.
   NoFiltering     = 1<<8, /// use GL_NEAREST instead of GL_LINEAR
+  Nearest = NoFiltering,  /// compatibility with original NanoVG
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -3965,6 +3966,7 @@ enum FONS_INIT_GLYPHS = 256;
 enum FONS_INIT_ATLAS_NODES = 256;
 enum FONS_VERTEX_COUNT = 1024;
 enum FONS_MAX_STATES = 20;
+enum FONS_MAX_FALLBACKS = 20;
 
 uint fons__hashint() (uint a) {
   pragma(inline, true);
@@ -4000,6 +4002,8 @@ struct FONSfont {
   int cglyphs;
   int nglyphs;
   int[FONS_HASH_LUT_SIZE] lut;
+  int[FONS_MAX_FALLBACKS] fallbacks;
+  int nfallbacks;
 }
 
 struct FONSstate {
@@ -4348,6 +4352,15 @@ FONSstate* fons__getState (FONScontext* stash) {
   return &stash.states[stash.nstates-1];
 }
 
+bool fonsAddFallbackFont (FONScontext* stash, int base, int fallback) {
+  FONSfont* baseFont = stash.fonts[base];
+  if (baseFont.nfallbacks < FONS_MAX_FALLBACKS) {
+    baseFont.fallbacks[baseFont.nfallbacks++] = fallback;
+    return true;
+  }
+  return false;
+}
+
 public void fonsSetSize (FONScontext* stash, float size) {
   pragma(inline, true);
   fons__getState(stash).size = size;
@@ -4635,6 +4648,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   int pad, added;
   ubyte* bdst;
   ubyte* dst;
+  FONSfont* renderFont = font;
 
   version(nanovg_kill_font_blur) iblur = 0;
 
@@ -4654,9 +4668,24 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   }
 
   // Could not find glyph, create it.
-  scale = fons__tt_getPixelHeightScale(&font.font, size);
+  //scale = fons__tt_getPixelHeightScale(&font.font, size);
   g = fons__tt_getGlyphIndex(&font.font, codepoint);
-  fons__tt_buildGlyphBitmap(&font.font, g, size, scale, &advance, &lsb, &x0, &y0, &x1, &y1);
+  // Try to find the glyph in fallback fonts.
+  if (g == 0) {
+    for (i = 0; i < font.nfallbacks; ++i) {
+      FONSfont* fallbackFont = stash.fonts[font.fallbacks[i]];
+      int fallbackIndex = fons__tt_getGlyphIndex(&fallbackFont.font, codepoint);
+      if (fallbackIndex != 0) {
+        g = fallbackIndex;
+        renderFont = fallbackFont;
+        break;
+      }
+    }
+    // It is possible that we did not find a fallback glyph.
+    // In that case the glyph index 'g' is 0, and we'll proceed below and cache empty glyph.
+  }
+  scale = fons__tt_getPixelHeightScale(&renderFont.font, size);
+  fons__tt_buildGlyphBitmap(&renderFont.font, g, size, scale, &advance, &lsb, &x0, &y0, &x1, &y1);
   gw = x1-x0+pad*2;
   gh = y1-y0+pad*2;
 
