@@ -1134,9 +1134,9 @@ public int cpuJSR (ushort npc, ubyte na) {
 }
 
 
-public void c64Init () {
+public void c64Init (bool dbl=false) {
   //if (srate < 44100 || srate > 48000) assert(0, "invalid sampling rate");
-  synth_init(44100);
+  synth_init(44100/(dbl ? 2 : 1));
   memory[] = 0;
   cpuReset();
 }
@@ -1192,8 +1192,21 @@ public struct SidSong {
 }
 
 
+public ubyte c64SidGetSpeed (VFile fl) {
+  fl.seek(0);
+
+  char[4] sign;
+  fl.rawReadExact(sign[]);
+  if (sign != "PSID") throw new Exception("invalid file");
+
+  fl.seek(0x15);
+  return fl.readNum!ubyte;
+}
+
+
 public void c64SidLoad (VFile fl, out SidSong song) {
   uint nacpos = 0;
+
   const(char)[] loadStr (uint ofs) {
     fl.seek(ofs);
     fl.rawReadExact(song.nacbuf[nacpos..nacpos+32]);
@@ -1202,6 +1215,12 @@ public void c64SidLoad (VFile fl, out SidSong song) {
     foreach (immutable idx, char ch; res) if (ch == 0) return res[0..idx];
     return res;
   }
+
+  fl.seek(0);
+
+  char[4] sign;
+  fl.rawReadExact(sign[]);
+  if (sign != "PSID") throw new Exception("invalid file");
 
   // Name holen
   song.name = loadStr(0x16);
