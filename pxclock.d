@@ -85,5 +85,31 @@ public void clockSleepMilli (uint millisecs) nothrow @trusted @nogc {
 }
 
 } else {
-  static assert(0, "please, use real OS");
+  pragma(msg, "please, use real OS");
+
+  import core.sys.windows.winbase : GetTickCount, Sleep, QueryPerformanceCounter, QueryPerformanceFrequency;
+
+  __gshared long pcfreq;
+
+  shared static this () { QueryPerformanceFrequency(&pcfreq); }
+
+  public ulong clockMicro () nothrow @trusted @nogc {
+    long c;
+    if (!QueryPerformanceCounter(&c)) return cast(ulong)GetTickCount*1000;
+    return c*1000*1000/pcfreq;
+  }
+  public ulong clockMilli () nothrow @trusted @nogc {
+    long c;
+    if (!QueryPerformanceCounter(&c)) return cast(ulong)GetTickCount*1000;
+    return c*1000/pcfreq;
+  }
+  public void clockSleepMicro (uint microsecs) nothrow @trusted @nogc {
+    auto start = clockMicro();
+    while (clockMicro-start < microsecs) {}
+  }
+  public void clockSleepMilli (uint millisecs) nothrow @trusted @nogc {
+    if (millisecs >= 50) { Sleep(millisecs); return; }
+    auto start = clockMilli();
+    while (clockMilli-start < millisecs) {}
+  }
 }
