@@ -1479,7 +1479,8 @@ public:
         foreach (int lidx; linebookmarked.byKey) {
           // fix bookmark line if necessary
           if (lidx >= py) { smthWasChanged = true; lidx += eolcount; }
-          assert(lidx >= 0 && lidx < gb.linecount);
+          if (lidx < 0 || lidx >= gb.linecount) continue;
+          //assert(lidx >= 0 && lidx < gb.linecount);
           // add this bookmark to new list
           newbm[newbmpos++] = lidx;
         }
