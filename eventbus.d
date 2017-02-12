@@ -1,4 +1,4 @@
-/* Invisible Vector IRC client
+/* Invisible Vector Library
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,72 +23,75 @@ import iv.weakref;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-//WARNING! changing this is NOT thread-safe!
-//         you should set this up at program startup and don't touch after that
+///WARNING! changing this is NOT thread-safe!
+///         you should set this up at program startup and don't touch after that
 __gshared void delegate (const(char)[] msg) ebusLogError;
 
 
-// objects should implement this interface to make sinking/bubbling work
-// if this interface is not implemented, targeted message will be dropped on the floor
+/// objects should implement this interface to make sinking/bubbling work.
+/// if this interface is not implemented, targeted message will be dropped on the floor.
 public interface EventTarget {
-  // this should return parent object or null
+  /// this should return parent object or null
   abstract @property Object eventbusParent ();
-  // this will be called on sinking and bubbling
+  /// this will be called on sinking and bubbling
   abstract void eventbusOnEvent (Event evt);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// note that when event reached it's destination, it will be switched to bubbling
-// phase before calling the appropriate event handler
+/** note that when event reached it's destination, it will be switched to bubbling
+  * phase before calling the appropriate event handler. */
 public class Event {
 public:
-  // propagation flags
+  /// propagation flags
   enum PFlags : ubyte {
-    Eaten     = 1U<<0, // event is processed, but not cancelled
-    Cancelled = 1U<<1, // event is cancelled (it may be *both* processed and cancelled!)
-    Bubbling  = 1U<<2, // event is in bubbling phase
-    Posted    = 1U<<7, // event is posted
+    Eaten     = 1U<<0, /// event is processed, but not cancelled
+    Cancelled = 1U<<1, /// event is cancelled (it may be *both* processed and cancelled!)
+    Bubbling  = 1U<<2, /// event is in bubbling phase
+    Posted    = 1U<<7, /// event is posted
   }
-  protected Object osource; // event source, can be null
-  protected Object odest; // event destination, can be null for broadcast events
-  protected ubyte flags;
-  protected SysTime etime;
+  protected Object osource; /// event source, can be null
+  protected Object odest; /// event destination, can be null for broadcast events
+  protected ubyte flags; /// see PFlags
+  protected SysTime etime; /// emiting time
 
-  this () { etime = Clock.currTime; }
-  this (Object asrc) { etime = Clock.currTime; osource = asrc; }
-  this (Object asrc, Object adest) { etime = Clock.currTime; osource = asrc; odest = adest; }
+  this () { etime = Clock.currTime; } ///
+  this (Object asrc) { etime = Clock.currTime; osource = asrc; } ///
+  this (Object asrc, Object adest) { etime = Clock.currTime; osource = asrc; odest = adest; } ///
 
+  /// post event: put it into queue to process at next iteration.
   final void post () { this.postpone(0); }
 
-  // schedule event to be processed later (after `msecs` msecs passed)
+  /// schedule event to be processed later (after `msecs` msecs passed)
   final void later (int msecs) { this.postpone(msecs); }
 
 final pure nothrow @safe @nogc:
-  void eat () { pragma(inline, true); flags |= PFlags.Eaten; }
-  void cancel () { pragma(inline, true); flags |= PFlags.Cancelled; }
+  void eat () { pragma(inline, true); flags |= PFlags.Eaten; } /// "eat" event (set "eaten" flag)
+  void cancel () { pragma(inline, true); flags |= PFlags.Cancelled; } /// "cancel" event (set "cancelled" flag)
 
-  inout(Object) source () inout { pragma(inline, true); return osource; }
-  inout(Object) dest () inout { pragma(inline, true); return odest; }
-  inout(SysTime) time () inout { pragma(inline, true); return etime; }
+  inout(Object) source () inout { pragma(inline, true); return osource; } /// source object
+  inout(Object) dest () inout { pragma(inline, true); return odest; } /// destination object
+  inout(SysTime) time () inout { pragma(inline, true); return etime; } /// emitting time
 
 const @property:
-  bool eaten () { pragma(inline, true); return ((flags&PFlags.Eaten) != 0); }
-  bool cancelled () { pragma(inline, true); return ((flags&PFlags.Cancelled) != 0); }
-  bool processed () { pragma(inline, true); return ((flags&(PFlags.Eaten|PFlags.Cancelled)) != 0); }
-  bool posted () { pragma(inline, true); return ((flags&PFlags.Posted) != 0); }
-  bool sinking () { pragma(inline, true); return ((flags&PFlags.Bubbling) == 0); }
-  bool bubbling () { pragma(inline, true); return ((flags&PFlags.Bubbling) != 0); }
+  bool eaten () { pragma(inline, true); return ((flags&PFlags.Eaten) != 0); } ///
+  bool cancelled () { pragma(inline, true); return ((flags&PFlags.Cancelled) != 0); } ///
+  bool processed () { pragma(inline, true); return ((flags&(PFlags.Eaten|PFlags.Cancelled)) != 0); } ///
+  bool posted () { pragma(inline, true); return ((flags&PFlags.Posted) != 0); } ///
+  bool sinking () { pragma(inline, true); return ((flags&PFlags.Bubbling) == 0); } ///
+  bool bubbling () { pragma(inline, true); return ((flags&PFlags.Bubbling) != 0); } ///
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// register listener for all events (both targeted and not, and for anonymous too)
+/** register listener for all events (both targeted and not, and for anonymous too).
+ * returns event id that can be used to remove listener. */
 public uint addEventListener(E:Event) (void delegate (E evt) dg, bool oneshot=false) {
   return addEventListener!E(null, dg, oneshot);
 }
 
-// register event listener for *source* object `obj`
+/** register event listener for *source* object `obj`.
+ * returns event id that can be used to remove listener. */
 public uint addEventListener(E:Event) (Object obj, void delegate (E evt) dg, bool oneshot=false) {
   if (dg is null) return 0;
   synchronized (Event.classinfo) {
@@ -104,6 +107,7 @@ public uint addEventListener(E:Event) (Object obj, void delegate (E evt) dg, boo
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// remove event listener with the given id. returns `true` if some listener was removed.
 public bool removeEventListener (uint id) {
   synchronized (Event.classinfo) {
     if (id !in usedIds) return false;
@@ -168,10 +172,17 @@ private class ObjDispatcher {
 }
 
 
-// void onEvent (EventXXX ev); // will receive any events
-// void onMyEvent (EventXXX ev); // will receive only events targeted to this object (dest is this), when they sinked
-// void onSinkEvent (EventXXX ev); // will receive sinking events (but not "my")
-// void onBubbleEvent (EventXXX ev); // will receive bubbling events (but not "my")
+/** this should be called in object ctor to automatically connect event listening methods.
+ *
+ * valid handler methods:
+ *
+ * ---------------
+ *   void onEvent (EventXXX ev); // will receive any events
+ *   void onMyEvent (EventXXX ev); // will receive only events targeted to this object (dest is this), when they sinked
+ *   void onSinkEvent (EventXXX ev); // will receive sinking events (but not "my")
+ *   void onBubbleEvent (EventXXX ev); // will receive bubbling events (but not "my")
+ * ---------------
+ */
 public void connectListeners(O:Object) (O obj) {
   if (obj is null) return;
 
@@ -262,7 +273,10 @@ private __gshared bool nowProcessing = false;
 private __gshared ThreadID peLastTID = 0;
 
 
-// WARNING! this MUST be called only in main processing thread!
+/** process queued events. it is safe to post new events in event handlers.
+ *
+ * WARNING! this MUST be called only in main processing thread!
+ */
 public void processEvents () {
   size_t left;
   synchronized (Event.classinfo) {
@@ -327,7 +341,7 @@ public void processEvents () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// returns milliseconds until next postponed event or -1 if there are none
+/// returns milliseconds until next postponed event or -1 if there are none
 public int ebusSafeDelay () {
   synchronized (Event.classinfo) {
     if (events.length > 0) return 0; // we have something to process
