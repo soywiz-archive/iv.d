@@ -23,12 +23,16 @@
 // UTF-8 utilities (there will be more soon ;-)
 module iv.utfutil;
 
+static if (!is(typeof(usize))) private alias usize = size_t;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct Utf8DecoderFast {
+/// fast state-machine based UTF-8 decoder; using 8 bytes of memory
+align(1) struct Utf8DecoderFast {
+align(1):
 public:
-  enum dchar replacement = '\uFFFD';
-  static bool isValidDC (dchar c) pure nothrow @safe @nogc { pragma(inline, true); return (c < 0xD800 || (c > 0xDFFF && c <= 0x10FFFF)); }
+  enum dchar replacement = '\uFFFD'; /// replacement char for invalid unicode
+  static bool isValidDC (dchar c) pure nothrow @safe @nogc { pragma(inline, true); return (c < 0xD800 || (c > 0xDFFF && c <= 0x10FFFF)); } /// is given codepoint valid?
 
 private:
   enum State {
@@ -64,17 +68,18 @@ private:
     0x0c,0x24,0x0c,0x0c,0x0c,0x24,0x0c,0x0c,0x0c,0x0c,0x0c,0x24,0x0c,0x24,0x0c,0x0c, // 150-15f
     0x0c,0x24,0x0c,0x0c,0x0c,0x0c,0x0c,0x0c,0x0c,0x0c,0x0c,0x0c];
 
+private:
+  uint state;
+
 nothrow @safe @nogc:
 public:
-  uint state;
-  dchar codepoint = 0;
+  dchar codepoint = 0; /// decoded codepoint (valid only when decoder is in "complete" state)
 
-  // is current character complete? take `codepoint` then
-  @property bool complete () const pure { pragma(inline, true); return (state == State.Accept); }
-  @property bool invalid () const pure { pragma(inline, true); return (state == State.Reject); }
-  @property bool completeOrInvalid () const pure { pragma(inline, true); return (state == State.Accept || state == State.Reject); }
-  void reset () pure { pragma(inline, true); state = State.Accept; codepoint = 0; }
-  // process one byte, return `true` if codepoint is ready
+  @property bool complete () const pure { pragma(inline, true); return (state == State.Accept); } /// is current character complete? take `codepoint` then
+  @property bool invalid () const pure { pragma(inline, true); return (state == State.Reject); } ///
+  @property bool completeOrInvalid () const pure { pragma(inline, true); return (state == State.Accept || state == State.Reject); } ///
+  void reset () pure { pragma(inline, true); state = State.Accept; codepoint = 0; } ///
+  /// process one byte, return `true` if codepoint is ready
   bool decode (ubyte b) pure @trusted {
     if (state == State.Reject) { state = 0; codepoint = 0; }
     uint type = utf8dfa.ptr[b];
@@ -82,14 +87,14 @@ public:
     state = utf8dfa.ptr[256+state+type];
     return (state == State.Accept);
   }
-  // same as `decode`, but caller is guaranteed that decoder will never get invalid utf-8 sequence
+  /// same as `decode`, but caller is guaranteed that decoder will never get invalid utf-8 sequence
   bool decodeValid (ubyte b) pure @trusted {
     uint type = utf8dfa.ptr[b];
     codepoint = (state != State.Accept ? (b&0x3fu)|(codepoint<<6) : (0xff>>type)&b);
     state = utf8dfa.ptr[256+state+type];
     return (state == State.Accept);
   }
-  // same as `decode`, never reaches `invalid` state, returns `replacement` for invalid chars
+  /// same as `decode`, never reaches `invalid` state, returns `replacement` for invalid chars
   bool decodeSafe (ubyte b) pure @trusted {
     uint type = utf8dfa.ptr[b];
     codepoint = (state != State.Accept ? (b&0x3f)|(codepoint<<6) : (0xff>>type)&b);
@@ -100,11 +105,12 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// slow, but using only 4 bytes (dchar)
-struct Utf8Decoder {
+/// slightly slower state-machine based UTF-8 decoder; using 4 bytes of memory (uint)
+align(1) struct Utf8Decoder {
+align(1):
 public:
-  enum dchar replacement = '\uFFFD';
-  static bool isValidDC (dchar c) pure nothrow @safe @nogc { pragma(inline, true); return (c < 0xD800 || (c > 0xDFFF && c <= 0x10FFFF)); }
+  enum dchar replacement = '\uFFFD'; /// replacement char for invalid unicode
+  static bool isValidDC (dchar c) pure nothrow @safe @nogc { pragma(inline, true); return (c < 0xD800 || (c > 0xDFFF && c <= 0x10FFFF)); } /// is given codepoint valid?
 
 private:
   enum State : uint {
@@ -115,14 +121,13 @@ private:
   uint codep = State.Accept;
 pure nothrow @safe @nogc:
 public:
-  // is current character complete? take `codepoint` then
-  @property bool complete () const { pragma(inline, true); return ((codep&State.Mask) == State.Accept); }
-  @property bool invalid () const { pragma(inline, true); return ((codep&State.Mask) == State.Reject); }
-  @property bool completeOrInvalid () const { pragma(inline, true); return (complete || invalid); }
-  @property dchar currCodePoint () const { pragma(inline, true); return (codep <= dchar.max ? codep : replacement); }
-  void reset () { codep = State.Accept; }
-  // same as `decode`, never reaches `invalid` state, returns `replacement` for invalid chars
-  // returns invalid dchar while it is "in progress" (i.e. result > dchar.max)
+  @property bool complete () const { pragma(inline, true); return ((codep&State.Mask) == State.Accept); } /// is current character complete?
+  @property bool invalid () const { pragma(inline, true); return ((codep&State.Mask) == State.Reject); } ///
+  @property bool completeOrInvalid () const { pragma(inline, true); return (complete || invalid); } ///
+  @property dchar currCodePoint () const { pragma(inline, true); return (codep <= dchar.max ? codep : replacement); } /// valid only if decoder is in "complete" state
+  void reset () { codep = State.Accept; } ///
+  /** same as `decode`, never reaches `invalid` state, returns `replacement` for invalid chars
+   * returns invalid dchar while it is "in progress" (i.e. result > dchar.max) */
   dchar decode (ubyte b) @trusted {
     immutable ubyte type = Utf8DecoderFast.utf8dfa.ptr[b];
     ubyte state = (codep>>24)&0xff;
@@ -138,7 +143,7 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// returns -1 on error (out of room in `s`, for example), or bytes taken
+/// returns -1 on error (out of room in `s`, for example), or bytes taken
 int utf8Encode(dchar replacement='\uFFFD') (char[] s, dchar c) pure nothrow @trusted @nogc {
   static assert(Utf8Decoder.isValidDC(replacement), "invalid replacement char");
   if (!Utf8Decoder.isValidDC(c)) c = replacement;
@@ -175,7 +180,7 @@ int utf8Encode(dchar replacement='\uFFFD') (char[] s, dchar c) pure nothrow @tru
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// doesn't do all possible checks, so don't pass invalid UTF-8
+/// doesn't do all possible checks, so don't pass invalid UTF-8
 size_t utf8Length (const(char)[] s) pure nothrow @trusted @nogc {
   static immutable ubyte[256] UTF8stride = [
     cast(ubyte)
@@ -208,8 +213,8 @@ size_t utf8Length (const(char)[] s) pure nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-bool isUtf8Start() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0xC0); }
-bool isUtf8Cont() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0x80); }
+bool isUtf8Start() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0xC0); } /// does this char start UTF-8 sequence?
+bool isUtf8Cont() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0x80); } /// does this char continue UTF-8 sequence?
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -317,6 +322,7 @@ public dchar koi2uni() (char ch) pure nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// convert koi8 to unicode
 wchar koi2uni() (char ch) pure nothrow @trusted @nogc {
   static immutable wchar[256] utbl = [
       0x0000,0x0001,0x0002,0x0003,0x0004,0x0005,0x0006,0x0007,0x0008,0x0009,0x000a,0x000b,0x000c,0x000d,0x000e,0x000f,
@@ -339,6 +345,7 @@ wchar koi2uni() (char ch) pure nothrow @trusted @nogc {
   return utbl.ptr[cast(ubyte)ch];
 }
 
+/// convert unicode to koi8
 char uni2koi(char repchar='?') (dchar dch) pure nothrow @trusted @nogc {
   if (dch < 128) return cast(char)(dch&0xff);
   if (dch == 0x00a0) return cast(char)0x9a;
@@ -416,6 +423,7 @@ char uni2koi(char repchar='?') (dchar dch) pure nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// conver 1251 to unicode
 wchar cp12512uni() (char ch) pure nothrow @trusted @nogc {
   static immutable wchar[256] utbl = [
       0x0000,0x0001,0x0002,0x0003,0x0004,0x0005,0x0006,0x0007,0x0008,0x0009,0x000a,0x000b,0x000c,0x000d,0x000e,0x000f,
@@ -438,6 +446,7 @@ wchar cp12512uni() (char ch) pure nothrow @trusted @nogc {
   return utbl.ptr[cast(ubyte)ch];
 }
 
+/// convert unicode to 1251
 char uni2cp1251(char repchar='?') (dchar dch) pure nothrow @trusted @nogc {
   if (dch < 128) return cast(char)(dch&0xff);
   if (dch == 0x00a0) return cast(char)0xa0;
@@ -501,6 +510,7 @@ char uni2cp1251(char repchar='?') (dchar dch) pure nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// convert 866 to unicode
 wchar cp8662uni() (char ch) pure nothrow @trusted @nogc {
   static immutable wchar[256] utbl = [
       0x0000,0x0001,0x0002,0x0003,0x0004,0x0005,0x0006,0x0007,0x0008,0x0009,0x000a,0x000b,0x000c,0x000d,0x000e,0x000f,
@@ -523,6 +533,7 @@ wchar cp8662uni() (char ch) pure nothrow @trusted @nogc {
   return utbl.ptr[cast(ubyte)ch];
 }
 
+/// convert unicode to 866
 char uni2cp866(char repchar='?') (dchar dch) pure nothrow @trusted @nogc {
   if (dch < 128) return cast(char)(dch&0xff);
   if (dch == 0x00a0) return cast(char)0xff;
@@ -577,4 +588,126 @@ char uni2cp866(char repchar='?') (dchar dch) pure nothrow @trusted @nogc {
   }
   if (dch == 0x25a0) return cast(char)0xfe;
   return repchar;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// `strlen()` for utf-8 string
+public usize utflen (const(char)[] s) nothrow @trusted @nogc {
+  Utf8DecoderFast dc;
+  int res = 0;
+  foreach (char ch; s) if (dc.decode(cast(ubyte)ch)) ++res;
+  return res;
+}
+
+
+/// remove last character from utf-8 string
+public T utfchop(T : const(char)[]) (T s) nothrow @trusted @nogc {
+  Utf8DecoderFast dc;
+  int last = 0;
+  foreach (immutable idx, char ch; s) if (dc.decode(cast(ubyte)ch)) last = cast(int)idx;
+  return s[0..last];
+}
+
+
+/// skip first `len` characters in utf-8 string
+public T utfskip(T : const(char)[]) (T s, ptrdiff_t len) nothrow @trusted @nogc {
+  if (len < 1) return s;
+  if (len >= s.length) return null;
+  Utf8DecoderFast dc;
+  foreach (immutable idx, char ch; s) {
+    if (dc.decode(cast(ubyte)ch)) {
+      if (--len == 0) return s[idx+1..$];
+    }
+  }
+  return null;
+}
+
+
+/// take first `len` characters in utf-8 string
+public T utfleft(T : const(char)[]) (T s, ptrdiff_t len) nothrow @trusted @nogc {
+  if (len < 1) return null;
+  if (len >= s.length) return s;
+  Utf8DecoderFast dc;
+  foreach (immutable idx, char ch; s) {
+    if (dc.decode(cast(ubyte)ch)) {
+      if (--len == 0) return s[0..idx+1];
+    }
+  }
+  return s;
+}
+
+
+/// take last `len` characters in utf-8 string (slow!)
+public T utfright(T : const(char)[]) (T s, ptrdiff_t len) nothrow @trusted @nogc {
+  if (len < 1) return null;
+  if (len >= s.length) return s;
+  auto fulllen = s.utflen;
+  if (len >= fulllen) return s;
+  Utf8DecoderFast dc;
+  foreach (immutable idx, char ch; s) {
+    if (dc.decode(cast(ubyte)ch)) {
+      if (--fulllen == len) return s[idx+1..$];
+    }
+  }
+  return null;
+}
+
+
+/// take `len` characters from position `pos` in utf-8 string (slow!)
+public T utfmid(T : const(char)[]) (T s, ptrdiff_t pos, ptrdiff_t len) nothrow @trusted @nogc {
+  if (len < 1 || pos >= s.length) return null;
+  Utf8DecoderFast dc;
+  int ds = -1, de = -1;
+  if (pos == 0) ds = 0;
+  foreach (immutable idx, char ch; s) {
+    if (dc.decode(cast(ubyte)ch)) {
+      if (ds < 0) {
+        if (pos > 0) --pos; else ++pos;
+        if (pos == 0) ds = cast(int)idx+1;
+      } else if (de < 0) {
+        if (--len == 0) { de = cast(int)idx+1; break; }
+      } else {
+        assert(0, "wtf?!");
+      }
+    }
+  }
+  if (ds < 0) return null;
+  if (de < 0) return s[ds..$];
+  return s[ds..de];
+}
+
+
+/// remove `len` characters from position `pos` in utf-8 string (slow!)
+/// NOT REALLY TESTED!
+public T utfdel(T : const(char)[]) (T s, ptrdiff_t pos, ptrdiff_t len) {
+  static if (is(T == typeof(null))) {
+    return null;
+  } else {
+    if (len < 1 || pos >= s.length) return s;
+    Utf8DecoderFast dc;
+    int ds = -1, de = -1;
+    if (pos == 0) ds = 0;
+    foreach (immutable idx, char ch; s) {
+      if (dc.decode(cast(ubyte)ch)) {
+        if (ds < 0) {
+          if (pos > 0) --pos; else ++pos;
+          if (pos == 0) ds = cast(int)idx+1;
+        } else if (de < 0) {
+          if (--len == 0) { de = cast(int)idx+1; break; }
+        } else {
+          assert(0, "wtf?!");
+        }
+      }
+    }
+    if (ds < 0) return s;
+    if (de < 0) return s[0..ds];
+    static if (is(T : char[])) {
+      return s[0..ds]~s[de..$];
+    } else {
+      char[] res = s[0..ds].dup;
+      res ~= s[de..$];
+      return cast(T)res; // it is safe to cast here
+    }
+  }
 }
