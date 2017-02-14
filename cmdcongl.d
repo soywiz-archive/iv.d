@@ -672,22 +672,28 @@ bool renderConsole () nothrow @trusted @nogc {
 static if (OptCmdConGlHasSdpy) {
 import arsd.simpledisplay : KeyEvent, Key;
 
-public __gshared glconShowKey = Key.Grave; /// this key will be eaten
+public __gshared string glconShowKey = "Grave"; /// this key will be eaten
+
+shared static this () {
+  conRegVar!glconShowKey("c_togglekey", "console toggle key name");
+}
 
 
 /// process keyboard event. returns `true` if event was eaten.
 public bool glconKeyEvent (KeyEvent event) {
   import arsd.simpledisplay;
   if (!rConsoleVisible) {
-    if (event.key == glconShowKey) {
+    if (event == glconShowKey) {
       if (event.pressed) concmd("r_console 1");
       return true;
     }
     return false;
   }
   if (!event.pressed) return true;
-  if (event.key == glconShowKey) {
-    if (glconShowKey >= ' ' && glconShowKey < 128) {
+  if (event == glconShowKey) {
+    if (glconShowKey.length == 1 && glconShowKey[0] >= ' ' && glconShowKey[0] < 128) {
+      if (conInputBuffer.length == 0) concmd("r_console 0");
+    } else if (glconShowKey == "Grave") {
       if (conInputBuffer.length == 0) concmd("r_console 0");
     } else {
       concmd("r_console 0");
@@ -744,13 +750,15 @@ public bool glconKeyEvent (KeyEvent event) {
 /// process character event. returns `true` if event was eaten.
 public bool glconCharEvent (dchar ch) {
   if (!rConsoleVisible) {
-    if (glconShowKey >= ' ' && glconShowKey < 128) {
-      if (ch == glconShowKey) return true;
-      if (glconShowKey >= 'A' && glconShowKey <= 'Z' && ch >= 'a' && ch <= 'z' && glconShowKey == ch-32) return true;
+    if (glconShowKey.length == 1 && glconShowKey[0] >= ' ' && glconShowKey[0] < 128) {
+      if (ch == glconShowKey[0]) return true;
+      if (ch == '`' && glconShowKey == "Grave" && conInputBuffer.length == 0) return true; // HACK!
+      if (glconShowKey[0] >= 'A' && glconShowKey[0] <= 'Z' && ch >= 'a' && ch <= 'z' && glconShowKey[0] == ch-32) return true;
     }
     return false;
   }
-  if (glconShowKey >= ' ' && glconShowKey < 128 && ch == glconShowKey && conInputBuffer.length == 0) return true; // HACK!
+  if (glconShowKey.length == 1 && glconShowKey[0] >= ' ' && glconShowKey[0] < 128 && ch == glconShowKey[0] && conInputBuffer.length == 0) return true; // HACK!
+  if (ch == '`' && glconShowKey == "Grave" && conInputBuffer.length == 0) return true; // HACK!
   if (ch >= ' ' && ch < 127) glconCharInput(cast(char)ch);
   return true;
 }
