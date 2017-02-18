@@ -303,7 +303,13 @@ string recodeToKOI8(T) (T s, string from=null) if (isSomeString!T) {
     size_t idx = 0;
     foreach (dchar dc; s) {
       eto.encode(dc, buf);
-      res[idx++] = buf[0];
+      if (idx >= res.length) {
+        //import std.conv : to;
+        //assert(0, "pos: "~idx.to!string~"; len="~res.length.to!string~"; slen="~s.length.to!string~"; string: '"~s.to!string);
+        res ~= buf[0];
+      } else {
+        res[idx++] = buf[0];
+      }
     }
   } else {
     auto efrom = EncodingScheme.create(from);
