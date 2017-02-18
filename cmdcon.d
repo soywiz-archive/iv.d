@@ -2432,16 +2432,35 @@ public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn)
         alias defaultArguments = ParameterDefaultValueTuple!fn;
         //pragma(msg, "defs: ", defaultArguments);
         import std.conv : to;
+        ConString[] rest; // will be used if necessary
         foreach (/*auto*/ idx, ref arg; args) {
           // populate arguments, with user data if available,
           // default if not, and throw if no argument provided
           if (hasArgs(cmdline)) {
             import std.conv : ConvException;
-            try {
-              arg = parseType!(typeof(arg))(cmdline);
-            } catch (ConvException) {
-              conwriteln("error parsing argument #", idx+1, " for command '", name, "'");
-              return;
+            static if (is(typeof(arg) == ConString[])) {
+              auto xidx = idx+1;
+              if (idx != args.length-1) {
+                conwriteln("error parsing argument #", xidx, " for command '", name, "'");
+                return;
+              }
+              while (hasArgs(cmdline)) {
+                try {
+                  rest ~= parseType!ConString(cmdline);
+                  ++xidx;
+                } catch (ConvException) {
+                  conwriteln("error parsing argument #", xidx, " for command '", name, "'");
+                  return;
+                }
+              }
+              arg = rest;
+            } else {
+              try {
+                arg = parseType!(typeof(arg))(cmdline);
+              } catch (ConvException) {
+                conwriteln("error parsing argument #", idx+1, " for command '", name, "'");
+                return;
+              }
             }
           } else {
             static if (!is(defaultArguments[idx] == void)) {
