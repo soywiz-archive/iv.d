@@ -27,10 +27,12 @@ module iv.minimp3;
 /* code sample:
   auto fi = File(args[1]);
 
-  auto mp3 = new MP3Decoder((void[] buf) {
+  auto reader = delegate (void[] buf) {
     auto rd = fi.rawRead(buf[]);
-    return cast(uint)rd.length;
-  });
+    return cast(int)rd.length;
+  };
+
+  auto mp3 = new MP3Decoder(reader);
 
   if (!mp3.valid) {
     writeln("invalid MP3 file!");
@@ -43,7 +45,7 @@ module iv.minimp3;
   auto fo = File("z00.raw", "w");
   while (mp3.valid) {
     fo.rawWrite(mp3.frameSamples);
-    mp3.decodeNextFrame();
+    mp3.decodeNextFrame(reader);
   }
   fo.close();
 */
