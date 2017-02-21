@@ -3606,7 +3606,15 @@ public void concmd (ConString cmd) {
 /// it also understands '$var', '${var}', '${var:ifabsent}', '${var?ifempty}'
 /// var substitution in quotes will be automatically quoted
 /// string substitution in quotes will be automatically quoted
-public void concmdf(string fmt, A...) (A args) {
+public void concmdf(string fmt, A...) (A args) { concmdfex!fmt(null, args); }
+
+
+/// add console command to execution queue (thread-safe)
+/// this understands '%s' and '%q' (quoted string, but without surroinding quotes)
+/// it also understands '$var', '${var}', '${var:ifabsent}', '${var?ifempty}'
+/// var substitution in quotes will be automatically quoted
+/// string substitution in quotes will be automatically quoted
+public void concmdfex(string fmt, A...) (scope void delegate (ConString cmd) cmddg, A args) {
   consoleLock();
   scope(exit) consoleUnlock();
 
@@ -3614,9 +3622,12 @@ public void concmdf(string fmt, A...) (A args) {
   bool ensureCmd = true;
   char inQ = 0;
 
+  usize stpos = usize.max;
+
   void puts(bool quote=false) (const(char)[] s...) {
     if (s.length) {
       if (ensureCmd) { concmdEnsureNewCommand(); ensureCmd = false; }
+      if (stpos == usize.max) stpos = concmdbufpos;
       static if (quote) {
         char[8] buf;
         foreach (immutable idx, char ch; s) {
@@ -3876,6 +3887,13 @@ public void concmdf(string fmt, A...) (A args) {
   }
 
   //conwriteln(concmdbuf[0..concmdbufpos]);
+  if (cmddg !is null) {
+    if (stpos != usize.max) {
+      cmddg(concmdbuf[stpos..concmdbufpos]);
+    } else {
+      cmddg("");
+    }
+  }
 }
 
 
