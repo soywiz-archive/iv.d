@@ -71,7 +71,7 @@ public void switchToWindowDesktop(bool doflush=true) (SimpleWindow sw) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// switch to the given window
-public void switchToWindow (SimpleWindow sw) {
+public void switchToWindow(string src="normal") (SimpleWindow sw) if (src == "normal" || src == "pager") {
   static if (UsingSimpledisplayX11) {
     if (sw is null || sw.closed) return;
     switchToWindowDesktop!false(sw);
@@ -84,7 +84,11 @@ public void switchToWindow (SimpleWindow sw) {
     e.xclient.message_type = GetAtom!("_NET_ACTIVE_WINDOW", true)(dpy);
     e.xclient.window = xwin;
     e.xclient.format = 32;
-    e.xclient.data.l[0] = 2; // pretend to be a pager
+    static if (src == "pager") {
+      e.xclient.data.l[0] = 2; // pretend to be a pager
+    } else {
+      e.xclient.data.l[0] = 1; // application request
+    }
     XSendEvent(dpy, RootWindow(dpy, DefaultScreen(dpy)), false, EventMask.SubstructureRedirectMask|EventMask.SubstructureNotifyMask, &e);
     flushGui();
   }
