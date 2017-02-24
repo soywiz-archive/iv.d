@@ -161,7 +161,7 @@ struct GCAData {
   }
 
   void* alloc (usize size) @trusted nothrow {
-    import iv.writer; writeln("!!!");
+    { import core.stdc.stdio : printf; printf("!!!\n"); }
     if (arena_bytes.length == 0) {
       auto oldproxy = *pproxy;
       *pproxy = null;
@@ -169,9 +169,9 @@ struct GCAData {
       *pproxy = oldproxy;
     }
     if (arena_pos+size > arena_bytes.length) {
-      import iv.writer : errwritefln;
+      import core.stdc.stdio : stderr, fprintf;
       import core.exception : onOutOfMemoryError;
-      errwritefln!"Arena too small! arena=%s, asked for %s, need %s"(arena_bytes.length, size, arena_pos+size);
+      stderr.fprintf("Arena too small! arena=%u, asked for %u, need %u", cast(uint)arena_bytes.length, cast(uint)size, cast(uint)(arena_pos+size));
       onOutOfMemoryError();
     }
     auto pos = arena_pos;
@@ -182,24 +182,24 @@ struct GCAData {
 
   void clearArena () @trusted nothrow @nogc {
     version(test_gcarena) {
-      import iv.writer : writeln;
-      writeln("clearArena: allocated ", arena_pos);
+      import core.stdc.stdio : printf;
+      printf("clearArena: allocated %u\n", cast(uint)arena_pos);
     }
     arena_pos = 0;
   }
 
   void installProxy () @trusted nothrow @nogc {
     version(test_gcarena) {
-      import iv.writer : writeln;
-      writeln("using arena now");
+      import core.stdc.stdio : printf;
+      printf("using arena now\n");
     }
     *pproxy = &myProxy;
   }
 
   void clearProxy () @trusted nothrow {
     version(test_gcarena) {
-      import iv.writer : writeln;
-      writeln("using GC now");
+      import core.stdc.stdio : printf;
+      printf("using GC now\n");
     }
     *pproxy = null;
   }
@@ -218,16 +218,16 @@ extern(C) {
 
   void* gca_malloc (usize sz, uint ba, const TypeInfo ti) @trusted nothrow {
     version(test_gcarena) {
-      import iv.writer : writeln;
-      writeln("gca_malloc ", sz);
+      import core.stdc.stdio : printf;
+      printf("gca_malloc %u\n", cast(uint)sz);
     }
     return gcaData.alloc(sz);
   }
 
   BlkInfo gca_qalloc (usize sz, uint ba, const TypeInfo ti) @trusted nothrow {
     version(test_gcarena) {
-      import iv.writer : writeln;
-      writeln("gca_qalloc ", sz);
+      import core.stdc.stdio : printf;
+      printf("gca_qalloc %u\n", cast(uint)sz);
     }
     auto pos0 = gcaData.arena_pos;
     BlkInfo b;
@@ -240,8 +240,8 @@ extern(C) {
   void* gca_calloc (usize sz, uint ba, const TypeInfo ti) @trusted nothrow {
     import core.stdc.string : memset;
     version(test_gcarena) {
-      import iv.writer : writeln;
-      writeln("gca_calloc ", sz);
+      import core.stdc.stdio : printf;
+      printf("gca_calloc %u\n", cast(uint)sz);
     }
     void* p = gcaData.alloc(sz);
     memset(p, 0, sz);
@@ -270,7 +270,7 @@ static this () {
 // ////////////////////////////////////////////////////////////////////////// //
 version(test_gcarena)
 unittest {
-  import iv.writer;
+  import core.stdc.stdio : printf;
   auto ar = useCleanArena();
   auto s = new ubyte[100]; // allocated in arena
   {
@@ -278,6 +278,6 @@ unittest {
     auto t = new ubyte[200];    // allocated in main GC heap
   }
   auto v = new ubyte[300];   // allocated in arena again
-  writeln("hi");
+  printf("hi\n");
   // end of scope, stop using arena
 }
