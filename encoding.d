@@ -264,7 +264,7 @@ bool koi8isAlpha (char ch) pure nothrow @trusted @nogc {
 import std.traits;
 
 // SLOOOOOW. but who cares?
-string recode(T) (T s, string to, string from) if (isSomeString!T) {
+string recode(T) (T s, const(char)[] to, const(char)[] from) if (isSomeString!T) {
   static bool strEqu (const(char)[] s0, const(char)[] s1) {
     if (s0.length != s1.length) return false;
     foreach (immutable idx, char c0; s0) {
@@ -277,8 +277,8 @@ string recode(T) (T s, string to, string from) if (isSomeString!T) {
   }
   ubyte[] res;
   ubyte[16] buf;
-  auto efrom = (strEqu(from, "utf-8") ? new EncodingSchemeUtf8() : EncodingScheme.create(from));
-  auto eto = (strEqu(to, "utf-8") ? new EncodingSchemeUtf8() : EncodingScheme.create(to));
+  auto efrom = (strEqu(from, "utf-8") ? new EncodingSchemeUtf8() : EncodingScheme.create(cast(string)from)); // sorry, phobos API is fubared
+  auto eto = (strEqu(to, "utf-8") ? new EncodingSchemeUtf8() : EncodingScheme.create(cast(string)to)); // sorry, phobos API is fubared
   auto ub = cast(const(ubyte)[])s;
   while (ub.length > 0) {
     dchar dc = efrom.safeDecode(ub);
