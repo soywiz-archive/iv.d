@@ -18,6 +18,7 @@
 module iv.cuefile is aliced;
 
 import iv.encoding;
+import iv.strex;
 import iv.vfs;
 import iv.vfs.io;
 
@@ -278,11 +279,15 @@ public:
     }
 
     // normalize tracks
-    foreach (ref trk; tracks) {
+    foreach (immutable tidx, ref trk; tracks) {
       if (trk.artist == artist) trk.artist = null;
       if (trk.year == year) trk.year = 0;
       if (trk.genre == genre) trk.genre = null;
       if (trk.filename == filename) trk.filename = null;
+      int pidx;
+      string t = simpleParseInt(trk.title, pidx);
+      if (pidx == tidx+1 && t.length && t.ptr[0] == '.') t = t[1..$].xstrip;
+      if (pidx == tidx+1 && t.length) trk.title = t;
     }
   }
 
@@ -308,4 +313,27 @@ public:
   }
 
   void dump () { dump(stdout); }
+
+private:
+  // num<0: no number
+  // return string w/o parsed number
+  static inout(char)[] simpleParseInt (inout(char)[] src, out int num) nothrow @trusted @nogc {
+    usize pos = 0;
+    while (pos < src.length && src.ptr[pos] <= ' ') ++pos;
+    if (pos >= src.length || src.ptr[pos] < '0' || src.ptr[pos] > '9') {
+      num = -1;
+      return src;
+    }
+    num = 0;
+    while (pos < src.length) {
+      char ch = src.ptr[pos];
+      if (ch < '0' || ch > '9') break;
+      auto onum = num;
+      num = num*10+ch-'0';
+      if (num < onum) { num = -1; return src; }
+      ++pos;
+    }
+    while (pos < src.length && src.ptr[pos] <= ' ') ++pos;
+    return src[pos..$];
+  }
 }
