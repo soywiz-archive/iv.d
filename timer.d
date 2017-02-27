@@ -60,8 +60,21 @@ nothrow @safe @nogc:
     bool paused () { pragma(inline, true); return (mState == State.Paused); }
   }
 
+  @property ulong msecs () const {
+    final switch (mState) {
+      case State.Stopped: case State.Paused: return mAccum.total!"msecs";
+      case State.Running: return (mAccum+(MonoTime.currTime-mSTime)).total!"msecs";
+    }
+  }
+
   void reset () {
     mAccum = Duration.zero;
+    mSTime = MonoTime.currTime;
+  }
+
+  void restart () {
+    mAccum = Duration.zero;
+    mState = State.Running;
     mSTime = MonoTime.currTime;
   }
 
