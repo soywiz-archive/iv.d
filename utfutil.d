@@ -711,3 +711,26 @@ public T utfdel(T : const(char)[]) (T s, ptrdiff_t pos, ptrdiff_t len) {
     }
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public T utfChopToSize(T:const(char)[]) (T s, int maxsize=255) nothrow @trusted {
+  static if (is(T == typeof(null))) {
+    return s;
+  } else {
+    if (maxsize < 1) return null;
+    if (s.length <= maxsize) return s;
+    // this is slow, but i don't care
+    while (s.length > maxsize) s = s.utfchop;
+    // add "..."
+    if (maxsize > 3) {
+      while (s.length > maxsize-3) s = s.utfchop;
+      static if (is(T == const(char)[])) {
+        return cast(T)(s.dup~"...");
+      } else {
+        return cast(T)(s~"...");
+      }
+    }
+    return s;
+  }
+}
