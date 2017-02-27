@@ -384,11 +384,32 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
               case 't': put('\t'); nextChar(); break;
               case '"': case '\\': put(curCh); nextChar(); break;
               case 'x':
-                nextChar();
+              case 'X':
+                if (digitInBase(peekCh, 16) < 0) error("invalid hex escape");
+                nextChar(); // skip 'x'
                 if (digitInBase(curCh, 16) < 0 || digitInBase(peekCh, 16) < 0) error("invalid hex escape");
                 put(cast(char)(digitInBase(curCh, 16)*16+digitInBase(peekCh, 16)));
                 nextChar();
                 nextChar();
+                break;
+              case 'u':
+              case 'U':
+                if (digitInBase(peekCh, 16) < 0) error("invalid unicode escape");
+                uint ucc = 0;
+                nextChar(); // skip 'u'
+                foreach (immutable _; 0..4) {
+                  if (digitInBase(curCh, 16) < 0) break;
+                  ucc = ucc*16+digitInBase(curCh, 16);
+                  nextChar();
+                }
+                {
+                  char[4] buf = 0;
+                  auto len = utf8Encode(buf[], cast(dchar)ucc);
+                  assert(len != 0);
+                  if (len < 0) error("invalid utf-8 escape");
+                  //{ import core.stdc.stdio; printf("ucc=%u 0x%04X; len=%d; [0]=%u; [1]=%u; [2]=%u; [3]=%u\n", ucc, ucc, len, cast(uint)buf[0], cast(uint)buf[1], cast(uint)buf[2], cast(uint)buf[3]); assert(0); }
+                  put(buf[0..len]);
+                }
                 break;
               default: error("invalid escape");
             }
@@ -545,6 +566,45 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
   linenum = 1;
 
   unserData(v);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private static bool isValidDC (dchar c) pure nothrow @safe @nogc { pragma(inline, true); return (c < 0xD800 || (c > 0xDFFF && c <= 0x10FFFF)); } /// is given codepoint valid?
+
+/// returns -1 on error (out of room in `s`, for example), or bytes taken
+private int utf8Encode(dchar replacement='\uFFFD') (char[] s, dchar c) pure nothrow @trusted @nogc {
+  static assert(isValidDC(replacement), "invalid replacement char");
+  if (!isValidDC(c)) c = replacement;
+  if (c <= 0x7F) {
+    if (s.length < 1) return -1;
+    s.ptr[0] = cast(char)c;
+    return 1;
+  } else {
+    char[4] buf;
+    ubyte len;
+    if (c <= 0x7FF) {
+      buf.ptr[0] = cast(char)(0xC0|(c>>6));
+      buf.ptr[1] = cast(char)(0x80|(c&0x3F));
+      len = 2;
+    } else if (c <= 0xFFFF) {
+      buf.ptr[0] = cast(char)(0xE0|(c>>12));
+      buf.ptr[1] = cast(char)(0x80|((c>>6)&0x3F));
+      buf.ptr[2] = cast(char)(0x80|(c&0x3F));
+      len = 3;
+    } else if (c <= 0x10FFFF) {
+      buf.ptr[0] = cast(char)(0xF0|(c>>18));
+      buf.ptr[1] = cast(char)(0x80|((c>>12)&0x3F));
+      buf.ptr[2] = cast(char)(0x80|((c>>6)&0x3F));
+      buf.ptr[3] = cast(char)(0x80|(c&0x3F));
+      len = 4;
+    } else {
+      assert(0, "wtf?!");
+    }
+    if (s.length < len) return -1;
+    s[0..len] = buf[0..len];
+    return len;
+  }
 }
 
 
