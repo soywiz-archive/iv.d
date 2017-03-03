@@ -1390,3 +1390,168 @@ public class EdHiTokensFrag : EdHiTokens {
     addToken("inout", HiSpecial);
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class EdHiTokensHtml : EdHiTokens {
+  this () {
+    options =
+      //Opt.Num0b|
+      //Opt.Num0o|
+      //Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      //Opt.SQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      //Opt.CSingleComment|
+      //Opt.CMultiComment|
+      //Opt.BodyIsSpecial|
+      //Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      //Opt.ShellSigil|
+      0;
+
+    addToken("a", HiSpecial);
+    addToken("abbr", HiSpecial);
+    addToken("address", HiSpecial);
+    addToken("applet", HiSpecial);
+    addToken("area", HiSpecial);
+    addToken("article", HiSpecial);
+    addToken("aside", HiSpecial);
+    addToken("audio", HiSpecial);
+    addToken("b", HiSpecial);
+    addToken("base", HiSpecial);
+    addToken("basefont", HiSpecial);
+    addToken("bdi", HiSpecial);
+    addToken("bdo", HiSpecial);
+    addToken("bgsound", HiSpecial);
+    addToken("big", HiSpecial);
+    addToken("blockquote", HiSpecial);
+    addToken("body", HiSpecial);
+    addToken("br", HiSpecial);
+    addToken("button", HiSpecial);
+    addToken("canvas", HiSpecial);
+    addToken("caption", HiSpecial);
+    addToken("center", HiSpecial);
+    addToken("cite", HiSpecial);
+    addToken("code", HiSpecial);
+    addToken("col", HiSpecial);
+    addToken("colgroup", HiSpecial);
+    addToken("command", HiSpecial);
+    addToken("data", HiSpecial);
+    addToken("datalist", HiSpecial);
+    addToken("dd", HiSpecial);
+    addToken("del", HiSpecial);
+    addToken("details", HiSpecial);
+    addToken("dfn", HiSpecial);
+    addToken("dialog", HiSpecial);
+    addToken("dir", HiSpecial);
+    addToken("div", HiSpecial);
+    addToken("dl", HiSpecial);
+    addToken("dt", HiSpecial);
+    addToken("em", HiSpecial);
+    addToken("embed", HiSpecial);
+    addToken("fieldset", HiSpecial);
+    addToken("figcaption", HiSpecial);
+    addToken("figure", HiSpecial);
+    addToken("font", HiSpecial);
+    addToken("footer", HiSpecial);
+    addToken("form", HiSpecial);
+    addToken("frame", HiSpecial);
+    addToken("frameset", HiSpecial);
+    addToken("h1", HiSpecial);
+    addToken("h2", HiSpecial);
+    addToken("h3", HiSpecial);
+    addToken("h4", HiSpecial);
+    addToken("h5", HiSpecial);
+    addToken("h6", HiSpecial);
+    addToken("head", HiSpecial);
+    addToken("header", HiSpecial);
+    addToken("hgroup", HiSpecial);
+    addToken("hr", HiSpecial);
+    addToken("html", HiSpecial);
+    addToken("i", HiSpecial);
+    addToken("iframe", HiSpecial);
+    addToken("image", HiSpecial);
+    addToken("img", HiSpecial);
+    addToken("input", HiSpecial);
+    addToken("ins", HiSpecial);
+    addToken("kbd", HiSpecial);
+    addToken("keygen", HiSpecial);
+    addToken("label", HiSpecial);
+    addToken("legend", HiSpecial);
+    addToken("li", HiSpecial);
+    addToken("link", HiSpecial);
+    addToken("listing", HiSpecial);
+    addToken("main", HiSpecial);
+    addToken("map", HiSpecial);
+    addToken("mark", HiSpecial);
+    addToken("marquee", HiSpecial);
+    addToken("math", HiSpecial);
+    addToken("mathml", HiSpecial);
+    addToken("menu", HiSpecial);
+    addToken("menuitem", HiSpecial);
+    addToken("meta", HiSpecial);
+    addToken("meter", HiSpecial);
+    addToken("nav", HiSpecial);
+    addToken("nobr", HiSpecial);
+    addToken("noembed", HiSpecial);
+    addToken("noframes", HiSpecial);
+    addToken("noscript", HiSpecial);
+    addToken("object", HiSpecial);
+    addToken("ol", HiSpecial);
+    addToken("optgroup", HiSpecial);
+    addToken("option", HiSpecial);
+    addToken("output", HiSpecial);
+    addToken("p", HiSpecial);
+    addToken("param", HiSpecial);
+    addToken("picture", HiSpecial);
+    addToken("plaintext", HiSpecial);
+    addToken("pre", HiSpecial);
+    addToken("progress", HiSpecial);
+    addToken("q", HiSpecial);
+    addToken("rb", HiSpecial);
+    addToken("rp", HiSpecial);
+    addToken("rt", HiSpecial);
+    addToken("rtc", HiSpecial);
+    addToken("ruby", HiSpecial);
+    addToken("s", HiSpecial);
+    addToken("samp", HiSpecial);
+    addToken("script", HiSpecial);
+    addToken("section", HiSpecial);
+    addToken("select", HiSpecial);
+    addToken("slot", HiSpecial);
+    addToken("small", HiSpecial);
+    addToken("source", HiSpecial);
+    addToken("span", HiSpecial);
+    addToken("strike", HiSpecial);
+    addToken("strong", HiSpecial);
+    addToken("style", HiSpecial);
+    addToken("sub", HiSpecial);
+    addToken("summary", HiSpecial);
+    addToken("sup", HiSpecial);
+    addToken("svg", HiSpecial);
+    addToken("table", HiSpecial);
+    addToken("tbody", HiSpecial);
+    addToken("td", HiSpecial);
+    addToken("template", HiSpecial);
+    addToken("textarea", HiSpecial);
+    addToken("tfoot", HiSpecial);
+    addToken("th", HiSpecial);
+    addToken("thead", HiSpecial);
+    addToken("time", HiSpecial);
+    addToken("title", HiSpecial);
+    addToken("tr", HiSpecial);
+    addToken("track", HiSpecial);
+    addToken("tt", HiSpecial);
+    addToken("u", HiSpecial);
+    addToken("ul", HiSpecial);
+    addToken("var", HiSpecial);
+    addToken("video", HiSpecial);
+    addToken("wbr", HiSpecial);
+    addToken("xmp", HiSpecial);
+  }
+}
