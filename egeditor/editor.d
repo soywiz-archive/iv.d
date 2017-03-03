@@ -26,6 +26,7 @@ static if (!is(typeof(object.usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+///
 public final class GapBuffer {
 public:
   static align(1) struct HighState {
@@ -37,9 +38,9 @@ public:
 public:
   // utfuck-8 support
   // WARNING! this will SIGNIFICANTLY slow down coordinate calculations!
-  bool utfuck = false;
-  bool visualtabs = false;
-  ubyte tabsize = 2;
+  bool utfuck = false; /// should x coordinate calculation assume that the text is in UTF-8?
+  bool visualtabs = false; /// should x coordinate calculation assume that tabs are not one-char width?
+  ubyte tabsize = 2; /// tab size
 
 private:
   HighState hidummy;
@@ -51,12 +52,14 @@ protected:
 
 nothrow @trusted @nogc:
 public:
+  ///
   static bool hasEols (const(char)[] str) {
     import core.stdc.string : memchr;
     uint left = cast(uint)str.length;
     return (left > 0 && memchr(str.ptr, '\n', left) !is null);
   }
 
+  ///
   static int findEol (const(char)[] str) {
     int left = cast(int)str.length;
     if (left > 0) {
@@ -67,6 +70,7 @@ public:
     return -1;
   }
 
+  ///
   static int countEols (const(char)[] str) {
     import core.stdc.string : memchr;
     int linecount = 0;
@@ -85,13 +89,13 @@ public:
   }
 
 protected:
-  char* tbuf; // text buffer
-  HighState* hbuf; // highlight buffer
-  uint tbused; // not including gap
-  uint tbsize; // including gap
-  uint tbmax = 512*1024*1024+MinGapSize; // maximum buffer size
-  uint gapstart, gapend; // tbuf[gapstart..gapend]; gap cannot be empty
-  uint bufferChangeCounter; // will simply increase on each buffer change
+  char* tbuf; /// text buffer
+  HighState* hbuf; /// highlight buffer
+  uint tbused; /// not including gap
+  uint tbsize; /// including gap
+  uint tbmax = 512*1024*1024+MinGapSize; /// maximum buffer size
+  uint gapstart, gapend; /// tbuf[gapstart..gapend]; gap cannot be empty
+  uint bufferChangeCounter; /// will simply increase on each buffer change
 
   // line offset cache
   uint* lineofsc;
@@ -156,7 +160,7 @@ final:
     return true;
   }
 
-  // use `memchr`, jumps over gap
+  /// using `memchr`, jumps over gap
   public int fastFindChar (int pos, char ch) {
     import core.stdc.string : memchr;
     auto ts = tbused;
@@ -179,7 +183,7 @@ final:
     return ts;
   }
 
-  // use `memchr`, jumps over gap
+  /// use `memchr`, jumps over gap
   public int fastFindCharIn (int pos, int len, char ch) {
     import core.stdc.string : memchr;
     auto ts = tbused;
@@ -212,10 +216,10 @@ final:
     return -1;
   }
 
-  // bufparts range
-  // this is hack for regexp searchers
-  // do not store returned slice anywhere for a long time!
-  // slice *will* be invalidated on next gap buffer operation!
+  /// bufparts range
+  /// this is hack for regexp searchers
+  /// do not store returned slice anywhere for a long time!
+  /// slice *will* be invalidated on next gap buffer operation!
   public auto bufparts (int pos) {
     static struct Range {
     nothrow @trusted @nogc:
@@ -324,6 +328,7 @@ protected:
   }
 
 public:
+  ///
   this () {
     // allocate minimal buffers
     if (!growTBuf(0)) assert(0, "out of memory for text buffers");
@@ -333,6 +338,7 @@ public:
     locused = 0;
   }
 
+  ///
   ~this () {
     import core.stdc.stdlib : free;
     if (tbuf !is null) free(tbuf);
@@ -340,8 +346,8 @@ public:
     if (lineofsc !is null) free(lineofsc);
   }
 
-  // remove all text from buffer
-  // WILL NOT call deletion hooks!
+  /// remove all text from buffer
+  /// WILL NOT call deletion hooks!
   void clear () {
     import core.stdc.stdlib : free;
     if (tbuf !is null) { free(tbuf); tbuf = null; }
@@ -361,14 +367,15 @@ public:
     locused = 0;
   }
 
-  // size of text without gap
+  /// size of text buffer without gap, in one-byte chars
   @property int textsize () const pure { pragma(inline, true); return tbused; }
-  // there is always at least one line, so `linecount` is never zero
+  /// there is always at least one line, so `linecount` is never zero
   @property int linecount () const pure { pragma(inline, true); return mLineCount; }
 
-  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\0'); }
-  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : hidummy); }
+  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\0'); } ///
+  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : hidummy); } ///
 
+  /// return decoded to koi-8 utf-8 char at buffer position pos
   @property char utfuckAt (uint pos) const pure {
     if (pos >= tbsize) return 0;
     if (!utfuck) return this[pos];
@@ -381,7 +388,8 @@ public:
     return uni2koi(dch);
   }
 
-  // never returns zero
+  /// return utf-8 character length at buffer position pos
+  /// never returns zero
   int utfuckLenAt(bool alwaysPositive=true) (int pos) {
     auto ts = tbused;
     if (pos < 0 || pos >= ts) {
@@ -400,7 +408,7 @@ public:
     static if (alwaysPositive) return pos-spos; else return (udc.invalid ? -1 : pos-spos);
   }
 
-  // get number of *symbols* to line end (this is not always equal to number of bytes for utfuck)
+  /// get number of *symbols* to line end (this is not always equal to number of bytes for utfuck)
   int syms2eol (int pos) {
     auto ts = tbused;
     if (pos < 0) pos = 0;
@@ -416,7 +424,7 @@ public:
     return count;
   }
 
-  // get line for the given position
+  /// get line for the given position
   int pos2line (int pos) {
     auto ts = tbused;
     if (pos < 0) return 0;
@@ -435,7 +443,7 @@ public:
     return lcidx;
   }
 
-  // get position (starting) for the given line
+  /// get position (starting) for the given line
   int line2pos (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
     if (lidx > mLineCount-1) return tbused;
@@ -447,7 +455,7 @@ public:
     return lineofsc[lidx];
   }
 
-  // get ending position for the given line
+  /// get ending position for the given line
   int lineend (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
     if (lidx > mLineCount-1) return tbused;
@@ -515,7 +523,7 @@ public:
     return x;
   }
 
-  // get position for the given coordinates
+  /// get position for the given coordinates
   int xy2pos (int x, int y) {
     auto ts = tbused;
     if (ts == 0 || y < 0) return 0;
@@ -543,7 +551,7 @@ public:
     }
   }
 
-  // get coordinates for the given position
+  /// get coordinates for the given position
   void pos2xy (int pos, out int x, out int y) {
     auto ts = tbused;
     if (pos <= 0 || ts == 0) return; // x and y autoinited
@@ -635,6 +643,8 @@ public:
     x = pos-ls;
   }
 
+  /// ensure that the buffer has room for at least one char in the gap
+  /// note that this may move gap
   protected void ensureGap () {
     // if we have zero-sized gap, assume that it is at end; we always have a room for at least MinGapSize chars
     if (gapstart >= gapend) {
@@ -643,7 +653,7 @@ public:
     }
   }
 
-  // put the gap *before* `pos`
+  /// put the gap *before* `pos`
   protected void moveGapAtPos (int pos) {
     import core.stdc.string : memmove;
     auto ts = tbused; // i will need it in several places
@@ -696,7 +706,7 @@ public:
     }
   }
 
-  // put the gap at the end of the text
+  /// put the gap at the end of the text
   void moveGapAtEnd () {
     import core.stdc.string : memmove;
     auto ts = tbused; // i will need it in several places
@@ -714,12 +724,12 @@ public:
     assert(gapend <= tbsize);
   }
 
-  // put text into buffer; will either put all the text, or nothing
-  // returns success flag
+  /// put text into buffer; will either put all the text, or nothing
+  /// returns success flag
   bool append (const(char)[] str...) { return (put(tbused, str) >= 0); }
 
-  // put text into buffer; will either put all the text, or nothing
-  // returns new position or -1
+  /// put text into buffer; will either put all the text, or nothing
+  /// returns new position or -1
   int put (int pos, const(char)[] str...) {
     import core.stdc.string : memchr, memcpy, memset;
     if (pos < 0) pos = 0;
@@ -770,8 +780,8 @@ public:
     return pos;
   }
 
-  // remove count codepoints from the current position; will either remove all of 'em, or nothing
-  // returns success flag
+  /// remove count codepoints from the current position; will either remove all of 'em, or nothing
+  /// returns success flag
   bool remove (int pos, int count) {
     import core.stdc.string : memmove;
     if (count < 0) return false;
@@ -821,7 +831,7 @@ public:
     return true;
   }
 
-  // count how much eols we has in this range
+  /// count how much eols we has in this range
   int countEolsInRange (int pos, int count) {
     if (count < 1 || pos <= -count || pos >= tbused) return 0;
     if (pos+count > tbused) count = tbused-pos;
@@ -833,19 +843,19 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// highlighter should be able to work line-by-line
+/// highlighter should be able to work line-by-line
 class EditorHL {
 protected:
-  GapBuffer gb;
+  GapBuffer gb; ///
 
 public:
-  this () {}
+  this () {} ///
 
-  // return true if highlighting for this line was changed
+  /// return true if highlighting for this line was changed
   abstract bool fixLine (int line);
 
-  // mark line as "need rehighlighting" (and possibly other text too)
-  // wasInsDel: some lines was inserted/deleted down the text
+  /// mark line as "need rehighlighting" (and possibly other text too)
+  /// wasInsDel: some lines was inserted/deleted down the text
   abstract void lineChanged (int line, bool wasInsDel);
 }
 
@@ -1290,16 +1300,18 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// main editor engine: does all the undo/redo magic, block management, etc.
 class Editor {
 public:
+  ///
   enum CodePage : ubyte {
-    koi8u,
-    cp1251,
-    cp866,
+    koi8u, ///
+    cp1251, ///
+    cp866, ///
   }
-  CodePage codepage = CodePage.koi8u;
+  CodePage codepage = CodePage.koi8u; ///
 
-  // from koi to codepage
+  /// from koi to codepage
   final char recodeCharTo (char ch) pure const nothrow @safe @nogc {
     pragma(inline, true);
     return
@@ -1308,7 +1320,7 @@ public:
       ch;
   }
 
-  // from codepage to koi
+  /// from codepage to koi
   final char recodeCharFrom (char ch) pure const nothrow @safe @nogc {
     pragma(inline, true);
     return
@@ -1329,7 +1341,6 @@ protected:
   EditorHL hl;
   UndoStack undo, redo;
   int bstart = -1, bend = -1; // marked block position
-  bool bcol; // is this "column" block?
   bool markingBlock;
   bool lastBGEnd; // last block grow was at end?
   bool txchanged;
@@ -1341,16 +1352,19 @@ protected:
   int inPasteMode;
 
 protected:
-  bool[int] linebookmarked; // is this line bookmarked?
+  bool[int] linebookmarked; /// is this line bookmarked?
 
 public:
+  /// is editor in "paste mode" (i.e. we are pasting chars from clipboard, and should skip autoindenting)?
   final @property bool pasteMode () const pure nothrow @safe @nogc { return (inPasteMode > 0); }
-  final resetPasteMode () pure nothrow @safe @nogc { inPasteMode = 0; }
+  final resetPasteMode () pure nothrow @safe @nogc { inPasteMode = 0; } ///
 
+  ///
   final void clearBookmarks () nothrow {
     linebookmarked.clear();
   }
 
+  ///
   final void bookmarkChange(string mode="toggle") (int cy) nothrow {
     static assert(mode == "toggle" || mode == "set" || mode == "reset");
     if (cy < 0 || cy >= gb.linecount) return;
@@ -1379,13 +1393,16 @@ public:
     }
   }
 
+  ///
   final void doBookmarkToggle () nothrow { pragma(inline, true); bookmarkChange!"toggle"(cy); }
 
+  ///
   final @property bool isLineBookmarked (int lidx) nothrow @safe @nogc {
     pragma(inline, true);
     return ((lidx in linebookmarked) !is null);
   }
 
+  ///
   final void doBookmarkJumpUp () nothrow @nogc {
     int bestBM = -1;
     foreach (int lidx; linebookmarked.byKey) {
@@ -1400,6 +1417,7 @@ public:
     }
   }
 
+  ///
   final void doBookmarkJumpDown () nothrow @nogc {
     int bestBM = int.max;
     foreach (int lidx; linebookmarked.byKey) {
@@ -1414,13 +1432,13 @@ public:
     }
   }
 
-  //WARNING! don't mutate bookmarks here!
+  ///WARNING! don't mutate bookmarks here!
   final void forEachBookmark (scope void delegate (int lidx) dg) {
     if (dg is null) return;
     foreach (int lidx; linebookmarked.byKey) dg(lidx);
   }
 
-  // call this from `willBeDeleted()` (only) to fix bookmarks
+  /// call this from `willBeDeleted()` (only) to fix bookmarks
   final void bookmarkDeletionFix (int pos, int len, int eolcount) nothrow {
     if (eolcount && linebookmarked.length > 0) {
       import core.stdc.stdlib : malloc, free;
@@ -1463,7 +1481,7 @@ public:
     }
   }
 
-  // call this from `willBeInserted()` or `wasInserted()` to fix bookmarks
+  /// call this from `willBeInserted()` or `wasInserted()` to fix bookmarks
   final void bookmarkInsertionFix (int pos, int len, int eolcount) nothrow {
     if (eolcount && linebookmarked.length > 0) {
       import core.stdc.stdlib : malloc, free;
@@ -1499,6 +1517,7 @@ public:
   }
 
 public:
+  ///
   this (int x0, int y0, int w, int h, EditorHL ahl=null, bool singleLine=false) {
     winx = x0;
     winy = y0;
@@ -1514,14 +1533,16 @@ public:
   }
 
   // utfuck switch hooks
-  protected void beforeUtfuckSwitch (bool newisutfuck) {}
-  protected void afterUtfuckSwitch (bool newisutfuck) {}
+  protected void beforeUtfuckSwitch (bool newisutfuck) {} /// utfuck switch hook
+  protected void afterUtfuckSwitch (bool newisutfuck) {} /// utfuck switch hook
 
   final @property {
-    // this switches "utfuck" mode
-    // note that utfuck mode is FUCKIN' SLOW and buggy
-    // you should not lose any text, but may encounder visual and positional glitches
+    ///
     bool utfuck () const pure nothrow @safe @nogc { pragma(inline, true); return gb.utfuck; }
+
+    /// this switches "utfuck" mode
+    /// note that utfuck mode is FUCKIN' SLOW and buggy
+    /// you should not lose any text, but may encounder visual and positional glitches
     void utfuck (bool v) {
       if (gb.utfuck == v) return;
       beforeUtfuckSwitch(v);
@@ -1532,28 +1553,29 @@ public:
       afterUtfuckSwitch(v);
     }
 
-    int x0 () const pure nothrow @safe @nogc { pragma(inline, true); return winx; }
-    int y0 () const pure nothrow @safe @nogc { pragma(inline, true); return winy; }
-    int width () const pure nothrow @safe @nogc { pragma(inline, true); return winw; }
-    int height () const pure nothrow @safe @nogc { pragma(inline, true); return winh; }
+    int x0 () const pure nothrow @safe @nogc { pragma(inline, true); return winx; } ///
+    int y0 () const pure nothrow @safe @nogc { pragma(inline, true); return winy; } ///
+    int width () const pure nothrow @safe @nogc { pragma(inline, true); return winw; } ///
+    int height () const pure nothrow @safe @nogc { pragma(inline, true); return winh; } ///
 
-    void x0 (int v) nothrow @safe @nogc { pragma(inline, true); move(v, winy); }
-    void y0 (int v) nothrow @safe @nogc { pragma(inline, true); move(winx, v); }
-    void width (int v) nothrow @safe { pragma(inline, true); resize(v, winh); }
-    void height (int v) nothrow @safe { pragma(inline, true); resize(winw, v); }
+    void x0 (int v) nothrow @safe @nogc { pragma(inline, true); move(v, winy); } ///
+    void y0 (int v) nothrow @safe @nogc { pragma(inline, true); move(winx, v); } ///
+    void width (int v) nothrow @safe { pragma(inline, true); resize(v, winh); } ///
+    void height (int v) nothrow @safe { pragma(inline, true); resize(winw, v); } ///
 
-    // has any effect only if you are using `insertText()` and `deleteText()` API!
+    /// has any effect only if you are using `insertText()` and `deleteText()` API!
     bool readonly () const pure nothrow @safe @nogc { pragma(inline, true); return mReadOnly; }
-    void readonly (bool v) nothrow @safe @nogc { pragma(inline, true); mReadOnly = v; }
+    void readonly (bool v) nothrow @safe @nogc { pragma(inline, true); mReadOnly = v; } ///
 
+    /// "single line" mode, for line editors
     bool singleline () const pure nothrow @safe @nogc { pragma(inline, true); return mSingleLine; }
 
-    // "buffer change counter"
+    /// "buffer change counter"
     uint bufferCC () const pure nothrow @safe @nogc { pragma(inline, true); return gb.bufferChangeCounter; }
-    void bufferCC (uint v) pure nothrow @safe @nogc { pragma(inline, true); gb.bufferChangeCounter = v; }
+    void bufferCC (uint v) pure nothrow @safe @nogc { pragma(inline, true); gb.bufferChangeCounter = v; } ///
 
-    bool killTextOnChar () const pure nothrow @safe @nogc { pragma(inline, true); return mKillTextOnChar; }
-    void killTextOnChar (bool v) nothrow @safe @nogc {
+    bool killTextOnChar () const pure nothrow @safe @nogc { pragma(inline, true); return mKillTextOnChar; } ///
+    void killTextOnChar (bool v) nothrow @safe @nogc { ///
       pragma(inline, true);
       if (mKillTextOnChar != v) {
         mKillTextOnChar = v;
@@ -1562,7 +1584,7 @@ public:
     }
   }
 
-  // resize control
+  /// resize control
   void resize (int nw, int nh) nothrow @safe {
     if (nw < 2) nw = 2;
     if (nh < 1) nh = 1;
@@ -1578,6 +1600,7 @@ public:
     }
   }
 
+  ///
   void move (int nx, int ny) nothrow @safe @nogc {
     if (winx != nx || winy != ny) {
       winx = nx;
@@ -1586,25 +1609,27 @@ public:
     }
   }
 
+  ///
   void moveResize (int nx, int ny, int nw, int nh) nothrow @safe {
     move(nx, ny);
     resize(nw, nh);
   }
 
   final @property nothrow @safe @nogc {
-    // has active marked block?
+    /// has active marked block?
     bool hasMarkedBlock () const pure { pragma(inline, true); return (bstart < bend); }
 
-    int curx () const pure { pragma(inline, true); return cx; }
-    int cury () const pure { pragma(inline, true); return cy; }
-    int xofs () const pure { pragma(inline, true); return mXOfs; }
+    int curx () const pure { pragma(inline, true); return cx; } ///
+    int cury () const pure { pragma(inline, true); return cy; } ///
+    int xofs () const pure { pragma(inline, true); return mXOfs; } ///
 
-    int topline () const pure { pragma(inline, true); return mTopLine; }
-    int linecount () const pure { pragma(inline, true); return gb.linecount; }
-    int textsize () const pure { pragma(inline, true); return gb.textsize; }
+    int topline () const pure { pragma(inline, true); return mTopLine; } ///
+    int linecount () const pure { pragma(inline, true); return gb.linecount; } ///
+    int textsize () const pure { pragma(inline, true); return gb.textsize; } ///
 
-    char opIndex (int pos) const pure { pragma(inline, true); return gb[pos]; }
+    char opIndex (int pos) const pure { pragma(inline, true); return gb[pos]; } ///
 
+    ///
     dchar dcharAt (int pos) const pure {
       auto ts = gb.textsize;
       if (pos < 0 || pos >= ts) return 0;
@@ -1628,11 +1653,12 @@ public:
 
     }
 
-    bool textChanged () const pure { pragma(inline, true); return txchanged; }
+    bool textChanged () const pure { pragma(inline, true); return txchanged; } ///
 
-    void curx (int v) @system { gotoXY(v, cy); }
-    void cury (int v) @system { gotoXY(cx, v); }
+    void curx (int v) @system { gotoXY(v, cy); } ///
+    void cury (int v) @system { gotoXY(cx, v); } ///
 
+     ///
     void topline (int v) @system {
       if (v < 0) v = 0;
       if (v > gb.linecount) v = gb.linecount-1;
@@ -1646,7 +1672,9 @@ public:
       }
     }
 
-    bool visualtabs () const pure { pragma(inline, true); return (gb.visualtabs && gb.tabsize > 0); }
+    bool visualtabs () const pure { pragma(inline, true); return (gb.visualtabs && gb.tabsize > 0); } ///
+
+    ///
     void visualtabs (bool v) {
       if (gb.visualtabs != v) {
         //auto pos = curpos;
@@ -1656,7 +1684,9 @@ public:
       }
     }
 
-    ubyte tabsize () const pure { pragma(inline, true); return gb.tabsize; }
+    ubyte tabsize () const pure { pragma(inline, true); return gb.tabsize; } ///
+
+    ///
     void tabsize (ubyte v) {
       if (gb.tabsize != v) {
         gb.tabsize = v;
@@ -1665,8 +1695,10 @@ public:
     }
   }
 
+  /// mark whole visible text as dirty
   final void fullDirty () nothrow @safe @nogc { dirtyLines[] = true; }
 
+  /// absolute coordinates in text
   final void gotoXY(bool vcenter=false) (int nx, int ny) nothrow @nogc {
     if (nx < 0) nx = 0;
     if (ny < 0) ny = 0;
@@ -1681,6 +1713,7 @@ public:
     }
   }
 
+  ///
   final void gotoPos(bool vcenter=false) (int pos) nothrow @nogc {
     if (pos < 0) pos = 0;
     if (pos > gb.textsize) pos = gb.textsize;
@@ -1689,13 +1722,15 @@ public:
     gotoXY!vcenter(rx, ry);
   }
 
-  final int curpos () nothrow @safe @nogc { pragma(inline, true); return gb.xy2pos(cx, cy); }
+  final int curpos () nothrow @safe @nogc { pragma(inline, true); return gb.xy2pos(cx, cy); } ///
 
+  ///
   void clearUndo () nothrow @nogc {
     if (undo !is null) undo.clear();
     if (redo !is null) redo.clear();
   }
 
+  ///
   void clear () nothrow @nogc {
     gb.clear();
     txchanged = false;
@@ -1706,24 +1741,27 @@ public:
     prevXOfs = -1;
     dirtyLines[] = true;
     bstart = bend = -1;
-    bcol = false;
     markingBlock = false;
     lastBGEnd = false;
     txchanged = false;
   }
 
+  ///
   void clearAndDisableUndo () {
     if (undo !is null) { undo.clear(true); delete undo; undo = null; }
     if (redo !is null) { redo.clear(true); delete redo; redo = null; }
   }
 
+  ///
   void reinstantiateUndo () {
     if (undo is null) undo = new UndoStack(false, !mSingleLine);
     if (redo is null) redo = new UndoStack(true, !mSingleLine);
   }
 
+  ///
   void loadFile (const(char)[] fname) { loadFile(VFile(fname)); }
 
+  ///
   void loadFile (VFile fl) {
     import core.stdc.stdlib : malloc, free;
     clear();
@@ -1739,8 +1777,10 @@ public:
     }
   }
 
+  ///
   void saveFile (const(char)[] fname) { saveFile(VFile(fname, "w")); }
 
+  ///
   void saveFile (VFile fl) {
     //FIXME: this uses internals of gap buffer!
     gb.moveGapAtEnd();
@@ -1750,7 +1790,7 @@ public:
     if (redo !is null) redo.alwaysChanged();
   }
 
-  // note that you can't reuse one highlighter for several editors
+  /// note that you can't reuse one highlighter for several editors!
   void attachHiglighter (EditorHL ahl) {
     if (ahl is hl) return; // nothing to do
     if (ahl is null) {
@@ -1774,6 +1814,7 @@ public:
     fullDirty();
   }
 
+  ///
   EditorHL detachHighlighter () {
     auto res = hl;
     if (res !is null) {
@@ -1784,24 +1825,33 @@ public:
     return res;
   }
 
+  /// override this method to draw text cursor; it will be called after `drawPageMisc()`
   public abstract void drawCursor ();
 
+  /// override this method to draw status line; it will be called after `drawPageBegin()`
   public abstract void drawStatus ();
 
-  // highlighting is done, other housekeeping is done, only draw
-  // lidx is always valid
-  // must repaint the whole line
-  // use `winXXX` vars to know window dimensions
+  /// override this method to draw one text line
+  /// highlighting is done, other housekeeping is done, only draw
+  /// lidx is always valid
+  /// must repaint the whole line
+  /// use `winXXX` vars to know window dimensions
   public abstract void drawLine (int lidx, int yofs, int xskip);
 
-  // just clear line
-  // use `winXXX` vars to know window dimensions
+  /// just clear line
+  /// use `winXXX` vars to know window dimensions
   public abstract void drawEmptyLine (int yofs);
 
-  public void drawPageBegin () {} // we are about to refresh page
-  public void drawPageMisc () {} // before setting cursor
-  public void drawPageEnd () {} // flush it, etc.
+  /// override this method to draw something before any other page drawing will be done
+  public void drawPageBegin () {}
 
+  /// override this method to draw something after page was drawn, but before drawing the cursor
+  public void drawPageMisc () {}
+
+  /// override this method to draw something (or flush drawing buffer) after everything was drawn
+  public void drawPageEnd () {}
+
+  /// draw the page; it will fix coords, call necessary methods and so on. you are usually don't need to override this.
   void drawPage () {
     makeCurLineVisible();
 
@@ -1831,12 +1881,12 @@ public:
     drawPageEnd();
   }
 
-  // force cursor coordinates to be in text
+  /// force cursor coordinates to be in text
   final void normXY () nothrow @safe @nogc {
     gb.pos2xy(curpos, cx, cy);
   }
 
-  // non-final, so i can do proprotional fonts in the future
+  /// non-final, so i can do proprotional fonts in the future
   void makeCurXVisible () nothrow @safe @nogc {
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
@@ -1847,6 +1897,7 @@ public:
     if (mXOfs < 0) mXOfs = 0;
   }
 
+  ///
   final void makeCurLineVisible () nothrow @safe @nogc {
     if (cy < 0) cy = 0;
     if (cy >= gb.linecount) cy = gb.linecount-1;
@@ -1861,6 +1912,7 @@ public:
     makeCurXVisible();
   }
 
+  ///
   final void makeCurLineVisibleCentered (bool forced=false) nothrow @safe @nogc {
     if (forced || !isCurLineVisible) {
       if (cy < 0) cy = 0;
@@ -1875,13 +1927,14 @@ public:
     makeCurXVisible();
   }
 
+  ///
   final bool isCurLineVisible () const pure nothrow @safe @nogc {
     if (cy < mTopLine) return false;
     if (cy > mTopLine+winh-1) return false;
     return true;
   }
 
-  // `updateDown`: update all the page (as new lines was inserted/removed)
+  /// `updateDown`: update all the page (as new lines was inserted/removed)
   final void lineChanged (int lidx, bool updateDown) {
     if (lidx < 0 || lidx >= gb.linecount) return;
     if (hl !is null) hl.lineChanged(lidx, updateDown);
@@ -1890,11 +1943,10 @@ public:
     if (updateDown) dirtyLines[lidx-mTopLine..$] = true; else dirtyLines[lidx-mTopLine] = true;
   }
 
+  ///
   final void lineChangedByPos (int pos, bool updateDown) { return lineChanged(gb.pos2line(pos), updateDown); }
 
-  // `updateDown`: update all the page (as new lines was inserted/removed)
-  //protected final void curLineChanged (bool updateDown) { lineChanged(cy, updateDown); }
-
+  ///
   final void markLinesDirty (int lidx, int count) nothrow @safe @nogc {
     if (prevTopLine != mTopLine || prevXOfs != mXOfs) return; // we will refresh the whole page anyway
     if (count < 1 || lidx >= gb.linecount) return;
@@ -1907,11 +1959,13 @@ public:
     dirtyLines[lidx-mTopLine..le-mTopLine] = true;
   }
 
+  ///
   final void markLinesDirtySE (int lidxs, int lidxe) nothrow @safe @nogc {
     if (lidxe < lidxs) { int tmp = lidxs; lidxs = lidxe; lidxe = tmp; }
     markLinesDirty(lidxs, lidxe-lidxs+1);
   }
 
+  ///
   final void markRangeDirty (int pos, int len) nothrow @safe @nogc {
     if (prevTopLine != mTopLine || prevXOfs != mXOfs) return; // we will refresh the whole page anyway
     int l0 = gb.pos2line(pos);
@@ -1919,16 +1973,17 @@ public:
     markLinesDirtySE(l0, l1);
   }
 
-  //FIXME: optimize updating with block boundaries
+  ///
   final void markBlockDirty () nothrow @safe @nogc {
+    //FIXME: optimize updating with block boundaries
     if (bstart >= bend) return;
     markRangeDirty(bstart, bend-bstart);
   }
 
-  // do various fixups before text deletion
-  // cursor coords *may* be already changed
-  // will be called before text deletion by `deleteText` or `replaceText` APIs
-  // eolcount: number of eols in (to be) deleted block
+  /// do various fixups before text deletion
+  /// cursor coords *may* be already changed
+  /// will be called before text deletion by `deleteText` or `replaceText` APIs
+  /// eolcount: number of eols in (to be) deleted block
   protected void willBeDeleted (int pos, int len, int eolcount) nothrow {
     //FIXME: optimize updating with block boundaries
     if (len < 1) return; // just in case
@@ -1969,25 +2024,25 @@ public:
     }
   }
 
-  // do various fixups after text deletion
-  // cursor coords *may* be already changed
-  // will be called after text deletion by `deleteText` or `replaceText` APIs
-  // eolcount: number of eols in deleted block
-  // pos and len: they were valid *before* deletion!
+  /// do various fixups after text deletion
+  /// cursor coords *may* be already changed
+  /// will be called after text deletion by `deleteText` or `replaceText` APIs
+  /// eolcount: number of eols in deleted block
+  /// pos and len: they were valid *before* deletion!
   protected void wasDeleted (int pos, int len, int eolcount) nothrow {
   }
 
-  // do various fixups before text insertion
-  // cursor coords *may* be already changed
-  // will be called before text insertion by `insertText` or `replaceText` APIs
-  // eolcount: number of eols in (to be) inserted block
+  /// do various fixups before text insertion
+  /// cursor coords *may* be already changed
+  /// will be called before text insertion by `insertText` or `replaceText` APIs
+  /// eolcount: number of eols in (to be) inserted block
   protected void willBeInserted (int pos, int len, int eolcount) nothrow {
   }
 
-  // do various fixups after text insertion
-  // cursor coords *may* be already changed
-  // will be called after text insertion by `insertText` or `replaceText` APIs
-  // eolcount: number of eols in inserted block
+  /// do various fixups after text insertion
+  /// cursor coords *may* be already changed
+  /// will be called after text insertion by `insertText` or `replaceText` APIs
+  /// eolcount: number of eols in inserted block
   protected void wasInserted (int pos, int len, int eolcount) nothrow {
     //FIXME: optimize updating with block boundaries
     if (len < 1) return;
@@ -2017,7 +2072,7 @@ public:
     }
   }
 
-  // should be called after cursor position change
+  /// should be called after cursor position change
   protected final void growBlockMark () nothrow @safe @nogc {
     if (!markingBlock || bstart < 0) return;
     makeCurLineVisible();
@@ -2060,16 +2115,18 @@ public:
     markLinesDirtySE(ry, cy);
   }
 
+  ///
   bool undoGroupStart () {
     return (undo !is null ? undo.addGroupStart(this) : false);
   }
 
+  ///
   bool undoGroupEnd () {
     return (undo !is null ? undo.addGroupEnd(this) : false);
   }
 
-  // build autoindent for the current line, put it into `indentText`
-  // `indentText` will include '\n'
+  /// build autoindent for the current line, put it into `indentText`
+  /// `indentText` will include '\n'
   protected final void buildIndent (int pos) {
     if (indentText.length) { indentText.length = 0; indentText.assumeSafeAppend; }
     indentText ~= '\n';
@@ -2087,10 +2144,10 @@ public:
     }
   }
 
-  // delete text, save undo, mark updated lines
-  // return `false` if operation cannot be performed
-  // if caller wants to delete more text than buffer has, it is ok
-  // calls `dg` *after* undo saving, but before `willBeDeleted()`
+  /// delete text, save undo, mark updated lines
+  /// return `false` if operation cannot be performed
+  /// if caller wants to delete more text than buffer has, it is ok
+  /// calls `dg` *after* undo saving, but before `willBeDeleted()`
   final bool deleteText(string movecursor="none") (int pos, int count, scope void delegate (int pos, int count) dg=null) {
     static assert(movecursor == "none" || movecursor == "start" || movecursor == "end");
     if (mReadOnly) return false;
@@ -2131,8 +2188,8 @@ public:
     return true;
   }
 
-  // ugly name is intentional
-  // this replaces editor text, clears undo and sets `killTextOnChar` if necessary
+  /// ugly name is intentional
+  /// this replaces editor text, clears undo and sets `killTextOnChar` if necessary
   final bool setNewText (const(char)[] text, bool killOnChar=true) {
     clear();
     auto res = insertText!"end"(0, text);
@@ -2142,8 +2199,8 @@ public:
     return res;
   }
 
-  // insert text, save undo, mark updated lines
-  // return `false` if operation cannot be performed
+  /// insert text, save undo, mark updated lines
+  /// return `false` if operation cannot be performed
   final bool insertText(string movecursor="none", bool doIndent=true) (int pos, const(char)[] str) {
     static assert(movecursor == "none" || movecursor == "start" || movecursor == "end");
     if (mReadOnly) return false;
@@ -2244,8 +2301,8 @@ public:
     return true;
   }
 
-  // replace text at pos, save undo, mark updated lines
-  // return `false` if operation cannot be performed
+  /// replace text at pos, save undo, mark updated lines
+  /// return `false` if operation cannot be performed
   final bool replaceText(string movecursor="none", bool doIndent=false) (int pos, int count, const(char)[] str) {
     static assert(movecursor == "none" || movecursor == "start" || movecursor == "end");
     if (mReadOnly) return false;
@@ -2293,8 +2350,10 @@ public:
     return false;
   }
 
+  ///
   bool doBlockWrite (const(char)[] fname) { return doBlockWrite(VFile(fname, "w")); }
 
+  ///
   bool doBlockWrite (VFile fl) {
     import core.stdc.stdlib : malloc, free;
     killTextOnChar = false;
@@ -2309,8 +2368,10 @@ public:
     return true;
   }
 
+  ///
   bool doBlockRead (const(char)[] fname) { return doBlockRead(VFile(fname)); }
 
+  ///
   bool doBlockRead (VFile fl) {
     import core.stdc.stdlib : realloc, free;
     import core.stdc.string : memcpy;
@@ -2334,12 +2395,14 @@ public:
     return insertText!("start", false)(curpos, btext[0..blen]); // no indent
   }
 
+  ///
   bool doBlockDelete () {
     if (mReadOnly) return false;
     if (!hasMarkedBlock) return true;
     return deleteText!"start"(bstart, bend-bstart, (pos, count) { doBlockResetMark(false); });
   }
 
+  ///
   bool doBlockCopy () {
     import core.stdc.stdlib : malloc, free;
     if (mReadOnly) return false;
@@ -2354,6 +2417,7 @@ public:
     return insertText!("start", false)(curpos, btext[0..blen]); // no indent
   }
 
+  ///
   bool doBlockMove () {
     import core.stdc.stdlib : malloc, free;
     if (mReadOnly) return false;
@@ -2388,6 +2452,7 @@ public:
     return true;
   }
 
+  ///
   void doDelete () {
     if (mReadOnly) return;
     int pos = curpos;
@@ -2399,6 +2464,7 @@ public:
     }
   }
 
+  ///
   void doBackspace () {
     if (mReadOnly) return;
     killTextOnChar = false;
@@ -2416,6 +2482,7 @@ public:
     }
   }
 
+  ///
   void doBackByIndent () {
     if (mReadOnly) return;
     int pos = curpos;
@@ -2430,6 +2497,7 @@ public:
     deleteText!"start"(pos, del);
   }
 
+  ///
   void doDeleteWord () {
     if (mReadOnly) return;
     int pos = curpos;
@@ -2455,6 +2523,7 @@ public:
     deleteText!"start"(stpos, pos-stpos);
   }
 
+  ///
   void doKillLine () {
     if (mReadOnly) return;
     int ls = gb.xy2pos(0, cy);
@@ -2467,6 +2536,7 @@ public:
     if (ls < le) deleteText!"start"(ls, le-ls);
   }
 
+  ///
   void doKillToEOL () {
     if (mReadOnly) return;
     int pos = curpos;
@@ -2478,7 +2548,7 @@ public:
     }
   }
 
-  // split line at current position
+  /// split line at current position
   bool doLineSplit (bool autoindent=true) {
     if (mReadOnly || mSingleLine) return false;
     if (autoindent) {
@@ -2488,6 +2558,7 @@ public:
     }
   }
 
+  ///
   void doPutChar (char ch) {
     if (mReadOnly) return;
     if (ch == 0) return;
@@ -2509,6 +2580,7 @@ public:
     }
   }
 
+  ///
   void doPutText (const(char)[] str) {
     if (mReadOnly) return;
     if (utfuck) {
@@ -2572,6 +2644,7 @@ public:
     }
   }
 
+  ///
   void doPasteStart () {
     if (mKillTextOnChar) {
       killTextOnChar = false;
@@ -2587,14 +2660,16 @@ public:
     ++inPasteMode;
   }
 
+  ///
   void doPasteEnd () {
     killTextOnChar = false;
     if (--inPasteMode < 0) inPasteMode = 0;
     undoGroupEnd();
   }
 
-  //TODO: rollback
+  ///
   protected final bool xIndentLine (int lidx) {
+    //TODO: rollback
     if (mReadOnly) return false;
     if (lidx < 0 || lidx >= gb.linecount) return false;
     auto pos = gb.xy2pos(0, lidx);
@@ -2636,6 +2711,7 @@ public:
     return deleteText!"none"(pos, len);
   }
 
+  ///
   void doUnindentBlock () {
     if (mReadOnly) return;
     killTextOnChar = false;
@@ -2649,6 +2725,8 @@ public:
 
   // ////////////////////////////////////////////////////////////////////// //
   // actions
+
+  ///
   final bool pushUndoCurPos () nothrow @nogc {
     return (undo !is null ? undo.addCurMove(this) : false);
   }
@@ -2667,6 +2745,7 @@ public:
     }
   };
 
+  ///
   void doWordLeft (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     killTextOnChar = false;
@@ -2695,6 +2774,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doWordRight (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     killTextOnChar = false;
@@ -2731,6 +2811,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doTextTop (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
@@ -2741,6 +2822,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doTextBottom (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
@@ -2751,6 +2833,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doPageTop (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
@@ -2761,6 +2844,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doPageBottom (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
@@ -2774,6 +2858,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doScrollUp (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (mTopLine > 0) {
@@ -2789,6 +2874,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doScrollDown (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (mTopLine+winh < gb.linecount) {
@@ -2804,6 +2890,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doUp (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (cy > 0) {
@@ -2814,6 +2901,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doDown (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (cy < gb.linecount-1) {
@@ -2824,6 +2912,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doLeft (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     int rx, ry;
@@ -2841,6 +2930,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doRight (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     int rx, ry;
@@ -2859,6 +2949,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doPageUp (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (winh < 2 || gb.mLineCount < 2) return;
@@ -2875,6 +2966,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doPageDown (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     if (winh < 2 || gb.mLineCount < 2) return;
@@ -2892,6 +2984,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doHome (bool smart=true, bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     killTextOnChar = false;
@@ -2917,6 +3010,7 @@ public:
     growBlockMark();
   }
 
+  ///
   void doEnd (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
     int rx, ry;
@@ -2931,8 +3025,8 @@ public:
     growBlockMark();
   }
 
-  // "allMembers" trait: shut the fuck up!
-  /*private*/protected void doUndoRedo (UndoStack us) {
+  ///
+  /*private*/protected void doUndoRedo (UndoStack us) { // "allMembers" trait: shut the fuck up!
     if (us is null) return;
     killTextOnChar = false;
     int level = 0;
@@ -2952,9 +3046,10 @@ public:
     }
   }
 
-  void doUndo () { doUndoRedo(undo); }
-  void doRedo () { doUndoRedo(redo); }
+  void doUndo () { doUndoRedo(undo); } ///
+  void doRedo () { doUndoRedo(redo); } ///
 
+  ///
   void doBlockResetMark (bool saveUndo=true) nothrow @nogc {
     killTextOnChar = false;
     if (bstart < bend) {
@@ -2965,6 +3060,7 @@ public:
     markingBlock = false;
   }
 
+  ///
   void doBlockMark () {
     killTextOnChar = false;
     if (bstart == bend && markingBlock) { doBlockResetMark(false); return; }
@@ -2984,6 +3080,7 @@ public:
     }
   }
 
+  ///
   void doSetBlockStart () {
     killTextOnChar = false;
     auto pos = curpos;
@@ -3000,6 +3097,7 @@ public:
     dirtyLines[] = true; //FIXME: optimize
   }
 
+  ///
   void doSetBlockEnd () {
     auto pos = curpos;
     if ((hasMarkedBlock || (bstart == bend && bstart >= 0 && bstart < gb.textsize)) && pos > bstart) {
@@ -3096,18 +3194,20 @@ protected:
   }
 
 public:
-  // range interface to editor text
-  // WARNING! do not change anything while range is active, or results *WILL* be UD
+  /// range interface to editor text
+  /// WARNING! do not change anything while range is active, or results *WILL* be UD
   final TextRange opSlice (usize lo, usize hi) nothrow @nogc { return TextRange(this, lo, hi); }
-  final TextRange opSlice () nothrow @nogc { return TextRange(this, 0, gb.textsize); }
-  final int opDollar () nothrow @nogc { return gb.textsize; }
+  final TextRange opSlice () nothrow @nogc { return TextRange(this, 0, gb.textsize); } /// ditto
+  final int opDollar () nothrow @nogc { return gb.textsize; } ///
 
+  ///
   final TextRange markedBlockRange () nothrow @nogc {
     if (!hasMarkedBlock) return TextRange.init;
     return TextRange(this, bstart, bend);
   }
 
 static:
+  ///
   bool isWordChar (char ch) pure nothrow @safe @nogc {
     return (ch.isalnum || ch == '_' || ch > 127);
   }
