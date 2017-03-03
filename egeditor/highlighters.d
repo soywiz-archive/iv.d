@@ -386,54 +386,56 @@ public:
         gb.hi(spos++) = st;
         continue mainloop;
       }
-      // char?
-      if (ch == '\'' && !(opt&EdHiTokens.Opt.SQString)) {
-        auto xsp = spos;
-        ++spos;
-        auto len = skipStrChar!(false, true)();
-        if (len > 0 && gb[spos+len] == '\'') {
-          spos = xsp;
-          gb.hi(spos++) = HS(HiChar);
-          st = HS(len == 1 ? HiChar : HiCharSpecial);
-          while (len--) gb.hi(spos++) = st;
-          gb.hi(spos++) = HS(HiChar);
-          st = HS(HiText);
-        } else {
-          spos = xsp;
-          st = HS(HiText);
-          gb.hi(spos++) = st;
-          for (;;) {
-            if (len == 0 || gb[spos] == '\'') { gb.hi(spos++) = st; continue mainloop; }
-            while (len-- > 0) gb.hi(spos++) = st;
-            len = skipStrChar!(false, true)();
+      if (!(opt&EdHiTokens.Opt.NoStrings)) {
+        // char?
+        if (ch == '\'' && !(opt&EdHiTokens.Opt.SQString)) {
+          auto xsp = spos;
+          ++spos;
+          auto len = skipStrChar!(false, true)();
+          if (len > 0 && gb[spos+len] == '\'') {
+            spos = xsp;
+            gb.hi(spos++) = HS(HiChar);
+            st = HS(len == 1 ? HiChar : HiCharSpecial);
+            while (len--) gb.hi(spos++) = st;
+            gb.hi(spos++) = HS(HiChar);
+            st = HS(HiText);
+          } else {
+            spos = xsp;
+            st = HS(HiText);
+            gb.hi(spos++) = st;
+            for (;;) {
+              if (len == 0 || gb[spos] == '\'') { gb.hi(spos++) = st; continue mainloop; }
+              while (len-- > 0) gb.hi(spos++) = st;
+              len = skipStrChar!(false, true)();
+            }
           }
+          continue mainloop;
         }
-        continue mainloop;
-      }
-      // string?
-      if (ch == '"') {
-        gb.hi(spos++) = HS(HiString);
-        st = HS(HiString);
-        continue mainloop;
-      }
-      // string?
-      if (ch == '\'' && (opt&EdHiTokens.Opt.SQString)) {
-        gb.hi(spos++) = HS(HiSQString);
-        st = HS(HiSQString);
-        continue mainloop;
-      }
-      // bqstring?
-      if (ch == '`' && (opt&EdHiTokens.Opt.BQString)) {
-        gb.hi(spos++) = HS(HiBQString);
-        st = HS(HiBQString);
-        continue mainloop;
-      }
-      // rqstring?
-      if (ch == 'r' && (opt&EdHiTokens.Opt.RQString) && gb[spos+1] == '"') {
-        gb.hi(spos++) = HS(HiRQString);
-        gb.hi(spos++) = HS(HiRQString);
-        st = HS(HiRQString);
-        continue mainloop;
+        // string?
+        if (ch == '"') {
+          gb.hi(spos++) = HS(HiString);
+          st = HS(HiString);
+          continue mainloop;
+        }
+        // string?
+        if (ch == '\'' && (opt&EdHiTokens.Opt.SQString)) {
+          gb.hi(spos++) = HS(HiSQString);
+          st = HS(HiSQString);
+          continue mainloop;
+        }
+        // bqstring?
+        if (ch == '`' && (opt&EdHiTokens.Opt.BQString)) {
+          gb.hi(spos++) = HS(HiBQString);
+          st = HS(HiBQString);
+          continue mainloop;
+        }
+        // rqstring?
+        if (ch == 'r' && (opt&EdHiTokens.Opt.RQString) && gb[spos+1] == '"') {
+          gb.hi(spos++) = HS(HiRQString);
+          gb.hi(spos++) = HS(HiRQString);
+          st = HS(HiRQString);
+          continue mainloop;
+        }
       }
       // identifier/keyword?
       if (ch.isalpha || ch == '_') {
@@ -796,6 +798,7 @@ public:
     ShellSigil    = 1U<<14, // parse shell sigils?
     // token machine options
     CaseSensitive = 1U<<15, // are tokens case-sensitive?
+    NoStrings     = 1U<<16, // no strings at all?
   }
   static assert(Opt.max <= uint.max);
 
@@ -849,6 +852,7 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseSensitive|
+      //Opt.NoStrings|
       0
     );
 
@@ -1092,6 +1096,7 @@ public class EdHiTokensJS : EdHiTokens {
       Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseSensitive|
+      //Opt.NoStrings|
       0
     );
 
@@ -1203,6 +1208,7 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseSensitive|
+      //Opt.NoStrings|
       0
     );
 
@@ -1302,6 +1308,7 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.JSRegExp|
       Opt.ShellSigil|
       //Opt.CaseSensitive|
+      //Opt.NoStrings|
       0
     );
 
@@ -1376,6 +1383,7 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseSensitive|
+      //Opt.NoStrings|
       0
     );
 
@@ -1513,6 +1521,7 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       Opt.CaseSensitive|
+      Opt.NoStrings|
       0
     );
 
