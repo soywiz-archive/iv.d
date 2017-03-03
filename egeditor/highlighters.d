@@ -66,6 +66,8 @@ public enum {
   HiToDoUnsure, // [?]
 }
 
+private enum HiBodySpecialMark = 253; // sorry; end user will never see this
+
 
 public bool hiIsComment() (in auto ref GapBuffer.HighState hs) nothrow @safe @nogc {
   switch (hs.kwtype) {
@@ -435,31 +437,32 @@ public:
       }
       // identifier/keyword?
       if (ch.isalpha || ch == '_') {
-        char[128] tk = void;
+        // new code
+        auto tmach = tks.start();
         uint tklen = 0;
+        ubyte stx = 0;
         while (spos+tklen <= le) {
           ch = gb[spos+tklen];
           if (ch != '_' && !ch.isalnum) break;
-          if (tklen < tk.length) tk.ptr[tklen] = cast(char)ch;
+          tmach.advance(ch);
+          stx = tmach.state;
           ++tklen;
         }
-        st = HS(HiText);
-        if (tklen <= tk.length) {
-          if (auto tknum = tks.findToken(tk[0..tklen])) {
-            // token
-            st = HS(tknum);
-          } else {
-            // sorry
-            if (tk[0..tklen] == "body" && (opt&EdHiTokens.Opt.BodyIsSpecial)) {
-              int xofs = spos+tklen;
-              for (;;) {
-                ch = gb[xofs];
-                if (ch == '{') { st = HS(HiSpecial); break; }
-                if (ch > ' ') break;
-                ++xofs;
-              }
+        if (stx) {
+          st = HS(stx);
+          // sorry
+          if (stx == HiBodySpecialMark) {
+            st = HS(HiText);
+            int xofs = spos+tklen;
+            for (;;) {
+              ch = gb[xofs];
+              if (ch == '{') { st = HS(HiSpecial); break; }
+              if (ch > ' ') break;
+              ++xofs;
             }
           }
+        } else {
+          st = HS(HiText);
         }
         foreach (immutable _; 0..tklen) gb.hi(spos++) = st;
         continue mainloop;
@@ -513,23 +516,31 @@ public:
       }
       // punctuation token
       if (tks.canStartWith(ch)) {
+        auto tmach = tks.start();
         bool isdollar = (ch == '$');
-        ubyte tknum = ubyte.max;
-        uint tkbest = 1;
-        char[128] tk = void;
+        uint maxxlen = tmach.maxtklen;
         uint tklen = 0;
-        while (tklen < tk.length && spos+tklen <= le) {
-          ch = gb[spos+tklen];
-          if (ch > 255) break;
-          tk.ptr[tklen++] = cast(char)ch;
-          if (auto tknump = tks.findToken(tk[0..tklen])) {
-            tknum = tknump;
-            tkbest = tklen;
+        ubyte lastStx = 0;
+        uint lastGoodLength = 0;
+        while (spos+tklen <= le && tklen < maxxlen) {
+          ch = gb[spos+(tklen++)];
+          if (ch <= ' ' || ch >= 128) break;
+          if (ch.isalnum || ch == '_') break;
+          tmach.advance(ch);
+          if (auto stx = tmach.state) {
+            lastStx = stx;
+            lastGoodLength = tklen;
           }
         }
-        if (tknum == ubyte.max && isdollar && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) goto sigil;
-        st = HS(tknum != ubyte.max ? tknum : HiPunct);
-        foreach (immutable cp; 0..tkbest) gb.hi(spos++) = st;
+        if (lastGoodLength == 0 && isdollar && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) goto sigil;
+        if (lastGoodLength == 0) {
+          tklen = 1;
+          st = HS(HiPunct);
+        } else {
+          tklen = lastGoodLength;
+          st = HS(lastStx);
+        }
+        foreach (immutable cp; 0..tklen) gb.hi(spos++) = st;
         continue mainloop;
       }
       // shell sigils
@@ -659,7 +670,7 @@ public class EditorHLGitCommit : EditorHLExt {
 // ////////////////////////////////////////////////////////////////////////// //
 struct TokenMachine {
 public:
-  enum InvalidState = ubyte.max;
+  enum InvalidState = 0;
 
 private:
   align(1) struct MachineNode {
@@ -690,7 +701,7 @@ public:
     if (tok.length == 0) return;
     if (minlen == 0 || tok.length < minlen) minlen = cast(int)tok.length;
     if (tok.length > maxlen) maxlen = cast(int)tok.length;
-    assert(estate != ubyte.max);
+    assert(estate != InvalidState);
     if (mach.length == 0) addMachineNode(MachineNode(0));
 
     auto tst = checkToken(tok);
@@ -735,19 +746,34 @@ public:
     }
     return mach.ptr[node].endstate;
   }
+
+  auto start () const nothrow @trusted @nogc {
+    static struct Checker {
+    private:
+      const(TokenMachine)* tmach;
+      int curnode;
+    public:
+    nothrow @trusted @nogc:
+      @property ubyte state () const { pragma(inline, true); return (curnode >= 0 ? tmach.mach.ptr[curnode].endstate : InvalidState); }
+      @property uint mintklen () const { pragma(inline, true); return tmach.minlen; }
+      @property uint maxtklen () const { pragma(inline, true); return tmach.maxlen; }
+      void advance (char ch) {
+        if (curnode >= 0) {
+          if (!tmach.casesens && ch >= 'A' && ch <= 'Z') ch += 32;
+          if ((curnode = tmach.mach.ptr[curnode].next.ptr[ch]) == 0) curnode = -1;
+        }
+      }
+    }
+    return Checker(&this, 0);
+  }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public abstract class EdHiTokens {
-private:
-  //ubyte[string] tokenMap; // tokens, by name, alphanum
-  //ubyte[string] tokenPunct; // indicies, by first char, nonalphanum
-  //bool[256] tokensPunctAny; // by first char, nonalphanum
-  //int mMaxPunctLen = 0;
-
 public:
   enum NotFound = 0;
+  static assert(NotFound == TokenMachine.InvalidState);
 
   enum Opt : uint {
     // number parsing options
@@ -765,12 +791,11 @@ public:
     CSingleComment     = 1U<<10, // allow `//` comments
     CMultiComment      = 1U<<11, // allow `/* ... */` comments
     // other options
-    BodyIsSpecial = 1U<<12, // is "body" token special? (aliced)
-    CPreprocessor = 1U<<13, // does this language use C preprocessor?
-    JSRegExp      = 1U<<14, // parse JS inline regexps?
-    ShellSigil    = 1U<<15, // parse shell sigils?
+    CPreprocessor = 1U<<12, // does this language use C preprocessor?
+    JSRegExp      = 1U<<13, // parse JS inline regexps?
+    ShellSigil    = 1U<<14, // parse shell sigils?
     // token machine options
-    CaseSensitive = 1U<<16, // are tokens case-sensitive?
+    CaseSensitive = 1U<<15, // are tokens case-sensitive?
   }
   static assert(Opt.max <= uint.max);
 
@@ -792,14 +817,14 @@ final:
     tmach.addToken(tok, estate);
   }
 
-  ubyte findToken (const(char)[] tk) {
-    auto res = tmach.checkToken(tk);
-    return (res != tmach.InvalidState ? res : NotFound);
-  }
-
-  bool canStartWith (char ch) {
+  bool canStartWith (char ch) const nothrow @trusted @nogc {
     pragma(inline, true);
     return (tmach.mach.ptr[0].next.ptr[ch] > 0);
+  }
+
+  auto start () const nothrow @trusted @nogc {
+    pragma(inline, true);
+    return tmach.start();
   }
 }
 
@@ -820,12 +845,14 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
-      Opt.BodyIsSpecial|
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
+      //Opt.CaseSensitive|
       0
     );
+
+    addToken("body", /*HiSpecial*/HiBodySpecialMark);
 
     addToken("this", HiInternal);
     addToken("super", HiInternal);
@@ -1061,10 +1088,10 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
-      //Opt.BodyIsSpecial|
       //Opt.CPreprocessor|
       Opt.JSRegExp|
       //Opt.ShellSigil|
+      //Opt.CaseSensitive|
       0
     );
 
@@ -1172,10 +1199,10 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
-      //Opt.BodyIsSpecial|
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
+      //Opt.CaseSensitive|
       0
     );
 
@@ -1271,10 +1298,10 @@ public class EdHiTokensShell : EdHiTokens {
       Opt.ShellSingleComment|
       //Opt.CSingleComment|
       //Opt.CMultiComment|
-      //Opt.BodyIsSpecial|
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       Opt.ShellSigil|
+      //Opt.CaseSensitive|
       0
     );
 
@@ -1345,10 +1372,10 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
-      //Opt.BodyIsSpecial|
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
+      //Opt.CaseSensitive|
       0
     );
 
@@ -1482,7 +1509,6 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.ShellSingleComment|
       //Opt.CSingleComment|
       //Opt.CMultiComment|
-      //Opt.BodyIsSpecial|
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
