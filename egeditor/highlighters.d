@@ -717,7 +717,7 @@ public:
 
     int lastnode = 0;
     foreach (char ch; tok) {
-      if (!casesens && ch >= 'A' && ch <= 'Z') ch += 32;
+      if (ch >= 'A' && ch <= 'Z' && !casesens) ch += 32;
       int nextnode = mach[lastnode].next[ch];
       if (nextnode == 0) {
         // new node
@@ -761,7 +761,7 @@ public:
       @property uint maxtklen () const { pragma(inline, true); return tmach.maxlen; }
       void advance (char ch) {
         if (curnode >= 0) {
-          if (!tmach.casesens && ch >= 'A' && ch <= 'Z') ch += 32;
+          if (ch >= 'A' && ch <= 'Z' && !tmach.casesens) ch += 32;
           if ((curnode = tmach.mach.ptr[curnode].next.ptr[ch]) == 0) curnode = -1;
         }
       }
@@ -797,8 +797,8 @@ public:
     JSRegExp      = 1U<<13, // parse JS inline regexps?
     ShellSigil    = 1U<<14, // parse shell sigils?
     // token machine options
-    CaseSensitive = 1U<<15, // are tokens case-sensitive?
-    NoStrings     = 1U<<16, // no strings at all?
+    CaseInsensitive = 1U<<15, // are tokens case-sensitive?
+    NoStrings       = 1U<<16, // no strings at all?
   }
   static assert(Opt.max <= uint.max);
 
@@ -808,7 +808,7 @@ public:
 
   final void setOptions (uint opt) {
     options = opt;
-    tmach.casesens = ((opt&Opt.CaseSensitive) != 0);
+    tmach.casesens = ((opt&Opt.CaseInsensitive) == 0);
   }
 
 public:
@@ -851,7 +851,7 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      //Opt.CaseSensitive|
+      //Opt.CaseInsensitive|
       //Opt.NoStrings|
       0
     );
@@ -1095,7 +1095,7 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.CPreprocessor|
       Opt.JSRegExp|
       //Opt.ShellSigil|
-      //Opt.CaseSensitive|
+      //Opt.CaseInsensitive|
       //Opt.NoStrings|
       0
     );
@@ -1207,7 +1207,7 @@ public class EdHiTokensC : EdHiTokens {
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      //Opt.CaseSensitive|
+      //Opt.CaseInsensitive|
       //Opt.NoStrings|
       0
     );
@@ -1307,7 +1307,7 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       Opt.ShellSigil|
-      //Opt.CaseSensitive|
+      //Opt.CaseInsensitive|
       //Opt.NoStrings|
       0
     );
@@ -1382,7 +1382,7 @@ public class EdHiTokensFrag : EdHiTokens {
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      //Opt.CaseSensitive|
+      //Opt.CaseInsensitive|
       //Opt.NoStrings|
       0
     );
@@ -1520,7 +1520,7 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      Opt.CaseSensitive|
+      Opt.CaseInsensitive|
       Opt.NoStrings|
       0
     );
