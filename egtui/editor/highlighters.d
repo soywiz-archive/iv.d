@@ -135,6 +135,11 @@ public __gshared EditorHL getHiglighterFor (const(char)[] ext, const(char)[] ful
     if (tokssh is null) tokssh = new EdHiTokensShell();
     return new EditorHLExt(tokssh);
   }
+  if (ext.strEquCI(".htm") || ext.strEquCI(".html")) {
+    __gshared EdHiTokensHtml tokshtml;
+    if (tokshtml is null) tokshtml = new EdHiTokensHtml();
+    return new EditorHLExt(tokshtml);
+  }
   auto bnpos = fullname.length;
   while (bnpos > 0 && fullname.ptr[bnpos-1] != '/') --bnpos;
   auto name = fullname[bnpos..$];
