@@ -445,7 +445,7 @@ public:
         }
         st = HS(HiText);
         if (tklen <= tk.length) {
-          if (auto tknum = tks.findAlnumToken(tk[0..tklen])) {
+          if (auto tknum = tks.findToken(tk[0..tklen])) {
             // token
             st = HS(tknum);
           } else {
@@ -512,7 +512,7 @@ public:
         continue mainloop;
       }
       // punctuation token
-      if (tks.punctCanStartWith(ch)) {
+      if (tks.canStartWith(ch)) {
         bool isdollar = (ch == '$');
         ubyte tknum = ubyte.max;
         uint tkbest = 1;
@@ -522,7 +522,7 @@ public:
           ch = gb[spos+tklen];
           if (ch > 255) break;
           tk.ptr[tklen++] = cast(char)ch;
-          if (auto tknump = tks.findPunctToken(tk[0..tklen])) {
+          if (auto tknump = tks.findToken(tk[0..tklen])) {
             tknum = tknump;
             tkbest = tklen;
           }
@@ -657,12 +657,94 @@ public class EditorHLGitCommit : EditorHLExt {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+struct TokenMachine {
+public:
+  enum InvalidState = ubyte.max;
+
+private:
+  align(1) struct MachineNode {
+  align(1):
+    char ch = 0; // current char
+    ubyte endstate = InvalidState; // if not ubyte.max, this is what we should have if this node is terminal
+    int[256] next = 0;
+  }
+
+private:
+  MachineNode[] mach;
+
+public:
+  int minlen = 0, maxlen = 0; // token lengthes
+  bool casesens = true;
+
+private:
+  int addMachineNode (MachineNode node) {
+    if (mach.length >= int.max) assert(0, "too many nodes in mach");
+    auto res = cast(int)mach.length;
+    mach ~= node;
+    return res;
+  }
+
+public:
+  void addToken (string tok, ubyte estate) {
+    if (tok.length >= int.max/8) assert(0, "wtf?!");
+    if (tok.length == 0) return;
+    if (minlen == 0 || tok.length < minlen) minlen = cast(int)tok.length;
+    if (tok.length > maxlen) maxlen = cast(int)tok.length;
+    assert(estate != ubyte.max);
+    if (mach.length == 0) addMachineNode(MachineNode(0));
+
+    auto tst = checkToken(tok);
+    if (tst != InvalidState) {
+      if (tst != estate) {
+        import core.stdc.stdio : stderr, fprintf;
+        stderr.fprintf("WARNING: CONFLICTING TOKEN: '%.*s'\n", cast(uint)tok.length, tok.ptr);
+      }
+      return;
+    }
+
+    int lastnode = 0;
+    foreach (char ch; tok) {
+      if (!casesens && ch >= 'A' && ch <= 'Z') ch += 32;
+      int nextnode = mach[lastnode].next[ch];
+      if (nextnode == 0) {
+        // new node
+        nextnode = addMachineNode(MachineNode(ch));
+        mach[lastnode].next[ch] = nextnode;
+      } else {
+        // merge nodes
+      }
+      lastnode = nextnode;
+    }
+    assert(lastnode > 0);
+    char lastch = tok[$-1];
+    assert(mach[lastnode].ch == lastch);
+    assert(mach[lastnode].endstate == InvalidState);
+    mach[lastnode].endstate = estate;
+  }
+
+  ubyte checkToken (const(char)[] tok) const nothrow @trusted @nogc {
+    if (tok.length < minlen || tok.length > maxlen) return InvalidState;
+    int node = 0;
+    if (casesens) {
+      foreach (char ch; tok) if ((node = mach.ptr[node].next.ptr[ch]) == 0) return InvalidState;
+    } else {
+      foreach (char ch; tok) {
+        if (ch >= 'A' && ch <= 'Z') ch += 32;
+        if ((node = mach.ptr[node].next.ptr[ch]) == 0) return InvalidState;
+      }
+    }
+    return mach.ptr[node].endstate;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public abstract class EdHiTokens {
 private:
-  ubyte[string] tokenMap; // tokens, by name, alphanum
-  ubyte[string] tokenPunct; // indicies, by first char, nonalphanum
-  bool[256] tokensPunctAny; // by first char, nonalphanum
-  int mMaxPunctLen = 0;
+  //ubyte[string] tokenMap; // tokens, by name, alphanum
+  //ubyte[string] tokenPunct; // indicies, by first char, nonalphanum
+  //bool[256] tokensPunctAny; // by first char, nonalphanum
+  //int mMaxPunctLen = 0;
 
 public:
   enum NotFound = 0;
@@ -687,50 +769,37 @@ public:
     CPreprocessor = 1U<<13, // does this language use C preprocessor?
     JSRegExp      = 1U<<14, // parse JS inline regexps?
     ShellSigil    = 1U<<15, // parse shell sigils?
+    // token machine options
+    CaseSensitive = 1U<<16, // are tokens case-sensitive?
   }
   static assert(Opt.max <= uint.max);
 
+public:
   uint options;
+  TokenMachine tmach;
+
+  final void setOptions (uint opt) {
+    options = opt;
+    tmach.casesens = ((opt&Opt.CaseSensitive) != 0);
+  }
 
 public:
-  this () {}
+  this (uint opt) { setOptions(opt); }
 
 final:
-  @property int maxPunctLen () const pure nothrow @safe @nogc { pragma(inline, true); return mMaxPunctLen; }
-
-  ubyte findAlnumToken (const(char)[] tk) {
-    if (tk.length > 0) {
-      if (auto p = tk in tokenMap) return *p;
-    }
-    return NotFound;
+  void addToken (string tok, ubyte estate) {
+    pragma(inline, true);
+    tmach.addToken(tok, estate);
   }
 
-  bool punctCanStartWith (char ch) const pure nothrow @trusted @nogc { pragma(inline); return tokensPunctAny.ptr[cast(ubyte)ch]; }
-
-  ubyte findPunctToken (const(char)[] tk) {
-    if (tk.length > 0 && tk.length <= mMaxPunctLen) {
-      if (auto p = tk in tokenPunct) return *p;
-    }
-    return NotFound;
+  ubyte findToken (const(char)[] tk) {
+    auto res = tmach.checkToken(tk);
+    return (res != tmach.InvalidState ? res : NotFound);
   }
 
-  void addToken(T : const(char)[]) (T name, ubyte tp) {
-    static if (is(T == typeof(null))) {
-      throw new Exception("empty tokens are not allowed");
-    } else {
-      import std.ascii : isAlphaNum;
-      if (name.length == 0) throw new Exception("empty tokens are not allowed");
-      if (name.length > int.max/4) throw new Exception("token too long");
-      string tkn;
-      static if (is(T == string)) tkn = name; else tkn = name.idup;
-      if (name.ptr[0] == '_' || name.ptr[0].isAlphaNum) {
-        tokenMap[tkn] = tp;
-      } else {
-        tokensPunctAny[name.ptr[0]] = true;
-        tokenPunct[tkn] = tp;
-        if (mMaxPunctLen < name.length) mMaxPunctLen = cast(int)name.length;
-      }
-    }
+  bool canStartWith (char ch) {
+    pragma(inline, true);
+    return (tmach.mach.ptr[0].next.ptr[ch] > 0);
   }
 }
 
@@ -738,7 +807,7 @@ final:
 // ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensD : EdHiTokens {
   this () {
-    options =
+    super(
       Opt.Num0b|
       Opt.Num0o|
       Opt.Num0x|
@@ -755,7 +824,8 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      0;
+      0
+    );
 
     addToken("this", HiInternal);
     addToken("super", HiInternal);
@@ -978,7 +1048,7 @@ public class EdHiTokensD : EdHiTokens {
 // ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensJS : EdHiTokens {
   this () {
-    options =
+    super(
       //Opt.Num0b|
       //Opt.Num0o|
       Opt.Num0x|
@@ -995,7 +1065,8 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.CPreprocessor|
       Opt.JSRegExp|
       //Opt.ShellSigil|
-      0;
+      0
+    );
 
     addToken("arguments", HiKeyword);
     addToken("break", HiKeyword);
@@ -1088,7 +1159,7 @@ public class EdHiTokensJS : EdHiTokens {
 // ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensC : EdHiTokens {
   this () {
-    options =
+    super(
       Opt.Num0b|
       Opt.Num0o|
       Opt.Num0x|
@@ -1105,7 +1176,8 @@ public class EdHiTokensC : EdHiTokens {
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      0;
+      0
+    );
 
     addToken("auto", HiKeyword);
     addToken("break", HiKeyword);
@@ -1186,7 +1258,7 @@ public class EdHiTokensC : EdHiTokens {
 // ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensShell : EdHiTokens {
   this () {
-    options =
+    super(
       //Opt.Num0b|
       //Opt.Num0o|
       //Opt.Num0x|
@@ -1203,7 +1275,8 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       Opt.ShellSigil|
-      0;
+      0
+    );
 
     addToken("{", HiPunct);
     addToken("}", HiPunct);
@@ -1259,7 +1332,7 @@ public class EdHiTokensShell : EdHiTokens {
 // ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensFrag : EdHiTokens {
   this () {
-    options =
+    super(
       Opt.Num0b|
       Opt.Num0o|
       Opt.Num0x|
@@ -1276,7 +1349,8 @@ public class EdHiTokensFrag : EdHiTokens {
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      0;
+      0
+    );
 
     addToken("break", HiKeyword);
     addToken("case", HiKeyword);
@@ -1395,7 +1469,7 @@ public class EdHiTokensFrag : EdHiTokens {
 // ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensHtml : EdHiTokens {
   this () {
-    options =
+    super(
       //Opt.Num0b|
       //Opt.Num0o|
       //Opt.Num0x|
@@ -1412,7 +1486,9 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      0;
+      Opt.CaseSensitive|
+      0
+    );
 
     addToken("a", HiSpecial);
     addToken("abbr", HiSpecial);
