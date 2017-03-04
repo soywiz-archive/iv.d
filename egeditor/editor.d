@@ -457,7 +457,8 @@ public:
 
   alias linestart = line2pos; /// ditto
 
-  /// get ending position for the given line
+  /// get ending position for the given line (position of '\n')
+  /// it may be `textsize`, though, if this is last line, and it doesn't end with '\n'
   int lineend (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
     if (lidx > mLineCount-1) return tbused;
@@ -2682,6 +2683,7 @@ public:
     if (mReadOnly) return;
     if (str.length == 0) return;
     if (utfuck) {
+      if (str.length == 1) { doPutChar(str.ptr[0]); return; }
       undoGroupStart();
       scope(exit) undoGroupEnd();
       insertText!"end"(curpos, str);
