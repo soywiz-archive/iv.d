@@ -504,7 +504,7 @@ char uni2cp1251(char repchar='?') (dchar dch) pure nothrow @trusted @nogc {
   if (dch == 0x20ac) return cast(char)0x88;
   if (dch == 0x2116) return cast(char)0xb9;
   if (dch == 0x2122) return cast(char)0x99;
-  if (dch == 0xfffd) return cast(char)0x98;
+  //if (dch == 0xfffd) return cast(char)0x98;
   return repchar;
 }
 
