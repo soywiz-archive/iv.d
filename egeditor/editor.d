@@ -1955,8 +1955,8 @@ public:
     gb.pos2xy(curpos, cx, cy);
   }
 
-  /// this should reset text width iterator
-  void textWidthReset () nothrow @trusted @nogc {}
+  /// this should reset text width iterator; tabsize > 0: process tabs as... well... tabs ;-)
+  void textWidthReset (int tabsize) nothrow @trusted @nogc {}
 
   /// advance text width iterator, return current x position for drawing next char
   int textWidthAdvance (char ch) nothrow @trusted @nogc { return 0; }
@@ -1979,7 +1979,6 @@ public:
       if (rx < mXOfs) mXOfs = rx;
       if (rx-mXOfs >= winw) mXOfs = rx-winw+1;
     } else {
-      //TODO: visual tabs
       localCursorXY(rx, ry);
       rx += mXOfs;
       if (rx < mXOfs) mXOfs = rx-8;
@@ -2022,15 +2021,14 @@ public:
       lcx = rx;
       lcy = ry;
     } else {
-      //TODO: visual tabs
       gb.pos2xy(curpos, rx, ry);
       lcy = (ry-mTopLine)*lineHeightPixels;
       if (rx == 0) { lcx = 0-mXOfs; return; }
-      textWidthReset();
+      textWidthReset(visualtabs ? gb.tabsize : 0);
       auto pos = gb.line2pos(ry);
       auto ts = gb.textsize;
       int linex = 0;
-      bool ufuck = gb.utfuck;
+      immutable bool ufuck = gb.utfuck;
       while (pos <= ts) {
         if (pos == ts) { linex = textWidthAdvanceFinish(); break; }
         // advance one symbol
