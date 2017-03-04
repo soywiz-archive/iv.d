@@ -2678,8 +2678,30 @@ public:
   }
 
   ///
+  void doPutTextUtf (const(char)[] str) {
+    if (mReadOnly) return;
+    if (str.length == 0) return;
+    if (utfuck) {
+      undoGroupStart();
+      scope(exit) undoGroupEnd();
+      insertText!"end"(curpos, str);
+    } else {
+      // recode to koi8
+      Utf8Decoder udc;
+      foreach (char ch; str) {
+        dchar dch = udc.decode(cast(ubyte)ch);
+        if (dch <= dchar.max) {
+          char[1] kch = uni2koi(dch);
+          insertText!"end"(curpos, kch[]);
+        }
+      }
+    }
+  }
+
+  ///
   void doPutText (const(char)[] str) {
     if (mReadOnly) return;
+    if (str.length == 0) return;
     if (utfuck) {
       // check if we have some high-ascii
       undoGroupStart();
