@@ -379,16 +379,17 @@ public:
   @property char utfuckAt (uint pos) const pure {
     if (pos >= tbsize) return 0;
     if (!utfuck) return this[pos];
-    Utf8Decoder udc;
-    dchar dch = '?';
+    Utf8DecoderFast udc;
     while (pos < tbsize) {
-      dch = udc.decode(cast(ubyte)tbuf[pos2real(pos++)]);
-      if (dch <= dchar.max) break;
+      if (udc.decode(cast(ubyte)tbuf[pos2real(pos++)])) {
+        immutable dchar dch = udc.codepoint;
+        return uni2koi(udc.invalid || !udc.isValidDC(dch) ? udc.replacement : dch);
+      }
     }
-    return uni2koi(dch);
+    return uni2koi(udc.replacement);
   }
 
-  /// return utf-8 character length at buffer position pos
+  /// return utf-8 character length at buffer position pos or -1 on error (or 1 on error if "always positive")
   /// never returns zero
   int utfuckLenAt(bool alwaysPositive=true) (int pos) {
     auto ts = tbused;
@@ -398,14 +399,19 @@ public:
     if (!utfuck) return 1;
     auto ch = tbuf[pos2real(pos)];
     if (ch < 128) return 1;
-    Utf8Decoder udc;
+    Utf8DecoderFast udc;
     auto spos = pos;
     while (pos < ts) {
       ch = tbuf[pos2real(pos++)];
-      auto dch = udc.decode(cast(ubyte)ch);
-      if (dch <= dchar.max) break;
+      if (udc.decode(cast(ubyte)ch)) {
+        static if (alwaysPositive) {
+          return (udc.invalid ? 1 : pos-spos);
+        } else {
+          return (udc.invalid ? -1 : pos-spos);
+        }
+      }
     }
-    static if (alwaysPositive) return pos-spos; else return (udc.invalid ? -1 : pos-spos);
+    static if (alwaysPositive) return 1; else return -1;
   }
 
   /// get number of *symbols* to line end (this is not always equal to number of bytes for utfuck)
@@ -1332,6 +1338,15 @@ public:
       ch;
   }
 
+  /// recode to codepage
+  final char recodeU2B (dchar dch) pure const nothrow @safe @nogc {
+    final switch (codepage) {
+      case CodePage.koi8u: return uni2koi(dch);
+      case CodePage.cp1251: return uni2cp1251(dch);
+      case CodePage.cp866: return uni2cp866(dch);
+    }
+  }
+
 protected:
   bool coordsInPixels = false; /// set this to `true` to make editor call text sizing functions
   int lineHeightPixels;
@@ -1646,7 +1661,7 @@ public:
     dchar dcharAt (int pos) const pure {
       auto ts = gb.textsize;
       if (pos < 0 || pos >= ts) return 0;
-      if (!utfuck) {
+      if (!gb.utfuck) {
         final switch (codepage) {
           case CodePage.koi8u: return koi2uni(this[pos]);
           case CodePage.cp1251: return cp12512uni(this[pos]);
@@ -1654,16 +1669,55 @@ public:
         }
         assert(0);
       }
-      auto spos = pos;
-      Utf8Decoder udc;
-      dchar dch = '?';
+      Utf8DecoderFast udc;
       while (pos < ts) {
-        dch = udc.decode(cast(ubyte)gb[pos++]);
-        if (dch <= dchar.max) break;
+        if (udc.decode(cast(ubyte)gb[pos++])) {
+          immutable dchar dch = udc.codepoint;
+          return (udc.invalid || !udc.isValidDC(dch) ? udc.replacement : dch);
+        }
       }
-      if (udc.invalid) return cast(dchar)(this[spos]);
-      return dch;
+      return udc.replacement;
+    }
 
+    /// this advances `pos`
+    dchar dcharAtAdvance (ref int pos) const pure {
+      auto ts = gb.textsize;
+      if (pos < 0) { pos = 0; return 0; }
+      if (pos >= ts) { pos = ts; return 0; }
+      if (!gb.utfuck) {
+        immutable char ch = this[pos++];
+        final switch (codepage) {
+          case CodePage.koi8u: return koi2uni(ch);
+          case CodePage.cp1251: return cp12512uni(ch);
+          case CodePage.cp866: return cp8662uni(ch);
+        }
+        assert(0);
+      }
+      immutable ep = pos+1;
+      Utf8DecoderFast udc;
+      while (pos < ts) {
+        if (udc.decode(cast(ubyte)gb[pos++])) {
+          immutable dchar dch = udc.codepoint;
+          if (udc.invalid || !udc.isValidDC(dch)) { pos = ep; return udc.replacement; }
+          return dch;
+        }
+      }
+      pos = ep;
+      return udc.replacement;
+    }
+
+    /// this works correctly with utfuck
+    int nextpos (int pos) const pure {
+      if (pos < 0) return 0;
+      immutable ts = gb.textsize;
+      if (pos >= ts) return ts;
+      if (!gb.utfuck) return pos+1;
+      immutable ep = pos+1;
+      Utf8DecoderFast udc;
+      while (pos < ts) {
+        if (udc.decode(cast(ubyte)gb[pos++])) return (udc.invalid ? ep : pos);
+      }
+      return ep;
     }
 
     bool textChanged () const pure { pragma(inline, true); return txchanged; } ///
@@ -1938,7 +1992,7 @@ public:
     auto pos = gb.line2pos(lidx);
     auto ts = gb.textsize;
     int res = 0;
-    if (!utfuck) {
+    if (!gb.utfuck) {
       while (pos < ts) {
         if (gb[pos++] == '\n') break;
         ++res;
@@ -1975,7 +2029,7 @@ public:
       auto pos = gb.line2pos(ry);
       auto ts = gb.textsize;
       int linex = 0;
-      bool ufuck = utfuck;
+      bool ufuck = gb.utfuck;
       while (pos <= ts) {
         if (pos == ts) { linex = textWidthAdvanceFinish(); break; }
         // advance one symbol
@@ -2555,7 +2609,7 @@ public:
     if (mReadOnly) return;
     int pos = curpos;
     if (pos >= gb.textsize) return;
-    if (!utfuck) {
+    if (!gb.utfuck) {
       deleteText!"start"(pos, 1);
     } else {
       deleteText!"start"(pos, gb.utfuckLenAt(pos));
@@ -2568,7 +2622,7 @@ public:
     killTextOnChar = false;
     int pos = curpos;
     if (pos == 0) return;
-    if (!utfuck) {
+    if (!gb.utfuck) {
       deleteText!"start"(pos-1, 1);
     } else {
       if (gb[pos-1] < 128) { deleteText!"start"(pos-1, 1); return; }
@@ -2656,12 +2710,12 @@ public:
     }
   }
 
-  ///
+  /// put char in koi8
   void doPutChar (char ch) {
     if (mReadOnly) return;
     if (ch == 0) return;
     if (!mSingleLine && (ch == '\n' || ch == '\r')) { doLineSplit(inPasteMode <= 0); return; }
-    if (ch > 127 && utfuck) {
+    if (ch > 127 && gb.utfuck) {
       char[8] ubuf = void;
       int len = utf8Encode(ubuf[], koi2uni(ch));
       if (len < 1) { ubuf[0] = '?'; len = 1; }
@@ -2679,88 +2733,79 @@ public:
   }
 
   ///
+  void doPutDChar (dchar dch) {
+    if (mReadOnly) return;
+    if (!Utf8DecoderFast.isValidDC(dch)) dch = Utf8DecoderFast.replacement;
+    if (dch < 128) { doPutChar(cast(char)dch); return; }
+    char[4] ubuf = void;
+    auto len = utf8Encode(ubuf[], dch);
+    if (len < 1) return;
+    if (gb.utfuck) {
+      insertText!"end"(curpos, ubuf.ptr[0..len]);
+    } else {
+      // recode to codepage
+      doPutChar(recodeU2B(dch));
+    }
+  }
+
+  ///
   void doPutTextUtf (const(char)[] str) {
     if (mReadOnly) return;
     if (str.length == 0) return;
-    if (utfuck) {
-      if (str.length == 1) { doPutChar(str.ptr[0]); return; }
-      undoGroupStart();
-      scope(exit) undoGroupEnd();
-      insertText!"end"(curpos, str);
-    } else {
-      // recode to koi8
-      Utf8Decoder udc;
-      foreach (char ch; str) {
-        dchar dch = udc.decode(cast(ubyte)ch);
-        if (dch <= dchar.max) {
-          char[1] kch = uni2koi(dch);
-          insertText!"end"(curpos, kch[]);
+
+    bool ugstarted = false;
+    void startug () { if (!ugstarted) { ugstarted = true; undoGroupStart(); } }
+    scope(exit) if (ugstarted) undoGroupEnd();
+
+    Utf8DecoderFast udc;
+    foreach (immutable char ch; str) {
+      if (udc.decode(cast(ubyte)ch)) {
+        dchar dch = (udc.complete ? udc.codepoint : udc.replacement);
+        if (!udc.isValidDC(dch)) dch = udc.replacement;
+        if (dch == '\r' || dch == '\n') { if (!mSingleLine) { startug(); doLineSplit(inPasteMode <= 0); } continue; }
+        if (ch == '\t' || (ch >= ' ' && ch != 127)) {
+          startug();
+          doPutChar(recodeU2B(dch));
         }
       }
     }
   }
 
-  ///
+  /// put text in koi8
   void doPutText (const(char)[] str) {
     if (mReadOnly) return;
     if (str.length == 0) return;
-    if (utfuck) {
-      // check if we have some high-ascii
-      undoGroupStart();
-      scope(exit) undoGroupEnd();
-      while (str.length > 0) {
-        usize epos = 0;
-        while (epos < str.length && str.ptr[epos] < 128) ++epos;
-        if (epos > 0) {
-          if (inPasteMode <= 0) {
-            insertText!("end", true)(curpos, str[0..epos]);
-          } else {
-            insertText!("end", false)(curpos, str[0..epos]);
-          }
-          str = str[epos..$];
-          continue;
-        }
-        while (str.length && str.ptr[0] >= 128) {
-          char[8] ubuf = void;
-          int len = utf8Encode(ubuf[], koi2uni(str.ptr[0]));
-          if (len < 1) { ubuf[0] = '?'; len = 1; }
-          if (inPasteMode <= 0) {
-            insertText!("end", true)(curpos, ubuf[0..len]);
-          } else {
-            insertText!("end", false)(curpos, ubuf[0..len]);
-          }
-          str = str[1..$];
-        }
+
+    bool ugstarted = false;
+    void startug () { if (!ugstarted) { ugstarted = true; undoGroupStart(); } }
+    scope(exit) if (ugstarted) undoGroupEnd();
+
+    size_t pos = 0;
+    char ch;
+    while (pos < str.length) {
+      auto stpos = pos;
+      while (pos < str.length) {
+        ch = str.ptr[pos];
+        if ((ch < ' ' && ch != '\t') || ch >= 128) break;
+        ++pos;
       }
-    } else if (codepage == CodePage.koi8u) {
-      insertText!"end"(curpos, str);
-    } else {
-      // more conversions
-      bool nonat = true;
-      foreach (char ch; str) if (ch >= 128) { nonat = false; break; }
-      if (nonat) { insertText!"end"(curpos, str); return; }
-      // hard case
-      undoGroupStart();
-      scope(exit) undoGroupEnd();
-      while (str.length > 0) {
-        usize epos = 0;
-        while (epos < str.length && str.ptr[epos] < 128) ++epos;
-        if (epos > 0) {
-          if (inPasteMode <= 0) {
-            insertText!("end", true)(curpos, str[0..epos]);
-          } else {
-            insertText!("end", false)(curpos, str[0..epos]);
-          }
-          str = str[epos..$];
-          continue;
-        }
-        char ch = recodeCharTo(str.ptr[0]);
-        str = str[1..$];
-        if (inPasteMode <= 0) {
-          insertText!("end", true)(curpos, (&ch)[0..1]);
-        } else {
-          insertText!("end", false)(curpos, (&ch)[0..1]);
-        }
+      if (stpos < pos) {
+        startug();
+        insertText!"end"(curpos, str.ptr[stpos..pos]);
+      }
+      if (pos >= str.length) break;
+      ch = str.ptr[pos];
+      if (ch == '\r' || ch == '\n') { if (!mSingleLine) { startug(); doLineSplit(inPasteMode <= 0); } ++pos; continue; }
+      if (ch < ' ') { ++pos; continue; }
+      Utf8DecoderFast udc;
+      stpos = pos;
+      while (pos < str.length) if (udc.decode(cast(ubyte)(str.ptr[pos++]))) break;
+      startug();
+      if (udc.complete) {
+        insertText!"end"(curpos, str.ptr[stpos..pos]);
+      } else {
+        ch = uni2koi(Utf8DecoderFast.replacement);
+        insertText!"end"(curpos, (&ch)[0..1]);
       }
     }
   }
