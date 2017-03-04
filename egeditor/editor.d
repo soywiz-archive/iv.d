@@ -1721,6 +1721,7 @@ public:
     }
 
     bool textChanged () const pure { pragma(inline, true); return txchanged; } ///
+    void textChanged (bool v) pure { pragma(inline, true); txchanged = v; } ///
 
     void curx (int v) @system { gotoXY(v, cy); } ///
     void cury (int v) @system { gotoXY(cx, v); } ///
