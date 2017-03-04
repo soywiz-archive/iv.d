@@ -526,8 +526,8 @@ public:
         uint lastGoodLength = 0;
         while (spos+tklen <= le && tklen < maxxlen) {
           ch = gb[spos+(tklen++)];
-          if (ch <= ' ' || ch >= 128) break;
-          if (ch.isalnum || ch == '_') break;
+          //if (ch <= ' ' || ch >= 128) break;
+          //if (ch.isalnum || ch == '_') break;
           tmach.advance(ch);
           if (auto stx = tmach.state) {
             lastStx = stx;

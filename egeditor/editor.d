@@ -455,6 +455,8 @@ public:
     return lineofsc[lidx];
   }
 
+  alias linestart = line2pos; /// ditto
+
   /// get ending position for the given line
   int lineend (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
@@ -583,7 +585,7 @@ public:
     x = (!utfuck ? pos-ls : utfuck_pos2x(pos));
   }
 
-  // get coordinates for the given position
+  /// get coordinates for the given position
   void pos2xyVT (int pos, out int x, out int y) {
     if (!utfuck && (!visualtabs || tabsize == 0)) { pos2xy(pos, x, y); return; }
 
@@ -1330,6 +1332,8 @@ public:
   }
 
 protected:
+  bool coordsInPixels = false; /// set this to `true` to make editor call text sizing functions
+  int lineHeightPixels;
   int prevTopLine = -1;
   int mTopLine = 0;
   int prevXOfs = -1;
@@ -1519,11 +1523,13 @@ public:
 public:
   ///
   this (int x0, int y0, int w, int h, EditorHL ahl=null, bool singleLine=false) {
+    if (w < 2) w = 2;
+    if (h < 1) h = 1;
     winx = x0;
     winy = y0;
     winw = w;
     winh = h;
-    dirtyLines.length = h;
+    dirtyLines.length = visibleLinesPerWindow;
     gb = new GapBuffer();
     hl = ahl;
     if (ahl !is null) hl.gb = gb;
@@ -1582,19 +1588,25 @@ public:
         fullDirty();
       }
     }
+
+    bool inPixels () const pure nothrow @safe @nogc { pragma(inline, true); return (coordsInPixels && lineHeightPixels > 0); } ///
+    int linesPerWindow () const pure nothrow @safe @nogc { pragma(inline, true); return (!coordsInPixels || lineHeightPixels < 1 ? winh : (winh <= lineHeightPixels ? 1 : winh/lineHeightPixels)); } ///
+    int visibleLinesPerWindow () const pure nothrow @safe @nogc { pragma(inline, true); return (!coordsInPixels || lineHeightPixels < 1 ? winh : (winh <= lineHeightPixels ? 1 : winh/lineHeightPixels+(winh%lineHeightPixels ? 1 : 0))); } ///
   }
 
   /// resize control
-  void resize (int nw, int nh) nothrow @safe {
+  void resize (int nw, int nh) nothrow @trusted {
     if (nw < 2) nw = 2;
     if (nh < 1) nh = 1;
     if (nw != winw || nh != winh) {
-      if (nh != winh) {
-        dirtyLines.length = nh;
-        dirtyLines[] = true;
-      }
       winw = nw;
       winh = nh;
+      auto nvl = visibleLinesPerWindow;
+      if (visibleLinesPerWindow != dirtyLines.length) {
+        dirtyLines.length = visibleLinesPerWindow;
+        dirtyLines.assumeSafeAppend;
+        dirtyLines[] = true;
+      }
       makeCurLineVisible();
       fullDirty();
     }
@@ -1658,12 +1670,12 @@ public:
     void curx (int v) @system { gotoXY(v, cy); } ///
     void cury (int v) @system { gotoXY(cx, v); } ///
 
-     ///
+    ///
     void topline (int v) @system {
       if (v < 0) v = 0;
       if (v > gb.linecount) v = gb.linecount-1;
-      if (v+winh > gb.linecount) {
-        v = gb.linecount-winh;
+      if (v+linesPerWindow > gb.linecount) {
+        v = gb.linecount-linesPerWindow;
         if (v < 0) v = 0;
       }
       if (v != mTopLine) {
@@ -1863,16 +1875,17 @@ public:
 
     drawPageBegin();
     drawStatus();
+    int ymul = (inPixels ? lineHeightPixels : 1);
     auto pos = gb.xy2pos(0, mTopLine);
     auto lc = gb.linecount;
-    foreach (int y; 0..winh) {
+    foreach (int y; 0..visibleLinesPerWindow) {
       if (mTopLine+y < lc && hl !is null && hl.fixLine(mTopLine+y)) dirtyLines[y] = true;
       if (dirtyLines[y]) {
         dirtyLines[y] = false;
         if (mTopLine+y < lc) {
-          drawLine(mTopLine+y, y, mXOfs);
+          drawLine(mTopLine+y, y*ymul, mXOfs);
         } else {
-          drawEmptyLine(y);
+          drawEmptyLine(y*ymul);
         }
       }
     }
@@ -1886,15 +1899,99 @@ public:
     gb.pos2xy(curpos, cx, cy);
   }
 
-  /// non-final, so i can do proprotional fonts in the future
-  void makeCurXVisible () nothrow @safe @nogc {
+  /// this should reset text width iterator
+  void textWidthReset () nothrow @trusted @nogc {}
+
+  /// advance text width iterator, return current x position for drawing next char
+  int textWidthAdvance (char ch) nothrow @trusted @nogc { return 0; }
+
+  /// advance text width iterator, return current x position for drawing next char
+  int textWidthAdvanceUtfuck (dchar ch) nothrow @trusted @nogc { return 0; }
+
+  /// finish text iterator, return position after last char
+  int textWidthAdvanceFinish () nothrow @trusted @nogc { return 0; }
+
+  //obsolete: non-final, so i can do proprotional fonts in the future
+
+  ///
+  final void makeCurXVisible () nothrow @safe @nogc {
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
     int rx, ry;
-    gb.pos2xyVT(curpos, rx, ry);
-    if (rx < mXOfs) mXOfs = rx;
-    if (rx-mXOfs >= winw) mXOfs = rx-winw+1;
+    if (!inPixels) {
+      gb.pos2xyVT(curpos, rx, ry);
+      if (rx < mXOfs) mXOfs = rx;
+      if (rx-mXOfs >= winw) mXOfs = rx-winw+1;
+    } else {
+      //TODO: visual tabs
+      localCursorXY(rx, ry);
+      rx += mXOfs;
+      if (rx < mXOfs) mXOfs = rx-8;
+      if (rx+4-mXOfs > winw) mXOfs = rx-winw+4;
+    }
     if (mXOfs < 0) mXOfs = 0;
+  }
+
+  final int linelen (int lidx) nothrow @trusted @nogc {
+    if (lidx < 0 || lidx >= gb.linecount) return 0;
+    auto pos = gb.line2pos(lidx);
+    auto ts = gb.textsize;
+    int res = 0;
+    if (!utfuck) {
+      while (pos < ts) {
+        if (gb[pos++] == '\n') break;
+        ++res;
+      }
+    } else {
+      while (pos < ts) {
+        char ch = gb[pos++];
+        if (ch == '\n') break;
+        ++res;
+        if (ch >= 128) {
+          --pos;
+          pos += gb.utfuckLenAt(pos);
+        }
+      }
+    }
+    return res;
+  }
+
+  /// cursor position in "local" coords: from widget (x0,y0), possibly in pixels
+  final void localCursorXY (out int lcx, out int lcy) nothrow @trusted @nogc {
+    int rx, ry;
+    if (!inPixels) {
+      gb.pos2xyVT(curpos, rx, ry);
+      ry -= mTopLine;
+      rx -= mXOfs;
+      lcx = rx;
+      lcy = ry;
+    } else {
+      //TODO: visual tabs
+      gb.pos2xy(curpos, rx, ry);
+      lcy = (ry-mTopLine)*lineHeightPixels;
+      if (rx == 0) { lcx = 0-mXOfs; return; }
+      textWidthReset();
+      auto pos = gb.line2pos(ry);
+      auto ts = gb.textsize;
+      int linex = 0;
+      bool ufuck = utfuck;
+      while (pos <= ts) {
+        if (pos == ts) { linex = textWidthAdvanceFinish(); break; }
+        // advance one symbol
+        char ch = gb[pos++];
+        if (ch == '\n') { linex = textWidthAdvanceFinish(); break; }
+        if (!ufuck && ch < 128) {
+          linex = textWidthAdvance(ch);
+        } else {
+          --pos;
+          linex = textWidthAdvanceUtfuck(dcharAt(pos));
+          pos += gb.utfuckLenAt(pos);
+        }
+        if (rx == 0) break;
+        --rx;
+      }
+      lcx = linex-mXOfs;
+    }
   }
 
   ///
@@ -1904,8 +2001,8 @@ public:
     if (cy < mTopLine) {
       mTopLine = cy;
     } else {
-      if (cy > mTopLine+winh-1) {
-        mTopLine = cy-winh+1;
+      if (cy > mTopLine+linesPerWindow-1) {
+        mTopLine = cy-linesPerWindow+1;
         if (mTopLine < 0) mTopLine = 0;
       }
     }
@@ -1917,10 +2014,10 @@ public:
     if (forced || !isCurLineVisible) {
       if (cy < 0) cy = 0;
       if (cy >= gb.linecount) cy = gb.linecount-1;
-      mTopLine = cy-winh/2;
+      mTopLine = cy-linesPerWindow/2;
       if (mTopLine < 0) mTopLine = 0;
-      if (mTopLine+winh > gb.linecount) {
-        mTopLine = gb.linecount-winh;
+      if (mTopLine+linesPerWindow > gb.linecount) {
+        mTopLine = gb.linecount-linesPerWindow;
         if (mTopLine < 0) mTopLine = 0;
       }
     }
@@ -1930,7 +2027,7 @@ public:
   ///
   final bool isCurLineVisible () const pure nothrow @safe @nogc {
     if (cy < mTopLine) return false;
-    if (cy > mTopLine+winh-1) return false;
+    if (cy > mTopLine+linesPerWindow-1) return false;
     return true;
   }
 
@@ -1939,7 +2036,7 @@ public:
     if (lidx < 0 || lidx >= gb.linecount) return;
     if (hl !is null) hl.lineChanged(lidx, updateDown);
     if (lidx < mTopLine) { if (updateDown) dirtyLines[] = true; return; }
-    if (lidx >= mTopLine+winh) return;
+    if (lidx >= mTopLine+linesPerWindow) return;
     if (updateDown) dirtyLines[lidx-mTopLine..$] = true; else dirtyLines[lidx-mTopLine] = true;
   }
 
@@ -1951,11 +2048,11 @@ public:
     if (prevTopLine != mTopLine || prevXOfs != mXOfs) return; // we will refresh the whole page anyway
     if (count < 1 || lidx >= gb.linecount) return;
     if (count > gb.linecount) count = gb.linecount;
-    if (lidx >= mTopLine+winh) return;
+    if (lidx >= mTopLine+linesPerWindow) return;
     int le = lidx+count;
     if (le <= mTopLine) return;
     if (lidx < mTopLine) lidx = mTopLine;
-    if (le > mTopLine+winh) le = mTopLine+winh;
+    if (le > mTopLine+linesPerWindow) le = mTopLine+linesPerWindow;
     dirtyLines[lidx-mTopLine..le-mTopLine] = true;
   }
 
@@ -2849,7 +2946,7 @@ public:
     mixin(SetupShiftMarkingMixin);
     if (gb.mLineCount < 2) return;
     killTextOnChar = false;
-    int ny = mTopLine+winh-1;
+    int ny = mTopLine+linesPerWindow-1;
     if (ny >= gb.linecount) ny = gb.linecount-1;
     if (cy != ny) {
       pushUndoCurPos();
@@ -2877,7 +2974,7 @@ public:
   ///
   void doScrollDown (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
-    if (mTopLine+winh < gb.linecount) {
+    if (mTopLine+linesPerWindow < gb.linecount) {
       killTextOnChar = false;
       pushUndoCurPos();
       ++mTopLine;
@@ -2952,10 +3049,10 @@ public:
   ///
   void doPageUp (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
-    if (winh < 2 || gb.mLineCount < 2) return;
+    if (linesPerWindow < 2 || gb.mLineCount < 2) return;
     killTextOnChar = false;
-    int ntl = mTopLine-(winh-1);
-    int ncy = cy-(winh-1);
+    int ntl = mTopLine-(linesPerWindow-1);
+    int ncy = cy-(linesPerWindow-1);
     if (ntl < 0) ntl = 0;
     if (ncy < 0) ncy = 0;
     if (ntl != mTopLine || ncy != cy) {
@@ -2969,11 +3066,11 @@ public:
   ///
   void doPageDown (bool domark=false) {
     mixin(SetupShiftMarkingMixin);
-    if (winh < 2 || gb.mLineCount < 2) return;
+    if (linesPerWindow < 2 || gb.mLineCount < 2) return;
     killTextOnChar = false;
-    int ntl = mTopLine+(winh-1);
-    int ncy = cy+(winh-1);
-    if (ntl+winh >= gb.linecount) ntl = gb.linecount-winh;
+    int ntl = mTopLine+(linesPerWindow-1);
+    int ncy = cy+(linesPerWindow-1);
+    if (ntl+linesPerWindow >= gb.linecount) ntl = gb.linecount-linesPerWindow;
     if (ncy >= gb.linecount) ncy = gb.linecount-1;
     if (ntl < 0) ntl = 0;
     if (ntl != mTopLine || ncy != cy) {
