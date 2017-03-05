@@ -2032,19 +2032,83 @@ public:
       while (pos <= ts) {
         if (pos == ts) { linex = textWidthAdvanceFinish(); break; }
         // advance one symbol
-        char ch = gb[pos++];
+        char ch = gb[pos];
         if (ch == '\n') { linex = textWidthAdvanceFinish(); break; }
-        if (!ufuck && ch < 128) {
+        if (!ufuck || ch < 128) {
           linex = textWidthAdvance(ch);
+          ++pos;
         } else {
-          --pos;
-          linex = textWidthAdvanceUtfuck(dcharAt(pos));
-          pos += gb.utfuckLenAt(pos);
+          linex = textWidthAdvanceUtfuck(dcharAtAdvance(pos));
         }
         if (rx == 0) break;
         --rx;
       }
       lcx = linex-mXOfs;
+    }
+  }
+
+  /// convert coordinates in widget into text coordinates; can be used to convert mouse click position into text position
+  /// WARNING: ty can be equal to linecount or -1!
+  final void widget2text (int mx, int my, out int tx, out int ty) nothrow @trusted @nogc {
+    if (!inPixels) {
+      int ry = my+mTopLine;
+      if (ry < 0) { ty = -1; return; } // tx is zero here
+      if (ry >= gb.linecount) { ty = gb.linecount; return; } // tx is zero here
+      if (mx <= 0 && mXOfs == 0) return; // tx is zero here
+      // ah, screw it! user should not call this very often, so i can stop care about speed.
+      int visx = -mXOfs;
+      auto pos = gb.line2pos(ry);
+      auto ts = gb.textsize;
+      int rx = 0;
+      immutable bool ufuck = gb.utfuck;
+      while (pos < ts) {
+        // advance one symbol
+        char ch = gb[pos];
+        if (ch == '\n') { tx = rx; return; } // done anyway
+        int nextx = visx+1;
+        if (ch == '\t' && visualtabs) {
+          // hack!
+          nextx = ((visx+mXOfs)/tabsize+1)*tabsize-mXOfs;
+        }
+        if (mx >= visx && mx < nextx) { tx = rx; return; }
+        visx = nextx;
+        if (!ufuck || ch < 128) {
+          ++pos;
+        } else {
+          pos = nextpos(pos);
+        }
+        ++rx;
+      }
+    } else {
+      int ry = my/lineHeightPixels+mTopLine;
+      if (ry < 0) { ty = -1; return; } // tx is zero here
+      if (ry >= gb.linecount) { ty = gb.linecount; return; } // tx is zero here
+      ty = ry;
+      if (mx <= 0 && mXOfs == 0) return; // tx is zero here
+      // now the hard part
+      textWidthReset(visualtabs ? gb.tabsize : 0);
+      int visx = -mXOfs, prevx;
+      auto pos = gb.line2pos(ry);
+      auto ts = gb.textsize;
+      int rx = 0;
+      immutable bool ufuck = gb.utfuck;
+      while (pos < ts) {
+        // advance one symbol
+        char ch = gb[pos];
+        if (ch == '\n') { tx = rx; return; } // done anyway
+        prevx = visx;
+        if (!ufuck || ch < 128) {
+          visx = textWidthAdvance(ch)-mXOfs;
+          ++pos;
+        } else {
+          visx = textWidthAdvanceUtfuck(dcharAtAdvance(pos))-mXOfs;
+        }
+        // prevx is previous char x start
+        // visx is current char x start
+        // so if our mx is in [prevx..visx), we are at previous char
+        if (mx >= prevx && mx < visx) { tx = rx; return; } // done
+        ++rx;
+      }
     }
   }
 
