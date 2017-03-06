@@ -678,13 +678,15 @@ private:
   struct MachineNode {
     char ch = 0; // current char
     ubyte endstate = InvalidState; // if not ubyte.max, this is what we should have if this node is terminal
+    int[/*' '-'0'*/] nextS0;
     int[/*'9'-'0'+1*/] next09;
     int[/*'Z'-'A'+1*/] nextAZ;
     int[/*'z'-'a'+1*/] nextaz;
     int[char] nextother;
     @property int next (char ch) const pure nothrow @trusted @nogc {
       //pragma(inline, true);
-           if (ch >= '0' && ch <= '9') return (ch-'0' < next09.length ? next09.ptr[ch-'0'] : 0);
+           if (ch >= ' ' && ch < '0') return (ch-' ' < nextS0.length ? nextS0.ptr[ch-' '] : 0);
+      else if (ch >= '0' && ch <= '9') return (ch-'0' < next09.length ? next09.ptr[ch-'0'] : 0);
       else if (ch >= 'A' && ch <= 'Z') return (ch-'A' < nextAZ.length ? nextAZ.ptr[ch-'A'] : 0);
       else if (ch >= 'a' && ch <= 'z') return (ch-'a' < nextaz.length ? nextaz.ptr[ch-'a'] : 0);
       else if (auto np = ch in nextother) return *np;
@@ -696,7 +698,8 @@ private:
         if (pos >= arr.length) arr.length = pos+1;
         arr[pos] = n;
       }
-           if (ch >= '0' && ch <= '9') set(ch-'0', next09);
+           if (ch >= ' ' && ch < '0') set(ch-' ', nextS0);
+      else if (ch >= '0' && ch <= '9') set(ch-'0', next09);
       else if (ch >= 'A' && ch <= 'Z') set(ch-'A', nextAZ);
       else if (ch >= 'a' && ch <= 'z') set(ch-'a', nextaz);
       else nextother[ch] = n;
