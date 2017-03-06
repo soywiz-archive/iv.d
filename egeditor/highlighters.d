@@ -439,23 +439,21 @@ public:
       }
       // identifier/keyword?
       if (ch.isalpha || ch == '_') {
-        // new code
         auto tmach = tks.start();
-        uint tklen = 0;
+        auto epos = spos;
         ubyte stx = 0;
-        while (spos+tklen <= le) {
-          ch = gb[spos+tklen];
+        while (epos <= le) {
+          ch = gb[epos++];
           if (ch != '_' && !ch.isalnum) break;
-          tmach.advance(ch);
-          stx = tmach.state;
-          ++tklen;
+          stx = tmach.advance(ch);
         }
+        --epos;
         if (stx) {
           st = HS(stx);
           // sorry
           if (stx == HiBodySpecialMark) {
             st = HS(HiText);
-            int xofs = spos+tklen;
+            int xofs = epos;
             for (;;) {
               ch = gb[xofs];
               if (ch == '{') { st = HS(HiSpecial); break; }
@@ -466,7 +464,7 @@ public:
         } else {
           st = HS(HiText);
         }
-        foreach (immutable _; 0..tklen) gb.hi(spos++) = st;
+        foreach (immutable _; spos..epos) gb.hi(spos++) = st;
         continue mainloop;
       }
       // based number?
@@ -518,31 +516,25 @@ public:
       }
       // punctuation token
       if (tks.canStartWith(ch)) {
-        auto tmach = tks.start();
         bool isdollar = (ch == '$');
-        uint maxxlen = tmach.maxtklen;
-        uint tklen = 0;
-        ubyte lastStx = 0;
-        uint lastGoodLength = 0;
-        while (spos+tklen <= le && tklen < maxxlen) {
-          ch = gb[spos+(tklen++)];
-          //if (ch <= ' ' || ch >= 128) break;
-          //if (ch.isalnum || ch == '_') break;
-          tmach.advance(ch);
-          if (auto stx = tmach.state) {
-            lastStx = stx;
-            lastGoodLength = tklen;
+        auto tmach = tks.start();
+        auto epos = spos;
+        uint lastlen = 0;
+        ubyte stx = 0;
+        while (epos <= le && tmach.canContinue) {
+          if (auto tx = tmach.advance(gb[epos++])) {
+            lastlen = cast(uint)(epos-spos);
+            stx = tx;
           }
         }
-        if (lastGoodLength == 0 && isdollar && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) goto sigil;
-        if (lastGoodLength == 0) {
-          tklen = 1;
+        if (lastlen == 0 && isdollar && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) goto sigil;
+        if (lastlen == 0) {
+          lastlen = 1;
           st = HS(HiPunct);
         } else {
-          tklen = lastGoodLength;
-          st = HS(lastStx);
+          st = HS(stx);
         }
-        foreach (immutable cp; 0..tklen) gb.hi(spos++) = st;
+        foreach (immutable cp; 0..lastlen) gb.hi(spos++) = st;
         continue mainloop;
       }
       // shell sigils
@@ -794,6 +786,7 @@ public:
     public:
     nothrow @trusted @nogc:
       @property ubyte state () const { pragma(inline, true); return (curnode >= 0 ? tmach.mach.ptr[curnode].endstate : InvalidState); }
+      @property bool canContinue () const { pragma(inline, true); return (curnode >= 0); }
       @property int mintklen () const { pragma(inline, true); return tmach.minlen; }
       @property int maxtklen () const { pragma(inline, true); return tmach.maxlen; }
       ubyte advance (char ch) {
