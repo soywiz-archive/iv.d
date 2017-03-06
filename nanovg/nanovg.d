@@ -3904,9 +3904,18 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
 
 int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) {
   FT_Vector ftKerning;
-  FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_DEFAULT, &ftKerning);
-  //return cast(int)ftKerning.x;
-  return cast(int)((ftKerning.x+32)>>6); // round up and convert to integer
+  version(none) {
+    // fitted kerning
+    FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_DEFAULT, &ftKerning);
+    //{ import core.stdc.stdio : printf; printf("kern for %u:%u: %d %d\n", glyph1, glyph2, ftKerning.x, ftKerning.y); }
+    return cast(int)ftKerning.x; // round up and convert to integer
+  } else {
+    // unfitted kerning
+    FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_UNFITTED, &ftKerning);
+    //{ import core.stdc.stdio : printf; printf("has kerning: %u\n", cast(uint)(font.font.face_flags&FT_FACE_FLAG_KERNING)); }
+    //{ import core.stdc.stdio : printf; printf("kern for %u:%u: %d %d\n", glyph1, glyph2, ftKerning.x, ftKerning.y); }
+    return cast(int)(ftKerning.x+(ftKerning.x < 0 ? -32 : 32)>>6); // round up and convert to integer
+  }
 }
 
 } else {
