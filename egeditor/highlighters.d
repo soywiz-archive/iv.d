@@ -675,11 +675,32 @@ public:
   enum InvalidState = 0;
 
 private:
-  align(1) struct MachineNode {
-  align(1):
+  struct MachineNode {
     char ch = 0; // current char
     ubyte endstate = InvalidState; // if not ubyte.max, this is what we should have if this node is terminal
-    int[256] next = 0;
+    int[/*'9'-'0'+1*/] next09;
+    int[/*'Z'-'A'+1*/] nextAZ;
+    int[/*'z'-'a'+1*/] nextaz;
+    int[char] nextother;
+    @property int next (char ch) const pure nothrow @trusted @nogc {
+      //pragma(inline, true);
+           if (ch >= '0' && ch <= '9') return (ch-'0' < next09.length ? next09.ptr[ch-'0'] : 0);
+      else if (ch >= 'A' && ch <= 'Z') return (ch-'A' < nextAZ.length ? nextAZ.ptr[ch-'A'] : 0);
+      else if (ch >= 'a' && ch <= 'z') return (ch-'a' < nextaz.length ? nextaz.ptr[ch-'a'] : 0);
+      else if (auto np = ch in nextother) return *np;
+      else return 0;
+    }
+    void setNext (char ch, int n) nothrow @trusted {
+      void set (int pos, ref int[] arr) nothrow @trusted {
+        assert(pos >= 0);
+        if (pos >= arr.length) arr.length = pos+1;
+        arr[pos] = n;
+      }
+           if (ch >= '0' && ch <= '9') set(ch-'0', next09);
+      else if (ch >= 'A' && ch <= 'Z') set(ch-'A', nextAZ);
+      else if (ch >= 'a' && ch <= 'z') set(ch-'a', nextaz);
+      else nextother[ch] = n;
+    }
   }
 
 private:
@@ -717,14 +738,12 @@ public:
 
     int lastnode = 0;
     foreach (char ch; tok) {
-      if (ch >= 'A' && ch <= 'Z' && !casesens) ch += 32;
-      int nextnode = mach[lastnode].next[ch];
+      if (!casesens && ch >= 'A' && ch <= 'Z') ch += 32;
+      int nextnode = mach[lastnode].next(ch);
       if (nextnode == 0) {
         // new node
         nextnode = addMachineNode(MachineNode(ch));
-        mach[lastnode].next[ch] = nextnode;
-      } else {
-        // merge nodes
+        mach[lastnode].setNext(ch, nextnode);
       }
       lastnode = nextnode;
     }
@@ -739,11 +758,11 @@ public:
     if (tok.length < minlen || tok.length > maxlen) return InvalidState;
     int node = 0;
     if (casesens) {
-      foreach (char ch; tok) if ((node = mach.ptr[node].next.ptr[ch]) == 0) return InvalidState;
+      foreach (char ch; tok) if ((node = mach.ptr[node].next(ch)) == 0) return InvalidState;
     } else {
       foreach (char ch; tok) {
         if (ch >= 'A' && ch <= 'Z') ch += 32;
-        if ((node = mach.ptr[node].next.ptr[ch]) == 0) return InvalidState;
+        if ((node = mach.ptr[node].next(ch)) == 0) return InvalidState;
       }
     }
     return mach.ptr[node].endstate;
@@ -757,12 +776,19 @@ public:
     public:
     nothrow @trusted @nogc:
       @property ubyte state () const { pragma(inline, true); return (curnode >= 0 ? tmach.mach.ptr[curnode].endstate : InvalidState); }
-      @property uint mintklen () const { pragma(inline, true); return tmach.minlen; }
-      @property uint maxtklen () const { pragma(inline, true); return tmach.maxlen; }
-      void advance (char ch) {
+      @property int mintklen () const { pragma(inline, true); return tmach.minlen; }
+      @property int maxtklen () const { pragma(inline, true); return tmach.maxlen; }
+      ubyte advance (char ch) {
         if (curnode >= 0) {
-          if (ch >= 'A' && ch <= 'Z' && !tmach.casesens) ch += 32;
-          if ((curnode = tmach.mach.ptr[curnode].next.ptr[ch]) == 0) curnode = -1;
+          if (!tmach.casesens && ch >= 'A' && ch <= 'Z') ch += 32;
+          if ((curnode = tmach.mach.ptr[curnode].next(ch)) == 0) {
+            curnode = -1;
+            return InvalidState;
+          } else {
+            return tmach.mach.ptr[curnode].endstate;
+          }
+        } else {
+          return InvalidState;
         }
       }
     }
@@ -822,7 +848,7 @@ final:
 
   bool canStartWith (char ch) const nothrow @trusted @nogc {
     pragma(inline, true);
-    return (tmach.mach.ptr[0].next.ptr[ch] > 0);
+    return (tmach.mach.ptr[0].next(ch) > 0);
   }
 
   auto start () const nothrow @trusted @nogc {
