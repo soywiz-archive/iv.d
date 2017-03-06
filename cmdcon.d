@@ -122,6 +122,8 @@ public @property uint cbufLastChange () nothrow @trusted @nogc { import core.ato
 public void consoleLock() () { pragma(inline, true); version(aliced) consoleLocker.lock(); } /// multithread lock
 public void consoleUnlock() () { pragma(inline, true); version(aliced) consoleLocker.unlock(); } /// multithread unlock
 
+public __gshared void delegate () nothrow @trusted @nogc conWasNewLineCB; /// can be called in any thread; called if some '\n' was output with `conwrite*()`
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// put characters to console buffer (and, possibly, STDOUT_FILENO). thread-safe.
@@ -182,10 +184,12 @@ public void cbufPutIntr(bool dolock) (scope ConString chrs...) nothrow @trusted 
         break;
     }
     //atomicOp!"+="(changeCount, 1);
+    bool wasNewLine = false;
     (*cast(uint*)&changeCount)++;
     foreach (char ch; chrs) {
       if (cbufLastWasCR && ch == '\x0a') { cbufLastWasCR = false; continue; }
       if ((cbufLastWasCR = (ch == '\x0d')) != false) ch = '\x0a';
+      wasNewLine = wasNewLine || (ch == '\x0a');
       int np = (cbuftail+1)%cbufcursize;
       if (np == cbufhead) {
         // we have to make some room; delete top line for this
@@ -231,6 +235,7 @@ public void cbufPutIntr(bool dolock) (scope ConString chrs...) nothrow @trusted 
       cbuf[np] = ch;
       cbuftail = np;
     }
+    if (wasNewLine && conWasNewLineCB !is null) conWasNewLineCB();
   }
 }
 
@@ -3143,10 +3148,11 @@ private:
 __gshared char[4096] concli = 0;
 __gshared uint conclilen = 0;
 __gshared int concurx = 0;
+public __gshared void delegate () nothrow @trusted conInputChangedCB; /// can be called in any thread
 
 shared uint inchangeCount = 1;
 public @property uint conInputLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; return atomicLoad(inchangeCount); } /// changed when something was put to console input buffer (thread-safe)
-public void conInputIncLastChange () nothrow @trusted @nogc { pragma(inline, true); import core.atomic; atomicOp!"+="(inchangeCount, 1); } /// increment console input buffer change flag (thread-safe)
+public void conInputIncLastChange () nothrow @trusted { pragma(inline, true); import core.atomic; atomicOp!"+="(inchangeCount, 1); if (conInputChangedCB !is null) conInputChangedCB(); } /// increment console input buffer change flag (thread-safe)
 
 public @property ConString conInputBuffer() () @trusted { pragma(inline, true); return concli[0..conclilen]; } /// returns console input buffer (not thread-safe)
 public @property int conInputBufferCurX() () @trusted { pragma(inline, true); return concurx; } /// returns cursor position in input buffer: [0..conclilen] (not thread-safe)
@@ -3596,7 +3602,7 @@ private:
 /// add console command to execution queue (thread-safe)
 public void concmd (ConString cmd) {
   consoleLock();
-  scope(exit) consoleUnlock();
+  scope(exit) { consoleUnlock(); conInputIncLastChange(); }
   concmdAdd(cmd);
 }
 
@@ -3616,7 +3622,7 @@ public void concmdf(string fmt, A...) (A args) { concmdfex!fmt(null, args); }
 /// string substitution in quotes will be automatically quoted
 public void concmdfex(string fmt, A...) (scope void delegate (ConString cmd) cmddg, A args) {
   consoleLock();
-  scope(exit) consoleUnlock();
+  scope(exit) { consoleUnlock(); conInputIncLastChange(); }
 
   usize pos = 0;
   bool ensureCmd = true;

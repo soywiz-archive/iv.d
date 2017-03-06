@@ -670,7 +670,7 @@ bool renderConsole () nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
-import arsd.simpledisplay : KeyEvent, Key;
+import arsd.simpledisplay : KeyEvent, Key, SimpleWindow;
 
 public __gshared string glconShowKey = "Grave"; /// this key will be eaten
 
@@ -761,6 +761,49 @@ public bool glconCharEvent (dchar ch) {
   if (ch == '`' && glconShowKey == "Grave" && conInputBuffer.length == 0) return true; // HACK!
   if (ch >= ' ' && ch < 127) glconCharInput(cast(char)ch);
   return true;
+}
+
+
+public class GLConScreenRebuildEvent {}
+public class GLConScreenRepaintEvent {}
+public class GLConDoConsoleCommandsEvent {}
+
+__gshared GLConScreenRebuildEvent evScrRebuild;
+__gshared GLConScreenRepaintEvent evScreenRepaint;
+__gshared GLConDoConsoleCommandsEvent evDoConCommands;
+public __gshared SimpleWindow glconMainWindow;
+
+shared static this () {
+  evScrRebuild = new GLConScreenRebuildEvent();
+  evScreenRepaint = new GLConScreenRepaintEvent();
+  evDoConCommands = new GLConDoConsoleCommandsEvent();
+  //__gshared oldccb = conInputChangedCB;
+  conInputChangedCB = delegate () nothrow @trusted {
+    try {
+      glconPostScreenRepaint();
+    } catch (Exception e) {}
+    //if (oldccb !is null) oldccb();
+  };
+}
+
+///
+public void glconPostScreenRebuild () {
+  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConScreenRebuildEvent) glconMainWindow.postEvent(evScrRebuild);
+}
+
+///
+public void glconPostScreenRepaint () {
+  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConScreenRepaintEvent && !glconMainWindow.eventQueued!GLConScreenRebuildEvent) glconMainWindow.postEvent(evScreenRepaint);
+}
+
+///
+public void glconPostScreenRepaintDelayed () {
+  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConScreenRepaintEvent && !glconMainWindow.eventQueued!GLConScreenRebuildEvent) glconMainWindow.postTimeout(evScreenRepaint, 35);
+}
+
+///
+public void glconPostDoConCommands () {
+  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConDoConsoleCommandsEvent) glconMainWindow.postEvent(evDoConCommands);
 }
 }
 
