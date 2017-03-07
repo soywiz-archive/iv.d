@@ -44,6 +44,7 @@ public:
 
 private:
   HighState hidummy;
+  bool mSingleLine;
 
 protected:
   enum MinGapSize = 1024; // bytes in gap
@@ -74,7 +75,6 @@ public:
   static int countEols (const(char)[] str) {
     import core.stdc.string : memchr;
     int linecount = 0;
-    //foreach (char ch; str) if (ch == '\n') ++linecount;
     uint left = cast(uint)str.length;
     auto dsp = str.ptr;
     while (left > 0) {
@@ -118,7 +118,7 @@ final:
       hbuf = cast(HighState*)malloc(nsz*HighState.sizeof);
       if (hbuf is null) { free(tbuf); tbuf = null; return false; }
       // allocate initial line cache
-      enum ICS = 1024;
+      uint ICS = (mSingleLine ? 2 : 1024);
       lineofsc = cast(typeof(lineofsc[0])*)realloc(lineofsc, ICS*lineofsc[0].sizeof);
       if (lineofsc is null) { free(hbuf); hbuf = null; free(tbuf); tbuf = null; return false; }
       tbsize = nsz;
@@ -262,7 +262,14 @@ final:
       // rare case, but...
       assert(mLineCount == 1);
       locused = 1;
-      lineofsc[0..1] = 0;
+      lineofsc[0..2] = 0;
+      return;
+    }
+    if (mSingleLine) {
+      assert(mLineCount == 1);
+      locused = 1;
+      lineofsc[0] = 0;
+      lineofsc[1] = ts;
       return;
     }
     if (lidx >= mLineCount) lidx = mLineCount-1;
@@ -329,13 +336,14 @@ protected:
 
 public:
   ///
-  this () {
+  this (bool asingleline) {
     // allocate minimal buffers
     if (!growTBuf(0)) assert(0, "out of memory for text buffers");
     gapend = MinGapSize;
     mLineCount = 1; // we always have at least one line, even if it is empty
-    lineofsc[0..1] = 0; // initial line cache
+    lineofsc[0..2] = 0; // initial line cache
     locused = 0;
+    mSingleLine = asingleline;
   }
 
   ///
@@ -363,9 +371,12 @@ public:
     if (!growTBuf(0)) assert(0, "out of memory for text buffers");
     gapend = MinGapSize;
     mLineCount = 1; // we always have at least one line, even if it is empty
-    lineofsc[0..1] = 0; // initial line cache
+    lineofsc[0..2] = 0; // initial line cache
     locused = 0;
   }
+
+  /// "single line" mode, for line editors
+  bool singleline () const pure nothrow @safe @nogc { pragma(inline, true); return mSingleLine; }
 
   /// size of text buffer without gap, in one-byte chars
   @property int textsize () const pure { pragma(inline, true); return tbused; }
@@ -464,17 +475,17 @@ public:
   alias linestart = line2pos; /// ditto
 
   /// get ending position for the given line (position of '\n')
-  /// it may be `textsize`, though, if this is last line, and it doesn't end with '\n'
+  /// it may be `textsize`, though, if this is the last line, and it doesn't end with '\n'
   int lineend (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
     if (lidx > mLineCount-1) return tbused;
     if (mLineCount == 1) {
       assert(lidx == 0);
-      return tbused-1;
+      return tbused;
     }
     updateCache(lidx);
     auto res = lineofsc[lidx+1];
-    return (res > lineofsc[lidx] ? res-1 : res);
+    return (res < tbused && res > lineofsc[lidx] ? res-1 : res);
   }
 
   // move by `x` utfucked chars
@@ -483,10 +494,11 @@ public:
   private int utfuck_x2pos (int x, int pos) {
     auto ts = tbused;
     if (pos < 0) pos = 0;
+    immutable bool sl = mSingleLine;
     mainloop: while (pos < ts && x > 0) {
       auto len = utfuckLenAt(pos);
       while (len-- > 0) {
-        if (tbuf[pos2real(pos)] == '\n') break mainloop;
+        if (!sl && tbuf[pos2real(pos)] == '\n') break mainloop;
         ++pos;
       }
       --x;
@@ -501,16 +513,21 @@ public:
     auto ts = tbused;
     if (pos < 0) pos = 0;
     if (pos > ts) pos = ts;
+    immutable bool sl = mSingleLine;
     // find line start
     int spos = pos;
-    while (spos > 0 && tbuf[pos2real(spos-1)] != '\n') --spos;
+    if (!sl) {
+      while (spos > 0 && tbuf[pos2real(spos-1)] != '\n') --spos;
+    } else {
+      spos = 0;
+    }
     // now `spos` points to line start; walk over utfucked chars
     int x = 0;
     mainloop: while (spos < pos) {
       auto len = utfuckLenAt(spos);
       if (len == 1) {
         auto ch = tbuf[pos2real(spos)];
-        if (ch == '\n') break mainloop;
+        if (!sl && ch == '\n') break mainloop;
         ++spos;
         static if (dotabs) {
           if (ch == '\t' && visualtabs && tabsize > 0) {
@@ -523,7 +540,7 @@ public:
         }
       } else {
         while (len-- > 0) {
-          if (tbuf[pos2real(spos)] == '\n') break mainloop; // just in case
+          if (!sl && tbuf[pos2real(spos)] == '\n') break mainloop; // just in case
           ++spos;
         }
         ++x;
@@ -573,7 +590,11 @@ public:
     if (pos == ts) {
       // end of text: no need to update line offset cache
       y = mLineCount-1;
-      while (pos > 0 && tbuf[pos2real(--pos)] != '\n') ++x;
+      if (!mSingleLine) {
+        while (pos > 0 && tbuf[pos2real(--pos)] != '\n') ++x;
+      } else {
+        x = pos;
+      }
       return;
     }
     int lcidx = findLineCacheIndex(pos);
@@ -629,7 +650,7 @@ public:
     if (pos == ts) {
       // end of text: no need to update line offset cache
       y = mLineCount-1;
-      while (pos > 0 && tbuf[pos2real(--pos)] != '\n') ++x;
+      while (pos > 0 && (mSingleLine || tbuf[pos2real(--pos)] != '\n')) ++x;
       if (utfuck) { x = utfuck_pos2x!true(ts); return; }
       if (visualtabs && tabsize != 0) { int ls = pos+1; pos = ts; tabbedX(ls); return; }
       return;
@@ -749,7 +770,7 @@ public:
     //if (str.length > tbmax-MinGapSize) return -1; // no room anyway
     if (tbmax-tbused-MinGapSize < str.length) return -1; // still no room
     if (!growTBuf(tbused+cast(uint)str.length)) return -1; // memory allocation failed
-    auto linecount = countEols(str);
+    int linecount = (!mSingleLine ? countEols(str) : 0);
     // count number of new lines and grow line cache
     if (!growLineCache(mLineCount+linecount)) return -1;
     auto olc = mLineCount;
@@ -810,14 +831,14 @@ public:
     ++bufferChangeCounter;
     if (pos == gapstart) {
       // decrease line counter
-      mLineCount -= countEols(tbuf[gapend..gapend+count]);
+      mLineCount -= (!mSingleLine ? countEols(tbuf[gapend..gapend+count]) : 0);
       gapend += count;
       tbused -= count;
       return true;
     }
     // removing text just before gap: increase gap (backspace does this)
     if (pos+count == gapstart) {
-      mLineCount -= countEols(tbuf[pos..pos+count]);
+      mLineCount -= (!mSingleLine ? countEols(tbuf[pos..pos+count]) : 0);
       gapstart -= count;
       tbused -= count;
       return true;
@@ -825,7 +846,7 @@ public:
     //TODO: add more gap edge movement?
     moveGapAtEnd();
     assert(pos+count <= ts);
-    mLineCount -= countEols(tbuf[pos..pos+count]);
+    mLineCount -= (!mSingleLine ? countEols(tbuf[pos..pos+count]) : 0);
     if (pos+count == ts) {
       tbused = pos;
       gapend = (gapstart = tbused)+MinGapSize;
@@ -840,7 +861,7 @@ public:
     return true;
   }
 
-  /// count how much eols we has in this range
+  /// count how much eols we have in this range
   int countEolsInRange (int pos, int count) {
     if (count < 1 || pos <= -count || pos >= tbused) return 0;
     if (pos+count > tbused) count = tbused-pos;
@@ -1538,7 +1559,7 @@ public:
 
 public:
   ///
-  this (int x0, int y0, int w, int h, EditorHL ahl=null, bool singleLine=false) {
+  this (int x0, int y0, int w, int h, EditorHL ahl=null, bool asingleline=false) {
     if (w < 2) w = 2;
     if (h < 1) h = 1;
     winx = x0;
@@ -1546,12 +1567,12 @@ public:
     winw = w;
     winh = h;
     dirtyLines.length = visibleLinesPerWindow;
-    gb = new GapBuffer();
+    gb = new GapBuffer(asingleline);
     hl = ahl;
     if (ahl !is null) hl.gb = gb;
-    undo = new UndoStack(false, !singleLine);
-    redo = new UndoStack(true, !singleLine);
-    mSingleLine = singleLine;
+    undo = new UndoStack(false, !asingleline);
+    redo = new UndoStack(true, !asingleline);
+    mSingleLine = asingleline;
   }
 
   // utfuck switch hooks
@@ -1840,7 +1861,6 @@ public:
     for (;;) {
       auto rd = fl.rawRead(buf[0..BufSize]);
       if (rd.length == 0) break;
-      if (mSingleLine) foreach (ref char ch; rd[]) if (ch == '\n') ch = ' ';
       if (!gb.append(rd[])) throw new Exception("text too big");
     }
   }
@@ -1987,20 +2007,24 @@ public:
     if (mXOfs < 0) mXOfs = 0;
   }
 
+  /// in symbols, not chars
   final int linelen (int lidx) nothrow @trusted @nogc {
     if (lidx < 0 || lidx >= gb.linecount) return 0;
     auto pos = gb.line2pos(lidx);
     auto ts = gb.textsize;
+    if (pos > ts) pos = ts;
     int res = 0;
     if (!gb.utfuck) {
+      if (mSingleLine) return ts-pos;
       while (pos < ts) {
         if (gb[pos++] == '\n') break;
         ++res;
       }
     } else {
+      immutable bool sl = mSingleLine;
       while (pos < ts) {
         char ch = gb[pos++];
-        if (ch == '\n') break;
+        if (!sl && ch == '\n') break;
         ++res;
         if (ch >= 128) {
           --pos;
@@ -2029,11 +2053,12 @@ public:
       auto ts = gb.textsize;
       int linex = 0;
       immutable bool ufuck = gb.utfuck;
+      immutable bool sl = mSingleLine;
       while (pos <= ts) {
         if (pos == ts) { linex = textWidthAdvanceFinish(); break; }
         // advance one symbol
         char ch = gb[pos];
-        if (ch == '\n') { linex = textWidthAdvanceFinish(); break; }
+        if (!sl && ch == '\n') { linex = textWidthAdvanceFinish(); break; }
         if (!ufuck || ch < 128) {
           linex = textWidthAdvance(ch);
           ++pos;
@@ -2061,10 +2086,11 @@ public:
       auto ts = gb.textsize;
       int rx = 0;
       immutable bool ufuck = gb.utfuck;
+      immutable bool sl = mSingleLine;
       while (pos < ts) {
         // advance one symbol
         char ch = gb[pos];
-        if (ch == '\n') { tx = rx; return; } // done anyway
+        if (!sl && ch == '\n') { tx = rx; return; } // done anyway
         int nextx = visx+1;
         if (ch == '\t' && visualtabs) {
           // hack!
@@ -2092,10 +2118,11 @@ public:
       auto ts = gb.textsize;
       int rx = 0;
       immutable bool ufuck = gb.utfuck;
+      immutable bool sl = mSingleLine;
       while (pos < ts) {
         // advance one symbol
         char ch = gb[pos];
-        if (ch == '\n') { tx = rx; return; } // done anyway
+        if (!sl && ch == '\n') { tx = rx; return; } // done anyway
         prevx = visx;
         if (!ufuck || ch < 128) {
           visx = textWidthAdvance(ch)-mXOfs;
@@ -2344,7 +2371,17 @@ public:
   /// `indentText` will include '\n'
   protected final void buildIndent (int pos) {
     if (indentText.length) { indentText.length = 0; indentText.assumeSafeAppend; }
-    indentText ~= '\n';
+    void putToIT (char ch) {
+      auto optr = indentText.ptr;
+      indentText ~= ch;
+      if (optr !is indentText.ptr) {
+        import core.memory : GC;
+        if (indentText.ptr is GC.addrOf(indentText.ptr)) {
+          GC.setAttr(indentText.ptr, GC.BlkAttr.NO_INTERIOR); // less false positives
+        }
+      }
+    }
+    putToIT('\n');
     pos = gb.line2pos(gb.pos2line(pos));
     auto ts = gb.textsize;
     int curx = 0;
@@ -2353,7 +2390,7 @@ public:
       auto ch = gb[pos];
       if (ch == '\n') break;
       if (ch > ' ') break;
-      indentText ~= ch;
+      putToIT(ch);
       ++pos;
       ++curx;
     }
@@ -2374,7 +2411,7 @@ public:
       bool undoOk = false;
       if (undo !is null) undoOk = undo.addTextRemove(this, pos, count);
       if (dg !is null) dg(pos, count);
-      int delEols = gb.countEolsInRange(pos, count);
+      int delEols = (!mSingleLine ? gb.countEolsInRange(pos, count) : 0);
       willBeDeleted(pos, count, delEols);
       //writeLogAction(pos, -count);
       // hack: if new linecount is different, there was '\n' in text
@@ -2409,7 +2446,7 @@ public:
     clear();
     auto res = insertText!"end"(0, text);
     clearUndo();
-    if (singleline) killTextOnChar = killOnChar;
+    if (mSingleLine) killTextOnChar = killOnChar;
     fullDirty();
     return res;
   }
@@ -2433,18 +2470,7 @@ public:
     if (pos < 0 || str.length >= int.max/3) return false;
     if (pos > ts) pos = ts;
     if (str.length > 0) {
-      int nlc = GapBuffer.countEols(str);
-      if (mSingleLine && nlc > 0) {
-        import core.stdc.stdlib : malloc, free;
-        // too bad
-        //FIXME: optimize this!
-        auto tbuf = cast(char*)malloc(str.length);
-        if (tbuf is null) return false;
-        scope(exit) free(tbuf);
-        tbuf[0..str.length] = str[];
-        foreach (ref char ch; tbuf[0..str.length]) if (ch == '\n') ch = ' ';
-        return insertText!(movecursor, false)(pos, tbuf[0..str.length]);
-      }
+      int nlc = (!mSingleLine ? GapBuffer.countEols(str) : 0);
       static if (doIndent) {
         if (nlc) {
           // want indenting and has at least one newline, hard case
@@ -2718,13 +2744,13 @@ public:
     int pos = curpos;
     if (pos == 0) return;
     auto ch = gb[pos-1];
-    if (ch == '\n') { doBackspace(); return; }
+    if (!mSingleLine && ch == '\n') { doBackspace(); return; }
     int stpos = pos-1;
     // find word start
     if (ch <= ' ') {
       while (stpos > 0) {
         ch = gb[stpos-1];
-        if (ch == '\n' || ch > ' ') break;
+        if ((!mSingleLine && ch == '\n') || ch > ' ') break;
         --stpos;
       }
     } else if (isWordChar(ch)) {
@@ -2756,10 +2782,14 @@ public:
     if (mReadOnly) return;
     int pos = curpos;
     auto ts = gb.textsize;
-    if (pos < ts && gb[pos] != '\n') {
-      int epos = pos+1;
-      while (epos < ts && gb[epos] != '\n') ++epos;
-      deleteText!"start"(pos, epos-pos);
+    if (mSingleLine) {
+      if (pos < ts) deleteText!"start"(pos, ts-pos);
+    } else {
+      if (pos < ts && gb[pos] != '\n') {
+        int epos = pos+1;
+        while (epos < ts && gb[epos] != '\n') ++epos;
+        deleteText!"start"(pos, epos-pos);
+      }
     }
   }
 
@@ -2776,8 +2806,7 @@ public:
   /// put char in koi8
   void doPutChar (char ch) {
     if (mReadOnly) return;
-    if (ch == 0) return;
-    if (!mSingleLine && (ch == '\n' || ch == '\r')) { doLineSplit(inPasteMode <= 0); return; }
+    if (!mSingleLine && ch == '\n') { doLineSplit(inPasteMode <= 0); return; }
     if (ch > 127 && gb.utfuck) {
       char[8] ubuf = void;
       int len = utf8Encode(ubuf[], koi2uni(ch));
@@ -2785,13 +2814,11 @@ public:
       insertText!("end", true)(curpos, ubuf[0..len]);
       return;
     }
-    if (ch == '\t' || (ch >= ' ' && ch != 127)) {
-      if (ch >= 128 && codepage != CodePage.koi8u) ch = recodeCharTo(ch);
-      if (inPasteMode <= 0) {
-        insertText!("end", true)(curpos, (&ch)[0..1]);
-      } else {
-        insertText!("end", false)(curpos, (&ch)[0..1]);
-      }
+    if (ch >= 128 && codepage != CodePage.koi8u) ch = recodeCharTo(ch);
+    if (inPasteMode <= 0) {
+      insertText!("end", true)(curpos, (&ch)[0..1]);
+    } else {
+      insertText!("end", false)(curpos, (&ch)[0..1]);
     }
   }
 
@@ -2825,11 +2852,9 @@ public:
       if (udc.decode(cast(ubyte)ch)) {
         dchar dch = (udc.complete ? udc.codepoint : udc.replacement);
         if (!udc.isValidDC(dch)) dch = udc.replacement;
-        if (dch == '\r' || dch == '\n') { if (!mSingleLine) { startug(); doLineSplit(inPasteMode <= 0); } continue; }
-        if (ch == '\t' || (ch >= ' ' && ch != 127)) {
-          startug();
-          doPutChar(recodeU2B(dch));
-        }
+        if (!mSingleLine && dch == '\n') { startug(); doLineSplit(inPasteMode <= 0); continue; }
+        startug();
+        doPutChar(recodeU2B(dch));
       }
     }
   }
@@ -2849,17 +2874,15 @@ public:
       auto stpos = pos;
       while (pos < str.length) {
         ch = str.ptr[pos];
-        if ((ch < ' ' && ch != '\t') || ch >= 128) break;
+        if (!mSingleLine && ch == '\n') break;
+        if (ch >= 128) break;
         ++pos;
       }
-      if (stpos < pos) {
-        startug();
-        insertText!"end"(curpos, str.ptr[stpos..pos]);
-      }
+      if (stpos < pos) { startug(); insertText!"end"(curpos, str.ptr[stpos..pos]); }
       if (pos >= str.length) break;
       ch = str.ptr[pos];
-      if (ch == '\r' || ch == '\n') { if (!mSingleLine) { startug(); doLineSplit(inPasteMode <= 0); } ++pos; continue; }
-      if (ch < ' ') { ++pos; continue; }
+      if (!mSingleLine && ch == '\n') { startug(); doLineSplit(inPasteMode <= 0); ++pos; continue; }
+      if (ch < ' ') { startug(); insertText!"end"(curpos, str.ptr[pos..pos+1]); ++pos; continue; }
       Utf8DecoderFast udc;
       stpos = pos;
       while (pos < str.length) if (udc.decode(cast(ubyte)(str.ptr[pos++]))) break;
@@ -2981,13 +3004,13 @@ public:
     int pos = curpos;
     if (pos == 0) return;
     auto ch = gb[pos-1];
-    if (ch == '\n') { doLeft(); return; }
+    if (!mSingleLine && ch == '\n') { doLeft(); return; }
     int stpos = pos-1;
     // find word start
     if (ch <= ' ') {
       while (stpos > 0) {
         ch = gb[stpos-1];
-        if (ch == '\n' || ch > ' ') break;
+        if ((!mSingleLine && ch == '\n') || ch > ' ') break;
         --stpos;
       }
     }
@@ -3010,13 +3033,13 @@ public:
     int pos = curpos;
     if (pos == gb.textsize) return;
     auto ch = gb[pos];
-    if (ch == '\n') { doRight(); return; }
+    if (!mSingleLine && ch == '\n') { doRight(); return; }
     int epos = pos+1;
     // find word start
     if (ch <= ' ') {
       while (epos < gb.textsize) {
         ch = gb[epos];
-        if (ch == '\n' || ch > ' ') break;
+        if ((!mSingleLine && ch == '\n') || ch > ' ') break;
         ++epos;
       }
     } else if (isWordChar(ch)) {
@@ -3026,7 +3049,7 @@ public:
           if (ch <= ' ') {
             while (epos < gb.textsize) {
               ch = gb[epos];
-              if (ch == '\n' || ch > ' ') break;
+              if ((!mSingleLine && ch == '\n') || ch > ' ') break;
               ++epos;
             }
           }
@@ -3226,7 +3249,7 @@ public:
       auto pos = gb.xy2pos(0, cy);
       while (pos < gb.textsize) {
         auto ch = gb[pos];
-        if (ch == '\n') return;
+        if (!mSingleLine && ch == '\n') return;
         if (ch > ' ') break;
         ++pos;
         ++nx;
@@ -3346,7 +3369,7 @@ protected:
   final void ubTextRemove (int pos, int len) {
     if (mReadOnly) return;
     killTextOnChar = false;
-    auto nlc = gb.countEolsInRange(pos, len);
+    int nlc = (!mSingleLine ? gb.countEolsInRange(pos, len) : 0);
     bookmarkDeletionFix(pos, len, nlc);
     lineChangedByPos(pos, (nlc > 0));
     gb.remove(pos, len);
@@ -3356,7 +3379,7 @@ protected:
     if (mReadOnly) return;
     killTextOnChar = false;
     if (str.length == 0) return;
-    auto nlc = gb.countEols(str);
+    int nlc = (!mSingleLine ? gb.countEols(str) : 0);
     bookmarkInsertionFix(pos, pos+cast(int)str.length, nlc);
     if (gb.put(pos, str) >= 0) lineChangedByPos(pos, (nlc > 0));
   }
