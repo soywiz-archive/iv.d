@@ -475,17 +475,17 @@ public:
   alias linestart = line2pos; /// ditto
 
   /// get ending position for the given line (position of '\n')
-  /// it may be `textsize`, though, if this is the last line, and it doesn't end with '\n'
+  /// it may be `textsize-1`, though, if this is the last line, and it doesn't end with '\n', so check for '\n' at EOL, and for any chars in line
   int lineend (int lidx) {
     if (lidx < 0 || tbused == 0) return 0;
-    if (lidx > mLineCount-1) return tbused;
+    if (lidx > mLineCount-1) return tbused-1;
     if (mLineCount == 1) {
       assert(lidx == 0);
-      return tbused;
+      return tbused-1;
     }
     updateCache(lidx);
     auto res = lineofsc[lidx+1];
-    return (res < tbused && res > lineofsc[lidx] ? res-1 : res);
+    return (res > lineofsc[lidx] ? res-1 : res);
   }
 
   // move by `x` utfucked chars

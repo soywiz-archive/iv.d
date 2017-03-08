@@ -443,18 +443,19 @@ public:
         auto epos = spos;
         ubyte stx = 0;
         while (epos <= le) {
-          ch = gb[epos++];
+          ch = gb[epos];
           if (ch != '_' && !ch.isalnum) break;
           stx = tmach.advance(ch);
+          ++epos;
         }
-        --epos;
+        if (epos <= spos && spos < le) epos = spos+1;
         if (stx) {
           st = HS(stx);
           // sorry
           if (stx == HiBodySpecialMark) {
             st = HS(HiText);
             int xofs = epos;
-            for (;;) {
+            while (xofs < gb.textsize) {
               ch = gb[xofs];
               if (ch == '{') { st = HS(HiSpecial); break; }
               if (ch > ' ') break;
