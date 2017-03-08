@@ -479,43 +479,62 @@ public void vfsForEachFile (scope void delegate (in ref VFSDriver.DirEntry de, V
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-char[] buildModeBuf (char[] modebuf, const(char)[] mode, ref bool ignoreCase, ref bool allowPaks) {
-  bool[128] got;
-  uint mpos;
-  allowPaks = true;
-  ignoreCase = (drivers.length ? vfsIgnoreCase : vfsIgnoreCaseNoDat);
-  foreach (char ch; mode) {
-    if (ch < 128 && !got[ch]) {
-      if (ch == 'i') { ignoreCase = true; continue; }
-      if (ch == 'I') { ignoreCase = false; continue; }
-      if (ch == 'X') { allowPaks = false; continue; }
-      if (ch == 'x') { allowPaks = true; continue; }
-      static if (VFS_NORMAL_OS) if (ch == 'b'/* || ch == 't'*/) continue;
-      if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-      got[ch] = true;
-      modebuf.ptr[mpos++] = ch;
+struct ModeOptions {
+  bool ignoreCase;
+  bool allowPaks;
+  bool allowGZ;
+  bool wantWrite;
+  private char[16] newmodebuf=0; // 0-terminated
+  private int nmblen; // 0 is not included
+  @property const(char)[] mode () const pure nothrow @safe @nogc { pragma(inline, true); return newmodebuf[0..nmblen]; }
+
+  this (const(char)[] mode) { parse(mode); }
+
+  void parse (const(char)[] mode) {
+    bool[128] got;
+    nmblen = 0;
+    newmodebuf[] = 0;
+    allowPaks = true;
+    allowGZ = true;
+    wantWrite = false;
+    ignoreCase = (drivers.length ? vfsIgnoreCase : vfsIgnoreCaseNoDat);
+    foreach (char ch; mode) {
+      if (ch < 128 && !got[ch]) {
+        if (ch == 'i') { ignoreCase = true; continue; }
+        if (ch == 'I') { ignoreCase = false; continue; }
+        if (ch == 'X') { allowPaks = false; continue; }
+        if (ch == 'x') { allowPaks = true; continue; }
+        if (ch == 'Z') { allowGZ = false; continue; }
+        if (ch == 'z') { allowGZ = true; continue; }
+        static if (VFS_NORMAL_OS) if (ch == 'b'/* || ch == 't'*/) continue;
+        if (nmblen >= newmodebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+        got[ch] = true;
+        newmodebuf.ptr[nmblen++] = ch;
+      }
     }
-  }
-  // add 'b' for idiotic shitdoze
-  static if (!VFS_NORMAL_OS) {
-    if (!got['b'] && !got['t'] && (got['r'] || got['w'] || got['a'] || got['R'] || got['W'] || got['A'])) {
-      if (mpos >= modebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-      modebuf.ptr[mpos++] = 'b';
+    // add 'b' for idiotic shitdoze
+    static if (!VFS_NORMAL_OS) {
+      if (!got['b'] && !got['t'] && (got['r'] || got['w'] || got['a'] || got['R'] || got['W'] || got['A'])) {
+        if (nmblen >= newmodebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+        newmodebuf.ptr[nmblen++] = 'b';
+      }
     }
-  }
-  if (mpos == 0) {
-    if (modebuf.length < 2) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-    static if (VFS_NORMAL_OS) {
-      modebuf[0..1] = "r";
-      mpos = 1;
-    } else {
-      modebuf[0..2] = "rb";
-      mpos = 2;
+    if (nmblen == 0) {
+      if (newmodebuf.length < 2) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+      static if (VFS_NORMAL_OS) {
+        newmodebuf[0..1] = "r";
+        nmblen = 1;
+      } else {
+        newmodebuf[0..2] = "rb";
+        nmblen = 2;
+      }
     }
+    if (newmodebuf.length-nmblen < 1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
+    foreach (char ch; newmodebuf[0..nmblen]) {
+      if (ch == 'a' || ch == 'A' || ch == 'w' || ch == 'W' || ch == '+' || ch == 't') wantWrite = true;
+    }
+    //newmodebuf[nmblen++] = '\0';
   }
-  if (modebuf.length-mpos < 1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-  modebuf[mpos++] = '\0';
-  return modebuf[0..mpos];
 }
 
 
@@ -557,10 +576,21 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
   } else {
     if (fname.length == 0) error("can't open file ''");
 
-    bool ignoreCase;
-    bool allowPaks;
-    char[16] modebuf = 0;
-    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase, allowPaks);
+    auto mopt = ModeOptions(mode);
+
+    // try ".gz"
+    //TODO: transparently read gzipped files from archives
+    if (mopt.allowGZ && !mopt.wantWrite) {
+      int epe = cast(int)fname.length;
+      while (epe > 1 && fname[epe-1] != '.') --epe;
+      if (fname.length-epe == 2 && (fname[epe] == 'G' || fname[epe] == 'g') && (fname[epe+1] == 'Z' || fname[epe+1] == 'z')) {
+        //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("TRYING GZ: '%.*s'\n", cast(int)fname.length, fname.ptr); }
+        import etc.c.zlib;
+        import std.internal.cstring;
+        gzFile gf = gzopen(fname.tempCString, "rb");
+        if (gf !is null) return VFile.OpenGZ(gf, fname[0..epe-1]);
+      }
+    }
 
     {
       auto lock = VFSLock.lock();
@@ -568,11 +598,11 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
       // try all drivers
       foreach_reverse (ref di; drivers) {
         try {
-          if (isROMode(mdb) || cast(VFSDriverDisk)di.drv is null) {
-            auto fl = di.drv.tryOpen(fname, ignoreCase);
+          if (!mopt.wantWrite || cast(VFSDriverDisk)di.drv is null) {
+            auto fl = di.drv.tryOpen(fname, mopt.ignoreCase);
             if (fl.isOpen) {
               if (di.temp) di.tempUsedTime = MonoTime.currTime;
-              if (!isROMode(mdb)) errorfn("can't open file '!' in non-binary non-readonly mode");
+              if (mopt.wantWrite) errorfn("can't open file '!' in non-binary non-readonly mode");
               return fl;
             }
           }
@@ -584,6 +614,7 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
     }
 
     // no drivers found, try disk file
+    //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("TRYING DISK: '%.*s'\n", cast(int)fname.length, fname.ptr); }
     return vfsDiskOpen!(T, usefname)(fname, mode);
   }
 }
@@ -706,10 +737,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
   } else {
     if (fname.length == 0) throw new VFSException("can't open file ''");
     if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
-    bool ignoreCase;
-    bool allowPaks;
-    char[16] modebuf;
-    auto mdb = buildModeBuf(modebuf[], mode, ignoreCase, allowPaks);
+    auto mopt = ModeOptions(mode);
     char[2049] nbuf;
     if (fname[0] == '~') {
       uint nepos = 1;
@@ -727,7 +755,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
       nbuf[0..fname.length] = fname[];
       nbuf[fname.length] = '\0';
     }
-    static if (VFS_NORMAL_OS) if (ignoreCase) {
+    static if (VFS_NORMAL_OS) if (mopt.ignoreCase) {
       // we have to lock here, as `findPathCI()` is not thread-safe
       auto lock = VFSLock.lock();
       auto pt = findPathCI(nbuf[0..fname.length]);
@@ -740,7 +768,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
       }
     }
     // try packs?
-    if (allowPaks && isROMode(mdb[])) {
+    if (mopt.allowPaks && !mopt.wantWrite) {
       uint colonpos = 0;
       version(Windows) {
         // idiotic shitdoze
@@ -750,14 +778,15 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
       if (nbuf[colonpos]) {
         try {
           import core.stdc.string : strlen;
-          auto fl = openFileWithPaks!(char[])(nbuf[0..strlen(nbuf.ptr)]); //FIXME: usefname!
+          auto fl = openFileWithPaks!(char[])(nbuf[0..strlen(nbuf.ptr)], mode); //FIXME: usefname!
           if (fl.isOpen) return fl;
         } catch (Exception e) {
         }
       }
     }
     // normal disk file
-    auto fl = core.stdc.stdio.fopen(nbuf.ptr, mdb.ptr);
+    //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("USING FOPEN: '%s' '%s'\n", nbuf.ptr, mopt.mode.ptr); }
+    auto fl = core.stdc.stdio.fopen(nbuf.ptr, mopt.mode.ptr);
     if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
     scope(failure) core.stdc.stdio.fclose(fl); // just in case
     try {
@@ -768,6 +797,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
       }
     } catch (Exception e) {
       // chain
+      //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("USING FOPEN ERROR!\n"); }
       throw new VFSException("can't open file '"~fname.idup~"'", __FILE__, __LINE__, e);
     }
   }
@@ -775,7 +805,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
 
 
 //FIXME: usefname!
-VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name) {
+VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name, const(char)[] mode) {
   static assert(!is(T == typeof(null)));
   assert(name.length < int.max/4);
 
@@ -793,6 +823,7 @@ VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name) {
 
   // cpos: after last succesfull prefix
   VFile openit (int cpos) {
+    bool nopaks = (cpos == 0);
     version(Windows) {
       // idiotic shitdoze
       if (cpos == 0 && name.length > 2 && name.ptr[1] == ':') cpos = 2;
@@ -800,7 +831,7 @@ VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name) {
     while (cpos < name.length) {
       auto ep = cpos;
       while (ep < name.length && name.ptr[ep] != ':') ++ep;
-      if (ep >= name.length) return VFile(name, "rXI");
+      if (ep >= name.length) return VFile(name, "rXIz");
       if (name.length-ep == 1) throw new VFSException("can't open file '"~name.idup~"'");
       {
         // hack!

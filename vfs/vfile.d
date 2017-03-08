@@ -100,6 +100,22 @@ public:
     if (own) wstp = WrapLibcFile!true(fl, fname); else wstp = WrapLibcFile!false(fl, fname);
   }
 
+  /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
+  package(iv.vfs) static VFile OpenGZ (etc.c.zlib.gzFile fl, bool own=true) {
+    if (fl is null) throw new VFSException("can't open file");
+    VFile fres;
+    if (own) fres.wstp = WrapGZFile!true(fl, null); else fres.wstp = WrapGZFile!false(fl, null);
+    return fres;
+  }
+
+  /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
+  package(iv.vfs) static VFile OpenGZ (etc.c.zlib.gzFile fl, const(char)[] afname, bool own=true) {
+    if (fl is null) throw new VFSException("can't open file");
+    VFile fres;
+    if (own) fres.wstp = WrapGZFile!true(fl, afname); else fres.wstp = WrapGZFile!false(fl, afname);
+    return fres;
+  }
+
   /// wrap file descriptor; `fd` is owned by VFile now; can throw
   static if (VFS_NORMAL_OS) this (int fd, bool own=true) {
     if (fd < 0) throw new VFSException("can't open file");
@@ -485,8 +501,8 @@ private:
   public this (core.stdc.stdio.FILE* afl, const(char)[] afname) { fl = afl; setFileName(afname); } // fuck! emplace needs it
 
 protected:
-  override @property bool isOpen () { return (fl !is null); }
-  override @property bool eof () { return (fl is null || core.stdc.stdio.feof(fl) != 0); }
+  override @property bool isOpen () { return (flp != 0); }
+  override @property bool eof () { return (flp == 0 || core.stdc.stdio.feof(fl) != 0); }
 
   override void close () {
     if (fl !is null) {
@@ -538,6 +554,72 @@ protected:
 
 usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl, string fname=null) {
   return newWS!(WrappedStreamLibcFile!ownfl)(fl, fname);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+final class WrappedStreamGZFile(bool ownfl=true) : WrappedStreamRC {
+private import etc.c.zlib;
+private:
+  size_t flp; // hide from GC
+  final @property gzFile fl () const pure nothrow @trusted @nogc { pragma(inline, true); return cast(gzFile)flp; }
+  final @property void fl (gzFile afl) pure nothrow @trusted @nogc { pragma(inline, true); flp = cast(size_t)afl; }
+
+  int err () nothrow @trusted {
+    int res = 0;
+    if (flp != 0) gzerror(fl, &res);
+    return res;
+  }
+
+  public this (gzFile afl, const(char)[] afname) { fl = afl; setFileName(afname); } // fuck! emplace needs it
+
+protected:
+  override @property bool isOpen () { return (flp != 0); }
+  override @property bool eof () { return (flp == 0 || gzeof(fl) != 0); }
+
+  override void close () {
+    if (fl !is null) {
+      static if (ownfl) {
+        auto res = gzclose(fl);
+        fl = null;
+        if (res != Z_BUF_ERROR && res != Z_OK) throw new VFSException("can't close file", __FILE__, __LINE__);
+      } else {
+        fl = null;
+      }
+    }
+  }
+
+  override ssize read (void* buf, usize count) {
+    if (fl is null || err()) return -1;
+    if (count == 0) return 0;
+    auto res = gzfread(buf, 1, count, fl);
+    if (res == 0) return (err() ? -1 : 0);
+    return res;
+  }
+
+  override ssize write (in void* buf, usize count) {
+    if (fl is null || err()) return -1;
+    if (count == 0) return 0;
+    auto res = gzfwrite(cast(void*)buf, 1, count, fl); // fuck you, phobos!
+    if (res == 0) return (err() ? -1 : 0);
+    return res;
+  }
+
+  override long lseek (long offset, int origin) {
+    if (fl is null) return -1;
+    static if (offset.sizeof > int.sizeof) {
+      if (offset < int.min || offset > int.max) return -1;
+    }
+    auto res = gzseek(fl, cast(int)offset, origin); // fuck you, phobos!
+    if (res != -1) gzclearerr(fl);
+    return gztell(fl);
+  }
+}
+
+static import etc.c.zlib;
+
+usize WrapGZFile(bool ownfl=true) (etc.c.zlib.gzFile fl, const(char)[] fname=null) {
+  return newWS!(WrappedStreamGZFile!ownfl)(fl, fname);
 }
 
 
