@@ -1,4 +1,4 @@
-// Ogg Vorbis audio decoder - v1.09 - public domain
+// Ogg Vorbis audio decoder - v1.10 - public domain
 // http://nothings.org/stb_vorbis/
 //
 // Original version written by Sean Barrett in 2007.
@@ -9,12 +9,7 @@
 //
 // LICENSE
 //
-//   This software is dual-licensed to the public domain and under the following
-//   license: you are granted a perpetual, irrevocable license to copy, modify,
-//   publish, and distribute this file as you see fit.
-//
-// No warranty for any purpose is expressed or implied by the author (nor
-// by RAD Game Tools). Report bugs and send enhancements to the author.
+//   See end of file for license information.
 //
 // Limitations:
 //
@@ -37,6 +32,7 @@
 //    manxorist@github   saga musix
 //
 // Partial history:
+//    1.10    - 2017/03/03 - more robust seeking; fix negative ilog(); clear error in open_memory
 //    1.09    - 2016/04/04 - back out 'avoid discarding last frame' fix from previous version
 //    1.08    - 2016/04/02 - fixed multiple warnings; fix setup memory leaks;
 //                           avoid discarding last frame of audio data
@@ -261,7 +257,7 @@ int stb_vorbis_seek_frame (VorbisDecoder f, uint sample_number);
 int stb_vorbis_seek (VorbisDecoder f, uint sample_number);
 
 // this function is equivalent to stb_vorbis_seek(f, 0)
-void stb_vorbis_seek_start (VorbisDecoder f);
+int stb_vorbis_seek_start (VorbisDecoder f);
 
 // these functions return the total length of the vorbis stream
 uint stb_vorbis_stream_length_in_samples (VorbisDecoder f);
@@ -722,8 +718,9 @@ private float square (float x) {
 // @OPTIMIZE: called multiple times per-packet with "constants"; move to setup
 immutable byte[16] log2_4 = [0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4];
 private int ilog (int n) {
-  // 2 compares if n < 16, 3 compares otherwise (4 if signed or n > 1<<29)
   //static if (__VERSION__ > 2067) pragma(inline, true);
+  if (n < 0) return 0; // signed n returns 0
+  // 2 compares if n < 16, 3 compares otherwise (4 if signed or n > 1<<29)
   if (n < (1<<14)) {
     if (n < (1<<4)) return 0+log2_4[n];
     if (n < (1<<9)) return 5+log2_4[n>>5];
@@ -733,8 +730,7 @@ private int ilog (int n) {
     return 20+log2_4[n>>20];
   } else {
     if (n < (1<<29)) return 25+log2_4[n>>25];
-    if (n < (1<<31)) return 30+log2_4[n>>30];
-    return 0; // signed n returns 0
+    return 30+log2_4[n>>30];
   }
 }
 
@@ -2804,9 +2800,13 @@ private int vorbis_finish_frame (VorbisDecoder f, int len, int left, int right) 
   return right-left;
 }
 
-private void vorbis_pump_first_frame (VorbisDecoder f) {
+private bool vorbis_pump_first_frame (VorbisDecoder f) {
   int len, right, left;
-  if (vorbis_decode_packet(f, &len, &left, &right)) vorbis_finish_frame(f, len, left, right);
+  if (vorbis_decode_packet(f, &len, &left, &right)) {
+    vorbis_finish_frame(f, len, left, right);
+    return true;
+  }
+  return false;
 }
 
 /+ k8: i don't need that, so it's dead
@@ -3757,7 +3757,8 @@ private int seek_to_sample_coarse (VorbisDecoder f, uint sample_number) {
   for (i = 0; i < start_seg_with_known_loc; ++i) skip(f, f.segments.ptr[i]);
 
   // start decoding (optimizable - this frame is generally discarded)
-  vorbis_pump_first_frame(f);
+  if (!vorbis_pump_first_frame(f)) return 0;
+  if (f.current_loc > sample_number) return error(f, STBVorbisError.seek_failed);
   return 1;
 
 error:
@@ -4509,13 +4510,13 @@ public:
     return 1;
   }
 
-  public void seekStart () {
+  public bool seekStart () {
     /+if (push_mode) { .error(this, STBVorbisError.invalid_api_mixing); return; }+/
     set_file_offset(this, first_audio_page_offset);
     previous_length = 0;
     first_decode = true;
     next_seg = -1;
-    vorbis_pump_first_frame(this);
+    return vorbis_pump_first_frame(this);
   }
 
   public uint streamLengthInSamples () {
@@ -5075,4 +5076,46 @@ template cmacroFixVars(T...) {
     0.92 - fixed a memory leak
     0.91 - conditional compiles to omit parts of the API and the infrastructure to support them: STB_VORBIS_NO_PULLDATA_API, STB_VORBIS_NO_PUSHDATA_API, STB_VORBIS_NO_STDIO, STB_VORBIS_NO_INTEGER_CONVERSION
     0.90 - first public release
+*/
+
+/*
+------------------------------------------------------------------------------
+This software is available under 2 licenses -- choose whichever you prefer.
+------------------------------------------------------------------------------
+ALTERNATIVE A - MIT License
+Copyright (c) 2017 Sean Barrett
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+------------------------------------------------------------------------------
+ALTERNATIVE B - Public Domain (www.unlicense.org)
+This is free and unencumbered software released into the public domain.
+Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
+software, either in source code form or as a compiled binary, for any purpose,
+commercial or non-commercial, and by any means.
+In jurisdictions that recognize copyright laws, the author or authors of this
+software dedicate any and all copyright interest in the software to the public
+domain. We make this dedication for the benefit of the public at large and to
+the detriment of our heirs and successors. We intend this dedication to be an
+overt act of relinquishment in perpetuity of all present and future rights to
+this software under copyright law.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+------------------------------------------------------------------------------
 */
