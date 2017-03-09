@@ -907,8 +907,10 @@ public int stbtt_GetGlyphShape (const(stbtt_fontinfo)* info, int glyph_index, st
       ushort flags, gidx;
       int comp_num_verts = 0;
       stbtt_vertex* comp_verts = null, tmp = null;
-      float[6] mtx = [1, 0, 0, 1, 0, 0];
-      float m, n;
+      //float[6] mtx = [1, 0, 0, 1, 0, 0];
+      float[6] mtx = 0;
+      mtx.ptr[0] = mtx.ptr[3] = 1;
+      //float m, n;
 
       flags = ttSHORT(comp); comp += 2;
       gidx = ttSHORT(comp); comp += 2;
@@ -940,8 +942,8 @@ public int stbtt_GetGlyphShape (const(stbtt_fontinfo)* info, int glyph_index, st
       }
 
       // Find transformation scales.
-      m = cast(float)STBTT_sqrt(mtx[0]*mtx[0]+mtx[1]*mtx[1]);
-      n = cast(float)STBTT_sqrt(mtx[2]*mtx[2]+mtx[3]*mtx[3]);
+      immutable float m = cast(float)STBTT_sqrt(mtx[0]*mtx[0]+mtx[1]*mtx[1]);
+      immutable float n = cast(float)STBTT_sqrt(mtx[2]*mtx[2]+mtx[3]*mtx[3]);
 
       // Get indexed glyph.
       comp_num_verts = stbtt_GetGlyphShape(info, gidx, &comp_verts);
@@ -1163,7 +1165,7 @@ enum STBTT_FIXMASK = (STBTT_FIX-1);
 
 stbtt__active_edge* stbtt__new_active (stbtt__hheap* hh, stbtt__edge* e, int off_x, float start_point, void* userdata) {
   stbtt__active_edge* z = cast(stbtt__active_edge*)stbtt__hheap_alloc(hh, stbtt__active_edge.sizeof, userdata);
-  float dxdy = (e.x1-e.x0)/(e.y1-e.y0);
+  immutable float dxdy = (e.x1-e.x0)/(e.y1-e.y0);
   assert(z !is null);
   if (!z) return z;
 
@@ -1184,7 +1186,7 @@ stbtt__active_edge* stbtt__new_active (stbtt__hheap* hh, stbtt__edge* e, int off
 } else static if (STBTT_RASTERIZER_VERSION == 2) {
 stbtt__active_edge* stbtt__new_active(stbtt__hheap* hh, stbtt__edge* e, int off_x, float start_point, void* userdata) {
   stbtt__active_edge* z = cast(stbtt__active_edge*)stbtt__hheap_alloc(hh, stbtt__active_edge.sizeof, userdata);
-  float dxdy = (e.x1-e.x0)/(e.y1-e.y0);
+  immutable float dxdy = (e.x1-e.x0)/(e.y1-e.y0);
   assert(z !is null);
   //assert(e.y0 <= start_point);
   if (!z) return z;
@@ -1425,23 +1427,21 @@ void stbtt__fill_active_edges_new (float* scanline, float* scanline_fill, int le
         // from here on, we don't have to range check x values
 
         if (cast(int)x_top == cast(int)x_bottom) {
-          float height;
           // simple case, only spans one pixel
           int x = cast(int)x_top;
-          height = sy1-sy0;
+          float height = sy1-sy0;
           assert(x >= 0 && x < len);
           scanline[x] += e.direction*(1-((x_top-x)+(x_bottom-x))/2)*height;
           scanline_fill[x] += e.direction*height; // everything right of this pixel is filled
         } else {
           int x, x1, x2;
-          float y_crossing, step, sign, area;
+          //float y_crossing, step, sign, area;
           // covers 2+ pixels
           if (x_top > x_bottom) {
             // flip scanline vertically; signed area is the same
-            float t;
             sy0 = y_bottom-(sy0-y_top);
             sy1 = y_bottom-(sy1-y_top);
-            t = sy0, sy0 = sy1, sy1 = t;
+            float t = sy0; sy0 = sy1, sy1 = t;
             t = x_bottom, x_bottom = x_top, x_top = t;
             dx = -dx;
             dy = -dy;
@@ -1451,15 +1451,15 @@ void stbtt__fill_active_edges_new (float* scanline, float* scanline_fill, int le
           x1 = cast(int)x_top;
           x2 = cast(int)x_bottom;
           // compute intersection with y axis at x1+1
-          y_crossing = (x1+1-x0)*dy+y_top;
+          float y_crossing = (x1+1-x0)*dy+y_top;
 
-          sign = e.direction;
+          float sign = e.direction;
           // area of the rectangle covered from y0..y_crossing
-          area = sign*(y_crossing-sy0);
+          float area = sign*(y_crossing-sy0);
           // area of the triangle (x_top, y0), (x+1, y0), (x+1, y_crossing)
           scanline[x1] += area*(1-((x_top-x1)+(x1+1-x1))/2);
 
-          step = sign*dy;
+          float step = sign*dy;
           for (x = x1+1; x < x2; ++x) {
             scanline[x] += area+step/2;
             area += step;
@@ -1497,13 +1497,13 @@ void stbtt__fill_active_edges_new (float* scanline, float* scanline_fill, int le
           float x2 = cast(float)(x+1);
           float x3 = xb;
           float y3 = y_bottom;
-          float y1, y2;
+          //float y1, y2;
 
           // x = e.x+e.dx*(y-y_top)
           // (y-y_top) = (x-e.x)/e.dx
           // y = (x-e.x)/e.dx+y_top
-          y1 = (x-x0)/dx+y_top;
-          y2 = (x+1-x0)/dx+y_top;
+          float y1 = (x-x0)/dx+y_top;
+          float y2 = (x+1-x0)/dx+y_top;
 
           if (x0 < x1 && x3 > x2) {         // three segments descending down-right
             stbtt__handle_clipped_edge(scanline, x, e, x0, y0, x1, y1);
