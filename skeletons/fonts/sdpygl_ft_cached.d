@@ -673,6 +673,7 @@ int ttfRenderGlyphBitmap(bool mono=true) (FTC_FaceID ttfontid, int x, int y, int
       FT_Size ttfontsz;
       if (FTC_Manager_LookupSize(ttfcache, &fsc, &ttfontsz)) return -666;
       ttface = ttfontsz.face;
+      conwriteln("INTERLINE: ", ttfontsz.metrics.height>>6);
 
       if (FT_HAS_KERNING(ttface)) {
         FT_Vector kk;
