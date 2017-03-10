@@ -662,8 +662,8 @@ int ttfRenderGlyphBitmap(bool mono=true) (FTC_FaceID ttfontid, int x, int y, int
     int glp = FTC_CMapCache_Lookup(ttfcachecmap, ttfontid, -1, prevcp);
     if (glp != 0) {
       FT_Face ttface;
+      //if (FTC_Manager_LookupFace(ttfcache, ttfontid, &ttface)) return -666;
 
-      /+
       FTC_ScalerRec fsc;
       fsc.face_id = ttfontid;
       fsc.width = 0;
@@ -673,14 +673,20 @@ int ttfRenderGlyphBitmap(bool mono=true) (FTC_FaceID ttfontid, int x, int y, int
       FT_Size ttfontsz;
       if (FTC_Manager_LookupSize(ttfcache, &fsc, &ttfontsz)) return -666;
       ttface = ttfontsz.face;
-      +/
-      if (FTC_Manager_LookupFace(ttfcache, ttfontid, &ttface)) return -666;
 
-      immutable float scale = cast(float)size/(ttface.ascender-ttface.descender);
-
-      FT_Vector ftKerning;
-      if (FT_Get_Kerning(ttface, glp, glyph, FT_KERNING_UNFITTED, &ftKerning) == 0) {
-        kadv = cast(int)(ftKerning.x/64.0f*scale);
+      if (FT_HAS_KERNING(ttface)) {
+        FT_Vector kk;
+        if (FT_Get_Kerning(ttface, glp, glyph, FT_KERNING_UNSCALED, &kk) == 0) {
+          auto kadvfrac = FT_MulFix(kk.x, ttfontsz.metrics.x_scale); // 1/64 of pixel
+          kadv = cast(int)(kadvfrac+(kadvfrac < 0 ? -32 : 32)>>6);
+          version(none) {
+            conwriteln("kerning: prevcp=", prevcp, "; codepoint=", codepoint, "; kk.x=", kk.x, "; kadv=", kadv);
+            if (kadv) {
+              gxVLine(x, y-50, 50, gxRGB!(0, 255, 0));
+              gxVLine(x+kadv, y-50, 50, gxRGB!(255, 0, 0));
+            }
+          }
+        }
       }
     }
   }
