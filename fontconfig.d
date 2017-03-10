@@ -31,7 +31,7 @@ import core.sys.posix.sys.stat;
 import iv.freetype;
 
 
-extern(C) nothrow:
+extern(C) nothrow @nogc:
 
 alias FcChar8 = char;
 alias FcChar16 = wchar;
@@ -289,14 +289,14 @@ struct FcCache;
 
 
 /* fcblanks.c */
-/*FcPublic*/ FcBlanks * FcBlanksCreate ();
+/*FcPublic*/ FcBlanks* FcBlanksCreate ();
 /*FcPublic*/ void FcBlanksDestroy (FcBlanks* b);
 /*FcPublic*/ FcBool FcBlanksAdd (FcBlanks* b, FcChar32 ucs4);
 /*FcPublic*/ FcBool FcBlanksIsMember (FcBlanks* b, FcChar32 ucs4);
 
 /* fccache.c */
 /*FcPublic*/ const(FcChar8)* FcCacheDir(const(FcCache)* c);
-/*FcPublic*/ FcFontSet * FcCacheCopySet(const(FcCache)* c);
+/*FcPublic*/ FcFontSet* FcCacheCopySet(const(FcCache)* c);
 /*FcPublic*/ const(FcChar8)* FcCacheSubdir (const(FcCache)* c, int i);
 /*FcPublic*/ int FcCacheNumSubdir (const(FcCache)* c);
 /*FcPublic*/ int FcCacheNumFont (const(FcCache)* c);
@@ -306,25 +306,25 @@ struct FcCache;
 /*FcPublic*/ void FcCacheCreateTagFile (const(FcConfig)* config);
 
 /* fccfg.c */
-/*FcPublic*/ FcChar8 * FcConfigHome ();
+/*FcPublic*/ FcChar8* FcConfigHome ();
 /*FcPublic*/ FcBool FcConfigEnableHome (FcBool enable);
-/*FcPublic*/ FcChar8 * FcConfigFilename (const(FcChar8)* url);
-/*FcPublic*/ FcConfig * FcConfigCreate ();
-/*FcPublic*/ FcConfig * FcConfigReference (FcConfig* config);
+/*FcPublic*/ FcChar8* FcConfigFilename (const(FcChar8)* url);
+/*FcPublic*/ FcConfig* FcConfigCreate ();
+/*FcPublic*/ FcConfig* FcConfigReference (FcConfig* config);
 /*FcPublic*/ void FcConfigDestroy (FcConfig* config);
 /*FcPublic*/ FcBool FcConfigSetCurrent (FcConfig* config);
-/*FcPublic*/ FcConfig * FcConfigGetCurrent ();
+/*FcPublic*/ FcConfig* FcConfigGetCurrent ();
 /*FcPublic*/ FcBool FcConfigUptoDate (FcConfig* config);
 /*FcPublic*/ FcBool FcConfigBuildFonts (FcConfig* config);
-/*FcPublic*/ FcStrList * FcConfigGetFontDirs (FcConfig* config);
-/*FcPublic*/ FcStrList * FcConfigGetConfigDirs (FcConfig* config);
-/*FcPublic*/ FcStrList * FcConfigGetConfigFiles (FcConfig* config);
-/*FcPublic*/ FcChar8 * FcConfigGetCache (FcConfig* config);
-/*FcPublic*/ FcBlanks * FcConfigGetBlanks (FcConfig* config);
-/*FcPublic*/ FcStrList * FcConfigGetCacheDirs (const(FcConfig)* config);
+/*FcPublic*/ FcStrList* FcConfigGetFontDirs (FcConfig* config);
+/*FcPublic*/ FcStrList* FcConfigGetConfigDirs (FcConfig* config);
+/*FcPublic*/ FcStrList* FcConfigGetConfigFiles (FcConfig* config);
+/*FcPublic*/ FcChar8* FcConfigGetCache (FcConfig* config);
+/*FcPublic*/ FcBlanks* FcConfigGetBlanks (FcConfig* config);
+/*FcPublic*/ FcStrList* FcConfigGetCacheDirs (const(FcConfig)* config);
 /*FcPublic*/ int FcConfigGetRescanInterval (FcConfig* config);
 /*FcPublic*/ FcBool FcConfigSetRescanInterval (FcConfig* config, int rescanInterval);
-/*FcPublic*/ FcFontSet * FcConfigGetFonts (FcConfig* config, FcSetName set);
+/*FcPublic*/ FcFontSet* FcConfigGetFonts (FcConfig* config, FcSetName set);
 /*FcPublic*/ FcBool FcConfigAppFontAddFile (FcConfig* config, const(FcChar8)* file);
 /*FcPublic*/ FcBool FcConfigAppFontAddDir (FcConfig* config, const(FcChar8)* dir);
 /*FcPublic*/ void FcConfigAppFontClear (FcConfig* config);
@@ -337,7 +337,7 @@ struct FcCache;
 /*FcPublic*/ FcCharSet* FcCharSetCreate ();
 
 /* deprecated alias for FcCharSetCreate */
-/*FcPublic*/ FcCharSet * FcCharSetNew ();
+/*FcPublic*/ FcCharSet* FcCharSetNew ();
 /*FcPublic*/ void FcCharSetDestroy (FcCharSet* fcs);
 /*FcPublic*/ FcBool FcCharSetAddChar (FcCharSet* fcs, FcChar32 ucs4);
 /*FcPublic*/ FcBool FcCharSetDelChar (FcCharSet* fcs, FcChar32 ucs4);
@@ -370,7 +370,7 @@ enum FC_CHARSET_DONE = (cast(FcChar32)-1);
 /*FcPublic*/ void FcFontSetPrint (const(FcFontSet)* s);
 
 /* fcdefault.c */
-/*FcPublic*/ FcStrSet * FcGetDefaultLangs ();
+/*FcPublic*/ FcStrSet* FcGetDefaultLangs ();
 /*FcPublic*/ void FcDefaultSubstitute (FcPattern* pattern);
 
 /* fcdir.c */
@@ -378,23 +378,23 @@ enum FC_CHARSET_DONE = (cast(FcChar32)-1);
 /*FcPublic*/ FcBool FcFileScan (FcFontSet* set, FcStrSet* dirs, FcFileCache* cache, FcBlanks* blanks, const(FcChar8)* file, FcBool force);
 /*FcPublic*/ FcBool FcDirScan (FcFontSet* set, FcStrSet* dirs, FcFileCache* cache, FcBlanks* blanks, const(FcChar8)* dir, FcBool force);
 /*FcPublic*/ FcBool FcDirSave (FcFontSet* set, FcStrSet* dirs, const(FcChar8)* dir);
-/*FcPublic*/ FcCache * FcDirCacheLoad (const(FcChar8)* dir, FcConfig* config, FcChar8** cache_file);
-/*FcPublic*/ FcCache * FcDirCacheRescan (const(FcChar8)* dir, FcConfig* config);
-/*FcPublic*/ FcCache * FcDirCacheRead (const(FcChar8)* dir, FcBool force, FcConfig* config);
-/*FcPublic*/ FcCache * FcDirCacheLoadFile (const(FcChar8)* cache_file, stat_t* file_stat);
+/*FcPublic*/ FcCache* FcDirCacheLoad (const(FcChar8)* dir, FcConfig* config, FcChar8** cache_file);
+/*FcPublic*/ FcCache* FcDirCacheRescan (const(FcChar8)* dir, FcConfig* config);
+/*FcPublic*/ FcCache* FcDirCacheRead (const(FcChar8)* dir, FcBool force, FcConfig* config);
+/*FcPublic*/ FcCache* FcDirCacheLoadFile (const(FcChar8)* cache_file, stat_t* file_stat);
 /*FcPublic*/ void FcDirCacheUnload (FcCache* cache);
 
 /* fcfreetype.c */
-/*FcPublic*/ FcPattern * FcFreeTypeQuery (const(FcChar8)* file, int id, FcBlanks* blanks, int* count);
+/*FcPublic*/ FcPattern* FcFreeTypeQuery (const(FcChar8)* file, int id, FcBlanks* blanks, int* count);
 
 /* fcfs.c */
-/*FcPublic*/ FcFontSet * FcFontSetCreate ();
+/*FcPublic*/ FcFontSet* FcFontSetCreate ();
 /*FcPublic*/ void FcFontSetDestroy (FcFontSet* s);
 /*FcPublic*/ FcBool FcFontSetAdd (FcFontSet* s, FcPattern* font);
 
 /* fcinit.c */
-/*FcPublic*/ FcConfig * FcInitLoadConfig ();
-/*FcPublic*/ FcConfig * FcInitLoadConfigAndFonts ();
+/*FcPublic*/ FcConfig* FcInitLoadConfig ();
+/*FcPublic*/ FcConfig* FcInitLoadConfigAndFonts ();
 /*FcPublic*/ FcBool FcInit ();
 /*FcPublic*/ void FcFini ();
 /*FcPublic*/ int FcGetVersion ();
@@ -402,8 +402,8 @@ enum FC_CHARSET_DONE = (cast(FcChar32)-1);
 /*FcPublic*/ FcBool FcInitBringUptoDate ();
 
 /* fclang.c */
-/*FcPublic*/ FcStrSet * FcGetLangs ();
-/*FcPublic*/ FcChar8 * FcLangNormalize (const(FcChar8)* lang);
+/*FcPublic*/ FcStrSet* FcGetLangs ();
+/*FcPublic*/ FcChar8* FcLangNormalize (const(FcChar8)* lang);
 /*FcPublic*/ const(FcCharSet)* FcLangGetCharSet (const(FcChar8)* lang);
 /*FcPublic*/ FcLangSet* FcLangSetCreate ();
 /*FcPublic*/ void FcLangSetDestroy (FcLangSet* ls);
@@ -415,39 +415,39 @@ enum FC_CHARSET_DONE = (cast(FcChar32)-1);
 /*FcPublic*/ FcBool FcLangSetContains (const(FcLangSet)* lsa, const(FcLangSet)* lsb);
 /*FcPublic*/ FcBool FcLangSetEqual (const(FcLangSet)* lsa, const(FcLangSet)* lsb);
 /*FcPublic*/ FcChar32 FcLangSetHash (const(FcLangSet)* ls);
-/*FcPublic*/ FcStrSet * FcLangSetGetLangs (const(FcLangSet)* ls);
-/*FcPublic*/ FcLangSet * FcLangSetUnion (const(FcLangSet)* a, const(FcLangSet)* b);
-/*FcPublic*/ FcLangSet * FcLangSetSubtract (const(FcLangSet)* a, const(FcLangSet)* b);
+/*FcPublic*/ FcStrSet* FcLangSetGetLangs (const(FcLangSet)* ls);
+/*FcPublic*/ FcLangSet* FcLangSetUnion (const(FcLangSet)* a, const(FcLangSet)* b);
+/*FcPublic*/ FcLangSet* FcLangSetSubtract (const(FcLangSet)* a, const(FcLangSet)* b);
 
 /* fclist.c */
-/*FcPublic*/ FcObjectSet * FcObjectSetCreate ();
+/*FcPublic*/ FcObjectSet* FcObjectSetCreate ();
 /*FcPublic*/ FcBool FcObjectSetAdd (FcObjectSet* os, const(char)* object);
 /*FcPublic*/ void FcObjectSetDestroy (FcObjectSet* os);
-/*FcPublic*/ FcObjectSet * FcObjectSetVaBuild (const(char)* first, va_list va);
-/*FcPublic*/ FcObjectSet * FcObjectSetBuild (const(char)* first, ...) /*FC_ATTRIBUTE_SENTINEL(0)*/;
-/*FcPublic*/ FcFontSet * FcFontSetList (FcConfig* config, FcFontSet** sets, int nsets, FcPattern* p, FcObjectSet* os);
-/*FcPublic*/ FcFontSet * FcFontList (FcConfig* config, FcPattern* p, FcObjectSet* os);
+/*FcPublic*/ FcObjectSet* FcObjectSetVaBuild (const(char)* first, va_list va);
+/*FcPublic*/ FcObjectSet* FcObjectSetBuild (const(char)* first, ...) /*FC_ATTRIBUTE_SENTINEL(0)*/;
+/*FcPublic*/ FcFontSet* FcFontSetList (FcConfig* config, FcFontSet** sets, int nsets, FcPattern* p, FcObjectSet* os);
+/*FcPublic*/ FcFontSet* FcFontList (FcConfig* config, FcPattern* p, FcObjectSet* os);
 
 /* fcatomic.c */
-/*FcPublic*/ FcAtomic * FcAtomicCreate (const(FcChar8)* file);
+/*FcPublic*/ FcAtomic* FcAtomicCreate (const(FcChar8)* file);
 /*FcPublic*/ FcBool FcAtomicLock (FcAtomic* atomic);
-/*FcPublic*/ FcChar8 * FcAtomicNewFile (FcAtomic* atomic);
-/*FcPublic*/ FcChar8 * FcAtomicOrigFile (FcAtomic* atomic);
+/*FcPublic*/ FcChar8* FcAtomicNewFile (FcAtomic* atomic);
+/*FcPublic*/ FcChar8* FcAtomicOrigFile (FcAtomic* atomic);
 /*FcPublic*/ FcBool FcAtomicReplaceOrig (FcAtomic* atomic);
 /*FcPublic*/ void FcAtomicDeleteNew (FcAtomic* atomic);
 /*FcPublic*/ void FcAtomicUnlock (FcAtomic* atomic);
 /*FcPublic*/ void FcAtomicDestroy (FcAtomic* atomic);
 
 /* fcmatch.c */
-/*FcPublic*/ FcPattern * FcFontSetMatch (FcConfig* config, FcFontSet** sets, int nsets, FcPattern* p, FcResult* result);
-/*FcPublic*/ FcPattern * FcFontMatch (FcConfig* config, FcPattern* p, FcResult* result);
-/*FcPublic*/ FcPattern * FcFontRenderPrepare (FcConfig* config, FcPattern* pat, FcPattern* font);
-/*FcPublic*/ FcFontSet * FcFontSetSort (FcConfig* config, FcFontSet** sets, int      nsets, FcPattern* p, FcBool     trim, FcCharSet** csp,FcResult* result);
-/*FcPublic*/ FcFontSet * FcFontSort (FcConfig* config, FcPattern* p, FcBool   trim, FcCharSet** csp, FcResult* result);
+/*FcPublic*/ FcPattern* FcFontSetMatch (FcConfig* config, FcFontSet** sets, int nsets, FcPattern* p, FcResult* result);
+/*FcPublic*/ FcPattern* FcFontMatch (FcConfig* config, FcPattern* p, FcResult* result);
+/*FcPublic*/ FcPattern* FcFontRenderPrepare (FcConfig* config, FcPattern* pat, FcPattern* font);
+/*FcPublic*/ FcFontSet* FcFontSetSort (FcConfig* config, FcFontSet** sets, int      nsets, FcPattern* p, FcBool     trim, FcCharSet** csp,FcResult* result);
+/*FcPublic*/ FcFontSet* FcFontSort (FcConfig* config, FcPattern* p, FcBool   trim, FcCharSet** csp, FcResult* result);
 /*FcPublic*/ void FcFontSetSortDestroy (FcFontSet* fs);
 
 /* fcmatrix.c */
-/*FcPublic*/ FcMatrix * FcMatrixCopy (const(FcMatrix)* mat);
+/*FcPublic*/ FcMatrix* FcMatrixCopy (const(FcMatrix)* mat);
 /*FcPublic*/ FcBool FcMatrixEqual (const(FcMatrix)* mat1, const(FcMatrix)* mat2);
 /*FcPublic*/ void FcMatrixMultiply (FcMatrix* result, const(FcMatrix)* a, const(FcMatrix)* b);
 /*FcPublic*/ void FcMatrixRotate (FcMatrix* m, double c, double s);
@@ -466,14 +466,14 @@ enum FC_CHARSET_DONE = (cast(FcChar32)-1);
 /*FcPublic*/ FcBool FcNameUnregisterConstants (const(FcConstant)* consts, int nconsts);
 /*FcPublic*/ const(FcConstant)* FcNameGetConstant (const(FcChar8)* string);
 /*FcPublic*/ FcBool FcNameConstant (const(FcChar8)* string, int* result);
-/*FcPublic*/ FcPattern * FcNameParse (const(FcChar8)* name);
-/*FcPublic*/ FcChar8 * FcNameUnparse (FcPattern* pat);
+/*FcPublic*/ FcPattern* FcNameParse (const(FcChar8)* name);
+/*FcPublic*/ FcChar8* FcNameUnparse (FcPattern* pat);
 
 /* fcpat.c */
-/*FcPublic*/ FcPattern * FcPatternCreate ();
-/*FcPublic*/ FcPattern * FcPatternDuplicate (const(FcPattern)* p);
+/*FcPublic*/ FcPattern* FcPatternCreate ();
+/*FcPublic*/ FcPattern* FcPatternDuplicate (const(FcPattern)* p);
 /*FcPublic*/ void FcPatternReference (FcPattern* p);
-/*FcPublic*/ FcPattern * FcPatternFilter (FcPattern* p, const(FcObjectSet)* os);
+/*FcPublic*/ FcPattern* FcPatternFilter (FcPattern* p, const(FcObjectSet)* os);
 /*FcPublic*/ void FcValueDestroy (FcValue v);
 /*FcPublic*/ FcBool FcValueEqual (FcValue va, FcValue vb);
 /*FcPublic*/ FcValue FcValueSave (FcValue v);
@@ -500,14 +500,14 @@ enum FC_CHARSET_DONE = (cast(FcChar32)-1);
 /*FcPublic*/ FcResult FcPatternGetCharSet (const(FcPattern)* p, const(char)* object, int n, FcCharSet** c);
 /*FcPublic*/ FcResult FcPatternGetBool (const(FcPattern)* p, const(char)* object, int n, FcBool* b);
 /*FcPublic*/ FcResult FcPatternGetLangSet (const(FcPattern)* p, const(char)* object, int n, FcLangSet** ls);
-/*FcPublic*/ FcPattern * FcPatternVaBuild (FcPattern* p, va_list va);
-/*FcPublic*/ FcPattern * FcPatternBuild (FcPattern* p, ...) /*FC_ATTRIBUTE_SENTINEL(0)*/;
-/*FcPublic*/ FcChar8 * FcPatternFormat (FcPattern* pat, const(FcChar8)* format);
+/*FcPublic*/ FcPattern* FcPatternVaBuild (FcPattern* p, va_list va);
+/*FcPublic*/ FcPattern* FcPatternBuild (FcPattern* p, ...) /*FC_ATTRIBUTE_SENTINEL(0)*/;
+/*FcPublic*/ FcChar8* FcPatternFormat (FcPattern* pat, const(FcChar8)* format);
 
 /* fcstr.c */
-/*FcPublic*/ FcChar8 * FcStrCopy (const(FcChar8)* s);
-/*FcPublic*/ FcChar8 * FcStrCopyFilename (const(FcChar8)* s);
-/*FcPublic*/ FcChar8 * FcStrPlus (const(FcChar8)* s1, const(FcChar8)* s2);
+/*FcPublic*/ FcChar8* FcStrCopy (const(FcChar8)* s);
+/*FcPublic*/ FcChar8* FcStrCopyFilename (const(FcChar8)* s);
+/*FcPublic*/ FcChar8* FcStrPlus (const(FcChar8)* s1, const(FcChar8)* s2);
 /*FcPublic*/ void FcStrFree (FcChar8* s);
 
 /* These are ASCII only, suitable only for pattern element names */
@@ -517,7 +517,7 @@ enum FC_CHARSET_DONE = (cast(FcChar32)-1);
 #define FcToLower(c)  (FcIsUpper(c) ? (c) - 0101 + 0141 : (c))
 */
 
-/*FcPublic*/ FcChar8 * FcStrDowncase (const(FcChar8)* s);
+/*FcPublic*/ FcChar8* FcStrDowncase (const(FcChar8)* s);
 /*FcPublic*/ int FcStrCmpIgnoreCase (const(FcChar8)* s1, const(FcChar8)* s2);
 /*FcPublic*/ int FcStrCmp (const(FcChar8)* s1, const(FcChar8)* s2);
 /*FcPublic*/ const(FcChar8)* FcStrStrIgnoreCase (const(FcChar8)* s1, const(FcChar8)* s2);
@@ -530,18 +530,18 @@ enum FC_UTF8_MAX_LEN = 6;
 /*FcPublic*/ int FcUcs4ToUtf8 (FcChar32  ucs4, FcChar8*/*[FC_UTF8_MAX_LEN]*/ dest);
 /*FcPublic*/ int FcUtf16ToUcs4 (const(FcChar8)* src_orig, FcEndian endian, FcChar32* dst, int len);     /* len: in bytes */
 /*FcPublic*/ FcBool FcUtf16Len (const(FcChar8)* string, FcEndian endian, int len, int* nchar, int* wchr); /* len: in bytes */
-/*FcPublic*/ FcChar8 * FcStrDirname (const(FcChar8)* file);
-/*FcPublic*/ FcChar8 * FcStrBasename (const(FcChar8)* file);
-/*FcPublic*/ FcStrSet * FcStrSetCreate ();
+/*FcPublic*/ FcChar8* FcStrDirname (const(FcChar8)* file);
+/*FcPublic*/ FcChar8* FcStrBasename (const(FcChar8)* file);
+/*FcPublic*/ FcStrSet* FcStrSetCreate ();
 /*FcPublic*/ FcBool FcStrSetMember (FcStrSet* set, const(FcChar8)* s);
 /*FcPublic*/ FcBool FcStrSetEqual (FcStrSet* sa, FcStrSet* sb);
 /*FcPublic*/ FcBool FcStrSetAdd (FcStrSet* set, const(FcChar8)* s);
 /*FcPublic*/ FcBool FcStrSetAddFilename (FcStrSet* set, const(FcChar8)* s);
 /*FcPublic*/ FcBool FcStrSetDel (FcStrSet* set, const(FcChar8)* s);
 /*FcPublic*/ void FcStrSetDestroy (FcStrSet* set);
-/*FcPublic*/ FcStrList * FcStrListCreate (FcStrSet* set);
+/*FcPublic*/ FcStrList* FcStrListCreate (FcStrSet* set);
 /*FcPublic*/ void FcStrListFirst (FcStrList* list);
-/*FcPublic*/ FcChar8 * FcStrListNext (FcStrList* list);
+/*FcPublic*/ FcChar8* FcStrListNext (FcStrList* list);
 /*FcPublic*/ void FcStrListDone (FcStrList* list);
 
 /* fcxml.c */
@@ -561,8 +561,8 @@ enum FC_UTF8_MAX_LEN = 6;
 
 /* fcfreetype.h */
 /*FcPublic*/ FT_UInt FcFreeTypeCharIndex (FT_Face face, FcChar32 ucs4);
-/*FcPublic*/ FcCharSet * FcFreeTypeCharSetAndSpacing (FT_Face face, FcBlanks* blanks, int* spacing);
-/*FcPublic*/ FcCharSet * FcFreeTypeCharSet (FT_Face face, FcBlanks* blanks);
+/*FcPublic*/ FcCharSet* FcFreeTypeCharSetAndSpacing (FT_Face face, FcBlanks* blanks, int* spacing);
+/*FcPublic*/ FcCharSet* FcFreeTypeCharSet (FT_Face face, FcBlanks* blanks);
 /*FcPublic*/ FcResult FcPatternGetFTFace (const(FcPattern)* p, const(char)* object, int n, FT_Face* f);
 /*FcPublic*/ FcBool FcPatternAddFTFace (FcPattern* p, const(char)* object, const FT_Face f);
-/*FcPublic*/ FcPattern * FcFreeTypeQueryFace (const FT_Face face, const(FcChar8)* file, int id, FcBlanks* blanks);
+/*FcPublic*/ FcPattern* FcFreeTypeQueryFace (const FT_Face face, const(FcChar8)* file, int id, FcBlanks* blanks);
