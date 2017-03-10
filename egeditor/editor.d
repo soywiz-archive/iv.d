@@ -1444,7 +1444,7 @@ public:
   }
 
   ///
-  final void doBookmarkJumpUp () nothrow @nogc {
+  final void doBookmarkJumpUp () nothrow {
     int bestBM = -1;
     foreach (int lidx; linebookmarked.byKey) {
       if (lidx < cy && lidx > bestBM) bestBM = lidx;
@@ -1459,7 +1459,7 @@ public:
   }
 
   ///
-  final void doBookmarkJumpDown () nothrow @nogc {
+  final void doBookmarkJumpDown () nothrow {
     int bestBM = int.max;
     foreach (int lidx; linebookmarked.byKey) {
       if (lidx > cy && lidx < bestBM) bestBM = lidx;
@@ -1664,6 +1664,9 @@ public:
     resize(nw, nh);
   }
 
+  final @property void curx (int v) nothrow @system { gotoXY(v, cy); } ///
+  final @property void cury (int v) nothrow @system { gotoXY(cx, v); } ///
+
   final @property nothrow @safe @nogc {
     /// has active marked block?
     bool hasMarkedBlock () const pure { pragma(inline, true); return (bstart < bend); }
@@ -1744,9 +1747,6 @@ public:
     bool textChanged () const pure { pragma(inline, true); return txchanged; } ///
     void textChanged (bool v) pure { pragma(inline, true); txchanged = v; } ///
 
-    void curx (int v) @system { gotoXY(v, cy); } ///
-    void cury (int v) @system { gotoXY(cx, v); } ///
-
     ///
     void topline (int v) @system {
       if (v < 0) v = 0;
@@ -1788,7 +1788,7 @@ public:
   final void fullDirty () nothrow @safe @nogc { dirtyLines[] = true; }
 
   /// absolute coordinates in text
-  final void gotoXY(bool vcenter=false) (int nx, int ny) nothrow @nogc {
+  final void gotoXY(bool vcenter=false) (int nx, int ny) nothrow {
     if (nx < 0) nx = 0;
     if (ny < 0) ny = 0;
     if (ny >= gb.linecount) ny = gb.linecount-1;
@@ -1803,7 +1803,7 @@ public:
   }
 
   ///
-  final void gotoPos(bool vcenter=false) (int pos) nothrow @nogc {
+  final void gotoPos(bool vcenter=false) (int pos) nothrow {
     if (pos < 0) pos = 0;
     if (pos > gb.textsize) pos = gb.textsize;
     int rx, ry;
@@ -1976,21 +1976,21 @@ public:
   }
 
   /// this should reset text width iterator; tabsize > 0: process tabs as... well... tabs ;-)
-  void textWidthReset (int tabsize) nothrow @trusted @nogc {}
+  void textWidthReset (int tabsize) nothrow @trusted {}
 
   /// advance text width iterator, return current x position for drawing next char
-  int textWidthAdvance (char ch) nothrow @trusted @nogc { return 0; }
+  int textWidthAdvance (char ch) nothrow @trusted { return 0; }
 
   /// advance text width iterator, return current x position for drawing next char
-  int textWidthAdvanceUtfuck (dchar ch) nothrow @trusted @nogc { return 0; }
+  int textWidthAdvanceUtfuck (dchar ch) nothrow @trusted { return 0; }
 
   /// finish text iterator, return position after last char
-  int textWidthAdvanceFinish () nothrow @trusted @nogc { return 0; }
+  int textWidthAdvanceFinish () nothrow @trusted { return 0; }
 
   //obsolete: non-final, so i can do proprotional fonts in the future
 
   ///
-  final void makeCurXVisible () nothrow @safe @nogc {
+  final void makeCurXVisible () nothrow @safe {
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
     int rx, ry;
@@ -2036,7 +2036,7 @@ public:
   }
 
   /// cursor position in "local" coords: from widget (x0,y0), possibly in pixels
-  final void localCursorXY (out int lcx, out int lcy) nothrow @trusted @nogc {
+  final void localCursorXY (out int lcx, out int lcy) nothrow @trusted {
     int rx, ry;
     if (!inPixels) {
       gb.pos2xyVT(curpos, rx, ry);
@@ -2074,7 +2074,7 @@ public:
 
   /// convert coordinates in widget into text coordinates; can be used to convert mouse click position into text position
   /// WARNING: ty can be equal to linecount or -1!
-  final void widget2text (int mx, int my, out int tx, out int ty) nothrow @trusted @nogc {
+  final void widget2text (int mx, int my, out int tx, out int ty) nothrow @trusted {
     if (!inPixels) {
       int ry = my+mTopLine;
       if (ry < 0) { ty = -1; return; } // tx is zero here
@@ -2140,7 +2140,7 @@ public:
   }
 
   ///
-  final void makeCurLineVisible () nothrow @safe @nogc {
+  final void makeCurLineVisible () nothrow @safe {
     if (cy < 0) cy = 0;
     if (cy >= gb.linecount) cy = gb.linecount-1;
     if (cy < mTopLine) {
@@ -2155,7 +2155,7 @@ public:
   }
 
   ///
-  final void makeCurLineVisibleCentered (bool forced=false) nothrow @safe @nogc {
+  final void makeCurLineVisibleCentered (bool forced=false) nothrow @safe {
     if (forced || !isCurLineVisible) {
       if (cy < 0) cy = 0;
       if (cy >= gb.linecount) cy = gb.linecount-1;
@@ -2315,7 +2315,7 @@ public:
   }
 
   /// should be called after cursor position change
-  protected final void growBlockMark () nothrow @safe @nogc {
+  protected final void growBlockMark () nothrow @safe {
     if (!markingBlock || bstart < 0) return;
     makeCurLineVisible();
     int ry;
