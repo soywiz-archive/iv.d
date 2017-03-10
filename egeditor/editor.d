@@ -1984,6 +1984,9 @@ public:
   /// advance text width iterator, return current x position for drawing next char
   int textWidthAdvanceUtfuck (dchar ch) nothrow @trusted { return 0; }
 
+  /// return position after last char, preferably without char spacing
+  int textWidthOfsEndChar () nothrow @trusted { return 0; }
+
   /// finish text iterator, return position after last char
   int textWidthAdvanceFinish () nothrow @trusted { return 0; }
 
@@ -2051,24 +2054,36 @@ public:
       textWidthReset(visualtabs ? gb.tabsize : 0);
       auto pos = gb.line2pos(ry);
       auto ts = gb.textsize;
-      int linex = 0;
       immutable bool ufuck = gb.utfuck;
-      immutable bool sl = mSingleLine;
-      while (pos <= ts) {
-        if (pos == ts) { linex = textWidthAdvanceFinish(); break; }
-        // advance one symbol
-        char ch = gb[pos];
-        if (!sl && ch == '\n') { linex = textWidthAdvanceFinish(); break; }
-        if (!ufuck || ch < 128) {
-          linex = textWidthAdvance(ch);
-          ++pos;
-        } else {
-          linex = textWidthAdvanceUtfuck(dcharAtAdvance(pos));
+      if (mSingleLine) {
+        while (pos < ts) {
+          // advance one symbol
+          char ch = gb[pos];
+          if (!ufuck || ch < 128) {
+            textWidthAdvance(ch);
+            ++pos;
+          } else {
+            textWidthAdvanceUtfuck(dcharAtAdvance(pos));
+          }
+          --rx;
+          if (rx == 0) break;
         }
-        if (rx == 0) break;
-        --rx;
+      } else {
+        while (pos < ts) {
+          // advance one symbol
+          char ch = gb[pos];
+          if (ch == '\n') break;
+          if (!ufuck || ch < 128) {
+            textWidthAdvance(ch);
+            ++pos;
+          } else {
+            textWidthAdvanceUtfuck(dcharAtAdvance(pos));
+          }
+          --rx;
+          if (rx == 0) break;
+        }
       }
-      lcx = linex-mXOfs;
+      lcx = /*textWidthAdvanceFinish()*/textWidthOfsEndChar()-mXOfs;
     }
   }
 
