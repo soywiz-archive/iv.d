@@ -35,7 +35,7 @@
  *  Carl D. Worth <cworth@cworth.org>
  */
 module iv.cairo;
-import core.stdc.config : c_ulong;
+import core.stdc.config : c_long, c_ulong;
 
 extern(C) nothrow:
 
@@ -55,19 +55,19 @@ enum CAIRO_HAS_GOBJECT_FUNCTIONS = false; // was true
 enum CAIRO_HAS_IMAGE_SURFACE = true;
 enum CAIRO_HAS_MIME_SURFACE = true;
 enum CAIRO_HAS_OBSERVER_SURFACE = true;
-enum CAIRO_HAS_PDF_SURFACE = false; // was true
+enum CAIRO_HAS_PDF_SURFACE = true;
 enum CAIRO_HAS_PNG_FUNCTIONS = true;
-enum CAIRO_HAS_PS_SURFACE = false; // was true
+enum CAIRO_HAS_PS_SURFACE = true;
 enum CAIRO_HAS_RECORDING_SURFACE = true;
-enum CAIRO_HAS_SCRIPT_SURFACE = false; // was true
-enum CAIRO_HAS_SVG_SURFACE = false; // was true
-enum CAIRO_HAS_TEE_SURFACE = false; // was true
+enum CAIRO_HAS_SCRIPT_SURFACE = true;
+enum CAIRO_HAS_SVG_SURFACE = true;
+enum CAIRO_HAS_TEE_SURFACE = true;
 enum CAIRO_HAS_USER_FONT = true;
 enum CAIRO_HAS_XCB_SHM_FUNCTIONS = false; // was true
 enum CAIRO_HAS_XCB_SURFACE = false; // was true
 enum CAIRO_HAS_XLIB_SURFACE = true;
 enum CAIRO_HAS_XLIB_XRENDER_SURFACE = false; // was true
-enum CAIRO_HAS_XML_SURFACE = false; // was true
+enum CAIRO_HAS_XML_SURFACE = true;
 
 enum CAIRO_HAS_BEOS_SURFACE = false;
 enum CAIRO_HAS_COGL_SURFACE = false;
@@ -2595,4 +2595,403 @@ static if (CAIRO_HAS_FT_FONT) {
     /*cairo_public*/ cairo_font_face_t* cairo_ft_font_face_create_for_pattern (FcPattern* pattern);
     /*cairo_public*/ void cairo_ft_font_options_substitute (const(cairo_font_options_t)* options, FcPattern* pattern);
   }
+}
+
+
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2002 University of Southern California
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
+ *
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is University of Southern
+ * California.
+ *
+ * Contributor(s):
+ *  Carl D. Worth <cworth@cworth.org>
+ */
+static if (CAIRO_HAS_PDF_SURFACE) {
+  /**
+   * cairo_pdf_version_t:
+   * @CAIRO_PDF_VERSION_1_4: The version 1.4 of the PDF specification. (Since 1.10)
+   * @CAIRO_PDF_VERSION_1_5: The version 1.5 of the PDF specification. (Since 1.10)
+   *
+   * #cairo_pdf_version_t is used to describe the version number of the PDF
+   * specification that a generated PDF file will conform to.
+   *
+   * Since: 1.10
+   **/
+  alias cairo_pdf_version_t = int;
+  enum : cairo_pdf_version_t {
+    CAIRO_PDF_VERSION_1_4,
+    CAIRO_PDF_VERSION_1_5
+  }
+
+  /*cairo_public*/ cairo_surface_t* cairo_pdf_surface_create (const(char)* filename, double width_in_points, double height_in_points);
+  /*cairo_public*/ cairo_surface_t* cairo_pdf_surface_create_for_stream (cairo_write_func_t write_func, void* closure, double width_in_points, double height_in_points);
+  /*cairo_public*/ void cairo_pdf_surface_restrict_to_version (cairo_surface_t* surface, cairo_pdf_version_t version_);
+  /*cairo_public*/ void cairo_pdf_get_versions (const(cairo_pdf_version_t)** versions, int* num_versions);
+  /*cairo_public*/ const(char)* cairo_pdf_version_to_string (cairo_pdf_version_t version_);
+  /*cairo_public*/ void cairo_pdf_surface_set_size (cairo_surface_t* surface, double width_in_points, double height_in_points);
+}
+
+
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2002 University of Southern California
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
+ *
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is University of Southern
+ * California.
+ *
+ * Contributor(s):
+ *  Carl D. Worth <cworth@cworth.org>
+ */
+static if (CAIRO_HAS_PS_SURFACE) {
+  /* PS-surface functions */
+
+  /**
+   * cairo_ps_level_t:
+   * @CAIRO_PS_LEVEL_2: The language level 2 of the PostScript specification. (Since 1.6)
+   * @CAIRO_PS_LEVEL_3: The language level 3 of the PostScript specification. (Since 1.6)
+   *
+   * #cairo_ps_level_t is used to describe the language level of the
+   * PostScript Language Reference that a generated PostScript file will
+   * conform to.
+   *
+   * Since: 1.6
+   **/
+  alias cairo_ps_level_t = int;
+  enum : cairo_ps_level_t {
+    CAIRO_PS_LEVEL_2,
+    CAIRO_PS_LEVEL_3
+  }
+
+  /*cairo_public*/ cairo_surface_t* cairo_ps_surface_create (const(char)* filename, double width_in_points, double height_in_points);
+  /*cairo_public*/ cairo_surface_t* cairo_ps_surface_create_for_stream (cairo_write_func_t write_func, void* closure, double width_in_points, double height_in_points);
+  /*cairo_public*/ void cairo_ps_surface_restrict_to_level (cairo_surface_t* surface, cairo_ps_level_t level);
+  /*cairo_public*/ void cairo_ps_get_levels (const(cairo_ps_level_t)** levels, int* num_levels);
+  /*cairo_public*/ const(char)* cairo_ps_level_to_string (cairo_ps_level_t level);
+  /*cairo_public*/ void cairo_ps_surface_set_eps (cairo_surface_t* surface, cairo_bool_t eps);
+  /*cairo_public*/ cairo_bool_t cairo_ps_surface_get_eps (cairo_surface_t* surface);
+  /*cairo_public*/ void cairo_ps_surface_set_size (cairo_surface_t* surface, double width_in_points, double height_in_points);
+  /*cairo_public*/ void cairo_ps_surface_dsc_comment (cairo_surface_t* surface, const(char)* comment);
+  /*cairo_public*/ void cairo_ps_surface_dsc_begin_setup (cairo_surface_t* surface);
+  /*cairo_public*/ void cairo_ps_surface_dsc_begin_page_setup (cairo_surface_t* surface);
+}
+
+
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2008 Chris Wilson
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
+ *
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is Chris Wilson
+ *
+ * Contributor(s):
+ *  Chris Wilson <chris@chris-wilson.co.uk>
+ */
+static if (CAIRO_HAS_SCRIPT_SURFACE) {
+  /**
+   * cairo_script_mode_t:
+   * @CAIRO_SCRIPT_MODE_ASCII: the output will be in readable text (default). (Since 1.12)
+   * @CAIRO_SCRIPT_MODE_BINARY: the output will use byte codes. (Since 1.12)
+   *
+   * A set of script output variants.
+   *
+   * Since: 1.12
+   **/
+  alias cairo_script_mode_t = int;
+  enum : cairo_script_mode_t {
+    CAIRO_SCRIPT_MODE_ASCII,
+    CAIRO_SCRIPT_MODE_BINARY
+  }
+
+  /*cairo_public*/ cairo_device_t* cairo_script_create (const(char)* filename);
+  /*cairo_public*/ cairo_device_t* cairo_script_create_for_stream (cairo_write_func_t write_func, void* closure);
+  /*cairo_public*/ void cairo_script_write_comment (cairo_device_t* script, const(char)* comment, int len);
+  /*cairo_public*/ void cairo_script_set_mode (cairo_device_t* script, cairo_script_mode_t mode);
+  /*cairo_public*/ cairo_script_mode_t cairo_script_get_mode (cairo_device_t* script);
+  /*cairo_public*/ cairo_surface_t* cairo_script_surface_create (cairo_device_t* script, cairo_content_t content, double width, double height);
+  /*cairo_public*/ cairo_surface_t* cairo_script_surface_create_for_target (cairo_device_t* script, cairo_surface_t* target);
+  /*cairo_public*/ cairo_status_t cairo_script_from_recording_surface (cairo_device_t* script, cairo_surface_t* recording_surface);
+}
+
+
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2008 Chris Wilson
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
+ *
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is Chris Wilson
+ *
+ * Contributor(s):
+ *  Chris Wilson <chris@chris-wilson.co.uk>
+ */
+import core.stdc.stdio : FILE;
+struct cairo_script_interpreter_t;
+
+/* XXX expose csi_dictionary_t and pass to hooks */
+alias csi_destroy_func_t = void function (void* closure, void* ptr);
+
+alias csi_surface_create_func_t = cairo_surface_t* function (void* closure, cairo_content_t content, double width, double height, c_long uid);
+alias csi_context_create_func_t = cairo_t* function (void* closure, cairo_surface_t* surface);
+alias csi_show_page_func_t = void function (void* closure, cairo_t* cr);
+alias csi_copy_page_func_t = void function (void* closure, cairo_t* cr);
+alias csi_create_source_image_t = cairo_surface_t* function (void* closure, cairo_format_t format, int width, int height, c_long uid);
+
+struct cairo_script_interpreter_hooks_t {
+  void* closure;
+  csi_surface_create_func_t surface_create;
+  csi_destroy_func_t surface_destroy;
+  csi_context_create_func_t context_create;
+  csi_destroy_func_t context_destroy;
+  csi_show_page_func_t show_page;
+  csi_copy_page_func_t copy_page;
+  csi_create_source_image_t create_source_image;
+}
+
+/*cairo_public*/ cairo_script_interpreter_t* cairo_script_interpreter_create ();
+/*cairo_public*/ void cairo_script_interpreter_install_hooks (cairo_script_interpreter_t* ctx, const(cairo_script_interpreter_hooks_t)* hooks);
+/*cairo_public*/ cairo_status_t cairo_script_interpreter_run (cairo_script_interpreter_t* ctx, const(char)* filename);
+/*cairo_public*/ cairo_status_t cairo_script_interpreter_feed_stream (cairo_script_interpreter_t* ctx, FILE* stream);
+/*cairo_public*/ cairo_status_t cairo_script_interpreter_feed_string (cairo_script_interpreter_t* ctx, const(char)* line, int len);
+/*cairo_public*/ uint cairo_script_interpreter_get_line_number (cairo_script_interpreter_t* ctx);
+/*cairo_public*/ cairo_script_interpreter_t* cairo_script_interpreter_reference (cairo_script_interpreter_t* ctx);
+/*cairo_public*/ cairo_status_t cairo_script_interpreter_finish (cairo_script_interpreter_t* ctx);
+/*cairo_public*/ cairo_status_t cairo_script_interpreter_destroy (cairo_script_interpreter_t* ctx);
+/*cairo_public*/ cairo_status_t cairo_script_interpreter_translate_stream (FILE* stream, cairo_write_func_t write_func, void* closure);
+
+
+/* cairo - a vector graphics library with display and print output
+ *
+ * cairo-svg.h
+ *
+ * Copyright © 2005 Emmanuel Pacaud <emmanuel.pacaud@univ-poitiers.fr>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
+ *
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ */
+static if (CAIRO_HAS_SVG_SURFACE) {
+  /**
+   * cairo_svg_version_t:
+   * @CAIRO_SVG_VERSION_1_1: The version 1.1 of the SVG specification. (Since 1.2)
+   * @CAIRO_SVG_VERSION_1_2: The version 1.2 of the SVG specification. (Since 1.2)
+   *
+   * #cairo_svg_version_t is used to describe the version number of the SVG
+   * specification that a generated SVG file will conform to.
+   *
+   * Since: 1.2
+   **/
+  alias cairo_svg_version_t = int;
+  enum : cairo_svg_version_t {
+    CAIRO_SVG_VERSION_1_1,
+    CAIRO_SVG_VERSION_1_2
+  }
+
+  /*cairo_public*/ cairo_surface_t* cairo_svg_surface_create (const(char)* filename, double width_in_points, double height_in_points);
+  /*cairo_public*/ cairo_surface_t* cairo_svg_surface_create_for_stream (cairo_write_func_t write_func, void* closure, double width_in_points, double height_in_points);
+  /*cairo_public*/ void cairo_svg_surface_restrict_to_version (cairo_surface_t* surface, cairo_svg_version_t version_);
+  /*cairo_public*/ void cairo_svg_get_versions (const(cairo_svg_version_t)** versions, int* num_versions);
+  /*cairo_public*/ const(char)* cairo_svg_version_to_string (cairo_svg_version_t version_);
+}
+
+
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2009 Chris Wilson
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
+ *
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is Chris Wilson
+ *
+ * Contributor(s):
+ *  Chris Wilson <chris@chris-wilson.co.uk>
+ */
+static if (CAIRO_HAS_TEE_SURFACE) {
+  /*cairo_public*/ cairo_surface_t* cairo_tee_surface_create (cairo_surface_t* master);
+  /*cairo_public*/ void cairo_tee_surface_add (cairo_surface_t* surface, cairo_surface_t* target);
+  /*cairo_public*/ void cairo_tee_surface_remove (cairo_surface_t* surface, cairo_surface_t* target);
+  /*cairo_public*/ cairo_surface_t* cairo_tee_surface_index (cairo_surface_t* surface, uint index);
+}
+
+
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2009 Chris Wilson
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
+ *
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
+ *
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is Chris Wilson
+ *
+ * Contributor(s):
+ *  Chris Wilson <chris@chris-wilson.co.uk>
+ */
+static if (CAIRO_HAS_XML_SURFACE) {
+  /*cairo_public*/ cairo_device_t* cairo_xml_create (const(char)* filename);
+  /*cairo_public*/ cairo_device_t* cairo_xml_create_for_stream (cairo_write_func_t write_func, void* closure);
+  /*cairo_public*/ cairo_surface_t* cairo_xml_surface_create (cairo_device_t* xml, cairo_content_t content, double width, double height);
+  /*cairo_public*/ cairo_status_t cairo_xml_for_recording_surface (cairo_device_t* xml, cairo_surface_t* surface);
 }
