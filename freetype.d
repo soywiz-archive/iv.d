@@ -78,7 +78,7 @@ struct FT_Data {
 }
 
 extern(C) nothrow {
-  alias FT_Generic_Finalizer = void function (void *object);
+  alias FT_Generic_Finalizer = void function (void* object);
 }
 
 struct FT_Generic {
@@ -447,7 +447,7 @@ version(linux) {
 // ftcache.h
 alias FTC_FaceID = FT_Pointer;
 extern(C) nothrow {
-  alias FTC_Face_Requester = FT_Error function (FTC_FaceID, FT_Library, FT_Pointer, FT_Face*);
+  alias FTC_Face_Requester = FT_Error function (FTC_FaceID face_id, FT_Library library, FT_Pointer request_data, FT_Face* aface);
 }
 
 struct FTC_ManagerRec;
