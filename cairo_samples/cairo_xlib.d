@@ -90,7 +90,7 @@ void turn (double v, double max, double* diff) {
 }
 
 
-void main () {
+void main (string[] args) {
   import core.sys.posix.signal : timespec;
   import core.sys.posix.time : nanosleep;
 
@@ -103,7 +103,11 @@ void main () {
   double dy0 = 2, dy1 = 1.5, dy2 = 1;
   bool running = true;
 
+  import std.conv : to;
+
   x = y = 0;
+  if (args.length > 1) x = to!int(args[1]);
+  if (args.length > 2) y = to!int(args[2]);
   sfc = cairo_create_x11_surface(&x, &y);
   ctx = cairo_create(sfc);
 
