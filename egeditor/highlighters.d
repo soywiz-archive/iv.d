@@ -742,7 +742,7 @@ public:
     if (tst != InvalidState) {
       if (tst != estate) {
         import core.stdc.stdio : stderr, fprintf;
-        stderr.fprintf("WARNING: CONFLICTING TOKEN: '%.*s'\n", cast(uint)tok.length, tok.ptr);
+        stderr.fprintf("WARNING: CONFLICTING TOKEN: '%.*s' (%u:%u)\n", cast(uint)tok.length, tok.ptr, cast(uint)tst, cast(uint)estate);
       }
       return;
     }
@@ -1263,7 +1263,7 @@ public class EdHiTokensC : EdHiTokens {
     addToken("goto", HiKeyword);
     addToken("if", HiKeyword);
     addToken("return", HiKeyword);
-    addToken("short", HiKeyword);
+    //addToken("short", HiKeyword);
     addToken("sizeof", HiKeyword);
     addToken("static", HiKeyword);
     addToken("struct", HiKeyword);
