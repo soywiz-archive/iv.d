@@ -163,6 +163,23 @@ shared static this () { initConsole(); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// initialize OpenGL part of glcmdcon. it is ok to call it with the same dimensions repeatedly.
+/// NOT THREAD-SAFE!
+public void glconInit (uint ascrwdt, uint ascrhgt, uint ascale=1) {
+  if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return;
+  if (ascale < 1 || ascale > 64) return;
+  conScale = ascale;
+  if (scrwdt != ascrwdt || scrhgt != ascrhgt || convbuf is null) {
+    if (rConsoleHeight > 0) rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
+    scrwdt = ascrwdt;
+    scrhgt = ascrhgt;
+    if (rConsoleHeight > scrhgt) rConsoleHeight = scrhgt;
+    //conLastChange = 0;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// call this if window was resized. will return `true` if resize was successfull.
 /// NOT THREAD-SAFE!
 /// can be called instead of `glconInit()`. it is ok to call it with the same dimensions repeatedly.
@@ -174,146 +191,169 @@ public void glconResize (uint ascrwdt, uint ascrhgt, uint ascale=1) {
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared uint* convbuf = null; // RGBA, malloced
 __gshared uint convbufTexId = 0;
+__gshared uint prevScrWdt = 0, prevScrHgt = 0;
+__gshared bool glconRenderFailed = false;
 
 
-/// initialize OpenGL part of glcmdcon. it is ok to call it with the same dimensions repeatedly.
-/// NOT THREAD-SAFE!
-public void glconInit (uint ascrwdt, uint ascrhgt, uint ascale=1) {
-  if (ascrwdt < 64 || ascrhgt < 64 || ascrwdt > 4096 || ascrhgt > 4096) return;
-  if (ascale < 1 || ascale > 64) return;
-  conScale = ascale;
-  if (scrwdt != ascrwdt || scrhgt != ascrhgt || convbuf is null) {
-    import core.stdc.stdlib : realloc;
-
-    if (rConsoleHeight > 0) rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
-    scrwdt = ascrwdt;
-    scrhgt = ascrhgt;
-    if (rConsoleHeight > scrhgt) rConsoleHeight = scrhgt;
-
-    convbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
-    if (convbuf is null) assert(0, "out of memory");
-    convbuf[0..scrwdt*scrhgt] = 0xff000000;
-
+// returns `true` if buffer need to be regenerated
+private bool glconGenRenderBuffer () {
+  if (glconRenderFailed) return false;
+  if (convbuf is null || prevScrWdt != scrwdt || prevScrHgt != scrhgt) {
+    import core.stdc.stdlib : free, realloc;
+    // need new buffer; kill old texture, so it will be recreated
     if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
-
-    enum wrapOpt = GL_REPEAT;
-    enum filterOpt = GL_NEAREST; //GL_LINEAR;
-    enum ttype = GL_UNSIGNED_BYTE;
-
-    glGenTextures(1, &convbufTexId);
-    if (convbufTexId == 0) assert(0, "can't create cmdcon texture");
-
-    GLint gltextbinding;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
-    scope(exit) glBindTexture(GL_TEXTURE_2D, gltextbinding);
-
-    glBindTexture(GL_TEXTURE_2D, convbufTexId);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterOpt);
-    //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-    GLfloat[4] bclr = 0.0;
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
-
-    conLastChange = 0;
+    auto nbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
+    if (nbuf is null) {
+      if (convbuf !is null) { free(convbuf); convbuf = null; }
+      glconRenderFailed = true;
+      return false;
+    }
+    convbuf = nbuf;
+    prevScrWdt = scrwdt;
+    prevScrHgt = scrhgt;
+    convbuf[0..scrwdt*scrhgt] = 0xff000000;
+    return true; // buffer updated
   }
+  return false; // buffer not updated
 }
 
 
+// returns `true` if texture was recreated
+private bool glconGenTexture () {
+  if (glconRenderFailed || convbufTexId != 0) return false;
+
+  enum wrapOpt = GL_REPEAT;
+  enum filterOpt = GL_NEAREST; //GL_LINEAR;
+  enum ttype = GL_UNSIGNED_BYTE;
+
+  glGenTextures(1, &convbufTexId);
+  if (convbufTexId == 0) {
+    import core.stdc.stdlib : free;
+    if (convbuf !is null) { free(convbuf); convbuf = null; }
+    glconRenderFailed = true;
+    return false;
+  }
+
+  GLint gltextbinding;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
+  scope(exit) glBindTexture(GL_TEXTURE_2D, gltextbinding);
+
+  glBindTexture(GL_TEXTURE_2D, convbufTexId);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapOpt);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapOpt);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filterOpt);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filterOpt);
+  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+  //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+  GLfloat[4] bclr = 0.0;
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
+
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
+
+  return true;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// render console (if it is visible). tries hard to not change OpenGL state.
 public void glconDraw () {
   if (!rConsoleVisible) return;
-  if (convbufTexId && convbuf !is null) {
-    consoleLock();
-    scope(exit) consoleUnlock();
 
-    auto updatetex = renderConsole();
+  consoleLock();
+  scope(exit) consoleUnlock();
 
-    GLint glmatmode;
-    GLint gltextbinding;
-    GLint oldprg;
-    GLint oldfbr, oldfbw;
-    GLint[4] glviewport;
-    glGetIntegerv(GL_MATRIX_MODE, &glmatmode);
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
-    glGetIntegerv(GL_VIEWPORT, glviewport.ptr);
-    glGetIntegerv(GL_CURRENT_PROGRAM, &oldprg);
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldfbr);
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldfbw);
-    glMatrixMode(GL_PROJECTION); glPushMatrix();
-    glMatrixMode(GL_MODELVIEW); glPushMatrix();
-    glMatrixMode(GL_TEXTURE); glPushMatrix();
-    glMatrixMode(GL_COLOR); glPushMatrix();
-    glPushAttrib(/*GL_ENABLE_BIT|GL_COLOR_BUFFER_BIT|GL_CURRENT_BIT*/GL_ALL_ATTRIB_BITS); // let's play safe
-    // restore on exit
-    scope(exit) {
-      glPopAttrib(/*GL_ENABLE_BIT*/);
-      glMatrixMode(GL_PROJECTION); glPopMatrix();
-      glMatrixMode(GL_MODELVIEW); glPopMatrix();
-      glMatrixMode(GL_TEXTURE); glPopMatrix();
-      glMatrixMode(GL_COLOR); glPopMatrix();
-      glMatrixMode(glmatmode);
-      if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, oldfbr);
-      if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, oldfbw);
-      glBindTexture(GL_TEXTURE_2D, gltextbinding);
-      if (glHasFunc!"glUseProgram") glUseProgram(oldprg);
-      glViewport(glviewport.ptr[0], glviewport.ptr[1], glviewport.ptr[2], glviewport.ptr[3]);
-    }
+  bool regen = glconGenRenderBuffer();
+  if (glconRenderFailed) return; // alas
 
-    enum x = 0;
-    int y = 0;
-    int w = scrwdt*conScale;
-    int h = scrhgt*conScale;
+  assert(convbuf !is null);
 
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-    if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
-    if (glHasFunc!"glUseProgram") glUseProgram(0);
+  auto updatetex = renderConsole(regen);
+  if (glconGenTexture()) updatetex = false;
+  if (glconRenderFailed) return; // alas
 
-    glMatrixMode(GL_PROJECTION); // for ortho camera
-    glLoadIdentity();
-    // left, right, bottom, top, near, far
-    //glOrtho(0, wdt, 0, hgt, -1, 1); // bottom-to-top
-    glOrtho(0, w, h, 0, -1, 1); // top-to-bottom
-    glViewport(0, 0, w, h);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+  assert(convbufTexId != 0);
 
-    glEnable(GL_TEXTURE_2D);
-    glDisable(GL_LIGHTING);
-    glDisable(GL_DITHER);
-    //glDisable(GL_BLEND);
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    //glDisable(GL_BLEND);
-    glDisable(GL_STENCIL_TEST);
-
-    glBindTexture(GL_TEXTURE_2D, convbufTexId);
-    if (updatetex) {
-      //glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
-    }
-
-    int ofs = (scrhgt-rConsoleHeight)*conScale;
-    y -= ofs;
-    h -= ofs;
-    float alpha = rConAlpha;
-    if (alpha < 0) alpha = 0; else if (alpha > 1) alpha = 1;
-    glColor4f(1, 1, 1, alpha);
-    //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
-    glBegin(GL_QUADS);
-      glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y); // top-left
-      glTexCoord2f(1.0f, 0.0f); glVertex2i(w, y); // top-right
-      glTexCoord2f(1.0f, 1.0f); glVertex2i(w, h); // bottom-right
-      glTexCoord2f(0.0f, 1.0f); glVertex2i(x, h); // bottom-left
-    glEnd();
-    //glDisable(GL_BLEND);
+  GLint glmatmode;
+  GLint gltextbinding;
+  GLint oldprg;
+  GLint oldfbr, oldfbw;
+  GLint[4] glviewport;
+  glGetIntegerv(GL_MATRIX_MODE, &glmatmode);
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &gltextbinding);
+  glGetIntegerv(GL_VIEWPORT, glviewport.ptr);
+  glGetIntegerv(GL_CURRENT_PROGRAM, &oldprg);
+  glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldfbr);
+  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldfbw);
+  glMatrixMode(GL_PROJECTION); glPushMatrix();
+  glMatrixMode(GL_MODELVIEW); glPushMatrix();
+  glMatrixMode(GL_TEXTURE); glPushMatrix();
+  glMatrixMode(GL_COLOR); glPushMatrix();
+  glPushAttrib(/*GL_ENABLE_BIT|GL_COLOR_BUFFER_BIT|GL_CURRENT_BIT*/GL_ALL_ATTRIB_BITS); // let's play safe
+  // restore on exit
+  scope(exit) {
+    glPopAttrib(/*GL_ENABLE_BIT*/);
+    glMatrixMode(GL_PROJECTION); glPopMatrix();
+    glMatrixMode(GL_MODELVIEW); glPopMatrix();
+    glMatrixMode(GL_TEXTURE); glPopMatrix();
+    glMatrixMode(GL_COLOR); glPopMatrix();
+    glMatrixMode(glmatmode);
+    if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, oldfbr);
+    if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, oldfbw);
+    glBindTexture(GL_TEXTURE_2D, gltextbinding);
+    if (glHasFunc!"glUseProgram") glUseProgram(oldprg);
+    glViewport(glviewport.ptr[0], glviewport.ptr[1], glviewport.ptr[2], glviewport.ptr[3]);
   }
+
+  enum x = 0;
+  int y = 0;
+  int w = scrwdt*conScale;
+  int h = scrhgt*conScale;
+
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+  if (glHasFunc!"glUseProgram") glUseProgram(0);
+
+  glMatrixMode(GL_PROJECTION); // for ortho camera
+  glLoadIdentity();
+  // left, right, bottom, top, near, far
+  //glOrtho(0, wdt, 0, hgt, -1, 1); // bottom-to-top
+  glOrtho(0, w, h, 0, -1, 1); // top-to-bottom
+  glViewport(0, 0, w, h);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+
+  glEnable(GL_TEXTURE_2D);
+  glDisable(GL_LIGHTING);
+  glDisable(GL_DITHER);
+  //glDisable(GL_BLEND);
+  glDisable(GL_DEPTH_TEST);
+  glEnable(GL_BLEND);
+  //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  //glDisable(GL_BLEND);
+  glDisable(GL_STENCIL_TEST);
+
+  glBindTexture(GL_TEXTURE_2D, convbufTexId);
+  if (updatetex) {
+    //glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+  }
+
+  int ofs = (scrhgt-rConsoleHeight)*conScale;
+  y -= ofs;
+  h -= ofs;
+  float alpha = rConAlpha;
+  if (alpha < 0) alpha = 0; else if (alpha > 1) alpha = 1;
+  glColor4f(1, 1, 1, alpha);
+  //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
+  glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y); // top-left
+    glTexCoord2f(1.0f, 0.0f); glVertex2i(w, y); // top-right
+    glTexCoord2f(1.0f, 1.0f); glVertex2i(w, h); // bottom-right
+    glTexCoord2f(0.0f, 1.0f); glVertex2i(x, h); // bottom-left
+  glEnd();
+  //glDisable(GL_BLEND);
 }
 
 
@@ -546,8 +586,8 @@ __gshared int prevCurX = -1;
 __gshared int prevIXOfs = 0;
 
 
-bool renderConsole () nothrow @trusted @nogc {
-  if (conLastChange == cbufLastChange && conLastIBChange == conInputLastChange) return false;
+bool renderConsole (bool forced) nothrow @trusted @nogc {
+  if (!forced && (conLastChange == cbufLastChange && conLastIBChange == conInputLastChange)) return false;
 
   enum XOfs = 0;
   immutable sw = scrwdt, sh = scrhgt;
