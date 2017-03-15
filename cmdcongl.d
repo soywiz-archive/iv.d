@@ -712,7 +712,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 static if (OptCmdConGlHasSdpy) {
 import arsd.simpledisplay : KeyEvent, Key, SimpleWindow;
 
-public __gshared string glconShowKey = "Grave"; /// this key will be eaten
+public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
 
 shared static this () {
   conRegVar!glconShowKey("c_togglekey", "console toggle key name");
@@ -811,7 +811,7 @@ public class GLConDoConsoleCommandsEvent {}
 __gshared GLConScreenRebuildEvent evScrRebuild;
 __gshared GLConScreenRepaintEvent evScreenRepaint;
 __gshared GLConDoConsoleCommandsEvent evDoConCommands;
-public __gshared SimpleWindow glconMainWindow;
+public __gshared SimpleWindow glconCtlWindow; /// this window will be used to send messages
 
 shared static this () {
   evScrRebuild = new GLConScreenRebuildEvent();
@@ -828,22 +828,22 @@ shared static this () {
 
 ///
 public void glconPostScreenRebuild () {
-  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConScreenRebuildEvent) glconMainWindow.postEvent(evScrRebuild);
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postEvent(evScrRebuild);
 }
 
 ///
 public void glconPostScreenRepaint () {
-  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConScreenRepaintEvent && !glconMainWindow.eventQueued!GLConScreenRebuildEvent) glconMainWindow.postEvent(evScreenRepaint);
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postEvent(evScreenRepaint);
 }
 
 ///
 public void glconPostScreenRepaintDelayed () {
-  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConScreenRepaintEvent && !glconMainWindow.eventQueued!GLConScreenRebuildEvent) glconMainWindow.postTimeout(evScreenRepaint, 35);
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postTimeout(evScreenRepaint, 35);
 }
 
 ///
 public void glconPostDoConCommands () {
-  if (glconMainWindow !is null && !glconMainWindow.eventQueued!GLConDoConsoleCommandsEvent) glconMainWindow.postEvent(evDoConCommands);
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConDoConsoleCommandsEvent) glconCtlWindow.postEvent(evDoConCommands);
 }
 }
 
