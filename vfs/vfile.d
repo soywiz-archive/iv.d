@@ -592,7 +592,12 @@ protected:
   override ssize read (void* buf, usize count) {
     if (fl is null || err()) return -1;
     if (count == 0) return 0;
-    auto res = gzfread(buf, 1, count, fl);
+    static if (is(typeof(&gzfread))) {
+      auto res = gzfread(buf, 1, count, fl);
+    } else {
+      static if (count.sizeof > uint.sizeof) { if (count >= int.max) return -1; }
+      auto res = gzread(fl, buf, cast(uint)count);
+    }
     if (res == 0) return (err() ? -1 : 0);
     return res;
   }
@@ -600,7 +605,12 @@ protected:
   override ssize write (in void* buf, usize count) {
     if (fl is null || err()) return -1;
     if (count == 0) return 0;
-    auto res = gzfwrite(cast(void*)buf, 1, count, fl); // fuck you, phobos!
+    static if (is(typeof(&gzfwrite))) {
+      auto res = gzfwrite(cast(void*)buf, 1, count, fl); // fuck you, phobos!
+    } else {
+      static if (count.sizeof > uint.sizeof) { if (count >= int.max) return -1; }
+      auto res = gzwrite(fl, cast(void*)buf, cast(uint)count);
+    }
     if (res == 0) return (err() ? -1 : 0);
     return res;
   }
