@@ -831,14 +831,18 @@ public void glconPostScreenRebuild () {
   if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postEvent(evScrRebuild);
 }
 
+public void glconPostScreenRebuildDelayed (int tout=35) {
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postTimeout(evScrRebuild, (tout < 0 ? 0 : tout));
+}
+
 ///
 public void glconPostScreenRepaint () {
   if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postEvent(evScreenRepaint);
 }
 
 ///
-public void glconPostScreenRepaintDelayed () {
-  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postTimeout(evScreenRepaint, 35);
+public void glconPostScreenRepaintDelayed (int tout=35) {
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postTimeout(evScreenRepaint, (tout < 0 ? 0 : tout));
 }
 
 ///
