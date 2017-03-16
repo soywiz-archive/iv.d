@@ -994,7 +994,6 @@ struct ZLibLowLevelRO {
 
   enum ibsize = 32768;
 
-
   VFile zfl; // archive file
   VFSZLibMode mode;
   long stpos; // starting position
@@ -1008,6 +1007,10 @@ struct ZLibLowLevelRO {
   bool eoz;
   bool eofhit;
   string fname;
+  // reading one byte from zlib fuckin' fails. shit.
+  ubyte[256] updata;
+  uint uppos, upused;
+  bool upeoz;
 
   this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
     if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
@@ -1017,6 +1020,8 @@ struct ZLibLowLevelRO {
     pksize = asize;
     mode = amode;
     fname = aname;
+    uppos = upused = 0;
+    upeoz = false;
   }
 
   @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
@@ -1075,11 +1080,27 @@ struct ZLibLowLevelRO {
   private bool unpackNextChunk () {
     while (zs.avail_out > 0) {
       if (eoz) return (size < 0); // `false` for known size, `true` for unknown size
-      if (!readPackedChunk()) return false;
-      auto err = inflate(&zs, Z_SYNC_FLUSH);
-      //if (err == Z_BUF_ERROR) { import iv.writer; writeln("*** OUT OF BUFFER!"); }
-      if (err != Z_STREAM_END && err != Z_OK) return false;
-      if (err == Z_STREAM_END) eoz = true;
+      if (uppos >= upused) {
+        if (upeoz) { eoz = true; continue; }
+        if (!readPackedChunk()) return false;
+        auto sv0 = zs.avail_out;
+        auto sv1 = zs.next_out;
+        uppos = 0;
+        zs.avail_out = cast(uint)updata.length;
+        zs.next_out = cast(ubyte*)updata.ptr;
+        auto err = inflate(&zs, Z_SYNC_FLUSH);
+        upused = cast(uint)(updata.length-zs.avail_out);
+        zs.avail_out = sv0;
+        zs.next_out = sv1;
+        //if (err == Z_BUF_ERROR) { import iv.writer; writeln("*** OUT OF BUFFER!"); }
+        if (err != Z_STREAM_END && err != Z_OK) return false;
+        if (err == Z_STREAM_END) upeoz = true;
+      } else {
+        auto ptr = cast(ubyte*)zs.next_out;
+        *ptr = updata.ptr[uppos++];
+        --zs.avail_out;
+        ++zs.next_out;
+      }
     }
     return true;
   }
