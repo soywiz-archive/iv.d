@@ -17,8 +17,8 @@ void main (string[] args) {
   conProcessArgs!true(args);
 
 
-  auto sdwin = new SimpleWindow(800, 600, "My D App", OpenGlOptions.yes, Resizablity.allowResizing);
-  glconMainWindow = sdwin;
+  auto sdwin = new SimpleWindow(800, 600, "My D App", OpenGlOptions.yes, Resizability.allowResizing);
+  glconCtlWindow = sdwin;
   //sdwin.hideCursor();
 
   static if (is(typeof(&sdwin.closeQuery))) {

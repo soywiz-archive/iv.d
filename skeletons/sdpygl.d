@@ -566,8 +566,8 @@ void main (string[] args) {
     gxDrawRect(10, 10, VBufWidth-20, VBufHeight-20, gxRGB!(255, 127, 0));
   };
 
-  auto sdwin = new SimpleWindow(VBufWidth, VBufHeight, "My D App", OpenGlOptions.yes, Resizablity.allowResizing);
-  glconMainWindow = sdwin;
+  auto sdwin = new SimpleWindow(VBufWidth, VBufHeight, "My D App", OpenGlOptions.yes, Resizability.allowResizing);
+  glconCtlWindow = sdwin;
   //sdwin.hideCursor();
 
   static if (is(typeof(&sdwin.closeQuery))) {
