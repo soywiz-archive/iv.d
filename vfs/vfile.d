@@ -1008,7 +1008,7 @@ struct ZLibLowLevelRO {
   bool eofhit;
   string fname;
   // reading one byte from zlib fuckin' fails. shit.
-  ubyte[256] updata;
+  ubyte[65536] updata;
   uint uppos, upused;
   bool upeoz;
 
