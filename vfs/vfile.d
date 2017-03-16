@@ -567,7 +567,11 @@ private:
 
   int err () nothrow @trusted {
     int res = 0;
-    if (flp != 0) gzerror(fl, &res);
+    version(aliced) {
+      if (flp != 0) gzerror(fl, &res);
+    } else {
+      try { if (flp != 0) gzerror(fl, &res); } catch (Exception) {}
+    }
     return res;
   }
 

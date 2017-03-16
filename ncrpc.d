@@ -20,6 +20,7 @@
 module iv.ncrpc;
 private:
 
+import iv.alice;
 import iv.vfs;
 //version(rdmd) import iv.strex;
 
@@ -1021,6 +1022,7 @@ private:
     import core.sys.posix.unistd : close;
     // max name length is 108, so be safe here
     if (name.length == 0 || name.length > 100) throw new Exception("invalid name");
+    //{ import core.stdc.stdio; printf("[%.*s]\n", cast(uint)name.length, name.ptr); }
     sockaddr_un sun = void;
     memset(&sun, 0, sun.sizeof);
     sun.sun_family = AF_UNIX;
@@ -1041,6 +1043,7 @@ private:
         throw new Exception("can't connect to unix domain socket");
       }
     }
+    //{ import core.stdc.stdio; printf("fd=%d\n", fd); }
     return fd;
   }
 }

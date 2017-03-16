@@ -2089,7 +2089,7 @@ void addName (string name) {
     import std.algorithm : sort;
     //import std.range : array;
     cmdlistSorted ~= name;
-    cmdlistSorted.sort;
+    sort(cmdlistSorted);
   }
 }
 
