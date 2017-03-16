@@ -1,7 +1,6 @@
-import iv.ncserial;
+import iv.ncrpc;
 import iv.vfs.io;
 
-import sockchan;
 import rpcapi;
 
 
