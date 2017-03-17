@@ -24,14 +24,17 @@ import iv.strex;
 
 static if (__traits(compiles, (){import arsd.simpledisplay;}())) {
   enum OptCmdConGlHasSdpy = true;
+  import arsd.simpledisplay : UsingSimpledisplayX11;
 } else {
   enum OptCmdConGlHasSdpy = false;
+  private enum UsingSimpledisplayX11 = false;
 }
 
 version(aliced) {} else { private alias usize = size_t; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public __gshared bool glconAllowOpenGLRender = true;
 __gshared uint conScale = 0;
 __gshared uint scrwdt, scrhgt;
 
@@ -201,7 +204,9 @@ private bool glconGenRenderBuffer () {
   if (convbuf is null || prevScrWdt != scrwdt || prevScrHgt != scrhgt) {
     import core.stdc.stdlib : free, realloc;
     // need new buffer; kill old texture, so it will be recreated
-    if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
+    if (glconBackBuffer is null && glconAllowOpenGLRender) {
+      if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
+    }
     auto nbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
     if (nbuf is null) {
       if (convbuf !is null) { free(convbuf); convbuf = null; }
@@ -220,7 +225,15 @@ private bool glconGenRenderBuffer () {
 
 // returns `true` if texture was recreated
 private bool glconGenTexture () {
-  if (glconRenderFailed || convbufTexId != 0) return false;
+  if (glconRenderFailed) return false;
+
+  static if (OptCmdConGlHasSdpy) {
+    if (glconBackBuffer !is null) return false;
+  }
+
+  if (convbufTexId != 0) return false;
+
+  if (!glconAllowOpenGLRender) return false;
 
   enum wrapOpt = GL_REPEAT;
   enum filterOpt = GL_NEAREST; //GL_LINEAR;
@@ -272,6 +285,40 @@ public void glconDraw () {
   if (glconGenTexture()) updatetex = false;
   if (glconRenderFailed) return; // alas
 
+  static if (OptCmdConGlHasSdpy) {
+    if (glconBackBuffer !is null) {
+      static if (UsingSimpledisplayX11) {
+        // ooops. render to backbuffer
+        //{ import core.stdc.stdio; printf("rendering to backbuffer\n"); }
+        int bbw = glconBackBuffer.width;
+        int bbh = glconBackBuffer.height;
+        if (bbh > scrhgt) bbh = scrhgt;
+        int copyw = (bbw < scrwdt ? bbw : scrwdt);
+        const(uint)* src = cast(const(uint)*)convbuf;
+        uint* dst = cast(uint*)glconBackBuffer.getDataPointer;
+        if (rConsoleHeight < bbh) {
+          bbh -= rConsoleHeight;
+          src += scrwdt*rConsoleHeight;
+        }
+        while (bbh-- > 0) {
+          auto s = src;
+          auto d = dst;
+          // dword copying is faster than rearranging bytes with assignments
+          foreach (immutable widx; 0..copyw) {
+            uint v = *s++;
+            // rearrange bytes for X11 image
+            v = (v&0xff_00ff00u)|((v>>16)&0x00_0000ffu)|((v<<16)&0x00_ff0000u);
+            *d++ = v;
+          }
+          src += scrwdt;
+          dst += bbw;
+        }
+      }
+      return;
+    }
+  }
+
+  if (!glconAllowOpenGLRender) return;
   assert(convbufTexId != 0);
 
   GLint glmatmode;
@@ -710,7 +757,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
-import arsd.simpledisplay : KeyEvent, Key, SimpleWindow;
+import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Image;
 
 public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
 
@@ -804,14 +851,15 @@ public bool glconCharEvent (dchar ch) {
 }
 
 
-public class GLConScreenRebuildEvent {}
-public class GLConScreenRepaintEvent {}
-public class GLConDoConsoleCommandsEvent {}
+public class GLConScreenRebuildEvent {} ///
+public class GLConScreenRepaintEvent {} ///
+public class GLConDoConsoleCommandsEvent {} ///
 
 __gshared GLConScreenRebuildEvent evScrRebuild;
 __gshared GLConScreenRepaintEvent evScreenRepaint;
 __gshared GLConDoConsoleCommandsEvent evDoConCommands;
 public __gshared SimpleWindow glconCtlWindow; /// this window will be used to send messages
+public __gshared Image glconBackBuffer; /// if `null`, OpenGL will be used
 
 shared static this () {
   evScrRebuild = new GLConScreenRebuildEvent();
