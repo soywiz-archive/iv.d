@@ -17,6 +17,9 @@
  */
 module iv.alice;
 
+version(aliced) {} else {
+
+// ////////////////////////////////////////////////////////////////////////// //
 static if (!is(typeof(usize))) public alias usize = size_t;
 static if (!is(typeof(sptrdiff))) public alias sptrdiff = ptrdiff_t;
 static if (!is(typeof(ssizediff))) public alias ssizediff = ptrdiff_t;
@@ -47,8 +50,10 @@ static if (!is(typeof(NamedExceptionBase))) {
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
-version(aliced) {} else {
-  template Imp(string mod) { mixin("import Imp="~mod~";"); }
-  // usage: auto boo(T)(Imp!"std.datetime".SysTime tm) if (Imp!"std.traits".isCallable!T) { return tm; }
+// ////////////////////////////////////////////////////////////////////////// //
+template Imp(string mod) { mixin("import Imp="~mod~";"); }
+// usage: auto boo(T)(Imp!"std.datetime".SysTime tm) if (Imp!"std.traits".isCallable!T) { return tm; }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 }
