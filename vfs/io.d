@@ -67,6 +67,8 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
   private:
     ST st;
     bool eof, futureeof;
+    char[128] rdbuf;
+    int rdpos, rdsize;
     static if (reuse) {
       char[] buf;
       size_t bufused;
@@ -80,46 +82,63 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
     }
   public:
     @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return eof; }
-    @property auto front () { static if (reuse) return buf[0..bufused]; else return fs; }
+    @property auto front () inout nothrow @safe @nogc { static if (reuse) return buf[0..bufused]; else return fs; }
     void popFront () {
-      if (futureeof) { eof = futureeof; futureeof = false; return; }
-      if (!eof) {
-        char ch;
-        static if (reuse) bufused = 0; else char[] buf;
-        for (;;) {
-          if (st.rawRead((&ch)[0..1]).length == 0) {
-            static if (reuse) {
-              if (bufused == 0) { eof = true; return; }
-            } else {
-              if (buf.length == 0) { eof = true; return; }
-            }
-            break;
-          }
-          if (ch == '\r') {
-            // fuck macs
-            if (st.rawRead((&ch)[0..1]).length == 0) {
-              static if (keepTerm) {
-                static if (reuse) { if (bufused == buf.length) { buf ~= ch; ++bufused; } else buf.ptr[bufused++] = ch; } else buf ~= ch;
-              }
-              break;
-            }
-            if (ch == '\n') {
-              static if (keepTerm) {
-                static if (reuse) { if (bufused == buf.length) { buf ~= ch; ++bufused; } else buf.ptr[bufused++] = ch; } else buf ~= ch;
-              }
-              break;
-            }
-            buf ~= ch;
-          } else if (ch == '\n') {
-            static if (keepTerm) {
-              static if (reuse) { if (bufused == buf.length) { buf ~= ch; ++bufused; } else buf.ptr[bufused++] = ch; } else buf ~= ch;
-            }
-            break;
-          }
-          static if (reuse) { if (bufused == buf.length) { buf ~= ch; ++bufused; } else buf.ptr[bufused++] = ch; } else buf ~= ch;
+      char getch () {
+        assert(!futureeof);
+        if (rdpos >= rdsize) {
+          rdpos = rdsize = 0;
+          auto rd = st.rawRead(rdbuf[]);
+          if (rd.length == 0) { futureeof = true; return 0; }
+          rdsize = cast(int)rd.length;
         }
-        static if (!reuse) fs = cast(string)buf; // it is safe to cast here
+        assert(rdpos < rdsize);
+        return rdbuf.ptr[rdpos++];
       }
+      void putch (char ch) {
+        static if (reuse) {
+          if (bufused == buf.length) {
+            auto optr = buf.ptr;
+            buf ~= ch;
+            if (buf.ptr !is optr) {
+              import core.memory : GC;
+              if (buf.ptr is GC.addrOf(buf.ptr)) GC.setAttr(buf.ptr, GC.BlkAttr.NO_INTERIOR);
+            }
+            ++bufused;
+          } else {
+            buf.ptr[bufused++] = ch;
+          }
+        } else {
+          s ~= ch;
+        }
+      }
+      if (futureeof) { eof = true; futureeof = false; }
+      static if (reuse) bufused = 0; else s = null;
+      if (eof) return;
+      bool wasChar = false;
+      for (;;) {
+        char ch = getch();
+        if (futureeof) break;
+        wasChar = true;
+        if (ch == '\r') {
+          // cr
+          ch = getch();
+          if (futureeof) {
+            static if (keepTerm) putch('\r');
+            break;
+          }
+          if (ch == '\n') {
+            static if (keepTerm) { putch('\r'); putch('\n'); }
+            break;
+          }
+        } else if (ch == '\n') {
+          // lf
+          static if (keepTerm) putch('\n');
+          break;
+        }
+        putch(ch);
+      }
+      if (!wasChar) { assert(futureeof); futureeof = false; eof = true; }
     }
   }
   return BLR!(keepTerm, reuseBuffer, ST)(fl);
