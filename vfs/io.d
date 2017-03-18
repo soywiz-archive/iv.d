@@ -73,7 +73,7 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
       char[] buf;
       size_t bufused;
     } else {
-      string fs;
+      string s;
     }
   private:
     this() (auto ref ST ast) {
@@ -82,7 +82,7 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
     }
   public:
     @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return eof; }
-    @property auto front () inout nothrow @safe @nogc { static if (reuse) return buf[0..bufused]; else return fs; }
+    @property auto front () inout nothrow @safe @nogc { static if (reuse) return buf[0..bufused]; else return s; }
     void popFront () {
       char getch () {
         assert(!futureeof);
