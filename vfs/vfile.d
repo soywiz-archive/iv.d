@@ -1036,6 +1036,8 @@ struct ZLibLowLevelRO {
       free(pkb.ptr);
       pkb = null;
     }
+    uppos = upused = 0;
+    upeoz = true;
     eoz = true;
     if (zfl.isOpen) zfl.close();
   }
@@ -1139,6 +1141,8 @@ struct ZLibLowLevelRO {
       if (prpos > pos) {
         // yes, rewind
         inflateEnd(&zs);
+        uppos = upused = 0;
+        upeoz = false;
         zs = zs.init;
         pkpos = 0;
         if (!initZStream(true)) return -1;
