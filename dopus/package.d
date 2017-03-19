@@ -1154,12 +1154,12 @@ int ff_opus_parse_packet (OpusPacket* pkt, const(uint8_t)* buf, int buf_size, bo
         int len = xiph_lacing_16bit(&ptr, end);
         if (len < 0 || len > end-ptr) goto fail;
         end = ptr+len;
-        buf_size = end-buf;
+        buf_size = cast(int)(end-buf);
       }
 
-      frame_bytes = end-ptr;
+      frame_bytes = cast(int)(end-ptr);
       if (frame_bytes > MAX_FRAME_SIZE) goto fail;
-      pkt.frame_offset[0] = ptr-buf;
+      pkt.frame_offset[0] = cast(int)(ptr-buf);
       pkt.frame_size[0] = frame_bytes;
       break;
     case 1:
@@ -1171,12 +1171,12 @@ int ff_opus_parse_packet (OpusPacket* pkt, const(uint8_t)* buf, int buf_size, bo
         int len = xiph_lacing_16bit(&ptr, end);
         if (len < 0 || 2 * len > end-ptr) goto fail;
         end = ptr+2*len;
-        buf_size = end-buf;
+        buf_size = cast(int)(end-buf);
       }
 
-      frame_bytes = end-ptr;
+      frame_bytes = cast(int)(end-ptr);
       if ((frame_bytes&1) != 0 || (frame_bytes>>1) > MAX_FRAME_SIZE) goto fail;
-      pkt.frame_offset[0] = ptr-buf;
+      pkt.frame_offset[0] = cast(int)(ptr-buf);
       pkt.frame_size[0] = frame_bytes>>1;
       pkt.frame_offset[1] = pkt.frame_offset[0]+pkt.frame_size[0];
       pkt.frame_size[1] = frame_bytes>>1;
@@ -1194,14 +1194,14 @@ int ff_opus_parse_packet (OpusPacket* pkt, const(uint8_t)* buf, int buf_size, bo
         int len = xiph_lacing_16bit(&ptr, end);
         if (len < 0 || len+frame_bytes > end-ptr) goto fail;
         end = ptr+frame_bytes+len;
-        buf_size = end-buf;
+        buf_size = cast(int)(end-buf);
       }
 
-      pkt.frame_offset[0] = ptr-buf;
+      pkt.frame_offset[0] = cast(int)(ptr-buf);
       pkt.frame_size[0] = frame_bytes;
 
       // calculate 2nd frame size
-      frame_bytes = end-ptr-pkt.frame_size[0];
+      frame_bytes = cast(int)(end-ptr-pkt.frame_size[0]);
       if (frame_bytes < 0 || frame_bytes > MAX_FRAME_SIZE) goto fail;
       pkt.frame_offset[1] = pkt.frame_offset[0]+pkt.frame_size[0];
       pkt.frame_size[1] = frame_bytes;
@@ -1238,12 +1238,12 @@ int ff_opus_parse_packet (OpusPacket* pkt, const(uint8_t)* buf, int buf_size, bo
           int len = xiph_lacing_16bit(&ptr, end);
           if (len < 0 || len+total_bytes+padding > end-ptr) goto fail;
           end = ptr+total_bytes+len+padding;
-          buf_size = end-buf;
+          buf_size = cast(int)(end-buf);
         }
 
-        frame_bytes = end-ptr-padding;
+        frame_bytes = cast(int)(end-ptr-padding);
         if (total_bytes > frame_bytes) goto fail;
-        pkt.frame_offset[0] = ptr-buf;
+        pkt.frame_offset[0] = cast(int)(ptr-buf);
         for (i = 1; i < pkt.frame_count; i++) pkt.frame_offset[i] = pkt.frame_offset[i-1]+pkt.frame_size[i-1];
         pkt.frame_size[pkt.frame_count-1] = frame_bytes-total_bytes;
       } else {
@@ -1253,16 +1253,16 @@ int ff_opus_parse_packet (OpusPacket* pkt, const(uint8_t)* buf, int buf_size, bo
           //conwriteln("frame_bytes=", frame_bytes);
           if (frame_bytes < 0 || pkt.frame_count*frame_bytes+padding > end-ptr) goto fail;
           end = ptr+pkt.frame_count*frame_bytes+padding;
-          buf_size = end-buf;
+          buf_size = cast(int)(end-buf);
         } else {
-          frame_bytes = end-ptr-padding;
+          frame_bytes = cast(int)(end-ptr-padding);
           //conwriteln("frame_bytes=", frame_bytes);
           if (frame_bytes % pkt.frame_count || frame_bytes/pkt.frame_count > MAX_FRAME_SIZE) goto fail;
           frame_bytes /= pkt.frame_count;
         }
 
-        pkt.frame_offset[0] = ptr-buf;
-        pkt.frame_size[0]   = frame_bytes;
+        pkt.frame_offset[0] = cast(int)(ptr-buf);
+        pkt.frame_size[0] = frame_bytes;
         for (i = 1; i < pkt.frame_count; i++) {
           pkt.frame_offset[i] = pkt.frame_offset[i-1]+pkt.frame_size[i-1];
           pkt.frame_size[i] = frame_bytes;
@@ -5912,7 +5912,7 @@ private:
 
     if (sincTableLen < minSincTableLen) {
       import core.stdc.stdlib : realloc;
-      auto nslen = minSincTableLen*float.sizeof;
+      auto nslen = cast(uint)(minSincTableLen*float.sizeof);
       if (nslen > realSincTableLen) {
         if (nslen < 512*1024) nslen = 512*1024; // inc to 3 mb?
         auto x = cast(float*)realloc(sincTable, nslen);
@@ -6113,7 +6113,7 @@ double computeFunc (float x, immutable FuncDef* func) {
   import std.math : floor;
   //double[4] interp;
   float y = x*func.oversample;
-  int ind = lrintf(floor(y));
+  int ind = cast(int)lrintf(floor(y));
   float frac = (y-ind);
   immutable f2 = frac*frac;
   immutable f3 = f2*frac;
@@ -6789,7 +6789,7 @@ int opus_decode_packet (/*AVCtx* avctx,*/ OpusContext* c, AVFrame* frame, int* g
     if (out_dummy & 2) out_[1] = null; else out_[1] += ret;
 
     //conwriteln("ret=", ret);
-    c.out_size[i] = frame.linesize[0]-ret*float.sizeof;
+    c.out_size[i] = cast(int)(frame.linesize[0]-ret*float.sizeof);
   }
 
   // decode each sub-packet

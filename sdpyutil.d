@@ -23,14 +23,15 @@ import arsd.simpledisplay;
 /// get desktop number for the given window; -1: unknown
 public int getWindowDesktop (SimpleWindow sw) {
   static if (UsingSimpledisplayX11) {
+    import core.stdc.config;
     if (sw is null || sw.closed) return -1;
     auto dpy = sw.display;
     auto xwin = sw.impl.window;
     auto atomWTF = GetAtom!("_NET_WM_DESKTOP", true)(dpy);
     Atom aType;
     int format;
-    uint itemCount;
-    uint bytesAfter;
+    c_ulong itemCount;
+    c_ulong bytesAfter;
     void* propRes;
     int desktop = -1;
     auto status = XGetWindowProperty(dpy, xwin, atomWTF, 0, 1, /*False*/0, AnyPropertyType, &aType, &format, &itemCount, &bytesAfter, &propRes);
@@ -111,25 +112,31 @@ void getWindowRect (SimpleWindow sw, out int x, out int y, out int width, out in
 
 // ////////////////////////////////////////////////////////////////////////// //
 public void getWorkAreaRect (out int x, out int y, out int width, out int height) {
-  width = 800;
-  height = 600;
-  auto dpy = XDisplayConnection.get;
-  if (dpy is null) return;
-  auto root = RootWindow(dpy, DefaultScreen(dpy));
-  auto atomWTF = GetAtom!("_NET_WORKAREA", true)(dpy);
-  Atom aType;
-  int format;
-  uint itemCount;
-  uint bytesAfter;
-  int* propRes;
-  auto status = XGetWindowProperty(dpy, root, atomWTF, 0, 4, /*False*/0, AnyPropertyType, &aType, &format, &itemCount, &bytesAfter, cast(void**)&propRes);
-  if (status >= Success) {
-    if (propRes !is null) {
-      x = propRes[0];
-      y = propRes[1];
-      width = propRes[2];
-      height = propRes[3];
-      XFree(propRes);
+  static if (UsingSimpledisplayX11) {
+    import core.stdc.config;
+    width = 800;
+    height = 600;
+    auto dpy = XDisplayConnection.get;
+    if (dpy is null) return;
+    auto root = RootWindow(dpy, DefaultScreen(dpy));
+    auto atomWTF = GetAtom!("_NET_WORKAREA", true)(dpy);
+    Atom aType;
+    int format;
+    c_ulong itemCount;
+    c_ulong bytesAfter;
+    int* propRes;
+    auto status = XGetWindowProperty(dpy, root, atomWTF, 0, 4, /*False*/0, AnyPropertyType, &aType, &format, &itemCount, &bytesAfter, cast(void**)&propRes);
+    if (status >= Success) {
+      if (propRes !is null) {
+        x = propRes[0];
+        y = propRes[1];
+        width = propRes[2];
+        height = propRes[3];
+        XFree(propRes);
+      }
     }
+  } else {
+    width = 800;
+    height = 600;
   }
 }

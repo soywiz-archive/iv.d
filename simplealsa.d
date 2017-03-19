@@ -245,7 +245,7 @@ void outSoundF (const(void)* buf, uint bytes) {
   auto len = bytes/float.sizeof;
   assert(len <= cvtbuffer.length);
   tflFloat2Short((cast(const(float)*)buf)[0..len], cvtbuffer[0..len]);
-  outSoundS(cvtbuffer.ptr, len*2);
+  outSoundS(cvtbuffer.ptr, cast(uint)(len*2));
 }
 
 

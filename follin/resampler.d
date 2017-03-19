@@ -549,7 +549,7 @@ private:
 
     if (sincTableLen < minSincTableLen) {
       import core.stdc.stdlib : realloc;
-      auto nslen = minSincTableLen*float.sizeof;
+      auto nslen = cast(uint)(minSincTableLen*float.sizeof);
       if (nslen > realSincTableLen) {
         if (nslen < 512*1024) nslen = 512*1024; // inc to 3 mb?
         auto x = cast(float*)realloc(sincTable, nslen);
@@ -750,7 +750,7 @@ double computeFunc (float x, immutable FuncDef* func) {
   import std.math : floor;
   //double[4] interp;
   float y = x*func.oversample;
-  int ind = lrintf(floor(y));
+  int ind = cast(int)lrintf(floor(y));
   float frac = (y-ind);
   immutable f2 = frac*frac;
   immutable f3 = f2*frac;
@@ -1021,8 +1021,8 @@ nothrow @trusted @nogc:
     d.inputSamplesUsed = d.outputSamplesUsed = 0;
     if (d.dataOut.length < 2) return SpeexResampler.Error.OK;
     foreach (uint cidx; 0..2) {
-      uint inleft = d.dataIn.length/2;
-      uint outleft = d.dataOut.length/2;
+      uint inleft = cast(uint)d.dataIn.length/2;
+      uint outleft = cast(uint)d.dataOut.length/2;
       processChannel(inleft, outleft, (d.dataIn.length ? d.dataIn.ptr+cidx : null), (d.dataOut.length ? d.dataOut.ptr+cidx : null), cidx);
       d.outputSamplesUsed += cast(uint)(d.dataOut.length/2)-outleft;
       d.inputSamplesUsed += cast(uint)(d.dataIn.length/2)-inleft;
