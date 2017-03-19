@@ -8,6 +8,8 @@ nothrow @trusted @nogc:
 //version = FFTW3;
 
 version = mbandeq_extended;
+//version = mbandeq_normal;
+//version = mbandeq_winamp;
 
 
 version(FFTW3) {
@@ -37,8 +39,10 @@ private:
 public:
   version(mbandeq_extended) {
     enum Bands = 30;
-  } else {
+  } else version(mbandeq_normal) {
     enum Bands = 15;
+  } else {
+    enum Bands = 10;
   }
   enum Latency = FFT_LENGTH-STEP_SIZE;
 
@@ -84,7 +88,9 @@ public:
     zalloc(window, FFT_LENGTH);
     zalloc(binBase, FFT_LENGTH/2);
     zalloc(binDelta, FFT_LENGTH/2);
-    fifoPos = 0;
+    fifoPos = Latency;
+    inFifo[0..FFT_LENGTH] = 0;
+    outFifo[0..FFT_LENGTH] = 0;
 
     version(FFTW3) {
       planRC = fftwf_plan_r2r_1d(FFT_LENGTH, realx, comp, FFTW_R2HC, FFTW_MEASURE);
@@ -180,7 +186,7 @@ public:
       coefs.ptr[bin] = ((1.0f-binDelta[bin])*gains.ptr[binBase[bin]])+(binDelta[bin]*gains.ptr[binBase[bin]+1]);
     }
 
-    if (fifoPos == 0) fifoPos = Latency;
+    //if (fifoPos == 0) fifoPos = Latency;
 
     foreach (immutable pos; 0..input.length/stride) {
       inFifo[fifoPos] = input.ptr[pos*stride+ofs];
@@ -221,11 +227,14 @@ public:
         }
         // window into the output accumulator
         foreach (immutable i; 0..FFT_LENGTH) outAccum[i] += 0.9186162f*window[i]*realx[i]/(FFT_LENGTH*OVER_SAMP);
-        foreach (immutable i; 0..STEP_SIZE) outFifo[i] = outAccum[i];
+        //foreach (immutable i; 0..STEP_SIZE) outFifo[i] = outAccum[i];
+        outFifo[0..STEP_SIZE] = outAccum[0..STEP_SIZE];
         // shift output accumulator
-        memmove(outAccum, outAccum+STEP_SIZE, FFT_LENGTH*float.sizeof);
+        memmove(outAccum, outAccum+STEP_SIZE, FFT_LENGTH*outAccum[0].sizeof);
         // shift input fifo
-        foreach (immutable i; 0..Latency) inFifo[i] = inFifo[i+STEP_SIZE];
+        //foreach (immutable i; 0..Latency) inFifo[i] = inFifo[i+STEP_SIZE];
+        //memmove(inFifo, inFifo+Latency, (FFT_LENGTH-Latency)*float.sizeof);
+        memmove(inFifo, inFifo+STEP_SIZE, Latency*inFifo[0].sizeof);
       }
     }
   }
@@ -244,12 +253,14 @@ public:
       500, 600, 700, 800, 1000, 1200, 1400, 1600, 2000, 2400, 2800, 3200, 4000, 4800,
       5600, 6400, 8000, 9600, 11200, 12800, 16000
     ];
-  } else {
+  } else version(mbandeq_normal) {
     static immutable float[Bands] bandfrqs = [
        50.00f,  100.00f,  155.56f,  220.00f,  311.13f, 440.00f, 622.25f,
       880.00f, 1244.51f, 1760.00f, 2489.02f, 3519.95, 4978.04f, 9956.08f,
       19912.16f
     ];
+  } else {
+    static immutable float[Bands] bandfrqs = [ 60.00f,  170.00f,  310.00f,  600.00f, 1000.00f, 3000.00f, 6000.00f, 12000.00f, 14000.00f, 16000.00f ];
   }
 
 private:

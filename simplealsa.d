@@ -44,7 +44,7 @@ public __gshared int[MBandEq.Bands] alsaEqBands = 0; /// 39-band equalizer optio
 public __gshared int alsaGain = 0; /// sound gain, in %
 public __gshared uint alsaLatencyms = 100; /// output latency, in milliseconds
 public __gshared bool alsaEnableResampling = true; /// set to `false` to disable resampling (sound can be distorted)
-public __gshared bool alsaEnableEqualizer = true; /// set to `false` to disable resampling (sound can be distorted)
+public __gshared bool alsaEnableEqualizer = true; /// set to `false` to disable equalizer
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -174,7 +174,7 @@ void outSoundFlush () {
 
   // equalizer
   bool doeq = false;
-  foreach (int v; alsaEqBands[]) if (v != 0) { doeq = true; break; }
+  if (alsaEnableEqualizer) foreach (int v; alsaEqBands[]) if (v != 0) { doeq = true; break; }
   if (doeq && alsaEnableEqualizer) {
     if (!didFloat) {
       didFloat = true;
