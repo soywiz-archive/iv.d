@@ -17,6 +17,7 @@
 module iv.cmdcongl /*is aliced*/;
 private:
 
+import iv.alice;
 public import iv.cmdcon;
 import iv.vfs;
 import iv.strex;
@@ -28,8 +29,6 @@ static if (__traits(compiles, (){import arsd.simpledisplay;}())) {
   enum OptCmdConGlHasSdpy = false;
   private enum UsingSimpledisplayX11 = false;
 }
-
-version(aliced) {} else { private alias usize = size_t; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
