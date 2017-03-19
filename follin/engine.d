@@ -53,8 +53,10 @@ shared static this () {
 
 // ////////////////////////////////////////////////////////////////////////// //
 version(X86) {
-  version = follin_use_sse;
-  version = follin_use_sse2;
+  version(D_PIC) {} else {
+    version = follin_use_sse;
+    version = follin_use_sse2;
+  }
 }
 
 import iv.follin.utils;
