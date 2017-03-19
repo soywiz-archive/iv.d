@@ -75,7 +75,7 @@ module iv.follin.resampler;
 */
 version = sincresample_use_full_table;
 version(X86) {
-  version = sincresample_use_sse;
+  version(D_PIC) {} else version = sincresample_use_sse;
 }
 
 

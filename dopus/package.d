@@ -5440,7 +5440,7 @@ int ff_silk_init(/*AVCodecContext *avctx,*/ SilkContext **ps, int output_channel
 
 version = sincresample_use_full_table;
 version(X86) {
-  version = sincresample_use_sse;
+  version(D_PIC) {} else version = sincresample_use_sse;
 }
 
 
