@@ -67,14 +67,11 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
   private:
     ST st;
     bool eof, futureeof;
-    char[128] rdbuf;
+    char[256] rdbuf;
     int rdpos, rdsize;
-    static if (reuse) {
-      char[] buf;
-      size_t bufused;
-    } else {
-      string s;
-    }
+    char[] buf;
+    size_t bufused;
+    static if (!reuse) string s;
   private:
     this() (auto ref ST ast) {
       st = ast;
@@ -82,7 +79,7 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
     }
   public:
     @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return eof; }
-    @property auto front () inout nothrow @safe @nogc { static if (reuse) return buf[0..bufused]; else return s; }
+    @property auto front () inout nothrow @safe @nogc { static if (reuse) return buf.ptr[0..bufused]; else return s; }
     void popFront () {
       char getch () {
         assert(!futureeof);
@@ -96,24 +93,21 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
         return rdbuf.ptr[rdpos++];
       }
       void putch (char ch) {
-        static if (reuse) {
-          if (bufused == buf.length) {
-            auto optr = buf.ptr;
-            buf ~= ch;
-            if (buf.ptr !is optr) {
-              import core.memory : GC;
-              if (buf.ptr is GC.addrOf(buf.ptr)) GC.setAttr(buf.ptr, GC.BlkAttr.NO_INTERIOR);
-            }
-            ++bufused;
-          } else {
-            buf.ptr[bufused++] = ch;
+        if (bufused == buf.length) {
+          auto optr = buf.ptr;
+          buf ~= ch;
+          if (buf.ptr !is optr) {
+            import core.memory : GC;
+            if (buf.ptr is GC.addrOf(buf.ptr)) GC.setAttr(buf.ptr, GC.BlkAttr.NO_INTERIOR);
           }
+          ++bufused;
         } else {
-          s ~= ch;
+          buf.ptr[bufused++] = ch;
         }
       }
       if (futureeof) { eof = true; futureeof = false; }
-      static if (reuse) bufused = 0; else s = null;
+      bufused = 0;
+      static if (!reuse) s = null;
       if (eof) return;
       bool wasChar = false;
       for (;;) {
@@ -138,7 +132,13 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
         }
         putch(ch);
       }
-      if (!wasChar) { assert(futureeof); futureeof = false; eof = true; }
+      if (!wasChar) {
+        assert(futureeof);
+        futureeof = false;
+        eof = true;
+      } else {
+        static if (!reuse) s = (bufused ? buf.ptr[0..bufused].idup : "");
+      }
     }
   }
   return BLR!(keepTerm, reuseBuffer, ST)(fl);
