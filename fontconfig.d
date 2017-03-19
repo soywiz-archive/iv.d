@@ -25,7 +25,7 @@ module iv.fontconfig;
 pragma(lib, "fontconfig");
 pragma(lib, "freetype");
 
-import core.stdc.stdarg;
+import core.stdc.stdarg : va_list;
 import core.sys.posix.sys.stat;
 
 import iv.freetype;
