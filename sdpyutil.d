@@ -25,7 +25,7 @@ public int getWindowDesktop (SimpleWindow sw) {
   static if (UsingSimpledisplayX11) {
     import core.stdc.config;
     if (sw is null || sw.closed) return -1;
-    auto dpy = sw.display;
+    auto dpy = sw.impl.display;
     auto xwin = sw.impl.window;
     auto atomWTF = GetAtom!("_NET_WM_DESKTOP", true)(dpy);
     Atom aType;
@@ -55,7 +55,7 @@ public void switchToWindowDesktop(bool doflush=true) (SimpleWindow sw) {
     if (sw is null || sw.closed) return;
     auto desktop = sw.getWindowDesktop();
     if (desktop < 0) return;
-    auto dpy = sw.display;
+    auto dpy = sw.impl.display;
     XEvent e;
     e.xclient.type = EventType.ClientMessage;
     e.xclient.serial = 0;
@@ -76,7 +76,7 @@ public void switchToWindow(string src="normal") (SimpleWindow sw) if (src == "no
   static if (UsingSimpledisplayX11) {
     if (sw is null || sw.closed) return;
     switchToWindowDesktop!false(sw);
-    auto dpy = sw.display;
+    auto dpy = sw.impl.display;
     auto xwin = sw.impl.window;
     XEvent e;
     e.xclient.type = EventType.ClientMessage;
@@ -104,7 +104,7 @@ void getWindowRect (SimpleWindow sw, out int x, out int y, out int width, out in
   //XWindowAttributes xwa;
   //XGetWindowAttributes(dpy, nativeHandle, &xwa);
   //XTranslateCoordinates(dpy, nativeHandle, RootWindow(dpy, DefaultScreen(dpy)), xwa.x, xwa.y, &x, &y, &dummyw);
-  XTranslateCoordinates(sw.display, sw.impl.window, RootWindow(sw.display, DefaultScreen(sw.display)), x, y, &x, &y, &dummyw);
+  XTranslateCoordinates(sw.impl.display, sw.impl.window, RootWindow(sw.impl.display, DefaultScreen(sw.impl.display)), x, y, &x, &y, &dummyw);
   width = sw.width;
   height = sw.height;
 }
@@ -138,5 +138,78 @@ public void getWorkAreaRect (out int x, out int y, out int width, out int height
   } else {
     width = 800;
     height = 600;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+enum _NET_WM_MOVERESIZE_SIZE_TOPLEFT = 0;
+enum _NET_WM_MOVERESIZE_SIZE_TOP = 1;
+enum _NET_WM_MOVERESIZE_SIZE_TOPRIGHT = 2;
+enum _NET_WM_MOVERESIZE_SIZE_RIGHT = 3;
+enum _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT = 4;
+enum _NET_WM_MOVERESIZE_SIZE_BOTTOM = 5;
+enum _NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT = 6;
+enum _NET_WM_MOVERESIZE_SIZE_LEFT = 7;
+enum _NET_WM_MOVERESIZE_MOVE = 8; /* movement only */
+enum _NET_WM_MOVERESIZE_SIZE_KEYBOARD = 9; /* size via keyboard */
+enum _NET_WM_MOVERESIZE_MOVE_KEYBOARD = 10; /* move via keyboard */
+enum _NET_WM_MOVERESIZE_CANCEL = 11; /* cancel operation */
+
+
+public void wmInitiateMoving (SimpleWindow sw, int localx, int localy) {
+  static if (UsingSimpledisplayX11) {
+    if (sw is null || sw.closed || sw.hidden) return;
+    Window dummyw;
+    auto dpy = sw.impl.display;
+    auto xwin = sw.impl.window;
+    auto root = RootWindow(dpy, DefaultScreen(dpy));
+    // convert local to global
+    { import core.stdc.stdio; printf("local: %d,%d\n", localx, localy); }
+    XTranslateCoordinates(dpy, xwin, root, localx, localy, &localx, &localy, &dummyw);
+    { import core.stdc.stdio; printf("global: %d,%d\n", localx, localy); }
+    // send event
+    XEvent e;
+    e.xclient.type = EventType.ClientMessage;
+    e.xclient.serial = 0;
+    e.xclient.send_event = 1/*True*/;
+    e.xclient.message_type = GetAtom!("_NET_WM_MOVERESIZE", true)(dpy);
+    e.xclient.window = xwin;
+    e.xclient.format = 32;
+    e.xclient.data.l[0] = localx; // root_x
+    e.xclient.data.l[1] = localy; // root_y
+    e.xclient.data.l[2] = _NET_WM_MOVERESIZE_MOVE;
+    e.xclient.data.l[3] = 0; // left button
+    e.xclient.data.l[4] = 1; // application request
+    XSendEvent(dpy, root, false, EventMask.SubstructureRedirectMask|EventMask.SubstructureNotifyMask, &e);
+    flushGui();
+  }
+}
+
+
+public void wmCancelMoving (SimpleWindow sw, int localx, int localy) {
+  static if (UsingSimpledisplayX11) {
+    if (sw is null || sw.closed || sw.hidden) return;
+    Window dummyw;
+    auto dpy = sw.impl.display;
+    auto xwin = sw.impl.window;
+    auto root = RootWindow(dpy, DefaultScreen(dpy));
+    // convert local to global
+    XTranslateCoordinates(dpy, xwin, root, localx, localy, &localx, &localy, &dummyw);
+    // send event
+    XEvent e;
+    e.xclient.type = EventType.ClientMessage;
+    e.xclient.serial = 0;
+    e.xclient.send_event = 1/*True*/;
+    e.xclient.message_type = GetAtom!("_NET_WM_MOVERESIZE", true)(dpy);
+    e.xclient.window = xwin;
+    e.xclient.format = 32;
+    e.xclient.data.l[0] = localx; // root_x
+    e.xclient.data.l[1] = localy; // root_y
+    e.xclient.data.l[2] = _NET_WM_MOVERESIZE_CANCEL;
+    e.xclient.data.l[3] = 0; // left button
+    e.xclient.data.l[4] = 1; // application request
+    XSendEvent(dpy, root, false, EventMask.SubstructureRedirectMask|EventMask.SubstructureNotifyMask, &e);
+    flushGui();
   }
 }
