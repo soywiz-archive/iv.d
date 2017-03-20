@@ -79,7 +79,7 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
     }
   public:
     @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return eof; }
-    @property auto front () inout nothrow @safe @nogc { static if (reuse) return buf.ptr[0..bufused]; else return s; }
+    @property auto front () inout nothrow @trusted @nogc { static if (reuse) return buf.ptr[0..bufused]; else return s; }
     void popFront () {
       char getch () {
         assert(!futureeof);

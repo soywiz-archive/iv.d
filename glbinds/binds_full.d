@@ -12,8 +12,7 @@ version = glbind_lazy_load;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-extern(System) nothrow @nogc {
-
+nothrow @nogc {
 version(Windows) {
   pragma(lib, "opengl32");
   private void* glbindGetProcAddress (const(char)* name) {
@@ -32,8 +31,10 @@ version(Windows) {
   }
 } else {
   pragma(lib, "GL");
-  void* glXGetProcAddress (const(char)* name);
-  alias glbindGetProcAddress = glXGetProcAddress;
+  extern(C) {
+    void* glXGetProcAddress (const(char)* name);
+    alias glbindGetProcAddress = glXGetProcAddress;
+  }
 }
 
 public bool glHasFunction (const(char)[] name) {
@@ -51,6 +52,7 @@ public bool glHasFunc(string name) () {
 }
 
 
+extern(System):
 alias GLvoid = void;
 alias GLintptr = ptrdiff_t;
 alias GLsizei = int;

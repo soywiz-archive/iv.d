@@ -1041,7 +1041,8 @@ static public immutable ushort[256*10] glConFont10 = [
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private extern(System) nothrow @nogc {
+version(none)
+private nothrow @nogc {
 
 version(Windows) {
   pragma(lib, "opengl32");
@@ -1061,8 +1062,10 @@ version(Windows) {
   }
 } else {
   pragma(lib, "GL");
-  void* glXGetProcAddress (const(char)* name);
-  alias glbindGetProcAddress = glXGetProcAddress;
+  extern(C) {
+    void* glXGetProcAddress (const(char)* name);
+    alias glbindGetProcAddress = glXGetProcAddress;
+  }
 }
 
 bool glHasFunction (const(char)[] name) {
@@ -1080,6 +1083,7 @@ bool glHasFunc(string name) () {
 }
 
 
+extern(System):
 alias GLvoid = void;
 alias GLintptr = ptrdiff_t;
 alias GLsizei = int;
@@ -1392,4 +1396,6 @@ private auto glbfn_glVertex2i_loader (int a0, int a1) nothrow @nogc {
   glVertex2i(a0,a1,);
 }
 
+} else {
+  import iv.glbinds;
 }
