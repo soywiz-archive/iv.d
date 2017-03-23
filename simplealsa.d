@@ -29,18 +29,20 @@ module iv.simplealsa;
 private:
 
 //version = simplealsa_writefile;
+//version = eq_debug;
+//version = SIALSA_X86_TRICK;
+
 
 import iv.alsa;
 import iv.follin.resampler;
 import iv.follin.utils;
-version(mbandeq_slow) import iv.mbandeq_slow; else import iv.mbandeq;
 version(simplealsa_writefile) import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public __gshared string alsaDevice = "default"; /// output device
 public __gshared ubyte alsaRQuality = SpeexResampler.Music; /// resampling quality (if required); [0..10]; default is 8
-public __gshared int[MBandEq.Bands] alsaEqBands = 0; /// 39-band equalizer options; [-70..30$(RPAREN)
+public __gshared int[EQ_MAX_BANDS] alsaEqBands = 0; /// [-20..20]
 public __gshared int alsaGain = 0; /// sound gain, in %
 public __gshared uint alsaLatencyms = 100; /// output latency, in milliseconds
 public __gshared bool alsaEnableResampling = true; /// set to `false` to disable resampling (sound can be distorted)
@@ -110,7 +112,11 @@ __gshared snd_pcm_t* pcm;
 __gshared SpeexResampler srb;
 
 __gshared uint srate, realsrate;
-__gshared MBandEq mbeql, mbeqr;
+
+__gshared int lastGain = 0;
+__gshared int lastEqSRate = 0;
+__gshared int[EQ_MAX_BANDS] lastEqBands = -666;
+
 
 enum XXBUF_SIZE = 4096;
 __gshared ubyte[XXBUF_SIZE*4] xxbuffer; // just in case
@@ -175,6 +181,9 @@ void outSoundFlush () {
   // equalizer
   bool doeq = false;
   if (alsaEnableEqualizer) foreach (int v; alsaEqBands[]) if (v != 0) { doeq = true; break; }
+  //doeq = alsaEnableEqualizer;
+
+  /*
   if (doeq && alsaEnableEqualizer) {
     if (!didFloat) {
       didFloat = true;
@@ -191,12 +200,36 @@ void outSoundFlush () {
     rsfbufi[0..smpCount] = rsfbufo[0..smpCount];
     //tflFloat2Short(rsfbufo[0..smpCount], b[0..smpCount]);
   }
+  */
+
+  void doEqualizing (short* buf, uint samples, uint srate) {
+    if (doeq && samples) {
+      if (srate != lastEqSRate) {
+        initEqIIR(srate);
+        lastEqSRate = srate;
+        lastEqBands[] = -666;
+        //{ import core.stdc.stdio; printf("equalizer reinited, srate: %u; chans: %u\n", srate, cast(uint)xxoutchans); }
+      }
+      foreach (immutable bidx, int bv; alsaEqBands[]) {
+        if (bv < -20) bv = -20; else if (bv > 20) bv = 20;
+        if (bv != lastEqBands.ptr[bidx]) {
+          lastEqBands.ptr[bidx] = bv;
+          double v = 0.03*bv+0.000999999*bv*bv;
+          //{ import core.stdc.stdio; printf("  band #%u; value=%d; v=%g\n", cast(uint)bidx, bv, v); }
+          set_gain(cast(int)bidx, 0/*chan*/, v);
+          set_gain(cast(int)bidx, 1/*chan*/, v);
+        }
+      }
+      iir(buf, cast(int)samples, xxoutchans);
+    }
+  }
 
   //{ import core.stdc.stdio; printf("smpCount: %u\n", cast(uint)smpCount); }
   // need resampling?
   if (srate == realsrate || !alsaEnableResampling) {
     // easy deal, no resampling required
     if (didFloat) tflFloat2Short(rsfbufi[0..smpCount], b[0..smpCount]);
+    doEqualizing(b, smpCount, srate);
     outSoundFlushX(b, smpCount*2);
   } else {
     // oops, must resample
@@ -214,6 +247,7 @@ void outSoundFlush () {
       //{ import core.stdc.stdio; printf("inpos=%u; smpCount=%u; iu=%u; ou=%u\n", cast(uint)inpos, cast(uint)smpCount, cast(uint)srbdata.inputSamplesUsed, cast(uint)srbdata.outputSamplesUsed); }
       if (srbdata.outputSamplesUsed) {
         tflFloat2Short(rsfbufo[0..srbdata.outputSamplesUsed], b[0..srbdata.outputSamplesUsed]);
+        doEqualizing(b, srbdata.outputSamplesUsed, realsrate);
         outSoundFlushX(b, srbdata.outputSamplesUsed*2);
       } else {
         // no data consumed, no data produced, so we're done
@@ -290,9 +324,6 @@ public bool alsaInit (uint asrate, ubyte chans) {
     srb.setup(chans, srate, realsrate, alsaRQuality);
   }
 
-  mbeql.setup(srate);
-  mbeqr.setup(srate);
-
   outSoundInit(chans);
 
   int err;
@@ -334,4 +365,409 @@ public void alsaWriteFloat (const(float)[] buf) {
   if (pcm is null || buf.length == 0) return;
   if (buf.length >= 1024*1024) assert(0, "too much");
   outSoundF(buf.ptr, cast(uint)(buf.length*buf[0].sizeof));
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/*
+ *   PCM time-domain equalizer
+ *
+ *   Copyright (C) 2002-2005  Felipe Rivera <liebremx at users.sourceforge.net>
+ *
+ *   This program is free software; you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation; either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program; if not, write to the Free Software
+ *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ *   $Id: iir.h,v 1.12 2005/10/17 01:57:59 liebremx Exp $
+ */
+private:
+
+/*public*/ enum EQ_CHANNELS = 2; // 6
+public enum EQ_MAX_BANDS = 10;
+
+
+/* Coefficients entry */
+struct sIIRCoefficients {
+  float beta;
+  float alpha;
+  float gamma;
+  //float dummy; // Word alignment
+}
+
+__gshared float[EQ_CHANNELS] preamp = 1.0; // Volume gain; values should be between 0.0 and 1.0
+__gshared sIIRCoefficients* eqiirCoeffs;
+//__gshared int bandCount;
+enum bandCount = EQ_MAX_BANDS;
+
+
+// Init the filters
+/*public*/ void initEqIIR (uint srate) nothrow @trusted @nogc {
+  //bandCount = EQ_MAX_BANDS;
+  auto br = BandRec(srate);
+  calc_coeffs(br);
+  eqiirCoeffs = br.coeffs;
+  clean_history();
+}
+
+
+
+/***************************
+ * IIR filter coefficients *
+ ***************************/
+__gshared sIIRCoefficients[10] iir_cfx;
+
+
+/******************************************************************
+ * Definitions and data structures to calculate the coefficients
+ ******************************************************************/
+static immutable double[10] band_f011k = [ 31, 62, 125, 250, 500, 1000, 2000, 3000, 4000, 5500 ];
+static immutable double[10] band_f022k = [ 31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 11000 ];
+static immutable double[10] band_f010 = [ 31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 ];
+static immutable double[10] band_original_f010 = [ 60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000 ];
+/*
+static immutable double[15] band_f015 = [ 25,40,63,100,160,250,400,630,1000,1600,2500,4000,6300,10000,16000 ];
+static immutable double[25] band_f025 = [ 20,31.5,40,50,80,100,125,160,250,315,400,500,800,1000,1250,1600,2500,3150,4000,5000,8000,10000,12500,16000,20000 ];
+static immutable double[31] band_f031 = [ 20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000 ];
+*/
+
+struct BandRec {
+  sIIRCoefficients* coeffs;
+  immutable(double)* cfs;
+  double octave = 1.0;
+  //int bandCount;
+  enum bandCount = EQ_MAX_BANDS;
+  double sfreq;
+
+  this (int samplerate) nothrow @trusted @nogc {
+    coeffs = iir_cfx.ptr;
+         if (samplerate <= 11025) cfs = band_f011k.ptr;
+    else if (samplerate <= 22050) cfs = band_f022k.ptr;
+    else if (samplerate <= 48000) cfs = band_original_f010.ptr;
+    else cfs = band_f010.ptr;
+    sfreq = samplerate;
+  }
+}
+
+/+
+__gshared BandRec[13] bands = [
+  BandRec(iir_cf10_11k_11025.ptr,     band_f011k.ptr,         1.0,     10, 11025.0 ),
+  BandRec(iir_cf10_22k_22050.ptr,     band_f022k.ptr,         1.0,     10, 22050.0 ),
+  BandRec(iir_cforiginal10_44100.ptr, band_original_f010.ptr, 1.0,     10, 44100.0 ),
+  BandRec(iir_cforiginal10_48000.ptr, band_original_f010.ptr, 1.0,     10, 48000.0 ),
+  BandRec(iir_cf10_96000.ptr,         band_f010.ptr,          1.0,     10, 96000.0 ),
+  /*
+  BandRec(iir_cf10_44100.ptr,         band_f010.ptr,          1.0,     10, 44100.0 ),
+  BandRec(iir_cf10_48000.ptr,         band_f010.ptr,          1.0,     10, 48000.0 ),
+  BandRec(iir_cf15_44100.ptr,         band_f015.ptr,          2.0/3.0, 15, 44100.0 ),
+  BandRec(iir_cf15_48000.ptr,         band_f015.ptr,          2.0/3.0, 15, 48000.0 ),
+  BandRec(iir_cf25_44100.ptr,         band_f025.ptr,          1.0/3.0, 25, 44100.0 ),
+  BandRec(iir_cf25_48000.ptr,         band_f025.ptr,          1.0/3.0, 25, 48000.0 ),
+  BandRec(iir_cf31_44100.ptr,         band_f031.ptr,          1.0/3.0, 31, 44100.0 ),
+  BandRec(iir_cf31_48000.ptr,         band_f031.ptr,          1.0/3.0, 31, 48000.0 ),
+  */
+];
+
+shared static this () { calc_coeffs(); }
++/
+
+
+import std.math : PI, SQRT2;
+
+enum GAIN_F0 = 1.0;
+enum GAIN_F1 = GAIN_F0/SQRT2;
+
+double TETA (double sfreq, double f) nothrow @trusted @nogc { return 2*PI*cast(double)f/ /*bands[n].*/sfreq; }
+double TWOPOWER (double value) nothrow @trusted @nogc { return value*value; }
+
+auto BETA2 (double tf0, double tf) nothrow @trusted @nogc {
+  import std.math : cos, sin;
+  return
+    (TWOPOWER(GAIN_F1)*TWOPOWER(cos(tf0))
+     - 2.0 * TWOPOWER(GAIN_F1) * cos(tf) * cos(tf0)
+     + TWOPOWER(GAIN_F1)
+     - TWOPOWER(GAIN_F0) * TWOPOWER(sin(tf)));
+}
+
+auto BETA1 (double tf0, double tf) nothrow @trusted @nogc {
+  import std.math : cos, sin;
+  return
+    (2.0 * TWOPOWER(GAIN_F1) * TWOPOWER(cos(tf))
+     + TWOPOWER(GAIN_F1) * TWOPOWER(cos(tf0))
+     - 2.0 * TWOPOWER(GAIN_F1) * cos(tf) * cos(tf0)
+     - TWOPOWER(GAIN_F1) + TWOPOWER(GAIN_F0) * TWOPOWER(sin(tf)));
+}
+
+auto BETA0 (double tf0, double tf) nothrow @trusted @nogc {
+  import std.math : cos, sin;
+  return
+    (0.25 * TWOPOWER(GAIN_F1) * TWOPOWER(cos(tf0))
+     - 0.5 * TWOPOWER(GAIN_F1) * cos(tf) * cos(tf0)
+     + 0.25 * TWOPOWER(GAIN_F1)
+     - 0.25 * TWOPOWER(GAIN_F0) * TWOPOWER(sin(tf)));
+}
+
+
+auto GAMMA (double beta, double tf0) nothrow @trusted @nogc { import std.math : cos; return (0.5+beta)*cos(tf0); }
+auto ALPHA (double beta) nothrow @trusted @nogc { return (0.5-beta)/2.0; }
+
+/* Get the coeffs for a given number of bands and sampling frequency */
+/*
+sIIRCoefficients* get_coeffs (uint sfreq) nothrow @trusted @nogc {
+  switch (sfreq) {
+    case 11025: return iir_cf10_11k_11025.ptr;
+    case 22050: return eqiirCoeffs = iir_cf10_22k_22050.ptr;
+    case 48000: return eqiirCoeffs = iir_cforiginal10_48000.ptr;
+    case 96000: return eqiirCoeffs = iir_cf10_96000.ptr;
+    default: break;
+  }
+  return null;
+}
+*/
+
+
+/* Get the freqs at both sides of F0. These will be cut at -3dB */
+void find_f1_and_f2 (double f0, double octave_percent, double* f1, double* f2) nothrow @trusted @nogc {
+  import std.math : pow;
+  double octave_factor = pow(2.0, octave_percent/2.0);
+  *f1 = f0/octave_factor;
+  *f2 = f0*octave_factor;
+}
+
+
+/* Find the quadratic root
+ * Always return the smallest root */
+bool find_root (double a, double b, double c, double* x0) nothrow @trusted @nogc {
+  import std.math : sqrt;
+  immutable double k = c-((b*b)/(4.0*a));
+  if (-(k/a) < 0.0) return false;
+  immutable double h = -(b/(2.0*a));
+  *x0 = h-sqrt(-(k/a));
+  immutable double x1 = h+sqrt(-(k/a));
+  if (x1 < *x0) *x0 = x1;
+  return true;
+}
+
+
+/* Calculate all the coefficients as specified in the bands[] array */
+void calc_coeffs (ref BandRec band) nothrow @trusted @nogc {
+  immutable(double)* freqs = band.cfs;
+  for (int i = 0; i < band.bandCount; ++i) {
+    double f1 = void, f2 = void;
+    double x0 = void;
+    /* Find -3dB frequencies for the center freq */
+    find_f1_and_f2(freqs[i], band.octave, &f1, &f2);
+    /* Find Beta */
+    if (find_root(
+          BETA2(TETA(band.sfreq, freqs[i]), TETA(band.sfreq, f1)),
+          BETA1(TETA(band.sfreq, freqs[i]), TETA(band.sfreq, f1)),
+          BETA0(TETA(band.sfreq, freqs[i]), TETA(band.sfreq, f1)),
+          &x0))
+    {
+      /* Got a solution, now calculate the rest of the factors */
+      /* Take the smallest root always (find_root returns the smallest one)
+       *
+       * NOTE: The IIR equation is
+       *  y[n] = 2 * (alpha*(x[n]-x[n-2]) + gamma*y[n-1] - beta*y[n-2])
+       *  Now the 2 factor has been distributed in the coefficients
+       */
+      /* Now store the coefficients */
+      band.coeffs[i].beta = 2.0*x0;
+      band.coeffs[i].alpha = 2.0*ALPHA(x0);
+      band.coeffs[i].gamma = 2.0*GAMMA(x0, TETA(band.sfreq, freqs[i]));
+      version(eq_debug) {
+        import core.stdc.stdio;
+        printf("Freq[%d]: %f. Beta: %.10e Alpha: %.10e Gamma %.10e\n", i, freqs[i], band.coeffs[i].beta, band.coeffs[i].alpha, band.coeffs[i].gamma);
+      }
+    } else {
+      /* Shouldn't happen */
+      band.coeffs[i].beta = 0.0;
+      band.coeffs[i].alpha = 0.0;
+      band.coeffs[i].gamma = 0.0;
+      import core.stdc.stdio;
+      printf("  **** Where are the roots?\n");
+    }
+  }
+}
+
+
+alias sample_t = double;
+
+/*
+ * Normal FPU implementation data structures
+ */
+/* Coefficient history for the IIR filter */
+struct sXYData {
+  sample_t[3] x = 0; /* x[n], x[n-1], x[n-2] */
+  sample_t[3] y = 0; /* y[n], y[n-1], y[n-2] */
+  //sample_t dummy1; // Word alignment
+  //sample_t dummy2;
+}
+
+
+//static sXYData data_history[EQ_MAX_BANDS][EQ_CHANNELS];
+//static sXYData data_history2[EQ_MAX_BANDS][EQ_CHANNELS];
+//float gain[EQ_MAX_BANDS][EQ_CHANNELS];
+
+__gshared sXYData[EQ_CHANNELS][EQ_MAX_BANDS] data_history;
+__gshared sXYData[EQ_CHANNELS][EQ_MAX_BANDS] data_history2;
+__gshared float[EQ_CHANNELS][EQ_MAX_BANDS] gain;
+
+shared static this () {
+  foreach (immutable bn; 0..EQ_MAX_BANDS) {
+    foreach (immutable cn; 0..EQ_CHANNELS) {
+      gain[bn][cn] = 0;
+    }
+  }
+}
+
+/* random noise */
+__gshared sample_t[256] dither;
+__gshared int di;
+
+/* Indexes for the history arrays
+ * These have to be kept between calls to this function
+ * hence they are static */
+__gshared int iirI = 2, iirJ = 1, iirK = 0;
+
+
+/*public*/ void set_gain (int index, int chn, float val) nothrow @trusted @nogc {
+  gain[index][chn] = val;
+}
+
+
+void clean_history () nothrow @trusted @nogc {
+  //import core.stdc.string : memset;
+  // Zero the history arrays
+  //memset(data_history.ptr, 0, sXYData.sizeof * EQ_MAX_BANDS * EQ_CHANNELS);
+  //memset(data_history2.ptr, 0, sXYData.sizeof * EQ_MAX_BANDS * EQ_CHANNELS);
+  foreach (immutable bn; 0..EQ_MAX_BANDS) {
+    foreach (immutable cn; 0..EQ_CHANNELS) {
+      data_history[bn][cn] = sXYData.init;
+      data_history2[bn][cn] = sXYData.init;
+      //gain[bn][cn] = 0;
+    }
+  }
+  import std.random : Xorshift32;
+  //for (n = 0; n < 256; n++) dither[n] = (uniform!"[)"(0, 4)) - 2;
+  auto xe = Xorshift32(666);
+  dither[] = 0;
+  for (int n = 0; n < 256; ++n) { int t = (xe.front%4)-2; dither.ptr[n] = cast(sample_t)t; xe.popFront(); }
+  //{ import core.stdc.stdio; for (int n = 0; n < 256; ++n) printf("%d: %g\n", n, dither.ptr[n]); }
+  //dither[] = 0;
+  //for (int n = 0; n < 256; ++n) dither.ptr[n] = n%4-2;
+  di = 0;
+  iirI = 2;
+  iirJ = 1;
+  iirK = 0;
+}
+
+
+// input: 16-bit samples, interleaved; length in BYTES
+/*public*/ void iir (short* data, int smplength, int nch) nothrow @trusted @nogc {
+  if (eqiirCoeffs is null) return;
+
+  /**
+   * IIR filter equation is
+   * y[n] = 2 * (alpha*(x[n]-x[n-2]) + gamma*y[n-1] - beta*y[n-2])
+   *
+   * NOTE: The 2 factor was introduced in the coefficients to save
+   *      a multiplication
+   *
+   * This algorithm cascades two filters to get nice filtering
+   * at the expense of extra CPU cycles
+   */
+  for (int index = 0; index < smplength; index += nch) {
+    // for each channel
+    for (int channel = 0; channel < nch; ++channel) {
+      sample_t pcm = *data*4.0;
+
+      // preamp gain
+      pcm *= preamp[channel];
+
+      // add random noise
+      pcm += dither.ptr[di];
+
+      sample_t outs = 0.0;
+
+      // for each band
+      for (int band = 0; band < bandCount; ++band) {
+        // store Xi(n)
+        data_history.ptr[band].ptr[channel].x.ptr[iirI] = pcm;
+        // calculate and store Yi(n)
+        data_history.ptr[band].ptr[channel].y.ptr[iirI] = (
+          //     = alpha * [x(n)-x(n-2)]
+          eqiirCoeffs[band].alpha * ( data_history.ptr[band].ptr[channel].x.ptr[iirI]-data_history.ptr[band].ptr[channel].x.ptr[iirK])
+          //     + gamma * y(n-1)
+          + eqiirCoeffs[band].gamma * data_history.ptr[band].ptr[channel].y.ptr[iirJ]
+          //     - beta * y(n-2)
+          - eqiirCoeffs[band].beta * data_history.ptr[band].ptr[channel].y.ptr[iirK]
+        );
+        // the multiplication by 2.0 was 'moved' into the coefficients to save CPU cycles here
+        // apply the gain
+        outs += data_history.ptr[band].ptr[channel].y.ptr[iirI]*gain.ptr[band].ptr[channel]; // * 2.0;
+      } // for each band
+
+      version(all) { //if (cfg.eq_extra_filtering)
+        // filter the sample again
+        for (int band = 0; band < bandCount; ++band) {
+          // store Xi(n)
+          data_history2.ptr[band].ptr[channel].x.ptr[iirI] = outs;
+          // calculate and store Yi(n)
+          data_history2.ptr[band].ptr[channel].y.ptr[iirI] = (
+            // y(n) = alpha * [x(n)-x(n-2)]
+            eqiirCoeffs[band].alpha * (data_history2.ptr[band].ptr[channel].x.ptr[iirI]-data_history2.ptr[band].ptr[channel].x.ptr[iirK])
+            //       + gamma * y(n-1)
+            + eqiirCoeffs[band].gamma * data_history2.ptr[band].ptr[channel].y.ptr[iirJ]
+            //     - beta * y(n-2)
+            - eqiirCoeffs[band].beta * data_history2.ptr[band].ptr[channel].y.ptr[iirK]
+          );
+          // apply the gain
+          outs +=  data_history2.ptr[band].ptr[channel].y.ptr[iirI]*gain.ptr[band].ptr[channel];
+        } // for each band
+      }
+
+      /* Volume stuff
+         Scale down original PCM sample and add it to the filters
+         output. This substitutes the multiplication by 0.25
+         Go back to use the floating point multiplication before the
+         conversion to give more dynamic range
+         */
+      outs += pcm*0.25;
+
+      // remove random noise
+      outs -= dither.ptr[di]*0.25;
+
+      // round and convert to integer
+      version(X86) {
+        import core.stdc.math : lrint;
+        int tempgint = cast(int)lrint(outs);
+        //int tempgint = cast(int)outs;
+      } else {
+        int tempgint = cast(int)outs;
+      }
+
+      // limit the output
+           if (tempgint < short.min) *data = short.min;
+      else if (tempgint > short.max) *data = short.max;
+      else *data = cast(short)tempgint;
+      ++data;
+    } // for each channel
+
+    // wrap around the indexes
+    iirI = (iirI+1)%3;
+    iirJ = (iirJ+1)%3;
+    iirK = (iirK+1)%3;
+    // random noise index
+    di = (di+1)%256;
+  }
 }
