@@ -48,7 +48,7 @@ struct Mp3Info {
   uint bitrate;
 
   static struct Index { ulong fpos; ulong samples; } // samples done before this frame (*multiplied* by channels)
-  Index[] index;
+  Index[] index; // WARNING: DON'T STORE SLICES OF IT!
 
   @property bool valid () const pure nothrow @safe @nogc { return (sampleRate != 0); }
 }
@@ -147,7 +147,15 @@ Mp3Info mp3Scan(bool buildIndex=false, RDG) (scope RDG rdg) if (is(typeof({
       inbufpos += (res > Mp3HeaderSize ? res-Mp3HeaderSize : 1); // move to header
     } else {
       // got valid frame
-      static if (buildIndex) info.index ~= info.Index(bytesRead-inbufused+inbufpos, info.samples);
+      static if (buildIndex) {
+        auto optr = info.index.ptr;
+        info.index ~= info.Index(bytesRead-inbufused+inbufpos, info.samples);
+        if (info.index.ptr !is optr) {
+          import core.memory : GC;
+          if (info.index.ptr is GC.addrOf(info.index.ptr)) GC.setAttr(info.index.ptr, GC.BlkAttr.NO_INTERIOR);
+          GC.collect(); // somehow this fixes amper
+        }
+      }
       inbufpos += res; // move past frame
       if (++headersCount == 0) headersCount = uint.max;
       if (!info.valid) {
