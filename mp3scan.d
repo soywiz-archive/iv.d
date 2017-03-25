@@ -46,11 +46,17 @@ struct Mp3Info {
   ulong samples;
   Mp3Mode mode;
   uint bitrate;
+  long id3v1ofs;
+  uint id3v1size;
+  long id3v2ofs;
+  uint id3v2size;
 
   static struct Index { ulong fpos; ulong samples; } // samples done before this frame (*multiplied* by channels)
   Index[] index; // WARNING: DON'T STORE SLICES OF IT!
 
   @property bool valid () const pure nothrow @safe @nogc { return (sampleRate != 0); }
+  @property bool hasID3v1 () const pure nothrow @safe @nogc { return (id3v1size == 128); }
+  @property bool hasID3v2 () const pure nothrow @safe @nogc { return (id3v2size > 10); }
 }
 
 
@@ -63,9 +69,10 @@ Mp3Info mp3Scan(bool buildIndex=false, RDG) (scope RDG rdg) if (is(typeof({
   ubyte[4096] inbuf;
   uint inbufpos, inbufused;
   Mp3Ctx s;
-  bool skipTagCheck;
   uint headersCount;
   ulong bytesRead = 0;
+
+  ulong streamOfs () { pragma(inline, true); return bytesRead-inbufused+inbufpos; }
 
   void fillInputBuffer () {
     if (inbufpos < inbufused) {
@@ -115,25 +122,26 @@ Mp3Info mp3Scan(bool buildIndex=false, RDG) (scope RDG rdg) if (is(typeof({
     auto left = inbufused-inbufpos;
     if (left < Mp3HeaderSize) break;
     // check for tags
-    if (!skipTagCheck) {
-      if (left < 10) break; // alas, no more data
-      skipTagCheck = true;
-      // check for ID3v2
-      if (inbuf.ptr[0] == 'I' && inbuf.ptr[1] == 'D' && inbuf.ptr[2] == '3' && inbuf.ptr[3] != 0xff && inbuf.ptr[4] != 0xff &&
-          ((inbuf.ptr[6]|inbuf.ptr[7]|inbuf.ptr[8]|inbuf.ptr[9])&0x80) == 0) { // see ID3v2 specs
-        // get tag size
-        uint sz = (inbuf.ptr[9]|(inbuf.ptr[8]<<7)|(inbuf.ptr[7]<<14)|(inbuf.ptr[6]<<21))+10;
-        // skip `sz` bytes, it's a tag
-        skipBytes(sz);
-        continue;
+    // check for ID3v2
+    if (info.id3v2size == 0 && left >= 10 && inbuf.ptr[inbufpos+0] == 'I' && inbuf.ptr[inbufpos+1] == 'D' && inbuf.ptr[inbufpos+2] == '3' && inbuf.ptr[inbufpos+3] != 0xff && inbuf.ptr[inbufpos+4] != 0xff &&
+        ((inbuf.ptr[inbufpos+6]|inbuf.ptr[inbufpos+7]|inbuf.ptr[inbufpos+8]|inbuf.ptr[inbufpos+9])&0x80) == 0) { // see ID3v2 specs
+      // get tag size
+      uint sz = (inbuf.ptr[inbufpos+9]|(inbuf.ptr[inbufpos+8]<<7)|(inbuf.ptr[inbufpos+7]<<14)|(inbuf.ptr[inbufpos+6]<<21))+10;
+      if (sz > 10) {
+        info.id3v2ofs = streamOfs;
+        info.id3v2size = sz;
       }
-    } else {
-      if (left < 4) break; // alas, no more data
-      if (inbuf.ptr[0] == 'T' && inbuf.ptr[1] == 'A' && inbuf.ptr[2] == 'G') {
-        // this may be ID3v1, just skip 128 bytes
-        skipBytes(128);
-        continue;
-      }
+      // skip `sz` bytes, it's a tag
+      skipBytes(sz);
+      continue;
+    }
+    // check for ID3v1
+    if (info.id3v1size == 0 && left >= 3 && inbuf.ptr[inbufpos+0] == 'T' && inbuf.ptr[inbufpos+1] == 'A' && inbuf.ptr[inbufpos+2] == 'G') {
+      // this may be ID3v1, just skip 128 bytes
+      info.id3v1ofs = streamOfs;
+      info.id3v1size = 128;
+      skipBytes(128);
+      continue;
     }
     int res = mp3SkipFrame(s, inbuf.ptr+inbufpos, left); // return bytes used in buffer or -1
     debug(mp3scan_verbose) { import core.stdc.stdio : printf; printf("FRAME: res=%d; valid=%u; frame_size=%d; samples=%d (%u) read=%u (inbufpos=%u; inbufused=%u)\n", res, (s.valid ? 1 : 0), s.frame_size, s.sample_count, headersCount, cast(uint)bytesRead, inbufpos, inbufused); }
@@ -149,7 +157,7 @@ Mp3Info mp3Scan(bool buildIndex=false, RDG) (scope RDG rdg) if (is(typeof({
       // got valid frame
       static if (buildIndex) {
         auto optr = info.index.ptr;
-        info.index ~= info.Index(bytesRead-inbufused+inbufpos, info.samples);
+        info.index ~= info.Index(streamOfs, info.samples);
         if (info.index.ptr !is optr) {
           import core.memory : GC;
           if (info.index.ptr is GC.addrOf(info.index.ptr)) GC.setAttr(info.index.ptr, GC.BlkAttr.NO_INTERIOR);

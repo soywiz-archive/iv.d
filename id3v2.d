@@ -38,7 +38,8 @@ struct ID3v2 {
   // returns `false` if no tag found
   // throws if tag is invalid (i.e. found, but inparseable)
   // fl position is undefined after return/throw
-  bool scanParse (VFile fl) {
+  // if `doscan` is `false`, assume that fl position is at the tag
+  bool scanParse(bool doscan=true) (VFile fl) {
     ubyte[] rdbuf;
     int rbpos, rbused;
     bool rbeof;
@@ -88,28 +89,33 @@ struct ID3v2 {
     ubyte verhi, verlo;
     // scan
     fillBuffer(); // initial fill
-    for (;;) {
+    scanloop: for (;;) {
       import core.stdc.string : memchr;
       if (rbeof || availData < 10) return false; // alas
       if (rdbuf.ptr[0] == 'I' && rdbuf.ptr[1] == 'D' && rdbuf.ptr[2] == '3' && rdbuf.ptr[3] <= 3 && rdbuf.ptr[4] != 0xff) {
         // check flags
-        flags = rdbuf.ptr[5];
-        if (flags&0b11111) goto skipit;
-        wholesize = 0;
-        foreach (immutable bpos; 6..10) {
-          ubyte b = rdbuf.ptr[bpos];
-          if (b&0x80) goto skipit; // oops
-          wholesize = (wholesize<<7)|b;
-        }
-        verhi = rdbuf.ptr[3];
-        verlo = rdbuf.ptr[4];
-        rbpos = 10;
-        break;
+        do {
+          flags = rdbuf.ptr[5];
+          if (flags&0b11111) break;
+          wholesize = 0;
+          foreach (immutable bpos; 6..10) {
+            ubyte b = rdbuf.ptr[bpos];
+            if (b&0x80) break; // oops
+            wholesize = (wholesize<<7)|b;
+          }
+          verhi = rdbuf.ptr[3];
+          verlo = rdbuf.ptr[4];
+          rbpos = 10;
+          break scanloop;
+        } while (0);
       }
-     skipit:
-      auto fptr = memchr(rdbuf.ptr+1, 'I', availData-1);
-      uint pos = (fptr !is null ? cast(uint)(fptr-rdbuf.ptr) : availData);
-      shiftFillBuffer(availData-pos);
+      static if (!doscan) {
+        return false;
+      } else {
+        auto fptr = memchr(rdbuf.ptr+1, 'I', availData-1);
+        uint pos = (fptr !is null ? cast(uint)(fptr-rdbuf.ptr) : availData);
+        shiftFillBuffer(availData-pos);
+      }
     }
 
     bool flagUnsync = ((flags*0x80) != 0);
@@ -146,12 +152,12 @@ struct ID3v2 {
     }
 
     // read frames
-    mainloop: while (wholesize >= 8) {
+    readloop: while (wholesize >= 8) {
       char[4] tag = void;
       foreach (ref char ch; tag[]) {
         ch = cast(char)getByte;
         --wholesize;
-        if (!((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z'))) break mainloop; // oops
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z'))) break readloop; // oops
       }
       lastByteWasFF = false;
       uint tagsize = getUInt!uint;
