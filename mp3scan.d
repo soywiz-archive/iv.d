@@ -161,7 +161,7 @@ Mp3Info mp3Scan(bool buildIndex=false, RDG) (scope RDG rdg) if (is(typeof({
         if (info.index.ptr !is optr) {
           import core.memory : GC;
           if (info.index.ptr is GC.addrOf(info.index.ptr)) GC.setAttr(info.index.ptr, GC.BlkAttr.NO_INTERIOR);
-          GC.collect(); // somehow this fixes amper
+          //GC.collect(); // somehow this fixes amper
         }
       }
       inbufpos += res; // move past frame
