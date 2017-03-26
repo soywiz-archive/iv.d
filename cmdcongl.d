@@ -262,7 +262,7 @@ private bool glconGenTexture () {
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
   */
 
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrwdt, scrhgt, 0, GL_RGBA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
+  glTexImage2D(GL_TEXTURE_2D, 0, /*GL_RGBA*/GL_BGRA, scrwdt, scrhgt, 0, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
 
   return true;
 }
@@ -292,7 +292,23 @@ public void glconDraw () {
         //{ import core.stdc.stdio; printf("rendering to backbuffer\n"); }
         if (!glconDrawWindow.closed && scrwdt > 0 && scrhgt > 0 && (!glconDrawDirect || !glconDrawWindow.hidden)) {
           XImage ximg;
-          glcon_ximageInitSimple(ximg, scrwdt, scrhgt, convbuf);
+          //glcon_ximageInitSimple(ximg, scrwdt, scrhgt, convbuf);
+          ximg.width = scrwdt;
+          ximg.height = scrhgt;
+          ximg.xoffset = 0;
+          ximg.format = ImageFormat.ZPixmap;
+          ximg.data = convbuf;
+          ximg.byte_order = 0;
+          ximg.bitmap_unit = 32;
+          ximg.bitmap_bit_order = 0;
+          ximg.bitmap_pad = 8;
+          ximg.depth = 24;
+          ximg.bytes_per_line = 0;
+          ximg.bits_per_pixel = 32; // THIS MATTERS!
+          ximg.red_mask = 0x00ff0000;
+          ximg.green_mask = 0x0000ff00;
+          ximg.blue_mask = 0x000000ff;
+          XInitImage(&ximg);
           int desty = rConsoleHeight-scrhgt;
           if (glconDrawDirect) {
             XPutImage(glconDrawWindow.impl.display, cast(Drawable)glconDrawWindow.impl.window, glconDrawWindow.impl.gc, &ximg, 0, 0, 0/*destx*/, desty, scrwdt, scrhgt);
@@ -371,7 +387,7 @@ public void glconDraw () {
   glBindTexture(GL_TEXTURE_2D, convbufTexId);
   if (updatetex) {
     //glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf);
   }
 
   int ofs = (scrhgt-rConsoleHeight)*conScale;
@@ -569,18 +585,25 @@ void drawStar (int x0, int y0, int radius) nothrow @trusted @nogc {
 
 void conSetColor (uint c) nothrow @trusted @nogc {
   pragma(inline, true);
-  conColor = (c&0x00ff00)|((c>>16)&0xff)|((c&0xff)<<16)|0xff000000;
+  //conColor = (c&0x00ff00)|((c>>16)&0xff)|((c&0xff)<<16)|0xff000000;
+  conColor = c|0xff000000;
 }
 
 
 void conDrawChar (char ch) nothrow @trusted @nogc {
+  /*
   int r = conColor&0xff;
   int g = (conColor>>8)&0xff;
   int b = (conColor>>16)&0xff;
+  */
+  int r = (conColor>>16)&0xff;
+  int g = (conColor>>8)&0xff;
+  int b = conColor&0xff;
   immutable int rr = r, gg = g, bb = b;
   foreach_reverse (immutable y; 0..10) {
     ushort v = glConFont10.ptr[cast(uint)ch*10+y];
-    immutable uint cc = (b<<16)|(g<<8)|r|0xff000000;
+    //immutable uint cc = (b<<16)|(g<<8)|r|0xff000000;
+    immutable uint cc = (r<<16)|(g<<8)|b|0xff000000;
     foreach (immutable x; 0..10) {
       if (v&0x8000) vsetPixel(conDrawX+x, conDrawY+y, cc);
       v <<= 1;
@@ -600,11 +623,17 @@ void conDrawChar (char ch) nothrow @trusted @nogc {
 
 
 void conRect (int w, int h) nothrow @trusted @nogc {
+  /*
   int r = conColor&0xff;
   int g = (conColor>>8)&0xff;
   int b = (conColor>>16)&0xff;
+  */
+  int r = (conColor>>16)&0xff;
+  int g = (conColor>>8)&0xff;
+  int b = conColor&0xff;
   foreach_reverse (immutable y; 0..h) {
-    immutable uint cc = (b<<16)|(g<<8)|r|0xff000000;
+    //immutable uint cc = (b<<16)|(g<<8)|r|0xff000000;
+    immutable uint cc = (r<<16)|(g<<8)|b|0xff000000;
     foreach (immutable x; conDrawX..conDrawX+w) vsetPixel(x, conDrawY+y, cc);
     if ((r -= 8) < 0) r = 0;
     if ((g -= 8) < 0) g = 0;
@@ -744,7 +773,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
-import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable;
+import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable, Status;
 
 public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
 
@@ -1127,6 +1156,7 @@ enum uint GL_PROJECTION = 0x1701;
 enum uint GL_TEXTURE = 0x1702;
 enum uint GL_COLOR = 0x1800;
 enum uint GL_RGBA = 0x1908;
+enum uint GL_BGRA = 0x80E1;
 enum uint GL_NEAREST = 0x2600;
 enum uint GL_TEXTURE_MAG_FILTER = 0x2800;
 enum uint GL_TEXTURE_MIN_FILTER = 0x2801;
@@ -1396,6 +1426,11 @@ private auto glbfn_glVertex2i_loader (int a0, int a1) nothrow @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+extern(C) nothrow @trusted @nogc {
+  Status XInitImage (XImage* image);
+}
+
+/+
 private extern(C) nothrow @trusted @nogc {
   import core.stdc.config : c_long, c_ulong;
 
@@ -1414,9 +1449,10 @@ private extern(C) nothrow @trusted @nogc {
     if (ximg.data is null) return 0;
     if (x < 0 || y < 0 || x >= ximg.width || y >= ximg.height) return 0;
     auto buf = cast(const(uint)*)ximg.data;
-    uint v = buf[y*ximg.width+x];
-    v = (v&0xff_00ff00u)|((v>>16)&0x00_0000ffu)|((v<<16)&0x00_ff0000u);
-    return v;
+    //uint v = buf[y*ximg.width+x];
+    //v = (v&0xff_00ff00u)|((v>>16)&0x00_0000ffu)|((v<<16)&0x00_ff0000u);
+    //return v;
+    return buf[y*ximg.width+x];
   }
 
   int glcon_xxsimple_put_pixel (XImage* ximg, int x, int y, c_ulong clr) {
@@ -1458,3 +1494,4 @@ private extern(C) nothrow @trusted @nogc {
     handle.f.add_pixel = &glcon_xxsimple_add_pixel;
   }
 }
++/
