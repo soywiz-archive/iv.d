@@ -203,7 +203,7 @@ version (XUTIL_DEFINE_FUNCTIONS) {
    * See_Also:
    *  XAddPixel(), XCreateImage(), XGetPixel(), XPutPixel(), XSubImage(), http://tronche.com/gui/x/xlib/utilities/manipulating-images.html
    */
-  XImage XSubImage (XImage* ximage, int x, int y, uint width, uint height) { return ximage.f.sub_image(ximage, x, y, width, height); }
+  XImage* XSubImage (XImage* ximage, int x, int y, uint width, uint height) { return ximage.f.sub_image(ximage, x, y, width, height); }
   /**
    * XAddPixel
    * The XAddPixel() function adds a constant value to every pixel in an image. It is useful when you have a base pixel value from allocating color resources and need to manipulate the image to that form.

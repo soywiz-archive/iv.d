@@ -298,7 +298,7 @@ struct XImage {
     int function (XImage*) destroy_image;
     c_ulong function (XImage*, int, int) get_pixel;
     int function (XImage*, int, int, c_ulong ) put_pixel;
-    XImage function (XImage*, int, int, uint, uint) sub_image;
+    XImage* function (XImage*, int, int, uint, uint) sub_image;
     int function (XImage*, c_long) add_pixel;
   }
   F f;

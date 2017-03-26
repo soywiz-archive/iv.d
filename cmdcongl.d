@@ -202,7 +202,7 @@ private bool glconGenRenderBuffer () {
   if (convbuf is null || prevScrWdt != scrwdt || prevScrHgt != scrhgt) {
     import core.stdc.stdlib : free, realloc;
     // need new buffer; kill old texture, so it will be recreated
-    if (glconBackBuffer is null && glconAllowOpenGLRender) {
+    if (glconDrawWindow is null && glconAllowOpenGLRender) {
       if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
     }
     auto nbuf = cast(uint*)realloc(convbuf, scrwdt*scrhgt*4);
@@ -226,7 +226,7 @@ private bool glconGenTexture () {
   if (glconRenderFailed) return false;
 
   static if (OptCmdConGlHasSdpy) {
-    if (glconBackBuffer !is null) return false;
+    if (glconDrawWindow !is null) return false;
   }
 
   if (convbufTexId != 0) return false;
@@ -286,32 +286,19 @@ public void glconDraw () {
   if (glconRenderFailed) return; // alas
 
   static if (OptCmdConGlHasSdpy) {
-    if (glconBackBuffer !is null) {
+    if (glconDrawWindow !is null) {
       static if (UsingSimpledisplayX11) {
         // ooops. render to backbuffer
         //{ import core.stdc.stdio; printf("rendering to backbuffer\n"); }
-        int bbw = glconBackBuffer.width;
-        int bbh = glconBackBuffer.height;
-        if (bbh > scrhgt) bbh = scrhgt;
-        int copyw = (bbw < scrwdt ? bbw : scrwdt);
-        const(uint)* src = cast(const(uint)*)convbuf;
-        uint* dst = cast(uint*)glconBackBuffer.getDataPointer;
-        if (rConsoleHeight < bbh) {
-          bbh -= rConsoleHeight;
-          src += scrwdt*rConsoleHeight;
-        }
-        while (bbh-- > 0) {
-          auto s = src;
-          auto d = dst;
-          // dword copying is faster than rearranging bytes with assignments
-          foreach (immutable widx; 0..copyw) {
-            uint v = *s++;
-            // rearrange bytes for X11 image
-            v = (v&0xff_00ff00u)|((v>>16)&0x00_0000ffu)|((v<<16)&0x00_ff0000u);
-            *d++ = v;
+        if (!glconDrawWindow.closed && scrwdt > 0 && scrhgt > 0 && (!glconDrawDirect || !glconDrawWindow.hidden)) {
+          XImage ximg;
+          glcon_ximageInitSimple(ximg, scrwdt, scrhgt, convbuf);
+          int desty = rConsoleHeight-scrhgt;
+          if (glconDrawDirect) {
+            XPutImage(glconDrawWindow.impl.display, cast(Drawable)glconDrawWindow.impl.window, glconDrawWindow.impl.gc, &ximg, 0, 0, 0/*destx*/, desty, scrwdt, scrhgt);
+          } else {
+            XPutImage(glconDrawWindow.impl.display, cast(Drawable)glconDrawWindow.impl.buffer, glconDrawWindow.impl.gc, &ximg, 0, 0, 0/*destx*/, desty, scrwdt, scrhgt);
           }
-          src += scrwdt;
-          dst += bbw;
         }
       }
       return;
@@ -757,7 +744,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
-import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Image;
+import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable;
 
 public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
 
@@ -851,18 +838,34 @@ public bool glconCharEvent (dchar ch) {
 }
 
 
-public class GLConScreenRebuildEvent {} ///
+/// call this in GLConDoConsoleCommandsEvent handler
+public void glconProcessEventMessage () {
+  bool sendAnother = false;
+  bool wasCommands = false;
+  bool prevVisible = isConsoleVisible;
+  {
+    consoleLock();
+    scope(exit) consoleUnlock();
+    wasCommands = conQueueEmpty;
+    conProcessQueue();
+    sendAnother = !conQueueEmpty();
+  }
+  if (glconCtlWindow is null || glconCtlWindow.closed) return;
+  if (sendAnother) glconPostDoConCommands();
+  if (wasCommands || prevVisible || isConsoleVisible) glconPostScreenRepaint();
+}
+
+
 public class GLConScreenRepaintEvent {} ///
 public class GLConDoConsoleCommandsEvent {} ///
 
-__gshared GLConScreenRebuildEvent evScrRebuild;
 __gshared GLConScreenRepaintEvent evScreenRepaint;
 __gshared GLConDoConsoleCommandsEvent evDoConCommands;
 public __gshared SimpleWindow glconCtlWindow; /// this window will be used to send messages
-public __gshared Image glconBackBuffer; /// if `null`, OpenGL will be used
+public __gshared SimpleWindow glconDrawWindow; /// if `null`, OpenGL will be used
+public __gshared bool glconDrawDirect = false; /// if `true`, draw directly to glconDrawWindow, else to it's backbuffer
 
 shared static this () {
-  evScrRebuild = new GLConScreenRebuildEvent();
   evScreenRepaint = new GLConScreenRepaintEvent();
   evDoConCommands = new GLConDoConsoleCommandsEvent();
   //__gshared oldccb = conInputChangedCB;
@@ -875,22 +878,13 @@ shared static this () {
 }
 
 ///
-public void glconPostScreenRebuild () {
-  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postEvent(evScrRebuild);
-}
-
-public void glconPostScreenRebuildDelayed (int tout=35) {
-  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postTimeout(evScrRebuild, (tout < 0 ? 0 : tout));
-}
-
-///
 public void glconPostScreenRepaint () {
-  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postEvent(evScreenRepaint);
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent) glconCtlWindow.postEvent(evScreenRepaint);
 }
 
 ///
 public void glconPostScreenRepaintDelayed (int tout=35) {
-  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent && !glconCtlWindow.eventQueued!GLConScreenRebuildEvent) glconCtlWindow.postTimeout(evScreenRepaint, (tout < 0 ? 0 : tout));
+  if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConScreenRepaintEvent) glconCtlWindow.postTimeout(evScreenRepaint, (tout < 0 ? 0 : tout));
 }
 
 ///
@@ -1398,4 +1392,69 @@ private auto glbfn_glVertex2i_loader (int a0, int a1) nothrow @nogc {
 
 } else {
   import iv.glbinds;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private extern(C) nothrow @trusted @nogc {
+  import core.stdc.config : c_long, c_ulong;
+
+  XImage* glcon_xxsimple_create_image (XDisplay* display, Visual* visual, uint depth, int format, int offset, ubyte* data, uint width, uint height, int bitmap_pad, int bytes_per_line) {
+    //return XCreateImage(display, visual, depth, format, offset, data, width, height, bitmap_pad, bytes_per_line);
+    return null;
+  }
+
+  int glcon_xxsimple_destroy_image (XImage* ximg) {
+    ximg.data = null;
+    ximg.width = ximg.height = 0;
+    return 0;
+  }
+
+  c_ulong glcon_xxsimple_get_pixel (XImage* ximg, int x, int y) {
+    if (ximg.data is null) return 0;
+    if (x < 0 || y < 0 || x >= ximg.width || y >= ximg.height) return 0;
+    auto buf = cast(const(uint)*)ximg.data;
+    uint v = buf[y*ximg.width+x];
+    v = (v&0xff_00ff00u)|((v>>16)&0x00_0000ffu)|((v<<16)&0x00_ff0000u);
+    return v;
+  }
+
+  int glcon_xxsimple_put_pixel (XImage* ximg, int x, int y, c_ulong clr) {
+    return 0;
+  }
+
+  XImage* glcon_xxsimple_sub_image (XImage* ximg, int x, int y, uint wdt, uint hgt) {
+    return null;
+  }
+
+  int glcon_xxsimple_add_pixel (XImage* ximg, c_long clr) {
+    return 0;
+  }
+
+  // create "simple" XImage with allocated buffer
+  void glcon_ximageInitSimple (ref XImage handle, int width, int height, void* data) {
+    handle.width = width;
+    handle.height = height;
+    handle.xoffset = 0;
+    handle.format = ImageFormat.ZPixmap;
+    handle.data = data;
+    handle.byte_order = 0;
+    handle.bitmap_unit = 0;
+    handle.bitmap_bit_order = 0;
+    handle.bitmap_pad = 0;
+    handle.depth = 24;
+    handle.bytes_per_line = 0;
+    handle.bits_per_pixel = 0; // THIS MATTERS!
+    handle.red_mask = 0;
+    handle.green_mask = 0;
+    handle.blue_mask = 0;
+
+    handle.obdata = null;
+    handle.f.create_image = &glcon_xxsimple_create_image;
+    handle.f.destroy_image = &glcon_xxsimple_destroy_image;
+    handle.f.get_pixel = &glcon_xxsimple_get_pixel;
+    handle.f.put_pixel = &glcon_xxsimple_put_pixel;
+    handle.f.sub_image = &glcon_xxsimple_sub_image;
+    handle.f.add_pixel = &glcon_xxsimple_add_pixel;
+  }
 }
