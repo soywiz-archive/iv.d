@@ -773,7 +773,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
-import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable, Status;
+import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable, Status, XInitImage;
 
 public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
 
@@ -1426,11 +1426,11 @@ private auto glbfn_glVertex2i_loader (int a0, int a1) nothrow @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/+
 extern(C) nothrow @trusted @nogc {
   Status XInitImage (XImage* image);
 }
 
-/+
 private extern(C) nothrow @trusted @nogc {
   import core.stdc.config : c_long, c_ulong;
 
