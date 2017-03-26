@@ -310,11 +310,13 @@ public void glconDraw () {
           ximg.blue_mask = 0x000000ff;
           XInitImage(&ximg);
           int desty = rConsoleHeight-scrhgt;
-          if (glconDrawDirect) {
-            XPutImage(glconDrawWindow.impl.display, cast(Drawable)glconDrawWindow.impl.window, glconDrawWindow.impl.gc, &ximg, 0, 0, 0/*destx*/, desty, scrwdt, scrhgt);
-          } else {
-            XPutImage(glconDrawWindow.impl.display, cast(Drawable)glconDrawWindow.impl.buffer, glconDrawWindow.impl.gc, &ximg, 0, 0, 0/*destx*/, desty, scrwdt, scrhgt);
-          }
+          auto dpy = glconDrawWindow.impl.display;
+          Drawable drw = (glconDrawDirect ? cast(Drawable)glconDrawWindow.impl.window : cast(Drawable)glconDrawWindow.impl.buffer);
+          GC gc = XCreateGC(dpy, drw, 0, null);
+          scope(exit) XFreeGC(dpy, gc);
+          XCopyGC(dpy, DefaultGC(dpy, DefaultScreen(dpy)), 0xffffffff, gc);
+          XSetClipMask(dpy, gc, None);
+          XPutImage(dpy, drw, gc, &ximg, 0, 0, 0/*destx*/, desty, scrwdt, scrhgt);
         }
       }
       return;
@@ -774,6 +776,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
 import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable, Status, XInitImage;
+import arsd.simpledisplay : GC, XCreateGC, XFreeGC, XCopyGC, XSetClipMask, DefaultGC, DefaultScreen, None;
 
 public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
 
