@@ -279,13 +279,13 @@ struct XImage {
   int width, height;    /* size of image */
   int xoffset;          /* number of pixels offset in X direction */
   int format;           /* XYBitmap, XYPixmap, ZPixmap */
-  char* data;           /* pointer to image data */
-  int char_order;       /* data char order, LSBFirst, MSBFirst */
+  void* data;           /* pointer to image data */
+  int byte_order;       /* data byte order, LSBFirst, MSBFirst */
   int bitmap_unit;      /* quant. of scanline 8, 16, 32 */
   int bitmap_bit_order; /* LSBFirst, MSBFirst */
   int bitmap_pad;       /* 8, 16, 32 either XY or ZPixmap */
   int depth;            /* depth of image */
-  int chars_per_line;   /* accelarator to next line */
+  int bytes_per_line;   /* accelarator to next line */
   int bits_per_pixel;   /* bits per pixel (ZPixmap) */
   c_ulong  red_mask;    /* bits in z arrangment */
   c_ulong  green_mask;
@@ -293,8 +293,8 @@ struct XImage {
   XPointer obdata;      /* hook for the object routines to hang on */
   /* image manipulation routines */
   static struct F {
-    extern (C) @trusted nothrow @nogc:
-    XImage* function (XDisplay* display, Visual* visual, uint depth, int format, int offset, char* data, uint width, uint height, int bitmap_pad, int chars_per_line) create_image;
+    extern(C):
+    XImage* function (XDisplay* display, Visual* visual, uint depth, int format, int offset, void* data, uint width, uint height, int bitmap_pad, int chars_per_line) create_image;
     int function (XImage*) destroy_image;
     c_ulong function (XImage*, int, int) get_pixel;
     int function (XImage*, int, int, c_ulong ) put_pixel;
