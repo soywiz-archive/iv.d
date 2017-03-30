@@ -9,7 +9,7 @@ import iv.x11.region;
 import iv.x11.resource : XrmStringToQuark;
 import iv.x11.keysym;
 
-extern(C) @trusted nothrow @nogc:
+extern(C):
 
 /*
  * Bitmask returned by XParseGeometry().  Each bit tells if the corresponding
@@ -216,6 +216,8 @@ version (XUTIL_DEFINE_FUNCTIONS) {
   int XAddPixel (XImage* ximage, c_long value) { return ximage.f.add_pixel(ximage, value); }
 }
 
+
+nothrow @trusted @nogc:
 /*
  * Compose sequence status structure, used in calling XLookupString.
  */
