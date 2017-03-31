@@ -262,7 +262,7 @@ private bool glconGenTexture () {
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
   */
 
-  glTexImage2D(GL_TEXTURE_2D, 0, /*GL_RGBA*/GL_BGRA, scrwdt, scrhgt, 0, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrwdt, scrhgt, 0, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
 
   return true;
 }

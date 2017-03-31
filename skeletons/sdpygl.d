@@ -574,16 +574,19 @@ void main (string[] args) {
     sdwin.closeQuery = delegate () { concmd("quit"); glconPostDoConCommands(); };
   }
 
+  /*
   sdwin.addEventListener((GLConScreenRebuildEvent evt) {
     if (sdwin.closed) return;
     if (isQuitRequested) { sdwin.close(); return; }
     gxRebuildScreen();
     sdwin.redrawOpenGlSceneNow();
   });
+  */
 
   sdwin.addEventListener((GLConScreenRepaintEvent evt) {
     if (sdwin.closed) return;
     if (isQuitRequested) { sdwin.close(); return; }
+    gxRebuildScreen();
     sdwin.redrawOpenGlSceneNow();
   });
 
