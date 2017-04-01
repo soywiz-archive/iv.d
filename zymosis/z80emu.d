@@ -1476,14 +1476,14 @@ protected nothrow @trusted @nogc:
     //pragma(inline, true);
     peekb_3ts_args_noread();
     version(Zymosis_Testing) {
-      if (truecc) memReading(PC);
+      /*if (truecc)*/ memReading(PC);
       ushort res = memPeekB(PC++);
     } else {
       ushort res = peekb(PC++);
     }
     peekb_3ts_args_noread();
     version(Zymosis_Testing) {
-      if (truecc) memReading(PC);
+      /*if (truecc)*/ memReading(PC);
       res |= memPeekB(PC)<<8;
     } else {
       res |= peekb(PC)<<8;

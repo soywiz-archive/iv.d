@@ -87,7 +87,7 @@ class MyZ80 : ZymCPU {
 private string read_test (VFile fl) {
   ubyte i, r;
   int i1, i2, im, hlt, ts;
-  ushort af, bc, de, hl, afx, bcx, dex, hlx, ix, iy, sp, pc;
+  ushort af, bc, de, hl, afx, bcx, dex, hlx, ix, iy, sp, pc, memptr;
   bool done = true;
   int ch;
   string s;
@@ -101,7 +101,7 @@ private string read_test (VFile fl) {
   z80.reset();
   z80.evenM1 = false;
   // registers
-  fl.readf(" %x %x %x %x %x %x %x %x %x %x %x %x", &af, &bc, &de, &hl, &afx, &bcx, &dex, &hlx, &ix, &iy, &sp, &pc);
+  fl.readf(" %x %x %x %x %x %x %x %x %x %x %x %x %x", &af, &bc, &de, &hl, &afx, &bcx, &dex, &hlx, &ix, &iy, &sp, &pc, &memptr);
   //writefln(":%04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x", af, bc, de, hl, afx, bcx, dex, hlx, ix, iy, sp, pc);
   z80.AF = af;
   z80.BC = bc;
@@ -115,6 +115,7 @@ private string read_test (VFile fl) {
   z80.IY = iy;
   z80.SP = sp;
   z80.PC = pc;
+  z80.MEMPTR = memptr;
   // more registers and state
   fl.readf(" %x %x %s %s %s %s %s", &i, &r, &i1, &i2, &im, &hlt, &ts);
   //writefln(":%02x %02x %s %s %s %s %s", i, r, i1, i2, im, hlt, ts);
@@ -200,8 +201,8 @@ private string read_test (VFile fl) {
 
 
 private void dump_state () {
-  conwritefln!"%04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x"(
-    z80.AF, z80.BC, z80.DE, z80.HL, z80.AFx, z80.BCx, z80.DEx, z80.HLx, z80.IX, z80.IY, z80.SP, z80.PC);
+  conwritefln!"%04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x"(
+    z80.AF, z80.BC, z80.DE, z80.HL, z80.AFx, z80.BCx, z80.DEx, z80.HLx, z80.IX, z80.IY, z80.SP, z80.PC, z80.MEMPTR);
   conwritefln!"%02x %02x %s %s %s %s %s"(z80.I, z80.R, (z80.IFF1 ? 1 : 0), (z80.IFF2 ? 1 : 0), z80.IM, (z80.halted ? 1 : 0), z80.tstates);
   for (int f = 0; f < 65536; ++f) {
     if (memory[f] != memsave[f]) {

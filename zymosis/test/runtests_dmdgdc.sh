@@ -53,5 +53,11 @@ if [ $? != 0 ]; then
   echo "FAIL!"
   exit 1
 fi
-diff -uEBbw testdata/tests.expected z10.out
+#diff -uEBbw testdata/tests.expected z10.out
+rdmd zcmp.d z10.out testdata/tests.expected >zres.out
+if [ $? != 0 ]; then
+  echo "***FUCKED*** (see zres.out for failed tests)"
+  cd "$odir"
+  exit 1
+fi
 cd "$odir"
