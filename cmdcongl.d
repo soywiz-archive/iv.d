@@ -36,6 +36,9 @@ public __gshared bool glconAllowOpenGLRender = true;
 __gshared uint conScale = 0;
 __gshared uint scrwdt, scrhgt;
 
+public __gshared void delegate () glconOnShow = null;
+public __gshared void delegate () glconOnHide = null;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // public void glconInit (); -- call in `visibleForTheFirstTime`
@@ -119,6 +122,7 @@ enum conCharHeight = 10;
 __gshared char rPromptChar = '>';
 __gshared float rConAlpha = 0.8;
 __gshared bool rConsoleVisible = false;
+__gshared bool rConsoleVisiblePrev = false;
 __gshared int rConsoleHeight = 10*3;
 __gshared uint rConTextColor = 0x00ff00; // rgb
 __gshared uint rConCursorColor = 0xff7f00; // rgb
@@ -268,9 +272,21 @@ private bool glconGenTexture () {
 }
 
 
+private void glconCallShowHideHandler () {
+  if (rConsoleVisible != rConsoleVisiblePrev) {
+    rConsoleVisiblePrev = rConsoleVisible;
+    try {
+           if (rConsoleVisible) { if (glconOnShow !is null) glconOnShow(); }
+      else if (!rConsoleVisible) { if (glconOnHide !is null) glconOnHide(); }
+    } catch (Exception) {}
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 /// render console (if it is visible). tries hard to not change OpenGL state.
 public void glconDraw () {
+  glconCallShowHideHandler();
   if (!rConsoleVisible) return;
 
   consoleLock();
@@ -884,6 +900,7 @@ public void glconProcessEventMessage () {
   }
   if (glconCtlWindow is null || glconCtlWindow.closed) return;
   if (sendAnother) glconPostDoConCommands();
+  glconCallShowHideHandler();
   if (wasCommands || prevVisible || isConsoleVisible) glconPostScreenRepaint();
 }
 

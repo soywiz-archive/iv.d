@@ -2148,7 +2148,12 @@ public:
         // prevx is previous char x start
         // visx is current char x start
         // so if our mx is in [prevx..visx), we are at previous char
-        if (mx >= prevx && mx < visx) { tx = rx; return; } // done
+        if (mx >= prevx && mx < visx) {
+          // it is more natural this way
+          if (rx > 0 && mx < prevx+(visx-prevx)/2) --rx;
+          tx = rx;
+          return;
+        }
         ++rx;
       }
     }
@@ -2458,6 +2463,9 @@ public:
   /// ugly name is intentional
   /// this replaces editor text, clears undo and sets `killTextOnChar` if necessary
   final bool setNewText (const(char)[] text, bool killOnChar=true) {
+    auto oldro = mReadOnly;
+    scope(exit) mReadOnly = oldro;
+    mReadOnly = false;
     clear();
     auto res = insertText!"end"(0, text);
     clearUndo();

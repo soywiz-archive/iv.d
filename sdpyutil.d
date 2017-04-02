@@ -585,3 +585,23 @@ public struct XlibPixmap {
 
 // ////////////////////////////////////////////////////////////////////////// //
 }
+
+
+void sdpyNormalizeArrowKeys (ref KeyEvent event) {
+  if ((event.modifierState&ModifierState.numLock) == 0) {
+    switch (event.key) {
+      case Key.PadEnter: event.key = Key.Enter; break;
+      case Key.Pad1: event.key = Key.End; break;
+      case Key.Pad2: event.key = Key.Down; break;
+      case Key.Pad3: event.key = Key.PageDown; break;
+      case Key.Pad4: event.key = Key.Left; break;
+      //case Key.Pad5: event.key = Key.; break;
+      case Key.Pad6: event.key = Key.Right; break;
+      case Key.Pad7: event.key = Key.Home; break;
+      case Key.Pad8: event.key = Key.Up; break;
+      case Key.Pad9: event.key = Key.PageUp; break;
+      case Key.Pad0: event.key = Key.Insert; break;
+      default: break;
+    }
+  }
+}

@@ -1343,7 +1343,7 @@ XImage* XCreateImage(
   uint depth,
   int format,
   int offset,
-  char* data,
+  void* data,
   uint width,
   uint height,
   int bitmap_pad,
