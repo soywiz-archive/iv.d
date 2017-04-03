@@ -57,6 +57,10 @@ public:
   align(1):
     ubyte kwtype; // keyword number
     ubyte kwidx; // index in keyword
+    @property ushort u16 () const pure nothrow @safe @nogc { pragma(inline, true); return cast(ushort)((kwidx<<8)|kwtype); }
+    @property short s16 () const pure nothrow @safe @nogc { pragma(inline, true); return cast(short)((kwidx<<8)|kwtype); }
+    @property void u16 (ushort v) pure nothrow @safe @nogc { pragma(inline, true); kwtype = v&0xff; kwidx = (v>>8)&0xff; }
+    @property void s16 (short v) pure nothrow @safe @nogc { pragma(inline, true); kwtype = v&0xff; kwidx = (v>>8)&0xff; }
   }
 
 public:
@@ -584,7 +588,7 @@ public:
   @property int linecount () const pure { pragma(inline, true); return mLineCount; }
 
   @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\0'); } ///
-  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : hidummy); } ///
+  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
 
   /// return decoded to koi-8 utf-8 char at buffer position pos
   @property char utfuckAt (uint pos) const pure {
@@ -982,7 +986,7 @@ public:
         if (cplen > str.length) cplen = cast(uint)str.length;
         memcpy(tbuf+gapstart, str.ptr, cplen);
         //memset(hbuf+gapstart, 0, cplen*HighState.sizeof);
-        hbuf[tbused+gapstart..tbused+gapstart+cplen] = defhs;
+        hbuf[gapstart..gapstart+cplen] = defhs;
         pos += cplen;
         gapstart += cplen;
         tbused += cplen;
@@ -1031,19 +1035,27 @@ public:
       return true;
     }
     //TODO: add more gap edge movement?
-    moveGapAtEnd();
-    assert(pos+count <= ts);
-    mLineCount -= (!mSingleLine ? countEols(tbuf[pos..pos+count]) : 0);
-    if (pos+count == ts) {
-      tbused = pos;
-      gapend = (gapstart = tbused)+MinGapSize;
+    version(none) {
+      // this code sux; why it is so complex?
+      moveGapAtEnd();
+      assert(pos+count <= ts);
+      mLineCount -= (!mSingleLine ? countEols(tbuf[pos..pos+count]) : 0);
+      if (pos+count == ts) {
+        tbused = pos;
+        gapend = (gapstart = tbused)+MinGapSize;
+      } else {
+        memmove(tbuf+pos, tbuf+pos+count, tbused-pos-count);
+        memmove(hbuf+pos, hbuf+pos+count, (tbused-pos-count)*HighState.sizeof);
+        tbused -= count;
+        gapstart -= count;
+        gapend -= count;
+        moveGapAtPos(pos);
+      }
     } else {
-      memmove(tbuf+pos, tbuf+pos+count, tbused-pos-count);
-      memmove(hbuf+pos, hbuf+pos+count, (tbused-pos-count)*HighState.sizeof);
-      tbused -= count;
-      gapstart -= count;
-      gapend -= count;
+      // this code rox, it is simple and easy to understand
       moveGapAtPos(pos);
+      tbused -= count;
+      gapend += count;
     }
     return true;
   }
@@ -1587,7 +1599,7 @@ protected:
   int prevXOfs = -1;
   int mXOfs = 0;
   int cx, cy;
-  bool[] dirtyLines;
+  int[] dirtyLines; // line heights or 0 if not dirty; hack!
   int winx, winy, winw, winh;
   GapBuffer gb;
   EditorHL hl;
@@ -1804,7 +1816,7 @@ public:
         import core.memory : GC;
         if (dirtyLines.ptr is GC.addrOf(dirtyLines.ptr)) GC.setAttr(dirtyLines.ptr, GC.BlkAttr.NO_INTERIOR);
       }
-      dirtyLines[olen..$] = true;
+      dirtyLines[olen..$] = -1;
     }
   }
 
@@ -2102,7 +2114,7 @@ public:
     }
 
     /// mark whole visible text as dirty
-    final void fullDirty () nothrow @safe @nogc { dirtyLines[] = true; }
+    final void fullDirty () nothrow @safe @nogc { dirtyLines[] = -1; }
   }
 
   ///
@@ -2163,7 +2175,7 @@ public:
     cx = cy = mTopLine = mXOfs = 0;
     prevTopLine = -1;
     prevXOfs = -1;
-    dirtyLines[] = true;
+    dirtyLines[] = -1;
     bstart = bend = -1;
     markingBlock = false;
     lastBGEnd = false;
@@ -2281,24 +2293,43 @@ public:
     if (prevTopLine != mTopLine || prevXOfs != mXOfs) {
       prevTopLine = mTopLine;
       prevXOfs = mXOfs;
-      dirtyLines[] = true;
+      dirtyLines[] = -1;
     }
 
     drawPageBegin();
     drawStatus();
-    immutable int ydelta = (inPixels ? lineHeightPixels : 1);
+    immutable int lhp = lineHeightPixels;
+    bool alwaysDirty = false;
+    immutable int ydelta = (inPixels ? lhp : 1);
     auto pos = gb.xy2pos(0, mTopLine);
     auto lc = gb.linecount;
     int lyofs = 0;
+    //TODO: optimize redrawing for variable line height mode
     foreach (int y; 0..visibleLinesPerWindow) {
-      bool dirty = true;
-      if (mTopLine+y < lc && hl !is null && hl.fixLine(mTopLine+y)) {
-        if (y < dirtyLines.length) dirtyLines.ptr[y] = true;
-      } else {
-        dirty = (y < dirtyLines.length ? dirtyLines.ptr[y] : true);
+      bool dirty = alwaysDirty;
+      if (!alwaysDirty) {
+        if (mTopLine+y < lc && hl !is null && hl.fixLine(mTopLine+y)) {
+          if (lhp < 0 && y < dirtyLines.length && dirtyLines.ptr[y] < 0) alwaysDirty = true;
+          dirty = true;
+        } else if (lhp >= 0) {
+          if (y < dirtyLines.length) {
+            dirty = (dirtyLines.ptr[y] != 0);
+          } else {
+            dirty = alwaysDirty = true; // just in case
+          }
+        } else {
+          // variable line height, more hacks
+          if (y < dirtyLines.length) {
+            if (dirtyLines.ptr[y] != gb.lidx2pixelh(mTopLine+y, textMeter, &recode1b)) {
+              dirty = alwaysDirty = true;
+            }
+          } else {
+            dirty = alwaysDirty = true; // just in case
+          }
+        }
       }
       if (dirty) {
-        if (y < dirtyLines.length) dirtyLines.ptr[y] = false;
+        if (y < dirtyLines.length) dirtyLines.ptr[y] = (lhp >= 0 ? 0 : gb.lidx2pixelh(mTopLine+y, textMeter, &recode1b));
         if (mTopLine+y < lc) {
           drawLine(mTopLine+y, lyofs, mXOfs);
         } else {
@@ -2622,15 +2653,15 @@ public:
   final void lineChanged (int lidx, bool updateDown) {
     if (lidx < 0 || lidx >= gb.linecount) return;
     if (hl !is null) hl.lineChanged(lidx, updateDown);
-    if (lidx < mTopLine) { if (updateDown) dirtyLines[] = true; return; }
+    if (lidx < mTopLine) { if (updateDown) dirtyLines[] = -1; return; }
     if (lidx >= mTopLine+linesPerWindow) return;
     immutable stl = lidx-mTopLine;
     assert(stl >= 0);
     if (stl < dirtyLines.length) {
       if (updateDown) {
-        dirtyLines[stl..$] = true;
+        dirtyLines[stl..$] = -1;
       } else {
-        dirtyLines.ptr[stl] = true;
+        dirtyLines.ptr[stl] = -1;
       }
     }
   }
@@ -2653,7 +2684,7 @@ public:
     if (stl < dirtyLines.length) {
       auto el = le-mTopLine;
       if (el > dirtyLines.length) el = cast(int)dirtyLines.length;
-      dirtyLines.ptr[stl..el] = true;
+      dirtyLines.ptr[stl..el] = -1;
     }
   }
 
@@ -3787,7 +3818,7 @@ public:
         if (bend < bstart) { pos = bstart; bstart = bend; bend = pos; }
       }
       markingBlock = false;
-      dirtyLines[] = true; //FIXME: optimize
+      dirtyLines[] = -1; //FIXME: optimize
     }
   }
 
@@ -3805,7 +3836,7 @@ public:
       lastBGEnd = false;
     }
     markingBlock = false;
-    dirtyLines[] = true; //FIXME: optimize
+    dirtyLines[] = -1; //FIXME: optimize
   }
 
   ///
@@ -3821,7 +3852,7 @@ public:
       lastBGEnd = true;
     }
     markingBlock = false;
-    dirtyLines[] = true; //FIXME: optimize
+    dirtyLines[] = -1; //FIXME: optimize
   }
 
 protected:
