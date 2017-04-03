@@ -289,7 +289,7 @@ public:
     super.willBeInserted(pos, len, eolcount);
   }
 
-  final void resetIncSearchPos () nothrow @safe @nogc {
+  final void resetIncSearchPos () nothrow {
     if (incSearchHitPos >= 0) {
       markLinesDirty(gb.pos2line(incSearchHitPos), 1);
       incSearchHitPos = -1;
@@ -464,9 +464,9 @@ public:
         // has highlighter
         if (pos-1 >= trspos) {
           if (ch != '\t') ch = '.';
-          if (!killTextOnChar && !singleline) win.color = TrailSpaceColor; else win.color = sltextClr;
+          if (!killTextOnChar && !singleline) win.color = (ch != '\t' ? TrailSpaceColor : VisualTabColor); else win.color = sltextClr;
         } else if (ch < ' ' || ch == 127) {
-          if (!killTextOnChar && !singleline) win.color = BadColor; else win.color = sltextClr;
+          if (!killTextOnChar && !singleline) win.color = (ch != '\t' ? BadColor : VisualTabColor); else win.color = sltextClr;
         } else {
           auto hs = gb.hi(pos-1);
           if (!killTextOnChar && !singleline) win.color = hiColor(hs); else win.color = sltextClr;
@@ -475,9 +475,9 @@ public:
         // no highlighter
         if (pos-1 >= trspos) {
           if (ch != '\t') ch = '.';
-          if (!killTextOnChar && !singleline) win.color = TrailSpaceColor; else win.color = sltextClr;
+          if (!killTextOnChar && !singleline) win.color = (ch != '\t' ? TrailSpaceColor : VisualTabColor); else win.color = sltextClr;
         } else if (ch < ' ' || ch == 127) {
-          if (!killTextOnChar && !singleline) win.color = BadColor; else win.color = sltextClr;
+          if (!killTextOnChar && !singleline) win.color = (ch != '\t' ? BadColor : VisualTabColor); else win.color = sltextClr;
         } else {
           win.color = sltextClr;
         }

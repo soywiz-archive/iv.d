@@ -32,6 +32,7 @@ public enum TextKillColor = XtColorFB!(TtyRgb2Color!(0xe0, 0xe0, 0xe0), TextBG);
 public enum BadColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x54), TtyRgb2Color!(0xb2, 0x18, 0x18)); // 11,1
 //public enum TrailSpaceColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x00), TtyRgb2Color!(0x00, 0x00, 0x87)); // 226,18
 public enum TrailSpaceColor = XtColorFB!(TtyRgb2Color!(0x6c, 0x6c, 0x6c), TtyRgb2Color!(0x26, 0x26, 0x26)); // 242,235
+public enum VisualTabColor = XtColorFB!(TtyRgb2Color!(0x80, 0x00, 0x00), TextBG); // 242,235
 public enum BlockColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0xff), TtyRgb2Color!(0x00, 0x5f, 0xff)); // 15,27
 public enum BookmarkColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0xff), TtyRgb2Color!(0x87, 0x00, 0xd7)); // 15,92
 public enum BracketColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x54), TtyRgb2Color!(0x00, 0x00, 0x00)); // 11,0

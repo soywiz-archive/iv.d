@@ -2123,7 +2123,7 @@ public:
   }
 
   ///
-  void topline (int v) nothrow {
+  @property void topline (int v) nothrow {
     if (v < 0) v = 0;
     if (v > gb.linecount) v = gb.linecount-1;
     immutable auto moldtop = mTopLine;
