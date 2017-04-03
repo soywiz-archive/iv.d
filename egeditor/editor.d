@@ -26,6 +26,26 @@ static if (!is(typeof(object.usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// this interface is used to measure text for pixel-sized editor
+abstract class EgTextMeter {
+  int currofs; /// current x offset; keep this in sync with the current state
+
+  /// this should reset text width iterator; tabsize > 0: process tabs as... well... tabs ;-)
+  abstract void reset (int tabsize) nothrow;
+
+  /// advance text width iterator, return x position for drawing next char
+  abstract int advance (dchar ch) nothrow;
+
+  /// return current string width, including last char passed to `advance()`, preferably without spacing after last char
+  abstract int currWidth () nothrow;
+
+  /// finish text iterator
+  /// WARNING: EditorEngine tries to call this after each `reset()`, but user code may not
+  abstract void finish () nothrow;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 ///
 public final class GapBuffer {
 public:
@@ -1168,7 +1188,7 @@ public:
     }
   }
 
-  private void fillCurPos (Action* ua, Editor ed) nothrow @trusted @nogc {
+  private void fillCurPos (Action* ua, EditorEngine ed) nothrow @trusted @nogc {
     if (ua !is null && ed !is null) {
       //TODO: correct x according to "visual tabs" mode (i.e. make it "normal x")
       ua.cx = ed.cx;
@@ -1184,7 +1204,7 @@ public:
     }
   }
 
-  bool addCurMove (Editor ed, bool fromRedo=false) nothrow @nogc {
+  bool addCurMove (EditorEngine ed, bool fromRedo=false) nothrow @nogc {
     if (auto lu = lastUndoHead()) {
       if (lu.type == Type.CurMove) {
         if (lu.cx == ed.cx && lu.cy == ed.cy && lu.topline == ed.mTopLine && lu.xofs == ed.mXOfs &&
@@ -1200,7 +1220,7 @@ public:
     return saveLastRecord();
   }
 
-  bool addTextRemove (Editor ed, int pos, int count, bool fromRedo=false) nothrow @nogc {
+  bool addTextRemove (EditorEngine ed, int pos, int count, bool fromRedo=false) nothrow @nogc {
     if (!asRedo && !fromRedo && ed.redo !is null) ed.redo.clear();
     GapBuffer gb = ed.gb;
     assert(gb !is null);
@@ -1219,7 +1239,7 @@ public:
     return saveLastRecord();
   }
 
-  bool addTextInsert (Editor ed, int pos, int count, bool fromRedo=false) nothrow @nogc {
+  bool addTextInsert (EditorEngine ed, int pos, int count, bool fromRedo=false) nothrow @nogc {
     if (!asRedo && !fromRedo && ed.redo !is null) ed.redo.clear();
     auto act = addUndo(0);
     if (act is null) { clear(); return false; }
@@ -1230,7 +1250,7 @@ public:
     return saveLastRecord();
   }
 
-  bool addGroupStart (Editor ed, bool fromRedo=false) nothrow @nogc {
+  bool addGroupStart (EditorEngine ed, bool fromRedo=false) nothrow @nogc {
     if (!asRedo && !fromRedo && ed.redo !is null) ed.redo.clear();
     auto act = addUndo(0);
     if (act is null) { clear(); return false; }
@@ -1239,7 +1259,7 @@ public:
     return saveLastRecord();
   }
 
-  bool addGroupEnd (Editor ed, bool fromRedo=false) nothrow @nogc {
+  bool addGroupEnd (EditorEngine ed, bool fromRedo=false) nothrow @nogc {
     if (!asRedo && !fromRedo && ed.redo !is null) ed.redo.clear();
     auto act = addUndo(0);
     if (act is null) { clear(); return false; }
@@ -1260,7 +1280,7 @@ public:
   }
 
   // return "None" in case of error
-  Type undoAction (Editor ed) {
+  Type undoAction (EditorEngine ed) {
     UndoStack oppos = (asRedo ? ed.undo : ed.redo);
     assert(ed !is null);
     auto ua = popUndo();
@@ -1316,7 +1336,7 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// main editor engine: does all the undo/redo magic, block management, etc.
-class Editor {
+class EditorEngine {
 public:
   ///
   enum CodePage : ubyte {
@@ -1379,6 +1399,9 @@ protected:
 
 protected:
   bool[int] linebookmarked; /// is this line bookmarked?
+
+public:
+  EgTextMeter textMeter; // *MUST* be set for coordsInPixels
 
 public:
   /// is editor in "paste mode" (i.e. we are pasting chars from clipboard, and should skip autoindenting)?
@@ -1960,6 +1983,7 @@ public:
     gb.pos2xy(curpos, cx, cy);
   }
 
+  /+
   /// this should reset text width iterator; tabsize > 0: process tabs as... well... tabs ;-)
   void textWidthReset (int tabsize) nothrow @trusted {}
 
@@ -1974,11 +1998,10 @@ public:
 
   /// finish text iterator, return position after last char
   int textWidthAdvanceFinish () nothrow @trusted { return 0; }
-
-  //obsolete: non-final, so i can do proprotional fonts in the future
+  +/
 
   ///
-  final void makeCurXVisible () nothrow @safe {
+  final void makeCurXVisible () nothrow {
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
     int rx, ry;
@@ -2024,7 +2047,7 @@ public:
   }
 
   /// cursor position in "local" coords: from widget (x0,y0), possibly in pixels
-  final void localCursorXY (out int lcx, out int lcy) nothrow @trusted {
+  final void localCursorXY (out int lcx, out int lcy) nothrow {
     int rx, ry;
     if (!inPixels) {
       gb.pos2xyVT(curpos, rx, ry);
@@ -2036,7 +2059,9 @@ public:
       gb.pos2xy(curpos, rx, ry);
       lcy = (ry-mTopLine)*lineHeightPixels;
       if (rx == 0) { lcx = 0-mXOfs; return; }
-      textWidthReset(visualtabs ? gb.tabsize : 0);
+      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      textMeter.reset(visualtabs ? gb.tabsize : 0);
+      scope(exit) textMeter.finish(); // just in case
       auto pos = gb.line2pos(ry);
       auto ts = gb.textsize;
       immutable bool ufuck = gb.utfuck;
@@ -2045,10 +2070,10 @@ public:
           // advance one symbol
           char ch = gb[pos];
           if (!ufuck || ch < 128) {
-            textWidthAdvance(ch);
+            textMeter.advance(cast(dchar)ch);
             ++pos;
           } else {
-            textWidthAdvanceUtfuck(dcharAtAdvance(pos));
+            textMeter.advance(dcharAtAdvance(pos));
           }
           --rx;
           if (rx == 0) break;
@@ -2059,22 +2084,22 @@ public:
           char ch = gb[pos];
           if (ch == '\n') break;
           if (!ufuck || ch < 128) {
-            textWidthAdvance(ch);
+            textMeter.advance(cast(dchar)ch);
             ++pos;
           } else {
-            textWidthAdvanceUtfuck(dcharAtAdvance(pos));
+            textMeter.advance(dcharAtAdvance(pos));
           }
           --rx;
           if (rx == 0) break;
         }
       }
-      lcx = /*textWidthAdvanceFinish()*/textWidthOfsEndChar()-mXOfs;
+      lcx = textMeter.currWidth()-mXOfs;
     }
   }
 
   /// convert coordinates in widget into text coordinates; can be used to convert mouse click position into text position
   /// WARNING: ty can be equal to linecount or -1!
-  final void widget2text (int mx, int my, out int tx, out int ty) nothrow @trusted {
+  final void widget2text (int mx, int my, out int tx, out int ty) nothrow {
     if (!inPixels) {
       int ry = my+mTopLine;
       if (ry < 0) { ty = -1; return; } // tx is zero here
@@ -2112,7 +2137,9 @@ public:
       ty = ry;
       if (mx <= 0 && mXOfs == 0) return; // tx is zero here
       // now the hard part
-      textWidthReset(visualtabs ? gb.tabsize : 0);
+      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      textMeter.reset(visualtabs ? gb.tabsize : 0);
+      scope(exit) textMeter.finish(); // just in case
       int visx = -mXOfs, prevx;
       auto pos = gb.line2pos(ry);
       auto ts = gb.textsize;
@@ -2125,10 +2152,10 @@ public:
         if (!sl && ch == '\n') { tx = rx; return; } // done anyway
         prevx = visx;
         if (!ufuck || ch < 128) {
-          visx = textWidthAdvance(ch)-mXOfs;
+          visx = textMeter.advance(cast(dchar)ch)-mXOfs;
           ++pos;
         } else {
-          visx = textWidthAdvanceUtfuck(dcharAtAdvance(pos))-mXOfs;
+          visx = textMeter.advance(dcharAtAdvance(pos))-mXOfs;
         }
         // prevx is previous char x start
         // visx is current char x start
@@ -2145,7 +2172,7 @@ public:
   }
 
   ///
-  final void makeCurLineVisible () nothrow @safe {
+  final void makeCurLineVisible () nothrow {
     if (cy < 0) cy = 0;
     if (cy >= gb.linecount) cy = gb.linecount-1;
     if (cy < mTopLine) {
@@ -2160,7 +2187,7 @@ public:
   }
 
   ///
-  final void makeCurLineVisibleCentered (bool forced=false) nothrow @safe {
+  final void makeCurLineVisibleCentered (bool forced=false) nothrow {
     if (forced || !isCurLineVisible) {
       if (cy < 0) cy = 0;
       if (cy >= gb.linecount) cy = gb.linecount-1;
@@ -2320,7 +2347,7 @@ public:
   }
 
   /// should be called after cursor position change
-  protected final void growBlockMark () nothrow @safe {
+  protected final void growBlockMark () nothrow {
     if (!markingBlock || bstart < 0) return;
     makeCurLineVisible();
     int ry;
@@ -3394,20 +3421,20 @@ protected:
 
   static struct TextRange {
   private:
-    Editor ed;
+    EditorEngine ed;
     int pos;
     int left; // chars left, including front
     char frontch = 0;
   nothrow @safe @nogc:
   private:
-    this (Editor aed, int apos, int aleft, char afrontch) pure {
+    this (EditorEngine aed, int apos, int aleft, char afrontch) pure {
       ed = aed;
       pos = apos;
       left = aleft;
       frontch = afrontch;
     }
 
-    this (Editor aed, usize lo, usize hi) {
+    this (EditorEngine aed, usize lo, usize hi) {
       ed = aed;
       if (aed !is null && lo < hi && lo < aed.gb.textsize) {
         pos = cast(int)lo;

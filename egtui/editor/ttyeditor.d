@@ -41,7 +41,7 @@ private string normalizedAbsolutePath (string path) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-class TtyEditor : Editor {
+class TtyEditor : EditorEngine {
   enum TEDSingleOnly; // only for single-line mode
   enum TEDMultiOnly; // only for multiline mode
   enum TEDEditOnly; // only for non-readonly mode
@@ -146,7 +146,7 @@ protected:
     fullDirty(); // just in case
   }
 
-  final bool promptProcessKey (TtyEvent key, scope void delegate (Editor ed) onChange=null) {
+  final bool promptProcessKey (TtyEvent key, scope void delegate (EditorEngine ed) onChange=null) {
     if (!mPromptActive) return false;
     auto lastCC = mPromptInput.bufferCC;
     auto res = mPromptInput.processKey(key);

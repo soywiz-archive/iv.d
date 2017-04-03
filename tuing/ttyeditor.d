@@ -43,7 +43,7 @@ private string normalizedAbsolutePath (string path) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-class TtyEditor : Editor {
+class TtyEditor : EditorEngine {
   static struct SROptions {
     TtyEditor ed;
     enum Type : int {
@@ -301,7 +301,7 @@ protected:
     fullDirty(); // just in case
   }
 
-  final bool promptProcessKey (TtyEvent key, scope void delegate (Editor ed) onChange=null) {
+  final bool promptProcessKey (TtyEvent key, scope void delegate (EditorEngine ed) onChange=null) {
     if (!mPromptActive) return false;
     auto lastCC = mPromptInput.bufferCC;
     auto res = mPromptInput.processKey(key);
