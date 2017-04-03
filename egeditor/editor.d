@@ -1,4 +1,4 @@
-/* Invisible Vector Library
+/* Invisible Vector Library.
  * simple FlexBox-based TUI engine
  *
  * This program is free software: you can redistribute it and/or modify
@@ -65,6 +65,7 @@ public:
   bool utfuck = false; /// should x coordinate calculation assume that the text is in UTF-8?
   bool visualtabs = false; /// should x coordinate calculation assume that tabs are not one-char width?
   ubyte tabsize = 2; /// tab size
+  HighState defhs; /// default highlighting state for new text
 
 private:
   HighState hidummy;
@@ -945,7 +946,7 @@ public:
   /// put text into buffer; will either put all the text, or nothing
   /// returns new position or -1
   int put (int pos, const(char)[] str...) {
-    import core.stdc.string : memchr, memcpy, memset;
+    import core.stdc.string : memchr, memcpy;
     if (pos < 0) pos = 0;
     auto ts = tbused;
     bool atend = false;
@@ -967,7 +968,8 @@ public:
     if (pos == tbused) {
       moveGapAtEnd();
       memcpy(tbuf+tbused, str.ptr, str.length);
-      memset(hbuf+tbused, 0, HighState.sizeof*str.length);
+      //memset(hbuf+tbused, 0, HighState.sizeof*str.length);
+      hbuf[tbused..tbused+str.length] = defhs;
       tbused += cast(uint)str.length;
       gapend = (gapstart = tbused)+MinGapSize;
       pos += cast(uint)str.length;
@@ -979,7 +981,8 @@ public:
         auto cplen = gapend-gapstart;
         if (cplen > str.length) cplen = cast(uint)str.length;
         memcpy(tbuf+gapstart, str.ptr, cplen);
-        memset(hbuf+gapstart, 0, cplen*HighState.sizeof);
+        //memset(hbuf+gapstart, 0, cplen*HighState.sizeof);
+        hbuf[tbused+gapstart..tbused+gapstart+cplen] = defhs;
         pos += cplen;
         gapstart += cplen;
         tbused += cplen;
@@ -1132,6 +1135,7 @@ private:
   uint maxBufSize = 32*1024*1024;
   ubyte* undoBuffer;
   uint ubUsed, ubSize;
+  bool asRich;
 
 final:
   void initTempFD () nothrow @nogc {
@@ -1283,8 +1287,9 @@ final:
   }
 
 public:
-  this (bool aAsRedo, bool aIntoFile) nothrow @nogc {
+  this (bool aAsRich, bool aAsRedo, bool aIntoFile) nothrow @nogc {
     asRedo = aAsRedo;
+    asRich = aAsRich;
     if (aIntoFile) {
       initTempFD();
       if (tmpfd < 0) {
@@ -1407,6 +1412,11 @@ public:
     if (count < 1) return true;
     if (count >= maxBufSize) { clear(); return false; }
     if (count > gb.textsize-pos) { clear(); return false; }
+    int realcount = count;
+    if (asRich && realcount > 0) {
+      if (realcount >= int.max/GapBuffer.HighState.sizeof) return false;
+      realcount *= cast(int)GapBuffer.HighState.sizeof;
+    }
     auto act = addUndo(count);
     if (act is null) { clear(); return false; }
     act.type = Type.TextRemove;
@@ -1415,6 +1425,13 @@ public:
     fillCurPos(act, ed);
     auto dp = act.data.ptr;
     while (count--) *dp++ = gb[pos++];
+    // save attrs for rich editor
+    if (asRich && realcount > 0) {
+      pos = act.pos;
+      count = realcount;
+      auto dph = cast(GapBuffer.HighState*)dp;
+      while (count--) *dph++ = gb.hi(pos++);
+    }
     return saveLastRecord();
   }
 
@@ -1482,7 +1499,9 @@ public:
         break;
       case Type.TextRemove: // insert removed text
         if (oppos !is null) { if (oppos.addTextInsert(ed, ua.pos, ua.len, asRedo) == Type.None) oppos.clear(); }
-        ed.ubTextInsert(ua.pos, ua.data.ptr[0..ua.len]);
+        if (ed.ubTextInsert(ua.pos, ua.data.ptr[0..ua.len])) {
+          if (asRich) ed.ubTextSetAttrs(ua.pos, (cast(GapBuffer.HighState*)(ua.data.ptr+ua.len))[0..ua.len]);
+        }
         //ed.writeLogAction(ua.pos, ua.len);
         break;
     }
@@ -1583,6 +1602,8 @@ protected:
 
   char[] indentText; // this buffer is actively reused, do not expose!
   int inPasteMode;
+
+  bool mAsRich; /// this is "rich editor", so engine should save/restore highlighting info in undo
 
 protected:
   bool[int] linebookmarked; /// is this line bookmarked?
@@ -1765,8 +1786,8 @@ public:
     gb = new GapBuffer(asingleline);
     hl = ahl;
     if (ahl !is null) hl.gb = gb;
-    undo = new UndoStack(false, !asingleline);
-    redo = new UndoStack(true, !asingleline);
+    undo = new UndoStack(mAsRich, false, !asingleline);
+    redo = new UndoStack(mAsRich, true, !asingleline);
     mSingleLine = asingleline;
   }
 
@@ -1797,7 +1818,7 @@ public:
 
     /// this switches "utfuck" mode
     /// note that utfuck mode is FUCKIN' SLOW and buggy
-    /// you should not lose any text, but may encounder visual and positional glitches
+    /// you should not lose any text, but may encounter visual and positional glitches
     void utfuck (bool v) {
       if (gb.utfuck == v) return;
       beforeUtfuckSwitch(v);
@@ -1806,6 +1827,25 @@ public:
       gb.pos2xy(pos, cx, cy);
       fullDirty();
       afterUtfuckSwitch(v);
+    }
+
+    ref inout(GapBuffer.HighState) defaultRichStyle () inout pure nothrow @safe @nogc { pragma(inline, true); return cast(typeof(return))gb.defhs; } ///
+
+    bool asRich () const pure nothrow @safe @nogc { pragma(inline, true); return mAsRich; } ///
+
+    /// WARNING! changing this will reset undo/redo buffers!
+    void asRich (bool v) {
+      if (mAsRich != v) {
+        mAsRich = v;
+        if (undo !is null) {
+          delete undo;
+          undo = new UndoStack(mAsRich, false, !singleline);
+        }
+        if (redo !is null) {
+          delete redo;
+          redo = new UndoStack(mAsRich, true, !singleline);
+        }
+      }
     }
 
     int x0 () const pure nothrow @safe @nogc { pragma(inline, true); return winx; } ///
@@ -2132,14 +2172,14 @@ public:
 
   ///
   void clearAndDisableUndo () {
-    if (undo !is null) { undo.clear(true); delete undo; undo = null; }
-    if (redo !is null) { redo.clear(true); delete redo; redo = null; }
+    if (undo !is null) delete undo;
+    if (redo !is null) delete redo;
   }
 
   ///
   void reinstantiateUndo () {
-    if (undo is null) undo = new UndoStack(false, !mSingleLine);
-    if (redo is null) redo = new UndoStack(true, !mSingleLine);
+    if (undo is null) undo = new UndoStack(mAsRich, false, !mSingleLine);
+    if (redo is null) redo = new UndoStack(mAsRich, true, !mSingleLine);
   }
 
   ///
@@ -3794,13 +3834,28 @@ protected:
     gb.remove(pos, len);
   }
 
-  final void ubTextInsert (int pos, const(char)[] str) {
-    if (mReadOnly) return;
+  final bool ubTextInsert (int pos, const(char)[] str) {
+    if (mReadOnly) return true;
     killTextOnChar = false;
-    if (str.length == 0) return;
+    if (str.length == 0) return true;
     int nlc = (!mSingleLine ? gb.countEols(str) : 0);
     bookmarkInsertionFix(pos, pos+cast(int)str.length, nlc);
-    if (gb.put(pos, str) >= 0) lineChangedByPos(pos, (nlc > 0));
+    if (gb.put(pos, str) >= 0) {
+      lineChangedByPos(pos, (nlc > 0));
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  // can be called only after `ubTextInsert`, and with the same pos/length
+  // usually it is done by undo/redo action if the editor is in "rich mode"
+  final void ubTextSetAttrs (int pos, const(GapBuffer.HighState)[] hs) {
+    if (mReadOnly || hs.length == 0) return;
+    foreach (const ref hi; hs) {
+      uint rtp = gb.pos2real(pos++);
+      gb.hbuf[rtp] = hi;
+    }
   }
 
   static struct TextRange {
