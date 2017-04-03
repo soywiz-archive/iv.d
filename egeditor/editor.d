@@ -37,6 +37,9 @@ abstract class EgTextMeter {
   /// advance text width iterator, return x position for drawing next char
   abstract int advance (dchar ch) nothrow;
 
+  /// advance text width iterator, return x position for drawing next char; override this if text size depends of attrs
+  int advance (dchar ch, in ref GapBuffer.HighState hs) nothrow { return advance(ch); }
+
   /// return current string width, including last char passed to `advance()`, preferably without spacing after last char
   abstract int currWidth () nothrow;
 
@@ -85,14 +88,24 @@ protected:
     scope(exit) textMeter.finish();
     if (utfuck) {
       Utf8DecoderFast udc;
+      HighState hs = hbuf[pos2real(ls)];
       while (ls < le) {
         char ch = tbuf[pos2real(ls++)];
-        if (udc.decode(cast(ubyte)ch)) textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint);
+        if (udc.decode(cast(ubyte)ch)) {
+          textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint, hs);
+          if (ls < le) hs = hbuf[pos2real(ls)];
+        }
       }
     } else if (recode1byte !is null) {
-      while (ls < le) textMeter.advance(recode1byte(tbuf[pos2real(ls++)]));
+      while (ls < le) {
+        immutable uint rpos = pos2real(ls++);
+        textMeter.advance(recode1byte(tbuf[rpos]), hbuf[rpos]);
+      }
     } else {
-      while (ls < le) textMeter.advance(tbuf[pos2real(ls++)]);
+      while (ls < le) {
+        immutable uint rpos = pos2real(ls++);
+        textMeter.advance(tbuf[rpos], hbuf[rpos]);
+      }
     }
     lineofsc[lidx].yofs = (lidx < 1 ? 0 : lineofsc[lidx-1].yofs+lineofsc[lidx-1].height);
     lineofsc[lidx].height = (textMeter.currheight > 0 ? textMeter.currheight : 1);
@@ -108,14 +121,22 @@ protected:
     scope(exit) textMeter.finish();
     if (utfuck) {
       Utf8DecoderFast udc;
+      HighState hs = hbuf[pos2real(ls)];
       while (ls < le) {
         char ch = tbuf[pos2real(ls++)];
-        if (udc.decode(cast(ubyte)ch)) textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint);
+        if (udc.decode(cast(ubyte)ch)) textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint, hs);
+        if (ls < le) hs = hbuf[pos2real(ls)];
       }
     } else if (recode1byte !is null) {
-      while (ls < le) textMeter.advance(recode1byte(tbuf[pos2real(ls++)]));
+      while (ls < le) {
+        immutable uint rpos = pos2real(ls++);
+        textMeter.advance(recode1byte(tbuf[rpos]), hbuf[rpos]);
+      }
     } else {
-      while (ls < le) textMeter.advance(tbuf[pos2real(ls++)]);
+      while (ls < le) {
+        immutable uint rpos = pos2real(ls++);
+        textMeter.advance(tbuf[rpos], hbuf[rpos]);
+      }
     }
     int h = (textMeter.currheight > 0 ? textMeter.currheight : 1);
     if (lineofsc[lidx].height != h) {
@@ -2260,23 +2281,6 @@ public:
     gb.pos2xy(curpos, cx, cy);
   }
 
-  /+
-  /// this should reset text width iterator; tabsize > 0: process tabs as... well... tabs ;-)
-  void textWidthReset (int tabsize) nothrow @trusted {}
-
-  /// advance text width iterator, return current x position for drawing next char
-  int textWidthAdvance (char ch) nothrow @trusted { return 0; }
-
-  /// advance text width iterator, return current x position for drawing next char
-  int textWidthAdvanceUtfuck (dchar ch) nothrow @trusted { return 0; }
-
-  /// return position after last char, preferably without char spacing
-  int textWidthOfsEndChar () nothrow @trusted { return 0; }
-
-  /// finish text iterator, return position after last char
-  int textWidthAdvanceFinish () nothrow @trusted { return 0; }
-  +/
-
   ///
   final void makeCurXVisible () nothrow {
     // use "real" x coordinate to calculate x offset
@@ -2339,15 +2343,17 @@ public:
       auto pos = gb.line2pos(ry);
       auto ts = gb.textsize;
       immutable bool ufuck = gb.utfuck;
+      GapBuffer.HighState* hs;
       if (mSingleLine) {
         while (pos < ts) {
           // advance one symbol
           char ch = gb[pos];
+          hs = &gb.hi(pos);
           if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch);
+            textMeter.advance(cast(dchar)ch, *hs);
             ++pos;
           } else {
-            textMeter.advance(dcharAtAdvance(pos));
+            textMeter.advance(dcharAtAdvance(pos), *hs);
           }
           --rx;
           if (rx == 0) break;
@@ -2357,11 +2363,12 @@ public:
           // advance one symbol
           char ch = gb[pos];
           if (ch == '\n') break;
+          hs = &gb.hi(pos);
           if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch);
+            textMeter.advance(cast(dchar)ch, *hs);
             ++pos;
           } else {
-            textMeter.advance(dcharAtAdvance(pos));
+            textMeter.advance(dcharAtAdvance(pos), *hs);
           }
           --rx;
           if (rx == 0) break;
@@ -2403,15 +2410,17 @@ public:
       auto pos = gb.line2pos(ry);
       auto ts = gb.textsize;
       immutable bool ufuck = gb.utfuck;
+      GapBuffer.HighState* hs;
       if (mSingleLine) {
         while (pos < ts) {
           // advance one symbol
           char ch = gb[pos];
+          hs = &gb.hi(pos);
           if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch);
+            textMeter.advance(cast(dchar)ch, *hs);
             ++pos;
           } else {
-            textMeter.advance(dcharAtAdvance(pos));
+            textMeter.advance(dcharAtAdvance(pos), *hs);
           }
           --rx;
           if (rx == 0) break;
@@ -2421,11 +2430,12 @@ public:
           // advance one symbol
           char ch = gb[pos];
           if (ch == '\n') break;
+          hs = &gb.hi(pos);
           if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch);
+            textMeter.advance(cast(dchar)ch, *hs);
             ++pos;
           } else {
-            textMeter.advance(dcharAtAdvance(pos));
+            textMeter.advance(dcharAtAdvance(pos), *hs);
           }
           --rx;
           if (rx == 0) break;
@@ -2502,16 +2512,18 @@ public:
       int rx = 0;
       immutable bool ufuck = gb.utfuck;
       immutable bool sl = mSingleLine;
+      GapBuffer.HighState* hs;
       while (pos < ts) {
         // advance one symbol
         char ch = gb[pos];
         if (!sl && ch == '\n') { tx = rx; return; } // done anyway
+        hs = &gb.hi(pos);
         prevx = visx;
         if (!ufuck || ch < 128) {
-          visx = textMeter.advance(cast(dchar)ch)-mXOfs;
+          visx = textMeter.advance(cast(dchar)ch, *hs)-mXOfs;
           ++pos;
         } else {
-          visx = textMeter.advance(dcharAtAdvance(pos))-mXOfs;
+          visx = textMeter.advance(dcharAtAdvance(pos), *hs)-mXOfs;
         }
         // prevx is previous char x start
         // visx is current char x start
