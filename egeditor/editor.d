@@ -1136,11 +1136,11 @@ private:
     char[0] data;
   }
 
-private import core.sys.posix.unistd : off_t;
+version(Posix) private import core.sys.posix.unistd : off_t;
 
 private:
-  int tmpfd = -1;
-  off_t tmpsize = 0;
+  version(Posix) int tmpfd = -1; else enum tmpfd = -1;
+  version(Posix) off_t tmpsize = 0;
   bool asRedo;
   // undo buffer format:
   //   last uint is always record size (not including size uints); record follows (up), then size again
@@ -1150,7 +1150,7 @@ private:
   bool asRich;
 
 final:
-  void initTempFD () nothrow @nogc {
+  version(Posix) void initTempFD () nothrow @nogc {
     import core.sys.posix.fcntl /*: open*/;
     static if (is(typeof(O_CLOEXEC)) && is(typeof(O_TMPFILE))) {
       auto xfd = open("/tmp/_egundoz", O_RDWR|O_CLOEXEC|O_TMPFILE, 0x1b6/*0o600*/);
@@ -1161,7 +1161,7 @@ final:
   }
 
   // returns record size
-  uint loadLastRecord(bool fullrecord=true) (bool dropit=false) nothrow @nogc {
+  version(Posix) uint loadLastRecord(bool fullrecord=true) (bool dropit=false) nothrow @nogc {
     import core.stdc.stdio : SEEK_SET, SEEK_END;
     import core.sys.posix.unistd : lseek, read;
     assert(tmpfd >= 0);
@@ -1191,24 +1191,26 @@ final:
   }
 
   bool saveLastRecord () nothrow @nogc {
-    import core.stdc.stdio : SEEK_SET;
-    import core.sys.posix.unistd : lseek, write;
-    if (tmpfd >= 0) {
-      assert(ubUsed >= Action.sizeof);
-      scope(exit) {
-        import core.stdc.stdlib : free;
-        if (ubUsed > 65536) {
-          free(undoBuffer);
-          undoBuffer = null;
-          ubUsed = ubSize = 0;
+    version(Posix) {
+      import core.stdc.stdio : SEEK_SET;
+      import core.sys.posix.unistd : lseek, write;
+      if (tmpfd >= 0) {
+        assert(ubUsed >= Action.sizeof);
+        scope(exit) {
+          import core.stdc.stdlib : free;
+          if (ubUsed > 65536) {
+            free(undoBuffer);
+            undoBuffer = null;
+            ubUsed = ubSize = 0;
+          }
         }
+        auto ofs = lseek(tmpfd, tmpsize, SEEK_SET);
+        if (write(tmpfd, &ubUsed, ubUsed.sizeof) != ubUsed.sizeof) return false;
+        if (write(tmpfd, undoBuffer, ubUsed) != ubUsed) return false;
+        if (write(tmpfd, &ubUsed, ubUsed.sizeof) != ubUsed.sizeof) return false;
+        write(tmpfd, &tmpsize, tmpsize.sizeof);
+        tmpsize += ubUsed+uint.sizeof*2;
       }
-      auto ofs = lseek(tmpfd, tmpsize, SEEK_SET);
-      if (write(tmpfd, &ubUsed, ubUsed.sizeof) != ubUsed.sizeof) return false;
-      if (write(tmpfd, undoBuffer, ubUsed) != ubUsed) return false;
-      if (write(tmpfd, &ubUsed, ubUsed.sizeof) != ubUsed.sizeof) return false;
-      write(tmpfd, &tmpsize, tmpsize.sizeof);
-      tmpsize += ubUsed+uint.sizeof*2;
     }
     return true;
   }
@@ -1216,7 +1218,7 @@ final:
   // return `true` if something was removed
   bool removeFirstUndo () nothrow @nogc {
     import core.stdc.string : memmove;
-    assert(tmpfd < 0);
+    version(Posix) assert(tmpfd < 0);
     if (ubUsed == 0) return false;
     uint np = (*cast(uint*)undoBuffer)+4*2;
     assert(np <= ubUsed);
@@ -1230,7 +1232,7 @@ final:
   Action* addUndo (int dataSize) nothrow @nogc {
     import core.stdc.stdlib : realloc;
     import core.stdc.string : memset;
-    if (tmpfd < 0) {
+    version(Posix) if (tmpfd < 0) {
       if (dataSize < 0 || dataSize >= maxBufSize) return null; // no room
       uint asz = cast(uint)Action.sizeof+dataSize+4*2;
       if (asz > maxBufSize) return null;
@@ -1256,7 +1258,8 @@ final:
       ubUsed += asz;
       memset(res, 0, asz-4*2);
       return res;
-    } else {
+    }
+    {
       // has temp file
       if (dataSize < 0 || dataSize >= int.max/4) return null; // wtf?!
       uint asz = cast(uint)Action.sizeof+dataSize;
@@ -1275,10 +1278,11 @@ final:
 
   // can return null
   Action* lastUndoHead () nothrow @trusted @nogc {
-    if (tmpfd >= 0) {
+    version(Posix) if (tmpfd >= 0) {
       if (loadLastRecord!false()) return null;
       return cast(Action*)undoBuffer;
-    } else {
+    }
+    {
       if (ubUsed == 0) return null;
       auto sz = *cast(uint*)(undoBuffer+ubUsed-4);
       return cast(Action*)(undoBuffer+ubUsed-4-sz);
@@ -1286,10 +1290,11 @@ final:
   }
 
   Action* popUndo () nothrow @trusted @nogc {
-    if (tmpfd >= 0) {
+    version(Posix) if (tmpfd >= 0) {
       auto len = loadLastRecord!true(true); // pop it
       return (len ? cast(Action*)undoBuffer : null);
-    } else {
+    }
+    {
       if (ubUsed == 0) return null;
       auto sz = *cast(uint*)(undoBuffer+ubUsed-4);
       auto res = cast(Action*)(undoBuffer+ubUsed-4-sz);
@@ -1320,11 +1325,13 @@ public:
   void clear (bool doclose=false) nothrow @nogc {
     ubUsed = 0;
     if (doclose) {
-      import core.stdc.stdlib : free;
-      if (tmpfd >= 0) {
-        import core.sys.posix.unistd : close;
-        close(tmpfd);
-        tmpfd = -1;
+      version(Posix) {
+        import core.stdc.stdlib : free;
+        if (tmpfd >= 0) {
+          import core.sys.posix.unistd : close;
+          close(tmpfd);
+          tmpfd = -1;
+        }
       }
       if (undoBuffer !is null) free(undoBuffer);
       undoBuffer = null;
@@ -1338,7 +1345,7 @@ public:
           ubSize = 65536;
         }
       }
-      if (tmpfd >= 0) tmpsize = 0;
+      version(Posix) if (tmpfd >= 0) tmpsize = 0;
     }
   }
 
@@ -1358,28 +1365,30 @@ public:
         }
       }
     } else {
-      import core.stdc.stdio : SEEK_SET;
-      import core.sys.posix.unistd : lseek, read, write;
-      off_t cpos = 0;
-      Action act;
-      while (cpos < tmpsize) {
-        uint sz;
-        lseek(tmpfd, cpos, SEEK_SET);
-        if (read(tmpfd, &sz, sz.sizeof) != sz.sizeof) break;
-        if (sz < Action.sizeof) assert(0, "wtf?!");
-        if (read(tmpfd, &act, Action.sizeof) != Action.sizeof) break;
-        switch (act.type) {
-          case Type.TextRemove:
-          case Type.TextInsert:
-            if (act.txchanged != true) {
-              act.txchanged = true;
-              lseek(tmpfd, cpos+sz.sizeof, SEEK_SET);
-              write(tmpfd, &act, Action.sizeof);
-            }
-            break;
-          default:
+      version(Posix) {
+        import core.stdc.stdio : SEEK_SET;
+        import core.sys.posix.unistd : lseek, read, write;
+        off_t cpos = 0;
+        Action act;
+        while (cpos < tmpsize) {
+          uint sz;
+          lseek(tmpfd, cpos, SEEK_SET);
+          if (read(tmpfd, &sz, sz.sizeof) != sz.sizeof) break;
+          if (sz < Action.sizeof) assert(0, "wtf?!");
+          if (read(tmpfd, &act, Action.sizeof) != Action.sizeof) break;
+          switch (act.type) {
+            case Type.TextRemove:
+            case Type.TextInsert:
+              if (act.txchanged != true) {
+                act.txchanged = true;
+                lseek(tmpfd, cpos+sz.sizeof, SEEK_SET);
+                write(tmpfd, &act, Action.sizeof);
+              }
+              break;
+            default:
+          }
+          cpos += sz+sz.sizeof*2;
         }
-        cpos += sz+sz.sizeof*2;
       }
     }
   }
@@ -1426,10 +1435,10 @@ public:
     if (count > gb.textsize-pos) { clear(); return false; }
     int realcount = count;
     if (asRich && realcount > 0) {
-      if (realcount >= int.max/GapBuffer.HighState.sizeof) return false;
-      realcount *= cast(int)GapBuffer.HighState.sizeof;
+      if (realcount >= int.max/GapBuffer.HighState.sizeof/2) return false;
+      realcount += realcount*cast(int)GapBuffer.HighState.sizeof;
     }
-    auto act = addUndo(count);
+    auto act = addUndo(realcount);
     if (act is null) { clear(); return false; }
     act.type = Type.TextRemove;
     act.pos = pos;
@@ -1440,7 +1449,7 @@ public:
     // save attrs for rich editor
     if (asRich && realcount > 0) {
       pos = act.pos;
-      count = realcount;
+      count = act.len;
       auto dph = cast(GapBuffer.HighState*)dp;
       while (count--) *dph++ = gb.hi(pos++);
     }
