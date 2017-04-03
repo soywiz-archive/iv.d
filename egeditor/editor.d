@@ -29,8 +29,9 @@ static if (!is(typeof(object.usize))) private alias usize = size_t;
 /// this interface is used to measure text for pixel-sized editor
 abstract class EgTextMeter {
   int currofs; /// current x offset; keep this in sync with the current state
+  int currheight; /// current text height; keep this in sync with the current state; `reset` should set it to "default text height"
 
-  /// this should reset text width iterator; tabsize > 0: process tabs as... well... tabs ;-)
+  /// this should reset text width iterator (and curr* fields); tabsize > 0: process tabs as... well... tabs ;-)
   abstract void reset (int tabsize) nothrow;
 
   /// advance text width iterator, return x position for drawing next char
@@ -39,7 +40,7 @@ abstract class EgTextMeter {
   /// return current string width, including last char passed to `advance()`, preferably without spacing after last char
   abstract int currWidth () nothrow;
 
-  /// finish text iterator
+  /// finish text iterator; it should NOT reset curr* fields!
   /// WARNING: EditorEngine tries to call this after each `reset()`, but user code may not
   abstract void finish () nothrow;
 }
@@ -70,6 +71,128 @@ protected:
   enum MinGapSize = 1024; // bytes in gap
   enum GrowGran = 0x1000; // must be power of 2
   static assert(GrowGran > MinGapSize);
+
+// fuck you, D! there is still no way to cancel @nogc!
+protected:
+  // this will update buffer if necessary
+  void updateLineHeightAndY (int lidx, EgTextMeter textMeter, scope dchar delegate (char ch) nothrow recode1byte) nothrow {
+    //{ import core.stdc.stdio; printf("0: updateLineHeightAndY: lidx=%d\n", lidx); }
+    if (lidx > 0 && (lineofsc[lidx-1].height == 0 || lineofsc[lidx-1].yofs == 0)) updateLineHeightAndY(lidx-1, textMeter, recode1byte);
+    //scope(exit) { import core.stdc.stdio; printf("1: updateLineHeightAndY: lidx=%d; yofs=%d; height=%d\n", lidx, lineofsc[lidx].yofs, lineofsc[lidx].height); }
+    int ls = lineofsc[lidx].ofs;
+    int le = lineofsc[lidx+1].ofs;
+    textMeter.reset(0); // nobody cares about tab widths here
+    scope(exit) textMeter.finish();
+    if (utfuck) {
+      Utf8DecoderFast udc;
+      while (ls < le) {
+        char ch = tbuf[pos2real(ls++)];
+        if (udc.decode(cast(ubyte)ch)) textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint);
+      }
+    } else if (recode1byte !is null) {
+      while (ls < le) textMeter.advance(recode1byte(tbuf[pos2real(ls++)]));
+    } else {
+      while (ls < le) textMeter.advance(tbuf[pos2real(ls++)]);
+    }
+    lineofsc[lidx].yofs = (lidx < 1 ? 0 : lineofsc[lidx-1].yofs+lineofsc[lidx-1].height);
+    lineofsc[lidx].height = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+  }
+
+  // this will update buffer if necessary
+  void updateLineHeight (int lidx, EgTextMeter textMeter, scope dchar delegate (char ch) nothrow recode1byte) nothrow {
+    //{ import core.stdc.stdio; printf("0: updateLineHeight: lidx=%d\n", lidx); }
+    //scope(exit) { import core.stdc.stdio; printf("1: updateLineHeight: lidx=%d; yofs=%d; height=%d\n", lidx, lineofsc[lidx].yofs, lineofsc[lidx].height); }
+    int ls = lineofsc[lidx].ofs;
+    int le = lineofsc[lidx+1].ofs;
+    textMeter.reset(0); // nobody cares about tab widths here
+    scope(exit) textMeter.finish();
+    if (utfuck) {
+      Utf8DecoderFast udc;
+      while (ls < le) {
+        char ch = tbuf[pos2real(ls++)];
+        if (udc.decode(cast(ubyte)ch)) textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint);
+      }
+    } else if (recode1byte !is null) {
+      while (ls < le) textMeter.advance(recode1byte(tbuf[pos2real(ls++)]));
+    } else {
+      while (ls < le) textMeter.advance(tbuf[pos2real(ls++)]);
+    }
+    int h = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+    if (lineofsc[lidx].height != h) {
+      int lly = lidx;
+      while (lly < locused) lineofsc[lly++].yofs = 0;
+    }
+    lineofsc[lidx].height = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+  }
+
+  int pixely2lidx (int y, EgTextMeter textMeter, scope dchar delegate (char ch) nothrow recode1byte) nothrow {
+    assert(textMeter !is null);
+    int lidx = findLineCacheYIndex(y);
+    if (lidx >= 0) return lidx;
+    // line cache is unusable, update it
+    updateCache(0);
+    while (locused < mLineCount) {
+      lidx = locused;
+      updateCache(locused);
+      assert(lidx+1 == locused);
+      updateLineHeightAndY(lidx, textMeter, recode1byte);
+      if (y <= lineofsc[lidx].yofs) {
+        lidx = findLineCacheYIndex(y);
+        if (lidx < 0) assert(0, "internal line cache error");
+        return lidx;
+      }
+    }
+    return mLineCount;
+  }
+
+  static struct LineHMetrics {
+    int y;
+    int height;
+  }
+
+  LineHMetrics lidx2pixelyh (int lidx, EgTextMeter textMeter, scope dchar delegate (char ch) nothrow recode1byte) nothrow {
+    LineHMetrics res;
+    assert(textMeter !is null);
+    if (lidx < 0 || mLineCount == 0) {
+      textMeter.reset(0);
+      res.height = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+      textMeter.finish();
+    } else {
+      int ll = (lidx >= mLineCount ? mLineCount-1 : lidx);
+      while (locused <= ll) {
+        int lx = locused;
+        if (lineofsc[lx].height == 0) updateLineHeightAndY(lx, textMeter, recode1byte);
+        updateCache(locused);
+        assert(lx+1 == locused);
+        updateLineHeightAndY(lx, textMeter, recode1byte);
+      }
+      if (lidx >= mLineCount) {
+        res.y = lineofsc[mLineCount].yofs+lineofsc[mLineCount].height;
+        textMeter.reset(0);
+        res.height = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+        textMeter.finish();
+      } else {
+        res.y = lineofsc[lidx].yofs;
+        res.height = lineofsc[lidx].height;
+      }
+    }
+    return res;
+  }
+
+  int lidx2pixelh (int lidx, EgTextMeter textMeter, scope dchar delegate (char ch) nothrow recode1byte) nothrow {
+    int h;
+    assert(textMeter !is null);
+    if (lidx < 0 || mLineCount == 0 || lidx >= mLineCount) {
+      textMeter.reset(0);
+      h = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+      textMeter.finish();
+    } else {
+      while (locused <= lidx) updateCache(locused);
+      if (lineofsc[lidx].height == 0) updateLineHeight(lidx, textMeter, recode1byte);
+      h = lineofsc[lidx].height;
+    }
+    return h;
+  }
 
 nothrow @trusted @nogc:
 public:
@@ -117,8 +240,16 @@ protected:
   uint gapstart, gapend; /// tbuf[gapstart..gapend]; gap cannot be empty
   uint bufferChangeCounter; /// will simply increase on each buffer change
 
+  // line offset/height cache item
+  static align(1) struct LOCItem {
+  align(1):
+    uint ofs;
+    uint height; // 0: invalid; line height
+    uint yofs; // line y offset from text top
+  }
+
   // line offset cache
-  uint* lineofsc;
+  LOCItem* lineofsc;
   uint locused; // number of valid entries in lineofsc-1 (i.e. lineofsc[locused] is always valid)
   uint locsize;
   uint mLineCount; // number of lines in *text* buffer
@@ -141,6 +272,7 @@ final:
       uint ICS = (mSingleLine ? 2 : 1024);
       lineofsc = cast(typeof(lineofsc[0])*)realloc(lineofsc, ICS*lineofsc[0].sizeof);
       if (lineofsc is null) { free(hbuf); hbuf = null; free(tbuf); tbuf = null; return false; }
+      lineofsc[0..ICS] = LOCItem.init;
       tbsize = nsz;
       locsize = ICS;
     } else {
@@ -171,8 +303,10 @@ final:
         // at least exact?
         nb = cast(typeof(lineofsc[0])*)realloc(lineofsc, total*lineofsc[0].sizeof);
         if (nb is null) return false; // alas
+        nb[locsize..total] = LOCItem.init;
         locsize = total;
       } else {
+        nb[locsize..nsz] = LOCItem.init;
         locsize = nsz;
       }
       lineofsc = nb;
@@ -282,37 +416,39 @@ final:
       // rare case, but...
       assert(mLineCount == 1);
       locused = 1;
-      lineofsc[0..2] = 0;
+      lineofsc[0].ofs = lineofsc[1].ofs = 0;
       return;
     }
     if (mSingleLine) {
       assert(mLineCount == 1);
       locused = 1;
-      lineofsc[0] = 0;
-      lineofsc[1] = ts;
+      lineofsc[0].ofs = 0;
+      lineofsc[1].ofs = ts;
       return;
     }
     if (lidx >= mLineCount) lidx = mLineCount-1;
     if (lidx+1 <= locused) return; // nothing to do
-    if (locused == 0) lineofsc[0] = 0; else --locused;
+    if (locused == 0) lineofsc[0] = LOCItem.init; else { --locused; lineofsc[locused].height = 0; } // recalc it
     while (locused < lidx+1) {
-      auto pos = lineofsc[locused];
+      auto pos = lineofsc[locused].ofs;
       version(none) {
         auto ep = fastFindChar(pos, '\n')+1;
         if (ep > ts) ep = ts;
         while (pos < ts) if (tbuf[pos2real(pos++)] == '\n') break; // i found her!
+        /*
         if (ep != pos) {
           import core.stdc.stdio : FILE, fopen, fclose, fprintf;
           auto fl = fopen("z00.bin", "w");
           scope(exit) fl.fclose;
           fl.fprintf("pos=%d; ep=%d\n", pos, ep);
         }
+        */
         assert(ep == pos);
       } else {
         pos = fastFindChar(pos, '\n')+1;
         if (pos > ts) pos = ts;
       }
-      lineofsc[++locused] = pos;
+      lineofsc[++locused] = LOCItem(pos);
     }
     assert(locused == lidx+1);
   }
@@ -320,28 +456,50 @@ final:
   void invalidateCacheFrom (uint lidx) {
     if (locsize == 0) { locused = 0; return; } // just in case
     if (lidx == 0) {
-      lineofsc[0] = 0;
+      lineofsc[0] = LOCItem.init;
       locused = 0;
     } else {
       if (lidx > mLineCount-1) lidx = mLineCount-1;
       if (lidx < locused) locused = lidx;
+      if (locused < locsize) lineofsc[locused].height = 0; // recalc it
     }
   }
 
   int findLineCacheIndex (uint pos) const {
     if (locused == 0) return -1;
     if (pos >= tbused) return (locused != mLineCount ? -1 : locused-1);
-    if (locused == 1) return (pos < lineofsc[1] ? 0 : -1);
-    if (pos < lineofsc[locused]) {
+    if (locused == 1) return (pos < lineofsc[1].ofs ? 0 : -1);
+    if (pos < lineofsc[locused].ofs) {
       // yay! use binary search to find the line
       int bot = 0, i = cast(int)locused-1;
       while (bot != i) {
         int mid = i-(i-bot)/2;
         //!assert(mid >= 0 && mid < locused);
-        auto ls = lineofsc[mid];
-        auto le = lineofsc[mid+1];
+        auto ls = lineofsc[mid].ofs;
+        auto le = lineofsc[mid+1].ofs;
         if (pos >= ls && pos < le) return mid; // i found her!
         if (pos < ls) i = mid-1; else bot = mid;
+      }
+      return i;
+    }
+    return -1;
+  }
+
+  int findLineCacheYIndex (int y) const {
+    if (locused == 0 || lineofsc[locused].height == 0) return -1;
+    if (y <= 0) return 0;
+    if (locused == 1) return (y < lineofsc[1].height ? 0 : -1);
+    if (y < lineofsc[locused].yofs+lineofsc[locused].height) {
+      // yay! use binary search to find the line
+      int bot = 0, i = cast(int)locused-1;
+      while (bot != i) {
+        int mid = i-(i-bot)/2;
+        //!assert(mid >= 0 && mid < locused);
+        auto ls = lineofsc[mid].yofs;
+        auto le = ls+lineofsc[mid].height;
+        assert(lineofsc[mid].height != 0);
+        if (y >= ls && y < le) return mid; // i found her!
+        if (y < ls) i = mid-1; else bot = mid;
       }
       return i;
     }
@@ -361,7 +519,7 @@ public:
     if (!growTBuf(0)) assert(0, "out of memory for text buffers");
     gapend = MinGapSize;
     mLineCount = 1; // we always have at least one line, even if it is empty
-    lineofsc[0..2] = 0; // initial line cache
+    lineofsc[0..2] = LOCItem.init; // initial line cache
     locused = 0;
     mSingleLine = asingleline;
   }
@@ -391,7 +549,7 @@ public:
     if (!growTBuf(0)) assert(0, "out of memory for text buffers");
     gapend = MinGapSize;
     mLineCount = 1; // we always have at least one line, even if it is empty
-    lineofsc[0..2] = 0; // initial line cache
+    lineofsc[0..2] = LOCItem.init; // initial line cache
     locused = 0;
   }
 
@@ -472,7 +630,7 @@ public:
     if (lcidx < 0) {
       // line cache is unusable, update it
       updateCache(0);
-      while (locused < mLineCount && lineofsc[locused-1] < pos) updateCache(locused);
+      while (locused < mLineCount && lineofsc[locused-1].ofs < pos) updateCache(locused);
       lcidx = findLineCacheIndex(pos);
       if (lcidx < 0) assert(0, "internal line cache error");
     }
@@ -489,7 +647,7 @@ public:
       return 0;
     }
     updateCache(lidx);
-    return lineofsc[lidx];
+    return lineofsc[lidx].ofs;
   }
 
   alias linestart = line2pos; /// ditto
@@ -504,8 +662,8 @@ public:
       return tbused-1;
     }
     updateCache(lidx);
-    auto res = lineofsc[lidx+1];
-    return (res > lineofsc[lidx] ? res-1 : res);
+    auto res = lineofsc[lidx+1].ofs;
+    return (res > lineofsc[lidx].ofs ? res-1 : res);
   }
 
   // move by `x` utfucked chars
@@ -569,7 +727,7 @@ public:
     return x;
   }
 
-  /// get position for the given coordinates
+  /// get position for the given text coordinates
   int xy2pos (int x, int y) {
     auto ts = tbused;
     if (ts == 0 || y < 0) return 0;
@@ -580,8 +738,8 @@ public:
       return (!utfuck ? (x < ts ? x : ts) : utfuck_x2pos(x, 0));
     }
     updateCache(y);
-    uint ls = lineofsc[y];
-    uint le = lineofsc[y+1];
+    uint ls = lineofsc[y].ofs;
+    uint le = lineofsc[y+1].ofs;
     if (ls == le) {
       // this should be last empty line
       assert(y == mLineCount-1);
@@ -597,7 +755,7 @@ public:
     }
   }
 
-  /// get coordinates for the given position
+  /// get text coordinates for the given position
   void pos2xy (int pos, out int x, out int y) {
     auto ts = tbused;
     if (pos <= 0 || ts == 0) return; // x and y autoinited
@@ -621,19 +779,19 @@ public:
     if (lcidx < 0) {
       // line cache is unusable, update it
       updateCache(0);
-      while (locused < mLineCount && lineofsc[locused-1] < pos) updateCache(locused);
+      while (locused < mLineCount && lineofsc[locused-1].ofs < pos) updateCache(locused);
       lcidx = findLineCacheIndex(pos);
       if (lcidx < 0) assert(0, "internal line cache error");
     }
     //!assert(lcidx >= 0 && lcidx < mLineCount);
-    auto ls = lineofsc[lcidx];
+    auto ls = lineofsc[lcidx].ofs;
     //auto le = lineofsc[lcidx+1];
     //!assert(pos >= ls && pos < le);
     y = cast(uint)lcidx;
     x = (!utfuck ? pos-ls : utfuck_pos2x(pos));
   }
 
-  /// get coordinates for the given position
+  /// get text coordinates (adjusted for tabs) for the given position
   void pos2xyVT (int pos, out int x, out int y) {
     if (!utfuck && (!visualtabs || tabsize == 0)) { pos2xy(pos, x, y); return; }
 
@@ -679,12 +837,12 @@ public:
     if (lcidx < 0) {
       // line cache is unusable, update it
       updateCache(0);
-      while (locused < mLineCount && lineofsc[locused-1] < pos) updateCache(locused);
+      while (locused < mLineCount && lineofsc[locused-1].ofs < pos) updateCache(locused);
       lcidx = findLineCacheIndex(pos);
       if (lcidx < 0) assert(0, "internal line cache error");
     }
     //!assert(lcidx >= 0 && lcidx < mLineCount);
-    auto ls = lineofsc[lcidx];
+    auto ls = lineofsc[lcidx].ofs;
     //auto le = lineofsc[lcidx+1];
     //!assert(pos >= ls && pos < le);
     y = cast(uint)lcidx;
@@ -1373,9 +1531,17 @@ public:
     }
   }
 
+  /// should not be called for utfuck mode
+  final dchar recode1b (char ch) pure const nothrow @safe @nogc {
+    final switch (codepage) {
+      case CodePage.koi8u: return koi2uni(ch);
+      case CodePage.cp1251: return cp12512uni(ch);
+      case CodePage.cp866: return cp8662uni(ch);
+    }
+  }
+
 protected:
-  bool coordsInPixels = false; /// set this to `true` to make editor call text sizing functions
-  int lineHeightPixels;
+  int lineHeightPixels = 0; /// <0: use line height API, proportional fonts; 0: everything is cell-based (tty); >0: constant line height in pixels; proprotional fonts
   int prevTopLine = -1;
   int mTopLine = 0;
   int prevXOfs = -1;
@@ -1574,13 +1740,30 @@ public:
     winy = y0;
     winw = w;
     winh = h;
-    dirtyLines.length = visibleLinesPerWindow;
+    //setDirtyLinesLength(visibleLinesPerWindow);
     gb = new GapBuffer(asingleline);
     hl = ahl;
     if (ahl !is null) hl.gb = gb;
     undo = new UndoStack(false, !asingleline);
     redo = new UndoStack(true, !asingleline);
     mSingleLine = asingleline;
+  }
+
+  private void setDirtyLinesLength (usize len) nothrow @trusted {
+    if (len > int.max/4) assert(0, "wtf?!");
+    if (dirtyLines.length > len) {
+      dirtyLines.length = len;
+      dirtyLines.assumeSafeAppend;
+    } else if (dirtyLines.length < len) {
+      auto optr = dirtyLines.ptr;
+      auto olen = dirtyLines.length;
+      dirtyLines.length = len;
+      if (dirtyLines.ptr !is optr) {
+        import core.memory : GC;
+        if (dirtyLines.ptr is GC.addrOf(dirtyLines.ptr)) GC.setAttr(dirtyLines.ptr, GC.BlkAttr.NO_INTERIOR);
+      }
+      dirtyLines[olen..$] = true;
+    }
   }
 
   // utfuck switch hooks
@@ -1634,9 +1817,93 @@ public:
       }
     }
 
-    bool inPixels () const pure nothrow @safe @nogc { pragma(inline, true); return (coordsInPixels && lineHeightPixels > 0); } ///
-    int linesPerWindow () const pure nothrow @safe @nogc { pragma(inline, true); return (!coordsInPixels || lineHeightPixels < 1 ? winh : (winh <= lineHeightPixels ? 1 : winh/lineHeightPixels)); } ///
-    int visibleLinesPerWindow () const pure nothrow @safe @nogc { pragma(inline, true); return (!coordsInPixels || lineHeightPixels < 1 ? winh : (winh <= lineHeightPixels ? 1 : winh/lineHeightPixels+(winh%lineHeightPixels ? 1 : 0))); } ///
+    bool inPixels () const pure nothrow @safe @nogc { pragma(inline, true); return (lineHeightPixels != 0); } ///
+
+    /// this can recalc height cache
+    int linesPerWindow () nothrow {
+      pragma(inline, true);
+      return
+        lineHeightPixels == 0 || lineHeightPixels == 1 ? winh :
+        lineHeightPixels > 0 ? (winh <= lineHeightPixels ? 1 : winh/lineHeightPixels) :
+        calcLinesPerWindow();
+    }
+
+    /// this can recalc height cache
+    int visibleLinesPerWindow () nothrow {
+      pragma(inline, true);
+      return
+        lineHeightPixels == 0 || lineHeightPixels == 1 ? winh :
+        lineHeightPixels > 0 ? (winh <= lineHeightPixels ? 1 : winh/lineHeightPixels+(winh%lineHeightPixels ? 1 : 0)) :
+        calcVisLinesPerWindow();
+    }
+  }
+
+  // for variable line height
+  protected final int calcVisLinesPerWindow () nothrow {
+    if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+    int hgtleft = winh;
+    if (hgtleft < 1) return 1; // just in case
+    int lidx = mTopLine;
+    int lcount = 0;
+    while (hgtleft > 0) {
+      auto lh = gb.lidx2pixelh(lidx++, textMeter, &recode1b);
+      ++lcount;
+      hgtleft -= lh;
+    }
+    return lcount;
+  }
+
+  // for variable line height
+  protected final int calcLinesPerWindow () nothrow {
+    if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+    int hgtleft = winh;
+    if (hgtleft < 1) return 1; // just in case
+    int lidx = mTopLine;
+    int lcount = 0;
+    //{ import core.stdc.stdio; printf("=== clpw ===\n"); }
+    for (;;) {
+      auto lh = gb.lidx2pixelh(lidx++, textMeter, &recode1b);
+      //if (gb.mLineCount > 0) { import core.stdc.stdio; printf("*clpw: lidx=%d; height=%d; hgtleft=%d\n", lidx-1, lh, hgtleft); }
+      hgtleft -= lh;
+      if (hgtleft >= 0) ++lcount;
+      if (hgtleft <= 0) break;
+    }
+    //{ import core.stdc.stdio; printf("clpw: %d\n", lcount); }
+    return (lcount ? lcount : 1);
+  }
+
+  /// has lille sense if `inPixels` is false
+  final int linePixelYHeight (int lidx, int* outhgt=null) nothrow {
+    if (lidx <= 0) {
+      if (inPixels && textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      if (outhgt !is null) *outhgt = (inPixels ? (lineHeightPixels > 0 ? lineHeightPixels : gb.lidx2pixelh(gb.mLineCount, textMeter, &recode1b)) : 1);
+      return 0;
+    }
+    if (!inPixels) {
+      if (outhgt !is null) *outhgt = 1;
+      return (lidx < gb.mLineCount ? gb.mLineCount : lidx);
+    }
+    if (lineHeightPixels > 0) {
+      if (outhgt !is null) *outhgt = lineHeightPixels;
+      if (lidx > gb.mLineCount) lidx = gb.mLineCount;
+      return lidx*lineHeightPixels;
+    } else {
+      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      auto lm = gb.lidx2pixelyh(lidx, textMeter, &recode1b);
+      if (outhgt !is null) *outhgt = lm.height;
+      return lm.y;
+    }
+  }
+
+  /// has lille sense if `inPixels` is false
+  final int linePixelHeight (int lidx) nothrow {
+    if (!inPixels) return 1;
+    if (lineHeightPixels > 0) {
+      return lineHeightPixels;
+    } else {
+      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      return gb.lidx2pixelh(lidx, textMeter, &recode1b);
+    }
   }
 
   /// resize control
@@ -1647,11 +1914,7 @@ public:
       winw = nw;
       winh = nh;
       auto nvl = visibleLinesPerWindow;
-      if (visibleLinesPerWindow != dirtyLines.length) {
-        dirtyLines.length = visibleLinesPerWindow;
-        dirtyLines.assumeSafeAppend;
-        dirtyLines[] = true;
-      }
+      setDirtyLinesLength(nvl);
       makeCurLineVisible();
       fullDirty();
     }
@@ -1755,20 +2018,6 @@ public:
     bool textChanged () const pure { pragma(inline, true); return txchanged; } ///
     void textChanged (bool v) pure { pragma(inline, true); txchanged = v; } ///
 
-    ///
-    void topline (int v) @system {
-      if (v < 0) v = 0;
-      if (v > gb.linecount) v = gb.linecount-1;
-      if (v+linesPerWindow > gb.linecount) {
-        v = gb.linecount-linesPerWindow;
-        if (v < 0) v = 0;
-      }
-      if (v != mTopLine) {
-        pushUndoCurPos();
-        mTopLine = v;
-      }
-    }
-
     bool visualtabs () const pure { pragma(inline, true); return (gb.visualtabs && gb.tabsize > 0); } ///
 
     ///
@@ -1790,10 +2039,27 @@ public:
         if (gb.visualtabs) fullDirty();
       }
     }
+
+    /// mark whole visible text as dirty
+    final void fullDirty () nothrow @safe @nogc { dirtyLines[] = true; }
   }
 
-  /// mark whole visible text as dirty
-  final void fullDirty () nothrow @safe @nogc { dirtyLines[] = true; }
+  ///
+  void topline (int v) nothrow {
+    if (v < 0) v = 0;
+    if (v > gb.linecount) v = gb.linecount-1;
+    immutable auto moldtop = mTopLine;
+    mTopLine = v; // for linesPerWindow
+    if (v+linesPerWindow > gb.linecount) {
+      v = gb.linecount-linesPerWindow;
+      if (v < 0) v = 0;
+    }
+    if (v != moldtop) {
+      mTopLine = moldtop;
+      pushUndoCurPos();
+      mTopLine = v;
+    }
+  }
 
   /// absolute coordinates in text
   final void gotoXY(bool vcenter=false) (int nx, int ny) nothrow {
@@ -1959,18 +2225,29 @@ public:
 
     drawPageBegin();
     drawStatus();
-    int ymul = (inPixels ? lineHeightPixels : 1);
+    immutable int ydelta = (inPixels ? lineHeightPixels : 1);
     auto pos = gb.xy2pos(0, mTopLine);
     auto lc = gb.linecount;
+    int lyofs = 0;
     foreach (int y; 0..visibleLinesPerWindow) {
-      if (mTopLine+y < lc && hl !is null && hl.fixLine(mTopLine+y)) dirtyLines[y] = true;
-      if (dirtyLines[y]) {
-        dirtyLines[y] = false;
+      bool dirty = true;
+      if (mTopLine+y < lc && hl !is null && hl.fixLine(mTopLine+y)) {
+        if (y < dirtyLines.length) dirtyLines.ptr[y] = true;
+      } else {
+        dirty = (y < dirtyLines.length ? dirtyLines.ptr[y] : true);
+      }
+      if (dirty) {
+        if (y < dirtyLines.length) dirtyLines.ptr[y] = false;
         if (mTopLine+y < lc) {
-          drawLine(mTopLine+y, y*ymul, mXOfs);
+          drawLine(mTopLine+y, lyofs, mXOfs);
         } else {
-          drawEmptyLine(y*ymul);
+          drawEmptyLine(lyofs);
         }
+      }
+      if (ydelta > 0) {
+        lyofs += ydelta;
+      } else {
+        lyofs += linePixelHeight(mTopLine+y);
       }
     }
     drawPageMisc();
@@ -2004,13 +2281,14 @@ public:
   final void makeCurXVisible () nothrow {
     // use "real" x coordinate to calculate x offset
     if (cx < 0) cx = 0;
-    int rx, ry;
+    int rx;
     if (!inPixels) {
+      int ry;
       gb.pos2xyVT(curpos, rx, ry);
       if (rx < mXOfs) mXOfs = rx;
       if (rx-mXOfs >= winw) mXOfs = rx-winw+1;
     } else {
-      localCursorXY(rx, ry);
+      rx = localCursorX();
       rx += mXOfs;
       if (rx < mXOfs) mXOfs = rx-8;
       if (rx+4-mXOfs > winw) mXOfs = rx-winw+4;
@@ -2047,6 +2325,54 @@ public:
   }
 
   /// cursor position in "local" coords: from widget (x0,y0), possibly in pixels
+  final int localCursorX () nothrow {
+    int rx, ry;
+    if (!inPixels) {
+      gb.pos2xyVT(curpos, rx, ry);
+      rx -= mXOfs;
+    } else {
+      gb.pos2xy(curpos, rx, ry);
+      if (rx == 0) return 0-mXOfs;
+      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      textMeter.reset(visualtabs ? gb.tabsize : 0);
+      scope(exit) textMeter.finish(); // just in case
+      auto pos = gb.line2pos(ry);
+      auto ts = gb.textsize;
+      immutable bool ufuck = gb.utfuck;
+      if (mSingleLine) {
+        while (pos < ts) {
+          // advance one symbol
+          char ch = gb[pos];
+          if (!ufuck || ch < 128) {
+            textMeter.advance(cast(dchar)ch);
+            ++pos;
+          } else {
+            textMeter.advance(dcharAtAdvance(pos));
+          }
+          --rx;
+          if (rx == 0) break;
+        }
+      } else {
+        while (pos < ts) {
+          // advance one symbol
+          char ch = gb[pos];
+          if (ch == '\n') break;
+          if (!ufuck || ch < 128) {
+            textMeter.advance(cast(dchar)ch);
+            ++pos;
+          } else {
+            textMeter.advance(dcharAtAdvance(pos));
+          }
+          --rx;
+          if (rx == 0) break;
+        }
+      }
+      rx = textMeter.currWidth()-mXOfs;
+    }
+    return rx;
+  }
+
+  /// cursor position in "local" coords: from widget (x0,y0), possibly in pixels
   final void localCursorXY (out int lcx, out int lcy) nothrow {
     int rx, ry;
     if (!inPixels) {
@@ -2057,9 +2383,21 @@ public:
       lcy = ry;
     } else {
       gb.pos2xy(curpos, rx, ry);
-      lcy = (ry-mTopLine)*lineHeightPixels;
-      if (rx == 0) { lcx = 0-mXOfs; return; }
       if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      if (lineHeightPixels > 0) {
+        lcy = (ry-mTopLine)*lineHeightPixels;
+      } else {
+        if (ry >= mTopLine && ry < mTopLine+linesPerWindow) {
+          // don't update y offsets
+          //lcy = 0;
+          for (int ll = mTopLine; ll < ry; ++ll) lcy += gb.lidx2pixelh(ll, textMeter, &recode1b);
+        } else {
+          auto lmt = gb.lidx2pixelyh(mTopLine, textMeter, &recode1b);
+          auto lmr = gb.lidx2pixelyh(ry, textMeter, &recode1b);
+          lcy = lmr.y-lmt.y;
+        }
+      }
+      if (rx == 0) { lcx = 0-mXOfs; return; }
       textMeter.reset(visualtabs ? gb.tabsize : 0);
       scope(exit) textMeter.finish(); // just in case
       auto pos = gb.line2pos(ry);
@@ -2131,13 +2469,31 @@ public:
         ++rx;
       }
     } else {
-      int ry = my/lineHeightPixels+mTopLine;
+      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
+      int ry;
+      if (lineHeightPixels > 0) {
+        ry = my/lineHeightPixels+mTopLine;
+      } else {
+        if (my >= 0 && my <= winh) {
+          // don't update y offsets
+          ry = mTopLine;
+          int lcy = 0;
+          while (lcy < my) {
+            lcy += gb.lidx2pixelh(ry, textMeter, &recode1b);
+            if (lcy > my) break;
+            ++ry;
+            if (lcy == my) break;
+          }
+        } else {
+          auto ytop = gb.lidx2pixelyh(mTopLine, textMeter, &recode1b).y;
+          ry = gb.pixely2lidx(ytop+my, textMeter, &recode1b);
+        }
+      }
       if (ry < 0) { ty = -1; return; } // tx is zero here
       if (ry >= gb.linecount) { ty = gb.linecount; return; } // tx is zero here
       ty = ry;
       if (mx <= 0 && mXOfs == 0) return; // tx is zero here
       // now the hard part
-      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
       textMeter.reset(visualtabs ? gb.tabsize : 0);
       scope(exit) textMeter.finish(); // just in case
       int visx = -mXOfs, prevx;
@@ -2183,6 +2539,7 @@ public:
         if (mTopLine < 0) mTopLine = 0;
       }
     }
+    setDirtyLinesLength(visibleLinesPerWindow);
     makeCurXVisible();
   }
 
@@ -2198,11 +2555,12 @@ public:
         if (mTopLine < 0) mTopLine = 0;
       }
     }
+    setDirtyLinesLength(visibleLinesPerWindow);
     makeCurXVisible();
   }
 
   ///
-  final bool isCurLineVisible () const pure nothrow @safe @nogc {
+  final bool isCurLineVisible () nothrow {
     if (cy < mTopLine) return false;
     if (cy > mTopLine+linesPerWindow-1) return false;
     return true;
@@ -2214,14 +2572,22 @@ public:
     if (hl !is null) hl.lineChanged(lidx, updateDown);
     if (lidx < mTopLine) { if (updateDown) dirtyLines[] = true; return; }
     if (lidx >= mTopLine+linesPerWindow) return;
-    if (updateDown) dirtyLines[lidx-mTopLine..$] = true; else dirtyLines[lidx-mTopLine] = true;
+    immutable stl = lidx-mTopLine;
+    assert(stl >= 0);
+    if (stl < dirtyLines.length) {
+      if (updateDown) {
+        dirtyLines[stl..$] = true;
+      } else {
+        dirtyLines.ptr[stl] = true;
+      }
+    }
   }
 
   ///
   final void lineChangedByPos (int pos, bool updateDown) { return lineChanged(gb.pos2line(pos), updateDown); }
 
   ///
-  final void markLinesDirty (int lidx, int count) nothrow @safe @nogc {
+  final void markLinesDirty (int lidx, int count) nothrow {
     if (prevTopLine != mTopLine || prevXOfs != mXOfs) return; // we will refresh the whole page anyway
     if (count < 1 || lidx >= gb.linecount) return;
     if (count > gb.linecount) count = gb.linecount;
@@ -2230,17 +2596,23 @@ public:
     if (le <= mTopLine) return;
     if (lidx < mTopLine) lidx = mTopLine;
     if (le > mTopLine+linesPerWindow) le = mTopLine+linesPerWindow;
-    dirtyLines[lidx-mTopLine..le-mTopLine] = true;
+    immutable stl = lidx-mTopLine;
+    assert(stl >= 0);
+    if (stl < dirtyLines.length) {
+      auto el = le-mTopLine;
+      if (el > dirtyLines.length) el = cast(int)dirtyLines.length;
+      dirtyLines.ptr[stl..el] = true;
+    }
   }
 
   ///
-  final void markLinesDirtySE (int lidxs, int lidxe) nothrow @safe @nogc {
+  final void markLinesDirtySE (int lidxs, int lidxe) nothrow {
     if (lidxe < lidxs) { int tmp = lidxs; lidxs = lidxe; lidxe = tmp; }
     markLinesDirty(lidxs, lidxe-lidxs+1);
   }
 
   ///
-  final void markRangeDirty (int pos, int len) nothrow @safe @nogc {
+  final void markRangeDirty (int pos, int len) nothrow {
     if (prevTopLine != mTopLine || prevXOfs != mXOfs) return; // we will refresh the whole page anyway
     int l0 = gb.pos2line(pos);
     int l1 = gb.pos2line(pos+len+1);
@@ -2248,7 +2620,7 @@ public:
   }
 
   ///
-  final void markBlockDirty () nothrow @safe @nogc {
+  final void markBlockDirty () nothrow {
     //FIXME: optimize updating with block boundaries
     if (bstart >= bend) return;
     markRangeDirty(bstart, bend-bstart);
@@ -3337,7 +3709,7 @@ public:
   void doRedo () { doUndoRedo(redo); } ///
 
   ///
-  void doBlockResetMark (bool saveUndo=true) nothrow @nogc {
+  void doBlockResetMark (bool saveUndo=true) nothrow {
     killTextOnChar = false;
     if (bstart < bend) {
       if (saveUndo) pushUndoCurPos();
