@@ -695,45 +695,30 @@ public:
     ensureGap(); // we should have a gap
     assert(gapstart < gapend);
     if (pos == gapstart) return; // nothing to do
-    version(egedit_old_gap) {
-      // memory moves are fast enough for my needs, so don't bother optimizing this
-      // move gap to the end
-      moveGapAtEnd();
-      debug(gapmove) { import core.stdc.stdio : printf; printf("  pos=%u; ts=%u; gs=%u; ge=%u\n", pos, ts, gapstart, gapend); }
-      // ...and move it back where i want it
-      if (pos == ts) return;
-      if (auto msz = ts-pos) {
-        memmove(tbuf+pos+MinGapSize, tbuf+pos, msz);
-        memmove(hbuf+pos+MinGapSize, hbuf+pos, msz*HighState.sizeof);
-      }
-      gapend = (gapstart = pos)+MinGapSize;
-      debug(gapmove) { import core.stdc.stdio : printf; printf("  pos=%u; ts=%u; gs=%u; ge=%u\n", pos, ts, gapstart, gapend); }
+    /* cases:
+     *  pos is before gap: shift [pos..gapstart] to gapend-len, shift gap
+     *  pos is after gap: shift [gapend..pos] to gapstart, shift gap
+     */
+    if (pos < gapstart) {
+      // pos is before gap
+      int len = gapstart-pos; // to shift
+      memmove(tbuf+gapend-len, tbuf+pos, len);
+      memmove(hbuf+gapend-len, hbuf+pos, len*HighState.sizeof);
+      gapstart -= len;
+      gapend -= len;
     } else {
-      /* cases:
-       *  pos is before gap: shift [pos..gapstart] to gapend-len, shift gap
-       *  pos is after gap: shift [gapend..pos] to gapstart, shift gap
-       */
-      if (pos < gapstart) {
-        // pos is before gap
-        int len = gapstart-pos; // to shift
-        memmove(tbuf+gapend-len, tbuf+pos, len);
-        memmove(hbuf+gapend-len, hbuf+pos, len*HighState.sizeof);
-        gapstart -= len;
-        gapend -= len;
-      } else {
-        // pos is after gap
-        assert(pos > gapstart);
-        //int pos += gapend-gapstart; // real position in buffer
-        int len = pos-gapstart;
-        assert(len > 0);
-        memmove(tbuf+gapstart, tbuf+gapend, len);
-        memmove(hbuf+gapstart, hbuf+gapend, len*HighState.sizeof);
-        gapstart += len;
-        gapend += len;
-      }
-      assert(gapstart == pos);
-      assert(gapstart < gapend);
+      // pos is after gap
+      assert(pos > gapstart);
+      //int pos += gapend-gapstart; // real position in buffer
+      int len = pos-gapstart;
+      assert(len > 0);
+      memmove(tbuf+gapstart, tbuf+gapend, len);
+      memmove(hbuf+gapstart, hbuf+gapend, len*HighState.sizeof);
+      gapstart += len;
+      gapend += len;
     }
+    assert(gapstart == pos);
+    assert(gapstart < gapend);
   }
 
   /// put the gap at the end of the text
