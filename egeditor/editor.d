@@ -91,6 +91,7 @@ protected:
     int le = lineofsc[lidx+1].ofs;
     textMeter.reset(0); // nobody cares about tab widths here
     scope(exit) textMeter.finish();
+    int maxh = 1;
     if (utfuck) {
       Utf8DecoderFast udc;
       HighState hs = hbuf[pos2real(ls)];
@@ -98,6 +99,7 @@ protected:
         char ch = tbuf[pos2real(ls++)];
         if (udc.decode(cast(ubyte)ch)) {
           textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint, hs);
+          if (textMeter.currheight > maxh) maxh = textMeter.currheight;
           if (ls < le) hs = hbuf[pos2real(ls)];
         }
       }
@@ -105,15 +107,17 @@ protected:
       while (ls < le) {
         immutable uint rpos = pos2real(ls++);
         textMeter.advance(recode1byte(tbuf[rpos]), hbuf[rpos]);
+        if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     } else {
       while (ls < le) {
         immutable uint rpos = pos2real(ls++);
         textMeter.advance(tbuf[rpos], hbuf[rpos]);
+        if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     }
     lineofsc[lidx].yofs = (lidx < 1 ? 0 : lineofsc[lidx-1].yofs+lineofsc[lidx-1].height);
-    lineofsc[lidx].height = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+    lineofsc[lidx].height = maxh;
   }
 
   // this will update buffer if necessary
@@ -124,31 +128,34 @@ protected:
     int le = lineofsc[lidx+1].ofs;
     textMeter.reset(0); // nobody cares about tab widths here
     scope(exit) textMeter.finish();
+    int maxh = 1;
     if (utfuck) {
       Utf8DecoderFast udc;
       HighState hs = hbuf[pos2real(ls)];
       while (ls < le) {
         char ch = tbuf[pos2real(ls++)];
         if (udc.decode(cast(ubyte)ch)) textMeter.advance(udc.invalid || !udc.isValidDC(udc.codepoint)? udc.replacement : udc.codepoint, hs);
+        if (textMeter.currheight > maxh) maxh = textMeter.currheight;
         if (ls < le) hs = hbuf[pos2real(ls)];
       }
     } else if (recode1byte !is null) {
       while (ls < le) {
         immutable uint rpos = pos2real(ls++);
         textMeter.advance(recode1byte(tbuf[rpos]), hbuf[rpos]);
+        if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     } else {
       while (ls < le) {
         immutable uint rpos = pos2real(ls++);
         textMeter.advance(tbuf[rpos], hbuf[rpos]);
+        if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     }
-    int h = (textMeter.currheight > 0 ? textMeter.currheight : 1);
-    if (lineofsc[lidx].height != h) {
+    if (lineofsc[lidx].height != maxh) {
       int lly = lidx;
       while (lly < locused) lineofsc[lly++].yofs = 0;
     }
-    lineofsc[lidx].height = (textMeter.currheight > 0 ? textMeter.currheight : 1);
+    lineofsc[lidx].height = maxh;
   }
 
   int pixely2lidx (int y, EgTextMeter textMeter, scope dchar delegate (char ch) nothrow recode1byte) nothrow {
