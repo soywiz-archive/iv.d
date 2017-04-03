@@ -587,12 +587,12 @@ public:
   /// there is always at least one line, so `linecount` is never zero
   @property int linecount () const pure { pragma(inline, true); return mLineCount; }
 
-  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\0'); } ///
+  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\n'); } ///
   @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
 
   /// return decoded to koi-8 utf-8 char at buffer position pos
   @property char utfuckAt (uint pos) const pure {
-    if (pos >= tbsize) return 0;
+    if (pos >= tbsize) return '\n';
     if (!utfuck) return this[pos];
     Utf8DecoderFast udc;
     while (pos < tbsize) {
@@ -698,14 +698,19 @@ public:
   private int utfuck_x2pos (int x, int pos) {
     auto ts = tbused;
     if (pos < 0) pos = 0;
-    immutable bool sl = mSingleLine;
-    mainloop: while (pos < ts && x > 0) {
-      auto len = utfuckLenAt(pos);
-      while (len-- > 0) {
-        if (!sl && tbuf[pos2real(pos)] == '\n') break mainloop;
-        ++pos;
+    if (mSingleLine) {
+      // single line
+      while (pos < ts && x > 0) {
+        pos += utfuckLenAt!true(pos); // "always positive"
+        --x;
       }
-      --x;
+    } else {
+      // multiline
+      while (pos < ts && x > 0) {
+        if (tbuf[pos2real(pos)] == '\n') break;
+        pos += utfuckLenAt!true(pos); // "always positive"
+        --x;
+      }
     }
     if (pos > ts) pos = ts;
     return pos;
@@ -727,28 +732,19 @@ public:
     }
     // now `spos` points to line start; walk over utfucked chars
     int x = 0;
-    mainloop: while (spos < pos) {
-      auto len = utfuckLenAt(spos);
-      if (len == 1) {
-        auto ch = tbuf[pos2real(spos)];
-        if (!sl && ch == '\n') break mainloop;
-        ++spos;
-        static if (dotabs) {
-          if (ch == '\t' && visualtabs && tabsize > 0) {
-            x = ((x+tabsize)/tabsize)*tabsize;
-          } else {
-            ++x;
-          }
+    while (spos < pos) {
+      char ch = tbuf[pos2real(spos)];
+      if (!sl && ch == '\n') break;
+      static if (dotabs) {
+        if (ch == '\t' && visualtabs && tabsize > 0) {
+          x = ((x+tabsize)/tabsize)*tabsize;
         } else {
           ++x;
         }
       } else {
-        while (len-- > 0) {
-          if (!sl && tbuf[pos2real(spos)] == '\n') break mainloop; // just in case
-          ++spos;
-        }
         ++x;
       }
+      spos += (ch < 128 ? 1 : utfuckLenAt!true(spos));
     }
     return x;
   }
