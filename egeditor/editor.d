@@ -1813,6 +1813,7 @@ public:
     if (dirtyLines.length > len) {
       dirtyLines.length = len;
       dirtyLines.assumeSafeAppend;
+      dirtyLines[] = -1;
     } else if (dirtyLines.length < len) {
       auto optr = dirtyLines.ptr;
       auto olen = dirtyLines.length;
@@ -1821,7 +1822,8 @@ public:
         import core.memory : GC;
         if (dirtyLines.ptr is GC.addrOf(dirtyLines.ptr)) GC.setAttr(dirtyLines.ptr, GC.BlkAttr.NO_INTERIOR);
       }
-      dirtyLines[olen..$] = -1;
+      //dirtyLines[olen..$] = -1;
+      dirtyLines[] = -1;
     }
   }
 
@@ -2304,48 +2306,33 @@ public:
     drawPageBegin();
     drawStatus();
     immutable int lhp = lineHeightPixels;
-    bool alwaysDirty = false;
     immutable int ydelta = (inPixels ? lhp : 1);
+    bool alwaysDirty = false;
     auto pos = gb.xy2pos(0, mTopLine);
     auto lc = gb.linecount;
     int lyofs = 0;
     //TODO: optimize redrawing for variable line height mode
     foreach (int y; 0..visibleLinesPerWindow) {
-      bool dirty = alwaysDirty;
+      bool dirty = (mTopLine+y < lc && hl !is null && hl.fixLine(mTopLine+y));
       if (!alwaysDirty) {
-        if (mTopLine+y < lc && hl !is null && hl.fixLine(mTopLine+y)) {
-          if (lhp < 0 && y < dirtyLines.length && dirtyLines.ptr[y] < 0) alwaysDirty = true;
-          dirty = true;
-        } else if (lhp >= 0) {
-          if (y < dirtyLines.length) {
-            dirty = (dirtyLines.ptr[y] != 0);
-          } else {
-            dirty = alwaysDirty = true; // just in case
-          }
-        } else {
-          // variable line height, more hacks
-          if (y < dirtyLines.length) {
-            if (dirtyLines.ptr[y] != gb.lidx2pixelh(mTopLine+y, textMeter, &recode1b)) {
-              dirty = alwaysDirty = true;
-            }
-          } else {
-            dirty = alwaysDirty = true; // just in case
-          }
+        if (lhp < 0) {
+          // variable line height, hacks
+          alwaysDirty = (!alwaysDirty && y < dirtyLines.length ? (dirtyLines.ptr[y] != linePixelHeight(mTopLine+y)) : true);
+        } else if (!dirty && y < dirtyLines.length) {
+          // tty or constant pixel height
+          dirty = (dirtyLines.ptr[y] != 0);
         }
+        dirty = true;
       }
-      if (dirty) {
-        if (y < dirtyLines.length) dirtyLines.ptr[y] = (lhp >= 0 ? 0 : gb.lidx2pixelh(mTopLine+y, textMeter, &recode1b));
+      if (dirty || alwaysDirty) {
+        if (y < dirtyLines.length) dirtyLines.ptr[y] = (lhp >= 0 ? 0 : linePixelHeight(mTopLine+y));
         if (mTopLine+y < lc) {
           drawLine(mTopLine+y, lyofs, mXOfs);
         } else {
           drawEmptyLine(lyofs);
         }
       }
-      if (ydelta > 0) {
-        lyofs += ydelta;
-      } else {
-        lyofs += linePixelHeight(mTopLine+y);
-      }
+      lyofs += (ydelta > 0 ? ydelta : linePixelHeight(mTopLine+y));
     }
     drawPageMisc();
     drawCursor();
@@ -2681,8 +2668,8 @@ public:
     if (count > gb.linecount) count = gb.linecount;
     if (lidx >= mTopLine+linesPerWindow) return;
     int le = lidx+count;
-    if (le <= mTopLine) return;
-    if (lidx < mTopLine) lidx = mTopLine;
+    if (le <= mTopLine) { dirtyLines[] = -1; return; } // just in case
+    if (lidx < mTopLine) { dirtyLines[] = -1; lidx = mTopLine; return; } // just in cale
     if (le > mTopLine+linesPerWindow) le = mTopLine+linesPerWindow;
     immutable stl = lidx-mTopLine;
     assert(stl >= 0);
