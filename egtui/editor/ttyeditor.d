@@ -206,6 +206,8 @@ public:
     if (hl is null) setupHighlighter(); else detachHighlighter();
   }
 
+  final @property bool hasHighlighter () const pure nothrow @safe @nogc { pragma(inline, true); return (hl !is null); }
+
   final void getDiskFileInfo () {
     import std.file : getSize, timeLastModified;
     if (fullFileName.length) {
