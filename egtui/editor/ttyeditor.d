@@ -1633,7 +1633,7 @@ final:
 
 
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("F2", "save file", q{ saveFile(fullFileName); });
-  mixin TEDImpl!("F3", "start/stop/reset block marking", q{ doBlockMark(); });
+  mixin TEDImpl!("F3", "start/stop/reset block marking", q{ doToggleBlockMarkMode(); });
   mixin TEDImpl!("^F3", "reset block mark", q{ doBlockResetMark(); });
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("F4", "search and relace text", q{
     srrOptions.inselenabled = hasMarkedBlock;

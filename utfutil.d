@@ -27,6 +27,10 @@ static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+bool isValidUtf8Start (ubyte b) pure nothrow @safe @nogc { pragma(inline, true); return (b < 128 || (b&0xc0) == 0xC0); } /// rough check
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// fast state-machine based UTF-8 decoder; using 8 bytes of memory
 align(1) struct Utf8DecoderFast {
 align(1):
