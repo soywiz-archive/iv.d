@@ -2047,25 +2047,11 @@ public:
       gb.tbused = sz;
       gb.gapstart = sz;
       gb.gapend = gb.tbsize;
-      int lncount = gb.countEols(gb.tbuf[0..sz]);
-      //if (sz > 0 && gb.tbuf[sz-1] == '\n') ++lncount;
-      //if (lncount == 0) lncount = 1;
-      ++lncount;
+      int lncount = gb.countEols(gb.tbuf[0..sz])+1; // '\n' means "start new line after me, unconditionally", hence +1
       if (!gb.growLineCache(lncount)) throw new Exception("out of memory");
       gb.mLineCount = lncount;
       gb.locused = 0;
     }
-    /*
-    enum BufSize = 65536;
-    char* buf = cast(char*)malloc(BufSize);
-    if (buf is null) throw new Exception("out of memory");
-    scope(exit) free(buf);
-    for (;;) {
-      auto rd = fl.rawRead(buf[0..BufSize]);
-      if (rd.length == 0) break;
-      if (!gb.append(rd[])) throw new Exception("text too big");
-    }
-    */
   }
 
   ///
@@ -2080,7 +2066,9 @@ public:
     */
     if (gb.tbused > 0) {
       if (gb.gapstart > 0) fl.rawWriteExact(gb.tbuf[0..gb.gapstart]);
+      assert(gb.gapstart <= gb.tbused);
       uint left = gb.tbused-gb.gapstart;
+      assert(gb.gapend+left <= gb.tbsize);
       if (left > 0) fl.rawWriteExact(gb.tbuf[gb.gapend..gb.gapend+left]);
     }
     txchanged = false;
