@@ -54,11 +54,11 @@ abstract class EgTextMeter {
 public final class GapBuffer {
 nothrow:
 public:
-  static nothrow @nogc align(1) struct HighState {
+  static align(1) struct HighState {
   align(1):
     ubyte kwtype; // keyword number
     ubyte kwidx; // index in keyword
-    @property pure {
+    @property pure nothrow @safe @nogc {
       ushort u16 () const { pragma(inline, true); return cast(ushort)((kwidx<<8)|kwtype); }
       short s16 () const { pragma(inline, true); return cast(short)((kwidx<<8)|kwtype); }
       void u16 (ushort v) { pragma(inline, true); kwtype = v&0xff; kwidx = (v>>8)&0xff; }
@@ -283,7 +283,7 @@ final:
   /// slice *will* be invalidated on next gap buffer operation!
   public auto bufparts (int pos) {
     static struct Range {
-    nothrow:
+    nothrow @nogc:
       GapBuffer gb;
       bool aftergap; // fr is "aftergap"?
       const(char)[] fr;
@@ -302,8 +302,8 @@ final:
           aftergap = true;
         }
       }
-      @property bool empty () pure const { pragma(inline, true); return (gb is null); }
-      @property const(char)[] front () pure { pragma(inline, true); return fr; }
+      @property bool empty () pure const @safe { pragma(inline, true); return (gb is null); }
+      @property const(char)[] front () pure @safe { pragma(inline, true); return fr; }
       void popFront () {
         if (aftergap) gb = null;
         if (gb is null) { fr = null; return; }
@@ -484,12 +484,12 @@ public:
   bool singleline () const pure nothrow { pragma(inline, true); return mSingleLine; }
 
   /// size of text buffer without gap, in one-byte chars
-  @property int textsize () const pure { pragma(inline, true); return tbused; }
+  @property int textsize () const pure @safe @nogc { pragma(inline, true); return tbused; }
   /// there is always at least one line, so `linecount` is never zero
-  @property int linecount () const pure { pragma(inline, true); return mLineCount; }
+  @property int linecount () const pure @safe @nogc { pragma(inline, true); return mLineCount; }
 
-  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbused ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\n'); } ///
-  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbused ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
+  @property char opIndex (uint pos) const pure @trusted @nogc { pragma(inline, true); return (pos < tbused ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\n'); } ///
+  @property ref HighState hi (uint pos) pure @trusted @nogc { pragma(inline, true); return (pos < tbused ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
 
   @property dchar uniAt (uint pos) const pure {
     immutable ts = tbused;
@@ -966,7 +966,7 @@ private:
       //VisTabs = 1<<3, // editor was in "visual tabs" mode
     }
 
-    @property nothrow pure {
+    @property nothrow pure @safe @nogc {
       bool bmarking () const { pragma(inline, true); return (flags&Flag.BlockMarking) != 0; }
       bool lastbe () const { pragma(inline, true); return (flags&Flag.LastBE) != 0; }
       bool txchanged () const { pragma(inline, true); return (flags&Flag.Changed) != 0; }
@@ -1338,7 +1338,7 @@ public:
     return saveLastRecord();
   }
 
-  @property bool hasUndo () const pure nothrow { pragma(inline, true); return (tmpfd < 0 ? (ubUsed > 0) : (tmpsize > 0)); }
+  @property bool hasUndo () const pure nothrow @safe @nogc { pragma(inline, true); return (tmpfd < 0 ? (ubUsed > 0) : (tmpsize > 0)); }
 
   private bool copyAction (Action* ua) nothrow {
     import core.stdc.string : memcpy;
@@ -1487,8 +1487,8 @@ public:
 
 public:
   /// is editor in "paste mode" (i.e. we are pasting chars from clipboard, and should skip autoindenting)?
-  final @property bool pasteMode () const pure nothrow { return (inPasteMode > 0); }
-  final resetPasteMode () pure nothrow { inPasteMode = 0; } ///
+  final @property bool pasteMode () const pure nothrow @safe @nogc { return (inPasteMode > 0); }
+  final resetPasteMode () pure nothrow @safe @nogc { inPasteMode = 0; } ///
 
   ///
   final void clearBookmarks () nothrow {
@@ -1690,7 +1690,7 @@ public:
 
   final @property {
     ///
-    bool utfuck () const pure nothrow { pragma(inline, true); return gb.utfuck; }
+    bool utfuck () const pure nothrow @safe @nogc { pragma(inline, true); return gb.utfuck; }
 
     /// this switches "utfuck" mode
     /// note that utfuck mode is FUCKIN' SLOW and buggy
@@ -1705,9 +1705,9 @@ public:
       afterUtfuckSwitch(v);
     }
 
-    ref inout(GapBuffer.HighState) defaultRichStyle () inout pure nothrow { pragma(inline, true); return cast(typeof(return))gb.defhs; } ///
+    ref inout(GapBuffer.HighState) defaultRichStyle () inout pure nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))gb.defhs; } ///
 
-    bool asRich () const pure nothrow { pragma(inline, true); return mAsRich; } ///
+    @property bool asRich () const pure nothrow @safe @nogc { pragma(inline, true); return mAsRich; } ///
 
     /// WARNING! changing this will reset undo/redo buffers!
     void asRich (bool v) {
@@ -1724,10 +1724,10 @@ public:
       }
     }
 
-    int x0 () const pure nothrow { pragma(inline, true); return winx; } ///
-    int y0 () const pure nothrow { pragma(inline, true); return winy; } ///
-    int width () const pure nothrow { pragma(inline, true); return winw; } ///
-    int height () const pure nothrow { pragma(inline, true); return winh; } ///
+    int x0 () const pure nothrow @safe @nogc { pragma(inline, true); return winx; } ///
+    int y0 () const pure nothrow @safe @nogc { pragma(inline, true); return winy; } ///
+    int width () const pure nothrow @safe @nogc { pragma(inline, true); return winw; } ///
+    int height () const pure nothrow @safe @nogc { pragma(inline, true); return winh; } ///
 
     void x0 (int v) nothrow { pragma(inline, true); move(v, winy); } ///
     void y0 (int v) nothrow { pragma(inline, true); move(winx, v); } ///
@@ -1735,17 +1735,17 @@ public:
     void height (int v) nothrow { pragma(inline, true); resize(winw, v); } ///
 
     /// has any effect only if you are using `insertText()` and `deleteText()` API!
-    bool readonly () const pure nothrow { pragma(inline, true); return mReadOnly; }
+    bool readonly () const pure nothrow @safe @nogc { pragma(inline, true); return mReadOnly; }
     void readonly (bool v) nothrow { pragma(inline, true); mReadOnly = v; } ///
 
     /// "single line" mode, for line editors
-    bool singleline () const pure nothrow { pragma(inline, true); return mSingleLine; }
+    bool singleline () const pure nothrow @safe @nogc { pragma(inline, true); return mSingleLine; }
 
     /// "buffer change counter"
-    uint bufferCC () const pure nothrow { pragma(inline, true); return gb.bufferChangeCounter; }
+    uint bufferCC () const pure nothrow @safe @nogc { pragma(inline, true); return gb.bufferChangeCounter; }
     void bufferCC (uint v) pure nothrow { pragma(inline, true); gb.bufferChangeCounter = v; } ///
 
-    bool killTextOnChar () const pure nothrow { pragma(inline, true); return mKillTextOnChar; } ///
+    bool killTextOnChar () const pure nothrow @safe @nogc { pragma(inline, true); return mKillTextOnChar; } ///
     void killTextOnChar (bool v) nothrow { ///
       pragma(inline, true);
       if (mKillTextOnChar != v) {
@@ -1754,7 +1754,7 @@ public:
       }
     }
 
-    bool inPixels () const pure nothrow { pragma(inline, true); return (lineHeightPixels != 0); } ///
+    bool inPixels () const pure nothrow @safe @nogc { pragma(inline, true); return (lineHeightPixels != 0); } ///
 
     /// this can recalc height cache
     int linesPerWindow () nothrow {
@@ -1854,17 +1854,17 @@ public:
 
   final @property nothrow {
     /// has active marked block?
-    bool hasMarkedBlock () const pure { pragma(inline, true); return (bstart < bend); }
+    bool hasMarkedBlock () const pure @safe @nogc { pragma(inline, true); return (bstart < bend); }
 
-    int curx () const pure { pragma(inline, true); return cx; } ///
-    int cury () const pure { pragma(inline, true); return cy; } ///
-    int xofs () const pure { pragma(inline, true); return mXOfs; } ///
+    int curx () const pure @safe @nogc { pragma(inline, true); return cx; } ///
+    int cury () const pure @safe @nogc { pragma(inline, true); return cy; } ///
+    int xofs () const pure @safe @nogc { pragma(inline, true); return mXOfs; } ///
 
-    int topline () const pure { pragma(inline, true); return mTopLine; } ///
-    int linecount () const pure { pragma(inline, true); return gb.linecount; } ///
-    int textsize () const pure { pragma(inline, true); return gb.textsize; } ///
+    int topline () const pure @safe @nogc { pragma(inline, true); return mTopLine; } ///
+    int linecount () const pure @safe @nogc { pragma(inline, true); return gb.linecount; } ///
+    int textsize () const pure @safe @nogc { pragma(inline, true); return gb.textsize; } ///
 
-    char opIndex (int pos) const pure { pragma(inline, true); return gb[pos]; } ///
+    char opIndex (int pos) const pure @safe @nogc { pragma(inline, true); return gb[pos]; } ///
 
     ///
     dchar dcharAt (int pos) const pure {
@@ -3759,8 +3759,8 @@ protected:
       }
     }
   public:
-    @property bool empty () const pure { pragma(inline, true); return (left <= 0); }
-    @property char front () const pure { pragma(inline, true); return frontch; }
+    @property bool empty () const pure @safe @nogc { pragma(inline, true); return (left <= 0); }
+    @property char front () const pure @safe @nogc { pragma(inline, true); return frontch; }
     void popFront () {
       if (ed is null || left < 2) { left = 0; frontch = 0; return; }
       --left;
@@ -3768,7 +3768,7 @@ protected:
       frontch = ed.gb[pos++];
     }
     auto save () pure { pragma(inline, true); return TextRange(ed, pos, left, frontch); }
-    @property usize length () const pure { pragma(inline, true); return (left > 0 ? left : 0); }
+    @property usize length () const pure @safe @nogc { pragma(inline, true); return (left > 0 ? left : 0); }
     alias opDollar = length;
     char opIndex (usize idx) {
       pragma(inline, true);

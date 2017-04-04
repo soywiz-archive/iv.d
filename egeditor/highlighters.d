@@ -45,7 +45,7 @@ public enum {
   HiRQString,
 
   HiKeyword, // yellow
-  HiKeywordHi, // while
+  HiKeywordHi, // white
   HiBuiltin, // red
   HiType, // olive
   HiSpecial, // green
@@ -308,6 +308,14 @@ public:
       ch = gb[spos];
       // single-line comment?
       if (ch == '/' && (opt&EdHiTokens.Opt.CSingleComment) && gb[spos+1] == '/') {
+        gb.hi(spos++) = HS(HiCommentOneLine);
+        gb.hi(spos++) = HS(HiCommentOneLine);
+        st = HS(HiCommentOneLine);
+        while (spos <= le) gb.hi(spos++) = st;
+        continue mainloop;
+      }
+      // sql single-line comment?
+      if (ch == '-' && (opt&EdHiTokens.Opt.SqlSingleComment) && gb[spos+1] == '-') {
         gb.hi(spos++) = HS(HiCommentOneLine);
         gb.hi(spos++) = HS(HiCommentOneLine);
         st = HS(HiCommentOneLine);
@@ -830,13 +838,14 @@ public:
     ShellSingleComment = 1U<<9, // allow `# ` comments
     CSingleComment     = 1U<<10, // allow `//` comments
     CMultiComment      = 1U<<11, // allow `/* ... */` comments
+    SqlSingleComment   = 1U<<12, // allow `/* ... */` comments
     // other options
-    CPreprocessor = 1U<<12, // does this language use C preprocessor?
-    JSRegExp      = 1U<<13, // parse JS inline regexps?
-    ShellSigil    = 1U<<14, // parse shell sigils?
+    CPreprocessor = 1U<<13, // does this language use C preprocessor?
+    JSRegExp      = 1U<<14, // parse JS inline regexps?
+    ShellSigil    = 1U<<15, // parse shell sigils?
     // token machine options
-    CaseInsensitive = 1U<<15, // are tokens case-sensitive?
-    NoStrings       = 1U<<16, // no strings at all?
+    CaseInsensitive = 1U<<16, // are tokens case-sensitive?
+    NoStrings       = 1U<<17, // no strings at all?
   }
   static assert(Opt.max <= uint.max);
 
@@ -886,6 +895,7 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
+      //Opt.SqlSingleComment|
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
@@ -1130,6 +1140,7 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
+      //Opt.SqlSingleComment|
       //Opt.CPreprocessor|
       Opt.JSRegExp|
       //Opt.ShellSigil|
@@ -1242,6 +1253,7 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
+      //Opt.SqlSingleComment|
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
@@ -1342,6 +1354,7 @@ public class EdHiTokensShell : EdHiTokens {
       Opt.ShellSingleComment|
       //Opt.CSingleComment|
       //Opt.CMultiComment|
+      //Opt.SqlSingleComment|
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       Opt.ShellSigil|
@@ -1417,6 +1430,7 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
       Opt.CMultiComment|
+      //Opt.SqlSingleComment|
       Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
@@ -1540,6 +1554,347 @@ public class EdHiTokensFrag : EdHiTokens {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public class EdHiTokensSQL : EdHiTokens {
+  this () {
+    super(
+      Opt.Num0b|
+      Opt.Num0o|
+      Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      Opt.SQString|
+      Opt.BQString|
+      Opt.RQString|
+      //Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      //Opt.CSingleComment|
+      Opt.SqlSingleComment|
+      Opt.CMultiComment|
+      //Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      //Opt.ShellSigil|
+      //Opt.CaseInsensitive|
+      //Opt.NoStrings|
+      0
+    );
+
+    addToken("abort", HiKeyword);
+    addToken("absolute", HiKeyword);
+    addToken("action", HiKeyword);
+    addToken("ada", HiKeyword);
+    addToken("add", HiKeyword);
+    addToken("all", HiKeyword);
+    addToken("allocate", HiKeyword);
+    addToken("alter", HiKeyword);
+    addToken("and", HiKeyword);
+    addToken("any", HiKeyword);
+    addToken("are", HiKeyword);
+    addToken("as", HiKeyword);
+    addToken("asc", HiKeyword);
+    addToken("assertion", HiKeyword);
+    addToken("at", HiKeyword);
+    addToken("authorization", HiKeyword);
+    addToken("auto_increment", HiKeyword);
+    addToken("begin", HiKeyword);
+    addToken("between", HiKeyword);
+    addToken("bigint", HiKeyword);
+    addToken("bit", HiKeyword);
+    addToken("bit_length", HiKeyword);
+    addToken("blob", HiKeyword);
+    addToken("both", HiKeyword);
+    addToken("by", HiKeyword);
+    addToken("cascade", HiKeyword);
+    addToken("cascaded", HiKeyword);
+    addToken("case", HiKeyword);
+    addToken("cast", HiKeyword);
+    addToken("catalog", HiKeyword);
+    addToken("char", HiKeyword);
+    addToken("char_length", HiKeyword);
+    addToken("character", HiKeyword);
+    addToken("character_length", HiKeyword);
+    addToken("check", HiKeyword);
+    addToken("close", HiKeyword);
+    addToken("coalesce", HiKeyword);
+    addToken("collate", HiKeyword);
+    addToken("collation", HiKeyword);
+    addToken("column", HiKeyword);
+    addToken("commit", HiKeyword);
+    addToken("compile", HiKeyword);
+    addToken("connect", HiKeyword);
+    addToken("connection", HiKeyword);
+    addToken("constraint", HiKeyword);
+    addToken("constraint", HiKeyword);
+    addToken("constraints", HiKeyword);
+    addToken("continue", HiKeyword);
+    addToken("copy", HiKeyword);
+    addToken("corresponding", HiKeyword);
+    addToken("create", HiKeyword);
+    addToken("cross", HiKeyword);
+    addToken("current", HiKeyword);
+    addToken("current_date", HiKeyword);
+    addToken("current_time", HiKeyword);
+    addToken("current_timestamp", HiKeyword);
+    addToken("current_user", HiKeyword);
+    addToken("cursor", HiKeyword);
+    addToken("database", HiKeyword);
+    addToken("date", HiKeyword);
+    addToken("datetime", HiKeyword);
+    addToken("day", HiKeyword);
+    addToken("deallocate", HiKeyword);
+    addToken("dec", HiKeyword);
+    addToken("decimal", HiKeyword);
+    addToken("declare", HiKeyword);
+    addToken("default", HiKeyword);
+    addToken("deferrable", HiKeyword);
+    addToken("deferred", HiKeyword);
+    addToken("delete", HiKeyword);
+    addToken("desc", HiKeyword);
+    addToken("describe", HiKeyword);
+    addToken("descriptor", HiKeyword);
+    addToken("diagnostics", HiKeyword);
+    addToken("disconnect", HiKeyword);
+    addToken("distinct", HiKeyword);
+    addToken("domain", HiKeyword);
+    addToken("double", HiKeyword);
+    addToken("drop", HiKeyword);
+    addToken("else", HiKeyword);
+    addToken("encoding", HiKeyword);
+    addToken("end", HiKeyword);
+    addToken("end-exec", HiKeyword);
+    addToken("enum", HiKeyword);
+    addToken("escape", HiKeyword);
+    addToken("except", HiKeyword);
+    addToken("exception", HiKeyword);
+    addToken("exec", HiKeyword);
+    addToken("execute", HiKeyword);
+    addToken("exists", HiKeyword);
+    addToken("external", HiKeyword);
+    addToken("extract", HiKeyword);
+    addToken("false", HiKeyword);
+    addToken("fetch", HiKeyword);
+    addToken("first", HiKeyword);
+    addToken("float", HiKeyword);
+    addToken("for", HiKeyword);
+    addToken("foreign", HiKeyword);
+    addToken("fortran", HiKeyword);
+    addToken("found", HiKeyword);
+    addToken("from", HiKeyword);
+    addToken("full", HiKeyword);
+    addToken("get", HiKeyword);
+    addToken("global", HiKeyword);
+    addToken("go", HiKeyword);
+    addToken("goto", HiKeyword);
+    addToken("grant", HiKeyword);
+    addToken("group", HiKeyword);
+    addToken("having", HiKeyword);
+    addToken("hour", HiKeyword);
+    addToken("identity", HiKeyword);
+    addToken("if", HiKeyword);
+    addToken("immediate", HiKeyword);
+    addToken("in", HiKeyword);
+    addToken("include", HiKeyword);
+    addToken("index", HiKeyword);
+    addToken("indicator", HiKeyword);
+    addToken("initially", HiKeyword);
+    addToken("inner", HiKeyword);
+    addToken("input", HiKeyword);
+    addToken("insensitive", HiKeyword);
+    addToken("insert", HiKeyword);
+    addToken("int", HiKeyword);
+    addToken("integer", HiKeyword);
+    addToken("intersect", HiKeyword);
+    addToken("interval", HiKeyword);
+    addToken("into", HiKeyword);
+    addToken("is", HiKeyword);
+    addToken("isolation", HiKeyword);
+    addToken("join", HiKeyword);
+    addToken("key", HiKeyword);
+    addToken("key", HiKeyword);
+    addToken("language", HiKeyword);
+    addToken("last", HiKeyword);
+    addToken("leading", HiKeyword);
+    addToken("left", HiKeyword);
+    addToken("level", HiKeyword);
+    addToken("like", HiKeyword);
+    addToken("local", HiKeyword);
+    addToken("lock", HiKeyword);
+    addToken("longblob", HiKeyword);
+    addToken("longtext", HiKeyword);
+    addToken("loop", HiKeyword);
+    addToken("match", HiKeyword);
+    addToken("mediumblob", HiKeyword);
+    addToken("mediumint", HiKeyword);
+    addToken("mediumtext", HiKeyword);
+    addToken("merge", HiKeyword);
+    addToken("minute", HiKeyword);
+    addToken("minus", HiKeyword);
+    addToken("module", HiKeyword);
+    addToken("month", HiKeyword);
+    addToken("names", HiKeyword);
+    addToken("national", HiKeyword);
+    addToken("natural", HiKeyword);
+    addToken("nchar", HiKeyword);
+    addToken("next", HiKeyword);
+    addToken("no", HiKeyword);
+    addToken("none", HiKeyword);
+    addToken("not", HiKeyword);
+    addToken("null", HiKeyword);
+    addToken("nullif", HiKeyword);
+    addToken("numeric", HiKeyword);
+    addToken("octet_length", HiKeyword);
+    addToken("of", HiKeyword);
+    addToken("offline", HiKeyword);
+    addToken("on", HiKeyword);
+    addToken("online", HiKeyword);
+    addToken("only", HiKeyword);
+    addToken("open", HiKeyword);
+    addToken("option", HiKeyword);
+    addToken("or", HiKeyword);
+    addToken("order", HiKeyword);
+    addToken("outer", HiKeyword);
+    addToken("output", HiKeyword);
+    addToken("overlaps", HiKeyword);
+    addToken("pad", HiKeyword);
+    addToken("partial", HiKeyword);
+    addToken("pascal", HiKeyword);
+    addToken("position", HiKeyword);
+    addToken("precision", HiKeyword);
+    addToken("prepare", HiKeyword);
+    addToken("preserve", HiKeyword);
+    addToken("primary", HiKeyword);
+    addToken("primary", HiKeyword);
+    addToken("prior", HiKeyword);
+    addToken("privileges", HiKeyword);
+    addToken("procedure", HiKeyword);
+    addToken("public", HiKeyword);
+    addToken("read", HiKeyword);
+    addToken("real", HiKeyword);
+    addToken("rebuild", HiKeyword);
+    addToken("references", HiKeyword);
+    addToken("relative", HiKeyword);
+    addToken("replace", HiKeyword);
+    addToken("restrict", HiKeyword);
+    addToken("revoke", HiKeyword);
+    addToken("right", HiKeyword);
+    addToken("rollback", HiKeyword);
+    addToken("rows", HiKeyword);
+    addToken("schema", HiKeyword);
+    addToken("scroll", HiKeyword);
+    addToken("second", HiKeyword);
+    addToken("section", HiKeyword);
+    addToken("select", HiKeyword);
+    addToken("sequence", HiKeyword);
+    addToken("session", HiKeyword);
+    addToken("session_user", HiKeyword);
+    addToken("set", HiKeyword);
+    addToken("size", HiKeyword);
+    addToken("smallint", HiKeyword);
+    addToken("some", HiKeyword);
+    addToken("space", HiKeyword);
+    addToken("sql", HiKeyword);
+    addToken("sqlca", HiKeyword);
+    addToken("sqlstate", HiKeyword);
+    addToken("sqlwarning", HiKeyword);
+    addToken("substring", HiKeyword);
+    addToken("system_user", HiKeyword);
+    addToken("table", HiKeyword);
+    addToken("tablespace", HiKeyword);
+    addToken("template", HiKeyword);
+    addToken("temporary", HiKeyword);
+    addToken("text", HiKeyword);
+    addToken("then", HiKeyword);
+    addToken("time", HiKeyword);
+    addToken("truncate", HiKeyword);
+    addToken("timestamp", HiKeyword);
+    addToken("timezone_hour", HiKeyword);
+    addToken("timezone_minute", HiKeyword);
+    addToken("tinyblob", HiKeyword);
+    addToken("tinyint", HiKeyword);
+    addToken("tinytext", HiKeyword);
+    addToken("to", HiKeyword);
+    addToken("trailing", HiKeyword);
+    addToken("transaction", HiKeyword);
+    addToken("translation", HiKeyword);
+    addToken("trigger", HiKeyword);
+    addToken("trim", HiKeyword);
+    addToken("true", HiKeyword);
+    addToken("type", HiKeyword);
+    addToken("union", HiKeyword);
+    addToken("unique", HiKeyword);
+    addToken("unknown", HiKeyword);
+    addToken("unsigned", HiKeyword);
+    addToken("update", HiKeyword);
+    addToken("usage", HiKeyword);
+    addToken("use", HiKeyword);
+    addToken("user", HiKeyword);
+    addToken("using", HiKeyword);
+    addToken("value", HiKeyword);
+    addToken("values", HiKeyword);
+    addToken("varchar", HiKeyword);
+    addToken("varying", HiKeyword);
+    addToken("view", HiKeyword);
+    addToken("when", HiKeyword);
+    addToken("whenever", HiKeyword);
+    addToken("where", HiKeyword);
+    addToken("while", HiKeyword);
+    addToken("with", HiKeyword);
+    addToken("work", HiKeyword);
+    addToken("write", HiKeyword);
+    addToken("year", HiKeyword);
+    addToken("zone", HiKeyword);
+
+    // postgres
+    addToken("cache", HiKeywordHi);
+    addToken("increment", HiKeywordHi);
+    addToken("maxvalue", HiKeywordHi);
+    addToken("minvalue", HiKeywordHi);
+    addToken("start", HiKeywordHi);
+
+    addToken("!", HiPunct);
+    addToken("%", HiPunct);
+    addToken("&&", HiPunct);
+    addToken("&", HiPunct);
+    addToken("(", HiPunct);
+    addToken(")", HiPunct);
+    addToken("*", HiPunct);
+    addToken("+", HiPunct);
+    addToken(",", HiPunct);
+    addToken("-", HiPunct);
+    addToken("/", HiPunct);
+    addToken(":", HiPunct);
+    addToken(";", HiSemi);
+    addToken("<", HiPunct);
+    addToken("=", HiPunct);
+    addToken(">", HiPunct);
+    addToken("?", HiPunct);
+    addToken("[", HiPunct);
+    addToken("]", HiPunct);
+    addToken("^", HiPunct);
+    addToken("{", HiPunct);
+    addToken("||", HiPunct);
+    addToken("|", HiPunct);
+    addToken("}", HiPunct);
+    addToken("~", HiPunct);
+    addToken(".", HiPunct);
+
+    addToken(">", HiPunct);
+    addToken("<", HiPunct);
+    addToken("+", HiPunct);
+    addToken("-", HiPunct);
+    addToken("*", HiPunct);
+    addToken("/", HiPunct);
+    addToken("%", HiPunct);
+    addToken("=", HiPunct);
+    addToken("(", HiPunct);
+    addToken(")", HiPunct);
+    addToken(",", HiPunct);
+    addToken(";", HiPunct);
+    addToken(".", HiPunct); // was white
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensHtml : EdHiTokens {
   this () {
     super(
@@ -1555,6 +1910,7 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.ShellSingleComment|
       //Opt.CSingleComment|
       //Opt.CMultiComment|
+      //Opt.SqlSingleComment|
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
@@ -1703,4 +2059,51 @@ public class EdHiTokensHtml : EdHiTokens {
     addToken("wbr", HiSpecial);
     addToken("xmp", HiSpecial);
   }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// new higlighter instance for the file with the given extension
+public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullname) {
+  if (ext.strEquCI(".d")) {
+    __gshared EdHiTokensD toksd;
+    if (toksd is null) toksd = new EdHiTokensD();
+    return new EditorHLExt(toksd);
+  }
+  if (ext.strEquCI(".js") || ext.strEquCI(".jsm")) {
+    __gshared EdHiTokensJS toksjs;
+    if (toksjs is null) toksjs = new EdHiTokensJS();
+    return new EditorHLExt(toksjs);
+  }
+  if (ext.strEquCI(".c") || ext.strEquCI(".cpp") || ext.strEquCI(".h") || ext.strEquCI(".hpp")) {
+    __gshared EdHiTokensC toksc;
+    if (toksc is null) toksc = new EdHiTokensC();
+    return new EditorHLExt(toksc);
+  }
+  if (ext.strEquCI(".frag") || ext.strEquCI(".vert") || ext.strEquCI(".shad") || ext.strEquCI(".shader")) {
+    __gshared EdHiTokensFrag tokf;
+    if (tokf is null) tokf = new EdHiTokensFrag();
+    return new EditorHLExt(tokf);
+  }
+  if (ext.strEquCI(".sh") || ext.strEquCI(".profile")) {
+    __gshared EdHiTokensShell tokssh;
+    if (tokssh is null) tokssh = new EdHiTokensShell();
+    return new EditorHLExt(tokssh);
+  }
+  if (ext.strEquCI(".htm") || ext.strEquCI(".html")) {
+    __gshared EdHiTokensHtml tokshtml;
+    if (tokshtml is null) tokshtml = new EdHiTokensHtml();
+    return new EditorHLExt(tokshtml);
+  }
+  if (ext.strEquCI(".sql")) {
+    __gshared EdHiTokensSQL toksql;
+    if (toksql is null) toksql = new EdHiTokensSQL();
+    return new EditorHLExt(toksql);
+  }
+  auto bnpos = fullname.length;
+  while (bnpos > 0 && fullname.ptr[bnpos-1] != '/') --bnpos;
+  auto name = fullname[bnpos..$];
+  if (name == "TODO") return new EditorHLTODO();
+  if (name == "COMMIT_EDITMSG") return new EditorHLGitCommit();
+  return null;
 }

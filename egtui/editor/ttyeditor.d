@@ -196,9 +196,9 @@ public:
     auto ep = fullFileName.length;
     while (ep > 0 && fullFileName.ptr[ep-1] != '/' && fullFileName.ptr[ep-1] != '.') --ep;
     if (ep < 1 || fullFileName.ptr[ep-1] != '.') {
-      attachHiglighter(getHiglighterFor("", fullFileName));
+      attachHiglighter(getHiglighterObjectFor("", fullFileName));
     } else {
-      attachHiglighter(getHiglighterFor(fullFileName[ep-1..$], fullFileName));
+      attachHiglighter(getHiglighterObjectFor(fullFileName[ep-1..$], fullFileName));
     }
   }
 
