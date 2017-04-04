@@ -594,15 +594,15 @@ public:
   /// there is always at least one line, so `linecount` is never zero
   @property int linecount () const pure { pragma(inline, true); return mLineCount; }
 
-  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbsize ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\n'); } ///
-  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbsize ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
+  @property char opIndex (uint pos) const pure { pragma(inline, true); return (pos < tbused ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\n'); } ///
+  @property ref HighState hi (uint pos) pure { pragma(inline, true); return (pos < tbused ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
 
   /// return decoded to koi-8 utf-8 char at buffer position pos
   @property char utfuckAt (uint pos) const pure {
-    if (pos >= tbsize) return '\n';
+    if (pos >= tbused) return '\n';
     if (!utfuck) return this[pos];
     Utf8DecoderFast udc;
-    while (pos < tbsize) {
+    while (pos < tbused) {
       if (udc.decode(cast(ubyte)tbuf[pos2real(pos++)])) {
         immutable dchar dch = udc.codepoint;
         return uni2koi(udc.invalid || !udc.isValidDC(dch) ? udc.replacement : dch);
