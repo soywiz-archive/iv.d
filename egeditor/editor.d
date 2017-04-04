@@ -554,8 +554,12 @@ public:
     if (lcidx < 0) {
       // line cache is unusable, update it
       updateCache(0);
-      while (locused < mLineCount && locache[locused-1].ofs < pos) updateCache(locused);
+      while (locused < mLineCount && locache[locused-1].ofs <= pos) updateCache(locused);
       lcidx = findLineCacheIndex(pos);
+      if (lcidx < 0) {
+        //{ import core.stdc.stdio; auto fo = fopen("z00.log", "a"); scope(exit) fclose(fo); fo.fprintf("pos=%u; tbused=%u; locused=%u; mLineCount=%u; $-2=%u; $-1=%u\n", pos, tbused, locused, mLineCount, locache[locused-2].ofs, locache[locused-1].ofs); }
+        assert(0, "internal line cache error");
+      }
       if (lcidx < 0) assert(0, "internal line cache error");
     }
     //!assert(lcidx >= 0 && lcidx < mLineCount);
@@ -665,7 +669,7 @@ public:
     uint le = locache[y+1].ofs;
     if (ls == le) {
       // this should be last empty line
-      if (y != mLineCount-1) { import std.format; assert(0, "fuuuuu; y=%u; lc=%u; locused=%u".format(y, mLineCount, locused)); }
+      //if (y != mLineCount-1) { import std.format; assert(0, "fuuuuu; y=%u; lc=%u; locused=%u".format(y, mLineCount, locused)); }
       assert(y == mLineCount-1);
       return ls;
     }
@@ -681,7 +685,7 @@ public:
 
   /// get text coordinates for the given position
   void pos2xy (int pos, out int x, out int y) {
-    auto ts = tbused;
+    immutable ts = tbused;
     if (pos <= 0 || ts == 0) return; // x and y autoinited
     if (pos > ts) pos = ts;
     if (mLineCount == 1) {
@@ -703,12 +707,15 @@ public:
     if (lcidx < 0) {
       // line cache is unusable, update it
       updateCache(0);
-      while (locused < mLineCount && locache[locused-1].ofs < pos) updateCache(locused);
+      while (locused < mLineCount && locache[locused-1].ofs <= pos) updateCache(locused);
       lcidx = findLineCacheIndex(pos);
-      if (lcidx < 0) assert(0, "internal line cache error");
+      if (lcidx < 0) {
+        //{ import core.stdc.stdio; auto fo = fopen("z00.log", "a"); scope(exit) fclose(fo); fo.fprintf("pos=%u; tbused=%u; locused=%u; mLineCount=%u\n", pos, tbused, locused, mLineCount); }
+        assert(0, "internal line cache error");
+      }
     }
     //!assert(lcidx >= 0 && lcidx < mLineCount);
-    auto ls = locache[lcidx].ofs;
+    immutable ls = locache[lcidx].ofs;
     //auto le = lineofsc[lcidx+1];
     //!assert(pos >= ls && pos < le);
     y = cast(uint)lcidx;
@@ -2823,10 +2830,10 @@ public:
                 str = str[elp..$];
               } else {
                 // insert newline
+                assert(str[0] == '\n');
                 auto newpos = gb.put(ipos, indentText);
                 if (newpos < 0) { doRollback = true; break; }
                 ipos = newpos;
-                assert(str[0] == '\n');
                 str = str[1..$];
               }
             }
