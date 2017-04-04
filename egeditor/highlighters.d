@@ -212,7 +212,7 @@ public:
       if (st.kwtype == HiString || st.kwtype == HiStringSpecial) {
         seenNonBlank = true;
         while (spos <= le) {
-          auto len = skipStrChar!(true, true)();
+          auto len = (opt&EdHiTokens.Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
           if (len == 0) { st = HS(HiText); continue mainloop; }
           if (len == 1) {
             // normal
@@ -230,7 +230,7 @@ public:
       if (st.kwtype == HiSQString || st.kwtype == HiSQStringSpecial) {
         seenNonBlank = true;
         while (spos <= le) {
-          auto len = skipStrChar!(true, true)();
+          auto len = (opt&EdHiTokens.Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
           if (len == 0) { st = HS(HiText); continue mainloop; }
           if (len == 1) {
             // normal
