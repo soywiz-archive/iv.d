@@ -1850,33 +1850,6 @@ public class EdHiTokensSQL : EdHiTokens {
     addToken("minvalue", HiKeywordHi);
     addToken("start", HiKeywordHi);
 
-    addToken("!", HiPunct);
-    addToken("%", HiPunct);
-    addToken("&&", HiPunct);
-    addToken("&", HiPunct);
-    addToken("(", HiPunct);
-    addToken(")", HiPunct);
-    addToken("*", HiPunct);
-    addToken("+", HiPunct);
-    addToken(",", HiPunct);
-    addToken("-", HiPunct);
-    addToken("/", HiPunct);
-    addToken(":", HiPunct);
-    addToken(";", HiSemi);
-    addToken("<", HiPunct);
-    addToken("=", HiPunct);
-    addToken(">", HiPunct);
-    addToken("?", HiPunct);
-    addToken("[", HiPunct);
-    addToken("]", HiPunct);
-    addToken("^", HiPunct);
-    addToken("{", HiPunct);
-    addToken("||", HiPunct);
-    addToken("|", HiPunct);
-    addToken("}", HiPunct);
-    addToken("~", HiPunct);
-    addToken(".", HiPunct);
-
     addToken(">", HiPunct);
     addToken("<", HiPunct);
     addToken("+", HiPunct);
