@@ -80,7 +80,7 @@ private:
 
 protected:
   enum MinGapSize = 1024; // bytes in gap
-  enum GrowGran = 0x1000; // must be power of 2
+  enum GrowGran = 65536; // must be power of 2
   enum MinGapSizeSmall = 64; // bytes in gap
   enum GrowGranSmall = 0x100; // must be power of 2
 
@@ -2035,6 +2035,27 @@ public:
   void loadFile (VFile fl) {
     import core.stdc.stdlib : malloc, free;
     clear();
+    scope(failure) clear();
+    auto fpos = fl.tell;
+    auto fsz = fl.size;
+    if (fpos < fsz) {
+      //HACK!
+      if (fsz-fpos >= gb.tbmax) throw new Exception("text too big");
+      immutable uint sz = cast(uint)(fsz-fpos);
+      if (!gb.growTBuf(sz)) throw new Exception("out of memory");
+      fl.rawReadExact(gb.tbuf[0..sz]);
+      gb.tbused = sz;
+      gb.gapstart = sz;
+      gb.gapend = gb.tbsize;
+      int lncount = gb.countEols(gb.tbuf[0..sz]);
+      //if (sz > 0 && gb.tbuf[sz-1] == '\n') ++lncount;
+      //if (lncount == 0) lncount = 1;
+      ++lncount;
+      if (!gb.growLineCache(lncount)) throw new Exception("out of memory");
+      gb.mLineCount = lncount;
+      gb.locused = 0;
+    }
+    /*
     enum BufSize = 65536;
     char* buf = cast(char*)malloc(BufSize);
     if (buf is null) throw new Exception("out of memory");
@@ -2044,6 +2065,7 @@ public:
       if (rd.length == 0) break;
       if (!gb.append(rd[])) throw new Exception("text too big");
     }
+    */
   }
 
   ///
@@ -2052,8 +2074,15 @@ public:
   ///
   void saveFile (VFile fl) {
     //FIXME: this uses internals of gap buffer!
+    /*
     gb.moveGapAtEnd();
     fl.rawWriteExact(gb.tbuf[0..gb.tbused]);
+    */
+    if (gb.tbused > 0) {
+      if (gb.gapstart > 0) fl.rawWriteExact(gb.tbuf[0..gb.gapstart]);
+      uint left = gb.tbused-gb.gapstart;
+      if (left > 0) fl.rawWriteExact(gb.tbuf[gb.gapend..gb.gapend+left]);
+    }
     txchanged = false;
     if (undo !is null) undo.alwaysChanged();
     if (redo !is null) redo.alwaysChanged();
