@@ -651,7 +651,7 @@ public:
                   win.writeCharsAt(0, 0, winw, ' ');
                   int x = 0;
                   while (x < winw && ls < le) {
-                    win.writeCharsAt(x, 0, 1, gb.utfuckAt(ls));
+                    win.writeCharsAt(x, 0, 1, uni2koi(gb.uniAt(ls)));
                     ls += gb.utfuckLenAt(ls);
                     ++x;
                   }
@@ -801,14 +801,8 @@ public:
     bool wasChanged = false;
     scope(exit) if (wasChanged) undoGroupEnd();
     foreach (int lidx; 0..linecount) {
-      auto ls = gb.line2pos(lidx);
-      auto le = gb.lineend(lidx); // points at '\n'
-      if (gb[le] != '\n') {
-        // for last line
-        ++le;
-      } else if (le-ls < 1) {
-        continue;
-      }
+      auto ls = gb.linestart(lidx);
+      auto le = gb.lineend(lidx); // points at '\n', or after text buffer
       int count = 0;
       while (le > ls && gb[le-1] <= ' ') { --le; ++count; }
       if (count == 0) continue;

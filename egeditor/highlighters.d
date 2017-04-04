@@ -69,7 +69,7 @@ public enum {
 private enum HiBodySpecialMark = 253; // sorry; end user will never see this
 
 
-public bool hiIsComment() (in auto ref GapBuffer.HighState hs) nothrow @safe @nogc {
+public bool hiIsComment() (in auto ref GapBuffer.HighState hs) nothrow {
   switch (hs.kwtype) {
     case HiCommentOneLine:
     case HiCommentMulti:
@@ -574,7 +574,7 @@ public:
 
 private final:
   // returns either 0 or "skip count"
-  int isGoodChar (int pos) nothrow @nogc {
+  int isGoodChar (int pos) nothrow {
     if (gb[pos] != '\'') return 0;
     if (gb[pos+1] == '\\') {
       auto ch = gb[pos+2];
@@ -590,7 +590,7 @@ private final:
     }
   }
 
-  bool isDecStart (int pos) nothrow @nogc {
+  bool isDecStart (int pos) nothrow {
     auto ch = gb[pos];
     if (ch == '-' || ch == '+') {
       if (!(tks.options&EdHiTokens.Opt.NumAllowSign)) return false;
@@ -602,7 +602,7 @@ private final:
   }
 
   // 0 or base
-  int isBasedStart (int pos) nothrow @nogc {
+  int isBasedStart (int pos) nothrow {
     auto ch = gb[pos++];
     if (ch == '-' || ch == '+') {
       if (!(tks.options&EdHiTokens.Opt.NumAllowSign)) return 0;
