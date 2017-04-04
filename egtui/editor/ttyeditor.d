@@ -202,6 +202,10 @@ public:
     }
   }
 
+  final void toggleHighlighting () {
+    if (hl is null) setupHighlighter(); else detachHighlighter();
+  }
+
   final void getDiskFileInfo () {
     import std.file : getSize, timeLastModified;
     if (fullFileName.length) {
@@ -1741,6 +1745,8 @@ final:
     auto tsz = dialogTabSize(hisman, tabsize);
     if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
   });
+
+  @TEDMultiOnly mixin TEDImpl!("^Q ^X", "toggle syntax highlighing", q{ toggleHighlighting(); });
 
   @TEDMultiOnly @TEDROOnly mixin TEDImpl!("Space", q{ doPageDown(); });
   @TEDMultiOnly @TEDROOnly mixin TEDImpl!("^Space", q{ doPageUp(); });
