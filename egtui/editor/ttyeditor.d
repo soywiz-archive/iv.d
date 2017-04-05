@@ -85,8 +85,22 @@ protected:
   int comboCount; // number of items in `comboBuf`
   bool waitingInF5;
   bool incInputActive;
+
+  enum RepMode {
+    Normal,
+    JustStarted,
+    CSpace, // C-Space just pressed
+    // math ops; they pushing value to stack
+    Plus,
+    Minus,
+    Mul,
+    Div,
+  }
+
   int repeatCounter = -1; // <0: not in counter typing
-  int repeatCounterMode; // <0: C-Space just pressed; >0: just started; 0: normal
+  RepMode repeatMode; // <0: C-Space just pressed; >0: just started; 0: normal
+  int[8] repeatStack;
+  int repeatSP;
 
 protected:
   TtyEditor mPromptInput; // input line for a prompt; lazy creation
@@ -425,7 +439,10 @@ public:
     // filesize, bufstart, bufend
     len += snprintf(buf.ptr+len, buf.length-len, "   [ %u : %d : %d]", gb.textsize, bstart, bend);
     // counter
-    if (repeatCounter >= 0) len += snprintf(buf.ptr+len, buf.length-len, "  rep:%d", repeatCounter);
+    if (repeatCounter >= 0) {
+      len += snprintf(buf.ptr+len, buf.length-len, "  rep:%d", repeatCounter);
+      if (repeatSP > 0) len += snprintf(buf.ptr+len, buf.length-len, " (%d)", repeatSP);
+    }
     // done
     if (len > winw) len = winw;
     win.writeStrAt(0, 0, buf[0..len]);
@@ -1034,18 +1051,60 @@ public:
     if (key.key == TtyEvent.Key.Error || key.key == TtyEvent.Key.Unknown) { repeatCounter = -1; comboCount = 0; return Ecc.None; }
     // process repeat counter
     if (repeatCounter >= 0) {
+      void pushVal () {
+        if (repeatSP < repeatStack.length) {
+          repeatStack[repeatSP++] = repeatCounter;
+        } else {
+          foreach (immutable idx; 1..repeatStack.length) repeatStack[idx-1] = repeatStack[idx];
+          repeatStack[$-1] = repeatCounter;
+        }
+        repeatCounter = 1;
+        repeatMode = RepMode.JustStarted;
+      }
+      // TOS op RC
+      void doBinMath(string op) () {
+        if (repeatSP < 1) { ttyBeep(); return; }
+             static if (op == "+") repeatCounter = repeatStack[repeatSP-1]+repeatCounter;
+        else static if (op == "-") repeatCounter = repeatStack[repeatSP-1]-repeatCounter;
+        else static if (op == "*") repeatCounter = repeatStack[repeatSP-1]*repeatCounter;
+        else static if (op == "/") { if (repeatCounter == 0) { ttyBeep(); repeatCounter = 0; } else repeatCounter = repeatStack[repeatSP-1]/repeatCounter; }
+        else static if (op == "%") { if (repeatCounter == 0) { ttyBeep(); repeatCounter = 0; } else repeatCounter = repeatStack[repeatSP-1]%repeatCounter; }
+        else static assert(0, "wtf?!");
+        repeatMode = RepMode.Normal;
+        --repeatSP; // pop used value
+      }
       // cancel counter mode?
       if (key == "C-C" || key == "C-G") { repeatCounter = -1; return Ecc.Eaten; }
-      if (key == "C-Space") { repeatCounterMode = -1; return Ecc.None; } // so C-Space can allow insert alot of numbers, for example
-      if (key.key == TtyEvent.Key.Char && key.ch >= '0' && key.ch <= '9') {
-        // digit
-        if (repeatCounterMode < 0) return Ecc.None; // previous was C-Space
-        if (repeatCounterMode > 0) repeatCounter = 0;
-        repeatCounter = repeatCounter*10+key.ch-'0';
-        repeatCounterMode = 0;
-        return Ecc.Combo;
+      if (repeatMode != RepMode.CSpace) {
+        if (key == "C-Space") { repeatMode = RepMode.CSpace; return Ecc.None; } // so C-Space can allow insert alot of numbers, for example
+        // digit?
+        if (key.key == TtyEvent.Key.Char && key.ch >= '0' && key.ch <= '9') {
+          if (repeatMode == RepMode.JustStarted) repeatCounter = 0;
+          repeatCounter = repeatCounter*10+key.ch-'0';
+          repeatMode = RepMode.Normal;
+          return Ecc.Combo;
+        }
+        // math op?
+        if (key.key == TtyEvent.Key.Char && key.ch == '+') { doBinMath!"+"(); return Ecc.Combo; }
+        if (key.key == TtyEvent.Key.Char && key.ch == '-') { doBinMath!"-"(); return Ecc.Combo; }
+        if (key.key == TtyEvent.Key.Char && key.ch == '*') { doBinMath!"*"(); return Ecc.Combo; }
+        if (key.key == TtyEvent.Key.Char && key.ch == '/') { doBinMath!"/"(); return Ecc.Combo; }
+        if (key.key == TtyEvent.Key.Char && key.ch == '%') { doBinMath!"%"(); return Ecc.Combo; }
+        // pop or drop value
+        if (key == "Backspace" || key == "M-Backspace") {
+          if (repeatSP == 0) { ttyBeep(); repeatCounter = 1; repeatMode = RepMode.JustStarted; return Ecc.Combo; }
+          if (key == "Backspace") repeatCounter = repeatStack[repeatSP-1];
+          --repeatSP;
+          return Ecc.Combo;
+        }
+        // push value
+        if (key == "=" || key == "!") {
+          pushVal();
+          return Ecc.Combo;
+        }
+      } else {
+        repeatMode = RepMode.Normal;
       }
-      if (repeatCounterMode < 0) repeatCounterMode = 0;
     }
     // normal key processing
     bool possibleCombo = false;
@@ -1124,7 +1183,7 @@ public:
     if (repeatCounter < 0) {
       // start counter mode
       repeatCounter = 1;
-      repeatCounterMode = 1; // just started
+      repeatMode = RepMode.JustStarted; // just started
     } else {
       repeatCounter *= 2; // so ^P will multiply current counter
     }
