@@ -3018,11 +3018,25 @@ public:
     if (!hasMarkedBlock) return true;
     // copy block data into temp buffer
     int blen = bend-bstart;
+    GapBuffer.HighState* hsbuf;
+    scope(exit) if (hsbuf !is null) free(hsbuf);
+    if (asRich) {
+      // rich text: get atts
+      hsbuf = cast(GapBuffer.HighState*)malloc(blen);
+      if (hsbuf is null) return false;
+      foreach (int pp; bstart..bend) hsbuf[pp-bstart] = gb.hi(pp);
+    }
+    // normal text
     char* btext = cast(char*)malloc(blen);
     if (btext is null) return false; // alas
     scope(exit) free(btext);
     foreach (int pp; bstart..bend) btext[pp-bstart] = gb[pp];
-    return insertText!("start", false)(curpos, btext[0..blen]); // no indent
+    auto stp = curpos;
+    return insertText!("start", false)(stp, btext[0..blen]); // no indent
+    // attrs
+    if (asRich) {
+      foreach (immutable int idx; 0..blen) gb.hi(stp+idx) = hsbuf[idx];
+    }
   }
 
   ///
@@ -3036,6 +3050,14 @@ public:
     if (pos >= bstart && pos < bend) return false; // can't do this while we are inside the block
     // copy block data into temp buffer
     int blen = bend-bstart;
+    GapBuffer.HighState* hsbuf;
+    scope(exit) if (hsbuf !is null) free(hsbuf);
+    if (asRich) {
+      // rich text: get atts
+      hsbuf = cast(GapBuffer.HighState*)malloc(blen);
+      if (hsbuf is null) return false;
+      foreach (int pp; bstart..bend) hsbuf[pp-bstart] = gb.hi(pp);
+    }
     char* btext = cast(char*)malloc(blen);
     if (btext is null) return false; // alas
     scope(exit) free(btext);
@@ -3048,10 +3070,15 @@ public:
       if (undoOk) undo.popUndo();
       return false;
     }
+    auto stp = pos;
     if (!insertText!("start", false)(pos, btext[0..blen])) {
       // rollback
       if (undoOk) undo.popUndo();
       return false;
+    }
+    // attrs
+    if (asRich) {
+      foreach (immutable int idx; 0..blen) gb.hi(stp+idx) = hsbuf[idx];
     }
     // mark moved block
     bstart = pos;

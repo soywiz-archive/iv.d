@@ -665,7 +665,7 @@ void ttfDrawTextUtf (int x, int y, const(char)[] str, uint fg) {
   fg &= 0xff_ff_ffU;
   Utf8DecoderFast ud;
   int prevcp = -1;
-  enum FontHeight = 14;
+  enum FontHeight = 12;
   immutable float scale = ttfGetPixelHeightScale(ttfont, FontHeight);
   foreach (char ch; str) {
     if (ud.decode(cast(ubyte)ch)) {
@@ -710,42 +710,23 @@ void main (string[] args) {
     ttfDrawTextUtf(100, 100, "Hello, пизда!", gxRGB!(255, 255, 0));
   };
 
-  auto sdwin = new SimpleWindow(VBufWidth, VBufHeight, "My D App", OpenGlOptions.yes, Resizablity.allowResizing);
-  glconMainWindow = sdwin;
+  auto sdwin = new SimpleWindow(VBufWidth, VBufHeight, "My D App", OpenGlOptions.yes, Resizability.allowResizing);
+  glconCtlWindow = sdwin;
+  glconDrawWindow = sdwin;
   //sdwin.hideCursor();
 
   static if (is(typeof(&sdwin.closeQuery))) {
     sdwin.closeQuery = delegate () { concmd("quit"); glconPostDoConCommands(); };
   }
 
-  sdwin.addEventListener((GLConScreenRebuildEvent evt) {
+  sdwin.addEventListener((GLConScreenRepaintEvent evt) {
     if (sdwin.closed) return;
     if (isQuitRequested) { sdwin.close(); return; }
     gxRebuildScreen();
     sdwin.redrawOpenGlSceneNow();
   });
 
-  sdwin.addEventListener((GLConScreenRepaintEvent evt) {
-    if (sdwin.closed) return;
-    if (isQuitRequested) { sdwin.close(); return; }
-    sdwin.redrawOpenGlSceneNow();
-  });
-
-  sdwin.addEventListener((GLConDoConsoleCommandsEvent evt) {
-    bool sendAnother = false;
-    bool prevVisible = isConsoleVisible;
-    {
-      consoleLock();
-      scope(exit) consoleUnlock();
-      conProcessQueue();
-      sendAnother = !conQueueEmpty();
-    }
-    if (sdwin.closed) return;
-    if (isQuitRequested) { sdwin.close(); return; }
-    if (sendAnother) glconPostDoConCommands();
-    if (prevVisible || isConsoleVisible) glconPostScreenRepaintDelayed();
-  });
-
+  sdwin.addEventListener((GLConDoConsoleCommandsEvent evt) { glconProcessEventMessage(); });
 
   sdwin.windowResized = delegate (int wdt, int hgt) {
     if (sdwin.closed) return;
