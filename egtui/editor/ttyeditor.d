@@ -46,6 +46,8 @@ class TtyEditor : EditorEngine {
   enum TEDMultiOnly; // only for multiline mode
   enum TEDEditOnly; // only for non-readonly mode
   enum TEDROOnly; // only for readonly mode
+  enum TEDRepeated; // allow "repeation count"
+  enum TEDRepeatChar; // this combo meant "repeat mode"
 
   static struct TEDKey { string key; string help; bool hidden; } // UDA
 
@@ -83,6 +85,8 @@ protected:
   int comboCount; // number of items in `comboBuf`
   bool waitingInF5;
   bool incInputActive;
+  int repeatCounter = -1; // <0: not in counter typing
+  int repeatCounterMode; // <0: C-Space just pressed; >0: just started; 0: normal
 
 protected:
   TtyEditor mPromptInput; // input line for a prompt; lazy creation
@@ -415,6 +419,9 @@ public:
     }
     // filesize, bufstart, bufend
     len += snprintf(buf.ptr+len, buf.length-len, "   [ %u : %d : %d]", gb.textsize, bstart, bend);
+    // counter
+    if (repeatCounter >= 0) len += snprintf(buf.ptr+len, buf.length-len, "  rep:%d", repeatCounter);
+    // done
     if (len > winw) len = winw;
     win.writeStrAt(0, 0, buf[0..len]);
     // mode flags
@@ -1019,7 +1026,23 @@ public:
   protected final Ecc doEditorCommandByUDA(ME=typeof(this)) (TtyEvent key) {
     import std.traits;
     if (key.key == TtyEvent.Key.None) return Ecc.None;
-    if (key.key == TtyEvent.Key.Error || key.key == TtyEvent.Key.Unknown) { comboCount = 0; return Ecc.None; }
+    if (key.key == TtyEvent.Key.Error || key.key == TtyEvent.Key.Unknown) { repeatCounter = -1; comboCount = 0; return Ecc.None; }
+    // process repeat counter
+    if (repeatCounter >= 0) {
+      // cancel counter mode?
+      if (key == "C-C" || key == "C-G") { repeatCounter = -1; return Ecc.Eaten; }
+      if (key == "C-Space") { repeatCounterMode = -1; return Ecc.None; } // so C-Space can allow insert alot of numbers, for example
+      if (key.key == TtyEvent.Key.Char && key.ch >= '0' && key.ch <= '9') {
+        // digit
+        if (repeatCounterMode < 0) return Ecc.None; // previous was C-Space
+        if (repeatCounterMode > 0) repeatCounter = 0;
+        repeatCounter = repeatCounter*10+key.ch-'0';
+        repeatCounterMode = 0;
+        return Ecc.Combo;
+      }
+      if (repeatCounterMode < 0) repeatCounterMode = 0;
+    }
+    // normal key processing
     bool possibleCombo = false;
     // temporarily add current key to combo
     comboBuf[comboCount] = key;
@@ -1042,12 +1065,31 @@ public:
                 // hit
                 static if (is(ReturnType!mx == void)) {
                   comboCount = 0; // reset combo
-                  mx();
+                  static if (hasUDA!(mx, TEDRepeated)) {
+                    scope(exit) repeatCounter = -1; // reset counter
+                    if (repeatCounter < 0) repeatCounter = 1; // no counter means 1
+                    foreach (immutable _; 0..repeatCounter) mx();
+                  } else {
+                    static if (!hasUDA!(mx, TEDRepeatChar)) repeatCounter = -1;
+                    mx();
+                  }
                   return Ecc.Eaten;
                 } else {
-                  if (mx()) {
-                    comboCount = 0; // reset combo
-                    return Ecc.Eaten;
+                  static if (hasUDA!(mx, TEDRepeated)) {
+                    if (repeatCounter != 0 && mx()) {
+                      scope(exit) repeatCounter = -1; // reset counter
+                      if (repeatCounter < 0) repeatCounter = 1; // no counter means 1
+                      comboCount = 0; // reset combo
+                      foreach (immutable _; 1..repeatCounter) if (!mx()) break;
+                      return Ecc.Eaten;
+                    }
+                  } else {
+                    static if (!hasUDA!(mx, TEDRepeatChar)) repeatCounter = -1;
+                    if (mx()) {
+                      repeatCounter = -1; // reset counter
+                      comboCount = 0; // reset combo
+                      return Ecc.Eaten;
+                    }
                   }
                 }
               } else if (cc == Ecc.Combo) {
@@ -1065,10 +1107,22 @@ public:
     }
     // if we have combo prefix, eat key unconditionally
     if (comboCount > 0) {
+      repeatCounter = -1; // reset counter
       comboCount = 0; // reset combo, too long, or invalid, or none
       return Ecc.Eaten;
     }
     return Ecc.None;
+  }
+
+  void doCounterMode () {
+    if (waitingInF5) { repeatCounter = -1; return; }
+    if (repeatCounter < 0) {
+      // start counter mode
+      repeatCounter = 1;
+      repeatCounterMode = 1; // just started
+    } else {
+      repeatCounter *= 2; // so ^P will multiply current counter
+    }
   }
 
   bool processKey (TtyEvent key) {
@@ -1086,13 +1140,13 @@ public:
       return true;
     }
 
-    if (key.key == TtyEvent.Key.Error || key.key == TtyEvent.Key.Unknown) { comboCount = 0; return false; }
+    if (key.key == TtyEvent.Key.Error || key.key == TtyEvent.Key.Unknown) { repeatCounter = -1; comboCount = 0; return false; }
 
     if (incInputActive) {
       if (key.key == TtyEvent.Key.ModChar) {
-        if (key == "^C") { incInputActive = false; resetIncSearchPos(); promptNoKillText(); return true; }
-        if (key == "^R") { incSearchDir = 1; doNextIncSearch(); promptNoKillText(); return true; }
-        if (key == "^V") { incSearchDir = -1; doNextIncSearch(); promptNoKillText(); return true; }
+        if (key == "C-C") { incInputActive = false; resetIncSearchPos(); promptNoKillText(); return true; }
+        if (key == "C-R") { incSearchDir = 1; doNextIncSearch(); promptNoKillText(); return true; }
+        if (key == "C-V") { incSearchDir = -1; doNextIncSearch(); promptNoKillText(); return true; }
         //return true;
       }
       if (key == "esc" || key == "enter") {
@@ -1130,8 +1184,18 @@ public:
     }
 
     if (key.key == TtyEvent.Key.Char) {
+      scope(exit) repeatCounter = -1; // reset counter
       if (readonly) return false;
-      doPutChar(cast(char)key.ch);
+      if (repeatCounter != 0) {
+        if (repeatCounter < 0) repeatCounter = 1;
+        if (repeatCounter > 1) {
+          undoGroupStart();
+          scope(exit) undoGroupEnd();
+          foreach (immutable _; 0..repeatCounter) doPutChar(cast(char)key.ch);
+        } else {
+          doPutChar(cast(char)key.ch);
+        }
+      }
       return true;
     }
 
@@ -1589,56 +1653,56 @@ final:
   }
 
 final:
-  @TEDMultiOnly mixin TEDImpl!("Up", q{ doUp(); });
-  @TEDMultiOnly mixin TEDImpl!("S-Up", q{ doUp(true); });
-  @TEDMultiOnly mixin TEDImpl!("^Up", q{ doScrollUp(); });
-  @TEDMultiOnly mixin TEDImpl!("S-^Up", q{ doScrollUp(true); });
-  @TEDMultiOnly mixin TEDImpl!("Down", q{ doDown(); });
-  @TEDMultiOnly mixin TEDImpl!("S-Down", q{ doDown(true); });
-  @TEDMultiOnly mixin TEDImpl!("^Down", q{ doScrollDown(); });
-  @TEDMultiOnly mixin TEDImpl!("S-^Down", q{ doScrollDown(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("Up", q{ doUp(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-Up", q{ doUp(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-Up", q{ doScrollUp(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-C-Up", q{ doScrollUp(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("Down", q{ doDown(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-Down", q{ doDown(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-Down", q{ doScrollDown(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-C-Down", q{ doScrollDown(true); });
 
-  mixin TEDImpl!("Left", q{ doLeft(); });
-  mixin TEDImpl!("S-Left", q{ doLeft(true); });
+  @TEDRepeated mixin TEDImpl!("Left", q{ doLeft(); });
+  @TEDRepeated mixin TEDImpl!("S-Left", q{ doLeft(true); });
 
-  mixin TEDImpl!("^Left", q{ doWordLeft(); });
-  mixin TEDImpl!("S-^Left", q{ doWordLeft(true); });
-  mixin TEDImpl!("Right", q{ doRight(); });
-  mixin TEDImpl!("S-Right", q{ doRight(true); });
-  mixin TEDImpl!("^Right", q{ doWordRight(); });
-  mixin TEDImpl!("S-^Right", q{ doWordRight(true); });
+  @TEDRepeated mixin TEDImpl!("C-Left", q{ doWordLeft(); });
+  @TEDRepeated mixin TEDImpl!("S-C-Left", q{ doWordLeft(true); });
+  @TEDRepeated mixin TEDImpl!("Right", q{ doRight(); });
+  @TEDRepeated mixin TEDImpl!("S-Right", q{ doRight(true); });
+  @TEDRepeated mixin TEDImpl!("C-Right", q{ doWordRight(); });
+  @TEDRepeated mixin TEDImpl!("S-C-Right", q{ doWordRight(true); });
 
-  @TEDMultiOnly mixin TEDImpl!("PageUp", q{ doPageUp(); });
-  @TEDMultiOnly mixin TEDImpl!("S-PageUp", q{ doPageUp(true); });
-  @TEDMultiOnly mixin TEDImpl!("^PageUp", q{ doTextTop(); });
-  @TEDMultiOnly mixin TEDImpl!("S-^PageUp", q{ doTextTop(true); });
-  @TEDMultiOnly mixin TEDImpl!("PageDown", q{ doPageDown(); });
-  @TEDMultiOnly mixin TEDImpl!("S-PageDown", q{ doPageDown(true); });
-  @TEDMultiOnly mixin TEDImpl!("^PageDown", q{ doTextBottom(); });
-  @TEDMultiOnly mixin TEDImpl!("S-^PageDown", q{ doTextBottom(true); });
-                mixin TEDImpl!("Home", q{ doHome(); });
-                mixin TEDImpl!("S-Home", q{ doHome(true, true); });
-  @TEDMultiOnly mixin TEDImpl!("^Home", q{ doPageTop(); });
-  @TEDMultiOnly mixin TEDImpl!("S-^Home", q{ doPageTop(true); });
-                mixin TEDImpl!("End", q{ doEnd(); });
-                mixin TEDImpl!("S-End", q{ doEnd(true); });
-  @TEDMultiOnly mixin TEDImpl!("^End", q{ doPageBottom(); });
-  @TEDMultiOnly mixin TEDImpl!("S-^End", q{ doPageBottom(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("PageUp", q{ doPageUp(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-PageUp", q{ doPageUp(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-PageUp", q{ doTextTop(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-C-PageUp", q{ doTextTop(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("PageDown", q{ doPageDown(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-PageDown", q{ doPageDown(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-PageDown", q{ doTextBottom(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-C-PageDown", q{ doTextBottom(true); });
+                @TEDRepeated mixin TEDImpl!("Home", q{ doHome(); });
+                @TEDRepeated mixin TEDImpl!("S-Home", q{ doHome(true, true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-Home", q{ doPageTop(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-C-Home", q{ doPageTop(true); });
+                @TEDRepeated mixin TEDImpl!("End", q{ doEnd(); });
+                @TEDRepeated mixin TEDImpl!("S-End", q{ doEnd(true); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-End", q{ doPageBottom(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-C-End", q{ doPageBottom(true); });
 
-  @TEDEditOnly mixin TEDImpl!("Backspace", q{ doBackspace(); });
-  @TEDSingleOnly @TEDEditOnly mixin TEDImpl!("M-Backspace", "delete previous word", q{ doDeleteWord(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Backspace", "delete previous word or unindent", q{ doBackByIndent(); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("Backspace", q{ doBackspace(); });
+  @TEDSingleOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("M-Backspace", "delete previous word", q{ doDeleteWord(); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("M-Backspace", "delete previous word or unindent", q{ doBackByIndent(); });
 
-  mixin TEDImpl!("Delete", q{ doDelete(); });
-  mixin TEDImpl!("^Insert", "copy block to clipboard file, reset block mark", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); doBlockResetMark(); });
+  @TEDRepeated mixin TEDImpl!("Delete", q{ doDelete(); });
+  mixin TEDImpl!("C-Insert", "copy block to clipboard file, reset block mark", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); doBlockResetMark(); });
 
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("Enter", q{ doPutChar('\n'); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Enter", "split line without autoindenting", q{ doLineSplit(false); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("Enter", q{ doPutChar('\n'); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("M-Enter", "split line without autoindenting", q{ doLineSplit(false); });
 
 
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("F2", "save file", q{ saveFile(fullFileName); });
   mixin TEDImpl!("F3", "start/stop/reset block marking", q{ doToggleBlockMarkMode(); });
-  mixin TEDImpl!("^F3", "reset block mark", q{ doBlockResetMark(); });
+  mixin TEDImpl!("C-F3", "reset block mark", q{ doBlockResetMark(); });
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("F4", "search and relace text", q{
     srrOptions.inselenabled = hasMarkedBlock;
     srrOptions.utfuck = utfuck;
@@ -1648,13 +1712,13 @@ final:
     dialogMessage!"error"("Not Yet", "This S&R type is not supported yet!");
   });
   @TEDEditOnly mixin TEDImpl!("F5", "copy block", q{ doBlockCopy(); });
-               mixin TEDImpl!("^F5", "copy block to clipboard file", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); });
+               mixin TEDImpl!("C-F5", "copy block to clipboard file", q{ if (tempBlockFileName.length == 0) return; doBlockWrite(tempBlockFileName); });
   @TEDEditOnly mixin TEDImpl!("S-F5", "insert block from clipboard file", q{ if (tempBlockFileName.length == 0) return; waitingInF5 = true; });
   @TEDEditOnly mixin TEDImpl!("F6", "move block", q{ doBlockMove(); });
   @TEDEditOnly mixin TEDImpl!("F8", "delete block", q{ doBlockDelete(); });
 
-  mixin TEDImpl!("^A", "move to line start", q{ doHome(); });
-  mixin TEDImpl!("^E", "move to line end", q{ doEnd(); });
+  mixin TEDImpl!("C-A", "move to line start", q{ doHome(); });
+  mixin TEDImpl!("C-E", "move to line end", q{ doEnd(); });
 
   @TEDMultiOnly mixin TEDImpl!("M-I", "jump to previous bookmark", q{ doBookmarkJumpUp(); });
   @TEDMultiOnly mixin TEDImpl!("M-J", "jump to next bookmark", q{ doBookmarkJumpDown(); });
@@ -1664,30 +1728,30 @@ final:
     if (lnum > 0 && lnum < linecount) gotoXY!true(curx, lnum-1); // vcenter
   });
 
-  @TEDEditOnly mixin TEDImpl!("M-C", "capitalize word", q{
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("M-C", "capitalize word", q{
     bool first = true;
     processWordWith((char ch) {
       if (first) { first = false; ch = ch.toupper; }
       return ch;
     });
   });
-  @TEDEditOnly mixin TEDImpl!("M-Q", "lowercase word", q{ processWordWith((char ch) => ch.tolower); });
-  @TEDEditOnly mixin TEDImpl!("M-U", "uppercase word", q{ processWordWith((char ch) => ch.toupper); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("M-Q", "lowercase word", q{ processWordWith((char ch) => ch.tolower); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("M-U", "uppercase word", q{ processWordWith((char ch) => ch.toupper); });
 
   @TEDMultiOnly mixin TEDImpl!("M-S-L", "force center current line", q{ makeCurLineVisibleCentered(true); });
-  @TEDMultiOnly mixin TEDImpl!("^R", "continue incremental search, forward", q{ incSearchDir = 1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(1); else doNextIncSearch(); });
-  @TEDEditOnly mixin TEDImpl!("^U", "undo", q{ doUndo(); });
-  @TEDEditOnly mixin TEDImpl!("M-S-U", "redo", q{ doRedo(); });
-  @TEDMultiOnly mixin TEDImpl!("^V", "continue incremental search, backward", q{ incSearchDir = -1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(-1); else doNextIncSearch(); });
-  @TEDEditOnly mixin TEDImpl!("^W", "remove previous word", q{ doDeleteWord(); });
-  @TEDEditOnly mixin TEDImpl!("^Y", "remove current line", q{ doKillLine(); });
-  @TEDMultiOnly mixin TEDImpl!("^_", "start new incremental search, forward", q{ doStartIncSearch(1); }); // ctrl+slash, actually
-  @TEDMultiOnly mixin TEDImpl!("^\\", "start new incremental search, backward", q{ doStartIncSearch(-1); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-R", "continue incremental search, forward", q{ incSearchDir = 1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(1); else doNextIncSearch(); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-U", "undo", q{ doUndo(); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("M-S-U", "redo", q{ doRedo(); });
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-V", "continue incremental search, backward", q{ incSearchDir = -1; if (incSearchBuf.length == 0 && !incInputActive) doStartIncSearch(-1); else doNextIncSearch(); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-W", "remove previous word", q{ doDeleteWord(); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-Y", "remove current line", q{ doKillLine(); });
+  @TEDMultiOnly mixin TEDImpl!("C-_", "start new incremental search, forward", q{ doStartIncSearch(1); }); // ctrl+slash, actually
+  @TEDMultiOnly mixin TEDImpl!("C-\\", "start new incremental search, backward", q{ doStartIncSearch(-1); });
 
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("Tab", q{ doPutText("  "); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("Tab", q{ doPutText("  "); });
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("M-Tab", "autocomplete word", q{ doAutoComplete(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Tab", "indent block", q{ doIndentBlock(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-S-Tab", "unindent block", q{ doUnindentBlock(); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-Tab", "indent block", q{ doIndentBlock(); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-S-Tab", "unindent block", q{ doUnindentBlock(); });
 
   mixin TEDImpl!("M-S-c", "copy block to X11 selections (all three)", q{ pasteToX11(); doBlockResetMark(); });
 
@@ -1700,32 +1764,32 @@ final:
     fullDirty();
   });
 
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^I", "indent block", q{ doIndentBlock(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^U", "unindent block", q{ doUnindentBlock(); });
-  @TEDEditOnly mixin TEDImpl!("^K ^E", "clear from cursor to EOL", q{ doKillToEOL(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K Tab", "indent block", q{ doIndentBlock(); });
-  @TEDEditOnly mixin TEDImpl!("^K M-Tab", "untabify", q{ doUntabify(gb.tabsize ? gb.tabsize : 2); }); // alt+tab: untabify
-  @TEDEditOnly mixin TEDImpl!("^K C-space", "remove trailing spaces", q{ doRemoveTailingSpaces(); });
-  mixin TEDImpl!("^K ^T", /*"toggle \"visual tabs\" mode",*/ q{ visualtabs = !visualtabs; });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K C-I", "indent block", q{ doIndentBlock(); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K C-U", "unindent block", q{ doUnindentBlock(); });
+  @TEDEditOnly mixin TEDImpl!("C-K C-E", "clear from cursor to EOL", q{ doKillToEOL(); });
+  @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K Tab", "indent block", q{ doIndentBlock(); });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K M-Tab", "untabify", q{ doUntabify(gb.tabsize ? gb.tabsize : 2); }); // alt+tab: untabify
+  @TEDEditOnly mixin TEDImpl!("C-K C-space", "remove trailing spaces", q{ doRemoveTailingSpaces(); });
+  mixin TEDImpl!("C-K C-T", /*"toggle \"visual tabs\" mode",*/ q{ visualtabs = !visualtabs; });
 
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^B", q{ doSetBlockStart(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^K", q{ doSetBlockEnd(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-B", q{ doSetBlockStart(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-K", q{ doSetBlockEnd(); });
 
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^C", q{ doBlockCopy(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^M", q{ doBlockMove(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^Y", q{ doBlockDelete(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K ^H", q{ doBlockResetMark(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-C", q{ doBlockCopy(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-M", q{ doBlockMove(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-Y", q{ doBlockDelete(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-H", q{ doBlockResetMark(); });
   // fuckin' vt100!
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("^K Backspace", q{ doBlockResetMark(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K Backspace", q{ doBlockResetMark(); });
 
-  @TEDEditOnly mixin TEDImpl!("^Q Tab", q{ doPutChar('\t'); });
-  mixin TEDImpl!("^Q ^U", "toggle utfuck mode", q{ utfuck = !utfuck; }); // ^Q^U: switch utfuck mode
-  mixin TEDImpl!("^Q 1", "switch to koi8", q{ utfuck = false; codepage = CodePage.koi8u; fullDirty(); });
-  mixin TEDImpl!("^Q 2", "switch to cp1251", q{ utfuck = false; codepage = CodePage.cp1251; fullDirty(); });
-  mixin TEDImpl!("^Q 3", "switch to cp866", q{ utfuck = false; codepage = CodePage.cp866; fullDirty(); });
-  mixin TEDImpl!("^Q ^B", "go to block start", q{ if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; });
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-Q Tab", q{ doPutChar('\t'); });
+  mixin TEDImpl!("C-Q C-U", "toggle utfuck mode", q{ utfuck = !utfuck; }); // ^Q^U: switch utfuck mode
+  mixin TEDImpl!("C-Q 1", "switch to koi8", q{ utfuck = false; codepage = CodePage.koi8u; fullDirty(); });
+  mixin TEDImpl!("C-Q 2", "switch to cp1251", q{ utfuck = false; codepage = CodePage.cp1251; fullDirty(); });
+  mixin TEDImpl!("C-Q 3", "switch to cp866", q{ utfuck = false; codepage = CodePage.cp866; fullDirty(); });
+  mixin TEDImpl!("C-Q C-B", "go to block start", q{ if (hasMarkedBlock) gotoPos!true(bstart); lastBGEnd = false; });
 
-  @TEDMultiOnly mixin TEDImpl!("^Q ^F", "incremental search current word", q{
+  @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-Q C-F", "incremental search current word", q{
     auto pos = curpos;
     if (!isWordChar(gb[pos])) return;
     // deactivate prompt
@@ -1744,14 +1808,17 @@ final:
     doNextIncSearch();
   });
 
-  mixin TEDImpl!("^Q ^K", "go to block end", q{ if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; });
-  mixin TEDImpl!("^Q ^T", "set tab size", q{
+  mixin TEDImpl!("C-Q C-K", "go to block end", q{ if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; });
+  mixin TEDImpl!("C-Q C-T", "set tab size", q{
     auto tsz = dialogTabSize(hisman, tabsize);
     if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
   });
 
-  @TEDMultiOnly mixin TEDImpl!("^Q ^X", "toggle syntax highlighing", q{ toggleHighlighting(); });
+  @TEDMultiOnly mixin TEDImpl!("C-Q C-X", "toggle syntax highlighing", q{ toggleHighlighting(); });
 
-  @TEDMultiOnly @TEDROOnly mixin TEDImpl!("Space", q{ doPageDown(); });
-  @TEDMultiOnly @TEDROOnly mixin TEDImpl!("^Space", q{ doPageUp(); });
+  @TEDMultiOnly @TEDROOnly @TEDRepeated mixin TEDImpl!("Space", q{ doPageDown(); });
+  @TEDMultiOnly @TEDROOnly @TEDRepeated mixin TEDImpl!("C-Space", q{ doPageUp(); });
+
+  @TEDRepeatChar mixin TEDImpl!("C-P", "counter (*2 or direct number)", q{ doCounterMode(); });
+  @TEDRepeatChar mixin TEDImpl!("C-]", "", q{ doCounterMode(); });
 }
