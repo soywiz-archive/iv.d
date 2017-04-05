@@ -3022,7 +3022,7 @@ public:
     scope(exit) if (hsbuf !is null) free(hsbuf);
     if (asRich) {
       // rich text: get atts
-      hsbuf = cast(GapBuffer.HighState*)malloc(blen);
+      hsbuf = cast(GapBuffer.HighState*)malloc(blen*hsbuf[0].sizeof);
       if (hsbuf is null) return false;
       foreach (int pp; bstart..bend) hsbuf[pp-bstart] = gb.hi(pp);
     }
@@ -3054,7 +3054,7 @@ public:
     scope(exit) if (hsbuf !is null) free(hsbuf);
     if (asRich) {
       // rich text: get atts
-      hsbuf = cast(GapBuffer.HighState*)malloc(blen);
+      hsbuf = cast(GapBuffer.HighState*)malloc(blen*hsbuf[0].sizeof);
       if (hsbuf is null) return false;
       foreach (int pp; bstart..bend) hsbuf[pp-bstart] = gb.hi(pp);
     }
