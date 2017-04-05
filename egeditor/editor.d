@@ -201,7 +201,7 @@ final nothrow:
     immutable uint nsz = (mSingleLine ? GrowGranSmall : GrowGran);
     tbuf = cast(char*)malloc(nsz);
     if (tbuf is null) return false;
-    hbuf = cast(HighState*)malloc(nsz*HighState.sizeof);
+    hbuf = cast(HighState*)malloc(nsz*hbuf[0].sizeof);
     if (hbuf is null) { free(tbuf); tbuf = null; return false; }
     // allocate initial line cache
     uint ICS = (mSingleLine ? 2 : 1024);
@@ -817,6 +817,7 @@ public:
   // ensure that the buffer has room for at least one char in the gap
   // note that this may move gap
   protected void ensureGap () {
+    pragma(inline, true);
     // if we have zero-sized gap, assume that it is at end; we always have a room for at least MinGapSize(Small) chars
     if (gapstart >= gapend || gapstart >= tbused) {
       assert(tbused <= tbsize);
@@ -842,14 +843,14 @@ public:
       // pos is before gap
       int len = gapstart-pos; // to shift
       memmove(tbuf+gapend-len, tbuf+pos, len);
-      memmove(hbuf+gapend-len, hbuf+pos, len*HighState.sizeof);
+      memmove(hbuf+gapend-len, hbuf+pos, len*hbuf[0].sizeof);
       gapstart -= len;
       gapend -= len;
     } else if (pos > gapstart) {
       // pos is after gap
       int len = pos-gapstart;
       memmove(tbuf+gapstart, tbuf+gapend, len);
-      memmove(hbuf+gapstart, hbuf+gapend, len*HighState.sizeof);
+      memmove(hbuf+gapstart, hbuf+gapend, len*hbuf[0].sizeof);
       gapstart += len;
       gapend += len;
     }
@@ -883,15 +884,21 @@ public:
     immutable olc = mLineCount;
     mLineCount += addedlines;
     // invalidate line cache
-    immutable int lcidx = findLineCacheIndex(pos);
-    if (lcidx >= 0) invalidateCacheFrom(lcidx);
+    if (!atend) {
+      immutable int lcidx = findLineCacheIndex(pos);
+      if (lcidx >= 0) invalidateCacheFrom(lcidx);
+    } else {
+      // we are at the end of the buffer, no need to convert position to line
+      assert(olc > 0);
+      invalidateCacheFrom(olc-1);
+    }
     //TODO: this can be made faster, but meh...
-    if (atend || gapend-gapstart < str.length) moveGapAtEnd(); // this will grow the gap, so it will take all available room
-    moveGapAtPos(pos);
-    assert(gapend-gapstart >= str.length);
+    immutable slen = cast(uint)str.length;
+    if (atend || gapend-gapstart < slen) moveGapAtEnd(); // this will grow the gap, so it will take all available room
+    if (!atend) moveGapAtPos(pos); // very small speedup
+    assert(gapend-gapstart >= slen);
     memcpy(tbuf+gapstart, str.ptr, str.length);
     hbuf[gapstart..gapstart+str.length] = defhs;
-    immutable slen = cast(uint)str.length;
     gapstart += slen;
     tbused += slen;
     pos += slen;
@@ -1320,8 +1327,8 @@ public:
     if (count > gb.textsize-pos) { clear(); return false; }
     int realcount = count;
     if (asRich && realcount > 0) {
-      if (realcount >= int.max/GapBuffer.HighState.sizeof/2) return false;
-      realcount += realcount*cast(int)GapBuffer.HighState.sizeof;
+      if (realcount >= int.max/gb.hbuf[0].sizeof/2) return false;
+      realcount += realcount*cast(int)gb.hbuf[0].sizeof;
     }
     auto act = addUndo(realcount);
     if (act is null) { clear(); return false; }
