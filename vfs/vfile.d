@@ -453,6 +453,9 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version(VFS_NORMAL_OS) enum VFSSigRepeatCount = 2;
+
+// ////////////////////////////////////////////////////////////////////////// //
 version(vfs_stdio_wrapper)
 final class WrappedStreamStdioFile : WrappedStreamRC {
 private:
@@ -520,29 +523,59 @@ protected:
   override ssize read (void* buf, usize count) {
     if (fl is null || core.stdc.stdio.ferror(fl)) return -1;
     if (count == 0) return 0;
-    auto res = core.stdc.stdio.fread(buf, 1, count, fl);
-    if (res == 0) return (core.stdc.stdio.ferror(fl) ? -1 : 0);
-    return res;
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      auto res = core.stdc.stdio.fread(buf, 1, count, fl);
+      if (res == 0) return (core.stdc.stdio.ferror(fl) ? -1 : 0);
+      version(VFS_NORMAL_OS) {
+        if (res == -1) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) { core.stdc.stdio.clearerr(fl); continue; } }
+        }
+      }
+      return res;
+    }
   }
 
   override ssize write (in void* buf, usize count) {
     if (fl is null || core.stdc.stdio.ferror(fl)) return -1;
     if (count == 0) return 0;
-    auto res = core.stdc.stdio.fwrite(buf, 1, count, fl);
-    if (res == 0) return (core.stdc.stdio.ferror(fl) ? -1 : 0);
-    return res;
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      auto res = core.stdc.stdio.fwrite(buf, 1, count, fl);
+      if (res == 0) return (core.stdc.stdio.ferror(fl) ? -1 : 0);
+      version(VFS_NORMAL_OS) {
+        if (res == -1) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) { core.stdc.stdio.clearerr(fl); continue; } }
+        }
+      }
+      return res;
+    }
   }
 
   override long lseek (long offset, int origin) {
     if (fl is null) return -1;
-    static if (VFS_NORMAL_OS) {
-      auto res = core.sys.posix.stdio.fseeko(fl, offset, origin);
-    } else {
-      // windoze sux
-      if (offset < int.min || offset > int.max) return -1;
-      auto res = core.stdc.stdio.fseek(fl, cast(int)offset, origin);
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      static if (VFS_NORMAL_OS) {
+        auto res = core.sys.posix.stdio.fseeko(fl, offset, origin);
+      } else {
+        // windoze sux
+        if (offset < int.min || offset > int.max) return -1;
+        auto res = core.stdc.stdio.fseek(fl, cast(int)offset, origin);
+      }
+      if (res != -1) {
+        core.stdc.stdio.clearerr(fl);
+        break;
+      } else {
+        version(VFS_NORMAL_OS) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) { core.stdc.stdio.clearerr(fl); continue; } }
+        }
+        return res;
+      }
     }
-    if (res != -1) core.stdc.stdio.clearerr(fl);
     static if (VFS_NORMAL_OS) {
       return core.sys.posix.stdio.ftello(fl);
     } else {
@@ -596,27 +629,45 @@ protected:
   override ssize read (void* buf, usize count) {
     if (fl is null || err()) return -1;
     if (count == 0) return 0;
-    static if (is(typeof(&gzfread))) {
-      auto res = gzfread(buf, 1, count, fl);
-    } else {
-      static if (count.sizeof > uint.sizeof) { if (count >= int.max) return -1; }
-      auto res = gzread(fl, buf, cast(uint)count);
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      static if (is(typeof(&gzfread))) {
+        auto res = gzfread(buf, 1, count, fl);
+      } else {
+        static if (count.sizeof > uint.sizeof) { if (count >= int.max) return -1; }
+        auto res = gzread(fl, buf, cast(uint)count);
+      }
+      version(VFS_NORMAL_OS) {
+        if (res == -1) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) { gzclearerr(fl); continue; } }
+        }
+      }
+      if (res == 0) return (err() ? -1 : 0);
+      return res;
     }
-    if (res == 0) return (err() ? -1 : 0);
-    return res;
   }
 
   override ssize write (in void* buf, usize count) {
     if (fl is null || err()) return -1;
     if (count == 0) return 0;
-    static if (is(typeof(&gzfwrite))) {
-      auto res = gzfwrite(cast(void*)buf, 1, count, fl); // fuck you, phobos!
-    } else {
-      static if (count.sizeof > uint.sizeof) { if (count >= int.max) return -1; }
-      auto res = gzwrite(fl, cast(void*)buf, cast(uint)count);
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      static if (is(typeof(&gzfwrite))) {
+        auto res = gzfwrite(cast(void*)buf, 1, count, fl); // fuck you, phobos!
+      } else {
+        static if (count.sizeof > uint.sizeof) { if (count >= int.max) return -1; }
+        auto res = gzwrite(fl, cast(void*)buf, cast(uint)count);
+      }
+      version(VFS_NORMAL_OS) {
+        if (res == -1) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) { gzclearerr(fl); continue; } }
+        }
+      }
+      if (res == 0) return (err() ? -1 : 0);
+      return res;
     }
-    if (res == 0) return (err() ? -1 : 0);
-    return res;
   }
 
   override long lseek (long offset, int origin) {
@@ -624,9 +675,20 @@ protected:
     static if (offset.sizeof > int.sizeof) {
       if (offset < int.min || offset > int.max) return -1;
     }
-    auto res = gzseek(fl, cast(int)offset, origin); // fuck you, phobos!
-    if (res != -1) gzclearerr(fl);
-    return gztell(fl);
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      auto res = gzseek(fl, cast(int)offset, origin); // fuck you, phobos!
+      if (res != -1) {
+        gzclearerr(fl);
+      } else {
+        version(VFS_NORMAL_OS) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) { gzclearerr(fl); continue; } }
+        }
+        return res;
+      }
+      return gztell(fl);
+    }
   }
 }
 
@@ -668,24 +730,52 @@ protected:
   override ssize read (void* buf, usize count) {
     if (fd < 0) return -1;
     if (count == 0) return 0;
-    auto res = core.sys.posix.unistd.read(fd, buf, count);
-    if (res != count) eofhit = true;
-    return res;
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      auto res = core.sys.posix.unistd.read(fd, buf, count);
+      version(VFS_NORMAL_OS) {
+        if (res == -1) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) continue; }
+        }
+      }
+      if (res != count) eofhit = true;
+      return res;
+    }
   }
 
   override ssize write (in void* buf, usize count) {
     if (fd < 0) return -1;
     if (count == 0) return 0;
-    auto res = core.sys.posix.unistd.write(fd, buf, count);
-    if (res != count) eofhit = true;
-    return res;
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      auto res = core.sys.posix.unistd.write(fd, buf, count);
+      version(VFS_NORMAL_OS) {
+        if (res == -1) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) continue; }
+        }
+      }
+      if (res != count) eofhit = true;
+      return res;
+    }
   }
 
   override long lseek (long offset, int origin) {
     if (fd < 0) return -1;
-    auto res = core.sys.posix.unistd.lseek(fd, offset, origin);
-    if (res != -1) eofhit = false;
-    return res;
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      auto res = core.sys.posix.unistd.lseek(fd, offset, origin);
+      if (res != -1) {
+        eofhit = false;
+      } else {
+        version(VFS_NORMAL_OS) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) continue; }
+        }
+      }
+      return res;
+    }
   }
 }
 
