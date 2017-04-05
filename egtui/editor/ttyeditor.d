@@ -326,14 +326,19 @@ public:
     //gb.moveGapAtEnd();
     //TODO: use `memr?chr()` here?
     resetIncSearchPos();
-    if (incSearchBuf.ptr[0] != '/') {
+    if (incSearchBuf.ptr[0] != '/' || incSearchBuf.ptr[0] == '\\') {
       // plain text
+      int isbofs = 0;
+      if (incSearchBuf.ptr[0] == '\\') {
+        if (incSearchBuf.length == 1) return;
+        isbofs = 1;
+      }
       int pos = curpos+(domove ? incSearchDir : 0);
       PlainMatch mt;
       if (incSearchDir < 0) {
-        mt = findTextPlainBack(incSearchBuf, 0, pos, /*words:*/false, /*caseSens:*/true);
+        mt = findTextPlainBack(incSearchBuf[isbofs..$], 0, pos, /*words:*/false, /*caseSens:*/true);
       } else {
-        mt = findTextPlain(incSearchBuf, pos, textsize, /*words:*/false, /*caseSens:*/true);
+        mt = findTextPlain(incSearchBuf[isbofs..$], pos, textsize, /*words:*/false, /*caseSens:*/true);
       }
       if (!mt.empty) {
         incSearchHitPos = mt.s;
