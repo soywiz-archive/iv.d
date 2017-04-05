@@ -396,26 +396,28 @@ public:
     win.writeCharsAt(0, 0, win.width, ' ');
     import core.stdc.stdio : snprintf;
     auto cp = curpos;
-    auto c = cast(uint)gb[cp];
     char[512] buf = void;
     auto sx = cx;
     if (visualtabs) {
       int ry;
       gb.pos2xyVT(cp, sx, ry);
     }
+    // mod, (pos), topline, linecount
+    auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%05u : %5u : %5u]  ",
+      (textChanged ? '*' : ' '), sx+0, cy+1, topline, linecount);
+    // character code (hex, dec)
     if (!utfuck) {
-      auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u",
-        (textChanged ? '*' : ' '), sx+0, cy+1, cp, topline, mXOfs, bstart, bend, c, c);
-      if (len > winw) len = winw;
-      win.writeStrAt(0, 0, buf[0..len]);
+      auto c = cast(uint)gb[cp];
+      len += snprintf(buf.ptr+len, buf.length-len, "0x%02x %3u", c, c);
     } else {
-      dchar dch = dcharAt(cp);
-      if (dch > dchar.max) dch = 0;
-      auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%04u : 0x%08x : %u : %u] [ 0x%08x : 0x%08x ]  0x%02x %3u  U%04X",
-        (textChanged ? '*' : ' '), sx+0, cy+1, cp, topline, mXOfs, bstart, bend, c, c, cast(uint)dch);
-      if (len > winw) len = winw;
-      win.writeStrAt(0, 0, buf[0..len]);
+      auto c = cast(uint)dcharAt(cp);
+      len += snprintf(buf.ptr+len, buf.length-len, "U%04x %5u", c, c);
     }
+    // filesize, bufstart, bufend
+    len += snprintf(buf.ptr+len, buf.length-len, "   [ %u : %d : %d]", gb.textsize, bstart, bend);
+    if (len > winw) len = winw;
+    win.writeStrAt(0, 0, buf[0..len]);
+    // mode flags
     if (utfuck) {
       win.fb(11, 9);
       if (readonly) win.writeCharsAt(0, 0, 1, '/'); else win.writeCharsAt(0, 0, 1, 'U');
