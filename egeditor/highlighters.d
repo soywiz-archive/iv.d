@@ -35,8 +35,8 @@ public enum {
   HiCharSpecial,
 
   // normal string
-  HiString,
-  HiStringSpecial,
+  HiDQString,
+  HiDQStringSpecial,
   HiSQString,
   HiSQStringSpecial,
   // backquoted string
@@ -210,29 +210,29 @@ public:
     }
 
     mainloop: while (spos <= le) {
-      // in string?
-      if (st.kwtype == HiString || st.kwtype == HiStringSpecial) {
+      // in double-quoted string?
+      if (st.kwtype == HiDQString || st.kwtype == HiDQStringSpecial) {
         seenNonBlank = true;
         while (spos <= le) {
-          auto len = (opt&Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
+          auto len = (opt&Opt.DQStringNoEscape ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
           if (len == 0) { st = HS(HiText); continue mainloop; }
           if (len == 1) {
             // normal
-            gb.hi(spos++) = HS(HiString);
+            gb.hi(spos++) = HS(HiDQString);
             if (gb[spos-1] == '"') { st = HS(HiText); continue mainloop; }
           } else {
             // special
-            foreach (immutable _; 0..len) gb.hi(spos++) = HS(HiStringSpecial);
+            foreach (immutable _; 0..len) gb.hi(spos++) = HS(HiDQStringSpecial);
           }
         }
-        st = HS(HiString);
+        st = HS(HiDQString);
         continue mainloop;
       }
       // in single-quoted string?
       if (st.kwtype == HiSQString || st.kwtype == HiSQStringSpecial) {
         seenNonBlank = true;
         while (spos <= le) {
-          auto len = (opt&Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
+          auto len = (opt&Opt.SQStringNoEscape ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
           if (len == 0) { st = HS(HiText); continue mainloop; }
           if (len == 1) {
             // normal
@@ -396,56 +396,54 @@ public:
         gb.hi(spos++) = st;
         continue mainloop;
       }
-      if (!(opt&Opt.NoStrings)) {
-        // char?
-        if (ch == '\'' && !(opt&Opt.SQString)) {
-          auto xsp = spos;
-          ++spos;
-          auto len = skipStrChar!(false, true)();
-          if (len > 0 && gb[spos+len] == '\'') {
-            spos = xsp;
-            gb.hi(spos++) = HS(HiChar);
-            st = HS(len == 1 ? HiChar : HiCharSpecial);
-            while (len--) gb.hi(spos++) = st;
-            gb.hi(spos++) = HS(HiChar);
-            st = HS(HiText);
-          } else {
-            spos = xsp;
-            st = HS(HiText);
-            gb.hi(spos++) = st;
-            for (;;) {
-              if (len == 0 || gb[spos] == '\'') { gb.hi(spos++) = st; continue mainloop; }
-              while (len-- > 0) gb.hi(spos++) = st;
-              len = skipStrChar!(false, true)();
-            }
+      // string?
+      if (ch == '\'' && (opt&Opt.SQString)) {
+        gb.hi(spos++) = HS(HiSQString);
+        st = HS(HiSQString);
+        continue mainloop;
+      }
+      // string?
+      if (ch == '"' && (opt&Opt.DQString)) {
+        gb.hi(spos++) = HS(HiDQString);
+        st = HS(HiDQString);
+        continue mainloop;
+      }
+      // bqstring?
+      if (ch == '`' && (opt&Opt.BQString)) {
+        gb.hi(spos++) = HS(HiBQString);
+        st = HS(HiBQString);
+        continue mainloop;
+      }
+      // rqstring?
+      if (ch == 'r' && (opt&Opt.RQString) && gb[spos+1] == '"') {
+        gb.hi(spos++) = HS(HiRQString);
+        gb.hi(spos++) = HS(HiRQString);
+        st = HS(HiRQString);
+        continue mainloop;
+      }
+      // char?
+      if (ch == '\'' && (opt&Opt.SQChar)) {
+        auto xsp = spos;
+        ++spos;
+        auto len = skipStrChar!(false, true)();
+        if (len > 0 && gb[spos+len] == '\'') {
+          spos = xsp;
+          gb.hi(spos++) = HS(HiChar);
+          st = HS(len == 1 ? HiChar : HiCharSpecial);
+          while (len--) gb.hi(spos++) = st;
+          gb.hi(spos++) = HS(HiChar);
+          st = HS(HiText);
+        } else {
+          spos = xsp;
+          st = HS(HiText);
+          gb.hi(spos++) = st;
+          for (;;) {
+            if (len == 0 || gb[spos] == '\'') { gb.hi(spos++) = st; continue mainloop; }
+            while (len-- > 0) gb.hi(spos++) = st;
+            len = skipStrChar!(false, true)();
           }
-          continue mainloop;
         }
-        // string?
-        if (ch == '"') {
-          gb.hi(spos++) = HS(HiString);
-          st = HS(HiString);
-          continue mainloop;
-        }
-        // string?
-        if (ch == '\'' && (opt&Opt.SQString)) {
-          gb.hi(spos++) = HS(HiSQString);
-          st = HS(HiSQString);
-          continue mainloop;
-        }
-        // bqstring?
-        if (ch == '`' && (opt&Opt.BQString)) {
-          gb.hi(spos++) = HS(HiBQString);
-          st = HS(HiBQString);
-          continue mainloop;
-        }
-        // rqstring?
-        if (ch == 'r' && (opt&Opt.RQString) && gb[spos+1] == '"') {
-          gb.hi(spos++) = HS(HiRQString);
-          gb.hi(spos++) = HS(HiRQString);
-          st = HS(HiRQString);
-          continue mainloop;
-        }
+        continue mainloop;
       }
       // identifier/keyword?
       if (ch.isalpha || ch == '_') {
@@ -825,6 +823,9 @@ public:
   enum NotFound = 0;
   static assert(NotFound == TokenMachine.InvalidState);
 
+  // if `SqlSingleComment` is set, strings cannot has escapes
+  // BQString and RQString cannot have escapes, ever
+  // double-quited strings are processed iff NoStrings flag is NOT set
   enum Opt : uint {
     // number parsing options
     Num0b         = 1U<<0,
@@ -833,21 +834,25 @@ public:
     NumAllowUnder = 1U<<3,
     NumAllowSign  = 1U<<4,
     SQString      = 1U<<5, // can string be single-quoted?
-    BQString      = 1U<<6, // allow D-style `...` strings
-    RQString      = 1U<<7, // allow D-style r"..." strings
+    DQString      = 1U<<6, // can string be double-quoted?
+    BQString      = 1U<<7, // allow D-style `...` strings
+    RQString      = 1U<<8, // allow D-style r"..." strings
+    SQChar        = 1U<<9, // allow single-quoted chars; escapes always allowed
     // comment options
-    DNestedComment     = 1U<<8, // allow `/+ ... +/` newsted comments
-    ShellSingleComment = 1U<<9, // allow `# ` comments
-    CSingleComment     = 1U<<10, // allow `//` comments
-    CMultiComment      = 1U<<11, // allow `/* ... */` comments
-    SqlSingleComment   = 1U<<12, // allow `/* ... */` comments
+    DNestedComment     = 1U<<10, // allow `/+ ... +/` newsted comments
+    ShellSingleComment = 1U<<11, // allow `# ` comments
+    CSingleComment     = 1U<<12, // allow `//` comments
+    CMultiComment      = 1U<<13, // allow `/* ... */` comments
+    SqlSingleComment   = 1U<<14, // allow `--` comments
     // other options
-    CPreprocessor = 1U<<13, // does this language use C preprocessor?
-    JSRegExp      = 1U<<14, // parse JS inline regexps?
-    ShellSigil    = 1U<<15, // parse shell sigils?
+    CPreprocessor = 1U<<15, // does this language use C preprocessor?
+    JSRegExp      = 1U<<16, // parse JS inline regexps?
+    ShellSigil    = 1U<<17, // parse shell sigils?
     // token machine options
-    CaseInsensitive = 1U<<16, // are tokens case-sensitive?
-    NoStrings       = 1U<<17, // no strings at all?
+    CaseInsensitive = 1U<<18, // are tokens case-sensitive?
+    // string options
+    SQStringNoEscape = 1U<<19, // no escapes are allowed in single-quoted strings
+    DQStringNoEscape = 1U<<20, // no escapes are allowed in double-quoted strings
   }
   static assert(Opt.max <= uint.max);
 
@@ -891,8 +896,10 @@ public class EdHiTokensD : EdHiTokens {
       Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       //Opt.SQString|
+      Opt.DQString|
       Opt.BQString|
       Opt.RQString|
+      Opt.SQChar|
       Opt.DNestedComment|
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
@@ -902,7 +909,8 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseInsensitive|
-      //Opt.NoStrings|
+      //Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
       0
     );
 
@@ -1136,8 +1144,10 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       Opt.SQString|
+      Opt.DQString|
       //Opt.BQString|
       //Opt.RQString|
+      Opt.SQChar|
       //Opt.DNestedComment|
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
@@ -1147,7 +1157,8 @@ public class EdHiTokensJS : EdHiTokens {
       Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseInsensitive|
-      //Opt.NoStrings|
+      //Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
       0
     );
 
@@ -1249,8 +1260,10 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       //Opt.SQString|
+      Opt.DQString|
       //Opt.BQString|
       //Opt.RQString|
+      Opt.SQChar|
       //Opt.DNestedComment|
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
@@ -1260,7 +1273,8 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseInsensitive|
-      //Opt.NoStrings|
+      //Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
       0
     );
 
@@ -1350,8 +1364,10 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       Opt.SQString|
+      Opt.DQString|
       Opt.BQString|
       //Opt.RQString|
+      //Opt.SQChar|
       //Opt.DNestedComment|
       Opt.ShellSingleComment|
       //Opt.CSingleComment|
@@ -1361,7 +1377,8 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.JSRegExp|
       Opt.ShellSigil|
       //Opt.CaseInsensitive|
-      //Opt.NoStrings|
+      Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
       0
     );
 
@@ -1426,8 +1443,10 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       //Opt.SQString|
+      Opt.DQString|
       //Opt.BQString|
       //Opt.RQString|
+      Opt.SQChar|
       //Opt.DNestedComment|
       //Opt.ShellSingleComment|
       Opt.CSingleComment|
@@ -1437,7 +1456,8 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseInsensitive|
-      //Opt.NoStrings|
+      //Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
       0
     );
 
@@ -1565,8 +1585,10 @@ public class EdHiTokensSQL : EdHiTokens {
       //Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       Opt.SQString|
-      Opt.BQString|
-      Opt.RQString|
+      Opt.DQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.SQChar|
       //Opt.DNestedComment|
       //Opt.ShellSingleComment|
       //Opt.CSingleComment|
@@ -1576,7 +1598,8 @@ public class EdHiTokensSQL : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       //Opt.CaseInsensitive|
-      //Opt.NoStrings|
+      Opt.SQStringNoEscape|
+      Opt.DQStringNoEscape|
       0
     );
 
@@ -1878,9 +1901,11 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.Num0x|
       //Opt.NumAllowUnder|
       //Opt.NumAllowSign|
-      //Opt.SQString|
+      Opt.SQString|
+      Opt.DQString|
       //Opt.BQString|
       //Opt.RQString|
+      //Opt.SQChar|
       //Opt.DNestedComment|
       //Opt.ShellSingleComment|
       //Opt.CSingleComment|
@@ -1890,7 +1915,8 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.JSRegExp|
       //Opt.ShellSigil|
       Opt.CaseInsensitive|
-      Opt.NoStrings|
+      Opt.SQStringNoEscape|
+      Opt.DQStringNoEscape|
       0
     );
 

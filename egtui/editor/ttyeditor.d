@@ -865,8 +865,8 @@ public:
       case HiCommentMulti:
       case HiChar:
       case HiCharSpecial:
-      case HiString:
-      case HiStringSpecial:
+      case HiDQString:
+      case HiDQStringSpecial:
       case HiSQString:
       case HiSQStringSpecial:
       case HiBQString:
@@ -891,8 +891,8 @@ public:
         case HiNumber:
         case HiChar:
         case HiCharSpecial:
-        case HiString:
-        case HiStringSpecial:
+        case HiDQString:
+        case HiDQStringSpecial:
         case HiSQString:
         case HiSQStringSpecial:
         case HiBQString:

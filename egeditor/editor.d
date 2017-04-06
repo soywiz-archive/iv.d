@@ -531,6 +531,12 @@ public:
     if (locache !is null) free(locache);
   }
 
+  // DO NOT USE!
+  final void hardReplaceChar (int pos, char ch) {
+    pragma(inline, true);
+    if (pos >= 0 && pos < tbused) tbuf[pos2real(pos)] = ch;
+  }
+
   /// remove all text from buffer
   /// WILL NOT call deletion hooks!
   void clear () {

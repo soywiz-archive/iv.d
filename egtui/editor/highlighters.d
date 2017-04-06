@@ -66,12 +66,12 @@ public uint hiColor() (in auto ref GapBuffer.HighState hs) nothrow @safe @nogc {
       //return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TextBG); // 14,237
 
     // normal string
-    case HiString:
+    case HiDQString:
     case HiSQString:
     case HiBQString:
     case HiRQString:
       return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0xb2), TextBG); // 6,237
-    case HiStringSpecial:
+    case HiDQStringSpecial:
     case HiSQStringSpecial:
       return XtColorFB!(TtyRgb2Color!(0x54, 0xff, 0xff), TextBG); // 14,237
       //return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TextBG); // 2,237
