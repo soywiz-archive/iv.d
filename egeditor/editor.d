@@ -50,6 +50,24 @@ abstract class EgTextMeter {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// highlighter should be able to work line-by-line
+class EditorHL {
+protected:
+  GapBuffer gb; /// this will be set by EditorEngine on attaching
+
+public:
+  this () {} ///
+
+  /// return true if highlighting for this line was changed
+  abstract bool fixLine (int line);
+
+  /// mark line as "need rehighlighting" (and possibly other text too)
+  /// wasInsDel: some lines was inserted/deleted down the text
+  abstract void lineChanged (int line, bool wasInsDel);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 ///
 public final class GapBuffer {
 public:
@@ -201,12 +219,15 @@ final nothrow:
     immutable uint nsz = (mSingleLine ? GrowGranSmall : GrowGran);
     tbuf = cast(char*)malloc(nsz);
     if (tbuf is null) return false;
+    // don't allocate highlight buffer right now; wait until EditorEngine asks for it explicitly
+    /*
     hbuf = cast(HighState*)malloc(nsz*hbuf[0].sizeof);
     if (hbuf is null) { free(tbuf); tbuf = null; return false; }
+    */
     // allocate initial line cache
     uint ICS = (mSingleLine ? 2 : 1024);
     locache = cast(typeof(locache[0])*)realloc(locache, ICS*locache[0].sizeof);
-    if (locache is null) { free(hbuf); hbuf = null; free(tbuf); tbuf = null; return false; }
+    if (locache is null) { /*free(hbuf); hbuf = null;*/ free(tbuf); tbuf = null; return false; }
     locache[0..ICS] = LOCItem.init;
     tbsize = nsz;
     locsize = ICS;
@@ -232,8 +253,11 @@ final nothrow:
     immutable uint gran = (mSingleLine ? GrowGranSmall : GrowGran);
     uint hbufsz = tbsize;
     if (!xrealloc(tbuf, tbsize, newsz, gran)) return false;
-    if (!xrealloc(hbuf, hbufsz, newsz, gran)) { tbsize = hbufsz; return false; } // HACK!
-    assert(tbsize == hbufsz);
+    // reallocate highlighting buffer only if we already have one
+    if (hbuf !is null) {
+      if (!xrealloc(hbuf, hbufsz, newsz, gran)) { tbsize = hbufsz; return false; } // HACK!
+      assert(tbsize == hbufsz);
+    }
     assert(tbsize >= newsz);
     return true;
   }
@@ -408,25 +432,41 @@ final nothrow:
     textMeter.reset(0); // nobody cares about tab widths here
     scope(exit) textMeter.finish();
     int maxh = 1;
+    auto tbufcopy = tbuf;
+    auto hbufcopy = hbuf;
     if (utfuck) {
       Utf8DecoderFast udc;
-      HighState hs = hbuf[pos2real(ls)];
+      HighState hs = (hbufcopy !is null ? hbufcopy[pos2real(ls)] : HighState.init);
       while (ls < le) {
-        char ch = tbuf[pos2real(ls++)];
-        if (udc.decode(cast(ubyte)ch)) textMeter.advance(udc.invalid ? udc.replacement : udc.codepoint, hs);
+        char ch = tbufcopy[pos2real(ls++)];
+        if (udc.decode(cast(ubyte)ch)) {
+          if (hbufcopy !is null) {
+            textMeter.advance(udc.invalid ? udc.replacement : udc.codepoint, hs);
+          } else {
+            textMeter.advance(udc.invalid ? udc.replacement : udc.codepoint);
+          }
+        }
         if (textMeter.currheight > maxh) maxh = textMeter.currheight;
-        if (ls < le) hs = hbuf[pos2real(ls)];
+        if (ls < le && hbufcopy !is null) hs = hbufcopy[pos2real(ls)];
       }
     } else if (recode1byte !is null) {
       while (ls < le) {
         immutable uint rpos = pos2real(ls++);
-        textMeter.advance(recode1byte(tbuf[rpos]), hbuf[rpos]);
+        if (hbufcopy !is null) {
+          textMeter.advance(recode1byte(tbufcopy[rpos]), hbufcopy[rpos]);
+        } else {
+          textMeter.advance(recode1byte(tbufcopy[rpos]));
+        }
         if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     } else {
       while (ls < le) {
         immutable uint rpos = pos2real(ls++);
-        textMeter.advance(tbuf[rpos], hbuf[rpos]);
+        if (hbufcopy !is null) {
+          textMeter.advance(tbufcopy[rpos], hbufcopy[rpos]);
+        } else {
+          textMeter.advance(tbufcopy[rpos]);
+        }
         if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     }
@@ -512,6 +552,26 @@ public:
     locused = 0;
   }
 
+  @property bool hasHiBuffer () const pure nothrow @safe @nogc { pragma(inline, true); return (hbuf !is null); }
+  @property void hasHiBuffer (bool v) nothrow @trusted @nogc {
+    if (v != hasHiBuffer) {
+      if (v) {
+        // create highlighting buffer
+        import core.stdc.stdlib : malloc;
+        assert(hbuf is null);
+        assert(tbsize > 0);
+        hbuf = cast(HighState*)malloc(tbsize*hbuf[0].sizeof);
+        if (hbuf !is null) hbuf[0..tbsize] = HighState.init;
+      } else {
+        // remove highlighitng buffer
+        import core.stdc.stdlib : free;
+        assert(hbuf !is null);
+        free(hbuf);
+        hbuf = null;
+      }
+    }
+  }
+
   /// "single line" mode, for line editors
   bool singleline () const pure nothrow { pragma(inline, true); return mSingleLine; }
 
@@ -521,7 +581,7 @@ public:
   @property int linecount () const pure @safe @nogc { pragma(inline, true); return mLineCount; }
 
   @property char opIndex (uint pos) const pure @trusted @nogc { pragma(inline, true); return (pos < tbused ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\n'); } ///
-  @property ref HighState hi (uint pos) pure @trusted @nogc { pragma(inline, true); return (pos < tbused ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
+  @property ref HighState hi (uint pos) pure @trusted @nogc { pragma(inline, true); return (hbuf !is null && pos < tbused ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
 
   @property dchar uniAt (uint pos) const pure {
     immutable ts = tbused;
@@ -843,14 +903,14 @@ public:
       // pos is before gap
       int len = gapstart-pos; // to shift
       memmove(tbuf+gapend-len, tbuf+pos, len);
-      memmove(hbuf+gapend-len, hbuf+pos, len*hbuf[0].sizeof);
+      if (hbuf !is null) memmove(hbuf+gapend-len, hbuf+pos, len*hbuf[0].sizeof);
       gapstart -= len;
       gapend -= len;
     } else if (pos > gapstart) {
       // pos is after gap
       int len = pos-gapstart;
       memmove(tbuf+gapstart, tbuf+gapend, len);
-      memmove(hbuf+gapstart, hbuf+gapend, len*hbuf[0].sizeof);
+      if (hbuf !is null) memmove(hbuf+gapstart, hbuf+gapend, len*hbuf[0].sizeof);
       gapstart += len;
       gapend += len;
     }
@@ -898,7 +958,7 @@ public:
     if (!atend) moveGapAtPos(pos); // very small speedup
     assert(gapend-gapstart >= slen);
     memcpy(tbuf+gapstart, str.ptr, str.length);
-    hbuf[gapstart..gapstart+str.length] = defhs;
+    if (hbuf !is null) hbuf[gapstart..gapstart+str.length] = defhs;
     gapstart += slen;
     tbused += slen;
     pos += slen;
@@ -960,24 +1020,6 @@ public:
     }
     return res;
   }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-/// highlighter should be able to work line-by-line
-class EditorHL {
-protected:
-  GapBuffer gb; ///
-
-public:
-  this () {} ///
-
-  /// return true if highlighting for this line was changed
-  abstract bool fixLine (int line);
-
-  /// mark line as "need rehighlighting" (and possibly other text too)
-  /// wasInsDel: some lines was inserted/deleted down the text
-  abstract void lineChanged (int line, bool wasInsDel);
 }
 
 
@@ -1746,6 +1788,11 @@ public:
     /// WARNING! changing this will reset undo/redo buffers!
     void asRich (bool v) {
       if (mAsRich != v) {
+        // detach highlighter for "rich mode"
+        if (v && hl !is null) {
+          hl.gb = null;
+          hl = null;
+        }
         mAsRich = v;
         if (undo !is null) {
           delete undo;
@@ -1755,7 +1802,16 @@ public:
           delete redo;
           redo = new UndoStack(mAsRich, true, !singleline);
         }
+        gb.hasHiBuffer = v; // "rich" mode require highlighting buffer, normal mode doesn't, as it has no highlighter
+        if (!gb.hasHiBuffer) assert(0, "out of memory"); // alas
       }
+    }
+
+    @property bool hasHiBuffer () const pure nothrow @safe @nogc { pragma(inline, true); return gb.hasHiBuffer; }
+    @property void hasHiBuffer (bool v) nothrow @trusted @nogc {
+      if (mAsRich) return; // cannot change
+      if (hl !is null) return; // cannot change too
+      gb.hasHiBuffer = v; // otherwise it is ok to change it
     }
 
     int x0 () const pure nothrow @safe @nogc { pragma(inline, true); return winx; } ///
@@ -2117,36 +2173,45 @@ public:
     if (redo !is null) redo.alwaysChanged();
   }
 
+  /// attach new highlighter; return previous one
   /// note that you can't reuse one highlighter for several editors!
-  void attachHiglighter (EditorHL ahl) {
-    if (ahl is hl) return; // nothing to do
+  EditorHL attachHiglighter (EditorHL ahl) {
+    if (mAsRich) { assert(hl is null); return null; } // oops
+    if (ahl is hl) return ahl; // nothing to do
+    EditorHL prevhl = hl;
     if (ahl is null) {
       // detach
       if (hl !is null) {
         hl.gb = null;
         hl = null;
+        gb.hasHiBuffer = false; // don't need it
         fullDirty();
       }
-      return;
+      return prevhl; // return previous
     }
     if (ahl.gb !is null) {
       if (ahl.gb !is gb) throw new Exception("highlighter already used by another editor");
       if (ahl !is hl) assert(0, "something is VERY wrong");
-      return;
+      return ahl;
     }
     if (hl !is null) hl.gb = null;
     ahl.gb = gb;
     hl = ahl;
+    gb.hasHiBuffer = true; // need it
+    if (!gb.hasHiBuffer) assert(0, "out of memory"); // alas
     ahl.lineChanged(0, true);
     fullDirty();
+    return prevhl;
   }
 
   ///
   EditorHL detachHighlighter () {
+    if (mAsRich) { assert(hl is null); return null; } // oops
     auto res = hl;
     if (res !is null) {
       hl.gb = null;
       hl = null;
+      gb.hasHiBuffer = false; // don't need it
       fullDirty();
     }
     return res;

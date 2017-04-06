@@ -85,6 +85,7 @@ public bool hiIsComment() (in auto ref GapBuffer.HighState hs) nothrow {
 public class EditorHLExt : EditorHL {
 private:
   alias HS = GapBuffer.HighState;
+  alias Opt = EdHiTokens.Opt;
 
 protected:
   EdHiTokens tks;
@@ -94,7 +95,7 @@ public:
   this (EdHiTokens atk) { tks = atk; super(); }
 
   // return `true` if next line was fucked
-  final bool redoLine (int ls, int le) {
+  private final bool redoLine (int ls, int le) {
     if (gb.hi(ls).kwtype == 0) {
       auto est = gb.hi(le);
       if (ls < gb.textsize) rehighlightLine(ls, le);
@@ -117,6 +118,7 @@ public:
     }
     bool res = false;
     if (line >= validLines) {
+      // set sca
       auto spos = gb.line2pos(validLines);
       while (line >= validLines) {
         if (true/*gb.hi(spos).kwtype == 0*/) {
@@ -155,7 +157,7 @@ public:
   // this is *inclusive* range
   protected void rehighlightLine (int ls, int le) {
     auto tks = this.tks;
-    auto opt = this.tks.options;
+    immutable opt = this.tks.options;
 
     // spos: at char
     // return: 0: error; 1: normal; >1: escape (length)
@@ -212,7 +214,7 @@ public:
       if (st.kwtype == HiString || st.kwtype == HiStringSpecial) {
         seenNonBlank = true;
         while (spos <= le) {
-          auto len = (opt&EdHiTokens.Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
+          auto len = (opt&Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
           if (len == 0) { st = HS(HiText); continue mainloop; }
           if (len == 1) {
             // normal
@@ -230,7 +232,7 @@ public:
       if (st.kwtype == HiSQString || st.kwtype == HiSQStringSpecial) {
         seenNonBlank = true;
         while (spos <= le) {
-          auto len = (opt&EdHiTokens.Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
+          auto len = (opt&Opt.SqlSingleComment ? skipStrChar!(true, false)() : skipStrChar!(true, true)());
           if (len == 0) { st = HS(HiText); continue mainloop; }
           if (len == 1) {
             // normal
@@ -307,7 +309,7 @@ public:
       }
       ch = gb[spos];
       // single-line comment?
-      if (ch == '/' && (opt&EdHiTokens.Opt.CSingleComment) && gb[spos+1] == '/') {
+      if (ch == '/' && (opt&Opt.CSingleComment) && gb[spos+1] == '/') {
         gb.hi(spos++) = HS(HiCommentOneLine);
         gb.hi(spos++) = HS(HiCommentOneLine);
         st = HS(HiCommentOneLine);
@@ -315,7 +317,7 @@ public:
         continue mainloop;
       }
       // sql single-line comment?
-      if (ch == '-' && (opt&EdHiTokens.Opt.SqlSingleComment) && gb[spos+1] == '-') {
+      if (ch == '-' && (opt&Opt.SqlSingleComment) && gb[spos+1] == '-') {
         gb.hi(spos++) = HS(HiCommentOneLine);
         gb.hi(spos++) = HS(HiCommentOneLine);
         st = HS(HiCommentOneLine);
@@ -323,7 +325,7 @@ public:
         continue mainloop;
       }
       // shell single-line comment?
-      if (ch == '#' && (opt&EdHiTokens.Opt.ShellSingleComment)) {
+      if (ch == '#' && (opt&Opt.ShellSingleComment)) {
         gb.hi(spos++) = HS(HiCommentOneLine);
         gb.hi(spos++) = HS(HiCommentOneLine);
         st = HS(HiCommentOneLine);
@@ -331,21 +333,21 @@ public:
         continue mainloop;
       }
       // multiline comment?
-      if (ch == '/' && (opt&EdHiTokens.Opt.CMultiComment) && gb[spos+1] == '*') {
+      if (ch == '/' && (opt&Opt.CMultiComment) && gb[spos+1] == '*') {
         gb.hi(spos++) = HS(HiCommentMulti);
         gb.hi(spos++) = HS(HiCommentMulti);
         st = HS(HiCommentMulti);
         continue mainloop;
       }
       // nested multiline comment?
-      if (ch == '/' && (opt&EdHiTokens.Opt.DNestedComment) && gb[spos+1] == '+') {
+      if (ch == '/' && (opt&Opt.DNestedComment) && gb[spos+1] == '+') {
         gb.hi(spos++) = HS(HiCommentMulti, 1);
         gb.hi(spos++) = HS(HiCommentMulti, 1);
         st = HS(HiCommentMulti, 1);
         continue mainloop;
       }
       // C preprocessor?
-      if (!inPreprocessor && ch == '#' && !seenNonBlank && (opt&EdHiTokens.Opt.CPreprocessor)) inPreprocessor = true;
+      if (!inPreprocessor && ch == '#' && !seenNonBlank && (opt&Opt.CPreprocessor)) inPreprocessor = true;
       if (inPreprocessor) {
         // in preprocessor; eol?
         if (ch == '\n') {
@@ -369,7 +371,7 @@ public:
       // non-blank?
       if (ch > ' ') seenNonBlank = true;
       // js inline regexp?
-      if (ch == '/' && (opt&EdHiTokens.Opt.JSRegExp)) {
+      if (ch == '/' && (opt&Opt.JSRegExp)) {
         int ep = spos+1;
         while (ep <= le) {
           if (gb[ep] == '/') break;
@@ -394,9 +396,9 @@ public:
         gb.hi(spos++) = st;
         continue mainloop;
       }
-      if (!(opt&EdHiTokens.Opt.NoStrings)) {
+      if (!(opt&Opt.NoStrings)) {
         // char?
-        if (ch == '\'' && !(opt&EdHiTokens.Opt.SQString)) {
+        if (ch == '\'' && !(opt&Opt.SQString)) {
           auto xsp = spos;
           ++spos;
           auto len = skipStrChar!(false, true)();
@@ -426,19 +428,19 @@ public:
           continue mainloop;
         }
         // string?
-        if (ch == '\'' && (opt&EdHiTokens.Opt.SQString)) {
+        if (ch == '\'' && (opt&Opt.SQString)) {
           gb.hi(spos++) = HS(HiSQString);
           st = HS(HiSQString);
           continue mainloop;
         }
         // bqstring?
-        if (ch == '`' && (opt&EdHiTokens.Opt.BQString)) {
+        if (ch == '`' && (opt&Opt.BQString)) {
           gb.hi(spos++) = HS(HiBQString);
           st = HS(HiBQString);
           continue mainloop;
         }
         // rqstring?
-        if (ch == 'r' && (opt&EdHiTokens.Opt.RQString) && gb[spos+1] == '"') {
+        if (ch == 'r' && (opt&Opt.RQString) && gb[spos+1] == '"') {
           gb.hi(spos++) = HS(HiRQString);
           gb.hi(spos++) = HS(HiRQString);
           st = HS(HiRQString);
@@ -478,7 +480,7 @@ public:
       }
       // based number?
       if (auto base = isBasedStart(spos)) {
-        bool au = (opt&EdHiTokens.Opt.NumAllowUnder) != 0;
+        bool au = (opt&Opt.NumAllowUnder) != 0;
         ofs = (ch == '+' || ch == '-' ? 3 : 2);
         while (spos+ofs <= le) {
           ch = gb[spos+ofs];
@@ -496,7 +498,7 @@ public:
       }
       // decimal/floating number
       if (isDecStart(spos)) {
-        bool au = (opt&EdHiTokens.Opt.NumAllowUnder) != 0;
+        bool au = (opt&Opt.NumAllowUnder) != 0;
         ofs = 1;
         while (spos+ofs <= le) {
           ch = gb[spos+ofs];
@@ -536,7 +538,7 @@ public:
             stx = tx;
           }
         }
-        if (lastlen == 0 && isdollar && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) goto sigil;
+        if (lastlen == 0 && isdollar && (opt&Opt.ShellSigil) && spos+1 < le) goto sigil;
         if (lastlen == 0) {
           lastlen = 1;
           st = HS(HiPunct);
@@ -547,7 +549,7 @@ public:
         continue mainloop;
       }
       // shell sigils
-      if (ch == '$' && (opt&EdHiTokens.Opt.ShellSigil) && spos+1 < le) {
+      if (ch == '$' && (opt&Opt.ShellSigil) && spos+1 < le) {
        sigil:
         st = HS(HiSpecial);
         gb.hi(spos++) = st;
@@ -601,7 +603,7 @@ private final:
   bool isDecStart (int pos) nothrow {
     auto ch = gb[pos];
     if (ch == '-' || ch == '+') {
-      if (!(tks.options&EdHiTokens.Opt.NumAllowSign)) return false;
+      if (!(tks.options&Opt.NumAllowSign)) return false;
       ch = gb[++pos];
     }
     if (ch.isdigit) return true;
@@ -613,7 +615,7 @@ private final:
   int isBasedStart (int pos) nothrow {
     auto ch = gb[pos++];
     if (ch == '-' || ch == '+') {
-      if (!(tks.options&EdHiTokens.Opt.NumAllowSign)) return 0;
+      if (!(tks.options&Opt.NumAllowSign)) return 0;
       ch = gb[pos++];
     }
     if (ch != '0') return 0;
@@ -623,9 +625,9 @@ private final:
     else if (ch == 'o' || ch == 'O') base = 8;
     else if (ch == 'b' || ch == 'B') base = 2;
     else return 0;
-    if (!(tks.options&EdHiTokens.Opt.Num0x) && base == 16) return 0;
-    if (!(tks.options&EdHiTokens.Opt.Num0o) && base == 8) return 0;
-    if (!(tks.options&EdHiTokens.Opt.Num0b) && base == 2) return 0;
+    if (!(tks.options&Opt.Num0x) && base == 16) return 0;
+    if (!(tks.options&Opt.Num0o) && base == 8) return 0;
+    if (!(tks.options&Opt.Num0b) && base == 2) return 0;
     return (gb[pos].digitInBase(base) >= 0 ? base : 0);
   }
 }
