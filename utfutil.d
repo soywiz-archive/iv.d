@@ -32,6 +32,7 @@ bool isValidUtf8Start (ubyte b) pure nothrow @safe @nogc { pragma(inline, true);
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// fast state-machine based UTF-8 decoder; using 8 bytes of memory
+/// code points from invalid range will never be valid, this is the property of the state machine
 align(1) struct Utf8DecoderFast {
 align(1):
 public:
@@ -110,6 +111,7 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// slightly slower state-machine based UTF-8 decoder; using 4 bytes of memory (uint)
+/// code points from invalid range will never be valid, this is the property of the state machine
 align(1) struct Utf8Decoder {
 align(1):
 public:
