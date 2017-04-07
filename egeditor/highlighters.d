@@ -112,33 +112,33 @@ public:
   override bool fixLine (int line) {
     if (validLines == 0) {
       // anyway
-      if (gb.textsize > 0) rehighlightLine(0, gb.lineend(0));
+      if (gb.textsize > 0) rehighlightLine(0, lc.lineend(0));
       validLines = 1;
       if (line == 0) return true;
     }
     bool res = false;
     if (line >= validLines) {
       // set sca
-      auto spos = gb.line2pos(validLines);
+      auto spos = lc.line2pos(validLines);
       while (line >= validLines) {
         if (true/*gb.hi(spos).kwtype == 0*/) {
           if (validLines == line) res = true;
-          auto epos = gb.lineend(validLines);
+          auto epos = lc.lineend(validLines);
           auto est = gb.hi(epos);
           if (spos < gb.textsize) rehighlightLine(spos, epos);
           // need to fix next line?
           if (epos+1 < gb.textsize && est != gb.hi(epos)) gb.hi(epos+1).kwtype = 0;
           spos = epos+1;
         } else {
-          spos = gb.line2pos(validLines+1);
+          spos = lc.line2pos(validLines+1);
         }
         ++validLines;
       }
     } else {
-      auto ls = gb.line2pos(line);
+      auto ls = lc.line2pos(line);
       auto stt = gb.hi(ls).kwtype;
       if (stt == 0) {
-        auto le = gb.lineend(line);
+        auto le = lc.lineend(line);
         if (redoLine(ls, le)) validLines = line+1; // should check next lines
         res = true;
       }
@@ -150,7 +150,7 @@ public:
   // wasInsDel: some lines was inserted/deleted down the text
   override void lineChanged (int line, bool wasInsDel) {
     if (line >= validLines) return; // nothing to do
-    gb.hi(gb.line2pos(line)).kwtype = 0; // "rehighlight" flag
+    gb.hi(lc.line2pos(line)).kwtype = 0; // "rehighlight" flag
     if (wasInsDel) validLines = line; // rehighlight the following text
   }
 

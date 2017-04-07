@@ -315,7 +315,7 @@ public:
 
   final void resetIncSearchPos () nothrow {
     if (incSearchHitPos >= 0) {
-      markLinesDirty(gb.pos2line(incSearchHitPos), 1);
+      markLinesDirty(lc.pos2line(incSearchHitPos), 1);
       incSearchHitPos = -1;
       incSearchHitLen = -1;
     }
@@ -378,7 +378,7 @@ public:
     }
     if (incSearchHitPos >= 0 && incSearchHitLen > 0) {
       pushUndoCurPos();
-      gb.pos2xy(incSearchHitPos, cx, cy);
+      lc.pos2xy(incSearchHitPos, cx, cy);
       makeCurLineVisibleCentered();
       markRangeDirty(incSearchHitPos, incSearchHitLen);
     }
@@ -407,7 +407,7 @@ public:
     // draw prompt if it is active
     if (mPromptActive) { mPromptInput.drawCursor(); return; }
     int rx, ry;
-    gb.pos2xyVT(curpos, rx, ry);
+    lc.pos2xyVT(curpos, rx, ry);
     XtWindow(winx, winy, winw, winh).gotoXY(rx-mXOfs, ry-topline);
   }
 
@@ -423,7 +423,7 @@ public:
     auto sx = cx;
     if (visualtabs) {
       int ry;
-      gb.pos2xyVT(cp, sx, ry);
+      lc.pos2xyVT(cp, sx, ry);
     }
     // mod, (pos), topline, linecount
     auto len = snprintf(buf.ptr, buf.length, " %c[%04u:%05u : %5u : %5u]  ",
@@ -463,9 +463,9 @@ public:
   //FIXME: clean this up!
   public override void drawLine (int lidx, int yofs, int xskip) {
     immutable vt = visualtabs;
-    immutable tabsz = gb.tabsize;
+    immutable tabsz = lc.tabsize;
     auto win = XtWindow(winx, winy, winw, winh);
-    auto pos = gb.line2pos(lidx);
+    auto pos = lc.line2pos(lidx);
     int x = -xskip;
     int y = yofs;
     auto ts = gb.textsize;
@@ -482,7 +482,7 @@ public:
     // if we have no highlighter, check for trailing spaces explicitly
     bool hasHL = (hl !is null); // do we have highlighter (just a cache)
     // look for trailing spaces even if we have a highlighter
-    int trspos = gb.line2pos(lidx+1); // this is where trailing spaces starts (will)
+    int trspos = lc.line2pos(lidx+1); // this is where trailing spaces starts (will)
     if (!singleline) while (trspos > pos && gb[trspos-1] <= ' ') --trspos;
     bool utfucked = utfuck;
     int bs = bstart, be = bend;
@@ -603,7 +603,7 @@ public:
       if (ch > ' ') {
         // nonspace, check highlighting, if any
         if (hl !is null) {
-          auto lidx = gb.pos2line(pos);
+          auto lidx = lc.pos2line(pos);
           if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
           if (!hiIsComment(gb.hi(pos))) return false;
           // ok, it is comment, it's the same as whitespace
@@ -620,14 +620,14 @@ public:
   final int lineFindFirstNonSpace (int pos) {
     auto ts = textsize;
     if (ts == 0) return 0; // wow, rare case
-    pos = gb.line2pos(gb.pos2line(pos));
+    pos = lc.line2pos(lc.pos2line(pos));
     while (pos < ts) {
       auto ch = gb[pos];
       if (ch == '\n') break;
       if (ch > ' ') {
         // nonspace, check highlighting, if any
         if (hl !is null) {
-          auto lidx = gb.pos2line(pos);
+          auto lidx = lc.pos2line(pos);
           if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
           if (!hiIsComment(gb.hi(pos))) return pos;
           // ok, it is comment, it's the same as whitespace
@@ -662,7 +662,7 @@ public:
         } else if (ch == ech) {
           if (--level == 0) {
             int rx, ry;
-            gb.pos2xyVT(pos, rx, ry);
+            lc.pos2xyVT(pos, rx, ry);
             if (rx >= mXOfs || rx < mXOfs+winw) {
               if (ry >= mTopLine && ry < mTopLine+winh) {
                 auto win = XtWindow(winx, winy, winw, winh);
@@ -705,10 +705,10 @@ public:
                   ls = lineFindFirstNonSpace(stpos);
                 } else if (dir < 0) {
                   // closing
-                  gb.pos2xyVT(stpos, rx, ry);
+                  lc.pos2xyVT(stpos, rx, ry);
                   ls = lineFindFirstNonSpace(pos);
                 }
-                gb.pos2xyVT(ls, stx, sty);
+                lc.pos2xyVT(ls, stx, sty);
                 if (stx == rx) {
                   markLinesDirtySE(sty+1, ry-1);
                   rx -= mXOfs;
@@ -732,7 +732,7 @@ public:
   protected final void drawPartHighlight (int pos, int count, uint clr) {
     if (pos >= 0 && count > 0 && pos < gb.textsize) {
       int rx, ry;
-      gb.pos2xyVT(pos, rx, ry);
+      lc.pos2xyVT(pos, rx, ry);
       //auto oldclr = xtGetColor;
       //scope(exit) win.color = oldclr;
       if (ry >= topline && ry < topline+winh) {
@@ -838,8 +838,8 @@ public:
     bool wasChanged = false;
     scope(exit) if (wasChanged) undoGroupEnd();
     foreach (int lidx; 0..linecount) {
-      auto ls = gb.linestart(lidx);
-      auto le = gb.lineend(lidx); // points at '\n', or after text buffer
+      auto ls = lc.linestart(lidx);
+      auto le = lc.lineend(lidx); // points at '\n', or after text buffer
       int count = 0;
       while (le > ls && gb[le-1] <= ' ') { --le; ++count; }
       if (count == 0) continue;
@@ -856,7 +856,7 @@ public:
     if (pos < 0 || pos >= gb.textsize) return false;
     // update highlighting
     if (goingDown && hl !is null) {
-      auto lidx = gb.pos2line(pos);
+      auto lidx = lc.pos2line(pos);
       if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
       // ok, it is comment, it's the same as whitespace
     }
@@ -981,7 +981,7 @@ public:
       acp = aclist[0];
     } else {
       int rx, ry;
-      gb.pos2xyVT(tkstpos, rx, ry);
+      lc.pos2xyVT(tkstpos, rx, ry);
       //int residx = promptSelect(aclist[0..acused], winx+(rx-mXOfs), winy+(ry-mTopLine)+1);
       int residx = dialogSelectAC(aclist[0..acused], winx+(rx-mXOfs), winy+(ry-mTopLine)+1);
       if (residx < 0) return;
@@ -1493,7 +1493,7 @@ final:
       if (mt.empty) break;
       // if i need to skip comments, do highlighting
       if (srr.nocomments && hl !is null) {
-        auto lidx = gb.pos2line(mt.s);
+        auto lidx = lc.pos2line(mt.s);
         if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
         if (hiIsComment(gb.hi(mt.s))) {
           // skip
@@ -1508,7 +1508,7 @@ final:
         fullDirty();
         drawPage();
         drawPartHighlight(mt.s, mt.e-mt.s, IncSearchColor);
-        auto act = dialogReplacePrompt(gb.pos2line(mt.s)-topline+winy);
+        auto act = dialogReplacePrompt(lc.pos2line(mt.s)-topline+winy);
         //FIXME: do undo only if it was succesfully registered
         //doUndo(); // undo cursor movement
         if (act == DialogRepPromptResult.Cancel) break;
@@ -1651,7 +1651,7 @@ final:
       if (!found) break;
       // i found her!
       if (srr.nocomments && hl !is null) {
-        auto lidx = gb.pos2line(caps[0].s);
+        auto lidx = lc.pos2line(caps[0].s);
         if (hl.fixLine(lidx)) markLinesDirty(lidx, 1); // so it won't lost dirty flag in redraw
         if (hiIsComment(gb.hi(caps[0].s))) {
           // skip
@@ -1665,7 +1665,7 @@ final:
         fullDirty();
         drawPage();
         drawPartHighlight(caps[0].s, caps[0].e-caps[0].s, IncSearchColor);
-        auto act = dialogReplacePrompt(gb.pos2line(caps[0].s)-topline+winy);
+        auto act = dialogReplacePrompt(lc.pos2line(caps[0].s)-topline+winy);
         //FIXME: do undo only if it was succesfully registered
         //doUndo(); // undo cursor movement
         if (act == DialogRepPromptResult.Cancel) break;
@@ -1832,7 +1832,7 @@ final:
   @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K C-U", "unindent block", q{ doUnindentBlock(); });
   @TEDEditOnly mixin TEDImpl!("C-K C-E", "clear from cursor to EOL", q{ doKillToEOL(); });
   @TEDMultiOnly @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K Tab", "indent block", q{ doIndentBlock(); });
-  @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K M-Tab", "untabify", q{ doUntabify(gb.tabsize ? gb.tabsize : 2); }); // alt+tab: untabify
+  @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-K M-Tab", "untabify", q{ doUntabify(lc.tabsize ? lc.tabsize : 2); }); // alt+tab: untabify
   @TEDEditOnly mixin TEDImpl!("C-K C-space", "remove trailing spaces", q{ doRemoveTailingSpaces(); });
   mixin TEDImpl!("C-K C-T", /*"toggle \"visual tabs\" mode",*/ q{ visualtabs = !visualtabs; });
 
