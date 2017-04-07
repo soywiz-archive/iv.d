@@ -17,7 +17,7 @@
 module iv.egeditor.editor;
 
 //version = egeditor_scan_time;
-version = egeditor_line_cache_checks;
+//version = egeditor_line_cache_checks;
 
 import iv.rawtty : koi2uni, uni2koi;
 import iv.strex;
@@ -924,7 +924,7 @@ public:
         // we will start repairing from the last good line
         pos = locache[lidx].ofs;
         if (pos == 0) assert(lidx == 0); else assert(gb[pos-1] == '\n');
-        { import core.stdc.stdio; printf("count=%u; pos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", count, pos, newlines, lidx, mLineCount); }
+        //{ import core.stdc.stdio; printf("count=%u; pos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", count, pos, newlines, lidx, mLineCount); }
         // remove unused lines
         if (lidx < mLineCount) memmove(locache+lidx, locache+lidx+newlines, (mLineCount-lidx)*locache[0].sizeof);
         validofsc = validlenc = (mLineCount -= newlines);
