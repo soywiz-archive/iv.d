@@ -1190,8 +1190,44 @@ public:
     }
   }
 
+  char[] pasteCollector;
+
+  void addToPasteCollector (TtyEvent key) {
+    void addChar (dchar dch) {
+      char ch = cast(char)dch;
+      if (ch < ' ') { if (ch != '\t' && ch != '\n') return; }
+      auto optr = pasteCollector.ptr;
+      pasteCollector ~= ch;
+      if (pasteCollector.ptr !is optr) {
+        import core.memory : GC;
+        if (pasteCollector.ptr is GC.addrOf(pasteCollector.ptr)) GC.setAttr(pasteCollector.ptr, GC.BlkAttr.NO_INTERIOR);
+      }
+    }
+
+    repeatCounter = -1;
+    if (key.key == TtyEvent.Key.PasteStart) { doPasteStart(); return; }
+    if (key.key == TtyEvent.Key.PasteEnd) {
+      doPasteEnd();
+      if (!pasteMode) {
+        if (pasteCollector.length) {
+          // insert text in "paste mode"
+          doPasteStart();
+          scope(exit) doPasteEnd();
+          doPutText(pasteCollector);
+          pasteCollector.length = 0;
+          pasteCollector.assumeSafeAppend;
+          ttyBeep();
+        }
+      }
+      return;
+    }
+    if (key == "Enter") { addChar('\n'); return; }
+    if (key.key == TtyEvent.Key.Char) { doPutChar(cast(char)key.ch); return; }
+  }
+
   bool processKey (TtyEvent key) {
     // hack it here, so it won't interfere with normal keyboard processing
+    if (pasteMode) { addToPasteCollector(key); return true; }
     if (key.key == TtyEvent.Key.PasteStart) { doPasteStart(); return true; }
     if (key.key == TtyEvent.Key.PasteEnd) { doPasteEnd(); return true; }
 

@@ -856,7 +856,8 @@ public:
       auto lidx = findLineCacheIndex(pos);
       immutable int ldelta = ppos-pos;
       //{ import core.stdc.stdio; printf("count=%u; pos=%u; ppos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
-      assert(lidx >= 0);
+      assert((!atend && lidx >= 0) || (atend && lidx < 0));
+      if (atend) lidx = mLineCount-1;
       if (newlines == 0) {
         // no lines was inserted, just repair the length
         locache[lidx].len += ldelta;
@@ -894,7 +895,7 @@ public:
   bool remove (int pos, int count) {
     if (gb.mSingleLine) {
       // easy
-      if (!remove(pos, count)) return false;
+      if (!gb.remove(pos, count)) return false;
       assert(mLineCount == 1);
       assert(locsize > 0);
       assert(validofsc == 1);
