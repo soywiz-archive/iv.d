@@ -1597,7 +1597,7 @@ public class EdHiTokensSQL : EdHiTokens {
       //Opt.CPreprocessor|
       //Opt.JSRegExp|
       //Opt.ShellSigil|
-      //Opt.CaseInsensitive|
+      Opt.CaseInsensitive|
       Opt.SQStringNoEscape|
       Opt.DQStringNoEscape|
       0
