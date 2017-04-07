@@ -395,16 +395,16 @@ public:
     return res;
   }
 
-  /// using `memchr`, jumps over gap; returns `tbused` if not found
-  public uint fastFindChar (int pos, char ch) const @trusted nothrow @nogc {
+  /// using `memchr`, jumps over gap; never moves after `tbused`
+  public uint fastSkipEol (int pos) const @trusted nothrow @nogc {
     import core.stdc.string : memchr;
     immutable ts = tbused;
     if (ts == 0 || pos >= ts) return ts;
     if (pos < 0) pos = 0;
     // check text before gap
     if (pos < gapstart) {
-      auto fp = cast(char*)memchr(tbuf+pos, ch, gapstart-pos);
-      if (fp !is null) return cast(int)(fp-tbuf);
+      auto fp = cast(char*)memchr(tbuf+pos, '\n', gapstart-pos);
+      if (fp !is null) return cast(int)(fp-tbuf)+1;
       pos = gapstart; // new starting position
     }
     assert(pos >= gapstart);
@@ -413,10 +413,16 @@ public:
     if (left > 0) {
       auto stx = tbuf+gapend+(pos-gapstart);
       assert(cast(usize)(tbuf+tbsize-stx) >= left);
-      auto fp = cast(char*)memchr(stx, ch, left);
-      if (fp !is null) return pos+cast(int)(fp-stx);
+      auto fp = cast(char*)memchr(stx, '\n', left);
+      if (fp !is null) return pos+cast(int)(fp-stx)+1;
     }
     return ts;
+  }
+
+  /// using `memchr`, jumps over gap; returns `tbused` if not found
+  public uint fastFindChar (int pos, char ch) const @trusted nothrow @nogc {
+    int res = fastFindCharIn(pos, tbused, ch);
+    return (res >= 0 ? res : tbused);
   }
 
   /// use `memchr`, jumps over gap; returns -1 if not found
@@ -430,6 +436,8 @@ public:
       len += pos;
       pos = 0;
     }
+    if (tbused-pos < len) len = tbused-pos;
+    assert(len > 0);
     int left;
     // check text before gap
     if (pos < gapstart) {
@@ -592,6 +600,7 @@ self-healing for wrapping mode:
   can be detected with "viswrap" flag.
 */
 // Self-Healing Line Cache (utm) implementation
+//TODO(?): don't do full cache repairing
 private final class LineCache {
 private:
   // line offset/height cache item
@@ -786,8 +795,7 @@ public:
     uint pos = 0;
     foreach (immutable uint lidx; 0..lcount) {
       locache[lidx].ofs = pos;
-      int eolpos = gb.fastFindCharIn(pos, ts-pos, '\n')+1;
-      if (eolpos <= 0 || eolpos > ts) eolpos = ts;
+      int eolpos = gb.fastSkipEol(pos);
       locache[lidx].len = eolpos-pos;
       pos = eolpos;
     }
@@ -829,20 +837,24 @@ public:
       int newlines = GapBuffer.countEols(str);
       auto lidx = findLineCacheIndex(pos);
       immutable int ldelta = ppos-pos;
-      //{ import core.stdc.stdio; printf("inserted %u chars at position %u; endpos is %u, %u newlines found, lidx is %u, linecount is %u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
+      //{ import core.stdc.stdio; printf("count=%u; pos=%u; ppos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
       assert(lidx >= 0);
       if (newlines == 0) {
         // no lines was inserted, just repair the length
         locache[lidx].len += ldelta;
       } else {
         import core.stdc.string : memmove;
+        // we will start repairing from the last good line
+        pos = locache[lidx].ofs;
+        if (pos == 0) assert(lidx == 0); else assert(gb[pos-1] == '\n');
         // inserted some new lines, make room for 'em
         growLineCache(mLineCount+newlines);
-        if (lidx < mLineCount-1) memmove(locache+lidx+newlines, locache+lidx, (mLineCount-lidx)*locache[0].sizeof);
-        locache[lidx..lidx+newlines+1] = LOCItem.init;
+        if (lidx < mLineCount) memmove(locache+lidx+newlines, locache+lidx, (mLineCount-lidx)*locache[0].sizeof);
+        // no need to clear inserted lines, we'll overwrite em
         // recalc offsets and lengthes
+        validofsc = validlenc = (mLineCount += newlines);
         while (newlines-- >= 0) {
-          int lend = gb.fastFindChar(pos, '\n');
+          int lend = gb.fastSkipEol(pos);
           locache[lidx].ofs = pos;
           locache[lidx++].len = lend-pos;
           pos = lend;
@@ -850,8 +862,9 @@ public:
         --lidx; // have to
       }
       // repair line cache (offsets) -- for now; switch to "repair on demand" later?
-      //if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs += ldelta;
-      finishLoading();
+      if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs += ldelta;
+      //{ import core.stdc.stdio; printf("  mLineCount=%u\n", mLineCount); }
+      //finishLoading();
     }
     return ppos;
   }
