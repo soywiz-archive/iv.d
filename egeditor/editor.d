@@ -3511,15 +3511,19 @@ public:
     if (mReadOnly) return;
     if (str.length == 0) return;
 
+    if (!mSingleLine && utfuck && inPasteMode > 0) {
+      insertText!"end"(curpos, str);
+      return;
+    }
+
     bool ugstarted = false;
     void startug () { if (!ugstarted) { ugstarted = true; undoGroupStart(); } }
     scope(exit) if (ugstarted) undoGroupEnd();
 
     Utf8DecoderFast udc;
     foreach (immutable char ch; str) {
-      if (udc.decode(cast(ubyte)ch)) {
-        dchar dch = (udc.complete ? udc.codepoint : udc.replacement);
-        if (!udc.isValidDC(dch)) dch = udc.replacement;
+      if (udc.decodeSafe(cast(ubyte)ch)) {
+        dchar dch = cast(dchar)udc.codepoint;
         if (!mSingleLine && dch == '\n') { startug(); doLineSplit(inPasteMode <= 0); continue; }
         startug();
         doPutChar(recodeU2B(dch));
@@ -3531,6 +3535,11 @@ public:
   void doPutText (const(char)[] str) {
     if (mReadOnly) return;
     if (str.length == 0) return;
+
+    if (!mSingleLine && !utfuck && codepage == CodePage.koi8u && inPasteMode > 0) {
+      insertText!"end"(curpos, str);
+      return;
+    }
 
     bool ugstarted = false;
     void startug () { if (!ugstarted) { ugstarted = true; undoGroupStart(); } }
