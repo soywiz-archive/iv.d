@@ -465,7 +465,7 @@ public:
     immutable vt = visualtabs;
     immutable tabsz = lc.tabsize;
     auto win = XtWindow(winx, winy, winw, winh);
-    auto pos = lc.line2pos(lidx);
+    auto pos = lc.linestart(lidx);
     int x = -xskip;
     int y = yofs;
     auto ts = gb.textsize;
@@ -482,7 +482,8 @@ public:
     // if we have no highlighter, check for trailing spaces explicitly
     bool hasHL = (hl !is null); // do we have highlighter (just a cache)
     // look for trailing spaces even if we have a highlighter
-    int trspos = lc.line2pos(lidx+1); // this is where trailing spaces starts (will)
+    int trspos = lc.lineend(lidx); // this is where trailing spaces starts (will)
+    immutable lend = trspos;
     if (!singleline) while (trspos > pos && gb[trspos-1] <= ' ') --trspos;
     bool utfucked = utfuck;
     int bs = bstart, be = bend;
@@ -492,7 +493,7 @@ public:
                          (clrText ? clrText : TextColor)) :
                        TextColor);
     auto blkClr = (singleline ? (clrBlock ? clrBlock : BlockColor) : BlockColor);
-    while (pos < ts) {
+    while (pos <= lend) {
       inBlock = (bs < be && pos >= bs && pos < be);
       auto ch = gb[pos++];
       if (ch == '\n') {
@@ -562,7 +563,7 @@ public:
     }
     if (x >= winw) return;
     if (x < 0) x = 0;
-    if (pos >= ts) {
+    if (pos >= lend) {
       win.color = TextColor;
       if (!killTextOnChar && !singleline) {
         if (bookmarked) win.color = BookmarkColor; else win.color = sltextClr;
@@ -620,7 +621,7 @@ public:
   final int lineFindFirstNonSpace (int pos) {
     auto ts = textsize;
     if (ts == 0) return 0; // wow, rare case
-    pos = lc.line2pos(lc.pos2line(pos));
+    pos = lc.linestart(lc.pos2line(pos));
     while (pos < ts) {
       auto ch = gb[pos];
       if (ch == '\n') break;
