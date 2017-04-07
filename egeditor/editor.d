@@ -17,6 +17,7 @@
 module iv.egeditor.editor;
 
 //version = egeditor_scan_time;
+version = egeditor_line_cache_checks;
 
 import iv.rawtty : koi2uni, uni2koi;
 import iv.strex;
@@ -235,12 +236,11 @@ public:
   @property dchar uniAt (uint pos) const @trusted nothrow @nogc {
     immutable ts = tbused;
     if (pos >= ts) return '\n';
-    //if (!utfuck) return cast(dchar)tbuf[pos2real(pos)];
     Utf8DecoderFast udc;
     while (pos < ts) {
-      if (udc.decode(cast(ubyte)tbuf[pos2real(pos++)])) return (udc.invalid ? cast(dchar)uint.max : udc.codepoint);
+      if (udc.decodeSafe(cast(ubyte)tbuf[pos2real(pos++)])) return udc.codepoint;
     }
-    return cast(dchar)uint.max;
+    return udc.codepoint;
   }
 
   /// return utf-8 character length at buffer position pos or -1 on error (or 1 on error if "always positive")
@@ -250,7 +250,6 @@ public:
     if (pos < 0 || pos >= ts) {
       static if (alwaysPositive) return 1; else return -1;
     }
-    //if (!utfuck) return 1;
     char ch = tbuf[pos2real(pos)];
     if (ch < 128) return 1;
     Utf8DecoderFast udc;
@@ -593,7 +592,7 @@ self-healing for non-wrapping mode:
   offsets can be invalidated, and if we have more than, say, 30000-40000
   lines down the cache, we can invalidate the whole cache (but i'm not
   sure that it is really better than just doing memmove()). prolly just
-  invalidate the whole cache if we have move than 3-5 megabytes to move?
+  invalidate the whole cache if we have more than 3-5 megabytes to move?
 
 self-healing for wrapping mode:
   almost the same as for non-wrapping, but we will rewrap the line. eol
@@ -668,7 +667,8 @@ private:
     int le = ls+locache[lidx].len;
     textMeter.reset(0); // nobody cares about tab widths here
     scope(exit) textMeter.finish();
-    int maxh = 1;
+    int maxh = textMeter.currheight;
+    if (maxh < 1) maxh = 1;
     auto tbufcopy = gb.tbuf;
     auto hbufcopy = gb.hbuf;
     if (utfuck) {
@@ -676,8 +676,8 @@ private:
       GapBuffer.HighState hs = (hbufcopy !is null ? hbufcopy[gb.pos2real(ls)] : GapBuffer.HighState.init);
       while (ls < le) {
         char ch = tbufcopy[gb.pos2real(ls++)];
-        if (udc.decode(cast(ubyte)ch)) {
-          dchar dch = (udc.invalid ? udc.replacement : udc.codepoint);
+        if (udc.decodeSafe(cast(ubyte)ch)) {
+          immutable dchar dch = udc.codepoint;
           if (hbufcopy !is null) textMeter.advance(dch, hs); else textMeter.advance(dch);
         }
         if (textMeter.currheight > maxh) maxh = textMeter.currheight;
@@ -692,6 +692,7 @@ private:
         if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     }
+    //{ import core.stdc.stdio; printf("line #%d height is %d\n", lidx, maxh); }
     return maxh;
   }
 
@@ -717,6 +718,22 @@ private:
   }
 
   void updateCache (int lidx) nothrow {
+  }
+
+  // debug check
+  void checkLineCache () nothrow {
+    int lcount = gb.countEolsInRange(0, gb.textsize)+1; // total number of lines
+    assert(mLineCount == lcount);
+    assert(validlenc == lcount);
+    assert(validofsc == lcount);
+    assert(locsize >= lcount);
+    uint pos = 0;
+    foreach (immutable uint lidx; 0..lcount) {
+      assert(locache[lidx].ofs == pos);
+      immutable int eolpos = gb.fastSkipEol(pos);
+      assert(locache[lidx].len == eolpos-pos);
+      pos = eolpos;
+    }
   }
 
 public:
@@ -795,7 +812,7 @@ public:
     uint pos = 0;
     foreach (immutable uint lidx; 0..lcount) {
       locache[lidx].ofs = pos;
-      int eolpos = gb.fastSkipEol(pos);
+      immutable int eolpos = gb.fastSkipEol(pos);
       locache[lidx].len = eolpos-pos;
       pos = eolpos;
     }
@@ -831,6 +848,7 @@ public:
       assert(validlenc == 1);
       assert(locache[0].ofs == 0);
       locache[0].len = gb.textsize;
+      locache[0].resetHeight();
     } else {
       assert(validofsc == mLineCount); // for now
       assert(ppos > pos);
@@ -842,6 +860,7 @@ public:
       if (newlines == 0) {
         // no lines was inserted, just repair the length
         locache[lidx].len += ldelta;
+        locache[lidx].resetHeight();
       } else {
         import core.stdc.string : memmove;
         // we will start repairing from the last good line
@@ -854,9 +873,10 @@ public:
         // recalc offsets and lengthes
         validofsc = validlenc = (mLineCount += newlines);
         while (newlines-- >= 0) {
-          int lend = gb.fastSkipEol(pos);
+          immutable int lend = gb.fastSkipEol(pos);
           locache[lidx].ofs = pos;
-          locache[lidx++].len = lend-pos;
+          locache[lidx].len = lend-pos;
+          locache[lidx++].resetHeight();
           pos = lend;
         }
         --lidx; // have to
@@ -864,7 +884,7 @@ public:
       // repair line cache (offsets) -- for now; switch to "repair on demand" later?
       if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs += ldelta;
       //{ import core.stdc.stdio; printf("  mLineCount=%u\n", mLineCount); }
-      //finishLoading();
+      version(egeditor_line_cache_checks) checkLineCache();
     }
     return ppos;
   }
@@ -881,6 +901,7 @@ public:
       assert(validlenc == 1);
       assert(locache[0].ofs == 0);
       locache[0].len = gb.textsize;
+      locache[0].resetHeight();
     } else {
       // hard
       import core.stdc.string : memmove;
@@ -894,8 +915,27 @@ public:
       int newlines = gb.countEolsInRange(pos, count);
       if (!gb.remove(pos, count)) return false;
       // repair line cache
-      // FIXME
-      finishLoading();
+      if (newlines == 0) {
+        assert((lidx < mLineCount-1 && locache[lidx].len > count) || (lidx == mLineCount-1 && locache[lidx].len >= count));
+        locache[lidx].len -= count;
+        locache[lidx].resetHeight();
+      } else {
+        import core.stdc.string : memmove;
+        // we will start repairing from the last good line
+        pos = locache[lidx].ofs;
+        if (pos == 0) assert(lidx == 0); else assert(gb[pos-1] == '\n');
+        { import core.stdc.stdio; printf("count=%u; pos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", count, pos, newlines, lidx, mLineCount); }
+        // remove unused lines
+        if (lidx < mLineCount) memmove(locache+lidx, locache+lidx+newlines, (mLineCount-lidx)*locache[0].sizeof);
+        validofsc = validlenc = (mLineCount -= newlines);
+        // fix current line
+        immutable int lend = gb.fastSkipEol(pos);
+        locache[lidx].ofs = pos;
+        locache[lidx].len = lend-pos;
+        locache[lidx].resetHeight();
+      }
+      if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs -= count;
+      version(egeditor_line_cache_checks) checkLineCache();
     }
     return true;
   }
@@ -909,7 +949,7 @@ public:
       textMeter.finish();
     } else {
       updateCache(lidx);
-      if (forceRecalc || locache[lidx].height == 0) locache[lidx].height = calcLineHeight(lidx);
+      if (forceRecalc || !locache[lidx].validHeight) locache[lidx].height = calcLineHeight(lidx);
       h = locache[lidx].height;
     }
     return h;
@@ -2139,10 +2179,7 @@ public:
       }
       Utf8DecoderFast udc;
       while (pos < ts) {
-        if (udc.decode(cast(ubyte)gb[pos++])) {
-          immutable dchar dch = udc.codepoint;
-          return (udc.invalid ? udc.replacement : dch);
-        }
+        if (udc.decodeSafe(cast(ubyte)gb[pos++])) return cast(dchar)udc.codepoint;
       }
       return udc.replacement;
     }
@@ -2161,16 +2198,10 @@ public:
         }
         assert(0);
       }
-      immutable ep = pos+1;
       Utf8DecoderFast udc;
       while (pos < ts) {
-        if (udc.decode(cast(ubyte)gb[pos++])) {
-          immutable dchar dch = udc.codepoint;
-          if (udc.invalid) { pos = ep; return udc.replacement; }
-          return dch;
-        }
+        if (udc.decodeSafe(cast(ubyte)gb[pos++])) return cast(dchar)udc.codepoint;
       }
-      pos = ep;
       return udc.replacement;
     }
 
@@ -2180,12 +2211,9 @@ public:
       immutable ts = gb.textsize;
       if (pos >= ts) return ts;
       if (!lc.utfuck) return pos+1;
-      immutable ep = pos+1;
       Utf8DecoderFast udc;
-      while (pos < ts) {
-        if (udc.decode(cast(ubyte)gb[pos++])) return (udc.invalid ? ep : pos);
-      }
-      return ep;
+      while (pos < ts) if (udc.decodeSafe(cast(ubyte)gb[pos++])) break;
+      return pos;
     }
 
     /// this sometimes works correctly with utfuck
