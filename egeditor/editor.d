@@ -855,7 +855,7 @@ public:
       int newlines = GapBuffer.countEols(str);
       auto lidx = findLineCacheIndex(pos);
       immutable int ldelta = ppos-pos;
-      { import core.stdc.stdio; printf("count=%u; pos=%u; ppos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
+      //{ import core.stdc.stdio; printf("count=%u; pos=%u; ppos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
       assert((!atend && lidx >= 0) || (atend && (lidx < 0 || lidx == mLineCount-1)));
       if (atend) lidx = mLineCount-1;
       if (newlines == 0) {
