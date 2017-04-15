@@ -878,7 +878,7 @@ private:
     ++lidx; // to kill: [lidx..lbot)
     immutable int tokill = lbot-lidx;
     if (tokill > 0) {
-      version(none) { import core.stdc.stdio; printf(" xx: lidx=%d; ltop=%d; lbot=%d, linecount=%d; tokill=%d\n", lidx, ltop, lbot, mLineCount, tokill); }
+      version(all) { import core.stdc.stdio; printf(" xx: lidx=%d; ltop=%d; lbot=%d, linecount=%d; tokill=%d\n", lidx, ltop, lbot, mLineCount, tokill); }
       if (lbot < mLineCount) memmove(locache+lidx, locache+lbot, (mLineCount-lbot)*locache[0].sizeof);
       lbot -= tokill;
       mLineCount -= tokill;
@@ -1018,16 +1018,8 @@ public:
       if (newlines == 0) {
         // no lines was inserted, just repair the length
         // no need to collapse wrapped line here, 'cause `doWordWrapping()` will rewrap it anyway
-        version(all) if (mLineCount > 4) {
-          import core.stdc.stdio;
-          foreach (immutable c; 0..5) printf("00: #%d: viswrap=%d\n", c, (locache[c].viswrap ? 1 : 0));
-        }
         locache[lidx].len += ldelta;
         locache[lidx].resetHeight();
-        version(all) if (mLineCount > 4) {
-          import core.stdc.stdio;
-          foreach (immutable c; 0..5) printf("01: #%d: viswrap=%d\n", c, (locache[c].viswrap ? 1 : 0));
-        }
       } else {
         import core.stdc.string : memmove;
         //FIXME: make this faster for wrapped lines
@@ -1086,7 +1078,7 @@ public:
       // repair line cache
       if (newlines == 0) {
         // no need to collapse wrapped line here, 'cause `doWordWrapping()` will rewrap it anyway
-        assert((lidx < mLineCount-1 && locache[lidx].len > count) || (lidx == mLineCount-1 && locache[lidx].len >= count));
+        //assert((lidx < mLineCount-1 && locache[lidx].len > count) || (lidx == mLineCount-1 && locache[lidx].len >= count));
         locache[lidx].len -= count;
         locache[lidx].resetHeight();
       } else {
