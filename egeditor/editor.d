@@ -33,21 +33,17 @@ version(egeditor_scan_time) import iv.pxclock;
 // ////////////////////////////////////////////////////////////////////////// //
 /// this interface is used to measure text for pixel-sized editor
 abstract class EgTextMeter {
-  int currofs; /// current x offset; keep this in sync with the current state
+  int currwdt; /// current line width, without trailing empty space between chars
   int currheight; /// current text height; keep this in sync with the current state; `reset` should set it to "default text height"
 
-  /// this should reset text width iterator (and curr* fields); tabsize > 0: process tabs as... well... tabs ;-)
+  /// this should reset text width iterator (and curr* fields); tabsize > 0: process tabs as... well... tabs ;-); tabsize < 0: calculating height
   abstract void reset (int tabsize) nothrow;
 
-  /// advance text width iterator, return x position for drawing char `ch`
-  /// WARNING: *NOT* *AFTER* `ch`, but the position to draw `ch` itself!
-  abstract int advance (dchar ch) nothrow;
+  /// advance text width iterator, fix `currwdt` (line width with `ch` included)
+  abstract void advance (dchar ch) nothrow;
 
   /// advance text width iterator, return x position for drawing next char; override this if text size depends of attrs
-  int advance (dchar ch, in ref GapBuffer.HighState hs) nothrow { return advance(ch); }
-
-  /// return current string width, including last char passed to `advance()`, preferably without spacing after last char
-  abstract int currWidth () nothrow;
+  void advance (dchar ch, in ref GapBuffer.HighState hs) nothrow { advance(ch); }
 
   /// finish text iterator; it should NOT reset curr* fields!
   /// WARNING: EditorEngine tries to call this after each `reset()`, but user code may not
@@ -703,7 +699,8 @@ private:
   int calcLineHeight (int lidx) nothrow {
     int ls = locache[lidx].ofs;
     int le = ls+locache[lidx].len;
-    textMeter.reset(0); // nobody cares about tab widths here
+    if (locache[lidx].viswrap) ++le;
+    textMeter.reset(-1); // nobody cares about tab widths here
     scope(exit) textMeter.finish();
     int maxh = textMeter.currheight;
     if (maxh < 1) maxh = 1;
@@ -753,9 +750,6 @@ private:
       return i;
     }
     return -1;
-  }
-
-  void updateCache (int lidx) nothrow {
   }
 
   // debug check
@@ -812,11 +806,11 @@ private:
       return false;
     }
 
-    if (mWordWrapWidth <= 0) return mLineCount;
+    immutable int www = mWordWrapWidth;
+    if (www <= 0) return mLineCount;
     if (lidx < 0) lidx = 0;
     if (lidx >= mLineCount) return mLineCount;
     // find first and last line, if it was already wrapped
-    //updateCache(lidx);
     // find first (top) line
     int ltop = lidx;
     while (ltop > 0) {
@@ -827,8 +821,6 @@ private:
     // find last (bottom) line; lbot will be "bottom line index+1"
     int lbot = lidx;
     while (lbot < mLineCount) {
-      //updateCache(lbot); // just in case
-      //assert(locache[lbot].ofs < gb.textsize);
       if (locache[lbot].len > 0) {
         if (gb[locache[lbot].ofs+locache[lbot].len-1] == '\n') { ++lbot; break; } // out-of-bounds access will return '\n'
       }
@@ -843,21 +835,19 @@ private:
     int cwdt = 0;
     int lastWordStartPos = 0;
     locache[lidx].len = 0;
+    immutable bool utfuckmode = utfuck;
+    auto tm = textMeter;
     while (gb[cpos] != '\n') {
       // go until cwdt allows us; but we have to have at least one char
       int nwdt; // "new" width with the current char
       int lpos = cpos; // "last position"
-      dchar dch;
-      if (utfuck) {
-        dch = gb.uniAtAndAdvance(cpos);
-      } else {
-        dch = (recode1byte is null ? cast(dchar)gb[cpos++] : recode1byte(gb[cpos++]));
-      }
-      if (textMeter !is null) {
-        if (gb.hasHiBuffer) textMeter.advance(dch, gb.hi(lpos)); else textMeter.advance(dch);
-        nwdt = textMeter.currWidth;
-      } else {
+      if (tm is null) {
         nwdt = cwdt+1;
+        if (utfuckmode) cpos += gb.utfuckLenAt!true(cpos); else ++cpos;
+      } else {
+        dchar dch = (utfuckmode ? gb.uniAtAndAdvance(cpos) : recode1byte is null ? cast(dchar)gb[cpos++] : recode1byte(gb[cpos++]));
+        if (gb.hasHiBuffer) textMeter.advance(dch, gb.hi(lpos)); else textMeter.advance(dch);
+        nwdt = textMeter.currwdt;
       }
       //TODO: *word* wrapping!
       //{ import core.stdc.stdio; printf(" lidx=%d; lineofs=%d; linelen=%d; cwdt=%d; nwdt=%d; maxwdt=%d; lpos=%d; cpos=%d\n", lidx, locache[lidx].ofs, locache[lidx].len, cwdt, nwdt, mWordWrapWidth, lpos, cpos); }
@@ -911,6 +901,7 @@ private:
     assert(lidx+1 == lbot);
     assert(mLineCount > 0);
     assert(locache[mLineCount-1].ofs+locache[mLineCount-1].len == gb.textsize);
+    validofsc = validlenc = mLineCount; //FIXME
     return lbot;
   }
 
@@ -1005,7 +996,9 @@ public:
     if (mWordWrapWidth > 0) {
       int lidx = 0;
       while (lidx < mLineCount) lidx = doWordWrapping(lidx);
-      validofsc = validlenc = mLineCount;
+      //validofsc = validlenc = mLineCount;
+      assert(validofsc == validlenc);
+      assert(validofsc == mLineCount);
     }
     return true;
   }
@@ -1041,6 +1034,7 @@ public:
       //{ import core.stdc.stdio; printf("count=%u; pos=%u; ppos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
       assert((!atend && lidx >= 0) || (atend && (lidx < 0 || lidx == mLineCount-1)));
       if (atend) lidx = mLineCount-1;
+      immutable int wraplidx = lidx;
       if (newlines == 0) {
         // no lines was inserted, just repair the length
         locache[lidx].len += ldelta;
@@ -1069,6 +1063,7 @@ public:
       if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs += ldelta;
       //{ import core.stdc.stdio; printf("  mLineCount=%u\n", mLineCount); }
       version(egeditor_line_cache_checks) checkLineCache();
+      if (mWordWrapWidth > 0) doWordWrapping(wraplidx);
     }
     return ppos;
   }
@@ -1096,6 +1091,7 @@ public:
       if (gb.textsize-pos < count) return false; // not enough text here
       auto lidx = findLineCacheIndex(pos);
       assert(lidx >= 0);
+      immutable int wraplidx = lidx;
       int newlines = gb.countEolsInRange(pos, count);
       if (!gb.remove(pos, count)) return false;
       // repair line cache
@@ -1120,6 +1116,7 @@ public:
       }
       if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs -= count;
       version(egeditor_line_cache_checks) checkLineCache();
+      if (mWordWrapWidth > 0) doWordWrapping(wraplidx);
     }
     return true;
   }
@@ -1132,7 +1129,6 @@ public:
       h = (textMeter.currheight > 0 ? textMeter.currheight : 1);
       textMeter.finish();
     } else {
-      updateCache(lidx);
       if (forceRecalc || !locache[lidx].validHeight) locache[lidx].height = calcLineHeight(lidx);
       h = locache[lidx].height;
     }
@@ -1163,21 +1159,7 @@ public:
     if (pos >= ts) return mLineCount-1; // end of text: no need to update line offset cache
     if (mLineCount == 1) return 0;
     int lcidx = findLineCacheIndex(pos);
-    if (lcidx < 0) {
-      // line cache is unusable, update it
-      assert(0);
-      /*
-      updateCache(0);
-      while (locused < mLineCount && locache[locused-1].ofs <= pos) updateCache(locused);
-      lcidx = findLineCacheIndex(pos);
-      if (lcidx < 0) {
-        //{ import core.stdc.stdio; auto fo = fopen("z00.log", "a"); scope(exit) fclose(fo); fo.fprintf("pos=%u; tbused=%u; locused=%u; mLineCount=%u; $-2=%u; $-1=%u\n", pos, tbused, locused, mLineCount, locache[locused-2].ofs, locache[locused-1].ofs); }
-        assert(0, "internal line cache error");
-      }
-      if (lcidx < 0) assert(0, "internal line cache error");
-      */
-    }
-    //!assert(lcidx >= 0 && lcidx < mLineCount);
+    assert(lcidx >= 0 && lcidx < mLineCount);
     return lcidx;
   }
 
@@ -1190,7 +1172,6 @@ public:
       assert(lidx == 0);
       return 0;
     }
-    updateCache(lidx);
     return locache[lidx].ofs;
   }
 
@@ -1206,7 +1187,6 @@ public:
       return gb.textsize;
     }
     if (lidx == mLineCount-1) return gb.textsize;
-    updateCache(lidx);
     auto res = locache[lidx].ofs+locache[lidx].len;
     assert(res > 0);
     return res-1;
@@ -1317,7 +1297,6 @@ public:
       assert(y == 0);
       return (!utfuck ? (x < ts ? x : ts) : utfuck_x2pos(x, 0));
     }
-    updateCache(y);
     uint ls = locache[y].ofs;
     uint le = ls+locache[y].len;
     if (ls == le) {
@@ -1358,20 +1337,7 @@ public:
       return;
     }
     int lcidx = findLineCacheIndex(pos);
-    if (lcidx < 0) {
-      // line cache is unusable, update it
-      /*
-      updateCache(0);
-      while (locused < mLineCount && locache[locused-1].ofs <= pos) updateCache(locused);
-      lcidx = findLineCacheIndex(pos);
-      if (lcidx < 0) {
-        //{ import core.stdc.stdio; auto fo = fopen("z00.log", "a"); scope(exit) fclose(fo); fo.fprintf("pos=%u; tbused=%u; locused=%u; mLineCount=%u\n", pos, tbused, locused, mLineCount); }
-        assert(0, "internal line cache error");
-      }
-      */
-      assert(0);
-    }
-    //!assert(lcidx >= 0 && lcidx < mLineCount);
+    assert(lcidx >= 0 && lcidx < mLineCount);
     immutable ls = locache[lcidx].ofs;
     //auto le = lineofsc[lcidx+1];
     //!assert(pos >= ls && pos < le);
@@ -1424,17 +1390,7 @@ public:
       return;
     }
     int lcidx = findLineCacheIndex(pos);
-    if (lcidx < 0) {
-      // line cache is unusable, update it
-      assert(0);
-      /*
-      updateCache(0);
-      while (locused < mLineCount && locache[locused-1].ofs < pos) updateCache(locused);
-      lcidx = findLineCacheIndex(pos);
-      if (lcidx < 0) assert(0, "internal line cache error");
-      */
-    }
-    //!assert(lcidx >= 0 && lcidx < mLineCount);
+    assert(lcidx >= 0 && lcidx < mLineCount);
     auto ls = locache[lcidx].ofs;
     //auto le = lineofsc[lcidx+1];
     //!assert(pos >= ls && pos < le);
@@ -2826,7 +2782,7 @@ public:
           if (rx == 0) break;
         }
       }
-      rx = textMeter.currWidth()-mXOfs;
+      rx = textMeter.currwdt-mXOfs;
     }
     return rx;
   }
@@ -2889,7 +2845,7 @@ public:
           if (rx == 0) break;
         }
       }
-      lcx = textMeter.currWidth()-mXOfs;
+      lcx = textMeter.currwdt-mXOfs;
     }
   }
 
@@ -2901,7 +2857,7 @@ public:
       if (ry < 0) { ty = -1; return; } // tx is zero here
       if (ry >= lc.linecount) { ty = lc.linecount; return; } // tx is zero here
       if (mx <= 0 && mXOfs == 0) return; // tx is zero here
-      // ah, screw it! user should not call this very often, so i can stop care about speed.
+      // ah, screw it! user should not call this very often, so i can stop caring about speed.
       int visx = -mXOfs;
       auto pos = lc.line2pos(ry);
       auto ts = gb.textsize;
@@ -2960,35 +2916,34 @@ public:
       // now the hard part
       textMeter.reset(visualtabs ? lc.tabsize : 0);
       scope(exit) textMeter.finish(); // just in case
-      int visx = -mXOfs, prevx;
+      int visx0 = -mXOfs;
       auto pos = lc.line2pos(ry);
-      auto ts = gb.textsize;
+      immutable ts = gb.textsize;
       int rx = 0;
       immutable bool ufuck = lc.utfuck;
       immutable bool sl = mSingleLine;
-      GapBuffer.HighState* hs;
       while (pos < ts) {
         // advance one symbol
         char ch = gb[pos];
         if (!sl && ch == '\n') { tx = rx; return; } // done anyway
-        hs = &gb.hi(pos);
-        prevx = visx;
         if (!ufuck || ch < 128) {
-          visx = textMeter.advance(cast(dchar)ch, *hs)-mXOfs;
+          textMeter.advance(cast(dchar)ch, gb.hi(pos));
           ++pos;
         } else {
-          visx = textMeter.advance(dcharAtAdvance(pos), *hs)-mXOfs;
+          textMeter.advance(dcharAtAdvance(pos), gb.hi(pos));
         }
-        // prevx is previous char x start
-        // visx is current char x start
-        // so if our mx is in [prevx..visx), we are at previous char
-        if (mx >= prevx && mx < visx) {
+        immutable int visx1 = textMeter.currwdt-mXOfs;
+        // visx0 is current char x start
+        // visx1 is current char x end
+        // so if our mx is in [visx0..visx1), we are at current char
+        if (mx >= visx0 && mx < visx1) {
           // it is more natural this way
-          if (rx > 0 && mx < prevx+(visx-prevx)/2) --rx;
+          if (mx >= visx0+(visx1-visx0)/2 && pos < lc.linestart(ry+1)) ++rx;
           tx = rx;
           return;
         }
         ++rx;
+        visx0 = visx1;
       }
     }
   }
