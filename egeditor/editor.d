@@ -657,8 +657,6 @@ private:
   GapBuffer gb;
   LOCItem* locache;  // line info cache
   uint locsize; // number of allocated items in locache
-  uint validofsc; // number of entries with valid offsets
-  uint validlenc; // number of entries with valid lengthes; cannot be less than `validofsc`
   uint mLineCount; // total number of lines
   EgTextMeter textMeter; // null: monospaced font
   int mLineHeight = 1; // line height, in pixels/cells; <0: variable; 0: invalid state
@@ -681,7 +679,6 @@ private:
     if (locache is null) assert(0, "out of memory for line cache");
     locache[0..ICS] = LOCItem.init;
     locsize = ICS;
-    validofsc = validlenc = 1;
     locache[0].len = 0;
     mLineCount = 1; // we always have at least one line, even if it is empty
   }
@@ -733,12 +730,12 @@ private:
 
   // -1: not found
   int findLineCacheIndex (uint pos) const nothrow @nogc {
-    if (validofsc == 0) return -1;
-    if (pos >= gb.tbused) return (validofsc != mLineCount ? -1 : mLineCount-1);
-    if (validofsc == 1) return (pos < locache[0].len ? 0 : -1);
-    if (pos < locache[validofsc-1].ofs+locache[validofsc-1].len) {
+    if (mLineCount == 0) return -1;
+    if (pos >= gb.tbused) return mLineCount-1;
+    if (mLineCount == 1) return (pos < locache[0].len ? 0 : -1);
+    if (pos < locache[mLineCount-1].ofs+locache[mLineCount-1].len) {
       // yay! use binary search to find the line
-      int bot = 0, i = cast(int)validofsc-1;
+      int bot = 0, i = cast(int)mLineCount-1;
       while (bot != i) {
         int mid = i-(i-bot)/2;
         //!assert(mid >= 0 && mid < locused);
@@ -756,8 +753,6 @@ private:
   void checkLineCache () nothrow {
     int lcount = gb.countEolsInRange(0, gb.textsize)+1; // total number of lines
     assert(mLineCount == lcount);
-    assert(validlenc == lcount);
-    assert(validofsc == lcount);
     assert(locsize >= lcount);
     uint pos = 0;
     foreach (immutable uint lidx; 0..lcount) {
@@ -777,31 +772,14 @@ private:
     import core.stdc.string : memmove;
 
     bool isWordBoundaryAt (int pos) nothrow {
-      static bool isAlNum (char ch) pure nothrow @safe @nogc {
-        pragma(inline, true);
-        return
-          (ch >= '0' && ch <= '9') ||
-          (ch >= 'A' && ch <= 'Z') ||
-          (ch >= 'a' && ch <= 'z') ||
-          ch == '_'; // yeah, this is "letter" too
-      }
       if (pos <= 0 || pos >= gb.textsize) return true;
-      /+
-      char c0 = gb[pos];
-      if (c0 == '(') return true;
-      char cp = gb[pos-1];
+      char ch = gb[pos-1];
       // prev is blank?
-      if (cp == ' ' || c0 == '\t') return (c0 != ' ' && c0 != '\t'); // cur should be nonblank
-      // prev is ";"?
-      if (cp == ';') return true; // wrap word here (for D code, for example)
-      // prev is punct?
-      if (!isAlNum(cp)) return isAlNum(c0); // cur should be non-punct
-      return false;
-      +/
-      char c0 = gb[pos];
-      char cp = gb[pos-1];
-      // prev is blank?
-      if (cp == ' ' || c0 == '\t') return (c0 != ' ' && c0 != '\t'); // cur should be nonblank
+      if (ch == ' ' || ch == '\t') {
+        // cur should be nonblank
+        ch = gb[pos];
+        return (ch != ' ' && ch != '\t');
+      }
       // prev is non-blank
       return false;
     }
@@ -812,20 +790,14 @@ private:
     if (lidx >= mLineCount) return mLineCount;
     // find first and last line, if it was already wrapped
     // find first (top) line
+    bool curIsMiddle = locache[lidx].viswrap;
     int ltop = lidx;
-    while (ltop > 0) {
-      assert(locache[ltop].ofs > 0);
-      if (gb[locache[ltop].ofs-1] == '\n') break;
-      --ltop;
-    }
+    if (ltop > 0 && curIsMiddle) while (ltop > 0 && locache[ltop-1].viswrap) --ltop;
     // find last (bottom) line; lbot will be "bottom line index+1"
     int lbot = lidx;
-    while (lbot < mLineCount) {
-      if (locache[lbot].len > 0) {
-        if (gb[locache[lbot].ofs+locache[lbot].len-1] == '\n') { ++lbot; break; } // out-of-bounds access will return '\n'
-      }
-      ++lbot;
-    }
+    if (lbot < mLineCount && curIsMiddle) while (lbot+1 < mLineCount && locache[lbot+1].viswrap) ++lbot;
+    if (++lbot > mLineCount) lbot = mLineCount; // just in case
+    // now the hard part
     if (textMeter) textMeter.reset(visualtabs ? tabsize : 0);
     scope(exit) textMeter.finish();
     //{ import core.stdc.stdio; printf("lidx=%d; ltop=%d; lbot=%d, linecount=%d\n", lidx, ltop, lbot, mLineCount); }
@@ -846,7 +818,7 @@ private:
         if (utfuckmode) cpos += gb.utfuckLenAt!true(cpos); else ++cpos;
       } else {
         dchar dch = (utfuckmode ? gb.uniAtAndAdvance(cpos) : recode1byte is null ? cast(dchar)gb[cpos++] : recode1byte(gb[cpos++]));
-        if (gb.hasHiBuffer) textMeter.advance(dch, gb.hi(lpos)); else textMeter.advance(dch);
+        textMeter.advance(dch, gb.hi(lpos));
         nwdt = textMeter.currwdt;
       }
       //TODO: *word* wrapping!
@@ -865,6 +837,7 @@ private:
             lastWordStartPos = 0;
             lpos = locache[lidx].ofs+locache[lidx].len;
           }
+          locache[lidx].viswrap = true;
           ++lidx;
           if (lidx == lbot) {
             // insert new cache record
@@ -888,6 +861,7 @@ private:
     }
     // last '\n' is not registered, so do it now
     if (locache[lidx].ofs+locache[lidx].len < gb.textsize) ++locache[lidx].len;
+    locache[lidx].viswrap = false; // last line
     // remove unused cache items
     //{ import core.stdc.stdio; printf(" 00: lidx=%d; ltop=%d; lbot=%d, linecount=%d\n", lidx, ltop, lbot, mLineCount); }
     assert(lidx < lbot);
@@ -901,7 +875,6 @@ private:
     assert(lidx+1 == lbot);
     assert(mLineCount > 0);
     assert(locache[mLineCount-1].ofs+locache[mLineCount-1].len == gb.textsize);
-    validofsc = validlenc = mLineCount; //FIXME
     return lbot;
   }
 
@@ -966,7 +939,7 @@ public:
       // easy
       growLineCache(1);
       assert(locsize > 0);
-      mLineCount = validofsc = validlenc = 1;
+      mLineCount = 1;
       locache[0] = LOCItem.init;
       locache[0].ofs = 0;
       locache[0].len = ts;
@@ -985,20 +958,11 @@ public:
       locache[lidx].len = eolpos-pos;
       pos = eolpos;
     }
-    mLineCount = validofsc = validlenc = lcount;
-    /*
-    foreach (immutable uint lidx; 0..validofsc) {
-      import iv.cmdcon;
-      conwriteln("line #", lidx, ": ofs=", locache[lidx].ofs, "; len=", locache[lidx].len);
-    }
-    */
+    mLineCount = lcount;
     version(egeditor_scan_time) { import core.stdc.stdio; auto et = clockMilli()-stt; printf("%u lines (%u bytes) scanned in %u milliseconds\n", mLineCount, gb.textsize, cast(uint)et); }
     if (mWordWrapWidth > 0) {
       int lidx = 0;
       while (lidx < mLineCount) lidx = doWordWrapping(lidx);
-      //validofsc = validlenc = mLineCount;
-      assert(validofsc == validlenc);
-      assert(validofsc == mLineCount);
     }
     return true;
   }
@@ -1020,13 +984,10 @@ public:
     if (gb.mSingleLine) {
       assert(mLineCount == 1);
       assert(locsize > 0);
-      assert(validofsc == 1);
-      assert(validlenc == 1);
       assert(locache[0].ofs == 0);
       locache[0].len = gb.textsize;
       locache[0].resetHeight();
     } else {
-      assert(validofsc == mLineCount); // for now
       assert(ppos > pos);
       int newlines = GapBuffer.countEols(str);
       auto lidx = findLineCacheIndex(pos);
@@ -1049,7 +1010,7 @@ public:
         if (lidx < mLineCount) memmove(locache+lidx+newlines, locache+lidx, (mLineCount-lidx)*locache[0].sizeof);
         // no need to clear inserted lines, we'll overwrite em
         // recalc offsets and lengthes
-        validofsc = validlenc = (mLineCount += newlines);
+        mLineCount += newlines;
         while (newlines-- >= 0) {
           immutable int lend = gb.fastSkipEol(pos);
           locache[lidx].ofs = pos;
@@ -1076,8 +1037,6 @@ public:
       if (!gb.remove(pos, count)) return false;
       assert(mLineCount == 1);
       assert(locsize > 0);
-      assert(validofsc == 1);
-      assert(validlenc == 1);
       assert(locache[0].ofs == 0);
       locache[0].len = gb.textsize;
       locache[0].resetHeight();
@@ -1107,7 +1066,7 @@ public:
         //{ import core.stdc.stdio; printf("count=%u; pos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", count, pos, newlines, lidx, mLineCount); }
         // remove unused lines
         if (lidx < mLineCount) memmove(locache+lidx, locache+lidx+newlines, (mLineCount-lidx)*locache[0].sizeof);
-        validofsc = validlenc = (mLineCount -= newlines);
+        mLineCount -= newlines;
         // fix current line
         immutable int lend = gb.fastSkipEol(pos);
         locache[lidx].ofs = pos;
