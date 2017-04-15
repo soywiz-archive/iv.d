@@ -33,13 +33,14 @@ version(egeditor_scan_time) import iv.pxclock;
 // ////////////////////////////////////////////////////////////////////////// //
 /// this interface is used to measure text for pixel-sized editor
 abstract class EgTextMeter {
-  int currwdt; /// current line width, without trailing empty space between chars
+  int currofs; /// x offset for current char (i.e. the last char that was passed to `advance()` should be drawn with this offset)
+  int currwdt; /// current line width (including, the last char that was passed to `advance()`), preferably without trailing empty space between chars
   int currheight; /// current text height; keep this in sync with the current state; `reset` should set it to "default text height"
 
   /// this should reset text width iterator (and curr* fields); tabsize > 0: process tabs as... well... tabs ;-); tabsize < 0: calculating height
   abstract void reset (int tabsize) nothrow;
 
-  /// advance text width iterator, fix `currwdt` (line width with `ch` included)
+  /// advance text width iterator, fix all curr* fields
   abstract void advance (dchar ch) nothrow;
 
   /// advance text width iterator, return x position for drawing next char; override this if text size depends of attrs
@@ -2728,114 +2729,67 @@ public:
 
   /// cursor position in "local" coords: from widget (x0,y0), possibly in pixels
   final int localCursorX () nothrow {
-    int rx, ry;
-    if (!inPixels) {
-      lc.pos2xyVT(curpos, rx, ry);
-      rx -= mXOfs;
-    } else {
-      lc.pos2xy(curpos, rx, ry);
-      if (rx == 0) return 0-mXOfs;
-      if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
-      textMeter.reset(visualtabs ? lc.tabsize : 0);
-      scope(exit) textMeter.finish(); // just in case
-      auto pos = lc.line2pos(ry);
-      auto ts = gb.textsize;
-      immutable bool ufuck = lc.utfuck;
-      GapBuffer.HighState* hs;
-      if (mSingleLine) {
-        while (pos < ts) {
-          // advance one symbol
-          char ch = gb[pos];
-          hs = &gb.hi(pos);
-          if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch, *hs);
-            ++pos;
-          } else {
-            textMeter.advance(dcharAtAdvance(pos), *hs);
-          }
-          --rx;
-          if (rx == 0) break;
-        }
-      } else {
-        while (pos < ts) {
-          // advance one symbol
-          char ch = gb[pos];
-          if (ch == '\n') break;
-          hs = &gb.hi(pos);
-          if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch, *hs);
-            ++pos;
-          } else {
-            textMeter.advance(dcharAtAdvance(pos), *hs);
-          }
-          --rx;
-          if (rx == 0) break;
-        }
-      }
-      rx = textMeter.currwdt-mXOfs;
-    }
+    int rx;
+    localCursorXY(&rx, null);
     return rx;
   }
 
   /// cursor position in "local" coords: from widget (x0,y0), possibly in pixels
-  final void localCursorXY (out int lcx, out int lcy) nothrow {
+  final void localCursorXY (int* lcx, int* lcy) nothrow {
     int rx, ry;
     if (!inPixels) {
       lc.pos2xyVT(curpos, rx, ry);
       ry -= mTopLine;
       rx -= mXOfs;
-      lcx = rx;
-      lcy = ry;
+      if (lcx !is null) *lcx = rx;
+      if (lcy !is null) *lcy = ry;
     } else {
       lc.pos2xy(curpos, rx, ry);
       if (textMeter is null) assert(0, "you forgot to setup `textMeter` for EditorEngine");
-      if (lineHeightPixels > 0) {
-        lcy = (ry-mTopLine)*lineHeightPixels;
-      } else {
-        if (ry >= mTopLine) {
-          for (int ll = mTopLine; ll < ry; ++ll) lcy += lc.lineHeightPixels(ll);
+      if (lcy !is null) {
+        if (lineHeightPixels > 0) {
+          *lcy = (ry-mTopLine)*lineHeightPixels;
         } else {
-          for (int ll = mTopLine-1; ll >= ry; --ll) lcy -= lc.lineHeightPixels(ll);
+          if (ry >= mTopLine) {
+            for (int ll = mTopLine; ll < ry; ++ll) *lcy += lc.lineHeightPixels(ll);
+          } else {
+            for (int ll = mTopLine-1; ll >= ry; --ll) *lcy -= lc.lineHeightPixels(ll);
+          }
         }
       }
-      if (rx == 0) { lcx = 0-mXOfs; return; }
-      textMeter.reset(visualtabs ? lc.tabsize : 0);
-      scope(exit) textMeter.finish(); // just in case
-      auto pos = lc.line2pos(ry);
-      auto ts = gb.textsize;
-      immutable bool ufuck = lc.utfuck;
-      GapBuffer.HighState* hs;
-      if (mSingleLine) {
-        while (pos < ts) {
-          // advance one symbol
-          char ch = gb[pos];
-          hs = &gb.hi(pos);
-          if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch, *hs);
-            ++pos;
-          } else {
-            textMeter.advance(dcharAtAdvance(pos), *hs);
+      if (rx == 0) { if (lcx !is null) *lcx = 0-mXOfs; return; }
+      if (lcx !is null) {
+        textMeter.reset(visualtabs ? lc.tabsize : 0);
+        scope(exit) textMeter.finish(); // just in case
+        auto pos = lc.linestart(ry);
+        immutable int le = lc.linestart(ry+1);
+        immutable bool ufuck = lc.utfuck;
+        if (mSingleLine) {
+          while (pos < le) {
+            // advance one symbol
+            textMeter.advance(dcharAtAdvance(pos), gb.hi(pos));
+            --rx;
+            if (rx == 0) break;
           }
-          --rx;
-          if (rx == 0) break;
-        }
-      } else {
-        while (pos < ts) {
-          // advance one symbol
-          char ch = gb[pos];
-          if (ch == '\n') break;
-          hs = &gb.hi(pos);
-          if (!ufuck || ch < 128) {
-            textMeter.advance(cast(dchar)ch, *hs);
-            ++pos;
-          } else {
-            textMeter.advance(dcharAtAdvance(pos), *hs);
+        } else {
+          while (pos < le) {
+            // advance one symbol
+            if (gb[pos] == '\n') break;
+            textMeter.advance(dcharAtAdvance(pos), gb.hi(pos));
+            --rx;
+            if (rx == 0) {
+              // hack for kerning
+              if (gb[pos] != '\n' && pos < le) {
+                textMeter.advance(dcharAtAdvance(pos), gb.hi(pos));
+                *lcx = textMeter.currofs;
+                return;
+              }
+              break;
+            }
           }
-          --rx;
-          if (rx == 0) break;
         }
+        *lcx = textMeter.currwdt-mXOfs;
       }
-      lcx = textMeter.currwdt-mXOfs;
     }
   }
 
