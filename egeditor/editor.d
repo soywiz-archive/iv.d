@@ -39,7 +39,8 @@ abstract class EgTextMeter {
   /// this should reset text width iterator (and curr* fields); tabsize > 0: process tabs as... well... tabs ;-)
   abstract void reset (int tabsize) nothrow;
 
-  /// advance text width iterator, return x position for drawing next char
+  /// advance text width iterator, return x position for drawing char `ch`
+  /// WARNING: *NOT* *AFTER* `ch`, but the position to draw `ch` itself!
   abstract int advance (dchar ch) nothrow;
 
   /// advance text width iterator, return x position for drawing next char; override this if text size depends of attrs
@@ -243,6 +244,17 @@ public:
     return udc.codepoint;
   }
 
+  @property dchar uniAtAndAdvance (ref int pos) const @trusted nothrow @nogc {
+    immutable ts = tbused;
+    if (pos < 0) pos = 0;
+    if (pos >= ts) return '\n';
+    Utf8DecoderFast udc;
+    while (pos < ts) {
+      if (udc.decodeSafe(cast(ubyte)tbuf[pos2real(pos++)])) return udc.codepoint;
+    }
+    return udc.codepoint;
+  }
+
   /// return utf-8 character length at buffer position pos or -1 on error (or 1 on error if "always positive")
   /// never returns zero
   int utfuckLenAt(bool alwaysPositive=true) (int pos) const @trusted nothrow @nogc {
@@ -321,6 +333,32 @@ public:
   /// returns success flag
   bool append (const(char)[] str...) @trusted nothrow @nogc { return (put(tbused, str) >= 0); }
 
+  /// put "nothing" into buffer (i.e. grow buffer, so you will be able to `memcpy()` into it); will either grow, or do nothing
+  /// returns pointer to where you can safely `memcpy()` your text of length `len`, or null
+  /+
+  char* putNada (int pos, int len) @trusted nothrow @nogc {
+    if (len <= 0) return null; // don't ask for nothing, or you will be punished!
+    if (pos < 0) pos = 0;
+    bool atend = (pos >= tbused);
+    if (atend) pos = tbused;
+    if (tbmax-(tbsize-tbused) < len) return null; // no room
+    if (!growTBuf(tbused+cast(uint)len)) return null; // memory allocation failed
+    //TODO: this can be made faster, but meh...
+    if (atend || gapend-gapstart < len) moveGapAtEnd(); // this will grow the gap, so it will take all available room
+    if (!atend) moveGapAtPos(pos); // condition is used for tiny speedup
+    assert(gapend-gapstart >= len);
+    //memcpy(tbuf+gapstart, str.ptr, str.length);
+    auto res = tbuf+gapstart;
+    if (hbuf !is null) hbuf[gapstart..gapstart+len] = defhs;
+    gapstart += len;
+    tbused += len;
+    ensureGap();
+    assert(tbsize-tbused >= MGS);
+    ++bufferChangeCounter;
+    return res;
+  }
+  +/
+
   /// put text into buffer; will either put all the text, or nothing
   /// returns new position or -1
   int put (int pos, const(char)[] str...) @trusted nothrow @nogc {
@@ -334,7 +372,7 @@ public:
     //TODO: this can be made faster, but meh...
     immutable slen = cast(uint)str.length;
     if (atend || gapend-gapstart < slen) moveGapAtEnd(); // this will grow the gap, so it will take all available room
-    if (!atend) moveGapAtPos(pos); // very small speedup
+    if (!atend) moveGapAtPos(pos); // condition is used for tiny speedup
     assert(gapend-gapstart >= slen);
     memcpy(tbuf+gapstart, str.ptr, str.length);
     if (hbuf !is null) hbuf[gapstart..gapstart+str.length] = defhs;
@@ -626,10 +664,10 @@ private:
   uint validofsc; // number of entries with valid offsets
   uint validlenc; // number of entries with valid lengthes; cannot be less than `validofsc`
   uint mLineCount; // total number of lines
-  bool mWordWrapping; // true: "visual wrap" mode (not implemented yet)
   EgTextMeter textMeter; // null: monospaced font
   int mLineHeight = 1; // line height, in pixels/cells; <0: variable; 0: invalid state
   dchar delegate (char ch) nothrow recode1byte; // not null: delegate to recode from 1bt to unishit
+  int mWordWrapWidth = 0; // >0: "visual wrap"; either in pixels (if textMeter is set) or in cells
 
 public:
   // utfuck-8 and visual tabs support
@@ -701,7 +739,7 @@ private:
     if (validofsc == 0) return -1;
     if (pos >= gb.tbused) return (validofsc != mLineCount ? -1 : mLineCount-1);
     if (validofsc == 1) return (pos < locache[0].len ? 0 : -1);
-    if (pos < locache[validofsc].ofs+locache[validofsc].len) {
+    if (pos < locache[validofsc-1].ofs+locache[validofsc-1].len) {
       // yay! use binary search to find the line
       int bot = 0, i = cast(int)validofsc-1;
       while (bot != i) {
@@ -734,6 +772,146 @@ private:
       assert(locache[lidx].len == eolpos-pos);
       pos = eolpos;
     }
+  }
+
+  // do word wrapping; line cache should be calculated and repaired for the given line
+  // (and down, if it was already wrapped)
+  // returns next line index to possible wrap
+  //TODO: "unwrap" line if word wrapping is not set
+  //TODO: make it faster
+  int doWordWrapping (int lidx) nothrow {
+    import core.stdc.string : memmove;
+
+    bool isWordBoundaryAt (int pos) nothrow {
+      static bool isAlNum (char ch) pure nothrow @safe @nogc {
+        pragma(inline, true);
+        return
+          (ch >= '0' && ch <= '9') ||
+          (ch >= 'A' && ch <= 'Z') ||
+          (ch >= 'a' && ch <= 'z') ||
+          ch == '_'; // yeah, this is "letter" too
+      }
+      if (pos <= 0 || pos >= gb.textsize) return true;
+      /+
+      char c0 = gb[pos];
+      if (c0 == '(') return true;
+      char cp = gb[pos-1];
+      // prev is blank?
+      if (cp == ' ' || c0 == '\t') return (c0 != ' ' && c0 != '\t'); // cur should be nonblank
+      // prev is ";"?
+      if (cp == ';') return true; // wrap word here (for D code, for example)
+      // prev is punct?
+      if (!isAlNum(cp)) return isAlNum(c0); // cur should be non-punct
+      return false;
+      +/
+      char c0 = gb[pos];
+      char cp = gb[pos-1];
+      // prev is blank?
+      if (cp == ' ' || c0 == '\t') return (c0 != ' ' && c0 != '\t'); // cur should be nonblank
+      // prev is non-blank
+      return false;
+    }
+
+    if (mWordWrapWidth <= 0) return mLineCount;
+    if (lidx < 0) lidx = 0;
+    if (lidx >= mLineCount) return mLineCount;
+    // find first and last line, if it was already wrapped
+    //updateCache(lidx);
+    // find first (top) line
+    int ltop = lidx;
+    while (ltop > 0) {
+      assert(locache[ltop].ofs > 0);
+      if (gb[locache[ltop].ofs-1] == '\n') break;
+      --ltop;
+    }
+    // find last (bottom) line; lbot will be "bottom line index+1"
+    int lbot = lidx;
+    while (lbot < mLineCount) {
+      //updateCache(lbot); // just in case
+      //assert(locache[lbot].ofs < gb.textsize);
+      if (locache[lbot].len > 0) {
+        if (gb[locache[lbot].ofs+locache[lbot].len-1] == '\n') { ++lbot; break; } // out-of-bounds access will return '\n'
+      }
+      ++lbot;
+    }
+    if (textMeter) textMeter.reset(visualtabs ? tabsize : 0);
+    scope(exit) textMeter.finish();
+    //{ import core.stdc.stdio; printf("lidx=%d; ltop=%d; lbot=%d, linecount=%d\n", lidx, ltop, lbot, mLineCount); }
+    // we have line range here; go, ninja, go
+    lidx = ltop;
+    int cpos = locache[lidx].ofs;
+    int cwdt = 0;
+    int lastWordStartPos = 0;
+    locache[lidx].len = 0;
+    while (gb[cpos] != '\n') {
+      // go until cwdt allows us; but we have to have at least one char
+      int nwdt; // "new" width with the current char
+      int lpos = cpos; // "last position"
+      dchar dch;
+      if (utfuck) {
+        dch = gb.uniAtAndAdvance(cpos);
+      } else {
+        dch = (recode1byte is null ? cast(dchar)gb[cpos++] : recode1byte(gb[cpos++]));
+      }
+      if (textMeter !is null) {
+        if (gb.hasHiBuffer) textMeter.advance(dch, gb.hi(lpos)); else textMeter.advance(dch);
+        nwdt = textMeter.currWidth;
+      } else {
+        nwdt = cwdt+1;
+      }
+      //TODO: *word* wrapping!
+      //{ import core.stdc.stdio; printf(" lidx=%d; lineofs=%d; linelen=%d; cwdt=%d; nwdt=%d; maxwdt=%d; lpos=%d; cpos=%d\n", lidx, locache[lidx].ofs, locache[lidx].len, cwdt, nwdt, mWordWrapWidth, lpos, cpos); }
+      // if we have at least one char in line, check if we should wrap here
+      if (locache[lidx].len > 0) {
+        if (nwdt > mWordWrapWidth) {
+          // should wrap here
+          if (textMeter) {
+            textMeter.finish();
+            textMeter.reset(visualtabs ? tabsize : 0);
+          }
+          assert(lpos == locache[lidx].ofs+locache[lidx].len);
+          if (lastWordStartPos > 0) {
+            locache[lidx].len = lastWordStartPos-locache[lidx].ofs;
+            lastWordStartPos = 0;
+            lpos = locache[lidx].ofs+locache[lidx].len;
+          }
+          ++lidx;
+          if (lidx == lbot) {
+            // insert new cache record
+            growLineCache(mLineCount+1);
+            if (lidx < mLineCount) memmove(locache+lidx+1, locache+lidx, (mLineCount-lidx)*locache[0].sizeof);
+            ++mLineCount;
+            ++lbot;
+          }
+          cpos = lpos;
+          locache[lidx] = LOCItem.init;
+          locache[lidx].ofs = cpos;
+          locache[lidx].len = 0;
+          cwdt = 0;
+          continue;
+        }
+      }
+      // go on
+      if (locache[lidx].len > 0 && isWordBoundaryAt(cpos)) lastWordStartPos = cpos;
+      ++locache[lidx].len;
+      cwdt = nwdt;
+    }
+    // last '\n' is not registered, so do it now
+    if (locache[lidx].ofs+locache[lidx].len < gb.textsize) ++locache[lidx].len;
+    // remove unused cache items
+    //{ import core.stdc.stdio; printf(" 00: lidx=%d; ltop=%d; lbot=%d, linecount=%d\n", lidx, ltop, lbot, mLineCount); }
+    assert(lidx < lbot);
+    //TODO: make it faster
+    while (lidx+1 < lbot) {
+      foreach (immutable c; lidx+1..mLineCount) locache[c-1] = locache[c];
+      --lbot;
+      --mLineCount;
+    }
+    //{ import core.stdc.stdio; printf(" 01: lidx=%d; ltop=%d; lbot=%d, linecount=%d\n", lidx, ltop, lbot, mLineCount); }
+    assert(lidx+1 == lbot);
+    assert(mLineCount > 0);
+    assert(locache[mLineCount-1].ofs+locache[mLineCount-1].len == gb.textsize);
+    return lbot;
   }
 
 public:
@@ -824,6 +1002,11 @@ public:
     }
     */
     version(egeditor_scan_time) { import core.stdc.stdio; auto et = clockMilli()-stt; printf("%u lines (%u bytes) scanned in %u milliseconds\n", mLineCount, gb.textsize, cast(uint)et); }
+    if (mWordWrapWidth > 0) {
+      int lidx = 0;
+      while (lidx < mLineCount) lidx = doWordWrapping(lidx);
+      validofsc = validlenc = mLineCount;
+    }
     return true;
   }
 
@@ -1036,15 +1219,27 @@ public:
     immutable ts = gb.textsize;
     const(char)* tbuf = gb.tbuf;
     if (pos < 0) pos = 0;
-    if (gb.mSingleLine) {
-      // single line
-      while (pos < ts && x > 0) {
-        pos += gb.utfuckLenAt!true(pos); // "always positive"
-        --x;
+    if (mWordWrapWidth <= 0 || gb.mSingleLine) {
+      if (gb.mSingleLine) {
+        // single line
+        while (pos < ts && x > 0) {
+          pos += gb.utfuckLenAt!true(pos); // "always positive"
+          --x;
+        }
+      } else {
+        // multiline
+        while (pos < ts && x > 0) {
+          if (tbuf[gb.pos2real(pos)] == '\n') break;
+          pos += gb.utfuckLenAt!true(pos); // "always positive"
+          --x;
+        }
       }
     } else {
-      // multiline
-      while (pos < ts && x > 0) {
+      if (pos >= ts) return ts;
+      int lidx = findLineCacheIndex(pos);
+      assert(lidx >= 0);
+      int epos = locache[lidx].ofs+locache[lidx].len;
+      while (pos < epos && x > 0) {
         if (tbuf[gb.pos2real(pos)] == '\n') break;
         pos += gb.utfuckLenAt!true(pos); // "always positive"
         --x;
@@ -1062,28 +1257,52 @@ public:
     if (pos > ts) pos = ts;
     immutable bool sl = gb.mSingleLine;
     const(char)* tbuf = gb.tbuf;
-    // find line start
-    int spos = pos;
-    if (!sl) {
-      while (spos > 0 && tbuf[gb.pos2real(spos-1)] != '\n') --spos;
-    } else {
-      spos = 0;
-    }
-    // now `spos` points to line start; walk over utfucked chars
     int x = 0;
-    while (spos < pos) {
-      char ch = tbuf[gb.pos2real(spos)];
-      if (!sl && ch == '\n') break;
-      static if (dotabs) {
-        if (ch == '\t' && visualtabs && tabsize > 0) {
-          x = ((x+tabsize)/tabsize)*tabsize;
+    if (mWordWrapWidth <= 0) {
+      // find line start
+      int spos = pos;
+      if (!sl) {
+        while (spos > 0 && tbuf[gb.pos2real(spos-1)] != '\n') --spos;
+      } else {
+        spos = 0;
+      }
+      // now `spos` points to line start; walk over utfucked chars
+      while (spos < pos) {
+        char ch = tbuf[gb.pos2real(spos)];
+        if (!sl && ch == '\n') break;
+        static if (dotabs) {
+          if (ch == '\t' && visualtabs && tabsize > 0) {
+            x = ((x+tabsize)/tabsize)*tabsize;
+          } else {
+            ++x;
+          }
         } else {
           ++x;
         }
-      } else {
-        ++x;
+        spos += (ch < 128 ? 1 : gb.utfuckLenAt!true(spos));
       }
-      spos += (ch < 128 ? 1 : gb.utfuckLenAt!true(spos));
+    } else {
+      // word-wrapped, eh...
+      int lidx = findLineCacheIndex(pos);
+      assert(lidx >= 0);
+      int spos = locache[lidx].ofs;
+      int epos = spos+locache[lidx].len;
+      assert(pos < epos);
+      // now `spos` points to line start; walk over utfucked chars
+      while (spos < pos) {
+        char ch = tbuf[gb.pos2real(spos)];
+        if (!sl && ch == '\n') break;
+        static if (dotabs) {
+          if (ch == '\t' && visualtabs && tabsize > 0) {
+            x = ((x+tabsize)/tabsize)*tabsize;
+          } else {
+            ++x;
+          }
+        } else {
+          ++x;
+        }
+        spos += (ch < 128 ? 1 : gb.utfuckLenAt!true(spos));
+      }
     }
     return x;
   }
@@ -1770,8 +1989,11 @@ protected:
 
 public:
   //EgTextMeter textMeter; /// *MUST* be set when `inPixels` is true
-  @property EgTextMeter textMeter () nothrow @nogc { return lc.textMeter; }
-  @property void textMeter (EgTextMeter tm) nothrow @nogc { lc.textMeter = tm; }
+  final @property EgTextMeter textMeter () nothrow @nogc { return lc.textMeter; }
+  final @property void textMeter (EgTextMeter tm) nothrow @nogc { lc.textMeter = tm; }
+
+  final @property int wordWrapPos () const nothrow @nogc { pragma(inline, true); return lc.mWordWrapWidth; }
+  final @property void wordWrapPos (int v) nothrow @nogc { pragma(inline, true); if (v < 0) v = 0; lc.mWordWrapWidth = v; } //FIXME
 
 public:
   /// is editor in "paste mode" (i.e. we are pasting chars from clipboard, and should skip autoindenting)?
@@ -3943,7 +4165,13 @@ public:
     mixin(SetupShiftMarkingMixin);
     int rx, ry;
     killTextOnChar = false;
-    auto ep = (cy >= lc.linecount-1 ? gb.textsize : lc.lineend(cy));
+    int ep;
+    if (cy >= lc.linecount-1) {
+      ep = gb.textsize;
+    } else {
+      ep = lc.lineend(cy);
+      //if (gb[ep] != '\n') ++ep; // word wrapping
+    }
     lc.pos2xy(ep, rx, ry);
     if (rx != cx || ry != cy) {
       pushUndoCurPos();
