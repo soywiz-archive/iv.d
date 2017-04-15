@@ -878,7 +878,7 @@ private:
     ++lidx; // to kill: [lidx..lbot)
     immutable int tokill = lbot-lidx;
     if (tokill > 0) {
-      version(all) { import core.stdc.stdio; printf(" xx: lidx=%d; ltop=%d; lbot=%d, linecount=%d; tokill=%d\n", lidx, ltop, lbot, mLineCount, tokill); }
+      version(none) { import core.stdc.stdio; printf(" xx: lidx=%d; ltop=%d; lbot=%d, linecount=%d; tokill=%d\n", lidx, ltop, lbot, mLineCount, tokill); }
       if (lbot < mLineCount) memmove(locache+lidx, locache+lbot, (mLineCount-lbot)*locache[0].sizeof);
       lbot -= tokill;
       mLineCount -= tokill;
@@ -1009,6 +1009,7 @@ public:
     } else {
       assert(ppos > pos);
       int newlines = GapBuffer.countEols(str);
+      immutable insertedLines = newlines;
       auto lidx = findLineCacheIndex(pos);
       immutable int ldelta = ppos-pos;
       //{ import core.stdc.stdio; printf("count=%u; pos=%u; ppos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
@@ -1037,6 +1038,7 @@ public:
           immutable int lend = gb.fastSkipEol(pos);
           locache[lidx].ofs = pos;
           locache[lidx].len = lend-pos;
+          locache[lidx].viswrap = false;
           locache[lidx++].resetHeight();
           pos = lend;
         }
@@ -1046,7 +1048,9 @@ public:
       if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs += ldelta;
       //{ import core.stdc.stdio; printf("  mLineCount=%u\n", mLineCount); }
       version(egeditor_line_cache_checks) checkLineCache();
-      if (mWordWrapWidth > 0) doWordWrapping(wraplidx);
+      if (mWordWrapWidth > 0) {
+        foreach (immutable c; 0..insertedLines+1) wraplidx = doWordWrapping(wraplidx);
+      }
     }
     return ppos;
   }
@@ -1087,7 +1091,7 @@ public:
         wraplidx = lidx = collapseWrappedLine(wraplidx);
         // we will start repairing from the last good line
         pos = locache[lidx].ofs;
-        assert((pos == 0 && lidx == 0) || (pos > 0 && gb[pos-1] == '\n'));
+        //assert((pos == 0 && lidx == 0) || (pos > 0 && gb[pos-1] == '\n'));
         //{ import core.stdc.stdio; printf("count=%u; pos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", count, pos, newlines, lidx, mLineCount); }
         // remove unused lines
         if (lidx < mLineCount) memmove(locache+lidx, locache+lidx+newlines, (mLineCount-lidx)*locache[0].sizeof);
