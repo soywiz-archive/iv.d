@@ -17,7 +17,7 @@
 module iv.egeditor.editor;
 
 //version = egeditor_scan_time;
-//version = egeditor_line_cache_checks;
+//version = egeditor_scan_time_to_file;
 
 import iv.rawtty : koi2uni, uni2koi;
 import iv.strex;
@@ -41,10 +41,7 @@ abstract class EgTextMeter {
   abstract void reset (int tabsize) nothrow;
 
   /// advance text width iterator, fix all curr* fields
-  abstract void advance (dchar ch) nothrow;
-
-  /// advance text width iterator, return x position for drawing next char; override this if text size depends of attrs
-  void advance (dchar ch, in ref GapBuffer.HighState hs) nothrow { advance(ch); }
+  abstract void advance (dchar ch, in ref GapBuffer.HighState hs) nothrow;
 
   /// finish text iterator; it should NOT reset curr* fields!
   /// WARNING: EditorEngine tries to call this after each `reset()`, but user code may not
@@ -125,14 +122,19 @@ protected:
 
 final:
   // initial alloc
-  void initTBuf () nothrow @nogc {
+  void initTBuf (bool hadHBuf) nothrow @nogc {
     import core.stdc.stdlib : free, malloc, realloc;
     assert(tbuf is null);
     assert(hbuf is null);
     immutable uint nsz = (mSingleLine ? GrowGranSmall : GrowGran);
     tbuf = cast(char*)malloc(nsz);
     if (tbuf is null) assert(0, "out of memory for text buffers");
-    // don't allocate highlight buffer right now; wait until owner asks for it explicitly
+    // allocate highlight buffer if necessary
+    if (hadHBuf) {
+      hbuf = cast(HighState*)malloc(nsz*hbuf[0].sizeof);
+      if (hbuf is null) assert(0, "out of memory for text buffers");
+      hbuf[0..nsz] = HighState.init;
+    }
     tbused = 0;
     tbsize = nsz;
     gapstart = 0;
@@ -180,7 +182,7 @@ public:
   ///
   this (bool asingleline) nothrow @nogc {
     mSingleLine = asingleline;
-    initTBuf();
+    initTBuf(false); // don't allocate hbuf yet
   }
 
   ///
@@ -194,10 +196,11 @@ public:
   /// WILL NOT call deletion hooks!
   void clear () nothrow @nogc {
     import core.stdc.stdlib : free;
+    immutable bool hadHBuf = (hbuf !is null);
     if (tbuf !is null) { free(tbuf); tbuf = null; }
-    if (hbuf !is null) { free(hbuf); hbuf = null; }
+    if (hadHBuf) { free(hbuf); hbuf = null; }
     ++bufferChangeCounter;
-    initTBuf();
+    initTBuf(hadHBuf);
   }
 
   @property bool hasHiBuffer () const pure nothrow @safe @nogc { pragma(inline, true); return (hbuf !is null); } ///
@@ -613,10 +616,10 @@ public:
 private final class LineCache {
 private:
   // line offset/height cache item
+  // to be safe, locache[mLineCount] is always valid and holds gb.textsize
   static align(1) struct LOCItem {
   align(1):
     uint ofs;
-    uint len;
     private uint mheight; // 0: unknown; line height; high bit is reserved for "viswrap" flag
   pure nothrow @safe @nogc:
     @property bool validHeight () const { pragma(inline, true); return ((mheight&0x7fff_ffffU) != 0); }
@@ -625,13 +628,16 @@ private:
     @property void height (uint v) { pragma(inline, true); assert(v <= 0x7fff_ffffU); mheight = (mheight&0x8000_0000)|v; }
     @property bool viswrap () const { pragma(inline, true); return ((mheight&0x8000_0000U) != 0); }
     @property viswrap (bool v) { pragma(inline, true); if (v) mheight |= 0x8000_0000U; else mheight &= 0x7fff_ffffU; }
+    @property void resetHeightAndWrap () { pragma(inline, true); mheight = 0; }
+    @property void resetHeightAndSetWrap () { pragma(inline, true); mheight = 0x8000_0000U; }
+    void initWithPos (uint pos) { pragma(inline, true); ofs = pos; mheight = 0; }
   }
 
 private:
   GapBuffer gb;
   LOCItem* locache;  // line info cache
   uint locsize; // number of allocated items in locache
-  uint mLineCount; // total number of lines
+  uint mLineCount; // total number of lines (and valid items in cache too)
   EgTextMeter textMeter; // null: monospaced font
   int mLineHeight = 1; // line height, in pixels/cells; <0: variable; 0: invalid state
   dchar delegate (char ch) nothrow recode1byte; // not null: delegate to recode from 1bt to unishit
@@ -644,6 +650,7 @@ public:
   bool visualtabs = false; /// should x coordinate calculation assume that tabs are not one-char width?
   ubyte tabsize = 2; /// tab size, in spaces
 
+final: // just in case the compiler won't notice "final class"
 private:
   void initLC () nothrow @nogc {
     import core.stdc.stdlib : realloc;
@@ -652,24 +659,26 @@ private:
     locache = cast(typeof(locache[0])*)realloc(locache, ICS*locache[0].sizeof);
     if (locache is null) assert(0, "out of memory for line cache");
     locache[0..ICS] = LOCItem.init;
+    locache[1].ofs = gb.textsize; // just in case
     locsize = ICS;
-    locache[0].len = 0;
     mLineCount = 1; // we always have at least one line, even if it is empty
   }
 
   // `total` is new number of entries in cache; actual number will be greater by one
   bool growLineCache (uint total) nothrow @nogc {
-    assert(total != 0);
+    if (total >= int.max/8) assert(0, "egeditor: wtf?!");
+    ++total; // for last item
     if (locsize < total) {
       // have to allocate more
-      if (!GapBuffer.xrealloc(locache, locsize, total, 0x400)) return false;
+      if (!GapBuffer.xrealloc(locache, locsize, total, (locsize < 4096 ? 0x400 : 0x1000))) return false;
     }
     return true;
   }
 
   int calcLineHeight (int lidx) nothrow {
+    assert(lidx >= 0 && lidx < mLineCount);
     int ls = locache[lidx].ofs;
-    int le = ls+locache[lidx].len;
+    int le = locache[lidx+1].ofs;
     if (locache[lidx].viswrap) ++le;
     textMeter.reset(-1); // nobody cares about tab widths here
     scope(exit) textMeter.finish();
@@ -677,24 +686,26 @@ private:
     if (maxh < 1) maxh = 1;
     auto tbufcopy = gb.tbuf;
     auto hbufcopy = gb.hbuf;
+    gb.hidummy = GapBuffer.HighState.init; // just in case
     if (utfuck) {
       Utf8DecoderFast udc;
-      GapBuffer.HighState hs = (hbufcopy !is null ? hbufcopy[gb.pos2real(ls)] : GapBuffer.HighState.init);
+      GapBuffer.HighState* hs = (hbufcopy !is null ? hbufcopy+gb.pos2real(ls) : &gb.hidummy);
       while (ls < le) {
         char ch = tbufcopy[gb.pos2real(ls++)];
         if (udc.decodeSafe(cast(ubyte)ch)) {
           immutable dchar dch = udc.codepoint;
-          if (hbufcopy !is null) textMeter.advance(dch, hs); else textMeter.advance(dch);
+          textMeter.advance(dch, *hs);
         }
         if (textMeter.currheight > maxh) maxh = textMeter.currheight;
-        if (ls < le && hbufcopy !is null) hs = hbufcopy[gb.pos2real(ls)];
+        if (ls < le && hbufcopy !is null) hs = hbufcopy+gb.pos2real(ls);
       }
     } else {
       auto rc1b = recode1byte;
       while (ls < le) {
         immutable uint rpos = gb.pos2real(ls++);
         dchar dch = (rc1b !is null ? rc1b(tbufcopy[rpos]) : cast(dchar)tbufcopy[rpos]);
-        if (hbufcopy !is null) textMeter.advance(dch, hbufcopy[rpos]); else textMeter.advance(dch);
+        GapBuffer.HighState* hs = (hbufcopy !is null ? hbufcopy+rpos : &gb.hidummy);
+        textMeter.advance(dch, *hs);
         if (textMeter.currheight > maxh) maxh = textMeter.currheight;
       }
     }
@@ -704,37 +715,24 @@ private:
 
   // -1: not found
   int findLineCacheIndex (uint pos) const nothrow @nogc {
-    if (mLineCount == 0) return -1;
-    if (pos >= gb.tbused) return mLineCount-1;
-    if (mLineCount == 1) return (pos < locache[0].len ? 0 : -1);
-    if (pos < locache[mLineCount-1].ofs+locache[mLineCount-1].len) {
+    int lcount = mLineCount;
+    if (lcount <= 0) return -1;
+    if (pos >= gb.tbused) return lcount-1;
+    if (lcount == 1) return (pos < locache[1].ofs ? 0 : -1);
+    if (pos < locache[lcount].ofs) {
       // yay! use binary search to find the line
-      int bot = 0, i = cast(int)mLineCount-1;
+      int bot = 0, i = lcount-1;
       while (bot != i) {
         int mid = i-(i-bot)/2;
         //!assert(mid >= 0 && mid < locused);
         immutable ls = locache[mid].ofs;
-        immutable le = ls+locache[mid].len;
+        immutable le = locache[mid+1].ofs;
         if (pos >= ls && pos < le) return mid; // i found her!
         if (pos < ls) i = mid-1; else bot = mid;
       }
       return i;
     }
     return -1;
-  }
-
-  // debug check
-  void checkLineCache () nothrow {
-    int lcount = gb.countEolsInRange(0, gb.textsize)+1; // total number of lines
-    assert(mLineCount == lcount);
-    assert(locsize >= lcount);
-    uint pos = 0;
-    foreach (immutable uint lidx; 0..lcount) {
-      assert(locache[lidx].ofs == pos);
-      immutable int eolpos = gb.fastSkipEol(pos);
-      assert(locache[lidx].len == eolpos-pos);
-      pos = eolpos;
-    }
   }
 
   // get range for current wrapped line: [ltop..lbot)
@@ -744,39 +742,32 @@ private:
     *ltop = *lbot = lidx;
     if (mWordWrapWidth <= 0) { *lbot += 1; return; }
     immutable bool curIsMiddle = locache[lidx].viswrap;
-    // find first (top) line (if current is wrapped, move up to first unwrapped, and then one down)
-    if (curIsMiddle) while (lidx >= 0 && locache[lidx].viswrap) --lidx; else --lidx;
-    *ltop = lidx+1;
+    // find first (top) line move up to previous unwrapped, and then one down
+    if (lidx > 0) while (lidx > 0 && locache[lidx-1].viswrap) --lidx;
+    *ltop = lidx;
     // find last (bottom) line (if current is wrapped, move down to first unwrapped; then one down anyway)
     lidx = *lbot;
     if (curIsMiddle) while (lidx < mLineCount && locache[lidx].viswrap) ++lidx;
     if (++lidx > mLineCount) lidx = mLineCount; // just in case
     *lbot = lidx;
     assert(*ltop < *lbot);
-    version(none) if (mLineCount > 4) {
-      import core.stdc.stdio;
-      foreach (immutable c; 0..5) printf("#%d: viswrap=%d\n", c, (locache[c].viswrap ? 1 : 0));
-    }
   }
 
   int collapseWrappedLine (int lidx) nothrow {
     import core.stdc.string : memmove;
-    if (mWordWrapWidth <= 0 || gb.singleline || lidx < 0 || lidx >= mLineCount) return lidx;
+    if (mWordWrapWidth <= 0 || gb.mSingleLine || lidx < 0 || lidx >= mLineCount) return lidx;
+    if (!locache[lidx].viswrap) return lidx; // early exit
     int ltop, lbot;
     wwGetTopBot(lidx, &ltop, &lbot);
     immutable int tokill = lbot-ltop-1;
     version(none) { import core.stdc.stdio; printf("collapsing: lidx=%d; ltop=%d; lbot=%d; tokill=%d; left=%d\n", lidx, ltop, lbot, tokill, mLineCount-lbot); }
     if (tokill <= 0) return lidx; // nothing to do
-    // fix line length
-    auto lctopitem = locache+ltop;
-    auto lccuritem = lctopitem+1;
-    foreach (immutable c; ltop+1..lbot) lctopitem.len += (*lccuritem++).len;
     // remove cache items for wrapped lines
-    if (lbot < mLineCount) memmove(lctopitem+1, lccuritem, (mLineCount-lbot)*locache[0].sizeof);
+    if (lbot <= mLineCount) memmove(locache+ltop+1, locache+lbot, (mLineCount-lbot+1)*locache[0].sizeof);
     lbot -= tokill;
     mLineCount -= tokill;
     // and fix wrapping flag
-    lctopitem.viswrap = false;
+    locache[ltop].resetHeightAndWrap();
     return ltop;
   }
 
@@ -785,24 +776,14 @@ private:
   // returns next line index to possible wrap
   //TODO: "unwrap" line if word wrapping is not set?
   //TODO: make it faster
+  //TODO: unicode blanks?
   int doWordWrapping (int lidx) nothrow {
     import core.stdc.string : memmove;
 
-    bool isWordBoundaryAt (int pos) nothrow {
-      if (pos <= 0 || pos >= gb.textsize) return true;
-      char ch = gb[pos-1];
-      // prev is blank?
-      if (ch == ' ' || ch == '\t') {
-        // cur should be nonblank
-        ch = gb[pos];
-        return (ch != ' ' && ch != '\t');
-      }
-      // prev is non-blank
-      return false;
-    }
+    static bool isBlank (char ch) pure nothrow @safe @nogc { pragma(inline, true); return (ch == '\t' || ch == ' '); }
 
     immutable int www = mWordWrapWidth;
-    if (www <= 0 || gb.singleline) return mLineCount;
+    if (www <= 0 || gb.mSingleLine) return mLineCount;
     if (lidx < 0) lidx = 0;
     if (lidx >= mLineCount) return mLineCount;
     // find first and last line, if it was already wrapped
@@ -817,61 +798,65 @@ private:
     int cpos = locache[lidx].ofs;
     int cwdt = 0;
     int lastWordStartPos = 0;
-    locache[lidx].len = 0;
     immutable bool utfuckmode = utfuck;
+    immutable int tabsz = (visualtabs ? tabsize : 0);
     auto tm = textMeter;
     while (gb[cpos] != '\n') {
       // go until cwdt allows us; but we have to have at least one char
       int nwdt; // "new" width with the current char
       int lpos = cpos; // "last position"
       if (tm is null) {
-        nwdt = cwdt+1;
-        if (utfuckmode) cpos += gb.utfuckLenAt!true(cpos); else ++cpos;
+        if (tabsz > 0 && gb[cpos] == '\t') {
+          // skip tab
+          nwdt = ((cwdt+tabsz)/tabsz)*tabsz;
+        } else {
+          nwdt = cwdt+1;
+          if (utfuckmode) cpos += gb.utfuckLenAt!true(cpos); else ++cpos;
+        }
       } else {
         dchar dch = (utfuckmode ? gb.uniAtAndAdvance(cpos) : recode1byte is null ? cast(dchar)gb[cpos++] : recode1byte(gb[cpos++]));
-        textMeter.advance(dch, gb.hi(lpos));
-        nwdt = textMeter.currwdt;
+        tm.advance(dch, gb.hi(lpos));
+        nwdt = tm.currwdt;
       }
-      //{ import core.stdc.stdio; printf(" lidx=%d; lineofs=%d; linelen=%d; cwdt=%d; nwdt=%d; maxwdt=%d; lpos=%d; cpos=%d\n", lidx, locache[lidx].ofs, locache[lidx].len, cwdt, nwdt, mWordWrapWidth, lpos, cpos); }
+      //{ import core.stdc.stdio; printf(" lidx=%d; lineofs=%d; linelen=%d; cwdt=%d; nwdt=%d; maxwdt=%d; lpos=%d; cpos=%d\n", lidx, locache[lidx].ofs, locache[lidx].len, cwdt, nwdt, www, lpos, cpos); }
       // if we have at least one char in line, check if we should wrap here
-      if (locache[lidx].len > 0) {
-        if (nwdt > mWordWrapWidth) {
+      if (lpos > locache[lidx].ofs) {
+        if (nwdt > www) {
           // should wrap here
-          if (textMeter) {
-            textMeter.finish();
-            textMeter.reset(visualtabs ? tabsize : 0);
+          if (tm !is null) {
+            tm.finish();
+            tm.reset(visualtabs ? tabsize : 0);
           }
-          assert(lpos == locache[lidx].ofs+locache[lidx].len);
+          // if we have at least one word, wrap on it
           if (lastWordStartPos > 0) {
-            locache[lidx].len = lastWordStartPos-locache[lidx].ofs;
+            cpos = lastWordStartPos;
             lastWordStartPos = 0;
-            lpos = locache[lidx].ofs+locache[lidx].len;
+          } else {
+            cpos = lpos;
           }
-          locache[lidx].viswrap = true;
+          locache[lidx].resetHeightAndSetWrap();
           ++lidx;
           if (lidx == lbot) {
             // insert new cache record
             growLineCache(mLineCount+1);
-            if (lidx < mLineCount) memmove(locache+lidx+1, locache+lidx, (mLineCount-lidx)*locache[0].sizeof);
+            if (lidx <= mLineCount) memmove(locache+lidx+1, locache+lidx, (mLineCount-lidx+1)*locache[0].sizeof);
             ++mLineCount;
             ++lbot;
           }
-          cpos = lpos;
-          locache[lidx] = LOCItem.init;
+          // setup next line
+          locache[lidx] = LOCItem.init; // reset all, including height and wrapping
           locache[lidx].ofs = cpos;
-          locache[lidx].len = 0;
           cwdt = 0;
           continue;
+        } else {
+          // check for word boundary
+          if (isBlank(gb[lpos]) && !isBlank(gb[cpos])) lastWordStartPos = cpos;
         }
       }
       // go on
-      if (locache[lidx].len > 0 && isWordBoundaryAt(cpos)) lastWordStartPos = cpos;
-      ++locache[lidx].len;
       cwdt = nwdt;
     }
-    // last '\n' is not registered, so do it now
-    if (locache[lidx].ofs+locache[lidx].len < gb.textsize) ++locache[lidx].len;
-    locache[lidx].viswrap = false; // last line
+    locache[lidx].resetHeightAndWrap();
     // remove unused cache items
     version(none) { import core.stdc.stdio; printf(" 00: lidx=%d; ltop=%d; lbot=%d, linecount=%d\n", lidx, ltop, lbot, mLineCount); }
     assert(lidx < lbot);
@@ -880,14 +865,14 @@ private:
     immutable int tokill = lbot-lidx;
     if (tokill > 0) {
       version(none) { import core.stdc.stdio; printf(" xx: lidx=%d; ltop=%d; lbot=%d, linecount=%d; tokill=%d\n", lidx, ltop, lbot, mLineCount, tokill); }
-      if (lbot < mLineCount) memmove(locache+lidx, locache+lbot, (mLineCount-lbot)*locache[0].sizeof);
+      if (lbot <= mLineCount) memmove(locache+lidx, locache+lbot, (mLineCount-lbot+1)*locache[0].sizeof);
       lbot -= tokill;
       mLineCount -= tokill;
     }
     version(none) { import core.stdc.stdio; printf(" 01: lidx=%d; ltop=%d; lbot=%d, linecount=%d\n", lidx, ltop, lbot, mLineCount); }
     assert(lidx == lbot);
     assert(mLineCount > 0);
-    assert(locache[mLineCount-1].ofs+locache[mLineCount-1].len == gb.textsize);
+    assert(locache[lbot].ofs == cpos+(cpos < gb.textsize ? 1 : 0));
     return lbot;
   }
 
@@ -918,15 +903,15 @@ public:
     initLC();
   }
 
-  /* load file like this:
+  /** load file like this:
    *   if (!lc.resizeBuffer(filesize)) throw new Exception("memory?");
    *   scope(failure) lc.clear();
    *   fl.rawReadExact(lc.getBufferPtr[]);
-   *   if (!lc.finishLoading()) throw new Exception("memory?");
+   *   if (!lc.rebuild()) throw new Exception("memory?");
    */
 
-  // allocate text buffer for the text of the given size
-  protected bool resizeBuffer (uint newsize) nothrow @nogc {
+  /// allocate text buffer for the text of the given size
+  bool resizeBuffer (uint newsize) nothrow @nogc {
     if (newsize > gb.tbmax) return false;
     clear();
     //{ import core.stdc.stdio; printf("resizing buffer to %u bytes\n", newsize); }
@@ -937,14 +922,15 @@ public:
     return true;
   }
 
-  // get continuous buffer pointer, so we can read the whole file into it
-  protected char[] getBufferPtr () nothrow @nogc {
+  /// get continuous buffer pointer, so we can read the whole file into it
+  char[] getBufferPtr () nothrow @nogc {
     gb.moveGapAtEnd();
     return gb.tbuf[0..gb.textsize];
   }
 
-  // count lines, fill line cache
-  protected bool finishLoading () {
+  /// count lines, fill line cache, do word wrapping
+  bool rebuild () {
+    import core.stdc.string : memset;
     //gb.moveGapAtEnd(); // just in case
     immutable ts = gb.textsize;
     const(char)* tb = gb.tbuf;
@@ -953,35 +939,79 @@ public:
       growLineCache(1);
       assert(locsize > 0);
       mLineCount = 1;
-      locache[0] = LOCItem.init;
-      locache[0].ofs = 0;
-      locache[0].len = ts;
+      locache[0..2] = LOCItem.init;
+      locache[1].ofs = ts;
       return true;
     }
     version(egeditor_scan_time) auto stt = clockMilli();
-    if (gb.singleline) {
-      if (!growLineCache(1)) return false;
-      locache[0..locsize] = LOCItem.init;
-      locache[0].len = ts;
-      mLineCount = 1;
-    } else {
+    version(none) {
+      // less memory fragmentation
       int lcount = gb.countEolsInRange(0, ts)+1; // total number of lines
       //{ import core.stdc.stdio; printf("loaded %u bytes; %d lines found\n", gb.textsize, lcount); }
       if (!growLineCache(lcount)) return false;
-      locache[0..locsize] = LOCItem.init;
-      assert(locsize >= lcount);
+      assert(lcount+1 <= locsize);
+      //locache[0..lcount+1] = LOCItem.init; // reset all lines
+      memset(locache, 0, (lcount+1)*locache[0].sizeof); // reset all lines (help compiler a little)
       uint pos = 0;
+      LOCItem* lcp = locache; // help compiler a little
       foreach (immutable uint lidx; 0..lcount) {
-        locache[lidx].ofs = pos;
-        immutable int eolpos = gb.fastSkipEol(pos);
-        locache[lidx].len = eolpos-pos;
-        pos = eolpos;
+        lcp.initWithPos(pos);
+        ++lcp;
+        pos = gb.fastSkipEol(pos);
       }
-      mLineCount = lcount;
-      version(egeditor_scan_time) { import core.stdc.stdio; auto et = clockMilli()-stt; printf("%u lines (%u bytes) scanned in %u milliseconds\n", mLineCount, gb.textsize, cast(uint)et); }
-      if (mWordWrapWidth > 0) {
-        int lidx = 0;
-        while (lidx < mLineCount) lidx = doWordWrapping(lidx);
+      // last line
+      assert(lcp is locache+lcount);
+      lcp.ofs = gb.textsize;
+    } else {
+      // faster scanning
+      int lcount = 0; // total number of lines
+      //{ import core.stdc.stdio; printf("loaded %u bytes; %d lines found\n", gb.textsize, lcount); }
+      if (!growLineCache(1)) return false; // should have at least one
+      uint pos = 0;
+      while (pos < ts) {
+        if (lcount+1 >= locsize) { if (!growLineCache(lcount+1)) return false; }
+        locache[lcount++].initWithPos(pos);
+        pos = gb.fastSkipEol(pos);
+      }
+      assert(lcount > 0);
+      // hack for last empty line, if it ends with '\n'
+      if (ts && gb[ts-1] == '\n') {
+        if (lcount+1 >= locsize) { if (!growLineCache(lcount+1)) return false; }
+        locache[lcount++].initWithPos(ts);
+      }
+      // last line
+      assert(pos == ts);
+      assert(lcount < locsize);
+      locache[lcount].initWithPos(pos);
+    }
+    mLineCount = lcount;
+    version(egeditor_scan_time) {
+      import core.stdc.stdio;
+      auto et = clockMilli()-stt;
+      version(egeditor_scan_time_to_file) {
+        if (auto fo = fopen("ztime.log", "a")) {
+          scope(exit) fo.fclose();
+          fo.fprintf("%u lines (%u bytes) scanned in %u milliseconds\n", mLineCount, gb.textsize, cast(uint)et);
+        }
+      } else {
+        printf("%u lines (%u bytes) scanned in %u milliseconds\n", mLineCount, gb.textsize, cast(uint)et);
+      }
+      stt = clockMilli(); // for wrapping
+    }
+    if (mWordWrapWidth > 0) {
+      int lidx = 0;
+      while (lidx < mLineCount) lidx = doWordWrapping(lidx);
+      version(egeditor_scan_time) {
+        import core.stdc.stdio;
+        et = clockMilli()-stt;
+        version(egeditor_scan_time_to_file) {
+          if (auto fo = fopen("ztime.log", "a")) {
+            scope(exit) fo.fclose();
+            fo.fprintf(" %u lines wrapped in %u milliseconds\n", mLineCount, cast(uint)et);
+          }
+        } else {
+          printf(" %u lines wrapped in %u milliseconds\n", mLineCount, cast(uint)et);
+        }
       }
     }
     return true;
@@ -1003,10 +1033,11 @@ public:
     // heal line cache for single-line case
     if (gb.mSingleLine) {
       assert(mLineCount == 1);
-      assert(locsize > 0);
+      assert(locsize > 1);
       assert(locache[0].ofs == 0);
-      locache[0].len = gb.textsize;
-      locache[0].resetHeight();
+      locache[1].ofs = gb.textsize;
+      locache[0].resetHeightAndWrap();
+      locache[1].resetHeightAndWrap();
     } else {
       assert(ppos > pos);
       int newlines = GapBuffer.countEols(str);
@@ -1020,8 +1051,7 @@ public:
       if (newlines == 0) {
         // no lines was inserted, just repair the length
         // no need to collapse wrapped line here, 'cause `doWordWrapping()` will rewrap it anyway
-        locache[lidx].len += ldelta;
-        locache[lidx].resetHeight();
+        locache[lidx++].resetHeight();
       } else {
         import core.stdc.string : memmove;
         //FIXME: make this faster for wrapped lines
@@ -1029,26 +1059,22 @@ public:
         // we will start repairing from the last good line
         pos = locache[lidx].ofs;
         assert((pos == 0 && lidx == 0) || (pos > 0 && gb[pos-1] == '\n'));
+        assert(gb[locache[lidx+1].ofs-1] == '\n');
         // inserted some new lines, make room for 'em
         growLineCache(mLineCount+newlines);
-        if (lidx < mLineCount) memmove(locache+lidx+newlines, locache+lidx, (mLineCount-lidx)*locache[0].sizeof);
+        if (lidx <= mLineCount) memmove(locache+lidx+newlines, locache+lidx, (mLineCount-lidx+1)*locache[0].sizeof);
+        mLineCount += newlines;
         // no need to clear inserted lines, we'll overwrite em
         // recalc offsets and lengthes
-        mLineCount += newlines;
         while (newlines-- >= 0) {
-          immutable int lend = gb.fastSkipEol(pos);
           locache[lidx].ofs = pos;
-          locache[lidx].len = lend-pos;
-          locache[lidx].viswrap = false;
-          locache[lidx++].resetHeight();
-          pos = lend;
+          locache[lidx++].resetHeightAndWrap();
+          pos = gb.fastSkipEol(pos);
         }
-        --lidx; // have to
       }
       // repair line cache (offsets) -- for now; switch to "repair on demand" later?
-      if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs += ldelta;
+      if (lidx <= mLineCount) foreach (ref lc; locache[lidx..mLineCount+1]) lc.ofs += ldelta;
       //{ import core.stdc.stdio; printf("  mLineCount=%u\n", mLineCount); }
-      version(egeditor_line_cache_checks) checkLineCache();
       if (mWordWrapWidth > 0) {
         foreach (immutable c; 0..insertedLines+1) wraplidx = doWordWrapping(wraplidx);
       }
@@ -1063,10 +1089,11 @@ public:
       // easy
       if (!gb.remove(pos, count)) return false;
       assert(mLineCount == 1);
-      assert(locsize > 0);
+      assert(locsize > 1);
       assert(locache[0].ofs == 0);
-      locache[0].len = gb.textsize;
-      locache[0].resetHeight();
+      locache[1].ofs = gb.textsize;
+      locache[0].resetHeightAndWrap();
+      locache[1].resetHeightAndWrap();
     } else {
       // hard
       import core.stdc.string : memmove;
@@ -1077,35 +1104,39 @@ public:
       if (gb.textsize-pos < count) return false; // not enough text here
       auto lidx = findLineCacheIndex(pos);
       assert(lidx >= 0);
-      int wraplidx = lidx;
       int newlines = gb.countEolsInRange(pos, count);
       if (!gb.remove(pos, count)) return false;
       // repair line cache
       if (newlines == 0) {
         // no need to collapse wrapped line here, 'cause `doWordWrapping()` will rewrap it anyway
-        //assert((lidx < mLineCount-1 && locache[lidx].len > count) || (lidx == mLineCount-1 && locache[lidx].len >= count));
-        locache[lidx].len -= count;
         locache[lidx].resetHeight();
       } else {
         import core.stdc.string : memmove;
-        //FIXME: make this faster for wrapped lines
-        wraplidx = lidx = collapseWrappedLine(wraplidx);
-        // we will start repairing from the last good line
-        pos = locache[lidx].ofs;
-        //assert((pos == 0 && lidx == 0) || (pos > 0 && gb[pos-1] == '\n'));
+        if (mWordWrapWidth > 0) {
+          // collapse wordwrapped line into one, it is easier this way; it is safe to collapse lines in modified text
+          //FIXME: make this faster for wrapped lines
+          lidx = collapseWrappedLine(lidx);
+          // collapse deleted lines too, so we can remove 'em as if they were normal ones
+          foreach (immutable c; 1..newlines+1) collapseWrappedLine(lidx+c);
+        }
+        // start repairing from the last good line
         //{ import core.stdc.stdio; printf("count=%u; pos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", count, pos, newlines, lidx, mLineCount); }
         // remove unused lines
-        if (lidx < mLineCount) memmove(locache+lidx, locache+lidx+newlines, (mLineCount-lidx)*locache[0].sizeof);
+        //{ import core.stdc.stdio; printf("00: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
+        if (lidx+1 <= mLineCount) memmove(locache+lidx+1, locache+lidx+1+newlines, (mLineCount-lidx)*locache[0].sizeof);
         mLineCount -= newlines;
         // fix current line
-        immutable int lend = gb.fastSkipEol(pos);
-        locache[lidx].ofs = pos;
-        locache[lidx].len = lend-pos;
-        locache[lidx].resetHeight();
+        locache[lidx].resetHeightAndWrap();
+        //{ import core.stdc.stdio; printf("01: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
       }
-      if (lidx+1 < mLineCount) foreach (ref lc; locache[lidx+1..mLineCount]) lc.ofs -= count;
-      version(egeditor_line_cache_checks) checkLineCache();
-      if (mWordWrapWidth > 0) doWordWrapping(wraplidx);
+      if (lidx+1 <= mLineCount) foreach (ref lc; locache[lidx+1..mLineCount+1]) lc.ofs -= count;
+      //{ import core.stdc.stdio; printf("02: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
+      if (mWordWrapWidth > 0) {
+        lidx = doWordWrapping(lidx);
+        // and next one, 'cause it was modified by collapser
+        doWordWrapping(lidx);
+      }
+      //{ import core.stdc.stdio; printf("03: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
     }
     return true;
   }
@@ -1125,6 +1156,7 @@ public:
   }
 
   bool isLastWrappedLine (int lidx) nothrow @nogc { pragma(inline, true); return (lidx >= 0 && lidx < mLineCount ? !locache[lidx].viswrap : true); }
+  bool isWrappedLine (int lidx) nothrow @nogc { pragma(inline, true); return (lidx >= 0 && lidx < mLineCount ? locache[lidx].viswrap : false); }
 
   /// get number of *symbols* to line end (this is not always equal to number of bytes for utfuck)
   int syms2eol (int pos) nothrow {
@@ -1178,7 +1210,7 @@ public:
       return gb.textsize;
     }
     if (lidx == mLineCount-1) return gb.textsize;
-    auto res = locache[lidx].ofs+locache[lidx].len;
+    auto res = locache[lidx+1].ofs;
     assert(res > 0);
     return res-1;
   }
@@ -1209,7 +1241,7 @@ public:
       if (pos >= ts) return ts;
       int lidx = findLineCacheIndex(pos);
       assert(lidx >= 0);
-      int epos = locache[lidx].ofs+locache[lidx].len;
+      int epos = locache[lidx+1].ofs;
       while (pos < epos && x > 0) {
         if (tbuf[gb.pos2real(pos)] == '\n') break;
         pos += gb.utfuckLenAt!true(pos); // "always positive"
@@ -1257,7 +1289,7 @@ public:
       int lidx = findLineCacheIndex(pos);
       assert(lidx >= 0);
       int spos = locache[lidx].ofs;
-      int epos = spos+locache[lidx].len;
+      int epos = locache[lidx+1].ofs;
       assert(pos < epos);
       // now `spos` points to line start; walk over utfucked chars
       while (spos < pos) {
@@ -1289,7 +1321,7 @@ public:
       return (!utfuck ? (x < ts ? x : ts) : utfuck_x2pos(x, 0));
     }
     uint ls = locache[y].ofs;
-    uint le = ls+locache[y].len;
+    uint le = locache[y+1].ofs;
     if (ls == le) {
       // this should be last empty line
       //if (y != mLineCount-1) { import std.format; assert(0, "fuuuuu; y=%u; lc=%u; locused=%u".format(y, mLineCount, locused)); }
@@ -2182,7 +2214,7 @@ public:
           redo = new UndoStack(mAsRich, true, !singleline);
         }
         gb.hasHiBuffer = v; // "rich" mode require highlighting buffer, normal mode doesn't, as it has no highlighter
-        if (!gb.hasHiBuffer) assert(0, "out of memory"); // alas
+        if (v && !gb.hasHiBuffer) assert(0, "out of memory"); // alas
       }
     }
 
@@ -2519,7 +2551,7 @@ public:
       if (!lc.resizeBuffer(filesize)) throw new Exception("text too big");
       scope(failure) clear();
       fl.rawReadExact(lc.getBufferPtr[]);
-      if (!lc.finishLoading()) throw new Exception("out of memory");
+      if (!lc.rebuild()) throw new Exception("out of memory");
       //HACK!
       /*
       if (fsz-fpos >= gb.tbmax) throw new Exception("text too big");
@@ -4198,10 +4230,8 @@ protected:
   // usually it is done by undo/redo action if the editor is in "rich mode"
   final void ubTextSetAttrs (int pos, const(GapBuffer.HighState)[] hs) {
     if (mReadOnly || hs.length == 0) return;
-    foreach (const ref hi; hs) {
-      uint rtp = gb.pos2real(pos++);
-      gb.hbuf[rtp] = hi;
-    }
+    assert(gb.hasHiBuffer);
+    foreach (const ref hi; hs) gb.hbuf[gb.pos2real(pos++)] = hi;
   }
 
   // ////////////////////////////////////////////////////////////////////// //
