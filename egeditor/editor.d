@@ -1044,7 +1044,6 @@ public:
       immutable insertedLines = newlines;
       auto lidx = findLineCacheIndex(pos);
       immutable int ldelta = ppos-pos;
-      //{ import core.stdc.stdio; printf("count=%u; pos=%u; ppos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", cast(uint)str.length, pos, ppos, newlines, lidx, mLineCount); }
       assert((!atend && lidx >= 0) || (atend && (lidx < 0 || lidx == mLineCount-1)));
       if (atend) lidx = mLineCount-1;
       int wraplidx = lidx;
@@ -1058,8 +1057,6 @@ public:
         wraplidx = lidx = collapseWrappedLine(wraplidx);
         // we will start repairing from the last good line
         pos = locache[lidx].ofs;
-        assert((pos == 0 && lidx == 0) || (pos > 0 && gb[pos-1] == '\n'));
-        assert(gb[locache[lidx+1].ofs-1] == '\n');
         // inserted some new lines, make room for 'em
         growLineCache(mLineCount+newlines);
         if (lidx <= mLineCount) memmove(locache+lidx+newlines, locache+lidx, (mLineCount-lidx+1)*locache[0].sizeof);
@@ -1074,7 +1071,6 @@ public:
       }
       // repair line cache (offsets) -- for now; switch to "repair on demand" later?
       if (lidx <= mLineCount) foreach (ref lc; locache[lidx..mLineCount+1]) lc.ofs += ldelta;
-      //{ import core.stdc.stdio; printf("  mLineCount=%u\n", mLineCount); }
       if (mWordWrapWidth > 0) {
         foreach (immutable c; 0..insertedLines+1) wraplidx = doWordWrapping(wraplidx);
       }
