@@ -333,32 +333,6 @@ public:
   /// returns success flag
   bool append (const(char)[] str...) @trusted nothrow @nogc { return (put(tbused, str) >= 0); }
 
-  /// put "nothing" into buffer (i.e. grow buffer, so you will be able to `memcpy()` into it); will either grow, or do nothing
-  /// returns pointer to where you can safely `memcpy()` your text of length `len`, or null
-  /+
-  char* putNada (int pos, int len) @trusted nothrow @nogc {
-    if (len <= 0) return null; // don't ask for nothing, or you will be punished!
-    if (pos < 0) pos = 0;
-    bool atend = (pos >= tbused);
-    if (atend) pos = tbused;
-    if (tbmax-(tbsize-tbused) < len) return null; // no room
-    if (!growTBuf(tbused+cast(uint)len)) return null; // memory allocation failed
-    //TODO: this can be made faster, but meh...
-    if (atend || gapend-gapstart < len) moveGapAtEnd(); // this will grow the gap, so it will take all available room
-    if (!atend) moveGapAtPos(pos); // condition is used for tiny speedup
-    assert(gapend-gapstart >= len);
-    //memcpy(tbuf+gapstart, str.ptr, str.length);
-    auto res = tbuf+gapstart;
-    if (hbuf !is null) hbuf[gapstart..gapstart+len] = defhs;
-    gapstart += len;
-    tbused += len;
-    ensureGap();
-    assert(tbsize-tbused >= MGS);
-    ++bufferChangeCounter;
-    return res;
-  }
-  +/
-
   /// put text into buffer; will either put all the text, or nothing
   /// returns new position or -1
   int put (int pos, const(char)[] str...) @trusted nothrow @nogc {
@@ -753,7 +727,7 @@ private:
     assert(*ltop < *lbot);
   }
 
-  int collapseWrappedLine (int lidx) nothrow {
+  int collapseWrappedLine (int lidx) nothrow @nogc {
     import core.stdc.string : memmove;
     if (mWordWrapWidth <= 0 || gb.mSingleLine || lidx < 0 || lidx >= mLineCount) return lidx;
     if (!locache[lidx].viswrap) return lidx; // early exit
@@ -929,7 +903,7 @@ public:
   }
 
   /// count lines, fill line cache, do word wrapping
-  bool rebuild () {
+  bool rebuild () nothrow {
     import core.stdc.string : memset;
     //gb.moveGapAtEnd(); // just in case
     immutable ts = gb.textsize;
@@ -1019,11 +993,11 @@ public:
 
   /// put text into buffer; will either put all the text, or nothing
   /// returns success flag
-  bool append (const(char)[] str...) { return (put(gb.textsize, str) >= 0); }
+  bool append (const(char)[] str...) nothrow { return (put(gb.textsize, str) >= 0); }
 
   /// put text into buffer; will either put all the text, or nothing
   /// returns new position or -1
-  int put (int pos, const(char)[] str...) {
+  int put (int pos, const(char)[] str...) nothrow {
     if (pos < 0) pos = 0;
     bool atend = (pos >= gb.textsize);
     if (str.length == 0) return pos;
@@ -1080,7 +1054,7 @@ public:
 
   /// remove count bytes from the current position; will either remove all of 'em, or nothing
   /// returns success flag
-  bool remove (int pos, int count) {
+  bool remove (int pos, int count) nothrow {
     if (gb.mSingleLine) {
       // easy
       if (!gb.remove(pos, count)) return false;
@@ -1962,7 +1936,15 @@ public:
   final @property void textMeter (EgTextMeter tm) nothrow @nogc { lc.textMeter = tm; }
 
   final @property int wordWrapPos () const nothrow @nogc { pragma(inline, true); return lc.mWordWrapWidth; }
-  final @property void wordWrapPos (int v) nothrow @nogc { pragma(inline, true); if (v < 0) v = 0; lc.mWordWrapWidth = v; } //FIXME
+  final @property void wordWrapPos (int v) nothrow {
+    if (v < 0) v = 0;
+    if (lc.mWordWrapWidth != v) {
+      auto pos = curpos;
+      lc.mWordWrapWidth = v;
+      lc.rebuild();
+      gotoPos!true(pos);
+    }
+  }
 
 public:
   /// is editor in "paste mode" (i.e. we are pasting chars from clipboard, and should skip autoindenting)?
@@ -2220,10 +2202,10 @@ public:
     int width () const pure nothrow @safe @nogc { pragma(inline, true); return winw; } ///
     int height () const pure nothrow @safe @nogc { pragma(inline, true); return winh; } ///
 
-    void x0 (int v) nothrow { pragma(inline, true); move(v, winy); } ///
-    void y0 (int v) nothrow { pragma(inline, true); move(winx, v); } ///
-    void width (int v) nothrow { pragma(inline, true); resize(v, winh); } ///
-    void height (int v) nothrow { pragma(inline, true); resize(winw, v); } ///
+    void x0 (int v) { pragma(inline, true); move(v, winy); } ///
+    void y0 (int v) { pragma(inline, true); move(winx, v); } ///
+    void width (int v) { pragma(inline, true); resize(v, winh); } ///
+    void height (int v) { pragma(inline, true); resize(winw, v); } ///
 
     /// has any effect only if you are using `insertText()` and `deleteText()` API!
     bool readonly () const pure nothrow @safe @nogc { pragma(inline, true); return mReadOnly; }
@@ -2312,7 +2294,7 @@ public:
   }
 
   /// resize control
-  void resize (int nw, int nh) nothrow {
+  void resize (int nw, int nh) {
     if (nw < 2) nw = 2;
     if (nh < 1) nh = 1;
     if (nw != winw || nh != winh) {
@@ -2326,7 +2308,7 @@ public:
   }
 
   /// move control
-  void move (int nx, int ny) nothrow {
+  void move (int nx, int ny) {
     if (winx != nx || winy != ny) {
       winx = nx;
       winy = ny;
@@ -2335,7 +2317,7 @@ public:
   }
 
   /// move and resize control
-  void moveResize (int nx, int ny, int nw, int nh) nothrow {
+  void moveResize (int nx, int ny, int nw, int nh) {
     move(nx, ny);
     resize(nw, nh);
   }
@@ -2490,6 +2472,7 @@ public:
   }
 
   final int curpos () nothrow { pragma(inline, true); return lc.xy2pos(cx, cy); } ///
+  final void curpos (int pos) nothrow { pragma(inline, true); gotoPos(pos); } ///
 
   ///
   void clearUndo () nothrow {
@@ -2631,11 +2614,14 @@ public:
   /// use `winXXX` vars to know window dimensions
   public abstract void drawEmptyLine (int yofs);
 
-  /// override this method to draw something after page was drawn, but before drawing the cursor
+  /// override this method to draw something after page was drawn, but before drawing the status
   public void drawPageMisc () {}
 
   /// override this method to draw status line; it will be called after `drawPageBegin()`
-  public void drawStatus ();
+  public void drawStatus () {}
+
+  /// override this method to draw something after status was drawn, but before drawing the cursor
+  public void drawPagePost () {}
 
   /// override this method to draw text cursor; it will be called after `drawPageMisc()`
   public abstract void drawCursor ();
@@ -2649,6 +2635,7 @@ public:
    *   page itself with drawLine() or drawEmptyLine();
    *   drawPageMisc();
    *   drawStatus();
+   *   drawPagePost();
    *   drawCursor();
    *   drawPageEnd();
    */
@@ -2693,6 +2680,7 @@ public:
     }
     drawPageMisc();
     drawStatus();
+    drawPagePost();
     drawCursor();
     drawPageEnd();
   }

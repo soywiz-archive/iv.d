@@ -771,7 +771,7 @@ public:
     }
   }
 
-  public override void drawPageMisc () {
+  public override void drawPagePost () {
     auto pos = curpos;
     if (isAnyTextChar(pos, false)) {
       auto ch = gb[pos];
