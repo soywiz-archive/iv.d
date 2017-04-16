@@ -1119,24 +1119,18 @@ public:
           // collapse deleted lines too, so we can remove 'em as if they were normal ones
           foreach (immutable c; 1..newlines+1) collapseWrappedLine(lidx+c);
         }
-        // start repairing from the last good line
-        //{ import core.stdc.stdio; printf("count=%u; pos=%u; newlines=%u; lidx=%u; mLineCount=%u\n", count, pos, newlines, lidx, mLineCount); }
         // remove unused lines
-        //{ import core.stdc.stdio; printf("00: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
         if (lidx+1 <= mLineCount) memmove(locache+lidx+1, locache+lidx+1+newlines, (mLineCount-lidx)*locache[0].sizeof);
         mLineCount -= newlines;
         // fix current line
         locache[lidx].resetHeightAndWrap();
-        //{ import core.stdc.stdio; printf("01: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
       }
       if (lidx+1 <= mLineCount) foreach (ref lc; locache[lidx+1..mLineCount+1]) lc.ofs -= count;
-      //{ import core.stdc.stdio; printf("02: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
       if (mWordWrapWidth > 0) {
         lidx = doWordWrapping(lidx);
         // and next one, 'cause it was modified by collapser
         doWordWrapping(lidx);
       }
-      //{ import core.stdc.stdio; printf("03: newlines=%u; lidx=%u; mLineCount=%u; ts=%u; lastofs=%u\n", newlines, lidx, mLineCount, gb.textsize, locache[mLineCount].ofs); }
     }
     return true;
   }
