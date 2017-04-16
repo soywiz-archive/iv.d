@@ -2525,20 +2525,6 @@ public:
       scope(failure) clear();
       fl.rawReadExact(lc.getBufferPtr[]);
       if (!lc.rebuild()) throw new Exception("out of memory");
-      //HACK!
-      /*
-      if (fsz-fpos >= gb.tbmax) throw new Exception("text too big");
-      immutable uint sz = cast(uint)(fsz-fpos);
-      if (!lc.growTBuf(sz)) throw new Exception("out of memory");
-      fl.rawReadExact(lc.tbuf[0..sz]);
-      lc.tbused = sz;
-      lc.gapstart = sz;
-      lc.gapend = lc.tbsize;
-      int lncount = lc.countEols(lc.tbuf[0..sz])+1; // '\n' means "start new line after me, unconditionally", hence +1
-      if (!lc.growLineCache(lncount)) throw new Exception("out of memory");
-      lc.mLineCount = lncount;
-      lc.locused = 0;
-      */
     }
   }
 
@@ -3747,6 +3733,7 @@ public:
     return insertText!("none", false)(pos, spc[]);
   }
 
+  ///
   void doIndentBlock () {
     if (mReadOnly) return;
     killTextOnChar = false;
