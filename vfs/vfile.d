@@ -1079,220 +1079,376 @@ public enum VFSZLibMode {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct ZLibLowLevelRO {
-  private import etc.c.zlib;
+version(none) {
+  struct ZLibLowLevelRO {
+    private import etc.c.zlib;
 
-  enum ibsize = 32768;
+    enum ibsize = 32768;
 
-  VFile zfl; // archive file
-  VFSZLibMode mode;
-  long stpos; // starting position
-  long size; // unpacked size
-  long pksize; // packed size
-  long pos; // current file position
-  long prpos; // previous file position
-  long pkpos; // current position in DAT
-  ubyte[] pkb; // packed data
-  z_stream zs;
-  bool eoz;
-  bool eofhit;
-  string fname;
-  // reading one byte from zlib fuckin' fails. shit.
-  ubyte[65536] updata;
-  uint uppos, upused;
-  bool upeoz;
+    VFile zfl; // archive file
+    VFSZLibMode mode;
+    long stpos; // starting position
+    long size; // unpacked size
+    long pksize; // packed size
+    long pos; // current file position
+    long prpos; // previous file position
+    long pkpos; // current position in DAT
+    ubyte[] pkb; // packed data
+    z_stream zs;
+    bool eoz;
+    bool eofhit;
+    string fname;
+    // reading one byte from zlib fuckin' fails. shit.
+    ubyte[65536] updata;
+    uint uppos, upused;
+    bool upeoz;
 
-  this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
-    if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
-    zfl = fl;
-    stpos = astpos;
-    size = aupsize;
-    pksize = asize;
-    mode = amode;
-    fname = aname;
-    uppos = upused = 0;
-    upeoz = false;
-  }
-
-  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
-  @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
-  @property bool eof () { pragma(inline, true); return eofhit; }
-
-  void close () {
-    import core.stdc.stdlib : free;
-    eofhit = true;
-    if (pkb.length) {
-      inflateEnd(&zs);
-      free(pkb.ptr);
-      pkb = null;
+    this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
+      if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
+      zfl = fl;
+      stpos = astpos;
+      size = aupsize;
+      pksize = asize;
+      mode = amode;
+      fname = aname;
+      uppos = upused = 0;
+      upeoz = false;
     }
-    uppos = upused = 0;
-    upeoz = true;
-    eoz = true;
-    if (zfl.isOpen) zfl.close();
-  }
 
-  private bool initZStream (bool reinit=false) {
-    import core.stdc.stdlib : malloc, free;
-    if (mode == VFSZLibMode.Raw || (!reinit && pkb.ptr !is null)) return true;
-    // allocate buffer for packed data
-    if (pkb.ptr is null) {
-      auto pb = cast(ubyte*)malloc(ibsize);
-      if (pb is null) return false;
-      pkb = pb[0..ibsize];
-    }
-    zs.avail_in = 0;
-    zs.avail_out = 0;
-    // initialize unpacker
-    // -15 is a magic value used to decompress zip files:
-    // it has the effect of not requiring the 2 byte header and 4 byte trailer
-    if (inflateInit2(&zs, (mode == VFSZLibMode.Zip ? -15 : 15)) != Z_OK) {
-      free(pkb.ptr);
-      pkb = null;
-      return false;
-    }
-    eoz = false;
-    // we are ready
-    return true;
-  }
+    @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
+    @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
+    @property bool eof () { pragma(inline, true); return eofhit; }
 
-  private bool readPackedChunk () {
-    if (zs.avail_in > 0) return true;
-    if (pkpos >= pksize) return false;
-    zs.next_in = cast(typeof(zs.next_in))pkb.ptr;
-    zs.avail_in = cast(uint)(pksize-pkpos > ibsize ? ibsize : pksize-pkpos);
-    zfl.seek(stpos+pkpos);
-    auto rd = zfl.rawRead(pkb[0..zs.avail_in]);
-    if (rd.length == 0) return false;
-    zs.avail_in = cast(int)rd.length;
-    pkpos += zs.avail_in;
-    return true;
-  }
-
-  private bool unpackNextChunk () {
-    while (zs.avail_out > 0) {
-      if (eoz) return (size < 0); // `false` for known size, `true` for unknown size
-      if (uppos >= upused) {
-        if (upeoz) { eoz = true; continue; }
-        if (!readPackedChunk()) return false;
-        auto sv0 = zs.avail_out;
-        auto sv1 = zs.next_out;
-        uppos = 0;
-        zs.avail_out = cast(uint)updata.length;
-        zs.next_out = cast(ubyte*)updata.ptr;
-        auto err = inflate(&zs, Z_SYNC_FLUSH);
-        upused = cast(uint)(updata.length-zs.avail_out);
-        zs.avail_out = sv0;
-        zs.next_out = sv1;
-        //if (err == Z_BUF_ERROR) { import iv.writer; writeln("*** OUT OF BUFFER!"); }
-        if (err != Z_STREAM_END && err != Z_OK) return false;
-        if (err == Z_STREAM_END) upeoz = true;
-      } else {
-        auto ptr = cast(ubyte*)zs.next_out;
-        *ptr = updata.ptr[uppos++];
-        --zs.avail_out;
-        ++zs.next_out;
-      }
-    }
-    return true;
-  }
-
-  bool findUnpackedSize () {
-    ubyte[1024] tbuf = void;
-    //size = pos; // current size
-    for (;;) {
-      uint rd = cast(uint)tbuf.length;
-      zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
-      zs.avail_out = rd;
-      if (!unpackNextChunk()) return false;
-      rd -= zs.avail_out;
-      if (pos+rd < 0) return false; // file too big
-      prpos = (pos += rd);
-      if (zs.avail_out != 0) break;
-    }
-    size = pos;
-    return true;
-  }
-
-  ssize read (void* buf, usize count) {
-    if (buf is null) return -1;
-    if (count == 0 || size == 0) return 0;
-    if (!isOpen) return -1; // read error
-    if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
-    if (mode == VFSZLibMode.Raw) {
-      if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
-      zfl.seek(stpos+pos);
-      auto rd = zfl.rawRead(buf[0..count]);
-      pos += rd.length;
-      return rd.length;
-    } else {
-      if (pkb.ptr is null && !initZStream()) return -1;
-      // do we want to seek backward?
-      if (prpos > pos) {
-        // yes, rewind
+    void close () {
+      import core.stdc.stdlib : free;
+      eofhit = true;
+      if (pkb.length) {
         inflateEnd(&zs);
-        uppos = upused = 0;
-        upeoz = false;
-        zs = zs.init;
-        pkpos = 0;
-        if (!initZStream(true)) return -1;
-        prpos = 0;
+        free(pkb.ptr);
+        pkb = null;
       }
-      // do we need to seek forward?
-      if (prpos < pos) {
-        // yes, skip data
-        ubyte[1024] tbuf = void;
-        auto skp = pos-prpos;
-        while (skp > 0) {
-          uint rd = cast(uint)(skp > tbuf.length ? tbuf.length : skp);
-          zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
-          zs.avail_out = rd;
-          if (!unpackNextChunk()) return -1;
-          skp -= rd;
+      uppos = upused = 0;
+      upeoz = true;
+      eoz = true;
+      if (zfl.isOpen) zfl.close();
+    }
+
+    private bool initZStream (bool reinit=false) {
+      import core.stdc.stdlib : malloc, free;
+      if (mode == VFSZLibMode.Raw || (!reinit && pkb.ptr !is null)) return true;
+      // allocate buffer for packed data
+      if (pkb.ptr is null) {
+        auto pb = cast(ubyte*)malloc(ibsize);
+        if (pb is null) return false;
+        pkb = pb[0..ibsize];
+      }
+      zs.avail_in = 0;
+      zs.avail_out = 0;
+      // initialize unpacker
+      // -15 is a magic value used to decompress zip files:
+      // it has the effect of not requiring the 2 byte header and 4 byte trailer
+      if (inflateInit2(&zs, (mode == VFSZLibMode.Zip ? -15 : 15)) != Z_OK) {
+        free(pkb.ptr);
+        pkb = null;
+        return false;
+      }
+      eoz = false;
+      // we are ready
+      return true;
+    }
+
+    private bool readPackedChunk () {
+      if (zs.avail_in > 0) return true;
+      if (pkpos >= pksize) return false;
+      zs.next_in = cast(typeof(zs.next_in))pkb.ptr;
+      zs.avail_in = cast(uint)(pksize-pkpos > ibsize ? ibsize : pksize-pkpos);
+      zfl.seek(stpos+pkpos);
+      auto rd = zfl.rawRead(pkb[0..zs.avail_in]);
+      if (rd.length == 0) return false;
+      zs.avail_in = cast(int)rd.length;
+      pkpos += zs.avail_in;
+      return true;
+    }
+
+    private bool unpackNextChunk () {
+      while (zs.avail_out > 0) {
+        if (eoz) return (size < 0); // `false` for known size, `true` for unknown size
+        if (uppos >= upused) {
+          if (upeoz) { eoz = true; continue; }
+          if (!readPackedChunk()) return false;
+          auto sv0 = zs.avail_out;
+          auto sv1 = zs.next_out;
+          uppos = 0;
+          zs.avail_out = cast(uint)updata.length;
+          zs.next_out = cast(ubyte*)updata.ptr;
+          auto err = inflate(&zs, Z_SYNC_FLUSH);
+          upused = cast(uint)(updata.length-zs.avail_out);
+          zs.avail_out = sv0;
+          zs.next_out = sv1;
+          //if (err == Z_BUF_ERROR) { import iv.writer; writeln("*** OUT OF BUFFER!"); }
+          if (err != Z_STREAM_END && err != Z_OK) return false;
+          if (err == Z_STREAM_END) upeoz = true;
+        } else {
+          auto ptr = cast(ubyte*)zs.next_out;
+          *ptr = updata.ptr[uppos++];
+          --zs.avail_out;
+          ++zs.next_out;
         }
-        prpos = pos;
       }
-      // unpack data
-      if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
-      zs.next_out = cast(typeof(zs.next_out))buf;
-      zs.avail_out = cast(uint)count;
-      if (!unpackNextChunk()) return -1;
-      if (size < 0 && zs.avail_out > 0) {
-        eofhit = true;
-        count -= zs.avail_out;
-        size = pos+count;
+      return true;
+    }
+
+    bool findUnpackedSize () {
+      ubyte[1024] tbuf = void;
+      //size = pos; // current size
+      for (;;) {
+        uint rd = cast(uint)tbuf.length;
+        zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
+        zs.avail_out = rd;
+        if (!unpackNextChunk()) return false;
+        rd -= zs.avail_out;
+        if (pos+rd < 0) return false; // file too big
+        prpos = (pos += rd);
+        if (zs.avail_out != 0) break;
       }
-      prpos = (pos += count);
-      return count;
+      size = pos;
+      return true;
+    }
+
+    ssize read (void* buf, usize count) {
+      if (buf is null) return -1;
+      if (count == 0 || size == 0) return 0;
+      if (!isOpen) return -1; // read error
+      if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
+      if (mode == VFSZLibMode.Raw) {
+        if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+        zfl.seek(stpos+pos);
+        auto rd = zfl.rawRead(buf[0..count]);
+        pos += rd.length;
+        return rd.length;
+      } else {
+        if (pkb.ptr is null && !initZStream()) return -1;
+        // do we want to seek backward?
+        if (prpos > pos) {
+          // yes, rewind
+          inflateEnd(&zs);
+          uppos = upused = 0;
+          upeoz = false;
+          zs = zs.init;
+          pkpos = 0;
+          if (!initZStream(true)) return -1;
+          prpos = 0;
+        }
+        // do we need to seek forward?
+        if (prpos < pos) {
+          // yes, skip data
+          ubyte[1024] tbuf = void;
+          auto skp = pos-prpos;
+          while (skp > 0) {
+            uint rd = cast(uint)(skp > tbuf.length ? tbuf.length : skp);
+            zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
+            zs.avail_out = rd;
+            if (!unpackNextChunk()) return -1;
+            skp -= rd;
+          }
+          prpos = pos;
+        }
+        // unpack data
+        if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+        zs.next_out = cast(typeof(zs.next_out))buf;
+        zs.avail_out = cast(uint)count;
+        if (!unpackNextChunk()) return -1;
+        if (size < 0 && zs.avail_out > 0) {
+          eofhit = true;
+          count -= zs.avail_out;
+          size = pos+count;
+        }
+        prpos = (pos += count);
+        return count;
+      }
+    }
+
+    ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+
+    long lseek (long ofs, int origin) {
+      if (!isOpen) return -1;
+      //TODO: overflow checks
+      switch (origin) {
+        case Seek.Set: break;
+        case Seek.Cur: ofs += pos; break;
+        case Seek.End:
+          if (ofs > 0) ofs = 0;
+          if (size < 0) {
+            if (pkb.ptr is null && !initZStream()) return -1;
+            if (!findUnpackedSize) return -1;
+          }
+          ofs += size;
+          break;
+        default:
+          return -1;
+      }
+      if (ofs < 0) return -1;
+      if (size >= 0 && ofs > size) ofs = size;
+      pos = ofs;
+      eofhit = false;
+      return pos;
     }
   }
+} else {
+  // inflate
+  import iv.vfs.inflate;
 
-  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+  struct ZLibLowLevelRO {
+    VFile zfl; // archive file
+    VFSZLibMode mode;
+    InfStream* ifs;
+    long stpos; // starting position
+    long size; // unpacked size
+    long pksize; // packed size
+    long pkpos; // current position in DAT
+    long pos; // current file position
+    long prpos; // previous file position
+    bool eofhit;
+    string fname;
 
-  long lseek (long ofs, int origin) {
-    if (!isOpen) return -1;
-    //TODO: overflow checks
-    switch (origin) {
-      case Seek.Set: break;
-      case Seek.Cur: ofs += pos; break;
-      case Seek.End:
-        if (ofs > 0) ofs = 0;
-        if (size < 0) {
-          if (pkb.ptr is null && !initZStream()) return -1;
-          if (!findUnpackedSize) return -1;
-        }
-        ofs += size;
-        break;
-      default:
-        return -1;
+    this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
+      //{ import core.stdc.stdio; printf("inf: aupsize=%d; astpos=%d; asize=%d\n", cast(int)aupsize, cast(int)astpos, cast(int)asize); }
+      if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
+      zfl = fl;
+      stpos = astpos;
+      size = aupsize;
+      pksize = asize;
+      pkpos = 0;
+      mode = amode;
+      fname = aname;
     }
-    if (ofs < 0) return -1;
-    if (size >= 0 && ofs > size) ofs = size;
-    pos = ofs;
-    eofhit = false;
-    return pos;
+
+    @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
+    @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
+    @property bool eof () { pragma(inline, true); return eofhit; }
+
+    void inflateInit () {
+      if (mode == VFSZLibMode.Raw) return;
+      if (ifs is null) {
+        import core.stdc.stdlib : malloc;
+        import core.stdc.string : memset;
+        ifs = cast(InfStream*)malloc(InfStream.sizeof);
+        if (ifs is null) throw new Exception("out of memory");
+        memset(ifs, 0, InfStream.sizeof);
+      }
+      ifs.reinit(delegate (ubyte[] buf) {
+        //{ import core.stdc.stdio; printf("inf: reading %u bytes (pkpos=%d; pksize=%d)\n", cast(uint)buf.length, cast(int)pkpos, cast(int)pksize); }
+        if (pkpos >= pksize) return 0; // eof
+        int toread = cast(int)buf.length;
+        if (toread > pksize-pkpos) toread = cast(int)(pksize-pkpos);
+        assert(toread > 0);
+        zfl.seek(stpos+pkpos);
+        auto rd = zfl.rawRead(buf[0..toread]);
+        if (rd.length == 0) { pkpos = pksize; return 0; } // eof
+        pkpos += rd.length;
+        return cast(int)rd.length;
+      }, (mode == VFSZLibMode.ZLib ? InfStream.Mode.ZLib : InfStream.Mode.Deflate));
+    }
+
+    void close () {
+      if (ifs !is null) {
+        import core.stdc.stdlib : free;
+        free(ifs);
+        ifs = null;
+      }
+      eofhit = true;
+      if (zfl.isOpen) zfl.close();
+    }
+
+    bool findUnpackedSize () {
+      ubyte[1024] tbuf = void;
+      for (;;) {
+        auto rd = ifs.rawRead(tbuf[]);
+        if (rd.length == 0) break;
+        pos += rd.length;
+      }
+      size = pos;
+      return true;
+    }
+
+    ssize read (void* buf, usize count) {
+      if (buf is null) return -1;
+      if (count == 0 || size == 0) return 0;
+      if (!isOpen) return -1; // read error
+      if (size >= 0 && pos >= size) { eofhit = true; return 0; } // EOF
+      if (mode == VFSZLibMode.Raw) {
+        if (size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+        zfl.seek(stpos+pos);
+        auto rd = zfl.rawRead(buf[0..count]);
+        pos += rd.length;
+        return rd.length;
+      } else {
+        if (ifs is null) inflateInit(); // here, 'cause struct can be copied
+        // do we want to seek backward?
+        if (prpos > pos) {
+          // yes, rewind
+          pkpos = 0;
+          inflateInit();
+          prpos = 0;
+        }
+        // do we need to seek forward?
+        if (prpos < pos) {
+          // yes, skip data
+          ubyte[1024] tbuf = void;
+          auto skp = pos-prpos;
+          while (skp > 0) {
+            uint rd = cast(uint)(skp > tbuf.length ? tbuf.length : skp);
+            auto b = ifs.rawRead(tbuf[0..rd]);
+            if (b.length == 0) return -1;
+            pos += b.length;
+            skp -= b.length;
+          }
+          prpos = pos;
+        }
+        // unpack data
+        if (size >= 0 && size-pos < count) { eofhit = true; count = cast(usize)(size-pos); }
+        auto rdb = ifs.rawRead(buf[0..count]);
+        if (rdb.length == 0) { eofhit = true; return 0; }
+        count = rdb.length;
+        prpos = (pos += count);
+        return count;
+      }
+    }
+
+    ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+
+    long lseek (long ofs, int origin) {
+      if (!isOpen) return -1;
+      //TODO: overflow checks
+      switch (origin) {
+        case Seek.Set: break;
+        case Seek.Cur: ofs += pos; break;
+        case Seek.End:
+          if (ofs > 0) ofs = 0;
+          if (size < 0) {
+            if (mode == VFSZLibMode.Raw) return -1;
+            if (!findUnpackedSize) return -1;
+          }
+          ofs += size;
+          break;
+        default:
+          return -1;
+      }
+      if (ofs < 0) return -1;
+      if (size >= 0 && ofs > size) ofs = size;
+      pos = ofs;
+      eofhit = false;
+      return pos;
+    }
   }
+} // version
+
+
+/*
+void foo () {
+  auto zro = ZLibLowLevelRO(VFile("a"), VFSZLibMode.ZLib, 10, 0, 10, "foo");
 }
+*/
 
 
 /// wrap VFile into read-only zlib-packed stream, with given offset and length.
