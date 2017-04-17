@@ -38,6 +38,9 @@ import iv.vfs.streams.mem;
 version(LDC) {}
 else { version = vfs_stdio_wrapper; }
 
+// uncomment to use zlib instead of internal inflater
+//version = vfs_use_zlib_unpacker;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// wrapper structure for various streams. kinda like `std.stdio.File`,
@@ -1079,7 +1082,7 @@ public enum VFSZLibMode {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-version(none) {
+version(vfs_use_zlib_unpacker) {
   struct ZLibLowLevelRO {
     private import etc.c.zlib;
 
