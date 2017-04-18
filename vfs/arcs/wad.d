@@ -20,6 +20,7 @@ module iv.vfs.arcs.wad;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -105,9 +106,9 @@ private:
         foreach (char ch; nbuf) {
           if (ch == 0) break;
           if (ch >= 'A' && ch <= 'Z') ch += 32; // original WADs has all names uppercased
-          s ~= ch;
+          s.arrayAppendUnsafe(ch);
         }
-        s ~= '/';
+        s.arrayAppendUnsafe('/');
         lastSeenMap = cast(string)s; // it is safe to cast here
         nbuf[] = "HEADER\x00\x00"; // replace header name
       } else if (isMapPart(nbuf[])) {
@@ -176,7 +177,7 @@ private:
       if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"WadArchive"("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
-        dir ~= fi;
+        dir.arrayAppendUnsafe(fi);
       }
     }
   }

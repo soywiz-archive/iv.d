@@ -20,6 +20,7 @@ module iv.vfs.arcs.q1pak;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -82,7 +83,7 @@ private:
       if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
-        dir ~= fi;
+        dir.arrayAppendUnsafe(fi);
       }
     }
     debug(q1pakarc) writeln(dir.length, " files found");

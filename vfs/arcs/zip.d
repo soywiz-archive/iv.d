@@ -20,6 +20,7 @@ module iv.vfs.arcs.zip;
 import iv.vfs.types : usize, ssize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -40,6 +41,7 @@ private:
     long hdrofs;
     ulong modtime;
     string name;
+    uint crc32;
   }
 
   VFile wrap (usize idx) {
@@ -50,6 +52,7 @@ private:
     st.rawReadExact((&zfh)[0..1]);
     if (zfh.sign != "PK\x03\x04") throw new VFSException("invalid ZIP archive entry");
     zfh.fixEndian;
+    if (zfh.crc32 != dir[idx].crc32) throw new VFSException("invalid ZIP archive entry");
     // skip name and extra
     auto xpos = st.tell;
     auto stpos = xpos+zfh.namelen+zfh.extlen;
@@ -234,6 +237,7 @@ private:
         fi.pksize = cdfh.pksize;
         fi.size = cdfh.size;
         fi.hdrofs = cdfh.hdrofs;
+        fi.crc32 = cdfh.crc32;
         try { fi.modtime = cdfh.modtime; } catch (Exception e) {}
         if (cdfh.method == 0) fi.pksize = fi.size;
         // now, this is valid file, so read it's name
@@ -329,7 +333,7 @@ private:
           // add new
           if (dir.length == uint.max) throw new VFSNamedException!"ZipArchive"("directory too long");
           fi.name = cast(string)nb[0..nbpos]; // this is safe
-          dir ~= fi;
+          dir.arrayAppendUnsafe(fi);
           //debug(ziparc) writefln("%10s %10s %s %04s/%02s/%02s %02s:%02s:%02s %s", fi.pksize, fi.size, (fi.packed ? "P" : "."), cdfh.year, cdfh.month, cdfh.day, cdfh.hour, cdfh.min, cdfh.sec, fi.name);
         }
         // skip extra and comments

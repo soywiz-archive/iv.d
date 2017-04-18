@@ -20,6 +20,7 @@ module iv.vfs.arcs.arcz;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -700,7 +701,7 @@ private:
       if (prefixpath.length) name[0..prefixpath.length] = prefixpath;
       name[prefixpath.length..$] = xname[];
       fi.name = cast(string)name; // it is safe to cast here
-      dir ~= fi;
+      dir.arrayAppendUnsafe(fi);
     }
   }
 }

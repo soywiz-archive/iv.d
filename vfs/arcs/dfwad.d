@@ -20,6 +20,7 @@ module iv.vfs.arcs.dfwad;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -115,7 +116,7 @@ private:
       if (name.length) {
         //{ import core.stdc.stdio : printf; printf("[%.*s]\n", cast(uint)name.length, name.ptr); }
         fi.name = cast(string)name; // it's safe here
-        dir ~= fi;
+        dir.arrayAppendUnsafe(fi);
       }
     }
     debug(dfwadarc) { import std.stdio; writeln(dir.length, " files found"); }

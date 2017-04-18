@@ -20,6 +20,7 @@ module iv.vfs.arcs.wad2;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -85,7 +86,7 @@ private:
       if (compr != 0) throw new VFSNamedException!"Wad2Archive"("invalid compression type");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
-        dir ~= fi;
+        dir.arrayAppendUnsafe(fi);
       }
     }
   }

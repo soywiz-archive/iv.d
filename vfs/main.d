@@ -96,8 +96,9 @@ public abstract class VFSDriver {
     ulong crtime; // 0: unknown; unixtime
     ulong modtime; // 0: unknown; unixtime
     long pksize; // packed size; should be equal to size if archive is not packed
+    uint crc32; // 0: none
 
-    this(T:const(char)[]) (T aname, long asize, ulong acrtime=0, ulong amodtime=0, long apksize=-1) {
+    this(T:const(char)[]) (T aname, long asize, ulong acrtime=0, ulong amodtime=0, long apksize=-1, uint acrc32=0) {
            static if (is(T == typeof(null))) name = null;
       else static if (is(T == string)) name = aname;
       else name = aname.idup;
@@ -105,11 +106,13 @@ public abstract class VFSDriver {
       crtime = acrtime;
       modtime = amodtime;
       pksize = (apksize >= 0 ? apksize : size);
+      crc32 = acrc32;
     }
 
     @property const pure nothrow @safe @nogc {
       bool hasCreationTime () { pragma(inline, true); return (crtime != 0); }
       bool hasModTime () { pragma(inline, true); return (modtime != 0); }
+      bool hasCrc32 () { pragma(inline, true); return (crc32 != 0); }
     }
   }
 

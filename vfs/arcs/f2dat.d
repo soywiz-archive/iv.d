@@ -20,6 +20,7 @@ module iv.vfs.arcs.f2dat;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -97,7 +98,7 @@ private:
       if (fi.ofs+fi.pksize > datSize-4-dirSize) throw new VFSNamedException!"F2DatArchive"("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
-        dir ~= fi;
+        dir.arrayAppendUnsafe(fi);
       }
     }
     debug(f2datarc) writeln(dir.length, " files found");

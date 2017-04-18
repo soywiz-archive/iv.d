@@ -20,6 +20,7 @@ module iv.vfs.arcs.abuse;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -105,7 +106,7 @@ private:
         // sanity checks
         if (fi.size > flsize || fi.ofs > flsize || fi.size+fi.ofs > flsize) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
       }
-      dir ~= fi;
+      dir.arrayAppendUnsafe(fi);
     }
   }
 }

@@ -21,6 +21,7 @@ module iv.vfs.arcs.toeedat;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -141,7 +142,7 @@ private:
         }
         de.read(fl);
         //debug(datToEE) writefln("%6s; flags=0x%04x; size=%10s; packedSize=%10s; offset=0x%08x; pdiridx=%6s; fcidx=%6s; nsidx=%6s  [%s]", flist.length, de.flags, de.size, de.packedSize, de.offset, de.pdiridx, de.fcidx, de.nsidx, de.name);
-        /*if (de.name.length > 0)*/ flist ~= de;
+        /*if (de.name.length > 0)*/ flist.arrayAppendUnsafe(de);
         --total;
         if ((de.flags&DatDirEntry.Flags.Dir) == 0) {
           if ((de.flags&(DatDirEntry.Flags.Packed|DatDirEntry.Flags.Unpacked)) == 0) throw new VFSNamedException!"ToEEDatArchive"("invalid ToEE file flags");
@@ -163,13 +164,13 @@ private:
         ppos = flist.ptr[ppos].pdiridx;
         if (--left < 0) throw new VFSNamedException!"ToEEDatArchive"("invalid archive (directory hierarchy too deep)");
       }
-      dir ~= FileInfo(
+      dir.arrayAppendUnsafe(FileInfo(
         (de.flags&DatDirEntry.Flags.Packed) != 0,
         de.packedSize,
         de.size,
         de.offset,
         fname
-      );
+      ));
     }
     debug(datToEE) foreach (ref fi; dir) {
       writefln("size=%10s; packedSize=%10s; offset=0x%08x; packed=%s  [%s]", fi.size, fi.pksize, fi.ofs, (fi.packed ? "tan" : "ona"), fi.name);

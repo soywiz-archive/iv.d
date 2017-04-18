@@ -20,6 +20,7 @@ module iv.vfs.arcs.dunepak;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
+import iv.vfs.util;
 import iv.vfs.vfile;
 
 
@@ -80,7 +81,7 @@ private:
         if (dir[$-1].ofs+dir[$-1].size > flsize) throw new VFSNamedException!"DunePakArchive"("invalid directory");
       }
       fi.name = cast(string)name; // it's safe here
-      dir ~= fi;
+      dir.arrayAppendUnsafe(fi);
       prevofs = ofs;
     }
     if (dir.length) {
