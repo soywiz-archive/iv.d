@@ -32,7 +32,7 @@ module trestex is aliced; // due to Phobos bug
 
 import iv.cmdcon;
 import iv.cmdcontty;
-import iv.mbandeq;
+//import iv.mbandeq;
 import iv.rawtty;
 import iv.simplealsa;
 import iv.vfs;
@@ -433,7 +433,7 @@ enum BandHeight = 20;
 __gshared int eqCurBand = 0, eqCurBandOld = 0;
 __gshared bool eqBandEditor = false;
 __gshared bool eqBandEditorOld = false;
-__gshared int[MBandEq.Bands] eqOldBands = int.min;
+__gshared int[/*MBandEq.Bands*/EQ_MAX_BANDS] eqOldBands = int.min;
 
 
 void drawEqBands () {
@@ -536,7 +536,7 @@ void drawEqBands () {
   if (drawFull) {
     foreach (immutable y; 0..BandHeight) {
       conOPut("   ");
-      foreach (immutable x; 0..MBandEq.Bands) {
+      foreach (immutable x; 0../*MBandEq.Bands*/EQ_MAX_BANDS) {
         if (x == eqCurBand) conOColorFG(0xff_ff_00);
         conOPut("|   ");
         if (x == eqCurBand) conOColorFG(0x80_80_80);
@@ -546,27 +546,27 @@ void drawEqBands () {
     conOPut("\x1b[K\r\n");
     conOPut("\x1b[K\r\n");
 
-    foreach (immutable x; 0..MBandEq.Bands) {
+    foreach (immutable x; 0../*MBandEq.Bands*/EQ_MAX_BANDS) {
       if (x%2 != 0) continue;
       conOPut("\x1b[");
       conOInt(BandHeight+1);
       conOPut(";");
       conOInt(3+x*4);
       conOPut("H");
-      conOInt(cast(int)MBandEq.bandfrqs[x]);
+      //!!!conOInt(cast(int)MBandEq.bandfrqs[x]);
     }
 
-    foreach (immutable x; 0..MBandEq.Bands) {
+    foreach (immutable x; 0../*MBandEq.Bands*/EQ_MAX_BANDS) {
       if (x%2 == 0) continue;
       conOPut("\x1b[");
       conOInt(BandHeight+2);
       conOPut(";");
       conOInt(3+x*4);
       conOPut("H");
-      conOInt(cast(int)MBandEq.bandfrqs[x]);
+      //!!!conOInt(cast(int)MBandEq.bandfrqs[x]);
     }
 
-    foreach (immutable x; 0..MBandEq.Bands) {
+    foreach (immutable x; 0../*MBandEq.Bands*/EQ_MAX_BANDS) {
       if (x == eqCurBand) conOColorFG(0xff_ff_00);
       int bv = alsaEqBands[x];
       if (bv < -70) bv = -70; else if (bv > 30) bv = 30;
@@ -624,7 +624,7 @@ bool eqProcessKey (TtyEvent key) {
   if (!eqBandEditor) return false;
   switch (key.key) {
     case TtyEvent.Key.Left: if (eqCurBand > 0) --eqCurBand; return true;
-    case TtyEvent.Key.Right: if (++eqCurBand >= MBandEq.Bands) eqCurBand = MBandEq.Bands-1; return true;
+    case TtyEvent.Key.Right: if (++eqCurBand >= /*MBandEq.Bands*/EQ_MAX_BANDS) eqCurBand = /*MBandEq.Bands*/EQ_MAX_BANDS-1; return true;
     case TtyEvent.Key.Up: alsaEqBands[eqCurBand] = eqclamp(alsaEqBands[eqCurBand]+10); return true;
     case TtyEvent.Key.Down: alsaEqBands[eqCurBand] = eqclamp(alsaEqBands[eqCurBand]-10); return true;
     case TtyEvent.Key.Home: alsaEqBands[eqCurBand] = 30; return true;
