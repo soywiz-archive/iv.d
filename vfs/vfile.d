@@ -1653,7 +1653,7 @@ public VFile wrapZLibStreamWO (VFile st, int complevel=9, string fname=null) {
 public VFile wrapMemoryRO (const(void)[] buf, string fname=null) { return wrapStream(MemoryStreamRO(buf), fname); }
 
 /// wrap read-write memory buffer into VFile; duplicates data
-public VFile wrapMemoryRW (const(void)[] buf, string fname=null) { return wrapStream(MemoryStreamRW(buf), fname); }
+public VFile wrapMemoryRW (const(ubyte)[] buf, string fname=null) { return wrapStream(MemoryStreamRW(buf), fname); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

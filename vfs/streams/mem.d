@@ -23,10 +23,25 @@ private import iv.vfs.augs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// WARNING! RW streams will set NO_INTERIOR!
+public alias MemoryStreamRW = MemoryStreamImpl!(true, false);
+public alias MemoryStreamRWRef = MemoryStreamImpl!(true, true);
+public alias MemoryStreamRO = MemoryStreamImpl!(false, false);
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 // not thread-safe
-public struct MemoryStreamRW {
+struct MemoryStreamImpl(bool rw, bool asref) {
 private:
-  ubyte[] data;
+  static if (rw) {
+    static if (asref)
+      ubyte[]* data;
+    else
+      ubyte[] data;
+  } else {
+    static assert(!asref, "wtf?!");
+    const(ubyte)[] data;
+  }
   usize curpos;
   bool eofhit;
   bool closed = false;
@@ -39,12 +54,30 @@ public:
   }
 
 public:
-  this (const(void)[] adata) @trusted {
-    if (adata.length > MaxSize) throw new VFSException("buffer too big");
-    data = cast(typeof(data))(adata.dup);
+  static if (rw) {
+    static if (asref) {
+      this (ref ubyte[] adata) @trusted {
+        if (adata.length > MaxSize) throw new VFSException("buffer too big");
+        data = &adata;
+        eofhit = (adata.length == 0);
+      }
+      @property ubyte[]* bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+    } else {
+      this (const(ubyte)[] adata) @trusted {
+        if (adata.length > MaxSize) throw new VFSException("buffer too big");
+        data = cast(typeof(data))(adata.dup);
+        eofhit = (adata.length == 0);
+      }
+      @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+    }
+  } else {
+    this (const(void)[] adata) @trusted {
+      if (adata.length > MaxSize) throw new VFSException("buffer too big");
+      data = cast(typeof(data))(adata);
+      eofhit = (adata.length == 0);
+    }
+    @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
   }
-
-  @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
 
   @property long size () const pure nothrow @safe @nogc { pragma(inline, true); return data.length; }
   @property long tell () const pure nothrow @safe @nogc { pragma(inline, true); return curpos; }
@@ -88,163 +121,29 @@ public:
   }
 
   ssize write (in void* buf, usize count) {
-    import core.stdc.string : memcpy;
-    if (closed) return -1;
-    if (count == 0) return 0;
-    if (count > MaxSize-curpos) return -1;
-    if (data.length < curpos+count) data.length = curpos+count;
-    memcpy(data.ptr+curpos, buf, count);
-    curpos += count;
-    return count;
+    static if (rw) {
+      import core.stdc.string : memcpy;
+      if (closed) return -1;
+      if (count == 0) return 0;
+      if (count > MaxSize-curpos) return -1;
+      if (data.length < curpos+count) {
+        auto optr = data.ptr;
+        data.length = curpos+count;
+        if (data.ptr !is optr) {
+          import core.memory : GC;
+          optr = data.ptr;
+          if (optr is GC.addrOf(optr)) GC.setAttr(optr, GC.BlkAttr.NO_INTERIOR);
+        }
+      }
+      memcpy(data.ptr+curpos, buf, count);
+      curpos += count;
+      return count;
+    } else {
+      return -1;
+    }
   }
 
   void close () pure nothrow @safe @nogc { curpos = 0; data = null; eofhit = true; closed = true; }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-// not thread-safe
-public struct MemoryStreamRWRef {
-private:
-  ubyte[]* data;
-  usize curpos;
-  bool eofhit;
-  bool closed = false;
-
-public:
-  static if (usize.sizeof == 4) {
-    enum MaxSize = 0x7fff_ffffU;
-  } else {
-    enum MaxSize = 0x7fff_ffff_ffff_ffffUL;
-  }
-
-public:
-  this (ref ubyte[] adata) @trusted {
-    if (adata.length > MaxSize) throw new VFSException("buffer too big");
-    data = &adata;
-  }
-
-  @property ubyte[]* bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
-
-  @property long size () const pure nothrow @safe @nogc { pragma(inline, true); return data.length; }
-  @property long tell () const pure nothrow @safe @nogc { pragma(inline, true); return curpos; }
-  @property bool eof () const pure nothrow @trusted @nogc { pragma(inline, true); return eofhit; }
-  @property bool isOpen () const pure nothrow @trusted @nogc { pragma(inline, true); return !closed; }
-
-  void seek (long offset, int origin=Seek.Set) @trusted {
-    if (closed) throw new VFSException("can't seek in closed stream");
-    switch (origin) {
-      case Seek.Set:
-        if (offset < 0 || offset > MaxSize) throw new VFSException("invalid offset");
-        curpos = cast(usize)offset;
-        break;
-      case Seek.Cur:
-        if (offset < -cast(long)curpos || offset > MaxSize-curpos) throw new VFSException("invalid offset");
-        curpos += offset;
-        break;
-      case Seek.End:
-        if (offset < -cast(long)data.length || offset > MaxSize-data.length) throw new VFSException("invalid offset");
-        curpos = cast(usize)(cast(long)data.length+offset);
-        break;
-      default: throw new VFSException("invalid offset origin");
-    }
-    eofhit = false;
-  }
-
-  ssize read (void* buf, usize count) {
-    if (closed) return -1;
-    if (curpos >= data.length) { eofhit = true; return 0; }
-    if (count > 0) {
-      import core.stdc.string : memcpy;
-      usize rlen = data.length-curpos;
-      if (rlen >= count) rlen = count; else eofhit = true;
-      assert(rlen != 0);
-      memcpy(buf, data.ptr+curpos, rlen);
-      curpos += rlen;
-      return cast(ssize)rlen;
-    } else {
-      return 0;
-    }
-  }
-
-  ssize write (in void* buf, usize count) {
-    import core.stdc.string : memcpy;
-    if (closed) return -1;
-    if (count == 0) return 0;
-    if (count > MaxSize-curpos) return -1;
-    if (data.length < curpos+count) data.length = curpos+count;
-    memcpy(data.ptr+curpos, buf, count);
-    curpos += count;
-    return count;
-  }
-
-  void close () pure nothrow @safe @nogc { curpos = 0; data = null; eofhit = true; closed = true; }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-// not thread-safe
-public struct MemoryStreamRO {
-private:
-  const(ubyte)[] data;
-  usize curpos;
-  bool eofhit;
-
-public:
-  static if (usize.sizeof == 4) {
-    enum MaxSize = 0x7fff_ffffU;
-  } else {
-    enum MaxSize = 0x7fff_ffff_ffff_ffffUL;
-  }
-
-public:
-  this (const(void)[] adata) @trusted {
-    if (adata.length > MaxSize) throw new VFSException("buffer too big");
-    data = cast(typeof(data))adata;
-  }
-
-  @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
-
-  @property long size () const pure nothrow @safe @nogc { pragma(inline, true); return data.length; }
-  @property long tell () const pure nothrow @safe @nogc { pragma(inline, true); return curpos; }
-  @property bool eof () const pure nothrow @trusted @nogc { pragma(inline, true); return eofhit; }
-  @property bool isOpen () const pure nothrow @trusted @nogc { pragma(inline, true); return (data !is null); }
-
-  void seek (long offset, int origin=Seek.Set) @trusted {
-    switch (origin) {
-      case Seek.Set:
-        if (offset < 0 || offset > MaxSize) throw new VFSException("invalid offset");
-        curpos = cast(usize)offset;
-        break;
-      case Seek.Cur:
-        if (offset < -cast(long)curpos || offset > MaxSize-curpos) throw new VFSException("invalid offset");
-        curpos += offset;
-        break;
-      case Seek.End:
-        if (offset < -cast(long)data.length || offset > MaxSize-data.length) throw new VFSException("invalid offset");
-        curpos = cast(usize)(cast(long)data.length+offset);
-        break;
-      default: throw new VFSException("invalid offset origin");
-    }
-    eofhit = false;
-  }
-
-  ssize read (void* buf, usize count) {
-    if (curpos >= data.length) { eofhit = true; return 0; }
-    if (count > 0) {
-      import core.stdc.string : memcpy;
-      usize rlen = data.length-curpos;
-      if (rlen >= count) rlen = count; else eofhit = true;
-      assert(rlen != 0);
-      memcpy(buf, data.ptr+curpos, rlen);
-      curpos += rlen;
-      return cast(ssize)rlen;
-    } else {
-      return 0;
-    }
-  }
-
-  void close () pure nothrow @safe @nogc { curpos = 0; data = null; }
 }
 
 
