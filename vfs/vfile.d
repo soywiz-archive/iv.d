@@ -1320,6 +1320,19 @@ version(vfs_use_zlib_unpacker) {
     bool eofhit;
     string fname;
 
+    int readBuf (ubyte[] buf) {
+      { import core.stdc.stdio; printf("inf: reading %u bytes (pkpos=%d; pksize=%d)\n", cast(uint)buf.length, cast(int)pkpos, cast(int)pksize); }
+      if (pkpos >= pksize) return 0; // eof
+      int toread = cast(int)buf.length;
+      if (toread > pksize-pkpos) toread = cast(int)(pksize-pkpos);
+      assert(toread > 0);
+      zfl.seek(stpos+pkpos);
+      auto rd = zfl.rawRead(buf[0..toread]);
+      if (rd.length == 0) { pkpos = pksize; return 0; } // eof
+      pkpos += rd.length;
+      return cast(int)rd.length;
+    }
+
     this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
       //{ import core.stdc.stdio; printf("inf: aupsize=%d; astpos=%d; asize=%d\n", cast(int)aupsize, cast(int)astpos, cast(int)asize); }
       if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
@@ -1345,8 +1358,9 @@ version(vfs_use_zlib_unpacker) {
         if (ifs is null) throw new Exception("out of memory");
         memset(ifs, 0, InfStream.sizeof);
       }
+      /*
       ifs.reinit(delegate (ubyte[] buf) {
-        //{ import core.stdc.stdio; printf("inf: reading %u bytes (pkpos=%d; pksize=%d)\n", cast(uint)buf.length, cast(int)pkpos, cast(int)pksize); }
+        { import core.stdc.stdio; printf("inf: reading %u bytes (pkpos=%d; pksize=%d)\n", cast(uint)buf.length, cast(int)pkpos, cast(int)pksize); }
         if (pkpos >= pksize) return 0; // eof
         int toread = cast(int)buf.length;
         if (toread > pksize-pkpos) toread = cast(int)(pksize-pkpos);
@@ -1357,6 +1371,8 @@ version(vfs_use_zlib_unpacker) {
         pkpos += rd.length;
         return cast(int)rd.length;
       }, (mode == VFSZLibMode.ZLib ? InfStream.Mode.ZLib : InfStream.Mode.Deflate));
+      */
+      ifs.reinit(&readBuf, (mode == VFSZLibMode.ZLib ? InfStream.Mode.ZLib : InfStream.Mode.Deflate));
     }
 
     void close () {
