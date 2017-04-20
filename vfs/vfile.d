@@ -1321,7 +1321,7 @@ version(vfs_use_zlib_unpacker) {
     string fname;
 
     int readBuf (ubyte[] buf) {
-      { import core.stdc.stdio; printf("inf: reading %u bytes (pkpos=%d; pksize=%d)\n", cast(uint)buf.length, cast(int)pkpos, cast(int)pksize); }
+      //{ import core.stdc.stdio; printf("inf: reading %u bytes (pkpos=%d; pksize=%d)\n", cast(uint)buf.length, cast(int)pkpos, cast(int)pksize); }
       if (pkpos >= pksize) return 0; // eof
       int toread = cast(int)buf.length;
       if (toread > pksize-pkpos) toread = cast(int)(pksize-pkpos);
