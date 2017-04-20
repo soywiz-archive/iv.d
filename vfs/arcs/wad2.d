@@ -17,6 +17,7 @@
  */
 module iv.vfs.arcs.wad2;
 
+import std.variant : Variant;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
@@ -39,6 +40,25 @@ private:
     long size;
     long ofs; // offset in archive
     string name; // with path
+    char type;
+  }
+
+  /** query various file properties; driver-specific.
+   * properties of interest:
+   *   "type" -- internal type
+   *   "packed" -- is file packed?
+   *   "pksize" -- packed file size (for archives)
+   *   "offset" -- offset in wad
+   *   "size"   -- file size (so we can get size without opening the file)
+   */
+  public override Variant stat (usize idx, const(char)[] propname) {
+    if (idx >= dir.length) return Variant();
+    if (propname == "type") return Variant(dir[idx].type);
+    if (propname == "packed") return Variant(false);
+    if (propname == "pksize") return Variant(dir[idx].size);
+    if (propname == "offset") return Variant(dir[idx].ofs);
+    if (propname == "size") return Variant(dir[idx].size);
+    return Variant();
   }
 
   VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size, dir[idx].name); }
@@ -61,6 +81,7 @@ private:
       fi.size = fl.readNum!uint;
       fl.readNum!uint; // size of entry in memory, not used
       ubyte type = fl.readNum!ubyte;
+      ubyte origtype = type;
       if (type == '/') type = '_'; // oops
       auto compr = fl.readNum!ubyte; // 0: none
       fl.readNum!ushort; // not used
@@ -86,6 +107,7 @@ private:
       if (compr != 0) throw new VFSNamedException!"Wad2Archive"("invalid compression type");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
+        fi.type = cast(char)origtype;
         dir.arrayAppendUnsafe(fi);
       }
     }

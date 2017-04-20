@@ -18,7 +18,6 @@
 module iv.vfs.arcs.zip;
 
 import std.variant : Variant;
-
 import iv.vfs.types : usize, ssize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.augs;
 import iv.vfs.main;
@@ -44,19 +43,40 @@ private:
     uint modtime;
     string name;
     uint crc32;
+    ushort method; // packing method
   }
 
   /** query various file properties; driver-specific.
    * properties of interest:
    *   "modtime" -- modify time; unixtime, UTC
-   *   "pksize" -- packed file size (for archives)
-   *   "crc32" -- crc32 value for some archives
+   *   "packed"  -- is file packed?
+   *   "pksize"  -- packed file size (for archives)
+   *   "crc32"   -- crc32 value for some archives
+   *   "size"    -- file size (so we can get size without opening the file)
+   *   "method"  -- uint with packing method
+   *   "methodname" -- string name of packing method
    */
   public override Variant stat (usize idx, const(char)[] propname) {
     if (idx >= dir.length) return Variant();
     if (propname == "modtime") return Variant(dir[idx].modtime);
+    if (propname == "packed") return Variant(false);
     if (propname == "pksize") return Variant(dir[idx].pksize);
     if (propname == "crc32") return Variant(dir[idx].crc32);
+    if (propname == "size") return Variant(dir[idx].size);
+    if (propname == "method") return Variant(cast(uint)dir[idx].method);
+    if (propname == "methodname") {
+      switch (dir[idx].method) {
+        case 8: return Variant("deflate");
+        case 0: return Variant("store");
+        case 6: return Variant("implode");
+        case 1: return Variant("shrink");
+        case 2: case 3: case 4: case 5: return Variant("reduce");
+        case 9: return Variant("deflate64");
+        case 14: return Variant("lzma");
+        default: break;
+      }
+      return Variant("unknown");
+    }
     return Variant();
   }
 
@@ -254,6 +274,7 @@ private:
         fi.size = cdfh.size;
         fi.hdrofs = cdfh.hdrofs;
         fi.crc32 = cdfh.crc32;
+        fi.method = cdfh.method;
         try { fi.modtime = cdfh.modtime; } catch (Exception e) {}
         if (cdfh.method == 0) fi.pksize = fi.size;
         // now, this is valid file, so read it's name

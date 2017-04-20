@@ -17,6 +17,7 @@
  */
 module iv.vfs.arcs.dunepak;
 
+import std.variant : Variant;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
@@ -39,6 +40,22 @@ private:
     long size;
     long ofs; // offset in archive
     string name; // with path
+  }
+
+  /** query various file properties; driver-specific.
+   * properties of interest:
+   *   "packed" -- is file packed?
+   *   "pksize" -- packed file size (for archives)
+   *   "offset" -- offset in wad
+   *   "size"   -- file size (so we can get size without opening the file)
+   */
+  public override Variant stat (usize idx, const(char)[] propname) {
+    if (idx >= dir.length) return Variant();
+    if (propname == "packed") return Variant(false);
+    if (propname == "pksize") return Variant(dir[idx].size);
+    if (propname == "offset") return Variant(dir[idx].ofs);
+    if (propname == "size") return Variant(dir[idx].size);
+    return Variant();
   }
 
   VFile wrap (usize idx) { return wrapStreamRO(st, dir[idx].ofs, dir[idx].size, dir[idx].name); }

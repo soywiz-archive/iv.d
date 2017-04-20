@@ -292,7 +292,9 @@ public:
 
   override Variant stat (usize idx, const(char)[] name) {
     buildFileList();
+    if (idx < files.length && name == "packed") return Variant(false);
     if (idx < files.length && name == "modtime" && files[idx].modtime) return Variant(files[idx].modtime);
+    if (idx < files.length && (name == "size" || name == "pksize")) { import std.file : getSize; return Variant(files[idx].name.getSize); }
     return Variant();
   }
 }

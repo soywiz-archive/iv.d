@@ -17,6 +17,7 @@
  */
 module iv.vfs.arcs.dfwad;
 
+import std.variant : Variant;
 import iv.vfs.types : usize, ssize, Seek;
 import iv.vfs.augs;
 import iv.vfs.main;
@@ -40,6 +41,18 @@ private:
     long ofs; // offset in archive
     long size = -1;
     string name; // with path
+  }
+
+  /** query various file properties; driver-specific.
+   * properties of interest:
+   *   "packed" -- is file packed?
+   *   "offset" -- offset in wad
+   */
+  public override Variant stat (usize idx, const(char)[] propname) {
+    if (idx >= dir.length) return Variant();
+    if (propname == "packed") return Variant(true);
+    if (propname == "offset") return Variant(dir[idx].ofs);
+    return Variant();
   }
 
   VFile wrap (usize idx) {
