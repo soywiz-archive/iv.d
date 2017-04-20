@@ -20,6 +20,7 @@ module iv.vfs.main;
 private:
 
 import core.time;
+import std.variant : Variant; // for `stat()`
 import iv.vfs.types : usize;
 import iv.vfs.config;
 import iv.vfs.augs;
@@ -91,29 +92,28 @@ private struct VFSLock {
 public abstract class VFSDriver {
   /// for dir range
   public static struct DirEntry {
+    VFSDriverId drvid; // assigned only in `vfsFileList()` or `vfsForEachFile()`
+    usize index; // should be set by the driver
     string name; // for disk: doesn't include base path; ends with '/'
     long size; // can be -1 if size is not known; for dirs means nothing
-    ulong crtime; // 0: unknown; unixtime
-    ulong modtime; // 0: unknown; unixtime
-    long pksize; // packed size; should be equal to size if archive is not packed
-    uint crc32; // 0: none
 
-    this(T:const(char)[]) (T aname, long asize, ulong acrtime=0, ulong amodtime=0, long apksize=-1, uint acrc32=0) {
+    this(T:const(char)[]) (T aname, long asize) {
            static if (is(T == typeof(null))) name = null;
       else static if (is(T == string)) name = aname;
       else name = aname.idup;
+      index = index.max; // just in case
       size = asize;
-      crtime = acrtime;
-      modtime = amodtime;
-      pksize = (apksize >= 0 ? apksize : size);
-      crc32 = acrc32;
     }
 
-    @property const pure nothrow @safe @nogc {
-      bool hasCreationTime () { pragma(inline, true); return (crtime != 0); }
-      bool hasModTime () { pragma(inline, true); return (modtime != 0); }
-      bool hasCrc32 () { pragma(inline, true); return (crc32 != 0); }
+    this(T:const(char)[]) (uint idx, T aname, long asize) {
+           static if (is(T == typeof(null))) name = null;
+      else static if (is(T == string)) name = aname;
+      else name = aname.idup;
+      index = idx;
+      size = asize;
     }
+
+    Variant stat (const(char)[] propname) const { return vfsStat(this, propname); }
   }
 
   /// this constructor is used for disk drivers
@@ -131,8 +131,18 @@ public abstract class VFSDriver {
 
   /// get number of entries in archive directory.
   @property usize dirLength () { return 0; }
+
   /// get directory entry with the given index. can throw, but it's not necessary.
   DirEntry dirEntry (usize idx) { return DirEntry.init; }
+
+  /** query various file properties; driver-specific.
+   * properties of interest:
+   *   "cretime" -- creation time; unixtime, UTC
+   *   "modtime" -- modify time; unixtime, UTC
+   *   "pksize" -- packed file size (for archives)
+   *   "crc32" -- crc32 value for some archives
+   */
+  Variant stat (usize idx, const(char)[] propname) { return Variant(); }
 }
 
 
@@ -240,8 +250,15 @@ public:
 
 /// same as `VFSDriverDisk`, but provides file list too
 public class VFSDriverDiskListed : VFSDriverDisk {
+  private static struct FileEntry {
+    //uint index; // should be set by the driver
+    string name;
+    long size;
+    ulong modtime; // 0: unknown; unixtime
+  }
+
 protected:
-  DirEntry[] files;
+  FileEntry[] files;
   bool flistInited;
   bool needTimes;
 
@@ -255,9 +272,9 @@ protected:
         if (de.name.length <= dataPath.length) continue;
         if (needTimes) {
           import std.datetime;
-          files ~= DirEntry(de.name[dataPath.length..$], de.size, 0, de.timeLastModified.toUTC.toUnixTime());
+          files ~= FileEntry(de.name[dataPath.length..$], de.size, de.timeLastModified.toUTC.toUnixTime());
         } else {
-          files ~= DirEntry(de.name[dataPath.length..$], de.size);
+          files ~= FileEntry(de.name[dataPath.length..$], de.size);
         }
       }
     } catch (Exception e) {}
@@ -271,7 +288,13 @@ public:
   /// get number of entries in archive directory.
   override @property usize dirLength () { buildFileList(); return files.length; }
   /// get directory entry with the given index. can throw, but it's not necessary.
-  override DirEntry dirEntry (usize idx) { buildFileList(); return files[idx]; }
+  override DirEntry dirEntry (usize idx) { buildFileList(); return DirEntry(idx, files[idx].name, files[idx].size); }
+
+  override Variant stat (usize idx, const(char)[] name) {
+    buildFileList();
+    if (idx < files.length && name == "modtime" && files[idx].modtime) return Variant(files[idx].modtime);
+    return Variant();
+  }
 }
 
 
@@ -416,6 +439,7 @@ public VFSDriver.DirEntry[] vfsFileList () {
     foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
       auto de = drvnfo.drv.dirEntry(idx);
       if (de.name.length == 0) continue;
+      de.drvid = drvnfo.drvid;
       if (auto iptr = de.name in filesSeen) {
         res.ptr[*iptr] = de;
       } else {
@@ -445,6 +469,7 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb)
       auto de = drvnfo.drv.dirEntry(idx);
       if (de.name !in filesSeen) {
         filesSeen[de.name] = true;
+        de.drvid = drvnfo.drvid;
         if (auto res = cb(de)) return res;
       }
     }
@@ -453,31 +478,21 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb)
 }
 
 
-/// call callback for each known file in VFS. return non-zero from callback to stop.
-/// WARNING: don't add new drivers while this is in process!
-public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de, VFSDriverId drvid) cb) {
-  if (cb is null) return 0;
-
-  auto lock = VFSLock.lock();
-  cleanupDrivers();
-  bool[string] filesSeen;
-  foreach_reverse (ref drvnfo; drivers) {
-    if (drvnfo.temp) continue;
-    foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
-      auto de = drvnfo.drv.dirEntry(idx);
-      if (de.name !in filesSeen) {
-        filesSeen[de.name] = true;
-        if (auto res = cb(de, drvnfo.drvid)) return res;
-      }
-    }
-  }
-  return 0;
+/// Ditto.
+public void vfsForEachFile (scope void delegate (in ref VFSDriver.DirEntry de) cb) {
+  if (cb !is null) vfsForEachFile((in ref VFSDriver.DirEntry de) { cb(de); return 0; });
 }
 
 
-/// Ditto.
-public void vfsForEachFile (scope void delegate (in ref VFSDriver.DirEntry de, VFSDriverId drvid) cb) {
-  if (cb !is null) vfsForEachFile((in ref VFSDriver.DirEntry de, VFSDriverId drvid) { cb(de, drvid); return 0; });
+/// query various things from driver
+public Variant vfsStat (in ref VFSDriver.DirEntry de, const(char)[] propname) {
+  if (!de.drvid.valid) return Variant();
+  auto lock = VFSLock.lock();
+  cleanupDrivers();
+  foreach_reverse (ref drvnfo; drivers) {
+    if (drvnfo.drvid == de.drvid) return drvnfo.drv.stat(de.index, propname);
+  }
+  return Variant();
 }
 
 

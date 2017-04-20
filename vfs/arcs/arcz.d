@@ -656,10 +656,10 @@ public:
     if (res < 0) throw new Exception("seek error");
   }
 
-  private import std.traits : isMutable;
+  //private import std.traits : isMutable;
 
   //TODO: overflow check
-  T[] rawRead(T) (T[] buf) if (isMutable!T) {
+  T[] rawRead(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
     if (!zlp) throw new Exception("can't read from closed file");
     if (buf.length > 0) {
       auto res = zl.read(buf.ptr, buf.length*T.sizeof);

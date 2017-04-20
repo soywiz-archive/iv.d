@@ -17,6 +17,8 @@
  */
 module iv.vfs.arcs.zip;
 
+import std.variant : Variant;
+
 import iv.vfs.types : usize, ssize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.augs;
 import iv.vfs.main;
@@ -39,9 +41,23 @@ private:
     long pksize;
     long size;
     long hdrofs;
-    ulong modtime;
+    uint modtime;
     string name;
     uint crc32;
+  }
+
+  /** query various file properties; driver-specific.
+   * properties of interest:
+   *   "modtime" -- modify time; unixtime, UTC
+   *   "pksize" -- packed file size (for archives)
+   *   "crc32" -- crc32 value for some archives
+   */
+  public override Variant stat (usize idx, const(char)[] propname) {
+    if (idx >= dir.length) return Variant();
+    if (propname == "modtime") return Variant(dir[idx].modtime);
+    if (propname == "pksize") return Variant(dir[idx].pksize);
+    if (propname == "crc32") return Variant(dir[idx].crc32);
+    return Variant();
   }
 
   VFile wrap (usize idx) {
@@ -404,12 +420,12 @@ align(1):
   }
 
   // unixtime
-  @property ulong modtime() const {
+  @property uint modtime() const {
     version(LDC) {
       return 0;
     } else {
       import std.datetime;
-      return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
     }
   }
 
@@ -465,12 +481,12 @@ align(1):
   }
 
   // unixtime
-  @property ulong modtime() const {
+  @property uint modtime() const {
     version(LDC) {
       return 0;
     } else {
       import std.datetime;
-      return SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
     }
   }
 

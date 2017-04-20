@@ -938,27 +938,36 @@ public:
       lcp.ofs = gb.textsize;
     } else {
       // faster scanning
-      int lcount = 0; // total number of lines
-      //{ import core.stdc.stdio; printf("loaded %u bytes; %d lines found\n", gb.textsize, lcount); }
-      if (!growLineCache(1)) return false; // should have at least one
-      uint pos = 0;
-      while (pos < ts) {
-        if (lcount+1 >= locsize) { if (!growLineCache(lcount+1)) return false; }
-        locache[lcount++].initWithPos(pos);
-        pos = gb.fastSkipEol(pos);
+      if (gb.textsize == 0) {
+        // no text
+        if (!growLineCache(1)) return false; // should have at least one
+        assert(locsize >= 2);
+        locache[0].initWithPos(0);
+        locache[1].initWithPos(0);
+        mLineCount = 1;
+      } else {
+        int lcount = 0; // total number of lines
+        //{ import core.stdc.stdio; printf("loaded %u bytes; %d lines found\n", gb.textsize, lcount); }
+        if (!growLineCache(1)) return false; // should have at least one
+        uint pos = 0;
+        while (pos < ts) {
+          if (lcount+1 >= locsize) { if (!growLineCache(lcount+1)) return false; }
+          locache[lcount++].initWithPos(pos);
+          pos = gb.fastSkipEol(pos);
+        }
+        assert(lcount > 0);
+        // hack for last empty line, if it ends with '\n'
+        if (ts && gb[ts-1] == '\n') {
+          if (lcount+1 >= locsize) { if (!growLineCache(lcount+1)) return false; }
+          locache[lcount++].initWithPos(ts);
+        }
+        // last line
+        assert(pos == ts);
+        assert(lcount < locsize);
+        locache[lcount].initWithPos(pos);
+        mLineCount = lcount;
       }
-      assert(lcount > 0);
-      // hack for last empty line, if it ends with '\n'
-      if (ts && gb[ts-1] == '\n') {
-        if (lcount+1 >= locsize) { if (!growLineCache(lcount+1)) return false; }
-        locache[lcount++].initWithPos(ts);
-      }
-      // last line
-      assert(pos == ts);
-      assert(lcount < locsize);
-      locache[lcount].initWithPos(pos);
     }
-    mLineCount = lcount;
     version(egeditor_scan_time) {
       import core.stdc.stdio;
       auto et = clockMilli()-stt;

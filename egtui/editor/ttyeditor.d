@@ -948,6 +948,15 @@ public:
         return;
       }
     }
+    //HACK: try "arsd.sdpy"
+    if (gb[pos-1] == '.' && gb[pos-2] == 'd' && gb[pos-3] == 's' && gb[pos-4] == 'r' && gb[pos-5] == 'a' && !isACGoodWordChar(pos-6)) {
+      if (tk[$-tklen..$] == "sdpy") {
+        string ntx = "simpledisplay";
+        // insert new token
+        replaceText!"end"(tkstpos, tklen, ntx);
+        return;
+      }
+    }
     //debug(egauto) { { import iv.vfs; auto fo = VFile("z00_tk.bin", "w"); fo.write(tk[$-tklen..$]); } }
     // build token list
     char[128] xtk = void;

@@ -17,7 +17,7 @@
  */
 module iv.vfs.augs;
 
-private import std.traits : isMutable;
+//private import std.traits : isMutable;
 
 public import iv.vfs.types : Seek;
 public import iv.vfs.error;
@@ -51,7 +51,7 @@ enum isLowLevelStreamS(T) = is(typeof((inout int=0) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// augment low-level streams with `rawRead`
-T[] rawRead(ST, T) (auto ref ST st, T[] buf) if (isLowLevelStreamR!ST && isMutable!T) {
+T[] rawRead(ST, T) (auto ref ST st, T[] buf) if (isLowLevelStreamR!ST && !is(T == const) && !is(T == immutable)) {
   if (buf.length > 0) {
     auto res = st.read(buf.ptr, buf.length*T.sizeof);
     if (res == -1 || res%T.sizeof != 0) throw new VFSException("read error");
@@ -70,7 +70,7 @@ void rawWrite(ST, T) (auto ref ST st, in T[] buf) if (isLowLevelStreamW!ST) {
 }
 
 /// read exact size or throw error
-T[] rawReadExact(ST, T) (auto ref ST st, T[] buf) if (isReadableStream!ST && isMutable!T) {
+T[] rawReadExact(ST, T) (auto ref ST st, T[] buf) if (isReadableStream!ST && !is(T == const) && !is(T == immutable)) {
   if (buf.length == 0) return buf;
   auto left = buf.length*T.sizeof;
   auto dp = cast(ubyte*)buf.ptr;

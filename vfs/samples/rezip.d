@@ -44,9 +44,9 @@ void repackZip (ConString infname, ConString outfname, ZipWriter.Method pmt) {
     fileseen[de.name] = true;
     conwrite("  ", de.name, " ... ");
     try {
-      auto zidx = zw.pack(VFile(de.name, "I"), de.name, ZipFileTime(de.modtime), pmt, de.size); // don't ignore case
-      conwritefln!"[%s] %s -> %s"(zw.files[zidx].methodName, n2s(de.pksize), n2s(zw.files[zidx].pksize));
-      if (zw.files[zidx].crc != de.crc32) throw new Exception("crc error!");
+      auto zidx = zw.pack(VFile(de.name, "I"), de.name, ZipFileTime(de.stat("modtime").get!uint), pmt, de.size); // don't ignore case
+      conwritefln!"[%s] %s -> %s"(zw.files[zidx].methodName, n2s(de.stat("pksize").get!long), n2s(zw.files[zidx].pksize));
+      if (zw.files[zidx].crc != de.stat("crc32").get!uint) throw new Exception("crc error!");
     } catch (Exception e) {
       conwriteln("ERROR: ", e.msg);
       throw e;

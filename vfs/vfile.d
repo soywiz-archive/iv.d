@@ -23,11 +23,14 @@
  * wrapper itself isn't.
  */
 module iv.vfs.vfile;
+
+//version = vfs_add_std_stdio_wrappers;
+
 private:
 static import core.stdc.stdio;
 static import core.sys.posix.stdio;
 static import core.sys.posix.unistd;
-static import std.stdio;
+version(vfs_add_std_stdio_wrappers) static import std.stdio;
 
 import iv.vfs.types : ssize, usize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.config;
@@ -36,7 +39,9 @@ import iv.vfs.augs;
 import iv.vfs.streams.mem;
 
 version(LDC) {}
-else { version = vfs_stdio_wrapper; }
+else {
+  version(vfs_add_std_stdio_wrappers) version = vfs_stdio_wrapper;
+}
 
 // uncomment to use zlib instead of internal inflater
 //version = vfs_use_zlib_unpacker;
@@ -104,6 +109,7 @@ public:
   }
 
   /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
+  static import etc.c.zlib;
   package(iv.vfs) static VFile OpenGZ (etc.c.zlib.gzFile fl, bool own=true) {
     if (fl is null) throw new VFSException("can't open file");
     VFile fres;
@@ -145,7 +151,7 @@ public:
   this (this) nothrow @trusted @nogc {
     debug(vfs_rc) { import core.stdc.stdio : printf; printf("POSTBLIT(0x%08x)\n", cast(void*)wstp); }
     debug(vfs_rc_trace) {
-      try { throw new Exception("stack trace"); } catch (Exception e) { import std.stdio; writeln("*** ", e.toString); }
+      try { throw new Exception("stack trace"); } catch (Exception e) { import core.stdc.stdio; string es = e.toString; printf("*** %.*s", cast(uint)es.length, es.ptr); }
     }
     if (wst !is null) wst.incRef();
   }
@@ -154,7 +160,7 @@ public:
   ~this () nothrow {
     debug(vfs_rc) { import core.stdc.stdio : printf; printf("DTOR(0x%08x)\n", cast(void*)wstp); }
     debug(vfs_rc_trace) {
-      try { throw new Exception("stack trace"); } catch (Exception e) { import std.stdio; writeln("*** ", e.toString); }
+      try { throw new Exception("stack trace"); } catch (Exception e) { import core.stdc.stdio; string es = e.toString; printf("*** %.*s", cast(uint)es.length, es.ptr); }
     }
     try {
       doDecRef(wst);
@@ -197,9 +203,9 @@ public:
 
   @property bool eof () { pragma(inline, true); return (!wstp || wst.eof); }
 
-  private import std.traits : isMutable;
+  //private import std.traits : isMutable;
 
-  T[] rawRead(T) (T[] buf) if (isMutable!T) {
+  T[] rawRead(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
     if (!isOpen) throw new VFSException("can't read from closed stream");
     if (buf.length > 0) {
       ssize res;
@@ -1687,7 +1693,7 @@ public VFile wrapStdin () {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /* handy building block for various unpackers/decoders
- * XPS API:
+ * XPS API (XPS should be a struct):
  *
  * XPS.InitUpkBufSize = initial size of intermediate "unpack buffer", which will be used
  *                      to store unpacked data chunks
@@ -1711,11 +1717,11 @@ public VFile wrapStdin () {
  * void close ();
  *   close fl, shutdown decoder, free memory, etc. nothing else will be called after this
  *
- * bool unpackChunk (VStreamDecoderLowLevelROPutBytesDg pdg);
+ * bool unpackChunk (scope VStreamDecoderLowLevelROPutBytesDg pdg);
  *   decode chunk of arbitrary size, use `putUnpackedBytes()` to put unpacked bytes into
- *   buffer. return `false` if EOF was hit, otherwise emit at least one byte.
- *   i.e. `unpackChunk()` can emit no bytes and return `true` to note that it can be called
- *   to get more data.
+ *   buffer. return `false` if EOF was hit, otherwise try to emit at least one byte.
+ *   note that `unpackChunk()` can emit no bytes and return `true` to indicate that it
+ *   can be called again to get more data.
  *     pdg = delegate that should be called to emit decoded bytes
  */
 public alias VStreamDecoderLowLevelROPutBytesDg = void delegate (const(ubyte)[] bts...) @trusted;
