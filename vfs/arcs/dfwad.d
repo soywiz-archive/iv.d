@@ -66,13 +66,13 @@ private:
 
   void open (VFile fl, const(char)[] prefixpath) {
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"DFWadArchive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new /*VFSNamedException!"DFWadArchive"*/VFSExceptionArc("file too big");
     // check it
-    if (flsize < 8) throw new VFSNamedException!"DFWadArchive"("invalid archive file");
+    if (flsize < 8) throw new /*VFSNamedException!"DFWadArchive"*/VFSExceptionArc("invalid archive file");
 
     char[6] sign;
     fl.rawReadExact(sign[]);
-    if (sign != "DFWAD\x01") throw new VFSNamedException!"DFWadArchive"("invalid archive file");
+    if (sign != "DFWAD\x01") throw new /*VFSNamedException!"DFWadArchive"*/VFSExceptionArc("invalid archive file");
 
     uint count = fl.readNum!ushort;
     //{ import core.stdc.stdio : printf; printf("dfwad: count=%u\n", cast(uint)count); }
@@ -123,9 +123,9 @@ private:
         }
       }
       // some sanity checks
-      if (fi.pksize > 0 && fi.ofs >= flsize) throw new VFSNamedException!"DFWadArchive"("invalid archive file directory");
-      if (fi.pksize >= flsize) throw new VFSNamedException!"DFWadArchive"("invalid archive file directory");
-      if (fi.ofs+fi.pksize > flsize) throw new VFSNamedException!"DFWadArchive"("invalid archive file directory");
+      if (fi.pksize > 0 && fi.ofs >= flsize) throw new /*VFSNamedException!"DFWadArchive"*/VFSExceptionArc("invalid archive file directory");
+      if (fi.pksize >= flsize) throw new /*VFSNamedException!"DFWadArchive"*/VFSExceptionArc("invalid archive file directory");
+      if (fi.ofs+fi.pksize > flsize) throw new /*VFSNamedException!"DFWadArchive"*/VFSExceptionArc("invalid archive file directory");
       if (name.length) {
         //{ import core.stdc.stdio : printf; printf("[%.*s]\n", cast(uint)name.length, name.ptr); }
         fi.name = cast(string)name; // it's safe here

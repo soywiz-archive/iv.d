@@ -63,14 +63,14 @@ private:
   void open (VFile fl, const(char)[] prefixpath) {
     debug(q1pakarc) import std.stdio : writeln, writefln;
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"Q1PakArchive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new /*VFSNamedException!"Q1PakArchive"*/VFSExceptionArc("file too big");
     char[4] sign;
     fl.rawReadExact(sign[]);
-    if (sign != "PACK" && sign != "SPAK") throw new VFSNamedException!"Q1PakArchive"("not a PAK file");
+    if (sign != "PACK" && sign != "SPAK") throw new /*VFSNamedException!"Q1PakArchive"*/VFSExceptionArc("not a PAK file");
     uint direlsize = (sign[0] == 'S' ? 128 : 64);
     auto dirOfs = fl.readNum!uint;
     auto dirSize = fl.readNum!uint;
-    if (dirSize%direlsize != 0 || dirSize >= flsize || dirOfs >= flsize || dirOfs+dirSize > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid PAK file");
+    if (dirSize%direlsize != 0 || dirSize >= flsize || dirOfs >= flsize || dirOfs+dirSize > flsize) throw new /*VFSNamedException!"Q1PakArchive"*/VFSExceptionArc("invalid PAK file");
     debug(q1pakarc) writefln("dir at: 0x%08x", dirOfs);
     // read directory
     fl.seek(dirOfs);
@@ -96,8 +96,8 @@ private:
       fi.ofs = fl.readNum!uint;
       fi.size = fl.readNum!uint;
       // some sanity checks
-      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid archive directory");
-      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"Q1PakArchive"("invalid archive directory");
+      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new /*VFSNamedException!"Q1PakArchive"*/VFSExceptionArc("invalid archive directory");
+      if (fi.ofs+fi.size > flsize) throw new /*VFSNamedException!"Q1PakArchive"*/VFSExceptionArc("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
         dir.arrayAppendUnsafe(fi);

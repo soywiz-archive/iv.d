@@ -94,14 +94,14 @@ private:
       return false;
     }
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"WadArchive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new /*VFSNamedException!"WadArchive"*/VFSExceptionArc("file too big");
     char[4] sign;
     fl.rawReadExact(sign[]);
-    if (sign != "IWAD" && sign != "PWAD") throw new VFSNamedException!"WadArchive"("not a WAD file");
+    if (sign != "IWAD" && sign != "PWAD") throw new /*VFSNamedException!"WadArchive"*/VFSExceptionArc("not a WAD file");
     auto flCount = fl.readNum!uint;
     auto dirOfs = fl.readNum!uint;
     if (flCount == 0) return;
-    if (flCount > 0x3fff_ffff || dirOfs >= flsize || dirOfs+flCount*16 > flsize) throw new VFSNamedException!"WadArchive"("invalid archive file");
+    if (flCount > 0x3fff_ffff || dirOfs >= flsize || dirOfs+flCount*16 > flsize) throw new /*VFSNamedException!"WadArchive"*/VFSExceptionArc("invalid archive file");
     //{ import core.stdc.stdio; printf("[%.*s]\n", 4, sign.ptr); }
     // read directory
     fl.seek(dirOfs);
@@ -190,8 +190,8 @@ private:
         if (name.length && name[$-1] == '/') name = null;
       }
       // some sanity checks
-      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"WadArchive"("invalid archive directory");
-      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"WadArchive"("invalid archive directory");
+      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new /*VFSNamedException!"WadArchive"*/VFSExceptionArc("invalid archive directory");
+      if (fi.ofs+fi.size > flsize) throw new /*VFSNamedException!"WadArchive"*/VFSExceptionArc("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
         dir.arrayAppendUnsafe(fi);

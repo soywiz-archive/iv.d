@@ -19,6 +19,7 @@ module iv.vfs.error;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/*
 mixin template VFSExceptionCtor() {
   static if (__VERSION__ > 2067) {
     this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
@@ -40,3 +41,16 @@ enum VFSExceptionMx(string name, string base="Exception") = `class `~name~` : `~
 
 mixin(VFSExceptionMx!("VFSException"));
 mixin(VFSExceptionMx!("VFSNamedException(string name)", "VFSException"));
+*/
+
+class VFSException : Exception {
+  this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
+    super(msg, file, line, next);
+  }
+}
+
+class VFSExceptionArc : VFSException {
+  this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
+    super(msg, file, line, next);
+  }
+}

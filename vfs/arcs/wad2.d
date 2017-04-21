@@ -65,13 +65,13 @@ private:
 
   void open (VFile fl, const(char)[] prefixpath) {
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"Wad2Archive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new /*VFSNamedException!"Wad2Archive"*/VFSExceptionArc("file too big");
     char[4] sign;
     fl.rawReadExact(sign[]);
-    if (sign != "WAD2") throw new VFSNamedException!"Wad2Archive"("not a PAK file");
+    if (sign != "WAD2") throw new /*VFSNamedException!"Wad2Archive"*/VFSExceptionArc("not a PAK file");
     auto flCount = fl.readNum!uint;
     auto dirOfs = fl.readNum!uint;
-    if (flCount > 0x3fff_ffff || dirOfs >= flsize || dirOfs+flCount*32 > flsize) throw new VFSNamedException!"Wad2Archive"("invalid archive file");
+    if (flCount > 0x3fff_ffff || dirOfs >= flsize || dirOfs+flCount*32 > flsize) throw new /*VFSNamedException!"Wad2Archive"*/VFSExceptionArc("invalid archive file");
     // read directory
     fl.seek(dirOfs);
     char[16] nbuf;
@@ -102,9 +102,9 @@ private:
         if (name.length && name[$-1] == '/') name = null;
       }
       // some sanity checks
-      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"Wad2Archive"("invalid archive directory");
-      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"Wad2Archive"("invalid archive directory");
-      if (compr != 0) throw new VFSNamedException!"Wad2Archive"("invalid compression type");
+      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new /*VFSNamedException!"Wad2Archive"*/VFSExceptionArc("invalid archive directory");
+      if (fi.ofs+fi.size > flsize) throw new /*VFSNamedException!"Wad2Archive"*/VFSExceptionArc("invalid archive directory");
+      if (compr != 0) throw new /*VFSNamedException!"Wad2Archive"*/VFSExceptionArc("invalid compression type");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
         fi.type = cast(char)origtype;

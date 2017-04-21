@@ -62,13 +62,13 @@ private:
 
   void open (VFile fl, const(char)[] prefixpath) {
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"KenGrpArchive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new /*VFSNamedException!"KenGrpArchive"*/VFSExceptionArc("file too big");
     char[12] sign;
     fl.rawReadExact(sign[]);
-    if (sign != "KenSilverman") throw new VFSNamedException!"KenGrpArchive"("not a KenGrp file");
+    if (sign != "KenSilverman") throw new /*VFSNamedException!"KenGrpArchive"*/VFSExceptionArc("not a KenGrp file");
     auto flCount = fl.readNum!uint;
     if (flCount == 0) return;
-    if (flCount > 0x3fff_ffff) throw new VFSNamedException!"KenGrpArchive"("invalid archive file");
+    if (flCount > 0x3fff_ffff) throw new /*VFSNamedException!"KenGrpArchive"*/VFSExceptionArc("invalid archive file");
     // read directory
     uint curfofs = (flCount+1)*16;
     char[12] nbuf;
@@ -93,8 +93,8 @@ private:
         if (name.length && name[$-1] == '/') name = null;
       }
       // some sanity checks
-      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new VFSNamedException!"KenGrpArchive"("invalid archive directory");
-      if (fi.ofs+fi.size > flsize) throw new VFSNamedException!"KenGrpArchive"("invalid archive directory");
+      if (fi.size > 0 && fi.ofs >= flsize || fi.size > flsize) throw new /*VFSNamedException!"KenGrpArchive"*/VFSExceptionArc("invalid archive directory");
+      if (fi.ofs+fi.size > flsize) throw new /*VFSNamedException!"KenGrpArchive"*/VFSExceptionArc("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
         dir.arrayAppendUnsafe(fi);

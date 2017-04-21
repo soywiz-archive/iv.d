@@ -120,7 +120,7 @@ private:
     DatDirInfo di;
     DatDirEntry de;
     di.read(fl);
-    if (!di.isGoodMagic || di.dirSize < DatDirInfo.sizeof+4) throw new VFSNamedException!"ArcanumDatArchive"("invalid archive");
+    if (!di.isGoodMagic || di.dirSize < DatDirInfo.sizeof+4) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid archive");
     debug(datToEE) {
       writeln("poolSize: ", di.poolSize, "; dirSize: ", di.dirSize);
       writefln("GUID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
@@ -134,8 +134,8 @@ private:
     while (di.dirSize >= DatDirEntry.Size+4) {
       di.dirSize -= DatDirEntry.Size+4;
       auto nlen = fl.readNum!uint;
-      if (nlen > 1024) throw new VFSNamedException!"ArcanumDatArchive"("invalid archive (name too long)");
-      if (nlen > di.dirSize) throw new VFSNamedException!"ArcanumDatArchive"("invalid archive (name is out of dir)");
+      if (nlen > 1024) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid archive (name too long)");
+      if (nlen > di.dirSize) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid archive (name is out of dir)");
       di.dirSize -= nlen;
       if (nlen > 0) {
         auto nbuf = new char[](nlen);
@@ -162,10 +162,10 @@ private:
       }
       --total;
       if ((de.flags&DatDirEntry.Flags.Dir) == 0) {
-        if ((de.flags&(DatDirEntry.Flags.Packed|DatDirEntry.Flags.Unpacked)) == 0) throw new VFSNamedException!"ArcanumDatArchive"("invalid ToEE file flags");
+        if ((de.flags&(DatDirEntry.Flags.Packed|DatDirEntry.Flags.Unpacked)) == 0) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid ToEE file flags");
       }
     }
-    if (total != 0) throw new VFSNamedException!"ArcanumDatArchive"("invalid archive (invalid total file count)");
-    if (di.dirSize != 0) throw new VFSNamedException!"ArcanumDatArchive"("invalid archive (extra data in directory)");
+    if (total != 0) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid archive (invalid total file count)");
+    if (di.dirSize != 0) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid archive (extra data in directory)");
   }
 }

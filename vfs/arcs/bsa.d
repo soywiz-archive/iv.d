@@ -92,12 +92,12 @@ private:
     }
 
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"BSAArchive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("file too big");
     char[4] sign;
     fl.rawReadExact(sign[]);
-    if (sign != "BSA\x00") throw new VFSNamedException!"BSAArchive"("not a BSA file");
+    if (sign != "BSA\x00") throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("not a BSA file");
     auto ver = fl.readNum!uint;
-    if (/*ver != 0x67 &&*/ ver != 0x68) throw new VFSNamedException!"BSAArchive"("invalid BSA version");
+    if (/*ver != 0x67 &&*/ ver != 0x68) throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("invalid BSA version");
     auto fatofs = fl.readNum!uint;
     auto flags = fl.readNum!uint;
     version(bsa_dump) {
@@ -107,7 +107,7 @@ private:
       if (flags&0x04) writeln("  compressed by default");
       if (flags&0x40) writeln("  shitbox archive");
     }
-    if ((flags&0x03) != 0x03) throw new VFSNamedException!"BSAArchive"("invalid BSA flags (no names)");
+    if ((flags&0x03) != 0x03) throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("invalid BSA flags (no names)");
     auto dircount = fl.readNum!uint;
     auto filecount = fl.readNum!uint;
     auto dirnmsize = fl.readNum!uint;

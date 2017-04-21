@@ -69,19 +69,19 @@ private:
 
   void open (VFile fl, const(char)[] prefixpath) {
     ulong flsize = fl.size;
-    if (flsize > 0xffff_ffffu) throw new VFSNamedException!"AbuseSpecArchive"("file too big");
+    if (flsize > 0xffff_ffffu) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("file too big");
     char[512] nbuf;
     fl.rawReadExact(nbuf[0..8]);
-    if (nbuf[0..8] != "SPEC1.0\0") throw new VFSNamedException!"AbuseSpecArchive"("invalid signature");
+    if (nbuf[0..8] != "SPEC1.0\0") throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid signature");
     // read directory
     uint count = fl.readNum!ushort;
     //{ import core.stdc.stdio : printf; printf("abuse: %u files\n", count); }
     while (count-- > 0) {
       ubyte type = fl.readNum!ubyte;
-      if (type > SPEC_MAX_TYPE) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+      if (type > SPEC_MAX_TYPE) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
       ubyte nlen = fl.readNum!ubyte;
       //{ import core.stdc.stdio : printf; printf("  type=%u; nlen=%u\n", cast(uint)type, cast(uint)nlen); }
-      if (nlen == 0) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+      if (nlen == 0) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
       char[] name;
       {
         fl.rawReadExact(nbuf[0..nlen]);
@@ -91,10 +91,10 @@ private:
         if (dirs[type].length) { name[nbpos..nbpos+dirs[type].length] = dirs[type][]; nbpos += dirs[type].length; }
         foreach (char ch; nbuf[0..nlen]) {
           if (ch == 0) break;
-          if (ch == '\\' || ch == '/' || ch > 127) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+          if (ch == '\\' || ch == '/' || ch > 127) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
           name.ptr[nbpos++] = ch;
         }
-        if (nbpos == 0) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+        if (nbpos == 0) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
         name = name[0..nbpos];
         //{ import core.stdc.stdio : printf; printf("abuse: [%.*s]\n", cast(uint)name.length, name.ptr); }
       }
@@ -104,24 +104,24 @@ private:
       if (flags&0x01) {
         // link
         nlen = fl.readNum!ubyte;
-        if (nlen == 0) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+        if (nlen == 0) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
         fl.rawReadExact(nbuf[0..nlen]);
         name = new char[](nlen);
         usize nbpos = 0;
         foreach (char ch; nbuf[0..nlen]) {
           if (ch == 0) break;
           if (ch == '\\') ch = '/';
-          if (ch > 127) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+          if (ch > 127) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
           name.ptr[nbpos++] = ch;
         }
-        if (nbpos == 0) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+        if (nbpos == 0) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
         name = name[0..nbpos];
         fi.link = cast(string)name; // it's safe here
       } else {
         fi.size = fl.readNum!uint;
         fi.ofs = fl.readNum!uint;
         // sanity checks
-        if (fi.size > flsize || fi.ofs > flsize || fi.size+fi.ofs > flsize) throw new VFSNamedException!"AbuseSpecArchive"("invalid directory");
+        if (fi.size > flsize || fi.ofs > flsize || fi.size+fi.ofs > flsize) throw new /*VFSNamedException!"AbuseSpecArchive"*/VFSExceptionArc("invalid directory");
       }
       dir.arrayAppendUnsafe(fi);
     }

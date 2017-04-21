@@ -128,7 +128,7 @@ private:
       DatDirInfo di;
       DatDirEntry de;
       di.read(fl);
-      if (!di.isGoodMagic || di.dirSize < DatDirInfo.sizeof+4) throw new VFSNamedException!"ToEEDatArchive"("invalid archive");
+      if (!di.isGoodMagic || di.dirSize < DatDirInfo.sizeof+4) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid archive");
       debug(datToEE) {
         writeln("poolSize: ", di.poolSize, "; dirSize: ", di.dirSize);
         writefln("GUID: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
@@ -142,8 +142,8 @@ private:
       while (di.dirSize >= DatDirEntry.Size+4) {
         di.dirSize -= DatDirEntry.Size+4;
         auto nlen = fl.readNum!uint;
-        if (nlen > 1024) throw new VFSNamedException!"ToEEDatArchive"("invalid archive (name too long)");
-        if (nlen > di.dirSize) throw new VFSNamedException!"ToEEDatArchive"("invalid archive (name is out of dir)");
+        if (nlen > 1024) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid archive (name too long)");
+        if (nlen > di.dirSize) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid archive (name is out of dir)");
         di.dirSize -= nlen;
         if (nlen > 0) {
           auto nbuf = new char[](nlen);
@@ -162,11 +162,11 @@ private:
         /*if (de.name.length > 0)*/ flist.arrayAppendUnsafe(de);
         --total;
         if ((de.flags&DatDirEntry.Flags.Dir) == 0) {
-          if ((de.flags&(DatDirEntry.Flags.Packed|DatDirEntry.Flags.Unpacked)) == 0) throw new VFSNamedException!"ToEEDatArchive"("invalid ToEE file flags");
+          if ((de.flags&(DatDirEntry.Flags.Packed|DatDirEntry.Flags.Unpacked)) == 0) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid ToEE file flags");
         }
       }
-      if (total != 0) throw new VFSNamedException!"ToEEDatArchive"("invalid archive (invalid total file count)");
-      if (di.dirSize != 0) throw new VFSNamedException!"ToEEDatArchive"("invalid archive (extra data in directory)");
+      if (total != 0) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid archive (invalid total file count)");
+      if (di.dirSize != 0) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid archive (extra data in directory)");
     }
     // now build directory
     foreach (ref de; flist) {
@@ -175,11 +175,11 @@ private:
       string fname = de.name;
       int ppos = de.pdiridx, left = 128;
       while (ppos != -1) {
-        if (ppos < 0 || ppos >= flist.length) throw new VFSNamedException!"ToEEDatArchive"("invalid ToEE file parent dir");
-        if ((flist.ptr[ppos].flags&DatDirEntry.Flags.Dir) == 0) throw new VFSNamedException!"ToEEDatArchive"("invalid ToEE file parent is not a dir");
+        if (ppos < 0 || ppos >= flist.length) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid ToEE file parent dir");
+        if ((flist.ptr[ppos].flags&DatDirEntry.Flags.Dir) == 0) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid ToEE file parent is not a dir");
         if (flist.ptr[ppos].name.length > 0) fname = flist.ptr[ppos].name~"/"~fname;
         ppos = flist.ptr[ppos].pdiridx;
-        if (--left < 0) throw new VFSNamedException!"ToEEDatArchive"("invalid archive (directory hierarchy too deep)");
+        if (--left < 0) throw new /*VFSNamedException!"ToEEDatArchive"*/VFSExceptionArc("invalid archive (directory hierarchy too deep)");
       }
       dir.arrayAppendUnsafe(FileInfo(
         (de.flags&DatDirEntry.Flags.Packed) != 0,
