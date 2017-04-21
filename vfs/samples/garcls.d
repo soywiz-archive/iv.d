@@ -34,7 +34,7 @@ void main (string[] args) {
   foreach (immutable idx, string aname; args[1..$]) {
     import std.format : format;
     try {
-      vfsAddPak(aname, "a%03s".format(idx));
+      vfsAddPak(aname, "a%03s:".format(idx));
     } catch (Exception e) {
       writeln("ERROR adding archive '", aname, "'!");
       throw e;
