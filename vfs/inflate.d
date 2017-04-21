@@ -702,4 +702,4 @@ static immutable ushort[30] distBase = (){
 }();
 
 
-InfStream ifs;
+//InfStream ifs;

@@ -20,5 +20,5 @@ module iv.vfs.arcs;
 public import iv.vfs.arcs.zip;
 public import iv.vfs.arcs.q1pak;
 public import iv.vfs.arcs.wad;
-public import iv.vfs.arcs.arcz;
+//public import iv.vfs.arcs.arcz;
 public import iv.vfs.arcs.kengrp;
