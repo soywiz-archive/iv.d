@@ -21,6 +21,7 @@ import iv.vfs.io;
 public import iv.vfs.arcs.abuse;
 public import iv.vfs.arcs.arcanum;
 public import iv.vfs.arcs.arcz;
+public import iv.vfs.arcs.bsa;
 //public import iv.vfs.arcs.dfwad; // just get lost
 //public import iv.vfs.arcs.dunepak; no signature
 //public import iv.vfs.arcs.f2dat; // no signature
