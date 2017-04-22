@@ -59,35 +59,48 @@ private:
   GengPatternPoints patpoints;
   GengFloat[] points; // [0]:x, [1]:y, [2]:x, [3]:y, etc...
   bool mNormalized; // true: `patpoints` is ok
+  bool mOriented;
   string mName;
 
+  private static normBlkAttr (void* ptr) {
+    import core.memory : GC;
+    pragma(inline, true);
+    if (ptr !is null && ptr is GC.addrOf(ptr)) GC.setAttr(ptr, GC.BlkAttr.NO_INTERIOR);
+  }
+
 public:
-  this () @safe nothrow @nogc {}
-  this (string aname) @safe nothrow @nogc { mName = aname; }
-  this (string aname, in GengPatternPoints apat) @safe nothrow @nogc {
+  this () nothrow @safe @nogc {}
+  this (string aname, bool aoriented=true) nothrow @safe @nogc { mName = aname; mOriented = aoriented; }
+  this (string aname, in GengPatternPoints apat, bool aoriented) nothrow @safe @nogc {
     mName = aname;
     patpoints[] = apat[];
     mNormalized = true;
+    mOriented = aoriented;
   }
 
 final:
-  @property bool valid () const @safe pure nothrow @nogc { return (mNormalized || points.length >= 4); }
-  @property bool normalized () const @safe pure nothrow @nogc { return mNormalized; }
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (mNormalized || points.length >= 4); }
+  @property bool normalized () const pure nothrow @safe @nogc { pragma(inline, true); return mNormalized; }
+  @property bool oriented () const pure nothrow @safe @nogc { pragma(inline, true); return mOriented; }
+  @property void oriented (bool v) pure nothrow @safe @nogc { pragma(inline, true); if (!mNormalized) mOriented = v; } // can't be changed for normalized glyphs
 
-  @property string name () const @safe pure nothrow @nogc { return mName; }
-  @property void name (string v) @safe nothrow @nogc { mName = v; }
+  @property string name () const pure nothrow @safe @nogc { pragma(inline, true); return mName; }
+  @property void name (string v) @safe nothrow @nogc { pragma(inline, true); mName = v; }
 
-  size_t length () const @safe pure nothrow @nogc { return (mNormalized ? NormalizedPoints : points.length/2); }
+  size_t length () const pure nothrow @safe @nogc { pragma(inline, true); return (mNormalized ? NormalizedPoints : points.length/2); }
   alias opDollar = length;
 
-  auto x (size_t idx) const @safe pure nothrow @nogc {
+  auto x (size_t idx) const pure nothrow @safe @nogc {
+    pragma(inline, true);
     if (!mNormalized) {
       return (idx*2 < points.length ? points[idx*2] : typeof(points[0]).nan);
     } else {
       return (idx < NormalizedPoints ? patpoints[idx*2] : typeof(points[0]).nan);
     }
   }
-  auto y (size_t idx) const @safe pure nothrow @nogc {
+
+  auto y (size_t idx) const pure nothrow @safe @nogc {
+    pragma(inline, true);
     if (!mNormalized) {
       return (idx*2 < points.length ? points[idx*2+1] : typeof(points[0]).nan);
     } else {
@@ -95,20 +108,21 @@ final:
     }
   }
 
-  auto clear () @safe nothrow @nogc {
-    points = null;
+  auto clear () nothrow {
+    if (points.length) { points.length = 0; points.assumeSafeAppend; }
     mNormalized = false;
     mName = null;
     return this;
   }
 
-  auto clone () const @safe {
+  auto clone () const {
     auto res = new PTGlyph(mName);
     res.mNormalized = mNormalized;
-    if (mNormalized) {
-      res.patpoints[] = patpoints[];
-    } else {
-      if (points.length > 0) res.points = points.dup;
+    res.mOriented = mOriented;
+    res.patpoints[] = patpoints[];
+    if (points.length > 0) {
+      res.points = points.dup;
+      normBlkAttr(res.points.ptr);
     }
     return res;
   }
@@ -120,24 +134,30 @@ final:
       immutable lx = x-points[$-2], ly = y-points[$-1];
       if (lx*lx+ly*ly < MinPointDistance*MinPointDistance) return this;
     }
+    auto optr = points.ptr;
     points ~= x;
+    if (optr != points.ptr) { normBlkAttr(points.ptr); optr = points.ptr; }
     points ~= y;
+    if (optr != points.ptr) { normBlkAttr(points.ptr); optr = points.ptr; }
     mNormalized = false;
     return this;
   }
 
-  auto normalize () @safe {
+  auto normalize (bool dropPoints=true) {
     if (!mNormalized) {
       if (points.length < 4) throw new Exception("glyph must have at least two points");
-      buildNormPoints(patpoints, points);
+      buildNormPoints(patpoints, points, mOriented);
       mNormalized = true;
-      points.length = 0;
+      if (dropPoints) {
+        points.length = 0;
+        points.assumeSafeAppend;
+      }
     }
     return this;
   }
 
   // this: template
-  GengFloat match (const(PTGlyph) sample) const @safe pure nothrow @nogc {
+  GengFloat match (const(PTGlyph) sample) const pure nothrow @safe @nogc {
     if (sample is null || !sample.valid || !valid) return -GengFloat.infinity;
     if (mNormalized) {
       // this is normalized
@@ -145,7 +165,7 @@ final:
     } else {
       // this is not normalized
       GengPatternPoints v1 = void;
-      buildNormPoints(v1, points);
+      buildNormPoints(v1, points, mOriented);
       return match(v1, sample);
     }
   }
@@ -157,22 +177,22 @@ final:
 
 private:
   // this: template
-  static GengFloat match (in GengPatternPoints tpl, const(PTGlyph) sample) @safe pure nothrow @nogc {
+  static GengFloat match (in GengPatternPoints tpl, const(PTGlyph) sample) pure nothrow @safe @nogc {
     if (sample is null || !sample.valid) return -GengFloat.infinity;
     if (sample.mNormalized) {
       return match(tpl, sample.patpoints);
     } else {
       GengPatternPoints spts = void;
-      buildNormPoints(spts, sample.points);
+      buildNormPoints(spts, sample.points, sample.mOriented);
       return match(tpl, spts);
     }
   }
 
-  static GengFloat match (in GengPatternPoints v0, in GengPatternPoints v1) @safe pure nothrow @nogc {
+  static GengFloat match (in GengPatternPoints v0, in GengPatternPoints v1) pure nothrow @safe @nogc {
     return 1.0/optimalCosineDistance(v0, v1);
   }
 
-  static GengFloat optimalCosineDistance (in GengPatternPoints v0, in GengPatternPoints v1) @safe pure nothrow @nogc {
+  static GengFloat optimalCosineDistance (in GengPatternPoints v0, in GengPatternPoints v1) pure nothrow @safe @nogc {
     import std.math : atan, acos, cos, sin;
     GengFloat a = 0.0, b = 0.0;
     foreach (immutable idx; 0..NormalizedPoints) {
@@ -184,7 +204,7 @@ private:
   }
 
   // glyph length (not point counter!)
-  static GengFloat glyphLength (in GengFloat[] points) @safe pure nothrow @nogc {
+  static GengFloat glyphLength (in GengFloat[] points) pure nothrow @safe @nogc {
     GengFloat res = 0.0;
     if (points.length >= 4) {
       // don't want to bring std.algo here
@@ -239,8 +259,8 @@ private:
   }
 
   // stroke is not required to be centered, but it must be resampled
-  static void vectorize (out GengPatternPoints vres, in GengPatternPoints ptx, bool orientationSensitive=true)
-  @safe pure nothrow @nogc
+  static void vectorize (out GengPatternPoints vres, in GengPatternPoints ptx, bool orientationSensitive)
+  pure nothrow @safe @nogc
   {
     import std.math : atan2, cos, sin, floor, sqrt, PI;
     GengPatternPoints pts;
@@ -278,13 +298,13 @@ private:
     foreach (immutable idx; 0..NormalizedPoints*2) vres[idx] /= magnitude;
   }
 
-  static void buildNormPoints (out GengPatternPoints vres, in GengFloat[] points, bool orientationSensitive=true)
-  @safe pure nothrow @nogc
+  static void buildNormPoints (out GengPatternPoints vres, in GengFloat[] points, bool orientationSensitive)
+  pure nothrow @safe @nogc
   {
     assert(points.length >= 4);
     GengPatternPoints tmp = void;
     resample(tmp, points);
-    vectorize(vres, tmp);
+    vectorize(vres, tmp, orientationSensitive);
   }
 
 public:
@@ -300,7 +320,7 @@ public:
       if (this.mNormalized) {
         pts[] = this.patpoints[];
       } else {
-        buildNormPoints(pts, points);
+        buildNormPoints(pts, points, mOriented);
       }
       while (!grng.empty) {
         auto gs = grng.front;
@@ -320,14 +340,13 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-import iv.stream;
+import iv.vfs;
 
 
-public void gstLibLoad(R, ST) (auto ref R orng, auto ref ST st)
-if (isOutputRange!(R, PTGlyph) && isReadableStream!ST)
-{
+public void gstLibLoad(R) (auto ref R orng, VFile st) if (isOutputRange!(R, PTGlyph)) {
   auto sign = st.readNum!ulong();
-  if (sign != 0x304244525450384BuL) throw new Exception("invalid library signature"); // "K8PTRDB0"
+  if (sign != 0x304244525450384BUL && sign != 0x314244525450384BUL) throw new Exception("invalid library signature"); // "K8PTRDB0"/1
+  ubyte ver = ((sign>>56)-0x30)&0xff;
   auto cnt = st.readNum!uint();
   if (cnt > 0x7fff_ffff) throw new Exception("too many glyphs");
   if (cnt == 0) return;
@@ -337,10 +356,9 @@ if (isOutputRange!(R, PTGlyph) && isReadableStream!ST)
     if (len > 1024) throw new Exception("glyph name too long");
     string name;
     if (len > 0) {
-      import std.exception : assumeUnique;
       auto buf = new char[](len);
       st.rawReadExact(buf);
-      name = buf.assumeUnique;
+      name = cast(string)buf; // it is safe to cast here
     }
     // template
     GengPatternPoints pts = void;
@@ -348,30 +366,28 @@ if (isOutputRange!(R, PTGlyph) && isReadableStream!ST)
       pt = st.readNum!float();
       if (pt != pt) throw new Exception("invalid number"); // nan check
     }
-    //
-    auto g = new PTGlyph(name, pts);
+    bool oriented = true;
+    if (ver == 1) oriented = (st.readNum!ubyte != 0);
+    auto g = new PTGlyph(name, pts, oriented);
     put(orng, g);
   }
 }
 
 
-public PTGlyph[] gstLibLoad(ST) (auto ref ST st) if (isReadableStream!ST) {
+public PTGlyph[] gstLibLoad (VFile fl) {
   static struct ORng {
     PTGlyph[] gls;
     void put (PTGlyph g) nothrow { if (g !is null && g.valid) gls ~= g; }
   }
   auto r = ORng();
-  gstLibLoad(r, st);
+  gstLibLoad(r, fl);
   return (r.gls.length ? r.gls : null);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void gstLibSave(ST, R) (auto ref ST st, auto ref R grng)
-if (isWriteableStream!ST && isInputRange!R && !isInfinite!R && is(ElementType!R : PTGlyph) &&
-    (hasLength!R || isSeekableStream!ST))
-{
-  st.writeNum!ulong(0x304244525450384BuL); // "K8PTRDB0"
+public void gstLibSave(R) (VFile st, auto ref R grng) if (isInputRange!R && !isInfinite!R && is(ElementType!R : PTGlyph)) {
+  st.writeNum!ulong(0x314244525450384BuL); // "K8PTRDB1"
   static if (hasLength!R) {
     auto cnt = grng.length;
     if (cnt > 0x7fff_ffff) throw new Exception("too many glyphs");
@@ -394,9 +410,10 @@ if (isWriteableStream!ST && isInputRange!R && !isInfinite!R && is(ElementType!R 
     if (g.mNormalized) {
       pts[] = g.patpoints[];
     } else {
-      g.buildNormPoints(pts, g.points);
+      g.buildNormPoints(pts, g.points, g.mOriented);
     }
     foreach (immutable pt; pts) st.writeNum!float(cast(float)pt);
+    st.writeNum!ubyte(g.mOriented ? 1 : 0);
     static if (!hasLength!R) {
       if (cnt == 0x7fff_ffff) throw new Exception("too many glyphs");
       ++cnt;
