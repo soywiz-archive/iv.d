@@ -382,6 +382,7 @@ private:
       throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("unknown central directory entry");
     }
     debug(ziparc) writeln(dir.length, " files found");
+    buildNameHashTable();
   }
 static protected:
   T[] xalloc(T) (usize len) {

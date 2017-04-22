@@ -192,5 +192,6 @@ private:
     debug(datToEE) foreach (ref fi; dir) {
       writefln("size=%10s; packedSize=%10s; offset=0x%08x; packed=%s  [%s]", fi.size, fi.pksize, fi.ofs, (fi.packed ? "tan" : "ona"), fi.name);
     }
+    buildNameHashTable();
   }
 }

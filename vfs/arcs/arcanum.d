@@ -167,5 +167,6 @@ private:
     }
     if (total != 0) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid archive (invalid total file count)");
     if (di.dirSize != 0) throw new /*VFSNamedException!"ArcanumDatArchive"*/VFSExceptionArc("invalid archive (extra data in directory)");
+    buildNameHashTable();
   }
 }

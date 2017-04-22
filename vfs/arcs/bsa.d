@@ -61,9 +61,23 @@ private:
   }
 
   VFile wrap (usize idx) {
+    //{ import core.stdc.stdio; printf("[%.*s]; packed=%s; pksize=%u; size=%u; ofs=0x%08x\n", cast(uint)dir[idx].name.length, dir[idx].name.ptr, (dir[idx].packed ? "tan".ptr : "ona".ptr) , cast(uint)dir[idx].pksize, cast(uint)dir[idx].size, cast(uint)dir[idx].ofs); }
     if (dir[idx].packed) return wrapZLibStreamRO(st, VFSZLibMode.ZLib, dir[idx].size, dir[idx].ofs, dir[idx].pksize, dir[idx].name);
     return wrapStreamRO(st, dir[idx].ofs, dir[idx].size, dir[idx].name);
   }
+
+  /*
+  void open (VFile fl, const(char)[] prefixpath) {
+    try {
+      open1(fl, prefixpath);
+    } catch (Exception e) {
+      import core.stdc.stdio;
+      auto s = e.toString;
+      printf("\n-----------------\n%.*s\n", cast(uint)s.length, s.ptr);
+      throw e;
+    }
+  }
+  */
 
   void open (VFile fl, const(char)[] prefixpath) {
     string loadBCStr(bool asdir) () {
@@ -96,8 +110,9 @@ private:
     char[4] sign;
     fl.rawReadExact(sign[]);
     if (sign != "BSA\x00") throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("not a BSA file");
+    //{ import core.stdc.stdio; printf("TRYING BSA! [%.*s]\n", cast(uint)fl.name.length, fl.name.ptr); }
     auto ver = fl.readNum!uint;
-    if (/*ver != 0x67 &&*/ ver != 0x68) throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("invalid BSA version");
+    if (ver != 0x67 && ver != 0x68) throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("invalid BSA version");
     auto fatofs = fl.readNum!uint;
     auto flags = fl.readNum!uint;
     version(bsa_dump) {
@@ -108,6 +123,7 @@ private:
       if (flags&0x40) writeln("  shitbox archive");
     }
     if ((flags&0x03) != 0x03) throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("invalid BSA flags (no names)");
+    if (flags&0x40) throw new /*VFSNamedException!"BSAArchive"*/VFSExceptionArc("no support for shitbox BSA archives yet");
     auto dircount = fl.readNum!uint;
     auto filecount = fl.readNum!uint;
     auto dirnmsize = fl.readNum!uint;
@@ -127,9 +143,11 @@ private:
     }
 
     // load file entries
+    //bool xxdmp = false;
     foreach (uint defcount; dircnt) {
       string dirname = loadBCStr!true();
       version(bsa_dump) writeln("directory [", dirname, "]: ", defcount, " files");
+      //if (!xxdmp) { /*xxdmp = true;*/ import iv.vfs.io; writefln("ffofs: 0x%08x\n", cast(uint)fl.tell); }
       // load actual file entries
       foreach (immutable _; 0..defcount) {
         FileInfo fe;
@@ -179,5 +197,7 @@ private:
         }
       }
     }
+
+    buildNameHashTable();
   }
 }

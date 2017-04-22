@@ -133,5 +133,6 @@ private:
       }
     }
     debug(dfwadarc) { import std.stdio; writeln(dir.length, " files found"); }
+    buildNameHashTable();
   }
 }

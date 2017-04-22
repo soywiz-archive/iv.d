@@ -100,5 +100,6 @@ private:
         dir.arrayAppendUnsafe(fi);
       }
     }
+    buildNameHashTable();
   }
 }

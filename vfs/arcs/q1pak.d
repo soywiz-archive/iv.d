@@ -104,5 +104,6 @@ private:
       }
     }
     debug(q1pakarc) writeln(dir.length, " files found");
+    buildNameHashTable();
   }
 }

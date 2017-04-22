@@ -110,5 +110,6 @@ private:
       if (dir[$-1].ofs+dir[$-1].size > flsize) throw new /*VFSNamedException!"DunePakArchive"*/VFSExceptionArc("invalid directory");
     }
     debug(dunepakarc) writeln(dir.length, " files found");
+    buildNameHashTable();
   }
 }

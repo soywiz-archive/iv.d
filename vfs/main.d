@@ -504,6 +504,7 @@ struct ModeOptions {
   bool allowPaks;
   bool allowGZ;
   bool wantWrite;
+  bool wantWriteOnly;
   private char[16] newmodebuf=0; // 0-terminated
   private int nmblen; // 0 is not included
   @property const(char)[] mode () const pure nothrow @safe @nogc { pragma(inline, true); return newmodebuf[0..nmblen]; }
@@ -517,6 +518,7 @@ struct ModeOptions {
     allowPaks = true;
     allowGZ = true;
     wantWrite = false;
+    wantWriteOnly = false;
     ignoreCase = (drivers.length ? vfsIgnoreCase : vfsIgnoreCaseNoDat);
     foreach (char ch; mode) {
       if (ch < 128 && !got[ch]) {
@@ -552,6 +554,7 @@ struct ModeOptions {
     if (newmodebuf.length-nmblen < 1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
     foreach (char ch; newmodebuf[0..nmblen]) {
       if (ch == 'a' || ch == 'A' || ch == 'w' || ch == 'W' || ch == '+' || ch == 't') wantWrite = true;
+      if (ch == 'w' || ch == 'W') wantWriteOnly = true;
     }
     //newmodebuf[nmblen++] = '\0';
   }
@@ -612,7 +615,7 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
       }
     }
 
-    {
+    if (!mopt.wantWriteOnly) {
       auto lock = VFSLock.lock();
       cleanupDrivers();
       // try all drivers

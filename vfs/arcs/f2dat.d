@@ -119,5 +119,6 @@ private:
       }
     }
     debug(f2datarc) writeln(dir.length, " files found");
+    buildNameHashTable();
   }
 }
