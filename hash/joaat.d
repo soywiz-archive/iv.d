@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.hash.joaathash;
+module iv.hash.joaat;
 // Bob Jenkins' One-At-A-Time hash function
 
 
@@ -47,13 +47,13 @@ private:
 public:
 nothrow @trusted @nogc:
   /// construct state with seed
-  this (uint aseed) { hash = seed = aseed; }
+  this (uint aseed) pure { hash = seed = aseed; }
 
   /// reset state
-  void reset () { totallen = 0; hash = seed; }
+  void reset () pure { totallen = 0; hash = seed; }
 
   /// reset state
-  void reset (uint aseed) { totallen = 0; hash = seed = aseed; }
+  void reset (uint aseed) pure { totallen = 0; hash = seed = aseed; }
 
   /// process data block
   void put(T) (scope const(T)[] data...) if (T.sizeof == 1) {
@@ -78,7 +78,7 @@ nothrow @trusted @nogc:
 
   /// finalize a hash (i.e. return current result).
   /// note that you can continue putting data, as this is not destructive
-  @property uint result32 () const {
+  @property uint result32 () const pure {
     uint h = hash;
     if (totallen == 0) h = seed;
     version(JoaatMixLength) {
@@ -96,7 +96,7 @@ nothrow @trusted @nogc:
     return h;
   }
 
-  uint finish32 () { auto res = result32; reset(); return res; }
+  uint finish32 () pure { auto res = result32; reset(); return res; } /// resets state
 }
 
 
@@ -107,7 +107,7 @@ nothrow @trusted @nogc:
  *   buf =  data buffer
  *   seed = the seed
  */
-uint joaatHash32(T) (const(T)[] buf, uint seed=0) @trusted nothrow @nogc if (T.sizeof == 1) {
+uint joaatHash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.sizeof == 1) {
   auto hh = JoaatHash(seed);
   hh.put(buf);
   return hh.result32;

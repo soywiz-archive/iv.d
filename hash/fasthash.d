@@ -51,13 +51,13 @@ private:
 public:
 nothrow @trusted @nogc:
   /// construct state with seed
-  this (ulong aseed) { hash = seed = aseed; }
+  this (ulong aseed) pure { hash = seed = aseed; }
 
   /// reset state
-  void reset () { accum = totallen = 0; hash = seed; }
+  void reset () pure { accum = totallen = 0; hash = seed; }
 
   /// reset state
-  void reset (ulong aseed) { accum = totallen = 0; hash = seed = aseed; }
+  void reset (ulong aseed) pure { accum = totallen = 0; hash = seed = aseed; }
 
   /// process data block
   void put(T) (scope const(T)[] data...) if (T.sizeof == 1) {
@@ -100,28 +100,26 @@ nothrow @trusted @nogc:
     ulong t;
     foreach (immutable _; 0..len/8) {
       if (__ctfe) {
-        t =
-          cast(ulong)bytes[0]|
-          (cast(ulong)bytes[1]<<8)|
-          (cast(ulong)bytes[2]<<16)|
-          (cast(ulong)bytes[3]<<24)|
-          (cast(ulong)bytes[4]<<32)|
-          (cast(ulong)bytes[5]<<40)|
-          (cast(ulong)bytes[6]<<48)|
-          (cast(ulong)bytes[7]<<56);
+        t = cast(ulong)bytes[0]|
+           (cast(ulong)bytes[1]<<8)|
+           (cast(ulong)bytes[2]<<16)|
+           (cast(ulong)bytes[3]<<24)|
+           (cast(ulong)bytes[4]<<32)|
+           (cast(ulong)bytes[5]<<40)|
+           (cast(ulong)bytes[6]<<48)|
+           (cast(ulong)bytes[7]<<56);
       } else {
         version(LittleEndian) {
-          t = *cast(ulong*)bytes;
+          t = *cast(const(ulong)*)bytes;
         } else {
-          t =
-            cast(ulong)bytes[0]|
-            (cast(ulong)bytes[1]<<8)|
-            (cast(ulong)bytes[2]<<16)|
-            (cast(ulong)bytes[3]<<24)|
-            (cast(ulong)bytes[4]<<32)|
-            (cast(ulong)bytes[5]<<40)|
-            (cast(ulong)bytes[6]<<48)|
-            (cast(ulong)bytes[7]<<56);
+          t = cast(ulong)bytes[0]|
+             (cast(ulong)bytes[1]<<8)|
+             (cast(ulong)bytes[2]<<16)|
+             (cast(ulong)bytes[3]<<24)|
+             (cast(ulong)bytes[4]<<32)|
+             (cast(ulong)bytes[5]<<40)|
+             (cast(ulong)bytes[6]<<48)|
+             (cast(ulong)bytes[7]<<56);
         }
       }
       bytes += 8;
@@ -144,7 +142,7 @@ nothrow @trusted @nogc:
 
   /// finalize a hash (i.e. return current result).
   /// note that you can continue putting data, as this is not destructive
-  @property ulong result64 () const {
+  @property ulong result64 () const pure {
     ulong h = hash;
     if (totallen == 0) h = seed;
     h ^= totallen*M;
@@ -168,7 +166,7 @@ nothrow @trusted @nogc:
 
   /// finalize a hash (i.e. return current result).
   /// note that you can continue putting data, as this is not destructive
-  @property uint result32 () const {
+  @property uint result32 () const pure {
     auto h = result64;
     // the following trick converts the 64-bit hashcode to Fermat
     // residue, which shall retain information from both the higher
@@ -176,8 +174,8 @@ nothrow @trusted @nogc:
     return cast(uint)(h-(h>>32));
   }
 
-  ulong finish64 () { auto res = result64; reset(); return res; }
-  ulong finish32 () { auto res = result32; reset(); return res; }
+  ulong finish64 () pure { auto res = result64; reset(); return res; } /// resets state
+  ulong finish32 () pure { auto res = result32; reset(); return res; } /// resets state
 }
 
 
@@ -188,7 +186,7 @@ nothrow @trusted @nogc:
  *   buf =  data buffer
  *   seed = the seed
  */
-ulong fastHash64(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc if (T.sizeof == 1) {
+ulong fastHash64(T) (const(T)[] buf, ulong seed=0) nothrow @trusted @nogc if (T.sizeof == 1) {
   auto hh = FastHash(seed);
   hh.put(buf);
   return hh.result64;
@@ -201,7 +199,7 @@ ulong fastHash64(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc if (T.
  *   buf =  data buffer
  *   seed = the seed
  */
-uint fastHash32(T) (const(T)[] buf, ulong seed=0) @trusted nothrow @nogc if (T.sizeof == 1) {
+uint fastHash32(T) (const(T)[] buf, ulong seed=0) nothrow @trusted @nogc if (T.sizeof == 1) {
   auto hh = FastHash(seed);
   hh.put(buf);
   return hh.result32;

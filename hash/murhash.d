@@ -58,13 +58,13 @@ private:
 public:
 nothrow @trusted @nogc:
   /// construct state with seed
-  this (uint aseed) { hash = seed = aseed; }
+  this (uint aseed) pure { hash = seed = aseed; }
 
   /// reset state
-  void reset () { accum = totallen = 0; hash = seed; }
+  void reset () pure { accum = totallen = 0; hash = seed; }
 
   /// reset state
-  void reset (uint aseed) { accum = totallen = 0; hash = seed = aseed; }
+  void reset (uint aseed) pure { accum = totallen = 0; hash = seed = aseed; }
 
   /// process data block
   void put(T) (scope const(T)[] data...) if (T.sizeof == 1) {
@@ -104,14 +104,14 @@ nothrow @trusted @nogc:
         if (__ctfe) {
           k1 = (bytes[0])|(bytes[1]<<8)|(bytes[2]<<16)|(bytes[3]<<24);
         } else {
-          k1 = *cast(uint*)bytes;
+          k1 = *cast(const(uint)*)bytes;
         }
       } else {
         if (__ctfe) {
           k1 = (bytes[3])|(bytes[2]<<8)|(bytes[1]<<16)|(bytes[0]<<24);
         } else {
           import core.bitop : bswap;
-          k1 = bswap(*cast(uint*)bytes);
+          k1 = bswap(*cast(const(uint)*)bytes);
         }
       }
       bytes += 4;
@@ -146,7 +146,7 @@ nothrow @trusted @nogc:
 
   /// finalize a hash (i.e. return current result).
   /// note that you can continue putting data, as this is not destructive
-  @property uint result32 () const {
+  @property uint result32 () const pure {
     uint acc = accum;
     uint hh = hash;
     immutable n = acc&3;
@@ -167,7 +167,7 @@ nothrow @trusted @nogc:
     return hh;
   }
 
-  uint finish32 () { auto res = result32; reset(); return res; }
+  uint finish32 () pure { auto res = result32; reset(); return res; } /// resets state
 }
 
 
@@ -178,7 +178,7 @@ nothrow @trusted @nogc:
  *   buf =  data buffer
  *   seed = the seed
  */
-uint murHash32(T) (const(T)[] buf, uint seed=0) @trusted nothrow @nogc if (T.sizeof == 1) {
+uint murHash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.sizeof == 1) {
   auto hh = MurHash(seed);
   hh.put(buf);
   return hh.result32;
