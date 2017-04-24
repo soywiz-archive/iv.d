@@ -506,9 +506,14 @@ public struct XlibPixmap {
   Pixmap xpm;
   private int mWidth, mHeight;
 
+  this (SimpleWindow w) {}
+
   this (SimpleWindow w, int wdt, int hgt) { setup(w, wdt, hgt); }
   this (SimpleWindow w, ref XlibImageTC xtc) { setup(w, xtc); }
   this (SimpleWindow w, XImageTC xtc) { setup(w, xtc); }
+
+  this (SimpleWindow w, ref XlibPixmap xpm) { setup(w, xpm); }
+  this (SimpleWindow w, XPixmap xpm) { setup(w, xpm); }
 
   @disable this (this);
 
@@ -518,6 +523,29 @@ public struct XlibPixmap {
 
   @property int width () const pure nothrow @trusted @nogc { pragma(inline, true); return mWidth; }
   @property int height () const pure nothrow @trusted @nogc { pragma(inline, true); return mHeight; }
+
+  void copyFromWinBuf (SimpleWindow w) {
+    if (w is null || w.closed) throw new Exception("can't copy pixmap without window");
+    if (!valid || mWidth != w.width || mHeight != w.height) {
+      dispose();
+      xpm = XCreatePixmap(w.impl.display, cast(Drawable)w.impl.window, w.width, w.height, 24);
+      mWidth = w.width;
+      mHeight = w.height;
+    }
+    XCopyArea(w.impl.display, cast(Drawable)w.impl.buffer, cast(Drawable)xpm, w.impl.gc, 0, 0, mWidth, mHeight, 0, 0);
+  }
+
+  void copyFrom (SimpleWindow w, ref XlibPixmap axpm) {
+    if (!valid) return;
+    if (!axpm.valid) return;
+    if (w is null || w.closed) throw new Exception("can't copy pixmap without window");
+    XCopyArea(w.impl.display, cast(Drawable)axpm.xpm, cast(Drawable)xpm, w.impl.gc, 0, 0, axpm.width, axpm.height, 0, 0);
+  }
+
+  void copyFrom (SimpleWindow w, XPixmap axpm) {
+    if (!axpm.hasObject) return;
+    copyFrom(w, *axpm.intr_);
+  }
 
   void setup (SimpleWindow w, int wdt, int hgt) {
     dispose();
@@ -531,6 +559,27 @@ public struct XlibPixmap {
     mHeight = hgt;
   }
 
+  void setup (SimpleWindow w, XPixmap xpm) {
+    if (!xpm.hasObject) throw new Exception("can't create pixmap from empty xlib image");
+    setup(w, *xpm.intr_);
+  }
+
+  void setup (SimpleWindow w, ref XlibPixmap axpm) {
+    if (!axpm.valid) throw new Exception("can't create pixmap from empty xlib pixmap");
+    dispose();
+    if (w is null || w.closed) throw new Exception("can't create pixmap without window");
+    int wdt = axpm.width;
+    int hgt = axpm.height;
+    if (wdt < 1) wdt = 1;
+    if (hgt < 1) hgt = 1;
+    if (wdt > 16384) wdt = 16384;
+    if (hgt > 16384) hgt = 16384;
+    xpm = XCreatePixmap(w.impl.display, cast(Drawable)w.impl.window, wdt, hgt, 24);
+    XCopyArea(w.impl.display, cast(Drawable)axpm.xpm, cast(Drawable)xpm, w.impl.gc, 0, 0, wdt, hgt, 0, 0);
+    mWidth = wdt;
+    mHeight = hgt;
+  }
+
   void setup (SimpleWindow w, XImageTC xtc) {
     if (!xtc.hasObject) throw new Exception("can't create pixmap from empty xlib image");
     setup(w, *xtc.intr_);
@@ -538,6 +587,7 @@ public struct XlibPixmap {
 
   void setup (SimpleWindow w, ref XlibImageTC xtc) {
     if (!xtc.valid) throw new Exception("can't create pixmap from empty xlib image");
+    dispose();
     if (w is null || w.closed) throw new Exception("can't create pixmap without window");
     int wdt = xtc.width;
     int hgt = xtc.height;
