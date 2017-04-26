@@ -398,7 +398,7 @@ public VFSDriverId vfsRegister(string mode="normal", bool temp=false) (VFSDriver
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// find driver. returns invalid VFSDriverId if the driver was not found.
-/// WARNING: don't add new drivers while this is in process!
+/// WARNING: don't add new drivers while this is in progress!
 public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=null) {
   auto lock = VFSLock.lock();
   foreach_reverse (immutable idx, ref drv; drivers) {
@@ -410,7 +410,7 @@ public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// unregister driver
-/// WARNING: don't add new drivers while this is in process!
+/// WARNING: don't add new drivers while this is in progress!
 public bool vfsUnregister (VFSDriverId id) {
   auto lock = VFSLock.lock("can't unregister drivers in list operations");
   cleanupDrivers();
@@ -756,7 +756,7 @@ public VFSDriverId vfsAddPak(string mode="normal", bool temp=false, T : const(ch
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// takes into account `vfsIgnoreCase` flag. you can override it with 'i' (on) or 'I' (off) mode letter.
+/// takes into account `vfsIgnoreCaseDisk` flag. you can override it with 'i' (on) or 'I' (off) mode letter.
 public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
   static if (is(T == typeof(null))) {
