@@ -33,21 +33,21 @@ static import core.sync.mutex;
 
 // ////////////////////////////////////////////////////////////////////////// //
 private shared int vfsLockedFlag = 0; // !0: can't add/remove drivers
-shared bool vflagIgnoreCase = true; // ignore file name case
-shared bool vflagIgnoreCaseNoDat = false; // ignore file name case when no archive files are connected
+shared bool vflagIgnoreCasePak = true; // ignore file name case in pak files; driver can ignore this, but it shouldn't
+shared bool vflagIgnoreCaseDisk = false; // ignore file name case for disk files
 
 
 /// get "ingore filename case" flag (default: true)
-public @property bool vfsIgnoreCase () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCase); }
+public @property bool vfsIgnoreCasePak () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCasePak); }
 
 /// set "ingore filename case" flag
-public @property void vfsIgnoreCase (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCase, v); }
+public @property void vfsIgnoreCasePak (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCasePak, v); }
 
 /// get "ingore filename case" flag when no archive files are attached (default: false)
-public @property bool vfsIgnoreCaseNoDat () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCaseNoDat); }
+public @property bool vfsIgnoreCaseDisk () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCaseDisk); }
 
 /// set "ingore filename case" flag when no archive files are attached
-public @property void vfsIgnoreCaseNoDat (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseNoDat, v); }
+public @property void vfsIgnoreCasePak (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseDisk, v); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -500,7 +500,8 @@ public Variant vfsStat (in ref VFSDriver.DirEntry de, const(char)[] propname) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 struct ModeOptions {
-  bool ignoreCase;
+  enum bool3 { def = -1, no = 0, yes = 1 }
+  bool3 ignoreCase;
   bool allowPaks;
   bool allowGZ;
   bool wantWrite;
@@ -519,11 +520,11 @@ struct ModeOptions {
     allowGZ = true;
     wantWrite = false;
     wantWriteOnly = false;
-    ignoreCase = (drivers.length ? vfsIgnoreCase : vfsIgnoreCaseNoDat);
+    ignoreCase = bool3.def;
     foreach (char ch; mode) {
       if (ch < 128 && !got[ch]) {
-        if (ch == 'i') { ignoreCase = true; continue; }
-        if (ch == 'I') { ignoreCase = false; continue; }
+        if (ch == 'i') { ignoreCase = bool3.yes; continue; }
+        if (ch == 'I') { ignoreCase = bool3.no; continue; }
         if (ch == 'X') { allowPaks = false; continue; }
         if (ch == 'x') { allowPaks = true; continue; }
         if (ch == 'Z') { allowGZ = false; continue; }
@@ -562,14 +563,16 @@ struct ModeOptions {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-bool isROMode (char[] modebuf) {
-  foreach (char ch; modebuf) {
-    if (ch == 'w' || ch == 'W' || ch == 'a' || ch == 'A' || ch == '+' || ch == 't') return false;
-  }
-  return true;
-}
-
-
+/** open file; this is the function used by `VFile("zub")`.
+ *
+ * funny additional file modes:
+ *   i: ignore case (default is `vflagIgnoreCase` for paks, and `vflagIgnoreCaseNoDat` for no paks)
+ *   I: case sensitive
+ *   x: allow searching in paks (default)
+ *   X: skip paks
+ *   z: allow transparent gzip unpacking (default)
+ *   Z: disable transparent gzip unpacking
+ */
 public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(char)[] mode=null) {
   static import core.stdc.stdio;
 
@@ -619,10 +622,11 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
       auto lock = VFSLock.lock();
       cleanupDrivers();
       // try all drivers
+      bool ignoreCase = (mopt.ignoreCase == mopt.bool3.def ? vfsIgnoreCasePak : (mopt.ignoreCase == mopt.bool3.yes));
       foreach_reverse (ref di; drivers) {
         try {
           if (!mopt.wantWrite || cast(VFSDriverDisk)di.drv is null) {
-            auto fl = di.drv.tryOpen(fname, mopt.ignoreCase);
+            auto fl = di.drv.tryOpen(fname, ignoreCase);
             if (fl.isOpen) {
               if (di.temp) di.tempUsedTime = MonoTime.currTime;
               if (mopt.wantWrite) errorfn("can't open file '!' in non-binary non-readonly mode");
@@ -778,7 +782,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
       nbuf[0..fname.length] = fname[];
       nbuf[fname.length] = '\0';
     }
-    static if (VFS_NORMAL_OS) if (mopt.ignoreCase) {
+    static if (VFS_NORMAL_OS) if (mopt.ignoreCase == mopt.bool3.yes || (mopt.ignoreCase == mopt.bool3.def && vfsIgnoreCaseDisk)) {
       // we have to lock here, as `findPathCI()` is not thread-safe
       auto lock = VFSLock.lock();
       auto pt = findPathCI(nbuf[0..fname.length]);
