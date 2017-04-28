@@ -56,32 +56,9 @@ void updateMsg () {
 
 void showMessage (string msg) {
   if (msg.length == 0) return;
-  /+
-  ovlMsg = new VLOverlay(msg.length*6+6, 8+6);
-  ovlMsg.fillRect(0, 0, ovlMsg.width, ovlMsg.height, rgb2col(25, 69, 247));
-  ovlMsg.rect(0, 0, ovlMsg.width, ovlMsg.height, rgb2col(255, 255, 255));
-  ovlMsg.rect(1, 1, ovlMsg.width-2, ovlMsg.height-2, rgb2col(0, 0, 0));
-  Color fg = rgb2col(255, 255, 255);
-  int x = 3;
-  foreach (auto ch; msg) {
-    /*
-    switch (ch) {
-      case 1: fg = rgb2col(255, 255, 255); break;
-      case 2: fg = rgb2col(0, 255, 0); break;
-      case 3: fg = rgb2col(255, 255, 0); break;
-      case 4: fg = rgb2col(255, 127, 0); break;
-      default: break;
-    }
-    if (ch < 32) continue;
-    */
-    ovlMsg.drawChar(x, 3, ch, fg);
-    x += 6;
-  }
-  +/
   msgText = msg;
   msgHideTime = clockMilli()+5000;
   msgAlpha = 0;
-  frameChanged();
 }
 
 
@@ -140,10 +117,7 @@ void frameChanged () {
         foreach (immutable int dy; 0..CharHeight) {
           ushort v = glConFont10.ptr[cast(ubyte)ch*CharHeight+dy];
           foreach (immutable int dx; 0..CharWidth) {
-            if (v&0x8000) {
-              painter.drawPixel(Point(x+dx, y+dy));
-              //painter.drawLine(Point(x+dx, y+dy), Point(x+dx+1, y+dy+1));
-            }
+            if (v&0x8000) painter.drawPixel(Point(x+dx, y+dy));
             v <<= 1;
           }
         }
@@ -151,7 +125,20 @@ void frameChanged () {
       }
     }
 
-    void helpOverlay () {
+    void fillRect (int x, int y, int w, int h, Color clr) {
+      painter.outlineColor = clr;
+      painter.fillColor = clr;
+      painter.drawRectangle(Point(x, y), w, h);
+      painter.fillColor = Color.transparent;
+    }
+
+    void drawRect (int x, int y, int w, int h, Color clr) {
+      painter.outlineColor = clr;
+      painter.fillColor = Color.transparent;
+      painter.drawRectangle(Point(x, y), w, h);
+    }
+
+    void drawHelp () {
       static immutable string[] helpText = [
         "\x1fDemo actions",
         "\x1f------------",
@@ -184,14 +171,9 @@ void frameChanged () {
       int x0 = (sdwin.width-wdt)/2;
       int y0 = (sdwin.height-hgt)/2;
 
-      painter.outlineColor = Color(25, 69, 247);
-      painter.fillColor = Color(25, 69, 247);
-      painter.drawRectangle(Point(x0, y0), wdt, hgt);
-      painter.fillColor = Color.transparent;
-      painter.outlineColor = Color(255, 255, 255);
-      painter.drawRectangle(Point(x0, y0), wdt, hgt);
-      painter.outlineColor = Color.black;
-      painter.drawRectangle(Point(x0+1, y0+1), wdt-2, hgt-2);
+      fillRect(x0, y0, wdt, hgt, Color(25, 69, 247));
+      drawRect(x0, y0, wdt, hgt, Color(255, 255, 255));
+      drawRect(x0+1, y0+1, wdt-2, hgt-2, Color.black);
 
       foreach (auto idx, auto s; helpText) {
         if (s.length == 0) continue;
@@ -219,6 +201,38 @@ void frameChanged () {
           x += CharWidth;
         }
       }
+    }
+
+    bool drawYesNoMessage () {
+      if (yesNoMessage.length > 0) {
+        fillRect(0, sdwin.height-CharHeight, sdwin.width, CharHeight, Color(128, 0, 0));
+        painter.outlineColor = Color(255, 255, 0);
+        drawText(0, sdwin.height-CharHeight, yesNoMessage);
+        return true;
+      }
+      return false;
+    }
+
+    bool drawEditor () {
+      if (editingName) {
+        fillRect(0, sdwin.height-CharHeight, sdwin.width, CharHeight, Color(0, 0, 190));
+        painter.outlineColor = Color(255, 127, 0);
+        drawText(0, sdwin.height-CharHeight, curGlyphName);
+        fillRect(CharWidth*cast(int)curGlyphName.length, sdwin.height-CharHeight, CharWidth, CharHeight, Color(255, 255, 0));
+        return true;
+      }
+      return false;
+    }
+
+    bool drawMessage () {
+      if (msgAlpha >= 0 && msgText.length) {
+        int y = sdwin.height-CharHeight;
+        fillRect(0, y, sdwin.width, CharHeight, Color(60, 60, 90));
+        painter.outlineColor = Color(255, 255, 255);
+        drawText((sdwin.width-CharWidth*cast(int)msgText.length)/2, y, msgText);
+        return true;
+      }
+      return false;
     }
 
     void drawStroke (const(DTWGlyph) stk) {
@@ -250,14 +264,8 @@ void frameChanged () {
     void drawStrokeList (int curptr) {
       int wdt = nameMaxLen*CharWidth+4;
       int hgt = cast(int)(glib.length*CharHeight+4);
-      painter.outlineColor = Color.white;
-      painter.fillColor = Color.transparent;
-      painter.drawRectangle(Point(0, 0), wdt, hgt);
-      painter.outlineColor = Color.black;
-      painter.drawRectangle(Point(1, 1), wdt-2, hgt-2);
-      painter.fillColor = Color.white;
-      painter.drawRectangle(Point(2, 2), wdt-4, hgt-4);
-      painter.fillColor = Color.transparent;
+      drawRect(0, 0, wdt, hgt, Color.white);
+      drawRect(1, 1, wdt-2, hgt-2, Color.black);
       foreach (auto idx, auto g; glib) {
         Color col, bkcol;
         if (g is detectedGlyph) {
@@ -271,55 +279,21 @@ void frameChanged () {
         }
         if (curptr == idx) bkcol = Color(0, 127, 0);
         if (idx == curPattern) col = Color(255, 255, 0);
-        painter.outlineColor = bkcol;
-        painter.fillColor = bkcol;
-        painter.drawRectangle(Point(2, idx*CharHeight+2), wdt-4, CharHeight);
+        fillRect(2, idx*CharHeight+2, wdt-4, CharHeight, bkcol);
         painter.outlineColor = col;
-        painter.fillColor = Color.transparent;
         drawText(2, idx*CharHeight+2, g.name);
       }
     }
 
-    painter.outlineColor = Color.black;
-    painter.fillColor = Color.black;
-    painter.drawRectangle(Point(0, 0), sdwin.width, sdwin.height);
+    fillRect(0, 0, sdwin.width, sdwin.height, Color.black); // cls
 
     if (curPattern >= 0 && curPattern < cast(int)glib.length) drawTemplate(glib[curPattern]);
     drawStrokeList(curGlyph);
     if (drawnGlyph !is null && drawnGlyph.valid) drawStroke(drawnGlyph);
-    if (yesNoMessage.length > 0) {
-      painter.outlineColor = Color(128, 0, 0);
-      painter.fillColor = Color(128, 0, 0);
-      painter.drawRectangle(Point(0, sdwin.height-CharHeight), sdwin.width, CharHeight);
-      painter.outlineColor = Color(255, 255, 0);
-      painter.fillColor = Color.transparent;
-      drawText(0, sdwin.height-CharHeight, yesNoMessage);
-    } else if (editingName) {
-      painter.outlineColor = Color(0, 0, 190);
-      painter.fillColor = Color(0, 0, 190);
-      painter.drawRectangle(Point(0, sdwin.height-CharHeight), sdwin.width, CharHeight);
-      painter.outlineColor = Color(255, 127, 0);
-      painter.fillColor = Color.transparent;
-      drawText(0, sdwin.height-CharHeight, curGlyphName);
-      painter.outlineColor = Color(255, 255, 0);
-      painter.fillColor = Color(255, 255, 0);
-      painter.drawRectangle(Point(CharWidth*cast(int)curGlyphName.length, sdwin.height-CharHeight), CharWidth, CharHeight);
-      painter.outlineColor = Color(255, 127, 0);
-      painter.fillColor = Color.transparent;
-    }
-    if (msgAlpha >= 0 && msgText.length) {
-      int y = sdwin.height-CharHeight;
-      painter.outlineColor = Color(60, 60, 90);
-      painter.fillColor = Color(60, 60, 90);
-      painter.drawRectangle(Point(0, y), sdwin.width, CharHeight);
-      painter.outlineColor = Color(255, 255, 255);
-      painter.fillColor = Color.transparent;
-      drawText((sdwin.width-CharWidth*cast(int)msgText.length)/2, y, msgText);
-      painter.fillColor = Color.transparent;
-    }
-    if (helpVisible) {
-      helpOverlay();
-    }
+
+    if (!drawYesNoMessage()) drawEditor();
+    drawMessage();
+    if (helpVisible) drawHelp();
   }
   flushGui();
 }

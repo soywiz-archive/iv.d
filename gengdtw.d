@@ -90,9 +90,19 @@ public:
     else { if (mName != v) mName = v.idup; }
   }
 
+  // you can use this to "reset" points array without actually deleting it
+  // otherwise it is identical to "clear"
+  auto reset () nothrow @trusted {
+    if (points.length) { points.length = 0; points.assumeSafeAppend; }
+    mName = null;
+    mFinished = false;
+    return this;
+  }
+
   auto clear () nothrow @trusted {
     delete points;
     mName = null;
+    mFinished = false;
     return this;
   }
 
@@ -126,6 +136,7 @@ public:
     return this;
   }
 
+  // "finish" (finalize) gesture in-place
   auto finish () nothrow @trusted @nogc {
     import std.math : hypot, atan2, PI;
     if (mFinished || points.length < 2) return this;
@@ -191,7 +202,7 @@ public:
         data[0..d0*d1] = initV;
       }
 
-      ~this () nothrow @nogc {
+      ~this () {
         if (data !is null) {
           import core.stdc.stdlib : free;
           free(data);
@@ -409,7 +420,7 @@ public DTWGlyph[] gstLibLoad (VFile fl) {
 // ////////////////////////////////////////////////////////////////////////// //
 public void gstLibSave (VFile fl, const(DTWGlyph)[] list) {
   if (list.length > uint.max/16) throw new Exception("too many glyphs");
-  fl.writeNum!uint(0x4C53384Bu); // "K8SL"
+  fl.rawWriteExact("K8SL");
   fl.writeNum!ubyte(0); // version
   fl.writeNum!uint(cast(uint)list.length);
   foreach (const DTWGlyph g; list) {
