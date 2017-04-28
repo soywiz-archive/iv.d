@@ -59,7 +59,7 @@ private:
   GengPatternPoints patpoints;
   GengFloat[] points; // [0]:x, [1]:y, [2]:x, [3]:y, etc...
   bool mNormalized; // true: `patpoints` is ok
-  bool mOriented;
+  bool mOriented = true;
   string mName;
 
   private static normBlkAttr (void* ptr) {

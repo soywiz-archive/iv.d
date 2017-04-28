@@ -51,7 +51,7 @@ private:
   GengPatternPoints patpoints;
   GengFloat[] points; // [0]:x, [1]:y, [2]:x, [3]:y, etc...
   bool mNormalized; // true: `patpoints` is ok
-  bool mOriented;
+  bool mOriented = true;
   string mName;
 
 private:
@@ -81,7 +81,7 @@ private:
   }
 
 public:
-  private this () nothrow @safe @nogc {} // no, really, we only need this in loader
+  this () nothrow @safe @nogc {}
 
   this (string aname, bool aoriented=true) nothrow @safe @nogc { mName = aname; mOriented = aoriented; } ///
 
@@ -101,11 +101,23 @@ final:
     string name () { pragma(inline, true); return mName; } ///
     bool hasOriginalPoints () { pragma(inline, true); return (points.length != 0); } ///
     usize length () { pragma(inline, true); return points.length/2; } /// number of original points
+    alias opDollar = length;
     /// return normalized points
     GengPatternPoints normPoints () {
       GengPatternPoints res = patpoints[];
-      if (!mNormalized && points.length) resample(res, points);
+      if (!mNormalized && points.length >= 4) resample(res, points);
       return res;
+    }
+    enum normLength = NormalizedPoints;
+    Point normPoint (usize idx) {
+      if (!valid || idx >= NormalizedPoints) return Point.init;
+      if (mNormalized) {
+        return Point(patpoints[idx*2+0], patpoints[idx*2+1]);
+      } else {
+        GengPatternPoints rpt = void;
+        resample(rpt, points);
+        return Point(patpoints[idx*2+0], patpoints[idx*2+1]);
+      }
     }
     /// return original point
     Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length/2 ? Point(points[idx*2], points[idx*2+1]) : Point.init); }
@@ -129,7 +141,7 @@ final:
 
   /// will not clear orientation
   auto clear () nothrow @trusted {
-    if (points.length) { points.length = 0; points.assumeSafeAppend; }
+    delete points;
     mNormalized = false;
     mName = null;
     return this;
@@ -168,10 +180,11 @@ final:
       buildNormPoints(patpoints, points, mOriented);
       mNormalized = true;
     }
-    if (dropOriginalPoints) { assert(mNormalized); points.length = 0; points.assumeSafeAppend; }
+    if (dropOriginalPoints) { assert(mNormalized); delete points; }
     return this;
   }
 
+  ///
   static bool isGoodScore (GengFloat score) {
     pragma(inline, true);
     import std.math : isNaN;
@@ -197,9 +210,9 @@ private:
     return sqrt(dx*dx+dy*dy);
   }
 
-  static GengFloat match (in ref GengPatternPoints v0, in ref GengPatternPoints v1) pure nothrow @safe @nogc {
+  static GengFloat match (in ref GengPatternPoints tpl, in ref GengPatternPoints v1) pure nothrow @safe @nogc {
     pragma(inline, true);
-    return cast(GengFloat)1.0/optimalCosineDistance(v0, v1);
+    return cast(GengFloat)1.0/optimalCosineDistance(tpl, v1);
   }
 
   static GengFloat optimalCosineDistance (in ref GengPatternPoints v0, in ref GengPatternPoints v1) pure nothrow @trusted @nogc {
@@ -327,7 +340,8 @@ public:
         if (gs is null || !gs.valid) continue;
         gspts = gs.patpoints[];
         if (!gs.mNormalized) buildNormPoints(gspts, gs.points, gs.mOriented);
-        GengFloat score = match(pts, gspts);
+        GengFloat score = match(gspts, pts);
+        //{ import core.stdc.stdio; printf("tested: '%.*s'; score=%f\n", cast(int)gs.mName.length, gs.mName.ptr, cast(double)score); }
         if (score >= MinMatchScore && score > bestScore) {
           bestScore = score;
           res = cast(PTGlyph)gs; // sorry

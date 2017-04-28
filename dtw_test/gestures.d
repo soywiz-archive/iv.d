@@ -18,17 +18,23 @@
 module gesturesdtw_test is aliced;
 private:
 
-import std.stdio;
+import arsd.color;
+import arsd.simpledisplay;
 
-import iv.videolib;
-
+import iv.cmdcongl;
 import iv.gengdtw;
+import iv.pxclock;
+import iv.vfs.io;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+SimpleWindow sdwin;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 ulong msgHideTime = 0;
-VLOverlay ovlMsg;
 int msgAlpha = -1;
+string msgText;
 
 
 void updateMsg () {
@@ -36,10 +42,10 @@ void updateMsg () {
     if (msgAlpha > 0) {
       if ((msgAlpha += 10) > 255) {
         msgAlpha = -1;
-        ovlMsg = null;
+        msgText = null;
       }
     } else {
-      if (getTicks() >= msgHideTime) {
+      if (clockMilli() >= msgHideTime) {
         msgAlpha = 1;
       }
     }
@@ -50,6 +56,7 @@ void updateMsg () {
 
 void showMessage (string msg) {
   if (msg.length == 0) return;
+  /+
   ovlMsg = new VLOverlay(msg.length*6+6, 8+6);
   ovlMsg.fillRect(0, 0, ovlMsg.width, ovlMsg.height, rgb2col(25, 69, 247));
   ovlMsg.rect(0, 0, ovlMsg.width, ovlMsg.height, rgb2col(255, 255, 255));
@@ -70,75 +77,11 @@ void showMessage (string msg) {
     ovlMsg.drawChar(x, 3, ch, fg);
     x += 6;
   }
-  msgHideTime = getTicks()+5000;
+  +/
+  msgText = msg;
+  msgHideTime = clockMilli()+5000;
   msgAlpha = 0;
   frameChanged();
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-VLOverlay helpOverlay () {
-  static immutable string[] helpText = [
-    "\x1fDemo actions",
-    "\x1f------------",
-    "\3keyboard:\1",
-    " \2F1\1: toggle help",
-    " \2F2\1: save library to '\4strokes.dat\1'",
-    " \2F3\1: replace library with '\4strokes.dat\1'",
-    " \2ESC\1: quit",
-    " \2DEL\1: delete selected stroke",
-    "",
-    "\3mouse:\1",
-    " \2LMB\1: select name or start drawing",
-    " \2RMB\1: register current stroke as template",
-  ];
-
-  static auto stlen (string s) {
-    usize res = 0;
-    foreach (immutable char ch; s) if (ch >= 32) ++res;
-    return res;
-  }
-
-  static VLOverlay ovlHelp = null;
-
-  if (ovlHelp is null) {
-    usize maxlen = 0;
-    foreach (auto s; helpText) {
-      auto ln = stlen(s);
-      if (ln > maxlen) maxlen = ln;
-    }
-    ovlHelp = new VLOverlay(maxlen*6+6, helpText.length*8+6);
-    ovlHelp.fillRect(0, 0, ovlHelp.width, ovlHelp.height, rgb2col(25, 69, 247));
-    ovlHelp.rect(0, 0, ovlHelp.width, ovlHelp.height, rgb2col(255, 255, 255));
-    ovlHelp.rect(1, 1, ovlHelp.width-2, ovlHelp.height-2, rgb2col(0, 0, 0));
-    foreach (auto idx, auto s; helpText) {
-      if (s.length == 0) continue;
-      auto ln = stlen(s)*6;
-      auto x = (ovlHelp.width-ln)/2;
-      auto y = idx*8+3;
-      string st = s;
-      if (s[0] == '\x1f') {
-        st = s[1..$];
-      } else {
-        x = 3;
-      }
-      Color fg = rgb2col(255, 255, 255);
-      foreach (auto ch; st) {
-        switch (ch) {
-          case 1: fg = rgb2col(255, 255, 255); break;
-          case 2: fg = rgb2col(0, 255, 0); break;
-          case 3: fg = rgb2col(255, 255, 0); break;
-          case 4: fg = rgb2col(255, 127, 0); break;
-          default: break;
-        }
-        if (ch < 32) continue;
-        ovlHelp.drawChar(x, y, ch, fg);
-        x += 6;
-      }
-    }
-  }
-
-  return ovlHelp;
 }
 
 
@@ -154,69 +97,6 @@ bool helpVisible;
 void fixNameMaxLen () {
   nameMaxLen = 0;
   foreach (auto g; glib) if (g.name.length > nameMaxLen) nameMaxLen = cast(int)g.name.length;
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-void drawStroke (const(DTWGlyph) stk) {
-  auto col = rgb2col(255, 255, 0);
-  foreach (uint idx; 1..stk.length) {
-    immutable p0 = stk[idx-1], p1 = stk[idx];
-    double x0 = p0.x, y0 = p0.y;
-    double x1 = p1.x, y1 = p1.y;
-    vscrOvl.line(cast(int)x0, cast(int)y0, cast(int)x1, cast(int)y1, col);
-  }
-}
-
-
-void drawTemplate (const(DTWGlyph) stk) {
-  foreach (uint idx; 1..stk.length) {
-    auto g = cast(ubyte)(255*idx/(stk.length-1));
-    auto b = cast(ubyte)(255-(255*idx/(stk.length-1)));
-    immutable p0 = stk[idx-1], p1 = stk[idx];
-    double x0 = p0.x, y0 = p0.y;
-    double x1 = p1.x, y1 = p1.y;
-    x0 = x0*200+400;
-    y0 = y0*200+300;
-    x1 = x1*200+400;
-    y1 = y1*200+300;
-    vscrOvl.line(cast(int)x0, cast(int)y0, cast(int)x1, cast(int)y1, rgb2col(0, g, b));
-  }
-}
-
-
-void drawStrokeList (int curptr) {
-  int wdt = nameMaxLen*6+4;
-  int hgt = cast(int)(glib.length*8+4);
-  with (vscrOvl) {
-    rect(0, 0, wdt, hgt, rgb2col(255, 255, 255));
-    rect(1, 1, wdt-2, hgt-2, 0);
-    fillRect(2, 2, wdt-4, hgt-4, rgb2col(0, 0, 127));
-  }
-  foreach (auto idx, auto g; glib) {
-    Color col, bkcol;
-    if (g is detectedGlyph) {
-      // highlighted
-      col = rgb2col(255, 255, 255);
-      //bkcol = rgb2col(0, 0, 255);
-      bkcol = rgb2col(0, 100, 0);
-    } else {
-      col = rgb2col(255, 127, 0);
-      bkcol = rgb2col(0, 0, 127);
-    }
-    if (curptr == idx) bkcol = rgb2col(0, 127, 0);
-    if (idx == curPattern) col = rgb2col(255, 255, 0);
-    with (vscrOvl) {
-      fillRect(2, idx*8+2, wdt-4, 8, bkcol);
-      drawStr(2, idx*8+2, g.name, col);
-    }
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-void updateCB (int elapsedTicks) {
-  updateMsg();
 }
 
 
@@ -246,109 +126,202 @@ void registerGlyph () {
 }
 
 
-void rebuildCB () {
-  vscrOvl.clear(0);
-  if (curPattern >= 0 && curPattern < cast(int)glib.length) drawTemplate(glib[curPattern]);
-  drawStrokeList(curGlyph);
-  if (drawnGlyph !is null && drawnGlyph.valid) drawStroke(drawnGlyph);
-  if (yesNoMessage.length > 0) {
-    with (vscrOvl) {
-      fillRect(0, vlHeight-8, vlWidth, 8, rgb2col(128, 0, 0));
-      drawStr(0, vlHeight-8, yesNoMessage, rgb2col(255, 255, 0));
-    }
-  } else if (editingName) {
-    with (vscrOvl) {
-      fillRect(0, vlHeight-8, vlWidth, 8, rgb2col(0, 0, 190));
-      drawStr(0, vlHeight-8, curGlyphName, rgb2col(255, 127, 0));
-      fillRect(curGlyphName.length*6, vlHeight-8, 6, 8, rgb2col(255, 255, 0));
-    }
-  }
-  if (msgAlpha >= 0 && ovlMsg !is null) {
-    auto ho = ovlMsg;
-    ho.blit(vscrOvl, (vlWidth-ho.width)/2, 2, msgAlpha&0xff);
-  }
-  if (helpVisible) {
-    auto ho = helpOverlay;
-    ho.blit(vscrOvl, (vlWidth-ho.width)/2, (vlHeight-ho.height)/2, 32);
-  }
-}
+enum CharWidth = 10;
+enum CharHeight = 10;
 
+void frameChanged () {
+  if (sdwin is null || sdwin.closed) return;
 
-// ////////////////////////////////////////////////////////////////////////// //
-void onTextInputCB (dchar ch) {
-  if (ch >= ' ' && ch <= 255) {
-    curGlyphName ~= cast(char)ch;
-    frameChanged();
-    return;
-  }
-}
+  {
+    auto painter = sdwin.draw();
 
+    void drawText (int x, int y, const(char)[] str...) {
+      foreach (immutable char ch; str) {
+        foreach (immutable int dy; 0..CharHeight) {
+          ushort v = glConFont10.ptr[cast(ubyte)ch*CharHeight+dy];
+          foreach (immutable int dx; 0..CharWidth) {
+            if (v&0x8000) {
+              painter.drawPixel(Point(x+dx, y+dy));
+              //painter.drawLine(Point(x+dx, y+dy), Point(x+dx+1, y+dy+1));
+            }
+            v <<= 1;
+          }
+        }
+        x += CharWidth;
+      }
+    }
 
-void onKeyDownCB (in ref SDL_KeyboardEvent ev) {
-  if (ev.keysym.sym == SDLK_RETURN && (ev.keysym.mod&KMOD_ALT)) { switchFullscreen(); return; }
-  if (helpVisible) {
-    if (ev.keysym.sym == SDLK_ESCAPE || ev.keysym.sym == SDLK_F1) {
-      helpVisible = false;
-      frameChanged();
+    void helpOverlay () {
+      static immutable string[] helpText = [
+        "\x1fDemo actions",
+        "\x1f------------",
+        "\3keyboard:\1",
+        " \2F1\1: toggle help",
+        " \2F2\1: save library to '\4strokes.dat\1'",
+        " \2F3\1: replace library with '\4strokes.dat\1'",
+        " \2ESC\1: quit",
+        " \2DEL\1: delete selected stroke",
+        "",
+        "\3mouse:\1",
+        " \2LMB\1: select name or start drawing",
+        " \2RMB\1: register current stroke as template",
+      ];
+
+      static int stlen (string s) {
+        int res = 0;
+        foreach (immutable char ch; s) if (ch >= 32) ++res;
+        return res;
+      }
+
+      int maxlen = 0;
+      foreach (auto s; helpText) {
+        auto ln = stlen(s);
+        if (ln > maxlen) maxlen = ln;
+      }
+
+      int wdt = (maxlen*CharWidth+6);
+      int hgt = (CharHeight*cast(int)helpText.length+6);
+      int x0 = (sdwin.width-wdt)/2;
+      int y0 = (sdwin.height-hgt)/2;
+
+      painter.outlineColor = Color(25, 69, 247);
+      painter.fillColor = Color(25, 69, 247);
+      painter.drawRectangle(Point(x0, y0), wdt, hgt);
+      painter.fillColor = Color.transparent;
+      painter.outlineColor = Color(255, 255, 255);
+      painter.drawRectangle(Point(x0, y0), wdt, hgt);
+      painter.outlineColor = Color.black;
+      painter.drawRectangle(Point(x0+1, y0+1), wdt-2, hgt-2);
+
+      foreach (auto idx, auto s; helpText) {
+        if (s.length == 0) continue;
+        auto ln = stlen(s)*CharWidth;
+        auto x = (wdt-ln)/2;
+        auto y = idx*CharHeight+3;
+        string st = s;
+        if (s[0] == '\x1f') {
+          st = s[1..$];
+        } else {
+          x = 3;
+        }
+        Color fg = Color(255, 255, 255);
+        foreach (auto ch; st) {
+          switch (ch) {
+            case 1: fg = Color(255, 255, 255); break;
+            case 2: fg = Color(0, 255, 0); break;
+            case 3: fg = Color(255, 255, 0); break;
+            case 4: fg = Color(255, 127, 0); break;
+            default: break;
+          }
+          if (ch < 32) continue;
+          painter.outlineColor = fg;
+          drawText(x0+x, y0+y, ch);
+          x += CharWidth;
+        }
+      }
     }
-    return;
-  }
-  if (yesNoMessage.length > 0) {
-    switch (ev.keysym.sym) {
-      case SDLK_ESCAPE: yesNoMessage = null; break;
-      case SDLK_RETURN:
-        glib = glib[0..curPattern]~glib[curPattern+1..$];
-        detectedGlyph = null;
-        curPattern = -1;
-        yesNoMessage = null;
-        break;
-      default: break;
+
+    void drawStroke (const(DTWGlyph) stk) {
+      painter.outlineColor = Color(255, 255, 0);
+      foreach (uint idx; 1..stk.length) {
+        immutable p0 = stk[idx-1], p1 = stk[idx];
+        double x0 = p0.x, y0 = p0.y;
+        double x1 = p1.x, y1 = p1.y;
+        painter.drawLine(Point(cast(int)x0, cast(int)y0), Point(cast(int)x1, cast(int)y1));
+      }
     }
-    frameChanged();
-    return;
-  }
-  if (editingName) {
-    switch (ev.keysym.sym) {
-      case SDLK_ESCAPE: editingName = false; break;
-      case SDLK_BACKSPACE:
-        if (curGlyphName.length > 0) curGlyphName = curGlyphName[0..$-1];
-        break;
-      case SDLK_RETURN: registerGlyph(); editingName = false; break;
-      default: break;
+
+    void drawTemplate (const(DTWGlyph) stk) {
+      foreach (uint idx; 1..stk.length) {
+        auto g = cast(ubyte)(255*idx/(stk.length-1));
+        auto b = cast(ubyte)(255-(255*idx/(stk.length-1)));
+        immutable p0 = stk[idx-1], p1 = stk[idx];
+        double x0 = p0.x, y0 = p0.y;
+        double x1 = p1.x, y1 = p1.y;
+        x0 = x0*200+400;
+        y0 = y0*200+300;
+        x1 = x1*200+400;
+        y1 = y1*200+300;
+        painter.outlineColor = Color(0, g, b);
+        painter.drawLine(Point(cast(int)x0, cast(int)y0), Point(cast(int)x1, cast(int)y1));
+      }
     }
-    if (!editingName) stopTextInput();
-    frameChanged();
-    return;
-  }
-  if (ev.keysym.sym == SDLK_ESCAPE) { postQuitMessage(); return; }
-  if (ev.keysym.sym == SDLK_F1) {
-    helpVisible = true;
-    frameChanged();
-    return;
-  }
-  if (ev.keysym.sym == SDLK_F2) {
-    gstLibSave(File("strokes.dat", "w"), glib[]);
-    writefln("%s strokes saved", glib.length);
-    frameChanged();
-    return;
-  }
-  if (ev.keysym.sym == SDLK_F3) {
-    glib = gstLibLoad(File("strokes.dat"));
-    fixNameMaxLen();
-    writefln("%s strokes loaded", glib.length);
-    detectedGlyph = null;
-    curPattern = -1;
-    drawnGlyph = null;
-    frameChanged();
-    return;
-  }
-  if (ev.keysym.sym == SDLK_DELETE) {
-    if (curPattern >= 0) {
-      yesNoMessage = "Remove '"~glib[curPattern].name~"'?";
-      frameChanged();
-      return;
+
+    void drawStrokeList (int curptr) {
+      int wdt = nameMaxLen*CharWidth+4;
+      int hgt = cast(int)(glib.length*CharHeight+4);
+      painter.outlineColor = Color.white;
+      painter.fillColor = Color.transparent;
+      painter.drawRectangle(Point(0, 0), wdt, hgt);
+      painter.outlineColor = Color.black;
+      painter.drawRectangle(Point(1, 1), wdt-2, hgt-2);
+      painter.fillColor = Color.white;
+      painter.drawRectangle(Point(2, 2), wdt-4, hgt-4);
+      painter.fillColor = Color.transparent;
+      foreach (auto idx, auto g; glib) {
+        Color col, bkcol;
+        if (g is detectedGlyph) {
+          // highlighted
+          col = Color(255, 255, 255);
+          //bkcol = rgb2col(0, 0, 255);
+          bkcol = Color(0, 100, 0);
+        } else {
+          col = Color(255, 127, 0);
+          bkcol = Color(0, 0, 127);
+        }
+        if (curptr == idx) bkcol = Color(0, 127, 0);
+        if (idx == curPattern) col = Color(255, 255, 0);
+        painter.outlineColor = bkcol;
+        painter.fillColor = bkcol;
+        painter.drawRectangle(Point(2, idx*CharHeight+2), wdt-4, CharHeight);
+        painter.outlineColor = col;
+        painter.fillColor = Color.transparent;
+        drawText(2, idx*CharHeight+2, g.name);
+      }
+    }
+
+    painter.outlineColor = Color.black;
+    painter.fillColor = Color.black;
+    painter.drawRectangle(Point(0, 0), sdwin.width, sdwin.height);
+
+    if (curPattern >= 0 && curPattern < cast(int)glib.length) drawTemplate(glib[curPattern]);
+    drawStrokeList(curGlyph);
+    if (drawnGlyph !is null && drawnGlyph.valid) drawStroke(drawnGlyph);
+    if (yesNoMessage.length > 0) {
+      painter.outlineColor = Color(128, 0, 0);
+      painter.fillColor = Color(128, 0, 0);
+      painter.drawRectangle(Point(0, sdwin.height-CharHeight), sdwin.width, CharHeight);
+      painter.outlineColor = Color(255, 255, 0);
+      painter.fillColor = Color.transparent;
+      drawText(0, sdwin.height-CharHeight, yesNoMessage);
+    } else if (editingName) {
+      painter.outlineColor = Color(0, 0, 190);
+      painter.fillColor = Color(0, 0, 190);
+      painter.drawRectangle(Point(0, sdwin.height-CharHeight), sdwin.width, CharHeight);
+      painter.outlineColor = Color(255, 127, 0);
+      painter.fillColor = Color.transparent;
+      drawText(0, sdwin.height-CharHeight, curGlyphName);
+      painter.outlineColor = Color(255, 255, 0);
+      painter.fillColor = Color(255, 255, 0);
+      painter.drawRectangle(Point(CharWidth*cast(int)curGlyphName.length, sdwin.height-CharHeight), CharWidth, CharHeight);
+      painter.outlineColor = Color(255, 127, 0);
+      painter.fillColor = Color.transparent;
+    }
+    if (msgAlpha >= 0 && msgText.length) {
+      int y = sdwin.height-CharHeight;
+      painter.outlineColor = Color(60, 60, 90);
+      painter.fillColor = Color(60, 60, 90);
+      painter.drawRectangle(Point(0, y), sdwin.width, CharHeight);
+      painter.outlineColor = Color(255, 255, 255);
+      painter.fillColor = Color.transparent;
+      drawText((sdwin.width-CharWidth*cast(int)msgText.length)/2, y, msgText);
+      painter.fillColor = Color.transparent;
+    }
+    if (helpVisible) {
+      helpOverlay();
     }
   }
+  flushGui();
 }
 
 
@@ -357,106 +330,181 @@ int mdown = 0;
 
 
 int getSelectedGlyph (int x, int y) {
-  int wdt = nameMaxLen*6+4;
-  int hgt = cast(int)(glib.length*8+4);
+  int wdt = nameMaxLen*CharWidth+4;
+  int hgt = cast(int)(glib.length*CharHeight+4);
   if (x >= 2 && y >= 2 && x < wdt-4 && y < hgt-4) {
-    return cast(int)((y-2)/8);
+    return cast(int)((y-2)/CharHeight);
   } else {
     return -1;
   }
 }
 
 
-void onMouseDownCB (in ref SDL_MouseButtonEvent ev) {
-  if (yesNoMessage.length > 0 || editingName) return;
-  if (mdown == 0) {
-    if (ev.button == SDL_BUTTON_LEFT) {
-      auto ng = getSelectedGlyph(ev.x, ev.y);
-      if (ng >= 0) {
-        curPattern = ng;
-        frameChanged();
-        return;
-      }
-    }
-    if (ev.button == SDL_BUTTON_LEFT || ev.button == SDL_BUTTON_RIGHT) {
-      mdown = (ev.button == SDL_BUTTON_LEFT ? 1 : 2);
-      detectedGlyph = null;
-      drawnGlyph = new DTWGlyph();
-      drawnGlyph.addPoint(ev.x, ev.y);
-      frameChanged();
-    }
-  }
-}
-
-
-void onMouseUpCB (in ref SDL_MouseButtonEvent ev) {
-  if (yesNoMessage.length > 0 || editingName) return;
-  if (mdown != 0) {
-    if (drawnGlyph.valid) {
-      if (mdown == 1) {
-        detectedGlyph = drawnGlyph.findMatch(glib[]);
-        if (detectedGlyph !is null && detectedGlyph.name.length > 0) {
-          showMessage("glyph: '"~detectedGlyph.name~"'");
-        }
-      } else {
-        curGlyphName = (curPattern >= 0 ? glib[curPattern].name : "");
-        editingName = true;
-        startTextInput();
-      }
-    } else {
-      drawnGlyph = null;
-    }
-    frameChanged();
-  }
-  mdown = 0;
-}
-
-
-void onMouseDoubleCB (in ref SDL_MouseButtonEvent ev) {
-  //writeln("double button", ev.button, " at (", ev.x, ",", ev.y, ")");
-}
-
-
-void onMouseMotionCB (in ref SDL_MouseMotionEvent ev) {
-  if (yesNoMessage.length > 0 || editingName) return;
-  if (mdown == 0) {
-    auto ng = getSelectedGlyph(ev.x, ev.y);
-    if (ng != curGlyph) {
-      curGlyph = ng;
-      frameChanged();
-    }
-  } else if (mdown != 0) {
-    drawnGlyph.addPoint(ev.x, ev.y);
-    frameChanged();
-  }
-}
-
-
 // ////////////////////////////////////////////////////////////////////////// //
 void main (string[] args) {
-  glib = gstLibLoad(File("strokes.dat"));
+  glib = gstLibLoad(VFile("strokes.dat"));
   fixNameMaxLen();
   writefln("%s strokes loaded", glib.length);
   //gstLibSave(File("strokes_new.dat", "w"), glib[]);
-  vlWidth = 800;
-  vlHeight = 600;
-  useMag2x = false;
-  processArgs(args);
-  try {
-    initVideo("Gestures/SDL");
-  } catch (Throwable e) {
-    writeln("FATAL: ", e.msg);
-    return;
-  }
-  //
-  setFPS(35);
-  onUpdate = &updateCB;
-  onRebuild = &rebuildCB;
-  onKeyDown = &onKeyDownCB;
-  onTextInput = &onTextInputCB;
-  onMouseDown = &onMouseDownCB;
-  onMouseUp = &onMouseUpCB;
-  onMouseDouble = &onMouseDoubleCB;
-  onMouseMotion = &onMouseMotionCB;
-  mainLoop();
+  sdwin = new SimpleWindow(800, 600, "DTW Gesture Recognizer test");
+  frameChanged();
+  sdwin.eventLoop(100,
+    // pulse timer
+    delegate () {
+      updateMsg();
+    },
+    // mouse events
+    delegate (MouseEvent event) {
+      switch (event.type) {
+        case MouseEventType.buttonPressed:
+          if (yesNoMessage.length > 0 || editingName) break;
+          if (mdown == 0) {
+            if (event.button == MouseButton.left) {
+              auto ng = getSelectedGlyph(event.x, event.y);
+              if (ng >= 0) {
+                curPattern = ng;
+                frameChanged();
+                return;
+              }
+            }
+            if (event.button == MouseButton.left || event.button == MouseButton.right) {
+              mdown = (event.button == MouseButton.left ? 1 : 2);
+              detectedGlyph = null;
+              drawnGlyph = new DTWGlyph();
+              drawnGlyph.appendPoint(event.x, event.y);
+              frameChanged();
+            }
+          }
+          break;
+        case MouseEventType.buttonReleased:
+          if (yesNoMessage.length > 0 || editingName) return;
+          if (mdown != 0) {
+            if (drawnGlyph.valid) {
+              if (mdown == 1) {
+                detectedGlyph = cast(DTWGlyph)drawnGlyph.findMatch(glib[]); // sorry
+                if (detectedGlyph !is null && detectedGlyph.name.length > 0) {
+                  showMessage("glyph: '"~detectedGlyph.name~"'");
+                }
+              } else {
+                curGlyphName = (curPattern >= 0 ? glib[curPattern].name : "");
+                editingName = true;
+              }
+            } else {
+              drawnGlyph = null;
+            }
+            frameChanged();
+          }
+          mdown = 0;
+          break;
+        case MouseEventType.motion:
+          if (yesNoMessage.length > 0 || editingName) break;
+          if (mdown == 0) {
+            auto ng = getSelectedGlyph(event.x, event.y);
+            if (ng != curGlyph) {
+              curGlyph = ng;
+              frameChanged();
+            }
+          } else if (mdown != 0) {
+            drawnGlyph.appendPoint(event.x, event.y);
+            frameChanged();
+          }
+          break;
+        default:
+      }
+    },
+    // keyboard events
+    delegate (KeyEvent event) {
+      if (!event.pressed) return;
+      if (helpVisible) {
+        if (event == "Escape" || event == "F1") {
+          helpVisible = false;
+          frameChanged();
+        }
+        return;
+      }
+      if (yesNoMessage.length > 0) {
+        if (event == "Escape") {
+          yesNoMessage = null;
+        } else if (event == "Enter") {
+          glib = glib[0..curPattern]~glib[curPattern+1..$];
+          detectedGlyph = null;
+          curPattern = -1;
+          yesNoMessage = null;
+        }
+        frameChanged();
+        return;
+      }
+      /*
+      if (editingName) {
+        if (event == "Escape")
+        switch (event.keysym.sym) {
+          case SDLK_ESCAPE: editingName = false; break;
+          case SDLK_BACKSPACE:
+            if (curGlyphName.length > 0) curGlyphName = curGlyphName[0..$-1];
+            break;
+          case SDLK_RETURN: registerGlyph(); editingName = false; break;
+          default: break;
+        }
+        if (!editingName) stopTextInput();
+        frameChanged();
+        return;
+      }
+      */
+      if (event == "C-Q") { sdwin.close(); return; }
+      if (event == "F1") {
+        helpVisible = true;
+        frameChanged();
+        return;
+      }
+      if (event == "F2") {
+        gstLibSave(VFile("strokes.dat", "w"), glib[]);
+        writefln("%s strokes saved", glib.length);
+        frameChanged();
+        return;
+      }
+      if (event == "F3") {
+        glib = gstLibLoad(VFile("strokes.dat"));
+        fixNameMaxLen();
+        writefln("%s strokes loaded", glib.length);
+        detectedGlyph = null;
+        curPattern = -1;
+        drawnGlyph = null;
+        frameChanged();
+        return;
+      }
+      if (event == "Delete") {
+        if (curPattern >= 0) {
+          yesNoMessage = "Remove '"~glib[curPattern].name~"'?";
+          frameChanged();
+          return;
+        }
+      }
+    },
+    // characters
+    delegate (dchar ch) {
+      if (!editingName) return;
+      if (ch == 27) { editingName = false; frameChanged(); return; }
+      if (ch == 8) {
+        if (curGlyphName.length > 0) curGlyphName = curGlyphName[0..$-1];
+        frameChanged();
+        return;
+      }
+      if (ch == 25) {
+        // C-Y
+        curGlyphName = null;
+        frameChanged();
+        return;
+      }
+      if (ch == 10 || ch == 13) {
+        registerGlyph();
+        editingName = false;
+        return;
+      }
+      if (ch >= ' ' && ch < 127) {
+        curGlyphName ~= cast(char)ch;
+        frameChanged();
+        return;
+      }
+    },
+  );
 }
