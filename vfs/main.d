@@ -47,7 +47,7 @@ public @property void vfsIgnoreCasePak (bool v) nothrow @trusted @nogc { import 
 public @property bool vfsIgnoreCaseDisk () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCaseDisk); }
 
 /// set "ingore filename case" flag when no archive files are attached
-public @property void vfsIgnoreCasePak (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseDisk, v); }
+public @property void vfsIgnoreCaseDisk (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseDisk, v); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //

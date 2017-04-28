@@ -498,6 +498,8 @@ public:
       auto ch = gb[pos++];
       if (ch == '\n') {
         if (!killTextOnChar && !singleline) win.color = (hasHL ? hiColor(gb.hi(pos-1)) : TextColor); else win.color = sltextClr;
+        --pos;
+        break;
       } else if (hasHL) {
         // has highlighter
         if (pos-1 >= trspos) {
@@ -525,7 +527,6 @@ public:
       } else {
         if (inBlock) win.color = blkClr; else win.color = sltextClr;
       }
-      if (ch == '\n') break;
       if (x < winw) {
         if (vt && ch == '\t') {
           int ex = ((x+tabsz)/tabsz)*tabsz;
@@ -570,6 +571,7 @@ public:
       } else {
         win.color = sltextClr;
       }
+      if (bs < be && pos >= bs && pos < be) win.color = blkClr;
     }
     win.writeCharsAt(x, y, winw-x, ' ');
   }
