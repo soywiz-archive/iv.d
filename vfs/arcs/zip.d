@@ -82,13 +82,21 @@ private:
 
   VFile wrap (usize idx) {
     assert(idx < dir.length);
+    debug(ziparc) import std.stdio : writeln, writefln;
+    debug(ziparc) writeln("zip: open file #", idx, ": [", dir[idx].name, "]");
     // read file header
     ZipFileHeader zfh = void;
     st.seek(dir[idx].hdrofs);
     st.rawReadExact((&zfh)[0..1]);
-    if (zfh.sign != "PK\x03\x04") throw new VFSException("invalid ZIP archive entry");
+    if (zfh.sign != "PK\x03\x04") {
+      debug(ziparc) writeln("  invalid ZIP archive entry");
+      throw new VFSException("invalid ZIP archive entry");
+    }
     zfh.fixEndian;
-    if (zfh.crc32 != dir[idx].crc32) throw new VFSException("invalid ZIP archive entry");
+    if (zfh.crc32 != 0 && zfh.crc32 != dir[idx].crc32) {
+      debug(ziparc) writefln("  invalid ZIP archive entry (crc): cdir: 0x%08x  local: 0x%08x", dir[idx].crc32, zfh.crc32);
+      throw new VFSException("invalid ZIP archive entry (crc)");
+    }
     // skip name and extra
     auto xpos = st.tell;
     auto stpos = xpos+zfh.namelen+zfh.extlen;
@@ -290,12 +298,12 @@ private:
         }
         bool doSkip = false;
         // should we parse extra field?
-        debug(ziparc) writefln("size=0x%08x; pksize=0x%08x", fi.size, fi.pksize);
+        debug(ziparc) writefln("name: [%s]; size=0x%08x; pksize=0x%08x", nb[0..nbpos], fi.size, fi.pksize);
         debug(ziparc) {{
           import std.datetime;
           try {
             writeln("  year: ", cdfh.year, "; month: ", cdfh.month, "; day: ", cdfh.day, "; hour: ", cdfh.hour, "; min: ", cdfh.min, "; sec: ", cdfh.sec);
-            writeln("  time: ", SysTime(DateTime(cdfh.year, cdfh.month+1, cdfh.day+1, cdfh.hour, cdfh.min, cdfh.sec), UTC()));
+            writeln("  time: ", SysTime(DateTime(cdfh.year, cdfh.month/*+1*/, cdfh.day+1, cdfh.hour, cdfh.min, cdfh.sec), UTC()));
           } catch (Exception e) {
             writeln("SHIT: ", e.msg);
             throw e;
@@ -447,7 +455,7 @@ align(1):
       return 0;
     } else {
       import std.datetime;
-      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
     }
   }
 
@@ -508,7 +516,7 @@ align(1):
       return 0;
     } else {
       import std.datetime;
-      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(1, 12), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
     }
   }
 
