@@ -453,6 +453,8 @@ private:
       --bytesLeft;
       return true;
     }
+    // end of block, fix state
+    state = State.ExpectBlock;
     return false;
   }
 
