@@ -174,7 +174,7 @@ struct InfStream {
 alias ReadBufDg = int delegate (ubyte[] buf);
 private:
   // return number of bytes read, -1 on error, 0 on eof; can read less than requested
-  ReadBufDg readBuf = null;
+  //ReadBufDg readBuf = null;
 
   // state data
   uint bytesLeft = void; // bytes to copy both for compressed and for uncompressed blocks
@@ -241,8 +241,9 @@ private:
     return (a32s2<<16)|a32s1;
   }
 
-  bool readOneByte (ref ubyte bt) {
+  bool readOneByte (scope ReadBufDg readBuf, ref ubyte bt) {
     //pragma(inline, true);
+    if (readBuf is null) rbeof = true;
     if (rbeof) return false;
     if (rbpos >= rbused) {
       rbpos = 0;
@@ -264,14 +265,14 @@ private:
     doingFinalBlock = false; // just in case too
   }
 
-  void processZLibHeader () @trusted {
+  void processZLibHeader (scope ReadBufDg readBuf) @trusted {
     scope(failure) setErrorState();
     ubyte cmf, flg;
     // 7 bytes
     // compression parameters
-    if (!readOneByte(cmf)) throw new Exception("out of input data");
+    if (!readOneByte(readBuf, cmf)) throw new Exception("out of input data");
     // flags
-    if (!readOneByte(flg)) throw new Exception("out of input data");
+    if (!readOneByte(readBuf, flg)) throw new Exception("out of input data");
     // check format
     // check checksum
     if ((256*cmf+flg)%31) throw new Exception("invalid zlib checksum");
@@ -296,24 +297,24 @@ private:
     state = State.ExpectBlock;
   }
 
-  void finishZLibData () {
+  void finishZLibData (scope ReadBufDg readBuf) {
     // read Adler32
     scope(failure) setErrorState();
     uint a32; // autoinit
     ubyte bt = void;
     foreach_reverse (immutable n; 0..4) {
-      if (!readOneByte(bt)) throw new Exception("out of input data");
+      if (!readOneByte(readBuf, bt)) throw new Exception("out of input data");
       a32 |= (cast(uint)bt)<<(n*8);
     }
     if (a32 != finishAdler32()) throw new Exception("invalid checksum");
   }
 
   // get one bit from source stream
-  uint getBit () {
+  uint getBit (scope ReadBufDg readBuf) {
     if (!bitcount--) {
       scope(failure) setErrorState();
       ubyte bt = void;
-      if (!readOneByte(bt)) throw new Exception("out of input data");
+      if (!readOneByte(readBuf, bt)) throw new Exception("out of input data");
       tag = bt;
       bitcount = 7;
     }
@@ -323,23 +324,23 @@ private:
   }
 
   // read a num bit value from a stream and add base
-  uint readBits (ubyte num, uint base) {
+  uint readBits (scope ReadBufDg readBuf, ubyte num, uint base) {
     uint val = 0;
     if (num) {
       immutable uint limit = 1<<num;
-      for (uint mask = 1; mask < limit; mask <<= 1) if (getBit()) val += mask;
+      for (uint mask = 1; mask < limit; mask <<= 1) if (getBit(readBuf)) val += mask;
     }
     return val+base;
   }
 
   // given a data stream and a tree, decode a symbol
-  uint decodeSymbol (const(Tree*) t) {
+  uint decodeSymbol (scope ReadBufDg readBuf, const(Tree*) t) {
     scope(failure) setErrorState();
     int cur, sum, len; // autoinit
     // get more bits while code value is above sum
     do {
       ushort sl;
-      cur = 2*cur+getBit();
+      cur = 2*cur+getBit(readBuf);
       ++len;
       if (len >= 16) throw new Exception("invalid symbol");
       sl = t.table.ptr[len];
@@ -352,7 +353,7 @@ private:
   }
 
   // given a data stream, decode dynamic trees from it
-  void decodeTrees () {
+  void decodeTrees (scope ReadBufDg readBuf) {
     scope(failure) setErrorState();
     // special ordering of code length codes
     static immutable ubyte[19] clcidx = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
@@ -361,35 +362,35 @@ private:
     uint hlit, hdist, hclen;
     uint num, length;
     // get 5 bits HLIT (257-286)
-    hlit = readBits(5, 257);
+    hlit = readBits(readBuf, 5, 257);
     // get 5 bits HDIST (1-32)
-    hdist = readBits(5, 1);
+    hdist = readBits(readBuf, 5, 1);
     if (hlit+hdist > 288+32) throw new Exception("invalid tree");
     // get 4 bits HCLEN (4-19)
-    hclen = readBits(4, 4);
+    hclen = readBits(readBuf, 4, 4);
     if (hclen > 19) throw new Exception("invalid tree");
     lengths[0..19] = 0;
     // read code lengths for code length alphabet
-    foreach (immutable i; 0..hclen) lengths[clcidx[i]] = cast(ubyte)readBits(3, 0); // get 3 bits code length (0-7)
+    foreach (immutable i; 0..hclen) lengths[clcidx[i]] = cast(ubyte)readBits(readBuf, 3, 0); // get 3 bits code length (0-7)
     // build code length tree
     codeTree.buildTree(lengths[0..19]);
     // decode code lengths for the dynamic trees
     for (num = 0; num < hlit+hdist; ) {
       ubyte bt;
-      uint sym = decodeSymbol(&codeTree);
+      uint sym = decodeSymbol(readBuf, &codeTree);
       switch (sym) {
         case 16: // copy previous code length 3-6 times (read 2 bits)
           if (num == 0) throw new Exception("invalid tree");
           bt = lengths[num-1];
-          length = readBits(2, 3);
+          length = readBits(readBuf, 2, 3);
           break;
         case 17: // repeat code length 0 for 3-10 times (read 3 bits)
           bt = 0;
-          length = readBits(3, 3);
+          length = readBits(readBuf, 3, 3);
           break;
         case 18: // repeat code length 0 for 11-138 times (read 7 bits)
           bt = 0;
-          length = readBits(7, 11);
+          length = readBits(readBuf, 7, 11);
           break;
         default: // values 0-15 represent the actual code lengths
           if (sym >= 19) throw new Exception("invalid tree symbol");
@@ -407,13 +408,13 @@ private:
   }
 
   // return true if char was read
-  bool processInflatedBlock (ref ubyte bt) {
+  bool processInflatedBlock (scope ReadBufDg readBuf, ref ubyte bt) {
     if (bytesLeft > 0) {
       // copying match; all checks already done
       --bytesLeft;
       bt = dict[dictEnd-matchOfs];
     } else {
-      uint sym = decodeSymbol(lt);
+      uint sym = decodeSymbol(readBuf, lt);
       if (sym == 256) {
         // end of block, fix state
         state = State.ExpectBlock;
@@ -429,11 +430,11 @@ private:
         sym -= 257;
         // possibly get more bits from length code
         if (sym >= 30) throw new Exception("invalid symbol");
-        length = readBits(lengthBits[sym], lengthBase[sym]);
-        dist = decodeSymbol(dt);
+        length = readBits(readBuf, lengthBits[sym], lengthBase[sym]);
+        dist = decodeSymbol(readBuf, dt);
         if (dist >= 30) throw new Exception("invalid distance");
         // possibly get more bits from distance code
-        offs = readBits(distBits[dist], distBase[dist]);
+        offs = readBits(readBuf, distBits[dist], distBase[dist]);
         if (offs > dictEnd) throw new Exception("invalid distance");
         // copy match
         bytesLeft = length;
@@ -445,11 +446,11 @@ private:
   }
 
   // return true if char was read
-  bool processUncompressedBlock (ref ubyte bt) {
+  bool processUncompressedBlock (scope ReadBufDg readBuf, ref ubyte bt) {
     if (bytesLeft > 0) {
       // copying
       scope(failure) setErrorState();
-      if (!readOneByte(bt)) throw new Exception("out of input data");
+      if (!readOneByte(readBuf, bt)) throw new Exception("out of input data");
       --bytesLeft;
       return true;
     }
@@ -458,17 +459,17 @@ private:
     return false;
   }
 
-  ushort readU16 () {
+  ushort readU16 (scope ReadBufDg readBuf) {
     scope(failure) setErrorState();
     ubyte b0 = void, b1 = void;
-    if (!readOneByte(b0)) throw new Exception("out of input data");
-    if (!readOneByte(b1)) throw new Exception("out of input data");
+    if (!readOneByte(readBuf, b0)) throw new Exception("out of input data");
+    if (!readOneByte(readBuf, b1)) throw new Exception("out of input data");
     return cast(ushort)(b0|(b1<<8));
   }
 
-  void processRawHeader () {
-    ushort length = readU16();
-    ushort invlength = readU16(); // one's complement of length
+  void processRawHeader (scope ReadBufDg readBuf) {
+    ushort length = readU16(readBuf);
+    ushort invlength = readU16(readBuf); // one's complement of length
     // check length
     if (length != cast(ushort)(~invlength)) { setErrorState(); throw new Exception("invalid uncompressed block length"); }
     bitcount = 0; // make sure we start next block on a byte boundary
@@ -476,16 +477,16 @@ private:
     state = State.RawBlock;
   }
 
-  void processFixedHeader () nothrow @safe @nogc {
+  void processFixedHeader (scope ReadBufDg readBuf) nothrow @safe @nogc {
     lt = &sltree;
     dt = &sdtree;
     bytesLeft = 0; // force reading of symbol (just in case)
     state = State.CompressedBlock;
   }
 
-  void processDynamicHeader () {
+  void processDynamicHeader (scope ReadBufDg readBuf) {
     // decode trees from stream
-    decodeTrees();
+    decodeTrees(readBuf);
     lt = &ltree;
     dt = &dtree;
     bytesLeft = 0; // force reading of symbol (just in case)
@@ -493,19 +494,19 @@ private:
   }
 
   // set state to State.EOF on correct EOF
-  void processBlockHeader () {
+  void processBlockHeader (scope ReadBufDg readBuf) {
     if (doingFinalBlock) {
-      if (mode == Mode.ZLib) finishZLibData();
+      if (mode == Mode.ZLib) finishZLibData(readBuf);
       doingFinalBlock = false;
       state = State.EOF;
       return;
     }
-    doingFinalBlock = (getBit() != 0); // final block flag
+    doingFinalBlock = (getBit(readBuf) != 0); // final block flag
     // read block type (2 bits) and fix state
-    switch (readBits(2, 0)) {
-      case 0: processRawHeader(); break; // uncompressed block
-      case 1: processFixedHeader(); break; // block with fixed huffman trees
-      case 2: processDynamicHeader(); break; // block with dynamic huffman trees
+    switch (readBits(readBuf, 2, 0)) {
+      case 0: processRawHeader(readBuf); break; // uncompressed block
+      case 1: processFixedHeader(readBuf); break; // block with fixed huffman trees
+      case 2: processDynamicHeader(readBuf); break; // block with dynamic huffman trees
       default: setErrorState(); throw new Exception("invalid input block type");
     }
   }
@@ -530,14 +531,12 @@ public:
    * Throws:
    *  on error
    */
-  this (ReadBufDg dgb, Mode amode=Mode.ZLib) {
-    if (dgb is null) assert(0, "wtf?!");
-    reinit(dgb, amode);
+  this (Mode amode/*=Mode.ZLib*/) {
+    reinit(amode);
   }
 
   /// Ditto.
-  void reinit (ReadBufDg dgb=null, Mode amode=Mode.ZLib) {
-    if (dgb !is null) readBuf = dgb;
+  void reinit (Mode amode=Mode.ZLib) {
     rbpos = rbused = 0;
     rbeof = false;
     mode = amode;
@@ -557,8 +556,8 @@ public:
    * Throws:
    *  on error
    */
-  void checkStreamHeader () {
-    if (mode == Mode.ZLib && state == State.ExpectZLibHeader) processZLibHeader();
+  void checkStreamHeader (scope ReadBufDg readBuf) {
+    if (mode == Mode.ZLib && state == State.ExpectZLibHeader) processZLibHeader(readBuf);
   }
 
   /**
@@ -570,14 +569,14 @@ public:
    * Throws:
    *  Exception on error
    */
-  bool getOneByte (ref ubyte bt) {
+  bool getOneByte (scope ReadBufDg readBuf, ref ubyte bt) {
     bool gotbyte = false;
     do {
       final switch (state) {
-        case State.ExpectZLibHeader: processZLibHeader(); break;
-        case State.ExpectBlock: processBlockHeader(); break;
-        case State.RawBlock: gotbyte = processUncompressedBlock(bt); break;
-        case State.CompressedBlock: gotbyte = processInflatedBlock(bt); break;
+        case State.ExpectZLibHeader: processZLibHeader(readBuf); break;
+        case State.ExpectBlock: processBlockHeader(readBuf); break;
+        case State.RawBlock: gotbyte = processUncompressedBlock(readBuf, bt); break;
+        case State.CompressedBlock: gotbyte = processInflatedBlock(readBuf, bt); break;
         case State.EOF: return false;
         case State.Dead: setErrorState(); throw new Exception("dead stream"); break;
       }
@@ -595,9 +594,9 @@ public:
    * Throws:
    *  Exception on EOF/error
    */
-  ubyte getByte () {
+  ubyte getByte (scope ReadBufDg readBuf) {
     ubyte res = void;
-    if (!getOneByte(res)) throw new Exception("no more data");
+    if (!getOneByte(readBuf, res)) throw new Exception("no more data");
     return res;
   }
 
@@ -613,12 +612,12 @@ public:
    * Throws:
    *  on error
    */
-  T[] rawRead(T) (T[] buf) {
+  T[] rawRead(T) (scope ReadBufDg readBuf, T[] buf) {
     auto len = buf.length*T.sizeof;
     auto dst = cast(ubyte*)buf.ptr;
     ubyte res = void;
     while (len--) {
-      if (!getOneByte(*dst)) {
+      if (!getOneByte(readBuf, *dst)) {
         // check if the last 'dest' item is fully decompressed
         static if (T.sizeof > 1) { if ((cast(size_t)dst-buf.ptr)%T.sizeof) { setErrorState(); throw new Exception("partial data"); } }
         return buf[0..cast(size_t)(dst-buf.ptr)];
