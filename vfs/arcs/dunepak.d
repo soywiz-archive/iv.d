@@ -27,7 +27,7 @@ import iv.vfs.vfile;
 
 // ////////////////////////////////////////////////////////////////////////// //
 private import iv.vfs.arcs.internal : VFSSimpleArchiveDetectorMixin;
-mixin(VFSSimpleArchiveDetectorMixin!"Dune2Pak");
+mixin(VFSSimpleArchiveDetectorMixin!("Dune2Pak", "last")); // try this last, as it doesn't have any signature
 
 
 // ////////////////////////////////////////////////////////////////////////// //

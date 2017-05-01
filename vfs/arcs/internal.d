@@ -176,8 +176,8 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-package enum VFSSimpleArchiveDetectorMixin(string drvname) =
-  "shared static this () { vfsRegisterDetector(new "~drvname~"Detector()); }\n"~
+package enum VFSSimpleArchiveDetectorMixin(string drvname, string mode="normal") =
+  "shared static this () { vfsRegisterDetector!"~mode.stringof~"(new "~drvname~"Detector()); }\n"~
   "private final class "~drvname~"Detector : VFSDriverDetector {\n"~
   "  override VFSDriver tryOpen (VFile fl, const(char)[] prefixpath) {\n"~
   "    try {\n"~
