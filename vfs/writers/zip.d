@@ -109,7 +109,7 @@ public:
   @property bool isOpen () { return fo.isOpen; }
 
   // return index in `files` array
-  uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate, ulong oldsize=ulong.max) {
+  uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
     if (!fo.isOpen) throw new VFSException("no archive file");
     if (!fl.isOpen) throw new VFSException("no source file");
     scope(failure) { files = null; fo = VFile.init; }
@@ -122,14 +122,16 @@ public:
       string pkname = fname.idup;
     }
     final switch (method) {
-      case Method.Store: files ~= zipOne!"store"(fo, pkname, fl, ftime, oldsize); break;
-      case Method.Deflate: files ~= zipOne!"deflate"(fo, pkname, fl, ftime, oldsize); break;
-      case Method.Lzma: files ~= zipOne!"lzma"(fo, pkname, fl, ftime, oldsize); break;
+      case Method.Store: files ~= zipOne!"store"(fo, pkname, fl, ftime, oldsize, onProgress); break;
+      case Method.Deflate: files ~= zipOne!"deflate"(fo, pkname, fl, ftime, oldsize, onProgress); break;
+      case Method.Lzma: files ~= zipOne!"lzma"(fo, pkname, fl, ftime, oldsize, onProgress); break;
     }
     return cast(uint)files.length-1;
   }
 
-  uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate, ulong oldsize=ulong.max) { return pack!T(fl, fname, ZipFileTime.init, method, oldsize); }
+  uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
+    return pack!T(fl, fname, ZipFileTime.init, method, oldsize);
+  }
 
   void finish () {
     if (!fo.isOpen) throw new VFSException("no archive file");
@@ -147,7 +149,7 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 // returs crc
-uint zpack (VFile ds, VFile ss, out bool aborted) {
+uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur) onProgress) {
   import etc.c.zlib;
   import core.stdc.stdlib;
 
@@ -180,6 +182,8 @@ uint zpack (VFile ds, VFile ss, out bool aborted) {
   if (err != Z_OK) throw new Exception("zlib error");
   scope(exit) deflateEnd(&zst);
 
+  ulong bytesread = 0;
+
   bool eof = false;
   while (!eof) {
     if (zst.avail_in == 0) {
@@ -189,6 +193,8 @@ uint zpack (VFile ds, VFile ss, out bool aborted) {
       if (rd.length != 0) { crc = crc32(crc, ib, cast(uint)rd.length); }
       zst.next_in = ib;
       zst.avail_in = cast(uint)rd.length;
+      bytesread += rd.length;
+      if (onProgress !is null) onProgress(bytesread);
     }
     // now process the whole input
     while (zst.avail_in > 0) {
@@ -247,7 +253,7 @@ uint zpack (VFile ds, VFile ss, out bool aborted) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // returs crc
-static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool aborted) {
+static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur) onProgress) {
   import etc.c.zlib;
   import core.stdc.stdlib;
 
@@ -302,6 +308,8 @@ static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool
   zst.next_in = ib;
   zst.avail_in = 0;
 
+  ulong bytesread = 0;
+
   bool eof = false;
   while (!eof) {
     if (zst.avail_in == 0) {
@@ -311,6 +319,8 @@ static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool
       if (rd.length != 0) { crc = crc32(crc, ib, cast(uint)rd.length); }
       zst.next_in = ib;
       zst.avail_in = cast(uint)rd.length;
+      bytesread += rd.length;
+      if (onProgress !is null) onProgress(bytesread);
     }
     // now process the whole input
     while (zst.avail_in > 0) {
@@ -394,9 +404,11 @@ ubyte[] buildUtfExtra (const(char)[] fname) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, ulong oldsize=ulong.max) { return zipOne!mtname(ds, fname, st, ZipFileTime.init, oldsize); }
+ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
+  return zipOne!mtname(ds, fname, st, ZipFileTime.init, oldsize, onProgress);
+}
 
-ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, in auto ref ZipFileTime ftime, ulong oldsize=ulong.max) {
+ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, in auto ref ZipFileTime ftime, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
   static assert(mtname == "store" || mtname == "deflate" || mtname == "lzma", "invalid method: '"~mtname~"'");
   ZipFileInfo res;
   ubyte[] ef;
@@ -452,9 +464,9 @@ ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFil
       auto pkdpos = ds.tell;
       st.seek(0);
       static if (mtname == "deflate") {
-        res.crc = zpack(ds, st, aborted);
+        res.crc = zpack(ds, st, aborted, onProgress);
       } else static if (mtname == "lzma") {
-        res.crc = lzmapack(ds, st, aborted);
+        res.crc = lzmapack(ds, st, aborted, onProgress);
       } else static if (mtname == "store") {
         assert(0, "wtf?!");
       } else {
@@ -467,19 +479,19 @@ ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFil
           // try deflate, it may work
           st.seek(0);
           ds.seek(res.pkofs);
-          return zipOne!"deflate"(ds, fname, st, ftime, oldsize);
+          return zipOne!"deflate"(ds, fname, st, ftime, oldsize, onProgress);
         } else {
           // just store it
           st.seek(0);
           ds.seek(res.pkofs);
-          return zipOne!"store"(ds, fname, st, ftime, oldsize);
+          return zipOne!"store"(ds, fname, st, ftime, oldsize, onProgress);
         }
       } else if (res.pksize == oldsize) {
         //{ import core.stdc.stdio : printf; printf("  size=%u; pksize=%u; oldsize=%u\n", cast(uint)res.size, cast(uint)res.pksize, cast(uint)oldsize); }
         // if file got the same size, just store it
         st.seek(0);
         ds.seek(res.pkofs);
-        return zipOne!"store"(ds, fname, st, ftime, oldsize);
+        return zipOne!"store"(ds, fname, st, ftime, oldsize, onProgress);
       }
     }
   } else {
@@ -492,10 +504,13 @@ ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFil
     st.seek(0);
     res.crc = crc32(0, null, 0);
     res.pksize = 0;
+    ulong bytesread = 0;
     while (res.pksize < res.size) {
       auto rd = res.size-res.pksize;
       if (rd > bufsz) rd = bufsz;
       st.rawReadExact(buf[0..cast(uint)rd]);
+      bytesread += rd;
+      if (onProgress !is null) onProgress(bytesread);
       ds.rawWriteExact(buf[0..cast(uint)rd]);
       res.pksize += rd;
       res.crc = crc32(res.crc, buf, cast(uint)rd);

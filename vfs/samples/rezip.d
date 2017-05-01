@@ -1,6 +1,7 @@
 #!/usr/bin/env rdmd
 module rezip is aliced;
 
+import core.time;
 import std.datetime;
 
 import iv.cmdcon;
@@ -44,8 +45,26 @@ void repackZip (ConString infname, ConString outfname, ZipWriter.Method pmt) {
     fileseen[de.name] = true;
     conwrite("  ", de.name, " ... ");
     try {
-      auto zidx = zw.pack(VFile(de.name, "I"), de.name, ZipFileTime(de.stat("modtime").get!uint), pmt, de.size); // don't ignore case
-      conwritefln!"[%s] %s -> %s"(zw.files[zidx].methodName, n2s(de.stat("pksize").get!long), n2s(zw.files[zidx].pksize));
+      ulong origsz = de.size;
+      conwrite("  0%");
+      int oldprc = 0;
+      MonoTime lastProgressTime = MonoTime.currTime;
+      // don't ignore case
+      auto zidx = zw.pack(VFile(de.name, "I"), de.name, ZipFileTime(de.stat("modtime").get!uint), pmt, de.size, delegate (ulong curpos) {
+        int prc = (curpos > 0 ? cast(int)(cast(ulong)100*curpos/origsz) : 0);
+        if (prc != oldprc) {
+          auto stt = MonoTime.currTime;
+          if ((stt-lastProgressTime).total!"msecs" >= 1000) {
+            lastProgressTime = stt;
+            if (prc < 0) prc = 0; else if (prc > 100) prc = 100;
+            conwritef!"\x08\x08\x08\x08%3u%%"(cast(uint)prc);
+            oldprc = prc;
+          } else {
+            //conwriteln(curpos, " : ", origsz);
+          }
+        }
+      });
+      conwritefln!"\x08\x08\x08\x08[%s] %s -> %s"(zw.files[zidx].methodName, n2s(de.stat("pksize").get!long), n2s(zw.files[zidx].pksize));
       if (zw.files[zidx].crc != de.stat("crc32").get!uint) throw new Exception("crc error!");
     } catch (Exception e) {
       conwriteln("ERROR: ", e.msg);
