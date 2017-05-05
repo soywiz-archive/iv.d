@@ -23,6 +23,21 @@ import arsd.simpledisplay;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public bool sdpyHasXShm () {
+  static if (UsingSimpledisplayX11) {
+    __gshared int xshmAvailable = -1;
+    if (xshmAvailable < 0) {
+      int i1, i2, i3;
+      xshmAvailable = (XQueryExtension(XDisplayConnection.get(), "MIT-SHM", &i1, &i2, &i3) != 0 ? 1 : 0);
+    }
+    return (xshmAvailable > 0);
+  } else {
+    return false;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// get desktop number for the given window; -1: unknown
 public int getWindowDesktop (SimpleWindow sw) {
   static if (UsingSimpledisplayX11) {
@@ -168,9 +183,9 @@ public void wmInitiateMoving (SimpleWindow sw, int localx, int localy) {
     auto xwin = sw.impl.window;
     auto root = RootWindow(dpy, DefaultScreen(dpy));
     // convert local to global
-    { import core.stdc.stdio; printf("local: %d,%d\n", localx, localy); }
+    //{ import core.stdc.stdio; printf("local: %d,%d\n", localx, localy); }
     XTranslateCoordinates(dpy, xwin, root, localx, localy, &localx, &localy, &dummyw);
-    { import core.stdc.stdio; printf("global: %d,%d\n", localx, localy); }
+    //{ import core.stdc.stdio; printf("global: %d,%d\n", localx, localy); }
     // send event
     XEvent e;
     e.xclient.type = EventType.ClientMessage;
@@ -215,29 +230,6 @@ public void wmCancelMoving (SimpleWindow sw, int localx, int localy) {
     XSendEvent(dpy, root, false, EventMask.SubstructureRedirectMask|EventMask.SubstructureNotifyMask, &e);
     flushGui();
   }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private uint c2img (in Color c) pure nothrow @safe @nogc {
-  pragma(inline, true);
-  return
-    ((c.asUint&0xff)<<16)|
-    (c.asUint&0x00ff00)|
-    ((c.asUint>>16)&0xff);
-}
-
-private uint c2img (uint c) pure nothrow @safe @nogc {
-  pragma(inline, true);
-  return
-    ((c&0xff)<<16)|
-    (c&0x00ff00)|
-    ((c>>16)&0xff);
-}
-
-private Color img2c (uint clr) pure nothrow @safe @nogc {
-  pragma(inline, true);
-  return Color((clr>>16)&0xff, (clr>>8)&0xff, clr&0xff);
 }
 
 
@@ -354,13 +346,14 @@ static private:
   size_t newOx (CT, A...) (auto ref A args) if (is(CT == struct)) {
     import core.exception : onOutOfMemoryErrorNoGC;
     import core.memory : GC;
-    import core.stdc.stdlib : malloc;
+    import core.stdc.stdlib : malloc, free;
     import core.stdc.string : memset;
     import std.conv : emplace;
     enum instSize = CT.sizeof;
     // let's hope that malloc() aligns returned memory right
     auto memx = malloc(instSize+uint.sizeof);
     if (memx is null) onOutOfMemoryErrorNoGC(); // oops
+    scope(failure) free(memx);
     memset(memx, 0, instSize+uint.sizeof);
     *cast(uint*)memx = 1;
     auto mem = memx+uint.sizeof;
@@ -391,110 +384,286 @@ static private:
 
 static if (UsingSimpledisplayX11) {
 // ////////////////////////////////////////////////////////////////////////// //
+// for X11 we will keep all XShm-allocated images in this list, so we can free 'em on connection closing.
+// we'll use glibc malloc()/free(), 'cause `unregisterImage()` can be called from object dtor.
+private struct XShmSeg {
+private:
+  __gshared size_t headp = 0, tailp = 0;
 
+  static @property XShmSeg* head () nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)headp; }
+  static @property void head (XShmSeg* v) nothrow @trusted @nogc { pragma(inline, true); headp = cast(size_t)v; }
+
+  static @property XShmSeg* tail () nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)tailp; }
+  static @property void tail (XShmSeg* v) nothrow @trusted @nogc { pragma(inline, true); tailp = cast(size_t)v; }
+
+private:
+  size_t segp; // XShmSegmentInfo*; hide it from GC
+  size_t prevp; // next link; hide it from GC
+  size_t nextp; // next link; hide it from GC
+
+private:
+  @property bool valid () const pure nothrow @trusted @nogc { pragma(inline, true); return (segp != 0); }
+
+  @property XShmSeg* next () pure nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)nextp; }
+  @property void next (XShmSeg* v) pure nothrow @trusted @nogc { pragma(inline, true); nextp = cast(size_t)v; }
+
+  @property XShmSeg* prev () pure nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)prevp; }
+  @property void prev (XShmSeg* v) pure nothrow @trusted @nogc { pragma(inline, true); prevp = cast(size_t)v; }
+
+  @property XShmSegmentInfo* seg () pure nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSegmentInfo*)segp; }
+  @property void seg (XShmSegmentInfo* v) pure nothrow @trusted @nogc { pragma(inline, true); segp = cast(size_t)v; }
+
+static:
+  XShmSeg* alloc () nothrow @trusted @nogc {
+    import core.stdc.stdlib : malloc, free;
+    XShmSeg* res = cast(XShmSeg*)malloc(XShmSeg.sizeof);
+    if (res !is null) {
+      res.seg = cast(XShmSegmentInfo*)malloc(XShmSegmentInfo.sizeof);
+      if (res.seg is null) { free(res); return null; }
+      res.prev = tail;
+      res.next = null;
+      if (tail !is null) tail.next = res; else { assert(head is null); head = res; }
+      tail = res;
+    }
+    return res;
+  }
+
+  void free (XShmSeg* seg, bool unregister) {
+    if (seg !is null) {
+      //{ import core.stdc.stdio; printf("00: freeing...\n"); }
+      import core.stdc.stdlib : free;
+      if (seg.prev !is null) seg.prev.next = seg.next; else { assert(head is seg); head = head.next; if (head !is null) head.prev = null; }
+      if (seg.next !is null) seg.next.prev = seg.prev; else { assert(tail is seg); tail = tail.prev; if (tail !is null) tail.next = null; }
+      if (seg.seg) {
+        if (unregister) {
+          //{ import core.stdc.stdio; printf("00: freeing-unreg...\n"); }
+          shmdt(seg.seg.shmaddr);
+          shmctl(seg.seg.shmid, IPC_RMID, null);
+        }
+        free(seg.seg);
+      }
+      free(seg);
+    }
+  }
+
+  void freeList () {
+    import core.stdc.stdlib : free;
+    while (head !is null) {
+      //{ import core.stdc.stdio; printf("01: freeing...\n"); }
+      if (head.seg) {
+        //{ import core.stdc.stdio; printf("01: freeing-unreg...\n"); }
+        shmdt(head.seg.shmaddr);
+        shmctl(head.seg.shmid, IPC_RMID, null);
+        free(head.seg);
+      }
+      auto p = head;
+      head = head.next;
+      free(p);
+    }
+    tail = null;
+  }
+
+  shared static ~this () { freeList(); }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public alias XImageTC = XRefCounted!XlibImageTC;
 
 public struct XlibImageTC {
-  XImage handle;
+  private bool thisIsXShm;
+  private union {
+    XImage handle;
+    XImage* handleshm;
+  }
+  private XShmSeg* shminfo;
 
   @disable this (this);
 
-  this (MemoryImage img) {
+  this (MemoryImage img, bool xshm=false) {
     if (img is null || img.width < 1 || img.height < 1) throw new Exception("can't create xlib image from empty MemoryImage");
-    create(img.width, img.height, img);
+    create(img.width, img.height, img, xshm);
   }
 
-  this (int wdt, int hgt, MemoryImage aimg=null) {
+  this (int wdt, int hgt, bool xshm=false) {
     if (wdt < 1 || hgt < 1) throw new Exception("invalid xlib image");
-    create(wdt, hgt, aimg);
+    create(wdt, hgt, null, xshm);
+  }
+
+  this (int wdt, int hgt, MemoryImage aimg, bool xshm=false) {
+    if (wdt < 1 || hgt < 1) throw new Exception("invalid xlib image");
+    create(wdt, hgt, aimg, xshm);
   }
 
   ~this () { dispose(); }
 
-  @property bool valid () const pure nothrow @trusted @nogc { pragma(inline, true); return (handle.data !is null); }
+  @property bool valid () const pure nothrow @trusted @nogc { pragma(inline, true); return (thisIsXShm ? handleshm !is null : handle.data !is null); }
+  @property bool xshm () const pure nothrow @trusted @nogc { pragma(inline, true); return thisIsXShm; }
 
-  @property int width () const pure nothrow @trusted @nogc { pragma(inline, true); return handle.width; }
-  @property int height () const pure nothrow @trusted @nogc { pragma(inline, true); return handle.height; }
+  @property int width () const pure nothrow @trusted @nogc { pragma(inline, true); return (thisIsXShm ? handleshm.width : handle.width); }
+  @property int height () const pure nothrow @trusted @nogc { pragma(inline, true); return (thisIsXShm ? handleshm.height : handle.height); }
 
-  void setup (MemoryImage aimg) {
+  inout(uint)* data () inout nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))(thisIsXShm ? handleshm.data : handle.data); }
+
+  void setup (MemoryImage aimg, bool xshm=false) {
     dispose();
     if (aimg is null || aimg.width < 1 || aimg.height < 1) throw new Exception("can't create xlib image from empty MemoryImage");
-    create(aimg.width, aimg.height, aimg);
+    create(aimg.width, aimg.height, aimg, xshm);
   }
 
-  void setup (int wdt, int hgt, MemoryImage aimg=null) {
+  void setup (int wdt, int hgt, MemoryImage aimg=null, bool xshm=false) {
     dispose();
     if (wdt < 1 || hgt < 1) throw new Exception("invalid xlib image");
-    create(wdt, hgt, aimg);
+    create(wdt, hgt, aimg, xshm);
   }
 
-  private void create (int width, int height, MemoryImage ximg) {
+  private void create (int width, int height, MemoryImage ximg, bool xshm) {
     import core.stdc.stdlib : malloc, free;
-    auto rawData = cast(uint*)malloc(width*height*4);
-    scope(failure) free(rawData);
-    if (ximg is null || ximg.width < width || ximg.height < height) rawData[0..width*height] = 0;
-    if (ximg !is null && ximg.width > 0 && ximg.height > 0) {
-      foreach (immutable int y; 0..height) {
-        foreach (immutable int x; 0..width) {
-          rawData[y*width+x] = c2img(ximg.getPixel(x, y));
+    if (xshm && !sdpyHasXShm) xshm = false;
+    thisIsXShm = xshm;
+    if (xshm) {
+      auto dpy = XDisplayConnection.get();
+      if (dpy is null) throw new Exception("can't create XShmImage");
+
+      shminfo = XShmSeg.alloc();
+      if (shminfo is null) throw new Exception("can't create XShmImage");
+      bool registered = false;
+      scope(failure) { XShmSeg.free(shminfo, registered); shminfo = null; }
+
+      handleshm = XShmCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)), 24, ImageFormat.ZPixmap, null, shminfo.seg, width, height);
+      if (handleshm is null) throw new Exception("can't create XShmImage");
+      assert(handleshm.bytes_per_line == 4*width);
+
+      shminfo.seg.shmid = shmget(IPC_PRIVATE, handleshm.bytes_per_line*height, IPC_CREAT|511 /* 0777 */);
+      assert(shminfo.seg.shmid >= 0);
+      registered = true;
+      handleshm.data = shminfo.seg.shmaddr = cast(ubyte*)shmat(shminfo.seg.shmid, null, 0);
+      assert(handleshm.data != cast(ubyte*)-1);
+
+      auto rawData = cast(uint*)handleshm.data;
+      if (ximg is null || ximg.width < width || ximg.height < height) rawData[0..width*height] = 0;
+      if (ximg !is null && ximg.width > 0 && ximg.height > 0) {
+        foreach (immutable int y; 0..height) {
+          foreach (immutable int x; 0..width) {
+            rawData[y*width+x] = c2img(ximg.getPixel(x, y));
+          }
         }
       }
+
+      shminfo.seg.readOnly = 0;
+      XShmAttach(dpy, shminfo.seg);
+    } else {
+      auto rawData = cast(uint*)malloc(width*height*4);
+      scope(failure) free(rawData);
+      if (ximg is null || ximg.width < width || ximg.height < height) rawData[0..width*height] = 0;
+      if (ximg !is null && ximg.width > 0 && ximg.height > 0) {
+        foreach (immutable int y; 0..height) {
+          foreach (immutable int x; 0..width) {
+            rawData[y*width+x] = c2img(ximg.getPixel(x, y));
+          }
+        }
+      }
+      //handle = XCreateImage(dpy, DefaultVisual(dpy, screen), 24/*bpp*/, ImageFormat.ZPixmap, 0/*offset*/, cast(ubyte*)rawData, width, height, 8/*FIXME*/, 4*width); // padding, bytes per line
+      handle.width = width;
+      handle.height = height;
+      handle.xoffset = 0;
+      handle.format = ImageFormat.ZPixmap;
+      handle.data = rawData;
+      handle.byte_order = 0;
+      handle.bitmap_unit = 32;
+      handle.bitmap_bit_order = 0;
+      handle.bitmap_pad = 8;
+      handle.depth = 24;
+      handle.bytes_per_line = 0;
+      handle.bits_per_pixel = 32; // THIS MATTERS!
+      handle.red_mask = 0x00ff0000;
+      handle.green_mask = 0x0000ff00;
+      handle.blue_mask = 0x000000ff;
+      XInitImage(&handle);
     }
-    //handle = XCreateImage(dpy, DefaultVisual(dpy, screen), 24/*bpp*/, ImageFormat.ZPixmap, 0/*offset*/, cast(ubyte*)rawData, width, height, 8/*FIXME*/, 4*width); // padding, bytes per line
-    handle.width = width;
-    handle.height = height;
-    handle.xoffset = 0;
-    handle.format = ImageFormat.ZPixmap;
-    handle.data = rawData;
-    handle.byte_order = 0;
-    handle.bitmap_unit = 32;
-    handle.bitmap_bit_order = 0;
-    handle.bitmap_pad = 8;
-    handle.depth = 24;
-    handle.bytes_per_line = 0;
-    handle.bits_per_pixel = 32; // THIS MATTERS!
-    handle.red_mask = 0x00ff0000;
-    handle.green_mask = 0x0000ff00;
-    handle.blue_mask = 0x000000ff;
-    XInitImage(&handle);
   }
 
   void dispose () {
-    if (handle.data !is null) {
-      import core.stdc.stdlib : free;
-      if (handle.data !is null) free(handle.data);
-      handle = XImage.init;
+    if (thisIsXShm) {
+      if (auto dpy = XDisplayConnection.get()) XShmDetach(dpy, shminfo.seg);
+      XDestroyImage(handleshm);
+      //shmdt(shminfo.seg.shmaddr);
+      //shmctl(shminfo.seg.shmid, IPC_RMID, null);
+      XShmSeg.free(shminfo, true);
+      shminfo = null;
+      handleshm = null;
+    } else {
+      if (handle.data !is null) {
+        import core.stdc.stdlib : free;
+        if (handle.data !is null) free(handle.data);
+        handle = XImage.init;
+      }
     }
   }
 
   void putPixel (int x, int y, Color c) nothrow @trusted @nogc {
     pragma(inline, true);
-    if (handle.data !is null && x >= 0 && y >= 0 && x < handle.width && y < handle.height) {
-      (cast(uint*)handle.data)[y*handle.width+x] = c2img(c);
+    if (valid && x >= 0 && y >= 0 && x < width && y < height) {
+      data[y*width+x] = c2img(c);
     }
   }
 
   Color getPixel (int x, int y, Color c) nothrow @trusted @nogc {
     pragma(inline, true);
-    return (handle.data !is null && x >= 0 && y >= 0 && x < handle.width && y < handle.height ? img2c((cast(uint*)handle.data)[y*handle.width+x]) : Color.transparent);
+    return (valid && x >= 0 && y >= 0 && x < width && y < height ? img2c(data[y*width+x]) : Color.transparent);
+  }
+
+  uint* row (int y) nothrow @trusted @nogc {
+    pragma(inline, true);
+    return (valid && y >= 0 && y < height ? data+y*width : null);
   }
 
   // blit to window buffer
-  void blitAt (SimpleWindow w, int destx, int desty) { blitRect(w, destx, desty, 0, 0, handle.width, handle.height); }
+  void blitAt (SimpleWindow w, int destx, int desty) { blitRect(w, destx, desty, 0, 0, width, height); }
 
   // blit to window buffer
   void blitRect (SimpleWindow w, int destx, int desty, int sx0, int sy0, int swdt, int shgt) {
-    if (w is null || handle.data is null || w.closed) return;
-    XPutImage(w.impl.display, cast(Drawable)w.impl.buffer, w.impl.gc, &handle, sx0, sy0, destx, desty, swdt, shgt);
+    if (w is null || !valid || w.closed) return;
+    if (thisIsXShm) {
+      XShmPutImage(w.impl.display, cast(Drawable)w.impl.buffer, w.impl.gc, handleshm, sx0, sy0, destx, desty, swdt, shgt, 0);
+    } else {
+      XPutImage(w.impl.display, cast(Drawable)w.impl.buffer, w.impl.gc, &handle, sx0, sy0, destx, desty, swdt, shgt);
+    }
   }
 
   // blit to window
-  void blitAtWin (SimpleWindow w, int destx, int desty) { blitRectWin(w, destx, desty, 0, 0, handle.width, handle.height); }
+  void blitAtWin (SimpleWindow w, int destx, int desty) { blitRectWin(w, destx, desty, 0, 0, width, height); }
 
   // blit to window
   void blitRectWin (SimpleWindow w, int destx, int desty, int sx0, int sy0, int swdt, int shgt) {
-    if (w is null || handle.data is null || w.closed) return;
-    XPutImage(w.impl.display, cast(Drawable)w.impl.window, w.impl.gc, &handle, sx0, sy0, destx, desty, swdt, shgt);
+    if (w is null || !valid || w.closed) return;
+    if (thisIsXShm) {
+      XShmPutImage(w.impl.display, cast(Drawable)w.impl.window, w.impl.gc, handleshm, sx0, sy0, destx, desty, swdt, shgt, 0);
+    } else {
+      XPutImage(w.impl.display, cast(Drawable)w.impl.window, w.impl.gc, &handle, sx0, sy0, destx, desty, swdt, shgt);
+    }
+  }
+
+static:
+  public uint c2img (in Color c) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return
+      ((c.asUint&0xff)<<16)|
+      (c.asUint&0x00ff00)|
+      ((c.asUint>>16)&0xff);
+  }
+
+  public uint c2img (uint c) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return
+      ((c&0xff)<<16)|
+      (c&0x00ff00)|
+      ((c>>16)&0xff);
+  }
+
+  public Color img2c (uint clr) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return Color((clr>>16)&0xff, (clr>>8)&0xff, clr&0xff);
   }
 }
 
@@ -510,10 +679,10 @@ public struct XlibPixmap {
 
   this (SimpleWindow w, int wdt, int hgt) { setup(w, wdt, hgt); }
   this (SimpleWindow w, ref XlibImageTC xtc) { setup(w, xtc); }
-  this (SimpleWindow w, XImageTC xtc) { setup(w, xtc); }
+  this (SimpleWindow w, XImageTC xtc) { if (!xtc.hasObject) throw new Exception("can't create pixmap from empty object"); setup(w, *xtc.intr_); }
 
   this (SimpleWindow w, ref XlibPixmap xpm) { setup(w, xpm); }
-  this (SimpleWindow w, XPixmap xpm) { setup(w, xpm); }
+  this (SimpleWindow w, XPixmap xpm) { if (!xpm.hasObject) throw new Exception("can't create pixmap from empty object"); setup(w, *xpm.intr_); }
 
   @disable this (this);
 
@@ -597,7 +766,11 @@ public struct XlibPixmap {
     if (hgt > 16384) hgt = 16384;
     xpm = XCreatePixmap(w.impl.display, cast(Drawable)w.impl.window, wdt, hgt, 24);
     // source x, source y
-    XPutImage(w.impl.display, cast(Drawable)xpm, w.impl.gc, &xtc.handle, 0, 0, 0, 0, wdt, hgt);
+    if (xtc.thisIsXShm) {
+      XShmPutImage(w.impl.display, cast(Drawable)xpm, w.impl.gc, xtc.handleshm, 0, 0, 0, 0, wdt, hgt, 0);
+    } else {
+      XPutImage(w.impl.display, cast(Drawable)xpm, w.impl.gc, &xtc.handle, 0, 0, 0, 0, wdt, hgt);
+    }
     mWidth = wdt;
     mHeight = hgt;
   }
