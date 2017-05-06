@@ -290,6 +290,7 @@ public void alsaShutdown (bool immediate=false) {
     if (immediate) {
       snd_pcm_drop(pcm);
     } else {
+      if (xxbufused > 0) outSoundFlush();
       snd_pcm_drain(pcm);
     }
     snd_pcm_close(pcm);
