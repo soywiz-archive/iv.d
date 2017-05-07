@@ -365,25 +365,30 @@ bool crypto_onetimeauth_verify (const(ubyte)[] h, const(ubyte)[] msg, const(ubyt
  * This function encrypts and authenticates a message 'msg' using a secret
  * key 'key' and a nonce 'nonce'.
  * The function returns the resulting ciphertext 'c'.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_secretbox_BOXZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  c = resulting cyphertext
+ *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
  *  msg = message
  *  key = secret key
  *  nonce = nonce
  *
  * Returns:
- *  success flag and cyphertext in 'c'
+ *  success flag and cyphertext in 'c' (on success)
  */
 bool crypto_secretbox (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (nonce.length < crypto_secretbox_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_secretbox_KEYBYTES) assert(0, "invalid key size");
-  //c.length = msg.length+crypto_secretbox_ZEROBYTES;
-  if (c is null || c.length < 32) return false;
+  if (msg.length > int.max/2) assert(0, "message too big");
+  if (msg.length < crypto_secretbox_BOXZEROBYTES) return false;
+  if (c.length < msg.length) return false;
+  ubyte b = 0;
+  foreach (immutable ubyte mb; msg[0..crypto_secretbox_ZEROBYTES]) b |= mb;
+  if (b != 0) return false;
   crypto_stream_xor(c, msg, nonce, key);
   crypto_onetimeauth(c[16..$], c[32..$], c);
-  c[0..16] = 0;
-  //return c[crypto_secretbox_BOXZEROBYTES..$];
+  c[0..crypto_secretbox_BOXZEROBYTES] = 0;
   return true;
 }
 
@@ -391,25 +396,31 @@ bool crypto_secretbox (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, cons
  * This function verifies and decrypts a ciphertext 'c' using a secret
  * key 'key' and a nonce 'nonce'.
  * The function returns the resulting plaintext 'output'.
+ * Note that first 'crypto_secretbox_BOXZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  output = resulting message
+ *  output = resulting message ('output' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
  *  c = cyphertext
  *  key = secret key
  *  nonce = nonce
  *
  * Returns:
- *  success flag and message in 'output'
+ *  success flag and message in 'output' (on success)
  */
 bool crypto_secretbox_open (ubyte[] output, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (nonce.length < crypto_secretbox_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_secretbox_KEYBYTES) assert(0, "invalid key size");
+  if (c.length > int.max/2) assert(0, "message too big");
+  if (output.length < c.length) return false;
+  ubyte b = 0;
+  foreach (immutable ubyte mb; c[0..crypto_secretbox_BOXZEROBYTES]) b |= mb;
+  if (b != 0) return false;
   ubyte[32] x = void;
-  if (output is null || output.length < 32) return false;
   crypto_stream(x, nonce, key);
   if (!crypto_onetimeauth_verify(c[16..$], c[32../*$*/32+(output.length-32)], x)) return false;
   crypto_stream_xor(output, c, nonce, key);
-  output[0..32] = 0;
+  output[0..crypto_secretbox_ZEROBYTES] = 0;
   return true;
 }
 
@@ -454,15 +465,17 @@ void crypto_box_beforenm (ubyte[] skey, const(ubyte)[] pk, const(ubyte)[] sk) @n
  * This function encrypts and authenticates a message 'msg' using a secret
  * key 'key' and a nonce 'nonce'.
  * The function returns the resulting ciphertext 'c'.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_secretbox_BOXZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  c = resulting cyphertext
+ *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
  *  msg = message
  *  nonce = nonce
  *  key = secret
  *
  * Returns:
- *  success flag and cyphertext in 'c'
+ *  success flag and cyphertext in 'c' (on success)
  */
 bool crypto_box_afternm (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (nonce.length < crypto_box_NONCEBYTES) assert(0, "invalid nonce size");
@@ -474,9 +487,10 @@ bool crypto_box_afternm (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, co
  * This function verifies and decrypts a ciphertext 'c' using a secret
  * key 'key' and a nonce 'nonce'.
  * The function returns the resulting message 'msg'.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  msg = resulting message
+ *  msg = resulting message ('msg' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
  *  c = cyphertext
  *  nonce = nonce
  *  key = secret
@@ -494,9 +508,11 @@ bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonc
  * This function encrypts and authenticates a message 'msg' using the sender's secret
  * key 'sk', the receiver's public key 'pk', and a nonce 'nonce'.
  * The function returns the resulting ciphertext 'c'.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  c = resulting cyphertext
+ *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
  *  msg = message
  *  nonce = nonce
  *  pk = receiver's public key
@@ -518,9 +534,11 @@ bool crypto_box (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyt
  * This function verifies and decrypts a ciphertext 'c' using the receiver's secret
  * key 'sk', the sender's public key 'pk', and a nonce 'nonce'.
  * The function returns the resulting message 'msg'.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  msg = resulting message
+ *  msg = resulting message ('msg' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
  *  c = cyphertext
  *  nonce = nonce
  *  pk = receiver's public key
@@ -543,9 +561,9 @@ bool crypto_box_open (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const
  * The function returns the resulting signed message.
  *
  * Params:
- *  sm = buffer to receive signed message, must be of size at least msg.length+64
- *  msg == message
- *  sk == secret key, slice size must be at least crypto_sign_SECRETKEYBYTES, extra ignored
+ *  sm = buffer to receive signed message, must be of size at least msg.length+crypto_sign_BYTES
+ *  msg = message
+ *  sk = secret key, slice size must be at least crypto_sign_SECRETKEYBYTES, extra ignored
  *
  * Returns:
  *  signed message
@@ -586,9 +604,9 @@ void crypto_sign (ubyte[] sm, const(ubyte)[] msg, const(ubyte)[] sk) @nogc {
  * This function verifies the signature in 'sm' using the receiver's public key 'pk'.
  *
  * Params:
- *  msg = decrypted message, last 64 bytes are useless zeroes, must be of size at least sm.length
- *  sm == signed message
- *  pk == public key, slice size must be at least crypto_sign_PUBLICKEYBYTES, extra ignored
+ *  msg = decrypted message, last crypto_sign_BYTES bytes are useless zeroes, must be of size at least sm.length-crypto_sign_BYTES
+ *  sm = signed message
+ *  pk = public key, slice size must be at least crypto_sign_PUBLICKEYBYTES, extra ignored
  *
  * Returns:
  *  success flag
@@ -617,12 +635,12 @@ bool crypto_sign_open (ubyte[] msg, const(ubyte)[] sm, const(ubyte)[] pk) @nogc 
 
   n -= 64;
   if (!crypto_verify_32(sm, t)) {
-    msg[0..n] = 0;
+    msg[0..$/*n*/] = 0;
     return false;
   }
 
   msg[0..n] = sm[64..64+n];
-  msg[n..n+64] = 0;
+  if (msg.length > n) msg[n..$] = 0;
 
   return true;
 }

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 
-USE_DMD="ona"
+USE_DMD="tan"
 USE_DMD_VANILLA="ona"
 SHORT_TEST="ona"
 
@@ -12,6 +12,7 @@ while [ $# != 0 ]; do
     echo "  --dmd   use DMD"
     echo "  --lite  lite tests"
     echo "  --dmdv  use vanilla DMD"
+    echo "  --gdc   use GDC"
     exit 1
   fi
   if [ "z$1" = "z--dmd" ]; then
@@ -23,6 +24,8 @@ while [ $# != 0 ]; do
     USE_DMD_VANILLA="tan"
   elif [ "z$1" = "z-dmd" ]; then
     USE_DMD="tan"
+  elif [ "z$1" = "z-gdc" ]; then
+    USE_DMD="ona"
   elif [ "z$1" = "z-lite" ]; then
     SHORT_TEST="tan"
   elif [ "z$1" = "z-dmdv" ]; then
