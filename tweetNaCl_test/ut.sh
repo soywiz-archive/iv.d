@@ -4,6 +4,7 @@
 USE_DMD="tan"
 USE_DMD_VANILLA="ona"
 SHORT_TEST="ona"
+USE_OPT="ona"
 
 while [ $# != 0 ]; do
   if [ "z$1" = "z--help" ]; then
@@ -13,6 +14,7 @@ while [ $# != 0 ]; do
     echo "  --lite  lite tests"
     echo "  --dmdv  use vanilla DMD"
     echo "  --gdc   use GDC"
+    echo "  --opt   optimize"
     exit 1
   fi
   if [ "z$1" = "z--dmd" ]; then
@@ -22,13 +24,15 @@ while [ $# != 0 ]; do
   elif [ "z$1" = "z--dmdv" ]; then
     USE_DMD="tan"
     USE_DMD_VANILLA="tan"
-  elif [ "z$1" = "z-dmd" ]; then
+  elif [ "z$1" = "z--dmd" ]; then
     USE_DMD="tan"
-  elif [ "z$1" = "z-gdc" ]; then
+  elif [ "z$1" = "z--gdc" ]; then
     USE_DMD="ona"
-  elif [ "z$1" = "z-lite" ]; then
+  elif [ "z$1" = "z--opt" ]; then
+    USE_OPT="tan"
+  elif [ "z$1" = "z--lite" ]; then
     SHORT_TEST="tan"
-  elif [ "z$1" = "z-dmdv" ]; then
+  elif [ "z$1" = "z--dmdv" ]; then
     USE_DMD="tan"
     USE_DMD_VANILLA="tan"
   else
@@ -53,7 +57,13 @@ if [ $USE_DMD = "tan" ]; then
     dmdbin="dmd"
   fi
   echo -n "DMD... [$dmdbin]"
-  time "$dmdbin" $tt -O -inline -w -oftweetNaCl ../tweetNaCl.d tweetNaCl_test.d
+  if [ $USE_OPT = "tan" ]; then
+    echo -n "[opt]"
+    opts="-O -inline"
+  else
+    opts=""
+  fi
+  time "$dmdbin" $tt $opts -w -oftweetNaCl ../tweetNaCl.d tweetNaCl_test.d
 else
   if [ $SHORT_TEST = "tan" ]; then
     tt=""
