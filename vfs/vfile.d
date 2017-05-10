@@ -1375,12 +1375,13 @@ version(vfs_use_zlib_unpacker) {
 
     bool findUnpackedSize () {
       ubyte[1024] tbuf = void;
+      if (ifs is null) inflateInit(); // here, 'cause struct can be copied
       for (;;) {
         auto rd = ifs.rawRead(&readBuf, tbuf[]);
         if (rd.length == 0) break;
-        pos += rd.length;
+        prpos += rd.length;
       }
-      size = pos;
+      size = pos = prpos;
       return true;
     }
 
