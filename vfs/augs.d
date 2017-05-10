@@ -86,6 +86,15 @@ T[] rawReadExact(ST, T) (auto ref ST st, T[] buf) if (isReadableStream!ST && !is
 /// write exact size or throw error (just for convenience)
 void rawWriteExact(ST, T) (auto ref ST st, in T[] buf) if (isWriteableStream!ST) { st.rawWrite(buf); }
 
+/// if stream doesn't have `.size`, but can be seeked, emulate it
+long size(ST) (auto ref ST st) if (!isSeekableStream!ST && !streamHasSize!ST) {
+  auto opos = st.tell;
+  st.seek(0, Seek.End);
+  auto res = st.tell;
+  st.seek(opos);
+  return res;
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// check if a given stream supports `eof`
