@@ -384,6 +384,8 @@ enum IVVFSIgnore;
 void readStruct(string es="LE", SS, ST) (auto ref ST fl, ref SS st)
 if (is(SS == struct) && isGoodEndianness!es && isReadableStream!ST)
 {
+  import iv.vfs.vfile : VFile;
+  static assert(!is(SS == VFile), "invalid argument order in `readStruct`");
   void unserData(T) (ref T v) {
     import std.traits : Unqual;
     alias UT = Unqual!T;

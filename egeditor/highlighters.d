@@ -961,6 +961,8 @@ public class EdHiTokensD : EdHiTokens {
     addToken("creal", HiType);
     addToken("string", HiType);
     addToken("usize", HiType);
+    addToken("uhash", HiType);
+    addToken("ssize", HiType);
     addToken("size_t", HiInternal);
     addToken("ptrdiff_t", HiInternal);
     addToken("cstring", HiType);
