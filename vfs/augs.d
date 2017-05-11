@@ -376,3 +376,47 @@ T readXInt(T : ulong, ST) (auto ref ST fl) if (isReadableStream!ST) {
     return cast(T)v;
   }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+enum IVVFSIgnore;
+
+void readStruct(string es="LE", SS, ST) (auto ref ST fl, ref SS st)
+if (is(SS == struct) && isGoodEndianness!es && isReadableStream!ST)
+{
+  void unserData(T) (ref T v) {
+    import std.traits : Unqual;
+    alias UT = Unqual!T;
+    static if (is(T : V[], V)) {
+      // array
+      static if (__traits(isStaticArray, T)) {
+        foreach (ref it; v) unserData(it);
+      } else static if (is(UT == char)) {
+        // special case: dynamic `char[]` array will be loaded as asciiz string
+        char c;
+        for (;;) {
+          if (fl.rawRead((&c)[0..1]).length == 0) break; // don't require trailing zero on eof
+          if (c == 0) break;
+          v ~= c;
+        }
+      } else {
+        assert(0, "cannot load dynamic arrays yet");
+      }
+    } else static if (is(T : V[K], K, V)) {
+      assert(0, "cannot load associative arrays yet");
+    } else static if (__traits(isIntegral, UT) || __traits(isFloating, UT)) {
+      // this takes care of `*char` and `bool` too
+      v = cast(UT)fl.readNum!(UT, es);
+    } else static if (is(T == struct)) {
+      // struct
+      import std.traits : FieldNameTuple, hasUDA;
+      foreach (string fldname; FieldNameTuple!T) {
+        static if (!hasUDA!(__traits(getMember, T, fldname), IVVFSIgnore)) {
+          unserData(__traits(getMember, v, fldname));
+        }
+      }
+    }
+  }
+
+  unserData(st);
+}
