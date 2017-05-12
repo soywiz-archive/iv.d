@@ -246,23 +246,24 @@ public abstract class VFSDriverDetector {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// you can register this driver to try disk files with the given data path
-public VFSDriver vfsNewDiskDriver(bool listed, T:const(char)[]) (T dpath=null) {
-  static if (listed) {
-    return new VFSDriverDiskImpl!true(dpath);
-  } else {
-    return new VFSDriverDiskListedImpl!true(dpath);
-  }
+public VFSDriver vfsNewDiskDriver(T:const(char)[]) (T dpath=null) {
+  return new VFSDriverDiskImpl!true(dpath);
 }
 
 /// you can register this driver to try disk files with the given data path
-public VFSDriver vfsNewFailDriver() () {
-  return new VFSDriverAlwaysFail!true();
+public VFSDriver vfsNewDiskDriverListed(bool needtime=false, T:const(char)[]) (T dpath=null) {
+  return new VFSDriverDiskListedImpl!needtime(dpath);
+}
+
+/// you can register this driver to try disk files with the given data path
+public VFSDriver vfsNewFailDriver () {
+  return new VFSDriverAlwaysFail();
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // you can register this driver as "last" to prevent disk searches
-final class VFSDriverAlwaysFail(bool dummy) : VFSDriver {
+final class VFSDriverAlwaysFail : VFSDriver {
   override VFile tryOpen (const(char)[] fname, bool ignoreCase) {
     throw new VFSException("can't open file '"~fname.idup~"'");
   }
@@ -357,7 +358,7 @@ public:
 }
 
 // same as `VFSDriverDisk`, but provides file list too; it is templated to cut compile times
-class VFSDriverDiskListedImpl(bool dummy) : VFSDriverDiskImpl!true {
+class VFSDriverDiskListedImpl(bool needtime) : VFSDriverDiskImpl!true {
   private static struct FileEntry {
     //uint index; // should be set by the driver
     string name;
@@ -368,7 +369,6 @@ class VFSDriverDiskListedImpl(bool dummy) : VFSDriverDiskImpl!true {
 protected:
   FileEntry[] files;
   bool flistInited;
-  bool needTimes;
 
 protected:
   final void buildFileList () {
@@ -378,7 +378,7 @@ protected:
       foreach (DE de; dirEntries(dataPath, SpanMode./*breadth*/depth)) {
         if (!de.isFile) continue;
         if (de.name.length <= dataPath.length) continue;
-        if (needTimes) {
+        static if (needtime) {
           import std.datetime;
           files ~= FileEntry(de.name[dataPath.length..$], de.size, de.timeLastModified.toUTC.toUnixTime());
         } else {
@@ -390,8 +390,7 @@ protected:
   }
 
 public:
-  this (bool aNeedTimes=false) { needTimes = aNeedTimes; super(); }
-  this(T : const(char)[]) (T dpath, bool aNeedTimes=false) { needTimes = aNeedTimes; super(dpath); }
+  this(T : const(char)[]) (T dpath) { super(dpath); }
 
   /// get number of entries in archive directory.
   override @property usize dirLength () { buildFileList(); return files.length; }
