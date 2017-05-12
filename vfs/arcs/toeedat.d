@@ -18,22 +18,20 @@
 // data files from Temple of Elemental Evil (conflicts with Arcanum, so can't detect)
 module iv.vfs.arcs.toeedat;
 
-import std.variant : Variant;
 import iv.vfs.types : usize, ssize, Seek;
-import iv.vfs.augs;
+import iv.vfs.error;
 import iv.vfs.main;
 import iv.vfs.util;
 import iv.vfs.vfile;
+import iv.vfs.arcs.internal;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private import iv.vfs.arcs.internal : VFSSimpleArchiveDetectorMixin;
 mixin(VFSSimpleArchiveDetectorMixin!"ToEEDat");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverToEEDat : VFSDriver {
-  private import iv.vfs.arcs.internal : VFSSimpleArchiveDriverMixin;
   mixin VFSSimpleArchiveDriverMixin;
 
 private:
@@ -104,13 +102,13 @@ private:
    *   "offset" -- offset in wad
    *   "size"   -- file size (so we can get size without opening the file)
    */
-  public override Variant stat (usize idx, const(char)[] propname) {
-    if (idx >= dir.length) return Variant();
-    if (propname == "packed") return Variant(dir[idx].packed);
-    if (propname == "pksize") return Variant(dir[idx].packed ? dir[idx].pksize : dir[idx].size);
-    if (propname == "offset") return Variant(dir[idx].ofs);
-    if (propname == "size") return Variant(dir[idx].size);
-    return Variant();
+  public override VFSVariant stat (usize idx, const(char)[] propname) {
+    if (idx >= dir.length) return VFSVariant();
+    if (propname == "packed") return VFSVariant(dir[idx].packed);
+    if (propname == "pksize") return VFSVariant(dir[idx].packed ? dir[idx].pksize : dir[idx].size);
+    if (propname == "offset") return VFSVariant(dir[idx].ofs);
+    if (propname == "size") return VFSVariant(dir[idx].size);
+    return VFSVariant();
   }
 
   VFile wrap (usize idx) {

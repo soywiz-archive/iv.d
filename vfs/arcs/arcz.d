@@ -18,14 +18,14 @@
 module iv.vfs.arcs.arcz;
 
 import iv.vfs.types : usize, ssize, Seek;
-import iv.vfs.augs;
+import iv.vfs.error;
 import iv.vfs.main;
 import iv.vfs.util;
 import iv.vfs.vfile;
+import iv.vfs.arcs.internal;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private import iv.vfs.arcs.internal : VFSSimpleArchiveDetectorMixin;
 mixin(VFSSimpleArchiveDetectorMixin!"ArcZ");
 
 // use Balz compressor if available
@@ -656,8 +656,6 @@ public:
     if (res < 0) throw new Exception("seek error");
   }
 
-  //private import std.traits : isMutable;
-
   //TODO: overflow check
   T[] rawRead(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
     if (!zlp) throw new Exception("can't read from closed file");
@@ -674,7 +672,6 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverArcZ : VFSDriver {
-  private import iv.vfs.arcs.internal : VFSSimpleArchiveDriverMixin;
   mixin VFSSimpleArchiveDriverMixin;
 
 private:

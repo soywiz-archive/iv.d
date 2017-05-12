@@ -17,22 +17,22 @@
  */
 module iv.vfs.arcs.zip;
 
-import std.variant : Variant;
 import iv.vfs.types : usize, ssize, Seek, VFSHiddenPointerHelper;
-import iv.vfs.augs;
+import iv.vfs.error;
 import iv.vfs.main;
 import iv.vfs.util;
 import iv.vfs.vfile;
+import iv.vfs.arcs.internal;
+
+//version = ziparc_debug;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private import iv.vfs.arcs.internal : VFSSimpleArchiveDetectorMixin;
 mixin(VFSSimpleArchiveDetectorMixin!"Zip");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverZip : VFSDriver {
-  private import iv.vfs.arcs.internal : VFSSimpleArchiveDriverMixin;
   mixin VFSSimpleArchiveDriverMixin;
 
 private:
@@ -56,45 +56,45 @@ private:
    *   "method"  -- uint with packing method
    *   "methodname" -- string name of packing method
    */
-  public override Variant stat (usize idx, const(char)[] propname) {
-    if (idx >= dir.length) return Variant();
-    if (propname == "modtime") return Variant(dir[idx].modtime);
-    if (propname == "packed") return Variant(false);
-    if (propname == "pksize") return Variant(dir[idx].pksize);
-    if (propname == "crc32") return Variant(dir[idx].crc32);
-    if (propname == "size") return Variant(dir[idx].size);
-    if (propname == "method") return Variant(cast(uint)dir[idx].method);
+  public override VFSVariant stat (usize idx, const(char)[] propname) {
+    if (idx >= dir.length) return VFSVariant();
+    if (propname == "modtime") return VFSVariant(dir[idx].modtime);
+    if (propname == "packed") return VFSVariant(false);
+    if (propname == "pksize") return VFSVariant(dir[idx].pksize);
+    if (propname == "crc32") return VFSVariant(dir[idx].crc32);
+    if (propname == "size") return VFSVariant(dir[idx].size);
+    if (propname == "method") return VFSVariant(cast(uint)dir[idx].method);
     if (propname == "methodname") {
       switch (dir[idx].method) {
-        case 8: return Variant("deflate");
-        case 0: return Variant("store");
-        case 6: return Variant("implode");
-        case 1: return Variant("shrink");
-        case 2: case 3: case 4: case 5: return Variant("reduce");
-        case 9: return Variant("deflate64");
-        case 14: return Variant("lzma");
+        case 8: return VFSVariant("deflate");
+        case 0: return VFSVariant("store");
+        case 6: return VFSVariant("implode");
+        case 1: return VFSVariant("shrink");
+        case 2: case 3: case 4: case 5: return VFSVariant("reduce");
+        case 9: return VFSVariant("deflate64");
+        case 14: return VFSVariant("lzma");
         default: break;
       }
-      return Variant("unknown");
+      return VFSVariant("unknown");
     }
-    return Variant();
+    return VFSVariant();
   }
 
   VFile wrap (usize idx) {
     assert(idx < dir.length);
-    debug(ziparc) import std.stdio : writeln, writefln;
-    debug(ziparc) writeln("zip: open file #", idx, ": [", dir[idx].name, "]");
+    version(ziparc_debug) debug(ziparc) import std.stdio : writeln, writefln;
+    version(ziparc_debug) debug(ziparc) writeln("zip: open file #", idx, ": [", dir[idx].name, "]");
     // read file header
     ZipFileHeader zfh = void;
     st.seek(dir[idx].hdrofs);
     st.rawReadExact((&zfh)[0..1]);
     if (zfh.sign != "PK\x03\x04") {
-      debug(ziparc) writeln("  invalid ZIP archive entry");
+      version(ziparc_debug) debug(ziparc) writeln("  invalid ZIP archive entry");
       throw new VFSException("invalid ZIP archive entry");
     }
     zfh.fixEndian;
     if (zfh.crc32 != 0 && zfh.crc32 != dir[idx].crc32) {
-      debug(ziparc) writefln("  invalid ZIP archive entry (crc): cdir: 0x%08x  local: 0x%08x", dir[idx].crc32, zfh.crc32);
+      version(ziparc_debug) debug(ziparc) writefln("  invalid ZIP archive entry (crc): cdir: 0x%08x  local: 0x%08x", dir[idx].crc32, zfh.crc32);
       throw new VFSException("invalid ZIP archive entry (crc)");
     }
     // skip name and extra
@@ -114,7 +114,7 @@ private:
       case 2: case 3: case 4: case 5: // reduce
         return wrapStream(VStreamDecoderLowLevelRO!Inductor(st, zfh.method, size, stpos, pksize), dir[idx].name);
       case 9: // deflate64
-        debug(ziparc) { import core.stdc.stdio : printf; printf("I64!\n"); }
+        version(ziparc_debug) debug(ziparc) { import core.stdc.stdio : printf; printf("I64!\n"); }
         return wrapStream(VStreamDecoderLowLevelRO!Inflater64(st, zfh.method, size, stpos, pksize), dir[idx].name);
       case 14: // lzma
         return wrapStream(VStreamDecoderLowLevelRO!Unlzmaer(st, zfh.method, size, stpos, pksize), dir[idx].name);
@@ -140,7 +140,7 @@ private:
   }
 
   void open (VFile fl, const(char)[] prefixpath) {
-    debug(ziparc) import std.stdio : writeln, writefln;
+    version(ziparc_debug) debug(ziparc) import std.stdio : writeln, writefln;
 
     if (fl.size > 0xffff_ffffu) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("file too big");
     ulong flsize = fl.size;
@@ -168,7 +168,7 @@ private:
     if (pos < 0) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("no central dir end marker found");
     auto eocd = *cast(EOCDHeader*)&buf[pos];
     eocd.fixEndian;
-    debug(ziparc) {
+    version(ziparc_debug) debug(ziparc) {
       writeln("=== EOCD ===");
       writeln("diskno: ", eocd.diskno);
       writeln("diskcd: ", eocd.diskcd);
@@ -182,14 +182,14 @@ private:
     bool zip64 = false;
     // zip64?
     if (eocd.cdofs == 0xffff_ffffu) {
-      debug(ziparc) writeln("  ZIP64 archive");
+      version(ziparc_debug) debug(ziparc) writeln("  ZIP64 archive");
       zip64 = true;
       if (pos < Z64Locator.sizeof) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("corrupted archive");
       auto lt64 = *cast(Z64Locator*)&buf[pos-Z64Locator.sizeof];
       lt64.fixEndian;
       if (lt64.sign != "PK\x06\x07") throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("corrupted archive");
       if (lt64.diskcd != 0 || lt64.diskno > 1) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("multidisk archive");
-      debug(ziparc) writeln("ecd64ofs=", lt64.ecd64ofs);
+      version(ziparc_debug) debug(ziparc) writeln("ecd64ofs=", lt64.ecd64ofs);
       if (lt64.ecd64ofs < 0 || lt64.ecd64ofs+EOCD64Header.sizeof > ubufpos+pos-Z64Locator.sizeof) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("corrupted archive");
       EOCD64Header e64 = void;
       fl.seek(lt64.ecd64ofs);
@@ -204,7 +204,7 @@ private:
       cdsize = e64.cdsize;
     } else {
       if (eocd.diskno != 0 || eocd.diskcd != 0) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("multidisk archive");
-      //debug(ziparc) writefln("flsize: 0x%08x  expected: 0x%08x", cast(uint)flsize, cast(uint)(ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize));
+      //version(ziparc_debug) debug(ziparc) writefln("flsize: 0x%08x  expected: 0x%08x", cast(uint)flsize, cast(uint)(ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize));
       if (eocd.diskfileno != eocd.fileno) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("corrupted archive");
       // relax it a little
       if (ubufpos+pos+EOCDHeader.sizeof+eocd.cmtsize > flsize) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("corrupted archive");
@@ -234,15 +234,15 @@ private:
     char[4] sign;
     dir.assumeSafeAppend; // yep
     while (bleft > 0) {
-      debug(ziparc) writefln("pos: 0x%08x (%s bytes left)", cast(uint)fl.tell, bleft);
+      version(ziparc_debug) debug(ziparc) writefln("pos: 0x%08x (%s bytes left)", cast(uint)fl.tell, bleft);
       if (bleft < 4) break;
       if (fl.rawRead(sign[]).length != sign.length) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("reading error");
       bleft -= 4;
       if (sign[0] != 'P' || sign[1] != 'K') {
-        debug(ziparc) writeln("SIGN: NOT PK!");
+        version(ziparc_debug) debug(ziparc) writeln("SIGN: NOT PK!");
         throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("invalid central directory entry");
       }
-      debug(ziparc) writefln("SIGN: 0x%02x 0x%02x", cast(ubyte)sign[2], cast(ubyte)sign[3]);
+      version(ziparc_debug) debug(ziparc) writefln("SIGN: 0x%02x 0x%02x", cast(ubyte)sign[2], cast(ubyte)sign[3]);
       // digital signature?
       if (sign[2] == 5 && sign[3] == 5) {
         // yes, skip it
@@ -263,13 +263,13 @@ private:
         if (bleft < cdfh.namelen+cdfh.extlen+cdfh.cmtlen) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("invalid central directory entry");
         // skip bad files
         if (!isGoodMethod(cdfh.method)) {
-          debug(ziparc) writeln("  INVALID: method=", cdfh.method);
+          version(ziparc_debug) debug(ziparc) writeln("  INVALID: method=", cdfh.method);
           throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("invalid method");
         }
         if (cdfh.namelen == 0 || (cdfh.gflags&0b10_0000_0110_0001) != 0 || (cdfh.attr&0x58) != 0 ||
             cast(long)cdfh.hdrofs+(cdfh.method ? cdfh.pksize : cdfh.size) >= ubufpos+pos)
         {
-          debug(ziparc) writeln("  ignored: method=", cdfh.method);
+          version(ziparc_debug) debug(ziparc) writeln("  ignored: method=", cdfh.method);
           // ignore this
           fl.seek(cdfh.namelen+cdfh.extlen+cdfh.cmtlen, Seek.Cur);
           bleft -= cdfh.namelen+cdfh.extlen+cdfh.cmtlen;
@@ -298,8 +298,8 @@ private:
         }
         bool doSkip = false;
         // should we parse extra field?
-        debug(ziparc) writefln("name: [%s]; size=0x%08x; pksize=0x%08x", nb[0..nbpos], fi.size, fi.pksize);
-        debug(ziparc) {{
+        version(ziparc_debug) debug(ziparc) writefln("name: [%s]; size=0x%08x; pksize=0x%08x", nb[0..nbpos], fi.size, fi.pksize);
+        version(ziparc_debug) debug(ziparc) {{
           import std.datetime;
           try {
             writeln("  year: ", cdfh.year, "; month: ", cdfh.month, "; day: ", cdfh.day, "; hour: ", cdfh.hour, "; min: ", cdfh.min, "; sec: ", cdfh.sec);
@@ -310,15 +310,15 @@ private:
           }
         }}
         if (zip64 && (fi.size == 0xffff_ffffu || fi.pksize == 0xffff_ffffu || fi.hdrofs == 0xffff_ffffu)) {
-          debug(ziparc) writeln("  ZIP64 record");
+          version(ziparc_debug) debug(ziparc) writeln("  ZIP64 record");
           // yep, do it
           bool found = false;
           //Z64Extra z64e = void;
-          debug(ziparc) writeln("extlen=", cdfh.extlen);
+          version(ziparc_debug) debug(ziparc) writeln("extlen=", cdfh.extlen);
           while (cdfh.extlen >= 4) {
             auto eid = fl.readNum!ushort;
             auto esize = fl.readNum!ushort;
-            debug(ziparc) writefln("0x%04x %s", eid, esize);
+            version(ziparc_debug) debug(ziparc) writefln("0x%04x %s", eid, esize);
             cdfh.extlen -= 4;
             bleft -= 4;
             if (cdfh.extlen < esize) break;
@@ -334,7 +334,7 @@ private:
                 if (fl.rawRead((&fi.size)[0..1]).length != 1) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("reading error");
                 version(BigEndian) { import std.bitmanip : swapEndian; fi.size = swapEndian(fi.size); }
                 esize -= 8;
-                //debug(ziparc) writeln(" size=", fi.size);
+                //version(ziparc_debug) debug(ziparc) writeln(" size=", fi.size);
               }
               if (fi.pksize == 0xffff_ffffu) {
                 if (esize == 0) {
@@ -368,7 +368,7 @@ private:
             }
           }
           if (!found) {
-            debug(ziparc) writeln("required zip64 record not found");
+            version(ziparc_debug) debug(ziparc) writeln("required zip64 record not found");
             //throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("required zip64 record not found");
             //fi.size = fi.pksize = 0x1_0000_0000Lu; // hack: skip it
             doSkip = true;
@@ -379,7 +379,7 @@ private:
           if (dir.length == uint.max) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("directory too long");
           fi.name = cast(string)nb[0..nbpos]; // this is safe
           dir.arrayAppendUnsafe(fi);
-          //debug(ziparc) writefln("%10s %10s %s %04s/%02s/%02s %02s:%02s:%02s %s", fi.pksize, fi.size, (fi.packed ? "P" : "."), cdfh.year, cdfh.month, cdfh.day, cdfh.hour, cdfh.min, cdfh.sec, fi.name);
+          //version(ziparc_debug) debug(ziparc) writefln("%10s %10s %s %04s/%02s/%02s %02s:%02s:%02s %s", fi.pksize, fi.size, (fi.packed ? "P" : "."), cdfh.year, cdfh.month, cdfh.day, cdfh.hour, cdfh.min, cdfh.sec, fi.name);
         }
         // skip extra and comments
         fl.seek(cdfh.extlen+cdfh.cmtlen, Seek.Cur);
@@ -389,7 +389,7 @@ private:
       // wtf?!
       throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("unknown central directory entry");
     }
-    debug(ziparc) writeln(dir.length, " files found");
+    version(ziparc_debug) debug(ziparc) writeln(dir.length, " files found");
     buildNameHashTable();
   }
 static protected:
@@ -451,12 +451,18 @@ align(1):
 
   // unixtime
   @property uint modtime() const {
-    version(LDC) {
-      return 0;
-    } else {
-      import std.datetime;
-      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
-    }
+    //import std.datetime;
+    //return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+    import core.stdc.time : tm, mktime;
+    tm xtm = void;
+    xtm.tm_sec = sec.within(0, 59);
+    xtm.tm_min = min.within(0, 59);
+    xtm.tm_hour = hour.within(0, 23);
+    xtm.tm_mday = day.within(1, 31);
+    xtm.tm_mon = day.within(0, 11);
+    xtm.tm_year = year;
+    xtm.tm_wday = xtm.tm_yday = xtm.tm_isdst = 0;
+    return cast(uint)mktime(&xtm);
   }
 
 @property pure const nothrow @safe @nogc:
@@ -512,12 +518,18 @@ align(1):
 
   // unixtime
   @property uint modtime() const {
-    version(LDC) {
-      return 0;
-    } else {
-      import std.datetime;
-      return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
-    }
+    //import std.datetime;
+    //return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
+    import core.stdc.time : tm, mktime;
+    tm xtm = void;
+    xtm.tm_sec = sec.within(0, 59);
+    xtm.tm_min = min.within(0, 59);
+    xtm.tm_hour = hour.within(0, 23);
+    xtm.tm_mday = day.within(1, 31);
+    xtm.tm_mon = day.within(0, 11);
+    xtm.tm_year = year;
+    xtm.tm_wday = xtm.tm_yday = xtm.tm_isdst = 0;
+    return cast(uint)mktime(&xtm);
   }
 
 @property pure const nothrow @safe @nogc:
@@ -1025,7 +1037,7 @@ public:
       value[freecode] = *newstr;
       oldcode = code;
 
-      debug(ziparc) { import core.stdc.stdio : printf; printf("deshrinker: len=%d\n", len); }
+      version(ziparc_debug) debug(ziparc) { import core.stdc.stdio : printf; printf("deshrinker: len=%d\n", len); }
       while (len--) {
         putUB(*newstr);
         ++newstr;
@@ -2721,7 +2733,7 @@ public:
 
   void setup (VFile fl, ulong agflags, long apos, uint apksize, uint aupksize) {
     br.setup(fl, apos, apksize, aupksize);
-    debug(ziparc) { import core.stdc.stdio : printf; printf("::: LZMA this=0x%08x\n", &this); }
+    version(ziparc_debug) debug(ziparc) { import core.stdc.stdio : printf; printf("::: LZMA this=0x%08x\n", &this); }
     reset();
   }
 

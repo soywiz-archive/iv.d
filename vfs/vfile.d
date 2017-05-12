@@ -32,11 +32,14 @@ static import core.sys.posix.stdio;
 static import core.sys.posix.unistd;
 version(vfs_add_std_stdio_wrappers) static import std.stdio;
 
+// we need this to simulate `synchronized`
+extern (C) void _d_monitorenter (Object h) nothrow;
+extern (C) void _d_monitorexit (Object h) nothrow;
+
 import iv.vfs.types : ssize, usize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.config;
 import iv.vfs.error;
-import iv.vfs.augs;
-import iv.vfs.streams.mem;
+import iv.vfs.preds;
 
 version(LDC) {}
 else {
@@ -203,8 +206,6 @@ public:
 
   @property bool eof () { pragma(inline, true); return (!wstp || wst.eof); }
 
-  //private import std.traits : isMutable;
-
   T[] rawRead(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
     if (!isOpen) throw new VFSException("can't read from closed stream");
     if (buf.length > 0) {
@@ -222,6 +223,62 @@ public:
     }
   }
 
+  private T[] rawReadNoLock(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
+    if (!isOpen) throw new VFSException("can't read from closed stream");
+    if (buf.length > 0) {
+      ssize res;
+      try {
+        res = wst.read(buf.ptr, buf.length*T.sizeof);
+      } catch (Exception e) {
+        // chain exception
+        throw new VFSException("read error", __FILE__, __LINE__, e);
+      }
+      if (res == -1 || res%T.sizeof != 0) throw new VFSException("read error");
+      return buf[0..res/T.sizeof];
+    } else {
+      return buf[0..0];
+    }
+  }
+
+  /// read exact size or throw error
+  T[] rawReadExact(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
+    if (buf.length == 0) return buf;
+    auto left = buf.length*T.sizeof;
+    auto dp = cast(ubyte*)buf.ptr;
+    synchronized(wst) {
+      try {
+        while (left > 0) {
+          ssize res = wst.read(dp, left);
+          if (res == 0) throw new VFSException("read error");
+          dp += res;
+          left -= res;
+        }
+      } catch (Exception e) {
+        // chain exception
+        throw new VFSException("read error", __FILE__, __LINE__, e);
+      }
+    }
+    return buf;
+  }
+
+  private T[] rawReadExactNoLock(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
+    if (buf.length == 0) return buf;
+    auto left = buf.length*T.sizeof;
+    auto dp = cast(ubyte*)buf.ptr;
+    try {
+      while (left > 0) {
+        ssize res = wst.read(dp, left);
+        if (res == 0) throw new VFSException("read error");
+        dp += res;
+        left -= res;
+      }
+    } catch (Exception e) {
+      // chain exception
+      throw new VFSException("read error", __FILE__, __LINE__, e);
+    }
+    return buf;
+  }
+
   void rawWrite(T) (in T[] buf) {
     if (!isOpen) throw new VFSException("can't write to closed stream");
     if (buf.length > 0) {
@@ -235,6 +292,22 @@ public:
       if (res == -1 || res%T.sizeof != 0) throw new VFSException("write error");
     }
   }
+
+  private void rawWriteNoLock(T) (in T[] buf) {
+    if (!isOpen) throw new VFSException("can't write to closed stream");
+    if (buf.length > 0) {
+      ssize res;
+      try {
+        res = wst.write(buf.ptr, buf.length*T.sizeof);
+      } catch (Exception e) {
+        // chain exception
+        throw new VFSException("read error", __FILE__, __LINE__, e);
+      }
+      if (res == -1 || res%T.sizeof != 0) throw new VFSException("write error");
+    }
+  }
+
+  alias rawWriteExact = rawWrite; // for convenience
 
   long seek (long offset, int origin=Seek.Set) {
     if (!isOpen) throw new VFSException("can't seek in closed stream");
@@ -317,6 +390,269 @@ public:
 
   usize toHash () const pure nothrow @safe @nogc { pragma(inline, true); return wstp; } // yeah, so simple
   bool opEquals() (auto ref VFile s) const { pragma(inline, true); return (wstp == s.wstp); }
+
+  // make this output stream
+  void put (const(char)[] s...) { pragma(inline, true); rawWrite(s); }
+  //void put (const(wchar)[] s...) { pragma(inline, true); rawWrite(s); }
+  //void put (const(dchar)[] s...) { pragma(inline, true); rawWrite(s); }
+
+  static struct LockedWriterImpl {
+    private VFile fl;
+
+    private this (VFile afl) nothrow {
+      if (afl.wstp) {
+        import core.atomic;
+        fl = afl;
+        if (atomicOp!"+="(fl.wst.wrrc, 1) == 1) {
+          //{ import core.stdc.stdio; printf("LockedWriterImpl(0x%08x): lock!\n", cast(uint)fl.wstp); }
+          _d_monitorenter(fl.wst); // emulate `synchronized(fl.wst)` enter
+        }
+      }
+    }
+
+    this (this) {
+      if (fl.wstp) {
+        import core.atomic;
+        atomicOp!"+="(fl.wst.wrrc, 1);
+      }
+    }
+
+    ~this () {
+      if (fl.wstp) {
+        import core.atomic;
+        if (atomicOp!"-="(fl.wst.wrrc, 1) == 0) {
+          //{ import core.stdc.stdio; printf("LockedWriterImpl(0x%08x): unlock!\n", cast(uint)fl.wstp); }
+          _d_monitorexit(fl.wst); // emulate `synchronized(fl.wst)` exit
+        }
+        fl = VFile.init; // just in case
+      }
+    }
+
+    void put (const(char)[] s...) { pragma(inline, true); fl.rawWriteNoLock(s); }
+  }
+
+  @property LockedWriterImpl lockedWriter () { return LockedWriterImpl(this); }
+
+  // stream i/o functions
+  version(LittleEndian) {
+    private enum MyEHi = "LE";
+    private enum MyELo = "le";
+    private enum ItEHi = "BE";
+    private enum ItELo = "be";
+  } else {
+    private enum MyEHi = "BE";
+    private enum MyELo = "be";
+    private enum ItEHi = "LE";
+    private enum ItELo = "le";
+  }
+
+  public enum MyEndianness = MyEHi;
+
+  // ////////////////////////////////////////////////////////////////////// //
+  /// write integer value of the given type, with the given endianness (default: little-endian)
+  /// usage: st.writeNum!ubyte(10)
+  void writeNum(T, string es="LE") (T n) if (__traits(isIntegral, T)) {
+    static assert(T.sizeof <= 8); // just in case
+    static if (es == MyEHi || es == MyELo) {
+      rawWrite((&n)[0..1]);
+    } else static if (es == ItEHi || es == ItELo) {
+      ubyte[T.sizeof] b = void;
+      version(LittleEndian) {
+        // convert to big-endian
+        foreach_reverse (ref x; b) { x = n&0xff; n >>= 8; }
+      } else {
+        // convert to little-endian
+        foreach (ref x; b) { x = n&0xff; n >>= 8; }
+      }
+      rawWrite(b[]);
+    } else {
+      static assert(0, "invalid endianness: '"~es~"'");
+    }
+  }
+
+  /// read integer value of the given type, with the given endianness (default: little-endian)
+  /// usage: auto v = st.readNum!ubyte
+  T readNum(T, string es="LE") () if (__traits(isIntegral, T)) {
+    static assert(T.sizeof <= 8); // just in case
+    static if (es == MyEHi || es == MyELo) {
+      T v = void;
+      rawReadExact((&v)[0..1]);
+      return v;
+    } else static if (es == ItEHi || es == ItELo) {
+      ubyte[T.sizeof] b = void;
+      rawReadExact(b[]);
+      T v = 0;
+      version(LittleEndian) {
+        // convert from big-endian
+        foreach (ubyte x; b) { v <<= 8; v |= x; }
+      } else {
+        // conver from little-endian
+        foreach_reverse (ubyte x; b) { v <<= 8; v |= x; }
+      }
+      return v;
+    } else {
+      static assert(0, "invalid endianness: '"~es~"'");
+    }
+  }
+
+  private enum reverseBytesMixin = "
+    foreach (idx; 0..b.length/2) {
+      ubyte t = b[idx];
+      b[idx] = b[$-idx-1];
+      b[$-idx-1] = t;
+    }
+  ";
+
+  /// write floating value of the given type, with the given endianness (default: little-endian)
+  /// usage: st.writeNum!float(10)
+  void writeNum(T, string es="LE") (T n) if (__traits(isFloating, T)) {
+    static assert(T.sizeof <= 8); // just in case
+    static if (es == MyEHi || es == MyELo) {
+      rawWrite((&n)[0..1]);
+    } else static if (es == ItEHi || es == ItELo) {
+      import core.stdc.string : memcpy;
+      ubyte[T.sizeof] b = void;
+      memcpy(b.ptr, &v, T.sizeof);
+      mixin(reverseBytesMixin);
+      rawWrite(b[]);
+    } else {
+      static assert(0, "invalid endianness: '"~es~"'");
+    }
+  }
+
+  /// read floating value of the given type, with the given endianness (default: little-endian)
+  /// usage: auto v = st.readNum!float
+  T readNum(T, string es="LE") () if (__traits(isFloating, T)) {
+    static assert(T.sizeof <= 8); // just in case
+    T v = void;
+    static if (es == MyEHi || es == MyELo) {
+      rawReadExact((&v)[0..1]);
+    } else static if (es == ItEHi || es == ItELo) {
+      import core.stdc.string : memcpy;
+      ubyte[T.sizeof] b = void;
+      rawReadExact(b[]);
+      mixin(reverseBytesMixin);
+      memcpy(&v, b.ptr, T.sizeof);
+    } else {
+      static assert(0, "invalid endianness: '"~es~"'");
+    }
+    return v;
+  }
+
+
+  // ////////////////////////////////////////////////////////////////////////// //
+  // first byte: bit 7 is sign; bit 6 is "has more bytes" mark; bits 0..5: first number bits
+  // next bytes: bit 7 is "has more bytes" mark; bits 0..6: next number bits
+  void writeXInt(T:ulong) (T vv) {
+    ubyte[16] buf = void; // actually, 10 is enough ;-)
+         static if (T.sizeof == ulong.sizeof) ulong v = cast(ulong)vv;
+    else static if (!__traits(isUnsigned, T)) ulong v = cast(ulong)cast(long)vv; // extend sign bits
+    else ulong v = cast(ulong)vv;
+    uint len = 1; // at least
+    // now write as signed
+    if (v == 0x8000_0000_0000_0000UL) {
+      // special (negative zero)
+      buf.ptr[0] = 0x80;
+    } else {
+      if (v&0x8000_0000_0000_0000UL) {
+        v = (v^~0uL)+1; // negate v
+        buf.ptr[0] = 0x80; // sign bit
+      } else {
+        buf.ptr[0] = 0;
+      }
+      buf.ptr[0] |= v&0x3f;
+      v >>= 6;
+      if (v != 0) buf.ptr[0] |= 0x40; // has more
+      while (v != 0) {
+        buf.ptr[len] = v&0x7f;
+        v >>= 7;
+        if (v > 0) buf.ptr[len] |= 0x80; // has more
+        ++len;
+      }
+    }
+    rawWrite(buf.ptr[0..len]);
+  }
+
+  T readXInt(T:ulong) () {
+    import std.conv : ConvOverflowException;
+    ulong v = 0;
+    ubyte c = void;
+    // first byte contains sign flag
+    rawReadExact((&c)[0..1]);
+    if (c == 0x80) {
+      // special (negative zero)
+      v = 0x8000_0000_0000_0000UL;
+    } else {
+      bool neg = ((c&0x80) != 0);
+      v = c&0x3f;
+      c <<= 1;
+      // 63/7 == 9, so we can shift at most 56==(7*8) bits
+      ubyte shift = 6;
+      while (c&0x80) {
+        if (shift > 62) throw new ConvOverflowException("readXInt overflow");
+        rawReadExact((&c)[0..1]);
+        ulong n = c&0x7f;
+        if (shift == 62 && n > 1) throw new ConvOverflowException("readXInt overflow");
+        n <<= shift;
+        v |= n;
+        shift += 7;
+      }
+      if (neg) v = (v^~0uL)+1; // negate v
+    }
+    // now convert to output
+    static if (T.sizeof == v.sizeof) {
+      return v;
+    } else static if (!__traits(isUnsigned, T)) {
+      auto l = cast(long)v;
+      if (v < T.min) throw new ConvOverflowException("readXInt underflow");
+      if (v > T.max) throw new ConvOverflowException("readXInt overflow");
+      return cast(T)l;
+    } else {
+      if (v > T.max) throw new ConvOverflowException("readXInt overflow");
+      return cast(T)v;
+    }
+  }
+
+  // ////////////////////////////////////////////////////////////////////// //
+  enum IVVFSIgnore;
+
+  void readStruct(string es="LE", SS) (ref SS st) if (is(SS == struct)) {
+    void unserData(T) (ref T v) {
+      import std.traits : Unqual;
+      alias UT = Unqual!T;
+      static if (is(T : V[], V)) {
+        // array
+        static if (__traits(isStaticArray, T)) {
+          foreach (ref it; v) unserData(it);
+        } else static if (is(UT == char)) {
+          // special case: dynamic `char[]` array will be loaded as asciiz string
+          char c;
+          for (;;) {
+            if (rawRead((&c)[0..1]).length == 0) break; // don't require trailing zero on eof
+            if (c == 0) break;
+            v ~= c;
+          }
+        } else {
+          assert(0, "cannot load dynamic arrays yet");
+        }
+      } else static if (is(T : V[K], K, V)) {
+        assert(0, "cannot load associative arrays yet");
+      } else static if (__traits(isIntegral, UT) || __traits(isFloating, UT)) {
+        // this takes care of `*char` and `bool` too
+        v = cast(UT)readNum!(UT, es);
+      } else static if (is(T == struct)) {
+        // struct
+        import std.traits : FieldNameTuple, hasUDA;
+        foreach (string fldname; FieldNameTuple!T) {
+          static if (!hasUDA!(__traits(getMember, T, fldname), IVVFSIgnore)) {
+            unserData(__traits(getMember, v, fldname));
+          }
+        }
+      }
+    }
+
+    unserData(st);
+  }
 }
 
 
@@ -325,15 +661,16 @@ public:
 package class WrappedStreamRC {
 protected:
   shared uint rc = 1;
+  shared uint wrrc = 0; // locked writer rc
   bool eofhit;
   //string fname;
   char[512] fnamebuf=0;
   size_t fnameptr;
   size_t fnamelen;
 
-  this () pure nothrow @safe @nogc {}
+  this (const(char)[] aname) nothrow @trusted @nogc { setFileName(aname); }
 
-  final void setFileName (const(char)[] aname) {
+  final void setFileName (const(char)[] aname) nothrow @trusted @nogc {
     if (aname.length) {
       if (aname.length <= fnamebuf.length) {
         if (fnameptr) { import core.stdc.stdlib : free; free(cast(void*)fnameptr); fnameptr = 0; }
@@ -377,7 +714,7 @@ protected:
     if (xrc == 0) {
       import core.memory : GC;
       import core.stdc.stdlib : free;
-      synchronized(this) close(); // finalize stream; should be synchronized right here
+      synchronized(this) { setFileName(null); close(); } // finalize stream; should be synchronized right here
       return true;
     } else {
       return false;
@@ -470,7 +807,7 @@ final class WrappedStreamStdioFile : WrappedStreamRC {
 private:
   std.stdio.File fl;
 
-  public this (std.stdio.File afl, const(char)[] afname) { fl = afl; setFileName(afname); } // fuck! emplace needs it
+  public this (std.stdio.File afl, const(char)[] afname) { fl = afl; super(afname); } // fuck! emplace needs it
 
 protected:
   override @property const(char)[] name () { return (hasName ? super.name : fl.name); }
@@ -510,7 +847,7 @@ private:
   final @property core.stdc.stdio.FILE* fl () const pure nothrow @trusted @nogc { pragma(inline, true); return cast(core.stdc.stdio.FILE*)flp; }
   final @property void fl (core.stdc.stdio.FILE* afl) pure nothrow @trusted @nogc { pragma(inline, true); flp = cast(size_t)afl; }
 
-  public this (core.stdc.stdio.FILE* afl, const(char)[] afname) { fl = afl; setFileName(afname); } // fuck! emplace needs it
+  public this (core.stdc.stdio.FILE* afl, const(char)[] afname) { fl = afl; super(afname); } // fuck! emplace needs it
 
 protected:
   override @property bool isOpen () { return (flp != 0); }
@@ -617,7 +954,7 @@ private:
     return res;
   }
 
-  public this (gzFile afl, const(char)[] afname) { fl = afl; setFileName(afname); } // fuck! emplace needs it
+  public this (gzFile afl, const(char)[] afname) { fl = afl; super(afname); } // fuck! emplace needs it
 
 protected:
   override @property bool isOpen () { return (flp != 0); }
@@ -713,7 +1050,7 @@ static if (VFS_NORMAL_OS) final class WrappedStreamFD(bool own) : WrappedStreamR
 private:
   int fd;
 
-  public this (int afd, const(char)[] afname) { fd = afd; eofhit = (afd < 0); setFileName(afname); } // fuck! emplace needs it
+  public this (int afd, const(char)[] afname) { fd = afd; eofhit = (afd < 0); super(afname); } // fuck! emplace needs it
 
 protected:
   override @property bool isOpen () { return (fd >= 0); }
@@ -800,10 +1137,10 @@ private:
   ST st;
   bool closed;
 
-   // fuck! emplace needs it
+  // fuck! emplace needs it
   public this() (auto ref ST ast, const(char)[] afname) {
     st = ast;
-    setFileName(afname);
+    super(afname);
     static if (streamHasIsOpen!ST) {
       closed = !st.isOpen;
     } else {
@@ -812,11 +1149,16 @@ private:
   }
 
 protected:
+  // prefer passed name, if it is not null
   override @property const(char)[] name () {
-    static if (streamHasName!ST) {
-      return (closed ? null : (hasName ? super.name : st.name));
+    if (fnameptr && fnamelen && !closed) {
+      return (cast(const(char)*)fnameptr)[0..fnamelen];
     } else {
-      return super.name;
+      static if (streamHasName!ST) {
+        return (closed ? null : (hasName ? super.name : st.name));
+      } else {
+        return (fnameptr ? "" : null);
+      }
     }
   }
 
@@ -910,7 +1252,7 @@ public VFile wrapStream (core.stdc.stdio.FILE* st, string fname=null) { return V
 
 static if (VFS_NORMAL_OS) {
 /// wrap file descriptor into `VFile`
-public VFile wrapStream (int st, string fname=null) { return VFile(st, fname); }
+public VFile wrapStream (int fd, string fname=null) { return VFile(fd, fname); }
 }
 
 /** wrap any valid i/o stream into `VFile`.
@@ -987,7 +1329,11 @@ public VFile wrapStream (int st, string fname=null) { return VFile(st, fname); }
  *   streams that returns `false` from `isOpen()`, but you'd better
  *   handle this situation yourself.
  */
-public VFile wrapStream(ST) (auto ref ST st, string fname=null) if (isReadableStream!ST || isWriteableStream!ST) { return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st, fname)); }
+public VFile wrapStream(ST) (auto ref ST st, string fname=null)
+if (isReadableStream!ST || isWriteableStream!ST || isLowLevelStreamR!ST || isLowLevelStreamW!ST)
+{
+  return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st, fname));
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -997,39 +1343,18 @@ private struct PartialLowLevelRO {
   long size; // unpacked size
   long pos; // current file position
   bool eofhit;
-  //string fname;
-  char[512] fnamebuf=0;
-  size_t fnameptr;
-  size_t fnamelen;
 
-  this (VFile fl, long astpos, long asize, const(char)[] aname) {
+  this (VFile fl, long astpos, long asize) {
     stpos = astpos;
     size = asize;
     zfl = fl;
-    if (aname.length) {
-      if (aname.length <= fnamebuf.length) {
-        fnamebuf[0..aname.length] = aname;
-        fnamelen = aname.length;
-      } else {
-        import core.stdc.stdlib : malloc;
-        auto nb = cast(char*)malloc(aname.length+1);
-        if (nb !is null) {
-          nb[0..aname.length] = 0;
-          nb[0..aname.length] = aname[];
-          fnameptr = cast(size_t)nb;
-          fnamelen = aname.length;
-        }
-      }
-    }
   }
 
-  @property const(char)[] name () { pragma(inline, true); return (fnamelen ? (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf[0..fnamelen]) : zfl.name); }
   @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
   @property bool eof () { pragma(inline, true); return eofhit; }
 
   void close () {
     eofhit = true;
-    if (fnameptr) { import core.stdc.stdlib : free; free(cast(void*)fnameptr); fnameptr = 0; }
     if (zfl.isOpen) zfl.close();
   }
 
@@ -1075,7 +1400,8 @@ public VFile wrapStreamRO (VFile st, long stpos=0, long len=-1, string fname=nul
   if (stpos < 0) throw new VFSException("invalid starting position");
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
-  return wrapStream(PartialLowLevelRO(st, stpos, len, fname), fname);
+  //return wrapStream(PartialLowLevelRO(st, stpos, len), fname);
+  return VFile(cast(void*)newWS!(WrappedStreamAny!PartialLowLevelRO)(PartialLowLevelRO(st, stpos, len), fname));
 }
 
 
@@ -1106,25 +1432,22 @@ version(vfs_use_zlib_unpacker) {
     z_stream zs;
     bool eoz;
     bool eofhit;
-    string fname;
     // reading one byte from zlib fuckin' fails. shit.
     ubyte[65536] updata;
     uint uppos, upused;
     bool upeoz;
 
-    this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
+    this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize) {
       if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
       zfl = fl;
       stpos = astpos;
       size = aupsize;
       pksize = asize;
       mode = amode;
-      fname = aname;
       uppos = upused = 0;
       upeoz = false;
     }
 
-    @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
     @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
     @property bool eof () { pragma(inline, true); return eofhit; }
 
@@ -1318,7 +1641,6 @@ version(vfs_use_zlib_unpacker) {
     long pos; // current file position (number of unpacked bytes read)
     long prpos; // previous file position (seek is done when reading)
     bool eofhit; // did we hit EOF on last read?
-    string fname;
 
     int readBuf (ubyte[] buf) {
       assert(buf.length > 0);
@@ -1335,7 +1657,7 @@ version(vfs_use_zlib_unpacker) {
       return cast(int)rd.length;
     }
 
-    this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize, string aname) {
+    this (VFile fl, VFSZLibMode amode, long aupsize, long astpos, long asize) {
       //{ import core.stdc.stdio; printf("inf: aupsize=%d; astpos=%d; asize=%d\n", cast(int)aupsize, cast(int)astpos, cast(int)asize); }
       if (amode == VFSZLibMode.Raw && aupsize < 0) aupsize = asize;
       zfl = fl;
@@ -1344,10 +1666,8 @@ version(vfs_use_zlib_unpacker) {
       pksize = asize;
       pkpos = 0;
       mode = amode;
-      fname = aname;
     }
 
-    @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
     @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
     @property bool eof () { pragma(inline, true); return eofhit; }
 
@@ -1479,7 +1799,8 @@ public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stp
   if (upsize < 0 && upsize != -1) throw new VFSException("invalid unpacked size");
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
-  return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len, fname), fname);
+  //return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len), fname);
+  return VFile(cast(void*)newWS!(WrappedStreamAny!ZLibLowLevelRO)(ZLibLowLevelRO(st, mode, upsize, stpos, len), fname));
 }
 
 /// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
@@ -1503,19 +1824,16 @@ struct ZLibLowLevelWO {
   z_stream zs;
   bool eofhit;
   int complevel;
-  string fname;
 
-  this (VFile fl, VFSZLibMode amode, int acomplevel=-1, string aname=null) {
+  this (VFile fl, VFSZLibMode amode, int acomplevel=-1) {
     zfl = fl;
     stpos = fl.tell;
     mode = amode;
     if (acomplevel < 0) acomplevel = 6;
     if (acomplevel > 9) acomplevel = 9;
     complevel = 9;
-    fname = aname;
   }
 
-  @property const(char)[] name () { pragma(inline, true); return (fname !is null ? fname : zfl.name); }
   @property bool isOpen () { pragma(inline, true); return !eofhit && zfl.isOpen; }
   @property bool eof () { pragma(inline, true); return isOpen; }
 
@@ -1650,7 +1968,8 @@ struct ZLibLowLevelWO {
 /// wrap VFile into write-only zlib-packing stream.
 /// default compression mode is 9.
 public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9, string fname=null) {
-  return wrapStream(ZLibLowLevelWO(st, mode, complevel, fname), fname);
+  //return wrapStream(ZLibLowLevelWO(st, mode, complevel), fname);
+  return VFile(cast(void*)newWS!(WrappedStreamAny!ZLibLowLevelWO)(ZLibLowLevelWO(st, mode, complevel), fname));
 }
 
 /// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
@@ -1660,11 +1979,206 @@ public VFile wrapZLibStreamWO (VFile st, int complevel=9, string fname=null) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// WARNING! RW streams will set NO_INTERIOR!
+public alias MemoryStreamRW = MemoryStreamImpl!(true, false);
+public alias MemoryStreamRWRef = MemoryStreamImpl!(true, true);
+public alias MemoryStreamRO = MemoryStreamImpl!(false, false);
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// not thread-safe
+struct MemoryStreamImpl(bool rw, bool asref) {
+private:
+  static if (rw) {
+    static if (asref)
+      ubyte[]* data;
+    else
+      ubyte[] data;
+  } else {
+    static assert(!asref, "wtf?!");
+    const(ubyte)[] data;
+  }
+  usize curpos;
+  bool eofhit;
+  bool closed = false;
+
+public:
+  static if (usize.sizeof == 4) {
+    enum MaxSize = 0x7fff_ffffU;
+  } else {
+    enum MaxSize = 0x7fff_ffff_ffff_ffffUL;
+  }
+
+public:
+  static if (rw) {
+    static if (asref) {
+      this (ref ubyte[] adata) @trusted {
+        if (adata.length > MaxSize) throw new VFSException("buffer too big");
+        data = &adata;
+        eofhit = (adata.length == 0);
+      }
+      @property ubyte[]* bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+    } else {
+      this (const(ubyte)[] adata) @trusted {
+        if (adata.length > MaxSize) throw new VFSException("buffer too big");
+        data = cast(typeof(data))(adata.dup);
+        eofhit = (adata.length == 0);
+      }
+      @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+    }
+  } else {
+    this (const(void)[] adata) @trusted {
+      if (adata.length > MaxSize) throw new VFSException("buffer too big");
+      data = cast(typeof(data))(adata);
+      eofhit = (adata.length == 0);
+    }
+    @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+  }
+
+  @property long size () const pure nothrow @safe @nogc { pragma(inline, true); return data.length; }
+  @property long tell () const pure nothrow @safe @nogc { pragma(inline, true); return curpos; }
+  @property bool eof () const pure nothrow @trusted @nogc { pragma(inline, true); return eofhit; }
+  @property bool isOpen () const pure nothrow @trusted @nogc { pragma(inline, true); return !closed; }
+
+  void seek (long offset, int origin=Seek.Set) @trusted {
+    if (closed) throw new VFSException("can't seek in closed stream");
+    switch (origin) {
+      case Seek.Set:
+        if (offset < 0 || offset > MaxSize) throw new VFSException("invalid offset");
+        curpos = cast(usize)offset;
+        break;
+      case Seek.Cur:
+        if (offset < -cast(long)curpos || offset > MaxSize-curpos) throw new VFSException("invalid offset");
+        curpos += offset;
+        break;
+      case Seek.End:
+        if (offset < -cast(long)data.length || offset > MaxSize-data.length) throw new VFSException("invalid offset");
+        curpos = cast(usize)(cast(long)data.length+offset);
+        break;
+      default: throw new VFSException("invalid offset origin");
+    }
+    eofhit = false;
+  }
+
+  ssize read (void* buf, usize count) {
+    if (closed) return -1;
+    if (curpos >= data.length) { eofhit = true; return 0; }
+    if (count > 0) {
+      import core.stdc.string : memcpy;
+      usize rlen = data.length-curpos;
+      if (rlen >= count) rlen = count; else eofhit = true;
+      assert(rlen != 0);
+      memcpy(buf, data.ptr+curpos, rlen);
+      curpos += rlen;
+      return cast(ssize)rlen;
+    } else {
+      return 0;
+    }
+  }
+
+  ssize write (in void* buf, usize count) {
+    static if (rw) {
+      import core.stdc.string : memcpy;
+      if (closed) return -1;
+      if (count == 0) return 0;
+      if (count > MaxSize-curpos) return -1;
+      if (data.length < curpos+count) {
+        auto optr = data.ptr;
+        data.length = curpos+count;
+        if (data.ptr !is optr) {
+          import core.memory : GC;
+          optr = data.ptr;
+          if (optr is GC.addrOf(optr)) GC.setAttr(optr, GC.BlkAttr.NO_INTERIOR);
+        }
+      }
+      memcpy(data.ptr+curpos, buf, count);
+      curpos += count;
+      return count;
+    } else {
+      return -1;
+    }
+  }
+
+  void close () pure nothrow @safe @nogc { curpos = 0; data = null; eofhit = true; closed = true; }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+version(vfs_test_stream) {
+  import std.stdio : File, stdout;
+
+  private void dump (const(ubyte)[] data, File fl=stdout) @trusted {
+    for (usize ofs = 0; ofs < data.length; ofs += 16) {
+      fl.writef("%04X:", ofs);
+      foreach (immutable i; 0..16) {
+        if (i == 8) fl.write(' ');
+        if (ofs+i < data.length) fl.writef(" %02X", data[ofs+i]); else fl.write("   ");
+      }
+      fl.write(" ");
+      foreach (immutable i; 0..16) {
+        if (ofs+i >= data.length) break;
+        if (i == 8) fl.write(' ');
+        ubyte b = data[ofs+i];
+        if (b <= 32 || b >= 127) fl.write('.'); else fl.writef("%c", cast(char)b);
+      }
+      fl.writeln();
+    }
+  }
+
+  static assert(isReadableStream!MemoryStreamRO);
+  static assert(!isWriteableStream!MemoryStreamRO);
+  static assert(!isRWStream!MemoryStreamRO);
+  static assert(isSeekableStream!MemoryStreamRO);
+  static assert(streamHasClose!MemoryStreamRO);
+  static assert(streamHasEof!MemoryStreamRO);
+  static assert(streamHasSeek!MemoryStreamRO);
+  static assert(streamHasTell!MemoryStreamRO);
+  static assert(streamHasSize!MemoryStreamRO);
+
+  unittest {
+    {
+      auto ms = MemoryStreamRW();
+      ms.rawWrite("hello");
+      assert(!ms.eof);
+      assert(ms.data == cast(ubyte[])"hello");
+      //dump(ms.data);
+      ushort[3] d;
+      ms.seek(0);
+      assert(!ms.eof);
+      assert(ms.rawRead(d[0..2]).length == 2);
+      assert(!ms.eof);
+      assert(d == [0x6568, 0x6c6c, 0]);
+      ms.seek(1);
+      assert(ms.rawRead(d[0..2]).length == 2);
+      assert(d == [0x6c65, 0x6f6c, 0]);
+      assert(!ms.eof);
+      //dump(cast(ubyte[])d);
+    }
+    {
+      auto ms = new MemoryStreamRW();
+      wchar[] a = ['\u0401', '\u0280', '\u089e'];
+      ms.rawWrite(a);
+      assert(ms.bytes == cast(const(ubyte)[])x"01 04 80 02 9E 08");
+      //dump(ms.data);
+    }
+    {
+      auto ms = MemoryStreamRO("hello");
+      assert(ms.data == cast(const(ubyte)[])"hello");
+    }
+  }
+}
+
 /// wrap read-only memory buffer into VFile
-public VFile wrapMemoryRO (const(void)[] buf, string fname=null) { return wrapStream(MemoryStreamRO(buf), fname); }
+public VFile wrapMemoryRO (const(void)[] buf, string fname=null) {
+  //return wrapStream(MemoryStreamRO(buf), fname);
+  return VFile(cast(void*)newWS!(WrappedStreamAny!MemoryStreamRO)(MemoryStreamRO(buf), fname));
+}
 
 /// wrap read-write memory buffer into VFile; duplicates data
-public VFile wrapMemoryRW (const(ubyte)[] buf, string fname=null) { return wrapStream(MemoryStreamRW(buf), fname); }
+public VFile wrapMemoryRW (const(ubyte)[] buf, string fname=null) {
+  //return wrapStream(MemoryStreamRW(buf), fname);
+  return VFile(cast(void*)newWS!(WrappedStreamAny!MemoryStreamRW)(MemoryStreamRW(buf), fname));
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //

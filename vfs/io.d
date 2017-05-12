@@ -32,24 +32,35 @@ public import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// aaaaah, let's conflict with std.stdio!
+public __gshared VFile stdin, stdout, stderr;
+
+shared static this () {
+  debug(vfs_rc) { import core.stdc.stdio : printf; printf("******** SHARED CTOR FOR iv.vfs.io\n"); }
+  stdin = wrapStdin;
+  stdout = wrapStdout;
+  stderr = wrapStderr;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// read 0-terminated string from stream. very slow, no recoding.
 /// eolhit will be set on EOF too.
 public string readZString(ST) (auto ref ST fl, bool* eolhit=null, usize maxSize=1024*1024) if (isReadableStream!ST) {
-  import std.array : appender;
   bool eh;
   if (eolhit is null) eolhit = &eh;
   *eolhit = false;
   if (maxSize == 0) return null;
-  auto res = appender!string();
+  char[] res;
   ubyte ch;
   for (;;) {
     if (fl.rawRead((&ch)[0..1]).length == 0) { *eolhit = true; break; }
     if (ch == 0) { *eolhit = true; break; }
     if (maxSize == 0) break;
-    res.put(cast(char)ch);
+    res ~= ch;
     --maxSize;
   }
-  return res.data;
+  return cast(string)res; // it is safe to cast here
 }
 
 
@@ -146,45 +157,6 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// hack around "has scoped destruction, cannot build closure"
-public void write(A...) (VFile fl, A args) { writeImpl!(false)(fl, args); }
-public void write(ST, A...) (auto ref ST fl, A args) if (!is(ST == VFile) && isRorWStream!ST) { writeImpl!(false, ST)(fl, args); }
-public void writeln(A...) (VFile fl, A args) { writeImpl!(true)(fl, args); }
-public void writeln(ST, A...) (auto ref ST fl, A args) if (!is(ST == VFile) && isRorWStream!ST) { writeImpl!(true, ST)(fl, args); }
-
-public void writef(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { writefImpl!(false, Char)(fl, fmt, args); }
-public void writef(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, A args) if (!is(ST == VFile) && isRorWStream!ST) { writefImpl!(false, Char, ST)(fl, fmt, args); }
-public void writefln(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { writefImpl!(true, Char)(fl, fmt, args); }
-public void writefln(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, A args) if (!is(ST == VFile) && isRorWStream!ST) { writefImpl!(true, Char, ST)(fl, fmt, args); }
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private void writeImpl(bool donl, ST, A...) (auto ref ST fl, A args) {
-  import std.format : formattedWrite;
-  static struct Writer(ST) {
-    ST fl;
-    this() (auto ref ST afl) { fl = afl; }
-    void put (const(char)[] s...) { fl.rawWriteExact(s); }
-  }
-  auto wr = Writer!ST(fl);
-  foreach (a; args) formattedWrite(wr, "%s", a);
-  static if (donl) fl.rawWriteExact("\n");
-}
-
-private void writefImpl(bool donl, Char, ST, A...) (auto ref ST fl, const(Char)[] fmt, A args) {
-  import std.format : formattedWrite;
-  static struct Writer(ST) {
-    ST fl;
-    this() (auto ref ST afl) { fl = afl; }
-    void put (const(char)[] s...) { fl.rawWriteExact(s); }
-  }
-  auto wr = Writer!ST(fl);
-  formattedWrite(wr, fmt, args);
-  static if (donl) fl.rawWriteExact("\n");
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 public auto readf(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { return readfImpl!(Char)(fl, fmt, args); }
 public auto readf(ST, Char:dchar, A...) (auto ref ST fl, const(Char)[] fmt, A args) if (!is(ST == VFile) && isRorWStream!ST) { return readfImpl!(Char, ST)(fl, fmt, args); }
 
@@ -207,6 +179,7 @@ private auto readfImpl(Char:dchar, ST, A...) (auto ref ST fl, const(Char)[] fmt,
 // ////////////////////////////////////////////////////////////////////////// //
 public string readln() (VFile fl) { return readlnImpl(fl); }
 public string readln(ST) (auto ref ST fl) if (!is(ST == VFile) && isRorWStream!ST) { return readlnImpl!ST(fl); }
+public string readln() () { return readlnImpl(stdin); }
 
 // slow, but IDC
 private string readlnImpl(ST) (auto ref ST fl) {
@@ -231,25 +204,82 @@ private string readlnImpl(ST) (auto ref ST fl) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// aaaaah, let's conflict with std.stdio!
-public __gshared VFile stdin, stdout, stderr;
-
-shared static this () {
-  debug(vfs_rc) { import core.stdc.stdio : printf; printf("******** SHARED CTOR FOR iv.vfs.io\n"); }
-  stdin = wrapStdin;
-  stdout = wrapStdout;
-  stderr = wrapStderr;
+void writeImpl(S...) (ref VFile.LockedWriterImpl wr, S args) {
+  import std.traits : isBoolean, isIntegral, isAggregateType, isSomeString, isSomeChar;
+  foreach (arg; args) {
+    alias A = typeof(arg);
+    static if (isAggregateType!A || is(A == enum)) {
+      import std.format : formattedWrite;
+      formattedWrite(wr, "%s", arg);
+    } else static if (isSomeString!A) {
+      wr.put(arg);
+    } else static if (isIntegral!A) {
+      import std.conv : toTextRange;
+      toTextRange(arg, wr);
+    } else static if (isBoolean!A) {
+      wr.put(arg ? "true" : "false");
+    } else static if (isSomeChar!A) {
+      wr.put(arg);
+    } else {
+      import std.format : formattedWrite;
+      formattedWrite(wr, "%s", arg);
+    }
+  }
 }
 
 
-public void write(A...) (A args) if (A.length == 0) {}
-public void write(A...) (A args) if (A.length > 0 && !isRorWStream!(A[0])) { writeImpl!false(stdout, args); }
-public void writeln(A...) (A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
-public void writeln(A...) (A args) if (A.length > 0 && !isRorWStream!(A[0])) { writeImpl!true(stdout, args); }
+// ////////////////////////////////////////////////////////////////////////// //
+public void write(A...) (A args) {
+  import std.traits : isAggregateType;
+  static if (A.length == 0) {
+  } else static if (is(A[0] == VFile)) {
+    // fl.write(...)
+    static if (A.length == 1) {
+      // nothing to do
+    } else static if (A.length == 2 &&
+                      is(typeof(args[1]) : const(char)[]) &&
+                      !is(typeof(args[1]) == enum) &&
+                      !is(Unqual!(typeof(args[1])) == typeof(null)) &&
+                      !isAggregateType!(typeof(args[1])))
+    {
+      import std.traits : isStaticArray;
+      // specialization for strings -- a very frequent case
+      auto wr = args[0].lockedWriter;
+      static if (isStaticArray!(typeof(args[1]))) {
+        wr.put(args[1][]);
+      } else {
+        wr.put(args[1]);
+      }
+    } else {
+      auto wr = args[0].lockedWriter;
+      writeImpl(wr, args[1..$]);
+    }
+  } else static if (A.length == 1 &&
+                    is(typeof(args[0]) : const(char)[]) &&
+                    !is(typeof(args[0]) == enum) &&
+                    !is(Unqual!(typeof(args[0])) == typeof(null)) &&
+                    !isAggregateType!(typeof(args[0])))
+  {
+    import std.traits : isStaticArray;
+    auto wr = stdout.lockedWriter;
+    // specialization for strings -- a very frequent case
+    static if (isStaticArray!(typeof(args[0]))) {
+      wr.put(args[0][]);
+    } else {
+      wr.put(args[0]);
+    }
+  } else {
+    auto wr = stdout.lockedWriter;
+    writeImpl(wr, args);
+  }
+}
 
-public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length == 0) {}
-public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isRorWStream!(A[0])) { return writefImpl!(false, Char)(stdout, fmt, args); }
-public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length == 0) { stdout.rawWriteExact("\n"); }
-public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) if (A.length > 0 && !isRorWStream!(A[0])) { return writefImpl!(true, Char)(stdout, fmt, args); }
+public void writeln(A...) (A args) { .write(args, "\n"); }
 
-public string readln() () { return readlnImpl(stdin); }
+
+// ////////////////////////////////////////////////////////////////////////// //
+public void writef(Char:dchar, ST, A...) (VFile fl, const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = fl.lockedWriter; formattedWrite(wr, fmt, args); }
+public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = stdout.lockedWriter; formattedWrite(wr, fmt, args); }
+
+public void writefln(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = fl.lockedWriter; formattedWrite(wr, fmt, args); wr.put("\n"); }
+public void writefln(Char:dchar, A...) (const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = stdout.lockedWriter; formattedWrite(wr, fmt, args); wr.put("\n"); }

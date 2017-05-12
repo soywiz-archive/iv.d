@@ -17,22 +17,20 @@
  */
 module iv.vfs.arcs.dfwad;
 
-import std.variant : Variant;
 import iv.vfs.types : usize, ssize, Seek;
-import iv.vfs.augs;
+import iv.vfs.error;
 import iv.vfs.main;
 import iv.vfs.util;
 import iv.vfs.vfile;
+import iv.vfs.arcs.internal;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private import iv.vfs.arcs.internal : VFSSimpleArchiveDetectorMixin;
 mixin(VFSSimpleArchiveDetectorMixin!"DFWad");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 public final class VFSDriverDFWad : VFSDriver {
-  private import iv.vfs.arcs.internal : VFSSimpleArchiveDriverMixin;
   mixin VFSSimpleArchiveDriverMixin;
 
 private:
@@ -48,11 +46,11 @@ private:
    *   "packed" -- is file packed?
    *   "offset" -- offset in wad
    */
-  public override Variant stat (usize idx, const(char)[] propname) {
-    if (idx >= dir.length) return Variant();
-    if (propname == "packed") return Variant(true);
-    if (propname == "offset") return Variant(dir[idx].ofs);
-    return Variant();
+  public override VFSVariant stat (usize idx, const(char)[] propname) {
+    if (idx >= dir.length) return VFSVariant();
+    if (propname == "packed") return VFSVariant(true);
+    if (propname == "offset") return VFSVariant(dir[idx].ofs);
+    return VFSVariant();
   }
 
   VFile wrap (usize idx) {

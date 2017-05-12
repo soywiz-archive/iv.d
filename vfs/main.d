@@ -20,10 +20,9 @@ module iv.vfs.main;
 private:
 
 import core.time;
-import std.variant : Variant; // for `stat()`
 import iv.vfs.types : usize;
 import iv.vfs.config;
-import iv.vfs.augs;
+import iv.vfs.preds;
 import iv.vfs.error;
 import iv.vfs.vfile;
 import iv.vfs.posixci;
@@ -38,16 +37,105 @@ shared bool vflagIgnoreCaseDisk = false; // ignore file name case for disk files
 
 
 /// get "ingore filename case" flag (default: true)
-public @property bool vfsIgnoreCasePak () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCasePak); }
+public @property bool vfsIgnoreCasePak() () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCasePak); }
 
 /// set "ingore filename case" flag
-public @property void vfsIgnoreCasePak (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCasePak, v); }
+public @property void vfsIgnoreCasePak() (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCasePak, v); }
 
 /// get "ingore filename case" flag when no archive files are attached (default: false)
-public @property bool vfsIgnoreCaseDisk () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCaseDisk); }
+public @property bool vfsIgnoreCaseDisk() () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCaseDisk); }
 
 /// set "ingore filename case" flag when no archive files are attached
-public @property void vfsIgnoreCaseDisk (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseDisk, v); }
+public @property void vfsIgnoreCaseDisk() (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseDisk, v); }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public struct VFSVariant {
+public:
+  enum Type : ubyte {
+    Empty = 0,
+    Bool,
+    Int,
+    Long,
+    Float,
+    Double,
+    String,
+  }
+
+private:
+  union {
+    bool bv;
+    int iv;
+    long lv;
+    float fv;
+    double dv;
+  }
+  string sv; // moved here, so GC will not scan numbers
+  Type vtype = Type.Empty;
+
+public:
+  string toString () const {
+    import core.stdc.stdio : snprintf;
+    char[256] buf = void;
+    final switch (vtype) {
+      case Type.Empty: return "(empty)";
+      case Type.Bool: return (bv ? "true" : "false");
+      case Type.Int: auto len = snprintf(buf.ptr, buf.length, "%d", iv); return buf[0..len].idup;
+      case Type.Long: auto len = snprintf(buf.ptr, buf.length, "%lld", lv); return buf[0..len].idup;
+      case Type.Float: auto len = snprintf(buf.ptr, buf.length, "%f", cast(double)fv); return buf[0..len].idup;
+      case Type.Double: auto len = snprintf(buf.ptr, buf.length, "%f", dv); return buf[0..len].idup;
+      case Type.String: return sv;
+    }
+  }
+
+nothrow @trusted @nogc:
+  this (bool v) { vtype = Type.Bool; bv = v; }
+  this (int v) { vtype = Type.Int; iv = v; }
+  this (long v) { vtype = Type.Long; lv = v; }
+  this (float v) { vtype = Type.Float; fv = v; }
+  this (double v) { vtype = Type.Double; dv = v; }
+  this(T:const(char)[]) (T v) {
+    vtype = Type.String;
+    static if (is(T == typeof(null))) sv = null;
+    else static if (is(T == string)) sv = v;
+    else sv = v.idup;
+  }
+
+  @property Type type () const pure { return vtype; }
+
+  @property bool hasValue () const pure { return (vtype != Type.Empty); }
+  @property bool isString () const pure { return (vtype == Type.String); }
+  @property bool isInteger () const pure { return (vtype == Type.Int || vtype == Type.Long); }
+  @property bool isFloating () const pure { return (vtype == Type.Float || vtype == Type.Double); }
+
+  @property T get(T) () const pure {
+    static if (is(T == bool)) {
+      final switch (vtype) {
+        case Type.Empty: return false;
+        case Type.Bool: return bv;
+        case Type.Int: return (iv != 0);
+        case Type.Long: return (lv != 0);
+        case Type.Float: return (fv != 0);
+        case Type.Double: return (dv != 0);
+        case Type.String: return (sv.length != 0);
+      }
+    } else static if (is(T == int) || is(T == uint) || is(T == long) || is(T == ulong) || is(T == float) || is(T == double)) {
+      final switch (vtype) {
+        case Type.Empty: return cast(T)0;
+        case Type.Bool: return cast(T)(bv ? 1 : 0);
+        case Type.Int: return cast(T)iv;
+        case Type.Long: return cast(T)lv;
+        case Type.Float: return cast(T)fv;
+        case Type.Double: return cast(T)dv;
+        case Type.String: return cast(T)0; //assert(0, "cannot get string value as number from VFSVariant");
+      }
+    } else static if (is(T == string)) {
+      return this.toString();
+    } else {
+      static assert(0, "cannot convert VFSVariant to '"~T.stringof~"'");
+    }
+  }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -69,21 +157,21 @@ private struct VFSLock {
       locked = -1;
     }
   }
+}
 
-  static VFSLock lock (string msg=null) {
-    import core.atomic;
-    ptlock.lock();
-    if (msg.length) {
-      if (atomicLoad(vfsLockedFlag)) {
-        ptlock.unlock();
-        throw new VFSException(msg);
-      }
+private auto vfsLockIntr() (string msg=null) {
+  import core.atomic;
+  ptlock.lock();
+  if (msg.length) {
+    if (atomicLoad(vfsLockedFlag)) {
+      ptlock.unlock();
+      throw new VFSException(msg);
     }
-    VFSLock lk;
-    lk.locked = 1;
-    atomicOp!"+="(vfsLockedFlag, 1);
-    return lk;
   }
+  VFSLock lk;
+  lk.locked = 1;
+  atomicOp!"+="(vfsLockedFlag, 1);
+  return lk;
 }
 
 
@@ -113,7 +201,7 @@ public abstract class VFSDriver {
       size = asize;
     }
 
-    Variant stat (const(char)[] propname) const { return vfsStat(this, propname); }
+    VFSVariant stat (const(char)[] propname) const { return vfsStat(this, propname); }
   }
 
   /// this constructor is used for disk drivers
@@ -142,7 +230,9 @@ public abstract class VFSDriver {
    *   "pksize" -- packed file size (for archives)
    *   "crc32" -- crc32 value for some archives
    */
-  Variant stat (usize idx, const(char)[] propname) { return Variant(); }
+  VFSVariant stat (usize idx, const(char)[] propname) { return VFSVariant(); }
+
+  @property bool isDisk () { return false; }
 }
 
 
@@ -155,15 +245,31 @@ public abstract class VFSDriverDetector {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// you can register this driver as "last" to prevent disk searches
-public final class VFSDriverAlwaysFail : VFSDriver {
+/// you can register this driver to try disk files with the given data path
+public VFSDriver vfsNewDiskDriver(bool listed, T:const(char)[]) (T dpath=null) {
+  static if (listed) {
+    return new VFSDriverDiskImpl!true(dpath);
+  } else {
+    return new VFSDriverDiskListedImpl!true(dpath);
+  }
+}
+
+/// you can register this driver to try disk files with the given data path
+public VFSDriver vfsNewFailDriver() () {
+  return new VFSDriverAlwaysFail!true();
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// you can register this driver as "last" to prevent disk searches
+final class VFSDriverAlwaysFail(bool dummy) : VFSDriver {
   override VFile tryOpen (const(char)[] fname, bool ignoreCase) {
     throw new VFSException("can't open file '"~fname.idup~"'");
   }
 }
 
-/// you can register this driver to try disk files with the given data path
-public class VFSDriverDisk : VFSDriver {
+// this is disk driver implementation; it is templated to cut compile times
+class VFSDriverDiskImpl(bool dummy) : VFSDriver {
 protected:
   string dataPath;
 
@@ -246,10 +352,12 @@ public:
     core.stdc.stdio.fclose(fl);
     return VFile.init;
   }
+
+  @property bool isDisk () { return true; }
 }
 
-/// same as `VFSDriverDisk`, but provides file list too
-public class VFSDriverDiskListed : VFSDriverDisk {
+// same as `VFSDriverDisk`, but provides file list too; it is templated to cut compile times
+class VFSDriverDiskListedImpl(bool dummy) : VFSDriverDiskImpl!true {
   private static struct FileEntry {
     //uint index; // should be set by the driver
     string name;
@@ -290,12 +398,12 @@ public:
   /// get directory entry with the given index. can throw, but it's not necessary.
   override DirEntry dirEntry (usize idx) { buildFileList(); return DirEntry(idx, files[idx].name, files[idx].size); }
 
-  override Variant stat (usize idx, const(char)[] name) {
+  override VFSVariant stat (usize idx, const(char)[] name) {
     buildFileList();
-    if (idx < files.length && name == "packed") return Variant(false);
-    if (idx < files.length && name == "modtime" && files[idx].modtime) return Variant(files[idx].modtime);
-    if (idx < files.length && (name == "size" || name == "pksize")) { import std.file : getSize; return Variant(files[idx].name.getSize); }
-    return Variant();
+    if (idx < files.length && name == "packed") return VFSVariant(false);
+    if (idx < files.length && name == "modtime" && files[idx].modtime) return VFSVariant(files[idx].modtime);
+    if (idx < files.length && (name == "size" || name == "pksize")) { import std.file : getSize; return VFSVariant(files[idx].name.getSize); }
+    return VFSVariant();
   }
 }
 
@@ -369,7 +477,7 @@ public VFSDriverId vfsRegister(string mode="normal", bool temp=false) (VFSDriver
   static assert(mode == "normal" || mode == "last" || mode == "first");
   import core.atomic : atomicOp;
   if (drv is null) return VFSDriverId.init;
-  auto lock = VFSLock.lock("can't register drivers in list operations");
+  auto lock = vfsLockIntr("can't register drivers in list operations");
   cleanupDrivers();
   VFSDriverId did = VFSDriverId.create;
   static if (temp) ++tempDrvCount;
@@ -399,8 +507,8 @@ public VFSDriverId vfsRegister(string mode="normal", bool temp=false) (VFSDriver
 // ////////////////////////////////////////////////////////////////////////// //
 /// find driver. returns invalid VFSDriverId if the driver was not found.
 /// WARNING: don't add new drivers while this is in progress!
-public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=null) {
-  auto lock = VFSLock.lock();
+public VFSDriverId vfsFindDriver() (const(char)[] fname, const(char)[] prefixpath=null) {
+  auto lock = vfsLockIntr();
   foreach_reverse (immutable idx, ref drv; drivers) {
     if (!drv.temp && drv.fname == fname && drv.prefixpath == prefixpath) return drv.drvid;
   }
@@ -411,8 +519,8 @@ public VFSDriverId vfsFindDriver (const(char)[] fname, const(char)[] prefixpath=
 // ////////////////////////////////////////////////////////////////////////// //
 /// unregister driver
 /// WARNING: don't add new drivers while this is in progress!
-public bool vfsUnregister (VFSDriverId id) {
-  auto lock = VFSLock.lock("can't unregister drivers in list operations");
+public bool vfsUnregister() (VFSDriverId id) {
+  auto lock = vfsLockIntr("can't unregister drivers in list operations");
   cleanupDrivers();
   foreach_reverse (immutable idx, ref drv; drivers) {
     if (drv.drvid == id) {
@@ -430,11 +538,11 @@ public bool vfsUnregister (VFSDriverId id) {
 // ////////////////////////////////////////////////////////////////////////// //
 /// list all files known to VFS.
 /// WARNING: don't add new drivers while this is in process!
-public VFSDriver.DirEntry[] vfsFileList () {
+public VFSDriver.DirEntry[] vfsFileList() () {
   usize[string] filesSeen;
   VFSDriver.DirEntry[] res;
 
-  auto lock = VFSLock.lock();
+  auto lock = vfsLockIntr();
   cleanupDrivers();
   foreach_reverse (ref drvnfo; drivers) {
     if (drvnfo.temp) continue;
@@ -453,16 +561,13 @@ public VFSDriver.DirEntry[] vfsFileList () {
   return res;
 }
 
-/// ditto.
-public alias vfsAllFiles = vfsFileList;
-
 
 /// call callback for each known file in VFS. return non-zero from callback to stop.
 /// WARNING: don't add new drivers while this is in process!
-public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb) {
+public int vfsForEachFile() (scope int delegate (in ref VFSDriver.DirEntry de) cb) {
   if (cb is null) return 0;
 
-  auto lock = VFSLock.lock();
+  auto lock = vfsLockIntr();
   cleanupDrivers();
   bool[string] filesSeen;
   foreach_reverse (ref drvnfo; drivers) {
@@ -481,20 +586,20 @@ public int vfsForEachFile (scope int delegate (in ref VFSDriver.DirEntry de) cb)
 
 
 /// Ditto.
-public void vfsForEachFile (scope void delegate (in ref VFSDriver.DirEntry de) cb) {
+public void vfsForEachFile() (scope void delegate (in ref VFSDriver.DirEntry de) cb) {
   if (cb !is null) vfsForEachFile((in ref VFSDriver.DirEntry de) { cb(de); return 0; });
 }
 
 
 /// query various things from driver
-public Variant vfsStat (in ref VFSDriver.DirEntry de, const(char)[] propname) {
-  if (!de.drvid.valid) return Variant();
-  auto lock = VFSLock.lock();
+public VFSVariant vfsStat() (in ref VFSDriver.DirEntry de, const(char)[] propname) {
+  if (!de.drvid.valid) return VFSVariant();
+  auto lock = vfsLockIntr();
   cleanupDrivers();
   foreach_reverse (ref drvnfo; drivers) {
     if (drvnfo.drvid == de.drvid) return drvnfo.drv.stat(de.index, propname);
   }
-  return Variant();
+  return VFSVariant();
 }
 
 
@@ -580,18 +685,22 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
 
   void errorfn(T:const(char)[]) (T msg, Throwable e=null, string file=__FILE__, usize line=__LINE__) {
     static assert(!is(T == typeof(null)), "wtf?!");
-    import std.array : appender;
     foreach (char cc; msg) {
       if (cc == '!') {
-        auto s = appender!string();
+        //import core.memory : GC;
+        char[] str;
+        str.reserve(msg.length+fname.length);
+        //if (str.ptr is GC.addrOf(str.ptr)) GC.setAttr(str.ptr, GC.BlkAttr.NO_INTERIOR);
         foreach (char ch; msg) {
           if (ch == '!') {
-            foreach (char xch; fname) s.put(xch);
+            //foreach (char xch; fname) s.put(xch);
+            str ~= fname;
           } else {
-            s.put(ch);
+            //s.put(ch);
+            str ~= ch;
           }
         }
-        throw new VFSException(s.data, file, line, e);
+        throw new VFSException(cast(string)str, file, line, e); // it is safe to cast here
       }
     }
     throw new VFSException(msg, file, line, e);
@@ -619,13 +728,13 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
     }
 
     if (!mopt.wantWriteOnly) {
-      auto lock = VFSLock.lock();
+      auto lock = vfsLockIntr();
       cleanupDrivers();
       // try all drivers
       bool ignoreCase = (mopt.ignoreCase == mopt.bool3.def ? vfsIgnoreCasePak : (mopt.ignoreCase == mopt.bool3.yes));
       foreach_reverse (ref di; drivers) {
         try {
-          if (!mopt.wantWrite || cast(VFSDriverDisk)di.drv is null) {
+          if (!mopt.wantWrite || !di.drv.isDisk) {
             auto fl = di.drv.tryOpen(fname, ignoreCase);
             if (fl.isOpen) {
               if (di.temp) di.tempUsedTime = MonoTime.currTime;
@@ -662,7 +771,7 @@ __gshared DetectorInfo[] detectors;
 public void vfsRegisterDetector(string mode="normal") (VFSDriverDetector dt) {
   static assert(mode == "normal" || mode == "last" || mode == "first");
   if (dt is null) return;
-  auto lock = VFSLock.lock("can't register drivers in list operations");
+  auto lock = vfsLockIntr("can't register drivers in list operations");
   static if (mode == "normal") {
     // normal
     usize ipos = detectors.length;
@@ -709,7 +818,7 @@ public VFSDriverId vfsFindPack (const(char)[] fname, const(char)[] prefixpath=nu
 
 
 ///
-public bool vfsRemovePak (VFSDriverId id) {
+public bool vfsRemovePak() (VFSDriverId id) {
   return vfsUnregister(id);
 }
 
@@ -724,14 +833,13 @@ public VFSDriverId vfsAddPak(string mode="normal", bool temp=false, T : const(ch
       if (fname.length == 0) {
         throw new VFSException("can't open pak file", file, line, e);
       } else {
-        import std.format : format;
-        throw new VFSException("can't open pak file '%s'".format(fname), file, line, e);
+        throw new VFSException("can't open pak file '"~fname.idup~"'", file, line, e);
       }
     }
 
     if (!fl.isOpen) error();
 
-    auto lock = VFSLock.lock("can't register drivers in list operations");
+    auto lock = vfsLockIntr("can't register drivers in list operations");
     // try all detectors
     foreach (ref di; detectors) {
       try {
@@ -784,7 +892,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
     }
     static if (VFS_NORMAL_OS) if (mopt.ignoreCase == mopt.bool3.yes || (mopt.ignoreCase == mopt.bool3.def && vfsIgnoreCaseDisk)) {
       // we have to lock here, as `findPathCI()` is not thread-safe
-      auto lock = VFSLock.lock();
+      auto lock = vfsLockIntr();
       auto pt = findPathCI(nbuf[0..fname.length]);
       if (pt is null) {
         // restore filename for correct error message
@@ -846,7 +954,7 @@ VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name, const(char)
     if (pfxend == 0) return VFile.init; // easy case
   }
 
-  auto lock = VFSLock.lock();
+  auto lock = vfsLockIntr();
 
   // cpos: after last succesfull prefix
   VFile openit (int cpos) {
@@ -895,7 +1003,7 @@ VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name, const(char)
 // ////////////////////////////////////////////////////////////////////////// //
 /// open VFile with the given name. supports "file.pak:file1.pak:file.ext" pathes.
 /// kept for compatibility with old code, standard `VFile(path)` can do that now.
-public VFile openFileEx (const(char)[] name) {
+public VFile openFileEx() (const(char)[] name) {
   if (name.length >= int.max/4) throw new VFSException("name too long");
 
   // check if name has any prefix at all
@@ -908,7 +1016,7 @@ public VFile openFileEx (const(char)[] name) {
     if (pfxend == 0) return VFile(name); // easy case
   }
 
-  auto lock = VFSLock.lock();
+  auto lock = vfsLockIntr();
 
   // cpos: after last succesfull prefix
   VFile openit (int cpos) {
