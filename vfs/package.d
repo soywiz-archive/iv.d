@@ -24,4 +24,4 @@ public import iv.vfs.preds;
 public import iv.vfs.vfile;
 public import iv.vfs.main;
 public import iv.vfs.arcs;
-//public import iv.vfs.streams;
+public import iv.vfs.streams;
