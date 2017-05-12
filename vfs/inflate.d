@@ -78,13 +78,12 @@ public:
 
   /// reinitialize
   void reset () {
-    pragma(inline, true);
     s1 = 1;
     s2 = 0;
   }
 
   /// get current Adler-32 sum
-  @property uint result () const pure { pragma(inline, true); return ((s2<<16)|s1); }
+  @property uint result () const pure { return ((s2<<16)|s1); }
 
   /// process buffer
   void doBuffer(T) (T[] data) @trusted {
@@ -242,7 +241,6 @@ private:
   }
 
   bool readOneByte (scope ReadBufDg readBuf, ref ubyte bt) {
-    //pragma(inline, true);
     if (readBuf is null) rbeof = true;
     if (rbeof) return false;
     if (rbpos >= rbused) {
@@ -627,8 +625,10 @@ public:
     return buf;
   }
 
-  @property bool eof () const pure nothrow @safe @nogc { pragma(inline, true); return (state == State.EOF); }
-  @property bool invalid () const pure nothrow @safe @nogc { pragma(inline, true); return (state == State.Dead); }
+  @property const pure nothrow @safe @nogc {
+    bool eof () { return (state == State.EOF); }
+    bool invalid () { return (state == State.Dead); }
+  }
 }
 
 

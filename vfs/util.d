@@ -192,10 +192,10 @@ version(iv_vfs_hash_test) unittest {
     const(char)[] s;
     usize pos;
   pure nothrow @trusted @nogc:
-    this (const(char)[] as) { pragma(inline, true); s = as; pos = 0; }
-    @property bool empty () const { pragma(inline, true); return (pos >= s.length); }
-    @property ubyte front () const { pragma(inline, true); return (pos < s.length ? cast(ubyte)s.ptr[pos] : 0); }
-    void popFront () { pragma(inline, true); if (pos < s.length) ++pos; }
+    this (const(char)[] as) { s = as; pos = 0; }
+    @property bool empty () const { return (pos >= s.length); }
+    @property ubyte front () const { return (pos < s.length ? cast(ubyte)s.ptr[pos] : 0); }
+    void popFront () { if (pos < s.length) ++pos; }
   }
 
   assert(mur3HashOf(StringRange("Sample string")) == 216753265u);

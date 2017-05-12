@@ -411,11 +411,13 @@ public:
 public struct VFSDriverId {
 private:
   uint id;
-  static VFSDriverId create () nothrow @trusted @nogc { pragma(inline, true); return VFSDriverId(++lastIdNumber); }
+  static VFSDriverId create () nothrow @trusted @nogc { return VFSDriverId(++lastIdNumber); }
 
-  public bool opCast(T) () const pure nothrow @safe @nogc if (is(T == bool)) { pragma(inline, true); return (id != 0); }
-  public @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (id != 0); }
-  public bool opEquals() (const VFSDriverId b) const pure nothrow @safe @nogc { pragma(inline, true); return (id == b.id); }
+  public const pure nothrow @safe @nogc {
+    bool opCast(T) () if (is(T == bool)) { return (id != 0); }
+    @property bool valid () { return (id != 0); }
+    bool opEquals() (const VFSDriverId b) { return (id == b.id); }
+  }
 
 private:
   __gshared uint lastIdNumber;
@@ -612,7 +614,7 @@ struct ModeOptions {
   bool wantWriteOnly;
   private char[16] newmodebuf=0; // 0-terminated
   private int nmblen; // 0 is not included
-  @property const(char)[] mode () const pure nothrow @safe @nogc { pragma(inline, true); return newmodebuf[0..nmblen]; }
+  @property const(char)[] mode () const pure nothrow @safe @nogc { return newmodebuf[0..nmblen]; }
 
   this (const(char)[] mode) { parse(mode); }
 

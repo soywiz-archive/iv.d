@@ -89,7 +89,7 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
       if (st.eof) eof = true; else popFront();
     }
   public:
-    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return eof; }
+    @property bool empty () const pure nothrow @safe @nogc { return eof; }
     @property auto front () inout nothrow @trusted @nogc { static if (reuse) return buf.ptr[0..bufused]; else return s; }
     void popFront () {
       char getch () {
@@ -167,8 +167,8 @@ private auto readfImpl(Char:dchar, ST, A...) (auto ref ST fl, const(Char)[] fmt,
     char ch;
     bool eof;
     this() (auto ref ST afl) { fl = afl; if (fl.eof) eof = true; else popFront(); }
-    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return eof; }
-    @property char front () const pure nothrow @safe @nogc { pragma(inline, true); return ch; }
+    @property bool empty () const pure nothrow @safe @nogc { return eof; }
+    @property char front () const pure nothrow @safe @nogc { return ch; }
     void popFront() { if (!eof) { eof = (fl.rawRead((&ch)[0..1]).length == 0); } }
   }
   auto rd = Reader!ST(fl);

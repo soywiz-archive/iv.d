@@ -171,7 +171,7 @@ public:
     }
   }
 
-  @property bool opCast(T) () if (is(T == bool)) { pragma(inline, true); return this.isOpen; }
+  @property bool opCast(T) () if (is(T == bool)) { return this.isOpen; }
 
   @property const(char)[] name () {
     if (!wstp) return null;
@@ -204,7 +204,7 @@ public:
     }
   }
 
-  @property bool eof () { pragma(inline, true); return (!wstp || wst.eof); }
+  @property bool eof () { return (!wstp || wst.eof); }
 
   T[] rawRead(T) (T[] buf) if (!is(T == const) && !is(T == immutable)) {
     if (!isOpen) throw new VFSException("can't read from closed stream");
@@ -388,13 +388,13 @@ public:
     }
   }
 
-  usize toHash () const pure nothrow @safe @nogc { pragma(inline, true); return wstp; } // yeah, so simple
-  bool opEquals() (auto ref VFile s) const { pragma(inline, true); return (wstp == s.wstp); }
+  usize toHash () const pure nothrow @safe @nogc { return wstp; } // yeah, so simple
+  bool opEquals() (auto ref VFile s) const { return (wstp == s.wstp); }
 
   // make this output stream
-  void put (const(char)[] s...) { pragma(inline, true); rawWrite(s); }
-  //void put (const(wchar)[] s...) { pragma(inline, true); rawWrite(s); }
-  //void put (const(dchar)[] s...) { pragma(inline, true); rawWrite(s); }
+  void put (const(char)[] s...) { rawWrite(s); }
+  //void put (const(wchar)[] s...) { rawWrite(s); }
+  //void put (const(dchar)[] s...) { rawWrite(s); }
 
   static struct LockedWriterImpl {
     private VFile fl;
@@ -428,7 +428,7 @@ public:
       }
     }
 
-    void put (const(char)[] s...) { pragma(inline, true); fl.rawWriteNoLock(s); }
+    void put (const(char)[] s...) { fl.rawWriteNoLock(s); }
   }
 
   @property LockedWriterImpl lockedWriter () { return LockedWriterImpl(this); }
@@ -725,7 +725,7 @@ protected:
   void function (void* self) nothrow gcUnregister;
 
 protected:
-  final bool hasName () const pure nothrow @safe @nogc { pragma(inline, true); return (fnamelen != 0); }
+  final bool hasName () const pure nothrow @safe @nogc { return (fnamelen != 0); }
   @property const(char)[] name () { return (fnamelen ? (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf.ptr[0..fnamelen]) : ""); }
   @property bool eof () { return eofhit; }
   abstract @property bool isOpen ();
@@ -844,8 +844,8 @@ final class WrappedStreamLibcFile(bool ownfl=true) : WrappedStreamRC {
 private:
   //core.stdc.stdio.FILE* fl;
   size_t flp; // hide from GC
-  final @property core.stdc.stdio.FILE* fl () const pure nothrow @trusted @nogc { pragma(inline, true); return cast(core.stdc.stdio.FILE*)flp; }
-  final @property void fl (core.stdc.stdio.FILE* afl) pure nothrow @trusted @nogc { pragma(inline, true); flp = cast(size_t)afl; }
+  final @property core.stdc.stdio.FILE* fl () const pure nothrow @trusted @nogc { return cast(core.stdc.stdio.FILE*)flp; }
+  final @property void fl (core.stdc.stdio.FILE* afl) pure nothrow @trusted @nogc { flp = cast(size_t)afl; }
 
   public this (core.stdc.stdio.FILE* afl, const(char)[] afname) { fl = afl; super(afname); } // fuck! emplace needs it
 
@@ -941,8 +941,8 @@ final class WrappedStreamGZFile(bool ownfl=true) : WrappedStreamRC {
 private import etc.c.zlib;
 private:
   size_t flp; // hide from GC
-  final @property gzFile fl () const pure nothrow @trusted @nogc { pragma(inline, true); return cast(gzFile)flp; }
-  final @property void fl (gzFile afl) pure nothrow @trusted @nogc { pragma(inline, true); flp = cast(size_t)afl; }
+  final @property gzFile fl () const pure nothrow @trusted @nogc { return cast(gzFile)flp; }
+  final @property void fl (gzFile afl) pure nothrow @trusted @nogc { flp = cast(size_t)afl; }
 
   int err () nothrow @trusted {
     int res = 0;
@@ -1350,8 +1350,8 @@ private struct PartialLowLevelRO {
     zfl = fl;
   }
 
-  @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
-  @property bool eof () { pragma(inline, true); return eofhit; }
+  @property bool isOpen () { return zfl.isOpen; }
+  @property bool eof () { return eofhit; }
 
   void close () {
     eofhit = true;
@@ -1370,7 +1370,7 @@ private struct PartialLowLevelRO {
     return rd.length;
   }
 
-  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+  ssize write (in void* buf, usize count) { return -1; }
 
   long lseek (long ofs, int origin) {
     if (!isOpen) return -1;
@@ -1448,8 +1448,8 @@ version(vfs_use_zlib_unpacker) {
       upeoz = false;
     }
 
-    @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
-    @property bool eof () { pragma(inline, true); return eofhit; }
+    @property bool isOpen () { return zfl.isOpen; }
+    @property bool eof () { return eofhit; }
 
     void close () {
       import core.stdc.stdlib : free;
@@ -1600,7 +1600,7 @@ version(vfs_use_zlib_unpacker) {
       }
     }
 
-    ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+    ssize write (in void* buf, usize count) { return -1; }
 
     long lseek (long ofs, int origin) {
       if (!isOpen) return -1;
@@ -1668,8 +1668,8 @@ version(vfs_use_zlib_unpacker) {
       mode = amode;
     }
 
-    @property bool isOpen () { pragma(inline, true); return zfl.isOpen; }
-    @property bool eof () { pragma(inline, true); return eofhit; }
+    @property bool isOpen () { return zfl.isOpen; }
+    @property bool eof () { return eofhit; }
 
     void inflateInit () {
       if (mode == VFSZLibMode.Raw) return;
@@ -1755,7 +1755,7 @@ version(vfs_use_zlib_unpacker) {
       }
     }
 
-    ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+    ssize write (in void* buf, usize count) { return -1; }
 
     long lseek (long ofs, int origin) {
       if (!isOpen) return -1;
@@ -1834,8 +1834,8 @@ struct ZLibLowLevelWO {
     complevel = 9;
   }
 
-  @property bool isOpen () { pragma(inline, true); return !eofhit && zfl.isOpen; }
-  @property bool eof () { pragma(inline, true); return isOpen; }
+  @property bool isOpen () { return (!eofhit && zfl.isOpen); }
+  @property bool eof () { return isOpen; }
 
   void close () {
     scope(exit) {
@@ -1907,7 +1907,7 @@ struct ZLibLowLevelWO {
     return true;
   }
 
-  ssize read (void* buf, usize count) { pragma(inline, true); return -1; }
+  ssize read (void* buf, usize count) { return -1; }
 
   ssize write (in void* buf, usize count) {
     if (buf is null) return -1;
@@ -2017,14 +2017,14 @@ public:
         data = &adata;
         eofhit = (adata.length == 0);
       }
-      @property ubyte[]* bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+      @property ubyte[]* bytes () pure nothrow @safe @nogc { return data; }
     } else {
       this (const(ubyte)[] adata) @trusted {
         if (adata.length > MaxSize) throw new VFSException("buffer too big");
         data = cast(typeof(data))(adata.dup);
         eofhit = (adata.length == 0);
       }
-      @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+      @property const(ubyte)[] bytes () pure nothrow @safe @nogc { return data; }
     }
   } else {
     this (const(void)[] adata) @trusted {
@@ -2032,13 +2032,15 @@ public:
       data = cast(typeof(data))(adata);
       eofhit = (adata.length == 0);
     }
-    @property const(ubyte)[] bytes () pure nothrow @safe @nogc { pragma(inline, true); return data; }
+    @property const(ubyte)[] bytes () pure nothrow @safe @nogc { return data; }
   }
 
-  @property long size () const pure nothrow @safe @nogc { pragma(inline, true); return data.length; }
-  @property long tell () const pure nothrow @safe @nogc { pragma(inline, true); return curpos; }
-  @property bool eof () const pure nothrow @trusted @nogc { pragma(inline, true); return eofhit; }
-  @property bool isOpen () const pure nothrow @trusted @nogc { pragma(inline, true); return !closed; }
+  @property const pure nothrow @safe @nogc {
+    long size () { return data.length; }
+    long tell () { return curpos; }
+    bool eof () { return eofhit; }
+    bool isOpen () { return !closed; }
+  }
 
   void seek (long offset, int origin=Seek.Set) @trusted {
     if (closed) throw new VFSException("can't seek in closed stream");
@@ -2289,8 +2291,8 @@ public:
     }
   }
 
-  @property bool isOpen () const pure nothrow @safe @nogc { pragma(inline, true); return !closed; }
-  @property bool eof () const pure nothrow @safe @nogc { pragma(inline, true); return eofhit; }
+  @property bool isOpen () const pure nothrow @safe @nogc { return !closed; }
+  @property bool eof () const pure nothrow @safe @nogc { return eofhit; }
 
   void close () {
     if (!closed) {
@@ -2380,7 +2382,7 @@ public:
     return rd;
   }
 
-  ssize write (in void* buf, usize count) { pragma(inline, true); return -1; }
+  ssize write (in void* buf, usize count) { return -1; }
 
   long lseek (long ofs, int origin) {
     if (!isOpen) return -1;
