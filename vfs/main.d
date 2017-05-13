@@ -22,7 +22,7 @@ private:
 import core.time;
 import iv.vfs.types : usize;
 import iv.vfs.config;
-import iv.vfs.preds;
+import iv.vfs.pred;
 import iv.vfs.error;
 import iv.vfs.vfile;
 import iv.vfs.posixci;

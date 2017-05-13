@@ -988,7 +988,19 @@ public:
     }
     debug(egauto) { { import iv.vfs; auto fo = VFile("z00_list.bin", "w"); fo.writeln(list[]); } }
     const(char)[] acp;
-    if (acused == 0) return;
+    if (acused == 0) {
+      // try some common things
+      switch (tk[$-tklen..$]) {
+        case "imm": acp = "immutable"; break;
+        case "for": acp = "foreach"; break;
+        case "ui": acp = "uint"; break;
+        case "pro": acp = "property"; break;
+        case "not": acp = "nothrow"; break;
+        case "noth": acp = "nothrow"; break;
+        case "tru": acp = "trusted"; break;
+        default: return;
+      }
+    }
     if (acused == 1) {
       acp = aclist[0];
     } else {

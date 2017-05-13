@@ -39,7 +39,7 @@ extern (C) void _d_monitorexit (Object h) nothrow;
 import iv.vfs.types : ssize, usize, Seek, VFSHiddenPointerHelper;
 import iv.vfs.config;
 import iv.vfs.error;
-import iv.vfs.preds;
+import iv.vfs.pred;
 
 version(LDC) {}
 else {

@@ -18,15 +18,15 @@
  */
 import iv.vfs.io;
 
-public import iv.vfs.arcs.abuse;
-public import iv.vfs.arcs.arcanum;
-public import iv.vfs.arcs.arcz;
-public import iv.vfs.arcs.bsa;
-//public import iv.vfs.arcs.dfwad; // just get lost
-//public import iv.vfs.arcs.dunepak; no signature
-//public import iv.vfs.arcs.f2dat; // no signature
-//public import iv.vfs.arcs.toeedat; // conflicts with arcanum
-public import iv.vfs.arcs.wad2;
+public import iv.vfs.arc.abuse;
+public import iv.vfs.arc.arcanum;
+public import iv.vfs.arc.arcz;
+public import iv.vfs.arc.bsa;
+//public import iv.vfs.arc.dfwad; // just get lost
+//public import iv.vfs.arc.dunepak; no signature
+//public import iv.vfs.arc.f2dat; // no signature
+//public import iv.vfs.arc.toeedat; // conflicts with arcanum
+public import iv.vfs.arc.wad2;
 
 
 void main (string[] args) {
