@@ -278,7 +278,7 @@ public void writeln(A...) (A args) { .write(args, "\n"); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void writef(Char:dchar, ST, A...) (VFile fl, const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = fl.lockedWriter; formattedWrite(wr, fmt, args); }
+public void writef(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = fl.lockedWriter; formattedWrite(wr, fmt, args); }
 public void writef(Char:dchar, A...) (const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = stdout.lockedWriter; formattedWrite(wr, fmt, args); }
 
 public void writefln(Char:dchar, A...) (VFile fl, const(Char)[] fmt, A args) { import std.format : formattedWrite; auto wr = fl.lockedWriter; formattedWrite(wr, fmt, args); wr.put("\n"); }
