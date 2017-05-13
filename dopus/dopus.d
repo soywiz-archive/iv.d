@@ -25,7 +25,7 @@ private:
 //import iv.cmdcon;
 nothrow @nogc {
 
-void conlog(Args...) (Args args) {}
+//void conlog(Args...) (Args args) {}
 
 
 alias FFTSample = float;
@@ -1325,7 +1325,7 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
 
   if (!avctx.extradata) {
     if (avctx.channels > 2) {
-      conlog("Multichannel configuration without extradata.");
+      //conlog("Multichannel configuration without extradata.");
       return AVERROR(EINVAL);
     }
     extradata      = opus_default_extradata.ptr;
@@ -1336,13 +1336,13 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
   }
 
   if (extradata_size < 19) {
-    conlog("Invalid extradata size: ", extradata_size);
+    //conlog("Invalid extradata size: ", extradata_size);
     return AVERROR_INVALIDDATA;
   }
 
   ver = extradata[8];
   if (ver > 15) {
-    conlog("Extradata version ", ver);
+    //conlog("Extradata version ", ver);
     return AVERROR_PATCHWELCOME;
   }
 
@@ -1350,7 +1350,7 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
 
   channels = avctx.extradata ? extradata[9] : (avctx.channels == 1) ? 1 : 2;
   if (!channels) {
-    conlog("Zero channel count specified in the extradata");
+    //conlog("Zero channel count specified in the extradata");
     return AVERROR_INVALIDDATA;
   }
 
@@ -1364,7 +1364,7 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
   map_type = extradata[18];
   if (!map_type) {
     if (channels > 2) {
-      conlog("Channel mapping 0 is only specified for up to 2 channels");
+      //conlog("Channel mapping 0 is only specified for up to 2 channels");
       return AVERROR_INVALIDDATA;
     }
     layout         = (channels == 1) ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO;
@@ -1373,20 +1373,20 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
     channel_map    = default_channel_map.ptr;
   } else if (map_type == 1 || map_type == 2 || map_type == 255) {
     if (extradata_size < 21 + channels) {
-      conlog("Invalid extradata size: ", extradata_size);
+      //conlog("Invalid extradata size: ", extradata_size);
       return AVERROR_INVALIDDATA;
     }
 
     streams        = extradata[19];
     stereo_streams = extradata[20];
     if (!streams || stereo_streams > streams || streams + stereo_streams > 255) {
-      conlog("Invalid stream/stereo stream count: ", streams, "/", stereo_streams);
+      //conlog("Invalid stream/stereo stream count: ", streams, "/", stereo_streams);
       return AVERROR_INVALIDDATA;
     }
 
     if (map_type == 1) {
       if (channels > 8) {
-        conlog("Channel mapping 1 is only specified for up to 8 channels");
+        //conlog("Channel mapping 1 is only specified for up to 8 channels");
         return AVERROR_INVALIDDATA;
       }
       layout = ff_vorbis_channel_layouts[channels - 1];
@@ -1394,7 +1394,7 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
     } else if (map_type == 2) {
       int ambisonic_order = ff_sqrt(channels) - 1;
       if (channels != (ambisonic_order + 1) * (ambisonic_order + 1)) {
-        conlog("Channel mapping 2 is only specified for channel counts which can be written as (n + 1)^2 for nonnegative integer n");
+        //conlog("Channel mapping 2 is only specified for channel counts which can be written as (n + 1)^2 for nonnegative integer n");
         return AVERROR_INVALIDDATA;
       }
       layout = 0;
@@ -1404,7 +1404,7 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
 
     channel_map = extradata + 21;
   } else {
-    conlog("Mapping type ", map_type);
+    //conlog("Mapping type ", map_type);
     return AVERROR_PATCHWELCOME;
   }
 
@@ -1419,7 +1419,7 @@ int ff_opus_parse_extradata (AVCtx* avctx, OpusContext* s, short cmtgain) {
       map.silence = 1;
       continue;
     } else if (idx >= streams + stereo_streams) {
-      conlog("Invalid channel map for output channel ", i, ": ", idx);
+      //conlog("Invalid channel map for output channel ", i, ": ", idx);
       return AVERROR_INVALIDDATA;
     }
 
