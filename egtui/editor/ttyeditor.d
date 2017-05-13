@@ -991,17 +991,32 @@ public:
     if (acused == 0) {
       // try some common things
       switch (tk[$-tklen..$]) {
-        case "imm": acp = "immutable"; break;
+        case "ab": acp = "abstract"; break;
+        case "br": acp = "break"; break;
+        case "ch": acp = "char"; break;
+        case "co": acp = "continue"; break;
+        case "de": acp = "delegate"; break;
+        case "fa": acp = "false"; break;
+        case "fi": acp = "final"; break;
         case "for": acp = "foreach"; break;
-        case "ui": acp = "uint"; break;
-        case "pro": acp = "property"; break;
+        case "fu": acp = "function"; break;
+        case "imm": acp = "immutable"; break;
         case "not": acp = "nothrow"; break;
         case "noth": acp = "nothrow"; break;
-        case "tru": acp = "trusted"; break;
+        case "ov": acp = "override"; break;
+        case "pro": acp = "property"; break;
+        case "st": acp = "string"; break;
+        case "tru": acp = (tkpos == 0 || gb[tkpos-1] != '@' ? "true" : "trusted"); break;
+        case "ub": acp = "ubyte"; break;
+        case "ui": acp = "uint"; break;
+        case "ul": acp = "ulong"; break;
+        case "us": acp = "ushort"; break;
+        case "ush": acp = "ushort"; break;
+        case "vo": acp = "void"; break;
         default: return;
       }
-    }
-    if (acused == 1) {
+      //{ import iv.vfs; auto fo = VFile("z00_tk.bin", "w"); fo.writeln(tk[$-tklen..$]); fo.writeln(acp); }
+    } else if (acused == 1) {
       acp = aclist[0];
     } else {
       int rx, ry;
