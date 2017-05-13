@@ -987,38 +987,48 @@ public:
       }
     }
     debug(egauto) { { import iv.vfs; auto fo = VFile("z00_list.bin", "w"); fo.writeln(list[]); } }
+
+    const(char)[] getDefToken () nothrow @trusted @nogc {
+      switch (tk[$-tklen..$]) {
+        case "ab": return "abstract";
+        case "br": return "break";
+        case "ch": return "char";
+        case "co": return "continue";
+        case "de": return "delegate";
+        case "fa": return "false";
+        case "fi": return "final";
+        case "for": return "foreach";
+        case "fu": return "function";
+        case "imm": return "immutable";
+        case "not": return "nothrow";
+        case "noth": return "nothrow";
+        case "ov": return "override";
+        case "pro": return "property";
+        case "st": return "string";
+        case "tru": return (tkpos == 0 || gb[tkpos-1] != '@' ? "true" : "trusted");
+        case "ub": return "ubyte";
+        case "ui": return "uint";
+        case "ul": return "ulong";
+        case "us": return "ushort";
+        case "ush": return "ushort";
+        case "vo": return "void";
+        default:
+      }
+      return null;
+    }
+
     const(char)[] acp;
     if (acused == 0) {
       // try some common things
-      switch (tk[$-tklen..$]) {
-        case "ab": acp = "abstract"; break;
-        case "br": acp = "break"; break;
-        case "ch": acp = "char"; break;
-        case "co": acp = "continue"; break;
-        case "de": acp = "delegate"; break;
-        case "fa": acp = "false"; break;
-        case "fi": acp = "final"; break;
-        case "for": acp = "foreach"; break;
-        case "fu": acp = "function"; break;
-        case "imm": acp = "immutable"; break;
-        case "not": acp = "nothrow"; break;
-        case "noth": acp = "nothrow"; break;
-        case "ov": acp = "override"; break;
-        case "pro": acp = "property"; break;
-        case "st": acp = "string"; break;
-        case "tru": acp = (tkpos == 0 || gb[tkpos-1] != '@' ? "true" : "trusted"); break;
-        case "ub": acp = "ubyte"; break;
-        case "ui": acp = "uint"; break;
-        case "ul": acp = "ulong"; break;
-        case "us": acp = "ushort"; break;
-        case "ush": acp = "ushort"; break;
-        case "vo": acp = "void"; break;
-        default: return;
-      }
+      acp = getDefToken();
+      if (acp.length == 0) return;
       //{ import iv.vfs; auto fo = VFile("z00_tk.bin", "w"); fo.writeln(tk[$-tklen..$]); fo.writeln(acp); }
     } else if (acused == 1) {
       acp = aclist[0];
-    } else {
+      auto tkx = getDefToken();
+      if (tkx.length && tkx != acp) addAcToken(tkx);
+    }
+    if (acused > 1) {
       int rx, ry;
       lc.pos2xyVT(tkstpos, rx, ry);
       //int residx = promptSelect(aclist[0..acused], winx+(rx-mXOfs), winy+(ry-mTopLine)+1);
