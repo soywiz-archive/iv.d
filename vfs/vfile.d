@@ -49,6 +49,9 @@ else {
 // uncomment to use zlib instead of internal inflater
 //version = vfs_use_zlib_unpacker;
 
+/// mark struct fields with this for VFile.readStruct
+public enum IVVFSIgnore;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// wrapper structure for various streams. kinda like `std.stdio.File`,
@@ -614,8 +617,6 @@ public:
   }
 
   // ////////////////////////////////////////////////////////////////////// //
-  enum IVVFSIgnore;
-
   void readStruct(string es="LE", SS) (ref SS st) if (is(SS == struct)) {
     void unserData(T) (ref T v) {
       import std.traits : Unqual;

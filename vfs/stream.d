@@ -20,6 +20,7 @@ module iv.vfs.stream;
 public import iv.vfs.types : Seek;
 public import iv.vfs.error;
 public import iv.vfs.pred;
+public import iv.vfs.vfile : IVVFSIgnore;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -253,8 +254,6 @@ T readXInt(T : ulong, ST) (auto ref ST fl) if (isReadableStream!ST) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum IVVFSIgnore;
-
 void readStruct(string es="LE", SS, ST) (auto ref ST fl, ref SS st)
 if (is(SS == struct) && isGoodEndianness!es && isReadableStream!ST)
 {

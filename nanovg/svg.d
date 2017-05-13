@@ -30,7 +30,7 @@ module iv.nanovg.svg;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
 static if (is(typeof({import iv.vfs;}()))) enum NanoSVGHasVFS = true; else enum NanoSVGHasVFS = false;
-static if (NanoSVGHasVFS) { import iv.vfs; import iv.vfs.streams; }
+static if (NanoSVGHasVFS) { import iv.vfs; }
 
 version = nanosvg_crappy_stylesheet_parser;
 //version = nanosvg_debug_styles;
