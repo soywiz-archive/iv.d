@@ -252,7 +252,7 @@ public:
       try {
         while (left > 0) {
           ssize res = wst.read(dp, left);
-          if (res == 0) throw new VFSException("read error");
+          if (res <= 0) throw new VFSException("read error");
           dp += res;
           left -= res;
         }
@@ -271,7 +271,7 @@ public:
     try {
       while (left > 0) {
         ssize res = wst.read(dp, left);
-        if (res == 0) throw new VFSException("read error");
+        if (res <= 0) throw new VFSException("read error");
         dp += res;
         left -= res;
       }
