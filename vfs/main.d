@@ -354,7 +354,7 @@ public:
     return VFile.init;
   }
 
-  @property bool isDisk () { return true; }
+  override @property bool isDisk () { return true; }
 }
 
 // same as `VFSDriverDisk`, but provides file list too; it is templated to cut compile times
