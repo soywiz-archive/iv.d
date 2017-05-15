@@ -251,9 +251,6 @@ private:
       int left, right;
     }
 
-    int i, j, k, n, left, right;
-    Resample_Real total_weight;
-    Resample_Real xscale, center, half_width, weight;
     Contrib_List* Pcontrib, PcontribRes;
     Contrib* Pcpool;
     Contrib* Pcpool_next;
@@ -266,66 +263,64 @@ private:
     if (Pcontrib_bounds is null) return null;
     scope(exit) free(Pcontrib_bounds);
 
+    enum Resample_Real NUDGE = 0.5f;
     immutable Resample_Real oo_filter_scale = 1.0f/filter_scale;
-
-    immutable Resample_Real NUDGE = 0.5f;
-    xscale = dst_x/cast(Resample_Real)src_x;
+    immutable Resample_Real xscale = dst_x/cast(Resample_Real)src_x;
 
     if (xscale < 1.0f) {
-      int total;
+      int total = 0;
       // Handle case when there are fewer destination samples than source samples (downsampling/minification).
       // stretched half width of filter
-      half_width = (filter_support/xscale)*filter_scale;
+      immutable Resample_Real half_width = (filter_support/xscale)*filter_scale;
       // Find the range of source sample(s) that will contribute to each destination sample.
-      for (i = 0, n = 0; i < dst_x; ++i) {
+      foreach (immutable i; 0..dst_x) {
         // Convert from discrete to continuous coordinates, scale, then convert back to discrete.
-        center = (cast(Resample_Real)i+NUDGE)/xscale;
+        Resample_Real center = (cast(Resample_Real)i+NUDGE)/xscale;
         center -= NUDGE;
         center += src_ofs;
-        left = cast_to_int(cast(Resample_Real)floor(center-half_width));
-        right = cast_to_int(cast(Resample_Real)ceil(center+half_width));
+        immutable int left = cast_to_int(cast(Resample_Real)floor(center-half_width));
+        immutable int right = cast_to_int(cast(Resample_Real)ceil(center+half_width));
         Pcontrib_bounds[i].center = center;
         Pcontrib_bounds[i].left = left;
         Pcontrib_bounds[i].right = right;
-        n += (right-left+1);
+        total += (right-left+1);
       }
 
       // Allocate memory for contributors.
-      if (n == 0 || ((Pcpool = cast(Contrib*)calloc(n, Contrib.sizeof)) is null)) return null;
+      if (total == 0 || ((Pcpool = cast(Contrib*)calloc(total, Contrib.sizeof)) is null)) return null;
       //scope(failure) free(Pcpool);
-      total = n;
+      //immutable int total = n;
 
       Pcpool_next = Pcpool;
 
       // Create the list of source samples which contribute to each destination sample.
-      for (i = 0; i < dst_x; i++) {
+      foreach (immutable i; 0..dst_x) {
         int max_k = -1;
         Resample_Real max_w = -1e+20f;
 
-        center = Pcontrib_bounds[i].center;
-        left = Pcontrib_bounds[i].left;
-        right = Pcontrib_bounds[i].right;
+        Resample_Real center = Pcontrib_bounds[i].center;
+        immutable int left = Pcontrib_bounds[i].left;
+        immutable int right = Pcontrib_bounds[i].right;
 
         Pcontrib[i].n = 0;
         Pcontrib[i].p = Pcpool_next;
         Pcpool_next += (right-left+1);
         assert(Pcpool_next-Pcpool <= total);
 
-        total_weight = 0;
+        Resample_Real totalWeight0 = 0;
+        foreach (immutable j; left..right+1) totalWeight0 += Pfilter((center-cast(Resample_Real)j)*xscale*oo_filter_scale);
+        immutable Resample_Real norm = cast(Resample_Real)(1.0f/totalWeight0);
 
-        for (j = left; j <= right; ++j) total_weight += Pfilter((center-cast(Resample_Real)j)*xscale*oo_filter_scale);
-        immutable Resample_Real norm = cast(Resample_Real)(1.0f/total_weight);
-
-        total_weight = 0;
-        for (j = left; j <= right; ++j) {
-          weight = Pfilter((center-cast(Resample_Real)j)*xscale*oo_filter_scale)*norm;
+        Resample_Real totalWeight1 = 0;
+        foreach (immutable j; left..right+1) {
+          immutable Resample_Real weight = Pfilter((center-cast(Resample_Real)j)*xscale*oo_filter_scale)*norm;
           if (weight == 0.0f) continue;
-          n = reflect(j, src_x, boundary_op);
+          immutable int n = reflect(j, src_x, boundary_op);
           // Increment the number of source samples which contribute to the current destination sample.
-          k = Pcontrib[i].n++;
+          immutable int k = Pcontrib[i].n++;
           Pcontrib[i].p[k].pixel = cast(ushort)(n); // store src sample number
           Pcontrib[i].p[k].weight = weight; // store src sample weight
-          total_weight += weight; // total weight of all contributors
+          totalWeight1 += weight; // total weight of all contributors
           if (weight > max_w) {
             max_w = weight;
             max_k = k;
@@ -334,60 +329,60 @@ private:
         //assert(Pcontrib[i].n);
         //assert(max_k != -1);
         if (max_k == -1 || Pcontrib[i].n == 0) return null;
-        if (total_weight != 1.0f) Pcontrib[i].p[max_k].weight += 1.0f-total_weight;
+        if (totalWeight1 != 1.0f) Pcontrib[i].p[max_k].weight += 1.0f-totalWeight1;
       }
     } else {
+      int total = 0;
       // Handle case when there are more destination samples than source samples (upsampling).
-      half_width = filter_support*filter_scale;
+      immutable Resample_Real half_width = filter_support*filter_scale;
       // Find the source sample(s) that contribute to each destination sample.
-      for (i = 0, n = 0; i < dst_x; ++i) {
+      foreach (immutable i; 0..dst_x) {
         // Convert from discrete to continuous coordinates, scale, then convert back to discrete.
-        center = (cast(Resample_Real)i+NUDGE)/xscale;
+        Resample_Real center = (cast(Resample_Real)i+NUDGE)/xscale;
         center -= NUDGE;
         center += src_ofs;
-        left = cast_to_int(cast(Resample_Real)floor(center-half_width));
-        right = cast_to_int(cast(Resample_Real)ceil(center+half_width));
+        immutable int left = cast_to_int(cast(Resample_Real)floor(center-half_width));
+        immutable int right = cast_to_int(cast(Resample_Real)ceil(center+half_width));
         Pcontrib_bounds[i].center = center;
         Pcontrib_bounds[i].left = left;
         Pcontrib_bounds[i].right = right;
-        n += (right-left+1);
+        total += (right-left+1);
       }
 
       // Allocate memory for contributors.
-      int total = n;
       if (total == 0 || ((Pcpool = cast(Contrib*)calloc(total, Contrib.sizeof)) is null)) return null;
       //scope(failure) free(Pcpool);
 
       Pcpool_next = Pcpool;
 
       // Create the list of source samples which contribute to each destination sample.
-      for (i = 0; i < dst_x; ++i) {
+      foreach (immutable i; 0..dst_x) {
         int max_k = -1;
         Resample_Real max_w = -1e+20f;
 
-        center = Pcontrib_bounds[i].center;
-        left = Pcontrib_bounds[i].left;
-        right = Pcontrib_bounds[i].right;
+        Resample_Real center = Pcontrib_bounds[i].center;
+        immutable int left = Pcontrib_bounds[i].left;
+        immutable int right = Pcontrib_bounds[i].right;
 
         Pcontrib[i].n = 0;
         Pcontrib[i].p = Pcpool_next;
         Pcpool_next += (right-left+1);
         assert(Pcpool_next-Pcpool <= total);
 
-        total_weight = 0;
-        for (j = left; j <= right; ++j) total_weight += Pfilter((center-cast(Resample_Real)j)*oo_filter_scale);
-        immutable Resample_Real norm = cast(Resample_Real)(1.0f/total_weight);
+        Resample_Real totalWeight0 = 0;
+        foreach (immutable j; left..right+1) totalWeight0 += Pfilter((center-cast(Resample_Real)j)*oo_filter_scale);
+        immutable Resample_Real norm = cast(Resample_Real)(1.0f/totalWeight0);
 
-        total_weight = 0;
-        for (j = left; j <= right; ++j) {
-          weight = Pfilter((center-cast(Resample_Real)j)*oo_filter_scale)*norm;
+        Resample_Real totalWeight1 = 0;
+        foreach (immutable j; left..right+1) {
+          immutable Resample_Real weight = Pfilter((center-cast(Resample_Real)j)*oo_filter_scale)*norm;
           if (weight == 0.0f) continue;
-          n = reflect(j, src_x, boundary_op);
+          immutable int n = reflect(j, src_x, boundary_op);
           // Increment the number of source samples which contribute to the current destination sample.
-          k = Pcontrib[i].n++;
+          immutable int k = Pcontrib[i].n++;
           Pcontrib[i].p[k].pixel = cast(ushort)(n); // store src sample number
           Pcontrib[i].p[k].weight = weight; // store src sample weight
-          total_weight += weight; // total weight of all contributors
+          totalWeight1 += weight; // total weight of all contributors
           if (weight > max_w) {
             max_w = weight;
             max_k = k;
@@ -396,7 +391,7 @@ private:
         //assert(Pcontrib[i].n);
         //assert(max_k != -1);
         if (max_k == -1 || Pcontrib[i].n == 0) return null;
-        if (total_weight != 1.0f) Pcontrib[i].p[max_k].weight += 1.0f-total_weight;
+        if (totalWeight1 != 1.0f) Pcontrib[i].p[max_k].weight += 1.0f-totalWeight1;
       }
     }
     // don't free return value
@@ -406,8 +401,8 @@ private:
   }
 
   static int count_ops (const(Contrib_List)* Pclist, int k) {
-    int i, t = 0;
-    for (i = 0; i < k; i++) t += Pclist[i].n;
+    int t = 0;
+    foreach (immutable i; 0..k) t += Pclist[i].n;
     return t;
   }
 
@@ -415,6 +410,7 @@ private:
   private Resample_Real m_hi;
 
   Resample_Real clamp_sample (Resample_Real f) const {
+    pragma(inline, true);
     if (f < m_lo) f = m_lo; else if (f > m_hi) f = m_hi;
     return f;
   }
@@ -617,17 +613,16 @@ public:
     import core.stdc.stdlib : free;
     if (STATUS_OKAY != m_status) return;
     m_cur_src_y = m_cur_dst_y = 0;
-    int i, j;
-    for (i = 0; i < m_resample_src_y; i++) {
+    foreach (immutable i; 0..m_resample_src_y) {
       m_Psrc_y_count[i] = 0;
       m_Psrc_y_flag[i] = false;
     }
-    for (i = 0; i < m_resample_dst_y; i++) {
-      for (j = 0; j < m_Pclist_y[i].n; j++) {
+    foreach (immutable i; 0..m_resample_dst_y) {
+      foreach (immutable j; 0..m_Pclist_y[i].n) {
         ++m_Psrc_y_count[resampler_range_check(m_Pclist_y[i].p[j].pixel, m_resample_src_y)];
       }
     }
-    for (i = 0; i < MAX_SCAN_BUF_SIZE; i++) {
+    foreach (immutable i; 0..MAX_SCAN_BUF_SIZE) {
       m_Pscan_buf.scan_buf_y[i] = -1;
       free(m_Pscan_buf.scan_buf_l[i]);
       m_Pscan_buf.scan_buf_l[i] = null;
@@ -686,11 +681,10 @@ public:
 
   // null if no scanlines are currently available (give the resampler more scanlines!)
   const(Sample)* get_line () {
-    int i;
     // If all the destination lines have been generated, then always return null.
     if (m_cur_dst_y == m_resample_dst_y) return null;
     // Check to see if all the required contributors are present, if not, return null.
-    for (i = 0; i < m_Pclist_y[m_cur_dst_y].n; i++) {
+    foreach (immutable i; 0..m_Pclist_y[m_cur_dst_y].n) {
       if (!m_Psrc_y_flag[resampler_range_check(m_Pclist_y[m_cur_dst_y].p[i].pixel, m_resample_src_y)]) return null;
     }
     resample_y(m_Pdst_buf);
@@ -727,145 +721,107 @@ private:
   /* Ensure that the contributing source sample is
   * within bounds. If not, reflect, clamp, or wrap.
   */
-  int reflect(in int j, in int src_x, in Boundary_Op boundary_op) {
+  int reflect (in int j, in int src_x, in Boundary_Op boundary_op) {
     int n;
-
-    if (j < 0)
-    {
-       if (boundary_op == BOUNDARY_REFLECT)
-       {
-          n = -j;
-
-          if (n >= src_x)
-             n = src_x-1;
-       }
-       else if (boundary_op == BOUNDARY_WRAP)
-          n = posmod(j, src_x);
-       else
-          n = 0;
+    if (j < 0) {
+      if (boundary_op == BOUNDARY_REFLECT) {
+        n = -j;
+        if (n >= src_x) n = src_x-1;
+      } else if (boundary_op == BOUNDARY_WRAP) {
+        n = posmod(j, src_x);
+      } else {
+        n = 0;
+      }
+    } else if (j >= src_x) {
+      if (boundary_op == BOUNDARY_REFLECT) {
+        n = (src_x-j)+(src_x-1);
+        if (n < 0) n = 0;
+      } else if (boundary_op == BOUNDARY_WRAP) {
+        n = posmod(j, src_x);
+      } else {
+        n = src_x-1;
+      }
+    } else {
+      n = j;
     }
-    else if (j >= src_x)
-    {
-       if (boundary_op == BOUNDARY_REFLECT)
-       {
-          n = (src_x-j)+(src_x-1);
-
-          if (n < 0)
-             n = 0;
-       }
-       else if (boundary_op == BOUNDARY_WRAP)
-          n = posmod(j, src_x);
-       else
-          n = src_x-1;
-    }
-    else
-       n = j;
-
     return n;
   }
 
-  void resample_x(Sample* Pdst, const(Sample)* Psrc)
-  {
-     assert(Pdst);
-     assert(Psrc);
+  void resample_x (Sample* Pdst, const(Sample)* Psrc) {
+    assert(Pdst);
+    assert(Psrc);
 
-     int i, j;
-     Sample total;
-     Contrib_List *Pclist = m_Pclist_x;
-     Contrib *p;
+    Sample total;
+    Contrib_List *Pclist = m_Pclist_x;
+    Contrib *p;
 
-     for (i = m_resample_dst_x; i > 0; i--, Pclist++)
-     {
-        for (j = Pclist.n, p = Pclist.p, total = 0; j > 0; j--, p++)
-           total += Psrc[p.pixel]*p.weight;
-
-        *Pdst++ = total;
-     }
+    for (int i = m_resample_dst_x; i > 0; --i, ++Pclist) {
+      int j = void;
+      for (j = Pclist.n, p = Pclist.p, total = 0; j > 0; --j, ++p) total += Psrc[p.pixel]*p.weight;
+      *Pdst++ = total;
+    }
   }
 
-  void scale_y_mov(Sample* Ptmp, const(Sample)* Psrc, Resample_Real weight, int dst_x)
-  {
-     int i;
-
-     // Not += because temp buf wasn't cleared.
-     for (i = dst_x; i > 0; i--)
-        *Ptmp++ = *Psrc++*weight;
+  void scale_y_mov (Sample* Ptmp, const(Sample)* Psrc, Resample_Real weight, int dst_x) {
+    // Not += because temp buf wasn't cleared.
+    for (int i = dst_x; i > 0; --i) *Ptmp++ = *Psrc++*weight;
   }
 
-  void scale_y_add(Sample* Ptmp, const(Sample)* Psrc, Resample_Real weight, int dst_x)
-  {
-     for (int i = dst_x; i > 0; i--)
-        (*Ptmp++) += *Psrc++*weight;
+  void scale_y_add (Sample* Ptmp, const(Sample)* Psrc, Resample_Real weight, int dst_x) {
+    for (int i = dst_x; i > 0; --i) (*Ptmp++) += *Psrc++*weight;
   }
 
-  void clamp(Sample* Pdst, int n)
-  {
-     while (n > 0)
-     {
-        *Pdst = clamp_sample(*Pdst);
-        ++Pdst;
-        n--;
-     }
+  void clamp (Sample* Pdst, int n) {
+    while (n > 0) {
+      *Pdst = clamp_sample(*Pdst);
+      ++Pdst;
+      --n;
+    }
   }
 
-  void resample_y(Sample* Pdst)
-  {
-     int i, j;
-     Sample* Psrc;
-     Contrib_List* Pclist = &m_Pclist_y[m_cur_dst_y];
+  void resample_y (Sample* Pdst) {
+    Sample* Psrc;
+    Contrib_List* Pclist = &m_Pclist_y[m_cur_dst_y];
 
-     Sample* Ptmp = m_delay_x_resample ? m_Ptmp_buf : Pdst;
-     assert(Ptmp);
+    Sample* Ptmp = m_delay_x_resample ? m_Ptmp_buf : Pdst;
+    assert(Ptmp);
 
-     /* Process each contributor. */
+    // process each contributor
+    foreach (immutable i; 0..Pclist.n) {
+      // locate the contributor's location in the scan buffer -- the contributor must always be found!
+      int j = void;
+      for (j = 0; j < MAX_SCAN_BUF_SIZE; ++j) if (m_Pscan_buf.scan_buf_y[j] == Pclist.p[i].pixel) break;
+      assert(j < MAX_SCAN_BUF_SIZE);
+      Psrc = m_Pscan_buf.scan_buf_l[j];
+      if (!i) {
+        scale_y_mov(Ptmp, Psrc, Pclist.p[i].weight, m_intermediate_x);
+      } else {
+        scale_y_add(Ptmp, Psrc, Pclist.p[i].weight, m_intermediate_x);
+      }
 
-     for (i = 0; i < Pclist.n; i++)
-     {
-        /* locate the contributor's location in the scan
-        * buffer -- the contributor must always be found!
-        */
+      /* If this source line doesn't contribute to any
+       * more destination lines then mark the scanline buffer slot
+       * which holds this source line as free.
+       * (The max. number of slots used depends on the Y
+       * axis sampling factor and the scaled filter width.)
+       */
 
-        for (j = 0; j < MAX_SCAN_BUF_SIZE; j++)
-           if (m_Pscan_buf.scan_buf_y[j] == Pclist.p[i].pixel)
-              break;
+      if (--m_Psrc_y_count[resampler_range_check(Pclist.p[i].pixel, m_resample_src_y)] == 0) {
+        m_Psrc_y_flag[resampler_range_check(Pclist.p[i].pixel, m_resample_src_y)] = false;
+        m_Pscan_buf.scan_buf_y[j] = -1;
+      }
+    }
 
-        assert(j < MAX_SCAN_BUF_SIZE);
+    // now generate the destination line
+    if (m_delay_x_resample) {
+      // X was resampling delayed until after Y resampling
+      assert(Pdst != Ptmp);
+      resample_x(Pdst, Ptmp);
+    } else {
+      assert(Pdst == Ptmp);
+    }
 
-        Psrc = m_Pscan_buf.scan_buf_l[j];
-
-        if (!i)
-           scale_y_mov(Ptmp, Psrc, Pclist.p[i].weight, m_intermediate_x);
-        else
-           scale_y_add(Ptmp, Psrc, Pclist.p[i].weight, m_intermediate_x);
-
-        /* If this source line doesn't contribute to any
-        * more destination lines then mark the scanline buffer slot
-        * which holds this source line as free.
-        * (The max. number of slots used depends on the Y
-        * axis sampling factor and the scaled filter width.)
-        */
-
-        if (--m_Psrc_y_count[resampler_range_check(Pclist.p[i].pixel, m_resample_src_y)] == 0)
-        {
-           m_Psrc_y_flag[resampler_range_check(Pclist.p[i].pixel, m_resample_src_y)] = false;
-           m_Pscan_buf.scan_buf_y[j] = -1;
-        }
-     }
-
-     /* Now generate the destination line */
-
-     if (m_delay_x_resample) // Was X resampling delayed until after Y resampling?
-     {
-        assert(Pdst != Ptmp);
-        resample_x(Pdst, Ptmp);
-     }
-     else
-     {
-        assert(Pdst == Ptmp);
-     }
-
-     if (m_lo < m_hi)
-        clamp(Pdst, m_resample_dst_x);
+    if (m_lo < m_hi) clamp(Pdst, m_resample_dst_x);
   }
 }
 
@@ -887,12 +843,14 @@ int resampler_range_check (int v, int h) {
 enum M_PI = 3.14159265358979323846;
 
 // Float to int cast with truncation.
-int cast_to_int (Resampler.Resample_Real i) { return cast(int)i; }
+int cast_to_int (Resampler.Resample_Real i) { pragma(inline, true); return cast(int)i; }
 
 // (x mod y) with special handling for negative x values.
 int posmod (int x, int y) {
-  if (x >= 0) return (x%y);
-  else {
+  pragma(inline, true);
+  if (x >= 0) {
+    return (x%y);
+  } else {
     int m = (-x)%y;
     if (m != 0) m = y-m;
     return m;
@@ -939,6 +897,7 @@ Resampler.Resample_Real B_spline_filter (Resampler.Resample_Real t) {
 // Dodgson, N., "Quadratic Interpolation for Image Resampling"
 enum QUADRATIC_SUPPORT = 1.5f;
 Resampler.Resample_Real quadratic (Resampler.Resample_Real t, in Resampler.Resample_Real R) {
+  pragma(inline, true);
   if (t < 0.0f) t = -t;
   if (t < QUADRATIC_SUPPORT) {
     Resampler.Resample_Real tt = t*t;
@@ -969,8 +928,7 @@ Resampler.Resample_Real quadratic_mix_filter (Resampler.Resample_Real t) {
 // (0, C)   - The family of Cardinal Cubic Splines
 // (B, 0)   - Duff's tensioned B-Splines.
 Resampler.Resample_Real mitchell (Resampler.Resample_Real t, in Resampler.Resample_Real B, in Resampler.Resample_Real C) {
-  Resampler.Resample_Real tt;
-  tt = t*t;
+  Resampler.Resample_Real tt = t*t;
   if (t < 0.0f) t = -t;
   if (t < 1.0f) {
     t = (((12.0f-9.0f*B-6.0f*C)*(t*tt))+
@@ -985,7 +943,7 @@ Resampler.Resample_Real mitchell (Resampler.Resample_Real t, in Resampler.Resamp
          (8.0f*B+24.0f*C));
     return (t/6.0f);
   }
-  return (0.0f);
+  return 0.0f;
 }
 
 enum MITCHELL_SUPPORT = 2.0f;
@@ -999,6 +957,7 @@ Resampler.Resample_Real catmull_rom_filter (Resampler.Resample_Real t) {
 }
 
 double sinc (double x) {
+  pragma(inline, true);
   import std.math : sin;
   x = (x*M_PI);
   if (x < 0.01f && x > -0.01f) return 1.0f+x*x*(-1.0f/6.0f+x*x*1.0f/120.0f);
@@ -1006,6 +965,7 @@ double sinc (double x) {
 }
 
 Resampler.Resample_Real clean (double t) {
+  pragma(inline, true);
   import std.math : abs;
   enum EPSILON = cast(Resampler.Resample_Real)0.0000125f;
   if (abs(t) < EPSILON) return 0.0f;
@@ -1018,6 +978,7 @@ Resampler.Resample_Real clean (double t) {
 //}
 
 double blackman_exact_window (double x) {
+  pragma(inline, true);
   import std.math : cos;
   return 0.42659071f+0.49656062f*cos(M_PI*x)+0.07684867f*cos(2.0f*M_PI*x);
 }
@@ -1072,13 +1033,11 @@ Resampler.Resample_Real lanczos12_filter (Resampler.Resample_Real t) {
 
 double bessel0 (double x) {
   enum EPSILON_RATIO = cast(double)1E-16;
-  double xh, sum, pow, ds;
-  int k;
-  xh = 0.5*x;
-  sum = 1.0;
-  pow = 1.0;
-  k = 0;
-  ds = 1.0;
+  double xh = 0.5*x;
+  double sum = 1.0;
+  double pow = 1.0;
+  int k = 0;
+  double ds = 1.0;
   // FIXME: Shouldn't this stop after X iterations for max. safety?
   while (ds > sum*EPSILON_RATIO) {
     ++k;
@@ -1091,6 +1050,7 @@ double bessel0 (double x) {
 
 enum KAISER_ALPHA = cast(Resampler.Resample_Real)4.0;
 double kaiser (double alpha, double half_width, double x) {
+  pragma(inline, true);
   import std.math : sqrt;
   immutable double ratio = (x/half_width);
   return bessel0(alpha*sqrt(1-ratio*ratio))/bessel0(alpha);

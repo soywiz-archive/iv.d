@@ -179,7 +179,7 @@ class SSLSocket : Socket {
       }
       gnutls_init(&session, GNUTLS_SERVER);
       gnutls_certificate_server_set_request(session, GNUTLS_CERT_IGNORE);
-      gnutls_handshake_set_timeout(session, GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
+      gnutls_handshake_set_timeout(session, /*GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT*/2300);
     } else {
       // client
       // initialize TLS session
