@@ -1241,6 +1241,21 @@ public:
   char[] pasteCollector;
   int pasteModeCounter;
 
+  private void promptKeyProcessor (EditorEngine ed) {
+    // input buffer changed
+    // check if it was *really* changed
+    if (incSearchBuf.length == ed.textsize) {
+      int pos = 0;
+      foreach (char ch; ed[]) { if (incSearchBuf[pos] != ch) break; ++pos; }
+      if (pos >= ed.textsize) return; // nothing was changed, so nothing to do
+    }
+    // recollect it
+    incSearchBuf.length = 0;
+    incSearchBuf.assumeSafeAppend;
+    foreach (char ch; ed[]) incSearchBuf ~= ch;
+    doNextIncSearch(false); // don't move pointer
+  }
+
   void addToPasteCollector (TtyEvent key) {
     void addChar (dchar dch) {
       if (dch < ' ') { if (dch != '\t' && dch != '\n') return; }
@@ -1265,15 +1280,30 @@ public:
     }
 
     repeatCounter = -1;
-    if (key.key == TtyEvent.Key.PasteStart) { ++pasteModeCounter; return; }
+    if (key.key == TtyEvent.Key.PasteStart) {
+      //VFile("z00.log", "w").writeln("PasteStart; pasteModeCounter before: ", pasteModeCounter);
+      ++pasteModeCounter;
+      return;
+    }
     if (key.key == TtyEvent.Key.PasteEnd) {
+      //VFile("z00.log", "w").writeln("PasteEnd; pasteModeCounter before: ", pasteModeCounter);
       if (pasteModeCounter < 1) { ttyBeep(); ttyBeep(); return; }
       if (--pasteModeCounter == 0) {
         if (pasteCollector.length) {
           // insert text in "paste mode"
-          doPasteStart();
-          scope(exit) doPasteEnd();
-          if (utfuck) doPutTextUtf(pasteCollector); else doPutText(pasteCollector);
+          if (incInputActive) {
+            foreach (char ch; pasteCollector) {
+              TtyEvent k;
+              k.key = TtyEvent.Key.Char;
+              k.ch = ch;
+              promptProcessKey(k, &promptKeyProcessor);
+            }
+            drawStatus(); // just in case
+          } else {
+            doPasteStart();
+            scope(exit) doPasteEnd();
+            if (utfuck) doPutTextUtf(pasteCollector); else doPutText(pasteCollector);
+          }
           pasteCollector.length = 0;
           pasteCollector.assumeSafeAppend;
           //ttyBeep();
@@ -1317,20 +1347,7 @@ public:
         return true;
       }
       if (mPromptInput !is null) mPromptInput.utfuck = utfuck;
-      promptProcessKey(key, delegate (ed) {
-        // input buffer changed
-        // check if it was *really* changed
-        if (incSearchBuf.length == ed.textsize) {
-          int pos = 0;
-          foreach (char ch; ed[]) { if (incSearchBuf[pos] != ch) break; ++pos; }
-          if (pos >= ed.textsize) return; // nothing was changed, so nothing to do
-        }
-        // recollect it
-        incSearchBuf.length = 0;
-        incSearchBuf.assumeSafeAppend;
-        foreach (char ch; ed[]) incSearchBuf ~= ch;
-        doNextIncSearch(false); // don't move pointer
-      });
+      promptProcessKey(key, &promptKeyProcessor);
       drawStatus(); // just in case
       return true;
     }
