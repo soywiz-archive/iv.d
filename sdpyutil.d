@@ -837,7 +837,7 @@ void sdpyNormalizeArrowKeys (ref KeyEvent event) {
 // alpha value of `destu32name` doesn't matter
 // alpha value of `colu32name` means: 255 for replace color, 0 for keep `destu32name` (was reversed)
 private enum ColorBlendMixinStr(string colu32name, string destu32name) = "{
-  immutable uint a_tmp_ = 256-((256-(("~colu32name~")>>24))&(-(1-(((("~colu32name~")>>24)+1)>>8)))); // to not loose bits, but 255 should become 0
+  immutable uint a_tmp_ = (256-(255-(("~colu32name~")>>24)))&(-(1-(((255-(("~colu32name~")>>24))+1)>>8))); // to not loose bits, but 255 should become 0
   immutable uint dc_tmp_ = ("~destu32name~")&0xffffff;
   immutable uint srb_tmp_ = (("~colu32name~")&0xff00ff);
   immutable uint sg_tmp_ = (("~colu32name~")&0x00ff00);
@@ -850,8 +850,7 @@ private enum ColorBlendMixinStr(string colu32name, string destu32name) = "{
 
 
 Color blend (Color dst, Color src) nothrow @trusted @nogc {
-  if (src.a != 0) {
-    mixin(ColorBlendMixinStr!("src.asUint", "dst.asUint"));
-  }
+  pragma(inline, true);
+  mixin(ColorBlendMixinStr!("src.asUint", "dst.asUint"));
   return dst;
 }
