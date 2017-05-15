@@ -401,7 +401,7 @@ static protected:
       import core.exception : onOutOfMemoryErrorNoGC;
       onOutOfMemoryErrorNoGC();
     }
-    res[0..len] = T.init;
+    res[0..len] = T.default;
     return res[0..len];
   }
 
@@ -663,7 +663,7 @@ struct BitReader {
     upkleft = upktotalsize;
   }
 
-  void close () { zfl = VFile.init; }
+  void close () { zfl = VFile.default; }
 
   // 0: eof
   uint readNewBuffer () {

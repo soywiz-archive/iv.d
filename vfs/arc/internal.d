@@ -75,7 +75,7 @@ protected:
     if (htable.length) htable.assumeSafeAppend;
     htable.length = dir.length;
     if (htable.ptr is GC.addrOf(htable.ptr)) GC.setAttr(htable.ptr, GC.BlkAttr.NO_INTERIOR);
-    htable[] = HashTableEntry.init;
+    htable[] = HashTableEntry.default;
     version(iv_vfs_arcs_debug_hash) {
       uint chaincount = 0;
       uint maxchainlen = 0;
@@ -142,7 +142,7 @@ public:
       }
     }
 
-    if (fname.length == 0 || dir.length == 0) return VFile.init;
+    if (fname.length == 0 || dir.length == 0) return VFile.default;
     // try hashtable first
     if (htable.length == dir.length) {
       uint nhash = hashStr(fname);
@@ -161,17 +161,17 @@ public:
         hidx = htable.ptr[hidx].prev;
       }
       // alas, and it is guaranteed that we have no such file here
-      return VFile.init;
+      return VFile.default;
     }
     // fallback to linear search
     foreach_reverse (immutable idx, ref fi; dir) {
       if (xequ(fi.name, fname, ignoreCase)) return wrap(idx);
     }
-    return VFile.init;
+    return VFile.default;
   }
 
   override @property usize dirLength () { return dir.length; }
-  override DirEntry dirEntry (usize idx) { return (idx < dir.length ? DirEntry(idx, dir.ptr[idx].name, dir.ptr[idx].size) : DirEntry.init); }
+  override DirEntry dirEntry (usize idx) { return (idx < dir.length ? DirEntry(idx, dir.ptr[idx].name, dir.ptr[idx].size) : DirEntry.default); }
 }
 
 

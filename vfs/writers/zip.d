@@ -108,7 +108,7 @@ public:
   uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
     if (!fo.isOpen) throw new VFSException("no archive file");
     if (!fl.isOpen) throw new VFSException("no source file");
-    scope(failure) { files = null; fo = VFile.init; }
+    scope(failure) { files = null; fo = VFile.default; }
     if (fname.length == 0) throw new VFSException("empty name");
     if (fname[$-1] == '/') throw new VFSException("directories not supported");
     foreach (char ch; fname) if (ch == '\\') throw new VFSException("shitdoze path delimiters not supported");
@@ -126,19 +126,19 @@ public:
   }
 
   uint pack(T:const(char)[]) (VFile fl, T fname, Method method=Method.Deflate, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
-    return pack!T(fl, fname, ZipFileTime.init, method, oldsize);
+    return pack!T(fl, fname, ZipFileTime.default, method, oldsize);
   }
 
   void finish () {
     if (!fo.isOpen) throw new VFSException("no archive file");
-    scope(exit) { files = null; fo = VFile.init; }
+    scope(exit) { files = null; fo = VFile.default; }
     zipFinish(fo, files);
   }
 
   void abort () {
     if (!fo.isOpen) throw new VFSException("no archive file");
     files = null;
-    fo = VFile.init;
+    fo = VFile.default;
   }
 }
 
@@ -401,7 +401,7 @@ ubyte[] buildUtfExtra (const(char)[] fname) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
-  return zipOne!mtname(ds, fname, st, ZipFileTime.init, oldsize, onProgress);
+  return zipOne!mtname(ds, fname, st, ZipFileTime.default, oldsize, onProgress);
 }
 
 ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, in auto ref ZipFileTime ftime, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
