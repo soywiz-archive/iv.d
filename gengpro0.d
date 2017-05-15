@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // Protractor gesture recognizer, v0
-module iv.gengpro0;
+module iv.gengpro0 is aliced;
 private:
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -87,10 +87,10 @@ final:
   @property string name () const pure nothrow @safe @nogc { pragma(inline, true); return mName; }
   @property void name (string v) @safe nothrow @nogc { pragma(inline, true); mName = v; }
 
-  size_t length () const pure nothrow @safe @nogc { pragma(inline, true); return (mNormalized ? NormalizedPoints : points.length/2); }
+  usize length () const pure nothrow @safe @nogc { pragma(inline, true); return (mNormalized ? NormalizedPoints : points.length/2); }
   alias opDollar = length;
 
-  auto x (size_t idx) const pure nothrow @safe @nogc {
+  auto x (usize idx) const pure nothrow @safe @nogc {
     pragma(inline, true);
     if (!mNormalized) {
       return (idx*2 < points.length ? points[idx*2] : typeof(points[0]).nan);
@@ -99,7 +99,7 @@ final:
     }
   }
 
-  auto y (size_t idx) const pure nothrow @safe @nogc {
+  auto y (usize idx) const pure nothrow @safe @nogc {
     pragma(inline, true);
     if (!mNormalized) {
       return (idx*2 < points.length ? points[idx*2+1] : typeof(points[0]).nan);
@@ -228,7 +228,7 @@ private:
     // add first point as-is
     ptres[0] = prx;
     ptres[1] = pry;
-    size_t ptpos = 2, oppos = 2;
+    usize ptpos = 2, oppos = 2;
     while (oppos < points.length) {
       immutable GengFloat cx = points[oppos], cy = points[oppos+1];
       immutable d = distance(prx, pry, cx, cy);
@@ -393,7 +393,7 @@ public void gstLibSave(R) (VFile st, auto ref R grng) if (isInputRange!R && !isI
     if (cnt > 0x7fff_ffff) throw new Exception("too many glyphs");
     st.writeNum!uint(cast(uint)cnt);
   } else {
-    size_t cnt = 0;
+    usize cnt = 0;
     auto cntpos = st.tell;
     st.writeNum!uint(0);
   }

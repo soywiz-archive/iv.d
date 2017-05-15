@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // some string operations: quoting, `indexOf()` for non-utf8
-module iv.strex /*is aliced*/;
+module iv.strex is aliced;
 
 
 /// quote string: append double quotes, screen all special chars;
@@ -137,7 +137,7 @@ bool endsWithCI (const(char)[] str, const(char)[] pat) pure nothrow @trusted @no
 }
 
 
-ptrdiff_t indexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure nothrow @trusted @nogc {
+ptrdiff_t indexOf (const(char)[] hay, const(char)[] need, usize stIdx=0) pure nothrow @trusted @nogc {
   if (hay.length <= stIdx || need.length == 0 || need.length > hay.length-stIdx) {
     return -1;
   } else {
@@ -146,12 +146,12 @@ ptrdiff_t indexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure n
   }
 }
 
-ptrdiff_t indexOf (const(char)[] hay, char ch, size_t stIdx=0) pure nothrow @trusted @nogc {
+ptrdiff_t indexOf (const(char)[] hay, char ch, usize stIdx=0) pure nothrow @trusted @nogc {
   return indexOf(hay, (&ch)[0..1], stIdx);
 }
 
 
-ptrdiff_t lastIndexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure nothrow @trusted @nogc {
+ptrdiff_t lastIndexOf (const(char)[] hay, const(char)[] need, usize stIdx=0) pure nothrow @trusted @nogc {
   if (hay.length <= stIdx || need.length == 0 || need.length > hay.length-stIdx) {
     return -1;
   } else {
@@ -160,7 +160,7 @@ ptrdiff_t lastIndexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pu
   }
 }
 
-ptrdiff_t lastIndexOf (const(char)[] hay, char ch, size_t stIdx=0) pure nothrow @trusted @nogc {
+ptrdiff_t lastIndexOf (const(char)[] hay, char ch, usize stIdx=0) pure nothrow @trusted @nogc {
   return lastIndexOf(hay, (&ch)[0..1], stIdx);
 }
 
@@ -225,7 +225,7 @@ auto byLine(T) (T s) if (is(T : const(char)[])) {
   nothrow @safe @nogc:
   private:
     T s;
-    size_t llen, npos;
+    usize llen, npos;
     this (T as) { s = as; popFront(); }
   public:
     @property bool empty () const { pragma(inline, true); return (s.length == 0); }
@@ -286,7 +286,7 @@ string outdentAll (const(char)[] s) {
   import std.array : appender;
   // first calculate maximum indent spaces
   uint maxspc = uint.max;
-  foreach (/*auto*/ line; s.byLine) {
+  foreach (auto line; s.byLine) {
     uint col = 0;
     while (col < line.length && line.ptr[col] <= ' ') {
       if (line.ptr[col] == '\t') assert(0, "can't outdent shit with tabs");
@@ -298,7 +298,7 @@ string outdentAll (const(char)[] s) {
   }
 
   auto res = appender!string();
-  foreach (/*auto*/ line; s.byLine) {
+  foreach (auto line; s.byLine) {
     uint col = 0;
     while (col < line.length && line.ptr[col] <= ' ') ++col;
     if (col < line.length) {
@@ -335,11 +335,11 @@ void main() {
 
 pure nothrow @system @nogc:
 version(linux) {
-  extern(C) inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
-  extern(C) inout(void)* memrchr (inout(void)* s, int ch, size_t slen);
+  extern(C) inout(void)* memmem (inout(void)* haystack, usize haystacklen, inout(void)* needle, usize needlelen);
+  extern(C) inout(void)* memrchr (inout(void)* s, int ch, usize slen);
 } else {
-  inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
-    // size_t is unsigned
+  inout(void)* memmem (inout(void)* haystack, usize haystacklen, inout(void)* needle, usize needlelen) {
+    // usize is unsigned
     if (needlelen > haystacklen || needlelen == 0) return null;
     auto h = cast(const(ubyte)*)haystack;
     auto n = cast(const(ubyte)*)needle;
@@ -350,8 +350,8 @@ version(linux) {
     return null;
   }
 
-  inout(void)* memrchr (inout(void)* haystack, int ch, size_t haystacklen) {
-    // size_t is unsigned
+  inout(void)* memrchr (inout(void)* haystack, int ch, usize haystacklen) {
+    // usize is unsigned
     if (haystacklen == 0) return null;
     auto h = cast(const(ubyte)*)haystack;
     ch &= 0xff;
@@ -362,31 +362,31 @@ version(linux) {
   }
 }
 
-inout(void)* memrmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
+inout(void)* memrmem (inout(void)* haystack, usize haystacklen, inout(void)* needle, usize needlelen) {
   if (needlelen > haystacklen) return null;
   auto h = cast(const(ubyte)*)haystack;
   const(ubyte)* res = null;
-  // size_t is unsigned
+  // usize is unsigned
   if (needlelen > haystacklen || needlelen == 0) return null;
   version(none) {
-    size_t pos = 0;
+    usize pos = 0;
     while (pos < haystacklen-needlelen+1) {
       auto ff = memmem(haystack+pos, haystacklen-pos, needle, needlelen);
       if (ff is null) break;
       res = cast(const(ubyte)*)ff;
-      pos = cast(size_t)(res-haystack)+1;
+      pos = cast(usize)(res-haystack)+1;
     }
     return cast(void*)res;
   } else {
     auto n = cast(const(ubyte)*)needle;
-    size_t len = haystacklen-needlelen+1;
+    usize len = haystacklen-needlelen+1;
     while (len > 0) {
       import core.stdc.string : memcmp;
       auto ff = cast(const(ubyte)*)memrchr(haystack, *n, len);
       if (ff is null) break;
       if (memcmp(ff, needle, needlelen) == 0) return cast(void*)ff;
       //if (ff is h) break;
-      len = cast(size_t)(ff-haystack);
+      len = cast(usize)(ff-haystack);
     }
     return null;
   }

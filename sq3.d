@@ -30,7 +30,7 @@ mixin(NewExceptionClass!("SQLiteException", "Exception"));
 class SQLiteErr : SQLiteException {
   int code;
 
-  this (int rc, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @trusted nothrow {
+  this (int rc, string file=__FILE__, usize line=__LINE__, Throwable next=null) @trusted nothrow {
     //import core.stdc.stdio : stderr, fprintf;
     //fprintf(stderr, "SQLITE ERROR: %s\n", sqlite3_errstr(rc));
     import std.exception : assumeUnique;
@@ -41,7 +41,7 @@ class SQLiteErr : SQLiteException {
 }
 
 
-private void sqcheck (int rc, string file=__FILE__, size_t line=__LINE__) {
+private void sqcheck (int rc, string file=__FILE__, usize line=__LINE__) {
   //pragma(inline, true);
   if (rc != SQLITE_OK) throw new SQLiteErr(rc, file, line);
 }

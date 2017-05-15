@@ -29,7 +29,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 // quick-and-dirty D translation by Ketmar // Invisible Vector
-module iv.tremor;
+module iv.tremor is aliced;
 //version = LOW_ACCURACY__;
 private:
 
@@ -63,7 +63,7 @@ enum LONG_MAX = trm_long.max;
 
 extern(C) {
   private alias compare_fp_t_ = int function (in void*, in void*) nothrow @trusted @nogc;
-  private extern(C) void qsort (void* base, size_t nmemb, size_t size, compare_fp_t_ compar) nothrow @trusted @nogc;
+  private extern(C) void qsort (void* base, usize nmemb, usize size, compare_fp_t_ compar) nothrow @trusted @nogc;
 }
 
 alias vorbis_info_floor = void;
@@ -302,7 +302,7 @@ struct vorbis_block {
   /* local storage to avoid remallocing; it's up to the mapping to structure it */
   void* localstore;
   int localtop;
-  /*int*/size_t localalloc;
+  /*int*/usize localalloc;
   int totaluse;
   alloc_chain* reap;
 }
@@ -2834,7 +2834,7 @@ int vorbis_block_init(vorbis_dsp_state *v, vorbis_block *vb){
   return(0);
 }
 
-void *vorbis_block_alloc_(vorbis_block *vb, /*trm_long*/size_t bytes) nothrow @trusted @nogc {
+void *vorbis_block_alloc_(vorbis_block *vb, /*trm_long*/usize bytes) nothrow @trusted @nogc {
   bytes=(bytes+(WORD_ALIGN-1)) & ~(WORD_ALIGN-1);
   if(bytes+vb.localtop>vb.localalloc){
     /* can't just ogg_realloc_... there are outstanding pointers */
@@ -4076,7 +4076,7 @@ static immutable vorbis_func_floor floor0_exportbundle={
 enum floor1_rangedB = 140; /* floor 1 fixed at -140dB to 0dB range */
 
 struct vorbis_look_floor1 {
-  /*int*/size_t[VIF_POSIT+2] forward_index;
+  /*int*/usize[VIF_POSIT+2] forward_index;
 
   int[VIF_POSIT] hineighbor;
   int[VIF_POSIT] loneighbor;
@@ -7064,7 +7064,7 @@ public void vorbis_comment_init(vorbis_comment *vc) nothrow @trusted @nogc {
 
 /* This is more or less the same as strncasecmp - but that doesn't exist
  * everywhere, and this is a fairly trivial function, so we include it */
-private int tagcompare (const(char)* s1, const(char)* s2, size_t n) nothrow @trusted @nogc {
+private int tagcompare (const(char)* s1, const(char)* s2, usize n) nothrow @trusted @nogc {
   int c=0;
   while(c < n){
     char c0 = s1[c];
@@ -7203,7 +7203,7 @@ enum READSIZE  = 1024;
 static if (!XoggTremorHasVFS) {
 ///
 public struct ov_callbacks {
-  size_t function (void *ptr, size_t size, size_t nmemb, void *datasource) read_func;
+  usize function (void *ptr, usize size, usize nmemb, void *datasource) read_func;
   int function (void *datasource, ogg_int64_t offset, int whence) seek_func;
   int function (void *datasource) close_func;
   trm_long function (void *datasource) tell_func;
@@ -8292,9 +8292,9 @@ static if (XoggTremorHasVFS) {
   }
 
   private void ov_setup_file_callbacks_ (ref ov_callbacks callbacks) {
-    callbacks.read_func = /*size_t*/ function (void *ptr, size_t size, size_t nmemb, void *datasource) {
+    callbacks.read_func = /*usize*/ function (void *ptr, usize size, usize nmemb, void *datasource) {
       if (datasource is null) return -1;
-      return cast(size_t)fread(ptr, size, nmemb, cast(FILE*)datasource);
+      return cast(usize)fread(ptr, size, nmemb, cast(FILE*)datasource);
     };
     callbacks.seek_func = /*int*/ function (void *datasource, ogg_int64_t offset, int whence) {
       if (datasource is null) return -1;
@@ -9316,7 +9316,7 @@ static immutable uint[256] crc_lookup = (){
 
 struct ogg_iovec_t {
   void *iov_base;
-  size_t iov_len;
+  usize iov_len;
 }
 
 struct oggpack_buffer {

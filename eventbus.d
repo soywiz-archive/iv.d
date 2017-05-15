@@ -13,7 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.eventbus;
+module iv.eventbus is aliced;
 private:
 
 import core.time : MonoTime;
@@ -138,7 +138,7 @@ enum SBDispatchMixin = q{
         import std.traits;
         if (typeid(Event) != ti) doit(ti.base);
         if (evt.processed) return;
-        foreach (immutable oidx, /*auto*/ over; __traits(getOverloads, this, "onMyEvent")) {
+        foreach (immutable oidx, auto over; __traits(getOverloads, this, "onMyEvent")) {
           alias tt = typeof(over);
           static if (is(ReturnType!tt == void)) {
             alias pars = Parameters!tt;
@@ -218,7 +218,7 @@ public void connectListeners(O:Object) (O obj) {
             import std.traits;
             if (typeid(Event) != ti) doit(ti.base);
             if (evt.processed) return;
-            foreach (immutable oidx, /*auto*/ over; __traits(getOverloads, OT, EvtName)) {
+            foreach (immutable oidx, auto over; __traits(getOverloads, OT, EvtName)) {
               alias tt = typeof(over);
               static if (is(ReturnType!tt == void)) {
                 alias pars = Parameters!tt;
@@ -278,7 +278,7 @@ private __gshared ThreadID peLastTID = 0;
  * WARNING! this MUST be called only in main processing thread!
  */
 public void processEvents () {
-  size_t left;
+  usize left;
   synchronized (Event.classinfo) {
     if (nowProcessing) throw new Exception("recursive calls to `processEvents()` aren't allowed");
     if (peLastTID == 0) {
@@ -504,9 +504,9 @@ void buildEvChain (Object obj) {
 // with evchain
 void dispatchSinkBubble (Event evt) {
   void callOnTypeFor (ObjDispatcher.Type type, Object obj) {
-    size_t llen;
+    usize llen;
     synchronized (Event.classinfo) llen = llistsb.length;
-    foreach (size_t idx; 0..llen) {
+    foreach (usize idx; 0..llen) {
       ObjDispatcher dobj = null;
       synchronized (Event.classinfo) {
         auto eli = &llistsb[idx];
@@ -571,9 +571,9 @@ void callEventListeners (Event evt) {
     fo.writeln;
   }}
   // broadcast listeners (they will also catch directed events w/o doing sink/bubble)
-  size_t llen;
+  usize llen;
   synchronized (Event.classinfo) llen = llist.length;
-  foreach (size_t idx; 0..llen) {
+  foreach (usize idx; 0..llen) {
     ObjDispatcher dobj = null;
     EventListenerInfo.DgType dg = null;
     TypeInfo_Class ti = null;

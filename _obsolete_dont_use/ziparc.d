@@ -527,7 +527,7 @@ private:
   // can be used as normal disk file processor too
   static struct InnerFileCookied {
     private import etc.c.zlib;
-    private import core.sys.posix.sys.types : ssize_t, off64_t = off_t;
+    private import core.sys.posix.sys.types : off64_t = off_t;
     private import core.stdc.stdio : FILE;
 
     enum ibsize = 32768;
@@ -650,7 +650,7 @@ private:
     }
 
 
-    ssize_t read (void* buf, size_t count) {
+    ssize read (void* buf, size_t count) {
       if (buf is null) return -1;
       if (count == 0 || size == 0) return 0;
       lock.lock();
@@ -744,9 +744,9 @@ static:
   // ////////////////////////////////////////////////////////////////////// //
   extern(C) nothrow {
     import core.sys.linux.stdio : cookie_io_functions_t;
-    import core.sys.posix.sys.types : ssize_t, off64_t = off_t;
+    import core.sys.posix.sys.types : ssize, off64_t = off_t;
 
-    ssize_t fcdatpkRead (void* cookie, char* buf, size_t count) {
+    ssize fcdatpkRead (void* cookie, char* buf, size_t count) {
       //{ import iv.writer; writeln("reading ", count, " bytes"); }
       import core.stdc.errno;
       auto fc = cast(InnerFileCookied*)cookie;
@@ -755,7 +755,7 @@ static:
       return res;
     }
 
-    ssize_t fcdatpkWrite (void* cookie, const(char)* buf, size_t count) {
+    ssize fcdatpkWrite (void* cookie, const(char)* buf, size_t count) {
       //{ import iv.writer; writeln("writing ", count, " bytes"); }
       import core.stdc.errno;
       errno = EIO; //FIXME: find better code

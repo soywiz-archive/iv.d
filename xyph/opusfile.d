@@ -14,7 +14,7 @@
  last mod: $Id: vorbisfile.h 17182 2010-04-29 03:48:32Z xiphmont $
 
  ********************************************************************/
-module iv.xyph.opusfile;
+module iv.xyph.opusfile is aliced;
 pragma(lib, "opusfile");
 version(libopusfile_url) pragma(lib, "opusurl");
 
@@ -395,7 +395,7 @@ struct OpusPictureTag{
                            <li>Too many coupled streams, or</li>
                            <li>An invalid channel mapping index.</li>
                           </ul>*/
-int opus_head_parse (OpusHead* _head, const(ubyte)* _data, size_t _len) /*OP_ARG_NONNULL(2)*/;
+int opus_head_parse (OpusHead* _head, const(ubyte)* _data, usize _len) /*OP_ARG_NONNULL(2)*/;
 
 /**Converts a granule position to a sample offset for a given Ogg Opus stream.
    The sample offset is simply <code>_gp-_head->pre_skip</code>.
@@ -427,7 +427,7 @@ ogg_int64_t opus_granule_sample (const(OpusHead)* _head, ogg_int64_t _gp) /*OP_A
    \retval #OP_EBADHEADER If the contents of the packet otherwise violate the
                            Ogg Opus specification.
    \retval #OP_EFAULT     If there wasn't enough memory to store the tags.*/
-int opus_tags_parse (OpusTags* _tags, const(ubyte)* _data, size_t _len) /*OP_ARG_NONNULL(2)*/;
+int opus_tags_parse (OpusTags* _tags, const(ubyte)* _data, usize _len) /*OP_ARG_NONNULL(2)*/;
 
 /**Performs a deep copy of an #OpusTags structure.
    \param _dst The #OpusTags structure to copy into.
@@ -930,7 +930,7 @@ void* op_freopen (OpusFileCallbacks* _cb, const(char)* _path, const(char)* _mode
    \param      _size The size of the block of memory.
    \return A stream handle to use with the callbacks, or <code>NULL</code> on
             error.*/
-void* op_mem_stream_create (OpusFileCallbacks* _cb, const(ubyte)* _data, size_t _size) /*OP_ARG_NONNULL(1)*/;
+void* op_mem_stream_create (OpusFileCallbacks* _cb, const(ubyte)* _data, usize _size) /*OP_ARG_NONNULL(1)*/;
 
 /**Creates a stream that reads from the given URL.
    This function behaves identically to op_url_stream_create(), except that it
@@ -1021,7 +1021,7 @@ void* op_url_stream_create (OpusFileCallbacks* _cb, const(char)* _url, ...) /*OP
                            does not know how to parse.
    \retval #OP_EBADHEADER The ID header was not properly formatted or contained
                            illegal values.*/
-int op_test (OpusHead* _head, const(ubyte)* _initial_data, size_t _initial_bytes);
+int op_test (OpusHead* _head, const(ubyte)* _initial_data, usize _initial_bytes);
 
 /**Open a stream from the given file path.
    \param      _path  The path to the file to open.
@@ -1042,7 +1042,7 @@ OggOpusFile* op_open_file (const(char)* _path, int* _error) /*OP_ARG_NONNULL(1)*
                        failure code.
                       See op_open_callbacks() for a full list of failure codes.
    \return A freshly opened \c OggOpusFile, or <code>NULL</code> on error.*/
-OggOpusFile* op_open_memory (const(ubyte)* _data, size_t _size, int* _error);
+OggOpusFile* op_open_memory (const(ubyte)* _data, usize _size, int* _error);
 
 /**Open a stream from a URL.
    This function behaves identically to op_open_url(), except that it
@@ -1170,7 +1170,7 @@ OggOpusFile* op_open_url (const(char)* _url, int* _error, ...) /*OP_ARG_NONNULL(
             if the call fails.
            The calling application is responsible for closing the source if
             this call returns an error.*/
-OggOpusFile* op_open_callbacks (void* _source, const(OpusFileCallbacks)* _cb, const(ubyte)* _initial_data, size_t _initial_bytes, int* _error) /*OP_ARG_NONNULL(2)*/;
+OggOpusFile* op_open_callbacks (void* _source, const(OpusFileCallbacks)* _cb, const(ubyte)* _initial_data, usize _initial_bytes, int* _error) /*OP_ARG_NONNULL(2)*/;
 
 /**Partially open a stream from the given file path.
    \see op_test_callbacks
@@ -1193,7 +1193,7 @@ OggOpusFile* op_test_file (const(char)* _path, int* _error) /*OP_ARG_NONNULL(1)*
                        failure code.
                       See op_open_callbacks() for a full list of failure codes.
    \return A partially opened \c OggOpusFile, or <code>NULL</code> on error.*/
-OggOpusFile* op_test_memory (const(ubyte)* _data, size_t _size, int* _error);
+OggOpusFile* op_test_memory (const(ubyte)* _data, usize _size, int* _error);
 
 /**Partially open a stream from a URL.
    This function behaves identically to op_test_url(), except that it
@@ -1311,7 +1311,7 @@ OggOpusFile* op_test_url (const(char)* _url, int* _error, ...) /*OP_ARG_NONNULL(
             if the call fails.
            The calling application is responsible for closing the source if
             this call returns an error.*/
-OggOpusFile* op_test_callbacks (void* _source, const(OpusFileCallbacks)* _cb, const(ubyte)* _initial_data, size_t _initial_bytes, int* _error) /*OP_ARG_NONNULL(2)*/;
+OggOpusFile* op_test_callbacks (void* _source, const(OpusFileCallbacks)* _cb, const(ubyte)* _initial_data, usize _initial_bytes, int* _error) /*OP_ARG_NONNULL(2)*/;
 
 /**Finish opening a stream partially opened with op_test_callbacks() or one of
     the associated convenience functions.

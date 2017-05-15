@@ -18,7 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 /// this engine can layout any boxset (if it is valid)
-module iv.flexlayout;
+module iv.flexlayout is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -35,8 +35,8 @@ align(1):
   FuiPoint opBinary(string op) (in auto ref FuiPoint pt) if (op == "+" || op == "-") {
     mixin("return FuiPoint(x"~op~"pt.x, y"~op~"pt.y);");
   }
-  int opIndex (size_t idx) const { pragma(inline, true); return (idx == 0 ? x : idx == 1 ? y : 0); }
-  void opIndexAssign (int v, size_t idx) { pragma(inline, true); if (idx == 0) x = v; else if (idx == 1) y = v; }
+  int opIndex (usize idx) const { pragma(inline, true); return (idx == 0 ? x : idx == 1 ? y : 0); }
+  void opIndexAssign (int v, usize idx) { pragma(inline, true); if (idx == 0) x = v; else if (idx == 1) y = v; }
 }
 
 /// size
@@ -44,8 +44,8 @@ public align(1) struct FuiSize {
 align(1):
   int w, h;
 @property pure nothrow @safe @nogc:
-  int opIndex (size_t idx) const { pragma(inline, true); return (idx == 0 ? w : idx == 1 ? h : 0); }
-  void opIndexAssign (int v, size_t idx) { pragma(inline, true); if (idx == 0) w = v; else if (idx == 1) h = v; }
+  int opIndex (usize idx) const { pragma(inline, true); return (idx == 0 ? w : idx == 1 ? h : 0); }
+  void opIndexAssign (int v, usize idx) { pragma(inline, true); if (idx == 0) w = v; else if (idx == 1) h = v; }
 }
 
 
@@ -88,8 +88,8 @@ pure nothrow @trusted @nogc:
   void top (int v) { pragma(inline, true); ltrb.ptr[1] = v; }
   void right (int v) { pragma(inline, true); ltrb.ptr[2] = v; }
   void bottom (int v) { pragma(inline, true); ltrb.ptr[3] = v; }
-  int opIndex (size_t idx) const { pragma(inline, true); return (idx < 4 ? ltrb.ptr[idx] : 0); }
-  void opIndexAssign (int v, size_t idx) { pragma(inline, true); if (idx < 4) ltrb.ptr[idx] = v; }
+  int opIndex (usize idx) const { pragma(inline, true); return (idx < 4 ? ltrb.ptr[idx] : 0); }
+  void opIndexAssign (int v, usize idx) { pragma(inline, true); if (idx < 4) ltrb.ptr[idx] = v; }
 }
 
 

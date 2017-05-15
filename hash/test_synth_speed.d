@@ -23,7 +23,7 @@ uint sfHash (const(char)[] str) {
 }
 
 
-size_t SFhashOf( const (void)* buf, size_t len, size_t seed = 0 ) @trusted pure nothrow @nogc
+usize SFhashOf( const (void)* buf, usize len, usize seed = 0 ) @trusted pure nothrow @nogc
 {
     /*
      * This is Paul Hsieh's SuperFastHash algorithm, described here:
@@ -97,12 +97,12 @@ size_t SFhashOf( const (void)* buf, size_t len, size_t seed = 0 ) @trusted pure 
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-uint murHashX (const(char)[] str, size_t seed=0) {
+uint murHashX (const(char)[] str, usize seed=0) {
   return MurHashOf(str, seed);
 }
 
 
-size_t MurHashOf (const(char)[] data, size_t seed=0) pure nothrow @trusted @nogc {
+usize MurHashOf (const(char)[] data, usize seed=0) pure nothrow @trusted @nogc {
   enum C1 = 0xcc9e2d51u;
   enum C2 = 0x1b873593u;
 
@@ -166,7 +166,7 @@ size_t MurHashOf (const(char)[] data, size_t seed=0) pure nothrow @trusted @nogc
 
 
 
-size_t bytesHash3(const(char)[] buf, size_t seed=0) @system nothrow @nogc {
+usize bytesHash3(const(char)[] buf, usize seed=0) @system nothrow @nogc {
     static uint rotl32(uint n)(in uint x) pure nothrow @safe @nogc
     {
         return (x << n) | (x >> (32 - n));
@@ -264,7 +264,7 @@ size_t bytesHash3(const(char)[] buf, size_t seed=0) @system nothrow @nogc {
  * Returns:
  *   32-bit or 64-bit hash
  */
-size_t FFhashOf (const(void)[] buf, size_t seed=0) /*pure*/ nothrow @trusted @nogc {
+usize FFhashOf (const(void)[] buf, usize seed=0) /*pure*/ nothrow @trusted @nogc {
   enum Get8Bytes = q{
     cast(ulong)data[0]|
     (cast(ulong)data[1]<<8)|
@@ -320,12 +320,12 @@ size_t FFhashOf (const(void)[] buf, size_t seed=0) /*pure*/ nothrow @trusted @no
   h ^= h>>23;
   h *= 0x2127599bf4325c37UL;
   h ^= h>>47;
-  static if (size_t.sizeof == 4) {
+  static if (usize.sizeof == 4) {
     // 32-bit hash
     // the following trick converts the 64-bit hashcode to Fermat
     // residue, which shall retain information from both the higher
     // and lower parts of hashcode.
-    return cast(size_t)(h-(h>>32));
+    return cast(usize)(h-(h>>32));
   } else {
     return h;
   }

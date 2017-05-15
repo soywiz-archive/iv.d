@@ -8,9 +8,9 @@ immutable string CODE = "INC ecx; DEC edx";
 void main () {
   ks_engine *ks;
   ks_err err;
-  size_t count;
+  usize count;
   ubyte* encode;
-  size_t size;
+  usize size;
 
   err = ks_open(KS_ARCH_X86, KS_MODE_32, &ks);
   if (err != KS_ERR_OK) assert(0, "FATAL: can't init keystone");

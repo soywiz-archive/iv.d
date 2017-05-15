@@ -14,21 +14,15 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.chachasimple;
+module iv.chachasimple is aliced;
 
 import std.range;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 class ChaChaException : Exception {
-  static if (__VERSION__ > 2067) {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
-      super(msg, file, line, next);
-    }
-  } else {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) pure nothrow @safe {
-      super(msg, file, line, next);
-    }
+  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
+    super(msg, file, line, next);
   }
 }
 

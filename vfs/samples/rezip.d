@@ -78,7 +78,7 @@ void repackZip (ConString infname, ConString outfname, ZipWriter.Method pmt) {
 void main (string[] args) {
   auto method = ZipWriter.Method.Lzma;
 
-  for (size_t idx = 1; idx < args.length;) {
+  for (usize idx = 1; idx < args.length;) {
     string arg = args[idx];
     if (arg == "--") {
       import std.algorithm : remove;

@@ -19,7 +19,7 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-module iv.dopus.dopus;
+module iv.dopus.dopus is aliced;
 private:
 
 //import iv.cmdcon;
@@ -277,7 +277,7 @@ void av_freep(T) (T** p) {
 }
 
 
-T* av_mallocz(T) (size_t cnt=1) {
+T* av_mallocz(T) (usize cnt=1) {
   if (cnt == 0) return null;
   import core.stdc.stdlib : calloc;
   return cast(T*)calloc(cnt, T.sizeof);
@@ -288,7 +288,7 @@ alias av_mallocz_array = av_mallocz;
 alias av_malloc = av_mallocz;
 
 /*
-int av_reallocp_array(T) (T** ptr, size_t cnt) {
+int av_reallocp_array(T) (T** ptr, usize cnt) {
   import core.stdc.stdlib : free, realloc;
   if (ptr is null) return -1;
   if (cnt == 0) {

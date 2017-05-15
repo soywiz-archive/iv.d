@@ -20,7 +20,7 @@
 
    Author: Raph Levien <raph@artofcode.com>
 */
-module iv.librsvg;
+module iv.librsvg is aliced;
 pragma(lib, "rsvg-2");
 pragma(lib, "gio-2.0");
 pragma(lib, "gdk_pixbuf-2.0");
@@ -110,7 +110,7 @@ void rsvg_handle_set_dpi (RsvgHandle* handle, double dpi);
 void rsvg_handle_set_dpi_x_y (RsvgHandle* handle, double dpi_x, double dpi_y);
 
 RsvgHandle* rsvg_handle_new ();
-rsvgbool rsvg_handle_write (RsvgHandle* handle, const(void)* buf, size_t count, GError** error);
+rsvgbool rsvg_handle_write (RsvgHandle* handle, const(void)* buf, usize count, GError** error);
 rsvgbool rsvg_handle_close (RsvgHandle* handle, GError** error);
 /*
 GdkPixbuf* rsvg_handle_get_pixbuf (RsvgHandle* handle);
@@ -156,7 +156,7 @@ enum : RsvgHandleFlags {
 //RsvgHandle* rsvg_handle_new_from_gfile_sync (GFile* file, RsvgHandleFlags flags, GCancellable* cancellable, GError** error);
 //RsvgHandle *rsvg_handle_new_from_stream_sync (GInputStream* input_stream, GFile* base_file, RsvgHandleFlags flags, GCancellable* cancellable, GError** error);
 
-RsvgHandle* rsvg_handle_new_from_data (const(void)* data, size_t data_len, GError** error);
+RsvgHandle* rsvg_handle_new_from_data (const(void)* data, usize data_len, GError** error);
 RsvgHandle* rsvg_handle_new_from_file (const(char)* file_name, GError** error);
 
 

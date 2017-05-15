@@ -2,23 +2,15 @@
  * original code: WDOSX-Pack v1.07, (c) 1999-2001 by Joergen Ibsen / Jibz
  * for data and executable compression software: http://www.ibsensoftware.com/
  */
-module iv.oldpakerz.wdx;
+module iv.oldpakerz.wdx is aliced;
 private:
-
-static if (size_t.sizeof == 4) {
-  alias ssize_t = int;
-} else static if (size_t.sizeof == 8) {
-  alias ssize_t = long;
-} else {
-  static assert(0, "wtf?!");
-}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 enum WDXUNPACK_LEN2_LIMIT = 1920;
 
 
-public size_t wdx_packbuf_size (size_t size_in) {
+public usize wdx_packbuf_size (usize size_in) {
   if (size_in < 1) return 0;
   return size_in+((size_in+7)/8)+2;
 }
@@ -41,7 +33,7 @@ struct pack_state_t {
   uint last_match_pos;
   int last_was_match;
   uint bytes_out;
-  size_t size_out;
+  usize size_out;
 }
 
 
@@ -201,7 +193,7 @@ void wdxi_find_match (pack_state_t *ps, match_t *thematch, const ubyte *buffer, 
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public ssize_t wdx_pack (void *buf_out, size_t size_out, const(void)* buf_in, size_t size_in) {
+public ssize wdx_pack (void *buf_out, usize size_out, const(void)* buf_in, usize size_in) {
   import core.stdc.stdlib : malloc, free;
   import core.stdc.string : memset;
   /* global variables */
@@ -334,7 +326,7 @@ public ssize_t wdx_pack (void *buf_out, size_t size_out, const(void)* buf_in, si
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public ssize_t wdx_unpack (void *buf_out, size_t size_out, const(void)* buf_in, size_t size_in) {
+public ssize wdx_unpack (void *buf_out, usize size_out, const(void)* buf_in, usize size_in) {
   int len, pos, b, itsOk;
   ubyte *pp;
   const(ubyte)* src = cast(const ubyte *)buf_in;

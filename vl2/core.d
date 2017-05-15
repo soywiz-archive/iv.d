@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vl2.core;
+module iv.vl2.core is aliced;
 
 public import iv.sdl2.sdl;
 
@@ -40,14 +40,8 @@ version(GNU) {
 // ////////////////////////////////////////////////////////////////////////// //
 /// generic VideoLib exception
 class VideoLibError : Exception {
-  static if (__VERSION__ > 2067) {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
-      super(msg, file, line, next);
-    }
-  } else {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow {
-      super(msg, file, line, next);
-    }
+  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
+    super(msg, file, line, next);
   }
 }
 

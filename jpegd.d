@@ -40,7 +40,7 @@
  * On return, width/height will be set to the image's dimensions, and actual_comps will be set to the either 1 (grayscale) or 3 (RGB).
  * Requesting a 8 or 32bpp image is currently a little faster than 24bpp because the jpeg_decoder class itself currently always unpacks to either 8 or 32bpp.
  */
-module iv.jpegd;
+module iv.jpegd is aliced;
 
 // Set to 1 to enable freq. domain chroma upsampling on images using H2V2 subsampling (0=faster nearest neighbor sampling).
 // This is slower, but results in higher quality on images with highly saturated colors.
@@ -59,7 +59,7 @@ alias JpegStreamReadFunc = int delegate (void* pBuf, int max_bytes_to_read, bool
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
-void *jpgd_malloc (size_t nSize) { import core.stdc.stdlib : malloc; return malloc(nSize); }
+void *jpgd_malloc (usize nSize) { import core.stdc.stdlib : malloc; return malloc(nSize); }
 void jpgd_free (void *p) { import core.stdc.stdlib : free; if (p !is null) free(p); }
 
 // Success/failure error codes.
@@ -391,8 +391,8 @@ private:
 
   static struct mem_block {
     mem_block* m_pNext;
-    size_t m_used_count;
-    size_t m_size;
+    usize m_used_count;
+    usize m_size;
     char[1] m_data;
   }
 
@@ -1009,7 +1009,7 @@ private:
     throw new Exception("jpeg decoding error");
   }
 
-  void* alloc (size_t nSize, bool zero=false) {
+  void* alloc (usize nSize, bool zero=false) {
     nSize = (JPGD_MAX(nSize, 1) + 3) & ~3;
     char *rv = null;
     for (mem_block *b = m_pMem_blocks; b; b = b.m_pNext)
@@ -2998,7 +2998,7 @@ public bool detect_jpeg_image_from_file (const(char)[] filename, out int width, 
 /// return `false` if image is not JPEG (i hope).
 public bool detect_jpeg_image_from_memory (const(void)[] buf, out int width, out int height, out int actual_comps) {
   bool m_eof_flag;
-  size_t bufpos;
+  usize bufpos;
   auto b = cast(const(ubyte)*)buf.ptr;
 
   return detect_jpeg_image_from_stream(
@@ -3161,7 +3161,7 @@ public ubyte[] decompress_jpeg_image_from_file(bool useMalloc=false) (const(char
 /// you can specify required color components in `req_comps` (3 for RGB or 4 for RGBA), or leave it as is to use image value.
 public ubyte[] decompress_jpeg_image_from_memory(bool useMalloc=false) (const(void)[] buf, out int width, out int height, out int actual_comps, int req_comps=-1) {
   bool m_eof_flag;
-  size_t bufpos;
+  usize bufpos;
   auto b = cast(const(ubyte)*)buf.ptr;
 
   return decompress_jpeg_image_from_stream!useMalloc(
@@ -3347,7 +3347,7 @@ public MemoryImage readJpeg (const(char)[] filename) {
 /// decompress JPEG image from memory buffer.
 public MemoryImage readJpegFromMemory (const(void)[] buf) {
   bool m_eof_flag;
-  size_t bufpos;
+  usize bufpos;
   auto b = cast(const(ubyte)*)buf.ptr;
 
   return readJpegFromStream(

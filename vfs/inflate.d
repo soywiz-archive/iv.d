@@ -617,8 +617,8 @@ public:
     while (len--) {
       if (!getOneByte(readBuf, *dst)) {
         // check if the last 'dest' item is fully decompressed
-        static if (T.sizeof > 1) { if ((cast(size_t)dst-buf.ptr)%T.sizeof) { setErrorState(); throw new Exception("partial data"); } }
-        return buf[0..cast(size_t)(dst-buf.ptr)];
+        static if (T.sizeof > 1) { if ((cast(usize)dst-buf.ptr)%T.sizeof) { setErrorState(); throw new Exception("partial data"); } }
+        return buf[0..cast(usize)(dst-buf.ptr)];
       }
       ++dst;
     }

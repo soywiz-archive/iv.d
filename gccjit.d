@@ -15,7 +15,7 @@
 
 /// You should have received a copy of the GNU General Public License
 /// along with this program.  If not, see <http://www.gnu.org/licenses/>.
-module iv.gccjit;
+module iv.gccjit is aliced;
 pragma(lib, "gccjit");
 
 import std.conv : to;
@@ -30,7 +30,7 @@ final class JITError : Exception
         super(msg, next);
     }
 
-    @safe pure nothrow this(string msg, string file, size_t line, Throwable next = null)
+    @safe pure nothrow this(string msg, string file, usize line, Throwable next = null)
     {
         super(msg, file, line, next);
     }
@@ -246,7 +246,7 @@ final class JITContext
 
     /// A way to map a specific int type, using the compiler to
     /// get the details automatically e.g:
-    ///     JITType type = getIntType!size_t();
+    ///     JITType type = getIntType!usize();
     JITType getIntType(T)() if (isIntegral!T)
     {
         return this.getIntType(T.sizeof, isSigned!T);
@@ -1488,7 +1488,7 @@ enum JITTypeKind : gcc_jit_types
     /// C's const char* type.
     CONST_CHAR_PTR = GCC_JIT_TYPE_CONST_CHAR_PTR,
 
-    /// C's size_t type.
+    /// C's usize type.
     SIZE_T = GCC_JIT_TYPE_SIZE_T,
 
     /// C's FILE* type.
@@ -2078,7 +2078,7 @@ enum : gcc_jit_types
     /* C type: (const char *).  */
     GCC_JIT_TYPE_CONST_CHAR_PTR,
 
-    /* The C "size_t" type.  */
+    /* The C "usize" type.  */
     GCC_JIT_TYPE_SIZE_T,
 
     /* C type: (FILE *)  */

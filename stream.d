@@ -17,13 +17,11 @@
  */
 // severely outdated i/o stream interface
 // use iv.vfs instead
-module iv.stream /*is aliced*/;
+module iv.stream is aliced;
 
 import std.conv : ConvOverflowException;
 import std.traits : isMutable;
 public import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
-
-static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

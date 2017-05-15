@@ -18,7 +18,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  ***********************************************************************/
 // stand-alone unpacker
-module iv.oldpakerz.haunpack;
+module iv.oldpakerz.haunpack is aliced;
 private:
 
 
@@ -413,12 +413,12 @@ public void haunp_reset (haunp_t hup) {
 
 
 // return number of bytes read (<len: end of data), throws on error
-public size_t haunp_read (haunp_t hup, void[] buf, haunp_bread_fn_t reader) {
+public usize haunp_read (haunp_t hup, void[] buf, haunp_bread_fn_t reader) {
   if (buf.length == 0) return 0;
   if (hup !is null && reader !is null) {
     hup.reader = reader;
     scope(exit) hup.reader = null;
-    size_t res = 0;
+    usize res = 0;
     auto d = cast(ubyte*)buf.ptr;
     auto left = buf.length;
     while (left > 0) {

@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.gfxbuf;
+module iv.sdpy.gfxbuf is aliced;
 
 import iv.sdpy.compat;
 import iv.sdpy.core;
@@ -56,7 +56,7 @@ public:
   alias stringc = const(char)[];
 
 private:
-  size_t mVScrS = 0; // this is actually `VScr*`
+  usize mVScrS = 0; // this is actually `VScr*`
 
 nothrow @trusted @nogc:
   void vscrIncRef () {
@@ -93,7 +93,7 @@ nothrow @trusted @nogc:
     //(*vs).__ctor();
     vs.buf = cast(VColor*)malloc((wdt && hgt ? wdt*hgt : 1)*VColor.sizeof);
     if (vs.buf is null) { free(vs); assert(0, "GfxBuf: out of memory"); }
-    mVScrS = cast(size_t)vs;
+    mVScrS = cast(usize)vs;
     vs.w = wdt;
     vs.h = hgt;
     vs.rc = 1;
@@ -107,7 +107,7 @@ nothrow @trusted @nogc:
   }
 
   // to create GfxBuf for vlVScr
-  this (VScr* vs) { mVScrS = cast(size_t)vs; }
+  this (VScr* vs) { mVScrS = cast(usize)vs; }
 
   __gshared VScr vsbuf;
 

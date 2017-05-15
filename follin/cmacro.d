@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.cmacro;
+module iv.follin.cmacro is aliced;
 
 
 // cool helper to translate C defines
@@ -30,7 +30,7 @@ template cmacroFixVars(T...) {
    * Returns:
    *   32-bit or 64-bit hash
    */
-  size_t hashBuffer (const(void)* buf, size_t len, size_t seed=0) pure nothrow @trusted @nogc {
+  usize hashBuffer (const(void)* buf, usize len, usize seed=0) pure nothrow @trusted @nogc {
     enum Get8Bytes = q{
       cast(ulong)data[0]|
       (cast(ulong)data[1]<<8)|
@@ -85,12 +85,12 @@ template cmacroFixVars(T...) {
     h ^= h>>23;
     h *= 0x2127599bf4325c37UL;
     h ^= h>>47;
-    static if (size_t.sizeof == 4) {
+    static if (usize.sizeof == 4) {
       // 32-bit hash
       // the following trick converts the 64-bit hashcode to Fermat
       // residue, which shall retain information from both the higher
       // and lower parts of hashcode.
-      return cast(size_t)(h-(h>>32));
+      return cast(usize)(h-(h>>32));
     } else {
       return h;
     }
@@ -129,7 +129,7 @@ template cmacroFixVars(T...) {
           auto hash = hashBuffer(s.ptr, s.length);
           immutable char[16] hexChars = "0123456789abcdef";
           tmppfx = "_temp_macro_var_";
-          foreach_reverse (immutable idx; 0..size_t.sizeof*2) {
+          foreach_reverse (immutable idx; 0..usize.sizeof*2) {
             tmppfx ~= hexChars[hash&0x0f];
             hash >>= 4;
           }

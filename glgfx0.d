@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.glgfx0;
+module iv.glgfx0 is aliced;
 
 import arsd.simpledisplay : SimpleWindow;
 import iv.cmdcongl;
@@ -658,7 +658,7 @@ void drawCharWdt(string type="msx") (int x, int y, int wdt, int shift, char ch, 
   else static if (type == "dos") { alias fontb8 = dosFont8; enum fwdt = 8; enum fhgt = 8; enum fmask = 0x80; }
   else static if (type == "d10") { alias fontb8 = dosFont10; enum fwdt = 10; enum fhgt = 10; enum fmask = 0x8000; }
   else static assert(0, "invalid font type");
-  size_t pos = ch*fhgt;
+  usize pos = ch*fhgt;
   if (wdt < 1 || shift >= fwdt) return;
   if (fgcol == Transparent && bgcol == Transparent) return;
   if (wdt > fwdt) wdt = fwdt;
@@ -697,7 +697,7 @@ void drawCharWdtOut(string type="msx") (int x, int y, int wdt, int shift, char c
     drawCharWdt(x, y, wdt, shift, ch, fgcol, Transparent);
     return;
   }
-  size_t pos = ch*fhgt;
+  usize pos = ch*fhgt;
   if (wdt < 1 || shift >= fwdt) return;
   if (wdt > 8) wdt = fwdt;
   if (shift < 0) shift = 0;

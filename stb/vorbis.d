@@ -53,14 +53,14 @@
 //
 // See end of file for full version history.
 // D translation by Ketmar // Invisible Vector
-module iv.stb.vorbis;
+module iv.stb.vorbis is aliced;
 
 import core.stdc.stdio : FILE;
 
 nothrow /*@trusted*/:
 @nogc { // code block, as c macro helper is not @nogc; yet it's CTFE-only
 // import it here, as druntime has no `@nogc` on it (for a reason)
-private extern(C) void qsort (void* base, size_t nmemb, size_t size, int function(in void*, in void*) compar);
+private extern(C) void qsort (void* base, usize nmemb, usize size, int function(in void*, in void*) compar);
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -4899,7 +4899,7 @@ template cmacroFixVars(T...) {
    * Returns:
    *   32-bit or 64-bit hash
    */
-  size_t hashOf (const(void)* buf, size_t len, size_t seed=0) pure nothrow @trusted @nogc {
+  usize hashOf (const(void)* buf, usize len, usize seed=0) pure nothrow @trusted @nogc {
     enum Get8Bytes = q{
       cast(ulong)data[0]|
       (cast(ulong)data[1]<<8)|
@@ -4954,12 +4954,12 @@ template cmacroFixVars(T...) {
     h ^= h>>23;
     h *= 0x2127599bf4325c37UL;
     h ^= h>>47;
-    static if (size_t.sizeof == 4) {
+    static if (usize.sizeof == 4) {
       // 32-bit hash
       // the following trick converts the 64-bit hashcode to Fermat
       // residue, which shall retain information from both the higher
       // and lower parts of hashcode.
-      return cast(size_t)(h-(h>>32));
+      return cast(usize)(h-(h>>32));
     } else {
       return h;
     }
@@ -4998,7 +4998,7 @@ template cmacroFixVars(T...) {
           auto hash = hashOf(s.ptr, s.length);
           immutable char[16] hexChars = "0123456789abcdef";
           tmppfx = "_temp_macro_var_";
-          foreach_reverse (immutable idx; 0..size_t.sizeof*2) {
+          foreach_reverse (immutable idx; 0..usize.sizeof*2) {
             tmppfx ~= hexChars[hash&0x0f];
             hash >>= 4;
           }

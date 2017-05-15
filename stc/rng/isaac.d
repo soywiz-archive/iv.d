@@ -20,7 +20,7 @@
  *
  * Suitable for using with std.random functions.
  */
-module iv.stc.rng.isaac;
+module iv.stc.rng.isaac is aliced;
 
 import std.range;
 import iv.stc.core;
@@ -183,7 +183,7 @@ private:
     // cache values
     a = randa;
     b = randb+(++randc); // cc just gets incremented once per 256 results then combined with bb
-    for (size_t i = 0; i < 256; ++i) {
+    for (usize i = 0; i < 256; ++i) {
       x = randm.ptr[i];
       final switch (i&3) {
         case 0: a ^= a<<13; break;
@@ -209,7 +209,7 @@ private:
       "randr.ptr[r++] = b = randm.ptr[((y>>RANDSIZL)>>2)&0xff]+x;\n";
     enum mend = (RANDSIZ/2);
     uint a, b, x, y;
-    size_t m, m2, r;
+    usize m, m2, r;
     a = randa;
     b = randb+(++randc);
     r = m = 0;
@@ -243,7 +243,7 @@ private:
   enum RANDSIZL = 8;
   enum RANDSIZ = (1<<RANDSIZL);
   // context of random number generator
-  size_t randcnt;
+  usize randcnt;
   uint[RANDSIZ] randr;
   uint[RANDSIZ] randm;
   uint randa;
@@ -261,15 +261,15 @@ unittest {
 
   void check (ref ISAACEngine ctx, immutable(uint)[] output) {
     assert(output.length == 8*16);
-    size_t pos = 0;
-    for (size_t f = 0; f < 8; ++f) {
-      for (size_t c = 0; c < 16; ++c) {
+    usize pos = 0;
+    for (usize f = 0; f < 8; ++f) {
+      for (usize c = 0; c < 16; ++c) {
         uint val = ctx.rand();
         assert(output[pos] == val);
         ++pos;
       }
       // now skip 1024 values
-      for (size_t c = 0; c < 1024; ++c) ctx.rand();
+      for (usize c = 0; c < 1024; ++c) ctx.rand();
     }
     ++count;
   }

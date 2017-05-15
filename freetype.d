@@ -23,7 +23,7 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-module iv.freetype;
+module iv.freetype is aliced;
 pragma(lib, "freetype");
 import core.stdc.config;
 
@@ -59,7 +59,7 @@ alias FT_F26Dot6 = c_long;
 alias FT_Fixed = c_long;
 alias FT_Error = int;
 alias FT_Pointer = void*;
-alias FT_Offset = size_t;
+alias FT_Offset = usize;
 alias FT_PtrDist = ptrdiff_t;
 
 struct FT_UnitVector {

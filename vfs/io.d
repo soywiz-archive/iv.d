@@ -78,7 +78,7 @@ private auto byLineCopyImpl(bool keepTerm=false, bool reuseBuffer=false, ST) (au
     char[256] rdbuf;
     int rdpos, rdsize;
     char[] buf;
-    size_t bufused;
+    usize bufused;
     static if (!reuse) string s;
   private:
     this() (auto ref ST ast) {

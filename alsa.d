@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.alsa;
+module iv.alsa is aliced;
 pragma(lib, "asound");
 
 import core.stdc.config;
@@ -359,19 +359,14 @@ int snd_pcm_sw_params_set_stop_threshold(snd_pcm_t*, snd_pcm_sw_params_t*, snd_p
 
 // raw midi
 
-static if(is(ssize_t == uint))
-  alias ssize_t = int;
-else
-  alias ssize_t = long;
-
 
 /+
 struct snd_rawmidi_t {}
 int snd_rawmidi_open(snd_rawmidi_t**, snd_rawmidi_t**, const char*, int);
 int snd_rawmidi_close(snd_rawmidi_t*);
 int snd_rawmidi_drain(snd_rawmidi_t*);
-ssize_t snd_rawmidi_write(snd_rawmidi_t*, const void*, size_t);
-ssize_t snd_rawmidi_read(snd_rawmidi_t*, void*, size_t);
+ssize snd_rawmidi_write(snd_rawmidi_t*, const void*, usize);
+ssize snd_rawmidi_read(snd_rawmidi_t*, void*, usize);
 +/
 
 // mixer

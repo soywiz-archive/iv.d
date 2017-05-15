@@ -33,7 +33,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.nanovg;
+module iv.nanovg.nanovg is aliced;
 
 //version = nanosvg_asserts;
 
@@ -335,7 +335,7 @@ struct NVGCompositeOperationState {
 
 ///
 struct NVGGlyphPosition {
-  size_t strpos;    /// Position of the glyph in the input string.
+  usize strpos;    /// Position of the glyph in the input string.
   float x;          /// The x-coordinate of the logical glyph position.
   float minx, maxx; /// The bounds of the glyph shape.
 }
@@ -3157,7 +3157,7 @@ private template isGoodPositionDelegate(DG) {
  */
 public NVGGlyphPosition[] textGlyphPositions(T) (NVGContext ctx, float x, float y, const(T)[] str, NVGGlyphPosition[] positions) if (is(T == char) || is(T == dchar)) {
   if (str.length == 0 || positions.length == 0) return positions[0..0];
-  size_t posnum;
+  usize posnum;
   auto len = ctx.textGlyphPositions(x, y, str, (in ref NVGGlyphPosition pos) {
     positions.ptr[posnum++] = pos;
     return (posnum < positions.length);
@@ -3197,9 +3197,9 @@ if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
     prevIter = iter;
     NVGGlyphPosition position = void; //WARNING!
     static if (is(T == char)) {
-      position.strpos = cast(size_t)(iter.str-str.ptr);
+      position.strpos = cast(usize)(iter.str-str.ptr);
     } else {
-      position.strpos = cast(size_t)(iter.dstr-str.ptr);
+      position.strpos = cast(usize)(iter.dstr-str.ptr);
     }
     position.x = iter.x*invscale;
     position.minx = nvg__min(iter.x, q.x0)*invscale;
@@ -4056,7 +4056,7 @@ public struct FONScontext {
   void* errorUptr;
 }
 
-void* fons__tmpalloc (size_t size, void* up) {
+void* fons__tmpalloc (usize size, void* up) {
   ubyte* ptr;
   FONScontext* stash = cast(FONScontext*)up;
   // 16-byte align the returned pointer
@@ -6579,7 +6579,7 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
     glBufferData(GL_ARRAY_BUFFER, gl.nverts*NVGvertex.sizeof, gl.verts, GL_STREAM_DRAW);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, NVGvertex.sizeof, cast(const(GLvoid)*)cast(size_t)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, NVGvertex.sizeof, cast(const(GLvoid)*)cast(usize)0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, NVGvertex.sizeof, cast(const(GLvoid)*)(0+2*(float).sizeof));
 
     // Set view and texture just once per frame.

@@ -14,7 +14,7 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.stc.core;
+module iv.stc.core is aliced;
 
 import std.range;
 
@@ -174,7 +174,7 @@ private:
 
 private:
   ubyte[BlockSize] buf;
-  size_t bufpos;
+  usize bufpos;
 }
 
 

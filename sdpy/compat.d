@@ -16,11 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.compat;
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-static if (!is(usize == size_t)) alias usize = size_t;
+module iv.sdpy.compat is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

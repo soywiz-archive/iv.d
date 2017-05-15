@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egeditor.editor;
+module iv.egeditor.editor is aliced;
 
 //version = egeditor_scan_time;
 //version = egeditor_scan_time_to_file;
@@ -24,8 +24,6 @@ import iv.strex;
 import iv.utfutil;
 import iv.vfs;
 debug import iv.vfs.io;
-
-static if (!is(typeof(object.usize))) private alias usize = size_t;
 
 version(egeditor_scan_time) import iv.pxclock;
 
@@ -3671,7 +3669,7 @@ public:
     void startug () { if (!ugstarted) { ugstarted = true; undoGroupStart(); } }
     scope(exit) if (ugstarted) undoGroupEnd();
 
-    size_t pos = 0;
+    usize pos = 0;
     char ch;
     while (pos < str.length) {
       auto stpos = pos;

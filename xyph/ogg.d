@@ -9,7 +9,7 @@
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  *                                                                  *
  ********************************************************************/
-module iv.xyph.ogg;
+module iv.xyph.ogg is aliced;
 pragma(lib, "ogg");
 
 import core.stdc.config;
@@ -18,7 +18,7 @@ alias ogg_int64_t = long;
 
 struct ogg_iovec_t {
   void* iov_base;
-  size_t iov_len;
+  usize iov_len;
 }
 
 

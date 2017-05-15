@@ -38,7 +38,7 @@ static if (iv_vfs_arcz_has_balz) import iv.balz;
 private struct ArzArchive {
 private import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 private:
-  static assert(size_t.sizeof >= (void*).sizeof);
+  static assert(usize.sizeof >= (void*).sizeof);
   private import etc.c.zlib;
 
   static align(1) struct ChunkInfo {
@@ -73,7 +73,7 @@ private:
 
     @disable this (this); // no copies!
 
-    static void decRef (size_t me) {
+    static void decRef (usize me) {
       if (me) {
         auto nfo = cast(Nfo*)me;
         assert(nfo.rc);
@@ -90,7 +90,7 @@ private:
     }
   }
 
-  size_t nfop; // hide it from GC
+  usize nfop; // hide it from GC
 
   private @property Nfo* nfo () { pragma(inline, true); return cast(Nfo*)nfop; }
   void decRef () { pragma(inline, true); Nfo.decRef(nfop); nfop = 0; }
@@ -328,7 +328,7 @@ public:
     assert(nfo.rc == 1);
     debug(iv_vfs_arcz_rc) { import core.stdc.stdio : printf; printf("Nfo %p allocated\n", nfo); }
     scope(failure) decRef();
-    nfop = cast(size_t)nfo;
+    nfop = cast(usize)nfo;
     /* no need to, there is nothing that needs GC there
     {
       import core.memory : GC;
@@ -401,7 +401,7 @@ public:
     debug(iv_vfs_arcz_rc) { import core.stdc.stdio : printf; printf("Zl %p allocated\n", zl); }
     zl.setup(nfo, fi.chunk, fi.chunkofs, fi.size);
     AZFile fl;
-    fl.zlp = cast(size_t)zl;
+    fl.zlp = cast(usize)zl;
     return fl;
   }
 
@@ -410,10 +410,10 @@ private:
     private import etc.c.zlib;
 
     uint rc = 1;
-    size_t nfop; // hide it from GC
+    usize nfop; // hide it from GC
 
     private @property inout(Nfo*) nfo () inout pure nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))nfop; }
-    static void decRef (size_t me) {
+    static void decRef (usize me) {
       if (me) {
         auto zl = cast(LowLevelPackedRO*)me;
         assert(zl.rc);
@@ -450,7 +450,7 @@ private:
     void setup (Nfo* anfo, uint astchunk, uint astofs, uint asize) {
       assert(anfo !is null);
       assert(rc == 1);
-      nfop = cast(size_t)anfo;
+      nfop = cast(usize)anfo;
       ++anfo.rc;
       nextchunk = stchunk = astchunk;
       //curcpos = 0;
@@ -617,7 +617,7 @@ private:
 private struct AZFile {
 private import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 private:
-  size_t zlp;
+  usize zlp;
 
   private @property inout(ArzArchive.LowLevelPackedRO)* zl () inout pure nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))zlp; }
   private void decRef () { pragma(inline, true); ArzArchive.LowLevelPackedRO.decRef(zlp); zlp = 0; }

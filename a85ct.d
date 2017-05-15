@@ -68,7 +68,7 @@ string encodeAscii85(T) (const(T)[] src, int width=76) {
   void encodeTuple () @safe nothrow {
     int tmp = 5;
     ubyte[5] buf;
-    size_t bpos = 0;
+    usize bpos = 0;
     do {
       buf[bpos++] = tuple%85;
       tuple /= 85;

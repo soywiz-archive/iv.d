@@ -17,7 +17,7 @@
  */
 // a thread-safe weak reference implementation
 // http://forum.dlang.org/thread/jjote0$1cql$1@digitalmars.com
-module iv.weakref;
+module iv.weakref is aliced;
 
 import core.atomic, core.memory;
 
@@ -36,9 +36,9 @@ final class Weak(T : Object) {
   // gets such a GC, we should push strongly for built-in weak
   // references.
 
-  private size_t mObject;
-  private size_t mPtr;
-  private size_t mHash;
+  private usize mObject;
+  private usize mPtr;
+  private usize mHash;
 
   this (T obj=null) @trusted { hook(obj); }
 
@@ -68,9 +68,9 @@ final class Weak(T : Object) {
 
   private void hook (Object obj) @trusted {
     if (obj !is null) {
-      //auto ptr = cast(size_t)cast(void*)obj;
+      //auto ptr = cast(usize)cast(void*)obj;
       // fix from Andrej Mitrovic
-      auto ptr = cast(size_t)*(cast(void**)&obj);
+      auto ptr = cast(usize)*(cast(void**)&obj);
       ptr ^= PointerMask;
       // we use atomics because not all architectures may guarantee atomic store and load of these values
       atomicStore(*cast(shared)&mObject, ptr);
@@ -80,7 +80,7 @@ final class Weak(T : Object) {
       rt_attachDisposeEvent(obj, &unhook);
       GC.setAttr(cast(void*)this, GC.BlkAttr.NO_SCAN);
     } else {
-      atomicStore(*cast(shared)&mObject, cast(size_t)0^PointerMask);
+      atomicStore(*cast(shared)&mObject, cast(usize)0^PointerMask);
     }
   }
 
@@ -90,7 +90,7 @@ final class Weak(T : Object) {
     // if we don't null mObject when it is collected, the check
     // in object could return false positives where the GC has
     // reused the memory for a new object.
-    atomicStore(*cast(shared)&mObject, cast(size_t)0^PointerMask);
+    atomicStore(*cast(shared)&mObject, cast(usize)0^PointerMask);
   }
 
   override bool opEquals (Object o) nothrow @trusted {
@@ -104,7 +104,7 @@ final class Weak(T : Object) {
     return 1;
   }
 
-  override size_t toHash () nothrow @trusted {
+  override usize toHash () nothrow @trusted {
     auto obj = object;
     return (obj ? typeid(T).getHash(&obj) : mHash);
   }

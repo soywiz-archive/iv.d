@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module tweetNaCl_test;
+module tweetNaCl_test is aliced;
 
 void main () {
   import iv.tweetNaCl;
@@ -36,8 +36,8 @@ void main () {
           sleep(1);
         }
       }
-      size_t pos = 0;
-      size_t len = dest.length;
+      usize pos = 0;
+      usize len = dest.length;
       while (len > 0) {
         auto i = read(fd, cast(void*)(&dest[pos]), (len < 1048576 ? len : 1048576));
         if (i < 1) {

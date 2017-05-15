@@ -25,7 +25,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 */
-module iv.sdl2.sdl /*is aliced*/;
+module iv.sdl2.sdl is aliced;
 pragma(lib, "SDL2");
 
 import core.stdc.stdio; // FILE
@@ -1756,8 +1756,8 @@ struct SDL_RWops {
   extern(C) nothrow {
     long function (SDL_RWops*) size;
     long function (SDL_RWops*, long, int) seek;
-    size_t function (SDL_RWops*, void*, size_t, size_t) read;
-    size_t function (SDL_RWops*, const (void)*, size_t, size_t) write;
+    usize function (SDL_RWops*, void*, usize, usize) read;
+    usize function (SDL_RWops*, const (void)*, usize, usize) write;
     int function (SDL_RWops*) close;
   }
   uint type;
@@ -1768,8 +1768,8 @@ struct SDL_RWops {
         void* h;
         struct Buffer {
           void* data;
-          size_t size;
-          size_t left;
+          usize size;
+          usize left;
         }
         Buffer buffer;
       }
@@ -1807,8 +1807,8 @@ nothrow {
   long SDL_RWsize (SDL_RWops* ctx) { return ctx.size (ctx); }
   long SDL_RWseek (SDL_RWops* ctx, long offset, int whence) { return ctx.seek (ctx, offset, whence); }
   long SDL_RWtell (SDL_RWops* ctx) { return ctx.seek (ctx, 0, RW_SEEK_CUR); }
-  size_t SDL_RWread (SDL_RWops* ctx, void* ptr, size_t size, size_t n) { return ctx.read (ctx, ptr, size, n); }
-  size_t SDL_RWwrite (SDL_RWops* ctx, const (void)* ptr, size_t size, size_t n) { return ctx.write (ctx, ptr, size, n); }
+  usize SDL_RWread (SDL_RWops* ctx, void* ptr, usize size, usize n) { return ctx.read (ctx, ptr, size, n); }
+  usize SDL_RWwrite (SDL_RWops* ctx, const (void)* ptr, usize size, usize n) { return ctx.write (ctx, ptr, size, n); }
   int SDL_RWclose (SDL_RWops* ctx) { return ctx.close (ctx); }
 }
 
@@ -2384,13 +2384,13 @@ extern(C) @nogc nothrow {
   uint SDL_ReadBE32 (SDL_RWops*);
   ulong SDL_ReadLE64 (SDL_RWops*);
   ulong SDL_ReadBE64 (SDL_RWops*);
-  size_t SDL_WriteU8 (SDL_RWops*, ubyte);
-  size_t SDL_WriteLE16 (SDL_RWops*, ushort);
-  size_t SDL_WriteBE16 (SDL_RWops*, ushort);
-  size_t SDL_WriteLE32 (SDL_RWops*, uint);
-  size_t SDL_WriteBE32 (SDL_RWops*, uint);
-  size_t SDL_WriteLE64 (SDL_RWops*, ulong);
-  size_t SDL_WriteBE64 (SDL_RWops*, ulong);
+  usize SDL_WriteU8 (SDL_RWops*, ubyte);
+  usize SDL_WriteLE16 (SDL_RWops*, ushort);
+  usize SDL_WriteBE16 (SDL_RWops*, ushort);
+  usize SDL_WriteLE32 (SDL_RWops*, uint);
+  usize SDL_WriteBE32 (SDL_RWops*, uint);
+  usize SDL_WriteLE64 (SDL_RWops*, ulong);
+  usize SDL_WriteBE64 (SDL_RWops*, ulong);
 
   // SDL_shape.h
   SDL_Window* SDL_CreateShapedWindow (const(char)*, uint, uint, uint, uint, uint);

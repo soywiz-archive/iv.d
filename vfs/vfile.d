@@ -666,8 +666,8 @@ protected:
   bool eofhit;
   //string fname;
   char[512] fnamebuf=0;
-  size_t fnameptr;
-  size_t fnamelen;
+  usize fnameptr;
+  usize fnamelen;
 
   this (const(char)[] aname) nothrow @trusted @nogc { setFileName(aname); }
 
@@ -682,7 +682,7 @@ protected:
         auto nb = cast(char*)realloc(cast(void*)fnameptr, aname.length);
         if (nb !is null) {
           nb[0..aname.length] = aname[];
-          fnameptr = cast(size_t)nb;
+          fnameptr = cast(usize)nb;
           fnamelen = aname.length;
         }
       }
@@ -754,16 +754,16 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
   {
     debug(vfs_vfile_gc) import core.stdc.stdio : printf;
     auto pbm = __traits(getPointerBitmap, CT);
-    debug(vfs_vfile_gc) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
+    debug(vfs_vfile_gc) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/usize.sizeof));
     immutable(ubyte)* p = cast(immutable(ubyte)*)(pbm.ptr+1);
-    size_t bitnum = 0;
-    immutable end = pbm[0]/size_t.sizeof;
+    usize bitnum = 0;
+    immutable end = pbm[0]/usize.sizeof;
     while (bitnum < end) {
       if (p[bitnum/8]&(1U<<(bitnum%8))) {
-        size_t len = 1;
+        usize len = 1;
         while (bitnum+len < end && (p[(bitnum+len)/8]&(1U<<((bitnum+len)%8))) != 0) ++len;
-        debug(vfs_vfile_gc) printf("  #%u (%u)\n", cast(uint)(bitnum*size_t.sizeof), cast(uint)len);
-        GC.addRange((cast(size_t*)mem)+bitnum, size_t.sizeof*len);
+        debug(vfs_vfile_gc) printf("  #%u (%u)\n", cast(uint)(bitnum*usize.sizeof), cast(uint)len);
+        GC.addRange((cast(usize*)mem)+bitnum, usize.sizeof*len);
         createUnregister = true;
         bitnum += len;
       } else {
@@ -777,16 +777,16 @@ usize newWS (CT, A...) (A args) if (is(CT : WrappedStreamRC)) {
       debug(vfs_vfile_gc) import core.stdc.stdio : printf;
       debug(vfs_vfile_gc) { import core.stdc.stdio : printf; printf("DESTROYING WRAPPER 0x%08x\n", cast(uint)self); }
       auto pbm = __traits(getPointerBitmap, CT);
-      debug(vfs_vfile_gc) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
+      debug(vfs_vfile_gc) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/usize.sizeof));
       immutable(ubyte)* p = cast(immutable(ubyte)*)(pbm.ptr+1);
-      size_t bitnum = 0;
-      immutable end = pbm[0]/size_t.sizeof;
+      usize bitnum = 0;
+      immutable end = pbm[0]/usize.sizeof;
       while (bitnum < end) {
         if (p[bitnum/8]&(1U<<(bitnum%8))) {
-          size_t len = 1;
+          usize len = 1;
           while (bitnum+len < end && (p[(bitnum+len)/8]&(1U<<((bitnum+len)%8))) != 0) ++len;
-          debug(vfs_vfile_gc) printf("  #%u (%u)\n", cast(uint)(bitnum*size_t.sizeof), cast(uint)len);
-          GC.removeRange((cast(size_t*)self)+bitnum);
+          debug(vfs_vfile_gc) printf("  #%u (%u)\n", cast(uint)(bitnum*usize.sizeof), cast(uint)len);
+          GC.removeRange((cast(usize*)self)+bitnum);
           bitnum += len;
         } else {
           ++bitnum;
@@ -844,9 +844,9 @@ private import core.stdc.errno;
 final class WrappedStreamLibcFile(bool ownfl=true) : WrappedStreamRC {
 private:
   //core.stdc.stdio.FILE* fl;
-  size_t flp; // hide from GC
+  usize flp; // hide from GC
   final @property core.stdc.stdio.FILE* fl () const pure nothrow @trusted @nogc { return cast(core.stdc.stdio.FILE*)flp; }
-  final @property void fl (core.stdc.stdio.FILE* afl) pure nothrow @trusted @nogc { flp = cast(size_t)afl; }
+  final @property void fl (core.stdc.stdio.FILE* afl) pure nothrow @trusted @nogc { flp = cast(usize)afl; }
 
   public this (core.stdc.stdio.FILE* afl, const(char)[] afname) { fl = afl; super(afname); } // fuck! emplace needs it
 
@@ -941,9 +941,9 @@ usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl, string fname=null
 final class WrappedStreamGZFile(bool ownfl=true) : WrappedStreamRC {
 private import etc.c.zlib;
 private:
-  size_t flp; // hide from GC
+  usize flp; // hide from GC
   final @property gzFile fl () const pure nothrow @trusted @nogc { return cast(gzFile)flp; }
-  final @property void fl (gzFile afl) pure nothrow @trusted @nogc { flp = cast(size_t)afl; }
+  final @property void fl (gzFile afl) pure nothrow @trusted @nogc { flp = cast(usize)afl; }
 
   int err () nothrow @trusted {
     int res = 0;

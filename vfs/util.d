@@ -67,7 +67,7 @@ public uint crc32 (const(void)[] buf, uint crc=0) pure nothrow @trusted @nogc {
 }
 
 
-public uint mur3HashOf(T) (const(T)[] data, size_t seed=0) pure nothrow @trusted @nogc if (T.sizeof == 1) {
+public uint mur3HashOf(T) (const(T)[] data, usize seed=0) pure nothrow @trusted @nogc if (T.sizeof == 1) {
   enum C1 = 0xcc9e2d51u;
   enum C2 = 0x1b873593u;
 
@@ -130,7 +130,7 @@ public uint mur3HashOf(T) (const(T)[] data, size_t seed=0) pure nothrow @trusted
 }
 
 
-public uint mur3HashOf(R) (auto ref R rng, size_t seed=0) pure nothrow @trusted @nogc
+public uint mur3HashOf(R) (auto ref R rng, usize seed=0) pure nothrow @trusted @nogc
 if (is(typeof((inout int=0){
   bool e = rng.empty;
   ubyte b = rng.front;

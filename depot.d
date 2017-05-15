@@ -17,23 +17,13 @@
  * D translation and "d-fication" by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * ********************************************************************************************* */
 // key/value database based on tokyo kabinet
-module iv.depot /*is aliced*/;
-
-static if (!is(typeof(usize))) private alias usize = size_t;
+module iv.depot is aliced;
 
 
 /// database errors
 class DepotException : Exception {
-  static if (__VERSION__ >= 2068) {
-    // it's @nogc in 2.068+
-    this (Depot.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
-      super(errorMessage(ecode), file, line, next);
-    }
-  } else {
-    // it's not @nogc in 2.067 and lower
-    this (Depot.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
-      super(errorMessage(ecode), file, line, next);
-    }
+  this (Depot.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
+    super(errorMessage(ecode), file, line, next);
   }
 
   /** Get a message string corresponding to an error code.

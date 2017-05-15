@@ -21,9 +21,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 // UTF-8 utilities (there will be more soon ;-)
-module iv.utfutil;
-
-static if (!is(typeof(usize))) private alias usize = size_t;
+module iv.utfutil is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -187,7 +185,7 @@ int utf8Encode(dchar replacement='\uFFFD') (char[] s, dchar c) pure nothrow @tru
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// doesn't do all possible checks, so don't pass invalid UTF-8
-size_t utf8Length (const(char)[] s) pure nothrow @trusted @nogc {
+usize utf8Length (const(char)[] s) pure nothrow @trusted @nogc {
   static immutable ubyte[256] UTF8stride = [
     cast(ubyte)
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -207,7 +205,7 @@ size_t utf8Length (const(char)[] s) pure nothrow @trusted @nogc {
     3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
     4,4,4,4,4,4,4,4,5,5,5,5,6,6,0xFF,0xFF,
   ];
-  size_t pos = 0, res = 0;
+  usize pos = 0, res = 0;
   while (pos < s.length) {
     ubyte l = UTF8stride.ptr[s.ptr[pos++]];
     if (l == 0xFF) l = 1;

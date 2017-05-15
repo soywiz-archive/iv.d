@@ -17,14 +17,13 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-module iv.gcrypt;
+module iv.gcrypt is aliced;
 pragma(lib, "gcrypt");
 
 import iv.gpgerror;
 
 import core.stdc.stdarg : va_list;
 import core.sys.posix.sys.socket : socklen_t;
-import core.sys.posix.sys.types : ssize_t;
 
 
 extern(C) nothrow @nogc:
@@ -164,9 +163,9 @@ typedef struct gcry_mpi *GcryMPI _GCRY_GCC_ATTR_DEPRECATED;
 
 /* A structure used for scatter gather hashing.  */
 struct gcry_buffer_t {
-  size_t size;  /* The allocated size of the buffer or 0.  */
-  size_t off;   /* Offset into the buffer.  */
-  size_t len;   /* The used length of the buffer.  */
+  usize size;  /* The allocated size of the buffer or 0.  */
+  usize off;   /* Offset into the buffer.  */
+  usize len;   /* The used length of the buffer.  */
   void *data;   /* The buffer.  */
 }
 
@@ -278,28 +277,28 @@ enum {
    return it in RETSEXP.  With AUTODETECT set to 0 the data in BUFFER
    is expected to be in canonized format.  */
 gcry_error_t gcry_sexp_new (gcry_sexp_t *retsexp,
-                            const(void)* buffer, size_t length,
+                            const(void)* buffer, usize length,
                             int autodetect);
 
  /* Same as gcry_sexp_new but allows to pass a FREEFNC which has the
     effect to transfer ownership of BUFFER to the created object.  */
 gcry_error_t gcry_sexp_create (gcry_sexp_t *retsexp,
-                               void *buffer, size_t length,
+                               void *buffer, usize length,
                                int autodetect, void function (void *) freefnc);
 
 /* Scan BUFFER and return a new S-expression object in RETSEXP.  This
    function expects a printf like string in BUFFER.  */
-gcry_error_t gcry_sexp_sscan (gcry_sexp_t *retsexp, size_t *erroff,
-                              const(char)* buffer, size_t length);
+gcry_error_t gcry_sexp_sscan (gcry_sexp_t *retsexp, usize *erroff,
+                              const(char)* buffer, usize length);
 
 /* Same as gcry_sexp_sscan but expects a string in FORMAT and can thus
    only be used for certain encodings.  */
-gcry_error_t gcry_sexp_build (gcry_sexp_t *retsexp, size_t *erroff,
+gcry_error_t gcry_sexp_build (gcry_sexp_t *retsexp, usize *erroff,
                               const(char)* format, ...);
 
 /* Like gcry_sexp_build, but uses an array instead of variable
    function arguments.  */
-gcry_error_t gcry_sexp_build_array (gcry_sexp_t *retsexp, size_t *erroff,
+gcry_error_t gcry_sexp_build_array (gcry_sexp_t *retsexp, usize *erroff,
             const(char)* format, void **arg_list);
 
 /* Release the S-expression object SEXP */
@@ -307,13 +306,13 @@ void gcry_sexp_release (gcry_sexp_t sexp);
 
 /* Calculate the length of an canonized S-expresion in BUFFER and
    check for a valid encoding. */
-size_t gcry_sexp_canon_len (const(ubyte)* buffer, size_t length,
-                            size_t *erroff, gcry_error_t *errcode);
+usize gcry_sexp_canon_len (const(ubyte)* buffer, usize length,
+                            usize *erroff, gcry_error_t *errcode);
 
 /* Copies the S-expression object SEXP into BUFFER using the format
    specified in MODE.  */
-size_t gcry_sexp_sprint (gcry_sexp_t sexp, int mode, void *buffer,
-                         size_t maxlength);
+usize gcry_sexp_sprint (gcry_sexp_t sexp, int mode, void *buffer,
+                         usize maxlength);
 
 /* Dumps the S-expression object A in a format suitable for debugging
    to Libgcrypt's logging stream.  */
@@ -331,7 +330,7 @@ gcry_sexp_t gcry_sexp_prepend (const gcry_sexp_t a, const gcry_sexp_t n);
    newly allocated S-expression consisting of the found sublist or
    `null' when not found.  */
 gcry_sexp_t gcry_sexp_find_token (gcry_sexp_t list,
-                                const(char)* tok, size_t toklen);
+                                const(char)* tok, usize toklen);
 /* Return the length of the LIST.  For a valid S-expression this
    should be at least 1.  */
 int gcry_sexp_length (const gcry_sexp_t list);
@@ -363,14 +362,14 @@ gcry_sexp_t gcry_sexp_cadr (const gcry_sexp_t list);
    *Note:* The returned pointer is valid as long as LIST is not
    modified or released.  */
 const(char)* gcry_sexp_nth_data (const gcry_sexp_t list, int number,
-                                size_t *datalen);
+                                usize *datalen);
 
 /* This function is used to get data from a LIST.  A malloced buffer to the
    data with index NUMBER is returned and the length of this
    data will be stored to RLENGTH.  If there is no data at the given
    index or the index represents another list, `null' is returned.  */
 void *gcry_sexp_nth_buffer (const gcry_sexp_t list, int number,
-                            size_t *rlength);
+                            usize *rlength);
 
 /* This function is used to get and convert data from a LIST.  The
    data is assumed to be a Nul terminated string.  The caller must
@@ -492,8 +491,8 @@ int gcry_mpi_cmp_ui (const gcry_mpi_t u, /*unsigned long*/uint v);
    RET_MPI.  If NSCANNED is not null, it will receive the number of
    bytes actually scanned after a successful operation. */
 gcry_error_t gcry_mpi_scan (gcry_mpi_t *ret_mpi, gcry_mpi_format format,
-                            const(void)* buffer, size_t buflen,
-                            size_t *nscanned);
+                            const(void)* buffer, usize buflen,
+                            usize *nscanned);
 
 /* Convert the big integer A into the external representation
    described by FORMAT and store it in the provided BUFFER which has
@@ -501,8 +500,8 @@ gcry_error_t gcry_mpi_scan (gcry_mpi_t *ret_mpi, gcry_mpi_format format,
    receives the actual length of the external representation unless it
    has been passed as null. */
 gcry_error_t gcry_mpi_print (gcry_mpi_format format,
-                             ubyte *buffer, size_t buflen,
-                             size_t *nwritten,
+                             ubyte *buffer, usize buflen,
+                             usize *nwritten,
                              const gcry_mpi_t a);
 
 /* Convert the big integer A int the external representation described
@@ -510,7 +509,7 @@ gcry_error_t gcry_mpi_print (gcry_mpi_format format,
    will be put into BUFFER.  NWRITTEN receives the actual lengths of the
    external representation. */
 gcry_error_t gcry_mpi_aprint (gcry_mpi_format format,
-                              ubyte **buffer, size_t *nwritten,
+                              ubyte **buffer, usize *nwritten,
                               const gcry_mpi_t a);
 
 /* Dump the value of A in a format suitable for debugging to
@@ -859,15 +858,15 @@ void gcry_cipher_close (gcry_cipher_hd_t h);
 
 /* Perform various operations on the cipher object H. */
 gcry_error_t gcry_cipher_ctl (gcry_cipher_hd_t h, int cmd, void *buffer,
-                             size_t buflen);
+                             usize buflen);
 
 /* Retrieve various information about the cipher object H. */
 gcry_error_t gcry_cipher_info (gcry_cipher_hd_t h, int what, void *buffer,
-                              size_t *nbytes);
+                              usize *nbytes);
 
 /* Retrieve various information about the cipher algorithm ALGO. */
 gcry_error_t gcry_cipher_algo_info (int algo, int what, void *buffer,
-                                   size_t *nbytes);
+                                   usize *nbytes);
 
 /* Map the cipher algorithm whose ID is contained in ALGORITHM to a
    string representation of the algorithm name.  For unknown algorithm
@@ -888,34 +887,34 @@ int gcry_cipher_mode_from_oid (const(char)* string) /*_GCRY_GCC_ATTR_PURE*/;
    most algorithms it is possible to pass null for in and 0 for INLEN
    and do a in-place decryption of the data provided in OUT.  */
 gcry_error_t gcry_cipher_encrypt (gcry_cipher_hd_t h,
-                                  void *out_, size_t outsize,
-                                  const(void)* in_, size_t inlen);
+                                  void *out_, usize outsize,
+                                  const(void)* in_, usize inlen);
 
 /* The counterpart to gcry_cipher_encrypt.  */
 gcry_error_t gcry_cipher_decrypt (gcry_cipher_hd_t h,
-                                  void *out_, size_t outsize,
-                                  const(void)* in_, size_t inlen);
+                                  void *out_, usize outsize,
+                                  const(void)* in_, usize inlen);
 
 /* Set KEY of length KEYLEN bytes for the cipher handle HD.  */
 gcry_error_t gcry_cipher_setkey (gcry_cipher_hd_t hd,
-                                 const(void)* key, size_t keylen);
+                                 const(void)* key, usize keylen);
 
 
 /* Set initialization vector IV of length IVLEN for the cipher handle HD. */
 gcry_error_t gcry_cipher_setiv (gcry_cipher_hd_t hd,
-                                const(void)* iv, size_t ivlen);
+                                const(void)* iv, usize ivlen);
 
 /* Provide additional authentication data for AEAD modes/ciphers.  */
 gcry_error_t gcry_cipher_authenticate (gcry_cipher_hd_t hd, const(void)* abuf,
-                                       size_t abuflen);
+                                       usize abuflen);
 
 /* Get authentication tag for AEAD modes/ciphers.  */
 gcry_error_t gcry_cipher_gettag (gcry_cipher_hd_t hd, void *outtag,
-                                 size_t taglen);
+                                 usize taglen);
 
 /* Check authentication tag for AEAD modes/ciphers.  */
 gcry_error_t gcry_cipher_checktag (gcry_cipher_hd_t hd, const(void)* intag,
-                                   size_t taglen);
+                                   usize taglen);
 
 /* Reset the handle to the state after open.  */
 auto gcry_cipher_reset (gcry_cipher_hd_t h) { return gcry_cipher_ctl(h, GCRYCTL_RESET, null, 0); }
@@ -930,13 +929,13 @@ auto gcry_cipher_cts (gcry_cipher_hd_t h, int on) { return gcry_cipher_ctl(h, GC
 /* Set counter for CTR mode.  (CTR,CTRLEN) must denote a buffer of
    block size length, or (null,0) to set the CTR to the all-zero block. */
 gpg_error_t gcry_cipher_setctr (gcry_cipher_hd_t hd,
-                                const(void)* ctr, size_t ctrlen);
+                                const(void)* ctr, usize ctrlen);
 
 /* Retrieve the key length in bytes used with algorithm A. */
-size_t gcry_cipher_get_algo_keylen (int algo);
+usize gcry_cipher_get_algo_keylen (int algo);
 
 /* Retrieve the block length in bytes used with algorithm A. */
-size_t gcry_cipher_get_algo_blklen (int algo);
+usize gcry_cipher_get_algo_blklen (int algo);
 
 /* Return 0 if the algorithm A is available for use. */
 auto gcry_cipher_test_algo (int a) { return gcry_cipher_algo_info(a, GCRYCTL_TEST_ALGO, null, null); }
@@ -1005,11 +1004,11 @@ gcry_error_t gcry_pk_testkey (gcry_sexp_t key);
 gcry_error_t gcry_pk_genkey (gcry_sexp_t *r_key, gcry_sexp_t s_parms);
 
 /* Catch all function for miscellaneous operations. */
-gcry_error_t gcry_pk_ctl (int cmd, void *buffer, size_t buflen);
+gcry_error_t gcry_pk_ctl (int cmd, void *buffer, usize buflen);
 
 /* Retrieve information about the public key algorithm ALGO. */
 gcry_error_t gcry_pk_algo_info (int algo, int what,
-                                void *buffer, size_t *nbytes);
+                                void *buffer, usize *nbytes);
 
 /* Map the public key algorithm whose ID is contained in ALGORITHM to
    a string representation of the algorithm name.  For unknown
@@ -1131,12 +1130,12 @@ void gcry_md_reset (gcry_md_hd_t hd);
 
 /* Perform various operations on the digest object HD. */
 gcry_error_t gcry_md_ctl (gcry_md_hd_t hd, int cmd,
-                          void *buffer, size_t buflen);
+                          void *buffer, usize buflen);
 
 /* Pass LENGTH bytes of data in BUFFER to the digest object HD so that
    it can update the digest values.  This is the actual hash
    function. */
-void gcry_md_write (gcry_md_hd_t hd, const(void)* buffer, size_t length);
+void gcry_md_write (gcry_md_hd_t hd, const(void)* buffer, usize length);
 
 /* Read out the final digest from HD return the digest value for
    algorithm ALGO. */
@@ -1148,7 +1147,7 @@ ubyte *gcry_md_read (gcry_md_hd_t hd, int algo);
    DIGEST which must be large enough to hold the digest of the given
    algorithm. */
 void gcry_md_hash_buffer (int algo, void *digest,
-                          const(void)* buffer, size_t length);
+                          const(void)* buffer, usize length);
 
 /* Convenience function to hash multiple buffers.  */
 gpg_error_t gcry_md_hash_buffers (int algo, uint flags, void *digest,
@@ -1171,11 +1170,11 @@ int gcry_md_is_secure (gcry_md_hd_t a);
 
 /* Retrieve various information about the object H.  */
 gcry_error_t gcry_md_info (gcry_md_hd_t h, int what, void *buffer,
-                          size_t *nbytes);
+                          usize *nbytes);
 
 /* Retrieve various information about the algorithm ALGO.  */
 gcry_error_t gcry_md_algo_info (int algo, int what, void *buffer,
-                               size_t *nbytes);
+                               usize *nbytes);
 
 /* Map the digest algorithm id ALGO to a string representation of the
    algorithm name.  For unknown algorithms this function returns
@@ -1188,7 +1187,7 @@ int gcry_md_map_name (const(char)* name) /*_GCRY_GCC_ATTR_PURE*/;
 
 /* For use with the HMAC feature, the set MAC key to the KEY of
    KEYLEN bytes. */
-gcry_error_t gcry_md_setkey (gcry_md_hd_t hd, const(void)* key, size_t keylen);
+gcry_error_t gcry_md_setkey (gcry_md_hd_t hd, const(void)* key, usize keylen);
 
 /* Start or stop debugging for digest handle HD; i.e. create a file
    named dbgmd-<n>.<suffix> while hashing.  If SUFFIX is null,
@@ -1217,7 +1216,7 @@ void gcry_md_debug (gcry_md_hd_t hd, const(char)* suffix);
             gcry_md_algo_info( (a), GCRYCTL_TEST_ALGO, null, null )
 
 /* Return an DER encoded ASN.1 OID for the algorithm A in buffer B. N
-   must point to size_t variable with the available size of buffer B.
+   must point to usize variable with the available size of buffer B.
    After return it will receive the actual size of the returned
    OID. */
 #define gcry_md_get_asnoid(a,b,n) \
@@ -1291,31 +1290,31 @@ void gcry_mac_close (gcry_mac_hd_t h);
 
 /* Perform various operations on the MAC object H. */
 gcry_error_t gcry_mac_ctl (gcry_mac_hd_t h, int cmd, void *buffer,
-                           size_t buflen);
+                           usize buflen);
 
 /* Retrieve various information about the MAC algorithm ALGO. */
 gcry_error_t gcry_mac_algo_info (int algo, int what, void *buffer,
-                                 size_t *nbytes);
+                                 usize *nbytes);
 
 /* Set KEY of length KEYLEN bytes for the MAC handle HD.  */
 gcry_error_t gcry_mac_setkey (gcry_mac_hd_t hd, const(void)* key,
-                              size_t keylen);
+                              usize keylen);
 
 /* Set initialization vector IV of length IVLEN for the MAC handle HD. */
 gcry_error_t gcry_mac_setiv (gcry_mac_hd_t hd, const(void)* iv,
-                             size_t ivlen);
+                             usize ivlen);
 
 /* Pass LENGTH bytes of data in BUFFER to the MAC object HD so that
    it can update the MAC values.  */
 gcry_error_t gcry_mac_write (gcry_mac_hd_t hd, const(void)* buffer,
-                             size_t length);
+                             usize length);
 
 /* Read out the final authentication code from the MAC object HD to BUFFER. */
-gcry_error_t gcry_mac_read (gcry_mac_hd_t hd, void *buffer, size_t *buflen);
+gcry_error_t gcry_mac_read (gcry_mac_hd_t hd, void *buffer, usize *buflen);
 
 /* Verify the final authentication code from the MAC object HD with BUFFER. */
 gcry_error_t gcry_mac_verify (gcry_mac_hd_t hd, const(void)* buffer,
-                              size_t buflen);
+                              usize buflen);
 
 /* Retrieve the length in bytes of the MAC yielded by algorithm ALGO. */
 uint gcry_mac_get_algo_maclen (int algo);
@@ -1358,11 +1357,11 @@ enum  {
 }
 
 /* Derive a key from a passphrase.  */
-gpg_error_t gcry_kdf_derive (const(void)* passphrase, size_t passphraselen,
+gpg_error_t gcry_kdf_derive (const(void)* passphrase, usize passphraselen,
                              int algo, int subalgo,
-                             const(void)* salt, size_t saltlen,
+                             const(void)* salt, usize saltlen,
                              /*unsigned long*/uint iterations,
-                             size_t keysize, void *keybuffer);
+                             usize keysize, void *keybuffer);
 
 
 
@@ -1395,13 +1394,13 @@ enum {
 
 /* Fill BUFFER with LENGTH bytes of random, using random numbers of
    quality LEVEL. */
-void gcry_randomize (void *buffer, size_t length,
+void gcry_randomize (void *buffer, usize length,
                      gcry_random_level level);
 
 /* Add the external random from BUFFER with LENGTH bytes into the
    pool. QUALITY should either be -1 for unknown or in the range of 0
    to 100 */
-gcry_error_t gcry_random_add_bytes (const(void)* buffer, size_t length,
+gcry_error_t gcry_random_add_bytes (const(void)* buffer, usize length,
                                     int quality);
 
 /* If random numbers are used in an application, this macro should be
@@ -1412,13 +1411,13 @@ auto gcry_fast_random_poll () { return gcry_control(GCRYCTL_FAST_POLL, null); }
 
 /* Return NBYTES of allocated random using a random numbers of quality
    LEVEL. */
-void *gcry_random_bytes (size_t nbytes, gcry_random_level level)
+void *gcry_random_bytes (usize nbytes, gcry_random_level level)
                          /*_GCRY_GCC_ATTR_MALLOC*/;
 
 /* Return NBYTES of allocated random using a random numbers of quality
    LEVEL.  The random numbers are created returned in "secure"
    memory. */
-void *gcry_random_bytes_secure (size_t nbytes, gcry_random_level level)
+void *gcry_random_bytes_secure (usize nbytes, gcry_random_level level)
                                 /*_GCRY_GCC_ATTR_MALLOC*/;
 
 
@@ -1430,7 +1429,7 @@ void gcry_mpi_randomize (gcry_mpi_t w,
 
 
 /* Create an unpredicable nonce of LENGTH bytes in BUFFER. */
-void gcry_create_nonce (void *buffer, size_t length);
+void gcry_create_nonce (void *buffer, usize length);
 
 
 
@@ -1507,7 +1506,7 @@ void gcry_ctx_release (gcry_ctx_t ctx);
 
 /* Log data using Libgcrypt's own log interface.  */
 void gcry_log_debug (const(char)* fmt, ...) /*_GCRY_GCC_ATTR_PRINTF(1,2)*/;
-void gcry_log_debughex (const(char)* text, const(void)* buffer, size_t length);
+void gcry_log_debughex (const(char)* text, const(void)* buffer, usize length);
 void gcry_log_debugmpi (const(char)* text, gcry_mpi_t mpi);
 void gcry_log_debugpnt (const(char)* text,
                         gcry_mpi_point_t point, gcry_ctx_t ctx);
@@ -1530,19 +1529,19 @@ enum {
 alias gcry_handler_progress_t= void function (void *, const(char)* , int, int, int);
 
 /* Type for memory allocation handlers.  */
-alias gcry_handler_alloc_t = void* function (size_t n);
+alias gcry_handler_alloc_t = void* function (usize n);
 
 /* Type for secure memory check handlers.  */
 alias gcry_handler_secure_check_t = int function (const(void)* );
 
 /* Type for memory reallocation handlers.  */
-alias gcry_handler_realloc_t = void* function (void *p, size_t n);
+alias gcry_handler_realloc_t = void* function (void *p, usize n);
 
 /* Type for memory free handlers.  */
 alias gcry_handler_free_t = void function (void *);
 
 /* Type for out-of-memory handlers.  */
-alias gcry_handler_no_mem_t = int function (void *, size_t, uint);
+alias gcry_handler_no_mem_t = int function (void *, usize, uint);
 
 /* Type for fatal error handlers.  */
 alias gcry_handler_error_t = void function (void *, int, const(char)* );
@@ -1580,17 +1579,17 @@ void gcry_set_gettext_handler (const(char)* function (const(char)*) f);
 
 /* Libgcrypt uses its own memory allocation.  It is important to use
    gcry_free () to release memory allocated by libgcrypt. */
-void *gcry_malloc (size_t n) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_calloc (size_t n, size_t m) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_malloc_secure (size_t n) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_calloc_secure (size_t n, size_t m) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_realloc (void *a, size_t n);
+void *gcry_malloc (usize n) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_calloc (usize n, usize m) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_malloc_secure (usize n) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_calloc_secure (usize n, usize m) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_realloc (void *a, usize n);
 char *gcry_strdup (const(char)* string) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_xmalloc (size_t n) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_xcalloc (size_t n, size_t m) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_xmalloc_secure (size_t n) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_xcalloc_secure (size_t n, size_t m) /*_GCRY_GCC_ATTR_MALLOC*/;
-void *gcry_xrealloc (void *a, size_t n);
+void *gcry_xmalloc (usize n) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_xcalloc (usize n, usize m) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_xmalloc_secure (usize n) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_xcalloc_secure (usize n, usize m) /*_GCRY_GCC_ATTR_MALLOC*/;
+void *gcry_xrealloc (void *a, usize n);
 char *gcry_xstrdup (const(char)* a) /*_GCRY_GCC_ATTR_MALLOC*/;
 void  gcry_free (void *a);
 

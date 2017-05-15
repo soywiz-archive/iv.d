@@ -241,12 +241,12 @@ public:
         ulong end = mp3info.index.length-1;
         while (start <= end) {
           ulong mid = (start+end)/2;
-          auto smps = mp3info.index[cast(size_t)mid].samples;
-          auto smpe = (mp3info.index.length-mid > 0 ? mp3info.index[cast(size_t)(mid+1)].samples : samplestotal);
+          auto smps = mp3info.index[cast(usize)mid].samples;
+          auto smpe = (mp3info.index.length-mid > 0 ? mp3info.index[cast(usize)(mid+1)].samples : samplestotal);
           if (snum >= smps && snum < smpe) {
             // i found her!
             samplesread = snum;
-            fl.seek(mp3info.index[cast(size_t)mid].fpos);
+            fl.seek(mp3info.index[cast(usize)mid].fpos);
             mp3smpused = cast(uint)(snum-smps);
             mp3.sync(&reader);
             return snum;

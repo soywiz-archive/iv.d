@@ -28,7 +28,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-module iv.lmdb /*is aliced*/;
+module iv.lmdb is aliced;
 pragma(lib, "lmdb");
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -37,7 +37,6 @@ extern(C):
 nothrow:
 @nogc:
 
-static if (!is(typeof(usize))) private alias usize = size_t;
 alias mdb_mode_t = uint;
 struct mdb_filehandle_ts {}
 alias mdb_filehandle_t = mdb_filehandle_ts*;

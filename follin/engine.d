@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.engine;
+module iv.follin.engine is aliced;
 
 version = follin_use_spinrw;
 //version = follin_prefer_alsa_plug;
@@ -648,7 +648,7 @@ bool sndGenerateBuffer () {
     }
     assert((zeroesptr&0x3f) == 0, "wtf?!");
   }
-  //version(follin_use_sse) assert(((cast(size_t)zeroes.ptr)&0x3f) == 0, "wtf?!");
+  //version(follin_use_sse) assert(((cast(usize)zeroes.ptr)&0x3f) == 0, "wtf?!");
 
   static void killChan() (Channel* ch, ref bool channelsChanged) {
     if (ch.namelen) {

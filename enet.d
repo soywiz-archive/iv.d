@@ -38,27 +38,27 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.enet;
+module iv.enet is aliced;
 
 
 version(BigEndian) {
   ushort ENET_HOST_TO_NET_16 (ushort x) @safe pure @nogc nothrow {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     return x;
   }
 
   uint ENET_HOST_TO_NET_32 (uint x) @safe pure @nogc nothrow {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     return x;
   }
 } else version(LittleEndian) {
   ushort ENET_HOST_TO_NET_16 (ushort x) @safe pure @nogc nothrow {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     return ((x&255)<<8)|(x>>8);
   }
 
   uint ENET_HOST_TO_NET_32 (uint x) @safe pure @nogc nothrow {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     import core.bitop : bswap;
     return bswap(x);
   }
@@ -84,7 +84,7 @@ version(Windows) {
 
   align(1) struct ENetBuffer {
   align(1):
-    size_t dataLength;
+    usize dataLength;
     void *data;
   }
 
@@ -115,7 +115,7 @@ version(Windows) {
   }
 
   void ENET_SOCKETSET_REMOVE() (ref ENetSocketSet sockset, ENetSocket socket) {
-    foreach (size_t i; 0..sockset.fd_count) {
+    foreach (usize i; 0..sockset.fd_count) {
       if (sockset.fd_array[i] == socket) {
         while (i < sockset.fd_count-1) {
           sockset.fd_array[i] = sockset.fd_array[i+1];
@@ -137,7 +137,7 @@ version(Windows) {
   align(1) struct ENetBuffer {
   align(1):
     void* data;
-    size_t dataLength;
+    usize dataLength;
   }
 }
 
@@ -343,12 +343,12 @@ struct ENetList {
 // callbacks.h
 struct ENetCallbacks {
 extern(C) nothrow:
-  void* function (size_t size) malloc;
+  void* function (usize size) malloc;
   void function (void* memory) free;
   void function () no_memory;
 }
 
-//extern(C) void* enet_malloc (size_t) nothrow @trusted;
+//extern(C) void* enet_malloc (usize) nothrow @trusted;
 //extern(C) void enet_free (void*) nothrow @trusted;
 
 
@@ -360,22 +360,22 @@ enum {
 }
 
 int ENET_VERSION_CREATE() (int major, int minor, int patch) pure nothrow @safe @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  pragma(inline, true);
   return (major << 16) | (minor << 8) | patch;
 }
 
 int ENET_VERSION_GET_MAJOR() (int version_) pure nothrow @safe @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  pragma(inline, true);
   return (version_ >> 16) & 0xFF;
 }
 
 int ENET_VERSION_GET_MINOR() (int version_) pure nothrow @safe @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  pragma(inline, true);
   return (version_ >> 8) & 0xFF;
 }
 
 int ENET_VERSION_GET_PATCH() (int version_) pure nothrow @safe @nogc {
-  static if (__VERSION__ > 2067) pragma(inline, true);
+  pragma(inline, true);
   return version_ & 0xFF;
 }
 
@@ -490,10 +490,10 @@ alias extern(C) nothrow void function (ENetPacket *) ENetPacketFreeCallback;
  *    ENET_PACKET_FLAG_SENT - whether the packet has been sent from all queues it has been entered into
  */
 struct ENetPacket {
-  size_t referenceCount;               /** internal use only */
+  usize referenceCount;               /** internal use only */
   enet_uint32 flags;                   /** bitwise-or of ENetPacketFlag constants */
   enet_uint8* data;                    /** allocated data for packet */
-  size_t dataLength;                   /** length of data */
+  usize dataLength;                   /** length of data */
   ENetPacketFreeCallback freeCallback; /** function to be called when the packet is no longer in use */
   void* userData;                      /** application private data, may be freely modified */
 }
@@ -603,7 +603,7 @@ struct ENetPeer {
   void* data;                    /** Application private data, may be freely modified */
   ENetPeerState state;
   ENetChannel* channels;
-  size_t channelCount;           /** Number of channels allocated for communication with peer */
+  usize channelCount;           /** Number of channels allocated for communication with peer */
   enet_uint32 incomingBandwidth; /** Downstream bandwidth of the client in bytes/second */
   enet_uint32 outgoingBandwidth; /** Upstream bandwidth of the client in bytes/second */
   enet_uint32 incomingBandwidthThrottleEpoch;
@@ -651,7 +651,7 @@ struct ENetPeer {
   enet_uint16 outgoingUnsequencedGroup;
   enet_uint32[ENET_PEER_UNSEQUENCED_WINDOW_SIZE/32] unsequencedWindow;
   enet_uint32 eventData;
-  size_t totalWaitingData;
+  usize totalWaitingData;
 }
 
 /** An ENet packet compressor for compressing UDP packets before socket sends or receives.
@@ -661,16 +661,16 @@ struct ENetCompressor {
   void* context;
 extern(C) nothrow @trusted:
   /** Compresses from inBuffers[0:inBufferCount-1], containing inLimit bytes, to outData, outputting at most outLimit bytes. Should return 0 on failure. */
-  size_t function (void* context, const(ENetBuffer)* inBuffers, size_t inBufferCount, size_t inLimit, enet_uint8* outData, size_t outLimit) @nogc compress;
+  usize function (void* context, const(ENetBuffer)* inBuffers, usize inBufferCount, usize inLimit, enet_uint8* outData, usize outLimit) @nogc compress;
   /** Decompresses from inData, containing inLimit bytes, to outData, outputting at most outLimit bytes. Should return 0 on failure. */
-  size_t function (void* context, const(enet_uint8)* inData, size_t inLimit, enet_uint8* outData, size_t outLimit) @nogc decompress;
+  usize function (void* context, const(enet_uint8)* inData, usize inLimit, enet_uint8* outData, usize outLimit) @nogc decompress;
   /** Destroys the context when compression is disabled or the host is destroyed. May be null. */
   void function (void* context) destroy;
 }
 
 /** Callback that computes the checksum of the data held in buffers[0:bufferCount-1] */
 extern(C) nothrow @trusted @nogc {
-alias ENetChecksumCallback = enet_uint32 function (const(ENetBuffer)* buffers, size_t bufferCount);
+alias ENetChecksumCallback = enet_uint32 function (const(ENetBuffer)* buffers, usize bufferCount);
 
 /** Callback for intercepting received raw UDP packets. Should return 1 to intercept, 0 to ignore, or -1 to propagate an error. */
 alias ENetInterceptCallback = int function (ENetHost* host, ENetEvent* event);
@@ -702,33 +702,33 @@ struct ENetHost {
   enet_uint32 randomSeed;
   int recalculateBandwidthLimits;
   ENetPeer* peers;     /** array of peers allocated for this host */
-  size_t peerCount;    /** number of peers allocated for this host */
-  size_t channelLimit; /** maximum number of channels allowed for connected peers */
+  usize peerCount;    /** number of peers allocated for this host */
+  usize channelLimit; /** maximum number of channels allowed for connected peers */
   enet_uint32 serviceTime;
   ENetList dispatchQueue;
   int continueSending;
-  size_t packetSize;
+  usize packetSize;
   enet_uint16 headerFlags;
   ENetProtocol[ENET_PROTOCOL_MAXIMUM_PACKET_COMMANDS] commands;
-  size_t commandCount;
+  usize commandCount;
   ENetBuffer[ENET_BUFFER_MAXIMUM] buffers;
-  size_t bufferCount;
+  usize bufferCount;
   ENetChecksumCallback checksum; /** callback the user can set to enable packet checksums for this host */
   ENetCompressor compressor;
   enet_uint8[ENET_PROTOCOL_MAXIMUM_MTU][2] packetData;
   ENetAddress receivedAddress;
   enet_uint8* receivedData;
-  size_t receivedDataLength;
+  usize receivedDataLength;
   enet_uint32 totalSentData;        /** total data sent, user should reset to 0 as needed to prevent overflow */
   enet_uint32 totalSentPackets;     /** total UDP packets sent, user should reset to 0 as needed to prevent overflow */
   enet_uint32 totalReceivedData;    /** total data received, user should reset to 0 as needed to prevent overflow */
   enet_uint32 totalReceivedPackets; /** total UDP packets received, user should reset to 0 as needed to prevent overflow */
   ENetInterceptCallback intercept;  /** callback the user can set to intercept received raw UDP packets */
-  size_t connectedPeers;
-  size_t bandwidthLimitedPeers;
-  size_t duplicatePeers;     /** optional number of allowed peers from duplicate IPs, defaults to ENET_PROTOCOL_MAXIMUM_PEER_ID */
-  size_t maximumPacketSize;  /** the maximum allowable packet size that may be sent or received on a peer */
-  size_t maximumWaitingData; /** the maximum aggregate amount of buffer space a peer may use waiting for packets to be delivered */
+  usize connectedPeers;
+  usize bandwidthLimitedPeers;
+  usize duplicatePeers;     /** optional number of allowed peers from duplicate IPs, defaults to ENET_PROTOCOL_MAXIMUM_PEER_ID */
+  usize maximumPacketSize;  /** the maximum allowable packet size that may be sent or received on a peer */
+  usize maximumWaitingData; /** the maximum aggregate amount of buffer space a peer may use waiting for packets to be delivered */
 }
 
 /**
@@ -785,22 +785,22 @@ version(Windows) {
 
 
   auto ENET_SOCKETSET_EMPTY (ref ENetSocketSet sockset) {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     core.sys.posix.sys.select.FD_ZERO(&sockset);
   }
 
   auto ENET_SOCKETSET_ADD (ref ENetSocketSet sockset, ENetSocket socket) {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     core.sys.posix.sys.select.FD_SET(socket, &sockset);
   }
 
   auto ENET_SOCKETSET_REMOVE (ref ENetSocketSet sockset, ENetSocket socket) {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     core.sys.posix.sys.select.FD_CLR(socket, &sockset);
   }
 
   auto ENET_SOCKETSET_CHECK (ref ENetSocketSet sockset, ENetSocket socket) {
-    static if (__VERSION__ > 2067) pragma(inline, true);
+    pragma(inline, true);
     return !!core.sys.posix.sys.select.FD_ISSET(socket, &sockset);
   }
 
@@ -868,7 +868,7 @@ version(Windows) {
   }
 
 
-  int enet_address_get_host_ip (const ENetAddress* address, char* name, size_t nameLength) {
+  int enet_address_get_host_ip (const ENetAddress* address, char* name, usize nameLength) {
     import core.sys.posix.arpa.inet : inet_ntop;
     import core.sys.posix.sys.socket : AF_INET;
 
@@ -877,7 +877,7 @@ version(Windows) {
   }
 
 
-  int enet_address_get_host (const ENetAddress* address, char* name, size_t nameLength) {
+  int enet_address_get_host (const ENetAddress* address, char* name, usize nameLength) {
     import core.stdc.string : memchr, memset;
     import core.sys.posix.netdb : EAI_NONAME, NI_NAMEREQD, getnameinfo;
     import core.sys.posix.netinet.in_ : sockaddr_in;
@@ -1061,7 +1061,7 @@ version(Windows) {
   }
 
 
-  int enet_socket_send (ENetSocket socket, const ENetAddress* address, const(ENetBuffer)* buffers, size_t bufferCount) {
+  int enet_socket_send (ENetSocket socket, const ENetAddress* address, const(ENetBuffer)* buffers, usize bufferCount) {
     import core.stdc.string : memset;
     import core.sys.posix.netinet.in_ : sockaddr_in;
     import core.sys.posix.sys.socket : AF_INET, MSG_NOSIGNAL, msghdr, sendmsg;
@@ -1098,7 +1098,7 @@ version(Windows) {
   }
 
 
-  int enet_socket_receive (ENetSocket socket, ENetAddress* address, ENetBuffer* buffers, size_t bufferCount) {
+  int enet_socket_receive (ENetSocket socket, ENetAddress* address, ENetBuffer* buffers, usize bufferCount) {
     import core.stdc.string : memset;
     import core.sys.posix.netinet.in_ : sockaddr_in;
     import core.sys.posix.sys.socket : MSG_NOSIGNAL, MSG_TRUNC, msghdr, recvmsg;
@@ -1213,7 +1213,7 @@ extern(C) nothrow {
   }
 
 
-  void* enet_malloc (size_t size) nothrow {
+  void* enet_malloc (usize size) nothrow {
     void* memory = callbacks.malloc(size);
     if (memory is null) callbacks.no_memory();
     return memory;
@@ -1233,37 +1233,37 @@ extern(C) @nogc nothrow {
 
   @safe pure {
     ENetListIterator enet_list_begin (ENetList* list) {
-      static if (__VERSION__ > 2067) pragma(inline, true);
+      pragma(inline, true);
       return list.sentinel.next;
     }
 
     ENetListIterator enet_list_end (ENetList* list) {
-      static if (__VERSION__ > 2067) pragma(inline, true);
+      pragma(inline, true);
       return &list.sentinel;
     }
 
     bool enet_list_empty (ENetList* list) {
-      static if (__VERSION__ > 2067) pragma(inline, true);
+      pragma(inline, true);
       return enet_list_begin(list) == enet_list_end(list);
     }
 
     ENetListIterator enet_list_next (ENetListIterator iterator) {
-      static if (__VERSION__ > 2067) pragma(inline, true);
+      pragma(inline, true);
       return iterator.next;
     }
 
     ENetListIterator enet_list_previous (ENetListIterator iterator) {
-      static if (__VERSION__ > 2067) pragma(inline, true);
+      pragma(inline, true);
       return iterator.previous;
     }
 
     void* enet_list_front (ENetList* list) {
-      static if (__VERSION__ > 2067) pragma(inline, true);
+      pragma(inline, true);
       return cast(void*)(list.sentinel.next);
     }
 
     void* enet_list_back (ENetList* list) {
-      static if (__VERSION__ > 2067) pragma(inline, true);
+      pragma(inline, true);
       return cast(void*)(list.sentinel.previous);
     }
   }
@@ -1312,8 +1312,8 @@ extern(C) @nogc nothrow {
     return first;
   }
 
-  size_t enet_list_size (ENetList* list) {
-    size_t size = 0;
+  usize enet_list_size (ENetList* list) {
+    usize size = 0;
     ENetListIterator position;
     for (position = enet_list_begin(list); position != enet_list_end(list); position = enet_list_next(position)) ++size;
     return size;
@@ -1333,7 +1333,7 @@ extern(C) nothrow {
    * Returns:
    *   the packet on success, null on failure
    */
-  ENetPacket* enet_packet_create (const(void)* data, size_t dataLength, enet_uint32 flags) {
+  ENetPacket* enet_packet_create (const(void)* data, usize dataLength, enet_uint32 flags) {
     ENetPacket* packet = cast(ENetPacket*)enet_malloc(ENetPacket.sizeof);
     if (packet is null) return null;
 
@@ -1386,7 +1386,7 @@ extern(C) nothrow {
    * Returns:
    *  0 on success, < 0 on failure
    */
-  int enet_packet_resize (ENetPacket* packet, size_t dataLength) {
+  int enet_packet_resize (ENetPacket* packet, usize dataLength) {
     import core.stdc.string : memcpy;
 
     enet_uint8* newData;
@@ -1431,7 +1431,7 @@ extern(C) nothrow {
   }());
 
 
-  enet_uint32 enet_crc32 (const(ENetBuffer)* buffers, size_t bufferCount) pure @nogc {
+  enet_uint32 enet_crc32 (const(ENetBuffer)* buffers, usize bufferCount) pure @nogc {
     enet_uint32 crc = 0xFFFFFFFF;
     while (bufferCount-- > 0) {
       auto data = cast(const(enet_uint8)*)buffers.data;
@@ -1526,7 +1526,7 @@ extern(C) nothrow {
   int enet_peer_send (ENetPeer* peer, enet_uint8 channelID, ENetPacket* packet) {
     ENetChannel* channel = &peer.channels[channelID];
     ENetProtocol command;
-    size_t fragmentLength;
+    usize fragmentLength;
 
     if (peer.state != ENET_PEER_STATE_CONNECTED || channelID >= peer.channelCount || packet.dataLength > peer.host.maximumPacketSize) return -1;
 
@@ -2119,7 +2119,7 @@ extern(C) nothrow {
   }
 
 
-  ENetIncomingCommand* enet_peer_queue_incoming_command (ENetPeer* peer, const ENetProtocol* command, const(void)* data, size_t dataLength, enet_uint32 flags, enet_uint32 fragmentCount) {
+  ENetIncomingCommand* enet_peer_queue_incoming_command (ENetPeer* peer, const ENetProtocol* command, const(void)* data, usize dataLength, enet_uint32 flags, enet_uint32 fragmentCount) {
     static ENetIncomingCommand dummyCommand;
 
     ENetChannel* channel = &peer.channels[command.header.channelID];
@@ -2266,7 +2266,7 @@ extern(C) nothrow {
    *  the window size of a connection which limits the amount of reliable packets that may be in transit
    *  at any given time.
    */
-  ENetHost* enet_host_create (const ENetAddress* address, size_t peerCount, size_t channelLimit, enet_uint32 incomingBandwidth=0, enet_uint32 outgoingBandwidth=0) {
+  ENetHost* enet_host_create (const ENetAddress* address, usize peerCount, usize channelLimit, enet_uint32 incomingBandwidth=0, enet_uint32 outgoingBandwidth=0) {
     import core.stdc.string : memset;
 
     ENetHost* host;
@@ -2303,7 +2303,7 @@ extern(C) nothrow {
     if (!channelLimit || channelLimit > ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT) channelLimit = ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT;
     else if (channelLimit < ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT) channelLimit = ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT;
 
-    host.randomSeed = cast(enet_uint32)cast(size_t)host;
+    host.randomSeed = cast(enet_uint32)cast(usize)host;
     host.randomSeed += enet_host_random_seed();
     host.randomSeed = (host.randomSeed<<16)|(host.randomSeed>>16);
     host.channelLimit = channelLimit;
@@ -2399,7 +2399,7 @@ extern(C) nothrow {
    *  The peer returned will have not completed the connection until enet_host_service()
    *  notifies of an ENET_EVENT_TYPE_CONNECT event for the peer.
    */
-  ENetPeer* enet_host_connect (ENetHost* host, const ENetAddress* address, size_t channelCount, enet_uint32 data) {
+  ENetPeer* enet_host_connect (ENetHost* host, const ENetAddress* address, usize channelCount, enet_uint32 data) {
     ENetPeer* currentPeer;
     ENetChannel* channel;
     ENetProtocol command;
@@ -2503,7 +2503,7 @@ extern(C) nothrow {
    *  host = host to limit
    *  channelLimit = the maximum number of channels allowed; if 0, then this is equivalent to ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT
    */
-  void enet_host_channel_limit (ENetHost* host, size_t channelLimit) @nogc {
+  void enet_host_channel_limit (ENetHost* host, usize channelLimit) @nogc {
     if (!channelLimit || channelLimit > ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT) channelLimit = ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT;
     else if (channelLimit < ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT) channelLimit = ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT;
     host.channelLimit = channelLimit;
@@ -2661,22 +2661,22 @@ extern(C) nothrow {
 // protocol.c
 extern(C) nothrow {
   // `auto` to trigger attribute inference
-  private auto ENET_MIN(T) (T a, T b) { static if (__VERSION__ > 2067) pragma(inline, true); return (a < b ? a : b); }
-  private auto ENET_MAX(T) (T a, T b) { static if (__VERSION__ > 2067) pragma(inline, true); return (a > b ? a : b); }
+  private auto ENET_MIN(T) (T a, T b) { pragma(inline, true); return (a < b ? a : b); }
+  private auto ENET_MAX(T) (T a, T b) { pragma(inline, true); return (a > b ? a : b); }
 
 
   enum ENET_TIME_OVERFLOW = 86400000;
 
   // `auto` to trigger attribute inference
-  auto ENET_TIME_LESS(T) (T a, T b) { static if (__VERSION__ > 2067) pragma(inline, true); return (a-b >= ENET_TIME_OVERFLOW); }
-  auto ENET_TIME_GREATER(T) (T a, T b) { static if (__VERSION__ > 2067) pragma(inline, true); return (b-a >= ENET_TIME_OVERFLOW); }
-  auto ENET_TIME_LESS_EQUAL(T) (T a, T b) { static if (__VERSION__ > 2067) pragma(inline, true); return !ENET_TIME_GREATER(a, b); }
-  auto ENET_TIME_GREATER_EQUAL(T) (T a, T b) { static if (__VERSION__ > 2067) pragma(inline, true); return !ENET_TIME_LESS(a, b); }
+  auto ENET_TIME_LESS(T) (T a, T b) { pragma(inline, true); return (a-b >= ENET_TIME_OVERFLOW); }
+  auto ENET_TIME_GREATER(T) (T a, T b) { pragma(inline, true); return (b-a >= ENET_TIME_OVERFLOW); }
+  auto ENET_TIME_LESS_EQUAL(T) (T a, T b) { pragma(inline, true); return !ENET_TIME_GREATER(a, b); }
+  auto ENET_TIME_GREATER_EQUAL(T) (T a, T b) { pragma(inline, true); return !ENET_TIME_LESS(a, b); }
 
-  auto ENET_TIME_DIFFERENCE(T) (T a, T b) { static if (__VERSION__ > 2067) pragma(inline, true); return (a-b >= ENET_TIME_OVERFLOW ? b-a : a-b); }
+  auto ENET_TIME_DIFFERENCE(T) (T a, T b) { pragma(inline, true); return (a-b >= ENET_TIME_OVERFLOW ? b-a : a-b); }
 
 
-  private immutable size_t[ENET_PROTOCOL_COMMAND_COUNT] commandSizes = [
+  private immutable usize[ENET_PROTOCOL_COMMAND_COUNT] commandSizes = [
     0,
     ENetProtocolAcknowledge.sizeof,
     ENetProtocolConnect.sizeof,
@@ -2693,7 +2693,7 @@ extern(C) nothrow {
   ];
 
 
-  size_t enet_protocol_command_size (enet_uint8 commandNumber) @nogc {
+  usize enet_protocol_command_size (enet_uint8 commandNumber) @nogc {
     return commandSizes[commandNumber&ENET_PROTOCOL_COMMAND_MASK];
   }
 
@@ -2868,7 +2868,7 @@ extern(C) nothrow {
     enet_uint8 incomingSessionID, outgoingSessionID;
     enet_uint32 mtu, windowSize;
     ENetChannel* channel;
-    size_t channelCount, duplicatePeers = 0;
+    usize channelCount, duplicatePeers = 0;
     ENetPeer* currentPeer, peer = null;
     ENetProtocol verifyCommand;
 
@@ -2975,7 +2975,7 @@ extern(C) nothrow {
 
 
   private int enet_protocol_handle_send_reliable (ENetHost* host, ENetPeer* peer, const ENetProtocol* command, enet_uint8** currentData) {
-    size_t dataLength;
+    usize dataLength;
     if (command.header.channelID >= peer.channelCount || (peer.state != ENET_PEER_STATE_CONNECTED && peer.state != ENET_PEER_STATE_DISCONNECT_LATER)) return -1;
     dataLength = ENET_NET_TO_HOST_16(command.sendReliable.dataLength);
     *currentData += dataLength;
@@ -2987,7 +2987,7 @@ extern(C) nothrow {
 
   private int enet_protocol_handle_send_unsequenced (ENetHost* host, ENetPeer* peer, const ENetProtocol* command, enet_uint8** currentData) {
     enet_uint32 unsequencedGroup, index;
-    size_t dataLength;
+    usize dataLength;
 
     if (command.header.channelID >= peer.channelCount || (peer.state != ENET_PEER_STATE_CONNECTED && peer.state != ENET_PEER_STATE_DISCONNECT_LATER)) return -1;
 
@@ -3021,7 +3021,7 @@ extern(C) nothrow {
 
 
   private int enet_protocol_handle_send_unreliable (ENetHost* host, ENetPeer* peer, const ENetProtocol* command, enet_uint8** currentData) {
-    size_t dataLength;
+    usize dataLength;
 
     if (command.header.channelID >= peer.channelCount || (peer.state != ENET_PEER_STATE_CONNECTED && peer.state != ENET_PEER_STATE_DISCONNECT_LATER)) return -1;
 
@@ -3318,7 +3318,7 @@ extern(C) nothrow {
 
   private int enet_protocol_handle_verify_connect (ENetHost* host, ENetEvent* event, ENetPeer* peer, const ENetProtocol* command) {
     enet_uint32 mtu, windowSize;
-    size_t channelCount;
+    usize channelCount;
 
     if (peer.state != ENET_PEER_STATE_CONNECTING) return 0;
 
@@ -3370,11 +3370,11 @@ extern(C) nothrow {
     ENetProtocol* command;
     ENetPeer* peer;
     enet_uint8* currentData;
-    size_t headerSize;
+    usize headerSize;
     enet_uint16 peerID, flags;
     enet_uint8 sessionID;
 
-    if (host.receivedDataLength < cast(size_t)&(cast(ENetProtocolHeader*)0).sentTime) return 0; //k8:???
+    if (host.receivedDataLength < cast(usize)&(cast(ENetProtocolHeader*)0).sentTime) return 0; //k8:???
 
     header = cast(ENetProtocolHeader*)host.receivedData;
 
@@ -3383,7 +3383,7 @@ extern(C) nothrow {
     flags = peerID&ENET_PROTOCOL_HEADER_FLAG_MASK;
     peerID &= ~(ENET_PROTOCOL_HEADER_FLAG_MASK|ENET_PROTOCOL_HEADER_SESSION_MASK);
 
-    headerSize = (flags&ENET_PROTOCOL_HEADER_FLAG_SENT_TIME ? ENetProtocolHeader.sizeof : cast(size_t)&(cast(ENetProtocolHeader*)0).sentTime);
+    headerSize = (flags&ENET_PROTOCOL_HEADER_FLAG_SENT_TIME ? ENetProtocolHeader.sizeof : cast(usize)&(cast(ENetProtocolHeader*)0).sentTime);
     if (host.checksum !is null) headerSize += enet_uint32.sizeof;
 
     if (peerID == ENET_PROTOCOL_MAXIMUM_PEER_ID) {
@@ -3401,7 +3401,7 @@ extern(C) nothrow {
     }
 
     if (flags&ENET_PROTOCOL_HEADER_FLAG_COMPRESSED) {
-      size_t originalSize;
+      usize originalSize;
       if (host.compressor.context is null || host.compressor.decompress is null) return 0;
 
       originalSize = host.compressor.decompress(host.compressor.context,
@@ -3440,7 +3440,7 @@ extern(C) nothrow {
 
     while (currentData < &host.receivedData[host.receivedDataLength]) {
       enet_uint8 commandNumber;
-      size_t commandSize;
+      usize commandSize;
 
       command = cast(ENetProtocol*)currentData;
 
@@ -3624,7 +3624,7 @@ extern(C) nothrow {
     currentCommand = enet_list_begin(&peer.outgoingUnreliableCommands);
 
     while (currentCommand != enet_list_end(&peer.outgoingUnreliableCommands)) {
-      size_t commandSize;
+      usize commandSize;
 
       outgoingCommand = cast(ENetOutgoingCommand*)currentCommand;
       commandSize = commandSizes[outgoingCommand.command.header.command&ENET_PROTOCOL_COMMAND_MASK];
@@ -3754,7 +3754,7 @@ extern(C) nothrow {
     ENetListIterator currentCommand;
     ENetChannel* channel;
     enet_uint16 reliableWindow;
-    size_t commandSize;
+    usize commandSize;
     int windowExceeded = 0, windowWrap = 0, canPing = 1;
 
     currentCommand = enet_list_begin(&peer.outgoingReliableCommands);
@@ -3859,7 +3859,7 @@ extern(C) nothrow {
     ENetProtocolHeader* header = cast(ENetProtocolHeader*)headerData;
     ENetPeer* currentPeer;
     int sentLength;
-    size_t shouldCompress = 0;
+    usize shouldCompress = 0;
 
     host.continueSending = 1;
 
@@ -3928,13 +3928,13 @@ extern(C) nothrow {
           header.sentTime = ENET_HOST_TO_NET_16(host.serviceTime&0xFFFF);
           host.buffers.ptr[0].dataLength = ENetProtocolHeader.sizeof;
         } else {
-          host.buffers.ptr[0].dataLength = cast(size_t)&(cast(ENetProtocolHeader*)0).sentTime;
+          host.buffers.ptr[0].dataLength = cast(usize)&(cast(ENetProtocolHeader*)0).sentTime;
         }
 
         shouldCompress = 0;
         if (host.compressor.context !is null && host.compressor.compress !is null) {
-          size_t originalSize = host.packetSize-ENetProtocolHeader.sizeof;
-          size_t compressedSize = host.compressor.compress(host.compressor.context, &host.buffers.ptr[1], host.bufferCount-1, originalSize, host.packetData.ptr[1].ptr, originalSize);
+          usize originalSize = host.packetSize-ENetProtocolHeader.sizeof;
+          usize compressedSize = host.compressor.compress(host.compressor.context, &host.buffers.ptr[1], host.bufferCount-1, originalSize, host.packetData.ptr[1].ptr, originalSize);
           if (compressedSize > 0 && compressedSize < originalSize) {
             host.headerFlags |= ENET_PROTOCOL_HEADER_FLAG_COMPRESSED;
             shouldCompress = compressedSize;
@@ -4299,14 +4299,14 @@ enum ENET_CONTEXT_ENCODE(string context, string symbol_, string value_, string u
 }}.cmacroFixVars!("context","symbol_","value_","under_","count_","update","minimum")(context,symbol_,value_,under_,count_,update,minimum);
 
 
-public extern(C) size_t enet_range_coder_compress (void* context, const(ENetBuffer)* inBuffers, size_t inBufferCount, size_t inLimit, ubyte* outData, size_t outLimit) nothrow @trusted @nogc {
+public extern(C) usize enet_range_coder_compress (void* context, const(ENetBuffer)* inBuffers, usize inBufferCount, usize inLimit, ubyte* outData, usize outLimit) nothrow @trusted @nogc {
   ENetRangeCoder* rangeCoder = cast(ENetRangeCoder*)context;
   ubyte* outStart = outData, outEnd = &outData[outLimit];
   const(ubyte)* inData, inEnd;
   enet_uint32 encodeLow = 0, encodeRange = ~0;
   ENetSymbol* root;
   ushort predicted = 0;
-  size_t order = 0, nextSymbol = 0;
+  usize order = 0, nextSymbol = 0;
 
   if (rangeCoder is null || inBufferCount <= 0 || inLimit <= 0) return 0;
 
@@ -4367,7 +4367,7 @@ public extern(C) size_t enet_range_coder_compress (void* context, const(ENetBuff
 
   mixin(ENET_RANGE_CODER_FLUSH);
 
-  return cast(size_t)(outData-outStart);
+  return cast(usize)(outData-outStart);
 }
 
 enum ENET_RANGE_CODER_SEED = q{{
@@ -4457,14 +4457,14 @@ enum ENET_CONTEXT_ROOT_DECODE(string context, string symbol_, string code, strin
 enum ENET_CONTEXT_NOT_EXCLUDED(string value_, string after, string before) = "{}";
 
 
-public extern(C) size_t enet_range_coder_decompress (void* context, const(ubyte)* inData, size_t inLimit, ubyte* outData, size_t outLimit) nothrow @trusted @nogc {
+public extern(C) usize enet_range_coder_decompress (void* context, const(ubyte)* inData, usize inLimit, ubyte* outData, usize outLimit) nothrow @trusted @nogc {
   ENetRangeCoder* rangeCoder = cast(ENetRangeCoder*)context;
   ubyte* outStart = outData, outEnd = &outData[outLimit];
   const(ubyte)* inEnd = &inData[inLimit];
   enet_uint32 decodeLow = 0, decodeCode = 0, decodeRange = ~0;
   ENetSymbol* root;
   ushort predicted = 0;
-  size_t order = 0, nextSymbol = 0;
+  usize order = 0, nextSymbol = 0;
 
   if (rangeCoder is null || inLimit <= 0) return 0;
 
@@ -4537,7 +4537,7 @@ public extern(C) size_t enet_range_coder_decompress (void* context, const(ubyte)
     mixin(ENET_RANGE_CODER_FREE_SYMBOLS);
   }
 
-  return cast(size_t)(outData-outStart);
+  return cast(usize)(outData-outStart);
 }
 
 /** @defgroup host ENet host functions

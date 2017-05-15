@@ -17,7 +17,7 @@
  */
 // various vector and matrix operations.
 // matrix should be compatible with OpenGL, but mostly untested.
-module iv.vmath /*is aliced*/;
+module iv.vmath is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -206,14 +206,14 @@ nothrow @safe:
     }
   }
 
-  FloatType opIndex (size_t idx) const pure {
+  FloatType opIndex (usize idx) const pure {
     pragma(inline, true);
          static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : FloatType.nan);
     else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : FloatType.nan);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void opIndexAssign (FloatType v, size_t idx) pure {
+  void opIndexAssign (FloatType v, usize idx) pure {
     pragma(inline, true);
          static if (dims == 2) { if (idx == 0) x = v; else if (idx == 1) y = v; }
     else static if (dims == 3) { if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v; }
@@ -632,12 +632,12 @@ pure @nogc:
 
   @property bool valid () const { pragma(inline, true); import std.math : isNaN; return !isNaN(w); }
 
-  FloatType opIndex (size_t idx) const {
+  FloatType opIndex (usize idx) const {
     pragma(inline, true);
     return (idx == 0 ? normal.x : idx == 1 ? normal.y : idx == 2 ? normal.z : idx == 3 ? w : FloatType.nan);
   }
 
-  void opIndexAssign (FloatType v, size_t idx) {
+  void opIndexAssign (FloatType v, usize idx) {
     pragma(inline, true);
     if (idx == 0) normal.x = v; else if (idx == 1) normal.y = v; else if (idx == 2) normal.z = v; else if (idx == 3) w = v;
   }
@@ -748,7 +748,7 @@ struct bbox(VT) if (isVector!VT) {
   VT v0, v1; // min and max respective
 
 pure nothrow @safe @nogc:
-  ref VT opIndex (size_t idx) const {
+  ref VT opIndex (usize idx) const {
     pragma(inline, true);
     return (idx == 0 ? v0 : v1);
   }
@@ -829,7 +829,7 @@ nothrow @safe:
     }
   }
 
-  @property FloatType opIndex (size_t x, size_t y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : FloatType.nan); }
+  @property FloatType opIndex (usize x, usize y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : FloatType.nan); }
 
 @nogc @trusted:
   this() (in FloatType[] vals...) { pragma(inline, true); if (vals.length >= 16) mt.ptr[0..16] = vals.ptr[0..16]; else { mt.ptr[0..16] = 0; mt.ptr[0..vals.length] = vals.ptr[0..vals.length]; } }
@@ -1690,12 +1690,12 @@ nothrow @trusted @nogc:
     }
   }
 
-  FloatType opIndex (size_t x, size_t y) const {
+  FloatType opIndex (usize x, usize y) const {
     pragma(inline, true);
     return (x < 3 && y < 3 ? m.ptr[y*3+x] : FloatType.nan);
   }
 
-  void opIndexAssign (FloatType v, size_t x, size_t y) {
+  void opIndexAssign (FloatType v, usize x, usize y) {
     pragma(inline, true);
     if (x < 3 && y < 3) m.ptr[y*3+x] = v;
   }

@@ -31,11 +31,11 @@
  *
  * The low level cipher functionality is in gnutls/crypto.h.
  */
-module iv.gnutls;
+module iv.gnutls is aliced;
 pragma(lib, "gnutls");
 pragma(lib, "gcrypt");
 
-import core.sys.posix.sys.types : ssize_t, time_t;
+import core.sys.posix.sys.types : time_t;
 
 
 extern(C) nothrow:
@@ -52,17 +52,17 @@ alias mutex_init_func = int function (void **mutex);
 alias mutex_lock_func = int function (void **mutex);
 alias mutex_unlock_func = int function (void **mutex);
 alias mutex_deinit_func = int function (void **mutex);
-alias gnutls_alloc_function = void * function (size_t);
-alias gnutls_calloc_function = void * function (size_t, size_t);
+alias gnutls_alloc_function = void * function (usize);
+alias gnutls_calloc_function = void * function (usize, usize);
 alias gnutls_is_secure_function = int function (const(void)* );
 alias gnutls_free_function = void function (void *);
-alias gnutls_realloc_function = void * function (void *, size_t);
+alias gnutls_realloc_function = void * function (void *, usize);
 alias gnutls_log_func = void function (int, const(char)* );
 alias gnutls_audit_log_func = void function (gnutls_session_t, const(char)* );
-alias gnutls_pull_func = ssize_t function (gnutls_transport_ptr_t, void *, size_t);
-alias gnutls_push_func = ssize_t function (gnutls_transport_ptr_t, const(void)* , size_t);
+alias gnutls_pull_func = ssize function (gnutls_transport_ptr_t, void *, usize);
+alias gnutls_push_func = ssize function (gnutls_transport_ptr_t, const(void)* , usize);
 alias gnutls_pull_timeout_func = int function (gnutls_transport_ptr_t, uint ms);
-alias gnutls_vec_push_func = ssize_t function (gnutls_transport_ptr_t, const(giovec_t)* iov, int iovcnt);
+alias gnutls_vec_push_func = ssize function (gnutls_transport_ptr_t, const(giovec_t)* iov, int iovcnt);
 alias gnutls_errno_func = int function (gnutls_transport_ptr_t);
 alias gnutls_srp_server_credentials_function = int function (gnutls_session_t, const(char)* username, gnutls_datum_t* salt, gnutls_datum_t* verifier, gnutls_datum_t* generator, gnutls_datum_t* prime);
 alias gnutls_srp_client_credentials_function = int function (gnutls_session_t, char **, char **);
@@ -72,13 +72,13 @@ alias gnutls_certificate_retrieve_function = int function (gnutls_session_t, con
 alias gnutls_tdb_store_func = int function (const(char)* db_name, const(char)* host, const(char)* service, time_t expiration, const(gnutls_datum_t)* pubkey);
 alias gnutls_tdb_store_commitment_func = int function (const(char)* db_name, const(char)* host, const(char)* service, time_t expiration, gnutls_digest_algorithm_t hash_algo, const(gnutls_datum_t)* hash);
 alias gnutls_tdb_verify_func = int function (const(char)* db_name, const(char)* host, const(char)* service, const(gnutls_datum_t)* pubkey);
-alias gnutls_pin_callback_t = int function (void *userdata, int attempt, const(char)* token_url, const(char)* token_label, uint flags, char* pin, size_t pin_max);
-alias gnutls_ext_recv_func = int function (gnutls_session_t session, const(ubyte)* data, size_t len);
+alias gnutls_pin_callback_t = int function (void *userdata, int attempt, const(char)* token_url, const(char)* token_label, uint flags, char* pin, usize pin_max);
+alias gnutls_ext_recv_func = int function (gnutls_session_t session, const(ubyte)* data, usize len);
 alias gnutls_ext_send_func = int function (gnutls_session_t session, gnutls_buffer_t extdata);
 alias gnutls_ext_deinit_data_func = void function (gnutls_ext_priv_data_t data);
 alias gnutls_ext_pack_func = int function (gnutls_ext_priv_data_t data, gnutls_buffer_t packed_data);
 alias gnutls_ext_unpack_func = int function (gnutls_buffer_t packed_data, gnutls_ext_priv_data_t *data);
-alias gnutls_supp_recv_func = int function (gnutls_session_t session, const(ubyte)* data, size_t data_size);
+alias gnutls_supp_recv_func = int function (gnutls_session_t session, const(ubyte)* data, usize data_size);
 alias gnutls_supp_send_func = int function (gnutls_session_t session, gnutls_buffer_t buf);
 
 
@@ -913,7 +913,7 @@ int gnutls_sign_algorithm_get(gnutls_session_t session) @nogc;
 int gnutls_sign_algorithm_get_client(gnutls_session_t session) @nogc;
 
 int gnutls_sign_algorithm_get_requested(gnutls_session_t session,
-          size_t indx,
+          usize indx,
           gnutls_sign_algorithm_t * algo) @nogc;
 
 /* the name of the specified algorithms */
@@ -934,8 +934,8 @@ const(char)* gnutls_pk_get_oid(gnutls_pk_algorithm_t algorithm) @nogc;
 const(char)* gnutls_sign_get_name(gnutls_sign_algorithm_t algorithm) @nogc;
 const(char)* gnutls_sign_get_oid(gnutls_sign_algorithm_t algorithm) @nogc;
 
-size_t gnutls_cipher_get_key_size(gnutls_cipher_algorithm_t algorithm) @nogc;
-size_t gnutls_mac_get_key_size(gnutls_mac_algorithm_t algorithm) @nogc;
+usize gnutls_cipher_get_key_size(gnutls_cipher_algorithm_t algorithm) @nogc;
+usize gnutls_mac_get_key_size(gnutls_mac_algorithm_t algorithm) @nogc;
 
 int gnutls_sign_is_secure(gnutls_sign_algorithm_t algorithm) @nogc;
 gnutls_digest_algorithm_t
@@ -977,7 +977,7 @@ const(gnutls_certificate_type_t)* gnutls_certificate_type_list() @nogc;
 const(gnutls_kx_algorithm_t)* gnutls_kx_list() @nogc;
 const(gnutls_pk_algorithm_t)* gnutls_pk_list() @nogc;
 const(gnutls_sign_algorithm_t)* gnutls_sign_list() @nogc;
-const(char)* gnutls_cipher_suite_info(size_t idx,
+const(char)* gnutls_cipher_suite_info(usize idx,
              ubyte *cs_id,
              gnutls_kx_algorithm_t * kx,
              gnutls_cipher_algorithm_t * cipher,
@@ -1007,7 +1007,7 @@ gnutls_handshake_get_last_in(gnutls_session_t session) @nogc;
 /* Record layer functions.
  */
 enum GNUTLS_HEARTBEAT_WAIT = 1;
-int gnutls_heartbeat_ping(gnutls_session_t session, size_t data_size,
+int gnutls_heartbeat_ping(gnutls_session_t session, usize data_size,
         uint max_tries, uint flags) @nogc;
 int gnutls_heartbeat_pong(gnutls_session_t session, uint flags) @nogc;
 
@@ -1017,7 +1017,7 @@ void gnutls_record_disable_padding(gnutls_session_t session) @nogc;
 void gnutls_record_cork(gnutls_session_t session) @nogc;
 enum GNUTLS_RECORD_WAIT = 1;
 int gnutls_record_uncork(gnutls_session_t session, uint flags) @nogc;
-size_t gnutls_record_discard_queued(gnutls_session_t session) @nogc;
+usize gnutls_record_discard_queued(gnutls_session_t session) @nogc;
 
 int
 gnutls_record_get_state(gnutls_session_t session,
@@ -1033,8 +1033,8 @@ gnutls_record_set_state(gnutls_session_t session,
       ubyte* seq_number/*[8]*/) @nogc;
 
 struct gnutls_range_st {
-  size_t low;
-  size_t high;
+  usize low;
+  usize high;
 }
 
 int gnutls_range_split(gnutls_session_t session,
@@ -1042,18 +1042,18 @@ int gnutls_range_split(gnutls_session_t session,
            gnutls_range_st * small_range,
            gnutls_range_st * rem_range) @nogc;
 
-ssize_t gnutls_record_send(gnutls_session_t session, const(void)* data,
-         size_t data_size) @nogc;
-ssize_t gnutls_record_send_range(gnutls_session_t session,
-         const(void)* data, size_t data_size,
+ssize gnutls_record_send(gnutls_session_t session, const(void)* data,
+         usize data_size) @nogc;
+ssize gnutls_record_send_range(gnutls_session_t session,
+         const(void)* data, usize data_size,
          const(gnutls_range_st)* range) @nogc;
-ssize_t gnutls_record_recv(gnutls_session_t session, void *data,
-         size_t data_size) @nogc;
+ssize gnutls_record_recv(gnutls_session_t session, void *data,
+         usize data_size) @nogc;
 
 struct mbuffer_st;
 alias gnutls_packet_t = mbuffer_st*;
 
-ssize_t
+ssize
 gnutls_record_recv_packet(gnutls_session_t session,
           gnutls_packet_t *packet) @nogc;
 
@@ -1062,12 +1062,12 @@ void gnutls_packet_deinit(gnutls_packet_t packet) @nogc;
 
 alias gnutls_read = gnutls_record_recv;
 alias gnutls_write = gnutls_record_send;
-ssize_t gnutls_record_recv_seq(gnutls_session_t session, void *data,
-             size_t data_size, ubyte *seq) @nogc;
+ssize gnutls_record_recv_seq(gnutls_session_t session, void *data,
+             usize data_size, ubyte *seq) @nogc;
 
-size_t gnutls_record_overhead_size(gnutls_session_t session) @nogc;
+usize gnutls_record_overhead_size(gnutls_session_t session) @nogc;
 
-size_t gnutls_est_record_overhead_size(gnutls_protocol_t version_,
+usize gnutls_est_record_overhead_size(gnutls_protocol_t version_,
                gnutls_cipher_algorithm_t cipher,
                gnutls_mac_algorithm_t mac,
                gnutls_compression_method_t comp,
@@ -1081,28 +1081,28 @@ int gnutls_record_can_use_length_hiding(gnutls_session_t session) @nogc;
 
 int gnutls_record_get_direction(gnutls_session_t session) @nogc;
 
-size_t gnutls_record_get_max_size(gnutls_session_t session) @nogc;
-ssize_t gnutls_record_set_max_size(gnutls_session_t session, size_t size) @nogc;
+usize gnutls_record_get_max_size(gnutls_session_t session) @nogc;
+ssize gnutls_record_set_max_size(gnutls_session_t session, usize size) @nogc;
 
-size_t gnutls_record_check_pending(gnutls_session_t session) @nogc;
-size_t gnutls_record_check_corked(gnutls_session_t session) @nogc;
+usize gnutls_record_check_pending(gnutls_session_t session) @nogc;
+usize gnutls_record_check_corked(gnutls_session_t session) @nogc;
 
 void gnutls_session_force_valid(gnutls_session_t session) @nogc;
 
 int gnutls_prf(gnutls_session_t session,
-         size_t label_size, const(char)* label,
+         usize label_size, const(char)* label,
          int server_random_first,
-         size_t extra_size, const(char)* extra,
-         size_t outsize, char *out_) @nogc;
+         usize extra_size, const(char)* extra,
+         usize outsize, char *out_) @nogc;
 int gnutls_prf_rfc5705(gnutls_session_t session,
-         size_t label_size, const(char)* label,
-         size_t context_size, const(char)* context,
-         size_t outsize, char *out_) @nogc;
+         usize label_size, const(char)* label,
+         usize context_size, const(char)* context,
+         usize outsize, char *out_) @nogc;
 
 int gnutls_prf_raw(gnutls_session_t session,
-       size_t label_size, const(char)* label,
-       size_t seed_size, const(char)* seed,
-       size_t outsize, char *out_) @nogc;
+       usize label_size, const(char)* label,
+       usize seed_size, const(char)* seed,
+       usize outsize, char *out_) @nogc;
 
 /**
  * gnutls_server_name_type_t:
@@ -1117,10 +1117,10 @@ enum : int {
 
 int gnutls_server_name_set(gnutls_session_t session,
          gnutls_server_name_type_t type,
-         const(void)* name, size_t name_length) @nogc;
+         const(void)* name, usize name_length) @nogc;
 
 int gnutls_server_name_get(gnutls_session_t session,
-         void *data, size_t * data_length,
+         void *data, usize * data_length,
          uint *type, uint indx) @nogc;
 
 uint gnutls_heartbeat_get_timeout(gnutls_session_t session) @nogc;
@@ -1274,9 +1274,9 @@ const(char)* gnutls_protocol_get_name(gnutls_protocol_t version_) @nogc;
  */
 int gnutls_session_set_data(gnutls_session_t session,
           const(void)* session_data,
-          size_t session_data_size) @nogc;
+          usize session_data_size) @nogc;
 int gnutls_session_get_data(gnutls_session_t session, void *session_data,
-          size_t * session_data_size) @nogc;
+          usize * session_data_size) @nogc;
 int gnutls_session_get_data2(gnutls_session_t session,
            gnutls_datum_t * data) @nogc;
 void gnutls_session_get_random(gnutls_session_t session,
@@ -1341,7 +1341,7 @@ int gnutls_session_set_premaster(gnutls_session_t session,
 /* returns the session ID */
 enum GNUTLS_MAX_SESSION_ID = 32;
 int gnutls_session_get_id(gnutls_session_t session, void *session_id,
-        size_t * session_id_size) @nogc;
+        usize * session_id_size) @nogc;
 int gnutls_session_get_id2(gnutls_session_t session,
          gnutls_datum_t * session_id) @nogc;
 
@@ -1406,7 +1406,7 @@ gnutls_handshake_set_post_client_hello_function(gnutls_session_t session,
             func) /*@nogc*/;
 
 void gnutls_handshake_set_max_packet_length(gnutls_session_t session,
-              size_t max) @nogc;
+              usize max) @nogc;
 
 /* returns libgnutls version (call it with a NULL argument)
  */
@@ -1643,7 +1643,7 @@ gnutls_certificate_set_ocsp_status_request_file
 
 int gnutls_ocsp_status_request_enable_client(gnutls_session_t session,
                gnutls_datum_t * responder_id,
-               size_t responder_id_size,
+               usize responder_id_size,
                gnutls_datum_t *
                request_extensions) @nogc;
 
@@ -1680,11 +1680,11 @@ void gnutls_global_set_mutex(mutex_init_func init,
            mutex_lock_func lock,
            mutex_unlock_func unlock) /*@nogc*/;
 
-//alias gnutls_alloc_function = void * function (size_t) @nogc;
-//alias gnutls_calloc_function = void * function (size_t, size_t) @nogc;
+//alias gnutls_alloc_function = void * function (usize) @nogc;
+//alias gnutls_calloc_function = void * function (usize, usize) @nogc;
 //alias gnutls_is_secure_function = int function (const(void)* ) @nogc;
 //alias gnutls_free_function = void function (void *) @nogc;
-//alias gnutls_realloc_function = void * function (void *, size_t) @nogc;
+//alias gnutls_realloc_function = void * function (void *, usize) @nogc;
 
 void gnutls_global_set_time_function(gnutls_time_func time_func) /*@nogc*/;
 
@@ -1697,10 +1697,10 @@ extern __gshared /*_SYM_EXPORT*/ gnutls_free_function gnutls_free;
 extern __gshared /*_SYM_EXPORT*/ char * function (const(char)* ) gnutls_strdup;
 
 /* a variant of memset that doesn't get optimized out */
-void gnutls_memset(void *data, int c, size_t size) @nogc;
+void gnutls_memset(void *data, int c, usize size) @nogc;
 
 /* constant time memcmp */
-int gnutls_memcmp(const(void)* s1, const(void)* s2, size_t n) @nogc;
+int gnutls_memcmp(const(void)* s1, const(void)* s2, usize n) @nogc;
 
 //alias gnutls_log_func = void function (int, const(char)* ) @nogc;
 //alias gnutls_audit_log_func = void function (gnutls_session_t, const(char)* ) @nogc;
@@ -1727,7 +1727,7 @@ int gnutls_dh_params_generate2(gnutls_dh_params_t params,
 int gnutls_dh_params_export_pkcs3(gnutls_dh_params_t params,
           gnutls_x509_crt_fmt_t format,
           ubyte *params_data,
-          size_t * params_data_size) @nogc;
+          usize * params_data_size) @nogc;
 int gnutls_dh_params_export2_pkcs3(gnutls_dh_params_t params,
            gnutls_x509_crt_fmt_t format,
            gnutls_datum_t * out_) @nogc;
@@ -1743,16 +1743,16 @@ int gnutls_dh_params_cpy(gnutls_dh_params_t dst, gnutls_dh_params_t src) @nogc;
  */
 struct giovec_t {
   void *iov_base;   /* Starting address */
-  size_t iov_len;   /* Number of bytes to transfer */
+  usize iov_len;   /* Number of bytes to transfer */
 }
 
-//alias gnutls_pull_func = ssize_t function (gnutls_transport_ptr_t, void *, size_t) @nogc;
-//alias gnutls_push_func = ssize_t function (gnutls_transport_ptr_t, const(void)* , size_t) @nogc;
+//alias gnutls_pull_func = ssize function (gnutls_transport_ptr_t, void *, usize) @nogc;
+//alias gnutls_push_func = ssize function (gnutls_transport_ptr_t, const(void)* , usize) @nogc;
 
 int gnutls_system_recv_timeout(gnutls_transport_ptr_t ptr, uint ms) @nogc;
 //alias gnutls_pull_timeout_func = int function (gnutls_transport_ptr_t, uint ms) @nogc;
 
-//alias gnutls_vec_push_func = ssize_t function (gnutls_transport_ptr_t, const(giovec_t)* iov, int iovcnt) @nogc;
+//alias gnutls_vec_push_func = ssize function (gnutls_transport_ptr_t, const(giovec_t)* iov, int iovcnt) @nogc;
 
 //alias gnutls_errno_func = int function (gnutls_transport_ptr_t) @nogc;
 
@@ -1809,7 +1809,7 @@ void gnutls_openpgp_send_cert(gnutls_session_t session,
  */
 int gnutls_fingerprint(gnutls_digest_algorithm_t algo,
            const(gnutls_datum_t)* data, void *result,
-           size_t * result_size) @nogc;
+           usize * result_size) @nogc;
 
   /**
    * gnutls_random_art_t:
@@ -1825,7 +1825,7 @@ enum : int {
 
 int gnutls_random_art(gnutls_random_art_t type,
           const(char)* key_type, uint key_size,
-          void *fpr, size_t fpr_size, gnutls_datum_t * art) @nogc;
+          void *fpr, usize fpr_size, gnutls_datum_t * art) @nogc;
 
 /* SRP
  */
@@ -1903,12 +1903,12 @@ gnutls_srp_set_client_credentials_function(gnutls_srp_client_credentials_t
              gnutls_srp_client_credentials_function func) /*@nogc*/;
 
 int gnutls_srp_base64_encode(const(gnutls_datum_t)* data, char *result,
-           size_t * result_size) @nogc;
+           usize * result_size) @nogc;
 int gnutls_srp_base64_encode2(const(gnutls_datum_t)* data,
            gnutls_datum_t * result) @nogc;
 
 int gnutls_srp_base64_decode(const(gnutls_datum_t)* b64_data, char *result,
-           size_t * result_size) @nogc;
+           usize * result_size) @nogc;
 int gnutls_srp_base64_decode2(const(gnutls_datum_t)* b64_data,
            gnutls_datum_t * result) @nogc;
 
@@ -1978,9 +1978,9 @@ gnutls_psk_set_client_credentials_function(gnutls_psk_client_credentials_t
              gnutls_psk_client_credentials_function func) /*@nogc*/;
 
 int gnutls_hex_encode(const(gnutls_datum_t)* data, char *result,
-          size_t * result_size) @nogc;
+          usize * result_size) @nogc;
 int gnutls_hex_decode(const(gnutls_datum_t)* hex_data, void *result,
-          size_t * result_size) @nogc;
+          usize * result_size) @nogc;
 
 int gnutls_hex_encode2(const(gnutls_datum_t)* data, gnutls_datum_t *result) @nogc;
 int gnutls_hex_decode2(const(gnutls_datum_t)* data, gnutls_datum_t *result) @nogc;
@@ -2151,10 +2151,10 @@ int gnutls_certificate_verification_status_print(uint status,
              uint flags) @nogc;
 
 int gnutls_pem_base64_encode(const(char)* msg, const(gnutls_datum_t)* data,
-           char *result, size_t * result_size) @nogc;
+           char *result, usize * result_size) @nogc;
 int gnutls_pem_base64_decode(const(char)* header,
            const(gnutls_datum_t)* b64_data,
-           ubyte *result, size_t * result_size) @nogc;
+           ubyte *result, usize * result_size) @nogc;
 
 int gnutls_pem_base64_encode2(const(char)* msg,
            const(gnutls_datum_t)* data,
@@ -2189,8 +2189,8 @@ void gnutls_anon_set_params_function(gnutls_anon_server_credentials_t res,
 void gnutls_psk_set_params_function(gnutls_psk_server_credentials_t res,
             gnutls_params_function func) /*@nogc*/;
 
-int gnutls_hex2bin(const(char)* hex_data, size_t hex_size,
-       void *bin_data, size_t * bin_size) @nogc;
+int gnutls_hex2bin(const(char)* hex_data, usize hex_size,
+       void *bin_data, usize * bin_size) @nogc;
 
   /* Trust on first use (or ssh like) functions */
 
@@ -2309,7 +2309,7 @@ enum GNUTLS_PKCS11_PIN_WRONG = GNUTLS_PIN_WRONG;
  *
  * Since: 2.12.0
  **/
-//alias gnutls_pin_callback_t = int function (void *userdata, int attempt, const(char)* token_url, const(char)* token_label, uint flags, char* pin, size_t pin_max) @nogc;
+//alias gnutls_pin_callback_t = int function (void *userdata, int attempt, const(char)* token_url, const(char)* token_label, uint flags, char* pin, usize pin_max) @nogc;
 
 void gnutls_certificate_set_pin_function(gnutls_certificate_credentials_t,
            gnutls_pin_callback_t fn,
@@ -2319,7 +2319,7 @@ void gnutls_certificate_set_pin_function(gnutls_certificate_credentials_t,
 struct gnutls_buffer_st {}
 alias gnutls_buffer_t = gnutls_buffer_st*;
 
-int gnutls_buffer_append_data(gnutls_buffer_t, const(void)* data, size_t data_size) @nogc;
+int gnutls_buffer_append_data(gnutls_buffer_t, const(void)* data, usize data_size) @nogc;
 
 /* Public extensions related functions */
 
@@ -2330,7 +2330,7 @@ void gnutls_ext_set_data(gnutls_session_t session, uint type,
 int gnutls_ext_get_data(gnutls_session_t session, uint type,
       gnutls_ext_priv_data_t *) @nogc;
 
-//alias gnutls_ext_recv_func = int function (gnutls_session_t session, const(ubyte)* data, size_t len) @nogc;
+//alias gnutls_ext_recv_func = int function (gnutls_session_t session, const(ubyte)* data, usize len) @nogc;
 //alias gnutls_ext_send_func = int function (gnutls_session_t session, gnutls_buffer_t extdata) @nogc;
 //alias gnutls_ext_deinit_data_func = void function (gnutls_ext_priv_data_t data) @nogc;
 //alias gnutls_ext_pack_func = int function (gnutls_ext_priv_data_t data, gnutls_buffer_t packed_data) @nogc;
@@ -2368,7 +2368,7 @@ int gnutls_ext_register(const(char)* name, int type, gnutls_ext_parse_type_t par
 
 /* Public supplemental data related functions */
 
-//alias gnutls_supp_recv_func = int function (gnutls_session_t session, const(ubyte)* data, size_t data_size) @nogc;
+//alias gnutls_supp_recv_func = int function (gnutls_session_t session, const(ubyte)* data, usize data_size) @nogc;
 //alias gnutls_supp_send_func = int function (gnutls_session_t session, gnutls_buffer_t buf) @nogc;
 
 int gnutls_supplemental_register(const(char)* name,

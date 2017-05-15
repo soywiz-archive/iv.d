@@ -26,11 +26,10 @@
  *
  * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
-module iv.nanovg.svg;
+module iv.nanovg.svg is aliced;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
-static if (is(typeof({import iv.vfs;}()))) enum NanoSVGHasVFS = true; else enum NanoSVGHasVFS = false;
-static if (NanoSVGHasVFS) { import iv.vfs; }
+import iv.vfs;
 
 version = nanosvg_crappy_stylesheet_parser;
 //version = nanosvg_debug_styles;
@@ -316,7 +315,7 @@ int xsscanf(A...) (const(char)[] str, const(char)[] fmt, ref A args) {
     }
   }
 
-  bool parseImpl(T/*, size_t dummy*/) (ref T res) {
+  bool parseImpl(T/*, usize dummy*/) (ref T res) {
     while (fpos < fmt.length) {
       //{ import std.stdio; writeln("spos=", spos, "; fpos=", fpos, "\nfmt=", fmt[fpos..$].quote, "\nstr=", str[spos..$].quote); }
       if (fmt.ptr[fpos] <= ' ') {
@@ -435,7 +434,7 @@ int xsscanf(A...) (const(char)[] str, const(char)[] fmt, ref A args) {
     return false;
   }
 
-  foreach (size_t aidx, immutable T; A) {
+  foreach (usize aidx, immutable T; A) {
     //pragma(msg, "aidx=", aidx, "; T=", T);
     if (!parseImpl!(T)(args[aidx])) return -(spos+1);
     //{ import std.stdio; writeln("@@@ aidx=", aidx+3, "; spos=", spos, "; fpos=", fpos, "\nfmt=", fmt[fpos..$].quote, "\nstr=", str[spos..$].quote); }
@@ -446,7 +445,7 @@ int xsscanf(A...) (const(char)[] str, const(char)[] fmt, ref A args) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-T* xalloc(T) (size_t addmem=0) if (!is(T == class)) {
+T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   import core.stdc.stdlib : malloc;
   if (T.sizeof == 0 && addmem == 0) addmem = 1;
   auto res = cast(ubyte*)malloc(T.sizeof+addmem+256);
@@ -466,9 +465,9 @@ T* xalloc(T) (size_t addmem=0) if (!is(T == class)) {
   return cast(T*)res;
 }
 
-T* xcalloc(T) (size_t count) if (!is(T == class) && !is(T == struct)) {
+T* xcalloc(T) (usize count) if (!is(T == class) && !is(T == struct)) {
   import core.stdc.stdlib : malloc;
-  size_t sz = T.sizeof*count;
+  usize sz = T.sizeof*count;
   if (sz == 0) sz = 1;
   auto res = cast(ubyte*)malloc(sz+256);
   if (res is null) return null;
@@ -557,7 +556,7 @@ static void nsvg__parseElement (const(char)[] s,
   // Get tag name
   //{ import std.stdio; writeln("bs=", s.quote); }
   {
-    size_t pos = 0;
+    usize pos = 0;
     while (pos < s.length && !nsvg__isspace(s[pos])) ++pos;
     name = s[0..pos];
     s = s[pos..$];
@@ -573,7 +572,7 @@ static void nsvg__parseElement (const(char)[] s,
     if (s[0] == '/') { end = 1; break; }
     // find end of the attrib name
     {
-      size_t pos = 0;
+      usize pos = 0;
       while (pos < s.length && !nsvg__isspace(s[pos]) && s[pos] != '=') ++pos;
       attr[nattr++] = s[0..pos];
       s = s[pos..$];
@@ -585,7 +584,7 @@ static void nsvg__parseElement (const(char)[] s,
     quote = s[0];
     s = s[1..$];
     {
-      size_t pos = 0;
+      usize pos = 0;
       while (pos < s.length && s[pos] != quote) ++pos;
       attr[nattr++] = s[0..pos];
       s = s[pos+(pos < s.length ? 1 : 0)..$];
@@ -610,7 +609,7 @@ void nsvg__parseXML (const(char)[] input,
                      scope void function (void* ud, const(char)[] s) contentCb,
                      void* ud)
 {
-  size_t cpos = 0;
+  usize cpos = 0;
   int state = NSVG_XML_CONTENT;
   while (cpos < input.length) {
     if (state == NSVG_XML_CONTENT && input[cpos] == '<') {
@@ -775,7 +774,7 @@ const(char)[] fromAsciiz (const(char)[] s) {
   //return s;
   if (s.length) {
     import core.stdc.string : memchr;
-    if (auto zp = memchr(s.ptr, 0, s.length)) return s[0..cast(size_t)(zp-s.ptr)];
+    if (auto zp = memchr(s.ptr, 0, s.length)) return s[0..cast(usize)(zp-s.ptr)];
   }
   return s;
 }
@@ -1663,7 +1662,7 @@ float nsvg__parseCoordinate (Parser* p, const(char)[] str, float orig, float len
 }
 
 int nsvg__parseTransformArgs (const(char)[] str, float* args, int maxNa, int* na) {
-  size_t end, ptr;
+  usize end, ptr;
   char[65] it = void;
 
   assert(str.length);
@@ -1864,7 +1863,7 @@ int nsvg__parseStrokeDashArray (Parser* p, const(char)[] str, float* strokeDashA
 }
 
 const(char)[] trimLeft (const(char)[] s, char ech=0) {
-  size_t pos = 0;
+  usize pos = 0;
   while (pos < s.length) {
     if (s.ptr[pos] <= ' ') { ++pos; continue; }
     if (ech && s.ptr[pos] == ech) { ++pos; continue; }
@@ -1880,7 +1879,7 @@ const(char)[] trimLeft (const(char)[] s, char ech=0) {
 }
 
 static const(char)[] trimRight (const(char)[] s, char ech=0) {
-  size_t pos = 0;
+  usize pos = 0;
   while (pos < s.length) {
     if (s.ptr[pos] <= ' ' || (ech && s.ptr[pos] == ech)) {
       if (s[pos..$].trimLeft(ech).length == 0) return s[0..pos];
@@ -1906,7 +1905,7 @@ void nsvg__parseClassOrId (Parser* p, char lch, const(char)[] str) {
   while (str.length) {
     while (str.length && str.ptr[0] <= ' ') str = str[1..$];
     if (str.length == 0) break;
-    size_t pos = 1;
+    usize pos = 1;
     while (pos < str.length && str.ptr[pos] > ' ') ++pos;
     version(nanosvg_debug_styles) { import std.stdio; writeln("class to find: ", lch, str[0..pos].quote); }
     if (auto st = p.findStyle(lch, str[0..pos])) {
@@ -1995,7 +1994,7 @@ bool nsvg__parseNameValue (Parser* p, const(char)[] str) {
   const(char)[] name;
 
   str = str.trimLeft;
-  size_t pos = 0;
+  usize pos = 0;
   while (pos < str.length && str.ptr[pos] != ':') {
     if (str.length-pos > 1 && str.ptr[pos] == '/' && str.ptr[pos+1] == '*') {
       pos += 2;
@@ -2019,7 +2018,7 @@ bool nsvg__parseNameValue (Parser* p, const(char)[] str) {
 void nsvg__parseStyle (Parser* p, const(char)[] str) {
   while (str.length) {
     str = str.trimLeft;
-    size_t pos = 0;
+    usize pos = 0;
     while (pos < str.length && str[pos] != ';') {
       if (str.length-pos > 1 && str.ptr[pos] == '/' && str.ptr[pos+1] == '*') {
         pos += 2;
@@ -2037,7 +2036,7 @@ void nsvg__parseStyle (Parser* p, const(char)[] str) {
 }
 
 void nsvg__parseAttribs (Parser* p, AttrList attr) {
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
          if (attr[i] == "style") nsvg__parseStyle(p, attr[i+1]);
     else if (attr[i] == "class") { version(nanosvg_crappy_stylesheet_parser) nsvg__parseClassOrId(p, '.', attr[i+1]); }
     else nsvg__parseAttr(p, attr[i], attr[i+1]);
@@ -2379,7 +2378,7 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
   char closedFlag = 0;
   char[65] item = void;
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (attr[i] == "d") {
       s = attr[i+1];
     } else {
@@ -2509,7 +2508,7 @@ void nsvg__parseRect (Parser* p, AttrList attr) {
   float rx = -1.0f; // marks not set
   float ry = -1.0f;
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "x") x = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "y") y = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2559,7 +2558,7 @@ void nsvg__parseCircle (Parser* p, AttrList attr) {
   float cy = 0.0f;
   float r = 0.0f;
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "cx") cx = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "cy") cy = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2588,7 +2587,7 @@ void nsvg__parseEllipse (Parser* p, AttrList attr) {
   float rx = 0.0f;
   float ry = 0.0f;
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "cx") cx = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "cy") cy = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2619,7 +2618,7 @@ void nsvg__parseLine (Parser* p, AttrList attr) {
   float x2 = 0.0;
   float y2 = 0.0;
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
            if (attr[i] == "x1") x1 = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigX(p), nsvg__actualWidth(p));
       else if (attr[i] == "y1") y1 = nsvg__parseCoordinate(p, attr[i+1], nsvg__actualOrigY(p), nsvg__actualHeight(p));
@@ -2646,7 +2645,7 @@ void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
 
   nsvg__resetPath(p);
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
       if (attr[i] == "points") {
         const(char)[]s = attr[i+1];
@@ -2672,7 +2671,7 @@ void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
 }
 
 void nsvg__parseSVG (Parser* p, AttrList attr) {
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
       if (attr[i] == "width") {
         p.image.width = nsvg__parseCoordinate(p, attr[i+1], 0.0f, 1.0f);
@@ -2721,7 +2720,7 @@ void nsvg__parseGradient (Parser* p, AttrList attr, NSVG.PaintType type) {
 
   nsvg__xformIdentity(grad.xform.ptr);
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) {
+  for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (attr[i] == "id") {
       grad.id[] = 0;
       const(char)[] s = attr[i+1];
@@ -2769,7 +2768,7 @@ void nsvg__parseGradientStop (Parser* p, AttrList attr) {
   curAttr.stopColor = 0;
   curAttr.stopOpacity = 1.0f;
 
-  for (size_t i = 0; attr.length-i >= 2; i += 2) nsvg__parseAttr(p, attr[i], attr[i+1]);
+  for (usize i = 0; attr.length-i >= 2; i += 2) nsvg__parseAttr(p, attr[i], attr[i+1]);
 
   // Add stop to the last gradient.
   grad = p.gradients;
@@ -2902,7 +2901,7 @@ void nsvg__content (void* ud, const(char)[] s) {
       }
       //version(nanosvg_debug_styles) { import std.stdio; writeln("::: ", s.quote); }
       if (s.ptr[0] == '{') {
-        size_t pos = 1;
+        usize pos = 1;
         while (pos < s.length && s.ptr[pos] != '}') {
           if (s.length-pos > 1 && s.ptr[pos] == '/' && s.ptr[pos+1] == '*') {
             // skip comment
@@ -2922,7 +2921,7 @@ void nsvg__content (void* ud, const(char)[] s) {
         if (s.length-pos < 1) break;
         s = s[pos+1..$];
       } else {
-        size_t pos = 0;
+        usize pos = 0;
         while (pos < s.length && s.ptr[pos] > ' ' && s.ptr[pos] != '{' && s.ptr[pos] != '/') ++pos;
         const(char)[] tk = s[0..pos];
         version(nanosvg_debug_styles) { import std.stdio; writeln("token: ", tk.quote); }
@@ -3105,7 +3104,7 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
   import std.internal.cstring : tempCString;
 
   FILE* fp = null;
-  size_t size;
+  usize size;
   char* data = null;
   NSVG* image = null;
 
@@ -3114,7 +3113,7 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
   fp = fopen(filename.tempCString, "rb");
   if (fp is null) goto error;
   fseek(fp, 0, SEEK_END);
-  size = cast(size_t)ftell(fp);
+  size = cast(usize)ftell(fp);
   fseek(fp, 0, SEEK_SET);
   data = cast(char*)malloc(size+1);
   if (data is null) goto error;
@@ -3150,25 +3149,23 @@ public void kill (NSVG* image) {
   xfree(image);
 }
 
-static if (NanoSVGHasVFS) {
-  public NSVG* nsvgParseFromFile(ST) (auto ref ST fi, const(char)[] units="px", float dpi=96) if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST) {
-    import core.stdc.stdlib : malloc, free;
+public NSVG* nsvgParseFromFile(ST) (auto ref ST fi, const(char)[] units="px", float dpi=96) if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST) {
+  import core.stdc.stdlib : malloc, free;
 
-    size_t size;
-    char* data = null;
+  usize size;
+  char* data = null;
 
-    auto sz = fi.size;
-    auto pp = fi.tell;
-    if (pp >= sz) return null;
-    sz -= pp;
-    if (sz > 0x3ff_ffff) return null;
-    size = cast(size_t)sz;
-    data = cast(char*)malloc(size+1);
-    if (data is null) return null;
-    scope(exit) free(data);
-    fi.rawReadExact(data[0..size]);
-    return nsvgParse(data[0..size], units, dpi);
-  }
+  auto sz = fi.size;
+  auto pp = fi.tell;
+  if (pp >= sz) return null;
+  sz -= pp;
+  if (sz > 0x3ff_ffff) return null;
+  size = cast(usize)sz;
+  data = cast(char*)malloc(size+1);
+  if (data is null) return null;
+  scope(exit) free(data);
+  fi.rawReadExact(data[0..size]);
+  return nsvgParse(data[0..size], units, dpi);
 }
 
 
@@ -4440,8 +4437,6 @@ public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float 
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-static if (NanoSVGHasVFS) {
-
 public void serialize(ST) (auto ref ST fo, NSVG* svg) if (isWriteableStream!ST) {
   assert(svg !is null);
 
@@ -4650,11 +4645,9 @@ public NSVG* nsvgUnserialize(ST) (auto ref ST fi) if (isWriteableStream!ST) {
   return svg;
 }
 
-}
-
 
 // ////////////////////////////////////////////////////////////////////////// //
-ptrdiff_t xindexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure @trusted nothrow @nogc {
+ptrdiff_t xindexOf (const(void)[] hay, const(void)[] need, usize stIdx=0) pure @trusted nothrow @nogc {
   if (hay.length <= stIdx || need.length == 0 || need.length > hay.length-stIdx) {
     return -1;
   } else {
@@ -4664,18 +4657,18 @@ ptrdiff_t xindexOf (const(void)[] hay, const(void)[] need, size_t stIdx=0) pure 
   }
 }
 
-ptrdiff_t xindexOf (const(void)[] hay, ubyte ch, size_t stIdx=0) pure @trusted nothrow @nogc {
+ptrdiff_t xindexOf (const(void)[] hay, ubyte ch, usize stIdx=0) pure @trusted nothrow @nogc {
   return xindexOf(hay, (&ch)[0..1], stIdx);
 }
 
 pure nothrow @trusted @nogc:
 version(linux) {
-  extern(C) inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen);
+  extern(C) inout(void)* memmem (inout(void)* haystack, usize haystacklen, inout(void)* needle, usize needlelen);
 } else {
-  inout(void)* memmem (inout(void)* haystack, size_t haystacklen, inout(void)* needle, size_t needlelen) {
+  inout(void)* memmem (inout(void)* haystack, usize haystacklen, inout(void)* needle, usize needlelen) {
     auto h = cast(const(ubyte)*)haystack;
     auto n = cast(const(ubyte)*)needle;
-    // size_t is unsigned
+    // usize is unsigned
     if (needlelen > haystacklen) return null;
     foreach (immutable i; 0..haystacklen-needlelen+1) {
       import core.stdc.string : memcmp;

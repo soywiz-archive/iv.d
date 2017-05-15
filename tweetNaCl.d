@@ -9,7 +9,7 @@
  */
 //k8: yes, i know that this code sux. i know that i should rewrite it to be more 'D-ish'.
 //    i'll not do that. thank you.
-module iv.tweetNaCl /*is aliced*/;
+module iv.tweetNaCl is aliced;
 
 public nothrow:
 
@@ -311,7 +311,7 @@ void crypto_onetimeauth (ubyte[] output, const(ubyte)[] msg, const(ubyte)[] key)
   while (n > 0) {
     c.ptr[0..17] = 0;
     {
-      size_t jj;
+      usize jj;
       for (jj = 0; jj < 16 && jj < n; ++jj) c.ptr[jj] = (mpos+jj < msg.length ? msg.ptr[mpos+jj] : 0);
       c.ptr[jj] = 1;
       mpos += jj;

@@ -38,7 +38,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-module iv.sr3c;
+module iv.sr3c is aliced;
 
 /** Prior to compression or uncompression the user of this library
  * creates a "compression context" of type `SR3C` which can
@@ -280,7 +280,7 @@ private:
    */
   public int compress (const(void)[] data) {
     const(ubyte)* bytes = cast(const(ubyte)*)data.ptr;
-    size_t n_bytes = data.length;
+    usize n_bytes = data.length;
     uint index, xsum, r;
     uint* sm;
     int ch;
@@ -465,7 +465,7 @@ private:
       "} while (0);";
 
     const(ubyte)* bytes = cast(const(ubyte)*)data.ptr;
-    size_t n_bytes = data.length;
+    usize n_bytes = data.length;
     uint xmid;
     int prediction;
 

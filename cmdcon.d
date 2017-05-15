@@ -32,14 +32,13 @@
  *   '~': fill with the following char instead of space
  *        second '~': right filling char for 'center'
  */
-module iv.cmdcon /*is aliced*/;
+module iv.cmdcon is aliced;
 private:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// use this in conGetVar, for example, to avoid allocations
 public alias ConString = const(char)[];
-static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -721,7 +720,7 @@ public template conwritef(string fmt, A...) {
     int wdt, maxwdt;
     char fmtch;
 
-    argloop: foreach (immutable argnum, /*auto*/ att; A) {
+    argloop: foreach (immutable argnum, auto att; A) {
       alias at = XUQQ!att;
       if (!simples) {
         processUntilFSp();
@@ -845,7 +844,7 @@ public template conwritef(string fmt, A...) {
               putRes("]");
             } else {
               if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
-              putRes("cwrxputhex(cast(size_t)args[");
+              putRes("cwrxputhex(cast(usize)args[");
               putNum(argnum);
               putRes("], false");
             }
@@ -872,7 +871,7 @@ public template conwritef(string fmt, A...) {
             assert(0, "can't hexprint floats yet");
           } else static if (is(at : T*, T)) {
             if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
-            putRes("cwrxputhex(cast(size_t)args[");
+            putRes("cwrxputhex(cast(usize)args[");
             putNum(argnum);
             putRes("], false");
           } else static if (is(at : long)) {
@@ -896,7 +895,7 @@ public template conwritef(string fmt, A...) {
             assert(0, "can't hexprint floats yet");
           } else static if (is(at : T*, T)) {
             if (wdt < (void*).sizeof*2) { lchar = '0'; wdt = cast(int)((void*).sizeof)*2; signw = ' '; }
-            putRes("cwrxputhex(cast(size_t)args[");
+            putRes("cwrxputhex(cast(usize)args[");
             putNum(argnum);
             putRes("], true");
           } else static if (is(at : long)) {
@@ -1024,7 +1023,7 @@ unittest {
 mixin template condump (Names...) {
   auto _xdump_tmp_ = {
     import iv.cmdcon : conwrite;
-    foreach (/*auto*/ i, /*auto*/ name; Names) conwrite(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
+    foreach (auto i, auto name; Names) conwrite(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
     return false;
   }();
 }
@@ -2440,7 +2439,7 @@ public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn)
         ConString[128] rest; // to avoid allocations in most cases
         ConString[] restdyn; // will be used if necessary
         uint restpos;
-        foreach (/*auto*/ idx, ref arg; args) {
+        foreach (auto idx, ref arg; args) {
           // populate arguments, with user data if available,
           // default if not, and throw if no argument provided
           if (hasArgs(cmdline)) {
@@ -3083,7 +3082,7 @@ version(contest_echo) unittest {
     char[44] buf;
     auto s = buf.conFormatStr("vs=$vs,  vi=${vi},  vb=${vb}!");
     conwriteln("[", s, "]");
-    foreach (/*auto*/ kv; cmdlist.byKeyValue) conwriteln(" ", kv.key);
+    foreach (auto kv; cmdlist.byKeyValue) conwriteln(" ", kv.key);
     assert("r_interpolation" in cmdlist);
     s = buf.conFormatStr("Interpolation: $r_interpolation");
     conwriteln("[", s, "]");
@@ -3112,10 +3111,10 @@ version(contest_cmdlist) unittest {
   }
 
   conwriteln("=== funcs ===");
-  foreach (/*auto*/ clx; conByCommand!"funcs") conwriteln("  [", clx, "]");
+  foreach (auto clx; conByCommand!"funcs") conwriteln("  [", clx, "]");
 
   conwriteln("=== vars ===");
-  foreach (/*auto*/ clx; conByCommand!"vars") conwriteln("  [", clx, "]");
+  foreach (auto clx; conByCommand!"vars") conwriteln("  [", clx, "]");
 }
 
 
@@ -3428,12 +3427,12 @@ public void conAddInputChar (char ch) {
       }
       string minPfx = null;
       // find longest command
-      foreach (/*auto*/ name; conByCommand) {
+      foreach (auto name; conByCommand) {
         if (name.length >= concurx && name.length > minPfx.length && name[0..concurx] == concli[0..concurx]) minPfx = name;
       }
       //conwriteln("longest command: [", minPfx, "]");
       // find longest prefix
-      foreach (/*auto*/ name; conByCommand) {
+      foreach (auto name; conByCommand) {
         if (name.length < concurx) continue;
         if (name[0..concurx] != concli[0..concurx]) continue;
         usize pos = 0;
@@ -3462,7 +3461,7 @@ public void conAddInputChar (char ch) {
     }
     // nope, print all available commands
     bool needDelimiter = true;
-    foreach (/*auto*/ name; conByCommand) {
+    foreach (auto name; conByCommand) {
       if (name.length == 0) continue;
       if (concurx > 0) {
         if (name.length < concurx) continue;
@@ -3809,7 +3808,7 @@ public void concmdfex(string fmt, A...) (scope void delegate (ConString cmd) cmd
     }
   }
 
-  foreach (immutable argnum, /*auto*/ att; A) {
+  foreach (immutable argnum, auto att; A) {
     processUntilFSp();
     if (pos >= fmt.length) assert(0, "out of format specifiers for arguments");
     assert(fmt[pos] == '%');

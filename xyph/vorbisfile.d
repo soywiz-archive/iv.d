@@ -9,7 +9,7 @@
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  *                                                                  *
  ********************************************************************/
-module iv.xyph.vorbisfile;
+module iv.xyph.vorbisfile is aliced;
 pragma(lib, "vorbisfile");
 
 import core.stdc.config;
@@ -22,7 +22,7 @@ import iv.xyph.vorbis;
 extern(C) nothrow @nogc:
 
 struct ov_callbacks {
-  size_t function (void *ptr, size_t size, size_t nmemb, void *datasource) read_func;
+  usize function (void *ptr, usize size, usize nmemb, void *datasource) read_func;
   int function (void *datasource, long offset, int whence) seek_func;
   int function (void *datasource) close_func;
   c_long function (void *datasource) tell_func;
@@ -119,7 +119,7 @@ int ov_halfrate_p (OggVorbis_File* vf);
 
 
 private {
-  size_t libcfile_VorbisRead (void* ptr, size_t byteSize, size_t sizeToRead, void* datasource) {
+  usize libcfile_VorbisRead (void* ptr, usize byteSize, usize sizeToRead, void* datasource) {
     return fread(ptr, byteSize, sizeToRead, cast(FILE*)datasource);
   }
 

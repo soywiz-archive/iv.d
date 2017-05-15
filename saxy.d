@@ -21,23 +21,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 // SAX style xml parser
-module iv.saxy;
+module iv.saxy is aliced;
 
 import std.encoding;
 import std.range;
-static if (is(typeof({import iv.vfs;}))) {
-  import iv.vfs;
-  import iv.strex;
-} else {
-  // check if a given stream supports `rawRead()`.
-  // it's enough to support `void[] rawRead (void[] buf)`
-  private enum isReadableStream(T) = is(typeof((inout int=0) {
-    auto t = T.init;
-    ubyte[1] b;
-    auto v = cast(void[])b;
-    t.rawRead(v);
-  }));
-}
+
+import iv.strex;
+import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -449,7 +439,7 @@ private:
         while (path.length != 0) {
           while (path.length != 0 && path.ptr[0] == '/') path = path[1..$];
           if (path.length == 0) break;
-          size_t e = 0;
+          usize e = 0;
           while (e < path.length && path.ptr[e] != '/') ++e;
           //if (e == 1 && path.ptr[0] == '+') throw new Exception("invalid callback path");
           if (path.ptr[e-1] == '+' || path.ptr[e-1] == '*') {
@@ -567,7 +557,7 @@ private:
     EncodingScheme efrom, eto;
     scope(exit) { efrom.destroy; eto.destroy; }
     char[] recbuf; // recode buffer
-    size_t rcpos; // for recode buffer
+    usize rcpos; // for recode buffer
     scope(exit) recbuf.destroy;
 
     void pushTag (const(char)[] s) {

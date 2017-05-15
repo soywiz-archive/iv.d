@@ -1,7 +1,7 @@
 // Capstone Disassembly Engine
 // By Nguyen Anh Quynh <aquynh@gmail.com>, 2013-2015
 // k8: see licenses in original capstone package, i'm too lazy to copy 'em.
-module iv.capstone;
+module iv.capstone is aliced;
 pragma(lib, "capstone");
 extern(C) nothrow:
 
@@ -22,7 +22,7 @@ uint CS_MAKE_VERSION (ubyte major, ubyte minor) { return ((major<<8)+minor); }
 enum CS_MNEMONIC_SIZE = 32;
 
 // Handle using with all API
-alias csh = size_t;
+alias csh = usize;
 
 // Architecture type
 alias cs_arch = uint;
@@ -79,11 +79,11 @@ enum /*cs_mode*/ : uint {
 
 import core.stdc.stdarg : va_list;
 
-alias void* function (size_t size) cs_malloc_t;
-alias void* function (size_t nmemb, size_t size) cs_calloc_t;
-alias void* function (void *ptr, size_t size) cs_realloc_t;
+alias void* function (usize size) cs_malloc_t;
+alias void* function (usize nmemb, usize size) cs_calloc_t;
+alias void* function (void *ptr, usize size) cs_realloc_t;
 alias void function (void *ptr) cs_free_t;
-alias int function (char *str, size_t size, const char *format, va_list ap) cs_vsnprintf_t;
+alias int function (char *str, usize size, const char *format, va_list ap) cs_vsnprintf_t;
 
 
 // User-defined dynamic memory related functions: malloc/calloc/realloc/free/vsnprintf()
@@ -178,7 +178,7 @@ enum /*cs_group_type*/ : uint {
 
  @return: return number of bytes to skip, or 0 to immediately stop disassembling.
 */
-alias size_t function (const ubyte *code, size_t code_size, size_t offset, void *user_data) cs_skipdata_cb_t;
+alias usize function (const ubyte *code, usize code_size, usize offset, void *user_data) cs_skipdata_cb_t;
 
 // User-customized setup for SKIPDATA option
 struct cs_opt_skipdata {
@@ -384,7 +384,7 @@ public cs_err cs_close (csh* handle);
  so that cs_option(handle, CS_OPT_MEM, value) can (i.e must) be called
  even before cs_open()
 */
-public cs_err cs_option (csh handle, cs_opt_type type, size_t value);
+public cs_err cs_option (csh handle, cs_opt_type type, usize value);
 
 /*
  Report the last error number when some API function fail.
@@ -440,13 +440,13 @@ public const(char)* cs_strerror (cs_err code);
 
  On failure, call cs_errno() for error code.
 */
-public size_t cs_disasm (csh handle, const(ubyte)* code, size_t code_size, ulong address, size_t count, cs_insn** insn);
+public usize cs_disasm (csh handle, const(ubyte)* code, usize code_size, ulong address, usize count, cs_insn** insn);
 
 /*
   Deprecated function - to be retired in the next version!
   Use cs_disasm() instead of cs_disasm_ex()
 */
-deprecated("wow, deprecated Capstone API") public size_t cs_disasm_ex(csh handle, const(ubyte)* code, size_t code_size, ulong address, size_t count, cs_insn** insn);
+deprecated("wow, deprecated Capstone API") public usize cs_disasm_ex(csh handle, const(ubyte)* code, usize code_size, ulong address, usize count, cs_insn** insn);
 
 /*
  Free memory allocated by cs_malloc() or cs_disasm() (argument @insn)
@@ -455,7 +455,7 @@ deprecated("wow, deprecated Capstone API") public size_t cs_disasm_ex(csh handle
  @count: number of cs_insn structures returned by cs_disasm(), or 1
      to free memory allocated by cs_malloc().
 */
-public void cs_free (cs_insn* insn, size_t count);
+public void cs_free (cs_insn* insn, usize count);
 
 
 /*
@@ -503,7 +503,7 @@ public cs_insn* cs_malloc (csh handle);
 
  On failure, call cs_errno() for error code.
 */
-public bool cs_disasm_iter (csh handle, const(ubyte)** code, size_t* size, ulong* address, cs_insn* insn);
+public bool cs_disasm_iter (csh handle, const(ubyte)** code, usize* size, ulong* address, cs_insn* insn);
 
 /*
  Return friendly name of register in a string.

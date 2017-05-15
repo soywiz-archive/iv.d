@@ -188,7 +188,7 @@
 //   given file is in a general way. I provide an API for this, but I don't
 //   recommend it.
 //
-module iv.stb.ttf;
+module iv.stb.ttf is aliced;
 
 private:
 // //////////////////////////////////////////////////////////////////////// //
@@ -1104,7 +1104,7 @@ struct stbtt__hheap {
   int num_remaining_in_head_chunk;
 }
 
-void* stbtt__hheap_alloc (stbtt__hheap* hh, size_t size, void* userdata) {
+void* stbtt__hheap_alloc (stbtt__hheap* hh, usize size, void* userdata) {
   if (hh.first_free) {
     void* p = hh.first_free;
     hh.first_free = *cast(void**)p;
@@ -1947,8 +1947,8 @@ public void stbtt_MakeCodepointBitmap (const(stbtt_fontinfo)* info, ubyte* outpu
 //
 
 // check if a utf8 string contains a prefix which is the utf16 string; if so return length of matching utf8 string
-size_t stbtt__CompareUTF8toUTF16_bigendian_prefix (const(ubyte)[] s1, const(ubyte)[] s2) {
-  size_t i = 0;
+usize stbtt__CompareUTF8toUTF16_bigendian_prefix (const(ubyte)[] s1, const(ubyte)[] s2) {
+  usize i = 0;
   // convert utf16 to utf8 and compare the results while converting
   while (s2.length) {
     if (s2.length < 2) return -1;

@@ -15,26 +15,16 @@
  * 02111-1307 USA.
  * ********************************************************************************************* */
 // key/value database based on QDBM
-module iv.sdbm /*is aliced*/;
+module iv.sdbm is aliced;
 
 import std.traits : isArray, isDynamicArray;
 import iv.hash.fasthash;
 
-static if (!is(typeof(usize))) private alias usize = size_t;
-
 
 /// database errors
 class SDBMException : Exception {
-  static if (__VERSION__ >= 2068) {
-    // it's @nogc in 2.068+
-    this (SDBM.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
-      super(errorMessage(ecode), file, line, next);
-    }
-  } else {
-    // it's not @nogc in 2.067 and lower
-    this (SDBM.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
-      super(errorMessage(ecode), file, line, next);
-    }
+  this (SDBM.Error ecode, string file=__FILE__, usize line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
+    super(errorMessage(ecode), file, line, next);
   }
 
   /** Get a message string corresponding to an error code.

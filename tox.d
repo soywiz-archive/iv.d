@@ -20,7 +20,7 @@
  *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-module iv.tox;
+module iv.tox is aliced;
 pragma(lib, "toxdns");
 pragma(lib, "toxencryptsave");
 pragma(lib, "toxcore");
@@ -122,8 +122,6 @@ struct Tox {
   @disable this (this);
 }
 alias ToxP = Tox*;
-
-static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 /*******************************************************************************
@@ -457,7 +455,7 @@ struct Tox_Options {
     /**
      * The length of the savedata.
      */
-    size_t savedata_length;
+    usize savedata_length;
 }
 
 

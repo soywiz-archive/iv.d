@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.region;
+module iv.sdpy.region is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -879,7 +879,7 @@ private:
   }
 
 private:
-  size_t rdatap = 0; // hide from GC
+  usize rdatap = 0; // hide from GC
 
   @property inout(RData)* rdata () inout pure const nothrow @trusted @nogc { static if (__VERSION__ > 2067) pragma(inline, true); return cast(RData*)rdatap; }
 
@@ -928,7 +928,7 @@ private:
         --srcd.rc;
         assert(srcd.rc > 0);
       }
-      rdatap = cast(size_t)dstd;
+      rdatap = cast(usize)dstd;
       GC.addRange(rdata, RData.sizeof, typeid(RData));
     }
   }

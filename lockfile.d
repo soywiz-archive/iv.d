@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.lockfile;
+module iv.lockfile is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -70,7 +70,7 @@ public nothrow @nogc:
   }
 
 static:
-  size_t create (const(char)[] afname) {
+  usize create (const(char)[] afname) {
     import core.sys.posix.fcntl /*: open*/;
     import core.sys.posix.unistd : close;
     import core.sys.posix.stdlib : malloc, free;
@@ -88,7 +88,7 @@ static:
     res.fname = namep[0..afname.length];
     res.fd = xfd;
     res.rc = 1;
-    return cast(size_t)fimp;
+    return cast(usize)fimp;
   }
 }
 
@@ -96,7 +96,7 @@ static:
 // ////////////////////////////////////////////////////////////////////////// //
 public struct LockFile {
 private:
-  size_t lci;
+  usize lci;
 
 nothrow @trusted @nogc:
   void decref () {

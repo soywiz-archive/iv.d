@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module mkziptest;
+module mkziptest is aliced;
 
 import iv.strex;
 import iv.vfs.io;
@@ -25,7 +25,7 @@ import iv.vfs.writers.zip;
 void main (string[] args) {
   auto method = ZipWriter.Method.Deflate;
 
-  for (size_t idx = 1; idx < args.length;) {
+  for (usize idx = 1; idx < args.length;) {
     string arg = args[idx];
     if (arg == "--") {
       import std.algorithm : remove;

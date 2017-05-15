@@ -237,7 +237,7 @@ public const(char)* ks_strerror (ks_err code);
  @return: KS_ERR_OK on success, or other value on failure.
  Refer to ks_err enum for detailed error.
 */
-public ks_err ks_option (ks_engine* ks, ks_opt_type type, size_t value);
+public ks_err ks_option (ks_engine* ks, ks_opt_type type, usize value);
 
 
 /*
@@ -264,7 +264,7 @@ public ks_err ks_option (ks_engine* ks, ks_opt_type type, size_t value);
 
  On failure, call ks_errno() for error code.
 */
-public int ks_asm (ks_engine* ks, const(char)* string, ulong address, ubyte** encoding, size_t* encoding_size, size_t* stat_count);
+public int ks_asm (ks_engine* ks, const(char)* string, ulong address, ubyte** encoding, usize* encoding_size, usize* stat_count);
 
 
 /*

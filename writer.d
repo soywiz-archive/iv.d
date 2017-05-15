@@ -38,11 +38,10 @@
  *        second '~': right filling char for 'center'
  *   '\0'...'\0': separator string for '%|'
  */
-module iv.writer /*is aliced*/;
+module iv.writer is aliced;
 private:
 
 private import std.traits : isBoolean, isIntegral, isPointer;
-static if (!is(typeof(usize))) private alias usize = size_t;
 private alias StripTypedef(T) = T;
 
 

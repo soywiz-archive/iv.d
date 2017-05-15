@@ -1237,7 +1237,7 @@ struct xKeymapEvent {
   BYTE[31] map;
 }
 
-enum size_t XEventSize = xEvent.sizeof;
+enum usize XEventSize = xEvent.sizeof;
 
 /* XReply is the union of all the replies above whose "fixed part"
 fits in 32 bytes.  It does NOT include GetWindowAttributesReply,

@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // 866,1251,koi8u
-module iv.encoding /*is aliced*/;
+module iv.encoding is aliced;
 
 import std.encoding;
 
@@ -96,7 +96,7 @@ class K8ByteEncoding(alias charMap) : EncodingScheme {
     return false;
   }
 
-  override size_t encodedLength (dchar c) const
+  override usize encodedLength (dchar c) const
   in {
     assert(canEncode(c));
   }
@@ -104,7 +104,7 @@ class K8ByteEncoding(alias charMap) : EncodingScheme {
     return 1;
   }
 
-  override size_t encode (dchar c, ubyte[] buffer) const {
+  override usize encode (dchar c, ubyte[] buffer) const {
     if (c < 0x80) {
       buffer[0] = c&0xff;
     } else {
@@ -300,7 +300,7 @@ string recodeToKOI8(T) (T s, string from=null) if (isSomeString!T) {
     // from utf-8
     auto len = s.count;
     res = new ubyte[](len);
-    size_t idx = 0;
+    usize idx = 0;
     foreach (dchar dc; s) {
       eto.encode(dc, buf);
       if (idx >= res.length) {

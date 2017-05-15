@@ -4,7 +4,7 @@
 **
 **  This software is dual licensed under the MIT and GPLv3 licenses.
 */
-module iv.libstrophe.utils;
+module iv.libstrophe.utils is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -18,7 +18,7 @@ char* xmpp_toStrz (const(char)[] s) {
 
 T[] xmpp_fromStrz(T : char) (T* s) {
   if (s is null) return null;
-  size_t pos = 0;
+  usize pos = 0;
   while (s[pos]) ++pos;
   return s[0..pos];
 }

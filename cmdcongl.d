@@ -779,7 +779,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
     }
   }
 
-  foreach (/*auto*/ line; conbufLinesRev) {
+  foreach (auto line; conbufLinesRev) {
     putLine(line);
     if (y+conCharHeight <= 0) break;
   }

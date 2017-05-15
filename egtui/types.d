@@ -17,6 +17,4 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.types;
-
-static if (!is(typeof(usize))) alias usize = size_t;
+module iv.egtui.types is aliced;

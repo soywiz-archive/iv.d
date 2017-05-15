@@ -27,8 +27,8 @@ public enum Seek : int {
 
 public mixin template VFSHiddenPointerHelper(T, string name) {
   mixin("
-    private size_t hptr_"~name~"_;
+    private usize hptr_"~name~"_;
     final @property inout(T)* "~name~" () inout pure nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))hptr_"~name~"_; }
-    final @property void "~name~" (T* v) pure nothrow @trusted @nogc { pragma(inline, true); hptr_"~name~"_ = cast(size_t)v; }
+    final @property void "~name~" (T* v) pure nothrow @trusted @nogc { pragma(inline, true); hptr_"~name~"_ = cast(usize)v; }
   ");
 }

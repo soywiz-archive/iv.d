@@ -22,7 +22,7 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-module iv.minimp3;
+module iv.minimp3 is aliced;
 
 /* code sample:
   auto fi = File(args[1]);
@@ -431,21 +431,21 @@ import core.stdc.string : libc_memcpy = memcpy, libc_memset = memset, libc_memmo
 import std.math : libc_pow = pow, libc_frexp = frexp, tan, M_PI = PI, sqrt, cos, sin;
 
 /*
-void* libc_calloc (size_t nmemb, size_t count) {
+void* libc_calloc (usize nmemb, usize count) {
   import core.stdc.stdlib : calloc;
   import core.stdc.stdio : printf;
   printf("calloc(%zu, %zu)\n", nmemb, count);
   return calloc(nmemb, count);
 }
 
-void* libc_malloc (size_t count) {
+void* libc_malloc (usize count) {
   import core.stdc.stdlib : malloc;
   import core.stdc.stdio : printf;
   printf("malloc(%zu)\n", count+1024*1024);
   return malloc(count);
 }
 
-void* libc_realloc (void* ptr, size_t count) {
+void* libc_realloc (void* ptr, usize count) {
   import core.stdc.stdlib : realloc;
   import core.stdc.stdio : printf;
   printf("realloc(%p, %zu)\n", ptr, count);

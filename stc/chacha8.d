@@ -14,7 +14,7 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.stc.chacha8;
+module iv.stc.chacha8 is aliced;
 
 import std.range;
 import iv.stc.core;
@@ -43,7 +43,7 @@ private:
     ubyte[KeySize] kb = 0;
     ubyte[] keybuf;
     {
-      size_t len = 0;
+      usize len = 0;
       while (!key.empty && len < kb.length) {
         kb.ptr[len++] = cast(ubyte)key.front;
         key.popFront;
@@ -54,7 +54,7 @@ private:
     ubyte[IVSize] ib = 0;
     ubyte[] ivbuf;
     {
-      size_t len = 0;
+      usize len = 0;
       while (!iv.empty && len < ib.length) {
         ib.ptr[len++] = cast(ubyte)iv.front;
         iv.popFront;

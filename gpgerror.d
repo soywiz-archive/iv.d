@@ -16,12 +16,11 @@
    You should have received a copy of the GNU Lesser General Public
    License along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-module iv.gpgerror;
+module iv.gpgerror is aliced;
 pragma(lib, "gpg-error");
 
 import core.stdc.stdarg : va_list;
 import core.stdc.stdio : FILE;
-import core.sys.posix.sys.types : ssize_t;
 
 
 extern(C) nothrow @nogc:
@@ -577,7 +576,7 @@ void gpg_err_deinit (int mode);
 void gpgrt_set_syscall_clamp (void function () pre, void function () post);
 
 /* Register a custom malloc/realloc/free function.  */
-void gpgrt_set_alloc_func (void* function (void *a, size_t n) f);
+void gpgrt_set_alloc_func (void* function (void *a, usize n) f);
 
 
 
@@ -626,7 +625,7 @@ const(char)* gpg_strerror (gpg_error_t err);
    contains the string describing the error.  If the buffer was not
    large enough, ERANGE is returned and BUF contains as much of the
    beginning of the error string as fits into the buffer.  */
-int gpg_strerror_r (gpg_error_t err, char* buf, size_t buflen);
+int gpg_strerror_r (gpg_error_t err, char* buf, usize buflen);
 
 /* Return a pointer to a string containing a description of the error
    source in the error value ERR.  */
@@ -667,7 +666,7 @@ enum GPG_ERROR_VERSION = "1.18";
 enum GPG_ERROR_VERSION_NUMBER = 0x011200;
 
 /* System specific type definitions.  */
-alias gpgrt_ssize_t = ssize_t;
+alias gpgrt_ssize_t = ssize;
 alias gpgrt_off_t = ulong;
 
 
@@ -748,22 +747,22 @@ struct _gpgrt__stream {
   ubyte* buffer;
 
   /* The size of the buffer in bytes.  */
-  size_t buffer_size;
+  usize buffer_size;
 
   /* The length of the usable data in the buffer, only valid when in
      read mode (see flags).  */
-  size_t data_len;
+  usize data_len;
 
   /* The current position of the offset pointer, valid in read and
      write mode.  */
-  size_t data_offset;
+  usize data_offset;
 
-  size_t data_flushed;
+  usize data_flushed;
   ubyte* unread_buffer;
-  size_t unread_buffer_size;
+  usize unread_buffer_size;
 
   /* The number of unread bytes.  */
-  size_t unread_data_len;
+  usize unread_data_len;
 
   /* A pointer to our internal data for this stream.  */
   _gpgrt_stream_internal_ptr intern;
@@ -777,8 +776,8 @@ typedef struct _gpgrt__stream *estream_t;
 #endif
 */
 
-alias gpgrt_cookie_read_function_t = ssize_t function (void *cookie, void *buffer, size_t size);
-alias gpgrt_cookie_write_function_t = ssize_t function  (void *cookie, const void *buffer, size_t size);
+alias gpgrt_cookie_read_function_t = ssize function (void *cookie, void *buffer, usize size);
+alias gpgrt_cookie_write_function_t = ssize function  (void *cookie, const void *buffer, usize size);
 alias gpgrt_cookie_seek_function_t = int function (void *cookie, gpgrt_off_t *pos, int whence);
 alias gpgrt_cookie_close_function_t = int function (void *cookie);
 
@@ -831,16 +830,16 @@ typedef struct _gpgrt_syshd es_syshd_t;
 
 gpgrt_stream_t gpgrt_fopen (scope const(char)* path, scope const(char)* mode);
 gpgrt_stream_t gpgrt_mopen (scope void *data,
-                            size_t data_n, size_t data_len,
+                            usize data_n, usize data_len,
                             uint grow,
-                            void* function (void *mem, size_t size) func_realloc,
+                            void* function (void *mem, usize size) func_realloc,
                             void function (void *mem) func_free,
                             scope const(char)* mode);
-gpgrt_stream_t gpgrt_fopenmem (size_t memlimit,
+gpgrt_stream_t gpgrt_fopenmem (usize memlimit,
                                scope const(char)* mode);
-gpgrt_stream_t gpgrt_fopenmem_init (size_t memlimit,
+gpgrt_stream_t gpgrt_fopenmem_init (usize memlimit,
                                     scope const(char)* mode,
-                                    const void *data, size_t datalen);
+                                    const void *data, usize datalen);
 gpgrt_stream_t gpgrt_fdopen    (int filedes, const(char)* mode);
 gpgrt_stream_t gpgrt_fdopen_nc (int filedes, const(char)* mode);
 
@@ -856,7 +855,7 @@ gpgrt_stream_t gpgrt_fopencookie (scope void *cookie,
                                   gpgrt_cookie_io_functions_t functions);
 int gpgrt_fclose (gpgrt_stream_t stream);
 int gpgrt_fclose_snatch (gpgrt_stream_t stream,
-                         void **r_buffer, size_t *r_buflen);
+                         void **r_buffer, usize *r_buflen);
 int gpgrt_onclose (gpgrt_stream_t stream, int mode,
                    void function  (gpgrt_stream_t, void*) fnc, void *fnc_value);
 int gpgrt_fileno (gpgrt_stream_t stream);
@@ -931,35 +930,35 @@ int _gpgrt_putc_overflow (int c, gpgrt_stream_t stream); /* (private) */
 int gpgrt_ungetc (int c, gpgrt_stream_t stream);
 
 int gpgrt_read (scope gpgrt_stream_t stream,
-                scope void *buffer, size_t bytes_to_read,
-                scope size_t *bytes_read);
+                scope void *buffer, usize bytes_to_read,
+                scope usize *bytes_read);
 int gpgrt_write (scope gpgrt_stream_t stream,
-                 scope const void *buffer, size_t bytes_to_write,
-                 scope size_t *bytes_written);
+                 scope const void *buffer, usize bytes_to_write,
+                 scope usize *bytes_written);
 int gpgrt_write_sanitized (scope gpgrt_stream_t stream,
-                           scope const void *buffer, size_t length,
+                           scope const void *buffer, usize length,
                            const(char)* delimiters,
-                           scope size_t *bytes_written);
+                           scope usize *bytes_written);
 int gpgrt_write_hexstring (scope gpgrt_stream_t stream,
-                           scope const void *buffer, size_t length,
+                           scope const void *buffer, usize length,
                            int reserved,
-                           scope size_t *bytes_written);
+                           scope usize *bytes_written);
 
-size_t gpgrt_fread (scope void *ptr, size_t size, size_t nitems,
+usize gpgrt_fread (scope void *ptr, usize size, usize nitems,
                     scope gpgrt_stream_t stream);
-size_t gpgrt_fwrite (scope const void *ptr, size_t size, size_t memb,
+usize gpgrt_fwrite (scope const void *ptr, usize size, usize memb,
                      scope gpgrt_stream_t stream);
 
 char *gpgrt_fgets (scope char *s, int n, scope gpgrt_stream_t stream);
 int gpgrt_fputs (scope const(char)* s, scope gpgrt_stream_t stream);
 int gpgrt_fputs_unlocked (scope const(char)* s, scope gpgrt_stream_t stream);
 
-ssize_t gpgrt_getline (scope char **lineptr,
-                       scope size_t *n,
+ssize gpgrt_getline (scope char **lineptr,
+                       scope usize *n,
                        gpgrt_stream_t stream);
-ssize_t gpgrt_read_line (gpgrt_stream_t stream,
-                         char **addr_of_buffer, size_t *length_of_buffer,
-                         size_t *max_length);
+ssize gpgrt_read_line (gpgrt_stream_t stream,
+                         char **addr_of_buffer, usize *length_of_buffer,
+                         usize *max_length);
 void gpgrt_free (void *a);
 
 int gpgrt_fprintf (scope gpgrt_stream_t stream, scope const(char)* format, ...) /*_GPGRT_GCC_A_PRINTF(2,3)*/;
@@ -971,7 +970,7 @@ int gpgrt_printf_unlocked (scope const(char)* format, ...) /*_GPGRT_GCC_A_PRINTF
 int gpgrt_vfprintf (scope gpgrt_stream_t stream, scope const(char)* format, va_list ap) /*_GPGRT_GCC_A_PRINTF(2,0)*/;
 int gpgrt_vfprintf_unlocked (scope gpgrt_stream_t stream, scope const(char)* format, va_list ap) /*_GPGRT_GCC_A_PRINTF(2,0)*/;
 
-int gpgrt_setvbuf (scope gpgrt_stream_t stream, scope char *buf, int mode, size_t size);
+int gpgrt_setvbuf (scope gpgrt_stream_t stream, scope char *buf, int mode, usize size);
 void gpgrt_setbuf (scope gpgrt_stream_t stream, scope char *buf);
 
 void gpgrt_set_binary (gpgrt_stream_t stream);
@@ -988,8 +987,8 @@ int gpgrt_asprintf (char **r_buf, scope const(char)* format, ...) /*_GPGRT_GCC_A
 int gpgrt_vasprintf (char **r_buf, scope const(char)* format, va_list ap) /*_GPGRT_GCC_A_PRINTF(2,0)*/;
 char *gpgrt_bsprintf (scope const(char)* format, ...) /*_GPGRT_GCC_A_PRINTF(1,2)*/;
 char *gpgrt_vbsprintf (scope const(char)* format, va_list ap) /*_GPGRT_GCC_A_PRINTF(1,0)*/;
-int gpgrt_snprintf (char *buf, size_t bufsize, scope const(char)* format, ...) /*_GPGRT_GCC_A_PRINTF(3,4)*/;
-int gpgrt_vsnprintf (char *buf,size_t bufsize, scope const(char)* format, va_list arg_ptr) /*_GPGRT_GCC_A_PRINTF(3,0)*/;
+int gpgrt_snprintf (char *buf, usize bufsize, scope const(char)* format, ...) /*_GPGRT_GCC_A_PRINTF(3,4)*/;
+int gpgrt_vsnprintf (char *buf,usize bufsize, scope const(char)* format, va_list arg_ptr) /*_GPGRT_GCC_A_PRINTF(3,0)*/;
 
 
 /*

@@ -7,7 +7,7 @@ void main (string[] args) {
 
   ubyte[] indata;
   void* odata;
-  size_t osize;
+  usize osize;
   {
     auto fl = File(args[1]);
     indata.length = cast(uint)fl.size;

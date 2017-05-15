@@ -16,7 +16,7 @@ limitations under the License.
 Author: lode.vandevenne@gmail.com (Lode Vandevenne)
 Author: jyrki.alakuijala@gmail.com (Jyrki Alakuijala)
 */
-module iv.zopfli;
+module iv.zopfli is aliced;
 extern(C) nothrow @nogc:
 //pragma(lib, "libzopfli.a");
 pragma(lib, "zopfli");
@@ -77,7 +77,7 @@ out: pointer to the dynamic output array to which the result is appended. Must
 outsize: pointer to the dynamic output array size
 */
 void ZopfliCompress (const ref ZopfliOptions options, ZopfliFormat output_type,
-                     const(void)* indata, size_t insize,
-                     void** outarr, size_t* outsize);
+                     const(void)* indata, usize insize,
+                     void** outarr, usize* outsize);
 
 void ZopfliFree (void* ptr) { import core.stdc.stdlib : free; if (ptr !is null) free(ptr); }

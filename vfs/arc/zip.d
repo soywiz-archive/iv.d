@@ -731,10 +731,10 @@ struct Exploder {
     ushort b0; // 0-branch value + leaf node flag
     ushort b1; // 1-branch value + leaf node flag
     //HufNode* jump; // 1-branch jump address
-    size_t jumpptr; // hide this from GC
+    usize jumpptr; // hide this from GC
     @property nothrow @trusted @nogc {
       HufNode* jump () const { pragma(inline, true); return cast(HufNode*)jumpptr; }
-      void jump (HufNode* v) { pragma(inline, true); jumpptr = cast(size_t)v; }
+      void jump (HufNode* v) { pragma(inline, true); jumpptr = cast(usize)v; }
     }
   }
 
@@ -2266,7 +2266,7 @@ private:
 
   //CProb* litProbs;
   mixin VFSHiddenPointerHelper!(CProb, "litProbs");
-  size_t litProbsAllotedBytes;
+  usize litProbsAllotedBytes;
   CBitTreeDecoder!6[kNumLenToPosStates] posSlotDecoder;
   CBitTreeDecoder!kNumAlignBits alignDecoder;
   CProb[1+kNumFullDistances-kEndPosModelIndex] posDecoders;
@@ -2446,7 +2446,7 @@ private:
     //litProbs = new CProb[](0x300U<<(lc+lp));
     import core.stdc.stdlib : realloc;
     //import core.stdc.string : memset;
-    size_t toalloc = (0x300U<<(lc+lp))*CProb.sizeof;
+    usize toalloc = (0x300U<<(lc+lp))*CProb.sizeof;
     if (litProbs is null || toalloc > litProbsAllotedBytes) {
       auto nb = cast(CProb*)realloc(litProbs, toalloc);
       if (nb is null) throw new Exception("LZMA: out of memory");

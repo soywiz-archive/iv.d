@@ -15,7 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // very simple (de)serializer to json-like text format
-module iv.txtser;
+module iv.txtser is aliced;
 private:
 
 import std.range : ElementEncodingType, isInputRange, isOutputRange;
@@ -84,7 +84,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
       xput(s);
     } else {
       // hard time
-      size_t pos = 0;
+      usize pos = 0;
       while (pos < s.length) {
         auto epos = pos;
         while (epos < s.length) {
@@ -347,7 +347,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
     static if (is(T : const(char)[])) {
       // quoted string
       static if (__traits(isStaticArray, T)) {
-        size_t dpos = 0;
+        usize dpos = 0;
         void put (const(char)[] s...) {
           if (s.length) {
             if (v.length-dpos < s.length) error("value too long");

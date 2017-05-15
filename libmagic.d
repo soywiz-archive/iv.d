@@ -24,7 +24,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-module iv.libmagic;
+module iv.libmagic is aliced;
 pragma(lib, "magic");
 
 
@@ -93,14 +93,14 @@ void magic_close (magic_t cookie);
 const(char)* magic_getpath (const(char)* filename, int);
 const(char)* magic_file (magic_t cookie, const(char)* filename);
 const(char)* magic_descriptor (magic_t cookie, int fd);
-const(char)* magic_buffer (magic_t cookie, const(void)* buffer, size_t length);
+const(char)* magic_buffer (magic_t cookie, const(void)* buffer, usize length);
 
 const(char)* magic_error (magic_t cookie);
 int magic_setflags (magic_t cookie, int flags);
 
 int magic_version ();
 int magic_load (magic_t cookie, const(char)* filename);
-int magic_load_buffers (magic_t cookie, void** buffers, size_t* sizes, size_t nbuffers);
+int magic_load_buffers (magic_t cookie, void** buffers, usize* sizes, usize nbuffers);
 
 int magic_compile (magic_t cookie, const(char)* filename);
 int magic_check (magic_t cookie, const(char)* filename);

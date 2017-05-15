@@ -16,16 +16,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // some code to process bittorrent files
-module iv.btenc;
+module iv.btenc is aliced;
 
 import iv.stream;
 import iv.strex : quote;
 
-static if (!is(typeof(usize))) private alias usize = size_t;
-
 
 struct BTField {
-
   enum Type { UInt, Str, List, Dict }
   Type type = Type.UInt;
   string vstr;

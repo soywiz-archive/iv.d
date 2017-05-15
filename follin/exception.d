@@ -15,19 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.exception;
-
-static if (!is(usize == size_t)) private alias usize = size_t;
+module iv.follin.exception is aliced;
 
 // Follin exception
 class FollinException : Exception {
-  static if (__VERSION__ > 2067) {
-    this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
-      super(msg, file, line, next);
-    }
-  } else {
-    this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) pure nothrow @safe {
-      super(msg, file, line, next);
-    }
+  this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) pure nothrow @safe @nogc {
+    super(msg, file, line, next);
   }
 }

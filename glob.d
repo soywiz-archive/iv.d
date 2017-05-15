@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.glob;
+module iv.glob is aliced;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,9 +68,9 @@ static if (__USE_GNU) enum GLOB_ABEND = GLOB_ABORTED;
 
 
 struct glob_t {
-  size_t gl_pathc;
+  usize gl_pathc;
   char** gl_pathv;
-  size_t gl_offs;
+  usize gl_offs;
   int gl_flags;
 
   /* If the GLOB_ALTDIRFUNC flag is set, the following functions
@@ -159,9 +159,9 @@ private import std.traits;
       if (res) break;
     };
     static if (dir == "normal") {
-      foreach (size_t idx; 0..ge.gb.gl_pathc) { mixin(foreachBody); }
+      foreach (usize idx; 0..ge.gb.gl_pathc) { mixin(foreachBody); }
     } else static if (dir == "reverse") {
-      foreach_reverse (size_t idx; 0..ge.gb.gl_pathc) { mixin(foreachBody); }
+      foreach_reverse (usize idx; 0..ge.gb.gl_pathc) { mixin(foreachBody); }
     } else {
       static assert(false, "wtf?!");
     }
@@ -173,7 +173,7 @@ private import std.traits;
 
 nothrow @nogc: // ah, let's dance!
 private:
-  this (globent* ange, size_t idx=0) {
+  this (globent* ange, usize idx=0) {
     ge = ange;
     Glob.incref(ge);
   }
@@ -203,7 +203,7 @@ public:
   @property bool error () pure const { return (ge.res != 0); }
   @property bool nomatch () pure const { return (ge.res == GLOB_NOMATCH); }
 
-  @property size_t length () pure const { return (idx < ge.gb.gl_pathc ? ge.gb.gl_pathc-idx : 0); }
+  @property usize length () pure const { return (idx < ge.gb.gl_pathc ? ge.gb.gl_pathc-idx : 0); }
   alias opDollar = length;
 
   void rewind () { idx = 0; }
@@ -220,7 +220,7 @@ public:
     return Item(ge, idx);
   }
 
-  auto opIndex (size_t idx) {
+  auto opIndex (usize idx) {
     if (idx >= ge.gb.gl_pathc) {
       import core.exception : RangeError;
       throw staticError!RangeError();
@@ -230,7 +230,7 @@ public:
 
 private:
   static struct globent {
-    size_t refcount;
+    usize refcount;
     glob_t gb;
     int res;
   }
@@ -239,9 +239,9 @@ private:
   @trusted nothrow @nogc: // ah, let's dance!
   private:
     globent* ge;
-    size_t idx;
+    usize idx;
 
-    this (globent* ange, size_t anidx) {
+    this (globent* ange, usize anidx) {
       ge = ange;
       idx = anidx;
       Glob.incref(ge);
@@ -251,12 +251,12 @@ private:
     this (this) { assert(ge !is null); Glob.incref(ge); }
     ~this () { assert(ge !is null); Glob.decref(ge); }
 
-    @property size_t index () pure const { return idx; }
-    @property size_t length () pure const { return ge.gb.gl_pathc; }
+    @property usize index () pure const { return idx; }
+    @property usize length () pure const { return ge.gb.gl_pathc; }
 
     // WARNING! this can escape!
     @property const(char)[] name () pure const return {
-      size_t pos = 0;
+      usize pos = 0;
       auto ptr = ge.gb.gl_pathv[idx];
       while (ptr[pos]) ++pos;
       return ptr[0..pos];
@@ -284,8 +284,8 @@ private:
   }
 
   // WARNING! this can escape!
-  @property const(char)[] getName (size_t idx) pure const return {
-    size_t pos = 0;
+  @property const(char)[] getName (usize idx) pure const return {
+    usize pos = 0;
     auto ptr = ge.gb.gl_pathv[idx];
     while (ptr[pos]) ++pos;
     return ptr[0..pos];
@@ -293,7 +293,7 @@ private:
 
 private:
   globent* ge;
-  size_t idx; // current position in range
+  usize idx; // current position in range
 }
 
 

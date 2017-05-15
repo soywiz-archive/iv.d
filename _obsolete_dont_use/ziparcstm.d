@@ -43,7 +43,7 @@ public:
   }
 
 protected:
-  import core.sys.posix.sys.types : ssize_t, off64_t = off_t;
+  import core.sys.posix.sys.types : off64_t = off_t;
 
   static struct FileInfo {
     bool packed; // only "store" and "deflate" are supported
@@ -77,7 +77,7 @@ protected:
 
 public:
   abstract @property bool isOpen () nothrow;
-  abstract ssize_t read (void* buf, usize count) nothrow;
+  abstract ssize read (void* buf, usize count) nothrow;
   abstract long seek (long ofs, int whence=0) nothrow;
   abstract int close () nothrow;
 
@@ -342,7 +342,7 @@ private:
   // can be used as normal disk file processor too
   static private final class InnerFileCookied {
     private import etc.c.zlib;
-    private import core.sys.posix.sys.types : ssize_t, off64_t = off_t;
+    private import core.sys.posix.sys.types : ssize, off64_t = off_t;
     private import core.stdc.stdio : FILE;
 
     uint rc = 1;
@@ -506,7 +506,7 @@ private:
       return true;
     }
 
-    ssize_t read (void* buf, usize count) nothrow {
+    ssize read (void* buf, usize count) nothrow {
       if (buf is null) return -1;
       if (count == 0 || size == 0) return 0;
       lock.lock();
@@ -647,12 +647,12 @@ public:
     }
   }
 
-  override ssize_t read (void* buf, usize count) nothrow {
+  override ssize read (void* buf, usize count) nothrow {
     if (!isOpen) return -1;
     if (count == 0) return 0;
     try {
       auto res = zfl.rawRead(buf[0..count]);
-      return cast(ssize_t)res.length;
+      return cast(ssize)res.length;
     } catch (Exception) {
       return -1;
     }

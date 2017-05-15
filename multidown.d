@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // multithreaded massive file downloading engine with fancy progress
-module iv.multidown /*is aliced*/;
+module iv.multidown is aliced;
 private:
 
 pragma(lib, "curl");
@@ -26,8 +26,6 @@ import std.net.curl;
 import iv.writer;
 import iv.rawtty;
 import iv.timer;
-
-static if (!is(typeof(usize))) private alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

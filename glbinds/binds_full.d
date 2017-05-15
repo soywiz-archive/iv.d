@@ -1,5 +1,5 @@
 // WTFPL or Public Domain, on your choice
-module iv.glbinds.binds_full;
+module iv.glbinds.binds_full is aliced;
 
 // lazy loading
 version = glbind_lazy_load;
@@ -11319,31 +11319,31 @@ private auto glbfn_glIsBuffer_loader (uint a0) nothrow @nogc {
   if (glIsBuffer is null) assert(0, `OpenGL function 'glIsBuffer' not found!`);
   return glIsBuffer(a0,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glBufferData glBufferData = function void (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glbfn_glBufferData_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glBufferData_loader (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glBufferData = cast(glbfn_glBufferData)glbindGetProcAddress(`glBufferData`);
   if (glBufferData is null) assert(0, `OpenGL function 'glBufferData' not found!`);
   glBufferData(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glBufferSubData glBufferSubData = function void (uint a0, int a1, int a2, const(void)* a3) nothrow @nogc {
   glbfn_glBufferSubData_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glBufferSubData_loader (uint a0, int a1, int a2, const(void)* a3) nothrow @nogc {
   glBufferSubData = cast(glbfn_glBufferSubData)glbindGetProcAddress(`glBufferSubData`);
   if (glBufferSubData is null) assert(0, `OpenGL function 'glBufferSubData' not found!`);
   glBufferSubData(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glGetBufferSubData glGetBufferSubData = function void (uint a0, int a1, int a2, void* a3) nothrow @nogc {
   glbfn_glGetBufferSubData_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glGetBufferSubData_loader (uint a0, int a1, int a2, void* a3) nothrow @nogc {
   glGetBufferSubData = cast(glbfn_glGetBufferSubData)glbindGetProcAddress(`glGetBufferSubData`);
   if (glGetBufferSubData is null) assert(0, `OpenGL function 'glGetBufferSubData' not found!`);
@@ -11397,11 +11397,11 @@ private auto glbfn_glDrawBuffers_loader (int a0, const(uint)* a1) nothrow @nogc 
   if (glDrawBuffers is null) assert(0, `OpenGL function 'glDrawBuffers' not found!`);
   glDrawBuffers(a0,a1,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glStencilOpSeparate glStencilOpSeparate = function void (uint a0, uint a1, uint a2, uint a3) nothrow @nogc {
   glbfn_glStencilOpSeparate_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glStencilOpSeparate_loader (uint a0, uint a1, uint a2, uint a3) nothrow @nogc {
   glStencilOpSeparate = cast(glbfn_glStencilOpSeparate)glbindGetProcAddress(`glStencilOpSeparate`);
   if (glStencilOpSeparate is null) assert(0, `OpenGL function 'glStencilOpSeparate' not found!`);
@@ -12239,11 +12239,11 @@ private auto glbfn_glEndTransformFeedback_loader () nothrow @nogc {
   if (glEndTransformFeedback is null) assert(0, `OpenGL function 'glEndTransformFeedback' not found!`);
   glEndTransformFeedback();
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glBindBufferRange glBindBufferRange = function void (uint a0, uint a1, uint a2, int a3, int a4) nothrow @nogc {
   glbfn_glBindBufferRange_loader(a0,a1,a2,a3,a4,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glBindBufferRange_loader (uint a0, uint a1, uint a2, int a3, int a4) nothrow @nogc {
   glBindBufferRange = cast(glbfn_glBindBufferRange)glbindGetProcAddress(`glBindBufferRange`);
   if (glBindBufferRange is null) assert(0, `OpenGL function 'glBindBufferRange' not found!`);
@@ -12801,21 +12801,21 @@ private auto glbfn_glFramebufferTextureLayer_loader (uint a0, uint a1, uint a2, 
   if (glFramebufferTextureLayer is null) assert(0, `OpenGL function 'glFramebufferTextureLayer' not found!`);
   glFramebufferTextureLayer(a0,a1,a2,a3,a4,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glMapBufferRange glMapBufferRange = function void* (uint a0, int a1, int a2, uint a3) nothrow @nogc {
   return glbfn_glMapBufferRange_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glMapBufferRange_loader (uint a0, int a1, int a2, uint a3) nothrow @nogc {
   glMapBufferRange = cast(glbfn_glMapBufferRange)glbindGetProcAddress(`glMapBufferRange`);
   if (glMapBufferRange is null) assert(0, `OpenGL function 'glMapBufferRange' not found!`);
   return glMapBufferRange(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glFlushMappedBufferRange glFlushMappedBufferRange = function void (uint a0, int a1, int a2) nothrow @nogc {
   glbfn_glFlushMappedBufferRange_loader(a0,a1,a2,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glFlushMappedBufferRange_loader (uint a0, int a1, int a2) nothrow @nogc {
   glFlushMappedBufferRange = cast(glbfn_glFlushMappedBufferRange)glbindGetProcAddress(`glFlushMappedBufferRange`);
   if (glFlushMappedBufferRange is null) assert(0, `OpenGL function 'glFlushMappedBufferRange' not found!`);
@@ -12885,11 +12885,11 @@ private auto glbfn_glPrimitiveRestartIndex_loader (uint a0) nothrow @nogc {
   if (glPrimitiveRestartIndex is null) assert(0, `OpenGL function 'glPrimitiveRestartIndex' not found!`);
   glPrimitiveRestartIndex(a0,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glCopyBufferSubData glCopyBufferSubData = function void (uint a0, uint a1, int a2, int a3, int a4) nothrow @nogc {
   glbfn_glCopyBufferSubData_loader(a0,a1,a2,a3,a4,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glCopyBufferSubData_loader (uint a0, uint a1, int a2, int a3, int a4) nothrow @nogc {
   glCopyBufferSubData = cast(glbfn_glCopyBufferSubData)glbindGetProcAddress(`glCopyBufferSubData`);
   if (glCopyBufferSubData is null) assert(0, `OpenGL function 'glCopyBufferSubData' not found!`);
@@ -14695,11 +14695,11 @@ private auto glbfn_glClearBufferData_loader (uint a0, uint a1, uint a2, uint a3,
   if (glClearBufferData is null) assert(0, `OpenGL function 'glClearBufferData' not found!`);
   glClearBufferData(a0,a1,a2,a3,a4,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glClearBufferSubData glClearBufferSubData = function void (uint a0, uint a1, int a2, int a3, uint a4, uint a5, const(void)* a6) nothrow @nogc {
   glbfn_glClearBufferSubData_loader(a0,a1,a2,a3,a4,a5,a6,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glClearBufferSubData_loader (uint a0, uint a1, int a2, int a3, uint a4, uint a5, const(void)* a6) nothrow @nogc {
   glClearBufferSubData = cast(glbfn_glClearBufferSubData)glbindGetProcAddress(`glClearBufferSubData`);
   if (glClearBufferSubData is null) assert(0, `OpenGL function 'glClearBufferSubData' not found!`);
@@ -14713,11 +14713,11 @@ private auto glbfn_glDispatchCompute_loader (uint a0, uint a1, uint a2) nothrow 
   if (glDispatchCompute is null) assert(0, `OpenGL function 'glDispatchCompute' not found!`);
   glDispatchCompute(a0,a1,a2,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glDispatchComputeIndirect glDispatchComputeIndirect = function void (int a0) nothrow @nogc {
   glbfn_glDispatchComputeIndirect_loader(a0,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glDispatchComputeIndirect_loader (int a0) nothrow @nogc {
   glDispatchComputeIndirect = cast(glbfn_glDispatchComputeIndirect)glbindGetProcAddress(`glDispatchComputeIndirect`);
   if (glDispatchComputeIndirect is null) assert(0, `OpenGL function 'glDispatchComputeIndirect' not found!`);
@@ -14771,11 +14771,11 @@ private auto glbfn_glInvalidateTexImage_loader (uint a0, int a1) nothrow @nogc {
   if (glInvalidateTexImage is null) assert(0, `OpenGL function 'glInvalidateTexImage' not found!`);
   glInvalidateTexImage(a0,a1,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glInvalidateBufferSubData glInvalidateBufferSubData = function void (uint a0, int a1, int a2) nothrow @nogc {
   glbfn_glInvalidateBufferSubData_loader(a0,a1,a2,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glInvalidateBufferSubData_loader (uint a0, int a1, int a2) nothrow @nogc {
   glInvalidateBufferSubData = cast(glbfn_glInvalidateBufferSubData)glbindGetProcAddress(`glInvalidateBufferSubData`);
   if (glInvalidateBufferSubData is null) assert(0, `OpenGL function 'glInvalidateBufferSubData' not found!`);
@@ -14869,21 +14869,21 @@ private auto glbfn_glGetProgramResourceLocationIndex_loader (uint a0, uint a1, c
   if (glGetProgramResourceLocationIndex is null) assert(0, `OpenGL function 'glGetProgramResourceLocationIndex' not found!`);
   return glGetProgramResourceLocationIndex(a0,a1,a2,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glShaderStorageBlockBinding glShaderStorageBlockBinding = function void (uint a0, uint a1, uint a2) nothrow @nogc {
   glbfn_glShaderStorageBlockBinding_loader(a0,a1,a2,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glShaderStorageBlockBinding_loader (uint a0, uint a1, uint a2) nothrow @nogc {
   glShaderStorageBlockBinding = cast(glbfn_glShaderStorageBlockBinding)glbindGetProcAddress(`glShaderStorageBlockBinding`);
   if (glShaderStorageBlockBinding is null) assert(0, `OpenGL function 'glShaderStorageBlockBinding' not found!`);
   glShaderStorageBlockBinding(a0,a1,a2,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glTexBufferRange glTexBufferRange = function void (uint a0, uint a1, uint a2, int a3, int a4) nothrow @nogc {
   glbfn_glTexBufferRange_loader(a0,a1,a2,a3,a4,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glTexBufferRange_loader (uint a0, uint a1, uint a2, int a3, int a4) nothrow @nogc {
   glTexBufferRange = cast(glbfn_glTexBufferRange)glbindGetProcAddress(`glTexBufferRange`);
   if (glTexBufferRange is null) assert(0, `OpenGL function 'glTexBufferRange' not found!`);
@@ -14913,11 +14913,11 @@ private auto glbfn_glTextureView_loader (uint a0, uint a1, uint a2, uint a3, uin
   if (glTextureView is null) assert(0, `OpenGL function 'glTextureView' not found!`);
   glTextureView(a0,a1,a2,a3,a4,a5,a6,a7,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glBindVertexBuffer glBindVertexBuffer = function void (uint a0, uint a1, int a2, int a3) nothrow @nogc {
   glbfn_glBindVertexBuffer_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glBindVertexBuffer_loader (uint a0, uint a1, int a2, int a3) nothrow @nogc {
   glBindVertexBuffer = cast(glbfn_glBindVertexBuffer)glbindGetProcAddress(`glBindVertexBuffer`);
   if (glBindVertexBuffer is null) assert(0, `OpenGL function 'glBindVertexBuffer' not found!`);
@@ -15035,11 +15035,11 @@ private auto glbfn_glGetObjectPtrLabel_loader (const(void)* a0, int a1, int* a2,
   if (glGetObjectPtrLabel is null) assert(0, `OpenGL function 'glGetObjectPtrLabel' not found!`);
   glGetObjectPtrLabel(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glBufferStorage glBufferStorage = function void (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glbfn_glBufferStorage_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glBufferStorage_loader (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glBufferStorage = cast(glbfn_glBufferStorage)glbindGetProcAddress(`glBufferStorage`);
   if (glBufferStorage is null) assert(0, `OpenGL function 'glBufferStorage' not found!`);
@@ -15069,11 +15069,11 @@ private auto glbfn_glBindBuffersBase_loader (uint a0, uint a1, int a2, const(uin
   if (glBindBuffersBase is null) assert(0, `OpenGL function 'glBindBuffersBase' not found!`);
   glBindBuffersBase(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glBindBuffersRange glBindBuffersRange = function void (uint a0, uint a1, int a2, const(uint)* a3, const(int)* a4, const(int)* a5) nothrow @nogc {
   glbfn_glBindBuffersRange_loader(a0,a1,a2,a3,a4,a5,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glBindBuffersRange_loader (uint a0, uint a1, int a2, const(uint)* a3, const(int)* a4, const(int)* a5) nothrow @nogc {
   glBindBuffersRange = cast(glbfn_glBindBuffersRange)glbindGetProcAddress(`glBindBuffersRange`);
   if (glBindBuffersRange is null) assert(0, `OpenGL function 'glBindBuffersRange' not found!`);
@@ -15103,11 +15103,11 @@ private auto glbfn_glBindImageTextures_loader (uint a0, int a1, const(uint)* a2)
   if (glBindImageTextures is null) assert(0, `OpenGL function 'glBindImageTextures' not found!`);
   glBindImageTextures(a0,a1,a2,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glBindVertexBuffers glBindVertexBuffers = function void (uint a0, int a1, const(uint)* a2, const(int)* a3, const(int)* a4) nothrow @nogc {
   glbfn_glBindVertexBuffers_loader(a0,a1,a2,a3,a4,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glBindVertexBuffers_loader (uint a0, int a1, const(uint)* a2, const(int)* a3, const(int)* a4) nothrow @nogc {
   glBindVertexBuffers = cast(glbfn_glBindVertexBuffers)glbindGetProcAddress(`glBindVertexBuffers`);
   if (glBindVertexBuffers is null) assert(0, `OpenGL function 'glBindVertexBuffers' not found!`);
@@ -15137,11 +15137,11 @@ private auto glbfn_glTransformFeedbackBufferBase_loader (uint a0, uint a1, uint 
   if (glTransformFeedbackBufferBase is null) assert(0, `OpenGL function 'glTransformFeedbackBufferBase' not found!`);
   glTransformFeedbackBufferBase(a0,a1,a2,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glTransformFeedbackBufferRange glTransformFeedbackBufferRange = function void (uint a0, uint a1, uint a2, int a3, int a4) nothrow @nogc {
   glbfn_glTransformFeedbackBufferRange_loader(a0,a1,a2,a3,a4,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glTransformFeedbackBufferRange_loader (uint a0, uint a1, uint a2, int a3, int a4) nothrow @nogc {
   glTransformFeedbackBufferRange = cast(glbfn_glTransformFeedbackBufferRange)glbindGetProcAddress(`glTransformFeedbackBufferRange`);
   if (glTransformFeedbackBufferRange is null) assert(0, `OpenGL function 'glTransformFeedbackBufferRange' not found!`);
@@ -15179,47 +15179,47 @@ private auto glbfn_glCreateBuffers_loader (int a0, uint* a1) nothrow @nogc {
   if (glCreateBuffers is null) assert(0, `OpenGL function 'glCreateBuffers' not found!`);
   glCreateBuffers(a0,a1,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glNamedBufferStorage glNamedBufferStorage = function void (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glbfn_glNamedBufferStorage_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glNamedBufferStorage_loader (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glNamedBufferStorage = cast(glbfn_glNamedBufferStorage)glbindGetProcAddress(`glNamedBufferStorage`);
   if (glNamedBufferStorage is null) assert(0, `OpenGL function 'glNamedBufferStorage' not found!`);
   glNamedBufferStorage(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glNamedBufferData glNamedBufferData = function void (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glbfn_glNamedBufferData_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glNamedBufferData_loader (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glNamedBufferData = cast(glbfn_glNamedBufferData)glbindGetProcAddress(`glNamedBufferData`);
   if (glNamedBufferData is null) assert(0, `OpenGL function 'glNamedBufferData' not found!`);
   glNamedBufferData(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glNamedBufferSubData glNamedBufferSubData = function void (uint a0, int a1, int a2, const(void)* a3) nothrow @nogc {
   glbfn_glNamedBufferSubData_loader(a0,a1,a2,a3,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glNamedBufferSubData_loader (uint a0, int a1, int a2, const(void)* a3) nothrow @nogc {
   glNamedBufferSubData = cast(glbfn_glNamedBufferSubData)glbindGetProcAddress(`glNamedBufferSubData`);
   if (glNamedBufferSubData is null) assert(0, `OpenGL function 'glNamedBufferSubData' not found!`);
   glNamedBufferSubData(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 __gshared glbfn_glCopyNamedBufferSubData glCopyNamedBufferSubData = function void (uint a0, uint a1, int a2, int a3, int a4) nothrow @nogc {
   glbfn_glCopyNamedBufferSubData_loader(a0,a1,a2,a3,a4,);
 };
-static if (size_t.sizeof == 4)
+static if (usize.sizeof == 4)
 private auto glbfn_glCopyNamedBufferSubData_loader (uint a0, uint a1, int a2, int a3, int a4) nothrow @nogc {
   glCopyNamedBufferSubData = cast(glbfn_glCopyNamedBufferSubData)glbindGetProcAddress(`glCopyNamedBufferSubData`);
   if (glCopyNamedBufferSubData is null) assert(0, `OpenGL function 'glCopyNamedBufferSubData' not found!`);
   glCopyNamedBufferSubData(a0,a1,a2,a3,a4,);
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 // fuck off, x86_64
 __gshared glbfn_glClearNamedBufferData glClearNamedBufferData = function void (uint a0, uint a1, uint a2, uint a3, const(void)* a4) nothrow @nogc {
   glbfn_glClearNamedBufferData_loader(a0,a1,a2,a3,a4,);
@@ -16102,7 +16102,7 @@ private auto glbfn_glTextureBarrier_loader () nothrow @nogc {
   if (glTextureBarrier is null) assert(0, `OpenGL function 'glTextureBarrier' not found!`);
   glTextureBarrier();
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 __gshared glbfn_glTbufferMask3DFX glTbufferMask3DFX = function void (uint a0) nothrow @nogc {
   glbfn_glTbufferMask3DFX_loader(a0,);
 };
@@ -17864,7 +17864,7 @@ private auto glbfn_glResetMinmax_loader (uint a0) nothrow @nogc {
   if (glResetMinmax is null) assert(0, `OpenGL function 'glResetMinmax' not found!`);
   glResetMinmax(a0,);
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 __gshared glbfn_glMultiDrawArraysIndirectCountARB glMultiDrawArraysIndirectCountARB = function void (uint a0, int a1, int a2, int a3, int a4) nothrow @nogc {
   glbfn_glMultiDrawArraysIndirectCountARB_loader(a0,a1,a2,a3,a4,);
 };
@@ -18850,7 +18850,7 @@ private auto glbfn_glGetNamedStringivARB_loader (int a0, const(char)* a1, uint a
   if (glGetNamedStringivARB is null) assert(0, `OpenGL function 'glGetNamedStringivARB' not found!`);
   glGetNamedStringivARB(a0,a1,a2,a3,);
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 __gshared glbfn_glBufferPageCommitmentARB glBufferPageCommitmentARB = function void (uint a0, int a1, int a2, ubyte a3) nothrow @nogc {
   glbfn_glBufferPageCommitmentARB_loader(a0,a1,a2,a3,);
 };
@@ -20364,7 +20364,7 @@ private auto glbfn_glGetUniformBufferSizeEXT_loader (uint a0, int a1) nothrow @n
   if (glGetUniformBufferSizeEXT is null) assert(0, `OpenGL function 'glGetUniformBufferSizeEXT' not found!`);
   return glGetUniformBufferSizeEXT(a0,a1,);
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 __gshared glbfn_glGetUniformOffsetEXT glGetUniformOffsetEXT = function int (uint a0, int a1) nothrow @nogc {
   return glbfn_glGetUniformOffsetEXT_loader(a0,a1,);
 };
@@ -21638,7 +21638,7 @@ private auto glbfn_glMatrixMultTransposedEXT_loader (uint a0, const(double)* a1)
   if (glMatrixMultTransposedEXT is null) assert(0, `OpenGL function 'glMatrixMultTransposedEXT' not found!`);
   glMatrixMultTransposedEXT(a0,a1,);
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 __gshared glbfn_glNamedBufferDataEXT glNamedBufferDataEXT = function void (uint a0, int a1, const(void)* a2, uint a3) nothrow @nogc {
   glbfn_glNamedBufferDataEXT_loader(a0,a1,a2,a3,);
 };
@@ -22352,7 +22352,7 @@ private auto glbfn_glGetFramebufferParameterivEXT_loader (uint a0, uint a1, int*
   if (glGetFramebufferParameterivEXT is null) assert(0, `OpenGL function 'glGetFramebufferParameterivEXT' not found!`);
   glGetFramebufferParameterivEXT(a0,a1,a2,);
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 __gshared glbfn_glNamedCopyBufferSubDataEXT glNamedCopyBufferSubDataEXT = function void (uint a0, uint a1, int a2, int a3, int a4) nothrow @nogc {
   glbfn_glNamedCopyBufferSubDataEXT_loader(a0,a1,a2,a3,a4,);
 };
@@ -23026,7 +23026,7 @@ private auto glbfn_glDeleteFramebuffersEXT_loader (int a0, const(uint)* a1) noth
   if (glDeleteFramebuffersEXT is null) assert(0, `OpenGL function 'glDeleteFramebuffersEXT' not found!`);
   glDeleteFramebuffersEXT(a0,a1,);
 }
-static if (size_t.sizeof == 4) {
+static if (usize.sizeof == 4) {
 __gshared glbfn_glGenFramebuffersEXT glGenFramebuffersEXT = function void (int a0, uint* a1) nothrow @nogc {
   glbfn_glGenFramebuffersEXT_loader(a0,a1,);
 };

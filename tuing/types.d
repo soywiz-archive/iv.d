@@ -17,7 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.types;
+module iv.tuing.types is aliced;
 
-static if (!is(typeof(usize))) alias usize = size_t;
 alias cstring = const(char)[];

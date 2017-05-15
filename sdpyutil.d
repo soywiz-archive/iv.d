@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpyutil;
+module iv.sdpyutil is aliced;
 
 import arsd.color;
 import arsd.simpledisplay;
@@ -236,10 +236,10 @@ public void wmCancelMoving (SimpleWindow sw, int localx, int localy) {
 // ////////////////////////////////////////////////////////////////////////// //
 public struct XRefCounted(T) if (is(T == struct)) {
 private:
-  size_t intrp__;
+  usize intrp__;
 
 private:
-  static void doIncRef (size_t ox) nothrow @trusted @nogc {
+  static void doIncRef (usize ox) nothrow @trusted @nogc {
     pragma(inline, true);
     if (ox) {
       *cast(uint*)(ox-uint.sizeof) += 1;
@@ -247,7 +247,7 @@ private:
     }
   }
 
-  static void doDecRef() (ref size_t ox) {
+  static void doDecRef() (ref usize ox) {
     if (ox) {
       version(krc_debug) { import core.stdc.stdio : printf; printf("doDecRef for 0x%08x (%u)\n", cast(uint)ox, *cast(uint*)(ox-uint.sizeof)); }
       if ((*cast(uint*)(ox-uint.sizeof) -= 1) == 0) {
@@ -262,16 +262,16 @@ private:
           version(krc_debug) { import core.stdc.stdio : printf; printf("DESTROYING WRAPPER 0x%08x\n", cast(uint)mem); }
           enum instSize = T.sizeof;
           auto pbm = __traits(getPointerBitmap, T);
-          version(krc_debug) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)T.stringof.length, T.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
+          version(krc_debug) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)T.stringof.length, T.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/usize.sizeof));
           immutable(ubyte)* p = cast(immutable(ubyte)*)(pbm.ptr+1);
-          size_t bitnum = 0;
-          immutable end = pbm[0]/size_t.sizeof;
+          usize bitnum = 0;
+          immutable end = pbm[0]/usize.sizeof;
           while (bitnum < end) {
             if (p[bitnum/8]&(1U<<(bitnum%8))) {
-              size_t len = 1;
+              usize len = 1;
               while (bitnum+len < end && (p[(bitnum+len)/8]&(1U<<((bitnum+len)%8))) != 0) ++len;
-              version(krc_debug) printf("  #%u (%u)\n", cast(uint)(bitnum*size_t.sizeof), cast(uint)len);
-              GC.removeRange((cast(size_t*)mem)+bitnum);
+              version(krc_debug) printf("  #%u (%u)\n", cast(uint)(bitnum*usize.sizeof), cast(uint)len);
+              GC.removeRange((cast(usize*)mem)+bitnum);
               bitnum += len;
             } else {
               ++bitnum;
@@ -328,7 +328,7 @@ public:
     }
   }
 
-  size_t toHash () const pure nothrow @safe @nogc { pragma(inline, true); return intrp__; } // yeah, so simple
+  usize toHash () const pure nothrow @safe @nogc { pragma(inline, true); return intrp__; } // yeah, so simple
   bool opEquals() (auto ref typeof(this) s) const { pragma(inline, true); return (intrp__ == s.intrp__); }
 
   @property bool hasObject () const pure nothrow @trusted @nogc { pragma(inline, true); return (intrp__ != 0); }
@@ -343,7 +343,7 @@ public:
   alias intr_ this;
 
 static private:
-  size_t newOx (CT, A...) (auto ref A args) if (is(CT == struct)) {
+  usize newOx (CT, A...) (auto ref A args) if (is(CT == struct)) {
     import core.exception : onOutOfMemoryErrorNoGC;
     import core.memory : GC;
     import core.stdc.stdlib : malloc, free;
@@ -361,23 +361,23 @@ static private:
 
     version(krc_debug) import core.stdc.stdio : printf;
     auto pbm = __traits(getPointerBitmap, CT);
-    version(krc_debug) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/size_t.sizeof));
+    version(krc_debug) printf("[%.*s]: size=%u (%u) (%u)\n", cast(uint)CT.stringof.length, CT.stringof.ptr, cast(uint)pbm[0], cast(uint)instSize, cast(uint)(pbm[0]/usize.sizeof));
     immutable(ubyte)* p = cast(immutable(ubyte)*)(pbm.ptr+1);
-    size_t bitnum = 0;
-    immutable end = pbm[0]/size_t.sizeof;
+    usize bitnum = 0;
+    immutable end = pbm[0]/usize.sizeof;
     while (bitnum < end) {
       if (p[bitnum/8]&(1U<<(bitnum%8))) {
-        size_t len = 1;
+        usize len = 1;
         while (bitnum+len < end && (p[(bitnum+len)/8]&(1U<<((bitnum+len)%8))) != 0) ++len;
-        version(krc_debug) printf("  #%u (%u)\n", cast(uint)(bitnum*size_t.sizeof), cast(uint)len);
-        GC.addRange((cast(size_t*)mem)+bitnum, size_t.sizeof*len);
+        version(krc_debug) printf("  #%u (%u)\n", cast(uint)(bitnum*usize.sizeof), cast(uint)len);
+        GC.addRange((cast(usize*)mem)+bitnum, usize.sizeof*len);
         bitnum += len;
       } else {
         ++bitnum;
       }
     }
     version(krc_debug) { import core.stdc.stdio : printf; printf("CREATED WRAPPER 0x%08x\n", mem); }
-    return cast(size_t)mem;
+    return cast(usize)mem;
   }
 }
 
@@ -388,30 +388,30 @@ static if (UsingSimpledisplayX11) {
 // we'll use glibc malloc()/free(), 'cause `unregisterImage()` can be called from object dtor.
 private struct XShmSeg {
 private:
-  __gshared size_t headp = 0, tailp = 0;
+  __gshared usize headp = 0, tailp = 0;
 
   static @property XShmSeg* head () nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)headp; }
-  static @property void head (XShmSeg* v) nothrow @trusted @nogc { pragma(inline, true); headp = cast(size_t)v; }
+  static @property void head (XShmSeg* v) nothrow @trusted @nogc { pragma(inline, true); headp = cast(usize)v; }
 
   static @property XShmSeg* tail () nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)tailp; }
-  static @property void tail (XShmSeg* v) nothrow @trusted @nogc { pragma(inline, true); tailp = cast(size_t)v; }
+  static @property void tail (XShmSeg* v) nothrow @trusted @nogc { pragma(inline, true); tailp = cast(usize)v; }
 
 private:
-  size_t segp; // XShmSegmentInfo*; hide it from GC
-  size_t prevp; // next link; hide it from GC
-  size_t nextp; // next link; hide it from GC
+  usize segp; // XShmSegmentInfo*; hide it from GC
+  usize prevp; // next link; hide it from GC
+  usize nextp; // next link; hide it from GC
 
 private:
   @property bool valid () const pure nothrow @trusted @nogc { pragma(inline, true); return (segp != 0); }
 
   @property XShmSeg* next () pure nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)nextp; }
-  @property void next (XShmSeg* v) pure nothrow @trusted @nogc { pragma(inline, true); nextp = cast(size_t)v; }
+  @property void next (XShmSeg* v) pure nothrow @trusted @nogc { pragma(inline, true); nextp = cast(usize)v; }
 
   @property XShmSeg* prev () pure nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSeg*)prevp; }
-  @property void prev (XShmSeg* v) pure nothrow @trusted @nogc { pragma(inline, true); prevp = cast(size_t)v; }
+  @property void prev (XShmSeg* v) pure nothrow @trusted @nogc { pragma(inline, true); prevp = cast(usize)v; }
 
   @property XShmSegmentInfo* seg () pure nothrow @trusted @nogc { pragma(inline, true); return cast(XShmSegmentInfo*)segp; }
-  @property void seg (XShmSegmentInfo* v) pure nothrow @trusted @nogc { pragma(inline, true); segp = cast(size_t)v; }
+  @property void seg (XShmSegmentInfo* v) pure nothrow @trusted @nogc { pragma(inline, true); segp = cast(usize)v; }
 
 static:
   XShmSeg* alloc () nothrow @trusted @nogc {

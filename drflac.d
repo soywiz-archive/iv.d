@@ -5,7 +5,7 @@
 // David Reid - mackron@gmail.com
 //
 // D translation by Ketmar // Invisible Vector
-module iv.drflac;
+module iv.drflac is aliced;
 //nothrow @nogc:
 
 // USAGE
@@ -264,7 +264,7 @@ struct drflac_metadata {
 // bytesToRead [in]  The number of bytes to read.
 //
 // Returns the number of bytes actually read.
-alias drflac_read_proc = size_t delegate (void* pUserData, void* pBufferOut, size_t bytesToRead);
+alias drflac_read_proc = usize delegate (void* pUserData, void* pBufferOut, usize bytesToRead);
 
 // Callback for when data needs to be seeked.
 //
@@ -290,8 +290,8 @@ alias drflac_meta_proc = void delegate (void* pUserData, drflac_metadata* pMetad
 // Structure for internal use. Only used for decoders opened with drflac_open_memory.
 struct drflac__memory_stream {
   const(ubyte)* data;
-  size_t dataSize;
-  size_t currentReadPos;
+  usize dataSize;
+  usize currentReadPos;
 }
 
 // Structure for internal use. Used for bit streaming.
@@ -312,16 +312,16 @@ struct drflac_bs {
   // The number of unaligned bytes in the L2 cache. This will always be 0 until the end of the stream is hit. At the end of the
   // stream there will be a number of bytes that don't cleanly fit in an L1 cache line, so we use this variable to know whether
   // or not the bistreamer needs to run on a slower path to read those last bytes. This will never be more than (drflac_cache_t).sizeof.
-  size_t unalignedByteCount;
+  usize unalignedByteCount;
 
   // The content of the unaligned bytes.
   drflac_cache_t unalignedCache;
 
   // The index of the next valid cache line in the "L2" cache.
-  size_t nextL2Line;
+  usize nextL2Line;
 
   // The number of bits that have been consumed by the cache. This is used to determine how many valid bits are remaining.
-  size_t consumedBits;
+  usize consumedBits;
 
   // The cached data which was most recently read from the client. There are two levels of cache. Data flows as such:
   // Client . L2 . L1. The L2 . L1 movement is aligned and runs on a fast path in just a few instructions.
@@ -547,12 +547,12 @@ struct drflac {
 //
 // This does not create a copy of the data. It is up to the application to ensure the buffer remains valid for
 // the lifetime of the decoder.
-//drflac* drflac_open_memory(const void* data, size_t dataSize);
+//drflac* drflac_open_memory(const void* data, usize dataSize);
 
 // Opens a FLAC decoder from a pre-allocated block of memory and notifies the caller of the metadata chunks (album art, etc.)
 //
 // Look at the documentation for drflac_open_with_metadata() for more information on how metadata is handled.
-//drflac* drflac_open_memory_with_metadata(const void* data, size_t dataSize, drflac_meta_proc onMeta, void* pUserData);
+//drflac* drflac_open_memory_with_metadata(const void* data, usize dataSize, drflac_meta_proc onMeta, void* pUserData);
 
 
 
@@ -573,7 +573,7 @@ struct drflac {
 //#endif
 
 // Same as drflac_open_and_decode() except opens the decoder from a block of memory.
-//int* drflac_open_and_decode_memory(const void* data, size_t dataSize, uint* sampleRate, uint* channels, ulong* totalSampleCount);
+//int* drflac_open_and_decode_memory(const void* data, usize dataSize, uint* sampleRate, uint* channels, ulong* totalSampleCount);
 
 // Frees data returned by drflac_open_and_decode_*().
 //void drflac_free(void* pSampleDataReturnedByOpenAndDecode);
@@ -703,7 +703,7 @@ bool drflac__reload_l1_cache_from_l2 (drflac_bs* bs) {
   // If we get here it means we've run out of data in the L2 cache. We'll need to fetch more from the client, if there's any left.
   if (bs.unalignedByteCount > 0) return false; // If we have any unaligned bytes it means there's not more aligned bytes left in the client.
 
-  size_t bytesRead = bs.rs.read(bs.cacheL2.ptr, mixin(DRFLAC_CACHE_L2_SIZE_BYTES!"bs"));
+  usize bytesRead = bs.rs.read(bs.cacheL2.ptr, mixin(DRFLAC_CACHE_L2_SIZE_BYTES!"bs"));
 
   bs.nextL2Line = 0;
   if (bytesRead == mixin(DRFLAC_CACHE_L2_SIZE_BYTES!"bs")) {
@@ -715,7 +715,7 @@ bool drflac__reload_l1_cache_from_l2 (drflac_bs* bs) {
   // means we've just reached the end of the file. We need to move the valid data down to the end of the buffer
   // and adjust the index of the next line accordingly. Also keep in mind that the L2 cache must be aligned to
   // the size of the L1 so we'll need to seek backwards by any misaligned bytes.
-  size_t alignedL1LineCount = bytesRead/mixin(DRFLAC_CACHE_L1_SIZE_BYTES!"bs");
+  usize alignedL1LineCount = bytesRead/mixin(DRFLAC_CACHE_L1_SIZE_BYTES!"bs");
 
   // We need to keep track of any unaligned bytes for later use.
   bs.unalignedByteCount = bytesRead-(alignedL1LineCount*mixin(DRFLAC_CACHE_L1_SIZE_BYTES!"bs"));
@@ -724,8 +724,8 @@ bool drflac__reload_l1_cache_from_l2 (drflac_bs* bs) {
   }
 
   if (alignedL1LineCount > 0) {
-    size_t offset = mixin(DRFLAC_CACHE_L2_LINE_COUNT!"bs")-alignedL1LineCount;
-    for (size_t i = alignedL1LineCount; i > 0; --i) bs.cacheL2.ptr[i-1+offset] = bs.cacheL2.ptr[i-1];
+    usize offset = mixin(DRFLAC_CACHE_L2_LINE_COUNT!"bs")-alignedL1LineCount;
+    for (usize i = alignedL1LineCount; i > 0; --i) bs.cacheL2.ptr[i-1+offset] = bs.cacheL2.ptr[i-1];
     bs.nextL2Line = offset;
     bs.cache = bs.cacheL2.ptr[bs.nextL2Line++];
     return true;
@@ -749,7 +749,7 @@ bool drflac__reload_cache (drflac_bs* bs) {
   // If we get here it means we have failed to load the L1 cache from the L2. Likely we've just reached the end of the stream and the last
   // few bytes did not meet the alignment requirements for the L2 cache. In this case we need to fall back to a slower path and read the
   // data from the unaligned cache.
-  size_t bytesRead = bs.unalignedByteCount;
+  usize bytesRead = bs.unalignedByteCount;
   if (bytesRead == 0) return false;
 
   assert(bytesRead < mixin(DRFLAC_CACHE_L1_SIZE_BYTES!"bs"));
@@ -770,7 +770,7 @@ void drflac__reset_cache (drflac_bs* bs) {
   bs.unalignedCache = 0;
 }
 
-bool drflac__seek_bits (drflac_bs* bs, size_t bitsToSeek) {
+bool drflac__seek_bits (drflac_bs* bs, usize bitsToSeek) {
   if (bitsToSeek <= mixin(DRFLAC_CACHE_L1_BITS_REMAINING!"bs")) {
     bs.consumedBits += bitsToSeek;
     bs.cache <<= bitsToSeek;
@@ -781,12 +781,12 @@ bool drflac__seek_bits (drflac_bs* bs, size_t bitsToSeek) {
     bs.consumedBits += mixin(DRFLAC_CACHE_L1_BITS_REMAINING!"bs");
     bs.cache = 0;
 
-    size_t wholeBytesRemaining = bitsToSeek/8;
+    usize wholeBytesRemaining = bitsToSeek/8;
     if (wholeBytesRemaining > 0) {
       // The next bytes to seek will be located in the L2 cache. The problem is that the L2 cache is not byte aligned,
       // but rather DRFLAC_CACHE_L1_SIZE_BYTES aligned (usually 4 or 8). If, for example, the number of bytes to seek is
       // 3, we'll need to handle it in a special way.
-      size_t wholeCacheLinesRemaining = wholeBytesRemaining/mixin(DRFLAC_CACHE_L1_SIZE_BYTES!"bs");
+      usize wholeCacheLinesRemaining = wholeBytesRemaining/mixin(DRFLAC_CACHE_L1_SIZE_BYTES!"bs");
       if (wholeCacheLinesRemaining < mixin(DRFLAC_CACHE_L2_LINES_REMAINING!"bs")) {
         wholeBytesRemaining -= wholeCacheLinesRemaining*mixin(DRFLAC_CACHE_L1_SIZE_BYTES!"bs");
         bitsToSeek -= wholeCacheLinesRemaining*mixin(DRFLAC_CACHE_L1_SIZE_BITS!"bs");
@@ -832,8 +832,8 @@ bool drflac__read_uint32 (drflac_bs* bs, uint bitCount, uint* pResultOut) {
     return true;
   } else {
     // It straddles the cached data. It will never cover more than the next chunk. We just read the number in two parts and combine them.
-    size_t bitCountHi = mixin(DRFLAC_CACHE_L1_BITS_REMAINING!"bs");
-    size_t bitCountLo = bitCount-bitCountHi;
+    usize bitCountHi = mixin(DRFLAC_CACHE_L1_BITS_REMAINING!"bs");
+    usize bitCountLo = bitCount-bitCountHi;
     uint resultHi = cast(uint)mixin(DRFLAC_CACHE_L1_SELECT_AND_SHIFT!("bs", "bitCountHi")); //k8
     if (!drflac__reload_cache(bs)) return false;
     *pResultOut = cast(uint)((resultHi<<bitCountLo)|mixin(DRFLAC_CACHE_L1_SELECT_AND_SHIFT!("bs", "bitCountLo"))); //k8
@@ -1196,7 +1196,7 @@ enum DRFLAC__DECODE_SAMPLES_WITH_RESIDULE__RICE__PROC(string funcName, string pr
 "      bs.cache <<= setBitOffsetPlus1;\n"~
 "\n"~
 "      /* It straddles the cached data. It will never cover more than the next chunk. We just read the number in two parts and combine them. */\n"~
-"      size_t bitCountLo = bs.consumedBits-"~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~";\n"~
+"      usize bitCountLo = bs.consumedBits-"~DRFLAC_CACHE_L1_SIZE_BITS!"bs"~";\n"~
 "      drflac_cache_t resultHi = bs.cache&riceParamMask;    /* <-- This mask is OK because all bits after the first bits are always zero. */\n"~
 "\n"~
 "      if (bs.nextL2Line < "~DRFLAC_CACHE_L2_LINE_COUNT!"bs"~") {\n"~
@@ -1745,7 +1745,7 @@ bool drflac__seek_to_sample__brute_force (drflac* pFlac, ulong sampleIndex) {
   drflac__get_current_frame_sample_range(pFlac, &firstSampleInFrame, null);
 
   assert(firstSampleInFrame <= sampleIndex);
-  size_t samplesToDecode = cast(size_t)(sampleIndex-firstSampleInFrame);    // <-- Safe cast because the maximum number of samples in a frame is 65535.
+  usize samplesToDecode = cast(usize)(sampleIndex-firstSampleInFrame);    // <-- Safe cast because the maximum number of samples in a frame is 65535.
   if (samplesToDecode == 0) return true;
 
   // At this point we are just sitting on the byte after the frame header. We need to decode the frame before reading anything from it.
@@ -1798,7 +1798,7 @@ bool drflac__seek_to_sample__seek_table (drflac* pFlac, ulong sampleIndex) {
   // At this point we are just sitting on the byte after the frame header. We need to decode the frame before reading anything from it.
   if (!drflac__decode_frame(pFlac)) return false;
 
-  size_t samplesToDecode = cast(size_t)(sampleIndex-firstSampleInFrame);    // <-- Safe cast because the maximum number of samples in a frame is 65535.
+  usize samplesToDecode = cast(usize)(sampleIndex-firstSampleInFrame);    // <-- Safe cast because the maximum number of samples in a frame is 65535.
   return drflac_read_s32(pFlac, samplesToDecode, null) == samplesToDecode;
 }
 
@@ -1846,12 +1846,12 @@ private struct ReadStruct {
   drflac_seek_proc onSeekCB;
   void* pUserData;
 
-  size_t read (void* pBufferOut, size_t bytesToRead) nothrow {
+  usize read (void* pBufferOut, usize bytesToRead) nothrow {
     auto b = cast(ubyte*)pBufferOut;
     auto res = 0;
     try {
       while (bytesToRead > 0) {
-        size_t rd = 0;
+        usize rd = 0;
         if (onReadCB !is null) {
           rd = onReadCB(pUserData, b, bytesToRead);
         } else {
@@ -2215,8 +2215,8 @@ struct drflac_oggbs {
   bool stdio; //k8: it is drflac's stdio shit
 } // oggbs = Ogg Bitstream
 
-size_t drflac_oggbs__read_physical (drflac_oggbs* oggbs, void* bufferOut, size_t bytesToRead) {
-  size_t bytesActuallyRead = oggbs.rs.read(bufferOut, bytesToRead);
+usize drflac_oggbs__read_physical (drflac_oggbs* oggbs, void* bufferOut, usize bytesToRead) {
+  usize bytesActuallyRead = oggbs.rs.read(bufferOut, bytesToRead);
   oggbs.currentBytePos += bytesActuallyRead;
   return bytesActuallyRead;
 }
@@ -2261,16 +2261,16 @@ bool drflac_oggbs__goto_next_page (drflac_oggbs* oggbs) {
   }
 }
 
-size_t drflac__on_read_ogg (void* pUserData, void* bufferOut, size_t bytesToRead) {
+usize drflac__on_read_ogg (void* pUserData, void* bufferOut, usize bytesToRead) {
   drflac_oggbs* oggbs = cast(drflac_oggbs*)pUserData;
   assert(oggbs !is null);
 
   ubyte* pRunningBufferOut = cast(ubyte*)bufferOut;
 
   // Reading is done page-by-page. If we've run out of bytes in the page we need to move to the next one.
-  size_t bytesRead = 0;
+  usize bytesRead = 0;
   while (bytesRead < bytesToRead) {
-    size_t bytesRemainingToRead = bytesToRead-bytesRead;
+    usize bytesRemainingToRead = bytesToRead-bytesRead;
 
     if (oggbs.bytesRemainingInPage >= bytesRemainingToRead) {
       bytesRead += oggbs.rs.read(pRunningBufferOut, bytesRemainingToRead);
@@ -2280,7 +2280,7 @@ size_t drflac__on_read_ogg (void* pUserData, void* bufferOut, size_t bytesToRead
 
     // If we get here it means some of the requested data is contained in the next pages.
     if (oggbs.bytesRemainingInPage > 0) {
-      size_t bytesJustRead = oggbs.rs.read(pRunningBufferOut, oggbs.bytesRemainingInPage);
+      usize bytesJustRead = oggbs.rs.read(pRunningBufferOut, oggbs.bytesRemainingInPage);
       bytesRead += bytesJustRead;
       pRunningBufferOut += bytesJustRead;
       if (bytesJustRead != oggbs.bytesRemainingInPage) break;  // Ran out of data.
@@ -2315,7 +2315,7 @@ bool drflac__on_seek_ogg (void* pUserData, int offset, drflac_seek_origin origin
     int bytesRemainingToSeek = offset-bytesSeeked;
     assert(bytesRemainingToSeek >= 0);
 
-    if (oggbs.bytesRemainingInPage >= cast(size_t)bytesRemainingToSeek) {
+    if (oggbs.bytesRemainingInPage >= cast(usize)bytesRemainingToSeek) {
       if (!drflac_oggbs__seek_physical(oggbs, bytesRemainingToSeek, drflac_seek_origin_current)) return false;
       bytesSeeked += bytesRemainingToSeek;
       oggbs.bytesRemainingInPage -= bytesRemainingToSeek;
@@ -2428,7 +2428,7 @@ bool drflac_ogg__seek_to_sample (drflac* pFlac, ulong sample) {
 
   if (!drflac__decode_frame(pFlac)) return false;
 
-  size_t samplesToDecode = cast(size_t)(sample-firstSampleInFrame);    // <-- Safe cast because the maximum number of samples in a frame is 65535.
+  usize samplesToDecode = cast(usize)(sample-firstSampleInFrame);    // <-- Safe cast because the maximum number of samples in a frame is 65535.
   return drflac_read_s32(pFlac, samplesToDecode, null) == samplesToDecode;
 }
 
@@ -2616,7 +2616,7 @@ drflac* drflac_open_with_metadata_private_xx (drflac_init_info* init, scope drfl
   import core.stdc.string : memset;
   import std.functional : toDelegate;
 
-  size_t allocationSize = (drflac).sizeof;
+  usize allocationSize = (drflac).sizeof;
   allocationSize += init.maxBlockSize*init.channels*(int).sizeof;
   //allocationSize += init.seektableSize;
 
@@ -2679,7 +2679,7 @@ drflac* drflac_open_with_metadata_private (VFile fl, scope drflac_meta_proc onMe
 nothrow {
 alias drflac_file = void*;
 
-size_t drflac__on_read_stdio (void* pUserData, void* bufferOut, size_t bytesToRead) {
+usize drflac__on_read_stdio (void* pUserData, void* bufferOut, usize bytesToRead) {
   import core.stdc.stdio;
   return fread(bufferOut, 1, bytesToRead, cast(FILE*)pUserData);
 }
@@ -2756,12 +2756,12 @@ static if (DrFlacHasVFS) {
 
 nothrow {
 
-size_t drflac__on_read_memory (void* pUserData, void* bufferOut, size_t bytesToRead) {
+usize drflac__on_read_memory (void* pUserData, void* bufferOut, usize bytesToRead) {
   drflac__memory_stream* memoryStream = cast(drflac__memory_stream*)pUserData;
   assert(memoryStream !is null);
   assert(memoryStream.dataSize >= memoryStream.currentReadPos);
 
-  size_t bytesRemaining = memoryStream.dataSize-memoryStream.currentReadPos;
+  usize bytesRemaining = memoryStream.dataSize-memoryStream.currentReadPos;
   if (bytesToRead > bytesRemaining) bytesToRead = bytesRemaining;
 
   if (bytesToRead > 0) {
@@ -2795,7 +2795,7 @@ bool drflac__on_seek_memory (void* pUserData, int offset, drflac_seek_origin ori
   return true;
 }
 
-public drflac* drflac_open_memory (const(void)* data, size_t dataSize) {
+public drflac* drflac_open_memory (const(void)* data, usize dataSize) {
   import std.functional : toDelegate;
 
   drflac__memory_stream memoryStream;
@@ -2823,7 +2823,7 @@ public drflac* drflac_open_memory (const(void)* data, size_t dataSize) {
   return pFlac;
 }
 
-public drflac* drflac_open_memory_with_metadata (const(void)* data, size_t dataSize, scope drflac_meta_proc onMeta, void* pUserData) {
+public drflac* drflac_open_memory_with_metadata (const(void)* data, usize dataSize, scope drflac_meta_proc onMeta, void* pUserData) {
   import std.functional : toDelegate;
 
   drflac__memory_stream memoryStream;
@@ -3132,7 +3132,7 @@ int* drflac__full_decode_and_close (drflac* pFlac, uint* sampleRateOut, uint* ch
   if (totalSampleCount == 0) {
     int[4096] buffer;
 
-    size_t sampleDataBufferSize = (buffer).sizeof;
+    usize sampleDataBufferSize = (buffer).sizeof;
     pSampleData = cast(int*)malloc(sampleDataBufferSize);
     if (pSampleData is null) goto on_error;
 
@@ -3147,17 +3147,17 @@ int* drflac__full_decode_and_close (drflac* pFlac, uint* sampleRateOut, uint* ch
         }
         pSampleData = pNewSampleData;
       }
-      memcpy(pSampleData+totalSampleCount, buffer.ptr, cast(size_t)(samplesRead*(int).sizeof));
+      memcpy(pSampleData+totalSampleCount, buffer.ptr, cast(usize)(samplesRead*(int).sizeof));
       totalSampleCount += samplesRead;
     }
     // At this point everything should be decoded, but we just want to fill the unused part buffer with silence - need to
     // protect those ears from random noise!
-    memset(pSampleData+totalSampleCount, 0, cast(size_t)(sampleDataBufferSize-totalSampleCount*(int).sizeof));
+    memset(pSampleData+totalSampleCount, 0, cast(usize)(sampleDataBufferSize-totalSampleCount*(int).sizeof));
   } else {
     ulong dataSize = totalSampleCount*(int).sizeof;
     if (dataSize > uint.max) goto on_error;  // The decoded data is too big.
 
-    pSampleData = cast(int*)malloc(cast(size_t)dataSize);    // <-- Safe cast as per the check above.
+    pSampleData = cast(int*)malloc(cast(usize)dataSize);    // <-- Safe cast as per the check above.
     if (pSampleData is null) goto on_error;
 
     ulong samplesDecoded = drflac_read_s32(pFlac, pFlac.totalSampleCount, pSampleData);
@@ -3202,7 +3202,7 @@ public int* drflac_open_and_decode_file (const(char)[] filename, uint* sampleRat
   return drflac__full_decode_and_close(pFlac, sampleRate, channels, totalSampleCount);
 }
 
-public int* drflac_open_and_decode_memory (const void* data, size_t dataSize, uint* sampleRate, uint* channels, ulong* totalSampleCount) {
+public int* drflac_open_and_decode_memory (const void* data, usize dataSize, uint* sampleRate, uint* channels, ulong* totalSampleCount) {
   if (sampleRate) *sampleRate = 0;
   if (channels) *channels = 0;
   if (totalSampleCount) *totalSampleCount = 0;

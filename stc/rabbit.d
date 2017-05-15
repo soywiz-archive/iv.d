@@ -25,7 +25,7 @@
 /* then the small IV size results in a reduced security level of 96 bit. This is due to generic TMD */
 /* trade-off attacks.                                                                               */
 /****************************************************************************************************/
-module iv.stc.rabbit;
+module iv.stc.rabbit is aliced;
 
 import std.range;
 import iv.stc.core;
@@ -48,7 +48,7 @@ private:
     static if (hasLength!IR) assert(iv.length == 0 || iv.length == 8);
     ubyte[KeySize] kb = void;
     {
-      size_t len = 0;
+      usize len = 0;
       while (!key.empty && len < kb.length) {
         kb.ptr[len++] = cast(ubyte)key.front;
         key.popFront;
@@ -59,7 +59,7 @@ private:
     ubyte[IVSize] ib = void;
     ubyte[] ivbuf;
     {
-      size_t len = 0;
+      usize len = 0;
       while (!iv.empty && len < ib.length) {
         ib.ptr[len++] = cast(ubyte)iv.front;
         iv.popFront;
@@ -193,7 +193,7 @@ private:
 
   /* Generate buffer to xor later */
   void getBuf () nothrow @trusted @nogc {
-    void putToBuf (size_t pos, uint n) nothrow @trusted @nogc {
+    void putToBuf (usize pos, uint n) nothrow @trusted @nogc {
       buf.ptr[pos+0] = n&0xff;
       buf.ptr[pos+1] = (n>>8)&0xff;
       buf.ptr[pos+2] = (n>>16)&0xff;

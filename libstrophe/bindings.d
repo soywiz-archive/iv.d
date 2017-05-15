@@ -8,7 +8,7 @@
 **
 **  This software is dual licensed under the MIT and GPLv3 licenses.
 */
-module iv.libstrophe.bindings;
+module iv.libstrophe.bindings is aliced;
 pragma(lib, "strophe");
 // consts are probably fucked all the way
 import core.stdc.config : c_long, c_ulong;
@@ -117,9 +117,9 @@ void xmpp_free(xmpp_ctx_t* /*const*/ ctx, void* p);
 
 /* user-replaceable memory allocator */
 struct xmpp_mem_t {
-  void* function (size_t size, void* userdata) alloc;
+  void* function (usize size, void* userdata) alloc;
   void function (void*p, void* userdata) free;
-  void* function (void* p, size_t size, void* userdata) realloc;
+  void* function (void* p, usize size, void* userdata) realloc;
   void* userdata;
 }
 
@@ -227,7 +227,7 @@ int xmpp_connect_component (xmpp_conn_t* conn, const(char)* server, ushort port,
 
 int xmpp_connect_raw (xmpp_conn_t* conn, const(char)* altdomain, ushort altport, xmpp_conn_handler callback, void* userdata);
 int xmpp_conn_open_stream_default (xmpp_conn_t* conn);
-int xmpp_conn_open_stream (xmpp_conn_t* conn, char** attributes, size_t attributes_len);
+int xmpp_conn_open_stream (xmpp_conn_t* conn, char** attributes, usize attributes_len);
 int xmpp_conn_tls_start (xmpp_conn_t* conn);
 
 void xmpp_disconnect (xmpp_conn_t* conn);
@@ -235,7 +235,7 @@ void xmpp_disconnect (xmpp_conn_t* conn);
 void xmpp_send (xmpp_conn_t* conn, const(xmpp_stanza_t)* stanza);
 
 void xmpp_send_raw_string (xmpp_conn_t* conn, const(char)* fmt, ...);
-void xmpp_send_raw (xmpp_conn_t* conn, const(char)* data, size_t len);
+void xmpp_send_raw (xmpp_conn_t* conn, const(char)* data, usize len);
 
 
 /* handlers */
@@ -278,7 +278,7 @@ int xmpp_stanza_is_text (const(xmpp_stanza_t)* stanza);
 int xmpp_stanza_is_tag (const(xmpp_stanza_t)* stanza);
 
 /* marshall a stanza into text for transmission or display */
-int xmpp_stanza_to_text (xmpp_stanza_t* stanza, const(char)** buf, const(size_t)* buflen);
+int xmpp_stanza_to_text (xmpp_stanza_t* stanza, const(char)** buf, const(usize)* buflen);
 
 xmpp_stanza_t* xmpp_stanza_get_children (const(xmpp_stanza_t)* stanza);
 xmpp_stanza_t* xmpp_stanza_get_child_by_name (const(xmpp_stanza_t)* stanza, const(char)* name);
@@ -298,7 +298,7 @@ const(char)* xmpp_stanza_get_name (const(xmpp_stanza_t)* stanza);
 int xmpp_stanza_set_attribute (const(xmpp_stanza_t)* stanza, const(char)* key, const(char)* value);
 int xmpp_stanza_set_name (xmpp_stanza_t* stanza, const(char)* name);
 int xmpp_stanza_set_text (xmpp_stanza_t* stanza, const(char)* text);
-int xmpp_stanza_set_text_with_size (xmpp_stanza_t* stanza, const(char)* text, size_t size);
+int xmpp_stanza_set_text_with_size (xmpp_stanza_t* stanza, const(char)* text, usize size);
 int xmpp_stanza_del_attribute (const(xmpp_stanza_t)* stanza, const(char)* name);
 
 /* common stanza helpers */
@@ -352,18 +352,18 @@ enum XMPP_SHA1_DIGEST_SIZE = 20;
 
 struct xmpp_sha1_t;
 
-char* xmpp_sha1 (xmpp_ctx_t* ctx, const(void)* data, size_t len);
+char* xmpp_sha1 (xmpp_ctx_t* ctx, const(void)* data, usize len);
 
 xmpp_sha1_t* xmpp_sha1_new (xmpp_ctx_t* ctx);
 void xmpp_sha1_free (xmpp_sha1_t* sha1);
-void xmpp_sha1_update (xmpp_sha1_t* sha1, const(void)* data, size_t len);
+void xmpp_sha1_update (xmpp_sha1_t* sha1, const(void)* data, usize len);
 void xmpp_sha1_final (xmpp_sha1_t* sha1);
-char* xmpp_sha1_to_string (xmpp_sha1_t* sha1, char* s, size_t slen);
+char* xmpp_sha1_to_string (xmpp_sha1_t* sha1, char* s, usize slen);
 char* xmpp_sha1_to_string_alloc (xmpp_sha1_t* sha1);
 void xmpp_sha1_to_digest (xmpp_sha1_t* sha1, void* digest);
 
 /* Base64 */
 
-char* xmpp_base64_encode (xmpp_ctx_t* ctx, const(void)* data, size_t len);
-char* xmpp_base64_decode_str (xmpp_ctx_t* ctx, const(char)* base64, size_t len);
-void xmpp_base64_decode_bin (xmpp_ctx_t* ctx, const(char)* base64, size_t len, void** out_, size_t* outlen);
+char* xmpp_base64_encode (xmpp_ctx_t* ctx, const(void)* data, usize len);
+char* xmpp_base64_decode_str (xmpp_ctx_t* ctx, const(char)* base64, usize len);
+void xmpp_base64_decode_bin (xmpp_ctx_t* ctx, const(char)* base64, usize len, void** out_, usize* outlen);

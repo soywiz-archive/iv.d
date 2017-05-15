@@ -39,7 +39,7 @@
  * num_channels must be 1 (Y), 3 (RGB), 4 (RGBA), image pitch must be width*num_channels.
  * note that alpha will not be stored in jpeg file.
  */
-module iv.jpege;
+module iv.jpege is aliced;
 
 public:
 // ////////////////////////////////////////////////////////////////////////// //
@@ -130,7 +130,7 @@ nothrow @trusted @nogc {
 auto JPGE_MIN(T) (T a, T b) pure nothrow @safe @nogc { pragma(inline, true); return (a < b ? a : b); }
 auto JPGE_MAX(T) (T a, T b) pure nothrow @safe @nogc { pragma(inline, true); return (a > b ? a : b); }
 
-void *jpge_malloc (size_t nSize) { import core.stdc.stdlib : malloc; return malloc(nSize); }
+void *jpge_malloc (usize nSize) { import core.stdc.stdlib : malloc; return malloc(nSize); }
 void jpge_free (void *p) { import core.stdc.stdlib : free; if (p !is null) free(p); }
 
 

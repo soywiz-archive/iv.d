@@ -14,7 +14,7 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.stc.testing;
+module iv.stc.testing is aliced;
 
 import std.stdio;
 import std.range;
@@ -49,13 +49,13 @@ public void processTVFile(alias T) (string tvs) {
   ubyte[256] output = void;
 
   void skipSpaces () {
-    size_t pos = 0;
+    usize pos = 0;
     while (pos < tvs.length && (tvs[pos] == ' ' || tvs[pos] == '\t' || tvs[pos] == '\n' || tvs[pos] == '\r')) ++pos;
     tvs = tvs[pos..$];
   }
 
-  size_t h2x (ubyte[] arr, int len=16) {
-    size_t pos = 0;
+  usize h2x (ubyte[] arr, int len=16) {
+    usize pos = 0;
     while (tvs.length) {
       if (tvs[0] < '0' || (tvs[0] > '9' && tvs[0] < 'A') || tvs[0] > 'F') break;
       uint n0 = tvs[0]-'0';
@@ -85,7 +85,7 @@ public void processTVFile(alias T) (string tvs) {
 
   auto xpos = tvs.indexOf("\nSet ");
   while (xpos >= 0) {
-    size_t keylen, ivlen;
+    usize keylen, ivlen;
     int rng = 0;
     // key
     xpos = tvs.indexOf("key = ");
@@ -105,7 +105,7 @@ public void processTVFile(alias T) (string tvs) {
     h2x(output[2*16..$]);
     h2x(output[3*16..$]);
     rng = (tvs.startsWith(ranges[0][0]) ? 0 : 1);
-    for (size_t f = 1; f < 4; ++f) {
+    for (usize f = 1; f < 4; ++f) {
       assert(tvs.skipOver(ranges[rng][f-1]));
       h2x(output[64*f+0*16..$]);
       h2x(output[64*f+1*16..$]);

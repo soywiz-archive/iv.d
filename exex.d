@@ -16,17 +16,17 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // severely outdated exception helpers
-module iv.exex /*is aliced*/;
+module iv.exex is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 mixin template ExceptionCtor() {
   static if (__VERSION__ > 2067) {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
+    this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow @nogc {
       super(msg, file, line, next);
     }
   } else {
-    this (string msg, string file=__FILE__, size_t line=__LINE__, Throwable next=null) @safe pure nothrow {
+    this (string msg, string file=__FILE__, usize line=__LINE__, Throwable next=null) @safe pure nothrow {
       super(msg, file, line, next);
     }
   }

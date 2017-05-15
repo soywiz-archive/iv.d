@@ -1,6 +1,6 @@
 // code from LADSPA plugins project: http://plugin.org.uk/
 // GNU GPLv3
-module iv.mbandeq;
+module iv.mbandeq is aliced;
 private:
 nothrow @trusted @nogc:
 
@@ -19,7 +19,7 @@ version(FFTW3) {
   extern(C) nothrow @trusted @nogc {
     enum FFTW_MEASURE = 0;
     enum { FFTW_R2HC=0, FFTW_HC2R=1, FFTW_DHT=2 }
-    fft_plan fftwf_plan_r2r_1d (int n, fftw_real* inp, fftw_real* outp, size_t kind, uint flags);
+    fft_plan fftwf_plan_r2r_1d (int n, fftw_real* inp, fftw_real* outp, usize kind, uint flags);
     void fftwf_execute (fft_plan plan);
   }
 } else {
@@ -380,7 +380,7 @@ struct kiss_fft_state {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private void kf_bfly2 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, int m) {
+private void kf_bfly2 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, int m) {
   kiss_fft_cpx* Fout2;
   const(kiss_fft_cpx)* tw1 = st.twiddles.ptr;
   kiss_fft_cpx t;
@@ -396,12 +396,12 @@ private void kf_bfly2 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
 }
 
 
-private void kf_bfly4 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, in size_t m) {
+private void kf_bfly4 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, in usize m) {
   const(kiss_fft_cpx)* tw1, tw2, tw3;
   kiss_fft_cpx[6] scratch = void;
-  size_t k = m;
-  immutable size_t m2 = 2*m;
-  immutable size_t m3 = 3*m;
+  usize k = m;
+  immutable usize m2 = 2*m;
+  immutable usize m3 = 3*m;
   tw3 = tw2 = tw1 = st.twiddles.ptr;
   do {
     scratch.ptr[0] = Fout[m]*(*tw1);
@@ -434,9 +434,9 @@ private void kf_bfly4 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
 }
 
 
-private void kf_bfly3 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, size_t m) {
-  size_t k = m;
-  immutable size_t m2 = 2*m;
+private void kf_bfly3 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, usize m) {
+  usize k = m;
+  immutable usize m2 = 2*m;
   const(kiss_fft_cpx)* tw1, tw2;
   kiss_fft_cpx[5] scratch = void;
   kiss_fft_cpx epi3;
@@ -469,7 +469,7 @@ private void kf_bfly3 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
 }
 
 
-private void kf_bfly5 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, int m) {
+private void kf_bfly5 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, int m) {
   kiss_fft_cpx* Fout0, Fout1, Fout2, Fout3, Fout4;
   int u;
   kiss_fft_cpx[13] scratch = void;
@@ -529,7 +529,7 @@ private void kf_bfly5 (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg
 
 
 // perform the butterfly for one stage of a mixed radix FFT
-private void kf_bfly_generic (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_fft_cfg) st, int m, int p) {
+private void kf_bfly_generic (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, int m, int p) {
   import core.stdc.stdlib : alloca;
   int u, k, q1, q;
   const(kiss_fft_cpx)* twiddles = st.twiddles.ptr;
@@ -563,7 +563,7 @@ private void kf_bfly_generic (kiss_fft_cpx* Fout, in size_t fstride, const(kiss_
 }
 
 
-private void kf_work (kiss_fft_cpx* Fout, const(kiss_fft_cpx)* f, in size_t fstride, int in_stride, int* factors, const(kiss_fft_cfg) st) {
+private void kf_work (kiss_fft_cpx* Fout, const(kiss_fft_cpx)* f, in usize fstride, int in_stride, int* factors, const(kiss_fft_cfg) st) {
   kiss_fft_cpx* Fout_beg = Fout;
   immutable int p = *factors++; // the radix
   immutable int m = *factors++; // stage's fft length/p
@@ -641,9 +641,9 @@ private void kf_factor (int n, int* facbuf) {
  * If lenmem is not `null` and (`mem` is `null` or `*lenmem` is not large enough),
  * then the function returns `null` and places the minimum cfg buffer size in `*lenmem`.
  */
-public kiss_fft_cfg kiss_fft_alloc (int nfft, bool inverse_fft, void* mem=null, size_t* lenmem=null) {
+public kiss_fft_cfg kiss_fft_alloc (int nfft, bool inverse_fft, void* mem=null, usize* lenmem=null) {
   kiss_fft_cfg st = null;
-  size_t memneeded = kiss_fft_state.sizeof+kiss_fft_cpx.sizeof*(nfft-1); // twiddle factors
+  usize memneeded = kiss_fft_state.sizeof+kiss_fft_cpx.sizeof*(nfft-1); // twiddle factors
   if (lenmem is null) {
     import core.stdc.stdlib : malloc;
     st = cast(kiss_fft_cfg)malloc(memneeded);
@@ -747,9 +747,9 @@ struct kiss_fftr_state {
  *
  * If you don't care to allocate space, use mem = lenmem = null
  */
-public kiss_fftr_cfg kiss_fftr_alloc (int nfft, bool inverse_fft, void* mem=null, size_t* lenmem=null) {
+public kiss_fftr_cfg kiss_fftr_alloc (int nfft, bool inverse_fft, void* mem=null, usize* lenmem=null) {
   kiss_fftr_cfg st = null;
-  size_t subsize, memneeded;
+  usize subsize, memneeded;
 
   if (nfft&1) assert(0, "real FFT optimization must be even");
   nfft >>= 1;

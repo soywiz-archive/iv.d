@@ -20,16 +20,12 @@
 ** use license for this code is available, please see:
 **    http://www.mega-nerd.com/SRC/procedure.html
 */
-module iv.secretrabbit;
+module iv.secretrabbit is aliced;
 
 //version = lib_secret_rabbit_allow_hq_filter;
 //version = lib_secret_rabbit_do_additional_checks;
 
 version(lib_secret_rabbit_allow_hq_filter) enum rabbitHasHQ = true; else enum rabbitHasHQ = false;
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-static if (!is(usize == size_t)) alias usize = size_t;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

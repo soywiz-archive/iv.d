@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vl2.vlo;
+module iv.vl2.vlo is aliced;
 
 import iv.vl2.core;
 import iv.vl2.font6;
@@ -307,7 +307,7 @@ nothrow:
    *  nothing
    */
   void drawCharWdt (int x, int y, int wdt, int shift, char ch, Color col, Color bkcol=vlcTransparent) @trusted {
-    size_t pos = ch*8;
+    usize pos = ch*8;
     if (wdt < 1 || shift >= 8) return;
     if (col == vlcTransparent && bkcol == vlcTransparent) return;
     if (wdt > 8) wdt = 8;
@@ -358,7 +358,7 @@ nothrow:
       drawCharWdt(x, y, wdt, shift, ch, col, vlcTransparent);
       return;
     }
-    size_t pos = ch*8;
+    usize pos = ch*8;
     if (wdt < 1 || shift >= 8) return;
     if (wdt > 8) wdt = 8;
     if (shift < 0) shift = 0;
@@ -486,7 +486,7 @@ nothrow:
       if (y0 >= mClipY0 && x0 <= mClipX1 && y0 <= mClipY1 && x0+len > mClipX0) {
         if (x0 < mClipX0) { if ((len += (x0-mClipX0)) <= 0) return; x0 = mClipX0; }
         if (x0+len-1 > mClipX1) len = mClipX1-x0+1;
-        immutable size_t ofs = y0*mWidth+x0;
+        immutable usize ofs = y0*mWidth+x0;
         mVScr[ofs..ofs+len] = col;
       }
     } else {

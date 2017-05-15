@@ -38,7 +38,7 @@ void main (string[] args) {
 
   int minw = 32, minh = 32;
   string fname;
-  for (size_t idx = 1; idx < args.length; ++idx) {
+  for (usize idx = 1; idx < args.length; ++idx) {
     import std.conv : to;
     string a = args[idx];
     if (a == "-w" || a == "-h") {

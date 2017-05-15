@@ -14,7 +14,7 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.stc.arc4;
+module iv.stc.arc4 is aliced;
 
 import std.range;
 import iv.stc.core;
@@ -40,7 +40,7 @@ private:
     ubyte[256] kb = void;
     ubyte[] keybuf;
     {
-      size_t len = 0;
+      usize len = 0;
       while (!key.empty && len < kb.length) {
         kb.ptr[len++] = cast(ubyte)key.front;
         key.popFront;

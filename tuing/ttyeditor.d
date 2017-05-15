@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.ttyeditor;
+module iv.tuing.ttyeditor is aliced;
 
 import std.datetime : SysTime;
 
@@ -197,7 +197,7 @@ class TtyEditor : EditorEngine {
 
   static struct TEDKey { string key; string help; } // UDA
 
-  static string TEDImplX(string key, string help, string code, size_t ln) () {
+  static string TEDImplX(string key, string help, string code, usize ln) () {
     static assert(key.length > 0, "wtf?!");
     static assert(code.length > 0, "wtf?!");
     string res = "@TEDKey("~key.stringof~", "~help.stringof~") void _ted_";
@@ -218,11 +218,11 @@ class TtyEditor : EditorEngine {
     return res;
   }
 
-  mixin template TEDImpl(string key, string help, string code, size_t ln=__LINE__) {
+  mixin template TEDImpl(string key, string help, string code, usize ln=__LINE__) {
     mixin(TEDImplX!(key, help, code, ln));
   }
 
-  mixin template TEDImpl(string key, string code, size_t ln=__LINE__) {
+  mixin template TEDImpl(string key, string code, usize ln=__LINE__) {
     mixin(TEDImplX!(key, "", code, ln));
   }
 
