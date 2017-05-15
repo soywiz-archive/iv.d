@@ -539,7 +539,7 @@ private:
         if (prpos > pos) {
           // yes, rewind
           inflateEnd(&zs);
-          zs = zs.init;
+          zs = zs.default;
           pkpos = 0;
           if (!initZStream()) return -1;
           prpos = 0;
@@ -602,7 +602,7 @@ static protected:
       import core.exception : onOutOfMemoryErrorNoGC;
       onOutOfMemoryErrorNoGC();
     }
-    res[0..len] = T.init;
+    res[0..len] = T.default;
     return res[0..len];
   }
 

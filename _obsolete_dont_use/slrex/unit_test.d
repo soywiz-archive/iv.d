@@ -3,8 +3,8 @@ import iv.slrex;
 
 
 const(char)[] stest;
-static assert(is(typeof({ auto t = typeof(stest).init; long len = t.length; })), "no length");
-static assert(is(typeof({ auto t = typeof(stest).init; char ch = t[2]; })), "can't index");
+static assert(is(typeof({ auto t = typeof(stest).default; long len = t.length; })), "no length");
+static assert(is(typeof({ auto t = typeof(stest).default; char ch = t[2]; })), "can't index");
 
 
 int static_total_tests = 0;

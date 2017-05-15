@@ -23,8 +23,8 @@
 module iv.slrex;
 
 enum isGoodSlreRange(T) =
-  is(typeof({ auto t = T.init; long len = t.length; })) &&
-  is(typeof({ auto t = T.init; char ch = t[2]; }));
+  is(typeof({ auto t = T.default; long len = t.length; })) &&
+  is(typeof({ auto t = T.default; char ch = t[2]; }));
 
 
 struct Slre {

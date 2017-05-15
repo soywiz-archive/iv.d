@@ -207,7 +207,7 @@ void outSoundFlush () {
     }
     uint inpos = 0;
     for (;;) {
-      srbdata = srbdata.init; // just in case
+      srbdata = srbdata.default; // just in case
       srbdata.dataIn = rsfbufi[inpos..smpCount];
       srbdata.dataOut = rsfbufo[];
       if (srb.process(srbdata) != 0) assert(0, "resampling error");

@@ -227,8 +227,8 @@ private:
 
 public:
   void close () {
-    fl = fl.init;
-    lastpage = lastpage.init;
+    fl = fl.default;
+    lastpage = lastpage.default;
     bufpos = bufused = 0;
     curseg = 0;
     bytesRead = 0;

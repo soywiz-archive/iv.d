@@ -141,7 +141,7 @@ public:
     initLock();
     zfl = File(fname);
     open(zfl);
-    scope(failure) { zfl.close; zfl = zfl.init; }
+    scope(failure) { zfl.close; zfl = zfl.default; }
   }
 
   // it now owns the file (if no exception was thrown)
@@ -496,7 +496,7 @@ private:
       import core.exception : onOutOfMemoryErrorNoGC;
       onOutOfMemoryErrorNoGC();
     }
-    (*fc) = InnerFileCookied.init;
+    (*fc) = InnerFileCookied.default;
     (*fc).stpos = stofs;
     (*fc).size = cast(uint)dir[idx].size; //FIXME
     (*fc).pksize = cast(uint)dir[idx].pksize; //FIXME
@@ -684,7 +684,7 @@ private:
         if (prpos > pos) {
           // yes, rewind
           inflateEnd(&zs);
-          zs = zs.init;
+          zs = zs.default;
           pkpos = 0;
           if (!initZStream()) return -1;
           prpos = 0;
@@ -805,7 +805,7 @@ static:
       import core.exception : onOutOfMemoryErrorNoGC;
       onOutOfMemoryErrorNoGC();
     }
-    res[0..len] = T.init;
+    res[0..len] = T.default;
     return res[0..len];
   }
 

@@ -36,7 +36,7 @@ template args(alias fun, dgs...) if (is(typeof(fun) == function)) {
       alias fun = dg!DummyType;
       static if (is(FunctionTypeOf!fun PT == __parameters)) {
         enum name = __traits(identifier, PT);
-        foreach (immutable i, string argName; names) static if (name == argName) args[i] = fun(DummyType.init);
+        foreach (immutable i, string argName; names) static if (name == argName) args[i] = fun(DummyType.default);
       } else {
         static assert(false, "Failed to extract parameter name from " ~ fun.stringof);
       }
@@ -76,7 +76,7 @@ template args(S, dgs...) if (is(S == struct)) {
       alias fun = dg!DummyType;
       static if (is(FunctionTypeOf!fun PT == __parameters)) {
         enum name = __traits(identifier, PT);
-        foreach (immutable i, immutable field; s.tupleof) static if (__traits(identifier, S.tupleof[i]) == name) s.tupleof[i] = fun(DummyType.init);
+        foreach (immutable i, immutable field; s.tupleof) static if (__traits(identifier, S.tupleof[i]) == name) s.tupleof[i] = fun(DummyType.default);
       } else {
         static assert(false, "Failed to extract parameter name from " ~ fun.stringof);
       }

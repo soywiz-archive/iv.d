@@ -38,7 +38,7 @@ class MyZ80 : ZymCPU {
 
   override void setupMemory () {
     foreach (immutable idx; 0..65536/MemPage.Size) {
-      mem[idx] = MemPage.init;
+      mem[idx] = MemPage.default;
       mem[idx].mem = memory.ptr+idx*MemPage.Size;
     }
     //foreach (immutable idx; 0..16384/MemPage.Size) mem[idx].rom = true;

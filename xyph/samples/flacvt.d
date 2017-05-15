@@ -128,7 +128,7 @@ public:
   Track[] tracks;
 
 public:
-  void clear () { this = this.init; }
+  void clear () { this = this.default; }
 
   void load (const(char)[] fname) { load(VFile(fname)); }
 
