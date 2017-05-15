@@ -14,12 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.id3v2;
+module iv.id3v2 is aliced;
 
 // ////////////////////////////////////////////////////////////////////////// //
 //version = id3v2_debug;
 
-import iv.alice;
 import iv.utfutil;
 import iv.vfs;
 version(id3v2_debug) import iv.vfs.io;

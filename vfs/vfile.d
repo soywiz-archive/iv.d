@@ -22,7 +22,7 @@
  * wrapped stream is thread-safe (i.e. reads, writes, etc), but
  * wrapper itself isn't.
  */
-module iv.vfs.vfile;
+module iv.vfs.vfile is aliced;
 
 //version = vfs_add_std_stdio_wrappers;
 
@@ -36,7 +36,7 @@ version(vfs_add_std_stdio_wrappers) static import std.stdio;
 extern (C) void _d_monitorenter (Object h) nothrow;
 extern (C) void _d_monitorexit (Object h) nothrow;
 
-import iv.vfs.types : ssize, usize, Seek, VFSHiddenPointerHelper;
+import iv.vfs.types : Seek, VFSHiddenPointerHelper;
 import iv.vfs.config;
 import iv.vfs.error;
 import iv.vfs.pred;

@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arc;
+module iv.vfs.arc is aliced;
 
 public import iv.vfs.arc.zip;
 public import iv.vfs.arc.q1pak;

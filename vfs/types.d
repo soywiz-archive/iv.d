@@ -15,22 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.types;
-
-static if (!is(typeof(object.usize))) {
-  package alias usize = size_t;
-} else {
-  package import object : usize;
-}
-
-static if (!is(typeof(object.ssize))) {
-       static if (usize.sizeof == 8) package alias ssize = long;
-  else static if (usize.sizeof == 4) package alias ssize = int;
-  else static assert(0, "wtf?!");
-} else {
-  package import object : ssize;
-}
-
+module iv.vfs.types is aliced;
 
 private import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 public enum Seek : int {

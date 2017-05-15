@@ -17,10 +17,9 @@
 // very simple serializer and RPC system
 // WARNING! do not use for disk and other sensitive serialization,
 //          as format may change without notice! at least version it!
-module iv.ncrpc;
+module iv.ncrpc is aliced;
 private:
 
-import iv.alice;
 import iv.vfs;
 //version(rdmd) import iv.strex;
 

@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arc.internal;
+module iv.vfs.arc.internal is aliced;
 
 //version = iv_vfs_arcs_debug_hash;
 

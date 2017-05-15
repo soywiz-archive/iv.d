@@ -16,11 +16,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // VFS pathes and data files
-module iv.vfs.main;
+module iv.vfs.main is aliced;
 private:
 
 import core.time;
-import iv.vfs.types : usize;
 import iv.vfs.config;
 import iv.vfs.pred;
 import iv.vfs.error;

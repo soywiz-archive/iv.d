@@ -17,10 +17,9 @@
  * adaptation by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
 // DTW-based gesture recognizer
-module iv.gengdtw;
+module iv.gengdtw is aliced;
 private:
 
-import iv.alice;
 import iv.vfs;
 
 

@@ -15,9 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arc.zip;
+module iv.vfs.arc.zip is aliced;
 
-import iv.vfs.types : usize, ssize, Seek, VFSHiddenPointerHelper;
+import iv.vfs.types : Seek, VFSHiddenPointerHelper;
 import iv.vfs.error;
 import iv.vfs.main;
 import iv.vfs.util;

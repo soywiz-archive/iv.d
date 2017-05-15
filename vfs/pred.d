@@ -16,9 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // stream predicates
-module iv.vfs.pred;
+module iv.vfs.pred is aliced;
 
-private import iv.vfs.types : ssize, usize;
 public import iv.vfs.types : Seek;
 public import iv.vfs.error;
 public import iv.vfs.vfile : IVVFSIgnore;

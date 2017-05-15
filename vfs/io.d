@@ -22,13 +22,10 @@
  * wrapped stream is thread-safe (i.e. reads, writes, etc), but
  * wrapper itself isn't.
  */
-module iv.vfs.io;
+module iv.vfs.io is aliced;
 private:
 
 public import iv.vfs;
-//import iv.vfs.augs;
-//import iv.vfs.error;
-//import iv.vfs.vfile;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -206,7 +203,7 @@ private string readlnImpl(ST) (auto ref ST fl) {
 // ////////////////////////////////////////////////////////////////////////// //
 void writeImpl(S...) (ref VFile.LockedWriterImpl wr, S args) {
   import std.traits : isBoolean, isIntegral, isAggregateType, isSomeString, isSomeChar;
-  foreach (arg; args) {
+  foreach (auto arg; args) {
     alias A = typeof(arg);
     static if (isAggregateType!A || is(A == enum)) {
       import std.format : formattedWrite;
