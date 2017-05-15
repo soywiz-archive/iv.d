@@ -1,4 +1,4 @@
-module balztest;
+module balztest is aliced;
 
 import iv.balz;
 

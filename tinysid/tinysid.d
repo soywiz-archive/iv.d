@@ -1,4 +1,4 @@
-module tinysid;
+module tinysid is aliced;
 
 import core.time;
 
@@ -116,7 +116,7 @@ void main (string[] args) {
           tflShort2Float(soundbuffer[0..BUF_SIZE*8], rsfbufi[0..BUF_SIZE*8]);
           uint inpos = 0;
           for (;;) {
-            srbdata = srbdata.init; // just in case
+            srbdata = srbdata.default; // just in case
             srbdata.dataIn = rsfbufi[inpos..BUF_SIZE*8];
             srbdata.dataOut = rsfbufo[];
             if (rsm.process(srbdata) != 0) assert(0, "resampling error");

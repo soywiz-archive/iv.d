@@ -109,7 +109,7 @@ final:
     }
     enum normLength = NormalizedPoints;
     Point normPoint (usize idx) {
-      if (!valid || idx >= NormalizedPoints) return Point.init;
+      if (!valid || idx >= NormalizedPoints) return Point.default;
       if (mNormalized) {
         return Point(patpoints[idx*2+0], patpoints[idx*2+1]);
       } else {
@@ -119,7 +119,7 @@ final:
       }
     }
     /// return original point
-    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length/2 ? Point(points[idx*2], points[idx*2+1]) : Point.init); }
+    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length/2 ? Point(points[idx*2], points[idx*2+1]) : Point.default); }
   }
 
   /// can't be changed for normalized glyphs with original points dropped

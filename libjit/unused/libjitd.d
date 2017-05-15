@@ -17,7 +17,7 @@
  * License along with the libjit library.  If not, see
  * <http://www.gnu.org/licenses/>.
  */
-module libjitd;
+module libjitd is aliced;
 
 public import libjit;
 

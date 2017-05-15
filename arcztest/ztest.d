@@ -1,4 +1,4 @@
-module ztest;
+module ztest is aliced;
 
 import std.stdio;
 import std.random;

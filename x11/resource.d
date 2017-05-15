@@ -1,5 +1,5 @@
 /* X Resource Manager Intrinsics */
-module iv.x11.resource;
+module iv.x11.resource is aliced;
 
 import iv.x11.xlib;
 

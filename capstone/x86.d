@@ -1,7 +1,7 @@
 // Capstone Disassembly Engine
 // By Nguyen Anh Quynh <aquynh@gmail.com>, 2013-2015
 // k8: see licenses in original capstone package, i'm too lazy to copy 'em.
-module iv.capstone.x86;
+module iv.capstone.x86 is aliced;
 
 // Calculate relative address for X86-64, given cs_insn structure
 //#define X86_REL_ADDR(insn) (insn.address + insn.size + insn.detail->x86.disp)

@@ -15,7 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // very simple (de)serializer to json-like text format
-module iv.egtui.txtser;
+module iv.egtui.txtser is aliced;
 
 static import iv.txtser;
 public import iv.txtser : SRZIgnore, SRZName, SRZNonDefaultOnly;

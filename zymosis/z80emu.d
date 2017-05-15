@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.zymosis.z80emu;
+module iv.zymosis.z80emu is aliced;
 
 //version = Zymosis_Like_FUSE;
 //version = Zymosis_Testing; // to use with FUSE testing suite
@@ -1874,7 +1874,7 @@ public:
     int ixy = -1; // 0: ix; 1: iy
     int disp = 0;
     bool gotDD = false;
-    nfo = nfo.init;
+    nfo = nfo.default;
 
     ubyte memReadPC () nothrow @trusted @nogc { immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
     ushort readPCW () nothrow @trusted @nogc { ushort res = memReadPC; res |= memReadPC<<8; return res; }

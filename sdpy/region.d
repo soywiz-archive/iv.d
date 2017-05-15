@@ -905,8 +905,8 @@ private:
       auto dstd = cast(RData*)malloc(RData.sizeof);
       if (dstd is null) assert(0, "Region: out of memory"); // this is unlikely, and hey, just crash
       // init with default values
-      //*dstd = RData.init;
-      static immutable RData initr = RData.init;
+      //*dstd = RData.default;
+      static immutable RData initr = RData.default;
       memcpy(dstd, &initr, RData.sizeof);
       //(*dstd).__ctor();
       if (srcd !is null) {

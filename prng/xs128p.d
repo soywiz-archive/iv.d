@@ -7,7 +7,7 @@
  */
 // D port by Ketmar // Invisible Vector
 // http://xoroshiro.di.unimi.it/xoroshiro128plus.c
-module iv.prng.xs128p;
+module iv.prng.xs128p is aliced;
 
 /* This is the successor to xorshift128+. It is the fastest full-period
  * generator passing BigCrush without systematic failures, but due to the

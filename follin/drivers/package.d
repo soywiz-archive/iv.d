@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.drivers;
+module iv.follin.drivers is aliced;
 
 version(linux) {
   package(iv.follin) import iv.follin.drivers.alsa;

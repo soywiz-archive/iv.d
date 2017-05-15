@@ -4276,8 +4276,8 @@ public:
 
     first_audio_page_offset = 0;
 
-    p_first = p_first.init;
-    p_last = p_last.init;
+    p_first = p_first.default;
+    p_last = p_last.default;
 
     setup_offset = 0;
     temp_offset = 0;
@@ -4299,7 +4299,7 @@ public:
     mapping_count = 0;
     mapping = null;
     mode_count = 0;
-    mode_config[] = Mode.init;
+    mode_config[] = Mode.default;
 
     total_samples = 0;
 
@@ -4344,7 +4344,7 @@ public:
 
     /+
     page_crc_tests = -1;
-    scan[] = CRCscan.init;
+    scan[] = CRCscan.default;
     +/
 
     channel_buffer_start = 0;

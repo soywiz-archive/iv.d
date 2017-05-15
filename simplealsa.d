@@ -25,7 +25,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /** simple, yet useful blocking ALSA player. can do resampling and has 39-band equalizer */
-module iv.simplealsa;
+module iv.simplealsa is aliced;
 private:
 
 //version = simplealsa_writefile;
@@ -240,7 +240,7 @@ void outSoundFlush () {
     }
     uint inpos = 0;
     for (;;) {
-      srbdata = srbdata.init; // just in case
+      srbdata = srbdata.default; // just in case
       srbdata.dataIn = rsfbufi[inpos..smpCount];
       srbdata.dataOut = rsfbufo[];
       if (srb.process(srbdata) != 0) assert(0, "resampling error");
@@ -653,8 +653,8 @@ void clean_history () nothrow @trusted @nogc {
   //memset(data_history2.ptr, 0, sXYData.sizeof * EQ_MAX_BANDS * EQ_CHANNELS);
   foreach (immutable bn; 0..EQ_MAX_BANDS) {
     foreach (immutable cn; 0..EQ_CHANNELS) {
-      data_history[bn][cn] = sXYData.init;
-      data_history2[bn][cn] = sXYData.init;
+      data_history[bn][cn] = sXYData.default;
+      data_history2[bn][cn] = sXYData.default;
       //gain[bn][cn] = 0;
     }
   }

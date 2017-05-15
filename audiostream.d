@@ -451,7 +451,7 @@ public:
   override void close () {
     if (mp3 !is null && mp3.valid) { mp3.close(); delete mp3; }
     delete mp3info.index;
-    mp3info = Mp3Info.init;
+    mp3info = Mp3Info.default;
     super.close();
   }
 

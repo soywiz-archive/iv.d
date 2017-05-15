@@ -300,7 +300,7 @@ public void processEvents () {
         if (tm < ppevents[0].hitTime) break;
         evt = ppevents.ptr[0].evt;
         foreach (immutable c; 1..ppevents.length) ppevents.ptr[c-1] = ppevents.ptr[c];
-        ppevents[$-1] = ppevents[0].init;
+        ppevents[$-1] = ppevents[0].default;
         ppevents.length -= 1;
         ppevents.assumeSafeAppend;
       }
@@ -456,7 +456,7 @@ void cleanupListeners () {
       }
       if (ell.id == 0) {
         foreach (immutable c; pos+1..llist.length) llist.ptr[c-1] = llist.ptr[c];
-        llist[$-1] = EventListenerInfo.init;
+        llist[$-1] = EventListenerInfo.default;
         llist.length -= 1;
         llist.assumeSafeAppend;
       } else {
@@ -475,7 +475,7 @@ void cleanupListeners () {
       }
       if (ell.id == 0) {
         foreach (immutable c; pos+1..llistsb.length) llistsb.ptr[c-1] = llistsb.ptr[c];
-        llistsb[$-1] = EventListenerInfo.init;
+        llistsb[$-1] = EventListenerInfo.default;
         llistsb.length -= 1;
         llistsb.assumeSafeAppend;
       } else {

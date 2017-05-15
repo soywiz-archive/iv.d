@@ -390,7 +390,7 @@ template isMultiDimArray(T) {
   private import std.range.primitives : hasLength;
   private import std.traits : isArray, isNarrowString;
   static if (isArray!T) {
-    alias DT = typeof(T.init[0]);
+    alias DT = typeof(T.default[0]);
     static if (hasLength!DT || isNarrowString!DT) {
       enum isMultiDimArray = true;
     } else {
@@ -409,7 +409,7 @@ template dimensionCount(T) {
   private import std.range.primitives : hasLength;
   private import std.traits : isArray, isNarrowString;
   static if (isArray!T) {
-    alias DT = typeof(T.init[0]);
+    alias DT = typeof(T.default[0]);
     static if (hasLength!DT || isNarrowString!DT) {
       enum dimensionCount = 1+dimensionCount!DT;
     } else {
@@ -426,7 +426,7 @@ static assert(dimensionCount!(int[int]) == 0);
 template arrayElementType(T) {
   private import std.traits : isArray, Unqual;
   static if (isArray!T) {
-    alias arrayElementType = arrayElementType!(typeof(T.init[0]));
+    alias arrayElementType = arrayElementType!(typeof(T.default[0]));
   } else static if (is(typeof(T))) {
     alias arrayElementType = Unqual!(typeof(T));
   } else {
@@ -693,7 +693,7 @@ if (isRWStream!ST && (is(typeof(func) == function) || is(typeof(func) == delegat
   } else if (replyCode == RPCommand.RetVoid) {
     // got reply, wow
     static if (!is(ReturnType!func == void)) {
-      return ReturnType!func.init;
+      return ReturnType!func.default;
     } else {
       return;
     }
@@ -752,7 +752,7 @@ public static RT rpcallany(RT, ST, A...) (auto ref ST chan, const(char)[] name, 
   } else if (replyCode == RPCommand.RetVoid) {
     // got reply, wow
     static if (!is(RT == void)) {
-      return RT.init;
+      return RT.default;
     } else {
       return;
     }

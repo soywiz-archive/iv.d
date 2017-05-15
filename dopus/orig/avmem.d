@@ -1,4 +1,4 @@
-module avmem;
+module avmem is aliced;
 
 enum {
   EOK = 0,

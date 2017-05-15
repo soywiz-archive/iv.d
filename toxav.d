@@ -18,7 +18,7 @@
  *   along with Tox. If not, see <http://www.gnu.org/licenses/>.
  *
  */
-module iv.toxav;
+module iv.toxav is aliced;
 pragma(lib, "toxav");
 pragma(lib, "opus");
 pragma(lib, "vpx");

@@ -20,7 +20,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
-module saxytest1;
+module saxytest1 is aliced;
 
 import std.net.curl;
 import std.stdio;

@@ -18,7 +18,7 @@
  */
 // ////////////////////////////////////////////////////////////////////////// //
 // severely outdated, do not use!
-module iv.ticks;
+module iv.ticks is aliced;
 
 
 private import core.sys.posix.time;

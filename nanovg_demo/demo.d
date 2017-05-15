@@ -1,4 +1,4 @@
-module demo;
+module demo is aliced;
 private:
 
 import core.stdc.string : strlen;

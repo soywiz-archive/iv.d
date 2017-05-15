@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // linux tty utilities
-module iv.rawtty;
+module iv.rawtty is aliced;
 
 import core.sys.posix.termios : termios;
 import iv.strex : strEquCI;
@@ -24,9 +24,7 @@ import iv.utfutil;
 
 //version = rawtty_weighted_colors;
 //version = rawtty_disable_256_colors;
-version(aliced) {
-  //version = rawtty_gamma_correct;
-}
+//version = rawtty_gamma_correct;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -685,7 +683,7 @@ align(1): // make it tightly packed
         }
       }
     error:
-      key = TtyEvent.init;
+      key = TtyEvent.default;
       key.key = TtyEvent.Key.Error;
       return olds;
     }
@@ -718,7 +716,7 @@ TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   }
 
   void badCSI () @nogc {
-    key = key.init;
+    key = key.default;
     key.key = TtyEvent.Key.Unknown;
   }
 

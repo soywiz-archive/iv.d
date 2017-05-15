@@ -1,4 +1,4 @@
-module iv.x11.util;
+module iv.x11.util is aliced;
 
 import core.stdc.config : c_long, c_ulong;
 import core.stdc.stddef : wchar_t;

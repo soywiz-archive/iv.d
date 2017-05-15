@@ -7,7 +7,7 @@
 // D Translation by Ketmar // Invisible Vector
 //
 // GNU GPLv3
-module sidengine;
+module sidengine is aliced;
 private:
 
 import iv.vfs;

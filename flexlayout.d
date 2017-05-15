@@ -459,10 +459,10 @@ void flexLayout (FuiLayoutProps aroot) {
   forEachItem(mroot, (FuiLayoutProps it) {
     it.layoutingStarted();
     it.resetLayouterFlags();
-    it.pos = it.pos.init;
+    it.pos = it.pos.default;
     foreach (int gidx; 0..FuiLayoutProps.Orientation.max+1) if (it.groupNext[gidx] !is null) seenGroup[gidx] = true;
-    if (!it.visible) { it.size = it.size.init; return; }
-    it.size = it.size.init;
+    if (!it.visible) { it.size = it.size.default; return; }
+    it.size = it.size.default;
   });
 
   if (seenGroup[0] || seenGroup[1]) {

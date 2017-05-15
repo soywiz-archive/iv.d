@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.sdata;
+module iv.follin.sdata is aliced;
 
 package(iv.follin) __gshared uint latency = 1000*512/44100;
 package(iv.follin) __gshared uint realSampleRate = 44100;

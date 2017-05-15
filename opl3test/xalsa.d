@@ -1,4 +1,4 @@
-module xalsa;
+module xalsa is aliced;
 
 import iv.alsa;
 import iv.follin.utils;

@@ -1,4 +1,4 @@
-module iv.x11.region;
+module iv.x11.region is aliced;
 
 import core.stdc.config;
 import iv.x11.xlib : XPoint;

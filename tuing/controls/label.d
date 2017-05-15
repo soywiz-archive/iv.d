@@ -18,7 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // label
-module iv.tuing.controls.label;
+module iv.tuing.controls.label is aliced;
 
 import iv.eventbus;
 import iv.flexlayout;

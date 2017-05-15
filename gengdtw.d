@@ -80,7 +80,7 @@ public:
     string name () const { pragma(inline, true); return mName; }
     usize length () const pure nothrow @safe @nogc { return points.length; }
     alias opDollar = length;
-    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length ? points[idx] : Point.init); }
+    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length ? points[idx] : Point.default); }
   }
 
   @property void name(T:const(char)[]) (T v) nothrow @safe {
@@ -189,7 +189,7 @@ public:
       @disable this ();
       @disable this (this);
 
-      this (usize d0, usize d1, T initV=T.init) {
+      this (usize d0, usize d1, T initV=T.default) {
         import core.stdc.stdlib : malloc;
         import core.exception : onOutOfMemoryError;
         if (d0 < 1) d0 = 1;

@@ -15,16 +15,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.writers.zip;
+module iv.vfs.writers.zip is aliced;
 private:
 
-version(aliced) {
-  public enum VFSZipWriterSupportsLZMA = true;
-  pragma(lib, "lzma");
-  import etc.c.lzma;
-} else {
-  public enum VFSZipWriterSupportsLZMA = false;
-}
+public enum VFSZipWriterSupportsLZMA = true;
+pragma(lib, "lzma");
+import etc.c.lzma;
 
 import iv.utfutil;
 import iv.vfs;

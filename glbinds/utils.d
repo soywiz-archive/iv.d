@@ -1,5 +1,5 @@
 // WTFPL or Public Domain, on your choice
-module iv.glbinds.utils;
+module iv.glbinds.utils is aliced;
 
 import iv.glbinds;
 

@@ -500,7 +500,7 @@ public:
     static if (mode == "throw") {
       if (res.length != T.sizeof) raise(Error.NOTFOUND);
     } else {
-      if (res.length != T.sizeof) data[0] = T.init;
+      if (res.length != T.sizeof) data[0] = T.default;
     }
     return data[0];
   }
@@ -512,7 +512,7 @@ public:
     static if (mode == "throw") {
       if (res.length != T.sizeof) raise(Error.NOTFOUND);
     } else {
-      if (res.length != T.sizeof) dval = T.init;
+      if (res.length != T.sizeof) dval = T.default;
     }
     return (res.length == T.sizeof);
   }

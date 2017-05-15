@@ -24,7 +24,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-module iv.hash.fasthash;
+module iv.hash.fasthash is aliced;
 
 
 /**

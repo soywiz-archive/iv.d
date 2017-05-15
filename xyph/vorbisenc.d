@@ -9,7 +9,7 @@
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  *                                                                  *
  ********************************************************************/
-module iv.xyph.vorbisenc;
+module iv.xyph.vorbisenc is aliced;
 pragma(lib, "vorbisenc");
 
 import core.stdc.config;

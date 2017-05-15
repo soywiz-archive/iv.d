@@ -9,7 +9,7 @@
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  *                                                                  *
  ********************************************************************/
-module iv.xyph;
+module iv.xyph is aliced;
 
 public import iv.xyph.ogg;
 public import iv.xyph.vorbis;

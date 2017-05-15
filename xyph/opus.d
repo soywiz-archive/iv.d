@@ -24,7 +24,7 @@
    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-module iv.xyph.opus;
+module iv.xyph.opus is aliced;
 pragma(lib, "opus");
 
 extern(C) nothrow @nogc:

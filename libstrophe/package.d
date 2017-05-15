@@ -8,7 +8,7 @@
 **
 **  This software is dual licensed under the MIT and GPLv3 licenses.
 */
-module iv.libstrophe;
+module iv.libstrophe is aliced;
 
 public import iv.libstrophe.bindings;
 public import iv.libstrophe.utils;

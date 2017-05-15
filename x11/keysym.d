@@ -1,4 +1,4 @@
-module iv.x11.keysym;
+module iv.x11.keysym is aliced;
 
 import iv.x11.x11 : KeySym;
 

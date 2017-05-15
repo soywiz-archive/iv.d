@@ -427,7 +427,7 @@ public:
           //{ import core.stdc.stdio; printf("LockedWriterImpl(0x%08x): unlock!\n", cast(uint)fl.wstp); }
           _d_monitorexit(fl.wst); // emulate `synchronized(fl.wst)` exit
         }
-        fl = VFile.init; // just in case
+        fl = VFile.default; // just in case
       }
     }
 
@@ -947,11 +947,7 @@ private:
 
   int err () nothrow @trusted {
     int res = 0;
-    version(aliced) {
-      if (flp != 0) gzerror(fl, &res);
-    } else {
-      try { if (flp != 0) gzerror(fl, &res); } catch (Exception) {}
-    }
+    if (flp != 0) gzerror(fl, &res);
     return res;
   }
 
@@ -1186,7 +1182,7 @@ protected:
       closed = true;
       eofhit = true;
       static if (streamHasClose!ST) st.close();
-      st = ST.init;
+      st = ST.default;
     }
   }
 
@@ -1567,7 +1563,7 @@ version(vfs_use_zlib_unpacker) {
           inflateEnd(&zs);
           uppos = upused = 0;
           upeoz = false;
-          zs = zs.init;
+          zs = zs.default;
           pkpos = 0;
           if (!initZStream(true)) return -1;
           prpos = 0;
@@ -2192,7 +2188,7 @@ public VFile wrapStdout () {
   } else {
     import core.stdc.stdio : stdout;
     if (stdout !is null) return VFile(stdout, false); // don't own
-    return VFile.init;
+    return VFile.default;
   }
 }
 
@@ -2203,7 +2199,7 @@ public VFile wrapStderr () {
   } else {
     import core.stdc.stdio : stderr;
     if (stderr !is null) return VFile(stderr, false); // don't own
-    return VFile.init;
+    return VFile.default;
   }
 }
 
@@ -2214,7 +2210,7 @@ public VFile wrapStdin () {
   } else {
     import core.stdc.stdio : stdin;
     if (stdin !is null) return VFile(stdin, false); // don't own
-    return VFile.init;
+    return VFile.default;
   }
 }
 

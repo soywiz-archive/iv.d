@@ -25,7 +25,7 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
-module iv.follin.rwlock;
+module iv.follin.rwlock is aliced;
 
 /*
  * Based on "Spinlocks and Read-Write Locks" by Dr. Steven Fuerst:

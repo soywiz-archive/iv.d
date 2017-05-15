@@ -33,7 +33,7 @@ public enum SRZNonDefaultOnly; // write only if it has non-default value
 template arrayElementType(T) {
   private import std.traits : isArray, Unqual;
   static if (isArray!T) {
-    alias arrayElementType = arrayElementType!(typeof(T.init[0]));
+    alias arrayElementType = arrayElementType!(typeof(T.default[0]));
   } else static if (is(typeof(T))) {
     alias arrayElementType = Unqual!(typeof(T));
   } else {
@@ -191,7 +191,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
           static if (names.length) enum xname = names[0].name; else enum xname = fldname;
           static assert(xname.length <= 255, "struct '"~UT.stringof~"': field name too long: "~xname);
           static if (hasUDA!(__traits(getMember, UT, fldname), SRZNonDefaultOnly)) {
-            if (__traits(getMember, v, fldname) == __traits(getMember, v, fldname).init) continue;
+            if (__traits(getMember, v, fldname) == __traits(getMember, v, fldname).default) continue;
           }
           if (needComma) xput(",");
           newline;

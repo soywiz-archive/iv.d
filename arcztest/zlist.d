@@ -1,4 +1,4 @@
-module zlist;
+module zlist is aliced;
 
 import iv.arcz;
 

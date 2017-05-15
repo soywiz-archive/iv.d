@@ -1,4 +1,4 @@
-module iv.x11;
+module iv.x11 is aliced;
 
 public import iv.x11.cursorfont;
 public import iv.x11.keysym;

@@ -1,4 +1,4 @@
-module avfft;
+module avfft is aliced;
 
 alias FFTSample = float;
 

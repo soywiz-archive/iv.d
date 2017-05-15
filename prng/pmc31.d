@@ -18,7 +18,7 @@
 // Park-Miller-Carta Pseudo-Random Number Generator, based on David G. Carta paper
 // 31 bit of randomness
 // seed is previous result, as usual
-module iv.prng.pmc31;
+module iv.prng.pmc31 is aliced;
 
 
 struct PMC31 {

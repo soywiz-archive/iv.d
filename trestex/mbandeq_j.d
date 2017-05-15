@@ -1,7 +1,7 @@
 // Shibatch Super Equalizer ver 0.03 for winamp
 // written by Naoki Shibata  shibatch@users.sourceforge.net
 // LGPL
-module mbandeq_j;
+module mbandeq_j is aliced;
 private:
 
 //import fftsg;
@@ -529,7 +529,7 @@ private:
  * You may use, copy, modify this code for any purpose and
  * without fee. You may distribute this ORIGINAL package.
  */
-//module fftsg;
+//module fftsg is aliced;
 private nothrow @trusted @nogc:
 
 /*public*/ alias REAL = float;

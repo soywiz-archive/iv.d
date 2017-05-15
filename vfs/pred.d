@@ -26,14 +26,14 @@ public import iv.vfs.vfile : IVVFSIgnore;
 // ////////////////////////////////////////////////////////////////////////// //
 /// is this "low-level" stream that can be read?
 enum isLowLevelStreamR(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ubyte[1] b;
   ssize r = t.read(b.ptr, 1);
 }));
 
 /// is this "low-level" stream that can be written?
 enum isLowLevelStreamW(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ubyte[1] b;
   ssize w = t.write(b.ptr, 1);
 }));
@@ -41,7 +41,7 @@ enum isLowLevelStreamW(T) = is(typeof((inout int=0) {
 
 /// is this "low-level" stream that can be seeked?
 enum isLowLevelStreamS(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   long p = t.lseek(0, 0);
 }));
 
@@ -49,52 +49,52 @@ enum isLowLevelStreamS(T) = is(typeof((inout int=0) {
 // ////////////////////////////////////////////////////////////////////////// //
 /// check if a given stream supports `eof`
 enum streamHasEof(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   bool n = t.eof;
 }));
 
 /// check if a given stream supports `seek`
 enum streamHasSeek(T) = is(typeof((inout int=0) {
   import core.stdc.stdio : SEEK_END;
-  auto t = T.init;
+  auto t = T.default;
   t.seek(0);
   t.seek(0, SEEK_END);
 }));
 
 /// check if a given stream supports `tell`
 enum streamHasTell(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   long pos = t.tell;
 }));
 
 /// check if a given stream supports `tell`
 enum streamHasClose(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   t.close();
 }));
 
 /// check if a given stream supports `name`
 enum streamHasName(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   const(char)[] n = t.name;
 }));
 
 /// check if a given stream supports `size`
 enum streamHasSize(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   long pos = t.size;
 }));
 
 /// check if a given stream supports `isOpen`
 enum streamHasIsOpen(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   bool op = t.isOpen;
 }));
 
 /// check if a given stream supports `rawRead()`.
 /// it's enough to support `void[] rawRead (void[] buf)`
 enum isReadableStream(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ubyte[1] b;
   auto v = cast(void[])b;
   t.rawRead(v);
@@ -103,7 +103,7 @@ enum isReadableStream(T) = is(typeof((inout int=0) {
 /// check if a given stream supports `rawWrite()`.
 /// it's enough to support `inout(void)[] rawWrite (inout(void)[] buf)`
 enum isWriteableStream(T) = is(typeof((inout int=0) {
-  auto t = T.init;
+  auto t = T.default;
   ubyte[1] b;
   t.rawWrite(cast(void[])b);
 }));

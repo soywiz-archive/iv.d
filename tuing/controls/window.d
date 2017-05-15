@@ -18,7 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // top-level window
-module iv.tuing.controls.window;
+module iv.tuing.controls.window is aliced;
 
 import iv.eventbus;
 import iv.flexlayout;

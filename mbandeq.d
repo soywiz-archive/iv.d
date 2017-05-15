@@ -316,7 +316,7 @@ version(FFTW3) {} else {
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-//module kissfft;
+//module kissfft is aliced;
 private:
 nothrow @trusted @nogc:
 

@@ -21,7 +21,7 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
-module iv.fontconfig;
+module iv.fontconfig is aliced;
 pragma(lib, "fontconfig");
 pragma(lib, "freetype");
 

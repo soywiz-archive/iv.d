@@ -596,7 +596,7 @@ public struct XlibImageTC {
       if (handle.data !is null) {
         import core.stdc.stdlib : free;
         if (handle.data !is null) free(handle.data);
-        handle = XImage.init;
+        handle = XImage.default;
       }
     }
   }

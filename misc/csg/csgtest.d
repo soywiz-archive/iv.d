@@ -1,4 +1,4 @@
-module main;
+module main is aliced;
 
 import iv.glbinds;
 import arsd.color;
@@ -66,17 +66,10 @@ void initMesh (int sample) {
 
   if (sample == 6) {
     auto a = CSG.cube();
-    version(aliced) {
-      auto b = CSG.sphere(radius:1.35, stacks:12);
-      auto c = CSG.cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
-      auto d = CSG.cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
-      auto e = CSG.cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
-    } else {
-      auto b = args!(CSG.sphere, radius=>1.35, stacks=>12)();
-      auto c = args!(CSG.cylinder, radius=>0.7, start=>Vec3(-1, 0, 0), end=>Vec3(1, 0, 0))();
-      auto d = args!(CSG.cylinder, radius=>0.7, start=>Vec3(0, -1, 0), end=>Vec3(0, 1, 0))();
-      auto e = args!(CSG.cylinder, radius=>0.7, start=>Vec3(0, 0, -1), end=>Vec3(0, 0, 1))();
-    }
+    auto b = CSG.sphere(radius:1.35, stacks:12);
+    auto c = CSG.cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
+    auto d = CSG.cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
+    auto e = CSG.cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
     mesh = a.opintersect(b).opsubtract(c.opunion(d).opunion(e));
     return;
   }

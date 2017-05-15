@@ -2,7 +2,7 @@
  * original code: WDOSX-Pack v1.07, (c) 1999-2001 by Joergen Ibsen / Jibz
  * for data and executable compression software: http://www.ibsensoftware.com/
  */
-module libwdx;
+module libwdx is aliced;
 
 import iv.oldpakerz.crc32;
 import iv.oldpakerz.wdx;

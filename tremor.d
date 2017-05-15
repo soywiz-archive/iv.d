@@ -7296,7 +7296,7 @@ private trm_long get_data_ (OggVorbis_File* vf) {
       //if (rd.length == 0 && errno) return -1;
       return cast(uint)rd.length;
     } catch (Exception) {
-      vf.datasource = VFile.init;
+      vf.datasource = VFile.default;
       return -1;
     }
   } else {
@@ -7326,7 +7326,7 @@ private int seek_helper_ (OggVorbis_File* vf, ogg_int64_t offset) {
       }
       return 0;
     } catch (Exception) {
-      vf.datasource = VFile.init;
+      vf.datasource = VFile.default;
       return OV_EREAD;
     }
   } else {
@@ -8175,7 +8175,7 @@ private int ov_open1_(void *f, OggVorbis_File *vf, const(char)* initial, trm_lon
   /* Fetch all BOS pages, store the vorbis header and all seen serial
      numbers, load subsequent vorbis setup headers */
   if((ret=fetch_headers_(vf, vf.vi, vf.vc, &serialno_list, &serialno_list_size, null))<0){
-    static if (XoggTremorHasVFS) vf.datasource = VFile.init; else vf.datasource = null;
+    static if (XoggTremorHasVFS) vf.datasource = VFile.default; else vf.datasource = null;
     ov_clear(vf);
   }else{
     /* serial number list for first link needs to be held somewhere
@@ -8203,7 +8203,7 @@ private int ov_open2_(OggVorbis_File *vf){
   if(vf.seekable){
     int ret=open_seekable2_(vf);
     if(ret){
-      static if (XoggTremorHasVFS) vf.datasource = VFile.init; else vf.datasource = null;
+      static if (XoggTremorHasVFS) vf.datasource = VFile.default; else vf.datasource = null;
       ov_clear(vf);
     }
     return(ret);
@@ -8235,7 +8235,7 @@ public int ov_clear (OggVorbis_File* vf) {
     if (vf.offsets !is null) ogg_free_(vf.offsets);
     ogg_sync_clear(&vf.oy);
     static if (XoggTremorHasVFS) {
-      vf.datasource = VFile.init;
+      vf.datasource = VFile.default;
     } else {
       if (vf.datasource && vf.callbacks.close_func !is null) vf.callbacks.close_func(vf.datasource);
     }

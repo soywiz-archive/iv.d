@@ -1,5 +1,5 @@
 // simple library for dealing with Ogg containers
-module zogg;
+module zogg is aliced;
 
 //import iv.cmdcon;
 import iv.vfs;

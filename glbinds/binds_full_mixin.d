@@ -1,5 +1,5 @@
 // WTFPL or Public Domain, on your choice
-module iv.glbinds.binds_full_mixin;
+module iv.glbinds.binds_full_mixin is aliced;
 
 // lazy loading
 version = glbind_lazy_load;

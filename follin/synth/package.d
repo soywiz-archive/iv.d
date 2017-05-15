@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.synth;
+module iv.follin.synth is aliced;
 
 public import iv.follin.synth.sfxr;
 public import iv.follin.synth.vorbis;

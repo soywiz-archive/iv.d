@@ -1,4 +1,4 @@
-module iv.x11.xlib;
+module iv.x11.xlib is aliced;
 pragma(lib, "X11");
 
 import core.stdc.config : c_long, c_ulong;

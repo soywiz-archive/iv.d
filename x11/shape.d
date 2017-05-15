@@ -23,7 +23,7 @@ used in advertising or otherwise to promote the sale, use or other dealings
 in this Software without prior written authorization from The Open Group.
 
 ********************************************************/
-module iv.x11.xshape;
+module iv.x11.xshape is aliced;
 
 import core.stdc.config;
 

@@ -1660,7 +1660,7 @@ final:
     if (srr.search.length == 0) { srr.ed = null; return; }
     if (srr.inselection && !hasMarkedBlock) { srr.ed = null; return; }
     srr.re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : SRFlags.CaseInsensitive)|SRFlags.Multiline);
-    if (!srr.re.valid) { ttyBeep; srr.re = RegExp.init; srr.ed = null; return; }
+    if (!srr.re.valid) { ttyBeep; srr.re = RegExp.default; srr.ed = null; return; }
     int spos, epos;
     if (srr.inselection) {
       spos = bstart;

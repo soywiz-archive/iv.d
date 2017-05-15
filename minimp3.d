@@ -178,7 +178,7 @@ MP3Info mp3Scan(RDG) (scope RDG rdg) if (is(typeof({
     }
   }
   //{ import core.stdc.stdio : printf; printf("%d\n", headersCount); }
-  if (headersCount < 6) info = info.init;
+  if (headersCount < 6) info = info.default;
   return info;
 }
 +/

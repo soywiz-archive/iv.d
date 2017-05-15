@@ -88,7 +88,7 @@ nothrow @trusted @nogc:
     if (wdt > 32767 || hgt > 32767) assert(0, "invalid GfxBuf dimensions");
     auto vs = cast(VScr*)malloc(VScr.sizeof);
     if (vs is null) assert(0, "GfxBuf: out of memory");
-    static immutable VScr initr = VScr.init;
+    static immutable VScr initr = VScr.default;
     memcpy(vs, &initr, VScr.sizeof);
     //(*vs).__ctor();
     vs.buf = cast(VColor*)malloc((wdt && hgt ? wdt*hgt : 1)*VColor.sizeof);

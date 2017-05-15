@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.bgichr;
+module iv.sdpy.bgichr is aliced;
 
 import iv.sdpy.color;
 import iv.sdpy.gfxbuf;

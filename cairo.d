@@ -34,7 +34,7 @@
  * Contributor(s):
  *  Carl D. Worth <cworth@cworth.org>
  */
-module iv.cairo;
+module iv.cairo is aliced;
 import core.stdc.config : c_long, c_ulong;
 
 extern(C) nothrow:

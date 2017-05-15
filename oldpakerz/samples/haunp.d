@@ -18,7 +18,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  ***********************************************************************/
 // stand-alone unpacker
-module haunp;
+module haunp is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

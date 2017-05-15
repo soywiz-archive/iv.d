@@ -17,7 +17,7 @@
  */
 // PCG32 / (c) 2014 M.E. O'Neill / pcg-random.org
 // Original code: Licensed under Apache License 2.0 (NO WARRANTY, etc. see website)
-module iv.prng.pcg32;
+module iv.prng.pcg32 is aliced;
 
 
 struct PCG32 {

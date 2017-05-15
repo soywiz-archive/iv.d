@@ -18,7 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // boxes
-module iv.tuing.controls.box;
+module iv.tuing.controls.box is aliced;
 
 import iv.eventbus;
 import iv.flexlayout;

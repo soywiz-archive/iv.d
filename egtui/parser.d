@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.parser;
+module iv.egtui.parser is aliced;
 
 import iv.strex;
 import iv.rawtty;
@@ -445,21 +445,21 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       foreach (immutable idx, var; Vars) {
         static if (is(typeof(var) == function) || is(typeof(var) == delegate)) {
           static if (type == "Action") {
-            static if (is(typeof((dg){int n = dg(FuiContext.init, 666);}(&Vars[idx])))) {
+            static if (is(typeof((dg){int n = dg(FuiContext.default, 666);}(&Vars[idx])))) {
               if ((&Vars[idx]).stringof[1..$].xstrip == props.bindfuncAction.getz) {
                 ctx.setActionCB(item, &Vars[idx]);
                 return item;
               }
             }
           } else static if (type == "Draw") {
-            static if (is(typeof((dg){dg(FuiContext.init, 666, FuiRect.init);}(&Vars[idx])))) {
+            static if (is(typeof((dg){dg(FuiContext.default, 666, FuiRect.default);}(&Vars[idx])))) {
               if ((&Vars[idx]).stringof[1..$].xstrip == props.bindfuncDraw.getz) {
                 ctx.setDrawCB(item, &Vars[idx]);
                 return item;
               }
             }
           } else static if (type == "Event") {
-            static if (is(typeof((dg){bool b = dg(FuiContext.init, 666, FuiEvent.init);}(&Vars[idx])))) {
+            static if (is(typeof((dg){bool b = dg(FuiContext.default, 666, FuiEvent.default);}(&Vars[idx])))) {
               if ((&Vars[idx]).stringof[1..$].xstrip == props.bindfuncEvent.getz) {
                 ctx.setEventCB(item, &Vars[idx]);
                 return item;

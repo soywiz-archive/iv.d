@@ -71,7 +71,7 @@ to the equivalent of 72 dpi in the Blender system settings.
 Support for label truncation is missing. Text rendering breaks when widgets are
 too short to contain their labels.
 */
-module iv.nanovg.oui.blendish;
+module iv.nanovg.oui.blendish is aliced;
 private:
 
 import iv.nanovg;

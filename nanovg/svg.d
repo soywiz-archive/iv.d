@@ -453,7 +453,7 @@ T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   /+
   static if (is(T == struct)) {
     import core.stdc.string : memcpy;
-    static immutable T i = T.init;
+    static immutable T i = T.default;
     memcpy(res, &i, T.sizeof);
     if (addmem) res[T.sizeof..T.sizeof+addmem] = 0;
     res[0..T.sizeof+addmem] = 0;

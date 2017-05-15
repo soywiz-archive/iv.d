@@ -1,4 +1,4 @@
-module iv.x11.xatoms;
+module iv.x11.xatoms is aliced;
 
 import iv.x11.x11 : Atom;
 

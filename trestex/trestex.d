@@ -413,7 +413,7 @@ public:
       sio.mp3 = null;
       fl.seek(fpos);
     } catch (Exception) {}
-    return StreamIO.init;
+    return StreamIO.default;
   }
 }
 

@@ -118,8 +118,8 @@ public @property uint cbufLastChange () nothrow @trusted @nogc { import core.ato
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void consoleLock() () { pragma(inline, true); version(aliced) consoleLocker.lock(); } /// multithread lock
-public void consoleUnlock() () { pragma(inline, true); version(aliced) consoleLocker.unlock(); } /// multithread unlock
+public void consoleLock() () { pragma(inline, true); consoleLocker.lock(); } /// multithread lock
+public void consoleUnlock() () { pragma(inline, true); consoleLocker.unlock(); } /// multithread unlock
 
 public __gshared void delegate () nothrow @trusted @nogc conWasNewLineCB; /// can be called in any thread; called if some '\n' was output with `conwrite*()`
 
@@ -283,7 +283,7 @@ public auto conbufLinesRev () nothrow @trusted @nogc {
     @property bool empty () const { pragma(inline, true); return (pos < 0 || pos == h || h != cbufhead || t != cbuftail); }
     @property auto save () { pragma(inline, true); return Range(h, t, pos, line); }
     void popFront () {
-      if (pos < 0 || pos == h || h != cbufhead || t != cbuftail) { line = Line.init; h = t = pos = -1; return; }
+      if (pos < 0 || pos == h || h != cbufhead || t != cbuftail) { line = Line.default; h = t = pos = -1; return; }
       pos = (pos+cbufcursize-1)%cbufcursize;
       toLineStart();
     }
@@ -1754,7 +1754,7 @@ public:
       else return strval;
     } else {
       // alas
-      return T.init;
+      return T.default;
     }
   }
 
@@ -1920,11 +1920,11 @@ final class ConVar(T) : ConVarBase {
   }
 
   protected override ulong getIntValue () /*nothrow @nogc*/ {
-    static if (is(T : ulong) || is(T : double)) return cast(ulong)(getv()); else return ulong.init;
+    static if (is(T : ulong) || is(T : double)) return cast(ulong)(getv()); else return ulong.default;
   }
 
   protected override double getDoubleValue () /*nothrow @nogc*/ {
-    static if (is(T : double) || is(T : ulong)) return cast(double)(getv()); else return double.init;
+    static if (is(T : double) || is(T : ulong)) return cast(double)(getv()); else return double.default;
   }
 
   private template PutVMx(string val) {
@@ -2577,7 +2577,7 @@ public T conGetVar(T=ConString) (ConString s) {
   if (auto cc = s in cmdlist) {
     if (auto cv = cast(ConVarBase)(*cc)) return cv.value!T;
   }
-  return T.init;
+  return T.default;
 }
 
 /// ditto
@@ -2585,7 +2585,7 @@ public T conGetVar(T=ConString) (ConVarBase v) {
   consoleLock();
   scope(exit) consoleUnlock();
   if (v !is null) return v.value!T;
-  return T.init;
+  return T.default;
 }
 
 

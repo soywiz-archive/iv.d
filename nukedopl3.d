@@ -22,7 +22,7 @@
 //          OPL2 ROMs.
 //
 // version: 1.7.4
-module iv.nukedopl3;
+module iv.nukedopl3 is aliced;
 nothrow @trusted @nogc:
 
 public:
@@ -1031,7 +1031,7 @@ public void reset (ref OPL3Chip chip, uint samplerate) {
 
   //ubyte* cc = cast(ubyte*)chip;
   //cc[0..OPL3Chip.sizeof] = 0;
-  chip = chip.init;
+  chip = chip.default;
 
   for (slotnum = 0; slotnum < 36; ++slotnum) {
     chip.slot.ptr[slotnum].chip = &chip;

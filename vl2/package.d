@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vl2;
+module iv.vl2 is aliced;
 
 public import iv.vl2.core;
 public import iv.vl2.font6;

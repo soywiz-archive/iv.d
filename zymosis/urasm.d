@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.zymosis.urasm;
+module iv.zymosis.urasm is aliced;
 
 //version = urasm_test;
 
@@ -1277,7 +1277,7 @@ pure nothrow @trusted @nogc:
   this (const(char)[] atext) { text = atext; }
   void setup (const(char)[] atext) { text = atext; }
   URAsmParser opSlice (uint lo, uint hi) pure const {
-    if (hi <= lo || lo >= text.length) return URAsmParser.init;
+    if (hi <= lo || lo >= text.length) return URAsmParser.default;
     if (hi > text.length) hi = cast(uint)text.length;
     return URAsmParser(text[lo..hi]);
   }
@@ -1285,7 +1285,7 @@ pure nothrow @trusted @nogc:
   void seek (uint pos) pure { pragma(inline, true); if (pos > text.length) pos = cast(uint)text.length; textpos = pos; }
   URAsmParser slice (uint len) pure const {
     if (len > text.length) len = cast(uint)text.length;
-    if (textpos >= text.length) return URAsmParser.init;
+    if (textpos >= text.length) return URAsmParser.default;
     if (text.length-textpos < len) len = cast(uint)text.length-textpos;
     return URAsmParser(text[textpos..textpos+len]);
   }
@@ -2395,7 +2395,7 @@ void urAssembleOne (ref URAsmBuf dbuf, ref URAsmParser pr, ushort addr) {
         pr.skipBlanks();
         if (pr.eol) throw new Exception("invalid operand");
       }
-      ops[] = URAOperand.init;
+      ops[] = URAOperand.default;
       urNextOperand(pr, ops[0], addr);
       genCode();
       first = false;
@@ -2415,7 +2415,7 @@ void urAssembleOne (ref URAsmBuf dbuf, ref URAsmParser pr, ushort addr) {
         pr.skipBlanks();
         if (pr.eol) throw new Exception("invalid operand");
       }
-      ops[] = URAOperand.init;
+      ops[] = URAOperand.default;
       foreach (immutable c; 0..opcnt) {
         if (c != 0) {
           pr.skipBlanks();

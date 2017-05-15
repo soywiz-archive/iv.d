@@ -1,4 +1,4 @@
-module zpack;
+module zpack is aliced;
 
 import core.time;
 import std.stdio;

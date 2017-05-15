@@ -16,11 +16,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.font6;
+module iv.sdpy.font6 is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public immutable ubyte[256*8] vlFont6 = [
+public immutable ubyte[$] vlFont6 = [
 /* 0 */
 0b_00000000,
 0b_00000000,

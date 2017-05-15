@@ -412,7 +412,7 @@ AVAudioFifo* av_audio_fifo_alloc (int samplefmt, int channels, int nb_samples) {
 int av_audio_fifo_free (AVAudioFifo* af) {
   if (af !is null) {
     if (af.buf !is null) av_free(af.buf);
-    *af = AVAudioFifo.init;
+    *af = AVAudioFifo.default;
     av_free(af);
   }
   return 0;
@@ -7330,8 +7330,8 @@ private:
 
 public:
   void close () {
-    fl = fl.init;
-    lastpage = lastpage.init;
+    fl = fl.default;
+    lastpage = lastpage.default;
     bufpos = bufused = 0;
     curseg = 0;
     bytesRead = 0;
@@ -8139,7 +8139,7 @@ public alias OpusFile = OpusFileCtx*;
 public OpusFile opusOpen (VFile fl) {
   OpusFile of = av_mallocz!OpusFileCtx(1);
   if (of is null) throw new Exception("out of memory");
-  *of = OpusFileCtx.init; // just in case
+  *of = OpusFileCtx.default; // just in case
   scope(failure) { av_freep(&of.commbuf); av_freep(&of.ctx.extradata); av_free(of); }
 
   fl.seek(0);

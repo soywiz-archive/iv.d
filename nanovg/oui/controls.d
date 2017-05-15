@@ -39,7 +39,7 @@ THE SOFTWARE.
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.oui.controls;
+module iv.nanovg.oui.controls is aliced;
 
 import core.stdc.stdio : snprintf;
 import iv.nanovg;

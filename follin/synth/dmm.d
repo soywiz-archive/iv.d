@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // DooM2d digital music
-module iv.follin.synth.dmm;
+module iv.follin.synth.dmm is aliced;
 
 import iv.follin.engine : TflChannel;
 import iv.vfs;

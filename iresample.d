@@ -34,7 +34,7 @@
 // June 4, 2012: v2.21: Switched to unlicense.org, integrated GCC fixes supplied by Peter Nagy <petern@crytek.com>, Anteru at anteru.net, and clay@coge.net,
 // added Codeblocks project (for testing with MinGW and GCC), VS2008 static code analysis pass.
 // float or double
-module iv.iresample;
+module iv.iresample is aliced;
 
 import arsd.color;
 

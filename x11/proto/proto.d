@@ -1,5 +1,5 @@
 //TODO
-module iv.x11.proto;
+module iv.x11.proto is aliced;
 
 import iv.x11.md;
 import iv.x11.xlib;

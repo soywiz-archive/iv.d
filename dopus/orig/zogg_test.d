@@ -1,5 +1,5 @@
 // simple library for dealing with Ogg container
-module zogg_test;
+module zogg_test is aliced;
 
 import zogg;
 

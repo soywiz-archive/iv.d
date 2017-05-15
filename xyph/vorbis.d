@@ -8,7 +8,7 @@
  * THE OggVorbis SOURCE CODE IS (C) COPYRIGHT 1994-2001             *
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  ********************************************************************/
-module iv.xyph.vorbis;
+module iv.xyph.vorbis is aliced;
 pragma(lib, "vorbis");
 
 import core.stdc.config;

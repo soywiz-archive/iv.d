@@ -10,7 +10,7 @@
  * Authors:
  *   Vladimir Panteleev <vladimir@thecybershadow.net>
  */
-module namedargs;
+module namedargs is aliced;
 
 import std.traits;
 

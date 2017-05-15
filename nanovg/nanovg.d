@@ -3462,8 +3462,8 @@ public:
   this (NVGContext actx, float ax, float ay) { reset(actx, ax, ay); }
 
   void reset (NVGContext actx, float ax, float ay) {
-    fsiter = fsiter.init;
-    this = this.init;
+    fsiter = fsiter.default;
+    this = this.default;
     if (actx is null) return;
     NVGstate* state = nvg__getState(actx);
     if (state is null) return;
@@ -5085,7 +5085,7 @@ public:
   this (FONScontext* astash, float ax, float ay) { reset(astash, ax, ay); }
 
   void reset (FONScontext* astash, float ax, float ay) {
-    this = this.init;
+    this = this.default;
     if (astash is null) return;
     stash = astash;
     state = fons__getState(stash);

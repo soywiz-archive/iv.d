@@ -114,7 +114,7 @@ private:
       if (res is null) onOutOfMemoryError();
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
-        static immutable T i = T.init;
+        static immutable T i = T.default;
         foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }
@@ -125,7 +125,7 @@ private:
       if (res is null) onOutOfMemoryError();
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
-        static immutable T i = T.init;
+        static immutable T i = T.default;
         foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }

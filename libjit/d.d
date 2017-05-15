@@ -18,7 +18,7 @@
  * License along with the libjit library.  If not, see
  * <http://www.gnu.org/licenses/>.
  */
-module iv.libjit.d;
+module iv.libjit.d is aliced;
 
 public import iv.libjit;
 

@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.tui;
+module iv.tuing.tui is aliced;
 
 import iv.eventbus;
 import iv.flexlayout;
@@ -713,7 +713,7 @@ class FuiEventQueueDesk : FuiEventQueue {
       foreach (immutable idx, ref hk; hkcombos) {
         if (hk.combo == cb) {
           foreach (immutable c; idx+1..hkcombos.length) hkcombos[c-1] = hkcombos[c];
-          hkcombos[$-1] = HotKey.init;
+          hkcombos[$-1] = HotKey.default;
           hkcombos.length -= 1;
           hkcombos.assumeSafeAppend;
           return true;
@@ -796,7 +796,7 @@ class FuiEventQueueDesk : FuiEventQueue {
   // pwi is "previous active window"
   // if window is closed, it should be removed from winlist before calling this
   // you may (and probably should) pass removed window as pwi
-  private void topwindowFocusJustChanged (WinInfo pwi=WinInfo.init) {
+  private void topwindowFocusJustChanged (WinInfo pwi=WinInfo.default) {
     if (winlist.length && pwi.win is winlist[$-1].win) return; // just in case
     // send blur event to pwi.win
     if (pwi.win !is null) {
@@ -983,9 +983,9 @@ class FuiEventQueueDesk : FuiEventQueue {
       FuiDeskWindow tw = twi.win;
       if (evt.source is tw) {
         // i found her!
-        auto lastWF = (idx == winlist.length-1 ? twi : WinInfo.init);
+        auto lastWF = (idx == winlist.length-1 ? twi : WinInfo.default);
         foreach (immutable c; idx+1..winlist.length) winlist[c-1] = winlist[c];
-        winlist[$-1] = WinInfo.init;
+        winlist[$-1] = WinInfo.default;
         winlist.length -= 1;
         winlist.assumeSafeAppend;
         if (lastWF.win !is null) { topwindowFocusJustChanged(lastWF); lastWF.win.desk = null; }

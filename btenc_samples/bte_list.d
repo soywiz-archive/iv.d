@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module list;
+module list is aliced;
 
 import iv.btenc;
 
@@ -29,12 +29,8 @@ void die(A...) (string fmt, A args) {
     auto s = format(fmt, args);
     stderr.writeln("FATAL: ", s);
   }
-  version(aliced) {
-    import core.exception : ExitException;
-    throw new ExitException();
-  } else {
-    assert(0);
-  }
+  import core.exception : ExitException;
+  throw new ExitException();
 }
 
 

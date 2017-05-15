@@ -17,7 +17,7 @@
  */
 // docs: https://docs.enlightenment.org/api/imlib2/html/imlib2_8c.html
 // sample: https://docs.enlightenment.org/api/imlib2/html/
-module iv.imlib2;
+module iv.imlib2 is aliced;
 pragma(lib, "Imlib2");
 import iv.x11;
 

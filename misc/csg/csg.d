@@ -43,7 +43,7 @@
 // ## License
 //
 // Copyright (c) 2011 Evan Wallace (http://madebyevan.com/), under the MIT license.
-module csg;
+module csg is aliced;
 
 import iv.vmath;
 

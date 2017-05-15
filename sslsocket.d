@@ -17,7 +17,7 @@
  */
 // This is CLIENT only at this point. Don't try to bind/accept with these.
 // based on opticron and Adam D. Ruppe work
-module iv.sslsocket;
+module iv.sslsocket is aliced;
 
 public import std.socket;
 import iv.gnutls;
