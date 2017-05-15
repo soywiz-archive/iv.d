@@ -155,7 +155,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       }
       auto name = tokenbuf[stpos..$];
       //{ import iv.vfs.io; VFile("z00.log", "a").writeln(name.quote); }
-      foreach (immutable idx, var; Vars) {
+      foreach (immutable idx, auto var; Vars) {
         static if (!is(typeof(var) == function) && !is(typeof(var) == delegate)) {
           import std.conv : to;
           static if (is(typeof({auto s = var.to!string;}))) {
@@ -442,7 +442,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
     else static if (type == "Draw") bool bfe = props.bindfuncDraw.empty;
     else static if (type == "Event") bool bfe = props.bindfuncEvent.empty;
     if (!bfe) {
-      foreach (immutable idx, var; Vars) {
+      foreach (immutable idx, auto var; Vars) {
         static if (is(typeof(var) == function) || is(typeof(var) == delegate)) {
           static if (type == "Action") {
             static if (is(typeof((dg){int n = dg(FuiContext.default, 666);}(&Vars[idx])))) {
@@ -501,7 +501,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
     if (widn.strEquCI("custombox")) return bindFuncs(ctx.custombox(parent, props.id.getz));
     if (widn.strEquCI("checkbox")) {
       if (!props.bindvar.empty) {
-        foreach (int idx, var; Vars) {
+        foreach (int idx, auto var; Vars) {
           static if (is(typeof(var) == bool)) {
             if (Vars[idx].stringof == props.bindvar.getz) {
               return bindFuncs(ctx.checkbox(parent, props.id.getz, props.caption.getz, &Vars[idx]));
@@ -513,7 +513,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
     }
     if (widn.strEquCI("radio")) {
       if (!props.bindvar.empty) {
-        foreach (int idx, var; Vars) {
+        foreach (int idx, auto var; Vars) {
           static if (is(typeof(var) == int)) {
             if (Vars[idx].stringof == props.bindvar.getz) {
               return bindFuncs(ctx.radio(parent, props.id.getz, props.caption.getz, &Vars[idx]));
