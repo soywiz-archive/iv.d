@@ -11,7 +11,8 @@
  *
  * What is ROLZ: http://ezcodesample.com/rolz/rolz_article.html
  */
-module iv.balz is aliced;
+module iv.balz /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -413,7 +414,7 @@ private:
   void reset () {
     setupMem();
     sldict[0..SlDictSize] = 0;
-    counters[0..512*CounterSize+TabSize*CounterSize] = Counter.default;
+    counters[0..512*CounterSize+TabSize*CounterSize] = Counter.init;
     static if (mode == "decoder") {
       tab[0..TabSize*TabCntSize] = 0; // encoder will immediately reinit this anyway
       ibufPos = ibufUsed = 0;

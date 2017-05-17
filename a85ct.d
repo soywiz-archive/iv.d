@@ -16,7 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // ASCII85 codec
-module iv.a85ct is aliced;
+module iv.a85ct /*is aliced*/;
+import iv.alice;
 
 
 // very slow and enifficient ascii85 decoder

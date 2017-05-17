@@ -28,8 +28,9 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-module trestex is aliced; // due to Phobos bug
+module trestex /*is aliced*/; // due to Phobos bug
 
+import iv.alice;
 import iv.cmdcon;
 import iv.cmdcontty;
 //import iv.mbandeq;
@@ -413,7 +414,7 @@ public:
       sio.mp3 = null;
       fl.seek(fpos);
     } catch (Exception) {}
-    return StreamIO.default;
+    return StreamIO.init;
   }
 }
 

@@ -16,8 +16,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // Protractor gesture recognizer, v0
-module iv.gengpro0 is aliced;
+module iv.gengpro0 /*is aliced*/;
 private:
+import iv.alice;
 
 // ////////////////////////////////////////////////////////////////////////// //
 import std.range;

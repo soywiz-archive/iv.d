@@ -39,9 +39,10 @@ THE SOFTWARE.
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.oui.controls is aliced;
+module iv.nanovg.oui.controls /*is aliced*/;
 
 import core.stdc.stdio : snprintf;
+import iv.alice;
 import iv.nanovg;
 import iv.nanovg.oui.engine;
 import iv.nanovg.oui.blendish;

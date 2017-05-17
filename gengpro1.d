@@ -16,9 +16,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // Protractor gesture recognizer, v1
-module iv.gengpro1 is aliced;
+module iv.gengpro1 /*is aliced*/;
 private:
 
+import iv.alice;
 import iv.vfs;
 
 
@@ -109,7 +110,7 @@ final:
     }
     enum normLength = NormalizedPoints;
     Point normPoint (usize idx) {
-      if (!valid || idx >= NormalizedPoints) return Point.default;
+      if (!valid || idx >= NormalizedPoints) return Point.init;
       if (mNormalized) {
         return Point(patpoints[idx*2+0], patpoints[idx*2+1]);
       } else {
@@ -119,7 +120,7 @@ final:
       }
     }
     /// return original point
-    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length/2 ? Point(points[idx*2], points[idx*2+1]) : Point.default); }
+    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length/2 ? Point(points[idx*2], points[idx*2+1]) : Point.init); }
   }
 
   /// can't be changed for normalized glyphs with original points dropped

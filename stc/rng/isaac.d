@@ -20,9 +20,10 @@
  *
  * Suitable for using with std.random functions.
  */
-module iv.stc.rng.isaac is aliced;
+module iv.stc.rng.isaac /*is aliced*/;
 
 import std.range;
+import iv.alice;
 import iv.stc.core;
 
 

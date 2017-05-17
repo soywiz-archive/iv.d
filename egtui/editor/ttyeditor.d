@@ -14,10 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.editor.ttyeditor is aliced;
+module iv.egtui.editor.ttyeditor /*is aliced*/;
 
 import std.datetime : SysTime;
 
+import iv.alice;
 import iv.rawtty;
 import iv.srex;
 import iv.strex;

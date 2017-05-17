@@ -17,8 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.layout is aliced;
+module iv.egtui.layout /*is aliced*/;
 
+import iv.alice;
 import iv.strex;
 import iv.rawtty;
 
@@ -358,7 +359,7 @@ private:
       --eventPos;
       return events.ptr[nn];
     } else {
-      return FuiEvent.default;
+      return FuiEvent.init;
     }
   }
 
@@ -753,7 +754,7 @@ private:
     pmemused += asz;
     static if (is(T == struct)) {
       import core.stdc.string : memcpy;
-      static immutable T i = T.default;
+      static immutable T i = T.init;
       memcpy(res, &i, T.sizeof);
     }
     return cast(T*)res;
@@ -957,7 +958,7 @@ public:
     // each context always have top-level panel
     auto ct = cast(FuiContextImpl*)malloc(FuiContextImpl.sizeof);
     if (ct is null) assert(0, "out of memory for Fui context");
-    static immutable FuiContextImpl i = FuiContextImpl.default;
+    static immutable FuiContextImpl i = FuiContextImpl.init;
     memcpy(ct, &i, FuiContextImpl.sizeof);
     res.ctxp = cast(usize)ct;
     res.addRootPanel();
@@ -990,7 +991,7 @@ public:
 
   @property bool valid () const { pragma(inline, true); return (length > 0); }
 
-  @property FuiSize maxDimensions () const @trusted { pragma(inline, true); return (ctxp ? ctx.maxDimensions : FuiSize.default); }
+  @property FuiSize maxDimensions () const @trusted { pragma(inline, true); return (ctxp ? ctx.maxDimensions : FuiSize.init); }
   @property void maxDimensions (FuiSize v) @trusted { pragma(inline, true); if (ctxp) ctx.maxDimensions = v; }
 
   // add new item; return pointer to allocated data
@@ -1100,9 +1101,9 @@ public:
         auto lp = layprops(idx);
         lp.resetLayouterFlags();
         if (idx > 0) {
-          lp.position = lp.position.default; // zero it out
+          lp.position = lp.position.init; // zero it out
         } else {
-          lp.position.size = lp.position.size.default;
+          lp.position.size = lp.position.size.init;
         }
         // setup group lists
         foreach (immutable grp; 0..2) {
@@ -1584,7 +1585,7 @@ public:
 
   void queueEvent (int aitem, FuiEvent.Type atype, uint aparam0=0, uint aparam1=0) nothrow @trusted @nogc { pragma(inline, true); if (ctxp) ctx.queueEvent(aitem, atype, aparam0, aparam1); }
   bool hasEvents () const nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.hasEvents() : false); }
-  FuiEvent getEvent () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.getEvent() : FuiEvent.default); }
+  FuiEvent getEvent () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.getEvent() : FuiEvent.init); }
 
   @property ubyte lastButtons () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastButtons : 0); }
   @property ubyte lastMods () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.lastMods : 0); }

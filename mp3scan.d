@@ -22,7 +22,8 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-module iv.mp3scan is aliced;
+module iv.mp3scan /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -179,7 +180,7 @@ Mp3Info mp3Scan(bool buildIndex=false, RDG) (scope RDG rdg) if (is(typeof({
     }
   }
   debug(mp3scan_verbose) { import core.stdc.stdio : printf, fflush, stdout; printf("%u\n", headersCount); fflush(stdout); }
-  if (headersCount < 6) info = info.default;
+  if (headersCount < 6) info = info.init;
   return info;
 }
 

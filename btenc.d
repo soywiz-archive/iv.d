@@ -16,8 +16,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // some code to process bittorrent files
-module iv.btenc is aliced;
+module iv.btenc /*is aliced*/;
 
+import iv.alice;
 import iv.stream;
 import iv.strex : quote;
 

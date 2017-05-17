@@ -38,7 +38,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-module iv.sr3c is aliced;
+module iv.sr3c /*is aliced*/;
+import iv.alice;
 
 /** Prior to compression or uncompression the user of this library
  * creates a "compression context" of type `SR3C` which can

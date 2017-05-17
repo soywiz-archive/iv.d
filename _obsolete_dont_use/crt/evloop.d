@@ -15,12 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.crt.evloop is aliced;
+module iv.crt.evloop /*is aliced*/;
 private:
 
 public import iv.evloop : TimerType, addTimer, removeTimer, isGlobalQuit, sendQuitSignal;
 import iv.evloop;
 
+import iv.alice;
 import iv.rawtty;
 
 

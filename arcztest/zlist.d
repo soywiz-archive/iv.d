@@ -1,5 +1,6 @@
-module zlist is aliced;
+module zlist /*is aliced*/;
 
+import iv.alice;
 import iv.arcz;
 
 

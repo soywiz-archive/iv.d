@@ -27,7 +27,8 @@
  * Also thanks to Denis Shelomovskij who made me aware of some
  * deficiencies in the concurrent part of WeakRef.
  */
-module iv.signal is aliced;
+module iv.signal /*is aliced*/;
+import iv.alice;
 
 // Hook into the GC to get informed about object deletions.
 private alias void delegate (Object) DisposeEvt;
@@ -371,7 +372,7 @@ string signal(Args...) (string name, Protection protection=Protection.Private) @
   import std.conv : to;
 
   string argList = "(";
-  foreach (auto arg; Args) {
+  foreach (/*auto*/ arg; Args) {
     import std.traits : fullyQualifiedName;
     argList ~= fullyQualifiedName!(arg)~", ";
   }
@@ -539,7 +540,7 @@ public:
   /// Pass null for o if you have a strong ref delegate.
   /// dg.funcptr must not point to heap memory.
   void construct (Object o, void delegate () dg)
-  in { assert(this is SlotImpl.default); }
+  in { assert(this is SlotImpl.init); }
   body {
     import core.memory : GC;
     mObj.construct(o);
@@ -570,7 +571,7 @@ public:
    * Implement proper explicit move.
    */
   void moveFrom (ref SlotImpl other)
-  in { assert(this is SlotImpl.default); }
+  in { assert(this is SlotImpl.init); }
   body {
     auto o = other.obj;
     mObj.construct(o);
@@ -621,8 +622,8 @@ public:
    * Reset this instance to its initial value.
    */
   void reset () {
-    mFuncPtr = SlotImpl.default.mFuncPtr;
-    mDataPtr = SlotImpl.default.mDataPtr;
+    mFuncPtr = SlotImpl.init.mFuncPtr;
+    mDataPtr = SlotImpl.init.mDataPtr;
     mObj.reset();
   }
 
@@ -665,7 +666,7 @@ public:
   ~this () => reset();
 
   void construct (Object o)
-  in { assert(this is WeakRef.default); }
+  in { assert(this is WeakRef.init); }
   body {
     debug(signal) createdThis = &this;
     debug(signal) { import iv.writer; writefln!"WeakRef.construct for %08X and object: %08X"(&this, cast(void*)o); }

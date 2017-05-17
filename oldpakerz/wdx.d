@@ -2,8 +2,9 @@
  * original code: WDOSX-Pack v1.07, (c) 1999-2001 by Joergen Ibsen / Jibz
  * for data and executable compression software: http://www.ibsensoftware.com/
  */
-module iv.oldpakerz.wdx is aliced;
+module iv.oldpakerz.wdx /*is aliced*/;
 private:
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

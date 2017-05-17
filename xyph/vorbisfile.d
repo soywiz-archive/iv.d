@@ -9,12 +9,13 @@
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  *                                                                  *
  ********************************************************************/
-module iv.xyph.vorbisfile is aliced;
+module iv.xyph.vorbisfile /*is aliced*/;
 pragma(lib, "vorbisfile");
 
 import core.stdc.config;
 import core.stdc.stdio;
 
+import iv.alice;
 import iv.xyph.ogg;
 import iv.xyph.vorbis;
 

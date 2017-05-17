@@ -18,8 +18,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  ***********************************************************************/
 // stand-alone unpacker
-module iv.oldpakerz.haunpack is aliced;
+module iv.oldpakerz.haunpack /*is aliced*/;
 private:
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

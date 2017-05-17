@@ -14,9 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.editor.highlighters is aliced;
+module iv.egtui.editor.highlighters /*is aliced*/;
 private:
 
+import iv.alice;
 import iv.rawtty;
 import iv.strex;
 import iv.egtui.tty;

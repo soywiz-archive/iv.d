@@ -16,8 +16,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // sqlite3 helpers
-module iv.sq3 is aliced;
+module iv.sq3 /*is aliced*/;
 pragma(lib, "sqlite3");
+
+import iv.alice;
 
 import etc.c.sqlite3;
 import std.traits;
@@ -87,7 +89,7 @@ public:
 
   void execute (const(char)[] ops) {
     if (!isOpen) throw new Exception("database is not opened");
-    foreach (auto opstr; sqlSplit(ops)) {
+    foreach (/*auto*/ opstr; sqlSplit(ops)) {
       import std.internal.cstring;
       char* errmsg;
       auto rc = sqlite3_exec(db, opstr.tempCString, null, null, &errmsg);

@@ -17,9 +17,10 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA  02111-1307, USA.
  */
-module iv.libnotify is aliced;
+module iv.libnotify /*is aliced*/;
 pragma(lib, "notify");
 
+import iv.alice;
 //version = libnotify_new;
 
 version(none) {

@@ -1,8 +1,9 @@
 // Keystone Assembler Engine (www.keystone-engine.org)
 // By Nguyen Anh Quynh <aquynh@gmail.com>, 2016
 // k8: see licenses in original capstone package, i'm too lazy to copy 'em.
-module iv.keystone is aliced;
+module iv.keystone /*is aliced*/;
 pragma(lib, "keystone");
+import iv.alice;
 extern(C) nothrow:
 
 struct ks_engine {}

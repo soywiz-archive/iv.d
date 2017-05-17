@@ -32,8 +32,9 @@
  *   '~': fill with the following char instead of space
  *        second '~': right filling char for 'center'
  */
-module iv.cmdcon is aliced;
+module iv.cmdcon /*is aliced*/;
 private:
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -283,7 +284,7 @@ public auto conbufLinesRev () nothrow @trusted @nogc {
     @property bool empty () const { pragma(inline, true); return (pos < 0 || pos == h || h != cbufhead || t != cbuftail); }
     @property auto save () { pragma(inline, true); return Range(h, t, pos, line); }
     void popFront () {
-      if (pos < 0 || pos == h || h != cbufhead || t != cbuftail) { line = Line.default; h = t = pos = -1; return; }
+      if (pos < 0 || pos == h || h != cbufhead || t != cbuftail) { line = Line.init; h = t = pos = -1; return; }
       pos = (pos+cbufcursize-1)%cbufcursize;
       toLineStart();
     }
@@ -313,7 +314,7 @@ version(unittest) public void conbufDump () {
     }
     pp = (pp+1)%cbufcursize;
   }
-  //foreach (auto s; conbufLinesRev) stdout.writeln(s, "|");
+  //foreach (/+auto+/ s; conbufLinesRev) stdout.writeln(s, "|");
 }
 
 
@@ -720,7 +721,7 @@ public template conwritef(string fmt, A...) {
     int wdt, maxwdt;
     char fmtch;
 
-    argloop: foreach (immutable argnum, auto att; A) {
+    argloop: foreach (immutable argnum, /*auto*/ att; A) {
       alias at = XUQQ!att;
       if (!simples) {
         processUntilFSp();
@@ -1023,7 +1024,7 @@ unittest {
 mixin template condump (Names...) {
   auto _xdump_tmp_ = {
     import iv.cmdcon : conwrite;
-    foreach (auto i, auto name; Names) conwrite(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
+    foreach (/*auto*/ i, /*auto*/ name; Names) conwrite(name, " = ", mixin(name), (i < Names.length-1 ? ", " : "\n"));
     return false;
   }();
 }
@@ -1754,7 +1755,7 @@ public:
       else return strval;
     } else {
       // alas
-      return T.default;
+      return T.init;
     }
   }
 
@@ -1920,11 +1921,11 @@ final class ConVar(T) : ConVarBase {
   }
 
   protected override ulong getIntValue () /*nothrow @nogc*/ {
-    static if (is(T : ulong) || is(T : double)) return cast(ulong)(getv()); else return ulong.default;
+    static if (is(T : ulong) || is(T : double)) return cast(ulong)(getv()); else return ulong.init;
   }
 
   protected override double getDoubleValue () /*nothrow @nogc*/ {
-    static if (is(T : double) || is(T : ulong)) return cast(double)(getv()); else return double.default;
+    static if (is(T : double) || is(T : ulong)) return cast(double)(getv()); else return double.init;
   }
 
   private template PutVMx(string val) {
@@ -2439,7 +2440,7 @@ public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn)
         ConString[128] rest; // to avoid allocations in most cases
         ConString[] restdyn; // will be used if necessary
         uint restpos;
-        foreach (auto idx, ref arg; args) {
+        foreach (/*auto*/ idx, ref arg; args) {
           // populate arguments, with user data if available,
           // default if not, and throw if no argument provided
           if (hasArgs(cmdline)) {
@@ -2577,7 +2578,7 @@ public T conGetVar(T=ConString) (ConString s) {
   if (auto cc = s in cmdlist) {
     if (auto cv = cast(ConVarBase)(*cc)) return cv.value!T;
   }
-  return T.default;
+  return T.init;
 }
 
 /// ditto
@@ -2585,7 +2586,7 @@ public T conGetVar(T=ConString) (ConVarBase v) {
   consoleLock();
   scope(exit) consoleUnlock();
   if (v !is null) return v.value!T;
-  return T.default;
+  return T.init;
 }
 
 
@@ -3082,7 +3083,7 @@ version(contest_echo) unittest {
     char[44] buf;
     auto s = buf.conFormatStr("vs=$vs,  vi=${vi},  vb=${vb}!");
     conwriteln("[", s, "]");
-    foreach (auto kv; cmdlist.byKeyValue) conwriteln(" ", kv.key);
+    foreach (/*auto*/ kv; cmdlist.byKeyValue) conwriteln(" ", kv.key);
     assert("r_interpolation" in cmdlist);
     s = buf.conFormatStr("Interpolation: $r_interpolation");
     conwriteln("[", s, "]");
@@ -3111,10 +3112,10 @@ version(contest_cmdlist) unittest {
   }
 
   conwriteln("=== funcs ===");
-  foreach (auto clx; conByCommand!"funcs") conwriteln("  [", clx, "]");
+  foreach (/*auto*/ clx; conByCommand!"funcs") conwriteln("  [", clx, "]");
 
   conwriteln("=== vars ===");
-  foreach (auto clx; conByCommand!"vars") conwriteln("  [", clx, "]");
+  foreach (/*auto*/ clx; conByCommand!"vars") conwriteln("  [", clx, "]");
 }
 
 
@@ -3427,12 +3428,12 @@ public void conAddInputChar (char ch) {
       }
       string minPfx = null;
       // find longest command
-      foreach (auto name; conByCommand) {
+      foreach (/*auto*/ name; conByCommand) {
         if (name.length >= concurx && name.length > minPfx.length && name[0..concurx] == concli[0..concurx]) minPfx = name;
       }
       //conwriteln("longest command: [", minPfx, "]");
       // find longest prefix
-      foreach (auto name; conByCommand) {
+      foreach (/*auto*/ name; conByCommand) {
         if (name.length < concurx) continue;
         if (name[0..concurx] != concli[0..concurx]) continue;
         usize pos = 0;
@@ -3461,7 +3462,7 @@ public void conAddInputChar (char ch) {
     }
     // nope, print all available commands
     bool needDelimiter = true;
-    foreach (auto name; conByCommand) {
+    foreach (/*auto*/ name; conByCommand) {
       if (name.length == 0) continue;
       if (concurx > 0) {
         if (name.length < concurx) continue;
@@ -3808,7 +3809,7 @@ public void concmdfex(string fmt, A...) (scope void delegate (ConString cmd) cmd
     }
   }
 
-  foreach (immutable argnum, auto att; A) {
+  foreach (immutable argnum, /*auto*/ att; A) {
     processUntilFSp();
     if (pos >= fmt.length) assert(0, "out of format specifiers for arguments");
     assert(fmt[pos] == '%');

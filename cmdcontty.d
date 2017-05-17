@@ -14,9 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.cmdcontty is aliced;
+module iv.cmdcontty /*is aliced*/;
 private:
 
+import iv.alice;
 public import iv.cmdcon;
 import iv.vfs;
 import iv.strex;
@@ -345,7 +346,7 @@ bool renderConsole () nothrow @trusted @nogc {
     }
   }
 
-  foreach (auto line; conbufLinesRev) {
+  foreach (/*auto*/ line; conbufLinesRev) {
     putLine(line);
     if (y <= 1) break;
   }

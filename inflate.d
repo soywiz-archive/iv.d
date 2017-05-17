@@ -35,10 +35,11 @@
  * This D port was made by Ketmar // Invisible Vector
  * ketmar@ketmar.no-ip.org
  */
-module iv.inflate is aliced;
+module iv.inflate /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+import iv.alice;
 import iv.exex;
 
 mixin(MyException!"InflateError");

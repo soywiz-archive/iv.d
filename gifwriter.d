@@ -44,8 +44,9 @@
  *   }
  * ---
  */
-module iv.gifwriter is aliced;
+module iv.gifwriter /*is aliced*/;
 private:
+import iv.alice;
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (__traits(compiles, (){import arsd.color;})) {

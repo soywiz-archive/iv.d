@@ -16,8 +16,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // loosely based on opticron and Adam D. Ruppe work
-module iv.sslsocket is aliced;
+module iv.sslsocket /*is aliced*/;
 
+import iv.alice;
 public import std.socket;
 import iv.gnutls;
 

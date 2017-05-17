@@ -16,12 +16,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // severely outdated! do not use!
-module iv.videolib is aliced;
+module iv.videolib /*is aliced*/;
 
 version(videolib_opengl) {} else { version = videolib_sdl; }
 
 //public import iv.gccattrs;
 
+import iv.alice;
 import std.traits;
 
 

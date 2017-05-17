@@ -1,5 +1,6 @@
-module balztest is aliced;
+module balztest /*is aliced*/;
 
+import iv.alice;
 import iv.balz;
 
 

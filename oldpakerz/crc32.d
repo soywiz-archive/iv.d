@@ -15,7 +15,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  ***********************************************************************/
-module iv.oldpakerz.crc32 is aliced;
+module iv.oldpakerz.crc32 /*is aliced*/;
+import iv.alice;
 
 
 public uint wdx_crc32 (const(void)[] buf, uint crc=0) pure nothrow @trusted @nogc {

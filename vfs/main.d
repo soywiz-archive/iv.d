@@ -16,10 +16,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // VFS pathes and data files
-module iv.vfs.main is aliced;
+module iv.vfs.main /*is aliced*/;
 private:
 
 import core.time;
+import iv.alice;
 import iv.vfs.config;
 import iv.vfs.pred;
 import iv.vfs.error;
@@ -211,7 +212,7 @@ public abstract class VFSDriver {
   this (VFile fl, const(char)[] prefixpath) { throw new VFSException("not implemented for abstract driver"); }
 
   /// try to find and open the file in archive.
-  /// should return `VFile.default` if no file was found.
+  /// should return `VFile.init` if no file was found.
   /// should not throw (except for VERY unrecoverable error).
   /// doesn't do any security checks, 'cause i don't care.
   abstract VFile tryOpen (const(char)[] fname, bool ignoreCase);
@@ -220,7 +221,7 @@ public abstract class VFSDriver {
   @property usize dirLength () { return 0; }
 
   /// get directory entry with the given index. can throw, but it's not necessary.
-  DirEntry dirEntry (usize idx) { return DirEntry.default; }
+  DirEntry dirEntry (usize idx) { return DirEntry.init; }
 
   /** query various file properties; driver-specific.
    * properties of interest:
@@ -299,13 +300,13 @@ public:
   override VFile tryOpen (const(char)[] fname, bool ignoreCase) {
     static import core.stdc.stdio;
     import core.stdc.stdlib : alloca;
-    if (fname.length == 0) return VFile.default;
-    if (fname.length > 1024*3) return VFile.default; // arbitrary limit
+    if (fname.length == 0) return VFile.init;
+    if (fname.length > 1024*3) return VFile.init; // arbitrary limit
     char* nbuf;
     if (fname[0] == '/') {
       if (dataPath[0] != '/' || fname.length <= dataPath.length) {
         bool hit = (ignoreCase ? koi8StrCaseEqu(fname[0..dataPath.length], dataPath) : fname[0..dataPath.length] == dataPath);
-        if (!hit) return VFile.default;
+        if (!hit) return VFile.init;
       }
       nbuf = cast(char*)alloca(fname.length+1);
       nbuf[0..fname.length] = fname[];
@@ -314,10 +315,10 @@ public:
       uint nepos = 1;
       while (nepos < fname.length && fname[nepos] != '/') ++nepos;
       uint len = cast(uint)fname.length-nepos+257;
-      if (len > 1024*3) return VFile.default;
+      if (len > 1024*3) return VFile.init;
       nbuf = cast(char*)alloca(len);
       auto up = findSystemUserPath(nbuf[0..255], fname[0..nepos]);
-      if (up.length == 0) return VFile.default;
+      if (up.length == 0) return VFile.init;
       len = cast(uint)up.length;
       if (nbuf[len-1] != '/') nbuf[len++] = '/';
       while (nepos < fname.length && fname[nepos] == '/') ++nepos;
@@ -329,7 +330,7 @@ public:
         nbuf[len] = '\0';
       }
     } else {
-      if (dataPath.length > 4096 || fname.length > 4096 || dataPath.length+fname.length > 1024*3) return VFile.default;
+      if (dataPath.length > 4096 || fname.length > 4096 || dataPath.length+fname.length > 1024*3) return VFile.init;
       nbuf = cast(char*)alloca(dataPath.length+fname.length+1);
       nbuf[0..dataPath.length] = dataPath[];
       nbuf[dataPath.length..dataPath.length+fname.length] = fname[];
@@ -339,7 +340,7 @@ public:
       import core.stdc.string : strlen;
       uint len = cast(uint)strlen(nbuf);
       auto pt = findPathCI(nbuf[0..len]);
-      if (pt is null) return VFile.default;
+      if (pt is null) return VFile.init;
       nbuf[pt.length] = '\0';
     }
     static if (VFS_NORMAL_OS) {
@@ -347,10 +348,10 @@ public:
     } else {
       auto fl = core.stdc.stdio.fopen(nbuf, "rb");
     }
-    if (fl is null) return VFile.default;
+    if (fl is null) return VFile.init;
     try { return VFile(fl); } catch (Exception e) {}
     core.stdc.stdio.fclose(fl);
-    return VFile.default;
+    return VFile.init;
   }
 
   override @property bool isDisk () { return true; }
@@ -476,7 +477,7 @@ private void cleanupDrivers () {
 public VFSDriverId vfsRegister(string mode="normal", bool temp=false) (VFSDriver drv, const(char)[] fname=null, const(char)[] prefixpath=null) {
   static assert(mode == "normal" || mode == "last" || mode == "first");
   import core.atomic : atomicOp;
-  if (drv is null) return VFSDriverId.default;
+  if (drv is null) return VFSDriverId.init;
   auto lock = vfsLockIntr("can't register drivers in list operations");
   cleanupDrivers();
   VFSDriverId did = VFSDriverId.create;
@@ -512,7 +513,7 @@ public VFSDriverId vfsFindDriver() (const(char)[] fname, const(char)[] prefixpat
   foreach_reverse (immutable idx, ref drv; drivers) {
     if (!drv.temp && drv.fname == fname && drv.prefixpath == prefixpath) return drv.drvid;
   }
-  return VFSDriverId.default;
+  return VFSDriverId.init;
 }
 
 
@@ -949,9 +950,9 @@ VFile openFileWithPaks(T:const(char)[], bool usefname=true) (T name, const(char)
   while (pfxend > 0 && name.ptr[pfxend-1] != ':') --pfxend;
   version(Windows) {
     // idiotic shitdoze
-    if (pfxend <= 1) return VFile.default; // easy case
+    if (pfxend <= 1) return VFile.init; // easy case
   } else {
-    if (pfxend == 0) return VFile.default; // easy case
+    if (pfxend == 0) return VFile.init; // easy case
   }
 
   auto lock = vfsLockIntr();

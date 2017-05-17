@@ -16,7 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // severely outdated exception helpers
-module iv.exex is aliced;
+module iv.exex /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

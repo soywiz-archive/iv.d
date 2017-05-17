@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin is aliced;
+module iv.follin /*is aliced*/;
 
 public import iv.follin.resampler;
 public import iv.follin.drivers;

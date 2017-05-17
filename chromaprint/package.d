@@ -48,8 +48,9 @@
  * Note that there is no error handling in the code above. Almost any of the called functions can fail.
  * You should check the return values in an actual code.
  */
-module iv.chromaprint is aliced;
+module iv.chromaprint /*is aliced*/;
 pragma(lib, "chromaprint");
+import iv.alice;
 
 extern(C) nothrow @nogc:
 

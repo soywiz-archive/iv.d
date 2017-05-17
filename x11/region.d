@@ -1,6 +1,8 @@
-module iv.x11.region is aliced;
+module iv.x11.region /*is aliced*/;
 
 import core.stdc.config;
+
+import iv.alice;
 import iv.x11.xlib : XPoint;
 
 extern (C) @trusted nothrow @nogc:

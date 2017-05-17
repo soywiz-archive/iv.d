@@ -15,10 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module zmplay is aliced;
+module zmplay /*is aliced*/;
 
 import std.stdio : File;
 
+import iv.alice;
 import iv.exex;
 import iv.stream;
 import iv.vl2;

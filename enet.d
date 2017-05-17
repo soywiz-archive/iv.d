@@ -38,7 +38,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.enet is aliced;
+module iv.enet /*is aliced*/;
+
+import iv.alice;
 
 
 version(BigEndian) {

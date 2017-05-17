@@ -18,8 +18,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // label
-module iv.tuing.controls.label is aliced;
+module iv.tuing.controls.label /*is aliced*/;
 
+import iv.alice;
 import iv.eventbus;
 import iv.flexlayout;
 import iv.strex;

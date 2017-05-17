@@ -18,8 +18,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.fui.engine is aliced;
+module iv.nanovg.fui.engine /*is aliced*/;
 
+import iv.alice;
 import iv.nanovg;
 import arsd.simpledisplay;
 
@@ -297,7 +298,7 @@ private:
       --eventPos;
       return events.ptr[nn];
     } else {
-      return FuiEvent.default;
+      return FuiEvent.init;
     }
   }
 
@@ -585,7 +586,7 @@ private:
     pmemused += cast(uint)T.sizeof;
     static if (is(T == struct)) {
       import core.stdc.string : memcpy;
-      static immutable T i = T.default;
+      static immutable T i = T.init;
       memcpy(res, &i, T.sizeof);
     }
     return cast(T*)res;
@@ -759,7 +760,7 @@ public:
     // each context always have top-level panel
     auto ct = cast(FuiContextImpl*)malloc(FuiContextImpl.sizeof);
     if (ct is null) assert(0, "out of memory for Fui context");
-    static immutable FuiContextImpl i = FuiContextImpl.default;
+    static immutable FuiContextImpl i = FuiContextImpl.init;
     memcpy(ct, &i, FuiContextImpl.sizeof);
     ct.vg = vg;
     res.ctxp = cast(usize)ct;
@@ -877,7 +878,7 @@ public:
       foreach (int idx; 0..length) {
         auto lp = layprops(idx);
         lp.resetLayouterFlags();
-        lp.position = lp.position.default; // zero it out
+        lp.position = lp.position.init; // zero it out
         // setup group lists
         mixin(FixGroupEnum!"hGroup");
         mixin(FixGroupEnum!"vGroup");
@@ -1294,7 +1295,7 @@ public:
 
   void queueEvent (int aitem, FuiEvent.Type atype, uint aparam0=0, uint aparam1=0) nothrow @trusted @nogc { pragma(inline, true); if (ctxp) ctx.queueEvent(aitem, atype, aparam0, aparam1); }
   bool hasEvents () const nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.hasEvents() : false); }
-  FuiEvent getEvent () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.getEvent() : FuiEvent.default); }
+  FuiEvent getEvent () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.getEvent() : FuiEvent.init); }
 
   @property NVGContext vg () nothrow @trusted @nogc { pragma(inline, true); return (ctxp ? ctx.vgc : null); }
   @property void vg (NVGContext v) nothrow @trusted @nogc { pragma(inline, true); if (ctxp) ctx.vgc = v; }

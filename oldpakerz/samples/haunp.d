@@ -18,13 +18,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  ***********************************************************************/
 // stand-alone unpacker
-module haunp is aliced;
+module haunp /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 import iv.oldpakerz.crc32;
 import iv.oldpakerz.haunpack;
 
+import iv.alice;
 import iv.cmdcon;
 import iv.vfs;
 

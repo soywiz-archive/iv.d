@@ -15,11 +15,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module zytest is aliced;
+module zytest /*is aliced*/;
 
 //import core.runtime : Runtime;
 //import std.string;
 
+import iv.alice;
 import iv.vfs.io;
 import iv.cmdcon;
 import iv.strex;
@@ -38,7 +39,7 @@ class MyZ80 : ZymCPU {
 
   override void setupMemory () {
     foreach (immutable idx; 0..65536/MemPage.Size) {
-      mem[idx] = MemPage.default;
+      mem[idx] = MemPage.init;
       mem[idx].mem = memory.ptr+idx*MemPage.Size;
     }
     //foreach (immutable idx; 0..16384/MemPage.Size) mem[idx].rom = true;

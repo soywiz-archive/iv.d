@@ -9,8 +9,9 @@
  */
 //k8: yes, i know that this code sux. i know that i should rewrite it to be more 'D-ish'.
 //    i'll not do that. thank you.
-module iv.tweetNaCl is aliced;
+module iv.tweetNaCl /*is aliced*/;
 
+import iv.alice;
 public nothrow:
 
 

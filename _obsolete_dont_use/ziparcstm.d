@@ -17,8 +17,9 @@
  */
 // severely outdated ZIP archive interface
 // use iv.vfs instead
-module iv.ziparcstm is aliced;
+module iv.ziparcstm /*is aliced*/;
 
+import iv.alice;
 import iv.stream;
 
 
@@ -539,7 +540,7 @@ private:
         if (prpos > pos) {
           // yes, rewind
           inflateEnd(&zs);
-          zs = zs.default;
+          zs = zs.init;
           pkpos = 0;
           if (!initZStream()) return -1;
           prpos = 0;
@@ -602,7 +603,7 @@ static protected:
       import core.exception : onOutOfMemoryErrorNoGC;
       onOutOfMemoryErrorNoGC();
     }
-    res[0..len] = T.default;
+    res[0..len] = T.init;
     return res[0..len];
   }
 

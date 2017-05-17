@@ -22,7 +22,8 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-module iv.minimp3 is aliced;
+module iv.minimp3 /*is aliced*/;
+import iv.alice;
 
 /* code sample:
   auto fi = File(args[1]);
@@ -178,7 +179,7 @@ MP3Info mp3Scan(RDG) (scope RDG rdg) if (is(typeof({
     }
   }
   //{ import core.stdc.stdio : printf; printf("%d\n", headersCount); }
-  if (headersCount < 6) info = info.default;
+  if (headersCount < 6) info = info.init;
   return info;
 }
 +/

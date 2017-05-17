@@ -20,7 +20,8 @@
 ** use license for this code is available, please see:
 **    http://www.mega-nerd.com/SRC/procedure.html
 */
-module iv.secretrabbit is aliced;
+module iv.secretrabbit /*is aliced*/;
+import iv.alice;
 
 //version = lib_secret_rabbit_allow_hq_filter;
 //version = lib_secret_rabbit_do_additional_checks;

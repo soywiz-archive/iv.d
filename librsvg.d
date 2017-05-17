@@ -20,13 +20,14 @@
 
    Author: Raph Levien <raph@artofcode.com>
 */
-module iv.librsvg is aliced;
+module iv.librsvg /*is aliced*/;
 pragma(lib, "rsvg-2");
 pragma(lib, "gio-2.0");
 pragma(lib, "gdk_pixbuf-2.0");
 pragma(lib, "gobject-2.0");
 pragma(lib, "glib-2.0");
 
+import iv.alice;
 import iv.cairo;
 
 extern(C) nothrow @nogc:

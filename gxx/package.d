@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.gxx is aliced;
+module iv.gxx /*is aliced*/;
 
 public import iv.gxx.color;
 public import iv.gxx.geom;

@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module mkziptest is aliced;
+module mkziptest /*is aliced*/;
 
+import iv.alice;
 import iv.strex;
 import iv.vfs.io;
 import iv.vfs.writers.zip;

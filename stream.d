@@ -17,8 +17,9 @@
  */
 // severely outdated i/o stream interface
 // use iv.vfs instead
-module iv.stream is aliced;
+module iv.stream /*is aliced*/;
 
+import iv.alice;
 import std.conv : ConvOverflowException;
 import std.traits : isMutable;
 public import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
@@ -32,20 +33,20 @@ mixin(MyException!"StreamException");
 
 // ////////////////////////////////////////////////////////////////////////// //
 enum isReadableStream(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ubyte[1] b;
   auto v = cast(void[])b;
   t.rawRead(v);
 }));
 
 enum isWriteableStream(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ubyte[1] b;
   t.rawWrite(cast(void[])b);
 }));
 
 enum isCloseableStream(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   t.close();
 }));
 
@@ -54,7 +55,7 @@ enum isRWStream(T) = isReadableStream!T && isWriteableStream!T;
 template isSeekableStream(T) {
   enum isSeekableStream = is(typeof((inout int=0) {
     import core.stdc.stdio : SEEK_END;
-    auto t = T.default;
+    auto t = T.init;
     t.seek(0, SEEK_END);
     ulong pos = t.tell;
   }));
@@ -62,44 +63,44 @@ template isSeekableStream(T) {
 
 // bad name!
 enum isClosableStream(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   t.close();
 }));
 
 // bad name!
 enum streamHasEOF(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   bool n = t.eof;
 }));
 
 enum streamHasSeek(T) = is(typeof((inout int=0) {
   import core.stdc.stdio : SEEK_END;
-  auto t = T.default;
+  auto t = T.init;
   t.seek(0, SEEK_END);
 }));
 
 enum streamHasTell(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ulong pos = t.tell;
 }));
 
 enum streamHasName(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   string n = t.name;
 }));
 
 enum streamHasSize(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   ulong pos = t.size;
 }));
 
 enum streamHasIsOpen(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   bool op = t.isOpen;
 }));
 
 enum streamHasDetach(T) = is(typeof((inout int=0) {
-  auto t = T.default;
+  auto t = T.init;
   op = t.detach;
 }));
 
@@ -850,7 +851,7 @@ private final class PartialStreamDataImpl(ST) : PartialStreamROData {
   }
 
 protected:
-  override void clear () { stream = stream.default; }
+  override void clear () { stream = stream.init; }
 
   override void[] read (void[] buf) {
     assert(curpos >= 0 && curpos <= size);

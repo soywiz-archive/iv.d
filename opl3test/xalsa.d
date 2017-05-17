@@ -1,5 +1,6 @@
-module xalsa is aliced;
+module xalsa /*is aliced*/;
 
+import iv.alice;
 import iv.alsa;
 import iv.follin.utils;
 

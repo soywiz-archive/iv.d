@@ -15,12 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module gesturespro_test is aliced;
+module gesturespro_test /*is aliced*/;
 private:
 
 import arsd.color;
 import arsd.simpledisplay;
 
+import iv.alice;
 import iv.cmdcongl;
 import iv.gengpro1;
 import iv.pxclock;
@@ -63,7 +64,7 @@ void showMessage (string msg) {
   ovlMsg.rect(1, 1, ovlMsg.width-2, ovlMsg.height-2, rgb2col(0, 0, 0));
   Color fg = rgb2col(255, 255, 255);
   int x = 3;
-  foreach (auto ch; msg) {
+  foreach (/+auto+/ ch; msg) {
     /*
     switch (ch) {
       case 1: fg = rgb2col(255, 255, 255); break;
@@ -96,7 +97,7 @@ bool helpVisible;
 
 void fixNameMaxLen () {
   nameMaxLen = 0;
-  foreach (auto g; glib) if (g.name.length > nameMaxLen) nameMaxLen = cast(int)g.name.length;
+  foreach (/*auto*/ g; glib) if (g.name.length > nameMaxLen) nameMaxLen = cast(int)g.name.length;
 }
 
 
@@ -113,7 +114,7 @@ void registerGlyph () {
     gg.normalize(true); // drop original points
     gg.name = curGlyphName;
     usize gpos = usize.max;
-    foreach (auto idx, auto g; glib) if (g.name == curGlyphName) { gpos = idx; break; }
+    foreach (/*auto*/ idx, /*auto*/ g; glib) if (g.name == curGlyphName) { gpos = idx; break; }
     if (gpos != usize.max) {
       glib[gpos] = gg;
     } else {
@@ -175,7 +176,7 @@ void frameChanged () {
       }
 
       int maxlen = 0;
-      foreach (auto s; helpText) {
+      foreach (/*auto*/ s; helpText) {
         auto ln = stlen(s);
         if (ln > maxlen) maxlen = ln;
       }
@@ -194,7 +195,7 @@ void frameChanged () {
       painter.outlineColor = Color.black;
       painter.drawRectangle(Point(x0+1, y0+1), wdt-2, hgt-2);
 
-      foreach (auto idx, auto s; helpText) {
+      foreach (/*auto*/ idx, /*auto*/ s; helpText) {
         if (s.length == 0) continue;
         auto ln = stlen(s)*CharWidth;
         auto x = (wdt-ln)/2;
@@ -206,7 +207,7 @@ void frameChanged () {
           x = 3;
         }
         Color fg = Color(255, 255, 255);
-        foreach (auto ch; st) {
+        foreach (/*auto*/ ch; st) {
           switch (ch) {
             case 1: fg = Color(255, 255, 255); break;
             case 2: fg = Color(0, 255, 0); break;
@@ -260,7 +261,7 @@ void frameChanged () {
       painter.fillColor = Color.white;
       painter.drawRectangle(Point(2, 2), wdt-4, hgt-4);
       painter.fillColor = Color.transparent;
-      foreach (auto idx, auto g; glib) {
+      foreach (/*auto*/ idx, /*auto*/ g; glib) {
         Color col, bkcol;
         if (g is detectedGlyph) {
           // highlighted

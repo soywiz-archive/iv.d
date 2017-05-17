@@ -1,4 +1,5 @@
-module iv.x11.md is aliced;
+module iv.x11.md /*is aliced*/;
+import iv.alice;
 
 /*
  *  Xmd.d: MACHINE DEPENDENT DECLARATIONS.

@@ -26,8 +26,9 @@
    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-module iv.libcelt is aliced;
+module iv.libcelt /*is aliced*/;
 pragma(lib, "celt");
+import iv.alice;
 extern(C) nothrow @nogc:
 
 /**

@@ -18,8 +18,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // button
-module iv.tuing.controls.button is aliced;
+module iv.tuing.controls.button /*is aliced*/;
 
+import iv.alice;
 import iv.eventbus;
 import iv.flexlayout;
 import iv.strex;

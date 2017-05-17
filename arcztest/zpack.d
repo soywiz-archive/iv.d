@@ -1,8 +1,9 @@
-module zpack is aliced;
+module zpack /*is aliced*/;
 
 import core.time;
 import std.stdio;
 
+import iv.alice;
 import iv.arcz;
 
 

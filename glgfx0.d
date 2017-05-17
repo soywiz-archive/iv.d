@@ -14,9 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.glgfx0 is aliced;
+module iv.glgfx0 /*is aliced*/;
 
 import arsd.simpledisplay : SimpleWindow;
+import iv.alice;
 import iv.cmdcongl;
 import iv.glbinds;
 

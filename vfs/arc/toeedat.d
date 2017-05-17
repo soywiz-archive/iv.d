@@ -16,8 +16,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // data files from Temple of Elemental Evil (conflicts with Arcanum, so can't detect)
-module iv.vfs.arc.toeedat is aliced;
+module iv.vfs.arc.toeedat /*is aliced*/;
 
+import iv.alice;
 import iv.vfs.types : Seek;
 import iv.vfs.error;
 import iv.vfs.main;

@@ -14,8 +14,9 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.stc.core is aliced;
+module iv.stc.core /*is aliced*/;
 
+import iv.alice;
 import std.range;
 
 package(iv.stc) template isValidRE(R) { enum isValidRE = is(ElementEncodingType!R : ubyte); }

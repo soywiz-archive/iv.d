@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arc.zip is aliced;
+module iv.vfs.arc.zip /*is aliced*/;
 
+import iv.alice;
 import iv.vfs.types : Seek, VFSHiddenPointerHelper;
 import iv.vfs.error;
 import iv.vfs.main;
@@ -401,7 +402,7 @@ static protected:
       import core.exception : onOutOfMemoryErrorNoGC;
       onOutOfMemoryErrorNoGC();
     }
-    res[0..len] = T.default;
+    res[0..len] = T.init;
     return res[0..len];
   }
 
@@ -663,7 +664,7 @@ struct BitReader {
     upkleft = upktotalsize;
   }
 
-  void close () { zfl = VFile.default; }
+  void close () { zfl = VFile.init; }
 
   // 0: eof
   uint readNewBuffer () {

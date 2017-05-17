@@ -16,11 +16,12 @@
    You should have received a copy of the GNU Lesser General Public
    License along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-module iv.gpgerror is aliced;
+module iv.gpgerror /*is aliced*/;
 pragma(lib, "gpg-error");
 
 import core.stdc.stdarg : va_list;
 import core.stdc.stdio : FILE;
+import iv.alice;
 
 
 extern(C) nothrow @nogc:

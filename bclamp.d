@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // just `clampToByte()`, so i can easily find and copypaste it
-module iv.bclamp is aliced;
+module iv.bclamp /*is aliced*/;
 
 
 // this is actually branch-less for ints on x86, and even for longs on x86_64

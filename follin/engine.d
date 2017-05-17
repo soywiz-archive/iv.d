@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.engine is aliced;
+module iv.follin.engine /*is aliced*/;
 
 version = follin_use_spinrw;
 //version = follin_prefer_alsa_plug;
@@ -23,6 +23,7 @@ version = follin_use_spinrw;
 //version = follin_wait_debug;
 //version = follin_debug_resampler_type;
 
+import iv.alice;
 import iv.follin.exception;
 
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env rdmd
-module rezip is aliced;
+module rezip /*is aliced*/;
 
 import core.time;
 import std.datetime;
 
+import iv.alice;
 import iv.cmdcon;
 import iv.vfs;
 import iv.vfs.util;

@@ -1,7 +1,8 @@
 // code from LADSPA plugins project: http://plugin.org.uk/
 // GNU GPLv3
-module iv.mbandeq is aliced;
+module iv.mbandeq /*is aliced*/;
 private:
+import iv.alice;
 nothrow @trusted @nogc:
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -316,7 +317,7 @@ version(FFTW3) {} else {
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-//module kissfft is aliced;
+//module kissfft /*is aliced*/;
 private:
 nothrow @trusted @nogc:
 

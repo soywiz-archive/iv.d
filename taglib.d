@@ -15,13 +15,14 @@
  * *********************************************************************** */
 // wrapper coded by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
 ///WARING! this MAY BE 64-bit unsafe!
-module iv.taglib is aliced;
+module iv.taglib /*is aliced*/;
 
 pragma(lib, "tag_c");
 pragma(lib, "tag");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+import iv.alice;
 import iv.exex;
 
 mixin(MyException!"TagLibException");
@@ -56,7 +57,7 @@ struct TagFile {
     if (mInited) {
       mInited = false;
       taglib_file_free(mFL);
-      this = this.default;
+      this = this.init;
     }
   }
 

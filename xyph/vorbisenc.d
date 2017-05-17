@@ -9,11 +9,12 @@
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  *                                                                  *
  ********************************************************************/
-module iv.xyph.vorbisenc is aliced;
+module iv.xyph.vorbisenc /*is aliced*/;
 pragma(lib, "vorbisenc");
 
 import core.stdc.config;
 import iv.xyph.vorbis;
+import iv.alice;
 
 extern(C) nothrow @nogc:
 

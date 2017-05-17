@@ -1,4 +1,5 @@
-module avmem is aliced;
+module avmem /*is aliced*/;
+import iv.alice;
 
 enum {
   EOK = 0,
@@ -166,7 +167,7 @@ AVAudioFifo* av_audio_fifo_alloc (int samplefmt, int channels, int nb_samples) {
 int av_audio_fifo_free (AVAudioFifo* af) {
   if (af !is null) {
     if (af.buf !is null) av_free(af.buf);
-    *af = AVAudioFifo.default;
+    *af = AVAudioFifo.init;
     av_free(af);
   }
   return 0;

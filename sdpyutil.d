@@ -14,10 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpyutil is aliced;
+module iv.sdpyutil /*is aliced*/;
 
 import arsd.color;
 import arsd.simpledisplay;
+import iv.alice;
 
 //version = krc_debug;
 
@@ -596,7 +597,7 @@ public struct XlibImageTC {
       if (handle.data !is null) {
         import core.stdc.stdlib : free;
         if (handle.data !is null) free(handle.data);
-        handle = XImage.default;
+        handle = XImage.init;
       }
     }
   }

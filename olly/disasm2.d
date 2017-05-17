@@ -34,7 +34,8 @@
  * This code is reentrant (thread-safe, feature not available in the original
  * OllyDbg code).
  */
-module iv.olly.disasm2 is aliced;
+module iv.olly.disasm2 /*is aliced*/;
+import iv.alice;
 
 enum TEXTLEN   = 256; // Max length of text string
 enum SHORTNAME = 32;  // Max length of short or module name

@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.controls is aliced;
+module iv.tuing.controls /*is aliced*/;
 
 public import iv.tuing.controls.box;
 public import iv.tuing.controls.button;

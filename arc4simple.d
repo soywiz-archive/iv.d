@@ -15,7 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.arc4simple is aliced;
+module iv.arc4simple /*is aliced*/;
+import iv.alice;
 
 
 // ///////////////////////////////////////////////////////////////////////// //

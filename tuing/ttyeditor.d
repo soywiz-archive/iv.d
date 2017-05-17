@@ -14,10 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.ttyeditor is aliced;
+module iv.tuing.ttyeditor /*is aliced*/;
 
 import std.datetime : SysTime;
 
+import iv.alice;
 import iv.eventbus;
 import iv.flexlayout;
 import iv.rawtty;
@@ -1660,7 +1661,7 @@ final:
     if (srr.search.length == 0) { srr.ed = null; return; }
     if (srr.inselection && !hasMarkedBlock) { srr.ed = null; return; }
     srr.re = RegExp.create(srr.search.byChar, (srr.casesens ? 0 : SRFlags.CaseInsensitive)|SRFlags.Multiline);
-    if (!srr.re.valid) { ttyBeep; srr.re = RegExp.default; srr.ed = null; return; }
+    if (!srr.re.valid) { ttyBeep; srr.re = RegExp.init; srr.ed = null; return; }
     int spos, epos;
     if (srr.inselection) {
       spos = bstart;

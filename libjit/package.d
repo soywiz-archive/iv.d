@@ -18,8 +18,9 @@
  * License along with the libjit library.  If not, see
  * <http://www.gnu.org/licenses/>.
  */
-module iv.libjit is aliced;
+module iv.libjit /*is aliced*/;
 pragma(lib, "jit");
+import iv.alice;
 extern(C) /*nothrow*/ /*@nogc*/:
 // "@nogc" removed due to callbacks -- there's no reason to forbid GC usage there
 

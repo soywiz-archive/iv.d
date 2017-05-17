@@ -19,7 +19,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.aatree is aliced;
+module iv.aatree /*is aliced*/;
+
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -486,7 +488,7 @@ void test00 () {
     import std.conv : to;
     int curK = 0;
     { import std.stdio; writeln("*** size=", tree.size); }
-    foreach (auto n; tree.fromMin) {
+    foreach (/+auto+/ n; tree.fromMin) {
       { import std.stdio; writeln("  curK=", curK, "; values[", curK, "]=", values[curK]); }
       if (n.key != values[curK]) assert(0, "(0)Invalid key for key "~to!string(curK)~" ("~to!string(n.key)~","~to!string(n.value)~" : "~to!string(values[curK])~")");
       if (n.value != curK+1) assert(0, "(0)Invalid value for key "~to!string(curK)~" ("~to!string(n.key)~","~to!string(n.value)~" : "~to!string(values[curK])~")");
@@ -494,7 +496,7 @@ void test00 () {
     }
     curK = cast(int)tree.size;
     { import std.stdio; writeln(" curK=", curK, "; size=", tree.size); }
-    foreach (auto n; tree.fromMax) {
+    foreach (/+auto+/ n; tree.fromMax) {
       --curK;
       { import std.stdio; writeln("  curK=", curK, "; values[", curK, "]=", values[curK]); }
       if (n.key != values[curK]) assert(0, "(1)Invalid key for key "~to!string(curK)~" ("~to!string(n.key)~","~to!string(n.value)~" : "~to!string(values[curK])~")");
@@ -527,7 +529,7 @@ void test00 () {
     assert(count == tree.size);
     int[] keys, values;
     //{ import std.stdio; writeln(" ** size=", tree.size); }
-    foreach (auto n; tree.fromMin) {
+    foreach (/*auto*/ n; tree.fromMin) {
       //if (n.key <= curK) assert(0, "(0)Invalid key for key "~to!string(curK)~" ("~to!string(n.key)~","~to!string(n.value)~")");
       //if (n.value <= curV) assert(0, "(0)Invalid value for key "~to!string(curK)~" ("~to!string(n.key)~","~to!string(n.value)~")");
       keys ~= n.key;
@@ -536,7 +538,7 @@ void test00 () {
       //curV = n.value;
     }
     //{ import std.stdio; writeln("  keys=", keys); writeln("  values=", values); }
-    foreach (auto n; tree.fromMax) {
+    foreach (/*auto*/ n; tree.fromMax) {
       if (n.key != keys[$-1]) assert(0, "(1)Invalid key for key "~to!string(keys.length-1)~" ("~to!string(n.key)~","~to!string(n.value)~")");
       if (n.value != values[$-1]) assert(0, "(1)Invalid value for key "~to!string(keys.length-1)~" ("~to!string(n.key)~","~to!string(n.value)~")");
       keys = keys[0..$-1];
@@ -575,10 +577,10 @@ void test00 () {
         import std.range : enumerate;
         assert(count == tree.size);
         count = 0;
-        foreach (auto idx, auto nn; tree.fromFirstNode.enumerate) { assert(count == idx); ++count; }
+        foreach (/*auto*/ idx, /*auto*/ nn; tree.fromFirstNode.enumerate) { assert(count == idx); ++count; }
         assert(count == tree.size);
         count = 0;
-        foreach (auto idx, auto nn; tree.fromLastNode.enumerate) { assert(count == idx); ++count; }
+        foreach (/*auto*/ idx, /*auto*/ nn; tree.fromLastNode.enumerate) { assert(count == idx); ++count; }
         assert(count == tree.size);
         if (count != tree.size) { import std.stdio; writeln("count=", count, "; size=", tree.size); }
       }
@@ -728,21 +730,21 @@ void test01 () {
   void checkTree () {
     string ww;
 
-    foreach (auto node; tree.fromMin) {
+    foreach (/*auto*/ node; tree.fromMin) {
       assert(ww.length == 0 || ww < node.key);
       ww = node.key;
     }
 
     ww = null;
-    foreach (auto node; tree.fromMax) {
+    foreach (/*auto*/ node; tree.fromMax) {
       assert(ww.length == 0 || ww > node.key);
       ww = node.key;
     }
 
     import std.range : enumerate;
 
-    foreach (immutable idx, auto node; tree.fromFirstNode.enumerate) assert(node.key == words[idx]);
-    foreach (immutable idx, auto node; tree.fromLastNode.enumerate) assert(node.key == words[words.length-idx-1]);
+    foreach (immutable idx, /*auto*/ node; tree.fromFirstNode.enumerate) assert(node.key == words[idx]);
+    foreach (immutable idx, /*auto*/ node; tree.fromLastNode.enumerate) assert(node.key == words[words.length-idx-1]);
   }
 
   checkTree();

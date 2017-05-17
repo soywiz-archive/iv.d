@@ -7,9 +7,10 @@
 // D Translation by Ketmar // Invisible Vector
 //
 // GNU GPLv3
-module sidengine is aliced;
+module sidengine /*is aliced*/;
 private:
 
+import iv.alice;
 import iv.vfs;
 
 version = SidEngineUseFilter;

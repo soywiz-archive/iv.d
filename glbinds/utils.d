@@ -1,6 +1,7 @@
 // WTFPL or Public Domain, on your choice
-module iv.glbinds.utils is aliced;
+module iv.glbinds.utils /*is aliced*/;
 
+import iv.alice;
 import iv.glbinds;
 
 // replacement for `gluPerspective()`

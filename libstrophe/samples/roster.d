@@ -12,8 +12,9 @@
 /* This example demonstrates basic handler functions by printing out
 ** the user's roster.
 */
-module roster is aliced;
+module roster /*is aliced*/;
 
+import iv.alice;
 import iv.libstrophe;
 import iv.vfs.io;
 

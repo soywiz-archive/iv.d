@@ -8,11 +8,12 @@
  * THE OggVorbis SOURCE CODE IS (C) COPYRIGHT 1994-2001             *
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  ********************************************************************/
-module iv.xyph.vorbis is aliced;
+module iv.xyph.vorbis /*is aliced*/;
 pragma(lib, "vorbis");
 
 import core.stdc.config;
 import iv.xyph.ogg/*: oggpack_buffer, ogg_packet*/;
+import iv.alice;
 
 
 struct vorbis_info {

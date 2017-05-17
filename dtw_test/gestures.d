@@ -15,12 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module gesturesdtw_test is aliced;
+module gesturesdtw_test /*is aliced*/;
 private:
 
 import arsd.color;
 import arsd.simpledisplay;
 
+import iv.alice;
 import iv.cmdcongl;
 import iv.gengdtw;
 import iv.pxclock;
@@ -73,7 +74,7 @@ bool helpVisible;
 
 void fixNameMaxLen () {
   nameMaxLen = 0;
-  foreach (auto g; glib) if (g.name.length > nameMaxLen) nameMaxLen = cast(int)g.name.length;
+  foreach (/*auto*/ g; glib) if (g.name.length > nameMaxLen) nameMaxLen = cast(int)g.name.length;
 }
 
 
@@ -90,7 +91,7 @@ void registerGlyph () {
     gg.finish;
     gg.name = curGlyphName;
     usize gpos = usize.max;
-    foreach (auto idx, auto g; glib) if (g.name == curGlyphName) { gpos = idx; break; }
+    foreach (/*auto*/ idx, /*auto*/ g; glib) if (g.name == curGlyphName) { gpos = idx; break; }
     if (gpos != usize.max) {
       glib[gpos] = gg;
     } else {
@@ -161,7 +162,7 @@ void frameChanged () {
       }
 
       int maxlen = 0;
-      foreach (auto s; helpText) {
+      foreach (/*auto*/ s; helpText) {
         auto ln = stlen(s);
         if (ln > maxlen) maxlen = ln;
       }
@@ -175,7 +176,7 @@ void frameChanged () {
       drawRect(x0, y0, wdt, hgt, Color(255, 255, 255));
       drawRect(x0+1, y0+1, wdt-2, hgt-2, Color.black);
 
-      foreach (auto idx, auto s; helpText) {
+      foreach (/*auto*/ idx, /*auto*/ s; helpText) {
         if (s.length == 0) continue;
         auto ln = stlen(s)*CharWidth;
         auto x = (wdt-ln)/2;
@@ -187,7 +188,7 @@ void frameChanged () {
           x = 3;
         }
         Color fg = Color(255, 255, 255);
-        foreach (auto ch; st) {
+        foreach (/*auto*/ ch; st) {
           switch (ch) {
             case 1: fg = Color(255, 255, 255); break;
             case 2: fg = Color(0, 255, 0); break;
@@ -266,7 +267,7 @@ void frameChanged () {
       int hgt = cast(int)(glib.length*CharHeight+4);
       drawRect(0, 0, wdt, hgt, Color.white);
       drawRect(1, 1, wdt-2, hgt-2, Color.black);
-      foreach (auto idx, auto g; glib) {
+      foreach (/*auto*/ idx, /*auto*/ g; glib) {
         Color col, bkcol;
         if (g is detectedGlyph) {
           // highlighted

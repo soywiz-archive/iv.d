@@ -23,8 +23,9 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-module iv.freetype is aliced;
+module iv.freetype /*is aliced*/;
 pragma(lib, "freetype");
+import iv.alice;
 import core.stdc.config;
 
 extern(C) nothrow:

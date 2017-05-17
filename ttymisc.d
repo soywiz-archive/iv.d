@@ -33,7 +33,7 @@
  * Throws:
  *  Exception on TTY mode errors
  */
-string ttyReadString (string prompt, const(string)[] strlist=null, string str=string.default) @trusted {
+string ttyReadString (string prompt, const(string)[] strlist=null, string str=string.init) @trusted {
   import core.sys.posix.unistd : STDOUT_FILENO, write;
   import std.algorithm : min, max;
   import iv.rawtty : ttyIsRedirected, ttyGetMode, ttySetMode, ttySetRaw, ttyReadKeyByte, ttyWidth, ttyHeight, TTYMode;

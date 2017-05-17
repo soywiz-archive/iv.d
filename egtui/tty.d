@@ -15,9 +15,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // virtual console with doublebuffering, to awoid alot of overdraw
-module iv.egtui.tty is aliced;
+module iv.egtui.tty /*is aliced*/;
 private:
 
+import iv.alice;
 import iv.rawtty;
 import iv.strex;
 import iv.utfutil;
@@ -359,8 +360,8 @@ public void xtInit () {
   ttyhIntr = ttyHeight;
   ttywb.length = ttywIntr*ttyhIntr;
   ttybc.length = ttywIntr*ttyhIntr;
-  ttywb[] = Glyph.default;
-  ttybc[] = Glyph.default;
+  ttywb[] = Glyph.init;
+  ttybc[] = Glyph.init;
   ttycx = ttycy = 0;
   ttyzScissor = XtScissor.fullscreen;
   // clear screen
@@ -398,8 +399,8 @@ public void xtReinit () {
     ttyhIntr = ttyHeight;
     ttywb.length = ttywIntr*ttyhIntr;
     ttybc.length = ttywIntr*ttyhIntr;
-    ttywb[] = Glyph.default;
-    ttybc[] = Glyph.default;
+    ttywb[] = Glyph.init;
+    ttybc[] = Glyph.init;
     ttycx = ttycy = 0;
     // clear screen
     //enum initStr = "\x1b[H\x1b[0;37;40m\x1b[2J";

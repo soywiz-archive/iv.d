@@ -17,9 +17,10 @@
  * adaptation by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
 // DTW-based gesture recognizer
-module iv.gengdtw is aliced;
+module iv.gengdtw /*is aliced*/;
 private:
 
+import iv.alice;
 import iv.vfs;
 
 
@@ -80,7 +81,7 @@ public:
     string name () const { pragma(inline, true); return mName; }
     usize length () const pure nothrow @safe @nogc { return points.length; }
     alias opDollar = length;
-    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length ? points[idx] : Point.default); }
+    Point opIndex (usize idx) { pragma(inline, true); return (idx < points.length ? points[idx] : Point.init); }
   }
 
   @property void name(T:const(char)[]) (T v) nothrow @safe {
@@ -189,7 +190,7 @@ public:
       @disable this ();
       @disable this (this);
 
-      this (usize d0, usize d1, T initV=T.default) {
+      this (usize d0, usize d1, T initV=T.init) {
         import core.stdc.stdlib : malloc;
         import core.exception : onOutOfMemoryError;
         if (d0 < 1) d0 = 1;
@@ -232,7 +233,7 @@ public:
     auto dist = A2D!DTWFloat(m+1, n+1, dtwInfinity);
     auto prevx = A2D!usize(m+1, n+1);
     auto prevy = A2D!usize(m+1, n+1);
-    //foreach (auto idx; 0..m+1) foreach (auto idx1; 0..n+1) dist[idx, idx1] = dtwInfinity;
+    //foreach (/+auto+/ idx; 0..m+1) foreach (/+auto+/ idx1; 0..n+1) dist[idx, idx1] = dtwInfinity;
     //dist[m, n] = dtwInfinity;
     dist[0, 0] = 0.0;
     foreach (immutable x; 0..m) {

@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // VFS config defs (somewhat similar to autocrap's config.h)
-module iv.vfs.config is aliced;
+module iv.vfs.config /*is aliced*/;
 
 public:
 version(Windows) {

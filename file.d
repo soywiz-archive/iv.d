@@ -17,8 +17,9 @@
  */
 // severely outdated case-insensitive filesystem interface
 // use iv.vfs instead
-module iv.file is aliced;
+module iv.file /*is aliced*/;
 
+import iv.alice;
 private import std.stdio : File;
 private import iv.strex : indexOf; // rdmd sux!
 
@@ -55,7 +56,7 @@ string getPathCI (string path, bool* allOk=null) @trusted {
 
   // alas, traverse dirs
   string dir;
-  foreach (auto d; path.dirName.expandTilde.buildNormalizedPath.pathSplitter) {
+  foreach (/*auto*/ d; path.dirName.expandTilde.buildNormalizedPath.pathSplitter) {
     if (dir.length == 0 && d.isRooted) {
       dir = d.idup;
     } else {
@@ -125,7 +126,7 @@ File openCI (string fileName, out string diskName) @trusted {
 
   // traverse dirs
   string dir;
-  foreach (auto d; fileName.dirName.expandTilde.buildNormalizedPath.pathSplitter) {
+  foreach (/*auto*/ d; fileName.dirName.expandTilde.buildNormalizedPath.pathSplitter) {
     if (dir.length == 0 && d.isRooted) {
       dir = d.idup;
     } else {

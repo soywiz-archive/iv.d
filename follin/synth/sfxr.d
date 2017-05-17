@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.synth.sfxr is aliced;
+module iv.follin.synth.sfxr /*is aliced*/;
 
+import iv.alice;
 import iv.follin.engine : TflChannel;
 
 static if (__traits(compiles, () { import iv.stream; })) {
@@ -131,7 +132,7 @@ public struct Sfxr {
 
   void reset () nothrow @safe @nogc {
     uint sd = origSeed;
-    this = this.default;
+    this = this.init;
     origSeed = curseed = sd;
   }
 

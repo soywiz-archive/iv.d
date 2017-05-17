@@ -15,7 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.types is aliced;
+module iv.vfs.types /*is aliced*/;
+public import iv.alice;
 
 private import core.stdc.stdio : SEEK_SET, SEEK_CUR, SEEK_END;
 public enum Seek : int {

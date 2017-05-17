@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.ftrick is aliced;
+module iv.follin.ftrick /*is aliced*/;
 
+import iv.alice;
 import iv.follin.cmacro;
 
 version = follin_use_float_trick;

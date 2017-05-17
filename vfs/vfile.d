@@ -22,7 +22,7 @@
  * wrapped stream is thread-safe (i.e. reads, writes, etc), but
  * wrapper itself isn't.
  */
-module iv.vfs.vfile is aliced;
+module iv.vfs.vfile /*is aliced*/;
 
 //version = vfs_add_std_stdio_wrappers;
 
@@ -36,6 +36,7 @@ version(vfs_add_std_stdio_wrappers) static import std.stdio;
 extern (C) void _d_monitorenter (Object h) nothrow;
 extern (C) void _d_monitorexit (Object h) nothrow;
 
+import iv.alice;
 import iv.vfs.types : Seek, VFSHiddenPointerHelper;
 import iv.vfs.config;
 import iv.vfs.error;
@@ -427,7 +428,7 @@ public:
           //{ import core.stdc.stdio; printf("LockedWriterImpl(0x%08x): unlock!\n", cast(uint)fl.wstp); }
           _d_monitorexit(fl.wst); // emulate `synchronized(fl.wst)` exit
         }
-        fl = VFile.default; // just in case
+        fl = VFile.init; // just in case
       }
     }
 
@@ -1182,7 +1183,7 @@ protected:
       closed = true;
       eofhit = true;
       static if (streamHasClose!ST) st.close();
-      st = ST.default;
+      st = ST.init;
     }
   }
 
@@ -1563,7 +1564,7 @@ version(vfs_use_zlib_unpacker) {
           inflateEnd(&zs);
           uppos = upused = 0;
           upeoz = false;
-          zs = zs.default;
+          zs = zs.init;
           pkpos = 0;
           if (!initZStream(true)) return -1;
           prpos = 0;
@@ -2188,7 +2189,7 @@ public VFile wrapStdout () {
   } else {
     import core.stdc.stdio : stdout;
     if (stdout !is null) return VFile(stdout, false); // don't own
-    return VFile.default;
+    return VFile.init;
   }
 }
 
@@ -2199,7 +2200,7 @@ public VFile wrapStderr () {
   } else {
     import core.stdc.stdio : stderr;
     if (stderr !is null) return VFile(stderr, false); // don't own
-    return VFile.default;
+    return VFile.init;
   }
 }
 
@@ -2210,7 +2211,7 @@ public VFile wrapStdin () {
   } else {
     import core.stdc.stdio : stdin;
     if (stdin !is null) return VFile(stdin, false); // don't own
-    return VFile.default;
+    return VFile.init;
   }
 }
 

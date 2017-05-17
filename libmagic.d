@@ -24,8 +24,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-module iv.libmagic is aliced;
+module iv.libmagic /*is aliced*/;
 pragma(lib, "magic");
+
+import iv.alice;
 
 
 extern(C) @trusted nothrow @nogc:

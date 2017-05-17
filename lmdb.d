@@ -28,11 +28,12 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-module iv.lmdb is aliced;
+module iv.lmdb /*is aliced*/;
 pragma(lib, "lmdb");
 
 // ////////////////////////////////////////////////////////////////////////// //
 // C API
+import iv.alice;
 extern(C):
 nothrow:
 @nogc:

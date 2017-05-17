@@ -1,8 +1,9 @@
 // Capstone Disassembly Engine
 // By Nguyen Anh Quynh <aquynh@gmail.com>, 2013-2015
 // k8: see licenses in original capstone package, i'm too lazy to copy 'em.
-module iv.capstone is aliced;
+module iv.capstone /*is aliced*/;
 pragma(lib, "capstone");
+import iv.alice;
 extern(C) nothrow:
 
 // Capstone API version

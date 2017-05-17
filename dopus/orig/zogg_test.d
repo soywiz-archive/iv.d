@@ -1,6 +1,7 @@
 // simple library for dealing with Ogg container
-module zogg_test is aliced;
+module zogg_test /*is aliced*/;
 
+import iv.alice;
 import zogg;
 
 

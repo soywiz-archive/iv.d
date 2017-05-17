@@ -18,7 +18,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 /// this engine can layout any boxset (if it is valid)
-module iv.flexlayout is aliced;
+module iv.flexlayout /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -459,10 +460,10 @@ void flexLayout (FuiLayoutProps aroot) {
   forEachItem(mroot, (FuiLayoutProps it) {
     it.layoutingStarted();
     it.resetLayouterFlags();
-    it.pos = it.pos.default;
+    it.pos = it.pos.init;
     foreach (int gidx; 0..FuiLayoutProps.Orientation.max+1) if (it.groupNext[gidx] !is null) seenGroup[gidx] = true;
-    if (!it.visible) { it.size = it.size.default; return; }
-    it.size = it.size.default;
+    if (!it.visible) { it.size = it.size.init; return; }
+    it.size = it.size.init;
   });
 
   if (seenGroup[0] || seenGroup[1]) {

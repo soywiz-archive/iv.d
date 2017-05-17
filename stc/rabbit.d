@@ -25,9 +25,10 @@
 /* then the small IV size results in a reduced security level of 96 bit. This is due to generic TMD */
 /* trade-off attacks.                                                                               */
 /****************************************************************************************************/
-module iv.stc.rabbit is aliced;
+module iv.stc.rabbit /*is aliced*/;
 
 import std.range;
+import iv.alice;
 import iv.stc.core;
 
 

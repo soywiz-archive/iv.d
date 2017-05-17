@@ -21,13 +21,14 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
-module iv.fontconfig is aliced;
+module iv.fontconfig /*is aliced*/;
 pragma(lib, "fontconfig");
 pragma(lib, "freetype");
 
 import core.stdc.stdarg : va_list;
 import core.sys.posix.sys.stat;
 
+import iv.alice;
 import iv.freetype;
 
 

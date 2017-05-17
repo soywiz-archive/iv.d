@@ -37,8 +37,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-module iv.srex is aliced;
+module iv.srex /*is aliced*/;
 private:
+import iv.alice;
 
 // ///////////////////////////////////////////////////////////////////////// //
 /// status code
@@ -81,11 +82,11 @@ public:
     if (pool.active) {
       pool.clear();
       auto re = parseRegExp(rng, pool, flags, lastError, lastErrorPos);
-      if (re is null) { pool = pool.default; return false; } // free pool and exit
+      if (re is null) { pool = pool.init; return false; } // free pool and exit
       auto prgpool = MemPool.create;
-      if (!prgpool.active) { pool = pool.default; lastError = "compile error"; lastErrorPos = 0; return false; } // free pool and exit
+      if (!prgpool.active) { pool = pool.init; lastError = "compile error"; lastErrorPos = 0; return false; } // free pool and exit
       auto prg = reCompile(prgpool, re);
-      if (prg is null) { pool = pool.default; lastError = "compile error"; lastErrorPos = 0; return false; } // free pool and exit
+      if (prg is null) { pool = pool.init; lastError = "compile error"; lastErrorPos = 0; return false; } // free pool and exit
       debug(srex) prg.dump;
       count = re.nregexes;
       capcount = re.multi_ncaps[0];
@@ -746,7 +747,7 @@ public:
     /*
     if (res !is null) {
       static if (is(T == struct) && T.sizeof > 0) {
-        static immutable T i = T.default;
+        static immutable T i = T.init;
         memcpy(res, &i, T.sizeof);
       }
     }
@@ -1606,15 +1607,15 @@ public:
     ThompsonCtx* ctx;
     ThompsonThreadList* clist, nlist;
 
-    if (!rex.valid) return Thompson.default;
+    if (!rex.valid) return Thompson.init;
 
     Thompson vm;
 
     vm.pool = MemPool.create;
-    if (!vm.pool.active) return Thompson.default;
+    if (!vm.pool.active) return Thompson.init;
 
     ctx = vm.pool.alloc!ThompsonCtx;
-    if (ctx is null) { vm.pool.release; return Thompson.default; }
+    if (ctx is null) { vm.pool.release; return Thompson.init; }
     scope(exit) ctx.pool.release; // fixup rc
 
     ctx.pool = vm.pool;
@@ -1624,12 +1625,12 @@ public:
     len = rex.reprg.len;
 
     clist = createThreadList(vm.pool, len);
-    if (clist is null) { ctx.pool.release; vm.pool.release; return Thompson.default; }
+    if (clist is null) { ctx.pool.release; vm.pool.release; return Thompson.init; }
 
     ctx.current_threads = clist;
 
     nlist = createThreadList(vm.pool, len);
-    if (nlist is null) { ctx.pool.release; vm.pool.release; return Thompson.default; }
+    if (nlist is null) { ctx.pool.release; vm.pool.release; return Thompson.init; }
 
     ctx.next_threads = nlist;
 
@@ -1644,7 +1645,7 @@ public:
     if (!pool.active) return SRes.Error;
     auto ctx = cast(ThompsonCtx*)pool.firstalloc;
     ctx.pool = pool;
-    scope(exit) ctx.pool = MemPool.default; // fixup rc
+    scope(exit) ctx.pool = MemPool.init; // fixup rc
     static if (input.length.sizeof > 4) {
       if (input.length > int.max) return SRes.Error;
     }
@@ -1899,15 +1900,15 @@ public:
     PikeCtx* ctx;
     PikeThreadList* clist, nlist;
 
-    if (!rex.valid) return Pike.default;
+    if (!rex.valid) return Pike.init;
 
     Pike vm;
 
     vm.pool = MemPool.create;
-    if (!vm.pool.active) return Pike.default;
+    if (!vm.pool.active) return Pike.init;
 
     ctx = vm.pool.alloc!PikeCtx;
-    if (ctx is null) { vm.pool.release; return Pike.default; }
+    if (ctx is null) { vm.pool.release; return Pike.init; }
 
     ctx.pool = vm.pool;
     ctx.program = rex.reprg;
@@ -1916,12 +1917,12 @@ public:
     scope(exit) ctx.pool.release; // fixup rc
 
     clist = treadListCreate(vm.pool);
-    if (clist is null) { ctx.pool.release; vm.pool.release; return Pike.default; }
+    if (clist is null) { ctx.pool.release; vm.pool.release; return Pike.init; }
 
     ctx.current_threads = clist;
 
     nlist = treadListCreate(vm.pool);
-    if (nlist is null) { ctx.pool.release; vm.pool.release; return Pike.default; }
+    if (nlist is null) { ctx.pool.release; vm.pool.release; return Pike.init; }
 
     ctx.next_threads = nlist;
 
@@ -1936,7 +1937,7 @@ public:
       ctx.ovecsize = cast(int)ovector.length*2;
     } else {
       ctx.ovector = ctx.pool.alloc!int(int.sizeof); // 2 ints
-      if (ctx.ovector is null) { ctx.pool.release; vm.pool.release; return Pike.default; }
+      if (ctx.ovector is null) { ctx.pool.release; vm.pool.release; return Pike.init; }
       ctx.ovecsize = 2;
     }
 

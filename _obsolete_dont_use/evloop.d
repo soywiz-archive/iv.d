@@ -16,9 +16,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // severely outdated event loop
-module iv.evloop is aliced;
+module iv.evloop /*is aliced*/;
 private:
 
+import iv.alice;
 public import core.time; // for timers, Duration
 //import core.time : MonoTime, TimeException;
 
@@ -128,7 +129,7 @@ body {
   tm.changeCount = curChangeCount;
   // add to list
   uint idx = uint.max;
-  foreach (auto i; 0..timersUsed) if (timers[i].id == 0) { idx = i; break; }
+  foreach (/*auto*/ i; 0..timersUsed) if (timers[i].id == 0) { idx = i; break; }
   if (idx == uint.max) {
     if (timersUsed >= timers.length) timers.length = timers.length+32;
     idx = timersUsed++;
@@ -227,7 +228,7 @@ public void addFD (int fd, FDFlags flg, Duration timeout, void delegate (int fd,
   fixTimeout(nfo, flg, timeout);
   if (events == 0 && nfo.timeout < 0) throw new Exception("invalid flags");
   uint idx = uint.max;
-  foreach (auto i; 1..pfdUsed) if (pfds[i].fd < 0) { idx = i; break; }
+  foreach (/*auto*/ i; 1..pfdUsed) if (pfds[i].fd < 0) { idx = i; break; }
   if (idx == uint.max) {
     if (pfdUsed >= pfds.length) pfds.length = pfds.length+32;
     idx = pfdUsed++;
@@ -271,7 +272,7 @@ public void addFD (int fd, FDFlags flg, void delegate (int fd, FDFlags flags) ev
   fixTimeout(nfo, flg, Duration.zero);
   if (events == 0 && nfo.timeout < 0) throw new Exception("invalid flags");
   uint idx = uint.max;
-  foreach (auto i; 1..pfdUsed) if (pfds[i].fd < 0) { idx = i; break; }
+  foreach (/*auto*/ i; 1..pfdUsed) if (pfds[i].fd < 0) { idx = i; break; }
   if (idx == uint.max) {
     if (pfdUsed >= pfds.length) pfds.length = pfds.length+32;
     idx = pfdUsed++;
@@ -289,7 +290,7 @@ version(unittest)
 void dumpFDs () {
   import std.stdio;
   writefln("=== used pfds: %s ===", pfdUsed);
-  foreach (auto idx; 0..pfdUsed) {
+  foreach (/*auto*/ idx; 0..pfdUsed) {
     if (pfds[idx].fd < 0) continue;
     auto nfo = pfds[idx].fd in fdset;
     if (nfo is null) {
@@ -414,7 +415,7 @@ int processAll () /*@trusted nothrow*/ {
 
   // process and shot timers
   if (timersUsed > 0) {
-    foreach (auto idx; 0..timersUsed) {
+    foreach (/*auto*/ idx; 0..timersUsed) {
       if (timers[idx].id == 0) continue;
       // skip just added
       if (timers[idx].changeCount < curChangeCount) {
@@ -481,7 +482,7 @@ int processAll () /*@trusted nothrow*/ {
       if (nfo.toTime < tout) tout = nfo.toTime;
     }
   }
-  foreach (auto idx; end..pfdUsed) pfds[idx].revents = 0;
+  foreach (/*auto*/ idx; end..pfdUsed) pfds[idx].revents = 0;
   while (pfdUsed > 0 && pfds[pfdUsed-1].fd < 0) --pfdUsed;
 
   if (tout != tout.max) {
@@ -509,7 +510,7 @@ public void eventLoop () {
 
   // loop
   while (!doQuit && !doGlobalQuit) {
-    //foreach (auto idx; 0..pfdUsed) pfds[idx].revents = 0;
+    //foreach (/+auto+/ idx; 0..pfdUsed) pfds[idx].revents = 0;
     auto tomsec = processAll();
     if (doQuit || doGlobalQuit) break;
     //{ import std.stdio; writeln("tomsec=", tomsec); }

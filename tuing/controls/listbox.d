@@ -17,8 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.controls.listbox is aliced;
+module iv.tuing.controls.listbox /*is aliced*/;
 
+import iv.alice;
 import iv.eventbus;
 import iv.flexlayout;
 import iv.strex;

@@ -15,9 +15,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module ziplist is aliced;
+module ziplist /*is aliced*/;
 
 import std.stdio;
+import iv.alice;
 import iv.ziparc;
 
 

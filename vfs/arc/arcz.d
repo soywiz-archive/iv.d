@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs.arc.arcz is aliced;
+module iv.vfs.arc.arcz /*is aliced*/;
 
+import iv.alice;
 import iv.vfs.types : Seek;
 import iv.vfs.error;
 import iv.vfs.main;
@@ -132,7 +133,7 @@ private:
       if (res is null) onOutOfMemoryError();
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
-        static immutable T i = T.default;
+        static immutable T i = T.init;
         foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(iv_vfs_arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }
@@ -143,7 +144,7 @@ private:
       if (res is null) onOutOfMemoryError();
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
-        static immutable T i = T.default;
+        static immutable T i = T.init;
         foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(iv_vfs_arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }

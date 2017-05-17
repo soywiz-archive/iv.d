@@ -25,8 +25,9 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 */
-module iv.opengl.gl is aliced;
+module iv.opengl.gl /*is aliced*/;
 pragma(lib, "GL");
+import iv.alice;
 
 alias GLenum = uint;
 alias GLvoid = void;

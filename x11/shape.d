@@ -23,10 +23,11 @@ used in advertising or otherwise to promote the sale, use or other dealings
 in this Software without prior written authorization from The Open Group.
 
 ********************************************************/
-module iv.x11.xshape is aliced;
+module iv.x11.xshape /*is aliced*/;
 
 import core.stdc.config;
 
+import iv.alice;
 import iv.x11.md;
 import iv.x11.region;
 import iv.x11.x11;

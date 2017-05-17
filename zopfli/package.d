@@ -16,8 +16,9 @@ limitations under the License.
 Author: lode.vandevenne@gmail.com (Lode Vandevenne)
 Author: jyrki.alakuijala@gmail.com (Jyrki Alakuijala)
 */
-module iv.zopfli is aliced;
+module iv.zopfli /*is aliced*/;
 extern(C) nothrow @nogc:
+import iv.alice;
 //pragma(lib, "libzopfli.a");
 pragma(lib, "zopfli");
 

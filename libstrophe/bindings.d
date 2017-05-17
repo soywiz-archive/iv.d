@@ -8,10 +8,11 @@
 **
 **  This software is dual licensed under the MIT and GPLv3 licenses.
 */
-module iv.libstrophe.bindings is aliced;
+module iv.libstrophe.bindings /*is aliced*/;
 pragma(lib, "strophe");
 // consts are probably fucked all the way
 import core.stdc.config : c_long, c_ulong;
+import iv.alice;
 
 alias xmpp_long = c_long;
 alias xmpp_ulong = c_ulong;

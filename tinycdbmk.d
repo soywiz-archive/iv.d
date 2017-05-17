@@ -16,7 +16,9 @@
  * D translation by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
 // CDB key/value database creator
-module iv.tinycdbmk is aliced;
+module iv.tinycdbmk /*is aliced*/;
+
+import iv.alice;
 
 
 struct CDBMaker {

@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.hash.joaat is aliced;
+module iv.hash.joaat /*is aliced*/;
 // Bob Jenkins' One-At-A-Time hash function
+import iv.alice;
 
 
 // this seems to give worser results

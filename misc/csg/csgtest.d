@@ -1,5 +1,6 @@
-module main is aliced;
+module main /*is aliced*/;
 
+import iv.alice;
 import iv.glbinds;
 import arsd.color;
 import arsd.png;

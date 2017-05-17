@@ -16,8 +16,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.core is aliced;
+module iv.sdpy.core /*is aliced*/;
 
+import iv.alice;
 import iv.sdpy.compat;
 private import iv.sdpy.gfxbuf;
 

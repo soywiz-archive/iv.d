@@ -17,10 +17,11 @@
  * D translation by Ketmar // Invisible Vector
  */
 // ZMBV video codec
-module iv.zmbv is aliced;
+module iv.zmbv /*is aliced*/;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+import iv.alice;
 import iv.exex;
 
 mixin(MyException!"ZMBVError");

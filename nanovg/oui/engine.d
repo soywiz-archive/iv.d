@@ -39,7 +39,8 @@ THE SOFTWARE.
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.oui.engine is aliced;
+module iv.nanovg.oui.engine /*is aliced*/;
+import iv.alice;
 
 import core.stdc.stdlib : malloc, free;
 import core.stdc.string : memset;
@@ -1699,7 +1700,7 @@ public T* uiAllocHandle(T) (int item) if (!is(T == class)) {
   ui_context.datasize += size;
   static if (is(T == struct)) {
     import core.stdc.string : memcpy;
-    static immutable T i = T.default;
+    static immutable T i = T.init;
     memcpy(pitem.handle, &i, T.sizeof);
   }
   return cast(T*)pitem.handle;

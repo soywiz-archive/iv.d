@@ -15,8 +15,9 @@
 **
 ** This bot responds to basic messages and iq version requests.
 */
-module bot is aliced;
+module bot /*is aliced*/;
 
+import iv.alice;
 import iv.libstrophe;
 import iv.vfs.io;
 

@@ -17,7 +17,8 @@
  */
 // various vector and matrix operations.
 // matrix should be compatible with OpenGL, but mostly untested.
-module iv.vmath is aliced;
+module iv.vmath /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

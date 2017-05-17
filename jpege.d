@@ -39,7 +39,9 @@
  * num_channels must be 1 (Y), 3 (RGB), 4 (RGBA), image pitch must be width*num_channels.
  * note that alpha will not be stored in jpeg file.
  */
-module iv.jpege is aliced;
+module iv.jpege /*is aliced*/;
+
+import iv.alice;
 
 public:
 // ////////////////////////////////////////////////////////////////////////// //

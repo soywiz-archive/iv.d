@@ -14,9 +14,10 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.stc.arc4 is aliced;
+module iv.stc.arc4 /*is aliced*/;
 
 import std.range;
+import iv.alice;
 import iv.stc.core;
 
 

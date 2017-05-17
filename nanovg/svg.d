@@ -26,9 +26,10 @@
  *
  * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
-module iv.nanovg.svg is aliced;
+module iv.nanovg.svg /*is aliced*/;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
+import iv.alice;
 import iv.vfs;
 
 version = nanosvg_crappy_stylesheet_parser;
@@ -453,7 +454,7 @@ T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   /+
   static if (is(T == struct)) {
     import core.stdc.string : memcpy;
-    static immutable T i = T.default;
+    static immutable T i = T.init;
     memcpy(res, &i, T.sizeof);
     if (addmem) res[T.sizeof..T.sizeof+addmem] = 0;
     res[0..T.sizeof+addmem] = 0;

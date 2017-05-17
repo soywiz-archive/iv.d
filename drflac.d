@@ -5,7 +5,8 @@
 // David Reid - mackron@gmail.com
 //
 // D translation by Ketmar // Invisible Vector
-module iv.drflac is aliced;
+module iv.drflac /*is aliced*/;
+import iv.alice;
 //nothrow @nogc:
 
 // USAGE

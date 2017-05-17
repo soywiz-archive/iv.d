@@ -15,9 +15,10 @@
  * 02111-1307 USA.
  * ********************************************************************************************* */
 // key/value database based on QDBM
-module iv.sdbm is aliced;
+module iv.sdbm /*is aliced*/;
 
 import std.traits : isArray, isDynamicArray;
+import iv.alice;
 import iv.hash.fasthash;
 
 
@@ -500,7 +501,7 @@ public:
     static if (mode == "throw") {
       if (res.length != T.sizeof) raise(Error.NOTFOUND);
     } else {
-      if (res.length != T.sizeof) data[0] = T.default;
+      if (res.length != T.sizeof) data[0] = T.init;
     }
     return data[0];
   }
@@ -512,7 +513,7 @@ public:
     static if (mode == "throw") {
       if (res.length != T.sizeof) raise(Error.NOTFOUND);
     } else {
-      if (res.length != T.sizeof) dval = T.default;
+      if (res.length != T.sizeof) dval = T.init;
     }
     return (res.length == T.sizeof);
   }

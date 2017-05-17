@@ -43,8 +43,9 @@
 // ## License
 //
 // Copyright (c) 2011 Evan Wallace (http://madebyevan.com/), under the MIT license.
-module csg is aliced;
+module csg /*is aliced*/;
 
+import iv.alice;
 import iv.vmath;
 
 //static assert(is(Float == double), "compile this with -version=vmath_double");

@@ -9,10 +9,11 @@
  * by the Xiph.Org Foundation http://www.xiph.org/                  *
  *                                                                  *
  ********************************************************************/
-module iv.xyph.ogg is aliced;
+module iv.xyph.ogg /*is aliced*/;
 pragma(lib, "ogg");
 
 import core.stdc.config;
+import iv.alice;
 
 alias ogg_int64_t = long;
 

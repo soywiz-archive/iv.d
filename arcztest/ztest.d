@@ -1,7 +1,9 @@
-module ztest is aliced;
+module ztest /*is aliced*/;
 
 import std.stdio;
 import std.random;
+
+import iv.alice;
 import iv.arcz;
 
 

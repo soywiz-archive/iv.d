@@ -16,9 +16,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // Totro-inspired random name generator, clean room implementation
-module iv.namegen is aliced;
+module iv.namegen /*is aliced*/;
 private:
 
+import iv.alice;
 import iv.stream;
 
 
@@ -631,7 +632,7 @@ public:
   }
 
   bool checkCorrectness() () const @safe nothrow @nogc {
-    foreach (auto aidx; 0..sylls.length) {
+    foreach (immutable aidx; 0..sylls.length) {
       if (sylls[aidx].length < 1 || sylls[aidx].length > 0xffff) {
         //assert(0);
         return false;
@@ -672,13 +673,13 @@ public:
     uint iscons = rand(0, 1);
     auto res = new char[](leng*3);
     usize respos = 0;
-    foreach (auto i; 0..leng) {
+    foreach (immutable i; 0..leng) {
       // WARNING: may hang if no termination vowel/consonants are present
       const(Syllable)* sy = null;
       while (sy is null) {
         uint count = rand(1, totals[iscons]);
         //try { writefln("count=%s, total=%s", count, totals[iscons]); } catch (Exception) {}
-        foreach (auto idx; 0..sylls[iscons].length) {
+        foreach (immutable idx; 0..sylls[iscons].length) {
           auto cc = sylls[iscons][idx].count;
           if (count > cc) {
             count -= cc;
@@ -775,13 +776,13 @@ public:
     scope(failure) clear();
     parseText(text);
     if (!checkCorrectness()) throw new Exception("incorrect resulting set");
-    foreach (auto idx; 0..sylls.length) sort!((ref a, ref b) => a.count < b.count)(sylls[idx]);
+    foreach (immutable idx; 0..sylls.length) sort!((ref a, ref b) => a.count < b.count)(sylls[idx]);
   }
 
   void saveToStream(ST) (auto ref ST fo) if (isWriteableStream!ST) {
     fo.rawWriteExact("SYLLDATA");
     fo.writeNum!ubyte(0); // version
-    foreach (auto aidx; 0..sylls.length) {
+    foreach (immutable aidx; 0..sylls.length) {
       fo.writeNum!ushort(cast(ushort)sylls[aidx].length); // count
       foreach (immutable sy; sylls[aidx]) {
         fo.writeNum!ubyte(cast(ubyte)sy.str.length);
@@ -799,7 +800,7 @@ public:
     st.rawReadExact(sign);
     if (sign != "SYLLDATA") throw new Exception("invalid signature");
     if (st.readNum!ubyte() != 0) throw new Exception("invalid version");
-    foreach (auto aidx; 0..sylls.length) {
+    foreach (immutable aidx; 0..sylls.length) {
       auto len = st.readNum!ushort();
       if (len < 1) throw new Exception("invalid length");
       sylls[aidx].length = len;
@@ -830,7 +831,7 @@ public:
     import std.stdio : File;
     void dumpToFile (File fo, string name="table") {
       fo.writeln("  // [", totals[0], ", ", totals[1], "]");
-      foreach (auto sidx; 0..sylls.length) {
+      foreach (immutable sidx; 0..sylls.length) {
         fo.writeln("  static immutable Syllable[", sylls[sidx].length, "] ", name, (sidx ? "C" : "V"), " = [");
         foreach (immutable sy; sylls[sidx]) {
           string s = sy.str;

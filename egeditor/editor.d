@@ -14,11 +14,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egeditor.editor is aliced;
+module iv.egeditor.editor /*is aliced*/;
 
 //version = egeditor_scan_time;
 //version = egeditor_scan_time_to_file;
 
+import iv.alice;
 import iv.rawtty : koi2uni, uni2koi;
 import iv.strex;
 import iv.utfutil;
@@ -131,7 +132,7 @@ final:
     if (hadHBuf) {
       hbuf = cast(HighState*)malloc(nsz*hbuf[0].sizeof);
       if (hbuf is null) assert(0, "out of memory for text buffers");
-      hbuf[0..nsz] = HighState.default;
+      hbuf[0..nsz] = HighState.init;
     }
     tbused = 0;
     tbsize = nsz;
@@ -212,7 +213,7 @@ public:
         assert(hbuf is null);
         assert(tbsize > 0);
         hbuf = cast(HighState*)malloc(tbsize*hbuf[0].sizeof);
-        if (hbuf !is null) hbuf[0..tbsize] = HighState.default;
+        if (hbuf !is null) hbuf[0..tbsize] = HighState.init;
       } else {
         // remove highlighitng buffer
         import core.stdc.stdlib : free;
@@ -230,7 +231,7 @@ public:
   @property int textsize () const pure @safe nothrow @nogc { pragma(inline, true); return tbused; }
 
   @property char opIndex (uint pos) const pure @trusted nothrow @nogc { pragma(inline, true); return (pos < tbused ? tbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : '\n'); } ///
-  @property ref HighState hi (uint pos) pure @trusted nothrow @nogc { pragma(inline, true); return (hbuf !is null && pos < tbused ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.default)); } ///
+  @property ref HighState hi (uint pos) pure @trusted nothrow @nogc { pragma(inline, true); return (hbuf !is null && pos < tbused ? hbuf[pos+(pos >= gapstart ? gapend-gapstart : 0)] : (hidummy = hidummy.init)); } ///
 
   @property dchar uniAt (uint pos) const @trusted nothrow @nogc {
     immutable ts = tbused;
@@ -630,7 +631,7 @@ private:
     uint ICS = (gb.mSingleLine ? 2 : 1024);
     locache = cast(typeof(locache[0])*)realloc(locache, ICS*locache[0].sizeof);
     if (locache is null) assert(0, "out of memory for line cache");
-    locache[0..ICS] = LOCItem.default;
+    locache[0..ICS] = LOCItem.init;
     locache[1].ofs = gb.textsize; // just in case
     locsize = ICS;
     mLineCount = 1; // we always have at least one line, even if it is empty
@@ -658,7 +659,7 @@ private:
     if (maxh < 1) maxh = 1;
     auto tbufcopy = gb.tbuf;
     auto hbufcopy = gb.hbuf;
-    gb.hidummy = GapBuffer.HighState.default; // just in case
+    gb.hidummy = GapBuffer.HighState.init; // just in case
     if (utfuck) {
       Utf8DecoderFast udc;
       GapBuffer.HighState* hs = (hbufcopy !is null ? hbufcopy+gb.pos2real(ls) : &gb.hidummy);
@@ -816,7 +817,7 @@ private:
             ++lbot;
           }
           // setup next line
-          locache[lidx] = LOCItem.default; // reset all, including height and wrapping
+          locache[lidx] = LOCItem.init; // reset all, including height and wrapping
           locache[lidx].ofs = cpos;
           cwdt = 0;
           continue;
@@ -911,7 +912,7 @@ public:
       growLineCache(1);
       assert(locsize > 0);
       mLineCount = 1;
-      locache[0..2] = LOCItem.default;
+      locache[0..2] = LOCItem.init;
       locache[1].ofs = ts;
       return true;
     }
@@ -922,7 +923,7 @@ public:
       //{ import core.stdc.stdio; printf("loaded %u bytes; %d lines found\n", gb.textsize, lcount); }
       if (!growLineCache(lcount)) return false;
       assert(lcount+1 <= locsize);
-      //locache[0..lcount+1] = LOCItem.default; // reset all lines
+      //locache[0..lcount+1] = LOCItem.init; // reset all lines
       memset(locache, 0, (lcount+1)*locache[0].sizeof); // reset all lines (help compiler a little)
       uint pos = 0;
       LOCItem* lcp = locache; // help compiler a little
@@ -4277,7 +4278,7 @@ public:
 
   ///
   final TextRange markedBlockRange () nothrow {
-    if (!hasMarkedBlock) return TextRange.default;
+    if (!hasMarkedBlock) return TextRange.init;
     return TextRange(this, bstart, bend);
   }
 

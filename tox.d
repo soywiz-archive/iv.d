@@ -20,13 +20,14 @@
  *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-module iv.tox is aliced;
+module iv.tox /*is aliced*/;
 pragma(lib, "toxdns");
 pragma(lib, "toxencryptsave");
 pragma(lib, "toxcore");
 pragma(lib, "sodium");
 //pragma(lib, "m");
 //pragma(lib, "pthread");
+import iv.alice;
 extern(C) nothrow {
 
 /** \page core Public core API for Tox clients.

@@ -31,10 +31,11 @@
  *
  * The low level cipher functionality is in gnutls/crypto.h.
  */
-module iv.gnutls is aliced;
+module iv.gnutls /*is aliced*/;
 pragma(lib, "gnutls");
 pragma(lib, "gcrypt");
 
+import iv.alice;
 import core.sys.posix.sys.types : time_t;
 
 

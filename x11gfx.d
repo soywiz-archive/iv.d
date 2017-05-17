@@ -14,10 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.x11gfx is aliced;
+module iv.x11gfx /*is aliced*/;
 
 import arsd.simpledisplay;
 //import arsd.color;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

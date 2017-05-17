@@ -1,6 +1,7 @@
 // simple and free spellchecker
 // simple word difference algorithm (found somewhere in teh internets, dunno whose it is)
-module wdiff is aliced;
+module wdiff /*is aliced*/;
+import iv.alice;
 
 
 struct DiffEngine {

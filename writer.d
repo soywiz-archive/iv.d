@@ -38,8 +38,9 @@
  *        second '~': right filling char for 'center'
  *   '\0'...'\0': separator string for '%|'
  */
-module iv.writer is aliced;
+module iv.writer /*is aliced*/;
 private:
+import iv.alice;
 
 private import std.traits : isBoolean, isIntegral, isPointer;
 private alias StripTypedef(T) = T;
@@ -359,7 +360,7 @@ private auto WrData (int fd, int alen) {
       auto sfd = fd;
       auto saidx = aidx;
       auto salen = alen;
-      this = this.default;
+      this = this.init;
       fd = sfd;
       aidx = saidx;
       alen = salen;

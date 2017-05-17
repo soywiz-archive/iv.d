@@ -46,7 +46,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module opus_resampler is aliced;
+module opus_resampler /*is aliced*/;
+import iv.alice;
 
 /*
    The design goals of this code are:

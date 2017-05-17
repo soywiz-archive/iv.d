@@ -1,6 +1,7 @@
 #!/usr/bin/env rdmd
-module rezip is aliced;
+module rezip /*is aliced*/;
 
+import iv.alice;
 import iv.cmdcon;
 import iv.vfs;
 import iv.vfs.writers.zip;

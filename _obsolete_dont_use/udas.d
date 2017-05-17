@@ -16,7 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // severely outdated! do not use!
-module iv.udas is aliced;
+module iv.udas /*is aliced*/;
+import iv.alice;
 
 private alias aliasHelper(alias T) = T;
 private alias aliasHelper(T) = T;

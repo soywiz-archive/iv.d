@@ -53,8 +53,9 @@
 //
 // See end of file for full version history.
 // D translation by Ketmar // Invisible Vector
-module iv.stb.vorbis is aliced;
+module iv.stb.vorbis /*is aliced*/;
 
+import iv.alice;
 import core.stdc.stdio : FILE;
 
 nothrow /*@trusted*/:
@@ -4276,8 +4277,8 @@ public:
 
     first_audio_page_offset = 0;
 
-    p_first = p_first.default;
-    p_last = p_last.default;
+    p_first = p_first.init;
+    p_last = p_last.init;
 
     setup_offset = 0;
     temp_offset = 0;
@@ -4299,7 +4300,7 @@ public:
     mapping_count = 0;
     mapping = null;
     mode_count = 0;
-    mode_config[] = Mode.default;
+    mode_config[] = Mode.init;
 
     total_samples = 0;
 
@@ -4344,7 +4345,7 @@ public:
 
     /+
     page_crc_tests = -1;
-    scan[] = CRCscan.default;
+    scan[] = CRCscan.init;
     +/
 
     channel_buffer_start = 0;

@@ -1,6 +1,7 @@
 // simple library for dealing with Ogg containers
-module zogg is aliced;
+module zogg /*is aliced*/;
 
+import iv.alice;
 //import iv.cmdcon;
 import iv.vfs;
 
@@ -227,8 +228,8 @@ private:
 
 public:
   void close () {
-    fl = fl.default;
-    lastpage = lastpage.default;
+    fl = fl.init;
+    lastpage = lastpage.init;
     bufpos = bufused = 0;
     curseg = 0;
     bytesRead = 0;

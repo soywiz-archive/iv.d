@@ -14,8 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.dialogs is aliced;
+module iv.egtui.dialogs /*is aliced*/;
 
+import iv.alice;
 import iv.rawtty;
 import iv.strex;
 import iv.vfs.io;

@@ -1,6 +1,7 @@
 #!/usr/bin/env rdmd
-module zflacvt is aliced;
+module zflacvt /*is aliced*/;
 
+import iv.alice;
 import iv.drflac;
 import iv.cmdcon;
 import iv.cuefile;

@@ -17,8 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.tuing.events is aliced;
+module iv.tuing.events /*is aliced*/;
 
+import iv.alice;
 import iv.eventbus;
 import iv.flexlayout : FuiPoint;
 import iv.rawtty : TtyEvent;

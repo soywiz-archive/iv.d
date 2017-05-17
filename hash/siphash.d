@@ -20,8 +20,9 @@
  * modifications, CTFEcation, etc. by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
 ///WARNING: not conforming to hash API!
-module iv.hash.siphash is aliced;
+module iv.hash.siphash /*is aliced*/;
 private:
+import iv.alice;
 
 /**
  * siphash template, which takes SipRound C and D parameters

@@ -15,7 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.prng.old is aliced;
+module iv.prng.old /*is aliced*/;
+import iv.alice;
 
 
 private uint xyzzyPRNGHashU32() (uint a) {

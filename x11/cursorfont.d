@@ -1,4 +1,5 @@
-module iv.x11.cursorfont is aliced;
+module iv.x11.cursorfont /*is aliced*/;
+import iv.alice;
 
 enum {
   XC_num_glyphs = 154,

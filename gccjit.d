@@ -15,9 +15,10 @@
 
 /// You should have received a copy of the GNU General Public License
 /// along with this program.  If not, see <http://www.gnu.org/licenses/>.
-module iv.gccjit is aliced;
+module iv.gccjit /*is aliced*/;
 pragma(lib, "gccjit");
 
+import iv.alice;
 import std.conv : to;
 import std.string : toStringz;
 import std.traits : isIntegral, isSigned;

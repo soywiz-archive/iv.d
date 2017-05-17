@@ -15,7 +15,8 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-module imdct15 is aliced;
+module imdct15 /*is aliced*/;
+import iv.alice;
 
 /**
  * @file

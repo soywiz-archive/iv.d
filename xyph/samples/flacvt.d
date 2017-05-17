@@ -14,8 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module zflacvt is aliced;
+module zflacvt /*is aliced*/;
 
+import iv.alice;
 import iv.drflac;
 import iv.cmdcon;
 import iv.encoding;
@@ -108,7 +109,7 @@ private:
     import std.range : enumerate;
     uint[3] msf;
     bool lastHit = false;
-    foreach (immutable idx, auto sv; s.splitter(':').enumerate) {
+    foreach (immutable idx, /*auto*/ sv; s.splitter(':').enumerate) {
       if (idx >= msf.length) throw new Exception("invalid index");
       lastHit = (idx == msf.length-1);
       msf[idx] = sv.to!uint;
@@ -128,7 +129,7 @@ public:
   Track[] tracks;
 
 public:
-  void clear () { this = this.default; }
+  void clear () { this = this.init; }
 
   void load (const(char)[] fname) { load(VFile(fname)); }
 

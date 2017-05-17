@@ -1,9 +1,10 @@
-module iv.x11.xlib is aliced;
+module iv.x11.xlib /*is aliced*/;
 pragma(lib, "X11");
 
 import core.stdc.config : c_long, c_ulong;
 import core.stdc.stddef : wchar_t;
 
+import iv.alice;
 import iv.x11.md;
 import iv.x11.x11;
 

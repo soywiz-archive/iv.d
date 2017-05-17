@@ -13,12 +13,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.eventbus is aliced;
+module iv.eventbus /*is aliced*/;
 private:
 
 import core.time : MonoTime;
 import std.datetime : Clock, SysTime;
 
+import iv.alice;
 import iv.weakref;
 
 
@@ -138,7 +139,7 @@ enum SBDispatchMixin = q{
         import std.traits;
         if (typeid(Event) != ti) doit(ti.base);
         if (evt.processed) return;
-        foreach (immutable oidx, auto over; __traits(getOverloads, this, "onMyEvent")) {
+        foreach (immutable oidx, /*auto*/ over; __traits(getOverloads, this, "onMyEvent")) {
           alias tt = typeof(over);
           static if (is(ReturnType!tt == void)) {
             alias pars = Parameters!tt;
@@ -218,7 +219,7 @@ public void connectListeners(O:Object) (O obj) {
             import std.traits;
             if (typeid(Event) != ti) doit(ti.base);
             if (evt.processed) return;
-            foreach (immutable oidx, auto over; __traits(getOverloads, OT, EvtName)) {
+            foreach (immutable oidx, /*auto*/ over; __traits(getOverloads, OT, EvtName)) {
               alias tt = typeof(over);
               static if (is(ReturnType!tt == void)) {
                 alias pars = Parameters!tt;
@@ -300,7 +301,7 @@ public void processEvents () {
         if (tm < ppevents[0].hitTime) break;
         evt = ppevents.ptr[0].evt;
         foreach (immutable c; 1..ppevents.length) ppevents.ptr[c-1] = ppevents.ptr[c];
-        ppevents[$-1] = ppevents[0].default;
+        ppevents[$-1] = ppevents[0].init;
         ppevents.length -= 1;
         ppevents.assumeSafeAppend;
       }
@@ -456,7 +457,7 @@ void cleanupListeners () {
       }
       if (ell.id == 0) {
         foreach (immutable c; pos+1..llist.length) llist.ptr[c-1] = llist.ptr[c];
-        llist[$-1] = EventListenerInfo.default;
+        llist[$-1] = EventListenerInfo.init;
         llist.length -= 1;
         llist.assumeSafeAppend;
       } else {
@@ -475,7 +476,7 @@ void cleanupListeners () {
       }
       if (ell.id == 0) {
         foreach (immutable c; pos+1..llistsb.length) llistsb.ptr[c-1] = llistsb.ptr[c];
-        llistsb[$-1] = EventListenerInfo.default;
+        llistsb[$-1] = EventListenerInfo.init;
         llistsb.length -= 1;
         llistsb.assumeSafeAppend;
       } else {

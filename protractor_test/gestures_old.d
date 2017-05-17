@@ -15,13 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module gesturespt_test is aliced;
+module gesturespt_test /*is aliced*/;
 private:
 
 import std.stdio;
 
+import iv.alice;
 import iv.videolib;
-
 import iv.geng;
 
 

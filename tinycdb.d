@@ -16,7 +16,8 @@
  * D translation by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
 // CDB key/value database reader
-module iv.tinycdb is aliced;
+module iv.tinycdb /*is aliced*/;
+import iv.alice;
 
 
 struct CDB {
@@ -222,10 +223,10 @@ nothrow:
       }
     }
 
-    if (key.length < 1 || key.length >= mDataEnd) return Iter.default; /* if key size is too large */
+    if (key.length < 1 || key.length >= mDataEnd) return Iter.init; /* if key size is too large */
     immutable klen = cast(uint)key.length;
 
-    auto it = Iter.default;
+    auto it = Iter.init;
     it.cdbp = &this;
     it.key = key;
     it.hval = hash(key);
@@ -233,13 +234,13 @@ nothrow:
     it.htp = mDataPtr+((it.hval<<3)&2047);
     uint n = unpack(it.htp+4);
     it.httodo = n<<3;
-    if (!n) return Iter.default;
+    if (!n) return Iter.init;
     uint pos = unpack(it.htp);
     if (n > (mFSize >> 3) ||
         pos < mDataEnd ||
         pos > mFSize ||
         it.httodo > mFSize-pos)
-      return Iter.default;
+      return Iter.init;
 
     it.htab = mDataPtr+pos;
     it.htend = it.htab+it.httodo;

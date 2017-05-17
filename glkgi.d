@@ -15,8 +15,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 /// DO NOT USE YET!
-module iv.glkgi is aliced;
+module iv.glkgi /*is aliced*/;
 
+import iv.alice;
 import core.atomic;
 import std.concurrency;
 

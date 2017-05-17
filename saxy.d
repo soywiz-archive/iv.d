@@ -21,11 +21,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 // SAX style xml parser
-module iv.saxy is aliced;
+module iv.saxy /*is aliced*/;
 
 import std.encoding;
 import std.range;
 
+import iv.alice;
 import iv.strex;
 import iv.vfs;
 

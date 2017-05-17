@@ -14,10 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module xmain_fed is aliced;
+module xmain_fed /*is aliced*/;
 
 import std.random : uniform;
 
+import iv.alice;
 import iv.glkgi;
 
 

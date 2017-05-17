@@ -17,7 +17,8 @@
  * D translation and "d-fication" by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * ********************************************************************************************* */
 // key/value database based on tokyo kabinet
-module iv.depot is aliced;
+module iv.depot /*is aliced*/;
+import iv.alice;
 
 
 /// database errors

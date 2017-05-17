@@ -16,9 +16,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // 866,1251,koi8u
-module iv.encoding is aliced;
+module iv.encoding /*is aliced*/;
 
 import std.encoding;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

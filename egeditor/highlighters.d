@@ -14,8 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egeditor.highlighters is aliced;
+module iv.egeditor.highlighters /*is aliced*/;
 
+import iv.alice;
 import iv.strex;
 
 import iv.egeditor.editor;

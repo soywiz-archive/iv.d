@@ -17,7 +17,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.cassowary is aliced;
+module iv.cassowary /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -590,7 +591,7 @@ public:
     string s;
     if (!Csw.approx(mConstant, 0.0) || mTerms.length == 0) return to!string(mConstant);
     bool first = true;
-    foreach (auto clv; mTerms.byValue) {
+    foreach (/*auto*/ clv; mTerms.byValue) {
       import std.string : format;
       s ~= format((first ? "%s*%s" : " + %s*%s"), clv.num, clv.var);
       first = false;
@@ -685,7 +686,7 @@ public:
   override string toString () const {
     import std.string : format;
     string s = "Tableau:\n";
-    foreach (auto ev; mRows.byValue) s ~= format("%s <==> %s\n", ev.var, ev.expr);
+    foreach (/*auto*/ ev; mRows.byValue) s ~= format("%s <==> %s\n", ev.var, ev.expr);
 
     s ~= format("\nColumns:\n%s", mColumns);
     s ~= format("\nInfeasible rows: %s", mInfeasibleRows);
@@ -776,7 +777,7 @@ public:
   // oldVar should now be a basic variable.
   protected final void substituteOut (CswAbstractVariable oldVar, CswLinearExpression expr) nothrow {
     auto varset = mColumns[oldVar.vindex];
-    foreach (auto v; varset.set.byValue) {
+    foreach (/*auto*/ v; varset.set.byValue) {
       auto row = mRows[v.vindex].expr;
       row.substituteOut(oldVar, expr, v, this);
       if (v.isRestricted && row.constant < 0.0) mInfeasibleRows[v.vindex] = v;
@@ -998,7 +999,7 @@ final:
   debug package void dumpVars () const {
     import iv.writer;
     writeln("=== VARS ===");
-    foreach (auto v; mVarMap) writeln(" ", v);
+    foreach (/*auto*/ v; mVarMap) writeln(" ", v);
     writeln("============");
   }
 
@@ -1051,7 +1052,7 @@ final:
   CswSimplexSolver beginEdit () {
     assert(mEditVarMap.length > 0, "mEditVarMap.length == 0");
     // may later want to do more in here
-    mInfeasibleRows = mInfeasibleRows.default; //mInfeasibleRows.clear();
+    mInfeasibleRows = mInfeasibleRows.init; //mInfeasibleRows.clear();
     resetStayConstants();
     mStackEdCns ~= mEditVarMap.length;
     return this;
@@ -1084,7 +1085,7 @@ final:
   CswSimplexSolver removeEditVarsTo (int n) {
     try {
       // using '.keys', 'cause mEditVarMap can be modified inside loop
-      foreach (auto v; mEditVarMap.values) {
+      foreach (/*auto*/ v; mEditVarMap.values) {
         //CswEditInfo cei = mEditVarMap[v.var.vindex].edit;
         auto cei = v.edit;
         if (cei.index >= n) removeEditVar(v.var);
@@ -1153,7 +1154,7 @@ final:
     CswLinearExpression zRow = rowExpression(mObjective);
     auto eVars = cn.cindex in mErrorVars;
     if (eVars !is null) {
-      foreach (auto clv; eVars.vars.byValue) {
+      foreach (/*auto*/ clv; eVars.vars.byValue) {
         CswLinearExpression expr = rowExpression(clv);
         if (expr is null) {
           zRow.addVariable(clv, -cn.weight*cn.strength, mObjective, this);
@@ -1187,7 +1188,7 @@ final:
       auto col = mColumns[marker.vindex];
       CswAbstractVariable exitVar = null;
       CswNumber minRatio = 0.0;
-      foreach (auto v; col.set) {
+      foreach (/*auto*/ v; col.set) {
         if (v.isRestricted) {
           CswLinearExpression expr = rowExpression(v);
           CswNumber coeff = expr.coefficientFor(marker);
@@ -1202,7 +1203,7 @@ final:
       }
 
       if (exitVar is null) {
-        foreach (auto v; col.set) {
+        foreach (/*auto*/ v; col.set) {
           if (v.isRestricted) {
             CswLinearExpression expr = rowExpression(v);
             CswNumber coeff = expr.coefficientFor(marker);
@@ -1231,7 +1232,7 @@ final:
     if (rowExpression(marker) !is null) removeRow(marker);
 
     if (eVars !is null) {
-      foreach (auto v; eVars.vars.byValue) {
+      foreach (/*auto*/ v; eVars.vars.byValue) {
         // FIXME: decide wether to use equals or !=
         if (v.vindex != marker.vindex) {
           removeColumn(v);
@@ -1242,7 +1243,7 @@ final:
 
     if (cn.isStayConstraint) {
       if (eVars !is null) {
-        foreach (auto i; 0..mStayPlusErrorVars.length) {
+        foreach (/*auto*/ i; 0..mStayPlusErrorVars.length) {
           eVars.vars.remove(mStayPlusErrorVars[i].vindex);
           eVars.vars.remove(mStayMinusErrorVars[i].vindex);
         }
@@ -1311,7 +1312,7 @@ final:
   void resolve () {
     dualOptimize();
     setExternalVariables();
-    mInfeasibleRows = mInfeasibleRows.default; //mInfeasibleRows.clear();
+    mInfeasibleRows = mInfeasibleRows.init; //mInfeasibleRows.clear();
     resetStayConstants();
   }
 
@@ -1677,7 +1678,7 @@ final:
       CswNumber minRatio = CswNumber.max;
       auto columnVars = mColumns[entryVar.vindex];
       CswNumber r = 0.0;
-      foreach (auto v; columnVars.set) {
+      foreach (/*auto*/ v; columnVars.set) {
         if (v.isPivotable) {
           CswLinearExpression expr = rowExpression(v);
           CswNumber coeff = expr.coefficientFor(entryVar);
@@ -1743,7 +1744,7 @@ final:
     }
 
     auto columnVars = mColumns[minusErrorVar.vindex];
-    foreach (auto basicVar; columnVars.set) {
+    foreach (/*auto*/ basicVar; columnVars.set) {
       CswLinearExpression expr = rowExpression(basicVar);
       //assert(expr != null, "expr != null");
       CswNumber c = expr.coefficientFor(minusErrorVar);
@@ -1845,7 +1846,7 @@ final:
   // don't actually store values -- their values are just implicit in the tableau -- so
   // we don't need to set them.
   protected void setExternalVariables () {
-    foreach (auto v; mExternalParametricVars.byValue) {
+    foreach (/*auto*/ v; mExternalParametricVars.byValue) {
       if (rowExpression(v) !is null) {
         debug { import iv.writer; errwriteln("Error: variable ", v.toString(), "in mExternalParametricVars is basic"); }
         continue;
@@ -1853,7 +1854,7 @@ final:
       auto vv = cast(CswVariable)v;
       vv.changeValue(0.0);
     }
-    foreach (auto v; mExternalRows.byValue) {
+    foreach (/*auto*/ v; mExternalRows.byValue) {
       CswLinearExpression expr = rowExpression(v);
       auto vv = cast(CswVariable)v;
       vv.changeValue(expr.constant);

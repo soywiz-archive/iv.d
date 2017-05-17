@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.vfs is aliced;
+module iv.vfs /*is aliced*/;
 
+public import iv.alice;
 public import iv.vfs.types;
 public import iv.vfs.config;
 public import iv.vfs.error;

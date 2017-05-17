@@ -1,5 +1,6 @@
-module iv.x11.keysym is aliced;
+module iv.x11.keysym /*is aliced*/;
 
+import iv.alice;
 import iv.x11.x11 : KeySym;
 
 enum XK_VoidSymbol = cast(KeySym)0xffffff; /* Void symbol */

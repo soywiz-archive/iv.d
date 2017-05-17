@@ -18,7 +18,8 @@
  */
 // some "unsafe" array operations
 // such arrays should be always anchored to first element
-module iv.unarray is aliced;
+module iv.unarray /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -54,7 +55,7 @@ public void unsafeArrayAppend(T) (ref T[] arr, auto ref T v) nothrow {
 public void unsafeArrayClear(T) (ref T[] arr) nothrow {
   if (arr.length) {
     import core.stdc.string : memset;
-    static if (is(T == class)) arr[] = null; /*else arr[] = T.default;*/
+    static if (is(T == class)) arr[] = null; /*else arr[] = T.init;*/
     memset(arr.ptr, 0, arr.length*T.sizeof);
     arr.length = 0;
     arr.assumeSafeAppend;
@@ -64,7 +65,7 @@ public void unsafeArrayClear(T) (ref T[] arr) nothrow {
 
 public void unsafeArrayRemove(T) (ref T[] arr, int idx) nothrow {
   if (idx < 0 || idx >= arr.length) assert(0, "invalid index in `unsafeArrayRemove()`");
-  static if (is(T == class)) arr[idx] = null; else arr[idx] = T.default;
+  static if (is(T == class)) arr[idx] = null; else arr[idx] = T.init;
   if (arr.length-idx > 1) {
     import core.stdc.string : memset, memmove;
     memmove(arr.ptr+idx, arr.ptr+idx+1, (arr.length-idx-1)*T.sizeof);

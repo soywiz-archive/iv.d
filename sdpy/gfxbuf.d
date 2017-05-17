@@ -16,8 +16,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.gfxbuf is aliced;
+module iv.sdpy.gfxbuf /*is aliced*/;
 
+import iv.alice;
 import iv.sdpy.compat;
 import iv.sdpy.core;
 import iv.sdpy.font6;
@@ -88,7 +89,7 @@ nothrow @trusted @nogc:
     if (wdt > 32767 || hgt > 32767) assert(0, "invalid GfxBuf dimensions");
     auto vs = cast(VScr*)malloc(VScr.sizeof);
     if (vs is null) assert(0, "GfxBuf: out of memory");
-    static immutable VScr initr = VScr.default;
+    static immutable VScr initr = VScr.init;
     memcpy(vs, &initr, VScr.sizeof);
     //(*vs).__ctor();
     vs.buf = cast(VColor*)malloc((wdt && hgt ? wdt*hgt : 1)*VColor.sizeof);

@@ -33,7 +33,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.nanovg is aliced;
+module iv.nanovg.nanovg /*is aliced*/;
+import iv.alice;
 
 //version = nanosvg_asserts;
 
@@ -3462,8 +3463,8 @@ public:
   this (NVGContext actx, float ax, float ay) { reset(actx, ax, ay); }
 
   void reset (NVGContext actx, float ax, float ay) {
-    fsiter = fsiter.default;
-    this = this.default;
+    fsiter = fsiter.init;
+    this = this.init;
     if (actx is null) return;
     NVGstate* state = nvg__getState(actx);
     if (state is null) return;
@@ -5085,7 +5086,7 @@ public:
   this (FONScontext* astash, float ax, float ay) { reset(astash, ax, ay); }
 
   void reset (FONScontext* astash, float ax, float ay) {
-    this = this.default;
+    this = this.init;
     if (astash is null) return;
     stash = astash;
     state = fons__getState(stash);

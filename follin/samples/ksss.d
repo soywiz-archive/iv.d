@@ -17,8 +17,9 @@
  */
 // Synthesizing a Plucked String Sound With the Karplus-Strong Algorithm
 // http://blog.demofox.org/2016/06/16/synthesizing-a-pluked-string-sound-with-the-karplus-strong-algorithm/
-module ksss is aliced;
+module ksss /*is aliced*/;
 
+import iv.alice;
 import iv.follin;
 import iv.rawtty;
 

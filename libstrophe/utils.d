@@ -4,7 +4,8 @@
 **
 **  This software is dual licensed under the MIT and GPLv3 licenses.
 */
-module iv.libstrophe.utils is aliced;
+module iv.libstrophe.utils /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

@@ -16,7 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // VFS utils
-module iv.vfs.util is aliced;
+module iv.vfs.util /*is aliced*/;
+import iv.alice;
 
 
 public void arrayAppendUnsafe(T) (ref T[] arr, auto ref T val) {

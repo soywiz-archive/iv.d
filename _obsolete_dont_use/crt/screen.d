@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.crt.screen is aliced;
+module iv.crt.screen /*is aliced*/;
 
 import core.atomic;
 import core.sys.posix.unistd;
@@ -26,6 +26,7 @@ import std.string;
 import std.traits;
 import std.utf;
 
+import iv.alice;
 import iv.gccattrs;
 import iv.rawtty;
 

@@ -15,8 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.follin.synth.mp3 is aliced;
+module iv.follin.synth.mp3 /*is aliced*/;
 
+import iv.alice;
 import iv.follin.engine : TflChannel, tflShort2Float;
 
 static if (__traits(compiles, { import iv.minimp3; })) {

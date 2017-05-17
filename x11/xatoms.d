@@ -1,5 +1,6 @@
-module iv.x11.xatoms is aliced;
+module iv.x11.xatoms /*is aliced*/;
 
+import iv.alice;
 import iv.x11.x11 : Atom;
 
 

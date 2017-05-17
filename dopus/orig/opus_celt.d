@@ -18,7 +18,8 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-module opus_celt is aliced;
+module opus_celt /*is aliced*/;
+import iv.alice;
 
 /**
  * @file

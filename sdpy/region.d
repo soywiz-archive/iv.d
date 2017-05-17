@@ -16,7 +16,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.sdpy.region is aliced;
+module iv.sdpy.region /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -905,8 +906,8 @@ private:
       auto dstd = cast(RData*)malloc(RData.sizeof);
       if (dstd is null) assert(0, "Region: out of memory"); // this is unlikely, and hey, just crash
       // init with default values
-      //*dstd = RData.default;
-      static immutable RData initr = RData.default;
+      //*dstd = RData.init;
+      static immutable RData initr = RData.init;
       memcpy(dstd, &initr, RData.sizeof);
       //(*dstd).__ctor();
       if (srcd !is null) {

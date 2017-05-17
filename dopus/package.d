@@ -19,6 +19,6 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-module iv.dopus is aliced;
+module iv.dopus /*is aliced*/;
 
 public import iv.dopus.dopus;

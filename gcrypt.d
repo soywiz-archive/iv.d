@@ -17,9 +17,10 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-module iv.gcrypt is aliced;
+module iv.gcrypt /*is aliced*/;
 pragma(lib, "gcrypt");
 
+import iv.alice;
 import iv.gpgerror;
 
 import core.stdc.stdarg : va_list;

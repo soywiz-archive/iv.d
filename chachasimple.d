@@ -14,8 +14,9 @@
  *
  * Get a copy of the GNU GPL from <http://www.gnu.org/licenses/>.
  */
-module iv.chachasimple is aliced;
+module iv.chachasimple /*is aliced*/;
 
+import iv.alice;
 import std.range;
 
 

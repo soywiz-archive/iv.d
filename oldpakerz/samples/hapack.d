@@ -17,11 +17,12 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  ***********************************************************************/
-module hapack is aliced;
+module hapack /*is aliced*/;
 
 import iv.oldpakerz.crc32;
 import iv.oldpakerz.hapack;
 
+import iv.alice;
 import iv.cmdcon;
 import iv.vfs;
 

@@ -16,10 +16,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // ASCII85 codec
-module iv.ascii85 is aliced;
+module iv.ascii85 /*is aliced*/;
 
 import std.range;
 import std.traits;
+import iv.alice;
 
 
 /// returns input range
@@ -46,7 +47,7 @@ if (isInputRange!RI &&
     this() (auto ref RI sr) {
       if (sr.empty) {
         static if (!isInfinite!RI) isEmpty = true;
-        rng = rng.default;
+        rng = rng.init;
       } else {
         rng = sr;
         popFront; // populate curCh
@@ -168,7 +169,7 @@ if (isInputRange!RI &&
     this() (auto ref RI sr) {
       if (sr.empty) {
         static if (!isInfinite!RI) isEmpty = true;
-        rng = rng.default;
+        rng = rng.init;
       } else {
         rng = sr;
         popFront; // populate curCh

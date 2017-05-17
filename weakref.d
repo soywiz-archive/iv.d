@@ -17,9 +17,10 @@
  */
 // a thread-safe weak reference implementation
 // http://forum.dlang.org/thread/jjote0$1cql$1@digitalmars.com
-module iv.weakref is aliced;
+module iv.weakref /*is aliced*/;
 
 import core.atomic, core.memory;
+import iv.alice;
 
 
 private alias void delegate (Object) DEvent;

@@ -14,10 +14,11 @@
  last mod: $Id: vorbisfile.h 17182 2010-04-29 03:48:32Z xiphmont $
 
  ********************************************************************/
-module iv.xyph.opusfile is aliced;
+module iv.xyph.opusfile /*is aliced*/;
 pragma(lib, "opusfile");
 version(libopusfile_url) pragma(lib, "opusurl");
 
+import iv.alice;
 import iv.xyph.ogg;
 import iv.xyph.opus;
 

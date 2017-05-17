@@ -15,9 +15,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.alsa is aliced;
+module iv.alsa /*is aliced*/;
 pragma(lib, "asound");
 
+import iv.alice;
 import core.stdc.config;
 import core.sys.posix.poll;
 

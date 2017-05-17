@@ -1,5 +1,6 @@
 // WTFPL or Public Domain, on your choice
-module iv.glbinds.binds_full is aliced;
+module iv.glbinds.binds_full /*is aliced*/;
+import iv.alice;
 
 // lazy loading
 version = glbind_lazy_load;

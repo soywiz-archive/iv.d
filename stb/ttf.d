@@ -188,7 +188,8 @@
 //   given file is in a general way. I provide an API for this, but I don't
 //   recommend it.
 //
-module iv.stb.ttf is aliced;
+module iv.stb.ttf /*is aliced*/;
+import iv.alice;
 
 private:
 // //////////////////////////////////////////////////////////////////////// //

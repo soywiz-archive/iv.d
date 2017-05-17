@@ -25,7 +25,7 @@
  * will reuse the same fixed size buffer.
  * Like this:
  *
- *   foreach (auto fname; files) {
+ *   foreach (fname; files) {
  *     auto ar = useCleanArena(); // (1)
  *     auto img = readPng(fname).getAsTrueColorImage();
  *     process(img);
@@ -54,7 +54,8 @@
  * You can set size for arena by calling setArenaSize() before its first use.
  * Default size is 64 MB.
  */
-module iv.gcarena is aliced;
+module iv.gcarena /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -154,7 +155,7 @@ struct GCAData {
   void initProxy () @trusted nothrow @nogc {
     pOrg = gc_getProxy();
     pproxy = cast(Proxy**)(cast(byte*)pOrg+Proxy.sizeof);
-    foreach (auto funname; __traits(allMembers, Proxy)) __traits(getMember, myProxy, funname) = &genCall!funname;
+    foreach (/*auto*/ funname; __traits(allMembers, Proxy)) __traits(getMember, myProxy, funname) = &genCall!funname;
     myProxy.gc_malloc = &gca_malloc;
     myProxy.gc_qalloc = &gca_qalloc;
     myProxy.gc_calloc = &gca_calloc;

@@ -16,7 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // severely outdated
-module iv.rect is aliced;
+module iv.rect /*is aliced*/;
+import iv.alice;
 
 
 ////////////////////////////////////////////////////////////////////////////////

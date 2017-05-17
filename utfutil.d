@@ -21,7 +21,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 // UTF-8 utilities (there will be more soon ;-)
-module iv.utfutil is aliced;
+module iv.utfutil /*is aliced*/;
+import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //

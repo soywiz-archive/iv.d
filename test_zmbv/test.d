@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module zmbv_test is aliced;
+module zmbv_test /*is aliced*/;
 
 import core.stdc.stdlib : malloc, free;
 import core.stdc.string : memset, memcpy, memcmp;
@@ -25,6 +25,7 @@ import std.path;
 import std.stdio;
 import std.string;
 
+import iv.alice;
 import iv.zmbv;
 
 
@@ -89,7 +90,7 @@ void encodeScreens (void delegate (const(void)[] buf) writer) {
   while (nextScreen()) {
     thisIsKeyframe = ((frameNo-1)%KeyframeInterval == 0);
     zc.prepareFrame((thisIsKeyframe ? zc.PrepareFlags.Keyframe : zc.PrepareFlags.None), curPal);
-    foreach (auto y; 0..240) zc.encodeLine(curScreen[y*320..(y+1)*320]);
+    foreach (/*auto*/ y; 0..240) zc.encodeLine(curScreen[y*320..(y+1)*320]);
     auto written = zc.finishFrame();
     writer(written);
     zd.decodeFrame(written);
@@ -100,11 +101,11 @@ void encodeScreens (void delegate (const(void)[] buf) writer) {
       enforce(((fb&0x02) != 0) == zd.paletteChanged);
     }
     enforce(zd.palette == curPal);
-    foreach (auto y; 0..240) {
+    foreach (/*auto*/ y; 0..240) {
       auto line = zd.line(y);
       if (curScreen[y*320..(y+1)*320] != line[]) {
         writeln("\nframe ", frameNo, "; line ", y);
-        foreach (auto x; 0..320) {
+        foreach (/*auto*/ x; 0..320) {
           if (curScreen[y*320+x] != line[x]) {
             writefln(" x=%3s; orig=0x%02x; unp=0x%02x", x, curScreen[y*320+x], line[x]);
           }

@@ -6,7 +6,8 @@
  *
  * License: Boost License 1.0
  */
-module iv.arcz is aliced;
+module iv.arcz /*is aliced*/;
+import iv.alice;
 
 // use Balz compressor if available
 static if (__traits(compiles, { import iv.balz; })) enum arcz_has_balz = true; else enum arcz_has_balz = false;
@@ -114,7 +115,7 @@ private:
       if (res is null) onOutOfMemoryError();
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
-        static immutable T i = T.default;
+        static immutable T i = T.init;
         foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }
@@ -125,7 +126,7 @@ private:
       if (res is null) onOutOfMemoryError();
       static if (is(T == struct)) {
         import core.stdc.string : memcpy;
-        static immutable T i = T.default;
+        static immutable T i = T.init;
         foreach (immutable idx; 0..mem) memcpy(res+idx, &i, T.sizeof);
       }
       debug(arcz_alloc) { import core.stdc.stdio : printf; printf("allocated %u bytes at %p\n", cast(uint)(mem*T.sizeof), res); }

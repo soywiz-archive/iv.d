@@ -17,8 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.egtui.tui is aliced;
+module iv.egtui.tui /*is aliced*/;
 
+import iv.alice;
 import iv.strex;
 import iv.rawtty;
 
@@ -409,7 +410,7 @@ int span (FuiContext ctx, int parent, bool ahorizontal) {
   }
   auto data = ctx.item!FuiCtlSpan(item);
   data.type = FuiCtlType.Invisible;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   return item;
 }
 
@@ -428,7 +429,7 @@ int spacer (FuiContext ctx, int parent) {
   }
   auto data = ctx.item!FuiCtlSpan(item);
   data.type = FuiCtlType.Invisible;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   return item;
 }
 
@@ -446,7 +447,7 @@ int hline (FuiContext ctx, int parent) {
   }
   auto data = ctx.item!FuiCtlSpan(item);
   data.type = FuiCtlType.HLine;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   data.drawcb = delegate (FuiContext ctx, int self, FuiRect rc) {
     auto lp = ctx.layprops(self);
     auto win = XtWindow.fullscreen;
@@ -489,7 +490,7 @@ int box (FuiContext ctx, int parent, bool ahorizontal, const(char)[] id=null) {
   }
   auto data = ctx.item!FuiCtlBox(item);
   data.type = FuiCtlType.Box;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   data.id.setz(id);
   return item;
 }
@@ -519,7 +520,7 @@ int panel (FuiContext ctx, int parent, const(char)[] caption, bool ahorizontal, 
   }
   auto data = ctx.item!FuiCtlPanel(item);
   data.type = FuiCtlType.Panel;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   data.id.setz(id);
   data.caption.setz(caption);
   data.drawcb = delegate (FuiContext ctx, int self, FuiRect rc) {
@@ -564,7 +565,7 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
   } else {
     data.type = FuiCtlType.EditLine;
   }
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   data.id.setz(id);
   data.ed = new TtyEditor(0, 0, 10, 1, !text); // size will be fixed later
   data.ed.utfuck = utfuck;
@@ -773,7 +774,7 @@ private int buttonLike(T, FuiCtlType type) (FuiContext ctx, int parent, const(ch
   auto item = ctx.addItem!T(parent);
   auto data = ctx.item!T(item);
   data.type = type;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   if (text.length > 255) text = text[0..255];
   if (id.length > 255) id = id[0..255];
   data.id.setz(id);
@@ -1110,7 +1111,7 @@ int textview (FuiContext ctx, int parent, const(char)[] id, const(char)[] text) 
   }
   auto data = ctx.item!FuiCtlTextView(item);
   data.type = FuiCtlType.TextView;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   data.id.setz(id);
   data.textlen = cast(uint)text.length;
   if (text.length > 0) {
@@ -1299,7 +1300,7 @@ int listbox (FuiContext ctx, int parent, const(char)[] id) {
   }
   auto data = ctx.item!FuiCtlListBox(item);
   data.type = FuiCtlType.ListBox;
-  //data.pal = Palette.default;
+  //data.pal = Palette.init;
   data.id.setz(id);
   data.drawcb = delegate (FuiContext ctx, int self, FuiRect rc) {
     auto data = ctx.item!FuiCtlListBox(self);
@@ -1909,7 +1910,7 @@ bool processEvent (FuiContext ctx, FuiEvent ev) {
     auto ch = ev.ch;
     if (ch > ' ' && ch < 256) ch = toupper(cast(char)ch);
     ev.type = FuiEvent.Type.Key;
-    ev.keyp = TtyEvent.default;
+    ev.keyp = TtyEvent.init;
     ev.keyp.key = TtyEvent.Key.ModChar;
     ev.keyp.ctrl = false;
     ev.keyp.alt = true;
@@ -2012,7 +2013,7 @@ private void closeTopDialog () {
   auto ctx = modalStack[$-1];
   windowMovingMouse = false;
   windowMovingKeys = false;
-  modalStack[$-1] = FuiContext.default;
+  modalStack[$-1] = FuiContext.init;
   modalStack.length -= 1;
   modalStack.assumeSafeAppend;
   if (auto data = ctx.itemIntr!FuiCtlRootPanel(0)) {
