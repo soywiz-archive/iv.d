@@ -19,6 +19,7 @@ module iv.vfs.arc.internal /*is aliced*/;
 import iv.alice;
 
 //version = iv_vfs_arcs_debug_hash;
+version = iv_vfs_arcs_nomodulo;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -26,7 +27,7 @@ package mixin template VFSSimpleArchiveDriverMixin() {
 protected:
   static struct HashTableEntry {
     uint hash; // name hash; name is lowercased
-    uint prev=uint.max; // previous name with the same hash%htable.length
+    uint prev=uint.max; // previous name with the same reduced hash position
     uint didx=uint.max; // dir index
   }
 
@@ -56,8 +57,8 @@ protected:
 
   static uint hashStr (const(char)[] s) {
     //pragma(inline, true);
-    //if (auto res = mur3HashOf(LoStringRange(s))) return res; else return 1; // so we can use 0 as sentinel
-    return mur3HashOf(LoStringRange(s));
+    if (auto res = mur3HashOf(LoStringRange(s))) return res; else return 1; // so we can use 0 as sentinel
+    //return mur3HashOf(LoStringRange(s));
   }
 
 protected:
@@ -83,7 +84,12 @@ protected:
     }
     foreach_reverse (immutable idx, const ref FileInfo fi; dir) {
       uint nhash = hashStr(fi.name); // never zero
-      uint hidx = nhash%cast(uint)htable.length;
+      version(iv_vfs_arcs_nomodulo) {
+        uint hidx = cast(uint)((cast(ulong)nhash*cast(ulong)htable.length)>>32);
+        assert(hidx < htable.length);
+      } else {
+        uint hidx = nhash%cast(uint)htable.length;
+      }
       if (htable.ptr[hidx].didx == uint.max) {
         // first item
         htable.ptr[hidx].hash = nhash;
@@ -103,7 +109,7 @@ protected:
         version(iv_vfs_arcs_debug_hash) if (chainlen > maxchainlen) maxchainlen = chainlen;
         // find free slot
         uint freeslot = hidx;
-        foreach (immutable _; 0..dir.length) {
+        foreach (immutable uint count; 0..cast(uint)dir.length) {
           freeslot = (freeslot+1)%cast(uint)htable.length;
           if (htable.ptr[freeslot].hash == 0) break; // i found her!
         }
@@ -148,7 +154,11 @@ public:
     if (htable.length == dir.length) {
       uint nhash = hashStr(fname);
       version(iv_vfs_arcs_debug_hash) { import core.stdc.stdio; printf("HL: [%.*s] nhash=0x%08x\n", cast(uint)fname.length, fname.ptr, nhash); }
-      uint hidx = nhash%cast(uint)htable.length;
+      version(iv_vfs_arcs_nomodulo) {
+        uint hidx = cast(uint)((cast(ulong)nhash*cast(ulong)htable.length)>>32);
+      } else {
+        uint hidx = nhash%cast(uint)htable.length;
+      }
       while (hidx != uint.max && htable.ptr[hidx].hash != 0) {
         if (htable.ptr[hidx].hash == nhash) {
           uint didx = htable.ptr[hidx].didx;
