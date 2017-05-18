@@ -345,11 +345,16 @@ public:
     long p;
     try {
       synchronized(wst) {
-        auto opos = wst.lseek(0, Seek.Cur);
-        if (opos == -1) { noChain = true; throw new VFSException("size error"); }
-        p = wst.lseek(0, Seek.End);
-        if (p == -1) { noChain = true; throw new VFSException("size error"); }
-        if (wst.lseek(opos, Seek.Set) == -1) { noChain = true; throw new VFSException("size error"); }
+        if (wst.hasSize) {
+          p = wst.size;
+          if (p == -1) { noChain = true; throw new VFSException("size error"); }
+        } else {
+          auto opos = wst.lseek(0, Seek.Cur);
+          if (opos == -1) { noChain = true; throw new VFSException("size error"); }
+          p = wst.lseek(0, Seek.End);
+          if (p == -1) { noChain = true; throw new VFSException("size error"); }
+          if (wst.lseek(opos, Seek.Set) == -1) { noChain = true; throw new VFSException("size error"); }
+        }
       }
     } catch (Exception e) {
       // chain exception
@@ -357,6 +362,21 @@ public:
       throw new VFSException("size error", __FILE__, __LINE__, e);
     }
     return p;
+  }
+
+  void flush () {
+    if (!isOpen) throw new VFSException("can't get size of closed stream");
+    bool noChain = false;
+    try {
+      if (!wst.flush) {
+        noChain = true;
+        throw new VFSException("flush error");
+      }
+    } catch (Exception e) {
+      // chain exception
+      if (noChain) throw e;
+      throw new VFSException("flush error", __FILE__, __LINE__, e);
+    }
   }
 
   void opAssign (VFile src) nothrow {
@@ -735,6 +755,11 @@ protected:
   ssize read (void* buf, usize count) { return -1; }
   ssize write (in void* buf, usize count) { return -1; }
   long lseek (long offset, int origin) { return -1; }
+  // override this if your stream has `flush()`
+  bool flush () { return true; }
+  // override this if your stream has dedicated `size`
+  @property bool hasSize () { return false; }
+  long size () { return -1; }
 }
 
 
@@ -830,6 +855,11 @@ protected:
   }
 
   override long lseek (long offset, int origin) { fl.seek(offset, origin); return fl.tell; }
+
+  override bool flush () { fl.flush(); return true; }
+
+  override @property bool hasSize () { return true; }
+  long size () { return fl.size; }
 }
 
 
@@ -929,6 +959,11 @@ protected:
     } else {
       return core.stdc.stdio.ftell(fl);
     }
+  }
+
+  override bool flush () {
+    if (fl is null) return false;
+    return (core.stdc.stdio.fflush(fl) == 0);
   }
 }
 
@@ -1034,6 +1069,11 @@ protected:
       return gztell(fl);
     }
   }
+
+  override bool flush () {
+    if (fl is null) return false;
+    return (gzflush(fl, Z_FINISH) == 0);
+  }
 }
 
 static import etc.c.zlib;
@@ -1120,6 +1160,12 @@ protected:
       }
       return res;
     }
+  }
+
+  override bool flush () {
+    import core.sys.posix.unistd : fdatasync;
+    if (fd < 0) return false;
+    return (fdatasync(fd) != -1);
   }
 }
 
@@ -1235,6 +1281,19 @@ protected:
       return -1;
     }
   }
+
+  override bool flush () {
+    static if (streamHasFlush!ST) {
+           static if (is(typeof(st.flush()) == bool)) return st.flush();
+      else static if (is(typeof(st.flush()) : long)) return (st.flush() == 0);
+      else { st.flush(); return true; }
+    } else {
+      return true;
+    }
+  }
+
+  override @property bool hasSize () { static if (streamHasSize!ST) return true; else return false; }
+  override long size () { static if (streamHasSize!ST) return st.size; else return -1; }
 }
 
 
@@ -1278,6 +1337,8 @@ public VFile wrapStream (int fd, string fname=null) { return VFile(fd, fname); }
  *   called with another values). should return resulting offset from stream start or -1
  *   on error. note that this method will be used to implement `tell()` and `size()`
  *   VFile APIs, so make it as fast as you can.
+ *
+ *   should return stream name, or throw on error. can return empty name.
  *
  * or high-level interface:
  *
@@ -1326,6 +1387,12 @@ public VFile wrapStream (int fd, string fname=null) { return VFile(fd, fname); }
  *   should close stream, or throw on error. VFile won't call that on
  *   streams that returns `false` from `isOpen()`, but you'd better
  *   handle this situation yourself.
+ *
+ * [optional] `bool flush ();`
+ *
+ *   flush unwritten data (if your stream supports writing).
+ *   return `true` on success.
+ *
  */
 public VFile wrapStream(ST) (auto ref ST st, string fname=null)
 if (isReadableStream!ST || isWriteableStream!ST || isLowLevelStreamR!ST || isLowLevelStreamW!ST)

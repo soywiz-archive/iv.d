@@ -92,6 +92,13 @@ enum streamHasIsOpen(T) = is(typeof((inout int=0) {
   bool op = t.isOpen;
 }));
 
+/// check if a given stream supports `flush()`
+enum streamHasFlush(T) = is(typeof((inout int=0) {
+  auto t = T.init;
+  t.flush();
+}));
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// check if a given stream supports `rawRead()`.
 /// it's enough to support `void[] rawRead (void[] buf)`
 enum isReadableStream(T) = is(typeof((inout int=0) {
@@ -122,6 +129,8 @@ enum isSeekableStream(T) = (streamHasSeek!T && streamHasTell!T);
 /// this can be done either with `.size`, or with `.seek` and `.tell`
 enum isSizedStream(T) = (streamHasSize!T || isSeekableStream!T);
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 version(vfs_test_stream) {
   import std.stdio;
   static assert(isReadableStream!File);
