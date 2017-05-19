@@ -23,6 +23,8 @@ private:
 import iv.alice;
 import iv.vfs;
 
+//version = gengdtw_debug_mempools;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 public alias DTWFloat = float;
@@ -175,41 +177,84 @@ public:
     return this;
   }
 
+  private {
+    // do avoid frequent malloc()/free() calls, we'll use memory pools instead
+    // statics are thread-local, so it is thread-safe, and this function cannot be called recursively
+    // we will leak this memory, but it doesn't matter in practice
+    static void*[3] mempools;
+    static usize[3] mempoolsizes;
+
+    static T* poolAlloc(T, ubyte poolidx) (usize count) nothrow @trusted @nogc {
+      static assert(poolidx < mempools.length);
+      if (count == 0) count = 1; // just in case
+      usize sz = T.sizeof*count;
+      if (sz > mempoolsizes.ptr[poolidx]) {
+        import core.stdc.stdlib : realloc;
+        import core.exception : onOutOfMemoryError;
+        version(gengdtw_debug_mempools) {{ import core.stdc.stdio; stderr.fprintf("pool #%u: reallocing %u to %u\n", cast(uint)poolidx, cast(uint)mempoolsizes.ptr[poolidx], cast(uint)sz); }}
+        auto data = realloc(mempools.ptr[poolidx], sz);
+        if (data is null) onOutOfMemoryError();
+        mempools.ptr[poolidx] = data;
+        mempoolsizes.ptr[poolidx] = sz;
+      } else if (sz < mempoolsizes.ptr[poolidx]/2) {
+        // shring used memory, 'cause why not?
+        import core.stdc.stdlib : realloc;
+        auto data = realloc(mempools.ptr[poolidx], sz+sz/3);
+        if (data !is null) {
+          version(gengdtw_debug_mempools) {{ import core.stdc.stdio; stderr.fprintf("pool #%u: shrinking %u to %u\n", cast(uint)poolidx, cast(uint)mempoolsizes.ptr[poolidx], cast(uint)(sz+sz/3)); }}
+          mempools.ptr[poolidx] = data;
+          mempoolsizes.ptr[poolidx] = sz;
+        }
+      } else {
+        version(gengdtw_debug_mempools) {{ import core.stdc.stdio; stderr.fprintf("pool #%u: reusing %u of %u\n", cast(uint)poolidx, cast(uint)sz, cast(uint)mempoolsizes.ptr[poolidx]); }}
+      }
+      T* res = cast(T*)(mempools.ptr[poolidx]);
+      assert(res !is null);
+      return res;
+    }
+
+    static void poolFree(ubyte poolidx) () nothrow @trusted @nogc {
+      // nothing to do here
+    }
+
+    version(gengdtw_debug_mempools) static ~this () {
+      import core.stdc.stdio;
+      foreach (immutable pidx; 0..mempools.length) {
+        stderr.fprintf("max pool #%u size: %u\n", cast(uint)pidx, cast(uint)mempoolsizes[pidx]);
+      }
+    }
+  }
+
   /* To compare two gestures, we use dynamic programming to minimize (an approximation)
    * of the integral over square of the angle difference among (roughly) all
    * reparametrizations whose slope is always between 1/2 and 2.
    * Use `isGoodScore()` to check if something was (somewhat) reliably matched.
    */
   DTWFloat compare (const(DTWGlyph) b) const nothrow @nogc {
-    static struct A2D(T) {
+    static struct A2D(T, ubyte poolidx) {
+    static assert(poolidx < DTWGlyph.mempools.length);
     private:
       usize dim0, dim1;
       T* data;
 
-    public nothrow @nogc:
+    public nothrow @trusted @nogc:
       @disable this ();
       @disable this (this);
 
       this (usize d0, usize d1, T initV=T.init) {
-        import core.stdc.stdlib : malloc;
-        import core.exception : onOutOfMemoryError;
         if (d0 < 1) d0 = 1;
         if (d1 < 1) d1 = 1;
-        data = cast(T*)malloc(T.sizeof*d0*d1);
-        if (data is null) onOutOfMemoryError();
+        data = DTWGlyph.poolAlloc!(T, poolidx)(d0*d1);
         dim0 = d0;
         dim1 = d1;
         data[0..d0*d1] = initV;
       }
 
       ~this () {
-        if (data !is null) {
-          import core.stdc.stdlib : free;
-          free(data);
-          // just in case
-          data = null;
-          dim0 = dim1 = 0;
-        }
+        DTWGlyph.poolFree!poolidx();
+        // just in case
+        data = null;
+        dim0 = dim1 = 0;
       }
 
       T opIndex (in usize i0, in usize i1) const {
@@ -230,9 +275,9 @@ public:
     immutable m = a.points.length-1;
     immutable n = b.points.length-1;
     DTWFloat cost = dtwInfinity;
-    auto dist = A2D!DTWFloat(m+1, n+1, dtwInfinity);
-    auto prevx = A2D!usize(m+1, n+1);
-    auto prevy = A2D!usize(m+1, n+1);
+    auto dist = A2D!(DTWFloat, 0)(m+1, n+1, dtwInfinity);
+    auto prevx = A2D!(usize, 1)(m+1, n+1);
+    auto prevy = A2D!(usize, 2)(m+1, n+1);
     //foreach (/+auto+/ idx; 0..m+1) foreach (/+auto+/ idx1; 0..n+1) dist[idx, idx1] = dtwInfinity;
     //dist[m, n] = dtwInfinity;
     dist[0, 0] = 0.0;

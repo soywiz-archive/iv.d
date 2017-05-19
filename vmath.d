@@ -60,7 +60,7 @@ private template SwizzleCtor(string stn, string s) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 enum FLTEPS = 1e-6f;
-enum DBLEPS = 1e-18f;
+enum DBLEPS = 1.0e-18;
 template EPSILON(T) if (is(T == float) || is(T == double)) {
        static if (is(T == float)) enum EPSILON = FLTEPS;
   else static if (is(T == double)) enum EPSILON = DBLEPS;
