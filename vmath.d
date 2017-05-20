@@ -66,6 +66,11 @@ template EPSILON(T) if (is(T == float) || is(T == double)) {
   else static if (is(T == double)) enum EPSILON = DBLEPS;
   else static assert(0, "wtf?!");
 }
+template SMALLEPSILON(T) if (is(T == float) || is(T == double)) {
+       static if (is(T == float)) enum SMALLEPSILON = 1e-5f;
+  else static if (is(T == double)) enum SMALLEPSILON = 1.0e-9;
+  else static assert(0, "wtf?!");
+}
 
 auto deg2rad(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*PI/180.0; }
 auto rad2deg(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*180.0/PI; }
@@ -120,6 +125,9 @@ public:
 
   alias v2 = VecN!(2, FloatType);
   alias v3 = VecN!(3, FloatType);
+
+  alias VecSelf = VecN!(dims, FloatType);
+  alias Float = FloatType;
 
 public:
   FloatType x = 0;
@@ -532,6 +540,64 @@ const pure:
         0
       );
     }
+  }
+
+  // some more supplementary functions to support various things
+  FloatType vcos(VT) (in auto ref VT v) if (isVector!VT) {
+    immutable double len = length*v.length;
+    return (len > 0 ? dot(v)/len : 0.0);
+  }
+
+  FloatType vsin(VT) (in auto ref VT v) if (isVector!VT) {
+    immutable double len = length*v.length;
+    return (len > 0 ? cross(v)/len : 0.0);
+  }
+
+  FloatType angle180(VT) (in auto ref VT v) if (isVector!VT) {
+    import std.math : atan, PI;
+    immutable FloatType cosv = vcos(v);
+    immutable FloatType sinv = vsin(v);
+    if (cosv == 0) return (sinv <= 0 ? -90 : 90);
+    if (sinv == 0) return (cosv <= 0 ? 180 : 0);
+    FloatType angle = (180.0*atan(sinv/cosv))/PI;
+    if (cosv < 0) { if (angle > 0) angle -= 180; else angle += 180; }
+    return angle;
+  }
+
+  FloatType angle360(VT) (in auto ref VT v) if (isVector!VT) {
+    import std.math : atan, PI;
+    immutable FloatType cosv = vcos(v);
+    immutable FloatType sinv = vsin(v);
+    if (cosv == 0) return (sinv <= 0 ? 270 : 90);
+    if (sinv == 0) return (cosv <= 0 ? 180 : 0);
+    FloatType angle = (180.0*atan(sinv/cosv))/PI;
+    if (cosv < 0) angle += 180;
+    if (angle < 0) angle += 360;
+    return angle;
+  }
+
+  FloatType relativeAngle(VT) (in auto ref VT v) if (isVector!VT) {
+    import std.math : PI, acos;
+    immutable FloatType cosv = vcos(v);
+    if (cosv <= -1) return PI;
+    if (cosv >= 1) return 0;
+    return acos(cosv);
+  }
+
+  bool touch(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return (distance(v) < /*SMALL*/EPSILON!FloatType); }
+  bool touch(VT) (in auto ref VT v, in FloatType epsilon) if (isVector!VT) { pragma(inline, true); return (distance(v) < epsilon); }
+
+  // is `this` on left?
+  bool onLeft(VT) (in auto ref VT v0, in auto ref VT v1) if (isVector!VT) {
+    pragma(inline, true);
+    return ((v1-v0).cross(this-v0) <= 0);
+  }
+
+  // is` this` inside?
+  bool inside(VT) (in auto ref VT v0, in auto ref VT v1, in auto ref VT v2) if (isVector!VT) {
+    if ((v1-v0).cross(this-v0) <= 0) return false;
+    if ((v2-v1).cross(this-v1) <= 0) return false;
+    return ((v0-v2).cross(this-v2) > 0);
   }
 
   // box2dlite port support
