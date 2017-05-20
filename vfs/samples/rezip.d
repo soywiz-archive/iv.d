@@ -41,10 +41,13 @@ void repackZip (ConString infname, ConString outfname, ZipWriter.Method pmt) {
     collectException(outfname.remove());
   }
   bool[string] fileseen;
-  foreach_reverse (const ref de; vfsFileList) {
+  auto flist = vfsFileList;
+  ulong flistidx = 0;
+  foreach_reverse (const ref de; flist) {
+    ++flistidx;
     if (de.name in fileseen) continue;
     fileseen[de.name] = true;
-    conwrite("  ", de.name, " ... ");
+    conwrite("  [", n2s(flistidx), "/", n2s(flist.length), "] ", de.name, " ... ");
     try {
       ulong origsz = de.size;
       conwrite("  0%");
