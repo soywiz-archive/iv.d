@@ -346,7 +346,7 @@ public:
     try {
       synchronized(wst) {
         if (wst.hasSize) {
-          p = wst.size;
+          p = wst.getsize;
           if (p == -1) { noChain = true; throw new VFSException("size error"); }
         } else {
           auto opos = wst.lseek(0, Seek.Cur);
@@ -759,7 +759,7 @@ protected:
   bool flush () { return true; }
   // override this if your stream has dedicated `size`
   @property bool hasSize () { return false; }
-  long size () { return -1; }
+  long getsize () { return -1; } // so it won't conflict with `iv.prim.size`
 }
 
 
@@ -859,7 +859,7 @@ protected:
   override bool flush () { fl.flush(); return true; }
 
   override @property bool hasSize () { return true; }
-  long size () { return fl.size; }
+  long getsize () { return fl.size; }
 }
 
 
@@ -1292,8 +1292,8 @@ protected:
     }
   }
 
-  override @property bool hasSize () { static if (streamHasSize!ST) return true; else return false; }
-  override long size () { static if (streamHasSize!ST) return st.size; else return -1; }
+  override @property bool hasSize () { static if (streamHasSizeLowLevel!ST) return true; else return false; }
+  override long getsize () { static if (streamHasSizeLowLevel!ST) return st.getsize; else return -1; }
 }
 
 
@@ -1362,7 +1362,7 @@ public VFile wrapStream (int fd, string fname=null) { return VFile(fd, fname); }
  *
  *   should return current position in stream. should throw on error.
  *
- * [mandatory] `@property long size ();`
+ * [mandatory] `@property long getsize ();`
  *
  *   should return stream size. should throw on error.
  *
@@ -2101,7 +2101,7 @@ public:
   }
 
   @property const pure nothrow @safe @nogc {
-    long size () { return data.length; }
+    long getsize () { return data.length; }
     long tell () { return curpos; }
     bool eof () { return eofhit; }
     bool isOpen () { return !closed; }

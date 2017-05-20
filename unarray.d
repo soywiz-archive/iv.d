@@ -23,6 +23,20 @@ import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public void unsafeArrayReserve(T) (ref T[] arr, int newlen) nothrow {
+  if (newlen < 0 || newlen >= int.max/2) assert(0, "invalid number of elements in array");
+  if (arr.length < newlen) {
+    auto optr = arr.ptr;
+    arr.reserve(newlen);
+    if (arr.ptr !is optr) {
+      import core.memory : GC;
+      optr = arr.ptr;
+      if (optr is GC.addrOf(optr)) GC.setAttr(optr, GC.BlkAttr.NO_INTERIOR);
+    }
+  }
+}
+
+
 public void unsafeArraySetLength(T) (ref T[] arr, int newlen) nothrow {
   if (newlen < 0 || newlen >= int.max/2) assert(0, "invalid number of elements in array");
   if (arr.length > newlen) {

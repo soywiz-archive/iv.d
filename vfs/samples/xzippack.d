@@ -235,10 +235,13 @@ void main (string[] args) {
 
   conwriteln("using '", method, "' method...");
 
-  if (args.length != 2) assert(0, "arcname?");
+  if (args.length != 2 && args.length != 3) assert(0, "arcname?");
+
+  string outfname = args[1];
+  if (!outfname.endsWithCI(".zip") && !outfname.endsWithCI(".pk3")) outfname ~= ".zip";
 
   conwriteln("scanning...");
-  auto list = scanDirs(".");
+  auto list = scanDirs(args.length == 2 ? "." : args[2]);
   /*
   foreach (const ref fi; list) {
     import core.stdc.time : localtime, strftime;
@@ -249,9 +252,6 @@ void main (string[] args) {
   }
   */
   if (list.length == 0) assert(0, "no files!");
-
-  string outfname = args[1];
-  if (!outfname.endsWithCI(".zip") && !outfname.endsWithCI(".pk3")) outfname ~= ".zip";
 
   conwriteln("packing '", outfname, "'...");
   packZip(outfname, list, method);
