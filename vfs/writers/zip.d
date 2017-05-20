@@ -36,6 +36,7 @@ public struct ZipFileInfo {
   uint crc; // crc32(0, null, 0);
   ushort method;
   ZipFileTime time;
+  bool dir;
 
   @property string methodName () const pure nothrow @safe @nogc {
     switch (method) {
@@ -55,7 +56,8 @@ public struct ZipFileTime {
   ushort mdate; // last mod file date
 
   // create from unixtime
-  this() (ulong unixtime, bool utc=true) {
+  this() (ulong unixtime/*, bool utc=true*/) nothrow @trusted @nogc {
+    /*
     import std.datetime;
     SysTime tm = (utc ? SysTime.fromUnixTime(unixtime, UTC()) : SysTime.fromUnixTime(unixtime));
     //TODO: validity checks
@@ -66,24 +68,53 @@ public struct ZipFileTime {
     hour = tm.hour;
     min = tm.minute;
     sec = tm.second;
+    */
+    import core.stdc.time : tm;
+    import core.sys.posix.time : localtime_r;
+    int utime = (unixtime > int.max ? int.max : cast(int)unixtime);
+    tm tmx;
+    localtime_r(&utime, &tmx);
+    year = tmx.tm_year+1900;
+    month = tmx.tm_mon;
+    day = tmx.tm_mday-1;
+    hour = tmx.tm_hour;
+    min = tmx.tm_min;
+    sec = tmx.tm_sec;
   }
 
-@property pure nothrow @safe @nogc:
-  ubyte hour () const { pragma(inline, true); return (mtime>>11); }
-  ubyte min () const { pragma(inline, true); return (mtime>>5)&0x3f; }
-  ubyte sec () const { pragma(inline, true); return (mtime&0x1f)*2; }
+@property nothrow @safe @nogc:
+  // unixtime
+  uint modtime() @trusted {
+    import core.stdc.time : tm, mktime;
+    tm xtm = void;
+    xtm.tm_sec = sec;
+    xtm.tm_min = min;
+    xtm.tm_hour = hour;
+    xtm.tm_mday = day+1; // this is 1..31
+    xtm.tm_mon = month;
+    xtm.tm_year = year-1900;
+    xtm.tm_wday = xtm.tm_yday = 0;
+    xtm.tm_isdst = 0; // ??? -- 1 for local time
+    return cast(uint)mktime(&xtm);
+  }
 
-  ushort year () const { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
-  ubyte month () const { pragma(inline, true); return (mdate>>5)&0x0f; }
-  ubyte day () const { pragma(inline, true); return (mdate&0x1f); }
-
+pure:
   void hour (int v) { if (v < 0) v = 0; else if (v > 23) v = 23; mtime = cast(ushort)((mtime&~(0x1f<<11))|(v<<11)); }
   void min (int v) { if (v < 0) v = 0; else if (v > 59) v = 59; mtime = cast(ushort)((mtime&~(0x1f<<5))|(v<<5)); }
   void sec (int v) { if (v < 0) v = 0; else if (v > 59) v = 59; mtime = cast(ushort)((mtime&~0x3f)|v); }
 
   void year (int v) { if (v < 1980) v = 1980; else if (v > 2107) v = 2107; v -= 1980; mdate = cast(ushort)((mdate&~(0x7f<<9))|(v<<9)); }
-  void month (int v) { if (v < 0) v = 0; else if (v > 11) v = 11; mdate = cast(ushort)((mdate&~(0x0f<<5))|(v<<5)); }
-  void day (int v) { if (v < 0) v = 0; else if (v > 30) v = 30; mdate = cast(ushort)((mdate&~0x1f)|v); }
+  void month (int v) { if (v < 0) v = 0; else if (v > 11) v = 11; v += 1; mdate = cast(ushort)((mdate&~(0x0f<<5))|(v<<5)); }
+  void day (int v) { if (v < 0) v = 0; else if (v > 30) v = 30; v += 1; mdate = cast(ushort)((mdate&~0x1f)|v); }
+
+const:
+  ubyte hour () { pragma(inline, true); return cast(ubyte)(((mtime>>11))%24); } // 0..23
+  ubyte min () { pragma(inline, true); return cast(ubyte)(((mtime>>5)&0x3f)%60); } // 0..59
+  ubyte sec () { pragma(inline, true); return cast(ubyte)(((mtime&0x1f)*2)%60); } // 0..59
+
+  ushort year () { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
+  ubyte month () { pragma(inline, true); return cast(ubyte)(((mdate>>5)&0x0f ? ((mdate>>5)&0x0f)-1 : 0)%12); } // 0..11
+  ubyte day () { pragma(inline, true); return cast(ubyte)((mdate&0x1f ? (mdate&0x1f)-1 : 0)%31); } // 0..30
 }
 
 
@@ -104,6 +135,16 @@ public:
   this (VFile afo) { fo = afo; }
 
   @property bool isOpen () { return fo.isOpen; }
+
+  /* not yet
+  uint appendDir(T:const(char)[]) (T aname, in auto ref ZipFileTime ftime) {
+    if (!fo.isOpen) throw new VFSException("no archive file");
+    if (aname.length == 0) throw new VFSException("empty name");
+    static if (is(T == string)) string fname = aname; else string fname = aname.idup;
+    if (fname[$-1] != '/') fname ~= '/';
+    foreach (char ch; fname) if (ch == '\\') throw new VFSException("shitdoze path delimiters not supported");
+  }
+  */
 
   // return index in `files` array
   uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
