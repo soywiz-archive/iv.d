@@ -54,7 +54,7 @@ void repackZip (ConString infname, ConString outfname, ZipWriter.Method pmt) {
       int oldprc = 0;
       MonoTime lastProgressTime = MonoTime.currTime;
       // don't ignore case
-      auto zidx = zw.pack(VFile(de.name, "I"), de.name, ZipFileTime(de.stat("modtime").get!uint), pmt, de.size, delegate (ulong curpos) {
+      auto zidx = zw.pack(VFile(de.name, "IZ"), de.name, ZipFileTime(de.stat("modtime").get!uint), pmt, de.size, delegate (ulong curpos) {
         int prc = (curpos > 0 ? cast(int)(cast(ulong)100*curpos/origsz) : 0);
         if (prc != oldprc) {
           auto stt = MonoTime.currTime;

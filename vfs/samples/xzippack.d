@@ -161,18 +161,24 @@ void packZip (ConString outfname, FileInfo[] flist, ZipWriter.Method pmt) {
   foreach (immutable flistidx, const ref de; flist) {
     if (de.name in fileseen) continue;
     fileseen[de.name] = true;
+    conwrite("  [", n2s(flistidx+1), "/", n2s(flist.length), "] ", de.name, " ... ");
     if (de.isDir) {
-      zw.appendDir(de.name, ZipFileTime(de.modtime));
+      try {
+        zw.appendDir(de.name, ZipFileTime(de.modtime));
+      } catch (Exception e) {
+        conwriteln("ERROR: ", e.msg);
+        throw e;
+      }
+      conwriteln("OK");
       continue;
     }
-    conwrite("  [", n2s(flistidx), "/", n2s(flist.length), "] ", de.name, " ... ");
     try {
       ulong origsz = de.size;
       conwrite("  0%");
       int oldprc = 0;
       MonoTime lastProgressTime = MonoTime.currTime;
       // don't ignore case
-      auto zidx = zw.pack(VFile(de.name, "I"), de.name, ZipFileTime(de.modtime), pmt, de.size, delegate (ulong curpos) {
+      auto zidx = zw.pack(VFile(de.name, "IZ"), de.name, ZipFileTime(de.modtime), pmt, de.size, delegate (ulong curpos) {
         int prc = (curpos > 0 ? cast(int)(cast(ulong)100*curpos/origsz) : 0);
         if (prc != oldprc) {
           auto stt = MonoTime.currTime;
