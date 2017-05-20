@@ -94,9 +94,11 @@ private:
       throw new VFSException("invalid ZIP archive entry");
     }
     zfh.fixEndian;
-    if (zfh.crc32 != 0 && zfh.crc32 != dir[idx].crc32) {
-      version(ziparc_debug) debug(ziparc) writefln("  invalid ZIP archive entry (crc): cdir: 0x%08x  local: 0x%08x", dir[idx].crc32, zfh.crc32);
-      throw new VFSException("invalid ZIP archive entry (crc)");
+    if ((zfh.gflags&0b1000) == 0) {
+      if (zfh.crc32 != 0 && zfh.crc32 != dir[idx].crc32) {
+        version(ziparc_debug) debug(ziparc) writefln("  invalid ZIP archive entry (crc): cdir: 0x%08x  local: 0x%08x", dir[idx].crc32, zfh.crc32);
+        throw new VFSException("invalid ZIP archive entry (crc)");
+      }
     }
     // skip name and extra
     auto xpos = st.tell;

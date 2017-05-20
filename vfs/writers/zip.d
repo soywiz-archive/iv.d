@@ -136,15 +136,22 @@ public:
 
   @property bool isOpen () { return fo.isOpen; }
 
-  /* not yet
   uint appendDir(T:const(char)[]) (T aname, in auto ref ZipFileTime ftime) {
     if (!fo.isOpen) throw new VFSException("no archive file");
     if (aname.length == 0) throw new VFSException("empty name");
     static if (is(T == string)) string fname = aname; else string fname = aname.idup;
     if (fname[$-1] != '/') fname ~= '/';
     foreach (char ch; fname) if (ch == '\\') throw new VFSException("shitdoze path delimiters not supported");
+    if (files.length >= int.max) throw new VFSException("too many files");
+    ZipFileInfo fi;
+    fi.name = fname;
+    fi.time = ftime;
+    fi.dir = true;
+    fi.pkofs = fo.tell;
+    fo.zipWriteLocalHeader(fi);
+    files ~= fi;
+    return cast(uint)files.length-1;
   }
-  */
 
   // return index in `files` array
   uint pack(T:const(char)[]) (VFile fl, T fname, in auto ref ZipFileTime ftime, Method method=Method.Deflate, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
@@ -442,6 +449,62 @@ ubyte[] buildUtfExtra (const(char)[] fname) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// returns `nfoofs`
+long zipWriteLocalHeader() (VFile ds, in auto ref ZipFileInfo res) {
+  static immutable char[4] sign = "PK\x03\x04";
+  auto ef = buildUtfExtra(res.name);
+  if (ef.length > ushort.max) throw new Exception("extra field too big");
+  if (res.size > uint.max-1) throw new Exception("file too big");
+  ds.rawWriteExact(sign[]);
+  //ds.writeNum!ushort(0x0310); // version to extract
+  ds.writeNum!ushort(res.method > 8 ? 0x003f : 0x0014); // version to extract
+  ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
+  ds.writeNum!ushort(res.method); // compression method
+  ds.writeNum!ushort(res.time.mtime); // file time
+  ds.writeNum!ushort(res.time.mdate); // file date
+  auto nfoofs = ds.tell;
+  ds.writeNum!uint(res.crc); // crc32
+  ds.writeNum!uint(res.method ? 0 : cast(uint)res.size); // packed size
+  ds.writeNum!uint(cast(uint)res.size); // unpacked size
+  ds.writeNum!ushort(cast(ushort)res.name.length); // name length
+  ds.writeNum!ushort(cast(ushort)ef.length); // extra field length
+  ds.rawWriteExact(res.name[]);
+  if (ef.length > 0) ds.rawWriteExact(ef[]);
+  return nfoofs;
+}
+
+
+void zipWriteCentralHeader() (VFile ds, in auto ref ZipFileInfo fi) {
+  static immutable char[4] sign = "PK\x01\x02";
+  auto ef = buildUtfExtra(fi.name);
+  ds.rawWriteExact(sign[]);
+  ds.writeNum!ushort(0x0310); // version made by
+  ds.writeNum!ushort(fi.method > 8 ? 0x003f : 0x0014); // version to extract
+  ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
+  ds.writeNum!ushort(fi.method); // compression method
+  ds.writeNum!ushort(fi.time.mtime); // file time
+  ds.writeNum!ushort(fi.time.mdate); // file date
+  ds.writeNum!uint(fi.crc);
+  ds.writeNum!uint(cast(uint)fi.pksize);
+  ds.writeNum!uint(cast(uint)fi.size);
+  ds.writeNum!ushort(cast(ushort)fi.name.length); // name length
+  ds.writeNum!ushort(cast(ushort)ef.length); // extra field length
+  ds.writeNum!ushort(0); // comment length
+  ds.writeNum!ushort(0); // disk start
+  ds.writeNum!ushort(0); // internal attributes
+  // external attributes
+  if (fi.dir) {
+    ds.writeNum!uint(0b0_100_000_111_101_101_0000000000_000010);
+  } else {
+    ds.writeNum!uint(0b1_000_000_110_100_000_0000000000_000000);
+  }
+  ds.writeNum!uint(cast(uint)fi.pkofs); // header offset
+  ds.rawWriteExact(fi.name[]);
+  if (ef.length > 0) ds.rawWriteExact(ef[]);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
   return zipOne!mtname(ds, fname, st, ZipFileTime.init, oldsize, onProgress);
 }
@@ -449,8 +512,6 @@ ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFil
 ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFile st, in auto ref ZipFileTime ftime, ulong oldsize=ulong.max, scope void delegate (ulong cur) onProgress=null) {
   static assert(mtname == "store" || mtname == "deflate" || mtname == "lzma", "invalid method: '"~mtname~"'");
   ZipFileInfo res;
-  ubyte[] ef;
-  char[4] sign;
 
   if (fname.length == 0 || fname.length > ushort.max) throw new Exception("inalid file name");
 
@@ -473,28 +534,8 @@ ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFil
   bool dopack = (res.method != 0);
   if (!dopack) { res.method = 0; res.pksize = res.size; }
   res.name = fname.idup;
-  ef = buildUtfExtra(res.name);
-  if (ef.length > ushort.max) throw new Exception("extra field too big");
 
-  if (res.size > uint.max-1) throw new Exception("file too big");
-
-  // write local header
-  sign = "PK\x03\x04";
-  ds.rawWriteExact(sign[]);
-  //ds.writeNum!ushort(0x0310); // version to extract
-  ds.writeNum!ushort(res.method > 8 ? 0x003f : 0x0014); // version to extract
-  ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
-  ds.writeNum!ushort(res.method); // compression method
-  ds.writeNum!ushort(res.time.mtime); // file time
-  ds.writeNum!ushort(res.time.mdate); // file date
-  auto nfoofs = ds.tell;
-  ds.writeNum!uint(res.crc); // crc32
-  ds.writeNum!uint(res.method ? 0 : cast(uint)res.size); // packed size
-  ds.writeNum!uint(cast(uint)res.size); // unpacked size
-  ds.writeNum!ushort(cast(ushort)fname.length); // name length
-  ds.writeNum!ushort(cast(ushort)ef.length); // extra field length
-  ds.rawWriteExact(fname[]);
-  if (ef.length > 0) ds.rawWriteExact(ef[]);
+  auto nfoofs = ds.zipWriteLocalHeader(res);
   if (dopack) {
     // write packed data
     if (res.size > 0) {
@@ -567,34 +608,11 @@ ZipFileInfo zipOne(string mtname="deflate") (VFile ds, const(char)[] fname, VFil
 // ////////////////////////////////////////////////////////////////////////// //
 void zipFinish (VFile ds, const(ZipFileInfo)[] files) {
   if (files.length > ushort.max) throw new Exception("too many files");
-  char[4] sign;
+  static immutable char[4] sign = "PK\x05\x06";
   auto cdofs = ds.tell;
-  foreach (const ref fi; files) {
-    auto ef = buildUtfExtra(fi.name);
-    sign = "PK\x01\x02";
-    ds.rawWriteExact(sign[]);
-    ds.writeNum!ushort(0x0310); // version made by
-    ds.writeNum!ushort(fi.method > 8 ? 0x003f : 0x0014); // version to extract
-    ds.writeNum!ushort(ef.length ? UtfFlags : 0); // flags
-    ds.writeNum!ushort(fi.method); // compression method
-    ds.writeNum!ushort(fi.time.mtime); // file time
-    ds.writeNum!ushort(fi.time.mdate); // file date
-    ds.writeNum!uint(fi.crc);
-    ds.writeNum!uint(cast(uint)fi.pksize);
-    ds.writeNum!uint(cast(uint)fi.size);
-    ds.writeNum!ushort(cast(ushort)fi.name.length); // name length
-    ds.writeNum!ushort(cast(ushort)ef.length); // extra field length
-    ds.writeNum!ushort(0); // comment length
-    ds.writeNum!ushort(0); // disk start
-    ds.writeNum!ushort(0); // internal attributes
-    ds.writeNum!uint(0b1000_000_110110000_0000000000_000000); // external attributes
-    ds.writeNum!uint(cast(uint)fi.pkofs); // header offset
-    ds.rawWriteExact(fi.name[]);
-    if (ef.length > 0) ds.rawWriteExact(ef[]);
-  }
+  foreach (const ref fi; files) ds.zipWriteCentralHeader(fi);
   auto cdend = ds.tell;
   // write end of central dir
-  sign = "PK\x05\x06";
   ds.rawWriteExact(sign[]);
   ds.writeNum!ushort(0); // disk number
   ds.writeNum!ushort(0); // disk with central dir
