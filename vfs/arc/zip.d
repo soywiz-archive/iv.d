@@ -284,7 +284,7 @@ private:
         fi.hdrofs = cdfh.hdrofs;
         fi.crc32 = cdfh.crc32;
         fi.method = cdfh.method;
-        try { fi.modtime = cdfh.modtime; } catch (Exception e) {}
+        fi.modtime = cdfh.modtime;
         if (cdfh.method == 0) fi.pksize = fi.size;
         // now, this is valid file, so read it's name
         if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("reading error");
@@ -418,7 +418,34 @@ static protected:
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
-int within (int n, int l, int h) pure nothrow @safe @nogc { pragma(inline, true); return (n < l ? l : n > h ? h : n); }
+mixin template DOSDateTimeUtil () {
+  @property const nothrow @nogc {
+    // unixtime
+    uint modtime() @trusted {
+      import core.stdc.time : tm, mktime;
+      tm xtm = void;
+      xtm.tm_sec = sec;
+      xtm.tm_min = min;
+      xtm.tm_hour = hour;
+      xtm.tm_mday = day+1; // this is 1..31
+      xtm.tm_mon = month;
+      xtm.tm_year = year-1900;
+      xtm.tm_wday = xtm.tm_yday = 0;
+      xtm.tm_isdst = 1; // ???
+      return cast(uint)mktime(&xtm);
+    }
+    pure @safe {
+      ubyte hour () { pragma(inline, true); return cast(ubyte)(((mtime>>11))%24); } // 0..23
+      ubyte min () { pragma(inline, true); return cast(ubyte)(((mtime>>5)&0x3f)%60); } // 0..59
+      ubyte sec () { pragma(inline, true); return cast(ubyte)(((mtime&0x1f)*2)%60); } // 0..59
+
+      ushort year () { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
+      ubyte month () { pragma(inline, true); return cast(ubyte)(((mdate>>5)&0x0f ? ((mdate>>5)&0x0f)-1 : 0)%12); } // 0..11
+      ubyte day () { pragma(inline, true); return cast(ubyte)((mdate&0x1f ? (mdate&0x1f)-1 : 0)%31); } // 0..30
+    }
+  }
+}
+
 
 align(1) static struct ZipFileHeader {
 align(1):
@@ -450,31 +477,9 @@ align(1):
     }
   }
 
-  // unixtime
-  @property uint modtime() const {
-    //import std.datetime;
-    //return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
-    import core.stdc.time : tm, mktime;
-    tm xtm = void;
-    xtm.tm_sec = sec.within(0, 59);
-    xtm.tm_min = min.within(0, 59);
-    xtm.tm_hour = hour.within(0, 23);
-    xtm.tm_mday = day.within(1, 31);
-    xtm.tm_mon = day.within(0, 11);
-    xtm.tm_year = year;
-    xtm.tm_wday = xtm.tm_yday = xtm.tm_isdst = 0;
-    return cast(uint)mktime(&xtm);
-  }
-
-@property pure const nothrow @safe @nogc:
-  ubyte hour () { pragma(inline, true); return (mtime>>11); }
-  ubyte min () { pragma(inline, true); return (mtime>>5)&0x3f; }
-  ubyte sec () { pragma(inline, true); return (mtime&0x1f)*2; }
-
-  ushort year () { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
-  ubyte month () { pragma(inline, true); return (mdate>>5)&0x0f; }
-  ubyte day () { pragma(inline, true); return (mdate&0x1f); }
+  mixin DOSDateTimeUtil;
 }
+
 
 align(1) static struct CDFileHeader {
 align(1):
@@ -517,30 +522,7 @@ align(1):
     }
   }
 
-  // unixtime
-  @property uint modtime() const {
-    //import std.datetime;
-    //return cast(uint)SysTime(DateTime(year.within(1980, 3000), month.within(0, 11), day.within(1, 31), hour.within(0, 23), min.within(0, 59), sec.within(0, 59)), UTC()).toUnixTime();
-    import core.stdc.time : tm, mktime;
-    tm xtm = void;
-    xtm.tm_sec = sec.within(0, 59);
-    xtm.tm_min = min.within(0, 59);
-    xtm.tm_hour = hour.within(0, 23);
-    xtm.tm_mday = day.within(1, 31);
-    xtm.tm_mon = day.within(0, 11);
-    xtm.tm_year = year;
-    xtm.tm_wday = xtm.tm_yday = xtm.tm_isdst = 0;
-    return cast(uint)mktime(&xtm);
-  }
-
-@property pure const nothrow @safe @nogc:
-  ubyte hour () { pragma(inline, true); return (mtime>>11); }
-  ubyte min () { pragma(inline, true); return (mtime>>5)&0x3f; }
-  ubyte sec () { pragma(inline, true); return (mtime&0x1f)*2; }
-
-  ushort year () { pragma(inline, true); return cast(ushort)((mdate>>9)+1980); }
-  ubyte month () { pragma(inline, true); return (mdate>>5)&0x0f; }
-  ubyte day () { pragma(inline, true); return (mdate&0x1f); }
+  mixin DOSDateTimeUtil;
 }
 
 align(1) static struct EOCDHeader {
