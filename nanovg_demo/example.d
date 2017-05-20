@@ -25,6 +25,13 @@ import arsd.color;
 import arsd.png;
 import arsd.jpeg;
 
+version(aliced) {
+  version = nanovg_use_freetype;
+  version = nanovg_ft_mon;
+  version = nanovg_demo_msfonts;
+  version = nanovg_no_font_aa;
+}
+
 // sdpy is missing that yet
 static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
 

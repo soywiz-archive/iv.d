@@ -47,6 +47,13 @@ import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
 //import iv.nanovg.fontstash;
 
+version(aliced) {
+  version = nanovg_use_freetype;
+  version = nanovg_ft_mon;
+  version = nanovg_demo_msfonts;
+  version = nanovg_no_font_aa;
+}
+
 public:
 alias NVG_PI = PI;
 
