@@ -56,7 +56,7 @@ void main () {
   setOpenGLContextVersion(2, 0); // it's enough
   //openGLContextCompatible = false;
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoVG", OpenGlOptions.yes, Resizablity.fixedSize);
+  auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoVG", OpenGlOptions.yes, Resizability.fixedSize);
   //sdwindow.hideCursor();
 
   version(X11) sdwindow.closeQuery = delegate () { doQuit = true; };
