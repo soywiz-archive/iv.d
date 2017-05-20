@@ -431,7 +431,7 @@ mixin template DOSDateTimeUtil () {
       xtm.tm_mon = month;
       xtm.tm_year = year-1900;
       xtm.tm_wday = xtm.tm_yday = 0;
-      xtm.tm_isdst = 1; // ???
+      xtm.tm_isdst = 0; // ??? -- 1 for local time
       return cast(uint)mktime(&xtm);
     }
     pure @safe {
