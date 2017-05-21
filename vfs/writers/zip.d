@@ -29,6 +29,10 @@ import iv.vfs;
 
 // ////////////////////////////////////////////////////////////////////////// //
 public struct ZipFileInfo {
+  enum DefaultMode {
+    File = 0b110_100_100,
+    Dir = 0b111_101_101,
+  }
   string name;
   ulong pkofs; // offset of file header
   ulong size;
@@ -36,6 +40,7 @@ public struct ZipFileInfo {
   uint crc; // crc32(0, null, 0);
   ushort method;
   ZipFileTime time;
+  ushort unixmode = 0b110_100_100; // default one
   bool dir;
 
   @property string methodName () const pure nothrow @safe @nogc {
@@ -146,6 +151,7 @@ public:
     ZipFileInfo fi;
     fi.name = fname;
     fi.time = ftime;
+    fi.unixmode = fi.DefaultMode.Dir;
     fi.dir = true;
     fi.pkofs = fo.tell;
     fo.zipWriteLocalHeader(fi);
@@ -493,10 +499,16 @@ void zipWriteCentralHeader() (VFile ds, in auto ref ZipFileInfo fi) {
   ds.writeNum!ushort(0); // disk start
   ds.writeNum!ushort(0); // internal attributes
   // external attributes
+  ushort umode = fi.unixmode;
+  if (umode == 0) umode = (fi.dir ? fi.DefaultMode.Dir : fi.DefaultMode.File);
+  uint mode;
   if (fi.dir) {
-    ds.writeNum!uint(0b0_100_000_111_101_101_0000000000_000010);
+    //ds.writeNum!uint(0b0_100_000_111_101_101_0000000000_000010);
+    ds.writeNum!uint(0b0_100_000_000_000_000_0000000000_000010|(umode<<16));
   } else {
-    ds.writeNum!uint(0b1_000_000_110_100_000_0000000000_000000);
+    // regular file
+    //ds.writeNum!uint(0b1_000_000_110_100_000_0000000000_000000);
+    ds.writeNum!uint(0b1_000_000_110_100_000_0000000000_000000|(umode<<16));
   }
   ds.writeNum!uint(cast(uint)fi.pkofs); // header offset
   ds.rawWriteExact(fi.name[]);

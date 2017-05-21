@@ -18,6 +18,8 @@ struct FileInfo {
   ulong size;
   Type type;
   uint modtime;
+  uint stmode;
+  ulong inode;
 
   this (const(char)[] aname) {
     import core.sys.posix.sys.stat;
@@ -31,11 +33,17 @@ struct FileInfo {
       size = st.st_size;
     } else if (st.st_mode.S_ISLNK) {
       throw new Exception("don't know what to do with symlink '"~aname.idup~"'");
+    } else {
+      throw new Exception("don't know what to do with special file '"~aname.idup~"'");
     }
     name = aname.idup;
     if (type == Type.Dir && name[$-1] != '/') name ~= '/';
     modtime = st.st_mtime;
+    inode = st.st_ino;
+    stmode = st.st_mode;
   }
+
+  @property ushort unixmode () const pure nothrow @safe @nogc { pragma(inline, true); return (stmode&ushort.max); }
 
   @property string baseName () const pure nothrow @safe @nogc {
     if (name.length == 0) return null;
@@ -95,35 +103,61 @@ struct FileInfo {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-FileInfo[] scanDirs (string dir) {
-  FileInfo[] res;
-  void scanDir (string dir) {
-    string[] dirs;
-    scope(exit) delete dirs;
-    foreach (Glob.Item it; Glob(dir~"/*", GLOB_NOSORT|GLOB_PERIOD|GLOB_TILDE_CHECK|GLOB_MARK)) {
-      //conwriteln(it.index, ": [", it.name, "]");
-      auto fi = FileInfo(it.name);
-      if (fi.isDir) {
-        auto bname = fi.baseName;
-        if (bname == "." || bname == "..") continue;
-        dirs.unsafeArrayAppend(fi.name);
-      }
-      if (fi.name.length == 2 && fi.name == "./") assert(0, "internal error");
-      if (fi.name.length > 2 && fi.name[0..2] == "./") fi.name = fi.name[2..$];
-      res.unsafeArrayAppend(fi);
-    }
-    // recurse dirs
-    foreach (string dname; dirs) {
-      if (dname == "/") continue;
-      if (dname[$-1] == '/') dname = dname[0..$-1];
-      if (dname.length == 0 || dname == "." || dname == "..") continue;
-      scanDir(dname);
-    }
+__gshared FileInfo[] diskFileList;
+__gshared bool[ulong] diskFilesSeen; // by inode
+__gshared ulong totalDiskSize;
+
+
+void scanDisk (string nameorpath) {
+  if (nameorpath.length == 0) return;
+
+  auto cfi = FileInfo(nameorpath);
+  //conwriteln("nameorpath: [", nameorpath, "] : [", cfi.name, "]; inode=", cfi.inode, "; mode=", cfi.stmode);
+
+  if (cfi.inode in diskFilesSeen) return;
+  diskFilesSeen[cfi.inode] = true;
+  if (!cfi.isDir) {
+    totalDiskSize += cfi.size;
+    diskFileList.unsafeArrayAppend(cfi);
+    //conwriteln("  FILE!");
+    return;
   }
-  scanDir(dir);
+
+  string[] dirs;
+  scope(exit) delete dirs;
+
+  assert(cfi.name[$-1] == '/');
+  foreach (Glob.Item it; Glob(cfi.name~"*", GLOB_NOSORT|GLOB_PERIOD|GLOB_TILDE_CHECK|GLOB_MARK)) {
+    auto fi = FileInfo(it.name);
+    //conwriteln(it.index, ": [", it.name, "] : basename=[", fi.baseName, "]; dirname=[", fi.dirName, "]");
+    if (fi.inode in diskFilesSeen) continue;
+    if (fi.isDir) {
+      auto bname = fi.baseName;
+      if (bname == "." || bname == "..") continue;
+      dirs.unsafeArrayAppend(fi.name);
+      // dir will be marked as visited later
+    } else {
+      diskFilesSeen[fi.inode] = true;
+      totalDiskSize += fi.size;
+    }
+    if (fi.name.length == 2 && fi.name == "./") assert(0, "internal error");
+    if (fi.name.length > 2 && fi.name[0..2] == "./") fi.name = fi.name[2..$];
+    diskFileList.unsafeArrayAppend(fi);
+  }
+
+  // recurse dirs
+  foreach (string dname; dirs) {
+    if (dname == "/") continue;
+    if (dname[$-1] == '/') dname = dname[0..$-1];
+    if (dname.length == 0 || dname == "." || dname == "..") continue;
+    scanDisk(dname);
+  }
+}
+
+
+void finalizeDiskScan () {
   import std.algorithm : sort;
-  res.sort;
-  return res;
+  diskFileList.sort;
 }
 
 
@@ -141,7 +175,8 @@ string n2s (ulong n) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void packZip (ConString outfname, FileInfo[] flist, ZipWriter.Method pmt) {
+// returns zip file size
+ulong packZip (ConString outfname, FileInfo[] flist, ZipWriter.Method pmt) {
   import core.time;
   import std.string : format;
   import std.exception : collectException;
@@ -162,44 +197,42 @@ void packZip (ConString outfname, FileInfo[] flist, ZipWriter.Method pmt) {
     if (de.name in fileseen) continue;
     fileseen[de.name] = true;
     conwrite("  [", n2s(flistidx+1), "/", n2s(flist.length), "] ", de.name, " ... ");
-    if (de.isDir) {
-      try {
-        zw.appendDir(de.name, ZipFileTime(de.modtime));
-      } catch (Exception e) {
-        conwriteln("ERROR: ", e.msg);
-        throw e;
-      }
-      conwriteln("OK");
-      continue;
-    }
+    uint zipidx;
     try {
-      ulong origsz = de.size;
-      conwrite("  0%");
-      int oldprc = 0;
-      MonoTime lastProgressTime = MonoTime.currTime;
-      // don't ignore case
-      auto zidx = zw.pack(VFile(de.name, "IZ"), de.name, ZipFileTime(de.modtime), pmt, de.size, delegate (ulong curpos) {
-        int prc = (curpos > 0 ? cast(int)(cast(ulong)100*curpos/origsz) : 0);
-        if (prc != oldprc) {
-          auto stt = MonoTime.currTime;
-          if ((stt-lastProgressTime).total!"msecs" >= 1000) {
-            lastProgressTime = stt;
-            if (prc < 0) prc = 0; else if (prc > 100) prc = 100;
-            conwritef!"\x08\x08\x08\x08%3u%%"(cast(uint)prc);
-            oldprc = prc;
-          } else {
-            //conwriteln(curpos, " : ", origsz);
+      if (de.isDir) {
+        zipidx = zw.appendDir(de.name, ZipFileTime(de.modtime));
+        conwriteln("OK");
+      } else {
+        ulong origsz = de.size;
+        conwrite("  0%");
+        int oldprc = 0;
+        MonoTime lastProgressTime = MonoTime.currTime;
+        // don't ignore case
+        zipidx = zw.pack(VFile(de.name, "IZ"), de.name, ZipFileTime(de.modtime), pmt, de.size, delegate (ulong curpos) {
+          int prc = (curpos > 0 ? cast(int)(cast(ulong)100*curpos/origsz) : 0);
+          if (prc != oldprc) {
+            auto stt = MonoTime.currTime;
+            if ((stt-lastProgressTime).total!"msecs" >= 1000) {
+              lastProgressTime = stt;
+              if (prc < 0) prc = 0; else if (prc > 100) prc = 100;
+              conwritef!"\x08\x08\x08\x08%3u%%"(cast(uint)prc);
+              oldprc = prc;
+            } else {
+              //conwriteln(curpos, " : ", origsz);
+            }
           }
-        }
-      });
-      conwritefln!"\x08\x08\x08\x08[%s] %s -> %s"(zw.files[zidx].methodName, n2s(de.size), n2s(zw.files[zidx].pksize));
-      //if (zw.files[zidx].crc != de.stat("crc32").get!uint) throw new Exception("crc error!");
+        });
+        conwritefln!"\x08\x08\x08\x08[%s] %s -> %s"(zw.files[zipidx].methodName, n2s(de.size), n2s(zw.files[zipidx].pksize));
+        //if (zw.files[zidx].crc != de.stat("crc32").get!uint) throw new Exception("crc error!");
+      }
+      zw.files[zipidx].unixmode = de.unixmode;
     } catch (Exception e) {
       conwriteln("ERROR: ", e.msg);
       throw e;
     }
   }
   zw.finish();
+  return fo.size;
 }
 
 
@@ -235,13 +268,17 @@ void main (string[] args) {
 
   conwriteln("using '", method, "' method...");
 
-  if (args.length != 2 && args.length != 3) assert(0, "arcname?");
+  if (args.length < 3) assert(0, "arcname?");
 
   string outfname = args[1];
   if (!outfname.endsWithCI(".zip") && !outfname.endsWithCI(".pk3")) outfname ~= ".zip";
 
   conwriteln("scanning...");
-  auto list = scanDirs(args.length == 2 ? "." : args[2]);
+  foreach (string dpath; args[2..$]) scanDisk(dpath);
+  finalizeDiskScan();
+  if (diskFileList.length == 0) assert(0, "no files!");
+  conwriteln(diskFileList.length, " file", (diskFileList.length != 1 ? "s" : ""), " found, ", n2s(totalDiskSize), " bytes.");
+
   /*
   foreach (const ref fi; list) {
     import core.stdc.time : localtime, strftime;
@@ -251,8 +288,8 @@ void main (string[] args) {
     conwriteln(fi.name, " [", fi.type, "]  ", fi.size, "  ", buf[0..len]);
   }
   */
-  if (list.length == 0) assert(0, "no files!");
 
-  conwriteln("packing '", outfname, "'...");
-  packZip(outfname, list, method);
+  conwriteln("creating '", outfname, "'...");
+  ulong fsize = packZip(outfname, diskFileList, method);
+  conwritefln!"DONE, TOTALS: %s -> %s %3u%%"(n2s(totalDiskSize), n2s(fsize), (totalDiskSize ? cast(uint)(100*fsize/totalDiskSize) : 100));
 }
