@@ -1,11 +1,13 @@
 module main /*is aliced*/;
 
-import iv.alice;
-import iv.glbinds;
 import arsd.color;
-import arsd.png;
+import arsd.image;
+import arsd.simpledisplay;
 
+import iv.alice;
+//import iv.glbinds;
 import iv.vmath;
+
 import csg;
 import namedargs;
 //import glutils;
@@ -106,7 +108,7 @@ void main () {
   setOpenGLContextVersion(3, 2);
   //openGLContextCompatible = false;
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "CSG demo", OpenGlOptions.yes, Resizablity.fixedSize);
+  auto sdwindow = new SimpleWindow(GWidth, GHeight, "CSG demo", OpenGlOptions.yes, Resizability.fixedSize);
   //sdwindow.hideCursor();
 
   //sdwindow.closeQuery = delegate () { concmd("quit"); };
@@ -148,8 +150,8 @@ void main () {
   };
 
   sdwindow.visibleForTheFirstTime = delegate () {
+    import iv.glbinds;
     sdwindow.setAsCurrentOpenGlContext(); // make this window active
-    glbindLoadFunctions();
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();

@@ -82,7 +82,7 @@ public:
 
   // Create a new vertex between this vertex and `other` by linearly
   // interpolating all properties using a parameter of `t`.
-  Vertex interpolate() (in auto ref Vertex other, Vec3.VFloat t) const {
+  Vertex interpolate() (in auto ref Vertex other, Vec3.Float t) const {
     pragma(inline, true);
     return Vertex(
       pos.lerp(other.pos, t),
@@ -94,7 +94,7 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Represents a plane in 3D space.
-alias Plane = Plane3!(Vec3.VFloat, 0.00001f, false); // EPS is 0.00001f, no swizzling
+alias Plane = Plane3!(Vec3.Float, 0.00001f, false); // EPS is 0.00001f, no swizzling
 
 void flip (ref Plane plane) pure nothrow @safe @nogc {
   pragma(inline, true);
@@ -514,7 +514,7 @@ static:
   //       center: [0, 0, 0],
   //       radius: 1
   //     });
-  CSG cube (Vec3 center=Vec3(0, 0, 0), Vec3.VFloat radius=1) {
+  CSG cube (Vec3 center=Vec3(0, 0, 0), Vec3.Float radius=1) {
     import std.algorithm : map;
     import std.array : array;
     auto c = center;
@@ -529,11 +529,11 @@ static:
     ].map!((info) {
       return new Polygon(info[0].map!((i) {
         auto pos = Vec3(
-          c.x+cast(Vec3.VFloat)r[0]*cast(Vec3.VFloat)(2*(cast(int)i&1 ? 1 : 0)-1),
-          c.y+cast(Vec3.VFloat)r[1]*cast(Vec3.VFloat)(2*(cast(int)i&2 ? 1 : 0)-1),
-          c.z+cast(Vec3.VFloat)r[2]*cast(Vec3.VFloat)(2*(cast(int)i&4 ? 1 : 0)-1),
+          c.x+cast(Vec3.Float)r[0]*cast(Vec3.Float)(2*(cast(int)i&1 ? 1 : 0)-1),
+          c.y+cast(Vec3.Float)r[1]*cast(Vec3.Float)(2*(cast(int)i&2 ? 1 : 0)-1),
+          c.z+cast(Vec3.Float)r[2]*cast(Vec3.Float)(2*(cast(int)i&4 ? 1 : 0)-1),
         );
-        return Vertex(pos, Vec3(cast(Vec3.VFloat)info[1][0], cast(Vec3.VFloat)info[1][1], cast(Vec3.VFloat)info[1][2]));
+        return Vertex(pos, Vec3(cast(Vec3.Float)info[1][0], cast(Vec3.Float)info[1][1], cast(Vec3.Float)info[1][2]));
       }).array);
     }).array);
   }
@@ -551,12 +551,12 @@ static:
   //       slices: 16,
   //       stacks: 8
   //     });
-  CSG sphere (Vec3 center=Vec3(0, 0, 0), Vec3.VFloat radius=1, int slices=16, int stacks=8) {
+  CSG sphere (Vec3 center=Vec3(0, 0, 0), Vec3.Float radius=1, int slices=16, int stacks=8) {
     import std.math;
     auto c = center;
     Polygon[] polygons;
     Vertex[] vertices;
-    void vertex (Vec3.VFloat theta, Vec3.VFloat phi) {
+    void vertex (Vec3.Float theta, Vec3.Float phi) {
       theta *= PI*2;
       phi *= PI;
       auto dir = Vec3(
@@ -569,10 +569,10 @@ static:
     foreach (int i; 0..slices) {
       foreach (int j; 0..stacks) {
         vertices = [];
-        vertex(cast(Vec3.VFloat)i/slices, cast(Vec3.VFloat)j/stacks);
-        if (j > 0) vertex(cast(Vec3.VFloat)(i+1)/slices, cast(Vec3.VFloat)j/stacks);
-        if (j < stacks-1) vertex(cast(Vec3.VFloat)(i+1)/slices, cast(Vec3.VFloat)(j+1)/stacks);
-        vertex(cast(Vec3.VFloat)i/slices, cast(Vec3.VFloat)(j+1)/stacks);
+        vertex(cast(Vec3.Float)i/slices, cast(Vec3.Float)j/stacks);
+        if (j > 0) vertex(cast(Vec3.Float)(i+1)/slices, cast(Vec3.Float)j/stacks);
+        if (j < stacks-1) vertex(cast(Vec3.Float)(i+1)/slices, cast(Vec3.Float)(j+1)/stacks);
+        vertex(cast(Vec3.Float)i/slices, cast(Vec3.Float)(j+1)/stacks);
         polygons ~= new Polygon(vertices);
       }
     }
@@ -591,7 +591,7 @@ static:
   //       radius: 1,
   //       slices: 16
   //     });
-  CSG cylinder (Vec3 start=Vec3(0, -1, 0), Vec3 end=Vec3(0, 1, 0), Vec3.VFloat radius=1, int slices=16) {
+  CSG cylinder (Vec3 start=Vec3(0, -1, 0), Vec3 end=Vec3(0, 1, 0), Vec3.Float radius=1, int slices=16) {
     import std.math;
     auto s = start;
     auto e = end;
@@ -603,7 +603,7 @@ static:
     auto sv = Vertex(s, -axisZ);
     auto ev = Vertex(e, axisZ.normalized);
     Polygon[] polygons;
-    Vertex point (Vec3.VFloat stack, Vec3.VFloat slice, Vec3.VFloat normalBlend) {
+    Vertex point (Vec3.Float stack, Vec3.Float slice, Vec3.Float normalBlend) {
       auto angle = slice*PI*2;
       auto o = (axisX*cos(angle))+(axisY*sin(angle));
       auto pos = s+(ray*stack)+(o*radius);
@@ -611,8 +611,8 @@ static:
       return Vertex(pos, normal);
     }
     foreach (int i; 0..slices) {
-      auto t0 = cast(Vec3.VFloat)i/slices;
-      auto t1 = cast(Vec3.VFloat)(i+1)/slices;
+      auto t0 = cast(Vec3.Float)i/slices;
+      auto t1 = cast(Vec3.Float)(i+1)/slices;
       polygons ~= new Polygon([sv, point(0, t0, -1), point(0, t1, -1)]);
       polygons ~= new Polygon([point(0, t1, 0), point(0, t0, 0), point(1, t0, 0), point(1, t1, 0)]);
       polygons ~= new Polygon([ev, point(1, t1, 1), point(1, t0, 1)]);
