@@ -855,3 +855,11 @@ Color blend (Color dst, Color src) nothrow @trusted @nogc {
   mixin(ColorBlendMixinStr!("src.asUint", "dst.asUint"));
   return dst;
 }
+
+
+// the only two requirements: alpha is in high bits, and "0 alpha" means "transparent"
+uint blendU32 (uint dst, uint src) nothrow @trusted @nogc {
+  pragma(inline, true);
+  mixin(ColorBlendMixinStr!("src", "dst"));
+  return dst;
+}
