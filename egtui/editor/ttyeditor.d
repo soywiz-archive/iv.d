@@ -1815,6 +1815,7 @@ final:
     bool undoAdded = false;
     scope(exit) if (undoAdded) undoGroupEnd();
     auto pos = curpos;
+    while (pos < gb.textsize && gb[pos] <= ' ') ++pos;
     if (!isWordChar(gb[pos])) return;
     // find word start
     while (pos > 0 && isWordChar(gb[pos-1])) --pos;
