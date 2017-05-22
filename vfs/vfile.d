@@ -759,7 +759,7 @@ protected:
   bool flush () { return true; }
   // override this if your stream has dedicated `size`
   @property bool hasSize () { return false; }
-  long getsize () { return -1; } // so it won't conflict with `iv.prim.size`
+  long getsize () { return -1; } // so it won't conflict with `iv.pred.size`
 }
 
 
