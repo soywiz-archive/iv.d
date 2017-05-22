@@ -118,14 +118,18 @@ public void switchToWindow(string src="normal") (SimpleWindow sw) if (src == "no
 // ////////////////////////////////////////////////////////////////////////// //
 /// Get global window coordinates and size. This can be used to show various notifications.
 void getWindowRect (SimpleWindow sw, out int x, out int y, out int width, out int height) {
-  if (sw is null || sw.closed) { width = 1; height = 1; return; } // 1: just in case
-  Window dummyw;
-  //XWindowAttributes xwa;
-  //XGetWindowAttributes(dpy, nativeHandle, &xwa);
-  //XTranslateCoordinates(dpy, nativeHandle, RootWindow(dpy, DefaultScreen(dpy)), xwa.x, xwa.y, &x, &y, &dummyw);
-  XTranslateCoordinates(sw.impl.display, sw.impl.window, RootWindow(sw.impl.display, DefaultScreen(sw.impl.display)), x, y, &x, &y, &dummyw);
-  width = sw.width;
-  height = sw.height;
+  static if (UsingSimpledisplayX11) {
+    if (sw is null || sw.closed) { width = 1; height = 1; return; } // 1: just in case
+    Window dummyw;
+    //XWindowAttributes xwa;
+    //XGetWindowAttributes(dpy, nativeHandle, &xwa);
+    //XTranslateCoordinates(dpy, nativeHandle, RootWindow(dpy, DefaultScreen(dpy)), xwa.x, xwa.y, &x, &y, &dummyw);
+    XTranslateCoordinates(sw.impl.display, sw.impl.window, RootWindow(sw.impl.display, DefaultScreen(sw.impl.display)), x, y, &x, &y, &dummyw);
+    width = sw.width;
+    height = sw.height;
+  } else {
+    assert(0, "iv.sdpyutil: getWindowRect() -- not for windoze yet");
+  }
 }
 
 
