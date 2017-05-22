@@ -2192,7 +2192,10 @@ if (!is(T == struct) && !is(T == class))
 
 private enum RegVarMixin(string cvcreate) =
   `static assert(isGoodVar!v, "console variable '"~v.stringof~"' must be shared or __gshared");`~
-  `if (aname.length == 0) aname = (&v).stringof[2..$]; /*HACK*/`~
+  `if (aname.length == 0) {`~
+  `aname = (&v).stringof[2..$]; /*HACK*/`~
+  `  foreach_reverse (immutable cidx, char ch; aname) if (ch == '.') { aname = aname[cidx+1..$]; break; }`~
+  `}`~
   `if (aname.length > 0) {`~
   `  addName(aname);`~
   `  auto cv = `~cvcreate~`;`~
