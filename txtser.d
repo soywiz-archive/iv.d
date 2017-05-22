@@ -215,7 +215,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void txtunser(T, ST) (out T v, auto ref ST fl)
+public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST fl)
 if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(ElementEncodingType!ST) == char))))
 {
   import std.traits : Unqual;
@@ -344,6 +344,57 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
     return buf[0..bpos];
   }
 
+  static if (ignoreUnknown) void skipData(bool fieldname) () {
+    skipBlanks();
+    // string?
+    if (curCh == '"' || curCh == '\'') {
+      char eq = curCh;
+      nextChar();
+      while (curCh != eq) {
+        char ch = curCh;
+        if (ch == 0) error("unterminated string");
+        nextChar();
+        if (ch == '\\') nextChar();
+      }
+      expectChar(eq);
+      return;
+    }
+    static if (!fieldname) {
+      // array?
+      if (curCh == '[') {
+        nextChar();
+        for (;;) {
+          skipBlanks();
+          if (curCh == 0) error("unterminated array");
+          if (curCh == ']') break;
+          skipData!false();
+          skipComma();
+        }
+        expectChar(']');
+        return;
+      }
+      // dictionary?
+      if (curCh == '{') {
+        nextChar();
+        for (;;) {
+          skipBlanks();
+          if (curCh == 0) error("unterminated array");
+          if (curCh == '}') break;
+          skipData!true(); // field name
+          skipBlanks();
+          expectChar(':');
+          skipData!false();
+          skipComma();
+        }
+        expectChar('}');
+        return;
+      }
+    }
+    // identifier
+    if (!isGoodIdChar(curCh)) error("invalid identifier");
+    while (isGoodIdChar(curCh)) nextChar();
+  }
+
   void unserData(T) (out T v) {
     static if (is(T : const(char)[])) {
       // quoted string
@@ -361,7 +412,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
       }
       skipBlanks();
       // `null` is empty string
-      if (curCh != '"') {
+      if (curCh != '"' && curCh != '\'') {
         if (!isGoodIdChar(curCh)) error("string expected");
         char[] ss;
         while (isGoodIdChar(curCh)) {
@@ -371,19 +422,42 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
         if (ss != "null") foreach (char ch; ss) put(ch);
       } else {
         // not a null
-        if (curCh != '"') error("string expected");
+        assert(curCh == '"' || curCh == '\'');
+        char eq = curCh;
         nextChar();
-        while (curCh != '"') {
-          if (curCh < ' ') error("invalid string");
-          if (curCh == '"') break;
+        while (curCh != eq) {
+          if (curCh == 0) error("unterminated string");
           if (curCh == '\\') {
             nextChar();
             switch (curCh) {
+              case '0': // oops, octal
+                uint ucc = 0;
+                foreach (immutable _; 0..4) {
+                  int dig = digitInBase(curCh, 10);
+                  if (dig < 0) break;
+                  if (dig > 7) error("invalid octal escape");
+                  ucc = ucc*8+dig;
+                  nextChar();
+                }
+                if (ucc > 255) error("invalid octal escape");
+                put(cast(char)ucc);
+                break;
+              case '1': .. case '9': // decimal
+                uint ucc = 0;
+                foreach (immutable _; 0..3) {
+                  int dig = digitInBase(curCh, 10);
+                  if (dig < 0) break;
+                  ucc = ucc*10+dig;
+                  nextChar();
+                }
+                if (ucc > 255) error("invalid decimal escape");
+                put(cast(char)ucc);
+                break;
               case 'e': put('\x1b'); nextChar(); break;
               case 'r': put('\r'); nextChar(); break;
               case 'n': put('\n'); nextChar(); break;
               case 't': put('\t'); nextChar(); break;
-              case '"': case '\\': put(curCh); nextChar(); break;
+              case '"': case '\\': case '\'': put(curCh); nextChar(); break;
               case 'x':
               case 'X':
                 if (digitInBase(peekCh, 16) < 0) error("invalid hex escape");
@@ -419,7 +493,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
             nextChar();
           }
         }
-        expectChar('"');
+        expectChar(eq);
       }
     } else static if (is(T : V[], V)) {
       // array
@@ -542,18 +616,32 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
             if (tryField!(idx, fldname)(name)) return;
           }
         }
-        throw new Exception("unknown field '"~name.idup~"'");
+        static if (ignoreUnknown) {
+          skipData!false();
+        } else {
+          throw new Exception("unknown field '"~name.idup~"'");
+        }
       }
 
       // let's hope that fields are in order (it is nothing wrong with seeing 'em in wrong order, though)
-      foreach (immutable idx, string fldname; FieldNameTuple!T) {
-        static if (!hasUDA!(__traits(getMember, T, fldname), SRZIgnore)) {
-          skipBlanks();
-          if (curCh == '}') break;
+      static if (ignoreUnknown) {
+        while (curCh != '}') {
+          if (curCh == 0) break;
           auto name = expectId!true();
           expectChar(':');
-          if (!tryField!(idx, fldname)(name)) tryAllFields(name);
+          tryAllFields(name);
           skipComma();
+        }
+      } else {
+        foreach (immutable idx, string fldname; FieldNameTuple!T) {
+          static if (!hasUDA!(__traits(getMember, T, fldname), SRZIgnore)) {
+            skipBlanks();
+            if (curCh == '}') break;
+            auto name = expectId!true();
+            expectChar(':');
+            if (!tryField!(idx, fldname)(name)) tryAllFields(name);
+            skipComma();
+          }
         }
       }
 
