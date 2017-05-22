@@ -22,18 +22,40 @@ public import iv.vfs.arc.abuse;
 public import iv.vfs.arc.arcanum;
 public import iv.vfs.arc.arcz;
 public import iv.vfs.arc.bsa;
-//public import iv.vfs.arc.dfwad; // just get lost
+public import iv.vfs.arc.dfwad; // just get lost
 //public import iv.vfs.arc.dunepak; no signature
 //public import iv.vfs.arc.f2dat; // no signature
 //public import iv.vfs.arc.toeedat; // conflicts with arcanum
 public import iv.vfs.arc.wad2;
 
 
-void main (string[] args) {
+__gshared ubyte[1024*1024] buf;
+
+
+void extractFile (const(char)[] fname) {
   import std.file : mkdirRecurse;
   import std.path : dirName;
+  try {
+    auto fl = VFile(fname);
+    write(fl.size, " ");
+    string destname = "_unp/"~fname.idup;
+    mkdirRecurse(destname.dirName);
+    auto fo = VFile(destname, "w");
+    for (;;) {
+      auto rd = fl.rawRead(buf);
+      if (rd.length == 0) break;
+      fo.rawWriteExact(rd);
+    }
+    writeln("OK");
+  } catch (Exception e) {
+    writeln("ERROR!");
+    writeln(e.toString);
+  }
+}
 
-  if (args.length < 3) assert(0, "PAK?");
+
+void main (string[] args) {
+  if (args.length < 2) assert(0, "PAK?");
 
   string aname = args[1];
   try {
@@ -43,25 +65,15 @@ void main (string[] args) {
     throw e;
   }
 
-  auto buf = new ubyte[](1024*1024);
-
-  foreach (string fname; args[2..$]) {
-    write("extracting '", fname, "' ... ");
-    try {
-      auto fl = VFile(fname);
-      write(fl.size, " ");
-      string destname = "_unp/"~fname;
-      mkdirRecurse(destname.dirName);
-      auto fo = VFile(destname, "w");
-      for (;;) {
-        auto rd = fl.rawRead(buf);
-        if (rd.length == 0) break;
-        fo.rawWriteExact(rd);
-      }
-      writeln("OK");
-    } catch (Exception e) {
-      writeln("ERROR!");
-      writeln(e.toString);
+  if (args.length > 2) {
+    foreach (string fname; args[2..$]) {
+      write("extracting '", fname, "' ... ");
+      extractFile(fname);
+    }
+  } else {
+    foreach_reverse (const ref de; vfsFileList) {
+      write("extracting '", de.name, "' ... ");
+      extractFile(de.name);
     }
   }
 }
