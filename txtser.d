@@ -242,6 +242,13 @@ private:
   // buffer for identifier reading
   char[128] buf = 0;
   int bpos = 0;
+  static if (isReadableStream!ST) {
+    enum AsStream = true;
+    char[256] rdbuf = 0;
+    uint rdpos, rdused;
+  } else {
+    enum AsStream = false;
+  }
 
 public:
   int line, col;
@@ -267,11 +274,19 @@ public:
     curch = peek;
     if (eotflag > 0) { eotflag = -1; peek = 0; return; }
     // read next char to `peek`
-    static if (isReadableStream!ST) {
-      if (st.rawRead((&peek)[0..1]).length == 0) {
-        peek = 0;
-        eotflag = 1;
+    static if (AsStream) {
+      if (rdpos >= rdused) {
+        auto read = st.rawRead(rdbuf[]);
+        if (read.length == 0) {
+          peek = 0;
+          eotflag = 1;
+          return;
+        }
+        rdpos = 0;
+        rdused = cast(uint)read.length;
       }
+      assert(rdpos < rdused);
+      peek = rdbuf.ptr[rdpos++];
     } else {
       if (!fl.empty) {
         peek = fl.curch;
