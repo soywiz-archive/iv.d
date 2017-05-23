@@ -215,89 +215,227 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST fl)
-if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(ElementEncodingType!ST) == char))))
-{
-  import std.traits : Unqual;
+public enum isGoodSerParser(T) = is(typeof((inout int=0) {
+  auto t = T.init;
+  char ch = t.curch;
+  ch = t.peek;
+  t.skipChar();
+  bool b = t.eot;
+  t.skipBlanks();
+  int l = t.line;
+  int c = t.col;
+  const(char)[] s = t.expectId!true();
+  s = t.expectId!false;
+  b = T.isGoodIdChar(' ');
+  t.expectChar('!');
+  int d = T.digitInBase('1', 10);
+  t.error("message");
+  t.parseString!true(delegate (char ch) {});
+  t.parseString!false(delegate (char ch) {});
+}));
 
-  char curCh = ' ', peekCh = ' ';
-  int linenum;
 
-  void nextChar () {
-    if (curCh == '\n') ++linenum;
-    if (peekCh) {
-      curCh = peekCh;
-      static if (isReadableStream!ST) {
-        if (fl.rawRead((&peekCh)[0..1]).length) {
-          if (peekCh == 0) peekCh = ' ';
-        } else {
-          peekCh = 0;
-        }
-      } else {
-        if (!fl.empty) {
-          peekCh = fl.front;
-          fl.popFront;
-          if (peekCh == 0) peekCh = ' ';
-        } else {
-          peekCh = 0;
-        }
+public struct TxtSerParser(ST) if (isReadableStream!ST || (isInputRange!ST && is(Unqual!(ElementEncodingType!ST) == char))) {
+private:
+  ST st;
+  int eotflag; // 0: not; 1: at peek; -1: at front; -2: done
+  // buffer for identifier reading
+  char[128] buf = 0;
+  int bpos = 0;
+
+public:
+  int line, col;
+  char curch, peek;
+
+public:
+  this() (auto ref ST stream) {
+    st = stream;
+    // load first chars
+    skipChar();
+    skipChar();
+    line = 1;
+    col = 1;
+  }
+
+  void error (string msg) { import std.conv : to; throw new Exception(msg~" around line "~line.to!string~", column "~col.to!string); }
+
+  @property bool eot () const pure nothrow @safe @nogc { pragma(inline, true); return (eotflag < -1); }
+
+  void skipChar () {
+    if (eotflag < 0) { curch = peek = 0; eotflag = -2; return; }
+    if (curch == '\n') { ++line; col = 1; } else ++col;
+    curch = peek;
+    if (eotflag > 0) { eotflag = -1; peek = 0; return; }
+    // read next char to `peek`
+    static if (isReadableStream!ST) {
+      if (st.rawRead((&peek)[0..1]).length == 0) {
+        peek = 0;
+        eotflag = 1;
       }
     } else {
-      curCh = peekCh = 0;
+      if (!fl.empty) {
+        peek = fl.curch;
+        fl.popFront;
+      } else {
+        peek = 0;
+        eotflag = 1;
+      }
     }
   }
 
   void skipBlanks () {
-    while (curCh) {
-      if ((curCh == '/' && peekCh == '/') || curCh == '#') {
-        while (curCh && curCh != '\n') nextChar();
-      } else if (curCh == '/' && peekCh == '*') {
-        nextChar();
-        nextChar();
-        while (curCh) {
-          if (curCh == '*' && peekCh == '/') {
-            nextChar();
-            nextChar();
+    while (!eot) {
+      if ((curch == '/' && peek == '/') || curch == '#') {
+        while (!eot && curch != '\n') skipChar();
+      } else if (curch == '/' && peek == '*') {
+        skipChar();
+        skipChar();
+        while (!eot) {
+          if (curch == '*' && peek == '/') {
+            skipChar();
+            skipChar();
             break;
           }
         }
-      } else if (curCh == '/' && peekCh == '+') {
-        nextChar();
-        nextChar();
+      } else if (curch == '/' && peek == '+') {
+        skipChar();
+        skipChar();
         int level = 1;
-        while (curCh) {
-          if (curCh == '+' && peekCh == '/') {
-            nextChar();
-            nextChar();
+        while (!eot) {
+          if (curch == '+' && peek == '/') {
+            skipChar();
+            skipChar();
             if (--level == 0) break;
-          } else if (curCh == '/' && peekCh == '+') {
-            nextChar();
-            nextChar();
+          } else if (curch == '/' && peek == '+') {
+            skipChar();
+            skipChar();
             ++level;
           }
         }
-      } else if (curCh > ' ') {
+      } else if (curch > ' ') {
         break;
       } else {
-        nextChar();
+        skipChar();
       }
     }
   }
 
-  void error (string msg) { import std.conv : to; throw new Exception(msg~" around line "~linenum.to!string); }
-
   void expectChar (char ch) {
     skipBlanks();
-    if (curCh != ch) error("'"~ch~"' expected");
-    nextChar();
+    if (eot || curch != ch) error("'"~ch~"' expected");
+    skipChar();
   }
 
-  void skipComma () {
+  const(char)[] expectId(bool allowQuoted=false) () {
+    bpos = 0;
     skipBlanks();
-    if (curCh == ',') nextChar();
+    static if (allowQuoted) {
+      if (!eot && curch == '"') {
+        skipChar();
+        while (!eot && curch != '"') {
+          if (curch == '\\') error("simple string expected");
+          if (bpos >= buf.length) error("identifier or number too long");
+          buf.ptr[bpos++] = curch;
+          skipChar();
+        }
+        if (eot || curch != '"') error("simple string expected");
+        skipChar();
+        return buf[0..bpos];
+      }
+    }
+    if (!isGoodIdChar(curch)) error("identifier or number expected");
+    while (isGoodIdChar(curch)) {
+      if (bpos >= buf.length) error("identifier or number too long");
+      buf[bpos++] = curch;
+      skipChar();
+    }
+    return buf[0..bpos];
   }
 
-  static bool isGoodIdChar (char ch) pure nothrow @safe @nogc {
+  // `curch` is opening quote
+  void parseString(bool allowEscapes) (scope void delegate (char ch) put) {
+    assert(put !is null);
+    if (eot) error("unterminated string");
+    char qch = curch;
+    skipChar();
+    while (!eot && curch != qch) {
+      static if (allowEscapes) if (curch == '\\') {
+        skipChar();
+        if (eot) error("unterminated string");
+        switch (curch) {
+          case '0': // oops, octal
+            uint ucc = 0;
+            foreach (immutable _; 0..4) {
+              if (eot) error("unterminated string");
+              int dig = digitInBase(curch, 10);
+              if (dig < 0) break;
+              if (dig > 7) error("invalid octal escape");
+              ucc = ucc*8+dig;
+              skipChar();
+            }
+            if (ucc > 255) error("invalid octal escape");
+            put(cast(char)ucc);
+            break;
+          case '1': .. case '9': // decimal
+            uint ucc = 0;
+            foreach (immutable _; 0..3) {
+              if (eot) error("unterminated string");
+              int dig = digitInBase(curch, 10);
+              if (dig < 0) break;
+              ucc = ucc*10+dig;
+              skipChar();
+            }
+            if (ucc > 255) error("invalid decimal escape");
+            put(cast(char)ucc);
+            break;
+          case 'e': put('\x1b'); skipChar(); break;
+          case 'r': put('\r'); skipChar(); break;
+          case 'n': put('\n'); skipChar(); break;
+          case 't': put('\t'); skipChar(); break;
+          case '"': case '\\': case '\'': put(curch); skipChar(); break;
+          case 'x':
+          case 'X':
+            if (eot) error("unterminated string");
+            if (digitInBase(peek, 16) < 0) error("invalid hex escape");
+            skipChar(); // skip 'x'
+            if (eot) error("unterminated string");
+            if (digitInBase(curch, 16) < 0 || digitInBase(peek, 16) < 0) error("invalid hex escape");
+            put(cast(char)(digitInBase(curch, 16)*16+digitInBase(peek, 16)));
+            skipChar();
+            skipChar();
+            break;
+          case 'u':
+          case 'U':
+            if (digitInBase(peek, 16) < 0) error("invalid unicode escape");
+            uint ucc = 0;
+            skipChar(); // skip 'u'
+            foreach (immutable _; 0..4) {
+              if (eot) error("unterminated string");
+              if (digitInBase(curch, 16) < 0) break;
+              ucc = ucc*16+digitInBase(curch, 16);
+              skipChar();
+            }
+            char[4] buf = void;
+            auto len = utf8Encode(buf[], cast(dchar)ucc);
+            assert(len != 0);
+            if (len < 0) error("invalid utf-8 escape");
+            foreach (char ch; buf[0..len]) put(ch);
+            break;
+          default: error("invalid escape");
+        }
+        continue;
+      }
+      // normal char
+      put(curch);
+      skipChar();
+    }
+    if (eot || curch != qch) error("unterminated string");
+    skipChar();
+  }
+
+static pure nothrow @safe @nogc:
+  bool isGoodIdChar (char ch) {
+    pragma(inline, true);
     return
       (ch >= '0' && ch <= '9') ||
       (ch >= 'A' && ch <= 'Z') ||
@@ -305,7 +443,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
       ch == '_' || ch == '-' || ch == '+' || ch == '.';
   }
 
-  static int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
+  int digitInBase (char ch, int base) {
     pragma(inline, true);
     return
       base >= 1 && ch >= '0' && ch < '0'+base ? ch-'0' :
@@ -313,262 +451,176 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
       base > 10 && ch >= 'a' && ch < 'a'+base-10 ? ch-'a'+10 :
       -1;
   }
+}
 
-  // buffer for identifier reading
-  char[64] buf = 0;
-  int bpos = 0;
 
-  const(char)[] expectId(bool allowquoted=false) () {
-    bpos = 0;
-    skipBlanks();
-    static if (allowquoted) {
-      if (curCh == '"') {
-        nextChar();
-        while (curCh != '"') {
-          if (curCh == '\\') error("simple string expected");
-          if (bpos >= buf.length) error("identifier or number too long");
-          buf[bpos++] = curCh;
-          nextChar();
-        }
-        if (curCh != '"') error("simple string expected");
-        nextChar();
-        return buf[0..bpos];
-      }
-    }
-    if (!isGoodIdChar(curCh)) error("identifier or number expected");
-    while (isGoodIdChar(curCh)) {
-      if (bpos >= buf.length) error("identifier or number too long");
-      buf[bpos++] = curCh;
-      nextChar();
-    }
-    return buf[0..bpos];
+static assert(isGoodSerParser!(TxtSerParser!VFile));
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST fl)
+if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(ElementEncodingType!ST) == char))))
+{
+  auto par = TxtSerParser!ST(fl);
+  txtunser!ignoreUnknown(v, par);
+}
+
+
+public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST par) if (!is(T == class) && isGoodSerParser!ST) {
+  import std.traits : Unqual;
+
+  void skipComma () {
+    par.skipBlanks();
+    if (par.curch == ',') par.skipChar();
   }
 
   static if (ignoreUnknown) void skipData(bool fieldname) () {
-    skipBlanks();
+    par.skipBlanks();
     // string?
-    if (curCh == '"' || curCh == '\'') {
-      char eq = curCh;
-      nextChar();
-      while (curCh != eq) {
-        char ch = curCh;
-        if (ch == 0) error("unterminated string");
-        nextChar();
-        if (ch == '\\') nextChar();
-      }
-      expectChar(eq);
+    if (par.curch == '"' || par.curch == '\'') {
+      par.parseString!(!fieldname)(delegate (char ch) {});
       return;
     }
     static if (!fieldname) {
       // array?
-      if (curCh == '[') {
-        nextChar();
+      if (par.curch == '[') {
+        par.skipChar();
         for (;;) {
-          skipBlanks();
-          if (curCh == 0) error("unterminated array");
-          if (curCh == ']') break;
+          par.skipBlanks();
+          if (par.eot) par.error("unterminated array");
+          if (par.curch == ']') break;
           skipData!false();
           skipComma();
         }
-        expectChar(']');
+        par.expectChar(']');
         return;
       }
       // dictionary?
-      if (curCh == '{') {
-        nextChar();
+      if (par.curch == '{') {
+        par.skipChar();
         for (;;) {
-          skipBlanks();
-          if (curCh == 0) error("unterminated array");
-          if (curCh == '}') break;
+          par.skipBlanks();
+          if (par.eot) par.error("unterminated array");
+          if (par.curch == '}') break;
           skipData!true(); // field name
-          skipBlanks();
-          expectChar(':');
+          par.skipBlanks();
+          par.expectChar(':');
           skipData!false();
           skipComma();
         }
-        expectChar('}');
+        par.expectChar('}');
         return;
       }
     }
     // identifier
-    if (!isGoodIdChar(curCh)) error("invalid identifier");
-    while (isGoodIdChar(curCh)) nextChar();
+    if (par.eot || !par.isGoodIdChar(par.curch)) par.error("invalid identifier");
+    while (!par.eot && par.isGoodIdChar(par.curch)) par.skipChar();
   }
 
   void unserData(T) (out T v) {
+    if (par.eot) par.error("data expected");
     static if (is(T : const(char)[])) {
       // quoted string
       static if (__traits(isStaticArray, T)) {
         usize dpos = 0;
-        void put (const(char)[] s...) {
-          if (s.length) {
-            if (v.length-dpos < s.length) error("value too long");
-            v[dpos..dpos+s.length] = s[];
-            dpos += s.length;
-          }
+        void put (char ch) {
+          if (v.length-dpos < 1) par.error("value too long");
+          v.ptr[dpos++] = ch;
         }
       } else {
-        void put (const(char)[] s...) { if (s.length) v ~= s; }
+        void put (char ch) { v ~= ch; }
       }
-      skipBlanks();
+      par.skipBlanks();
       // `null` is empty string
-      if (curCh != '"' && curCh != '\'') {
-        if (!isGoodIdChar(curCh)) error("string expected");
+      if (par.curch != '"' && par.curch != '\'') {
+        if (!par.isGoodIdChar(par.curch)) par.error("string expected");
         char[] ss;
-        while (isGoodIdChar(curCh)) {
-          ss ~= curCh;
-          nextChar();
+        while (par.isGoodIdChar(par.curch)) {
+          ss ~= par.curch;
+          par.skipChar();
         }
         if (ss != "null") foreach (char ch; ss) put(ch);
       } else {
         // not a null
-        assert(curCh == '"' || curCh == '\'');
-        char eq = curCh;
-        nextChar();
-        while (curCh != eq) {
-          if (curCh == 0) error("unterminated string");
-          if (curCh == '\\') {
-            nextChar();
-            switch (curCh) {
-              case '0': // oops, octal
-                uint ucc = 0;
-                foreach (immutable _; 0..4) {
-                  int dig = digitInBase(curCh, 10);
-                  if (dig < 0) break;
-                  if (dig > 7) error("invalid octal escape");
-                  ucc = ucc*8+dig;
-                  nextChar();
-                }
-                if (ucc > 255) error("invalid octal escape");
-                put(cast(char)ucc);
-                break;
-              case '1': .. case '9': // decimal
-                uint ucc = 0;
-                foreach (immutable _; 0..3) {
-                  int dig = digitInBase(curCh, 10);
-                  if (dig < 0) break;
-                  ucc = ucc*10+dig;
-                  nextChar();
-                }
-                if (ucc > 255) error("invalid decimal escape");
-                put(cast(char)ucc);
-                break;
-              case 'e': put('\x1b'); nextChar(); break;
-              case 'r': put('\r'); nextChar(); break;
-              case 'n': put('\n'); nextChar(); break;
-              case 't': put('\t'); nextChar(); break;
-              case '"': case '\\': case '\'': put(curCh); nextChar(); break;
-              case 'x':
-              case 'X':
-                if (digitInBase(peekCh, 16) < 0) error("invalid hex escape");
-                nextChar(); // skip 'x'
-                if (digitInBase(curCh, 16) < 0 || digitInBase(peekCh, 16) < 0) error("invalid hex escape");
-                put(cast(char)(digitInBase(curCh, 16)*16+digitInBase(peekCh, 16)));
-                nextChar();
-                nextChar();
-                break;
-              case 'u':
-              case 'U':
-                if (digitInBase(peekCh, 16) < 0) error("invalid unicode escape");
-                uint ucc = 0;
-                nextChar(); // skip 'u'
-                foreach (immutable _; 0..4) {
-                  if (digitInBase(curCh, 16) < 0) break;
-                  ucc = ucc*16+digitInBase(curCh, 16);
-                  nextChar();
-                }
-                {
-                  char[4] buf = 0;
-                  auto len = utf8Encode(buf[], cast(dchar)ucc);
-                  assert(len != 0);
-                  if (len < 0) error("invalid utf-8 escape");
-                  //{ import core.stdc.stdio; printf("ucc=%u 0x%04X; len=%d; [0]=%u; [1]=%u; [2]=%u; [3]=%u\n", ucc, ucc, len, cast(uint)buf[0], cast(uint)buf[1], cast(uint)buf[2], cast(uint)buf[3]); assert(0); }
-                  put(buf[0..len]);
-                }
-                break;
-              default: error("invalid escape");
-            }
-          } else {
-            put(curCh);
-            nextChar();
-          }
-        }
-        expectChar(eq);
+        assert(par.curch == '"' || par.curch == '\'');
+        par.parseString!true(&put);
       }
     } else static if (is(T : V[], V)) {
       // array
-      skipBlanks();
-      if (curCh == '{') {
+      par.skipBlanks();
+      if (par.curch == '{') {
         // only one element
         static if (__traits(isStaticArray, T)) {
-          if (v.length == 0) error("array too small");
+          if (v.length == 0) par.error("array too small");
         } else {
           v.length += 1;
         }
         unserData(v[0]);
-      } else if (curCh == 'n') {
+      } else if (par.curch == 'n') {
         // this should be 'null'
-        nextChar(); if (curCh != 'u') error("'null' expected");
-        nextChar(); if (curCh != 'l') error("'null' expected");
-        nextChar(); if (curCh != 'l') error("'null' expected");
-        nextChar(); if (isGoodIdChar(curCh)) error("'null' expected");
-        static if (__traits(isStaticArray, T)) if (v.length != 0) error("static array too big");
+        par.skipChar(); if (!par.eot && par.curch != 'u') par.error("'null' expected");
+        par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
+        par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
+        par.skipChar(); if (!par.eot && isGoodIdChar(par.curch)) par.error("'null' expected");
+        static if (__traits(isStaticArray, T)) if (v.length != 0) par.error("static array too big");
       } else {
-        expectChar('[');
+        par.expectChar('[');
         static if (__traits(isStaticArray, T)) {
           foreach (ref it; v) {
-            skipBlanks();
-            if (curCh == ']') break;
+            par.skipBlanks();
+            if (par.eot || par.curch == ']') break;
             unserData(it);
             skipComma();
           }
         } else {
           for (;;) {
-            skipBlanks();
-            if (curCh == ']') break;
+            par.skipBlanks();
+            if (par.eot || par.curch == ']') break;
             v.length += 1;
             unserData(v[$-1]);
             skipComma();
           }
         }
-        expectChar(']');
+        par.expectChar(']');
       }
     } else static if (is(T : V[K], K, V)) {
       // associative array
       K key = void;
       V value = void;
-      expectChar('{');
+      par.expectChar('{');
       for (;;) {
-        skipBlanks();
-        if (curCh == '}') break;
+        par.skipBlanks();
+        if (par.eot || par.curch == '}') break;
         unserData(key);
-        expectChar(':');
-        skipBlanks();
+        par.expectChar(':');
+        par.skipBlanks();
         // `null`?
-        if (curCh == 'n' && peekCh == 'u') {
-          auto id = expectId;
-          if (id != "null") error("`null` expected");
-          continue; // skip null key
+        if (par.curch == 'n' && par.peek == 'u') {
+          par.skipChar(); // skip 'n'
+          par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
+          par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
+          par.skipChar(); if (!par.eot && isGoodIdChar(par.curch)) par.error("'null' expected");
+          continue; // skip null value
         } else {
           unserData(value);
         }
         skipComma();
         v[key] = value;
       }
-      expectChar('}');
+      par.expectChar('}');
     } else static if (isCharType!T) {
       import std.conv : to;
-      auto id = expectId;
+      auto id = par.expectId;
       try {
         v = id.to!uint.to!T;
       } catch (Exception e) {
-        error("type conversion error for type '"~T.stringof~"' ("~id.idup~")");
+        par.error("type conversion error for type '"~T.stringof~"' ("~id.idup~")");
       }
     } else static if (isSimpleType!T) {
       import std.conv : to;
-      auto id = expectId;
+      auto id = par.expectId;
       // try bool->int conversions
-      static if ((is(T : ulong) || is(T : real)) && is(typeof((){v=0;}))  && is(typeof((){v=1;}))) {
+      static if ((is(T : ulong) || is(T : real)) && is(typeof((){v=0;})) && is(typeof((){v=1;}))) {
         // char, int, etc.
         if (id == "true") { v = 1; return; }
         if (id == "false") { v = 0; return; }
@@ -576,19 +628,19 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
       try {
         v = id.to!T;
       } catch (Exception e) {
-        error("type conversion error for type '"~T.stringof~"' ("~id.idup~")");
+        par.error("type conversion error for type '"~T.stringof~"' ("~id.idup~")");
       }
     } else static if (is(T == struct)) {
       // struct
       import std.traits : FieldNameTuple, getUDAs, hasUDA;
 
-      skipBlanks();
-      if (curCh != '{') {
-        auto nm = expectId!true();
-        if (nm != (Unqual!T).stringof) error("'"~(Unqual!T).stringof~"' struct expected, but got '"~nm.idup~"'");
-        expectChar(':');
+      par.skipBlanks();
+      if (par.curch != '{') {
+        auto nm = par.expectId!true();
+        if (nm != (Unqual!T).stringof) par.error("'"~(Unqual!T).stringof~"' struct expected, but got '"~nm.idup~"'");
+        par.expectChar(':');
       }
-      expectChar('{');
+      par.expectChar('{');
 
       ulong[(FieldNameTuple!T.length+ulong.sizeof-1)/ulong.sizeof] fldseen = 0;
 
@@ -625,34 +677,29 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
 
       // let's hope that fields are in order (it is nothing wrong with seeing 'em in wrong order, though)
       static if (ignoreUnknown) {
-        while (curCh != '}') {
-          if (curCh == 0) break;
-          auto name = expectId!true();
-          expectChar(':');
+        while (par.curch != '}') {
+          if (par.curch == 0) break;
+          auto name = par.expectId!true();
+          par.expectChar(':');
           tryAllFields(name);
           skipComma();
         }
       } else {
         foreach (immutable idx, string fldname; FieldNameTuple!T) {
           static if (!hasUDA!(__traits(getMember, T, fldname), SRZIgnore)) {
-            skipBlanks();
-            if (curCh == '}') break;
-            auto name = expectId!true();
-            expectChar(':');
+            par.skipBlanks();
+            if (par.curch == '}') break;
+            auto name = par.expectId!true();
+            par.expectChar(':');
             if (!tryField!(idx, fldname)(name)) tryAllFields(name);
             skipComma();
           }
         }
       }
 
-      expectChar('}');
+      par.expectChar('}');
     }
   }
-
-  // load first chars
-  nextChar();
-  nextChar();
-  linenum = 1;
 
   unserData(v);
 }
