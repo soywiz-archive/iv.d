@@ -288,9 +288,9 @@ public:
       assert(rdpos < rdused);
       peek = rdbuf.ptr[rdpos++];
     } else {
-      if (!fl.empty) {
-        peek = fl.curch;
-        fl.popFront;
+      if (!st.empty) {
+        peek = st.front;
+        st.popFront;
       } else {
         peek = 0;
         eotflag = 1;
@@ -576,7 +576,7 @@ public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST par)
         par.skipChar(); if (!par.eot && par.curch != 'u') par.error("'null' expected");
         par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
         par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
-        par.skipChar(); if (!par.eot && isGoodIdChar(par.curch)) par.error("'null' expected");
+        par.skipChar(); if (!par.eot && par.isGoodIdChar(par.curch)) par.error("'null' expected");
         static if (__traits(isStaticArray, T)) if (v.length != 0) par.error("static array too big");
       } else {
         par.expectChar('[');
