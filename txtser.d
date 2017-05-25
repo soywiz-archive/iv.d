@@ -614,7 +614,7 @@ public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST par)
           par.skipChar(); // skip 'n'
           par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
           par.skipChar(); if (!par.eot && par.curch != 'l') par.error("'null' expected");
-          par.skipChar(); if (!par.eot && isGoodIdChar(par.curch)) par.error("'null' expected");
+          par.skipChar(); if (!par.eot && par.isGoodIdChar(par.curch)) par.error("'null' expected");
           continue; // skip null value
         } else {
           unserData(value);
