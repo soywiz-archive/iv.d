@@ -750,65 +750,77 @@ pure @nogc:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/+TODO:
-struct ray2 {
-  vec2 org;
-  vec2 dir;
+struct Ray(VT) if (IsVector!VT) {
+public:
+  VT orig, dir;
 
 nothrow @safe:
   string toString () const {
-    import std.string : format;
+    import std.format : format;
     try {
-      return "[(%s,%s):(%s,%s)]".format(org.x, org.y, dir.x, dir.y);
+      return "[(%s,%s):(%s,%s)]".format(orig.x, orig.y, dir.x, dir.y);
     } catch (Exception) {
       assert(0);
     }
   }
 
 pure @nogc:
-  this (FloatType x, FloatType y, FloatType angle) { pragma(inline, true); setOrgDir(x, y, angle); }
-  this() (in auto ref vec2 aorg, FloatType angle) { pragma(inline, true); setOrgDir(aorg, angle); }
+  this (VT.Float x, VT.Float y, VT.Float angle) { pragma(inline, true); setOrigDir(x, y, angle); }
+  this() (in auto ref VT aorg, VT.Float angle) { pragma(inline, true); setOrigDir(aorg, angle); }
 
-  void setOrgDir (FloatType x, FloatType y, FloatType angle) {
+  static Ray!VT fromPoints() (in auto ref VT p0, in auto ref VT p1) {
     pragma(inline, true);
-    org.x = x;
-    org.y = y;
+    Ray!VT res;
+    res.orig = p0;
+    res.dir = (p1-p0).normalized;
+    return res;
+  }
+
+  void setOrigDir (VT.Float x, VT.Float y, VT.Float angle) {
+    pragma(inline, true);
+    import std.math : cos, sin;
+    orig.x = x;
+    orig.y = y;
+    dir.x = cos(angle);
+    dir.y = sin(angle);
+  }
+
+  void setOrigDir() (in auto ref VT aorg, VT.Float angle) {
+    pragma(inline, true);
+    import std.math : cos, sin;
+    orig.x = aorg.x;
+    orig.y = aorg.y;
+    dir.x = cos(angle);
+    dir.y = sin(angle);
+  }
+
+  void setOrig (VT.Float x, VT.Float y) {
+    pragma(inline, true);
+    orig.x = x;
+    orig.y = y;
+  }
+
+  void setOrig() (in auto ref VT aorg) {
+    pragma(inline, true);
+    orig.x = aorg.x;
+    orig.y = aorg.y;
+  }
+
+  void setDir (VT.Float angle) {
+    pragma(inline, true);
     import std.math : cos, sin;
     dir.x = cos(angle);
     dir.y = sin(angle);
   }
 
-  void setOrgDir() (in auto ref vec2 aorg, FloatType angle) {
+  @property VT right () const {
     pragma(inline, true);
-    org.x = aorg.x;
-    org.y = aorg.y;
-    import std.math : cos, sin;
-    dir.x = cos(angle);
-    dir.y = sin(angle);
+    static if (VT.Dims == 2) return VT(dir.y, -dir.x);
+    else return VT(dir.y, -dir.x, dir.z);
   }
 
-  void setOrg (FloatType x, FloatType y) {
-    pragma(inline, true);
-    org.x = x;
-    org.y = y;
-  }
-
-  void setOrg() (in auto ref vec2 aorg) {
-    pragma(inline, true);
-    org.x = aorg.x;
-    org.y = aorg.y;
-  }
-
-  void setDir (FloatType angle) {
-    pragma(inline, true);
-    import std.math : cos, sin;
-    dir.x = cos(angle);
-    dir.y = sin(angle);
-  }
-
-  @property vec2 right () const => vec2(dir.y, -dir.x);
+  VT movedBy (VT.Float len) const { pragma(inline, true); return orig+dir*len; }
 }
-+/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -884,7 +896,7 @@ public pure nothrow @safe @nogc:
     }
   }
 
-  // return true if the current AABB contains the AABB given in parameter
+  // return true if the current AABB contains the AABB given in argument
   bool contains() (in auto ref Me aabb) const {
     pragma(inline, true);
     bool isInside = true;
@@ -934,25 +946,25 @@ public pure nothrow @safe @nogc:
   // something to consider here is that 0 * inf =nan which occurs when the ray starts exactly on the edge of a box
   // rd: ray direction, normalized
   // https://tavianator.com/fast-branchless-raybounding-box-intersections-part-2-nans/
-  static bool rayIntersect() (in auto ref VT bmin, in auto ref VT bmax, in auto ref VT ro, in auto ref VT rd, FType* tmino=null, FType* tmaxo=null) {
+  static bool intersect() (in auto ref VT bmin, in auto ref VT bmax, in auto ref Ray!VT ray, FType* tmino=null, FType* tmaxo=null) {
     // ok with coplanars, but dmd sux at unrolled loops
     // do X
-    FType dinv = cast(FType)1/rd.x; // 1/0 will produce inf
-    FType t1 = (bmin.x-ro.x)*dinv;
-    FType t2 = (bmax.x-ro.x)*dinv;
+    FType dinv = cast(FType)1/ray.dir.x; // 1/0 will produce inf
+    FType t1 = (bmin.x-ray.orig.x)*dinv;
+    FType t2 = (bmax.x-ray.orig.x)*dinv;
     FType tmin = nmin(t1, t2);
     FType tmax = nmax(t1, t2);
     // do Y
-    dinv = cast(FType)1/rd.y; // 1/0 will produce inf
-    t1 = (bmin.y-ro.y)*dinv;
-    t2 = (bmax.y-ro.y)*dinv;
+    dinv = cast(FType)1/ray.dir.y; // 1/0 will produce inf
+    t1 = (bmin.y-ray.orig.y)*dinv;
+    t2 = (bmax.y-ray.orig.y)*dinv;
     tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
     tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     // do Z
     static if (VT.Dims == 3) {
-      dinv = cast(FType)1/rd.z; // 1/0 will produce inf
-      t1 = (bmin.z-ro.z)*dinv;
-      t2 = (bmax.z-ro.z)*dinv;
+      dinv = cast(FType)1/ray.dir.z; // 1/0 will produce inf
+      t1 = (bmin.z-ray.orig.z)*dinv;
+      t2 = (bmax.z-ray.orig.z)*dinv;
       tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
       tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     }
@@ -965,25 +977,25 @@ public pure nothrow @safe @nogc:
     }
   }
 
-  bool rayIntersect() (in auto ref VT ro, in auto ref VT rd, FType* tmino=null, FType* tmaxo=null) const @trusted {
+  bool intersect() (in auto ref Ray!VT ray, FType* tmino=null, FType* tmaxo=null) const @trusted {
     // ok with coplanars, but dmd sux at unrolled loops
     // do X
-    FType dinv = cast(FType)1/rd.x; // 1/0 will produce inf
-    FType t1 = (min.x-ro.x)*dinv;
-    FType t2 = (max.x-ro.x)*dinv;
+    FType dinv = cast(FType)1/ray.dir.x; // 1/0 will produce inf
+    FType t1 = (min.x-ray.orig.x)*dinv;
+    FType t2 = (max.x-ray.orig.x)*dinv;
     FType tmin = nmin(t1, t2);
     FType tmax = nmax(t1, t2);
     // do Y
-    dinv = cast(FType)1/rd.y; // 1/0 will produce inf
-    t1 = (min.y-ro.y)*dinv;
-    t2 = (max.y-ro.y)*dinv;
+    dinv = cast(FType)1/ray.dir.y; // 1/0 will produce inf
+    t1 = (min.y-ray.orig.y)*dinv;
+    t2 = (max.y-ray.orig.y)*dinv;
     tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
     tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     // do Z
     static if (VT.Dims == 3) {
-      dinv = cast(FType)1/rd.z; // 1/0 will produce inf
-      t1 = (min.z-ro.z)*dinv;
-      t2 = (max.z-ro.z)*dinv;
+      dinv = cast(FType)1/ray.dir.z; // 1/0 will produce inf
+      t1 = (min.z-ray.orig.z)*dinv;
+      t2 = (max.z-ray.orig.z)*dinv;
       tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
       tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     }
@@ -998,7 +1010,7 @@ public pure nothrow @safe @nogc:
 
   FType segIntersectMin() (in auto ref VT a, in auto ref VT b) const @trusted {
     FType tmin;
-    if (!rayIntersect(min, max, a, (b-a).normalized, &tmin)) return -1;
+    if (!intersect(Ray!VT.fromPoints(a, b), &tmin)) return -1;
     if (tmin < 0) return 0; // inside
     if (tmin > (b-a).length) return -1;
     return tmin;
@@ -1006,7 +1018,7 @@ public pure nothrow @safe @nogc:
 
   FType segIntersectMax() (in auto ref VT a, in auto ref VT b) const @trusted {
     FType tmax;
-    if (!rayIntersect(min, max, a, (b-a).normalized, null, &tmax)) return -1;
+    if (!intersect(Ray!VT.fromPoints(a, b), null, &tmax)) return -1;
     if (tmax < 0) return 0; // inside
     if (tmax > (b-a).length) return -1;
     return tmax;
