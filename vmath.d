@@ -79,8 +79,10 @@ auto rad2deg(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); 
 // ////////////////////////////////////////////////////////////////////////// //
 alias vec2 = VecN!2;
 alias vec3 = VecN!3;
+//alias AABB2 = AABBImpl!vec2;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 template IsVector(VT) {
   static if (is(VT == VecN!(D, T), ubyte D, T)) {
     enum IsVector = (D == 2 || D == 3);
@@ -128,6 +130,7 @@ public:
 
   alias VecSelf = VecN!(dims, FloatType);
   alias Float = FloatType;
+  alias Dims = dims;
 
 public:
   FloatType x = 0;
@@ -809,58 +812,216 @@ pure @nogc:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/+TODO:
-struct bbox(VT) if (isVector!VT) {
-  // vertexes
-  VT v0, v1; // min and max respective
+public struct AABBImpl(VT) if (IsVector!VT) {
+private:
+  static T nmin(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }
+  static T nmax(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }
 
-pure nothrow @safe @nogc:
-  ref VT opIndex (usize idx) const {
-    pragma(inline, true);
-    return (idx == 0 ? v0 : v1);
+public:
+  alias VType = VT;
+  alias FType = VT.Float;
+  alias Me = typeof(this);
+
+public:
+  VT min, max;
+
+public:
+  string toString () const {
+    import std.format : format;
+    return "[%s-%s]".format(min, max);
   }
 
-  void reset () {
+public pure nothrow @safe @nogc:
+  // return the volume of the AABB
+  @property FType volume () const {
     pragma(inline, true);
-    v0.x = v0.y = double.infinity;
-    v1.x = v1.y = -double.infinity;
-    static if (isVector3!VT) v1.z = v1.z = -double.infinity;
-  }
-
-  void addPoint() (in auto ref VT v) if (isVector!VT) {
-    static if (isVector2!VT) enum vclen = 2; else enum vclen = 3;
-    import std.algorithm : min, max;
-    foreach (immutable cidx; 0..vclen) {
-      v0[cidx] = min(v0[cidx], v[cidx]);
-      v1[cidx] = max(v1[cidx], v[cidx]);
+    immutable diff = max-min;
+    static if (VT.isVector3!VT) {
+      return diff.x*diff.y*diff.z;
+    } else {
+      return diff.x*diff.y;
     }
   }
 
-  void addBBox() (in auto ref typeof(this) b) {
-    addPoint(b.v0);
-    addPoint(b.v1);
+  static auto mergeAABBs() (in auto ref Me aabb1, in auto ref Me aabb2) {
+    typeof(this) res;
+    res.merge(aabb1, aabb2);
+    return res;
   }
 
-  bool inside() (in auto ref VT p) const if (isVector!VT) {
+  void merge() (in auto ref Me aabb1, in auto ref Me aabb2) {
+    pragma(inline, true);
+    min.x = nmin(aabb1.min.x, aabb2.min.x);
+    min.y = nmin(aabb1.min.y, aabb2.min.y);
+    max.x = nmax(aabb1.max.x, aabb2.max.x);
+    max.y = nmax(aabb1.max.y, aabb2.max.y);
+    static if (VT.isVector3!VT) {
+      min.z = nmin(aabb1.min.z, aabb2.min.z);
+      max.z = nmax(aabb1.max.z, aabb2.max.z);
+    }
+  }
+
+  void merge() (in auto ref Me aabb1) {
+    pragma(inline, true);
+    min.x = nmin(aabb1.min.x, min.x);
+    min.y = nmin(aabb1.min.y, min.y);
+    max.x = nmax(aabb1.max.x, max.x);
+    max.y = nmax(aabb1.max.y, max.y);
+    static if (VT.isVector3!VT) {
+      min.z = nmin(aabb1.min.z, min.z);
+      max.z = nmax(aabb1.max.z, max.z);
+    }
+  }
+
+  void addPoint() (in auto ref VT v) {
+    min.x = nmin(min.x, v.x);
+    max.x = nmax(max.x, v.x);
+    min.y = nmin(min.y, v.y);
+    max.y = nmax(max.y, v.y);
+    static if (VT.Dims == 3) {
+      min.z = nmin(min.z, v.z);
+      max.z = nmax(max.z, v.z);
+    }
+  }
+
+  // return true if the current AABB contains the AABB given in parameter
+  bool contains() (in auto ref Me aabb) const {
+    pragma(inline, true);
+    bool isInside = true;
+    isInside = (isInside && min.x <= aabb.min.x);
+    isInside = (isInside && min.y <= aabb.min.y);
+    isInside = (isInside && max.x >= aabb.max.x);
+    isInside = (isInside && max.y >= aabb.max.y);
+    static if (VT.isVector3!VT) {
+      isInside = (isInside && min.z <= aabb.min.z);
+      isInside = (isInside && max.z >= aabb.max.z);
+    }
+    return isInside;
+  }
+
+  bool contains() (in auto ref VT p) const {
     pragma(inline, true);
     static if (isVector2!VT) {
-      return (p.x >= v0.x && p.y >= v0.y && p.x <= v1.x && p.y <= v1.y);
+      return (p.x >= min.x && p.y >= min.y && p.x <= max.x && p.y <= max.y);
     } else {
-      return (p.x >= v0.x && p.y >= v0.y && p.z >= v0.z && p.x <= v1.x && p.y <= v1.y && p.z <= v1.z);
+      return (p.x >= min.x && p.y >= min.y && p.z >= min.z && p.x <= max.x && p.y <= max.y && p.z <= max.z);
     }
   }
 
   // extrude bbox a little, to compensate floating point inexactness
-  void extrude (double delta=0.0000015) {
-    v0.x -= delta;
-    v0.y -= delta;
-    static if (isVector3!VT) v0.z -= delta;
-    v1.x += delta;
-    v1.y += delta;
-    static if (isVector3!VT) v0.z += delta;
+  void extrude (FType delta) {
+    min.x -= delta;
+    min.y -= delta;
+    static if (VT.Dims == 3) min.z -= delta;
+    max.x += delta;
+    max.y += delta;
+    static if (VT.Dims == 3) max.z += delta;
+  }
+
+  // return true if the current AABB is overlapping with the AABB in argument
+  // two AABBs overlap if they overlap in the two(three) x, y (and z) axes at the same time
+  bool overlaps() (in auto ref Me aabb) const {
+    //pragma(inline, true);
+    if (max.x < aabb.min.x || aabb.max.x < min.x) return false;
+    if (max.y < aabb.min.y || aabb.max.y < min.y) return false;
+    static if (VT.isVector3!VT) {
+      if (max.z < aabb.min.z || aabb.max.z < min.z) return false;
+    }
+    return true;
+  }
+
+  // ////////////////////////////////////////////////////////////////////////// //
+  // something to consider here is that 0 * inf =nan which occurs when the ray starts exactly on the edge of a box
+  // rd: ray direction, normalized
+  // https://tavianator.com/fast-branchless-raybounding-box-intersections-part-2-nans/
+  static bool rayIntersect() (in auto ref VT bmin, in auto ref VT bmax, in auto ref VT ro, in auto ref VT rd, FType* tmino=null, FType* tmaxo=null) {
+    // ok with coplanars, but dmd sux at unrolled loops
+    // do X
+    FType dinv = cast(FType)1/rd.x; // 1/0 will produce inf
+    FType t1 = (bmin.x-ro.x)*dinv;
+    FType t2 = (bmax.x-ro.x)*dinv;
+    FType tmin = nmin(t1, t2);
+    FType tmax = nmax(t1, t2);
+    // do Y
+    dinv = cast(FType)1/rd.y; // 1/0 will produce inf
+    t1 = (bmin.y-ro.y)*dinv;
+    t2 = (bmax.y-ro.y)*dinv;
+    tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+    tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    // do Z
+    static if (VT.Dims == 3) {
+      dinv = cast(FType)1/rd.z; // 1/0 will produce inf
+      t1 = (bmin.z-ro.z)*dinv;
+      t2 = (bmax.z-ro.z)*dinv;
+      tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+      tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    }
+    if (tmax > nmax(tmin, cast(FType)0)) {
+      if (tmino !is null) *tmino = tmin;
+      if (tmaxo !is null) *tmaxo = tmax;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  bool rayIntersect() (in auto ref VT ro, in auto ref VT rd, FType* tmino=null, FType* tmaxo=null) const @trusted {
+    // ok with coplanars, but dmd sux at unrolled loops
+    // do X
+    FType dinv = cast(FType)1/rd.x; // 1/0 will produce inf
+    FType t1 = (min.x-ro.x)*dinv;
+    FType t2 = (max.x-ro.x)*dinv;
+    FType tmin = nmin(t1, t2);
+    FType tmax = nmax(t1, t2);
+    // do Y
+    dinv = cast(FType)1/rd.y; // 1/0 will produce inf
+    t1 = (min.y-ro.y)*dinv;
+    t2 = (max.y-ro.y)*dinv;
+    tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+    tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    // do Z
+    static if (VT.Dims == 3) {
+      dinv = cast(FType)1/rd.z; // 1/0 will produce inf
+      t1 = (min.z-ro.z)*dinv;
+      t2 = (max.z-ro.z)*dinv;
+      tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+      tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    }
+    if (tmax > nmax(tmin, cast(FType)0)) {
+      if (tmino !is null) *tmino = tmin;
+      if (tmaxo !is null) *tmaxo = tmax;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  FType segIntersectMin() (in auto ref VT a, in auto ref VT b) const @trusted {
+    FType tmin;
+    if (!rayIntersect(min, max, a, (b-a).normalized, &tmin)) return -1;
+    if (tmin < 0) return 0; // inside
+    if (tmin > (b-a).length) return -1;
+    return tmin;
+  }
+
+  FType segIntersectMax() (in auto ref VT a, in auto ref VT b) const @trusted {
+    FType tmax;
+    if (!rayIntersect(min, max, a, (b-a).normalized, null, &tmax)) return -1;
+    if (tmax < 0) return 0; // inside
+    if (tmax > (b-a).length) return -1;
+    return tmax;
+  }
+
+  bool isSegIntersects() (in auto ref VT a, in auto ref VT b) const {
+    pragma(inline, true);
+    return (segIntersectMin(a, b) >= 0);
+  }
+
+  ref inout(VT) opIndex (usize idx) inout {
+    pragma(inline, true);
+    return (idx == 0 ? min : max);
   }
 }
-+/
 
 
 // ////////////////////////////////////////////////////////////////////////// //
