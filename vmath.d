@@ -83,7 +83,7 @@ alias vec3 = VecN!3;
 
 template IsVector(VT) {
   static if (is(VT == VecN!(D, T), ubyte D, T)) {
-    enum IsVector = true;
+    enum IsVector = (D == 2 || D == 3);
   } else {
     enum IsVector = false;
   }
