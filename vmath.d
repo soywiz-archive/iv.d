@@ -20,7 +20,7 @@
 module iv.vmath /*is aliced*/;
 import iv.alice;
 
-version = aabbtree_many_asserts;
+//version = aabbtree_many_asserts;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -898,7 +898,7 @@ public pure nothrow @safe @nogc:
     }
   }
 
-  // return true if the current AABB contains the AABB given in argument
+  // return true if the current AABB contains the AABB given in parameter
   bool contains() (in auto ref Me aabb) const {
     pragma(inline, true);
     bool isInside = true;
@@ -932,7 +932,7 @@ public pure nothrow @safe @nogc:
     static if (VT.Dims == 3) max.z += delta;
   }
 
-  // return true if the current AABB is overlapping with the AABB in argument
+  // return true if the current AABB is overlapping with the AABB in parameter
   // two AABBs overlap if they overlap in the two(three) x, y (and z) axes at the same time
   bool overlaps() (in auto ref Me aabb) const {
     //pragma(inline, true);
@@ -2217,7 +2217,8 @@ align(1):
  * based on the one from Erin Catto in Box2D as described in the book
  * "Introduction to Game Physics with Box2D" by Ian Parberry.
  */
-// GCAnchor==true: add nodes as GC roots; you won't need it if you're storing nodes in some other way
+/// Dynamic AABB Tree: can be used to speed up broad phase in various engines
+/// GCAnchor==true: add nodes as GC roots; you won't need it if you're storing nodes in some other way
 public final class DynamicAABBTree(VT, BodyBase, bool GCAnchor=false) if (IsVector!VT && is(BodyBase == class)) {
 private:
   static T min(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }
@@ -2239,7 +2240,7 @@ public:
   enum FType LinearMotionGapMultiplier = FloatNum!(1.7);
 
 public:
-  // called when a overlapping node has been found during the call to reportAllShapesOverlappingWithAABB()
+  // called when a overlapping node has been found during the call to forEachAABBOverlap()
   // return `true` to stop
   alias OverlapCallback = bool delegate (BodyBase abody);
   alias SegQueryCallback = FType delegate (BodyBase abody, in ref VT a, in ref VT b); // return dist from a to abody
@@ -2742,6 +2743,7 @@ private:
   }
 
 public:
+  /// add `extraAABBGap` to bounding boxes so slight object movement won't cause tree rebuilds
   this (FType extraAABBGap=FloatNum!0) {
     mExtraGap = extraAABBGap;
     setup();
@@ -2753,26 +2755,15 @@ public:
     free(mNodes);
   }
 
-  // return the fat AABB corresponding to a given node Id
-  /*const ref*/ AABB getFatAABB (int nodeId) const {
-    pragma(inline, true);
-    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
-    return mNodes[nodeId].aabb;
-  }
-
-  // return the pointer to the data array of a given leaf node of the tree
-  BodyBase getNodeBody (int nodeId) {
-    pragma(inline, true);
-    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
-    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
-    return mNodes[nodeId].flesh;
-  }
-
   // return the root AABB of the tree
-  AABB getRootAABB () { pragma(inline, true); return getFatAABB(mRootNodeId); }
+  AABB getRootAABB () {
+    pragma(inline, true);
+    version(aabbtree_many_asserts) assert(mRootNodeId >= 0 && mRootNodeId < mNodeCount);
+    return mNodes[mRootNodeId].aabb;
+  }
 
-  // add an object into the tree.
-  // this method creates a new leaf node in the tree and returns the Id of the corresponding node
+  /// insert an object into the tree
+  /// this method creates a new leaf node in the tree and returns the Id of the corresponding node
   int insertObject (BodyBase flesh) {
     auto aabb = flesh.getAABB(); // can be passed as argument
     int nodeId = insertObjectInternal(aabb);
@@ -2786,9 +2777,11 @@ public:
     return nodeId;
   }
 
-  // remove an object from the tree
+  /// remove an object from the tree
   void removeObject (int nodeId) {
-    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    if (nodeId < 0) return;
+    if (nodeId >= mNodeCount) assert(0, "node id out of bounds");
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mNodeCount);
     version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
     static if (GCAnchor) {
       import core.memory : GC;
@@ -2801,14 +2794,19 @@ public:
     releaseNode(nodeId);
   }
 
-  // update the dynamic tree after an object has moved
-  // if the new AABB of the object that has moved is still inside its fat AABB, then nothing is done.
-  // otherwise, the corresponding node is removed and reinserted into the tree.
-  // the method returns true if the object has been reinserted into the tree.
-  // the "displacement" argument is the linear velocity of the AABB multiplied by the elapsed time between two frames.
-  // if the "forceReinsert" parameter is true, we force a removal and reinsertion of the node
-  // (this can be useful if the shape AABB has become much smaller than the previous one for instance).
-  // return `true` if the tree was modified
+  /** update the dynamic tree after an object has moved.
+   *
+   * if the new AABB of the object that has moved is still inside its fat AABB, then nothing is done.
+   * otherwise, the corresponding node is removed and reinserted into the tree.
+   * the method returns true if the object has been reinserted into the tree.
+   * the "displacement" parameter is the linear velocity of the AABB multiplied by the elapsed time between two frames.
+   * if the "forceReinsert" parameter is true, we force a removal and reinsertion of the node
+   * (this can be useful if the shape AABB has become much smaller than the previous one for instance).
+   *
+   * note that you should call this method if body's AABB was modified, even if the body wasn't moved.
+   *
+   * return `true` if the tree was modified.
+   */
   bool updateObject() (int nodeId, in auto ref AABB.VType displacement, bool forceReinsert=false) {
     version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
     version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
@@ -2824,7 +2822,11 @@ public:
 
     // compute the fat AABB by inflating the AABB with a constant gap
     mNodes[nodeId].aabb = newAABB;
-    immutable gap = AABB.VType(mExtraGap, mExtraGap, mExtraGap);
+    static if (VT.Dims == 2) {
+      immutable gap = VT(mExtraGap, mExtraGap);
+    } else {
+      immutable gap = VT(mExtraGap, mExtraGap, mExtraGap);
+    }
     mNodes[nodeId].aabb.mMin -= gap;
     mNodes[nodeId].aabb.mMax += gap;
 
@@ -2855,8 +2857,8 @@ public:
     return true;
   }
 
-  // report all shapes overlapping with the AABB given in parameter
-  BodyBase reportAllShapesOverlappingWithAABB() (in auto ref AABB aabb, scope OverlapCallback cb) {
+  /// report all shapes overlapping with the AABB given in parameter
+  BodyBase forEachAABBOverlap() (in auto ref AABB aabb, scope OverlapCallback cb) {
     int[256] stack = void; // stack with the nodes to visit
     int sp = 0;
 
@@ -2898,14 +2900,15 @@ public:
     return null;
   }
 
+  ///
   static struct SegmentQueryResult {
-    FType dist = -1; // <0: nothing was hit
-    BodyBase flesh;
+    FType dist = -1; /// <0: nothing was hit
+    BodyBase flesh; ///
 
-    @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (dist >= 0 && flesh !is null); }
+    @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (dist >= 0 && flesh !is null); } ///
   }
 
-  // segment querying method
+  /// segment querying method
   SegmentQueryResult segmentQuery() (in auto ref VT a, in auto ref VT b, scope SegQueryCallback cb) {
     SegmentQueryResult res;
     FType maxFraction = FType.infinity;
@@ -2975,10 +2978,10 @@ public:
     return res;
   }
 
-  // compute the height of the tree
+  /// compute the height of the tree
   int computeHeight () { pragma(inline, true); return computeHeight(mRootNodeId); }
 
-  // clear all the nodes and reset the tree
+  /// clear all the nodes and reset the tree
   void reset() {
     import core.stdc.stdlib : free;
     static if (GCAnchor) gcRelease();
