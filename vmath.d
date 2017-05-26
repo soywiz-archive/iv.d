@@ -20,6 +20,8 @@
 module iv.vmath /*is aliced*/;
 import iv.alice;
 
+version = aabbtree_many_asserts;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 version(vmath_double) {
@@ -2157,3 +2159,872 @@ private:
 }
 
 alias mat3 = Mat3F!VFloat;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/* Dynamic AABB tree (bounding volume hierarchy)
+ * based on the code from ReactPhysics3D physics library, http://www.reactphysics3d.com
+ * Copyright (c) 2010-2016 Daniel Chappuis
+ *
+ * This software is provided 'as-is', without any express or implied warranty.
+ * In no event will the authors be held liable for any damages arising from the
+ * use of this software.
+ *
+ * Permission is granted to anyone to use this software for any purpose,
+ * including commercial applications, and to alter it and redistribute it
+ * freely, subject to the following restrictions:
+ *
+ * 1. The origin of this software must not be misrepresented; you must not claim
+ *    that you wrote the original software. If you use this software in a
+ *    product, an acknowledgment in the product documentation would be
+ *    appreciated but is not required.
+ *
+ * 2. Altered source versions must be plainly marked as such, and must not be
+ *    misrepresented as being the original software.
+ *
+ * 3. This notice may not be removed or altered from any source distribution.
+ */
+/* WARNING! BY DEFAULT TREE WILL NOT PROTECT OBJECTS FROM GC! */
+// ////////////////////////////////////////////////////////////////////////// //
+private align(1) struct TreeNodeBase(VT, BodyBase) {
+align(1):
+  enum NullTreeNode = -1;
+  enum { Left = 0, Right = 1 }
+  // a node is either in the tree (has a parent) or in the free nodes list (has a next node)
+  union {
+    int parentId;
+    int nextNodeId;
+  }
+  // a node is either a leaf (has data) or is an internal node (has children)
+  union {
+    int[2] children; /// left and right child of the node (children[0] = left child)
+    BodyBase flesh;
+  }
+  // height of the node in the tree
+  short height;
+  // fat axis aligned bounding box (AABB) corresponding to the node
+  AABBImpl!VT aabb;
+  // return true if the node is a leaf of the tree
+  @property bool leaf () const pure nothrow @safe @nogc { pragma(inline, true); return (height == 0); }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/*
+ * This class implements a dynamic AABB tree that is used for broad-phase
+ * collision detection. This data structure is inspired by Nathanael Presson's
+ * dynamic tree implementation in BulletPhysics. The following implementation is
+ * based on the one from Erin Catto in Box2D as described in the book
+ * "Introduction to Game Physics with Box2D" by Ian Parberry.
+ */
+// GCAnchor==true: add nodes as GC roots; you won't need it if you're storing nodes in some other way
+public final class DynamicAABBTree(VT, BodyBase, bool GCAnchor=false) if (IsVector!VT && is(BodyBase == class)) {
+private:
+  static T min(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }
+  static T max(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }
+
+public:
+  alias VType = VT;
+  alias FType = VT.Float;
+  alias Me = typeof(this);
+  alias AABB = AABBImpl!VT;
+  alias TreeNode = TreeNodeBase!(VT, BodyBase);
+
+  enum FloatNum(FType v) = cast(FType)v;
+
+public:
+  // in the broad-phase collision detection (dynamic AABB tree), the AABBs are
+  // also inflated in direction of the linear motion of the body by mutliplying the
+  // followin constant with the linear velocity and the elapsed time between two frames
+  enum FType LinearMotionGapMultiplier = FloatNum!(1.7);
+
+public:
+  // called when a overlapping node has been found during the call to reportAllShapesOverlappingWithAABB()
+  // return `true` to stop
+  alias OverlapCallback = bool delegate (BodyBase abody);
+  alias SegQueryCallback = FType delegate (BodyBase abody, in ref VT a, in ref VT b); // return dist from a to abody
+
+private:
+  TreeNode* mNodes; // pointer to the memory location of the nodes of the tree
+  int mRootNodeId; // id of the root node of the tree
+  int mFreeNodeId; // id of the first node of the list of free (allocated) nodes in the tree that we can use
+  int mAllocCount; // number of allocated nodes in the tree
+  int mNodeCount; // number of nodes in the tree
+
+  // extra AABB Gap used to allow the collision shape to move a little bit
+  // without triggering a large modification of the tree which can be costly
+  FType mExtraGap;
+
+private:
+  // allocate and return a node to use in the tree
+  int allocateNode () {
+    // if there is no more allocated node to use
+    if (mFreeNodeId == TreeNode.NullTreeNode) {
+      import core.stdc.stdlib : realloc;
+      version(aabbtree_many_asserts) assert(mNodeCount == mAllocCount);
+      // allocate more nodes in the tree
+      auto newsz = (mAllocCount < 4096 ? mAllocCount*2 : mAllocCount+4096);
+      TreeNode* nn = cast(TreeNode*)realloc(mNodes, newsz*TreeNode.sizeof);
+      if (nn is null) assert(0, "out of memory");
+      //{ import core.stdc.stdio; printf("realloced: old=%u; new=%u\n", mAllocCount, newsz); }
+      mAllocCount = newsz;
+      mNodes = nn;
+      // initialize the allocated nodes
+      foreach (int i; mNodeCount..mAllocCount-1) {
+        mNodes[i].nextNodeId = i+1;
+        mNodes[i].height = -1;
+      }
+      mNodes[mAllocCount-1].nextNodeId = TreeNode.NullTreeNode;
+      mNodes[mAllocCount-1].height = -1;
+      mFreeNodeId = mNodeCount;
+    }
+    // get the next free node
+    int freeNodeId = mFreeNodeId;
+    version(aabbtree_many_asserts) assert(freeNodeId >= mNodeCount && freeNodeId < mAllocCount);
+    mFreeNodeId = mNodes[freeNodeId].nextNodeId;
+    mNodes[freeNodeId].parentId = TreeNode.NullTreeNode;
+    mNodes[freeNodeId].height = 0;
+    ++mNodeCount;
+    return freeNodeId;
+  }
+
+  // release a node
+  void releaseNode (int nodeId) {
+    version(aabbtree_many_asserts) assert(mNodeCount > 0);
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].height >= 0);
+    mNodes[nodeId].nextNodeId = mFreeNodeId;
+    mNodes[nodeId].height = -1;
+    mFreeNodeId = nodeId;
+    --mNodeCount;
+  }
+
+  // insert a leaf node in the tree
+  // the process of inserting a new leaf node in the dynamic tree is described in the book "Introduction to Game Physics with Box2D" by Ian Parberry
+  void insertLeafNode (int nodeId) {
+    // if the tree is empty
+    if (mRootNodeId == TreeNode.NullTreeNode) {
+      mRootNodeId = nodeId;
+      mNodes[mRootNodeId].parentId = TreeNode.NullTreeNode;
+      return;
+    }
+
+    version(aabbtree_many_asserts) assert(mRootNodeId != TreeNode.NullTreeNode);
+
+    // find the best sibling node for the new node
+    AABB newNodeAABB = mNodes[nodeId].aabb;
+    int currentNodeId = mRootNodeId;
+    while (!mNodes[currentNodeId].leaf) {
+      int leftChild = mNodes[currentNodeId].children.ptr[TreeNode.Left];
+      int rightChild = mNodes[currentNodeId].children.ptr[TreeNode.Right];
+
+      // compute the merged AABB
+      FType volumeAABB = mNodes[currentNodeId].aabb.volume;
+      AABB mergedAABBs = AABB.mergeAABBs(mNodes[currentNodeId].aabb, newNodeAABB);
+      FType mergedVolume = mergedAABBs.volume;
+
+      // compute the cost of making the current node the sibbling of the new node
+      FType costS = FloatNum!(2.0)*mergedVolume;
+
+      // compute the minimum cost of pushing the new node further down the tree (inheritance cost)
+      FType costI = FloatNum!(2.0)*(mergedVolume-volumeAABB);
+
+      // compute the cost of descending into the left child
+      FType costLeft;
+      AABB currentAndLeftAABB = AABB.mergeAABBs(newNodeAABB, mNodes[leftChild].aabb);
+      if (mNodes[leftChild].leaf) {
+        costLeft = currentAndLeftAABB.volume+costI;
+      } else {
+        FType leftChildVolume = mNodes[leftChild].aabb.volume;
+        costLeft = costI+currentAndLeftAABB.volume-leftChildVolume;
+      }
+
+      // compute the cost of descending into the right child
+      FType costRight;
+      AABB currentAndRightAABB = AABB.mergeAABBs(newNodeAABB, mNodes[rightChild].aabb);
+      if (mNodes[rightChild].leaf) {
+        costRight = currentAndRightAABB.volume+costI;
+      } else {
+        FType rightChildVolume = mNodes[rightChild].aabb.volume;
+        costRight = costI+currentAndRightAABB.volume-rightChildVolume;
+      }
+
+      // if the cost of making the current node a sibbling of the new node is smaller than the cost of going down into the left or right child
+      if (costS < costLeft && costS < costRight) break;
+
+      // it is cheaper to go down into a child of the current node, choose the best child
+      currentNodeId = (costLeft < costRight ? leftChild : rightChild);
+    }
+
+    int siblingNode = currentNodeId;
+
+    // create a new parent for the new node and the sibling node
+    int oldParentNode = mNodes[siblingNode].parentId;
+    int newParentNode = allocateNode();
+    mNodes[newParentNode].parentId = oldParentNode;
+    mNodes[newParentNode].aabb.merge(mNodes[siblingNode].aabb, newNodeAABB);
+    mNodes[newParentNode].height = cast(short)(mNodes[siblingNode].height+1);
+    version(aabbtree_many_asserts) assert(mNodes[newParentNode].height > 0);
+
+    // If the sibling node was not the root node
+    if (oldParentNode != TreeNode.NullTreeNode) {
+      version(aabbtree_many_asserts) assert(!mNodes[oldParentNode].leaf);
+      if (mNodes[oldParentNode].children.ptr[TreeNode.Left] == siblingNode) {
+        mNodes[oldParentNode].children.ptr[TreeNode.Left] = newParentNode;
+      } else {
+        mNodes[oldParentNode].children.ptr[TreeNode.Right] = newParentNode;
+      }
+      mNodes[newParentNode].children.ptr[TreeNode.Left] = siblingNode;
+      mNodes[newParentNode].children.ptr[TreeNode.Right] = nodeId;
+      mNodes[siblingNode].parentId = newParentNode;
+      mNodes[nodeId].parentId = newParentNode;
+    } else {
+      // if the sibling node was the root node
+      mNodes[newParentNode].children.ptr[TreeNode.Left] = siblingNode;
+      mNodes[newParentNode].children.ptr[TreeNode.Right] = nodeId;
+      mNodes[siblingNode].parentId = newParentNode;
+      mNodes[nodeId].parentId = newParentNode;
+      mRootNodeId = newParentNode;
+    }
+
+    // move up in the tree to change the AABBs that have changed
+    currentNodeId = mNodes[nodeId].parentId;
+    version(aabbtree_many_asserts) assert(!mNodes[currentNodeId].leaf);
+    while (currentNodeId != TreeNode.NullTreeNode) {
+      // balance the sub-tree of the current node if it is not balanced
+      currentNodeId = balanceSubTreeAtNode(currentNodeId);
+      version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+
+      version(aabbtree_many_asserts) assert(!mNodes[currentNodeId].leaf);
+      int leftChild = mNodes[currentNodeId].children.ptr[TreeNode.Left];
+      int rightChild = mNodes[currentNodeId].children.ptr[TreeNode.Right];
+      version(aabbtree_many_asserts) assert(leftChild != TreeNode.NullTreeNode);
+      version(aabbtree_many_asserts) assert(rightChild != TreeNode.NullTreeNode);
+
+      // recompute the height of the node in the tree
+      mNodes[currentNodeId].height = cast(short)(max(mNodes[leftChild].height, mNodes[rightChild].height)+1);
+      version(aabbtree_many_asserts) assert(mNodes[currentNodeId].height > 0);
+
+      // recompute the AABB of the node
+      mNodes[currentNodeId].aabb.merge(mNodes[leftChild].aabb, mNodes[rightChild].aabb);
+
+      currentNodeId = mNodes[currentNodeId].parentId;
+    }
+
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+  }
+
+  // remove a leaf node from the tree
+  void removeLeafNode (int nodeId) {
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+
+    // If we are removing the root node (root node is a leaf in this case)
+    if (mRootNodeId == nodeId) { mRootNodeId = TreeNode.NullTreeNode; return; }
+
+    int parentNodeId = mNodes[nodeId].parentId;
+    int grandParentNodeId = mNodes[parentNodeId].parentId;
+    int siblingNodeId;
+
+    if (mNodes[parentNodeId].children.ptr[TreeNode.Left] == nodeId) {
+      siblingNodeId = mNodes[parentNodeId].children.ptr[TreeNode.Right];
+    } else {
+      siblingNodeId = mNodes[parentNodeId].children.ptr[TreeNode.Left];
+    }
+
+    // if the parent of the node to remove is not the root node
+    if (grandParentNodeId != TreeNode.NullTreeNode) {
+      // destroy the parent node
+      if (mNodes[grandParentNodeId].children.ptr[TreeNode.Left] == parentNodeId) {
+        mNodes[grandParentNodeId].children.ptr[TreeNode.Left] = siblingNodeId;
+      } else {
+        version(aabbtree_many_asserts) assert(mNodes[grandParentNodeId].children.ptr[TreeNode.Right] == parentNodeId);
+        mNodes[grandParentNodeId].children.ptr[TreeNode.Right] = siblingNodeId;
+      }
+      mNodes[siblingNodeId].parentId = grandParentNodeId;
+      releaseNode(parentNodeId);
+
+      // now, we need to recompute the AABBs of the node on the path back to the root and make sure that the tree is still balanced
+      int currentNodeId = grandParentNodeId;
+      while (currentNodeId != TreeNode.NullTreeNode) {
+        // balance the current sub-tree if necessary
+        currentNodeId = balanceSubTreeAtNode(currentNodeId);
+
+        version(aabbtree_many_asserts) assert(!mNodes[currentNodeId].leaf);
+
+        // get the two children.ptr of the current node
+        int leftChildId = mNodes[currentNodeId].children.ptr[TreeNode.Left];
+        int rightChildId = mNodes[currentNodeId].children.ptr[TreeNode.Right];
+
+        // recompute the AABB and the height of the current node
+        mNodes[currentNodeId].aabb.merge(mNodes[leftChildId].aabb, mNodes[rightChildId].aabb);
+        mNodes[currentNodeId].height = cast(short)(max(mNodes[leftChildId].height, mNodes[rightChildId].height)+1);
+        version(aabbtree_many_asserts) assert(mNodes[currentNodeId].height > 0);
+
+        currentNodeId = mNodes[currentNodeId].parentId;
+      }
+    } else {
+      // if the parent of the node to remove is the root node, the sibling node becomes the new root node
+      mRootNodeId = siblingNodeId;
+      mNodes[siblingNodeId].parentId = TreeNode.NullTreeNode;
+      releaseNode(parentNodeId);
+    }
+  }
+
+  // balance the sub-tree of a given node using left or right rotations
+  // the rotation schemes are described in the book "Introduction to Game Physics with Box2D" by Ian Parberry
+  // this method returns the new root node Id
+  int balanceSubTreeAtNode (int nodeId) {
+    version(aabbtree_many_asserts) assert(nodeId != TreeNode.NullTreeNode);
+
+    TreeNode* nodeA = mNodes+nodeId;
+
+    // if the node is a leaf or the height of A's sub-tree is less than 2
+    if (nodeA.leaf || nodeA.height < 2) return nodeId; // do not perform any rotation
+
+    // get the two children nodes
+    int nodeBId = nodeA.children.ptr[TreeNode.Left];
+    int nodeCId = nodeA.children.ptr[TreeNode.Right];
+    version(aabbtree_many_asserts) assert(nodeBId >= 0 && nodeBId < mAllocCount);
+    version(aabbtree_many_asserts) assert(nodeCId >= 0 && nodeCId < mAllocCount);
+    TreeNode* nodeB = mNodes+nodeBId;
+    TreeNode* nodeC = mNodes+nodeCId;
+
+    // compute the factor of the left and right sub-trees
+    int balanceFactor = nodeC.height-nodeB.height;
+
+    // if the right node C is 2 higher than left node B
+    if (balanceFactor > 1) {
+      version(aabbtree_many_asserts) assert(!nodeC.leaf);
+
+      int nodeFId = nodeC.children.ptr[TreeNode.Left];
+      int nodeGId = nodeC.children.ptr[TreeNode.Right];
+      version(aabbtree_many_asserts) assert(nodeFId >= 0 && nodeFId < mAllocCount);
+      version(aabbtree_many_asserts) assert(nodeGId >= 0 && nodeGId < mAllocCount);
+      TreeNode* nodeF = mNodes+nodeFId;
+      TreeNode* nodeG = mNodes+nodeGId;
+
+      nodeC.children.ptr[TreeNode.Left] = nodeId;
+      nodeC.parentId = nodeA.parentId;
+      nodeA.parentId = nodeCId;
+
+      if (nodeC.parentId != TreeNode.NullTreeNode) {
+        if (mNodes[nodeC.parentId].children.ptr[TreeNode.Left] == nodeId) {
+          mNodes[nodeC.parentId].children.ptr[TreeNode.Left] = nodeCId;
+        } else {
+          version(aabbtree_many_asserts) assert(mNodes[nodeC.parentId].children.ptr[TreeNode.Right] == nodeId);
+          mNodes[nodeC.parentId].children.ptr[TreeNode.Right] = nodeCId;
+        }
+      } else {
+        mRootNodeId = nodeCId;
+      }
+
+      version(aabbtree_many_asserts) assert(!nodeC.leaf);
+      version(aabbtree_many_asserts) assert(!nodeA.leaf);
+
+      // if the right node C was higher than left node B because of the F node
+      if (nodeF.height > nodeG.height) {
+        nodeC.children.ptr[TreeNode.Right] = nodeFId;
+        nodeA.children.ptr[TreeNode.Right] = nodeGId;
+        nodeG.parentId = nodeId;
+
+        // recompute the AABB of node A and C
+        nodeA.aabb.merge(nodeB.aabb, nodeG.aabb);
+        nodeC.aabb.merge(nodeA.aabb, nodeF.aabb);
+
+        // recompute the height of node A and C
+        nodeA.height = cast(short)(max(nodeB.height, nodeG.height)+1);
+        nodeC.height = cast(short)(max(nodeA.height, nodeF.height)+1);
+        version(aabbtree_many_asserts) assert(nodeA.height > 0);
+        version(aabbtree_many_asserts) assert(nodeC.height > 0);
+      } else {
+        // if the right node C was higher than left node B because of node G
+        nodeC.children.ptr[TreeNode.Right] = nodeGId;
+        nodeA.children.ptr[TreeNode.Right] = nodeFId;
+        nodeF.parentId = nodeId;
+
+        // recompute the AABB of node A and C
+        nodeA.aabb.merge(nodeB.aabb, nodeF.aabb);
+        nodeC.aabb.merge(nodeA.aabb, nodeG.aabb);
+
+        // recompute the height of node A and C
+        nodeA.height = cast(short)(max(nodeB.height, nodeF.height)+1);
+        nodeC.height = cast(short)(max(nodeA.height, nodeG.height)+1);
+        version(aabbtree_many_asserts) assert(nodeA.height > 0);
+        version(aabbtree_many_asserts) assert(nodeC.height > 0);
+      }
+
+      // return the new root of the sub-tree
+      return nodeCId;
+    }
+
+    // if the left node B is 2 higher than right node C
+    if (balanceFactor < -1) {
+      version(aabbtree_many_asserts) assert(!nodeB.leaf);
+
+      int nodeFId = nodeB.children.ptr[TreeNode.Left];
+      int nodeGId = nodeB.children.ptr[TreeNode.Right];
+      version(aabbtree_many_asserts) assert(nodeFId >= 0 && nodeFId < mAllocCount);
+      version(aabbtree_many_asserts) assert(nodeGId >= 0 && nodeGId < mAllocCount);
+      TreeNode* nodeF = mNodes+nodeFId;
+      TreeNode* nodeG = mNodes+nodeGId;
+
+      nodeB.children.ptr[TreeNode.Left] = nodeId;
+      nodeB.parentId = nodeA.parentId;
+      nodeA.parentId = nodeBId;
+
+      if (nodeB.parentId != TreeNode.NullTreeNode) {
+        if (mNodes[nodeB.parentId].children.ptr[TreeNode.Left] == nodeId) {
+          mNodes[nodeB.parentId].children.ptr[TreeNode.Left] = nodeBId;
+        } else {
+          version(aabbtree_many_asserts) assert(mNodes[nodeB.parentId].children.ptr[TreeNode.Right] == nodeId);
+          mNodes[nodeB.parentId].children.ptr[TreeNode.Right] = nodeBId;
+        }
+      } else {
+        mRootNodeId = nodeBId;
+      }
+
+      version(aabbtree_many_asserts) assert(!nodeB.leaf);
+      version(aabbtree_many_asserts) assert(!nodeA.leaf);
+
+      // if the left node B was higher than right node C because of the F node
+      if (nodeF.height > nodeG.height) {
+        nodeB.children.ptr[TreeNode.Right] = nodeFId;
+        nodeA.children.ptr[TreeNode.Left] = nodeGId;
+        nodeG.parentId = nodeId;
+
+        // recompute the AABB of node A and B
+        nodeA.aabb.merge(nodeC.aabb, nodeG.aabb);
+        nodeB.aabb.merge(nodeA.aabb, nodeF.aabb);
+
+        // recompute the height of node A and B
+        nodeA.height = cast(short)(max(nodeC.height, nodeG.height)+1);
+        nodeB.height = cast(short)(max(nodeA.height, nodeF.height)+1);
+        version(aabbtree_many_asserts) assert(nodeA.height > 0);
+        version(aabbtree_many_asserts) assert(nodeB.height > 0);
+      } else {
+        // if the left node B was higher than right node C because of node G
+        nodeB.children.ptr[TreeNode.Right] = nodeGId;
+        nodeA.children.ptr[TreeNode.Left] = nodeFId;
+        nodeF.parentId = nodeId;
+
+        // recompute the AABB of node A and B
+        nodeA.aabb.merge(nodeC.aabb, nodeF.aabb);
+        nodeB.aabb.merge(nodeA.aabb, nodeG.aabb);
+
+        // recompute the height of node A and B
+        nodeA.height = cast(short)(max(nodeC.height, nodeF.height)+1);
+        nodeB.height = cast(short)(max(nodeA.height, nodeG.height)+1);
+        version(aabbtree_many_asserts) assert(nodeA.height > 0);
+        version(aabbtree_many_asserts) assert(nodeB.height > 0);
+      }
+
+      // return the new root of the sub-tree
+      return nodeBId;
+    }
+
+    // if the sub-tree is balanced, return the current root node
+    return nodeId;
+  }
+
+  // compute the height of a given node in the tree
+  int computeHeight (int nodeId) {
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    TreeNode* node = mNodes+nodeId;
+
+    // If the node is a leaf, its height is zero
+    if (node.leaf) return 0;
+
+    // Compute the height of the left and right sub-tree
+    int leftHeight = computeHeight(node.children.ptr[TreeNode.Left]);
+    int rightHeight = computeHeight(node.children.ptr[TreeNode.Right]);
+
+    // Return the height of the node
+    return 1+max(leftHeight, rightHeight);
+  }
+
+  // internally add an object into the tree
+  int insertObjectInternal() (in auto ref AABB aabb) {
+    // get the next available node (or allocate new ones if necessary)
+    int nodeId = allocateNode();
+
+    // create the fat aabb to use in the tree
+    immutable gap = AABB.VType(mExtraGap, mExtraGap, mExtraGap);
+    mNodes[nodeId].aabb.min = aabb.min-gap;
+    mNodes[nodeId].aabb.max = aabb.max+gap;
+
+    // set the height of the node in the tree
+    mNodes[nodeId].height = 0;
+
+    // insert the new leaf node in the tree
+    insertLeafNode(nodeId);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+
+    version(aabbtree_many_asserts) assert(nodeId >= 0);
+
+    // return the Id of the node
+    return nodeId;
+  }
+
+  // initialize the tree
+  void setup () {
+    import core.stdc.stdlib : malloc;
+    import core.stdc.string : memset;
+
+    mRootNodeId = TreeNode.NullTreeNode;
+    mNodeCount = 0;
+    mAllocCount = 64;
+
+    mNodes = cast(TreeNode*)malloc(mAllocCount*TreeNode.sizeof);
+    if (mNodes is null) assert(0, "out of memory");
+    memset(mNodes, 0, mAllocCount*TreeNode.sizeof);
+
+    // initialize the allocated nodes
+    foreach (int i; 0..mAllocCount-1) {
+      mNodes[i].nextNodeId = i+1;
+      mNodes[i].height = -1;
+    }
+    mNodes[mAllocCount-1].nextNodeId = TreeNode.NullTreeNode;
+    mNodes[mAllocCount-1].height = -1;
+    mFreeNodeId = 0;
+  }
+
+  // also, checks if the tree structure is valid (for debugging purpose)
+  public void forEachLeaf (scope void delegate (/*int nodeId*/BodyBase abody, in ref AABB aabb) dg) {
+    void forEachNode (int nodeId) {
+      if (nodeId == TreeNode.NullTreeNode) return;
+      // if it is the root
+      if (nodeId == mRootNodeId) {
+        assert(mNodes[nodeId].parentId == TreeNode.NullTreeNode);
+      }
+      // get the children nodes
+      TreeNode* pNode = mNodes+nodeId;
+      assert(pNode.height >= 0);
+      assert(pNode.aabb.volume > 0);
+      // if the current node is a leaf
+      if (pNode.leaf) {
+        assert(pNode.height == 0);
+        if (dg !is null) dg(/*nodeId*/pNode.flesh, pNode.aabb);
+      } else {
+        int leftChild = pNode.children.ptr[TreeNode.Left];
+        int rightChild = pNode.children.ptr[TreeNode.Right];
+        // check that the children node Ids are valid
+        assert(0 <= leftChild && leftChild < mAllocCount);
+        assert(0 <= rightChild && rightChild < mAllocCount);
+        // check that the children nodes have the correct parent node
+        assert(mNodes[leftChild].parentId == nodeId);
+        assert(mNodes[rightChild].parentId == nodeId);
+        // check the height of node
+        int height = 1+max(mNodes[leftChild].height, mNodes[rightChild].height);
+        assert(mNodes[nodeId].height == height);
+        // check the AABB of the node
+        AABB aabb = AABB.mergeAABBs(mNodes[leftChild].aabb, mNodes[rightChild].aabb);
+        assert(aabb.min == mNodes[nodeId].aabb.min);
+        assert(aabb.max == mNodes[nodeId].aabb.max);
+        // recursively check the children nodes
+        forEachNode(leftChild);
+        forEachNode(rightChild);
+      }
+    }
+    // recursively check each node
+    forEachNode(mRootNodeId);
+  }
+
+  static if (GCAnchor) void gcRelease () {
+    import core.memory : GC;
+    foreach (ref TreeNode n; mNodes[0..mNodeCount]) {
+      if (n.leaf) {
+        auto flesh = n.flesh;
+        GC.clrAttr(*cast(void**)&flesh, GC.BlkAttr.NO_MOVE);
+        GC.removeRoot(*cast(void**)&flesh);
+      }
+    }
+  }
+
+public:
+  this (FType extraAABBGap=FloatNum!0) {
+    mExtraGap = extraAABBGap;
+    setup();
+  }
+
+  ~this () {
+    import core.stdc.stdlib : free;
+    static if (GCAnchor) gcRelease();
+    free(mNodes);
+  }
+
+  // return the fat AABB corresponding to a given node Id
+  /*const ref*/ AABB getFatAABB (int nodeId) const {
+    pragma(inline, true);
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    return mNodes[nodeId].aabb;
+  }
+
+  // return the pointer to the data array of a given leaf node of the tree
+  BodyBase getNodeBody (int nodeId) {
+    pragma(inline, true);
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+    return mNodes[nodeId].flesh;
+  }
+
+  // return the root AABB of the tree
+  AABB getRootAABB () { pragma(inline, true); return getFatAABB(mRootNodeId); }
+
+  // add an object into the tree.
+  // this method creates a new leaf node in the tree and returns the Id of the corresponding node
+  int insertObject (BodyBase flesh) {
+    auto aabb = flesh.getAABB(); // can be passed as argument
+    int nodeId = insertObjectInternal(aabb);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+    mNodes[nodeId].flesh = flesh;
+    static if (GCAnchor) {
+      import core.memory : GC;
+      GC.addRoot(*cast(void**)&flesh);
+      GC.setAttr(*cast(void**)&flesh, GC.BlkAttr.NO_MOVE);
+    }
+    return nodeId;
+  }
+
+  // remove an object from the tree
+  void removeObject (int nodeId) {
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+    static if (GCAnchor) {
+      import core.memory : GC;
+      auto flesh = mNodes[nodeId].flesh;
+      GC.clrAttr(*cast(void**)&flesh, GC.BlkAttr.NO_MOVE);
+      GC.removeRoot(*cast(void**)&flesh);
+    }
+    // remove the node from the tree
+    removeLeafNode(nodeId);
+    releaseNode(nodeId);
+  }
+
+  // update the dynamic tree after an object has moved
+  // if the new AABB of the object that has moved is still inside its fat AABB, then nothing is done.
+  // otherwise, the corresponding node is removed and reinserted into the tree.
+  // the method returns true if the object has been reinserted into the tree.
+  // the "displacement" argument is the linear velocity of the AABB multiplied by the elapsed time between two frames.
+  // if the "forceReinsert" parameter is true, we force a removal and reinsertion of the node
+  // (this can be useful if the shape AABB has become much smaller than the previous one for instance).
+  // return `true` if the tree was modified
+  bool updateObject() (int nodeId, in auto ref AABB.VType displacement, bool forceReinsert=false) {
+    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].height >= 0);
+
+    auto newAABB = mNodes[nodeId].flesh.getAABB(); // can be passed as argument
+
+    // if the new AABB is still inside the fat AABB of the node
+    if (!forceReinsert && mNodes[nodeId].aabb.contains(newAABB)) return false;
+
+    // if the new AABB is outside the fat AABB, we remove the corresponding node
+    removeLeafNode(nodeId);
+
+    // compute the fat AABB by inflating the AABB with a constant gap
+    mNodes[nodeId].aabb = newAABB;
+    immutable gap = AABB.VType(mExtraGap, mExtraGap, mExtraGap);
+    mNodes[nodeId].aabb.mMin -= gap;
+    mNodes[nodeId].aabb.mMax += gap;
+
+    // inflate the fat AABB in direction of the linear motion of the AABB
+    if (displacement.x < FloatNum!0) {
+      mNodes[nodeId].aabb.mMin.x += LinearMotionGapMultiplier*displacement.x;
+    } else {
+      mNodes[nodeId].aabb.mMax.x += LinearMotionGapMultiplier*displacement.x;
+    }
+    if (displacement.y < FloatNum!0) {
+      mNodes[nodeId].aabb.mMin.y += LinearMotionGapMultiplier*displacement.y;
+    } else {
+      mNodes[nodeId].aabb.mMax.y += LinearMotionGapMultiplier*displacement.y;
+    }
+    static if (AABB.VType.isVector3!(AABB.VType)) {
+      if (displacement.z < FloatNum!0) {
+        mNodes[nodeId].aabb.mMin.z += LinearMotionGapMultiplier *displacement.z;
+      } else {
+        mNodes[nodeId].aabb.mMax.z += LinearMotionGapMultiplier *displacement.z;
+      }
+    }
+
+    version(aabbtree_many_asserts) assert(mNodes[nodeId].aabb.contains(newAABB));
+
+    // reinsert the node into the tree
+    insertLeafNode(nodeId);
+
+    return true;
+  }
+
+  // report all shapes overlapping with the AABB given in parameter
+  BodyBase reportAllShapesOverlappingWithAABB() (in auto ref AABB aabb, scope OverlapCallback cb) {
+    int[256] stack = void; // stack with the nodes to visit
+    int sp = 0;
+
+    void spush (int id) {
+      if (sp >= stack.length) throw new Exception("stack overflow");
+      stack.ptr[sp++] = id;
+    }
+
+    int spop () {
+      if (sp == 0) throw new Exception("stack underflow");
+      return stack.ptr[--sp];
+    }
+
+    spush(mRootNodeId);
+
+    // while there are still nodes to visit
+    while (sp > 0) {
+      // get the next node id to visit
+      int nodeIdToVisit = spop();
+      // skip it if it is a null node
+      if (nodeIdToVisit == TreeNode.NullTreeNode) continue;
+      // get the corresponding node
+      const(TreeNode)* nodeToVisit = mNodes+nodeIdToVisit;
+      // if the AABB in parameter overlaps with the AABB of the node to visit
+      if (aabb.overlaps(nodeToVisit.aabb)) {
+        // if the node is a leaf
+        if (nodeToVisit.leaf) {
+          // notify the broad-phase about a new potential overlapping pair
+          if (cb(/*nodeIdToVisit*/nodeToVisit.flesh)) return nodeToVisit.flesh;
+        } else {
+          // if the node is not a leaf
+          // we need to visit its children
+          spush(nodeToVisit.children.ptr[TreeNode.Left]);
+          spush(nodeToVisit.children.ptr[TreeNode.Right]);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  static struct SegmentQueryResult {
+    FType dist = -1; // <0: nothing was hit
+    BodyBase flesh;
+
+    @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (dist >= 0 && flesh !is null); }
+  }
+
+  // segment querying method
+  SegmentQueryResult segmentQuery() (in auto ref VT a, in auto ref VT b, scope SegQueryCallback cb) {
+    SegmentQueryResult res;
+    FType maxFraction = FType.infinity;
+
+    int[256] stack = void;
+    int sp = 0;
+
+    void spush (int id) {
+      if (sp >= stack.length) throw new Exception("stack overflow");
+      stack.ptr[sp++] = id;
+    }
+
+    int spop () {
+      if (sp == 0) throw new Exception("stack underflow");
+      return stack.ptr[--sp];
+    }
+
+    spush(mRootNodeId);
+
+    //auto rayTemp = Ray(ray.point1, ray.point2, maxFraction);
+    immutable VT cura = a;
+    VT curb = b;
+    immutable VT dir = (b-a).normalized;
+    // walk through the tree from the root looking for proxy shapes that overlap with the ray AABB
+    while (sp > 0) {
+      // get the next node in the stack
+      int nodeID = spop();
+      // if it is a null node, skip it
+      if (nodeID == TreeNode.NullTreeNode) continue;
+      // get the corresponding node
+      TreeNode* node = mNodes+nodeID;
+      // test if the ray intersects with the current node AABB
+      //conwriteln("checking node ", nodeID, " : aabb=", node.aabb, "; cura=", cura, "; curb=", curb);
+      if (!node.aabb.isSegIntersects(cura, curb)) continue;
+      //conwriteln("  node ", nodeID);
+      // if the node is a leaf of the tree
+      if (node.leaf) {
+        // call the callback that will raycast again the broad-phase shape
+        FType hitFraction = cb(/*nodeID*/node.flesh, a, b);
+        // if the user returned a hitFraction of zero, it means that the raycasting should stop here
+        if (hitFraction == FloatNum!0) {
+          res.dist = 0;
+          res.flesh = node.flesh;
+          return res;
+        }
+        // if the user returned a positive fraction
+        if (hitFraction > FloatNum!0 /*|| hitFraction <= VFloatNum!1*/) {
+          // we update the maxFraction value and the ray AABB using the new maximum fraction
+          if (hitFraction < maxFraction) {
+            maxFraction = hitFraction;
+            res.dist = hitFraction;
+            res.flesh = node.flesh;
+            // fix curb here
+            curb = cura+dir*hitFraction;
+          }
+        }
+        // if the user returned a negative fraction, we continue the raycasting as if the proxy shape did not exist
+      } else {
+        // if the node has children
+        // push its children in the stack of nodes to explore
+        spush(node.children[0]);
+        spush(node.children[1]);
+      }
+    }
+    //if (maxFraction > 1) maxFraction = -1;
+    //return (wasHit ? maxFraction : -1);
+    return res;
+  }
+
+  // compute the height of the tree
+  int computeHeight () { pragma(inline, true); return computeHeight(mRootNodeId); }
+
+  // clear all the nodes and reset the tree
+  void reset() {
+    import core.stdc.stdlib : free;
+    static if (GCAnchor) gcRelease();
+    free(mNodes);
+    setup();
+  }
+}
+
+
+/*
+// ////////////////////////////////////////////////////////////////////////// //
+final class Body {
+  AABB aabb;
+
+  this (vec2 amin, vec2 amax) { aabb.min = amin; aabb.max = amax; }
+
+  AABB getAABB () { return aabb; }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+import iv.vfs.io;
+
+void main () {
+  auto tree = new DynamicAABBTree!Body(0.2);
+
+  vec2 bmin = vec2(10, 15);
+  vec2 bmax = vec2(42, 54);
+
+  auto body = new Body(bmin, bmax);
+
+  tree.insertObject(body);
+
+  vec2 ro = vec2(5, 18);
+  vec2 rd = vec2(1, 0.2).normalized;
+  vec2 re = ro+rd*20;
+
+  writeln(body.aabb.segIntersectMin(ro, re));
+
+  auto res = tree.segmentQuery(ro, re, delegate (int nodeId, in ref vec2 a, in ref vec2 b) {
+    auto dst = body.aabb.segIntersectMin(a, b);
+    writeln("a=", a, "; b=", b, "; dst=", dst);
+    if (dst < 0) return -1;
+    return dst;
+  });
+
+  writeln(res);
+}
+*/
