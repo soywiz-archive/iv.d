@@ -1037,9 +1037,23 @@ public pure nothrow @safe @nogc:
     return tmax;
   }
 
-  bool isSegIntersects() (in auto ref VT a, in auto ref VT b) const {
-    pragma(inline, true);
-    return (segIntersectMin(a, b) >= 0);
+  bool isIntersect() (in auto ref VT a, in auto ref VT b) const @trusted {
+    //pragma(inline, true);
+    // it may be faster to first check if start or end point is inside AABB (this is sometimes enough for dyntree)
+    static if (VT.Dims == 2) {
+      if (a.x >= min.x && a.y >= min.y && a.x <= max.x && a.y <= max.y) return true; // a
+      if (b.x >= min.x && b.y >= min.y && b.x <= max.x && b.y <= max.y) return true; // b
+    } else {
+      if (a.x >= min.x && a.y >= min.y && a.z >= min.z && a.x <= max.x && a.y <= max.y && a.z <= max.z) return true; // a
+      if (b.x >= min.x && b.y >= min.y && b.z >= min.z && b.x <= max.x && b.y <= max.y && b.z <= max.z) return true; // b
+    }
+    // nope, do it hard way
+    //return (segIntersectMin(a, b) >= 0);
+    FType tmin;
+    if (!intersect(Ray!VT.fromPoints(a, b), &tmin)) return false;
+    if (tmin < 0) return true; // inside, just in case
+    if (tmin > (b-a).length) return false;
+    return true;
   }
 
   ref inout(VT) opIndex (usize idx) inout {
@@ -2953,7 +2967,7 @@ public:
       TreeNode* node = mNodes+nodeID;
       // test if the ray intersects with the current node AABB
       //conwriteln("checking node ", nodeID, " : aabb=", node.aabb, "; cura=", cura, "; curb=", curb);
-      if (!node.aabb.isSegIntersects(cura, curb)) continue;
+      if (!node.aabb.isIntersect(cura, curb)) continue;
       //conwriteln("  node ", nodeID);
       // if the node is a leaf of the tree
       if (node.leaf) {
