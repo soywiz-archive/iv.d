@@ -850,7 +850,7 @@ public pure nothrow @safe @nogc:
   @property FType volume () const {
     pragma(inline, true);
     immutable diff = max-min;
-    static if (VT.isVector3!VT) {
+    static if (VT.Dims == 3) {
       return diff.x*diff.y*diff.z;
     } else {
       return diff.x*diff.y;
@@ -869,7 +869,7 @@ public pure nothrow @safe @nogc:
     min.y = nmin(aabb1.min.y, aabb2.min.y);
     max.x = nmax(aabb1.max.x, aabb2.max.x);
     max.y = nmax(aabb1.max.y, aabb2.max.y);
-    static if (VT.isVector3!VT) {
+    static if (VT.Dims == 3) {
       min.z = nmin(aabb1.min.z, aabb2.min.z);
       max.z = nmax(aabb1.max.z, aabb2.max.z);
     }
@@ -881,7 +881,7 @@ public pure nothrow @safe @nogc:
     min.y = nmin(aabb1.min.y, min.y);
     max.x = nmax(aabb1.max.x, max.x);
     max.y = nmax(aabb1.max.y, max.y);
-    static if (VT.isVector3!VT) {
+    static if (VT.Dims == 3) {
       min.z = nmin(aabb1.min.z, min.z);
       max.z = nmax(aabb1.max.z, max.z);
     }
@@ -949,7 +949,7 @@ public pure nothrow @safe @nogc:
     //pragma(inline, true);
     if (max.x < aabb.min.x || aabb.max.x < min.x) return false;
     if (max.y < aabb.min.y || aabb.max.y < min.y) return false;
-    static if (VT.isVector3!VT) {
+    static if (VT.Dims == 3) {
       if (max.z < aabb.min.z || aabb.max.z < min.z) return false;
     }
     return true;
@@ -2942,7 +2942,7 @@ public:
     } else {
       mNodes[nodeId].aabb.mMax.y += LinearMotionGapMultiplier*displacement.y;
     }
-    static if (AABB.VType.isVector3!(AABB.VType)) {
+    static if (AABB.VType.Dims == 3) {
       if (displacement.z < FloatNum!0) {
         mNodes[nodeId].aabb.mMin.z += LinearMotionGapMultiplier *displacement.z;
       } else {
