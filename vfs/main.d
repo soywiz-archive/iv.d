@@ -88,27 +88,28 @@ public:
     }
   }
 
-nothrow @trusted @nogc:
-  this (bool v) { vtype = Type.Bool; bv = v; }
-  this (int v) { vtype = Type.Int; iv = v; }
-  this (long v) { vtype = Type.Long; lv = v; }
-  this (float v) { vtype = Type.Float; fv = v; }
-  this (double v) { vtype = Type.Double; dv = v; }
-  this(T:const(char)[]) (T v) {
-    vtype = Type.String;
-    static if (is(T == typeof(null))) sv = null;
-    else static if (is(T == string)) sv = v;
-    else sv = v.idup;
+  nothrow @trusted @nogc {
+    this (bool v) { vtype = Type.Bool; bv = v; }
+    this (int v) { vtype = Type.Int; iv = v; }
+    this (long v) { vtype = Type.Long; lv = v; }
+    this (float v) { vtype = Type.Float; fv = v; }
+    this (double v) { vtype = Type.Double; dv = v; }
+    this(T:const(char)[]) (T v) {
+      vtype = Type.String;
+      static if (is(T == typeof(null))) sv = null;
+      else static if (is(T == string)) sv = v;
+      else sv = v.idup;
+    }
+
+    @property Type type () const pure { return vtype; }
+
+    @property bool hasValue () const pure { return (vtype != Type.Empty); }
+    @property bool isString () const pure { return (vtype == Type.String); }
+    @property bool isInteger () const pure { return (vtype == Type.Int || vtype == Type.Long); }
+    @property bool isFloating () const pure { return (vtype == Type.Float || vtype == Type.Double); }
   }
 
-  @property Type type () const pure { return vtype; }
-
-  @property bool hasValue () const pure { return (vtype != Type.Empty); }
-  @property bool isString () const pure { return (vtype == Type.String); }
-  @property bool isInteger () const pure { return (vtype == Type.Int || vtype == Type.Long); }
-  @property bool isFloating () const pure { return (vtype == Type.Float || vtype == Type.Double); }
-
-  @property T get(T) () const pure {
+  @property T get(T) () const /*pure*/ {
     static if (is(T == bool)) {
       final switch (vtype) {
         case Type.Empty: return false;
@@ -399,6 +400,7 @@ public:
 
   override VFSVariant stat (usize idx, const(char)[] name) {
     buildFileList();
+    if (name == "arcname") return VFSVariant("disk");
     if (idx < files.length && name == "packed") return VFSVariant(false);
     if (idx < files.length && name == "modtime" && files[idx].modtime) return VFSVariant(files[idx].modtime);
     if (idx < files.length && (name == "size" || name == "pksize")) { import std.file : getSize; return VFSVariant(files[idx].name.getSize); }

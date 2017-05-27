@@ -50,6 +50,7 @@ private:
    */
   public override VFSVariant stat (usize idx, const(char)[] propname) {
     if (idx >= dir.length) return VFSVariant();
+    if (propname == "arcname") return VFSVariant("grp");
     if (propname == "packed") return VFSVariant(false);
     if (propname == "pksize") return VFSVariant(dir[idx].size);
     if (propname == "offset") return VFSVariant(dir[idx].ofs);

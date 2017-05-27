@@ -34,7 +34,7 @@ import iv.vfs.arc.dfwad; // just get lost
 //import iv.vfs.arc.toeedat; // conflicts with arcanum
 import iv.vfs.arc.wad2;
 
-//import iv.encoding;
+import iv.utfutil;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -79,7 +79,7 @@ If permissions do not start with l, but number of links is greater than one,
 then it says that this file should be a hardlinked with the other file.
 */
 // archivename
-void doList (string[] args) {
+void doList(bool extended=false) (string[] args) {
   if (args.length != 1) assert(0, "'list' command expect one arg");
   vfsAddPak(args[0], "\x00");
 
@@ -100,7 +100,29 @@ void doList (string[] args) {
       // brain-damaged dfwad
       size = 0;
     }
-    writefln("-rw-r--r--    1 1000     100      %8s %s %s", size, tbuf[0..len], de.name[1..$]/*.recode("utf-8", "koi8-u")*/);
+    string name = de.name[1..$]/*.recode("utf-8", "koi8-u")*/;
+    // fix all-upper
+    bool allupper = true;
+    foreach (char ch; name) if (koi8toupperTable[ch] != ch) { allupper = false; break; }
+    if (allupper) {
+      string t;
+      foreach (char ch; name) t ~= koi8tolowerTable[ch];
+      name = t;
+    }
+    /*
+    auto arcname = de.stat("arcname");
+    if (arcname.isString && arcname.get!string == "dfwad") {
+      // fix all-upper
+      string t;
+      foreach (char ch; name) t ~= koi8tolowerTable[ch];
+      name = t;
+    }
+    */
+    static if (!extended) {
+      writefln("-rw-r--r--    1 1000     100      %8s %s %s", size, tbuf[0..len], name);
+    } else {
+      writefln("[%s] -rw-r--r--    1 1000     100      %8s %s %s", de.stat("arcname"), size, tbuf[0..len], name);
+    }
   });
 }
 
@@ -131,6 +153,9 @@ int main (string[] args) {
   switch (args[1]) {
     case "list": // list archivename
       doList(args[2..$]);
+      return 0;
+    case "list_ex": // list archivename
+      doList!true(args[2..$]);
       return 0;
     case "copyout": // copyout archivename storedfilename extractto
       doExtract(args[2..$]);
