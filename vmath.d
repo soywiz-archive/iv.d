@@ -926,7 +926,7 @@ public pure nothrow @safe @nogc:
 
   bool contains() (in auto ref VT p) const {
     pragma(inline, true);
-    static if (isVector2!VT) {
+    static if (VT.Dims == 2) {
       return (p.x >= min.x && p.y >= min.y && p.x <= max.x && p.y <= max.y);
     } else {
       return (p.x >= min.x && p.y >= min.y && p.z >= min.z && p.x <= max.x && p.y <= max.y && p.z <= max.z);
@@ -2349,11 +2349,11 @@ private:
       AABB mergedAABBs = AABB.mergeAABBs(mNodes[currentNodeId].aabb, newNodeAABB);
       FType mergedVolume = mergedAABBs.volume;
 
-      // compute the cost of making the current node the sibbling of the new node
-      FType costS = FloatNum!(2.0)*mergedVolume;
+      // compute the cost of making the current node the sibling of the new node
+      FType costS = FloatNum!2*mergedVolume;
 
       // compute the minimum cost of pushing the new node further down the tree (inheritance cost)
-      FType costI = FloatNum!(2.0)*(mergedVolume-volumeAABB);
+      FType costI = FloatNum!2*(mergedVolume-volumeAABB);
 
       // compute the cost of descending into the left child
       FType costLeft;
@@ -2375,7 +2375,7 @@ private:
         costRight = costI+currentAndRightAABB.volume-rightChildVolume;
       }
 
-      // if the cost of making the current node a sibbling of the new node is smaller than the cost of going down into the left or right child
+      // if the cost of making the current node a sibling of the new node is smaller than the cost of going down into the left or right child
       if (costS < costLeft && costS < costRight) break;
 
       // it is cheaper to go down into a child of the current node, choose the best child
@@ -2883,7 +2883,49 @@ public:
   }
 
   /// report all shapes overlapping with the AABB given in parameter
-  BodyBase forEachAABBOverlap() (in auto ref AABB aabb, scope OverlapCallback cb) {
+  void forEachAABBOverlap() (in auto ref AABB aabb, scope OverlapCallback cb) {
+    int[256] stack = void; // stack with the nodes to visit
+    //int[]
+    int sp = 0;
+
+    void spush (int id) {
+      if (sp >= stack.length) throw new Exception("stack overflow");
+      stack.ptr[sp++] = id;
+    }
+
+    int spop () {
+      if (sp == 0) throw new Exception("stack underflow");
+      return stack.ptr[--sp];
+    }
+
+    spush(mRootNodeId);
+
+    // while there are still nodes to visit
+    while (sp > 0) {
+      // get the next node id to visit
+      int nodeIdToVisit = spop();
+      // skip it if it is a null node
+      if (nodeIdToVisit == TreeNode.NullTreeNode) continue;
+      // get the corresponding node
+      TreeNode* nodeToVisit = mNodes+nodeIdToVisit;
+      // if the AABB in parameter overlaps with the AABB of the node to visit
+      if (aabb.overlaps(nodeToVisit.aabb)) {
+        // if the node is a leaf
+        if (nodeToVisit.leaf) {
+          // notify the broad-phase about a new potential overlapping pair
+          if (cb(/*nodeIdToVisit*/nodeToVisit.flesh)) return /*nodeToVisit.flesh*/;
+        } else {
+          // if the node is not a leaf
+          // we need to visit its children
+          spush(nodeToVisit.children.ptr[TreeNode.Left]);
+          spush(nodeToVisit.children.ptr[TreeNode.Right]);
+        }
+      }
+    }
+  }
+
+  /// report body that contains the given point
+  BodyBase pointQuery() (in auto ref VT point, scope OverlapCallback cb) {
     int[256] stack = void; // stack with the nodes to visit
     int sp = 0;
 
@@ -2906,13 +2948,13 @@ public:
       // skip it if it is a null node
       if (nodeIdToVisit == TreeNode.NullTreeNode) continue;
       // get the corresponding node
-      const(TreeNode)* nodeToVisit = mNodes+nodeIdToVisit;
+      TreeNode* nodeToVisit = mNodes+nodeIdToVisit;
       // if the AABB in parameter overlaps with the AABB of the node to visit
-      if (aabb.overlaps(nodeToVisit.aabb)) {
+      if (nodeToVisit.aabb.contains(point)) {
         // if the node is a leaf
         if (nodeToVisit.leaf) {
           // notify the broad-phase about a new potential overlapping pair
-          if (cb(/*nodeIdToVisit*/nodeToVisit.flesh)) return nodeToVisit.flesh;
+          if (cb(nodeToVisit.flesh)) return nodeToVisit.flesh;
         } else {
           // if the node is not a leaf
           // we need to visit its children
@@ -3036,18 +3078,18 @@ void main () {
   vec2 bmin = vec2(10, 15);
   vec2 bmax = vec2(42, 54);
 
-  auto body = new Body(bmin, bmax);
+  auto flesh = new Body(bmin, bmax);
 
-  tree.insertObject(body);
+  tree.insertObject(flesh);
 
   vec2 ro = vec2(5, 18);
   vec2 rd = vec2(1, 0.2).normalized;
   vec2 re = ro+rd*20;
 
-  writeln(body.aabb.segIntersectMin(ro, re));
+  writeln(flesh.aabb.segIntersectMin(ro, re));
 
   auto res = tree.segmentQuery(ro, re, delegate (int nodeId, in ref vec2 a, in ref vec2 b) {
-    auto dst = body.aabb.segIntersectMin(a, b);
+    auto dst = flesh.aabb.segIntersectMin(a, b);
     writeln("a=", a, "; b=", b, "; dst=", dst);
     if (dst < 0) return -1;
     return dst;
