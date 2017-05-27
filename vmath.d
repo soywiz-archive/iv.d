@@ -2774,15 +2774,45 @@ private:
   private int visit (scope bool delegate (TreeNode* node) checker, scope bool delegate (BodyBase abody) visitor) {
     int[256] stack = void; // stack with the nodes to visit
     int sp = 0;
+    int[] bigstack = null;
+    scope(exit) if (bigstack.ptr !is null) delete bigstack;
 
     void spush (int id) {
-      if (sp >= stack.length) throw new Exception("stack overflow");
-      stack.ptr[sp++] = id;
+      if (sp < stack.length) {
+        // use "small stack"
+        stack.ptr[sp++] = id;
+      } else {
+        if (sp >= int.max/2) assert(0, "huge tree!");
+        // use "big stack"
+        immutable int xsp = sp-cast(int)stack.length;
+        if (xsp < bigstack.length) {
+          // reuse
+          bigstack.ptr[xsp] = id;
+        } else {
+          // grow
+          auto optr = bigstack.ptr;
+          bigstack ~= id;
+          if (bigstack.ptr !is optr) {
+            import core.memory : GC;
+            optr = bigstack.ptr;
+            if (optr is GC.addrOf(optr)) GC.setAttr(optr, GC.BlkAttr.NO_INTERIOR);
+          }
+        }
+        ++sp;
+      }
     }
 
     int spop () {
-      if (sp == 0) throw new Exception("stack underflow");
-      return stack.ptr[--sp];
+      pragma(inline, true); // why not?
+      if (sp == 0) assert(0, "stack underflow");
+      if (sp <= stack.length) {
+        // use "small stack"
+        return stack.ptr[--sp];
+      } else {
+        // use "big stack"
+        --sp;
+        return bigstack.ptr[sp-cast(int)stack.length];
+      }
     }
 
     // start from root node
