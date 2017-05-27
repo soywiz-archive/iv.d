@@ -901,16 +901,27 @@ public pure nothrow @safe @nogc:
   // return true if the current AABB contains the AABB given in parameter
   bool contains() (in auto ref Me aabb) const {
     pragma(inline, true);
-    bool isInside = true;
-    isInside = (isInside && min.x <= aabb.min.x);
-    isInside = (isInside && min.y <= aabb.min.y);
-    isInside = (isInside && max.x >= aabb.max.x);
-    isInside = (isInside && max.y >= aabb.max.y);
-    static if (VT.isVector3!VT) {
-      isInside = (isInside && min.z <= aabb.min.z);
-      isInside = (isInside && max.z >= aabb.max.z);
+    version(all) {
+      // exit with no intersection if found separated along an axis
+      if (max.x < aabbmin.x || min.x > aabbmax.x) return false;
+      if (max.y < aabbmin.y || min.y > aabbmax.y) return false;
+      static if (VT.Dims == 3) {
+        if (max.z < aabbmin.z || min.z > aabbmax.z) return false;
+      }
+      // no separating axis found, therefor there is at least one overlapping axis
+      return true;
+    } else {
+      bool isInside = true;
+      isInside = (isInside && min.x <= aabb.min.x);
+      isInside = (isInside && min.y <= aabb.min.y);
+      isInside = (isInside && max.x >= aabb.max.x);
+      isInside = (isInside && max.y >= aabb.max.y);
+      static if (VT.Dims == 3) {
+        isInside = (isInside && min.z <= aabb.min.z);
+        isInside = (isInside && max.z >= aabb.max.z);
+      }
+      return isInside;
     }
-    return isInside;
   }
 
   bool contains() (in auto ref VT p) const {
