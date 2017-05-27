@@ -22,7 +22,7 @@ public import iv.vfs.arc.abuse;
 public import iv.vfs.arc.arcanum;
 public import iv.vfs.arc.arcz;
 public import iv.vfs.arc.bsa;
-//public import iv.vfs.arc.dfwad; // just get lost
+public import iv.vfs.arc.dfwad;
 //public import iv.vfs.arc.dunepak; no signature
 //public import iv.vfs.arc.f2dat; // no signature
 //public import iv.vfs.arc.toeedat; // conflicts with arcanum
