@@ -2267,7 +2267,8 @@ public:
 public:
   // called when a overlapping node has been found during the call to forEachAABBOverlap()
   // return `true` to stop
-  alias OverlapCallback = bool delegate (BodyBase abody);
+  alias OverlapCallback = void delegate (BodyBase abody);
+  alias SimpleQueryCallback = bool delegate (BodyBase abody);
   alias SegQueryCallback = FType delegate (BodyBase abody, in ref VT a, in ref VT b); // return dist from a to abody
 
 private:
@@ -2767,6 +2768,51 @@ private:
     }
   }
 
+  // return `true` from visitor to stop immediately
+  // checker should check if this node should be considered to further checking
+  // returns tree node if visitor says stop or -1
+  private int visit (scope bool delegate (TreeNode* node) checker, scope bool delegate (BodyBase abody) visitor) {
+    int[256] stack = void; // stack with the nodes to visit
+    int sp = 0;
+
+    void spush (int id) {
+      if (sp >= stack.length) throw new Exception("stack overflow");
+      stack.ptr[sp++] = id;
+    }
+
+    int spop () {
+      if (sp == 0) throw new Exception("stack underflow");
+      return stack.ptr[--sp];
+    }
+
+    // start from root node
+    spush(mRootNodeId);
+
+    // while there are still nodes to visit
+    while (sp > 0) {
+      // get the next node id to visit
+      int nodeId = spop();
+      // skip it if it is a null node
+      if (nodeId == TreeNode.NullTreeNode) continue;
+      // get the corresponding node
+      TreeNode* node = mNodes+nodeId;
+      // should we investigate this node?
+      if (checker(node)) {
+        // if the node is a leaf
+        if (node.leaf) {
+          // call visitor on it
+          if (visitor(node.flesh)) return nodeId;
+        } else {
+          // if the node is not a leaf, we need to visit its children
+          spush(node.children.ptr[TreeNode.Left]);
+          spush(node.children.ptr[TreeNode.Right]);
+        }
+      }
+    }
+
+    return -1; // oops
+  }
+
 public:
   /// add `extraAABBGap` to bounding boxes so slight object movement won't cause tree rebuilds
   this (FType extraAABBGap=FloatNum!0) {
@@ -2884,87 +2930,24 @@ public:
 
   /// report all shapes overlapping with the AABB given in parameter
   void forEachAABBOverlap() (in auto ref AABB aabb, scope OverlapCallback cb) {
-    int[256] stack = void; // stack with the nodes to visit
-    //int[]
-    int sp = 0;
-
-    void spush (int id) {
-      if (sp >= stack.length) throw new Exception("stack overflow");
-      stack.ptr[sp++] = id;
-    }
-
-    int spop () {
-      if (sp == 0) throw new Exception("stack underflow");
-      return stack.ptr[--sp];
-    }
-
-    spush(mRootNodeId);
-
-    // while there are still nodes to visit
-    while (sp > 0) {
-      // get the next node id to visit
-      int nodeIdToVisit = spop();
-      // skip it if it is a null node
-      if (nodeIdToVisit == TreeNode.NullTreeNode) continue;
-      // get the corresponding node
-      TreeNode* nodeToVisit = mNodes+nodeIdToVisit;
-      // if the AABB in parameter overlaps with the AABB of the node to visit
-      if (aabb.overlaps(nodeToVisit.aabb)) {
-        // if the node is a leaf
-        if (nodeToVisit.leaf) {
-          // notify the broad-phase about a new potential overlapping pair
-          if (cb(/*nodeIdToVisit*/nodeToVisit.flesh)) return /*nodeToVisit.flesh*/;
-        } else {
-          // if the node is not a leaf
-          // we need to visit its children
-          spush(nodeToVisit.children.ptr[TreeNode.Left]);
-          spush(nodeToVisit.children.ptr[TreeNode.Right]);
-        }
-      }
-    }
+    visit(
+      // checker
+      (node) => aabb.overlaps(node.aabb),
+      // visitor
+      (flesh) { cb(flesh); return false; }
+    );
   }
 
   /// report body that contains the given point
-  BodyBase pointQuery() (in auto ref VT point, scope OverlapCallback cb) {
-    int[256] stack = void; // stack with the nodes to visit
-    int sp = 0;
-
-    void spush (int id) {
-      if (sp >= stack.length) throw new Exception("stack overflow");
-      stack.ptr[sp++] = id;
-    }
-
-    int spop () {
-      if (sp == 0) throw new Exception("stack underflow");
-      return stack.ptr[--sp];
-    }
-
-    spush(mRootNodeId);
-
-    // while there are still nodes to visit
-    while (sp > 0) {
-      // get the next node id to visit
-      int nodeIdToVisit = spop();
-      // skip it if it is a null node
-      if (nodeIdToVisit == TreeNode.NullTreeNode) continue;
-      // get the corresponding node
-      TreeNode* nodeToVisit = mNodes+nodeIdToVisit;
-      // if the AABB in parameter overlaps with the AABB of the node to visit
-      if (nodeToVisit.aabb.contains(point)) {
-        // if the node is a leaf
-        if (nodeToVisit.leaf) {
-          // notify the broad-phase about a new potential overlapping pair
-          if (cb(nodeToVisit.flesh)) return nodeToVisit.flesh;
-        } else {
-          // if the node is not a leaf
-          // we need to visit its children
-          spush(nodeToVisit.children.ptr[TreeNode.Left]);
-          spush(nodeToVisit.children.ptr[TreeNode.Right]);
-        }
-      }
-    }
-
-    return null;
+  BodyBase pointQuery() (in auto ref VT point, scope SimpleQueryCallback cb) {
+    int nid = visit(
+      // checker
+      (node) => node.aabb.contains(point),
+      // visitor
+      (flesh) => cb(flesh),
+    );
+    version(aabbtree_many_asserts) assert(nid < 0 || (nid >= 0 && nid < mNodeCount && mNodes[nid].leaf));
+    return (nid >= 0 ? mNodes[nid].flesh : null);
   }
 
   ///
@@ -2980,68 +2963,37 @@ public:
     SegmentQueryResult res;
     FType maxFraction = FType.infinity;
 
-    int[256] stack = void;
-    int sp = 0;
-
-    void spush (int id) {
-      if (sp >= stack.length) throw new Exception("stack overflow");
-      stack.ptr[sp++] = id;
-    }
-
-    int spop () {
-      if (sp == 0) throw new Exception("stack underflow");
-      return stack.ptr[--sp];
-    }
-
-    spush(mRootNodeId);
-
-    //auto rayTemp = Ray(ray.point1, ray.point2, maxFraction);
     immutable VT cura = a;
     VT curb = b;
-    immutable VT dir = (b-a).normalized;
-    // walk through the tree from the root looking for proxy shapes that overlap with the ray AABB
-    while (sp > 0) {
-      // get the next node in the stack
-      int nodeID = spop();
-      // if it is a null node, skip it
-      if (nodeID == TreeNode.NullTreeNode) continue;
-      // get the corresponding node
-      TreeNode* node = mNodes+nodeID;
-      // test if the ray intersects with the current node AABB
-      //conwriteln("checking node ", nodeID, " : aabb=", node.aabb, "; cura=", cura, "; curb=", curb);
-      if (!node.aabb.isIntersect(cura, curb)) continue;
-      //conwriteln("  node ", nodeID);
-      // if the node is a leaf of the tree
-      if (node.leaf) {
-        // call the callback that will raycast again the broad-phase shape
-        FType hitFraction = cb(/*nodeID*/node.flesh, a, b);
+    immutable VT dir = (curb-cura).normalized;
+
+    visit(
+      // checker
+      (node) => node.aabb.isIntersect(cura, curb),
+      // visitor
+      (flesh) {
+        FType hitFraction = cb(flesh, a, b);
         // if the user returned a hitFraction of zero, it means that the raycasting should stop here
         if (hitFraction == FloatNum!0) {
           res.dist = 0;
-          res.flesh = node.flesh;
-          return res;
+          res.flesh = flesh;
+          return true;
         }
         // if the user returned a positive fraction
-        if (hitFraction > FloatNum!0 /*|| hitFraction <= VFloatNum!1*/) {
+        if (hitFraction > FloatNum!0) {
           // we update the maxFraction value and the ray AABB using the new maximum fraction
           if (hitFraction < maxFraction) {
             maxFraction = hitFraction;
             res.dist = hitFraction;
-            res.flesh = node.flesh;
+            res.flesh = flesh;
             // fix curb here
             curb = cura+dir*hitFraction;
           }
         }
-        // if the user returned a negative fraction, we continue the raycasting as if the proxy shape did not exist
-      } else {
-        // if the node has children
-        // push its children in the stack of nodes to explore
-        spush(node.children[0]);
-        spush(node.children[1]);
-      }
-    }
-    //if (maxFraction > 1) maxFraction = -1;
-    //return (wasHit ? maxFraction : -1);
+        return false; // continue
+      },
+    );
+
     return res;
   }
 
