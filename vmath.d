@@ -3009,7 +3009,7 @@ public:
       (node) => node.aabb.isIntersect(cura, curb),
       // visitor
       (flesh) {
-        FType hitFraction = cb(flesh, a, b);
+        FType hitFraction = cb(flesh, cura, curb);
         // if the user returned a hitFraction of zero, it means that the raycasting should stop here
         if (hitFraction == FloatNum!0) {
           res.dist = 0;
