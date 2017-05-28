@@ -15,12 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-// various vector and matrix operations.
-// matrix should be compatible with OpenGL, but mostly untested.
+// various vector and matrix operations
+// matrix should be compatible with OpenGL, but mostly untested
 module iv.vmath /*is aliced*/;
 import iv.alice;
 
 //version = aabbtree_many_asserts;
+//version = aabbtree_query_count;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1073,7 +1074,7 @@ public:
   alias vec3 = VecN!(3, FloatType);
 
 public:
-   // OpenGL-compatible, row by row
+  // OpenGL-compatible, row by row
   FloatType[4*4] mt = [
     1, 0, 0, 0,
     0, 1, 0, 0,
@@ -1211,7 +1212,7 @@ nothrow @safe:
   }
 
   // same as `gluPerspective()`
-  // sets the frustum to perspective mode.
+  // sets the frustum to perspective mode
   // fovY   - Field of vision in degrees in the y direction
   // aspect - Aspect ratio of the viewport
   // zNear  - The near clipping distance
@@ -1634,8 +1635,8 @@ public:
   }
 
   ref mat4 inverted() () {
-    // If the 4th row is [0,0,0,1] then it is affine matrix and
-    // it has no projective transformation.
+    // if the 4th row is [0,0,0,1] then it is affine matrix and
+    // it has no projective transformation
     if (mt.ptr[3] == 0 && mt.ptr[7] == 0 && mt.ptr[11] == 0 && mt.ptr[15] == 1) {
       invertedAffine();
     } else {
@@ -1646,7 +1647,7 @@ public:
 
   ///////////////////////////////////////////////////////////////////////////////
   // compute the inverse of a general 4x4 matrix using Cramer's Rule
-  // If cannot find inverse, return indentity matrix
+  // if cannot find inverse, return indentity matrix
   ref mat4 invertedGeneral() () {
     static if (is(FloatType == float)) {
       import core.stdc.math : abs=fabsf;
@@ -1705,7 +1706,7 @@ public:
 
   // compute cofactor of 3x3 minor matrix without sign
   // input params are 9 elements of the minor matrix
-  // NOTE: The caller must know its sign.
+  // NOTE: The caller must know its sign
   private static FloatType getCofactor() (FloatType m0, FloatType m1, FloatType m2, FloatType m3, FloatType m4, FloatType m5, FloatType m6, FloatType m7, FloatType m8) {
     pragma(inline, true);
     return m0*(m4*m8-m5*m7)-m1*(m3*m8-m5*m6)+m2*(m3*m7-m4*m6);
@@ -2290,7 +2291,7 @@ private:
       import core.stdc.stdlib : realloc;
       version(aabbtree_many_asserts) assert(mNodeCount == mAllocCount);
       // allocate more nodes in the tree
-      auto newsz = (mAllocCount < 4096 ? mAllocCount*2 : mAllocCount+4096);
+      auto newsz = (mAllocCount < 8192 ? mAllocCount*2 : mAllocCount+8192);
       TreeNode* nn = cast(TreeNode*)realloc(mNodes, newsz*TreeNode.sizeof);
       if (nn is null) assert(0, "out of memory");
       //{ import core.stdc.stdio; printf("realloced: old=%u; new=%u\n", mAllocCount, newsz); }
@@ -2393,7 +2394,7 @@ private:
     mNodes[newParentNode].height = cast(short)(mNodes[siblingNode].height+1);
     version(aabbtree_many_asserts) assert(mNodes[newParentNode].height > 0);
 
-    // If the sibling node was not the root node
+    // if the sibling node was not the root node
     if (oldParentNode != TreeNode.NullTreeNode) {
       version(aabbtree_many_asserts) assert(!mNodes[oldParentNode].leaf);
       if (mNodes[oldParentNode].children.ptr[TreeNode.Left] == siblingNode) {
@@ -2446,7 +2447,7 @@ private:
     version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
     version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
 
-    // If we are removing the root node (root node is a leaf in this case)
+    // if we are removing the root node (root node is a leaf in this case)
     if (mRootNodeId == nodeId) { mRootNodeId = TreeNode.NullTreeNode; return; }
 
     int parentNodeId = mNodes[nodeId].parentId;
@@ -2659,14 +2660,14 @@ private:
     version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
     TreeNode* node = mNodes+nodeId;
 
-    // If the node is a leaf, its height is zero
+    // if the node is a leaf, its height is zero
     if (node.leaf) return 0;
 
-    // Compute the height of the left and right sub-tree
+    // compute the height of the left and right sub-tree
     int leftHeight = computeHeight(node.children.ptr[TreeNode.Left]);
     int rightHeight = computeHeight(node.children.ptr[TreeNode.Right]);
 
-    // Return the height of the node
+    // return the height of the node
     return 1+max(leftHeight, rightHeight);
   }
 
@@ -2768,6 +2769,8 @@ private:
     }
   }
 
+  version(aabbtree_query_count) public int nodesVisited, nodesDeepVisited;
+
   // return `true` from visitor to stop immediately
   // checker should check if this node should be considered to further checking
   // returns tree node if visitor says stop or -1
@@ -2815,6 +2818,8 @@ private:
       }
     }
 
+    version(aabbtree_query_count) nodesVisited = nodesDeepVisited = 0;
+
     // start from root node
     spush(mRootNodeId);
 
@@ -2824,6 +2829,7 @@ private:
       int nodeId = spop();
       // skip it if it is a null node
       if (nodeId == TreeNode.NullTreeNode) continue;
+      version(aabbtree_query_count) ++nodesVisited;
       // get the corresponding node
       TreeNode* node = mNodes+nodeId;
       // should we investigate this node?
@@ -2831,6 +2837,7 @@ private:
         // if the node is a leaf
         if (node.leaf) {
           // call visitor on it
+          version(aabbtree_query_count) ++nodesDeepVisited;
           if (visitor(node.flesh)) return nodeId;
         } else {
           // if the node is not a leaf, we need to visit its children
@@ -2856,7 +2863,7 @@ public:
     free(mNodes);
   }
 
-  // return the root AABB of the tree
+  /// return the root AABB of the tree
   AABB getRootAABB () {
     pragma(inline, true);
     version(aabbtree_many_asserts) assert(mRootNodeId >= 0 && mRootNodeId < mNodeCount);
@@ -3029,6 +3036,9 @@ public:
 
   /// compute the height of the tree
   int computeHeight () { pragma(inline, true); return computeHeight(mRootNodeId); }
+
+  @property int nodeCount () const pure nothrow @safe @nogc { pragma(inline, true); return mNodeCount; }
+  @property int nodeAlloced () const pure nothrow @safe @nogc { pragma(inline, true); return mAllocCount; }
 
   /// clear all the nodes and reset the tree
   void reset() {
