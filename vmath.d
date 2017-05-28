@@ -136,9 +136,9 @@ public:
   alias Dims = dims;
 
 public:
-  FloatType x = 0;
-  FloatType y = 0;
-  static if (dims >= 3) FloatType z = 0;
+  Float x = 0;
+  Float y = 0;
+  static if (dims >= 3) Float z = 0;
 
 nothrow @safe:
   string toString () const {
@@ -153,21 +153,21 @@ nothrow @safe:
   }
 
 @nogc:
-  this (in FloatType[] c...) pure @trusted {
+  this (in Float[] c...) pure @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
     static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
   }
 
   static if (dims == 2)
-  this (in FloatType ax, in FloatType ay) pure {
+  this (in Float ax, in Float ay) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
   }
 
   static if (dims == 3)
-  this (in FloatType ax, in FloatType ay, in FloatType az) pure {
+  this (in Float ax, in Float ay, in Float az) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
@@ -198,21 +198,21 @@ nothrow @safe:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void set (in FloatType[] c...) pure @trusted {
+  void set (in Float[] c...) pure @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
     static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
   }
 
   static if (dims == 2)
-  void set (in FloatType ax, in FloatType ay) pure {
+  void set (in Float ax, in Float ay) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
   }
 
   static if (dims == 3)
-  void set (in FloatType ax, in FloatType ay, in FloatType az) pure {
+  void set (in Float ax, in Float ay, in Float az) pure {
     //pragma(inline, true);
     x = ax;
     y = ay;
@@ -228,14 +228,14 @@ nothrow @safe:
     }
   }
 
-  FloatType opIndex (usize idx) const pure {
+  Float opIndex (usize idx) const pure {
     pragma(inline, true);
-         static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : FloatType.nan);
-    else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : FloatType.nan);
+         static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : Float.nan);
+    else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : Float.nan);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void opIndexAssign (FloatType v, usize idx) pure {
+  void opIndexAssign (Float v, usize idx) pure {
     pragma(inline, true);
          static if (dims == 2) { if (idx == 0) x = v; else if (idx == 1) y = v; }
     else static if (dims == 3) { if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v; }
@@ -245,8 +245,8 @@ nothrow @safe:
   ref auto normalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) immutable FloatType invlength = cast(FloatType)1/sqrt(x*x+y*y);
-    else static if (dims == 3) immutable FloatType invlength = cast(FloatType)1/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) immutable Float invlength = cast(Float)1/sqrt(x*x+y*y);
+    else static if (dims == 3) immutable Float invlength = cast(Float)1/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
     x *= invlength;
     y *= invlength;
@@ -258,11 +258,11 @@ nothrow @safe:
   ref auto safeNormalize () pure {
     //pragma(inline, true);
     import std.math : sqrt;
-         static if (dims == 2) FloatType invlength = sqrt(x*x+y*y);
-    else static if (dims == 3) FloatType invlength = sqrt(x*x+y*y+z*z);
+         static if (dims == 2) Float invlength = sqrt(x*x+y*y);
+    else static if (dims == 3) Float invlength = sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
-    if (invlength >= EPSILON!FloatType) {
-      invlength = cast(FloatType)1/invlength;
+    if (invlength >= EPSILON!Float) {
+      invlength = cast(Float)1/invlength;
       x *= invlength;
       y *= invlength;
       static if (dims == 3) z *= invlength;
@@ -283,7 +283,7 @@ nothrow @safe:
     return this;
   }
 
-  ref auto opOpAssign(string op) (FloatType a) if (op == "+" || op == "-" || op == "*") {
+  ref auto opOpAssign(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
     //pragma(inline, true);
     mixin("x "~op~"= a;");
     mixin("y "~op~"= a;");
@@ -291,11 +291,11 @@ nothrow @safe:
     return this;
   }
 
-  ref auto opOpAssign(string op:"/") (FloatType a) {
+  ref auto opOpAssign(string op:"/") (Float a) {
     //import std.math : abs;
     //pragma(inline, true);
-    //a = (abs(a) >= EPSILON!FloatType ? 1.0/a : FloatType.nan);
-    a = cast(FloatType)1/a;
+    //a = (abs(a) >= EPSILON!Float ? 1.0/a : Float.nan);
+    a = cast(Float)1/a;
     x *= a;
     y *= a;
     static if (dims == 3) z *= a;
@@ -304,41 +304,41 @@ nothrow @safe:
 
   static if (dims == 2) {
     // radians
-    ref auto rotate (float angle) {
-      static if (is(FloatType == float)) {
+    ref auto rotate (Float angle) {
+      static if (is(Float == float)) {
         import core.stdc.math : cos=cosf, sin=sinf;
-      } else static if (is(FloatType == double)) {
+      } else static if (is(Float == double)) {
         import core.stdc.math : cos, sin;
       } else {
         import std.math : cos, sin;
       }
       pragma(inline, true);
-      immutable FloatType c = cos(angle);
-      immutable FloatType s = sin(angle);
-      immutable FloatType nx = x*c-y*s;
-      immutable FloatType ny = x*s+y*c;
+      immutable Float c = cos(angle);
+      immutable Float s = sin(angle);
+      immutable Float nx = x*c-y*s;
+      immutable Float ny = x*s+y*c;
       x = nx;
       y = ny;
       return this;
     }
 
-    auto rotated (float angle) const {
-      static if (is(FloatType == float)) {
+    auto rotated (Float angle) const {
+      static if (is(Float == float)) {
         import core.stdc.math : cos=cosf, sin=sinf;
-      } else static if (is(FloatType == double)) {
+      } else static if (is(Float == double)) {
         import core.stdc.math : cos, sin;
       } else {
         import std.math : cos, sin;
       }
       pragma(inline, true);
-      immutable FloatType c = cos(angle);
-      immutable FloatType s = sin(angle);
+      immutable Float c = cos(angle);
+      immutable Float s = sin(angle);
       return v2(x*c-y*s, x*s+y*c);
     }
   }
 
 const pure:
-  auto lerp(VT) (in auto ref VT a, in FloatType t) if (isVector!VT) {
+  auto lerp(VT) (in auto ref VT a, in Float t) if (isVector!VT) {
     pragma(inline, true);
     return this+(a-this)*t;
   }
@@ -355,7 +355,7 @@ const pure:
   }
   +/
 
-  @property FloatType length () {
+  @property Float length () {
     pragma(inline, true);
     import std.math : sqrt;
          static if (dims == 2) return sqrt(x*x+y*y);
@@ -363,7 +363,7 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  @property FloatType lengthSquared () {
+  @property Float lengthSquared () {
     pragma(inline, true);
          static if (dims == 2) return x*x+y*y;
     else static if (dims == 3) return x*x+y*y+z*z;
@@ -371,7 +371,7 @@ const pure:
   }
 
   // distance
-  FloatType distance(VT) (in auto ref VT a) if (isVector!VT) {
+  Float distance(VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     import std.math : sqrt;
     static if (dims == 2) {
@@ -388,7 +388,7 @@ const pure:
   }
 
   // distance
-  FloatType distanceSquared(VT) (in auto ref VT a) if (isVector!VT) {
+  Float distanceSquared(VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     static if (dims == 2) {
            static if (isVector2!VT) return (x-a.x)*(x-a.x)+(y-a.y)*(y-a.y);
@@ -429,7 +429,7 @@ const pure:
   }
 
   // dot product
-  FloatType opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
+  Float opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
     static if (dims == 2) {
       return x*a.x+y*a.y;
@@ -452,37 +452,37 @@ const pure:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op) (FloatType a) if (op == "+" || op == "-" || op == "*") {
+  auto opBinary(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
     pragma(inline, true);
          static if (dims == 2) mixin("return v2(x"~op~"a, y"~op~"a);");
     else static if (dims == 3) mixin("return v3(x"~op~"a, y"~op~"a, z"~op~"a);");
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinaryRight(string op:"*") (FloatType a) {
+  auto opBinaryRight(string op:"*") (Float a) {
     pragma(inline, true);
          static if (dims == 2) mixin("return v2(x"~op~"a, y"~op~"a);");
     else static if (dims == 3) mixin("return v3(x"~op~"a, y"~op~"a, z"~op~"a);");
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinary(string op:"/") (FloatType a) {
+  auto opBinary(string op:"/") (Float a) {
     pragma(inline, true);
     //import std.math : abs;
-    //immutable FloatType a = (abs(aa) >= EPSILON!FloatType ? 1.0/aa : FloatType.nan);
-    //immutable FloatType a = cast(FloatType)1/aa; // 1/0 == inf
-    a = cast(FloatType)1/a; // 1/0 == inf
+    //immutable Float a = (abs(aa) >= EPSILON!Float ? 1.0/aa : Float.nan);
+    //immutable Float a = cast(Float)1/aa; // 1/0 == inf
+    a = cast(Float)1/a; // 1/0 == inf
          static if (dims == 2) return v2(x*a, y*a);
     else static if (dims == 3) return v3(x*a, y*a, z*a);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  auto opBinaryRight(string op:"/") (FloatType aa) {
+  auto opBinaryRight(string op:"/") (Float aa) {
     pragma(inline, true);
     /*
     import std.math : abs;
-         static if (dims == 2) return v2((abs(x) >= EPSILON!FloatType ? aa/x : 0), (abs(y) >= EPSILON!FloatType ? aa/y : 0));
-    else static if (dims == 3) return v3((abs(x) >= EPSILON!FloatType ? aa/x : 0), (abs(y) >= EPSILON!FloatType ? aa/y : 0), (abs(z) >= EPSILON!FloatType ? aa/z : 0));
+         static if (dims == 2) return v2((abs(x) >= EPSILON!Float ? aa/x : 0), (abs(y) >= EPSILON!Float ? aa/y : 0));
+    else static if (dims == 3) return v3((abs(x) >= EPSILON!Float ? aa/x : 0), (abs(y) >= EPSILON!Float ? aa/y : 0), (abs(z) >= EPSILON!Float ? aa/z : 0));
     else static assert(0, "invalid dimension count for vector");
     */
          static if (dims == 2) return v2(aa/x, aa/y);
@@ -530,7 +530,7 @@ const pure:
   }
 
   // this dot v
-  @property FloatType dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
+  @property Float dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
 
   // this cross v
   auto cross(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this%v; }
@@ -543,62 +543,62 @@ const pure:
       hpr.y = -atan2(tmp.z, sqrt(tmp.x*tmp.x+tmp.y*tmp.y));*/
     static if (dims == 2) {
       return v2(
-        atan2(cast(FloatType)tmp.x, cast(FloatType)0.0),
-        -atan2(cast(FloatType)tmp.y, cast(FloatType)tmp.x),
+        atan2(cast(Float)tmp.x, cast(Float)0.0),
+        -atan2(cast(Float)tmp.y, cast(Float)tmp.x),
       );
     } else {
       return v3(
-        atan2(cast(FloatType)tmp.x, cast(FloatType)tmp.z),
-        -atan2(cast(FloatType)tmp.y, cast(FloatType)sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
+        atan2(cast(Float)tmp.x, cast(Float)tmp.z),
+        -atan2(cast(Float)tmp.y, cast(Float)sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
         0
       );
     }
   }
 
   // some more supplementary functions to support various things
-  FloatType vcos(VT) (in auto ref VT v) if (isVector!VT) {
-    immutable double len = length*v.length;
+  Float vcos(VT) (in auto ref VT v) if (isVector!VT) {
+    immutable Float len = length*v.length;
     return (len > 0 ? dot(v)/len : 0.0);
   }
 
-  FloatType vsin(VT) (in auto ref VT v) if (isVector!VT) {
-    immutable double len = length*v.length;
+  Float vsin(VT) (in auto ref VT v) if (isVector!VT) {
+    immutable Float len = length*v.length;
     return (len > 0 ? cross(v)/len : 0.0);
   }
 
-  FloatType angle180(VT) (in auto ref VT v) if (isVector!VT) {
+  Float angle180(VT) (in auto ref VT v) if (isVector!VT) {
     import std.math : atan, PI;
-    immutable FloatType cosv = vcos(v);
-    immutable FloatType sinv = vsin(v);
+    immutable Float cosv = vcos(v);
+    immutable Float sinv = vsin(v);
     if (cosv == 0) return (sinv <= 0 ? -90 : 90);
     if (sinv == 0) return (cosv <= 0 ? 180 : 0);
-    FloatType angle = (180.0*atan(sinv/cosv))/PI;
+    Float angle = (180.0*atan(sinv/cosv))/PI;
     if (cosv < 0) { if (angle > 0) angle -= 180; else angle += 180; }
     return angle;
   }
 
-  FloatType angle360(VT) (in auto ref VT v) if (isVector!VT) {
+  Float angle360(VT) (in auto ref VT v) if (isVector!VT) {
     import std.math : atan, PI;
-    immutable FloatType cosv = vcos(v);
-    immutable FloatType sinv = vsin(v);
+    immutable Float cosv = vcos(v);
+    immutable Float sinv = vsin(v);
     if (cosv == 0) return (sinv <= 0 ? 270 : 90);
     if (sinv == 0) return (cosv <= 0 ? 180 : 0);
-    FloatType angle = (180.0*atan(sinv/cosv))/PI;
+    Float angle = (180.0*atan(sinv/cosv))/PI;
     if (cosv < 0) angle += 180;
     if (angle < 0) angle += 360;
     return angle;
   }
 
-  FloatType relativeAngle(VT) (in auto ref VT v) if (isVector!VT) {
+  Float relativeAngle(VT) (in auto ref VT v) if (isVector!VT) {
     import std.math : PI, acos;
-    immutable FloatType cosv = vcos(v);
+    immutable Float cosv = vcos(v);
     if (cosv <= -1) return PI;
     if (cosv >= 1) return 0;
     return acos(cosv);
   }
 
-  bool touch(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return (distance(v) < /*SMALL*/EPSILON!FloatType); }
-  bool touch(VT) (in auto ref VT v, in FloatType epsilon) if (isVector!VT) { pragma(inline, true); return (distance(v) < epsilon); }
+  bool touch(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return (distance(v) < /*SMALL*/EPSILON!Float); }
+  bool touch(VT) (in auto ref VT v, in Float epsilon) if (isVector!VT) { pragma(inline, true); return (distance(v) < epsilon); }
 
   // is `this` on left?
   bool onLeft(VT) (in auto ref VT v0, in auto ref VT v1) if (isVector!VT) {
@@ -625,12 +625,12 @@ const pure:
     auto projectTo() (in auto ref v2 v) { pragma(inline, true); return v*(this.dot(v)/v.dot(v)); }
 
     // returns the unit length vector for the given angle (in radians)
-    auto forAngle (in FloatType a) { pragma(inline, true); import std.math : cos, sin; return v2(cos(a), sin(a)); }
+    auto forAngle (in Float a) { pragma(inline, true); import std.math : cos, sin; return v2(cos(a), sin(a)); }
 
     // returns the angular direction v is pointing in (in radians)
-    FloatType toAngle() () { pragma(inline, true); import std.math : atan2; return atan2(y, x); }
+    Float toAngle() () { pragma(inline, true); import std.math : atan2; return atan2(y, x); }
 
-    auto scross() (FloatType s) { pragma(inline, true); return v2(-s*y, s*x); }
+    auto scross() (Float s) { pragma(inline, true); return v2(-s*y, s*x); }
   }
 
   // swizzling
@@ -648,9 +648,9 @@ const pure:
 static:
   // linearly interpolate between v1 and v2
   /*
-  VT lerp(VT) (in auto ref VT v1, in auto ref VT v2, const FloatType t) if (isSameVector!VT) {
+  VT lerp(VT) (in auto ref VT v1, in auto ref VT v2, const Float t) if (isSameVector!VT) {
     pragma(inline, true);
-    return (v1*cast(FloatType)1.0f-t)+(v2*t);
+    return (v1*cast(Float)1.0f-t)+(v2*t);
   }
   */
 }
@@ -661,10 +661,11 @@ static:
 align(1) struct Plane3(FloatType=VFloat, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
 align(1):
 public:
-  alias plane3 = Plane3!(FloatType, PlaneEps, enableSwizzling);
-  alias vec3 = VecN!(3, FloatType);
+  alias Float = FloatType;
+  alias plane3 = typeof(this);
+  alias vec3 = VecN!(3, Float);
   static if (PlaneEps < 0) {
-    enum EPS = EPSILON!FloatType;
+    enum EPS = EPSILON!Float;
   } else {
     enum EPS = PlaneEps;
   }
@@ -679,9 +680,9 @@ public:
   }
 
 public:
-  //FloatType a = 0, b = 0, c = 0, d = 0;
+  //Float a = 0, b = 0, c = 0, d = 0;
   vec3 normal;
-  FloatType w;
+  Float w;
 
 nothrow @safe:
   string toString () const {
@@ -694,10 +695,10 @@ nothrow @safe:
   }
 
 pure @nogc:
-  this() (in auto ref vec3 anormal, FloatType aw) { pragma(inline, true); set(anormal, aw); }
+  this() (in auto ref vec3 anormal, Float aw) { pragma(inline, true); set(anormal, aw); }
   this() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) { pragma(inline, true); setFromPoints(a, b, c); }
 
-  void set () (in auto ref vec3 anormal, FloatType aw) {
+  void set () (in auto ref vec3 anormal, Float aw) {
     import std.math : abs;
     normal = anormal;
     w = aw;
@@ -712,19 +713,19 @@ pure @nogc:
 
   @property bool valid () const { pragma(inline, true); import std.math : isNaN; return !isNaN(w); }
 
-  FloatType opIndex (usize idx) const {
+  Float opIndex (usize idx) const {
     pragma(inline, true);
-    return (idx == 0 ? normal.x : idx == 1 ? normal.y : idx == 2 ? normal.z : idx == 3 ? w : FloatType.nan);
+    return (idx == 0 ? normal.x : idx == 1 ? normal.y : idx == 2 ? normal.z : idx == 3 ? w : Float.nan);
   }
 
-  void opIndexAssign (FloatType v, usize idx) {
+  void opIndexAssign (Float v, usize idx) {
     pragma(inline, true);
     if (idx == 0) normal.x = v; else if (idx == 1) normal.y = v; else if (idx == 2) normal.z = v; else if (idx == 3) w = v;
   }
 
   ref plane3 normalize () {
-    FloatType dd = normal.length;
-    if (dd >= EPSILON!FloatType) {
+    Float dd = normal.length;
+    if (dd >= EPSILON!Float) {
       dd = 1.0/dd;
       normal.x *= dd;
       normal.y *= dd;
@@ -743,7 +744,7 @@ pure @nogc:
     return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
   }
 
-  FloatType pointSideF() (in auto ref vec3 p) const pure {
+  Float pointSideF() (in auto ref vec3 p) const pure {
     pragma(inline, true);
     return (normal*p)-w; // dot
   }
@@ -1072,17 +1073,18 @@ public pure nothrow @safe @nogc:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-alias mat4 = Mat4!float;
+alias mat4 = Mat4!vec3;
 
-align(1) struct Mat4(FloatType=VFloat) if (is(FloatType == FloatType) || is(FloatType == double)) {
+align(1) struct Mat4(VT) if (IsVector!VT) {
 align(1):
 public:
-  alias mat4 = Mat4!FloatType;
-  alias vec3 = VecN!(3, FloatType);
+  alias Float = VT.Float;
+  alias mat4 = typeof(this);
+  alias vec3 = VecN!(3, Float);
 
 public:
   // OpenGL-compatible, row by row
-  FloatType[4*4] mt = [
+  Float[4*4] mt = [
     1, 0, 0, 0,
     0, 1, 0, 0,
     0, 0, 1, 0,
@@ -1104,10 +1106,10 @@ nothrow @safe:
     }
   }
 
-  @property FloatType opIndex (usize x, usize y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : FloatType.nan); }
+  @property Float opIndex (usize x, usize y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : Float.nan); }
 
 @nogc @trusted:
-  this() (in FloatType[] vals...) { pragma(inline, true); if (vals.length >= 16) mt.ptr[0..16] = vals.ptr[0..16]; else { mt.ptr[0..16] = 0; mt.ptr[0..vals.length] = vals.ptr[0..vals.length]; } }
+  this() (in Float[] vals...) { pragma(inline, true); if (vals.length >= 16) mt.ptr[0..16] = vals.ptr[0..16]; else { mt.ptr[0..16] = 0; mt.ptr[0..vals.length] = vals.ptr[0..vals.length]; } }
   this() (in auto ref mat4 m) { pragma(inline, true); mt.ptr[0..16] = m.mt.ptr[0..16]; }
   this() (in auto ref vec3 v) {
     //mt.ptr[0..16] = 0;
@@ -1121,16 +1123,16 @@ nothrow @safe:
   static mat4 Identity () pure { pragma(inline, true); /*mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res;*/ return mat4(); }
 
   private enum SinCosImportMixin = q{
-    static if (is(FloatType == float)) {
+    static if (is(Float == float)) {
       import core.stdc.math : cos=cosf, sin=sinf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : cos, sin;
     } else {
       import std.math : cos, sin;
     }
   };
 
-  static mat4 RotateX() (FloatType angle) {
+  static mat4 RotateX() (Float angle) {
     mixin(SinCosImportMixin);
     auto res = mat4(0);
     res.mt.ptr[0*4+0] = 1.0;
@@ -1142,7 +1144,7 @@ nothrow @safe:
     return res;
   }
 
-  static mat4 RotateY() (FloatType angle) {
+  static mat4 RotateY() (Float angle) {
     mixin(SinCosImportMixin);
     auto res = mat4(0);
     res.mt.ptr[0*4+0] = cos(angle);
@@ -1154,7 +1156,7 @@ nothrow @safe:
     return res;
   }
 
-  static mat4 RotateZ() (FloatType angle) {
+  static mat4 RotateZ() (Float angle) {
     mixin(SinCosImportMixin);
     auto res = mat4(0);
     res.mt.ptr[0*4+0] = cos(angle);
@@ -1193,7 +1195,7 @@ nothrow @safe:
   }
 
   // same as `glFrustum()`
-  static mat4 Frustum() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
+  static mat4 Frustum() (Float left, Float right, Float bottom, Float top, Float nearVal, Float farVal) nothrow @trusted @nogc {
     auto res = mat4(0);
     res.mt.ptr[0]  = 2*nearVal/(right-left);
     res.mt.ptr[5]  = 2*nearVal/(top-bottom);
@@ -1207,7 +1209,7 @@ nothrow @safe:
   }
 
   // same as `glOrtho()`
-  static mat4 Ortho() (FloatType left, FloatType right, FloatType bottom, FloatType top, FloatType nearVal, FloatType farVal) nothrow @trusted @nogc {
+  static mat4 Ortho() (Float left, Float right, Float bottom, Float top, Float nearVal, Float farVal) nothrow @trusted @nogc {
     auto res = mat4(0);
     res.mt.ptr[0]  = 2/(right-left);
     res.mt.ptr[5]  = 2/(top-bottom);
@@ -1224,34 +1226,34 @@ nothrow @safe:
   // aspect - Aspect ratio of the viewport
   // zNear  - The near clipping distance
   // zFar   - The far clipping distance
-  static mat4 Perspective() (FloatType fovY, FloatType aspect, FloatType zNear, FloatType zFar) nothrow @trusted @nogc {
-    static if (is(FloatType == float)) {
+  static mat4 Perspective() (Float fovY, Float aspect, Float zNear, Float zFar) nothrow @trusted @nogc {
+    static if (is(Float == float)) {
       import core.stdc.math : tan=tanf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : tan;
     } else {
       import std.math : tan;
     }
     import std.math : PI;
-    immutable FloatType fH = cast(FloatType)(tan(fovY/360*PI)*zNear);
-    immutable FloatType fW = cast(FloatType)(fH*aspect);
+    immutable Float fH = cast(Float)(tan(fovY/360*PI)*zNear);
+    immutable Float fW = cast(Float)(fH*aspect);
     return frustum(-fW, fW, -fH, fH, zNear, zFar);
   }
 
 public:
   // does `gluLookAt()`
   mat4 lookAt() (in auto ref vec3 eye, in auto ref vec3 center, in auto ref vec3 up) const {
-    static if (is(FloatType == float)) {
+    static if (is(Float == float)) {
       import core.stdc.math : sqrt=sqrtf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : sqrt;
     } else {
       import std.math : sqrt;
     }
 
     mat4 m = void;
-    float[3] x = void, y = void, z = void;
-    float mag;
+    Float[3] x = void, y = void, z = void;
+    Float mag;
     // make rotation matrix
     // Z vector
     z.ptr[0] = eye.x-center.x;
@@ -1318,9 +1320,9 @@ public:
   // this function will clear the previous rotation and scale, but it will keep the previous translation
   // it is for rotating object to look at the target, NOT for camera
   ref mat4 lookingAt() (in auto ref vec3 target) {
-    static if (is(FloatType == float)) {
+    static if (is(Float == float)) {
       import core.stdc.math : abs=fabsf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : abs=fabs;
     } else {
       import std.math : abs;
@@ -1328,7 +1330,7 @@ public:
     vec3 position = vec3(mt.ptr[12], mt.ptr[13], mt.ptr[14]);
     vec3 forward = (target-position).normalized;
     vec3 up;
-    if (abs(forward.x) < EPSILON!FloatType && abs(forward.z) < EPSILON!FloatType) {
+    if (abs(forward.x) < EPSILON!Float && abs(forward.z) < EPSILON!Float) {
       up.z = (forward.y > 0 ? -1 : 1);
     } else {
       up.y = 1;
@@ -1367,26 +1369,26 @@ public:
   mat4 lookAt() (in auto ref vec3 target) { pragma(inline, true); auto res = mat4(this); return this.lookingAt(target); }
   mat4 lookAt() (in auto ref vec3 target, in auto ref vec3 upVec) { pragma(inline, true); auto res = mat4(this); return this.lookingAt(target, upVec); }
 
-  ref mat4 rotate() (FloatType angle, in auto ref vec3 axis) {
+  ref mat4 rotate() (Float angle, in auto ref vec3 axis) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
-    immutable FloatType c = cos(angle);
-    immutable FloatType s = sin(angle);
-    immutable FloatType c1 = 1-c;
-    immutable FloatType m0 = mt.ptr[0], m4 = mt.ptr[4], m8 = mt.ptr[8], m12 = mt.ptr[12];
-    immutable FloatType m1 = mt.ptr[1], m5 = mt.ptr[5], m9 = mt.ptr[9], m13 = mt.ptr[13];
-    immutable FloatType m2 = mt.ptr[2], m6 = mt.ptr[6], m10 = mt.ptr[10], m14 = mt.ptr[14];
+    immutable Float c = cos(angle);
+    immutable Float s = sin(angle);
+    immutable Float c1 = 1-c;
+    immutable Float m0 = mt.ptr[0], m4 = mt.ptr[4], m8 = mt.ptr[8], m12 = mt.ptr[12];
+    immutable Float m1 = mt.ptr[1], m5 = mt.ptr[5], m9 = mt.ptr[9], m13 = mt.ptr[13];
+    immutable Float m2 = mt.ptr[2], m6 = mt.ptr[6], m10 = mt.ptr[10], m14 = mt.ptr[14];
 
     // build rotation matrix
-    immutable FloatType r0 = axis.x*axis.x*c1+c;
-    immutable FloatType r1 = axis.x*axis.y*c1+axis.z*s;
-    immutable FloatType r2 = axis.x*axis.z*c1-axis.y*s;
-    immutable FloatType r4 = axis.x*axis.y*c1-axis.z*s;
-    immutable FloatType r5 = axis.y*axis.y*c1+c;
-    immutable FloatType r6 = axis.y*axis.z*c1+axis.x*s;
-    immutable FloatType r8 = axis.x*axis.z*c1+axis.y*s;
-    immutable FloatType r9 = axis.y*axis.z*c1-axis.x*s;
-    immutable FloatType r10= axis.z*axis.z*c1+c;
+    immutable Float r0 = axis.x*axis.x*c1+c;
+    immutable Float r1 = axis.x*axis.y*c1+axis.z*s;
+    immutable Float r2 = axis.x*axis.z*c1-axis.y*s;
+    immutable Float r4 = axis.x*axis.y*c1-axis.z*s;
+    immutable Float r5 = axis.y*axis.y*c1+c;
+    immutable Float r6 = axis.y*axis.z*c1+axis.x*s;
+    immutable Float r8 = axis.x*axis.z*c1+axis.y*s;
+    immutable Float r9 = axis.y*axis.z*c1-axis.x*s;
+    immutable Float r10= axis.z*axis.z*c1+c;
 
     // multiply rotation matrix
     mt.ptr[0] = r0*m0+r4*m1+r8*m2;
@@ -1405,15 +1407,15 @@ public:
     return this;
   }
 
-  ref mat4 rotateX() (FloatType angle) {
+  ref mat4 rotateX() (Float angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
-    immutable FloatType c = cos(angle);
-    immutable FloatType s = sin(angle);
-    immutable FloatType m1 = mt.ptr[1], m2 = mt.ptr[2];
-    immutable FloatType m5 = mt.ptr[5], m6 = mt.ptr[6];
-    immutable FloatType m9 = mt.ptr[9], m10 = mt.ptr[10];
-    immutable FloatType m13 = mt.ptr[13], m14 = mt.ptr[14];
+    immutable Float c = cos(angle);
+    immutable Float s = sin(angle);
+    immutable Float m1 = mt.ptr[1], m2 = mt.ptr[2];
+    immutable Float m5 = mt.ptr[5], m6 = mt.ptr[6];
+    immutable Float m9 = mt.ptr[9], m10 = mt.ptr[10];
+    immutable Float m13 = mt.ptr[13], m14 = mt.ptr[14];
 
     mt.ptr[1] = m1*c+m2*-s;
     mt.ptr[2] = m1*s+m2*c;
@@ -1427,15 +1429,15 @@ public:
     return this;
   }
 
-  ref mat4 rotateY() (FloatType angle) {
+  ref mat4 rotateY() (Float angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
-    immutable FloatType c = cos(angle);
-    immutable FloatType s = sin(angle);
-    immutable FloatType m0 = mt.ptr[0], m2 = mt.ptr[2];
-    immutable FloatType m4 = mt.ptr[4], m6 = mt.ptr[6];
-    immutable FloatType m8 = mt.ptr[8], m10 = mt.ptr[10];
-    immutable FloatType m12 = mt.ptr[12], m14 = mt.ptr[14];
+    immutable Float c = cos(angle);
+    immutable Float s = sin(angle);
+    immutable Float m0 = mt.ptr[0], m2 = mt.ptr[2];
+    immutable Float m4 = mt.ptr[4], m6 = mt.ptr[6];
+    immutable Float m8 = mt.ptr[8], m10 = mt.ptr[10];
+    immutable Float m12 = mt.ptr[12], m14 = mt.ptr[14];
 
     mt.ptr[0] = m0*c+m2*s;
     mt.ptr[2] = m0*-s+m2*c;
@@ -1449,15 +1451,15 @@ public:
     return this;
   }
 
-  ref mat4 rotateZ() (FloatType angle) {
+  ref mat4 rotateZ() (Float angle) {
     mixin(SinCosImportMixin);
     angle = deg2rad(angle);
-    immutable FloatType c = cos(angle);
-    immutable FloatType s = sin(angle);
-    immutable FloatType m0 = mt.ptr[0], m1 = mt.ptr[1];
-    immutable FloatType m4 = mt.ptr[4], m5 = mt.ptr[5];
-    immutable FloatType m8 = mt.ptr[8], m9 = mt.ptr[9];
-    immutable FloatType m12 = mt.ptr[12], m13 = mt.ptr[13];
+    immutable Float c = cos(angle);
+    immutable Float s = sin(angle);
+    immutable Float m0 = mt.ptr[0], m1 = mt.ptr[1];
+    immutable Float m4 = mt.ptr[4], m5 = mt.ptr[5];
+    immutable Float m8 = mt.ptr[8], m9 = mt.ptr[9];
+    immutable Float m12 = mt.ptr[12], m13 = mt.ptr[13];
 
     mt.ptr[0] = m0*c+m1*-s;
     mt.ptr[1] = m0*s+m1*c;
@@ -1485,10 +1487,10 @@ public:
     return this;
   }
 
-  mat4 rotated() (FloatType angle, in auto ref vec3 axis) const { pragma(inline, true); auto res = mat4(this); return res.rotate(angle, axis); }
-  mat4 rotatedX() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateX(angle); }
-  mat4 rotatedY() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateY(angle); }
-  mat4 rotatedZ() (FloatType angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateZ(angle); }
+  mat4 rotated() (Float angle, in auto ref vec3 axis) const { pragma(inline, true); auto res = mat4(this); return res.rotate(angle, axis); }
+  mat4 rotatedX() (Float angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateX(angle); }
+  mat4 rotatedY() (Float angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateY(angle); }
+  mat4 rotatedZ() (Float angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateZ(angle); }
   mat4 translated() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.translate(v); }
   mat4 scaled() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.scale(v); }
 
@@ -1497,19 +1499,19 @@ public:
   // Ry: rotation about Y-axis, yaw (heading)
   // Rz: rotation about Z-axis, roll
   vec3 getAngles () const {
-    static if (is(FloatType == float)) {
+    static if (is(Float == float)) {
       import core.stdc.math : atan2=atan2f, asin=asinf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : atan2, asin;
     } else {
       import std.math : atan2, asin;
     }
-    FloatType pitch = void, roll = void;
-    FloatType yaw = rad2deg(asin(mt.ptr[8]));
+    Float pitch = void, roll = void;
+    Float yaw = rad2deg(asin(mt.ptr[8]));
     if (mt.ptr[10] < 0) {
       if (yaw >= 0) yaw = 180-yaw; else yaw = -180-yaw;
     }
-    if (mt.ptr[0] > -EPSILON!FloatType && mt.ptr[0] < EPSILON!FloatType) {
+    if (mt.ptr[0] > -EPSILON!Float && mt.ptr[0] < EPSILON!Float) {
       roll = 0;
       pitch = rad2deg(atan2(mt.ptr[1], mt.ptr[5]));
     } else {
@@ -1551,13 +1553,13 @@ public:
     return res;
   }
 
-  mat4 opBinary(string op:"*") (FloatType a) const {
+  mat4 opBinary(string op:"*") (Float a) const {
     auto res = mat4(this);
     res.mt[] *= a;
     return res;
   }
 
-  mat4 opBinary(string op:"/") (FloatType a) const {
+  mat4 opBinary(string op:"/") (Float a) const {
     import std.math : abs;
     auto res = mat4(this);
     if (abs(a) >= FLTEPS) {
@@ -1611,7 +1613,7 @@ public:
     );
   }
 
-  FloatType determinant() () const {
+  Float determinant() () const {
     return mt.ptr[0]*getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15])-
            mt.ptr[1]*getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15])+
            mt.ptr[2]*getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15])-
@@ -1628,13 +1630,13 @@ public:
   //
   // Use inverseAffine() if the matrix has scale and shear transformation.
   ref mat4 invertedEuclidean() () {
-    FloatType tmp = void;
+    Float tmp = void;
     tmp = mt.ptr[1]; mt.ptr[1] = mt.ptr[4]; mt.ptr[4] = tmp;
     tmp = mt.ptr[2]; mt.ptr[2] = mt.ptr[8]; mt.ptr[8] = tmp;
     tmp = mt.ptr[6]; mt.ptr[6] = mt.ptr[9]; mt.ptr[9] = tmp;
-    FloatType x = mt.ptr[12];
-    FloatType y = mt.ptr[13];
-    FloatType z = mt.ptr[14];
+    Float x = mt.ptr[12];
+    Float y = mt.ptr[13];
+    Float z = mt.ptr[14];
     mt.ptr[12] = -(mt.ptr[0]*x+mt.ptr[4]*y+mt.ptr[8]*z);
     mt.ptr[13] = -(mt.ptr[1]*x+mt.ptr[5]*y+mt.ptr[9]*z);
     mt.ptr[14] = -(mt.ptr[2]*x+mt.ptr[6]*y+mt.ptr[10]*z);
@@ -1656,38 +1658,38 @@ public:
   // compute the inverse of a general 4x4 matrix using Cramer's Rule
   // if cannot find inverse, return indentity matrix
   ref mat4 invertedGeneral() () {
-    static if (is(FloatType == float)) {
+    static if (is(Float == float)) {
       import core.stdc.math : abs=fabsf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : abs=fabs;
     } else {
       import std.math : abs;
     }
 
-    FloatType cofactor0 = getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
-    FloatType cofactor1 = getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
-    FloatType cofactor2 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
-    FloatType cofactor3 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    Float cofactor0 = getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    Float cofactor1 = getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    Float cofactor2 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    Float cofactor3 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
 
-    FloatType determinant = mt.ptr[0]*cofactor0-mt.ptr[1]*cofactor1+mt.ptr[2]*cofactor2-mt.ptr[3]*cofactor3;
-    if (abs(determinant) <= EPSILON!FloatType) { this = Identity; return this; }
+    Float determinant = mt.ptr[0]*cofactor0-mt.ptr[1]*cofactor1+mt.ptr[2]*cofactor2-mt.ptr[3]*cofactor3;
+    if (abs(determinant) <= EPSILON!Float) { this = Identity; return this; }
 
-    FloatType cofactor4 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
-    FloatType cofactor5 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
-    FloatType cofactor6 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
-    FloatType cofactor7 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    Float cofactor4 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    Float cofactor5 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    Float cofactor6 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    Float cofactor7 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
 
-    FloatType cofactor8 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[13], mt.ptr[14], mt.ptr[15]);
-    FloatType cofactor9 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[12], mt.ptr[14], mt.ptr[15]);
-    FloatType cofactor10= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[12], mt.ptr[13], mt.ptr[15]);
-    FloatType cofactor11= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    Float cofactor8 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    Float cofactor9 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    Float cofactor10= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    Float cofactor11= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[12], mt.ptr[13], mt.ptr[14]);
 
-    FloatType cofactor12= getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[9], mt.ptr[10], mt.ptr[11]);
-    FloatType cofactor13= getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[8], mt.ptr[10], mt.ptr[11]);
-    FloatType cofactor14= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[8], mt.ptr[9], mt.ptr[11]);
-    FloatType cofactor15= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[8], mt.ptr[9], mt.ptr[10]);
+    Float cofactor12= getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[9], mt.ptr[10], mt.ptr[11]);
+    Float cofactor13= getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[8], mt.ptr[10], mt.ptr[11]);
+    Float cofactor14= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[8], mt.ptr[9], mt.ptr[11]);
+    Float cofactor15= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[8], mt.ptr[9], mt.ptr[10]);
 
-    FloatType invDeterminant = cast(FloatType)1.0/determinant;
+    Float invDeterminant = cast(Float)1.0/determinant;
     mt.ptr[0] =  invDeterminant*cofactor0;
     mt.ptr[1] = -invDeterminant*cofactor4;
     mt.ptr[2] =  invDeterminant*cofactor8;
@@ -1714,26 +1716,26 @@ public:
   // compute cofactor of 3x3 minor matrix without sign
   // input params are 9 elements of the minor matrix
   // NOTE: The caller must know its sign
-  private static FloatType getCofactor() (FloatType m0, FloatType m1, FloatType m2, FloatType m3, FloatType m4, FloatType m5, FloatType m6, FloatType m7, FloatType m8) {
+  private static Float getCofactor() (Float m0, Float m1, Float m2, Float m3, Float m4, Float m5, Float m6, Float m7, Float m8) {
     pragma(inline, true);
     return m0*(m4*m8-m5*m7)-m1*(m3*m8-m5*m6)+m2*(m3*m7-m4*m6);
   }
 
-  Quat4!FloatType toQuaternion () const nothrow @trusted @nogc {
-    static if (is(FloatType == float)) {
+  Quat4!VT toQuaternion () const nothrow @trusted @nogc {
+    static if (is(Float == float)) {
       import core.stdc.math : sqrt=sqrtf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : sqrt;
     } else {
       import std.math : sqrt;
     }
-    Quat4!FloatType res = void;
-    FloatType tr = mt.ptr[0*4+0]+mt.ptr[1*4+1]+mt.ptr[2*4+2];
+    Quat4!VT res = void;
+    Float tr = mt.ptr[0*4+0]+mt.ptr[1*4+1]+mt.ptr[2*4+2];
     // check the diagonal
     if (tr > 0) {
-      FloatType s = sqrt(tr+1.0);
-      res.w = s/cast(FloatType)2;
-      s = cast(FloatType)0.5/s;
+      Float s = sqrt(tr+1.0);
+      res.w = s/cast(Float)2;
+      s = cast(Float)0.5/s;
       res.x = (mt.ptr[2*4+1]-mt.ptr[1*4+2])*s;
       res.y = (mt.ptr[0*4+2]-mt.ptr[2*4+0])*s;
       res.z = (mt.ptr[1*4+0]-mt.ptr[0*4+1])*s;
@@ -1741,16 +1743,16 @@ public:
       // diagonal is negative
       int i, j, k;
       int[3] nxt = [1, 2, 0];
-      FloatType s = void;
-      FloatType[4] q = void;
+      Float s = void;
+      Float[4] q = void;
       i = 0;
       if (mt.ptr[1*4+1] > mt.ptr[0*4+0]) i = 1;
       if (mt.ptr[2*4+2] > mt.ptr[i*4+i]) i = 2;
       j = nxt.ptr[i];
       k = nxt.ptr[j];
-      s = sqrt((mt.ptr[i*4+i]-(mt.ptr[j*4+j]+mt.ptr[k*4+k]))+cast(FloatType)1);
-      q[i] = s*cast(FloatType)0.5;
-      if (s != 0) s = cast(FloatType)0.5/s;
+      s = sqrt((mt.ptr[i*4+i]-(mt.ptr[j*4+j]+mt.ptr[k*4+k]))+cast(Float)1);
+      q[i] = s*cast(Float)0.5;
+      if (s != 0) s = cast(Float)0.5/s;
       q[3] = (mt.ptr[k*4+j]-mt.ptr[j*4+k])*s;
       q[j] = (mt.ptr[j*4+i]+mt.ptr[i*4+j])*s;
       q[k] = (mt.ptr[k*4+i]+mt.ptr[i*4+k])*s;
@@ -1765,15 +1767,19 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-alias quat4 = Quat4!float;
+alias quat4 = Quat4!vec3;
 
-align(1) struct Quat4(FloatType=VFloat) {
+align(1) struct Quat4(VT) if (IsVector!VT) {
 align(1):
-  alias quat4 = Quat4!FloatType;
+public:
+  alias Float = VT.Float;
+  alias quat4 = typeof(this);
 
-  FloatType w=1, x=0, y=0, z=0;
+public:
+  Float w=1, x=0, y=0, z=0; // default: identity
 
-  this (FloatType aw, FloatType ax, FloatType ay, FloatType az) nothrow @trusted @nogc {
+public:
+  this (Float aw, Float ax, Float ay, Float az) nothrow @trusted @nogc {
     w = aw;
     x = ax;
     y = ay;
@@ -1782,23 +1788,23 @@ align(1):
 
   static quat4 Identity () nothrow @trusted @nogc { pragma(inline, true); return quat4(1, 0, 0, 0); }
 
-  static quat4 fromAngles (FloatType roll, FloatType pitch, FloatType yaw) nothrow @trusted @nogc {
-    static if (is(FloatType == float)) {
+  static quat4 fromAngles (Float roll, Float pitch, Float yaw) nothrow @trusted @nogc {
+    static if (is(Float == float)) {
       import core.stdc.math : cos=cosf, sin=sinf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : cos, sin;
     } else {
       import std.math : cos, sin;
     }
     // calculate trig identities
-    FloatType cr = cos(roll/2);
-    FloatType cp = cos(pitch/2);
-    FloatType cy = cos(yaw/2);
-    FloatType sr = sin(roll/2);
-    FloatType sp = sin(pitch/2);
-    FloatType sy = sin(yaw/2);
-    FloatType cpcy = cp*cy;
-    FloatType spsy = sp*sy;
+    immutable Float cr = cos(roll/2);
+    immutable Float cp = cos(pitch/2);
+    immutable Float cy = cos(yaw/2);
+    immutable Float sr = sin(roll/2);
+    immutable Float sp = sin(pitch/2);
+    immutable Float sy = sin(yaw/2);
+    immutable Float cpcy = cp*cy;
+    immutable Float spsy = sp*sy;
     return quat4(
       cr*cpcy+sr*spsy,
       sr*cpcy-cr*spsy,
@@ -1809,35 +1815,39 @@ align(1):
 
   @property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w) && !isnan(x) && !isnan(y) && !isnan(z); }
 
-  Mat4!FloatType toMatrix () const nothrow @trusted @nogc {
-    Mat4!FloatType res = void;
-    FloatType wx = void, wy = void, wz = void, xx = void, yy = void, yz = void;
-    FloatType xy = void, xz = void, zz = void, x2 = void, y2 = void, z2 = void;
+  Mat4!VT toMatrix () const nothrow @trusted @nogc {
+    //Float wx = void, wy = void, wz = void, xx = void, yy = void, yz = void;
+    //Float xy = void, xz = void, zz = void, x2 = void, y2 = void, z2 = void;
 
     // calculate coefficients
-    x2 = this.x+this.x; y2 = this.y+this.y;
-    z2 = this.z+this.z;
-    xx = this.x*x2; xy = this.x*y2; xz = this.x*z2;
-    yy = this.y*y2; yz = this.y*z2; zz = this.z*z2;
-    wx = this.w*x2; wy = this.w*y2; wz = this.w*z2;
+    immutable Float x2 = this.x+this.x;
+    immutable Float y2 = this.y+this.y;
+    immutable Float z2 = this.z+this.z;
+    immutable Float xx = this.x*x2;
+    immutable Float xy = this.x*y2;
+    immutable Float xz = this.x*z2;
+    immutable Float yy = this.y*y2;
+    immutable Float yz = this.y*z2;
+    immutable Float zz = this.z*z2;
+    immutable Float wx = this.w*x2;
+    immutable Float wy = this.w*y2;
+    immutable Float wz = this.w*z2;
 
-
-    res.mt.ptr[0*4+0] = cast(FloatType)1-(yy+zz);
+    Mat4!VT res = void;
+    res.mt.ptr[0*4+0] = cast(Float)1-(yy+zz);
     res.mt.ptr[0*4+1] = xy-wz;
     res.mt.ptr[0*4+2] = xz+wy;
     res.mt.ptr[0*4+3] = 0;
 
     res.mt.ptr[1*4+0] = xy+wz;
-    res.mt.ptr[1*4+1] = cast(FloatType)1-(xx+zz);
+    res.mt.ptr[1*4+1] = cast(Float)1-(xx+zz);
     res.mt.ptr[1*4+2] = yz-wx;
     res.mt.ptr[1*4+3] = 0;
 
-
     res.mt.ptr[2*4+0] = xz-wy;
     res.mt.ptr[2*4+1] = yz+wx;
-    res.mt.ptr[2*4+2] = cast(FloatType)1-(xx+yy);
+    res.mt.ptr[2*4+2] = cast(Float)1-(xx+yy);
     res.mt.ptr[2*4+3] = 0;
-
 
     res.mt.ptr[3*4+0] = 0;
     res.mt.ptr[3*4+1] = 0;
@@ -1853,14 +1863,14 @@ align(1):
   }
 
   ref quat4 opOpAssign(string op:"*") (in auto ref quat4 q2) nothrow @safe @nogc {
-    FloatType A = (this.w+this.x)*(q2.w+q2.x);
-    FloatType B = (this.z-this.y)*(q2.y-q2.z);
-    FloatType C = (this.w-this.x)*(q2.y+q2.z);
-    FloatType D = (this.y+this.z)*(q2.w-q2.x);
-    FloatType E = (this.x+this.z)*(q2.x+q2.y);
-    FloatType F = (this.x-this.z)*(q2.x-q2.y);
-    FloatType G = (this.w+this.y)*(q2.w-q2.z);
-    FloatType H = (this.w-this.y)*(q2.w+q2.z);
+    immutable Float A = (this.w+this.x)*(q2.w+q2.x);
+    immutable Float B = (this.z-this.y)*(q2.y-q2.z);
+    immutable Float C = (this.w-this.x)*(q2.y+q2.z);
+    immutable Float D = (this.y+this.z)*(q2.w-q2.x);
+    immutable Float E = (this.x+this.z)*(q2.x+q2.y);
+    immutable Float F = (this.x-this.z)*(q2.x-q2.y);
+    immutable Float G = (this.w+this.y)*(q2.w-q2.z);
+    immutable Float H = (this.w-this.y)*(q2.w+q2.z);
     this.w = B+(-E-F+G+H)/2;
     this.x = A-(E+F+G+H)/2;
     this.y = C+(E-F+G-H)/2;
@@ -1868,17 +1878,17 @@ align(1):
     return this;
   }
 
-  quat4 slerp() (in auto ref quat4 to, FloatType t) const nothrow @trusted @nogc {
-    static if (is(FloatType == float)) {
+  quat4 slerp() (in auto ref quat4 to, Float t) const nothrow @trusted @nogc {
+    static if (is(Float == float)) {
       import core.stdc.math : acos, sin;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : acos, sin;
     } else {
       import std.math : acos, sin;
     }
-    FloatType[4] to1 = void;
+    Float[4] to1 = void;
     // calc cosine
-    double cosom = this.x*to.x+this.y*to.y+this.z*to.z+this.w*to.w;
+    Float cosom = this.x*to.x+this.y*to.y+this.z*to.z+this.w*to.w;
     // adjust signs (if necessary)
     if (cosom < 0.0) {
       cosom = -cosom;
@@ -1892,12 +1902,12 @@ align(1):
       to1[2] = to.z;
       to1[3] = to.w;
     }
-    double scale0 = void, scale1 = void;
+    Float scale0 = void, scale1 = void;
     // calculate coefficients
-    if (1.0-cosom > EPSILON!double) {
+    if (1.0-cosom > EPSILON!Float) {
       // standard case (slerp)
-      double omega = acos(cosom);
-      double sinom = sin(omega);
+      Float omega = acos(cosom);
+      Float sinom = sin(omega);
       scale0 = sin((1.0-t)*omega)/sinom;
       scale1 = sin(t*omega)/sinom;
     } else {
@@ -1918,22 +1928,25 @@ align(1):
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+alias mat3 = Mat3!vec2;
+
 // very simple (and mostly not tested) 3x3 matrix
-align(1) struct Mat3F(FloatType=VFloat) if (is(FloatType == float) || is(FloatType == double)) {
+align(1) struct Mat3(VT) if (IsVector!VT) {
 align(1):
 
 private:
-  alias m3 = mat3!FloatType;
-  alias v2 = VecN!(2, FloatType);
-  alias v3 = VecN!(3, FloatType);
+  alias Float = VT.Float;
+  alias m3 = typeof(this);
+  alias v2 = VecN!(2, Float);
+  alias v3 = VecN!(3, Float);
 
-  enum isVector(VT) = (is(VT == VecN!(2, FloatType)) || is(VT == VecN!(3, FloatType)));
-  enum isVector2(VT) = is(VT == VecN!(2, FloatType));
-  enum isVector3(VT) = is(VT == VecN!(3, FloatType));
+  enum isVector(VT) = (is(VT == VecN!(2, Float)) || is(VT == VecN!(3, Float)));
+  enum isVector2(VT) = is(VT == VecN!(2, Float));
+  enum isVector3(VT) = is(VT == VecN!(3, Float));
 
 private:
   // 3x3 matrix components
-  FloatType[3*3] m = [
+  Float[3*3] m = [
     1, 0, 0,
     0, 1, 0,
     0, 0, 1,
@@ -1955,7 +1968,7 @@ public:
 
 public:
 nothrow @trusted @nogc:
-  this (const(FloatType)[] vals...) {
+  this (const(Float)[] vals...) {
     pragma(inline, true);
     if (vals.length >= 3*3) {
       m.ptr[0..9] = vals.ptr[0..9];
@@ -1965,12 +1978,12 @@ nothrow @trusted @nogc:
     }
   }
 
-  FloatType opIndex (usize x, usize y) const {
+  Float opIndex (usize x, usize y) const {
     pragma(inline, true);
-    return (x < 3 && y < 3 ? m.ptr[y*3+x] : FloatType.nan);
+    return (x < 3 && y < 3 ? m.ptr[y*3+x] : Float.nan);
   }
 
-  void opIndexAssign (FloatType v, usize x, usize y) {
+  void opIndexAssign (Float v, usize x, usize y) {
     pragma(inline, true);
     if (x < 3 && y < 3) m.ptr[y*3+x] = v;
   }
@@ -2007,7 +2020,7 @@ nothrow @trusted @nogc:
     return this;
   }
 
-  auto opBinary(string op) (in FloatType b) const if (op == "*" || op == "/") {
+  auto opBinary(string op) (in Float b) const if (op == "*" || op == "/") {
     pragma(inline, true);
     m3 res;
     mixin("res.m.ptr[0] = m.ptr[0]"~op~"b;");
@@ -2022,7 +2035,7 @@ nothrow @trusted @nogc:
     return res;
   }
 
-  auto opBinaryRight(string op) (in FloatType b) const if (op == "*" || op == "/") {
+  auto opBinaryRight(string op) (in Float b) const if (op == "*" || op == "/") {
     pragma(inline, true);
     m3 res;
     mixin("res.m.ptr[0] = m.ptr[0]"~op~"b;");
@@ -2037,7 +2050,7 @@ nothrow @trusted @nogc:
     return res;
   }
 
-  ref auto opOpAssign(string op) (in FloatType b) if (op == "*" || op == "/") {
+  ref auto opOpAssign(string op) (in Float b) if (op == "*" || op == "/") {
     pragma(inline, true);
     mixin("m.ptr[0]"~op~"=b; m.ptr[1]"~op~"=b; m.ptr[2]"~op~"=b;");
     mixin("m.ptr[3]"~op~"=b; m.ptr[4]"~op~"=b; m.ptr[5]"~op~"=b;");
@@ -2083,12 +2096,12 @@ nothrow @trusted @nogc:
   }
 
   // sum of the diagonal components
-  FloatType trace () const { pragma(inline, true); return m.ptr[3*0+0]+m.ptr[3*1+1]+m.ptr[3*2+2]; }
+  Float trace () const { pragma(inline, true); return m.ptr[3*0+0]+m.ptr[3*1+1]+m.ptr[3*2+2]; }
 
   // determinant
-  FloatType det () const {
+  Float det () const {
     pragma(inline, true);
-    FloatType res = 0;
+    Float res = 0;
     res += m.ptr[3*0+0]*(m.ptr[3*1+1]*m.ptr[3*2+2]-m.ptr[3*2+1]*m.ptr[3*1+2]);
     res -= m.ptr[3*0+1]*(m.ptr[3*1+0]*m.ptr[3*2+2]-m.ptr[3*2+0]*m.ptr[3*1+2]);
     res += m.ptr[3*0+2]*(m.ptr[3*1+0]*m.ptr[3*2+1]-m.ptr[3*2+0]*m.ptr[3*1+1]);
@@ -2136,18 +2149,18 @@ static:
   auto Identity () { pragma(inline, true); return m3(); }
   auto Zero () { pragma(inline, true); return m3(0); }
 
-  auto Rotate (in FloatType angle) {
+  auto Rotate (in Float angle) {
     pragma(inline, true);
     mixin(SinCosImportMixin);
-    immutable FloatType c = cos(angle);
-    immutable FloatType s = sin(angle);
+    immutable Float c = cos(angle);
+    immutable Float s = sin(angle);
     m3 res;
     res.m.ptr[3*0+0] =  c; res.m.ptr[3*0+1] = s;
     res.m.ptr[3*1+0] = -s; res.m.ptr[3*1+1] = c;
     return res;
   }
 
-  auto Scale (in FloatType sx, in FloatType sy) {
+  auto Scale (in Float sx, in Float sy) {
     pragma(inline, true);
     m3 res;
     res.m.ptr[3*0+0] = sx;
@@ -2163,7 +2176,7 @@ static:
     return res;
   }
 
-  auto Translate (in FloatType dx, in FloatType dy) {
+  auto Translate (in Float dx, in Float dy) {
     pragma(inline, true);
     m3 res;
     res.m.ptr[3*2+0] = dx;
@@ -2181,17 +2194,15 @@ static:
 
 private:
   private enum SinCosImportMixin = q{
-    static if (is(FloatType == float)) {
+    static if (is(Float == float)) {
       import core.stdc.math : cos=cosf, sin=sinf;
-    } else static if (is(FloatType == double)) {
+    } else static if (is(Float == double)) {
       import core.stdc.math : cos, sin;
     } else {
       import std.math : cos, sin;
     }
   };
 }
-
-alias mat3 = Mat3F!VFloat;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
