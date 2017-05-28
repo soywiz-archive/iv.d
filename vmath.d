@@ -191,6 +191,13 @@ nothrow @safe:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  @property bool isZero () const nothrow @safe @nogc {
+    pragma(inline, true);
+         static if (dims == 2) return (x == 0 && y == 0);
+    else static if (dims == 3) return (x == 0 && y == 0 && z == 0);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
   void set (in FloatType[] c...) pure @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
@@ -2226,12 +2233,13 @@ align(1):
     int[2] children; /// left and right child of the node (children[0] = left child)
     BodyBase flesh;
   }
-  // height of the node in the tree
+  // height of the node in the tree (-1 for free nodes)
   short height;
   // fat axis aligned bounding box (AABB) corresponding to the node
   AABBImpl!VT aabb;
   // return true if the node is a leaf of the tree
   @property bool leaf () const pure nothrow @safe @nogc { pragma(inline, true); return (height == 0); }
+  @property bool free () const pure nothrow @safe @nogc { pragma(inline, true); return (height == -1); }
 }
 
 
@@ -2501,7 +2509,7 @@ private:
 
   // balance the sub-tree of a given node using left or right rotations
   // the rotation schemes are described in the book "Introduction to Game Physics with Box2D" by Ian Parberry
-  // this method returns the new root node Id
+  // this method returns the new root node id
   int balanceSubTreeAtNode (int nodeId) {
     version(aabbtree_many_asserts) assert(nodeId != TreeNode.NullTreeNode);
 
@@ -2672,14 +2680,21 @@ private:
   }
 
   // internally add an object into the tree
-  int insertObjectInternal() (in auto ref AABB aabb) {
+  int insertObjectInternal() (in auto ref AABB aabb, bool staticObject) {
     // get the next available node (or allocate new ones if necessary)
     int nodeId = allocateNode();
 
     // create the fat aabb to use in the tree
-    immutable gap = AABB.VType(mExtraGap, mExtraGap, mExtraGap);
-    mNodes[nodeId].aabb.min = aabb.min-gap;
-    mNodes[nodeId].aabb.max = aabb.max+gap;
+    mNodes[nodeId].aabb = aabb;
+    if (!staticObject) {
+      static if (VT.Dims == 2) {
+        immutable gap = VT(mExtraGap, mExtraGap);
+      } else {
+        immutable gap = VT(mExtraGap, mExtraGap, mExtraGap);
+      }
+      mNodes[nodeId].aabb.min -= gap;
+      mNodes[nodeId].aabb.max += gap;
+    }
 
     // set the height of the node in the tree
     mNodes[nodeId].height = 0;
@@ -2690,7 +2705,7 @@ private:
 
     version(aabbtree_many_asserts) assert(nodeId >= 0);
 
-    // return the Id of the node
+    // return the id of the node
     return nodeId;
   }
 
@@ -2870,11 +2885,23 @@ public:
     return mNodes[mRootNodeId].aabb;
   }
 
+  /// does the given id represents a valid object?
+  /// WARNING: ids of removed objects can be reused on later insertions!
+  @property bool isValidId (int id) const pure nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf); }
+
+  /// get object by id; can return null for invalid ids
+  BodyBase getObject (int id) pure nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf ? mNodes[id].flesh : null); }
+
+  /// get fat object AABB by id; returns random shit for invalid ids
+  AABB getObjectFatAABB (int id) pure nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && !mNodes[id].free ? mNodes[id].aabb : AABB()); }
+
   /// insert an object into the tree
-  /// this method creates a new leaf node in the tree and returns the Id of the corresponding node
-  int insertObject (BodyBase flesh) {
+  /// this method creates a new leaf node in the tree and returns the id of the corresponding node
+  /// AABB for static object will not be "fat" (simple optimization)
+  /// WARNING! inserting the same object several times *WILL* break everything!
+  int insertObject (BodyBase flesh, bool staticObject=false) {
     auto aabb = flesh.getAABB(); // can be passed as argument
-    int nodeId = insertObjectInternal(aabb);
+    int nodeId = insertObjectInternal(aabb, staticObject);
     version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
     mNodes[nodeId].flesh = flesh;
     static if (GCAnchor) {
@@ -2886,11 +2913,9 @@ public:
   }
 
   /// remove an object from the tree
+  /// WARNING: ids of removed objects can be reused on later insertions!
   void removeObject (int nodeId) {
-    if (nodeId < 0) return;
-    if (nodeId >= mNodeCount) assert(0, "node id out of bounds");
-    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mNodeCount);
-    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
+    if (nodeId < 0 || nodeId >= mNodeCount || !mNodes[nodeId].leaf) assert(0, "invalid node id");
     static if (GCAnchor) {
       import core.memory : GC;
       auto flesh = mNodes[nodeId].flesh;
@@ -2913,12 +2938,12 @@ public:
    *
    * note that you should call this method if body's AABB was modified, even if the body wasn't moved.
    *
+   * if `forceReinsert` == `true` and `displacement` is zero, convert object to "static" (don't extrude AABB).
+   *
    * return `true` if the tree was modified.
    */
   bool updateObject() (int nodeId, in auto ref AABB.VType displacement, bool forceReinsert=false) {
-    version(aabbtree_many_asserts) assert(nodeId >= 0 && nodeId < mAllocCount);
-    version(aabbtree_many_asserts) assert(mNodes[nodeId].leaf);
-    version(aabbtree_many_asserts) assert(mNodes[nodeId].height >= 0);
+    if (nodeId < 0 || nodeId >= mNodeCount || !mNodes[nodeId].leaf) assert(0, "invalid node id");
 
     auto newAABB = mNodes[nodeId].flesh.getAABB(); // can be passed as argument
 
@@ -2930,13 +2955,15 @@ public:
 
     // compute the fat AABB by inflating the AABB with a constant gap
     mNodes[nodeId].aabb = newAABB;
-    static if (VT.Dims == 2) {
-      immutable gap = VT(mExtraGap, mExtraGap);
-    } else {
-      immutable gap = VT(mExtraGap, mExtraGap, mExtraGap);
+    if (!(forceReinsert && displacement.isZero)) {
+      static if (VT.Dims == 2) {
+        immutable gap = VT(mExtraGap, mExtraGap);
+      } else {
+        immutable gap = VT(mExtraGap, mExtraGap, mExtraGap);
+      }
+      mNodes[nodeId].aabb.mMin -= gap;
+      mNodes[nodeId].aabb.mMax += gap;
     }
-    mNodes[nodeId].aabb.mMin -= gap;
-    mNodes[nodeId].aabb.mMax += gap;
 
     // inflate the fat AABB in direction of the linear motion of the AABB
     if (displacement.x < FloatNum!0) {
@@ -2951,9 +2978,9 @@ public:
     }
     static if (AABB.VType.Dims == 3) {
       if (displacement.z < FloatNum!0) {
-        mNodes[nodeId].aabb.mMin.z += LinearMotionGapMultiplier *displacement.z;
+        mNodes[nodeId].aabb.mMin.z += LinearMotionGapMultiplier*displacement.z;
       } else {
-        mNodes[nodeId].aabb.mMax.z += LinearMotionGapMultiplier *displacement.z;
+        mNodes[nodeId].aabb.mMax.z += LinearMotionGapMultiplier*displacement.z;
       }
     }
 
