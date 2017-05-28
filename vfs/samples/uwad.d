@@ -34,7 +34,10 @@ import iv.vfs.arc.dfwad; // just get lost
 //import iv.vfs.arc.toeedat; // conflicts with arcanum
 import iv.vfs.arc.wad2;
 
+import iv.strex;
 import iv.utfutil;
+
+version = dfwad_deep_scan;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -44,6 +47,70 @@ uint getfmodtime (const(char)[] fname) {
   stat_t st;
   if (stat(fname.tempCString, &st) != 0) return 0;
   return st.st_mtime/*.tv_sec*/;
+}
+
+
+const(char)[] removeExtension (const(char)[] fn) {
+  foreach_reverse (immutable cidx, char ch; fn) {
+    if (ch == '/') break;
+    if (ch == '.') { fn = fn[0..cidx]; break; }
+  }
+  return fn;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// try to guess targa by validating some header fields
+bool guessTarga (const(ubyte)[] buf) {
+  if (buf.length < 45) return false; // minimal 1x1 tga
+  immutable ubyte idlength = buf.ptr[0];
+  immutable ubyte bColorMapType = buf.ptr[1];
+  immutable ubyte type = buf.ptr[2];
+  immutable ushort wColorMapFirstEntryIndex = cast(ushort)(buf.ptr[3]|(buf.ptr[4]<<8));
+  immutable ushort wColorMapLength = cast(ushort)(buf.ptr[5]|(buf.ptr[6]<<8));
+  immutable ubyte bColorMapEntrySize = buf.ptr[7];
+  immutable ushort wOriginX = cast(ushort)(buf.ptr[8]|(buf.ptr[9]<<8));
+  immutable ushort wOriginY = cast(ushort)(buf.ptr[10]|(buf.ptr[11]<<8));
+  immutable ushort wImageWidth = cast(ushort)(buf.ptr[12]|(buf.ptr[13]<<8));
+  immutable ushort wImageHeight = cast(ushort)(buf.ptr[14]|(buf.ptr[15]<<8));
+  immutable ubyte bPixelDepth = buf.ptr[16];
+  immutable ubyte bImageDescriptor = buf.ptr[17];
+  if (wImageWidth < 1 || wImageHeight < 1 || wImageWidth > 16384 || wImageHeight > 16384) return false; // arbitrary limit
+  immutable uint pixelsize = (bPixelDepth>>3);
+  switch (type) {
+    case 2: // truecolor, raw
+    case 10: // truecolor, rle
+      switch (pixelsize) {
+        case 2: case 3: case 4: break;
+        default: return false;
+      }
+      break;
+    case 1: // paletted, raw
+    case 9: // paletted, rle
+      if (pixelsize != 1) return false;
+      break;
+    case 3: // b/w, raw
+    case 11: // b/w, rle
+      if (pixelsize != 1 && pixelsize != 2) return false;
+      break;
+    default: // invalid type
+      return false;
+  }
+  // check for valid colormap
+  switch (bColorMapType) {
+    case 0:
+      if (wColorMapFirstEntryIndex != 0 || wColorMapLength != 0) return 0;
+      break;
+    case 1:
+      if (bColorMapEntrySize != 15 && bColorMapEntrySize != 16 && bColorMapEntrySize != 24 && bColorMapEntrySize != 32) return false;
+      if (wColorMapLength == 0) return false;
+      break;
+    default: // invalid colormap type
+      return false;
+  }
+  if (((bImageDescriptor>>6)&3) != 0) return false;
+  // this *looks* like a tga
+  return true;
 }
 
 
@@ -96,10 +163,6 @@ void doList(bool extended=false) (string[] args) {
     auto tm = localtime(cast(int*)&timev);
     auto len = strftime(tbuf.ptr, tbuf.length, "%m/%d/%Y %H:%M:%S", tm);
     long size = de.size;
-    if (size < 0) {
-      // brain-damaged dfwad
-      size = 0;
-    }
     string name = de.name[1..$]/*.recode("utf-8", "koi8-u")*/;
     // fix all-upper
     bool allupper = true;
@@ -109,6 +172,59 @@ void doList(bool extended=false) (string[] args) {
       foreach (char ch; name) t ~= koi8tolowerTable[ch];
       name = t;
     }
+
+    if (size < 0) {
+      // brain-damaged dfwad
+      size = 0;
+      version(dfwad_deep_scan) {
+        try {
+          auto fl = VFile(de.name);
+          size = fl.size;
+          do {
+            if (size > 6) {
+              char[6] buf;
+              fl.rawReadExact(buf[]);
+              if (buf == "DFWAD\x01") { name ~= ".wad"; break; }
+              if (buf[] == "\x89PNG\x0d\x0a") { name ~= ".png"; break; }
+              if (buf[0..4] == "OggS") { name ~= ".ogg"; break; }
+              if (buf[0..4] == "fLaC") { name ~= ".flac"; break; }
+              if (buf[0..4] == "RIFF") { name ~= ".wav"; break; }
+              if (buf[0..4] == "MAP\x01") { name ~= ".map"; break; }
+              if (buf[0..4] == "ID3\x02") { name ~= ".mp3"; break; }
+              if (buf[0..4] == "ID3\x03") { name ~= ".mp3"; break; }
+              if (buf[0..4] == "ID3\x04") { name ~= ".mp3"; break; }
+              if (buf[0..4] == "IMPM") { name ~= ".it"; break; } // impulse tracker
+              if (buf[0..4] == "MThd") { name ~= ".mid"; break; }
+            }
+            if (size > 16) {
+              char[16] buf;
+              fl.rawReadExact(buf[]);
+              if (buf == "Extended Module:") { name ~= ".xm"; break; }
+            }
+            if (size > 18) {
+              char[18] buf;
+              fl.seek(-18, Seek.End);
+              fl.rawReadExact(buf[]);
+              if (buf == "TRUEVISION-XFILE\x2e\x00") { name ~= ".tga"; break; }
+            }
+            if (size > 1024) {
+              char[640] buf;
+              fl.seek(-640, Seek.End);
+              fl.rawReadExact(buf[]);
+              if (buf.indexOf("LAME3.") >= 0) { name ~= ".mp3"; break; }
+            }
+            // try hard to guess targa
+            if (size >= 45) {
+              ubyte[45] buf;
+              fl.seek(0);
+              fl.rawReadExact(buf[]);
+              if (guessTarga(buf[])) { name ~= ".tga"; break; }
+            }
+          } while (false);
+        } catch (Exception e) {}
+      }
+    }
+
     /*
     auto arcname = de.stat("arcname");
     if (arcname.isString && arcname.get!string == "dfwad") {
@@ -134,7 +250,17 @@ void doExtract (string[] args) {
 
   if (args.length != 3) assert(0, "'copyout' command expect three args");
   vfsAddPak(args[0], "\x00");
-  auto fi = VFile("\x00"~args[1]);
+  VFile fi;
+  try {
+    fi = VFile("\x00"~args[1]);
+  } catch (Exception e) {
+    version(dfwad_deep_scan) {
+      // try w/o extension
+      fi = VFile("\x00"~args[1].removeExtension);
+    } else {
+      throw e;
+    }
+  }
   auto fo = VFile(args[2], "w");
   for (;;) {
     auto rd = fi.rawRead(buf);
