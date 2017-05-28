@@ -181,14 +181,33 @@ void doList(bool extended=false) (string[] args) {
           auto fl = VFile(de.name);
           size = fl.size;
           do {
+            char[1024] xbuf;
+            // try text
+            if (name == "interscript" || name == "text/anim") {
+              bool good = true;
+              iniloop: for (;;) {
+                auto rd = fl.rawRead(xbuf[]);
+                if (rd.length == 0) break;
+                foreach (char ch; rd) {
+                  if (ch < ' ') {
+                    if (ch != '\t' && ch != '\n' && ch != '\r') { good = false; break iniloop; }
+                  } else if (ch == 127) { good = false; break iniloop; }
+                }
+              }
+              if (good) { name ~= ".ini"; break; }
+            }
             if (size > 6) {
-              char[6] buf;
+              auto buf = xbuf[0..6];
+              fl.seek(0);
               fl.rawReadExact(buf[]);
               if (buf == "DFWAD\x01") { name ~= ".wad"; break; }
               if (buf[] == "\x89PNG\x0d\x0a") { name ~= ".png"; break; }
               if (buf[0..4] == "OggS") { name ~= ".ogg"; break; }
               if (buf[0..4] == "fLaC") { name ~= ".flac"; break; }
-              if (buf[0..4] == "RIFF") { name ~= ".wav"; break; }
+              if (buf[0..4] == "RIFF" && size > 16) {
+                fl.rawReadExact(xbuf[0..10]);
+                if (xbuf[2..10] == "WAVEfmt ") { name ~= ".wav"; break; }
+              }
               if (buf[0..4] == "MAP\x01") { name ~= ".map"; break; }
               if (buf[0..4] == "ID3\x02") { name ~= ".mp3"; break; }
               if (buf[0..4] == "ID3\x03") { name ~= ".mp3"; break; }
@@ -197,25 +216,27 @@ void doList(bool extended=false) (string[] args) {
               if (buf[0..4] == "MThd") { name ~= ".mid"; break; }
             }
             if (size > 16) {
-              char[16] buf;
+              auto buf = xbuf[0..16];
+              fl.seek(0);
               fl.rawReadExact(buf[]);
               if (buf == "Extended Module:") { name ~= ".xm"; break; }
             }
             if (size > 18) {
-              char[18] buf;
+              auto buf = xbuf[0..18];
               fl.seek(-18, Seek.End);
               fl.rawReadExact(buf[]);
               if (buf == "TRUEVISION-XFILE\x2e\x00") { name ~= ".tga"; break; }
             }
             if (size > 1024) {
-              char[640] buf;
+              auto buf = xbuf[0..640];
               fl.seek(-640, Seek.End);
               fl.rawReadExact(buf[]);
               if (buf.indexOf("LAME3.") >= 0) { name ~= ".mp3"; break; }
+              if (buf[$-128..$-128+3] == "TAG") { name ~= ".mp3"; break; }
             }
             // try hard to guess targa
             if (size >= 45) {
-              ubyte[45] buf;
+              auto buf = cast(ubyte[])xbuf[0..45];
               fl.seek(0);
               fl.rawReadExact(buf[]);
               if (guessTarga(buf[])) { name ~= ".tga"; break; }
