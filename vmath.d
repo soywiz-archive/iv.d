@@ -62,6 +62,27 @@ private template SwizzleCtor(string stn, string s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private template ImportCoreMath(FloatType, T...) {
+  private template InternalImport(T...) {
+    static if (T.length == 0) enum InternalImport = "";
+    else static if (is(typeof(T[0]) == string)) {
+      static if (is(FloatType == float)) {
+        enum InternalImport = T[0]~"="~T[0]~"f,"~InternalImport!(T[1..$]);
+      } else {
+        enum InternalImport = T[0]~","~InternalImport!(T[1..$]);
+      }
+    }
+    else static assert(0, "string expected");
+  }
+  static if (T.length > 0) {
+    enum ImportCoreMath = "import core.stdc.math : "~InternalImport!(T)[0..$-1]~";";
+  } else {
+    enum ImportCoreMath = "{}";
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 enum FLTEPS = 1e-6f;
 enum DBLEPS = 1.0e-18;
 template EPSILON(T) if (is(T == float) || is(T == double)) {
@@ -153,28 +174,28 @@ nothrow @safe:
   }
 
 @nogc:
-  this (in Float[] c...) pure @trusted {
+  this (in Float[] c...) @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
     static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
   }
 
   static if (dims == 2)
-  this (in Float ax, in Float ay) pure {
+  this (in Float ax, in Float ay) {
     //pragma(inline, true);
     x = ax;
     y = ay;
   }
 
   static if (dims == 3)
-  this (in Float ax, in Float ay, in Float az) pure {
+  this (in Float ax, in Float ay, in Float az) {
     //pragma(inline, true);
     x = ax;
     y = ay;
     z = az;
   }
 
-  this(VT) (in auto ref VT v) pure if (isVector!VT) {
+  this(VT) (in auto ref VT v) if (isVector!VT) {
     //pragma(inline, true);
     x = v.x;
     y = v.y;
@@ -198,28 +219,28 @@ nothrow @safe:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void set (in Float[] c...) pure @trusted {
+  void set (in Float[] c...) @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
     static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
   }
 
   static if (dims == 2)
-  void set (in Float ax, in Float ay) pure {
+  void set (in Float ax, in Float ay) {
     //pragma(inline, true);
     x = ax;
     y = ay;
   }
 
   static if (dims == 3)
-  void set (in Float ax, in Float ay, in Float az) pure {
+  void set (in Float ax, in Float ay, in Float az) {
     //pragma(inline, true);
     x = ax;
     y = ay;
     z = az;
   }
 
-  void opAssign(VT) (in auto ref VT v) pure if (isVector!VT) {
+  void opAssign(VT) (in auto ref VT v) if (isVector!VT) {
     //pragma(inline, true);
     x = v.x;
     y = v.y;
@@ -228,23 +249,23 @@ nothrow @safe:
     }
   }
 
-  Float opIndex (usize idx) const pure {
+  Float opIndex (usize idx) const {
     pragma(inline, true);
          static if (dims == 2) return (idx == 0 ? x : idx == 1 ? y : Float.nan);
     else static if (dims == 3) return (idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : Float.nan);
     else static assert(0, "invalid dimension count for vector");
   }
 
-  void opIndexAssign (Float v, usize idx) pure {
+  void opIndexAssign (Float v, usize idx) {
     pragma(inline, true);
          static if (dims == 2) { if (idx == 0) x = v; else if (idx == 1) y = v; }
     else static if (dims == 3) { if (idx == 0) x = v; else if (idx == 1) y = v; else if (idx == 2) z = v; }
     else static assert(0, "invalid dimension count for vector");
   }
 
-  ref auto normalize () pure {
+  ref auto normalize () {
     //pragma(inline, true);
-    import std.math : sqrt;
+    mixin(ImportCoreMath!(Float, "sqrt"));
          static if (dims == 2) immutable Float invlength = cast(Float)1/sqrt(x*x+y*y);
     else static if (dims == 3) immutable Float invlength = cast(Float)1/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
@@ -305,14 +326,8 @@ nothrow @safe:
   static if (dims == 2) {
     // radians
     ref auto rotate (Float angle) {
-      static if (is(Float == float)) {
-        import core.stdc.math : cos=cosf, sin=sinf;
-      } else static if (is(Float == double)) {
-        import core.stdc.math : cos, sin;
-      } else {
-        import std.math : cos, sin;
-      }
       pragma(inline, true);
+      mixin(ImportCoreMath!(Float, "cos", "sin"));
       immutable Float c = cos(angle);
       immutable Float s = sin(angle);
       immutable Float nx = x*c-y*s;
@@ -323,21 +338,15 @@ nothrow @safe:
     }
 
     auto rotated (Float angle) const {
-      static if (is(Float == float)) {
-        import core.stdc.math : cos=cosf, sin=sinf;
-      } else static if (is(Float == double)) {
-        import core.stdc.math : cos, sin;
-      } else {
-        import std.math : cos, sin;
-      }
       pragma(inline, true);
+      mixin(ImportCoreMath!(Float, "cos", "sin"));
       immutable Float c = cos(angle);
       immutable Float s = sin(angle);
       return v2(x*c-y*s, x*s+y*c);
     }
   }
 
-const pure:
+const:
   auto lerp(VT) (in auto ref VT a, in Float t) if (isVector!VT) {
     pragma(inline, true);
     return this+(a-this)*t;
@@ -357,7 +366,7 @@ const pure:
 
   @property Float length () {
     pragma(inline, true);
-    import std.math : sqrt;
+    mixin(ImportCoreMath!(Float, "sqrt"));
          static if (dims == 2) return sqrt(x*x+y*y);
     else static if (dims == 3) return sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
@@ -373,7 +382,7 @@ const pure:
   // distance
   Float distance(VT) (in auto ref VT a) if (isVector!VT) {
     pragma(inline, true);
-    import std.math : sqrt;
+    mixin(ImportCoreMath!(Float, "sqrt"));
     static if (dims == 2) {
            static if (isVector2!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y));
       else static if (isVector3!VT) return sqrt((x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+a.z*a.z);
@@ -499,9 +508,9 @@ const pure:
 
   auto abs () {
     pragma(inline, true);
-    import std.math : abs;
-         static if (dims == 2) return v2(abs(x), abs(y));
-    else static if (dims == 3) return v3(abs(x), abs(y), abs(z));
+    mixin(ImportCoreMath!(Float, "fabs"));
+         static if (dims == 2) return v2(fabs(x), fabs(y));
+    else static if (dims == 3) return v3(fabs(x), fabs(y), fabs(z));
     else static assert(0, "invalid dimension count for vector");
   }
 
@@ -537,16 +546,17 @@ const pure:
 
   // compute Euler angles from direction vector (this) (with zero roll)
   auto hpr () {
-    import std.math : atan2, sqrt;
     auto tmp = this.normalized;
     /*hpr.x = -atan2(tmp.x, tmp.y);
       hpr.y = -atan2(tmp.z, sqrt(tmp.x*tmp.x+tmp.y*tmp.y));*/
     static if (dims == 2) {
+      mixin(ImportCoreMath!(Float, "atan2"));
       return v2(
         atan2(cast(Float)tmp.x, cast(Float)0.0),
         -atan2(cast(Float)tmp.y, cast(Float)tmp.x),
       );
     } else {
+      mixin(ImportCoreMath!(Float, "atan2", "sqrt"));
       return v3(
         atan2(cast(Float)tmp.x, cast(Float)tmp.z),
         -atan2(cast(Float)tmp.y, cast(Float)sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
@@ -567,7 +577,8 @@ const pure:
   }
 
   Float angle180(VT) (in auto ref VT v) if (isVector!VT) {
-    import std.math : atan, PI;
+    import std.math : PI;
+    mixin(ImportCoreMath!(Float, "atan"));
     immutable Float cosv = vcos(v);
     immutable Float sinv = vsin(v);
     if (cosv == 0) return (sinv <= 0 ? -90 : 90);
@@ -578,7 +589,8 @@ const pure:
   }
 
   Float angle360(VT) (in auto ref VT v) if (isVector!VT) {
-    import std.math : atan, PI;
+    import std.math : PI;
+    mixin(ImportCoreMath!(Float, "atan"));
     immutable Float cosv = vcos(v);
     immutable Float sinv = vsin(v);
     if (cosv == 0) return (sinv <= 0 ? 270 : 90);
@@ -590,7 +602,8 @@ const pure:
   }
 
   Float relativeAngle(VT) (in auto ref VT v) if (isVector!VT) {
-    import std.math : PI, acos;
+    import std.math : PI;
+    mixin(ImportCoreMath!(Float, "acos"));
     immutable Float cosv = vcos(v);
     if (cosv <= -1) return PI;
     if (cosv >= 1) return 0;
@@ -625,10 +638,10 @@ const pure:
     auto projectTo() (in auto ref v2 v) { pragma(inline, true); return v*(this.dot(v)/v.dot(v)); }
 
     // returns the unit length vector for the given angle (in radians)
-    auto forAngle (in Float a) { pragma(inline, true); import std.math : cos, sin; return v2(cos(a), sin(a)); }
+    auto forAngle (in Float a) { pragma(inline, true); mixin(ImportCoreMath!(Float, "cos", "sin")); return v2(cos(a), sin(a)); }
 
     // returns the angular direction v is pointing in (in radians)
-    Float toAngle() () { pragma(inline, true); import std.math : atan2; return atan2(y, x); }
+    Float toAngle() () { pragma(inline, true); mixin(ImportCoreMath!(Float, "atan2")); return atan2(y, x); }
 
     auto scross() (Float s) { pragma(inline, true); return v2(-s*y, s*x); }
   }
@@ -694,15 +707,15 @@ nothrow @safe:
     }
   }
 
-pure @nogc:
+@nogc:
   this() (in auto ref vec3 anormal, Float aw) { pragma(inline, true); set(anormal, aw); }
   this() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) { pragma(inline, true); setFromPoints(a, b, c); }
 
   void set () (in auto ref vec3 anormal, Float aw) {
-    import std.math : abs;
+    mixin(ImportCoreMath!(Float, "fabs"));
     normal = anormal;
     w = aw;
-    if (abs(w) <= EPS) w = 0;
+    if (fabs(w) <= EPS) w = 0;
   }
 
   ref plane3 setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
@@ -711,7 +724,7 @@ pure @nogc:
     return this;
   }
 
-  @property bool valid () const { pragma(inline, true); import std.math : isNaN; return !isNaN(w); }
+  @property bool valid () const { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w); }
 
   Float opIndex (usize idx) const {
     pragma(inline, true);
@@ -744,7 +757,7 @@ pure @nogc:
     return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
   }
 
-  Float pointSideF() (in auto ref vec3 p) const pure {
+  Float pointSideF() (in auto ref vec3 p) const {
     pragma(inline, true);
     return (normal*p)-w; // dot
   }
@@ -763,6 +776,10 @@ pure @nogc:
 // ////////////////////////////////////////////////////////////////////////// //
 struct Ray(VT) if (IsVector!VT) {
 public:
+  alias vec = VT;
+  alias Float = VT.Float;
+
+public:
   VT orig, dir;
 
 nothrow @safe:
@@ -775,7 +792,7 @@ nothrow @safe:
     }
   }
 
-pure @nogc:
+@nogc:
   this (VT.Float x, VT.Float y, VT.Float angle) { pragma(inline, true); setOrigDir(x, y, angle); }
   this() (in auto ref VT aorg, VT.Float angle) { pragma(inline, true); setOrigDir(aorg, angle); }
 
@@ -789,7 +806,7 @@ pure @nogc:
 
   void setOrigDir (VT.Float x, VT.Float y, VT.Float angle) {
     pragma(inline, true);
-    import std.math : cos, sin;
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
     orig.x = x;
     orig.y = y;
     dir.x = cos(angle);
@@ -798,7 +815,7 @@ pure @nogc:
 
   void setOrigDir() (in auto ref VT aorg, VT.Float angle) {
     pragma(inline, true);
-    import std.math : cos, sin;
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
     orig.x = aorg.x;
     orig.y = aorg.y;
     dir.x = cos(angle);
@@ -819,7 +836,7 @@ pure @nogc:
 
   void setDir (VT.Float angle) {
     pragma(inline, true);
-    import std.math : cos, sin;
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
     dir.x = cos(angle);
     dir.y = sin(angle);
   }
@@ -854,7 +871,7 @@ public:
     return "[%s-%s]".format(min, max);
   }
 
-public pure nothrow @safe @nogc:
+public nothrow @safe @nogc:
   // return the volume of the AABB
   @property FType volume () const {
     pragma(inline, true);
@@ -1119,16 +1136,14 @@ nothrow @safe:
     //mt.ptr[3*4+3] = 1; // just in case
   }
 
-  static mat4 Zero () pure { pragma(inline, true); return mat4(0); }
-  static mat4 Identity () pure { pragma(inline, true); /*mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res;*/ return mat4(); }
+  static mat4 Zero () { pragma(inline, true); return mat4(0); }
+  static mat4 Identity () { pragma(inline, true); /*mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res;*/ return mat4(); }
 
   private enum SinCosImportMixin = q{
     static if (is(Float == float)) {
       import core.stdc.math : cos=cosf, sin=sinf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : cos, sin;
     } else {
-      import std.math : cos, sin;
+      import core.stdc.math : cos, sin;
     }
   };
 
@@ -1227,14 +1242,8 @@ nothrow @safe:
   // zNear  - The near clipping distance
   // zFar   - The far clipping distance
   static mat4 Perspective() (Float fovY, Float aspect, Float zNear, Float zFar) nothrow @trusted @nogc {
-    static if (is(Float == float)) {
-      import core.stdc.math : tan=tanf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : tan;
-    } else {
-      import std.math : tan;
-    }
     import std.math : PI;
+    mixin(ImportCoreMath!(Float, "tan"));
     immutable Float fH = cast(Float)(tan(fovY/360*PI)*zNear);
     immutable Float fW = cast(Float)(fH*aspect);
     return frustum(-fW, fW, -fH, fH, zNear, zFar);
@@ -1243,13 +1252,7 @@ nothrow @safe:
 public:
   // does `gluLookAt()`
   mat4 lookAt() (in auto ref vec3 eye, in auto ref vec3 center, in auto ref vec3 up) const {
-    static if (is(Float == float)) {
-      import core.stdc.math : sqrt=sqrtf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : sqrt;
-    } else {
-      import std.math : sqrt;
-    }
+    mixin(ImportCoreMath!(Float, "sqrt"));
 
     mat4 m = void;
     Float[3] x = void, y = void, z = void;
@@ -1320,17 +1323,11 @@ public:
   // this function will clear the previous rotation and scale, but it will keep the previous translation
   // it is for rotating object to look at the target, NOT for camera
   ref mat4 lookingAt() (in auto ref vec3 target) {
-    static if (is(Float == float)) {
-      import core.stdc.math : abs=fabsf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : abs=fabs;
-    } else {
-      import std.math : abs;
-    }
+    mixin(ImportCoreMath!(Float, "fabs"));
     vec3 position = vec3(mt.ptr[12], mt.ptr[13], mt.ptr[14]);
     vec3 forward = (target-position).normalized;
     vec3 up;
-    if (abs(forward.x) < EPSILON!Float && abs(forward.z) < EPSILON!Float) {
+    if (fabs(forward.x) < EPSILON!Float && fabs(forward.z) < EPSILON!Float) {
       up.z = (forward.y > 0 ? -1 : 1);
     } else {
       up.y = 1;
@@ -1499,13 +1496,7 @@ public:
   // Ry: rotation about Y-axis, yaw (heading)
   // Rz: rotation about Z-axis, roll
   vec3 getAngles () const {
-    static if (is(Float == float)) {
-      import core.stdc.math : atan2=atan2f, asin=asinf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : atan2, asin;
-    } else {
-      import std.math : atan2, asin;
-    }
+    mixin(ImportCoreMath!(Float, "asin", "atan2"));
     Float pitch = void, roll = void;
     Float yaw = rad2deg(asin(mt.ptr[8]));
     if (mt.ptr[10] < 0) {
@@ -1560,9 +1551,9 @@ public:
   }
 
   mat4 opBinary(string op:"/") (Float a) const {
-    import std.math : abs;
+    mixin(ImportCoreMath!(Float, "fabs"));
     auto res = mat4(this);
-    if (abs(a) >= FLTEPS) {
+    if (fabs(a) >= FLTEPS) {
       a = 1.0/a;
       res.mt[] *= a;
     } else {
@@ -1658,38 +1649,32 @@ public:
   // compute the inverse of a general 4x4 matrix using Cramer's Rule
   // if cannot find inverse, return indentity matrix
   ref mat4 invertedGeneral() () {
-    static if (is(Float == float)) {
-      import core.stdc.math : abs=fabsf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : abs=fabs;
-    } else {
-      import std.math : abs;
-    }
+    mixin(ImportCoreMath!(Float, "fabs"));
 
-    Float cofactor0 = getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
-    Float cofactor1 = getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
-    Float cofactor2 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
-    Float cofactor3 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    immutable Float cofactor0 = getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    immutable Float cofactor1 = getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    immutable Float cofactor2 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    immutable Float cofactor3 = getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
 
-    Float determinant = mt.ptr[0]*cofactor0-mt.ptr[1]*cofactor1+mt.ptr[2]*cofactor2-mt.ptr[3]*cofactor3;
-    if (abs(determinant) <= EPSILON!Float) { this = Identity; return this; }
+    immutable Float determinant = mt.ptr[0]*cofactor0-mt.ptr[1]*cofactor1+mt.ptr[2]*cofactor2-mt.ptr[3]*cofactor3;
+    if (fabs(determinant) <= EPSILON!Float) { this = Identity; return this; }
 
-    Float cofactor4 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
-    Float cofactor5 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
-    Float cofactor6 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
-    Float cofactor7 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    immutable Float cofactor4 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    immutable Float cofactor5 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    immutable Float cofactor6 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    immutable Float cofactor7 = getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
 
-    Float cofactor8 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[13], mt.ptr[14], mt.ptr[15]);
-    Float cofactor9 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[12], mt.ptr[14], mt.ptr[15]);
-    Float cofactor10= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[12], mt.ptr[13], mt.ptr[15]);
-    Float cofactor11= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+    immutable Float cofactor8 = getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[13], mt.ptr[14], mt.ptr[15]);
+    immutable Float cofactor9 = getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[12], mt.ptr[14], mt.ptr[15]);
+    immutable Float cofactor10= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[12], mt.ptr[13], mt.ptr[15]);
+    immutable Float cofactor11= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[12], mt.ptr[13], mt.ptr[14]);
 
-    Float cofactor12= getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[9], mt.ptr[10], mt.ptr[11]);
-    Float cofactor13= getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[8], mt.ptr[10], mt.ptr[11]);
-    Float cofactor14= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[8], mt.ptr[9], mt.ptr[11]);
-    Float cofactor15= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[8], mt.ptr[9], mt.ptr[10]);
+    immutable Float cofactor12= getCofactor(mt.ptr[1], mt.ptr[2], mt.ptr[3], mt.ptr[5], mt.ptr[6], mt.ptr[7],  mt.ptr[9], mt.ptr[10], mt.ptr[11]);
+    immutable Float cofactor13= getCofactor(mt.ptr[0], mt.ptr[2], mt.ptr[3], mt.ptr[4], mt.ptr[6], mt.ptr[7],  mt.ptr[8], mt.ptr[10], mt.ptr[11]);
+    immutable Float cofactor14= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[8], mt.ptr[9], mt.ptr[11]);
+    immutable Float cofactor15= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[8], mt.ptr[9], mt.ptr[10]);
 
-    Float invDeterminant = cast(Float)1.0/determinant;
+    immutable Float invDeterminant = cast(Float)1.0/determinant;
     mt.ptr[0] =  invDeterminant*cofactor0;
     mt.ptr[1] = -invDeterminant*cofactor4;
     mt.ptr[2] =  invDeterminant*cofactor8;
@@ -1722,13 +1707,7 @@ public:
   }
 
   Quat4!VT toQuaternion () const nothrow @trusted @nogc {
-    static if (is(Float == float)) {
-      import core.stdc.math : sqrt=sqrtf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : sqrt;
-    } else {
-      import std.math : sqrt;
-    }
+    mixin(ImportCoreMath!(Float, "sqrt"));
     Quat4!VT res = void;
     Float tr = mt.ptr[0*4+0]+mt.ptr[1*4+1]+mt.ptr[2*4+2];
     // check the diagonal
@@ -1789,13 +1768,7 @@ public:
   static quat4 Identity () nothrow @trusted @nogc { pragma(inline, true); return quat4(1, 0, 0, 0); }
 
   static quat4 fromAngles (Float roll, Float pitch, Float yaw) nothrow @trusted @nogc {
-    static if (is(Float == float)) {
-      import core.stdc.math : cos=cosf, sin=sinf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : cos, sin;
-    } else {
-      import std.math : cos, sin;
-    }
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
     // calculate trig identities
     immutable Float cr = cos(roll/2);
     immutable Float cp = cos(pitch/2);
@@ -1879,13 +1852,7 @@ public:
   }
 
   quat4 slerp() (in auto ref quat4 to, Float t) const nothrow @trusted @nogc {
-    static if (is(Float == float)) {
-      import core.stdc.math : acos, sin;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : acos, sin;
-    } else {
-      import std.math : acos, sin;
-    }
+    mixin(ImportCoreMath!(Float, "acos", "sin"));
     Float[4] to1 = void;
     // calc cosine
     Float cosom = this.x*to.x+this.y*to.y+this.z*to.z+this.w*to.w;
@@ -2196,10 +2163,8 @@ private:
   private enum SinCosImportMixin = q{
     static if (is(Float == float)) {
       import core.stdc.math : cos=cosf, sin=sinf;
-    } else static if (is(Float == double)) {
-      import core.stdc.math : cos, sin;
     } else {
-      import std.math : cos, sin;
+      import core.stdc.math : cos, sin;
     }
   };
 }
@@ -2249,8 +2214,8 @@ align(1):
   // fat axis aligned bounding box (AABB) corresponding to the node
   AABBImpl!VT aabb;
   // return true if the node is a leaf of the tree
-  @property bool leaf () const pure nothrow @safe @nogc { pragma(inline, true); return (height == 0); }
-  @property bool free () const pure nothrow @safe @nogc { pragma(inline, true); return (height == -1); }
+  @property bool leaf () const nothrow @safe @nogc { pragma(inline, true); return (height == 0); }
+  @property bool free () const nothrow @safe @nogc { pragma(inline, true); return (height == -1); }
 }
 
 
@@ -2898,13 +2863,13 @@ public:
 
   /// does the given id represents a valid object?
   /// WARNING: ids of removed objects can be reused on later insertions!
-  @property bool isValidId (int id) const pure nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf); }
+  @property bool isValidId (int id) const nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf); }
 
   /// get object by id; can return null for invalid ids
-  BodyBase getObject (int id) pure nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf ? mNodes[id].flesh : null); }
+  BodyBase getObject (int id) nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf ? mNodes[id].flesh : null); }
 
   /// get fat object AABB by id; returns random shit for invalid ids
-  AABB getObjectFatAABB (int id) pure nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && !mNodes[id].free ? mNodes[id].aabb : AABB()); }
+  AABB getObjectFatAABB (int id) nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && !mNodes[id].free ? mNodes[id].aabb : AABB()); }
 
   /// insert an object into the tree
   /// this method creates a new leaf node in the tree and returns the id of the corresponding node
@@ -3030,7 +2995,7 @@ public:
     FType dist = -1; /// <0: nothing was hit
     BodyBase flesh; ///
 
-    @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (dist >= 0 && flesh !is null); } ///
+    @property bool valid () const nothrow @safe @nogc { pragma(inline, true); return (dist >= 0 && flesh !is null); } ///
   }
 
   /// segment querying method
@@ -3075,8 +3040,8 @@ public:
   /// compute the height of the tree
   int computeHeight () { pragma(inline, true); return computeHeight(mRootNodeId); }
 
-  @property int nodeCount () const pure nothrow @safe @nogc { pragma(inline, true); return mNodeCount; }
-  @property int nodeAlloced () const pure nothrow @safe @nogc { pragma(inline, true); return mAllocCount; }
+  @property int nodeCount () const nothrow @safe @nogc { pragma(inline, true); return mNodeCount; }
+  @property int nodeAlloced () const nothrow @safe @nogc { pragma(inline, true); return mAllocCount; }
 
   /// clear all the nodes and reset the tree
   void reset() {
