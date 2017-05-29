@@ -96,8 +96,8 @@ template SMALLEPSILON(T) if (is(T == float) || is(T == double)) {
   else static assert(0, "wtf?!");
 }
 
-auto deg2rad(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*PI/180.0; }
-auto rad2deg(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return v*180.0/PI; }
+auto deg2rad(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)PI/cast(T)180); }
+auto rad2deg(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)180/cast(T)PI); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -174,33 +174,32 @@ nothrow @safe:
   }
 
 @nogc:
-  this (in Float[] c...) @trusted {
+  this (in Float[] c) @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
     static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
   }
 
-  static if (dims == 2)
   this (in Float ax, in Float ay) {
-    //pragma(inline, true);
+    pragma(inline, true);
     x = ax;
     y = ay;
+    static if (dims == 3) z = 0;
   }
 
-  static if (dims == 3)
   this (in Float ax, in Float ay, in Float az) {
-    //pragma(inline, true);
+    pragma(inline, true);
     x = ax;
     y = ay;
-    z = az;
+    static if (dims == 3) z = az;
   }
 
   this(VT) (in auto ref VT v) if (isVector!VT) {
-    //pragma(inline, true);
+    pragma(inline, true);
     x = v.x;
     y = v.y;
     static if (dims == 3) {
-      static if (isVector3!VT) z = v.z; else z = 0.0;
+      static if (isVector3!VT) z = v.z; else z = 0;
     }
   }
 
@@ -245,7 +244,7 @@ nothrow @safe:
     x = v.x;
     y = v.y;
     static if (dims == 3) {
-      static if (isVector3!VT) z = v.z; else z = 0.0;
+      static if (isVector3!VT) z = v.z; else z = 0;
     }
   }
 
@@ -552,7 +551,7 @@ const:
     static if (dims == 2) {
       mixin(ImportCoreMath!(Float, "atan2"));
       return v2(
-        atan2(cast(Float)tmp.x, cast(Float)0.0),
+        atan2(cast(Float)tmp.x, cast(Float)0),
         -atan2(cast(Float)tmp.y, cast(Float)tmp.x),
       );
     } else {
@@ -568,12 +567,12 @@ const:
   // some more supplementary functions to support various things
   Float vcos(VT) (in auto ref VT v) if (isVector!VT) {
     immutable Float len = length*v.length;
-    return (len > 0 ? dot(v)/len : 0.0);
+    return (len > 0 ? dot(v)/len : 0);
   }
 
   Float vsin(VT) (in auto ref VT v) if (isVector!VT) {
     immutable Float len = length*v.length;
-    return (len > 0 ? cross(v)/len : 0.0);
+    return (len > 0 ? cross(v)/len : 0);
   }
 
   Float angle180(VT) (in auto ref VT v) if (isVector!VT) {
@@ -583,7 +582,7 @@ const:
     immutable Float sinv = vsin(v);
     if (cosv == 0) return (sinv <= 0 ? -90 : 90);
     if (sinv == 0) return (cosv <= 0 ? 180 : 0);
-    Float angle = (180.0*atan(sinv/cosv))/PI;
+    Float angle = (cast(Float)180*atan(sinv/cosv))/cast(Float)PI;
     if (cosv < 0) { if (angle > 0) angle -= 180; else angle += 180; }
     return angle;
   }
@@ -595,7 +594,7 @@ const:
     immutable Float sinv = vsin(v);
     if (cosv == 0) return (sinv <= 0 ? 270 : 90);
     if (sinv == 0) return (cosv <= 0 ? 180 : 0);
-    Float angle = (180.0*atan(sinv/cosv))/PI;
+    Float angle = (cast(Float)180*atan(sinv/cosv))/cast(Float)PI;
     if (cosv < 0) angle += 180;
     if (angle < 0) angle += 360;
     return angle;
@@ -739,7 +738,7 @@ nothrow @safe:
   ref plane3 normalize () {
     Float dd = normal.length;
     if (dd >= EPSILON!Float) {
-      dd = 1.0/dd;
+      dd = cast(Float)1/dd;
       normal.x *= dd;
       normal.y *= dd;
       normal.z *= dd;
@@ -1224,12 +1223,12 @@ nothrow @safe:
   static mat4 RotateX() (Float angle) {
     mixin(SinCosImportMixin);
     auto res = mat4(0);
-    res.mt.ptr[0*4+0] = 1.0;
+    res.mt.ptr[0*4+0] = cast(Float)1;
     res.mt.ptr[1*4+1] = cos(angle);
     res.mt.ptr[2*4+1] = -sin(angle);
     res.mt.ptr[1*4+2] = sin(angle);
     res.mt.ptr[2*4+2] = cos(angle);
-    res.mt.ptr[3*4+3] = 1.0;
+    res.mt.ptr[3*4+3] = cast(Float)1;
     return res;
   }
 
@@ -1238,10 +1237,10 @@ nothrow @safe:
     auto res = mat4(0);
     res.mt.ptr[0*4+0] = cos(angle);
     res.mt.ptr[2*4+0] = sin(angle);
-    res.mt.ptr[1*4+1] = 1.0;
+    res.mt.ptr[1*4+1] = cast(Float)1;
     res.mt.ptr[0*4+2] = -sin(angle);
     res.mt.ptr[2*4+2] = cos(angle);
-    res.mt.ptr[3*4+3] = 1.0;
+    res.mt.ptr[3*4+3] = cast(Float)1;
     return res;
   }
 
@@ -1252,8 +1251,8 @@ nothrow @safe:
     res.mt.ptr[1*4+0] = -sin(angle);
     res.mt.ptr[0*4+1] = sin(angle);
     res.mt.ptr[1*4+1] = cos(angle);
-    res.mt.ptr[2*4+2] = 1.0;
-    res.mt.ptr[3*4+3] = 1.0;
+    res.mt.ptr[2*4+2] = cast(Float)1;
+    res.mt.ptr[3*4+3] = cast(Float)1;
     return res;
   }
 
@@ -1337,7 +1336,7 @@ public:
     z.ptr[1] = eye.y-center.y;
     z.ptr[2] = eye.z-center.z;
     mag = sqrt(z.ptr[0]*z.ptr[0]+z.ptr[1]*z.ptr[1]+z.ptr[2]*z.ptr[2]);
-    if (mag != 0.0f) {
+    if (mag != 0) {
       z.ptr[0] /= mag;
       z.ptr[1] /= mag;
       z.ptr[2] /= mag;
@@ -1359,14 +1358,14 @@ public:
      * non-perpendicular unit-length vectors; so normalize x, y here
      */
     mag = sqrt(x.ptr[0]*x.ptr[0]+x.ptr[1]*x.ptr[1]+x.ptr[2]*x.ptr[2]);
-    if (mag != 0.0f) {
+    if (mag != 0) {
       x.ptr[0] /= mag;
       x.ptr[1] /= mag;
       x.ptr[2] /= mag;
     }
 
     mag = sqrt(y.ptr[0]*y.ptr[0]+y.ptr[1]*y.ptr[1]+y.ptr[2]*y.ptr[2]);
-    if (mag != 0.0f) {
+    if (mag != 0) {
       y.ptr[0] /= mag;
       y.ptr[1] /= mag;
       y.ptr[2] /= mag;
@@ -1375,19 +1374,19 @@ public:
     m.mt.ptr[0*4+0] = x.ptr[0];
     m.mt.ptr[1*4+0] = x.ptr[1];
     m.mt.ptr[2*4+0] = x.ptr[2];
-    m.mt.ptr[3*4+0] = 0.0f;
+    m.mt.ptr[3*4+0] = 0;
     m.mt.ptr[0*4+1] = y.ptr[0];
     m.mt.ptr[1*4+1] = y.ptr[1];
     m.mt.ptr[2*4+1] = y.ptr[2];
-    m.mt.ptr[3*4+1] = 0.0f;
+    m.mt.ptr[3*4+1] = 0;
     m.mt.ptr[0*4+2] = z.ptr[0];
     m.mt.ptr[1*4+2] = z.ptr[1];
     m.mt.ptr[2*4+2] = z.ptr[2];
-    m.mt.ptr[3*4+2] = 0.0f;
-    m.mt.ptr[0*4+3] = 0.0f;
-    m.mt.ptr[1*4+3] = 0.0f;
-    m.mt.ptr[2*4+3] = 0.0f;
-    m.mt.ptr[3*4+3] = 1.0f;
+    m.mt.ptr[3*4+2] = 0;
+    m.mt.ptr[0*4+3] = 0;
+    m.mt.ptr[1*4+3] = 0;
+    m.mt.ptr[2*4+3] = 0;
+    m.mt.ptr[3*4+3] = 1;
 
     // move, and translate Eye to Origin
     return this*m*Translate(-eye);
@@ -1628,7 +1627,7 @@ public:
     mixin(ImportCoreMath!(Float, "fabs"));
     auto res = mat4(this);
     if (fabs(a) >= FLTEPS) {
-      a = 1.0/a;
+      a = cast(Float)1/a;
       res.mt[] *= a;
     } else {
       res.mt[] = 0;
@@ -1748,7 +1747,7 @@ public:
     immutable Float cofactor14= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[3], mt.ptr[4], mt.ptr[5], mt.ptr[7],  mt.ptr[8], mt.ptr[9], mt.ptr[11]);
     immutable Float cofactor15= getCofactor(mt.ptr[0], mt.ptr[1], mt.ptr[2], mt.ptr[4], mt.ptr[5], mt.ptr[6],  mt.ptr[8], mt.ptr[9], mt.ptr[10]);
 
-    immutable Float invDeterminant = cast(Float)1.0/determinant;
+    immutable Float invDeterminant = cast(Float)1/determinant;
     mt.ptr[0] =  invDeterminant*cofactor0;
     mt.ptr[1] = -invDeterminant*cofactor4;
     mt.ptr[2] =  invDeterminant*cofactor8;
@@ -1786,7 +1785,7 @@ public:
     Float tr = mt.ptr[0*4+0]+mt.ptr[1*4+1]+mt.ptr[2*4+2];
     // check the diagonal
     if (tr > 0) {
-      Float s = sqrt(tr+1.0);
+      Float s = sqrt(tr+cast(Float)1);
       res.w = s/cast(Float)2;
       s = cast(Float)0.5/s;
       res.x = (mt.ptr[2*4+1]-mt.ptr[1*4+2])*s;
@@ -1931,7 +1930,7 @@ public:
     // calc cosine
     Float cosom = this.x*to.x+this.y*to.y+this.z*to.z+this.w*to.w;
     // adjust signs (if necessary)
-    if (cosom < 0.0) {
+    if (cosom < 0) {
       cosom = -cosom;
       to1[0] = -to.x;
       to1[1] = -to.y;
@@ -1945,16 +1944,16 @@ public:
     }
     Float scale0 = void, scale1 = void;
     // calculate coefficients
-    if (1.0-cosom > EPSILON!Float) {
+    if (cast(Float)1-cosom > EPSILON!Float) {
       // standard case (slerp)
       Float omega = acos(cosom);
       Float sinom = sin(omega);
-      scale0 = sin((1.0-t)*omega)/sinom;
+      scale0 = sin((cast(Float)1-t)*omega)/sinom;
       scale1 = sin(t*omega)/sinom;
     } else {
       // "from" and "to" quaternions are very close
       //  ... so we can do a linear interpolation
-      scale0 = 1.0-t;
+      scale0 = cast(Float)1-t;
       scale1 = t;
     }
     // calculate final values
