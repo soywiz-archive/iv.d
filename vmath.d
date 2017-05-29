@@ -691,6 +691,100 @@ static:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+template IsSphere(ST) {
+  static if (is(ST == Sphere!SVT, SVT)) {
+    enum IsSphere = IsVector!SVT;
+  } else {
+    enum IsSphere = false;
+  }
+}
+
+template IsSphere(ST, VT) {
+  static if (is(ST == Sphere!SVT, SVT)) {
+    enum IsSphere = (is(VT == SVT) && IsVector!SVT);
+  } else {
+    enum IsSphere = false;
+  }
+}
+
+
+///
+struct Sphere(VT) if (IsVector!VT) {
+public:
+  alias Float = VT.Float;
+  alias vec = VT;
+  alias Me = typeof(this);
+
+public:
+  vec orig; /// sphere origin
+  Float radius; /// sphere radius
+
+public nothrow @trusted @nogc:
+  this() (in auto ref vec aorig, Float arad) { orig = aorig; radius = arad; }
+
+  @property bool valid () const { import core.stdc.math : isnan; pragma(inline, true); return (!isnan(radius) && radius > 0); }
+
+  /// sweep test
+  bool sweep() (in auto ref vec amove, in auto ref Me sb, in auto ref vec bmove, Float* u0, Float* u1) const {
+    mixin(ImportCoreMath!(Float, "sqrt"));
+
+    immutable odist = sb.orig-this.orig; // vector from A0 to B0
+    immutable vab = bmove-amove; // relative velocity (in normalized time)
+    immutable rab = this.radius+sb.radius;
+    immutable Float a = vab.dot(vab); // u*u coefficient
+    immutable Float b = cast(Float)2*vab.dot(odist); // u coefficient
+    immutable Float c = odist.dot(odist)-rab*rab; // constant term
+
+    // check if they're currently overlapping
+    if (odist.dot(odist) <= rab*rab) {
+      if (u0 !is null) *u0 = 0;
+      if (u0 !is null) *u1 = 0;
+      return true;
+    }
+
+    // check if they hit each other during the frame
+    immutable Float q = b*b-4*a*c;
+    if (q < 0) return false; // alas, complex roots
+
+    immutable Float sq = sqrt(q);
+    immutable Float d = cast(Float)1/(cast(Float)2*a);
+    Float uu0 = (-b+sq)*d;
+    Float uu1 = (-b-sq)*d;
+
+    if (uu0 > uu1) { immutable t = uu0; uu0 = uu1; uu1 = t; } // swap
+    if (u0 !is null) *u0 = uu0;
+    if (u1 !is null) *u1 = uu1;
+
+    return true;
+  }
+
+  // sweep test; if `true` (hit), `hitpos` will be sphere position when it hits this plane, and `u` will be normalized collision time
+  bool sweep(PT) (in auto ref PT plane, in auto ref vec3 amove, vec3* hitpos, Float* u) const if (IsPlane3!(PT, Float)) {
+    pragma(inline, true);
+    return plane.sweep(this, amove, hitpos, u);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+template IsPlane3(PT) {
+  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, PFT eps, bool swiz)) {
+    enum IsPlane3 = (is(PFT == float) || is(PFT == double));
+  } else {
+    enum IsPlane3 = false;
+  }
+}
+
+
+template IsPlane3(PT, FT) {
+  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, FT eps, bool swiz)) {
+    enum IsPlane3 = (is(FT == PFT) && (is(PFT == float) || is(PFT == double)));
+  } else {
+    enum IsPlane3 = false;
+  }
+}
+
+
 // plane in 3D space: Ax+By+Cz+D=0
 align(1) struct Plane3(FloatType=VFloat, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
 align(1):
@@ -783,11 +877,6 @@ nothrow @safe:
     return (normal*p)-w; // dot
   }
 
-  Float distanceTo() (in auto ref vec3 p) const {
-    pragma(inline, true);
-    return (normal*p)+w; // dot
-  }
-
   // swizzling
   static if (enableSwizzling) auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xyzw", 2, 3)) {
     static if (fld.length == 2) {
@@ -795,6 +884,31 @@ nothrow @safe:
     } else {
       return mixin(SwizzleCtor!("vec3", fld));
     }
+  }
+
+  // sweep test; if `true` (hit), `hitpos` will be sphere position when it hits this plane, and `u` will be normalized collision time
+  bool sweep(ST) (in auto ref ST sphere, in auto ref vec3 amove, vec3* hitpos, Float* u) const if (IsSphere!(ST, vec3)) {
+    mixin(ImportCoreMath!(Float, "fabs"));
+    immutable c0 = sphere.orig;
+    immutable c1 = c0+amove;
+    immutable Float r = sphere.radius;
+    immutable Float d0 = (normal*c0)+w;
+    immutable Float d1 = (normal*c1)+w;
+    // check if the sphere is touching the plane
+    if (fabs(d0) <= r) {
+      if (hitpos !is null) *hitpos = c0;
+      if (u !is null) *u = 0;
+      return true;
+    }
+    // check if the sphere penetrated during movement
+    if (d0 > r && d1 < r) {
+      immutable Float uu = (d0-r)/(d0-d1); // normalized time
+      if (u !is null) *u = uu;
+      if (hitpos !is null) *hitpos = (1-uu)*c0+uu*c1; // point of first contact
+      return true;
+    }
+    // no collision
+    return false;
   }
 }
 
@@ -1181,6 +1295,9 @@ public nothrow @safe @nogc:
     // they could have only collided if the first time of overlap occurred before the last time of overlap
     return (uu0 <= uu1);
   }
+
+  /// check to see if the sphere overlaps the AABB
+  bool overlaps(ST) (in auto ref ST sphere) if (IsSphere!(ST, VT)) { pragma(inline, true); return overlapsSphere(sphere.orig, sphere.radius); }
 
   /// check to see if the sphere overlaps the AABB
   bool overlapsSphere() (in auto ref VT center, Float radius) {
