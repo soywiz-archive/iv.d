@@ -62,7 +62,7 @@ private template SwizzleCtor(string stn, string s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private template ImportCoreMath(FloatType, T...) {
+template ImportCoreMath(FloatType, T...) {
   private template InternalImport(T...) {
     static if (T.length == 0) enum InternalImport = "";
     else static if (is(typeof(T[0]) == string)) {
@@ -762,6 +762,11 @@ nothrow @safe:
     return (normal*p)-w; // dot
   }
 
+  Float distanceTo() (in auto ref vec3 p) const {
+    pragma(inline, true);
+    return (normal*p)+w; // dot
+  }
+
   // swizzling
   static if (enableSwizzling) auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xyzw", 2, 3)) {
     static if (fld.length == 2) {
@@ -859,7 +864,7 @@ private:
 
 public:
   alias VType = VT;
-  alias FType = VT.Float;
+  alias Float = VT.Float;
   alias Me = typeof(this);
 
 public:
@@ -873,7 +878,7 @@ public:
 
 public nothrow @safe @nogc:
   // return the volume of the AABB
-  @property FType volume () const {
+  @property Float volume () const {
     pragma(inline, true);
     immutable diff = max-min;
     static if (VT.Dims == 3) {
@@ -960,7 +965,7 @@ public nothrow @safe @nogc:
   }
 
   // extrude bbox a little, to compensate floating point inexactness
-  void extrude (FType delta) {
+  void extrude (Float delta) {
     min.x -= delta;
     min.y -= delta;
     static if (VT.Dims == 3) min.z -= delta;
@@ -985,29 +990,29 @@ public nothrow @safe @nogc:
   // something to consider here is that 0 * inf =nan which occurs when the ray starts exactly on the edge of a box
   // rd: ray direction, normalized
   // https://tavianator.com/fast-branchless-raybounding-box-intersections-part-2-nans/
-  static bool intersect() (in auto ref VT bmin, in auto ref VT bmax, in auto ref Ray!VT ray, FType* tmino=null, FType* tmaxo=null) {
+  static bool intersect() (in auto ref VT bmin, in auto ref VT bmax, in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) {
     // ok with coplanars, but dmd sux at unrolled loops
     // do X
-    FType dinv = cast(FType)1/ray.dir.x; // 1/0 will produce inf
-    FType t1 = (bmin.x-ray.orig.x)*dinv;
-    FType t2 = (bmax.x-ray.orig.x)*dinv;
-    FType tmin = nmin(t1, t2);
-    FType tmax = nmax(t1, t2);
+    Float dinv = cast(Float)1/ray.dir.x; // 1/0 will produce inf
+    Float t1 = (bmin.x-ray.orig.x)*dinv;
+    Float t2 = (bmax.x-ray.orig.x)*dinv;
+    Float tmin = nmin(t1, t2);
+    Float tmax = nmax(t1, t2);
     // do Y
-    dinv = cast(FType)1/ray.dir.y; // 1/0 will produce inf
+    dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
     t1 = (bmin.y-ray.orig.y)*dinv;
     t2 = (bmax.y-ray.orig.y)*dinv;
     tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
     tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     // do Z
     static if (VT.Dims == 3) {
-      dinv = cast(FType)1/ray.dir.z; // 1/0 will produce inf
+      dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
       t1 = (bmin.z-ray.orig.z)*dinv;
       t2 = (bmax.z-ray.orig.z)*dinv;
       tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
       tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     }
-    if (tmax > nmax(tmin, cast(FType)0)) {
+    if (tmax > nmax(tmin, cast(Float)0)) {
       if (tmino !is null) *tmino = tmin;
       if (tmaxo !is null) *tmaxo = tmax;
       return true;
@@ -1016,29 +1021,29 @@ public nothrow @safe @nogc:
     }
   }
 
-  bool intersect() (in auto ref Ray!VT ray, FType* tmino=null, FType* tmaxo=null) const @trusted {
+  bool intersect() (in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) const @trusted {
     // ok with coplanars, but dmd sux at unrolled loops
     // do X
-    FType dinv = cast(FType)1/ray.dir.x; // 1/0 will produce inf
-    FType t1 = (min.x-ray.orig.x)*dinv;
-    FType t2 = (max.x-ray.orig.x)*dinv;
-    FType tmin = nmin(t1, t2);
-    FType tmax = nmax(t1, t2);
+    Float dinv = cast(Float)1/ray.dir.x; // 1/0 will produce inf
+    Float t1 = (min.x-ray.orig.x)*dinv;
+    Float t2 = (max.x-ray.orig.x)*dinv;
+    Float tmin = nmin(t1, t2);
+    Float tmax = nmax(t1, t2);
     // do Y
-    dinv = cast(FType)1/ray.dir.y; // 1/0 will produce inf
+    dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
     t1 = (min.y-ray.orig.y)*dinv;
     t2 = (max.y-ray.orig.y)*dinv;
     tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
     tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     // do Z
     static if (VT.Dims == 3) {
-      dinv = cast(FType)1/ray.dir.z; // 1/0 will produce inf
+      dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
       t1 = (min.z-ray.orig.z)*dinv;
       t2 = (max.z-ray.orig.z)*dinv;
       tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
       tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
     }
-    if (tmax > nmax(tmin, cast(FType)0)) {
+    if (tmax > nmax(tmin, cast(Float)0)) {
       if (tmino !is null) *tmino = tmin;
       if (tmaxo !is null) *tmaxo = tmax;
       return true;
@@ -1047,16 +1052,16 @@ public nothrow @safe @nogc:
     }
   }
 
-  FType segIntersectMin() (in auto ref VT a, in auto ref VT b) const @trusted {
-    FType tmin;
+  Float segIntersectMin() (in auto ref VT a, in auto ref VT b) const @trusted {
+    Float tmin;
     if (!intersect(Ray!VT.fromPoints(a, b), &tmin)) return -1;
     if (tmin < 0) return 0; // inside
     if (tmin > (b-a).length) return -1;
     return tmin;
   }
 
-  FType segIntersectMax() (in auto ref VT a, in auto ref VT b) const @trusted {
-    FType tmax;
+  Float segIntersectMax() (in auto ref VT a, in auto ref VT b) const @trusted {
+    Float tmax;
     if (!intersect(Ray!VT.fromPoints(a, b), null, &tmax)) return -1;
     if (tmax < 0) return 0; // inside
     if (tmax > (b-a).length) return -1;
@@ -1075,7 +1080,7 @@ public nothrow @safe @nogc:
     }
     // nope, do it hard way
     //return (segIntersectMin(a, b) >= 0);
-    FType tmin;
+    Float tmin;
     if (!intersect(Ray!VT.fromPoints(a, b), &tmin)) return false;
     if (tmin < 0) return true; // inside, just in case
     if (tmin > (b-a).length) return false;
@@ -1085,6 +1090,75 @@ public nothrow @safe @nogc:
   ref inout(VT) opIndex (usize idx) inout {
     pragma(inline, true);
     return (idx == 0 ? min : max);
+  }
+
+  /// sweep two AABB's to see if and when they first and last were overlapping
+  /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
+  /// u1 = normalized time of second collision (i.e. collision stops after myMove*u0)
+  bool sweepTest() (in auto ref VT myMove, in auto ref Me b, in auto ref VT bMove, Float* u0, Float* u1) {
+    // check if they are overlapping right now
+    if (this.overlaps(b)) {
+      if (u0 !is null) *u0 = 0;
+      if (u1 !is null) *u1 = 0;
+      return true;
+    }
+
+    // the problem is solved in A's frame of reference
+    immutable v = bMove-myMove; // relative velocity (in normalized time)
+
+    // not moving, and not overlapping
+    if (v.isZero) {
+      if (u0 !is null) *u0 = 0;
+      if (u1 !is null) *u1 = 0;
+      return false;
+    }
+
+    auto u_0 = VT(0, 0, 0); // first times of overlap along each axis
+    auto u_1 = VT(1, 1, 1); // last times of overlap along each axis
+    bool wasHit = false;
+
+    // find the possible first and last times of overlap along each axis
+    foreach (immutable i; 0..VT.Dims) {
+      Float dinv = v[i];
+      if (dinv != 0) {
+        dinv = cast(Float)1/dinv;
+        if (this.max[i] < b.min[i] && dinv < 0) {
+          u_0[i] = (this.max[i]-b.min[i])*dinv;
+          wasHit = true;
+        } else if (b.max[i] < this.min[i] && dinv > 0) {
+          u_0[i] = (this.min[i]-b.max[i])*dinv;
+          wasHit = true;
+        }
+        if (b.max[i] > this.min[i] && dinv < 0) {
+          u_1[i] = (this.min[i]-b.max[i])*dinv;
+          wasHit = true;
+        } else if (this.max[i] > b.min[i] && dinv > 0) {
+          u_1[i] = (this.max[i]-b.min[i])*dinv;
+          wasHit = true;
+        }
+      }
+    }
+
+    // oops
+    if (!wasHit) {
+      if (u0 !is null) *u0 = 0;
+      if (u1 !is null) *u1 = 0;
+      return false;
+    }
+
+    static if (VT.Dims == 3) {
+      immutable Float uu0 = nmax(u_0.x, nmax(u_0.y, u_0.z)); // possible first time of overlap
+      immutable Float uu1 = nmin(u_1.x, nmin(u_1.y, u_1.z)); // possible last time of overlap
+    } else {
+      immutable Float uu0 = nmax(u_0.x, u_0.y); // possible first time of overlap
+      immutable Float uu1 = nmin(u_1.x, u_1.y); // possible last time of overlap
+    }
+
+    if (u0 !is null) *u0 = uu0;
+    if (u1 !is null) *u1 = uu1;
+
+    // they could have only collided if the first time of overlap occurred before the last time of overlap
+    return (uu0 <= uu1);
   }
 }
 
@@ -2236,25 +2310,25 @@ private:
 
 public:
   alias VType = VT;
-  alias FType = VT.Float;
+  alias Float = VT.Float;
   alias Me = typeof(this);
   alias AABB = AABBImpl!VT;
   alias TreeNode = TreeNodeBase!(VT, BodyBase);
 
-  enum FloatNum(FType v) = cast(FType)v;
+  enum FloatNum(Float v) = cast(Float)v;
 
 public:
   // in the broad-phase collision detection (dynamic AABB tree), the AABBs are
   // also inflated in direction of the linear motion of the body by mutliplying the
   // followin constant with the linear velocity and the elapsed time between two frames
-  enum FType LinearMotionGapMultiplier = FloatNum!(1.7);
+  enum Float LinearMotionGapMultiplier = FloatNum!(1.7);
 
 public:
   // called when a overlapping node has been found during the call to forEachAABBOverlap()
   // return `true` to stop
   alias OverlapCallback = void delegate (BodyBase abody);
   alias SimpleQueryCallback = bool delegate (BodyBase abody);
-  alias SegQueryCallback = FType delegate (BodyBase abody, in ref VT a, in ref VT b); // return dist from a to abody
+  alias SegQueryCallback = Float delegate (BodyBase abody, in ref VT a, in ref VT b); // return dist from a to abody
 
 private:
   TreeNode* mNodes; // pointer to the memory location of the nodes of the tree
@@ -2265,7 +2339,7 @@ private:
 
   // extra AABB Gap used to allow the collision shape to move a little bit
   // without triggering a large modification of the tree which can be costly
-  FType mExtraGap;
+  Float mExtraGap;
 
 private:
   // allocate and return a node to use in the tree
@@ -2331,33 +2405,33 @@ private:
       int rightChild = mNodes[currentNodeId].children.ptr[TreeNode.Right];
 
       // compute the merged AABB
-      FType volumeAABB = mNodes[currentNodeId].aabb.volume;
+      Float volumeAABB = mNodes[currentNodeId].aabb.volume;
       AABB mergedAABBs = AABB.mergeAABBs(mNodes[currentNodeId].aabb, newNodeAABB);
-      FType mergedVolume = mergedAABBs.volume;
+      Float mergedVolume = mergedAABBs.volume;
 
       // compute the cost of making the current node the sibling of the new node
-      FType costS = FloatNum!2*mergedVolume;
+      Float costS = FloatNum!2*mergedVolume;
 
       // compute the minimum cost of pushing the new node further down the tree (inheritance cost)
-      FType costI = FloatNum!2*(mergedVolume-volumeAABB);
+      Float costI = FloatNum!2*(mergedVolume-volumeAABB);
 
       // compute the cost of descending into the left child
-      FType costLeft;
+      Float costLeft;
       AABB currentAndLeftAABB = AABB.mergeAABBs(newNodeAABB, mNodes[leftChild].aabb);
       if (mNodes[leftChild].leaf) {
         costLeft = currentAndLeftAABB.volume+costI;
       } else {
-        FType leftChildVolume = mNodes[leftChild].aabb.volume;
+        Float leftChildVolume = mNodes[leftChild].aabb.volume;
         costLeft = costI+currentAndLeftAABB.volume-leftChildVolume;
       }
 
       // compute the cost of descending into the right child
-      FType costRight;
+      Float costRight;
       AABB currentAndRightAABB = AABB.mergeAABBs(newNodeAABB, mNodes[rightChild].aabb);
       if (mNodes[rightChild].leaf) {
         costRight = currentAndRightAABB.volume+costI;
       } else {
-        FType rightChildVolume = mNodes[rightChild].aabb.volume;
+        Float rightChildVolume = mNodes[rightChild].aabb.volume;
         costRight = costI+currentAndRightAABB.volume-rightChildVolume;
       }
 
@@ -2843,7 +2917,7 @@ private:
 
 public:
   /// add `extraAABBGap` to bounding boxes so slight object movement won't cause tree rebuilds
-  this (FType extraAABBGap=FloatNum!0) {
+  this (Float extraAABBGap=FloatNum!0) {
     mExtraGap = extraAABBGap;
     setup();
   }
@@ -2992,7 +3066,7 @@ public:
 
   ///
   static struct SegmentQueryResult {
-    FType dist = -1; /// <0: nothing was hit
+    Float dist = -1; /// <0: nothing was hit
     BodyBase flesh; ///
 
     @property bool valid () const nothrow @safe @nogc { pragma(inline, true); return (dist >= 0 && flesh !is null); } ///
@@ -3001,7 +3075,7 @@ public:
   /// segment querying method
   SegmentQueryResult segmentQuery() (in auto ref VT a, in auto ref VT b, scope SegQueryCallback cb) {
     SegmentQueryResult res;
-    FType maxFraction = FType.infinity;
+    Float maxFraction = Float.infinity;
 
     immutable VT cura = a;
     VT curb = b;
@@ -3012,7 +3086,7 @@ public:
       (node) => node.aabb.isIntersect(cura, curb),
       // visitor
       (flesh) {
-        FType hitFraction = cb(flesh, cura, curb);
+        Float hitFraction = cb(flesh, cura, curb);
         // if the user returned a hitFraction of zero, it means that the raycasting should stop here
         if (hitFraction == FloatNum!0) {
           res.dist = 0;
