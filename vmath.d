@@ -96,8 +96,14 @@ template SMALLEPSILON(T) if (is(T == float) || is(T == double)) {
   else static assert(0, "wtf?!");
 }
 
-auto deg2rad(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)PI/cast(T)180); }
-auto rad2deg(T : double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)180/cast(T)PI); }
+auto deg2rad(T:double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)PI/cast(T)180); }
+auto rad2deg(T:double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)180/cast(T)PI); }
+
+auto deg2rad (int v) pure nothrow @safe @nogc { pragma(inline, true); return deg2rad!VFloat(cast(VFloat)v); }
+auto rad2deg (int v) pure nothrow @safe @nogc { pragma(inline, true); return rad2deg!VFloat(cast(VFloat)v); }
+
+auto deg2rad (long v) pure nothrow @safe @nogc { pragma(inline, true); return deg2rad!VFloat(cast(VFloat)v); }
+auto rad2deg (long v) pure nothrow @safe @nogc { pragma(inline, true); return rad2deg!VFloat(cast(VFloat)v); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -115,11 +121,27 @@ template IsVector(VT) {
   }
 }
 
+template IsVectorDim(VT, ubyte dim) {
+  static if (is(VT == VecN!(D, T), ubyte D, T)) {
+    enum IsVectorDim = (D == dim);
+  } else {
+    enum IsVectorDim = false;
+  }
+}
+
 template IsVector(VT, FT) {
   static if (is(VT == VecN!(D, T), ubyte D, T)) {
-    enum IsVector = is(T == FT);
+    enum IsVector = ((D == 2 || D == 3) && is(T == FT));
   } else {
     enum IsVector = false;
+  }
+}
+
+template IsVectorDim(VT, FT, ubyte dim) {
+  static if (is(VT == VecN!(D, T), ubyte D, T)) {
+    enum IsVectorDim = (D == dim && is(T == FT));
+  } else {
+    enum IsVectorDim = false;
   }
 }
 
@@ -1117,22 +1139,22 @@ public nothrow @safe @nogc:
     bool wasHit = false;
 
     // find the possible first and last times of overlap along each axis
-    foreach (immutable i; 0..VT.Dims) {
-      Float dinv = v[i];
+    foreach (immutable idx; 0..VT.Dims) {
+      Float dinv = v[idx];
       if (dinv != 0) {
         dinv = cast(Float)1/dinv;
-        if (this.max[i] < b.min[i] && dinv < 0) {
-          u_0[i] = (this.max[i]-b.min[i])*dinv;
+        if (this.max[idx] < b.min[idx] && dinv < 0) {
+          u_0[idx] = (this.max[idx]-b.min[idx])*dinv;
           wasHit = true;
-        } else if (b.max[i] < this.min[i] && dinv > 0) {
-          u_0[i] = (this.min[i]-b.max[i])*dinv;
+        } else if (b.max[idx] < this.min[idx] && dinv > 0) {
+          u_0[idx] = (this.min[idx]-b.max[idx])*dinv;
           wasHit = true;
         }
-        if (b.max[i] > this.min[i] && dinv < 0) {
-          u_1[i] = (this.min[i]-b.max[i])*dinv;
+        if (b.max[idx] > this.min[idx] && dinv < 0) {
+          u_1[idx] = (this.min[idx]-b.max[idx])*dinv;
           wasHit = true;
-        } else if (this.max[i] > b.min[i] && dinv > 0) {
-          u_1[i] = (this.max[i]-b.min[i])*dinv;
+        } else if (this.max[idx] > b.min[idx] && dinv > 0) {
+          u_1[idx] = (this.max[idx]-b.min[idx])*dinv;
           wasHit = true;
         }
       }
@@ -1159,13 +1181,29 @@ public nothrow @safe @nogc:
     // they could have only collided if the first time of overlap occurred before the last time of overlap
     return (uu0 <= uu1);
   }
+
+  /// check to see if the sphere overlaps the AABB
+  bool overlapsSphere() (in auto ref VT center, Float radius) {
+    Float d = 0;
+    // find the square of the distance from the sphere to the box
+    foreach (immutable idx; 0..VT.Dims) {
+      if (center[idx] < min[idx]) {
+        immutable Float s = center[idx]-min[idx];
+        d += s*s;
+      } else if (center[idx] > max[idx]) {
+        immutable Float s = center[idx]-max[idx];
+        d += s*s;
+      }
+    }
+    return (d <= radius*radius);
+  }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 alias mat4 = Mat4!vec3;
 
-align(1) struct Mat4(VT) if (IsVector!VT) {
+align(1) struct Mat4(VT) if (IsVectorDim!(VT, 3)) {
 align(1):
 public:
   alias Float = VT.Float;
@@ -1971,7 +2009,7 @@ public:
 alias mat3 = Mat3!vec2;
 
 // very simple (and mostly not tested) 3x3 matrix
-align(1) struct Mat3(VT) if (IsVector!VT) {
+align(1) struct Mat3(VT) if (IsVectorDim!(VT, 2)) {
 align(1):
 
 private:
@@ -2240,6 +2278,146 @@ private:
       import core.stdc.math : cos, sin;
     }
   };
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+alias OBB2D = OBB2d!vec2;
+
+/// Oriented Bounding Box
+struct OBB2d(VT) if (IsVectorDim!(VT, 2)) {
+  // to make the tests extremely efficient, `origin` stores the
+  // projection of corner number zero onto a box's axes and the axes are stored
+  // explicitly in axis. the magnitude of these stored axes is the inverse
+  // of the corresponding edge length so that all overlap tests can be performed on
+  // the interval [0, 1] without normalization, and square roots are avoided
+  // throughout the entire test.
+public:
+  alias Me = typeof(this);
+  alias Float = VT.Float;
+  alias vec2 = VT;
+
+private:
+  VT[4] corner; // corners of the box, where 0 is the lower left
+  bool aovalid; // are axes and origin valid?
+  VT[2] axis; // two edges of the box extended away from corner[0]
+  VT.Float[2] origin; // origin[a] = corner[0].dot(axis[a]);
+
+private nothrow @trusted @nogc:
+  // returns true if other overlaps one dimension of this
+  bool overlaps1Way() (in auto ref Me other) const {
+    foreach (immutable a; 0..2) {
+      Float t = other.corner.ptr[0].dot(axis.ptr[a]);
+      // find the extent of box 2 on axis a
+      Float tMin = t, tMax = t;
+      foreach (immutable c; 1..4) {
+        t = other.corner.ptr[c].dot(axis.ptr[a]);
+        if (t < tMin) tMin = t; else if (t > tMax) tMax = t;
+      }
+      // we have to subtract off the origin
+      // see if [tMin, tMax] intersects [0, 1]
+      if (tMin > 1+origin.ptr[a] || tMax < origin.ptr[a]) {
+        // there was no intersection along this dimension; the boxes cannot possibly overlap
+        return false;
+      }
+    }
+    // there was no dimension along which there is no intersection: therefore the boxes overlap
+    return true;
+  }
+
+  // updates the axes after the corners move; assumes the corners actually form a rectangle
+  void computeAxes () {
+    axis.ptr[0] = corner.ptr[1]-corner.ptr[0];
+    axis.ptr[1] = corner.ptr[3]-corner.ptr[0];
+    // make the length of each axis 1/edge length so we know any dot product must be less than 1 to fall within the edge
+    foreach (immutable a; 0..2) {
+      axis.ptr[a] /= axis.ptr[a].lengthSquared;
+      origin.ptr[a] = corner.ptr[0].dot(axis.ptr[a]);
+    }
+    aovalid = true;
+  }
+
+public:
+  ///
+  this() (in auto ref VT center, in Float w, in Float h, in Float angle) {
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
+
+    immutable Float ca = cos(angle);
+    immutable Float sa = sin(angle);
+    auto ox = VT( ca, sa);
+    auto oy = VT(-sa, ca);
+
+    ox *= w/2;
+    oy *= h/2;
+
+    corner.ptr[0] = center-ox-oy;
+    corner.ptr[1] = center+ox-oy;
+    corner.ptr[2] = center+ox+oy;
+    corner.ptr[3] = center-ox+oy;
+
+    // compute axes on demand
+    //computeAxes();
+  }
+
+  VT[4] corners () const { pragma(inline, true); VT[4] res = corner[]; return res; }
+
+  /// get corner
+  VT opIndex (usize idx) const {
+    pragma(inline, true);
+    return (idx < 4 ? corner.ptr[idx] : VT(Float.nan, Float.nan, Float.nan));
+  }
+
+  ///
+  void moveTo() (in auto ref VT center) {
+    immutable centroid = (corner.ptr[0]+corner.ptr[1]+corner.ptr[2]+corner.ptr[3])/4;
+    immutable translation = center-centroid;
+    foreach (ref VT cv; corner[]) cv += translation;
+    aovalid = false; // invalidate axes
+  }
+
+  ///
+  void moveBy() (in auto ref VT delta) {
+    foreach (ref VT cv; corner[]) cv += delta;
+    aovalid = false; // invalidate axes
+  }
+
+  /// rotate around centroid
+  void rotate() (Float angle) {
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
+    immutable centroid = (corner.ptr[0]+corner.ptr[1]+corner.ptr[2]+corner.ptr[3])/4;
+    immutable Float ca = cos(angle);
+    immutable Float sa = sin(angle);
+    foreach (ref cv; corner[]) {
+      immutable Float ox = cv.x-centroid.x;
+      immutable Float oy = cv.y-centroid.y;
+      cv.x = ox*ca-oy*sa+centroid.x;
+      cv.y = ox*sa+oy*ca+centroid.y;
+    }
+    aovalid = false; // invalidate axes
+  }
+
+  ///
+  void scale() (Float mult) {
+    immutable centroid = (corner.ptr[0]+corner.ptr[1]+corner.ptr[2]+corner.ptr[3])/4;
+    foreach (ref cv; corner[]) cv = (cv-centroid)*mult+centroid;
+    aovalid = false; // invalidate axes
+  }
+
+  /// apply transformation matrix, assuming that world (0,0) is at centroid
+  void transform() (in auto ref Mat3!VT mat) {
+    immutable centroid = (corner.ptr[0]+corner.ptr[1]+corner.ptr[2]+corner.ptr[3])/4;
+    foreach (ref VT cv; corner[]) cv -= centroid;
+    foreach (ref VT cv; corner[]) cv = cv*mat;
+    foreach (ref VT cv; corner[]) cv += centroid;
+    aovalid = false; // invalidate axes
+  }
+
+  /// returns true if the intersection of the boxes is non-empty
+  bool overlaps() (in auto ref Me other) {
+    pragma(inline, true);
+    if (!aovalid) computeAxes(); // fix axes if necessary
+    return (overlaps1Way(other) && other.overlaps1Way(this));
+  }
 }
 
 
