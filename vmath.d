@@ -1230,70 +1230,119 @@ public nothrow @safe @nogc:
   /// sweep two AABB's to see if and when they first and last were overlapping
   /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
   /// u1 = normalized time of second collision (i.e. collision stops after myMove*u0)
-  bool sweepTest() (in auto ref VT myMove, in auto ref Me b, in auto ref VT bMove, Float* u0, Float* u1) {
+  /// hitnormal = normal that will move `this` apart of `b` edge it collided with
+  /// no output values are valid if no collision detected
+  /// WARNING! hit normal calculation is not tested!
+  bool sweep() (in auto ref VT myMove, in auto ref Me b, Float* u0, Float* u1=null, VT* hitnormal=null) const @trusted {
     // check if they are overlapping right now
     if (this.overlaps(b)) {
       if (u0 !is null) *u0 = 0;
       if (u1 !is null) *u1 = 0;
+      if (hitnormal !is null) *hitnormal = VT(); // oops
       return true;
     }
 
-    // the problem is solved in A's frame of reference
-    immutable v = bMove-myMove; // relative velocity (in normalized time)
+    immutable v = -myMove; // treat b as stationary, so invert v to get relative velocity
 
     // not moving, and not overlapping
-    if (v.isZero) {
-      if (u0 !is null) *u0 = 0;
-      if (u1 !is null) *u1 = 0;
-      return false;
+    if (v.isZero) return false;
+
+    Float hitTime = 0.0f;
+    Float outTime = 1.0f;
+    Float[VT.Dims] overlapTime = 0;
+
+    alias a = this;
+    foreach (immutable aidx; 0..VT.Dims) {
+      // axis overlap
+      immutable Float vv = v[aidx];
+      if (vv < 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (b.max[aidx] < a.min[aidx]) return false;
+        if (b.max[aidx] > a.min[aidx]) outTime = nmin((a.min[aidx]-b.max[aidx])*invv, outTime);
+        if (a.max[aidx] < b.min[aidx]) hitTime = nmax((overlapTime.ptr[aidx] = (a.max[aidx]-b.min[aidx])*invv), hitTime);
+        if (hitTime > outTime) return false;
+      } else if (vv > 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (b.min[aidx] > a.max[aidx]) return false;
+        if (a.max[aidx] > b.min[aidx]) outTime = nmin((a.max[aidx]-b.min[aidx])*invv, outTime);
+        if (b.max[aidx] < a.min[aidx]) hitTime = nmax((overlapTime.ptr[aidx] = (a.min[aidx]-b.max[aidx])*invv), hitTime);
+      }
+      if (hitTime > outTime) return false;
     }
 
-    auto u_0 = VT(0, 0, 0); // first times of overlap along each axis
-    auto u_1 = VT(1, 1, 1); // last times of overlap along each axis
-    bool wasHit = false;
+    if (u0 !is null) *u0 = hitTime;
+    if (u1 !is null) *u1 = outTime;
 
-    // find the possible first and last times of overlap along each axis
-    foreach (immutable idx; 0..VT.Dims) {
-      Float dinv = v[idx];
-      if (dinv != 0) {
-        dinv = cast(Float)1/dinv;
-        if (this.max[idx] < b.min[idx] && dinv < 0) {
-          u_0[idx] = (this.max[idx]-b.min[idx])*dinv;
-          wasHit = true;
-        } else if (b.max[idx] < this.min[idx] && dinv > 0) {
-          u_0[idx] = (this.min[idx]-b.max[idx])*dinv;
-          wasHit = true;
-        }
-        if (b.max[idx] > this.min[idx] && dinv < 0) {
-          u_1[idx] = (this.min[idx]-b.max[idx])*dinv;
-          wasHit = true;
-        } else if (this.max[idx] > b.min[idx] && dinv > 0) {
-          u_1[idx] = (this.max[idx]-b.min[idx])*dinv;
-          wasHit = true;
+    // hit normal is along axis with the highest overlap time
+    if (hitnormal !is null) {
+      static if (VT.Dims == 3) {
+        int aidx = 0;
+        if (overlapTime.ptr[1] > overlapTime.ptr[0]) aidx = 1;
+        if (overlapTime.ptr[2] > overlapTime.ptr[aidx]) aidx = 2;
+        VT hn; // zero vector
+        hn[aidx] = (v[aidx] < 0 ? -1 : v[aidx] > 0 ? 1 : 0);
+        *hitnormal = hn;
+      } else {
+        if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
+          *hitNormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
+        } else {
+          *hitNormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
         }
       }
     }
 
-    // oops
-    if (!wasHit) {
-      if (u0 !is null) *u0 = 0;
-      if (u1 !is null) *u1 = 0;
-      return false;
+    return true;
+
+    /+
+    version(none) {
+      auto u_0 = VT(0, 0, 0); // first times of overlap along each axis
+      auto u_1 = VT(1, 1, 1); // last times of overlap along each axis
+      bool wasHit = false;
+
+      // find the possible first and last times of overlap along each axis
+      foreach (immutable idx; 0..VT.Dims) {
+        Float dinv = v[idx];
+        if (dinv != 0) {
+          dinv = cast(Float)1/dinv;
+          if (this.max[idx] < b.min[idx] && dinv < 0) {
+            u_0[idx] = (this.max[idx]-b.min[idx])*dinv;
+            wasHit = true;
+          } else if (b.max[idx] < this.min[idx] && dinv > 0) {
+            u_0[idx] = (this.min[idx]-b.max[idx])*dinv;
+            wasHit = true;
+          }
+          if (b.max[idx] > this.min[idx] && dinv < 0) {
+            u_1[idx] = (this.min[idx]-b.max[idx])*dinv;
+            wasHit = true;
+          } else if (this.max[idx] > b.min[idx] && dinv > 0) {
+            u_1[idx] = (this.max[idx]-b.min[idx])*dinv;
+            wasHit = true;
+          }
+        }
+      }
+
+      // oops
+      if (!wasHit) {
+        if (u0 !is null) *u0 = 0;
+        if (u1 !is null) *u1 = 0;
+        return false;
+      }
+
+      static if (VT.Dims == 3) {
+        immutable Float uu0 = nmax(u_0.x, nmax(u_0.y, u_0.z)); // possible first time of overlap
+        immutable Float uu1 = nmin(u_1.x, nmin(u_1.y, u_1.z)); // possible last time of overlap
+      } else {
+        immutable Float uu0 = nmax(u_0.x, u_0.y); // possible first time of overlap
+        immutable Float uu1 = nmin(u_1.x, u_1.y); // possible last time of overlap
+      }
+
+      if (u0 !is null) *u0 = uu0;
+      if (u1 !is null) *u1 = uu1;
+
+      // they could have only collided if the first time of overlap occurred before the last time of overlap
+      return (uu0 <= uu1);
     }
-
-    static if (VT.Dims == 3) {
-      immutable Float uu0 = nmax(u_0.x, nmax(u_0.y, u_0.z)); // possible first time of overlap
-      immutable Float uu1 = nmin(u_1.x, nmin(u_1.y, u_1.z)); // possible last time of overlap
-    } else {
-      immutable Float uu0 = nmax(u_0.x, u_0.y); // possible first time of overlap
-      immutable Float uu1 = nmin(u_1.x, u_1.y); // possible last time of overlap
-    }
-
-    if (u0 !is null) *u0 = uu0;
-    if (u1 !is null) *u1 = uu1;
-
-    // they could have only collided if the first time of overlap occurred before the last time of overlap
-    return (uu0 <= uu1);
+    +/
   }
 
   /// check to see if the sphere overlaps the AABB
