@@ -16,7 +16,6 @@
  */
 module iv.gxx.geom /*is aliced*/;
 private:
-import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -36,8 +35,8 @@ public:
   }
 
 pure nothrow @safe @nogc:
-  this() (in auto ref GxSize p) { pragma(inline, true); width = p.width; height = p.height; } ///
-  this (int ax, int ay) { pragma(inline, true); width = ax; height = ay; } ///
+  this() (in auto ref GxSize p) { /*pragma(inline, true);*/ width = p.width; height = p.height; } ///
+  this (int ax, int ay) { /*pragma(inline, true);*/ width = ax; height = ay; } ///
   @property bool valid () const { pragma(inline, true); return (width >= 0 && height >= 0); } ///
   @property bool invalid () const { pragma(inline, true); return (width < 0 || height < 0); } ///
   @property bool empty () const { pragma(inline, true); return (width <= 0 || height <= 0); } /// invalid rects are empty
@@ -53,6 +52,7 @@ pure nothrow @safe @nogc:
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 public struct GxPoint {
 public:
   int x, y; ///
@@ -79,6 +79,7 @@ pure nothrow @safe @nogc:
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 public struct GxRect {
 public:
   int x0, y0; ///
@@ -105,7 +106,10 @@ public:
 
 pure nothrow @safe @nogc:
   ///
-  this() (in auto ref GxRect rc) { pragma(inline, true); x0 = rc.x0; y0 = rc.y0; width = rc.width; height = rc.height; }
+  this() (in auto ref GxRect rc) { /*pragma(inline, true);*/ x0 = rc.x0; y0 = rc.y0; width = rc.width; height = rc.height; }
+
+  ///
+  this() (in auto ref GxSize sz) { /*pragma(inline, true);*/ x0 = 0; y0 = 0; width = sz.width; height = sz.height; }
 
   ///
   this (int ax0, int ay0, int awidth, int aheight) {
@@ -118,7 +122,7 @@ pure nothrow @safe @nogc:
 
   ///
   this() (in auto ref GxPoint xy0, int awidth, int aheight) {
-    pragma(inline, true);
+    //pragma(inline, true);
     x0 = xy0.x;
     y0 = xy0.y;
     width = awidth;
@@ -127,14 +131,14 @@ pure nothrow @safe @nogc:
 
   ///
   this() (in auto ref GxPoint xy0, in auto ref GxPoint xy1) {
-    pragma(inline, true);
+    //pragma(inline, true);
     x0 = xy0.x;
     y0 = xy0.y;
     width = xy1.x-xy0.x+1;
     height = xy1.y-xy0.y+1;
   }
 
-  void opAssign() (in auto ref GxRect rc) { pragma(inline, true); x0 = rc.x0; y0 = rc.y0; width = rc.width; height = rc.height; } ///
+  void opAssign() (in auto ref GxRect rc) { /*pragma(inline, true);*/ x0 = rc.x0; y0 = rc.y0; width = rc.width; height = rc.height; } ///
   bool opEquals() (in auto ref GxRect rc) const { pragma(inline, true); return (rc.x0 == x0 && rc.y0 == y0 && rc.width == width && rc.height == height); } ///
   ///
   int opCmp() (in auto ref GxRect p) const {
