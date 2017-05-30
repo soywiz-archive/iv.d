@@ -725,11 +725,11 @@ public nothrow @trusted @nogc:
   @property bool valid () const { import core.stdc.math : isnan; pragma(inline, true); return (!isnan(radius) && radius > 0); }
 
   /// sweep test
-  bool sweep() (in auto ref vec amove, in auto ref Me sb, in auto ref vec bmove, Float* u0, Float* u1) const {
+  bool sweep() (in auto ref vec amove, in auto ref Me sb, Float* u0, Float* u1) const {
     mixin(ImportCoreMath!(Float, "sqrt"));
 
     immutable odist = sb.orig-this.orig; // vector from A0 to B0
-    immutable vab = bmove-amove; // relative velocity (in normalized time)
+    immutable vab = -amove; // relative velocity (in normalized time)
     immutable rab = this.radius+sb.radius;
     immutable Float a = vab.dot(vab); // u*u coefficient
     immutable Float b = cast(Float)2*vab.dot(odist); // u coefficient
@@ -1227,13 +1227,16 @@ public nothrow @safe @nogc:
     return (idx == 0 ? min : max);
   }
 
+  VT center () const { pragma(inline, true); return (min+max)/2; }
+  VT extent () const { pragma(inline, true); return max-min; }
+
   /// sweep two AABB's to see if and when they first and last were overlapping
   /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
   /// u1 = normalized time of second collision (i.e. collision stops after myMove*u0)
   /// hitnormal = normal that will move `this` apart of `b` edge it collided with
   /// no output values are valid if no collision detected
   /// WARNING! hit normal calculation is not tested!
-  bool sweep() (in auto ref VT myMove, in auto ref Me b, Float* u0, Float* u1=null, VT* hitnormal=null) const @trusted {
+  bool sweep() (in auto ref VT myMove, in auto ref Me b, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted {
     // check if they are overlapping right now
     if (this.overlaps(b)) {
       if (u0 !is null) *u0 = 0;
@@ -1247,8 +1250,8 @@ public nothrow @safe @nogc:
     // not moving, and not overlapping
     if (v.isZero) return false;
 
-    Float hitTime = 0.0f;
-    Float outTime = 1.0f;
+    Float hitTime = 0;
+    Float outTime = 1;
     Float[VT.Dims] overlapTime = 0;
 
     alias a = this;
@@ -1266,8 +1269,8 @@ public nothrow @safe @nogc:
         if (b.min[aidx] > a.max[aidx]) return false;
         if (a.max[aidx] > b.min[aidx]) outTime = nmin((a.max[aidx]-b.min[aidx])*invv, outTime);
         if (b.max[aidx] < a.min[aidx]) hitTime = nmax((overlapTime.ptr[aidx] = (a.min[aidx]-b.max[aidx])*invv), hitTime);
+        if (hitTime > outTime) return false;
       }
-      if (hitTime > outTime) return false;
     }
 
     if (u0 !is null) *u0 = hitTime;
@@ -1284,9 +1287,9 @@ public nothrow @safe @nogc:
         *hitnormal = hn;
       } else {
         if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
-          *hitNormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
+          *hitnormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
         } else {
-          *hitNormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
+          *hitnormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
         }
       }
     }
@@ -1343,6 +1346,105 @@ public nothrow @safe @nogc:
       return (uu0 <= uu1);
     }
     +/
+  }
+
+  /// UNTESTED!
+  bool sweepLine() (in auto ref VT myMove, in auto ref VT la, in auto ref VT lb, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted if (VT.Dims == 2) {
+    mixin(ImportCoreMath!(Float, "fabs"));
+
+    alias a = this;
+    alias v = myMove;
+
+    auto lineDir = lb-la;
+    auto lineMin = VT(0, 0, 0);
+    auto lineMax = VT(0, 0, 0);
+
+    if (lineDir.x > 0) {
+      // right
+      lineMin.x = la.x;
+      lineMax.x = lb.x;
+    } else {
+      // left
+      lineMin.x = lb.x;
+      lineMax.x = la.x;
+    }
+
+    if (lineDir.y > 0) {
+      // up
+      lineMin.y = la.y;
+      lineMax.y = lb.y;
+    } else {
+      // down
+      lineMin.y = lb.y;
+      lineMax.y = la.y;
+    }
+
+    // initialise out info
+    //outVel = v;
+    //hitNormal = new VT(0,0);
+
+    Float hitTime = 0;
+    Float outTime = 1;
+    Float[VT.Dims] overlapTime = 0;
+
+    static if (VT.Dims == 3) {
+      static assert(0, "not yet");
+    } else {
+      //auto lnorm = VT(-lineDir.y, lineDir.x).normalized;
+      auto lnorm = lineDir.perp.normalized;
+    }
+
+    Float r = a.extent.x*fabs(lnorm.x)+a.extent.y*fabs(lnorm.y); // radius to line
+    Float boxProj = (la-a.center).dot(lnorm); // projected line distance to n
+    Float velProj = v.dot(lnorm); // projected velocity to n
+
+    if (velProj < 0) r = -r;
+
+    hitTime = nmax((boxProj-r)/velProj, hitTime);
+    outTime = nmin((boxProj+r)/velProj, outTime);
+
+    foreach (immutable aidx; 0..VT.Dims) {
+      // axis overlap
+      immutable Float vv = v[aidx];
+      if (vv < 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (a.max[aidx] < lineMin[aidx]) return false;
+        hitTime = nmax((overlapTime.ptr[aidx] = (lineMax[aidx]-a.min[aidx])*invv), hitTime);
+        outTime = nmin((lineMin[aidx]-a.max[aidx])*invv, outTime);
+        if (hitTime > outTime) return false;
+      } else if (vv > 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (a.min[aidx] > lineMax[aidx]) return false;
+        hitTime = nmax((overlapTime.ptr[aidx] = (lineMin[aidx]-a.max[aidx])*invv), hitTime);
+        outTime = nmin((lineMax[aidx]-a.min[aidx])*invv, outTime);
+        if (hitTime > outTime) return false;
+      } else {
+        if (lineMin[aidx] > a.max[aidx] || lineMax[aidx] < a.min[aidx]) return false;
+      }
+    }
+
+    if (u0 !is null) *u0 = hitTime;
+    if (u1 !is null) *u1 = outTime;
+
+    // hit normal is along axis with the highest overlap time
+    if (hitnormal !is null) {
+      static if (VT.Dims == 3) {
+        int aidx = 0;
+        if (overlapTime.ptr[1] > overlapTime.ptr[0]) aidx = 1;
+        if (overlapTime.ptr[2] > overlapTime.ptr[aidx]) aidx = 2;
+        VT hn; // zero vector
+        hn[aidx] = (v[aidx] < 0 ? -1 : v[aidx] > 0 ? 1 : 0);
+        *hitnormal = hn;
+      } else {
+        if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
+          *hitnormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
+        } else {
+          *hitnormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
+        }
+      }
+    }
+
+    return true;
   }
 
   /// check to see if the sphere overlaps the AABB
