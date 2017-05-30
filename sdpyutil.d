@@ -907,10 +907,15 @@ public:
     clip = GxRect(dim);
   }
 
-final:
-  @property int width () const pure nothrow @safe @nogc { pragma(inline, true); return dim.width; }
-  @property int height () const pure nothrow @safe @nogc { pragma(inline, true); return dim.height; }
+  final @property int width () const pure nothrow @safe @nogc { pragma(inline, true); return dim.width; }
+  final @property int height () const pure nothrow @safe @nogc { pragma(inline, true); return dim.height; }
 
+  void cls (Color clr=Color.white) { fillrc(0, 0, dim.width, dim.height, clr); }
+
+  // can return null, yeah
+  TrueColorImage getBuffer () { return null; }
+
+final:
   Color getPixel (int x, int y) {
     pragma(inline, true);
     return (x >= 0 && y >= 0 && x < dim.width && y < dim.height && clip.inside(x, y) ? getpix(x, y) : Color.transparent);
@@ -1319,4 +1324,77 @@ final:
     0x0000,0x0000,0x0000,0x0000,0x1e00,0x0300,0x0e00,0x1800,0x1f00,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x1e00,0x1e00,0x1e00,
     0x1e00,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,
   ];
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+final class SdpyDrawSdpyImage : SdpyDrawBase {
+private:
+  Image vbuf;
+
+protected:
+  // must be overriden
+  override Color getpix (int x, int y) {
+    static if (UsingSimpledisplayX11) {
+      pragma(inline, true);
+      const(uint)* dp = (cast(const(uint)*)vbuf.getDataPointer)+y*vbuf.width+x;
+      return XlibImageTC.img2c(*dp);
+    } else {
+      vbuf.getPixel(x, y);
+    }
+  }
+
+  override void putpix (int x, int y, Color col) {
+    static if (UsingSimpledisplayX11) {
+      uint* dp = (cast(uint*)vbuf.getDataPointer)+y*vbuf.width+x;
+      if (col.a == 255) *dp = XlibImageTC.c2img(col)|0xff_000000; else *dp = blendU32(*dp, XlibImageTC.c2img(col)|(col.a<<24));
+    } else {
+      vbuf.setPixel(x, y, col);
+    }
+  }
+
+  // optionals
+  override void hline (int x, int y, int len, Color col) {
+    static if (UsingSimpledisplayX11) {
+      uint* dp = (cast(uint*)vbuf.getDataPointer)+y*vbuf.width+x;
+      uint uc = XlibImageTC.c2img(col);
+      if (col.a == 255) {
+        uc |= 0xff_000000;
+        foreach (immutable _; 0..len) *dp++ = uc;
+      } else {
+        uc |= col.a<<24;
+        foreach (immutable _; 0..len) { *dp = blendU32(*dp, uc); ++dp; }
+      }
+    } else {
+      while (len-- > 0) vbuf.setPixel(x++, y, col);
+    }
+  }
+
+public:
+  this (Image img) {
+    vbuf = img;
+    super(img.width, img.height);
+  }
+
+  override TrueColorImage getBuffer () {
+    auto img = new TrueColorImage(vbuf.width, vbuf.height);
+    static if (UsingSimpledisplayX11) {
+      const(uint)* sp = cast(const(uint)*)vbuf.getDataPointer;
+      auto dp = img.imageData.colors.ptr;
+      foreach (immutable y; 0..vbuf.height) {
+        foreach (immutable x; 0..vbuf.width) {
+          *dp++ = XlibImageTC.img2c(*sp++);
+        }
+      }
+    } else {
+      foreach (immutable y; 0..vbuf.height) {
+        foreach (immutable x; 0..vbuf.width) {
+          img.setPixel(x, y, vbuf.getPixel(x, y));
+        }
+      }
+    }
+    return img;
+  }
+
+  final @property Image imagebuf () pure nothrow @safe @nogc { pragma(inline, true); return vbuf; }
 }
