@@ -13,6 +13,12 @@ final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
   VT[] verts; // vertices
   VT[] norms; // normals
 
+  // GJK interface
+  int vertCount () const nothrow @nogc { pragma(inline, true); return cast(int)verts.length; }
+  VT vert (int idx) const nothrow @nogc { pragma(inline, true); return verts[idx]; }
+  int ringCount () const nothrow @nogc { pragma(inline, true); return cast(int)(verts.length+1); }
+  int ring (int idx) const nothrow @nogc { pragma(inline, true); return (idx < verts.length ? idx : -1); }
+
   void setVerts (const(VT)[] aaverts, VT.Float arot=0) {
     // no hulls with less than 3 vertices (ensure actual polygon)
     if (aaverts.length < 3) throw new Exception("degenerate body");
@@ -134,6 +140,9 @@ auto generateBody () {
 }
 
 
+static assert(IsGoodGJKObject!(Body2D!vec2, vec2));
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 void main () {
   auto flesh0 = generateBody();
@@ -172,6 +181,7 @@ void main () {
     {
       GJK gjk;
 
+      /*
       GJK.VObject buildVObject(BT) (BT flesh) if (is(BT == Body2D!VT, VT)) {
         GJK.VObject obj;
         static if (GJK.Dims == 2) {
@@ -191,9 +201,11 @@ void main () {
       }
       auto o0 = buildVObject(flesh0);
       auto o1 = buildVObject(flesh1);
+      */
       GJK.Vec wpt1, wpt2;
-      auto res = gjk.distance(&o0, &o1, &wpt1, &wpt2);
+      auto res = gjk.distance(flesh0, flesh1, &wpt1, &wpt2);
       writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2);
+      writeln("  disp: ", gjk.simplex.disp);
       if (res < GJK.EPS) pt.outlineColor = Color.red;
       drawPoint(wpt1);
       drawPoint(wpt2);

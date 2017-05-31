@@ -23,8 +23,8 @@ import iv.vmath;
 
 /*
  * If there is no topological information given for the hull
- * then an exhaustive search of the vertices is used.  Otherwise,
- * hill-climbing is performed.  If GJK_EAGER_HILL_CLIMBING is defined
+ * then an exhaustive search of the vertices is used. Otherwise,
+ * hill-climbing is performed. If GJK_EAGER_HILL_CLIMBING is defined
  * then the hill-climbing moves to a new vertex as soon as a better
  * vertex is found, and if it is not defined then every vertex leading
  * from the current vertex is explored before moving to the best one.
@@ -36,13 +36,35 @@ import iv.vmath;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// GJK object should support:
+//   int vertCount const nothrow @nogc
+//   VecN vert (int idx) const nothrow @nogc
+//  optional:
+//   int ringCount const nothrow @nogc
+//   int ring (int idx) const nothrow @nogc
+public template IsGoodGJKObject(T, VT) if ((is(T == struct) || is(T == class)) && IsVector!VT) {
+  enum IsGoodGJKObject = is(typeof((inout int=0) nothrow @nogc {
+    const o = T.init;
+    int vc = o.vertCount; // number of vertices
+    auto vx = o.vert(vc); // get nth vertex
+    static assert(is(typeof(vx) == VT));
+    static if (is(typeof(o.ringCount))) {
+      // has rings
+      int rc = o.ringCount; // number of rings
+      int r = o.ring(rc); // get nth ring
+    }
+  }));
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public struct GJKImpl(VT) if (IsVector!VT) {
 public:
   enum Dims = VT.Dims; /* dimension of space (i.e., x/y/z = 3) */
   alias Float = VT.Float;
   alias Vec = VT;
 
-  /* Even this algorithm has an epsilon (fudge) factor.  It basically indicates
+  /* Even this algorithm has an epsilon (fudge) factor. It basically indicates
      how far apart two points have to be to declared different, expressed
      loosely as a proportion of the `average distance' between the point sets.
    */
@@ -51,13 +73,15 @@ public:
 
 public:
   // VObject structure: holds basic information about each object
+  /*
   static struct VObject {
     const(Vec)[] vertices;
     int[] rings;
   }
+  */
 
   /* The SimplexPoint structure is really designed to be private to the
-     main GJK routines.  However the calling routine may wish to allocate
+     main GJK routines. However the calling routine may wish to allocate
      some to be used to cache information for the distance routines.
      */
   static struct SimplexPoint {
@@ -83,7 +107,7 @@ public:
     /* This value is that returned by the `G-test', and indicates the
        difference between the reported shortest distance vector and the
        vector constructed from supporting hyperplanes in the direction
-       of the reported shortest distance vector.  That is, if the reported
+       of the reported shortest distance vector. That is, if the reported
        shortest distance vector is x, and the hyperplanes are distance D
        apart, this value is G = x.x - D|x|, and should be exactly zero
        for the true shortest distance vector (as |x| should then equal
@@ -91,12 +115,19 @@ public:
 
        Alternatively, G/(x.x) is a relative error bound on the result.
     */
-    bool calculated;
+    bool calculated; // can this struct be used as a seed?
+
+    Float[Dims] displacementv;
+
+  public nothrow @safe @nogc:
+    Float[Dims] disp () const { return displacementv; }
   }
 
-  /* The main GJK distance routine.  This routine implements the routine
+  @property ref const(SimplexPoint) simplex () const nothrow @safe @nogc { pragma(inline, true); return local_simplex; }
+
+  /* The main GJK distance routine. This routine implements the routine
    * of Gilbert, Johnson and Keerthi, as described in the paper (GJK88)
-   * listed below.  It also optionally runs my speed-up extension to this
+   * listed below. It also optionally runs my speed-up extension to this
    * algorithm, as described in (Cam97).
    *
    * The first two parameters are two hulls. These data-structures are
@@ -111,14 +142,12 @@ public:
    * minimum distance between the hulls, which is equal to the (square
    * of the) distance between the witness points.
    *
-   * The 5th parameter is a pointer to a SimplexPoint structure.  If
-   * this is non-null then a special form of the witness points is
-   * stored in the structure by the routine, suitable for passing to
-   * this routine as seed points for any further calls involving these
-   * two objects. The 6th parameter is a flag, which when set tells the
-   * routine to use the given SimplexPoint structure instance as as
-   * seed, otherwise it just uses any seed.  (If the 5th parameter is
-   * null then no harm is done.)
+   * The 5th parameter is a flag, which when set tells the routine to
+   * use the previously calculated SimplexPoint structure instance as
+   * seed, otherwise it just uses any seed. A special form of the
+   * witness points is stored in the structure by the routine, suitable
+   * for using as seed points for any further calls involving these
+   * two objects.
    *
    * Note that with this version one field of the SimplexPoint structure
    * can be used to pass back the confidence region for the routine: when
@@ -131,19 +160,19 @@ public:
    * be sensibly used.)
    *
    * The code will attempt to return with E<=EPS, which the user
-   * can set, but will in any event return with some value of E.  In particular,
+   * can set, but will in any event return with some value of E. In particular,
    * the code should return even with EPS set to zero.
    *
    * Alternatively, either or both of the pointer values for the witness
    * points can be zero, in which case those witness points are not
-   * returned.  The caller can later extract the coordinates of the
+   * returned. The caller can later extract the coordinates of the
    * witness points from the SimplexPoint structure by using the
    * function gjk_extract_point.
    *
    * Returning to the opaque data-structures used to describe the objects
-   * and their transformations.  For an object then the minimum information
-   * required is a list of vertices.  The vertices themselves are another
-   * opaque type, accessed through the type VertexID.  The following macros
+   * and their transformations. For an object then the minimum information
+   * required is a list of vertices. The vertices themselves are another
+   * opaque type, accessed through the type VertexID. The following macros
    * are defined for the vertices:
    *
    *  InvalidVertexID      a VertexID which cannot point to a valid vertex
@@ -156,7 +185,7 @@ public:
    *
    * Optionally, the object data-structures encode the wireframe of the objects;
    * this is used in my extended GJK algorithm to greatly speed up the routine
-   * in many cases.  For an object the predicate ValidRing(obj) says whether
+   * in many cases. For an object the predicate ValidRing(obj) says whether
    * this information is provided, in which case the edges that surround any
    * can be accessed and traversed with the following:
    *
@@ -166,10 +195,10 @@ public:
    *  VertexOfEdge( obj, edge)    Returns the (other) vertex of an edge
    *
    * With this information this routine runs in expected constant time
-   * for tracking operations and small relative motions.  If the
+   * for tracking operations and small relative motions. If the
    * information is not supplied the the routine reverts to using the
    * original GJK technique, which takes time roughly linear in the number
-   * of vertices.  (As a rough rule of thumb, this difference becomes
+   * of vertices. (As a rough rule of thumb, this difference becomes
    * measurable at around 10 vertices per hull, and important at about
    * 20 vertices per hull.)
    *
@@ -183,8 +212,16 @@ public:
    * Automation 13(6):915-920, December 1997.
    *
    */
-  public Float distance (VObject* obj1, VObject* obj2, Vec* wpt1, Vec* wpt2, bool use_seed=false) {
-    VertexID v, p, maxp, minp;
+  public Float distance(VO1, VO2) (in auto ref VO1 obj1, VO2 obj2, bool use_seed=false)
+  if (IsGoodGJKObject!(VO1, VT) && IsGoodGJKObject!(VO2, VT))
+  {
+    return distance(obj1, obj2, null, null, use_seed);
+  }
+
+  public Float distance(VO1, VO2) (in auto ref VO1 obj1, VO2 obj2, Vec* wpt1, Vec* wpt2, bool use_seed=false)
+  if (IsGoodGJKObject!(VO1, VT) && IsGoodGJKObject!(VO2, VT))
+  {
+    VertexID v, maxp, minp;
     Float minus_minv, maxv, sqrd, g_val;
     Float[Dims] displacementv, reverse_displacementv;
     Float[Dims] local_witness1, local_witness2;
@@ -222,7 +259,7 @@ public:
     } else {
       /* If we are being told to use this seed point, there
          is a good chance that the near point will be on
-         the current simplex.  Besides, if we don't confirm
+         the current simplex. Besides, if we don't confirm
          that the seed point given satisfies the invariant
          (that the witness points given are the closest points
          on the current simplex) things can and will fall down.
@@ -230,7 +267,7 @@ public:
       for (v = 0; v < simplex.npts; ++v) add_simplex_vertex(simplex, v, obj1, simplex.simplex1.ptr[v], obj2, simplex.simplex2.ptr[v]);
     }
 
-    /* Now the main loop.  We first compute the distance between the
+    /* Now the main loop. We first compute the distance between the
        current simplicies, the check whether this gives the globally
        correct answer, and if not construct new simplices and try again.
      */
@@ -250,7 +287,7 @@ public:
       }
 
       /* compute at least the displacement vectors given by the
-         SimplexPoint structure.  If we are to provide both witness
+         SimplexPoint structure. If we are to provide both witness
          points, it's slightly faster to compute those first.
        */
       if (compute_both_witnesses) {
@@ -265,10 +302,11 @@ public:
       } else {
         foreach (immutable d; 0..Dims) {
           displacementv.ptr[d] = 0;
-          for (p = 0; p < simplex.npts; ++p) displacementv.ptr[d] += simplex.lambdas.ptr[p]*(simplex.coords2.ptr[p].ptr[d]-simplex.coords1.ptr[p].ptr[d]);
+          foreach (immutable p; 0..simplex.npts) displacementv.ptr[d] += simplex.lambdas.ptr[p]*(simplex.coords2.ptr[p].ptr[d]-simplex.coords1.ptr[p].ptr[d]);
           reverse_displacementv.ptr[d] = -displacementv.ptr[d];
         }
       }
+      simplex.displacementv[] = displacementv[];
 
       sqrd = DOT_PRODUCT(displacementv, displacementv);
 
@@ -373,33 +411,41 @@ private nothrow @trusted @nogc:
      */
   enum InvalidVertexID = -1;
 
-  static int FirstVertex (VObject* obj) { return 0; }
-  static int NumVertices (VObject* obj) { return cast(int)obj.vertices.length; }
-  static void IncrementVertex (VObject* obj, ref int vertex) { ++vertex; }
-  static bool ValidVertex (VObject* obj, int vertex) { return (vertex >= 0); }
-  static bool LastVertex (VObject* obj, int vertex) { return (vertex >= obj.vertices.length); }
-  static Float SupportValue (VObject* obj, int v, const(Float)[] d) {
+  static int FirstVertex(VO) (in ref VO obj) { pragma(inline, true); return 0; }
+  static int NumVertices(VO) (in ref VO obj) { pragma(inline, true); return obj.vertCount; }
+  static void IncrementVertex(VO) (in ref VO obj, ref int vertex) { pragma(inline, true); ++vertex; }
+  static bool ValidVertex(VO) (in ref VO obj, int vertex) { pragma(inline, true); return (vertex >= 0); }
+  static bool LastVertex(VO) (in ref VO obj, int vertex) { pragma(inline, true); return (vertex >= obj.vertCount); }
+  static Float SupportValue(VO) (in ref VO obj, int v, const(Float)[] d) {
     Float[Dims] vx = void;
-    vx.ptr[0] = obj.vertices.ptr[v].x;
-    vx.ptr[1] = obj.vertices.ptr[v].y;
-    static if (Dims == 3) vx.ptr[2] = obj.vertices.ptr[v].z;
+    immutable vv = obj.vert(v);
+    vx.ptr[0] = vv.x;
+    vx.ptr[1] = vv.y;
+    static if (Dims == 3) vx.ptr[2] = vv.z;
     return DOT_PRODUCT(vx[], d);
   }
 
-  static int VertexOfEdge (VObject* obj, int edge) { return obj.rings.ptr[edge]; }
-  static int FirstEdge (VObject* obj, int vertex) { return obj.rings.ptr[vertex]; }
-  static bool ValidEdge (VObject* obj, int edge) { return (obj.rings.ptr[edge] >= 0); }
-  static void IncrementEdge (VObject* obj, ref int edge) { ++edge; }
+  static int VertexOfEdge(VO) (in ref VO obj, int edge) { pragma(inline, true); return obj.ring(edge); }
+  static int FirstEdge(VO) (in ref VO obj, int vertex) { pragma(inline, true); return obj.ring(vertex); }
+  static bool ValidEdge(VO) (in ref VO obj, int edge) { pragma(inline, true); return (obj.ring(edge) >= 0); }
+  static void IncrementEdge(VO) (in ref VO obj, ref int edge) { pragma(inline, true); ++edge; }
 
-  static bool ValidRings (VObject* obj) { return (obj.rings.length != 0); }
+  static bool ValidRings(VO) (in ref VO obj) {
+    pragma(inline, true);
+    static if (is(typeof(obj.ringCount))) {
+      return (obj.ringCount > 0);
+    } else {
+      return false;
+    }
+  }
 
   /* The above set up for vertices to be stored in an array, and for
    * edges to be encoded within a single array of integers as follows.
    * Consider a hull whose vertices are stored in array
-   * Pts, and edge topology in integer array Ring.  Then the indices of
+   * Pts, and edge topology in integer array Ring. Then the indices of
    * the neighbouring vertices to the vertex with index i are Ring[j],
    * Ring[j+1], Ring[j+2], etc, where j = Ring[i] and the list of
-   * indices are terminated with a negative number.  Thus the contents
+   * indices are terminated with a negative number. Thus the contents
    * of Ring for a tetrahedron could be
    *
    *  [ 4, 8, 12, 16,  1, 2, 3, -1,  0, 2, 3, -1,  0, 1, 3, -1,  0, 1, 2, -1 ]
@@ -422,7 +468,7 @@ private nothrow @trusted @nogc:
 
 
   /* MAX_RING_SIZE gives an upper bound on the size of the array of rings
-   * of edges in terms of the number of vertices.  From the formula
+   * of edges in terms of the number of vertices. From the formula
    *   v - e + f = 2
    * and the relationships that there are two half-edges for each edge,
    * and at least 3 half-edges per face, we obtain
@@ -464,7 +510,7 @@ private nothrow @trusted @nogc:
   __gshared immutable int[DIM_PLUS_ONE][TWICE_TWO_TO_DIM] successor;
 
   /* initialise_simplex_distance is called just once per activation of this
-     code, to set up some internal tables.  It takes around 5000 integer
+     code, to set up some internal tables. It takes around 5000 integer
      instructions for Dims==3.
      */
   shared static this () {
@@ -478,13 +524,13 @@ private nothrow @trusted @nogc:
 
     // initialise the number of successors array
     for (s = 0; s < TWICE_TWO_TO_DIM; ++s) num_succ[s] = 0;
-    /* Now the main bit of work.  Simply stated, we wish to encode
+    /* Now the main bit of work. Simply stated, we wish to encode
       within the matrices listed below information about each possible
       subset of DIM_PLUS_ONE integers e in the range
-      0 <= e < DIM_PLUS_ONE.  There are TWICE_TWO_TO_DIM such subsets,
-      including the trivial empty subset.  We wish to ensure that the
+      0 <= e < DIM_PLUS_ONE. There are TWICE_TWO_TO_DIM such subsets,
+      including the trivial empty subset. We wish to ensure that the
       subsets are ordered such that all the proper subsets of subset
-      indexed s themselves have indexes less than s.  The easiest way
+      indexed s themselves have indexes less than s. The easiest way
       to do this is to take the natural mapping from integers to
       subsets, namely integer s corresponds to the subset that contains
       element e if and only if there is a one in the e'th position in
@@ -515,7 +561,7 @@ private nothrow @trusted @nogc:
       */
 
     for (s = 1; s < TWICE_TWO_TO_DIM; ++s) {
-      /* Now consider every possible element.  Element e is in subset s if and only if s DIV 2^e is odd. */
+      /* Now consider every possible element. Element e is in subset s if and only if s DIV 2^e is odd. */
       two_to_e = 1;
       next_elt = next_non_elt = 0;
 
@@ -559,12 +605,12 @@ private nothrow @trusted @nogc:
 
   void reset_simplex (int subset, SimplexPoint* simplex) {
     /* compute the lambda values that indicate exactly where the
-      witness points lie.  We also fold back the values stored for the
+      witness points lie. We also fold back the values stored for the
       indices into the original point arrays, and the transformed
       coordinates, so that these are ready for subsequent calls.
      */
     foreach (immutable j; 0..card.ptr[subset]) {
-     /* rely on elts( subset, j)>=j, which is true as they are stored in ascending order.   */
+     /* rely on elts( subset, j)>=j, which is true as they are stored in ascending order. */
       auto oldpos = elts.ptr[subset].ptr[j];
       if (oldpos != j) {
         simplex.simplex1.ptr[j] = simplex.simplex1.ptr[oldpos];
@@ -579,7 +625,7 @@ private nothrow @trusted @nogc:
     simplex.npts = card.ptr[subset];
   }
 
-  /* The simplex_distance routine requires the computation of a number of delta terms.  These are computed here. */
+  /* The simplex_distance routine requires the computation of a number of delta terms. These are computed here. */
   void compute_subterms (SimplexPoint* simp) {
     int i, j, ielt, jelt, s, jsubset, size = simp.npts;
     Float[Dims][DIM_PLUS_ONE] c_space_points;
@@ -634,7 +680,7 @@ private nothrow @trusted @nogc:
    * default_distance is our equivalent of GJK's distance subalgorithm.
    * It is given a c-space simplex as indices of size (up to DIM_PLUS_ONE) points
    * in the master point list, and computes a pair of witness points for the
-   * minimum distance vector between the simplices.  This vector is indicated
+   * minimum distance vector between the simplices. This vector is indicated
    * by setting the values lambdas[] in the given array, and returning the
    * number of non-zero values of lambda.
    */
@@ -738,12 +784,12 @@ private nothrow @trusted @nogc:
     reset_simplex( bests, simplex);
   }
 
-  static VertexID support_simple (VObject* obj, VertexID start, Float* supportval, Float[] direction) {
+  static VertexID support_simple(VO) (in ref VO obj, VertexID start, Float* supportval, Float[] direction) {
     VertexID p, maxp;
     Float maxv, thisv;
 
-    /* then no information for hill-climbing.  Use brute-force instead. */
-    p = maxp = FirstVertex( obj);
+    /* then no information for hill-climbing. Use brute-force instead. */
+    p = maxp = FirstVertex(obj);
     maxv = SupportValue(obj, maxp, direction);
     for (IncrementVertex(obj, p); !LastVertex(obj, p); IncrementVertex(obj, p)) {
       thisv = SupportValue(obj, p, direction);
@@ -756,7 +802,7 @@ private nothrow @trusted @nogc:
     return maxp;
   }
 
-  static VertexID support_hill_climbing (VObject* obj, VertexID start, Float* supportval, Float[] direction) {
+  static VertexID support_hill_climbing(VO) (in ref VO obj, VertexID start, Float* supportval, Float[] direction) {
     VertexID p, maxp, lastvisited, neighbour;
     EdgeID index;
     Float maxv, thisv;
@@ -772,7 +818,7 @@ private nothrow @trusted @nogc:
       for (index = FirstEdge(obj, p); ValidEdge(obj, index); IncrementEdge(obj, index)) {
         neighbour = VertexOfEdge(obj, index);
         /* Check that we haven't already visited this one in the
-         * last outer iteration.  This is to avoid us calculating
+         * last outer iteration. This is to avoid us calculating
          * the dot-product with vertices we've already looked at.
          */
         if (neighbour == lastvisited) continue;
@@ -790,14 +836,14 @@ private nothrow @trusted @nogc:
   }
 
   /*
-   * The implementation of the support function.  Given a direction and
+   * The implementation of the support function. Given a direction and
    * a hull, this function returns a vertex of the hull that is maximal
    * in that direction, and the value (i.e., dot-product of the maximal
    * vertex and the direction) associated.
    *
    * If there is no topological information given for the hull
-   * then an exhaustive search of the vertices is used.  Otherwise,
-   * hill-climbing is performed.  If GJK_EAGER_HILL_CLIMBING is defined
+   * then an exhaustive search of the vertices is used. Otherwise,
+   * hill-climbing is performed. If GJK_EAGER_HILL_CLIMBING is defined
    * then the hill-climbing moves to a new vertex as soon as a better
    * vertex is found, and if it is not defined then every vertex leading
    * from the current vertex is explored before moving to the best one.
@@ -806,21 +852,23 @@ private nothrow @trusted @nogc:
    * This is presumably due to pipeline bubbles and/or cache misses.
    *
    */
-  static VertexID support_function (VObject* obj, VertexID start, Float* supportval, Float[] direction) {
+  static VertexID support_function(VO) (in ref VO obj, VertexID start, Float* supportval, Float[] direction) {
     if (!ValidRings(obj)) {
-      /* then no information for hill-climbing.  Use brute-force instead. */
+      /* then no information for hill-climbing. Use brute-force instead. */
       return support_simple(obj, start, supportval, direction);
     } else {
       return support_hill_climbing(obj, start, supportval, direction);
     }
   }
 
-  static void add_simplex_vertex (SimplexPoint* s, int pos, VObject* obj1, VertexID v1, VObject* obj2, VertexID v2) {
-    s.coords1.ptr[pos].ptr[0] = obj1.vertices.ptr[v1].x;
-    s.coords1.ptr[pos].ptr[1] = obj1.vertices.ptr[v1].y;
-    static if (Dims == 3) s.coords1.ptr[pos].ptr[2] = obj1.vertices.ptr[v1].z;
-    s.coords2.ptr[pos].ptr[0] = obj2.vertices.ptr[v2].x;
-    s.coords2.ptr[pos].ptr[1] = obj2.vertices.ptr[v2].y;
-    static if (Dims == 3) s.coords2.ptr[pos].ptr[2] = obj2.vertices.ptr[v2].z;
+  static void add_simplex_vertex(VO1, VO2) (SimplexPoint* s, int pos, in ref VO1 obj1, VertexID v1, in ref VO2 obj2, VertexID v2) {
+    immutable vc0 = obj1.vert(v1);
+    s.coords1.ptr[pos].ptr[0] = vc0.x;
+    s.coords1.ptr[pos].ptr[1] = vc0.y;
+    static if (Dims == 3) s.coords1.ptr[pos].ptr[2] = vc0.z;
+    immutable vc1 = obj2.vert(v2);
+    s.coords2.ptr[pos].ptr[0] = vc1.x;
+    s.coords2.ptr[pos].ptr[1] = vc1.y;
+    static if (Dims == 3) s.coords2.ptr[pos].ptr[2] = vc1.z;
   }
 }
