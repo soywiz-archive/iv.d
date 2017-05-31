@@ -174,7 +174,7 @@ public:
   alias v2 = VecN!(2, FloatType);
   alias v3 = VecN!(3, FloatType);
 
-  alias VecSelf = VecN!(dims, FloatType);
+  alias Me = typeof(this);
   alias Float = FloatType;
   alias Dims = dims;
 
@@ -527,6 +527,12 @@ const:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  static if (dims == 3) {
+    alias normal = cross;
+  } else {
+    Me normal(VT) (in auto ref VT b) if (IsVectorDim!(VT, dims)) { pragma(inline, true); return Me(-(b.y-y), b.x-x); }
+  }
+
   auto abs () {
     pragma(inline, true);
     mixin(ImportCoreMath!(Float, "fabs"));
@@ -543,10 +549,16 @@ const:
   }
 
   // `this` is edge; see glsl reference
-  auto step() (in auto ref vec3 val) {
+  auto step(VT) (in auto ref VT val) if (IsVector!VT) {
     pragma(inline, true);
          static if (dims == 2) return v2((val.x < this.x ? 0f : 1f), (val.y < this.y ? 0f : 1f));
-    else static if (dims == 3) return v3((val.x < this.x ? 0f : 1f), (val.y < this.y ? 0f : 1f), (val.z < this.z ? 0f : 1f));
+    else static if (dims == 3) {
+      static if (VT.Dims == 3) {
+        return v3((val.x < this.x ? 0f : 1f), (val.y < this.y ? 0f : 1f), (val.z < this.z ? 0f : 1f));
+      } else {
+        return v3((val.x < this.x ? 0f : 1f), (val.y < this.y ? 0f : 1f), (0 < this.z ? 0f : 1f));
+      }
+    }
     else static assert(0, "invalid dimension count for vector");
   }
 

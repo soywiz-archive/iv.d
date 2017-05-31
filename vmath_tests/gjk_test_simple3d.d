@@ -1,28 +1,35 @@
 import arsd.simpledisplay;
 import iv.vfs.io;
 import iv.vmath;
-import iv.vmath_gjk;
-
-version = want_points;
-//version = use_seed;
-
-version(use_seed) enum UseSeed = true; else enum UseSeed = false;
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-alias GJK = GJKImpl!vec2;
+import iv.vmath_gjk3d_simple;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
   VT[] verts; // vertices
   VT[] norms; // normals
+  VT centroid;
+
+  alias vec3 = VecN!(3, VT.Float);
 
   // GJK interface
-  int vertCount () const nothrow @nogc { pragma(inline, true); return cast(int)verts.length; }
-  VT vert (int idx) const nothrow @nogc { pragma(inline, true); return verts[idx]; }
-  int ringCount () const nothrow @nogc { pragma(inline, true); return cast(int)(verts.length+1); }
-  int ring (int idx) const nothrow @nogc { pragma(inline, true); return (idx < verts.length ? idx : -1); }
+  vec3 position () const { return vec3(centroid); }
+
+  // dumb O(n) support function, just brute force check all points
+  vec3 support (in vec3 dir) const {
+    //dir = matRS_inverse*dir;
+    vec3 furthestPoint = vec3(verts[0]);
+    auto maxDot = furthestPoint.dot(dir);
+    foreach (const ref v; verts[1..$]) {
+      auto d = vec3(v).dot(vec3(dir));
+      if (d > maxDot) {
+        maxDot = d;
+        furthestPoint = vec3(v);
+      }
+    }
+    //auto res = matRS*furthestPoint+pos; // convert support to world space
+    return furthestPoint;
+  }
 
   void setVerts (const(VT)[] aaverts, VT.Float arot=0) {
     // no hulls with less than 3 vertices (ensure actual polygon)
@@ -94,9 +101,11 @@ final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
     foreach (immutable i; 0..vcount) verts ~= averts[hull[i]];
     if (!isConvex()) throw new Exception("non-convex body");
 
+    centroid = VT(0, 0, 0);
     // compute face normals
     norms.reserve(verts.length);
     foreach (immutable i1; 0..verts.length) {
+      centroid += verts[i1];
       immutable i2 = (i1+1)%verts.length;
       auto face = verts[i2]-verts[i1];
       // ensure no zero-length edges, because that's bad
@@ -104,6 +113,7 @@ final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
       // calculate normal with 2D cross product between vector and scalar
       norms ~= VT(face.y, -face.x).normalized;
     }
+    centroid /= cast(VT.Float)verts.length;
     assert(isConvex);
   }
 
@@ -128,6 +138,7 @@ final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
 
   void moveBy() (in auto ref VT delta) {
     foreach (ref v; verts) v += delta;
+    centroid += delta;
   }
 
   void moveBy() (VT.Float dx, VT.Float dy, VT.Float dz=0) { moveBy(VT(dx, dy, dz)); }
@@ -151,6 +162,9 @@ final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
 }
 
 
+static assert(IsGoodGJKObject!(Body2D!vec2, vec3));
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 auto generateBody () {
   import std.random;
@@ -160,9 +174,6 @@ auto generateBody () {
   flesh.setVerts(vtx);
   return flesh;
 }
-
-
-static assert(IsGoodGJKObject!(Body2D!vec2, vec2));
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -177,7 +188,6 @@ void main () {
 
   int fhigh = -1;
   bool checkCollision = true;
-  GJK gjk;
 
   void repaint () {
     auto pt = sdwin.draw();
@@ -190,39 +200,28 @@ void main () {
       pt.drawLine(Point(cast(int)v0.x, cast(int)v0.y), Point(cast(int)v1.x, cast(int)v1.y));
     }
 
-    void drawBody(BT) (BT flesh) if (is(BT == Body2D!VT, VT)) {
-      foreach (immutable int idx; 0..cast(int)flesh.verts.length) {
-        immutable v0 = flesh.verts[idx];
-        immutable v1 = flesh.verts[(idx+1)%cast(int)flesh.verts.length];
-        drawVL(v0, v1);
-      }
-    }
-
     void drawPoint(VT) (in auto ref VT v) if (IsVector!VT) {
       immutable v0 = v-2;
       immutable v1 = v+2;
       pt.drawEllipse(Point(cast(int)v0.x, cast(int)v0.y), Point(cast(int)v1.x, cast(int)v1.y));
     }
 
+    void drawBody(BT) (BT flesh) if (is(BT == Body2D!VT, VT)) {
+      foreach (immutable int idx; 0..cast(int)flesh.verts.length) {
+        immutable v0 = flesh.verts[idx];
+        immutable v1 = flesh.verts[(idx+1)%cast(int)flesh.verts.length];
+        drawVL(v0, v1);
+      }
+      drawPoint(flesh.centroid);
+    }
+
     bool collided = false;
+    vec3 mtv;
 
     if (checkCollision) {
       import std.math : sqrt;
-      version(want_points) {
-        GJK.Vec wpt1, wpt2;
-        auto res = gjk.distance(flesh0, flesh1, &wpt1, &wpt2, UseSeed);
-        writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2, "; d2=", wpt1.distanceSquared(wpt2), "; dist=", sqrt(res));
-      } else {
-        auto res = gjk.distance(flesh0, flesh1, UseSeed);
-        writeln("res=", res, "; dist=", sqrt(res));
-      }
-      writeln("  disp: ", gjk.simplex.disp);
-      if (res < GJK.EPS) collided = true;
-      pt.outlineColor = Color.red;
-      version(want_points) {
-        drawPoint(wpt1);
-        drawPoint(wpt2);
-      }
+      collided = gjk(flesh0, flesh1, &mtv);
+      if (collided) writeln("COLLISION! mtv=", mtv);
     }
 
     pt.outlineColor = (fhigh == 0 ? Color.green : collided ? Color.red : Color.white);
@@ -230,11 +229,29 @@ void main () {
     pt.outlineColor = (fhigh == 1 ? Color.green : collided ? Color.red : Color.white);
     drawBody(flesh1);
 
-    version(want_points) {
-    } else {
+    if (collided) {
+      /*
       pt.outlineColor = Color.yellow;
-      drawPoint(gjk.extractPoint(0));
-      drawPoint(gjk.extractPoint(1));
+      flesh0.moveBy(mtv);
+      drawBody(flesh0);
+      flesh0.moveBy(-mtv);
+
+      pt.outlineColor = Color(255, 127, 0);
+      flesh1.moveBy(mtv);
+      drawBody(flesh1);
+      flesh1.moveBy(-mtv);
+      */
+
+      /*
+      pt.outlineColor = Color(255, 127, 0);
+      drawPoint(epaP+flesh0.centroid);
+
+      drawVL(vec2(epaFace[0]+flesh0.centroid), vec2(epaFace[1]+flesh0.centroid));
+      pt.outlineColor = Color.yellow;
+      drawVL(vec2(epaFace[1]+flesh0.centroid), vec2(epaFace[2]+flesh0.centroid));
+      pt.outlineColor = Color.blue;
+      drawVL(vec2(epaFace[2]+flesh0.centroid), vec2(epaFace[0]+flesh0.centroid));
+      */
     }
   }
 
@@ -247,9 +264,20 @@ void main () {
     delegate (MouseEvent event) {
       int oldhi = fhigh;
       if (event.type == MouseEventType.buttonPressed && event.button == MouseButton.left) {
-             if (flesh0.inside(event.x, event.y)) fhigh = 0;
-        else if (flesh1.inside(event.x, event.y)) fhigh = 1;
-        else fhigh = -1;
+        ubyte hp = 0;
+        if (flesh0.inside(event.x, event.y)) hp |= 1;
+        if (flesh1.inside(event.x, event.y)) hp |= 2;
+        if (hp) {
+               if (hp == 1) fhigh = 0;
+          else if (hp == 2) fhigh = 1;
+          else {
+            assert(hp == 3);
+            // choose one with the closest centroid
+            fhigh = (flesh0.centroid.distanceSquared(vec2(event.x, event.y)) < flesh1.centroid.distanceSquared(vec2(event.x, event.y)) ? 0 : 1);
+          }
+        } else {
+          fhigh = -1;
+        }
         if (oldhi != fhigh) {
           checkCollision = (fhigh == -1);
           repaint();
