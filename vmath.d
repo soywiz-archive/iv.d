@@ -622,12 +622,12 @@ const:
   // some more supplementary functions to support various things
   Float vcos(VT) (in auto ref VT v) if (isVector!VT) {
     immutable Float len = length*v.length;
-    return (len > 0 ? dot(v)/len : 0);
+    return (len > EPSILON!Float ? dot(v)/len : 0);
   }
 
   Float vsin(VT) (in auto ref VT v) if (isVector!VT) {
     immutable Float len = length*v.length;
-    return (len > 0 ? cross(v)/len : 0);
+    return (len > EPSILON!Float ? cross(v)/len : 0);
   }
 
   Float angle180(VT) (in auto ref VT v) if (isVector!VT) {
@@ -667,7 +667,7 @@ const:
   bool touch(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return (distance(v) < /*SMALL*/EPSILON!Float); }
   bool touch(VT) (in auto ref VT v, in Float epsilon) if (isVector!VT) { pragma(inline, true); return (distance(v) < epsilon); }
 
-  // is `this` on left?
+  // is `this` on left? (or on line)
   bool onLeft(VT) (in auto ref VT v0, in auto ref VT v1) if (isVector!VT) {
     pragma(inline, true);
     return ((v1-v0).cross(this-v0) <= 0);
@@ -953,7 +953,7 @@ public:
   alias Float = VT.Float;
 
 public:
-  VT orig, dir;
+  VT orig, dir; // dir should be normalized (setters does this)
 
 nothrow @safe:
   string toString () const {
@@ -1020,7 +1020,7 @@ nothrow @safe:
     else return VT(dir.y, -dir.x, dir.z);
   }
 
-  VT movedBy (VT.Float len) const { pragma(inline, true); return orig+dir*len; }
+  VT pointAt (VT.Float len) const { pragma(inline, true); return orig+dir*len; }
 }
 
 
@@ -1158,27 +1158,31 @@ public nothrow @safe @nogc:
   // something to consider here is that 0 * inf =nan which occurs when the ray starts exactly on the edge of a box
   // rd: ray direction, normalized
   // https://tavianator.com/fast-branchless-raybounding-box-intersections-part-2-nans/
-  static bool intersect() (in auto ref VT bmin, in auto ref VT bmax, in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) {
+  static bool intersects() (in auto ref VT bmin, in auto ref VT bmax, in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) {
     // ok with coplanars, but dmd sux at unrolled loops
     // do X
-    Float dinv = cast(Float)1/ray.dir.x; // 1/0 will produce inf
-    Float t1 = (bmin.x-ray.orig.x)*dinv;
-    Float t2 = (bmax.x-ray.orig.x)*dinv;
-    Float tmin = nmin(t1, t2);
-    Float tmax = nmax(t1, t2);
+    immutable Float dinvp0 = cast(Float)1/ray.dir.x; // 1/0 will produce inf
+    immutable Float t1p0 = (bmin.x-ray.orig.x)*dinvp0;
+    immutable Float t2p0 = (bmax.x-ray.orig.x)*dinvp0;
+    Float tmin = nmin(t1p0, t2p0);
+    Float tmax = nmax(t1p0, t2p0);
     // do Y
-    dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
-    t1 = (bmin.y-ray.orig.y)*dinv;
-    t2 = (bmax.y-ray.orig.y)*dinv;
-    tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
-    tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
-    // do Z
-    static if (VT.Dims == 3) {
-      dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
-      t1 = (bmin.z-ray.orig.z)*dinv;
-      t2 = (bmax.z-ray.orig.z)*dinv;
+    {
+      immutable Float dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
+      immutable Float t1 = (bmin.y-ray.orig.y)*dinv;
+      immutable Float t2 = (bmax.y-ray.orig.y)*dinv;
       tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
       tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    }
+    // do Z
+    static if (VT.Dims == 3) {
+      {
+        immutable Float dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
+        immutable Float t1 = (bmin.z-ray.orig.z)*dinv;
+        immutable Float t2 = (bmax.z-ray.orig.z)*dinv;
+        tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+        tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+      }
     }
     if (tmax > nmax(tmin, cast(Float)0)) {
       if (tmino !is null) *tmino = tmin;
@@ -1189,27 +1193,31 @@ public nothrow @safe @nogc:
     }
   }
 
-  bool intersect() (in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) const @trusted {
+  bool intersects() (in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) const @trusted {
     // ok with coplanars, but dmd sux at unrolled loops
     // do X
-    Float dinv = cast(Float)1/ray.dir.x; // 1/0 will produce inf
-    Float t1 = (min.x-ray.orig.x)*dinv;
-    Float t2 = (max.x-ray.orig.x)*dinv;
-    Float tmin = nmin(t1, t2);
-    Float tmax = nmax(t1, t2);
+    immutable Float dinvp0 = cast(Float)1/ray.dir.x; // 1/0 will produce inf
+    immutable Float t1p0 = (min.x-ray.orig.x)*dinvp0;
+    immutable Float t2p0 = (max.x-ray.orig.x)*dinvp0;
+    Float tmin = nmin(t1p0, t2p0);
+    Float tmax = nmax(t1p0, t2p0);
     // do Y
-    dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
-    t1 = (min.y-ray.orig.y)*dinv;
-    t2 = (max.y-ray.orig.y)*dinv;
-    tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
-    tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
-    // do Z
-    static if (VT.Dims == 3) {
-      dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
-      t1 = (min.z-ray.orig.z)*dinv;
-      t2 = (max.z-ray.orig.z)*dinv;
+    {
+      immutable Float dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
+      immutable Float t1 = (min.y-ray.orig.y)*dinv;
+      immutable Float t2 = (max.y-ray.orig.y)*dinv;
       tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
       tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    }
+    // do Z
+    static if (VT.Dims == 3) {
+      {
+        immutable Float dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
+        immutable Float t1 = (min.z-ray.orig.z)*dinv;
+        immutable Float t2 = (max.z-ray.orig.z)*dinv;
+        tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+        tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+      }
     }
     if (tmax > nmax(tmin, cast(Float)0)) {
       if (tmino !is null) *tmino = tmin;
@@ -1222,22 +1230,20 @@ public nothrow @safe @nogc:
 
   Float segIntersectMin() (in auto ref VT a, in auto ref VT b) const @trusted {
     Float tmin;
-    if (!intersect(Ray!VT.fromPoints(a, b), &tmin)) return -1;
+    if (!intersects(Ray!VT.fromPoints(a, b), &tmin)) return -1;
     if (tmin < 0) return 0; // inside
-    if (tmin > (b-a).length) return -1;
+    if (tmin*tmin > (b-a).lengthSquared) return -1;
     return tmin;
   }
 
   Float segIntersectMax() (in auto ref VT a, in auto ref VT b) const @trusted {
     Float tmax;
-    if (!intersect(Ray!VT.fromPoints(a, b), null, &tmax)) return -1;
-    if (tmax < 0) return 0; // inside
-    if (tmax > (b-a).length) return -1;
+    if (!intersects(Ray!VT.fromPoints(a, b), null, &tmax)) return -1;
+    if (tmax*tmax > (b-a).lengthSquared) return -1;
     return tmax;
   }
 
-  bool isIntersect() (in auto ref VT a, in auto ref VT b) const @trusted {
-    //pragma(inline, true);
+  bool isIntersects() (in auto ref VT a, in auto ref VT b) const @trusted {
     // it may be faster to first check if start or end point is inside AABB (this is sometimes enough for dyntree)
     static if (VT.Dims == 2) {
       if (a.x >= min.x && a.y >= min.y && a.x <= max.x && a.y <= max.y) return true; // a
@@ -1247,12 +1253,10 @@ public nothrow @safe @nogc:
       if (b.x >= min.x && b.y >= min.y && b.z >= min.z && b.x <= max.x && b.y <= max.y && b.z <= max.z) return true; // b
     }
     // nope, do it hard way
-    //return (segIntersectMin(a, b) >= 0);
     Float tmin;
-    if (!intersect(Ray!VT.fromPoints(a, b), &tmin)) return false;
+    if (!intersects(Ray!VT.fromPoints(a, b), &tmin)) return false;
     if (tmin < 0) return true; // inside, just in case
-    if (tmin > (b-a).length) return false;
-    return true;
+    return (tmin*tmin <= (b-a).lengthSquared);
   }
 
   ref inout(VT) opIndex (usize idx) inout {
@@ -3623,7 +3627,7 @@ public:
 
     visit(
       // checker
-      (node) => node.aabb.isIntersect(cura, curb),
+      (node) => node.aabb.isIntersects(cura, curb),
       // visitor
       (flesh) {
         Float hitFraction = cb(flesh, cura, curb);
@@ -3697,7 +3701,7 @@ void main () {
 
   writeln(flesh.aabb.segIntersectMin(ro, re));
 
-  auto res = tree.segmentQuery(ro, re, delegate (int nodeId, in ref vec2 a, in ref vec2 b) {
+  auto res = tree.segmentQuery(ro, re, delegate (flesh, in ref vec2 a, in ref vec2 b) {
     auto dst = flesh.aabb.segIntersectMin(a, b);
     writeln("a=", a, "; b=", b, "; dst=", dst);
     if (dst < 0) return -1;
