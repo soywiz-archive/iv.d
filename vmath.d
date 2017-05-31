@@ -527,10 +527,31 @@ const:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  static if (dims == 3) {
-    alias normal = cross;
-  } else {
-    Me normal(VT) (in auto ref VT b) if (IsVectorDim!(VT, dims)) { pragma(inline, true); return Me(-(b.y-y), b.x-x); }
+  // this method performs the following triple product: (this x b) x c
+  Me tripleProduct() (in auto ref Me b, in auto ref Me c) {
+    alias a = this;
+    static if (dims == 2) {
+      // perform a.dot(c)
+      immutable Float ac = a.x*c.x+a.y*c.y;
+      // perform b.dot(c)
+      immutable Float bc = b.x*c.x+b.y*c.y;
+      // perform b * a.dot(c) - a * b.dot(c)
+      return Me(
+        b.x*ac-a.x*bc,
+        b.y*ac-a.y*bc,
+      );
+    } else {
+      // perform a.dot(c)
+      immutable Float ac = a.x*c.x+a.y*c.y+a.z*c.z;
+      // perform b.dot(c)
+      immutable Float bc = b.x*c.x+b.y*c.y+b.z*c.z;
+      // perform b * a.dot(c) - a * b.dot(c)
+      return Me(
+        b.x*ac-a.x*bc,
+        b.y*ac-a.y*bc,
+        b.z*ac-a.z*bc,
+      );
+    }
   }
 
   auto abs () {

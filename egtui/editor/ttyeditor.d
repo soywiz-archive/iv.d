@@ -1952,8 +1952,8 @@ final:
   @TEDEditOnly mixin TEDImpl!("C-K C-space", "remove trailing spaces", q{ doRemoveTailingSpaces(); });
   mixin TEDImpl!("C-K C-T", /*"toggle \"visual tabs\" mode",*/ q{ visualtabs = !visualtabs; });
 
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-B", q{ doSetBlockStart(); });
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-K", q{ doSetBlockEnd(); });
+  @TEDMultiOnly mixin TEDImpl!("C-K C-B", q{ doSetBlockStart(); });
+  @TEDMultiOnly mixin TEDImpl!("C-K C-K", q{ doSetBlockEnd(); });
 
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-C", q{ doBlockCopy(); });
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-M", q{ doBlockMove(); });
@@ -1961,6 +1961,8 @@ final:
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K C-H", q{ doBlockResetMark(); });
   // fuckin' vt100!
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-K Backspace", q{ doBlockResetMark(); });
+
+  mixin TEDImpl!("C-K !", "toggle read-only mode", q{ ttyBeep(); auto ro = readonly; readonly = !ro; fullDirty(); });
 
   @TEDEditOnly @TEDRepeated mixin TEDImpl!("C-Q Tab", q{ doPutChar('\t'); });
   mixin TEDImpl!("C-Q C-U", "toggle utfuck mode", q{ utfuck = !utfuck; }); // ^Q^U: switch utfuck mode
