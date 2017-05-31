@@ -2002,7 +2002,7 @@ public:
            mt.ptr[3]*getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
   }
 
-  ///////////////////////////////////////////////////////////////////////////////
+  // ////////////////////////////////////////////////////////////////////////////
   // compute the inverse of 4x4 Euclidean transformation matrix
   //
   // Euclidean transformation is translation, rotation, and reflection.
@@ -2025,15 +2025,77 @@ public:
     return this;
   }
 
+  // ////////////////////////////////////////////////////////////////////////////
+  // compute the inverse of a 4x4 affine transformation matrix
+  //
+  // Affine transformations are generalizations of Euclidean transformations.
+  // Affine transformation includes translation, rotation, reflection, scaling,
+  // and shearing. Length and angle are NOT preserved.
+  ref mat4 invertAffine() () {
+    // R^-1
+    mixin(ImportCoreMath!(Float, "fabs"));
+    // inverse 3x3 matrix
+    Float[9] r = [ mt.ptr[0],mt.ptr[1],mt.ptr[2], mt.ptr[4],mt.ptr[5],mt.ptr[6], mt.ptr[8],mt.ptr[9],mt.ptr[10] ];
+    {
+      Float[9] tmp = void;
+      tmp.ptr[0] = r.ptr[4]*r.ptr[8]-r.ptr[5]*r.ptr[7];
+      tmp.ptr[1] = r.ptr[2]*r.ptr[7]-r.ptr[1]*r.ptr[8];
+      tmp.ptr[2] = r.ptr[1]*r.ptr[5]-r.ptr[2]*r.ptr[4];
+      tmp.ptr[3] = r.ptr[5]*r.ptr[6]-r.ptr[3]*r.ptr[8];
+      tmp.ptr[4] = r.ptr[0]*r.ptr[8]-r.ptr[2]*r.ptr[6];
+      tmp.ptr[5] = r.ptr[2]*r.ptr[3]-r.ptr[0]*r.ptr[5];
+      tmp.ptr[6] = r.ptr[3]*r.ptr[7]-r.ptr[4]*r.ptr[6];
+      tmp.ptr[7] = r.ptr[1]*r.ptr[6]-r.ptr[0]*r.ptr[7];
+      tmp.ptr[8] = r.ptr[0]*r.ptr[4]-r.ptr[1]*r.ptr[3];
+
+      // check determinant if it is 0
+      Float determinant = r.ptr[0]*tmp.ptr[0]+r.ptr[1]*tmp.ptr[3]+r.ptr[2]*tmp.ptr[6];
+      if (fabs(determinant) <= EPSILON!Float) {
+        // cannot inverse, make it idenety matrix
+        r[] = 0;
+        r.ptr[0] = r.ptr[4] = r.ptr[8] = 1;
+      } else {
+        // divide by the determinant
+        Float invDeterminant = cast(Float)1/determinant;
+        r.ptr[0] = invDeterminant*tmp.ptr[0];
+        r.ptr[1] = invDeterminant*tmp.ptr[1];
+        r.ptr[2] = invDeterminant*tmp.ptr[2];
+        r.ptr[3] = invDeterminant*tmp.ptr[3];
+        r.ptr[4] = invDeterminant*tmp.ptr[4];
+        r.ptr[5] = invDeterminant*tmp.ptr[5];
+        r.ptr[6] = invDeterminant*tmp.ptr[6];
+        r.ptr[7] = invDeterminant*tmp.ptr[7];
+        r.ptr[8] = invDeterminant*tmp.ptr[8];
+      }
+    }
+
+    mt.ptr[0] = r.ptr[0]; mt.ptr[1] = r.ptr[1]; mt.ptr[2] = r.ptr[2];
+    mt.ptr[4] = r.ptr[3]; mt.ptr[5] = r.ptr[4]; mt.ptr[6] = r.ptr[5];
+    mt.ptr[8] = r.ptr[6]; mt.ptr[9] = r.ptr[7]; mt.ptr[10]= r.ptr[8];
+
+    // -R^-1 * T
+    immutable Float x = mt.ptr[12];
+    immutable Float y = mt.ptr[13];
+    immutable Float z = mt.ptr[14];
+    mt.ptr[12] = -(r.ptr[0]*x+r.ptr[3]*y+r.ptr[6]*z);
+    mt.ptr[13] = -(r.ptr[1]*x+r.ptr[4]*y+r.ptr[7]*z);
+    mt.ptr[14] = -(r.ptr[2]*x+r.ptr[5]*y+r.ptr[8]*z);
+
+    // last row should be unchanged (0,0,0,1)
+    //mt.ptr[3] = mt.ptr[7] = mt.ptr[11] = 0.0f;
+    //mt.ptr[15] = 1.0f;
+
+    return this;
+  }
+
   ref mat4 inverted() () {
     // if the 4th row is [0,0,0,1] then it is affine matrix and
     // it has no projective transformation
     if (mt.ptr[3] == 0 && mt.ptr[7] == 0 && mt.ptr[11] == 0 && mt.ptr[15] == 1) {
-      invertedAffine();
+      return invertedAffine();
     } else {
-      invertedGeneral();
+      return invertedGeneral();
     }
-    return this;
   }
 
   ///////////////////////////////////////////////////////////////////////////////
