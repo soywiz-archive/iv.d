@@ -3,6 +3,11 @@ import iv.vfs.io;
 import iv.vmath;
 import iv.vmath_gjk;
 
+version = want_points;
+//version = use_seed;
+
+version(use_seed) enum UseSeed = true; else enum UseSeed = false;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 alias GJK = GJKImpl!vec2;
@@ -203,14 +208,21 @@ void main () {
 
     if (checkCollision) {
       import std.math : sqrt;
-      GJK.Vec wpt1, wpt2;
-      auto res = gjk.distance(flesh0, flesh1, &wpt1, &wpt2);
-      writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2, "; d2=", wpt1.distanceSquared(wpt2), "; dist=", sqrt(res));
+      version(want_points) {
+        GJK.Vec wpt1, wpt2;
+        auto res = gjk.distance(flesh0, flesh1, &wpt1, &wpt2, UseSeed);
+        writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2, "; d2=", wpt1.distanceSquared(wpt2), "; dist=", sqrt(res));
+      } else {
+        auto res = gjk.distance(flesh0, flesh1, UseSeed);
+        writeln("res=", res, "; dist=", sqrt(res));
+      }
       writeln("  disp: ", gjk.simplex.disp);
       if (res < GJK.EPS) collided = true;
       pt.outlineColor = Color.red;
-      drawPoint(wpt1);
-      drawPoint(wpt2);
+      version(want_points) {
+        drawPoint(wpt1);
+        drawPoint(wpt2);
+      }
     }
 
     pt.outlineColor = (fhigh == 0 ? Color.green : collided ? Color.red : Color.white);
@@ -218,9 +230,12 @@ void main () {
     pt.outlineColor = (fhigh == 1 ? Color.green : collided ? Color.red : Color.white);
     drawBody(flesh1);
 
-    pt.outlineColor = Color.yellow;
-    drawPoint(gjk.extractPoint(0));
-    drawPoint(gjk.extractPoint(1));
+    version(want_points) {
+    } else {
+      pt.outlineColor = Color.yellow;
+      drawPoint(gjk.extractPoint(0));
+      drawPoint(gjk.extractPoint(1));
+    }
   }
 
   repaint();
