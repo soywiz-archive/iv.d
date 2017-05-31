@@ -1340,7 +1340,7 @@ protected:
       const(uint)* dp = (cast(const(uint)*)vbuf.getDataPointer)+y*vbuf.width+x;
       return XlibImageTC.img2c(*dp);
     } else {
-      vbuf.getPixel(x, y);
+      return vbuf.getPixel(x, y);
     }
   }
 
