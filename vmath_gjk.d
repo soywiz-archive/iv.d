@@ -382,7 +382,7 @@ public:
     }
   }
 
-private nothrow @trusted @nogc:
+private nothrow @nogc:
   // working arrays
   Float[DIM_PLUS_ONE][TWICE_TWO_TO_DIM] delta_values;
   Float[DIM_PLUS_ONE][DIM_PLUS_ONE] dot_products;

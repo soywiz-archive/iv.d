@@ -204,7 +204,7 @@ void main () {
       */
       GJK.Vec wpt1, wpt2;
       auto res = gjk.distance(flesh0, flesh1, &wpt1, &wpt2);
-      writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2);
+      writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2, "; d2=", wpt1.distanceSquared(wpt2));
       writeln("  disp: ", gjk.simplex.disp);
       if (res < GJK.EPS) pt.outlineColor = Color.red;
       drawPoint(wpt1);
