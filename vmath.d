@@ -96,14 +96,25 @@ template SMALLEPSILON(T) if (is(T == float) || is(T == double)) {
   else static assert(0, "wtf?!");
 }
 
-auto deg2rad(T:double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)PI/cast(T)180); }
-auto rad2deg(T:double) (T v) pure nothrow @safe @nogc { pragma(inline, true); import std.math : PI; return cast(T)(v*cast(T)180/cast(T)PI); }
+auto deg2rad(T:double) (T v) pure nothrow @safe @nogc {
+  pragma(inline, true);
+  import std.math : PI;
+  static if (__traits(isFloating, T)) {
+    return cast(T)(v*cast(T)PI/cast(T)180);
+  } else {
+    return cast(VFloat)(cast(VFloat)v*cast(VFloat)PI/cast(VFloat)180);
+  }
+}
 
-auto deg2rad (int v) pure nothrow @safe @nogc { pragma(inline, true); return deg2rad!VFloat(cast(VFloat)v); }
-auto rad2deg (int v) pure nothrow @safe @nogc { pragma(inline, true); return rad2deg!VFloat(cast(VFloat)v); }
-
-auto deg2rad (long v) pure nothrow @safe @nogc { pragma(inline, true); return deg2rad!VFloat(cast(VFloat)v); }
-auto rad2deg (long v) pure nothrow @safe @nogc { pragma(inline, true); return rad2deg!VFloat(cast(VFloat)v); }
+auto rad2deg(T:double) (T v) pure nothrow @safe @nogc {
+  pragma(inline, true);
+  import std.math : PI;
+  static if (__traits(isFloating, T)) {
+    return cast(T)(v*cast(T)180/cast(T)PI);
+  } else {
+    return cast(VFloat)(cast(VFloat)v*cast(VFloat)180/cast(VFloat)PI);
+  }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
