@@ -102,14 +102,14 @@ final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
     assert(isConvex);
   }
 
-  bool isConvex () {
+  bool isConvex () const {
     static int sign() (VT.Float v) { pragma(inline, true); return (v < 0 ? -1 : v > 0 ? 1 : 0); }
     if (verts.length < 3) return false;
     if (verts.length == 3) return true; // nothing to check here
     int dir;
     foreach (immutable idx, const ref v; verts) {
-      auto v1 = VT(verts[(idx+1)%verts.length])-v;
-      auto v2 = VT(verts[(idx+2)%verts.length]);
+      immutable v1 = VT(verts[(idx+1)%verts.length])-v;
+      immutable v2 = VT(verts[(idx+2)%verts.length]);
       int d = sign(v2.x*v1.y-v2.y*v1.x+v1.x*v.y-v1.y*v.x);
       if (d == 0) return false;
       if (idx) {
@@ -126,6 +126,23 @@ final class Body2D(VT) if (IsVectorDim!(VT, 2)) {
   }
 
   void moveBy() (VT.Float dx, VT.Float dy, VT.Float dz=0) { moveBy(VT(dx, dy, dz)); }
+
+  bool inside() (in auto ref VT p) const {
+    static int sign() (VT.Float v) { pragma(inline, true); return (v < 0 ? -1 : v > 0 ? 1 : 0); }
+    if (verts.length < 3) return false;
+    int side = 0;
+    foreach (immutable idx, const ref v; verts) {
+      immutable as = verts[(idx+1)%verts.length]-v;
+      immutable ap = p-v;
+      int d = sign(as.cross(ap));
+      if (d != 0) {
+        if (side == 0) side = d; else if (side != d) return false;
+      }
+    }
+    return true;
+  }
+
+  bool inside() (VT.Float x, VT.Float y) const { return inside(VT(x, y)); }
 }
 
 
@@ -153,6 +170,10 @@ void main () {
 
   auto sdwin = new SimpleWindow(1024, 768, "GJK Test");
 
+  int fhigh = -1;
+  bool checkCollision = true;
+  GJK gjk;
+
   void repaint () {
     auto pt = sdwin.draw();
     pt.fillColor = Color.black;
@@ -178,47 +199,28 @@ void main () {
       pt.drawEllipse(Point(cast(int)v0.x, cast(int)v0.y), Point(cast(int)v1.x, cast(int)v1.y));
     }
 
-    {
-      GJK gjk;
+    bool collided = false;
 
-      /*
-      GJK.VObject buildVObject(BT) (BT flesh) if (is(BT == Body2D!VT, VT)) {
-        GJK.VObject obj;
-        static if (GJK.Dims == 2) {
-          obj.vertices = flesh.verts;
-        } else {
-          GJK.Vec[] vc;
-          vc.length = flesh.verts.length;
-          foreach (immutable idx, const ref v; flesh.verts) vc[idx] = GJK.Vec(v.x, v.y, 0);
-          obj.vertices = vc;
-        }
-        version(all) {
-          obj.rings.length = obj.vertices.length+1;
-          foreach (immutable idx; 0..flesh.verts.length) obj.rings[idx] = cast(int)idx;
-          obj.rings[$-1] = -1;
-        }
-        return obj;
-      }
-      auto o0 = buildVObject(flesh0);
-      auto o1 = buildVObject(flesh1);
-      */
+    if (checkCollision) {
+      import std.math : sqrt;
       GJK.Vec wpt1, wpt2;
       auto res = gjk.distance(flesh0, flesh1, &wpt1, &wpt2);
-      writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2, "; d2=", wpt1.distanceSquared(wpt2));
+      writeln("res=", res, "; wpt1=", wpt1, "; wpt2=", wpt2, "; d2=", wpt1.distanceSquared(wpt2), "; dist=", sqrt(res));
       writeln("  disp: ", gjk.simplex.disp);
-      if (res < GJK.EPS) pt.outlineColor = Color.red;
+      if (res < GJK.EPS) collided = true;
+      pt.outlineColor = Color.red;
       drawPoint(wpt1);
       drawPoint(wpt2);
     }
 
+    pt.outlineColor = (fhigh == 0 ? Color.green : collided ? Color.red : Color.white);
     drawBody(flesh0);
+    pt.outlineColor = (fhigh == 1 ? Color.green : collided ? Color.red : Color.white);
     drawBody(flesh1);
 
-    /*
     pt.outlineColor = Color.yellow;
-    drawPoint(GJK.extractPoint(0));
-    drawPoint(GJK.extractPoint(1));
-    */
+    drawPoint(gjk.extractPoint(0));
+    drawPoint(gjk.extractPoint(1));
   }
 
   repaint();
@@ -226,6 +228,33 @@ void main () {
     delegate (KeyEvent event) {
       if (!event.pressed) return;
       if (event == "C-Q") { sdwin.close(); return; }
+    },
+    delegate (MouseEvent event) {
+      int oldhi = fhigh;
+      if (event.type == MouseEventType.buttonPressed && event.button == MouseButton.left) {
+             if (flesh0.inside(event.x, event.y)) fhigh = 0;
+        else if (flesh1.inside(event.x, event.y)) fhigh = 1;
+        else fhigh = -1;
+        if (oldhi != fhigh) {
+          checkCollision = (fhigh == -1);
+          repaint();
+        }
+        return;
+      }
+      if (fhigh != -1 && event.type == MouseEventType.motion && (event.modifierState&ModifierState.leftButtonDown) != 0) {
+             if (fhigh == 0) flesh0.moveBy(event.dx, event.dy);
+        else if (fhigh == 1) flesh1.moveBy(event.dx, event.dy);
+        checkCollision = (fhigh == -1);
+        repaint();
+        return;
+      }
+      if (event.type == MouseEventType.buttonReleased && event.button == MouseButton.left) {
+        if (fhigh != -1) {
+          fhigh = -1;
+          checkCollision = true;
+          repaint();
+        }
+      }
     },
   );
 }
