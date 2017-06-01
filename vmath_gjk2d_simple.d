@@ -56,8 +56,6 @@ public template IsGoodGJKObject(T, VT) if ((is(T == struct) || is(T == class)) &
 // ////////////////////////////////////////////////////////////////////////// //
 /// check if two convex shapes are colliding. can optionally return separating vector in `sepmove`.
 public bool gjk(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepmove=null) if (IsGoodGJKObject!(CT, VT)) {
-  enum MaxIterations = 64;
-
   VT sdir = coll2.position-coll1.position; // initial search direction
   if (sdir.isZero) sdir = VT(1, 0); // use arbitrary normal if initial direction is zero
 
@@ -69,7 +67,7 @@ public bool gjk(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepmove
   sdir = -sdir; // change search direction
 
   int spxidx = 1;
-  foreach (immutable iterations; 0..MaxIterations) {
+  for (;;) {
     spx.ptr[spxidx] = getSupportPoint(coll1, coll2, sdir);
     if (spx.ptr[spxidx].dot(sdir) <= 0) return false; // past the origin
     if (checkSimplex(sdir, spx[spxidx..$])) {
