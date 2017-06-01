@@ -19,6 +19,7 @@ module iv.sdpyutil /*is aliced*/;
 import arsd.color;
 import arsd.simpledisplay;
 import iv.alice;
+import iv.bclamp;
 
 //version = krc_debug;
 
@@ -522,6 +523,20 @@ public struct XlibImageTC {
     create(wdt, hgt, aimg, xshm);
   }
 
+  TrueColorImage getAsTC () {
+    if (!valid) return null;
+    auto tc = new TrueColorImage(width, height);
+    scope(failure) delete tc;
+    auto sc = cast(const(uint)*)data;
+    auto dc = tc.imageData.colors.ptr;
+    foreach (immutable dy; 0..height) {
+      foreach (immutable dx; 0..width) {
+        *dc++ = img2c(*sc++);
+      }
+    }
+    return tc;
+  }
+
   private void create (int width, int height, MemoryImage ximg, bool xshm) {
     import core.stdc.stdlib : malloc, free;
     if (xshm && !sdpyHasXShm) xshm = false;
@@ -650,6 +665,21 @@ public struct XlibImageTC {
   }
 
 static:
+  public ubyte icR (uint c) pure nothrow @safe @nogc { pragma(inline, true); return ((c>>16)&0xff); }
+  public ubyte icG (uint c) pure nothrow @safe @nogc { pragma(inline, true); return ((c>>8)&0xff); }
+  public ubyte icB (uint c) pure nothrow @safe @nogc { pragma(inline, true); return (c&0xff); }
+  public ubyte icA (uint c) pure nothrow @safe @nogc { pragma(inline, true); return (c&0xff); }
+
+  public uint icRGB (int r, int g, int b) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return (clampToByte(r)<<16)|(clampToByte(g)<<8)|clampToByte(b);
+  }
+
+  public uint icRGBA (int r, int g, int b, int a) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return (clampToByte(a)<<24)|(clampToByte(r)<<16)|(clampToByte(g)<<8)|clampToByte(b);
+  }
+
   public uint c2img (in Color c) pure nothrow @safe @nogc {
     pragma(inline, true);
     return
@@ -939,6 +969,20 @@ final:
   void fillRect (int x, int y, int w, int h, Color c) {
     pragma(inline, true);
     if (GxRect(dim).clipHVStripes(x, y, w, h) && clip.clipHVStripes(x, y, w, h)) fillrc(x, y, w, h, c);
+  }
+
+  void drawRect(bool filled) (int x, int y, int w, int h, Color c) {
+    pragma(inline, true);
+    static if (filled) {
+      if (GxRect(dim).clipHVStripes(x, y, w, h) && clip.clipHVStripes(x, y, w, h)) fillrc(x, y, w, h, c);
+    } else {
+      hline(x, y, w, c);
+      if (h > 1) hline(x, y+h-1, w, c);
+      if (h > 2 && w > 2) {
+        vline(x+1, y, w-2, c);
+        vline(x+1, y+h-1, w-2, c);
+      }
+    }
   }
 
   void drawEllipse(bool filled=false) (int x0, int y0, int x1, int y1, Color col) {

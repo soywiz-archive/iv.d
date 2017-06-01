@@ -23,7 +23,7 @@ import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void unsafeArrayReserve(T) (ref T[] arr, int newlen) nothrow {
+public void unsafeArrayReserve(T) (ref T[] arr, int newlen) /*nothrow*/ {
   if (newlen < 0 || newlen >= int.max/2) assert(0, "invalid number of elements in array");
   if (arr.length < newlen) {
     auto optr = arr.ptr;
@@ -37,7 +37,7 @@ public void unsafeArrayReserve(T) (ref T[] arr, int newlen) nothrow {
 }
 
 
-public void unsafeArraySetLength(T) (ref T[] arr, int newlen) nothrow {
+public void unsafeArraySetLength(T) (ref T[] arr, int newlen) /*nothrow*/ {
   if (newlen < 0 || newlen >= int.max/2) assert(0, "invalid number of elements in array");
   if (arr.length > newlen) {
     arr.length = newlen;
@@ -54,7 +54,7 @@ public void unsafeArraySetLength(T) (ref T[] arr, int newlen) nothrow {
 }
 
 
-public void unsafeArrayAppend(T) (ref T[] arr, auto ref T v) nothrow {
+public void unsafeArrayAppend(T) (ref T[] arr, auto ref T v) /*nothrow*/ {
   if (arr.length >= int.max/2) assert(0, "too many elements in array");
   auto optr = arr.ptr;
   arr ~= v;
@@ -66,7 +66,7 @@ public void unsafeArrayAppend(T) (ref T[] arr, auto ref T v) nothrow {
 }
 
 
-public void unsafeArrayClear(T) (ref T[] arr) nothrow {
+public void unsafeArrayClear(T) (ref T[] arr) /*nothrow*/ {
   if (arr.length) {
     import core.stdc.string : memset;
     static if (is(T == class)) arr[] = null; /*else arr[] = T.init;*/
@@ -77,7 +77,7 @@ public void unsafeArrayClear(T) (ref T[] arr) nothrow {
 }
 
 
-public void unsafeArrayRemove(T) (ref T[] arr, int idx) nothrow {
+public void unsafeArrayRemove(T) (ref T[] arr, int idx) /*nothrow*/ {
   if (idx < 0 || idx >= arr.length) assert(0, "invalid index in `unsafeArrayRemove()`");
   static if (is(T == class)) arr[idx] = null; else arr[idx] = T.init;
   if (arr.length-idx > 1) {
@@ -90,7 +90,7 @@ public void unsafeArrayRemove(T) (ref T[] arr, int idx) nothrow {
 }
 
 
-public void unsafeArrayInsertBefore(T) (ref T[] arr, int idx, auto ref T v) nothrow {
+public void unsafeArrayInsertBefore(T) (ref T[] arr, int idx, auto ref T v) /*nothrow*/ {
   if (idx < 0 || idx > arr.length) assert(0, "invalid index in `unsafeArrayRemove()`");
   auto olen = cast(int)arr.length;
   if (olen >= int.max/2) assert(0, "too many elements in array");
