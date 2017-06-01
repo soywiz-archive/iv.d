@@ -59,7 +59,7 @@ public bool gjk(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepmove
   VT sdir = coll2.position-coll1.position; // initial search direction
   if (sdir.isZero) sdir = VT(1, 0); // use arbitrary normal if initial direction is zero
 
-  VT[3] spx = void; // simplex; [2] is most recently added, [0] is oldest
+  VT[3] spx = void; // simplex; [0] is most recently added, [2] is oldest
 
   spx.ptr[2] = getSupportPoint(coll1, coll2, sdir);
   if (spx.ptr[2].dot(sdir) <= 0) return false; // past the origin
@@ -74,7 +74,7 @@ public bool gjk(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepmove
       if (sepmove !is null) *sepmove = EPA(coll1, coll2, spx[spxidx..$]);
       return true;
     }
-    if (spxidx > 0) --spxidx;
+    spxidx = 0;
   }
 
   return false;

@@ -449,7 +449,7 @@ struct DriverInfo {
 __gshared DriverInfo[] drivers;
 __gshared uint tempDrvCount = 0;
 
-private void cleanupDrivers () {
+private void cleanupDrivers (VFSDriverId did=VFSDriverId(0)) {
   if (tempDrvCount == 0) return;
   bool ctValid = false;
   MonoTime ct;
@@ -457,6 +457,7 @@ private void cleanupDrivers () {
   while (idx > 0) {
     --idx;
     if (!drivers.ptr[idx].temp) continue;
+    if (drivers.ptr[idx].drvid == did) continue; // keep this one
     if (!ctValid) { ct = MonoTime.currTime; ctValid = true; }
     if ((ct-drivers.ptr[idx].tempUsedTime).total!"seconds" >= 5) {
       // remove it
@@ -591,6 +592,33 @@ public int vfsForEachFile() (scope int delegate (in ref VFSDriver.DirEntry de) c
 /// Ditto.
 public void vfsForEachFile() (scope void delegate (in ref VFSDriver.DirEntry de) cb) {
   if (cb !is null) vfsForEachFile((in ref VFSDriver.DirEntry de) { cb(de); return 0; });
+}
+
+
+/// call callback for each known file in the given driver. return non-zero from callback to stop.
+/// WARNING: don't add new drivers while this is in process!
+/// WARNING: can return duplicate dir entries!
+public int vfsForEachFileInPak() (VFSDriverId did, scope int delegate (in ref VFSDriver.DirEntry de) cb) {
+  if (cb is null || !did.valid) return 0;
+
+  auto lock = vfsLockIntr();
+  cleanupDrivers(did); // but keep did
+  foreach_reverse (ref drvnfo; drivers) {
+    if (drvnfo.drvid != did) continue;
+    foreach_reverse (immutable idx; 0..drvnfo.drv.dirLength) {
+      auto de = drvnfo.drv.dirEntry(idx);
+      de.drvid = drvnfo.drvid;
+      if (auto res = cb(de)) return res;
+    }
+    break;
+  }
+  return 0;
+}
+
+
+/// Ditto.
+public void vfsForEachFileInPak() (VFSDriverId did, scope void delegate (in ref VFSDriver.DirEntry de) cb) {
+  if (cb !is null) vfsForEachFileInPak(did, (in ref VFSDriver.DirEntry de) { cb(de); return 0; });
 }
 
 
