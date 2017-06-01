@@ -1463,3 +1463,151 @@ public:
 
   final @property Image imagebuf () pure nothrow @safe @nogc { pragma(inline, true); return vbuf; }
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/+
+version(linux) final class SdpyDrawVBuf : SdpyDrawBase {
+private:
+  XImageTC vbuf;
+
+protected:
+  // must be overriden
+  override Color getpix (int x, int y) {
+    pragma(inline, true);
+    return XlibImageTC.img2c(vbuf.data[y*vbuf.width+x]);
+  }
+
+  override void putpix (int x, int y, Color col) {
+    uint* dp = vbuf.data+y*vbuf.width+x;
+    if (col.a == 255) *dp = XlibImageTC.c2img(col)|0xff_000000; else *dp = blendU32(*dp, XlibImageTC.c2img(col)|(col.a<<24));
+  }
+
+  // optionals
+  override void hline (int x, int y, int len, Color col) {
+    uint* dp = vbuf.data+y*vbuf.width+x;
+    uint uc = XlibImageTC.c2img(col);
+    if (col.a == 255) {
+      uc |= 0xff_000000;
+      foreach (immutable _; 0..len) *dp++ = uc;
+    } else {
+      uc |= col.a<<24;
+      foreach (immutable _; 0..len) { *dp = blendU32(*dp, uc); ++dp; }
+    }
+  }
+
+public:
+  this (XImageTC img) {
+    vbuf = img;
+    super(img.width, img.height);
+  }
+
+  override TrueColorImage getBuffer () {
+    auto img = new TrueColorImage(vbuf.width, vbuf.height);
+    const(uint)* sp = cast(const(uint)*)vbuf.data;
+    auto dp = img.imageData.colors.ptr;
+    foreach (immutable y; 0..vbuf.height) {
+      foreach (immutable x; 0..vbuf.width) {
+        *dp++ = XlibImageTC.img2c(*sp++);
+      }
+    }
+    return img;
+  }
+
+  final @property XImageTC imagebuf () pure nothrow @safe @nogc { pragma(inline, true); return vbuf; }
+
+  final void cls (Color clr) {
+    import core.stdc.string : memset;
+    if (!vbuf.valid) return;
+    if (clr.r == 0 && clr.g == 0 && clr.b == 0) {
+      memset(vbuf.data, 0, vbuf.width*vbuf.height*uint.sizeof);
+    } else {
+      drawRect!true(0, 0, vbuf.width, vbuf.height);
+    }
+  }
+
+  void blitFrom (DFImage src, int x0, int y0, int subalpha=-1, int cx0=0, int cy0=0, int cx1=int.max, int cy1=int.max) {
+    if (src is null || !src.valid || !vbuf.valid) return;
+    if (cx1 >= vbuf.width) cx1 = vbuf.width-1;
+    if (cy1 >= vbuf.height) cy1 = vbuf.height-1;
+    if (cx0 < 0) cx0 = 0;
+    if (cy0 < 0) cy0 = 0;
+    if (cx1 < cx0 || cy1 < cy0 || cx1 < 0 || cy1 < 0 || cx0 >= vbuf.width || cy0 >= vbuf.height) return; // nothing to do here
+
+    void doBlit(bool doSrcAlpha, bool doSubAlpha) (int x, int y, int xofs, int yofs, int wdt, int hgt, int subalpha=0) {
+      auto sc = cast(const(uint)*)src.data.ptr;
+      auto dc = vbuf.data;
+      sc += yofs*src.width+xofs;
+      dc += y*vbuf.width+x;
+      foreach (immutable dy; 0..hgt) {
+        static if (!doSubAlpha && !doSrcAlpha) {
+          // fastest path
+          import core.stdc.string : memcpy;
+          memcpy(dc, sc, wdt*uint.sizeof);
+        } else {
+          auto scl = sc;
+          auto dcl = dc;
+          foreach (immutable dx; 0..wdt) {
+            static if (doSubAlpha) {
+              static assert(!doSrcAlpha);
+              *dcl = XlibImageTC.icRGB(
+                XlibImageTC.icR(*dcl)+XlibImageTC.icR(*scl)*(255-subalpha)/255,
+                XlibImageTC.icG(*dcl)+XlibImageTC.icG(*scl)*(255-subalpha)/255,
+                XlibImageTC.icB(*dcl)+XlibImageTC.icB(*scl)*(255-subalpha)/255,
+              );
+            } else {
+              static assert(doSrcAlpha);
+              if (XlibImageTC.icA(*scl) == 255) {
+                *dcl = *scl;
+              } else if (XlibImageTC.icA(*scl)) {
+                *dcl = (*dcl).blendU32(*scl);
+              }
+            }
+            ++scl;
+            ++dcl;
+          }
+        }
+        sc += src.width;
+        dc += vbuf.width;
+      }
+    }
+
+    int swdt = src.width, shgt = src.height, xofs = 0, yofs = 0, x = x0, y = y0;
+    if (!GxRect(cx0, cy0, cx1-cx0+1, cy1-cy0+1).clipHVStripes(x, y, swdt, shgt, &xofs, &yofs)) return; // nothing to do here
+    if (!src.hasAlpha && subalpha < 0) {
+      doBlit!(false, false)(x, y, xofs, yofs, swdt, shgt);
+    } else if (subalpha >= 0) {
+      doBlit!(false, true)(x, y, xofs, yofs, swdt, shgt, subalpha);
+    } else if (src.hasAlpha) {
+      doBlit!(true, false)(x, y, xofs, yofs, swdt, shgt);
+    } else {
+      assert(0, "wtf?!");
+    }
+  }
+
+  void blendRect (int x0, int y0, int w, int h, Color clr) {
+    if (clr.a == 0 || !vbuf.valid) return;
+    if (!GxRect(0, 0, vbuf.width, vbuf.height).clipHVStripes(x0, y0, w, h)) return; // nothing to do here
+    auto dc = vbuf.data;
+    dc += y0*vbuf.width+x0;
+    if (clr.a == 255) {
+      uint c = XlibImageTC.c2img(clr);
+      foreach (immutable dy; 0..h) {
+        auto dcl = dc;
+        foreach (immutable dx; 0..w) *dcl++ = c;
+        dc += vbuf.width;
+      }
+    } else {
+      uint c = XlibImageTC.icRGBA(clr.r, clr.g, clr.b, clr.a);
+      foreach (immutable dy; 0..h) {
+        auto dcl = dc;
+        foreach (immutable dx; 0..w) {
+          *dcl = (*dcl).blendU32(c);
+          ++dcl;
+        }
+        dc += vbuf.width;
+      }
+    }
+  }
+}
++/
