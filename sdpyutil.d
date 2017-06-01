@@ -668,7 +668,7 @@ static:
   public ubyte icR (uint c) pure nothrow @safe @nogc { pragma(inline, true); return ((c>>16)&0xff); }
   public ubyte icG (uint c) pure nothrow @safe @nogc { pragma(inline, true); return ((c>>8)&0xff); }
   public ubyte icB (uint c) pure nothrow @safe @nogc { pragma(inline, true); return (c&0xff); }
-  public ubyte icA (uint c) pure nothrow @safe @nogc { pragma(inline, true); return (c&0xff); }
+  public ubyte icA (uint c) pure nothrow @safe @nogc { pragma(inline, true); return ((c>>24)&0xff); }
 
   public uint icRGB (int r, int g, int b) pure nothrow @safe @nogc {
     pragma(inline, true);
@@ -684,7 +684,15 @@ static:
     pragma(inline, true);
     return
       ((c.asUint&0xff)<<16)|
-      (c.asUint&0x00ff00)|
+      (c.asUint&0x00ff00U)|
+      ((c.asUint>>16)&0xff);
+  }
+
+  public uint c2imgA (in Color c) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return
+      ((c.asUint&0xff)<<16)|
+      (c.asUint&0xff_00ff00U)|
       ((c.asUint>>16)&0xff);
   }
 
@@ -696,9 +704,22 @@ static:
       ((c>>16)&0xff);
   }
 
+  public uint c2imgA (uint c) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return
+      ((c&0xff)<<16)|
+      (c&0xff_00ff00)|
+      ((c>>16)&0xff);
+  }
+
   public Color img2c (uint clr) pure nothrow @safe @nogc {
     pragma(inline, true);
     return Color((clr>>16)&0xff, (clr>>8)&0xff, clr&0xff);
+  }
+
+  public Color img2cA (uint clr) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return Color((clr>>16)&0xff, (clr>>8)&0xff, clr&0xff, (clr>>24)&0xff);
   }
 }
 
