@@ -71,7 +71,7 @@ protected:
 
 protected:
   // call this after you done building `dir`; never modify `dir` after that (or call `buildNameHashTable()` again)
-  final buildNameHashTable () @trusted {
+  final void buildNameHashTable () @trusted {
     import core.memory : GC;
     if (dir.length == 0 || dir.length >= uint.max-8) { delete htable; return; } // just in case
     if (htable.length) htable.assumeSafeAppend;
