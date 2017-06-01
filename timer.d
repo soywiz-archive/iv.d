@@ -18,14 +18,15 @@
 // this essentially duplicates std.datetime.StopWatch, but meh...
 module iv.timer /*is aliced*/;
 
+import iv.alice;
+import iv.pxclock;
+
 
 struct Timer {
 private:
-  import core.time : Duration, MonoTime;
-
+  ulong mSTimeMicro;
+  ulong mAccumMicro;
   State mState = State.Stopped;
-  MonoTime mSTime;
-  Duration mAccum;
 
 public:
   enum State {
@@ -35,22 +36,39 @@ public:
   }
 
 public:
-  string toString () @trusted const {
-    import std.string : format;
-    Duration d;
+  string toString () const @trusted {
+    import core.stdc.stdio : snprintf;
+    char[128] buf = void;
+    ulong d;
     final switch (mState) {
-      case State.Stopped: case State.Paused: d = mAccum; break;
-      case State.Running: d = mAccum+(MonoTime.currTime-mSTime); break;
+      case State.Stopped: case State.Paused: d = mAccumMicro; break;
+      case State.Running: d = mAccumMicro+(clockMicro-mSTimeMicro); break;
     }
-    auto tm = d.split!("hours", "minutes", "seconds", "msecs")();
-    if (tm.hours) return format("%s:%02d:%02d.%03d", tm.hours, tm.minutes, tm.seconds, tm.msecs);
-    if (tm.minutes) return format("%s:%02d.%03d", tm.minutes, tm.seconds, tm.msecs);
-    return format("%s.%03d", tm.seconds, tm.msecs);
+    immutable uint micro = cast(uint)(d%1000);
+    d /= 1000;
+    immutable uint milli = cast(uint)(d%1000);
+    d /= 1000;
+    immutable uint seconds = cast(uint)(d%60);
+    d /= 60;
+    immutable uint minutes = cast(uint)(d%60);
+    d /= 60;
+    immutable uint hours = cast(uint)d;
+    usize len;
+         if (hours) len = snprintf(buf.ptr, buf.length, "%u:%02u:%02u.%03u", hours, minutes, seconds, milli);
+    else if (minutes) len = snprintf(buf.ptr, buf.length, "%u:%02u.%03u", minutes, seconds, milli);
+    else if (seconds) len = snprintf(buf.ptr, buf.length, "%u.%03u", seconds, milli);
+    else if (micro != 0) len = snprintf(buf.ptr, buf.length, "%ums:%umcs", milli, micro);
+    else len = snprintf(buf.ptr, buf.length, "%ums", milli);
+    return buf.ptr[0..len].idup;
   }
 
-nothrow @safe @nogc:
+nothrow @trusted @nogc:
   this (State initState) @trusted {
     if (initState == State.Running) start();
+  }
+
+  this (bool startit) @trusted {
+    if (startit) start();
   }
 
   @property const pure {
@@ -60,46 +78,52 @@ nothrow @safe @nogc:
     bool paused () { pragma(inline, true); return (mState == State.Paused); }
   }
 
-  @property ulong msecs () const {
+  @property ulong micro () const {
     final switch (mState) {
-      case State.Stopped: case State.Paused: return mAccum.total!"msecs";
-      case State.Running: return (mAccum+(MonoTime.currTime-mSTime)).total!"msecs";
+      case State.Stopped: case State.Paused: return mAccumMicro;
+      case State.Running: return mAccumMicro+(clockMicro-mSTimeMicro);
     }
   }
 
+  @property ulong milli () const { pragma(inline, true); return micro/1000; }
+
   void reset () {
-    mAccum = Duration.zero;
-    mSTime = MonoTime.currTime;
+    mAccumMicro = 0;
+    mSTimeMicro = clockMicro;
   }
 
   void restart () {
-    mAccum = Duration.zero;
+    mAccumMicro = 0;
     mState = State.Running;
-    mSTime = MonoTime.currTime;
+    mSTimeMicro = clockMicro;
   }
 
   void start () {
-    if (mState != State.Stopped) assert(0, "Timer.start(): invalid timer state");
-    mAccum = Duration.zero;
+    mAccumMicro = 0;
     mState = State.Running;
-    mSTime = MonoTime.currTime;
+    mSTimeMicro = clockMicro;
   }
 
   void stop () {
-    if (mState != State.Running) assert(0, "Timer.stop(): invalid timer state");
-    mAccum += MonoTime.currTime-mSTime;
-    mState = State.Stopped;
+    if (mState == State.Running) {
+      mAccumMicro += clockMicro-mSTimeMicro;
+      mState = State.Stopped;
+    }
   }
 
   void pause () {
-    if (mState != State.Running) assert(0, "Timer.pause(): invalid timer state");
-    mAccum += MonoTime.currTime-mSTime;
-    mState = State.Paused;
+    if (mState == State.Running) {
+      mAccumMicro += clockMicro-mSTimeMicro;
+      mState = State.Paused;
+    }
   }
 
   void resume () {
-    if (mState != State.Paused) assert(0, "Timer.resume(): invalid timer state");
-    mState = State.Running;
-    mSTime = MonoTime.currTime;
+    if (mState == State.Paused) {
+      mState = State.Running;
+      mSTimeMicro = clockMicro;
+    } else if (mState == State.Stopped) {
+      start();
+    }
   }
 }
