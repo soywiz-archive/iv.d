@@ -46,7 +46,7 @@ version = iresample_debug;
 
 // ////////////////////////////////////////////////////////////////////////// //
 public enum ResamplerDefaultFilter = "lanczos4";
-public enum ResamplerMaxDimension = 32768;
+public enum ResamplerMaxDimension = 65536;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -287,7 +287,7 @@ private:
   ubyte* mPsrcYFlag;
 
   // The maximum number of scanlines that can be buffered at one time.
-  enum { MaxScanBufSize = ResamplerMaxDimension };
+  enum MaxScanBufSize = ResamplerMaxDimension;
 
   static struct ScanBuf {
     int[MaxScanBufSize] scanBufY;
@@ -599,8 +599,8 @@ public:
     }
 
     for (i = 0; i < MaxScanBufSize; ++i) {
-      mPscanBuf.scanBufY[i] = -1;
-      mPscanBuf.scanBufL[i] = null;
+      mPscanBuf.scanBufY.ptr[i] = -1;
+      mPscanBuf.scanBufL.ptr[i] = null;
     }
 
     mCurSrcY = mCurDstY = 0;
@@ -670,7 +670,7 @@ public:
      }
 
      if (mPscanBuf !is null) {
-       foreach (immutable i; 0..MaxScanBufSize) if (mPscanBuf.scanBufL[i] !is null) free(mPscanBuf.scanBufL[i]);
+       foreach (immutable i; 0..MaxScanBufSize) if (mPscanBuf.scanBufL.ptr[i] !is null) free(mPscanBuf.scanBufL.ptr[i]);
        free(mPscanBuf);
        mPscanBuf = null;
      }
@@ -691,9 +691,9 @@ public:
       }
     }
     foreach (immutable i; 0..MaxScanBufSize) {
-      mPscanBuf.scanBufY[i] = -1;
-      free(mPscanBuf.scanBufL[i]);
-      mPscanBuf.scanBufL[i] = null;
+      mPscanBuf.scanBufY.ptr[i] = -1;
+      free(mPscanBuf.scanBufL.ptr[i]);
+      mPscanBuf.scanBufL.ptr[i] = null;
     }
   }
 
@@ -710,7 +710,7 @@ public:
     }
 
     // Find an empty slot in the scanline buffer. (FIXME: Perf. is terrible here with extreme scaling ratios.)
-    for (i = 0; i < MaxScanBufSize; ++i) if (mPscanBuf.scanBufY[i] == -1) break;
+    for (i = 0; i < MaxScanBufSize; ++i) if (mPscanBuf.scanBufY.ptr[i] == -1) break;
 
     // If the buffer is full, exit with an error.
     if (i == MaxScanBufSize) {
@@ -719,12 +719,12 @@ public:
     }
 
     mPsrcYFlag[resamplerRangeCheck(mCurSrcY, mResampleSrcY)] = true;
-    mPscanBuf.scanBufY[i] = mCurSrcY;
+    mPscanBuf.scanBufY.ptr[i] = mCurSrcY;
 
     // Does this slot have any memory allocated to it?
-    if (!mPscanBuf.scanBufL[i]) {
+    if (!mPscanBuf.scanBufL.ptr[i]) {
       import core.stdc.stdlib : malloc;
-      if ((mPscanBuf.scanBufL[i] = cast(Sample*)malloc(mIntermediateX*Sample.sizeof)) is null) {
+      if ((mPscanBuf.scanBufL.ptr[i] = cast(Sample*)malloc(mIntermediateX*Sample.sizeof)) is null) {
         mStatus = StatusOutOfMemory;
         return false;
       }
@@ -735,11 +735,11 @@ public:
       import core.stdc.string : memcpy;
       assert(mIntermediateX == mResampleSrcX);
       // Y-X resampling order
-      memcpy(mPscanBuf.scanBufL[i], Psrc, mIntermediateX*Sample.sizeof);
+      memcpy(mPscanBuf.scanBufL.ptr[i], Psrc, mIntermediateX*Sample.sizeof);
     } else {
       assert(mIntermediateX == mResampleDstX);
       // X-Y resampling order
-      resampleX(mPscanBuf.scanBufL[i], Psrc);
+      resampleX(mPscanBuf.scanBufL.ptr[i], Psrc);
     }
 
     ++mCurSrcY;
@@ -858,9 +858,9 @@ private:
     foreach (immutable i; 0..Pclist.n) {
       // locate the contributor's location in the scan buffer -- the contributor must always be found!
       int j = void;
-      for (j = 0; j < MaxScanBufSize; ++j) if (mPscanBuf.scanBufY[j] == Pclist.p[i].pixel) break;
+      for (j = 0; j < MaxScanBufSize; ++j) if (mPscanBuf.scanBufY.ptr[j] == Pclist.p[i].pixel) break;
       assert(j < MaxScanBufSize);
-      Psrc = mPscanBuf.scanBufL[j];
+      Psrc = mPscanBuf.scanBufL.ptr[j];
       if (!i) {
         scaleYMov(Ptmp, Psrc, Pclist.p[i].weight, mIntermediateX);
       } else {
@@ -876,7 +876,7 @@ private:
 
       if (--mPsrcYCount[resamplerRangeCheck(Pclist.p[i].pixel, mResampleSrcY)] == 0) {
         mPsrcYFlag[resamplerRangeCheck(Pclist.p[i].pixel, mResampleSrcY)] = false;
-        mPscanBuf.scanBufY[j] = -1;
+        mPscanBuf.scanBufY.ptr[j] = -1;
       }
     }
 
