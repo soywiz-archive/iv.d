@@ -50,10 +50,10 @@ public enum ResamplerMaxDimension = 32768;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-@property int resamplerFilterCount () { pragma(inline, true); return NumFilters; }
-string resamplerFilterName (long idx) { pragma(inline, true); return (idx >= 0 && idx < NumFilters ? gFilters.ptr[cast(uint)idx].name : null); }
+public @property int resamplerFilterCount () { pragma(inline, true); return NumFilters; }
+public string resamplerFilterName (long idx) { pragma(inline, true); return (idx >= 0 && idx < NumFilters ? gFilters.ptr[cast(uint)idx].name : null); }
 
-int resamplerFindFilter (const(char)[] name, const(char)[] defaultFilter=ResamplerDefaultFilter) {
+public int resamplerFindFilter (const(char)[] name, const(char)[] defaultFilter=ResamplerDefaultFilter) {
   int res = resamplerFindFilterInternal(name);
   if (res >= 0) return res;
   res = resamplerFindFilterInternal(defaultFilter);
@@ -82,12 +82,14 @@ public TrueColorImage imageResample(int Components=4) (MemoryImage msrcimg, int 
     imageResample!Components(
       delegate (Color[] destrow, int y) { destrow[] = tc.imageData.colors[y*tc.width..(y+1)*tc.width]; },
       delegate (int y, const(Color)[] row) { resimg.imageData.colors[y*resimg.width..(y+1)*resimg.width] = row[]; },
-      msrcimg.width, msrcimg.height, dstwdt, dsthgt, filter, gamma, filterScale);
+      msrcimg.width, msrcimg.height, dstwdt, dsthgt, filter, gamma, filterScale
+    );
   } else {
     imageResample!Components(
       delegate (Color[] destrow, int y) { foreach (immutable x, ref c; destrow) c = msrcimg.getPixel(cast(int)x, y); },
       delegate (int y, const(Color)[] row) { resimg.imageData.colors[y*resimg.width..(y+1)*resimg.width] = row[]; },
-      msrcimg.width, msrcimg.height, dstwdt, dsthgt, filter, gamma, filterScale);
+      msrcimg.width, msrcimg.height, dstwdt, dsthgt, filter, gamma, filterScale
+    );
   }
   return resimg;
 }
