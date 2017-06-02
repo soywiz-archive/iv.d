@@ -217,9 +217,20 @@ void main () {
     vec2 mtv;
 
     if (checkCollision) {
-      import std.math : sqrt;
       collided = gjk(flesh0, flesh1, &mtv);
-      if (collided) writeln("COLLISION! mtv=", mtv);
+      if (collided) {
+        writeln("COLLISION! mtv=", mtv);
+      } else {
+        vec2 snorm;
+        auto dist = gjkdist(flesh0, flesh1, &snorm);
+        if (dist < 0) {
+          writeln("FUCKED DIST! dist=", dist);
+        } else {
+          writeln("distance=", dist);
+          pt.outlineColor = Color.green;
+          drawVL(flesh0.position, flesh0.position+snorm*dist);
+        }
+      }
     }
 
     pt.outlineColor = (fhigh == 0 ? Color.green : collided ? Color.red : Color.white);

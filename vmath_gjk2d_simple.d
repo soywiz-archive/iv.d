@@ -81,8 +81,61 @@ public bool gjk(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepmove
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+/// return distance between two convex shapes, and separation normal.
+/// negative distance means that shapes are overlapping
+public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepnorm=null) if (IsGoodGJKObject!(CT, VT)) {
+  static VT segClosestToOrigin() (in auto ref VT segp0, in auto ref VT segp1) {
+    immutable oseg = segp1-segp0;
+    immutable ab2 = oseg.dot(oseg);
+    immutable apab = (-segp0).dot(oseg);
+    if (ab2 <= EPSILON!(VT.Float)) return segp0;
+    VT.Float t = apab/ab2;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    return segp0+oseg*t;
+  }
+
+  if (sepnorm !is null) *sepnorm = VT(0, 0);
+
+  VT a, b, c; // simplex
+  // position is centroid, use that fact
+  auto d = coll2.position-coll1.position;
+  // check for a zero direction vector
+  if (d.isZero) return cast(VT.Float)-1; // centroids are the same, not separated
+  a = getSupportPoint(coll1, coll2, d);
+  b = getSupportPoint(coll1, coll2, -d);
+  d = segClosestToOrigin(b, a);
+  foreach (immutable iter; 0..100) {
+    if (d.lengthSquared <= EPSILON!(VT.Float)) return cast(VT.Float)-1; // if the closest point is the origin, not separated
+    d = -d;
+    c = getSupportPoint(coll1, coll2, d);
+    // is simplex triangle contains origin?
+    immutable sa = a.cross(b);
+    if (sa*b.cross(c) > 0 && sa*c.cross(a) > 0) return cast(VT.Float)-1; // yes, not separated
+    if (c.dot(d)-a.dot(d) < EPSILON!(VT.Float)*EPSILON!(VT.Float)) break; // new point is not far enough, we found her!
+    auto p0 = segClosestToOrigin(a, c);
+    auto p1 = segClosestToOrigin(c, b);
+    immutable p0sqlen = p0.lengthSquared;
+    immutable p1sqlen = p1.lengthSquared;
+    if (p0sqlen <= EPSILON!(VT.Float) || p1sqlen <= EPSILON!(VT.Float)) {
+      // origin is very close, but not exactly on edge; assume zero distance (special case)
+      if (sepnorm !is null) *sepnorm = d.normalized;
+      return cast(VT.Float)0;
+    }
+    if (p0sqlen < p1sqlen) { b = c; d = p0; } else { a = c; d = p1; }
+  }
+  // either out of iterations, or new point was not far enough
+  d.normalize;
+  auto dist = -c.dot(d);
+  if (dist < 0) { d = -d; dist = -dist; }
+  if (sepnorm !is null) *sepnorm = d;
+  return dist;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 // return the Minkowski sum point (ok, something *like* it, but not Minkowski difference yet ;-)
-private VT getSupportPoint(CT, VT) (in ref CT coll1, in ref CT coll2, in ref VT sdir) {
+private VT getSupportPoint(CT, VT) (in ref CT coll1, in ref CT coll2, in auto ref VT sdir) {
   pragma(inline, true);
   return coll1.support(sdir)-coll2.support(-sdir);
 }
