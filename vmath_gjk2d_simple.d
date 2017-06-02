@@ -83,8 +83,8 @@ public bool gjk(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepmove
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// return distance between two convex shapes, and separation normal.
-/// negative distance means that shapes are overlapping
-public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepnorm=null) if (IsGoodGJKObject!(CT, VT)) {
+/// negative distance means that shapes are overlapping, and zero distance means touching (and ops are invalid)
+public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* op0, VT* op1=null, VT* sepnorm=null) if (IsGoodGJKObject!(CT, VT)) {
   static VT segClosestToOrigin() (in auto ref VT segp0, in auto ref VT segp1) {
     immutable oseg = segp1-segp0;
     immutable ab2 = oseg.dot(oseg);
@@ -95,20 +95,31 @@ public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sep
     return segp0+oseg*t;
   }
 
+  enum GetSupport(string smpx) =
+    smpx~"p0 = coll1.support(d);\n"~
+    smpx~"p1 = coll2.support(-d);\n"~
+    smpx~" = "~smpx~"p0-"~smpx~"p1;";
+
   if (sepnorm !is null) *sepnorm = VT(0, 0);
+  if (op0 !is null) *op0 = VT(0, 0);
+  if (op1 !is null) *op1 = VT(0, 0);
 
   VT a, b, c; // simplex
+  VT ap0, bp0, cp0; // simplex support points, needed for closest points calculation
+  VT ap1, bp1, cp1; // simplex support points, needed for closest points calculation
   // position is centroid, use that fact
   auto d = coll2.position-coll1.position;
   // check for a zero direction vector
   if (d.isZero) return cast(VT.Float)-1; // centroids are the same, not separated
-  a = getSupportPoint(coll1, coll2, d);
-  b = getSupportPoint(coll1, coll2, -d);
+  //getSupport(a, ap0, ap1, d);
+  mixin(GetSupport!"a");
+  d = -d;
+  mixin(GetSupport!"b");
   d = segClosestToOrigin(b, a);
   foreach (immutable iter; 0..100) {
     if (d.lengthSquared <= EPSILON!(VT.Float)) return cast(VT.Float)-1; // if the closest point is the origin, not separated
     d = -d;
-    c = getSupportPoint(coll1, coll2, d);
+    mixin(GetSupport!"c");
     // is simplex triangle contains origin?
     immutable sa = a.cross(b);
     if (sa*b.cross(c) > 0 && sa*c.cross(a) > 0) return cast(VT.Float)-1; // yes, not separated
@@ -122,11 +133,33 @@ public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sep
       if (sepnorm !is null) *sepnorm = d.normalized;
       return cast(VT.Float)0;
     }
-    if (p0sqlen < p1sqlen) { b = c; d = p0; } else { a = c; d = p1; }
+    if (p0sqlen < p1sqlen) { b = c; bp0 = cp0; bp1 = cp1; d = p0; } else { a = c; ap0 = cp0; ap1 = cp1; d = p1; }
   }
   // either out of iterations, or new point was not far enough
   d.normalize;
   auto dist = -c.dot(d);
+  // get closest points
+  if (op0 !is null || op1 !is null) {
+    auto l = b-a;
+    if (l.isZero) {
+      if (op0 !is null) *op0 = ap0;
+      if (op1 !is null) *op1 = ap1;
+    } else {
+      immutable ll = l.dot(l);
+      immutable l2 = -l.dot(a)/ll;
+      immutable l1 = cast(VT.Float)1-l2;
+      if (l1 < 0) {
+        if (op0 !is null) *op0 = bp0;
+        if (op1 !is null) *op1 = bp1;
+      } else if (l2 < 0) {
+        if (op0 !is null) *op0 = ap0;
+        if (op1 !is null) *op1 = ap1;
+      } else {
+        if (op0 !is null) *op0 = ap0*l1+bp0*l2;
+        if (op1 !is null) *op1 = ap1*l1+bp1*l2;
+      }
+    }
+  }
   if (dist < 0) { d = -d; dist = -dist; }
   if (sepnorm !is null) *sepnorm = d;
   return dist;
@@ -135,7 +168,7 @@ public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sep
 
 // ////////////////////////////////////////////////////////////////////////// //
 // return the Minkowski sum point (ok, something *like* it, but not Minkowski difference yet ;-)
-private VT getSupportPoint(CT, VT) (in ref CT coll1, in ref CT coll2, in auto ref VT sdir) {
+private VT getSupportPoint(CT, VT) (in ref CT coll1, in ref CT coll2, in ref VT sdir) {
   pragma(inline, true);
   return coll1.support(sdir)-coll2.support(-sdir);
 }

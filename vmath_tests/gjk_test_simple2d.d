@@ -215,14 +215,14 @@ void main () {
 
     bool collided = false;
     vec2 mtv;
+    vec2 snorm, p0, p1;
 
     if (checkCollision) {
       collided = gjk(flesh0, flesh1, &mtv);
       if (collided) {
         writeln("COLLISION! mtv=", mtv);
       } else {
-        vec2 snorm;
-        auto dist = gjkdist(flesh0, flesh1, &snorm);
+        auto dist = gjkdist(flesh0, flesh1, &p0, &p1, &snorm);
         if (dist < 0) {
           writeln("FUCKED DIST! dist=", dist);
         } else {
@@ -248,6 +248,10 @@ void main () {
       flesh1.moveBy(mtv);
       drawBody(flesh1);
       flesh1.moveBy(-mtv);
+    } else {
+      pt.outlineColor = Color.green;
+      drawPoint(p0);
+      drawPoint(p1);
     }
   }
 
