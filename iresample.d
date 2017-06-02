@@ -35,255 +35,320 @@
 // added Codeblocks project (for testing with MinGW and GCC), VS2008 static code analysis pass.
 // float or double
 module iv.iresample /*is aliced*/;
+private:
 
 import arsd.color;
 import iv.alice;
+import iv.bclamp;
+
+version = iresample_debug;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum RESAMPLER_DEFAULT_FILTER = "lanczos4";
-enum RESAMPLER_MAX_DIMENSION = 16384;
+public enum ResamplerDefaultFilter = "lanczos4";
+public enum ResamplerMaxDimension = 32768;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-TrueColorImage imageResample (MemoryImage msrcimg, int destwdt, int desthgt, string filter) {
-  return imageResample(msrcimg, destwdt, desthgt, filter, 1.0f);
+@property int resamplerFilterCount () { pragma(inline, true); return NumFilters; }
+string resamplerFilterName (long idx) { pragma(inline, true); return (idx >= 0 && idx < NumFilters ? gFilters.ptr[cast(uint)idx].name : null); }
+
+int resamplerFindFilter (const(char)[] name, const(char)[] defaultFilter=ResamplerDefaultFilter) {
+  int res = resamplerFindFilterInternal(name);
+  if (res >= 0) return res;
+  res = resamplerFindFilterInternal(defaultFilter);
+  if (res >= 0) return res;
+  res = resamplerFindFilterInternal("lanczos4");
+  assert(res >= 0);
+  return res;
 }
 
 
-TrueColorImage imageResample (MemoryImage msrcimg, int destwdt, int desthgt, float gamma) {
-  return imageResample(msrcimg, destwdt, desthgt, RESAMPLER_DEFAULT_FILTER, gamma);
+// ////////////////////////////////////////////////////////////////////////// //
+public TrueColorImage imageResample(int Components=4) (MemoryImage msrcimg, int dstwdt, int dsthgt, const(char)[] filter=null, float gamma=1.0f, float filterScale=1.0f) {
+  static assert(Components == 1 || Components == 3 || Components == 4, "invalid number of components in color");
+  return imageResample!Components(msrcimg, dstwdt, dsthgt, resamplerFindFilter(filter), gamma, filterScale);
+}
+
+public TrueColorImage imageResample(int Components=4) (MemoryImage msrcimg, int dstwdt, int dsthgt, int filter, float gamma=1.0f, float filterScale=1.0f) {
+  static assert(Components == 1 || Components == 3 || Components == 4, "invalid number of components in color");
+  if (msrcimg is null || msrcimg.width < 1 || msrcimg.height < 1 || msrcimg.width > ResamplerMaxDimension || msrcimg.height > ResamplerMaxDimension) {
+    throw new Exception("invalid source image");
+  }
+  if (dstwdt < 1 || dsthgt < 1 || dstwdt > ResamplerMaxDimension || dsthgt > ResamplerMaxDimension) throw new Exception("invalid destination image size");
+  auto resimg = new TrueColorImage(dstwdt, dsthgt);
+  scope(failure) delete resimg;
+  if (auto tc = cast(TrueColorImage)msrcimg) {
+    imageResample!Components(
+      delegate (Color[] destrow, int y) { destrow[] = tc.imageData.colors[y*tc.width..(y+1)*tc.width]; },
+      delegate (int y, const(Color)[] row) { resimg.imageData.colors[y*resimg.width..(y+1)*resimg.width] = row[]; },
+      msrcimg.width, msrcimg.height, dstwdt, dsthgt, filter, gamma, filterScale);
+  } else {
+    imageResample!Components(
+      delegate (Color[] destrow, int y) { foreach (immutable x, ref c; destrow) c = msrcimg.getPixel(cast(int)x, y); },
+      delegate (int y, const(Color)[] row) { resimg.imageData.colors[y*resimg.width..(y+1)*resimg.width] = row[]; },
+      msrcimg.width, msrcimg.height, dstwdt, dsthgt, filter, gamma, filterScale);
+  }
+  return resimg;
 }
 
 
-TrueColorImage imageResample (MemoryImage msrcimg, int destwdt, int desthgt, string filter=RESAMPLER_DEFAULT_FILTER, float gamma=1.0f, float filterScale=1.0f) {
-  if (msrcimg is null || destwdt < 1 || desthgt < 1) return null;
-  if (msrcimg.width < 1 || msrcimg.height < 1 || destwdt > RESAMPLER_MAX_DIMENSION || desthgt > RESAMPLER_MAX_DIMENSION || msrcimg.width > RESAMPLER_MAX_DIMENSION || msrcimg.height > RESAMPLER_MAX_DIMENSION) {
-    throw new Exception("invalid image size");
-  }
-  TrueColorImage img = msrcimg.getAsTrueColorImage;
-
-  int n = 4;
-  int srcwidth = img.width;
-  int srcheight = img.height;
-  auto srcimgdata = img.imageData.bytes.ptr;
-
-  enum MaxComponents = 4;
-
-  // Partial gamma correction looks better on mips. Set to 1.0 to disable gamma correction.
-  immutable float sourceGamma = gamma;
-
-  // Filter scale - values < 1.0 cause aliasing, but create sharper looking mips.
-  //enum filterScale = 1.0f;//.75f;
-
-  float[256] srgb2linear;
-  foreach (int i, ref v; srgb2linear) {
-    import std.math : pow;
-    v = cast(float)pow(i*1.0f/255.0f, sourceGamma);
-  }
-
+private {
   enum Linear2srgbTableSize = 4096;
-  ubyte[Linear2srgbTableSize] linear2srgb;
-
   enum InvLinear2srgbTableSize = cast(float)(1.0f/Linear2srgbTableSize);
-  immutable float invSourceGamma = 1.0f/sourceGamma;
+  float[256] srgb2linear = void;
+  ubyte[Linear2srgbTableSize] linear2srgb = void;
+  float lastGamma = float.nan;
+}
 
-  foreach (int i, ref v; linear2srgb) {
-    import std.math : pow;
-    int k = cast(int)(255.0f*pow(i*InvLinear2srgbTableSize, invSourceGamma)+0.5f);
-    if (k < 0) k = 0; else if (k > 255) k = 255;
-    v = cast(ubyte)k;
+// partial gamma correction looks better on mips; set to 1.0 to disable gamma correction
+// filter scale: values < 1.0 cause aliasing, but create sharper looking mips (0.75f, for example)
+public void imageResample(int Components=4) (
+  scope void delegate (Color[] destrow, int y) srcGetRow,
+  scope void delegate (int y, const(Color)[] row) dstPutRow,
+  int srcwdt, int srchgt, int dstwdt, int dsthgt,
+  int filter=-1, float gamma=1.0f, float filterScale=1.0f
+) {
+  static assert(Components == 1 || Components == 3 || Components == 4, "invalid number of components in color");
+  assert(srcGetRow !is null);
+  assert(dstPutRow !is null);
+
+  if (srcwdt < 1 || srchgt < 1 || dstwdt < 1 || dsthgt < 1 ||
+      srcwdt > ResamplerMaxDimension || srchgt > ResamplerMaxDimension ||
+      dstwdt > ResamplerMaxDimension || dsthgt > ResamplerMaxDimension) throw new Exception("invalid image size");
+
+  if (filter < 0 || filter >= NumFilters) {
+    filter = resamplerFindFilterInternal(ResamplerDefaultFilter);
+    if (filter < 0) {
+      filter = resamplerFindFilterInternal("lanczos4");
+    }
+  }
+  assert(filter >= 0 && filter < NumFilters);
+
+
+  if (lastGamma != gamma) {
+    version(iresample_debug) { import core.stdc.stdio; stderr.fprintf("creating translation tables for gamma %f (previous gamma is %f)\n", gamma, lastGamma); }
+    foreach (immutable i, ref v; srgb2linear[]) {
+      import std.math : pow;
+      v = cast(float)pow(cast(int)i*1.0f/255.0f, gamma);
+    }
+    immutable float invSourceGamma = 1.0f/gamma;
+    foreach (immutable i, ref v; linear2srgb[]) {
+      import std.math : pow;
+      int k = cast(int)(255.0f*pow(cast(int)i*InvLinear2srgbTableSize, invSourceGamma)+0.5f);
+      if (k < 0) k = 0; else if (k > 255) k = 255;
+      v = cast(ubyte)k;
+    }
+    lastGamma = gamma;
+  }
+  version(iresample_debug) { import core.stdc.stdio; stderr.fprintf("filter is %d\n", filter); }
+
+  Resampler[Components] resamplers;
+  float[][Components] samples;
+  Color[] srcrow, dstrow;
+  scope(exit) {
+    foreach (ref rsm; resamplers[]) delete rsm;
+    foreach (ref smr; samples[]) delete smr;
+    delete srcrow;
+    delete dstrow;
   }
 
-  Resampler[MaxComponents] resamplers;
-  float[][MaxComponents] samples;
-
-  // Now create a Resampler instance for each component to process. The first instance will create new contributor tables, which are shared by the resamplers
+  // now create a Resampler instance for each component to process
+  // the first instance will create new contributor tables, which are shared by the resamplers
   // used for the other components (a memory and slight cache efficiency optimization).
-  resamplers[0] = new Resampler(srcwidth, srcheight, destwdt, desthgt, Resampler.BOUNDARY_CLAMP, 0.0f, 1.0f, filter, null, null, filterScale, filterScale);
-  samples[0].length = srcwidth;
-  foreach (int i; 1..n) {
-    resamplers[i] = new Resampler(srcwidth, srcheight, destwdt, desthgt, Resampler.BOUNDARY_CLAMP, 0.0f, 1.0f, filter, resamplers[0].get_clist_x(), resamplers[0].get_clist_y(), filterScale, filterScale);
-    samples[i].length = srcwidth;
+  resamplers[0] = new Resampler(srcwdt, srchgt, dstwdt, dsthgt, Resampler.BoundaryClamp, 0.0f, 1.0f, filter, null, null, filterScale, filterScale);
+  samples[0].length = srcwdt;
+  srcrow.length = srcwdt;
+  dstrow.length = dstwdt;
+  foreach (immutable i; 1..Components) {
+    resamplers[i] = new Resampler(srcwdt, srchgt, dstwdt, dsthgt, Resampler.BoundaryClamp, 0.0f, 1.0f, filter, resamplers[0].getClistX(), resamplers[0].getClistY(), filterScale, filterScale);
+    samples[i].length = srcwdt;
   }
-  scope(exit) foreach (int i; 0..n) delete resamplers[i]; // delete the resamplers
-  scope(exit) foreach (int i; 0..n) delete samples[i]; // delete samples
 
-  auto dstimg = new TrueColorImage(destwdt, desthgt);
-  auto destimage = dstimg.imageData.bytes.ptr;
-
-  immutable int srcpitch = srcwidth*4;
-  immutable int destpitch = destwdt*4;
-  int desty = 0;
-
-  foreach (int srcy; 0..srcheight) {
-    const(ubyte)* pSrc = &srcimgdata[srcy*srcpitch];
-    foreach (int x; 0..srcwidth) {
-      foreach (int c; 0..n) {
-        if (c == 3 /*|| (n == 2 && c == 1)*/)
-          samples[c][x] = *pSrc++*(1.0f/255.0f);
-        else
-          samples[c][x] = srgb2linear[*pSrc++];
+  int dsty = 0;
+  foreach (immutable int srcy; 0..srchgt) {
+    // get row components
+    srcGetRow(srcrow, srcy);
+    {
+      auto scp = srcrow.ptr;
+      foreach (immutable x; 0..srcwdt) {
+        auto sc = *scp++;
+        samples.ptr[0].ptr[x] = srgb2linear.ptr[sc.r]; // first component
+        static if (Components > 1) samples.ptr[1].ptr[x] = srgb2linear.ptr[sc.g]; // second component
+        static if (Components > 2) samples.ptr[2].ptr[x] = srgb2linear.ptr[sc.b]; // thirs component
+        static if (Components == 4) samples.ptr[3].ptr[x] = sc.a*(1.0f/255.0f); // fourth component is alpha, and it is already linear
       }
     }
 
-    foreach (int c; 0..n) {
-      if (!resamplers[c].put_line(&samples[c][0])) assert(0, "Out of memory!");
-    }
+    foreach (immutable c; 0..Components) if (!resamplers.ptr[c].putLine(samples.ptr[c].ptr)) assert(0, "out of memory");
 
     for (;;) {
-      int compIdx;
-      for (compIdx = 0; compIdx < n; ++compIdx) {
-        const(float)* outSmp = resamplers[compIdx].get_line();
-        if (outSmp is null) break;
-        immutable bool alphachan = (compIdx == 3);// || (n == 2 && compIdx == 1));
-        assert(desty < desthgt);
-        ubyte* pDst = &destimage[desty*destpitch+compIdx];
-        foreach (int x; 0..destwdt) {
-          if (alphachan) {
-            int c = cast(int)(255.0f*outSmp[x]+0.5f);
-            if (c < 0) c = 0; else if (c > 255) c = 255;
-            *pDst = cast(ubyte)c;
-          } else {
-            int j = cast(int)(Linear2srgbTableSize * outSmp[x] + .5f);
-            if (j < 0) j = 0; else if (j >= Linear2srgbTableSize) j = Linear2srgbTableSize-1;
-            *pDst = linear2srgb[j];
+      int compIdx = 0;
+      for (; compIdx < Components; ++compIdx) {
+        const(float)* outsmp = resamplers.ptr[compIdx].getLine();
+        if (outsmp is null) break;
+        auto dsc = dstrow.ptr;
+        // alpha?
+        static if (Components == 4) {
+          if (compIdx == 3) {
+            foreach (immutable x; 0..dstwdt) {
+              dsc.a = clampToByte(cast(int)(255.0f*(*outsmp++)+0.5f));
+              ++dsc;
+            }
+            continue;
           }
-          pDst += 4;
+        }
+        // color
+        auto dsb = (cast(ubyte*)dsc)+compIdx;
+        foreach (immutable x; 0..dstwdt) {
+          int j = cast(int)(Linear2srgbTableSize*(*outsmp++)+0.5f);
+          if (j < 0) j = 0; else if (j >= Linear2srgbTableSize) j = Linear2srgbTableSize-1;
+          *dsb = linear2srgb.ptr[j];
+          dsb += 4;
         }
       }
-      if (compIdx < n) break;
-      ++desty;
+      if (compIdx < Components) break;
+      // fill destination line
+      assert(dsty < dsthgt);
+      static if (Components != 4) {
+        auto dsc = dstrow.ptr;
+        foreach (immutable x; 0..dstwdt) {
+          static if (Components == 1) dsc.g = dsc.b = dsc.r;
+          dsc.a = 255;
+          ++dsc;
+        }
+      }
+      //version(iresample_debug) { import core.stdc.stdio; stderr.fprintf("writing dest row %d with %u components\n", dsty, Components); }
+      dstPutRow(dsty, dstrow);
+      ++dsty;
     }
   }
-
-  return dstimg;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-final class Resampler {
+public final class Resampler {
 nothrow @trusted @nogc:
 public:
-  alias Resample_Real = float;
-  alias Sample = Resample_Real;
+  alias ResampleReal = float;
+  alias Sample = ResampleReal;
 
   static struct Contrib {
-    Resample_Real weight;
+    ResampleReal weight;
     ushort pixel;
   }
 
-  static struct Contrib_List {
+  static struct ContribList {
     ushort n;
     Contrib* p;
   }
 
-  alias Boundary_Op = int;
+  alias BoundaryOp = int;
   enum /*Boundary_Op*/ {
-    BOUNDARY_WRAP = 0,
-    BOUNDARY_REFLECT = 1,
-    BOUNDARY_CLAMP = 2,
+    BoundaryWrap = 0,
+    BoundaryReflect = 1,
+    BoundaryClamp = 2,
   }
 
   alias Status = int;
   enum /*Status*/ {
-    STATUS_OKAY = 0,
-    STATUS_OUT_OF_MEMORY = 1,
-    STATUS_BAD_FILTER_NAME = 2,
-    STATUS_SCAN_BUFFER_FULL = 3,
+    StatusOkay = 0,
+    StatusOutOfMemory = 1,
+    StatusBadFilterName = 2,
+    StatusScanBufferFull = 3,
   }
 
 private:
-  alias FilterFunc = Resample_Real function (Resample_Real) nothrow @trusted @nogc;
+  alias FilterFunc = ResampleReal function (ResampleReal) nothrow @trusted @nogc;
 
-  int m_intermediate_x;
+  int mIntermediateX;
 
-  int m_resample_src_x;
-  int m_resample_src_y;
-  int m_resample_dst_x;
-  int m_resample_dst_y;
+  int mResampleSrcX;
+  int mResampleSrcY;
+  int mResampleDstX;
+  int mResampleDstY;
 
-  Boundary_Op m_boundary_op;
+  BoundaryOp mBoundaryOp;
 
-  Sample* m_Pdst_buf;
-  Sample* m_Ptmp_buf;
+  Sample* mPdstBuf;
+  Sample* mPtmpBuf;
 
-  Contrib_List* m_Pclist_x;
-  Contrib_List* m_Pclist_y;
+  ContribList* mPclistX;
+  ContribList* mPclistY;
 
-  bool m_clist_x_forced;
-  bool m_clist_y_forced;
+  bool mClistXForced;
+  bool mClistYForced;
 
-  bool m_delay_x_resample;
+  bool mDelayXResample;
 
-  int* m_Psrc_y_count;
-  ubyte* m_Psrc_y_flag;
+  int* mPsrcYCount;
+  ubyte* mPsrcYFlag;
 
   // The maximum number of scanlines that can be buffered at one time.
-  enum { MAX_SCAN_BUF_SIZE = RESAMPLER_MAX_DIMENSION };
+  enum { MaxScanBufSize = ResamplerMaxDimension };
 
-  static struct Scan_Buf {
-    int[MAX_SCAN_BUF_SIZE] scan_buf_y;
-    Sample*[MAX_SCAN_BUF_SIZE] scan_buf_l;
+  static struct ScanBuf {
+    int[MaxScanBufSize] scanBufY;
+    Sample*[MaxScanBufSize] scanBufL;
   }
 
-  Scan_Buf* m_Pscan_buf;
+  ScanBuf* mPscanBuf;
 
-  int m_cur_src_y;
-  int m_cur_dst_y;
+  int mCurSrcY;
+  int mCurDstY;
 
-  Status m_status;
+  Status mStatus;
 
   // The make_clist() method generates, for all destination samples,
   // the list of all source samples with non-zero weighted contributions.
-  Contrib_List* make_clist(
-    int src_x, int dst_x, Boundary_Op boundary_op,
+  ContribList* makeClist(
+    int srcX, int dstX, BoundaryOp boundaryOp,
     FilterFunc Pfilter,
-    Resample_Real filter_support,
-    Resample_Real filter_scale,
-    Resample_Real src_ofs)
+    ResampleReal filterSupport,
+    ResampleReal filterScale,
+    ResampleReal srcOfs)
   {
     import core.stdc.stdlib : calloc, free;
     import std.math : floor, ceil;
 
-    static struct Contrib_Bounds {
+    static struct ContribBounds {
       // The center of the range in DISCRETE coordinates (pixel center = 0.0f).
-      Resample_Real center;
+      ResampleReal center;
       int left, right;
     }
 
-    Contrib_List* Pcontrib, PcontribRes;
+    ContribList* Pcontrib, PcontribRes;
     Contrib* Pcpool;
-    Contrib* Pcpool_next;
-    Contrib_Bounds* Pcontrib_bounds;
+    Contrib* PcpoolNext;
+    ContribBounds* PcontribBounds;
 
-    if ((Pcontrib = cast(Contrib_List*)calloc(dst_x, Contrib_List.sizeof)) is null) return null;
+    if ((Pcontrib = cast(ContribList*)calloc(dstX, ContribList.sizeof)) is null) return null;
     scope(exit) if (Pcontrib !is null) free(Pcontrib);
 
-    Pcontrib_bounds = cast(Contrib_Bounds*)calloc(dst_x, Contrib_Bounds.sizeof);
-    if (Pcontrib_bounds is null) return null;
-    scope(exit) free(Pcontrib_bounds);
+    PcontribBounds = cast(ContribBounds*)calloc(dstX, ContribBounds.sizeof);
+    if (PcontribBounds is null) return null;
+    scope(exit) free(PcontribBounds);
 
-    enum Resample_Real NUDGE = 0.5f;
-    immutable Resample_Real oo_filter_scale = 1.0f/filter_scale;
-    immutable Resample_Real xscale = dst_x/cast(Resample_Real)src_x;
+    enum ResampleReal NUDGE = 0.5f;
+    immutable ResampleReal ooFilterScale = 1.0f/filterScale;
+    immutable ResampleReal xscale = dstX/cast(ResampleReal)srcX;
 
     if (xscale < 1.0f) {
       int total = 0;
       // Handle case when there are fewer destination samples than source samples (downsampling/minification).
       // stretched half width of filter
-      immutable Resample_Real half_width = (filter_support/xscale)*filter_scale;
+      immutable ResampleReal halfWidth = (filterSupport/xscale)*filterScale;
       // Find the range of source sample(s) that will contribute to each destination sample.
-      foreach (immutable i; 0..dst_x) {
+      foreach (immutable i; 0..dstX) {
         // Convert from discrete to continuous coordinates, scale, then convert back to discrete.
-        Resample_Real center = (cast(Resample_Real)i+NUDGE)/xscale;
+        ResampleReal center = (cast(ResampleReal)i+NUDGE)/xscale;
         center -= NUDGE;
-        center += src_ofs;
-        immutable int left = cast_to_int(cast(Resample_Real)floor(center-half_width));
-        immutable int right = cast_to_int(cast(Resample_Real)ceil(center+half_width));
-        Pcontrib_bounds[i].center = center;
-        Pcontrib_bounds[i].left = left;
-        Pcontrib_bounds[i].right = right;
+        center += srcOfs;
+        immutable int left = castToInt(cast(ResampleReal)floor(center-halfWidth));
+        immutable int right = castToInt(cast(ResampleReal)ceil(center+halfWidth));
+        PcontribBounds[i].center = center;
+        PcontribBounds[i].left = left;
+        PcontribBounds[i].right = right;
         total += (right-left+1);
       }
 
@@ -292,61 +357,61 @@ private:
       //scope(failure) free(Pcpool);
       //immutable int total = n;
 
-      Pcpool_next = Pcpool;
+      PcpoolNext = Pcpool;
 
       // Create the list of source samples which contribute to each destination sample.
-      foreach (immutable i; 0..dst_x) {
-        int max_k = -1;
-        Resample_Real max_w = -1e+20f;
+      foreach (immutable i; 0..dstX) {
+        int maxK = -1;
+        ResampleReal maxW = -1e+20f;
 
-        Resample_Real center = Pcontrib_bounds[i].center;
-        immutable int left = Pcontrib_bounds[i].left;
-        immutable int right = Pcontrib_bounds[i].right;
+        ResampleReal center = PcontribBounds[i].center;
+        immutable int left = PcontribBounds[i].left;
+        immutable int right = PcontribBounds[i].right;
 
         Pcontrib[i].n = 0;
-        Pcontrib[i].p = Pcpool_next;
-        Pcpool_next += (right-left+1);
-        assert(Pcpool_next-Pcpool <= total);
+        Pcontrib[i].p = PcpoolNext;
+        PcpoolNext += (right-left+1);
+        assert(PcpoolNext-Pcpool <= total);
 
-        Resample_Real totalWeight0 = 0;
-        foreach (immutable j; left..right+1) totalWeight0 += Pfilter((center-cast(Resample_Real)j)*xscale*oo_filter_scale);
-        immutable Resample_Real norm = cast(Resample_Real)(1.0f/totalWeight0);
+        ResampleReal totalWeight0 = 0;
+        foreach (immutable j; left..right+1) totalWeight0 += Pfilter((center-cast(ResampleReal)j)*xscale*ooFilterScale);
+        immutable ResampleReal norm = cast(ResampleReal)(1.0f/totalWeight0);
 
-        Resample_Real totalWeight1 = 0;
+        ResampleReal totalWeight1 = 0;
         foreach (immutable j; left..right+1) {
-          immutable Resample_Real weight = Pfilter((center-cast(Resample_Real)j)*xscale*oo_filter_scale)*norm;
+          immutable ResampleReal weight = Pfilter((center-cast(ResampleReal)j)*xscale*ooFilterScale)*norm;
           if (weight == 0.0f) continue;
-          immutable int n = reflect(j, src_x, boundary_op);
+          immutable int n = reflect(j, srcX, boundaryOp);
           // Increment the number of source samples which contribute to the current destination sample.
           immutable int k = Pcontrib[i].n++;
           Pcontrib[i].p[k].pixel = cast(ushort)(n); // store src sample number
           Pcontrib[i].p[k].weight = weight; // store src sample weight
           totalWeight1 += weight; // total weight of all contributors
-          if (weight > max_w) {
-            max_w = weight;
-            max_k = k;
+          if (weight > maxW) {
+            maxW = weight;
+            maxK = k;
           }
         }
         //assert(Pcontrib[i].n);
         //assert(max_k != -1);
-        if (max_k == -1 || Pcontrib[i].n == 0) return null;
-        if (totalWeight1 != 1.0f) Pcontrib[i].p[max_k].weight += 1.0f-totalWeight1;
+        if (maxK == -1 || Pcontrib[i].n == 0) return null;
+        if (totalWeight1 != 1.0f) Pcontrib[i].p[maxK].weight += 1.0f-totalWeight1;
       }
     } else {
       int total = 0;
       // Handle case when there are more destination samples than source samples (upsampling).
-      immutable Resample_Real half_width = filter_support*filter_scale;
+      immutable ResampleReal halfWidth = filterSupport*filterScale;
       // Find the source sample(s) that contribute to each destination sample.
-      foreach (immutable i; 0..dst_x) {
+      foreach (immutable i; 0..dstX) {
         // Convert from discrete to continuous coordinates, scale, then convert back to discrete.
-        Resample_Real center = (cast(Resample_Real)i+NUDGE)/xscale;
+        ResampleReal center = (cast(ResampleReal)i+NUDGE)/xscale;
         center -= NUDGE;
-        center += src_ofs;
-        immutable int left = cast_to_int(cast(Resample_Real)floor(center-half_width));
-        immutable int right = cast_to_int(cast(Resample_Real)ceil(center+half_width));
-        Pcontrib_bounds[i].center = center;
-        Pcontrib_bounds[i].left = left;
-        Pcontrib_bounds[i].right = right;
+        center += srcOfs;
+        immutable int left = castToInt(cast(ResampleReal)floor(center-halfWidth));
+        immutable int right = castToInt(cast(ResampleReal)ceil(center+halfWidth));
+        PcontribBounds[i].center = center;
+        PcontribBounds[i].left = left;
+        PcontribBounds[i].right = right;
         total += (right-left+1);
       }
 
@@ -354,45 +419,45 @@ private:
       if (total == 0 || ((Pcpool = cast(Contrib*)calloc(total, Contrib.sizeof)) is null)) return null;
       //scope(failure) free(Pcpool);
 
-      Pcpool_next = Pcpool;
+      PcpoolNext = Pcpool;
 
       // Create the list of source samples which contribute to each destination sample.
-      foreach (immutable i; 0..dst_x) {
-        int max_k = -1;
-        Resample_Real max_w = -1e+20f;
+      foreach (immutable i; 0..dstX) {
+        int maxK = -1;
+        ResampleReal maxW = -1e+20f;
 
-        Resample_Real center = Pcontrib_bounds[i].center;
-        immutable int left = Pcontrib_bounds[i].left;
-        immutable int right = Pcontrib_bounds[i].right;
+        ResampleReal center = PcontribBounds[i].center;
+        immutable int left = PcontribBounds[i].left;
+        immutable int right = PcontribBounds[i].right;
 
         Pcontrib[i].n = 0;
-        Pcontrib[i].p = Pcpool_next;
-        Pcpool_next += (right-left+1);
-        assert(Pcpool_next-Pcpool <= total);
+        Pcontrib[i].p = PcpoolNext;
+        PcpoolNext += (right-left+1);
+        assert(PcpoolNext-Pcpool <= total);
 
-        Resample_Real totalWeight0 = 0;
-        foreach (immutable j; left..right+1) totalWeight0 += Pfilter((center-cast(Resample_Real)j)*oo_filter_scale);
-        immutable Resample_Real norm = cast(Resample_Real)(1.0f/totalWeight0);
+        ResampleReal totalWeight0 = 0;
+        foreach (immutable j; left..right+1) totalWeight0 += Pfilter((center-cast(ResampleReal)j)*ooFilterScale);
+        immutable ResampleReal norm = cast(ResampleReal)(1.0f/totalWeight0);
 
-        Resample_Real totalWeight1 = 0;
+        ResampleReal totalWeight1 = 0;
         foreach (immutable j; left..right+1) {
-          immutable Resample_Real weight = Pfilter((center-cast(Resample_Real)j)*oo_filter_scale)*norm;
+          immutable ResampleReal weight = Pfilter((center-cast(ResampleReal)j)*ooFilterScale)*norm;
           if (weight == 0.0f) continue;
-          immutable int n = reflect(j, src_x, boundary_op);
+          immutable int n = reflect(j, srcX, boundaryOp);
           // Increment the number of source samples which contribute to the current destination sample.
           immutable int k = Pcontrib[i].n++;
           Pcontrib[i].p[k].pixel = cast(ushort)(n); // store src sample number
           Pcontrib[i].p[k].weight = weight; // store src sample weight
           totalWeight1 += weight; // total weight of all contributors
-          if (weight > max_w) {
-            max_w = weight;
-            max_k = k;
+          if (weight > maxW) {
+            maxW = weight;
+            maxK = k;
           }
         }
         //assert(Pcontrib[i].n);
         //assert(max_k != -1);
-        if (max_k == -1 || Pcontrib[i].n == 0) return null;
-        if (totalWeight1 != 1.0f) Pcontrib[i].p[max_k].weight += 1.0f-totalWeight1;
+        if (maxK == -1 || Pcontrib[i].n == 0) return null;
+        if (totalWeight1 != 1.0f) Pcontrib[i].p[maxK].weight += 1.0f-totalWeight1;
       }
     }
     // don't free return value
@@ -401,18 +466,18 @@ private:
     return PcontribRes;
   }
 
-  static int count_ops (const(Contrib_List)* Pclist, int k) {
+  static int countOps (const(ContribList)* Pclist, int k) {
     int t = 0;
     foreach (immutable i; 0..k) t += Pclist[i].n;
     return t;
   }
 
-  private Resample_Real m_lo;
-  private Resample_Real m_hi;
+  private ResampleReal mLo;
+  private ResampleReal mHi;
 
-  Resample_Real clamp_sample (Resample_Real f) const {
+  ResampleReal clampSample (ResampleReal f) const {
     pragma(inline, true);
-    if (f < m_lo) f = m_lo; else if (f > m_hi) f = m_hi;
+    if (f < mLo) f = mLo; else if (f > mHi) f = mHi;
     return f;
   }
 
@@ -424,144 +489,144 @@ public:
   // Pclist_x/Pclist_y - Optional pointers to contributor lists from another instance of a Resampler
   // src_x_ofs/src_y_ofs - Offset input image by specified amount (fractional values okay)
   this(
-    int src_x, int src_y,
-    int dst_x, int dst_y,
-    Boundary_Op boundary_op=BOUNDARY_CLAMP,
-    Resample_Real sample_low=0.0f, Resample_Real sample_high=0.0f,
-    string Pfilter_name=RESAMPLER_DEFAULT_FILTER,
-    Contrib_List* Pclist_x=null,
-    Contrib_List* Pclist_y=null,
-    Resample_Real filter_x_scale=1.0f,
-    Resample_Real filter_y_scale=1.0f,
-    Resample_Real src_x_ofs=0.0f,
-    Resample_Real src_y_ofs=0.0f)
+    int srcX, int srcY,
+    int dstX, int dstY,
+    BoundaryOp boundaryOp=BoundaryClamp,
+    ResampleReal sampleLow=0.0f, ResampleReal sampleHigh=0.0f,
+    int PfilterIndex=-1,
+    ContribList* PclistX=null,
+    ContribList* PclistY=null,
+    ResampleReal filterXScale=1.0f,
+    ResampleReal filterYScale=1.0f,
+    ResampleReal srcXOfs=0.0f,
+    ResampleReal srcYOfs=0.0f)
   {
     import core.stdc.stdlib : calloc, malloc;
 
     int i, j;
-    Resample_Real support;
+    ResampleReal support;
     FilterFunc func;
 
-    assert(src_x > 0);
-    assert(src_y > 0);
-    assert(dst_x > 0);
-    assert(dst_y > 0);
+    assert(srcX > 0);
+    assert(srcY > 0);
+    assert(dstX > 0);
+    assert(dstY > 0);
 
-    m_lo = sample_low;
-    m_hi = sample_high;
+    mLo = sampleLow;
+    mHi = sampleHigh;
 
-    m_delay_x_resample = false;
-    m_intermediate_x = 0;
-    m_Pdst_buf = null;
-    m_Ptmp_buf = null;
-    m_clist_x_forced = false;
-    m_Pclist_x = null;
-    m_clist_y_forced = false;
-    m_Pclist_y = null;
-    m_Psrc_y_count = null;
-    m_Psrc_y_flag = null;
-    m_Pscan_buf = null;
-    m_status = STATUS_OKAY;
+    mDelayXResample = false;
+    mIntermediateX = 0;
+    mPdstBuf = null;
+    mPtmpBuf = null;
+    mClistXForced = false;
+    mPclistX = null;
+    mClistYForced = false;
+    mPclistY = null;
+    mPsrcYCount = null;
+    mPsrcYFlag = null;
+    mPscanBuf = null;
+    mStatus = StatusOkay;
 
-    m_resample_src_x = src_x;
-    m_resample_src_y = src_y;
-    m_resample_dst_x = dst_x;
-    m_resample_dst_y = dst_y;
+    mResampleSrcX = srcX;
+    mResampleSrcY = srcY;
+    mResampleDstX = dstX;
+    mResampleDstY = dstY;
 
-    m_boundary_op = boundary_op;
+    mBoundaryOp = boundaryOp;
 
-    if ((m_Pdst_buf = cast(Sample*)malloc(m_resample_dst_x*Sample.sizeof)) is null) {
-      m_status = STATUS_OUT_OF_MEMORY;
+    if ((mPdstBuf = cast(Sample*)malloc(mResampleDstX*Sample.sizeof)) is null) {
+      mStatus = StatusOutOfMemory;
       return;
     }
 
-    // Find the specified filter.
-    if (Pfilter_name == null) Pfilter_name = RESAMPLER_DEFAULT_FILTER;
-    for (i = 0; i < NUM_FILTERS; ++i) if (Pfilter_name == g_filters[i].name) break;
-    if (i == NUM_FILTERS) {
-      m_status = STATUS_BAD_FILTER_NAME;
-      return;
+    if (PfilterIndex < 0 || PfilterIndex >= NumFilters) {
+      PfilterIndex = resamplerFindFilterInternal(ResamplerDefaultFilter);
+      if (PfilterIndex < 0 || PfilterIndex >= NumFilters) {
+        mStatus = StatusBadFilterName;
+        return;
+      }
     }
 
-    func = g_filters[i].func;
-    support = g_filters[i].support;
+    func = gFilters[PfilterIndex].func;
+    support = gFilters[PfilterIndex].support;
 
     // Create contributor lists, unless the user supplied custom lists.
-    if (Pclist_x is null) {
-      m_Pclist_x = make_clist(m_resample_src_x, m_resample_dst_x, m_boundary_op, func, support, filter_x_scale, src_x_ofs);
-      if (m_Pclist_x is null) {
-        m_status = STATUS_OUT_OF_MEMORY;
+    if (PclistX is null) {
+      mPclistX = makeClist(mResampleSrcX, mResampleDstX, mBoundaryOp, func, support, filterXScale, srcXOfs);
+      if (mPclistX is null) {
+        mStatus = StatusOutOfMemory;
         return;
       }
     } else {
-      m_Pclist_x = Pclist_x;
-      m_clist_x_forced = true;
+      mPclistX = PclistX;
+      mClistXForced = true;
     }
 
-    if (Pclist_y is null) {
-      m_Pclist_y = make_clist(m_resample_src_y, m_resample_dst_y, m_boundary_op, func, support, filter_y_scale, src_y_ofs);
-      if (m_Pclist_y is null) {
-        m_status = STATUS_OUT_OF_MEMORY;
+    if (PclistY is null) {
+      mPclistY = makeClist(mResampleSrcY, mResampleDstY, mBoundaryOp, func, support, filterYScale, srcYOfs);
+      if (mPclistY is null) {
+        mStatus = StatusOutOfMemory;
         return;
       }
     } else {
-      m_Pclist_y = Pclist_y;
-      m_clist_y_forced = true;
+      mPclistY = PclistY;
+      mClistYForced = true;
     }
 
-    if ((m_Psrc_y_count = cast(int*)calloc(m_resample_src_y, int.sizeof)) is null) {
-      m_status = STATUS_OUT_OF_MEMORY;
+    if ((mPsrcYCount = cast(int*)calloc(mResampleSrcY, int.sizeof)) is null) {
+      mStatus = StatusOutOfMemory;
       return;
     }
 
-    if ((m_Psrc_y_flag = cast(ubyte*)calloc(m_resample_src_y, ubyte.sizeof)) is null) {
-      m_status = STATUS_OUT_OF_MEMORY;
+    if ((mPsrcYFlag = cast(ubyte*)calloc(mResampleSrcY, ubyte.sizeof)) is null) {
+      mStatus = StatusOutOfMemory;
       return;
     }
 
     // Count how many times each source line contributes to a destination line.
-    for (i = 0; i < m_resample_dst_y; ++i) {
-      for (j = 0; j < m_Pclist_y[i].n; ++j) {
-        ++m_Psrc_y_count[resampler_range_check(m_Pclist_y[i].p[j].pixel, m_resample_src_y)];
+    for (i = 0; i < mResampleDstY; ++i) {
+      for (j = 0; j < mPclistY[i].n; ++j) {
+        ++mPsrcYCount[resamplerRangeCheck(mPclistY[i].p[j].pixel, mResampleSrcY)];
       }
     }
 
-    if ((m_Pscan_buf = cast(Scan_Buf*)malloc(Scan_Buf.sizeof)) is null) {
-      m_status = STATUS_OUT_OF_MEMORY;
+    if ((mPscanBuf = cast(ScanBuf*)malloc(ScanBuf.sizeof)) is null) {
+      mStatus = StatusOutOfMemory;
       return;
     }
 
-    for (i = 0; i < MAX_SCAN_BUF_SIZE; ++i) {
-      m_Pscan_buf.scan_buf_y[i] = -1;
-      m_Pscan_buf.scan_buf_l[i] = null;
+    for (i = 0; i < MaxScanBufSize; ++i) {
+      mPscanBuf.scanBufY[i] = -1;
+      mPscanBuf.scanBufL[i] = null;
     }
 
-    m_cur_src_y = m_cur_dst_y = 0;
+    mCurSrcY = mCurDstY = 0;
     {
       // Determine which axis to resample first by comparing the number of multiplies required
       // for each possibility.
-      int x_ops = count_ops(m_Pclist_x, m_resample_dst_x);
-      int y_ops = count_ops(m_Pclist_y, m_resample_dst_y);
+      int xOps = countOps(mPclistX, mResampleDstX);
+      int yOps = countOps(mPclistY, mResampleDstY);
 
       // Hack 10/2000: Weight Y axis ops a little more than X axis ops.
       // (Y axis ops use more cache resources.)
-      int xy_ops = x_ops*m_resample_src_y+(4*y_ops*m_resample_dst_x)/3;
-      int yx_ops = (4*y_ops*m_resample_src_x)/3+x_ops*m_resample_dst_y;
+      int xyOps = xOps*mResampleSrcY+(4*yOps*mResampleDstX)/3;
+      int yxOps = (4*yOps*mResampleSrcX)/3+xOps*mResampleDstY;
 
       // Now check which resample order is better. In case of a tie, choose the order
       // which buffers the least amount of data.
-      if (xy_ops > yx_ops || (xy_ops == yx_ops && m_resample_src_x < m_resample_dst_x)) {
-        m_delay_x_resample = true;
-        m_intermediate_x = m_resample_src_x;
+      if (xyOps > yxOps || (xyOps == yxOps && mResampleSrcX < mResampleDstX)) {
+        mDelayXResample = true;
+        mIntermediateX = mResampleSrcX;
       } else {
-        m_delay_x_resample = false;
-        m_intermediate_x = m_resample_dst_x;
+        mDelayXResample = false;
+        mIntermediateX = mResampleDstX;
       }
     }
 
-    if (m_delay_x_resample) {
-      if ((m_Ptmp_buf = cast(Sample*)malloc(m_intermediate_x*Sample.sizeof)) is null) {
-        m_status = STATUS_OUT_OF_MEMORY;
+    if (mDelayXResample) {
+      if ((mPtmpBuf = cast(Sample*)malloc(mIntermediateX*Sample.sizeof)) is null) {
+        mStatus = StatusOutOfMemory;
         return;
       }
     }
@@ -570,149 +635,149 @@ public:
   ~this () {
      import core.stdc.stdlib : free;
 
-     if (m_Pdst_buf !is null) {
-       free(m_Pdst_buf);
-       m_Pdst_buf = null;
+     if (mPdstBuf !is null) {
+       free(mPdstBuf);
+       mPdstBuf = null;
      }
 
-     if (m_Ptmp_buf !is null) {
-       free(m_Ptmp_buf);
-       m_Ptmp_buf = null;
+     if (mPtmpBuf !is null) {
+       free(mPtmpBuf);
+       mPtmpBuf = null;
      }
 
      // Don't deallocate a contibutor list if the user passed us one of their own.
-     if (m_Pclist_x !is null && !m_clist_x_forced) {
-       free(m_Pclist_x.p);
-       free(m_Pclist_x);
-       m_Pclist_x = null;
+     if (mPclistX !is null && !mClistXForced) {
+       free(mPclistX.p);
+       free(mPclistX);
+       mPclistX = null;
      }
-     if (m_Pclist_y !is null && !m_clist_y_forced) {
-       free(m_Pclist_y.p);
-       free(m_Pclist_y);
-       m_Pclist_y = null;
-     }
-
-     if (m_Psrc_y_count !is null) {
-       free(m_Psrc_y_count);
-       m_Psrc_y_count = null;
+     if (mPclistY !is null && !mClistYForced) {
+       free(mPclistY.p);
+       free(mPclistY);
+       mPclistY = null;
      }
 
-     if (m_Psrc_y_flag !is null) {
-       free(m_Psrc_y_flag);
-       m_Psrc_y_flag = null;
+     if (mPsrcYCount !is null) {
+       free(mPsrcYCount);
+       mPsrcYCount = null;
      }
 
-     if (m_Pscan_buf !is null) {
-       foreach (immutable i; 0..MAX_SCAN_BUF_SIZE) if (m_Pscan_buf.scan_buf_l[i] !is null) free(m_Pscan_buf.scan_buf_l[i]);
-       free(m_Pscan_buf);
-       m_Pscan_buf = null;
+     if (mPsrcYFlag !is null) {
+       free(mPsrcYFlag);
+       mPsrcYFlag = null;
+     }
+
+     if (mPscanBuf !is null) {
+       foreach (immutable i; 0..MaxScanBufSize) if (mPscanBuf.scanBufL[i] !is null) free(mPscanBuf.scanBufL[i]);
+       free(mPscanBuf);
+       mPscanBuf = null;
      }
   }
 
   // Reinits resampler so it can handle another frame.
   void restart () {
     import core.stdc.stdlib : free;
-    if (STATUS_OKAY != m_status) return;
-    m_cur_src_y = m_cur_dst_y = 0;
-    foreach (immutable i; 0..m_resample_src_y) {
-      m_Psrc_y_count[i] = 0;
-      m_Psrc_y_flag[i] = false;
+    if (StatusOkay != mStatus) return;
+    mCurSrcY = mCurDstY = 0;
+    foreach (immutable i; 0..mResampleSrcY) {
+      mPsrcYCount[i] = 0;
+      mPsrcYFlag[i] = false;
     }
-    foreach (immutable i; 0..m_resample_dst_y) {
-      foreach (immutable j; 0..m_Pclist_y[i].n) {
-        ++m_Psrc_y_count[resampler_range_check(m_Pclist_y[i].p[j].pixel, m_resample_src_y)];
+    foreach (immutable i; 0..mResampleDstY) {
+      foreach (immutable j; 0..mPclistY[i].n) {
+        ++mPsrcYCount[resamplerRangeCheck(mPclistY[i].p[j].pixel, mResampleSrcY)];
       }
     }
-    foreach (immutable i; 0..MAX_SCAN_BUF_SIZE) {
-      m_Pscan_buf.scan_buf_y[i] = -1;
-      free(m_Pscan_buf.scan_buf_l[i]);
-      m_Pscan_buf.scan_buf_l[i] = null;
+    foreach (immutable i; 0..MaxScanBufSize) {
+      mPscanBuf.scanBufY[i] = -1;
+      free(mPscanBuf.scanBufL[i]);
+      mPscanBuf.scanBufL[i] = null;
     }
   }
 
   // false on out of memory.
-  bool put_line (const(Sample)* Psrc) {
+  bool putLine (const(Sample)* Psrc) {
     int i;
 
-    if (m_cur_src_y >= m_resample_src_y) return false;
+    if (mCurSrcY >= mResampleSrcY) return false;
 
     // Does this source line contribute to any destination line? if not, exit now.
-    if (!m_Psrc_y_count[resampler_range_check(m_cur_src_y, m_resample_src_y)]) {
-      ++m_cur_src_y;
+    if (!mPsrcYCount[resamplerRangeCheck(mCurSrcY, mResampleSrcY)]) {
+      ++mCurSrcY;
       return true;
     }
 
     // Find an empty slot in the scanline buffer. (FIXME: Perf. is terrible here with extreme scaling ratios.)
-    for (i = 0; i < MAX_SCAN_BUF_SIZE; ++i) if (m_Pscan_buf.scan_buf_y[i] == -1) break;
+    for (i = 0; i < MaxScanBufSize; ++i) if (mPscanBuf.scanBufY[i] == -1) break;
 
     // If the buffer is full, exit with an error.
-    if (i == MAX_SCAN_BUF_SIZE) {
-      m_status = STATUS_SCAN_BUFFER_FULL;
+    if (i == MaxScanBufSize) {
+      mStatus = StatusScanBufferFull;
       return false;
     }
 
-    m_Psrc_y_flag[resampler_range_check(m_cur_src_y, m_resample_src_y)] = true;
-    m_Pscan_buf.scan_buf_y[i] = m_cur_src_y;
+    mPsrcYFlag[resamplerRangeCheck(mCurSrcY, mResampleSrcY)] = true;
+    mPscanBuf.scanBufY[i] = mCurSrcY;
 
     // Does this slot have any memory allocated to it?
-    if (!m_Pscan_buf.scan_buf_l[i]) {
+    if (!mPscanBuf.scanBufL[i]) {
       import core.stdc.stdlib : malloc;
-      if ((m_Pscan_buf.scan_buf_l[i] = cast(Sample*)malloc(m_intermediate_x*Sample.sizeof)) is null) {
-        m_status = STATUS_OUT_OF_MEMORY;
+      if ((mPscanBuf.scanBufL[i] = cast(Sample*)malloc(mIntermediateX*Sample.sizeof)) is null) {
+        mStatus = StatusOutOfMemory;
         return false;
       }
     }
 
     // Resampling on the X axis first?
-    if (m_delay_x_resample) {
+    if (mDelayXResample) {
       import core.stdc.string : memcpy;
-      assert(m_intermediate_x == m_resample_src_x);
+      assert(mIntermediateX == mResampleSrcX);
       // Y-X resampling order
-      memcpy(m_Pscan_buf.scan_buf_l[i], Psrc, m_intermediate_x*Sample.sizeof);
+      memcpy(mPscanBuf.scanBufL[i], Psrc, mIntermediateX*Sample.sizeof);
     } else {
-      assert(m_intermediate_x == m_resample_dst_x);
+      assert(mIntermediateX == mResampleDstX);
       // X-Y resampling order
-      resample_x(m_Pscan_buf.scan_buf_l[i], Psrc);
+      resampleX(mPscanBuf.scanBufL[i], Psrc);
     }
 
-    ++m_cur_src_y;
+    ++mCurSrcY;
 
     return true;
   }
 
   // null if no scanlines are currently available (give the resampler more scanlines!)
-  const(Sample)* get_line () {
-    // If all the destination lines have been generated, then always return null.
-    if (m_cur_dst_y == m_resample_dst_y) return null;
-    // Check to see if all the required contributors are present, if not, return null.
-    foreach (immutable i; 0..m_Pclist_y[m_cur_dst_y].n) {
-      if (!m_Psrc_y_flag[resampler_range_check(m_Pclist_y[m_cur_dst_y].p[i].pixel, m_resample_src_y)]) return null;
+  const(Sample)* getLine () {
+    // if all the destination lines have been generated, then always return null
+    if (mCurDstY == mResampleDstY) return null;
+    // check to see if all the required contributors are present, if not, return null
+    foreach (immutable i; 0..mPclistY[mCurDstY].n) {
+      if (!mPsrcYFlag[resamplerRangeCheck(mPclistY[mCurDstY].p[i].pixel, mResampleSrcY)]) return null;
     }
-    resample_y(m_Pdst_buf);
-    ++m_cur_dst_y;
-    return m_Pdst_buf;
+    resampleY(mPdstBuf);
+    ++mCurDstY;
+    return mPdstBuf;
   }
 
-  @property Status status () const { pragma(inline, true); return m_status; }
+  @property Status status () const { pragma(inline, true); return mStatus; }
 
-  // Returned contributor lists can be shared with another Resampler.
-  void get_clists (Contrib_List** ptr_clist_x, Contrib_List** ptr_clist_y) {
-    if (ptr_clist_x !is null) *ptr_clist_x = m_Pclist_x;
-    if (ptr_clist_y !is null) *ptr_clist_y = m_Pclist_y;
+  // returned contributor lists can be shared with another Resampler
+  void getClists (ContribList** ptrClistX, ContribList** ptrClistY) {
+    if (ptrClistX !is null) *ptrClistX = mPclistX;
+    if (ptrClistY !is null) *ptrClistY = mPclistY;
   }
 
-  @property Contrib_List* get_clist_x () { pragma(inline, true); return m_Pclist_x; }
-  @property Contrib_List* get_clist_y () { pragma(inline, true); return m_Pclist_y; }
+  @property ContribList* getClistX () { pragma(inline, true); return mPclistX; }
+  @property ContribList* getClistY () { pragma(inline, true); return mPclistY; }
 
-  // Filter accessors.
+  // filter accessors
   static @property auto filters () {
     static struct FilterRange {
     pure nothrow @trusted @nogc:
       int idx;
-      @property bool empty () const { pragma(inline, true); return (idx >= NUM_FILTERS); }
-      @property string front () const { pragma(inline, true); return (idx < NUM_FILTERS ? g_filters[idx].name : null); }
-      void popFront () { if (idx < NUM_FILTERS) ++idx; }
-      int length () const { return cast(int)NUM_FILTERS; }
+      @property bool empty () const { pragma(inline, true); return (idx >= NumFilters); }
+      @property string front () const { pragma(inline, true); return (idx < NumFilters ? gFilters[idx].name : null); }
+      void popFront () { if (idx < NumFilters) ++idx; }
+      int length () const { return cast(int)NumFilters; }
       alias opDollar = length;
     }
     return FilterRange();
@@ -722,25 +787,25 @@ private:
   /* Ensure that the contributing source sample is
   * within bounds. If not, reflect, clamp, or wrap.
   */
-  int reflect (in int j, in int src_x, in Boundary_Op boundary_op) {
+  int reflect (in int j, in int srcX, in BoundaryOp boundaryOp) {
     int n;
     if (j < 0) {
-      if (boundary_op == BOUNDARY_REFLECT) {
+      if (boundaryOp == BoundaryReflect) {
         n = -j;
-        if (n >= src_x) n = src_x-1;
-      } else if (boundary_op == BOUNDARY_WRAP) {
-        n = posmod(j, src_x);
+        if (n >= srcX) n = srcX-1;
+      } else if (boundaryOp == BoundaryWrap) {
+        n = posmod(j, srcX);
       } else {
         n = 0;
       }
-    } else if (j >= src_x) {
-      if (boundary_op == BOUNDARY_REFLECT) {
-        n = (src_x-j)+(src_x-1);
+    } else if (j >= srcX) {
+      if (boundaryOp == BoundaryReflect) {
+        n = (srcX-j)+(srcX-1);
         if (n < 0) n = 0;
-      } else if (boundary_op == BOUNDARY_WRAP) {
-        n = posmod(j, src_x);
+      } else if (boundaryOp == BoundaryWrap) {
+        n = posmod(j, srcX);
       } else {
-        n = src_x-1;
+        n = srcX-1;
       }
     } else {
       n = j;
@@ -748,56 +813,56 @@ private:
     return n;
   }
 
-  void resample_x (Sample* Pdst, const(Sample)* Psrc) {
+  void resampleX (Sample* Pdst, const(Sample)* Psrc) {
     assert(Pdst);
     assert(Psrc);
 
     Sample total;
-    Contrib_List *Pclist = m_Pclist_x;
+    ContribList *Pclist = mPclistX;
     Contrib *p;
 
-    for (int i = m_resample_dst_x; i > 0; --i, ++Pclist) {
+    for (int i = mResampleDstX; i > 0; --i, ++Pclist) {
       int j = void;
       for (j = Pclist.n, p = Pclist.p, total = 0; j > 0; --j, ++p) total += Psrc[p.pixel]*p.weight;
       *Pdst++ = total;
     }
   }
 
-  void scale_y_mov (Sample* Ptmp, const(Sample)* Psrc, Resample_Real weight, int dst_x) {
+  void scaleYMov (Sample* Ptmp, const(Sample)* Psrc, ResampleReal weight, int dstX) {
     // Not += because temp buf wasn't cleared.
-    for (int i = dst_x; i > 0; --i) *Ptmp++ = *Psrc++*weight;
+    for (int i = dstX; i > 0; --i) *Ptmp++ = *Psrc++*weight;
   }
 
-  void scale_y_add (Sample* Ptmp, const(Sample)* Psrc, Resample_Real weight, int dst_x) {
-    for (int i = dst_x; i > 0; --i) (*Ptmp++) += *Psrc++*weight;
+  void scaleYAdd (Sample* Ptmp, const(Sample)* Psrc, ResampleReal weight, int dstX) {
+    for (int i = dstX; i > 0; --i) (*Ptmp++) += *Psrc++*weight;
   }
 
   void clamp (Sample* Pdst, int n) {
     while (n > 0) {
-      *Pdst = clamp_sample(*Pdst);
+      *Pdst = clampSample(*Pdst);
       ++Pdst;
       --n;
     }
   }
 
-  void resample_y (Sample* Pdst) {
+  void resampleY (Sample* Pdst) {
     Sample* Psrc;
-    Contrib_List* Pclist = &m_Pclist_y[m_cur_dst_y];
+    ContribList* Pclist = &mPclistY[mCurDstY];
 
-    Sample* Ptmp = m_delay_x_resample ? m_Ptmp_buf : Pdst;
+    Sample* Ptmp = mDelayXResample ? mPtmpBuf : Pdst;
     assert(Ptmp);
 
     // process each contributor
     foreach (immutable i; 0..Pclist.n) {
       // locate the contributor's location in the scan buffer -- the contributor must always be found!
       int j = void;
-      for (j = 0; j < MAX_SCAN_BUF_SIZE; ++j) if (m_Pscan_buf.scan_buf_y[j] == Pclist.p[i].pixel) break;
-      assert(j < MAX_SCAN_BUF_SIZE);
-      Psrc = m_Pscan_buf.scan_buf_l[j];
+      for (j = 0; j < MaxScanBufSize; ++j) if (mPscanBuf.scanBufY[j] == Pclist.p[i].pixel) break;
+      assert(j < MaxScanBufSize);
+      Psrc = mPscanBuf.scanBufL[j];
       if (!i) {
-        scale_y_mov(Ptmp, Psrc, Pclist.p[i].weight, m_intermediate_x);
+        scaleYMov(Ptmp, Psrc, Pclist.p[i].weight, mIntermediateX);
       } else {
-        scale_y_add(Ptmp, Psrc, Pclist.p[i].weight, m_intermediate_x);
+        scaleYAdd(Ptmp, Psrc, Pclist.p[i].weight, mIntermediateX);
       }
 
       /* If this source line doesn't contribute to any
@@ -807,29 +872,29 @@ private:
        * axis sampling factor and the scaled filter width.)
        */
 
-      if (--m_Psrc_y_count[resampler_range_check(Pclist.p[i].pixel, m_resample_src_y)] == 0) {
-        m_Psrc_y_flag[resampler_range_check(Pclist.p[i].pixel, m_resample_src_y)] = false;
-        m_Pscan_buf.scan_buf_y[j] = -1;
+      if (--mPsrcYCount[resamplerRangeCheck(Pclist.p[i].pixel, mResampleSrcY)] == 0) {
+        mPsrcYFlag[resamplerRangeCheck(Pclist.p[i].pixel, mResampleSrcY)] = false;
+        mPscanBuf.scanBufY[j] = -1;
       }
     }
 
     // now generate the destination line
-    if (m_delay_x_resample) {
+    if (mDelayXResample) {
       // X was resampling delayed until after Y resampling
       assert(Pdst != Ptmp);
-      resample_x(Pdst, Ptmp);
+      resampleX(Pdst, Ptmp);
     } else {
       assert(Pdst == Ptmp);
     }
 
-    if (m_lo < m_hi) clamp(Pdst, m_resample_dst_x);
+    if (mLo < mHi) clamp(Pdst, mResampleDstX);
   }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 private nothrow @trusted @nogc:
-int resampler_range_check (int v, int h) {
+int resamplerRangeCheck (int v, int h) {
   version(assert) {
     //import std.conv : to;
     //assert(v >= 0 && v < h, "invalid v ("~to!string(v)~"), should be in [0.."~to!string(h)~")");
@@ -844,7 +909,7 @@ int resampler_range_check (int v, int h) {
 enum M_PI = 3.14159265358979323846;
 
 // Float to int cast with truncation.
-int cast_to_int (Resampler.Resample_Real i) { pragma(inline, true); return cast(int)i; }
+int castToInt (Resampler.ResampleReal i) { pragma(inline, true); return cast(int)i; }
 
 // (x mod y) with special handling for negative x values.
 int posmod (int x, int y) {
@@ -863,22 +928,22 @@ int posmod (int x, int y) {
 // only called during initializing to create the X and Y axis contributor tables.
 
 /* pulse/Fourier window */
-enum BOX_FILTER_SUPPORT = 0.5f;
-Resampler.Resample_Real box_filter (Resampler.Resample_Real t) {
+enum BoxFilterSupport = 0.5f;
+Resampler.ResampleReal boxFilter (Resampler.ResampleReal t) {
   // make_clist() calls the filter function with t inverted (pos = left, neg = right)
   if (t >= -0.5f && t < 0.5f) return 1.0f; else return 0.0f;
 }
 
 /* box (*) box, bilinear/triangle */
-enum TENT_FILTER_SUPPORT = 1.0f;
-Resampler.Resample_Real tent_filter (Resampler.Resample_Real t) {
+enum TentFilterSupport = 1.0f;
+Resampler.ResampleReal tentFilter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
   if (t < 1.0f) return 1.0f-t; else return 0.0f;
 }
 
 /* box (*) box (*) box */
-enum BELL_SUPPORT = 1.5f;
-Resampler.Resample_Real bell_filter (Resampler.Resample_Real t) {
+enum BellSupport = 1.5f;
+Resampler.ResampleReal bellFilter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
   if (t < 0.5f) return (0.75f-(t*t));
   if (t < 1.5f) { t = (t-1.5f); return (0.5f*(t*t)); }
@@ -886,37 +951,36 @@ Resampler.Resample_Real bell_filter (Resampler.Resample_Real t) {
 }
 
 /* box (*) box (*) box (*) box */
-enum B_SPLINE_SUPPORT = 2.0f;
-Resampler.Resample_Real B_spline_filter (Resampler.Resample_Real t) {
-  Resampler.Resample_Real tt;
+enum BSplineSupport = 2.0f;
+Resampler.ResampleReal BSplineFilter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
-  if (t < 1.0f) { tt = t*t; return ((0.5f*tt*t)-tt+(2.0f/3.0f)); }
+  if (t < 1.0f) { immutable Resampler.ResampleReal tt = t*t; return ((0.5f*tt*t)-tt+(2.0f/3.0f)); }
   if (t < 2.0f) { t = 2.0f-t; return ((1.0f/6.0f)*(t*t*t)); }
-  return (0.0f);
+  return 0.0f;
 }
 
 // Dodgson, N., "Quadratic Interpolation for Image Resampling"
-enum QUADRATIC_SUPPORT = 1.5f;
-Resampler.Resample_Real quadratic (Resampler.Resample_Real t, in Resampler.Resample_Real R) {
+enum QuadraticSupport = 1.5f;
+Resampler.ResampleReal quadratic (Resampler.ResampleReal t, in Resampler.ResampleReal R) {
   pragma(inline, true);
   if (t < 0.0f) t = -t;
-  if (t < QUADRATIC_SUPPORT) {
-    Resampler.Resample_Real tt = t*t;
+  if (t < QuadraticSupport) {
+    immutable Resampler.ResampleReal tt = t*t;
     if (t <= 0.5f) return (-2.0f*R)*tt+0.5f*(R+1.0f);
     return (R*tt)+(-2.0f*R-0.5f)*t+(3.0f/4.0f)*(R+1.0f);
   }
   return 0.0f;
 }
 
-Resampler.Resample_Real quadratic_interp_filter (Resampler.Resample_Real t) {
+Resampler.ResampleReal quadraticInterpFilter (Resampler.ResampleReal t) {
   return quadratic(t, 1.0f);
 }
 
-Resampler.Resample_Real quadratic_approx_filter (Resampler.Resample_Real t) {
+Resampler.ResampleReal quadraticApproxFilter (Resampler.ResampleReal t) {
   return quadratic(t, 0.5f);
 }
 
-Resampler.Resample_Real quadratic_mix_filter (Resampler.Resample_Real t) {
+Resampler.ResampleReal quadraticMixFilter (Resampler.ResampleReal t) {
   return quadratic(t, 0.8f);
 }
 
@@ -928,8 +992,8 @@ Resampler.Resample_Real quadratic_mix_filter (Resampler.Resample_Real t) {
 // (0, 0.5)   - Equivalent to the Catmull-Rom Spline
 // (0, C)   - The family of Cardinal Cubic Splines
 // (B, 0)   - Duff's tensioned B-Splines.
-Resampler.Resample_Real mitchell (Resampler.Resample_Real t, in Resampler.Resample_Real B, in Resampler.Resample_Real C) {
-  Resampler.Resample_Real tt = t*t;
+Resampler.ResampleReal mitchell (Resampler.ResampleReal t, in Resampler.ResampleReal B, in Resampler.ResampleReal C) {
+  Resampler.ResampleReal tt = t*t;
   if (t < 0.0f) t = -t;
   if (t < 1.0f) {
     t = (((12.0f-9.0f*B-6.0f*C)*(t*tt))+
@@ -947,30 +1011,30 @@ Resampler.Resample_Real mitchell (Resampler.Resample_Real t, in Resampler.Resamp
   return 0.0f;
 }
 
-enum MITCHELL_SUPPORT = 2.0f;
-Resampler.Resample_Real mitchell_filter (Resampler.Resample_Real t) {
+enum MitchellSupport = 2.0f;
+Resampler.ResampleReal mitchellFilter (Resampler.ResampleReal t) {
   return mitchell(t, 1.0f/3.0f, 1.0f/3.0f);
 }
 
-enum CATMULL_ROM_SUPPORT = 2.0f;
-Resampler.Resample_Real catmull_rom_filter (Resampler.Resample_Real t) {
+enum CatmullRomSupport = 2.0f;
+Resampler.ResampleReal catmullRomFilter (Resampler.ResampleReal t) {
   return mitchell(t, 0.0f, 0.5f);
 }
 
 double sinc (double x) {
   pragma(inline, true);
   import std.math : sin;
-  x = (x*M_PI);
+  x *= M_PI;
   if (x < 0.01f && x > -0.01f) return 1.0f+x*x*(-1.0f/6.0f+x*x*1.0f/120.0f);
   return sin(x)/x;
 }
 
-Resampler.Resample_Real clean (double t) {
+Resampler.ResampleReal clean (double t) {
   pragma(inline, true);
   import std.math : abs;
-  enum EPSILON = cast(Resampler.Resample_Real)0.0000125f;
+  enum EPSILON = cast(Resampler.ResampleReal)0.0000125f;
   if (abs(t) < EPSILON) return 0.0f;
-  return cast(Resampler.Resample_Real)t;
+  return cast(Resampler.ResampleReal)t;
 }
 
 //static double blackman_window(double x)
@@ -978,69 +1042,69 @@ Resampler.Resample_Real clean (double t) {
 //  return 0.42f+0.50f*cos(M_PI*x)+0.08f*cos(2.0f*M_PI*x);
 //}
 
-double blackman_exact_window (double x) {
+double blackmanExactWindow (double x) {
   pragma(inline, true);
   import std.math : cos;
   return 0.42659071f+0.49656062f*cos(M_PI*x)+0.07684867f*cos(2.0f*M_PI*x);
 }
 
-enum BLACKMAN_SUPPORT = 3.0f;
-Resampler.Resample_Real blackman_filter (Resampler.Resample_Real t) {
+enum BlackmanSupport = 3.0f;
+Resampler.ResampleReal blackmanFilter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
   if (t < 3.0f) {
     //return clean(sinc(t)*blackman_window(t/3.0f));
-    return clean(sinc(t)*blackman_exact_window(t/3.0f));
+    return clean(sinc(t)*blackmanExactWindow(t/3.0f));
   }
   return (0.0f);
 }
 
 // with blackman window
-enum GAUSSIAN_SUPPORT = 1.25f;
-Resampler.Resample_Real gaussian_filter (Resampler.Resample_Real t) {
+enum GaussianSupport = 1.25f;
+Resampler.ResampleReal gaussianFilter (Resampler.ResampleReal t) {
   import std.math : exp, sqrt;
   if (t < 0) t = -t;
-  if (t < GAUSSIAN_SUPPORT) return clean(exp(-2.0f*t*t)*sqrt(2.0f/M_PI)*blackman_exact_window(t/GAUSSIAN_SUPPORT));
+  if (t < GaussianSupport) return clean(exp(-2.0f*t*t)*sqrt(2.0f/M_PI)*blackmanExactWindow(t/GaussianSupport));
   return 0.0f;
 }
 
 // Windowed sinc -- see "Jimm Blinn's Corner: Dirty Pixels" pg. 26.
-enum LANCZOS3_SUPPORT = 3.0f;
-Resampler.Resample_Real lanczos3_filter (Resampler.Resample_Real t) {
+enum Lanczos3Support = 3.0f;
+Resampler.ResampleReal lanczos3Filter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
   if (t < 3.0f) return clean(sinc(t)*sinc(t/3.0f));
   return (0.0f);
 }
 
-enum LANCZOS4_SUPPORT = 4.0f;
-Resampler.Resample_Real lanczos4_filter (Resampler.Resample_Real t) {
+enum Lanczos4Support = 4.0f;
+Resampler.ResampleReal lanczos4Filter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
   if (t < 4.0f) return clean(sinc(t)*sinc(t/4.0f));
   return (0.0f);
 }
 
-enum LANCZOS6_SUPPORT = 6.0f;
-Resampler.Resample_Real lanczos6_filter (Resampler.Resample_Real t) {
+enum Lanczos6Support = 6.0f;
+Resampler.ResampleReal lanczos6Filter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
   if (t < 6.0f) return clean(sinc(t)*sinc(t/6.0f));
   return (0.0f);
 }
 
-enum LANCZOS12_SUPPORT = 12.0f;
-Resampler.Resample_Real lanczos12_filter (Resampler.Resample_Real t) {
+enum Lanczos12Support = 12.0f;
+Resampler.ResampleReal lanczos12Filter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
   if (t < 12.0f) return clean(sinc(t)*sinc(t/12.0f));
   return (0.0f);
 }
 
 double bessel0 (double x) {
-  enum EPSILON_RATIO = cast(double)1E-16;
+  enum EpsilonRatio = cast(double)1E-16;
   double xh = 0.5*x;
   double sum = 1.0;
   double pow = 1.0;
   int k = 0;
   double ds = 1.0;
   // FIXME: Shouldn't this stop after X iterations for max. safety?
-  while (ds > sum*EPSILON_RATIO) {
+  while (ds > sum*EpsilonRatio) {
     ++k;
     pow = pow*(xh/k);
     ds = pow*pow;
@@ -1049,24 +1113,24 @@ double bessel0 (double x) {
   return sum;
 }
 
-enum KAISER_ALPHA = cast(Resampler.Resample_Real)4.0;
-double kaiser (double alpha, double half_width, double x) {
+enum KaiserAlpha = cast(Resampler.ResampleReal)4.0;
+double kaiser (double alpha, double halfWidth, double x) {
   pragma(inline, true);
   import std.math : sqrt;
-  immutable double ratio = (x/half_width);
+  immutable double ratio = (x/halfWidth);
   return bessel0(alpha*sqrt(1-ratio*ratio))/bessel0(alpha);
 }
 
-enum KAISER_SUPPORT = 3;
-static Resampler.Resample_Real kaiser_filter (Resampler.Resample_Real t) {
+enum KaiserSupport = 3;
+static Resampler.ResampleReal kaiserFilter (Resampler.ResampleReal t) {
   if (t < 0.0f) t = -t;
-  if (t < KAISER_SUPPORT) {
+  if (t < KaiserSupport) {
     import std.math : exp, log;
     // db atten
-    immutable Resampler.Resample_Real att = 40.0f;
-    immutable Resampler.Resample_Real alpha = cast(Resampler.Resample_Real)(exp(log(cast(double)0.58417*(att-20.96))*0.4)+0.07886*(att-20.96));
+    immutable Resampler.ResampleReal att = 40.0f;
+    immutable Resampler.ResampleReal alpha = cast(Resampler.ResampleReal)(exp(log(cast(double)0.58417*(att-20.96))*0.4)+0.07886*(att-20.96));
     //const Resampler.Resample_Real alpha = KAISER_ALPHA;
-    return cast(Resampler.Resample_Real)clean(sinc(t)*kaiser(alpha, KAISER_SUPPORT, t));
+    return cast(Resampler.ResampleReal)clean(sinc(t)*kaiser(alpha, KaiserSupport, t));
   }
   return 0.0f;
 }
@@ -1075,26 +1139,58 @@ static Resampler.Resample_Real kaiser_filter (Resampler.Resample_Real t) {
 struct FilterInfo {
   string name;
   Resampler.FilterFunc func;
-  Resampler.Resample_Real support;
+  Resampler.ResampleReal support;
 }
 
-static immutable FilterInfo[16] g_filters = [
-   FilterInfo("box",              &box_filter,              BOX_FILTER_SUPPORT),
-   FilterInfo("tent",             &tent_filter,             TENT_FILTER_SUPPORT),
-   FilterInfo("bell",             &bell_filter,             BELL_SUPPORT),
-   FilterInfo("bspline",          &B_spline_filter,         B_SPLINE_SUPPORT),
-   FilterInfo("mitchell",         &mitchell_filter,         MITCHELL_SUPPORT),
-   FilterInfo("lanczos3",         &lanczos3_filter,         LANCZOS3_SUPPORT),
-   FilterInfo("blackman",         &blackman_filter,         BLACKMAN_SUPPORT),
-   FilterInfo("lanczos4",         &lanczos4_filter,         LANCZOS4_SUPPORT),
-   FilterInfo("lanczos6",         &lanczos6_filter,         LANCZOS6_SUPPORT),
-   FilterInfo("lanczos12",        &lanczos12_filter,        LANCZOS12_SUPPORT),
-   FilterInfo("kaiser",           &kaiser_filter,           KAISER_SUPPORT),
-   FilterInfo("gaussian",         &gaussian_filter,         GAUSSIAN_SUPPORT),
-   FilterInfo("catmullrom",       &catmull_rom_filter,      CATMULL_ROM_SUPPORT),
-   FilterInfo("quadratic_interp", &quadratic_interp_filter, QUADRATIC_SUPPORT),
-   FilterInfo("quadratic_approx", &quadratic_approx_filter, QUADRATIC_SUPPORT),
-   FilterInfo("quadratic_mix",    &quadratic_mix_filter,    QUADRATIC_SUPPORT),
+static immutable FilterInfo[16] gFilters = [
+   FilterInfo("box",              &boxFilter,             BoxFilterSupport),
+   FilterInfo("tent",             &tentFilter,            TentFilterSupport),
+   FilterInfo("bell",             &bellFilter,            BellSupport),
+   FilterInfo("bspline",          &BSplineFilter,         BSplineSupport),
+   FilterInfo("mitchell",         &mitchellFilter,        MitchellSupport),
+   FilterInfo("lanczos3",         &lanczos3Filter,        Lanczos3Support),
+   FilterInfo("blackman",         &blackmanFilter,        BlackmanSupport),
+   FilterInfo("lanczos4",         &lanczos4Filter,        Lanczos4Support),
+   FilterInfo("lanczos6",         &lanczos6Filter,        Lanczos6Support),
+   FilterInfo("lanczos12",        &lanczos12Filter,       Lanczos12Support),
+   FilterInfo("kaiser",           &kaiserFilter,          KaiserSupport),
+   FilterInfo("gaussian",         &gaussianFilter,        GaussianSupport),
+   FilterInfo("catmullrom",       &catmullRomFilter,      CatmullRomSupport),
+   FilterInfo("quadratic_interp", &quadraticInterpFilter, QuadraticSupport),
+   FilterInfo("quadratic_approx", &quadraticApproxFilter, QuadraticSupport),
+   FilterInfo("quadratic_mix",    &quadraticMixFilter,    QuadraticSupport),
 ];
 
-enum NUM_FILTERS = cast(int)g_filters.length;
+enum NumFilters = cast(int)gFilters.length;
+
+
+bool rsmStringEqu (const(char)[] s0, const(char)[] s1) {
+  for (;;) {
+    if (s0.length && (s0.ptr[0] <= ' ' || s0.ptr[0] == '_')) { s0 = s0[1..$]; continue; }
+    if (s1.length && (s1.ptr[0] <= ' ' || s1.ptr[0] == '_')) { s1 = s1[1..$]; continue; }
+    if (s0.length == 0) {
+      while (s1.length && (s1.ptr[0] <= ' ' || s1.ptr[0] == '_')) s1 = s1[1..$];
+      return (s1.length == 0);
+    }
+    if (s1.length == 0) {
+      while (s0.length && (s0.ptr[0] <= ' ' || s0.ptr[0] == '_')) s0 = s0[1..$];
+      return (s0.length == 0);
+    }
+    assert(s0.length && s1.length);
+    char c0 = s0.ptr[0];
+    char c1 = s1.ptr[0];
+    if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man's tolower
+    if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's tolower
+    if (c0 != c1) return false;
+    s0 = s0[1..$];
+    s1 = s1[1..$];
+  }
+}
+
+
+int resamplerFindFilterInternal (const(char)[] name) {
+  if (name.length) {
+    foreach (immutable idx, const ref fi; gFilters[]) if (rsmStringEqu(name, fi.name)) return cast(int)idx;
+  }
+  return -1;
+}
