@@ -19,7 +19,6 @@ module iv.sdpyutil /*is aliced*/;
 import arsd.color;
 import arsd.simpledisplay;
 import iv.alice;
-import iv.bclamp;
 
 //version = krc_debug;
 
@@ -672,12 +671,12 @@ static:
 
   public uint icRGB (int r, int g, int b) pure nothrow @safe @nogc {
     pragma(inline, true);
-    return (clampToByte(r)<<16)|(clampToByte(g)<<8)|clampToByte(b);
+    return (Color.clampToByte(r)<<16)|(Color.clampToByte(g)<<8)|Color.clampToByte(b);
   }
 
   public uint icRGBA (int r, int g, int b, int a) pure nothrow @safe @nogc {
     pragma(inline, true);
-    return (clampToByte(a)<<24)|(clampToByte(r)<<16)|(clampToByte(g)<<8)|clampToByte(b);
+    return (Color.clampToByte(a)<<24)|(Color.clampToByte(r)<<16)|(Color.clampToByte(g)<<8)|Color.clampToByte(b);
   }
 
   public uint c2img (in Color c) pure nothrow @safe @nogc {
@@ -886,6 +885,7 @@ void sdpyNormalizeArrowKeys (ref KeyEvent event) {
 }
 
 
+/+
 // ////////////////////////////////////////////////////////////////////////// //
 // this mixin can be used to alphablend two `uint` colors
 // `colu32name` is variable that holds color to blend,
@@ -918,6 +918,10 @@ uint blendU32 (uint dst, uint src) nothrow @trusted @nogc {
   mixin(ColorBlendMixinStr!("src", "dst"));
   return dst;
 }
++/
+
+Color blend (Color dst, Color src) pure nothrow @trusted @nogc { pragma(inline, true); return dst.alphaBlend(src); }
+uint blendU32 (uint dst, uint src) pure nothrow @trusted @nogc { pragma(inline, true); mixin(Color.ColorBlendMixinStr!("src", "dst")); return dst; }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
