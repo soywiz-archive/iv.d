@@ -19,8 +19,7 @@ module iv.vfs.writers.zip /*is aliced*/;
 private:
 
 public enum VFSZipWriterSupportsLZMA = true;
-pragma(lib, "lzma");
-import etc.c.lzma;
+import iv.vfs.writers.lzma;
 
 import iv.alice;
 import iv.utfutil;
