@@ -2883,6 +2883,7 @@ public:
   // return `true` to stop
   alias OverlapCallback = void delegate (BodyBase abody);
   alias SimpleQueryCallback = bool delegate (BodyBase abody);
+  alias SimpleQueryCallbackNR = void delegate (BodyBase abody);
   alias SegQueryCallback = Float delegate (BodyBase abody, in ref VT a, in ref VT b); // return dist from a to abody
 
 private:
@@ -3617,6 +3618,16 @@ public:
     );
     version(aabbtree_many_asserts) assert(nid < 0 || (nid >= 0 && nid < mNodeCount && mNodes[nid].leaf));
     return (nid >= 0 ? mNodes[nid].flesh : null);
+  }
+
+  /// report all bodies containing the given point
+  void pointQuery() (in auto ref VT point, scope SimpleQueryCallbackNR cb) {
+    visit(
+      // checker
+      (node) => node.aabb.contains(point),
+      // visitor
+      (flesh) { cb(flesh); return false; },
+    );
   }
 
   ///
