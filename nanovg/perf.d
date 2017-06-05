@@ -53,6 +53,9 @@ public:
   enum height = 35;
 
 private:
+  enum FilterFadeoff = 0.1f; // 10%
+  float curFilterValue = 0;
+
   enum HistorySize = 100;
 
   Style gstyle;
@@ -81,6 +84,7 @@ public:
       if (!isFinite(frameTime)) frameTime = 0;
       head = (head+1)%HistorySize;
       values.ptr[head] = frameTime;
+      curFilterValue = FilterFadeoff*frameTime+(1.0f-FilterFadeoff)*curFilterValue;
     }
   }
 
@@ -153,7 +157,7 @@ public:
         vg.fontSize(18.0f);
         vg.textAlign(NVGTextAlign(NVGTextAlign.H.Right, NVGTextAlign.V.Top));
         vg.fillColor(nvgRGBA(240, 240, 240, 255));
-        auto len = snprintf(str.ptr, str.length, "%.2f FPS", 1.0f/avg);
+        auto len = snprintf(str.ptr, str.length, "%.2f FPS (%.2f)", 1.0f/avg, 1.0f/curFilterValue);
         vg.text(x+width-3, y+1, str.ptr[0..len]);
 
         vg.fontSize(15.0f);
