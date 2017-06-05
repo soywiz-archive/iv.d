@@ -66,16 +66,18 @@ template ImportCoreMath(FloatType, T...) {
   private template InternalImport(T...) {
     static if (T.length == 0) enum InternalImport = "";
     else static if (is(typeof(T[0]) == string)) {
-      static if (is(FloatType == float)) {
-        enum InternalImport = T[0]~"="~T[0]~"f,"~InternalImport!(T[1..$]);
+      static if (T[0] == "fabs" || T[0] == "cos" || T[0] == "sin" || T[0] == "sqrt") {
+        enum InternalImport = "import core.math : "~T[0]~";"~InternalImport!(T[1..$]);
+      } else static if (is(FloatType == float)) {
+        enum InternalImport = "import core.stdc.math : "~T[0]~"="~T[0]~"f;"~InternalImport!(T[1..$]);
       } else {
-        enum InternalImport = T[0]~","~InternalImport!(T[1..$]);
+        enum InternalImport = "import core.stdc.math : "~T[0]~";"~InternalImport!(T[1..$]);
       }
     }
     else static assert(0, "string expected");
   }
   static if (T.length > 0) {
-    enum ImportCoreMath = "import core.stdc.math : "~InternalImport!(T)[0..$-1]~";";
+    enum ImportCoreMath = InternalImport!T;
   } else {
     enum ImportCoreMath = "{}";
   }
@@ -236,6 +238,9 @@ nothrow @safe:
     }
   }
 
+  static Me Zero () pure nothrow @safe @nogc { pragma(inline, true); return Me(0, 0); }
+  static Me Invalid () pure nothrow @safe @nogc { pragma(inline, true); return Me(Float.nan, Float.nan); }
+
   @property bool valid () const nothrow @safe @nogc {
     pragma(inline, true);
     import core.stdc.math : isnan;
@@ -298,13 +303,26 @@ nothrow @safe:
   ref auto normalize () {
     //pragma(inline, true);
     mixin(ImportCoreMath!(Float, "sqrt"));
-         static if (dims == 2) immutable Float invlength = cast(Float)1/sqrt(x*x+y*y);
-    else static if (dims == 3) immutable Float invlength = cast(Float)1/sqrt(x*x+y*y+z*z);
+         static if (dims == 2) immutable Float invlen = cast(Float)1/sqrt(x*x+y*y);
+    else static if (dims == 3) immutable Float invlen = cast(Float)1/sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
-    x *= invlength;
-    y *= invlength;
-    static if (dims == 3) z *= invlength;
+    x *= invlen;
+    y *= invlen;
+    static if (dims == 3) z *= invlen;
     return this;
+  }
+
+  Float normalizeRetLength () {
+    //pragma(inline, true);
+    mixin(ImportCoreMath!(Float, "sqrt"));
+         static if (dims == 2) immutable Float len = sqrt(x*x+y*y);
+    else static if (dims == 3) immutable Float len = sqrt(x*x+y*y+z*z);
+    else static assert(0, "invalid dimension count for vector");
+    immutable Float invlen = cast(Float)1/len;
+    x *= invlen;
+    y *= invlen;
+    static if (dims == 3) z *= invlen;
+    return len;
   }
 
   /+

@@ -82,9 +82,9 @@ public bool gjk(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* sepmove
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// return distance between two convex shapes, and separation normal.
+/// return distance between two convex shapes, and separation normal
 /// negative distance means that shapes are overlapping, and zero distance means touching (and ops are invalid)
-public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* op0, VT* op1=null, VT* sepnorm=null) if (IsGoodGJKObject!(CT, VT)) {
+public auto gjkdist(CT, VT) (in auto ref CT coll1, in auto ref CT coll2, VT* op0=null, VT* op1=null, VT* sepnorm=null) if (IsGoodGJKObject!(CT, VT)) {
   static VT segClosestToOrigin() (in auto ref VT segp0, in auto ref VT segp1) {
     immutable oseg = segp1-segp0;
     immutable ab2 = oseg.dot(oseg);
