@@ -249,6 +249,14 @@ nothrow @safe:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  @property bool isFinite () const nothrow @safe @nogc {
+    pragma(inline, true);
+    import core.stdc.math : isfinite;
+         static if (dims == 2) return isfinite(x) && isfinite(y);
+    else static if (dims == 3) return isfinite(x) && isfinite(y) && isfinite(z);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
   @property bool isZero () const nothrow @safe @nogc {
     pragma(inline, true);
          static if (dims == 2) return (x == 0 && y == 0);
@@ -488,28 +496,10 @@ const:
   }
 
   // dot product
-  Float opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) {
-    pragma(inline, true);
-    static if (dims == 2) {
-      return x*a.x+y*a.y;
-    } else static if (dims == 3) {
-           static if (isVector2!VT) return x*a.x+y*a.y;
-      else static if (isVector3!VT) return x*a.x+y*a.y+z*a.z;
-      else static assert(0, "invalid dimension count for vector");
-    } else {
-      static assert(0, "invalid dimension count for vector");
-    }
-  }
+  Float opBinary(string op:"*", VT) (in auto ref VT a) if (isVector!VT) { pragma(inline, true); return dot(a); }
 
   // cross product
-  auto opBinary(string op:"%", VT) (in auto ref VT a) if (isVector!VT) {
-    pragma(inline, true);
-         static if (dims == 2 && isVector2!VT) return /*v3(0, 0, x*a.y-y*a.x)*/x*a.y-y*a.x;
-    else static if (dims == 2 && isVector3!VT) return v3(y*a.z, -x*a.z, x*a.y-y*a.x);
-    else static if (dims == 3 && isVector2!VT) return v3(-z*a.y, z*a.x, x*a.y-y*a.x);
-    else static if (dims == 3 && isVector3!VT) return v3(y*a.z-z*a.y, z*a.x-x*a.z, x*a.y-y*a.x);
-    else static assert(0, "invalid dimension count for vector");
-  }
+  auto opBinary(string op:"%", VT) (in auto ref VT a) if (isVector!VT) { pragma(inline, true); return cross(a); }
 
   auto opBinary(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
     pragma(inline, true);
@@ -621,11 +611,35 @@ const:
     else static assert(0, "invalid dimension count for vector");
   }
 
-  // this dot v
-  @property Float dot(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this*v; }
+  // this dot a
+  @property Float dot(VT) (in auto ref VT a) if (isVector!VT) {
+    pragma(inline, true);
+    static if (dims == 2) {
+      return x*a.x+y*a.y;
+    } else static if (dims == 3) {
+           static if (isVector2!VT) return x*a.x+y*a.y;
+      else static if (isVector3!VT) return x*a.x+y*a.y+z*a.z;
+      else static assert(0, "invalid dimension count for vector");
+    } else {
+      static assert(0, "invalid dimension count for vector");
+    }
+  }
 
-  // this cross v
-  auto cross(VT) (in auto ref VT v) if (isVector!VT) { pragma(inline, true); return this%v; }
+  // this cross a
+  auto cross(VT) (in auto ref VT a) if (isVector!VT) {
+    pragma(inline, true);
+         static if (dims == 2 && isVector2!VT) return /*v3(0, 0, x*a.y-y*a.x)*/x*a.y-y*a.x;
+    else static if (dims == 2 && isVector3!VT) return v3(y*a.z, -x*a.z, x*a.y-y*a.x);
+    else static if (dims == 3 && isVector2!VT) return v3(-z*a.y, z*a.x, x*a.y-y*a.x);
+    else static if (dims == 3 && isVector3!VT) return v3(y*a.z-z*a.y, z*a.x-x*a.z, x*a.y-y*a.x);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  // this*s; if you want s*this, do cross(-s)
+  static if (dims == 2) auto cross (Float s) {
+    pragma(inline, true);
+    return Me(s*y, -s*x);
+  }
 
   // compute Euler angles from direction vector (this) (with zero roll)
   auto hpr () {
@@ -728,6 +742,15 @@ const:
 
     auto scross() (Float s) { pragma(inline, true); return v2(-s*y, s*x); }
   }
+
+  bool equals() (in auto ref Me v) {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(Float, "fabs"));
+         static if (dims == 2) return (fabs(x-v.x) < EPSILON!Float && fabs(y-v.y) < EPSILON!Float);
+    else static if (dims == 3) return (fabs(x-v.x) < EPSILON!Float && fabs(y-v.y) < EPSILON!Float && fabs(z-v.z) < EPSILON!Float);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
 
   // swizzling
   auto opDispatch(string fld) ()
