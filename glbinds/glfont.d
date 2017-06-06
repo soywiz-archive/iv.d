@@ -13739,7 +13739,6 @@ public void oglFontDrawStr(bool restorepos=true) (GLuint fontBase, GLfloat x, GL
     glTranslatef(x, y, 0);
     glListBase(fontBase);
     glCallLists(str.length, GL_UNSIGNED_BYTE, cast(void*)str.ptr);
-    glPopAttrib();
   }
 }
 
@@ -13752,6 +13751,5 @@ public void oglFontDrawStr(bool restorepos=true) (GLuint fontBase, const(char)[]
     scope(exit) { static if (restorepos) glPopMatrix(); glPopAttrib(); }
     glListBase(fontBase);
     glCallLists(str.length, GL_UNSIGNED_BYTE, cast(void*)str.ptr);
-    glPopAttrib();
   }
 }
