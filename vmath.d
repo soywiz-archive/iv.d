@@ -500,6 +500,12 @@ const:
 
   // cross product
   auto opBinary(string op:"%", VT) (in auto ref VT a) if (isVector!VT) { pragma(inline, true); return cross(a); }
+  auto opBinary(string op:"^", VT) (in auto ref VT a) if (isVector!VT) { pragma(inline, true); return cross(a); }
+
+  static if (dims == 2) {
+    auto opBinary(string op:"%", VT) (VT.Float a) if (isVector!VT) { pragma(inline, true); return cross(a); }
+    auto opBinary(string op:"^", VT) (VT.Float a) if (isVector!VT) { pragma(inline, true); return cross(a); }
+  }
 
   auto opBinary(string op) (Float a) if (op == "+" || op == "-" || op == "*") {
     pragma(inline, true);
