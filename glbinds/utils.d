@@ -11,6 +11,37 @@ enum GL_PI = 3.1415926535897932384626433832795;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+void oglSetup2D (int winWidth, int winHeight, bool upsideDown=false) {
+  glViewport(0, 0, winWidth, winHeight);
+
+  glDisable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glDisable(GL_LINE_SMOOTH);
+  glDisable(GL_POINT_SMOOTH);
+  glDisable(GL_DEPTH_TEST);
+  glDisable(GL_TEXTURE_2D);
+  glDisable(GL_LIGHTING);
+  glDisable(GL_DITHER);
+  glDisable(GL_STENCIL_TEST);
+  glDisable(GL_SCISSOR_TEST);
+
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  if (upsideDown) {
+    glOrtho(0, winWidth, 0, winHeight, -1, 1); // set origin to bottom left
+  } else {
+    glOrtho(0, winWidth, winHeight, 0, -1, 1); // set origin to top left
+  }
+
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+
+  glClearColor(0, 0, 0, 0);
+  glColor4f(1, 1, 1, 1);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 // replacement for `gluPerspective()`
 // sets the frustum to perspective mode.
 // fovY   - Field of vision in degrees in the y direction
