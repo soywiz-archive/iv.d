@@ -782,788 +782,6 @@ static:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-template IsSphere(ST) {
-  static if (is(ST == Sphere!SVT, SVT)) {
-    enum IsSphere = IsVector!SVT;
-  } else {
-    enum IsSphere = false;
-  }
-}
-
-template IsSphere(ST, VT) {
-  static if (is(ST == Sphere!SVT, SVT)) {
-    enum IsSphere = (is(VT == SVT) && IsVector!SVT);
-  } else {
-    enum IsSphere = false;
-  }
-}
-
-
-///
-struct Sphere(VT) if (IsVector!VT) {
-public:
-  alias Float = VT.Float;
-  alias vec = VT;
-  alias Me = typeof(this);
-
-public:
-  vec orig; /// sphere origin
-  Float radius; /// sphere radius
-
-public nothrow @trusted @nogc:
-  this() (in auto ref vec aorig, Float arad) { orig = aorig; radius = arad; }
-
-  @property bool valid () const { import core.stdc.math : isnan; pragma(inline, true); return (!isnan(radius) && radius > 0); }
-
-  /// sweep test
-  bool sweep() (in auto ref vec amove, in auto ref Me sb, Float* u0, Float* u1) const {
-    mixin(ImportCoreMath!(Float, "sqrt"));
-
-    immutable odist = sb.orig-this.orig; // vector from A0 to B0
-    immutable vab = -amove; // relative velocity (in normalized time)
-    immutable rab = this.radius+sb.radius;
-    immutable Float a = vab.dot(vab); // u*u coefficient
-    immutable Float b = cast(Float)2*vab.dot(odist); // u coefficient
-    immutable Float c = odist.dot(odist)-rab*rab; // constant term
-
-    // check if they're currently overlapping
-    if (odist.dot(odist) <= rab*rab) {
-      if (u0 !is null) *u0 = 0;
-      if (u0 !is null) *u1 = 0;
-      return true;
-    }
-
-    // check if they hit each other during the frame
-    immutable Float q = b*b-4*a*c;
-    if (q < 0) return false; // alas, complex roots
-
-    immutable Float sq = sqrt(q);
-    immutable Float d = cast(Float)1/(cast(Float)2*a);
-    Float uu0 = (-b+sq)*d;
-    Float uu1 = (-b-sq)*d;
-
-    if (uu0 > uu1) { immutable t = uu0; uu0 = uu1; uu1 = t; } // swap
-    if (u0 !is null) *u0 = uu0;
-    if (u1 !is null) *u1 = uu1;
-
-    return true;
-  }
-
-  // sweep test; if `true` (hit), `hitpos` will be sphere position when it hits this plane, and `u` will be normalized collision time
-  bool sweep(PT) (in auto ref PT plane, in auto ref vec3 amove, vec3* hitpos, Float* u) const if (IsPlane3!(PT, Float)) {
-    pragma(inline, true);
-    return plane.sweep(this, amove, hitpos, u);
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-template IsPlane3(PT) {
-  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, PFT eps, bool swiz)) {
-    enum IsPlane3 = (is(PFT == float) || is(PFT == double));
-  } else {
-    enum IsPlane3 = false;
-  }
-}
-
-
-template IsPlane3(PT, FT) {
-  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, FT eps, bool swiz)) {
-    enum IsPlane3 = (is(FT == PFT) && (is(PFT == float) || is(PFT == double)));
-  } else {
-    enum IsPlane3 = false;
-  }
-}
-
-
-// plane in 3D space: Ax+By+Cz+D=0
-align(1) struct Plane3(FloatType=VFloat, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
-align(1):
-public:
-  alias Float = FloatType;
-  alias plane3 = typeof(this);
-  alias vec3 = VecN!(3, Float);
-  static if (PlaneEps < 0) {
-    enum EPS = EPSILON!Float;
-  } else {
-    enum EPS = PlaneEps;
-  }
-
-public:
-  alias PType = ubyte;
-  enum /*PType*/ {
-    Coplanar = 0,
-    Front = 1,
-    Back = 2,
-    Spanning = 3,
-  }
-
-public:
-  //Float a = 0, b = 0, c = 0, d = 0;
-  vec3 normal;
-  Float w;
-
-nothrow @safe:
-  string toString () const {
-    import std.string : format;
-    try {
-      return "(%s,%s,%s,%s)".format(normal.x, normal.y, normal.z, w);
-    } catch (Exception) {
-      assert(0);
-    }
-  }
-
-@nogc:
-  this() (in auto ref vec3 anormal, Float aw) { pragma(inline, true); set(anormal, aw); }
-  this() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) { pragma(inline, true); setFromPoints(a, b, c); }
-
-  void set () (in auto ref vec3 anormal, Float aw) {
-    mixin(ImportCoreMath!(Float, "fabs"));
-    normal = anormal;
-    w = aw;
-    if (fabs(w) <= EPS) w = 0;
-  }
-
-  ref plane3 setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
-    normal = ((b-a)%(c-a)).normalized;
-    w = normal*a; // n.dot(a)
-    return this;
-  }
-
-  @property bool valid () const { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w); }
-
-  Float opIndex (usize idx) const {
-    pragma(inline, true);
-    return (idx == 0 ? normal.x : idx == 1 ? normal.y : idx == 2 ? normal.z : idx == 3 ? w : Float.nan);
-  }
-
-  void opIndexAssign (Float v, usize idx) {
-    pragma(inline, true);
-    if (idx == 0) normal.x = v; else if (idx == 1) normal.y = v; else if (idx == 2) normal.z = v; else if (idx == 3) w = v;
-  }
-
-  ref plane3 normalize () {
-    Float dd = normal.length;
-    if (dd >= EPSILON!Float) {
-      dd = cast(Float)1/dd;
-      normal.x *= dd;
-      normal.y *= dd;
-      normal.z *= dd;
-      w *= dd;
-    } else {
-      normal = vec3(0, 0, 0);
-      w = 0;
-    }
-    return this;
-  }
-
-  PType pointSide() (in auto ref vec3 p) const {
-    pragma(inline, true);
-    auto t = (normal*p)-w; // dot
-    return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
-  }
-
-  Float pointSideF() (in auto ref vec3 p) const {
-    pragma(inline, true);
-    return (normal*p)-w; // dot
-  }
-
-  // swizzling
-  static if (enableSwizzling) auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xyzw", 2, 3)) {
-    static if (fld.length == 2) {
-      return mixin(SwizzleCtor!("vec2", fld));
-    } else {
-      return mixin(SwizzleCtor!("vec3", fld));
-    }
-  }
-
-  // sweep test; if `true` (hit), `hitpos` will be sphere position when it hits this plane, and `u` will be normalized collision time
-  bool sweep(ST) (in auto ref ST sphere, in auto ref vec3 amove, vec3* hitpos, Float* u) const if (IsSphere!(ST, vec3)) {
-    mixin(ImportCoreMath!(Float, "fabs"));
-    immutable c0 = sphere.orig;
-    immutable c1 = c0+amove;
-    immutable Float r = sphere.radius;
-    immutable Float d0 = (normal*c0)+w;
-    immutable Float d1 = (normal*c1)+w;
-    // check if the sphere is touching the plane
-    if (fabs(d0) <= r) {
-      if (hitpos !is null) *hitpos = c0;
-      if (u !is null) *u = 0;
-      return true;
-    }
-    // check if the sphere penetrated during movement
-    if (d0 > r && d1 < r) {
-      immutable Float uu = (d0-r)/(d0-d1); // normalized time
-      if (u !is null) *u = uu;
-      if (hitpos !is null) *hitpos = (1-uu)*c0+uu*c1; // point of first contact
-      return true;
-    }
-    // no collision
-    return false;
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-struct Ray(VT) if (IsVector!VT) {
-public:
-  alias vec = VT;
-  alias Float = VT.Float;
-
-public:
-  VT orig, dir; // dir should be normalized (setters does this)
-
-nothrow @safe:
-  string toString () const {
-    import std.format : format;
-    try {
-      return "[(%s,%s):(%s,%s)]".format(orig.x, orig.y, dir.x, dir.y);
-    } catch (Exception) {
-      assert(0);
-    }
-  }
-
-@nogc:
-  this (VT.Float x, VT.Float y, VT.Float angle) { pragma(inline, true); setOrigDir(x, y, angle); }
-  this() (in auto ref VT aorg, VT.Float angle) { pragma(inline, true); setOrigDir(aorg, angle); }
-
-  static Ray!VT fromPoints() (in auto ref VT p0, in auto ref VT p1) {
-    pragma(inline, true);
-    Ray!VT res;
-    res.orig = p0;
-    res.dir = (p1-p0).normalized;
-    return res;
-  }
-
-  void setOrigDir (VT.Float x, VT.Float y, VT.Float angle) {
-    pragma(inline, true);
-    mixin(ImportCoreMath!(Float, "cos", "sin"));
-    orig.x = x;
-    orig.y = y;
-    dir.x = cos(angle);
-    dir.y = sin(angle);
-  }
-
-  void setOrigDir() (in auto ref VT aorg, VT.Float angle) {
-    pragma(inline, true);
-    mixin(ImportCoreMath!(Float, "cos", "sin"));
-    orig.x = aorg.x;
-    orig.y = aorg.y;
-    dir.x = cos(angle);
-    dir.y = sin(angle);
-  }
-
-  void setOrig (VT.Float x, VT.Float y) {
-    pragma(inline, true);
-    orig.x = x;
-    orig.y = y;
-  }
-
-  void setOrig() (in auto ref VT aorg) {
-    pragma(inline, true);
-    orig.x = aorg.x;
-    orig.y = aorg.y;
-  }
-
-  void setDir (VT.Float angle) {
-    pragma(inline, true);
-    mixin(ImportCoreMath!(Float, "cos", "sin"));
-    dir.x = cos(angle);
-    dir.y = sin(angle);
-  }
-
-  @property VT right () const {
-    pragma(inline, true);
-    static if (VT.Dims == 2) return VT(dir.y, -dir.x);
-    else return VT(dir.y, -dir.x, dir.z);
-  }
-
-  VT pointAt (VT.Float len) const { pragma(inline, true); return orig+dir*len; }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-public struct AABBImpl(VT) if (IsVector!VT) {
-private:
-  static T nmin(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }
-  static T nmax(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }
-
-public:
-  alias VType = VT;
-  alias Float = VT.Float;
-  alias Me = typeof(this);
-
-public:
-  VT min, max;
-
-public:
-  string toString () const {
-    import std.format : format;
-    return "[%s-%s]".format(min, max);
-  }
-
-public nothrow @safe @nogc:
-  // return the volume of the AABB
-  @property Float volume () const {
-    pragma(inline, true);
-    immutable diff = max-min;
-    static if (VT.Dims == 3) {
-      return diff.x*diff.y*diff.z;
-    } else {
-      return diff.x*diff.y;
-    }
-  }
-
-  static auto mergeAABBs() (in auto ref Me aabb1, in auto ref Me aabb2) {
-    typeof(this) res;
-    res.merge(aabb1, aabb2);
-    return res;
-  }
-
-  void merge() (in auto ref Me aabb1, in auto ref Me aabb2) {
-    pragma(inline, true);
-    min.x = nmin(aabb1.min.x, aabb2.min.x);
-    min.y = nmin(aabb1.min.y, aabb2.min.y);
-    max.x = nmax(aabb1.max.x, aabb2.max.x);
-    max.y = nmax(aabb1.max.y, aabb2.max.y);
-    static if (VT.Dims == 3) {
-      min.z = nmin(aabb1.min.z, aabb2.min.z);
-      max.z = nmax(aabb1.max.z, aabb2.max.z);
-    }
-  }
-
-  void merge() (in auto ref Me aabb1) {
-    pragma(inline, true);
-    min.x = nmin(aabb1.min.x, min.x);
-    min.y = nmin(aabb1.min.y, min.y);
-    max.x = nmax(aabb1.max.x, max.x);
-    max.y = nmax(aabb1.max.y, max.y);
-    static if (VT.Dims == 3) {
-      min.z = nmin(aabb1.min.z, min.z);
-      max.z = nmax(aabb1.max.z, max.z);
-    }
-  }
-
-  void addPoint() (in auto ref VT v) {
-    min.x = nmin(min.x, v.x);
-    max.x = nmax(max.x, v.x);
-    min.y = nmin(min.y, v.y);
-    max.y = nmax(max.y, v.y);
-    static if (VT.Dims == 3) {
-      min.z = nmin(min.z, v.z);
-      max.z = nmax(max.z, v.z);
-    }
-  }
-
-  // return true if the current AABB contains the AABB given in parameter
-  bool contains() (in auto ref Me aabb) const {
-    pragma(inline, true);
-    version(all) {
-      // exit with no intersection if found separated along an axis
-      if (max.x < aabbmin.x || min.x > aabbmax.x) return false;
-      if (max.y < aabbmin.y || min.y > aabbmax.y) return false;
-      static if (VT.Dims == 3) {
-        if (max.z < aabbmin.z || min.z > aabbmax.z) return false;
-      }
-      // no separating axis found, therefor there is at least one overlapping axis
-      return true;
-    } else {
-      bool isInside = true;
-      isInside = (isInside && min.x <= aabb.min.x);
-      isInside = (isInside && min.y <= aabb.min.y);
-      isInside = (isInside && max.x >= aabb.max.x);
-      isInside = (isInside && max.y >= aabb.max.y);
-      static if (VT.Dims == 3) {
-        isInside = (isInside && min.z <= aabb.min.z);
-        isInside = (isInside && max.z >= aabb.max.z);
-      }
-      return isInside;
-    }
-  }
-
-  bool contains() (in auto ref VT p) const {
-    pragma(inline, true);
-    static if (VT.Dims == 2) {
-      return (p.x >= min.x && p.y >= min.y && p.x <= max.x && p.y <= max.y);
-    } else {
-      return (p.x >= min.x && p.y >= min.y && p.z >= min.z && p.x <= max.x && p.y <= max.y && p.z <= max.z);
-    }
-  }
-
-  // extrude bbox a little, to compensate floating point inexactness
-  void extrude (Float delta) {
-    min.x -= delta;
-    min.y -= delta;
-    static if (VT.Dims == 3) min.z -= delta;
-    max.x += delta;
-    max.y += delta;
-    static if (VT.Dims == 3) max.z += delta;
-  }
-
-  // return true if the current AABB is overlapping with the AABB in parameter
-  // two AABBs overlap if they overlap in the two(three) x, y (and z) axes at the same time
-  bool overlaps() (in auto ref Me aabb) const {
-    //pragma(inline, true);
-    if (max.x < aabb.min.x || aabb.max.x < min.x) return false;
-    if (max.y < aabb.min.y || aabb.max.y < min.y) return false;
-    static if (VT.Dims == 3) {
-      if (max.z < aabb.min.z || aabb.max.z < min.z) return false;
-    }
-    return true;
-  }
-
-  // ////////////////////////////////////////////////////////////////////////// //
-  // something to consider here is that 0 * inf =nan which occurs when the ray starts exactly on the edge of a box
-  // rd: ray direction, normalized
-  // https://tavianator.com/fast-branchless-raybounding-box-intersections-part-2-nans/
-  static bool intersects() (in auto ref VT bmin, in auto ref VT bmax, in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) {
-    // ok with coplanars, but dmd sux at unrolled loops
-    // do X
-    immutable Float dinvp0 = cast(Float)1/ray.dir.x; // 1/0 will produce inf
-    immutable Float t1p0 = (bmin.x-ray.orig.x)*dinvp0;
-    immutable Float t2p0 = (bmax.x-ray.orig.x)*dinvp0;
-    Float tmin = nmin(t1p0, t2p0);
-    Float tmax = nmax(t1p0, t2p0);
-    // do Y
-    {
-      immutable Float dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
-      immutable Float t1 = (bmin.y-ray.orig.y)*dinv;
-      immutable Float t2 = (bmax.y-ray.orig.y)*dinv;
-      tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
-      tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
-    }
-    // do Z
-    static if (VT.Dims == 3) {
-      {
-        immutable Float dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
-        immutable Float t1 = (bmin.z-ray.orig.z)*dinv;
-        immutable Float t2 = (bmax.z-ray.orig.z)*dinv;
-        tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
-        tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
-      }
-    }
-    if (tmax > nmax(tmin, cast(Float)0)) {
-      if (tmino !is null) *tmino = tmin;
-      if (tmaxo !is null) *tmaxo = tmax;
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  bool intersects() (in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) const @trusted {
-    // ok with coplanars, but dmd sux at unrolled loops
-    // do X
-    immutable Float dinvp0 = cast(Float)1/ray.dir.x; // 1/0 will produce inf
-    immutable Float t1p0 = (min.x-ray.orig.x)*dinvp0;
-    immutable Float t2p0 = (max.x-ray.orig.x)*dinvp0;
-    Float tmin = nmin(t1p0, t2p0);
-    Float tmax = nmax(t1p0, t2p0);
-    // do Y
-    {
-      immutable Float dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
-      immutable Float t1 = (min.y-ray.orig.y)*dinv;
-      immutable Float t2 = (max.y-ray.orig.y)*dinv;
-      tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
-      tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
-    }
-    // do Z
-    static if (VT.Dims == 3) {
-      {
-        immutable Float dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
-        immutable Float t1 = (min.z-ray.orig.z)*dinv;
-        immutable Float t2 = (max.z-ray.orig.z)*dinv;
-        tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
-        tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
-      }
-    }
-    if (tmax > nmax(tmin, cast(Float)0)) {
-      if (tmino !is null) *tmino = tmin;
-      if (tmaxo !is null) *tmaxo = tmax;
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  Float segIntersectMin() (in auto ref VT a, in auto ref VT b) const @trusted {
-    Float tmin;
-    if (!intersects(Ray!VT.fromPoints(a, b), &tmin)) return -1;
-    if (tmin < 0) return 0; // inside
-    if (tmin*tmin > (b-a).lengthSquared) return -1;
-    return tmin;
-  }
-
-  Float segIntersectMax() (in auto ref VT a, in auto ref VT b) const @trusted {
-    Float tmax;
-    if (!intersects(Ray!VT.fromPoints(a, b), null, &tmax)) return -1;
-    if (tmax*tmax > (b-a).lengthSquared) return -1;
-    return tmax;
-  }
-
-  bool isIntersects() (in auto ref VT a, in auto ref VT b) const @trusted {
-    // it may be faster to first check if start or end point is inside AABB (this is sometimes enough for dyntree)
-    static if (VT.Dims == 2) {
-      if (a.x >= min.x && a.y >= min.y && a.x <= max.x && a.y <= max.y) return true; // a
-      if (b.x >= min.x && b.y >= min.y && b.x <= max.x && b.y <= max.y) return true; // b
-    } else {
-      if (a.x >= min.x && a.y >= min.y && a.z >= min.z && a.x <= max.x && a.y <= max.y && a.z <= max.z) return true; // a
-      if (b.x >= min.x && b.y >= min.y && b.z >= min.z && b.x <= max.x && b.y <= max.y && b.z <= max.z) return true; // b
-    }
-    // nope, do it hard way
-    Float tmin;
-    if (!intersects(Ray!VT.fromPoints(a, b), &tmin)) return false;
-    if (tmin < 0) return true; // inside, just in case
-    return (tmin*tmin <= (b-a).lengthSquared);
-  }
-
-  ref inout(VT) opIndex (usize idx) inout {
-    pragma(inline, true);
-    return (idx == 0 ? min : max);
-  }
-
-  VT center () const { pragma(inline, true); return (min+max)/2; }
-  VT extent () const { pragma(inline, true); return max-min; }
-
-  /// sweep two AABB's to see if and when they first and last were overlapping
-  /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
-  /// u1 = normalized time of second collision (i.e. collision stops after myMove*u0)
-  /// hitnormal = normal that will move `this` apart of `b` edge it collided with
-  /// no output values are valid if no collision detected
-  /// WARNING! hit normal calculation is not tested!
-  bool sweep() (in auto ref VT myMove, in auto ref Me b, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted {
-    // check if they are overlapping right now
-    if (this.overlaps(b)) {
-      if (u0 !is null) *u0 = 0;
-      if (u1 !is null) *u1 = 0;
-      if (hitnormal !is null) *hitnormal = VT(); // oops
-      return true;
-    }
-
-    immutable v = -myMove; // treat b as stationary, so invert v to get relative velocity
-
-    // not moving, and not overlapping
-    if (v.isZero) return false;
-
-    Float hitTime = 0;
-    Float outTime = 1;
-    Float[VT.Dims] overlapTime = 0;
-
-    alias a = this;
-    foreach (immutable aidx; 0..VT.Dims) {
-      // axis overlap
-      immutable Float vv = v[aidx];
-      if (vv < 0) {
-        immutable Float invv = cast(Float)1/vv;
-        if (b.max[aidx] < a.min[aidx]) return false;
-        if (b.max[aidx] > a.min[aidx]) outTime = nmin((a.min[aidx]-b.max[aidx])*invv, outTime);
-        if (a.max[aidx] < b.min[aidx]) hitTime = nmax((overlapTime.ptr[aidx] = (a.max[aidx]-b.min[aidx])*invv), hitTime);
-        if (hitTime > outTime) return false;
-      } else if (vv > 0) {
-        immutable Float invv = cast(Float)1/vv;
-        if (b.min[aidx] > a.max[aidx]) return false;
-        if (a.max[aidx] > b.min[aidx]) outTime = nmin((a.max[aidx]-b.min[aidx])*invv, outTime);
-        if (b.max[aidx] < a.min[aidx]) hitTime = nmax((overlapTime.ptr[aidx] = (a.min[aidx]-b.max[aidx])*invv), hitTime);
-        if (hitTime > outTime) return false;
-      }
-    }
-
-    if (u0 !is null) *u0 = hitTime;
-    if (u1 !is null) *u1 = outTime;
-
-    // hit normal is along axis with the highest overlap time
-    if (hitnormal !is null) {
-      static if (VT.Dims == 3) {
-        int aidx = 0;
-        if (overlapTime.ptr[1] > overlapTime.ptr[0]) aidx = 1;
-        if (overlapTime.ptr[2] > overlapTime.ptr[aidx]) aidx = 2;
-        VT hn; // zero vector
-        hn[aidx] = (v[aidx] < 0 ? -1 : v[aidx] > 0 ? 1 : 0);
-        *hitnormal = hn;
-      } else {
-        if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
-          *hitnormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
-        } else {
-          *hitnormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
-        }
-      }
-    }
-
-    return true;
-
-    /+
-    version(none) {
-      auto u_0 = VT(0, 0, 0); // first times of overlap along each axis
-      auto u_1 = VT(1, 1, 1); // last times of overlap along each axis
-      bool wasHit = false;
-
-      // find the possible first and last times of overlap along each axis
-      foreach (immutable idx; 0..VT.Dims) {
-        Float dinv = v[idx];
-        if (dinv != 0) {
-          dinv = cast(Float)1/dinv;
-          if (this.max[idx] < b.min[idx] && dinv < 0) {
-            u_0[idx] = (this.max[idx]-b.min[idx])*dinv;
-            wasHit = true;
-          } else if (b.max[idx] < this.min[idx] && dinv > 0) {
-            u_0[idx] = (this.min[idx]-b.max[idx])*dinv;
-            wasHit = true;
-          }
-          if (b.max[idx] > this.min[idx] && dinv < 0) {
-            u_1[idx] = (this.min[idx]-b.max[idx])*dinv;
-            wasHit = true;
-          } else if (this.max[idx] > b.min[idx] && dinv > 0) {
-            u_1[idx] = (this.max[idx]-b.min[idx])*dinv;
-            wasHit = true;
-          }
-        }
-      }
-
-      // oops
-      if (!wasHit) {
-        if (u0 !is null) *u0 = 0;
-        if (u1 !is null) *u1 = 0;
-        return false;
-      }
-
-      static if (VT.Dims == 3) {
-        immutable Float uu0 = nmax(u_0.x, nmax(u_0.y, u_0.z)); // possible first time of overlap
-        immutable Float uu1 = nmin(u_1.x, nmin(u_1.y, u_1.z)); // possible last time of overlap
-      } else {
-        immutable Float uu0 = nmax(u_0.x, u_0.y); // possible first time of overlap
-        immutable Float uu1 = nmin(u_1.x, u_1.y); // possible last time of overlap
-      }
-
-      if (u0 !is null) *u0 = uu0;
-      if (u1 !is null) *u1 = uu1;
-
-      // they could have only collided if the first time of overlap occurred before the last time of overlap
-      return (uu0 <= uu1);
-    }
-    +/
-  }
-
-  /// UNTESTED!
-  bool sweepLine() (in auto ref VT myMove, in auto ref VT la, in auto ref VT lb, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted if (VT.Dims == 2) {
-    mixin(ImportCoreMath!(Float, "fabs"));
-
-    alias a = this;
-    alias v = myMove;
-
-    auto lineDir = lb-la;
-    auto lineMin = VT(0, 0, 0);
-    auto lineMax = VT(0, 0, 0);
-
-    if (lineDir.x > 0) {
-      // right
-      lineMin.x = la.x;
-      lineMax.x = lb.x;
-    } else {
-      // left
-      lineMin.x = lb.x;
-      lineMax.x = la.x;
-    }
-
-    if (lineDir.y > 0) {
-      // up
-      lineMin.y = la.y;
-      lineMax.y = lb.y;
-    } else {
-      // down
-      lineMin.y = lb.y;
-      lineMax.y = la.y;
-    }
-
-    // initialise out info
-    //outVel = v;
-    //hitNormal = new VT(0,0);
-
-    Float hitTime = 0;
-    Float outTime = 1;
-    Float[VT.Dims] overlapTime = 0;
-
-    static if (VT.Dims == 3) {
-      static assert(0, "not yet");
-    } else {
-      //auto lnorm = VT(-lineDir.y, lineDir.x).normalized;
-      auto lnorm = lineDir.perp.normalized;
-    }
-
-    Float r = a.extent.x*fabs(lnorm.x)+a.extent.y*fabs(lnorm.y); // radius to line
-    Float boxProj = (la-a.center).dot(lnorm); // projected line distance to n
-    Float velProj = v.dot(lnorm); // projected velocity to n
-
-    if (velProj < 0) r = -r;
-
-    hitTime = nmax((boxProj-r)/velProj, hitTime);
-    outTime = nmin((boxProj+r)/velProj, outTime);
-
-    foreach (immutable aidx; 0..VT.Dims) {
-      // axis overlap
-      immutable Float vv = v[aidx];
-      if (vv < 0) {
-        immutable Float invv = cast(Float)1/vv;
-        if (a.max[aidx] < lineMin[aidx]) return false;
-        hitTime = nmax((overlapTime.ptr[aidx] = (lineMax[aidx]-a.min[aidx])*invv), hitTime);
-        outTime = nmin((lineMin[aidx]-a.max[aidx])*invv, outTime);
-        if (hitTime > outTime) return false;
-      } else if (vv > 0) {
-        immutable Float invv = cast(Float)1/vv;
-        if (a.min[aidx] > lineMax[aidx]) return false;
-        hitTime = nmax((overlapTime.ptr[aidx] = (lineMin[aidx]-a.max[aidx])*invv), hitTime);
-        outTime = nmin((lineMax[aidx]-a.min[aidx])*invv, outTime);
-        if (hitTime > outTime) return false;
-      } else {
-        if (lineMin[aidx] > a.max[aidx] || lineMax[aidx] < a.min[aidx]) return false;
-      }
-    }
-
-    if (u0 !is null) *u0 = hitTime;
-    if (u1 !is null) *u1 = outTime;
-
-    // hit normal is along axis with the highest overlap time
-    if (hitnormal !is null) {
-      static if (VT.Dims == 3) {
-        int aidx = 0;
-        if (overlapTime.ptr[1] > overlapTime.ptr[0]) aidx = 1;
-        if (overlapTime.ptr[2] > overlapTime.ptr[aidx]) aidx = 2;
-        VT hn; // zero vector
-        hn[aidx] = (v[aidx] < 0 ? -1 : v[aidx] > 0 ? 1 : 0);
-        *hitnormal = hn;
-      } else {
-        if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
-          *hitnormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
-        } else {
-          *hitnormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
-        }
-      }
-    }
-
-    return true;
-  }
-
-  /// check to see if the sphere overlaps the AABB
-  bool overlaps(ST) (in auto ref ST sphere) if (IsSphere!(ST, VT)) { pragma(inline, true); return overlapsSphere(sphere.orig, sphere.radius); }
-
-  /// check to see if the sphere overlaps the AABB
-  bool overlapsSphere() (in auto ref VT center, Float radius) {
-    Float d = 0;
-    // find the square of the distance from the sphere to the box
-    foreach (immutable idx; 0..VT.Dims) {
-      if (center[idx] < min[idx]) {
-        immutable Float s = center[idx]-min[idx];
-        d += s*s;
-      } else if (center[idx] > max[idx]) {
-        immutable Float s = center[idx]-max[idx];
-        d += s*s;
-      }
-    }
-    return (d <= radius*radius);
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 alias mat4 = Mat4!vec3;
 
 align(1) struct Mat4(VT) if (IsVectorDim!(VT, 3)) {
@@ -2842,6 +2060,788 @@ public:
     pragma(inline, true);
     if (!aovalid) computeAxes(); // fix axes if necessary
     return (overlaps1Way(other) && other.overlaps1Way(this));
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+template IsSphere(ST) {
+  static if (is(ST == Sphere!SVT, SVT)) {
+    enum IsSphere = IsVector!SVT;
+  } else {
+    enum IsSphere = false;
+  }
+}
+
+template IsSphere(ST, VT) {
+  static if (is(ST == Sphere!SVT, SVT)) {
+    enum IsSphere = (is(VT == SVT) && IsVector!SVT);
+  } else {
+    enum IsSphere = false;
+  }
+}
+
+
+///
+struct Sphere(VT) if (IsVector!VT) {
+public:
+  alias Float = VT.Float;
+  alias vec = VT;
+  alias Me = typeof(this);
+
+public:
+  vec orig; /// sphere origin
+  Float radius; /// sphere radius
+
+public nothrow @trusted @nogc:
+  this() (in auto ref vec aorig, Float arad) { orig = aorig; radius = arad; }
+
+  @property bool valid () const { import core.stdc.math : isnan; pragma(inline, true); return (!isnan(radius) && radius > 0); }
+
+  /// sweep test
+  bool sweep() (in auto ref vec amove, in auto ref Me sb, Float* u0, Float* u1) const {
+    mixin(ImportCoreMath!(Float, "sqrt"));
+
+    immutable odist = sb.orig-this.orig; // vector from A0 to B0
+    immutable vab = -amove; // relative velocity (in normalized time)
+    immutable rab = this.radius+sb.radius;
+    immutable Float a = vab.dot(vab); // u*u coefficient
+    immutable Float b = cast(Float)2*vab.dot(odist); // u coefficient
+    immutable Float c = odist.dot(odist)-rab*rab; // constant term
+
+    // check if they're currently overlapping
+    if (odist.dot(odist) <= rab*rab) {
+      if (u0 !is null) *u0 = 0;
+      if (u0 !is null) *u1 = 0;
+      return true;
+    }
+
+    // check if they hit each other during the frame
+    immutable Float q = b*b-4*a*c;
+    if (q < 0) return false; // alas, complex roots
+
+    immutable Float sq = sqrt(q);
+    immutable Float d = cast(Float)1/(cast(Float)2*a);
+    Float uu0 = (-b+sq)*d;
+    Float uu1 = (-b-sq)*d;
+
+    if (uu0 > uu1) { immutable t = uu0; uu0 = uu1; uu1 = t; } // swap
+    if (u0 !is null) *u0 = uu0;
+    if (u1 !is null) *u1 = uu1;
+
+    return true;
+  }
+
+  // sweep test; if `true` (hit), `hitpos` will be sphere position when it hits this plane, and `u` will be normalized collision time
+  bool sweep(PT) (in auto ref PT plane, in auto ref vec3 amove, vec3* hitpos, Float* u) const if (IsPlane3!(PT, Float)) {
+    pragma(inline, true);
+    return plane.sweep(this, amove, hitpos, u);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+template IsPlane3(PT) {
+  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, PFT eps, bool swiz)) {
+    enum IsPlane3 = (is(PFT == float) || is(PFT == double));
+  } else {
+    enum IsPlane3 = false;
+  }
+}
+
+
+template IsPlane3(PT, FT) {
+  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, FT eps, bool swiz)) {
+    enum IsPlane3 = (is(FT == PFT) && (is(PFT == float) || is(PFT == double)));
+  } else {
+    enum IsPlane3 = false;
+  }
+}
+
+
+// plane in 3D space: Ax+By+Cz+D=0
+align(1) struct Plane3(FloatType=VFloat, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
+align(1):
+public:
+  alias Float = FloatType;
+  alias plane3 = typeof(this);
+  alias vec3 = VecN!(3, Float);
+  static if (PlaneEps < 0) {
+    enum EPS = EPSILON!Float;
+  } else {
+    enum EPS = PlaneEps;
+  }
+
+public:
+  alias PType = ubyte;
+  enum /*PType*/ {
+    Coplanar = 0,
+    Front = 1,
+    Back = 2,
+    Spanning = 3,
+  }
+
+public:
+  //Float a = 0, b = 0, c = 0, d = 0;
+  vec3 normal;
+  Float w;
+
+nothrow @safe:
+  string toString () const {
+    import std.string : format;
+    try {
+      return "(%s,%s,%s,%s)".format(normal.x, normal.y, normal.z, w);
+    } catch (Exception) {
+      assert(0);
+    }
+  }
+
+@nogc:
+  this() (in auto ref vec3 anormal, Float aw) { pragma(inline, true); set(anormal, aw); }
+  this() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) { pragma(inline, true); setFromPoints(a, b, c); }
+
+  void set () (in auto ref vec3 anormal, Float aw) {
+    mixin(ImportCoreMath!(Float, "fabs"));
+    normal = anormal;
+    w = aw;
+    if (fabs(w) <= EPS) w = 0;
+  }
+
+  ref plane3 setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
+    normal = ((b-a)%(c-a)).normalized;
+    w = normal*a; // n.dot(a)
+    return this;
+  }
+
+  @property bool valid () const { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w); }
+
+  Float opIndex (usize idx) const {
+    pragma(inline, true);
+    return (idx == 0 ? normal.x : idx == 1 ? normal.y : idx == 2 ? normal.z : idx == 3 ? w : Float.nan);
+  }
+
+  void opIndexAssign (Float v, usize idx) {
+    pragma(inline, true);
+    if (idx == 0) normal.x = v; else if (idx == 1) normal.y = v; else if (idx == 2) normal.z = v; else if (idx == 3) w = v;
+  }
+
+  ref plane3 normalize () {
+    Float dd = normal.length;
+    if (dd >= EPSILON!Float) {
+      dd = cast(Float)1/dd;
+      normal.x *= dd;
+      normal.y *= dd;
+      normal.z *= dd;
+      w *= dd;
+    } else {
+      normal = vec3(0, 0, 0);
+      w = 0;
+    }
+    return this;
+  }
+
+  PType pointSide() (in auto ref vec3 p) const {
+    pragma(inline, true);
+    auto t = (normal*p)-w; // dot
+    return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
+  }
+
+  Float pointSideF() (in auto ref vec3 p) const {
+    pragma(inline, true);
+    return (normal*p)-w; // dot
+  }
+
+  // swizzling
+  static if (enableSwizzling) auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xyzw", 2, 3)) {
+    static if (fld.length == 2) {
+      return mixin(SwizzleCtor!("vec2", fld));
+    } else {
+      return mixin(SwizzleCtor!("vec3", fld));
+    }
+  }
+
+  // sweep test; if `true` (hit), `hitpos` will be sphere position when it hits this plane, and `u` will be normalized collision time
+  bool sweep(ST) (in auto ref ST sphere, in auto ref vec3 amove, vec3* hitpos, Float* u) const if (IsSphere!(ST, vec3)) {
+    mixin(ImportCoreMath!(Float, "fabs"));
+    immutable c0 = sphere.orig;
+    immutable c1 = c0+amove;
+    immutable Float r = sphere.radius;
+    immutable Float d0 = (normal*c0)+w;
+    immutable Float d1 = (normal*c1)+w;
+    // check if the sphere is touching the plane
+    if (fabs(d0) <= r) {
+      if (hitpos !is null) *hitpos = c0;
+      if (u !is null) *u = 0;
+      return true;
+    }
+    // check if the sphere penetrated during movement
+    if (d0 > r && d1 < r) {
+      immutable Float uu = (d0-r)/(d0-d1); // normalized time
+      if (u !is null) *u = uu;
+      if (hitpos !is null) *hitpos = (1-uu)*c0+uu*c1; // point of first contact
+      return true;
+    }
+    // no collision
+    return false;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+struct Ray(VT) if (IsVector!VT) {
+public:
+  alias vec = VT;
+  alias Float = VT.Float;
+
+public:
+  VT orig, dir; // dir should be normalized (setters does this)
+
+nothrow @safe:
+  string toString () const {
+    import std.format : format;
+    try {
+      return "[(%s,%s):(%s,%s)]".format(orig.x, orig.y, dir.x, dir.y);
+    } catch (Exception) {
+      assert(0);
+    }
+  }
+
+@nogc:
+  this (VT.Float x, VT.Float y, VT.Float angle) { pragma(inline, true); setOrigDir(x, y, angle); }
+  this() (in auto ref VT aorg, VT.Float angle) { pragma(inline, true); setOrigDir(aorg, angle); }
+
+  static Ray!VT fromPoints() (in auto ref VT p0, in auto ref VT p1) {
+    pragma(inline, true);
+    Ray!VT res;
+    res.orig = p0;
+    res.dir = (p1-p0).normalized;
+    return res;
+  }
+
+  void setOrigDir (VT.Float x, VT.Float y, VT.Float angle) {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
+    orig.x = x;
+    orig.y = y;
+    dir.x = cos(angle);
+    dir.y = sin(angle);
+  }
+
+  void setOrigDir() (in auto ref VT aorg, VT.Float angle) {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
+    orig.x = aorg.x;
+    orig.y = aorg.y;
+    dir.x = cos(angle);
+    dir.y = sin(angle);
+  }
+
+  void setOrig (VT.Float x, VT.Float y) {
+    pragma(inline, true);
+    orig.x = x;
+    orig.y = y;
+  }
+
+  void setOrig() (in auto ref VT aorg) {
+    pragma(inline, true);
+    orig.x = aorg.x;
+    orig.y = aorg.y;
+  }
+
+  void setDir (VT.Float angle) {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(Float, "cos", "sin"));
+    dir.x = cos(angle);
+    dir.y = sin(angle);
+  }
+
+  @property VT right () const {
+    pragma(inline, true);
+    static if (VT.Dims == 2) return VT(dir.y, -dir.x);
+    else return VT(dir.y, -dir.x, dir.z);
+  }
+
+  VT pointAt (VT.Float len) const { pragma(inline, true); return orig+dir*len; }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public struct AABBImpl(VT) if (IsVector!VT) {
+private:
+  static T nmin(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }
+  static T nmax(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }
+
+public:
+  alias VType = VT;
+  alias Float = VT.Float;
+  alias Me = typeof(this);
+
+public:
+  VT min, max;
+
+public:
+  string toString () const {
+    import std.format : format;
+    return "[%s-%s]".format(min, max);
+  }
+
+public nothrow @safe @nogc:
+  // return the volume of the AABB
+  @property Float volume () const {
+    pragma(inline, true);
+    immutable diff = max-min;
+    static if (VT.Dims == 3) {
+      return diff.x*diff.y*diff.z;
+    } else {
+      return diff.x*diff.y;
+    }
+  }
+
+  static auto mergeAABBs() (in auto ref Me aabb1, in auto ref Me aabb2) {
+    typeof(this) res;
+    res.merge(aabb1, aabb2);
+    return res;
+  }
+
+  void merge() (in auto ref Me aabb1, in auto ref Me aabb2) {
+    pragma(inline, true);
+    min.x = nmin(aabb1.min.x, aabb2.min.x);
+    min.y = nmin(aabb1.min.y, aabb2.min.y);
+    max.x = nmax(aabb1.max.x, aabb2.max.x);
+    max.y = nmax(aabb1.max.y, aabb2.max.y);
+    static if (VT.Dims == 3) {
+      min.z = nmin(aabb1.min.z, aabb2.min.z);
+      max.z = nmax(aabb1.max.z, aabb2.max.z);
+    }
+  }
+
+  void merge() (in auto ref Me aabb1) {
+    pragma(inline, true);
+    min.x = nmin(aabb1.min.x, min.x);
+    min.y = nmin(aabb1.min.y, min.y);
+    max.x = nmax(aabb1.max.x, max.x);
+    max.y = nmax(aabb1.max.y, max.y);
+    static if (VT.Dims == 3) {
+      min.z = nmin(aabb1.min.z, min.z);
+      max.z = nmax(aabb1.max.z, max.z);
+    }
+  }
+
+  void addPoint() (in auto ref VT v) {
+    min.x = nmin(min.x, v.x);
+    max.x = nmax(max.x, v.x);
+    min.y = nmin(min.y, v.y);
+    max.y = nmax(max.y, v.y);
+    static if (VT.Dims == 3) {
+      min.z = nmin(min.z, v.z);
+      max.z = nmax(max.z, v.z);
+    }
+  }
+
+  // return true if the current AABB contains the AABB given in parameter
+  bool contains() (in auto ref Me aabb) const {
+    pragma(inline, true);
+    version(all) {
+      // exit with no intersection if found separated along an axis
+      if (max.x < aabbmin.x || min.x > aabbmax.x) return false;
+      if (max.y < aabbmin.y || min.y > aabbmax.y) return false;
+      static if (VT.Dims == 3) {
+        if (max.z < aabbmin.z || min.z > aabbmax.z) return false;
+      }
+      // no separating axis found, therefor there is at least one overlapping axis
+      return true;
+    } else {
+      bool isInside = true;
+      isInside = (isInside && min.x <= aabb.min.x);
+      isInside = (isInside && min.y <= aabb.min.y);
+      isInside = (isInside && max.x >= aabb.max.x);
+      isInside = (isInside && max.y >= aabb.max.y);
+      static if (VT.Dims == 3) {
+        isInside = (isInside && min.z <= aabb.min.z);
+        isInside = (isInside && max.z >= aabb.max.z);
+      }
+      return isInside;
+    }
+  }
+
+  bool contains() (in auto ref VT p) const {
+    pragma(inline, true);
+    static if (VT.Dims == 2) {
+      return (p.x >= min.x && p.y >= min.y && p.x <= max.x && p.y <= max.y);
+    } else {
+      return (p.x >= min.x && p.y >= min.y && p.z >= min.z && p.x <= max.x && p.y <= max.y && p.z <= max.z);
+    }
+  }
+
+  // extrude bbox a little, to compensate floating point inexactness
+  void extrude (Float delta) {
+    min.x -= delta;
+    min.y -= delta;
+    static if (VT.Dims == 3) min.z -= delta;
+    max.x += delta;
+    max.y += delta;
+    static if (VT.Dims == 3) max.z += delta;
+  }
+
+  // return true if the current AABB is overlapping with the AABB in parameter
+  // two AABBs overlap if they overlap in the two(three) x, y (and z) axes at the same time
+  bool overlaps() (in auto ref Me aabb) const {
+    //pragma(inline, true);
+    if (max.x < aabb.min.x || aabb.max.x < min.x) return false;
+    if (max.y < aabb.min.y || aabb.max.y < min.y) return false;
+    static if (VT.Dims == 3) {
+      if (max.z < aabb.min.z || aabb.max.z < min.z) return false;
+    }
+    return true;
+  }
+
+  // ////////////////////////////////////////////////////////////////////////// //
+  // something to consider here is that 0 * inf =nan which occurs when the ray starts exactly on the edge of a box
+  // rd: ray direction, normalized
+  // https://tavianator.com/fast-branchless-raybounding-box-intersections-part-2-nans/
+  static bool intersects() (in auto ref VT bmin, in auto ref VT bmax, in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) {
+    // ok with coplanars, but dmd sux at unrolled loops
+    // do X
+    immutable Float dinvp0 = cast(Float)1/ray.dir.x; // 1/0 will produce inf
+    immutable Float t1p0 = (bmin.x-ray.orig.x)*dinvp0;
+    immutable Float t2p0 = (bmax.x-ray.orig.x)*dinvp0;
+    Float tmin = nmin(t1p0, t2p0);
+    Float tmax = nmax(t1p0, t2p0);
+    // do Y
+    {
+      immutable Float dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
+      immutable Float t1 = (bmin.y-ray.orig.y)*dinv;
+      immutable Float t2 = (bmax.y-ray.orig.y)*dinv;
+      tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+      tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    }
+    // do Z
+    static if (VT.Dims == 3) {
+      {
+        immutable Float dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
+        immutable Float t1 = (bmin.z-ray.orig.z)*dinv;
+        immutable Float t2 = (bmax.z-ray.orig.z)*dinv;
+        tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+        tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+      }
+    }
+    if (tmax > nmax(tmin, cast(Float)0)) {
+      if (tmino !is null) *tmino = tmin;
+      if (tmaxo !is null) *tmaxo = tmax;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  bool intersects() (in auto ref Ray!VT ray, Float* tmino=null, Float* tmaxo=null) const @trusted {
+    // ok with coplanars, but dmd sux at unrolled loops
+    // do X
+    immutable Float dinvp0 = cast(Float)1/ray.dir.x; // 1/0 will produce inf
+    immutable Float t1p0 = (min.x-ray.orig.x)*dinvp0;
+    immutable Float t2p0 = (max.x-ray.orig.x)*dinvp0;
+    Float tmin = nmin(t1p0, t2p0);
+    Float tmax = nmax(t1p0, t2p0);
+    // do Y
+    {
+      immutable Float dinv = cast(Float)1/ray.dir.y; // 1/0 will produce inf
+      immutable Float t1 = (min.y-ray.orig.y)*dinv;
+      immutable Float t2 = (max.y-ray.orig.y)*dinv;
+      tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+      tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+    }
+    // do Z
+    static if (VT.Dims == 3) {
+      {
+        immutable Float dinv = cast(Float)1/ray.dir.z; // 1/0 will produce inf
+        immutable Float t1 = (min.z-ray.orig.z)*dinv;
+        immutable Float t2 = (max.z-ray.orig.z)*dinv;
+        tmin = nmax(tmin, nmin(nmin(t1, t2), tmax));
+        tmax = nmin(tmax, nmax(nmax(t1, t2), tmin));
+      }
+    }
+    if (tmax > nmax(tmin, cast(Float)0)) {
+      if (tmino !is null) *tmino = tmin;
+      if (tmaxo !is null) *tmaxo = tmax;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  Float segIntersectMin() (in auto ref VT a, in auto ref VT b) const @trusted {
+    Float tmin;
+    if (!intersects(Ray!VT.fromPoints(a, b), &tmin)) return -1;
+    if (tmin < 0) return 0; // inside
+    if (tmin*tmin > (b-a).lengthSquared) return -1;
+    return tmin;
+  }
+
+  Float segIntersectMax() (in auto ref VT a, in auto ref VT b) const @trusted {
+    Float tmax;
+    if (!intersects(Ray!VT.fromPoints(a, b), null, &tmax)) return -1;
+    if (tmax*tmax > (b-a).lengthSquared) return -1;
+    return tmax;
+  }
+
+  bool isIntersects() (in auto ref VT a, in auto ref VT b) const @trusted {
+    // it may be faster to first check if start or end point is inside AABB (this is sometimes enough for dyntree)
+    static if (VT.Dims == 2) {
+      if (a.x >= min.x && a.y >= min.y && a.x <= max.x && a.y <= max.y) return true; // a
+      if (b.x >= min.x && b.y >= min.y && b.x <= max.x && b.y <= max.y) return true; // b
+    } else {
+      if (a.x >= min.x && a.y >= min.y && a.z >= min.z && a.x <= max.x && a.y <= max.y && a.z <= max.z) return true; // a
+      if (b.x >= min.x && b.y >= min.y && b.z >= min.z && b.x <= max.x && b.y <= max.y && b.z <= max.z) return true; // b
+    }
+    // nope, do it hard way
+    Float tmin;
+    if (!intersects(Ray!VT.fromPoints(a, b), &tmin)) return false;
+    if (tmin < 0) return true; // inside, just in case
+    return (tmin*tmin <= (b-a).lengthSquared);
+  }
+
+  ref inout(VT) opIndex (usize idx) inout {
+    pragma(inline, true);
+    return (idx == 0 ? min : max);
+  }
+
+  VT center () const { pragma(inline, true); return (min+max)/2; }
+  VT extent () const { pragma(inline, true); return max-min; }
+
+  /// sweep two AABB's to see if and when they first and last were overlapping
+  /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
+  /// u1 = normalized time of second collision (i.e. collision stops after myMove*u0)
+  /// hitnormal = normal that will move `this` apart of `b` edge it collided with
+  /// no output values are valid if no collision detected
+  /// WARNING! hit normal calculation is not tested!
+  bool sweep() (in auto ref VT myMove, in auto ref Me b, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted {
+    // check if they are overlapping right now
+    if (this.overlaps(b)) {
+      if (u0 !is null) *u0 = 0;
+      if (u1 !is null) *u1 = 0;
+      if (hitnormal !is null) *hitnormal = VT(); // oops
+      return true;
+    }
+
+    immutable v = -myMove; // treat b as stationary, so invert v to get relative velocity
+
+    // not moving, and not overlapping
+    if (v.isZero) return false;
+
+    Float hitTime = 0;
+    Float outTime = 1;
+    Float[VT.Dims] overlapTime = 0;
+
+    alias a = this;
+    foreach (immutable aidx; 0..VT.Dims) {
+      // axis overlap
+      immutable Float vv = v[aidx];
+      if (vv < 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (b.max[aidx] < a.min[aidx]) return false;
+        if (b.max[aidx] > a.min[aidx]) outTime = nmin((a.min[aidx]-b.max[aidx])*invv, outTime);
+        if (a.max[aidx] < b.min[aidx]) hitTime = nmax((overlapTime.ptr[aidx] = (a.max[aidx]-b.min[aidx])*invv), hitTime);
+        if (hitTime > outTime) return false;
+      } else if (vv > 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (b.min[aidx] > a.max[aidx]) return false;
+        if (a.max[aidx] > b.min[aidx]) outTime = nmin((a.max[aidx]-b.min[aidx])*invv, outTime);
+        if (b.max[aidx] < a.min[aidx]) hitTime = nmax((overlapTime.ptr[aidx] = (a.min[aidx]-b.max[aidx])*invv), hitTime);
+        if (hitTime > outTime) return false;
+      }
+    }
+
+    if (u0 !is null) *u0 = hitTime;
+    if (u1 !is null) *u1 = outTime;
+
+    // hit normal is along axis with the highest overlap time
+    if (hitnormal !is null) {
+      static if (VT.Dims == 3) {
+        int aidx = 0;
+        if (overlapTime.ptr[1] > overlapTime.ptr[0]) aidx = 1;
+        if (overlapTime.ptr[2] > overlapTime.ptr[aidx]) aidx = 2;
+        VT hn; // zero vector
+        hn[aidx] = (v[aidx] < 0 ? -1 : v[aidx] > 0 ? 1 : 0);
+        *hitnormal = hn;
+      } else {
+        if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
+          *hitnormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
+        } else {
+          *hitnormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
+        }
+      }
+    }
+
+    return true;
+
+    /+
+    version(none) {
+      auto u_0 = VT(0, 0, 0); // first times of overlap along each axis
+      auto u_1 = VT(1, 1, 1); // last times of overlap along each axis
+      bool wasHit = false;
+
+      // find the possible first and last times of overlap along each axis
+      foreach (immutable idx; 0..VT.Dims) {
+        Float dinv = v[idx];
+        if (dinv != 0) {
+          dinv = cast(Float)1/dinv;
+          if (this.max[idx] < b.min[idx] && dinv < 0) {
+            u_0[idx] = (this.max[idx]-b.min[idx])*dinv;
+            wasHit = true;
+          } else if (b.max[idx] < this.min[idx] && dinv > 0) {
+            u_0[idx] = (this.min[idx]-b.max[idx])*dinv;
+            wasHit = true;
+          }
+          if (b.max[idx] > this.min[idx] && dinv < 0) {
+            u_1[idx] = (this.min[idx]-b.max[idx])*dinv;
+            wasHit = true;
+          } else if (this.max[idx] > b.min[idx] && dinv > 0) {
+            u_1[idx] = (this.max[idx]-b.min[idx])*dinv;
+            wasHit = true;
+          }
+        }
+      }
+
+      // oops
+      if (!wasHit) {
+        if (u0 !is null) *u0 = 0;
+        if (u1 !is null) *u1 = 0;
+        return false;
+      }
+
+      static if (VT.Dims == 3) {
+        immutable Float uu0 = nmax(u_0.x, nmax(u_0.y, u_0.z)); // possible first time of overlap
+        immutable Float uu1 = nmin(u_1.x, nmin(u_1.y, u_1.z)); // possible last time of overlap
+      } else {
+        immutable Float uu0 = nmax(u_0.x, u_0.y); // possible first time of overlap
+        immutable Float uu1 = nmin(u_1.x, u_1.y); // possible last time of overlap
+      }
+
+      if (u0 !is null) *u0 = uu0;
+      if (u1 !is null) *u1 = uu1;
+
+      // they could have only collided if the first time of overlap occurred before the last time of overlap
+      return (uu0 <= uu1);
+    }
+    +/
+  }
+
+  /// UNTESTED!
+  bool sweepLine() (in auto ref VT myMove, in auto ref VT la, in auto ref VT lb, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted if (VT.Dims == 2) {
+    mixin(ImportCoreMath!(Float, "fabs"));
+
+    alias a = this;
+    alias v = myMove;
+
+    auto lineDir = lb-la;
+    auto lineMin = VT(0, 0, 0);
+    auto lineMax = VT(0, 0, 0);
+
+    if (lineDir.x > 0) {
+      // right
+      lineMin.x = la.x;
+      lineMax.x = lb.x;
+    } else {
+      // left
+      lineMin.x = lb.x;
+      lineMax.x = la.x;
+    }
+
+    if (lineDir.y > 0) {
+      // up
+      lineMin.y = la.y;
+      lineMax.y = lb.y;
+    } else {
+      // down
+      lineMin.y = lb.y;
+      lineMax.y = la.y;
+    }
+
+    // initialise out info
+    //outVel = v;
+    //hitNormal = new VT(0,0);
+
+    Float hitTime = 0;
+    Float outTime = 1;
+    Float[VT.Dims] overlapTime = 0;
+
+    static if (VT.Dims == 3) {
+      static assert(0, "not yet");
+    } else {
+      //auto lnorm = VT(-lineDir.y, lineDir.x).normalized;
+      auto lnorm = lineDir.perp.normalized;
+    }
+
+    Float r = a.extent.x*fabs(lnorm.x)+a.extent.y*fabs(lnorm.y); // radius to line
+    Float boxProj = (la-a.center).dot(lnorm); // projected line distance to n
+    Float velProj = v.dot(lnorm); // projected velocity to n
+
+    if (velProj < 0) r = -r;
+
+    hitTime = nmax((boxProj-r)/velProj, hitTime);
+    outTime = nmin((boxProj+r)/velProj, outTime);
+
+    foreach (immutable aidx; 0..VT.Dims) {
+      // axis overlap
+      immutable Float vv = v[aidx];
+      if (vv < 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (a.max[aidx] < lineMin[aidx]) return false;
+        hitTime = nmax((overlapTime.ptr[aidx] = (lineMax[aidx]-a.min[aidx])*invv), hitTime);
+        outTime = nmin((lineMin[aidx]-a.max[aidx])*invv, outTime);
+        if (hitTime > outTime) return false;
+      } else if (vv > 0) {
+        immutable Float invv = cast(Float)1/vv;
+        if (a.min[aidx] > lineMax[aidx]) return false;
+        hitTime = nmax((overlapTime.ptr[aidx] = (lineMin[aidx]-a.max[aidx])*invv), hitTime);
+        outTime = nmin((lineMax[aidx]-a.min[aidx])*invv, outTime);
+        if (hitTime > outTime) return false;
+      } else {
+        if (lineMin[aidx] > a.max[aidx] || lineMax[aidx] < a.min[aidx]) return false;
+      }
+    }
+
+    if (u0 !is null) *u0 = hitTime;
+    if (u1 !is null) *u1 = outTime;
+
+    // hit normal is along axis with the highest overlap time
+    if (hitnormal !is null) {
+      static if (VT.Dims == 3) {
+        int aidx = 0;
+        if (overlapTime.ptr[1] > overlapTime.ptr[0]) aidx = 1;
+        if (overlapTime.ptr[2] > overlapTime.ptr[aidx]) aidx = 2;
+        VT hn; // zero vector
+        hn[aidx] = (v[aidx] < 0 ? -1 : v[aidx] > 0 ? 1 : 0);
+        *hitnormal = hn;
+      } else {
+        if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
+          *hitnormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
+        } else {
+          *hitnormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /// check to see if the sphere overlaps the AABB
+  bool overlaps(ST) (in auto ref ST sphere) if (IsSphere!(ST, VT)) { pragma(inline, true); return overlapsSphere(sphere.orig, sphere.radius); }
+
+  /// check to see if the sphere overlaps the AABB
+  bool overlapsSphere() (in auto ref VT center, Float radius) {
+    Float d = 0;
+    // find the square of the distance from the sphere to the box
+    foreach (immutable idx; 0..VT.Dims) {
+      if (center[idx] < min[idx]) {
+        immutable Float s = center[idx]-min[idx];
+        d += s*s;
+      } else if (center[idx] > max[idx]) {
+        immutable Float s = center[idx]-max[idx];
+        d += s*s;
+      }
+    }
+    return (d <= radius*radius);
   }
 }
 
