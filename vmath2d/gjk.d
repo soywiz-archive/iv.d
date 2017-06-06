@@ -17,6 +17,7 @@
  */
 module iv.vmath2d.gjk;
 
+import iv.alice;
 import iv.vmath2d;
 
 version = gjk_warnings;
@@ -211,13 +212,16 @@ private bool checkSimplex(VT) (ref VT sdir, VT[] spx) {
 // find minimum translation vector to resolve collision
 // using the final simplex obtained with the GJK algorithm
 private VT EPA(CT, VT) (in ref CT body0, in ref CT body1, const(VT)[] spx...) {
-  enum MaxIterations = 100;
+  enum MaxIterations = 128;
   enum MaxFaces = MaxIterations*3;
 
   static struct SxEdge {
     VT p0, p1;
     VT normal;
     VT.Float dist;
+    usize nextFree; // will be used to store my temp index too
+
+    @disable this (this);
 
   nothrow @safe @nogc:
     void calcNormDist (int winding) {
@@ -234,16 +238,80 @@ private VT EPA(CT, VT) (in ref CT body0, in ref CT body1, const(VT)[] spx...) {
       p1 = ap1;
       calcNormDist(winding);
     }
-
-    this (in ref VT ap0, in ref VT ap1, int winding) { pragma(inline, true); set(ap0, ap1, winding); }
   }
 
   // as this cannot be called recursive, we can use thread-local static here
-  static SxEdge[MaxFaces] faces = void;
-  int faceCount;
+  // use binary heap to store faces
+  static SxEdge[MaxFaces+2] faces = void;
+  static usize[MaxFaces+2] faceMap = void;
+
+  usize freeFaceIdx = usize.max;
+  usize facesUsed = 0;
+  usize faceCount = 0;
+  int winding = 0;
+
+  void heapify (usize root) {
+    for (;;) {
+      auto smallest = 2*root+1; // left child
+      if (smallest >= faceCount) break; // anyway
+      immutable right = smallest+1; // right child
+      if (!(faces.ptr[faceMap.ptr[smallest]].dist < faces.ptr[faceMap.ptr[root]].dist)) smallest = root;
+      if (right < faceCount && faces.ptr[faceMap.ptr[right]].dist < faces.ptr[faceMap.ptr[smallest]].dist) smallest = right;
+      if (smallest == root) break;
+      // swap
+      auto tmp = faceMap.ptr[root];
+      faceMap.ptr[root] = faceMap.ptr[smallest];
+      faceMap.ptr[smallest] = tmp;
+      root = smallest;
+    }
+  }
+
+  void insertFace (in ref VT p0, in ref VT p1) {
+    if (faceCount == faces.length) assert(0, "too many elements in heap");
+    auto i = faceCount;
+    usize ffidx = freeFaceIdx; // allocated face index in `faces[]`
+    if (ffidx != usize.max) {
+      // had free face in free list, fix free list
+      freeFaceIdx = faces.ptr[ffidx].nextFree;
+    } else {
+      // no free faces, use next unallocated
+      ffidx = facesUsed++;
+    }
+    assert(ffidx < faces.length);
+    ++faceCount;
+    faces.ptr[ffidx].set(p0, p1, winding);
+    immutable nfdist = faces.ptr[ffidx].dist;
+    // fix heap, and find place for new face
+    while (i != 0) {
+      auto par = (i-1)/2; // parent
+      if (!(nfdist < faces.ptr[faceMap.ptr[par]].dist)) break;
+      faceMap.ptr[i] = faceMap.ptr[par];
+      i = par;
+    }
+    faceMap.ptr[i] = ffidx;
+  }
+
+  // remove face from heap, but don't add it to free list yet
+  SxEdge* popSmallestFace () {
+    assert(faceCount > 0);
+    usize fidx = faceMap.ptr[0];
+    SxEdge* res = faces.ptr+fidx;
+    res.nextFree = fidx; // store face index; it will be used in `freeFace()`
+    // remove from heap (but don't add to free list yet)
+    faceMap.ptr[0] = faceMap.ptr[--faceCount];
+    heapify(0);
+    return res;
+  }
+
+  // add face to free list
+  void freeFace (SxEdge* e) {
+    assert(e !is null);
+    auto fidx = e.nextFree;
+    e.nextFree = freeFaceIdx;
+    freeFaceIdx = fidx;
+  }
 
   // compute the winding
-  int winding = 0;
   VT prevv = spx[$-1];
   foreach (const ref v; spx[]) {
     auto cp = prevv.cross(v);
@@ -255,33 +323,22 @@ private VT EPA(CT, VT) (in ref CT body0, in ref CT body1, const(VT)[] spx...) {
   // build the initial edge queue
   prevv = spx[$-1];
   foreach (const ref v; spx[]) {
-    faces.ptr[faceCount++].set(prevv, v, winding);
+    insertFace(prevv, v);
     prevv = v;
   }
 
-  void extractClosestEdge (ref SxEdge eres) {
-    import core.stdc.string : memmove;
-    int res = 0;
-    auto lastDist = VT.Float.infinity;
-    foreach (immutable idx, const ref SxEdge e; faces[0..faceCount]) {
-      if (e.dist < lastDist) { res = cast(int)idx; lastDist = e.dist; }
-    }
-    eres = faces.ptr[res];
-    if (faceCount-res > 1) memmove(faces.ptr+res, faces.ptr+res+1, (faceCount-res-1)*SxEdge.sizeof);
-    --faceCount;
-  }
-
-  SxEdge e;
+  SxEdge* e;
   VT p;
   foreach (immutable i; 0..MaxIterations) {
-    extractClosestEdge(e);
+    e = popSmallestFace();
     p = getSupportPoint(body0, body1, e.normal);
     immutable proj = p.dot(e.normal);
     if (proj-e.dist < EPSILON!(VT.Float)/* *EPSILON!(VT.Float) */) return e.normal*proj;
-    if (faces.length-faceCount < 2) assert(0, "out of memory in GJK-EPA");
-    faces.ptr[faceCount++].set(e.p0, p, winding);
-    faces.ptr[faceCount++].set(p, e.p1, winding);
+    insertFace(e.p0, p);
+    insertFace(p, e.p1);
+    freeFace(e);
   }
+  assert(e !is null); // just in case
   version(gjk_warnings) { import core.stdc.stdio; stderr.fprintf("EPA: out of iterations!\n"); }
   return e.normal*p.dot(e.normal);
 }
