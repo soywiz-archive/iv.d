@@ -17,8 +17,9 @@
  */
 module iv.vmath2d;
 
-import iv.vmath;
-import iv.vmath2d.math2d;
-import iv.vmath2d.vxstore;
-import iv.vmath2d.creatori;
-import iv.vmath2d.ybdecomposer;
+public import iv.vmath;
+public import iv.vmath2d.math2d;
+public import iv.vmath2d.vxstore;
+public import iv.vmath2d.creatori;
+public import iv.vmath2d.ybdecomposer;
+public import iv.vmath2d.gjk;
