@@ -2871,31 +2871,6 @@ public nothrow @safe @nogc:
  */
 /* WARNING! BY DEFAULT TREE WILL NOT PROTECT OBJECTS FROM GC! */
 // ////////////////////////////////////////////////////////////////////////// //
-private align(1) struct TreeNodeBase(VT, BodyBase) {
-align(1):
-  enum NullTreeNode = -1;
-  enum { Left = 0, Right = 1 }
-  // a node is either in the tree (has a parent) or in the free nodes list (has a next node)
-  union {
-    int parentId;
-    int nextNodeId;
-  }
-  // a node is either a leaf (has data) or is an internal node (has children)
-  union {
-    int[2] children; /// left and right child of the node (children[0] = left child)
-    BodyBase flesh;
-  }
-  // height of the node in the tree (-1 for free nodes)
-  short height;
-  // fat axis aligned bounding box (AABB) corresponding to the node
-  AABBImpl!VT aabb;
-  // return true if the node is a leaf of the tree
-  @property bool leaf () const nothrow @safe @nogc { pragma(inline, true); return (height == 0); }
-  @property bool free () const nothrow @safe @nogc { pragma(inline, true); return (height == -1); }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 /*
  * This class implements a dynamic AABB tree that is used for broad-phase
  * collision detection. This data structure is inspired by Nathanael Presson's
@@ -2915,7 +2890,6 @@ public:
   alias Float = VT.Float;
   alias Me = typeof(this);
   alias AABB = AABBImpl!VT;
-  alias TreeNode = TreeNodeBase!(VT, BodyBase);
 
   enum FloatNum(Float v) = cast(Float)v;
 
@@ -2932,6 +2906,32 @@ public:
   alias SimpleQueryCallback = bool delegate (BodyBase abody);
   alias SimpleQueryCallbackNR = void delegate (BodyBase abody);
   alias SegQueryCallback = Float delegate (BodyBase abody, in ref VT a, in ref VT b); // return dist from a to abody
+
+private:
+  align(1) struct TreeNode {
+  align(1):
+    enum NullTreeNode = -1;
+    enum { Left = 0, Right = 1 }
+    // a node is either in the tree (has a parent) or in the free nodes list (has a next node)
+    union {
+      int parentId;
+      int nextNodeId;
+    }
+    // a node is either a leaf (has data) or is an internal node (has children)
+    union {
+      int[2] children; /// left and right child of the node (children[0] = left child)
+      BodyBase flesh;
+    }
+    // height of the node in the tree (-1 for free nodes)
+    short height;
+    // fat axis aligned bounding box (AABB) corresponding to the node
+    AABBImpl!VT aabb;
+    // return true if the node is a leaf of the tree
+    @property const pure nothrow @safe @nogc {
+      bool leaf () { pragma(inline, true); return (height == 0); }
+      bool free () { pragma(inline, true); return (height == -1); }
+    }
+  }
 
 private:
   TreeNode* mNodes; // pointer to the memory location of the nodes of the tree
@@ -3333,7 +3333,7 @@ private:
   }
 
   // internally add an object into the tree
-  int insertObjectInternal() (in auto ref AABB aabb, bool staticObject) {
+  int insertObjectInternal (in ref AABB aabb, bool staticObject) {
     // get the next available node (or allocate new ones if necessary)
     int nodeId = allocateNode();
 
@@ -3386,7 +3386,7 @@ private:
   }
 
   // also, checks if the tree structure is valid (for debugging purpose)
-  public void forEachLeaf (scope void delegate (/*int nodeId*/BodyBase abody, in ref AABB aabb) dg) {
+  public void forEachLeaf (scope void delegate (BodyBase abody, in ref AABB aabb) dg) {
     void forEachNode (int nodeId) {
       if (nodeId == TreeNode.NullTreeNode) return;
       // if it is the root
@@ -3400,7 +3400,7 @@ private:
       // if the current node is a leaf
       if (pNode.leaf) {
         assert(pNode.height == 0);
-        if (dg !is null) dg(/*nodeId*/pNode.flesh, pNode.aabb);
+        if (dg !is null) dg(pNode.flesh, pNode.aabb);
       } else {
         int leftChild = pNode.children.ptr[TreeNode.Left];
         int rightChild = pNode.children.ptr[TreeNode.Right];
@@ -3520,7 +3520,8 @@ private:
 
 public:
   /// add `extraAABBGap` to bounding boxes so slight object movement won't cause tree rebuilds
-  this (Float extraAABBGap=FloatNum!0) {
+  /// extra AABB Gap used to allow the collision shape to move a little bit without triggering a large modification of the tree which can be costly
+  this (Float extraAABBGap=FloatNum!0) nothrow {
     mExtraGap = extraAABBGap;
     setup();
   }
@@ -3532,7 +3533,7 @@ public:
   }
 
   /// return the root AABB of the tree
-  AABB getRootAABB () {
+  AABB getRootAABB () nothrow @trusted @nogc {
     pragma(inline, true);
     version(aabbtree_many_asserts) assert(mRootNodeId >= 0 && mRootNodeId < mNodeCount);
     return mNodes[mRootNodeId].aabb;
@@ -3541,6 +3542,12 @@ public:
   /// does the given id represents a valid object?
   /// WARNING: ids of removed objects can be reused on later insertions!
   @property bool isValidId (int id) const nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf); }
+
+  /// get current extra AABB gap
+  @property Float extraGap () const pure nothrow @trusted @nogc { pragma(inline, true); return mExtraGap; }
+
+  /// set current extra AABB gap
+  @property void extraGap (Float aExtraGap) pure nothrow @trusted @nogc { pragma(inline, true); mExtraGap = aExtraGap; }
 
   /// get object by id; can return null for invalid ids
   BodyBase getObject (int id) nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf ? mNodes[id].flesh : null); }
@@ -3727,8 +3734,8 @@ public:
   /// compute the height of the tree
   int computeHeight () { pragma(inline, true); return computeHeight(mRootNodeId); }
 
-  @property int nodeCount () const nothrow @safe @nogc { pragma(inline, true); return mNodeCount; }
-  @property int nodeAlloced () const nothrow @safe @nogc { pragma(inline, true); return mAllocCount; }
+  @property int nodeCount () const pure nothrow @safe @nogc { pragma(inline, true); return mNodeCount; }
+  @property int nodeAlloced () const pure nothrow @safe @nogc { pragma(inline, true); return mAllocCount; }
 
   /// clear all the nodes and reset the tree
   void reset() {
