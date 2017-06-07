@@ -353,6 +353,8 @@ public static struct Raycast(VT) {
   @property bool valid () const nothrow @safe @nogc { pragma(inline, true); return p.isFinite; }
 }
 
+// see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
+// http://www.dtecta.com/papers/jgt04raycast.pdf
 public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodGJKObject!(CT, VT)) {
   Raycast!VT res;
 
@@ -369,22 +371,21 @@ public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO,
   VT n; // normal at the hit point
   VT x = start; // current closest point on the ray
   VT a = VT.Invalid, b = VT.Invalid; // simplex
-  VT c = abody.centroid;
-  VT d = x-c;
+  VT v = x-abody.centroid;
   VT.Float distsq = VT.Float.infinity;
   int itersLeft = 100;
 
   while (itersLeft > 0 && distsq > 0.001f) {
-    VT p = abody.support(d);
+    VT p = abody.support(v);
     VT w = x-p;
-    VT.Float ddw = d.dot(w);
-    if (ddw > 0) {
-      VT.Float ddr = d.dot(r);
-      if (ddr >= 0) return res;
-      lambda = lambda-ddw/ddr;
+    VT.Float dvw = v.dot(w);
+    if (dvw > 0) {
+      VT.Float dvr = v.dot(r);
+      if (dvr >= 0) return res;
+      lambda = lambda-dvw/dvr;
       if (isseg && lambda > maxlen) return res;
-      x = r*lambda+start;
-      n = d;
+      x = start+r*lambda;
+      n = v;
     }
     // reduce simplex
     if (a.valid) {
@@ -400,16 +401,16 @@ public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO,
         }
         VT ab = b-a;
         VT ax = x-a;
-        d = ab.tripleProduct(ax, ab);
+        v = ab.tripleProduct(ax, ab);
       } else {
         b = p;
         VT ab = b-a;
         VT ax = x-a;
-        d = ab.tripleProduct(ax, ab);
+        v = ab.tripleProduct(ax, ab);
       }
     } else {
       a = p;
-      d = -d;
+      v = -v;
     }
     --itersLeft;
   }
