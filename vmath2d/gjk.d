@@ -217,6 +217,7 @@ private bool checkSimplex(VT) (ref VT sdir, VT[] spx) {
 private VT EPA(CT, VT) (ref CT body0, ref CT body1, const(VT)[] spx...) {
   enum MaxIterations = 128;
   enum MaxFaces = MaxIterations*3;
+  assert(MaxIterations >= body0.length*body1.length);
 
   static struct SxEdge {
     VT p0, p1;
@@ -333,7 +334,7 @@ private VT EPA(CT, VT) (ref CT body0, ref CT body1, const(VT)[] spx...) {
   SxEdge* e;
   VT p;
   version(vm2d_debug_count_iterations) epaIterationCount = 0;
-  foreach (immutable i; 0..MaxIterations) {
+  foreach (immutable i; 0..body0.length*body1.length) {
     version(vm2d_debug_count_iterations) ++epaIterationCount;
     e = popSmallestFace();
     p = getSupportPoint(body0, body1, e.normal);
