@@ -44,19 +44,11 @@ version = gjk_warnings;
  *   return furthestPoint;
  * }
  */
-public template IsGoodGJKObject(T, VT) if ((is(T == struct) || is(T == class)) && IsVectorDim!(VT, 2)) {
-  enum IsGoodGJKObject = is(typeof((inout int=0) {
-    const o = T.init;
-    VT v = o.centroid;
-    v = o.support(VT(0, 0));
-    bool ins = o.inside(VT(0, 0));
-  }));
-}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// check if two convex shapes are colliding. can optionally return separating vector in `sepmove`.
-public bool gjkcollide(CT, VT) (in auto ref CT body0, in auto ref CT body1, VT* sepmove=null) if (IsGoodGJKObject!(CT, VT)) {
+public bool gjkcollide(CT, VT) (auto ref CT body0, auto ref CT body1, VT* sepmove=null) if (IsGoodVertexStorage!(CT, VT)) {
   VT sdir = body1.centroid-body0.centroid; // initial search direction
   if (sdir.isZero) sdir = VT(1, 0); // use arbitrary normal if initial direction is zero
   VT[3] spx = void; // simplex; [0] is most recently added, [2] is oldest
@@ -80,7 +72,7 @@ public bool gjkcollide(CT, VT) (in auto ref CT body0, in auto ref CT body1, VT* 
 // ////////////////////////////////////////////////////////////////////////// //
 /// return distance between two convex shapes, and separation normal
 /// negative distance means that shapes are overlapping, and zero distance means touching (and ops are invalid)
-public auto gjkdistance(CT, VT) (in auto ref CT body0, in auto ref CT body1, VT* op0=null, VT* op1=null, VT* sepnorm=null) if (IsGoodGJKObject!(CT, VT)) {
+public auto gjkdistance(CT, VT) (auto ref CT body0, auto ref CT body1, VT* op0=null, VT* op1=null, VT* sepnorm=null) if (IsGoodVertexStorage!(CT, VT)) {
   static VT segClosestToOrigin() (in auto ref VT segp0, in auto ref VT segp1) {
     immutable oseg = segp1-segp0;
     immutable ab2 = oseg.dot(oseg);
@@ -164,7 +156,7 @@ public auto gjkdistance(CT, VT) (in auto ref CT body0, in auto ref CT body1, VT*
 
 // ////////////////////////////////////////////////////////////////////////// //
 // return the Minkowski sum point (ok, something *like* it, but not Minkowski difference yet ;-)
-private VT getSupportPoint(CT, VT) (in ref CT body0, in ref CT body1, in ref VT sdir) {
+private VT getSupportPoint(CT, VT) (ref CT body0, ref CT body1, in ref VT sdir) {
   pragma(inline, true);
   return body0.support(sdir)-body1.support(-sdir);
 }
@@ -213,7 +205,7 @@ private bool checkSimplex(VT) (ref VT sdir, VT[] spx) {
 // Expanding Polytope Algorithm
 // find minimum translation vector to resolve collision
 // using the final simplex obtained with the GJK algorithm
-private VT EPA(CT, VT) (in ref CT body0, in ref CT body1, const(VT)[] spx...) {
+private VT EPA(CT, VT) (ref CT body0, ref CT body1, const(VT)[] spx...) {
   enum MaxIterations = 128;
   enum MaxFaces = MaxIterations*3;
 
@@ -356,14 +348,14 @@ public static struct Raycast(VT) {
 
 // see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
 // http://www.dtecta.com/papers/jgt04raycast.pdf
-public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (in auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodGJKObject!(CT, VT)) {
+public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodVertexStorage!(CT, VT)) {
   Raycast!VT res;
 
   VT.Float lambda = 0;
   VT.Float maxlen = rayD.length;
   bool isseg = (maxlen > 1);
 
-  VT start = rayO;
+  immutable VT start = rayO;
   VT r = rayD;
   if (maxlen != 1) r.normalize;
 

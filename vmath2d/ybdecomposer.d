@@ -32,7 +32,7 @@ import iv.vmath2d.vxstore;
 public struct YBDecomposer(VT) if (IsVectorDim!(VT, 2)) {
 private:
   // precondition: ccw
-  static bool reflex (in ref VT prev, in ref VT on, in ref VT next) {
+  static bool reflex() (in auto ref VT prev, in auto ref VT on, in auto ref VT next) {
     pragma(inline, true);
     // YOGESH: Added following condition of collinearity
     if (Math2D.isCollinear(prev, on, next)) return false;
@@ -40,16 +40,16 @@ private:
   }
 
   // if i is on the left of i-1 and i+1 line in the polygon vertices; checks area -ve
-  static bool left (in ref VT a, in ref VT b, in ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) > 0); }
+  static bool left() (in auto ref VT a, in auto ref VT b, in auto ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) > 0); }
 
   // if i is on the left or ON of i-1 and i+1 line in the polygon vertices; checks area -ve and 0
-  static bool leftOn (in ref VT a, in ref VT b, in ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) >= 0); }
+  static bool leftOn() (in auto ref VT a, in auto ref VT b, in auto ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) >= 0); }
 
   // if i is on the right of i-1 and i+1 line in the polygon vertices; checks area +ve
-  static bool right (in ref VT a, in ref VT b, in ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) < 0); }
+  static bool right() (in auto ref VT a, in auto ref VT b, in auto ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) < 0); }
 
   // if i is on the right or ON of i-1 and i+1 line in the polygon vertices; checks area +ve and 0
-  static bool rightOn (in ref VT a, in ref VT b, in ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) <= 0); }
+  static bool rightOn() (in auto ref VT a, in auto ref VT b, in auto ref VT c) { pragma(inline, true); return (Math2D.area(a, b, c) <= 0); }
 
 public:
   // decompose the polygon into several smaller non-concave polygon
@@ -108,11 +108,11 @@ public:
     }
 
     // main
-    VertexHelper!VT.collinearSimplify(poly);
+    poly.collinearSimplify();
     if (poly.length < 3) return;
 
     // we force it to CCW as it is a precondition in this algorithm
-    VertexHelper!VT.forceCCW(poly);
+    poly.forceCCW();
 
     //VT.Float lowerDist = 0.0, upperDist = 0.0;
     //int lowerIndex = 0, upperIndex = 0;

@@ -22,27 +22,31 @@ import iv.vmath2d.vxstore;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public struct Creatori(VT) if (IsVectorDim!(VT, 2)) {
+public struct Creatori {
+  @disable this ();
+  @disable this (this);
+
 static:
   // xRadius -- the rounding X radius
   // yRadius -- the rounding Y radius
   // segments -- the number of segments to subdivide the edges
-  void roundedRect(VS) (ref VS vstore, VT.Float width, VT.Float height, VT.Float xRadius, VT.Float yRadius, int segments) if (IsGoodVertexStorage!(VS, VT)) {
+  void roundedRect(VS) (ref VS vstore, double width, double height, double xRadius, double yRadius, int segments) if (IsGoodVertexStorage!VS) {
+    alias VT = VertexStorageVT!VS;
     if (yRadius > height/2 || xRadius > width/2) throw new Exception("rounding amount can't be more than half the height and width respectively");
     if (segments < 0) throw new Exception("segments must be zero or more");
 
     if (segments == 0) {
-      vstore ~= VT(width*cast(VT.Float)0.5-xRadius, -height*cast(VT.Float)0.5);
-      vstore ~= VT(width*cast(VT.Float)0.5, -height*cast(VT.Float)0.5+yRadius);
+      vstore ~= VT(cast(VT.Float)width*cast(VT.Float)0.5-cast(VT.Float)xRadius, -cast(VT.Float)height*cast(VT.Float)0.5);
+      vstore ~= VT(cast(VT.Float)width*cast(VT.Float)0.5, -cast(VT.Float)height*cast(VT.Float)0.5+cast(VT.Float)yRadius);
 
-      vstore ~= VT(width*cast(VT.Float)0.5, height*cast(VT.Float)0.5-yRadius);
-      vstore ~= VT(width*cast(VT.Float)0.5-xRadius, height*cast(VT.Float)0.5);
+      vstore ~= VT(cast(VT.Float)width*cast(VT.Float)0.5, cast(VT.Float)height*cast(VT.Float)0.5-cast(VT.Float)yRadius);
+      vstore ~= VT(cast(VT.Float)width*cast(VT.Float)0.5-cast(VT.Float)xRadius, cast(VT.Float)height*cast(VT.Float)0.5);
 
-      vstore ~= VT(-width*cast(VT.Float)0.5+xRadius, height*cast(VT.Float)0.5);
-      vstore ~= VT(-width*cast(VT.Float)0.5, height*cast(VT.Float)0.5-yRadius);
+      vstore ~= VT(-cast(VT.Float)width*cast(VT.Float)0.5+cast(VT.Float)xRadius, cast(VT.Float)height*cast(VT.Float)0.5);
+      vstore ~= VT(-cast(VT.Float)width*cast(VT.Float)0.5, cast(VT.Float)height*cast(VT.Float)0.5-cast(VT.Float)yRadius);
 
-      vstore ~= VT(-width*cast(VT.Float)0.5, -height*cast(VT.Float)0.5+yRadius);
-      vstore ~= VT(-width*cast(VT.Float)0.5+xRadius, -height*cast(VT.Float)0.5);
+      vstore ~= VT(-cast(VT.Float)width*cast(VT.Float)0.5, -cast(VT.Float)height*cast(VT.Float)0.5+cast(VT.Float)yRadius);
+      vstore ~= VT(-cast(VT.Float)width*cast(VT.Float)0.5+cast(VT.Float)xRadius, -cast(VT.Float)height*cast(VT.Float)0.5);
     } else {
       mixin(ImportCoreMath!(VT.Float, "cos", "sin"));
       import std.math : PI;
@@ -51,8 +55,8 @@ static:
       VT.Float stepSize = cast(VT.Float)(PI*2)/(numberOfEdges-4);
       int perPhase = numberOfEdges/4;
 
-      VT posOffset = VT(width/2-xRadius, height/2-yRadius);
-      vstore ~= posOffset+VT(xRadius, -yRadius+yRadius);
+      VT posOffset = VT(cast(VT.Float)width/2-cast(VT.Float)xRadius, cast(VT.Float)height/2-cast(VT.Float)yRadius);
+      vstore ~= posOffset+VT(cast(VT.Float)xRadius, 0/*-cast(VT.Float)yRadius+cast(VT.Float)yRadius*/);
       int phase = 0;
       foreach (immutable int i; 1..numberOfEdges) {
         if (i-perPhase == 0 || i-perPhase*3 == 0) {
@@ -62,30 +66,32 @@ static:
           posOffset.y = -posOffset.y;
           --phase;
         }
-        vstore ~= posOffset+VT(xRadius*cast(VT.Float)cos(stepSize*-(i+phase)), -yRadius*cast(VT.Float)sin(stepSize*-(i+phase)));
+        vstore ~= posOffset+VT(cast(VT.Float)xRadius*cast(VT.Float)cos(stepSize*-(i+phase)), -cast(VT.Float)yRadius*cast(VT.Float)sin(stepSize*-(i+phase)));
       }
     }
   }
 
   // numberOfEdges -- the number of edges
-  void circle(VS) (ref VS vstore, VT.Float radius, int numberOfEdges) if (IsGoodVertexStorage!(VS, VT)) {
+  void circle(VS, FT:double) (ref VS vstore, FT radius, int numberOfEdges) if (IsGoodVertexStorage!(VS, VecN!(2, FT))) {
     ellipse(vstore, radius, radius, numberOfEdges);
   }
 
   // xRadius -- width of the ellipse
   // yRadius -- height of the ellipse
   // numberOfEdges -- the number of edges
-  void ellipse(VS) (ref VS vstore, VT.Float xRadius, VT.Float yRadius, int numberOfEdges) if (IsGoodVertexStorage!(VS, VT)) {
+  void ellipse(VS) (ref VS vstore, double xRadius, double yRadius, int numberOfEdges) if (IsGoodVertexStorage!VS) {
+    alias VT = VertexStorageVT!VS;
     mixin(ImportCoreMath!(VT.Float, "cos", "sin"));
     import std.math : PI;
     VT.Float stepSize = cast(VT.Float)(PI*2)/numberOfEdges;
-    vstore ~= VT(xRadius, 0);
+    vstore ~= VT(cast(VT.Float)xRadius, 0);
     foreach_reverse (immutable int i; 1..numberOfEdges) {
-      vstore ~= VT(xRadius*cast(VT.Float)cos(stepSize*i), -yRadius*cast(VT.Float)sin(stepSize*i));
+      vstore ~= VT(cast(VT.Float)xRadius*cast(VT.Float)cos(stepSize*i), -cast(VT.Float)yRadius*cast(VT.Float)sin(stepSize*i));
     }
   }
 
-  void arc(VS) (ref VS vstore, VT.Float radians, int sides, VT.Float radius) if (IsGoodVertexStorage!(VS, VT)) {
+  void arc(VS) (ref VS vstore, double radians, int sides, double radius) if (IsGoodVertexStorage!VS) {
+  alias VT = VertexStorageVT!VS;
     mixin(ImportCoreMath!(VT.Float, "cos", "sin"));
     if (radians <= 0) throw new Exception("the arc needs to be larger than 0");
     if (sides <= 1) throw new Exception("The arc needs to have more than 1 sides");
@@ -99,7 +105,7 @@ static:
   // height -- height (inner height + 2 * radius) of the capsule
   // endRadius -- radius of the capsule ends
   // edges -- the number of edges of the capsule ends. the more edges, the more it resembles an capsule
-  void capsule(VS) (ref VS vstore, VT.Float height, VT.Float endRadius, int edges) if (IsGoodVertexStorage!(VS, VT)) {
+  void capsule(VS) (ref VS vstore, double height, double endRadius, int edges) if (IsGoodVertexStorage!VS) {
     if (endRadius >= height/2) throw new Exception("The radius must be lower than height/2: higher values of radius would create a circle, and not a half circle");
     return capsule(vstore, height, endRadius, edges, endRadius, edges);
   }
@@ -109,7 +115,8 @@ static:
   // topEdges -- the number of edges of the top. the more edges, the more it resembles an capsule
   // bottomRadius -- radius of bottom
   // bottomEdges -- the number of edges of the bottom. the more edges, the more it resembles an capsule
-  void capsule(VS) (ref VS vstore, VT.Float height, VT.Float topRadius, int topEdges, VT.Float bottomRadius, int bottomEdges) if (IsGoodVertexStorage!(VS, VT)) {
+  void capsule(VS) (ref VS vstore, double height, double topRadius, int topEdges, double bottomRadius, int bottomEdges) if (IsGoodVertexStorage!VS) {
+    alias VT = VertexStorageVT!VS;
     mixin(ImportCoreMath!(VT.Float, "cos", "sin"));
     import std.math : PI;
 
@@ -121,34 +128,35 @@ static:
     if (topRadius >= height/2) throw new Exception("the top radius must be lower than height/2: higher values of top radius would create a circle, and not a half circle");
     if (bottomRadius >= height/2) throw new Exception("the bottom radius must be lower than height/2: higher values of bottom radius would create a circle, and not a half circle");
 
-    VT.Float newHeight = (height-topRadius-bottomRadius)*cast(VT.Float)0.5;
+    VT.Float newHeight = (cast(VT.Float)height-cast(VT.Float)topRadius-cast(VT.Float)bottomRadius)*cast(VT.Float)0.5;
 
     // top
-    vstore ~= VT(topRadius, newHeight);
+    vstore ~= VT(cast(VT.Float)topRadius, newHeight);
 
     VT.Float stepSize = cast(VT.Float)PI/topEdges;
     foreach (immutable int i; 1..topEdges) {
-      vstore ~= VT(topRadius*cast(VT.Float)cos(stepSize*i), topRadius*cast(VT.Float)sin(stepSize*i)+newHeight);
+      vstore ~= VT(cast(VT.Float)topRadius*cast(VT.Float)cos(stepSize*i), cast(VT.Float)topRadius*cast(VT.Float)sin(stepSize*i)+newHeight);
     }
 
-    vstore ~= VT(-topRadius, newHeight);
+    vstore ~= VT(-cast(VT.Float)topRadius, newHeight);
 
     // bottom
-    vstore ~= VT(-bottomRadius, -newHeight);
+    vstore ~= VT(-cast(VT.Float)bottomRadius, -newHeight);
 
     stepSize = cast(VT.Float)PI/bottomEdges;
     foreach (immutable int i; 1..bottomEdges) {
-      vstore ~= VT(-bottomRadius*cast(VT.Float)cos(stepSize*i), -bottomRadius*cast(VT.Float)sin(stepSize*i)-newHeight);
+      vstore ~= VT(-cast(VT.Float)bottomRadius*cast(VT.Float)cos(stepSize*i), -cast(VT.Float)bottomRadius*cast(VT.Float)sin(stepSize*i)-newHeight);
     }
 
-    vstore ~= VT(bottomRadius, -newHeight);
+    vstore ~= VT(cast(VT.Float)bottomRadius, -newHeight);
   }
 
   // radius -- the radius
   // numberOfTeeth -- the number of teeth
   // tipPercentage -- the tip percentage
   // toothHeight -- height of the tooth
-  void gear(VS) (ref VS vstore, VT.Float radius, int numberOfTeeth, VT.Float tipPercentage, VT.Float toothHeight) if (IsGoodVertexStorage!(VS, VT)) {
+  void gear(VS) (ref VS vstore, double radius, int numberOfTeeth, double tipPercentage, double toothHeight) if (IsGoodVertexStorage!VS) {
+    alias VT = VertexStorageVT!VS;
     mixin(ImportCoreMath!(VT.Float, "cos", "sin"));
     import std.math : PI;
 
