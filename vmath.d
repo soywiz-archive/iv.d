@@ -215,22 +215,22 @@ nothrow @safe:
     static if (dims == 3) z = (c.length >= 3 ? c.ptr[2] : 0);
   }
 
-  this (in Float ax, in Float ay) {
+  this (in Float ax, in Float ay) pure {
     pragma(inline, true);
     x = ax;
     y = ay;
     static if (dims == 3) z = 0;
   }
 
-  this (in Float ax, in Float ay, in Float az) {
-    pragma(inline, true);
+  this (in Float ax, in Float ay, in Float az) pure {
+    //pragma(inline, true);
     x = ax;
     y = ay;
     static if (dims == 3) z = az;
   }
 
-  this(VT) (in auto ref VT v) if (isVector!VT) {
-    pragma(inline, true);
+  this(VT) (in auto ref VT v) pure if (isVector!VT) {
+    //pragma(inline, true);
     x = v.x;
     y = v.y;
     static if (dims == 3) {
@@ -249,6 +249,7 @@ nothrow @safe:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  // this also reject nans
   @property bool isFinite () const nothrow @safe @nogc {
     pragma(inline, true);
     import core.stdc.math : isfinite;
@@ -2377,6 +2378,8 @@ public:
   alias Me = typeof(this);
 
 public:
+  //VT center;
+  //VT half; // should be positive
   VT min, max;
 
 public:
@@ -2386,6 +2389,66 @@ public:
   }
 
 public nothrow @safe @nogc:
+  this() (in auto ref VT amin, in auto ref VT amax) {
+    pragma(inline, true);
+    //center = (amin+amax)/2;
+    //half = VT((nmax(amin.x, amax.x)-nmin(amin.x, amax.x))/2, (nmax(amin.y, amax.y)-nmin(amin.y, amax.y))/2);
+    version(none) {
+      // this breaks VecN ctor inliner (fuck!)
+      static if (VT.Dims == 2) {
+        min = VT(nmin(amin.x, amax.x), nmin(amin.y, amax.y));
+        max = VT(nmax(amin.x, amax.x), nmax(amin.y, amax.y));
+      } else {
+        min = VT(nmin(amin.x, amax.x), nmin(amin.y, amax.y), nmin(amin.z, amax.z));
+        max = VT(nmax(amin.x, amax.x), nmax(amin.y, amax.y), nmax(amin.z, amax.z));
+      }
+    } else {
+      min.x = nmin(amin.x, amax.x);
+      min.y = nmin(amin.y, amax.y);
+      static if (VT.Dims == 3) min.z = nmin(amin.z, amax.z);
+      max.x = nmax(amin.x, amax.x);
+      max.y = nmax(amin.y, amax.y);
+      static if (VT.Dims == 3) max.z = nmax(amin.z, amax.z);
+    }
+  }
+
+  void setMinMax() (in auto ref VT amin, in auto ref VT amax) pure {
+    pragma(inline, true);
+    version(none) {
+      // this breaks VecN ctor inliner (fuck!)
+      static if (VT.Dims == 2) {
+        min = VT(nmin(amin.x, amax.x), nmin(amin.y, amax.y));
+        max = VT(nmax(amin.x, amax.x), nmax(amin.y, amax.y));
+      } else {
+        min = VT(nmin(amin.x, amax.x), nmin(amin.y, amax.y), nmin(amin.z, amax.z));
+        max = VT(nmax(amin.x, amax.x), nmax(amin.y, amax.y), nmax(amin.z, amax.z));
+      }
+    } else {
+      min.x = nmin(amin.x, amax.x);
+      min.y = nmin(amin.y, amax.y);
+      static if (VT.Dims == 3) min.z = nmin(amin.z, amax.z);
+      max.x = nmax(amin.x, amax.x);
+      max.y = nmax(amin.y, amax.y);
+      static if (VT.Dims == 3) max.z = nmax(amin.z, amax.z);
+    }
+  }
+
+  //@property VT min () const pure { pragma(inline, true); return center-half; }
+  //@property VT max () const pure { pragma(inline, true); return center+half; }
+
+  VT center () const pure { pragma(inline, true); return (min+max)/2; }
+  VT extent () const pure { pragma(inline, true); return max-min; }
+
+  //@property valid () const { pragma(inline, true); return center.isFinite && half.isFinite; }
+  @property valid () const {
+    pragma(inline, true);
+    static if (VT.Dims == 2) {
+      return (min.isFinite && max.isFinite && min.x <= max.x && min.y <= max.y);
+    } else {
+      return (min.isFinite && max.isFinite && min.x <= max.x && min.y <= max.y && min.z <= max.z);
+    }
+  }
+
   // return the volume of the AABB
   @property Float volume () const {
     pragma(inline, true);
@@ -2474,7 +2537,8 @@ public nothrow @safe @nogc:
   }
 
   // extrude bbox a little, to compensate floating point inexactness
-  void extrude (Float delta) {
+  /*
+  void extrude (Float delta) pure {
     min.x -= delta;
     min.y -= delta;
     static if (VT.Dims == 3) min.z -= delta;
@@ -2482,6 +2546,7 @@ public nothrow @safe @nogc:
     max.y += delta;
     static if (VT.Dims == 3) max.z += delta;
   }
+  */
 
   // return true if the current AABB is overlapping with the AABB in parameter
   // two AABBs overlap if they overlap in the two(three) x, y (and z) axes at the same time
@@ -2604,9 +2669,6 @@ public nothrow @safe @nogc:
     pragma(inline, true);
     return (idx == 0 ? min : max);
   }
-
-  VT center () const { pragma(inline, true); return (min+max)/2; }
-  VT extent () const { pragma(inline, true); return max-min; }
 
   /// sweep two AABB's to see if and when they first and last were overlapping
   /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
