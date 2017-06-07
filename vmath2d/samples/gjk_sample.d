@@ -82,10 +82,12 @@ void main () {
 
     if (checkCollision) {
       collided = gjkcollide(flesh0, flesh1, &mtv);
+      version(vm2d_debug_count_iterations) writeln("gjkcollide: ", gjkIterationCount, " gjk iterations, ", epaIterationCount, " epa iterations");
       if (collided) {
         writeln("COLLISION! mtv=", mtv);
       } else {
         auto dist = gjkdistance(flesh0, flesh1, &p0, &p1, &snorm);
+        version(vm2d_debug_count_iterations) writeln("gjkdistance: ", gjkIterationCount, " iterations");
         if (dist < 0) {
           writeln("FUCKED DIST! dist=", dist);
         } else {

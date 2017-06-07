@@ -20,7 +20,12 @@ module iv.vmath2d.gjk;
 import iv.alice;
 import iv.vmath2d;
 
-version = gjk_warnings;
+version = vm2d_debug_gjk_warnings;
+//version = vm2d_debug_save_minkowski_points;
+//version = vm2d_debug_count_iterations;
+
+version(vm2d_debug_count_iterations) int gjkIterationCount, epaIterationCount;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /* GJK object should support:
@@ -56,7 +61,9 @@ public bool gjkcollide(CT, VT) (auto ref CT body0, auto ref CT body1, VT* sepmov
   if (spx.ptr[2].dot(sdir) <= 0) return false; // past the origin
   sdir = -sdir; // change search direction
   int spxidx = 1;
+  version(vm2d_debug_count_iterations) gjkIterationCount = 0;
   for (;;) {
+    version(vm2d_debug_count_iterations) ++gjkIterationCount;
     spx.ptr[spxidx] = getSupportPoint(body0, body1, sdir);
     if (spx.ptr[spxidx].dot(sdir) <= 0) return false; // past the origin
     if (checkSimplex(sdir, spx[spxidx..$])) {
@@ -104,8 +111,10 @@ public auto gjkdistance(CT, VT) (auto ref CT body0, auto ref CT body1, VT* op0=n
   d = -d;
   mixin(GetSupport!"b");
   d = segClosestToOrigin(b, a);
-  foreach (immutable iter; 0..100) {
-    if (d.lengthSquared <= EPSILON!(VT.Float)) return cast(VT.Float)-1; // if the closest point is the origin, not separated
+  version(vm2d_debug_count_iterations) gjkIterationCount = 0;
+  foreach (immutable iter; 0..32) {
+    if (d.lengthSquared <= EPSILON!(VT.Float)*EPSILON!(VT.Float)) return cast(VT.Float)-1; // if the closest point is the origin, not separated
+    version(vm2d_debug_count_iterations) ++gjkIterationCount;
     d = -d;
     mixin(GetSupport!"c");
     // is simplex triangle contains origin?
@@ -116,7 +125,7 @@ public auto gjkdistance(CT, VT) (auto ref CT body0, auto ref CT body1, VT* op0=n
     auto p1 = segClosestToOrigin(c, b);
     immutable p0sqlen = p0.lengthSquared;
     immutable p1sqlen = p1.lengthSquared;
-    if (p0sqlen <= EPSILON!(VT.Float) || p1sqlen <= EPSILON!(VT.Float)) {
+    if (p0sqlen <= EPSILON!(VT.Float)*EPSILON!(VT.Float) || p1sqlen <= EPSILON!(VT.Float)*EPSILON!(VT.Float)) {
       // origin is very close, but not exactly on edge; assume zero distance (special case)
       if (sepnorm !is null) *sepnorm = d.normalized;
       return cast(VT.Float)0;
@@ -195,7 +204,7 @@ private bool checkSimplex(VT) (ref VT sdir, VT[] spx) {
     auto ao = -a; // to origin
     auto ab = spx.ptr[1]-a;
     sdir = ab.tripleProduct(ao, ab);
-    if (sdir.lengthSquared <= EPSILON!(VT.Float)) sdir = sdir.rperp; // bad direction, use any normal
+    if (sdir.lengthSquared <= EPSILON!(VT.Float)*EPSILON!(VT.Float)) sdir = sdir.rperp; // bad direction, use any normal
   }
   return false;
 }
@@ -323,17 +332,19 @@ private VT EPA(CT, VT) (ref CT body0, ref CT body1, const(VT)[] spx...) {
 
   SxEdge* e;
   VT p;
+  version(vm2d_debug_count_iterations) epaIterationCount = 0;
   foreach (immutable i; 0..MaxIterations) {
+    version(vm2d_debug_count_iterations) ++epaIterationCount;
     e = popSmallestFace();
     p = getSupportPoint(body0, body1, e.normal);
     immutable proj = p.dot(e.normal);
-    if (proj-e.dist < EPSILON!(VT.Float)/* *EPSILON!(VT.Float) */) return e.normal*proj;
+    if (proj-e.dist < EPSILON!(VT.Float)) return e.normal*proj;
     insertFace(e.p0, p);
     insertFace(p, e.p1);
     freeFace(e);
   }
   assert(e !is null); // just in case
-  version(gjk_warnings) { import core.stdc.stdio; stderr.fprintf("EPA: out of iterations!\n"); }
+  version(vm2d_debug_gjk_warnings) { import core.stdc.stdio; stderr.fprintf("EPA: out of iterations!\n"); }
   return e.normal*p.dot(e.normal);
 }
 
@@ -342,10 +353,11 @@ private VT EPA(CT, VT) (ref CT body0, ref CT body1, const(VT)[] spx...) {
 public static struct Raycast(VT) {
   VT p = VT.Invalid, n = VT.Invalid; // point and normal
   VT.Float dist;
-  int iters;
   @property bool valid () const nothrow @safe @nogc { pragma(inline, true); return n.isFinite; }
 }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 // see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
 // http://www.dtecta.com/papers/jgt04raycast.pdf
 public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodVertexStorage!(CT, VT)) {
@@ -370,13 +382,15 @@ public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double di
   VT.Float distsq = VT.Float.infinity;
   int itersLeft = maxiters;
 
+  version(vm2d_debug_count_iterations) gjkIterationCount = 0;
   while (itersLeft > 0) {
+    version(vm2d_debug_count_iterations) ++gjkIterationCount;
     VT p = abody.support(v);
     VT w = x-p;
     VT.Float dvw = v.dot(w);
     if (dvw > 0) {
       VT.Float dvr = v.dot(r);
-      if (dvr >= 0) return res;
+      if (dvr >= -(EPSILON!(VT.Float)*EPSILON!(VT.Float))) return res;
       lambda = lambda-dvw/dvr;
       if (isseg && lambda > maxlen) return res; // we don't really know vk for warm start in this case
       x = start+r*lambda;
@@ -409,7 +423,87 @@ public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double di
     }
     if (distsq <= cast(VT.Float)distEps) break;
     --itersLeft;
-    ++res.iters;
+  }
+
+  if (itersLeft < 1) return res; // alas, out of iterations
+
+  // result
+  res.p = x;
+  res.n = n.normalized;
+  res.dist = lambda;
+  return res;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
+// http://www.dtecta.com/papers/jgt04raycast.pdf
+// this inflates *bbody*, and traces ray from *abody* origin to *bbody*. it is IMPORTANT! ;-)
+// if result is valid, body a can move by `res.p-abody.origin` before hit
+public Raycast!VT gjksweep(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (auto ref CT abody, auto ref CT bbody, in auto ref VT lvelA, in auto ref VT lvelB) {
+  Raycast!VT res;
+  version(vm2d_debug_save_minkowski_points)mink = null;
+
+  immutable VT start = abody.centroid; // trace from abody
+  if (start.equals(bbody.centroid)) return res; // obviously collided
+  static if (checkRayStart) {
+    if (bbody.inside(start)) return res; // the start point is inside the destination body, oops
+  }
+
+  VT r = lvelA-lvelB; // relative motion
+  VT.Float maxlen = r.length;
+  r.normalize;
+
+  VT x = start; // current closest point on the ray
+  VT.Float lambda = 0;
+  VT n; // normal at the hit point
+  VT a = VT.Invalid, b = VT.Invalid; // simplex
+  VT v = x-bbody.centroid;
+  VT.Float distsq = VT.Float.infinity;
+  int itersLeft = maxiters;
+
+  version(vm2d_debug_count_iterations) gjkIterationCount = 0;
+  while (itersLeft > 0) {
+    version(vm2d_debug_count_iterations) ++gjkIterationCount;
+    VT p = bbody.support(v)-(abody.support(-v)-abody.centroid);
+    VT w = x-p;
+    version(vm2d_debug_save_minkowski_points)mink ~= w;
+    VT.Float dvw = v.dot(w);
+    if (dvw > 0) {
+      VT.Float dvr = v.dot(r);
+      if (dvr >= -(EPSILON!(VT.Float)*EPSILON!(VT.Float))) return res;
+      lambda = lambda-dvw/dvr;
+      if (lambda > maxlen) return res; // we don't really know vk for warm start in this case
+      x = start+r*lambda;
+      n = v;
+    }
+    // reduce simplex
+    if (a.valid) {
+      if (b.valid) {
+        VT p1 = x.projectToSeg(a, p);
+        VT p2 = x.projectToSeg(p, b);
+        if (p1.distanceSquared(x) < p2.distanceSquared(x)) {
+          b = p;
+          distsq = p1.distanceSquared(x);
+        } else {
+          a = p;
+          distsq = p2.distanceSquared(x);
+        }
+        VT ab = b-a;
+        VT ax = x-a;
+        v = ab.tripleProduct(ax, ab);
+      } else {
+        b = p;
+        VT ab = b-a;
+        VT ax = x-a;
+        v = ab.tripleProduct(ax, ab);
+      }
+    } else {
+      a = p;
+      v = -v;
+    }
+    if (distsq <= cast(VT.Float)distEps) break;
+    --itersLeft;
   }
 
   if (itersLeft < 1) return res; // alas, out of iterations
