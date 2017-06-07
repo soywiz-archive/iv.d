@@ -748,6 +748,24 @@ const:
     Float toAngle() () { pragma(inline, true); mixin(ImportCoreMath!(Float, "atan2")); return atan2(y, x); }
 
     auto scross() (Float s) { pragma(inline, true); return v2(-s*y, s*x); }
+
+    // returns the closest point to `this` on the line segment from `a` to `b`, or invalid vector
+    // if `asseg` is false, "segment" is actually a line (infinite in both directions)
+    Me projectToSeg(bool asseg=true) (in auto ref Me a, in auto ref Me b) {
+      alias p = this;
+      auto ab = b-a; // vector from a to b
+      // squared distance from a to b
+      auto absq = ab.dot(ab);
+      if (absq == 0) return a; // a and b are the same point
+      auto ap = p-a; // vector from a to p
+      auto t = ap.dot(ab)/absq;
+      static if (asseg) {
+        if (t < 0.0) return a; // "before" a on the line
+        if (t > 1.0) return b; // "after" b on the line
+      }
+      // projection lines "inbetween" a and b on the line
+      return a+t*ab;
+    }
   }
 
   bool equals() (in auto ref Me v) {
