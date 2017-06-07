@@ -24,7 +24,7 @@ import iv.vmath;
 
 import iv.vmath2d.math2d;
 import iv.vmath2d.vxstore;
-import iv.vmath2d.creatori;
+static import iv.vmath2d.creatori; // hello, rdmd
 import iv.vmath2d.ybdecomposer;
 
 
@@ -176,33 +176,37 @@ void main () {
         return;
       }
       if (event == "E") {
+        import iv.vmath2d.creatori;
         polys = null;
         incPoly.clear();
-        Creatori.ellipse(incPoly, 50, 110, 20);
+        ellipse(incPoly, 50, 110, 20);
         incPoly.moveTo(vec2(winWidth/2, winHeight/2));
         polyComplete = true;
         return;
       }
       if (event == "R") {
+        import iv.vmath2d.creatori;
         polys = null;
         incPoly.clear();
-        Creatori.roundedRect(incPoly, 110, 70, 10, 10, 6);
+        roundedRect(incPoly, 110, 70, 10, 10, 6);
         incPoly.moveTo(vec2(winWidth/2, winHeight/2));
         polyComplete = true;
         return;
       }
       if (event == "C") {
+        import iv.vmath2d.creatori;
         polys = null;
         incPoly.clear();
-        Creatori.capsule(incPoly, 110, 20, 6);
+        capsule(incPoly, 110, 20, 6);
         incPoly.moveTo(vec2(winWidth/2, winHeight/2));
         polyComplete = true;
         return;
       }
       if (event == "G") {
+        import iv.vmath2d.creatori;
         polys = null;
         incPoly.clear();
-        Creatori.gear(incPoly, 100, 8, 90, 18);
+        gear(incPoly, 100, 8, 90, 18);
         incPoly.moveTo(vec2(winWidth/2, winHeight/2));
         polyComplete = true;
         return;
