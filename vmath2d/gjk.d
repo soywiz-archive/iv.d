@@ -26,6 +26,7 @@ version = gjk_warnings;
 /* GJK object should support:
  *   Vec2 centroid
  *   Vec2 support (Vec2 dir) -- in world space
+ *   bool inside (Vec2 pt) -- is point inside body?
  *
  * for polyhedra:
  *
@@ -48,6 +49,7 @@ public template IsGoodGJKObject(T, VT) if ((is(T == struct) || is(T == class)) &
     const o = T.init;
     VT v = o.centroid;
     v = o.support(VT(0, 0));
+    bool ins = o.inside(VT(0, 0));
   }));
 }
 
@@ -341,4 +343,82 @@ private VT EPA(CT, VT) (in ref CT body0, in ref CT body1, const(VT)[] spx...) {
   assert(e !is null); // just in case
   version(gjk_warnings) { import core.stdc.stdio; stderr.fprintf("EPA: out of iterations!\n"); }
   return e.normal*p.dot(e.normal);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public static struct Raycast(VT) {
+  VT p = VT.Invalid, n = VT.Invalid; // point and normal
+  VT.Float dist;
+  @property bool valid () const nothrow @safe @nogc { pragma(inline, true); return p.isFinite; }
+}
+
+public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodGJKObject!(CT, VT)) {
+  Raycast!VT res;
+
+  VT.Float lambda = 0;
+  VT.Float maxlen = rayD.length;
+  bool isseg = (maxlen > 1);
+
+  VT start = rayO;
+  VT r = rayD;
+  if (maxlen != 1) r.normalize;
+
+  if (abody.inside(start)) return res; // the start point is inside the body, oops
+
+  VT n; // normal at the hit point
+  VT x = start; // current closest point on the ray
+  VT a = VT.Invalid, b = VT.Invalid; // simplex
+  VT c = abody.centroid;
+  VT d = x-c;
+  VT.Float distsq = VT.Float.infinity;
+  int itersLeft = 100;
+
+  while (itersLeft > 0 && distsq > 0.001f) {
+    VT p = abody.support(d);
+    VT w = x-p;
+    VT.Float ddw = d.dot(w);
+    if (ddw > 0) {
+      VT.Float ddr = d.dot(r);
+      if (ddr >= 0) return res;
+      lambda = lambda-ddw/ddr;
+      if (isseg && lambda > maxlen) return res;
+      x = r*lambda+start;
+      n = d;
+    }
+    // reduce simplex
+    if (a.valid) {
+      if (b.valid) {
+        VT p1 = x.projectToSeg(a, p);
+        VT p2 = x.projectToSeg(p, b);
+        if (p1.distanceSquared(x) < p2.distanceSquared(x)) {
+          b = p;
+          distsq = p1.distanceSquared(x);
+        } else {
+          a = p;
+          distsq = p2.distanceSquared(x);
+        }
+        VT ab = b-a;
+        VT ax = x-a;
+        d = ab.tripleProduct(ax, ab);
+      } else {
+        b = p;
+        VT ab = b-a;
+        VT ax = x-a;
+        d = ab.tripleProduct(ax, ab);
+      }
+    } else {
+      a = p;
+      d = -d;
+    }
+    --itersLeft;
+  }
+
+  if (itersLeft < 1) return res; // alas, out of iterations
+
+  // result
+  res.p = x;
+  res.n = n.normalized;
+  res.dist = lambda;
+  return res;
 }
