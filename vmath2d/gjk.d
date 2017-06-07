@@ -350,12 +350,13 @@ private VT EPA(CT, VT) (in ref CT body0, in ref CT body1, const(VT)[] spx...) {
 public static struct Raycast(VT) {
   VT p = VT.Invalid, n = VT.Invalid; // point and normal
   VT.Float dist;
-  @property bool valid () const nothrow @safe @nogc { pragma(inline, true); return p.isFinite; }
+  int iters;
+  @property bool valid () const nothrow @safe @nogc { pragma(inline, true); return n.isFinite; }
 }
 
 // see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
 // http://www.dtecta.com/papers/jgt04raycast.pdf
-public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodGJKObject!(CT, VT)) {
+public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (in auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodGJKObject!(CT, VT)) {
   Raycast!VT res;
 
   VT.Float lambda = 0;
@@ -366,16 +367,18 @@ public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO,
   VT r = rayD;
   if (maxlen != 1) r.normalize;
 
-  if (abody.inside(start)) return res; // the start point is inside the body, oops
+  static if (checkRayStart) {
+    if (abody.inside(start)) return res; // the start point is inside the body, oops
+  }
 
   VT n; // normal at the hit point
   VT x = start; // current closest point on the ray
   VT a = VT.Invalid, b = VT.Invalid; // simplex
   VT v = x-abody.centroid;
   VT.Float distsq = VT.Float.infinity;
-  int itersLeft = 100;
+  int itersLeft = maxiters;
 
-  while (itersLeft > 0 && distsq > 0.001f) {
+  while (itersLeft > 0) {
     VT p = abody.support(v);
     VT w = x-p;
     VT.Float dvw = v.dot(w);
@@ -383,7 +386,7 @@ public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO,
       VT.Float dvr = v.dot(r);
       if (dvr >= 0) return res;
       lambda = lambda-dvw/dvr;
-      if (isseg && lambda > maxlen) return res;
+      if (isseg && lambda > maxlen) return res; // we don't really know vk for warm start in this case
       x = start+r*lambda;
       n = v;
     }
@@ -412,7 +415,9 @@ public Raycast!VT gjkraycast(VT, CT) (in auto ref CT abody, in auto ref VT rayO,
       a = p;
       v = -v;
     }
+    if (distsq <= cast(VT.Float)distEps) break;
     --itersLeft;
+    ++res.iters;
   }
 
   if (itersLeft < 1) return res; // alas, out of iterations
