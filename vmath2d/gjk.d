@@ -351,6 +351,10 @@ private VT EPA(CT, VT) (ref CT body0, ref CT body1, const(VT)[] spx...) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
+// http://www.dtecta.com/papers/jgt04raycast.pdf
+
+// ////////////////////////////////////////////////////////////////////////// //
 public static struct Raycast(VT) {
   VT p = VT.Invalid, n = VT.Invalid; // point and normal
   VT.Float dist;
@@ -359,49 +363,56 @@ public static struct Raycast(VT) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
-// http://www.dtecta.com/papers/jgt04raycast.pdf
-public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodVertexStorage!(CT, VT)) {
-  Raycast!VT res;
+// simplex for gjk raycaster
+private struct RCSimplex(VT) {
+  VT start; // ray start (not modified by solver)
+  VT r; // ray direction (not modified by solver)
+  VT.Float maxlen = 0; // maximum ray length (not modified by solver)
+  VT x; // current closest point on the ray
+  VT v; // current direction
+  VT a = VT.Invalid, b = VT.Invalid; // simplex points
+  VT.Float distsq = VT.Float.infinity;
+  VT p; // current support point (in world space)
+  VT n; // normal at the hit point
+  VT.Float lambda = 0; // current distance
 
-  VT.Float lambda = 0;
-  VT.Float maxlen = rayD.length;
-  bool isseg = (maxlen > 1);
-
-  immutable VT start = rayO;
-  VT r = rayD;
-  if (maxlen != 1) r.normalize;
-
-  static if (checkRayStart) {
-    if (abody.inside(start)) return res; // the start point is inside the body, oops
+  // setup simplex
+  //   astart: start point
+  //   adir: velocity, not normalized
+  //   apoint: first point for simplex, arbitrary point from a body we're checking
+  // returns `false` if velocity is too small to get something sane
+  bool setup() (in auto ref VT astart, in auto ref VT adir, in auto ref VT apoint) {
+    start = astart;
+    x = astart;
+    v = x-apoint;
+    r = adir;
+    maxlen = r.normalizeRetLength;
+    return (maxlen > 1);
   }
 
-  VT n; // normal at the hit point
-  VT x = start; // current closest point on the ray
-  VT a = VT.Invalid, b = VT.Invalid; // simplex
-  VT v = x-abody.centroid;
-  VT.Float distsq = VT.Float.infinity;
-  int itersLeft = maxiters;
-
-  version(vm2d_debug_count_iterations) gjkIterationCount = 0;
-  while (itersLeft > 0) {
-    version(vm2d_debug_count_iterations) ++gjkIterationCount;
-    VT p = abody.support(v);
-    VT w = x-p;
-    VT.Float dvw = v.dot(w);
+  // return `false` if we can stop iterating due to "solution not found" condition
+  // set `p` to new support point before calling this
+  bool advance () {
+    immutable VT w = x-p;
+    version(vm2d_debug_save_minkowski_points)mink ~= w;
+    immutable VT.Float dvw = v.dot(w);
     if (dvw > 0) {
-      VT.Float dvr = v.dot(r);
-      if (dvr >= -(EPSILON!(VT.Float)*EPSILON!(VT.Float))) return res;
-      lambda = lambda-dvw/dvr;
-      if (isseg && lambda > maxlen) return res; // we don't really know vk for warm start in this case
-      x = start+r*lambda;
-      n = v;
+      immutable VT.Float dvr = v.dot(r);
+      if (dvr >= -(EPSILON!(VT.Float)*EPSILON!(VT.Float))) return false;
+      lambda -= dvw/dvr;
+      if (lambda > maxlen) return false;
+      x = start+r*lambda; // shorten ray
+      n = v; // new normal
     }
-    // reduce simplex
-    if (a.valid) {
+    return true;
+  }
+
+  // update simplex
+  void update () {
+   if (a.valid) {
       if (b.valid) {
-        VT p1 = x.projectToSeg(a, p);
-        VT p2 = x.projectToSeg(p, b);
+        immutable VT p1 = x.projectToSeg(a, p);
+        immutable VT p2 = x.projectToSeg(p, b);
         if (p1.distanceSquared(x) < p2.distanceSquared(x)) {
           b = p;
           distsq = p1.distanceSquared(x);
@@ -409,109 +420,81 @@ public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double di
           a = p;
           distsq = p2.distanceSquared(x);
         }
-        VT ab = b-a;
-        VT ax = x-a;
+        immutable VT ab = b-a;
+        immutable VT ax = x-a;
         v = ab.tripleProduct(ax, ab);
       } else {
         b = p;
-        VT ab = b-a;
-        VT ax = x-a;
+        immutable VT ab = b-a;
+        immutable VT ax = x-a;
         v = ab.tripleProduct(ax, ab);
       }
     } else {
       a = p;
       v = -v;
     }
-    if (distsq <= cast(VT.Float)distEps) break;
-    --itersLeft;
   }
 
-  if (itersLeft < 1) return res; // alas, out of iterations
+  // main solver
+  // returns `false` if a solution wasn't found, or modify `res` if a solution was found
+  bool solve(int maxiters=32, double distEps=0.0001) (ref Raycast!VT res, scope VT delegate (in ref VT sdir) getSupportPoint) {
+    version(vm2d_debug_save_minkowski_points)mink = null;
+    version(vm2d_debug_count_iterations) gjkIterationCount = 0;
+    foreach (immutable itnum; 0..maxiters) {
+      version(vm2d_debug_count_iterations) ++gjkIterationCount;
+      p = getSupportPoint(v);
+      if (!advance()) return false;
+      update();
+      if (distsq <= cast(VT.Float)distEps) {
+        // yay, i found her!
+        res.p = x;
+        res.n = n.normalized;
+        res.dist = lambda;
+        return true;
+      }
+    }
+    return false;
+  }
+}
 
-  // result
-  res.p = x;
-  res.n = n.normalized;
-  res.dist = lambda;
+
+// ////////////////////////////////////////////////////////////////////////// //
+public Raycast!VT gjkraycast(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (auto ref CT abody, in auto ref VT rayO, in auto ref VT rayD) if (IsGoodVertexStorage!(CT, VT)) {
+  Raycast!VT res;
+  RCSimplex!VT simplex;
+
+  static if (checkRayStart) {
+    if (abody.inside(rayO)) return res; // the start point is inside the body, oops
+  }
+
+  if (!simplex.setup(rayO, rayD, abody.centroid)) {
+    // velocity is zero, use infinite length
+    simplex.maxlen = VT.Float.infinity;
+  }
+  if (!simplex.solve!(maxiters, distEps)(res, (in ref sdir) => abody.support(sdir))) return res;
+
   return res;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// see Gino van den Bergen's "Ray Casting against General Convex Objects with Application to Continuous Collision Detection" paper
-// http://www.dtecta.com/papers/jgt04raycast.pdf
 // this inflates *bbody*, and traces ray from *abody* origin to *bbody*. it is IMPORTANT! ;-)
 // if result is valid, body a can move by `res.p-abody.origin` before hit
 public Raycast!VT gjksweep(bool checkRayStart=true, int maxiters=32, double distEps=0.0001, VT, CT) (auto ref CT abody, auto ref CT bbody, in auto ref VT lvelA, in auto ref VT lvelB) {
   Raycast!VT res;
-  version(vm2d_debug_save_minkowski_points)mink = null;
+  RCSimplex!VT simplex;
 
-  immutable VT start = abody.centroid; // trace from abody
-  if (start.equals(bbody.centroid)) return res; // obviously collided
+  immutable VT act = abody.centroid;
+  immutable VT bct = bbody.centroid;
+
+  if (act.equals(bct)) return res; // obviously collided
   static if (checkRayStart) {
-    if (bbody.inside(start)) return res; // the start point is inside the destination body, oops
+    if (bbody.inside(act)) return res; // the start point is inside the destination body, oops
   }
 
-  VT r = lvelA-lvelB; // relative motion
-  VT.Float maxlen = r.length;
-  r.normalize;
+  // trace from abody to bbody, with relative motion (lvelA-lvelB)
+  if (!simplex.setup(act, lvelA-lvelB, bct)) return res; // velocity is zero, so oops
+  if (!simplex.solve!(maxiters, distEps)(res, (in ref sdir) => bbody.support(sdir)-(abody.support(-sdir)-act))) return res;
 
-  VT x = start; // current closest point on the ray
-  VT.Float lambda = 0;
-  VT n; // normal at the hit point
-  VT a = VT.Invalid, b = VT.Invalid; // simplex
-  VT v = x-bbody.centroid;
-  VT.Float distsq = VT.Float.infinity;
-  int itersLeft = maxiters;
-
-  version(vm2d_debug_count_iterations) gjkIterationCount = 0;
-  while (itersLeft > 0) {
-    version(vm2d_debug_count_iterations) ++gjkIterationCount;
-    VT p = bbody.support(v)-(abody.support(-v)-abody.centroid);
-    VT w = x-p;
-    version(vm2d_debug_save_minkowski_points)mink ~= w;
-    VT.Float dvw = v.dot(w);
-    if (dvw > 0) {
-      VT.Float dvr = v.dot(r);
-      if (dvr >= -(EPSILON!(VT.Float)*EPSILON!(VT.Float))) return res;
-      lambda = lambda-dvw/dvr;
-      if (lambda > maxlen) return res; // we don't really know vk for warm start in this case
-      x = start+r*lambda;
-      n = v;
-    }
-    // reduce simplex
-    if (a.valid) {
-      if (b.valid) {
-        VT p1 = x.projectToSeg(a, p);
-        VT p2 = x.projectToSeg(p, b);
-        if (p1.distanceSquared(x) < p2.distanceSquared(x)) {
-          b = p;
-          distsq = p1.distanceSquared(x);
-        } else {
-          a = p;
-          distsq = p2.distanceSquared(x);
-        }
-        VT ab = b-a;
-        VT ax = x-a;
-        v = ab.tripleProduct(ax, ab);
-      } else {
-        b = p;
-        VT ab = b-a;
-        VT ax = x-a;
-        v = ab.tripleProduct(ax, ab);
-      }
-    } else {
-      a = p;
-      v = -v;
-    }
-    if (distsq <= cast(VT.Float)distEps) break;
-    --itersLeft;
-  }
-
-  if (itersLeft < 1) return res; // alas, out of iterations
-
-  // result
-  res.p = x;
-  res.n = n.normalized;
-  res.dist = lambda;
   return res;
 }
