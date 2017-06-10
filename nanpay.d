@@ -49,10 +49,7 @@ double makeNanPay(bool doChecking=false) (long pay) pure nothrow @trusted @nogc 
   pay &= (0x7_ffff_ffff_ffffUL|0x8000_0000_0000_0000UL); // left only bits we are interested in
   pay |= 0x7ff8_0000_0000_0000UL; // set highest mantissa bit to ensure nan, and exponent to nan/inf
   // create double
-  double res = void;
-  *cast(long*)&res = pay;
-  // done
-  return res;
+  return *cast(double*)&pay;
 }
 
 
@@ -101,10 +98,7 @@ double makeNanPayU(bool doChecking=false) (ulong pay) pure nothrow @trusted @nog
   pay &= 0x0007_ffff_ffff_ffffUL; // left only bits we are interested in
   pay |= 0x7ff8_0000_0000_0000UL; // set highest mantissa bit to ensure nan, and exponent to nan/inf
   // create double
-  double res = void;
-  *cast(long*)&res = pay;
-  // done
-  return res;
+  return *cast(double*)&pay;
 }
 
 
@@ -161,10 +155,7 @@ float makeNanPayF(bool doChecking=false) (int pay) pure nothrow @trusted @nogc {
   pay &= (0x3f_ffffU|0x8000_0000U); // left only bits we are interested in
   pay |= 0x7fc0_0000U; // set highest mantissa bit to ensure nan, and exponent to nan/inf
   // create float
-  float res = void;
-  *cast(int*)&res = pay;
-  // done
-  return res;
+  return *cast(float*)&pay;
 }
 
 
@@ -213,10 +204,7 @@ float makeNanPayUF(bool doChecking=false) (uint pay) pure nothrow @trusted @nogc
   pay &= 0x003f_ffffU; // left only bits we are interested in
   pay |= 0x7fc0_0000U; // set highest mantissa bit to ensure nan, and exponent to nan/inf
   // create float
-  float res = void;
-  *cast(int*)&res = pay;
-  // done
-  return res;
+  return *cast(float*)&pay;
 }
 
 
