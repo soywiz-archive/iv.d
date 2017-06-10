@@ -46,7 +46,7 @@ double makeNanPay(bool doChecking=false) (long pay) pure nothrow @trusted @nogc 
   static if (doChecking) {
     if (pay < MinSignedNanPay || pay > MaxSignedNanPay) assert(0, "invalid payload");
   }
-  pay &= (0x7_ffff_ffff_ffffUL|0x8000_0000_0000_0000UL); // left only bits we are interested in
+  pay &= 0x8007_ffff_ffff_ffffUL; // left only bits we are interested in
   pay |= 0x7ff8_0000_0000_0000UL; // set highest mantissa bit to ensure nan, and exponent to nan/inf
   // create double
   return *cast(double*)&pay;
@@ -73,7 +73,7 @@ bool hasNanPay (in double v) pure nothrow @trusted @nogc {
  */
 long getNanPay (in double v) pure nothrow @trusted @nogc {
   pragma(inline, true);
-  long pay = (*cast(const(long)*)&v)&(0x7_ffff_ffff_ffffUL|0x8000_0000_0000_0000UL); // remove exponent
+  long pay = (*cast(const(long)*)&v)&0x8007_ffff_ffff_ffffUL; // remove exponent
   // this bitors the missing "1" bits for negative numbers
   // shift either by 16 (effectively removing the mask) or by 0
   pay |= 0xfff8_0000_0000_0000UL<<(((pay>>59)&0x10)^0x10);
@@ -122,7 +122,7 @@ bool hasNanPayU (in double v) pure nothrow @trusted @nogc {
  */
 ulong getNanPayU (in double v) pure nothrow @trusted @nogc {
   pragma(inline, true);
-  return (*cast(const(ulong)*)&v)&(0x7_ffff_ffff_ffffUL); // remove exponent
+  return (*cast(const(ulong)*)&v)&0x0007_ffff_ffff_ffffUL; // remove exponent
 }
 
 
@@ -152,7 +152,7 @@ float makeNanPayF(bool doChecking=false) (int pay) pure nothrow @trusted @nogc {
   static if (doChecking) {
     if (pay < MinSignedNanPayF || pay > MaxSignedNanPayF) assert(0, "invalid payload");
   }
-  pay &= (0x3f_ffffU|0x8000_0000U); // left only bits we are interested in
+  pay &= 0x803f_ffffU; // left only bits we are interested in
   pay |= 0x7fc0_0000U; // set highest mantissa bit to ensure nan, and exponent to nan/inf
   // create float
   return *cast(float*)&pay;
@@ -179,7 +179,7 @@ bool hasNanPayF (in float v) pure nothrow @trusted @nogc {
  */
 int getNanPayF (in float v) pure nothrow @trusted @nogc {
   pragma(inline, true);
-  int pay = (*cast(const(int)*)&v)&(0x3f_ffffU|0x8000_0000U); // remove exponent
+  int pay = (*cast(const(int)*)&v)&0x803f_ffffU; // remove exponent
   // this bitors the missing "1" bits for negative numbers
   // shift either by 8 (effectively removing the mask) or by 0
   pay |= 0xfc00_0000U<<(((pay>>28)&0x08)^0x08);
