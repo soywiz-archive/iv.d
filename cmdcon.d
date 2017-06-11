@@ -119,17 +119,34 @@ public @property uint cbufLastChange () nothrow @trusted @nogc { import core.ato
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void consoleLock() () { pragma(inline, true); consoleLocker.lock(); } /// multithread lock
-public void consoleUnlock() () { pragma(inline, true); consoleLocker.unlock(); } /// multithread unlock
+/// multithread lock
+public void consoleLock() () nothrow @trusted {
+  pragma(inline, true);
+  version(aliced) {
+    consoleLocker.lock();
+  } else {
+    try { consoleLocker.lock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+  }
+}
+
+/// multithread unlock
+public void consoleUnlock() () nothrow @trusted {
+  pragma(inline, true);
+  version(aliced) {
+    consoleLocker.unlock();
+  } else {
+    try { consoleLocker.unlock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+  }
+}
 
 public __gshared void delegate () nothrow @trusted @nogc conWasNewLineCB; /// can be called in any thread; called if some '\n' was output with `conwrite*()`
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// put characters to console buffer (and, possibly, STDOUT_FILENO). thread-safe.
-public void cbufPut (scope ConString chrs...) nothrow @trusted @nogc { pragma(inline, true); if (chrs.length) cbufPutIntr!true(chrs); }
+public void cbufPut() (scope ConString chrs...) nothrow @trusted /*@nogc*/ { pragma(inline, true); if (chrs.length) cbufPutIntr!true(chrs); }
 
-public void cbufPutIntr(bool dolock) (scope ConString chrs...) nothrow @trusted @nogc {
+public void cbufPutIntr(bool dolock) (scope ConString chrs...) nothrow @trusted /*@nogc*/ {
   if (chrs.length) {
     import core.atomic : atomicLoad, atomicOp;
     static if (dolock) consoleLock();
@@ -344,7 +361,7 @@ private import std.traits/* : isBoolean, isIntegral, isPointer*/;
 //public @property auto ConWriter () @trusted nothrow @nogc { return conwriter; }
 //public @property auto ConWriter (typeof(conwriter) cv) @trusted nothrow @nogc { auto res = conwriter; conwriter = cv; return res; }
 
-void conwriter (scope ConString str) nothrow @trusted @nogc {
+void conwriter() (scope ConString str) nothrow @trusted /*@nogc*/ {
   pragma(inline, true);
   if (str.length > 0) cbufPut(str);
 }

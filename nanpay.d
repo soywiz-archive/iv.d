@@ -64,7 +64,7 @@ bool hasNanPay (in double v) pure nothrow @trusted @nogc {
  * Extract an integral payload from a NaN.
  *
  * Returns:
- *  the integer payload as a ulong.
+ *  the integer payload as a long.
  *
  * The largest possible payload is 0x7_ffff_ffff_ffff (51 bits).
  * One bit is reserved to not turn nans into infinity.
@@ -78,6 +78,31 @@ long getNanPay (in double v) pure nothrow @trusted @nogc {
   // shift either by 16 (effectively removing the mask) or by 0
   pay |= 0xfff8_0000_0000_0000UL<<(((pay>>59)&0x10)^0x10);
   return pay;
+}
+
+
+/**
+ * Extract an integral payload from a NaN.
+ *
+ * Returns:
+ *  the integer payload as a long or default value if NaN has no payload.
+ *
+ * The largest possible payload is 0x7_ffff_ffff_ffff (51 bits).
+ * One bit is reserved to not turn nans into infinity.
+ * But sign bit can be used to store sign, which allows to store signed values.
+ * Check if your number is "good nan" before extracting!
+ */
+long getNanPayDef (in double v, long def) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  if (((*cast(const(ulong)*)&v)&0x7ff8_0000_0000_0000UL) == 0x7ff8_0000_0000_0000UL) {
+    long pay = (*cast(const(long)*)&v)&0x8007_ffff_ffff_ffffUL; // remove exponent
+    // this bitors the missing "1" bits for negative numbers
+    // shift either by 16 (effectively removing the mask) or by 0
+    pay |= 0xfff8_0000_0000_0000UL<<(((pay>>59)&0x10)^0x10);
+    return pay;
+  } else {
+    return def;
+  }
 }
 
 
@@ -113,7 +138,7 @@ bool hasNanPayU (in double v) pure nothrow @trusted @nogc {
  * Extract an integral payload from a NaN.
  *
  * Returns:
- *  the integer payload as a ulong.
+ *  the integer payload as a long or default value if NaN has no payload.
  *
  * The largest possible payload is 0x7_ffff_ffff_ffff (51 bits).
  * One bit is reserved to not turn nans into infinity.
@@ -123,6 +148,24 @@ bool hasNanPayU (in double v) pure nothrow @trusted @nogc {
 ulong getNanPayU (in double v) pure nothrow @trusted @nogc {
   pragma(inline, true);
   return (*cast(const(ulong)*)&v)&0x0007_ffff_ffff_ffffUL; // remove exponent
+}
+
+
+/**
+ * Extract an integral payload from a NaN.
+ *
+ * Returns:
+ *  the integer payload as a long or default value if NaN has no payload.
+ *
+ * The largest possible payload is 0x7_ffff_ffff_ffff (51 bits).
+ * One bit is reserved to not turn nans into infinity.
+ * Sign bit is unused, and should be zero.
+ * Check if your number is "good nan" before extracting!
+ */
+ulong getNanPayUDef (in double v, ulong def) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (((*cast(const(ulong)*)&v)&0xfff8_0000_0000_0000UL) == 0x7ff8_0000_0000_0000UL ?
+    (*cast(const(ulong)*)&v)&0x0007_ffff_ffff_ffffUL : def);
 }
 
 
@@ -170,7 +213,7 @@ bool hasNanPayF (in float v) pure nothrow @trusted @nogc {
  * Extract an integral payload from a NaN.
  *
  * Returns:
- *  the integer payload as a uint.
+ *  the integer payload as a int.
  *
  * The largest possible payload is 0x3f_ffff (22 bits).
  * One bit is reserved to not turn nans into infinity.
@@ -184,6 +227,31 @@ int getNanPayF (in float v) pure nothrow @trusted @nogc {
   // shift either by 8 (effectively removing the mask) or by 0
   pay |= 0xfc00_0000U<<(((pay>>28)&0x08)^0x08);
   return pay;
+}
+
+
+/**
+ * Extract an integral payload from a NaN.
+ *
+ * Returns:
+ *  the integer payload as a int or default value if NaN has no payload.
+ *
+ * The largest possible payload is 0x3f_ffff (22 bits).
+ * One bit is reserved to not turn nans into infinity.
+ * But sign bit can be used to store sign, which allows to store signed values.
+ * Check if your number is "good nan" before extracting!
+ */
+int getNanPayFDef (in float v, int def) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  if (((*cast(const(uint)*)&v)&0x7fc0_0000U) == 0x7fc0_0000U) {
+    int pay = (*cast(const(int)*)&v)&0x803f_ffffU; // remove exponent
+    // this bitors the missing "1" bits for negative numbers
+    // shift either by 8 (effectively removing the mask) or by 0
+    pay |= 0xfc00_0000U<<(((pay>>28)&0x08)^0x08);
+    return pay;
+  } else {
+    return def;
+  }
 }
 
 
@@ -229,6 +297,24 @@ bool hasNanPayUF (in float v) pure nothrow @trusted @nogc {
 uint getNanPayUF (in float v) pure nothrow @trusted @nogc {
   pragma(inline, true);
   return (*cast(const(uint)*)&v)&0x003f_ffffU; // remove exponent
+}
+
+
+/**
+ * Extract an integral payload from a NaN.
+ *
+ * Returns:
+ *  the integer payload as a uint or default value if NaN has no payload.
+ *
+ * The largest possible payload is 0x3f_ffff (22 bits).
+ * One bit is reserved to not turn nans into infinity.
+ * Sign bit is unused, and should be zero.
+ * Check if your number is "good nan" before extracting!
+ */
+uint getNanPayUFDef (in float v, uint def) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (((*cast(const(uint)*)&v)&0xffc0_0000U) == 0x7fc0_0000U ?
+    (*cast(const(uint)*)&v)&0x003f_ffffU : def);
 }
 
 
