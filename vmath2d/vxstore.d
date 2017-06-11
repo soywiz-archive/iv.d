@@ -203,18 +203,45 @@ private int sign(T) (T v) { pragma(inline, true); return (v < 0 ? -1 : v > 0 ? 1
 
 // ////////////////////////////////////////////////////////////////////////// //
 // dumb O(n) support function, just brute force check all points
-public VT support(VS, VT) (ref VS vstore, in auto ref VT dir) if (IsGoodVertexStorage!(VS, VT)) {
+public VT supportDumb(VS, VT) (ref VS vstore, in auto ref VT dir) if (IsGoodVertexStorage!(VS, VT)) {
   if (vstore.length == 0) return VT.Invalid; // dunno, something
   VT sup = vstore[0];
   auto maxDot = sup.dot(dir);
   foreach (const ref v; vstore[1..$]) {
     immutable d = v.dot(dir);
-    if (d > maxDot) {
-      maxDot = d;
-      sup = v;
-    }
+    if (d > maxDot) { maxDot = d; sup = v; }
   }
   return sup;
+}
+
+
+// support function using hill climbing
+public VT support(VS, VT) (ref VS vstore, in auto ref VT dir) if (IsGoodVertexStorage!(VS, VT)) {
+  if (vstore.length <= 4) return supportDumb(vstore, dir); // we will check all vertices in those cases anyway
+
+  int vidx = 1, vtxdir = 1;
+  auto maxDot = vstore[1].dot(dir);
+
+  // check backward direction
+  immutable dot0delta = vstore[0].dot(dir)-maxDot;
+  // if dot0delta is negative, there is no reason to go backwards
+  if (dot0delta > 0) {
+    // check forward direction
+    immutable dot2delta = vstore[2].dot(dir)-maxDot;
+    vtxdir = (dot2delta > dot0delta ? 1 : -1);
+  }
+
+  // this loop is guaranteed to stop (obviously), but only for good convexes, so limit iteration count
+  foreach (immutable itrcount; 0..vstore.length) {
+    immutable d = vstore[vidx+vtxdir].dot(dir);
+    if (d < maxDot) return vstore[vidx]; // i found her!
+    // advance
+    maxDot = d;
+    vidx += vtxdir;
+  }
+
+  // degenerate poly
+  return vstore[vidx];
 }
 
 
