@@ -16,6 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 module iv.vfs.arc.zip /*is aliced*/;
+private:
 
 import iv.alice;
 import iv.vfs.types : Seek, VFSHiddenPointerHelper;
@@ -25,7 +26,9 @@ import iv.vfs.util;
 import iv.vfs.vfile;
 import iv.vfs.arc.internal;
 
+//version = (iv_vfs_slow_lzma;
 //version = ziparc_debug;
+//version = iv_vfs_debug_lzma;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -106,6 +109,7 @@ private:
     auto stpos = xpos+zfh.namelen+zfh.extlen;
     auto size = dir[idx].size;
     auto pksize = dir[idx].pksize;
+    version(iv_vfs_debug_lzma) { import core.stdc.stdio; printf("[%.*s]: stpos: 0x%08x  pksize: 0x%08x\n", cast(uint)dir[idx].name.length, dir[idx].name.ptr, cast(uint)stpos, cast(uint)pksize); }
     switch (zfh.method) {
       case 8: // deflate
         return wrapZLibStreamRO(st, VFSZLibMode.Zip, size, stpos, pksize, dir[idx].name);
@@ -616,7 +620,7 @@ align(1):
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-struct BitReader {
+private struct BitReader {
   VFile zfl;
   long zflpos;
   long zflorg;
@@ -2225,6 +2229,8 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
+version(iv_vfs_slow_lzma) {
+// ////////////////////////////////////////////////////////////////////////// //
 // LZMA Reference Decoder
 // 2015-06-14 : Igor Pavlov : Public domain
 
@@ -2760,4 +2766,145 @@ public:
     }
     return true;
   }
+}
+
+} else {
+// ////////////////////////////////////////////////////////////////////////// //
+// fast lzma
+import iv.vfs.lzmadec;
+
+struct Unlzmaer {
+  public enum InitUpkBufSize = OBufSize;
+
+  long origPos;
+  uint origPkSize, origUpkSize;
+
+  enum IBufSize = 32768;
+  enum OBufSize = 32768;
+
+  CLzmaDec lzmaDecoder;
+  bool inited;
+  ubyte* ibuf, obuf;
+  uint ibpos, ibused;
+  long flpos, pksize, upkleft;
+  VFile fl;
+
+private:
+  void freeBuffers () {
+    import core.stdc.stdlib : free;
+    if (ibuf !is null) free(ibuf);
+    if (obuf !is null) free(obuf);
+    ibuf = obuf = null;
+    ibpos = ibused = 0;
+  }
+
+  void allocBuffers () {
+    import core.stdc.stdlib : malloc;
+    if (ibuf is null) {
+      ibuf = cast(ubyte*)malloc(IBufSize);
+      if (ibuf is null) throw new Exception("out of memory");
+    }
+    if (obuf is null) {
+      obuf = cast(ubyte*)malloc(OBufSize);
+      if (obuf is null) throw new Exception("out of memory");
+    }
+    ibpos = ibused = 0;
+  }
+
+private:
+  void rawReadBufExact (void[] buf) {
+    if (buf.length == 0) return;
+    if (pksize < buf.length) throw new Exception("LZMA: out of data");
+    fl.rawReadExact(buf[]);
+    pksize -= buf.length;
+    flpos += buf.length;
+  }
+
+public:
+  void close () {
+    LzmaDec_Free(&lzmaDecoder);
+    freeBuffers();
+    inited = false;
+    fl.close();
+  }
+
+  void setup (VFile afl, ulong agflags, long apos, uint apksize, uint aupksize) {
+    origPos = apos;
+    origPkSize = apksize;
+    origUpkSize = aupksize;
+    //version(ziparc_debug) debug(ziparc) { import core.stdc.stdio : printf; printf("::: LZMA this=0x%08x\n", &this); }
+    ibuf = obuf = null;
+    fl = afl;
+    reset();
+  }
+
+  void reset () {
+    LzmaDec_Free(&lzmaDecoder);
+    flpos = origPos;
+    pksize = origPkSize;
+    upkleft = origUpkSize;
+    inited = false;
+  }
+
+  bool unpackChunk (scope VStreamDecoderLowLevelROPutBytesDg putUB) {
+    if (upkleft == 0) return false; // packed file EOF
+    if (!inited) {
+      CLzmaProps props;
+      ubyte[4] ziplzmahdr;
+      if (pksize < ziplzmahdr.length) throw new Exception("LZMA: invalid header");
+      fl.seek(flpos);
+      rawReadBufExact(ziplzmahdr[]);
+      if (ziplzmahdr[3] != 0) throw new Exception("LZMA: invalid header");
+      //{ import core.stdc.stdio : printf; printf("LZMA version: %u.%u\nprops size: %u\n", ziplzmahdr[0], ziplzmahdr[1], ziplzmahdr[2]); }
+      if (ziplzmahdr[2] == 0 || ziplzmahdr[2] < 5) throw new Exception("LZMA: invalid header size");
+      ubyte[5] header = 0;
+      rawReadBufExact(header[]);
+      if (ziplzmahdr[2] > header.length) {
+        ubyte[256] tbuf = void;
+        auto skip = ziplzmahdr[2]-header.length;
+        rawReadBufExact(tbuf[0..skip]);
+      }
+      if (LzmaProps_Decode(&props, header.ptr, 5) != SRes.OK) throw new Exception("LZMA: invalid properties");
+      //lzmaDecoder.markerIsMandatory = false;
+      //lzmaDecoder.create(br.upktotalsize);
+      allocBuffers();
+      LzmaDec_Init(&lzmaDecoder);
+      LzmaDec_Allocate(&lzmaDecoder, header.ptr, 5);
+      inited = true;
+    }
+    // fill buffer
+    if (ibpos >= ibused) {
+      if (pksize == 0) throw new Exception("LZMA: out of data");
+      uint rdlen = (pksize > IBufSize ? cast(uint)IBufSize : cast(uint)pksize);
+      fl.seek(flpos);
+      auto rd = fl.rawRead(ibuf[0..rdlen]);
+      if (rd.length == 0) throw new Exception("LZMA: out of data");
+      flpos += rd.length;
+      ibpos = 0;
+      ibused = cast(uint)rd.length;
+    }
+    assert(ibpos < ibused);
+    uint dclen = (upkleft > OBufSize ? cast(uint)OBufSize : cast(uint)upkleft);
+    size_t iblen = ibused-ibpos;
+    size_t oblen = OBufSize;
+    ELzmaStatus status;
+    auto res = LzmaDec_DecodeToBuf(&lzmaDecoder, obuf, &oblen, ibuf+ibpos, &iblen, LZMA_FINISH_ANY, &status);
+    if (res != SRes.OK) throw new Exception("LZMA stream corrupted");
+    // send output buffer to caller
+    if (oblen > 0) putUB(obuf[0..oblen]);
+    ibpos += cast(uint)iblen;
+    upkleft -= oblen;
+    switch (status) {
+      case LZMA_STATUS_NOT_SPECIFIED: break;
+      case LZMA_STATUS_FINISHED_WITH_MARK:
+        upkleft = 0; //HACK!
+        return false;
+      case LZMA_STATUS_NOT_FINISHED:
+      case LZMA_STATUS_NEEDS_MORE_INPUT:
+      case LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK:
+      default: break;
+    }
+    return true;
+  }
+}
 }
