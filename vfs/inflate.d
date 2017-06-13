@@ -171,7 +171,9 @@ private struct Tree {
 // stream of unpacked data
 //
 struct InfStream {
-alias ReadBufDg = int delegate (ubyte[] buf);
+public:
+  alias ReadBufDg = int delegate (ubyte[] buf);
+
 private:
   // return number of bytes read, -1 on error, 0 on eof; can read less than requested
   //ReadBufDg readBuf = null;
@@ -216,7 +218,8 @@ private:
   int rbpos, rbused;
   bool rbeof;
 
-  void dictPutByte (ubyte bt) nothrow @trusted @nogc {
+  // bt: arg
+  enum DictPutByteMixin = q{{
     if (dictEnd == dict.length) {
       import core.stdc.string : memmove;
       // move dict data
@@ -233,29 +236,35 @@ private:
         a32s2 %= Adler32.BASE;
       }
     }
-  }
+  }};
 
   uint finishAdler32 () nothrow @safe @nogc {
+    pragma(inline, true);
     a32s1 %= Adler32.BASE;
     a32s2 %= Adler32.BASE;
     return (a32s2<<16)|a32s1;
   }
 
-  bool readOneByte (scope ReadBufDg readBuf, ref ubyte bt) {
-    if (readBuf is null) rbeof = true;
-    if (rbeof) return false;
+  static template StrOr(string v, string def) {
+    static if (v.length == 0) enum StrOr = def; else enum StrOr = v;
+  }
+
+  enum ReadOneByteMixin(string dvar, string oneof="") = "{
+    //if (readBuf is null) rbeof = true;
+    if (rbeof) {
+      "~StrOr!(oneof, `throw new Exception("out of data for inflate");`)~"
+    }
     if (rbpos >= rbused) {
       rbpos = 0;
       if ((rbused = readBuf(rdbuf[])) <= 0) {
         rbeof = true;
-        if (rbused < 0) throw new Exception("inflate read error");
-        return false;
+        if (rbused < 0) throw new Exception(`inflate read error`);
+        "~StrOr!(oneof, `throw new Exception("out of data for inflate");`)~"
       }
     }
-    assert(rbpos < rbused);
-    bt = rdbuf.ptr[rbpos++];
-    return true;
-  }
+    //assert(rbpos < rbused);
+    "~dvar~" = rdbuf.ptr[rbpos++];
+  }\n";
 
 private:
   void setErrorState () nothrow @safe @nogc {
@@ -269,9 +278,11 @@ private:
     ubyte cmf, flg;
     // 7 bytes
     // compression parameters
-    if (!readOneByte(readBuf, cmf)) throw new Exception("out of input data");
+    //if (!readOneByte(readBuf, cmf)) throw new Exception("out of input data");
+    mixin(ReadOneByteMixin!"cmf");
     // flags
-    if (!readOneByte(readBuf, flg)) throw new Exception("out of input data");
+    //if (!readOneByte(readBuf, flg)) throw new Exception("out of input data");
+    mixin(ReadOneByteMixin!"flg");
     // check format
     // check checksum
     if ((256*cmf+flg)%31) throw new Exception("invalid zlib checksum");
@@ -302,47 +313,54 @@ private:
     uint a32; // autoinit
     ubyte bt = void;
     foreach_reverse (immutable n; 0..4) {
-      if (!readOneByte(readBuf, bt)) throw new Exception("out of input data");
+      //if (!readOneByte(readBuf, bt)) throw new Exception("out of input data");
+      mixin(ReadOneByteMixin!"bt");
       a32 |= (cast(uint)bt)<<(n*8);
     }
     if (a32 != finishAdler32()) throw new Exception("invalid checksum");
   }
 
-  // get one bit from source stream
-  uint getBit (scope ReadBufDg readBuf) {
+  // get one bit from source stream to `ubyte onebit`
+  enum GetBitMixin = q{{
     if (!bitcount--) {
       scope(failure) setErrorState();
-      ubyte bt = void;
-      if (!readOneByte(readBuf, bt)) throw new Exception("out of input data");
-      tag = bt;
+      //if (!readOneByte(readBuf, onebit)) throw new Exception("out of input data");
+      mixin(ReadOneByteMixin!"onebit");
+      tag = onebit;
       bitcount = 7;
     }
-    uint res = tag&0x01;
+    onebit = tag&0x01;
     tag >>= 1;
-    return res;
-  }
+  }};
 
   // read a num bit value from a stream and add base
-  uint readBits (scope ReadBufDg readBuf, ubyte num, uint base) {
+  enum ReadBitsMixin(string dvar, string num, string base) = "{
     uint val = 0;
-    if (num) {
-      immutable uint limit = 1<<num;
-      for (uint mask = 1; mask < limit; mask <<= 1) if (getBit(readBuf)) val += mask;
+    ubyte onebit = void;
+    if ("~num~") {
+      immutable uint limit = 1<<"~num~";
+      for (uint mask = 1; mask < limit; mask <<= 1) {
+        //if (getBit(readBuf)) val += mask;
+        "~GetBitMixin~"
+        if (onebit) val += mask;
+      }
     }
-    return val+base;
-  }
+    "~dvar~" = cast(typeof("~dvar~"))(val+"~base~");
+  }\n";
 
   // given a data stream and a tree, decode a symbol
   uint decodeSymbol (scope ReadBufDg readBuf, const(Tree*) t) {
     scope(failure) setErrorState();
     int cur, sum, len; // autoinit
+    ubyte onebit = void;
     // get more bits while code value is above sum
     do {
-      ushort sl;
-      cur = 2*cur+getBit(readBuf);
+      //cur = 2*cur+getBit(readBuf);
+      mixin(GetBitMixin);
+      cur = 2*cur+onebit;
       ++len;
       if (len >= 16) throw new Exception("invalid symbol");
-      sl = t.table.ptr[len];
+      ushort sl = t.table.ptr[len];
       sum += sl;
       cur -= sl;
     } while (cur >= 0);
@@ -361,18 +379,24 @@ private:
     uint hlit, hdist, hclen;
     uint num, length;
     // get 5 bits HLIT (257-286)
-    hlit = readBits(readBuf, 5, 257);
+    //hlit = readBits(readBuf, 5, 257);
+    mixin(ReadBitsMixin!("hlit", "5", "257"));
     // get 5 bits HDIST (1-32)
-    hdist = readBits(readBuf, 5, 1);
+    //hdist = readBits(readBuf, 5, 1);
+    mixin(ReadBitsMixin!("hdist", "5", "1"));
     if (hlit+hdist > 288+32) throw new Exception("invalid tree");
     // get 4 bits HCLEN (4-19)
-    hclen = readBits(readBuf, 4, 4);
+    //hclen = readBits(readBuf, 4, 4);
+    mixin(ReadBitsMixin!("hclen", "4", "4"));
     if (hclen > 19) throw new Exception("invalid tree");
-    lengths[0..19] = 0;
+    lengths.ptr[0..19] = 0;
     // read code lengths for code length alphabet
-    foreach (immutable i; 0..hclen) lengths[clcidx[i]] = cast(ubyte)readBits(readBuf, 3, 0); // get 3 bits code length (0-7)
+    foreach (immutable i; 0..hclen) {
+      //lengths[clcidx[i]] = cast(ubyte)readBits(readBuf, 3, 0); // get 3 bits code length (0-7)
+      mixin(ReadBitsMixin!("lengths.ptr[clcidx.ptr[i]]", "3", "0")); // get 3 bits code length (0-7)
+    }
     // build code length tree
-    codeTree.buildTree(lengths[0..19]);
+    codeTree.buildTree(lengths.ptr[0..19]);
     // decode code lengths for the dynamic trees
     for (num = 0; num < hlit+hdist; ) {
       ubyte bt;
@@ -380,16 +404,19 @@ private:
       switch (sym) {
         case 16: // copy previous code length 3-6 times (read 2 bits)
           if (num == 0) throw new Exception("invalid tree");
-          bt = lengths[num-1];
-          length = readBits(readBuf, 2, 3);
+          bt = lengths.ptr[num-1];
+          //length = readBits(readBuf, 2, 3);
+          mixin(ReadBitsMixin!("length", "2", "3"));
           break;
         case 17: // repeat code length 0 for 3-10 times (read 3 bits)
           bt = 0;
-          length = readBits(readBuf, 3, 3);
+          //length = readBits(readBuf, 3, 3);
+          mixin(ReadBitsMixin!("length", "3", "3"));
           break;
         case 18: // repeat code length 0 for 11-138 times (read 7 bits)
           bt = 0;
-          length = readBits(readBuf, 7, 11);
+          //length = readBits(readBuf, 7, 11);
+          mixin(ReadBitsMixin!("length", "7", "11"));
           break;
         default: // values 0-15 represent the actual code lengths
           if (sym >= 19) throw new Exception("invalid tree symbol");
@@ -399,11 +426,11 @@ private:
       }
       // fill it
       if (num+length > 288+32) throw new Exception("invalid tree");
-      while (length-- > 0) lengths[num++] = bt;
+      while (length-- > 0) lengths.ptr[num++] = bt;
     }
     // build dynamic trees
-    ltree.buildTree(lengths[0..hlit]);
-    dtree.buildTree(lengths[hlit..hlit+hdist]);
+    ltree.buildTree(lengths.ptr[0..hlit]);
+    dtree.buildTree(lengths.ptr[hlit..hlit+hdist]);
   }
 
   // can return zero-length slice (on state switch, for example)
@@ -414,8 +441,8 @@ private:
       if (bytesLeft > 0) {
         // copying match; all checks already done
         //--bytesLeft;
-        ubyte bt = dict[dictEnd-matchOfs];
-        dictPutByte(bt);
+        ubyte bt = dict.ptr[dictEnd-matchOfs];
+        mixin(DictPutByteMixin);
         *dest++ = bt;
         --bytesLeft;
         --btleft;
@@ -430,7 +457,7 @@ private:
         if (sym < 256) {
           // normal
           ubyte bt = cast(ubyte)sym;
-          dictPutByte(bt);
+          mixin(DictPutByteMixin);
           *dest++ = bt;
           --btleft;
         } else {
@@ -440,11 +467,13 @@ private:
           sym -= 257;
           // possibly get more bits from length code
           if (sym >= 30) throw new Exception("invalid symbol");
-          length = readBits(readBuf, lengthBits[sym], lengthBase[sym]);
+          //length = readBits(readBuf, lengthBits[sym], lengthBase[sym]);
+          mixin(ReadBitsMixin!("length", "lengthBits[sym]", "lengthBase[sym]"));
           dist = decodeSymbol(readBuf, dt);
           if (dist >= 30) throw new Exception("invalid distance");
           // possibly get more bits from distance code
-          offs = readBits(readBuf, distBits[dist], distBase[dist]);
+          //offs = readBits(readBuf, distBits[dist], distBase[dist]);
+          mixin(ReadBitsMixin!("offs", "distBits[dist]", "distBase[dist]"));
           if (offs > dictEnd) throw new Exception("invalid distance");
           // copy match
           bytesLeft = length;
@@ -463,8 +492,10 @@ private:
     while (btleft > 0 && bytesLeft > 0) {
       // copying
       scope(failure) setErrorState();
-      if (!readOneByte(readBuf, *dest)) throw new Exception("out of input data");
-      dictPutByte(*dest++);
+      //if (!readOneByte(readBuf, *dest)) throw new Exception("out of input data");
+      mixin(ReadOneByteMixin!"*dest");
+      ubyte bt = *dest++;
+      mixin(DictPutByteMixin);
       --bytesLeft;
       --btleft;
     }
@@ -478,8 +509,10 @@ private:
   ushort readU16 (scope ReadBufDg readBuf) {
     scope(failure) setErrorState();
     ubyte b0 = void, b1 = void;
-    if (!readOneByte(readBuf, b0)) throw new Exception("out of input data");
-    if (!readOneByte(readBuf, b1)) throw new Exception("out of input data");
+    //if (!readOneByte(readBuf, b0)) throw new Exception("out of input data");
+    mixin(ReadOneByteMixin!"b0");
+    //if (!readOneByte(readBuf, b1)) throw new Exception("out of input data");
+    mixin(ReadOneByteMixin!"b1");
     return cast(ushort)(b0|(b1<<8));
   }
 
@@ -517,9 +550,16 @@ private:
       state = State.EOF;
       return;
     }
-    doingFinalBlock = (getBit(readBuf) != 0); // final block flag
+    //doingFinalBlock = (getBit(readBuf) != 0); // final block flag
+    {
+      ubyte onebit = void;
+      mixin(GetBitMixin);
+      doingFinalBlock = (onebit != 0);
+    }
     // read block type (2 bits) and fix state
-    switch (readBits(readBuf, 2, 0)) {
+    ubyte btype = void;
+    mixin(ReadBitsMixin!("btype", "2", "0"));
+    switch (/*readBits(readBuf, 2, 0)*/btype) {
       case 0: processRawHeader(readBuf); break; // uncompressed block
       case 1: processFixedHeader(readBuf); break; // block with fixed huffman trees
       case 2: processDynamicHeader(readBuf); break; // block with dynamic huffman trees
