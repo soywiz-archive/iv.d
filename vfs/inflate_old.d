@@ -406,73 +406,56 @@ private:
     dtree.buildTree(lengths[hlit..hlit+hdist]);
   }
 
-  // can return zero-length slice (on state switch, for example)
-  ubyte[] processInflatedBlock (scope ReadBufDg readBuf, ubyte[] btdest) {
-    auto btleft = btdest.length;
-    ubyte* dest = btdest.ptr;
-    while (btleft > 0) {
-      if (bytesLeft > 0) {
-        // copying match; all checks already done
-        //--bytesLeft;
-        ubyte bt = dict[dictEnd-matchOfs];
-        dictPutByte(bt);
-        *dest++ = bt;
-        --bytesLeft;
-        --btleft;
+  // return true if char was read
+  bool processInflatedBlock (scope ReadBufDg readBuf, ref ubyte bt) {
+    if (bytesLeft > 0) {
+      // copying match; all checks already done
+      --bytesLeft;
+      bt = dict[dictEnd-matchOfs];
+    } else {
+      uint sym = decodeSymbol(readBuf, lt);
+      if (sym == 256) {
+        // end of block, fix state
+        state = State.ExpectBlock;
+        return false;
+      }
+      if (sym < 256) {
+        // normal
+        bt = cast(ubyte)sym;
       } else {
-        uint sym = decodeSymbol(readBuf, lt);
-        if (sym == 256) {
-          // end of block, fix state
-          state = State.ExpectBlock;
-          //return null;
-          break;
-        }
-        if (sym < 256) {
-          // normal
-          ubyte bt = cast(ubyte)sym;
-          dictPutByte(bt);
-          *dest++ = bt;
-          --btleft;
-        } else {
-          scope(failure) setErrorState();
-          // copy
-          uint dist, length, offs;
-          sym -= 257;
-          // possibly get more bits from length code
-          if (sym >= 30) throw new Exception("invalid symbol");
-          length = readBits(readBuf, lengthBits[sym], lengthBase[sym]);
-          dist = decodeSymbol(readBuf, dt);
-          if (dist >= 30) throw new Exception("invalid distance");
-          // possibly get more bits from distance code
-          offs = readBits(readBuf, distBits[dist], distBase[dist]);
-          if (offs > dictEnd) throw new Exception("invalid distance");
-          // copy match
-          bytesLeft = length;
-          matchOfs = offs;
-          //return false; // no byte read yet
-        }
+        scope(failure) setErrorState();
+        // copy
+        uint dist, length, offs;
+        sym -= 257;
+        // possibly get more bits from length code
+        if (sym >= 30) throw new Exception("invalid symbol");
+        length = readBits(readBuf, lengthBits[sym], lengthBase[sym]);
+        dist = decodeSymbol(readBuf, dt);
+        if (dist >= 30) throw new Exception("invalid distance");
+        // possibly get more bits from distance code
+        offs = readBits(readBuf, distBits[dist], distBase[dist]);
+        if (offs > dictEnd) throw new Exception("invalid distance");
+        // copy match
+        bytesLeft = length;
+        matchOfs = offs;
+        return false; // no byte read yet
       }
     }
-    return btdest[0..$-btleft];
+    return true;
   }
 
-  // can return zero-length slice (on state switch, for example)
-  ubyte[] processUncompressedBlock (scope ReadBufDg readBuf, ubyte[] btdest) {
-    auto btleft = btdest.length;
-    ubyte* dest = btdest.ptr;
-    while (btleft > 0 && bytesLeft > 0) {
+  // return true if char was read
+  bool processUncompressedBlock (scope ReadBufDg readBuf, ref ubyte bt) {
+    if (bytesLeft > 0) {
       // copying
       scope(failure) setErrorState();
-      if (!readOneByte(readBuf, *dest)) throw new Exception("out of input data");
-      dictPutByte(*dest++);
+      if (!readOneByte(readBuf, bt)) throw new Exception("out of input data");
       --bytesLeft;
-      --btleft;
+      return true;
     }
-    if (bytesLeft == 0) {
-      // end of block, fix state
-      state = State.ExpectBlock;
-    }
-    return btdest[0..$-btleft];
+    // end of block, fix state
+    state = State.ExpectBlock;
+    return false;
   }
 
   ushort readU16 (scope ReadBufDg readBuf) {
@@ -577,39 +560,28 @@ public:
   }
 
   /**
-   * Get bytes from stream.
+   * Get another byte from stream.
    *
    * Returns:
-   *  slice of `btdest`; can be zero-length
+   *  one decompressed byte in `bt` and `true`, or `false`, and `bt` is undefined
    *
    * Throws:
    *  Exception on error
    */
-  ubyte[] getBytes (scope ReadBufDg readBuf, ubyte[] btdest) {
-    usize btpos = 0;
-    while (btpos < btdest.length) {
+  bool getOneByte (scope ReadBufDg readBuf, ref ubyte bt) {
+    bool gotbyte = false;
+    do {
       final switch (state) {
-        case State.ExpectZLibHeader:
-          processZLibHeader(readBuf);
-          break;
-        case State.ExpectBlock:
-          processBlockHeader(readBuf);
-          break;
-        case State.RawBlock:
-          auto rd = processUncompressedBlock(readBuf, btdest[btpos..$]);
-          btpos += rd.length;
-          break;
-        case State.CompressedBlock:
-          auto rd = processInflatedBlock(readBuf, btdest[btpos..$]);
-          btpos += rd.length;
-          break;
-        case State.EOF: break;
+        case State.ExpectZLibHeader: processZLibHeader(readBuf); break;
+        case State.ExpectBlock: processBlockHeader(readBuf); break;
+        case State.RawBlock: gotbyte = processUncompressedBlock(readBuf, bt); break;
+        case State.CompressedBlock: gotbyte = processInflatedBlock(readBuf, bt); break;
+        case State.EOF: return false;
         case State.Dead: setErrorState(); throw new Exception("dead stream"); break;
       }
-    }
-    //DONE: MOVE THIS TO READERS!
-    //dictPutByte(bt);
-    return btdest[0..btpos];
+    } while (!gotbyte);
+    dictPutByte(bt);
+    return true;
   }
 
   /**
@@ -623,8 +595,7 @@ public:
    */
   ubyte getByte (scope ReadBufDg readBuf) {
     ubyte res = void;
-    auto rd = getBytes(readBuf, (&res)[0..1]);
-    if (rd.length == 0) throw new Exception("no more data");
+    if (!getOneByte(readBuf, res)) throw new Exception("no more data");
     return res;
   }
 
@@ -642,12 +613,17 @@ public:
    */
   T[] rawRead(T) (scope ReadBufDg readBuf, T[] buf) {
     auto len = buf.length*T.sizeof;
-    if (len == 0) return buf;
     auto dst = cast(ubyte*)buf.ptr;
-    auto rd = getBytes(readBuf, dst[0..len]);
-    // check if the last 'dest' item is fully decompressed
-    static if (T.sizeof > 1) { if (rd.length%T.sizeof) { setErrorState(); throw new Exception("partial data"); } }
-    return buf[0..rd.length/T.sizeof];
+    ubyte res = void;
+    while (len--) {
+      if (!getOneByte(readBuf, *dst)) {
+        // check if the last 'dest' item is fully decompressed
+        static if (T.sizeof > 1) { if ((cast(usize)dst-buf.ptr)%T.sizeof) { setErrorState(); throw new Exception("partial data"); } }
+        return buf[0..cast(usize)(dst-buf.ptr)];
+      }
+      ++dst;
+    }
+    return buf;
   }
 
   @property const pure nothrow @safe @nogc {
