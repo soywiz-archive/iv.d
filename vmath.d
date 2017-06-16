@@ -68,6 +68,12 @@ template ImportCoreMath(FloatType, T...) {
     else static if (is(typeof(T[0]) == string)) {
       static if (T[0] == "fabs" || T[0] == "cos" || T[0] == "sin" || T[0] == "sqrt") {
         enum InternalImport = "import core.math : "~T[0]~";"~InternalImport!(T[1..$]);
+      } else static if (T[0] == "min" || T[0] == "nmin") {
+        enum InternalImport = "static T "~T[0]~"(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }"~InternalImport!(T[1..$]);
+      } else static if (T[0] == "max" || T[0] == "nmax") {
+        enum InternalImport = "static T "~T[0]~"(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }"~InternalImport!(T[1..$]);
+      } else static if (T[0] == "isnan" || T[0] == "isfinite") {
+        enum InternalImport = "import core.stdc.math : "~T[0]~";"~InternalImport!(T[1..$]);
       } else static if (is(FloatType == float)) {
         enum InternalImport = "import core.stdc.math : "~T[0]~"="~T[0]~"f;"~InternalImport!(T[1..$]);
       } else {
@@ -723,6 +729,19 @@ const:
   bool onLeft(VT) (in auto ref VT v0, in auto ref VT v1) if (isVector!VT) {
     pragma(inline, true);
     return ((v1-v0).cross(this-v0) <= 0);
+  }
+
+  static if (dims == 2) {
+    // 2d stuff
+    // test if a point (`this`) is left/on/right of an infinite 2D line
+    // return:
+    //   <0: on the right
+    //   =0: on the line
+    //   >0: on the left
+    Float side(VT) (in auto ref VT v0, in auto ref VT v1) const if (isVector2!VT) {
+      pragma(inline, true);
+      return ((v1.x-v0.x)*(this.y-v0.y)-(this.x-v0.x)*(v1.y-v0.y));
+    }
   }
 
   // is` this` inside?
@@ -2513,6 +2532,11 @@ public nothrow @safe @nogc:
       max.y = nmax(amin.y, amax.y);
       static if (VT.Dims == 3) max.z = nmax(amin.z, amax.z);
     }
+  }
+
+  void reset () {
+    min = VT(+VT.Float.infinity, +VT.Float.infinity);
+    max = VT(-VT.Float.infinity, -VT.Float.infinity);
   }
 
   void setMinMax() (in auto ref VT amin, in auto ref VT amax) pure {

@@ -151,14 +151,17 @@ private:
   uint[2] totals = [81, 90];
 
   static uint defaultUni (uint max) @trusted nothrow @nogc {
-    import iv.prng;
-    static BJRng prng;
+    import iv.prng.pcg32;
+    static PCG32 prng;
     static bool inited = false;
     if (!inited) {
-      prng.randomize();
+      import iv.prng.seeder;
+      prng.seed(getUlongSeed, 42);
       inited = true;
     }
-    return prng.next%max; // this is not uniform, but i don't care
+    uint res = prng.front%max; // this is not uniform, but i don't care
+    prng.popFront();
+    return res;
   }
 
   uint rand (uint min, uint max) const @trusted nothrow @nogc {
@@ -852,9 +855,9 @@ unittest {
   //ng.loadFromStream(File("names.syl"));
   //ng.loadText(readText("names.txt"));
   //ng.saveToStream(File("names.syl", "w"));
-  writeln("==========="); foreach (; 0..10) writeln(ng.next, " ", ng.next);
+  writeln("==========="); foreach (immutable _; 0..10) writeln(ng.next, " ", ng.next);
   ng.setSW();
-  writeln("==========="); foreach (; 0..10) writeln(ng.next, " ", ng.next);
+  writeln("==========="); foreach (immutable _; 0..10) writeln(ng.next, " ", ng.next);
   ng.setTotro();
-  writeln("==========="); foreach (; 0..10) writeln(ng.next, " ", ng.next);
+  writeln("==========="); foreach (immutable _; 0..10) writeln(ng.next, " ", ng.next);
 }
