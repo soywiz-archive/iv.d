@@ -272,6 +272,14 @@ nothrow @safe:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  @property bool isNearZero () const nothrow @safe @nogc {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(Float, "fabs"));
+         static if (dims == 2) return (fabs(x) < EPSILON!Float && fabs(y) < EPSILON!Float);
+    else static if (dims == 3) return (fabs(x) < EPSILON!Float && fabs(y) < EPSILON!Float && fabs(z) < EPSILON!Float);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
   void set (in Float[] c...) @trusted {
     x = (c.length >= 1 ? c.ptr[0] : 0);
     y = (c.length >= 2 ? c.ptr[1] : 0);
@@ -775,12 +783,12 @@ const:
     // if `asseg` is false, "segment" is actually a line (infinite in both directions)
     Me projectToSeg(bool asseg=true) (in auto ref Me a, in auto ref Me b) {
       alias p = this;
-      auto ab = b-a; // vector from a to b
+      immutable ab = b-a; // vector from a to b
       // squared distance from a to b
-      auto absq = ab.dot(ab);
+      immutable absq = ab.dot(ab);
       if (absq == 0) return a; // a and b are the same point
-      auto ap = p-a; // vector from a to p
-      auto t = ap.dot(ab)/absq;
+      immutable ap = p-a; // vector from a to p
+      immutable t = ap.dot(ab)/absq;
       static if (asseg) {
         if (t < 0.0) return a; // "before" a on the line
         if (t > 1.0) return b; // "after" b on the line
