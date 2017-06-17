@@ -196,6 +196,7 @@ public:
   alias Me = typeof(this);
   alias Float = FloatType;
   alias Dims = dims;
+  enum Epsilon = EPSILON!Float;
 
 public:
   Float x = 0;
