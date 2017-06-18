@@ -32,6 +32,36 @@ string quote (const(char)[] s) {
 }
 
 
+/// convert integral number to number with commas
+char[] intWithCommas(T) (char[] dest, T nn, char comma=',') if (__traits(isIntegral, T)) {
+  static if (__traits(isUnsigned, T)) {
+    enum neg = false;
+    alias n = nn;
+  } else {
+    bool neg = (nn < 0);
+    static if (T.sizeof < 8) {
+      long n = -cast(long)nn;
+    } else {
+      nn = -nn;
+      if (nn < 0) nn = T.max; //FIXME
+      alias n = nn;
+    }
+  }
+  char[256] buf = void;
+  int bpos = cast(int)buf.length;
+  int leftToComma = 3;
+  do {
+    if (leftToComma-- == 0) { buf[--bpos] = comma; leftToComma = 2; }
+    buf[--bpos] = cast(char)('0'+n%10);
+  } while ((n /= 10) != 0);
+  if (neg) buf[--bpos] = '-';
+  auto len = buf.length-bpos;
+  if (len > dest.length) len = dest.length;
+  dest[0..len] = buf[bpos..bpos+len];
+  return dest[0..len];
+}
+
+
 char tolower (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch-'A'+'a') : ch); }
 char toupper (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'a' && ch <= 'z' ? cast(char)(ch-'a'+'A') : ch); }
 

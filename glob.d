@@ -29,7 +29,7 @@ import core.sys.linux.config : __USE_GNU, __USE_MISC;
 
 //static assert(__USE_MISC);
 
-@trusted nothrow @nogc extern(C) {
+nothrow @trusted @nogc extern(C) {
 
 /* Bits set in the FLAGS argument to `glob'.  */
 enum {
@@ -237,7 +237,8 @@ private:
   }
 
   public static struct Item {
-  @trusted nothrow @nogc: // ah, let's dance!
+  public import core.sys.posix.sys.types : INode = ino_t;
+  nothrow @trusted @nogc: // ah, let's dance!
   private:
     globent* ge;
     usize idx;
@@ -257,14 +258,63 @@ private:
 
     // WARNING! this can escape!
     @property const(char)[] name () pure const return {
-      usize pos = 0;
-      auto ptr = ge.gb.gl_pathv[idx];
-      while (ptr[pos]) ++pos;
-      return ptr[0..pos];
+      if (idx < ge.gb.gl_pathc) {
+        usize pos = 0;
+        auto ptr = ge.gb.gl_pathv[idx];
+        while (ptr[pos]) ++pos;
+        return ptr[0..pos];
+      } else {
+        return "";
+      }
+    }
+
+    // WARNING! this can escape!
+    @property const(char)[] basename () pure const return {
+      if (idx < ge.gb.gl_pathc) {
+        usize pos = 0;
+        auto ptr = ge.gb.gl_pathv[idx];
+        while (ptr[pos]) ++pos;
+        usize epos = pos;
+        while (pos > 0 && ptr[pos-1] != '/') --pos;
+        return ptr[pos..epos];
+      } else {
+        return "";
+      }
     }
 
     @property bool prev () { if (idx > 0) { --idx; return true; } else return false; }
     @property bool next () { if (idx < ge.gb.gl_pathc) { ++idx; return true; } else return false; }
+
+    private bool checkStatFlag (uint flag) const {
+      if (idx < ge.gb.gl_pathc) {
+        import core.sys.posix.sys.stat;
+        stat_t st = void;
+        if (stat(ge.gb.gl_pathv[idx], &st) == 0) return ((st.st_mode&flag) != 0);
+      }
+      return false;
+    }
+
+    @property bool isFile () const { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFREG); }
+    @property bool isDir () const { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFDIR); }
+    @property bool isLink () const { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFLNK); }
+
+    @property ulong size () const {
+      if (idx < ge.gb.gl_pathc) {
+        import core.sys.posix.sys.stat;
+        stat_t st = void;
+        if (stat(ge.gb.gl_pathv[idx], &st) == 0) return st.st_size;
+      }
+      return 0;
+    }
+
+    @property INode inode () const {
+      if (idx < ge.gb.gl_pathc) {
+        import core.sys.posix.sys.stat;
+        stat_t st = void;
+        if (stat(ge.gb.gl_pathv[idx], &st) == 0) return st.st_size;
+      }
+      return 0;
+    }
   }
 
   static void incref (globent* ge) @safe nothrow @nogc {
@@ -304,14 +354,19 @@ private:
 private void[128] stestore_;
 
 // only Errors for now as those are rarely chained
-private T staticError(T, Args...) (auto ref Args args) if (is(T : Error)) {
+private T staticError(T, Args...) (auto ref Args args) @nogc if (is(T : Error)) {
   // pure hack, what we actually need is @noreturn and allow to call that in pure functions
   static T get () {
     static assert(__traits(classInstanceSize, T) <= stestore_.length, T.stringof~" is too large for staticError()");
     stestore_[0..__traits(classInstanceSize, T)] = typeid(T).initializer[];
-    return cast(T) stestore_.ptr;
+    return cast(T)stestore_.ptr;
   }
-  auto res = (cast(T function() @trusted pure nothrow @nogc) &get)();
-  res.__ctor(args);
+  auto res = (cast(T function () pure nothrow @trusted @nogc) &get)();
+  void doInit () { res.__ctor(args); }
+  void initIt (scope void delegate () dg) {
+    auto xinit = cast(void delegate () pure nothrow @trusted @nogc)dg;
+    xinit();
+  }
+  initIt(&doInit);
   return res;
 }
