@@ -333,6 +333,14 @@ public:
         while (spos <= le) gb.hi(spos++) = st;
         continue mainloop;
       }
+      // cougar single-line comment?
+      if (ch == ';' && (opt&Opt.CougarSingleComment)) {
+        gb.hi(spos++) = HS(HiCommentOneLine);
+        gb.hi(spos++) = HS(HiCommentOneLine);
+        st = HS(HiCommentOneLine);
+        while (spos <= le) gb.hi(spos++) = st;
+        continue mainloop;
+      }
       // multiline comment?
       if (ch == '/' && (opt&Opt.CMultiComment) && gb[spos+1] == '*') {
         gb.hi(spos++) = HS(HiCommentMulti);
@@ -446,6 +454,43 @@ public:
         }
         continue mainloop;
       }
+      // cougar char?
+      //FIXME
+      if (ch == '#' && (opt&Opt.CougarCharLiteral) /*&& (spos-1 < ls || gb[spos-1] == '\\')*/) {
+        auto xsp = spos;
+        ++spos;
+        auto len = skipStrChar!(true, true)();
+        if (len > 0) {
+          st = HS(HiCharSpecial);
+          spos = xsp;
+          gb.hi(spos++) = st;
+          while (len--) gb.hi(spos++) = st;
+          st = HS(HiText);
+          continue mainloop;
+        }
+      }
+      // "cXr"
+      if ((opt&Opt.MaximumTokens) && gb[spos] == 'c') {
+        auto epos = spos+1;
+        int cnt = 0;
+        while (epos <= le) {
+          ch = gb[epos];
+          if (ch != 'a' && ch != 'd') break;
+          ++epos;
+          ++cnt;
+        }
+        if (epos <= le && cnt > 1 && gb[epos] == 'r') {
+          ch = gb[++epos];
+          if (ch <= ' ' || ch == '(' || ch == ')' || ch == ';' ||
+              (ch == '/' && (gb[epos+1] == '*' || gb[epos+1] == '+' || gb[epos+1] == '/')))
+          {
+            st = HS(HiKeyword);
+            foreach (immutable _; spos..epos) gb.hi(spos++) = st;
+            continue mainloop;
+          }
+        }
+        // nope
+      }
       // identifier/keyword?
       if (ch.isalpha || ch == '_') {
         auto tmach = tks.start();
@@ -453,7 +498,15 @@ public:
         ubyte stx = 0;
         while (epos <= le) {
           ch = gb[epos];
-          if (ch != '_' && !ch.isalnum) break;
+          if (!(opt&Opt.MaximumTokens)) {
+            if (ch != '_' && !ch.isalnum) break;
+          } else {
+            if (ch <= ' ' || ch == '(' || ch == ')' || ch == ';' ||
+                (ch == '/' && (gb[epos+1] == '*' || gb[epos+1] == '+' || gb[epos+1] == '/')))
+            {
+              break;
+            }
+          }
           stx = tmach.advance(ch);
           ++epos;
         }
@@ -854,6 +907,10 @@ public:
     // string options
     SQStringNoEscape = 1U<<19, // no escapes are allowed in single-quoted strings
     DQStringNoEscape = 1U<<20, // no escapes are allowed in double-quoted strings
+    // cougar options
+    CougarSingleComment = 1U<<21,
+    CougarCharLiteral = 1U<<22,
+    MaximumTokens = 1U<<23,
   }
   static assert(Opt.max <= uint.max);
 
@@ -912,6 +969,9 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.CaseInsensitive|
       //Opt.SQStringNoEscape|
       //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
       0
     );
 
@@ -1162,6 +1222,9 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.CaseInsensitive|
       //Opt.SQStringNoEscape|
       //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
       0
     );
 
@@ -1278,6 +1341,9 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.CaseInsensitive|
       //Opt.SQStringNoEscape|
       //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
       0
     );
 
@@ -1382,6 +1448,9 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.CaseInsensitive|
       Opt.SQStringNoEscape|
       //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
       0
     );
 
@@ -1461,6 +1530,9 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.CaseInsensitive|
       //Opt.SQStringNoEscape|
       //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
       0
     );
 
@@ -1603,6 +1675,9 @@ public class EdHiTokensSQL : EdHiTokens {
       Opt.CaseInsensitive|
       Opt.SQStringNoEscape|
       Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
       0
     );
 
@@ -1920,6 +1995,9 @@ public class EdHiTokensHtml : EdHiTokens {
       Opt.CaseInsensitive|
       Opt.SQStringNoEscape|
       Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
       0
     );
 
@@ -2067,6 +2145,133 @@ public class EdHiTokensHtml : EdHiTokens {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public class EdHiTokensCougar : EdHiTokens {
+  this () {
+    super(
+      //Opt.Num0b|
+      //Opt.Num0o|
+      //Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      //Opt.SQString|
+      Opt.DQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.SQChar|
+      Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      //Opt.SqlSingleComment|
+      //Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      Opt.ShellSigil|
+      //Opt.CaseInsensitive|
+      //Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
+      Opt.CougarSingleComment|
+      Opt.CougarCharLiteral|
+      Opt.MaximumTokens|
+      0
+    );
+
+    addToken("nil", HiType);
+    addToken("true", HiType);
+    addToken("PI", HiType);
+
+    addToken("quote", HiKeyword);
+    addToken("lambda", HiBuiltin);
+    addToken("defun", HiKeyword);
+    addToken("define", HiKeyword);
+    addToken("car", HiKeyword);
+    addToken("cdr", HiKeyword);
+    addToken("mk-list", HiKeyword);
+    addToken("set-car!", HiInternal);
+    addToken("set-cdr!", HiInternal);
+    addToken("cons", HiKeyword);
+    addToken("while", HiKeyword);
+    addToken("break", HiKeywordHi);
+    addToken("continue", HiKeywordHi);
+    addToken("set!", HiInternal);
+    addToken("gset!", HiInternal);
+    addToken("begin", HiKeyword);
+    addToken("return", HiKeywordHi);
+    addToken("if", HiKeyword);
+    addToken("cond", HiKeyword);
+    addToken("and", HiKeyword);
+    addToken("or", HiKeyword);
+    addToken("not", HiKeyword);
+    addToken("let", HiKeywordHi);
+    addToken("let*", HiKeywordHi);
+
+    addToken("apply", HiKeyword);
+    addToken("call", HiKeyword);
+
+    addToken("eq?", HiSpecial);
+    addToken("nil?", HiSpecial);
+    addToken("number?", HiSpecial);
+    addToken("symbol?", HiSpecial);
+    addToken("cons?", HiSpecial);
+    addToken("lambda?", HiSpecial);
+    addToken("array?", HiSpecial);
+    addToken("string?", HiSpecial);
+    addToken("cons-or-nil?", HiSpecial);
+
+
+    addToken("min", HiKeyword);
+    addToken("max", HiKeyword);
+
+
+    addToken("sqrt", HiKeyword);
+    addToken("abs", HiKeyword);
+
+    addToken("sin", HiKeyword);
+    addToken("cos", HiKeyword);
+    addToken("tan", HiKeyword);
+    addToken("atan", HiKeyword);
+    addToken("floor", HiKeyword);
+    addToken("ceil", HiKeyword);
+    addToken("trunc", HiKeyword);
+
+    addToken("atan2", HiKeyword);
+
+    addToken("new-array", HiKeyword);
+    addToken("new-string", HiKeyword);
+    addToken("length", HiKeyword);
+    addToken("slice", HiKeyword);
+    addToken("a-get", HiKeyword);
+    addToken("a-set!", HiInternal);
+
+
+    addToken("=", HiPunct);
+    addToken("==", HiPunct);
+    addToken("<>", HiPunct);
+    addToken("!=", HiPunct);
+    addToken(">", HiPunct);
+    addToken("<", HiPunct);
+    addToken(">=", HiPunct);
+    addToken("<=", HiPunct);
+
+    addToken("+", HiPunct);
+    addToken("-", HiPunct);
+    addToken("*", HiPunct);
+    addToken("/", HiPunct);
+    addToken("%", HiPunct);
+
+    addToken("(", HiPunct);
+    addToken(")", HiPunct);
+    addToken("{", HiPunct);
+    addToken("}", HiPunct);
+    addToken("[", HiPunct);
+    addToken("]", HiPunct);
+
+    addToken(".", HiInternal);
+    addToken("'", HiInternal);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 // new higlighter instance for the file with the given extension
 public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullname) {
   if (ext.strEquCI(".d")) {
@@ -2103,6 +2308,11 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
     __gshared EdHiTokensSQL toksql;
     if (toksql is null) toksql = new EdHiTokensSQL();
     return new EditorHLExt(toksql);
+  }
+  if (ext.strEquCI(".lsp") || ext.strEquCI(".cgr")) {
+    __gshared EdHiTokensCougar tokcougar;
+    if (tokcougar is null) tokcougar = new EdHiTokensCougar();
+    return new EditorHLExt(tokcougar);
   }
   auto bnpos = fullname.length;
   while (bnpos > 0 && fullname.ptr[bnpos-1] != '/') --bnpos;
