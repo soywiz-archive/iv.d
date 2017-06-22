@@ -1,19 +1,59 @@
 // WTFPL or Public Domain, on your choice
 module iv.glbinds.binds_full_mixin /*is aliced*/;
-import iv.alice;
+//import iv.alice;
 
 // lazy loading
-version = glbind_lazy_load;
+//version = glbind_lazy_load;
 
 // show loaded functions
 //version = glbind_debug;
 
 
-public import arsd.simpledisplay;
+//public import arsd.simpledisplay;
+// ////////////////////////////////////////////////////////////////////////// //
+nothrow @nogc {
+version(Windows) {
+  pragma(lib, "opengl32");
+  private void* glbindGetProcAddress (const(char)* name) {
+    import core.sys.windows.wingdi : wglGetProcAddress;
+    void* res = wglGetProcAddress(name);
+    if (res is null) {
+      import core.sys.windows.windef, core.sys.windows.winbase;
+      static HINSTANCE dll = null;
+      if (dll is null) {
+        dll = LoadLibraryA("opengl32.dll");
+        if (dll is null) return null; // <32, but idc
+      }
+      return GetProcAddress(dll, name);
+    }
+    return res;
+  }
+} else {
+  pragma(lib, "GL");
+  extern(C) {
+    void* glXGetProcAddress (const(char)* name);
+    alias glbindGetProcAddress = glXGetProcAddress;
+  }
+}
+
+public bool glHasFunction (const(char)[] name) {
+  if (name.length == 0 || name.length > 255) return false; // arbitrary limit
+  char[256] xname = 0;
+  xname[0..name.length] = name[];
+  return (glbindGetProcAddress(xname.ptr) !is null);
+}
+
+// convenient template checker
+public bool glHasFunc(string name) () {
+  static int flag = -1;
+  if (flag < 0) flag = (glHasFunction(name) ? 1 : 0);
+  return (flag == 1);
+}
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-extern(C) nothrow @nogc {
+extern(System) nothrow @nogc {
 
 alias GLvoid = void;
 alias GLintptr = ptrdiff_t;
@@ -7854,65 +7894,129 @@ alias glbfn_glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN = void func
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-version(glbind_lazy_load) {
-  private string glbindCreateInternalVars () {
-    string res;
-    foreach (name; __traits(allMembers, mixin(__MODULE__))) {
-      static if (name.length > 6 && name[0..6] == "glbfn_") {
-        //pragma(msg, mixin(name));
-        import std.traits;
-        //pragma(msg, ReturnType!(mixin(name)));
-        //pragma(msg, Parameters!(mixin(name)));
-        // create pointer
-        string pars, call;
-        foreach (immutable idx, immutable ptype; Parameters!(mixin(name))) {
-          import std.conv : to;
-          pars ~= ", "~ptype.stringof~" a"~to!string(idx);
-          call ~= "a"~to!string(idx)~",";
-        }
-        if (pars.length) pars = pars[2..$];
-        res ~= "__gshared "~name~" "~name[6..$]~" = function "~
-          ReturnType!(mixin(name)).stringof~" "~
-          /*Parameters!(mixin(name)).stringof*/"("~pars~") nothrow{\n"~
-          // build loader
-          "  "~name[6..$]~" = cast("~name~")glGetProcAddress(`"~name[6..$]~"`);\n"~
-          "  if ("~name[6..$]~" is null) assert(0, `OpenGL function '"~name[6..$]~"' not found!`);\n"~
-          "  version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, \"GLBIND: '"~name[6..$]~"'\\n\"); }\n"~
-          "  "~(is(ReturnType!(mixin(name)) == void) ? "" : "return ")~name[6..$]~"("~call~");\n"~
-          //"  assert(0, `"~name[6..$]~"`);\n"~
-          "};\n";
-      }
-    }
-    return res;
+mixin(/*glbindCreateInternalVars*/ () {
+  alias glID(T...) = T[0];
+  char[] resbuf = new char[](1024*1024+1025*512);
+  int respos = 0;
+  void put (const(char)[] s...) {
+    assert(resbuf.length-respos >= s.length);
+    resbuf[respos..respos+s.length] = s[];
+    respos += cast(int)s.length;
   }
-} else {
-  private string glbindCreateInternalVars () {
-    string res;
-    foreach (name; __traits(allMembers, mixin(__MODULE__))) {
-      static if (name.length > 6 && name[0..6] == "glbfn_") {
-        //pragma(msg, name);
-        // create pointer
-        res ~= "__gshared "~name~" "~name[6..$]~";\n";
-      }
-    }
-    return res;
+  void putuint (uint n) {
+    if (n > 99) assert(0, "oops");
+    put(cast(char)('0'+(n/10)%10));
+    put(cast(char)('0'+n%10));
   }
-}
-mixin(glbindCreateInternalVars());
-
-
-public void glbindLoadFunctions () {
-  version(glbind_lazy_load) {} else {
-  foreach (name; __traits(allMembers, mixin(__MODULE__))) {
+  put("extern(System) nothrow @nogc:\n\n");
+  foreach (string name; __traits(allMembers, mixin(__MODULE__))) {
+    pragma(msg, name);
     static if (name.length > 6 && name[0..6] == "glbfn_") {
-      //pragma(msg, name);
-      // load function
-      mixin(name[6..$]~" = cast("~name~")glGetProcAddress(`"~name[6..$]~"`);");
-      mixin("if ("~name[6..$]~" is null) assert(0, `OpenGL function '"~name[6..$]~"' not found!`);");
+      /*
+      __gshared glbfn_glCullFace glCullFace = function void (uint a0) nothrow @nogc {
+        glbfn_glCullFace_loader(a0,);
+      };
+      private auto glbfn_glCullFace_loader (uint a0) nothrow @nogc {
+        glCullFace = cast(glbfn_glCullFace)glbindGetProcAddress(`glCullFace`);
+        if (glCullFace is null) assert(0, `OpenGL function 'glCullFace' not found!`);
+        glCullFace(a0,);
+      }
+      */
+
+      //alias Pars = Parameters!(mixin(name));
+      //alias RT = ReturnType!(mixin(name));
+
+      static if (is(glID!(__traits(getMember, mixin(__MODULE__), name)) FP : FP*) && is(FP == function)) {
+        static if (is(FP RT == return)) {
+          alias RetType = RT;
+          static if (is(FP P == function)) {
+            alias Pars = P;
+          } else {
+            static assert(0, "wtf2?!");
+          }
+        } else {
+          static assert(0, "wtf0?!");
+        }
+      } else {
+        static assert(0, "wtf1?!");
+      }
+
+      put("__gshared ");
+      put(name);
+      put(" ");
+      put(name[6..$]);
+      put(" = function ");
+      put(RT.stringof);
+      put(" (");
+      // params
+      foreach (immutable idx, immutable ptype; Pars) {
+        if (idx != 0) put(",");
+        put(ptype.stringof);
+        put(" a");
+        putuint(cast(uint)idx);
+      }
+      put(") {\n"); //nothrow @nogc {\n");
+      // build loader call
+      put("  ");
+      static if (!is(RT == void)) put("return ");
+      put(name);
+      put("_loader(");
+      foreach (immutable idx, immutable ptype; Pars) {
+        put("a");
+        putuint(idx);
+        put(",");
+      }
+      put(");\n};\n");
+      // build loader
+      put("private ");
+      put(RT.stringof);
+      put(" ");
+      put(name);
+      put("_loader (");
+      // params
+      foreach (immutable idx, immutable ptype; Pars) {
+        if (idx != 0) put(",");
+        put(ptype.stringof);
+        put(" a");
+        putuint(cast(uint)idx);
+      }
+      put(") {\n"); //nothrow @nogc {\n");
+      put("  ");
+      put(name[6..$]);
+      put(" = cast(");
+      put(name);
+      put(")glbindGetProcAddress(`");
+      put(name[6..$]);
+      put("`);\n");
+      put("  if (");
+      put(name[6..$]);
+      put(" is null) assert(0, `OpenGL function '");
+      put(name[6..$]);
+      put("' not found!`);\n");
+      //put("  version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, \"GLBIND: '"); put(name[6..$]); put("'\\n\"); }\n");
+      put("  ");
+      static if (!is(RT == void)) put("return ");
+      put(name[6..$]);
+      put("(");
+      // call
+      foreach (immutable idx, immutable ptype; Pars) {
+        put("a");
+        putuint(idx);
+        put(",");
+      }
+      put(");\n");
+      put("};\n");
     }
   }
-  }
-}
+  return cast(string)resbuf[0..respos];
+}());
+
+//mixin(glbindCreateInternalVars());
+/*
+pragma(msg, glbindCreateInternalVars());
+extern(C) nothrow @nogc { mixin(glbindCreateInternalVars()); }
+pragma(msg, glbindCreateInternalVars());
+*/
 
 
-//void main () { glbindLoadFunctions(); }
+//pragma(msg, "done...");
