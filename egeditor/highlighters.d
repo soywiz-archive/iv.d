@@ -2203,6 +2203,8 @@ public class EdHiTokensCougar : EdHiTokens {
     addToken("not", HiKeyword);
     addToken("let", HiKeywordHi);
     addToken("let*", HiKeywordHi);
+    addToken("else", HiSpecial);
+    addToken("case", HiKeyword);
 
     addToken("apply", HiKeyword);
     addToken("call", HiKeyword);
