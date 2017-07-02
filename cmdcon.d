@@ -1103,8 +1103,30 @@ public:
   alias ArgCompleteCB = void delegate (ConCommand self); /// prototype for argument completion callback
 
 private:
-  __gshared char[] wordBuf; // buffer for `getWord()`
+  __gshared usize wordBufMem; // buffer for `getWord()`
+  __gshared uint wordBufUsed, wordBufSize;
   ArgCompleteCB argcomplete; // this delegate will be called to do argument autocompletion
+
+  static void wbReset () nothrow @trusted @nogc { pragma(inline, true); wordBufUsed = 0; }
+
+  static void wbPut (const(char)[] s...) nothrow @trusted @nogc {
+    if (s.length == 0) return;
+    if (s.length > int.max/4) assert(0, "oops: console command too long");
+    if (wordBufUsed+cast(uint)s.length > int.max/4) assert(0, "oops: console command too long");
+    // grow wordbuf, if necessary
+    if (wordBufUsed+cast(uint)s.length > wordBufSize) {
+      import core.stdc.stdlib : realloc;
+      wordBufSize = ((wordBufUsed+cast(uint)s.length)|0x3fff)+1;
+      auto newmem = cast(usize)realloc(cast(void*)wordBufMem, wordBufSize);
+      if (newmem == 0) assert(0, "cmdcon: out of memory");
+      wordBufMem = cast(usize)newmem;
+    }
+    assert(wordBufUsed+cast(uint)s.length <= wordBufSize);
+    (cast(char*)(wordBufMem+wordBufUsed))[0..s.length] = s;
+    wordBufUsed += cast(uint)s.length;
+  }
+
+  static @property const(char)[] wordBuf () nothrow @trusted @nogc { pragma(inline, true); return (cast(char*)wordBufMem)[0..wordBufUsed]; }
 
 public:
   string name; ///
@@ -1142,6 +1164,7 @@ static:
    * `*strtemp` will be `true` if temporary string storage was used.
    */
   ConString getWord (ref ConString s, bool *strtemp=null) {
+    wbReset();
     if (strtemp !is null) *strtemp = false;
     usize pos;
     while (s.length > 0 && s.ptr[0] <= ' ') s = s[1..$];
@@ -1164,23 +1187,24 @@ static:
         return res;
       }
       if (strtemp !is null) *strtemp = true;
-      wordBuf.assumeSafeAppend.length = pos;
-      if (pos) wordBuf[0..pos] = s[0..pos];
+      //wordBuf.assumeSafeAppend.length = pos;
+      //if (pos) wordBuf[0..pos] = s[0..pos];
+      if (pos) wbPut(s[0..pos]);
       // process special chars
       while (pos < s.length && s.ptr[pos] != qch) {
         if (s.ptr[pos] == '\\' && s.length-pos > 1) {
           ++pos;
           switch (s.ptr[pos++]) {
-            case '"': case '\'': case '\\': wordBuf ~= s.ptr[pos-1]; break;
-            case '0': wordBuf ~= '\x00'; break;
-            case 'a': wordBuf ~= '\a'; break;
-            case 'b': wordBuf ~= '\b'; break;
-            case 'e': wordBuf ~= '\x1b'; break;
-            case 'f': wordBuf ~= '\f'; break;
-            case 'n': wordBuf ~= '\n'; break;
-            case 'r': wordBuf ~= '\r'; break;
-            case 't': wordBuf ~= '\t'; break;
-            case 'v': wordBuf ~= '\v'; break;
+            case '"': case '\'': case '\\': wbPut(s.ptr[pos-1]); break;
+            case '0': wbPut('\x00'); break;
+            case 'a': wbPut('\a'); break;
+            case 'b': wbPut('\b'); break;
+            case 'e': wbPut('\x1b'); break;
+            case 'f': wbPut('\f'); break;
+            case 'n': wbPut('\n'); break;
+            case 'r': wbPut('\r'); break;
+            case 't': wbPut('\t'); break;
+            case 'v': wbPut('\v'); break;
             case 'x': case 'X':
               int n = 0;
               foreach (immutable _; 0..2) {
@@ -1189,13 +1213,13 @@ static:
                 if (digit(c2, 16) < 0) throw exBadHexEsc;
                 n = n*16+digit(c2, 16);
               }
-              wordBuf ~= cast(char)n;
+              wbPut(cast(char)n);
               break;
             default: throw exBadEscChar;
           }
           continue;
         }
-        wordBuf ~= s.ptr[pos++];
+        wbPut(s.ptr[pos++]);
       }
       if (pos < s.length) ++pos; // skip closing quote
       s = s[pos..$];
@@ -2193,6 +2217,18 @@ private void heapsort(alias lessfn, T) (T[] arr) {
 }
 
 
+private void conUnsafeArrayAppend(T) (ref T[] arr, auto ref T v) /*nothrow*/ {
+  if (arr.length >= int.max/2) assert(0, "too many elements in array");
+  auto optr = arr.ptr;
+  arr ~= v;
+  if (arr.ptr !is optr) {
+    import core.memory : GC;
+    optr = arr.ptr;
+    if (optr is GC.addrOf(optr)) GC.setAttr(optr, GC.BlkAttr.NO_INTERIOR);
+  }
+}
+
+
 private void addName (string name) {
   //{ import core.stdc.stdio; printf("%.*s\n", cast(uint)name.length, name.ptr); }
   // ascii only
@@ -2214,7 +2250,8 @@ private void addName (string name) {
 
   if (name.length == 0) return;
   if (name !in cmdlist) {
-    cmdlistSorted ~= name;
+    //cmdlistSorted ~= name;
+    cmdlistSorted.conUnsafeArrayAppend(name);
     heapsort!strLessCI(cmdlistSorted);
   }
 }
