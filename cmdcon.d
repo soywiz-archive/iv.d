@@ -1680,6 +1680,58 @@ version(contest_parser) unittest {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// console alias
+public final class ConAlias {
+private:
+  public import std.conv : ConvOverflowException;
+  __gshared ConvOverflowException exAliasTooBig;
+  __gshared ConvOverflowException exAliasTooDeep;
+
+  shared static this () {
+    exAliasTooBig = new ConvOverflowException("alias text too big");
+    exAliasTooDeep = new ConvOverflowException("alias expansion too deep");
+  }
+
+  usize textmem;
+  uint textsize;
+  uint allocsize;
+
+  this (const(char)[] atext) @nogc {
+    set(atext);
+  }
+
+  ~this () {
+    import core.stdc.stdlib : free;
+    if (textmem != 0) free(cast(void*)textmem);
+  }
+
+  const(char)[] get () nothrow @trusted @nogc { pragma(inline, true); return (textmem != 0 ? (cast(char*)textmem)[0..textsize] : null); }
+
+  void set (const(char)[] atext) @nogc {
+    if (atext.length > 65535) throw exAliasTooBig;
+    // realloc
+    if (atext.length > allocsize) {
+      import core.stdc.stdlib : realloc;
+      uint newsz;
+           if (atext.length <= 4096) newsz = 4096;
+      else if (atext.length <= 8192) newsz = 8192;
+      else if (atext.length <= 16384) newsz = 16384;
+      else if (atext.length <= 32768) newsz = 32768;
+      else newsz = 65536;
+      assert(newsz >= atext.length);
+      auto newmem = cast(usize)realloc(cast(void*)textmem, newsz);
+      if (newmem == 0) assert(0, "out of memory for alias"); //FIXME
+      textmem = newmem;
+      allocsize = newsz;
+    }
+    assert(allocsize >= atext.length);
+    textsize = cast(uint)atext.length;
+    (cast(char*)textmem)[0..textsize] = atext;
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// convar attributes
 public enum ConVarAttr : uint {
   None = 0, ///
@@ -2100,7 +2152,7 @@ version(contest_vars) unittest {
 }
 
 
-void addName (string name) {
+private void addName (string name) {
   if (name.length == 0) return;
   if (name !in cmdlist) {
     import std.algorithm : sort;
@@ -2111,7 +2163,7 @@ void addName (string name) {
 }
 
 
-void enumComplete(T) (ConCommand self) if (is(T == enum)) {
+private void enumComplete(T) (ConCommand self) if (is(T == enum)) {
   auto cs = conInputBuffer[0..conInputBufferCurX];
   ConCommand.getWord(cs); // skip command
   while (cs.length && cs[0] <= ' ') cs = cs[1..$];
@@ -2161,7 +2213,7 @@ void enumComplete(T) (ConCommand self) if (is(T == enum)) {
 }
 
 
-void boolComplete(T) (ConCommand self) if (is(T == bool)) {
+private void boolComplete(T) (ConCommand self) if (is(T == bool)) {
   auto cs = conInputBuffer[0..conInputBufferCurX];
   ConCommand.getWord(cs); // skip command
   while (cs.length && cs[0] <= ' ') cs = cs[1..$];
@@ -2521,7 +2573,7 @@ public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn)
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared ConCommand[string] cmdlist;
+__gshared /*ConCommand*/Object[string] cmdlist; // ConCommand or ConAlias
 __gshared string[] cmdlistSorted;
 
 
@@ -2533,18 +2585,21 @@ __gshared string[] cmdlistSorted;
  * `conAddInputChar()` itself to put new chars into buffer.
  */
 void conSetArgCompleter (ConString cmdname, ConCommand.ArgCompleteCB ac) {
-  if (auto cp = cmdname in cmdlist) (*cp).argcomplete = ac;
+  if (auto cp = cmdname in cmdlist) {
+    if (auto cmd = cast(ConCommand)(*cp)) cmd.argcomplete = ac;
+  }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // all following API is thread-unsafe, if the opposite is not written
 public bool conHasCommand (ConString name) { pragma(inline, true); return ((name in cmdlist) !is null); } /// check if console has a command with a given name (thread-unsafe)
+public bool conHasAlias (ConString name) { if (auto cc = name in cmdlist) return (cast(ConAlias)(*cc) !is null); else return false; } /// check if console has an alias with a given name (thread-unsafe)
 public bool conHasVar (ConString name) { if (auto cc = name in cmdlist) return (cast(ConVarBase)(*cc) !is null); else return false; } /// check if console has a variable with a given name (thread-unsafe)
 
 /// known console commands (funcs and vars) range (thread-unsafe)
 /// type: "all", "vars", "funcs"
-public auto conByCommand(string type="all") () if (type == "all" || type == "vars" || type == "funcs") {
+public auto conByCommand(string type="all") () if (type == "all" || type == "vars" || type == "funcs" || type == "aliases") {
   static struct Range(string type) {
   private:
     usize idx;
@@ -2559,6 +2614,9 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
       } else static if (type == "funcs") {
         while (stidx < cmdlistSorted.length && (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[stidx]]) is null) ++stidx;
         idx = stidx;
+      } else static if (type == "aliases") {
+        while (stidx < cmdlistSorted.length && (cast(ConAlias)cmdlist[cmdlistSorted.ptr[stidx]]) is null) ++stidx;
+        idx = stidx;
       } else {
         static assert(0, "wtf?!");
       }
@@ -2569,6 +2627,7 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
     @property string front() () { pragma(inline, true); return (idx < cmdlistSorted.length ? cmdlistSorted.ptr[idx] : null); }
     @property bool frontIsVar() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConVarBase)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
     @property bool frontIsFunc() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
+    @property bool frontIsAlias() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConAlias)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
     void popFront () {
       static if (type == "all") {
        pragma(inline, true);
@@ -2579,6 +2638,9 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
       } else static if (type == "funcs") {
         ++idx;
         while (idx < cmdlistSorted.length && (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[idx]]) is null) ++idx;
+      } else static if (type == "aliases") {
+        ++idx;
+        while (idx < cmdlistSorted.length && (cast(ConAlias)cmdlist[cmdlistSorted.ptr[idx]]) is null) ++idx;
       } else {
         static assert(0, "wtf?!");
       }
@@ -2666,22 +2728,46 @@ public void conUnsealVar (ConVarBase v) {
 
 /// execute console command (thread-safe)
 public void conExecute (ConString s) {
-  auto ss = s;
+  auto ss = s; // anchor it
   consoleLock();
   scope(exit) consoleUnlock();
-  try {
+
+  enum MaxAliasExpand = 256*1024; // 256KB
+
+  void conExecuteInternal (ConString s, int aliassize) {
     auto w = ConCommand.getWord(s);
     if (w is null) return;
-    if (auto cmd = w in cmdlist) {
-      while (s.length && s.ptr[0] <= 32) s = s[1..$];
-      //conwriteln("'", s, "'");
-      (*cmd).exec(s);
+    if (auto cobj = w in cmdlist) {
+      if (auto cmd = cast(ConCommand)(*cobj)) {
+        // execute command
+        while (s.length && s.ptr[0] <= 32) s = s[1..$];
+        //conwriteln("'", s, "'");
+        cmd.exec(s);
+      } else if (auto ali = cast(ConAlias)(*cobj)) {
+        // execute alias
+        //TODO: alias arguments
+        auto atext = ali.get;
+        //conwriteln("ALIAS: '", w, "': '", atext, "'");
+        if (atext.length) {
+          if (aliassize+atext.length > MaxAliasExpand) throw ConAlias.exAliasTooDeep;
+          conExecuteInternal(atext, aliassize+cast(int)atext.length);
+        }
+      } else {
+        conwrite("command ");
+        ConCommand.writeQuotedString(w);
+        conwrite(" is of unknown type (internal error)");
+        conwrite("\n");
+      }
     } else {
       conwrite("command ");
       ConCommand.writeQuotedString(w);
       conwrite(" not found");
       conwrite("\n");
     }
+  }
+
+  try {
+    conExecuteInternal(s, 0);
   } catch (Exception) {
     conwriteln("error executing console command:\n ", s);
   }
@@ -2806,7 +2892,7 @@ public class ConCommandEcho : ConCommand {
 
   override void exec (ConString cmdline) {
     if (checkHelp(cmdline)) { showHelp; return; }
-    if (!hasArgs(cmdline)) return;
+    if (!hasArgs(cmdline)) { conwriteln; return; }
     bool needSpace = false;
     for (;;) {
       auto w = getWord(cmdline);
@@ -2867,6 +2953,60 @@ public class ConCommandEcho : ConCommand {
       }
     }
     conwrite("\n");
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// console always has "alias" command, no need to register it.
+public class ConCommandAlias : ConCommand {
+  this () { super("alias", "set or remove alias"); }
+
+  override void exec (ConString cmdline) {
+    if (checkHelp(cmdline)) { showHelp; return; }
+    if (!hasArgs(cmdline)) { conwriteln("alias what?"); return; }
+
+    auto name = getWord(cmdline);
+    if (name is null || name.length == 0) { conwriteln("alias what?"); return; }
+    if (name.length > 128) { conwriteln("alias name too long: ", name); return; }
+
+    char[129] nbuf = void;
+    nbuf[0..name.length] = name;
+    const(char)[] xname = nbuf[0..name.length];
+
+    // alias value
+    auto v = getWord(cmdline);
+    while (v.length && v[0] <= ' ') v = v[1..$];
+    while (v.length && v[$-1] <= ' ') v = v[0..$-1];
+
+    if (hasArgs(cmdline)) { conwriteln("too many arguments to `alias` command"); return; }
+
+    if (auto cp = xname in cmdlist) {
+      // existing alias?
+      auto ali = cast(ConAlias)(*cp);
+      if (ali is null) { conwriteln("can't change existing command/var to alias: ", xname); return; }
+      if (v.length == 0) {
+        // remove
+        cmdlist.remove(cast(string)xname); // it is safe to cast here
+        foreach (immutable idx, string n; cmdlistSorted) {
+          if (n == xname) {
+            foreach (immutable c; idx+1..cmdlistSorted.length) cmdlistSorted[c-1] = cmdlistSorted[c];
+            break;
+          }
+        }
+      } else {
+        // change
+        ali.set(v);
+      }
+      return;
+    } else {
+      // new alias
+      auto ali = new ConAlias(v);
+      //conwriteln(xname, ": <", ali.get, ">");
+      string sname = xname.idup;
+      addName(sname);
+      cmdlist[sname] = ali;
+    }
   }
 }
 
@@ -3001,6 +3141,8 @@ public class ConCommandKillUserConVar : ConCommand {
 shared static this () {
   addName("echo");
   cmdlist["echo"] = new ConCommandEcho();
+  addName("alias");
+  cmdlist["alias"] = new ConCommandAlias();
   addName("userconvar");
   cmdlist["userconvar"] = new ConCommandUserConVar();
   addName("killuserconvar");
@@ -3155,7 +3297,11 @@ shared static this () {
       if (auto ccp = name in cmdlist) {
         conwrite(name);
         foreach (immutable _; name.length..maxlen) conwrite(" ");
-        conwriteln(" -- ", (*ccp).help);
+        if (auto cmd = cast(ConCommand)(*ccp)) {
+          conwriteln(" -- ", cmd.help);
+        } else {
+          conwriteln(" -- alias");
+        }
       }
     }
   })("cmdlist", "list all known commands and variables");
@@ -3442,7 +3588,9 @@ public void conAddInputChar (char ch) {
         auto ste = stp+1;
         while (ste < concurx && concli.ptr[ste] > ' ') ++ste;
         if (auto cp = concli[stp..ste] in cmdlist) {
-          if (cp.argcomplete) try { cp.argcomplete(*cp); } catch (Exception) {} // sorry
+          if (auto cmd = cast(ConCommand)(*cp)) {
+            if (cmd.argcomplete !is null) try { cmd.argcomplete(cmd); } catch (Exception) {} // sorry
+          }
         }
         return;
       }
@@ -4088,6 +4236,8 @@ public bool conProcessArgs(bool immediate=false) (ref string[] args) {
     }
   }
 
+  static if (immediate) bool res = false;
+
   usize idx = 1;
   while (idx < args.length) {
     string a = args[idx++];
@@ -4115,6 +4265,14 @@ public bool conProcessArgs(bool immediate=false) (ref string[] args) {
       foreach (immutable c; idx..args.length) args[xidx+c-idx] = args[c];
       args.length -= idx-xidx;
       idx = xidx;
+      // execute it immediately if we're asked to do so
+      static if (immediate) {
+        if (concmdbufpos > ocbpos) {
+          res = true;
+          conProcessQueue(256*1024);
+          ocbpos = concmdbufpos;
+        }
+      }
     }
   }
 
@@ -4135,13 +4293,7 @@ public bool conProcessArgs(bool immediate=false) (ref string[] args) {
     }
   }
 
-  static if (immediate) {
-    bool res = (concmdbufpos > ocbpos);
-    conProcessQueue(256*1024);
-    return res;
-  } else {
-    return (concmdbufpos > ocbpos);
-  }
+  static if (immediate) return res; else return (concmdbufpos > ocbpos);
 }
 
 
