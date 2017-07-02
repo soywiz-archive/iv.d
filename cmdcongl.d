@@ -1441,7 +1441,7 @@ private auto glbfn_glVertex2i_loader (int a0, int a1) nothrow @nogc {
 }
 
 } else {
-  import iv.glbinds;
+  version(glbinds_mixin) import iv.glbinds.binds_full_mixin; else import iv.glbinds;
 }
 
 

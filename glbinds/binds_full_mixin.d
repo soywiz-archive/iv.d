@@ -7894,9 +7894,9 @@ alias glbfn_glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN = void func
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-mixin(/*glbindCreateInternalVars*/ () {
+pragma(msg, /*glbindCreateInternalVars*/ () {
   alias glID(T...) = T[0];
-  char[] resbuf = new char[](1024*1024+1025*512);
+  char[] resbuf = new char[](1024*1024*2+1025*512);
   int respos = 0;
   void put (const(char)[] s...) {
     assert(resbuf.length-respos >= s.length);
@@ -7908,9 +7908,9 @@ mixin(/*glbindCreateInternalVars*/ () {
     put(cast(char)('0'+(n/10)%10));
     put(cast(char)('0'+n%10));
   }
-  put("extern(System) nothrow @nogc:\n\n");
+  put("/*extern(System)*/ nothrow @nogc:\n\n");
   foreach (string name; __traits(allMembers, mixin(__MODULE__))) {
-    pragma(msg, name);
+    //pragma(msg, name);
     static if (name.length > 6 && name[0..6] == "glbfn_") {
       /*
       __gshared glbfn_glCullFace glCullFace = function void (uint a0) nothrow @nogc {
@@ -7941,11 +7941,17 @@ mixin(/*glbindCreateInternalVars*/ () {
         static assert(0, "wtf1?!");
       }
 
+      put("alias ");
+      put(name[6..$]);
+      put(" = ");
+      put(name[6..$]);
+      put("_Z;\n");
+
       put("__gshared ");
       put(name);
       put(" ");
       put(name[6..$]);
-      put(" = function ");
+      put("_Z = function ");
       put(RT.stringof);
       put(" (");
       // params
@@ -7981,23 +7987,26 @@ mixin(/*glbindCreateInternalVars*/ () {
         putuint(cast(uint)idx);
       }
       put(") {\n"); //nothrow @nogc {\n");
-      put("  ");
+      put("  *cast(void**)&");
       put(name[6..$]);
+      /*
       put(" = cast(");
       put(name);
       put(")glbindGetProcAddress(`");
+      */
+      put("_Z = glbindGetProcAddress(`");
       put(name[6..$]);
       put("`);\n");
-      put("  if (");
+      put("  if (*cast(void**)&");
       put(name[6..$]);
-      put(" is null) assert(0, `OpenGL function '");
+      put("_Z is null) assert(0, `OpenGL function '");
       put(name[6..$]);
       put("' not found!`);\n");
       //put("  version(glbind_debug) { import core.stdc.stdio; fprintf(stderr, \"GLBIND: '"); put(name[6..$]); put("'\\n\"); }\n");
       put("  ");
       static if (!is(RT == void)) put("return ");
       put(name[6..$]);
-      put("(");
+      put("_Z(");
       // call
       foreach (immutable idx, immutable ptype; Pars) {
         put("a");
@@ -8005,8 +8014,24 @@ mixin(/*glbindCreateInternalVars*/ () {
         put(",");
       }
       put(");\n");
-      put("};\n");
+      put("}\n");
     }
+/+
+alias glGenTextures = glGenTexturesZ;
+__gshared glbfn_glGenTextures glGenTexturesZ = function void (int a00,uint* a01) {
+  //assert(0);
+  { import core.stdc.stdio; printf("glGenTextures: 00\n"); }
+  glbfn_glGenTextures_loader(a00,a01,);
+};
+private void glbfn_glGenTextures_loader (int a00,uint* a01) {
+  { import core.stdc.stdio; printf("glGenTextures: 01\n"); }
+  *cast(void**)&glGenTexturesZ = cast(/*glbfn_glGenTextures*/void*)glbindGetProcAddress(`glGenTextures`);
+  { import core.stdc.stdio; printf("glGenTextures: 02\n"); }
+  if (*cast(void**)&glGenTexturesZ is null) assert(0, `OpenGL function 'glGenTextures' not found!`);
+  { import core.stdc.stdio; printf("glGenTextures: 03: %p (%u, %p)\n", *cast(void**)&glGenTexturesZ, a00, a01); }
+  glGenTexturesZ(a00,a01,);
+};
++/
   }
   return cast(string)resbuf[0..respos];
 }());
