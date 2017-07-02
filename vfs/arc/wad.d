@@ -78,18 +78,27 @@ private:
     }
     static bool isMapName (const(char)[] s) {
       foreach (immutable idx, char ch; s) if (ch == 0) { s = s[0..idx]; break; }
+      int spos = 0;
+      bool skipNum () {
+        if (spos >= s.length) return false;
+        if (s[spos] >= '0' && s[spos] <= '9') { ++spos; return true; }
+        return false;
+      }
       // ExMx?
-      if (s.length == 4) {
-        if (s[0] != 'E' || s[2] != 'M') return false;
-        if (s[1] < '0' || s[1] > '9') return false;
-        if (s[3] < '0' || s[3] > '9') return false;
-        return true;
+      if (s.length >= 4 && s[0] == 'E') {
+        spos = 1; // skip 'E'
+        if (!skipNum) return false; // should be at least one
+        skipNum(); // allow two-digit episodes
+        if (spos >= s.length || s[spos] != 'M') return false;
+        if (!skipNum) return false; // should be at least one
+        skipNum(); // allow two-digit maps
+        return (spos >= s.length);
       }
       // MAPxx
-      if (s.length == 5) {
-        if (s[0..3] != "MAP") return false;
-        foreach (char ch; s[3..$]) if (ch < '0' || ch > '9') return false;
-        return true;
+      if (s.length >= 5 && s[0..3] == "MAP") {
+        spos = 3;
+        while (spos < s.length) { if (!skipNum) return false; }
+        return (spos >= s.length);
       }
       return false;
     }
