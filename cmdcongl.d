@@ -791,8 +791,11 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
-import arsd.simpledisplay : KeyEvent, Key, SimpleWindow, Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable, Status, XInitImage;
-import arsd.simpledisplay : GC, XCreateGC, XFreeGC, XCopyGC, XSetClipMask, DefaultGC, DefaultScreen, None;
+import arsd.simpledisplay : KeyEvent, Key, SimpleWindow;
+version(Posix) {
+  import arsd.simpledisplay : Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable, Status, XInitImage;
+  import arsd.simpledisplay : GC, XCreateGC, XFreeGC, XCopyGC, XSetClipMask, DefaultGC, DefaultScreen, None;
+}
 
 public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
 

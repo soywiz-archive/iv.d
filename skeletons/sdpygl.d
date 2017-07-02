@@ -641,6 +641,7 @@ void main (string[] args) {
     gxResize(sdwin.width, sdwin.height);
     gxRebuildScreen();
     sdwin.redrawOpenGlSceneNow();
+    //{ import core.stdc.stdio; printf("!!!!\n"); }
   };
 
   sdwin.eventLoop(0,
@@ -650,6 +651,7 @@ void main (string[] args) {
       if (isQuitRequested) { sdwin.close(); return; }
     },
     delegate (KeyEvent event) {
+      //sdwin.redrawOpenGlSceneNow();
       scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
       if (sdwin.closed) return;
       if (isQuitRequested) { sdwin.close(); return; }

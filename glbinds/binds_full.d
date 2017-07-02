@@ -9,19 +9,38 @@ module iv.glbinds.binds_full /*is aliced*/;
 // ////////////////////////////////////////////////////////////////////////// //
 nothrow @nogc {
 version(Windows) {
-  pragma(lib, "opengl32");
-  private void* glbindGetProcAddress (const(char)* name) {
-    import core.sys.windows.wingdi : wglGetProcAddress;
-    void* res = wglGetProcAddress(name);
-    if (res is null) {
-      import core.sys.windows.windef, core.sys.windows.winbase;
-      static HINSTANCE dll = null;
-      if (dll is null) {
-        dll = LoadLibraryA("opengl32.dll");
-        if (dll is null) return null; // <32, but idc
-      }
-      return GetProcAddress(dll, name);
+  //pragma(lib, "opengl32");
+  private extern(System) nothrow @nogc {
+    private import core.sys.windows.windef, core.sys.windows.winbase;
+    __gshared void* function (const(char)* name) wglGetProcAddress_Z;
+    __gshared BOOL function (HGLRC) wglDeleteContext_Z;
+    __gshared HGLRC function (HDC) wglCreateContext_Z;
+    __gshared BOOL function (HDC, HGLRC) wglMakeCurrent_Z;
+    public alias wglDeleteContext = wglDeleteContext_Z;
+    public alias wglCreateContext = wglCreateContext_Z;
+    public alias wglMakeCurrent = wglMakeCurrent_Z;
+  }
+  public void* glbindGetProcAddress (const(char)* name) {
+    //import core.sys.windows.wingdi : wglGetProcAddress;
+    import core.sys.windows.windef, core.sys.windows.winbase;
+    __gshared HINSTANCE dll = null;
+    if (*cast(void**)&wglGetProcAddress_Z is null) {
+      dll = LoadLibraryA("opengl32.dll");
+      if (dll is null) assert(0, "GL: cannot load OpenGL library");
+      *cast(void**)&wglGetProcAddress_Z = GetProcAddress(dll, "wglGetProcAddress");
+      if (*cast(void**)&wglGetProcAddress_Z is null) assert(0, "GL: cannot load `wglGetProcAddress`");
+
+      *cast(void**)&wglDeleteContext_Z = GetProcAddress(dll, "wglDeleteContext");
+      if (*cast(void**)&wglDeleteContext_Z is null) assert(0, "GL: cannot load `wglDeleteContext`");
+
+      *cast(void**)&wglCreateContext_Z = GetProcAddress(dll, "wglCreateContext");
+      if (*cast(void**)&wglCreateContext_Z is null) assert(0, "GL: cannot load `wglCreateContext`");
+
+      *cast(void**)&wglMakeCurrent_Z = GetProcAddress(dll, "wglMakeCurrent");
+      if (*cast(void**)&wglMakeCurrent_Z is null) assert(0, "GL: cannot load `wglMakeCurrent`");
     }
+    void* res = wglGetProcAddress_Z(name);
+    if (res is null) return GetProcAddress(dll, name);
     return res;
   }
 } else {
