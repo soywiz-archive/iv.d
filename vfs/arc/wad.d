@@ -90,6 +90,7 @@ private:
         if (!skipNum) return false; // should be at least one
         skipNum(); // allow two-digit episodes
         if (spos >= s.length || s[spos] != 'M') return false;
+        ++spos;
         if (!skipNum) return false; // should be at least one
         skipNum(); // allow two-digit maps
         return (spos >= s.length);
