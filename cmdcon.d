@@ -2152,13 +2152,70 @@ version(contest_vars) unittest {
 }
 
 
+// don't use std.algo
+private void heapsort(alias lessfn, T) (T[] arr) {
+  auto count = arr.length;
+  if (count < 2) return; // nothing to do
+
+  void siftDown(T) (T start, T end) {
+    auto root = start;
+    for (;;) {
+      auto child = 2*root+1; // left child
+      if (child > end) break;
+      auto swap = root;
+      if (lessfn(arr.ptr[swap], arr.ptr[child])) swap = child;
+      if (child+1 <= end && lessfn(arr.ptr[swap], arr.ptr[child+1])) swap = child+1;
+      if (swap == root) break;
+      auto tmp = arr.ptr[swap];
+      arr.ptr[swap] = arr.ptr[root];
+      arr.ptr[root] = tmp;
+      root = swap;
+    }
+  }
+
+  auto end = count-1;
+  // heapify
+  auto start = (end-1)/2; // parent; always safe, as our array has at least two items
+  for (;;) {
+    siftDown(start, end);
+    if (start-- == 0) break; // as `start` cannot be negative, use this condition
+  }
+
+  while (end > 0) {
+    {
+      auto tmp = arr.ptr[0];
+      arr.ptr[0] = arr.ptr[end];
+      arr.ptr[end] = tmp;
+    }
+    --end;
+    siftDown(0, end);
+  }
+}
+
+
 private void addName (string name) {
+  //{ import core.stdc.stdio; printf("%.*s\n", cast(uint)name.length, name.ptr); }
+  // ascii only
+  static bool strLessCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
+    auto slen = s0.length;
+    if (slen > s1.length) slen = s1.length;
+    char c1;
+    foreach (immutable idx, char c0; s0[0..slen]) {
+      if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man's tolower()
+      c1 = s1.ptr[idx];
+      if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's tolower()
+      if (c0 < c1) return true;
+      if (c0 > c1) return false;
+    }
+    if (s0.length < s1.length) return true;
+    if (s0.length > s1.length) return false;
+    return false;
+  }
+
   if (name.length == 0) return;
   if (name !in cmdlist) {
-    import std.algorithm : sort;
-    //import std.range : array;
     cmdlistSorted ~= name;
-    sort(cmdlistSorted);
+    heapsort!strLessCI(cmdlistSorted);
   }
 }
 

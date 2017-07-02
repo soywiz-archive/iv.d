@@ -99,6 +99,23 @@ bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
 
 // ascii only
 int strCmpCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
+  auto slen = s0.length;
+  if (slen > s1.length) slen = s1.length;
+  char c1;
+  foreach (immutable idx, char c0; s0[0..slen]) {
+    c0 = c0.tolower;
+    if (__ctfe) {
+      c1 = s1[idx].tolower;
+    } else {
+      c1 = s1.ptr[idx].tolower;
+    }
+    if (c0 < c1) return -1;
+    if (c0 > c1) return 1;
+  }
+  if (s0.length < s1.length) return -1;
+  if (s0.length > s1.length) return 1;
+  return 0;
+  /+
   if (s0.length < s1.length) return -1;
   if (s0.length > s1.length) return 1;
   char c1;
@@ -113,6 +130,7 @@ int strCmpCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
     if (c0 > c1) return 1;
   }
   return 0;
+  +/
 }
 
 
