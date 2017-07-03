@@ -385,7 +385,7 @@ public void kgiDeinit () {
 
 private void kgiThread (Tid starterTid) {
   try {
-    vbwin = new SimpleWindow(vbufW*(blit2x ? 2 : 1), vbufH*(blit2x ? 2 : 1), kgiTitle, OpenGlOptions.yes, Resizablity.fixedSize);
+    vbwin = new SimpleWindow(vbufW*(blit2x ? 2 : 1), vbufH*(blit2x ? 2 : 1), kgiTitle, OpenGlOptions.yes, Resizability.fixedSize);
     if (mcurHidden == 0) vbwin.hideCursor();
 
     static if (is(typeof(openGLContextFallbackActivated))) {
