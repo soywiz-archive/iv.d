@@ -753,7 +753,7 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
         //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("TRYING GZ: '%.*s'\n", cast(int)fname.length, fname.ptr); }
         import etc.c.zlib;
         import std.internal.cstring;
-        gzFile gf = gzopen(fname.tempCString, "rb");
+        gzFile gf = gzopen(fname[].tempCString, "rb");
         if (gf !is null) return VFile.OpenGZ(gf, fname[0..epe-1]);
       }
     }
