@@ -2450,7 +2450,7 @@ nothrow @safe:
     return res;
   }
 
-  void setOrigDir (VT.Float x, VT.Float y, VT.Float angle) {
+  static if (VT.Dims == 2) void setOrigDir (VT.Float x, VT.Float y, VT.Float angle) {
     pragma(inline, true);
     mixin(ImportCoreMath!(Float, "cos", "sin"));
     orig.x = x;
@@ -2459,7 +2459,7 @@ nothrow @safe:
     dir.y = sin(angle);
   }
 
-  void setOrigDir() (in auto ref VT aorg, VT.Float angle) {
+  static if (VT.Dims == 2) void setOrigDir() (in auto ref VT aorg, VT.Float angle) {
     pragma(inline, true);
     mixin(ImportCoreMath!(Float, "cos", "sin"));
     orig.x = aorg.x;
@@ -2468,7 +2468,7 @@ nothrow @safe:
     dir.y = sin(angle);
   }
 
-  void setOrig (VT.Float x, VT.Float y) {
+  static if (VT.Dims == 2) void setOrig (VT.Float x, VT.Float y) {
     pragma(inline, true);
     orig.x = x;
     orig.y = y;
@@ -2478,9 +2478,10 @@ nothrow @safe:
     pragma(inline, true);
     orig.x = aorg.x;
     orig.y = aorg.y;
+    static if (VT.Dims == 3) orig.z = aorg.z;
   }
 
-  void setDir (VT.Float angle) {
+  static if (VT.Dims == 2) void setDir (VT.Float angle) {
     pragma(inline, true);
     mixin(ImportCoreMath!(Float, "cos", "sin"));
     dir.x = cos(angle);
@@ -2922,105 +2923,6 @@ public nothrow @safe @nogc:
       return (uu0 <= uu1);
     }
     +/
-  }
-
-  /// UNTESTED!
-  bool sweepLine() (in auto ref VT myMove, in auto ref VT la, in auto ref VT lb, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted if (VT.Dims == 2) {
-    mixin(ImportCoreMath!(Float, "fabs"));
-
-    alias a = this;
-    alias v = myMove;
-
-    auto lineDir = lb-la;
-    auto lineMin = VT(0, 0, 0);
-    auto lineMax = VT(0, 0, 0);
-
-    if (lineDir.x > 0) {
-      // right
-      lineMin.x = la.x;
-      lineMax.x = lb.x;
-    } else {
-      // left
-      lineMin.x = lb.x;
-      lineMax.x = la.x;
-    }
-
-    if (lineDir.y > 0) {
-      // up
-      lineMin.y = la.y;
-      lineMax.y = lb.y;
-    } else {
-      // down
-      lineMin.y = lb.y;
-      lineMax.y = la.y;
-    }
-
-    // initialise out info
-    //outVel = v;
-    //hitNormal = new VT(0,0);
-
-    Float hitTime = 0;
-    Float outTime = 1;
-    Float[VT.Dims] overlapTime = 0;
-
-    static if (VT.Dims == 3) {
-      static assert(0, "not yet");
-    } else {
-      //auto lnorm = VT(-lineDir.y, lineDir.x).normalized;
-      auto lnorm = lineDir.perp.normalized;
-    }
-
-    Float r = a.extent.x*fabs(lnorm.x)+a.extent.y*fabs(lnorm.y); // radius to line
-    Float boxProj = (la-a.center).dot(lnorm); // projected line distance to n
-    Float velProj = v.dot(lnorm); // projected velocity to n
-
-    if (velProj < 0) r = -r;
-
-    hitTime = nmax((boxProj-r)/velProj, hitTime);
-    outTime = nmin((boxProj+r)/velProj, outTime);
-
-    foreach (immutable aidx; 0..VT.Dims) {
-      // axis overlap
-      immutable Float vv = v[aidx];
-      if (vv < 0) {
-        immutable Float invv = cast(Float)1/vv;
-        if (a.max[aidx] < lineMin[aidx]) return false;
-        hitTime = nmax((overlapTime.ptr[aidx] = (lineMax[aidx]-a.min[aidx])*invv), hitTime);
-        outTime = nmin((lineMin[aidx]-a.max[aidx])*invv, outTime);
-        if (hitTime > outTime) return false;
-      } else if (vv > 0) {
-        immutable Float invv = cast(Float)1/vv;
-        if (a.min[aidx] > lineMax[aidx]) return false;
-        hitTime = nmax((overlapTime.ptr[aidx] = (lineMin[aidx]-a.max[aidx])*invv), hitTime);
-        outTime = nmin((lineMax[aidx]-a.min[aidx])*invv, outTime);
-        if (hitTime > outTime) return false;
-      } else {
-        if (lineMin[aidx] > a.max[aidx] || lineMax[aidx] < a.min[aidx]) return false;
-      }
-    }
-
-    if (u0 !is null) *u0 = hitTime;
-    if (u1 !is null) *u1 = outTime;
-
-    // hit normal is along axis with the highest overlap time
-    if (hitnormal !is null) {
-      static if (VT.Dims == 3) {
-        int aidx = 0;
-        if (overlapTime.ptr[1] > overlapTime.ptr[0]) aidx = 1;
-        if (overlapTime.ptr[2] > overlapTime.ptr[aidx]) aidx = 2;
-        VT hn; // zero vector
-        hn[aidx] = (v[aidx] < 0 ? -1 : v[aidx] > 0 ? 1 : 0);
-        *hitnormal = hn;
-      } else {
-        if (overlapTime.ptr[0] > overlapTime.ptr[1]) {
-          *hitnormal = VT((v.x < 0 ? -1 : v.x > 0 ? 1 : 0), 0);
-        } else {
-          *hitnormal = VT(0, (v.y < 0 ? -1 : v.y > 0 ? 1 : 0));
-        }
-      }
-    }
-
-    return true;
   }
 
   /// check to see if the sphere overlaps the AABB
