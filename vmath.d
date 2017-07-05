@@ -782,19 +782,52 @@ const:
     // returns the closest point to `this` on the line segment from `a` to `b`, or invalid vector
     // if `asseg` is false, "segment" is actually a line (infinite in both directions)
     Me projectToSeg(bool asseg=true) (in auto ref Me a, in auto ref Me b) {
+      mixin(ImportCoreMath!(Float, "fabs"));
       alias p = this;
       immutable ab = b-a; // vector from a to b
       // squared distance from a to b
       immutable absq = ab.dot(ab);
-      if (absq == 0) return a; // a and b are the same point
+      if (fabs(absq) < Epsilon) return a; // a and b are the same point (roughly)
       immutable ap = p-a; // vector from a to p
       immutable t = ap.dot(ab)/absq;
       static if (asseg) {
-        if (t < 0.0) return a; // "before" a on the line
-        if (t > 1.0) return b; // "after" b on the line
+        if (t < 0) return a; // "before" a on the line
+        if (t > 1) return b; // "after" b on the line
       }
-      // projection lines "inbetween" a and b on the line
+      // projection lies "inbetween" a and b on the line
       return a+t*ab;
+    }
+
+    // returns the closest point to `this` on the line segment from `a` to `b`, or invalid vector
+    // if `asseg` is false, "segment" is actually a line (infinite in both directions)
+    Me projectToSegT(bool asseg=true) (in auto ref Me a, in auto ref Me b, ref Float rest) {
+      mixin(ImportCoreMath!(Float, "fabs"));
+      alias p = this;
+      immutable ab = b-a; // vector from a to b
+      // squared distance from a to b
+      immutable absq = ab.dot(ab);
+      if (fabs(absq) < Epsilon) { rest = 0; return a; } // a and b are the same point (roughly)
+      immutable ap = p-a; // vector from a to p
+      immutable t = ap.dot(ab)/absq;
+      rest = t;
+      static if (asseg) {
+        if (t < 0) return a; // "before" a on the line
+        if (t > 1) return b; // "after" b on the line
+      }
+      // projection lies "inbetween" a and b on the line
+      return a+t*ab;
+    }
+
+    // returns `t` (normalized distance of projected point from `a`)
+    Float projectToLineT() (in auto ref Me a, in auto ref Me b) {
+      mixin(ImportCoreMath!(Float, "fabs"));
+      alias p = this;
+      immutable ab = b-a; // vector from a to b
+      // squared distance from a to b
+      immutable absq = ab.dot(ab);
+      if (fabs(absq) < Epsilon) return cast(Float)0; // a and b are the same point (roughly)
+      immutable ap = p-a; // vector from a to p
+      return cast(Float)(ap.dot(ab)/absq);
     }
   }
 

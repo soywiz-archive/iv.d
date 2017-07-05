@@ -56,10 +56,13 @@ char[] intWithCommas(T) (char[] dest, T nn, char comma=',') if (__traits(isInteg
   } while ((n /= 10) != 0);
   if (neg) buf[--bpos] = '-';
   auto len = buf.length-bpos;
+  if (dest is null) dest = new char[](len);
   if (len > dest.length) len = dest.length;
   dest[0..len] = buf[bpos..bpos+len];
   return dest[0..len];
 }
+
+char[] intWithCommas(T) (T nn, char comma=',') if (__traits(isIntegral, T)) { return intWithCommas(null, nn, comma); }
 
 
 char tolower (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return (ch >= 'A' && ch <= 'Z' ? cast(char)(ch-'A'+'a') : ch); }
