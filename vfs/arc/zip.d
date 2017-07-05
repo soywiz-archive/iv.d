@@ -382,6 +382,7 @@ private:
             doSkip = true;
           }
         }
+        if (!doSkip && nbpos > 0 && nb[nbpos-1] != '/' && fuckedshitac(nb[0..nbpos])) doSkip = true;
         if (!doSkip && nbpos > 0 && nb[nbpos-1] != '/') {
           // add new
           if (dir.length == uint.max) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("directory too long");
@@ -400,6 +401,7 @@ private:
     version(ziparc_debug) debug(ziparc) writeln(dir.length, " files found");
     buildNameHashTable();
   }
+
 static protected:
   T[] xalloc(T) (usize len) {
     import core.stdc.stdlib : malloc;
@@ -419,6 +421,19 @@ static protected:
       free(slc.ptr);
     }
     slc = null;
+  }
+
+  // is this fucked shitosx crap from some dumbass?
+  bool fuckedshitac (const(char)[] name) nothrow @trusted @nogc {
+    usize pos = 0;
+    while (pos < name.length) {
+      if (name.ptr[pos] == '/') { ++pos; continue; }
+      usize epos = pos+1;
+      while (epos < name.length && name.ptr[epos] != '/') ++epos;
+      if (name[pos..epos] == "__MACOSX") return true;
+      pos = epos;
+    }
+    return false;
   }
 }
 
