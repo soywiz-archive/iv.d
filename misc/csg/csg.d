@@ -46,7 +46,10 @@
 module csg /*is aliced*/;
 
 import iv.alice;
+import iv.unarray;
 import iv.vmath;
+
+//version = csg_new_bsp_score_algo;
 
 //static assert(is(Float == double), "compile this with -version=vmath_double");
 alias Vec3 = VecN!(3, double);
@@ -96,6 +99,8 @@ public:
 // Represents a plane in 3D space.
 alias Plane = Plane3!(Vec3.Float, 0.00001f, false); // EPS is 0.00001f, no swizzling
 
+
+/*
 void flip (ref Plane plane) nothrow @safe @nogc {
   pragma(inline, true);
   if (plane.valid) {
@@ -103,9 +108,15 @@ void flip (ref Plane plane) nothrow @safe @nogc {
     plane.w = -plane.w;
   }
 }
+*/
 
+
+// classify each point as well as the entire polygon into one of the four classes:
+//   Coplanar
+//   Front
+//   Back
+//   Spanning
 Plane.PType polySide (in ref Plane plane, in Polygon pl) {
-  // classify each point as well as the entire polygon into one of the above four classes
   Plane.PType polygonType = Plane.Coplanar;
   foreach (const ref Vertex v; pl.vertices) {
     Plane.PType type = plane.pointSide(v.pos);
@@ -113,6 +124,7 @@ Plane.PType polySide (in ref Plane plane, in Polygon pl) {
   }
   return polygonType;
 }
+
 
 // Split `polygon` by this plane if needed, then put the polygon or polygon
 // fragments in the appropriate lists. Coplanar polygons go into either
@@ -126,10 +138,12 @@ void splitPolygon (in ref Plane plane, Polygon polygon, ref Polygon[] coplanarFr
   // classify each point as well as the entire polygon into one of the above four classes
   Plane.PType polygonType = Plane.Coplanar;
   Plane.PType[] types;
+  scope(exit) delete types;
+
   foreach (const ref Vertex v; polygon.vertices) {
     Plane.PType type = plane.pointSide(v.pos);
     polygonType |= type;
-    types ~= type;
+    types.unsafeArrayAppend(type);
   }
 
   // put the polygon in the correct list, splitting it when necessary
@@ -212,8 +226,13 @@ public:
   }
 
   void flip () /*pure*/ @nogc {
-    import std.algorithm : reverse;
-    vertices.reverse;
+    //import std.algorithm : reverse;
+    //vertices.reverse;
+    foreach (immutable idx; 0..vertices.length/2) {
+      auto vt = vertices[idx];
+      vertices[idx] = vertices[$-idx-1];
+      vertices[$-idx-1] = vt;
+    }
     foreach (ref Vertex v; vertices) v.flip();
     plane.flip();
   }
@@ -305,6 +324,7 @@ public:
         import core.stdc.string : memmove;
         memmove(&nodes[0], &nodes[1], nodes[0].sizeof*(nodes.length-1));
         nodes.length -= 1;
+        nodes.assumeSafeAppend;
       } else {
         nodes.length = 0;
       }
@@ -330,24 +350,39 @@ public:
       } else {
         Polygon[] fbest, bbest;
         if (!node.plane.valid) {
+          version(csg_new_bsp_score_algo) {
+            mixin(ImportCoreMath!(float, "fabs"));
+            enum balance = 128; // [0..255]
+            float bestScore = float.infinity;
+          } else {
+            int bestl = 0, bestr = 0, bests = 0;
+          }
           uint bestidx = 0;
-          int bestl = 0, bestr = 0, bests = 0;
           if (plys.length > 2) {
             foreach (immutable idx, Polygon px; plys) {
               auto pl = px.plane;
-              int l = 0, r = 0, s = 0;
+              int l = 0, r = 0, s = 0, c = 0;
               foreach (Polygon p; plys) {
                 auto side = pl.polySide(p);
                      if (side == Plane.Back) ++l;
                 else if (side == Plane.Front) ++r;
                 else if (side == Plane.Spanning) ++s;
+                else if (side == Plane.Coplanar) ++c;
               }
-              import std.math : abs;
-              if (idx == 0 || (/*s < bests ||*/ abs(l-r) < abs(bestl-bestr))) {
-                bestidx = cast(uint)idx;
-                bestl = l;
-                bestr = r;
-                bests = s;
+              version(csg_new_bsp_score_algo) {
+                float score = (100.0f-cast(float)balance)*cast(float)s+cast(float)balance*fabs(cast(float)(r-l));
+                if (score < bestScore) {
+                  bestidx = cast(uint)idx;
+                  bestScore = score;
+                }
+              } else {
+                import std.math : abs;
+                if (idx == 0 || (/*s < bests ||*/ abs(l-r) < abs(bestl-bestr))) {
+                  bestidx = cast(uint)idx;
+                  bestl = l;
+                  bestr = r;
+                  bests = s;
+                }
               }
             }
             //{ import std.stdio; writeln("bestidx=", bestidx, " of ", plys.length, "; l=", bestl, "; r=", bests, "; s=", bests); }

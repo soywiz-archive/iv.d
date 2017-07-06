@@ -2405,6 +2405,20 @@ nothrow @safe:
     return this;
   }
 
+  void flip () {
+    pragma(inline, true);
+    if (valid) {
+      normal = -normal;
+      w = -w;
+    }
+  }
+
+  //WARNING! won't check if this plane is valid
+  plane3 flipped () const {
+    pragma(inline, true);
+    return plane3(-normal, -w);
+  }
+
   PType pointSide() (in auto ref vec3 p) const {
     pragma(inline, true);
     auto t = (normal*p)-w; // dot

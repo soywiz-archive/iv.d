@@ -10,7 +10,7 @@ import iv.vmath;
 
 import csg;
 import namedargs;
-//import glutils;
+import gourd;
 
 
 enum GWidth = 800;
@@ -46,7 +46,7 @@ enum FragmentShader = q{
 __gshared CSG mesh;
 
 
-mixin(import("gourd.d"));
+//mixin(import("gourd.d"));
 
 void initMesh (int sample) {
   if (sample >= 0 && sample <= 2) {
