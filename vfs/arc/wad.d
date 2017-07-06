@@ -123,6 +123,12 @@ private:
       fi.ofs = fl.readNum!uint;
       fi.size = fl.readNum!uint;
       fl.rawReadExact(nbuf[0..8]);
+      //{ import core.stdc.stdio; printf("[%.*s] %u %u\n", 8, nbuf.ptr, cast(uint)fi.ofs, cast(uint)fi.size); }
+      // some idiotic old tools loves to create empty space in directory
+      if (nbuf[0] == 0) {
+        // this shit cannot be accessed anyway
+        continue;
+      }
       bool mapPart = false;
       // check for map lumps
       if (isMapName(nbuf[])) {
@@ -150,6 +156,7 @@ private:
           ++ep;
         }
         const(char)[] lname = nbuf[0..ep];
+        if (lname.length == 0) lname = "ghost-of-kain";
         // "*_START"
         if (lname.length > 6 && lname[$-6..$] == "_start") {
           if (lname == "p_start") { curPath = "patches/"; continue; }

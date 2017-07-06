@@ -96,7 +96,7 @@ public:
 // Represents a plane in 3D space.
 alias Plane = Plane3!(Vec3.Float, 0.00001f, false); // EPS is 0.00001f, no swizzling
 
-void flip (ref Plane plane) pure nothrow @safe @nogc {
+void flip (ref Plane plane) nothrow @safe @nogc {
   pragma(inline, true);
   if (plane.valid) {
     plane.normal = -plane.normal;

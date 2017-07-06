@@ -155,7 +155,7 @@ void main () {
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(45, cast(float)GWidth/cast(float)GHeight, 0.1, 100);
+    oglPerspective(45, cast(float)GWidth/cast(float)GHeight, 0.1, 100);
     glMatrixMode(GL_MODELVIEW);
 
     //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
