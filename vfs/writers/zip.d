@@ -251,12 +251,13 @@ uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur
       err = deflate(&zst, Z_NO_FLUSH);
       if (err != Z_OK) throw new Exception("zlib compression error");
       if (zst.avail_out < OBSize) {
-        if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+        outsize += OBSize-zst.avail_out;
+        // if we're going to win less than 2% or nothing, it doesn't worth it
+        if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
           // this will be overwritten anyway
           aborted = true;
           return 0;
         }
-        outsize += OBSize-zst.avail_out;
         ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
         zst.next_out = ob;
         zst.avail_out = OBSize;
@@ -265,12 +266,13 @@ uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur
   }
   // empty write buffer (just in case)
   if (zst.avail_out < OBSize) {
-    if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+    outsize += OBSize-zst.avail_out;
+    // if we're going to win less than 2% or nothing, it doesn't worth it
+    if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
       // this will be overwritten anyway
       aborted = true;
       return 0;
     }
-    outsize += OBSize-zst.avail_out;
     ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
     zst.next_out = ob;
     zst.avail_out = OBSize;
@@ -281,12 +283,13 @@ uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur
     err = deflate(&zst, Z_FINISH);
     if (err != Z_OK && err != Z_STREAM_END) throw new Exception("zlib compression error");
     if (zst.avail_out < OBSize) {
-      if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+      outsize += OBSize-zst.avail_out;
+      // if we're going to win less than 2% or nothing, it doesn't worth it
+      if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
         // this will be overwritten anyway
         aborted = true;
         return 0;
       }
-      outsize += OBSize-zst.avail_out;
       ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
       zst.next_out = ob;
       zst.avail_out = OBSize;
@@ -376,12 +379,13 @@ static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool
     while (zst.avail_in > 0) {
       if (lzma_code(&zst, LZMA_RUN) != LZMA_OK) throw new Exception("LZMA error");
       if (zst.avail_out < OBSize) {
-        if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+        outsize += OBSize-zst.avail_out;
+        // if we're going to win less than 2% or nothing, it doesn't worth it
+        if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
           // this will be overwritten anyway
           aborted = true;
           return 0;
         }
-        outsize += OBSize-zst.avail_out;
         ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
         zst.next_out = ob;
         zst.avail_out = OBSize;
@@ -395,12 +399,13 @@ static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool
     auto res = lzma_code(&zst, LZMA_FINISH);
     if (res != LZMA_OK && res != LZMA_STREAM_END) throw new Exception("LZMA error");
     if (zst.avail_out < OBSize) {
-      if (outsize+(OBSize-zst.avail_out) >= srcsize) {
+      outsize += OBSize-zst.avail_out;
+      // if we're going to win less than 2% or nothing, it doesn't worth it
+      if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
         // this will be overwritten anyway
         aborted = true;
         return 0;
       }
-      outsize += OBSize-zst.avail_out;
       ds.rawWriteExact(ob[0..OBSize-zst.avail_out]);
       zst.next_out = ob;
       zst.avail_out = OBSize;

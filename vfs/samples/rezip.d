@@ -68,7 +68,14 @@ void repackZip (ConString infname, ConString outfname, ZipWriter.Method pmt) {
           }
         }
       });
-      conwritefln!"\x08\x08\x08\x08[%s] %s -> %s"(zw.files[zidx].methodName, n2s(de.stat("pksize").get!long), n2s(zw.files[zidx].pksize));
+      conwritefln!"\x08\x08\x08\x08[%s] %s (%s) -> %s  %s%% (%s%%)"(
+        zw.files[zidx].methodName,
+        n2s(de.stat("pksize").get!long), n2s(de.size),
+        n2s(zw.files[zidx].pksize),
+        // percents
+        cast(uint)(100UL*zw.files[zidx].pksize/de.stat("pksize").get!long), // left from packed
+        cast(uint)(100UL*zw.files[zidx].pksize/de.size), // left from unpacked
+      );
       if (zw.files[zidx].crc != de.stat("crc32").get!uint) throw new Exception("crc error!");
     } catch (Exception e) {
       conwriteln("ERROR: ", e.msg);
