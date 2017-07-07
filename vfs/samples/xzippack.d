@@ -222,7 +222,9 @@ ulong packZip (ConString outfname, FileInfo[] flist, ZipWriter.Method pmt) {
             }
           }
         });
-        conwritefln!"\x08\x08\x08\x08[%s] %s -> %s"(zw.files[zipidx].methodName, n2s(de.size), n2s(zw.files[zipidx].pksize));
+        conwritefln!"\x08\x08\x08\x08[%s] %s -> %s (%s%%)"(zw.files[zipidx].methodName, n2s(de.size), n2s(zw.files[zipidx].pksize),
+          (de.size > 0 ? cast(uint)(100UL*zw.files[zipidx].pksize/de.size) : 0), // left from unpacked
+        );
         //if (zw.files[zidx].crc != de.stat("crc32").get!uint) throw new Exception("crc error!");
       }
       zw.files[zipidx].unixmode = de.unixmode;
