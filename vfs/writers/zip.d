@@ -202,7 +202,9 @@ private bool doesntWorth (ulong outsize, ulong srcsize) {
   pragma(inline, true);
   return
     outsize >= srcsize ||
-    ((srcsize&0xf000_0000_0000_0000UL) == 0 && 100UL*outsize/srcsize > 97);
+    (srcsize < 1000 && srcsize-outsize < 300) ||
+    (srcsize < 8192 && srcsize-outsize < srcsize/10) ||
+    ((srcsize&0xff00_0000_0000_0000UL) == 0 && srcsize > 0 && 100UL*outsize/srcsize > 96);
 }
 
 
