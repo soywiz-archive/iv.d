@@ -300,7 +300,9 @@ void oglPerspective (GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zF
 void oglNormalZTests () {
   glDepthFunc(GL_LESS); // default would be GL_LESS
   glClearDepth(1.0f); // default would be 1.0f
-  glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+  // OpenGL 4.5 feature; see "GL_ARB_clip_control" extension
+  //glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+  glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE); // actually, this is better even for "normal" cases
 }
 
 
@@ -311,10 +313,11 @@ void oglReversedZTests () {
 }
 
 
+// see https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
 void oglPerspectiveReversedZ (GLdouble fovy, GLdouble aspect, GLdouble zNear) {
   version(none) {
     import std.math : tan;
-    immutable GLdouble f = 1.0/tan(fovy/2.0); // 1.0 / tan(X) == cotangent(X)
+    immutable GLdouble f = 1.0/tan(deg2rad(fovy)/2.0); // 1.0 / tan(X) == cotangent(X)
     //GLdouble aspect = cast(float)GWidth/cast(float)GHeight;
     // infinite perspective matrix reversed
     immutable GLdouble[16] projMat = [

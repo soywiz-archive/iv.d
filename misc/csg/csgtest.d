@@ -183,8 +183,8 @@ void main (string[] args) {
 
   conRegVar!BSPBalance(0, 100, "bsp_balance", "bsp balancing factor [0..100] -- lower prefers less splits, higher prefers more balance");
 
-  conRegVar!revz("r_revz", "use reversed z buffer");
-  conRegVar!revzclamp("r_revz_clamp", "clamp valued in reversed z buffer");
+  conRegVar!revz("gl_revz", "use reversed z buffer");
+  conRegVar!revzclamp("gl_revz_clamp", "clamp valued in reversed z buffer");
 
   //glconShowKey = "M-Grave";
   conProcessQueue(); // load config
