@@ -106,6 +106,8 @@ __gshared float depth = -4.5;
 __gshared bool drawLines = false;
 __gshared bool drawPolys = true;
 __gshared int sample = 0;
+__gshared bool revz = true;
+__gshared bool revzclamp = false;
 
 
 void oglDrawScene () {
@@ -126,12 +128,14 @@ void oglDrawScene () {
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
 
-  version(none) {
+  if (!revz) {
     oglPerspective(45, cast(float)GWidth/cast(float)GHeight, 0.1, 100);
     oglNormalZTests();
+    glEnable(GL_DEPTH_CLAMP);
   } else {
     oglPerspectiveReversedZ(45, cast(float)GWidth/cast(float)GHeight, 0.001);
     oglReversedZTests();
+    if (revzclamp) glEnable(GL_DEPTH_CLAMP); else glDisable(GL_DEPTH_CLAMP);
   }
 
   glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -178,6 +182,9 @@ void main (string[] args) {
   conRegVar!GHeight(64, 8192, "v_height", "window width");
 
   conRegVar!BSPBalance(0, 100, "bsp_balance", "bsp balancing factor [0..100] -- lower prefers less splits, higher prefers more balance");
+
+  conRegVar!revz("r_revz", "use reversed z buffer");
+  conRegVar!revzclamp("r_revz_clamp", "clamp valued in reversed z buffer");
 
   //glconShowKey = "M-Grave";
   conProcessQueue(); // load config
