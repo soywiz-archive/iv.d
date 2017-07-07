@@ -200,6 +200,7 @@ public:
   Vertex[] vertices;
   Object[] mshared;
   Plane plane;
+  AABBImpl!Vec3 aabb;
 
 public:
 /*pure*/ nothrow @safe:
@@ -213,11 +214,13 @@ public:
     vertices = avertices;
     mshared = ashared;
     plane.setFromPoints(vertices[0].pos, vertices[1].pos, vertices[2].pos);
+    aabb.reset();
     foreach (immutable idx, const ref v; vertices) {
       if (plane.pointSide(v.pos) != plane.Coplanar) {
         { import core.stdc.stdio : printf; printf("invalid polygon: vertex #%u is bad! (%g, %g)\n", cast(uint)idx, cast(double)plane.pointSideF(v.pos), cast(double)Plane.EPS); }
         assert(0, "invalid polygon");
       }
+      aabb ~= v.pos;
     }
   }
 
@@ -405,9 +408,8 @@ public:
             mixin(ImportCoreMath!(float, "fabs"));
             enum balance = 50; // [0..100]; lower prefers less splits, higher prefers more balance
             float bestScore = float.infinity;
-          } else {
-            int bestl = 0, bestr = 0, bests = 0;
           }
+          int bestl = 0, bestr = 0, bests = 0, bestc = 0;
           uint bestidx = 0;
           if (plys.length > 2) {
             foreach (immutable idx, Polygon px; plys) {
@@ -425,6 +427,10 @@ public:
                 if (score < bestScore) {
                   bestidx = cast(uint)idx;
                   bestScore = score;
+                  bestl = l;
+                  bestr = r;
+                  bests = s;
+                  bestc = c;
                 }
               } else {
                 import std.math : abs;
@@ -433,12 +439,30 @@ public:
                   bestl = l;
                   bestr = r;
                   bests = s;
+                  bestc = c;
                 }
               }
             }
-            //{ import std.stdio; writeln("bestidx=", bestidx, " of ", plys.length, "; l=", bestl, "; r=", bests, "; s=", bests); }
+            node.plane = plys[bestidx].plane;
+            // if we have highly unbalanced tree (no polys at one side), split it by half to maintain at least *some* balance
+            version(none) {
+              if ((bestl == 0 || bestr == 0) && bestl+bestr > 16) {
+                // find bounding box
+                auto bbox = plys[0].aabb;
+                foreach (Polygon px; plys[1..$]) bbox ~= px.aabb;
+                // and split it in half
+                //node.plane = Plane.setFromPoints(bbox.min, bbox.max, vec3(bbox.bbox.max.z));
+                //{ import iv.vfs.io; writeln("bestidx=", bestidx, " of ", plys.length, "; l=", bestl, "; r=", bests, "; s=", bests, "; bestc=", bestc); }
+                //{ import iv.vfs.io; writeln("bbox=", bbox); }
+                node.plane.setFromPoints(
+                  Vec3(bbox.min.x, bbox.center.y, bbox.min.z),
+                  Vec3(bbox.min.x, bbox.center.y, bbox.max.z),
+                  Vec3(bbox.max.x, bbox.center.y, bbox.min.z));
+              }
+            }
+          } else {
+            node.plane = plys[bestidx].plane;
           }
-          node.plane = plys[bestidx].plane;
         }
         foreach (Polygon p; plys) node.plane.splitPolygon(p, node.polygons, node.polygons, fbest, bbest);
         if (fbest.length != 0) {

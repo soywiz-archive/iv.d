@@ -2592,8 +2592,13 @@ public nothrow @safe @nogc:
   }
 
   void reset () {
-    min = VT(+VT.Float.infinity, +VT.Float.infinity);
-    max = VT(-VT.Float.infinity, -VT.Float.infinity);
+    static if (VT.Dims == 2) {
+      min = VT(+VT.Float.infinity, +VT.Float.infinity);
+      max = VT(-VT.Float.infinity, -VT.Float.infinity);
+    } else {
+      min = VT(+VT.Float.infinity, +VT.Float.infinity, +VT.Float.infinity);
+      max = VT(-VT.Float.infinity, -VT.Float.infinity, -VT.Float.infinity);
+    }
   }
 
   void setMinMax() (in auto ref VT amin, in auto ref VT amax) pure {
@@ -2684,6 +2689,9 @@ public nothrow @safe @nogc:
       max.z = nmax(max.z, v.z);
     }
   }
+
+  void opOpAssign(string op:"~") (in auto ref VT v) { pragma(inline, true); addPoint(v); }
+  void opOpAssign(string op:"~") (in auto ref Me aabb1) { pragma(inline, true); merge(aabb1); }
 
   // return true if the current AABB contains the AABB given in parameter
   bool contains() (in auto ref Me aabb) const {
