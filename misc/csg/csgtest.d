@@ -186,6 +186,11 @@ void main (string[] args) {
   conRegVar!revz("gl_revz", "use reversed z buffer");
   conRegVar!revzclamp("gl_revz_clamp", "clamp valued in reversed z buffer");
 
+  conRegVar!sample(0, 7, "scene", "sample scene", (ConVarBase self, ConString valstr) { initMesh(sample); });
+
+  conRegVar!drawLines("r_lines", "draw lines");
+  conRegVar!drawPolys("r_polys", "draw polygons");
+
   //glconShowKey = "M-Grave";
   conProcessQueue(); // load config
   conProcessArgs!true(args);
@@ -250,10 +255,10 @@ void main (string[] args) {
 
   charEventDG = delegate (dchar ch) {
     if (ch == 'q') { concmd("quit"); return; }
-    if (ch == 'l') { drawLines = !drawLines; return; }
-    if (ch == 'p') { drawPolys = !drawPolys; return; }
-    if (ch == '+') { initMesh(++sample); return; }
-    if (ch == '-') { initMesh(--sample); return; }
+    if (ch == 'l') { concmd("r_lines toggle"); return; }
+    if (ch == 'p') { concmd("r_polys toggle"); return; }
+    if (ch == '+') { concmdf!"scene %d"(sample+1); return; }
+    if (ch == '-') { concmdf!"scene %d"(sample-1); return; }
   };
 
   glconSetupForGLWindow(sdwin);

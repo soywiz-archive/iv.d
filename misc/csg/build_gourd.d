@@ -4,38 +4,6 @@ import csg;
 import gourd;
 
 
-/*
-void writePolySoup (VFile fo, Polygon[] plys) {
-  // no need to store polygon plane, it will be recalculated
-  assert(plys.length < int.max/16);
-  fo.rawWriteExact("K8POLYSOUPv0");
-  // number of polygons
-  fo.writeNum!uint(cast(uint)plys.length);
-  foreach (Polygon p; plys) {
-    if (p.vertices.length < 3) assert(0, "degenerate polygon");
-    if (p.vertices.length > short.max) assert(0, "polygon too big");
-    // check it, just for fun
-    foreach (ref Vertex v; p.vertices) {
-      if (p.plane.pointSide(v.pos) != p.plane.Coplanar) assert(0, "invalid polygon");
-    }
-    // number of vertices
-    fo.writeNum!ushort(cast(ushort)p.vertices.length);
-    // vertices
-    foreach (ref Vertex v; p.vertices) {
-      // coords
-      fo.writeNum!double(v.pos.x);
-      fo.writeNum!double(v.pos.y);
-      fo.writeNum!double(v.pos.z);
-      // normal
-      fo.writeNum!double(v.normal.x);
-      fo.writeNum!double(v.normal.y);
-      fo.writeNum!double(v.normal.z);
-    }
-  }
-}
-*/
-
-
 /*CSG*/void buildGourd () {
   Polygon[] plys;
   plys ~= new Polygon([

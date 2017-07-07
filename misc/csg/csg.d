@@ -51,8 +51,15 @@ import iv.vmath;
 
 version = csg_new_bsp_score_algo;
 
-//static assert(is(Float == double), "compile this with -version=vmath_double");
-alias Vec3 = VecN!(3, double);
+//version = csg_use_doubles;
+
+version(csg_use_doubles) {
+  alias Vec3 = VecN!(3, double);
+  alias Plane = Plane3!(Vec3.Float, 0.000001f, false);
+} else {
+  alias Vec3 = VecN!(3, float);
+  alias Plane = Plane3!(Vec3.Float, 0.0001f, false); // EPS is 0.0001f, no swizzling
+}
 
 
 public __gshared int BSPBalance = 50; // [0..100]; lower prefers less splits, higher prefers more balance
@@ -100,7 +107,6 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Represents a plane in 3D space.
-alias Plane = Plane3!(Vec3.Float, 0.00001f, false); // EPS is 0.00001f, no swizzling
 
 
 // classify each point as well as the entire polygon into one of the four classes:

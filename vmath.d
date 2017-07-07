@@ -2373,7 +2373,7 @@ nothrow @safe:
   }
 
   ref plane3 setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
-    normal = ((b-a)%(c-a)).normalized;
+    normal = ((b-a)^(c-a)).normalized;
     w = normal*a; // n.dot(a)
     return this;
   }
@@ -2405,12 +2405,11 @@ nothrow @safe:
     return this;
   }
 
+  //WARNING! won't check if this plane is valid
   void flip () {
     pragma(inline, true);
-    if (valid) {
-      normal = -normal;
-      w = -w;
-    }
+    normal = -normal;
+    w = -w;
   }
 
   //WARNING! won't check if this plane is valid
@@ -2421,7 +2420,7 @@ nothrow @safe:
 
   PType pointSide() (in auto ref vec3 p) const {
     pragma(inline, true);
-    auto t = (normal*p)-w; // dot
+    immutable Float t = (normal*p)-w; // dot
     return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
   }
 
