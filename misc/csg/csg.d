@@ -49,7 +49,7 @@ import iv.alice;
 import iv.unarray;
 import iv.vmath;
 
-//version = csg_new_bsp_score_algo;
+version = csg_new_bsp_score_algo;
 
 //static assert(is(Float == double), "compile this with -version=vmath_double");
 alias Vec3 = VecN!(3, double);
@@ -100,17 +100,6 @@ public:
 alias Plane = Plane3!(Vec3.Float, 0.00001f, false); // EPS is 0.00001f, no swizzling
 
 
-/*
-void flip (ref Plane plane) nothrow @safe @nogc {
-  pragma(inline, true);
-  if (plane.valid) {
-    plane.normal = -plane.normal;
-    plane.w = -plane.w;
-  }
-}
-*/
-
-
 // classify each point as well as the entire polygon into one of the four classes:
 //   Coplanar
 //   Front
@@ -139,23 +128,30 @@ void splitPolygon (in ref Plane plane, Polygon polygon, ref Polygon[] coplanarFr
   Plane.PType polygonType = Plane.Coplanar;
   Plane.PType[] types;
   scope(exit) delete types;
+  types.unsafeArraySetLength(polygon.vertices.length);
 
-  foreach (const ref Vertex v; polygon.vertices) {
+  foreach (immutable vidx, const ref Vertex v; polygon.vertices) {
     Plane.PType type = plane.pointSide(v.pos);
     polygonType |= type;
-    types.unsafeArrayAppend(type);
+    //types.unsafeArrayAppend(type);
+    types.ptr[vidx] = type;
   }
 
   // put the polygon in the correct list, splitting it when necessary
   final switch (polygonType) {
     case Plane.Coplanar:
-      if (plane.normal*polygon.plane.normal > 0) coplanarFront ~= polygon; else coplanarBack ~= polygon; // dot
+      // dot
+      if (plane.normal*polygon.plane.normal > 0) {
+        coplanarFront.unsafeArrayAppend(polygon);
+      } else {
+        coplanarBack.unsafeArrayAppend(polygon);
+      }
       break;
     case Plane.Front:
-      front ~= polygon;
+      front.unsafeArrayAppend(polygon);
       break;
     case Plane.Back:
-      back ~= polygon;
+      back.unsafeArrayAppend(polygon);
       break;
     case Plane.Spanning:
       Vertex[] f, b;
@@ -165,18 +161,18 @@ void splitPolygon (in ref Plane plane, Polygon polygon, ref Polygon[] coplanarFr
         auto tj = types[j];
         auto vi = polygon.vertices[i];
         auto vj = polygon.vertices[j];
-        if (ti != Plane.Back) f ~= vi;
-        if (ti != Plane.Front) b ~= vi; //(ti != Back ? vi.dup : vi);
+        if (ti != Plane.Back) f.unsafeArrayAppend(vi);
+        if (ti != Plane.Front) b.unsafeArrayAppend(vi); //(ti != Back ? vi.dup : vi);
         if ((ti|tj) == Plane.Spanning) {
           auto t = (plane.w-(plane.normal*vi.pos))/(plane.normal*(vj.pos-vi.pos));
           assert(abs(t) > Plane.EPS);
           auto v = vi.interpolate(vj, t);
-          f ~= v;
-          b ~= v;//v.dup;
+          f.unsafeArrayAppend(v);
+          b.unsafeArrayAppend(v); //v.dup;
         }
       }
-      if (f.length >= 3) front ~= new Polygon(f, cast(Object[])polygon.mshared);
-      if (b.length >= 3) back ~= new Polygon(b, cast(Object[])polygon.mshared);
+      if (f.length >= 3) front.unsafeArrayAppend(new Polygon(f, cast(Object[])polygon.mshared));
+      if (b.length >= 3) back.unsafeArrayAppend(new Polygon(b, cast(Object[])polygon.mshared));
       break;
   }
 }
@@ -218,7 +214,7 @@ public:
     mshared = ashared;
     plane.setFromPoints(vertices[0].pos, vertices[1].pos, vertices[2].pos);
     foreach (immutable idx, const ref v; vertices) {
-      if (plane.pointSide(v.pos) != 0) {
+      if (plane.pointSide(v.pos) != plane.Coplanar) {
         { import core.stdc.stdio : printf; printf("invalid polygon: vertex #%u is bad! (%g, %g)\n", cast(uint)idx, cast(double)plane.pointSideF(v.pos), cast(double)Plane.EPS); }
         assert(0, "invalid polygon");
       }
@@ -259,7 +255,10 @@ public:
   private this () {}
 
   this (Polygon[] apolygons) {
-    if (apolygons.length) build(apolygons);
+    if (apolygons.length) {
+      build(apolygons);
+      { import core.stdc.stdio; printf("polys=%u; nodes=%u; maxdepth=%u\n", cast(uint)apolygons.length, calcNodeCount, calcMaxDepth); }
+    }
   }
 
   // Convert solid space to empty space and empty space to solid space.
@@ -277,10 +276,31 @@ public:
   Polygon[] clipPolygons (Polygon[] plys) {
     if (!plane.valid) return plys;
     Polygon[] f, b;
+    bool keepf = false, keepb = false;
+    scope(exit) { if (!keepf) delete f; if (!keepb) delete b; }
     foreach (Polygon p; plys) plane.splitPolygon(p, f, b, f, b);
     if (front !is null) f = front.clipPolygons(f);
     if (back !is null) b = back.clipPolygons(b); else b = null;
-    return f[]~b[];
+    // return concatenation of `f` and `b`
+    if (f.length == 0 && b.length == 0) return null;
+    // is `f` empty?
+    if (f.length == 0) {
+      assert(b.length != 0);
+      keepb = true;
+      return b;
+    }
+    // is `b` empty?
+    if (b.length == 0) {
+      assert(f.length != 0);
+      keepf = true;
+      return f;
+    }
+    // build new array
+    Polygon[] res;
+    res.unsafeArraySetLength(f.length+b.length);
+    res[0..f.length] = f[];
+    res[f.length..$] = b[];
+    return res;
   }
 
   // Remove all polygons in this BSP tree that are inside the other BSP tree `bsp`.
@@ -290,11 +310,42 @@ public:
     if (back !is null) back.clipTo(bsp);
   }
 
+  private void collectPolys (ref Polygon[] plys) {
+    if (polygons.length) {
+      auto clen = plys.length;
+      plys.unsafeArraySetLength(clen+polygons.length);
+      plys[clen..$] = polygons[];
+    }
+    if (front !is null) front.collectPolys(plys);
+    if (back !is null) back.collectPolys(plys);
+  }
+
+  uint calcNodeCount () {
+    uint res = 1;
+    if (front !is null) res += front.calcNodeCount();
+    if (back !is null) res += back.calcNodeCount();
+    return res;
+  }
+
+  uint calcMaxDepth () {
+    uint maxdepth = 0, curdepth = 0;
+    void walk (Node n) {
+      if (n is null) return;
+      ++curdepth;
+      if (curdepth > maxdepth) maxdepth = curdepth;
+      walk(n.front);
+      walk(n.back);
+      --curdepth;
+    }
+    walk(this);
+    assert(curdepth == 0);
+    return maxdepth;
+  }
+
   // Return a list of all polygons in this BSP tree.
   Polygon[] allPolygons () {
-    Polygon[] res = polygons;
-    if (front !is null) res ~= front.allPolygons();
-    if (back !is null) res ~= back.allPolygons();
+    Polygon[] res;
+    collectPolys(res);
     return res;
   }
 
@@ -310,25 +361,25 @@ public:
   private void build (Polygon[] plys) {
     if (plys.length == 0) return;
     BuildInfo[] nodes;
-    nodes ~= BuildInfo(this, plys);
+    nodes.unsafeArrayAppend(BuildInfo(this, plys));
     buildInternal(nodes);
   }
 
   private static void buildInternal (ref BuildInfo[] nodes) {
     while (nodes.length > 0) {
       auto node = nodes[0].node;
-      //{ import std.stdio; stdout.writeln(nodes.length, " (", cast(void*)node, ")"); stdout.flush(); }
       Polygon[] plys = nodes[0].plys;
       //nodes = nodes[1..$];
       if (nodes.length > 1) {
         import core.stdc.string : memmove;
         memmove(&nodes[0], &nodes[1], nodes[0].sizeof*(nodes.length-1));
-        nodes.length -= 1;
-        nodes.assumeSafeAppend;
+        //nodes.length -= 1;
+        nodes.unsafeArraySetLength(nodes.length-1);
       } else {
-        nodes.length = 0;
+        //nodes.length = 0;
+        nodes.unsafeArraySetLength(0);
       }
-      nodes.assumeSafeAppend;
+      //nodes.assumeSafeAppend;
       if (plys.length == 0) continue;
       //assert(node.front is null);
       //assert(node.back is null);
@@ -339,12 +390,12 @@ public:
         //{ import std.stdio; stdout.writeln(" polys=", node.polygons.length, "; back=", b.length, "; front=", f.length); }
         if (f.length != 0) {
           if (node.front is null) node.front = new Node();
-          nodes ~= BuildInfo(node.front, f);
+          nodes.unsafeArrayAppend(BuildInfo(node.front, f));
           //{ import std.stdio; stdout.writeln("  added front node"); }
         }
         if (b.length != 0) {
           if (node.back is null) node.back = new Node();
-          nodes ~= BuildInfo(node.back, b);
+          nodes.unsafeArrayAppend(BuildInfo(node.back, b));
           //{ import std.stdio; stdout.writeln("  added back node"); }
         }
       } else {
@@ -352,7 +403,7 @@ public:
         if (!node.plane.valid) {
           version(csg_new_bsp_score_algo) {
             mixin(ImportCoreMath!(float, "fabs"));
-            enum balance = 128; // [0..255]
+            enum balance = 50; // [0..100]; lower prefers less splits, higher prefers more balance
             float bestScore = float.infinity;
           } else {
             int bestl = 0, bestr = 0, bests = 0;
@@ -392,11 +443,11 @@ public:
         foreach (Polygon p; plys) node.plane.splitPolygon(p, node.polygons, node.polygons, fbest, bbest);
         if (fbest.length != 0) {
           if (node.front is null) node.front = new Node();
-          nodes ~= BuildInfo(node.front, fbest);
+          nodes.unsafeArrayAppend(BuildInfo(node.front, fbest));
         }
         if (bbest.length != 0) {
           if (node.back is null) node.back = new Node();
-          nodes ~= BuildInfo(node.back, bbest);
+          nodes.unsafeArrayAppend(BuildInfo(node.back, bbest));
         }
       }
     }
@@ -599,7 +650,7 @@ static:
         cos(phi),
         sin(theta)*sin(phi),
       );
-      vertices ~= Vertex(c+(dir*radius), dir);
+      vertices.unsafeArrayAppend(Vertex(c+(dir*radius), dir));
     }
     foreach (int i; 0..slices) {
       foreach (int j; 0..stacks) {
@@ -608,7 +659,7 @@ static:
         if (j > 0) vertex(cast(Vec3.Float)(i+1)/slices, cast(Vec3.Float)j/stacks);
         if (j < stacks-1) vertex(cast(Vec3.Float)(i+1)/slices, cast(Vec3.Float)(j+1)/stacks);
         vertex(cast(Vec3.Float)i/slices, cast(Vec3.Float)(j+1)/stacks);
-        polygons ~= new Polygon(vertices);
+        polygons.unsafeArrayAppend(new Polygon(vertices));
       }
     }
     return CSG.fromPolygons(polygons);
@@ -648,9 +699,9 @@ static:
     foreach (int i; 0..slices) {
       auto t0 = cast(Vec3.Float)i/slices;
       auto t1 = cast(Vec3.Float)(i+1)/slices;
-      polygons ~= new Polygon([sv, point(0, t0, -1), point(0, t1, -1)]);
-      polygons ~= new Polygon([point(0, t1, 0), point(0, t0, 0), point(1, t0, 0), point(1, t1, 0)]);
-      polygons ~= new Polygon([ev, point(1, t1, 1), point(1, t0, 1)]);
+      polygons.unsafeArrayAppend(new Polygon([sv, point(0, t0, -1), point(0, t1, -1)]));
+      polygons.unsafeArrayAppend(new Polygon([point(0, t1, 0), point(0, t0, 0), point(1, t0, 0), point(1, t1, 0)]));
+      polygons.unsafeArrayAppend(new Polygon([ev, point(1, t1, 1), point(1, t0, 1)]));
     }
     return CSG.fromPolygons(polygons);
   }
