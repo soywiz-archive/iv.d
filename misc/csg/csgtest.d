@@ -108,54 +108,6 @@ __gshared bool drawPolys = true;
 __gshared int sample = 0;
 
 
-void oglDrawSceneOld () {
-  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-  if (mesh is null) return;
-
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  oglPerspective(45, cast(float)GWidth/cast(float)GHeight, 0.1, 100);
-  glMatrixMode(GL_MODELVIEW);
-
-  //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glClearColor(0.93, 0.93, 0.93, 1);
-  glEnable(GL_DEPTH_TEST);
-  glEnable(GL_CULL_FACE);
-  glDisable(GL_BLEND);
-  glPolygonOffset(1, 1);
-
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  glTranslatef(0, 0, depth);
-  glRotatef(angleX, 1, 0, 0);
-  glRotatef(angleY, 0, 1, 0);
-
-  foreach (immutable pidx, Polygon p; mesh.polygons) {
-    glColor3f(1.0f, 0.5f, 0.0f);
-    if (drawLines) {
-      glColor3f(0.0f, 0.0f, 0.0f);
-      glBegin(GL_LINES);
-      foreach (immutable idx; 2..p.vertices.length) {
-        glVertex3f(p.vertices[0].pos.x, p.vertices[0].pos.y, p.vertices[0].pos.z);
-        glVertex3f(p.vertices[idx-1].pos.x, p.vertices[idx-1].pos.y, p.vertices[idx-1].pos.z);
-        glVertex3f(p.vertices[0].pos.x, p.vertices[0].pos.y, p.vertices[0].pos.z);
-        glVertex3f(p.vertices[idx].pos.x, p.vertices[idx].pos.y, p.vertices[idx].pos.z);
-        glVertex3f(p.vertices[idx-1].pos.x, p.vertices[idx-1].pos.y, p.vertices[idx-1].pos.z);
-        glVertex3f(p.vertices[idx].pos.x, p.vertices[idx].pos.y, p.vertices[idx].pos.z);
-      }
-      glEnd();
-    }
-    if (drawPolys) {
-      glColor3f(1.0f, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
-      //glColor3f(1.0f-cast(float)pidx/cast(float)mesh.polygons.length, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
-      glBegin(GL_TRIANGLE_FAN);
-        foreach (const ref v; p.vertices) glVertex3f(v.pos.x, v.pos.y, v.pos.z);
-      glEnd();
-    }
-  }
-}
-
-
 void oglDrawScene () {
   glViewport(0, 0, GWidth, GHeight);
 
