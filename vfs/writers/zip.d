@@ -198,6 +198,14 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private bool doesntWorth (ulong outsize, ulong srcsize) {
+  pragma(inline, true);
+  return
+    outsize >= srcsize ||
+    ((srcsize&0xf000_0000_0000_0000UL) == 0 && 100UL*outsize/srcsize > 97);
+}
+
+
 // returs crc
 uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur) onProgress) {
   import etc.c.zlib;
@@ -253,7 +261,7 @@ uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur
       if (zst.avail_out < OBSize) {
         outsize += OBSize-zst.avail_out;
         // if we're going to win less than 2% or nothing, it doesn't worth it
-        if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
+        if (doesntWorth(outsize, srcsize)) {
           // this will be overwritten anyway
           aborted = true;
           return 0;
@@ -268,7 +276,7 @@ uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur
   if (zst.avail_out < OBSize) {
     outsize += OBSize-zst.avail_out;
     // if we're going to win less than 2% or nothing, it doesn't worth it
-    if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
+    if (doesntWorth(outsize, srcsize)) {
       // this will be overwritten anyway
       aborted = true;
       return 0;
@@ -285,7 +293,7 @@ uint zpack (VFile ds, VFile ss, out bool aborted, scope void delegate (ulong cur
     if (zst.avail_out < OBSize) {
       outsize += OBSize-zst.avail_out;
       // if we're going to win less than 2% or nothing, it doesn't worth it
-      if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
+      if (doesntWorth(outsize, srcsize)) {
         // this will be overwritten anyway
         aborted = true;
         return 0;
@@ -381,7 +389,7 @@ static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool
       if (zst.avail_out < OBSize) {
         outsize += OBSize-zst.avail_out;
         // if we're going to win less than 2% or nothing, it doesn't worth it
-        if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
+        if (doesntWorth(outsize, srcsize)) {
           // this will be overwritten anyway
           aborted = true;
           return 0;
@@ -401,7 +409,7 @@ static if (VFSZipWriterSupportsLZMA) uint lzmapack (VFile ds, VFile ss, out bool
     if (zst.avail_out < OBSize) {
       outsize += OBSize-zst.avail_out;
       // if we're going to win less than 2% or nothing, it doesn't worth it
-      if (outsize >= srcsize || 100UL*outsize/srcsize > 97) {
+      if (doesntWorth(outsize, srcsize)) {
         // this will be overwritten anyway
         aborted = true;
         return 0;
