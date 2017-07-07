@@ -11,7 +11,6 @@ import iv.cmdcongl;
 import iv.vmath;
 
 import csg;
-import namedargs;
 import gourd;
 
 
@@ -54,43 +53,43 @@ __gshared CSG mesh;
 // ////////////////////////////////////////////////////////////////////////// //
 void initMesh (int sample) {
   if (sample >= 0 && sample <= 2) {
-    auto a = CSG.cube();
-    auto b = args!(CSG.sphere, radius=>1.3)();
-    if (sample == 0) mesh = a.opunion(b);
-    if (sample == 1) mesh = a.opsubtract(b);
-    if (sample == 2) mesh = a.opintersect(b);
+    auto a = CSG.Cube();
+    auto b = args!(CSG.Sphere, radius=>1.3)();
+    if (sample == 0) mesh = a.doUnion(b);
+    if (sample == 1) mesh = a.doSubtract(b);
+    if (sample == 2) mesh = a.doIntersect(b);
     return;
   }
 
   if (sample >= 3 && sample <= 5) {
-    auto a = CSG.cube();
-    auto b = args!(CSG.sphere, center=>Vec3(-0.5, 0, 0.5), radius=>1.3)();
-    if (sample == 3) mesh = a.opunion(b);
-    if (sample == 4) mesh = a.opsubtract(b);
-    if (sample == 5) mesh = a.opintersect(b);
+    auto a = CSG.Cube();
+    auto b = args!(CSG.Sphere, center=>Vec3(-0.5, 0, 0.5), radius=>1.3)();
+    if (sample == 3) mesh = a.doUnion(b);
+    if (sample == 4) mesh = a.doSubtract(b);
+    if (sample == 5) mesh = a.doIntersect(b);
     return;
   }
 
   if (sample == 6) {
-    auto a = CSG.cube();
-    auto b = CSG.sphere(radius:1.35, stacks:12);
-    auto c = CSG.cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
-    auto d = CSG.cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
-    auto e = CSG.cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
-    mesh = a.opintersect(b).opsubtract(c.opunion(d).opunion(e));
+    auto a = CSG.Cube();
+    auto b = CSG.Sphere(radius:1.35, stacks:12);
+    auto c = CSG.Cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
+    auto d = CSG.Cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
+    auto e = CSG.Cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
+    mesh = a.doIntersect(b).doSubtract(c.doUnion(d).doUnion(e));
     return;
   }
 
   if (sample == 7) {
     auto gourd = buildGourd();
     assert(gourd !is null);
-    auto cyl = args!(CSG.cylinder, radius=>0.4, start=>Vec3(0.6, 0.8, -0.6), end=>Vec3(-0.6, -0.8, 0.6))();
+    auto cyl = args!(CSG.Cylinder, radius=>0.4, start=>Vec3(0.6, 0.8, -0.6), end=>Vec3(-0.6, -0.8, 0.6))();
     //gourd.setColor(0.5, 1, 0);
     //cyl.setColor(0, 0.5, 1);
     //auto n = new Node(gourd.polygons);
     //auto n = new Node(cyl.polygons);
     //assert(0);
-    mesh = gourd.opsubtract(cyl);
+    mesh = gourd.doSubtract(cyl);
     //mesh = gourd;
     return;
   }
@@ -103,7 +102,7 @@ void initMesh (int sample) {
 __gshared int angleX = 20;
 __gshared int angleY = 20;
 __gshared float depth = -4.5;
-__gshared bool drawLines = false;
+__gshared bool drawLines = true;
 __gshared bool drawPolys = true;
 __gshared int sample = 0;
 __gshared bool revz = true;
@@ -178,6 +177,8 @@ void oglDrawScene () {
 
 // ////////////////////////////////////////////////////////////////////////// //
 void main (string[] args) {
+  conRegVar!csg_dump_bsp_stats("dbg_dump_bsp_stats", "dump some BSP stats");
+
   conRegVar!GWidth(64, 8192, "v_width", "window width");
   conRegVar!GHeight(64, 8192, "v_height", "window width");
 

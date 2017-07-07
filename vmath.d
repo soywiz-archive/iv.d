@@ -2413,7 +2413,7 @@ nothrow @safe:
   }
 
   //WARNING! won't check if this plane is valid
-  plane3 flipped () const {
+  plane3 fliped () const {
     pragma(inline, true);
     return plane3(-normal, -w);
   }

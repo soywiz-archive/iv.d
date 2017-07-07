@@ -49,15 +49,19 @@ import iv.alice;
 import iv.unarray;
 import iv.vmath;
 
+public __gshared bool csg_dump_bsp_stats = false;
+
 version = csg_new_bsp_score_algo;
 
 //version = csg_use_doubles;
 
 version(csg_use_doubles) {
   alias Vec3 = VecN!(3, double);
+  // Represents a plane in 3D space.
   alias Plane = Plane3!(Vec3.Float, 0.000001f, false);
 } else {
   alias Vec3 = VecN!(3, float);
+  // Represents a plane in 3D space.
   alias Plane = Plane3!(Vec3.Float, 0.0001f, false); // EPS is 0.0001f, no swizzling
 }
 
@@ -106,92 +110,8 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// Represents a plane in 3D space.
-
-
-// classify each point as well as the entire polygon into one of the four classes:
-//   Coplanar
-//   Front
-//   Back
-//   Spanning
-Plane.PType polySide (in ref Plane plane, in Polygon pl) {
-  Plane.PType polygonType = Plane.Coplanar;
-  foreach (const ref Vertex v; pl.vertices) {
-    Plane.PType type = plane.pointSide(v.pos);
-    polygonType |= type;
-  }
-  return polygonType;
-}
-
-
-// Split `polygon` by this plane if needed, then put the polygon or polygon
-// fragments in the appropriate lists. Coplanar polygons go into either
-// `coplanarFront` or `coplanarBack` depending on their orientation with
-// respect to this plane. Polygons in front or in back of this plane go into
-// either `front` or `back`.
-void splitPolygon (in ref Plane plane, Polygon polygon, ref Polygon[] coplanarFront, ref Polygon[] coplanarBack, ref Polygon[] front, ref Polygon[] back) {
-  import std.math : abs;
-  assert(plane.valid);
-
-  // classify each point as well as the entire polygon into one of the above four classes
-  Plane.PType polygonType = Plane.Coplanar;
-  Plane.PType[] types;
-  scope(exit) delete types;
-  types.unsafeArraySetLength(polygon.vertices.length);
-
-  foreach (immutable vidx, const ref Vertex v; polygon.vertices) {
-    Plane.PType type = plane.pointSide(v.pos);
-    polygonType |= type;
-    //types.unsafeArrayAppend(type);
-    types.ptr[vidx] = type;
-  }
-
-  // put the polygon in the correct list, splitting it when necessary
-  final switch (polygonType) {
-    case Plane.Coplanar:
-      // dot
-      if (plane.normal*polygon.plane.normal > 0) {
-        coplanarFront.unsafeArrayAppend(polygon);
-      } else {
-        coplanarBack.unsafeArrayAppend(polygon);
-      }
-      break;
-    case Plane.Front:
-      front.unsafeArrayAppend(polygon);
-      break;
-    case Plane.Back:
-      back.unsafeArrayAppend(polygon);
-      break;
-    case Plane.Spanning:
-      Vertex[] f, b;
-      foreach (immutable i; 0..polygon.vertices.length) {
-        immutable j = (i+1)%polygon.vertices.length;
-        auto ti = types[i];
-        auto tj = types[j];
-        auto vi = polygon.vertices[i];
-        auto vj = polygon.vertices[j];
-        if (ti != Plane.Back) f.unsafeArrayAppend(vi);
-        if (ti != Plane.Front) b.unsafeArrayAppend(vi); //(ti != Back ? vi.dup : vi);
-        if ((ti|tj) == Plane.Spanning) {
-          auto t = (plane.w-(plane.normal*vi.pos))/(plane.normal*(vj.pos-vi.pos));
-          assert(abs(t) > Plane.EPS);
-          auto v = vi.interpolate(vj, t);
-          f.unsafeArrayAppend(v);
-          b.unsafeArrayAppend(v); //v.dup;
-        }
-      }
-      if (f.length >= 3) front.unsafeArrayAppend(new Polygon(f, cast(Object[])polygon.mshared));
-      if (b.length >= 3) back.unsafeArrayAppend(new Polygon(b, cast(Object[])polygon.mshared));
-      break;
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 // Represents a convex polygon. The vertices used to initialize a polygon must
-// be coplanar and form a convex loop. They do not have to be `Vertex`
-// instances but they must behave similarly (duck typing can be used for
-// customization).
+// be coplanar and form a convex loop.
 //
 // Each convex polygon has a `mshared` property, which is shared between all
 // polygons that are clones of each other or were split from the same polygon.
@@ -207,18 +127,13 @@ public:
 
 public:
   Vertex[] vertices;
-  Object[] mshared;
+  Object mshared;
   Plane plane;
   AABBImpl!Vec3 aabb;
 
 public:
 /*pure*/ nothrow @safe:
-  Polygon dup () /*pure*/ const @trusted {
-    pragma(inline, true);
-    return new Polygon(vertices.dup, cast(Object[])mshared);
-  }
-
-  this (Vertex[] avertices, Object[] ashared=null) @trusted {
+  this (Vertex[] avertices, Object ashared=null) @trusted {
     assert(avertices.length > 2);
     vertices = avertices;
     mshared = ashared;
@@ -233,7 +148,22 @@ public:
     }
   }
 
-  void flip () /*pure*/ @nogc {
+  final Polygon clone () /*pure*/ @trusted {
+    //pragma(inline, true);
+    Vertex[] nv;
+    nv.unsafeArraySetLength(vertices.length);
+    nv[] = vertices[];
+    return new Polygon(nv, mshared);
+  }
+
+  final Polygon flipClone () /*pure*/ @trusted {
+    //pragma(inline, true);
+    auto res = this.clone();
+    res.flip();
+    return res;
+  }
+
+  final void flip () /*pure*/ @nogc {
     //import std.algorithm : reverse;
     //vertices.reverse;
     foreach (immutable idx; 0..vertices.length/2) {
@@ -243,6 +173,83 @@ public:
     }
     foreach (ref Vertex v; vertices) v.flip();
     plane.flip();
+  }
+
+  // classify each point as well as the entire polygon into one of the four classes:
+  //   Coplanar
+  //   Front
+  //   Back
+  //   Spanning
+  final Plane.PType polySide() (in auto ref Plane plane) const @nogc {
+    Plane.PType polygonType = Plane.Coplanar;
+    foreach (const ref Vertex v; vertices) {
+      Plane.PType type = plane.pointSide(v.pos);
+      polygonType |= type;
+    }
+    return polygonType;
+  }
+
+  // Split `polygon` by this plane if needed, then put the polygon or polygon
+  // fragments in the appropriate lists. Coplanar polygons go into either
+  // `coplanarFront` or `coplanarBack` depending on their orientation with
+  // respect to this plane. Polygons in front or in back of this plane go into
+  // either `front` or `back`.
+  final void splitPolygon (in ref Plane plane, ref Polygon[] coplanarFront, ref Polygon[] coplanarBack, ref Polygon[] front, ref Polygon[] back) @trusted {
+    alias polygon = this;
+    mixin(ImportCoreMath!(Plane.Float, "fabs"));
+    assert(plane.valid);
+
+    // classify each point as well as the entire polygon into one of the above four classes
+    Plane.PType polygonType = Plane.Coplanar;
+    Plane.PType[] types;
+    scope(exit) delete types;
+    types.unsafeArraySetLength(polygon.vertices.length);
+
+    foreach (immutable vidx, const ref Vertex v; polygon.vertices) {
+      Plane.PType type = plane.pointSide(v.pos);
+      polygonType |= type;
+      //types.unsafeArrayAppend(type);
+      types.ptr[vidx] = type;
+    }
+
+    // put the polygon in the correct list, splitting it when necessary
+    final switch (polygonType) {
+      case Plane.Coplanar:
+        // dot
+        if (plane.normal*polygon.plane.normal > 0) {
+          coplanarFront.unsafeArrayAppend(polygon);
+        } else {
+          coplanarBack.unsafeArrayAppend(polygon);
+        }
+        break;
+      case Plane.Front:
+        front.unsafeArrayAppend(polygon);
+        break;
+      case Plane.Back:
+        back.unsafeArrayAppend(polygon);
+        break;
+      case Plane.Spanning:
+        Vertex[] f, b;
+        foreach (immutable i; 0..polygon.vertices.length) {
+          immutable j = (i+1)%polygon.vertices.length;
+          auto ti = types[i];
+          auto tj = types[j];
+          auto vi = polygon.vertices[i];
+          auto vj = polygon.vertices[j];
+          if (ti != Plane.Back) f.unsafeArrayAppend(vi);
+          if (ti != Plane.Front) b.unsafeArrayAppend(vi); //(ti != Back ? vi.dup : vi);
+          if ((ti|tj) == Plane.Spanning) {
+            Plane.Float t = (plane.w-(plane.normal*vi.pos))/(plane.normal*(vj.pos-vi.pos));
+            assert(fabs(t) > Plane.EPS);
+            auto v = vi.interpolate(vj, t);
+            f.unsafeArrayAppend(v);
+            b.unsafeArrayAppend(v); //v.dup;
+          }
+        }
+        if (f.length >= 3) front.unsafeArrayAppend(new Polygon(f, polygon.mshared));
+        if (b.length >= 3) back.unsafeArrayAppend(new Polygon(b, polygon.mshared));
+        break;
+    }
   }
 }
 
@@ -261,15 +268,15 @@ public:
   Polygon[] polygons;
 
 public:
-//pure nothrow @safe:
-
-public:
   private this () {}
 
   this (Polygon[] apolygons) {
     if (apolygons.length) {
       build(apolygons);
-      { import core.stdc.stdio; printf("polys=%u; nodes=%u; maxdepth=%u\n", cast(uint)apolygons.length, calcNodeCount, calcMaxDepth); }
+      if (csg_dump_bsp_stats) {
+        import core.stdc.stdio;
+        printf("polys=%u; nodes=%u; maxdepth=%u\n", cast(uint)apolygons.length, calcNodeCount, calcMaxDepth);
+      }
     }
   }
 
@@ -290,7 +297,7 @@ public:
     Polygon[] f, b;
     bool keepf = false, keepb = false;
     scope(exit) { if (!keepf) delete f; if (!keepb) delete b; }
-    foreach (Polygon p; plys) plane.splitPolygon(p, f, b, f, b);
+    foreach (Polygon p; plys) p.splitPolygon(plane, f, b, f, b);
     if (front !is null) f = front.clipPolygons(f);
     if (back !is null) b = back.clipPolygons(b); else b = null;
     // return concatenation of `f` and `b`
@@ -398,7 +405,7 @@ public:
       version(csg_simple_bsp) {
         if (!node.plane.valid) node.plane = plys[0].plane;
         Polygon[] f, b;
-        foreach (Polygon p; plys) node.plane.splitPolygon(p, node.polygons, node.polygons, f, b);
+        foreach (Polygon p; plys) p.splitPolygon(node.plane, node.polygons, node.polygons, f, b);
         //{ import std.stdio; stdout.writeln(" polys=", node.polygons.length, "; back=", b.length, "; front=", f.length); }
         if (f.length != 0) {
           if (node.front is null) node.front = new Node();
@@ -425,7 +432,7 @@ public:
               auto pl = px.plane;
               int l = 0, r = 0, s = 0, c = 0;
               foreach (Polygon p; plys) {
-                auto side = pl.polySide(p);
+                auto side = p.polySide(pl);
                      if (side == Plane.Back) ++l;
                 else if (side == Plane.Front) ++r;
                 else if (side == Plane.Spanning) ++s;
@@ -473,7 +480,7 @@ public:
             node.plane = plys[bestidx].plane;
           }
         }
-        foreach (Polygon p; plys) node.plane.splitPolygon(p, node.polygons, node.polygons, fbest, bbest);
+        foreach (Polygon p; plys) p.splitPolygon(node.plane, node.polygons, node.polygons, fbest, bbest);
         if (fbest.length != 0) {
           if (node.front is null) node.front = new Node();
           nodes.unsafeArrayAppend(BuildInfo(node.front, fbest));
@@ -490,7 +497,7 @@ public:
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Holds a binary space partition tree representing a 3D solid. Two solids can
-// be combined using the `union()`, `subtract()`, and `intersect()` methods.
+// be combined using the `doUnion()`, `doSubtract()`, and `doIntersect()` methods.
 final class CSG {
 public:
   override string toString () const {
@@ -516,14 +523,13 @@ public:
     return csg;
   }
 
-  /+
-  CSG dup () const {
+  CSG clone () {
     auto csg = new CSG();
-    csg.polygons = (cast(Polygon[])polygons).dup;
-    foreach (ref p; csg.polygons) p = p.dup;
+    csg.polygons.unsafeArraySetLength(polygons.length);
+    csg.polygons[] = polygons[];
+    foreach (ref p; csg.polygons) p = p.clone;
     return csg;
   }
-  +/
 
   Polygon[] toPolygons () { pragma(inline, true); return polygons; }
 
@@ -541,7 +547,7 @@ public:
   //          |       |            |       |
   //          +-------+            +-------+
   //
-  CSG opunion (CSG csg) {
+  CSG doUnion (CSG csg) {
     auto a = new Node(this.polygons);
     auto b = new Node(csg.polygons);
     a.clipTo(b);
@@ -567,7 +573,7 @@ public:
   //          |       |
   //          +-------+
   //
-  CSG opsubtract (CSG csg) {
+  CSG doSubtract (CSG csg) {
     auto a = new Node(this.polygons);
     auto b = new Node(csg.polygons);
     a.invert();
@@ -595,7 +601,7 @@ public:
   //          |       |
   //          +-------+
   //
-  CSG opintersect (CSG csg) {
+  CSG doIntersect (CSG csg) {
     auto a = new Node(this.polygons);
     auto b = new Node(csg.polygons);
     a.invert();
@@ -609,16 +615,11 @@ public:
   }
 
   // Return a new CSG solid with solid and empty space switched. This solid is not modified.
-  CSG opinverse () {
+  CSG doInverse () {
     auto csg = new CSG();
-    /*
-    foreach (Polygon p; polygons) {
-      csg.polygons ~= new Polygon(p.vertices.dup, p.mshared);
-      csg.polygons[$-1].flip();
-    }
-    */
-    csg.polygons = polygons.dup;
-    foreach (ref p; csg.polygons) p = p.dup;
+    csg.polygons.unsafeArraySetLength(polygons.length);
+    csg.polygons[] = polygons[];
+    foreach (ref p; csg.polygons) p = p.flipClone;
     return csg;
   }
 
@@ -633,7 +634,7 @@ static:
   //       center: [0, 0, 0],
   //       radius: 1
   //     });
-  CSG cube (Vec3 center=Vec3(0, 0, 0), Vec3.Float radius=1) {
+  CSG Cube (Vec3 center=Vec3(0, 0, 0), Vec3.Float radius=1) {
     import std.algorithm : map;
     import std.array : array;
     auto c = center;
@@ -670,7 +671,7 @@ static:
   //       slices: 16,
   //       stacks: 8
   //     });
-  CSG sphere (Vec3 center=Vec3(0, 0, 0), Vec3.Float radius=1, int slices=16, int stacks=8) {
+  CSG Sphere (Vec3 center=Vec3(0, 0, 0), Vec3.Float radius=1, int slices=16, int stacks=8) {
     import std.math;
     auto c = center;
     Polygon[] polygons;
@@ -710,7 +711,7 @@ static:
   //       radius: 1,
   //       slices: 16
   //     });
-  CSG cylinder (Vec3 start=Vec3(0, -1, 0), Vec3 end=Vec3(0, 1, 0), Vec3.Float radius=1, int slices=16) {
+  CSG Cylinder (Vec3 start=Vec3(0, -1, 0), Vec3 end=Vec3(0, 1, 0), Vec3.Float radius=1, int slices=16) {
     import std.math;
     auto s = start;
     auto e = end;
@@ -742,10 +743,10 @@ static:
 
 
 version(csg_test) unittest {
-  auto a = CSG.cube();
-  auto b = CSG.sphere(radius:1.35, stacks:12);
-  auto c = CSG.cylinder(radius: 0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
-  auto d = CSG.cylinder(radius: 0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
-  auto e = CSG.cylinder(radius: 0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
-  auto mesh = a.opintersect(b).opsubtract(c.opunion(d).opunion(e));
+  auto a = CSG.Cube();
+  auto b = CSG.Sphere(radius:1.35, stacks:12);
+  auto c = CSG.Cylinder(radius: 0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
+  auto d = CSG.Cylinder(radius: 0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
+  auto e = CSG.Cylinder(radius: 0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
+  auto mesh = a.doIntersect(b).doSubtract(c.doUnion(d).doUnion(e));
 }
