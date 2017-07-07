@@ -555,7 +555,6 @@ public void gxRebuildScreen () nothrow {
 
 // ////////////////////////////////////////////////////////////////////////// //
 void main (string[] args) {
-  sdpyWindowClass = "SDPY WINDOW";
   glconShowKey = "M-Grave";
 
   conProcessQueue(); // load config
@@ -566,107 +565,59 @@ void main (string[] args) {
     gxDrawRect(10, 10, VBufWidth-20, VBufHeight-20, gxRGB!(255, 127, 0));
   };
 
-  auto sdwin = new SimpleWindow(VBufWidth, VBufHeight, "My D App", OpenGlOptions.yes, Resizability.allowResizing);
-  glconCtlWindow = sdwin;
-  //sdwin.hideCursor();
 
-  static if (is(typeof(&sdwin.closeQuery))) {
-    sdwin.closeQuery = delegate () { concmd("quit"); glconPostDoConCommands(); };
-  }
-
-  /*
-  sdwin.addEventListener((GLConScreenRebuildEvent evt) {
-    if (sdwin.closed) return;
-    if (isQuitRequested) { sdwin.close(); return; }
-    gxRebuildScreen();
-    sdwin.redrawOpenGlSceneNow();
-  });
-  */
-
-  sdwin.addEventListener((GLConScreenRepaintEvent evt) {
-    if (sdwin.closed) return;
-    if (isQuitRequested) { sdwin.close(); return; }
-    gxRebuildScreen();
-    sdwin.redrawOpenGlSceneNow();
-  });
-
-  sdwin.addEventListener((GLConDoConsoleCommandsEvent evt) {
-    bool sendAnother = false;
-    bool prevVisible = isConsoleVisible;
-    {
-      consoleLock();
-      scope(exit) consoleUnlock();
-      conProcessQueue();
-      sendAnother = !conQueueEmpty();
-    }
-    if (sdwin.closed) return;
-    if (isQuitRequested) { sdwin.close(); return; }
-    if (sendAnother) glconPostDoConCommands();
-    if (prevVisible || isConsoleVisible) glconPostScreenRepaintDelayed();
-  });
-
-
-  sdwin.windowResized = delegate (int wdt, int hgt) {
-    if (sdwin.closed) return;
-    glconResize(wdt, hgt);
-    gxResize(wdt, hgt);
-    //glconPostScreenRebuild();
-    gxRebuildScreen();
+  // first time setup
+  oglSetupDG = delegate () {
+    // this will create texture
+    gxResize(glconCtlWindow.width, glconCtlWindow.height);
   };
 
-  sdwin.redrawOpenGlScene = delegate () {
-    if (sdwin.closed) return;
-
-    {
-      consoleLock();
-      scope(exit) consoleUnlock();
-      if (!conQueueEmpty()) glconPostDoConCommands();
-    }
-
-    // draw main screen
+  // draw main screen
+  redrawFrameDG = delegate () {
     /*
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_ACCUM_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
     glViewport(0, 0, sdwin.width, sdwin.height);
     */
     gxBlitTexture();
-    glconDraw();
-
-    //if (isQuitRequested()) sdwin.glconPostEvent(new QuitEvent());
   };
 
-  sdwin.visibleForTheFirstTime = delegate () {
-    sdwin.setAsCurrentOpenGlContext();
-    glconInit(sdwin.width, sdwin.height);
-    gxResize(sdwin.width, sdwin.height);
+  // rebuild main screen
+  nextFrameDG = delegate () {
+    gxRebuildScreenCB();
+  };
+
+  keyEventDG = delegate (KeyEvent event) {
+    if (!event.pressed) return;
+    switch (event.key) {
+      case Key.Escape: concmd("quit"); break;
+      default:
+    }
+  };
+
+  mouseEventDG = delegate (MouseEvent event) {
+  };
+
+  charEventDG = delegate (dchar ch) {
+    if (ch == 'q') { concmd("quit"); return; }
+  };
+
+  resizeEventDG = delegate (int wdt, int hgt) {
+    gxResize(wdt, hgt);
     gxRebuildScreen();
-    sdwin.redrawOpenGlSceneNow();
-    //{ import core.stdc.stdio; printf("!!!!\n"); }
   };
 
-  sdwin.eventLoop(0,
-    delegate () {
-      scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
-      if (sdwin.closed) return;
-      if (isQuitRequested) { sdwin.close(); return; }
-    },
-    delegate (KeyEvent event) {
-      //sdwin.redrawOpenGlSceneNow();
-      scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
-      if (sdwin.closed) return;
-      if (isQuitRequested) { sdwin.close(); return; }
-      if (glconKeyEvent(event)) { glconPostScreenRepaint(); return; }
-    },
-    delegate (MouseEvent event) {
-      scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
-      if (sdwin.closed) return;
-    },
-    delegate (dchar ch) {
-      if (sdwin.closed) return;
-      scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
-      if (glconCharEvent(ch)) { glconPostScreenRepaint(); return; }
-    },
-  );
-  flushGui();
-  conProcessQueue(int.max/4);
+  version(none) {
+   // this...
+    sdpyWindowClass = "SDPY WINDOW";
+    auto sdwin = new SimpleWindow(VBufWidth, VBufHeight, "My D App", OpenGlOptions.yes, Resizability.allowResizing);
+    //sdwin.hideCursor();
+    glconSetupForGLWindow(sdwin);
+    sdwin.eventLoop(0);
+    flushGui();
+    conProcessQueue(int.max/4);
+  } else {
+    // or this
+    glconRunGLWindowResizeable(VBufWidth, VBufHeight, "My D App", "SDPY WINDOW");
+  }
 }

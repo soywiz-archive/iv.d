@@ -5,6 +5,8 @@ import arsd.image;
 import arsd.simpledisplay;
 
 import iv.alice;
+import iv.cmdcon;
+import iv.cmdcongl;
 //import iv.glbinds;
 import iv.vmath;
 
@@ -13,10 +15,12 @@ import namedargs;
 import gourd;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 enum GWidth = 800;
 enum GHeight = 600;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 enum VertexShader = q{
   varying Vec3 color;
   varying Vec3 normal;
@@ -43,11 +47,11 @@ enum FragmentShader = q{
 };
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 __gshared CSG mesh;
 
 
-//mixin(import("gourd.d"));
-
+// ////////////////////////////////////////////////////////////////////////// //
 void initMesh (int sample) {
   if (sample >= 0 && sample <= 2) {
     auto a = CSG.cube();
@@ -95,63 +99,95 @@ void initMesh (int sample) {
 }
 
 
-void main () {
-  int angleX = 20;
-  int angleY = 20;
-  float depth = -4.5;
-  bool drawLines = false;
-  bool drawPolys = true;
-  int sample = 0;
+// ////////////////////////////////////////////////////////////////////////// //
+__gshared float zNear = 0.001f;
+__gshared float viewAngleVertical = 90.0f;
+
+
+void oglSetupReversedZ () {
+  import std.math : tan;
+  import iv.glbinds;
+  float f = 1.0f / tan(viewAngleVertical / 2.0f); // 1.0 / tan(X) == cotangent(X)
+  float aspect = cast(float)GWidth/cast(float)GHeight;
+/+
+  glDepthFunc(GL_GREATER); //default would be GL_LESS
+  clearDepth(0.0f); //default would be 1.0f
+
+  glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+
+
+  //infinite Perspective matrix reversed
+  glm::mat4 projectionMatrix = {
+    f/aspect, 0.0f,  0.0f,  0.0f,
+      0.0f,    f,  0.0f,  0.0f,
+      0.0f, 0.0f,  0.0f, -1.0f,
+      0.0f, 0.0f, zNear,  0.0f
+  };
++/
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+__gshared int angleX = 20;
+__gshared int angleY = 20;
+__gshared float depth = -4.5;
+__gshared bool drawLines = false;
+__gshared bool drawPolys = true;
+__gshared int sample = 0;
+
+
+void oglDrawScene () {
+  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+  if (mesh is null) return;
+
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+  glTranslatef(0, 0, depth);
+  glRotatef(angleX, 1, 0, 0);
+  glRotatef(angleY, 0, 1, 0);
+
+  foreach (immutable pidx, Polygon p; mesh.polygons) {
+    glColor3f(1.0f, 0.5f, 0.0f);
+    if (drawLines) {
+      glColor3f(0.0f, 0.0f, 0.0f);
+      glBegin(GL_LINES);
+      foreach (immutable idx; 2..p.vertices.length) {
+        glVertex3f(p.vertices[0].pos.x, p.vertices[0].pos.y, p.vertices[0].pos.z);
+        glVertex3f(p.vertices[idx-1].pos.x, p.vertices[idx-1].pos.y, p.vertices[idx-1].pos.z);
+        glVertex3f(p.vertices[0].pos.x, p.vertices[0].pos.y, p.vertices[0].pos.z);
+        glVertex3f(p.vertices[idx].pos.x, p.vertices[idx].pos.y, p.vertices[idx].pos.z);
+        glVertex3f(p.vertices[idx-1].pos.x, p.vertices[idx-1].pos.y, p.vertices[idx-1].pos.z);
+        glVertex3f(p.vertices[idx].pos.x, p.vertices[idx].pos.y, p.vertices[idx].pos.z);
+      }
+      glEnd();
+    }
+    if (drawPolys) {
+      glColor3f(1.0f, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
+      //glColor3f(1.0f-cast(float)pidx/cast(float)mesh.polygons.length, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
+      glBegin(GL_TRIANGLE_FAN);
+        foreach (const ref v; p.vertices) glVertex3f(v.pos.x, v.pos.y, v.pos.z);
+      glEnd();
+    }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+void main (string[] args) {
+  //glconShowKey = "M-Grave";
+  conProcessQueue(); // load config
+  conProcessArgs!true(args);
 
   initMesh(sample);
 
   setOpenGLContextVersion(3, 2);
   //openGLContextCompatible = false;
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "CSG demo", OpenGlOptions.yes, Resizability.fixedSize);
+  auto sdwin = new SimpleWindow(GWidth, GHeight, "CSG demo", OpenGlOptions.yes, Resizability.fixedSize);
   //sdwindow.hideCursor();
 
-  //sdwindow.closeQuery = delegate () { concmd("quit"); };
-
-  sdwindow.redrawOpenGlScene = delegate () {
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-    if (mesh is null) return;
-
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    glTranslatef(0, 0, depth);
-    glRotatef(angleX, 1, 0, 0);
-    glRotatef(angleY, 0, 1, 0);
-
-    foreach (immutable pidx, Polygon p; mesh.polygons) {
-      glColor3f(1.0f, 0.5f, 0.0f);
-      if (drawLines) {
-        glColor3f(0.0f, 0.0f, 0.0f);
-        glBegin(GL_LINES);
-        foreach (immutable idx; 2..p.vertices.length) {
-          glVertex3f(p.vertices[0].pos.x, p.vertices[0].pos.y, p.vertices[0].pos.z);
-          glVertex3f(p.vertices[idx-1].pos.x, p.vertices[idx-1].pos.y, p.vertices[idx-1].pos.z);
-          glVertex3f(p.vertices[0].pos.x, p.vertices[0].pos.y, p.vertices[0].pos.z);
-          glVertex3f(p.vertices[idx].pos.x, p.vertices[idx].pos.y, p.vertices[idx].pos.z);
-          glVertex3f(p.vertices[idx-1].pos.x, p.vertices[idx-1].pos.y, p.vertices[idx-1].pos.z);
-          glVertex3f(p.vertices[idx].pos.x, p.vertices[idx].pos.y, p.vertices[idx].pos.z);
-        }
-        glEnd();
-      }
-      if (drawPolys) {
-        glColor3f(1.0f, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
-        //glColor3f(1.0f-cast(float)pidx/cast(float)mesh.polygons.length, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
-        glBegin(GL_TRIANGLE_FAN);
-          foreach (const ref v; p.vertices) glVertex3f(v.pos.x, v.pos.y, v.pos.z);
-        glEnd();
-      }
-    }
-    //glFlush();
-  };
-
-  sdwindow.visibleForTheFirstTime = delegate () {
+  oglSetupDG = delegate () {
     import iv.glbinds;
-    sdwindow.setAsCurrentOpenGlContext(); // make this window active
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -164,41 +200,40 @@ void main () {
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glPolygonOffset(1, 1);
-
-    sdwindow.redrawOpenGlScene();
   };
 
-  sdwindow.eventLoop(1000/35,
-    delegate () {
-      if (sdwindow.closed) return;
-      sdwindow.redrawOpenGlSceneNow();
-    },
-    delegate (KeyEvent event) {
-      if (sdwindow.closed) return;
-      if (!event.pressed) return;
-      switch (event.key) {
-        case Key.Escape: sdwindow.close(); break;
-        default:
+  redrawFrameDG = delegate () { oglDrawScene(); };
+  nextFrameDG = delegate () {};
+
+  keyEventDG = delegate (KeyEvent event) {
+    if (!event.pressed) return;
+    switch (event.key) {
+      case Key.Escape: concmd("quit"); break;
+      default:
+    }
+  };
+
+  mouseEventDG = delegate (MouseEvent event) {
+    import std.algorithm : max, min;
+    if (event.type == MouseEventType.motion) {
+      if (event.modifierState&ModifierState.leftButtonDown) {
+        angleY += event.dx;
+        angleX += event.dy;
+        angleX = max(-90, min(90, angleX));
       }
-    },
-    delegate (MouseEvent event) {
-      import std.algorithm : max, min;
-      if (event.type == MouseEventType.motion) {
-        if (event.modifierState&ModifierState.leftButtonDown) {
-          angleY += event.dx;
-          angleX += event.dy;
-          angleX = max(-90, min(90, angleX));
-        }
-      }
-      if (event.type == MouseEventType.buttonPressed && event.button == MouseButton.wheelUp) depth += 0.5;
-      if (event.type == MouseEventType.buttonPressed && event.button == MouseButton.wheelDown) depth -= 0.5;
-    },
-    delegate (dchar ch) {
-      if (ch == 'q') { sdwindow.close(); return; }
-      if (ch == 'l') { drawLines = !drawLines; return; }
-      if (ch == 'p') { drawPolys = !drawPolys; return; }
-      if (ch == '+') { initMesh(++sample); return; }
-      if (ch == '-') { initMesh(--sample); return; }
-    },
-  );
+    }
+    if (event.type == MouseEventType.buttonPressed && event.button == MouseButton.wheelUp) depth += 0.5;
+    if (event.type == MouseEventType.buttonPressed && event.button == MouseButton.wheelDown) depth -= 0.5;
+  };
+
+  charEventDG = delegate (dchar ch) {
+    if (ch == 'q') { concmd("quit"); return; }
+    if (ch == 'l') { drawLines = !drawLines; return; }
+    if (ch == 'p') { drawPolys = !drawPolys; return; }
+    if (ch == '+') { initMesh(++sample); return; }
+    if (ch == '-') { initMesh(--sample); return; }
+  };
+
+  glconSetupForGLWindow(sdwin);
+  sdwin.eventLoop(0);
 }

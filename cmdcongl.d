@@ -21,6 +21,7 @@ import iv.alice;
 public import iv.cmdcon;
 import iv.vfs;
 import iv.strex;
+import iv.pxclock;
 
 static if (__traits(compiles, (){import arsd.simpledisplay;}())) {
   enum OptCmdConGlHasSdpy = true;
@@ -268,6 +269,7 @@ private bool glconGenTexture () {
 
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrwdt, scrhgt, 0, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
 
+  //{ import core.stdc.stdio; printf("glconGenTexture: yep\n"); }
   return true;
 }
 
@@ -401,11 +403,20 @@ public void glconDraw () {
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   //glDisable(GL_BLEND);
   glDisable(GL_STENCIL_TEST);
+  glDisable(GL_SCISSOR_TEST);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_POLYGON_OFFSET_FILL);
+  glDisable(GL_ALPHA_TEST);
+  glDisable(GL_FOG);
+  glDisable(GL_COLOR_LOGIC_OP);
+  glDisable(GL_INDEX_LOGIC_OP);
+  glDisable(GL_POLYGON_SMOOTH);
 
   glBindTexture(GL_TEXTURE_2D, convbufTexId);
   if (updatetex) {
     //glTextureSubImage2D(convbufTexId, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, GL_RGBA, GL_UNSIGNED_BYTE, convbuf);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf);
+    //{ import core.stdc.stdio; printf("glconDraw: yep (%u)\n", convbufTexId); }
   }
 
   int ofs = (scrhgt-rConsoleHeight)*conScale;
@@ -791,7 +802,7 @@ bool renderConsole (bool forced) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 static if (OptCmdConGlHasSdpy) {
-import arsd.simpledisplay : KeyEvent, Key, SimpleWindow;
+import arsd.simpledisplay : KeyEvent, MouseEvent, Key, ModifierState, SimpleWindow;
 version(Posix) {
   import arsd.simpledisplay : Pixmap, XImage, XDisplay, Visual, XPutImage, ImageFormat, Drawable, Status, XInitImage;
   import arsd.simpledisplay : GC, XCreateGC, XFreeGC, XCopyGC, XSetClipMask, DefaultGC, DefaultScreen, None;
@@ -942,6 +953,214 @@ public void glconPostScreenRepaintDelayed (int tout=35) {
 ///
 public void glconPostDoConCommands () {
   if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConDoConsoleCommandsEvent) glconCtlWindow.postEvent(evDoConCommands);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public __gshared bool glconTranslateKeypad = true; /// translate keypad keys to "normal" keys?
+public __gshared bool glconTranslateMods = true; /// translate right modifiers "normal" modifiers?
+public __gshared bool glconNoMouseEventsWhenConsoleIsVisible = true; ///
+
+public __gshared void delegate () oglSetupDG; /// called when window will become visible for the first time
+public __gshared void delegate () redrawFrameDG; /// frame need to be redrawn (but not rebuilt)
+public __gshared void delegate () nextFrameDG; /// frame need to be rebuilt (but not redrawn)
+public __gshared void delegate (KeyEvent event) keyEventDG; ///
+public __gshared void delegate (MouseEvent event) mouseEventDG; ///
+public __gshared void delegate (dchar ch) charEventDG; ///
+public __gshared void delegate (int wdt, int hgt) resizeEventDG; ///
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private void glconRunGLWindowInternal (int wdt, int hgt, string title, string klass, bool resizeable) {
+  import arsd.simpledisplay : sdpyWindowClass, OpenGlOptions, Resizability, flushGui;
+  if (klass !is null) sdpyWindowClass = klass;
+  auto sdwin = new SimpleWindow(wdt, hgt, title, OpenGlOptions.yes, (resizeable ? Resizability.allowResizing : Resizability.fixedSize));
+  glconSetupForGLWindow(sdwin);
+  sdwin.eventLoop(0);
+  flushGui();
+  conProcessQueue(int.max/4);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+///
+public void glconRunGLWindow (int wdt, int hgt, string title, string klass=null) {
+  glconRunGLWindowInternal(wdt, hgt, title, klass, false);
+}
+
+///
+public void glconRunGLWindowResizeable (int wdt, int hgt, string title, string klass=null) {
+  glconRunGLWindowInternal(wdt, hgt, title, klass, true);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private __gshared int glconFPS = 30;
+private __gshared ulong nextFrameTime; // in msecs
+
+private final class NextFrameEvent {}
+private __gshared NextFrameEvent eventNextFrame;
+private shared static this () {
+  eventNextFrame = new NextFrameEvent();
+  conRegVar!glconFPS(1, 200, "r_fps", "frames per second (affects both rendering and processing)");
+  // use `conSealVar("r_fps")` to seal it
+}
+
+/// call this to reset frame timer, and immediately post "rebuild frame" event
+// called automatically when window is shown, if `glconSetupForGLWindow()` is used
+public void glconResetNextFrame () {
+  nextFrameTime = 0;
+  glconPostNextFrame();
+}
+
+/// usually will be called automatically
+public void glconPostNextFrame () {
+  import iv.pxclock;
+  if (glconCtlWindow.eventQueued!NextFrameEvent) return;
+  auto ctime = clockMilli();
+  if (nextFrameTime == 0) nextFrameTime = ctime;
+  if (nextFrameTime > ctime) {
+    // next frime time isn't came yet
+    glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nextFrameTime-ctime));
+  } else {
+    // next frime time is either now, or passed
+    int fps = glconFPS;
+    if (fps < 1) fps = 1;
+    if (fps > 120) fps = 120;
+    nextFrameTime += 1000/fps;
+    if (nextFrameTime < ctime) nextFrameTime = ctime+1000/fps; // too much time passed, reset timer
+    glconCtlWindow.postTimeout(eventNextFrame, 0);
+  }
+}
+
+/** use this after you set all the necessary *DG handlers, like this:
+ *
+ * ------
+ * sdpyWindowClass = "SDPY WINDOW";
+ * auto sdwin = new SimpleWindow(VBufWidth, VBufHeight, "My D App", OpenGlOptions.yes, Resizability.allowResizing);
+ * //sdwin.hideCursor();
+ * glconSetupForGLWindow(sdwin);
+ * sdwin.eventLoop(0);
+ * flushGui();
+ * conProcessQueue(int.max/4);
+ * ------
+ */
+public void glconSetupForGLWindow (SimpleWindow w) {
+  if (glconCtlWindow !is null) {
+    if (w !is glconCtlWindow) throw new Exception("glconSetupForGLWindow() was already called for another window");
+    return;
+  }
+
+  glconCtlWindow = w;
+  if (w is null) return;
+
+  static if (is(typeof(&glconCtlWindow.closeQuery))) {
+    glconCtlWindow.closeQuery = delegate () { concmd("quit"); glconPostDoConCommands(); };
+  }
+
+  glconCtlWindow.visibleForTheFirstTime = delegate () {
+    import iv.glbinds;
+    glconCtlWindow.setAsCurrentOpenGlContext(); // make this window active
+
+    glconInit(glconCtlWindow.width, glconCtlWindow.height);
+    if (oglSetupDG !is null) oglSetupDG();
+
+    glconResetNextFrame();
+    //glconPostNextFrame();
+  };
+
+  glconCtlWindow.addEventListener((NextFrameEvent evt) {
+    if (glconCtlWindow.closed) return;
+    if (isQuitRequested) { glconCtlWindow.close(); return; }
+    if (nextFrameDG !is null) nextFrameDG();
+    glconCtlWindow.redrawOpenGlSceneNow();
+    glconPostNextFrame();
+  });
+
+  glconCtlWindow.addEventListener((GLConScreenRepaintEvent evt) {
+    if (glconCtlWindow.closed) return;
+    if (isQuitRequested) { glconCtlWindow.close(); return; }
+    glconCtlWindow.redrawOpenGlSceneNow();
+  });
+
+  glconCtlWindow.addEventListener((GLConDoConsoleCommandsEvent evt) {
+    glconProcessEventMessage();
+  });
+
+  glconCtlWindow.windowResized = delegate (int wdt, int hgt) {
+    if (glconCtlWindow.closed) return;
+    glconResize(wdt, hgt);
+    glconPostScreenRepaint/*Delayed*/();
+    if (resizeEventDG !is null) resizeEventDG(wdt, hgt);
+  };
+
+  glconCtlWindow.redrawOpenGlScene = delegate () {
+    if (glconCtlWindow.closed) return;
+
+    {
+      consoleLock();
+      scope(exit) consoleUnlock();
+      if (!conQueueEmpty()) glconPostDoConCommands();
+    }
+
+    // draw main screen
+    if (redrawFrameDG !is null) redrawFrameDG();
+
+    glconDraw();
+  };
+
+  glconCtlWindow.handleKeyEvent = delegate (KeyEvent event) {
+    scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
+    if (glconCtlWindow.closed) return;
+    if (isQuitRequested) { glconCtlWindow.close(); return; }
+    if (glconKeyEvent(event)) { glconPostScreenRepaint(); return; }
+
+    if (keyEventDG is null) return;
+
+    if (glconTranslateMods) {
+      switch (event.key) {
+        case Key.Ctrl_r: event.key = Key.Ctrl; return;
+        case Key.Shift_r: event.key = Key.Shift; return;
+        case Key.Alt_r: event.key = Key.Alt; return;
+        case Key.Windows_r: event.key = Key.Windows; return;
+        default:
+      }
+    }
+    if (glconTranslateKeypad) {
+      if ((event.modifierState&ModifierState.numLock) == 0) {
+        switch (event.key) {
+          case Key.PadEnter: event.key = Key.Enter; return;
+          case Key.Pad1: event.key = Key.End; return;
+          case Key.Pad2: event.key = Key.Down; return;
+          case Key.Pad3: event.key = Key.PageDown; return;
+          case Key.Pad4: event.key = Key.Left; return;
+          //case Key.Pad5: event.key = Key.; return;
+          case Key.Pad6: event.key = Key.Right; return;
+          case Key.Pad7: event.key = Key.Home; return;
+          case Key.Pad8: event.key = Key.Up; return;
+          case Key.Pad9: event.key = Key.PageUp; return;
+          case Key.Pad0: event.key = Key.Insert; return;
+          default:
+        }
+      }
+    }
+    keyEventDG(event);
+  };
+
+  glconCtlWindow.handleMouseEvent = delegate (MouseEvent event) {
+    scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
+    if (glconCtlWindow.closed) return;
+    if (rConsoleVisible && glconNoMouseEventsWhenConsoleIsVisible) return;
+    if (mouseEventDG !is null) mouseEventDG(event);
+  };
+
+  glconCtlWindow.handleCharEvent = delegate (dchar ch) {
+    scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
+    if (glconCtlWindow.closed) return;
+    if (glconCharEvent(ch)) { glconPostScreenRepaint(); return; }
+    if (charEventDG !is null) charEventDG(ch);
+  };
+
 }
 }
 
