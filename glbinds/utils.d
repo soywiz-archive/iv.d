@@ -280,14 +280,11 @@ void oglOrtho2D (GLdouble left, GLdouble right, GLdouble bottom, GLdouble top) {
 
 void oglPerspective (GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zFar) {
   import core.math : cos, sin;
-
   GLdouble radians = fovy/2.0*GL_PI/180.0;
-
   GLdouble deltaZ = zFar-zNear;
   GLdouble sine = sin(radians);
   if (deltaZ == 0 || sine == 0 || aspect == 0) return;
   GLdouble cotangent = cos(radians)/sine;
-
   GLdouble[4][4] m = void;
   oglMakeIdentity(&m[0][0]);
   m.ptr[0].ptr[0] = cotangent/aspect;
@@ -297,6 +294,51 @@ void oglPerspective (GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zF
   m.ptr[3].ptr[2] = -2*zNear*zFar/deltaZ;
   m.ptr[3].ptr[3] = 0;
   glMultMatrixd(&m[0][0]);
+}
+
+
+void oglNormalZTests () {
+  glDepthFunc(GL_LESS); // default would be GL_LESS
+  glClearDepth(1.0f); // default would be 1.0f
+  glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+}
+
+
+void oglReversedZTests () {
+  glDepthFunc(GL_GREATER); // default would be GL_LESS
+  glClearDepth(0.0f); // default would be 1.0f
+  glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+}
+
+
+void oglPerspectiveReversedZ (GLdouble fovy, GLdouble aspect, GLdouble zNear) {
+  version(none) {
+    import std.math : tan;
+    immutable GLdouble f = 1.0/tan(fovy/2.0); // 1.0 / tan(X) == cotangent(X)
+    //GLdouble aspect = cast(float)GWidth/cast(float)GHeight;
+    // infinite perspective matrix reversed
+    immutable GLdouble[16] projMat = [
+      f/aspect, 0.0,   0.0,  0.0,
+           0.0,   f,   0.0,  0.0,
+           0.0, 0.0,   0.0, -1.0,
+           0.0, 0.0, zNear,  0.0,
+    ];
+    //glMatrixMode(GL_PROJECTION);
+    //glLoadIdentity();
+    glMultMatrixd(projMat.ptr);
+  } else {
+    import core.math : cos, sin;
+    GLdouble radians = fovy/2.0*GL_PI/180.0;
+    GLdouble sine = sin(radians);
+    if (sine == 0 || aspect == 0) return;
+    GLdouble cotangent = cos(radians)/sine;
+    GLdouble[16] m = 0.0;
+    m.ptr[0] = cotangent/aspect;
+    m.ptr[5] = cotangent;
+    m.ptr[11] = -1;
+    m.ptr[14] = zNear;
+    glMultMatrixd(m.ptr);
+  }
 }
 
 

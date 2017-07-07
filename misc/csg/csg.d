@@ -55,6 +55,9 @@ version = csg_new_bsp_score_algo;
 alias Vec3 = VecN!(3, double);
 
 
+public __gshared int BSPBalance = 50; // [0..100]; lower prefers less splits, higher prefers more balance
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // Represents a vertex of a polygon. This class provides `normal` so convenience
 // functions like `CSG.sphere()` can return a smooth vertex normal, but `normal`
@@ -406,7 +409,7 @@ public:
         if (!node.plane.valid) {
           version(csg_new_bsp_score_algo) {
             mixin(ImportCoreMath!(float, "fabs"));
-            enum balance = 50; // [0..100]; lower prefers less splits, higher prefers more balance
+            //enum BSPBalance = 50; // [0..100]; lower prefers less splits, higher prefers more balance
             float bestScore = float.infinity;
           }
           int bestl = 0, bestr = 0, bests = 0, bestc = 0;
@@ -423,7 +426,7 @@ public:
                 else if (side == Plane.Coplanar) ++c;
               }
               version(csg_new_bsp_score_algo) {
-                float score = (100.0f-cast(float)balance)*cast(float)s+cast(float)balance*fabs(cast(float)(r-l));
+                float score = (100.0f-cast(float)BSPBalance)*cast(float)s+cast(float)BSPBalance*fabs(cast(float)(r-l));
                 if (score < bestScore) {
                   bestidx = cast(uint)idx;
                   bestScore = score;
