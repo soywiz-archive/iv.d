@@ -24,6 +24,7 @@ void oglSetup2D(bool upsideDown=false) (int winWidth, int winHeight) {
   glDisable(GL_DITHER);
   glDisable(GL_STENCIL_TEST);
   glDisable(GL_SCISSOR_TEST);
+  glDisable(GL_CULL_FACE);
 
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
@@ -301,8 +302,8 @@ void oglNormalZTests () {
   glDepthFunc(GL_LESS); // default would be GL_LESS
   glClearDepth(1.0f); // default would be 1.0f
   // OpenGL 4.5 feature; see "GL_ARB_clip_control" extension
-  //glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
-  glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE); // actually, this is better even for "normal" cases
+  glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+  //glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE); // actually, this is better even for "normal" cases
 }
 
 

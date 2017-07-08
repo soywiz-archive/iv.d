@@ -3693,6 +3693,7 @@ public void conAddInputChar (char ch) {
       foreach (/*auto*/ name; conByCommand) {
         if (name.length >= concurx && name.length > minPfx.length && name[0..concurx] == concli[0..concurx]) minPfx = name;
       }
+      string longestCmd = minPfx;
       //conwriteln("longest command: [", minPfx, "]");
       // find longest prefix
       foreach (/*auto*/ name; conByCommand) {
@@ -3709,7 +3710,7 @@ public void conAddInputChar (char ch) {
         bool doRet = (minPfx.length > concurx);
         if (insChars(minPfx[concurx..$])) {
           // insert space after complete command
-          if (conHasCommand(minPfx)) {
+          if (longestCmd.length == minPfx.length && conHasCommand(minPfx)) {
             if (concurx >= conclilen || concli.ptr[concurx] > ' ') {
               doRet = insChars(' ');
             } else {
