@@ -861,12 +861,19 @@ const:
     }
   }
 
-  bool collinear() (in auto ref Me v1, in auto ref Me v2) {
+  static if (dims == 3) bool collinear() (in auto ref Me v1, in auto ref Me v2) {
     pragma(inline, true);
     mixin(ImportCoreMath!(double, "fabs"));
     alias v0 = this;
     immutable Float det = cast(Float)(v0.x*(v1.y*v2.z-v2.y*v1.z)-v1.x*(v0.y*v2.z-v2.y*v0.z)+v2.x*(v0.y*v1.z-v1.y*v0.z));
     return (fabs(det) < Epsilon);
+  }
+
+  static if (dims == 2) bool collinear() (in auto ref Me v1, in auto ref Me v2) {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(double, "fabs"));
+    alias v0 = this;
+    immutable Float det = cast(Float)((v0-v1)*(v0-v2)-(v0-v2)*(v0-v1));
   }
 
 static:
