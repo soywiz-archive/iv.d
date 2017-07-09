@@ -861,6 +861,14 @@ const:
     }
   }
 
+  bool collinear() (in auto ref Me v1, in auto ref Me v2) {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(double, "fabs"));
+    alias v0 = this;
+    immutable Float det = cast(Float)(v0.x*(v1.y*v2.z-v2.y*v1.z)-v1.x*(v0.y*v2.z-v2.y*v0.z)+v2.x*(v0.y*v1.z-v1.y*v0.z));
+    return (fabs(det) < Epsilon);
+  }
+
 static:
   // linearly interpolate between v1 and v2
   /*
@@ -2379,7 +2387,7 @@ nothrow @safe:
     mixin(ImportCoreMath!(Float, "fabs"));
     normal = anormal;
     w = aw;
-    if (fabs(w) <= EPS) w = 0;
+    //if (fabs(w) <= EPS) w = 0;
   }
 
   void setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
@@ -2391,6 +2399,7 @@ nothrow @safe:
     //x*a.x+y*a.y+z*a.z
     //w = normal*a; // n.dot(a)
     w = normal.x*a.x+normal.y*a.y+normal.z*a.z;
+    assert(valid);
     //return this;
   }
 
@@ -2436,13 +2445,15 @@ nothrow @safe:
 
   PType pointSide() (in auto ref vec3 p) const {
     pragma(inline, true);
-    immutable Float t = (normal*p)-w; // dot
+    //immutable Float t = (normal*p)-w; // dot
+    immutable double t = normal.x*p.x+normal.y*p.y+normal.z*p.z-w;
     return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
   }
 
   Float pointSideF() (in auto ref vec3 p) const {
     pragma(inline, true);
-    return (normal*p)-w; // dot
+    //return (normal*p)-w; // dot
+    return cast(Float)normal.x*p.x+normal.y*p.y+normal.z*p.z-w;
   }
 
   // swizzling
