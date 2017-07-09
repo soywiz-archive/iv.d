@@ -248,11 +248,20 @@ nothrow @safe:
   static Me Zero () pure nothrow @safe @nogc { pragma(inline, true); return Me(0, 0); }
   static Me Invalid () pure nothrow @safe @nogc { pragma(inline, true); return Me(Float.nan, Float.nan); }
 
+  // infinites are invalid too
   @property bool valid () const nothrow @safe @nogc {
+    /*
     pragma(inline, true);
     import core.stdc.math : isnan;
          static if (dims == 2) return !isnan(x) && !isnan(y);
     else static if (dims == 3) return !isnan(x) && !isnan(y) && !isnan(z);
+    else static assert(0, "invalid dimension count for vector");
+    */
+    // this also reject nans
+    pragma(inline, true);
+    import core.stdc.math : isfinite;
+         static if (dims == 2) return isfinite(x) && isfinite(y);
+    else static if (dims == 3) return isfinite(x) && isfinite(y) && isfinite(z);
     else static assert(0, "invalid dimension count for vector");
   }
 
@@ -1981,7 +1990,8 @@ public:
     );
   }
 
-  @property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w) && !isnan(x) && !isnan(y) && !isnan(z); }
+  //@property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w) && !isnan(x) && !isnan(y) && !isnan(z); }
+  @property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isfinite; return isfinite(w) && isfinite(x) && isfinite(y) && isfinite(z); }
 
   Mat4!VT toMatrix () const nothrow @trusted @nogc {
     //Float wx = void, wy = void, wz = void, xx = void, yy = void, yz = void;
@@ -2261,7 +2271,7 @@ public:
 public nothrow @trusted @nogc:
   this() (in auto ref vec aorig, Float arad) { orig = aorig; radius = arad; }
 
-  @property bool valid () const { import core.stdc.math : isnan; pragma(inline, true); return (!isnan(radius) && radius > 0); }
+  @property bool valid () const { import core.stdc.math : isfinite; pragma(inline, true); return (isfinite(radius) && radius > 0); }
 
   /// sweep test
   bool sweep() (in auto ref vec amove, in auto ref Me sb, Float* u0, Float* u1) const {
@@ -2372,13 +2382,19 @@ nothrow @safe:
     if (fabs(w) <= EPS) w = 0;
   }
 
-  ref plane3 setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
-    normal = ((b-a)^(c-a)).normalized;
-    w = normal*a; // n.dot(a)
-    return this;
+  void setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
+    //normal = ((b-a)^(c-a)).normalized;
+    immutable vec3 b0 = b-a;
+    immutable vec3 c0 = c-a;
+    normal = vec3(b0.y*c0.z-b0.z*c0.y, b0.z*c0.x-b0.x*c0.z, b0.x*c0.y-b0.y*c0.x);
+    normal.normalize;
+    //x*a.x+y*a.y+z*a.z
+    //w = normal*a; // n.dot(a)
+    w = normal.x*a.x+normal.y*a.y+normal.z*a.z;
+    //return this;
   }
 
-  @property bool valid () const { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w); }
+  @property bool valid () const { pragma(inline, true); import core.stdc.math : isfinite; return (isfinite(w) != 0); }
 
   Float opIndex (usize idx) const {
     pragma(inline, true);
@@ -2399,8 +2415,8 @@ nothrow @safe:
       normal.z *= dd;
       w *= dd;
     } else {
-      normal = vec3(0, 0, 0);
-      w = 0;
+      normal = vec3.Invalid;
+      w = vec3.Float.nan;
     }
     return this;
   }
