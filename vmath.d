@@ -863,10 +863,12 @@ const:
 
   static if (dims == 3) bool collinear() (in auto ref Me v1, in auto ref Me v2) {
     pragma(inline, true);
-    mixin(ImportCoreMath!(double, "fabs"));
+    mixin(ImportCoreMath!(Float, "fabs"));
     alias v0 = this;
-    immutable Float det = cast(Float)(v0.x*(v1.y*v2.z-v2.y*v1.z)-v1.x*(v0.y*v2.z-v2.y*v0.z)+v2.x*(v0.y*v1.z-v1.y*v0.z));
-    return (fabs(det) < Epsilon);
+    immutable Float cx = (v1.y-v0.y)*(v2.z-v0.z)-(v2.y-v0.y)*(v1.z-v0.z);
+    immutable Float cy = (v2.x-v0.x)*(v1.z-v0.z)-(v1.x-v0.x)*(v2.z-v0.z);
+    immutable Float cz = (v1.x-v0.x)*(v2.y-v0.y)-(v2.x-v0.x)*(v1.y-v0.y);
+    return (fabs(cast(double)(cx*cx+cy*cy+cz*cz)) < EPSILON!double);
   }
 
   static if (dims == 2) bool collinear() (in auto ref Me v1, in auto ref Me v2) {
