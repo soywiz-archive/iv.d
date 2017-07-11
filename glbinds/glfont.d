@@ -13634,7 +13634,7 @@ static immutable GLubyte[1+13][96] bitmapFont = [
 
 // ////////////////////////////////////////////////////////////////////////// //
 // returns fontBase to be passed to oglFontDrawStr
-public GLuint oglFontCreateStroke (bool downup=false) {
+public GLuint oglFontCreateStroke (bool downup=false, GLfloat scale=1) {
   immutable GLfloat signmul = (downup ? 1 : -1);
   GLuint fontBase = glGenLists(256);
   for (uint i = 0; strokeFont[i][0] != END_OF_LIST; ++i) {
@@ -13643,14 +13643,14 @@ public GLuint oglFontCreateStroke (bool downup=false) {
     for (uint j = 1; (mode = strokeFont[i][j]) != END_OF_LIST; j += 3) {
       if (mode == FONT_BEGIN) {
         glBegin(GL_LINE_STRIP);
-        glVertex2f(cast(float)strokeFont[i][j+1]*STROKE_SCALE, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE));
+        glVertex2f(cast(float)strokeFont[i][j+1]*STROKE_SCALE*scale, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE)*scale);
       } else if (mode == FONT_NEXT) {
-        glVertex2f(cast(float)strokeFont[i][j+1]*STROKE_SCALE, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE));
+        glVertex2f(cast(float)strokeFont[i][j+1]*STROKE_SCALE*scale, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE)*scale);
       } else if (mode == FONT_END) {
-        glVertex2f(cast(float)strokeFont[i][j+1]*STROKE_SCALE, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE));
+        glVertex2f(cast(float)strokeFont[i][j+1]*STROKE_SCALE*scale, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE)*scale);
         glEnd();
       } else if (mode == FONT_ADVANCE) {
-        glTranslatef(cast(float)strokeFont[i][j+1]*STROKE_SCALE, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE), 0.0);
+        glTranslatef(cast(float)strokeFont[i][j+1]*STROKE_SCALE*scale, signmul*(cast(float)strokeFont[i][j+2]*STROKE_SCALE)*scale, 0.0);
         break;
       }
     }
@@ -13662,7 +13662,7 @@ public GLuint oglFontCreateStroke (bool downup=false) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // returns fontBase to be passed to oglFontDrawStr
-public GLuint oglFontCreateOutline (bool downup=false) {
+public GLuint oglFontCreateOutline (bool downup=false, GLfloat scale=1) {
   immutable GLfloat signmul = (downup ? 1 : -1);
   GLuint fontBase = glGenLists(256);
   for (uint i = 0; outlineFont[i][0] != END_OF_LIST; ++i) {
@@ -13671,14 +13671,14 @@ public GLuint oglFontCreateOutline (bool downup=false) {
     for (uint j = 1; (mode = outlineFont[i][j]) != END_OF_LIST; j += 3) {
       if (mode == FONT_BEGIN) {
         glBegin(GL_LINE_LOOP);
-        glVertex2f(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE));
+        glVertex2f(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE*scale, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE)*scale);
       } else if (mode == FONT_NEXT) {
-        glVertex2f(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE));
+        glVertex2f(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE*scale, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE)*scale);
       } else if (mode == FONT_END) {
-        glVertex2f(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE));
+        glVertex2f(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE*scale, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE)*scale);
         glEnd();
       } else if (mode == FONT_ADVANCE) {
-        glTranslatef(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE), 0.0);
+        glTranslatef(cast(float)outlineFont[i][j+1]*OUTLINE_SCALE*scale, signmul*(cast(float)outlineFont[i][j+2]*OUTLINE_SCALE)*scale, 0.0);
         break;
       }
     }
@@ -13690,7 +13690,7 @@ public GLuint oglFontCreateOutline (bool downup=false) {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // returns fontBase to be passed to oglFontDrawStr
-public GLuint oglFontCreateFilled (bool downup=false) {
+public GLuint oglFontCreateFilled (bool downup=false, GLfloat scale=1) {
   immutable GLfloat signmul = (downup ? 1 : -1);
   GLuint fontBase = glGenLists(256);
   for (uint i = 0; filledFont[i][0] != END_OF_LIST; ++i) {
@@ -13699,14 +13699,14 @@ public GLuint oglFontCreateFilled (bool downup=false) {
     for (uint j = 1; (mode = filledFont[i][j]) != END_OF_LIST; j += 3) {
       if (mode == FONT_BEGIN) {
         glBegin(GL_TRIANGLE_STRIP);
-        glVertex2f(cast(float)filledFont[i][j+1]*FILLED_SCALE, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE));
+        glVertex2f(cast(float)filledFont[i][j+1]*FILLED_SCALE*scale, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE)*scale);
       } else if (mode == FONT_NEXT) {
-        glVertex2f(cast(float)filledFont[i][j+1]*FILLED_SCALE, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE));
+        glVertex2f(cast(float)filledFont[i][j+1]*FILLED_SCALE*scale, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE)*scale);
       } else if (mode == FONT_END) {
-        glVertex2f(cast(float)filledFont[i][j+1]*FILLED_SCALE, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE));
+        glVertex2f(cast(float)filledFont[i][j+1]*FILLED_SCALE*scale, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE)*scale);
         glEnd();
       } else if (mode == FONT_ADVANCE) {
-        glTranslatef(cast(float)filledFont[i][j+1]*FILLED_SCALE, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE), 0.0);
+        glTranslatef(cast(float)filledFont[i][j+1]*FILLED_SCALE*scale, signmul*(cast(float)filledFont[i][j+2]*FILLED_SCALE)*scale, 0.0);
         break;
       }
     }
