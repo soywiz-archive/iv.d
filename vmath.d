@@ -185,6 +185,10 @@ template VectorFloat(VT) {
 align(1) struct VecN(ubyte dims, FloatType=VFloat) if (dims >= 2 && dims <= 3 && (is(FloatType == float) || is(FloatType == double))) {
 align(1):
 public:
+  static T nmin(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }
+  static T nmax(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }
+
+public:
   enum isVector(VT) = (is(VT == VecN!(2, FloatType)) || is(VT == VecN!(3, FloatType)));
   enum isVector2(VT) = is(VT == VecN!(2, FloatType));
   enum isVector3(VT) = is(VT == VecN!(3, FloatType));
@@ -878,6 +882,93 @@ const:
     immutable Float det = cast(Float)((v0-v1)*(v0-v2)-(v0-v2)*(v0-v1));
   }
 
+  static if (dims == 2) {
+    import std.range.primitives : isInputRange, ElementType;
+
+    static auto vertRange (const(Me)[] varr) {
+      static struct VertRange {
+        const(Me)[] arr;
+        usize pos;
+      nothrow @trusted @nogc:
+        @property bool empty () const pure { pragma(inline, true); return (pos >= arr.length); }
+        @property Me front () const pure { pragma(inline, true); return (pos < arr.length ? arr.ptr[pos] : Me.Invalid); }
+        void popFront () { pragma(inline, true); if (pos < arr.length) ++pos; }
+        auto save () const pure { pragma(inline, true); return VertRange(arr, pos); }
+      }
+      return VertRange(varr, 0);
+    }
+
+    bool insidePoly(VR) (auto ref VR vr) const if (isInputRange!VR && is(ElementType!VR : const Me)) {
+      if (vr.empty) return false;
+      Me p1 = vr.front;
+      vr.popFront();
+      if (vr.empty) return false;
+      Me p2 = vr.front;
+      vr.popFront();
+      if (vr.empty) return false; //TODO: check if p is ON the edge?
+      alias p = this;
+      int counter = 0;
+      for (;;) {
+        if (p.y > nmin(p1.y, p2.y)) {
+          if (p.y <= nmax(p1.y, p2.y)) {
+            if (p.x <= nmax(p1.x, p2.x)) {
+              if (p1.y != p2.y) {
+                auto xinters = (p.y-p1.y)*(p2.x-p1.x)/(p2.y-p1.y)+p1.x;
+                if (p1.x == p2.x || p.x <= xinters) counter ^= 1;
+              }
+            }
+          }
+        }
+        if (vr.empty) break;
+        p1 = p2;
+        p2 = vr.front;
+        vr.popFront();
+      }
+      return (counter != 0);
+    }
+
+    bool insidePoly() (const(Me)[] poly) const { pragma(inline, true); return insidePoly(vertRange(poly)); }
+
+    // gets the signed area
+    // if the area is less than 0, it indicates that the polygon is clockwise winded
+    Me.Float signedArea(VR) (auto ref VR vr) const if (isInputRange!VR && is(ElementType!VR : const Me)) {
+      Me.Float area = 0;
+      if (vr.empty) return area;
+      Me p1 = vr.front;
+      vr.popFront();
+      if (vr.empty) return area;
+      Me p2 = vr.front;
+      vr.popFront();
+      if (vr.empty) return area;
+      Me pfirst = p1;
+      for (;;) {
+        area += p1.x*p2.y;
+        area -= p1.y*p2.x;
+        if (vr.empty) break;
+        p1 = p2;
+        p2 = vr.front;
+        vr.popFront();
+      }
+      // last and first
+      area += p2.x*pfirst.y;
+      area -= p2.y*pfirst.x;
+      return area/cast(VT.Float)2;
+    }
+
+    Me.Float signedArea() (const(Me)[] poly) const { pragma(inline, true); return signedArea(vertRange(poly)); }
+
+    // indicates if the vertices are in counter clockwise order
+    // warning: If the area of the polygon is 0, it is unable to determine the winding
+    bool isCCW(VR) (auto ref VR vr) const if (isInputRange!VR && is(ElementType!VR : const Me)) { pragma(inline, true); return (signedArea(vr) > 0); }
+    bool isCCW() (const(Me)[] poly) const { pragma(inline, true); return (signedArea(vertRange(poly)) > 0); }
+
+    // *signed* area; can be used to check on which side `b` is
+    static auto triSignedArea() (in auto ref Me a, in auto ref Me b, in auto ref Me c) {
+      pragma(inline, true);
+      return (b.x-a.x)*(c.y-a.y)-(c.x-a.x)*(b.y-a.y);
+    }
+  }
+
 static:
   // linearly interpolate between v1 and v2
   /*
@@ -886,6 +977,49 @@ static:
     return (v1*cast(Float)1.0f-t)+(v2*t);
   }
   */
+
+  static if (dims == 2) {
+    Me lineIntersect() (in auto ref Me p1, in auto ref Me p2, in auto ref Me q1, in auto ref Me q2) {
+      pragma(inline, true);
+      mixin(ImportCoreMath!(Me.Float, "fabs"));
+      immutable Me.Float a1 = p2.y-p1.y;
+      immutable Me.Float b1 = p1.x-p2.x;
+      immutable Me.Float c1 = a1*p1.x+b1*p1.y;
+      immutable Me.Float a2 = q2.y-q1.y;
+      immutable Me.Float b2 = q1.x-q2.x;
+      immutable Me.Float c2 = a2*q1.x+b2*q1.y;
+      immutable Me.Float det = a1*b2-a2*b1;
+      if (fabs(det) > EPSILON!(Me.Float)) {
+        // lines are not parallel
+        immutable Me.Float invdet = cast(Me.Float)1/det;
+        return Me((b2*c1-b1*c2)*invdet, (a1*c2-a2*c1)*invdet);
+      }
+      return Me.Invalid;
+    }
+
+    Me segIntersect(bool firstIsSeg=true, bool secondIsSeg=true) (in auto ref Me point0, in auto ref Me point1, in auto ref Me point2, in auto ref Me point3) {
+      mixin(ImportCoreMath!(Me.Float, "fabs"));
+      static if (firstIsSeg && secondIsSeg) {
+        // fast aabb test for possible early exit
+        if (nmax(point0.x, point1.x) < nmin(point2.x, point3.x) || nmax(point2.x, point3.x) < nmin(point0.x, point1.x)) return Me.Invalid;
+        if (nmax(point0.y, point1.y) < nmin(point2.y, point3.y) || nmax(point2.y, point3.y) < nmin(point0.y, point1.y)) return Me.Invalid;
+      }
+      immutable Me.Float den = ((point3.y-point2.y)*(point1.x-point0.x))-((point3.x-point2.x)*(point1.y-point0.y));
+      if (fabs(den) > EPSILON!(Me.Float)) {
+        immutable Me.Float e = point0.y-point2.y;
+        immutable Me.Float f = point0.x-point2.x;
+        immutable Me.Float invden = cast(Me.Float)1/den;
+        immutable Me.Float ua = (((point3.x-point2.x)*e)-((point3.y-point2.y)*f))*invden;
+        static if (firstIsSeg) { if (ua < 0 || ua > 1) return Me.Invalid; }
+        if (ua >= 0 && ua <= 1) {
+          immutable Me.Float ub = (((point1.x-point0.x)*e)-((point1.y-point0.y)*f))*invden;
+          static if (secondIsSeg) { if (ub < 0 || ub > 1) return Me.Invalid; }
+          if (ua != 0 || ub != 0) return Me(point0.x+ua*(point1.x-point0.x), point0.y+ua*(point1.y-point0.y));
+        }
+      }
+      return Me.Invalid;
+    }
+  }
 }
 
 
