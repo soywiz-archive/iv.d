@@ -72,6 +72,8 @@ template ImportCoreMath(FloatType, T...) {
         enum InternalImport = "static T "~T[0]~"(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }"~InternalImport!(T[1..$]);
       } else static if (T[0] == "max" || T[0] == "nmax") {
         enum InternalImport = "static T "~T[0]~"(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }"~InternalImport!(T[1..$]);
+      } else static if (T[0] == "PI") {
+        enum InternalImport = "import std.math : PI;"~InternalImport!(T[1..$]);
       } else static if (T[0] == "isnan" || T[0] == "isfinite") {
         enum InternalImport = "import core.stdc.math : "~T[0]~";"~InternalImport!(T[1..$]);
       } else static if (is(FloatType == float)) {
@@ -1018,6 +1020,49 @@ static:
         }
       }
       return Me.Invalid;
+    }
+
+    // returns hittime; <0: no collision; 0: inside
+    // WARNING! NOT REALLY TESTED, AND MAY BE INCORRECT!
+    Me.Float sweepCircle() (in auto ref Me v0, in auto ref Me v1, in auto ref Me pos, Me.Float radii, in auto ref Me vel, ref Me hitp) {
+      mixin(ImportCoreMath!(Me.Float, "fabs", "sqrt"));
+      immutable Me normal = (v1-v0).perp.normalized;
+      immutable Me.Float D = -normal*((v0+v1)/2);
+      immutable d0 = normal.dot(pos)+D;
+      if (fabs(d0) <= radii) return cast(Me.Float)0; // inside
+      // sweep to plane
+      immutable p1 = pos+vel;
+      immutable Me.Float d1 = normal.dot(p1)+D;
+      if (d0 > radii && d1 < radii) {
+        Me.Float t = (d0-radii)/(d0-d1); // normalized time
+        hitp = pos+vel*t;
+        // project hitp point to segment
+        alias a = v0;
+        alias b = v1;
+        alias p = hitp;
+        immutable ab = b-a; // vector from a to b
+        // squared distance from a to b
+        immutable absq = ab.dot(ab);
+        //assert(absq != 0); // a and b are the same point
+        if (fabs(absq) < Me.Epsilon) return -1; // a and b are the same point (roughly) -- SOMETHING IS VERY WRONG
+        // t1 is projection "time" of p; [0..1]
+        Me.Float t1 = (p-a).dot(ab)/absq; //a+t1*ab -- projected point
+        // is "contact center" lies on the seg?
+        if (t1 >= 0 && t1 <= 1) return t; // yes: this is clear hit
+        // because i'm teh idiot, i'll just check ray-circle intersection for edge's capsue endpoints
+        // ('cause if we'll turn edge into the capsule (v0,v1) with radius radii, we can use raycasting)
+        Me.Float ct1;
+        immutable Me eco = (t1 < 0 ? a : b);
+        immutable Me rpj = eco.projectToSegT!false(pos, p1, ct1);
+        immutable Me.Float dsq = eco.distanceSquared(rpj);
+        if (dsq >= radii*radii) return -1; // endpoint may be on sphere or out of it, this is not interesting
+        immutable Me.Float dt = sqrt(radii*radii-dsq)/sqrt(vel.x*vel.x+vel.y*vel.y);
+        t = ct1-fabs(dt);
+        hitp = pos+t*vel;
+        return t;
+      }
+      // no collision
+      return -1;
     }
   }
 }
