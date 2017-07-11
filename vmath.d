@@ -1026,6 +1026,7 @@ static:
     // WARNING! NOT REALLY TESTED, AND MAY BE INCORRECT!
     Me.Float sweepCircle() (in auto ref Me v0, in auto ref Me v1, in auto ref Me pos, Me.Float radii, in auto ref Me vel, ref Me hitp) {
       mixin(ImportCoreMath!(Me.Float, "fabs", "sqrt"));
+      if (v0.equals(v1)) return (pos.distanceSquared(v0) <= radii*radii ? 0 : -1); // v0 and v1 are the same point; do "point inside circle" check
       immutable Me normal = (v1-v0).perp.normalized;
       immutable Me.Float D = -normal*((v0+v1)/2);
       immutable d0 = normal.dot(pos)+D;
@@ -1051,6 +1052,7 @@ static:
         if (t1 >= 0 && t1 <= 1) return t; // yes: this is clear hit
         // because i'm teh idiot, i'll just check ray-circle intersection for edge's capsue endpoints
         // ('cause if we'll turn edge into the capsule (v0,v1) with radius radii, we can use raycasting)
+        // this is not entirely valid for segments much shorter than radius, but meh
         Me.Float ct1;
         immutable Me eco = (t1 < 0 ? a : b);
         immutable Me rpj = eco.projectToSegT!false(pos, p1, ct1);
