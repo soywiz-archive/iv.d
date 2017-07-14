@@ -339,6 +339,11 @@ public:
     return p;
   }
 
+  @property bool hasSize () {
+    if (!isOpen) throw new VFSException("can't query closed stream");
+    synchronized(wst) return wst.hasSize;
+  }
+
   @property long size () {
     if (!isOpen) throw new VFSException("can't get size of closed stream");
     bool noChain = false;

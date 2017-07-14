@@ -2570,14 +2570,20 @@ nothrow @safe:
   }
 
 @nogc:
+  this() (in auto ref vec3 aorigin, in auto ref vec3 anormal) { pragma(inline, true); setOriginNormal(aorigin, anormal); }
   this() (in auto ref vec3 anormal, Float aw) { pragma(inline, true); set(anormal, aw); }
   this() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) { pragma(inline, true); setFromPoints(a, b, c); }
 
   void set () (in auto ref vec3 anormal, Float aw) {
-    mixin(ImportCoreMath!(Float, "fabs"));
+    pragma(inline, true);
     normal = anormal;
     w = aw;
-    //if (fabs(w) <= EPS) w = 0;
+  }
+
+  void setOriginNormal () (in auto ref vec3 aorigin, in auto ref vec3 anormal) {
+    normal = anormal.normalized;
+    //origin = aorigin;
+    w = normal.x*aorigin.x+normal.y*aorigin.y+normal.z*aorigin.z;
   }
 
   void setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {

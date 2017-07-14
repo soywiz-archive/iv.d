@@ -42,6 +42,30 @@ shared static this () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public auto readTextFile(T=string) (const(char)[] fname, int maxlen=int.max/8)
+if (is(T == string) || is(T == const(char)[]) || is(T == char[]) || is(T == const char[]))
+{
+  return readTextFile(VFile(fname), maxlen);
+}
+
+
+//TODO: fallback to chunked reader if `fl.hasSize` is false
+public auto readTextFile(T=string) (VFile fl, int maxlen=int.max/8)
+if (is(T == string) || is(T == const(char)[]) || is(T == char[]) || is(T == const char[]) ||
+    is(T == immutable(ubyte)[]) || is(T == const(ubyte)[]) || is(T == ubyte[]) || is(T == const ubyte[]))
+{
+  auto fpos = fl.tell;
+  auto flen = fl.size-fpos;
+  if (flen < 1) return cast(T)null;
+  if (flen > maxlen) throw new Exception("text file too big");
+  auto res = new char[](cast(int)flen);
+  scope(failure) delete res; // make GC life easier
+  fl.rawReadExact(res);
+  return cast(T)res; // it is safe to cast here
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// read 0-terminated string from stream. very slow, no recoding.
 /// eolhit will be set on EOF too.
 public string readZString(ST) (auto ref ST fl, bool* eolhit=null, usize maxSize=1024*1024) if (isReadableStream!ST) {
