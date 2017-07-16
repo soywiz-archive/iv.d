@@ -33,6 +33,21 @@ enum MaxUnsignedNanPayF = 0x3f_ffffU; // 22 bits
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// is `v` finite (i.e. not a nan and not an infinity)?
+bool isFinite (in double v) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (((*cast(const(ulong)*)&v)&0x7ff0_0000_0000_0000UL) != 0x7ff0_0000_0000_0000UL);
+}
+
+
+/// is `v` finite (i.e. not a nan and not an infinity)?
+bool isFiniteF (in float v) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (((*cast(const(uint)*)&v)&0x7f80_0000U) != 0x7f80_0000U);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /**
  * Create a NaN, storing an integer inside the payload.
  *

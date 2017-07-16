@@ -37,6 +37,21 @@ enum VFloatNum(real v) = cast(VFloat)v;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// is `v` finite (i.e. not a nan and not an infinity)?
+public bool isFiniteDbl (in double v) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (((*cast(const(ulong)*)&v)&0x7ff0_0000_0000_0000UL) != 0x7ff0_0000_0000_0000UL);
+}
+
+
+/// is `v` finite (i.e. not a nan and not an infinity)?
+public bool isFiniteFlt (in float v) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (((*cast(const(uint)*)&v)&0x7f80_0000U) != 0x7f80_0000U);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 private template isGoodSwizzling(string s, string comps, int minlen, int maxlen) {
   private static template hasChar(string str, char ch, uint idx=0) {
          static if (idx >= str.length) enum hasChar = false;
@@ -74,9 +89,16 @@ template ImportCoreMath(FloatType, T...) {
         enum InternalImport = "static T "~T[0]~"(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }"~InternalImport!(T[1..$]);
       } else static if (T[0] == "PI") {
         enum InternalImport = "import std.math : PI;"~InternalImport!(T[1..$]);
-      } else static if (T[0] == "isnan" || T[0] == "isfinite") {
-        enum InternalImport = "import core.stdc.math : "~T[0]~";"~InternalImport!(T[1..$]);
-      } else static if (is(FloatType == float)) {
+      } else static if (T[0] == "isnan") {
+        enum InternalImport = "import core.stdc.math : isnan;"~InternalImport!(T[1..$]);
+      } else static if (T[0] == "isfinite") {
+        static if (is(FloatType == float) || is(FloatType == const float) || is(FloatType == immutable float)) {
+          enum InternalImport = "import iv.nanpay : isfinite = isFinite;"~InternalImport!(T[1..$]);
+          pragma(msg, "float!");
+        } else {
+          enum InternalImport = "import iv.nanpay : isfinite = isFiniteD;"~InternalImport!(T[1..$]);
+        }
+      } else static if (is(FloatType == float) || is(FloatType == const float) || is(FloatType == immutable float)) {
         enum InternalImport = "import core.stdc.math : "~T[0]~"="~T[0]~"f;"~InternalImport!(T[1..$]);
       } else {
         enum InternalImport = "import core.stdc.math : "~T[0]~";"~InternalImport!(T[1..$]);
