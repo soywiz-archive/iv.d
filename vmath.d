@@ -94,7 +94,6 @@ template ImportCoreMath(FloatType, T...) {
       } else static if (T[0] == "isfinite") {
         static if (is(FloatType == float) || is(FloatType == const float) || is(FloatType == immutable float)) {
           enum InternalImport = "import iv.nanpay : isfinite = isFinite;"~InternalImport!(T[1..$]);
-          pragma(msg, "float!");
         } else {
           enum InternalImport = "import iv.nanpay : isfinite = isFiniteD;"~InternalImport!(T[1..$]);
         }
