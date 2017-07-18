@@ -2536,7 +2536,7 @@ public nothrow @trusted @nogc:
 
 // ////////////////////////////////////////////////////////////////////////// //
 template IsPlane3(PT) {
-  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, PFT eps, bool swiz)) {
+  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, double eps, bool swiz)) {
     enum IsPlane3 = (is(PFT == float) || is(PFT == double));
   } else {
     enum IsPlane3 = false;
@@ -2545,7 +2545,7 @@ template IsPlane3(PT) {
 
 
 template IsPlane3(PT, FT) {
-  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, FT eps, bool swiz)) {
+  static if (is(PT == Plane3!(PFT, eps, swiz), PFT, double eps, bool swiz)) {
     enum IsPlane3 = (is(FT == PFT) && (is(PFT == float) || is(PFT == double)));
   } else {
     enum IsPlane3 = false;
@@ -2554,16 +2554,17 @@ template IsPlane3(PT, FT) {
 
 
 // plane in 3D space: Ax+By+Cz+D=0
-align(1) struct Plane3(FloatType=VFloat, FloatType PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
+align(1) struct Plane3(FloatType=VFloat, double PlaneEps=-1.0, bool enableSwizzling=true) if (is(FloatType == float) || is(FloatType == double)) {
 align(1):
 public:
   alias Float = FloatType;
   alias plane3 = typeof(this);
+  alias Me = typeof(this);
   alias vec3 = VecN!(3, Float);
   static if (PlaneEps < 0) {
     enum EPS = EPSILON!Float;
   } else {
-    enum EPS = PlaneEps;
+    enum EPS = cast(Float)PlaneEps;
   }
 
 public:
@@ -2705,6 +2706,19 @@ nothrow @safe:
     }
     // no collision
     return false;
+  }
+
+  // intersection of 3 planes, Graphics Gems 1 pg 305
+  auto intersectionPoint() (in auto ref plane3 plane2, in auto ref plane3 plane3) const {
+    mixin(ImportCoreMath!(Float, "fabs"));
+    alias plane1 = this;
+    immutable Float det = plane1.normal.cross(plane2.normal).dot(plane3.normal);
+    // if the determinant is 0, that means parallel planes, no intersection
+    if (fabs(det) < EPSILON!Float) return vec3.Invalid;
+    return
+      (plane2.normal.cross(plane3.normal)*(-plane1.w)+
+       plane3.normal.cross(plane1.normal)*(-plane2.w)+
+       plane1.normal.cross(plane2.normal)*(-plane3.w))/det;
   }
 }
 
