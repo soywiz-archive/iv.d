@@ -32,7 +32,7 @@
  *   '~': fill with the following char instead of space
  *        second '~': right filling char for 'center'
  */
-module iv.cmdcon /*is aliced*/;
+module iv.cmdcon.core /*is aliced*/;
 private:
 import iv.alice;
 
