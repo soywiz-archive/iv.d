@@ -1609,6 +1609,54 @@ nothrow @safe:
   }
 
 public:
+  static mat4 LookAtFucked() (in auto ref vec3 eye, in auto ref vec3 center, in auto ref vec3 up) {
+    // compute vector `N = EP-VRP` and normalize `N`
+    vec3 n = eye-center;
+    n.normalize;
+
+    // compute vector `V = UP-VRP`
+    // make vector `V` orthogonal to `N` and normalize `V`
+    vec3 v = up-center;
+    immutable dp = v.dot(n); //dp = (float)V3Dot(&v,&n);
+    //v.x -= dp * n.x; v.y -= dp * n.y; v.z -= dp * n.z;
+    v -= n*dp;
+    v.normalize;
+
+    // compute vector `U = V x N` (cross product)
+    immutable vec3 u = v.cross(n);
+
+    // write the vectors `U`, `V`, and `N` as the first three rows of first, second, and third columns of transformation matrix
+    mat4 m = void;
+
+    m.mt.ptr[0*4+0] = u.x;
+    m.mt.ptr[1*4+0] = u.y;
+    m.mt.ptr[2*4+0] = u.z;
+    //m.mt.ptr[3*4+0] = 0;
+
+    m.mt.ptr[0*4+1] = v.x;
+    m.mt.ptr[1*4+1] = v.y;
+    m.mt.ptr[2*4+1] = v.z;
+    //m.mt.ptr[3*4+1] = 0;
+
+    m.mt.ptr[0*4+2] = n.x;
+    m.mt.ptr[1*4+2] = n.y;
+    m.mt.ptr[2*4+2] = n.z;
+    //m.mt.ptr[3*4+2] = 0;
+
+    // compute the fourth row of transformation matrix to include the translation of `VRP` to the origin
+    m.mt.ptr[3*4+0] = -u.x*center.x-u.y*center.y-u.z*center.z;
+    m.mt.ptr[3*4+1] = -v.x*center.x-v.y*center.y-v.z*center.z;
+    m.mt.ptr[3*4+2] = -n.x*center.x-n.y*center.y-n.z*center.z;
+    m.mt.ptr[3*4+3] = 1;
+
+    foreach (ref Float f; m.mt[]) {
+      mixin(ImportCoreMath!(Float, "fabs"));
+      if (fabs(f) < EPSILON!Float) f = 0;
+    }
+
+    return m;
+  }
+
   // does `gluLookAt()`
   mat4 lookAt() (in auto ref vec3 eye, in auto ref vec3 center, in auto ref vec3 up) const {
     mixin(ImportCoreMath!(Float, "sqrt"));
