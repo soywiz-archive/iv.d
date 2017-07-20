@@ -45,8 +45,13 @@ void main (string[] args) {
 
     glColor4f(1, 1, 0, 0.8);
     glEnable(GL_BLEND); // other things was set in `oglSetup2D()`
+
     glPointSize(6);
     glEnable(GL_POINT_SMOOTH); // so our point will be "smoothed" to circle
+
+    glLineWidth(2);
+    glDisable(GL_LINE_SMOOTH);
+
     glBegin(GL_POINTS);
       glVertex2f(30, 30);
     glEnd();
