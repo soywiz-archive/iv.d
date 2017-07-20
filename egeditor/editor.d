@@ -2058,9 +2058,11 @@ public:
           if (lidx > py && lidx < ey) continue;
           // fix bookmark line if necessary
           if (lidx >= ey) { smthWasChanged = true; lidx -= eolcount; }
-          assert(lidx >= 0 && lidx < lc.linecount);
-          // add this bookmark to new list
-          newbm[newbmpos++] = lidx;
+          if (lidx >= 0 && lidx < lc.linecount) {
+            //assert(lidx >= 0 && lidx < lc.linecount);
+            // add this bookmark to new list
+            newbm[newbmpos++] = lidx;
+          }
         }
         // rebuild list if something was changed
         if (smthWasChanged) {
