@@ -457,6 +457,7 @@ nothrow @safe:
   }
 
 const:
+  // from `this` to `a`
   auto lerp(VT) (in auto ref VT a, in Float t) if (isVector!VT) {
     pragma(inline, true);
     return this+(a-this)*t;
