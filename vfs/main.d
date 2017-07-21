@@ -288,11 +288,11 @@ public:
         static if (is(T == string)) dataPath = dpath; else dataPath = dpath.idup;
       } else if (dpath[0] == '~') {
         import std.path : expandTilde;
-        dataPath = dpath.expandTilde;
+        static if (is(T == string)) dataPath = dpath.expandTilde; else dataPath = dpath.idup.expandTilde;
         if (dataPath.length == 0) dataPath = "./";
         else if (dataPath[$-1] != '/') dataPath ~= "/";
       } else {
-        dataPath = dpath~"/";
+        static if (is(T == string)) dataPath = dpath~"/"; else dataPath = dpath.idup~"/";
       }
     }
   }
