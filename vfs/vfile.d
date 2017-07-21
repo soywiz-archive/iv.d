@@ -986,6 +986,9 @@ private:
   final @property gzFile fl () const pure nothrow @trusted @nogc { return cast(gzFile)flp; }
   final @property void fl (gzFile afl) pure nothrow @trusted @nogc { flp = cast(usize)afl; }
 
+  ulong cachedSize = ulong.max;
+  ulong newpos = 0;
+
   int err () nothrow @trusted {
     int res = 0;
     if (flp != 0) gzerror(fl, &res);
@@ -993,6 +996,50 @@ private:
   }
 
   public this (gzFile afl, const(char)[] afname) { fl = afl; super(afname); } // fuck! emplace needs it
+
+  // this shit tries to workaround "convenient features" of gzio
+  // i really should rewrite the whole gz stuff and got rid of zlib
+  bool fixPosition () {
+    if (newpos >= int.max) return false; // alas
+    auto cpos = gztell(fl);
+    if (cpos == -1) return false; // something is VERY wrong
+    if (cpos == newpos) return true;
+    // position changed
+    version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
+    if (newpos < cpos) {
+      // have to rewind
+      for (;;) {
+        if (gzrewind(fl) < 0) {
+          version(VFS_NORMAL_OS) {
+            import core.stdc.errno;
+            if (errno == EINTR) { if (sigsleft-- > 0) { gzclearerr(fl); continue; } }
+          }
+          return false;
+        } else {
+          break;
+        }
+      }
+      cpos = gztell(fl);
+      if (cpos == -1) return false; // something is VERY wrong
+    }
+    if (newpos < cpos) return false; // why?!
+    version(VFS_NORMAL_OS) sigsleft = VFSSigRepeatCount;
+    for (;;) {
+      auto res = gzseek(fl, cast(int)newpos, 0); // fuck you, phobos!
+      if (res != -1) {
+        gzclearerr(fl);
+      } else {
+        version(VFS_NORMAL_OS) {
+          import core.stdc.errno;
+          if (errno == EINTR) { if (sigsleft-- > 0) { gzclearerr(fl); continue; } }
+        }
+        return false;
+      }
+      break;
+    }
+    if (gztell(fl) != newpos) return false; // something is VERY wrong
+    return true;
+  }
 
 protected:
   override @property bool isOpen () { return (flp != 0); }
@@ -1013,6 +1060,7 @@ protected:
   override ssize read (void* buf, usize count) {
     if (fl is null || err()) return -1;
     if (count == 0) return 0;
+    if (!fixPosition) return -1;
     version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
     for (;;) {
       static if (is(typeof(&gzfread))) {
@@ -1028,6 +1076,7 @@ protected:
         }
       }
       if (res == 0) return (err() ? -1 : 0);
+      newpos += res;
       return res;
     }
   }
@@ -1035,6 +1084,7 @@ protected:
   override ssize write (in void* buf, usize count) {
     if (fl is null || err()) return -1;
     if (count == 0) return 0;
+    if (!fixPosition) return -1;
     version(VFS_NORMAL_OS) int sigsleft = VFSSigRepeatCount;
     for (;;) {
       static if (is(typeof(&gzfwrite))) {
@@ -1050,12 +1100,22 @@ protected:
         }
       }
       if (res == 0) return (err() ? -1 : 0);
+      newpos += res;
+      if (cachedSize == ulong.max || newpos > cachedSize) cachedSize = newpos; // fix cached file size
       return res;
     }
   }
 
   override long lseek (long offset, int origin) {
     if (fl is null) return -1;
+    //{ import core.stdc.stdio; printf("ofs=%d; orig=%d\n", cast(int)offset, origin); }
+    // size query, and we have cached size?
+    if (origin == 2 && offset == 0 && cachedSize != ulong.max) {
+      // don't do anything
+      newpos = cachedSize;
+      return cachedSize;
+    }
+    // ok, "normal" seek
     static if (offset.sizeof > int.sizeof) {
       if (offset < int.min || offset > int.max) return -1;
     }
@@ -1069,9 +1129,28 @@ protected:
           import core.stdc.errno;
           if (errno == EINTR) { if (sigsleft-- > 0) { gzclearerr(fl); continue; } }
         }
+        // ok, gzio sux and cannot seek, fallback to file reading if this is size query
+        //{ import core.stdc.stdio; printf("ERR: ofs=%d; orig=%d\n", cast(int)offset, origin); }
+        if (origin == 2 && offset == 0 && cachedSize == ulong.max) {
+          char[512] buf = void;
+          newpos = gztell(fl); // just in case
+          for (;;) {
+            auto rd = read(buf.ptr, buf.length);
+            if (rd < 0) return -1; // alas
+            if (rd == 0) break; // done
+          }
+          // no more bytes; assume that it is file size
+          //{ import core.stdc.stdio; printf("np0: %u\n", cast(uint)newpos); }
+          newpos = gztell(fl); // just in case
+          //{ import core.stdc.stdio; printf("np1: %u\n", cast(uint)newpos); }
+          cachedSize = newpos;
+          return newpos;
+        }
         return res;
       }
-      return gztell(fl);
+      //{ import core.stdc.stdio; printf("%d\n", cast(int)gztell(fl)); }
+      newpos = gztell(fl);
+      return newpos;
     }
   }
 
