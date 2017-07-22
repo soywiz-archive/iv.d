@@ -1,5 +1,4 @@
 /*
- * Pixel Region Operations
  * coded by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * Understanding is not required. Only obedience.
  *

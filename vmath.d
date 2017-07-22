@@ -77,7 +77,74 @@ private template SwizzleCtor(string stn, string s) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// Values obtained from Wolfram Alpha. 116 bits ought to be enough for anybody.
+// Wolfram Alpha LLC. 2011. Wolfram|Alpha. http://www.wolframalpha.com/input/?i=e+in+base+16 (access July 6, 2011).
+enum real E_R =          0x1.5bf0a8b1457695355fb8ac404e7a8p+1L; /* e = 2.718281... */
+enum real LOG2T_R =      0x1.a934f0979a3715fc9257edfe9b5fbp+1L; /* log2 10 = 3.321928... */
+enum real LOG2E_R =      0x1.71547652b82fe1777d0ffda0d23a8p+0L; /* log2 e = 1.442695... */
+enum real LOG2_R =       0x1.34413509f79fef311f12b35816f92p-2L; /* log10 2 = 0.301029... */
+enum real LOG10E_R =     0x1.bcb7b1526e50e32a6ab7555f5a67cp-2L; /* log10 e = 0.434294... */
+enum real LN2_R =        0x1.62e42fefa39ef35793c7673007e5fp-1L; /* ln 2  = 0.693147... */
+enum real LN10_R =       0x1.26bb1bbb5551582dd4adac5705a61p+1L; /* ln 10 = 2.302585... */
+enum real PI_R =         0x1.921fb54442d18469898cc51701b84p+1L; /* PI = 3.141592... */
+enum real PI_2_R =       PI_R/2;                                /* PI / 2 = 1.570796... */
+enum real PI_4_R =       PI_R/4;                                /* PI / 4 = 0.785398... */
+enum real M_1_PI_R =     0x1.45f306dc9c882a53f84eafa3ea69cp-2L; /* 1 / PI = 0.318309... */
+enum real M_2_PI_R =     2*M_1_PI_R;                            /* 2 / PI = 0.636619... */
+enum real M_2_SQRTPI_R = 0x1.20dd750429b6d11ae3a914fed7fd8p+0L; /* 2 / sqrt(PI) = 1.128379... */
+enum real SQRT2_R =      0x1.6a09e667f3bcc908b2fb1366ea958p+0L; /* sqrt(2) = 1.414213... */
+enum real SQRT1_2_R =    SQRT2_R/2;                             /* sqrt(1/2) = 0.707106... */
+
+enum double E_D =          cast(double)0x1.5bf0a8b1457695355fb8ac404e7a8p+1L; /* e = 2.718281... */
+enum double LOG2T_D =      cast(double)0x1.a934f0979a3715fc9257edfe9b5fbp+1L; /* log2 10 = 3.321928... */
+enum double LOG2E_D =      cast(double)0x1.71547652b82fe1777d0ffda0d23a8p+0L; /* log2 e = 1.442695... */
+enum double LOG2_D =       cast(double)0x1.34413509f79fef311f12b35816f92p-2L; /* log10 2 = 0.301029... */
+enum double LOG10E_D =     cast(double)0x1.bcb7b1526e50e32a6ab7555f5a67cp-2L; /* log10 e = 0.434294... */
+enum double LN2_D =        cast(double)0x1.62e42fefa39ef35793c7673007e5fp-1L; /* ln 2  = 0.693147... */
+enum double LN10_D =       cast(double)0x1.26bb1bbb5551582dd4adac5705a61p+1L; /* ln 10 = 2.302585... */
+enum double PI_D =         cast(double)0x1.921fb54442d18469898cc51701b84p+1L; /* PI = 3.141592... */
+enum double PI_2_D =       cast(double)(PI_R/2);                              /* PI / 2 = 1.570796... */
+enum double PI_4_D =       cast(double)(PI_R/4);                              /* PI / 4 = 0.785398... */
+enum double M_1_PI_D =     cast(double)0x1.45f306dc9c882a53f84eafa3ea69cp-2L; /* 1 / PI = 0.318309... */
+enum double M_2_PI_D =     cast(double)(2*M_1_PI_R);                          /* 2 / PI = 0.636619... */
+enum double M_2_SQRTPI_D = cast(double)0x1.20dd750429b6d11ae3a914fed7fd8p+0L; /* 2 / sqrt(PI) = 1.128379... */
+enum double SQRT2_D =      cast(double)0x1.6a09e667f3bcc908b2fb1366ea958p+0L; /* sqrt(2) = 1.414213... */
+enum double SQRT1_2_D =    cast(double)(SQRT2_R/2);                           /* sqrt(1/2) = 0.707106... */
+
+enum float E_F =          cast(float)0x1.5bf0a8b1457695355fb8ac404e7a8p+1L; /* e = 2.718281... */
+enum float LOG2T_F =      cast(float)0x1.a934f0979a3715fc9257edfe9b5fbp+1L; /* log2 10 = 3.321928... */
+enum float LOG2E_F =      cast(float)0x1.71547652b82fe1777d0ffda0d23a8p+0L; /* log2 e = 1.442695... */
+enum float LOG2_F =       cast(float)0x1.34413509f79fef311f12b35816f92p-2L; /* log10 2 = 0.301029... */
+enum float LOG10E_F =     cast(float)0x1.bcb7b1526e50e32a6ab7555f5a67cp-2L; /* log10 e = 0.434294... */
+enum float LN2_F =        cast(float)0x1.62e42fefa39ef35793c7673007e5fp-1L; /* ln 2  = 0.693147... */
+enum float LN10_F =       cast(float)0x1.26bb1bbb5551582dd4adac5705a61p+1L; /* ln 10 = 2.302585... */
+enum float PI_F =         cast(float)0x1.921fb54442d18469898cc51701b84p+1L; /* PI = 3.141592... */
+enum float PI_2_F =       cast(float)(PI_R/2);                              /* PI / 2 = 1.570796... */
+enum float PI_4_F =       cast(float)(PI_R/4);                              /* PI / 4 = 0.785398... */
+enum float M_1_PI_F =     cast(float)0x1.45f306dc9c882a53f84eafa3ea69cp-2L; /* 1 / PI = 0.318309... */
+enum float M_2_PI_F =     cast(float)(2*M_1_PI_R);                          /* 2 / PI = 0.636619... */
+enum float M_2_SQRTPI_F = cast(float)0x1.20dd750429b6d11ae3a914fed7fd8p+0L; /* 2 / sqrt(PI) = 1.128379... */
+enum float SQRT2_F =      cast(float)0x1.6a09e667f3bcc908b2fb1366ea958p+0L; /* sqrt(2) = 1.414213... */
+enum float SQRT1_2_F =    cast(float)(SQRT2_R/2);                           /* sqrt(1/2) = 0.707106... */
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private template IsKnownVMathConstant(string name) {
+  static if (name == "E" || name == "LOG2T" || name == "LOG2E" || name == "LOG2" || name == "LOG10E" ||
+             name == "LN2" || name == "LN10" || name == "PI" || name == "PI_2" || name == "PI_4" ||
+             name == "M_1_PI" || name == "M_2_PI" || name == "M_2_SQRTPI" || name == "SQRT2" || name == "SQRT1_2")
+  {
+    enum IsKnownVMathConstant = true;
+  } else {
+    enum IsKnownVMathConstant = false;
+  }
+}
+
 template ImportCoreMath(FloatType, T...) {
+  static assert(
+    (is(FloatType == float) || is(FloatType == const float) || is(FloatType == immutable float)) ||
+    (is(FloatType == double) || is(FloatType == const double) || is(FloatType == immutable double)),
+    "import type should be `float` or `double`");
   private template InternalImport(T...) {
     static if (T.length == 0) enum InternalImport = "";
     else static if (is(typeof(T[0]) == string)) {
@@ -87,8 +154,12 @@ template ImportCoreMath(FloatType, T...) {
         enum InternalImport = "static T "~T[0]~"(T) (in T a, in T b) { pragma(inline, true); return (a < b ? a : b); }"~InternalImport!(T[1..$]);
       } else static if (T[0] == "max" || T[0] == "nmax") {
         enum InternalImport = "static T "~T[0]~"(T) (in T a, in T b) { pragma(inline, true); return (a > b ? a : b); }"~InternalImport!(T[1..$]);
-      } else static if (T[0] == "PI") {
-        enum InternalImport = "import std.math : PI;"~InternalImport!(T[1..$]);
+      } else static if (IsKnownVMathConstant!(T[0])) {
+        static if (is(FloatType == float) || is(FloatType == const float) || is(FloatType == immutable float)) {
+          enum InternalImport = "enum "~T[0]~"="~T[0]~"_F;"~InternalImport!(T[1..$]);
+        } else {
+          enum InternalImport = "enum "~T[0]~"="~T[0]~"_D;"~InternalImport!(T[1..$]);
+        }
       } else static if (T[0] == "isnan") {
         enum InternalImport = "import core.stdc.math : isnan;"~InternalImport!(T[1..$]);
       } else static if (T[0] == "isfinite") {
@@ -241,6 +312,9 @@ nothrow @safe:
       assert(0);
     }
   }
+
+  //HACK!
+  inout(Float)* unsafePtr () inout nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))&x; }
 
 @nogc:
   this (in Float[] c) @trusted {
@@ -1172,21 +1246,26 @@ pure:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-alias mat3 = Mat3!vec2;
+alias mat3 = Mat3!vec2; /// for 2D
+alias mat33 = Mat3!vec3; /// for 3D
 
-// very simple (and mostly not tested) 3x3 matrix
-align(1) struct Mat3(VT) if (IsVectorDim!(VT, 2)) {
+/// very simple (and mostly not tested) 3x3 matrix, for 2D/3D (depenting of parameterizing vector type)
+align(1) struct Mat3(VT) if (IsVectorDim!(VT, 2) || IsVectorDim!(VT, 3)) {
 align(1):
-
 private:
   alias Float = VT.Float;
   alias m3 = typeof(this);
-  alias v2 = VecN!(2, Float);
-  alias v3 = VecN!(3, Float);
-
-  enum isVector(VT) = (is(VT == VecN!(2, Float)) || is(VT == VecN!(3, Float)));
-  enum isVector2(VT) = is(VT == VecN!(2, Float));
-  enum isVector3(VT) = is(VT == VecN!(3, Float));
+  static if (VT.Dims == 2) {
+    alias v2 = VT;
+    enum TwoD = true;
+    enum ThreeD = false;
+    enum isVector2(VT) = is(VT == VecN!(2, Float));
+  } else {
+    alias v3 = VT;
+    enum TwoD = false;
+    enum ThreeD = true;
+    enum isVector3(VT) = is(VT == VecN!(3, Float));
+  }
 
 private:
   // 3x3 matrix components
@@ -1217,9 +1296,20 @@ nothrow @trusted @nogc:
     if (vals.length >= 3*3) {
       m.ptr[0..9] = vals.ptr[0..9];
     } else {
-      m.ptr[0..9] = 0;
-      m.ptr[0..vals.length] = vals[];
+      // so `m3(1)`, for example, will create matrix filled with `1`
+      if (vals.length == 1) {
+        m.ptr[0..9] = vals.ptr[0];
+      } else {
+        // still clear the matrix
+        m.ptr[0..9] = 0;
+        m.ptr[0..vals.length] = vals[];
+      }
     }
+  }
+
+  this() (in auto ref m3 mt) {
+    pragma(inline, true);
+    m[] = mt.m[];
   }
 
   Float opIndex (usize x, usize y) const {
@@ -1245,7 +1335,7 @@ nothrow @trusted @nogc:
 
   auto opBinary(string op) (in auto ref m3 b) const if (op == "+" || op == "-") {
     pragma(inline, true);
-    m3 res;
+    m3 res = void;
     mixin("res.m.ptr[0] = m.ptr[0]"~op~"b.m.ptr[0];");
     mixin("res.m.ptr[1] = m.ptr[1]"~op~"b.m.ptr[1];");
     mixin("res.m.ptr[2] = m.ptr[2]"~op~"b.m.ptr[2];");
@@ -1268,7 +1358,7 @@ nothrow @trusted @nogc:
 
   auto opBinary(string op) (in Float b) const if (op == "*" || op == "/") {
     pragma(inline, true);
-    m3 res;
+    m3 res = void;
     mixin("res.m.ptr[0] = m.ptr[0]"~op~"b;");
     mixin("res.m.ptr[1] = m.ptr[1]"~op~"b;");
     mixin("res.m.ptr[2] = m.ptr[2]"~op~"b;");
@@ -1283,7 +1373,7 @@ nothrow @trusted @nogc:
 
   auto opBinaryRight(string op) (in Float b) const if (op == "*" || op == "/") {
     pragma(inline, true);
-    m3 res;
+    m3 res = void;
     mixin("res.m.ptr[0] = m.ptr[0]"~op~"b;");
     mixin("res.m.ptr[1] = m.ptr[1]"~op~"b;");
     mixin("res.m.ptr[2] = m.ptr[2]"~op~"b;");
@@ -1304,7 +1394,7 @@ nothrow @trusted @nogc:
     return this;
   }
 
-  auto opBinary(string op:"*") (in auto ref v2 v) const {
+  static if (TwoD) auto opBinary(string op:"*") (in auto ref v2 v) const {
     pragma(inline, true);
     return v2(
       v.x*m.ptr[3*0+0]+v.y*m.ptr[3*1+0]+m.ptr[3*2+0],
@@ -1312,8 +1402,7 @@ nothrow @trusted @nogc:
     );
   }
 
-  /*
-  auto opBinary(string op:"*") (in auto ref v3 v) const {
+  static if (ThreeD) auto opBinary(string op:"*") (in auto ref v3 v) const {
     pragma(inline, true);
     return v3(
       v.x*m.ptr[3*0+0]+v.y*m.ptr[3*1+0]+v.z*m.ptr[3*2+0],
@@ -1321,14 +1410,13 @@ nothrow @trusted @nogc:
       v.x*m.ptr[3*0+2]+v.y*m.ptr[3*1+2]+v.z*m.ptr[3*2+2],
     );
   }
-  */
 
-  auto opBinaryRight(string op:"*") (in auto ref v2 v) const { pragma(inline, true); return this*v; }
-  //auto opBinaryRight(string op:"*") (in auto ref v3 v) const { pragma(inline, true); return this*v; }
+  static if (TwoD) auto opBinaryRight(string op:"*") (in auto ref v2 v) const { pragma(inline, true); return this*v; }
+  static if (ThreeD) auto opBinaryRight(string op:"*") (in auto ref v3 v) const { pragma(inline, true); return this*v; }
 
   auto opBinary(string op:"*") (in auto ref m3 b) const {
     //pragma(inline, true);
-    m3 res;
+    m3 res = void;
     res.m.ptr[3*0+0] = m.ptr[3*0+0]*b.m.ptr[3*0+0]+m.ptr[3*0+1]*b.m.ptr[3*1+0]+m.ptr[3*0+2]*b.m.ptr[3*2+0];
     res.m.ptr[3*0+1] = m.ptr[3*0+0]*b.m.ptr[3*0+1]+m.ptr[3*0+1]*b.m.ptr[3*1+1]+m.ptr[3*0+2]*b.m.ptr[3*2+1];
     res.m.ptr[3*0+2] = m.ptr[3*0+0]*b.m.ptr[3*0+2]+m.ptr[3*0+1]*b.m.ptr[3*1+2]+m.ptr[3*0+2]*b.m.ptr[3*2+2];
@@ -1339,6 +1427,16 @@ nothrow @trusted @nogc:
     res.m.ptr[3*2+1] = m.ptr[3*2+0]*b.m.ptr[3*0+1]+m.ptr[3*2+1]*b.m.ptr[3*1+1]+m.ptr[3*2+2]*b.m.ptr[3*2+1];
     res.m.ptr[3*2+2] = m.ptr[3*2+0]*b.m.ptr[3*0+2]+m.ptr[3*2+1]*b.m.ptr[3*1+2]+m.ptr[3*2+2]*b.m.ptr[3*2+2];
     return res;
+  }
+
+  // multiply vector by transposed matrix (TESTME!)
+  static if (ThreeD) auto transmul() (in auto ref v3 v) const {
+    pragma(inline, true);
+    return v3(
+      v.x*m.ptr[3*0+0]+v.y*m.ptr[3*0+1]+v.z*m.ptr[3*0+2],
+      v.x*m.ptr[3*1+0]+v.y*m.ptr[3*1+1]+v.z*m.ptr[3*1+2],
+      v.x*m.ptr[3*2+0]+v.y*m.ptr[3*2+1]+v.z*m.ptr[3*2+2],
+    );
   }
 
   // sum of the diagonal components
@@ -1372,7 +1470,8 @@ nothrow @trusted @nogc:
   auto inv () const {
     //pragma(inline, true);
     immutable mtp = this.transposed;
-    m3 res;
+    m3 res = void;
+
     res.m.ptr[3*0+0] = mtp.m.ptr[3*1+1]*mtp.m.ptr[3*2+2]-mtp.m.ptr[3*2+1]*mtp.m.ptr[3*1+2];
     res.m.ptr[3*0+1] = mtp.m.ptr[3*1+0]*mtp.m.ptr[3*2+2]-mtp.m.ptr[3*2+0]*mtp.m.ptr[3*1+2];
     res.m.ptr[3*0+2] = mtp.m.ptr[3*1+0]*mtp.m.ptr[3*2+1]-mtp.m.ptr[3*2+0]*mtp.m.ptr[3*1+1];
@@ -1391,61 +1490,165 @@ nothrow @trusted @nogc:
     return res/this.det;
   }
 
+  static if (ThreeD) {
+    ref m3 rotateX (Float angle) {
+      mixin(ImportCoreMath!(Float, "cos", "sin"));
+      alias A = this;
+
+      // get the sine and cosine of the rotation angle
+      immutable Float s = sin(angle);
+      immutable Float c = cos(angle);
+
+      // calculate the new values of the six affected matrix entries
+      immutable Float temp01 = c*A[0, 1]+s*A[0, 2];
+      immutable Float temp11 = c*A[1, 1]+s*A[1, 2];
+      immutable Float temp21 = c*A[2, 1]+s*A[2, 2];
+      immutable Float temp02 = c*A[0, 2]-s*A[0, 1];
+      immutable Float temp12 = c*A[1, 2]-s*A[1, 1];
+      immutable Float temp22 = c*A[2, 2]-s*A[2, 1];
+
+      // put the results back into A
+      A[0, 1] = temp01; A[0, 2] = temp02;
+      A[1, 1] = temp11; A[1, 2] = temp12;
+      A[2, 1] = temp21; A[2, 2] = temp22;
+
+      return this;
+    }
+
+    ref m3 rotateY (Float angle) {
+      mixin(ImportCoreMath!(Float, "cos", "sin"));
+      alias A = this;
+
+      // get the sine and cosine of the rotation angle
+      immutable Float s = sin(angle);
+      immutable Float c = cos(angle);
+
+      // calculate the new values of the six affected matrix entries
+      immutable Float temp00 = c*A[0, 0]+s*A[0, 2];
+      immutable Float temp10 = c*A[1, 0]+s*A[1, 2];
+      immutable Float temp20 = c*A[2, 0]+s*A[2, 2];
+      immutable Float temp02 = c*A[0, 2]-s*A[0, 0];
+      immutable Float temp12 = c*A[1, 2]-s*A[1, 0];
+      immutable Float temp22 = c*A[2, 2]-s*A[2, 0];
+
+      // put the results back into XformToChange
+      A[0, 0] = temp00; A[0, 2] = temp02;
+      A[1, 0] = temp10; A[1, 2] = temp12;
+      A[2, 0] = temp20; A[2, 2] = temp22;
+
+      return this;
+    }
+
+    ref m3 rotateZ (Float angle) {
+      import core.stdc.math : cos, sin;
+      alias A = this;
+
+      // get the sine and cosine of the rotation angle
+      immutable Float s = sin(angle);
+      immutable Float c = cos(angle);
+
+      // calculate the new values of the six affected matrix entries
+      immutable Float temp00 = c*A[0, 0]+s*A[0, 1];
+      immutable Float temp10 = c*A[1, 0]+s*A[1, 1];
+      immutable Float temp20 = c*A[2, 0]+s*A[2, 1];
+      immutable Float temp01 = c*A[0, 1]-s*A[0, 0];
+      immutable Float temp11 = c*A[1, 1]-s*A[1, 0];
+      immutable Float temp21 = c*A[2, 1]-s*A[2, 0];
+
+      // put the results back into XformToChange
+      A[0, 0] = temp00; A[0, 1] = temp01;
+      A[1, 0] = temp10; A[1, 1] = temp11;
+      A[2, 0] = temp20; A[2, 1] = temp21;
+
+      return this;
+    }
+  }
+
 static:
   auto Identity () { pragma(inline, true); return m3(); }
   auto Zero () { pragma(inline, true); return m3(0); }
 
-  auto Rotate (in Float angle) {
-    pragma(inline, true);
-    mixin(SinCosImportMixin);
-    immutable Float c = cos(angle);
-    immutable Float s = sin(angle);
-    m3 res;
-    res.m.ptr[3*0+0] =  c; res.m.ptr[3*0+1] = s;
-    res.m.ptr[3*1+0] = -s; res.m.ptr[3*1+1] = c;
-    return res;
-  }
-
-  auto Scale (in Float sx, in Float sy) {
-    pragma(inline, true);
-    m3 res;
-    res.m.ptr[3*0+0] = sx;
-    res.m.ptr[3*1+1] = sy;
-    return res;
-  }
-
-  auto Scale() (in auto ref v2 sc) {
-    pragma(inline, true);
-    m3 res;
-    res.m.ptr[3*0+0] = sc.x;
-    res.m.ptr[3*1+1] = sc.y;
-    return res;
-  }
-
-  auto Translate (in Float dx, in Float dy) {
-    pragma(inline, true);
-    m3 res;
-    res.m.ptr[3*2+0] = dx;
-    res.m.ptr[3*2+1] = dy;
-    return res;
-  }
-
-  auto Translate() (in auto ref v2 v) {
-    pragma(inline, true);
-    m3 res;
-    res.m.ptr[3*2+0] = v.x;
-    res.m.ptr[3*2+1] = v.y;
-    return res;
-  }
-
-private:
-  private enum SinCosImportMixin = q{
-    static if (is(Float == float)) {
-      import core.stdc.math : cos=cosf, sin=sinf;
-    } else {
-      import core.stdc.math : cos, sin;
+  static if (TwoD) {
+    auto Rotate (in Float angle) {
+      pragma(inline, true);
+      mixin(ImportCoreMath!(Float, "cos", "sin"));
+      immutable Float c = cos(angle);
+      immutable Float s = sin(angle);
+      m3 res;
+      res.m.ptr[3*0+0] =  c; res.m.ptr[3*0+1] = s;
+      res.m.ptr[3*1+0] = -s; res.m.ptr[3*1+1] = c;
+      return res;
     }
-  };
+
+    auto Scale (in Float sx, in Float sy) {
+      pragma(inline, true);
+      m3 res;
+      res.m.ptr[3*0+0] = sx;
+      res.m.ptr[3*1+1] = sy;
+      return res;
+    }
+
+    auto Scale() (in auto ref v2 sc) {
+      pragma(inline, true);
+      m3 res;
+      res.m.ptr[3*0+0] = sc.x;
+      res.m.ptr[3*1+1] = sc.y;
+      return res;
+    }
+
+    auto Translate (in Float dx, in Float dy) {
+      pragma(inline, true);
+      m3 res;
+      res.m.ptr[3*2+0] = dx;
+      res.m.ptr[3*2+1] = dy;
+      return res;
+    }
+
+    auto Translate() (in auto ref v2 v) {
+      pragma(inline, true);
+      m3 res;
+      res.m.ptr[3*2+0] = v.x;
+      res.m.ptr[3*2+1] = v.y;
+      return res;
+    }
+  }
+
+  static if (ThreeD) {
+    // make rotation matrix from given angles
+    static auto Rotate() (in auto ref v3 angles) {
+      mixin(ImportCoreMath!(Float, "cos", "sin"));
+
+      immutable Float cos_b = cos(angles[0]);
+      immutable Float sin_b = sin(angles[0]);
+      immutable Float cos_c = cos(angles[1]);
+      immutable Float sin_c = sin(angles[1]);
+      immutable Float cos_a = cos(angles[2]);
+      immutable Float sin_a = sin(angles[2]);
+
+      m3 M = void;
+
+      // first matrix row
+      M[0, 0] = cos_a*cos_c-sin_a*sin_b*sin_c;
+      M[0, 1] = sin_a*cos_c+cos_a*sin_b*sin_c;
+      M[0, 2] = cos_b*sin_c;
+
+      // second matrix row
+      M[1, 0] = -sin_a*cos_b;
+      M[1, 1] = cos_a*cos_b;
+      M[1, 2] = -sin_b;
+
+      // third matrix row
+      M[2, 0] = -cos_a*sin_c-sin_a*sin_b*cos_c;
+      M[2, 1] = -sin_a*sin_c+cos_a*sin_b*cos_c;
+      M[2, 2] = cos_b*cos_c;
+
+      return M;
+    }
+
+    static auto RotateX() (Float angle) { m3 res; res.rotateX(angle); return res; }
+    static auto RotateY() (Float angle) { m3 res; res.rotateY(angle); return res; }
+    static auto RotateZ() (Float angle) { m3 res; res.rotateZ(angle); return res; }
+  }
 }
 
 
