@@ -36,6 +36,8 @@ module iv.cmdcon.core /*is aliced*/;
 private:
 import iv.alice;
 
+//version = iv_cmdcon_debug_wait;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// use this in conGetVar, for example, to avoid allocations
@@ -2821,50 +2823,83 @@ public void conUnsealVar (ConVarBase v) {
 // thread-safe
 
 /// execute console command (thread-safe)
-public void conExecute (ConString s) {
+/// return `true` if `wait` pseudocommant was hit
+public bool conExecute (ConString s) {
+  bool waitHit = false;
   auto ss = s; // anchor it
   consoleLock();
   scope(exit) consoleUnlock();
 
   enum MaxAliasExpand = 256*1024; // 256KB
 
-  void conExecuteInternal (ConString s, int aliassize) {
-    auto w = ConCommand.getWord(s);
-    if (w is null) return;
-    if (auto cobj = w in cmdlist) {
-      if (auto cmd = cast(ConCommand)(*cobj)) {
-        // execute command
-        while (s.length && s.ptr[0] <= 32) s = s[1..$];
-        //conwriteln("'", s, "'");
-        cmd.exec(s);
-      } else if (auto ali = cast(ConAlias)(*cobj)) {
-        // execute alias
-        //TODO: alias arguments
-        auto atext = ali.get;
-        //conwriteln("ALIAS: '", w, "': '", atext, "'");
-        if (atext.length) {
-          if (aliassize+atext.length > MaxAliasExpand) throw ConAlias.exAliasTooDeep;
-          conExecuteInternal(atext, aliassize+cast(int)atext.length);
+  void conExecuteInternal (ConString s, int aliassize, int aliaslevel) {
+    ConString anchor = s, curs = s;
+    for (;;) {
+      if (aliaslevel > 0) {
+        s = conGetCommandStr(curs);
+        if (s is null) return;
+      } else {
+        curs = null;
+      }
+      auto w = ConCommand.getWord(s);
+      if (w is null) return;
+      // "wait" pseudocommand
+      if (w == "wait") {
+        waitHit = true;
+        // insert the rest of the code into command queue (at the top),
+        // so it will be processed on the next `conProcessQueue()` call
+        while (curs.length) {
+          while (curs.length && curs.ptr[0] <= ' ') curs = curs[1..$];
+          if (curs.length == 0 || curs.ptr[0] != '#') break;
+          // comment; skip it
+          while (curs.length && curs.ptr[0] != '\n') curs = curs[1..$];
+        }
+        if (curs.length) {
+          // has something to insert
+          //concmdPrepend(curs);
+          concmdAdd!true(curs); // ensure new command
+        }
+        return;
+      }
+      version(iv_cmdcon_debug_wait) conwriteln("CMD: <", w, ">; args=<", s, ">; rest=<", curs, ">");
+      if (auto cobj = w in cmdlist) {
+        if (auto cmd = cast(ConCommand)(*cobj)) {
+          // execute command
+          while (s.length && s.ptr[0] <= 32) s = s[1..$];
+          //conwriteln("'", s, "'");
+          cmd.exec(s);
+        } else if (auto ali = cast(ConAlias)(*cobj)) {
+          // execute alias
+          //TODO: alias arguments
+          auto atext = ali.get;
+          //conwriteln("ALIAS: '", w, "': '", atext, "'");
+          if (atext.length) {
+            if (aliassize+atext.length > MaxAliasExpand) throw ConAlias.exAliasTooDeep;
+            if (aliaslevel >= 128) throw ConAlias.exAliasTooDeep;
+            conExecuteInternal(atext, aliassize+cast(int)atext.length, aliaslevel+1);
+          }
+        } else {
+          conwrite("command ");
+          ConCommand.writeQuotedString(w);
+          conwrite(" is of unknown type (internal error)");
+          conwrite("\n");
         }
       } else {
         conwrite("command ");
         ConCommand.writeQuotedString(w);
-        conwrite(" is of unknown type (internal error)");
+        conwrite(" not found");
         conwrite("\n");
       }
-    } else {
-      conwrite("command ");
-      ConCommand.writeQuotedString(w);
-      conwrite(" not found");
-      conwrite("\n");
+      s = curs;
     }
   }
 
   try {
-    conExecuteInternal(s, 0);
+    conExecuteInternal(s, 0, 0);
   } catch (Exception) {
     conwriteln("error executing console command:\n ", s);
   }
+  return waitHit;
 }
 
 
@@ -4185,12 +4220,50 @@ public void convar(T) (ConString s, T val) {
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared char[] concmdbuf;
 __gshared uint concmdbufpos;
-shared static this () { concmdbuf.length = 65536; }
+shared static this () { concmdbuf.unsafeArraySetLength(65536); }
+
+
+private void unsafeArraySetLength(T) (ref T[] arr, int newlen) /*nothrow*/ {
+  if (newlen < 0 || newlen >= int.max/2) assert(0, "invalid number of elements in array");
+  if (arr.length > newlen) {
+    arr.length = newlen;
+    arr.assumeSafeAppend;
+  } else if (arr.length < newlen) {
+    auto optr = arr.ptr;
+    arr.length = newlen;
+    if (arr.ptr !is optr) {
+      import core.memory : GC;
+      optr = arr.ptr;
+      if (optr is GC.addrOf(optr)) GC.setAttr(optr, GC.BlkAttr.NO_INTERIOR);
+    }
+  }
+}
+
+
+/+
+void concmdPrepend (ConString s) {
+  if (s.length == 0) return; // nothing to do
+  if (s.length >= int.max/4) assert(0, "console command too long"); //FIXME
+  uint reslen = cast(uint)s.length+1;
+  uint newlen = concmdbufpos+reslen;
+  if (newlen <= concmdbufpos || newlen >= int.max/2-1024) assert(0, "console command too long"); //FIXME
+  if (newlen > concmdbuf.length) concmdbuf.unsafeArraySetLength(newlen+512);
+  // make room
+  if (concmdbufpos > 0) {
+    import core.stdc.string : memmove;
+    memmove(concmdbuf.ptr+reslen, concmdbuf.ptr, concmdbufpos);
+  }
+  // put new test and '\n'
+  concmdbuf.ptr[0..s.length] = s[];
+  concmdbuf.ptr[s.length] = '\n';
+  concmdbufpos += reslen;
+}
++/
 
 
 void concmdEnsureNewCommand () {
   if (concmdbufpos > 0 && concmdbuf[concmdbufpos-1] != '\n') {
-    if (concmdbuf.length-concmdbufpos < 1) concmdbuf.length += 512;
+    if (concmdbuf.length-concmdbufpos < 1) concmdbuf.unsafeArraySetLength(concmdbuf.length+512);
   }
   concmdbuf.ptr[concmdbufpos++] = '\n';
 }
@@ -4199,7 +4272,7 @@ void concmdEnsureNewCommand () {
 package(iv) void concmdAdd(bool ensureNewCommand=true) (ConString s) {
   if (s.length) {
     if (concmdbuf.length-concmdbufpos < s.length+1) {
-      concmdbuf.length += s.length-(concmdbuf.length-concmdbufpos)+512;
+      concmdbuf.unsafeArraySetLength(concmdbuf.length+s.length-(concmdbuf.length-concmdbufpos)+512);
     }
     static if (ensureNewCommand) {
       if (concmdbufpos > 0 && concmdbuf[concmdbufpos-1] != '\n') concmdbuf.ptr[concmdbufpos++] = '\n';
@@ -4244,14 +4317,26 @@ public bool conProcessQueue (uint maxlen=0) {
   for (;;) {
     auto ebuf = concmdbufpos;
     ConString s = concmdbuf[0..ebuf];
+    version(iv_cmdcon_debug_wait) conwriteln("** [", s, "]; ebuf=", ebuf);
     while (s.length) {
       auto cmd = conGetCommandStr(s);
       if (cmd is null) break;
       try {
         //consoleLock();
         //scope(exit) consoleUnlock();
-        //conwriteln("  <", cmd, ">");
-        conExecute(cmd);
+        version(iv_cmdcon_debug_wait) conwriteln("** <", cmd, ">");
+        if (conExecute(cmd)) {
+          // "wait" pseudocommand hit; remove executed part
+          //import core.stdc.string : memmove;
+          version(iv_cmdcon_debug_wait) conwriteln(" :: rest=<", s, ">");
+          ebuf -= cast(uint)s.length;
+          version(iv_cmdcon_debug_wait) conwriteln("<WAIT> HIT! ebuf=", ebuf, "; concmdbufpos=", concmdbufpos);
+          //if (leftlen > 0) memmove(concmdbuf.ptr, concmdbuf.ptr+leftlen, ebuf-leftlen);
+          //concmdbufpos -= leftlen;
+          version(iv_cmdcon_debug_wait) conwriteln("=== BUFFER LEFT ===\n", concmdbuf[ebuf..concmdbufpos], "\n=================");
+          break;
+        }
+        version(iv_cmdcon_debug_wait) conwriteln(" ++++++++++");
       } catch (Exception e) {
         conwriteln("***ERROR: ", e.msg);
       }

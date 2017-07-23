@@ -998,6 +998,13 @@ public void glconRunGLWindowResizeable (int wdt, int hgt, string title, string k
 private __gshared int glconFPS = 30;
 private __gshared ulong nextFrameTime; // in msecs
 
+public void glconSetAndSealFPS (int fps) {
+  if (fps < 1) fps = 1; else if (fps > 200) fps = 200;
+  glconFPS = fps;
+  conSealVar("r_fps");
+}
+
+
 private final class NextFrameEvent {}
 private __gshared NextFrameEvent eventNextFrame;
 private shared static this () {
