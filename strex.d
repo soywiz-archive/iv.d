@@ -40,11 +40,13 @@ char[] intWithCommas(T) (char[] dest, T nn, char comma=',') if (__traits(isInteg
   } else {
     bool neg = (nn < 0);
     static if (T.sizeof < 8) {
-      long n = -cast(long)nn;
+      long n = nn;
+      if (neg) n = -n;
+      if (n < 0) n = T.max;
     } else {
-      nn = -nn;
-      if (nn < 0) nn = T.max; //FIXME
       alias n = nn;
+      if (neg) n = -n;
+      if (n < 0) n = T.max; //FIXME
     }
   }
   char[256] buf = void;

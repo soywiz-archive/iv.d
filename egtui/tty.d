@@ -635,6 +635,34 @@ private:
   int x, y, w, h;
   ushort fgbg;
 
+public: // what idiot marked this whole thing as nothrow-nogc?!
+  // temporarily change color and call delegate
+  void withFB (ubyte fg, ubyte bg, scope void delegate () dg) {
+    if (dg is null) return;
+    auto oldcolor = fgbg;
+    scope(exit) fgbg = oldcolor;
+    fb(fg, bg);
+    dg();
+  }
+
+  // temporarily change color and call delegate
+  void withFG (ubyte cfg, scope void delegate () dg) {
+    if (dg is null) return;
+    auto oldcolor = fgbg;
+    scope(exit) fgbg = oldcolor;
+    fg = cfg;
+    dg();
+  }
+
+  // temporarily change color and call delegate
+  void withBG (ubyte cbg, scope void delegate () dg) {
+    if (dg is null) return;
+    auto oldcolor = fgbg;
+    scope(exit) fgbg = oldcolor;
+    bg = cbg;
+    dg();
+  }
+
 nothrow @safe @nogc:
 public:
   this (int ax, int ay, int aw, int ah) @trusted {
