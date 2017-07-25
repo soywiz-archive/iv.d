@@ -148,7 +148,7 @@ private void initConsole () {
   scrwdt = ascrwdt;
   scrhgt = ascrhgt;
   conScale = ascale;
-  conRegVar!rConsoleVisible("r_console", "console visibility", ConVarAttr.Archive);
+  conRegVar!rConsoleVisible("r_console", "console visibility"/*, ConVarAttr.Archive*/);
   conRegVar!rConsoleHeight(10*3, scrhgt, "r_conheight", "console height", ConVarAttr.Archive);
   conRegVar!rConTextColor("r_contextcolor", "console log text color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
   conRegVar!rConCursorColor("r_concursorcolor", "console cursor color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
@@ -159,6 +159,7 @@ private void initConsole () {
   conRegVar!rConAlpha("r_conalpha", "console transparency (0 is fully transparent, 1 is opaque)", ConVarAttr.Archive);
   //rConsoleHeight = scrhgt-scrhgt/3;
   rConsoleHeight = scrhgt/2;
+  scrhgt = 0;
   conRegFunc!({
     import core.atomic;
     atomicStore(vquitRequested, true);
@@ -176,7 +177,7 @@ public void glconInit (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   if (ascale < 1 || ascale > 64) return;
   conScale = ascale;
   if (scrwdt != ascrwdt || scrhgt != ascrhgt || convbuf is null) {
-    if (rConsoleHeight > 0) rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
+    if (rConsoleHeight > 0 && scrhgt > 0) rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
     scrwdt = ascrwdt;
     scrhgt = ascrhgt;
     if (rConsoleHeight > scrhgt) rConsoleHeight = scrhgt;
@@ -206,6 +207,7 @@ private bool glconGenRenderBuffer () {
   if (glconRenderFailed) return false;
   if (convbuf is null || prevScrWdt != scrwdt || prevScrHgt != scrhgt) {
     import core.stdc.stdlib : free, realloc;
+    if (scrhgt == 0) scrhgt = 600;
     // need new buffer; kill old texture, so it will be recreated
     if (glconDrawWindow is null && glconAllowOpenGLRender) {
       if (convbufTexId) { glDeleteTextures(1, &convbufTexId); convbufTexId = 0; }
@@ -228,7 +230,7 @@ private bool glconGenRenderBuffer () {
 
 // returns `true` if texture was recreated
 private bool glconGenTexture () {
-  if (glconRenderFailed) return false;
+  if (glconRenderFailed || scrhgt == 0) return false;
 
   static if (OptCmdConGlHasSdpy) {
     if (glconDrawWindow !is null) return false;
@@ -289,7 +291,7 @@ private void glconCallShowHideHandler () {
 /// render console (if it is visible). tries hard to not change OpenGL state.
 public void glconDraw () {
   glconCallShowHideHandler();
-  if (!rConsoleVisible) return;
+  if (!rConsoleVisible || scrhgt == 0) return;
 
   consoleLock();
   scope(exit) consoleUnlock();
@@ -679,7 +681,7 @@ __gshared int prevIXOfs = 0;
 
 
 bool renderConsole (bool forced) nothrow @trusted @nogc {
-  if (!forced && (conLastChange == cbufLastChange && conLastIBChange == conInputLastChange)) return false;
+  if (!forced && (conLastChange == cbufLastChange && conLastIBChange == conInputLastChange) || scrhgt == 0) return false;
 
   enum XOfs = 0;
   immutable sw = scrwdt, sh = scrhgt;

@@ -1504,43 +1504,56 @@ static:
     return (pos < s.length);
   }
 
-  public static void writeQuotedString (scope ConString s) {
+  private static bool isBadStrChar() (char ch) {
+    pragma(inline, true);
+    return (ch < ' ' || ch == '\\' || ch == '"' || ch == '\'' || ch == '#' || ch == ';' || ch > 126);
+  }
+
+  public static void writeQuotedString(bool forceQuote=true) (scope ConString s) { quoteStringDG!forceQuote(s, delegate (scope ConString s) { conwriter(s); }); }
+
+  public static void quoteStringDG(bool forceQuote=false) (scope ConString s, scope void delegate (scope ConString) dg) {
+    if (dg is null) return;
     static immutable string hexd = "0123456789abcdef";
-    static bool isBadChar() (char ch) {
+    static bool isBadStrChar() (char ch) {
       pragma(inline, true);
-      return (ch < ' ' || ch == '\\' || ch == '"' || ch > 126);
+      return (ch < ' ' || ch == '\\' || ch == '"' || ch == '\'' || ch == '#' || ch == ';' || ch > 126);
     }
-    //auto wrt = ConWriter;
-    alias wrt = conwriter;
-    wrt("\"");
+    // need to quote?
+    if (s.length == 0) { dg(`""`); return; }
+    static if (!forceQuote) {
+      bool needQuote = false;
+      foreach (char ch; s) if (ch == ' ' || isBadStrChar(ch)) { needQuote = true; break; }
+      if (!needQuote) { dg(s); return; }
+    }
+    dg("\"");
     usize pos = 0;
     while (pos < s.length) {
       usize end = pos;
-      while (end < s.length && !isBadChar(s.ptr[end])) ++end;
-      if (end > pos) wrt(s[pos..end]);
+      while (end < s.length && !isBadStrChar(s.ptr[end])) ++end;
+      if (end > pos) dg(s[pos..end]);
       pos = end;
       if (pos >= s.length) break;
-      wrt("\\");
+      dg("\\");
       switch (s.ptr[pos++]) {
-        case '"': case '\'': case '\\': wrt(s.ptr[pos-1..pos]); break;
-        case '\x00': wrt("0"); break;
-        case '\a': wrt("a"); break;
-        case '\b': wrt("b"); break;
-        case '\x1b': wrt("e"); break;
-        case '\f': wrt("f"); break;
-        case '\n': wrt("n"); break;
-        case '\r': wrt("r"); break;
-        case '\t': wrt("t"); break;
-        case '\v': wrt("c"); break;
+        case '"': case '\'': case '\\': dg(s.ptr[pos-1..pos]); break;
+        case '\x00': dg("0"); break;
+        case '\a': dg("a"); break;
+        case '\b': dg("b"); break;
+        case '\x1b': dg("e"); break;
+        case '\f': dg("f"); break;
+        case '\n': dg("n"); break;
+        case '\r': dg("r"); break;
+        case '\t': dg("t"); break;
+        case '\v': dg("c"); break;
         default:
           ubyte c = cast(ubyte)(s.ptr[pos-1]);
-          wrt("x");
-          wrt(hexd[c>>4..(c>>4)+1]);
-          wrt(hexd[c&0x0f..c&0x0f+1]);
+          dg("x");
+          dg(hexd[c>>4..(c>>4)+1]);
+          dg(hexd[c&0x0f..(c&0x0f)+1]);
           break;
       }
     }
-    wrt("\"");
+    dg("\"");
   }
 }
 
@@ -2695,7 +2708,7 @@ public bool conHasVar (ConString name) { if (auto cc = name in cmdlist) return (
 
 /// known console commands (funcs and vars) range (thread-unsafe)
 /// type: "all", "vars", "funcs"
-public auto conByCommand(string type="all") () if (type == "all" || type == "vars" || type == "funcs" || type == "aliases") {
+public auto conByCommand(string type="all") () if (type == "all" || type == "vars" || type == "funcs" || type == "aliases" || type == "archive") {
   static struct Range(string type) {
   private:
     usize idx;
@@ -2713,6 +2726,14 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
       } else static if (type == "aliases") {
         while (stidx < cmdlistSorted.length && (cast(ConAlias)cmdlist[cmdlistSorted.ptr[stidx]]) is null) ++stidx;
         idx = stidx;
+      } else static if (type == "archive") {
+        while (stidx < cmdlistSorted.length) {
+          if (auto v = cast(ConVarBase)cmdlist[cmdlistSorted.ptr[stidx]]) {
+            if (v.attrArchive) break;
+          }
+          ++stidx;
+        }
+        idx = stidx;
       } else {
         static assert(0, "wtf?!");
       }
@@ -2725,6 +2746,7 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
     @property bool frontIsFunc() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConFuncBase)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
     @property bool frontIsAlias() () { pragma(inline, true); return (idx < cmdlistSorted.length ? (cast(ConAlias)cmdlist[cmdlistSorted.ptr[idx]] !is null) : false); }
     void popFront () {
+      if (idx >= cmdlistSorted.length) return;
       static if (type == "all") {
        pragma(inline, true);
         ++idx;
@@ -2737,6 +2759,14 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
       } else static if (type == "aliases") {
         ++idx;
         while (idx < cmdlistSorted.length && (cast(ConAlias)cmdlist[cmdlistSorted.ptr[idx]]) is null) ++idx;
+      } else static if (type == "archive") {
+        ++idx;
+        while (idx < cmdlistSorted.length) {
+          if (auto v = cast(ConVarBase)cmdlist[cmdlistSorted.ptr[idx]]) {
+            if (v.attrArchive) break;
+          }
+          ++idx;
+        }
       } else {
         static assert(0, "wtf?!");
       }
@@ -3142,7 +3172,7 @@ public class ConCommandAlias : ConCommand {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// create "user console variable"
-ConVarBase conRegUserVar(T) (string aname, string help) {
+ConVarBase conRegUserVar(T) (string aname, string help, const(ConVarAttr)[] attrs...) {
   if (aname.length == 0) return null;
   ConVarBase v;
   static if (is(T : long) || is(T : double)) {
@@ -3155,7 +3185,8 @@ ConVarBase conRegUserVar(T) (string aname, string help) {
   } else {
     static assert(0, "can't create uservar of type '"~T.stringof~"'");
   }
-  v.setAttrs!true(ConVarAttr.User);
+  c.setAttrs(attrs);
+  v.mAttrs |= ConVarAttr.User;
   addName(aname);
   cmdlist[aname] = v;
   return v;
@@ -3163,7 +3194,7 @@ ConVarBase conRegUserVar(T) (string aname, string help) {
 
 
 /// create bounded "user console variable"
-ConVarBase conRegUserVar(T) (T amin, T amax, string aname, string help) if (is(T : long) || is(T : double)) {
+ConVarBase conRegUserVar(T) (T amin, T amax, string aname, string help, const(ConVarAttr)[] attrs...) if (is(T : long) || is(T : double)) {
   if (aname.length == 0) return null;
   ConVarBase v;
   static if (is(T : long) || is(T : double)) {
@@ -3176,7 +3207,8 @@ ConVarBase conRegUserVar(T) (T amin, T amax, string aname, string help) if (is(T
   } else {
     static assert(0, "can't create uservar of type '"~T.stringof~"'");
   }
-  v.setAttrs!true(ConVarAttr.User);
+  c.setAttrs(attrs);
+  v.mAttrs |= ConVarAttr.User;
   addName(aname);
   cmdlist[aname] = v;
   return v;
