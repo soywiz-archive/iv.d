@@ -1702,6 +1702,44 @@ nothrow @safe:
   static mat4 Zero () { pragma(inline, true); return mat4(0); }
   static mat4 Identity () { pragma(inline, true); /*mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res;*/ return mat4(); }
 
+  Float[4] getRow (int idx) const {
+    Float[4] res = Float.nan;
+    switch (idx) {
+      case 0:
+        res.ptr[0] = mt.ptr[0];
+        res.ptr[1] = mt.ptr[4];
+        res.ptr[2] = mt.ptr[8];
+        res.ptr[3] = mt.ptr[12];
+        break;
+      case 1:
+        res.ptr[0] = mt.ptr[1];
+        res.ptr[1] = mt.ptr[5];
+        res.ptr[2] = mt.ptr[9];
+        res.ptr[3] = mt.ptr[13];
+        break;
+      case 2:
+        res.ptr[0] = mt.ptr[2];
+        res.ptr[1] = mt.ptr[6];
+        res.ptr[2] = mt.ptr[10];
+        res.ptr[3] = mt.ptr[14];
+        break;
+      case 3:
+        res.ptr[0] = mt.ptr[3];
+        res.ptr[1] = mt.ptr[7];
+        res.ptr[2] = mt.ptr[11];
+        res.ptr[3] = mt.ptr[15];
+        break;
+      default: break;
+    }
+    return res;
+  }
+
+  Float[4] getCol (int idx) const {
+    Float[4] res = Float.nan;
+    if (idx >= 0 && idx <= 3) res = mt.ptr[idx*4..idx*5];
+    return res;
+  }
+
   private enum SinCosImportMixin = q{
     static if (is(Float == float)) {
       import core.stdc.math : cos=cosf, sin=sinf;
