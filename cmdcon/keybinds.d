@@ -107,6 +107,7 @@ public void saveBindings (scope void delegate (scope ConString s) wdg) {
   if (wdg is null) return;
   wdg("bind_clear_all\n");
   foreach (ref kv; boundkeysDown.byKeyValue) {
+    if (kv.key == cast(Key)0) continue;
     wdg("bind ");
     string ksname;
     foreach (string nm; __traits(allMembers, Key)) {
@@ -114,6 +115,7 @@ public void saveBindings (scope void delegate (scope ConString s) wdg) {
     }
     if (ksname.length == 0) continue;
     if (kv.value.length == 0) continue;
+    if (ksname.length == 2 && ksname[0] == 'N' && ksname[1] >= '0' && ksname[1] <= '9') ksname = ksname[1..$];
     if (kv.value[0] == '+') {
       if (auto kup = kv.key in boundkeysUp) {
         string uv = *kup;
@@ -185,7 +187,7 @@ Key findKeyByName (ConString name, KeyState* ks=null) {
     foreach (string kn; __traits(allMembers, Key)) {
       if (strEquCI(name, kn)) return __traits(getMember, Key, kn);
     }
-    if (name.length == 1 && name[0] >= '1' && name[0] <= '9') return cast(Key)(Key.N1+name[0]-'0');
+    if (name.length == 1 && name[0] >= '1' && name[0] <= '9') return cast(Key)(Key.N1+name[0]-'1');
     if (name.length == 1 && name[0] == '0') return Key.N0;
   }
   return cast(Key)0; // HACK!
