@@ -103,6 +103,71 @@ public void clearBindings () {
 }
 
 
+public void saveBindings (scope void delegate (scope ConString s) wdg) {
+  if (wdg is null) return;
+  wdg("bind_clear_all\n");
+  foreach (ref kv; boundkeysDown.byKeyValue) {
+    wdg("bind ");
+    string ksname;
+    foreach (string nm; __traits(allMembers, Key)) {
+      if (__traits(getMember, Key, nm) == kv.key) { ksname = nm; break; }
+    }
+    if (ksname.length == 0) continue;
+    if (kv.value.length == 0) continue;
+    if (kv.value[0] == '+') {
+      if (auto kup = kv.key in boundkeysUp) {
+        string uv = *kup;
+        if (uv.length == kv.value.length && uv[0] == '-' && kv.value[1..$] == uv[1..$]) {
+          // "all"
+          ConCommand.quoteStringDG(ksname, wdg);
+          wdg(" ");
+          ConCommand.quoteStringDG(kv.value, wdg);
+          wdg("\n");
+          continue;
+        }
+      }
+    }
+    // down
+    bool putPfx = true;
+    ConCommand.quoteStringDG!true(ksname, delegate (scope ConString s) {
+      if (s.length == 0) return; // just in case
+      if (putPfx) {
+        assert(s[0] == '"');
+        wdg(`"+`);
+        if (s.length > 1) wdg(s[1..$]);
+        putPfx = false;
+      } else {
+        wdg(s);
+      }
+    });
+    wdg(` `);
+    ConCommand.quoteStringDG(kv.value, wdg);
+    wdg("\n");
+    // up
+    if (auto kup = kv.key in boundkeysUp) {
+      string uv = *kup;
+      if (uv.length == 0) continue; // just in case
+      wdg(`bind `);
+      putPfx = true;
+      ConCommand.quoteStringDG!true(ksname, delegate (scope ConString s) {
+        if (s.length == 0) return; // just in case
+        if (putPfx) {
+          assert(s[0] == '"');
+          wdg(`"-`);
+          if (s.length > 1) wdg(s[1..$]);
+          putPfx = false;
+        } else {
+          wdg(s);
+        }
+      });
+      wdg(` `);
+      ConCommand.quoteStringDG(uv, wdg);
+      wdg("\n");
+    }
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 enum KeyState { All, Down, Up }
 
