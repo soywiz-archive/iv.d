@@ -554,7 +554,7 @@ void parse(Vars...) (ref FuiContext ctx, const(char)[] text) {
       if (props.linebreak >= 0) lp.lineBreak = (props.linebreak != 0);
       if (props.canbefocused >= 0) lp.canBeFocused = (props.canbefocused != 0);
       if (props.hv >= 0) lp.vertical = (props.hv != 0);
-      if (props.def >= 0) lp.userFlags = (lp.userFlags&~FuiCtlUserFlags.Default)|(props.def > 0 ? FuiCtlUserFlags.Default : 0);
+      if (props.def >= 0) lp.userFlags = (lp.userFlags&~cast(uint)FuiCtlUserFlags.Default)|(props.def > 0 ? FuiCtlUserFlags.Default : 0);
       if (props.wpalign >= 0) lp.aligning = cast(FuiLayoutProps.Align)props.wpalign;
       if (props.resetsize > 0) {
         lp.minSize = FuiSize(1, 1);

@@ -479,9 +479,9 @@ align(1): // make it tightly packed
   }
 
   @property pure nothrow @safe @nogc {
-    void ctrl (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Ctrl; else mods &= ~ModFlag.Ctrl; } ///
-    void alt (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Alt; else mods &= ~ModFlag.Alt; } ///
-    void shift (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Shift; else mods &= ~ModFlag.Shift; } ///
+    void ctrl (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Ctrl; else mods &= ~(ModFlag.Ctrl); } ///
+    void alt (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Alt; else mods &= ~(ModFlag.Alt); } ///
+    void shift (bool v) { pragma(inline, true); if (v) mods |= ModFlag.Shift; else mods &= ~(ModFlag.Shift); } ///
   }
 
   this (const(char)[] s) pure nothrow @safe @nogc {

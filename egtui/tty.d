@@ -210,7 +210,7 @@ align(1):
           }
         }
       } else {
-        flags &= ~Flag.GraphMask;
+        flags &= ~(Flag.GraphMask);
       }
       flags |= (gf&Flag.GraphMask)|Flag.G1;
       ch = g1char;
@@ -811,7 +811,7 @@ public:
       dst.bg = b;
       dst.ch = ch;
       static if (g1) {
-        dst.flags &= ~Glyph.Flag.GraphMask;
+        dst.flags &= ~(Glyph.Flag.GraphMask);
         dst.flags |= Glyph.Flag.G1;
       } else {
         dst.flags &= ~(Glyph.Flag.GraphMask|Glyph.Flag.G1);

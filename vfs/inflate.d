@@ -521,7 +521,7 @@ private:
     ushort length = readU16(readBuf);
     ushort invlength = readU16(readBuf); // one's complement of length
     // check length
-    if (length != cast(ushort)(~invlength)) { setErrorState(); throw new Exception("invalid uncompressed block length"); }
+    if (length != cast(ushort)(~(invlength))) { setErrorState(); throw new Exception("invalid uncompressed block length"); }
     bitcount = 0; // make sure we start next block on a byte boundary
     bytesLeft = length;
     state = State.RawBlock;

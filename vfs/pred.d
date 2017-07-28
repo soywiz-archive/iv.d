@@ -199,7 +199,7 @@ T[] rawReadExact(ST, T) (auto ref ST st, T[] buf) if (isReadableStream!ST && !is
 void rawWriteExact(ST, T) (auto ref ST st, in T[] buf) if (isWriteableStream!ST) { st.rawWrite(buf); }
 
 /// if stream doesn't have `.size`, but can be seeked, emulate it
-long size(ST) (auto ref ST st) if (!isSeekableStream!ST && !streamHasSize!ST) {
+long size(ST) (auto ref ST st) if (isSeekableStream!ST && !streamHasSize!ST) {
   auto opos = st.tell;
   st.seek(0, Seek.End);
   auto res = st.tell;
@@ -209,17 +209,17 @@ long size(ST) (auto ref ST st) if (!isSeekableStream!ST && !streamHasSize!ST) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private enum isGoodEndianness(string s) = (s == "LE" || s == "le" || s == "BE" || s == "be");
+public enum isGoodEndianness(string s) = (s == "LE" || s == "le" || s == "BE" || s == "be");
 
-private template isLittleEndianness(string s) if (isGoodEndianness!s) {
+public template isLittleEndianness(string s) if (isGoodEndianness!s) {
   enum isLittleEndianness = (s == "LE" || s == "le");
 }
 
-private template isBigEndianness(string s) if (isGoodEndianness!s) {
+public template isBigEndianness(string s) if (isGoodEndianness!s) {
   enum isLittleEndianness = (s == "BE" || s == "be");
 }
 
-private template isSystemEndianness(string s) if (isGoodEndianness!s) {
+public template isSystemEndianness(string s) if (isGoodEndianness!s) {
   version(LittleEndian) {
     enum isSystemEndianness = isLittleEndianness!s;
   } else {

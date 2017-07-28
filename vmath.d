@@ -1250,6 +1250,7 @@ alias mat3 = Mat3!vec2; /// for 2D
 alias mat33 = Mat3!vec3; /// for 3D
 
 /// very simple (and mostly not tested) 3x3 matrix, for 2D/3D (depenting of parameterizing vector type)
+/// for 3D, 3x3 matrix cannot do translation
 align(1) struct Mat3(VT) if (IsVectorDim!(VT, 2) || IsVectorDim!(VT, 3)) {
 align(1):
 private:
@@ -1813,10 +1814,10 @@ nothrow @safe:
   // same as `glFrustum()`
   static mat4 Frustum() (Float left, Float right, Float bottom, Float top, Float nearVal, Float farVal) nothrow @trusted @nogc {
     auto res = mat4(0);
-    res.mt.ptr[0]  = 2*nearVal/(right-left);
-    res.mt.ptr[5]  = 2*nearVal/(top-bottom);
-    res.mt.ptr[8]  = (right+left)/(right-left);
-    res.mt.ptr[9]  = (top+bottom)/(top-bottom);
+    res.mt.ptr[0] = 2*nearVal/(right-left);
+    res.mt.ptr[5] = 2*nearVal/(top-bottom);
+    res.mt.ptr[8] = (right+left)/(right-left);
+    res.mt.ptr[9] = (top+bottom)/(top-bottom);
     res.mt.ptr[10] = -(farVal+nearVal)/(farVal-nearVal);
     res.mt.ptr[11] = -1;
     res.mt.ptr[14] = -(2*farVal*nearVal)/(farVal-nearVal);
