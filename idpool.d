@@ -36,7 +36,7 @@ alias IdPool32 = IdPoolImpl!uint;
 
 
 // WARNING! don't use copies of this struct, it WILL ruin everything!
-// copying is not disabled to allow copying when programmer things it is necessary
+// copying is not disabled to allow copying when programmer thinks it is necessary
 // if `allowZero` is true, zero id is valid, otherwise it is never returned
 // `IDT.max` is ALWAYS invalid, and is used as "error result"
 struct IdPoolImpl(IDT, bool allowZero=false) if (is(IDT == ubyte) || is(IDT == ushort) || is(IDT == uint)) {
