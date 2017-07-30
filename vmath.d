@@ -1323,6 +1323,14 @@ nothrow @trusted @nogc:
     if (x < 3 && y < 3) m.ptr[y*3+x] = v;
   }
 
+  @property bool isIdentity () const {
+    pragma(inline, true); // can we?
+    return
+      m.ptr[0] == 1 && m.ptr[1] == 0 && m.ptr[2] == 0 &&
+      m.ptr[3] == 0 && m.ptr[4] == 1 && m.ptr[5] == 0 &&
+      m.ptr[6] == 0 && m.ptr[7] == 0 && m.ptr[8] == 1;
+  }
+
   auto opUnary(string op:"+") () const { pragma(inline, true); return this; }
 
   auto opUnary(string op:"-") () const {
@@ -1702,6 +1710,15 @@ nothrow @safe:
 
   static mat4 Zero () { pragma(inline, true); return mat4(0); }
   static mat4 Identity () { pragma(inline, true); /*mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res;*/ return mat4(); }
+
+  @property bool isIdentity () const {
+    pragma(inline, true); // can we?
+    return
+      mt.ptr[0] == 1 && mt.ptr[1] == 0 && mt.ptr[2] == 0 && mt.ptr[3] == 0 &&
+      mt.ptr[4] == 0 && mt.ptr[5] == 1 && mt.ptr[6] == 0 && mt.ptr[7] == 0 &&
+      mt.ptr[8] == 0 && mt.ptr[9] == 0 && mt.ptr[10] == 1 && mt.ptr[11] == 0 &&
+      mt.ptr[12] == 0 && mt.ptr[13] == 0 && mt.ptr[14] == 0 && mt.ptr[15] == 1;
+  }
 
   Float[4] getRow (int idx) const {
     Float[4] res = Float.nan;
@@ -2473,13 +2490,48 @@ public:
 
 public:
   this (Float aw, Float ax, Float ay, Float az) nothrow @trusted @nogc {
+    pragma(inline, true);
     w = aw;
     x = ax;
     y = ay;
     z = az;
   }
 
-  static quat4 Identity () nothrow @trusted @nogc { pragma(inline, true); return quat4(1, 0, 0, 0); }
+  // valid only for unit quaternions
+  this (Float ax, Float ay, Float az) nothrow @trusted @nogc {
+    immutable Float t = cast(Float)1-(ax*ax)-(ay*ay)-(az*az);
+    if (t < 0) {
+      w = 0;
+    } else {
+      mixin(ImportCoreMath!(Float, "sqrt"));
+      w = -sqrt(t);
+    }
+    x = ax;
+    y = ay;
+    z = az;
+  }
+
+  this() (in auto ref VT v) nothrow @safe @nogc {
+    pragma(inline, true);
+    x = v.x;
+    y = v.y;
+    z = v.z;
+    w = 0;
+  }
+
+  // the rotation of a point by a quaternion is given by the formula:
+  //   R = Q.P.Q*
+  // where R is the resultant quaternion, Q is the orientation quaternion by which you want to perform a rotation,
+  // Q* the conjugate of Q and P is the point converted to a quaternion.
+  // note: here the "." is the multiplication operator.
+  //
+  // to convert a 3D vector to a quaternion, copy the x, y and z components and set the w component to 0.
+  // this is the same for quaternion to vector conversion: take the x, y and z components and forget the w.
+
+  VT asVector () const nothrow @safe @nogc { pragma(inline, true); return VT(x, y, z); }
+
+  static quat4 Identity () nothrow @safe @nogc { pragma(inline, true); return quat4(1, 0, 0, 0); }
+  bool isIdentity () const nothrow @safe @nogc { pragma(inline, true); return (w == 1 && x == 0 && y == 0 && z == 0); }
 
   static quat4 fromAngles (Float roll, Float pitch, Float yaw) nothrow @trusted @nogc {
     mixin(ImportCoreMath!(Float, "cos", "sin"));
@@ -2504,9 +2556,6 @@ public:
   @property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isfinite; return isfinite(w) && isfinite(x) && isfinite(y) && isfinite(z); }
 
   Mat4!VT toMatrix () const nothrow @trusted @nogc {
-    //Float wx = void, wy = void, wz = void, xx = void, yy = void, yz = void;
-    //Float xy = void, xz = void, zz = void, x2 = void, y2 = void, z2 = void;
-
     // calculate coefficients
     immutable Float x2 = this.x+this.x;
     immutable Float y2 = this.y+this.y;
@@ -2544,6 +2593,11 @@ public:
 
     return res;
   }
+
+  auto opUnary(string op:"+") () const nothrow @safe @nogc { pragma(inline, true); return this; }
+
+  // for unit quaternions, this is inverse/conjugate
+  auto opUnary(string op:"-") () const nothrow @safe @nogc { pragma(inline, true); return quat4(-w, -x, -y, -z); }
 
   quat4 opBinary(string op:"*") (in auto ref quat4 q2) const nothrow @safe @nogc {
     auto res = quat4(this.w, this.x, this.y, this.z);
