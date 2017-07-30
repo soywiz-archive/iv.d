@@ -2628,36 +2628,35 @@ public:
     // adjust signs (if necessary)
     if (cosom < 0) {
       cosom = -cosom;
-      to1[0] = -to.x;
-      to1[1] = -to.y;
-      to1[2] = -to.z;
-      to1[3] = -to.w;
+      to1.ptr[0] = -to.x;
+      to1.ptr[1] = -to.y;
+      to1.ptr[2] = -to.z;
+      to1.ptr[3] = -to.w;
     } else  {
-      to1[0] = to.x;
-      to1[1] = to.y;
-      to1[2] = to.z;
-      to1[3] = to.w;
+      to1.ptr[0] = to.x;
+      to1.ptr[1] = to.y;
+      to1.ptr[2] = to.z;
+      to1.ptr[3] = to.w;
     }
     Float scale0 = void, scale1 = void;
     // calculate coefficients
     if (cast(Float)1-cosom > EPSILON!Float) {
       // standard case (slerp)
-      Float omega = acos(cosom);
-      Float sinom = sin(omega);
+      immutable Float omega = acos(cosom);
+      immutable Float sinom = sin(omega);
       scale0 = sin((cast(Float)1-t)*omega)/sinom;
       scale1 = sin(t*omega)/sinom;
     } else {
-      // "from" and "to" quaternions are very close
-      //  ... so we can do a linear interpolation
+      // "from" and "to" quaternions are very close, so we can do a linear interpolation
       scale0 = cast(Float)1-t;
       scale1 = t;
     }
     // calculate final values
     return quat4(
-      scale0*this.w+scale1*to1[3],
-      scale0*this.x+scale1*to1[0],
-      scale0*this.y+scale1*to1[1],
-      scale0*this.z+scale1*to1[2],
+      scale0*this.w+scale1*to1.ptr[3],
+      scale0*this.x+scale1*to1.ptr[0],
+      scale0*this.y+scale1*to1.ptr[1],
+      scale0*this.z+scale1*to1.ptr[2],
     );
   }
 }
