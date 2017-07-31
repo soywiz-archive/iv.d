@@ -1025,20 +1025,40 @@ public void glconResetNextFrame () {
 /// usually will be called automatically
 public void glconPostNextFrame () {
   import iv.pxclock;
-  if (glconCtlWindow.eventQueued!NextFrameEvent) return;
+  if (glconCtlWindow.eventQueued!NextFrameEvent) {
+    //auto ctime = clockMilli();
+    //conwriteln("z: ctime=", ctime, "; nextFrameTime=", nextFrameTime, "; delta=", nextFrameTime-ctime);
+    return;
+  }
   auto ctime = clockMilli();
-  if (nextFrameTime == 0) nextFrameTime = ctime;
+  if (nextFrameTime == 0) nextFrameTime = ctime+10;
   if (nextFrameTime > ctime) {
-    // next frime time isn't came yet
+    // next frame time isn't came yet
+    //conwriteln("0: ctime=", ctime, "; nextFrameTime=", nextFrameTime, "; delta=", nextFrameTime-ctime);
     glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nextFrameTime-ctime));
   } else {
-    // next frime time is either now, or passed
+    /*
+    __gshared ulong prevFrameTime = 0;
+    if (prevFrameTime == 0) {
+      prevFrameTime = ctime;
+    } else {
+      conwriteln("1: fps=", glconFPS, "; frame time=", 1000/glconFPS, "; frtime=", ctime-prevFrameTime);
+      prevFrameTime = ctime;
+    }
+    */
+    // next frame time is either now, or passed
     int fps = glconFPS;
     if (fps < 1) fps = 1;
-    if (fps > 120) fps = 120;
+    if (fps > 200) fps = 200;
     nextFrameTime += 1000/fps;
-    if (nextFrameTime < ctime) nextFrameTime = ctime+1000/fps; // too much time passed, reset timer
-    glconCtlWindow.postTimeout(eventNextFrame, 0);
+    //conwriteln("1: fps=", fps, "; frame time=", 1000/fps, "; ctime=", ctime, "; nextFrameTime=", nextFrameTime, "; delta=", nextFrameTime-ctime);
+    //{ import core.stdc.stdio; printf("1: ctime=%u; nft=%u; delta=%u\n", cast(uint)ctime, cast(uint)nextFrameTime, cast(uint)(nextFrameTime-ctime)); }
+    if (nextFrameTime <= ctime) {
+      nextFrameTime = ctime+1000/fps; // too much time passed, reset timer
+      glconCtlWindow.postTimeout(eventNextFrame, 0);
+    } else {
+      glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nextFrameTime-ctime));
+    }
   }
 }
 
@@ -1082,14 +1102,18 @@ public void glconSetupForGLWindow (SimpleWindow w) {
     if (glconCtlWindow.closed) return;
     if (isQuitRequested) { glconCtlWindow.close(); return; }
     if (nextFrameDG !is null) nextFrameDG();
+    //{ import core.stdc.stdio; printf("000: FRAME\n"); }
     glconCtlWindow.redrawOpenGlSceneNow();
+    //{ import core.stdc.stdio; printf("001: FRAME\n"); }
     glconPostNextFrame();
   });
 
   glconCtlWindow.addEventListener((GLConScreenRepaintEvent evt) {
     if (glconCtlWindow.closed) return;
     if (isQuitRequested) { glconCtlWindow.close(); return; }
+    //{ import core.stdc.stdio; printf("000: SCREPAINT\n"); }
     glconCtlWindow.redrawOpenGlSceneNow();
+    //{ import core.stdc.stdio; printf("001: SCREPAINT\n"); }
   });
 
   glconCtlWindow.addEventListener((GLConDoConsoleCommandsEvent evt) {

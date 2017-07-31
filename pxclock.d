@@ -16,6 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 module iv.pxclock /*is aliced*/;
+private:
 import iv.alice;
 
 
@@ -23,19 +24,22 @@ import iv.alice;
 version(Posix) {
 import core.sys.posix.time;
 
+enum ClockType = CLOCK_REALTIME;
+//enum ClockType = CLOCK_MONOTONIC;
+
 __gshared timespec stt;
 
 shared static this () {
-  if (clock_getres(CLOCK_MONOTONIC, &stt) != 0) assert(0, "cannot get clock resolution");
+  if (clock_getres(ClockType, &stt) != 0) assert(0, "cannot get clock resolution");
   if (stt.tv_sec != 0 || stt.tv_nsec > 1_000_000) assert(0, "clock resolution too big"); // at least millisecond
-  if (clock_gettime(CLOCK_MONOTONIC, &stt) != 0) assert(0, "cannot get clock starting time");
+  if (clock_gettime(ClockType, &stt) != 0) assert(0, "cannot get clock starting time");
 }
 
 
 ///
 public ulong clockMicro () nothrow @trusted @nogc {
   timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) assert(0, "cannot get clock time");
+  if (clock_gettime(ClockType, &ts) != 0) assert(0, "cannot get clock time");
   // ignore nanoseconds in stt here: we need only 'differential' time, and it can start with something weird
   return (cast(ulong)(ts.tv_sec-stt.tv_sec))*1000000+ts.tv_nsec/1000;
 }
@@ -44,7 +48,7 @@ public ulong clockMicro () nothrow @trusted @nogc {
 ///
 public ulong clockMilli () nothrow @trusted @nogc {
   timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) assert(0, "cannot get clock time");
+  if (clock_gettime(ClockType, &ts) != 0) assert(0, "cannot get clock time");
   // ignore nanoseconds in stt here: we need only 'differential' time, and it can start with something weird
   return (cast(ulong)(ts.tv_sec-stt.tv_sec))*1000+ts.tv_nsec/1000000;
 }
@@ -57,7 +61,7 @@ void clockDoSleep (ref timespec rq) nothrow @trusted @nogc {
   for (;;) {
     if (rq.tv_sec == 0 && rq.tv_nsec == 0) break;
     import core.stdc.errno;
-    auto err = clock_nanosleep(CLOCK_MONOTONIC, 0, &rq, &rem);
+    auto err = clock_nanosleep(ClockType, 0, &rq, &rem);
     if (err == 0) break;
     if (err != EINTR) assert(0, "sleeping error");
     // continue sleeping
