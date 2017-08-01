@@ -2748,7 +2748,7 @@ public auto conByCommand(string type="all") () if (type == "all" || type == "var
     void popFront () {
       if (idx >= cmdlistSorted.length) return;
       static if (type == "all") {
-       pragma(inline, true);
+       //pragma(inline, true);
         ++idx;
       } else static if (type == "vars") {
         ++idx;
@@ -2852,6 +2852,32 @@ public void conUnsealVar (ConVarBase v) {
 // ////////////////////////////////////////////////////////////////////////// //
 // thread-safe
 
+shared bool ccWaitPrepends = true;
+public @property bool conWaitPrepends () nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicLoad; return atomicLoad(ccWaitPrepends); } /// shoud "wait" prepend rest of the alias?
+public @property void conWaitPrepends (bool v) nothrow @trusted @nogc { pragma(inline, true); import core.atomic : atomicStore; atomicStore(ccWaitPrepends, v); } /// ditto
+
+__gshared char* ccWaitPrependStr = null;
+__gshared uint ccWaitPrependStrSize, ccWaitPrependStrLen;
+
+ConString prependStr () { return ccWaitPrependStr[0..ccWaitPrependStrLen]; }
+
+void clearPrependStr () { ccWaitPrependStrLen = 0; return; }
+
+void setPrependStr (ConString s) {
+  if (s.length == 0) { ccWaitPrependStrLen = 0; return; }
+  if (s.length >= int.max/8) assert(0, "console command too long"); //FIXME
+  if (s.length > ccWaitPrependStrSize) {
+    import core.stdc.stdlib : realloc;
+    ccWaitPrependStr = cast(char*)realloc(ccWaitPrependStr, s.length);
+    if (ccWaitPrependStr is null) assert(0, "out of memory in cmdcon"); //FIXME
+    ccWaitPrependStrSize = cast(uint)s.length;
+  }
+  assert(s.length <= ccWaitPrependStrSize);
+  ccWaitPrependStrLen = cast(uint)s.length;
+  ccWaitPrependStr[0..s.length] = s[];
+}
+
+
 /// execute console command (thread-safe)
 /// return `true` if `wait` pseudocommant was hit
 public bool conExecute (ConString s) {
@@ -2886,8 +2912,13 @@ public bool conExecute (ConString s) {
         }
         if (curs.length) {
           // has something to insert
-          //concmdPrepend(curs);
-          concmdAdd!true(curs); // ensure new command
+          if (conWaitPrepends) {
+            //ccWaitPrependStr = curs;
+            //concmdPrepend(curs);
+            setPrependStr(curs);
+          } else {
+            concmdAdd!true(curs); // ensure new command
+          }
         }
         return;
       }
@@ -4272,7 +4303,6 @@ private void unsafeArraySetLength(T) (ref T[] arr, int newlen) /*nothrow*/ {
 }
 
 
-/+
 void concmdPrepend (ConString s) {
   if (s.length == 0) return; // nothing to do
   if (s.length >= int.max/4) assert(0, "console command too long"); //FIXME
@@ -4290,7 +4320,6 @@ void concmdPrepend (ConString s) {
   concmdbuf.ptr[s.length] = '\n';
   concmdbufpos += reslen;
 }
-+/
 
 
 void concmdEnsureNewCommand () {
@@ -4343,7 +4372,7 @@ public bool conQueueEmpty () {
  *   "has more commands" flag (i.e. some new commands were added to queue)
  */
 public bool conProcessQueue (uint maxlen=0) {
-  scope(exit) conHistShrinkBuf(); // do it here
+  scope(exit) { clearPrependStr(); conHistShrinkBuf(); } // do it here
   if (concmdbufpos == 0) return false;
   bool once = (maxlen == 0);
   for (;;) {
@@ -4361,11 +4390,13 @@ public bool conProcessQueue (uint maxlen=0) {
           // "wait" pseudocommand hit; remove executed part
           //import core.stdc.string : memmove;
           version(iv_cmdcon_debug_wait) conwriteln(" :: rest=<", s, ">");
+          version(iv_cmdcon_debug_wait) if (conWaitPrepends) conwriteln("pps: <", prependStr, ">"); // should prepend `ccWaitPrependStr` instead of the whole buffer
           ebuf -= cast(uint)s.length;
           version(iv_cmdcon_debug_wait) conwriteln("<WAIT> HIT! ebuf=", ebuf, "; concmdbufpos=", concmdbufpos);
           //if (leftlen > 0) memmove(concmdbuf.ptr, concmdbuf.ptr+leftlen, ebuf-leftlen);
           //concmdbufpos -= leftlen;
           version(iv_cmdcon_debug_wait) conwriteln("=== BUFFER LEFT ===\n", concmdbuf[ebuf..concmdbufpos], "\n=================");
+          once = true;
           break;
         }
         version(iv_cmdcon_debug_wait) conwriteln(" ++++++++++");
@@ -4384,8 +4415,10 @@ public bool conProcessQueue (uint maxlen=0) {
       //s = concmdbuf[0..concmdbufpos];
       //ebuf = concmdbufpos;
       //return true;
+      if (ccWaitPrependStrLen) { concmdPrepend(prependStr); clearPrependStr(); }
     } else {
       concmdbufpos = 0;
+      if (ccWaitPrependStrLen) { concmdPrepend(prependStr); clearPrependStr(); }
       break;
     }
     if (once || pbc >= maxlen) break;
