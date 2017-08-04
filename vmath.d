@@ -200,20 +200,22 @@ template SMALLEPSILON(T) if (is(T == float) || is(T == double)) {
 
 auto deg2rad(T:double) (T v) pure nothrow @safe @nogc {
   pragma(inline, true);
-  import std.math : PI;
   static if (__traits(isFloating, T)) {
+    static if (is(T == float)) alias PI = PI_F; else alias PI = PI_D;
     return cast(T)(v*cast(T)PI/cast(T)180);
   } else {
+    static if (is(VFloat == float)) alias PI = PI_F; else alias PI = PI_D;
     return cast(VFloat)(cast(VFloat)v*cast(VFloat)PI/cast(VFloat)180);
   }
 }
 
 auto rad2deg(T:double) (T v) pure nothrow @safe @nogc {
   pragma(inline, true);
-  import std.math : PI;
   static if (__traits(isFloating, T)) {
+    static if (is(T == float)) alias PI = PI_F; else alias PI = PI_D;
     return cast(T)(v*cast(T)180/cast(T)PI);
   } else {
+    static if (is(VFloat == float)) alias PI = PI_F; else alias PI = PI_D;
     return cast(VFloat)(cast(VFloat)v*cast(VFloat)180/cast(VFloat)PI);
   }
 }
@@ -2158,11 +2160,11 @@ public:
   mat4 translated() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.translate(v); }
   mat4 scaled() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.scale(v); }
 
-  // retrieve angles in degree from rotation matrix, M = Rx*Ry*Rz
+  // retrieve angles in degree from rotation matrix, M = Rx*Ry*Rz, in degrees
   // Rx: rotation about X-axis, pitch
   // Ry: rotation about Y-axis, yaw (heading)
   // Rz: rotation about Z-axis, roll
-  vec3 getAngles () const {
+  vec3 getAnglesDeg () const {
     mixin(ImportCoreMath!(Float, "asin", "atan2"));
     Float pitch = void, roll = void;
     Float yaw = rad2deg(asin(mt.ptr[8]));
@@ -2175,6 +2177,27 @@ public:
     } else {
       roll = rad2deg(atan2(-mt.ptr[4], mt.ptr[0]));
       pitch = rad2deg(atan2(-mt.ptr[9], mt.ptr[10]));
+    }
+    return vec3(pitch, yaw, roll);
+  }
+
+  // retrieve angles in degree from rotation matrix, M = Rx*Ry*Rz, in radians
+  // Rx: rotation about X-axis, pitch
+  // Ry: rotation about Y-axis, yaw (heading)
+  // Rz: rotation about Z-axis, roll
+  vec3 getAngles () const {
+    mixin(ImportCoreMath!(Float, "asin", "atan2"));
+    Float pitch = void, roll = void;
+    Float yaw = asin(mt.ptr[8]);
+    if (mt.ptr[10] < 0) {
+      if (yaw >= 0) yaw = 180-yaw; else yaw = -180-yaw;
+    }
+    if (mt.ptr[0] > -EPSILON!Float && mt.ptr[0] < EPSILON!Float) {
+      roll = 0;
+      pitch = atan2(mt.ptr[1], mt.ptr[5]);
+    } else {
+      roll = atan2(-mt.ptr[4], mt.ptr[0]);
+      pitch = atan2(-mt.ptr[9], mt.ptr[10]);
     }
     return vec3(pitch, yaw, roll);
   }
@@ -2242,7 +2265,7 @@ public:
     return this;
   }
 
-  mat4 transpose () const {
+  mat4 transposed () const {
     /*
     mat4 res;
     foreach (immutable i; 0..4) {
@@ -2273,11 +2296,88 @@ public:
     );
   }
 
+  // blends two matrices together, at a given percentage (range is [0..1]), blend==0: m2 is ignored
+  // WARNING! won't sanitize `blend`
+  mat4 blended() (in auto ref mat4 m2, Float blend) const {
+    immutable Float ib = cast(Float)1-blend;
+    mat4 res = void;
+    res.mt.ptr[0] = mt.ptr[0]*ib+m2.mt.ptr[0]*blend;
+    res.mt.ptr[1] = mt.ptr[1]*ib+m2.mt.ptr[1]*blend;
+    res.mt.ptr[2] = mt.ptr[2]*ib+m2.mt.ptr[2]*blend;
+    res.mt.ptr[3] = mt.ptr[3]*ib+m2.mt.ptr[3]*blend;
+    res.mt.ptr[4] = mt.ptr[4]*ib+m2.mt.ptr[4]*blend;
+    res.mt.ptr[5] = mt.ptr[5]*ib+m2.mt.ptr[5]*blend;
+    res.mt.ptr[6] = mt.ptr[6]*ib+m2.mt.ptr[6]*blend;
+    res.mt.ptr[7] = mt.ptr[7]*ib+m2.mt.ptr[7]*blend;
+    res.mt.ptr[8] = mt.ptr[8]*ib+m2.mt.ptr[8]*blend;
+    res.mt.ptr[9] = mt.ptr[9]*ib+m2.mt.ptr[9]*blend;
+    res.mt.ptr[10] = mt.ptr[10]*ib+m2.mt.ptr[10]*blend;
+    res.mt.ptr[11] = mt.ptr[11]*ib+m2.mt.ptr[11]*blend;
+    res.mt.ptr[12] = mt.ptr[12]*ib+m2.mt.ptr[12]*blend;
+    res.mt.ptr[13] = mt.ptr[13]*ib+m2.mt.ptr[13]*blend;
+    res.mt.ptr[14] = mt.ptr[14]*ib+m2.mt.ptr[14]*blend;
+    res.mt.ptr[15] = mt.ptr[15]*ib+m2.mt.ptr[15]*blend;
+    return res;
+  }
+
   Float determinant() () const {
     return mt.ptr[0]*getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15])-
            mt.ptr[1]*getCofactor(mt.ptr[4], mt.ptr[6], mt.ptr[7], mt.ptr[8], mt.ptr[10], mt.ptr[11], mt.ptr[12], mt.ptr[14], mt.ptr[15])+
            mt.ptr[2]*getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[7], mt.ptr[8], mt.ptr[9], mt.ptr[11], mt.ptr[12], mt.ptr[13], mt.ptr[15])-
            mt.ptr[3]*getCofactor(mt.ptr[4], mt.ptr[5], mt.ptr[6], mt.ptr[8], mt.ptr[9], mt.ptr[10], mt.ptr[12], mt.ptr[13], mt.ptr[14]);
+  }
+
+  //WARNING: this must be tested for row/col
+  // partially ;-) taken from DarkPlaces
+  // this assumes uniform scaling
+  mat4 invertedSimple () const {
+    // we only support uniform scaling, so assume the first row is enough
+    // (note the lack of sqrt here, because we're trying to undo the scaling,
+    // this means multiplying by the inverse scale twice - squaring it, which
+    // makes the sqrt a waste of time)
+    version(all) {
+      immutable Float scale = cast(Float)1/(mt.ptr[0*4+0]*mt.ptr[0*4+0]+mt.ptr[1*4+0]*mt.ptr[1*4+0]+mt.ptr[2*4+0]*mt.ptr[2*4+0]);
+    } else {
+      mixin(ImportCoreMath!(Float, "sqrt"));
+      Float scale = cast(Float)3/sqrt(
+        mt.ptr[0*4+0]*mt.ptr[0*4+0]+mt.ptr[1*4+0]*mt.ptr[1*4+0]+mt.ptr[2*4+0]*mt.ptr[2*4+0]+
+        mt.ptr[0*4+1]*mt.ptr[0*4+1]+mt.ptr[1*4+1]*mt.ptr[1*4+1]+mt.ptr[2*4+1]*mt.ptr[2*4+1]+
+        mt.ptr[0*4+2]*mt.ptr[0*4+2]+mt.ptr[1*4+2]*mt.ptr[1*4+2]+mt.ptr[2*4+2]*mt.ptr[2*4+2]
+      );
+      scale *= scale;
+    }
+
+    mat4 res = void;
+
+    // invert the rotation by transposing and multiplying by the squared recipricol of the input matrix scale as described above
+    res.mt.ptr[0*4+0] = mt.ptr[0*4+0]*scale;
+    res.mt.ptr[1*4+0] = mt.ptr[0*4+1]*scale;
+    res.mt.ptr[2*4+0] = mt.ptr[0*4+2]*scale;
+    res.mt.ptr[0*4+1] = mt.ptr[1*4+0]*scale;
+    res.mt.ptr[1*4+1] = mt.ptr[1*4+1]*scale;
+    res.mt.ptr[2*4+1] = mt.ptr[1*4+2]*scale;
+    res.mt.ptr[0*4+2] = mt.ptr[2*4+0]*scale;
+    res.mt.ptr[1*4+2] = mt.ptr[2*4+1]*scale;
+    res.mt.ptr[2*4+2] = mt.ptr[2*4+2]*scale;
+
+    // invert the translate
+    res.mt.ptr[3*4+0] = -(mt.ptr[3*4+0]*res.mt.ptr[0*4+0]+mt.ptr[3*4+1]*res.mt.ptr[1*4+0]+mt.ptr[3*4+2]*res.mt.ptr[2*4+0]);
+    res.mt.ptr[3*4+1] = -(mt.ptr[3*4+0]*res.mt.ptr[0*4+1]+mt.ptr[3*4+1]*res.mt.ptr[1*4+1]+mt.ptr[3*4+2]*res.mt.ptr[2*4+1]);
+    res.mt.ptr[3*4+2] = -(mt.ptr[3*4+0]*res.mt.ptr[0*4+2]+mt.ptr[3*4+1]*res.mt.ptr[1*4+2]+mt.ptr[3*4+2]*res.mt.ptr[2*4+2]);
+
+    // don't know if there's anything worth doing here
+    res.mt.ptr[0*4+3] = cast(Float)0;
+    res.mt.ptr[1*4+3] = cast(Float)0;
+    res.mt.ptr[2*4+3] = cast(Float)0;
+    res.mt.ptr[3*4+3] = cast(Float)1;
+
+    return res;
+  }
+
+  //FIXME: make this fast pasta!
+  ref mat4 invertSimple () {
+    mt[] = invertedSimple().mt[];
+    return this;
   }
 
   // ////////////////////////////////////////////////////////////////////////////
@@ -2289,14 +2389,14 @@ public:
   // (no scaling). Length and angle are reserved.
   //
   // Use inverseAffine() if the matrix has scale and shear transformation.
-  ref mat4 invertedEuclidean() () {
+  ref mat4 invertEuclidean() () {
     Float tmp = void;
     tmp = mt.ptr[1]; mt.ptr[1] = mt.ptr[4]; mt.ptr[4] = tmp;
     tmp = mt.ptr[2]; mt.ptr[2] = mt.ptr[8]; mt.ptr[8] = tmp;
     tmp = mt.ptr[6]; mt.ptr[6] = mt.ptr[9]; mt.ptr[9] = tmp;
-    Float x = mt.ptr[12];
-    Float y = mt.ptr[13];
-    Float z = mt.ptr[14];
+    immutable Float x = mt.ptr[12];
+    immutable Float y = mt.ptr[13];
+    immutable Float z = mt.ptr[14];
     mt.ptr[12] = -(mt.ptr[0]*x+mt.ptr[4]*y+mt.ptr[8]*z);
     mt.ptr[13] = -(mt.ptr[1]*x+mt.ptr[5]*y+mt.ptr[9]*z);
     mt.ptr[14] = -(mt.ptr[2]*x+mt.ptr[6]*y+mt.ptr[10]*z);
@@ -2313,7 +2413,16 @@ public:
     // R^-1
     mixin(ImportCoreMath!(Float, "fabs"));
     // inverse 3x3 matrix
-    Float[9] r = [ mt.ptr[0],mt.ptr[1],mt.ptr[2], mt.ptr[4],mt.ptr[5],mt.ptr[6], mt.ptr[8],mt.ptr[9],mt.ptr[10] ];
+    Float[9] r = void; //[ mt.ptr[0],mt.ptr[1],mt.ptr[2], mt.ptr[4],mt.ptr[5],mt.ptr[6], mt.ptr[8],mt.ptr[9],mt.ptr[10] ];
+    r.ptr[0] = mt.ptr[0];
+    r.ptr[1] = mt.ptr[1];
+    r.ptr[2] = mt.ptr[2];
+    r.ptr[3] = mt.ptr[4];
+    r.ptr[4] = mt.ptr[5];
+    r.ptr[5] = mt.ptr[6];
+    r.ptr[6] = mt.ptr[8];
+    r.ptr[7] = mt.ptr[9];
+    r.ptr[8] = mt.ptr[10];
     {
       Float[9] tmp = void;
       tmp.ptr[0] = r.ptr[4]*r.ptr[8]-r.ptr[5]*r.ptr[7];
@@ -2325,16 +2434,15 @@ public:
       tmp.ptr[6] = r.ptr[3]*r.ptr[7]-r.ptr[4]*r.ptr[6];
       tmp.ptr[7] = r.ptr[1]*r.ptr[6]-r.ptr[0]*r.ptr[7];
       tmp.ptr[8] = r.ptr[0]*r.ptr[4]-r.ptr[1]*r.ptr[3];
-
       // check determinant if it is 0
-      Float determinant = r.ptr[0]*tmp.ptr[0]+r.ptr[1]*tmp.ptr[3]+r.ptr[2]*tmp.ptr[6];
+      immutable Float determinant = r.ptr[0]*tmp.ptr[0]+r.ptr[1]*tmp.ptr[3]+r.ptr[2]*tmp.ptr[6];
       if (fabs(determinant) <= EPSILON!Float) {
         // cannot inverse, make it idenety matrix
         r[] = 0;
         r.ptr[0] = r.ptr[4] = r.ptr[8] = 1;
       } else {
         // divide by the determinant
-        Float invDeterminant = cast(Float)1/determinant;
+        immutable Float invDeterminant = cast(Float)1/determinant;
         r.ptr[0] = invDeterminant*tmp.ptr[0];
         r.ptr[1] = invDeterminant*tmp.ptr[1];
         r.ptr[2] = invDeterminant*tmp.ptr[2];
@@ -2366,7 +2474,7 @@ public:
     return this;
   }
 
-  ref mat4 inverted() () {
+  ref mat4 invert() () {
     // if the 4th row is [0,0,0,1] then it is affine matrix and
     // it has no projective transformation
     if (mt.ptr[3] == 0 && mt.ptr[7] == 0 && mt.ptr[11] == 0 && mt.ptr[15] == 1) {
@@ -2379,7 +2487,7 @@ public:
   ///////////////////////////////////////////////////////////////////////////////
   // compute the inverse of a general 4x4 matrix using Cramer's Rule
   // if cannot find inverse, return indentity matrix
-  ref mat4 invertedGeneral() () {
+  ref mat4 invertGeneral() () {
     mixin(ImportCoreMath!(Float, "fabs"));
 
     immutable Float cofactor0 = getCofactor(mt.ptr[5], mt.ptr[6], mt.ptr[7], mt.ptr[9], mt.ptr[10], mt.ptr[11], mt.ptr[13], mt.ptr[14], mt.ptr[15]);
@@ -2440,7 +2548,7 @@ public:
   Quat4!VT toQuaternion () const nothrow @trusted @nogc {
     mixin(ImportCoreMath!(Float, "sqrt"));
     Quat4!VT res = void;
-    Float tr = mt.ptr[0*4+0]+mt.ptr[1*4+1]+mt.ptr[2*4+2];
+    immutable Float tr = mt.ptr[0*4+0]+mt.ptr[1*4+1]+mt.ptr[2*4+2];
     // check the diagonal
     if (tr > 0) {
       Float s = sqrt(tr+cast(Float)1);
@@ -2451,25 +2559,23 @@ public:
       res.z = (mt.ptr[1*4+0]-mt.ptr[0*4+1])*s;
     } else {
       // diagonal is negative
-      int i, j, k;
       int[3] nxt = [1, 2, 0];
-      Float s = void;
-      Float[4] q = void;
-      i = 0;
+      int i = 0;
       if (mt.ptr[1*4+1] > mt.ptr[0*4+0]) i = 1;
       if (mt.ptr[2*4+2] > mt.ptr[i*4+i]) i = 2;
-      j = nxt.ptr[i];
-      k = nxt.ptr[j];
-      s = sqrt((mt.ptr[i*4+i]-(mt.ptr[j*4+j]+mt.ptr[k*4+k]))+cast(Float)1);
-      q[i] = s*cast(Float)0.5;
+      int j = nxt.ptr[i];
+      int k = nxt.ptr[j];
+      Float s = sqrt((mt.ptr[i*4+i]-(mt.ptr[j*4+j]+mt.ptr[k*4+k]))+cast(Float)1);
+      Float[4] q = void;
+      q.ptr[i] = s*cast(Float)0.5;
       if (s != 0) s = cast(Float)0.5/s;
-      q[3] = (mt.ptr[k*4+j]-mt.ptr[j*4+k])*s;
-      q[j] = (mt.ptr[j*4+i]+mt.ptr[i*4+j])*s;
-      q[k] = (mt.ptr[k*4+i]+mt.ptr[i*4+k])*s;
-      res.x = q[0];
-      res.y = q[1];
-      res.z = q[2];
-      res.w = q[3];
+      q.ptr[3] = (mt.ptr[k*4+j]-mt.ptr[j*4+k])*s;
+      q.ptr[j] = (mt.ptr[j*4+i]+mt.ptr[i*4+j])*s;
+      q.ptr[k] = (mt.ptr[k*4+i]+mt.ptr[i*4+k])*s;
+      res.x = q.ptr[0];
+      res.y = q.ptr[1];
+      res.z = q.ptr[2];
+      res.w = q.ptr[3];
     }
     return res;
   }
@@ -2554,6 +2660,27 @@ public:
 
   //@property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isnan; return !isnan(w) && !isnan(x) && !isnan(y) && !isnan(z); }
   @property bool valid () const nothrow @safe @nogc { pragma(inline, true); import core.stdc.math : isfinite; return isfinite(w) && isfinite(x) && isfinite(y) && isfinite(z); }
+
+  // x,y,z,w
+  Float opIndex (usize idx) const nothrow @safe @nogc {
+    pragma(inline, true);
+    return
+      idx == 0 ? x :
+      idx == 1 ? y :
+      idx == 2 ? z :
+      idx == 3 ? w :
+      Float.nan;
+  }
+
+  // x,y,z,w
+  void opIndexAssign (Float v, usize idx) {
+    pragma(inline, true);
+    if (idx == 0) x = v; else
+    if (idx == 1) y = v; else
+    if (idx == 2) z = v; else
+    if (idx == 3) w = v; else
+    assert(0, "invalid quaternion index");
+  }
 
   Mat4!VT toMatrix () const nothrow @trusted @nogc {
     // calculate coefficients
