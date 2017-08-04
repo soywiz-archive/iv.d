@@ -1427,9 +1427,9 @@ private:
       bool txchanged () const { pragma(inline, true); return (flags&Flag.Changed) != 0; }
       //bool vistabs () const { pragma(inline, true); return (flags&Flag.VisTabs) != 0; }
 
-      void bmarking (bool v) { pragma(inline, true); if (v) flags |= Flag.BlockMarking; else flags &= ~Flag.BlockMarking; }
-      void lastbe (bool v) { pragma(inline, true); if (v) flags |= Flag.LastBE; else flags &= ~Flag.LastBE; }
-      void txchanged (bool v) { pragma(inline, true); if (v) flags |= Flag.Changed; else flags &= ~Flag.Changed; }
+      void bmarking (bool v) { pragma(inline, true); if (v) flags |= Flag.BlockMarking; else flags &= ~(Flag.BlockMarking); }
+      void lastbe (bool v) { pragma(inline, true); if (v) flags |= Flag.LastBE; else flags &= ~(Flag.LastBE); }
+      void txchanged (bool v) { pragma(inline, true); if (v) flags |= Flag.Changed; else flags &= ~(Flag.Changed); }
       //void vistabs (bool v) { pragma(inline, true); if (v) flags |= Flag.VisTabs; else flags &= ~Flag.VisTabs; }
     }
 

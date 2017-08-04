@@ -277,7 +277,21 @@ public:
       if (st.kwtype == HiCommentMulti && st.kwidx == 0) {
         while (spos <= le) {
           gb.hi(spos++) = HS(HiCommentMulti);
-          if (gb[spos-1] == '*' && gb[spos] == '/') {
+          bool commentEnd = false;
+          if (opt&Opt.PascalComments) {
+            //HACK: find multiline comment start
+            auto cspos = spos;
+            while (cspos > 0 && gb.hi(cspos-1).kwtype == HiCommentMulti) --cspos;
+            // now cspos points to the first char of the multiline comment
+            if (gb[cspos] == '{') {
+              commentEnd = (gb[spos] == '}');
+            } else {
+              commentEnd = (gb[spos-1] == '*' && gb[spos] == ')');
+            }
+          } else {
+            commentEnd = (gb[spos-1] == '*' && gb[spos] == '/');
+          }
+          if (commentEnd) {
             gb.hi(spos++) = HS(HiCommentMulti);
             st = HS(HiText);
             continue mainloop;
@@ -341,9 +355,22 @@ public:
         while (spos <= le) gb.hi(spos++) = st;
         continue mainloop;
       }
-      // multiline comment?
-      if (ch == '/' && (opt&Opt.CMultiComment) && gb[spos+1] == '*') {
+      // C multiline comment?
+      if (ch == '/' && (opt&(Opt.CMultiComment|Opt.PascalComments)) == Opt.CMultiComment && gb[spos+1] == '*') {
         gb.hi(spos++) = HS(HiCommentMulti);
+        gb.hi(spos++) = HS(HiCommentMulti);
+        st = HS(HiCommentMulti);
+        continue mainloop;
+      }
+      // Pascal multiline comment?
+      if (ch == '(' && (opt&(Opt.CMultiComment|Opt.PascalComments)) == (Opt.CMultiComment|Opt.PascalComments) && gb[spos+1] == '*') {
+        gb.hi(spos++) = HS(HiCommentMulti);
+        gb.hi(spos++) = HS(HiCommentMulti);
+        st = HS(HiCommentMulti);
+        continue mainloop;
+      }
+      // Pascal multiline comment?
+      if (ch == '{' && (opt&(Opt.CMultiComment|Opt.PascalComments)) == (Opt.CMultiComment|Opt.PascalComments)) {
         gb.hi(spos++) = HS(HiCommentMulti);
         st = HS(HiCommentMulti);
         continue mainloop;
@@ -911,6 +938,7 @@ public:
     CougarSingleComment = 1U<<21,
     CougarCharLiteral = 1U<<22,
     MaximumTokens = 1U<<23,
+    PascalComments = 1U<<24,
   }
   static assert(Opt.max <= uint.max);
 
@@ -972,6 +1000,7 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.CougarSingleComment|
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -1225,6 +1254,7 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.CougarSingleComment|
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -1344,6 +1374,7 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.CougarSingleComment|
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -1451,6 +1482,7 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.CougarSingleComment|
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -1533,6 +1565,7 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.CougarSingleComment|
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -1678,6 +1711,7 @@ public class EdHiTokensSQL : EdHiTokens {
       //Opt.CougarSingleComment|
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -1998,6 +2032,7 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.CougarSingleComment|
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -2172,6 +2207,7 @@ public class EdHiTokensCougar : EdHiTokens {
       Opt.CougarSingleComment|
       Opt.CougarCharLiteral|
       Opt.MaximumTokens|
+      //Opt.PascalComments|
       0
     );
 
@@ -2274,6 +2310,189 @@ public class EdHiTokensCougar : EdHiTokens {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public class EdHiTokensPas : EdHiTokens {
+  this () {
+    super(
+      //Opt.Num0b|
+      //Opt.Num0o|
+      Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      Opt.SQString|
+      //Opt.DQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.SQChar|
+      Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      //Opt.SqlSingleComment|
+      //Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      //Opt.ShellSigil|
+      Opt.CaseInsensitive|
+      Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
+      Opt.PascalComments|
+      0
+    );
+
+    addToken("absolute", HiKeyword);
+    addToken("abstract", HiKeyword);
+    addToken("and", HiSpecial);
+    addToken("array", HiKeyword);
+    addToken("as", HiKeyword);
+    addToken("asm", HiKeyword);
+    addToken("assembler", HiKeyword);
+    addToken("begin", HiKeyword);
+    addToken("break", HiKeyword);
+    addToken("case", HiKeyword);
+    addToken("cdecl", HiKeyword);
+    addToken("class", HiKeyword);
+    addToken("const", HiKeyword);
+    addToken("continue", HiKeyword);
+    addToken("constructor", HiKeyword);
+    addToken("destructor", HiKeyword);
+    addToken("dispid", HiKeyword);
+    addToken("dispinterface", HiKeyword);
+    addToken("dispose", HiKeyword);
+    addToken("div", HiSpecial);
+    addToken("do", HiKeyword);
+    addToken("downto", HiKeyword);
+    addToken("dynamic", HiKeyword);
+    addToken("else", HiKeyword);
+    addToken("end", HiKeyword);
+    addToken("except", HiKeyword);
+    addToken("exit", HiKeyword);
+    addToken("export", HiKeyword);
+    addToken("exports", HiKeyword);
+    addToken("external", HiKeyword);
+    addToken("fail", HiKeyword);
+    addToken("far", HiKeyword);
+    addToken("false", HiKeywordHi);
+    addToken("file", HiKeywordHi);
+    addToken("finalisation", HiKeyword);
+    addToken("finally", HiKeyword);
+    addToken("for", HiKeyword);
+    addToken("forward", HiKeywordHi);
+    addToken("function", HiKeyword);
+    addToken("goto", HiKeyword);
+    addToken("if", HiKeyword);
+    addToken("implementation", HiKeyword);
+    addToken("in", HiKeyword);
+    addToken("inherited", HiKeyword);
+    addToken("initialization", HiKeyword);
+    addToken("inline", HiKeywordHi);
+    addToken("interface", HiKeyword);
+    addToken("interrupt", HiKeyword);
+    addToken("is", HiKeyword);
+    addToken("label", HiKeyword);
+    addToken("library", HiKeyword);
+    addToken("mod", HiSpecial);
+    addToken("near", HiKeyword);
+    addToken("new", HiKeyword);
+    addToken("nil", HiKeywordHi);
+    addToken("not", HiKeyword);
+    addToken("object", HiKeyword);
+    addToken("of", HiKeyword);
+    addToken("on", HiKeyword);
+    addToken("operator", HiKeyword);
+    addToken("or", HiSpecial);
+    addToken("otherwise", HiKeyword);
+    addToken("overload", HiKeywordHi);
+    addToken("override", HiKeywordHi);
+    addToken("packed", HiKeyword);
+    addToken("pascal", HiKeyword);
+    addToken("private", HiKeyword);
+    addToken("procedure", HiKeyword);
+    addToken("program", HiKeyword);
+    addToken("property", HiKeyword);
+    addToken("protected", HiKeyword);
+    addToken("public", HiKeyword);
+    addToken("published", HiKeyword);
+    addToken("raise", HiKeyword);
+    addToken("read", HiKeyword);
+    addToken("readonly", HiKeyword);
+    addToken("record", HiKeyword);
+    addToken("register", HiKeyword);
+    addToken("repeat", HiKeyword);
+    addToken("safecall", HiKeyword);
+    addToken("self", HiKeyword);
+    addToken("set", HiSpecial);
+    addToken("shl", HiSpecial);
+    addToken("shr", HiSpecial);
+    addToken("stdcall", HiKeyword);
+    //addToken("string", HiKeyword);
+    addToken("then", HiKeyword);
+    addToken("to", HiKeyword);
+    addToken("true", HiKeywordHi);
+    addToken("try", HiKeyword);
+    addToken("type", HiKeyword);
+    addToken("unit", HiKeyword);
+    addToken("until", HiKeyword);
+    addToken("uses", HiKeyword);
+    addToken("var", HiKeyword);
+    addToken("virtual", HiKeyword);
+    addToken("while", HiKeyword);
+    addToken("with", HiKeyword);
+    addToken("write", HiKeyword);
+    addToken("writeln", HiKeyword);
+    addToken("xor", HiSpecial);
+    addToken("..", HiKeyword);
+
+    addToken("result", HiKeywordHi);
+
+    addToken(">", HiPunct);
+    addToken("<", HiPunct);
+    addToken(">>", HiPunct);
+    addToken("<<", HiPunct);
+    addToken("+", HiPunct);
+    addToken("-", HiPunct);
+    addToken("*", HiPunct);
+    addToken("/", HiPunct);
+    addToken("%", HiPunct);
+    addToken("=", HiPunct);
+    addToken("[", HiPunct);
+    addToken("]", HiPunct);
+    addToken("(", HiPunct);
+    addToken(")", HiPunct);
+    addToken(",", HiPunct);
+    addToken(".", HiPunct);
+    addToken(":", HiPunct);
+    addToken(";", HiSemi);
+    addToken(":=", HiPunct);
+    addToken("<=", HiPunct);
+    addToken(">=", HiPunct);
+    addToken("<>", HiPunct);
+
+    addToken("Char", HiType);
+    addToken("Boolean", HiType);
+
+    addToken("ShortInt", HiType);
+    addToken("SmallInt", HiType);
+    addToken("Integer", HiType);
+    addToken("LongInt", HiType);
+    addToken("Int64", HiType);
+
+    addToken("Byte", HiType);
+    addToken("Word", HiType);
+    addToken("DWord", HiType);
+    addToken("Cardinal", HiType);
+
+    addToken("Single", HiType);
+    addToken("Double", HiType);
+
+    addToken("String", HiType);
+    addToken("AnsiString", HiType);
+    addToken("WideString", HiType);
+  }
+}
+
+// ////////////////////////////////////////////////////////////////////////// //
 // new higlighter instance for the file with the given extension
 public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullname) {
   if (ext.strEquCI(".d")) {
@@ -2315,6 +2534,11 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
     __gshared EdHiTokensCougar tokcougar;
     if (tokcougar is null) tokcougar = new EdHiTokensCougar();
     return new EditorHLExt(tokcougar);
+  }
+  if (ext.strEquCI(".pas") || ext.strEquCI(".pp")) {
+    __gshared EdHiTokensPas tokpas;
+    if (tokpas is null) tokpas = new EdHiTokensPas();
+    return new EditorHLExt(tokpas);
   }
   auto bnpos = fullname.length;
   while (bnpos > 0 && fullname.ptr[bnpos-1] != '/') --bnpos;
