@@ -33,6 +33,7 @@ import iv.vfs.arc.dfwad; // just get lost
 //import iv.vfs.arc.f2dat; // no signature
 //import iv.vfs.arc.toeedat; // conflicts with arcanum
 import iv.vfs.arc.wad2;
+import iv.vfs.arc.feararch;
 
 import iv.strex;
 import iv.utfutil;

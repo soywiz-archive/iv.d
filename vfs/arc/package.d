@@ -22,3 +22,4 @@ public import iv.vfs.arc.q1pak;
 public import iv.vfs.arc.wad;
 //public import iv.vfs.arc.arcz;
 public import iv.vfs.arc.kengrp;
+public import iv.vfs.arc.feararch; // 'cause why not?

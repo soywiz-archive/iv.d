@@ -30,6 +30,21 @@ public void arrayAppendUnsafe(T) (ref T[] arr, auto ref T val) {
   }
 }
 
+public void arraySetLengthUnsafe(T) (ref T[] arr, usize len) {
+  if (len < arr.length) {
+    arr.length = len;
+    arr.assumeSafeAppend;
+  } else {
+    auto xptr = arr.ptr;
+    arr.length = len;
+    if (arr.ptr !is xptr) {
+      import core.memory : GC;
+      xptr = arr.ptr;
+      if (xptr is GC.addrOf(xptr)) GC.setAttr(xptr, GC.BlkAttr.NO_INTERIOR);
+    }
+  }
+}
+
 
 public uint crc32 (const(void)[] buf, uint crc=0) pure nothrow @trusted @nogc {
   /*
