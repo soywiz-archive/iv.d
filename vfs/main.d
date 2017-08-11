@@ -35,7 +35,6 @@ private shared int vfsLockedFlag = 0; // !0: can't add/remove drivers
 shared bool vflagIgnoreCasePak = true; // ignore file name case in pak files; driver can ignore this, but it shouldn't
 shared bool vflagIgnoreCaseDisk = false; // ignore file name case for disk files
 
-
 /// get "ingore filename case" flag (default: true)
 public @property bool vfsIgnoreCasePak() () nothrow @trusted @nogc { import core.atomic : atomicLoad; return atomicLoad(vflagIgnoreCasePak); }
 
@@ -47,6 +46,20 @@ public @property bool vfsIgnoreCaseDisk() () nothrow @trusted @nogc { import cor
 
 /// set "ingore filename case" flag when no archive files are attached
 public @property void vfsIgnoreCaseDisk() (bool v) nothrow @trusted @nogc { import core.atomic : atomicStore; return atomicStore(vflagIgnoreCaseDisk, v); }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private import core.stdc.stdio : FILE;
+
+private FILE* dofopen (const(char)* fname, const(char)* mode) nothrow @nogc {
+  version(Posix) {
+    import core.sys.posix.stdio;
+    return fopen64(fname, mode);
+  } else {
+    import core.stdc.stdio;
+    return fopen(fname, mode);
+  }
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -345,9 +358,9 @@ public:
       nbuf[pt.length] = '\0';
     }
     static if (VFS_NORMAL_OS) {
-      auto fl = core.stdc.stdio.fopen(nbuf, "r");
+      auto fl = dofopen(nbuf, "r");
     } else {
-      auto fl = core.stdc.stdio.fopen(nbuf, "rb");
+      auto fl = dofopen(nbuf, "rb");
     }
     if (fl is null) return VFile.init;
     try { return VFile(fl); } catch (Exception e) {}
@@ -952,7 +965,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
     }
     // normal disk file
     //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("USING FOPEN: '%s' '%s'\n", nbuf.ptr, mopt.mode.ptr); }
-    auto fl = core.stdc.stdio.fopen(nbuf.ptr, mopt.mode.ptr);
+    auto fl = dofopen(nbuf.ptr, mopt.mode.ptr);
     if (fl is null) throw new VFSException("can't open file '"~fname.idup~"'");
     scope(failure) core.stdc.stdio.fclose(fl); // just in case
     try {
