@@ -934,10 +934,14 @@ public void conprintfX(bool donl, A...) (ConString fmt, in auto ref A args) {
         if (wdt.aval == 0) { wdt.aval = 8/*cast(int)usize.sizeof*2*/; wdt.leadingZero = true; }
         cwrxputhex(cast(usize)args[argnum], true, wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
       }
+    } else static if (is(at : const(char)[])) {
+      // strings
+      cwrxputstr!false(args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
     } else {
       // alas
       try {
         import std.format : formatValue, singleSpec;
+        tlen = 0;
         scope Writer wrt;
         scope spec = singleSpec("%s");
         formatValue(wrt, args[argnum], spec);
