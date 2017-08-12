@@ -37,6 +37,7 @@ private:
 import iv.alice;
 
 //version = iv_cmdcon_debug_wait;
+//version = iv_cmdcon_honest_ctfe_writer;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -586,7 +587,7 @@ private void cwrxputfloat(TT) (TT nn, bool simple, char signw, char lchar, char 
       fmtstr.ptr[fspos++] = '.';
       putNum(maxwdt);
     }
-    fmtstr.ptr[fspos++] = 'f';
+    fmtstr.ptr[fspos++] = 'g';
     maxwdt = 0;
   } else {
     fmtstr.ptr[fspos++] = 'g';
@@ -638,7 +639,7 @@ private void cwrxputenum(TT) (TT nn, char signw, char lchar, char rchar, int wdt
       return;
     }
   }
-  static if (isUnsigned!TT) {
+  static if (__traits(isUnsigned, T)) {
     cwrxputint!long(cast(long)n, signw, lchar, rchar, wdt, maxwdt);
   } else {
     cwrxputint!ulong(cast(ulong)n, signw, lchar, rchar, wdt, maxwdt);
@@ -647,6 +648,362 @@ private void cwrxputenum(TT) (TT nn, char signw, char lchar, char rchar, int wdt
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/** write formatted string to console with runtime format string
+ * will try to not allocate if it is possible.
+ *
+ * understands [+|-]width[.maxlen]
+ *   negative width: add spaces to right
+ *   + signed width: center
+ *   negative maxlen: get right part
+ * specifiers:
+ *   's': use to!string to write argument
+ *        note that writer can print strings, bools, integrals and floats without allocation
+ *   'x': write integer as hex
+ *   'X': write integer as HEX
+ *   '!': skip all arguments that's left, no width allowed
+ *   '%': just a percent sign, no width allowed
+ *   '|': print all arguments that's left with simple "%s", no width allowed
+ *   '<...>': print all arguments that's left with simple "%s", delimited with "...", no width allowed
+ * options (must immediately follow '%'): NOT YET
+ *   '~': fill with the following char instead of space
+ *        second '~': right filling char for 'center'
+ */
+public void conprintfX(bool donl, A...) (ConString fmt, in auto ref A args) {
+  import core.stdc.stdio : snprintf;
+  char[128] tmp = void;
+  usize tlen;
+
+  struct Writer {
+    void put (const(char)[] s...) nothrow @trusted @nogc {
+      foreach (char ch; s) {
+        if (tlen >= tmp.length) { tlen = tmp.length+42; break; }
+        tmp.ptr[tlen++] = ch;
+      }
+    }
+  }
+
+  static struct IntNum { char sign; int aval; bool leadingZero; /*|value|*/ }
+
+  static char[] utf8Encode (char[] s, dchar c) pure nothrow @trusted @nogc {
+    assert(s.length >= 4);
+    if (c > 0x10FFFF) c = '\uFFFD';
+    if (c <= 0x7F) {
+      s.ptr[0] = cast(char)c;
+      return s[0..1];
+    } else {
+      if (c <= 0x7FF) {
+        s.ptr[0] = cast(char)(0xC0|(c>>6));
+        s.ptr[1] = cast(char)(0x80|(c&0x3F));
+        return s[0..2];
+      } else if (c <= 0xFFFF) {
+        s.ptr[0] = cast(char)(0xE0|(c>>12));
+        s.ptr[1] = cast(char)(0x80|((c>>6)&0x3F));
+        s.ptr[2] = cast(char)(0x80|(c&0x3F));
+        return s[0..3];
+      } else if (c <= 0x10FFFF) {
+        s.ptr[0] = cast(char)(0xF0|(c>>18));
+        s.ptr[1] = cast(char)(0x80|((c>>12)&0x3F));
+        s.ptr[2] = cast(char)(0x80|((c>>6)&0x3F));
+        s.ptr[3] = cast(char)(0x80|(c&0x3F));
+        return s[0..4];
+      } else {
+        s[0..3] = "<?>";
+        return s[0..3];
+      }
+    }
+  }
+
+  void parseInt(bool allowsign) (ref IntNum n) nothrow @trusted @nogc {
+    n.sign = ' ';
+    n.aval = 0;
+    n.leadingZero = false;
+    if (fmt.length == 0) return;
+    static if (allowsign) {
+      if (fmt.ptr[0] == '-' || fmt.ptr[0] == '+') {
+        n.sign = fmt.ptr[0];
+        fmt = fmt[1..$];
+        if (fmt.length == 0) return;
+      }
+    }
+    if (fmt.ptr[0] < '0' || fmt.ptr[0] > '9') return;
+    n.leadingZero = (fmt.ptr[0] == '0');
+    while (fmt.length && fmt.ptr[0] >= '0' && fmt.ptr[0] <= '9') {
+      n.aval = n.aval*10+(fmt.ptr[0]-'0'); // ignore overflow here
+      fmt = fmt[1..$];
+    }
+  }
+
+  void skipLitPart () nothrow @trusted @nogc {
+    while (fmt.length > 0) {
+      import core.stdc.string : memchr;
+      auto prcptr = cast(const(char)*)memchr(fmt.ptr, '%', fmt.length);
+      if (prcptr is null) prcptr = fmt.ptr+fmt.length;
+      // print (and remove) literal part
+      if (prcptr !is fmt.ptr) {
+        auto lplen = cast(usize)(prcptr-fmt.ptr);
+        cwrxputch(fmt[0..lplen]);
+        fmt = fmt[lplen..$];
+      }
+      if (fmt.length >= 2 && fmt.ptr[0] == '%' && fmt.ptr[1] == '%') {
+        cwrxputch("%");
+        fmt = fmt[2..$];
+        continue;
+      }
+      break;
+    }
+  }
+
+  if (fmt.length == 0) return;
+  consoleLock();
+  scope(exit) consoleUnlock();
+  auto fmtanchor = fmt;
+  IntNum wdt, maxlen;
+  char mode = ' ';
+
+  ConString smpDelim = null;
+  ConString fmtleft = null;
+
+  argloop: foreach (immutable argnum, /*auto*/ att; A) {
+    alias at = XUQQ!att;
+    // skip literal part of the format string
+    skipLitPart();
+    // something's left in the format string?
+    if (fmt.length > 0) {
+      // here we should have at least two chars
+      assert(fmt[0] == '%');
+      if (fmt.length == 1) { cwrxputch("<stray-percent-in-conprintf>"); break argloop; }
+      fmt = fmt[1..$];
+      parseInt!true(wdt);
+      if (fmt.length && fmt[0] == '.') {
+        fmt = fmt[1..$];
+        parseInt!false(maxlen);
+      } else {
+        maxlen.sign = ' ';
+        maxlen.aval = 0;
+        maxlen.leadingZero = false;
+      }
+      if (fmt.length == 0) { cwrxputch("<stray-percent-in-conprintf>"); break argloop; }
+      mode = fmt[0];
+      fmt = fmt[1..$];
+      switch (mode) {
+        case '!': break argloop; // no more
+        case '|': // rock 'till the end
+          wdt.sign = maxlen.sign = ' ';
+          wdt.aval = maxlen.aval = 0;
+          wdt.leadingZero = maxlen.leadingZero = false;
+          if (fmt !is null) fmtleft = fmt;
+          fmt = null;
+          break;
+        case '<': // <...>: print all arguments that's left with simple "%s", delimited with "...", no width allowed
+          wdt.sign = maxlen.sign = ' ';
+          wdt.aval = maxlen.aval = 0;
+          wdt.leadingZero = maxlen.leadingZero = false;
+          usize epos = 0;
+          while (epos < fmt.length && fmt[epos] != '>') ++epos;
+          smpDelim = fmt[0..epos];
+          if (epos < fmt.length) ++epos;
+          fmtleft = fmt[epos..$];
+          fmt = null;
+          break;
+        case 's': // process as simple string
+          break;
+        case 'd': case 'D': // decimal, process as simple string
+        case 'u': case 'U': // unsigned decimal, process as simple string
+          static if (is(at == bool)) {
+            cwrxputint((args[argnum] ? 1 : 0), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            continue argloop;
+          } else static if (is(at == char) || is(at == wchar) || is(at == dchar)) {
+            cwrxputint(cast(uint)(args[argnum] ? 1 : 0), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            continue argloop;
+          } else static if (is(at == enum)) {
+            static if (at.min >= int.min && at.max <= int.max) {
+              cwrxputint(cast(int)args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            } else static if (at.min >= 0 && at.max <= uint.max) {
+              cwrxputint(cast(uint)args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            } else static if (at.min >= long.min && at.max <= long.max) {
+              cwrxputint(cast(long)args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            } else {
+              cwrxputint(cast(ulong)args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            }
+            continue argloop;
+          } else {
+            break;
+          }
+        case 'c': case 'C': // char
+          static if (is(at == bool)) {
+            cwrxputstr!false((args[argnum] ? "t" : "f"), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else static if (is(at == wchar) || is(at == dchar)) {
+            cwrxputstr!false(utf8Encode(tmp[], cast(dchar)args[argnum]), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else static if (is(at == byte) || is(at == short) || is(at == int) || is(at == long) ||
+                            is(at == ubyte) || is(at == ushort) || is(at == uint) || is(at == ulong) ||
+                            is(at == char))
+          {
+            tmp[0] = cast(char)args[argnum]; // nobody cares about unifuck
+            cwrxputstr!false(tmp[0..1], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else {
+            cwrxputch("<cannot-charprint-");
+            cwrxputch(at.stringof);
+            cwrxputch("in-conprintf>");
+          }
+          continue argloop;
+        case 'x': case 'X': // hex
+          static if (is(at == bool)) {
+            cwrxputint((args[argnum] ? 1 : 0), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else static if (is(at == byte) || is(at == short) || is(at == int) || is(at == long) ||
+                            is(at == ubyte) || is(at == ushort) || is(at == uint) || is(at == ulong))
+          {
+            //cwrxputint(args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            cwrxputhex(args[argnum], (mode == 'X'), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else static if (is(at == char) || is(at == wchar) || is(at == dchar)) {
+            cwrxputhex(cast(uint)args[argnum], (mode == 'X'), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else static if (is(at == enum)) {
+            static if (at.min >= int.min && at.max <= int.max) {
+              cwrxputhex(cast(int)args[argnum], (mode == 'X'), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            } else static if (at.min >= 0 && at.max <= uint.max) {
+              cwrxputhex(cast(uint)args[argnum], (mode == 'X'), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            } else static if (at.min >= long.min && at.max <= long.max) {
+              cwrxputhex(cast(long)args[argnum], (mode == 'X'), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            } else {
+              cwrxputhex(cast(ulong)args[argnum], (mode == 'X'), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+            }
+          } else static if (is(at : T*, T)) {
+            // pointers
+            cwrxputhex(cast(usize)args[argnum], (mode == 'X'), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else {
+            cwrxputch("<cannot-hexprint-");
+            cwrxputch(at.stringof);
+            cwrxputch("in-conprintf>");
+          }
+          continue argloop;
+        case 'f':
+          static if (is(at == bool)) {
+            cwrxputfloat((args[argnum] ? 1.0f : 0.0f), false, wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else static if (is(at == byte) || is(at == short) || is(at == int) || is(at == long) ||
+                            is(at == ubyte) || is(at == ushort) || is(at == uint) || is(at == ulong) ||
+                            is(at == char) || is(at == wchar) || is(at == dchar))
+          {
+            cwrxputfloat(cast(double)args[argnum], false, wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else static if (is(at == float) || is(at == double)) {
+            cwrxputfloat(args[argnum], false, wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+          } else {
+            cwrxputch("<cannot-floatprint-");
+            cwrxputch(at.stringof);
+            cwrxputch("in-conprintf>");
+          }
+          continue argloop;
+        default:
+          cwrxputch("<invalid-format-in-conprintf(%");
+          if (mode < 32 || mode == 127) {
+            tlen = snprintf(tmp.ptr, tmp.length, "\\x%02x", cast(uint)mode);
+            cwrxputch(tmp[0..tlen]);
+          } else {
+            cwrxputch(mode);
+          }
+          cwrxputch(")>");
+          break argloop;
+      }
+    } else {
+      if (smpDelim.length) cwrxputch(smpDelim);
+      wdt.sign = maxlen.sign = ' ';
+      wdt.aval = maxlen.aval = 0;
+      wdt.leadingZero = maxlen.leadingZero = false;
+    }
+    // print as string
+    static if (is(at == bool)) {
+      cwrxputstr!false((args[argnum] ? "true" : "false"), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+    } else static if (is(at == wchar) || is(at == dchar)) {
+      cwrxputstr!false(utf8Encode(tmp[], cast(dchar)args[argnum]), wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+    } else static if (is(at == byte) || is(at == short) || is(at == int) || is(at == long) ||
+                      is(at == ubyte) || is(at == ushort) || is(at == uint) || is(at == ulong))
+    {
+      cwrxputint(args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+    } else static if (is(at == char)) {
+      tmp[0] = cast(char)args[argnum]; // nobody cares about unifuck
+      cwrxputstr!false(tmp[0..1], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+    } else static if (is(at == float) || is(at == double)) {
+      cwrxputfloat(args[argnum], false, wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+    } else static if (is(at == enum)) {
+      cwrxputenum(args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+    } else static if (is(at : T*, T)) {
+      // pointers
+      static if (is(XUQQ!T == char)) {
+        // special case: `char*` will be printed as 0-terminated string
+        cwrxputstrz(args[argnum], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+      } else {
+        // other pointers will be printed as "0x..."
+        if (wdt.aval == 0) { wdt.aval = 8/*cast(int)usize.sizeof*2*/; wdt.leadingZero = true; }
+        cwrxputhex(cast(usize)args[argnum], true, wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+      }
+    } else {
+      // alas
+      try {
+        import std.format : formatValue, singleSpec;
+        scope Writer wrt;
+        scope spec = singleSpec("%s");
+        formatValue(wrt, args[argnum], spec);
+        if (tlen > tmp.length) {
+          cwrxputch("<error-formatting-in-conprintf>");
+        } else {
+          cwrxputstr!false(tmp[0..tlen], wdt.sign, (wdt.leadingZero ? '0' : ' '), (maxlen.leadingZero ? '0' : ' '), wdt.aval, maxlen.aval);
+        }
+      } catch (Exception e) {
+        cwrxputch("<error-formatting-in-conprintf>");
+      }
+    }
+  }
+
+  if (fmt is null) {
+    if (fmtleft.length) cwrxputch(fmtleft);
+  }
+
+  if (fmt.length) {
+    skipLitPart();
+    if (fmt.length) {
+      assert(fmt[0] == '%');
+      if (fmt.length == 1) {
+        cwrxputch("<stray-percent-in-conprintf>");
+      } else {
+        fmt = fmt[1..$];
+        parseInt!true(wdt);
+        if (fmt.length && fmt[0] == '.') {
+          fmt = fmt[1..$];
+          parseInt!false(maxlen);
+        }
+        if (fmt.length == 0) {
+          cwrxputch("<stray-percent-in-conprintf>");
+        } else {
+          mode = fmt[0];
+          fmt = fmt[1..$];
+          if (mode == '!' || mode == '|') {
+            if (fmt.length) cwrxputch(fmt);
+          } else if (mode == '<') {
+            while (fmt.length && fmt[0] != '>') fmt = fmt[1..$];
+            if (fmt.length) fmt = fmt[1..$];
+            if (fmt.length) cwrxputch(fmt);
+          } else {
+            cwrxputch("<orphan-format-in-conprintf(%");
+            if (mode < 32 || mode == 127) {
+              tlen = snprintf(tmp.ptr, tmp.length, "\\x%02x", cast(uint)mode);
+              cwrxputch(tmp[0..tlen]);
+            } else {
+              cwrxputch(mode);
+            }
+            cwrxputch(")>");
+          }
+        }
+      }
+    }
+  }
+
+  static if (donl) cwrxputch("\n");
+}
+
+void conprintf(A...) (ConString fmt, in auto ref A args) { conprintfX!false(fmt, args); }
+void conprintfln(A...) (ConString fmt, in auto ref A args) { conprintfX!true(fmt, args); }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+version(iv_cmdcon_honest_ctfe_writer)
 /// write formatted string to console with compile-time format string
 public template conwritef(string fmt, A...) {
   private string gen() () {
@@ -984,9 +1341,16 @@ public template conwritef(string fmt, A...) {
 public:
 
 //void conwritef(string fmt, A...) (A args) { fdwritef!(fmt)(args); }
-void conwritefln(string fmt, A...) (A args) { conwritef!(fmt)(args); cwrxputch('\n'); } /// write formatted string to console with compile-time format string
-void conwrite(A...) (A args) { conwritef!("%|")(args); } /// write formatted string to console with compile-time format string
-void conwriteln(A...) (A args) { conwritef!("%|\n")(args); } /// write formatted string to console with compile-time format string
+version(iv_cmdcon_honest_ctfe_writer) {
+  void conwritefln(string fmt, A...) (A args) { conwritef!(fmt)(args); cwrxputch('\n'); } /// write formatted string to console with compile-time format string
+  void conwrite(A...) (A args) { conwritef!("%|")(args); } /// write formatted string to console with compile-time format string
+  void conwriteln(A...) (A args) { conwritef!("%|\n")(args); } /// write formatted string to console with compile-time format string
+} else {
+  public void conwritef(string fmt, A...) (in auto ref A args) { conprintfX!false(fmt, args); } /// unhonest CTFE writer
+  void conwritefln(string fmt, A...) (in auto ref A args) { conprintfX!true(fmt, args); } /// write formatted string to console with compile-time format string
+  void conwrite(A...) (in auto ref A args) { conprintfX!false("%|", args); } /// write formatted string to console with compile-time format string
+  void conwriteln(A...) (in auto ref A args) { conprintfX!false("%|\n", args); } /// write formatted string to console with compile-time format string
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -3973,7 +4337,7 @@ public void concmd (ConString cmd) {
 /// it also understands '$var', '${var}', '${var:ifabsent}', '${var?ifempty}'
 /// var substitution in quotes will be automatically quoted
 /// string substitution in quotes will be automatically quoted
-public void concmdf(string fmt, A...) (A args) { concmdfex!fmt(null, args); }
+public void concmdf(string fmt, A...) (A args) { concmdfdg(fmt, null, args); }
 
 
 /// add console command to execution queue (thread-safe)
@@ -3981,10 +4345,11 @@ public void concmdf(string fmt, A...) (A args) { concmdfex!fmt(null, args); }
 /// it also understands '$var', '${var}', '${var:ifabsent}', '${var?ifempty}'
 /// var substitution in quotes will be automatically quoted
 /// string substitution in quotes will be automatically quoted
-public void concmdfex(string fmt, A...) (scope void delegate (ConString cmd) cmddg, A args) {
+public void concmdfdg(A...) (ConString fmt, scope void delegate (ConString cmd) cmddg, A args) {
   consoleLock();
   scope(exit) { consoleUnlock(); conInputIncLastChange(); }
 
+  auto fmtanchor = fmt;
   usize pos = 0;
   bool ensureCmd = true;
   char inQ = 0;
