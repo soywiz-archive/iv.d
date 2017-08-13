@@ -1682,14 +1682,19 @@ version(vfs_use_zlib_unpacker) {
     bool findUnpackedSize () {
       ubyte[1024] tbuf = void;
       //size = pos; // current size
+      //{ import core.stdc.stdio; printf("findUnpackedSize: starting...\n"); }
+      scope(exit) { import core.stdc.stdio; printf("findUnpackedSize: done...\n"); }
       for (;;) {
         uint rd = cast(uint)tbuf.length;
         zs.next_out = cast(typeof(zs.next_out))tbuf.ptr;
         zs.avail_out = rd;
+        //{ import core.stdc.stdio; printf("findUnpackedSize: reading %u bytes...\n", rd); }
         if (!unpackNextChunk()) return false;
         rd -= zs.avail_out;
+        //{ import core.stdc.stdio; printf("findUnpackedSize: read %u bytes...\n", rd); }
         if (pos+rd < 0) return false; // file too big
         prpos = (pos += rd);
+        //{ import core.stdc.stdio; printf("findUnpackedSize: prpos=%u\n", cast(uint)prpos); }
         if (zs.avail_out != 0) break;
       }
       size = pos;
@@ -1845,10 +1850,15 @@ version(vfs_use_zlib_unpacker) {
     bool findUnpackedSize () {
       ubyte[1024] tbuf = void;
       if (ifs is null) inflateInit(); // here, 'cause struct can be copied
+      //{ import core.stdc.stdio; printf("findUnpackedSize: starting...\n"); }
+      //scope(exit) { import core.stdc.stdio; printf("findUnpackedSize: done...\n"); }
       for (;;) {
+        //{ import core.stdc.stdio; printf("findUnpackedSize: reading %u bytes...\n", cast(uint)tbuf.length); }
         auto rd = ifs.rawRead(&readBuf, tbuf[]);
+        //{ import core.stdc.stdio; printf("findUnpackedSize: read %u bytes...\n", cast(uint)rd.length); }
         if (rd.length == 0) break;
         prpos += rd.length;
+        //{ import core.stdc.stdio; printf("findUnpackedSize: prpos=%u\n", cast(uint)prpos); }
       }
       size = pos = prpos;
       return true;

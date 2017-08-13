@@ -628,7 +628,8 @@ public:
    */
   ubyte[] getBytes (scope ReadBufDg readBuf, ubyte[] btdest) {
     usize btpos = 0;
-    while (btpos < btdest.length) {
+    mainloop: while (btpos < btdest.length) {
+      //{ import core.stdc.stdio; printf("btpos=%u; btlen=%u; state=%u\n", cast(uint)btpos, cast(uint)btdest.length, cast(uint)state); }
       final switch (state) {
         case State.ExpectZLibHeader:
           processZLibHeader(readBuf);
@@ -644,7 +645,7 @@ public:
           auto rd = processInflatedBlock(readBuf, btdest[btpos..$]);
           btpos += rd.length;
           break;
-        case State.EOF: break;
+        case State.EOF: break mainloop;
         case State.Dead: setErrorState(); throw new Exception("dead stream"); break;
       }
     }
