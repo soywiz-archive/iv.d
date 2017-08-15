@@ -1002,8 +1002,8 @@ public void conprintfX(bool donl, A...) (ConString fmt, in auto ref A args) {
   static if (donl) cwrxputch("\n");
 }
 
-void conprintf(A...) (ConString fmt, in auto ref A args) { conprintfX!false(fmt, args); }
-void conprintfln(A...) (ConString fmt, in auto ref A args) { conprintfX!true(fmt, args); }
+public void conprintf(A...) (ConString fmt, in auto ref A args) { conprintfX!false(fmt, args); }
+public void conprintfln(A...) (ConString fmt, in auto ref A args) { conprintfX!true(fmt, args); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
