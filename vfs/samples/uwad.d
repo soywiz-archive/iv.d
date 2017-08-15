@@ -43,11 +43,16 @@ version = dfwad_deep_scan;
 
 // ////////////////////////////////////////////////////////////////////////// //
 uint getfmodtime (const(char)[] fname) {
-  import core.sys.posix.sys.stat;
-  import std.internal.cstring : tempCString;
-  stat_t st;
-  if (stat(fname.tempCString, &st) != 0) return 0;
-  return st.st_mtime/*.tv_sec*/;
+  version(Posix) {
+    import core.sys.posix.sys.stat;
+    import std.internal.cstring : tempCString;
+    stat_t st;
+    if (stat(fname.tempCString, &st) != 0) return 0;
+    return st.st_mtime/*.tv_sec*/;
+  } else {
+    // fuck you, shitdoze
+    return 0;
+  }
 }
 
 
