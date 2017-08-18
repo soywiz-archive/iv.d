@@ -21,7 +21,7 @@ module iv.vmath /*is aliced*/;
 import iv.alice;
 
 //version = aabbtree_many_asserts;
-//version = aabbtree_query_count;
+version = aabbtree_query_count;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -4305,7 +4305,7 @@ private:
   // checker should check if this node should be considered to further checking
   // returns tree node if visitor says stop or -1
   private int visit (scope bool delegate (TreeNode* node) checker, scope bool delegate (BodyBase abody) visitor) {
-    int[256] stack = void; // stack with the nodes to visit
+    int[1024] stack = void; // stack with the nodes to visit
     int sp = 0;
     int[] bigstack = null;
     scope(exit) if (bigstack.ptr !is null) delete bigstack;
