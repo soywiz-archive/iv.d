@@ -3423,27 +3423,15 @@ public nothrow @safe @nogc:
 
   // return true if the current AABB contains the AABB given in parameter
   bool contains() (in auto ref Me aabb) const {
-    pragma(inline, true);
-    version(all) {
-      // exit with no intersection if found separated along an axis
-      if (max.x < aabbmin.x || min.x > aabbmax.x) return false;
-      if (max.y < aabbmin.y || min.y > aabbmax.y) return false;
-      static if (VT.Dims == 3) {
-        if (max.z < aabbmin.z || min.z > aabbmax.z) return false;
-      }
-      // no separating axis found, therefor there is at least one overlapping axis
-      return true;
+    //pragma(inline, true);
+    static if (VT.Dims == 3) {
+      return
+        aabb.min.x >= min.x && aabb.min.y >= min.y && aabb.min.z >= min.z &&
+        aabb.max.x <= max.x && aabb.max.y <= max.y && aabb.max.z <= max.z;
     } else {
-      bool isInside = true;
-      isInside = (isInside && min.x <= aabb.min.x);
-      isInside = (isInside && min.y <= aabb.min.y);
-      isInside = (isInside && max.x >= aabb.max.x);
-      isInside = (isInside && max.y >= aabb.max.y);
-      static if (VT.Dims == 3) {
-        isInside = (isInside && min.z <= aabb.min.z);
-        isInside = (isInside && max.z >= aabb.max.z);
-      }
-      return isInside;
+      return
+        aabb.min.x >= min.x && aabb.min.y >= min.y &&
+        aabb.max.x <= max.x && aabb.max.y <= max.y;
     }
   }
 
@@ -3472,10 +3460,11 @@ public nothrow @safe @nogc:
   // two AABBs overlap if they overlap in the two(three) x, y (and z) axes at the same time
   bool overlaps() (in auto ref Me aabb) const {
     //pragma(inline, true);
-    if (max.x < aabb.min.x || aabb.max.x < min.x) return false;
-    if (max.y < aabb.min.y || aabb.max.y < min.y) return false;
+    // exit with no intersection if found separated along any axis
+    if (max.x < aabb.min.x || min.x > aabb.max.x) return false;
+    if (max.y < aabb.min.y || min.y > aabb.max.y) return false;
     static if (VT.Dims == 3) {
-      if (max.z < aabb.min.z || aabb.max.z < min.z) return false;
+      if (max.z < aabb.min.z || min.z > aabb.max.z) return false;
     }
     return true;
   }
@@ -3902,24 +3891,14 @@ private:
       Float costI = FloatNum!2*(mergedVolume-volumeAABB);
 
       // compute the cost of descending into the left child
-      Float costLeft;
       AABB currentAndLeftAABB = AABB.mergeAABBs(newNodeAABB, mNodes[leftChild].aabb);
-      if (mNodes[leftChild].leaf) {
-        costLeft = currentAndLeftAABB.volume+costI;
-      } else {
-        Float leftChildVolume = mNodes[leftChild].aabb.volume;
-        costLeft = costI+currentAndLeftAABB.volume-leftChildVolume;
-      }
+      Float costLeft = currentAndLeftAABB.volume+costI;
+      if (!mNodes[leftChild].leaf) costLeft -= mNodes[leftChild].aabb.volume;
 
       // compute the cost of descending into the right child
-      Float costRight;
       AABB currentAndRightAABB = AABB.mergeAABBs(newNodeAABB, mNodes[rightChild].aabb);
-      if (mNodes[rightChild].leaf) {
-        costRight = currentAndRightAABB.volume+costI;
-      } else {
-        Float rightChildVolume = mNodes[rightChild].aabb.volume;
-        costRight = costI+currentAndRightAABB.volume-rightChildVolume;
-      }
+      Float costRight = currentAndRightAABB.volume+costI;
+      if (!mNodes[rightChild].leaf) costRight -= mNodes[rightChild].aabb.volume;
 
       // if the cost of making the current node a sibling of the new node is smaller than the cost of going down into the left or right child
       if (costS < costLeft && costS < costRight) break;
@@ -4424,7 +4403,7 @@ public:
 
   /// does the given id represents a valid object?
   /// WARNING: ids of removed objects can be reused on later insertions!
-  @property bool isValidId (int id) const nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf); }
+  bool isValidId (int id) const nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf); }
 
   /// get current extra AABB gap
   @property Float extraGap () const pure nothrow @trusted @nogc { pragma(inline, true); return mExtraGap; }

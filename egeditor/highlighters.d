@@ -194,6 +194,7 @@ public:
     int spos = ls;
     bool seenNonBlank = false; // comments are blanks
     bool inPreprocessor = false;
+    int basedNumSkip;
 
     if (st.kwtype == HiPreprocessor) inPreprocessor = true;
 
@@ -558,9 +559,9 @@ public:
         continue mainloop;
       }
       // based number?
-      if (auto base = isBasedStart(spos)) {
+      if (auto base = isBasedStart(spos, basedNumSkip)) {
         bool au = (opt&Opt.NumAllowUnder) != 0;
-        ofs = (ch == '+' || ch == '-' ? 3 : 2);
+        ofs = basedNumSkip; //(ch == '+' || ch == '-' ? 3 : 2);
         while (spos+ofs <= le) {
           ch = gb[spos+ofs];
           if (ch.digitInBase(base) >= 0 || (au && ch == '_')) { ++ofs; continue; }
@@ -691,11 +692,17 @@ private final:
   }
 
   // 0 or base
-  int isBasedStart (int pos) nothrow {
+  int isBasedStart (int pos, out int basedNumSkip) nothrow {
     auto ch = gb[pos++];
     if (ch == '-' || ch == '+') {
       if (!(tks.options&Opt.NumAllowSign)) return 0;
       ch = gb[pos++];
+      basedNumSkip = 1; // sign
+    }
+    // pascal $hex literal?
+    if ((tks.options&Opt.NumPasHex) && ch == '$' && gb[pos+1].digitInBase(16)) {
+      basedNumSkip += 1; // dollar
+      return 16;
     }
     if (ch != '0') return 0;
     ch = gb[pos++];
@@ -707,6 +714,7 @@ private final:
     if (!(tks.options&Opt.Num0x) && base == 16) return 0;
     if (!(tks.options&Opt.Num0o) && base == 8) return 0;
     if (!(tks.options&Opt.Num0b) && base == 2) return 0;
+    basedNumSkip += 2; // 0n prefix
     return (gb[pos].digitInBase(base) >= 0 ? base : 0);
   }
 }
@@ -939,6 +947,7 @@ public:
     CougarCharLiteral = 1U<<22,
     MaximumTokens = 1U<<23,
     PascalComments = 1U<<24,
+    NumPasHex = 1U<<25,
   }
   static assert(Opt.max <= uint.max);
 
@@ -1001,6 +1010,7 @@ public class EdHiTokensD : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -1255,6 +1265,7 @@ public class EdHiTokensJS : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -1375,6 +1386,7 @@ public class EdHiTokensC : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -1483,6 +1495,7 @@ public class EdHiTokensShell : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -1566,6 +1579,7 @@ public class EdHiTokensFrag : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -1712,6 +1726,7 @@ public class EdHiTokensSQL : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -2033,6 +2048,7 @@ public class EdHiTokensHtml : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -2208,6 +2224,7 @@ public class EdHiTokensCougar : EdHiTokens {
       Opt.CougarCharLiteral|
       Opt.MaximumTokens|
       //Opt.PascalComments|
+      //Opt.NumPasHex|
       0
     );
 
@@ -2315,7 +2332,7 @@ public class EdHiTokensPas : EdHiTokens {
     super(
       //Opt.Num0b|
       //Opt.Num0o|
-      Opt.Num0x|
+      //Opt.Num0x|
       //Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       Opt.SQString|
@@ -2338,6 +2355,7 @@ public class EdHiTokensPas : EdHiTokens {
       //Opt.CougarCharLiteral|
       //Opt.MaximumTokens|
       Opt.PascalComments|
+      Opt.NumPasHex|
       0
     );
 
@@ -2403,6 +2421,7 @@ public class EdHiTokensPas : EdHiTokens {
     addToken("operator", HiKeywordHi);
     addToken("or", HiSpecial);
     addToken("otherwise", HiSpecial);
+    addToken("out", HiSpecial);
     addToken("overload", HiKeywordHi);
     addToken("override", HiKeywordHi);
     addToken("packed", HiKeyword);
@@ -2536,7 +2555,7 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
     if (tokcougar is null) tokcougar = new EdHiTokensCougar();
     return new EditorHLExt(tokcougar);
   }
-  if (ext.strEquCI(".pas") || ext.strEquCI(".pp")) {
+  if (ext.strEquCI(".pas") || ext.strEquCI(".pp") || ext.strEquCI(".inc") || ext.strEquCI(".dpr")) {
     __gshared EdHiTokensPas tokpas;
     if (tokpas is null) tokpas = new EdHiTokensPas();
     return new EditorHLExt(tokpas);
