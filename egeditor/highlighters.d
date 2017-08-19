@@ -2398,6 +2398,7 @@ public class EdHiTokensPas : EdHiTokens {
     addToken("for", HiKeyword);
     addToken("forward", HiKeywordHi);
     addToken("function", HiKeyword);
+    addToken("generic", HiKeywordHi);
     addToken("goto", HiKeyword);
     addToken("if", HiKeyword);
     addToken("implementation", HiKeywordHi);
@@ -2445,6 +2446,7 @@ public class EdHiTokensPas : EdHiTokens {
     addToken("shl", HiSpecial);
     addToken("shr", HiSpecial);
     addToken("sizeof", HiKeywordHi);
+    addToken("specialize", HiKeywordHi);
     addToken("static", HiKeywordHi);
     addToken("stdcall", HiKeywordHi);
     addToken("strict", HiKeywordHi);
