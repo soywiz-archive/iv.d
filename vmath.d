@@ -3841,7 +3841,7 @@ private:
     }
     // get the next free node
     int freeNodeId = mFreeNodeId;
-    version(aabbtree_many_asserts) assert(freeNodeId >= mNodeCount && freeNodeId < mAllocCount);
+    version(aabbtree_many_asserts) assert(freeNodeId < mAllocCount);
     mFreeNodeId = mNodes[freeNodeId].nextNodeId;
     mNodes[freeNodeId].parentId = TreeNode.NullTreeNode;
     mNodes[freeNodeId].height = 0;
@@ -4397,13 +4397,13 @@ public:
   /// return the root AABB of the tree
   AABB getRootAABB () nothrow @trusted @nogc {
     pragma(inline, true);
-    version(aabbtree_many_asserts) assert(mRootNodeId >= 0 && mRootNodeId < mNodeCount);
+    version(aabbtree_many_asserts) assert(mRootNodeId >= 0 && mRootNodeId < mAllocCount);
     return mNodes[mRootNodeId].aabb;
   }
 
   /// does the given id represents a valid object?
   /// WARNING: ids of removed objects can be reused on later insertions!
-  bool isValidId (int id) const nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf); }
+  bool isValidId (int id) const nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mAllocCount && mNodes[id].leaf); }
 
   /// get current extra AABB gap
   @property Float extraGap () const pure nothrow @trusted @nogc { pragma(inline, true); return mExtraGap; }
@@ -4412,10 +4412,10 @@ public:
   @property void extraGap (Float aExtraGap) pure nothrow @trusted @nogc { pragma(inline, true); mExtraGap = aExtraGap; }
 
   /// get object by id; can return null for invalid ids
-  BodyBase getObject (int id) nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && mNodes[id].leaf ? mNodes[id].flesh : null); }
+  BodyBase getObject (int id) nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mAllocCount && mNodes[id].leaf ? mNodes[id].flesh : null); }
 
   /// get fat object AABB by id; returns random shit for invalid ids
-  AABB getObjectFatAABB (int id) nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mNodeCount && !mNodes[id].free ? mNodes[id].aabb : AABB()); }
+  AABB getObjectFatAABB (int id) nothrow @trusted @nogc { pragma(inline, true); return (id >= 0 && id < mAllocCount && !mNodes[id].free ? mNodes[id].aabb : AABB()); }
 
   /// insert an object into the tree
   /// this method creates a new leaf node in the tree and returns the id of the corresponding node
@@ -4437,7 +4437,7 @@ public:
   /// remove an object from the tree
   /// WARNING: ids of removed objects can be reused on later insertions!
   void removeObject (int nodeId) {
-    if (nodeId < 0 || nodeId >= mNodeCount || !mNodes[nodeId].leaf) assert(0, "invalid node id");
+    if (nodeId < 0 || nodeId >= mAllocCount || !mNodes[nodeId].leaf) assert(0, "invalid node id");
     static if (GCAnchor) {
       import core.memory : GC;
       auto flesh = mNodes[nodeId].flesh;
@@ -4465,7 +4465,7 @@ public:
    * return `true` if the tree was modified.
    */
   bool updateObject() (int nodeId, in auto ref AABB.VType displacement, bool forceReinsert=false) {
-    if (nodeId < 0 || nodeId >= mNodeCount || !mNodes[nodeId].leaf) assert(0, "invalid node id");
+    if (nodeId < 0 || nodeId >= mAllocCount || !mNodes[nodeId].leaf) assert(0, "invalid node id");
 
     auto newAABB = mNodes[nodeId].flesh.getAABB(); // can be passed as argument
 
@@ -4532,7 +4532,7 @@ public:
       // visitor
       (flesh) => cb(flesh),
     );
-    version(aabbtree_many_asserts) assert(nid < 0 || (nid >= 0 && nid < mNodeCount && mNodes[nid].leaf));
+    version(aabbtree_many_asserts) assert(nid < 0 || (nid >= 0 && nid < mAllocCount && mNodes[nid].leaf));
     return (nid >= 0 ? mNodes[nid].flesh : null);
   }
 
