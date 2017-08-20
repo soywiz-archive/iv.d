@@ -867,6 +867,7 @@ public:
     switch (gb.hi(pos).kwtype) {
       case HiCommentOneLine:
       case HiCommentMulti:
+      case HiCommentDirective:
       case HiChar:
       case HiCharSpecial:
       case HiDQString:

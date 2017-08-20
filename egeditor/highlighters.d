@@ -29,6 +29,7 @@ public enum {
 
   HiCommentOneLine,
   HiCommentMulti, // kwidx: level; 0: non-nesting
+  HiCommentDirective, // pascal directive
 
   HiNumber,
 
@@ -74,6 +75,7 @@ public bool hiIsComment() (in auto ref GapBuffer.HighState hs) nothrow {
   switch (hs.kwtype) {
     case HiCommentOneLine:
     case HiCommentMulti:
+    case HiCommentDirective:
       return true;
     default:
       break;
@@ -275,16 +277,12 @@ public:
         continue mainloop;
       }
       // in multiline comment?
-      if (st.kwtype == HiCommentMulti && (st.kwidx == 0 || (opt&Opt.PascalComments) != 0)) {
+      if ((st.kwtype == HiCommentMulti && (st.kwidx == 0 || (opt&Opt.PascalComments) != 0)) || st.kwtype == HiCommentDirective) {
         while (spos <= le) {
           gb.hi(spos++) = st;
           bool commentEnd = false;
           if (opt&Opt.PascalComments) {
-            //HACK: find multiline comment start
-            //auto cspos = spos;
-            //while (cspos > 0 && gb.hi(cspos-1).kwtype == HiCommentMulti) --cspos;
-            // now cspos points to the first char of the multiline comment
-            if (/*gb[cspos] == '{'*/st.kwidx == 0) {
+            if (st.kwidx == 0) {
               commentEnd = (gb[spos-1] == '}');
             } else {
               commentEnd = (gb[spos-2] == '*' && gb[spos-1] == ')');
@@ -293,15 +291,13 @@ public:
             commentEnd = (gb[spos-2] == '*' && gb[spos-1] == '/');
           }
           if (commentEnd) {
-            //gb.hi(spos++) = HS(HiCommentMulti, st.kwidx);
             st = HS(HiText);
             continue mainloop;
           }
         }
-        //st = HS(HiCommentMulti);
         continue mainloop;
       }
-      // in nested multiline comment? (255
+      // in nested multiline comment?
       if (st.kwtype == HiCommentMulti && st.kwidx > 0 && (opt&Opt.PascalComments) == 0) {
         //FIXME: more than 255 levels aren't supported
         ubyte level = st.kwidx;
@@ -365,14 +361,14 @@ public:
       }
       // Pascal multiline comment?
       if (ch == '(' && (opt&(Opt.CMultiComment|Opt.PascalComments)) == (Opt.CMultiComment|Opt.PascalComments) && gb[spos+1] == '*') {
-        gb.hi(spos++) = HS(HiCommentMulti, 1);
-        gb.hi(spos++) = HS(HiCommentMulti, 1);
-        st = HS(HiCommentMulti, 1);
+        st = HS((gb[spos+2] == '$' ? HiCommentDirective : HiCommentMulti), 1);
+        gb.hi(spos++) = st;
+        gb.hi(spos++) = st;
         continue mainloop;
       }
       // Pascal multiline comment?
       if (ch == '{' && (opt&(Opt.CMultiComment|Opt.PascalComments)) == (Opt.CMultiComment|Opt.PascalComments)) {
-        st = HS(HiCommentMulti, 0);
+        st = HS((gb[spos+1] == '$' ? HiCommentDirective : HiCommentMulti), 0);
         gb.hi(spos++) = st;
         continue mainloop;
       }
