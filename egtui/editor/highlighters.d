@@ -57,7 +57,7 @@ public uint hiColor() (in auto ref GapBuffer.HighState hs) nothrow @safe @nogc {
       return XtColorFB!(TtyRgb2Color!(0xb2, 0x68, 0x18), TextBG); // 3,237
 
     case HiCommentDirective:
-      return XtColorFB!(TtyRgb2Color!(0x00, 0xd0, 0x00), TextBG);
+      return XtColorFB!(TtyRgb2Color!(0xd0, 0x00, 0x00), TextBG);
 
     case HiNumber:
       return XtColorFB!(TtyRgb2Color!(0x18, 0xb2, 0x18), TextBG); // 2,237
