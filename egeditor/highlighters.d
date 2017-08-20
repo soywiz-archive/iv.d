@@ -2372,6 +2372,7 @@ public class EdHiTokensPas : EdHiTokens {
     addToken("cdecl", HiKeywordHi);
     addToken("class", HiKeywordHi);
     addToken("const", HiKeywordHi);
+    addToken("constref", HiSpecial);
     addToken("constructor", HiKeywordHi);
     addToken("continue", HiKeywordHi);
     addToken("destructor", HiKeywordHi);
