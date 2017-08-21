@@ -2524,7 +2524,10 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
     if (toksjs is null) toksjs = new EdHiTokensJS();
     return new EditorHLExt(toksjs);
   }
-  if (ext.strEquCI(".c") || ext.strEquCI(".cpp") || ext.strEquCI(".h") || ext.strEquCI(".hpp")) {
+  if (ext.strEquCI(".c") || ext.strEquCI(".cpp") ||
+      ext.strEquCI(".h") || ext.strEquCI(".hpp") ||
+      ext.strEquCI(".hxx") || ext.strEquCI(".cxx") ||
+      ext.strEquCI(".cc")) {
     __gshared EdHiTokensC toksc;
     if (toksc is null) toksc = new EdHiTokensC();
     return new EditorHLExt(toksc);
