@@ -556,7 +556,7 @@ public:
       }
       // based number?
       if (auto base = isBasedStart(spos, basedNumSkip)) {
-        bool au = (opt&Opt.NumAllowUnder) != 0;
+        bool au = ((opt&Opt.NumAllowUnder) != 0);
         ofs = basedNumSkip; //(ch == '+' || ch == '-' ? 3 : 2);
         while (spos+ofs <= le) {
           ch = gb[spos+ofs];
@@ -696,7 +696,7 @@ private final:
       basedNumSkip = 1; // sign
     }
     // pascal $hex literal?
-    if ((tks.options&Opt.NumPasHex) && ch == '$' && gb[pos+1].digitInBase(16)) {
+    if ((tks.options&Opt.NumPasHex) && ch == '$' && gb[pos].digitInBase(16) >= 0) {
       basedNumSkip += 1; // dollar
       return 16;
     }
