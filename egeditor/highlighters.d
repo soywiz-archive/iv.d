@@ -2488,6 +2488,8 @@ public class EdHiTokensPas : EdHiTokens {
     addToken("<>", HiPunct);
 
     addToken("Char", HiType);
+    addToken("AnsiChar", HiType);
+    addToken("WideChar", HiType);
     addToken("Boolean", HiType);
 
     addToken("ShortInt", HiType);
@@ -2499,15 +2501,22 @@ public class EdHiTokensPas : EdHiTokens {
 
     addToken("Byte", HiType);
     addToken("Word", HiType);
+    addToken("LongWord", HiType);
     addToken("DWord", HiType);
     addToken("Cardinal", HiType);
 
     addToken("Single", HiType);
     addToken("Double", HiType);
+    addToken("Extended", HiType);
+    addToken("Real", HiType);
 
     addToken("String", HiType);
+    addToken("ShortString", HiType);
     addToken("AnsiString", HiType);
     addToken("WideString", HiType);
+
+    addToken("Pointer", HiType);
+    addToken("Variant", HiType);
   }
 }
 
