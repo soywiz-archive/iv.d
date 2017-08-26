@@ -909,6 +909,8 @@ public:
     return true;
   }
 
+  const(char)[] delegate (EditorEngine ed, const(char)[] tk, int tkpos) completeToken;
+
   final void doAutoComplete () {
     scope(exit) {
       acused = 0;
@@ -990,7 +992,9 @@ public:
     }
     debug(egauto) { { import iv.vfs; auto fo = VFile("z00_list.bin", "w"); fo.writeln(list[]); } }
 
-    const(char)[] getDefToken () nothrow @trusted @nogc {
+    const(char)[] getDefToken () /*nothrow @trusted @nogc*/ {
+      if (completeToken !is null) return completeToken(this, tk[$-tklen..$], tkpos);
+      /+
       switch (tk[$-tklen..$]) {
         case "ab": return "abstract";
         case "br": return "break";
@@ -1014,8 +1018,25 @@ public:
         case "us": return "ushort";
         case "ush": return "ushort";
         case "vo": return "void";
+        // pascal
+        /*
+        case "ra": return "raise";
+        case "Ex": return "Exception";
+        case "Cr": return "Create";
+        case "Cre": return "Create";
+        case "De": return "Destroy";
+        case "ove": return "overload";
+        case "ovr": return "override";
+        case "inh": return "inherited";
+        case "inhe": return "inherited";
+        case "proc": return "procedure";
+        case "fun": return "function";
+        case "con": return "constructor";
+        case "des": return "destructor";
+        */
         default:
       }
+      +/
       return null;
     }
 
