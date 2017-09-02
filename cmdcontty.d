@@ -14,6 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.cmdcongl /*is aliced*/;
+module iv.cmdcontty /*is aliced*/;
 
 public import iv.cmdcon.tty;

@@ -3584,7 +3584,7 @@ ConVarBase conRegUserVar(T) (string aname, string help, const(ConVarAttr)[] attr
   } else {
     static assert(0, "can't create uservar of type '"~T.stringof~"'");
   }
-  c.setAttrs(attrs);
+  v.setAttrs(attrs);
   v.mAttrs |= ConVarAttr.User;
   addName(aname);
   cmdlist[aname] = v;
