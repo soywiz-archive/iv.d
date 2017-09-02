@@ -123,17 +123,17 @@ public:
    *
    * PC is current instruction address (to be fetched). Entering page `mpage`.
    */
-  void execHook () nothrow @trusted @nogc {}
+  void execHook () nothrow @trusted {}
 
   /// this will be called before writing occurs
-  void memWriteHook (ushort addr, ubyte b) nothrow @trusted @nogc {}
+  void memWriteHook (ushort addr, ubyte b) nothrow @trusted {}
 
   /**
    * Breakpoint hook
    *
    * PC is current instruction address (to be fetched). Return `true` to break emulation loop.
    */
-  bool checkBreakpoint () nothrow @trusted @nogc { return false; }
+  bool checkBreakpoint () nothrow @trusted { return false; }
 
   version(Zymosis_Testing) {
     /*
@@ -151,11 +151,11 @@ public:
      * Returns:
      *  nothing
      */
-    void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc { tstates += atstates; }
+    void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted { tstates += atstates; }
 
-    void memContention (ushort addr, bool mreq) nothrow @trusted @nogc {}
-    void memReading (ushort addr) nothrow @trusted @nogc {}
-    void memWriting (ushort addr, ubyte b) nothrow @trusted @nogc {}
+    void memContention (ushort addr, bool mreq) nothrow @trusted {}
+    void memReading (ushort addr) nothrow @trusted {}
+    void memWriting (ushort addr, ubyte b) nothrow @trusted {}
   }
 
   /**
@@ -167,7 +167,7 @@ public:
    * Returns:
    *  readed byte from emulated port
    */
-  abstract ubyte portRead (ushort port) nothrow @trusted @nogc;
+  abstract ubyte portRead (ushort port) nothrow @trusted;
 
   /**
    * Write byte to emulated port.
@@ -179,16 +179,16 @@ public:
    * Returns:
    *  Nothing
    */
-  abstract void portWrite (ushort port, ubyte value) nothrow @trusted @nogc;
+  abstract void portWrite (ushort port, ubyte value) nothrow @trusted;
 
   /// get byte from memory, don't trigger any breakpoints or such
-  public final ubyte memPeekB (ushort addr) nothrow @trusted @nogc {
+  public final ubyte memPeekB (ushort addr) nothrow @trusted {
     pragma(inline, true);
     return mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size];
   }
 
   /// set byte in memory, don't trigger any breakpoints or such, but respect ROM
-  public final void memPokeB (ushort addr, ubyte b) nothrow @trusted @nogc {
+  public final void memPokeB (ushort addr, ubyte b) nothrow @trusted {
     pragma(inline, true);
     if (!mem.ptr[addr/MemPage.Size].rom) mem.ptr[addr/MemPage.Size].mem[addr%MemPage.Size] = b;
   }
@@ -208,7 +208,7 @@ public:
    * Returns:
    *   'stop emulation' flag (return true to stop emulation loop immediately)
    */
-  bool trapED (ubyte trapCode) nothrow @trusted @nogc { return false; }
+  bool trapED (ubyte trapCode) nothrow @trusted { return false; }
 
   /**
    * This function will be called *AFTER* RETI command executed, iff changed and return address set.
@@ -219,7 +219,7 @@ public:
    * Returns:
    *   'stop emulation' flag (return true to stop emulation loop immediately)
    */
-  bool trapRETI (ubyte opcode) nothrow @trusted @nogc { return false; }
+  bool trapRETI (ubyte opcode) nothrow @trusted { return false; }
 
   /**
    * This function will be called *AFTER* RETN command executed, iff changed and return address set.
@@ -230,7 +230,7 @@ public:
    * Returns:
    *   'stop emulation' flag (return true to stop emulation loop immediately)
    */
-  bool trapRETN (ubyte opcode) nothrow @trusted @nogc { return false; }
+  bool trapRETN (ubyte opcode) nothrow @trusted { return false; }
 
 
   // ////////////////////////////////////////////////////////////////////// //
@@ -292,7 +292,7 @@ final:
    * Returns:
    *  number of tstates actually spent
    */
-  int exec (int tscount=-1) nothrow @trusted @nogc {
+  int exec (int tscount=-1) nothrow @trusted {
     static bool isRepeated (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
     static bool isBackward (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x08) != 0); }
     ubyte opcode;
@@ -319,7 +319,7 @@ final:
     }
 
     //FIXME: call enter/leave hooks here too?
-    ubyte fetchOpcodeExt () nothrow @trusted @nogc {
+    ubyte fetchOpcodeExt () nothrow @trusted {
       //pragma(inline, true);
       contention(PC, 4, true);
       //contention(((I<<8)|R), 2, false); // memory refresh
@@ -1255,7 +1255,7 @@ final:
    * Returns:
    *  popped word
    */
-  ushort pop () nothrow @trusted @nogc {
+  ushort pop () nothrow @trusted {
     ushort res = memPeekB(SP++);
     res |= memPeekB(SP++)<<8;
     return res;
@@ -1269,7 +1269,7 @@ final:
    * Returns:
    *  nothing
    */
-  void push (ushort value) nothrow @trusted @nogc {
+  void push (ushort value) nothrow @trusted {
     memPokeB(--SP, (value>>8)&0xff);
     memPokeB(--SP, value&0xff);
   }
@@ -1286,7 +1286,7 @@ final:
     ushort t = AF; AF = AFx; AFx = t;
   }
 
-protected nothrow @trusted @nogc:
+protected nothrow @trusted /*@nogc*/:
   /* ************************************************************************** */
   /* simulate contented memory access */
   /* (tstates = tstates+contention+atstates)*cnt */
@@ -1339,7 +1339,7 @@ protected nothrow @trusted @nogc:
     //       If A0 is low, the 1st T-state is also contended, 3rd and 4th are not.
     //       If A0 is high, all T-states are contended
     //   Reading the floating bus returns the second attribute byte of fetched pair (the last byte fetched), or 0xFF.
-    final void doPortOp(bool lateio) (ushort port, scope void delegate () nothrow @trusted @nogc doio) nothrow @trusted @nogc {
+    final void doPortOp(bool lateio) (ushort port, scope void delegate () nothrow @trusted doio) nothrow @trusted {
       bool ulaPort = ((port&0x01) == 0);
       if (mem.ptr[port/MemPage.Size].contended) {
         // the port looks like contended memory address
@@ -1520,7 +1520,7 @@ protected nothrow @trusted @nogc:
     AF.f =
       tblSZ53.ptr[newv&0xff]|
       (newv > 0xff ? Z80Flags.C : 0)|
-      ((o^(~b))&(o^newv)&0x80 ? Z80Flags.PV : 0)|
+      ((o^(~(b)))&(o^newv)&0x80 ? Z80Flags.PV : 0)|
       ((o&0x0f)+(b&0x0f)+(AF.f&Z80Flags.C) >= 0x10 ? Z80Flags.H : 0);
   }
 
@@ -1723,7 +1723,7 @@ protected nothrow @trusted @nogc:
       ((res>>8)&Z80Flags.S35)|
       (res == 0 ? Z80Flags.Z : 0)|
       (newv > 0xffff ? Z80Flags.C : 0)|
-      ((value^((~ddvalue)&0xffff))&(value^newv)&0x8000 ? Z80Flags.PV : 0)|
+      ((value^((~(ddvalue))&0xffff))&(value^newv)&0x8000 ? Z80Flags.PV : 0)|
       ((value&0x0fff)+(ddvalue&0x0fff)+c >= 0x1000 ? Z80Flags.H : 0);
     return res;
   }
@@ -1868,7 +1868,7 @@ public:
   }
 
   /// Get opcode information. Useful for debuggers.
-  final void opcodeInfo (ref ZOInfo nfo, ushort pc) nothrow @trusted @nogc {
+  final void opcodeInfo (ref ZOInfo nfo, ushort pc) nothrow @trusted {
     static bool isRepeated() (ushort opc) pure nothrow @safe @nogc { pragma(inline, true); return ((opc&0x10) != 0); }
 
     ushort orgpc = pc;
@@ -1877,8 +1877,8 @@ public:
     bool gotDD = false;
     nfo = nfo.init;
 
-    ubyte memReadPC () nothrow @trusted @nogc { immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
-    ushort readPCW () nothrow @trusted @nogc { ushort res = memReadPC; res |= memReadPC<<8; return res; }
+    ubyte memReadPC () nothrow @trusted { immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
+    ushort readPCW () nothrow @trusted { ushort res = memReadPC; res |= memReadPC<<8; return res; }
 
     ubyte opcode = memReadPC;
     if (opcode == 0xdd || opcode == 0xfd) {
@@ -2222,9 +2222,9 @@ public:
   }
 
   /// Disassemble command
-  final void disasm (ref ZDisop nfo, ushort pc) nothrow @trusted @nogc {
-    ubyte memReadPC () nothrow @trusted @nogc { /*pragma(inline, true);*/ immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
-    ushort memReadPCW () nothrow @trusted @nogc {
+  final void disasm (ref ZDisop nfo, ushort pc) nothrow @trusted {
+    ubyte memReadPC () nothrow @trusted { /*pragma(inline, true);*/ immutable ubyte b = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]; ++pc; return b; }
+    ushort memReadPCW () nothrow @trusted {
       ushort w = mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size];
       ++pc;
       w |= mem.ptr[pc/MemPage.Size].mem[pc%MemPage.Size]<<8;
@@ -2258,7 +2258,7 @@ public:
       dbstpos = dbpos;
     }
 
-    void putKeepCase (const(char)[] s...) nothrow @trusted @nogc {
+    void putKeepCase (const(char)[] s...) nothrow @trusted {
       assert(s.length <= 1024);
       if (dbpos+s.length > nfo.disbuf.length) s = s[0..nfo.disbuf.length-dbpos];
       if (s.length) {
@@ -2267,7 +2267,7 @@ public:
       }
     }
 
-    void put (const(char)[] s...) nothrow @trusted @nogc {
+    void put (const(char)[] s...) nothrow @trusted {
       assert(s.length <= 1024);
       if (dbpos+s.length > nfo.disbuf.length) s = s[0..nfo.disbuf.length-dbpos];
       foreach (char ch; s) {
@@ -2280,24 +2280,24 @@ public:
       }
     }
 
-    void putMnemo (string s) nothrow @trusted @nogc {
+    void putMnemo (string s) nothrow @trusted {
       put(s);
       endMnemo();
     }
 
-    void putArg (string s) nothrow @trusted @nogc {
+    void putArg (string s) nothrow @trusted {
       put(s);
       endArg();
     }
 
-    void putUIntDec (uint n) nothrow @trusted @nogc {
+    void putUIntDec (uint n) nothrow @trusted {
       char[16] buf = void;
       uint bpos = cast(uint)buf.length;
       do { buf.ptr[--bpos] = cast(char)('0'+n%10); } while ((n /= 10) != 0);
       put(buf[bpos..$]);
     }
 
-    void putUIntHex (uint n, int len) nothrow @trusted @nogc {
+    void putUIntHex (uint n, int len) nothrow @trusted {
       char[16] buf = void;
       uint bpos = cast(uint)buf.length;
       do { buf.ptr[--bpos] = cast(char)('0'+n%16+(n%16 > 9 ? 7 : 0)); } while ((n /= 16) != 0);
@@ -2306,11 +2306,11 @@ public:
       put(buf[bpos..$]);
     }
 
-    void putUInt (uint n, int len) nothrow @trusted @nogc {
+    void putUInt (uint n, int len) nothrow @trusted {
       if (nfo.decimal) putUIntDec(n); else putUIntHex(n, len);
     }
 
-    void putDisp (int n) nothrow @trusted @nogc {
+    void putDisp (int n) nothrow @trusted {
       if (n < 0) {
         put("-");
         putUIntDec(-n);
