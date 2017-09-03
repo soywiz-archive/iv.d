@@ -3579,11 +3579,12 @@ public nothrow @safe @nogc:
     return (idx == 0 ? min : max);
   }
 
-  /// sweep two AABB's to see if and when they first and last were overlapping
+  /// sweep two AABB's to see if and when they are overlapping
+  /// returns `true` if collision was detected (or boxes overlaps)
   /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
   /// u1 = normalized time of second collision (i.e. collision stops after myMove*u1)
   /// hitnormal = normal that will move `this` apart of `b` edge it collided with
-  /// no output values are valid if no collision detected
+  /// no output values are valid if no collision was detected
   /// WARNING! hit normal calculation is not tested!
   bool sweep() (in auto ref VT myMove, in auto ref Me b, Float* u0, VT* hitnormal=null, Float* u1=null) const @trusted {
     // check if they are overlapping right now
