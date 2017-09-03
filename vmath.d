@@ -3581,7 +3581,7 @@ public nothrow @safe @nogc:
 
   /// sweep two AABB's to see if and when they first and last were overlapping
   /// u0 = normalized time of first collision (i.e. collision starts at myMove*u0)
-  /// u1 = normalized time of second collision (i.e. collision stops after myMove*u0)
+  /// u1 = normalized time of second collision (i.e. collision stops after myMove*u1)
   /// hitnormal = normal that will move `this` apart of `b` edge it collided with
   /// no output values are valid if no collision detected
   /// WARNING! hit normal calculation is not tested!
