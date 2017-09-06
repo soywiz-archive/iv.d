@@ -1549,6 +1549,47 @@ final:
     return true;
   }
 
+
+  public static struct FindResult {
+    int line, col;
+  }
+
+  // find all occurences of regexp, line by line (i.e. only first hit in line will be used)
+  // returns "unsafe array" that cannot be modified
+  final FindResult[] findAllRegExp (const(char)[] restr, bool* error=null) {
+    FindResult[] res;
+
+    void addFindRect (int line, int col) {
+      if (res.length > 0 && res.ptr[0].line == line) return; // skip duplicate lines
+      auto optr = res.ptr;
+      res ~= FindResult(line, col);
+      if (res.ptr !is optr) {
+        import core.memory : GC;
+        if (res.ptr is GC.addrOf(res.ptr)) GC.setAttr(res.ptr, GC.BlkAttr.NO_INTERIOR);
+      }
+    }
+
+    auto re = RegExp.create(restr, SRFlags.Multiline);
+    if (!re.valid) { if (error !is null) *error = true; return null; } // alas
+    if (error !is null) *error = false;
+
+    Pike.Capture[2] caps;
+    int spos = 0;
+    while (spos < textsize) {
+      if (findTextRegExp(re, spos, textsize, caps[])) {
+        int cx, cy;
+        lc.pos2xy(caps.ptr[0].s, cx, cy);
+        addFindRect(cy, cx);
+        spos = caps[0].e;
+      } else {
+        break;
+      }
+    }
+
+    return res;
+  }
+
+
   // epos is not included
   // caps are fixed so it can be used to index gap buffer
   final bool findTextRegExpBack (RegExp re, int spos, int epos, Pike.Capture[] caps) {
