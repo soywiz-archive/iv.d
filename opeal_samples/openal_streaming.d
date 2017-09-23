@@ -3,6 +3,8 @@
 // WTFPL
 module openal_streaming;
 
+import std.getopt;
+
 import iv.audiostream;
 import iv.openal;
 import iv.vfs.io;
@@ -118,9 +120,16 @@ void main (string[] args) {
 
   ALuint testSource;
   ALfloat maxGain;
+  ALfloat listenerGain = 1.0f;
 
   ALCdevice* dev;
   ALCcontext* ctx;
+
+  auto gof = getopt(args,
+    std.getopt.config.caseSensitive,
+    std.getopt.config.bundling,
+    "gain|g", &listenerGain,
+  );
 
   if (args.length <= 1) throw new Exception("filename?!");
 
@@ -165,15 +174,25 @@ void main (string[] args) {
   writeln("setting OpenAL listener...");
   // set position and gain for the listener
   alListener3f(AL_POSITION, 0.0f, 0.0f, 0.0f);
-  alListenerf(AL_GAIN, 1.0f);
+  //alListenerf(AL_GAIN, 1.0f);
+  // as listener gain is applied after source gain, and it not limited to 1.0, it is possible to do the following
+  writeln("listener gain: ", listenerGain);
+  alListenerf(AL_GAIN, listenerGain);
 
   // ...and set source properties
   writeln("setting OpenAL source properties...");
   alSource3f(testSource, AL_POSITION, 0.0f, 0.0f, 0.0f);
 
-  alGetSourcef(testSource, AL_MAX_GAIN, &maxGain);
-  writeln("max gain: ", maxGain);
+  //alGetSourcef(testSource, AL_MAX_GAIN, &maxGain);
+  //writeln("max gain: ", maxGain);
   alSourcef(testSource, AL_GAIN, 1.0f);
+  // MAX_GAIN is *user* limit, not library/hw; so you can do the following
+  // but somehow it doesn't work right on my system (or i misunderstood it's use case)
+  // it seems to slowly fall back to 1.0, and distort both volume and (sometimes) pitch
+  version(none) {
+    alSourcef(testSource, AL_MAX_GAIN, 2.0f);
+    alSourcef(testSource, AL_GAIN, 2.0f);
+  }
 
   writeln("streaming...");
   streamAudioFile(testSource, args[1]);
