@@ -135,9 +135,19 @@ void main (string[] args) {
 
   writeln("OpenAL device extensions: ", alcGetString(null, ALC_EXTENSIONS).fromStringz);
 
-  version(all) {
-    auto devlist = alcGetString(null, ALC_ALL_DEVICES_SPECIFIER);
+  if (alcIsExtensionPresent(null, "ALC_ENUMERATE_ALL_EXT")) {
+    auto hwdevlist = alcGetString(null, ALC_ALL_DEVICES_SPECIFIER);
     writeln("OpenAL hw devices:");
+    while (*hwdevlist) {
+      writeln("  ", hwdevlist.fromStringz);
+      while (*hwdevlist) ++hwdevlist;
+      ++hwdevlist;
+    }
+  }
+
+  if (alcIsExtensionPresent(null, "ALC_ENUMERATION_EXT")) {
+    auto devlist = alcGetString(null, ALC_DEVICE_SPECIFIER);
+    writeln("OpenAL renderers:");
     while (*devlist) {
       writeln("  ", devlist.fromStringz);
       while (*devlist) ++devlist;
@@ -145,22 +155,28 @@ void main (string[] args) {
     }
   }
 
+  writeln("OpenAL default renderer: ", alcGetString(null, ALC_DEFAULT_DEVICE_SPECIFIER).fromStringz);
+
   // open the default device
   dev = alcOpenDevice(null);
   if (dev is null) throw new Exception("couldn't open OpenAL device");
   scope(exit) alcCloseDevice(dev);
 
-  writeln("OpenAL default renderer: ", alcGetString(dev, ALC_DEFAULT_DEVICE_SPECIFIER).fromStringz);
   writeln("OpenAL renderer: ", alcGetString(dev, ALC_DEVICE_SPECIFIER).fromStringz);
   writeln("OpenAL hw device: ", alcGetString(dev, ALC_ALL_DEVICES_SPECIFIER).fromStringz);
 
   // we want an OpenAL context
   ctx = alcCreateContext(dev, null);
   if (ctx is null) throw new Exception("couldn't create OpenAL context");
-  scope(exit) { /*alcSetThreadContext(null);*/ alcMakeContextCurrent(null); alcDestroyContext(ctx); }
+  scope(exit) {
+    // just to show you how it's done
+    if (alcIsExtensionPresent(null, "ALC_EXT_thread_local_context")) alcSetThreadContext(null); else alcMakeContextCurrent(null);
+    alcDestroyContext(ctx);
+  }
 
-  alcMakeContextCurrent(ctx);
-  //alcSetThreadContext(ctx); //k8: doesn't work without this on my box (why?) -- this prolly was faulty OpenAL build
+  // just to show you how it's done; see https://github.com/openalext/openalext/blob/master/ALC_EXT_thread_local_context.txt
+  if (alcIsExtensionPresent(null, "ALC_EXT_thread_local_context")) alcSetThreadContext(ctx); else alcMakeContextCurrent(ctx);
+  //alcMakeContextCurrent(ctx);
 
   writeln("OpenAL vendor: ", alGetString(AL_VENDOR).fromStringz);
   writeln("OpenAL version: ", alGetString(AL_VERSION).fromStringz);
