@@ -659,7 +659,7 @@ public bool kgiInit (int awdt, int ahgt, string title, bool a2x, uint afps) { re
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private uint glgfxCompileShader (const(char)[] src) nothrow @trusted @nogc {
+private uint glgfxCompileShader (const(char)[] src) nothrow @trusted {
   import iv.glbinds;
 
   if (shaderVersionOk < 0) {
@@ -674,7 +674,7 @@ private uint glgfxCompileShader (const(char)[] src) nothrow @trusted @nogc {
         auto v = glGetStringi(GL_SHADING_LANGUAGE_VERSION, n);
         if (v is null) continue;
         //if (strncmp(v, "130", 3) != 0) continue;
-        if (strncmp(v, "150", 3) != 0) continue;
+        if (strncmp(cast(char*)v, "150".ptr, 3) != 0) continue;
         if (v[3] > ' ') continue;
         found = true;
         break;
@@ -694,7 +694,7 @@ private uint glgfxCompileShader (const(char)[] src) nothrow @trusted @nogc {
 }
 
 
-private void glgfxInitTexture () nothrow @trusted @nogc {
+private void glgfxInitTexture () nothrow @trusted {
   import iv.glbinds;
 
   //if (vbTexId) { glDeleteTextures(1, &vbTexId); vbTexId = 0; }
@@ -744,7 +744,7 @@ private void glgfxInitTexture () nothrow @trusted @nogc {
 }
 
 
-private void glgfxUpdateTexture () nothrow @trusted @nogc {
+private void glgfxUpdateTexture () nothrow @trusted {
   import iv.glbinds;
 
   consoleLock();
@@ -777,7 +777,7 @@ private void glgfxUpdateTexture () nothrow @trusted @nogc {
 }
 
 
-private void glgfxUpdateCurTexture () nothrow @trusted @nogc {
+private void glgfxUpdateCurTexture () nothrow @trusted {
   import iv.glbinds;
 
   if (atomicLoad(updateCurTexture)) {
@@ -798,7 +798,7 @@ private void glgfxUpdateCurTexture () nothrow @trusted @nogc {
 }
 
 
-private void glgfxBlit () nothrow @trusted @nogc {
+private void glgfxBlit () nothrow @trusted {
   import iv.glbinds;
 
   consoleLock();
@@ -988,7 +988,7 @@ mixin(genRGBGetSet!"Blue");
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-nothrow @trusted @nogc:
+nothrow @trusted @nogc {
 
 private void putPixelIntrNoCheck (in int xx, in int yy, in VColor col) {
   pragma(inline, true);
@@ -1685,6 +1685,7 @@ void floodFillEx (int x, int y, scope bool delegate (int x, int y) nothrow @nogc
     }
   }
 }
+} // @nogc
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -2125,7 +2126,7 @@ const(char)[] sdrGetPart(string typepfx) (const(char)[] s) nothrow @trusted @nog
 // set var: glUniformXXX()
 
 // returns 0 or programid
-uint compileShaders (const(char)[] src) nothrow @trusted @nogc {
+uint compileShaders (const(char)[] src) nothrow @trusted {
   import iv.glbinds;
 
   GLuint prg = 0;
@@ -2176,7 +2177,7 @@ uint compileShaders (const(char)[] src) nothrow @trusted @nogc {
 
 
 // returns 0 or shaderid
-uint createShader(uint type) (const(char)[] src) nothrow @trusted @nogc {
+uint createShader(uint type) (const(char)[] src) nothrow @trusted {
   import iv.glbinds;
 
   auto shaderId = glCreateShader(type);
