@@ -28,8 +28,8 @@ public import iv.libjit;
 public class JitException : Exception {
   //private import std.exception : basicExceptionCtors;
   //mixin basicExceptionCtors;
-  this (int aresult, string file = __FILE__, usize line = __LINE__, Throwable next = null) @nogc @safe pure nothrow { result = aresult; super("libjit error", file, line, next); }
-  this (int aresult, Throwable next, string file = __FILE__, usize line = __LINE__) @nogc @safe pure nothrow { result = aresult; super("libjit error", file, line, next); }
+  this (int aresult, string file = __FILE__, usize line = __LINE__, Throwable next = null) pure nothrow @safe @nogc { result = aresult; super("libjit error", file, line, next); }
+  this (int aresult, Throwable next, string file = __FILE__, usize line = __LINE__) pure nothrow @safe @nogc { result = aresult; super("libjit error", file, line, next); }
 
   int result;
 
@@ -446,6 +446,12 @@ final:
     if (!jit_insn_label(func, label.rawp)) out_of_memory();
   }
 
+  void insn_label_tight (JitLabel label) {
+    assert(this.valid);
+    assert(label.valid);
+    if (!jit_insn_label_tight(func, label.rawp)) out_of_memory();
+  }
+
   void insn_new_block () {
     assert(this.valid);
     if (!jit_insn_new_block(func)) out_of_memory();
@@ -514,7 +520,6 @@ final:
 
   mixin(UnInsnMixin!"load");
   mixin(UnInsnMixin!"dup");
-  mixin(UnInsnMixin!"load_small");
 
   mixin(UnInsnMixin!"neg");
   mixin(UnInsnMixin!"not");

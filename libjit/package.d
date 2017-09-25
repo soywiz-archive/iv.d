@@ -477,10 +477,10 @@ jit_type_t jit_insn_get_signature (jit_insn_t insn) nothrow @nogc;
 int jit_insn_dest_is_value (jit_insn_t insn) nothrow @nogc;
 
 int jit_insn_label (jit_function_t func, jit_label_t* label) nothrow @nogc;
+int jit_insn_label_tight (jit_function_t func, jit_label_t* label) nothrow @nogc;
 int jit_insn_new_block (jit_function_t func) nothrow @nogc;
 jit_value_t jit_insn_load (jit_function_t func, jit_value_t value) nothrow @nogc;
 jit_value_t jit_insn_dup (jit_function_t func, jit_value_t value) nothrow @nogc;
-jit_value_t jit_insn_load_small (jit_function_t func, jit_value_t value) nothrow @nogc;
 int jit_insn_store (jit_function_t func, jit_value_t dest, jit_value_t value) nothrow @nogc;
 jit_value_t jit_insn_load_relative (jit_function_t func, jit_value_t value, jit_nint offset, jit_type_t type) nothrow @nogc;
 int jit_insn_store_relative (jit_function_t func, jit_value_t dest, jit_nint offset, jit_value_t value) nothrow @nogc;
