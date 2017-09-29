@@ -1,7 +1,7 @@
 // sample OpenAL streaming player
 // based on the code by David Gow <david@ingeniumdigital.com>
 // WTFPL
-module openal_streaming;
+module openal_streaming is aliced;
 
 import std.getopt;
 
@@ -13,7 +13,22 @@ import iv.vfs.io;
 enum BufferSizeBytes = 960*2*2;
 
 struct PlayTime {
+  string warning;
+  ulong warnStartFrm;
+  uint warnDurMsecs;
   ulong framesDone;
+
+  bool warnWasPainted;
+  bool newWarning;
+
+  void warn (string w, uint durms=1500) {
+    if (w.length > 0) {
+      warning = w;
+      warnStartFrm = framesDone;
+      warnDurMsecs = durms;
+      newWarning = true;
+    }
+  }
 }
 
 
@@ -35,19 +50,24 @@ int fillBuffer (ref AudioStream ass, ALuint buffer) {
   while (samplesRead < BufferSizeBytes) {
     int ns = ass.readFrames(buf.ptr+samplesRead, (BufferSizeBytes-samplesRead)/numChannels);
     if (ns < 0) { stderr.writeln("ERROR reading audio file!"); return -1; }
-    if (ns == 0) { writeln("done reading audio data."); break; }
+    if (ns == 0) break;
     samplesRead += ns*numChannels;
   }
 
   if (samplesRead > 0) {
-    ALenum format, chantype;
+    ALenum format;
     // try to use OpenAL Soft extension first
     static if (AL_SOFT_buffer_samples) {
+      ALenum chantype;
       static bssChecked = -1;
       if (bssChecked < 0) {
-        if (alGetProcAddress("alIsBufferFormatSupportedSOFT") !is null &&
-            alGetProcAddress("alBufferSamplesSOFT") !is null) bssChecked = 1; else bssChecked = 0;
-        //writeln("bssChecked=", bssChecked);
+        if (alIsExtensionPresent("AL_SOFT_buffer_samples")) {
+          if (alGetProcAddress("alIsBufferFormatSupportedSOFT") !is null &&
+              alGetProcAddress("alBufferSamplesSOFT") !is null) bssChecked = 1; else bssChecked = 0;
+          //writeln("bssChecked=", bssChecked);
+        } else {
+          bssChecked = 0;
+        }
         if (!bssChecked) writeln("OpenAL: no 'AL_SOFT_buffer_samples'");
       }
       if (bssChecked > 0) {
@@ -103,7 +123,7 @@ bool updateStream (ref AudioStream ass, ALuint source, ref PlayTime ptime) {
     ALenum sourceState;
     alGetSourcei(source, AL_SOURCE_STATE, &sourceState);
     if (sourceState != AL_PLAYING) {
-      stderr.writeln("Source not playing!");
+      ptime.warn("Source not playing!", 600);
       alSourcePlay(source);
     }
   }
@@ -141,11 +161,36 @@ void streamAudioFile (ALuint source, string filename) {
       alGetSourcedSOFT(source, AL_SEC_LENGTH_SOFT, &blen);
       writeln("slen: ", blen);
     }
+
+    // process warnings
+    if (ptime.newWarning && ptime.warning.length == 0) ptime.newWarning = false;
+
+    if (ptime.newWarning) {
+      import std.string : toStringz;
+      import core.stdc.stdio : stdout, fprintf;
+      if (ptime.warnWasPainted) stdout.fprintf("\e[A");
+      stdout.fprintf("\r%s\e[K\n", ptime.warning.toStringz);
+      ptime.warnWasPainted = true;
+      ptime.newWarning = false;
+      nextProgressTime = 0; // redraw time
+    }
+
     uint time = cast(uint)(ptime.framesDone*1000/ass.rate);
     uint total = cast(uint)(ass.framesTotal*1000/ass.rate);
+
+    if (ptime.warning.length > 0 && ptime.warnWasPainted) {
+      import core.stdc.stdio : stdout, fprintf;
+      uint etime = cast(uint)(ptime.warnStartFrm*1000/ass.rate)+ptime.warnDurMsecs;
+      if (etime <= time) {
+        stdout.fprintf("\e\r[A\e[K\n");
+        ptime.warning = null;
+        nextProgressTime = 0; // redraw time
+      }
+    }
+
     if (time >= nextProgressTime) {
       import core.stdc.stdio : stdout, fprintf, fflush;
-      stdout.fprintf("\r%2u:%02u / %u:%02u", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000);
+      stdout.fprintf("\r%2u:%02u / %u:%02u\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000);
       stdout.fflush();
       nextProgressTime = time+500;
     }
@@ -156,6 +201,7 @@ void streamAudioFile (ALuint source, string filename) {
     showTime();
     import core.stdc.stdio : stdout, fprintf, fflush;
     stdout.fprintf("\n");
+    stdout.fflush();
   }
 
 
@@ -214,8 +260,8 @@ void main (string[] args) {
   import std.string : fromStringz;
 
   ALuint testSource;
-  ALfloat maxGain;
   ALfloat listenerGain = 1.0f;
+  bool limiting = true;
 
   ALCdevice* dev;
   ALCcontext* ctx;
@@ -224,6 +270,7 @@ void main (string[] args) {
     std.getopt.config.caseSensitive,
     std.getopt.config.bundling,
     "gain|g", &listenerGain,
+    "limit|l", &limiting,
   );
 
   if (args.length <= 1) throw new Exception("filename?!");
@@ -269,6 +316,14 @@ void main (string[] args) {
     alcDestroyContext(ctx);
   }
 
+  if (!limiting && alcGetProcAddress(dev, "alcResetDeviceSOFT") !is null) {
+    immutable ALCint[$] attrs = [
+      ALC_OUTPUT_LIMITER_SOFT, ALC_FALSE,
+      0,
+    ];
+    if (!alcResetDeviceSOFT(dev, attrs.ptr)) stderr.writeln("WARNING: can't turn off OpenAL limiter");
+  }
+
   // just to show you how it's done; see https://github.com/openalext/openalext/blob/master/ALC_EXT_thread_local_context.txt
   if (alcIsExtensionPresent(null, "ALC_EXT_thread_local_context")) alcSetThreadContext(ctx); else alcMakeContextCurrent(ctx);
   //alcMakeContextCurrent(ctx);
@@ -290,6 +345,7 @@ void main (string[] args) {
     if (alIsExtensionPresent("AL_SOFT_direct_channels")) {
       writeln("OpenAL: direct channels extension detected");
       alSourcei(testSource, AL_DIRECT_CHANNELS_SOFT, AL_TRUE);
+      if (alGetError() != AL_NO_ERROR) stderr.writeln("WARNING: can't turn on direct channels");
     }
   }
 
@@ -305,8 +361,17 @@ void main (string[] args) {
   writeln("setting OpenAL source properties...");
   alSource3f(testSource, AL_POSITION, 0.0f, 0.0f, 0.0f);
 
-  //alGetSourcef(testSource, AL_MAX_GAIN, &maxGain);
-  //writeln("max gain: ", maxGain);
+  {
+    //ALfloat maxGain;
+    //alGetSourcef(testSource, AL_MAX_GAIN, &maxGain);
+    //writeln("max gain: ", maxGain);
+  }
+  if (alIsExtensionPresent("AL_SOFT_gain_clamp_ex")) {
+    ALfloat gainLimit = 0.0f;
+    alGetFloatv(AL_GAIN_LIMIT_SOFT, &gainLimit);
+    writeln("gain limit: ", gainLimit);
+  }
+
   alSourcef(testSource, AL_GAIN, 1.0f);
   // MAX_GAIN is *user* limit, not library/hw; so you can do the following
   // but somehow it doesn't work right on my system (or i misunderstood it's use case)
