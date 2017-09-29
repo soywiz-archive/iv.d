@@ -113,6 +113,7 @@ void streamAudioFile (ALuint source, string filename) {
   scope(exit) ass.close();
 
   uint nextProgressTime = 0;
+  enum sleepTimeNS = 1000*1000*960/48000/10;
 
   void showTime () {
     /*
@@ -124,6 +125,11 @@ void streamAudioFile (ALuint source, string filename) {
       writeln("sample: ", smpvals[0]>>32, "; latency (ns): ", smpvals[1], "; seconds=", timevals[0], "; latency (msecs)=", timevals[1]*1000);
     }
     */
+    version(none) {
+      ALdouble blen;
+      alGetSourcedSOFT(source, AL_SEC_LENGTH_SOFT, &blen);
+      writeln("slen: ", blen);
+    }
     uint time = cast(uint)(ptime.framesDone*1000/ass.rate);
     uint total = cast(uint)(ass.framesTotal*1000/ass.rate);
     if (time >= nextProgressTime) {
@@ -170,7 +176,7 @@ void streamAudioFile (ALuint source, string filename) {
     // it's important not to sleep for too long, though
     // sleep() and friends give a _minimum_ time to be kept asleep
     import core.sys.posix.unistd : usleep;
-    usleep(1000*1000*960/48000/10);
+    usleep(sleepTimeNS);
     showTime();
   }
   // actually, "waiting" should go into time display too
