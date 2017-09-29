@@ -43,16 +43,25 @@ int fillBuffer (ref AudioStream ass, ALuint buffer) {
     ALenum format, chantype;
     // try to use OpenAL Soft extension first
     static if (AL_SOFT_buffer_samples) {
-      static bool warningDisplayed = false;
-      final switch (numChannels) {
-        case 1: format = AL_MONO16_SOFT; chantype = AL_MONO_SOFT; break;
-        case 2: format = AL_STEREO16_SOFT; chantype = AL_STEREO_SOFT; break;
+      static bssChecked = -1;
+      if (bssChecked < 0) {
+        if (alGetProcAddress("alIsBufferFormatSupportedSOFT") !is null &&
+            alGetProcAddress("alBufferSamplesSOFT") !is null) bssChecked = 1; else bssChecked = 0;
+        //writeln("bssChecked=", bssChecked);
+        if (!bssChecked) writeln("OpenAL: no 'AL_SOFT_buffer_samples'");
       }
-      if (alIsBufferFormatSupportedSOFT(format)) {
-        alBufferSamplesSOFT(buffer, ass.rate, format, samplesRead/numChannels, chantype, AL_SHORT_SOFT, buf.ptr);
-        return true;
+      if (bssChecked > 0) {
+        static bool warningDisplayed = false;
+        final switch (numChannels) {
+          case 1: format = AL_MONO16_SOFT; chantype = AL_MONO_SOFT; break;
+          case 2: format = AL_STEREO16_SOFT; chantype = AL_STEREO_SOFT; break;
+        }
+        if (alIsBufferFormatSupportedSOFT(format)) {
+          alBufferSamplesSOFT(buffer, ass.rate, format, samplesRead/numChannels, chantype, AL_SHORT_SOFT, buf.ptr);
+          return true;
+        }
+        if (!warningDisplayed) { warningDisplayed = true; stderr.writeln("fallback!"); }
       }
-      if (!warningDisplayed) { warningDisplayed = true; stderr.writeln("fallback!"); }
     }
     // use normal OpenAL method
     final switch (numChannels) {
@@ -118,11 +127,13 @@ void streamAudioFile (ALuint source, string filename) {
   void showTime () {
     /*
     static if (AL_SOFT_source_latency) {
-      ALint64SOFT[2] smpvals;
-      ALdouble[2] timevals;
-      alGetSourcei64vSOFT(source, AL_SAMPLE_OFFSET_LATENCY_SOFT, smpvals.ptr);
-      alGetSourcedvSOFT(source, AL_SEC_OFFSET_LATENCY_SOFT, timevals.ptr);
-      writeln("sample: ", smpvals[0]>>32, "; latency (ns): ", smpvals[1], "; seconds=", timevals[0], "; latency (msecs)=", timevals[1]*1000);
+      if (alIsExtensionPresent("AL_SOFT_source_latency")) {
+        ALint64SOFT[2] smpvals;
+        ALdouble[2] timevals;
+        alGetSourcei64vSOFT(source, AL_SAMPLE_OFFSET_LATENCY_SOFT, smpvals.ptr);
+        alGetSourcedvSOFT(source, AL_SEC_OFFSET_LATENCY_SOFT, timevals.ptr);
+        writeln("sample: ", smpvals[0]>>32, "; latency (ns): ", smpvals[1], "; seconds=", timevals[0], "; latency (msecs)=", timevals[1]*1000);
+      }
     }
     */
     version(none) {
@@ -275,7 +286,12 @@ void main (string[] args) {
   // thus directly mapping stereo sound to the corresponding channels;
   // but this works only for stereo samples, and we'd better do that
   // after checking number of channels in input stream
-  static if (AL_SOFT_direct_channels) alSourcei(testSource, AL_DIRECT_CHANNELS_SOFT, AL_TRUE);
+  static if (AL_SOFT_direct_channels) {
+    if (alIsExtensionPresent("AL_SOFT_direct_channels")) {
+      writeln("OpenAL: direct channels extension detected");
+      alSourcei(testSource, AL_DIRECT_CHANNELS_SOFT, AL_TRUE);
+    }
+  }
 
   writeln("setting OpenAL listener...");
   // set position and gain for the listener
@@ -299,6 +315,8 @@ void main (string[] args) {
     alSourcef(testSource, AL_MAX_GAIN, 2.0f);
     alSourcef(testSource, AL_GAIN, 2.0f);
   }
+
+  if (alGetError() != AL_NO_ERROR) throw new Exception("error initializing OpenAL");
 
   writeln("streaming...");
   streamAudioFile(testSource, args[1]);
