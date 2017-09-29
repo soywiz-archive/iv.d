@@ -10,59 +10,93 @@ import iv.openal;
 import iv.vfs.io;
 
 
-bool fillBuffer (ref AudioStream ass, ALuint buffer) {
+enum BufferSizeBytes = 960*2*2;
+
+struct PlayTime {
+  ulong framesDone;
+}
+
+
+// returns number of *samples* (not frames!) queued, -1 on error, 0 on EOF
+int fillBuffer (ref AudioStream ass, ALuint buffer) {
   // let's have a buffer that is two opus frames long (and two channels)
-  enum bufferSize = 960*2*2;
-  short[bufferSize] buf = void; // no need to initialize it
+  short[BufferSizeBytes] buf = void; // no need to initialize it
 
   immutable int numChannels = ass.channels;
 
-  // we only support stereo and mono, set the openAL format based on channels
-  // opus always uses signed 16-bit integers, unless the _float functions are called
-  ALenum format;
-  switch (numChannels) {
-    case 1: format = AL_FORMAT_MONO16; break;
-    case 2: format = AL_FORMAT_STEREO16; break;
-    default:
-      stderr.writeln("File contained more channels than we support (", numChannels, ").");
-      return false;
+  // we only support stereo and mono
+  if (numChannels < 1 || numChannels > 2) {
+    stderr.writeln("File contained more channels than we support (", numChannels, ").");
+    return -1;
   }
 
   int samplesRead = 0;
   // keep reading samples until we have them all
-  while (samplesRead < bufferSize) {
-    int ns = ass.readFrames(buf.ptr+samplesRead, (bufferSize-samplesRead)/numChannels);
-    if (ns < 0) { stderr.writeln("ERROR reading audio file!"); return false; }
-    if (ns == 0) break;
+  while (samplesRead < BufferSizeBytes) {
+    int ns = ass.readFrames(buf.ptr+samplesRead, (BufferSizeBytes-samplesRead)/numChannels);
+    if (ns < 0) { stderr.writeln("ERROR reading audio file!"); return -1; }
+    if (ns == 0) { writeln("done reading audio data."); break; }
     samplesRead += ns*numChannels;
   }
 
-  alBufferData(buffer, format, buf.ptr, samplesRead*2, ass.rate);
+  if (samplesRead > 0) {
+    ALenum format, chantype;
+    // try to use OpenAL Soft extension first
+    static if (AL_SOFT_buffer_samples) {
+      static bool warningDisplayed = false;
+      final switch (numChannels) {
+        case 1: format = AL_MONO16_SOFT; chantype = AL_MONO_SOFT; break;
+        case 2: format = AL_STEREO16_SOFT; chantype = AL_STEREO_SOFT; break;
+      }
+      if (alIsBufferFormatSupportedSOFT(format)) {
+        alBufferSamplesSOFT(buffer, ass.rate, format, samplesRead/numChannels, chantype, AL_SHORT_SOFT, buf.ptr);
+        return true;
+      }
+      if (!warningDisplayed) { warningDisplayed = true; stderr.writeln("fallback!"); }
+    }
+    // use normal OpenAL method
+    final switch (numChannels) {
+      case 1: format = AL_FORMAT_MONO16; break;
+      case 2: format = AL_FORMAT_STEREO16; break;
+    }
+    alBufferData(buffer, format, buf.ptr, samplesRead*2, ass.rate);
+  }
 
-  return true;
+  return samplesRead;
 }
 
 
-bool updateStream (ref AudioStream ass, ALuint source) {
+bool updateStream (ref AudioStream ass, ALuint source, ref PlayTime ptime) {
+  bool someBufsAdded = false;
   ALuint currentbuffer;
 
   // how many buffers do we need to fill?
   int numProcessedBuffers = 0;
   alGetSourcei(source, AL_BUFFERS_PROCESSED, &numProcessedBuffers);
 
-  // source can stop playing on buffer underflow
-  ALenum sourceState;
-  alGetSourcei(source, AL_SOURCE_STATE, &sourceState);
-  if (sourceState != AL_PLAYING) {
-    writeln("Source not playing!");
-    alSourcePlay(source);
+  if (numProcessedBuffers > 0) {
+    // unqueue a finished buffer, fill it with new data, and re-add it to the end of the queue
+    while (numProcessedBuffers--) {
+      alSourceUnqueueBuffers(source, 1, &currentbuffer);
+      // add number of played samples to playtime
+      ALint bufsz;
+      alGetBufferi(currentbuffer, AL_SIZE, &bufsz);
+      ptime.framesDone += bufsz/2/ass.channels;
+      //writeln("buffer size: ", bufsz);
+      if (ass.fillBuffer(currentbuffer) <= 0) return false;
+      someBufsAdded = true;
+      alSourceQueueBuffers(source, 1, &currentbuffer);
+    }
   }
 
-  // unqueue a finished buffer, fill it with new data, and re-add it to the end of the queue
-  while (numProcessedBuffers--) {
-    alSourceUnqueueBuffers(source, 1, &currentbuffer);
-    if (!ass.fillBuffer(currentbuffer)) return false;
-    alSourceQueueBuffers(source, 1, &currentbuffer);
+  // source can stop playing on buffer underflow
+  if (someBufsAdded) {
+    ALenum sourceState;
+    alGetSourcei(source, AL_SOURCE_STATE, &sourceState);
+    if (sourceState != AL_PLAYING) {
+      stderr.writeln("Source not playing!");
+      alSourcePlay(source);
+    }
   }
 
   return true;
@@ -71,17 +105,49 @@ bool updateStream (ref AudioStream ass, ALuint source) {
 
 // load an ogg opus file into the given AL buffer
 void streamAudioFile (ALuint source, string filename) {
+  PlayTime ptime;
+
   // open the file
   writeln("opening '", filename, "'...");
   auto ass = AudioStream.detect(VFile(filename));
   scope(exit) ass.close();
+
+  uint nextProgressTime = 0;
+
+  void showTime () {
+    /*
+    static if (AL_SOFT_source_latency) {
+      ALint64SOFT[2] smpvals;
+      ALdouble[2] timevals;
+      alGetSourcei64vSOFT(source, AL_SAMPLE_OFFSET_LATENCY_SOFT, smpvals.ptr);
+      alGetSourcedvSOFT(source, AL_SEC_OFFSET_LATENCY_SOFT, timevals.ptr);
+      writeln("sample: ", smpvals[0]>>32, "; latency (ns): ", smpvals[1], "; seconds=", timevals[0], "; latency (msecs)=", timevals[1]*1000);
+    }
+    */
+    uint time = cast(uint)(ptime.framesDone*1000/ass.rate);
+    uint total = cast(uint)(ass.framesTotal*1000/ass.rate);
+    if (time >= nextProgressTime) {
+      import core.stdc.stdio : stdout, fprintf, fflush;
+      stdout.fprintf("\r%2u:%02u / %u:%02u", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000);
+      stdout.fflush();
+      nextProgressTime = time+500;
+    }
+  }
+
+  void doneTime () {
+    nextProgressTime = 0;
+    showTime();
+    import core.stdc.stdio : stdout, fprintf, fflush;
+    stdout.fprintf("\n");
+  }
+
 
   // get the number of channels in the current link
   int numChannels = ass.channels;
   // get the number of samples (per channel) in the current link
   long pcmSize = ass.framesTotal;
 
-  writeln(filename, ": ", numChannels, " channels, ", pcmSize, " samples (", ass.timeTotal/1000, " seconds)");
+  writeln(filename, ": ", numChannels, " channels, ", pcmSize, " frames (", ass.timeTotal/1000, " seconds)");
 
   // the number of buffers we'll be rotating through
   // ideally, all bar one will be full
@@ -91,19 +157,31 @@ void streamAudioFile (ALuint source, string filename) {
 
   alGenBuffers(numBuffers, buffers.ptr);
 
-  foreach (ref buf; buffers) ass.fillBuffer(buf); // check for errors here too
+  foreach (ref buf; buffers) ass.fillBuffer(buf); //TODO: check for errors here too
 
   alSourceQueueBuffers(source, numBuffers, buffers.ptr);
 
   alSourcePlay(source);
   if (alGetError() != AL_NO_ERROR) throw new Exception("Could not play source!");
 
-  while (ass.updateStream(source)) {
+  showTime();
+  while (ass.updateStream(source, ptime)) {
     // this reduces CPU use (obviously)
     // it's important not to sleep for too long, though
     // sleep() and friends give a _minimum_ time to be kept asleep
     import core.sys.posix.unistd : usleep;
     usleep(1000*1000*960/48000/10);
+    showTime();
+  }
+  // actually, "waiting" should go into time display too
+  doneTime();
+
+  // wait for source to finish playing
+  writeln("waiting source to finish playing...");
+  for (;;) {
+    ALenum sourceState;
+    alGetSourcei(source, AL_SOURCE_STATE, &sourceState);
+    if (sourceState != AL_PLAYING) break;
   }
 
   alSourceUnqueueBuffers(source, numBuffers, buffers.ptr);
@@ -186,6 +264,12 @@ void main (string[] args) {
   // get us a buffer and a source to attach it to
   writeln("creating OpenAL source...");
   alGenSources(1, &testSource);
+
+  // this turns off OpenAL spatial processing for the source,
+  // thus directly mapping stereo sound to the corresponding channels;
+  // but this works only for stereo samples, and we'd better do that
+  // after checking number of channels in input stream
+  static if (AL_SOFT_direct_channels) alSourcei(testSource, AL_DIRECT_CHANNELS_SOFT, AL_TRUE);
 
   writeln("setting OpenAL listener...");
   // set position and gain for the listener
