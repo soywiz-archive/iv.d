@@ -7,10 +7,16 @@ import std.getopt;
 
 import iv.audiostream;
 import iv.openal;
+import iv.pxclock;
 import iv.vfs.io;
 
 
 enum BufferSizeBytes = 960*2*2;
+
+// the number of buffers we'll be rotating through
+// ideally, all but one will be full
+enum BufferCount = 3;
+
 
 struct PlayTime {
   string warning;
@@ -96,7 +102,7 @@ int fillBuffer (ref AudioStream ass, ALuint buffer) {
 
 
 bool updateStream (ref AudioStream ass, ALuint source, ref PlayTime ptime) {
-  bool someBufsAdded = false;
+  //bool someBufsAdded = false;
   ALuint currentbuffer;
 
   // how many buffers do we need to fill?
@@ -113,18 +119,8 @@ bool updateStream (ref AudioStream ass, ALuint source, ref PlayTime ptime) {
       ptime.framesDone += bufsz/2/ass.channels;
       //writeln("buffer size: ", bufsz);
       if (ass.fillBuffer(currentbuffer) <= 0) return false;
-      someBufsAdded = true;
+      //someBufsAdded = true;
       alSourceQueueBuffers(source, 1, &currentbuffer);
-    }
-  }
-
-  // source can stop playing on buffer underflow
-  if (someBufsAdded) {
-    ALenum sourceState;
-    alGetSourcei(source, AL_SOURCE_STATE, &sourceState);
-    if (sourceState != AL_PLAYING) {
-      ptime.warn("Source not playing!", 600);
-      alSourcePlay(source);
     }
   }
 
@@ -141,8 +137,14 @@ void streamAudioFile (ALuint source, string filename) {
   auto ass = AudioStream.detect(VFile(filename));
   scope(exit) ass.close();
 
+  // get the number of channels in the current link
+  immutable int numChannels = ass.channels;
+  // get the number of samples (per channel) in the current link
+  immutable long frameCount = ass.framesTotal;
+
   uint nextProgressTime = 0;
-  enum sleepTimeNS = 1000*1000*960/48000/10;
+  int procBufs = -1;
+
 
   void showTime () {
     /*
@@ -176,7 +178,7 @@ void streamAudioFile (ALuint source, string filename) {
     }
 
     uint time = cast(uint)(ptime.framesDone*1000/ass.rate);
-    uint total = cast(uint)(ass.framesTotal*1000/ass.rate);
+    uint total = cast(uint)(frameCount*1000/ass.rate);
 
     if (ptime.warning.length > 0 && ptime.warnWasPainted) {
       import core.stdc.stdio : stdout, fprintf;
@@ -190,7 +192,11 @@ void streamAudioFile (ALuint source, string filename) {
 
     if (time >= nextProgressTime) {
       import core.stdc.stdio : stdout, fprintf, fflush;
-      stdout.fprintf("\r%2u:%02u / %u:%02u\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000);
+      if (procBufs >= 0) {
+        stdout.fprintf("\r%2u:%02u / %u:%02u  (%u of %u)\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000, cast(uint)procBufs, BufferCount);
+      } else {
+        stdout.fprintf("\r%2u:%02u / %u:%02u\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000);
+      }
       stdout.fflush();
       nextProgressTime = time+500;
     }
@@ -205,36 +211,50 @@ void streamAudioFile (ALuint source, string filename) {
   }
 
 
-  // get the number of channels in the current link
-  int numChannels = ass.channels;
-  // get the number of samples (per channel) in the current link
-  long pcmSize = ass.framesTotal;
+  writeln(filename, ": ", numChannels, " channels, ", frameCount, " frames (", ass.timeTotal/1000, " seconds)");
 
-  writeln(filename, ": ", numChannels, " channels, ", pcmSize, " frames (", ass.timeTotal/1000, " seconds)");
+  ALuint[BufferCount] buffers; // no need to initialize it, but why not?
 
-  // the number of buffers we'll be rotating through
-  // ideally, all bar one will be full
-  enum numBuffers = 2;
-
-  ALuint[numBuffers] buffers; // no need to initialize it, but why not?
-
-  alGenBuffers(numBuffers, buffers.ptr);
+  alGenBuffers(BufferCount, buffers.ptr);
 
   foreach (ref buf; buffers) ass.fillBuffer(buf); //TODO: check for errors here too
 
-  alSourceQueueBuffers(source, numBuffers, buffers.ptr);
+  alSourceQueueBuffers(source, BufferCount, buffers.ptr);
+
+  ulong stt = clockMicro();
 
   alSourcePlay(source);
   if (alGetError() != AL_NO_ERROR) throw new Exception("Could not play source!");
 
   showTime();
-  while (ass.updateStream(source, ptime)) {
-    // this reduces CPU use (obviously)
-    // it's important not to sleep for too long, though
-    // sleep() and friends give a _minimum_ time to be kept asleep
+  pumploop: for (;;) {
     import core.sys.posix.unistd : usleep;
-    usleep(sleepTimeNS);
+    //usleep(sleepTimeNS);
     showTime();
+    // sleep until at least one buffer is empty
+    ulong ett = stt+(ass.rate*1000/(BufferSizeBytes/2/numChannels));
+    ulong ctt = clockMicro();
+    //writeln("  ", ctt, " ", ett, " " , ett-ctt);
+    if (ctt < ett && ett-ctt > 100) usleep(cast(uint)(ett-ctt)-100);
+    // statistics
+    alGetSourcei(source, AL_BUFFERS_PROCESSED, &procBufs);
+    // refill buffers
+    if (!ass.updateStream(source, ptime)) break pumploop;
+    stt = clockMicro();
+    // source can stop playing on buffer underflow
+    version(all) {
+      ALenum sourceState;
+      alGetSourcei(source, AL_SOURCE_STATE, &sourceState);
+      if (sourceState != AL_PLAYING) {
+        version(none) {
+          int numProcessedBuffers = 0;
+          alGetSourcei(source, AL_BUFFERS_PROCESSED, &numProcessedBuffers);
+          writeln("  npb=", numProcessedBuffers, " of ", BufferCount);
+        }
+        ptime.warn("Source not playing!", 600);
+        alSourcePlay(source);
+      }
+    }
   }
   // actually, "waiting" should go into time display too
   doneTime();
@@ -247,12 +267,12 @@ void streamAudioFile (ALuint source, string filename) {
     if (sourceState != AL_PLAYING) break;
   }
 
-  alSourceUnqueueBuffers(source, numBuffers, buffers.ptr);
+  alSourceUnqueueBuffers(source, BufferCount, buffers.ptr);
 
   // we have to delete the source here, as OpenAL soft seems to need the source gone before the buffers
   // perhaps this is just timing
   alDeleteSources(1, &source);
-  alDeleteBuffers(numBuffers, buffers.ptr);
+  alDeleteBuffers(BufferCount, buffers.ptr);
 }
 
 
