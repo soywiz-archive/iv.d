@@ -2983,7 +2983,7 @@ public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn)
         args[0].cmdline = cmdline;
         dg(args);
       } else {
-        alias defaultArguments = ParameterDefaultValueTuple!fn;
+        alias defaultArguments = ParameterDefaults!fn;
         //pragma(msg, "defs: ", defaultArguments);
         import std.conv : to;
         ConString[128] rest; // to avoid allocations in most cases
