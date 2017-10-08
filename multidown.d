@@ -26,6 +26,7 @@ import std.net.curl;
 import iv.alice;
 import iv.writer;
 import iv.rawtty;
+import iv.strex;
 import iv.timer;
 
 
@@ -184,6 +185,8 @@ void removeInfoLines () {
 // ////////////////////////////////////////////////////////////////////////// //
 import core.atomic;
 
+public __gshared string mdUserAgent = "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)";
+
 // fill this with urls to download
 public __gshared string[] urlList; // the following is protected by `synchronized`
 shared usize urlDone;
@@ -197,6 +200,10 @@ public __gshared string delegate (string url) url2path;
 public __gshared void delegate (string url) urldone;
 
 
+struct UrlInfo { string url, diskpath; }
+private __gshared UrlInfo[] urlinfo;
+
+
 void downloadThread (usize tnum, Tid ownerTid) {
   bool done = false;
   while (!done) {
@@ -207,20 +214,22 @@ void downloadThread (usize tnum, Tid ownerTid) {
       ttyRawWrite("\r\x1b[0;1;33mIDLE\x1b[0m\x1b[K");
     }
     */
+    UrlInfo uinfo;
     string url;
     usize utotal;
     receive(
       // usize: url index to download
       (usize unum) {
         synchronized {
-          if (unum >= urlList.length) {
+          if (unum >= urlinfo.length) {
             // url index too big? done with it all
             done = true;
             cursorToInfoLine(tnum);
             ttyRawWrite("\r\x1b[0;1;31mDONE\x1b[0m\x1b[K");
           } else {
-            url = urlList[unum];
-            utotal = urlList.length;
+            uinfo = urlinfo[unum];
+            url = uinfo.url;
+            utotal = urlinfo.length;
           }
         }
       },
@@ -231,7 +240,8 @@ void downloadThread (usize tnum, Tid ownerTid) {
       import std.file : mkdirRecurse;
       import std.path : baseName, dirName;
       string line, upath, ddir, dname;
-      upath = url2path(url);
+      //upath = url2path(url);
+      upath = uinfo.diskpath;
       if (upath.length == 0) {
         static if (is(typeof(() { import core.exception : ExitError; }()))) {
           import core.exception : ExitError;
@@ -242,32 +252,71 @@ void downloadThread (usize tnum, Tid ownerTid) {
       }
       ddir = upath.dirName;
       dname = upath.baseName;
-      {
-        import std.conv : to;
-        line ~= to!string(tnum)~": [";
-        auto cs = to!string(atomicLoad(urlDone)+1);
-        auto ts = to!string(utotal);
-        foreach (immutable _; cs.length..ts.length) line ~= ' ';
-        line ~= cs~"/"~ts~"] "~upath~" ... ";
-      }
       while (!done) {
         try {
+         doItAgain:
+          {
+            import std.conv : to;
+            line ~= to!string(tnum)~": [";
+            auto cs = to!string(atomicLoad(urlDone));
+            auto ts = to!string(utotal);
+            foreach (immutable _; cs.length..ts.length) line ~= ' ';
+            line ~= cs~"/"~ts~"] "~upath~" ... ";
+          }
           auto pbar = PBar2(line, atomicLoad(urlDone), utotal);
           //pbar.draw();
           //ttyRawWrite("\r", line, "  0%");
           // down it
+          //string location = null;
+          //bool hdrChecked = false;
+          //bool hasLocation = false;
+          bool wasProgress = false;
+          bool showProgress = true;
           int oldPrc = -1, oldPos = -1;
           auto conn = HTTP();
-          conn.setUserAgent("Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)");
-          conn.onProgress = (scope usize dlTotal, scope usize dlNow, scope usize ulTotal, scope usize ulNow) {
-            if (dlTotal > 0) {
-              pbar.setTotal0(dlTotal);
-              pbar[0] = dlNow;
+          version(none) {
+            import std.stdio;
+            auto fo = File("/tmp/zzz", "a");
+            fo.writeln("====================================================");
+            fo.writeln(url);
+          }
+          conn.maxRedirects = 64;
+          //conn.setUserAgent("Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)");
+          conn.setUserAgent(mdUserAgent);
+          conn.onReceiveHeader = (in char[] key, in char[] value) {
+            if (wasProgress) {
+              wasProgress = false;
+              showProgress = true;
             }
-            synchronized {
-              pbar[1] = atomicLoad(urlDone);
-              cursorToInfoLine(tnum);
-              pbar.draw();
+            version(none) {
+              import std.stdio;
+              auto fo = File("/tmp/zzz", "a");
+              fo.writeln(key, "\t", value);
+            }
+            if (strEquCI(key, "Location") && value.length) {
+              //hasLocation = true;
+              showProgress = false;
+              /*
+              location = value.idup;
+              if (location.length > 0) {
+                //url = location;
+                throw new Exception("boo!");
+              }
+              */
+            }
+          };
+          conn.onProgress = (scope usize dlTotal, scope usize dlNow, scope usize ulTotal, scope usize ulNow) {
+            wasProgress = true;
+            if (showProgress) {
+              if (dlTotal > 0) {
+                pbar.setTotal0(dlTotal);
+                pbar[0] = dlNow;
+              }
+              synchronized {
+                pbar[1] = atomicLoad(urlDone);
+                cursorToInfoLine(tnum);
+                pbar.draw();
+              }
             }
             return 0;
           };
@@ -282,6 +331,12 @@ void downloadThread (usize tnum, Tid ownerTid) {
             } catch (Exception e) {
               ok = false;
             }
+            /*
+            if (location.length) {
+              url = location;
+              goto doItAgain;
+            }
+            */
             if (ok) break;
             if (--retries <= 0) {
               ttyRawWrite("\n\n\n\n\x1b[0mFUCK!\n");
@@ -377,6 +432,18 @@ extern(C) void sigtermh (int snum) nothrow @nogc {
 public string downloadAll (uint tcount=4) {
   if (tcount < 1 || tcount > 64) assert(0);
   if (urlList.length == 0) return "nothing to do";
+
+  delete urlinfo;
+  urlinfo = null;
+  foreach (string url; urlList) {
+    bool found = false;
+    foreach (const ref ui; urlinfo) if (url == ui.url) { found = true; break; }
+    if (!found) {
+      auto path = url2path(url);
+      if (path.length) urlinfo ~= UrlInfo(url, url2path(url));
+    }
+  }
+
   { import core.memory : GC; GC.collect(); }
   import core.stdc.signal;
   auto oldh = signal(SIGINT, &sigtermh);
@@ -391,7 +458,7 @@ public string downloadAll (uint tcount=4) {
   ulong toCollect = 0;
   auto timer = Timer(Timer.State.Running);
   atomicStore(urlDone, 0);
-  while (atomicLoad(urlDone) < urlList.length) {
+  while (atomicLoad(urlDone) < urlinfo.length) {
     // force periodical collect to keep CURL happy
     if (toCollect-- == 0) {
       import core.memory : GC;
@@ -406,7 +473,7 @@ public string downloadAll (uint tcount=4) {
       // no idle thread found, wait for completion message
       import core.time;
       for (;;) {
-        bool got = receiveTimeout(500.msecs,
+        bool got = receiveTimeout(50.msecs,
           (uint tnum) {
             threads[tnum].idle = true;
             freeTNum = tnum;
@@ -416,8 +483,8 @@ public string downloadAll (uint tcount=4) {
       }
       if (atomicLoad(ctrlC)) break;
     }
-    usize uidx = atomicLoad(urlDone);
-    atomicOp!"+="(urlDone, 1);
+    usize uidx = atomicOp!"+="(urlDone, 1);
+    --uidx; // 'cause `atomicOp()` returns op result
     with (threads[freeTNum]) {
       idle = false;
       uindex = uidx;
