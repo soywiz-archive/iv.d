@@ -4,13 +4,20 @@ import arsd.simpledisplay;
 import iv.cmdcon;
 import iv.cmdcongl;
 import iv.nanovg;
-//import iv.nanovg.svg;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+__gshared string optEditorFont = "~/ttf/ms/arial.ttf:noaa";
+__gshared int optEditorFontSize = 14;
+__gshared NVGContext nvg = null;
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 void main (string[] args) {
   glconShowKey = "M-Grave";
 
-  NVGContext nvg = null;
+  conRegVar!optEditorFont("ed_font_path", "path to TTF font");
+  conRegVar!optEditorFontSize(6, 72, "ed_font_size", "editor font size");
 
   conProcessQueue(); // load config
   conProcessArgs!true(args);
@@ -21,7 +28,7 @@ void main (string[] args) {
     // create and upload texture, rebuild screen
     nvg = createGL2NVG(NVG_FONT_NOAA|NVG_ANTIALIAS|NVG_STENCIL_STROKES/*|NVG_DEBUG*/);
     if (nvg is null) assert(0, "Could not init nanovg.");
-    nvg.createFont("sans:noaa", "/home/ketmar/ttf/ms/arial.ttf");
+    nvg.createFont("sans", optEditorFont);
   };
 
 
@@ -44,7 +51,7 @@ void main (string[] args) {
       nvg.fillColor(nvgRGB(255, 127, 0));
       nvg.fill();
 
-      nvg.fontSize(14);
+      nvg.fontSize(optEditorFontSize);
       nvg.fontFace("sans");
       nvg.textAlign(NVGTextAlign.H.Center, NVGTextAlign.V.Middle);
       nvg.fillColor(nvgRGB(0, 0, 255));
