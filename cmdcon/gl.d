@@ -964,6 +964,7 @@ public __gshared bool glconTranslateMods = true; /// translate right modifiers "
 public __gshared bool glconNoMouseEventsWhenConsoleIsVisible = true; ///
 
 public __gshared void delegate () oglSetupDG; /// called when window will become visible for the first time
+public __gshared bool delegate () closeQueryDG; /// called when window will going to be closed; return `false` to prevent closing
 public __gshared void delegate () redrawFrameDG; /// frame need to be redrawn (but not rebuilt)
 public __gshared void delegate () nextFrameDG; /// frame need to be rebuilt (but not redrawn)
 public __gshared void delegate (KeyEvent event) keyEventDG; ///
@@ -1084,7 +1085,11 @@ public void glconSetupForGLWindow (SimpleWindow w) {
   if (w is null) return;
 
   static if (is(typeof(&glconCtlWindow.closeQuery))) {
-    glconCtlWindow.closeQuery = delegate () { concmd("quit"); glconPostDoConCommands(); };
+    glconCtlWindow.closeQuery = delegate () {
+      if (closeQueryDG !is null && !closeQueryDG()) return;
+      concmd("quit");
+      glconPostDoConCommands();
+    };
   }
 
   glconCtlWindow.visibleForTheFirstTime = delegate () {
