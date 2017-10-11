@@ -516,6 +516,7 @@ public alias NVGContext = NVGcontext*;
 FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs : null); }
 
 private struct NVGcontext {
+private:
   NVGparams params;
   float* commands;
   int ccommands;
@@ -535,6 +536,14 @@ private struct NVGcontext {
   int fillTriCount;
   int strokeTriCount;
   int textTriCount;
+  // internals
+  int mWidth, mHeight;
+  float mDeviceRatio;
+public:
+  // some public info
+  @property int width () const nothrow pure @safe @nogc { pragma(inline, true); return mWidth; } /// valid only inside `beginFrame()`/`endFrame()`
+  @property int height () const nothrow pure @safe @nogc { pragma(inline, true); return mHeight; } /// valid only inside `beginFrame()`/`endFrame()`
+  @property float devicePixelRatio () const nothrow pure @safe @nogc { pragma(inline, true); return mDeviceRatio; } /// valid only inside `beginFrame()`/`endFrame()`
 }
 
 import core.stdc.math :
@@ -744,6 +753,9 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
   nvg__setDevicePixelRatio(ctx, devicePixelRatio);
 
   ctx.params.renderViewport(ctx.params.userPtr, windowWidth, windowHeight);
+  ctx.mWidth = windowWidth;
+  ctx.mHeight = windowHeight;
+  ctx.mDeviceRatio = devicePixelRatio;
 
   ctx.drawCallCount = 0;
   ctx.fillTriCount = 0;
@@ -753,11 +765,19 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
 
 /// Cancels drawing the current frame.
 public void cancelFrame (NVGContext ctx) {
+  ctx.mWidth = 0;
+  ctx.mHeight = 0;
+  ctx.mDeviceRatio = 0;
+  // cancel render queue
   ctx.params.renderCancel(ctx.params.userPtr);
 }
 
 /// Ends drawing flushing remaining render state.
 public void endFrame (NVGContext ctx) {
+  ctx.mWidth = 0;
+  ctx.mHeight = 0;
+  ctx.mDeviceRatio = 0;
+  // flush render queue
   NVGstate* state = nvg__getState(ctx);
   ctx.params.renderFlush(ctx.params.userPtr, state.compositeOperation);
   if (ctx.fontImageIdx != 0) {
