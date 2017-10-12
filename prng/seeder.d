@@ -33,7 +33,7 @@ public uint xyzzyPRNGHashU32() (uint a) {
 
 public uint getTwoUintSeeds (uint* second=null) nothrow @trusted @nogc {
   version(Windows) {
-    import win32.windef, win32.winbase;
+    import core.sys.windows.windef, core.sys.windows.winbase;
     uint s0 = xyzzyPRNGHashU32(cast(uint)GetCurrentProcessId());
     uint s1 = xyzzyPRNGHashU32(cast(uint)GetTickCount());
     if (second is null) return s0^s1;
