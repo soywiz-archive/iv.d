@@ -84,7 +84,7 @@ void delegate (ubyte[] dest) nothrow randombytes = null;
  * Params:
  *  msg == message
  *  sk == secret key, slice size must be at least crypto_sign_SECRETKEYBYTES, extra ignored
- *  dest == destination buffer; leave `null` to allocate, or pass array of at least `msg.length+64` bytes
+ *  dest == destination buffer; leave `null` to allocate, or pass array of at least `msg.length+crypto_sign_BYTES` bytes
  *
  * Returns:
  *  signed message
@@ -92,7 +92,7 @@ void delegate (ubyte[] dest) nothrow randombytes = null;
 ubyte[] crypto_sign (const(ubyte)[] msg, const(ubyte)[] sk, ubyte[] dest=null) {
   if (sk.length < crypto_sign_SECRETKEYBYTES) assert(0, "sk too small");
   ubyte[] sm;
-  if (dest.length >= msg.length+64) sm = dest[0..msg.length+64]; else sm.length = msg.length+64;
+  if (dest.length >= msg.length+crypto_sign_BYTES) sm = dest[0..msg.length+64]; else sm.length = msg.length+crypto_sign_BYTES;
   crypto_sign(sm, msg, sk);
   return sm;
 }
@@ -116,9 +116,9 @@ ubyte[] crypto_sign_open (const(ubyte)[] sm, const(ubyte)[] pk, ubyte[] dest=nul
   if (sm.length < crypto_sign_SECRETKEYBYTES) assert(0, "sm too small");
   ubyte[] msg;
   if (dest.length >= sm.length) msg = dest; else msg.length = sm.length;
-  scope(exit) if (msg.length >= 64) msg[$-64..$] = 0; else if (msg.length) msg[] = 0;
+  scope(exit) if (msg.length >= crypto_sign_BYTES) msg[$-crypto_sign_BYTES..$] = 0; else if (msg.length) msg[] = 0;
   if (!crypto_sign_open(msg, sm, pk)) return null;
-  return msg[0..sm.length-64]; // remove signature
+  return msg[0..sm.length-crypto_sign_BYTES]; // remove signature
 }
 
 
@@ -135,9 +135,9 @@ ubyte[] crypto_sign_open (const(ubyte)[] sm, const(ubyte)[] pk, ubyte[] dest=nul
  */
 bool crypto_verify_16 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
   pragma(inline, true);
-  if (x.length < 16) assert(0, "x too small");
-  if (y.length < 16) assert(0, "y too small");
-  return vn(x.ptr[0..16], y.ptr[0..16]);
+  if (x.length < crypto_verify_16_BYTES) assert(0, "x too small");
+  if (y.length < crypto_verify_16_BYTES) assert(0, "y too small");
+  return vn(x.ptr[0..crypto_verify_16_BYTES], y.ptr[0..crypto_verify_16_BYTES]);
 }
 
 /**
@@ -152,9 +152,9 @@ bool crypto_verify_16 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
  */
 bool crypto_verify_32 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
   pragma(inline, true);
-  if (x.length < 16) assert(0, "x too small");
-  if (y.length < 16) assert(0, "y too small");
-  return vn(x.ptr[0..32], y.ptr[0..32]);
+  if (x.length < crypto_verify_32_BYTES) assert(0, "x too small");
+  if (y.length < crypto_verify_32_BYTES) assert(0, "y too small");
+  return vn(x.ptr[0..crypto_verify_32_BYTES], y.ptr[0..crypto_verify_32_BYTES]);
 }
 
 /**
@@ -455,6 +455,22 @@ void crypto_box_keypair (ubyte[] pk, ubyte[] sk) {
 }
 
 /**
+ * This function generates a public key from a given secret key.
+ *
+ * Params:
+ *  pk = slice to put generated public key into
+ *  sk = slice with secret key
+ *
+ * Returns:
+ *  pair of new keys
+ */
+void crypto_box_pk_from_sk (ubyte[] pk, const(ubyte)[] sk) {
+  if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
+  if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
+  crypto_scalarmult_base(pk, sk);
+}
+
+/**
  * This function computes a shared secret 's' from public key 'pk' and secret key 'sk'.
  *
  * Params:
@@ -524,7 +540,13 @@ bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonc
  * key 'sk', the receiver's public key 'pk', and a nonce 'nonce'.
  * The function returns the resulting ciphertext 'c'.
  * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
- * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
+ * Note that first 'crypto_secretbox_BOXZEROBYTES' in destination buffer will always contains zeroes.
+ *
+ * usage: fill first `crypto_secretbox_ZEROBYTES` of `msg` with zeroes, and other bytes with
+ *        actual unencrypted message data.
+ *        make `c` of exactly `msg` size.
+ *        call `crypto_box()`.
+ *        `c[crypto_secretbox_BOXZEROBYTES..$]` will be your encrypted message, ready to send.
  *
  * Params:
  *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
@@ -549,8 +571,14 @@ bool crypto_box (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyt
  * This function verifies and decrypts a ciphertext 'c' using the receiver's secret
  * key 'sk', the sender's public key 'pk', and a nonce 'nonce'.
  * The function returns the resulting message 'msg'.
- * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_secretbox_BOXZEROBYTES' in source buffer SHOULD always contains zeroes.
  * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
+ *
+ * usage: fill first `crypto_secretbox_BOXZEROBYTES` of `c` with zeroes, and other bytes with
+ *        actual encrypted message data.
+ *        make `c` of exactly `msg` size.
+ *        call `crypto_box_open()`.
+ *        `c[crypto_secretbox_ZEROBYTES..$]` will be your decrypted message, ready to read.
  *
  * Params:
  *  msg = resulting message ('msg' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
@@ -665,8 +693,8 @@ bool crypto_sign_open (ubyte[] msg, const(ubyte)[] sm, const(ubyte)[] pk) @nogc 
  * This function randomly generates a secret key and a corresponding public key.
  *
  * Params:
- *  pk = slice to put generated public key into
- *  sk = slice to put generated secret key into
+ *  pk = slice to put generated public key into (at least crypto_sign_PUBLICKEYBYTES)
+ *  sk = slice to put generated secret key into (at least crypto_sign_SECRETKEYBYTES)
  *
  * Returns:
  *  pair of new keys (in pk and sk)
@@ -679,6 +707,36 @@ void crypto_sign_keypair (ubyte[] pk, ubyte[] sk) {
   long[16][4] p = void;
 
   randombytes(sk.ptr[0..32]);
+  crypto_hash(d, sk.ptr[0..32]);
+  d.ptr[0] &= 248;
+  d.ptr[31] &= 127;
+  d.ptr[31] |= 64;
+
+  scalarbase(p, d);
+  pack(pk, p);
+
+  sk.ptr[32..64] = pk.ptr[0..32];
+}
+
+/**
+ * This function generates a public key from the given secret key.
+ *
+ * Params:
+ *  pk = slice to put generated public key into (at least crypto_sign_PUBLICKEYBYTES)
+ *  sk = slice to get secret key from (at least crypto_sign_SECRETKEYBYTES,
+ *       crypto_sign_PUBLICKEYBYTES is secret key, won't be modified)
+ *
+ * Returns:
+ *  pair of new keys (in pk and sk)
+ */
+void crypto_sign_pk_from_sk (ubyte[] pk, ubyte[] sk) {
+  if (pk.length < crypto_sign_PUBLICKEYBYTES) assert(0, "invalid pk size");
+  if (sk.length < crypto_sign_SECRETKEYBYTES) assert(0, "invalid sk size");
+
+  ubyte[64] d = void;
+  long[16][4] p = void;
+
+  //randombytes(sk.ptr[0..32]);
   crypto_hash(d, sk.ptr[0..32]);
   d.ptr[0] &= 248;
   d.ptr[31] &= 127;
