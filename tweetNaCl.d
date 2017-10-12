@@ -1099,7 +1099,7 @@ void crypto_hashblocks (ubyte[] x, const(ubyte)[] m, ulong n) {
   foreach (immutable i; 0..8) ts64(x[8*i..$], z.ptr[i]);
 }
 
-immutable ubyte[64] iv = [
+immutable ubyte[64] ivc = [
   0x6a, 0x09, 0xe6, 0x67, 0xf3, 0xbc, 0xc9, 0x08,
   0xbb, 0x67, 0xae, 0x85, 0x84, 0xca, 0xa7, 0x3b,
   0x3c, 0x6e, 0xf3, 0x72, 0xfe, 0x94, 0xf8, 0x2b,
@@ -1130,7 +1130,7 @@ public void crypto_hash (ubyte[] output, const(ubyte)[] msg) {
   ulong b = n;
   uint mpos = 0;
 
-  h[] = iv[];
+  h[] = ivc[];
 
   crypto_hashblocks(h, msg, n);
   mpos += n;
