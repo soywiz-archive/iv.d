@@ -124,7 +124,7 @@ public @property uint cbufLastChange () nothrow @trusted @nogc { import core.ato
 // ////////////////////////////////////////////////////////////////////////// //
 /// multithread lock
 public void consoleLock() () nothrow @trusted {
-  pragma(inline, true);
+  version(aliced) pragma(inline, true);
   version(aliced) {
     consoleLocker.lock();
   } else {
@@ -134,7 +134,7 @@ public void consoleLock() () nothrow @trusted {
 
 /// multithread unlock
 public void consoleUnlock() () nothrow @trusted {
-  pragma(inline, true);
+  version(aliced) pragma(inline, true);
   version(aliced) {
     consoleLocker.unlock();
   } else {

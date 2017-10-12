@@ -63,6 +63,7 @@ version(nanovg_use_arsd_image) {
   import arsd.color;
   static if (__traits(compiles, {import arsd.png;})) import arsd.png;
   static if (__traits(compiles, {import arsd.jpeg;})) import arsd.jpeg;
+  static if (__traits(compiles, {import arsd.image;})) import arsd.image;
 } else {
   void stbi_set_unpremultiply_on_load (int flag_true_if_should_unpremultiply) {}
   void stbi_convert_iphone_png_to_rgb (int flag_true_if_should_convert) {}
