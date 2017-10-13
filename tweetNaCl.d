@@ -11,8 +11,18 @@
 //    i'll not do that. thank you.
 module iv.tweetNaCl /*is aliced*/;
 
-import iv.alice;
+//import iv.alice;
 public nothrow:
+
+static if (!is(typeof(usize))) private alias usize = size_t;
+static if (!is(typeof(sptrdiff))) private alias sptrdiff = ptrdiff_t;
+static if (!is(typeof(ssizediff))) private alias ssizediff = ptrdiff_t;
+
+static if (!is(typeof(ssize))) {
+       static if (usize.sizeof == 8) private alias ssize = long; //k8
+  else static if (usize.sizeof == 4) private alias ssize = int; //k8
+  else static assert(0, "invalid usize size"); //k8
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -598,6 +608,158 @@ bool crypto_box_open (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const
   crypto_box_beforenm(k[], pk, sk);
   return crypto_box_open_afternm(msg, c, nonce, k[]);
 }
+
+
+/**
+ * Calculate buffer size to hold encrypted message; it is bigger than `msg` size.
+ *
+ * Params:
+ *  msg = input message
+ *
+ * Returns:
+ *  buffer size to hold encrypted message
+ */
+usize crypto_box_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
+  pragma(inline, true);
+  return msg.length+crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES;
+}
+
+/**
+ * Calculate buffer size to hold decrypted message; it is smaller than `msg` size.
+ *
+ * Params:
+ *  msg = input message
+ *
+ * Returns:
+ *  buffer size to hold encrypted message
+ */
+usize crypto_box_decsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
+  pragma(inline, true);
+  return
+    (msg.length > crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES ?
+      msg.length-(crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES) : 0);
+}
+
+/**
+ * Check if `msg` can contain encrypted and authenticated message (i.e. it has enough data for that).
+ *
+ * Params:
+ *  msg = input message
+ *
+ * Returns:
+ *  `true` if `msg` size is valid.
+ */
+bool crypto_box_valid_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
+  pragma(inline, true);
+  return (msg.length >= crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES);
+}
+
+/**
+ * This function encrypts and authenticates a message 'msg' using the sender's secret
+ * key 'sk', the receiver's public key 'pk', and a nonce 'nonce'.
+ * The function returns the resulting ciphertext 'c'.
+ * Note that `c` must be of at least `crypto_box_encsize(msg)` bytes in size.
+ *
+ * WARNING! this function is using `malloc()` internally, but not GC.
+ *
+ * Params:
+ *  c = resulting cyphertext
+ *  msg = message
+ *  nonce = nonce
+ *  pk = receiver's public key
+ *  sk = sender's secret key
+ *
+ * Returns:
+ *  success flag and cyphertext in 'c'
+ */
+bool crypto_box_enc (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
+  if (c.length < crypto_box_encsize(msg)) return false;
+  if (nonce.length < crypto_box_NONCEBYTES) return false;
+  if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
+  if (sk.length < crypto_box_SECRETKEYBYTES) return false;
+  // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_secretbox_ZEROBYTES*2
+  import core.stdc.stdlib : alloca, malloc, free;
+  import core.stdc.string : memset, memcpy;
+  ubyte* smem, dmem;
+  bool doFree = false;
+  scope(exit) if (doFree) { if (smem !is null) free(smem); if (dmem !is null) free(dmem); }
+  immutable memsz = msg.length+crypto_secretbox_ZEROBYTES;
+  if (msg.length <= 2048) {
+    smem = cast(ubyte*)alloca(memsz);
+    dmem = cast(ubyte*)alloca(memsz);
+  } else {
+    smem = cast(ubyte*)malloc(memsz);
+    dmem = cast(ubyte*)malloc(memsz);
+    doFree = true;
+  }
+  if (smem is null || dmem is null) return false;
+  memset(smem, 0, memsz);
+  memset(dmem, 0, memsz);
+  // copy `msg` to `smem`
+  if (msg.length) memcpy(smem+crypto_secretbox_ZEROBYTES, msg.ptr, msg.length);
+  // process
+  auto res = crypto_box(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
+  ubyte b = 0;
+  foreach (immutable ubyte bv; dmem[0..crypto_secretbox_BOXZEROBYTES]) b |= bv;
+  if (b != 0) return false;
+  // copy result to destination buffer
+  if (res) memcpy(c.ptr, dmem+crypto_secretbox_BOXZEROBYTES, crypto_box_encsize(msg));
+  return res;
+}
+
+/**
+ * This function verifies and decrypts a ciphertext 'c' using the receiver's secret
+ * key 'sk', the sender's public key 'pk', and a nonce 'nonce'.
+ * Note that `msg` must be of at least `crypto_box_decsize(msg)` bytes in size.
+ *
+ * WARNING! this function is using `malloc()` internally, but not GC.
+ *
+ * Params:
+ *  msg = resulting message
+ *  c = cyphertext
+ *  nonce = nonce
+ *  pk = receiver's public key
+ *  sk = sender's secret key
+ *
+ * Returns:
+ *  success flag and message in 'msg'
+ */
+bool crypto_box_dec (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
+  if (c.length < crypto_box_valid_encsize(c)) return false;
+  if (msg.length < crypto_box_decsize(c)) return false;
+  if (nonce.length < crypto_box_NONCEBYTES) return false;
+  if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
+  if (sk.length < crypto_box_SECRETKEYBYTES) return false;
+  // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_secretbox_ZEROBYTES*2
+  import core.stdc.stdlib : alloca, malloc, free;
+  import core.stdc.string : memset, memcpy;
+  ubyte* smem, dmem;
+  bool doFree = false;
+  scope(exit) if (doFree) { if (smem !is null) free(smem); if (dmem !is null) free(dmem); }
+  immutable memsz = c.length+(crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES);
+  if (c.length <= 2048) {
+    smem = cast(ubyte*)alloca(memsz);
+    dmem = cast(ubyte*)alloca(memsz);
+  } else {
+    smem = cast(ubyte*)malloc(memsz);
+    dmem = cast(ubyte*)malloc(memsz);
+    doFree = true;
+  }
+  if (smem is null || dmem is null) return false;
+  memset(smem, 0, memsz);
+  memset(dmem, 0, memsz);
+  // copy `c` to `smem`
+  memcpy(smem+crypto_secretbox_BOXZEROBYTES, c.ptr, c.length);
+  // process
+  auto res = crypto_box_open(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
+  ubyte b = 0;
+  foreach (immutable ubyte bv; dmem[0..crypto_secretbox_ZEROBYTES]) b |= bv;
+  if (b != 0) return false;
+  // copy result to destination buffer
+  if (res) memcpy(msg.ptr, dmem+crypto_secretbox_ZEROBYTES, crypto_box_decsize(c));
+  return res;
+}
+
 
 /**
  * This function signs a message 'msg' using the sender's secret key 'sk'.
