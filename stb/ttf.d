@@ -1113,7 +1113,7 @@ void* stbtt__hheap_alloc (stbtt__hheap* hh, usize size, void* userdata) {
   } else {
     if (hh.num_remaining_in_head_chunk == 0) {
       int count = (size < 32 ? 2000 : size < 128 ? 800 : 100);
-      stbtt__hheap_chunk* c = STBTT_xalloc!stbtt__hheap_chunk(1, size*count);
+      stbtt__hheap_chunk* c = STBTT_xalloc!stbtt__hheap_chunk(1, cast(uint)(size*count));
       if (c is null) return null;
       c.next = hh.head;
       hh.head = c;
@@ -2030,7 +2030,7 @@ bool stbtt__matchpair (const(ubyte)* fc, uint nm, const(ubyte)* name, int nlen, 
         int slen = ttUSHORT(fc+loc+8);
         int off = ttUSHORT(fc+loc+10);
         // check if there's a prefix match
-        int matchlen = stbtt__CompareUTF8toUTF16_bigendian_prefix(name[0..nlen], (fc+stringOffset+off)[0..slen]);
+        int matchlen = cast(int)stbtt__CompareUTF8toUTF16_bigendian_prefix(name[0..nlen], (fc+stringOffset+off)[0..slen]);
         if (matchlen >= 0) {
           // check for target_id+1 immediately following, with same encoding & language
           if (i+1 < count && ttUSHORT(fc+loc+12+6) == next_id && ttUSHORT(fc+loc+12) == platform && ttUSHORT(fc+loc+12+2) == encoding && ttUSHORT(fc+loc+12+4) == language) {
