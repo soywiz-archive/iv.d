@@ -146,7 +146,7 @@ public uint mur3HashOf(T) (const(T)[] data, usize seed=0) pure nothrow @trusted 
 }
 
 
-public uint mur3HashOf(R) (auto ref R rng, usize seed=0) pure nothrow @trusted @nogc
+public uint mur3HashOf(R) (auto ref R rng, uint seed=0) pure nothrow @trusted @nogc
 if (is(typeof((inout int=0){
   bool e = rng.empty;
   ubyte b = rng.front;

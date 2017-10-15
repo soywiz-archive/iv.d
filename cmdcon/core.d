@@ -4693,7 +4693,7 @@ void concmdPrepend (ConString s) {
 
 void concmdEnsureNewCommand () {
   if (concmdbufpos > 0 && concmdbuf[concmdbufpos-1] != '\n') {
-    if (concmdbuf.length-concmdbufpos < 1) concmdbuf.unsafeArraySetLength(concmdbuf.length+512);
+    if (concmdbuf.length-concmdbufpos < 1) concmdbuf.unsafeArraySetLength(cast(int)concmdbuf.length+512);
   }
   concmdbuf.ptr[concmdbufpos++] = '\n';
 }
