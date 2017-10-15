@@ -4702,7 +4702,7 @@ void concmdEnsureNewCommand () {
 package(iv) void concmdAdd(bool ensureNewCommand=true) (ConString s) {
   if (s.length) {
     if (concmdbuf.length-concmdbufpos < s.length+1) {
-      concmdbuf.unsafeArraySetLength(concmdbuf.length+s.length-(concmdbuf.length-concmdbufpos)+512);
+      concmdbuf.unsafeArraySetLength(cast(int)(concmdbuf.length+s.length-(concmdbuf.length-concmdbufpos)+512));
     }
     static if (ensureNewCommand) {
       if (concmdbufpos > 0 && concmdbuf[concmdbufpos-1] != '\n') concmdbuf.ptr[concmdbufpos++] = '\n';
