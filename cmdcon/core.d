@@ -4555,7 +4555,7 @@ public void concmdfdg(A...) (ConString fmt, scope void delegate (ConString cmd) 
           import std.conv : to;
           puts!true(to!string(args[argnum]));
         } else static if (is(at == bool)) {
-          putsq(args[argnum] ? "true" : "false");
+          puts!false(args[argnum] ? "true" : "false");
         } else static if (is(at == enum)) {
           bool dumpNum = true;
           foreach (string mname; __traits(allMembers, at)) {
