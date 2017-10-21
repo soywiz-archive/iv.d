@@ -22,8 +22,8 @@ import iv.alice;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void unsafeArrayReserve(T) (ref T[] arr, int newlen) /*nothrow*/ {
-  if (newlen < 0 || newlen >= int.max/2) assert(0, "invalid number of elements in array");
+public void unsafeArrayReserve(T) (ref T[] arr, usize newlen) /*nothrow*/ {
+  if (/*newlen < 0 ||*/ newlen >= int.max/2) assert(0, "invalid number of elements in array");
   if (arr.length < newlen) {
     auto optr = arr.ptr;
     arr.reserve(newlen);
@@ -36,8 +36,8 @@ public void unsafeArrayReserve(T) (ref T[] arr, int newlen) /*nothrow*/ {
 }
 
 
-public void unsafeArraySetLength(T) (ref T[] arr, int newlen) /*nothrow*/ {
-  if (newlen < 0 || newlen >= int.max/2) assert(0, "invalid number of elements in array");
+public void unsafeArraySetLength(T) (ref T[] arr, usize newlen) /*nothrow*/ {
+  if (/*newlen < 0 ||*/ newlen >= int.max/2) assert(0, "invalid number of elements in array");
   if (arr.length > newlen) {
     arr.length = newlen;
     arr.assumeSafeAppend;
@@ -76,8 +76,8 @@ public void unsafeArrayClear(T) (ref T[] arr) /*nothrow*/ {
 }
 
 
-public void unsafeArrayRemove(T) (ref T[] arr, int idx) /*nothrow*/ {
-  if (idx < 0 || idx >= arr.length) assert(0, "invalid index in `unsafeArrayRemove()`");
+public void unsafeArrayRemove(T) (ref T[] arr, usize idx) /*nothrow*/ {
+  if (/*idx < 0 ||*/ idx >= arr.length) assert(0, "invalid index in `unsafeArrayRemove()`");
   static if (is(T == class)) arr[idx] = null; else arr[idx] = T.init;
   if (arr.length-idx > 1) {
     import core.stdc.string : memset, memmove;
@@ -89,8 +89,8 @@ public void unsafeArrayRemove(T) (ref T[] arr, int idx) /*nothrow*/ {
 }
 
 
-public void unsafeArrayInsertBefore(T) (ref T[] arr, int idx, auto ref T v) /*nothrow*/ {
-  if (idx < 0 || idx > arr.length) assert(0, "invalid index in `unsafeArrayRemove()`");
+public void unsafeArrayInsertBefore(T) (ref T[] arr, usize idx, auto ref T v) /*nothrow*/ {
+  if (/*idx < 0 ||*/ idx > arr.length) assert(0, "invalid index in `unsafeArrayRemove()`");
   auto olen = cast(int)arr.length;
   if (olen >= int.max/2) assert(0, "too many elements in array");
   auto optr = arr.ptr;
