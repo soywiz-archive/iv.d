@@ -1386,7 +1386,6 @@ public class EdHiTokensC : EdHiTokens {
       0
     );
 
-    addToken("auto", HiKeyword);
     addToken("break", HiKeyword);
     addToken("case", HiKeyword);
     addToken("const", HiKeyword);
@@ -1415,8 +1414,19 @@ public class EdHiTokensC : EdHiTokens {
     addToken("protected", HiKeyword);
     addToken("private", HiKeyword);
     addToken("public", HiKeyword);
+    addToken("default", HiKeyword);
 
     addToken("register", HiInternal);
+
+    addToken("template", HiKeyword);
+    addToken("typename", HiKeyword);
+    addToken("const_cast", HiKeywordHi);
+    addToken("static_cast", HiKeywordHi);
+    addToken("dynamic_cast", HiKeywordHi);
+    addToken("operator", HiKeywordHi);
+
+    addToken("explicit", HiSpecial);
+    addToken("mutable", HiSpecial);
 
     addToken("!", HiPunct);
     addToken("%", HiPunct);
@@ -1446,6 +1456,11 @@ public class EdHiTokensC : EdHiTokens {
     addToken(".", HiPunct);
     addToken("->", HiInternal);
 
+    addToken("nullptr", HiInternal);
+    addToken("new", HiInternal);
+    addToken("delete", HiInternal);
+    addToken("this", HiInternal);
+
     addToken("void", HiType);
     addToken("short", HiType);
     addToken("int", HiType);
@@ -1458,6 +1473,7 @@ public class EdHiTokensC : EdHiTokens {
     addToken("ptrdiff_t", HiType);
     addToken("signed", HiType);
     addToken("unsigned", HiType);
+    addToken("auto", HiType);
   }
 }
 
