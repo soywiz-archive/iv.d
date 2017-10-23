@@ -1422,6 +1422,7 @@ public class EdHiTokensC : EdHiTokens {
     addToken("typename", HiKeyword);
     addToken("const_cast", HiKeywordHi);
     addToken("static_cast", HiKeywordHi);
+    addToken("static_assert", HiKeywordHi);
     addToken("dynamic_cast", HiKeywordHi);
     addToken("operator", HiKeywordHi);
 
