@@ -82,7 +82,10 @@ public:
     string genre;
     uint year; // 0: unknown
     string filename;
+    ulong pregapmsecs; // index 00, or startmsecs
     ulong startmsecs; // index 01
+
+    @property ulong start () const pure nothrow @safe @nogc { pragma(inline, true); return (pregapmsecs != pregapmsecs.max && pregapmsecs < startmsecs ? pregapmsecs : startmsecs); }
   }
 
 private:
@@ -226,6 +229,7 @@ public:
           break;
         case "TRACK": // new track
           tracks.length += 1;
+          tracks[$-1].pregapmsecs = tracks[$-1].pregapmsecs.max;
           w = nextWord!true();
           try {
             import std.conv : to;
@@ -264,7 +268,11 @@ public:
           try {
             import std.conv : to;
             auto n = w.to!ubyte(10);
-            if (n == 1) tracks[$-1].startmsecs = parseIndex(nextWord!true);
+            if (n == 1) {
+              tracks[$-1].startmsecs = parseIndex(nextWord!true);
+            } else if (n == 0) {
+              tracks[$-1].pregapmsecs = parseIndex(nextWord!true);
+            }
           } catch (Exception e) {
             writeln("ERROR: ", e.msg);
             throw new Exception("fucked index");
@@ -281,6 +289,7 @@ public:
 
     // normalize tracks
     foreach (immutable tidx, ref trk; tracks) {
+      if (trk.pregapmsecs == trk.pregapmsecs.max) trk.pregapmsecs = trk.startmsecs;
       if (trk.artist == artist) trk.artist = null;
       if (trk.year == year) trk.year = 0;
       if (trk.genre == genre) trk.genre = null;
