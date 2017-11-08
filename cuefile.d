@@ -103,7 +103,8 @@ private:
     if (!lastHit) throw new Exception("invalid index");
     if (msf[1] > 59) throw new Exception("invalid index");
     if (msf[2] > 74) throw new Exception("invalid index");
-    return cast(uint)((((msf[1]+msf[0]*60)*75)/75.0)*1000.0);
+    //return cast(uint)((((msf[1]+msf[0]*60)*75)/75.0)*1000.0);
+    return cast(uint)((((msf[1]+msf[0]*60)*75+msf[2])/75.0)*1000.0);
   }
 
 public:
