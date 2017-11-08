@@ -1415,6 +1415,15 @@ public class EdHiTokensC : EdHiTokens {
     addToken("private", HiKeyword);
     addToken("public", HiKeyword);
     addToken("default", HiKeyword);
+    addToken("using", HiKeyword);
+    addToken("try", HiKeyword);
+    addToken("catch", HiKeyword);
+    addToken("throw", HiKeyword);
+    addToken("virtual", HiKeyword);
+    addToken("override", HiKeyword);
+
+    addToken("true", HiKeyword);
+    addToken("false", HiKeyword);
 
     addToken("register", HiInternal);
 
@@ -1475,6 +1484,9 @@ public class EdHiTokensC : EdHiTokens {
     addToken("signed", HiType);
     addToken("unsigned", HiType);
     addToken("auto", HiType);
+    addToken("bool", HiType);
+    // for I.V.A.N.
+    addToken("truth", HiType);
   }
 }
 
