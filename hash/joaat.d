@@ -115,7 +115,7 @@ uint joaatHash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.s
 }
 
 
-unittest {
+version(iv_hash_unittest) unittest {
   version(JoaatMixLength) {
     enum HashValue = 0x17fa5136U;
   } else {

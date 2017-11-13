@@ -311,7 +311,7 @@ enum SipRound = q{
 };
 
 
-unittest {
+version(iv_hash_unittest) unittest {
   import std.conv : to;
   import std.range : chunks;
   import std.bitmanip : littleEndianToNative, nativeToLittleEndian;

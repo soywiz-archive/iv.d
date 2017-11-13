@@ -186,7 +186,7 @@ uint murHash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.siz
 }
 
 
-unittest {
+version(iv_hash_unittest) unittest {
   // wow, we can do this in compile time!
   static assert(murHash32("Alice & Miriel") == 0x295db5e7u);
 

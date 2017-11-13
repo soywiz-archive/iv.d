@@ -52,13 +52,13 @@ private:
 public:
 nothrow @trusted @nogc:
   /// construct state with seed
-  this (ulong aseed) pure { hash = seed = aseed; }
+  this (ulong aseed) pure { pragma(inline, true); hash = seed = aseed; }
 
   /// reset state
-  void reset () pure { accum = totallen = 0; hash = seed; }
+  void reset () pure { pragma(inline, true); accum = totallen = 0; hash = seed; }
 
   /// reset state
-  void reset (ulong aseed) pure { accum = totallen = 0; hash = seed = aseed; }
+  void reset (ulong aseed) pure { pragma(inline, true); accum = totallen = 0; hash = seed = aseed; }
 
   /// process data block
   void put(T) (scope const(T)[] data...) if (T.sizeof == 1) {
@@ -168,6 +168,7 @@ nothrow @trusted @nogc:
   /// finalize a hash (i.e. return current result).
   /// note that you can continue putting data, as this is not destructive
   @property uint result32 () const pure {
+    pragma(inline, true);
     auto h = result64;
     // the following trick converts the 64-bit hashcode to Fermat
     // residue, which shall retain information from both the higher
@@ -207,7 +208,7 @@ uint fastHash32(T) (const(T)[] buf, ulong seed=0) nothrow @trusted @nogc if (T.s
 }
 
 
-unittest {
+version(iv_hash_unittest) unittest {
   static assert(fastHash32("Alice & Miriel") == 0x4773e2a3U);
   static assert(fastHash64("Alice & Miriel") == 0xfa02b41e417696c1UL);
 
