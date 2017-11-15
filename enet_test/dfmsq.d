@@ -15,7 +15,7 @@ struct ServerInfo {
   ushort port;
   char[256] namestr = 0; // [0] is length
   char[256] mapstr = 0; // [0] is length
-  ubyte mode;
+  ubyte modeval;
   ubyte players;
   ubyte maxplayers;
   ubyte protover;
@@ -57,13 +57,25 @@ struct ServerInfo {
     port = getu16;
     getstr(namestr[]);
     getstr(mapstr[]);
-    mode = getu8;
+    modeval = getu8;
     players = getu8;
     maxplayers = getu8;
     protover = getu8;
     haspass = getu8;
 
     return data;
+  }
+
+  @property string mode () const pure nothrow @trusted @nogc {
+    switch (modeval) {
+      case 0: return "unknown";
+      case 1: return "DM";
+      case 2: return "TDM";
+      case 3: return "CTF";
+      case 4: return "COOP";
+      case 5: return "SINGLE";
+      default: return "invalid";
+    }
   }
 
   void dump () {
