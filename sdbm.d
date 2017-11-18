@@ -410,6 +410,28 @@ public:
    * Throws:
    *   SDBMException on various errors
    */
+  T get(T=string) (const(void)[] kbuf, uint start=0, uint max=uint.max, usize* sp=null) if (isDynamicArray!T && !isArray!(typeof(T.init[0]))) {
+    return getA!(typeof(T.init[0]))(kbuf, start, max, sp);
+  }
+
+  /** Retrieve a record.
+   *
+   * Params:
+   *   kbuf = the pointer to the region of a key
+   *   start = the offset address of the beginning of the region of the value to be read
+   *   max = specifies the max size to be read; if it is `uint.max`, the size to read is unlimited
+   *   sp = the pointer to a variable to which the size of the region of the return
+   *        value is assigned; if it is `null`, it is not used
+   *
+   * Returns:
+   *   If successful, the return value is the GC-allocated slice of the region of the value of the
+   *   corresponding record, else, it is `null`. `null` is returned when no record corresponds to
+   *   the specified key or the size of the value of the corresponding record is less than `start`.
+   *   No additional zero code is appended at the end of the region of the return value.
+   *
+   * Throws:
+   *   SDBMException on various errors
+   */
   T[] getA(T=char) (const(void)[] kbuf, uint start=0, uint max=uint.max, usize* sp=null) if (!isArray!T) {
     RecordHeader head;
     int bi, off, entoff;
