@@ -165,6 +165,78 @@ usize MurHashOf (const(char)[] data, usize seed=0) pure nothrow @trusted @nogc {
 }
 
 
+/**
+ * MurmurHash3 was written by Austin Appleby, and is placed in the public domain.
+ *
+ * Params:
+ *   buf =  data buffer
+ *   seed = the seed
+ *
+ * Returns:
+ *   32-bit hash
+ */
+uint murHash32 (const(char)[] data, uint seed=0) pure nothrow @trusted @nogc {
+  enum C1 = 0xcc9e2d51u;
+  enum C2 = 0x1b873593u;
+
+  uint hash = seed; // current value
+  uint k1;
+
+  // process data blocks
+  if (data.length) {
+    auto bytes = cast(const(ubyte)*)data.ptr;
+    auto len = data.length;
+    // process 32-bit chunks
+    foreach (immutable _; 0..len/4) {
+      version(LittleEndian) {
+        if (__ctfe) {
+          k1 = (bytes[0])|(bytes[1]<<8)|(bytes[2]<<16)|(bytes[3]<<24);
+        } else {
+          k1 = *cast(const(uint)*)bytes;
+        }
+      } else {
+        if (__ctfe) {
+          k1 = (bytes[3])|(bytes[2]<<8)|(bytes[1]<<16)|(bytes[0]<<24);
+        } else {
+          import core.bitop : bswap;
+          k1 = bswap(*cast(const(uint)*)bytes);
+        }
+      }
+      bytes += 4;
+      k1 *= C1;
+      k1 = (k1<<15)|(k1>>(32-15));
+      k1 *= C2;
+      hash ^= k1;
+      hash = (hash<<13)|(hash>>(32-13));
+      hash = hash*5+0xe6546b64;
+    }
+    // advance over whole 32-bit chunks, possibly leaving 1..3 bytes
+    if ((len &= 0x03) != 0) {
+      immutable ubyte n = cast(ubyte)len;
+      // append any remaining bytes into carry
+      uint accum = 0;
+      while (len--) accum = (accum>>8)|(*bytes++<<24);
+      // finalize a hash
+      k1 = accum>>((4-n)*8);
+      k1 *= C1;
+      k1 = (k1<<15)|(k1>>(32-15));
+      k1 *= C2;
+      hash ^= k1;
+    }
+    hash ^= cast(uint)data.length;
+  }
+
+  // fmix
+  hash ^= hash>>16;
+  hash *= 0x85ebca6bu;
+  hash ^= hash>>13;
+  hash *= 0xc2b2ae35u;
+  hash ^= hash>>16;
+
+  return hash;
+}
+
+
 
 usize bytesHash3(const(char)[] buf, usize seed=0) @system nothrow @nogc {
     static uint rotl32(uint n)(in uint x) pure nothrow @safe @nogc
@@ -359,7 +431,7 @@ void doTestX(alias fn) () {
   write((&fn).stringof[2..$], ": ");
   auto stt = clockMilli();
   foreach (immutable _; 0..Tries) {
-    foreach (string s; words) fn(s);
+    foreach (string s; words) cast(void)fn(s);
   }
   auto ett = clockMilli()-stt;
   writeln(words.length*Tries, " (", words.length, ", ", Tries, " times) took ", ett, " milliseconds");
@@ -380,6 +452,8 @@ static assert(bytesHash3("", 1234) == 0x0f2cc00bU);
 
 pragma(msg, murHashX("Sample string"));
 pragma(msg, murHashX("Alice & Miriel"));
+pragma(msg, murHash32("Sample string"));
+pragma(msg, murHash32("Alice & Miriel"));
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -392,6 +466,20 @@ void main () {
   doTest!MurHash();
   doTestX!sfHash();
   doTestX!murHashX();
+  doTestX!murHash32();
   doTestX!bytesHash3();
   doTestX!FFhashOf();
+
+  foreach (string w; words) {
+    if (murHashX(w) != murHash32(w)) assert(0, "shit!");
+  }
+
+  writeln("checking murhashes...");
+  char[1024*8] buf = void;
+  foreach (immutable _; 0..100000) {
+    import std.random;
+    auto len = uniform!"[]"(0, buf.length);
+    foreach (ref char c; buf[0..len]) c = cast(char)(uniform!"[]"(0, 255));
+    if (murHashX(buf[0..len]) != murHash32(buf[0..len])) assert(0, "shit!");
+  }
 }

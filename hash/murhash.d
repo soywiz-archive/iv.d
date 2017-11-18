@@ -179,16 +179,98 @@ nothrow @trusted @nogc:
  *   buf =  data buffer
  *   seed = the seed
  */
+/*
 uint murHash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.sizeof == 1) {
   auto hh = MurHash(seed);
   hh.put(buf);
   return hh.result32;
+}
+*/
+
+
+/**
+ * MurmurHash3 was written by Austin Appleby, and is placed in the public domain.
+ *
+ * Params:
+ *   buf =  data buffer
+ *   seed = the seed
+ *
+ * Returns:
+ *   32-bit hash
+ */
+uint murHash32(T) (const(T)[] data, uint seed=0) pure nothrow @trusted @nogc if (T.sizeof == 1) {
+  enum C1 = 0xcc9e2d51u;
+  enum C2 = 0x1b873593u;
+
+  uint hash = seed; // current value
+  uint k1;
+
+  // process data blocks
+  if (data.length) {
+    auto bytes = cast(const(ubyte)*)data.ptr;
+    auto len = data.length;
+    // process 32-bit chunks
+    foreach (immutable _; 0..len/4) {
+      version(LittleEndian) {
+        if (__ctfe) {
+          k1 = (bytes[0])|(bytes[1]<<8)|(bytes[2]<<16)|(bytes[3]<<24);
+        } else {
+          k1 = *cast(const(uint)*)bytes;
+        }
+      } else {
+        if (__ctfe) {
+          k1 = (bytes[3])|(bytes[2]<<8)|(bytes[1]<<16)|(bytes[0]<<24);
+        } else {
+          import core.bitop : bswap;
+          k1 = bswap(*cast(const(uint)*)bytes);
+        }
+      }
+      bytes += 4;
+      k1 *= C1;
+      k1 = (k1<<15)|(k1>>(32-15));
+      k1 *= C2;
+      hash ^= k1;
+      hash = (hash<<13)|(hash>>(32-13));
+      hash = hash*5+0xe6546b64;
+    }
+    // advance over whole 32-bit chunks, possibly leaving 1..3 bytes
+    if ((len &= 0x03) != 0) {
+      immutable ubyte n = cast(ubyte)len;
+      // append any remaining bytes into carry
+      uint accum = 0;
+      while (len--) accum = (accum>>8)|(*bytes++<<24);
+      // finalize a hash
+      k1 = accum>>((4-n)*8);
+      k1 *= C1;
+      k1 = (k1<<15)|(k1>>(32-15));
+      k1 *= C2;
+      hash ^= k1;
+    }
+    hash ^= cast(uint)data.length;
+  }
+
+  // fmix
+  hash ^= hash>>16;
+  hash *= 0x85ebca6bu;
+  hash ^= hash>>13;
+  hash *= 0xc2b2ae35u;
+  hash ^= hash>>16;
+
+  return hash;
 }
 
 
 version(iv_hash_unittest) unittest {
   // wow, we can do this in compile time!
   static assert(murHash32("Alice & Miriel") == 0x295db5e7u);
+
+  static uint xmurhash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.sizeof == 1) {
+    auto hh = MurHash(seed);
+    hh.put(buf);
+    return hh.result32;
+  }
+  static assert(xmurhash32("Alice & Miriel") == 0x295db5e7u);
+
 
   /*{
     import std.stdio;
@@ -197,4 +279,6 @@ version(iv_hash_unittest) unittest {
 
   mixin(import("test.d"));
   doTest!(32, "MurHash")("Alice & Miriel", 0x295db5e7u);
+  assert(murHash32("Alice & Miriel") == 0x295db5e7u);
+  assert(xmurhash32("Alice & Miriel") == 0x295db5e7u);
 }

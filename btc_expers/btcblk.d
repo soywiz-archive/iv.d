@@ -19,7 +19,7 @@ private:
       import core.sys.posix.unistd;
       import core.stdc.stdio : SEEK_CUR, SEEK_END, SEEK_SET;
       import std.internal.cstring;
-      fd = core.sys.posix.fcntl.open(afname.tempCString, O_RDONLY|O_CLOEXEC|O_DIRECT|O_NOATIME);
+      fd = core.sys.posix.fcntl.open(afname.tempCString, O_RDONLY|O_CLOEXEC|O_DIRECT/*|O_NOATIME*/);
       if (fd < 0) throw new Exception("cannot open file '"~afname.idup~"'");
       scope(failure) { core.sys.posix.unistd.close(fd); fd = -1; }
       auto size = lseek(fd, 0, SEEK_END);
