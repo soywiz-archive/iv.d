@@ -1,3 +1,20 @@
+/* Invisible Vector Library
+ * coded by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
+ * Understanding is not required. Only obedience.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 module blkdump is aliced;
 
 import iv.vfs.io;
@@ -34,12 +51,9 @@ string s2a (const(ubyte)[] script) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-bool parseBlock (MMapFile fl, ref uint ofs) {
-  if (ofs >= fl.size) return false;
-  auto fldata = fl[ofs..$];
-  auto bdata = BtcBlock.getPackedData(fldata);
-  ofs += BtcBlock.packedDataSize(fldata);
-  auto blk = BtcBlock(bdata);
+bool parseBlock (ref MemBuffer mbuf) {
+  import std.range : enumerate;
+  auto blk = BtcBlock(mbuf);
   // read block header
   auto hdr = blk.header;
   //hdr.bits = 0x1d001234;
@@ -52,25 +66,20 @@ bool parseBlock (MMapFile fl, ref uint ofs) {
   //writeln("bits: ", hdr.bits);
   //writefln("bits: 0x%08x", hdr.bits);
   //assert(hdr.zero == 0);
-  auto txc = blk.txcount;
-  //writeln("txc=", txc);
-  foreach (immutable tidx; 0..txc) {
-    auto txofs = blk.txofs(tidx);
-    writeln("transaction #", tidx, "; version is ", blk.txver(txofs), "; inputs: ", blk.icount(txofs), "; outputs: ", blk.ocount(txofs), "; lock=", blk.locktime(txofs));
-    if (blk.icount(txofs)) {
+  foreach (immutable tidx, const ref tx; blk[].enumerate) {
+    writeln("transaction #", tidx, "; version is ", tx.ver, "; inputs: ", tx.incount, "; outputs: ", tx.outcount, "; lock=", tx.locktime);
+    if (tx.incount > 0) {
       writeln(" -- inputs --");
-      foreach (immutable vidx; 0..blk.icount(txofs)) {
-        auto v = blk.getInput(txofs, vidx);
-        writeln("  #", vidx, ": vout=", v.vout, "; seq=", v.seq, "; script_length=", v.script.length, "; id=", v.id.bin2hex);
+      foreach (immutable vidx, const ref txin; tx.inputs.enumerate) {
+        writeln("  #", vidx, ": vout=", txin.vout, "; seq=", txin.seq, "; script_length=", txin.script.length, "; id=", txin.id.bin2hex);
         //if (isAsciiScript(v.script)) writeln("      ", cast(const(char)[])v.script);
         //if (v.script > 8) writeln("      ", s2a(v.script));
       }
     }
-    if (blk.ocount(txofs)) {
+    if (tx.outcount > 0) {
       writeln(" -- outputs --");
-      foreach (immutable vidx; 0..blk.ocount(txofs)) {
-        auto v = blk.getOutput(txofs, vidx);
-        writeln("  #", vidx, ": value=", v.value, "; script_length=", v.script.length);
+      foreach (immutable vidx, const ref txout; tx.outputs.enumerate) {
+        writeln("  #", vidx, ": value=", txout.value, "; script_length=", txout.script.length);
         //if (isAsciiScript(v.script)) writeln("      ", cast(const(char)[])v.script);
         //if (v.script > 67) writeln("      ", s2a(v.script));
       }
@@ -85,8 +94,8 @@ bool parseBlock (MMapFile fl, ref uint ofs) {
 void main (string[] args) {
   assert(args.length > 1);
   auto fl = MMapFile(args[1]);
-  uint ofs = 0;
-  for (;;) {
-    if (!parseBlock(fl, ofs)) break;
+  auto mbuf = MemBuffer(fl[]);
+  while (!mbuf.empty) {
+    if (!parseBlock(mbuf)) break;
   }
 }

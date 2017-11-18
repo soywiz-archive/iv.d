@@ -1,3 +1,20 @@
+/* Invisible Vector Library
+ * coded by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
+ * Understanding is not required. Only obedience.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 module btcblk is aliced;
 
 
@@ -117,6 +134,12 @@ public:
   alias length = size;
   alias opDollar = size;
 
+  const(ubyte)[] opSlice () @trusted {
+    if (!sdptr) return null;
+    auto sd = cast(SharedData*)sdptr;
+    return sd.mbuf[0..sd.mbufsize];
+  }
+
   const(ubyte)[] opSlice (usize lo, usize hi) @trusted {
     if (!sdptr || lo >= hi) return null;
     auto sd = cast(SharedData*)sdptr;
@@ -145,6 +168,146 @@ public string bin2hex(string mode="BE") (const(ubyte)[] buf) @trusted nothrow {
     }
   }
   return cast(string)res;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public struct MemBuffer {
+  const(ubyte)[] membuf;
+  uint ofs;
+
+  this (const(void)[] abuf) pure nothrow @safe @nogc {
+    membuf = cast(const(ubyte)[])abuf;
+  }
+
+  @property usize length () const pure nothrow @safe @nogc { pragma(inline, true); return (ofs < membuf.length ? membuf.length-ofs : 0); }
+
+  @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (ofs >= membuf.length); }
+
+  void clear () pure nothrow @safe @nogc { pragma(inline, true); membuf = null; ofs = 0; }
+
+  T getvl(T, bool dochecks=true) () @trusted if (is(T == byte) || is(T == ubyte) || is(T == short) || is(T == ushort) || is(T == int) || is(T == uint) || is(T == long) || is(T == ulong)) {
+    import core.stdc.string : memcpy;
+    static if (dochecks) if (ofs >= membuf.length) throw new Exception("malformed block");
+    ulong v = membuf.ptr[ofs++];
+    if (v == 0xFD) {
+      static if (dochecks) if (membuf.length-ofs < 3) throw new Exception("malformed block");
+      version(BigEndian) {
+        v = membuf.ptr[ofs]|(membuf.ptr[ofs+1]<<8);
+      } else {
+        memcpy(&v, membuf.ptr+ofs, 2);
+      }
+      ofs += 2;
+    } else if (v == 0xFE) {
+      static if (dochecks) if (membuf.length-ofs < 5) throw new Exception("malformed block");
+      version(BigEndian) {
+        v = membuf.ptr[ofs]|(membuf.ptr[ofs+1]<<8)|(membuf.ptr[ofs+2]<<16)|(membuf.ptr[ofs+3]<<24);
+      } else {
+        memcpy(&v, membuf.ptr+ofs, 4);
+      }
+      ofs += 4;
+    } else if (v == 0xFF) {
+      static if (dochecks) if (membuf.length-ofs < 9) throw new Exception("malformed block");
+      version(BigEndian) {
+        v = cast(ulong)(membuf.ptr[ofs]|(membuf.ptr[ofs+1]<<8)|(membuf.ptr[ofs+2]<<16)|(membuf.ptr[ofs+3]<<24))|
+          ((cast(ulong)(membuf.ptr[ofs+4]))<<32)|
+          ((cast(ulong)(membuf.ptr[ofs+5]))<<40)|
+          ((cast(ulong)(membuf.ptr[ofs+6]))<<48)|
+          ((cast(ulong)(membuf.ptr[ofs+7]))<<56);
+      } else {
+        memcpy(&v, membuf.ptr+ofs, 8);
+      }
+      ofs += 8;
+    }
+    static if (!is(T == ulong)) {
+      if (v > T.max) throw new Exception("value too big");
+    }
+    return cast(T)v;
+  }
+
+  T get(T, bool dochecks=true) () @trusted if (is(T == byte) || is(T == ubyte) || is(T == short) || is(T == ushort) || is(T == int) || is(T == uint) || is(T == long) || is(T == ulong)) {
+    static if (dochecks) {
+      if (ofs >= membuf.length) throw new Exception("malformed block");
+      if (membuf.length-ofs < T.sizeof) throw new Exception("malformed block");
+    }
+    version(BigEndian) {
+      static if (T.sizeof == 1) {
+        T res = *cast(const(T)*)(membuf.ptr+ofs);
+      } else static if (T.sizeof == 2) {
+        T res = cast(T)(membuf.ptr[ofs]|(membuf.ptr[ofs+1]<<8));
+      } else {
+        import core.bitop : bswap;
+        T res = bswap(*cast(const(T)*)(membuf.ptr+ofs));
+      }
+    } else {
+      T res = *cast(const(T)*)(membuf.ptr+ofs);
+    }
+    ofs += cast(uint)T.sizeof;
+    return res;
+  }
+
+  //FIXME: overflow checks
+  void getbuf(T) (ref T[] buf) @trusted if (is(T == byte) || is(T == ubyte) || is(T == short) || is(T == ushort) || is(T == int) || is(T == uint) || is(T == long) || is(T == ulong)) {
+    import core.stdc.string : memcpy;
+    if (ofs >= membuf.length) throw new Exception("malformed block");
+    if (membuf.length-ofs < buf.length*T.sizeof) throw new Exception("malformed block");
+    memcpy(buf.ptr, membuf.ptr+ofs, buf.length*T.sizeof);
+    ofs += cast(uint)(buf.length*T.sizeof);
+  }
+
+  //FIXME: overflow checks
+  const(T)[] getbufnc(T) (uint len) @trusted if (is(T == byte) || is(T == ubyte) || is(T == short) || is(T == ushort) || is(T == int) || is(T == uint) || is(T == long) || is(T == ulong)) {
+    if (ofs >= membuf.length) throw new Exception("malformed block");
+    if (membuf.length-ofs < len*T.sizeof) throw new Exception("malformed block");
+    auto res = cast(const(T)[])(membuf.ptr[ofs..ofs+len*T.sizeof]);
+    ofs += cast(uint)(len*T.sizeof);
+    return res;
+  }
+
+  void skipInput () @trusted {
+    if (ofs >= membuf.length) throw new Exception("malformed block");
+    // id[32]
+    if (membuf.length-ofs < 32) throw new Exception("malformed block");
+    ofs += 32;
+    // vout
+    if (membuf.length-ofs < 4) throw new Exception("malformed block");
+    ofs += 4;
+    // script
+    uint scsz = getvl!uint;
+    if (membuf.length-ofs < scsz) throw new Exception("malformed block");
+    ofs += scsz;
+    // seq
+    if (membuf.length-ofs < 4) throw new Exception("malformed block");
+    ofs += 4;
+  }
+
+  void skipOutput () @trusted {
+    if (ofs >= membuf.length) throw new Exception("malformed block");
+    // value
+    if (membuf.length-ofs < 8) throw new Exception("malformed block");
+    ofs += 8;
+    // script
+    uint scsz = getvl!uint;
+    if (membuf.length-ofs < scsz) throw new Exception("malformed block");
+    ofs += scsz;
+  }
+
+  void skipTx(bool skiplocktime=true) () @trusted {
+    if (ofs >= membuf.length) throw new Exception("malformed block");
+    // version
+    if (membuf.length-ofs < 4) throw new Exception("malformed block");
+    ofs += 4;
+    // inputs
+    uint icount = getvl!ushort;
+    while (icount-- > 0) skipInput();
+    // outputs
+    uint ocount = getvl!ushort;
+    while (ocount-- > 0) skipOutput();
+    static if (skiplocktime) {
+      if (membuf.length-ofs < 4) throw new Exception("malformed block");
+      ofs += 4;
+    }
+  }
 }
 
 
@@ -210,81 +373,175 @@ public:
     const(ubyte)[] script;
   }
 
-private:
-  T getvl(T, bool dochecks=true) (ref usize ofs) const @trusted if (is(T == byte) || is(T == ubyte) || is(T == short) || is(T == ushort) || is(T == int) || is(T == uint) || is(T == long) || is(T == ulong)) {
-    version(BigEndian) {
-      static assert(0, "not yet");
-    } else {
-      import core.stdc.string : memcpy;
-      static if (dochecks) if (ofs >= membuf.length) throw new Exception("malformed block");
-      ulong v = membuf.ptr[ofs++];
-      if (v == 0xFD) {
-        static if (dochecks) if (membuf.length-ofs < 3) throw new Exception("malformed block");
-        memcpy(&v, membuf.ptr+ofs, 2);
-        ofs += 2;
-      } else if (v == 0xFE) {
-        static if (dochecks) if (membuf.length-ofs < 5) throw new Exception("malformed block");
-        memcpy(&v, membuf.ptr+ofs, 4);
-        ofs += 4;
-      } else if (v == 0xFF) {
-        static if (dochecks) if (membuf.length-ofs < 9) throw new Exception("malformed block");
-        memcpy(&v, membuf.ptr+ofs, 8);
-        ofs += 8;
+public:
+  //FIXME: in/out ranges are fuckin' pasta, i can templatize this!
+  static struct TxInRange {
+  private:
+    MemBuffer mbuf;
+    uint cur, len;
+    uint curofs;
+
+  private:
+    // no need to validate anything here
+    this (in ref MemBuffer abuf, uint aofs, int acount) nothrow @trusted @nogc {
+      mbuf.membuf = abuf.membuf[aofs..$];
+      len = acount;
+    }
+
+  public:
+    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (cur >= len); }
+    @property uint length () const pure nothrow @safe @nogc { pragma(inline, true); return len-cur; }
+
+    @property Input front () const pure @trusted {
+      pragma(inline, true);
+      if (cur >= len) assert(0, "no front element in empty range");
+      MemBuffer xbuf = mbuf;
+      xbuf.ofs = curofs;
+      // read input
+      Input res;
+      // id[32]
+      res.id = xbuf.getbufnc!ubyte(32);
+      // outnum
+      res.vout = xbuf.get!uint;
+      // script
+      uint scsz = xbuf.getvl!uint;
+      res.script = xbuf.getbufnc!ubyte(scsz);
+      // seq
+      res.seq = xbuf.get!uint;
+      // done
+      return res;
+    }
+
+    void popFront () {
+      if (cur < len) {
+        ++cur;
+        mbuf.ofs = curofs;
+        mbuf.skipInput();
+        curofs = mbuf.ofs;
       }
-      static if (!is(T == ulong)) {
-        if (v > T.max) throw new Exception("value too big");
-      }
-      return cast(T)v;
     }
   }
 
-  void skipInput (ref usize ofs) const @trusted {
-    if (ofs >= membuf.length) throw new Exception("malformed block");
-    // id[32]
-    if (membuf.length-ofs < 32) throw new Exception("malformed block");
-    ofs += 32;
-    // vout
-    if (membuf.length-ofs < 4) throw new Exception("malformed block");
-    ofs += 4;
-    // script
-    uint scsz = getvl!uint(ofs);
-    if (membuf.length-ofs < scsz) throw new Exception("malformed block");
-    ofs += scsz;
-    // seq
-    if (membuf.length-ofs < 4) throw new Exception("malformed block");
-    ofs += 4;
+  static struct TxOutRange {
+  private:
+    MemBuffer mbuf;
+    uint cur, len;
+    uint curofs;
+
+  private:
+    // no need to validate anything here
+    this (in ref MemBuffer abuf, uint aofs, int acount) nothrow @trusted @nogc {
+      mbuf.membuf = abuf.membuf[aofs..$];
+      len = acount;
+    }
+
+  public:
+    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (cur >= len); }
+    @property uint length () const pure nothrow @safe @nogc { pragma(inline, true); return len-cur; }
+
+    @property Output front () const pure @trusted {
+      pragma(inline, true);
+      if (cur >= len) assert(0, "no front element in empty range");
+      MemBuffer xbuf = mbuf;
+      xbuf.ofs = curofs;
+      // read input
+      Output res;
+      // value
+      res.value = xbuf.get!ulong;
+      // script
+      uint scsz = xbuf.getvl!uint;
+      res.script = xbuf.getbufnc!ubyte(scsz);
+      // done
+      return res;
+    }
+
+    void popFront () {
+      if (cur < len) {
+        ++cur;
+        mbuf.ofs = curofs;
+        mbuf.skipOutput();
+        curofs = mbuf.ofs;
+      }
+    }
   }
 
-  void skipOutput (ref usize ofs) const @trusted {
-    if (ofs >= membuf.length) throw new Exception("malformed block");
-    // value
-    if (membuf.length-ofs < 8) throw new Exception("malformed block");
-    ofs += 8;
-    // script
-    uint scsz = getvl!uint(ofs);
-    if (membuf.length-ofs < scsz) throw new Exception("malformed block");
-    ofs += scsz;
+
+  static struct Tx {
+  private:
+    MemBuffer mbuf;
+    int icount, ocount;
+    uint iofs, oofs;
+    uint txver;
+    uint txlocktm;
+
+  private:
+    this (in ref MemBuffer abuf, uint atxofs) @trusted {
+      mbuf.membuf = abuf.membuf[atxofs..$];
+      scope(failure) mbuf.clear();
+      txver = mbuf.get!uint;
+      icount = mbuf.getvl!ushort;
+      iofs = mbuf.ofs;
+      //{ import core.stdc.stdio; printf("txver=%u; icount=%u; iofs=%u\n", txver, icount, iofs); }
+      foreach (immutable _; 0..icount) mbuf.skipInput();
+      ocount = mbuf.getvl!ushort;
+      oofs = mbuf.ofs;
+      //{ import core.stdc.stdio; printf(" ocount=%u; oofs=%u\n", ocount, oofs); }
+      foreach (immutable _; 0..ocount) mbuf.skipOutput();
+      txlocktm = mbuf.get!uint;
+    }
+
+  public:
+    @property uint ver () const pure nothrow @safe @nogc { pragma(inline, true); return txver; }
+    @property uint locktime () const pure nothrow @safe @nogc { pragma(inline, true); return txlocktm; }
+
+    @property int incount () const pure nothrow @safe @nogc { pragma(inline, true); return icount; }
+    @property int outcount () const pure nothrow @safe @nogc { pragma(inline, true); return ocount; }
+
+    TxInRange inputs () const nothrow @safe @nogc { return TxInRange(mbuf, iofs, icount); }
+    TxOutRange outputs () const nothrow @safe @nogc { return TxOutRange(mbuf, oofs, ocount); }
   }
 
-  void skipTx(bool skiplocktime=true) (ref usize ofs) const @trusted {
-    if (ofs >= membuf.length) throw new Exception("malformed block");
-    // version
-    if (membuf.length-ofs < 4) throw new Exception("malformed block");
-    ofs += 4;
-    // inputs
-    uint icount = getvl!ushort(ofs);
-    while (icount-- > 0) skipInput(ofs);
-    // outputs
-    uint ocount = getvl!ushort(ofs);
-    while (ocount-- > 0) skipOutput(ofs);
-    static if (skiplocktime) {
-      if (membuf.length-ofs < 4) throw new Exception("malformed block");
-      ofs += 4;
+
+  static struct TxRange {
+  private:
+    MemBuffer mbuf;
+    uint txn, txe;
+
+  private:
+    this (in ref MemBuffer abuf, usize txlo, usize txhi) @trusted {
+      mbuf.membuf = abuf.membuf;
+      mbuf.ofs = cast(uint)BtcBlock.Header.sizeof;
+      auto txc = mbuf.getvl!uint;
+      if (txlo >= txhi || txlo >= txc) {
+        mbuf.ofs = 0;
+      } else {
+        //{ import core.stdc.stdio; printf("txlo=%u; txhi=%u; txc=%u\n", cast(uint)txlo, cast(uint)txhi, cast(uint)txc); }
+        while (txn < txlo) { mbuf.skipTx(); ++txn; }
+        txe = (txhi <= txc ? cast(uint)txhi : txc);
+      }
+    }
+
+  public:
+    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (txn >= txe); }
+    @property uint length () const pure nothrow @safe @nogc { pragma(inline, true); return txe-txn; }
+
+    @property Tx front () const @trusted {
+      pragma(inline, true);
+      if (txn >= txe) assert(0, "no front element in empty range");
+      return Tx(mbuf, mbuf.ofs);
+    }
+
+    void popFront () {
+      pragma(inline, true);
+      if (txn < txe) {
+        ++txn;
+        mbuf.skipTx();
+      }
     }
   }
 
 private:
-  const(ubyte)[] membuf;
+  MemBuffer mbuf;
 
 public @trusted:
   // throws on invalid data
@@ -320,120 +577,33 @@ public @trusted:
     return len+8;
   }
 
-  this (const(void)[] abuf) {
-    //pragma(inline, true);
-    if (abuf.length < Header.sizeof) throw new Exception("malformed block");
-    membuf = cast(const(ubyte)[])abuf;
-    scope(failure) membuf = null; // ease GC pressure
+  // advance abuf offset past the block
+  this (ref MemBuffer abuf, uint amagic=Magic.Main) @trusted {
+    if (abuf.length < 8) throw new Exception("malformed block");
+    auto magic = abuf.get!uint;
+    if (magic != amagic) throw new Exception("invalid packet magic");
+    auto len = abuf.get!uint;
+    if (len >= uint.max-16 || len > abuf.length) throw new Exception("invalid packet size");
+    if (len < Header.sizeof) throw new Exception("malformed block");
+    mbuf.membuf = abuf.membuf[abuf.ofs..abuf.ofs+len];
+    mbuf.ofs = cast(uint)Header.sizeof;
+    abuf.ofs += len;
   }
 
-  void clear () nothrow @nogc { pragma(inline, true); membuf = null; }
+  void clear () nothrow @nogc { pragma(inline, true); mbuf.clear(); }
 
-  @property bool valid () const pure nothrow @nogc { pragma(inline, true); return (membuf.length > Header.sizeof); }
-  @property auto header () const nothrow @nogc { pragma(inline, true); return (membuf.length > Header.sizeof ? cast(const Header*)membuf.ptr : cast(const Header*)null); }
+  @property bool valid () const pure nothrow @nogc { pragma(inline, true); return (mbuf.length > Header.sizeof); }
+  @property auto header () const nothrow @nogc { pragma(inline, true); return (mbuf.length > Header.sizeof ? cast(const Header*)mbuf.membuf.ptr : cast(const Header*)null); }
 
   @property int txcount () const {
-    usize ofs = Header.sizeof;
-    return cast(int)getvl!ushort(ofs);
+    MemBuffer xmbuf = mbuf;
+    xmbuf.ofs = cast(uint)Header.sizeof;
+    return cast(int)xmbuf.getvl!ushort;
   }
 
-  @property uint txofs (usize idx) const {
-    usize ofs = Header.sizeof;
-    uint txc = getvl!ushort(ofs);
-    if (idx >= txc) return 0; //throw new Exception("invalid index");
-    //{ import core.stdc.stdio; printf("txc=%u; hsz=%u; ofs=%u\n", txc, cast(uint)Header.sizeof, cast(uint)ofs); }
-    while (idx-- > 0) skipTx(ofs);
-    return cast(uint)ofs;
-  }
+  @property usize length () const { pragma(inline, true); return txcount; }
+  alias opDollar = length;
 
-  // 0: no more
-  @property uint txnext (uint txofs) const {
-    if (txofs == 0) return 0;
-    usize ofs = txofs;
-    skipTx(ofs);
-    return (membuf.length-ofs > 0 ? cast(uint)ofs : 0);
-  }
-
-  @property uint txver (uint txofs) const {
-    if (txofs == 0) return 0;
-    if (membuf.length-txofs < 4) throw new Exception("malformed block");
-    return *cast(const(uint)*)(membuf.ptr+txofs);
-  }
-
-  @property int icount (uint txofs) const {
-    if (txofs == 0) return 0;
-    if (txofs < Header.sizeof+1) throw new Exception("invalid transaction offset");
-    usize ofs = txofs+4; // skip version
-    return cast(int)getvl!ushort(ofs);
-  }
-
-  @property int ocount (uint txofs) const {
-    if (txofs == 0) return 0;
-    if (txofs < Header.sizeof+1) throw new Exception("invalid transaction offset");
-    usize ofs = txofs+4; // skip version
-    uint icount = getvl!ushort(ofs);
-    while (icount-- > 0) skipInput(ofs);
-    return cast(int)getvl!ushort(ofs);
-  }
-
-  @property uint locktime (uint txofs) const {
-    if (txofs == 0) return 0;
-    if (txofs < Header.sizeof+1) throw new Exception("invalid transaction offset");
-    usize ofs = txofs;
-    skipTx!false(ofs);
-    if (membuf.length-ofs < 4) throw new Exception("malformed block");
-    return *cast(const(uint)*)(membuf.ptr+ofs);
-  }
-
-  @property Input getInput (uint txofs, usize idx) const {
-    if (txofs < Header.sizeof+1) throw new Exception("invalid transaction offset");
-    usize ofs = txofs+4; // skip version
-    int icount = getvl!ushort(ofs);
-    if (idx >= icount) throw new Exception("invalid index");
-    while (idx-- > 0) skipInput(ofs);
-    // read input
-    Input res;
-    if (ofs >= membuf.length) throw new Exception("malformed block");
-    // id[32]
-    if (membuf.length-ofs < 32) throw new Exception("malformed block");
-    res.id = membuf.ptr[ofs..ofs+32];
-    ofs += 32;
-    // outnum
-    if (membuf.length-ofs < 4) throw new Exception("malformed block");
-    res.vout = *cast(const(uint)*)(membuf.ptr+ofs);
-    ofs += 4;
-    // script
-    uint scsz = getvl!uint(ofs);
-    if (membuf.length-ofs < scsz) throw new Exception("malformed block");
-    res.script = membuf.ptr[ofs..ofs+scsz];
-    ofs += scsz;
-    // seq
-    if (membuf.length-ofs < 4) throw new Exception("malformed block");
-    res.seq = *cast(const(uint)*)(membuf.ptr+ofs);
-    // done
-    return res;
-  }
-
-  @property Output getOutput (uint txofs, usize idx) const {
-    if (txofs < Header.sizeof+1) throw new Exception("invalid transaction offset");
-    usize ofs = txofs+4; // skip version
-    int icount = getvl!ushort(ofs);
-    while (icount-- > 0) skipInput(ofs);
-    int ocount = getvl!ushort(ofs);
-    if (idx >= ocount) throw new Exception("invalid index");
-    while (idx-- > 0) skipOutput(ofs);
-    // read output
-    Output res;
-    if (ofs >= membuf.length) throw new Exception("malformed block");
-    // value
-    if (membuf.length-ofs < 8) throw new Exception("malformed block");
-    res.value = *cast(const(ulong)*)(membuf.ptr+ofs);
-    ofs += 8;
-    // script
-    uint scsz = getvl!uint(ofs);
-    if (membuf.length-ofs < scsz) throw new Exception("malformed block");
-    res.script = membuf.ptr[ofs..ofs+scsz];
-    // done
-    return res;
-  }
+  TxRange opSlice () const { pragma(inline, true); return TxRange(mbuf, 0, length); }
+  TxRange opSlice (usize lo, usize hi) const { pragma(inline, true); return TxRange(mbuf, lo, hi); }
 }
