@@ -322,7 +322,7 @@ public:
     NameCoin = 0xFEB4BEF9U,
   }
 
-  align(1) struct Header {
+  align(1) static struct Header {
   align(1):
     uint ver;
     const(ubyte)[32] prev;
@@ -374,96 +374,56 @@ public:
   }
 
 public:
-  //FIXME: in/out ranges are fuckin' pasta, i can templatize this!
-  static struct TxInRange {
+  private static struct TxInOutRange(FT, string parser) {
   private:
     MemBuffer mbuf;
     uint cur, len;
-    uint curofs;
+    FT crec;
 
   private:
+    void xparse() () { mixin(parser); }
+
     // no need to validate anything here
-    this (in ref MemBuffer abuf, uint aofs, int acount) nothrow @trusted @nogc {
+    this (in ref MemBuffer abuf, uint aofs, int acount) @trusted {
       mbuf.membuf = abuf.membuf[aofs..$];
       len = acount;
+      if (acount > 0) xparse();
     }
 
   public:
     @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (cur >= len); }
     @property uint length () const pure nothrow @safe @nogc { pragma(inline, true); return len-cur; }
 
-    @property Input front () const pure @trusted {
-      pragma(inline, true);
-      if (cur >= len) assert(0, "no front element in empty range");
-      MemBuffer xbuf = mbuf;
-      xbuf.ofs = curofs;
-      // read input
-      Input res;
-      // id[32]
-      res.id = xbuf.getbufnc!ubyte(32);
-      // outnum
-      res.vout = xbuf.get!uint;
-      // script
-      uint scsz = xbuf.getvl!uint;
-      res.script = xbuf.getbufnc!ubyte(scsz);
-      // seq
-      res.seq = xbuf.get!uint;
-      // done
-      return res;
-    }
+    @property FT front () const pure nothrow @trusted @nogc { pragma(inline, true); return crec; }
 
     void popFront () {
+      pragma(inline, true);
       if (cur < len) {
         ++cur;
-        mbuf.ofs = curofs;
-        mbuf.skipInput();
-        curofs = mbuf.ofs;
+        if (cur < len) xparse();
       }
     }
   }
 
-  static struct TxOutRange {
-  private:
-    MemBuffer mbuf;
-    uint cur, len;
-    uint curofs;
+  public alias TxInRange = TxInOutRange!(Input, q{
+    // id[32]
+    crec.id = mbuf.getbufnc!ubyte(32);
+    // outnum
+    crec.vout = mbuf.get!uint;
+    // script
+    uint scsz = mbuf.getvl!uint;
+    crec.script = mbuf.getbufnc!ubyte(scsz);
+    // seq
+    crec.seq = mbuf.get!uint;
+  });
 
-  private:
-    // no need to validate anything here
-    this (in ref MemBuffer abuf, uint aofs, int acount) nothrow @trusted @nogc {
-      mbuf.membuf = abuf.membuf[aofs..$];
-      len = acount;
-    }
-
-  public:
-    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (cur >= len); }
-    @property uint length () const pure nothrow @safe @nogc { pragma(inline, true); return len-cur; }
-
-    @property Output front () const pure @trusted {
-      pragma(inline, true);
-      if (cur >= len) assert(0, "no front element in empty range");
-      MemBuffer xbuf = mbuf;
-      xbuf.ofs = curofs;
-      // read input
-      Output res;
-      // value
-      res.value = xbuf.get!ulong;
-      // script
-      uint scsz = xbuf.getvl!uint;
-      res.script = xbuf.getbufnc!ubyte(scsz);
-      // done
-      return res;
-    }
-
-    void popFront () {
-      if (cur < len) {
-        ++cur;
-        mbuf.ofs = curofs;
-        mbuf.skipOutput();
-        curofs = mbuf.ofs;
-      }
-    }
-  }
+  public alias TxOutRange = TxInOutRange!(Output, q{
+    // value
+    crec.value = mbuf.get!ulong;
+    // script
+    uint scsz = mbuf.getvl!uint;
+    crec.script = mbuf.getbufnc!ubyte(scsz);
+  });
 
 
   static struct Tx {
@@ -497,8 +457,8 @@ public:
     @property int incount () const pure nothrow @safe @nogc { pragma(inline, true); return icount; }
     @property int outcount () const pure nothrow @safe @nogc { pragma(inline, true); return ocount; }
 
-    TxInRange inputs () const nothrow @safe @nogc { return TxInRange(mbuf, iofs, icount); }
-    TxOutRange outputs () const nothrow @safe @nogc { return TxOutRange(mbuf, oofs, ocount); }
+    TxInRange inputs () const @safe { return TxInRange(mbuf, iofs, icount); }
+    TxOutRange outputs () const @safe { return TxOutRange(mbuf, oofs, ocount); }
   }
 
 
