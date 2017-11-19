@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module btcblk is aliced;
+module btcblock is aliced;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -448,6 +448,8 @@ public:
       //{ import core.stdc.stdio; printf(" ocount=%u; oofs=%u\n", ocount, oofs); }
       foreach (immutable _; 0..ocount) mbuf.skipOutput();
       txlocktm = mbuf.get!uint;
+      // drop alien data
+      mbuf.membuf = mbuf.membuf[0..mbuf.ofs];
     }
 
   public:
@@ -456,6 +458,23 @@ public:
 
     @property int incount () const pure nothrow @safe @nogc { pragma(inline, true); return icount; }
     @property int outcount () const pure nothrow @safe @nogc { pragma(inline, true); return ocount; }
+
+    @property auto data () const pure nothrow @trusted @nogc { pragma(inline, true); return mbuf.membuf; }
+
+    // calculate txid; return reversed txid, 'cause this is how it is stored in inputs
+    @property ubyte[32] txid () const pure nothrow @trusted @nogc {
+      import std.digest.sha : sha256Of;
+      auto dg0 = sha256Of(mbuf.membuf);
+      dg0 = sha256Of(dg0[]);
+      version(none) {
+        foreach (immutable idx, ref ubyte b; dg0[0..16]) {
+          ubyte t = dg0.ptr[31-idx];
+          dg0.ptr[31-idx] = t;
+          b = t;
+        }
+      }
+      return dg0;
+    }
 
     TxInRange inputs () const @safe { return TxInRange(mbuf, iofs, icount); }
     TxOutRange outputs () const @safe { return TxOutRange(mbuf, oofs, ocount); }

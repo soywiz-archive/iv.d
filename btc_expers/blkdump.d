@@ -18,7 +18,12 @@
 module blkdump is aliced;
 
 import iv.vfs.io;
-import btcblk;
+
+import btcblock;
+import btcscript;
+
+
+//version = dump_scripts;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -67,21 +72,37 @@ bool parseBlock (ref MemBuffer mbuf) {
   //writefln("bits: 0x%08x", hdr.bits);
   //assert(hdr.zero == 0);
   foreach (immutable tidx, const ref tx; blk[].enumerate) {
-    writeln("transaction #", tidx, "; version is ", tx.ver, "; inputs: ", tx.incount, "; outputs: ", tx.outcount, "; lock=", tx.locktime);
+    writeln("transaction #", tidx, "; version is ", tx.ver, "; inputs: ", tx.incount, "; outputs: ", tx.outcount, "; lock=", tx.locktime, "; datalen=", tx.data.length, "; txid=", tx.txid.bin2hex);
     if (tx.incount > 0) {
       writeln(" -- inputs --");
       foreach (immutable vidx, const ref txin; tx.inputs.enumerate) {
         writeln("  #", vidx, ": vout=", txin.vout, "; seq=", txin.seq, "; script_length=", txin.script.length, "; id=", txin.id.bin2hex);
-        //if (isAsciiScript(v.script)) writeln("      ", cast(const(char)[])v.script);
-        //if (v.script > 8) writeln("      ", s2a(v.script));
+        version(dump_scripts) {
+          const(ubyte)[] sc = txin.script;
+          if (sc.length) {
+            uint ofs = 0;
+            while (sc.length) {
+              writefln("    %04X: %s", ofs, btsDecodeOne(sc));
+              sc = sc[btsOpSize(sc)..$];
+            }
+          }
+        }
       }
     }
     if (tx.outcount > 0) {
       writeln(" -- outputs --");
       foreach (immutable vidx, const ref txout; tx.outputs.enumerate) {
         writeln("  #", vidx, ": value=", txout.value, "; script_length=", txout.script.length);
-        //if (isAsciiScript(v.script)) writeln("      ", cast(const(char)[])v.script);
-        //if (v.script > 67) writeln("      ", s2a(v.script));
+        version(dump_scripts) {
+          const(ubyte)[] sc = txout.script;
+          if (sc.length) {
+            uint ofs = 0;
+            while (sc.length) {
+              writefln("    %04X: %s", ofs, btsDecodeOne(sc));
+              sc = sc[btsOpSize(sc)..$];
+            }
+          }
+        }
       }
     }
   }
@@ -90,12 +111,26 @@ bool parseBlock (ref MemBuffer mbuf) {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+import core.time;
 
 void main (string[] args) {
   assert(args.length > 1);
   auto fl = MMapFile(args[1]);
   auto mbuf = MemBuffer(fl[]);
+  auto stt = MonoTime.currTime;
+  int count = 0, total = 0;
   while (!mbuf.empty) {
     if (!parseBlock(mbuf)) break;
+    ++total;
+    if (++count >= 1024) {
+      count = 0;
+      auto ctt = MonoTime.currTime;
+      if ((ctt-stt).total!"msecs" >= 1000) {
+        stderr.write("\r", total, " blocks processed...");
+        stt = ctt;
+      }
+    }
   }
+  stderr.writeln("\r", total, " blocks processed...");
 }
