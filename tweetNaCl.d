@@ -701,10 +701,9 @@ bool crypto_box_enc (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(
   auto res = crypto_box(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
   ubyte b = 0;
   foreach (immutable ubyte bv; dmem[0..crypto_secretbox_BOXZEROBYTES]) b |= bv;
-  if (b != 0) return false;
   // copy result to destination buffer
-  if (res) memcpy(c.ptr, dmem+crypto_secretbox_BOXZEROBYTES, crypto_box_encsize(msg));
-  return res;
+  memcpy(c.ptr, dmem+crypto_secretbox_BOXZEROBYTES, crypto_box_encsize(msg));
+  return (res && b == 0);
 }
 
 /**
@@ -754,10 +753,9 @@ bool crypto_box_dec (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(
   auto res = crypto_box_open(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
   ubyte b = 0;
   foreach (immutable ubyte bv; dmem[0..crypto_secretbox_ZEROBYTES]) b |= bv;
-  if (b != 0) return false;
   // copy result to destination buffer
-  if (res) memcpy(msg.ptr, dmem+crypto_secretbox_ZEROBYTES, crypto_box_decsize(c));
-  return res;
+  memcpy(msg.ptr, dmem+crypto_secretbox_ZEROBYTES, crypto_box_decsize(c));
+  return (res && b == 0);
 }
 
 
