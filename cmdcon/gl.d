@@ -269,7 +269,8 @@ private bool glconGenTexture () {
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, bclr.ptr);
   */
 
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrwdt, scrhgt, 0, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, nextPOTU32(scrwdt), nextPOTU32(scrhgt), 0, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, null); // this creates texture
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0/*x*/, 0/*y*/, scrwdt, scrhgt, /*GL_RGBA*/GL_BGRA, GL_UNSIGNED_BYTE, convbuf); // this updates texture
 
   //{ import core.stdc.stdio; printf("glconGenTexture: yep\n"); }
   return true;
@@ -382,6 +383,9 @@ public void glconDraw () {
   int w = scrwdt*conScale;
   int h = scrhgt*conScale;
 
+  immutable float gtx1 = cast(float)scrwdt/nextPOTU32(scrwdt);
+  immutable float gty1 = cast(float)scrhgt/nextPOTU32(scrhgt);
+
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
   if (glHasFunc!"glUseProgram") glUseProgram(0);
@@ -430,9 +434,9 @@ public void glconDraw () {
   //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
   glBegin(GL_QUADS);
     glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y); // top-left
-    glTexCoord2f(1.0f, 0.0f); glVertex2i(w, y); // top-right
-    glTexCoord2f(1.0f, 1.0f); glVertex2i(w, h); // bottom-right
-    glTexCoord2f(0.0f, 1.0f); glVertex2i(x, h); // bottom-left
+    glTexCoord2f(gtx1, 0.0f); glVertex2i(w, y); // top-right
+    glTexCoord2f(gtx1, gty1); glVertex2i(w, h); // bottom-right
+    glTexCoord2f(0.0f, gty1); glVertex2i(x, h); // bottom-left
   glEnd();
   //glDisable(GL_BLEND);
 }
