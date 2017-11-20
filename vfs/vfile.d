@@ -482,7 +482,7 @@ public:
   /// usage: st.writeNum!ubyte(10)
   void writeNum(T, string es="LE") (T n) if (__traits(isIntegral, T)) {
     static assert(T.sizeof <= 8); // just in case
-    static if (es == MyEHi || es == MyELo) {
+    static if (es == MyEHi || es == MyELo || T.sizeof == 1) {
       rawWrite((&n)[0..1]);
     } else static if (es == ItEHi || es == ItELo) {
       ubyte[T.sizeof] b = void;
@@ -503,7 +503,7 @@ public:
   /// usage: auto v = st.readNum!ubyte
   T readNum(T, string es="LE") () if (__traits(isIntegral, T)) {
     static assert(T.sizeof <= 8); // just in case
-    static if (es == MyEHi || es == MyELo) {
+    static if (es == MyEHi || es == MyELo || T.sizeof == 1) {
       T v = void;
       rawReadExact((&v)[0..1]);
       return v;
@@ -566,6 +566,82 @@ public:
       static assert(0, "invalid endianness: '"~es~"'");
     }
     return v;
+  }
+
+  /// write btc-style integer
+  void writeVarUNum(T, string es="LE") (T n) if (__traits(isIntegral, T) && __traits(isUnsigned, T)) {
+    static assert(T.sizeof <= 8); // just in case
+    if (n < 253) {
+      writeNum!(ubyte, es)(cast(ubyte)n);
+    } else if (n <= 255) {
+      writeNum!(ubyte, es)(253);
+      writeNum!(ushort, es)(cast(ushort)n);
+    } else {
+      // ushort?
+      static if (T.sizeof == 2) {
+        writeNum!(ubyte, es)(253);
+        writeNum!(ushort, es)(cast(ushort)n);
+      } else {
+        // fits into ushort?
+        if (n <= ushort.max) {
+          writeNum!(ubyte, es)(253);
+          writeNum!(ushort, es)(cast(ushort)n);
+        } else {
+          // uint?
+          static if (T.sizeof == 4) {
+            writeNum!(ubyte, es)(254);
+            writeNum!(uint, es)(cast(uint)n);
+          } else {
+            // fits into uint?
+            if (n <= uint.max) {
+              writeNum!(ubyte, es)(254);
+              writeNum!(uint, es)(cast(uint)n);
+            } else {
+              // ulong
+              writeNum!(ubyte, es)(255);
+              writeNum!(ulong, es)(cast(ulong)n);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /// read btc-style integer
+  T readVarUNum(T, string es="LE") () if (__traits(isIntegral, T) && __traits(isUnsigned, T)) {
+    ubyte b = readNum!(ubyte, es);
+    if (b < 253) return cast(T)b;
+    switch (b) {
+      case 253: // ushort
+        ushort v = readNum!(ushort, es);
+        if (v < 253) throw new VFSException("invalid varnum");
+        // check overflow
+        static if (T.sizeof == 1) {
+          import std.conv : ConvOverflowException;
+          if (v > ubyte.max) throw new ConvOverflowException("varnum overflow");
+        }
+        return cast(T)v;
+      case 254: // uint
+        uint v = readNum!(uint, es);
+        if (v < 253) throw new VFSException("invalid varnum");
+        // check overflow
+        static if (T.sizeof < uint.sizeof) {
+          import std.conv : ConvOverflowException;
+          if (v > T.max) throw new ConvOverflowException("varnum overflow");
+        }
+        return cast(T)v;
+      case 255: // ulong
+        ulong v = readNum!(ulong, es);
+        if (v < 253) throw new VFSException("invalid varnum");
+        // check overflow
+        static if (T.sizeof < ulong.sizeof) {
+          import std.conv : ConvOverflowException;
+          if (v > T.max) throw new ConvOverflowException("varnum overflow");
+        }
+        return cast(T)v;
+      default: break;
+    }
+    return cast(T)b;
   }
 
 

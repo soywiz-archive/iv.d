@@ -233,7 +233,7 @@ public template isSystemEndianness(string s) if (isGoodEndianness!s) {
 /// usage: st.writeNum!ubyte(10)
 void writeNum(T, string es="LE", ST) (auto ref ST st, T n) if (isGoodEndianness!es && isWriteableStream!ST && __traits(isIntegral, T)) {
   static assert(T.sizeof <= 8); // just in case
-  static if (isSystemEndianness!es) {
+  static if (isSystemEndianness!es || T.sizeof == 1) {
     st.rawWriteExact((&n)[0..1]);
   } else {
     ubyte[T.sizeof] b = void;
@@ -253,7 +253,7 @@ void writeNum(T, string es="LE", ST) (auto ref ST st, T n) if (isGoodEndianness!
 /// usage: auto v = st.readNum!ubyte
 T readNum(T, string es="LE", ST) (auto ref ST st) if (isGoodEndianness!es && isReadableStream!ST && __traits(isIntegral, T)) {
   static assert(T.sizeof <= 8); // just in case
-  static if (isSystemEndianness!es) {
+  static if (isSystemEndianness!es || T.sizeof == 1) {
     T v = void;
     st.rawReadExact((&v)[0..1]);
     return v;
