@@ -11,6 +11,21 @@ enum GL_PI = 3.1415926535897932384626433832795;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+uint nextPOTU32 (uint x) nothrow @safe @nogc {
+  pragma(inline, true);
+  uint res = x;
+  res |= res>>1;
+  res |= res>>2;
+  res |= res>>4;
+  res |= res>>8;
+  res |= res>>16;
+  // already pot?
+  if (x != 0 && (x&(x-1)) == 0) res &= ~(res>>1); else ++res;
+  return res;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 void oglSetup2D(bool upsideDown=false) (int winWidth, int winHeight) {
   glViewport(0, 0, winWidth, winHeight);
 
