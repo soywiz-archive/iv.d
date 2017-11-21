@@ -1161,27 +1161,27 @@ public void glconSetupForGLWindow (SimpleWindow w) {
 
     if (glconTranslateMods) {
       switch (event.key) {
-        case Key.Ctrl_r: event.key = Key.Ctrl; return;
-        case Key.Shift_r: event.key = Key.Shift; return;
-        case Key.Alt_r: event.key = Key.Alt; return;
-        case Key.Windows_r: event.key = Key.Windows; return;
+        case Key.Ctrl_r: event.key = Key.Ctrl; break;
+        case Key.Shift_r: event.key = Key.Shift; break;
+        case Key.Alt_r: event.key = Key.Alt; break;
+        case Key.Windows_r: event.key = Key.Windows; break;
         default:
       }
     }
     if (glconTranslateKeypad) {
       if ((event.modifierState&ModifierState.numLock) == 0) {
         switch (event.key) {
-          case Key.PadEnter: event.key = Key.Enter; return;
-          case Key.Pad1: event.key = Key.End; return;
-          case Key.Pad2: event.key = Key.Down; return;
-          case Key.Pad3: event.key = Key.PageDown; return;
-          case Key.Pad4: event.key = Key.Left; return;
-          //case Key.Pad5: event.key = Key.; return;
-          case Key.Pad6: event.key = Key.Right; return;
-          case Key.Pad7: event.key = Key.Home; return;
-          case Key.Pad8: event.key = Key.Up; return;
-          case Key.Pad9: event.key = Key.PageUp; return;
-          case Key.Pad0: event.key = Key.Insert; return;
+          case Key.PadEnter: event.key = Key.Enter; break;
+          case Key.Pad1: event.key = Key.End; break;
+          case Key.Pad2: event.key = Key.Down; break;
+          case Key.Pad3: event.key = Key.PageDown; break;
+          case Key.Pad4: event.key = Key.Left; break;
+          //case Key.Pad5: event.key = Key.; break;
+          case Key.Pad6: event.key = Key.Right; break;
+          case Key.Pad7: event.key = Key.Home; break;
+          case Key.Pad8: event.key = Key.Up; break;
+          case Key.Pad9: event.key = Key.PageUp; break;
+          case Key.Pad0: event.key = Key.Insert; break;
           default:
         }
       }
