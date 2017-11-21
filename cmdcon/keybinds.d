@@ -44,7 +44,7 @@ import iv.strex;
     //LookXRight,
   }
 
-  void registerBindCommands!Key;
+  registerBindCommands!Key;
 
   // then in KeyEvent handler:
   if (PlayerBinds.processKeyEvent(event)) return;
@@ -171,10 +171,11 @@ public void saveBindings (scope void delegate (scope ConString s) wdg) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum KeyState { All, Down, Up }
+public enum KeyState { All, Down, Up }
 
 // 0: invalid
-Key findKeyByName (ConString name, KeyState* ks=null) {
+public Key findKeyByName (ConString name, KeyState* ks=null) {
+  auto anchor = name;
   if (ks !is null) *ks = KeyState.All;
   if (name.length && name[0] == '+') {
     if (ks !is null) *ks = KeyState.Down;
