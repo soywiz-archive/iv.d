@@ -76,7 +76,10 @@ import iv.alice;
 */
 version = sincresample_use_full_table;
 version(X86) {
-  version(D_PIC) {} else version = sincresample_use_sse;
+  version(sincresample_disable_sse) {
+  } else {
+    version(D_PIC) {} else version = sincresample_use_sse;
+  }
 }
 
 
