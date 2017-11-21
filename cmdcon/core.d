@@ -2640,6 +2640,63 @@ private void addName (string name) {
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+import std.range;
+
+void concmdRangeCompleter(IR, bool casesens=true) (ConCommand self, auto ref IR rng) if (isForwardRange!IR && is(ElementEncodingType!IR : const(char)[])) {
+  if (rng.empty) return; // oops
+  auto cs = conInputBuffer[0..conInputBufferCurX];
+  ConCommand.getWord(cs); // skip command
+  while (cs.length && cs[0] <= ' ') cs = cs[1..$];
+  if (cs.length == 0) {
+    conwriteln(self.name, ":");
+    foreach (const(char)[] mname; rng) conwriteln("  ", mname);
+  } else {
+    if (cs[0] == '"' || cs[0] == '\'') return; // alas
+    ConString pfx = ConCommand.getWord(cs);
+    while (cs.length && cs[0] <= ' ') cs = cs[1..$];
+    if (cs.length) return; // alas
+    const(char)[] bestPfx;
+    int count = 0;
+    foreach (const(char)[] mname; rng.save) {
+      if (mname.length >= pfx.length && strEquCI(mname[0..pfx.length], pfx)) {
+        if (count == 0) {
+          bestPfx = mname;
+        } else {
+          //if (mname.length < bestPfx.length) bestPfx = bestPfx[0..mname.length];
+          usize pos = 0;
+          while (pos < bestPfx.length && pos < mname.length) {
+            char c0 = bestPfx[pos];
+            char c1 = mname[pos];
+            static if (!casesens) {
+              if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man's tolower()
+              if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's tolower()
+            }
+            if (c0 != c1) break;
+            ++pos;
+          }
+          if (pos < bestPfx.length) bestPfx = bestPfx[0..pos];
+        }
+        ++count;
+      }
+    }
+    if (count == 0 || bestPfx.length < pfx.length) { conwriteln(self.name, ": ???"); return; }
+    foreach (char ch; bestPfx[pfx.length..$]) conAddInputChar(ch);
+    if (count == 1) {
+      conAddInputChar(' ');
+    } else {
+      conwriteln(self.name, ":");
+      foreach (const(char)[] mname; rng) {
+        if (mname.length >= bestPfx.length && mname[0..bestPfx.length] == bestPfx) {
+          conwriteln("  ", mname);
+        }
+      }
+    }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 private void enumComplete(T) (ConCommand self) if (is(T == enum)) {
   auto cs = conInputBuffer[0..conInputBufferCurX];
   ConCommand.getWord(cs); // skip command
