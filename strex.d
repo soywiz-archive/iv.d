@@ -194,7 +194,7 @@ ptrdiff_t indexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pure n
   if (hay.length <= stIdx || need.length == 0 || need.length > hay.length-stIdx) {
     return -1;
   } else {
-    auto res = memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
+    auto res = cast(char*)memmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
     return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
   }
 }
@@ -208,7 +208,7 @@ ptrdiff_t lastIndexOf (const(char)[] hay, const(char)[] need, size_t stIdx=0) pu
   if (hay.length <= stIdx || need.length == 0 || need.length > hay.length-stIdx) {
     return -1;
   } else {
-    auto res = memrmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
+    auto res = cast(char*)memrmem(hay.ptr+stIdx, hay.length-stIdx, need.ptr, need.length);
     return (res !is null ? cast(ptrdiff_t)(res-hay.ptr) : -1);
   }
 }
@@ -439,7 +439,7 @@ inout(void)* memrmem (inout(void)* haystack, size_t haystacklen, inout(void)* ne
       if (ff is null) break;
       if (memcmp(ff, needle, needlelen) == 0) return cast(void*)ff;
       //if (ff is h) break;
-      len = cast(size_t)(ff-haystack);
+      len = cast(size_t)(ff-cast(ubyte*)haystack);
     }
     return null;
   }
