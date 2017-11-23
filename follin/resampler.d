@@ -750,11 +750,15 @@ static immutable QualityMapping[11] qualityMap = [
 nothrow @trusted @nogc:
 /*8, 24, 40, 56, 80, 104, 128, 160, 200, 256, 320*/
 double computeFunc (float x, immutable FuncDef* func) {
-  import core.stdc.math : lrintf;
+  version(Posix) import core.stdc.math : lrintf;
   import std.math : floor;
   //double[4] interp;
   float y = x*func.oversample;
-  int ind = cast(int)lrintf(floor(y));
+  version(Posix) {
+    int ind = cast(int)lrintf(floor(y));
+  } else {
+    int ind = cast(int)(floor(y));
+  }
   float frac = (y-ind);
   immutable f2 = frac*frac;
   immutable f3 = f2*frac;
