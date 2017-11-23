@@ -3672,9 +3672,9 @@ ConVarBase conRegUserVar(T) (T amin, T amax, string aname, string help, const(Co
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// console always has "userconvar" command, no need to register it.
+// console always has "uvar_create" command, no need to register it.
 public class ConCommandUserConVar : ConCommand {
-  this () { super("userconvar", "create user convar: userconvar \"<type> <name>\"; type is <int|str|bool|float|double>"); }
+  this () { super("uvar_create", "create user convar: userconvar \"<type> <name>\"; type is <int|str|bool|float|double>"); }
 
   override void exec (ConString cmdline) {
     if (checkHelp(cmdline)) { showHelp; return; }
@@ -3720,9 +3720,9 @@ public class ConCommandUserConVar : ConCommand {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// console always has "killuserconvar" command, no need to register it.
+// console always has "uvar_remove" command, no need to register it.
 public class ConCommandKillUserConVar : ConCommand {
-  this () { super("killuserconvar", "remove user convar: killuserconvar \"<name>\""); }
+  this () { super("uvar_remove", "remove user convar: killuserconvar \"<name>\""); }
 
   override void exec (ConString cmdline) {
     if (checkHelp(cmdline)) { showHelp; return; }
@@ -3760,10 +3760,10 @@ shared static this () {
   cmdlist["echo"] = new ConCommandEcho();
   addName("alias");
   cmdlist["alias"] = new ConCommandAlias();
-  addName("userconvar");
-  cmdlist["userconvar"] = new ConCommandUserConVar();
-  addName("killuserconvar");
-  cmdlist["killuserconvar"] = new ConCommandKillUserConVar();
+  addName("uvar_create");
+  cmdlist["uvar_create"] = new ConCommandUserConVar();
+  addName("uvar_remove");
+  cmdlist["uvar_remove"] = new ConCommandKillUserConVar();
 }
 
 
