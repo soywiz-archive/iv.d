@@ -957,7 +957,14 @@ public void glconPostScreenRepaintDelayed (int tout=35) {
 }
 
 ///
-public void glconPostDoConCommands () {
+public void glconPostDoConCommands(bool checkempty=false) () {
+  static if (checkempty) {
+    {
+      consoleLock();
+      scope(exit) consoleUnlock();
+      if (conQueueEmpty()) return;
+    }
+  }
   if (glconCtlWindow !is null && !glconCtlWindow.eventQueued!GLConDoConsoleCommandsEvent) glconCtlWindow.postEvent(evDoConCommands);
 }
 
@@ -975,6 +982,7 @@ public __gshared void delegate (KeyEvent event) keyEventDG; ///
 public __gshared void delegate (MouseEvent event) mouseEventDG; ///
 public __gshared void delegate (dchar ch) charEventDG; ///
 public __gshared void delegate (int wdt, int hgt) resizeEventDG; ///
+public __gshared void delegate (bool focused) focusEventDG; ///
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1108,6 +1116,7 @@ public void glconSetupForGLWindow (SimpleWindow w) {
   };
 
   glconCtlWindow.addEventListener((NextFrameEvent evt) {
+    glconPostDoConCommands!true();
     if (glconCtlWindow.closed) return;
     if (isQuitRequested) { glconCtlWindow.close(); return; }
     if (nextFrameDG !is null) nextFrameDG();
@@ -1136,23 +1145,21 @@ public void glconSetupForGLWindow (SimpleWindow w) {
     if (resizeEventDG !is null) resizeEventDG(wdt, hgt);
   };
 
-  glconCtlWindow.redrawOpenGlScene = delegate () {
+  glconCtlWindow.onFocusChange = delegate (bool focused) {
     if (glconCtlWindow.closed) return;
+    if (focusEventDG !is null) focusEventDG(focused);
+  };
 
-    {
-      consoleLock();
-      scope(exit) consoleUnlock();
-      if (!conQueueEmpty()) glconPostDoConCommands();
-    }
-
+  glconCtlWindow.redrawOpenGlScene = delegate () {
+    glconPostDoConCommands!true();
+    if (glconCtlWindow.closed) return;
     // draw main screen
     if (redrawFrameDG !is null) redrawFrameDG();
-
     glconDraw();
   };
 
   glconCtlWindow.handleKeyEvent = delegate (KeyEvent event) {
-    scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
+    scope(exit) glconPostDoConCommands!true();
     if (glconCtlWindow.closed) return;
     if (isQuitRequested) { glconCtlWindow.close(); return; }
     if (glconKeyEvent(event)) { glconPostScreenRepaint(); return; }
@@ -1190,14 +1197,14 @@ public void glconSetupForGLWindow (SimpleWindow w) {
   };
 
   glconCtlWindow.handleMouseEvent = delegate (MouseEvent event) {
-    scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
+    scope(exit) glconPostDoConCommands!true();
     if (glconCtlWindow.closed) return;
     if (rConsoleVisible && glconNoMouseEventsWhenConsoleIsVisible) return;
     if (mouseEventDG !is null) mouseEventDG(event);
   };
 
   glconCtlWindow.handleCharEvent = delegate (dchar ch) {
-    scope(exit) if (!conQueueEmpty()) glconPostDoConCommands();
+    scope(exit) glconPostDoConCommands!true();
     if (glconCtlWindow.closed) return;
     if (glconCharEvent(ch)) { glconPostScreenRepaint(); return; }
     if (charEventDG !is null) charEventDG(ch);
