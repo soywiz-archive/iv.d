@@ -28,12 +28,15 @@ version(Zymosis_Check_Contention) pragma(msg, "Zymosis: do some sanity checks fo
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public class ZymCPU {
+alias ZymCPU = ZymCPUBase!16384; ///
+
+public class ZymCPUBase(ushort MemPageSize=16384) {
 public:
   ///
   static struct MemPage {
-    //enum Size = 4096; /// in page
-    enum Size = 16384; /// in page
+    //enum Size = 4096; // in page
+    //enum Size = 16384; // in page
+    enum Size = MemPageSize; /// in page
     ubyte* mem; /// pointer to Size bytes
     bool contended; /// is this page contended?
     bool rom; /// read-only?

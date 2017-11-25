@@ -46,28 +46,28 @@ class MyZ80 : ZymCPU {
     //foreach (immutable idx; 0x4000..0x5B00) mem[idx/MemPage.Size].writeHook = true;
   }
 
-  override void memContention (ushort addr, bool mreq) nothrow @trusted @nogc {
+  override void memContention (ushort addr, bool mreq) nothrow @trusted {
     conwritefln!"%5s MC %04x"(tstates, addr);
   }
 
-  override void memReading (ushort addr) nothrow @trusted @nogc {
+  override void memReading (ushort addr) nothrow @trusted {
     conwritefln!"%5s MR %04x %02x"(tstates, addr, memory[addr]);
   }
 
-  override void memWriting (ushort addr, ubyte b) nothrow @trusted @nogc {
+  override void memWriting (ushort addr, ubyte b) nothrow @trusted {
     conwritefln!"%5s MW %04x %02x"(tstates, addr, b);
   }
 
-  override ubyte portRead (ushort port) nothrow @trusted @nogc {
+  override ubyte portRead (ushort port) nothrow @trusted {
     conwritefln!"%5s PR %04x %02x"(tstates, port, port>>8);
     return port>>8;
   }
 
-  override void portWrite (ushort port, ubyte value) nothrow @trusted @nogc {
+  override void portWrite (ushort port, ubyte value) nothrow @trusted {
     conwritefln!"%5s PW %04x %02x"(tstates, port, value);
   }
 
-  override void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted @nogc {
+  override void portContention (ushort port, int atstates, bool doIN, bool early) nothrow @trusted {
     if (early) {
       if ((port&0xc000) == 0x4000) conwritefln!"%5s PC %04x"(tstates, port);
     } else {
