@@ -74,6 +74,20 @@ alias ENET_NET_TO_HOST_32 = ENET_HOST_TO_NET_32;
 
 
 version(Windows) {
+  import core.sys.windows.mmsystem;
+  import core.sys.windows.winsock2;
+
+  alias ENetSocket = int;
+  enum ENET_SOCKET_NULL = -1;
+
+  alias ENetSocketSet = core.sys.windows.winsock2.fd_set;
+
+  struct ENetBuffer {
+    usize dataLength;
+    void* data;
+  }
+
+  /*
   version(X86_64) {
     alias SOCKET = ulong;
   } else {
@@ -86,8 +100,10 @@ version(Windows) {
 
   align(1) struct ENetBuffer {
   align(1):
+    //usize dataLength;
+    //void *data;
+    void* data;
     usize dataLength;
-    void *data;
   }
 
   enum FD_SETSIZE = 64;
@@ -128,6 +144,7 @@ version(Windows) {
       }
     }
   }
+  */
 } else {
   static import core.sys.posix.sys.select; // fd_set
 
@@ -776,15 +793,351 @@ struct ENetEvent {
 }
 
 
-version(Windows) {
-  static assert(0, "windoze socket module is not here");
+private __gshared enet_uint32 timeBase = 0;
+
+version(Windows) nothrow @nogc {
+  //static assert(0, "windoze socket module is not here");
+  pragma(lib, "ws2_32");
+  pragma(lib, "winmm");
+  import core.sys.windows.mmsystem;
+  import core.sys.windows.winsock2;
+  import core.sys.windows.windef : DWORD, LPDWORD;
+
+  private __gshared bool shitdozeinited = false;
+
+  shared static this () {
+    WSADATA wsaData;
+    if (WSAStartup(0x0101, &wsaData)) return;
+    if ((wsaData.wVersion&0xffff) != 0x0101) {
+      WSACleanup ();
+      return;
+    }
+    timeBeginPeriod(1);
+    shitdozeinited = true;
+  }
+
+  shared static ~this () {
+    if (shitdozeinited) {
+      timeEndPeriod(1);
+      WSACleanup();
+      shitdozeinited = false;
+    }
+  }
+
+  int enet_initialize () {
+    return (shitdozeinited ? 0 : -1);
+  }
+
+  void enet_deinitialize () {
+  }
+
+  enet_uint32 enet_host_random_seed () {
+    return cast(enet_uint32)timeGetTime();
+  }
+
+  enet_uint32 enet_time_get () {
+    return cast(enet_uint32)timeGetTime()-timeBase;
+  }
+
+  void enet_time_set (enet_uint32 newTimeBase) {
+    timeBase = cast(enet_uint32)timeGetTime()-newTimeBase;
+  }
+
+  int enet_address_set_host_ip (ENetAddress* address, const(char)[] name) {
+    auto anchor = name;
+    enet_uint8[4] vals = 0;
+    foreach (immutable i, ref ubyte v; vals[]) {
+      int val = 0;
+      while (name.length) {
+        char ch = name.ptr[0];
+        name = name[1..$];
+        if (ch < '0' || ch > '9') return -1;
+        val = val*10+ch-'0';
+        if (val > 255) return -1;
+      }
+      v = cast(ubyte)val;
+      if (name.length) {
+        if (name.ptr[0] != '.') return -1;
+        name = name[1..$];
+      }
+    }
+
+    import core.stdc.string : memcpy;
+    memcpy(&address.host, vals.ptr, enet_uint32.sizeof);
+    return 0;
+  }
+
+  int enet_address_set_host (ENetAddress* address, const(char)[] namestr) {
+    import std.internal.cstring : tempCString;
+    auto name = namestr.tempCString;
+    hostent* hostEntry = gethostbyname(name);
+    if (hostEntry is null || hostEntry.h_addrtype != AF_INET) return enet_address_set_host_ip(address, namestr);
+    address.host = *cast(const(enet_uint32)*)hostEntry.h_addr_list[0];
+    return 0;
+  }
+
+  int enet_address_get_host_ip (const ENetAddress* address, char* name, usize nameLength) {
+    import core.stdc.string : memcpy, strlen;
+    char* addr = inet_ntoa(*cast(const(in_addr)*)&address.host);
+    if (addr is null) return -1;
+    usize addrLen = strlen(addr);
+    if (addrLen >= nameLength) return -1;
+    memcpy(name, addr, addrLen+1);
+    return 0;
+  }
+
+  int enet_address_get_host (const ENetAddress* address, char* name, usize nameLength) {
+    in_addr in_;
+    hostent* hostEntry;
+
+    in_.s_addr = address.host;
+
+    hostEntry = gethostbyaddr(cast(char*)&in_, in_addr.sizeof, AF_INET);
+    if (hostEntry is null) {
+      return enet_address_get_host_ip(address, name, nameLength);
+    } else {
+      import core.stdc.string : memcpy, strlen;
+      usize hostLen = strlen(hostEntry.h_name);
+      if (hostLen >= nameLength) return -1;
+      memcpy(name, hostEntry.h_name, hostLen+1);
+    }
+
+    return 0;
+  }
+
+  int enet_socket_bind (ENetSocket socket, const ENetAddress* address) {
+    import core.stdc.string : memset;
+
+    sockaddr_in sin;
+    memset(&sin, 0, sockaddr_in.sizeof);
+    sin.sin_family = AF_INET;
+    if (address !is null) {
+      sin.sin_port = ENET_HOST_TO_NET_16(address.port);
+      sin.sin_addr.s_addr = address.host;
+    } else {
+      sin.sin_port = 0;
+      sin.sin_addr.s_addr = INADDR_ANY;
+    }
+
+    return (bind(socket, cast(sockaddr*)&sin, sockaddr_in.sizeof) == SOCKET_ERROR ? -1 : 0);
+  }
+
+  int enet_socket_get_address (ENetSocket socket, ENetAddress* address) {
+    sockaddr_in sin;
+    socklen_t sinLength = cast(socklen_t)sockaddr_in.sizeof;
+
+    if (getsockname(socket, cast(sockaddr*)&sin, &sinLength) == -1) return -1;
+
+    address.host = cast(enet_uint32)sin.sin_addr.s_addr;
+    address.port = ENET_NET_TO_HOST_16(sin.sin_port);
+
+    return 0;
+  }
+
+  int enet_socket_listen (ENetSocket socket, int backlog) {
+    return (listen(socket, (backlog < 0 ? /*SOMAXCONN*/127 : backlog)) == SOCKET_ERROR ? -1 : 0);
+  }
+
+  ENetSocket enet_socket_create (ENetSocketType type) {
+    return socket(PF_INET, (type == ENET_SOCKET_TYPE_DATAGRAM ? SOCK_DGRAM : SOCK_STREAM), 0);
+  }
+
+  int enet_socket_set_option (ENetSocket socket, ENetSocketOption option, int value) {
+    int result = SOCKET_ERROR;
+    switch (option) {
+      case ENET_SOCKOPT_NONBLOCK:
+        uint nonBlocking = cast(uint)value;
+        result = ioctlsocket(socket, FIONBIO, &nonBlocking);
+        break;
+      case ENET_SOCKOPT_BROADCAST:
+        result = setsockopt(socket, SOL_SOCKET, SO_BROADCAST, cast(void*)&value, int.sizeof);
+        break;
+      case ENET_SOCKOPT_REUSEADDR:
+        result = setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, cast(void*)&value, int.sizeof);
+        break;
+      case ENET_SOCKOPT_RCVBUF:
+        result = setsockopt(socket, SOL_SOCKET, SO_RCVBUF, cast(void*)&value, int.sizeof);
+        break;
+      case ENET_SOCKOPT_SNDBUF:
+        result = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, cast(void*)&value, int.sizeof);
+        break;
+      case ENET_SOCKOPT_RCVTIMEO:
+        result = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, cast(void*)&value, int.sizeof);
+        break;
+      case ENET_SOCKOPT_SNDTIMEO:
+        result = setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, cast(void*)&value, int.sizeof);
+        break;
+      case ENET_SOCKOPT_NODELAY:
+        result = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, cast(void*)&value, int.sizeof);
+        break;
+      default:
+        break;
+    }
+    return (result == SOCKET_ERROR ? -1 : 0);
+  }
+
+  int enet_socket_get_option (ENetSocket socket, ENetSocketOption option, int* value) {
+    int result = SOCKET_ERROR, len;
+    switch (option) {
+      case ENET_SOCKOPT_ERROR:
+          len = int.sizeof;
+          result = getsockopt(socket, SOL_SOCKET, SO_ERROR, cast(void*)value, &len);
+          break;
+      default:
+          break;
+    }
+    return (result == SOCKET_ERROR ? -1 : 0);
+  }
+
+  int enet_socket_connect (ENetSocket socket, const ENetAddress* address) {
+    import core.stdc.string : memset;
+    sockaddr_in sin;
+    int result;
+
+    memset(&sin, 0, sockaddr_in.sizeof);
+
+    sin.sin_family = AF_INET;
+    sin.sin_port = ENET_HOST_TO_NET_16(address.port);
+    sin.sin_addr.s_addr = address.host;
+
+    result = connect(socket, cast(sockaddr*)&sin, sockaddr_in.sizeof);
+    if (result == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK) return -1;
+
+    return 0;
+  }
+
+  ENetSocket enet_socket_accept (ENetSocket socket, ENetAddress* address) {
+    SOCKET result;
+    sockaddr_in sin;
+    socklen_t sinLength = cast(socklen_t)sockaddr_in.sizeof;
+
+    result = accept(socket, (address !is null ? cast(sockaddr*)&sin : null), (address !is null ? &sinLength : null));
+
+    if (result == INVALID_SOCKET) return ENET_SOCKET_NULL;
+
+    if (address !is null) {
+      address.host = cast(enet_uint32)sin.sin_addr.s_addr;
+      address.port = ENET_NET_TO_HOST_16 (sin.sin_port);
+    }
+
+    return result;
+  }
+
+  int enet_socket_shutdown (ENetSocket socket, ENetSocketShutdown how) {
+    return (shutdown(socket, cast(int)how) == SOCKET_ERROR ? -1 : 0);
+  }
+
+  void enet_socket_destroy (ENetSocket socket) {
+    if (socket != INVALID_SOCKET) closesocket(socket);
+  }
+
+  extern(Windows) nothrow @nogc int WSASendTo (
+    SOCKET s,
+    const ENetBuffer* lpBuffers,
+    DWORD dwBufferCount,
+    LPDWORD lpNumberOfBytesSent,
+    DWORD dwFlags,
+    const sockaddr* lpTo,
+    int iToLen,
+    /*LPWSAOVERLAPPED*/void* lpOverlapped=null,
+    /*LPWSAOVERLAPPED_COMPLETION_ROUTINE*/void* lpCompletionRoutine=null
+  );
+
+  extern(Windows) nothrow @nogc int WSARecvFrom (
+    SOCKET s,
+    ENetBuffer* lpBuffers,
+    DWORD dwBufferCount,
+    LPDWORD lpNumberOfBytesRecvd,
+    LPDWORD lpFlags,
+    sockaddr* lpFrom,
+    /*LPINT*/int* lpFromlen,
+    /*LPWSAOVERLAPPED*/void* lpOverlapped=null,
+    /*LPWSAOVERLAPPED_COMPLETION_ROUTINE*/void* lpCompletionRoutine=null
+  );
+
+
+  int enet_socket_send (ENetSocket socket, const ENetAddress* address, const ENetBuffer* buffers, usize bufferCount) {
+    import core.stdc.string : memset;
+    sockaddr_in sin;
+    DWORD sentLength;
+
+    if (address !is null) {
+      memset(&sin, 0, sockaddr_in.sizeof);
+      sin.sin_family = AF_INET;
+      sin.sin_port = ENET_HOST_TO_NET_16(address.port);
+      sin.sin_addr.s_addr = address.host;
+    }
+
+    if (WSASendTo(socket, /*cast(LPWSABUF)*/buffers, cast(DWORD)bufferCount, &sentLength, 0, (address !is null ? cast(sockaddr*)&sin : null), (address !is null ? sockaddr_in.sizeof : 0), null, null) == SOCKET_ERROR) {
+       if (WSAGetLastError() == WSAEWOULDBLOCK) return 0;
+       return -1;
+    }
+
+    return cast(int)sentLength;
+  }
+
+  int enet_socket_receive (ENetSocket socket, ENetAddress* address, ENetBuffer* buffers, usize bufferCount) {
+    enum MSG_PARTIAL = 0x8000;
+    socklen_t sinLength = cast(socklen_t)sockaddr_in.sizeof;
+    DWORD flags = 0, recvLength;
+    sockaddr_in sin;
+
+    if (WSARecvFrom(socket, /*cast(LPWSABUF)*/buffers, cast(DWORD)bufferCount, &recvLength, &flags, (address !is null ? cast(sockaddr*)&sin : null), (address !is null ? &sinLength : null), null, null) == SOCKET_ERROR) {
+      switch (WSAGetLastError()) {
+        case WSAEWOULDBLOCK:
+        case WSAECONNRESET:
+          return 0;
+        default:
+      }
+      return -1;
+    }
+
+    if (flags&MSG_PARTIAL) return -1;
+
+    if (address !is null) {
+      address.host = cast(enet_uint32)sin.sin_addr.s_addr;
+      address.port = ENET_NET_TO_HOST_16(sin.sin_port);
+    }
+
+    return cast(int)recvLength;
+  }
+
+  int enet_socketset_select (ENetSocket maxSocket, ENetSocketSet* readSet, ENetSocketSet* writeSet, enet_uint32 timeout) {
+    timeval timeVal;
+    timeVal.tv_sec = timeout/1000;
+    timeVal.tv_usec = (timeout%1000)*1000;
+    return select(maxSocket+1, readSet, writeSet, null, &timeVal);
+  }
+
+  int enet_socket_wait (ENetSocket socket, enet_uint32* condition, enet_uint32 timeout) {
+    fd_set readSet, writeSet;
+    timeval timeVal;
+    int selectCount;
+
+    timeVal.tv_sec = timeout / 1000;
+    timeVal.tv_usec = (timeout % 1000) * 1000;
+
+    FD_ZERO(&readSet);
+    FD_ZERO(&writeSet);
+
+    if ((*condition)&ENET_SOCKET_WAIT_SEND) FD_SET(socket, &writeSet);
+    if ((*condition)&ENET_SOCKET_WAIT_RECEIVE) FD_SET(socket, &readSet);
+
+    selectCount = select(socket+1, &readSet, &writeSet, null, &timeVal);
+    if (selectCount < 0) return -1;
+
+    *condition = ENET_SOCKET_WAIT_NONE;
+
+    if (selectCount == 0) return 0;
+
+    if (FD_ISSET(socket, &writeSet)) *condition |= ENET_SOCKET_WAIT_SEND;
+    if (FD_ISSET(socket, &readSet)) *condition |= ENET_SOCKET_WAIT_RECEIVE;
+
+    return 0;
+  }
 } else extern(C) nothrow @nogc {
   // unix.c
   static import core.sys.posix.sys.select; // FD_XXX
-
-
-  private __gshared enet_uint32 timeBase = 0;
-
 
   auto ENET_SOCKETSET_EMPTY (ref ENetSocketSet sockset) {
     pragma(inline, true);
@@ -838,18 +1191,21 @@ version(Windows) {
   }
 
 
-  int enet_address_set_host (ENetAddress* address, const(char)* name) {
+  int enet_address_set_host (ENetAddress* address, const(char)[] namestr) {
     import core.stdc.string : memset;
     import core.sys.posix.arpa.inet : inet_pton;
     import core.sys.posix.netdb : addrinfo, getaddrinfo, freeaddrinfo;
     import core.sys.posix.netinet.in_ : sockaddr_in;
     import core.sys.posix.sys.socket : AF_INET;
+    import std.internal.cstring : tempCString;
 
     addrinfo hints = void;
     addrinfo* resultList = null, result = null;
 
     memset(&hints, 0, hints.sizeof);
     hints.ai_family = AF_INET;
+
+    auto name = namestr.tempCString;
 
     if (getaddrinfo(name, null, null, &resultList) != 0) return -1;
 
