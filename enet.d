@@ -1031,7 +1031,7 @@ version(Windows) nothrow @nogc {
     if (socket != INVALID_SOCKET) closesocket(socket);
   }
 
-  extern(Windows) nothrow @nogc int WSASendTo (
+  private extern(Windows) nothrow @nogc int WSASendTo (
     SOCKET s,
     const ENetBuffer* lpBuffers,
     DWORD dwBufferCount,
@@ -1043,7 +1043,7 @@ version(Windows) nothrow @nogc {
     /*LPWSAOVERLAPPED_COMPLETION_ROUTINE*/void* lpCompletionRoutine=null
   );
 
-  extern(Windows) nothrow @nogc int WSARecvFrom (
+  private extern(Windows) nothrow @nogc int WSARecvFrom (
     SOCKET s,
     ENetBuffer* lpBuffers,
     DWORD dwBufferCount,
