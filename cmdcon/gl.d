@@ -1011,7 +1011,7 @@ public void glconRunGLWindowResizeable (int wdt, int hgt, string title, string k
 
 // ////////////////////////////////////////////////////////////////////////// //
 private __gshared int glconFPS = 30;
-private __gshared ulong nextFrameTime; // in msecs
+private __gshared double nextFrameTime = 0; // in msecs
 
 public void glconSetAndSealFPS (int fps) {
   if (fps < 1) fps = 1; else if (fps > 200) fps = 200;
@@ -1038,39 +1038,24 @@ public void glconResetNextFrame () {
 /// usually will be called automatically
 public void glconPostNextFrame () {
   import iv.pxclock;
-  if (glconCtlWindow.eventQueued!NextFrameEvent) {
-    //auto ctime = clockMilli();
-    //conwriteln("z: ctime=", ctime, "; nextFrameTime=", nextFrameTime, "; delta=", nextFrameTime-ctime);
-    return;
-  }
+  if (glconCtlWindow.eventQueued!NextFrameEvent) return;
+  ulong nft = cast(ulong)nextFrameTime;
   auto ctime = clockMilli();
-  if (nextFrameTime == 0) nextFrameTime = ctime+10;
-  if (nextFrameTime > ctime) {
-    // next frame time isn't came yet
-    //conwriteln("0: ctime=", ctime, "; nextFrameTime=", nextFrameTime, "; delta=", nextFrameTime-ctime);
-    glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nextFrameTime-ctime));
+  if (nft > 0 && nft > ctime) {
+    glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nft-ctime));
   } else {
-    /*
-    __gshared ulong prevFrameTime = 0;
-    if (prevFrameTime == 0) {
-      prevFrameTime = ctime;
-    } else {
-      conwriteln("1: fps=", glconFPS, "; frame time=", 1000/glconFPS, "; frtime=", ctime-prevFrameTime);
-      prevFrameTime = ctime;
-    }
-    */
     // next frame time is either now, or passed
     int fps = glconFPS;
     if (fps < 1) fps = 1;
     if (fps > 200) fps = 200;
-    nextFrameTime += 1000/fps;
-    //conwriteln("1: fps=", fps, "; frame time=", 1000/fps, "; ctime=", ctime, "; nextFrameTime=", nextFrameTime, "; delta=", nextFrameTime-ctime);
-    //{ import core.stdc.stdio; printf("1: ctime=%u; nft=%u; delta=%u\n", cast(uint)ctime, cast(uint)nextFrameTime, cast(uint)(nextFrameTime-ctime)); }
-    if (nextFrameTime <= ctime) {
-      nextFrameTime = ctime+1000/fps; // too much time passed, reset timer
+    if (nft <= 0) nextFrameTime = ctime;
+    nextFrameTime += 1000.0/fps;
+    nft = cast(ulong)nextFrameTime;
+    if (nft <= ctime) {
+      nextFrameTime = ctime; // too much time passed, reset timer
       glconCtlWindow.postTimeout(eventNextFrame, 0);
     } else {
-      glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nextFrameTime-ctime));
+      glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nft-ctime));
     }
   }
 }
