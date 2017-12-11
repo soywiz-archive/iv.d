@@ -363,7 +363,8 @@ public:
       auto fl = dofopen(nbuf, "rb");
     }
     if (fl is null) return VFile.init;
-    try { return VFile(fl); } catch (Exception e) {}
+    usize nblen = 0; while (nbuf[nblen] != 0) ++nblen;
+    try { return VFile(fl, nbuf[0..nblen]); } catch (Exception e) {}
     core.stdc.stdio.fclose(fl);
     return VFile.init;
   }
@@ -957,7 +958,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
       if (nbuf[colonpos]) {
         try {
           import core.stdc.string : strlen;
-          auto fl = openFileWithPaks!(char[])(nbuf[0..strlen(nbuf.ptr)], mode); //FIXME: usefname!
+          auto fl = openFileWithPaks!(char[], usefname)(nbuf[0..strlen(nbuf.ptr)], mode);
           if (fl.isOpen) return fl;
         } catch (Exception e) {
         }
@@ -970,9 +971,9 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
     scope(failure) core.stdc.stdio.fclose(fl); // just in case
     try {
       static if (usefname) {
-        static if (is(T == string)) return VFile(fl, fname); else return VFile(fl, fname.idup);
+        return VFile(fl, fname);
       } else {
-        return VFile(fl);
+        return VFile(fl, nbuf); //???
       }
     } catch (Exception e) {
       // chain

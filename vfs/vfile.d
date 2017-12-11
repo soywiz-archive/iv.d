@@ -25,6 +25,7 @@
 module iv.vfs.vfile /*is aliced*/;
 
 //version = vfs_add_std_stdio_wrappers;
+//version = vfs_debug_name_set;
 
 private:
 static import core.stdc.stdio;
@@ -94,7 +95,7 @@ public:
   }
 
   version(vfs_stdio_wrapper)
-  this (std.stdio.File fl, string fname=null) {
+  this (std.stdio.File fl, const(char)[] fname=null) {
     try {
       wstp = WrapStdioFile(fl, fname);
     } catch (Exception e) {
@@ -110,7 +111,7 @@ public:
   }
 
   /// this will throw if `fl` is `null`; `fl` is (not) owned by VFile now
-  this (core.stdc.stdio.FILE* fl, string fname, bool own=true) {
+  this (core.stdc.stdio.FILE* fl, const(char)[] fname, bool own=true) {
     if (fl is null) throw new VFSException("can't open file");
     if (own) wstp = WrapLibcFile!true(fl, fname); else wstp = WrapLibcFile!false(fl, fname);
   }
@@ -139,13 +140,13 @@ public:
   }
 
   /// wrap file descriptor; `fd` is owned by VFile now; can throw
-  static if (VFS_NORMAL_OS) this (int fd, string fname, bool own=true) {
+  static if (VFS_NORMAL_OS) this (int fd, const(char)[] fname, bool own=true) {
     if (fd < 0) throw new VFSException("can't open file");
     if (own) wstp = WrapFD!true(fd, fname); else wstp = WrapFD!true(fd, fname);
   }
 
   /// open named file with VFS engine; start with "/" or "./" to use only disk files
-  this(T) (T fname, const(char)[] mode=null) if (is(T : const(char)[])) {
+  this(T:const(char)[]) (T fname, const(char)[] mode=null) {
     import iv.vfs.main : vfsOpenFile;
     debug(vfs_rc) { import core.stdc.stdio : printf; printf("CTOR:STR(%.*s)\n", cast(uint)fname.length, fname.ptr); }
     auto fl = vfsOpenFile(fname, mode);
@@ -779,6 +780,7 @@ protected:
         if (fnameptr) { import core.stdc.stdlib : free; free(cast(void*)fnameptr); fnameptr = 0; }
         fnamebuf[0..aname.length] = aname;
         fnamelen = aname.length;
+        version(Windows) foreach (ref char ch; fnamebuf[0..fnamelen]) if (ch == '\\') ch = '/';
       } else {
         import core.stdc.stdlib : realloc;
         auto nb = cast(char*)realloc(cast(void*)fnameptr, aname.length);
@@ -786,11 +788,20 @@ protected:
           nb[0..aname.length] = aname[];
           fnameptr = cast(usize)nb;
           fnamelen = aname.length;
+          version(Windows) foreach (ref char ch; nb[0..fnamelen]) if (ch == '\\') ch = '/';
+        } else {
+          fnamelen = 0;
         }
       }
     } else {
       if (fnameptr) { import core.stdc.stdlib : free; free(cast(void*)fnameptr); fnameptr = 0; }
       fnamelen = 0;
+    }
+    version(vfs_debug_name_set) {
+      import core.stdc.stdio;
+      stderr.fprintf("WrappedStreamRC: setFileName: aname");
+      if (aname is null) stderr.fprintf(" IS NULL"); else stderr.fprintf("=<%.*s>", cast(uint)aname.length, aname.ptr);
+      stderr.fprintf("; set name=<%.*s>\n", cast(uint)name.length, name.ptr);
     }
   }
 
@@ -829,7 +840,7 @@ protected:
 
 protected:
   final bool hasName () const pure nothrow @safe @nogc { return (fnamelen != 0); }
-  @property const(char)[] name () { return (fnamelen ? (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf.ptr[0..fnamelen]) : ""); }
+  @property const(char)[] name () const nothrow @trusted @nogc { return (fnamelen ? (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf.ptr[0..fnamelen]) : ""); }
   @property bool eof () { return eofhit; }
   abstract @property bool isOpen ();
   abstract void close ();
@@ -945,7 +956,7 @@ protected:
 
 
 version(vfs_stdio_wrapper)
-usize WrapStdioFile (std.stdio.File fl, string fname=null) {
+usize WrapStdioFile (std.stdio.File fl, const(char)[] fname=null) {
   return newWS!WrappedStreamStdioFile(fl, fname);
 }
 
@@ -1049,7 +1060,7 @@ protected:
 }
 
 
-usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl, string fname=null) {
+usize WrapLibcFile(bool ownfl=true) (core.stdc.stdio.FILE* fl, const(char)[] fname=null) {
   return newWS!(WrappedStreamLibcFile!ownfl)(fl, fname);
 }
 
@@ -1330,7 +1341,7 @@ protected:
 }
 
 
-static if (VFS_NORMAL_OS) usize WrapFD(bool own) (int fd, string fname=null) {
+static if (VFS_NORMAL_OS) usize WrapFD(bool own) (int fd, const(char)[] fname=null) {
   return newWS!(WrappedStreamFD!own)(fd, fname);
 }
 
@@ -1343,6 +1354,11 @@ private:
 
   // fuck! emplace needs it
   public this() (auto ref ST ast, const(char)[] afname) {
+    version(vfs_debug_name_set) {
+      import core.stdc.stdio;
+      stderr.fprintf("WrappedStreamAny(%s).ctor: afname", ST.stringof.ptr);
+      if (afname is null) stderr.fprintf(" IS NULL\n"); else stderr.fprintf("=<%.*s>\n", cast(uint)afname.length, afname.ptr);
+    }
     st = ast;
     super(afname);
     static if (streamHasIsOpen!ST) {
@@ -1354,9 +1370,9 @@ private:
 
 protected:
   // prefer passed name, if it is not null
-  override @property const(char)[] name () {
-    if (fnameptr && fnamelen && !closed) {
-      return (cast(const(char)*)fnameptr)[0..fnamelen];
+  override @property const(char)[] name () const nothrow @trusted @nogc {
+    if (fnamelen && !closed) {
+      return (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf.ptr[0..fnamelen]);
     } else {
       static if (streamHasName!ST) {
         return (closed ? null : (hasName ? super.name : st.name));
@@ -1459,17 +1475,17 @@ protected:
 
 /// wrap `std.stdio.File` into `VFile`
 version(vfs_stdio_wrapper)
-public VFile wrapStream (std.stdio.File st, string fname=null) { return VFile(st, fname); }
+public VFile wrapStream (std.stdio.File st, const(char)[] fname=null) { return VFile(st, fname); }
 
-/// wrap another `VFile` into `VFile`
-public VFile wrapStream (VFile st) { return VFile(st); }
+/// wrap another `VFile` into `VFile` (a perfectly idiotic action)
+public VFile wrapStream (VFile st) { return st; }
 
 /// wrap libc `FILE*` into `VFile`
-public VFile wrapStream (core.stdc.stdio.FILE* st, string fname=null) { return VFile(st, fname); }
+public VFile wrapStream (core.stdc.stdio.FILE* st, const(char)[] fname=null) { return VFile(st, fname); }
 
 static if (VFS_NORMAL_OS) {
 /// wrap file descriptor into `VFile`
-public VFile wrapStream (int fd, string fname=null) { return VFile(fd, fname); }
+public VFile wrapStream (int fd, const(char)[] fname=null) { return VFile(fd, fname); }
 }
 
 /** wrap any valid i/o stream into `VFile`.
@@ -1554,7 +1570,7 @@ public VFile wrapStream (int fd, string fname=null) { return VFile(fd, fname); }
  *   return `true` on success.
  *
  */
-public VFile wrapStream(ST) (auto ref ST st, string fname=null)
+public VFile wrapStream(ST) (auto ref ST st, const(char)[] fname=null)
 if (isReadableStream!ST || isWriteableStream!ST || isLowLevelStreamR!ST || isLowLevelStreamW!ST)
 {
   return VFile(cast(void*)newWS!(WrappedStreamAny!ST)(st, fname));
@@ -1621,12 +1637,12 @@ private struct PartialLowLevelRO {
 
 /// wrap VFile into read-only stream, with given offset and length.
 /// if `len` == -1, wrap from starting position to file end.
-public VFile wrapStreamRO (VFile st, long stpos=0, long len=-1, string fname=null) {
+public VFile wrapStreamRO (VFile st, long stpos=0, long len=-1, const(char)[] fname=null) {
   if (stpos < 0) throw new VFSException("invalid starting position");
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
   //return wrapStream(PartialLowLevelRO(st, stpos, len), fname);
-  return VFile(cast(void*)newWS!(WrappedStreamAny!PartialLowLevelRO)(PartialLowLevelRO(st, stpos, len), fname));
+  return VFile(cast(void*)newWS!(WrappedStreamAny!PartialLowLevelRO)(PartialLowLevelRO(st, stpos, len), (fname !is null ? fname : st.name)));
 }
 
 
@@ -2029,17 +2045,18 @@ void foo () {
 /// wrap VFile into read-only zlib-packed stream, with given offset and length.
 /// if `len` == -1, wrap from starting position to file end.
 /// `upsize`: size of unpacked file (-1: size unknown)
-public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stpos=0, long len=-1, string fname=null) {
+public VFile wrapZLibStreamRO (VFile st, VFSZLibMode mode, long upsize, long stpos=0, long len=-1, const(char)[] fname=null) {
   if (stpos < 0) throw new VFSException("invalid starting position");
   if (upsize < 0 && upsize != -1) throw new VFSException("invalid unpacked size");
   if (len == -1) len = st.size-stpos;
   if (len < 0) throw new VFSException("invalid length");
   //return wrapStream(ZLibLowLevelRO(st, mode, upsize, stpos, len), fname);
-  return VFile(cast(void*)newWS!(WrappedStreamAny!ZLibLowLevelRO)(ZLibLowLevelRO(st, mode, upsize, stpos, len), fname));
+  //{ import core.stdc.stdio; if (fname is null) stderr.fprintf("FNAME IS NULL\n"); else stderr.fprintf("FNAME: <%.*s>\n", cast(uint)fname.length, fname.ptr); }
+  return VFile(cast(void*)newWS!(WrappedStreamAny!ZLibLowLevelRO)(ZLibLowLevelRO(st, mode, upsize, stpos, len), (fname !is null ? fname : st.name)));
 }
 
 /// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
-public VFile wrapZLibStreamRO (VFile st, long upsize, long stpos=0, long len=-1, string fname=null) {
+public VFile wrapZLibStreamRO (VFile st, long upsize, long stpos=0, long len=-1, const(char)[] fname=null) {
   return wrapZLibStreamRO(st, VFSZLibMode.ZLib, upsize, stpos, len, fname);
 }
 
@@ -2202,14 +2219,14 @@ struct ZLibLowLevelWO {
 
 /// wrap VFile into write-only zlib-packing stream.
 /// default compression mode is 9.
-public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9, string fname=null) {
+public VFile wrapZLibStreamWO (VFile st, VFSZLibMode mode, int complevel=9, const(char)[] fname=null) {
   //return wrapStream(ZLibLowLevelWO(st, mode, complevel), fname);
-  return VFile(cast(void*)newWS!(WrappedStreamAny!ZLibLowLevelWO)(ZLibLowLevelWO(st, mode, complevel), fname));
+  return VFile(cast(void*)newWS!(WrappedStreamAny!ZLibLowLevelWO)(ZLibLowLevelWO(st, mode, complevel), (fname !is null ? fname : st.name)));
 }
 
 /// the same as previous function, but using VFSZLibMode.ZLib, as most people is using it
-public VFile wrapZLibStreamWO (VFile st, int complevel=9, string fname=null) {
-  return wrapZLibStreamWO(st, VFSZLibMode.ZLib, complevel, fname);
+public VFile wrapZLibStreamWO (VFile st, int complevel=9, const(char)[] fname=null) {
+  return wrapZLibStreamWO(st, VFSZLibMode.ZLib, complevel, (fname !is null ? fname : st.name));
 }
 
 
@@ -2406,13 +2423,13 @@ version(vfs_test_stream) {
 }
 
 /// wrap read-only memory buffer into VFile
-public VFile wrapMemoryRO (const(void)[] buf, string fname=null) {
+public VFile wrapMemoryRO (const(void)[] buf, const(char)[] fname=null) {
   //return wrapStream(MemoryStreamRO(buf), fname);
   return VFile(cast(void*)newWS!(WrappedStreamAny!MemoryStreamRO)(MemoryStreamRO(buf), fname));
 }
 
 /// wrap read-write memory buffer into VFile; duplicates data
-public VFile wrapMemoryRW (const(ubyte)[] buf, string fname=null) {
+public VFile wrapMemoryRW (const(ubyte)[] buf, const(char)[] fname=null) {
   //return wrapStream(MemoryStreamRW(buf), fname);
   return VFile(cast(void*)newWS!(WrappedStreamAny!MemoryStreamRW)(MemoryStreamRW(buf), fname));
 }
@@ -2425,7 +2442,7 @@ public VFile wrapStdout () {
     return VFile(1, false); // don't own
   } else {
     import core.stdc.stdio : stdout;
-    if (stdout !is null) return VFile(stdout, false); // don't own
+    if (stdout !is null) return VFile(stdout, "<stdout>", false); // don't own
     return VFile.init;
   }
 }
@@ -2436,7 +2453,7 @@ public VFile wrapStderr () {
     return VFile(2, false); // don't own
   } else {
     import core.stdc.stdio : stderr;
-    if (stderr !is null) return VFile(stderr, false); // don't own
+    if (stderr !is null) return VFile(stderr, "<stderr>", false); // don't own
     return VFile.init;
   }
 }
@@ -2447,7 +2464,7 @@ public VFile wrapStdin () {
     return VFile(0, false); // don't own
   } else {
     import core.stdc.stdio : stdin;
-    if (stdin !is null) return VFile(stdin, false); // don't own
+    if (stdin !is null) return VFile(stdin, "<stdin>", false); // don't own
     return VFile.init;
   }
 }
