@@ -180,12 +180,22 @@ public:
 
   @property const(char)[] name () const nothrow @safe @nogc {
     if (!wstp) return null;
-    synchronized(wst) return wst.name;
+    version(aliced) {
+      synchronized(wst) return wst.name;
+    } else {
+      // vanilla sux!
+      return wst.name;
+    }
   }
 
   @property bool isOpen () const nothrow @safe @nogc {
     if (!wstp) return false;
-    synchronized(wst) return wst.isOpen;
+    version(aliced) {
+      synchronized(wst) return wst.isOpen;
+    } else {
+      // vanilla sux!
+      return wst.isOpen;
+    }
   }
 
   void close () {
