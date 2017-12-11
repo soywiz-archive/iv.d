@@ -64,7 +64,7 @@ public struct VFile {
 private:
   /*WrappedStreamRC*/usize wstp; // yep, the whole struct size: one pointer
 
-  @property WrappedStreamRC wst () pure nothrow @trusted @nogc { pragma(inline, true); return *cast(WrappedStreamRC*)&wstp; }
+  @property WrappedStreamRC wst () const pure nothrow @trusted @nogc { pragma(inline, true); return *cast(WrappedStreamRC*)&wstp; }
 
   static bool doDecRef (WrappedStreamRC st) {
     if (st !is null) {
@@ -176,26 +176,16 @@ public:
     }
   }
 
-  @property bool opCast(T) () if (is(T == bool)) { return this.isOpen; }
+  @property bool opCast(T) () const nothrow @safe @nogc if (is(T == bool)) { return this.isOpen; }
 
-  @property const(char)[] name () {
+  @property const(char)[] name () const nothrow @safe @nogc {
     if (!wstp) return null;
-    try {
-      synchronized(wst) return wst.name;
-    } catch (Exception e) {
-      // chain exception
-      throw new VFSException("read error", __FILE__, __LINE__, e);
-    }
+    synchronized(wst) return wst.name;
   }
 
-  @property bool isOpen () {
+  @property bool isOpen () const nothrow @safe @nogc {
     if (!wstp) return false;
-    try {
-      synchronized(wst) return wst.isOpen;
-    } catch (Exception e) {
-      // chain exception
-      throw new VFSException("read error", __FILE__, __LINE__, e);
-    }
+    synchronized(wst) return wst.isOpen;
   }
 
   void close () {
@@ -842,7 +832,7 @@ protected:
   final bool hasName () const pure nothrow @safe @nogc { return (fnamelen != 0); }
   @property const(char)[] name () const nothrow @trusted @nogc { return (fnamelen ? (fnameptr ? (cast(const(char)*)fnameptr)[0..fnamelen] : fnamebuf.ptr[0..fnamelen]) : ""); }
   @property bool eof () { return eofhit; }
-  abstract @property bool isOpen ();
+  abstract @property bool isOpen () const nothrow @safe @nogc;
   abstract void close ();
   ssize read (void* buf, usize count) { return -1; }
   ssize write (in void* buf, usize count) { return -1; }
@@ -930,7 +920,7 @@ private:
 
 protected:
   override @property const(char)[] name () { return (hasName ? super.name : fl.name); }
-  override @property bool isOpen () { return fl.isOpen; }
+  override @property bool isOpen () const nothrow @safe @nogc { return fl.isOpen; }
   override @property bool eof () { return fl.eof; }
 
   override void close () { if (fl.isOpen) fl.close(); }
@@ -974,7 +964,7 @@ private:
   public this (core.stdc.stdio.FILE* afl, const(char)[] afname) { fl = afl; super(afname); } // fuck! emplace needs it
 
 protected:
-  override @property bool isOpen () { return (flp != 0); }
+  override @property bool isOpen () const nothrow @safe @nogc { return (flp != 0); }
   override @property bool eof () { return (flp == 0 || core.stdc.stdio.feof(fl) != 0); }
 
   override void close () {
@@ -1129,7 +1119,7 @@ private:
   }
 
 protected:
-  override @property bool isOpen () { return (flp != 0); }
+  override @property bool isOpen () const nothrow @safe @nogc { return (flp != 0); }
   override @property bool eof () { return (flp == 0 || gzeof(fl) != 0); }
 
   override void close () {
@@ -1262,7 +1252,7 @@ private:
   public this (int afd, const(char)[] afname) { fd = afd; eofhit = (afd < 0); super(afname); } // fuck! emplace needs it
 
 protected:
-  override @property bool isOpen () { return (fd >= 0); }
+  override @property bool isOpen () const nothrow @safe @nogc { return (fd >= 0); }
 
   override void close () {
     if (fd >= 0) {
@@ -1382,7 +1372,7 @@ protected:
     }
   }
 
-  override @property bool isOpen () {
+  override @property bool isOpen () const nothrow @safe @nogc {
     static if (streamHasIsOpen!ST) {
       if (closed) return true;
       return st.isOpen;
@@ -1591,7 +1581,7 @@ private struct PartialLowLevelRO {
     zfl = fl;
   }
 
-  @property bool isOpen () { return zfl.isOpen; }
+  @property bool isOpen () const nothrow @safe @nogc { return zfl.isOpen; }
   @property bool eof () { return eofhit; }
 
   void close () {
@@ -1689,7 +1679,7 @@ version(vfs_use_zlib_unpacker) {
       upeoz = false;
     }
 
-    @property bool isOpen () { return zfl.isOpen; }
+    @property bool isOpen () const nothrow @safe @nogc { return zfl.isOpen; }
     @property bool eof () { return eofhit; }
 
     void close () {
@@ -1914,7 +1904,7 @@ version(vfs_use_zlib_unpacker) {
       mode = amode;
     }
 
-    @property bool isOpen () { return zfl.isOpen; }
+    @property bool isOpen () const nothrow @safe @nogc { return zfl.isOpen; }
     @property bool eof () { return eofhit; }
 
     void inflateInit () {
@@ -2086,7 +2076,7 @@ struct ZLibLowLevelWO {
     complevel = 9;
   }
 
-  @property bool isOpen () { return (!eofhit && zfl.isOpen); }
+  @property bool isOpen () const nothrow @safe @nogc { return (!eofhit && zfl.isOpen); }
   @property bool eof () { return isOpen; }
 
   void close () {
