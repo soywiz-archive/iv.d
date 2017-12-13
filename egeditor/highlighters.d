@@ -2549,6 +2549,160 @@ public class EdHiTokensPas : EdHiTokens {
   }
 }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class EdHiTokensMES : EdHiTokens {
+  this () {
+    super(
+      Opt.Num0b|
+      Opt.Num0o|
+      Opt.Num0x|
+      Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      //Opt.SQString|
+      Opt.DQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      Opt.SQChar|
+      Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      //Opt.SqlSingleComment|
+      //Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      //Opt.ShellSigil|
+      //Opt.CaseInsensitive|
+      //Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
+      //Opt.PascalComments|
+      //Opt.NumPasHex|
+      0
+    );
+
+    addToken("this", HiInternal);
+    addToken("method", HiInternal);
+    addToken("builtin", HiInternal);
+
+    addToken("assert", HiBuiltin);
+    addToken("new", HiBuiltin);
+    //addToken("delete", HiBuiltin);
+
+    addToken("null", HiKeyword);
+    addToken("true", HiKeyword);
+    addToken("false", HiKeyword);
+    addToken("cast", HiKeyword);
+    //addToken("throw", HiKeyword);
+    addToken("module", HiKeyword);
+    //addToken("typeof", HiKeyword);
+    //addToken("typeid", HiKeyword);
+    addToken("sizeof", HiKeyword);
+
+    addToken("void", HiType);
+    addToken("int", HiType);
+    addToken("bool", HiType);
+    addToken("string", HiType);
+    addToken("Actor", HiType);
+
+    addToken("function", HiKeyword);
+    addToken("is", HiKeyword);
+    addToken("if", HiKeyword);
+    addToken("else", HiKeyword);
+    addToken("while", HiKeyword);
+    addToken("for", HiKeyword);
+    addToken("default", HiKeyword);
+    addToken("break", HiKeyword);
+    addToken("continue", HiKeyword);
+    addToken("return", HiKeyword);
+    addToken("struct", HiKeyword);
+    addToken("enum", HiKeyword);
+    addToken("const", HiKeyword);
+    addToken("alias", HiKeyword);
+    addToken("static", HiKeyword);
+
+    addToken("import", HiInternal);
+
+    addToken("auto", HiType);
+
+    addToken("private", HiSpecial);
+    addToken("public", HiSpecial);
+
+    addToken("__argTypes", HiInternal);
+    addToken("__parameters", HiInternal);
+
+    addToken("ref", HiSpecial);
+
+    addToken("{", HiPunct);
+    addToken("}", HiPunct);
+    addToken("(", HiPunct);
+    addToken(")", HiPunct);
+    addToken("[", HiPunct);
+    addToken("]", HiPunct);
+    addToken(";", HiSemi);
+    addToken(":", HiPunct);
+    addToken(",", HiPunct);
+    addToken(".", HiPunct);
+    addToken("^", HiPunct);
+    addToken("^=", HiPunct);
+    addToken("=", HiPunct);
+    addToken("=", HiPunct);
+    addToken("=", HiPunct);
+    addToken("<", HiPunct);
+    addToken(">", HiPunct);
+    addToken("<=", HiPunct);
+    addToken(">=", HiPunct);
+    addToken("==", HiPunct);
+    addToken("!=", HiPunct);
+    addToken("<>", HiPunct);
+    addToken("<>=", HiPunct);
+    addToken("<<", HiPunct);
+    addToken(">>", HiPunct);
+    //addToken(">>>", HiPunct);
+    addToken("+", HiPunct);
+    addToken("-", HiPunct);
+    addToken("*", HiPunct);
+    addToken("/", HiPunct);
+    addToken("%", HiPunct);
+    addToken("..", HiPunct);
+    addToken("...", HiPunct);
+    addToken("&", HiPunct);
+    addToken("&&", HiPunct);
+    addToken("|", HiPunct);
+    addToken("||", HiPunct);
+    addToken("[]", HiPunct);
+    addToken("&", HiPunct);
+    addToken("*", HiPunct);
+    addToken("~", HiPunct);
+    addToken("$", HiPunct);
+    addToken("++", HiPunct);
+    addToken("--", HiPunct);
+    addToken("++", HiPunct);
+    addToken("--", HiPunct);
+    addToken("?", HiPunct);
+    addToken("-", HiPunct);
+    addToken("+", HiPunct);
+    addToken("+=", HiPunct);
+    addToken("-=", HiPunct);
+    addToken("*=", HiPunct);
+    addToken("/=", HiPunct);
+    addToken("%=", HiPunct);
+    addToken("<<=", HiPunct);
+    addToken(">>=", HiPunct);
+    //addToken(">>>=", HiPunct);
+    addToken("&=", HiPunct);
+    addToken("|=", HiPunct);
+    addToken("~=", HiPunct);
+    addToken("~", HiPunct);
+    //addToken("is", HiPunct);
+    //addToken("!is", HiPunct);
+    //addToken("@", HiPunct);
+  }
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // new higlighter instance for the file with the given extension
 public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullname) {
@@ -2599,6 +2753,11 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
     __gshared EdHiTokensPas tokpas;
     if (tokpas is null) tokpas = new EdHiTokensPas();
     return new EditorHLExt(tokpas);
+  }
+  if (ext.strEquCI(".mes")) {
+    __gshared EdHiTokensMES toksmes;
+    if (toksmes is null) toksmes = new EdHiTokensMES();
+    return new EditorHLExt(toksmes);
   }
   auto bnpos = fullname.length;
   while (bnpos > 0 && fullname.ptr[bnpos-1] != '/') --bnpos;
