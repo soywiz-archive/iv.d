@@ -28,6 +28,10 @@ import iv.alice;
 // ////////////////////////////////////////////////////////////////////////// //
 bool isValidUtf8Start (ubyte b) pure nothrow @safe @nogc { pragma(inline, true); return (b < 128 || (b&0xc0) == 0xC0); } /// rough check
 
+// ////////////////////////////////////////////////////////////////////////// //
+bool isUtf8Start() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0xC0); } /// does this char start UTF-8 sequence?
+bool isUtf8Cont() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0x80); } /// does this char continue UTF-8 sequence?
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// fast state-machine based UTF-8 decoder; using 8 bytes of memory
@@ -243,11 +247,6 @@ bool utf8Valid (const(char)[] buf) {
   }
   return true;
 }
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-bool isUtf8Start() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0xC0); } /// does this char start UTF-8 sequence?
-bool isUtf8Cont() (char ch) pure nothrow @trusted @nogc { pragma(inline, true); return ((ch&0xC0) == 0x80); } /// does this char continue UTF-8 sequence?
 
 
 // ////////////////////////////////////////////////////////////////////////// //

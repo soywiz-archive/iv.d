@@ -2586,6 +2586,7 @@ public class EdHiTokensMES : EdHiTokens {
     addToken("this", HiInternal);
     addToken("method", HiInternal);
     addToken("builtin", HiInternal);
+    addToken("field", HiInternal);
 
     addToken("assert", HiBuiltin);
     addToken("new", HiBuiltin);
