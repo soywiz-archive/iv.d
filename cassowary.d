@@ -996,7 +996,7 @@ final:
   }
 
   debug package void dumpVars () const {
-    import iv.writer;
+    import std.stdio;
     writeln("=== VARS ===");
     foreach (/*auto*/ v; mVarMap) writeln(" ", v);
     writeln("============");
@@ -1113,7 +1113,7 @@ final:
       CswStayConstraint cn = new CswStayConstraint(*var, strength, weight);
       return addConstraint(cn);
     } else {
-      debug { import iv.writer; errwriteln("addStay: can't find variable '", name, "'"); }
+      //debug { import iv.writer; errwriteln("addStay: can't find variable '", name, "'"); }
       throw new CswErrorNoVariable("addStay: can't find variable '"~name~"'");
     }
   }
@@ -1122,7 +1122,7 @@ final:
     if (auto var = name in mVarMap) {
       return *var;
     } else {
-      debug { import iv.writer; errwriteln("addStay: can't find variable '", name, "'"); }
+      //debug { import iv.writer; errwriteln("addStay: can't find variable '", name, "'"); }
       throw new CswErrorNoVariable("solver: can't find variable '"~name~"'");
     }
   }
@@ -1332,7 +1332,7 @@ final:
       deltaEditConstant(delta, clvEditPlus, clvEditMinus);
       return this;
     } else {
-      debug { import iv.writer; errwriteln("suggestValue for variable ", v.toString(), ", but var is not an edit variable"); }
+      //debug { import iv.writer; errwriteln("suggestValue for variable ", v.toString(), ", but var is not an edit variable"); }
       throw new CswError("suggestValue!");
     }
   }
@@ -1847,7 +1847,7 @@ final:
   protected void setExternalVariables () {
     foreach (/*auto*/ v; mExternalParametricVars.byValue) {
       if (rowExpression(v) !is null) {
-        debug { import iv.writer; errwriteln("Error: variable ", v.toString(), "in mExternalParametricVars is basic"); }
+        //debug { import iv.writer; errwriteln("Error: variable ", v.toString(), "in mExternalParametricVars is basic"); }
         continue;
       }
       auto vv = cast(CswVariable)v;
@@ -2061,9 +2061,9 @@ private:
 // ////////////////////////////////////////////////////////////////////////// //
 // parser
 private:
-debug import iv.writer;
-debug(CswParser) import iv.writer;
-debug(CswTokenizer) import iv.writer;
+debug import std.stdio;
+debug(CswParser) import std.stdio;
+debug(CswTokenizer) import std.stdio;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -2703,7 +2703,7 @@ public CswConstraint CswParseConstraint (string s, CswSimplexSolver solver) {
     if (!st.peekToken().isEOF) throw new CswErrorParser("invalid constraint expression");
     return res;
   } catch (CswErrorParser e) {
-    debug { import iv.writer; errwriteln("PARSE ERROR IN: '", s, "'"); }
+    debug { import std.stdio; stderr.writeln("PARSE ERROR IN: '", s, "'"); }
     throw e;
   }
   assert(0);
@@ -2719,7 +2719,7 @@ public CswNumber CswParseSimpleMath (string s, CswSimplexSolver solver) {
     if (!ex.isNumber) throw new CswErrorParser("invalid simple math expression");
     return ex.n;
   } catch (CswErrorParser e) {
-    debug { import iv.writer; errwriteln("PARSE ERROR (", e.msg, ") IN: '", s, "'"); }
+    debug { import std.stdio; stderr.writeln("PARSE ERROR (", e.msg, ") IN: '", s, "'"); }
     throw e;
   }
   assert(0);
@@ -2887,9 +2887,9 @@ public void CswParseScript (string s, CswSimplexSolver solver) {
     }
   } catch (CswErrorParser e) {
     debug {
-      import iv.writer;
-      errwriteln("PARSE ERROR IN SCRIPT: ", e.msg);
-      errwriteln("POSITION: ", st.lastTokenPos);
+      import std.stdio;
+      stderr.writeln("PARSE ERROR IN SCRIPT: ", e.msg);
+      stderr.writeln("POSITION: ", st.lastTokenPos);
     }
     //writeln(s[0..st.lastTokenPos]);
     //writeln(s[0..st.pos]);
