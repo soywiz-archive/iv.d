@@ -19,7 +19,7 @@
 module iv.btenc /*is aliced*/;
 
 import iv.alice;
-import iv.stream;
+import iv.vfs;
 import iv.strex : quote;
 
 
