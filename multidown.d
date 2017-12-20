@@ -24,7 +24,6 @@ import std.concurrency;
 import std.net.curl;
 
 import iv.alice;
-import iv.writer;
 import iv.rawtty;
 import iv.strex;
 import iv.timer;
