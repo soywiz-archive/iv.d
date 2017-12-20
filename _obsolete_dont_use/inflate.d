@@ -40,10 +40,10 @@ module iv.inflate /*is aliced*/;
 
 // ////////////////////////////////////////////////////////////////////////// //
 import iv.alice;
-import iv.exex;
+//import iv.exex;
 
-mixin(MyException!"InflateError");
-mixin(MyException!("InflateEOF", "InflateError"));
+mixin(NewExceptionClass!"InflateError");
+mixin(NewExceptionClass!("InflateEOF", "InflateError"));
 
 
 ////////////////////////////////////////////////////////////////////////////////
