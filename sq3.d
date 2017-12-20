@@ -67,8 +67,8 @@ private:
 public:
   @disable this (this); // no copy!
 
-  this (const(char)[] name, const(char)[] schema=null) => open(name, schema);
-  ~this () => close();
+  this (const(char)[] name, const(char)[] schema=null) { open(name, schema); }
+  ~this () { close(); }
 
   void open (const(char)[] name, const(char)[] schema=null) {
     close();
@@ -78,14 +78,14 @@ public:
     if (schema.length) execute(schema);
   }
 
-  @property bool isOpen () const pure nothrow @safe @nogc => (db !is null);
+  @property bool isOpen () const pure nothrow @safe @nogc { return (db !is null); }
 
   void close () {
     if (db !is null) sqlite3_close_v2(db);
     db = null;
   }
 
-  ulong lastRowId () => (db ? sqlite3_last_insert_rowid(db) : 0);
+  ulong lastRowId () { return (db ? sqlite3_last_insert_rowid(db) : 0); }
 
   void execute (const(char)[] ops) {
     if (!isOpen) throw new Exception("database is not opened");
@@ -117,7 +117,7 @@ public:
         popFront();
       }
 
-      @property bool empty () const pure nothrow @safe @nogc => (front is null);
+      @property bool empty () const pure nothrow @safe @nogc { return (front is null); }
 
       void popFront () {
         front = null;
@@ -323,20 +323,20 @@ private:
         }
       }
     }
-    T to(T) (const(char)[] name) => this.to!T(fieldIndex____(name));
+    T to(T) (const(char)[] name) { return this.to!T(fieldIndex____(name)); }
 
     template opIndex() {
-      T opIndexImpl(T) (usize idx) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(idx);
-      T opIndexImpl(T) (const(char)[] name) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(name);
+      T opIndexImpl(T) (usize idx) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) { return this.to!T(idx); }
+      T opIndexImpl(T) (const(char)[] name) if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) { return this.to!T(name); }
       alias opIndex = opIndexImpl;
     }
 
     template opDispatch(string name) {
-      T opDispatchImpl(T=const(char)[]) () if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) => this.to!T(name);
+      T opDispatchImpl(T=const(char)[]) () if ((isNarrowString!T && is(ElementEncodingType!T : char)) || isIntegral!T) { return this.to!T(name); }
       alias opDispatch = opDispatchImpl;
     }
 
-    auto index_ () pure const nothrow @nogc => (data____.stepIndex > 0 ? data____.stepIndex-1 : 0);
+    auto index_ () pure const nothrow @nogc { return (data____.stepIndex > 0 ? data____.stepIndex-1 : 0); }
 
     private DBStatement.Data* data____;
   }
@@ -379,7 +379,7 @@ private:
       ++data.stepIndex;
     }
 
-    auto index_ () pure const nothrow @nogc => (data.stepIndex > 0 ? data.stepIndex-1 : 0);
+    auto index_ () pure const nothrow @nogc { return (data.stepIndex > 0 ? data.stepIndex-1 : 0); }
 
     private DBStatement.Data* data;
   }
