@@ -20,7 +20,7 @@ module iv.namegen /*is aliced*/;
 private:
 
 import iv.alice;
-import iv.stream;
+import iv.vfs;
 
 
 public struct NameGen {
@@ -850,7 +850,7 @@ public:
 
 version(test_namegen)
 unittest {
-  import iv.writer;
+  import std.stdio;
   auto ng = NameGen();
   //ng.loadFromStream(File("names.syl"));
   //ng.loadText(readText("names.txt"));
