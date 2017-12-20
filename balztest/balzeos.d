@@ -1,4 +1,4 @@
-module balztest /*is aliced*/;
+module balzeos /*is aliced*/;
 
 import iv.alice;
 import iv.balz;

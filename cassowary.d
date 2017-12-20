@@ -63,23 +63,23 @@ static:
     LEQ = 2
   }
 
-  CswLinearExpression plus (CswLinearExpression e1, CswLinearExpression e2) nothrow => e1.plus(e2);
-  CswLinearExpression plus (CswNumber e1, CswLinearExpression e2) nothrow => (new CswLinearExpression(e1)).plus(e2);
-  CswLinearExpression plus (CswVariable e1, CswLinearExpression e2) nothrow => (new CswLinearExpression(e1)).plus(e2);
-  CswLinearExpression plus (CswLinearExpression e1, CswVariable e2) nothrow => e1.plus(new CswLinearExpression(e2));
-  CswLinearExpression plus (CswVariable e1, CswNumber e2) nothrow => (new CswLinearExpression(e1)).plus(new CswLinearExpression(e2));
-  CswLinearExpression plus (CswNumber e1, CswVariable e2) nothrow => (new CswLinearExpression(e1)).plus(new CswLinearExpression(e2));
-  CswLinearExpression minus (CswLinearExpression e1, CswLinearExpression e2) nothrow => e1.minus(e2);
-  CswLinearExpression minus (CswNumber e1, CswLinearExpression e2) nothrow => (new CswLinearExpression(e1)).minus(e2);
-  CswLinearExpression minus (CswLinearExpression e1, CswNumber e2) nothrow => e1.minus(new CswLinearExpression(e2));
-  CswLinearExpression times (CswLinearExpression e1, CswLinearExpression e2) => e1.times(e2);
-  CswLinearExpression times (CswLinearExpression e1, CswVariable e2) => e1.times(new CswLinearExpression(e2));
-  CswLinearExpression times (CswVariable e1, CswLinearExpression e2) => (new CswLinearExpression(e1)).times(e2);
-  CswLinearExpression times (CswLinearExpression e1, CswNumber e2) => e1.times(new CswLinearExpression(e2));
-  CswLinearExpression times (CswNumber e1, CswLinearExpression e2) => (new CswLinearExpression(e1)).times(e2);
-  CswLinearExpression times (CswNumber n, CswVariable clv) nothrow => new CswLinearExpression(clv, n);
-  CswLinearExpression times (CswVariable clv, CswNumber n) nothrow => new CswLinearExpression(clv, n);
-  CswLinearExpression divide (CswLinearExpression e1, CswLinearExpression e2) => e1.divide(e2);
+  CswLinearExpression plus (CswLinearExpression e1, CswLinearExpression e2) nothrow { return e1.plus(e2); }
+  CswLinearExpression plus (CswNumber e1, CswLinearExpression e2) nothrow { return (new CswLinearExpression(e1)).plus(e2); }
+  CswLinearExpression plus (CswVariable e1, CswLinearExpression e2) nothrow { return (new CswLinearExpression(e1)).plus(e2); }
+  CswLinearExpression plus (CswLinearExpression e1, CswVariable e2) nothrow { return e1.plus(new CswLinearExpression(e2)); }
+  CswLinearExpression plus (CswVariable e1, CswNumber e2) nothrow { return (new CswLinearExpression(e1)).plus(new CswLinearExpression(e2)); }
+  CswLinearExpression plus (CswNumber e1, CswVariable e2) nothrow { return (new CswLinearExpression(e1)).plus(new CswLinearExpression(e2)); }
+  CswLinearExpression minus (CswLinearExpression e1, CswLinearExpression e2) nothrow { return e1.minus(e2); }
+  CswLinearExpression minus (CswNumber e1, CswLinearExpression e2) nothrow { return (new CswLinearExpression(e1)).minus(e2); }
+  CswLinearExpression minus (CswLinearExpression e1, CswNumber e2) nothrow { return e1.minus(new CswLinearExpression(e2)); }
+  CswLinearExpression times (CswLinearExpression e1, CswLinearExpression e2) { return e1.times(e2); }
+  CswLinearExpression times (CswLinearExpression e1, CswVariable e2) { return e1.times(new CswLinearExpression(e2)); }
+  CswLinearExpression times (CswVariable e1, CswLinearExpression e2) { return (new CswLinearExpression(e1)).times(e2); }
+  CswLinearExpression times (CswLinearExpression e1, CswNumber e2) { return e1.times(new CswLinearExpression(e2)); }
+  CswLinearExpression times (CswNumber e1, CswLinearExpression e2) { return (new CswLinearExpression(e1)).times(e2); }
+  CswLinearExpression times (CswNumber n, CswVariable clv) nothrow { return new CswLinearExpression(clv, n); }
+  CswLinearExpression times (CswVariable clv, CswNumber n) nothrow { return new CswLinearExpression(clv, n); }
+  CswLinearExpression divide (CswLinearExpression e1, CswLinearExpression e2) { return e1.divide(e2); }
 
   bool approx (CswNumber a, CswNumber b) pure @safe nothrow @nogc {
     import std.math : abs;
@@ -89,8 +89,8 @@ static:
     return (abs(a-b) < abs(a)*epsilon);
   }
 
-  bool approx (CswVariable clv, CswNumber b) pure @safe nothrow @nogc => approx(clv.value, b);
-  bool approx (CswNumber a, CswVariable clv) pure @safe nothrow @nogc => approx(a, clv.value);
+  bool approx (CswVariable clv, CswNumber b) pure @safe nothrow @nogc { return approx(clv.value, b); }
+  bool approx (CswNumber a, CswVariable clv) pure @safe nothrow @nogc { return approx(a, clv.value); }
 
   CswStrength Strength (string name) @safe nothrow @nogc {
     switch (name) {
@@ -103,15 +103,14 @@ static:
   }
 
   private enum SWMult = 1000.0;
-  CswNumber Strength (in CswNumber w1, in CswNumber w2, in CswNumber w3) @safe nothrow @nogc =>
-    w3+w2*SWMult+w1*(SWMult*SWMult);
+  CswNumber Strength (in CswNumber w1, in CswNumber w2, in CswNumber w3) @safe nothrow @nogc { return w3+w2*SWMult+w1*(SWMult*SWMult); }
 
   enum Required = Strength(1000, 1000, 1000);
   enum Strong = Strength(1, 0, 0);
   enum Medium = Strength(0, 1, 0);
   enum Weak = Strength(0, 0, 1);
 
-  private bool isRequiredStrength (CswStrength str) @safe pure nothrow @nogc => (str >= Required);
+  private bool isRequiredStrength (CswStrength str) @safe pure nothrow @nogc { return (str >= Required); }
 }
 
 
@@ -151,18 +150,18 @@ nothrow:
   abstract @property CswLinearExpression expression ();
 
   pure {
-    @property bool isEditConstraint () const => false;
-    @property bool isInequality () const => false;
-    @property bool isRequired () const => Csw.isRequiredStrength(mStrength);
-    @property bool isStayConstraint () const => false;
+    @property bool isEditConstraint () const { return false; }
+    @property bool isInequality () const { return false; }
+    @property bool isRequired () const { return Csw.isRequiredStrength(mStrength); }
+    @property bool isStayConstraint () const { return false; }
   }
 
 final:
-  @property ref CswStrength strength () => mStrength;
-  @property void strength (in CswStrength v) => mStrength = v;
+  @property ref CswStrength strength () { return mStrength; }
+  @property void strength (in CswStrength v) { mStrength = v; }
 
-  @property CswNumber weight () const pure => mWeight;
-  @property void weight (CswNumber v) => mWeight = v;
+  @property CswNumber weight () const pure { return mWeight; }
+  @property void weight (CswNumber v) { mWeight = v; }
 }
 
 
@@ -173,8 +172,8 @@ class CswEditOrStayConstraint : CswConstraint {
 
 public:
   // add missing bracket -> see CswConstraint#ToString(...)
-  override string toString () const => super.toString()~")";
-  override @property string expressionStr () const => mExpression.toString;
+  override string toString () const { return super.toString()~")"; }
+  override @property string expressionStr () const { return mExpression.toString; }
 
 @safe:
 nothrow:
@@ -185,17 +184,17 @@ nothrow:
   }
 
 @nogc:
-  final @property CswVariable variable () pure => mVariable;
-  override @property CswLinearExpression expression () pure => mExpression;
+  final @property CswVariable variable () pure { return mVariable; }
+  override @property CswLinearExpression expression () pure { return mExpression; }
 }
 
 
 class CswEditConstraint : CswEditOrStayConstraint {
-  override string toString () const => "edit"~super.toString();
+  override string toString () const { return "edit"~super.toString(); }
 @safe:
 nothrow:
-  this (CswVariable clv, in CswStrength strength=Csw.Required, CswNumber weight=1.0) => super(clv, strength, weight);
-  override @property bool isEditConstraint () const pure @nogc => true;
+  this (CswVariable clv, in CswStrength strength=Csw.Required, CswNumber weight=1.0) { super(clv, strength, weight); }
+  override @property bool isEditConstraint () const pure @nogc { return true; }
 }
 
 
@@ -204,7 +203,7 @@ protected:
   CswLinearExpression mExpression;
 
 public:
-  override @property string expressionStr () const => mExpression.toString;
+  override @property string expressionStr () const { return mExpression.toString; }
 
 @safe:
 nothrow:
@@ -212,17 +211,17 @@ nothrow:
     super(strength, weight);
     mExpression = cle;
   }
-  override @property CswLinearExpression expression () pure @nogc => mExpression;
-  //protected final void setExpression (CswLinearExpression expr) => mExpression = expr;
+  override @property CswLinearExpression expression () pure @nogc { return mExpression; }
+  //protected final void setExpression (CswLinearExpression expr) { return mExpression = expr; }
 }
 
 
 public class CswStayConstraint : CswEditOrStayConstraint {
-  override string toString () const => "stay"~super.toString();
+  override string toString () const { return "stay"~super.toString(); }
 @safe:
 nothrow:
-  this (CswVariable var, in CswStrength strength=Csw.Weak, CswNumber weight=1.0) => super(var, strength, weight);
-  override @property bool isStayConstraint () const pure @nogc => true;
+  this (CswVariable var, in CswStrength strength=Csw.Weak, CswNumber weight=1.0) { super(var, strength, weight); }
+  override @property bool isStayConstraint () const pure @nogc { return true; }
 }
 
 
@@ -230,7 +229,7 @@ class CswLinearEquation : CswLinearConstraint {
   private enum buildCtor(string args, string body) =
     `this (`~args~`, in CswStrength strength=Csw.Required, CswNumber weight=1.0) {`~body~`}`;
 
-  override string toString () const => super.toString()~" = 0)";
+  override string toString () const { return super.toString()~" = 0)"; }
 nothrow:
   @safe {
     mixin(buildCtor!("CswLinearExpression cle", q{ super(cle, strength, weight); }));
@@ -304,9 +303,9 @@ class CswLinearInequality : CswLinearConstraint {
     `clv`,
     `super(cast(CswLinearExpression)cle.clone(), strength, weight);`));
 
-  override @property bool isInequality () const @safe pure nothrow @nogc => true;
+  override @property bool isInequality () const @safe pure nothrow @nogc { return true; }
 
-  public override string toString () const => super.toString()~" >= 0)";
+  public override string toString () const { return super.toString()~" >= 0)"; }
 }
 
 
@@ -325,11 +324,11 @@ private:
 
 public:
   /// Create 'semi-valid' zero constant
-  this () @safe nothrow => this(0.0);
+  this () @safe nothrow { this(0.0); }
   /// Create constant
-  this (CswNumber num) @safe nothrow => this(null, 0.0, num);
+  this (CswNumber num) @safe nothrow { this(null, 0.0, num); }
   // / Create variable with multiplier
-  // this (CswAbstractVariable clv, CswNumber multiplier=1.0) @safe nothrow => this(clv, multiplier, 0.0);
+  // this (CswAbstractVariable clv, CswNumber multiplier=1.0) @safe nothrow { return this(clv, multiplier, 0.0); }
   /// Create either variable with multiplier or constant (internal constructor).
   /// Used in CswEditOrStayConstraint
   this (CswAbstractVariable clv, CswNumber multiplier=1.0, CswNumber constant=0.0) @safe nothrow {
@@ -349,7 +348,7 @@ public:
   }
 
   /// Clone this expression
-  CswLinearExpression clone () @safe nothrow => new CswLinearExpression(mConstant, mTerms);
+  CswLinearExpression clone () @safe nothrow { return new CswLinearExpression(mConstant, mTerms); }
 
   /// Multiply this expression by scalar
   CswLinearExpression multiplyMe (in CswNumber x) @trusted nothrow @nogc {
@@ -358,7 +357,7 @@ public:
     return this;
   }
 
-  final CswLinearExpression times (in CswNumber x) @safe nothrow => clone().multiplyMe(x);
+  final CswLinearExpression times (in CswNumber x) @safe nothrow { return clone().multiplyMe(x); }
 
   final CswLinearExpression times (CswLinearExpression expr) {
     if (isConstant) return expr.times(mConstant);
@@ -369,11 +368,11 @@ public:
     return times(expr.mConstant);
   }
 
-  final CswLinearExpression plus (CswLinearExpression expr) nothrow => clone().addExpression(expr, 1.0);
-  final CswLinearExpression plus (CswVariable var) nothrow => clone().addVariable(var, 1.0);
+  final CswLinearExpression plus (CswLinearExpression expr) nothrow { return clone().addExpression(expr, 1.0); }
+  final CswLinearExpression plus (CswVariable var) nothrow { return clone().addVariable(var, 1.0); }
 
-  final CswLinearExpression minus (CswLinearExpression expr) nothrow => clone().addExpression(expr, -1.0);
-  final CswLinearExpression minus (CswVariable var) nothrow => clone().addVariable(var, -1.0);
+  final CswLinearExpression minus (CswLinearExpression expr) nothrow { return clone().addExpression(expr, -1.0); }
+  final CswLinearExpression minus (CswVariable var) nothrow { return clone().addVariable(var, -1.0); }
 
   CswLinearExpression divide (in CswNumber x) {
     if (Csw.approx(x, 0.0)) {
@@ -403,19 +402,19 @@ public:
     return expr.divide(mConstant);
   }
 
-  final CswLinearExpression subtractFrom (CswLinearExpression expr) nothrow => expr.minus(this);
+  final CswLinearExpression subtractFrom (CswLinearExpression expr) nothrow { return expr.minus(this); }
 
-  final CswLinearExpression opBinary(string op) (in CswNumber n) if (op == "*") => this.times(n);
-  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "*") => this.times(expr);
+  final CswLinearExpression opBinary(string op) (in CswNumber n) if (op == "*") { return this.times(n); }
+  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "*") { return this.times(expr); }
 
-  final CswLinearExpression opBinary(string op) (in CswNumber n) if (op == "/") => this.divide(n);
-  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "/") => this.divide(expr);
+  final CswLinearExpression opBinary(string op) (in CswNumber n) if (op == "/") { return this.divide(n); }
+  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "/") { return this.divide(expr); }
 
-  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "+") => this.plus(expr);
-  final CswLinearExpression opBinary(string op) (CswVariable var) if (op == "+") => this.plus(var);
+  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "+") { return this.plus(expr); }
+  final CswLinearExpression opBinary(string op) (CswVariable var) if (op == "+") { return this.plus(var); }
 
-  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "-") => this.minus(expr);
-  final CswLinearExpression opBinary(string op) (CswVariable var) if (op == "-") => this.minus(var);
+  final CswLinearExpression opBinary(string op) (CswLinearExpression expr) if (op == "-") { return this.minus(expr); }
+  final CswLinearExpression opBinary(string op) (CswVariable var) if (op == "-") { return this.minus(var); }
 
   /// Add n*expr to this expression from another expression expr.
   /// Notify the solver if a variable is added or deleted from this
@@ -574,17 +573,17 @@ public:
     return (coeff !is null ? coeff.num : 0.0);
   }
 
-  final @property CswNumber constant () const @safe pure nothrow @nogc => mConstant;
-  final @property void constant (CswNumber v) @safe nothrow @nogc => mConstant = v;
+  final @property CswNumber constant () const @safe pure nothrow @nogc { return mConstant; }
+  final @property void constant (CswNumber v) @safe nothrow @nogc { mConstant = v; }
 
-  final void incrementConstant (CswNumber c) @safe nothrow @nogc => mConstant = mConstant+c;
+  final void incrementConstant (CswNumber c) @safe nothrow @nogc { mConstant = mConstant+c; }
 
-  final @property bool isConstant () const @safe pure nothrow @nogc => (mTerms.length == 0);
+  final @property bool isConstant () const @safe pure nothrow @nogc { return (mTerms.length == 0); }
 
-  static CswLinearExpression plus (CswLinearExpression e1, CswLinearExpression e2) => e1.plus(e2);
-  static CswLinearExpression minus (CswLinearExpression e1, CswLinearExpression e2) => e1.minus(e2);
-  static CswLinearExpression times (CswLinearExpression e1, CswLinearExpression e2) => e1.times(e2);
-  static CswLinearExpression divide (CswLinearExpression e1, CswLinearExpression e2) => e1.divide(e2);
+  static CswLinearExpression plus (CswLinearExpression e1, CswLinearExpression e2) { return e1.plus(e2); }
+  static CswLinearExpression minus (CswLinearExpression e1, CswLinearExpression e2) { return e1.minus(e2); }
+  static CswLinearExpression times (CswLinearExpression e1, CswLinearExpression e2) { return e1.times(e2); }
+  static CswLinearExpression divide (CswLinearExpression e1, CswLinearExpression e2) { return e1.divide(e2); }
 
   override string toString () const {
     import std.conv : to;
@@ -789,11 +788,11 @@ public:
     mColumns.remove(oldVar.vindex);
   }
 
-  //final @property auto columns () const @safe pure nothrow @nogc => mColumns;
-  //final @property auto rows () const @safe pure nothrow @nogc => mRows;
+  //final @property auto columns () const @safe pure nothrow @nogc { return mColumns; }
+  //final @property auto rows () const @safe pure nothrow @nogc { return mRows; }
 
   // Return true if and only if the variable subject is in the columns keys
-  protected final bool columnsHasKey (CswAbstractVariable subject) const nothrow @nogc => (subject.vindex in mColumns) !is null;
+  protected final bool columnsHasKey (CswAbstractVariable subject) const nothrow @nogc { return (subject.vindex in mColumns) !is null; }
 
   protected final CswLinearExpression rowExpression (CswAbstractVariable v) nothrow @nogc {
     assert(v !is null);
@@ -833,13 +832,13 @@ nothrow:
 
 final:
 pure:
-  @property usize index () const => mIndex;
-  @property CswConstraint constraint () pure => mCtr;
-  @property CswSlackVariable editPlus () pure => mSVEditPlus;
-  @property CswSlackVariable editMinus () pure => mSVEditMinus;
+  @property usize index () const { return mIndex; }
+  @property CswConstraint constraint () pure { return mCtr; }
+  @property CswSlackVariable editPlus () pure { return mSVEditPlus; }
+  @property CswSlackVariable editMinus () pure { return mSVEditMinus; }
 
-  @property CswNumber prevEditConstant () const => mPrevEditConstant;
-  @property void prevEditConstant (CswNumber v) => mPrevEditConstant = v;
+  @property CswNumber prevEditConstant () const { return mPrevEditConstant; }
+  @property void prevEditConstant (CswNumber v) { mPrevEditConstant = v; }
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -984,7 +983,7 @@ final:
     return this;
   }
 
-  CswSimplexSolver addConstraint (string s) => addConstraint(CswParseConstraint(s, this));
+  CswSimplexSolver addConstraint (string s) { return addConstraint(CswParseConstraint(s, this)); }
 
   CswSimplexSolver registerVariable (CswVariable var) nothrow {
     mVarMap[var.name] = var;
@@ -1127,13 +1126,13 @@ final:
       throw new CswErrorNoVariable("solver: can't find variable '"~name~"'");
     }
   }
-  bool hasVariable (string name) const @safe pure nothrow @nogc => (name in mVarMap) !is null;
+  bool hasVariable (string name) const @safe pure nothrow @nogc { return (name in mVarMap) !is null; }
 
-  CswVariable opIndex (string name) => this.variable(name);
+  CswVariable opIndex (string name) { return this.variable(name); }
   CswNumber opIndexAssign (CswNumber value, string name) { registerVariable(name, value); return value; }
 
-  bool hasDefine (string name) const @safe pure nothrow @nogc => (name in mDefineMap) !is null;
-  string define (string name) @safe => mDefineMap[name];
+  bool hasDefine (string name) const @safe pure nothrow @nogc { return (name in mDefineMap) !is null; }
+  string define (string name) @safe { return mDefineMap[name]; }
   void setDefine (string name, string value) @safe {
     assert(name.length > 0);
     if (value.length == 0) {
@@ -1142,7 +1141,7 @@ final:
       mDefineMap[name] = value;
     }
   }
-  void removeDefine (string name) @safe => setDefine(name, null);
+  void removeDefine (string name) @safe { return setDefine(name, null); }
 
 
   /// Remove a constraint from the tableau.
@@ -1345,8 +1344,8 @@ final:
   /// to be explicitly called by client code. If `autoSolve` is
   /// put to false, then solve() needs to be invoked explicitly
   /// before using variables' values.
-  @property bool autoSolve () const @safe pure nothrow @nogc => mOptimizeAutomatically;
-  @property void autoSolve (bool v) @safe nothrow @nogc => mOptimizeAutomatically = v;
+  @property bool autoSolve () const @safe pure nothrow @nogc { return mOptimizeAutomatically; }
+  @property void autoSolve (bool v) @safe nothrow @nogc { mOptimizeAutomatically = v; }
 
   CswSimplexSolver solve () {
     if (mNeedsSolving) {
@@ -1376,7 +1375,7 @@ final:
     return this;
   }
 
-  bool containsVariable (CswVariable v) nothrow => columnsHasKey(v) || (rowExpression(v) !is null);
+  bool containsVariable (CswVariable v) nothrow { return columnsHasKey(v) || (rowExpression(v) !is null); }
 
   CswSimplexSolver addVar (CswVariable v) {
     if (!containsVariable(v)) {
@@ -1877,8 +1876,8 @@ final:
   }
 
 public:
-  @property ref CswVariable[string] varMap () @safe nothrow @nogc => mVarMap;
-  @property void varMap (ref CswVariable[string] v) @safe nothrow @nogc => mVarMap = v;
+  @property ref CswVariable[string] varMap () @safe nothrow @nogc { return mVarMap; }
+  @property void varMap (ref CswVariable[string] v) @safe nothrow @nogc { mVarMap = v; }
 }
 
 
@@ -1902,20 +1901,20 @@ public:
 public:
 @safe:
 nothrow:
-  this () => name = buildIndexedName("v", (vindex = newVarIndex));
+  this () { name = buildIndexedName("v", (vindex = newVarIndex)); }
   this (string aname) @nogc { vindex = newVarIndex; name = aname; }
-  this (uint varnumber, string prefix) => name = buildIndexedName(prefix, (vindex = newVarIndex), varnumber);
+  this (uint varnumber, string prefix) { name = buildIndexedName(prefix, (vindex = newVarIndex), varnumber); }
 
   const pure @nogc {
-    @property bool isDummy () const => false;
+    @property bool isDummy () const { return false; }
     abstract @property bool isExternal ();
     abstract @property bool isPivotable ();
     abstract @property bool isRestricted ();
   }
 
-  @property static uint count () @nogc => mVarIndex;
+  @property static uint count () @nogc { return mVarIndex; }
 
-  override string toString () const nothrow => "["~name~":abstract]";
+  override string toString () const nothrow { return "["~name~":abstract]"; }
 
 protected:
   // 4294967296
@@ -1964,37 +1963,37 @@ protected:
     private enum piv = HasStr!("pivot", T) || HasStr!("pivotable", T);
     private enum res = HasStr!("restricted", T);
     enum GenTypes =
-      "override @property bool isDummy () const @safe pure nothrow @nogc => "~IFS!(dum)~";\n"~
-      "override @property bool isExternal () const @safe pure nothrow @nogc => "~IFS!(ext)~";\n"~
-      "override @property bool isPivotable () const @safe pure nothrow @nogc => "~IFS!(piv)~";\n"~
-      "override @property bool isRestricted () const @safe pure nothrow @nogc => "~IFS!(res)~";\n";
+      "override @property bool isDummy () const @safe pure nothrow @nogc { return "~IFS!(dum)~"; }\n"~
+      "override @property bool isExternal () const @safe pure nothrow @nogc { return "~IFS!(ext)~"; }\n"~
+      "override @property bool isPivotable () const @safe pure nothrow @nogc { return "~IFS!(piv)~"; }\n"~
+      "override @property bool isRestricted () const @safe pure nothrow @nogc { return "~IFS!(res)~"; }\n";
   }
 }
 
 
 class CswDummyVariable : CswAbstractVariable {
-  this () @safe nothrow => super();
-  this (string name) @safe nothrow @nogc => super(name);
-  this (uint varnumber, string prefix) @safe nothrow => super(varnumber, prefix);
-  override string toString () const nothrow => "["~name~":dummy]";
+  this () @safe nothrow { super(); }
+  this (string name) @safe nothrow @nogc { super(name); }
+  this (uint varnumber, string prefix) @safe nothrow { super(varnumber, prefix); }
+  override string toString () const nothrow { return "["~name~":dummy]"; }
   mixin(GenTypes!("dummy", "restricted"));
 }
 
 
 class CswSlackVariable : CswAbstractVariable {
-  this () @safe nothrow => super();
-  this (string name) @safe nothrow @nogc => super(name);
-  this (uint varnumber, string prefix) @safe nothrow => super(varnumber, prefix);
-  override string toString () const nothrow => "["~name~":slack]";
+  this () @safe nothrow { super(); }
+  this (string name) @safe nothrow @nogc { super(name); }
+  this (uint varnumber, string prefix) @safe nothrow { super(varnumber, prefix); }
+  override string toString () const nothrow { return "["~name~":slack]"; }
   mixin(GenTypes!("pivotable", "restricted"));
 }
 
 
 class CswObjectiveVariable : CswAbstractVariable {
-  this () @safe nothrow => super();
-  this (string name) @safe nothrow @nogc => super(name);
-  this (uint varnumber, string prefix) @safe nothrow => super(varnumber, prefix);
-  override string toString () const nothrow => "["~name~":obj]";
+  this () @safe nothrow { super(); }
+  this (string name) @safe nothrow @nogc { super(name); }
+  this (uint varnumber, string prefix) @safe nothrow { super(varnumber, prefix); }
+  override string toString () const nothrow { return "["~name~":obj]"; }
   mixin(GenTypes!());
 }
 
@@ -2025,14 +2024,14 @@ public:
 
   // Change the value held -- should *not* use this if the variable is
   // in a solver -- use addEditVar() and suggestValue() interface instead
-  @property CswNumber value () const @safe pure nothrow @nogc => mValue;
-  @property void value (CswNumber v) @safe nothrow @nogc => mValue = v;
+  @property CswNumber value () const @safe pure nothrow @nogc { return mValue; }
+  @property void value (CswNumber v) @safe nothrow @nogc { mValue = v; }
 
   // Permit overriding in subclasses in case something needs to be
   // done when the value is changed by the solver
   // may be called when the value hasn't actually changed -- just
   // means the solver is setting the external variable
-  public void changeValue (CswNumber value) @safe pure nothrow @nogc => mValue = value;
+  public void changeValue (CswNumber value) @safe pure nothrow @nogc { mValue = value; }
 
   // construct expressions
   mixin(buildOpBin!(`*/`, `CswNumber`));
@@ -2040,7 +2039,7 @@ public:
   mixin(buildOpBin!(`+-`, `CswVariable`));
 
   // convert variable to CswLinearExpression
-  final T opCast(T : CswLinearExpression) () => new CswLinearExpression(this);
+  final T opCast(T : CswLinearExpression) () { return new CswLinearExpression(this); }
 
 private:
   template buildOpBinConstraint(string ops) {
@@ -2084,11 +2083,11 @@ struct Token {
   CswNumber n;
   string s;
 
-  @property bool isEOF () const @safe pure nothrow @nogc => (type == Type.EOF);
-  @property bool isEOX () const @safe pure nothrow @nogc => (type == Type.EOF || type == Type.Semicolon);
-  @property bool isId () const @safe pure nothrow @nogc => (type == Type.Id);
-  @property bool isNumber () const @safe pure nothrow @nogc => (type == Type.Number);
-  @property bool isPunct () const @safe pure nothrow @nogc => (type > Type.Number && type <= Type.max);
+  @property bool isEOF () const @safe pure nothrow @nogc { return (type == Type.EOF); }
+  @property bool isEOX () const @safe pure nothrow @nogc { return (type == Type.EOF || type == Type.Semicolon); }
+  @property bool isId () const @safe pure nothrow @nogc { return (type == Type.Id); }
+  @property bool isNumber () const @safe pure nothrow @nogc { return (type == Type.Number); }
+  @property bool isPunct () const @safe pure nothrow @nogc { return (type > Type.Number && type <= Type.max); }
 
   string toString () const {
     import std.conv : to;
@@ -2269,11 +2268,11 @@ struct Term {
   this (CswLinearExpression ae) @safe nothrow @nogc { type = Type.Expr; e = ae; }
   this (in Operator aop) @safe nothrow @nogc { type = Type.Operator; op = aop; }
 
-  @property bool isEOF () const @safe pure nothrow @nogc => (type == Type.EOF);
-  @property bool isNumber () const @safe pure nothrow @nogc => (type == Type.Number);
-  @property bool isVar () const @safe pure nothrow @nogc => (type == Type.Var);
-  @property bool isExpr () const @safe pure nothrow @nogc => (type == Type.Expr);
-  @property bool isOperator () const @safe pure nothrow @nogc => (type == Type.Operator);
+  @property bool isEOF () const @safe pure nothrow @nogc { return (type == Type.EOF); }
+  @property bool isNumber () const @safe pure nothrow @nogc { return (type == Type.Number); }
+  @property bool isVar () const @safe pure nothrow @nogc { return (type == Type.Var); }
+  @property bool isExpr () const @safe pure nothrow @nogc { return (type == Type.Expr); }
+  @property bool isOperator () const @safe pure nothrow @nogc { return (type == Type.Operator); }
 
   T opCast(T : CswLinearExpression) () {
     switch (type) {
@@ -2836,10 +2835,10 @@ public void CswParseScript (string s, CswSimplexSolver solver) {
       auto tk = st.nextToken(); // eat Id
       if (!tk.isId) throw new CswErrorParser("identifier expected");
       if (!st.solver.hasVariable(tk.s)) {
-        import iv.writer;
+        import std.stdio;
         writeln("*** UNKNOWN VARIABLE: '", tk.s, "'");
       } else {
-        import iv.writer;
+        import std.stdio;
         writeln(st.solver[tk.s]);
       }
       tk = st.peekToken();
