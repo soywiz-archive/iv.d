@@ -33,6 +33,7 @@ alias ttyRgb2Color = ttyRGB;
 
 // ////////////////////////////////////////////////////////////////////////// //
 private __gshared termios origMode;
+private __gshared bool doRestoreOrig = false;
 private shared bool inRawMode = false;
 
 private class XLock {}
@@ -172,7 +173,7 @@ void ttyRestoreOrigMode () {
   import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
   import core.sys.posix.unistd : STDIN_FILENO;
   //tcflush(STDIN_FILENO, TCIOFLUSH);
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &origMode);
+  if (doRestoreOrig) tcsetattr(STDIN_FILENO, TCSAFLUSH, &origMode);
   atomicStore(inRawMode, false);
 }
 
@@ -180,6 +181,7 @@ void ttyRestoreOrigMode () {
 /// returns previous mode or Bad
 TTYMode ttySetNormal () @trusted @nogc {
   import core.atomic;
+  if (!doRestoreOrig) return TTYMode.Bad;
   synchronized(XLock.classinfo) {
     if (atomicLoad(inRawMode)) {
       import core.sys.posix.termios : tcflush, tcsetattr;
@@ -198,7 +200,7 @@ TTYMode ttySetNormal () @trusted @nogc {
 /// returns previous mode or Bad
 TTYMode ttySetRaw (bool waitkey=true) @trusted @nogc {
   import core.atomic;
-  if (ttyIsRedirected) return TTYMode.Bad;
+  if (ttyIsRedirected || !doRestoreOrig) return TTYMode.Bad;
   synchronized(XLock.classinfo) {
     if (!atomicLoad(inRawMode)) {
       import core.sys.posix.termios : tcflush, tcsetattr;
@@ -984,7 +986,7 @@ private extern(C) void ttyExitRestore () {
     import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
     import core.sys.posix.unistd : STDIN_FILENO;
     //tcflush(STDIN_FILENO, TCIOFLUSH);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &origMode);
+    if (doRestoreOrig) tcsetattr(STDIN_FILENO, TCSAFLUSH, &origMode);
   }
 }
 
@@ -994,15 +996,12 @@ shared static this () {
     atexit(&ttyExitRestore);
   }
   {
-    import core.stdc.stdlib : getenv;
-    import core.stdc.string : strcmp;
-    auto tt = getenv("TERM");
-    if (tt !is null) {
-      auto len = 0;
-      while (len < 5 && tt[len]) ++len;
-           if (len >= 4 && tt[0..4] == "rxvt") termType = TermType.rxvt;
-      else if (len >= 5 && tt[0..5] == "xterm") termType = TermType.xterm;
-      else if (len >= 5 && tt[0..5] == "linux") termType = TermType.linux;
+    import core.sys.posix.unistd : isatty, STDIN_FILENO, STDOUT_FILENO;
+    import core.sys.posix.termios : tcgetattr;
+    import core.sys.posix.termios : termios;
+    doRestoreOrig = false;
+    if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO)) {
+      doRestoreOrig = (tcgetattr(STDIN_FILENO, &origMode) == 0);
     }
   }
 }
