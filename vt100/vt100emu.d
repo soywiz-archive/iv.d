@@ -112,7 +112,7 @@ private:
         if (wrbufpos == wrbufsize) {
           import core.stdc.stdlib : realloc;
           if (wrbufsize+buf.length <= wrbufsize) assert(0, "fuck!");
-          uint newsz = wrbufsize+data.length;
+          uint newsz = wrbufsize+cast(uint)data.length;
           if (newsz >= int.max/1024) {
             wrbufFree();
             writeFucked = true;
