@@ -205,7 +205,7 @@ public:
   this (int x0, int y0, int w, int h, bool asinglesine=false) {
     // prompt should be created only for multiline editors
     super(x0, y0, w, h, null, asinglesine);
-    //srrOptions.type = SearchReplaceOptions.Type.Regex;
+    srrOptions.type = SearchReplaceOptions.Type.Regex;
     srrOptions.casesens = true;
     srrOptions.nocomments = true;
   }
