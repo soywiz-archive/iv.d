@@ -307,7 +307,43 @@ public ubyte tty2linux8 (ubyte ttyc) nothrow @trusted @nogc {
 
 /// Force CTFE
 public enum TtyRGB(ubyte r, ubyte g, ubyte b, bool allow256=true) = ttyRGB!allow256(r, g, b);
+
+/// Ditto.
+public enum TtyRGB(string rgb, bool allow256=true) = ttyRGB!allow256(rgb);
+
 public alias TtyRgb = TtyRGB; /// Ditto.
+
+
+/// Convert rgb values to approximate 256-color (or 16-color) teminal color number
+public ubyte ttyRGB(bool allow256=true, bool only8=false) (const(char)[] rgb) pure nothrow @trusted @nogc {
+  static int c2h (immutable char ch) pure nothrow @trusted @nogc {
+         if (ch >= '0' && ch <= '9') return ch-'0';
+    else if (ch >= 'A' && ch <= 'F') return ch-'A'+10;
+    else if (ch >= 'a' && ch <= 'f') return ch-'a'+10;
+    else return -1;
+  }
+
+  auto anchor = rgb;
+  while (rgb.length && (rgb[0] <= ' ' || rgb[0] == '#')) rgb = rgb[1..$];
+  while (rgb.length && rgb[$-1] <= ' ') rgb = rgb[0..$-1];
+  if (rgb.length == 3) {
+    foreach (immutable char ch; rgb) if (c2h(ch) < 0) return 7; // normal gray
+    return ttyRGB(
+      cast(ubyte)(255*c2h(rgb[0])/15),
+      cast(ubyte)(255*c2h(rgb[1])/15),
+      cast(ubyte)(255*c2h(rgb[2])/15),
+    );
+  } else if (rgb.length == 6) {
+    foreach (immutable char ch; rgb) if (c2h(ch) < 0) return 7; // normal gray
+    return ttyRGB(
+      cast(ubyte)(16*c2h(rgb[0])+c2h(rgb[1])),
+      cast(ubyte)(16*c2h(rgb[2])+c2h(rgb[3])),
+      cast(ubyte)(16*c2h(rgb[4])+c2h(rgb[5])),
+    );
+  } else {
+    return 7; // normal gray
+  }
+}
 
 
 /// Convert rgb values to approximate 256-color (or 16-color) teminal color number
