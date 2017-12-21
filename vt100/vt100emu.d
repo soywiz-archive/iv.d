@@ -17,6 +17,7 @@
 module iv.vt100.vt100emu;
 private:
 
+import iv.alice;
 import iv.strex;
 import iv.utfutil;
 import iv.x11;
