@@ -1670,6 +1670,15 @@ auto itemAs(string type) (FuiContext ctx, const(char)[] id) nothrow @trusted @no
 }
 
 
+auto firstItemOfType(string type) (FuiContext ctx) nothrow @trusted @nogc {
+  if (!ctx.valid) return null;
+  foreach (int fid; 0..ctx.length) {
+    if (auto it = ctx.itemAs!type(fid)) return it;
+  }
+  return null;
+}
+
+
 FuiCtlType itemType (FuiContext ctx, int item) nothrow @trusted @nogc {
   if (!ctx.valid) return FuiCtlType.Invisible;
   if (auto data = ctx.itemIntr!FuiCtlHead(item)) return data.type;

@@ -95,7 +95,8 @@ int dialogTanOna (const(char)[] title, const(char)[] text, bool def) {
 
 // ///////////////////////////////////////////////////////////////////////// //
 // result.ptr is null: calcelled
-string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
+string dialogInputLine(string editorid="") (const(char)[] msg, const(char)[] def=null, FuiHistoryManager dghisman=null) {
+  static if (editorid.length > 0) string editid = editorid; else string editid = "ed";
   enum laydesc = q{
     caption: "Input query"
     small-frame: false
@@ -106,7 +107,7 @@ string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
     }
     editline: {
       align: expand
-      id: "ed"
+      id: "$editid"
       text: "$def"
     }
     hline
@@ -122,25 +123,10 @@ string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
 
   auto ctx = FuiContext.create();
 
-  int edGetNum (int item) {
-    if (auto edl = ctx.itemAs!"editline"(item)) {
-      auto ed = edl.ed;
-      if (ed is null) return -1;
-      int num = 0;
-      auto rng = ed[];
-      while (!rng.empty && rng.front <= ' ') rng.popFront();
-      if (rng.empty || !rng.front.isdigit) return -1;
-      while (!rng.empty && rng.front.isdigit) {
-        num = num*10+rng.front-'0';
-        rng.popFront();
-      }
-      while (!rng.empty && rng.front <= ' ') rng.popFront();
-      return (rng.empty ? num : -1);
-    }
-    return -1;
+  ctx.parse!(msg, def, editid)(laydesc);
+  static if (editorid.length > 0) {
+    if (dghisman !is null) ctx.dialogHistoryManager = dghisman;
   }
-
-  ctx.parse!(msg, def)(laydesc);
   ctx.relayout();
   if (ctx.layprops(0).position.w < ttyw/3*2) {
     ctx.layprops(0).minSize.w = ttyw/3*2;
@@ -148,13 +134,16 @@ string dialogInputLine (const(char)[] msg, const(char)[] def=null) {
   }
   auto res = ctx.modalDialog;
   if (res >= 0) {
-    if (auto edl = ctx.itemAs!"editline"(ctx["ed"])) {
+    if (auto edl = ctx.firstItemOfType!"editline") {
       auto ed = edl.ed;
       char[] rs;
       auto rng = ed[];
       if (rng.length == 0) return ""; // so it won't be null
       rs.reserve(rng.length);
       foreach (char ch; rng) rs ~= ch;
+      static if (editorid.length > 0) {
+        if (auto hisman = ctx.dialogHistoryManager) hisman.add(editid, rs);
+      }
       return cast(string)rs; // it is safe to cast it here
     }
   }
