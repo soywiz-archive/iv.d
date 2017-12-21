@@ -203,24 +203,22 @@ TTYMode ttySetRaw (bool waitkey=true) @trusted @nogc {
   if (ttyIsRedirected || !doRestoreOrig) return TTYMode.Bad;
   synchronized(XLock.classinfo) {
     if (!atomicLoad(inRawMode)) {
-      import core.sys.posix.termios : tcflush, tcsetattr;
-      import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
-      import core.sys.posix.termios : BRKINT, CS8, ECHO, ICANON, IEXTEN, INPCK, ISIG, ISTRIP, IXON, ONLCR, OPOST, VMIN, VTIME;
+      //import core.sys.posix.termios : tcflush, tcsetattr;
+      //import core.sys.posix.termios : TCIOFLUSH, TCSAFLUSH;
+      //import core.sys.posix.termios : BRKINT, CS8, ECHO, ICANON, IEXTEN, INPCK, ISIG, ISTRIP, IXOFF, IGNCR, INLCR, ONLCR, OPOST, VMIN, VTIME;
+      import core.sys.posix.termios;
       import core.sys.posix.unistd : STDIN_FILENO;
-      termios raw = origMode; // modify the original mode
+      import core.stdc.string : memset;
+      enum IUCLC = 512; //0001000
+      //termios raw = origMode; // modify the original mode
+      termios raw = void;
+      memset(&raw, 0, raw.sizeof);
       //tcflush(STDIN_FILENO, TCIOFLUSH);
-      // input modes: no break, no CR to NL, no parity check, no strip char, no start/stop output control
-      //raw.c_iflag &= ~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
-      // input modes: no break, no parity check, no strip char, no start/stop output control
-      raw.c_iflag &= ~(BRKINT|INPCK|ISTRIP|IXON);
+      raw.c_iflag = IGNBRK;
       // output modes: disable post processing
-      raw.c_oflag &= ~OPOST;
-      raw.c_oflag |= ONLCR;
       raw.c_oflag = OPOST|ONLCR;
       // control modes: set 8 bit chars
-      raw.c_cflag |= CS8;
-      // local modes: echoing off, canonical off, no extended functions, no signal chars (^Z,^C)
-      raw.c_lflag &= ~(ECHO|ICANON|IEXTEN|ISIG);
+      raw.c_cflag = CS8|CLOCAL;
       // control chars: set return condition: min number of bytes and timer; we want read to return every single byte, without timeout
       raw.c_cc[VMIN] = (waitkey ? 1 : 0); // wait/poll mode
       raw.c_cc[VTIME] = 0; // no timer
