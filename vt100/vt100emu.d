@@ -226,7 +226,7 @@ public:
     if (!ptyi.valid) return false;
     if (ptyi.pid == pid) {
       ptyi.close();
-      putstr("\r\n\x1b[0;33;1;41mDEAD CHILD");
+      //putstr("\r\n\x1b[0;33;1;41mDEAD CHILD");
       wrbufFree();
       return true;
     }
