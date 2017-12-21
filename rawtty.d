@@ -824,7 +824,8 @@ TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
   if (ch == 0) { key.key = TtyEvent.Key.ModChar; key.ctrl = true; key.ch = ' '; return key; }
   if (ch == 8 || ch == 127) { key.key = TtyEvent.Key.Backspace; key.ch = 8; return key; }
   if (ch == 9) { key.key = TtyEvent.Key.Tab; key.ch = 9; return key; }
-  if (ch == 10) { key.key = TtyEvent.Key.Enter; key.ch = 13; return key; }
+  //if (ch == 10) { key.key = TtyEvent.Key.Enter; key.ch = 13; return key; }
+  if (ch == 13) { key.key = TtyEvent.Key.Enter; key.ch = 13; return key; }
 
   key.key = TtyEvent.Key.Unknown;
 
@@ -837,7 +838,7 @@ TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
       ch = ttyReadKeyByte(toEscMSec);
       if (ch < 0 || ch == 27) { key.key = TtyEvent.Key.Escape; key.ch = 27; return key; }
       if (ch >= 'A' && ch <= 'Z') xtermSpecial(cast(char)ch);
-      if (ch >= 'a' && ch <= 'z') xtermSpecial(cast(char)(ch-32));
+      if (ch >= 'a' && ch <= 'z') { key.shift = true; xtermSpecial(cast(char)(ch-32)); }
       return key;
     }
     // csi
