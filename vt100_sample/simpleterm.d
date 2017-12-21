@@ -36,11 +36,14 @@ enum OptPtrBlinkTime = 700;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+class ExitException : Exception { this () { super("exit"); } }
+class ExitError : ExitException { this () { super(); } }
+
+
 void die(AA...) (string fmt, AA args) {
-  import core.exception : ExitException;
   stderr.write("FATAL: ");
   stderr.writeln(fmt, args);
-  throw new ExitException();
+  throw new ExitError();
 }
 
 
@@ -947,7 +950,7 @@ public:
     while (len > 0) {
       // draw cursor char if we hit it
       if (cursorLine && x == curx) {
-        drawTermChar(curx, cury, asCursor:true);
+        drawTermChar(curx, cury, /*asCursor:*/true);
         ++x;
         winx += charWidth;
         --len;
@@ -1037,7 +1040,7 @@ public:
         // find last dirty glyph
         uint x1 = x0+1;
         while (x1 < scrbuf.width && !scrbuf.isDirtyAt(x1, y)) ++x1;
-        drawGlyphsInLine(x0, y, x1-x0, cursor:true);
+        drawGlyphsInLine(x0, y, x1-x0, /*cursor:*/true);
         x0 = x1;
       }
     }
@@ -1063,12 +1066,12 @@ public:
 
   void undrawCursor () nothrow @trusted @nogc {
     if (!tab.prevcurVis) return;
-    drawTermChar(tab.prevcurX, tab.prevcurY, asCursor:false);
+    drawTermChar(tab.prevcurX, tab.prevcurY, /*asCursor:*/false);
   }
 
   void drawCursor () nothrow @trusted @nogc {
     if (!tab.prevcurVis) return;
-    drawTermChar(tab.prevcurX, tab.prevcurY, asCursor:true);
+    drawTermChar(tab.prevcurX, tab.prevcurY, /*asCursor:*/true);
   }
 
   // ////////////////////////////////////////////////////////////////////// //
@@ -1292,7 +1295,7 @@ public:
     xev.property = cast(Atom)None;
     if (ev.target == xaTargets) {
       // respond with the supported type
-      Atom[$] tlist = [xaUTF8, XA_STRING, xaTargets];
+      Atom[3] tlist = [xaUTF8, XA_STRING, xaTargets];
       XChangeProperty(ev.display, ev.requestor, ev.property, XA_ATOM, 32, PropModeReplace, cast(ubyte*)tlist.ptr, 3);
       xev.property = ev.property;
     } else if (ev.target == xaUTF8 || ev.target == XA_STRING) {
@@ -1525,7 +1528,7 @@ public:
       if (scrbuf.curVisible != tab.prevcurVis || scrbuf.curX != tab.prevcurX || scrbuf.curY != tab.prevcurY) {
         if (tab.prevcurVis) {
           if (!scrbuf.isDirty) {
-            drawTermChar(tab.prevcurX, tab.prevcurY, asCursor:false);
+            drawTermChar(tab.prevcurX, tab.prevcurY, /*asCursor:*/false);
           } else {
             scrbuf.setDirtyAt(tab.prevcurX, tab.prevcurY, true);
           }
@@ -1557,7 +1560,7 @@ public:
           scrbuf.setDirtyAt(scrbuf.curX, scrbuf.curY, true);
         } else {
           // immediate redraw
-          drawTermChar(scrbuf.curX, scrbuf.curY, asCursor:true);
+          drawTermChar(scrbuf.curX, scrbuf.curY, /*asCursor:*/true);
           XFlush(dpy);
         }
       }
@@ -1707,14 +1710,12 @@ public:
 
 
 void usage () {
-  import core.exception : ExitError;
   write("usage: sampleterm [runcmd...]\n");
-  throw new ExitError(0);
+  throw new ExitException();
 }
 
 
 string[] processCLIArgs (string[] args) {
-  import core.exception : ExitError;
   string[] res = [args[0]];
   bool noMoreArgs = false;
   for (usize aidx = 1; aidx < args.length; ++aidx) {
@@ -1732,11 +1733,16 @@ string[] processCLIArgs (string[] args) {
 
 
 int main (string[] args) {
-  args = processCLIArgs(args);
-  auto xw = new DiWindow(80, 24);
-  xw.changeTitle("DiTTY sample terminal");
-  xw.appbuf.execPty(args[1..$]);
-  xw.mainLoop();
-  xw.close();
-  return 0;
+  try {
+    args = processCLIArgs(args);
+    auto xw = new DiWindow(80, 24);
+    xw.changeTitle("DiTTY sample terminal");
+    xw.appbuf.execPty(args[1..$]);
+    xw.mainLoop();
+    xw.close();
+    return 0;
+  } catch (ExitException e) {
+    if (cast(ExitError)e) return -1;
+    return 0;
+  }
 }
