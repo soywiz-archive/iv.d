@@ -253,6 +253,17 @@ private:
       Glob.incref(ge);
     }
 
+  private:
+    bool updateStat () {
+      if (!statvalid && idx < ge.gb.gl_pathc) {
+        if (stat(ge.gb.gl_pathv[idx], &st) == 0) {
+          statvalid = true;
+          return true;
+        }
+      }
+      return false;
+    }
+
   public:
     this (this) { assert(ge !is null); Glob.incref(ge); }
     ~this () { assert(ge !is null); Glob.decref(ge); }
@@ -289,75 +300,62 @@ private:
     @property bool prev () { if (idx > 0) { statvalid = false; --idx; return true; } else return false; }
     @property bool next () { if (idx < ge.gb.gl_pathc) { statvalid = false; ++idx; return true; } else return false; }
 
-    private bool checkStatFlag (uint flag) {
+    bool getStat (ref stat_t outst) const {
       if (idx < ge.gb.gl_pathc) {
         if (!statvalid) {
-          if (stat(ge.gb.gl_pathv[idx], &st) == 0) {
-            statvalid = true;
-            return ((st.st_mode&flag) != 0);
-          }
+          stat_t st = void;
+          if (stat(ge.gb.gl_pathv[idx], &st) == 0) { outst = st; return true; }
         } else {
-          return ((st.st_mode&flag) != 0);
+          outst = st;
+          return true;
         }
       }
       return false;
-    }
-
-    uint mode () {
-      if (idx < ge.gb.gl_pathc) {
-        if (!statvalid) {
-          if (stat(ge.gb.gl_pathv[idx], &st) != 0) return 0;
-          statvalid = true;
-        }
-        return st.st_mode;
-      }
-      return 0;
     }
 
     bool getStat (ref stat_t outst) {
-      if (idx < ge.gb.gl_pathc) {
-        if (!statvalid) {
-          if (stat(ge.gb.gl_pathv[idx], &st) != 0) return false;
-          statvalid = true;
-        }
-        outst = st;
-        return true;
-      }
+      if (updateStat()) { outst = st; return true; }
       return false;
     }
 
-    @property bool isFile () { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFREG); }
-    @property bool isDir () { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFDIR); }
-    @property bool isLink () { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFLNK); }
+    private bool checkStatFlag (uint flag) const {
+      stat_t st = void;
+      return (getStat(st) ? ((st.st_mode&flag) != 0) : false);
+    }
+
+    private bool checkStatFlag (uint flag) {
+      return (updateStat() ? ((st.st_mode&flag) != 0) : false);
+    }
+
+    uint mode () const {
+      stat_t st = void;
+      return (getStat(st) ? st.st_mode : 0);
+    }
+
+    uint mode () {
+      return (updateStat() ? st.st_mode : 0);
+    }
+
+    @property bool isFile () inout { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFREG); }
+    @property bool isDir () inout { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFDIR); }
+    @property bool isLink () inout { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFLNK); }
+
+    @property ulong size () const {
+      stat_t st = void;
+      return (getStat(st) ? st.st_size : 0);
+    }
 
     @property ulong size () {
-      if (idx < ge.gb.gl_pathc) {
-        import core.sys.posix.sys.stat;
-        if (!statvalid) {
-          if (stat(ge.gb.gl_pathv[idx], &st) == 0) {
-            statvalid = true;
-            return st.st_size;
-          }
-        } else {
-          return st.st_size;
-        }
-      }
-      return 0;
+      return (updateStat() ? st.st_size : 0);
+    }
+
+    @property INode inode () const {
+      stat_t st = void;
+      return (getStat(st) ? st.st_ino : 0);
     }
 
     @property INode inode () {
-      if (idx < ge.gb.gl_pathc) {
-        import core.sys.posix.sys.stat;
-        if (!statvalid) {
-          if (stat(ge.gb.gl_pathv[idx], &st) == 0) {
-            statvalid = true;
-            return st.st_ino;
-          }
-        } else {
-          return st.st_ino;
-        }
-      }
-      return 0;
+      return (updateStat() ? st.st_ino : 0);
     }
   }
 
