@@ -227,6 +227,18 @@ public:
        (ch >= 0xFFF0) ? '?' : cast(wchar)ch);
   }
 
+  static wchar filterWC (wchar ch) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    return
+      ((ch >= 0x02B0 && ch <= 0x036F) ||
+       (ch >= 0x20D0 && ch <= 0x20FF) ||
+       (ch >= 0xD800 && ch <= 0xDBFF) ||
+       (ch >= 0xDC00 && ch <= 0xF8FF) ||
+       (ch >= 0xFE20 && ch <= 0xFE2F) ||
+       (ch >= 0xFEFF && ch <= 0xFFEF) ||
+       (ch >= 0xFFF0) ? '?' : ch);
+  }
+
 public:
   enum {
     CornerLU,
@@ -519,7 +531,7 @@ public:
     Utf8DecoderFast dc;
     foreach (immutable char ch; s) {
       if (!dc.decodeSafe(ch)) continue;
-      wchar wc = (dc.codepoint <= wchar.max ? cast(wchar)dc.codepoint : '?');
+      wchar wc = filterDC(dc.codepoint);
       // cr?
       if (wc == 13) {
         if (mCurY >= 0 && mCurY < mHeight) mGBuf.ptr[mCurY*mWidth+mWidth-1].mAttr.autoWrap = false; // no autowrap
@@ -589,7 +601,7 @@ public:
       if (count < 1) return;
       x = 0;
     }
-    wchar wc = (dch <= wchar.max ? cast(wchar)dch : '?');
+    wchar wc = filterDC(dch);
     auto ng = Glyph(wc, a);
     ng.dirty = true;
     Glyph* g = mGBuf.ptr+y*mWidth+x;
@@ -638,7 +650,7 @@ public:
     }
     Glyph* g = mGBuf.ptr+y*mWidth+x;
     foreach (immutable wchar wc; s) {
-      auto ng = Glyph(wc, a);
+      auto ng = Glyph(filterWC(wc), a);
       ng.dirty = true;
       if (*g != ng) {
         if (!g.dirty) ++mDirtyCount;

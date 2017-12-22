@@ -1335,7 +1335,7 @@ protected:
         foreach (ref Glyph g; mGBuf) {
           if (g.ch != 'E') {
             if (!g.dirty) ++mDirtyCount;
-            g.ch = ' ';
+            g.ch = 'E';
             g.dirty = true;
           }
         }
@@ -1548,7 +1548,7 @@ public:
       doInsertChars(mCurX, 1);
     }
     // put char and move cursor
-    auto gl = Glyph(wch, mCurAttr);
+    auto gl = Glyph(filterWC(wch), mCurAttr);
     if (mCurX >= 0 && mCurY >= 0 && mCurX < mWidth && mCurY < mHeight) {
       auto gp = mGBuf.ptr+(mCurY*mWidth+mCurX);
       if (*gp != gl) {
