@@ -613,7 +613,7 @@ public:
     Glyph* g = mGBuf.ptr+y*mWidth+(x > 0 ? x : 0);
     foreach (immutable char ch; s) {
       if (!dc.decodeSafe(ch)) continue;
-      wchar wc = (dc.codepoint <= wchar.max ? cast(wchar)dc.codepoint : '?');
+      wchar wc = filterDC(dc.codepoint);
       if (x >= 0) {
         auto ng = Glyph(wc, a);
         ng.dirty = true;
@@ -623,6 +623,50 @@ public:
         }
         ++g;
       }
+      if (++x >= mWidth) return;
+    }
+  }
+
+  void writeStrAt (int x, int y, const(wchar)[] s, Attr a) nothrow @trusted @nogc {
+    if (y < 0 || y >= mHeight || x >= mWidth || s.length == 0) return;
+    if (x < 0) {
+      if (x == int.min) return;
+      x = -x;
+      if (s.length <= x) return;
+      s = s[x..$];
+      x = 0;
+    }
+    Glyph* g = mGBuf.ptr+y*mWidth+x;
+    foreach (immutable wchar wc; s) {
+      auto ng = Glyph(wc, a);
+      ng.dirty = true;
+      if (*g != ng) {
+        if (!g.dirty) ++mDirtyCount;
+        *g = ng;
+      }
+      ++g;
+      if (++x >= mWidth) return;
+    }
+  }
+
+  void writeStrAt (int x, int y, const(dchar)[] s, Attr a) nothrow @trusted @nogc {
+    if (y < 0 || y >= mHeight || x >= mWidth || s.length == 0) return;
+    if (x < 0) {
+      if (x == int.min) return;
+      x = -x;
+      if (s.length <= x) return;
+      s = s[x..$];
+      x = 0;
+    }
+    Glyph* g = mGBuf.ptr+y*mWidth+x;
+    foreach (immutable dchar dc; s) {
+      auto ng = Glyph(filterDC(dc), a);
+      ng.dirty = true;
+      if (*g != ng) {
+        if (!g.dirty) ++mDirtyCount;
+        *g = ng;
+      }
+      ++g;
       if (++x >= mWidth) return;
     }
   }

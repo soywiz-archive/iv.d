@@ -318,15 +318,6 @@ private:
       return false;
     }
 
-    private bool checkStatFlag (uint flag) const {
-      stat_t st = void;
-      return (getStat(st) ? ((st.st_mode&flag) != 0) : false);
-    }
-
-    private bool checkStatFlag (uint flag) {
-      return (updateStat() ? ((st.st_mode&flag) != 0) : false);
-    }
-
     uint mode () const {
       stat_t st = void;
       return (getStat(st) ? st.st_mode : 0);
@@ -336,9 +327,9 @@ private:
       return (updateStat() ? st.st_mode : 0);
     }
 
-    @property bool isFile () inout { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFREG); }
-    @property bool isDir () inout { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFDIR); }
-    @property bool isLink () inout { pragma(inline, true); import core.sys.posix.sys.stat; return checkStatFlag(S_IFLNK); }
+    @property bool isFile () inout { pragma(inline, true); return ((mode&S_IFREG) != 0); } // symlinks are regular files too!
+    @property bool isDir () inout { pragma(inline, true); return ((mode&S_IFDIR) != 0); }
+    @property bool isLink () inout { pragma(inline, true); return ((mode&S_IFLNK) == S_IFLNK); }
 
     @property ulong size () const {
       stat_t st = void;
