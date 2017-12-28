@@ -2515,6 +2515,7 @@ public class EdHiTokensPas : EdHiTokens {
     addToken("<=", HiPunct);
     addToken(">=", HiPunct);
     addToken("<>", HiPunct);
+    addToken("@", HiKeyword);
 
     addToken("Char", HiType);
     addToken("AnsiChar", HiType);
