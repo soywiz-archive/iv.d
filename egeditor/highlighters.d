@@ -1492,6 +1492,126 @@ public class EdHiTokensC : EdHiTokens {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+public class EdHiTokensZS : EdHiTokens {
+  this () {
+    super(
+      Opt.Num0b|
+      Opt.Num0o|
+      Opt.Num0x|
+      //Opt.NumAllowUnder|
+      //Opt.NumAllowSign|
+      Opt.SQString|
+      Opt.DQString|
+      //Opt.BQString|
+      //Opt.RQString|
+      //Opt.SQChar|
+      //Opt.DNestedComment|
+      //Opt.ShellSingleComment|
+      Opt.CSingleComment|
+      Opt.CMultiComment|
+      //Opt.SqlSingleComment|
+      Opt.CPreprocessor|
+      //Opt.JSRegExp|
+      //Opt.ShellSigil|
+      Opt.CaseInsensitive|
+      //Opt.SQStringNoEscape|
+      //Opt.DQStringNoEscape|
+      //Opt.CougarSingleComment|
+      //Opt.CougarCharLiteral|
+      //Opt.MaximumTokens|
+      //Opt.PascalComments|
+      //Opt.NumPasHex|
+      0
+    );
+
+    addToken("break", HiKeyword);
+    addToken("case", HiKeyword);
+    addToken("const", HiKeyword);
+    addToken("continue", HiKeyword);
+    addToken("do", HiKeyword);
+    addToken("else", HiKeyword);
+    addToken("enum", HiKeyword);
+    addToken("extern", HiKeyword);
+    addToken("for", HiKeyword);
+    addToken("goto", HiKeyword);
+    addToken("if", HiKeyword);
+    addToken("return", HiKeyword);
+    //addToken("short", HiKeyword);
+    addToken("sizeof", HiKeyword);
+    addToken("static", HiKeyword);
+    addToken("struct", HiKeyword);
+    addToken("switch", HiKeyword);
+    addToken("typedef", HiKeyword);
+    addToken("union", HiKeyword);
+    addToken("volatile", HiKeyword);
+    addToken("while", HiKeyword);
+    addToken("asm", HiKeyword);
+    addToken("inline", HiKeyword);
+    addToken("...", HiKeyword);
+    addToken("class", HiKeyword);
+    addToken("protected", HiKeyword);
+    addToken("private", HiKeyword);
+    addToken("public", HiKeyword);
+    addToken("default", HiKeyword);
+    addToken("using", HiKeyword);
+    addToken("try", HiKeyword);
+    addToken("catch", HiKeyword);
+    addToken("throw", HiKeyword);
+    addToken("virtual", HiKeyword);
+    addToken("override", HiKeyword);
+
+    addToken("true", HiKeyword);
+    addToken("false", HiKeyword);
+
+    addToken("!", HiPunct);
+    addToken("%", HiPunct);
+    addToken("&&", HiPunct);
+    addToken("&", HiPunct);
+    addToken("(", HiPunct);
+    addToken(")", HiPunct);
+    addToken("*", HiPunct);
+    addToken("+", HiPunct);
+    addToken(",", HiPunct);
+    addToken("-", HiPunct);
+    addToken("/", HiPunct);
+    addToken(":", HiPunct);
+    addToken(";", HiSemi);
+    addToken("<", HiPunct);
+    addToken("=", HiPunct);
+    addToken(">", HiPunct);
+    addToken("?", HiPunct);
+    addToken("[", HiPunct);
+    addToken("]", HiPunct);
+    addToken("^", HiPunct);
+    addToken("{", HiPunct);
+    addToken("||", HiPunct);
+    addToken("|", HiPunct);
+    addToken("}", HiPunct);
+    addToken("~", HiPunct);
+    addToken(".", HiPunct);
+    addToken("->", HiInternal);
+
+    addToken("null", HiInternal);
+    addToken("new", HiInternal);
+    addToken("self", HiInternal);
+    addToken("super", HiInternal);
+
+    addToken("void", HiType);
+    addToken("short", HiType);
+    addToken("int", HiType);
+    addToken("long", HiType);
+    addToken("float", HiType);
+    addToken("double", HiType);
+    addToken("char", HiType);
+    addToken("let", HiType);
+    addToken("bool", HiType);
+    addToken("string", HiType);
+    addToken("name", HiType);
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 public class EdHiTokensShell : EdHiTokens {
   this () {
     super(
@@ -2708,6 +2828,9 @@ public class EdHiTokensMES : EdHiTokens {
 // ////////////////////////////////////////////////////////////////////////// //
 // new higlighter instance for the file with the given extension
 public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullname) {
+  auto xname = fullname;
+  auto lslpos = xname.lastIndexOf('/');
+  if (lslpos >= 0) xname = xname[lslpos+1..$];
   if (ext.strEquCI(".d")) {
     __gshared EdHiTokensD toksd;
     if (toksd is null) toksd = new EdHiTokensD();
@@ -2721,10 +2844,16 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
   if (ext.strEquCI(".c") || ext.strEquCI(".cpp") ||
       ext.strEquCI(".h") || ext.strEquCI(".hpp") ||
       ext.strEquCI(".hxx") || ext.strEquCI(".cxx") ||
-      ext.strEquCI(".cc")) {
+      ext.strEquCI(".cc"))
+  {
     __gshared EdHiTokensC toksc;
     if (toksc is null) toksc = new EdHiTokensC();
     return new EditorHLExt(toksc);
+  }
+  if (xname.strEquCI("zscript.txt") || xname.strEquCI("actor.txt")) {
+    __gshared EdHiTokensZS tokszs;
+    if (tokszs is null) tokszs = new EdHiTokensZS();
+    return new EditorHLExt(tokszs);
   }
   if (ext.strEquCI(".frag") || ext.strEquCI(".vert") || ext.strEquCI(".shad") || ext.strEquCI(".shader")) {
     __gshared EdHiTokensFrag tokf;
