@@ -1,34 +1,33 @@
-/* tox.h
- *
+/*
  * The Tox public API.
+ */
+
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013 Tox project.
  *
- *  Copyright (C) 2013 Tox project All Rights Reserved.
+ * This file is part of Tox, the free peer to peer instant messenger.
  *
- *  This file is part of Tox.
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- *  Tox is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  Tox is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
  */
 module iv.tox /*is aliced*/;
-pragma(lib, "toxdns");
-pragma(lib, "toxencryptsave");
 pragma(lib, "toxcore");
-pragma(lib, "sodium");
-//pragma(lib, "m");
-//pragma(lib, "pthread");
+pragma(lib, "toxencryptsave");
+pragma(lib, "sodium"); // for static linking
 import iv.alice;
 extern(C) nothrow {
+
 
 /** \page core Public core API for Tox clients.
  *
@@ -145,84 +144,83 @@ alias ToxP = Tox*;
  ******************************************************************************/
 
 
+
 /**
  * The major version number. Incremented when the API or ABI changes in an
  * incompatible way.
+ *
+ * The function variants of these constants return the version number of the
+ * library. They can be used to display the Tox library version or to check
+ * whether the client is compatible with the dynamically linked version of Tox.
  */
 enum TOX_VERSION_MAJOR = 0;
+
+uint tox_version_major();
+
 /**
  * The minor version number. Incremented when functionality is added without
  * breaking the API or ABI. Set to 0 when the major version number is
  * incremented.
  */
-enum TOX_VERSION_MINOR = 1;
+enum TOX_VERSION_MINOR = 2;
+
+uint tox_version_minor();
+
 /**
  * The patch or revision number. Incremented when bugfixes are applied without
  * changing any functionality or API or ABI.
  */
-enum TOX_VERSION_PATCH = 10;
+enum TOX_VERSION_PATCH = 0;
+
+uint tox_version_patch();
 
 /**
  * A macro to check at preprocessing time whether the client code is compatible
- * with the installed version of Tox.
+ * with the installed version of Tox. Leading zeros in the version number are
+ * ignored. E.g. 0.1.5 is to 0.1.4 what 1.5 is to 1.4, that is: it can add new
+ * features, but can't break the API.
  */
-bool TOX_VERSION_IS_API_COMPATIBLE(int MAJOR, int MINOR, int PATCH) {
+bool TOX_VERSION_IS_API_COMPATIBLE(int MAJOR, int MINOR, int PATCH) pure nothrow @safe @nogc {
   return
-    (TOX_VERSION_MAJOR == MAJOR &&
-     (TOX_VERSION_MINOR > MINOR ||
-      (TOX_VERSION_MINOR == MINOR &&
-       TOX_VERSION_PATCH >= PATCH)));
+    (TOX_VERSION_MAJOR > 0 && TOX_VERSION_MAJOR == MAJOR) && (
+      /* 1.x.x, 2.x.x, etc. with matching major version. */
+      TOX_VERSION_MINOR > MINOR ||
+      TOX_VERSION_MINOR == MINOR && TOX_VERSION_PATCH >= PATCH
+    ) || (TOX_VERSION_MAJOR == 0 && MAJOR == 0) && (
+      /* 0.x.x makes minor behave like major above. */
+      (TOX_VERSION_MINOR > 0 && TOX_VERSION_MINOR == MINOR) && (
+        TOX_VERSION_PATCH >= PATCH
+      ) || (TOX_VERSION_MINOR == 0 && MINOR == 0) && (
+        /* 0.0.x and 0.0.y are only compatible if x == y. */
+        TOX_VERSION_PATCH == PATCH
+      )
+    );
 }
 
-/**
- * A macro to make compilation fail if the client code is not compatible with
- * the installed version of Tox.
- */
-/*
-#define TOX_VERSION_REQUIRE(MAJOR, MINOR, PATCH)                \
-  typedef char tox_required_version[TOX_IS_COMPATIBLE(MAJOR, MINOR, PATCH) ? 1 : -1]
-*/
-
-
-/**
- * Return the major version number of the library. Can be used to display the
- * Tox library version or to check whether the client is compatible with the
- * dynamically linked version of Tox.
- */
-uint tox_version_major();
-
-/**
- * Return the minor version number of the library.
- */
-uint tox_version_minor();
-
-/**
- * Return the patch number of the library.
- */
-uint tox_version_patch();
 
 /**
  * Return whether the compiled library version is compatible with the passed
  * version numbers.
  */
-bool tox_version_is_compatible(uint major, uint minor, uint patch);
+bool tox_version_is_compatible(uint major, uint minor, uint patch) nothrow @trusted @nogc;
 
 /**
  * A convenience macro to call tox_version_is_compatible with the currently
  * compiling API version.
  */
-/*
-bool TOX_VERSION_IS_ABI_COMPATIBLE() {
-  return tox_version_is_compatible(TOX_VERSION_MAJOR, TOX_VERSION_MINOR, TOX_VERSION_PATCH);
-}
-*/
+bool TOX_VERSION_IS_ABI_COMPATIBLE() nothrow @safe @nogc { return tox_version_is_compatible(TOX_VERSION_MAJOR, TOX_VERSION_MINOR, TOX_VERSION_PATCH); }
 
 
 /*******************************************************************************
  *
  * :: Numeric constants
  *
+ * The values of these are not part of the ABI. Prefer to use the function
+ * versions of them for code that should remain compatible with future versions
+ * of toxcore.
+ *
  ******************************************************************************/
+
 
 
 /**
@@ -230,15 +228,21 @@ bool TOX_VERSION_IS_ABI_COMPATIBLE() {
  */
 enum TOX_PUBLIC_KEY_SIZE = 32;
 
+uint tox_public_key_size();
+
 /**
  * The size of a Tox Secret Key in bytes.
  */
 enum TOX_SECRET_KEY_SIZE = 32;
 
+uint tox_secret_key_size();
+
 /**
  * The size of the nospam in bytes when written in a Tox address.
  */
-enum TOX_NOSPAM_SIZE = cast(uint)(uint.sizeof); // 4 bytes
+enum TOX_NOSPAM_SIZE = cast(uint)(uint.sizeof);
+
+uint tox_nospam_size();
 
 /**
  * The size of a Tox address in bytes. Tox addresses are in the format
@@ -250,45 +254,64 @@ enum TOX_NOSPAM_SIZE = cast(uint)(uint.sizeof); // 4 bytes
  */
 enum TOX_ADDRESS_SIZE = cast(uint)(TOX_PUBLIC_KEY_SIZE + TOX_NOSPAM_SIZE + ushort.sizeof);
 
+uint tox_address_size();
+
 /**
  * Maximum length of a nickname in bytes.
  */
 enum TOX_MAX_NAME_LENGTH = 128;
+
+uint tox_max_name_length();
 
 /**
  * Maximum length of a status message in bytes.
  */
 enum TOX_MAX_STATUS_MESSAGE_LENGTH = 1007;
 
+uint tox_max_status_message_length();
+
 /**
  * Maximum length of a friend request message in bytes.
  */
 enum TOX_MAX_FRIEND_REQUEST_LENGTH = 1016;
+
+uint tox_max_friend_request_length();
 
 /**
  * Maximum length of a single message after which it should be split.
  */
 enum TOX_MAX_MESSAGE_LENGTH = 1372;
 
+uint tox_max_message_length();
+
 /**
- * Maximum size of custom packets. TODO: should be LENGTH?
+ * Maximum size of custom packets. TODO(iphydf): should be LENGTH?
  */
 enum TOX_MAX_CUSTOM_PACKET_SIZE = 1373;
+
+uint tox_max_custom_packet_size();
 
 /**
  * The number of bytes in a hash generated by tox_hash.
  */
-enum TOX_HASH_LENGTH = /*crypto_hash_sha256_BYTES*/ 32;
+enum TOX_HASH_LENGTH = 32;
+
+uint tox_hash_length();
 
 /**
  * The number of bytes in a file id.
  */
 enum TOX_FILE_ID_LENGTH = 32;
 
+uint tox_file_id_length();
+
 /**
- * Maximum file name length for file tran.
+ * Maximum file name length for file transfers.
  */
 enum TOX_MAX_FILENAME_LENGTH = 255;
+
+uint tox_max_filename_length();
+
 
 /*******************************************************************************
  *
@@ -297,41 +320,60 @@ enum TOX_MAX_FILENAME_LENGTH = 255;
  ******************************************************************************/
 
 
+
 /**
  * Represents the possible statuses a client can have.
  */
-enum TOX_USER_STATUS {
+alias TOX_USER_STATUS = int;
+enum : int {
+
     /**
      * User is online and available.
      */
-    /*TOX_USER_STATUS_*/NONE,
+    TOX_USER_STATUS_NONE,
+
     /**
      * User is away. Clients can set this e.g. after a user defined
      * inactivity time.
      */
-    /*TOX_USER_STATUS_*/AWAY,
+    TOX_USER_STATUS_AWAY,
+
     /**
      * User is busy. Signals to other clients that this client does not
      * currently wish to communicate.
      */
-    /*TOX_USER_STATUS_*/BUSY
+    TOX_USER_STATUS_BUSY,
+
 }
 
+
 /**
- * Represents message types for friend messages and group chat
+ * Represents message types for tox_friend_send_message and conference
  * messages.
  */
-enum TOX_MESSAGE_TYPE {
+alias TOX_MESSAGE_TYPE = int;
+enum : int {
+
     /**
      * Normal text message. Similar to PRIVMSG on IRC.
      */
-    /*TOX_MESSAGE_TYPE_*/NORMAL,
+    TOX_MESSAGE_TYPE_NORMAL,
+
     /**
      * A message describing an user action. This is similar to /me (CTCP ACTION)
      * on IRC.
      */
-    /*TOX_MESSAGE_TYPE_*/ACTION
+    TOX_MESSAGE_TYPE_ACTION,
+
+    /**
+     * Correction of the last message. With empty message body can be used to mark
+     * last message as deleted.
+     */
+    TOX_MESSAGE_TYPE_CORRECTION,
+
 }
+
+
 
 /*******************************************************************************
  *
@@ -340,72 +382,88 @@ enum TOX_MESSAGE_TYPE {
  ******************************************************************************/
 
 
-enum TOX_PROXY_TYPE {
+
+/**
+ * Type of proxy used to connect to TCP relays.
+ */
+alias TOX_PROXY_TYPE = int;
+enum : int {
+
     /**
      * Don't use a proxy.
      */
-    /*TOX_PROXY_TYPE_*/NONE,
+    TOX_PROXY_TYPE_NONE,
+
     /**
      * HTTP proxy using CONNECT.
      */
-    /*TOX_PROXY_TYPE_*/HTTP,
+    TOX_PROXY_TYPE_HTTP,
+
     /**
      * SOCKS proxy for simple socket pipes.
      */
-    /*TOX_PROXY_TYPE_*/SOCKS5
+    TOX_PROXY_TYPE_SOCKS5,
+
 }
 
 
 /**
  * Type of savedata to create the Tox instance from.
  */
-enum TOX_SAVEDATA_TYPE {
+alias TOX_SAVEDATA_TYPE = int;
+enum : int {
+
     /**
      * No savedata.
      */
-    /*TOX_SAVEDATA_TYPE_*/NONE,
+    TOX_SAVEDATA_TYPE_NONE,
 
     /**
-     * Savedata is one that was obtained from tox_get_savedata
+     * Savedata is one that was obtained from tox_get_savedata.
      */
-    /*TOX_SAVEDATA_TYPE_*/TOX_SAVE,
+    TOX_SAVEDATA_TYPE_TOX_SAVE,
 
     /**
-     * Savedata is a secret key of length TOX_SECRET_KEY_SIZE
+     * Savedata is a secret key of length TOX_SECRET_KEY_SIZE.
      */
-    /*TOX_SAVEDATA_TYPE_*/SECRET_KEY,
+    TOX_SAVEDATA_TYPE_SECRET_KEY,
+
 }
 
 
 /**
  * Severity level of log messages.
  */
-enum TOX_LOG_LEVEL {
+alias TOX_LOG_LEVEL = int;
+enum : int {
+
     /**
      * Very detailed traces including all network activity.
      */
-    TRACE,
+    TOX_LOG_LEVEL_TRACE,
 
     /**
      * Debug messages such as which port we bind to.
      */
-    DEBUG,
+    TOX_LOG_LEVEL_DEBUG,
 
     /**
      * Informational log messages such as video call status changes.
      */
-    INFO,
+    TOX_LOG_LEVEL_INFO,
 
     /**
      * Warnings about internal inconsistency or logic errors.
      */
-    WARNING,
+    TOX_LOG_LEVEL_WARNING,
 
     /**
      * Severe unexpected errors caused by external or internal inconsistency.
      */
-    ERROR,
+    TOX_LOG_LEVEL_ERROR,
+
 }
+
 
 /**
  * This event is triggered when the toxcore library logs an internal message.
@@ -424,7 +482,8 @@ enum TOX_LOG_LEVEL {
  * @param message The log message.
  * @param user_data The user data pointer passed to tox_new in options.
  */
-alias tox_log_cb = void function (Tox *tox, TOX_LOG_LEVEL level, const(char)* file, uint line, const(char)* func, const(char)* message, void* user_data) nothrow;
+alias tox_log_cb = void function (Tox* tox, TOX_LOG_LEVEL level, const(char)* file, uint line, const(char)* func,
+                        const(char)* message, void* user_data) nothrow;
 
 
 /**
@@ -441,7 +500,10 @@ alias tox_log_cb = void function (Tox *tox, TOX_LOG_LEVEL level, const(char)* fi
  * will become opaque (i.e. the definition will become private) in v0.2.0.
  */
 struct Tox_Options {
-private:
+  // disable construction and postblit
+  @disable this ();
+  @disable this (this);
+  /+
     /**
      * The type of socket to create.
      *
@@ -452,6 +514,7 @@ private:
      */
     bool ipv6_enabled;
 
+
     /**
      * Enable the use of UDP communication when available.
      *
@@ -461,10 +524,20 @@ private:
      */
     bool udp_enabled;
 
+
+    /**
+     * Enable local network peer discovery.
+     *
+     * Disabling this will cause Tox to not look for peers on the local network.
+     */
+    bool local_discovery_enabled;
+
+
     /**
      * Pass communications through a proxy.
      */
     TOX_PROXY_TYPE proxy_type;
+
 
     /**
      * The IP address or DNS name of the proxy to be used.
@@ -474,8 +547,12 @@ private:
      * (255 chars + 1 NUL byte).
      *
      * This member is ignored (it can be NULL) if proxy_type is TOX_PROXY_TYPE_NONE.
+     *
+     * The data pointed at by this member is owned by the user, so must
+     * outlive the options object.
      */
     const(char)* proxy_host;
+
 
     /**
      * The port to use to connect to the proxy server.
@@ -484,6 +561,7 @@ private:
      * proxy_type is TOX_PROXY_TYPE_NONE.
      */
     ushort proxy_port;
+
 
     /**
      * The start port of the inclusive port range to attempt to use.
@@ -499,10 +577,12 @@ private:
      */
     ushort start_port;
 
+
     /**
      * The end port of the inclusive port range to attempt to use.
      */
     ushort end_port;
+
 
     /**
      * The port to use for the TCP server (relay). If 0, the TCP server is
@@ -532,6 +612,9 @@ private:
 
     /**
      * The savedata.
+     *
+     * The data pointed at by this member is owned by the user, so must
+     * outlive the options object.
      */
     const(void)* savedata_data;
 
@@ -539,7 +622,7 @@ private:
     /**
      * The length of the savedata.
      */
-    usize savedata_length;
+    size_t savedata_length;
 
 
     /**
@@ -552,39 +635,69 @@ private:
      * User data pointer passed to the logging callback.
      */
     void *log_user_data;
+  +/
 }
 
-bool tox_options_get_ipv6_enabled(const(Tox_Options)* options);
-void tox_options_set_ipv6_enabled(Tox_Options* options, bool ipv6_enabled);
-bool tox_options_get_udp_enabled(const(Tox_Options)* options);
-void tox_options_set_udp_enabled(Tox_Options* options, bool udp_enabled);
-bool tox_options_get_local_discovery_enabled(const(Tox_Options)* options);
-void tox_options_set_local_discovery_enabled(Tox_Options* options, bool local_discovery_enabled);
-TOX_PROXY_TYPE tox_options_get_proxy_type(const(Tox_Options)* options);
-void tox_options_set_proxy_type(Tox_Options* options, TOX_PROXY_TYPE type);
-const(char)* tox_options_get_proxy_host(const(Tox_Options)* options);
-void tox_options_set_proxy_host(Tox_Options* options, const(char)* host);
-ushort tox_options_get_proxy_port(const(Tox_Options)* options);
-void tox_options_set_proxy_port(Tox_Options* options, ushort port);
-ushort tox_options_get_start_port(const(Tox_Options)* options);
-void tox_options_set_start_port(Tox_Options* options, ushort start_port);
-ushort tox_options_get_end_port(const(Tox_Options)* options);
-void tox_options_set_end_port(Tox_Options* options, ushort end_port);
-ushort tox_options_get_tcp_port(const(Tox_Options)* options);
-void tox_options_set_tcp_port(Tox_Options* options, ushort tcp_port);
-bool tox_options_get_hole_punching_enabled(const(Tox_Options)* options);
-void tox_options_set_hole_punching_enabled(Tox_Options* options, bool hole_punching_enabled);
-TOX_SAVEDATA_TYPE tox_options_get_savedata_type(const(Tox_Options)* options);
-void tox_options_set_savedata_type(Tox_Options* options, TOX_SAVEDATA_TYPE type);
-const(void)* tox_options_get_savedata_data(const(Tox_Options)* options);
-void tox_options_set_savedata_data(Tox_Options* options, const(void)* data, usize length);
-usize tox_options_get_savedata_length(const(Tox_Options)* options);
-void tox_options_set_savedata_length(Tox_Options* options, usize length);
-tox_log_cb *tox_options_get_log_callback(const(Tox_Options)* options);
-void tox_options_set_log_callback(Tox_Options* options, tox_log_cb callback);
-void *tox_options_get_log_user_data(const(Tox_Options)* options);
-void tox_options_set_log_user_data(Tox_Options* options, void* user_data);
 
+bool tox_options_get_ipv6_enabled(const(Tox_Options)* options);
+
+void tox_options_set_ipv6_enabled(Tox_Options* options, bool ipv6_enabled);
+
+bool tox_options_get_udp_enabled(const(Tox_Options)* options);
+
+void tox_options_set_udp_enabled(Tox_Options* options, bool udp_enabled);
+
+bool tox_options_get_local_discovery_enabled(const(Tox_Options)* options);
+
+void tox_options_set_local_discovery_enabled(Tox_Options* options, bool local_discovery_enabled);
+
+TOX_PROXY_TYPE tox_options_get_proxy_type(const(Tox_Options)* options);
+
+void tox_options_set_proxy_type(Tox_Options* options, TOX_PROXY_TYPE type);
+
+const(char)* tox_options_get_proxy_host(const(Tox_Options)* options);
+
+void tox_options_set_proxy_host(Tox_Options* options, const(char)* host);
+
+ushort tox_options_get_proxy_port(const(Tox_Options)* options);
+
+void tox_options_set_proxy_port(Tox_Options* options, ushort port);
+
+ushort tox_options_get_start_port(const(Tox_Options)* options);
+
+void tox_options_set_start_port(Tox_Options* options, ushort start_port);
+
+ushort tox_options_get_end_port(const(Tox_Options)* options);
+
+void tox_options_set_end_port(Tox_Options* options, ushort end_port);
+
+ushort tox_options_get_tcp_port(const(Tox_Options)* options);
+
+void tox_options_set_tcp_port(Tox_Options* options, ushort tcp_port);
+
+bool tox_options_get_hole_punching_enabled(const(Tox_Options)* options);
+
+void tox_options_set_hole_punching_enabled(Tox_Options* options, bool hole_punching_enabled);
+
+TOX_SAVEDATA_TYPE tox_options_get_savedata_type(const(Tox_Options)* options);
+
+void tox_options_set_savedata_type(Tox_Options* options, TOX_SAVEDATA_TYPE type);
+
+const(void)* tox_options_get_savedata_data(const(Tox_Options)* options);
+
+void tox_options_set_savedata_data(Tox_Options* options, const(void)* data, usize length);
+
+usize tox_options_get_savedata_length(const(Tox_Options)* options);
+
+void tox_options_set_savedata_length(Tox_Options* options, usize length);
+
+tox_log_cb tox_options_get_log_callback(const(Tox_Options)* options);
+
+void tox_options_set_log_callback(Tox_Options* options, tox_log_cb callback);
+
+void* tox_options_get_log_user_data(const(Tox_Options)* options);
+
+void tox_options_set_log_user_data(Tox_Options* options, void* user_data);
 
 /**
  * Initialises a Tox_Options object with the default options.
@@ -599,14 +712,21 @@ void tox_options_set_log_user_data(Tox_Options* options, void* user_data);
  */
 void tox_options_default(Tox_Options* options);
 
+alias TOX_ERR_OPTIONS_NEW = int;
+enum : int {
 
-enum TOX_ERR_OPTIONS_NEW {
-    /*TOX_ERR_OPTIONS_NEW_*/OK,
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_OPTIONS_NEW_OK,
+
     /**
      * The function failed to allocate enough memory for the options struct.
      */
-    /*TOX_ERR_OPTIONS_NEW_*/MALLOC
+    TOX_ERR_OPTIONS_NEW_MALLOC,
+
 }
+
 
 /**
  * Allocates a new Tox_Options object and initialises it with the default
@@ -618,8 +738,7 @@ enum TOX_ERR_OPTIONS_NEW {
  *
  * @return A new Tox_Options object with default options or NULL on failure.
  */
-Tox_Options* tox_options_new(TOX_ERR_OPTIONS_NEW* error);
-
+Tox_Options* tox_options_new(TOX_ERR_OPTIONS_NEW *error);
 
 /**
  * Releases all resources associated with an options objects.
@@ -637,41 +756,59 @@ void tox_options_free(Tox_Options* options);
  ******************************************************************************/
 
 
-enum TOX_ERR_NEW {
-    /*TOX_ERR_NEW_*/OK,
-    /*TOX_ERR_NEW_*/NULL,
+
+alias TOX_ERR_NEW = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_NEW_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_NEW_NULL,
+
     /**
      * The function was unable to allocate enough memory to store the internal
      * structures for the Tox object.
      */
-    /*TOX_ERR_NEW_*/MALLOC,
+    TOX_ERR_NEW_MALLOC,
+
     /**
      * The function was unable to bind to a port. This may mean that all ports
      * have already been bound, e.g. by other Tox instances, or it may mean
      * a permission error. You may be able to gather more information from errno.
      */
-    /*TOX_ERR_NEW_*/PORT_ALLOC,
+    TOX_ERR_NEW_PORT_ALLOC,
+
     /**
      * proxy_type was invalid.
      */
-    /*TOX_ERR_NEW_*/PROXY_BAD_TYPE,
+    TOX_ERR_NEW_PROXY_BAD_TYPE,
+
     /**
      * proxy_type was valid but the proxy_host passed had an invalid format
      * or was NULL.
      */
-    /*TOX_ERR_NEW_*/PROXY_BAD_HOST,
+    TOX_ERR_NEW_PROXY_BAD_HOST,
+
     /**
      * proxy_type was valid, but the proxy_port was invalid.
      */
-    /*TOX_ERR_NEW_*/PROXY_BAD_PORT,
+    TOX_ERR_NEW_PROXY_BAD_PORT,
+
     /**
-     * The proxy host passed could not be resolved.
+     * The proxy address passed could not be resolved.
      */
-    /*TOX_ERR_NEW_*/PROXY_NOT_FOUND,
+    TOX_ERR_NEW_PROXY_NOT_FOUND,
+
     /**
      * The byte array to be loaded contained an encrypted save.
      */
-    /*TOX_ERR_NEW_*/LOAD_ENCRYPTED,
+    TOX_ERR_NEW_LOAD_ENCRYPTED,
+
     /**
      * The data format was invalid. This can happen when loading data that was
      * saved by an older version of Tox, or when the data has been corrupted.
@@ -679,7 +816,8 @@ enum TOX_ERR_NEW {
      * and the rest is discarded. Passing an invalid length parameter also
      * causes this error.
      */
-    /*TOX_ERR_NEW_*/LOAD_BAD_FORMAT
+    TOX_ERR_NEW_LOAD_BAD_FORMAT,
+
 }
 
 
@@ -689,19 +827,17 @@ enum TOX_ERR_NEW {
  * This function will bring the instance into a valid state. Running the event
  * loop with a new instance will operate correctly.
  *
- * If the data parameter is not NULL, this function will load the Tox instance
- * from a byte array previously filled by tox_get_savedata.
- *
  * If loading failed or succeeded only partially, the new or partially loaded
  * instance is returned and an error code is set.
  *
  * @param options An options object as described above. If this parameter is
  *   NULL, the default options are used.
  *
- * @see tox_iteration for the event loop.
+ * @see tox_iterate for the event loop.
+ *
+ * @return A new Tox instance pointer on success or NULL on failure.
  */
-Tox* tox_new(in Tox_Options* options, TOX_ERR_NEW* error);
-
+Tox* tox_new(const(Tox_Options)* options, TOX_ERR_NEW *error);
 
 /**
  * Releases all resources associated with the Tox instance and disconnects from
@@ -712,24 +848,22 @@ Tox* tox_new(in Tox_Options* options, TOX_ERR_NEW* error);
  */
 void tox_kill(Tox* tox);
 
-
 /**
  * Calculates the number of bytes required to store the tox instance with
- * tox_get_savedata. This function cannot fail. The result is always greater
- * than 0.
+ * tox_get_savedata. This function cannot fail. The result is always greater than 0.
  *
  * @see threading for concurrency implications.
  */
-usize tox_get_savedata_size(in Tox* tox);
+usize tox_get_savedata_size(const(Tox)* tox);
 
 /**
  * Store all information associated with the tox instance to a byte array.
  *
- * @param data A memory region large enough to store the tox instance data.
- *   Call tox_get_savedata_size to find the number of bytes required. If this parameter
+ * @param savedata A memory region large enough to store the tox instance
+ *   data. Call tox_get_savedata_size to find the number of bytes required. If this parameter
  *   is NULL, this function has no effect.
  */
-void tox_get_savedata(in Tox* tox, void* data);
+void tox_get_savedata(const(Tox)* tox, void* savedata);
 
 
 /*******************************************************************************
@@ -739,19 +873,33 @@ void tox_get_savedata(in Tox* tox, void* data);
  ******************************************************************************/
 
 
-enum TOX_ERR_BOOTSTRAP {
-    /*TOX_ERR_BOOTSTRAP_*/OK,
-    /*TOX_ERR_BOOTSTRAP_*/NULL,
+
+alias TOX_ERR_BOOTSTRAP = int;
+enum : int {
+
     /**
-     * The host could not be resolved to an IP address, or the IP address
+     * The function returned successfully.
+     */
+    TOX_ERR_BOOTSTRAP_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_BOOTSTRAP_NULL,
+
+    /**
+     * The address could not be resolved to an IP address, or the IP address
      * passed was invalid.
      */
-    /*TOX_ERR_BOOTSTRAP_*/BAD_HOST,
+    TOX_ERR_BOOTSTRAP_BAD_HOST,
+
     /**
      * The port passed was invalid. The valid port range is (1, 65535).
      */
-    /*TOX_ERR_BOOTSTRAP_*/BAD_PORT
+    TOX_ERR_BOOTSTRAP_BAD_PORT,
+
 }
+
 
 /**
  * Sends a "get nodes" request to the given bootstrap node with IP, port, and
@@ -767,8 +915,7 @@ enum TOX_ERR_BOOTSTRAP {
  *   (TOX_PUBLIC_KEY_SIZE bytes).
  * @return true on success.
  */
-bool tox_bootstrap(Tox* tox, const(char)* address, ushort port, const(void)* public_key, TOX_ERR_BOOTSTRAP* error);
-
+bool tox_bootstrap(Tox* tox, const(char)* address, ushort port, const(void)* public_key, TOX_ERR_BOOTSTRAP *error);
 
 /**
  * Adds additional host:port pair as TCP relay.
@@ -783,28 +930,36 @@ bool tox_bootstrap(Tox* tox, const(char)* address, ushort port, const(void)* pub
  *   (TOX_PUBLIC_KEY_SIZE bytes).
  * @return true on success.
  */
-bool tox_add_tcp_relay(Tox* tox, const(char)* address, ushort port, const(void)* public_key, TOX_ERR_BOOTSTRAP* error);
+bool tox_add_tcp_relay(Tox* tox, const(char)* address, ushort port, const(void)* public_key,
+                       TOX_ERR_BOOTSTRAP *error);
 
+/**
+ * Protocols that can be used to connect to the network or friends.
+ */
+alias TOX_CONNECTION = int;
+enum : int {
 
-enum TOX_CONNECTION {
     /**
      * There is no connection. This instance, or the friend the state change is
      * about, is now offline.
      */
-    /*TOX_CONNECTION_*/NONE,
+    TOX_CONNECTION_NONE,
+
     /**
      * A TCP connection has been established. For the own instance, this means it
      * is connected through a TCP relay, only. For a friend, this means that the
      * connection to that particular friend goes through a TCP relay.
      */
-    /*TOX_CONNECTION_*/TCP,
+    TOX_CONNECTION_TCP,
+
     /**
      * A UDP connection has been established. For the own instance, this means it
      * is able to send UDP packets to DHT nodes, but may still be connected to
      * a TCP relay. For a friend, this means that the connection to that
      * particular friend was built using direct UDP packets.
      */
-    /*TOX_CONNECTION_*/UDP
+    TOX_CONNECTION_UDP,
+
 }
 
 
@@ -812,15 +967,13 @@ enum TOX_CONNECTION {
  * Return whether we are connected to the DHT. The return value is equal to the
  * last value received through the `self_connection_status` callback.
  */
-TOX_CONNECTION tox_self_get_connection_status(in Tox* tox);
+TOX_CONNECTION tox_self_get_connection_status(const(Tox)* tox);
 
 /**
- * The function type for the `self_connection_status` callback.
- *
- * @param connection_status Equal to the return value of
- *   tox_self_get_connection_status.
+ * @param connection_status Whether we are connected to the DHT.
  */
 alias tox_self_connection_status_cb = void function (Tox* tox, TOX_CONNECTION connection_status, void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `self_connection_status` event. Pass NULL to unset.
@@ -833,15 +986,13 @@ alias tox_self_connection_status_cb = void function (Tox* tox, TOX_CONNECTION co
  *
  * TODO(iphydf): how long should a client wait before bootstrapping again?
  */
-void tox_callback_self_connection_status(Tox* tox, tox_self_connection_status_cb func);
-
+void tox_callback_self_connection_status(Tox* tox, tox_self_connection_status_cb callback);
 
 /**
- * Return the time in milliseconds before tox_iteration() should be called again
+ * Return the time in milliseconds before tox_iterate() should be called again
  * for optimal performance.
  */
-uint tox_iteration_interval(in Tox* tox);
-
+uint tox_iteration_interval(const(Tox)* tox);
 
 /**
  * The main loop that needs to be run in intervals of tox_iteration_interval()
@@ -857,6 +1008,7 @@ void tox_iterate(Tox* tox, void* user_data);
  ******************************************************************************/
 
 
+
 /**
  * Writes the Tox friend address of the client to a byte array. The address is
  * not in human-readable format. If a client wants to display the address,
@@ -866,36 +1018,38 @@ void tox_iterate(Tox* tox, void* user_data);
  *   parameter is NULL, this function has no effect.
  * @see TOX_ADDRESS_SIZE for the address format.
  */
-void tox_self_get_address(in Tox* tox, void* address);
-
+void tox_self_get_address(const(Tox)* tox, void* address);
 
 /**
- * Set the 4-byte nospam part of the address.
+ * Set the 4-byte nospam part of the address. This value is expected in host
+ * byte order. I.e. 0x12345678 will form the bytes [12, 34, 56, 78] in the
+ * nospam part of the Tox friend address.
  *
  * @param nospam Any 32 bit unsigned integer.
  */
 void tox_self_set_nospam(Tox* tox, uint nospam);
 
 /**
- * Get the 4-byte nospam part of the address.
+ * Get the 4-byte nospam part of the address. This value is returned in host
+ * byte order.
  */
-uint tox_self_get_nospam(in Tox* tox);
+uint tox_self_get_nospam(const(Tox)* tox);
 
 /**
- * Copy the Tox Public Key (long term public key) from the Tox object.
+ * Copy the Tox Public Key (long term) from the Tox object.
  *
  * @param public_key A memory region of at least TOX_PUBLIC_KEY_SIZE bytes. If
  *   this parameter is NULL, this function has no effect.
  */
-void tox_self_get_public_key(in Tox* tox, void* public_key);
+void tox_self_get_public_key(const(Tox)* tox, void* public_key);
 
 /**
- * Copy the secret key from the Tox object.
+ * Copy the Tox Secret Key from the Tox object.
  *
  * @param secret_key A memory region of at least TOX_SECRET_KEY_SIZE bytes. If
  *   this parameter is NULL, this function has no effect.
  */
-void tox_self_get_secret_key(in Tox* tox, void* secret_key);
+void tox_self_get_secret_key(const(Tox)* tox, void* secret_key);
 
 
 /*******************************************************************************
@@ -905,17 +1059,29 @@ void tox_self_get_secret_key(in Tox* tox, void* secret_key);
  ******************************************************************************/
 
 
+
 /**
  * Common error codes for all functions that set a piece of user-visible
  * client information.
  */
-enum TOX_ERR_SET_INFO {
-    /*TOX_ERR_SET_INFO_*/OK,
-    /*TOX_ERR_SET_INFO_*/NULL,
+alias TOX_ERR_SET_INFO = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_SET_INFO_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_SET_INFO_NULL,
+
     /**
      * Information length exceeded maximum permissible size.
      */
-    /*TOX_ERR_SET_INFO_*/TOO_LONG
+    TOX_ERR_SET_INFO_TOO_LONG,
+
 }
 
 
@@ -930,7 +1096,7 @@ enum TOX_ERR_SET_INFO {
  *
  * @return true on success.
  */
-bool tox_self_set_name(Tox* tox, const(void)* name, usize length, TOX_ERR_SET_INFO* error);
+bool tox_self_set_name(Tox* tox, const(void)* name, usize length, TOX_ERR_SET_INFO *error);
 
 /**
  * Return the length of the current nickname as passed to tox_self_set_name.
@@ -940,7 +1106,7 @@ bool tox_self_set_name(Tox* tox, const(void)* name, usize length, TOX_ERR_SET_IN
  *
  * @see threading for concurrency implications.
  */
-usize tox_self_get_name_size(in Tox* tox);
+usize tox_self_get_name_size(const(Tox)* tox);
 
 /**
  * Write the nickname set by tox_self_set_name to a byte array.
@@ -954,7 +1120,7 @@ usize tox_self_get_name_size(in Tox* tox);
  * @param name A valid memory location large enough to hold the nickname.
  *   If this parameter is NULL, the function has no effect.
  */
-void tox_self_get_name(in Tox* tox, void* name);
+void tox_self_get_name(const(Tox)* tox, void* name);
 
 /**
  * Set the client's status message.
@@ -963,7 +1129,7 @@ void tox_self_get_name(in Tox* tox, void* name);
  * length is 0, the status parameter is ignored (it can be NULL), and the
  * user status is set back to empty.
  */
-bool tox_self_set_status_message(Tox* tox, const(void)* status, usize length, TOX_ERR_SET_INFO* error);
+bool tox_self_set_status_message(Tox* tox, const(void)* status_message, usize length, TOX_ERR_SET_INFO *error);
 
 /**
  * Return the length of the current status message as passed to tox_self_set_status_message.
@@ -973,7 +1139,7 @@ bool tox_self_set_status_message(Tox* tox, const(void)* status, usize length, TO
  *
  * @see threading for concurrency implications.
  */
-usize tox_self_get_status_message_size(in Tox* tox);
+usize tox_self_get_status_message_size(const(Tox)* tox);
 
 /**
  * Write the status message set by tox_self_set_status_message to a byte array.
@@ -981,26 +1147,25 @@ usize tox_self_get_status_message_size(in Tox* tox);
  * If no status message was set before calling this function, the status is
  * empty, and this function has no effect.
  *
- * Call tox_self_status_message_size to find out how much memory to allocate for
+ * Call tox_self_get_status_message_size to find out how much memory to allocate for
  * the result.
  *
- * @param status A valid memory location large enough to hold the status message.
- *   If this parameter is NULL, the function has no effect.
+ * @param status_message A valid memory location large enough to hold the
+ *   status message. If this parameter is NULL, the function has no effect.
  */
-void tox_self_get_status_message(in Tox* tox, void* status);
-
+void tox_self_get_status_message(const(Tox)* tox, void* status_message);
 
 /**
  * Set the client's user status.
  *
- * @param user_status One of the user statuses listed in the enumeration above.
+ * @param status One of the user statuses listed in the enumeration above.
  */
-void tox_self_set_status(Tox* tox, TOX_USER_STATUS user_status);
+void tox_self_set_status(Tox* tox, TOX_USER_STATUS status);
 
 /**
  * Returns the client's user status.
  */
-TOX_USER_STATUS tox_self_get_status(in Tox* tox);
+TOX_USER_STATUS tox_self_get_status(const(Tox)* tox);
 
 
 /*******************************************************************************
@@ -1010,41 +1175,60 @@ TOX_USER_STATUS tox_self_get_status(in Tox* tox);
  ******************************************************************************/
 
 
-enum TOX_ERR_FRIEND_ADD {
-    /*TOX_ERR_FRIEND_ADD_*/OK,
-    /*TOX_ERR_FRIEND_ADD_*/NULL,
+
+alias TOX_ERR_FRIEND_ADD = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_ADD_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_FRIEND_ADD_NULL,
+
     /**
      * The length of the friend request message exceeded
      * TOX_MAX_FRIEND_REQUEST_LENGTH.
      */
-    /*TOX_ERR_FRIEND_ADD_*/TOO_LONG,
+    TOX_ERR_FRIEND_ADD_TOO_LONG,
+
     /**
      * The friend request message was empty. This, and the TOO_LONG code will
      * never be returned from tox_friend_add_norequest.
      */
-    /*TOX_ERR_FRIEND_ADD_*/NO_MESSAGE,
+    TOX_ERR_FRIEND_ADD_NO_MESSAGE,
+
     /**
      * The friend address belongs to the sending client.
      */
-    /*TOX_ERR_FRIEND_ADD_*/OWN_KEY,
+    TOX_ERR_FRIEND_ADD_OWN_KEY,
+
     /**
      * A friend request has already been sent, or the address belongs to a friend
      * that is already on the friend list.
      */
-    /*TOX_ERR_FRIEND_ADD_*/ALREADY_SENT,
+    TOX_ERR_FRIEND_ADD_ALREADY_SENT,
+
     /**
      * The friend address checksum failed.
      */
-    /*TOX_ERR_FRIEND_ADD_*/BAD_CHECKSUM,
+    TOX_ERR_FRIEND_ADD_BAD_CHECKSUM,
+
     /**
      * The friend was already there, but the nospam value was different.
      */
-    /*TOX_ERR_FRIEND_ADD_*/SET_NEW_NOSPAM,
+    TOX_ERR_FRIEND_ADD_SET_NEW_NOSPAM,
+
     /**
      * A memory allocation failed when trying to increase the friend list size.
      */
-    /*TOX_ERR_FRIEND_ADD_*/MALLOC
+    TOX_ERR_FRIEND_ADD_MALLOC,
+
 }
+
 
 /**
  * Add a friend to the friend list and send a friend request.
@@ -1069,8 +1253,8 @@ enum TOX_ERR_FRIEND_ADD {
  *
  * @return the friend number on success, UINT32_MAX on failure.
  */
-uint tox_friend_add(Tox* tox, const(void)* address, const(void)* message, usize length, TOX_ERR_FRIEND_ADD* error);
-
+uint tox_friend_add(Tox* tox, const(void)* address, const(void)* message, usize length,
+                        TOX_ERR_FRIEND_ADD *error);
 
 /**
  * Add a friend without sending a friend request.
@@ -1090,32 +1274,36 @@ uint tox_friend_add(Tox* tox, const(void)* address, const(void)* message, usize 
  * @return the friend number on success, UINT32_MAX on failure.
  * @see tox_friend_add for a more detailed description of friend numbers.
  */
-uint tox_friend_add_norequest(Tox* tox, const(void)* public_key, TOX_ERR_FRIEND_ADD* error);
+uint tox_friend_add_norequest(Tox* tox, const(void)* public_key, TOX_ERR_FRIEND_ADD *error);
 
+alias TOX_ERR_FRIEND_DELETE = int;
+enum : int {
 
-enum TOX_ERR_FRIEND_DELETE {
-    /*TOX_ERR_FRIEND_DELETE_*/OK,
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_DELETE_OK,
+
     /**
      * There was no friend with the given friend number. No friends were deleted.
      */
-    /*TOX_ERR_FRIEND_DELETE_*/FRIEND_NOT_FOUND
+    TOX_ERR_FRIEND_DELETE_FRIEND_NOT_FOUND,
+
 }
+
 
 /**
  * Remove a friend from the friend list.
- * Other friend numbers are unchanged.
- * The friend_number can be reused by toxcore as a friend number for a new friend.
  *
  * This does not notify the friend of their deletion. After calling this
  * function, this client will appear offline to the friend and no communication
  * can occur between the two.
  *
- * @friend_number Friend number for the friend to be deleted.
+ * @param friend_number Friend number for the friend to be deleted.
  *
  * @return true on success.
- * @see tox_friend_add for detailed description of friend numbers.
  */
-bool tox_friend_delete(Tox* tox, uint friend_number, TOX_ERR_FRIEND_DELETE* error);
+bool tox_friend_delete(Tox* tox, uint friend_number, TOX_ERR_FRIEND_DELETE *error);
 
 
 /*******************************************************************************
@@ -1125,14 +1313,27 @@ bool tox_friend_delete(Tox* tox, uint friend_number, TOX_ERR_FRIEND_DELETE* erro
  ******************************************************************************/
 
 
-enum TOX_ERR_FRIEND_BY_PUBLIC_KEY {
-    /*TOX_ERR_FRIEND_BY_PUBLIC_KEY_*/OK,
-    /*TOX_ERR_FRIEND_BY_PUBLIC_KEY_*/NULL,
+
+alias TOX_ERR_FRIEND_BY_PUBLIC_KEY = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_BY_PUBLIC_KEY_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_FRIEND_BY_PUBLIC_KEY_NULL,
+
     /**
      * No friend with the given Public Key exists on the friend list.
      */
-    /*TOX_ERR_FRIEND_BY_PUBLIC_KEY_*/NOT_FOUND
+    TOX_ERR_FRIEND_BY_PUBLIC_KEY_NOT_FOUND,
+
 }
+
 
 /**
  * Return the friend number associated with that Public Key.
@@ -1140,16 +1341,47 @@ enum TOX_ERR_FRIEND_BY_PUBLIC_KEY {
  * @return the friend number on success, UINT32_MAX on failure.
  * @param public_key A byte array containing the Public Key.
  */
-uint tox_friend_by_public_key(in Tox* tox, const(void)* public_key, TOX_ERR_FRIEND_BY_PUBLIC_KEY* error);
+uint tox_friend_by_public_key(const(Tox)* tox, const(void)* public_key, TOX_ERR_FRIEND_BY_PUBLIC_KEY *error);
 
+/**
+ * Checks if a friend with the given friend number exists and returns true if
+ * it does.
+ */
+bool tox_friend_exists(const(Tox)* tox, uint friend_number);
 
-enum TOX_ERR_FRIEND_GET_PUBLIC_KEY {
-    /*TOX_ERR_FRIEND_GET_PUBLIC_KEY_*/OK,
+/**
+ * Return the number of friends on the friend list.
+ *
+ * This function can be used to determine how much memory to allocate for
+ * tox_self_get_friend_list.
+ */
+usize tox_self_get_friend_list_size(const(Tox)* tox);
+
+/**
+ * Copy a list of valid friend numbers into an array.
+ *
+ * Call tox_self_get_friend_list_size to determine the number of elements to allocate.
+ *
+ * @param friend_list A memory region with enough space to hold the friend
+ *   list. If this parameter is NULL, this function has no effect.
+ */
+void tox_self_get_friend_list(const(Tox)* tox, uint *friend_list);
+
+alias TOX_ERR_FRIEND_GET_PUBLIC_KEY = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK,
+
     /**
      * No friend with the given number exists on the friend list.
      */
-    /*TOX_ERR_FRIEND_GET_PUBLIC_KEY_*/FRIEND_NOT_FOUND
+    TOX_ERR_FRIEND_GET_PUBLIC_KEY_FRIEND_NOT_FOUND,
+
 }
+
 
 /**
  * Copies the Public Key associated with a given friend number to a byte array.
@@ -1160,41 +1392,24 @@ enum TOX_ERR_FRIEND_GET_PUBLIC_KEY {
  *
  * @return true on success.
  */
-bool tox_friend_get_public_key(in Tox* tox, uint friend_number, void* public_key, TOX_ERR_FRIEND_GET_PUBLIC_KEY* error);
+bool tox_friend_get_public_key(const(Tox)* tox, uint friend_number, void* public_key,
+                               TOX_ERR_FRIEND_GET_PUBLIC_KEY *error);
 
+alias TOX_ERR_FRIEND_GET_LAST_ONLINE = int;
+enum : int {
 
-/**
- * Checks if a friend with the given friend number exists and returns true if
- * it does.
- */
-bool tox_friend_exists(in Tox* tox, uint friend_number);
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_GET_LAST_ONLINE_OK,
 
-/**
- * Return the number of friends on the friend list.
- *
- * This function can be used to determine how much memory to allocate for
- * tox_self_get_friend_list.
- */
-usize tox_self_get_friend_list_size(in Tox* tox);
-
-/**
- * Copy a list of valid friend numbers into an array.
- *
- * Call tox_self_get_friend_list_size to determine the number of elements to allocate.
- *
- * @param friend_list A memory region with enough space to hold the friend
- *   list. If this parameter is NULL, this function has no effect.
- */
-void tox_self_get_friend_list(in Tox* tox, uint* friend_list);
-
-
-enum TOX_ERR_FRIEND_GET_LAST_ONLINE {
-    /*TOX_ERR_FRIEND_GET_LAST_ONLINE_*/OK,
     /**
      * No friend with the given number exists on the friend list.
      */
-    /*TOX_ERR_FRIEND_GET_LAST_ONLINE_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FRIEND_GET_LAST_ONLINE_FRIEND_NOT_FOUND,
+
 }
+
 
 /**
  * Return a unix-time timestamp of the last time the friend associated with a given
@@ -1202,7 +1417,7 @@ enum TOX_ERR_FRIEND_GET_LAST_ONLINE {
  *
  * @param friend_number The friend number you want to query.
  */
-ulong tox_friend_get_last_online(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_GET_LAST_ONLINE* error);
+ulong tox_friend_get_last_online(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_GET_LAST_ONLINE *error);
 
 
 /*******************************************************************************
@@ -1212,32 +1427,41 @@ ulong tox_friend_get_last_online(in Tox* tox, uint friend_number, TOX_ERR_FRIEND
  ******************************************************************************/
 
 
+
 /**
  * Common error codes for friend state query functions.
  */
-enum TOX_ERR_FRIEND_QUERY {
-    /*TOX_ERR_FRIEND_QUERY_*/OK,
+alias TOX_ERR_FRIEND_QUERY = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_QUERY_OK,
+
     /**
      * The pointer parameter for storing the query result (name, message) was
      * NULL. Unlike the `_self_` variants of these functions, which have no effect
      * when a parameter is NULL, these functions return an error in that case.
      */
-    /*TOX_ERR_FRIEND_QUERY_*/NULL,
+    TOX_ERR_FRIEND_QUERY_NULL,
+
     /**
      * The friend_number did not designate a valid friend.
      */
-    /*TOX_ERR_FRIEND_QUERY_*/FRIEND_NOT_FOUND
+    TOX_ERR_FRIEND_QUERY_FRIEND_NOT_FOUND,
+
 }
 
 
 /**
  * Return the length of the friend's name. If the friend number is invalid, the
- * return value is SIZE_MAX.
+ * return value is unspecified.
  *
  * The return value is equal to the `length` argument received by the last
  * `friend_name` callback.
  */
-usize tox_friend_get_name_size(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error);
+usize tox_friend_get_name_size(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error);
 
 /**
  * Write the name of the friend designated by the given friend number to a byte
@@ -1253,11 +1477,9 @@ usize tox_friend_get_name_size(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_Q
  *
  * @return true on success.
  */
-bool tox_friend_get_name(in Tox* tox, uint friend_number, void* name, TOX_ERR_FRIEND_QUERY* error);
+bool tox_friend_get_name(const(Tox)* tox, uint friend_number, void* name, TOX_ERR_FRIEND_QUERY *error);
 
 /**
- * The function type for the `friend_name` callback.
- *
  * @param friend_number The friend number of the friend whose name changed.
  * @param name A byte array containing the same data as
  *   tox_friend_get_name would write to its `name` parameter.
@@ -1266,53 +1488,53 @@ bool tox_friend_get_name(in Tox* tox, uint friend_number, void* name, TOX_ERR_FR
  */
 alias tox_friend_name_cb = void function (Tox* tox, uint friend_number, const(char)* name, usize length, void* user_data) nothrow;
 
+
 /**
  * Set the callback for the `friend_name` event. Pass NULL to unset.
  *
  * This event is triggered when a friend changes their name.
  */
-void tox_callback_friend_name(Tox* tox, tox_friend_name_cb func);
-
+void tox_callback_friend_name(Tox* tox, tox_friend_name_cb callback);
 
 /**
  * Return the length of the friend's status message. If the friend number is
  * invalid, the return value is SIZE_MAX.
  */
-usize tox_friend_get_status_message_size(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error);
+usize tox_friend_get_status_message_size(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error);
 
 /**
- * Write the name of the friend designated by the given friend number to a byte
+ * Write the status message of the friend designated by the given friend number to a byte
  * array.
  *
- * Call tox_friend_get_name_size to determine the allocation size for the `name`
+ * Call tox_friend_get_status_message_size to determine the allocation size for the `status_name`
  * parameter.
  *
- * The data written to `message` is equal to the data received by the last
+ * The data written to `status_message` is equal to the data received by the last
  * `friend_status_message` callback.
  *
- * @param name A valid memory region large enough to store the friend's name.
+ * @param status_message A valid memory region large enough to store the friend's status message.
  */
-bool tox_friend_get_status_message(in Tox* tox, uint friend_number, void* message, TOX_ERR_FRIEND_QUERY* error);
+bool tox_friend_get_status_message(const(Tox)* tox, uint friend_number, void* status_message,
+                                   TOX_ERR_FRIEND_QUERY *error);
 
 /**
- * The function type for the `friend_status_message` callback.
- *
  * @param friend_number The friend number of the friend whose status message
  *   changed.
  * @param message A byte array containing the same data as
- *   tox_friend_get_status_message would write to its `message` parameter.
+ *   tox_friend_get_status_message would write to its `status_message` parameter.
  * @param length A value equal to the return value of
  *   tox_friend_get_status_message_size.
  */
-alias tox_friend_status_message_cb = void function (Tox* tox, uint friend_number, const(char)* message, usize length, void* user_data);
+alias tox_friend_status_message_cb = void function (Tox* tox, uint friend_number, const(char)* message, usize length,
+        void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `friend_status_message` event. Pass NULL to unset.
  *
  * This event is triggered when a friend changes their status message.
  */
-void tox_callback_friend_status_message(Tox* tox, tox_friend_status_message_cb func);
-
+void tox_callback_friend_status_message(Tox* tox, tox_friend_status_message_cb callback);
 
 /**
  * Return the friend's user status (away/busy/...). If the friend number is
@@ -1321,24 +1543,22 @@ void tox_callback_friend_status_message(Tox* tox, tox_friend_status_message_cb f
  * The status returned is equal to the last status received through the
  * `friend_status` callback.
  */
-TOX_USER_STATUS tox_friend_get_status(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error);
+TOX_USER_STATUS tox_friend_get_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error);
 
 /**
- * The function type for the `friend_status` callback.
- *
  * @param friend_number The friend number of the friend whose user status
  *   changed.
  * @param status The new user status.
  */
 alias tox_friend_status_cb = void function (Tox* tox, uint friend_number, TOX_USER_STATUS status, void* user_data) nothrow;
 
+
 /**
  * Set the callback for the `friend_status` event. Pass NULL to unset.
  *
  * This event is triggered when a friend changes their user status.
  */
-void tox_callback_friend_status(Tox* tox, tox_friend_status_cb func);
-
+void tox_callback_friend_status(Tox* tox, tox_friend_status_cb callback);
 
 /**
  * Check whether a friend is currently connected to this client.
@@ -1352,30 +1572,28 @@ void tox_callback_friend_status(Tox* tox, tox_friend_status_cb func);
  * @return the friend's connection status as it was received through the
  *   `friend_connection_status` event.
  */
-TOX_CONNECTION tox_friend_get_connection_status(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error);
+TOX_CONNECTION tox_friend_get_connection_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error);
 
 /**
- * The function type for the `friend_connection_status` callback.
- *
  * @param friend_number The friend number of the friend whose connection status
  *   changed.
  * @param connection_status The result of calling
  *   tox_friend_get_connection_status on the passed friend_number.
  */
-alias tox_friend_connection_status_cb = void function (Tox* tox, uint friend_number, TOX_CONNECTION connection_status, void* user_data) nothrow;
+alias tox_friend_connection_status_cb = void function (Tox* tox, uint friend_number, TOX_CONNECTION connection_status,
+        void* user_data) nothrow;
+
 
 /**
- * Set the callback for the `friend_connection_status` event. Pass NULL to
- * unset.
+ * Set the callback for the `friend_connection_status` event. Pass NULL to unset.
  *
  * This event is triggered when a friend goes offline after having been online,
  * or when a friend goes online.
  *
  * This callback is not called when adding friends. It is assumed that when
- * adding friends, their connection status is offline.
+ * adding friends, their connection status is initially offline.
  */
-void tox_callback_friend_connection_status(Tox* tox, tox_friend_connection_status_cb func);
-
+void tox_callback_friend_connection_status(Tox* tox, tox_friend_connection_status_cb callback);
 
 /**
  * Check whether a friend is currently typing a message.
@@ -1386,11 +1604,9 @@ void tox_callback_friend_connection_status(Tox* tox, tox_friend_connection_statu
  * @return false if the friend is not typing, or the friend number was
  *   invalid. Inspect the error code to determine which case it is.
  */
-bool tox_friend_get_typing(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error);
+bool tox_friend_get_typing(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error);
 
 /**
- * The function type for the `friend_typing` callback.
- *
  * @param friend_number The friend number of the friend who started or stopped
  *   typing.
  * @param is_typing The result of calling tox_friend_get_typing on the passed
@@ -1398,12 +1614,13 @@ bool tox_friend_get_typing(in Tox* tox, uint friend_number, TOX_ERR_FRIEND_QUERY
  */
 alias tox_friend_typing_cb = void function (Tox* tox, uint friend_number, bool is_typing, void* user_data) nothrow;
 
+
 /**
  * Set the callback for the `friend_typing` event. Pass NULL to unset.
  *
  * This event is triggered when a friend starts or stops typing.
  */
-void tox_callback_friend_typing(Tox* tox, tox_friend_typing_cb func);
+void tox_callback_friend_typing(Tox* tox, tox_friend_typing_cb callback);
 
 
 /*******************************************************************************
@@ -1413,13 +1630,22 @@ void tox_callback_friend_typing(Tox* tox, tox_friend_typing_cb func);
  ******************************************************************************/
 
 
-enum TOX_ERR_SET_TYPING {
-    /*TOX_ERR_SET_TYPING_*/OK,
+
+alias TOX_ERR_SET_TYPING = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_SET_TYPING_OK,
+
     /**
      * The friend number did not designate a valid friend.
      */
-    /*TOX_ERR_SET_TYPING_*/FRIEND_NOT_FOUND
+    TOX_ERR_SET_TYPING_FRIEND_NOT_FOUND,
+
 }
+
 
 /**
  * Set the client's typing status for a friend.
@@ -1427,37 +1653,52 @@ enum TOX_ERR_SET_TYPING {
  * The client is responsible for turning it on or off.
  *
  * @param friend_number The friend to which the client is typing a message.
- * @param is_typing The typing status. True means the client is typing.
+ * @param typing The typing status. True means the client is typing.
  *
  * @return true on success.
  */
-bool tox_self_set_typing(Tox* tox, uint friend_number, bool is_typing, TOX_ERR_SET_TYPING* error);
+bool tox_self_set_typing(Tox* tox, uint friend_number, bool typing, TOX_ERR_SET_TYPING *error);
 
+alias TOX_ERR_FRIEND_SEND_MESSAGE = int;
+enum : int {
 
-enum TOX_ERR_FRIEND_SEND_MESSAGE {
-    /*TOX_ERR_FRIEND_SEND_MESSAGE_*/OK,
-    /*TOX_ERR_FRIEND_SEND_MESSAGE_*/NULL,
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_SEND_MESSAGE_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_FRIEND_SEND_MESSAGE_NULL,
+
     /**
      * The friend number did not designate a valid friend.
      */
-    /*TOX_ERR_FRIEND_SEND_MESSAGE_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FRIEND_SEND_MESSAGE_FRIEND_NOT_FOUND,
+
     /**
      * This client is currently not connected to the friend.
      */
-    /*TOX_ERR_FRIEND_SEND_MESSAGE_*/FRIEND_NOT_CONNECTED,
+    TOX_ERR_FRIEND_SEND_MESSAGE_FRIEND_NOT_CONNECTED,
+
     /**
      * An allocation error occurred while increasing the send queue size.
      */
-    /*TOX_ERR_FRIEND_SEND_MESSAGE_*/SENDQ,
+    TOX_ERR_FRIEND_SEND_MESSAGE_SENDQ,
+
     /**
      * Message length exceeded TOX_MAX_MESSAGE_LENGTH.
      */
-    /*TOX_ERR_FRIEND_SEND_MESSAGE_*/TOO_LONG,
+    TOX_ERR_FRIEND_SEND_MESSAGE_TOO_LONG,
+
     /**
      * Attempted to send a zero-length message.
      */
-    /*TOX_ERR_FRIEND_SEND_MESSAGE_*/EMPTY
+    TOX_ERR_FRIEND_SEND_MESSAGE_EMPTY,
+
 }
+
 
 /**
  * Send a text chat message to an online friend.
@@ -1465,37 +1706,41 @@ enum TOX_ERR_FRIEND_SEND_MESSAGE {
  * This function creates a chat message packet and pushes it into the send
  * queue.
  *
- * Type corresponds to the message type, for a list of valid types see TOX_MESSAGE_TYPE.
- *
  * The message length may not exceed TOX_MAX_MESSAGE_LENGTH. Larger messages
  * must be split by the client and sent as separate messages. Other clients can
  * then reassemble the fragments. Messages may not be empty.
  *
  * The return value of this function is the message ID. If a read receipt is
- * received, the triggered `read_receipt` event will be passed this message ID.
+ * received, the triggered `friend_read_receipt` event will be passed this message ID.
  *
  * Message IDs are unique per friend. The first message ID is 0. Message IDs are
  * incremented by 1 each time a message is sent. If UINT32_MAX messages were
  * sent, the next message ID is 0.
+ *
+ * @param type Message type (normal, action, ...).
+ * @param friend_number The friend number of the friend to send the message to.
+ * @param message A non-NULL pointer to the first element of a byte array
+ *   containing the message text.
+ * @param length Length of the message to be sent.
  */
-uint tox_friend_send_message(Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(void)* message, usize length, TOX_ERR_FRIEND_SEND_MESSAGE* error);
+uint tox_friend_send_message(Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(void)* message,
+                                 usize length, TOX_ERR_FRIEND_SEND_MESSAGE *error);
 
 /**
- * The function type for the `read_receipt` callback.
- *
  * @param friend_number The friend number of the friend who received the message.
  * @param message_id The message ID as returned from tox_friend_send_message
  *   corresponding to the message sent.
  */
 alias tox_friend_read_receipt_cb = void function (Tox* tox, uint friend_number, uint message_id, void* user_data) nothrow;
 
+
 /**
- * Set the callback for the `read_receipt` event. Pass NULL to unset.
+ * Set the callback for the `friend_read_receipt` event. Pass NULL to unset.
  *
  * This event is triggered when the friend receives the message sent with
  * tox_friend_send_message with the corresponding message ID.
  */
-void tox_callback_friend_read_receipt(Tox* tox, tox_friend_read_receipt_cb func);
+void tox_callback_friend_read_receipt(Tox* tox, tox_friend_read_receipt_cb callback);
 
 
 /*******************************************************************************
@@ -1505,39 +1750,38 @@ void tox_callback_friend_read_receipt(Tox* tox, tox_friend_read_receipt_cb func)
  ******************************************************************************/
 
 
+
 /**
- * The function type for the `friend_request` callback.
- *
  * @param public_key The Public Key of the user who sent the friend request.
  * @param message The message they sent along with the request.
  * @param length The size of the message byte array.
  */
-alias tox_friend_request_cb = void function (Tox* tox, const(ubyte)* public_key, const(char)* message, usize length, void* user_data) nothrow;
+alias tox_friend_request_cb = void function (Tox* tox, const(ubyte)* public_key, const(char)* message, usize length,
+                                   void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `friend_request` event. Pass NULL to unset.
  *
  * This event is triggered when a friend request is received.
  */
-void tox_callback_friend_request(Tox* tox, tox_friend_request_cb func);
-
+void tox_callback_friend_request(Tox* tox, tox_friend_request_cb callback);
 
 /**
- * The function type for the `friend_message` callback.
- *
  * @param friend_number The friend number of the friend who sent the message.
- * @param type The message type, for a list of valid types see TOX_MESSAGE_TYPE.
  * @param message The message data they sent.
  * @param length The size of the message byte array.
  */
-alias tox_friend_message_cb = void function (Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(char)* message, usize length, void* user_data) nothrow;
+alias tox_friend_message_cb = void function (Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(char)* message,
+                                   usize length, void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `friend_message` event. Pass NULL to unset.
  *
  * This event is triggered when a message from a friend is received.
  */
-void tox_callback_friend_message(Tox* tox, tox_friend_message_cb func);
+void tox_callback_friend_message(Tox* tox, tox_friend_message_cb callback);
 
 
 /*******************************************************************************
@@ -1545,6 +1789,7 @@ void tox_callback_friend_message(Tox* tox, tox_friend_message_cb func);
  * :: File transmission: common between sending and receiving
  *
  ******************************************************************************/
+
 
 
 /**
@@ -1568,14 +1813,17 @@ void tox_callback_friend_message(Tox* tox, tox_friend_message_cb func);
  */
 bool tox_hash(void* hash, const(void)* data, usize length);
 
-enum TOX_FILE_KIND {
+alias TOX_FILE_KIND = uint;
+enum : uint {
+
     /**
      * Arbitrary file data. Clients can choose to handle it based on the file name
      * or magic or any other way they choose.
      */
-    /*TOX_FILE_KIND_*/DATA,
+    TOX_FILE_KIND_DATA,
+
     /**
-     * Avatar filename. This consists of tox_hash(image).
+     * Avatar file_id. This consists of tox_hash(image).
      * Avatar data. This consists of the image data.
      *
      * Avatars can be sent at any time the client wishes. Generally, a client will
@@ -1591,66 +1839,86 @@ enum TOX_FILE_KIND {
      * this hash with a saved hash and send TOX_FILE_CONTROL_CANCEL to terminate the avatar
      * transfer if it matches.
      *
-     * When file_size is set to 0 in the transfer request it means that the client has no
-     * avatar.
+     * When file_size is set to 0 in the transfer request it means that the client
+     * has no avatar.
      */
-    /*TOX_FILE_KIND_*/AVATAR
-};
+    TOX_FILE_KIND_AVATAR,
+
+}
 
 
-enum TOX_FILE_CONTROL {
+alias TOX_FILE_CONTROL = int;
+enum : int {
+
     /**
      * Sent by the receiving side to accept a file send request. Also sent after a
      * TOX_FILE_CONTROL_PAUSE command to continue sending or receiving.
      */
-    /*TOX_FILE_CONTROL_*/RESUME,
+    TOX_FILE_CONTROL_RESUME,
+
     /**
      * Sent by clients to pause the file transfer. The initial state of a file
      * transfer is always paused on the receiving side and running on the sending
      * side. If both the sending and receiving side pause the transfer, then both
      * need to send TOX_FILE_CONTROL_RESUME for the transfer to resume.
      */
-    /*TOX_FILE_CONTROL_*/PAUSE,
+    TOX_FILE_CONTROL_PAUSE,
+
     /**
      * Sent by the receiving side to reject a file send request before any other
      * commands are sent. Also sent by either side to terminate a file transfer.
      */
-    /*TOX_FILE_CONTROL_*/CANCEL
+    TOX_FILE_CONTROL_CANCEL,
+
 }
 
 
-enum TOX_ERR_FILE_CONTROL {
-    /*TOX_ERR_FILE_CONTROL_*/OK,
+alias TOX_ERR_FILE_CONTROL = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FILE_CONTROL_OK,
+
     /**
      * The friend_number passed did not designate a valid friend.
      */
-    /*TOX_ERR_FILE_CONTROL_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FILE_CONTROL_FRIEND_NOT_FOUND,
+
     /**
      * This client is currently not connected to the friend.
      */
-    /*TOX_ERR_FILE_CONTROL_*/FRIEND_NOT_CONNECTED,
+    TOX_ERR_FILE_CONTROL_FRIEND_NOT_CONNECTED,
+
     /**
      * No file transfer with the given file number was found for the given friend.
      */
-    /*TOX_ERR_FILE_CONTROL_*/NOT_FOUND,
+    TOX_ERR_FILE_CONTROL_NOT_FOUND,
+
     /**
      * A RESUME control was sent, but the file transfer is running normally.
      */
-    /*TOX_ERR_FILE_CONTROL_*/NOT_PAUSED,
+    TOX_ERR_FILE_CONTROL_NOT_PAUSED,
+
     /**
      * A RESUME control was sent, but the file transfer was paused by the other
      * party. Only the party that paused the transfer can resume it.
      */
-    /*TOX_ERR_FILE_CONTROL_*/DENIED,
+    TOX_ERR_FILE_CONTROL_DENIED,
+
     /**
      * A PAUSE control was sent, but the file transfer was already paused.
      */
-    /*TOX_ERR_FILE_CONTROL_*/ALREADY_PAUSED,
+    TOX_ERR_FILE_CONTROL_ALREADY_PAUSED,
+
     /**
      * Packet queue is full.
      */
-    /*TOX_ERR_FILE_CONTROL_*/SENDQ
+    TOX_ERR_FILE_CONTROL_SENDQ,
+
 }
+
 
 /**
  * Sends a file control command to a friend for a given file transfer.
@@ -1662,12 +1930,10 @@ enum TOX_ERR_FILE_CONTROL {
  *
  * @return true on success.
  */
-bool tox_file_control(Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control, TOX_ERR_FILE_CONTROL* error);
-
+bool tox_file_control(Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control,
+                      TOX_ERR_FILE_CONTROL *error);
 
 /**
- * The function type for the `file_control` callback.
- *
  * When receiving TOX_FILE_CONTROL_CANCEL, the client should release the
  * resources associated with the file number and consider the transfer failed.
  *
@@ -1676,44 +1942,58 @@ bool tox_file_control(Tox* tox, uint friend_number, uint file_number, TOX_FILE_C
  *   associated with.
  * @param control The file control command received.
  */
-alias tox_file_recv_control_cb = void function (Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control, void* user_data) nothrow;
+alias tox_file_recv_control_cb = void function (Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control,
+                                      void* user_data) nothrow;
+
 
 /**
- * Set the callback for the `file_control` event. Pass NULL to unset.
+ * Set the callback for the `file_recv_control` event. Pass NULL to unset.
  *
  * This event is triggered when a file control command is received from a
  * friend.
  */
-void tox_callback_file_recv_control(Tox* tox, tox_file_recv_control_cb func);
+void tox_callback_file_recv_control(Tox* tox, tox_file_recv_control_cb callback);
 
+alias TOX_ERR_FILE_SEEK = int;
+enum : int {
 
-enum TOX_ERR_FILE_SEEK {
-    /*TOX_ERR_FILE_SEEK_*/OK,
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FILE_SEEK_OK,
+
     /**
      * The friend_number passed did not designate a valid friend.
      */
-    /*TOX_ERR_FILE_SEEK_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FILE_SEEK_FRIEND_NOT_FOUND,
+
     /**
      * This client is currently not connected to the friend.
      */
-    /*TOX_ERR_FILE_SEEK_*/FRIEND_NOT_CONNECTED,
+    TOX_ERR_FILE_SEEK_FRIEND_NOT_CONNECTED,
+
     /**
      * No file transfer with the given file number was found for the given friend.
      */
-    /*TOX_ERR_FILE_SEEK_*/NOT_FOUND,
+    TOX_ERR_FILE_SEEK_NOT_FOUND,
+
     /**
      * File was not in a state where it could be seeked.
      */
-    /*TOX_ERR_FILE_SEEK_*/DENIED,
+    TOX_ERR_FILE_SEEK_DENIED,
+
     /**
      * Seek position was invalid
      */
-    /*TOX_ERR_FILE_SEEK_*/INVALID_POSITION,
+    TOX_ERR_FILE_SEEK_INVALID_POSITION,
+
     /**
      * Packet queue is full.
      */
-    /*TOX_ERR_FILE_SEEK_*/SENDQ
+    TOX_ERR_FILE_SEEK_SENDQ,
+
 }
+
 
 /**
  * Sends a file seek control command to a friend for a given file transfer.
@@ -1726,32 +2006,48 @@ enum TOX_ERR_FILE_SEEK {
  * @param file_number The friend-specific identifier for the file transfer.
  * @param position The position that the file should be seeked to.
  */
-bool tox_file_seek(Tox* tox, uint friend_number, uint file_number, ulong position, TOX_ERR_FILE_SEEK* error);
+bool tox_file_seek(Tox* tox, uint friend_number, uint file_number, ulong position, TOX_ERR_FILE_SEEK *error);
 
-enum TOX_ERR_FILE_GET {
-    /*TOX_ERR_FILE_GET_*/OK,
+alias TOX_ERR_FILE_GET = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FILE_GET_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_FILE_GET_NULL,
+
     /**
      * The friend_number passed did not designate a valid friend.
      */
-    /*TOX_ERR_FILE_GET_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FILE_GET_FRIEND_NOT_FOUND,
+
     /**
      * No file transfer with the given file number was found for the given friend.
      */
-    /*TOX_ERR_FILE_GET_*/NOT_FOUND
+    TOX_ERR_FILE_GET_NOT_FOUND,
+
 }
+
 
 /**
  * Copy the file id associated to the file transfer to a byte array.
  *
  * @param friend_number The friend number of the friend the file is being
- *   transferred to.
+ *   transferred to or received from.
  * @param file_number The friend-specific identifier for the file transfer.
  * @param file_id A memory region of at least TOX_FILE_ID_LENGTH bytes. If
  *   this parameter is NULL, this function has no effect.
  *
  * @return true on success.
  */
-bool tox_file_get_file_id(in Tox* tox, uint friend_number, uint file_number, void* file_id, TOX_ERR_FILE_GET* error);
+bool tox_file_get_file_id(const(Tox)* tox, uint friend_number, uint file_number, void* file_id,
+                          TOX_ERR_FILE_GET *error);
+
 
 /*******************************************************************************
  *
@@ -1760,27 +2056,43 @@ bool tox_file_get_file_id(in Tox* tox, uint friend_number, uint file_number, voi
  ******************************************************************************/
 
 
-enum TOX_ERR_FILE_SEND {
-    /*TOX_ERR_FILE_SEND_*/OK,
-    /*TOX_ERR_FILE_SEND_*/NULL,
+
+alias TOX_ERR_FILE_SEND = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FILE_SEND_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_FILE_SEND_NULL,
+
     /**
      * The friend_number passed did not designate a valid friend.
      */
-    /*TOX_ERR_FILE_SEND_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FILE_SEND_FRIEND_NOT_FOUND,
+
     /**
      * This client is currently not connected to the friend.
      */
-    /*TOX_ERR_FILE_SEND_*/FRIEND_NOT_CONNECTED,
+    TOX_ERR_FILE_SEND_FRIEND_NOT_CONNECTED,
+
     /**
      * Filename length exceeded TOX_MAX_FILENAME_LENGTH bytes.
      */
-    /*TOX_ERR_FILE_SEND_*/NAME_TOO_LONG,
+    TOX_ERR_FILE_SEND_NAME_TOO_LONG,
+
     /**
      * Too many ongoing transfers. The maximum number of concurrent file transfers
      * is 256 per friend per direction (sending and receiving).
      */
-    /*TOX_ERR_FILE_SEND_*/TOO_MANY
+    TOX_ERR_FILE_SEND_TOO_MANY,
+
 }
+
 
 /**
  * Send a file transmission request.
@@ -1841,48 +2153,62 @@ enum TOX_ERR_FILE_SEND {
  *   On failure, this function returns UINT32_MAX. Any pattern in file numbers
  *   should not be relied on.
  */
-uint tox_file_send(Tox* tox, uint friend_number, TOX_FILE_KIND kind, ulong file_size, const(void)* file_id,
-                       const(void)* filename, usize filename_length, TOX_ERR_FILE_SEND* error);
+uint tox_file_send(Tox* tox, uint friend_number, uint kind, ulong file_size, const(void)* file_id,
+                       const(void)* filename, usize filename_length, TOX_ERR_FILE_SEND *error);
 
+alias TOX_ERR_FILE_SEND_CHUNK = int;
+enum : int {
 
-enum TOX_ERR_FILE_SEND_CHUNK {
-    /*TOX_ERR_FILE_SEND_CHUNK_*/OK,
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FILE_SEND_CHUNK_OK,
+
     /**
      * The length parameter was non-zero, but data was NULL.
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/NULL,
+    TOX_ERR_FILE_SEND_CHUNK_NULL,
+
     /**
      * The friend_number passed did not designate a valid friend.
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FILE_SEND_CHUNK_FRIEND_NOT_FOUND,
+
     /**
      * This client is currently not connected to the friend.
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/FRIEND_NOT_CONNECTED,
+    TOX_ERR_FILE_SEND_CHUNK_FRIEND_NOT_CONNECTED,
+
     /**
      * No file transfer with the given file number was found for the given friend.
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/NOT_FOUND,
+    TOX_ERR_FILE_SEND_CHUNK_NOT_FOUND,
+
     /**
      * File transfer was found but isn't in a transferring state: (paused, done,
      * broken, etc...) (happens only when not called from the request chunk callback).
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/NOT_TRANSFERRING,
+    TOX_ERR_FILE_SEND_CHUNK_NOT_TRANSFERRING,
+
     /**
      * Attempted to send more or less data than requested. The requested data size is
      * adjusted according to maximum transmission unit and the expected end of
      * the file. Trying to send less or more than requested will return this error.
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/INVALID_LENGTH,
+    TOX_ERR_FILE_SEND_CHUNK_INVALID_LENGTH,
+
     /**
      * Packet queue is full.
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/SENDQ,
+    TOX_ERR_FILE_SEND_CHUNK_SENDQ,
+
     /**
      * Position parameter was wrong.
      */
-    /*TOX_ERR_FILE_SEND_CHUNK_*/WRONG_POSITION
+    TOX_ERR_FILE_SEND_CHUNK_WRONG_POSITION,
+
 }
+
 
 /**
  * Send a chunk of file data to a friend.
@@ -1901,12 +2227,9 @@ enum TOX_ERR_FILE_SEND_CHUNK {
  * @return true on success.
  */
 bool tox_file_send_chunk(Tox* tox, uint friend_number, uint file_number, ulong position, const(void)* data,
-                         usize length, TOX_ERR_FILE_SEND_CHUNK* error);
-
+                         usize length, TOX_ERR_FILE_SEND_CHUNK *error);
 
 /**
- * The function type for the `file_chunk_request` callback.
- *
  * If the length parameter is 0, the file transfer is finished, and the client's
  * resources associated with the file number should be released. After a call
  * with zero length, the file number can be reused for future file transfers.
@@ -1929,12 +2252,15 @@ bool tox_file_send_chunk(Tox* tox, uint friend_number, uint file_number, ulong p
  * @param length The number of bytes requested for the current chunk.
  */
 alias tox_file_chunk_request_cb = void function (Tox* tox, uint friend_number, uint file_number, ulong position,
-                                                 usize length, void* user_data) nothrow;
+                                       usize length, void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `file_chunk_request` event. Pass NULL to unset.
+ *
+ * This event is triggered when Core is ready to send more file data.
  */
-void tox_callback_file_chunk_request(Tox* tox, tox_file_chunk_request_cb func);
+void tox_callback_file_chunk_request(Tox* tox, tox_file_chunk_request_cb callback);
 
 
 /*******************************************************************************
@@ -1942,6 +2268,7 @@ void tox_callback_file_chunk_request(Tox* tox, tox_file_chunk_request_cb func);
  * :: File transmission: receiving
  *
  ******************************************************************************/
+
 
 
 /**
@@ -1962,16 +2289,16 @@ void tox_callback_file_chunk_request(Tox* tox, tox_file_chunk_request_cb func);
  *   name will be sent along with the file send request.
  * @param filename_length Size in bytes of the filename.
  */
-alias tox_file_recv_cb = void function (Tox* tox, uint friend_number, uint file_number, TOX_FILE_KIND kind,
-                              ulong file_size, const(char)* filename, usize filename_length, void* user_data) nothrow;
+alias tox_file_recv_cb = void function (Tox* tox, uint friend_number, uint file_number, uint kind, ulong file_size,
+                              const(char)* filename, usize filename_length, void* user_data) nothrow;
+
 
 /**
- * Set the callback for the `file_receive` event. Pass NULL to unset.
+ * Set the callback for the `file_recv` event. Pass NULL to unset.
  *
  * This event is triggered when a file transfer request is received.
  */
-void tox_callback_file_recv(Tox* tox, tox_file_recv_cb func);
-
+void tox_callback_file_recv(Tox* tox, tox_file_recv_cb callback);
 
 /**
  * When length is 0, the transfer is finished and the client should release the
@@ -1990,7 +2317,8 @@ void tox_callback_file_recv(Tox* tox, tox_file_recv_cb func);
  * @param length The length of the received chunk.
  */
 alias tox_file_recv_chunk_cb = void function (Tox* tox, uint friend_number, uint file_number, ulong position,
-                                    const(ubyte)* data, usize length, void* user_data) nothrow;
+                                    const(void)* data, usize length, void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `file_recv_chunk` event. Pass NULL to unset.
@@ -1998,7 +2326,7 @@ alias tox_file_recv_chunk_cb = void function (Tox* tox, uint friend_number, uint
  * This event is first triggered when a file transfer request is received, and
  * subsequently when a chunk of file data for an accepted request was received.
  */
-void tox_callback_file_recv_chunk(Tox* tox, tox_file_recv_chunk_cb func);
+void tox_callback_file_recv_chunk(Tox* tox, tox_file_recv_chunk_cb callback);
 
 
 /*******************************************************************************
@@ -2008,19 +2336,23 @@ void tox_callback_file_recv_chunk(Tox* tox, tox_file_recv_chunk_cb func);
  ******************************************************************************/
 
 
+
 /**
  * Conference types for the conference_invite event.
  */
-enum TOX_CONFERENCE_TYPE {
+alias TOX_CONFERENCE_TYPE = int;
+enum : int {
+
     /**
      * Text-only conferences that must be accepted with the tox_conference_join function.
      */
-    /*TOX_CONFERENCE_TYPE_*/TEXT,
+    TOX_CONFERENCE_TYPE_TEXT,
 
     /**
      * Video conference. The function to accept these is in toxav.
      */
-    /*TOX_CONFERENCE_TYPE_*/AV,
+    TOX_CONFERENCE_TYPE_AV,
+
 }
 
 
@@ -2052,8 +2384,8 @@ void tox_callback_conference_invite(Tox* tox, tox_conference_invite_cb callback)
  * @param message The message data.
  * @param length The length of the message.
  */
-alias tox_conference_message_cb = void function (Tox *tox, uint conference_number, uint peer_number,
-                                       TOX_MESSAGE_TYPE type, const(void)* message, usize length, void* user_data) nothrow;
+alias tox_conference_message_cb = void function (Tox* tox, uint conference_number, uint peer_number,
+                                       TOX_MESSAGE_TYPE type, const(char)* message, usize length, void* user_data) nothrow;
 
 
 /**
@@ -2069,8 +2401,8 @@ void tox_callback_conference_message(Tox* tox, tox_conference_message_cb callbac
  * @param title The title data.
  * @param length The title length.
  */
-alias tox_conference_title_cb = void function (Tox* tox, uint conference_number, uint peer_number, const(void)* title,
-                                     usize length, void* user_data);
+alias tox_conference_title_cb = void function (Tox* tox, uint conference_number, uint peer_number, const(char)* title,
+                                     usize length, void* user_data) nothrow;
 
 
 /**
@@ -2085,21 +2417,24 @@ void tox_callback_conference_title(Tox* tox, tox_conference_title_cb callback);
 /**
  * Peer list state change types.
  */
-enum TOX_CONFERENCE_STATE_CHANGE {
+alias TOX_CONFERENCE_STATE_CHANGE = int;
+enum : int {
+
     /**
      * A peer has joined the conference.
      */
-    /*TOX_CONFERENCE_STATE_CHANGE_*/PEER_JOIN,
+    TOX_CONFERENCE_STATE_CHANGE_PEER_JOIN,
 
     /**
      * A peer has exited the conference.
      */
-    /*TOX_CONFERENCE_STATE_CHANGE_*/PEER_EXIT,
+    TOX_CONFERENCE_STATE_CHANGE_PEER_EXIT,
 
     /**
      * A peer has changed their name.
      */
-    /*TOX_CONFERENCE_STATE_CHANGE_*/PEER_NAME_CHANGE,
+    TOX_CONFERENCE_STATE_CHANGE_PEER_NAME_CHANGE,
+
 }
 
 
@@ -2109,7 +2444,7 @@ enum TOX_CONFERENCE_STATE_CHANGE {
  * @param change The type of change (one of TOX_CONFERENCE_STATE_CHANGE).
  */
 alias tox_conference_namelist_change_cb = void function (Tox* tox, uint conference_number, uint peer_number,
-        TOX_CONFERENCE_STATE_CHANGE change, void* user_data);
+        TOX_CONFERENCE_STATE_CHANGE change, void* user_data) nothrow;
 
 
 /**
@@ -2119,16 +2454,19 @@ alias tox_conference_namelist_change_cb = void function (Tox* tox, uint conferen
  */
 void tox_callback_conference_namelist_change(Tox* tox, tox_conference_namelist_change_cb callback);
 
-enum TOX_ERR_CONFERENCE_NEW {
+alias TOX_ERR_CONFERENCE_NEW = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_NEW_*/OK,
+    TOX_ERR_CONFERENCE_NEW_OK,
 
     /**
      * The conference instance failed to initialize.
      */
-    /*TOX_ERR_CONFERENCE_NEW_*/INIT,
+    TOX_ERR_CONFERENCE_NEW_INIT,
+
 }
 
 
@@ -2139,18 +2477,21 @@ enum TOX_ERR_CONFERENCE_NEW {
  *
  * @return conference number on success, or UINT32_MAX on failure.
  */
-uint tox_conference_new(Tox* tox, TOX_ERR_CONFERENCE_NEW* error);
+uint tox_conference_new(Tox* tox, TOX_ERR_CONFERENCE_NEW *error);
 
-enum TOX_ERR_CONFERENCE_DELETE {
+alias TOX_ERR_CONFERENCE_DELETE = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_DELETE_*/OK,
+    TOX_ERR_CONFERENCE_DELETE_OK,
 
     /**
      * The conference number passed did not designate a valid conference.
      */
-    /*TOX_ERR_CONFERENCE_DELETE_CONFERENCE_*/NOT_FOUND,
+    TOX_ERR_CONFERENCE_DELETE_CONFERENCE_NOT_FOUND,
+
 }
 
 
@@ -2161,44 +2502,47 @@ enum TOX_ERR_CONFERENCE_DELETE {
  *
  * @return true on success.
  */
-bool tox_conference_delete(Tox* tox, uint conference_number, TOX_ERR_CONFERENCE_DELETE* error);
+bool tox_conference_delete(Tox* tox, uint conference_number, TOX_ERR_CONFERENCE_DELETE *error);
 
 /**
  * Error codes for peer info queries.
  */
-enum TOX_ERR_CONFERENCE_PEER_QUERY {
+alias TOX_ERR_CONFERENCE_PEER_QUERY = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_PEER_QUERY_*/OK,
+    TOX_ERR_CONFERENCE_PEER_QUERY_OK,
 
     /**
      * The conference number passed did not designate a valid conference.
      */
-    /*TOX_ERR_CONFERENCE_PEER_QUERY_*/CONFERENCE_NOT_FOUND,
+    TOX_ERR_CONFERENCE_PEER_QUERY_CONFERENCE_NOT_FOUND,
 
     /**
      * The peer number passed did not designate a valid peer.
      */
-    /*TOX_ERR_CONFERENCE_PEER_QUERY_*/PEER_NOT_FOUND,
+    TOX_ERR_CONFERENCE_PEER_QUERY_PEER_NOT_FOUND,
 
     /**
      * The client is not connected to the conference.
      */
-    /*TOX_ERR_CONFERENCE_PEER_QUERY_*/NO_CONNECTION,
+    TOX_ERR_CONFERENCE_PEER_QUERY_NO_CONNECTION,
+
 }
 
 
 /**
  * Return the number of peers in the conference. Return value is unspecified on failure.
  */
-uint tox_conference_peer_count(in Tox* tox, uint conference_number, TOX_ERR_CONFERENCE_PEER_QUERY* error);
+uint tox_conference_peer_count(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_PEER_QUERY *error);
 
 /**
  * Return the length of the peer's name. Return value is unspecified on failure.
  */
-usize tox_conference_peer_get_name_size(in Tox* tox, uint conference_number, uint peer_number,
-        TOX_ERR_CONFERENCE_PEER_QUERY* error);
+usize tox_conference_peer_get_name_size(const(Tox)* tox, uint conference_number, uint peer_number,
+        TOX_ERR_CONFERENCE_PEER_QUERY *error);
 
 /**
  * Copy the name of peer_number who is in conference_number to name.
@@ -2206,8 +2550,8 @@ usize tox_conference_peer_get_name_size(in Tox* tox, uint conference_number, uin
  *
  * @return true on success.
  */
-bool tox_conference_peer_get_name(in Tox* tox, uint conference_number, uint peer_number, void* name,
-                                  TOX_ERR_CONFERENCE_PEER_QUERY* error);
+bool tox_conference_peer_get_name(const(Tox)* tox, uint conference_number, uint peer_number, void* name,
+                                  TOX_ERR_CONFERENCE_PEER_QUERY *error);
 
 /**
  * Copy the public key of peer_number who is in conference_number to public_key.
@@ -2215,30 +2559,33 @@ bool tox_conference_peer_get_name(in Tox* tox, uint conference_number, uint peer
  *
  * @return true on success.
  */
-bool tox_conference_peer_get_public_key(in Tox* tox, uint conference_number, uint peer_number,
-                                        void* public_key, TOX_ERR_CONFERENCE_PEER_QUERY* error);
+bool tox_conference_peer_get_public_key(const(Tox)* tox, uint conference_number, uint peer_number,
+                                        void* public_key, TOX_ERR_CONFERENCE_PEER_QUERY *error);
 
 /**
  * Return true if passed peer_number corresponds to our own.
  */
-bool tox_conference_peer_number_is_ours(in Tox* tox, uint conference_number, uint peer_number,
-                                        TOX_ERR_CONFERENCE_PEER_QUERY* error);
+bool tox_conference_peer_number_is_ours(const(Tox)* tox, uint conference_number, uint peer_number,
+                                        TOX_ERR_CONFERENCE_PEER_QUERY *error);
 
-enum TOX_ERR_CONFERENCE_INVITE {
+alias TOX_ERR_CONFERENCE_INVITE = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_INVITE_*/OK,
+    TOX_ERR_CONFERENCE_INVITE_OK,
 
     /**
      * The conference number passed did not designate a valid conference.
      */
-    /*TOX_ERR_CONFERENCE_INVITE_*/CONFERENCE_NOT_FOUND,
+    TOX_ERR_CONFERENCE_INVITE_CONFERENCE_NOT_FOUND,
 
     /**
      * The invite packet failed to send.
      */
-    /*TOX_ERR_CONFERENCE_INVITE_*/FAIL_SEND,
+    TOX_ERR_CONFERENCE_INVITE_FAIL_SEND,
+
 }
 
 
@@ -2251,43 +2598,46 @@ enum TOX_ERR_CONFERENCE_INVITE {
  * @return true on success.
  */
 bool tox_conference_invite(Tox* tox, uint friend_number, uint conference_number,
-                           TOX_ERR_CONFERENCE_INVITE* error);
+                           TOX_ERR_CONFERENCE_INVITE *error);
 
-enum TOX_ERR_CONFERENCE_JOIN {
+alias TOX_ERR_CONFERENCE_JOIN = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_JOIN_*/OK,
+    TOX_ERR_CONFERENCE_JOIN_OK,
 
     /**
      * The cookie passed has an invalid length.
      */
-    /*TOX_ERR_CONFERENCE_JOIN_*/INVALID_LENGTH,
+    TOX_ERR_CONFERENCE_JOIN_INVALID_LENGTH,
 
     /**
      * The conference is not the expected type. This indicates an invalid cookie.
      */
-    /*TOX_ERR_CONFERENCE_JOIN_*/WRONG_TYPE,
+    TOX_ERR_CONFERENCE_JOIN_WRONG_TYPE,
 
     /**
      * The friend number passed does not designate a valid friend.
      */
-    /*TOX_ERR_CONFERENCE_JOIN_*/FRIEND_NOT_FOUND,
+    TOX_ERR_CONFERENCE_JOIN_FRIEND_NOT_FOUND,
 
     /**
      * Client is already in this conference.
      */
-    /*TOX_ERR_CONFERENCE_JOIN_*/DUPLICATE,
+    TOX_ERR_CONFERENCE_JOIN_DUPLICATE,
 
     /**
      * Conference instance failed to initialize.
      */
-    /*TOX_ERR_CONFERENCE_JOIN_*/INIT_FAIL,
+    TOX_ERR_CONFERENCE_JOIN_INIT_FAIL,
 
     /**
      * The join packet failed to send.
      */
-    /*TOX_ERR_CONFERENCE_JOIN_*/FAIL_SEND,
+    TOX_ERR_CONFERENCE_JOIN_FAIL_SEND,
+
 }
 
 
@@ -2301,33 +2651,36 @@ enum TOX_ERR_CONFERENCE_JOIN {
  * @return conference number on success, UINT32_MAX on failure.
  */
 uint tox_conference_join(Tox* tox, uint friend_number, const(void)* cookie, usize length,
-                             TOX_ERR_CONFERENCE_JOIN* error);
+                             TOX_ERR_CONFERENCE_JOIN *error);
 
-enum TOX_ERR_CONFERENCE_SEND_MESSAGE {
+alias TOX_ERR_CONFERENCE_SEND_MESSAGE = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_SEND_MESSAGE_*/OK,
+    TOX_ERR_CONFERENCE_SEND_MESSAGE_OK,
 
     /**
      * The conference number passed did not designate a valid conference.
      */
-    /*TOX_ERR_CONFERENCE_SEND_MESSAGE_*/CONFERENCE_NOT_FOUND,
+    TOX_ERR_CONFERENCE_SEND_MESSAGE_CONFERENCE_NOT_FOUND,
 
     /**
      * The message is too long.
      */
-    /*TOX_ERR_CONFERENCE_SEND_MESSAGE_*/TOO_LONG,
+    TOX_ERR_CONFERENCE_SEND_MESSAGE_TOO_LONG,
 
     /**
      * The client is not connected to the conference.
      */
-    /*TOX_ERR_CONFERENCE_SEND_MESSAGE_*/NO_CONNECTION,
+    TOX_ERR_CONFERENCE_SEND_MESSAGE_NO_CONNECTION,
 
     /**
      * The message packet failed to send.
      */
-    /*TOX_ERR_CONFERENCE_SEND_MESSAGE_*/FAIL_SEND,
+    TOX_ERR_CONFERENCE_SEND_MESSAGE_FAIL_SEND,
+
 }
 
 
@@ -2350,28 +2703,31 @@ enum TOX_ERR_CONFERENCE_SEND_MESSAGE {
  * @return true on success.
  */
 bool tox_conference_send_message(Tox* tox, uint conference_number, TOX_MESSAGE_TYPE type, const(void)* message,
-                                 usize length, TOX_ERR_CONFERENCE_SEND_MESSAGE* error);
+                                 usize length, TOX_ERR_CONFERENCE_SEND_MESSAGE *error);
 
-enum TOX_ERR_CONFERENCE_TITLE {
+alias TOX_ERR_CONFERENCE_TITLE = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_TITLE_*/OK,
+    TOX_ERR_CONFERENCE_TITLE_OK,
 
     /**
      * The conference number passed did not designate a valid conference.
      */
-    /*TOX_ERR_CONFERENCE_TITLE_*/CONFERENCE_NOT_FOUND,
+    TOX_ERR_CONFERENCE_TITLE_CONFERENCE_NOT_FOUND,
 
     /**
      * The title is too long or empty.
      */
-    /*TOX_ERR_CONFERENCE_TITLE_*/INVALID_LENGTH,
+    TOX_ERR_CONFERENCE_TITLE_INVALID_LENGTH,
 
     /**
      * The title packet failed to send.
      */
-    /*TOX_ERR_CONFERENCE_TITLE_*/FAIL_SEND,
+    TOX_ERR_CONFERENCE_TITLE_FAIL_SEND,
+
 }
 
 
@@ -2381,7 +2737,7 @@ enum TOX_ERR_CONFERENCE_TITLE {
  * The return value is equal to the `length` argument received by the last
  * `conference_title` callback.
  */
-usize tox_conference_get_title_size(in Tox* tox, uint conference_number, TOX_ERR_CONFERENCE_TITLE* error);
+usize tox_conference_get_title_size(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_TITLE *error);
 
 /**
  * Write the title designated by the given conference number to a byte array.
@@ -2396,8 +2752,8 @@ usize tox_conference_get_title_size(in Tox* tox, uint conference_number, TOX_ERR
  *
  * @return true on success.
  */
-bool tox_conference_get_title(in Tox* tox, uint conference_number, void* title,
-                              TOX_ERR_CONFERENCE_TITLE* error);
+bool tox_conference_get_title(const(Tox)* tox, uint conference_number, void* title,
+                              TOX_ERR_CONFERENCE_TITLE *error);
 
 /**
  * Set the conference title and broadcast it to the rest of the conference.
@@ -2407,40 +2763,42 @@ bool tox_conference_get_title(in Tox* tox, uint conference_number, void* title,
  * @return true on success.
  */
 bool tox_conference_set_title(Tox* tox, uint conference_number, const(void)* title, usize length,
-                              TOX_ERR_CONFERENCE_TITLE* error);
+                              TOX_ERR_CONFERENCE_TITLE *error);
 
 /**
  * Return the number of conferences in the Tox instance.
  * This should be used to determine how much memory to allocate for `tox_conference_get_chatlist`.
  */
-usize tox_conference_get_chatlist_size(in Tox *tox);
+usize tox_conference_get_chatlist_size(const(Tox)* tox);
 
 /**
  * Copy a list of valid conference IDs into the array chatlist. Determine how much space
  * to allocate for the array with the `tox_conference_get_chatlist_size` function.
  */
-void tox_conference_get_chatlist(in Tox *tox, uint* chatlist);
+void tox_conference_get_chatlist(const(Tox)* tox, uint *chatlist);
 
 /**
  * Returns the type of conference (TOX_CONFERENCE_TYPE) that conference_number is. Return value is
  * unspecified on failure.
  */
-enum TOX_ERR_CONFERENCE_GET_TYPE {
+alias TOX_ERR_CONFERENCE_GET_TYPE = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_CONFERENCE_GET_TYPE_*/OK,
+    TOX_ERR_CONFERENCE_GET_TYPE_OK,
 
     /**
      * The conference number passed did not designate a valid conference.
      */
-    /*TOX_ERR_CONFERENCE_GET_TYPE_*/CONFERENCE_NOT_FOUND,
+    TOX_ERR_CONFERENCE_GET_TYPE_CONFERENCE_NOT_FOUND,
+
 }
 
 
-TOX_CONFERENCE_TYPE tox_conference_get_type(in Tox* tox, uint conference_number,
-        TOX_ERR_CONFERENCE_GET_TYPE* error);
-
+TOX_CONFERENCE_TYPE tox_conference_get_type(const(Tox)* tox, uint conference_number,
+        TOX_ERR_CONFERENCE_GET_TYPE *error);
 
 
 /*******************************************************************************
@@ -2450,34 +2808,51 @@ TOX_CONFERENCE_TYPE tox_conference_get_type(in Tox* tox, uint conference_number,
  ******************************************************************************/
 
 
-enum TOX_ERR_FRIEND_CUSTOM_PACKET {
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/OK,
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/NULL,
+
+alias TOX_ERR_FRIEND_CUSTOM_PACKET = int;
+enum : int {
+
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_FRIEND_CUSTOM_PACKET_OK,
+
+    /**
+     * One of the arguments to the function was NULL when it was not expected.
+     */
+    TOX_ERR_FRIEND_CUSTOM_PACKET_NULL,
+
     /**
      * The friend number did not designate a valid friend.
      */
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/FRIEND_NOT_FOUND,
+    TOX_ERR_FRIEND_CUSTOM_PACKET_FRIEND_NOT_FOUND,
+
     /**
      * This client is currently not connected to the friend.
      */
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/FRIEND_NOT_CONNECTED,
+    TOX_ERR_FRIEND_CUSTOM_PACKET_FRIEND_NOT_CONNECTED,
+
     /**
      * The first byte of data was not in the specified range for the packet type.
      * This range is 200-254 for lossy, and 160-191 for lossless packets.
      */
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/INVALID,
+    TOX_ERR_FRIEND_CUSTOM_PACKET_INVALID,
+
     /**
      * Attempted to send an empty packet.
      */
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/EMPTY,
+    TOX_ERR_FRIEND_CUSTOM_PACKET_EMPTY,
+
     /**
      * Packet data length exceeded TOX_MAX_CUSTOM_PACKET_SIZE.
      */
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/TOO_LONG,
+    TOX_ERR_FRIEND_CUSTOM_PACKET_TOO_LONG,
+
     /**
-     * Send queue size exceeded.
+     * Packet queue is full.
      */
-    /*TOX_ERR_FRIEND_CUSTOM_PACKET_*/SENDQ
+    TOX_ERR_FRIEND_CUSTOM_PACKET_SENDQ,
+
 }
 
 
@@ -2501,7 +2876,8 @@ enum TOX_ERR_FRIEND_CUSTOM_PACKET {
  *
  * @return true on success.
  */
-bool tox_friend_send_lossy_packet(Tox* tox, uint friend_number, const(void)* data, usize length, TOX_ERR_FRIEND_CUSTOM_PACKET* error);
+bool tox_friend_send_lossy_packet(Tox* tox, uint friend_number, const(void)* data, usize length,
+                                  TOX_ERR_FRIEND_CUSTOM_PACKET *error);
 
 /**
  * Send a custom lossless packet to a friend.
@@ -2519,37 +2895,38 @@ bool tox_friend_send_lossy_packet(Tox* tox, uint friend_number, const(void)* dat
  *
  * @return true on success.
  */
-bool tox_friend_send_lossless_packet(Tox* tox, uint friend_number, const(void)* data, usize length, TOX_ERR_FRIEND_CUSTOM_PACKET* error);
+bool tox_friend_send_lossless_packet(Tox* tox, uint friend_number, const(void)* data, usize length,
+                                     TOX_ERR_FRIEND_CUSTOM_PACKET *error);
 
 /**
- * The function type for the `friend_lossy_packet` callback.
- *
  * @param friend_number The friend number of the friend who sent a lossy packet.
  * @param data A byte array containing the received packet data.
  * @param length The length of the packet data byte array.
  */
-alias tox_friend_lossy_packet_cb = void function (Tox* tox, uint friend_number, const(ubyte)* data, usize length, void* user_data) nothrow;
+alias tox_friend_lossy_packet_cb = void function (Tox* tox, uint friend_number, const(void)* data, usize length,
+                                        void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `friend_lossy_packet` event. Pass NULL to unset.
+ *
  */
-void tox_callback_friend_lossy_packet(Tox* tox, tox_friend_lossy_packet_cb func);
-
+void tox_callback_friend_lossy_packet(Tox* tox, tox_friend_lossy_packet_cb callback);
 
 /**
- * The function type for the `friend_lossless_packet` callback.
- *
  * @param friend_number The friend number of the friend who sent the packet.
  * @param data A byte array containing the received packet data.
  * @param length The length of the packet data byte array.
  */
-alias tox_friend_lossless_packet_cb = void function (Tox* tox, uint friend_number, const(ubyte)* data, usize length, void* user_data) nothrow;
+alias tox_friend_lossless_packet_cb = void function (Tox* tox, uint friend_number, const(void)* data, usize length,
+        void* user_data) nothrow;
+
 
 /**
  * Set the callback for the `friend_lossless_packet` event. Pass NULL to unset.
+ *
  */
-void tox_callback_friend_lossless_packet(Tox* tox, tox_friend_lossless_packet_cb func);
-
+void tox_callback_friend_lossless_packet(Tox* tox, tox_friend_lossless_packet_cb callback);
 
 
 /*******************************************************************************
@@ -2559,11 +2936,12 @@ void tox_callback_friend_lossless_packet(Tox* tox, tox_friend_lossless_packet_cb
  ******************************************************************************/
 
 
+
 /**
  * Writes the temporary DHT public key of this instance to a byte array.
  *
  * This can be used in combination with an externally accessible IP address and
- * the bound port (from tox_get_udp_port) to run a temporary bootstrap node.
+ * the bound port (from tox_self_get_udp_port) to run a temporary bootstrap node.
  *
  * Be aware that every time a new instance is created, the DHT public key
  * changes, meaning this cannot be used to run a permanent bootstrap node.
@@ -2571,52 +2949,61 @@ void tox_callback_friend_lossless_packet(Tox* tox, tox_friend_lossless_packet_cb
  * @param dht_id A memory region of at least TOX_PUBLIC_KEY_SIZE bytes. If this
  *   parameter is NULL, this function has no effect.
  */
-void tox_self_get_dht_id(in Tox* tox, void* dht_id);
+void tox_self_get_dht_id(const(Tox)* tox, void* dht_id);
 
+alias TOX_ERR_GET_PORT = int;
+enum : int {
 
-enum TOX_ERR_GET_PORT {
-    /*TOX_ERR_GET_PORT_*/OK,
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_GET_PORT_OK,
+
     /**
      * The instance was not bound to any port.
      */
-    /*TOX_ERR_GET_PORT_*/NOT_BOUND
+    TOX_ERR_GET_PORT_NOT_BOUND,
+
 }
+
 
 /**
  * Return the UDP port this Tox instance is bound to.
  */
-ushort tox_self_get_udp_port(in Tox* tox, TOX_ERR_GET_PORT* error);
+ushort tox_self_get_udp_port(const(Tox)* tox, TOX_ERR_GET_PORT *error);
 
 /**
  * Return the TCP port this Tox instance is bound to. This is only relevant if
  * the instance is acting as a TCP relay.
  */
-ushort tox_self_get_tcp_port(in Tox* tox, TOX_ERR_GET_PORT* error);
+ushort tox_self_get_tcp_port(const(Tox)* tox, TOX_ERR_GET_PORT *error);
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-// toxencryptsave.h
-//
-/* The Tox encrypted save functions.
- *
- *  Copyright (C) 2013 Tox project All Rights Reserved.
- *
- *  This file is part of Tox.
- *
- *  Tox is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Tox is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- *
+/*
+ * Batch encryption functions.
  */
+
+/*
+ * Copyright © 2016-2017 The TokTok team.
+ * Copyright © 2013-2016 Tox Developers.
+ *
+ * This file is part of Tox, the free peer to peer instant messenger.
+ *
+ * Tox is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Tox is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 
 /*******************************************************************************
  *
@@ -2645,6 +3032,8 @@ ushort tox_self_get_tcp_port(in Tox* tox, TOX_ERR_GET_PORT* error);
  *
  ******************************************************************************/
 
+
+
 /**
  * The size of the salt part of a pass-key.
  */
@@ -2656,6 +3045,7 @@ uint tox_pass_salt_length();
  * The size of the key part of a pass-key.
  */
 enum TOX_PASS_KEY_LENGTH = 32;
+
 uint tox_pass_key_length();
 
 /**
@@ -2664,87 +3054,96 @@ uint tox_pass_key_length();
  * bytes in the encrypted byte array.
  */
 enum TOX_PASS_ENCRYPTION_EXTRA_LENGTH = 80;
+
 uint tox_pass_encryption_extra_length();
 
-enum TOX_ERR_KEY_DERIVATION {
+alias TOX_ERR_KEY_DERIVATION = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_KEY_DERIVATION_*/OK,
+    TOX_ERR_KEY_DERIVATION_OK,
 
     /**
      * One of the arguments to the function was NULL when it was not expected.
      */
-    /*TOX_ERR_KEY_DERIVATION_*/NULL,
+    TOX_ERR_KEY_DERIVATION_NULL,
 
     /**
      * The crypto lib was unable to derive a key from the given passphrase,
-     * which is usually a lack of memory issue. The functions accepting keys
-     * do not produce this error.
+     * which is usually a lack of memory issue.
      */
-    /*TOX_ERR_KEY_DERIVATION_*/FAILED,
+    TOX_ERR_KEY_DERIVATION_FAILED,
+
 }
 
 
-enum TOX_ERR_ENCRYPTION {
+alias TOX_ERR_ENCRYPTION = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_ENCRYPTION_*/OK,
+    TOX_ERR_ENCRYPTION_OK,
 
     /**
      * One of the arguments to the function was NULL when it was not expected.
      */
-    /*TOX_ERR_ENCRYPTION_*/NULL,
+    TOX_ERR_ENCRYPTION_NULL,
 
     /**
      * The crypto lib was unable to derive a key from the given passphrase,
      * which is usually a lack of memory issue. The functions accepting keys
      * do not produce this error.
      */
-    /*TOX_ERR_ENCRYPTION_*/KEY_DERIVATION_FAILED,
+    TOX_ERR_ENCRYPTION_KEY_DERIVATION_FAILED,
 
     /**
      * The encryption itself failed.
      */
-    /*TOX_ERR_ENCRYPTION_*/FAILED,
+    TOX_ERR_ENCRYPTION_FAILED,
+
 }
 
 
-enum TOX_ERR_DECRYPTION {
+alias TOX_ERR_DECRYPTION = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_DECRYPTION_*/OK,
+    TOX_ERR_DECRYPTION_OK,
 
     /**
      * One of the arguments to the function was NULL when it was not expected.
      */
-    /*TOX_ERR_DECRYPTION_*/NULL,
+    TOX_ERR_DECRYPTION_NULL,
 
     /**
      * The input data was shorter than TOX_PASS_ENCRYPTION_EXTRA_LENGTH bytes
      */
-    /*TOX_ERR_DECRYPTION_*/INVALID_LENGTH,
+    TOX_ERR_DECRYPTION_INVALID_LENGTH,
 
     /**
      * The input data is missing the magic number (i.e. wasn't created by this
      * module, or is corrupted).
      */
-    /*TOX_ERR_DECRYPTION_*/BAD_FORMAT,
+    TOX_ERR_DECRYPTION_BAD_FORMAT,
 
     /**
      * The crypto lib was unable to derive a key from the given passphrase,
      * which is usually a lack of memory issue. The functions accepting keys
      * do not produce this error.
      */
-    /*TOX_ERR_DECRYPTION_*/KEY_DERIVATION_FAILED,
+    TOX_ERR_DECRYPTION_KEY_DERIVATION_FAILED,
 
     /**
      * The encrypted byte array could not be decrypted. Either the data was
      * corrupted or the password/key was incorrect.
      */
-    /*TOX_ERR_DECRYPTION_*/FAILED,
+    TOX_ERR_DECRYPTION_FAILED,
+
 }
 
 
@@ -2777,7 +3176,7 @@ enum TOX_ERR_DECRYPTION {
  * @return true on success.
  */
 bool tox_pass_encrypt(const(void)* plaintext, usize plaintext_len, const(void)* passphrase, usize passphrase_len,
-                      void* ciphertext, TOX_ERR_ENCRYPTION* error);
+                      void* ciphertext, TOX_ERR_ENCRYPTION *error);
 
 /**
  * Decrypts the given data with the given passphrase.
@@ -2794,7 +3193,7 @@ bool tox_pass_encrypt(const(void)* plaintext, usize plaintext_len, const(void)* 
  * @return true on success.
  */
 bool tox_pass_decrypt(const(void)* ciphertext, usize ciphertext_len, const(void)* passphrase,
-                      usize passphrase_len, void* plaintext, TOX_ERR_DECRYPTION* error);
+                      usize passphrase_len, void* plaintext, TOX_ERR_DECRYPTION *error);
 
 
 /*******************************************************************************
@@ -2816,23 +3215,14 @@ bool tox_pass_decrypt(const(void)* ciphertext, usize ciphertext_len, const(void)
  * for encryption and decryption. It is derived from a salt and the user-
  * provided password.
  *
- * The Tox_Pass_Key structure is hidden in the implementation. It can be allocated
- * using tox_pass_key_new and must be deallocated using tox_pass_key_free.
+ * The Tox_Pass_Key structure is hidden in the implementation. It can be created
+ * using tox_pass_key_derive or tox_pass_key_derive_with_salt and must be deallocated using tox_pass_key_free.
  */
 struct Tox_Pass_Key {
   // disable construction and postblit
   @disable this ();
   @disable this (this);
 }
-
-/**
- * Create a new Tox_Pass_Key. The initial value of it is indeterminate. To
- * initialise it, use one of the derive_* functions below.
- *
- * In case of failure, this function returns NULL. The only failure mode at
- * this time is memory allocation failure, so this function has no error code.
- */
-Tox_Pass_Key* tox_pass_key_new();
 
 /**
  * Deallocate a Tox_Pass_Key. This function behaves like free(), so NULL is an
@@ -2853,10 +3243,10 @@ void tox_pass_key_free(Tox_Pass_Key* _key);
  * @param passphrase The user-provided password. Can be empty.
  * @param passphrase_len The length of the password.
  *
- * @return true on success.
+ * @return non-NULL on success.
  */
-bool tox_pass_key_derive(Tox_Pass_Key* _key, const(void)* passphrase, usize passphrase_len,
-                         TOX_ERR_KEY_DERIVATION* error);
+Tox_Pass_Key* tox_pass_key_derive(const(void)* passphrase, usize passphrase_len,
+                         TOX_ERR_KEY_DERIVATION *error);
 
 /**
  * Same as above, except use the given salt for deterministic key derivation.
@@ -2865,10 +3255,10 @@ bool tox_pass_key_derive(Tox_Pass_Key* _key, const(void)* passphrase, usize pass
  * @param passphrase_len The length of the password.
  * @param salt An array of at least TOX_PASS_SALT_LENGTH bytes.
  *
- * @return true on success.
+ * @return non-NULL on success.
  */
-bool tox_pass_key_derive_with_salt(Tox_Pass_Key* _key, const(void)* passphrase, usize passphrase_len,
-                                   const(void)* salt, TOX_ERR_KEY_DERIVATION* error);
+Tox_Pass_Key* tox_pass_key_derive_with_salt(const(void)* passphrase, usize passphrase_len,
+                                   const(void)* salt, TOX_ERR_KEY_DERIVATION *error);
 
 /**
  * Encrypt a plain text with a key produced by tox_pass_key_derive or tox_pass_key_derive_with_salt.
@@ -2882,8 +3272,8 @@ bool tox_pass_key_derive_with_salt(Tox_Pass_Key* _key, const(void)* passphrase, 
  *
  * @return true on success.
  */
-bool tox_pass_key_encrypt(in Tox_Pass_Key* _key, const(void)* plaintext, usize plaintext_len,
-                          void* ciphertext, TOX_ERR_ENCRYPTION* error);
+bool tox_pass_key_encrypt(const(Tox_Pass_Key)* _key, const(void)* plaintext, usize plaintext_len,
+                          void* ciphertext, TOX_ERR_ENCRYPTION *error);
 
 /**
  * This is the inverse of tox_pass_key_encrypt, also using only keys produced by
@@ -2895,25 +3285,28 @@ bool tox_pass_key_encrypt(in Tox_Pass_Key* _key, const(void)* plaintext, usize p
  *
  * @return true on success.
  */
-bool tox_pass_key_decrypt(in Tox_Pass_Key* _key, const(void)* ciphertext, usize ciphertext_len,
-                          void* plaintext, TOX_ERR_DECRYPTION* error);
+bool tox_pass_key_decrypt(const(Tox_Pass_Key)* _key, const(void)* ciphertext, usize ciphertext_len,
+                          void* plaintext, TOX_ERR_DECRYPTION *error);
 
-enum TOX_ERR_GET_SALT {
+alias TOX_ERR_GET_SALT = int;
+enum : int {
+
     /**
      * The function returned successfully.
      */
-    /*TOX_ERR_GET_SALT_*/OK,
+    TOX_ERR_GET_SALT_OK,
 
     /**
      * One of the arguments to the function was NULL when it was not expected.
      */
-    /*TOX_ERR_GET_SALT_*/NULL,
+    TOX_ERR_GET_SALT_NULL,
 
     /**
      * The input data is missing the magic number (i.e. wasn't created by this
      * module, or is corrupted).
      */
-    /*TOX_ERR_GET_SALT_*/BAD_FORMAT,
+    TOX_ERR_GET_SALT_BAD_FORMAT,
+
 }
 
 
@@ -2936,7 +3329,7 @@ enum TOX_ERR_GET_SALT {
  *
  * @return true on success.
  */
-bool tox_get_salt(const(void)* ciphertext, void* salt, TOX_ERR_GET_SALT* error);
+bool tox_get_salt(const(void)* ciphertext, void* salt, TOX_ERR_GET_SALT *error);
 
 /**
  * Determines whether or not the given data is encrypted by this module.
@@ -2955,92 +3348,7 @@ bool tox_get_salt(const(void)* ciphertext, void* salt, TOX_ERR_GET_SALT* error);
 bool tox_is_data_encrypted(const(void)* data);
 
 
-// ////////////////////////////////////////////////////////////////////////// //
-// toxdns.h
-//
-/*
- * Tox secure username DNS toxid resolving functions.
- */
-
-/*
- * Copyright © 2016-2017 The TokTok team.
- * Copyright © 2014 Tox project.
- *
- * This file is part of Tox, the free peer to peer instant messenger.
- *
- * Tox is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Tox is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Tox.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-/* Clients are encouraged to set this as the maximum length names can have. */
-enum TOXDNS_MAX_RECOMMENDED_NAME_LENGTH = 32;
-
-/* How to use this api to make secure tox dns3 requests:
- *
- * 1. Get the public key of a server that supports tox dns3.
- * 2. use tox_dns3_new() to create a new object to create DNS requests
- * and handle responses for that server.
- * 3. Use tox_generate_dns3_string() to generate a string based on the name we want to query and a request_id
- * that must be stored somewhere for when we want to decrypt the response.
- * 4. take the string and use it for your DNS request like this:
- * _4haaaaipr1o3mz0bxweox541airydbovqlbju51mb4p0ebxq.rlqdj4kkisbep2ks3fj2nvtmk4daduqiueabmexqva1jc._tox.utox.org
- * 5. The TXT in the DNS you receive should look like this:
- * v=tox3;id=2vgcxuycbuctvauik3plsv3d3aadv4zfjfhi3thaizwxinelrvigchv0ah3qjcsx5qhmaksb2lv2hm5cwbtx0yp
- * 6. Take the id string and use it with tox_decrypt_dns3_TXT() and the request_id corresponding to the
- * request we stored earlier to get the Tox id returned by the DNS server.
- */
-
-/* Create a new tox_dns3 object for server with server_public_key of size TOX_CLIENT_ID_SIZE.
- *
- * return Null on failure.
- * return pointer object on success.
- */
-void* tox_dns3_new(void* server_public_key);
-
-/* Destroy the tox dns3 object.
- */
-void tox_dns3_kill(void* dns3_object);
-
-/* Generate a dns3 string of string_max_len used to query the dns server referred to by to
- * dns3_object for a tox id registered to user with name of name_len.
- *
- * the uint pointed by request_id will be set to the request id which must be passed to
- * tox_decrypt_dns3_TXT() to correctly decode the response.
- *
- * This is what the string returned looks like:
- * 4haaaaipr1o3mz0bxweox541airydbovqlbju51mb4p0ebxq.rlqdj4kkisbep2ks3fj2nvtmk4daduqiueabmexqva1jc
- *
- * returns length of string on success.
- * returns -1 on failure.
- */
-int tox_generate_dns3_string(void* dns3_object, void* str, ushort string_max_len, uint* request_id,
-                             void* name, ubyte name_len);
-
-/* Decode and decrypt the id_record returned of length id_record_len into
- * tox_id (needs to be at least TOX_FRIEND_ADDRESS_SIZE).
- *
- * request_id is the request id given by tox_generate_dns3_string() when creating the request.
- *
- * the id_record passed to this function should look somewhat like this:
- * 2vgcxuycbuctvauik3plsv3d3aadv4zfjfhi3thaizwxinelrvigchv0ah3qjcsx5qhmaksb2lv2hm5cwbtx0yp
- *
- * returns -1 on failure.
- * returns 0 on success.
- *
- */
-int tox_decrypt_dns3_TXT(void* dns3_object, void* tox_id, void* id_record, uint id_record_len,
-                         uint request_id);
-}
+} // extern(C) nothrow
 
 
 // ////////////////////////////////////////////////////////////////////////// //
