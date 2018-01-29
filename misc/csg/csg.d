@@ -199,6 +199,8 @@ public:
     mixin(ImportCoreMath!(Plane.Float, "fabs"));
     assert(plane.valid);
 
+    if (polygon.vertices.length < 3) return;
+
     // classify each point as well as the entire polygon into one of the above four classes
     Plane.PType polygonType = Plane.Coplanar;
     Plane.PType[] types;
@@ -210,6 +212,12 @@ public:
       polygonType |= type;
       //types.unsafeArrayAppend(type);
       types.ptr[vidx] = type;
+    }
+
+    Vertex intersectEdgeAgainstPlane() (in auto ref Vertex a, in auto ref Vertex b) {
+      Plane.Float t = (plane.w-(plane.normal*a.pos))/(plane.normal*(b.pos-a.pos));
+      assert(fabs(t) > Plane.EPS);
+      return a.interpolate(b, t);
     }
 
     // put the polygon in the correct list, splitting it when necessary
@@ -230,6 +238,7 @@ public:
         break;
       case Plane.Spanning:
         Vertex[] f, b;
+        /*
         foreach (immutable i; 0..polygon.vertices.length) {
           immutable j = (i+1)%polygon.vertices.length;
           auto ti = types[i];
@@ -244,6 +253,45 @@ public:
             auto v = vi.interpolate(vj, t);
             f.unsafeArrayAppend(v);
             b.unsafeArrayAppend(v); //v.dup;
+          }
+        }
+        */
+        immutable vlen = cast(int)polygon.vertices.length;
+        int aidx = cast(int)polygon.vertices.length-1;
+        for (int bidx = 0; bidx < vlen; aidx = bidx, ++bidx) {
+          immutable atype = types[aidx];
+          immutable btype = types[bidx];
+          auto va = polygon.vertices[aidx];
+          auto vb = polygon.vertices[bidx];
+          if (btype == Plane.Front) {
+            if (atype == Plane.Back) {
+              // edge (a, b) straddles, output intersection point to both sides
+              auto i = intersectEdgeAgainstPlane(vb, va); // `(b, a)` for robustness; was (a, b)
+              // consistently clip edge as ordered going from in front -> behind
+              assert(plane.pointSide(i.pos) == Plane.Coplanar);
+              f.unsafeArrayAppend(i);
+              b.unsafeArrayAppend(i);
+            }
+            // in all three cases, output b to the front side
+            f.unsafeArrayAppend(vb);
+          } else if (btype == Plane.Back) {
+            if (atype == Plane.Front) {
+              // edge (a, b) straddles plane, output intersection point
+              auto i = intersectEdgeAgainstPlane(va, vb);
+              assert(plane.pointSide(i.pos) == Plane.Coplanar);
+              f.unsafeArrayAppend(i);
+              b.unsafeArrayAppend(i);
+            } else if (atype == Plane.Coplanar) {
+              // output a when edge (a, b) goes from 'on' to 'behind' plane
+              b.unsafeArrayAppend(va);
+            }
+            // in all three cases, output b to the back side
+            b.unsafeArrayAppend(vb);
+          } else {
+            // b is on the plane. In all three cases output b to the front side
+            f.unsafeArrayAppend(vb);
+            // in one case, also output b to back side
+            if (atype == Plane.Back) b.unsafeArrayAppend(vb);
           }
         }
         if (f.length >= 3) front.unsafeArrayAppend(new Polygon(f, polygon.mshared));
