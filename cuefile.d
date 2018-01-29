@@ -270,12 +270,14 @@ public:
             import std.conv : to;
             auto n = w.to!ubyte(10);
             if (n == 1) {
-              tracks[$-1].startmsecs = parseIndex(nextWord!true);
+              w = nextWord!true();
+              tracks[$-1].startmsecs = parseIndex(w);
             } else if (n == 0) {
-              tracks[$-1].pregapmsecs = parseIndex(nextWord!true);
+              w = nextWord!true();
+              tracks[$-1].pregapmsecs = parseIndex(w);
             }
           } catch (Exception e) {
-            writeln("ERROR: ", e.msg);
+            writeln("ERROR: ", e.msg, " (", w, ")");
             throw new Exception("fucked index");
           }
           break;
