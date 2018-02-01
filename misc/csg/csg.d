@@ -55,6 +55,7 @@ version = csg_new_bsp_score_algo;
 //version = csg_vertex_has_normal; // provide `normal` member for `Vertex`; it is not used in BSP building or CSG, though
 //version = csg_nonrobust_split; // uncomment this to use non-robust spliting (why?)
 //version = csg_use_doubles;
+version = csg_use_merge;
 
 version(csg_use_doubles) {
   alias Vec3 = VecN!(3, double);
@@ -447,7 +448,7 @@ public:
     scope(exit) { if (!keepf) delete f; if (!keepb) delete b; }
     foreach (Polygon p; plys) p.splitPolygon(plane, f, b, f, b);
     if (front !is null) f = front.clipPolygons(f);
-    if (back !is null) b = back.clipPolygons(b); else b = null;
+    if (back !is null) b = back.clipPolygons(b); else delete b;
     // return concatenation of `f` and `b`
     if (f.length == 0 && b.length == 0) return null;
     // is `f` empty?
@@ -473,9 +474,44 @@ public:
   /// Remove all polygons in this BSP tree that are inside the other BSP tree `bsp`.
   /// Will not modify or destroy old polygon list.
   void clipTo (BSPNode bsp) {
+    if (bsp is null) return;
     polygons = bsp.clipPolygons(polygons);
     if (front !is null) front.clipTo(bsp);
     if (back !is null) back.clipTo(bsp);
+  }
+
+  // Add all polys from `plys` to this tree.
+  // Takes ownership of polygons (but not `plys`).
+  // First, sort all polys with the current node's splitting plane.
+  // Then send "front" polys to front node, and "back" polys to back node.
+  // If there is no corresponding node, just add it with the all polys and stop sending (obviously).
+  private void merge (Polygon[] plys) {
+    if (plys.length == 0) return;
+
+    void pushToNode (ref BSPNode node, Polygon[] apl) {
+      if (apl.length == 0) return; // nothing to do
+      if (node !is null) {
+        // send polygons to node, it knows what to do
+        node.merge(apl);
+      } else {
+        // create new node
+        node = new BSPNode();
+        BuildInfo[] nodes;
+        nodes.unsafeArrayAppend(BuildInfo(node, apl));
+        buildInternal(nodes);
+      }
+    }
+
+    // split polygons
+    Polygon[] fbest, bbest;
+    foreach (Polygon p; plys) p.splitPolygon(this.plane, this.polygons, this.polygons, fbest, bbest);
+    pushToNode(this.front, fbest);
+    pushToNode(this.back, bbest);
+  }
+
+  private void merge (BSPNode bsp) {
+    if (bsp is null) return;
+    merge(bsp.allPolygons);
   }
 
   private void collectPolys (ref Polygon[] plys) {
@@ -769,7 +805,11 @@ public:
     b.invert();
     b.clipTo(a);
     b.invert();
-    a.buildAndKill(b.allPolygons());
+    version(csg_use_merge) {
+      a.merge(b);
+    } else {
+      a.buildAndKill(b.allPolygons());
+    }
     return new CSG(a);
   }
 
@@ -797,7 +837,11 @@ public:
     b.invert();
     b.clipTo(a);
     b.invert();
-    a.buildAndKill(b.allPolygons());
+    version(csg_use_merge) {
+      a.merge(b);
+    } else {
+      a.buildAndKill(b.allPolygons());
+    }
     a.invert();
     return new CSG(a);
   }
@@ -825,7 +869,11 @@ public:
     b.invert();
     a.clipTo(b);
     b.clipTo(a);
-    a.buildAndKill(b.allPolygons());
+    version(csg_use_merge) {
+      a.merge(b);
+    } else {
+      a.buildAndKill(b.allPolygons());
+    }
     a.invert();
     return new CSG(a);
   }
