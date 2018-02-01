@@ -489,7 +489,15 @@ public:
   }
 
   ///
-  uint calcNodeCount () {
+  uint calcPolyCount () const nothrow @safe @nogc {
+    uint res = cast(uint)polygons.length;
+    if (front !is null) res += front.calcPolyCount();
+    if (back !is null) res += back.calcPolyCount();
+    return res;
+  }
+
+  ///
+  uint calcNodeCount () const nothrow @safe @nogc {
     uint res = 1;
     if (front !is null) res += front.calcNodeCount();
     if (back !is null) res += back.calcNodeCount();
@@ -497,9 +505,9 @@ public:
   }
 
   ///
-  uint calcMaxDepth () {
+  uint calcMaxDepth () const nothrow @safe @nogc {
     uint maxdepth = 0, curdepth = 0;
-    void walk (BSPNode n) {
+    void walk (const(BSPNode) n) {
       if (n is null) return;
       ++curdepth;
       if (curdepth > maxdepth) maxdepth = curdepth;
@@ -525,6 +533,14 @@ public:
     foreach (const Polygon pg; polygons) dg(pg);
     if (front !is null) front.forEachPoly(dg);
     if (back !is null) back.forEachPoly(dg);
+  }
+
+  ///
+  void forEachPolyNC (scope void delegate (Polygon pg) dg) {
+    if (dg is null) return;
+    foreach (Polygon pg; polygons) dg(pg);
+    if (front !is null) front.forEachPolyNC(dg);
+    if (back !is null) back.forEachPolyNC(dg);
   }
 
   // Build a BSP tree out of `polygons`. When called on an existing tree, the
@@ -676,9 +692,10 @@ public:
     const(Polygon)[] list;
     scope(exit) delete list;
     int count = 0;
-    forEachPoly(delegate (const(Polygon) p) { ++count; });
-    list.reserve(count);
-    forEachPoly(delegate (const(Polygon) p) { list ~= p; });
+    if (tree !is null) {
+      list.reserve(tree.calcPolyCount);
+      tree.forEachPoly(delegate (const(Polygon) p) { list ~= p; });
+    }
     string res = "=== CSG (%s) ===".format(list.length);
     foreach (immutable pidx, const Polygon p; list) {
       res ~= "\nPOLY #%s\n".format(pidx);
@@ -701,7 +718,7 @@ private:
 
 public:
   /// Construct a CSG solid from a list of `Polygon` instances.
-  /// Takes ownership of polygons.
+  /// Takes ownership of polygons (but not `aplys`).
   static auto fromPolygons (Polygon[] aplys) {
     assert(aplys.length > 0);
     auto csg = new CSG();
@@ -744,6 +761,7 @@ public:
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doUnion (CSG csg) {
     auto a = this.getClonedBSP(); // this will be used as new CSG
+    //scope(exit) BSPNode.deleteTree(a);
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     scope(exit) BSPNode.deleteTree(b);
     a.clipTo(b);
@@ -770,6 +788,7 @@ public:
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doSubtract (CSG csg) {
     auto a = this.getClonedBSP(); // this will be used as new CSG
+    //scope(exit) BSPNode.deleteTree(a);
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     scope(exit) BSPNode.deleteTree(b);
     a.invert();
@@ -798,6 +817,7 @@ public:
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doIntersect (CSG csg) {
     auto a = this.getClonedBSP(); // this will be used as new CSG
+    //scope(exit) BSPNode.deleteTree(a);
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     scope(exit) BSPNode.deleteTree(b);
     a.invert();
@@ -813,15 +833,21 @@ public:
   /// Return a new CSG solid with solid and empty space switched. This solid is not modified.
   CSG doInverse () {
     assert(tree !is null);
-    auto csg = new CSG();
-    csg.tree = tree.deepClone();
-    csg.tree.invert();
+    uint count = tree.calcPolyCount();
+    Polygon[] plys;
+    plys.reserve(count);
+    scope(exit) delete plys;
+    tree.forEachPolyNC(delegate (Polygon pg) { plys ~= pg.flipClone(); });
+    return fromPolygons(plys);
+    //auto csg = new CSG();
+    //csg.tree = tree.deepClone();
+    //csg.tree.invert();
     /*
     csg.plys.unsafeArraySetLength(plys.length);
     csg.plys[] = plys[];
     foreach (ref p; csg.plys) p = p.flipClone();
     */
-    return csg;
+    //return csg;
   }
 
 static:
