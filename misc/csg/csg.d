@@ -55,7 +55,6 @@ version = csg_new_bsp_score_algo;
 //version = csg_vertex_has_normal; // provide `normal` member for `Vertex`; it is not used in BSP building or CSG, though
 //version = csg_nonrobust_split; // uncomment this to use non-robust spliting (why?)
 //version = csg_use_doubles;
-version = csg_use_merge;
 
 version(csg_use_doubles) {
   alias Vec3 = VecN!(3, double);
@@ -375,6 +374,7 @@ public:
   BSPNode front;
   BSPNode back;
   Polygon[] polygons;
+  int polyCount; // all polys in this node and in all children
 
 private:
   // WARNING! UNSAFE!
@@ -396,7 +396,7 @@ public:
       build(apolygons);
       if (csg_dump_bsp_stats) {
         import core.stdc.stdio;
-        printf("polys=%u; nodes=%u; maxdepth=%u\n", cast(uint)apolygons.length, calcNodeCount, calcMaxDepth);
+        printf("polys=%u(%d:%u); nodes=%u; maxdepth=%u\n", cast(uint)apolygons.length, polyCount, calcPolyCountSlow, calcNodeCount, calcMaxDepth);
       }
     }
   }
@@ -410,6 +410,7 @@ public:
     //foreach (Polygon pg; this.polygons) res.polygons ~= pg.clone();
     res.polygons.length = this.polygons.length;
     res.polygons[] = this.polygons[];
+    res.polyCount = this.polyCount;
     if (this.front !is null) res.front = this.front.clone();
     if (this.back !is null) res.back = this.back.clone();
     return res;
@@ -422,9 +423,45 @@ public:
     res.plane = this.plane;
     res.polygons.reserve(this.polygons.length);
     foreach (Polygon pg; this.polygons) res.polygons ~= pg.clone();
+    res.polyCount = this.polyCount;
     if (this.front !is null) res.front = this.front.clone();
     if (this.back !is null) res.back = this.back.clone();
     return res;
+  }
+
+  ///
+  uint calcPolyCount () const nothrow @safe @nogc { pragma(inline, true); return polyCount; }
+
+  ///
+  uint calcPolyCountSlow () const nothrow @safe @nogc {
+    uint res = cast(uint)polygons.length;
+    if (front !is null) res += front.calcPolyCountSlow();
+    if (back !is null) res += back.calcPolyCountSlow();
+    return res;
+  }
+
+  ///
+  uint calcNodeCount () const nothrow @safe @nogc {
+    uint res = 1;
+    if (front !is null) res += front.calcNodeCount();
+    if (back !is null) res += back.calcNodeCount();
+    return res;
+  }
+
+  ///
+  uint calcMaxDepth () const nothrow @safe @nogc {
+    uint maxdepth = 0, curdepth = 0;
+    void walk (const(BSPNode) n) {
+      if (n is null) return;
+      ++curdepth;
+      if (curdepth > maxdepth) maxdepth = curdepth;
+      walk(n.front);
+      walk(n.back);
+      --curdepth;
+    }
+    walk(this);
+    assert(curdepth == 0);
+    return maxdepth;
   }
 
   /// Convert solid space to empty space and empty space to solid space.
@@ -476,42 +513,15 @@ public:
   void clipTo (BSPNode bsp) {
     if (bsp is null) return;
     polygons = bsp.clipPolygons(polygons);
-    if (front !is null) front.clipTo(bsp);
-    if (back !is null) back.clipTo(bsp);
-  }
-
-  // Add all polys from `plys` to this tree.
-  // Takes ownership of polygons (but not `plys`).
-  // First, sort all polys with the current node's splitting plane.
-  // Then send "front" polys to front node, and "back" polys to back node.
-  // If there is no corresponding node, just add it with the all polys and stop sending (obviously).
-  private void merge (Polygon[] plys) {
-    if (plys.length == 0) return;
-
-    void pushToNode (ref BSPNode node, Polygon[] apl) {
-      if (apl.length == 0) return; // nothing to do
-      if (node !is null) {
-        // send polygons to node, it knows what to do
-        node.merge(apl);
-      } else {
-        // create new node
-        node = new BSPNode();
-        BuildInfo[] nodes;
-        nodes.unsafeArrayAppend(BuildInfo(node, apl));
-        buildInternal(nodes);
-      }
-    }
-
-    // split polygons
-    Polygon[] fbest, bbest;
-    foreach (Polygon p; plys) p.splitPolygon(this.plane, this.polygons, this.polygons, fbest, bbest);
-    pushToNode(this.front, fbest);
-    pushToNode(this.back, bbest);
+    polyCount = cast(int)polygons.length;
+    if (front !is null) { front.clipTo(bsp); polyCount += front.polyCount; }
+    if (back !is null) { back.clipTo(bsp); polyCount += back.polyCount; }
+    assert(calcPolyCountSlow == polyCount);
   }
 
   private void merge (BSPNode bsp) {
     if (bsp is null) return;
-    merge(bsp.allPolygons);
+    build(bsp.allPolygons);
   }
 
   private void collectPolys (ref Polygon[] plys) {
@@ -522,38 +532,6 @@ public:
     }
     if (front !is null) front.collectPolys(plys);
     if (back !is null) back.collectPolys(plys);
-  }
-
-  ///
-  uint calcPolyCount () const nothrow @safe @nogc {
-    uint res = cast(uint)polygons.length;
-    if (front !is null) res += front.calcPolyCount();
-    if (back !is null) res += back.calcPolyCount();
-    return res;
-  }
-
-  ///
-  uint calcNodeCount () const nothrow @safe @nogc {
-    uint res = 1;
-    if (front !is null) res += front.calcNodeCount();
-    if (back !is null) res += back.calcNodeCount();
-    return res;
-  }
-
-  ///
-  uint calcMaxDepth () const nothrow @safe @nogc {
-    uint maxdepth = 0, curdepth = 0;
-    void walk (const(BSPNode) n) {
-      if (n is null) return;
-      ++curdepth;
-      if (curdepth > maxdepth) maxdepth = curdepth;
-      walk(n.front);
-      walk(n.back);
-      --curdepth;
-    }
-    walk(this);
-    assert(curdepth == 0);
-    return maxdepth;
   }
 
   /// Return a list of all polygons in this BSP tree.
@@ -579,10 +557,8 @@ public:
     if (back !is null) back.forEachPolyNC(dg);
   }
 
-  // Build a BSP tree out of `polygons`. When called on an existing tree, the
-  // new polygons are filtered down to the bottom of the tree and become new
-  // nodes there. Each set of polygons is partitioned using the first polygon
-  // (no heuristic is used to pick a good split).
+  // Build a BSP tree out of `polygons`. When called on an existing tree, the new
+  // polygons are filtered down to the bottom of the tree and become new nodes there.
   private static struct BuildInfo {
     BSPNode node;
     Polygon[] plys;
@@ -603,6 +579,13 @@ public:
     BuildInfo[] nodes;
     nodes.unsafeArrayAppend(BuildInfo(this, plys));
     buildInternal(nodes);
+    updatePolyCount();
+  }
+
+  private void updatePolyCount () nothrow @safe @nogc {
+    polyCount = cast(int)polygons.length;
+    if (front !is null) { front.updatePolyCount(); polyCount += front.polyCount; }
+    if (back !is null) { back.updatePolyCount();  polyCount += back.polyCount; }
   }
 
   private static void buildInternal (ref BuildInfo[] nodes) {
@@ -782,6 +765,18 @@ public:
     return tree.clone();
   }
 
+  // `a` is always a result, `b` can be deleted
+  private static void mergeBSP (ref BSPNode a, ref BSPNode b) {
+    // always merge smaller tree to the bigger one
+    { import iv.cmdcon; conwriteln("apc=", a.calcPolyCountSlow, "; apcFast=", a.polyCount, "; bpc=", b.calcPolyCountSlow, "; bpcFast=", b.polyCount); }
+    if (a.calcPolyCount < b.calcPolyCount) {
+      auto tmp = a;
+      a = b;
+      b = tmp;
+    }
+    a.merge(b);
+  }
+
   //     A.union(B)
   //
   //     +-------+            +-------+
@@ -805,11 +800,7 @@ public:
     b.invert();
     b.clipTo(a);
     b.invert();
-    version(csg_use_merge) {
-      a.merge(b);
-    } else {
-      a.buildAndKill(b.allPolygons());
-    }
+    mergeBSP(a, b);
     return new CSG(a);
   }
 
@@ -837,11 +828,7 @@ public:
     b.invert();
     b.clipTo(a);
     b.invert();
-    version(csg_use_merge) {
-      a.merge(b);
-    } else {
-      a.buildAndKill(b.allPolygons());
-    }
+    mergeBSP(a, b);
     a.invert();
     return new CSG(a);
   }
@@ -869,11 +856,7 @@ public:
     b.invert();
     a.clipTo(b);
     b.clipTo(a);
-    version(csg_use_merge) {
-      a.merge(b);
-    } else {
-      a.buildAndKill(b.allPolygons());
-    }
+    mergeBSP(a, b);
     a.invert();
     return new CSG(a);
   }
