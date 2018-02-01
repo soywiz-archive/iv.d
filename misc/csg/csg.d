@@ -688,85 +688,44 @@ public:
   }
 
 private:
-  // either `plys` or `tree` can be null
-  Polygon[] plys = null; /// WARNING! DON'T MODIFY! modifying this directly will make internal BSP tree out-of-sync
   BSPNode tree = null;
 
 private:
   // Takes ownership of `atree`.
   this (BSPNode atree) {
     assert(atree !is null);
-    //plys = atree.allPolygons();
     tree = atree;
   }
 
-public:
-  ///
   this () {}
 
-  /// Construct a CSG solid from a list of `Polygon` instances. Will not create BSP tree.
-  /// Takes ownership of `aplys`.
+public:
+  /// Construct a CSG solid from a list of `Polygon` instances.
+  /// Takes ownership of polygons.
   static auto fromPolygons (Polygon[] aplys) {
+    assert(aplys.length > 0);
     auto csg = new CSG();
-    version(none) {
-      csg.plys = aplys;
-    } else {
-      csg.tree = new BSPNode(aplys);
-    }
+    csg.tree = new BSPNode(aplys);
     return csg;
   }
-
-  /*
-  // Returns new polygon array, but won't clone polygons themselves.
-  Polygon[] getPolygons () nothrow {
-    Polygon[] res;
-    forEachPoly(delegate (Polygon p) { res.unsafeArrayAppend(p); });
-  }
-  */
-
-  /*
-  // Construct a CSG solid from a list of `Polygon` instances. Will not create BSP tree.
-  // Will clone all polygons in `plys`.
-  static auto fromPolygonsCopy (Polygon[] plys) {
-    auto csg = new CSG();
-    csg.plys.reserve(plys.length);
-    foreach (Polygon pg; plys) csg.plys ~= pg.clone();
-    return csg;
-  }
-  */
 
   /// Clone solid. Will not clone BSP tree.
   /// Will clone polygons themselves.
   CSG clone () {
+    assert(tree !is null);
     auto csg = new CSG();
-    if (csg.plys.length) {
-      csg.plys.unsafeArraySetLength(plys.length);
-      csg.plys[] = plys[];
-      foreach (ref p; csg.plys) p = p.clone;
-    } else if (tree !is null) {
-      csg.tree = tree.deepClone();
-    }
+    csg.tree = tree.deepClone();
     return csg;
   }
 
   void forEachPoly (scope void delegate (const(Polygon) pg) dg) const {
-    if (dg is null) return;
-    if (plys.length == 0) {
-      // take polygons from BSP tree
-      if (tree is null) return;
-      tree.forEachPoly(dg);
-    } else {
-      // take polygons from `plys` array
-      foreach (const Polygon pg; plys) dg(pg);
-    }
+    if (dg is null || tree is null) return;
+    tree.forEachPoly(dg);
   }
 
   // Will not clone polygons themselves.
   private BSPNode getClonedBSP () {
-    if (tree is null) {
-      assert(plys.length > 0);
-      tree = new BSPNode(this.plys);
-    }
+    assert(tree !is null);
     return tree.clone();
   }
 
@@ -784,11 +743,8 @@ public:
   /** Return a new CSG solid representing space in either this solid or in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doUnion (CSG csg) {
-    //auto a = new BSPNode(this.plys);
-    auto a = this.getClonedBSP();
-    //scope(exit) BSPNode.deleteTree(a); // this will be used as new CSG
-    //auto b = new BSPNode(csg.plys);
-    auto b = csg.getClonedBSP();
+    auto a = this.getClonedBSP(); // this will be used as new CSG
+    auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     scope(exit) BSPNode.deleteTree(b);
     a.clipTo(b);
     b.clipTo(a);
@@ -796,7 +752,6 @@ public:
     b.clipTo(a);
     b.invert();
     a.buildAndKill(b.allPolygons());
-    //return CSG.fromPolygonsCopy(a.allPolygons());
     return new CSG(a);
   }
 
@@ -814,11 +769,8 @@ public:
   /** Return a new CSG solid representing space in this solid but not in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doSubtract (CSG csg) {
-    //auto a = new BSPNode(this.plys);
-    auto a = this.getClonedBSP();
-    //scope(exit) BSPNode.deleteTree(a); // this will be used as new CSG
-    //auto b = new BSPNode(csg.plys);
-    auto b = csg.getClonedBSP();
+    auto a = this.getClonedBSP(); // this will be used as new CSG
+    auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     scope(exit) BSPNode.deleteTree(b);
     a.invert();
     a.clipTo(b);
@@ -828,7 +780,6 @@ public:
     b.invert();
     a.buildAndKill(b.allPolygons());
     a.invert();
-    //return CSG.fromPolygonsCopy(a.allPolygons());
     return new CSG(a);
   }
 
@@ -846,11 +797,8 @@ public:
   /** Return a new CSG solid representing space both this solid and in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doIntersect (CSG csg) {
-    //auto a = new BSPNode(this.plys);
-    auto a = this.getClonedBSP();
-    //scope(exit) BSPNode.deleteTree(a); // this will be used as new CSG
-    //auto b = new BSPNode(csg.plys);
-    auto b = csg.getClonedBSP();
+    auto a = this.getClonedBSP(); // this will be used as new CSG
+    auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     scope(exit) BSPNode.deleteTree(b);
     a.invert();
     b.clipTo(a);
@@ -859,16 +807,20 @@ public:
     b.clipTo(a);
     a.buildAndKill(b.allPolygons());
     a.invert();
-    //return CSG.fromPolygonsCopy(a.allPolygons());
     return new CSG(a);
   }
 
   /// Return a new CSG solid with solid and empty space switched. This solid is not modified.
   CSG doInverse () {
+    assert(tree !is null);
     auto csg = new CSG();
+    csg.tree = tree.deepClone();
+    csg.tree.invert();
+    /*
     csg.plys.unsafeArraySetLength(plys.length);
     csg.plys[] = plys[];
     foreach (ref p; csg.plys) p = p.flipClone();
+    */
     return csg;
   }
 
