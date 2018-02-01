@@ -149,7 +149,12 @@ void oglDrawScene () {
   glRotatef(angleX, 1, 0, 0);
   glRotatef(angleY, 0, 1, 0);
 
-  foreach (immutable pidx, Polygon p; mesh.polygons) {
+  int pcount = 0;
+  mesh.forEachPoly(delegate (const(Polygon) p) { ++pcount; });
+
+  int pidx = -1;
+  mesh.forEachPoly(delegate (const(Polygon) p) {
+    ++pidx;
     glColor3f(1.0f, 0.5f, 0.0f);
     if (drawLines) {
       glColor3f(0.0f, 0.0f, 0.0f);
@@ -165,13 +170,13 @@ void oglDrawScene () {
       glEnd();
     }
     if (drawPolys) {
-      glColor3f(1.0f, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
+      glColor3f(1.0f, cast(float)pidx/cast(float)pcount/*mesh.polygons.length*/, 0.0f);
       //glColor3f(1.0f-cast(float)pidx/cast(float)mesh.polygons.length, cast(float)pidx/cast(float)mesh.polygons.length, 0.0f);
       glBegin(GL_TRIANGLE_FAN);
         foreach (const ref v; p.vertices) glVertex3f(v.pos.x, v.pos.y, v.pos.z);
       glEnd();
     }
-  }
+  });
 }
 
 
