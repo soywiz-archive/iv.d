@@ -499,11 +499,13 @@ public:
     assert(calcPolyCountSlow == polyCount);
   }
 
+  ///
   void merge (BSPNode bsp) {
     if (bsp is null) return;
     build(bsp.allPolygons);
   }
 
+  ///
   void merge (Polygon[] plys) {
     if (plys.length == 0) return;
     build(plys);
