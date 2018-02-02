@@ -47,7 +47,7 @@ void writePolySoup (VFile fo, Polygon[] plys) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-CSG readPolySoup (VFile fi) {
+SolidMesh readPolySoup (VFile fi) {
   enum Signature = "K8PLYSOUPv"; // 0: with normals; 1: without normals
   char[Signature.length+1] sign = void;
   fi.rawReadExact(sign[]);
@@ -100,15 +100,15 @@ CSG readPolySoup (VFile fi) {
   static if (Polygon.HasNormal) {
     if (normalWarning) {
       import core.stdc.stdio : stderr, fprintf;
-      fprintf(stderr, "WARNING: CSG was compiled with normal support, but model contains no normals!");
+      fprintf(stderr, "WARNING: SolidMesh was compiled with normal support, but model contains no normals!");
     }
   }
   // done
-  return CSG.fromPolygons(plys);
+  return SolidMesh.fromPolygons(plys);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-CSG buildGourd () {
+SolidMesh buildGourd () {
   return readPolySoup(VFile("gourd.pso.gz"));
 }

@@ -632,11 +632,11 @@ public:
  *
  * Two solids can be combined using the `doUnion()`, `doSubtract()`, and `doIntersect()` methods.
  */
-final class CSG {
+final class SolidMesh {
 public:
   override string toString () const {
     import std.string : format;
-    string res = "=== CSG (%s) ===".format(tree !is null ? tree.calcPolyCount : 0);
+    string res = "=== SolidMesh (%s) ===".format(tree !is null ? tree.calcPolyCount : 0);
     if (tree !is null) {
       int pidx = -1;
       tree.forEachPoly(delegate (const(Polygon) p) {
@@ -665,18 +665,18 @@ public:
   /// Takes ownership of polygons (but not `aplys`).
   static auto fromPolygons (Polygon[] aplys) {
     assert(aplys.length > 0);
-    auto csg = new CSG();
-    csg.tree = new BSPNode(aplys);
-    return csg;
+    auto mesh = new SolidMesh();
+    mesh.tree = new BSPNode(aplys);
+    return mesh;
   }
 
   /// Clone solid.
   /// Will clone polygons themselves.
-  CSG clone () {
+  SolidMesh clone () {
     assert(tree !is null);
-    auto csg = new CSG();
-    csg.tree = tree.clone!true(); // deep clone
-    return csg;
+    auto mesh = new SolidMesh();
+    mesh.tree = tree.clone!true(); // deep clone
+    return mesh;
   }
 
   ///
@@ -704,41 +704,41 @@ public:
   }
 
   /** Return a new CSG solid representing space in either this solid or in the
-   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
-  CSG opBinary(string op) (CSG csg) if (op == "+" || op == "|") { return doUnion(csg); }
+   * solid `mesh`. Neither this solid nor the solid `mesh` are modified. */
+  SolidMesh opBinary(string op) (SolidMesh mesh) if (op == "+" || op == "|") { return doUnion(mesh); }
 
   /** Return a new CSG solid representing space in this solid but not in the
-   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
-  CSG opBinary(string op) (CSG csg) if (op == "-" || op == "&") { return doSubtract(csg); }
+   * solid `mesh`. Neither this solid nor the solid `mesh` are modified. */
+  SolidMesh opBinary(string op) (SolidMesh mesh) if (op == "-" || op == "&") { return doSubtract(mesh); }
 
   /** Return a new CSG solid representing space both this solid and in the
-   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
-  CSG opBinary(string op) (CSG csg) if (op == "%" || op == "^") { return doIntersect(csg); }
+   * solid `mesh`. Neither this solid nor the solid `mesh` are modified. */
+  SolidMesh opBinary(string op) (SolidMesh mesh) if (op == "%" || op == "^") { return doIntersect(mesh); }
 
   /// Return a new CSG solid with solid and empty space switched. This solid is not modified.
-  CSG opUnary(string op:"~") () { return doInverse(csg); }
+  SolidMesh opUnary(string op:"~") () { return doInverse(); }
 
   /** Return a new CSG solid representing space in either this solid or in the
-   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
-  CSG doUnion (CSG csg) {
-    if (csg is null) return this.clone();
+   * solid `mesh`. Neither this solid nor the solid `mesh` are modified. */
+  SolidMesh doUnion (SolidMesh mesh) {
+    if (mesh is null) return this.clone();
     auto a = this.getClonedBSP(); // this will be used as new CSG
-    auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
+    auto b = mesh.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     a.clipTo(b);
     b.clipTo(a);
     b.invert();
     b.clipTo(a);
     b.invert();
     mergeBSP(a, b);
-    return new CSG(a);
+    return new SolidMesh(a);
   }
 
   /** Return a new CSG solid representing space in this solid but not in the
-   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
-  CSG doSubtract (CSG csg) {
-    if (csg is null) return this.clone();
+   * solid `mesh`. Neither this solid nor the solid `mesh` are modified. */
+  SolidMesh doSubtract (SolidMesh mesh) {
+    if (mesh is null) return this.clone();
     auto a = this.getClonedBSP(); // this will be used as new CSG
-    auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
+    auto b = mesh.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     a.invert();
     a.clipTo(b);
     b.clipTo(a);
@@ -747,15 +747,15 @@ public:
     b.invert();
     mergeBSP(a, b);
     a.invert();
-    return new CSG(a);
+    return new SolidMesh(a);
   }
 
   /** Return a new CSG solid representing space both this solid and in the
-   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
-  CSG doIntersect (CSG csg) {
-    if (csg is null) return this.clone();
+   * solid `mesh`. Neither this solid nor the solid `mesh` are modified. */
+  SolidMesh doIntersect (SolidMesh mesh) {
+    if (mesh is null) return this.clone();
     auto a = this.getClonedBSP(); // this will be used as new CSG
-    auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
+    auto b = mesh.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     a.invert();
     b.clipTo(a);
     b.invert();
@@ -763,17 +763,17 @@ public:
     b.clipTo(a);
     mergeBSP(a, b);
     a.invert();
-    return new CSG(a);
+    return new SolidMesh(a);
   }
 
   /// Return a new CSG solid with solid and empty space switched. This solid is not modified.
-  CSG doInverse () {
-    auto csg = new CSG();
+  SolidMesh doInverse () {
+    auto mesh = new SolidMesh();
     if (tree !is null) {
-      csg.tree = tree.clone!true(); // deep clone
-      csg.tree.invert();
+      mesh.tree = tree.clone!true(); // deep clone
+      mesh.tree.invert();
     }
-    return csg;
+    return mesh;
   }
 
 static:
@@ -782,7 +782,7 @@ static:
    * Optional parameters are `center` and `radius`, which default to `[0, 0, 0]` and `[1, 1, 1]`.
    * The radius can be specified using a single number or a list of three numbers, one for each axis.
    */
-  CSG Cube (Vec3 center, const(Float)[] radius...) {
+  SolidMesh Cube (Vec3 center, const(Float)[] radius...) {
     import std.algorithm : map;
     import std.array : array;
     auto c = center;
@@ -792,7 +792,7 @@ static:
       r[cast(int)n] = f;
     }
     //auto r = (radius > 0 ? Vec3(radius, radius, radius) : Vec3(1, 1, 1));
-    return CSG.fromPolygons([
+    return SolidMesh.fromPolygons([
       [[0.0, 4.0, 6.0, 2.0], [-1.0, 0.0, 0.0]],
       [[1.0, 3.0, 7.0, 5.0], [+1.0, 0.0, 0.0]],
       [[0.0, 1.0, 5.0, 4.0], [0.0, -1.0, 0.0]],
@@ -816,7 +816,7 @@ static:
   }
 
   /// Construct an axis-aligned solid cuboid at origin, and with raduis of 1.
-  CSG Cube () { return Cube(Vec3(0, 0, 0)); }
+  SolidMesh Cube () { return Cube(Vec3(0, 0, 0)); }
 
   /** Construct a solid sphere.
    *
@@ -825,7 +825,7 @@ static:
    * The `slices` and `stacks` parameters control the tessellation along the
    * longitude and latitude directions.
    */
-  CSG Sphere (Vec3 center=Vec3(0, 0, 0), Float radius=1, int slices=16, int stacks=8) {
+  SolidMesh Sphere (Vec3 center=Vec3(0, 0, 0), Float radius=1, int slices=16, int stacks=8) {
     import std.math;
     auto c = center;
     Polygon[] polygons;
@@ -854,7 +854,7 @@ static:
         polygons.unsafeArrayAppend(new Polygon(vertices));
       }
     }
-    return CSG.fromPolygons(polygons);
+    return SolidMesh.fromPolygons(polygons);
   }
 
   /** Construct a solid cylinder.
@@ -863,7 +863,7 @@ static:
    * which default to `[0, -1, 0]`, `[0, 1, 0]`, `1`, and `16`.
    * The `slices` parameter controls the tessellation.
    */
-  CSG Cylinder (Vec3 start=Vec3(0, -1, 0), Vec3 end=Vec3(0, 1, 0), Float radius=1, int slices=16) {
+  SolidMesh Cylinder (Vec3 start=Vec3(0, -1, 0), Vec3 end=Vec3(0, 1, 0), Float radius=1, int slices=16) {
     import std.math;
     auto s = start;
     auto e = end;
@@ -895,16 +895,16 @@ static:
       polygons.unsafeArrayAppend(new Polygon([point(0, t1, 0), point(0, t0, 0), point(1, t0, 0), point(1, t1, 0)]));
       polygons.unsafeArrayAppend(new Polygon([ev, point(1, t1, 1), point(1, t0, 1)]));
     }
-    return CSG.fromPolygons(polygons);
+    return SolidMesh.fromPolygons(polygons);
   }
 }
 
 
 version(csg_test) unittest {
-  auto a = CSG.Cube();
-  auto b = CSG.Sphere(radius:1.35, stacks:12);
-  auto c = CSG.Cylinder(radius: 0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
-  auto d = CSG.Cylinder(radius: 0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
-  auto e = CSG.Cylinder(radius: 0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
+  auto a = SolidMesh.Cube();
+  auto b = SolidMesh.Sphere(radius:1.35, stacks:12);
+  auto c = SolidMesh.Cylinder(radius: 0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
+  auto d = SolidMesh.Cylinder(radius: 0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
+  auto e = SolidMesh.Cylinder(radius: 0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
   auto mesh = a.doIntersect(b).doSubtract(c.doUnion(d).doUnion(e));
 }

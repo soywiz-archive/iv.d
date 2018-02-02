@@ -47,14 +47,14 @@ enum FragmentShader = q{
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-__gshared CSG mesh;
+__gshared SolidMesh mesh;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 void initMesh (int sample) {
   if (sample >= 0 && sample <= 2) {
-    auto a = CSG.Cube();
-    auto b = args!(CSG.Sphere, radius=>1.3)();
+    auto a = SolidMesh.Cube();
+    auto b = args!(SolidMesh.Sphere, radius=>1.3)();
     if (sample == 0) mesh = a|b; //a.doUnion(b);
     if (sample == 1) mesh = a&b; //a.doSubtract(b);
     if (sample == 2) mesh = a^b; //a.doIntersect(b);
@@ -62,8 +62,8 @@ void initMesh (int sample) {
   }
 
   if (sample >= 3 && sample <= 5) {
-    auto a = CSG.Cube();
-    auto b = args!(CSG.Sphere, center=>Vec3(-0.5, 0, 0.5), radius=>1.3)();
+    auto a = SolidMesh.Cube();
+    auto b = args!(SolidMesh.Sphere, center=>Vec3(-0.5, 0, 0.5), radius=>1.3)();
     if (sample == 3) mesh = a+b; //a.doUnion(b);
     if (sample == 4) mesh = a-b; //a.doSubtract(b);
     if (sample == 5) mesh = a%b; //a.doIntersect(b);
@@ -71,11 +71,11 @@ void initMesh (int sample) {
   }
 
   if (sample == 6) {
-    auto a = CSG.Cube();
-    auto b = CSG.Sphere(radius:1.35, stacks:12);
-    auto c = CSG.Cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
-    auto d = CSG.Cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
-    auto e = CSG.Cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
+    auto a = SolidMesh.Cube();
+    auto b = SolidMesh.Sphere(radius:1.35, stacks:12);
+    auto c = SolidMesh.Cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
+    auto d = SolidMesh.Cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
+    auto e = SolidMesh.Cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
     //mesh = a.doIntersect(b).doSubtract(c.doUnion(d).doUnion(e));
     mesh = (a^b)-(c+d+e);
     return;
@@ -84,7 +84,7 @@ void initMesh (int sample) {
   if (sample == 7) {
     auto gourd = buildGourd();
     assert(gourd !is null);
-    auto cyl = args!(CSG.Cylinder, radius=>0.4, start=>Vec3(0.6, 0.8, -0.6), end=>Vec3(-0.6, -0.8, 0.6))();
+    auto cyl = args!(SolidMesh.Cylinder, radius=>0.4, start=>Vec3(0.6, 0.8, -0.6), end=>Vec3(-0.6, -0.8, 0.6))();
     //gourd.setColor(0.5, 1, 0);
     //cyl.setColor(0, 0.5, 1);
     //auto n = new Node(gourd.polygons);
