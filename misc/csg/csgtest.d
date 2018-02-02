@@ -55,18 +55,18 @@ void initMesh (int sample) {
   if (sample >= 0 && sample <= 2) {
     auto a = CSG.Cube();
     auto b = args!(CSG.Sphere, radius=>1.3)();
-    if (sample == 0) mesh = a.doUnion(b);
-    if (sample == 1) mesh = a.doSubtract(b);
-    if (sample == 2) mesh = a.doIntersect(b);
+    if (sample == 0) mesh = a|b; //a.doUnion(b);
+    if (sample == 1) mesh = a&b; //a.doSubtract(b);
+    if (sample == 2) mesh = a^b; //a.doIntersect(b);
     return;
   }
 
   if (sample >= 3 && sample <= 5) {
     auto a = CSG.Cube();
     auto b = args!(CSG.Sphere, center=>Vec3(-0.5, 0, 0.5), radius=>1.3)();
-    if (sample == 3) mesh = a.doUnion(b);
-    if (sample == 4) mesh = a.doSubtract(b);
-    if (sample == 5) mesh = a.doIntersect(b);
+    if (sample == 3) mesh = a+b; //a.doUnion(b);
+    if (sample == 4) mesh = a-b; //a.doSubtract(b);
+    if (sample == 5) mesh = a%b; //a.doIntersect(b);
     return;
   }
 
@@ -76,7 +76,8 @@ void initMesh (int sample) {
     auto c = CSG.Cylinder(radius:0.7, start:Vec3(-1, 0, 0), end:Vec3(1, 0, 0));
     auto d = CSG.Cylinder(radius:0.7, start:Vec3(0, -1, 0), end:Vec3(0, 1, 0));
     auto e = CSG.Cylinder(radius:0.7, start:Vec3(0, 0, -1), end:Vec3(0, 0, 1));
-    mesh = a.doIntersect(b).doSubtract(c.doUnion(d).doUnion(e));
+    //mesh = a.doIntersect(b).doSubtract(c.doUnion(d).doUnion(e));
+    mesh = (a^b)-(c+d+e);
     return;
   }
 
@@ -89,7 +90,8 @@ void initMesh (int sample) {
     //auto n = new Node(gourd.polygons);
     //auto n = new Node(cyl.polygons);
     //assert(0);
-    mesh = gourd.doSubtract(cyl);
+    //mesh = gourd.doSubtract(cyl);
+    mesh = gourd-cyl;
     //mesh = gourd;
     return;
   }

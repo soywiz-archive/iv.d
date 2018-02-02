@@ -705,7 +705,23 @@ public:
 
   /** Return a new CSG solid representing space in either this solid or in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
+  CSG opBinary(string op) (CSG csg) if (op == "+" || op == "|") { return doUnion(csg); }
+
+  /** Return a new CSG solid representing space in this solid but not in the
+   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
+  CSG opBinary(string op) (CSG csg) if (op == "-" || op == "&") { return doSubtract(csg); }
+
+  /** Return a new CSG solid representing space both this solid and in the
+   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
+  CSG opBinary(string op) (CSG csg) if (op == "%" || op == "^") { return doIntersect(csg); }
+
+  /// Return a new CSG solid with solid and empty space switched. This solid is not modified.
+  CSG opUnary(string op:"~") () { return doInverse(csg); }
+
+  /** Return a new CSG solid representing space in either this solid or in the
+   * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doUnion (CSG csg) {
+    if (csg is null) return this.clone();
     auto a = this.getClonedBSP(); // this will be used as new CSG
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     a.clipTo(b);
@@ -720,6 +736,7 @@ public:
   /** Return a new CSG solid representing space in this solid but not in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doSubtract (CSG csg) {
+    if (csg is null) return this.clone();
     auto a = this.getClonedBSP(); // this will be used as new CSG
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     a.invert();
@@ -736,6 +753,7 @@ public:
   /** Return a new CSG solid representing space both this solid and in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doIntersect (CSG csg) {
+    if (csg is null) return this.clone();
     auto a = this.getClonedBSP(); // this will be used as new CSG
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
     a.invert();
