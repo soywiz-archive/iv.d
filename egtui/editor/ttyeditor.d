@@ -1263,6 +1263,7 @@ public:
 
   char[] pasteCollector;
   int pasteModeCounter;
+  bool pastePrevWasCR;
 
   private void promptKeyProcessor (EditorEngine ed) {
     // input buffer changed
@@ -1306,10 +1307,12 @@ public:
     if (key.key == TtyEvent.Key.PasteStart) {
       //VFile("z00.log", "w").writeln("PasteStart; pasteModeCounter before: ", pasteModeCounter);
       ++pasteModeCounter;
+      pastePrevWasCR = false;
       return;
     }
     if (key.key == TtyEvent.Key.PasteEnd) {
       //VFile("z00.log", "w").writeln("PasteEnd; pasteModeCounter before: ", pasteModeCounter);
+      pastePrevWasCR = false;
       if (pasteModeCounter < 1) { ttyBeep(); ttyBeep(); return; }
       if (--pasteModeCounter == 0) {
         if (pasteCollector.length) {
@@ -1334,8 +1337,29 @@ public:
       }
       return;
     }
-    if (key == "Enter") { addChar('\n'); return; }
-    if (key.key == TtyEvent.Key.Char) { addChar(cast(char)key.ch); return; }
+    if (key == "Enter") {
+      //{ import core.stdc.stdio : stderr, fprintf; fprintf(stderr, "{Enter}"); }
+      if (!pastePrevWasCR) addChar('\n');
+      pastePrevWasCR = false;
+      return;
+    }
+    if (key.key == TtyEvent.Key.ModChar && (key.ch == 13 || key.ch == 10 || key.ch == 12)) {
+      //{ import core.stdc.stdio : stderr, fprintf; fprintf(stderr, "{X:%d}", cast(int)key.ch); }
+      if (key.ch != 13 || !pastePrevWasCR) addChar('\n');
+      pastePrevWasCR = (key.ch == 13);
+      return;
+    }
+    if (key.key == TtyEvent.Key.ModChar) {
+      //{ import core.stdc.stdio : stderr, fprintf; fprintf(stderr, "{C:%d:%c}", cast(int)key.ch, cast(int)key.ch); }
+      pastePrevWasCR = false;
+      return;
+    }
+    pastePrevWasCR = false;
+    if (key.key == TtyEvent.Key.Char) {
+      //{ import core.stdc.stdio : stderr, fprintf; fprintf(stderr, "%c", cast(int)key.ch); }
+      addChar(cast(char)key.ch);
+      return;
+    }
   }
 
   bool processKey (TtyEvent key) {
