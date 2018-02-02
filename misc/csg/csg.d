@@ -372,7 +372,7 @@ public:
   Plane plane; // defaults to invalid
   BSPNode front, back;
   Polygon[] polygons;
-  int polyCount; // all polys in this node and in all children
+  int mPolyCount; // all polys in this node and in all children
 
 public:
   ///
@@ -384,7 +384,7 @@ public:
       build(apolygons);
       if (csg_dump_bsp_stats) {
         import core.stdc.stdio;
-        printf("polys=%d(%d:%d); nodes=%d; maxdepth=%d\n", cast(uint)apolygons.length, polyCount, calcPolyCountSlow, calcNodeCount, calcMaxDepth);
+        printf("polys=%d(%d:%d); nodes=%d; maxdepth=%d; pseudo-leaves=%d\n", cast(uint)apolygons.length, mPolyCount, calcPolyCountSlow, calcNodeCount, calcMaxDepth, calcPseudoLeaves);
       }
     }
   }
@@ -403,14 +403,14 @@ public:
         res.polygons[] = this.polygons[];
       }
     }
-    res.polyCount = this.polyCount;
+    res.mPolyCount = this.mPolyCount;
     if (this.front !is null) res.front = this.front.clone!deep();
     if (this.back !is null) res.back = this.back.clone!deep();
     return res;
   }
 
   ///
-  int calcPolyCount () const pure nothrow @safe @nogc { pragma(inline, true); return polyCount; }
+  int polyCount () const pure nothrow @safe @nogc { pragma(inline, true); return mPolyCount; }
 
   ///
   int calcPolyCountSlow () const nothrow @safe @nogc {
@@ -442,6 +442,31 @@ public:
     walk(this);
     assert(curdepth == 0);
     return maxdepth;
+  }
+
+  ///
+  int calcPseudoLeaves () const nothrow @safe @nogc {
+    bool isOneSided (const(BSPNode) n) {
+      if (n is null) return false;
+      if (n.front is null && n.back is null) return (mPolyCount != 0);
+      if (n.front !is null && n.back !is null && n.front.mPolyCount && n.back.mPolyCount) return false;
+      if (n.front !is null && n.front.mPolyCount) return isOneSided(n.front);
+      if (n.back !is null && n.back.mPolyCount) return isOneSided(n.back);
+      return false;
+    }
+
+    int leaves = 0;
+    void walk (const(BSPNode) n) {
+      if (n is null) return;
+      if (isOneSided(n)) {
+        if (n.mPolyCount) ++leaves;
+      } else {
+        walk(n.front);
+        walk(n.back);
+      }
+    }
+    walk(this);
+    return leaves;
   }
 
   /// Convert solid space to empty space and empty space to solid space.
@@ -493,10 +518,10 @@ public:
   void clipTo (BSPNode bsp) {
     if (bsp is null) return;
     polygons = bsp.clipPolygons(polygons);
-    polyCount = cast(int)polygons.length;
-    if (front !is null) { front.clipTo(bsp); polyCount += front.polyCount; }
-    if (back !is null) { back.clipTo(bsp); polyCount += back.polyCount; }
-    assert(calcPolyCountSlow == polyCount);
+    mPolyCount = cast(int)polygons.length;
+    if (front !is null) { front.clipTo(bsp); mPolyCount += front.mPolyCount; }
+    if (back !is null) { back.clipTo(bsp); mPolyCount += back.mPolyCount; }
+    //assert(calcPolyCountSlow == mPolyCount);
   }
 
   ///
@@ -561,9 +586,9 @@ public:
   }
 
   private void updatePolyCount () nothrow @safe @nogc {
-    polyCount = cast(int)polygons.length;
-    if (front !is null) { front.updatePolyCount(); polyCount += front.polyCount; }
-    if (back !is null) { back.updatePolyCount();  polyCount += back.polyCount; }
+    mPolyCount = cast(int)polygons.length;
+    if (front !is null) { front.updatePolyCount(); mPolyCount += front.mPolyCount; }
+    if (back !is null) { back.updatePolyCount();  mPolyCount += back.mPolyCount; }
   }
 
   private static void buildInternal (ref BuildInfo[] nodes) {
@@ -636,7 +661,7 @@ final class SolidMesh {
 public:
   override string toString () const {
     import std.string : format;
-    string res = "=== SolidMesh (%s) ===".format(tree !is null ? tree.calcPolyCount : 0);
+    string res = "=== SolidMesh (%s) ===".format(tree !is null ? tree.polyCount : 0);
     if (tree !is null) {
       int pidx = -1;
       tree.forEachPoly(delegate (const(Polygon) p) {
@@ -694,13 +719,19 @@ public:
   // `a` is always a result, `b` can be deleted
   private static void mergeBSP (ref BSPNode a, ref BSPNode b) {
     // always merge smaller tree to the bigger one
-    { import iv.cmdcon; conwriteln("apc=", a.calcPolyCountSlow, "; apcFast=", a.polyCount, "; bpc=", b.calcPolyCountSlow, "; bpcFast=", b.polyCount); }
-    if (a.calcPolyCount < b.calcPolyCount) {
+    { import iv.cmdcon; conwriteln("apc=", a.calcPolyCountSlow, "; apcFast=", a.mPolyCount, "; bpc=", b.calcPolyCountSlow, "; bpcFast=", b.mPolyCount); }
+    if (a.polyCount < b.polyCount) {
       auto tmp = a;
       a = b;
       b = tmp;
     }
-    a.merge(b);
+    version(none) {
+      auto pa = a.allPolygons~b.allPolygons;
+      a = new BSPNode(pa);
+    } else {
+      a.merge(b);
+    }
+    { import iv.cmdcon; conwriteln("  merged; pseudo-leaves=", a.calcPseudoLeaves); }
   }
 
   /** Return a new CSG solid representing space in either this solid or in the
