@@ -920,9 +920,10 @@ TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     if (ch >= 1 && ch <= 26) {
       key.key = TtyEvent.Key.ModChar;
       key.alt = true;
+      key.ctrl = true;
       key.ch = cast(dchar)(ch+64);
-           if (key.ch == 'H') { key.key = TtyEvent.Key.Backspace; key.ch = 8; }
-      else if (key.ch == 'J') { key.key = TtyEvent.Key.Enter; key.ch = 13; }
+           if (key.ch == 'H') { key.key = TtyEvent.Key.Backspace; key.ctrl = false; key.ch = 8; }
+      else if (key.ch == 'J') { key.key = TtyEvent.Key.Enter; key.ctrl = false; key.ch = 13; }
       return key;
     }
     if (/*(ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '`'*/true) {
@@ -936,11 +937,16 @@ TtyEvent ttyReadKey (int toMSec=-1, int toEscMSec=-1/*300*/) @trusted @nogc {
     return key;
   }
 
-  if (ch < 32) {
+  if (ch == 9) {
+    key.key = TtyEvent.Key.Tab;
+    key.ch = 9;
+  } else if (ch < 32) {
     // ctrl+letter
     key.key = TtyEvent.Key.ModChar;
     key.ctrl = true;
     key.ch = cast(dchar)(ch+64);
+         if (key.ch == 'H') { key.key = TtyEvent.Key.Backspace; key.ctrl = false; key.ch = 8; }
+    else if (key.ch == 'J') { key.key = TtyEvent.Key.Enter; key.ctrl = false; key.ch = 13; }
   } else {
     key.key = TtyEvent.Key.Char;
     key.ch = cast(dchar)(ch);
