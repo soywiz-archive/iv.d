@@ -51,7 +51,6 @@ import iv.vmath;
 
 public __gshared bool csg_dump_bsp_stats = false;
 
-version = csg_new_bsp_score_algo;
 //version = csg_vertex_has_normal; // provide `normal` member for `Vertex`; it is not used in BSP building or CSG, though
 //version = csg_nonrobust_split; // uncomment this to use non-robust spliting (why?)
 //version = csg_use_doubles;
@@ -370,25 +369,14 @@ public:
  */
 final class BSPNode {
 public:
-  Plane plane;
-  BSPNode front;
-  BSPNode back;
+  Plane plane; // defaults to invalid
+  BSPNode front, back;
   Polygon[] polygons;
   int polyCount; // all polys in this node and in all children
 
-private:
-  // WARNING! UNSAFE!
-  static void deleteTree (ref BSPNode node) {
-    if (node is null) return;
-    //foreach (ref Polygon pg; node.polygons) delete pg;
-    delete node.polygons;
-    if (node.front !is null) deleteTree(node.front);
-    if (node.back !is null) deleteTree(node.back);
-    delete node;
-  }
-
 public:
-  private this () {}
+  ///
+  this () {}
 
   ///
   this (Polygon[] apolygons) {
@@ -396,61 +384,53 @@ public:
       build(apolygons);
       if (csg_dump_bsp_stats) {
         import core.stdc.stdio;
-        printf("polys=%u(%d:%u); nodes=%u; maxdepth=%u\n", cast(uint)apolygons.length, polyCount, calcPolyCountSlow, calcNodeCount, calcMaxDepth);
+        printf("polys=%d(%d:%d); nodes=%d; maxdepth=%d\n", cast(uint)apolygons.length, polyCount, calcPolyCountSlow, calcNodeCount, calcMaxDepth);
       }
     }
   }
 
   /// Clone this node and all its subnodes.
-  /// Will clone `polygons` array, bit not polygons themselves.
-  BSPNode clone () {
+  /// If `deep` is `true`, clones all polygons.
+  BSPNode clone(bool deep) () {
     auto res = new BSPNode();
     res.plane = this.plane;
-    //res.polygons.reserve(this.polygons.length);
-    //foreach (Polygon pg; this.polygons) res.polygons ~= pg.clone();
-    res.polygons.length = this.polygons.length;
-    res.polygons[] = this.polygons[];
+    if (this.polygons.length) {
+      static if (deep) {
+        res.polygons.reserve(this.polygons.length);
+        foreach (Polygon pg; this.polygons) res.polygons ~= pg.clone();
+      } else {
+        res.polygons.length = this.polygons.length;
+        res.polygons[] = this.polygons[];
+      }
+    }
     res.polyCount = this.polyCount;
-    if (this.front !is null) res.front = this.front.clone();
-    if (this.back !is null) res.back = this.back.clone();
-    return res;
-  }
-
-  /// Clone this node and all its subnodes.
-  /// Will clone `polygons` array, and polygons themselves.
-  BSPNode deepClone () {
-    auto res = new BSPNode();
-    res.plane = this.plane;
-    res.polygons.reserve(this.polygons.length);
-    foreach (Polygon pg; this.polygons) res.polygons ~= pg.clone();
-    res.polyCount = this.polyCount;
-    if (this.front !is null) res.front = this.front.clone();
-    if (this.back !is null) res.back = this.back.clone();
+    if (this.front !is null) res.front = this.front.clone!deep();
+    if (this.back !is null) res.back = this.back.clone!deep();
     return res;
   }
 
   ///
-  uint calcPolyCount () const nothrow @safe @nogc { pragma(inline, true); return polyCount; }
+  int calcPolyCount () const pure nothrow @safe @nogc { pragma(inline, true); return polyCount; }
 
   ///
-  uint calcPolyCountSlow () const nothrow @safe @nogc {
-    uint res = cast(uint)polygons.length;
+  int calcPolyCountSlow () const nothrow @safe @nogc {
+    int res = cast(uint)polygons.length;
     if (front !is null) res += front.calcPolyCountSlow();
     if (back !is null) res += back.calcPolyCountSlow();
     return res;
   }
 
   ///
-  uint calcNodeCount () const nothrow @safe @nogc {
-    uint res = 1;
+  int calcNodeCount () const nothrow @safe @nogc {
+    int res = 1;
     if (front !is null) res += front.calcNodeCount();
     if (back !is null) res += back.calcNodeCount();
     return res;
   }
 
   ///
-  uint calcMaxDepth () const nothrow @safe @nogc {
-    uint maxdepth = 0, curdepth = 0;
+  int calcMaxDepth () const nothrow @safe @nogc {
+    int maxdepth = 0, curdepth = 0;
     void walk (const(BSPNode) n) {
       if (n is null) return;
       ++curdepth;
@@ -519,9 +499,14 @@ public:
     assert(calcPolyCountSlow == polyCount);
   }
 
-  private void merge (BSPNode bsp) {
+  void merge (BSPNode bsp) {
     if (bsp is null) return;
     build(bsp.allPolygons);
+  }
+
+  void merge (Polygon[] plys) {
+    if (plys.length == 0) return;
+    build(plys);
   }
 
   private void collectPolys (ref Polygon[] plys) {
@@ -565,15 +550,6 @@ public:
   }
 
   // Used in CSG class.
-  private void buildAndKill (Polygon[] plys) {
-    scope(exit) {
-      //foreach (ref Polygon pg; plys) delete pg;
-      delete plys;
-    }
-    build(plys);
-  }
-
-  // Used in CSG class.
   private void build (Polygon[] plys) {
     if (plys.length == 0) return;
     BuildInfo[] nodes;
@@ -592,6 +568,7 @@ public:
     while (nodes.length > 0) {
       auto node = nodes[0].node;
       Polygon[] plys = nodes[0].plys;
+      // remove first node from node list (hacky -- to reuse memory)
       //nodes = nodes[1..$];
       if (nodes.length > 1) {
         import core.stdc.string : memmove;
@@ -603,96 +580,45 @@ public:
         nodes.unsafeArraySetLength(0);
       }
       //nodes.assumeSafeAppend;
-      if (plys.length == 0) continue;
-      //assert(node.front is null);
-      //assert(node.back is null);
-      version(csg_simple_bsp) {
-        if (!node.plane.valid) node.plane = plys[0].plane;
-        Polygon[] f, b;
-        foreach (Polygon p; plys) p.splitPolygon(node.plane, node.polygons, node.polygons, f, b);
-        //{ import std.stdio; stdout.writeln(" polys=", node.polygons.length, "; back=", b.length, "; front=", f.length); }
-        if (f.length != 0) {
-          if (node.front is null) node.front = new BSPNode();
-          nodes.unsafeArrayAppend(BuildInfo(node.front, f));
-          //{ import std.stdio; stdout.writeln("  added front node"); }
-        }
-        if (b.length != 0) {
-          if (node.back is null) node.back = new BSPNode();
-          nodes.unsafeArrayAppend(BuildInfo(node.back, b));
-          //{ import std.stdio; stdout.writeln("  added back node"); }
-        }
-      } else {
-        Polygon[] fbest, bbest;
-        if (!node.plane.valid) {
-          version(csg_new_bsp_score_algo) {
-            mixin(ImportCoreMath!(float, "fabs"));
-            //enum BSPBalance = 50; // [0..100]; lower prefers less splits, higher prefers more balance
-            float bestScore = float.infinity;
-          }
-          int bestl = 0, bestr = 0, bests = 0, bestc = 0;
-          uint bestidx = 0;
-          if (plys.length > 2) {
-            foreach (immutable idx, Polygon px; plys) {
-              auto pl = px.plane;
-              int l = 0, r = 0, s = 0, c = 0;
-              foreach (Polygon p; plys) {
-                auto side = p.classify(pl);
-                     if (side == Plane.Back) ++l;
-                else if (side == Plane.Front) ++r;
-                else if (side == Plane.Spanning) ++s;
-                else if (side == Plane.Coplanar) ++c;
-              }
-              version(csg_new_bsp_score_algo) {
-                float score = (100.0f-cast(float)BSPBalance)*cast(float)s+cast(float)BSPBalance*fabs(cast(float)(r-l));
-                if (score < bestScore) {
-                  bestidx = cast(uint)idx;
-                  bestScore = score;
-                  bestl = l;
-                  bestr = r;
-                  bests = s;
-                  bestc = c;
-                }
-              } else {
-                import std.math : abs;
-                if (idx == 0 || (/*s < bests ||*/ abs(l-r) < abs(bestl-bestr))) {
-                  bestidx = cast(uint)idx;
-                  bestl = l;
-                  bestr = r;
-                  bests = s;
-                  bestc = c;
-                }
-              }
+      if (plys.length == 0) continue; // nothing to do
+      // process polygons for this node
+      Polygon[] fbest, bbest;
+      if (!node.plane.valid) {
+        // find splitting plane
+        usize bestidx = 0;
+        if (plys.length > 2) {
+          mixin(ImportCoreMath!(float, "fabs"));
+          float bestScore = float.infinity;
+          foreach (immutable idx, Polygon px; plys) {
+            auto pl = px.plane;
+            int l = 0, r = 0, s = 0, c = 0;
+            foreach (const Polygon p; plys) {
+              auto side = p.classify(pl);
+                   if (side == Plane.Back) ++l;
+              else if (side == Plane.Front) ++r;
+              else if (side == Plane.Spanning) ++s;
+              else if (side == Plane.Coplanar) ++c;
+              else assert(0, "wtf?!");
             }
-            node.plane = plys[bestidx].plane;
-            // if we have highly unbalanced tree (no polys at one side), split it by half to maintain at least *some* balance
-            version(none) {
-              if ((bestl == 0 || bestr == 0) && bestl+bestr > 16) {
-                // find bounding box
-                auto bbox = plys[0].aabb;
-                foreach (Polygon px; plys[1..$]) bbox ~= px.aabb;
-                // and split it in half
-                //node.plane = Plane.setFromPoints(bbox.min, bbox.max, vec3(bbox.bbox.max.z));
-                //{ import iv.vfs.io; writeln("bestidx=", bestidx, " of ", plys.length, "; l=", bestl, "; r=", bests, "; s=", bests, "; bestc=", bestc); }
-                //{ import iv.vfs.io; writeln("bbox=", bbox); }
-                node.plane.setFromPoints(
-                  Vec3(bbox.min.x, bbox.center.y, bbox.min.z),
-                  Vec3(bbox.min.x, bbox.center.y, bbox.max.z),
-                  Vec3(bbox.max.x, bbox.center.y, bbox.min.z));
-              }
+            float score = (100.0f-cast(float)BSPBalance)*cast(float)s+cast(float)BSPBalance*fabs(cast(float)(r-l));
+            if (score < bestScore) {
+              bestidx = idx;
+              bestScore = score;
             }
-          } else {
-            node.plane = plys[bestidx].plane;
           }
         }
-        foreach (Polygon p; plys) p.splitPolygon(node.plane, node.polygons, node.polygons, fbest, bbest);
-        if (fbest.length != 0) {
-          if (node.front is null) node.front = new BSPNode();
-          nodes.unsafeArrayAppend(BuildInfo(node.front, fbest));
-        }
-        if (bbest.length != 0) {
-          if (node.back is null) node.back = new BSPNode();
-          nodes.unsafeArrayAppend(BuildInfo(node.back, bbest));
-        }
+        node.plane = plys[bestidx].plane;
+      }
+      // split polygon list with the splitting plane
+      foreach (Polygon p; plys) p.splitPolygon(node.plane, node.polygons, node.polygons, fbest, bbest);
+      // if we have something to process, add it
+      if (fbest.length != 0) {
+        if (node.front is null) node.front = new BSPNode();
+        nodes.unsafeArrayAppend(BuildInfo(node.front, fbest));
+      }
+      if (bbest.length != 0) {
+        if (node.back is null) node.back = new BSPNode();
+        nodes.unsafeArrayAppend(BuildInfo(node.back, bbest));
       }
     }
   }
@@ -708,17 +634,14 @@ final class CSG {
 public:
   override string toString () const {
     import std.string : format;
-    const(Polygon)[] list;
-    scope(exit) delete list;
-    int count = 0;
+    string res = "=== CSG (%s) ===".format(tree !is null ? tree.calcPolyCount : 0);
     if (tree !is null) {
-      list.reserve(tree.calcPolyCount);
-      tree.forEachPoly(delegate (const(Polygon) p) { list ~= p; });
-    }
-    string res = "=== CSG (%s) ===".format(list.length);
-    foreach (immutable pidx, const Polygon p; list) {
-      res ~= "\nPOLY #%s\n".format(pidx);
-      res ~= p.toString();
+      int pidx = -1;
+      tree.forEachPoly(delegate (const(Polygon) p) {
+        ++pidx;
+        res ~= "\nPOLY #%d\n".format(pidx);
+        res ~= p.toString();
+      });
     }
     return res;
   }
@@ -745,15 +668,16 @@ public:
     return csg;
   }
 
-  /// Clone solid. Will not clone BSP tree.
+  /// Clone solid.
   /// Will clone polygons themselves.
   CSG clone () {
     assert(tree !is null);
     auto csg = new CSG();
-    csg.tree = tree.deepClone();
+    csg.tree = tree.clone!true(); // deep clone
     return csg;
   }
 
+  ///
   void forEachPoly (scope void delegate (const(Polygon) pg) dg) const {
     if (dg is null || tree is null) return;
     tree.forEachPoly(dg);
@@ -762,7 +686,7 @@ public:
   // Will not clone polygons themselves.
   private BSPNode getClonedBSP () {
     assert(tree !is null);
-    return tree.clone();
+    return tree.clone!false(); // shallow clone
   }
 
   // `a` is always a result, `b` can be deleted
@@ -777,24 +701,11 @@ public:
     a.merge(b);
   }
 
-  //     A.union(B)
-  //
-  //     +-------+            +-------+
-  //     |       |            |       |
-  //     |   A   |            |       |
-  //     |    +--+----+   =   |       +----+
-  //     +----+--+    |       +----+       |
-  //          |   B   |            |       |
-  //          |       |            |       |
-  //          +-------+            +-------+
-  //
   /** Return a new CSG solid representing space in either this solid or in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doUnion (CSG csg) {
     auto a = this.getClonedBSP(); // this will be used as new CSG
-    //scope(exit) BSPNode.deleteTree(a);
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
-    scope(exit) BSPNode.deleteTree(b);
     a.clipTo(b);
     b.clipTo(a);
     b.invert();
@@ -804,24 +715,11 @@ public:
     return new CSG(a);
   }
 
-  //     A.subtract(B)
-  //
-  //     +-------+            +-------+
-  //     |       |            |       |
-  //     |   A   |            |       |
-  //     |    +--+----+   =   |    +--+
-  //     +----+--+    |       +----+
-  //          |   B   |
-  //          |       |
-  //          +-------+
-  //
   /** Return a new CSG solid representing space in this solid but not in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doSubtract (CSG csg) {
     auto a = this.getClonedBSP(); // this will be used as new CSG
-    //scope(exit) BSPNode.deleteTree(a);
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
-    scope(exit) BSPNode.deleteTree(b);
     a.invert();
     a.clipTo(b);
     b.clipTo(a);
@@ -833,24 +731,11 @@ public:
     return new CSG(a);
   }
 
-  //     A.intersect(B)
-  //
-  //     +-------+
-  //     |       |
-  //     |   A   |
-  //     |    +--+----+   =   +--+
-  //     +----+--+    |       +--+
-  //          |   B   |
-  //          |       |
-  //          +-------+
-  //
   /** Return a new CSG solid representing space both this solid and in the
    * solid `csg`. Neither this solid nor the solid `csg` are modified. */
   CSG doIntersect (CSG csg) {
     auto a = this.getClonedBSP(); // this will be used as new CSG
-    //scope(exit) BSPNode.deleteTree(a);
     auto b = csg.getClonedBSP(); // temporary tree, will be used to do CSG and then discarded
-    scope(exit) BSPNode.deleteTree(b);
     a.invert();
     b.clipTo(a);
     b.invert();
@@ -863,22 +748,12 @@ public:
 
   /// Return a new CSG solid with solid and empty space switched. This solid is not modified.
   CSG doInverse () {
-    assert(tree !is null);
-    uint count = tree.calcPolyCount();
-    Polygon[] plys;
-    plys.reserve(count);
-    scope(exit) delete plys;
-    tree.forEachPolyNC(delegate (Polygon pg) { plys ~= pg.flipClone(); });
-    return fromPolygons(plys);
-    //auto csg = new CSG();
-    //csg.tree = tree.deepClone();
-    //csg.tree.invert();
-    /*
-    csg.plys.unsafeArraySetLength(plys.length);
-    csg.plys[] = plys[];
-    foreach (ref p; csg.plys) p = p.flipClone();
-    */
-    //return csg;
+    auto csg = new CSG();
+    if (tree !is null) {
+      csg.tree = tree.clone!true(); // deep clone
+      csg.tree.invert();
+    }
+    return csg;
   }
 
 static:
