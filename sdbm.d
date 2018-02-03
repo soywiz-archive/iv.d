@@ -255,7 +255,6 @@ public:
    *    determined on creating, and can not be changed except for by optimization of the database.
    *    Suggested size of a bucket array is about from 0.5 to 4 times of the number of all records
    *    to store.
-   *   errcode = the error code (can be `null`)
    *
    * Throws:
    *   SDBMException on various errors
@@ -477,7 +476,7 @@ public:
   /** Retrieve a record and write the value into a buffer.
    *
    * Params:
-   *   vbuf = the pointer to a buffer into which the value of the corresponding record is written
+   *   vbuff = the pointer to a buffer into which the value of the corresponding record is written
    *   kbuf = the pointer to the region of a key
    *   start = the offset address of the beginning of the region of the value to be read
    *
@@ -1144,6 +1143,8 @@ public:
 
   /** Get flags of a database.
    *
+   * Engine doesn't use database flags in any way.
+   *
    * Returns:
    *   The return value is the flags of a database.
    *
@@ -1158,8 +1159,10 @@ public:
 
   /** Set flags of a database.
    *
+   * Engine doesn't use database flags in any way.
+   *
    * Params:
-   *   flags = flags to set. Least ten bits are reserved for internal use.
+   *   v = flags to set.
    *
    * Returns:
    *   If successful, the return value is true, else, it is false.
