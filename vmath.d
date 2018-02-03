@@ -802,15 +802,15 @@ const:
   // some more supplementary functions to support various things
   Float vcos(VT) (in auto ref VT v) if (isVector!VT) {
     immutable Float len = length*v.length;
-    return (len > EPSILON!Float ? dot(v)/len : 0);
+    return (len > EPSILON!Float ? cast(Float)(dot(v)/len) : cast(Float)0);
   }
 
-  Float vsin(VT) (in auto ref VT v) if (isVector!VT) {
+  static if (dims == 2) Float vsin(VT) (in auto ref VT v) if (isVector!VT) {
     immutable Float len = length*v.length;
-    return (len > EPSILON!Float ? cross(v)/len : 0);
+    return (len > EPSILON!Float ? cast(Float)(cross(v)/len) : cast(Float)0);
   }
 
-  Float angle180(VT) (in auto ref VT v) if (isVector!VT) {
+  static if (dims == 2) Float angle180(VT) (in auto ref VT v) if (isVector!VT) {
     import std.math : PI;
     mixin(ImportCoreMath!(Float, "atan"));
     immutable Float cosv = vcos(v);
@@ -822,7 +822,7 @@ const:
     return angle;
   }
 
-  Float angle360(VT) (in auto ref VT v) if (isVector!VT) {
+  static if (dims == 2) Float angle360(VT) (in auto ref VT v) if (isVector!VT) {
     import std.math : PI;
     mixin(ImportCoreMath!(Float, "atan"));
     immutable Float cosv = vcos(v);
