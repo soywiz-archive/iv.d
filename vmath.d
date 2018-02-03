@@ -22,6 +22,7 @@ import iv.alice;
 
 //version = aabbtree_many_asserts;
 version = aabbtree_query_count;
+version = vmath_slow_normalize;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -438,27 +439,42 @@ nothrow @safe:
 
   ref auto normalize () {
     //pragma(inline, true);
-    mixin(ImportCoreMath!(Float, "sqrt"));
-         static if (dims == 2) immutable Float invlen = cast(Float)1/sqrt(x*x+y*y);
-    else static if (dims == 3) immutable Float invlen = cast(Float)1/sqrt(x*x+y*y+z*z);
-    else static assert(0, "invalid dimension count for vector");
-    x *= invlen;
-    y *= invlen;
-    static if (dims == 3) z *= invlen;
+    mixin(ImportCoreMath!(double, "sqrt"));
+    version(vmath_slow_normalize) {
+           static if (dims == 2) immutable double len = sqrt(x*x+y*y);
+      else static if (dims == 3) immutable double len = sqrt(x*x+y*y+z*z);
+      else static assert(0, "invalid dimension count for vector");
+      x /= len;
+      y /= len;
+      static if (dims == 3) z /= len;
+    } else {
+           static if (dims == 2) immutable double invlen = 1.0/sqrt(x*x+y*y);
+      else static if (dims == 3) immutable double invlen = 1.0/sqrt(x*x+y*y+z*z);
+      else static assert(0, "invalid dimension count for vector");
+      x *= invlen;
+      y *= invlen;
+      static if (dims == 3) z *= invlen;
+    }
     return this;
   }
 
   Float normalizeRetLength () {
     //pragma(inline, true);
-    mixin(ImportCoreMath!(Float, "sqrt"));
-         static if (dims == 2) immutable Float len = sqrt(x*x+y*y);
-    else static if (dims == 3) immutable Float len = sqrt(x*x+y*y+z*z);
+    mixin(ImportCoreMath!(double, "sqrt"));
+         static if (dims == 2) immutable double len = sqrt(x*x+y*y);
+    else static if (dims == 3) immutable double len = sqrt(x*x+y*y+z*z);
     else static assert(0, "invalid dimension count for vector");
-    immutable Float invlen = cast(Float)1/len;
-    x *= invlen;
-    y *= invlen;
-    static if (dims == 3) z *= invlen;
-    return len;
+    version(vmath_slow_normalize) {
+      x /= len;
+      y /= len;
+      static if (dims == 3) z /= len;
+    } else {
+      immutable double invlen = 1.0/len;
+      x *= invlen;
+      y *= invlen;
+      static if (dims == 3) z *= invlen;
+    }
+    return cast(Float)len;
   }
 
   /+
@@ -502,10 +518,16 @@ nothrow @safe:
     //import std.math : abs;
     //pragma(inline, true);
     //a = (abs(a) >= EPSILON!Float ? 1.0/a : Float.nan);
-    a = cast(Float)1/a;
-    x *= a;
-    y *= a;
-    static if (dims == 3) z *= a;
+    version(all/*vmath_slow_normalize*/) {
+      x /= a;
+      y /= a;
+      static if (dims == 3) z /= a;
+    } else {
+      immutable double aa = 1.0/a;
+      x *= aa;
+      y *= aa;
+      static if (dims == 3) z *= aa;
+    }
     return this;
   }
 
@@ -559,10 +581,25 @@ const:
     else static assert(0, "invalid dimension count for vector");
   }
 
+  @property double dbllength () {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(double, "sqrt"));
+         static if (dims == 2) return sqrt(cast(double)x*cast(double)x+cast(double)y*cast(double)y);
+    else static if (dims == 3) return sqrt(cast(double)x*cast(double)x+cast(double)y*cast(double)y+cast(double)z*cast(double)z);
+    else static assert(0, "invalid dimension count for vector");
+  }
+
   @property Float lengthSquared () {
     pragma(inline, true);
          static if (dims == 2) return x*x+y*y;
     else static if (dims == 3) return x*x+y*y+z*z;
+    else static assert(0, "invalid dimension count for vector");
+  }
+
+  @property double dbllengthSquared () {
+    pragma(inline, true);
+         static if (dims == 2) return cast(double)x*cast(double)x+cast(double)y*cast(double)y;
+    else static if (dims == 3) return cast(double)x*cast(double)x+cast(double)y*cast(double)y+cast(double)z*cast(double)z;
     else static assert(0, "invalid dimension count for vector");
   }
 
@@ -593,6 +630,29 @@ const:
     } else static if (dims == 3) {
            static if (isVector2!VT) return (x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+z*z;
       else static if (isVector3!VT) return (x-a.x)*(x-a.x)+(y-a.y)*(y-a.y)+(z-a.z)*(z-a.z);
+      else static assert(0, "invalid dimension count for vector");
+    } else {
+      static assert(0, "invalid dimension count for vector");
+    }
+  }
+
+  // distance
+  double dbldistance(VT) (in auto ref VT a) if (isVector!VT) {
+    pragma(inline, true);
+    mixin(ImportCoreMath!(double, "sqrt"));
+    return sqrt(dbldistanceSquared(a));
+  }
+
+  // distance
+  double dbldistanceSquared(VT) (in auto ref VT a) if (isVector!VT) {
+    pragma(inline, true);
+    static if (dims == 2) {
+           static if (isVector2!VT) return cast(double)(x-a.x)*cast(double)(x-a.x)+cast(double)(y-a.y)*cast(double)(y-a.y);
+      else static if (isVector3!VT) return cast(double)(x-a.x)*cast(double)(x-a.x)+cast(double)(y-a.y)*cast(double)(y-a.y)+cast(double)a.z*cast(double)a.z;
+      else static assert(0, "invalid dimension count for vector");
+    } else static if (dims == 3) {
+           static if (isVector2!VT) return cast(double)(x-a.x)*cast(double)(x-a.x)+cast(double)(y-a.y)*cast(double)(y-a.y)+cast(double)z*cast(double)z;
+      else static if (isVector3!VT) return cast(double)(x-a.x)*cast(double)(x-a.x)+cast(double)(y-a.y)*cast(double)(y-a.y)+cast(double)(z-a.z)*cast(double)(z-a.z);
       else static assert(0, "invalid dimension count for vector");
     } else {
       static assert(0, "invalid dimension count for vector");
@@ -655,10 +715,16 @@ const:
     //import std.math : abs;
     //immutable Float a = (abs(aa) >= EPSILON!Float ? 1.0/aa : Float.nan);
     //immutable Float a = cast(Float)1/aa; // 1/0 == inf
-    a = cast(Float)1/a; // 1/0 == inf
-         static if (dims == 2) return v2(x*a, y*a);
-    else static if (dims == 3) return v3(x*a, y*a, z*a);
-    else static assert(0, "invalid dimension count for vector");
+    version(all/*vmath_slow_normalize*/) {
+           static if (dims == 2) return v2(x/a, y/a);
+      else static if (dims == 3) return v3(x/a, y/a, z/a);
+      else static assert(0, "invalid dimension count for vector");
+    } else {
+      a = cast(Float)1/a; // 1/0 == inf
+           static if (dims == 2) return v2(x*a, y*a);
+      else static if (dims == 3) return v3(x*a, y*a, z*a);
+      else static assert(0, "invalid dimension count for vector");
+    }
   }
 
   auto opBinaryRight(string op:"/") (Float aa) {
@@ -784,16 +850,16 @@ const:
     /*hpr.x = -atan2(tmp.x, tmp.y);
       hpr.y = -atan2(tmp.z, sqrt(tmp.x*tmp.x+tmp.y*tmp.y));*/
     static if (dims == 2) {
-      mixin(ImportCoreMath!(Float, "atan2"));
+      mixin(ImportCoreMath!(double, "atan2"));
       return v2(
-        atan2(cast(Float)tmp.x, cast(Float)0),
-        -atan2(cast(Float)tmp.y, cast(Float)tmp.x),
+        cast(Float)(atan2(cast(double)tmp.x, cast(Float)0)),
+        cast(Float)(-atan2(cast(double)tmp.y, cast(double)tmp.x)),
       );
     } else {
-      mixin(ImportCoreMath!(Float, "atan2", "sqrt"));
+      mixin(ImportCoreMath!(double, "atan2", "sqrt"));
       return v3(
-        atan2(cast(Float)tmp.x, cast(Float)tmp.z),
-        -atan2(cast(Float)tmp.y, cast(Float)sqrt(tmp.x*tmp.x+tmp.z*tmp.z)),
+        cast(Float)(atan2(cast(double)tmp.x, cast(double)tmp.z)),
+        cast(Float)(-atan2(cast(double)tmp.y, cast(double)sqrt(tmp.x*tmp.x+tmp.z*tmp.z))),
         0
       );
     }
@@ -801,13 +867,13 @@ const:
 
   // some more supplementary functions to support various things
   Float vcos(VT) (in auto ref VT v) if (isVector!VT) {
-    immutable Float len = length*v.length;
-    return (len > EPSILON!Float ? cast(Float)(dot(v)/len) : cast(Float)0);
+    immutable double len = length*v.length;
+    return cast(Float)(len > EPSILON!Float ? cast(Float)(dot(v)/len) : cast(Float)0);
   }
 
   static if (dims == 2) Float vsin(VT) (in auto ref VT v) if (isVector!VT) {
-    immutable Float len = length*v.length;
-    return (len > EPSILON!Float ? cast(Float)(cross(v)/len) : cast(Float)0);
+    immutable double len = length*v.length;
+    return cast(Float)(len > EPSILON!Float ? cast(Float)(cross(v)/len) : cast(Float)0);
   }
 
   static if (dims == 2) Float angle180(VT) (in auto ref VT v) if (isVector!VT) {
@@ -3079,15 +3145,46 @@ nothrow @safe:
     w = normal.x*aorigin.x+normal.y*aorigin.y+normal.z*aorigin.z;
   }
 
-  void setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @nogc {
+  void setFromPoints() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) @trusted {
     //normal = ((b-a)^(c-a)).normalized;
     immutable vec3 b0 = b-a;
     immutable vec3 c0 = c-a;
     normal = vec3(b0.y*c0.z-b0.z*c0.y, b0.z*c0.x-b0.x*c0.z, b0.x*c0.y-b0.y*c0.x);
-    normal.normalize;
-    //x*a.x+y*a.y+z*a.z
-    //w = normal*a; // n.dot(a)
-    w = normal.x*a.x+normal.y*a.y+normal.z*a.z;
+    version(none) {
+      normal.normalize;
+      //x*a.x+y*a.y+z*a.z
+      //w = normal*a; // n.dot(a)
+      w = normal.x*a.x+normal.y*a.y+normal.z*a.z;
+      //immutable ow = w;
+      //normalize; // just in case, to tolerate some floating point errors
+      //assert(ow == w);
+    } else {
+      immutable double len = normal.dbllength;
+      //{ import core.stdc.stdio; printf("**len=%g\n", len); }
+      if (len <= EPSILON!Float) {
+        // oops
+        //{ import core.stdc.stdio; printf("  OOPS: n=(%g,%g,%g)\n", cast(double)normal.x, cast(double)normal.y, cast(double)normal.z); }
+        normal = vec3.Invalid;
+        w = vec3.Float.nan;
+        return;
+      }
+      version(vmath_slow_normalize) {
+        normal.x /= len;
+        normal.y /= len;
+        normal.z /= len;
+      } else {
+        immutable double dd = 1.0/len;
+        normal.x *= dd;
+        normal.y *= dd;
+        normal.z *= dd;
+      }
+      w = normal.x*a.x+normal.y*a.y+normal.z*a.z;
+      /*
+      immutable ow = w;
+      normalize; // just in case, to tolerate some floating point errors
+      assert(ow == w);
+      */
+    }
     assert(valid);
     //return this;
   }
@@ -3105,16 +3202,43 @@ nothrow @safe:
   }
 
   ref plane3 normalize () {
-    Float dd = normal.length;
-    if (dd >= EPSILON!Float) {
-      dd = cast(Float)1/dd;
-      normal.x *= dd;
-      normal.y *= dd;
-      normal.z *= dd;
-      w *= dd;
-    } else {
+    if (!normal.isFinite) {
       normal = vec3.Invalid;
       w = vec3.Float.nan;
+      return this;
+    }
+    version(none) {
+      mixin(ImportCoreMath!(Float, "fabs"));
+      double dd = normal.dbllength;
+      if (fabs(1.0-dd) > EPSILON!Float) {
+        version(vmath_slow_normalize) {
+          normal.x /= dd;
+          normal.y /= dd;
+          normal.z /= dd;
+          w /= dd;
+        } else {
+          dd = cast(Float)1/dd;
+          normal.x *= dd;
+          normal.y *= dd;
+          normal.z *= dd;
+          w *= dd;
+        }
+      }
+    } else {
+      mixin(ImportCoreMath!(double, "sqrt"));
+      double dd = sqrt(cast(double)normal.x*cast(double)normal.x+cast(double)normal.y*cast(double)normal.y+cast(double)normal.z*cast(double)normal.z);
+      version(vmath_slow_normalize) {
+        normal.x /= dd;
+        normal.y /= dd;
+        normal.z /= dd;
+        w /= dd;
+      } else {
+        dd = 1.0/dd;
+        normal.x *= dd;
+        normal.y *= dd;
+        normal.z *= dd;
+        w *= dd;
+      }
     }
     return this;
   }
@@ -3135,14 +3259,20 @@ nothrow @safe:
   PType pointSide() (in auto ref vec3 p) const {
     pragma(inline, true);
     //immutable Float t = (normal*p)-w; // dot
-    immutable double t = normal.x*p.x+normal.y*p.y+normal.z*p.z-w;
+    immutable double t = cast(double)normal.x*cast(double)p.x+cast(double)normal.y*cast(double)p.y+cast(double)normal.z*cast(double)p.z-cast(double)w;
     return (t < -EPS ? Back : (t > EPS ? Front : Coplanar));
+  }
+
+  double pointSideD() (in auto ref vec3 p) const {
+    pragma(inline, true);
+    //return (normal*p)-w; // dot
+    return cast(double)normal.x*cast(double)p.x+cast(double)normal.y*cast(double)p.y+cast(double)normal.z*cast(double)p.z-cast(double)w;
   }
 
   Float pointSideF() (in auto ref vec3 p) const {
     pragma(inline, true);
     //return (normal*p)-w; // dot
-    return cast(Float)normal.x*p.x+normal.y*p.y+normal.z*p.z-w;
+    return cast(Float)(cast(double)normal.x*cast(double)p.x+cast(double)normal.y*cast(double)p.y+cast(double)normal.z*cast(double)p.z-cast(double)w);
   }
 
   // swizzling
