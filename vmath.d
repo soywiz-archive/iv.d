@@ -1722,9 +1722,23 @@ static:
       return M;
     }
 
-    static auto RotateX() (Float angle) { m3 res; res.rotateX(angle); return res; }
-    static auto RotateY() (Float angle) { m3 res; res.rotateY(angle); return res; }
-    static auto RotateZ() (Float angle) { m3 res; res.rotateZ(angle); return res; }
+    static auto RotateX() (Float angle) {
+      m3 res;
+      res.rotateX(angle);
+      return res;
+    }
+
+    static auto RotateY() (Float angle) {
+      m3 res;
+      res.rotateY(angle);
+      return res;
+    }
+
+    static auto RotateZ() (Float angle) {
+      m3 res;
+      res.rotateZ(angle);
+      return res;
+    }
   }
 }
 
@@ -1763,7 +1777,8 @@ nothrow @safe:
     }
   }
 
-  @property Float opIndex (usize x, usize y) @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : Float.nan); }
+  Float opIndex (usize x, usize y) const @trusted @nogc { pragma(inline, true); return (x < 4 && y < 4 ? mt.ptr[y*4+x] : Float.nan); }
+  void opIndexAssign (Float v, usize x, usize y) @trusted @nogc { pragma(inline, true); if (x < 4 && y < 4) mt.ptr[y*4+x] = v; }
 
 @nogc @trusted:
   this() (in Float[] vals...) { pragma(inline, true); if (vals.length >= 16) mt.ptr[0..16] = vals.ptr[0..16]; else { mt.ptr[0..16] = 0; mt.ptr[0..vals.length] = vals.ptr[0..vals.length]; } }
@@ -1779,6 +1794,50 @@ nothrow @safe:
   static mat4 Zero () { pragma(inline, true); return mat4(0); }
   static mat4 Identity () { pragma(inline, true); /*mat4 res = Zero; res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = res.mt.ptr[3*4+3] = 1; return res;*/ return mat4(); }
 
+  // multiply current OpenGL matrix with this one
+  // templated, to not compile it if we won't use it
+  void glMultiply() () const {
+    pragma(inline, true);
+    import iv.glbinds;
+    static if (is(Float == float)) {
+      glMultMatrixf(mt.ptr);
+    } else {
+      glMultMatrixd(mt.ptr);
+    }
+  }
+
+  static mat4 GLRetrieveAny() (uint mode) nothrow @trusted @nogc {
+    pragma(inline, true);
+    import iv.glbinds;
+    mat4 res = void;
+    static if (is(Float == float)) {
+      glGetFloatv(mode, res.mt.ptr);
+    } else {
+      glGetDoublev(mode, res.mt.ptr);
+    }
+    return res;
+  }
+
+  static mat4 GLRetrieveModelView() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; return GLRetrieveAny(GL_MODELVIEW_MATRIX); }
+  static mat4 GLRetrieveProjection() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; return GLRetrieveAny(GL_PROJECTION_MATRIX); }
+  static mat4 GLRetrieveTexture() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; return GLRetrieveAny(GL_TEXTURE_MATRIX); }
+  static mat4 GLRetrieveColor() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; return GLRetrieveAny(GL_COLOR_MATRIX); }
+
+  void glRetrieveAny() (uint mode) nothrow @trusted @nogc {
+    pragma(inline, true);
+    import iv.glbinds;
+    static if (is(Float == float)) {
+      glGetFloatv(mode, mt.ptr);
+    } else {
+      glGetDoublev(mode, mt.ptr);
+    }
+  }
+
+  void glRetrieveModelView() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; glRetrieveAny(GL_MODELVIEW_MATRIX); }
+  void glRetrieveProjection() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; glRetrieveAny(GL_PROJECTION_MATRIX); }
+  void glRetrieveTexture() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; glRetrieveAny(GL_TEXTURE_MATRIX); }
+  void glRetrieveColor() () nothrow @trusted @nogc { pragma(inline, true); import iv.glbinds; glRetrieveAny(GL_COLOR_MATRIX); }
+
   @property bool isIdentity () const {
     pragma(inline, true); // can we?
     return
@@ -1787,6 +1846,8 @@ nothrow @safe:
       mt.ptr[8] == 0 && mt.ptr[9] == 0 && mt.ptr[10] == 1 && mt.ptr[11] == 0 &&
       mt.ptr[12] == 0 && mt.ptr[13] == 0 && mt.ptr[14] == 0 && mt.ptr[15] == 1;
   }
+
+  @property inout(Float)* glGetVUnsafe () inout nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))mt.ptr; }
 
   Float[4] getRow (int idx) const {
     Float[4] res = Float.nan;
@@ -1825,6 +1886,11 @@ nothrow @safe:
     if (idx >= 0 && idx <= 3) res = mt.ptr[idx*4..idx*5];
     return res;
   }
+
+  // this is for camera matrices
+  vec3 upVector () const { pragma(inline, true); return vec3(mt.ptr[1], mt.ptr[5], mt.ptr[9]); }
+  vec3 rightVector () const { pragma(inline, true); return vec3(mt.ptr[0], mt.ptr[4], mt.ptr[8]); }
+  vec3 forwardVector () const { pragma(inline, true); return vec3(mt.ptr[2], mt.ptr[6], mt.ptr[10]); }
 
   private enum SinCosImportMixin = q{
     static if (is(Float == float)) {
@@ -1880,6 +1946,16 @@ nothrow @safe:
     return res;
   }
 
+  static mat4 TranslateNeg() (in auto ref vec3 v) {
+    auto res = mat4(0);
+    res.mt.ptr[0*4+0] = res.mt.ptr[1*4+1] = res.mt.ptr[2*4+2] = 1;
+    res.mt.ptr[3*4+0] = -v.x;
+    res.mt.ptr[3*4+1] = -v.y;
+    res.mt.ptr[3*4+2] = -v.z;
+    res.mt.ptr[3*4+3] = 1;
+    return res;
+  }
+
   static mat4 Scale() (in auto ref vec3 v) {
     auto res = mat4(0);
     res.mt.ptr[0*4+0] = v.x;
@@ -1894,6 +1970,29 @@ nothrow @safe:
     auto my = mat4.RotateY(v.y);
     auto mz = mat4.RotateZ(v.z);
     return mz*my*mx;
+  }
+
+  static mat4 RotateDeg() (in auto ref vec3 v) {
+    auto mx = mat4.RotateX(v.x.deg2rad);
+    auto my = mat4.RotateY(v.y.deg2rad);
+    auto mz = mat4.RotateZ(v.z.deg2rad);
+    return mz*my*mx;
+  }
+
+  // for camera; x is pitch (up/down); y is yaw (left/right); z is roll (tilt)
+  static mat4 RotateZXY() (in auto ref vec3 v) {
+    auto mx = mat4.RotateX(v.x);
+    auto my = mat4.RotateY(v.y);
+    auto mz = mat4.RotateZ(v.z);
+    return mz*mx*my;
+  }
+
+  // for camera; x is pitch (up/down); y is yaw (left/right); z is roll (tilt)
+  static mat4 RotateZXYDeg() (in auto ref vec3 v) {
+    auto mx = mat4.RotateX(v.x.deg2rad);
+    auto my = mat4.RotateY(v.y.deg2rad);
+    auto mz = mat4.RotateZ(v.z.deg2rad);
+    return mz*mx*my;
   }
 
   // same as `glFrustum()`
@@ -2205,6 +2304,7 @@ public:
     return this;
   }
 
+  //k8: wtf is this?!
   ref mat4 translate() (in auto ref vec3 v) {
     mt.ptr[0] += mt.ptr[3]*v.x; mt.ptr[4] += mt.ptr[7]*v.x; mt.ptr[8] += mt.ptr[11]*v.x; mt.ptr[12] += mt.ptr[15]*v.x;
     mt.ptr[1] += mt.ptr[3]*v.y; mt.ptr[5] += mt.ptr[7]*v.y; mt.ptr[9] += mt.ptr[11]*v.y; mt.ptr[13] += mt.ptr[15]*v.y;
@@ -2212,6 +2312,30 @@ public:
     return this;
   }
 
+  ref mat4 translateNeg() (in auto ref vec3 v) {
+    mt.ptr[0] -= mt.ptr[3]*v.x; mt.ptr[4] -= mt.ptr[7]*v.x; mt.ptr[8] -= mt.ptr[11]*v.x; mt.ptr[12] -= mt.ptr[15]*v.x;
+    mt.ptr[1] -= mt.ptr[3]*v.y; mt.ptr[5] -= mt.ptr[7]*v.y; mt.ptr[9] -= mt.ptr[11]*v.y; mt.ptr[13] -= mt.ptr[15]*v.y;
+    mt.ptr[2] -= mt.ptr[3]*v.z; mt.ptr[6] -= mt.ptr[7]*v.z; mt.ptr[10] -= mt.ptr[11]*v.z; mt.ptr[14] -= mt.ptr[15]*v.z;
+    return this;
+  }
+
+  /*
+  ref mat4 translate() (in auto ref vec3 v) {
+    mt.ptr[12] += v.x;
+    mt.ptr[13] += v.y;
+    mt.ptr[14] += v.z;
+    return this;
+  }
+
+  ref mat4 translateNeg() (in auto ref vec3 v) {
+    mt.ptr[12] -= v.x;
+    mt.ptr[13] -= v.y;
+    mt.ptr[14] -= v.z;
+    return this;
+  }
+  */
+
+  //k8: wtf is this?!
   ref mat4 scale() (in auto ref vec3 v) {
     mt.ptr[0] *= v.x; mt.ptr[4] *= v.x; mt.ptr[8] *= v.x; mt.ptr[12] *= v.x;
     mt.ptr[1] *= v.y; mt.ptr[5] *= v.y; mt.ptr[9] *= v.y; mt.ptr[13] *= v.y;
@@ -2224,6 +2348,7 @@ public:
   mat4 rotatedY() (Float angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateY(angle); }
   mat4 rotatedZ() (Float angle) const { pragma(inline, true); auto res = mat4(this); return res.rotateZ(angle); }
   mat4 translated() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.translate(v); }
+  mat4 translatedNeg() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.translateNeg(v); }
   mat4 scaled() (in auto ref vec3 v) const { pragma(inline, true); auto res = mat4(this); return res.scale(v); }
 
   // retrieve angles in degree from rotation matrix, M = Rx*Ry*Rz, in degrees
