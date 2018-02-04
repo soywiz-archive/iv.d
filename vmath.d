@@ -3133,6 +3133,8 @@ nothrow @safe:
   this() (in auto ref vec3 anormal, Float aw) { pragma(inline, true); set(anormal, aw); }
   this() (in auto ref vec3 a, in auto ref vec3 b, in auto ref vec3 c) { pragma(inline, true); setFromPoints(a, b, c); }
 
+  @property Float offset () const pure { pragma(inline, true); return -w; }
+
   void set () (in auto ref vec3 anormal, Float aw) {
     pragma(inline, true);
     normal = anormal;
