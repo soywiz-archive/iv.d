@@ -3402,6 +3402,56 @@ nothrow @safe:
     return cast(Float)(cast(double)normal.x*cast(double)p.x+cast(double)normal.y*cast(double)p.y+cast(double)normal.z*cast(double)p.z-cast(double)w);
   }
 
+  // distance from point to plane
+  // plane must be normalized
+  double dbldistance() (in auto ref vec3 p) const {
+    pragma(inline, true);
+    return (cast(double)normal.x*p.x+cast(double)normal.y*p.y+cast(double)normal.z*cast(double)p.z)/normal.dbllength;
+  }
+
+  // distance from point to plane
+  // plane must be normalized
+  Float distance() (in auto ref vec3 p) const {
+    pragma(inline, true);
+    return cast(Float)dbldistance;
+  }
+
+  // "land" point onto the plane
+  // plane must be normalized
+  vec3 landAlongNormal() (in auto ref vec3 p) const {
+    mixin(ImportCoreMath!(Float, "fabs"));
+    double pdist = pointSideF(p);
+    if (fabs(pdist) > EPSILON!Float) {
+      return p-normal*pdist;
+    } else {
+      return p;
+    }
+  }
+
+  // "land" point onto the plane
+  // plane must be normalized
+  /*
+  vec3 land() (in auto ref vec3 p) const {
+    mixin(ImportCoreMath!(double, "fabs"));
+    // distance from point to plane
+    double pdist = (cast(double)normal.x*p.x+cast(double)normal.y*p.y+cast(double)normal.z*cast(double)p.z)/normal.dbllength;
+    // just-in-case check
+    if (fabs(pdist) > EPSILON!double) {
+      // get side
+      return p+normal*pdist;
+    } else {
+      // on the plane
+      return p;
+    }
+  }
+  */
+
+  // plane must be normalized
+  vec3 project() (in auto ref vec3 v) const {
+    mixin(ImportCoreMath!(double, "fabs"));
+    return v-(v-normal*w).dot(normal)*normal;
+  }
+
   // swizzling
   static if (enableSwizzling) auto opDispatch(string fld) () if (isGoodSwizzling!(fld, "xyzw", 2, 3)) {
     static if (fld.length == 2) {
