@@ -35,17 +35,38 @@ void playbuf () {
 
 
 void main (string[] args) {
-  player = new OPLPlayer(48000, true);
+  bool useOPL3 = true;
+  string filename = null;
+  bool nomore = false;
+  foreach (string a; args[1..$]) {
+    if (nomore) {
+      if (filename !is null) assert(0, "too many file names");
+      filename = a;
+      continue;
+    }
+    if (a == "--") { nomore = true; continue; }
+    if (a.length == 0) continue;
+         if (a == "-opl2" || a == "--opl2") useOPL3 = false;
+    else if (a == "-opl3" || a == "--opl3") useOPL3 = true;
+    else if (a[0] == '-') assert(0, "invalid option: '"~a~"'");
+    else {
+      if (filename !is null) assert(0, "too many file names");
+      filename = a;
+      continue;
+    }
+  }
+  player = new OPLPlayer(48000, useOPL3);
   version(genmidi_dumper) {
     player.dumpGenMidi(stdout);
   } else {
-    if (args.length < 2) assert(0, "file?");
-    auto fl = VFile(args[1]);
+    if (filename.length == 0) assert(0, "file?");
+    auto fl = VFile(filename);
     uint flen = cast(uint)fl.size;
     assert(flen > 0);
     alsaOpen(2);
     scope(exit) alsaClose();
 
+    conwriteln("OPL", (useOPL3 ? "3" : "2"), ": playing '", filename, "'...");
     ubyte[] fdata = new ubyte[](flen);
     fl.rawReadExact(fdata);
     if (!player.load(fdata)) assert(0, "cannot load song");
