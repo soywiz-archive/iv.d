@@ -1133,6 +1133,45 @@ const:
       pragma(inline, true);
       return (b.x-a.x)*(c.y-a.y)-(c.x-a.x)*(b.y-a.y);
     }
+  } // dims2
+
+  static if (dims == 3) {
+    // project this point to the given line
+    Me projectToLine() (in auto ref Me p0, in auto ref Me p1) const {
+      immutable Me d = p1-p0;
+      immutable Me.Float t = d.dot(this-p0)/d.dot(d);
+      if (tout !is null) *tout = t;
+      return p0+d*t;
+    }
+
+    // return "time" of projection
+    Me.Float projectToLineTime() (in auto ref Me p0, in auto ref Me p1) const {
+      immutable Me d = p1-p0;
+      return d.dot(this-p0)/d.dot(d);
+    }
+
+    // calculate triangle normal
+    static Me triangleNormal() (in auto ref Me v0, in auto ref Me v1, in auto ref Me v2) {
+      mixin(ImportCoreMath!(Me.Float, "fabs"));
+      immutable Me cp = (v1-v0).cross(v2-v1);
+      immutable Me.Float m = cp.length;
+      return (fabs(m) > Epsilon ? cp*(cast(Me.Float)1/m) : Me.init);
+    }
+
+    // polygon must be convex, ccw, and without collinear vertices
+    //FIXME: UNTESTED
+    bool insideConvexPoly (const(Me)[] ply...) const @trusted {
+      if (ply.length < 3) return false;
+      immutable normal = triangleNormal(ply.ptr[0], ply.ptr[1], ply.ptr[2]);
+      auto pidx = ply.length-1;
+      for (typeof(pidx) cidx = 0; cidx < ply.length; pidx = cidx, ++cidx) {
+        immutable pp1 = ply.ptr[pidx];
+        immutable pp2 = ply.ptr[cidx];
+        immutable side = (pp2-pp1).cross(this-pp1);
+        if (normal.dot(side) < 0) return false;
+      }
+      return true;
+    }
   }
 
 static:
@@ -3419,13 +3458,10 @@ nothrow @safe:
   // "land" point onto the plane
   // plane must be normalized
   vec3 landAlongNormal() (in auto ref vec3 p) const {
+    pragma(inline, true);
     mixin(ImportCoreMath!(Float, "fabs"));
-    double pdist = pointSideF(p);
-    if (fabs(pdist) > EPSILON!Float) {
-      return p-normal*pdist;
-    } else {
-      return p;
-    }
+    immutable double pdist = pointSideF(p);
+    return (fabs(pdist) > EPSILON!Float ? p-normal*pdist : p);
   }
 
   // "land" point onto the plane
@@ -3448,8 +3484,17 @@ nothrow @safe:
 
   // plane must be normalized
   vec3 project() (in auto ref vec3 v) const {
+    pragma(inline, true);
     mixin(ImportCoreMath!(double, "fabs"));
     return v-(v-normal*w).dot(normal)*normal;
+  }
+
+  // returns the point where the line p0-p1 intersects this plane
+  vec3 lineIntersect() (in auto ref vec3 p0, in auto ref vec3 p1) const {
+    pragma(inline, true);
+    immutable dif = p1-p0;
+    immutable t = (w-normal.dot(p0))/normal.dot(dif);
+    return p0+(dif*t);
   }
 
   // swizzling
