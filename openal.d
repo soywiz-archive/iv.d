@@ -977,8 +977,9 @@ enum AL_DEDICATED_GAIN = 0x0001;
 enum AL_EFFECT_DEDICATED_DIALOGUE = 0x9001;
 enum AL_EFFECT_DEDICATED_LOW_FREQUENCY_EFFECT = 0x9000;
 
-enum AL_SOFT_buffer_samples = true;
+enum AL_SOFT_buffer_samples = false; //removed in OpenAL-soft
 /* Channel configurations */
+/*removed in OpenAL-soft:
 enum AL_MONO_SOFT = 0x1500;
 enum AL_STEREO_SOFT = 0x1501;
 enum AL_REAR_SOFT = 0x1502;
@@ -986,8 +987,10 @@ enum AL_QUAD_SOFT = 0x1503;
 enum AL_5POINT1_SOFT = 0x1504;
 enum AL_6POINT1_SOFT = 0x1505;
 enum AL_7POINT1_SOFT = 0x1506;
+*/
 
 /* Sample types */
+/*removed in OpenAL-soft:
 enum AL_BYTE_SOFT = 0x1400;
 enum AL_UNSIGNED_BYTE_SOFT = 0x1401;
 enum AL_SHORT_SOFT = 0x1402;
@@ -998,8 +1001,10 @@ enum AL_FLOAT_SOFT = 0x1406;
 enum AL_DOUBLE_SOFT = 0x1407;
 enum AL_BYTE3_SOFT = 0x1408;
 enum AL_UNSIGNED_BYTE3_SOFT = 0x1409;
+*/
 
 /* Storage formats */
+/*removed in OpenAL-soft:
 enum AL_MONO8_SOFT = 0x1100;
 enum AL_MONO16_SOFT = 0x1101;
 enum AL_MONO32F_SOFT = 0x10010;
@@ -1021,6 +1026,7 @@ enum AL_6POINT1_32F_SOFT = 0x120F;
 enum AL_7POINT1_8_SOFT = 0x1210;
 enum AL_7POINT1_16_SOFT = 0x1211;
 enum AL_7POINT1_32F_SOFT = 0x1212;
+*/
 
 /* Buffer attributes */
 enum AL_INTERNAL_FORMAT_SOFT = 0x2008;
@@ -1032,10 +1038,10 @@ enum AL_SEC_LENGTH_SOFT = 0x200B;
 //typedef void (/*AL_APIENTRY*/*LPALBUFFERSUBSAMPLESSOFT)(ALuint,ALsizei,ALsizei,ALenum,ALenum,const(ALvoid)* );
 //typedef void (/*AL_APIENTRY*/*LPALGETBUFFERSAMPLESSOFT)(ALuint,ALsizei,ALsizei,ALenum,ALenum,ALvoid*);
 //typedef ALboolean (/*AL_APIENTRY*/*LPALISBUFFERFORMATSUPPORTEDSOFT)(ALenum);
-/*AL_API*/ void /*AL_APIENTRY*/ alBufferSamplesSOFT(ALuint buffer, ALuint samplerate, ALenum internalformat, ALsizei samples, ALenum channels, ALenum type, const(ALvoid)* data);
-/*AL_API*/ void /*AL_APIENTRY*/ alBufferSubSamplesSOFT(ALuint buffer, ALsizei offset, ALsizei samples, ALenum channels, ALenum type, const(ALvoid)* data);
-/*AL_API*/ void /*AL_APIENTRY*/ alGetBufferSamplesSOFT(ALuint buffer, ALsizei offset, ALsizei samples, ALenum channels, ALenum type, ALvoid* data);
-/*AL_API*/ ALboolean /*AL_APIENTRY*/ alIsBufferFormatSupportedSOFT(ALenum format);
+//removed in OpenAL-soft: /*AL_API*/ void /*AL_APIENTRY*/ alBufferSamplesSOFT(ALuint buffer, ALuint samplerate, ALenum internalformat, ALsizei samples, ALenum channels, ALenum type, const(ALvoid)* data);
+//removed in OpenAL-soft: /*AL_API*/ void /*AL_APIENTRY*/ alBufferSubSamplesSOFT(ALuint buffer, ALsizei offset, ALsizei samples, ALenum channels, ALenum type, const(ALvoid)* data);
+//removed in OpenAL-soft: /*AL_API*/ void /*AL_APIENTRY*/ alGetBufferSamplesSOFT(ALuint buffer, ALsizei offset, ALsizei samples, ALenum channels, ALenum type, ALvoid* data);
+//removed in OpenAL-soft: /*AL_API*/ ALboolean /*AL_APIENTRY*/ alIsBufferFormatSupportedSOFT(ALenum format);
 
 enum AL_SOFT_direct_channels = true;
 enum AL_DIRECT_CHANNELS_SOFT = 0x1033;
