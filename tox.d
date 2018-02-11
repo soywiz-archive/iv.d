@@ -657,7 +657,7 @@ enum : int {
  *
  * @return A new Tox_Options object with default options or NULL on failure.
  */
-Tox_Options* tox_options_new(TOX_ERR_OPTIONS_NEW *error) @nogc;
+Tox_Options* tox_options_new(TOX_ERR_OPTIONS_NEW* error=null) @nogc;
 
 /**
  * Releases all resources associated with an options objects.
@@ -753,7 +753,7 @@ enum : int {
  *
  * @return A new Tox instance pointer on success or NULL on failure.
  */
-Tox* tox_new(const(Tox_Options)* options, TOX_ERR_NEW *error) @nogc;
+Tox* tox_new(const(Tox_Options)* options, TOX_ERR_NEW* error=null) @nogc;
 
 /**
  * Releases all resources associated with the Tox instance and disconnects from
@@ -828,7 +828,7 @@ enum : int {
  *   (TOX_PUBLIC_KEY_SIZE bytes).
  * @return true on success.
  */
-bool tox_bootstrap(Tox* tox, const(char)* address, ushort port, const(void)* public_key, TOX_ERR_BOOTSTRAP *error) @nogc;
+bool tox_bootstrap(Tox* tox, const(char)* address, ushort port, const(void)* public_key, TOX_ERR_BOOTSTRAP* error=null) @nogc;
 
 /**
  * Adds additional host:port pair as TCP relay.
@@ -843,7 +843,7 @@ bool tox_bootstrap(Tox* tox, const(char)* address, ushort port, const(void)* pub
  *   (TOX_PUBLIC_KEY_SIZE bytes).
  * @return true on success.
  */
-bool tox_add_tcp_relay(Tox* tox, const(char)* address, ushort port, const(void)* public_key, TOX_ERR_BOOTSTRAP *error) @nogc;
+bool tox_add_tcp_relay(Tox* tox, const(char)* address, ushort port, const(void)* public_key, TOX_ERR_BOOTSTRAP* error=null) @nogc;
 
 
 /**
@@ -1003,7 +1003,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_self_set_name(Tox* tox, const(void)* name, usize length, TOX_ERR_SET_INFO *error) @nogc;
+bool tox_self_set_name(Tox* tox, const(void)* name, usize length, TOX_ERR_SET_INFO* error=null) @nogc;
 
 /**
  * Return the length of the current nickname as passed to tox_self_set_name.
@@ -1036,7 +1036,7 @@ void tox_self_get_name(const(Tox)* tox, void* name) @nogc;
  * length is 0, the status parameter is ignored (it can be NULL), and the
  * user status is set back to empty.
  */
-bool tox_self_set_status_message(Tox* tox, const(void)* status_message, usize length, TOX_ERR_SET_INFO *error) @nogc;
+bool tox_self_set_status_message(Tox* tox, const(void)* status_message, usize length, TOX_ERR_SET_INFO* error=null) @nogc;
 
 /**
  * Return the length of the current status message as passed to tox_self_set_status_message.
@@ -1157,7 +1157,7 @@ enum : int {
  *
  * @return the friend number on success, UINT32_MAX on failure.
  */
-uint tox_friend_add(Tox* tox, const(void)* address, const(void)* message, usize length, TOX_ERR_FRIEND_ADD *error) @nogc;
+uint tox_friend_add(Tox* tox, const(void)* address, const(void)* message, usize length, TOX_ERR_FRIEND_ADD* error=null) @nogc;
 
 /**
  * Add a friend without sending a friend request.
@@ -1177,7 +1177,7 @@ uint tox_friend_add(Tox* tox, const(void)* address, const(void)* message, usize 
  * @return the friend number on success, UINT32_MAX on failure.
  * @see tox_friend_add for a more detailed description of friend numbers.
  */
-uint tox_friend_add_norequest(Tox* tox, const(void)* public_key, TOX_ERR_FRIEND_ADD *error) @nogc;
+uint tox_friend_add_norequest(Tox* tox, const(void)* public_key, TOX_ERR_FRIEND_ADD* error=null) @nogc;
 
 
 alias TOX_ERR_FRIEND_DELETE = int;
@@ -1205,7 +1205,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_friend_delete(Tox* tox, uint friend_number, TOX_ERR_FRIEND_DELETE *error) @nogc;
+bool tox_friend_delete(Tox* tox, uint friend_number, TOX_ERR_FRIEND_DELETE* error=null) @nogc;
 
 
 /*******************************************************************************
@@ -1240,7 +1240,7 @@ enum : int {
  * @return the friend number on success, UINT32_MAX on failure.
  * @param public_key A byte array containing the Public Key.
  */
-uint tox_friend_by_public_key(const(Tox)* tox, const(void)* public_key, TOX_ERR_FRIEND_BY_PUBLIC_KEY *error) @nogc;
+uint tox_friend_by_public_key(const(Tox)* tox, const(void)* public_key, TOX_ERR_FRIEND_BY_PUBLIC_KEY* error=null) @nogc;
 
 /**
  * Checks if a friend with the given friend number exists and returns true if
@@ -1290,7 +1290,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_friend_get_public_key(const(Tox)* tox, uint friend_number, void* public_key, TOX_ERR_FRIEND_GET_PUBLIC_KEY *error) @nogc;
+bool tox_friend_get_public_key(const(Tox)* tox, uint friend_number, void* public_key, TOX_ERR_FRIEND_GET_PUBLIC_KEY* error=null) @nogc;
 
 
 alias TOX_ERR_FRIEND_GET_LAST_ONLINE = int;
@@ -1313,7 +1313,7 @@ enum : int {
  *
  * @param friend_number The friend number you want to query.
  */
-ulong tox_friend_get_last_online(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_GET_LAST_ONLINE *error) @nogc;
+ulong tox_friend_get_last_online(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_GET_LAST_ONLINE* error=null) @nogc;
 
 
 /*******************************************************************************
@@ -1354,7 +1354,7 @@ enum : int {
  * The return value is equal to the `length` argument received by the last
  * `friend_name` callback.
  */
-usize tox_friend_get_name_size(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error) @nogc;
+usize tox_friend_get_name_size(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * Write the name of the friend designated by the given friend number to a byte
@@ -1370,7 +1370,7 @@ usize tox_friend_get_name_size(const(Tox)* tox, uint friend_number, TOX_ERR_FRIE
  *
  * @return true on success.
  */
-bool tox_friend_get_name(const(Tox)* tox, uint friend_number, void* name, TOX_ERR_FRIEND_QUERY *error) @nogc;
+bool tox_friend_get_name(const(Tox)* tox, uint friend_number, void* name, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend whose name changed.
@@ -1393,7 +1393,7 @@ void tox_callback_friend_name(Tox* tox, tox_friend_name_cb callback) @nogc;
  * Return the length of the friend's status message. If the friend number is
  * invalid, the return value is SIZE_MAX.
  */
-usize tox_friend_get_status_message_size(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error) @nogc;
+usize tox_friend_get_status_message_size(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * Write the status message of the friend designated by the given friend number to a byte
@@ -1407,7 +1407,7 @@ usize tox_friend_get_status_message_size(const(Tox)* tox, uint friend_number, TO
  *
  * @param status_message A valid memory region large enough to store the friend's status message.
  */
-bool tox_friend_get_status_message(const(Tox)* tox, uint friend_number, void* status_message, TOX_ERR_FRIEND_QUERY *error) @nogc;
+bool tox_friend_get_status_message(const(Tox)* tox, uint friend_number, void* status_message, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend whose status message
@@ -1434,7 +1434,7 @@ void tox_callback_friend_status_message(Tox* tox, tox_friend_status_message_cb c
  * The status returned is equal to the last status received through the
  * `friend_status` callback.
  */
-TOX_USER_STATUS tox_friend_get_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error) @nogc;
+TOX_USER_STATUS tox_friend_get_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend whose user status
@@ -1463,7 +1463,7 @@ void tox_callback_friend_status(Tox* tox, tox_friend_status_cb callback) @nogc;
  * @return the friend's connection status as it was received through the
  *   `friend_connection_status` event.
  */
-TOX_CONNECTION tox_friend_get_connection_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error) @nogc;
+TOX_CONNECTION tox_friend_get_connection_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend whose connection status
@@ -1494,7 +1494,7 @@ void tox_callback_friend_connection_status(Tox* tox, tox_friend_connection_statu
  * @return false if the friend is not typing, or the friend number was
  *   invalid. Inspect the error code to determine which case it is.
  */
-bool tox_friend_get_typing(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY *error) @nogc;
+bool tox_friend_get_typing(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend who started or stopped
@@ -1544,7 +1544,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_self_set_typing(Tox* tox, uint friend_number, bool typing, TOX_ERR_SET_TYPING *error) @nogc;
+bool tox_self_set_typing(Tox* tox, uint friend_number, bool typing, TOX_ERR_SET_TYPING* error=null) @nogc;
 
 
 alias TOX_ERR_FRIEND_SEND_MESSAGE = int;
@@ -1609,7 +1609,7 @@ enum : int {
  *   containing the message text.
  * @param length Length of the message to be sent.
  */
-uint tox_friend_send_message(Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(void)* message, usize length, TOX_ERR_FRIEND_SEND_MESSAGE *error) @nogc;
+uint tox_friend_send_message(Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(void)* message, usize length, TOX_ERR_FRIEND_SEND_MESSAGE* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend who received the message.
@@ -1808,7 +1808,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_file_control(Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control, TOX_ERR_FILE_CONTROL *error) @nogc;
+bool tox_file_control(Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control, TOX_ERR_FILE_CONTROL* error=null) @nogc;
 
 /**
  * When receiving TOX_FILE_CONTROL_CANCEL, the client should release the
@@ -1881,7 +1881,7 @@ enum : int {
  * @param file_number The friend-specific identifier for the file transfer.
  * @param position The position that the file should be seeked to.
  */
-bool tox_file_seek(Tox* tox, uint friend_number, uint file_number, ulong position, TOX_ERR_FILE_SEEK *error) @nogc;
+bool tox_file_seek(Tox* tox, uint friend_number, uint file_number, ulong position, TOX_ERR_FILE_SEEK* error=null) @nogc;
 
 
 alias TOX_ERR_FILE_GET = int;
@@ -1919,7 +1919,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_file_get_file_id(const(Tox)* tox, uint friend_number, uint file_number, void* file_id, TOX_ERR_FILE_GET *error) @nogc;
+bool tox_file_get_file_id(const(Tox)* tox, uint friend_number, uint file_number, void* file_id, TOX_ERR_FILE_GET* error=null) @nogc;
 
 
 /*******************************************************************************
@@ -2023,7 +2023,7 @@ enum : int {
  *   On failure, this function returns UINT32_MAX. Any pattern in file numbers
  *   should not be relied on.
  */
-uint tox_file_send(Tox* tox, uint friend_number, uint kind, ulong file_size, const(void)* file_id, const(void)* filename, usize filename_length, TOX_ERR_FILE_SEND *error) @nogc;
+uint tox_file_send(Tox* tox, uint friend_number, uint kind, ulong file_size, const(void)* file_id, const(void)* filename, usize filename_length, TOX_ERR_FILE_SEND* error=null) @nogc;
 
 
 alias TOX_ERR_FILE_SEND_CHUNK = int;
@@ -2094,7 +2094,7 @@ enum : int {
  * @param position The file or stream position from which to continue reading.
  * @return true on success.
  */
-bool tox_file_send_chunk(Tox* tox, uint friend_number, uint file_number, ulong position, const(void)* data, usize length, TOX_ERR_FILE_SEND_CHUNK *error) @nogc;
+bool tox_file_send_chunk(Tox* tox, uint friend_number, uint file_number, ulong position, const(void)* data, usize length, TOX_ERR_FILE_SEND_CHUNK* error=null) @nogc;
 
 /**
  * If the length parameter is 0, the file transfer is finished, and the client's
@@ -2331,7 +2331,7 @@ enum : int {
  *
  * @return conference number on success, or UINT32_MAX on failure.
  */
-uint tox_conference_new(Tox* tox, TOX_ERR_CONFERENCE_NEW *error) @nogc;
+uint tox_conference_new(Tox* tox, TOX_ERR_CONFERENCE_NEW* error=null) @nogc;
 
 
 alias TOX_ERR_CONFERENCE_DELETE = int;
@@ -2355,7 +2355,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_conference_delete(Tox* tox, uint conference_number, TOX_ERR_CONFERENCE_DELETE *error) @nogc;
+bool tox_conference_delete(Tox* tox, uint conference_number, TOX_ERR_CONFERENCE_DELETE* error=null) @nogc;
 
 
 /**
@@ -2388,12 +2388,12 @@ enum : int {
 /**
  * Return the number of peers in the conference. Return value is unspecified on failure.
  */
-uint tox_conference_peer_count(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_PEER_QUERY *error) @nogc;
+uint tox_conference_peer_count(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_PEER_QUERY* error=null) @nogc;
 
 /**
  * Return the length of the peer's name. Return value is unspecified on failure.
  */
-usize tox_conference_peer_get_name_size(const(Tox)* tox, uint conference_number, uint peer_number, TOX_ERR_CONFERENCE_PEER_QUERY *error) @nogc;
+usize tox_conference_peer_get_name_size(const(Tox)* tox, uint conference_number, uint peer_number, TOX_ERR_CONFERENCE_PEER_QUERY* error=null) @nogc;
 
 /**
  * Copy the name of peer_number who is in conference_number to name.
@@ -2401,7 +2401,7 @@ usize tox_conference_peer_get_name_size(const(Tox)* tox, uint conference_number,
  *
  * @return true on success.
  */
-bool tox_conference_peer_get_name(const(Tox)* tox, uint conference_number, uint peer_number, void* name, TOX_ERR_CONFERENCE_PEER_QUERY *error) @nogc;
+bool tox_conference_peer_get_name(const(Tox)* tox, uint conference_number, uint peer_number, void* name, TOX_ERR_CONFERENCE_PEER_QUERY* error=null) @nogc;
 
 /**
  * Copy the public key of peer_number who is in conference_number to public_key.
@@ -2409,12 +2409,12 @@ bool tox_conference_peer_get_name(const(Tox)* tox, uint conference_number, uint 
  *
  * @return true on success.
  */
-bool tox_conference_peer_get_public_key(const(Tox)* tox, uint conference_number, uint peer_number, void* public_key, TOX_ERR_CONFERENCE_PEER_QUERY *error) @nogc;
+bool tox_conference_peer_get_public_key(const(Tox)* tox, uint conference_number, uint peer_number, void* public_key, TOX_ERR_CONFERENCE_PEER_QUERY* error=null) @nogc;
 
 /**
  * Return true if passed peer_number corresponds to our own.
  */
-bool tox_conference_peer_number_is_ours(const(Tox)* tox, uint conference_number, uint peer_number, TOX_ERR_CONFERENCE_PEER_QUERY *error) @nogc;
+bool tox_conference_peer_number_is_ours(const(Tox)* tox, uint conference_number, uint peer_number, TOX_ERR_CONFERENCE_PEER_QUERY* error=null) @nogc;
 
 
 alias TOX_ERR_CONFERENCE_INVITE = int;
@@ -2444,7 +2444,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_conference_invite(Tox* tox, uint friend_number, uint conference_number, TOX_ERR_CONFERENCE_INVITE *error) @nogc;
+bool tox_conference_invite(Tox* tox, uint friend_number, uint conference_number, TOX_ERR_CONFERENCE_INVITE* error=null) @nogc;
 
 
 alias TOX_ERR_CONFERENCE_JOIN = int;
@@ -2495,7 +2495,7 @@ enum : int {
  *
  * @return conference number on success, UINT32_MAX on failure.
  */
-uint tox_conference_join(Tox* tox, uint friend_number, const(void)* cookie, usize length, TOX_ERR_CONFERENCE_JOIN *error) @nogc;
+uint tox_conference_join(Tox* tox, uint friend_number, const(void)* cookie, usize length, TOX_ERR_CONFERENCE_JOIN* error=null) @nogc;
 
 
 alias TOX_ERR_CONFERENCE_SEND_MESSAGE = int;
@@ -2545,7 +2545,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_conference_send_message(Tox* tox, uint conference_number, TOX_MESSAGE_TYPE type, const(void)* message, usize length, TOX_ERR_CONFERENCE_SEND_MESSAGE *error) @nogc;
+bool tox_conference_send_message(Tox* tox, uint conference_number, TOX_MESSAGE_TYPE type, const(void)* message, usize length, TOX_ERR_CONFERENCE_SEND_MESSAGE* error=null) @nogc;
 
 
 alias TOX_ERR_CONFERENCE_TITLE = int;
@@ -2578,7 +2578,7 @@ enum : int {
  * The return value is equal to the `length` argument received by the last
  * `conference_title` callback.
  */
-usize tox_conference_get_title_size(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_TITLE *error) @nogc;
+usize tox_conference_get_title_size(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_TITLE* error=null) @nogc;
 
 /**
  * Write the title designated by the given conference number to a byte array.
@@ -2593,7 +2593,7 @@ usize tox_conference_get_title_size(const(Tox)* tox, uint conference_number, TOX
  *
  * @return true on success.
  */
-bool tox_conference_get_title(const(Tox)* tox, uint conference_number, void* title, TOX_ERR_CONFERENCE_TITLE *error) @nogc;
+bool tox_conference_get_title(const(Tox)* tox, uint conference_number, void* title, TOX_ERR_CONFERENCE_TITLE* error=null) @nogc;
 
 /**
  * Set the conference title and broadcast it to the rest of the conference.
@@ -2602,7 +2602,7 @@ bool tox_conference_get_title(const(Tox)* tox, uint conference_number, void* tit
  *
  * @return true on success.
  */
-bool tox_conference_set_title(Tox* tox, uint conference_number, const(void)* title, usize length, TOX_ERR_CONFERENCE_TITLE *error) @nogc;
+bool tox_conference_set_title(Tox* tox, uint conference_number, const(void)* title, usize length, TOX_ERR_CONFERENCE_TITLE* error=null) @nogc;
 
 /**
  * Return the number of conferences in the Tox instance.
@@ -2635,7 +2635,7 @@ enum : int {
 }
 
 
-TOX_CONFERENCE_TYPE tox_conference_get_type(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_GET_TYPE *error) @nogc;
+TOX_CONFERENCE_TYPE tox_conference_get_type(const(Tox)* tox, uint conference_number, TOX_ERR_CONFERENCE_GET_TYPE* error=null) @nogc;
 
 
 /*******************************************************************************
@@ -2710,7 +2710,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_friend_send_lossy_packet(Tox* tox, uint friend_number, const(void)* data, usize length, TOX_ERR_FRIEND_CUSTOM_PACKET *error) @nogc;
+bool tox_friend_send_lossy_packet(Tox* tox, uint friend_number, const(void)* data, usize length, TOX_ERR_FRIEND_CUSTOM_PACKET* error=null) @nogc;
 
 /**
  * Send a custom lossless packet to a friend.
@@ -2728,7 +2728,7 @@ bool tox_friend_send_lossy_packet(Tox* tox, uint friend_number, const(void)* dat
  *
  * @return true on success.
  */
-bool tox_friend_send_lossless_packet(Tox* tox, uint friend_number, const(void)* data, usize length, TOX_ERR_FRIEND_CUSTOM_PACKET *error) @nogc;
+bool tox_friend_send_lossless_packet(Tox* tox, uint friend_number, const(void)* data, usize length, TOX_ERR_FRIEND_CUSTOM_PACKET* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend who sent a lossy packet.
@@ -2798,13 +2798,13 @@ enum : int {
 /**
  * Return the UDP port this Tox instance is bound to.
  */
-ushort tox_self_get_udp_port(const(Tox)* tox, TOX_ERR_GET_PORT *error) @nogc;
+ushort tox_self_get_udp_port(const(Tox)* tox, TOX_ERR_GET_PORT* error=null) @nogc;
 
 /**
  * Return the TCP port this Tox instance is bound to. This is only relevant if
  * the instance is acting as a TCP relay.
  */
-ushort tox_self_get_tcp_port(const(Tox)* tox, TOX_ERR_GET_PORT *error) @nogc;
+ushort tox_self_get_tcp_port(const(Tox)* tox, TOX_ERR_GET_PORT* error=null) @nogc;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -2997,7 +2997,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_pass_encrypt(const(void)* plaintext, usize plaintext_len, const(void)* passphrase, usize passphrase_len, void* ciphertext, TOX_ERR_ENCRYPTION *error) @nogc;
+bool tox_pass_encrypt(const(void)* plaintext, usize plaintext_len, const(void)* passphrase, usize passphrase_len, void* ciphertext, TOX_ERR_ENCRYPTION* error=null) @nogc;
 
 /**
  * Decrypts the given data with the given passphrase.
@@ -3013,7 +3013,7 @@ bool tox_pass_encrypt(const(void)* plaintext, usize plaintext_len, const(void)* 
  *
  * @return true on success.
  */
-bool tox_pass_decrypt(const(void)* ciphertext, usize ciphertext_len, const(void)* passphrase, usize passphrase_len, void* plaintext, TOX_ERR_DECRYPTION *error) @nogc;
+bool tox_pass_decrypt(const(void)* ciphertext, usize ciphertext_len, const(void)* passphrase, usize passphrase_len, void* plaintext, TOX_ERR_DECRYPTION* error=null) @nogc;
 
 
 /*******************************************************************************
@@ -3064,7 +3064,7 @@ void tox_pass_key_free(Tox_Pass_Key* _key) @nogc;
  *
  * @return non-NULL on success.
  */
-Tox_Pass_Key* tox_pass_key_derive(const(void)* passphrase, usize passphrase_len, TOX_ERR_KEY_DERIVATION *error) @nogc;
+Tox_Pass_Key* tox_pass_key_derive(const(void)* passphrase, usize passphrase_len, TOX_ERR_KEY_DERIVATION* error=null) @nogc;
 
 /**
  * Same as above, except use the given salt for deterministic key derivation.
@@ -3075,7 +3075,7 @@ Tox_Pass_Key* tox_pass_key_derive(const(void)* passphrase, usize passphrase_len,
  *
  * @return non-NULL on success.
  */
-Tox_Pass_Key* tox_pass_key_derive_with_salt(const(void)* passphrase, usize passphrase_len, const(void)* salt, TOX_ERR_KEY_DERIVATION *error) @nogc;
+Tox_Pass_Key* tox_pass_key_derive_with_salt(const(void)* passphrase, usize passphrase_len, const(void)* salt, TOX_ERR_KEY_DERIVATION* error=null) @nogc;
 
 /**
  * Encrypt a plain text with a key produced by tox_pass_key_derive or tox_pass_key_derive_with_salt.
@@ -3089,7 +3089,7 @@ Tox_Pass_Key* tox_pass_key_derive_with_salt(const(void)* passphrase, usize passp
  *
  * @return true on success.
  */
-bool tox_pass_key_encrypt(const(Tox_Pass_Key)* _key, const(void)* plaintext, usize plaintext_len, void* ciphertext, TOX_ERR_ENCRYPTION *error) @nogc;
+bool tox_pass_key_encrypt(const(Tox_Pass_Key)* _key, const(void)* plaintext, usize plaintext_len, void* ciphertext, TOX_ERR_ENCRYPTION* error=null) @nogc;
 
 /**
  * This is the inverse of tox_pass_key_encrypt, also using only keys produced by
@@ -3101,7 +3101,7 @@ bool tox_pass_key_encrypt(const(Tox_Pass_Key)* _key, const(void)* plaintext, usi
  *
  * @return true on success.
  */
-bool tox_pass_key_decrypt(const(Tox_Pass_Key)* _key, const(void)* ciphertext, usize ciphertext_len, void* plaintext, TOX_ERR_DECRYPTION *error) @nogc;
+bool tox_pass_key_decrypt(const(Tox_Pass_Key)* _key, const(void)* ciphertext, usize ciphertext_len, void* plaintext, TOX_ERR_DECRYPTION* error=null) @nogc;
 
 
 alias TOX_ERR_GET_SALT = int;
@@ -3143,7 +3143,7 @@ enum : int {
  *
  * @return true on success.
  */
-bool tox_get_salt(const(void)* ciphertext, void* salt, TOX_ERR_GET_SALT *error) @nogc;
+bool tox_get_salt(const(void)* ciphertext, void* salt, TOX_ERR_GET_SALT* error=null) @nogc;
 
 /**
  * Determines whether or not the given data is encrypted by this module.
@@ -3188,12 +3188,12 @@ bool tox_unhex() (ubyte[] dest, const(char)[] str) nothrow @trusted @nogc {
 }
 
 
-string tox_hex() (const(ubyte)[] src) nothrow @trusted {
+string tox_hex() (const(void)[] src) nothrow @trusted {
   assert(src.length < int.max/2);
   if (src.length == 0) return null;
   auto res = new char[](src.length*2);
   int dpos = 0;
-  foreach (ubyte b; src) {
+  foreach (ubyte b; cast(const(ubyte)[])src) {
     immutable hb = (b>>4);
     b &= 0x0f;
     res[dpos++] = cast(char)(hb+'0'+(hb > 9 ? 7 : 0));
