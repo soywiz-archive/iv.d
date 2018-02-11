@@ -63,7 +63,7 @@ if [ $USE_DMD = "tan" ]; then
   else
     opts=""
   fi
-  time "$dmdbin" $tt $opts -w -oftweetNaCl ../tweetNaCl.d tweetNaCl_test.d
+  time "$dmdbin" $tt $opts -g -w -oftweetNaCl ../tweetNaCl.d tweetNaCl_test.d
 else
   if [ $SHORT_TEST = "tan" ]; then
     tt=""

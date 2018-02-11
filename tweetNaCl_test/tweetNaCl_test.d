@@ -448,13 +448,14 @@ void main () {
       crypto_box_keypair(bobpk, bobsk);
       randombytes(n[0..crypto_box_NONCEBYTES]);
       randombytes(m[crypto_box_ZEROBYTES..crypto_box_ZEROBYTES+mlen]);
-      crypto_box(c[0..mlen+crypto_box_ZEROBYTES], m, n, bobpk, alicesk);
+      crypto_box(c[0..crypto_box_ZEROBYTES+mlen], m[0..crypto_box_ZEROBYTES+mlen], n, bobpk, alicesk);
       int caught = 0;
       while (caught < 10) {
         import std.random : uniform;
         c[uniform(0, mlen+crypto_box_ZEROBYTES)] = cast(ubyte)uniform(0, 256);
-        if (crypto_box_open(m2[0..mlen+crypto_box_ZEROBYTES], c, n, alicepk, bobsk)) {
-          for (auto i = 0; i < mlen+crypto_box_ZEROBYTES; ++i) assert(m2[i] == m[i]);
+        // we need to turn sanity checks off here to test if `crypto_box_open()` can catch invalid padding
+        if (crypto_box_open!false(m2[0..crypto_box_ZEROBYTES+mlen], c[0..crypto_box_ZEROBYTES+mlen], n, alicepk, bobsk)) {
+          for (auto i = 0; i < mlen+crypto_box_ZEROBYTES; ++i) if (m2[i] != m[i]) assert(0, "oops: box8");
         } else {
           ++caught;
         }

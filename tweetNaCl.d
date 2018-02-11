@@ -504,11 +504,11 @@ void crypto_box_beforenm (ubyte[] skey, const(ubyte)[] pk, const(ubyte)[] sk) @n
  * This function encrypts and authenticates a message 'msg' using a secret
  * key 'key' and a nonce 'nonce'.
  * The function returns the resulting ciphertext 'c'.
- * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
- * Note that first 'crypto_secretbox_BOXZEROBYTES' in destination buffer will always contains zeroes.
+ * Note that first 'crypto_box_ZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_box_BOXZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
+ *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_box_ZEROBYTES)
  *  msg = message
  *  nonce = nonce
  *  key = secret
@@ -527,10 +527,10 @@ bool crypto_box_afternm (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, co
  * This function verifies and decrypts a ciphertext 'c' using a secret
  * key 'key' and a nonce 'nonce'.
  * The function returns the resulting message 'msg'.
- * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
+ * Note that first 'crypto_box_ZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  msg = resulting message ('msg' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
+ *  msg = resulting message ('msg' size should be at least msg.length+crypto_box_ZEROBYTES)
  *  c = cyphertext
  *  nonce = nonce
  *  key = secret
@@ -549,17 +549,17 @@ bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonc
  * This function encrypts and authenticates a message 'msg' using the sender's secret
  * key 'sk', the receiver's public key 'pk', and a nonce 'nonce'.
  * The function returns the resulting ciphertext 'c'.
- * Note that first 'crypto_secretbox_ZEROBYTES' in source buffer SHOULD always contains zeroes.
- * Note that first 'crypto_secretbox_BOXZEROBYTES' in destination buffer will always contains zeroes.
+ * Note that first 'crypto_box_ZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_box_BOXZEROBYTES' in destination buffer will always contains zeroes.
  *
- * usage: fill first `crypto_secretbox_ZEROBYTES` of `msg` with zeroes, and other bytes with
+ * usage: fill first `crypto_box_ZEROBYTES` of `msg` with zeroes, and other bytes with
  *        actual unencrypted message data.
  *        make `c` of exactly `msg` size.
  *        call `crypto_box()`.
- *        `c[crypto_secretbox_BOXZEROBYTES..$]` will be your encrypted message, ready to send.
+ *        `c[crypto_box_BOXZEROBYTES..$]` will be your encrypted message, ready to send.
  *
  * Params:
- *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
+ *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_box_ZEROBYTES)
  *  msg = message
  *  nonce = nonce
  *  pk = receiver's public key
@@ -568,30 +568,41 @@ bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonc
  * Returns:
  *  success flag and cyphertext in 'c'
  */
-bool crypto_box (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
+bool crypto_box(bool doSanityChecks=true) (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
   if (nonce.length < crypto_box_NONCEBYTES) assert(0, "invalid nonce size");
   if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
+  if (msg.length < crypto_box_ZEROBYTES) assert(0, "invalid msg size");
+  if (c.length < msg.length) assert(0, "invalid c size");
+  static if (crypto_box_BOXZEROBYTES > crypto_box_ZEROBYTES) {
+    if (c.length < crypto_box_BOXZEROBYTES) assert(0, "invalid c size");
+  }
+  static if (doSanityChecks) {
+    ubyte b = 0;
+    foreach (immutable ubyte bv; msg[0..crypto_box_ZEROBYTES]) b |= bv;
+    if (b != 0) assert(0, "invalid msg padding");
+  }
   ubyte[32] k = void;
   crypto_box_beforenm(k[], pk, sk);
-  return crypto_box_afternm(c, msg, nonce, k[]);
+  c.ptr[0..crypto_box_BOXZEROBYTES] = 0; // why not?
+  return crypto_box_afternm(c[0..msg.length], msg, nonce, k[]);
 }
 
 /**
  * This function verifies and decrypts a ciphertext 'c' using the receiver's secret
  * key 'sk', the sender's public key 'pk', and a nonce 'nonce'.
  * The function returns the resulting message 'msg'.
- * Note that first 'crypto_secretbox_BOXZEROBYTES' in source buffer SHOULD always contains zeroes.
- * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
+ * Note that first 'crypto_box_BOXZEROBYTES' in source buffer SHOULD always contains zeroes.
+ * Note that first 'crypto_box_ZEROBYTES' in destination buffer will always contains zeroes.
  *
- * usage: fill first `crypto_secretbox_BOXZEROBYTES` of `c` with zeroes, and other bytes with
+ * usage: fill first `crypto_box_BOXZEROBYTES` of `c` with zeroes, and other bytes with
  *        actual encrypted message data.
- *        make `c` of exactly `msg` size.
+ *        make `msg` of exactly `c` size.
  *        call `crypto_box_open()`.
- *        `c[crypto_secretbox_ZEROBYTES..$]` will be your decrypted message, ready to read.
+ *        `msg[crypto_box_ZEROBYTES..$]` will be your decrypted message, ready to read.
  *
  * Params:
- *  msg = resulting message ('msg' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
+ *  msg = resulting message ('msg' size should be at least msg.length+crypto_box_ZEROBYTES)
  *  c = cyphertext
  *  nonce = nonce
  *  pk = receiver's public key
@@ -600,13 +611,24 @@ bool crypto_box (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyt
  * Returns:
  *  success flag and message in 'msg'
  */
-bool crypto_box_open (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
+bool crypto_box_open(bool doSanityChecks=true) (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
   if (nonce.length < crypto_box_NONCEBYTES) assert(0, "invalid nonce size");
   if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
+  if (c.length < crypto_box_BOXZEROBYTES) assert(0, "invalid c size");
+  if (msg.length < c.length) assert(0, "invalid msg size");
+  static if (crypto_box_ZEROBYTES > crypto_box_BOXZEROBYTES) {
+    if (msg.length < crypto_box_ZEROBYTES) assert(0, "invalid msg size");
+  }
+  static if (doSanityChecks) {
+    ubyte b = 0;
+    foreach (immutable ubyte bv; c[0..crypto_box_BOXZEROBYTES]) b |= bv;
+    if (b != 0) assert(0, "invalid c padding");
+  }
   ubyte[32] k = void;
   crypto_box_beforenm(k[], pk, sk);
-  return crypto_box_open_afternm(msg, c, nonce, k[]);
+  msg.ptr[0..crypto_box_ZEROBYTES] = 0; // why not?
+  return crypto_box_open_afternm(msg[0..c.length], c, nonce, k[]);
 }
 
 
@@ -621,7 +643,7 @@ bool crypto_box_open (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const
  */
 usize crypto_box_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
   pragma(inline, true);
-  return msg.length+crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES;
+  return msg.length+crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES;
 }
 
 /**
@@ -636,8 +658,8 @@ usize crypto_box_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
 usize crypto_box_decsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
   pragma(inline, true);
   return
-    (msg.length > crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES ?
-      msg.length-(crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES) : 0);
+    (msg.length > crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES ?
+      msg.length-(crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES) : 0);
 }
 
 /**
@@ -651,7 +673,7 @@ usize crypto_box_decsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
  */
 bool crypto_box_valid_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
   pragma(inline, true);
-  return (msg.length >= crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES);
+  return (msg.length >= crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES);
 }
 
 /**
@@ -677,13 +699,13 @@ bool crypto_box_enc (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(
   if (nonce.length < crypto_box_NONCEBYTES) return false;
   if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
   if (sk.length < crypto_box_SECRETKEYBYTES) return false;
-  // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_secretbox_ZEROBYTES*2
+  // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_box_ZEROBYTES*2
   import core.stdc.stdlib : alloca, malloc, free;
   import core.stdc.string : memset, memcpy;
   ubyte* smem, dmem;
   bool doFree = false;
   scope(exit) if (doFree) { if (smem !is null) free(smem); if (dmem !is null) free(dmem); }
-  immutable memsz = msg.length+crypto_secretbox_ZEROBYTES;
+  immutable memsz = msg.length+crypto_box_ZEROBYTES;
   if (msg.length <= 2048) {
     smem = cast(ubyte*)alloca(memsz);
     dmem = cast(ubyte*)alloca(memsz);
@@ -696,13 +718,13 @@ bool crypto_box_enc (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(
   memset(smem, 0, memsz);
   memset(dmem, 0, memsz);
   // copy `msg` to `smem`
-  if (msg.length) memcpy(smem+crypto_secretbox_ZEROBYTES, msg.ptr, msg.length);
+  if (msg.length) memcpy(smem+crypto_box_ZEROBYTES, msg.ptr, msg.length);
   // process
   auto res = crypto_box(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
   ubyte b = 0;
-  foreach (immutable ubyte bv; dmem[0..crypto_secretbox_BOXZEROBYTES]) b |= bv;
+  foreach (immutable ubyte bv; dmem[0..crypto_box_BOXZEROBYTES]) b |= bv;
   // copy result to destination buffer
-  memcpy(c.ptr, dmem+crypto_secretbox_BOXZEROBYTES, crypto_box_encsize(msg));
+  memcpy(c.ptr, dmem+crypto_box_BOXZEROBYTES, crypto_box_encsize(msg));
   return (res && b == 0);
 }
 
@@ -729,13 +751,13 @@ bool crypto_box_dec (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(
   if (nonce.length < crypto_box_NONCEBYTES) return false;
   if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
   if (sk.length < crypto_box_SECRETKEYBYTES) return false;
-  // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_secretbox_ZEROBYTES*2
+  // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_box_ZEROBYTES*2
   import core.stdc.stdlib : alloca, malloc, free;
   import core.stdc.string : memset, memcpy;
   ubyte* smem, dmem;
   bool doFree = false;
   scope(exit) if (doFree) { if (smem !is null) free(smem); if (dmem !is null) free(dmem); }
-  immutable memsz = c.length+(crypto_secretbox_ZEROBYTES-crypto_secretbox_BOXZEROBYTES);
+  immutable memsz = c.length+(crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES);
   if (c.length <= 2048) {
     smem = cast(ubyte*)alloca(memsz);
     dmem = cast(ubyte*)alloca(memsz);
@@ -748,13 +770,13 @@ bool crypto_box_dec (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(
   memset(smem, 0, memsz);
   memset(dmem, 0, memsz);
   // copy `c` to `smem`
-  memcpy(smem+crypto_secretbox_BOXZEROBYTES, c.ptr, c.length);
+  memcpy(smem+crypto_box_BOXZEROBYTES, c.ptr, c.length);
   // process
   auto res = crypto_box_open(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
   ubyte b = 0;
-  foreach (immutable ubyte bv; dmem[0..crypto_secretbox_ZEROBYTES]) b |= bv;
+  foreach (immutable ubyte bv; dmem[0..crypto_box_ZEROBYTES]) b |= bv;
   // copy result to destination buffer
-  memcpy(msg.ptr, dmem+crypto_secretbox_ZEROBYTES, crypto_box_decsize(c));
+  memcpy(msg.ptr, dmem+crypto_box_ZEROBYTES, crypto_box_decsize(c));
   return (res && b == 0);
 }
 
