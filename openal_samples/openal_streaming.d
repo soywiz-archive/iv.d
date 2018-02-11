@@ -22,7 +22,7 @@ struct PlayTime {
   string warning;
   ulong warnStartFrm;
   uint warnDurMsecs;
-  ulong framesDone;
+  ulong framesDone; // with buffer precision
 
   bool warnWasPainted;
   bool newWarning;
@@ -128,6 +128,28 @@ bool updateStream (ref AudioStream ass, ALuint source, ref PlayTime ptime) {
 }
 
 
+// AudioStream is required to get sampling rate and number of channels
+uint getPositionMSec (ref AudioStream ass, ALuint source, in ref PlayTime ptime) {
+  ulong frames = ptime.framesDone;
+  int offset;
+  alGetSourcei(source, AL_SAMPLE_OFFSET, &offset); // in the current buffer
+  if (alGetError() == AL_NO_ERROR) {
+    // add processed buffers (assume that all buffers are of the same size)
+    int numProcessedBuffers = 0;
+    alGetSourcei(source, AL_BUFFERS_PROCESSED, &numProcessedBuffers);
+    if (alGetError() == AL_NO_ERROR) {
+      frames += numProcessedBuffers*(BufferSizeBytes/2/ass.channels);
+      frames += offset/ass.channels;
+    } else {
+      //assert(0);
+    }
+  } else {
+    //assert(0);
+  }
+  return cast(uint)(frames*1000/ass.rate);
+}
+
+
 // load an ogg opus file into the given AL buffer
 void streamAudioFile (ALuint source, string filename) {
   PlayTime ptime;
@@ -179,6 +201,7 @@ void streamAudioFile (ALuint source, string filename) {
 
     uint time = cast(uint)(ptime.framesDone*1000/ass.rate);
     uint total = cast(uint)(frameCount*1000/ass.rate);
+    uint xtime = getPositionMSec(ass, source, ptime);
 
     if (ptime.warning.length > 0 && ptime.warnWasPainted) {
       import core.stdc.stdio : stdout, fprintf;
@@ -193,9 +216,9 @@ void streamAudioFile (ALuint source, string filename) {
     if (time >= nextProgressTime) {
       import core.stdc.stdio : stdout, fprintf, fflush;
       if (procBufs >= 0) {
-        stdout.fprintf("\r%2u:%02u / %u:%02u  (%u of %u)\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000, cast(uint)procBufs, BufferCount);
+        stdout.fprintf("\r%2u:%02u / %u:%02u  (%u of %u) (%u : %u)\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000, cast(uint)procBufs, BufferCount, time, xtime);
       } else {
-        stdout.fprintf("\r%2u:%02u / %u:%02u\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000);
+        stdout.fprintf("\r%2u:%02u / %u:%02u  (%u : %u)\e[K", time/60/1000, time%60000/1000, total/60/1000, total%60000/1000, time, xtime);
       }
       stdout.fflush();
       nextProgressTime = time+500;
@@ -245,7 +268,7 @@ void streamAudioFile (ALuint source, string filename) {
     version(all) {
       ALenum sourceState;
       alGetSourcei(source, AL_SOURCE_STATE, &sourceState);
-      if (sourceState != AL_PLAYING) {
+      if (sourceState != AL_PLAYING && sourceState != AL_PAUSED) {
         version(none) {
           int numProcessedBuffers = 0;
           alGetSourcei(source, AL_BUFFERS_PROCESSED, &numProcessedBuffers);
@@ -328,7 +351,15 @@ void main (string[] args) {
   writeln("OpenAL hw device: ", alcGetString(dev, ALC_ALL_DEVICES_SPECIFIER).fromStringz);
 
   // we want an OpenAL context
-  ctx = alcCreateContext(dev, null);
+  {
+    immutable ALCint[$] attrs = [
+      ALC_STEREO_SOURCES, 1, // get at least one stereo source for music
+      ALC_MONO_SOURCES, 1, // this should be audio channels in our game engine
+      //ALC_FREQUENCY, 48000, // desired frequency; we don't really need this, let OpenAL choose the best
+      0,
+    ];
+    ctx = alcCreateContext(dev, attrs.ptr);
+  }
   if (ctx is null) throw new Exception("couldn't create OpenAL context");
   scope(exit) {
     // just to show you how it's done
