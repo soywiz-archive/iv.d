@@ -3191,9 +3191,10 @@ bool tox_is_data_encrypted(const(void)* data) @nogc;
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Ketmar's added utilities
-import std.net.curl;
+//import std.net.curl;
 
-bool tox_unhex (ubyte[] dest, const(char)[] str) nothrow @trusted @nogc {
+
+bool tox_unhex() (ubyte[] dest, const(char)[] str) nothrow @trusted @nogc {
   if (dest.length == 0) return false;
   typeof(dest.length) dpos = 0;
   foreach (char ch; str) {
@@ -3211,7 +3212,7 @@ bool tox_unhex (ubyte[] dest, const(char)[] str) nothrow @trusted @nogc {
 }
 
 
-string tox_hex (const(ubyte)[] src) nothrow @trusted {
+string tox_hex() (const(ubyte)[] src) nothrow @trusted {
   assert(src.length < int.max/2);
   if (src.length == 0) return null;
   auto res = new char[](src.length*2);
@@ -3236,7 +3237,7 @@ struct ToxBootstrapServer {
 }
 
 
-ToxBootstrapServer[] tox_download_bootstrap_list (string url=null) {
+ToxBootstrapServer[] tox_download_bootstrap_list() (string url=null) {
   import std.net.curl : get;
   import std.json;
   if (url.length == 0) url = "https://nodes.tox.chat/json";
