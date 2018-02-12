@@ -456,7 +456,7 @@ enum : int {
  * @param message The log message.
  * @param user_data The user data pointer passed to tox_new in options.
  */
-alias tox_log_cb = void function (Tox* tox, TOX_LOG_LEVEL level, const(char)* file, uint line, const(char)* func, const(char)* message, void* user_data) nothrow;
+alias tox_log_cb = void function (Tox* tox, TOX_LOG_LEVEL level, const(char)* file, uint line, const(char)* func, const(char)* message, void* user_data) nothrow @system;
 
 
 /**
@@ -883,7 +883,7 @@ TOX_CONNECTION tox_self_get_connection_status(const(Tox)* tox) @nogc;
 /**
  * @param connection_status Whether we are connected to the DHT.
  */
-alias tox_self_connection_status_cb = void function (Tox* tox, TOX_CONNECTION connection_status, void* user_data) nothrow;
+alias tox_self_connection_status_cb = void function (Tox* tox, TOX_CONNECTION connection_status, void* user_data) nothrow @system;
 
 
 /**
@@ -1379,7 +1379,7 @@ bool tox_friend_get_name(const(Tox)* tox, uint friend_number, void* name, TOX_ER
  * @param length A value equal to the return value of
  *   tox_friend_get_name_size.
  */
-alias tox_friend_name_cb = void function (Tox* tox, uint friend_number, const(char)* name, usize length, void* user_data) nothrow;
+alias tox_friend_name_cb = void function (Tox* tox, uint friend_number, const(char)* name, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -1417,7 +1417,7 @@ bool tox_friend_get_status_message(const(Tox)* tox, uint friend_number, void* st
  * @param length A value equal to the return value of
  *   tox_friend_get_status_message_size.
  */
-alias tox_friend_status_message_cb = void function (Tox* tox, uint friend_number, const(char)* message, usize length, void* user_data) nothrow;
+alias tox_friend_status_message_cb = void function (Tox* tox, uint friend_number, const(char)* message, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -1441,7 +1441,7 @@ TOX_USER_STATUS tox_friend_get_status(const(Tox)* tox, uint friend_number, TOX_E
  *   changed.
  * @param status The new user status.
  */
-alias tox_friend_status_cb = void function (Tox* tox, uint friend_number, TOX_USER_STATUS status, void* user_data) nothrow;
+alias tox_friend_status_cb = void function (Tox* tox, uint friend_number, TOX_USER_STATUS status, void* user_data) nothrow @system;
 
 
 /**
@@ -1471,7 +1471,7 @@ TOX_CONNECTION tox_friend_get_connection_status(const(Tox)* tox, uint friend_num
  * @param connection_status The result of calling
  *   tox_friend_get_connection_status on the passed friend_number.
  */
-alias tox_friend_connection_status_cb = void function (Tox* tox, uint friend_number, TOX_CONNECTION connection_status, void* user_data) nothrow;
+alias tox_friend_connection_status_cb = void function (Tox* tox, uint friend_number, TOX_CONNECTION connection_status, void* user_data) nothrow @system;
 
 
 /**
@@ -1502,7 +1502,7 @@ bool tox_friend_get_typing(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_Q
  * @param is_typing The result of calling tox_friend_get_typing on the passed
  *   friend_number.
  */
-alias tox_friend_typing_cb = void function (Tox* tox, uint friend_number, bool is_typing, void* user_data) nothrow;
+alias tox_friend_typing_cb = void function (Tox* tox, uint friend_number, bool is_typing, void* user_data) nothrow @system;
 
 
 /**
@@ -1616,7 +1616,7 @@ uint tox_friend_send_message(Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type
  * @param message_id The message ID as returned from tox_friend_send_message
  *   corresponding to the message sent.
  */
-alias tox_friend_read_receipt_cb = void function (Tox* tox, uint friend_number, uint message_id, void* user_data) nothrow;
+alias tox_friend_read_receipt_cb = void function (Tox* tox, uint friend_number, uint message_id, void* user_data) nothrow @system;
 
 
 /**
@@ -1641,7 +1641,7 @@ void tox_callback_friend_read_receipt(Tox* tox, tox_friend_read_receipt_cb callb
  * @param message The message they sent along with the request.
  * @param length The size of the message byte array.
  */
-alias tox_friend_request_cb = void function (Tox* tox, const(ubyte)* public_key, const(char)* message, usize length, void* user_data) nothrow;
+alias tox_friend_request_cb = void function (Tox* tox, const(ubyte)* public_key, const(char)* message, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -1656,7 +1656,7 @@ void tox_callback_friend_request(Tox* tox, tox_friend_request_cb callback) @nogc
  * @param message The message data they sent.
  * @param length The size of the message byte array.
  */
-alias tox_friend_message_cb = void function (Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(char)* message, usize length, void* user_data) nothrow;
+alias tox_friend_message_cb = void function (Tox* tox, uint friend_number, TOX_MESSAGE_TYPE type, const(char)* message, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -1819,7 +1819,7 @@ bool tox_file_control(Tox* tox, uint friend_number, uint file_number, TOX_FILE_C
  *   associated with.
  * @param control The file control command received.
  */
-alias tox_file_recv_control_cb = void function (Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control, void* user_data) nothrow;
+alias tox_file_recv_control_cb = void function (Tox* tox, uint friend_number, uint file_number, TOX_FILE_CONTROL control, void* user_data) nothrow @system;
 
 
 /**
@@ -2118,7 +2118,7 @@ bool tox_file_send_chunk(Tox* tox, uint friend_number, uint file_number, ulong p
  * @param position The file or stream position from which to continue reading.
  * @param length The number of bytes requested for the current chunk.
  */
-alias tox_file_chunk_request_cb = void function (Tox* tox, uint friend_number, uint file_number, ulong position, usize length, void* user_data) nothrow;
+alias tox_file_chunk_request_cb = void function (Tox* tox, uint friend_number, uint file_number, ulong position, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -2154,7 +2154,7 @@ void tox_callback_file_chunk_request(Tox* tox, tox_file_chunk_request_cb callbac
  *   name will be sent along with the file send request.
  * @param filename_length Size in bytes of the filename.
  */
-alias tox_file_recv_cb = void function (Tox* tox, uint friend_number, uint file_number, uint kind, ulong file_size, const(char)* filename, usize filename_length, void* user_data) nothrow;
+alias tox_file_recv_cb = void function (Tox* tox, uint friend_number, uint file_number, uint kind, ulong file_size, const(char)* filename, usize filename_length, void* user_data) nothrow @system;
 
 
 /**
@@ -2180,7 +2180,7 @@ void tox_callback_file_recv(Tox* tox, tox_file_recv_cb callback) @nogc;
  * @param data A byte array containing the received chunk.
  * @param length The length of the received chunk.
  */
-alias tox_file_recv_chunk_cb = void function (Tox* tox, uint friend_number, uint file_number, ulong position, const(void)* data, usize length, void* user_data) nothrow;
+alias tox_file_recv_chunk_cb = void function (Tox* tox, uint friend_number, uint file_number, ulong position, const(void)* data, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -2226,7 +2226,7 @@ enum : int {
  *   conference.
  * @param length The length of the cookie.
  */
-alias tox_conference_invite_cb = void function (Tox* tox, uint friend_number, TOX_CONFERENCE_TYPE type, const(void)* cookie, usize length, void* user_data) nothrow;
+alias tox_conference_invite_cb = void function (Tox* tox, uint friend_number, TOX_CONFERENCE_TYPE type, const(void)* cookie, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -2243,7 +2243,7 @@ void tox_callback_conference_invite(Tox* tox, tox_conference_invite_cb callback)
  * @param message The message data.
  * @param length The length of the message.
  */
-alias tox_conference_message_cb = void function (Tox* tox, uint conference_number, uint peer_number, TOX_MESSAGE_TYPE type, const(char)* message, usize length, void* user_data) nothrow;
+alias tox_conference_message_cb = void function (Tox* tox, uint conference_number, uint peer_number, TOX_MESSAGE_TYPE type, const(char)* message, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -2259,7 +2259,7 @@ void tox_callback_conference_message(Tox* tox, tox_conference_message_cb callbac
  * @param title The title data.
  * @param length The title length.
  */
-alias tox_conference_title_cb = void function (Tox* tox, uint conference_number, uint peer_number, const(char)* title, usize length, void* user_data) nothrow;
+alias tox_conference_title_cb = void function (Tox* tox, uint conference_number, uint peer_number, const(char)* title, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -2299,7 +2299,7 @@ enum : int {
  * @param peer_number The ID of the peer who changed the title.
  * @param change The type of change (one of TOX_CONFERENCE_STATE_CHANGE).
  */
-alias tox_conference_namelist_change_cb = void function (Tox* tox, uint conference_number, uint peer_number, TOX_CONFERENCE_STATE_CHANGE change, void* user_data) nothrow;
+alias tox_conference_namelist_change_cb = void function (Tox* tox, uint conference_number, uint peer_number, TOX_CONFERENCE_STATE_CHANGE change, void* user_data) nothrow @system;
 
 
 /**
@@ -2735,7 +2735,7 @@ bool tox_friend_send_lossless_packet(Tox* tox, uint friend_number, const(void)* 
  * @param data A byte array containing the received packet data.
  * @param length The length of the packet data byte array.
  */
-alias tox_friend_lossy_packet_cb = void function (Tox* tox, uint friend_number, const(void)* data, usize length, void* user_data) nothrow;
+alias tox_friend_lossy_packet_cb = void function (Tox* tox, uint friend_number, const(void)* data, usize length, void* user_data) nothrow @system;
 
 
 /**
@@ -2749,7 +2749,7 @@ void tox_callback_friend_lossy_packet(Tox* tox, tox_friend_lossy_packet_cb callb
  * @param data A byte array containing the received packet data.
  * @param length The length of the packet data byte array.
  */
-alias tox_friend_lossless_packet_cb = void function (Tox* tox, uint friend_number, const(void)* data, usize length, void* user_data) nothrow;
+alias tox_friend_lossless_packet_cb = void function (Tox* tox, uint friend_number, const(void)* data, usize length, void* user_data) nothrow @system;
 
 
 /**
