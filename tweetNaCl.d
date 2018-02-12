@@ -8,7 +8,7 @@
  * Ported by Ketmar // Invisible Vector ( ketmar@ketmar.no-ip.org )
  */
 //k8: yes, i know that this code sux. i know that i should rewrite it to be more 'D-ish'.
-//    i'll not do that. thank you.
+//    i won't do that. thank you for your understanding. hehe.
 module iv.tweetNaCl /*is aliced*/;
 
 //import iv.alice;
@@ -81,7 +81,7 @@ enum {
 // ////////////////////////////////////////////////////////////////////////// //
 /// set this callback to good (cryptograpic strong) random bytes generator
 /// you can use /dev/urandom as prng
-void delegate (ubyte[] dest) nothrow randombytes = null;
+public void delegate (ubyte[] dest) nothrow randombytes = null;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -99,7 +99,7 @@ void delegate (ubyte[] dest) nothrow randombytes = null;
  * Returns:
  *  signed message
  */
-ubyte[] crypto_sign (const(ubyte)[] msg, const(ubyte)[] sk, ubyte[] dest=null) {
+public ubyte[] crypto_sign (const(ubyte)[] msg, const(ubyte)[] sk, ubyte[] dest=null) {
   if (sk.length < crypto_sign_SECRETKEYBYTES) assert(0, "sk too small");
   ubyte[] sm;
   if (dest.length >= msg.length+crypto_sign_BYTES) sm = dest[0..msg.length+64]; else sm.length = msg.length+crypto_sign_BYTES;
@@ -122,7 +122,7 @@ ubyte[] crypto_sign (const(ubyte)[] msg, const(ubyte)[] sk, ubyte[] dest=null) {
  * Returns:
  *  decrypted message or null on error
  */
-ubyte[] crypto_sign_open (const(ubyte)[] sm, const(ubyte)[] pk, ubyte[] dest=null) {
+public ubyte[] crypto_sign_open (const(ubyte)[] sm, const(ubyte)[] pk, ubyte[] dest=null) {
   if (sm.length < crypto_sign_SECRETKEYBYTES) assert(0, "sm too small");
   ubyte[] msg;
   if (dest.length >= sm.length) msg = dest; else msg.length = sm.length;
@@ -143,7 +143,7 @@ ubyte[] crypto_sign_open (const(ubyte)[] sm, const(ubyte)[] pk, ubyte[] dest=nul
  * Returns:
  *  success flag
  */
-bool crypto_verify_16 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
+public bool crypto_verify_16 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
   pragma(inline, true);
   if (x.length < crypto_verify_16_BYTES) assert(0, "x too small");
   if (y.length < crypto_verify_16_BYTES) assert(0, "y too small");
@@ -160,7 +160,7 @@ bool crypto_verify_16 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
  * Returns:
  *  success flag
  */
-bool crypto_verify_32 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
+public bool crypto_verify_32 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
   pragma(inline, true);
   if (x.length < crypto_verify_32_BYTES) assert(0, "x too small");
   if (y.length < crypto_verify_32_BYTES) assert(0, "y too small");
@@ -180,14 +180,13 @@ bool crypto_verify_32 (const(ubyte)[] x, const(ubyte)[] y) @nogc {
  * Returns:
  *  ciphertext in 'output'
  */
-void crypto_stream_salsa20_xor (ubyte[] output, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @trusted @nogc {
+public void crypto_stream_salsa20_xor (ubyte[] output, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @trusted @nogc {
   if (nonce.length < crypto_stream_salsa20_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_stream_salsa20_KEYBYTES) assert(0, "invalid key size");
   if (msg.length > int.max/2) assert(0, "message too big");
   //??? msg.length == 0 || output.length <= msg.length
-  ubyte[16] z; // autoclear
+  ubyte[16] z = 0;
   ubyte[64] x = void;
-  uint u;
   uint cpos = 0, mpos = 0;
   auto b = output.length;
   if (!b) return;
@@ -204,7 +203,7 @@ void crypto_stream_salsa20_xor (ubyte[] output, const(ubyte)[] msg, const(ubyte)
       cpos += 64;
     }
     */
-    u = 1;
+    uint u = 1;
     foreach (immutable i; 8..16) {
       u += cast(uint)z.ptr[i];
       z.ptr[i] = u&0xff;
@@ -237,7 +236,7 @@ void crypto_stream_salsa20_xor (ubyte[] output, const(ubyte)[] msg, const(ubyte)
  * Returns:
  *  ciphertext in 'c'
  */
-void crypto_stream_salsa20 (ubyte[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
+public void crypto_stream_salsa20 (ubyte[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (nonce.length < crypto_stream_salsa20_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_stream_salsa20_KEYBYTES) assert(0, "invalid key size");
   crypto_stream_salsa20_xor(c, null, nonce, key);
@@ -255,7 +254,7 @@ void crypto_stream_salsa20 (ubyte[] c, const(ubyte)[] nonce, const(ubyte)[] key)
  * Returns:
  *  stream in 'c'
  */
-void crypto_stream (ubyte[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
+public void crypto_stream (ubyte[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (c.length == 0) assert(0, "invalid c");
   if (nonce.length < crypto_stream_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_stream_KEYBYTES) assert(0, "invalid key size");
@@ -277,7 +276,7 @@ void crypto_stream (ubyte[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
  * Returns:
  *  ciphertext in 'c'
  */
-void crypto_stream_xor (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
+public void crypto_stream_xor (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (msg.length < c.length) assert(0, "invalid msg size");
   if (nonce.length < crypto_stream_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_stream_KEYBYTES) assert(0, "invalid key size");
@@ -298,7 +297,7 @@ void crypto_stream_xor (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, con
  * Returns:
  *  authenticator in 'output'
  */
-void crypto_onetimeauth (ubyte[] output, const(ubyte)[] msg, const(ubyte)[] key) @nogc {
+public void crypto_onetimeauth (ubyte[] output, const(ubyte)[] msg, const(ubyte)[] key) @nogc {
   if (key.length < crypto_onetimeauth_KEYBYTES) assert(0, "invalid key size");
   if (output.length < crypto_onetimeauth_BYTES) assert(0, "invalid output size");
   if (msg.length > int.max/2) assert(0, "invalid message size");
@@ -375,7 +374,7 @@ void crypto_onetimeauth (ubyte[] output, const(ubyte)[] msg, const(ubyte)[] key)
  * Returns:
  *  success flag
  */
-bool crypto_onetimeauth_verify (const(ubyte)[] h, const(ubyte)[] msg, const(ubyte)[] key) @nogc {
+public bool crypto_onetimeauth_verify (const(ubyte)[] h, const(ubyte)[] msg, const(ubyte)[] key) @nogc {
   if (h.length < crypto_onetimeauth_BYTES) assert(0, "invalid h size");
   if (key.length < crypto_onetimeauth_KEYBYTES) assert(0, "invalid key size");
   ubyte[16] x = void;
@@ -391,7 +390,7 @@ bool crypto_onetimeauth_verify (const(ubyte)[] h, const(ubyte)[] msg, const(ubyt
  * Note that first 'crypto_secretbox_BOXZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
+ *  c = resulting cyphertext ('c' size should be at least msg.length)
  *  msg = message
  *  key = secret key
  *  nonce = nonce
@@ -399,16 +398,16 @@ bool crypto_onetimeauth_verify (const(ubyte)[] h, const(ubyte)[] msg, const(ubyt
  * Returns:
  *  success flag and cyphertext in 'c' (on success)
  */
-bool crypto_secretbox (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
+public bool crypto_secretbox (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (nonce.length < crypto_secretbox_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_secretbox_KEYBYTES) assert(0, "invalid key size");
-  if (msg.length > int.max/2) assert(0, "message too big");
-  if (msg.length < crypto_secretbox_BOXZEROBYTES) return false;
+  if (msg.length > int.max/2) assert(0, "msg too big");
+  if (msg.length <= crypto_secretbox_BOXZEROBYTES) assert(0, "msg too small");
   if (c.length < msg.length) return false;
   ubyte b = 0;
   foreach (immutable ubyte mb; msg.ptr[0..crypto_secretbox_ZEROBYTES]) b |= mb;
   if (b != 0) return false;
-  crypto_stream_xor(c, msg, nonce, key);
+  crypto_stream_xor(c.ptr[0..msg.length], msg, nonce, key);
   crypto_onetimeauth(c[16..$], c[32..$], c);
   c.ptr[0..crypto_secretbox_BOXZEROBYTES] = 0;
   return true;
@@ -422,7 +421,7 @@ bool crypto_secretbox (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, cons
  * Note that first 'crypto_secretbox_ZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  output = resulting message ('output' size should be at least msg.length+crypto_secretbox_ZEROBYTES)
+ *  output = resulting message ('output' size should be at least msg.length)
  *  c = cyphertext
  *  key = secret key
  *  nonce = nonce
@@ -430,7 +429,7 @@ bool crypto_secretbox (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, cons
  * Returns:
  *  success flag and message in 'output' (on success)
  */
-bool crypto_secretbox_open (ubyte[] output, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
+public bool crypto_secretbox_open (ubyte[] output, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   if (nonce.length < crypto_secretbox_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_secretbox_KEYBYTES) assert(0, "invalid key size");
   if (c.length > int.max/2) assert(0, "message too big");
@@ -442,7 +441,7 @@ bool crypto_secretbox_open (ubyte[] output, const(ubyte)[] c, const(ubyte)[] non
   ubyte[32] x = void;
   crypto_stream(x[], nonce, key);
   if (!crypto_onetimeauth_verify(c[16..$], c[32../*$*/32+(output.length-32)], x)) return false;
-  crypto_stream_xor(output, c, nonce, key);
+  crypto_stream_xor(output.ptr[0..c.length], c, nonce, key);
   output.ptr[0..crypto_secretbox_ZEROBYTES] = 0;
   return true;
 }
@@ -457,7 +456,7 @@ bool crypto_secretbox_open (ubyte[] output, const(ubyte)[] c, const(ubyte)[] non
  * Returns:
  *  pair of new keys
  */
-void crypto_box_keypair (ubyte[] pk, ubyte[] sk) {
+public void crypto_box_keypair (ubyte[] pk, ubyte[] sk) {
   if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
   randombytes(sk.ptr[0..32]);
@@ -474,7 +473,7 @@ void crypto_box_keypair (ubyte[] pk, ubyte[] sk) {
  * Returns:
  *  pair of new keys
  */
-void crypto_box_pk_from_sk (ubyte[] pk, const(ubyte)[] sk) {
+public void crypto_box_pk_from_sk (ubyte[] pk, const(ubyte)[] sk) {
   if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
   crypto_scalarmult_base(pk, sk);
@@ -491,7 +490,7 @@ void crypto_box_pk_from_sk (ubyte[] pk, const(ubyte)[] sk) {
  * Returns:
  *  generated secret
  */
-void crypto_box_beforenm (ubyte[] skey, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
+public void crypto_box_beforenm (ubyte[] skey, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
   if (skey.length < crypto_box_BEFORENMBYTES) assert(0, "invalid skey size");
   if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
@@ -508,7 +507,7 @@ void crypto_box_beforenm (ubyte[] skey, const(ubyte)[] pk, const(ubyte)[] sk) @n
  * Note that first 'crypto_box_BOXZEROBYTES' in destination buffer will always contains zeroes.
  *
  * Params:
- *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_box_ZEROBYTES)
+ *  c = resulting cyphertext ('c' size should be at least msg.length)
  *  msg = message
  *  nonce = nonce
  *  key = secret
@@ -516,7 +515,7 @@ void crypto_box_beforenm (ubyte[] skey, const(ubyte)[] pk, const(ubyte)[] sk) @n
  * Returns:
  *  success flag and cyphertext in 'c' (on success)
  */
-bool crypto_box_afternm (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
+public bool crypto_box_afternm (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   pragma(inline, true);
   if (nonce.length < crypto_box_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_box_BEFORENMBYTES) assert(0, "invalid key size");
@@ -538,7 +537,7 @@ bool crypto_box_afternm (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, co
  * Returns:
  *  success flag and resulting message in 'msg'
  */
-bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
+public bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] key) @nogc {
   pragma(inline, true);
   if (nonce.length < crypto_box_NONCEBYTES) assert(0, "invalid nonce size");
   if (key.length < crypto_box_BEFORENMBYTES) assert(0, "invalid key size");
@@ -559,7 +558,7 @@ bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonc
  *        `c[crypto_box_BOXZEROBYTES..$]` will be your encrypted message, ready to send.
  *
  * Params:
- *  c = resulting cyphertext ('c' size should be at least msg.length+crypto_box_ZEROBYTES)
+ *  c = resulting cyphertext ('c' size should be at least msg.length)
  *  msg = message
  *  nonce = nonce
  *  pk = receiver's public key
@@ -568,7 +567,7 @@ bool crypto_box_open_afternm (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonc
  * Returns:
  *  success flag and cyphertext in 'c'
  */
-bool crypto_box(bool doSanityChecks=true) (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
+public bool crypto_box(bool doSanityChecks=true) (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
   if (nonce.length < crypto_box_NONCEBYTES) assert(0, "invalid nonce size");
   if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
@@ -602,7 +601,7 @@ bool crypto_box(bool doSanityChecks=true) (ubyte[] c, const(ubyte)[] msg, const(
  *        `msg[crypto_box_ZEROBYTES..$]` will be your decrypted message, ready to read.
  *
  * Params:
- *  msg = resulting message ('msg' size should be at least msg.length+crypto_box_ZEROBYTES)
+ *  msg = resulting message ('msg' size should be at least msg.length)
  *  c = cyphertext
  *  nonce = nonce
  *  pk = receiver's public key
@@ -611,7 +610,7 @@ bool crypto_box(bool doSanityChecks=true) (ubyte[] c, const(ubyte)[] msg, const(
  * Returns:
  *  success flag and message in 'msg'
  */
-bool crypto_box_open(bool doSanityChecks=true) (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
+public bool crypto_box_open(bool doSanityChecks=true) (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
   if (nonce.length < crypto_box_NONCEBYTES) assert(0, "invalid nonce size");
   if (pk.length < crypto_box_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_box_SECRETKEYBYTES) assert(0, "invalid sk size");
@@ -632,35 +631,52 @@ bool crypto_box_open(bool doSanityChecks=true) (ubyte[] msg, const(ubyte)[] c, c
 }
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+// Ketmar's utility functions
+
 /**
  * Calculate buffer size to hold encrypted message; it is bigger than `msg` size.
  *
+ * WARNING! doesn't do overflow checking!
+ *
  * Params:
- *  msg = input message
+ *  msglength = input message length
  *
  * Returns:
  *  buffer size to hold encrypted message
  */
-usize crypto_box_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
+public usize crypto_boxes_encsize(string boxmode) (usize msglength) pure nothrow @safe @nogc
+if (boxmode == "box" || boxmode == "secretbox")
+{
   pragma(inline, true);
-  return msg.length+crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES;
+  return msglength+mixin("crypto_"~boxmode~"_ZEROBYTES")-mixin("crypto_"~boxmode~"_BOXZEROBYTES");
 }
+
+alias crypto_box_encsize = crypto_boxes_encsize!"box"; /// ditto
+alias crypto_secretbox_encsize = crypto_boxes_encsize!"secretbox"; /// ditto
 
 /**
  * Calculate buffer size to hold decrypted message; it is smaller than `msg` size.
  *
+ * WARNING! doesn't do overflow checking!
+ *
  * Params:
- *  msg = input message
+ *  msglength = input message length
  *
  * Returns:
  *  buffer size to hold encrypted message
  */
-usize crypto_box_decsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
+public usize crypto_boxes_decsize(string boxmode) (usize msglength) pure nothrow @safe @nogc
+if (boxmode == "box" || boxmode == "secretbox")
+{
   pragma(inline, true);
   return
-    (msg.length > crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES ?
-      msg.length-(crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES) : 0);
+    (msglength > mixin("crypto_"~boxmode~"_ZEROBYTES")-mixin("crypto_"~boxmode~"_BOXZEROBYTES") ?
+      msglength-(mixin("crypto_"~boxmode~"_ZEROBYTES")-mixin("crypto_"~boxmode~"_BOXZEROBYTES")) : 0);
 }
+
+alias crypto_box_decsize = crypto_boxes_decsize!"box"; /// ditto
+alias crypto_secretbox_decsize = crypto_boxes_decsize!"secretbox"; /// ditto
 
 /**
  * Check if `msg` can contain encrypted and authenticated message (i.e. it has enough data for that).
@@ -671,10 +687,16 @@ usize crypto_box_decsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
  * Returns:
  *  `true` if `msg` size is valid.
  */
-bool crypto_box_valid_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
+public bool crypto_boxes_valid_encsize(string boxmode) (const(ubyte)[] msg) pure nothrow @safe @nogc
+if (boxmode == "box" || boxmode == "secretbox")
+{
   pragma(inline, true);
-  return (msg.length >= crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES);
+  return (msg.length >= mixin("crypto_"~boxmode~"_ZEROBYTES")-mixin("crypto_"~boxmode~"_BOXZEROBYTES"));
 }
+
+alias crypto_box_valid_encsize = crypto_boxes_valid_encsize!"box"; /// ditto
+alias crypto_secretbox_valid_encsize = crypto_boxes_valid_encsize!"secretbox"; /// ditto
+
 
 /**
  * This function encrypts and authenticates a message 'msg' using the sender's secret
@@ -688,24 +710,34 @@ bool crypto_box_valid_encsize() (const(ubyte)[] msg) pure nothrow @safe @nogc {
  *  c = resulting cyphertext
  *  msg = message
  *  nonce = nonce
- *  pk = receiver's public key
- *  sk = sender's secret key
+ *  pk = receiver's public key for "box" mode, or the only key for "secretbox" mode
+ *  sk = sender's secret key for "box" mode, unused (and can be `null`) for "secretbox" mode
  *
  * Returns:
  *  success flag and cyphertext in 'c'
  */
-bool crypto_box_enc (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
-  if (c.length < crypto_box_encsize(msg)) return false;
-  if (nonce.length < crypto_box_NONCEBYTES) return false;
-  if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
-  if (sk.length < crypto_box_SECRETKEYBYTES) return false;
-  // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_box_ZEROBYTES*2
+public bool crypto_boxes_enc(string boxmode) (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk=null) @trusted @nogc
+if (boxmode == "box" || boxmode == "secretbox")
+{
+  enum ZeroBytes = mixin("crypto_"~boxmode~"_ZEROBYTES");
+  enum BoxZeroBytes = mixin("crypto_"~boxmode~"_BOXZEROBYTES");
+
+  if (c.length < crypto_boxes_encsize!boxmode(msg.length)) return false;
+  if (nonce.length < mixin("crypto_"~boxmode~"_NONCEBYTES")) return false;
+  static if (boxmode == "box") {
+    if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
+    if (sk.length < crypto_box_SECRETKEYBYTES) return false;
+  } else {
+    if (pk.length < crypto_secretbox_KEYBYTES) return false;
+  }
+
+  // use stack buffer for small messages; assume that we can alloca at least 4kb+ZeroBytes*2
   import core.stdc.stdlib : alloca, malloc, free;
   import core.stdc.string : memset, memcpy;
-  ubyte* smem, dmem;
+  ubyte* smem = null, dmem = null;
   bool doFree = false;
   scope(exit) if (doFree) { if (smem !is null) free(smem); if (dmem !is null) free(dmem); }
-  immutable memsz = msg.length+crypto_box_ZEROBYTES;
+  immutable memsz = msg.length+ZeroBytes;
   if (msg.length <= 2048) {
     smem = cast(ubyte*)alloca(memsz);
     dmem = cast(ubyte*)alloca(memsz);
@@ -718,20 +750,30 @@ bool crypto_box_enc (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(
   memset(smem, 0, memsz);
   memset(dmem, 0, memsz);
   // copy `msg` to `smem`
-  if (msg.length) memcpy(smem+crypto_box_ZEROBYTES, msg.ptr, msg.length);
+  if (msg.length) memcpy(smem+ZeroBytes, msg.ptr, msg.length);
   // process
-  auto res = crypto_box(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
+  static if (boxmode == "box") {
+    auto res = crypto_box(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
+  } else static if (boxmode == "secretbox") {
+    auto res = crypto_secretbox(dmem[0..memsz], smem[0..memsz], nonce, pk);
+  } else {
+    static assert(0, "wtf?!");
+  }
   ubyte b = 0;
-  foreach (immutable ubyte bv; dmem[0..crypto_box_BOXZEROBYTES]) b |= bv;
+  foreach (immutable ubyte bv; dmem[0..BoxZeroBytes]) b |= bv;
   // copy result to destination buffer
-  memcpy(c.ptr, dmem+crypto_box_BOXZEROBYTES, crypto_box_encsize(msg));
+  memcpy(c.ptr, dmem+BoxZeroBytes, crypto_boxes_encsize!boxmode(msg.length));
   return (res && b == 0);
 }
+
+alias crypto_box_enc = crypto_boxes_enc!"box"; /// ditto
+alias crypto_secretbox_enc = crypto_boxes_enc!"secretbox"; /// ditto
 
 /**
  * This function verifies and decrypts a ciphertext 'c' using the receiver's secret
  * key 'sk', the sender's public key 'pk', and a nonce 'nonce'.
  * Note that `msg` must be of at least `crypto_box_decsize(msg)` bytes in size.
+ * Also note that key order for "box" mode is reverse of `crypto_box_XXX()` functions.
  *
  * WARNING! this function is using `malloc()` internally, but not GC.
  *
@@ -739,25 +781,35 @@ bool crypto_box_enc (ubyte[] c, const(ubyte)[] msg, const(ubyte)[] nonce, const(
  *  msg = resulting message
  *  c = cyphertext
  *  nonce = nonce
- *  pk = receiver's public key
- *  sk = sender's secret key
+ *  pk = receiver's public key for "box" mode, or the only key for "secretbox" mode
+ *  sk = sender's secret key for "box" mode, unused (and can be `null`) for "secretbox" mode
  *
  * Returns:
  *  success flag and message in 'msg'
  */
-bool crypto_box_dec (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk) @nogc {
-  if (c.length < crypto_box_valid_encsize(c)) return false;
-  if (msg.length < crypto_box_decsize(c)) return false;
-  if (nonce.length < crypto_box_NONCEBYTES) return false;
-  if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
-  if (sk.length < crypto_box_SECRETKEYBYTES) return false;
+public bool crypto_boxes_dec(string boxmode) (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(ubyte)[] pk, const(ubyte)[] sk=null) @trusted @nogc
+if (boxmode == "box" || boxmode == "secretbox")
+{
+  enum ZeroBytes = mixin("crypto_"~boxmode~"_ZEROBYTES");
+  enum BoxZeroBytes = mixin("crypto_"~boxmode~"_BOXZEROBYTES");
+
+  if (c.length < crypto_boxes_valid_encsize!boxmode(c)) return false;
+  if (msg.length < crypto_boxes_decsize!boxmode(c.length)) return false;
+  if (nonce.length < mixin("crypto_"~boxmode~"_NONCEBYTES")) return false;
+  static if (boxmode == "box") {
+    if (pk.length < crypto_box_PUBLICKEYBYTES) return false;
+    if (sk.length < crypto_box_SECRETKEYBYTES) return false;
+  } else {
+    if (pk.length < crypto_secretbox_KEYBYTES) return false;
+  }
+
   // use stack buffer for small messages; assume that we can alloca at least 4kb+crypto_box_ZEROBYTES*2
   import core.stdc.stdlib : alloca, malloc, free;
   import core.stdc.string : memset, memcpy;
-  ubyte* smem, dmem;
+  ubyte* smem = null, dmem = null;
   bool doFree = false;
   scope(exit) if (doFree) { if (smem !is null) free(smem); if (dmem !is null) free(dmem); }
-  immutable memsz = c.length+(crypto_box_ZEROBYTES-crypto_box_BOXZEROBYTES);
+  immutable memsz = c.length+(ZeroBytes-BoxZeroBytes);
   if (c.length <= 2048) {
     smem = cast(ubyte*)alloca(memsz);
     dmem = cast(ubyte*)alloca(memsz);
@@ -770,17 +822,25 @@ bool crypto_box_dec (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(
   memset(smem, 0, memsz);
   memset(dmem, 0, memsz);
   // copy `c` to `smem`
-  memcpy(smem+crypto_box_BOXZEROBYTES, c.ptr, c.length);
+  memcpy(smem+BoxZeroBytes, c.ptr, c.length);
   // process
-  auto res = crypto_box_open(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
+  static if (boxmode == "box") {
+    auto res = crypto_box_open(dmem[0..memsz], smem[0..memsz], nonce, pk, sk);
+  } else {
+    auto res = crypto_secretbox_open(dmem[0..memsz], smem[0..memsz], nonce, pk);
+  }
   ubyte b = 0;
-  foreach (immutable ubyte bv; dmem[0..crypto_box_ZEROBYTES]) b |= bv;
+  foreach (immutable ubyte bv; dmem[0..ZeroBytes]) b |= bv;
   // copy result to destination buffer
-  memcpy(msg.ptr, dmem+crypto_box_ZEROBYTES, crypto_box_decsize(c));
+  memcpy(msg.ptr, dmem+ZeroBytes, crypto_boxes_decsize!boxmode(c.length));
   return (res && b == 0);
 }
 
+alias crypto_box_dec = crypto_boxes_dec!"box"; /// ditto
+alias crypto_secretbox_dec = crypto_boxes_dec!"secretbox"; /// ditto
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 /**
  * This function signs a message 'msg' using the sender's secret key 'sk'.
  * The function returns the resulting signed message.
@@ -793,12 +853,12 @@ bool crypto_box_dec (ubyte[] msg, const(ubyte)[] c, const(ubyte)[] nonce, const(
  * Returns:
  *  signed message
  */
-void crypto_sign (ubyte[] sm, const(ubyte)[] msg, const(ubyte)[] sk) @nogc {
+public void crypto_sign (ubyte[] sm, const(ubyte)[] msg, const(ubyte)[] sk) @nogc {
   if (sk.length < crypto_sign_SECRETKEYBYTES) assert(0, "invalid sk size");
   if (sm.length < msg.length+64) assert(0, "invalid sm size");
 
   ubyte[64] d = void, h = void, r = void;
-  ulong[64] x;/*autoinit*/
+  ulong[64] x = 0;
   long[16][4] p = void;
   auto n = msg.length;
   auto smlen = n+64;
@@ -836,7 +896,7 @@ void crypto_sign (ubyte[] sm, const(ubyte)[] msg, const(ubyte)[] sk) @nogc {
  * Returns:
  *  success flag
  */
-bool crypto_sign_open (ubyte[] msg, const(ubyte)[] sm, const(ubyte)[] pk) @nogc {
+public bool crypto_sign_open (ubyte[] msg, const(ubyte)[] sm, const(ubyte)[] pk) @nogc {
   if (pk.length < crypto_sign_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (msg.length < sm.length) assert(0, "invalid sm size");
   if (sm.length < 64) assert(0, "invalid sm size");
@@ -881,7 +941,7 @@ bool crypto_sign_open (ubyte[] msg, const(ubyte)[] sm, const(ubyte)[] pk) @nogc 
  * Returns:
  *  pair of new keys (in pk and sk)
  */
-void crypto_sign_keypair (ubyte[] pk, ubyte[] sk) {
+public void crypto_sign_keypair (ubyte[] pk, ubyte[] sk) {
   if (pk.length < crypto_sign_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_sign_SECRETKEYBYTES) assert(0, "invalid sk size");
 
@@ -911,7 +971,7 @@ void crypto_sign_keypair (ubyte[] pk, ubyte[] sk) {
  * Returns:
  *  pair of new keys (in pk and sk)
  */
-void crypto_sign_pk_from_sk (ubyte[] pk, ubyte[] sk) {
+public void crypto_sign_pk_from_sk (ubyte[] pk, ubyte[] sk) {
   if (pk.length < crypto_sign_PUBLICKEYBYTES) assert(0, "invalid pk size");
   if (sk.length < crypto_sign_SECRETKEYBYTES) assert(0, "invalid sk size");
 
@@ -947,24 +1007,18 @@ static immutable long[16]
   Y = [0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666],
   I = [0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43, 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83];
 
-uint ld32 (const(ubyte)[] x)
-in {
-  assert(x.length >= 4);
-}
-body {
+uint ld32 (const(ubyte)[] x) {
   pragma(inline, true);
+  assert(x.length >= 4);
   uint u = x.ptr[3];
   u = (u<<8)|x.ptr[2];
   u = (u<<8)|x.ptr[1];
   return (u<<8)|x.ptr[0];
 }
 
-ulong dl64 (const(ubyte)[] x)
-in {
-  assert(x.length >= 8);
-}
-body {
+ulong dl64 (const(ubyte)[] x) {
   pragma(inline, true);
+  assert(x.length >= 8);
   ulong u = x.ptr[0];
   u = (u<<8)|x.ptr[1];
   u = (u<<8)|x.ptr[2];
@@ -975,24 +1029,18 @@ body {
   return (u<<8)|x.ptr[7];
 }
 
-void st32 (ubyte[] x, uint u)
-in {
-  assert(x.length >= 4);
-}
-body {
+void st32 (ubyte[] x, uint u) {
   pragma(inline, true);
+  assert(x.length >= 4);
   x.ptr[0] = u&0xff;
   x.ptr[1] = (u>>8)&0xff;
   x.ptr[2] = (u>>16)&0xff;
   x.ptr[3] = (u>>24)&0xff;
 }
 
-void ts64 (ubyte[] x, ulong u)
-in {
-  assert(x.length >= 8);
-}
-body {
+void ts64 (ubyte[] x, ulong u) {
   pragma(inline, true);
+  assert(x.length >= 8);
   x.ptr[0] = (u>>56)&0xff;
   x.ptr[1] = (u>>48)&0xff;
   x.ptr[2] = (u>>40)&0xff;
@@ -1003,11 +1051,8 @@ body {
   x.ptr[7] = u&0xff;
 }
 
-bool vn (const(ubyte)[] x, const(ubyte)[] y)
-in {
+bool vn (const(ubyte)[] x, const(ubyte)[] y) {
   assert(x.length >= y.length);
-}
-body {
   uint d = 0;
   foreach (immutable i, immutable v; cast(const(ubyte)[])x) d |= v^y.ptr[i];
   return (1&((d-1)>>8)) != 0;
@@ -1015,15 +1060,14 @@ body {
 
 private void salsa_core(string type) (ubyte[] output, const(ubyte)[] input, const(ubyte)[] key, const(ubyte)[] constant)
 if (type == "salsa" || type == "hsalsa") // constraint
-in {
+{
+  static uint ROTL32 (uint x, int c) pure nothrow @safe @nogc { pragma(inline, true); return (x<<c)|((x&0xffffffff)>>(32-c)); }
+
   // magic!
   assert(mixin(`output.length >= crypto_core_`~type~`20_OUTPUTBYTES`));
   assert(mixin(`input.length >= crypto_core_`~type~`20_INPUTBYTES`));
   assert(mixin(`key.length >= crypto_core_`~type~`20_KEYBYTES`));
   assert(mixin(`constant.length >= crypto_core_`~type~`20_CONSTBYTES`));
-}
-body {
-  static uint ROTL32 (uint x, int c) pure nothrow @safe @nogc { pragma(inline, true); return (x<<c)|((x&0xffffffff)>>(32-c)); }
 
   uint[16] w = void, x = void, y = void;
   uint[4] t = void;
@@ -1065,15 +1109,13 @@ body {
 }
 
 // public for testing
-public void crypto_core_salsa20 (ubyte[] output, const(ubyte)[] input, const(ubyte)[] key, const(ubyte)[] constant)
-{
+public void crypto_core_salsa20 (ubyte[] output, const(ubyte)[] input, const(ubyte)[] key, const(ubyte)[] constant) {
   pragma(inline, true);
   salsa_core!"salsa"(output, input, key, constant);
 }
 
 // public for testing
-public void crypto_core_hsalsa20 (ubyte[] output, const(ubyte)[] input, const(ubyte)[] key, const(ubyte)[] constant)
-{
+public void crypto_core_hsalsa20 (ubyte[] output, const(ubyte)[] input, const(ubyte)[] key, const(ubyte)[] constant) {
   pragma(inline, true);
   salsa_core!"hsalsa"(output, input, key, constant);
 }
@@ -1203,13 +1245,11 @@ void pow2523 (long[] o, const(long)[] i) {
  * Returns:
  *  resulting group element 'q' of length crypto_scalarmult_BYTES.
  */
-public void crypto_scalarmult (ubyte[] q, const(ubyte)[] n, const(ubyte)[] p)
-in {
+public void crypto_scalarmult (ubyte[] q, const(ubyte)[] n, const(ubyte)[] p) {
   assert(q.length == crypto_scalarmult_BYTES);
   assert(n.length == crypto_scalarmult_BYTES);
   assert(p.length == crypto_scalarmult_BYTES);
-}
-body {
+
   ubyte[32] z = void;
   long[80] x = void;
   long r;
@@ -1270,13 +1310,10 @@ body {
  * Returns:
  *  resulting group element 'q' of length crypto_scalarmult_BYTES.
  */
-public void crypto_scalarmult_base (ubyte[] q, const(ubyte)[] n)
-in {
+public void crypto_scalarmult_base (ubyte[] q, const(ubyte)[] n) {
+  pragma(inline, true);
   assert(q.length == crypto_scalarmult_BYTES);
   assert(n.length == crypto_scalarmult_SCALARBYTES);
-}
-body {
-  pragma(inline, true);
   crypto_scalarmult(q, n, nine_);
 }
 
@@ -1365,7 +1402,7 @@ immutable ubyte[64] ivc = [
 public void crypto_hash (ubyte[] output, const(ubyte)[] msg) {
   if (output.length < crypto_hash_BYTES) assert(0, "output too small");
   ubyte[64] h = void;
-  ubyte[256] x; /*autoinit*/
+  ubyte[256] x = 0;
   auto n = msg.length;
   ulong b = n;
   uint mpos = 0;
@@ -1519,4 +1556,42 @@ private bool unpackneg (ref long[16][4] r, const(ubyte)[] p) {
 
   M(r.ptr[3], r.ptr[0], r.ptr[1]);
   return true;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// Ketmar's additions
+
+/** Generate 32-byte secret key from the given passphase and salt.
+ *
+ * This is very simple (and cryptographically weak) function to
+ * generate crypto key from the given passphrase and salt.
+ *
+ * WARNING! This function sux, and it is absolutely cryptographically weak
+ *          (hence the name). Only use it if you don't care about any
+ *          attacks. Heh.
+ *
+ * Params:
+ *   sk = output buffer, should have room for at least 32 bytes
+ *   passphrase = passphrase, arbitrary length
+ *   salt = salt
+ *
+ * Returns:
+ *   Generated key in first 32 bytes of sk.
+ */
+public void weak_crypto_key_from_passphrase (ubyte[] sk, const(void)[] passphrase, ulong salt) @trusted @nogc {
+  if (sk.length < 32) assert(0, "invalid sk size");
+  static assert(crypto_hash_BYTES == 64);
+  ubyte[crypto_hash_BYTES+24/*nonce*/] hash = void;
+  crypto_hash(hash[], cast(const(ubyte)[])passphrase[]);
+  hash[crypto_hash_BYTES..$] = 0;
+  hash.ptr[crypto_hash_BYTES+0] = cast(ubyte)(salt&0xff);
+  hash.ptr[crypto_hash_BYTES+1] = cast(ubyte)((salt>>8)&0xff);
+  hash.ptr[crypto_hash_BYTES+2] = cast(ubyte)((salt>>16)&0xff);
+  hash.ptr[crypto_hash_BYTES+3] = cast(ubyte)((salt>>24)&0xff);
+  hash.ptr[crypto_hash_BYTES+4] = cast(ubyte)((salt>>32)&0xff);
+  hash.ptr[crypto_hash_BYTES+5] = cast(ubyte)((salt>>40)&0xff);
+  hash.ptr[crypto_hash_BYTES+6] = cast(ubyte)((salt>>48)&0xff);
+  hash.ptr[crypto_hash_BYTES+7] = cast(ubyte)((salt>>56)&0xff);
+  crypto_stream_xor(sk[0..32], hash[0..32], hash[64..64+24], hash[32..64]);
 }
