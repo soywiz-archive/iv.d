@@ -472,16 +472,16 @@ public:
     auto ts = gb.textsize;
     bool inBlock = (bstart < bend && pos >= bstart && pos < bend);
     bool bookmarked = isLineBookmarked(lidx);
+    bool hasHL = (hl !is null); // do we have highlighter (just a cache)
     if (singleline) {
       win.color = (clrText ? clrText : TextColor);
       if (killTextOnChar) win.color = (clrTextUnchanged ? clrTextUnchanged : TextKillColor);
       if (inBlock) win.color = (clrBlock ? clrBlock : BlockColor);
     } else {
-      win.color = TextColor;
+      win.color = (hasHL ? TextColor : TextColorNoHi);
       if (bookmarked) win.color = BookmarkColor; else if (inBlock) win.color = BlockColor;
     }
     // if we have no highlighter, check for trailing spaces explicitly
-    bool hasHL = (hl !is null); // do we have highlighter (just a cache)
     // look for trailing spaces even if we have a highlighter
     int trspos = lc.lineend(lidx); // this is where trailing spaces starts (will)
     immutable lend = trspos;
@@ -492,13 +492,13 @@ public:
                        (killTextOnChar ?
                          (clrTextUnchanged ? clrTextUnchanged : TextKillColor) :
                          (clrText ? clrText : TextColor)) :
-                       TextColor);
+                       (hasHL ? TextColor : TextColorNoHi));
     auto blkClr = (singleline ? (clrBlock ? clrBlock : BlockColor) : BlockColor);
     while (pos <= lend) {
       inBlock = (bs < be && pos >= bs && pos < be);
       auto ch = gb[pos++];
       if (ch == '\n') {
-        if (!killTextOnChar && !singleline) win.color = (hasHL ? hiColor(gb.hi(pos-1)) : TextColor); else win.color = sltextClr;
+        if (!killTextOnChar && !singleline) win.color = (hasHL ? hiColor(gb.hi(pos-1)) : TextColorNoHi); else win.color = sltextClr;
         --pos;
         break;
       } else if (hasHL) {
@@ -566,7 +566,7 @@ public:
     if (x >= winw) return;
     if (x < 0) x = 0;
     if (pos >= lend) {
-      win.color = TextColor;
+      win.color = (hasHL || singleline ? TextColor : TextColorNoHi);
       if (!killTextOnChar && !singleline) {
         if (bookmarked) win.color = BookmarkColor; else win.color = sltextClr;
       } else {

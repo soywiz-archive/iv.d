@@ -28,6 +28,7 @@ public import iv.egeditor.highlighters;
 // ////////////////////////////////////////////////////////////////////////// //
 public enum TextBG = TtyRgb2Color!(0x3a, 0x3a, 0x3a); // 237
 
+public enum TextColorNoHi = XtColorFB!(TtyRgb2Color!(0xff, 0xa0, 0x00), TextBG);
 public enum TextColor = XtColorFB!(TtyRgb2Color!(0xd0, 0xd0, 0xd0), TextBG); // 252,237
 public enum TextKillColor = XtColorFB!(TtyRgb2Color!(0xe0, 0xe0, 0xe0), TextBG); // 252,237
 public enum BadColor = XtColorFB!(TtyRgb2Color!(0xff, 0xff, 0x54), TtyRgb2Color!(0xb2, 0x18, 0x18)); // 11,1
