@@ -2931,10 +2931,24 @@ public:
   }
 
   ///
+  final bool isCurLineBeforeTop () nothrow {
+    pragma(inline, true);
+    return (cy < mTopLine);
+  }
+
+  ///
+  final bool isCurLineAfterBottom () nothrow {
+    pragma(inline, true);
+    return (cy > mTopLine+linesPerWindow-1);
+  }
+
+  ///
   final bool isCurLineVisible () nothrow {
-    if (cy < mTopLine) return false;
-    if (cy > mTopLine+linesPerWindow-1) return false;
-    return true;
+    pragma(inline, true);
+    return (cy >= mTopLine && cy < mTopLine+linesPerWindow);
+    //if (cy < mTopLine) return false;
+    //if (cy > mTopLine+linesPerWindow-1) return false;
+    //return true;
   }
 
   /// `updateDown`: update all the page (as new lines was inserted/removed)
@@ -3953,6 +3967,13 @@ public:
       killTextOnChar = false;
       pushUndoCurPos();
       --cy;
+      // visjump
+      if (winh >= 24 && isCurLineBeforeTop) {
+        mTopLine = cy-(winh/3);
+        if (mTopLine < 0) mTopLine = 0;
+        setDirtyLinesLength(visibleLinesPerWindow);
+        makeCurXVisible();
+      }
     }
     growBlockMark();
   }
@@ -3964,6 +3985,13 @@ public:
       killTextOnChar = false;
       pushUndoCurPos();
       ++cy;
+      // visjump
+      if (winh >= 24 && isCurLineAfterBottom) {
+        mTopLine = cy+(winh/3)-linesPerWindow+1;
+        if (mTopLine < 0) mTopLine = 0;
+        setDirtyLinesLength(visibleLinesPerWindow);
+        makeCurXVisible();
+      }
     }
     growBlockMark();
   }
