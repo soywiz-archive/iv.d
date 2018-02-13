@@ -36,8 +36,6 @@
 module iv.nanovg.nanovg /*is aliced*/;
 import iv.alice;
 
-//version = nanosvg_asserts;
-
 
 // ////////////////////////////////////////////////////////////////////////// //
 // engine
@@ -426,18 +424,18 @@ struct NVGparams {
   void* userPtr;
   bool edgeAntiAlias;
   bool fontAA;
-  bool function (void* uptr) renderCreate;
-  int function (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) renderCreateTexture;
-  bool function (void* uptr, int image) renderDeleteTexture;
-  bool function (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) renderUpdateTexture;
-  bool function (void* uptr, int image, int* w, int* h) renderGetTextureSize;
-  void function (void* uptr, int width, int height) renderViewport;
-  void function (void* uptr) renderCancel;
-  void function (void* uptr, NVGCompositeOperationState compositeOperation) renderFlush;
-  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) renderFill;
-  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) renderStroke;
-  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) renderTriangles;
-  void function (void* uptr) renderDelete;
+  bool function (void* uptr) nothrow @trusted @nogc renderCreate;
+  int function (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) nothrow @trusted @nogc renderCreateTexture;
+  bool function (void* uptr, int image) nothrow @trusted @nogc renderDeleteTexture;
+  bool function (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) nothrow @trusted @nogc renderUpdateTexture;
+  bool function (void* uptr, int image, int* w, int* h) nothrow @trusted @nogc renderGetTextureSize;
+  void function (void* uptr, int width, int height) nothrow @trusted @nogc renderViewport;
+  void function (void* uptr) nothrow @trusted @nogc renderCancel;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation) nothrow @trusted @nogc renderFlush;
+  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderFill;
+  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
+  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
+  void function (void* uptr) nothrow @trusted @nogc renderDelete;
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -567,7 +565,7 @@ float nvg__cross() (float dx0, float dy0, float dx1, float dy1) { pragma(inline,
 private import core.stdc.math : nvg__absf = fabsf;
 
 
-float nvg__normalize (float* x, float* y) {
+float nvg__normalize (float* x, float* y) nothrow @safe @nogc {
   float d = nvg__sqrtf((*x)*(*x)+(*y)*(*y));
   if (d > 1e-6f) {
     immutable float id = 1.0f/d;
@@ -578,7 +576,7 @@ float nvg__normalize (float* x, float* y) {
 }
 
 
-void nvg__deletePathCache (NVGpathCache* c) {
+void nvg__deletePathCache (NVGpathCache* c) nothrow @trusted @nogc {
   if (c is null) return;
   if (c.points !is null) free(c.points);
   if (c.paths !is null) free(c.paths);
@@ -587,7 +585,7 @@ void nvg__deletePathCache (NVGpathCache* c) {
 }
 
 
-NVGpathCache* nvg__allocPathCache () {
+NVGpathCache* nvg__allocPathCache () nothrow @trusted @nogc {
   NVGpathCache* c = cast(NVGpathCache*)malloc(NVGpathCache.sizeof);
   if (c is null) goto error;
   memset(c, 0, NVGpathCache.sizeof);
@@ -613,14 +611,14 @@ error:
   return null;
 }
 
-void nvg__setDevicePixelRatio (NVGContext ctx, float ratio) {
+void nvg__setDevicePixelRatio (NVGContext ctx, float ratio) pure nothrow @safe @nogc {
   ctx.tessTol = 0.25f/ratio;
   ctx.distTol = 0.01f/ratio;
   ctx.fringeWidth = 1.0f/ratio;
   ctx.devicePxRatio = ratio;
 }
 
-NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation op) {
+NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation op) pure nothrow @safe @nogc {
   NVGBlendFactor sfactor, dfactor;
        if (op == NVGCompositeOperation.SOURCE_OVER) { sfactor = NVGBlendFactor.ONE; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA;}
   else if (op == NVGCompositeOperation.SOURCE_IN) { sfactor = NVGBlendFactor.DST_ALPHA; dfactor = NVGBlendFactor.ZERO; }
@@ -643,13 +641,13 @@ NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation o
   return state;
 }
 
-NVGstate* nvg__getState (NVGContext ctx) {
+NVGstate* nvg__getState (NVGContext ctx) pure nothrow @trusted @nogc {
   //pragma(inline, true);
   return ctx.states.ptr+(ctx.nstates-1);
 }
 
 // Constructor called by the render back-end.
-package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) {
+package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
   FONSparams fontParams;
   NVGContext ctx = cast(NVGContext)malloc(NVGcontext.sizeof);
   if (ctx is null) goto error;
@@ -699,12 +697,12 @@ error:
 }
 
 // Called by render backend.
-package/*(iv.nanovg)*/ NVGparams* internalParams (NVGContext ctx) {
+package/*(iv.nanovg)*/ NVGparams* internalParams (NVGContext ctx) nothrow @trusted @nogc {
   return &ctx.params;
 }
 
 // Destructor called by the render back-end.
-package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) {
+package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx is null) return;
   if (ctx.commands !is null) free(ctx.commands);
   if (ctx.cache !is null) nvg__deletePathCache(ctx.cache);
@@ -737,7 +735,7 @@ package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) {
  *
  * see also `glNVGClearFlags()`, which returns necessary flags for `glClear()`.
  */
-public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float devicePixelRatio=float.nan) {
+public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float devicePixelRatio=float.nan) nothrow @trusted @nogc {
   import std.math : isNaN;
   /*
   printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
@@ -765,7 +763,7 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
 }
 
 /// Cancels drawing the current frame.
-public void cancelFrame (NVGContext ctx) {
+public void cancelFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.mWidth = 0;
   ctx.mHeight = 0;
   ctx.mDeviceRatio = 0;
@@ -774,7 +772,7 @@ public void cancelFrame (NVGContext ctx) {
 }
 
 /// Ends drawing flushing remaining render state.
-public void endFrame (NVGContext ctx) {
+public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.mWidth = 0;
   ctx.mHeight = 0;
   ctx.mDeviceRatio = 0;
@@ -817,18 +815,18 @@ public void endFrame (NVGContext ctx) {
 public alias NVGSectionDummy00_00 = void;
 
 // Sets the composite operation. The op parameter should be one of NVGcompositeOperation.
-void globalCompositeOperation (NVGContext ctx, NVGCompositeOperation op) {
+void globalCompositeOperation (NVGContext ctx, NVGCompositeOperation op) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.compositeOperation = nvg__compositeOperationState(op);
 }
 
 // Sets the composite operation with custom pixel arithmetic. The parameters should be one of NVGblendFactor.
-void globalCompositeBlendFunc (NVGContext ctx, NVGBlendFactor sfactor, NVGBlendFactor dfactor) {
+void globalCompositeBlendFunc (NVGContext ctx, NVGBlendFactor sfactor, NVGBlendFactor dfactor) nothrow @trusted @nogc {
   ctx.globalCompositeBlendFuncSeparate(sfactor, dfactor, sfactor, dfactor);
 }
 
 // Sets the composite operation with custom pixel arithmetic for RGB and alpha components separately. The parameters should be one of NVGblendFactor.
-void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NVGBlendFactor dstRGB, NVGBlendFactor srcAlpha, NVGBlendFactor dstAlpha) {
+void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NVGBlendFactor dstRGB, NVGBlendFactor srcAlpha, NVGBlendFactor dstAlpha) nothrow @trusted @nogc {
   NVGCompositeOperationState op;
   op.srcRGB = srcRGB;
   op.dstRGB = dstRGB;
@@ -898,7 +896,7 @@ public NVGColor nvgHSL() (float h, float s, float l) {
 }
 */
 
-float nvg__hue() (float h, float m1, float m2) {
+float nvg__hue() (float h, float m1, float m2) pure nothrow @safe @nogc {
   if (h < 0) h += 1;
   if (h > 1) h -= 1;
   if (h < 1.0f/6.0f) return m1+(m2-m1)*h*6.0f;
@@ -977,36 +975,36 @@ public NVGColor nvgHSLA() (float h, float s, float l, float a) {
 public alias NVGSectionDummy01 = void;
 
 /// Sets the transform to identity matrix.
-public void nvgTransformIdentity (float[] t) {
+public void nvgTransformIdentity (float[] t) nothrow @trusted @nogc {
   pragma(inline, true);
-  version(nanosvg_asserts) assert(t.length > 5);
+  assert(t.length > 5);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
   t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to translation matrix matrix.
-public void nvgTransformTranslate (float[] t, float tx, float ty) {
+public void nvgTransformTranslate (float[] t, float tx, float ty) nothrow @trusted @nogc {
   pragma(inline, true);
-  version(nanosvg_asserts) assert(t.length > 5);
+  assert(t.length > 5);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
   t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
   t.ptr[4] = tx; t.ptr[5] = ty;
 }
 
 /// Sets the transform to scale matrix.
-public void nvgTransformScale (float[] t, float sx, float sy) {
+public void nvgTransformScale (float[] t, float sx, float sy) nothrow @trusted @nogc {
   pragma(inline, true);
-  version(nanosvg_asserts) assert(t.length > 5);
+  assert(t.length > 5);
   t.ptr[0] = sx; t.ptr[1] = 0.0f;
   t.ptr[2] = 0.0f; t.ptr[3] = sy;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to rotate matrix. Angle is specified in radians.
-public void nvgTransformRotate (float[] t, float a) {
+public void nvgTransformRotate (float[] t, float a) nothrow @trusted @nogc {
   //pragma(inline, true);
-  version(nanosvg_asserts) assert(t.length > 5);
+  assert(t.length > 5);
   float cs = nvg__cosf(a), sn = nvg__sinf(a);
   t.ptr[0] = cs; t.ptr[1] = sn;
   t.ptr[2] = -sn; t.ptr[3] = cs;
@@ -1014,27 +1012,27 @@ public void nvgTransformRotate (float[] t, float a) {
 }
 
 /// Sets the transform to skew-x matrix. Angle is specified in radians.
-public void nvgTransformSkewX (float[] t, float a) {
+public void nvgTransformSkewX (float[] t, float a) nothrow @trusted @nogc {
   //pragma(inline, true);
-  version(nanosvg_asserts) assert(t.length > 5);
+  assert(t.length > 5);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
   t.ptr[2] = nvg__tanf(a); t.ptr[3] = 1.0f;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to skew-y matrix. Angle is specified in radians.
-public void nvgTransformSkewY (float[] t, float a) {
+public void nvgTransformSkewY (float[] t, float a) nothrow @trusted @nogc {
   //pragma(inline, true);
-  version(nanosvg_asserts) assert(t.length > 5);
+  assert(t.length > 5);
   t.ptr[0] = 1.0f; t.ptr[1] = nvg__tanf(a);
   t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to the result of multiplication of two transforms, of A = A*B.
-public void nvgTransformMultiply (float[] t, const(float)[] s) {
-  version(nanosvg_asserts) assert(t.length > 5);
-  version(nanosvg_asserts) assert(s.length > 5);
+public void nvgTransformMultiply (float[] t, const(float)[] s) nothrow @trusted @nogc {
+  assert(t.length > 5);
+  assert(s.length > 5);
   //pragma(inline, true);
   float t0 = t.ptr[0]*s.ptr[0]+t.ptr[1]*s.ptr[2];
   float t2 = t.ptr[2]*s.ptr[0]+t.ptr[3]*s.ptr[2];
@@ -1048,9 +1046,9 @@ public void nvgTransformMultiply (float[] t, const(float)[] s) {
 }
 
 /// Sets the transform to the result of multiplication of two transforms, of A = B*A.
-public void nvgTransformPremultiply (float[] t, const(float)[] s) {
-  version(nanosvg_asserts) assert(t.length > 5);
-  version(nanosvg_asserts) assert(s.length > 5);
+public void nvgTransformPremultiply (float[] t, const(float)[] s) nothrow @trusted @nogc {
+  assert(t.length > 5);
+  assert(s.length > 5);
   //pragma(inline, true);
   float[6] s2 = s[0..6];
   nvgTransformMultiply(s2[], t);
@@ -1059,9 +1057,9 @@ public void nvgTransformPremultiply (float[] t, const(float)[] s) {
 
 /// Sets the destination to inverse of specified transform.
 /// Returns `true` if the inverse could be calculated, else `false`.
-public bool nvgTransformInverse (float[] inv, const(float)[] t) {
-  version(nanosvg_asserts) assert(t.length > 5);
-  version(nanosvg_asserts) assert(inv.length > 5);
+public bool nvgTransformInverse (float[] inv, const(float)[] t) nothrow @trusted @nogc {
+  assert(t.length > 5);
+  assert(inv.length > 5);
   immutable double det = cast(double)t.ptr[0]*t.ptr[3]-cast(double)t.ptr[2]*t.ptr[1];
   if (det > -1e-6 && det < 1e-6) {
     nvgTransformIdentity(inv);
@@ -1078,9 +1076,9 @@ public bool nvgTransformInverse (float[] inv, const(float)[] t) {
 }
 
 /// Transform a point by given transform.
-public void nvgTransformPoint (float* dx, float* dy, const(float)[] t, float sx, float sy) {
+public void nvgTransformPoint (float* dx, float* dy, const(float)[] t, float sx, float sy) nothrow @trusted @nogc {
   pragma(inline, true);
-  version(nanosvg_asserts) assert(t.length > 5);
+  assert(t.length > 5);
   *dx = sx*t.ptr[0]+sy*t.ptr[2]+t.ptr[4];
   *dy = sx*t.ptr[1]+sy*t.ptr[3]+t.ptr[5];
 }
@@ -1097,7 +1095,7 @@ public float nvgRadToDeg() (float rad) {
   return rad/NVG_PI*180.0f;
 }
 
-void nvg__setPaintColor (NVGPaint* p, NVGColor color) {
+void nvg__setPaintColor (NVGPaint* p, NVGColor color) nothrow @trusted @nogc {
   //pragma(inline, true);
   memset(p, 0, (*p).sizeof);
   nvgTransformIdentity(p.xform[]);
@@ -1121,7 +1119,7 @@ public alias NVGSectionDummy02 = void;
  * A matching `restore()` must be used to restore the state.
  * Returns `false` if state stack overflowed.
  */
-public bool save (NVGContext ctx) {
+public bool save (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.nstates >= NVG_MAX_STATES) return false;
   if (ctx.nstates > 0) memcpy(&ctx.states[ctx.nstates], &ctx.states[ctx.nstates-1], NVGstate.sizeof);
   ++ctx.nstates;
@@ -1129,14 +1127,14 @@ public bool save (NVGContext ctx) {
 }
 
 /// Pops and restores current render state.
-public bool restore (NVGContext ctx) {
+public bool restore (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.nstates <= 1) return false;
   --ctx.nstates;
   return true;
 }
 
 /// Resets current render state to default values. Does not affect the render state stack.
-public void reset (NVGContext ctx) {
+public void reset (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   memset(state, 0, (*state).sizeof);
 
@@ -1173,34 +1171,34 @@ public void reset (NVGContext ctx) {
 public alias NVGSectionDummy03 = void;
 
 /// Sets the stroke width of the stroke style.
-public void strokeWidth (NVGContext ctx, float width) {
+public void strokeWidth (NVGContext ctx, float width) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.strokeWidth = width;
 }
 
 /// Sets the miter limit of the stroke style. Miter limit controls when a sharp corner is beveled.
-public void miterLimit (NVGContext ctx, float limit) {
+public void miterLimit (NVGContext ctx, float limit) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.miterLimit = limit;
 }
 
 /// Sets how the end of the line (cap) is drawn,
 /// Can be one of: NVGLineCap.Butt (default), NVGLineCap.Round, NVGLineCap.Square.
-public void lineCap (NVGContext ctx, NVGLineCap cap) {
+public void lineCap (NVGContext ctx, NVGLineCap cap) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.lineCap = cap;
 }
 
 /// Sets how sharp path corners are drawn.
 /// Can be one of NVGLineCap.Miter (default), NVGLineCap.Round, NVGLineCap.Bevel.
-public void lineJoin (NVGContext ctx, NVGLineCap join) {
+public void lineJoin (NVGContext ctx, NVGLineCap join) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.lineJoin = join;
 }
 
 /// Sets the transparency applied to all rendered shapes.
 /// Already transparent paths will get proportionally more transparent as well.
-public void globalAlpha (NVGContext ctx, float alpha) {
+public void globalAlpha (NVGContext ctx, float alpha) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.alpha = alpha;
 }
@@ -1215,7 +1213,7 @@ public void globalAlpha (NVGContext ctx, float alpha) {
  *   [0 0 1]
  * ----------------------
  */
-public void transform (NVGContext ctx, float a, float b, float c, float d, float e, float f) {
+public void transform (NVGContext ctx, float a, float b, float c, float d, float e, float f) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   //float[6] t = [ a, b, c, d, e, f ];
   float[6] t = void;
@@ -1229,13 +1227,13 @@ public void transform (NVGContext ctx, float a, float b, float c, float d, float
 }
 
 /// Resets current transform to a identity matrix.
-public void resetTransform (NVGContext ctx) {
+public void resetTransform (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   nvgTransformIdentity(state.xform[]);
 }
 
 /// Translates current coordinate system.
-public void translate (NVGContext ctx, float x, float y) {
+public void translate (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   float[6] t = void;
   nvgTransformTranslate(t[], x, y);
@@ -1243,7 +1241,7 @@ public void translate (NVGContext ctx, float x, float y) {
 }
 
 /// Rotates current coordinate system. Angle is specified in radians.
-public void rotate (NVGContext ctx, float angle) {
+public void rotate (NVGContext ctx, float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   float[6] t = void;
   nvgTransformRotate(t[], angle);
@@ -1251,7 +1249,7 @@ public void rotate (NVGContext ctx, float angle) {
 }
 
 /// Skews the current coordinate system along X axis. Angle is specified in radians.
-public void skewX (NVGContext ctx, float angle) {
+public void skewX (NVGContext ctx, float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   float[6] t = void;
   nvgTransformSkewX(t[], angle);
@@ -1259,7 +1257,7 @@ public void skewX (NVGContext ctx, float angle) {
 }
 
 /// Skews the current coordinate system along Y axis. Angle is specified in radians.
-public void skewY (NVGContext ctx, float angle) {
+public void skewY (NVGContext ctx, float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   float[6] t = void;
   nvgTransformSkewY(t[], angle);
@@ -1267,7 +1265,7 @@ public void skewY (NVGContext ctx, float angle) {
 }
 
 /// Scales the current coordinate system.
-public void scale (NVGContext ctx, float x, float y) {
+public void scale (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   float[6] t = void;
   nvgTransformScale(t[], x, y);
@@ -1284,33 +1282,33 @@ public void scale (NVGContext ctx, float x, float y) {
  *
  * There should be space for 6 floats in the return buffer for the values a-f.
  */
-public void currentTransform (NVGContext ctx, float[] xform) {
-  version(nanosvg_asserts) assert(xform.length > 5);
+public void currentTransform (NVGContext ctx, float[] xform) nothrow @trusted @nogc {
+  assert(xform.length > 5);
   NVGstate* state = nvg__getState(ctx);
   xform[0..6] = state.xform[0..6];
 }
 
 /// Sets current stroke style to a solid color.
-public void strokeColor (NVGContext ctx, NVGColor color) {
+public void strokeColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   nvg__setPaintColor(&state.stroke, color);
 }
 
 /// Sets current stroke style to a paint, which can be a one of the gradients or a pattern.
-public void strokePaint (NVGContext ctx, NVGPaint paint) {
+public void strokePaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.stroke = paint;
   nvgTransformMultiply(state.stroke.xform[], state.xform[]);
 }
 
 /// Sets current fill style to a solid color.
-public void fillColor (NVGContext ctx, NVGColor color) {
+public void fillColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   nvg__setPaintColor(&state.fill, color);
 }
 
 /// Sets current fill style to a paint, which can be a one of the gradients or a pattern.
-public void fillPaint (NVGContext ctx, NVGPaint paint) {
+public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.fill = paint;
   nvgTransformMultiply(state.fill.xform[], state.xform[]);
@@ -1423,25 +1421,25 @@ version(nanovg_use_arsd_image) {
 
 /// Creates image from specified image data.
 /// Returns handle to the image.
-public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, int imageFlags=NVGImageFlags.None) {
+public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, int imageFlags=NVGImageFlags.None) nothrow @trusted @nogc {
   if (w < 1 || h < 1 || data.length < w*h*4) return -1;
   return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
 }
 
 /// Updates image data specified by image handle.
-public void updateImage (NVGContext ctx, int image, const(void)[] data) {
+public void updateImage (NVGContext ctx, int image, const(void)[] data) nothrow @trusted @nogc {
   int w, h;
   ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
   ctx.params.renderUpdateTexture(ctx.params.userPtr, image, 0, 0, w, h, cast(const(ubyte)*)data.ptr);
 }
 
 /// Returns the dimensions of a created image.
-public void imageSize (NVGContext ctx, int image, int* w, int* h) {
+public void imageSize (NVGContext ctx, int image, int* w, int* h) nothrow @trusted @nogc {
   ctx.params.renderGetTextureSize(ctx.params.userPtr, image, w, h);
 }
 
 /// Deletes created image.
-public void deleteImage (NVGContext ctx, int image) {
+public void deleteImage (NVGContext ctx, int image) nothrow @trusted @nogc {
   if (ctx is null || image < 0) return;
   ctx.params.renderDeleteTexture(ctx.params.userPtr, image);
 }
@@ -1459,7 +1457,7 @@ public alias NVGSectionDummy05 = void;
  * of the linear gradient, icol specifies the start color and ocol the end color.
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
-public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, float ey, NVGColor icol, NVGColor ocol) {
+public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, float ey, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
   NVGPaint p;
   //float dx, dy, d;
   //const float large = 1e5;
@@ -1500,7 +1498,7 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
  * the inner and outer radius of the gradient, icol specifies the start color and ocol the end color.
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
-public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, float outr, NVGColor icol, NVGColor ocol) {
+public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, float outr, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
   NVGPaint p;
   immutable float r = (inr+outr)*0.5f;
   immutable float f = (outr-inr);
@@ -1530,7 +1528,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
  * the border of the rectangle is. Parameter icol specifies the inner color and ocol the outer color of the gradient.
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
-public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h, float r, float f, NVGColor icol, NVGColor ocol) {
+public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h, float r, float f, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
   NVGPaint p;
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
@@ -1557,7 +1555,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
  * `(w, h)` the size of one image, `angle` rotation around the top-left corner, `image` is handle to the image to render.
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
-public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float h, float angle, int image, float alpha=1) {
+public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float h, float angle, int image, float alpha=1) nothrow @trusted @nogc {
   NVGPaint p;
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
@@ -1585,7 +1583,7 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
 public alias NVGSectionDummy06 = void;
 
 /// Sets the current scissor rectangle. The scissor rectangle is transformed by the current transform.
-public void scissor (NVGContext ctx, float x, float y, float w, float h) {
+public void scissor (NVGContext ctx, float x, float y, float w, float h) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
 
   w = nvg__max(0.0f, w);
@@ -1600,7 +1598,7 @@ public void scissor (NVGContext ctx, float x, float y, float w, float h) {
   state.scissor.extent[1] = h*0.5f;
 }
 
-void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) {
+void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) nothrow @trusted @nogc {
   immutable float minx = nvg__max(ax, bx);
   immutable float miny = nvg__max(ay, by);
   immutable float maxx = nvg__min(ax+aw, bx+bw);
@@ -1618,7 +1616,7 @@ void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float 
  * rectangle and the previous scissor rectangle transformed in the current
  * transform space. The resulting shape is always rectangle.
  */
-public void intersectScissor (NVGContext ctx, float x, float y, float w, float h) {
+public void intersectScissor (NVGContext ctx, float x, float y, float w, float h) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
 
   // If no previous scissor has been set, set the scissor as current scissor.
@@ -1649,21 +1647,21 @@ public void intersectScissor (NVGContext ctx, float x, float y, float w, float h
 }
 
 /// Reset and disables scissoring.
-public void resetScissor (NVGContext ctx) {
+public void resetScissor (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   memset(state.scissor.xform.ptr, 0, (state.scissor.xform.ptr).sizeof);
   state.scissor.extent[0] = -1.0f;
   state.scissor.extent[1] = -1.0f;
 }
 
-int nvg__ptEquals (float x1, float y1, float x2, float y2, float tol) {
+int nvg__ptEquals (float x1, float y1, float x2, float y2, float tol) pure nothrow @safe @nogc {
   //pragma(inline, true);
   immutable float dx = x2-x1;
   immutable float dy = y2-y1;
   return dx*dx+dy*dy < tol*tol;
 }
 
-float nvg__distPtSeg (float x, float y, float px, float py, float qx, float qy) {
+float nvg__distPtSeg (float x, float y, float px, float py, float qx, float qy) pure nothrow @safe @nogc {
   //float pqx, pqy, dx, dy, d, t;
   immutable float pqx = qx-px;
   immutable float pqy = qy-py;
@@ -1678,7 +1676,7 @@ float nvg__distPtSeg (float x, float y, float px, float py, float qx, float qy) 
   return dx*dx+dy*dy;
 }
 
-void nvg__appendCommands (NVGContext ctx, float* vals, int nvals) {
+void nvg__appendCommands (NVGContext ctx, float* vals, int nvals) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
 
   if (ctx.ncommands+nvals > ctx.ccommands) {
@@ -1731,16 +1729,16 @@ void nvg__appendCommands (NVGContext ctx, float* vals, int nvals) {
 }
 
 
-void nvg__clearPathCache (NVGContext ctx) {
+void nvg__clearPathCache (NVGContext ctx) nothrow @trusted @nogc {
   ctx.cache.npoints = 0;
   ctx.cache.npaths = 0;
 }
 
-NVGpath* nvg__lastPath (NVGContext ctx) {
+NVGpath* nvg__lastPath (NVGContext ctx) nothrow @trusted @nogc {
   return (ctx.cache.npaths > 0 ? &ctx.cache.paths[ctx.cache.npaths-1] : null);
 }
 
-void nvg__addPath (NVGContext ctx) {
+void nvg__addPath (NVGContext ctx) nothrow @trusted @nogc {
   NVGpath* path;
   if (ctx.cache.npaths+1 > ctx.cache.cpaths) {
     NVGpath* paths;
@@ -1758,11 +1756,11 @@ void nvg__addPath (NVGContext ctx) {
   ++ctx.cache.npaths;
 }
 
-NVGpoint* nvg__lastPoint (NVGContext ctx) {
+NVGpoint* nvg__lastPoint (NVGContext ctx) nothrow @trusted @nogc {
   return (ctx.cache.npoints > 0 ? &ctx.cache.points[ctx.cache.npoints-1] : null);
 }
 
-void nvg__addPoint (NVGContext ctx, float x, float y, int flags) {
+void nvg__addPoint (NVGContext ctx, float x, float y, int flags) nothrow @trusted @nogc {
   NVGpath* path = nvg__lastPath(ctx);
   NVGpoint* pt;
   if (path is null) return;
@@ -1794,26 +1792,26 @@ void nvg__addPoint (NVGContext ctx, float x, float y, int flags) {
   ++path.count;
 }
 
-void nvg__closePath (NVGContext ctx) {
+void nvg__closePath (NVGContext ctx) nothrow @trusted @nogc {
   NVGpath* path = nvg__lastPath(ctx);
   if (path is null) return;
   path.closed = 1;
 }
 
-void nvg__pathWinding (NVGContext ctx, NVGWinding winding) {
+void nvg__pathWinding (NVGContext ctx, NVGWinding winding) nothrow @trusted @nogc {
   NVGpath* path = nvg__lastPath(ctx);
   if (path is null) return;
   path.winding = winding;
 }
 
-float nvg__getAverageScale (float[] t) {
-  version(nanosvg_asserts) assert(t.length > 5);
+float nvg__getAverageScale (float[] t) nothrow @trusted @nogc {
+  assert(t.length > 5);
   immutable float sx = nvg__sqrtf(t.ptr[0]*t.ptr[0]+t.ptr[2]*t.ptr[2]);
   immutable float sy = nvg__sqrtf(t.ptr[1]*t.ptr[1]+t.ptr[3]*t.ptr[3]);
   return (sx+sy)*0.5f;
 }
 
-NVGvertex* nvg__allocTempVerts (NVGContext ctx, int nverts) {
+NVGvertex* nvg__allocTempVerts (NVGContext ctx, int nverts) nothrow @trusted @nogc {
   if (nverts > ctx.cache.cverts) {
     int cverts = (nverts+0xff)&~0xff; // Round up to prevent allocations when things change just slightly.
     NVGvertex* verts = cast(NVGvertex*)realloc(ctx.cache.verts, (NVGvertex).sizeof*cverts);
@@ -1825,7 +1823,7 @@ NVGvertex* nvg__allocTempVerts (NVGContext ctx, int nverts) {
   return ctx.cache.verts;
 }
 
-float nvg__triarea2 (float ax, float ay, float bx, float by, float cx, float cy) {
+float nvg__triarea2 (float ax, float ay, float bx, float by, float cx, float cy) pure nothrow @safe @nogc {
   immutable float abx = bx-ax;
   immutable float aby = by-ay;
   immutable float acx = cx-ax;
@@ -1833,7 +1831,7 @@ float nvg__triarea2 (float ax, float ay, float bx, float by, float cx, float cy)
   return acx*aby-abx*acy;
 }
 
-float nvg__polyArea (NVGpoint* pts, int npts) {
+float nvg__polyArea (NVGpoint* pts, int npts) nothrow @trusted @nogc {
   float area = 0;
   foreach (int i; 2..npts) {
     NVGpoint* a = &pts[0];
@@ -1844,8 +1842,8 @@ float nvg__polyArea (NVGpoint* pts, int npts) {
   return area*0.5f;
 }
 
-void nvg__polyReverse (NVGpoint* pts, int npts) {
-  NVGpoint tmp;
+void nvg__polyReverse (NVGpoint* pts, int npts) nothrow @trusted @nogc {
+  NVGpoint tmp = void;
   int i = 0, j = npts-1;
   while (i < j) {
     tmp = pts[i];
@@ -1856,14 +1854,14 @@ void nvg__polyReverse (NVGpoint* pts, int npts) {
   }
 }
 
-void nvg__vset (NVGvertex* vtx, float x, float y, float u, float v) {
+void nvg__vset (NVGvertex* vtx, float x, float y, float u, float v) nothrow @trusted @nogc {
   vtx.x = x;
   vtx.y = y;
   vtx.u = u;
   vtx.v = v;
 }
 
-void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) {
+void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) nothrow @trusted @nogc {
   //import core.stdc.math : fabsf;
   //float x12, y12, x23, y23, x34, y34, x123, y123, x234, y234, x1234, y1234;
   //float dx, dy, d2, d3;
@@ -1905,7 +1903,7 @@ void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2
   nvg__tesselateBezier(ctx, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
 }
 
-void nvg__flattenPaths (NVGContext ctx) {
+void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
   //NVGstate* state = nvg__getState(ctx);
   NVGpoint* last;
@@ -2000,12 +1998,12 @@ void nvg__flattenPaths (NVGContext ctx) {
   }
 }
 
-int nvg__curveDivs (float r, float arc, float tol) {
+int nvg__curveDivs (float r, float arc, float tol) nothrow @trusted @nogc {
   immutable float da = nvg__acosf(r/(r+tol))*2.0f;
   return nvg__max(2, cast(int)nvg__ceilf(arc/da));
 }
 
-void nvg__chooseBevel (int bevel, NVGpoint* p0, NVGpoint* p1, float w, float* x0, float* y0, float* x1, float* y1) {
+void nvg__chooseBevel (int bevel, NVGpoint* p0, NVGpoint* p1, float w, float* x0, float* y0, float* x1, float* y1) nothrow @trusted @nogc {
   if (bevel) {
     *x0 = p1.x+p0.dy*w;
     *y0 = p1.y-p0.dx*w;
@@ -2019,7 +2017,7 @@ void nvg__chooseBevel (int bevel, NVGpoint* p0, NVGpoint* p1, float w, float* x0
   }
 }
 
-NVGvertex* nvg__roundJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw, float rw, float lu, float ru, int ncap, float fringe) {
+NVGvertex* nvg__roundJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw, float rw, float lu, float ru, int ncap, float fringe) nothrow @trusted @nogc {
   int i, n;
   float dlx0 = p0.dy;
   float dly0 = -p0.dx;
@@ -2079,7 +2077,7 @@ NVGvertex* nvg__roundJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
   return dst;
 }
 
-NVGvertex* nvg__bevelJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw, float rw, float lu, float ru, float fringe) {
+NVGvertex* nvg__bevelJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw, float rw, float lu, float ru, float fringe) nothrow @trusted @nogc {
   float rx0, ry0, rx1, ry1;
   float lx0, ly0, lx1, ly1;
   float dlx0 = p0.dy;
@@ -2150,7 +2148,7 @@ NVGvertex* nvg__bevelJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
   return dst;
 }
 
-NVGvertex* nvg__buttCapStart (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, float d, float aa) {
+NVGvertex* nvg__buttCapStart (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, float d, float aa) nothrow @trusted @nogc {
   immutable float px = p.x-dx*d;
   immutable float py = p.y-dy*d;
   immutable float dlx = dy;
@@ -2162,7 +2160,7 @@ NVGvertex* nvg__buttCapStart (NVGvertex* dst, NVGpoint* p, float dx, float dy, f
   return dst;
 }
 
-NVGvertex* nvg__buttCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, float d, float aa) {
+NVGvertex* nvg__buttCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, float d, float aa) nothrow @trusted @nogc {
   immutable float px = p.x+dx*d;
   immutable float py = p.y+dy*d;
   immutable float dlx = dy;
@@ -2175,7 +2173,7 @@ NVGvertex* nvg__buttCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, flo
 }
 
 
-NVGvertex* nvg__roundCapStart (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, int ncap, float aa) {
+NVGvertex* nvg__roundCapStart (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, int ncap, float aa) nothrow @trusted @nogc {
   immutable float px = p.x;
   immutable float py = p.y;
   immutable float dlx = dy;
@@ -2193,7 +2191,7 @@ NVGvertex* nvg__roundCapStart (NVGvertex* dst, NVGpoint* p, float dx, float dy, 
   return dst;
 }
 
-NVGvertex* nvg__roundCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, int ncap, float aa) {
+NVGvertex* nvg__roundCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, int ncap, float aa) nothrow @trusted @nogc {
   immutable float px = p.x;
   immutable float py = p.y;
   immutable float dlx = dy;
@@ -2212,7 +2210,7 @@ NVGvertex* nvg__roundCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, fl
 }
 
 
-void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimit) {
+void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
   //int i, j;
   float iw = 0.0f;
@@ -2279,7 +2277,7 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
 }
 
 
-int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float miterLimit) {
+int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
   NVGvertex* verts;
   NVGvertex* dst;
@@ -2393,7 +2391,7 @@ int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float
   return 1;
 }
 
-int nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) {
+int nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
   NVGvertex* verts;
   NVGvertex* dst;
@@ -2532,31 +2530,31 @@ int nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) {
 public alias NVGSectionDummy07 = void;
 
 /// Clears the current path and sub-paths.
-public void beginPath (NVGContext ctx) {
+public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
   ctx.ncommands = 0;
   nvg__clearPathCache(ctx);
 }
 
 /// Starts new sub-path with specified point as first point.
-public void moveTo (NVGContext ctx, float x, float y) {
+public void moveTo (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
   float[3] vals = [ NVGcommands.MoveTo, x, y ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Adds line segment from the last point in the path to the specified point.
-public void lineTo (NVGContext ctx, float x, float y) {
+public void lineTo (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
   float[3] vals = [ NVGcommands.LineTo, x, y ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Adds cubic bezier segment from last point in the path via two control points to the specified point.
-public void bezierTo (NVGContext ctx, float c1x, float c1y, float c2x, float c2y, float x, float y) {
+public void bezierTo (NVGContext ctx, float c1x, float c1y, float c2x, float c2y, float x, float y) nothrow @trusted @nogc {
   float[7] vals = [ NVGcommands.BezierTo, c1x, c1y, c2x, c2y, x, y ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Adds quadratic bezier segment from last point in the path via a control point to the specified point.
-public void quadTo (NVGContext ctx, float cx, float cy, float x, float y) {
+public void quadTo (NVGContext ctx, float cx, float cy, float x, float y) nothrow @trusted @nogc {
   float x0 = ctx.commandx;
   float y0 = ctx.commandy;
   float[7] vals = [ NVGcommands.BezierTo,
@@ -2567,7 +2565,7 @@ public void quadTo (NVGContext ctx, float cx, float cy, float x, float y) {
 }
 
 /// Adds an arc segment at the corner defined by the last path point, and two specified points.
-public void arcTo (NVGContext ctx, float x1, float y1, float x2, float y2, float radius) {
+public void arcTo (NVGContext ctx, float x1, float y1, float x2, float y2, float radius) nothrow @trusted @nogc {
   float x0 = ctx.commandx;
   float y0 = ctx.commandy;
   float dx0, dy0, dx1, dy1, a, d, cx, cy, a0, a1;
@@ -2621,19 +2619,19 @@ public void arcTo (NVGContext ctx, float x1, float y1, float x2, float y2, float
 }
 
 /// Closes current sub-path with a line segment.
-public void closePath (NVGContext ctx) {
+public void closePath (NVGContext ctx) nothrow @trusted @nogc {
   float[1] vals = [ NVGcommands.Close ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Sets the current sub-path winding, see NVGWinding and NVGSolidity.
-public void pathWinding (NVGContext ctx, NVGWinding dir) {
+public void pathWinding (NVGContext ctx, NVGWinding dir) nothrow @trusted @nogc {
   float[2] vals = [ NVGcommands.Winding, cast(float)dir ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
 
 /// Ditto.
-public void pathWinding (NVGContext ctx, NVGSolidity dir) {
+public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc {
   float[2] vals = [ NVGcommands.Winding, cast(float)dir ];
   nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
 }
@@ -2642,7 +2640,7 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) {
  * and the arc is drawn from angle a0 to a1, and swept in direction dir (NVGWinding.CCW, or NVGWinding.CW).
  * Angles are specified in radians.
  */
-public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1, NVGWinding dir) {
+public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1, NVGWinding dir) nothrow @trusted @nogc {
   //float a = 0;
   //float dx = 0, dy = 0, x = 0, y = 0, tanx = 0, tany = 0;
   //float px = 0, py = 0, ptanx = 0, ptany = 0;
@@ -2707,7 +2705,7 @@ public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1
 }
 
 /// Creates new rectangle shaped sub-path.
-public void rect (NVGContext ctx, float x, float y, float w, float h) {
+public void rect (NVGContext ctx, float x, float y, float w, float h) nothrow @trusted @nogc {
   float[13] vals = [
     NVGcommands.MoveTo, x, y,
     NVGcommands.LineTo, x, y+h,
@@ -2719,12 +2717,12 @@ public void rect (NVGContext ctx, float x, float y, float w, float h) {
 }
 
 /// Creates new rounded rectangle shaped sub-path.
-public void roundedRect (NVGContext ctx, float x, float y, float w, float h, float r) {
+public void roundedRect (NVGContext ctx, float x, float y, float w, float h, float r) nothrow @trusted @nogc {
   ctx.roundedRectVarying(x, y, w, h, r, r, r, r);
 }
 
 /// Creates new rounded rectangle shaped sub-path. This one allows you to specify different rounding radii for each corner.
-public void roundedRectVarying (NVGContext ctx, float x, float y, float w, float h, float radTopLeft, float radTopRight, float radBottomRight, float radBottomLeft) {
+public void roundedRectVarying (NVGContext ctx, float x, float y, float w, float h, float radTopLeft, float radTopRight, float radBottomRight, float radBottomLeft) nothrow @trusted @nogc {
   if (radTopLeft < 0.1f && radTopRight < 0.1f && radBottomRight < 0.1f && radBottomLeft < 0.1f) {
     ctx.rect(x, y, w, h);
   } else {
@@ -2751,7 +2749,7 @@ public void roundedRectVarying (NVGContext ctx, float x, float y, float w, float
 }
 
 /// Creates new ellipse shaped sub-path.
-public void ellipse (NVGContext ctx, float cx, float cy, float rx, float ry) {
+public void ellipse (NVGContext ctx, float cx, float cy, float rx, float ry) nothrow @trusted @nogc {
   float[32] vals = [
     NVGcommands.MoveTo, cx-rx, cy,
     NVGcommands.BezierTo, cx-rx, cy+ry*NVG_KAPPA90, cx-rx*NVG_KAPPA90, cy+ry, cx, cy+ry,
@@ -2764,12 +2762,12 @@ public void ellipse (NVGContext ctx, float cx, float cy, float rx, float ry) {
 }
 
 /// Creates new circle shaped sub-path.
-public void circle (NVGContext ctx, float cx, float cy, float r) {
+public void circle (NVGContext ctx, float cx, float cy, float r) nothrow @trusted @nogc {
   ctx.ellipse(cx, cy, r, r);
 }
 
 /// Debug function to dump cached path data.
-debug public void debugDumpPathCache (NVGContext ctx) {
+debug public void debugDumpPathCache (NVGContext ctx) nothrow @trusted @nogc {
   import core.stdc.stdio : printf;
   const(NVGpath)* path;
   int i, j;
@@ -2792,7 +2790,7 @@ debug public void debugDumpPathCache (NVGContext ctx) {
 }
 
 /// Fills the current path with current fill style.
-public void fill (NVGContext ctx) {
+public void fill (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   const(NVGpath)* path;
   NVGPaint fillPaint = state.fill;
@@ -2820,7 +2818,7 @@ public void fill (NVGContext ctx) {
 }
 
 /// Fills the current path with current stroke style.
-public void stroke (NVGContext ctx) {
+public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getAverageScale(state.xform[]);
   float strokeWidth = nvg__clamp(state.strokeWidth*scale, 0.0f, 200.0f);
@@ -2854,7 +2852,7 @@ public void stroke (NVGContext ctx) {
   foreach (int i; 0..ctx.cache.npaths) {
     path = &ctx.cache.paths[i];
     ctx.strokeTriCount += path.nstroke-2;
-    ctx.drawCallCount++;
+    ++ctx.drawCallCount;
   }
 }
 
@@ -2898,7 +2896,7 @@ public alias NVGSectionDummy08 = void;
 /** Creates font by loading it from the disk from specified file name.
  * Returns handle to the font.
  * use "fontname:noaa" as `name` to turn off antialiasing (if font driver supports that). */
-public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) {
+public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) nothrow @trusted {
   return fonsAddFont(ctx.fs, name, path);
 }
 
@@ -3016,17 +3014,17 @@ public void fontFace (NVGContext ctx, const(char)[] font) {
   nvg__getState(ctx).fontId = fonsGetFontByName(ctx.fs, font);
 }
 
-float nvg__quantize (float a, float d) {
+float nvg__quantize (float a, float d) pure nothrow @safe @nogc {
   pragma(inline, true);
   return (cast(int)(a/d+0.5f))*d;
 }
 
-float nvg__getFontScale (NVGstate* state) {
+float nvg__getFontScale (NVGstate* state) nothrow @safe @nogc {
   pragma(inline, true);
   return nvg__min(nvg__quantize(nvg__getAverageScale(state.xform[]), 0.01f), 4.0f);
 }
 
-void nvg__flushTextTexture (NVGContext ctx) {
+void nvg__flushTextTexture (NVGContext ctx) nothrow @trusted @nogc {
   int[4] dirty = void;
   if (fonsValidateTexture(ctx.fs, dirty.ptr)) {
     int fontImage = ctx.fontImages[ctx.fontImageIdx];
@@ -3043,7 +3041,7 @@ void nvg__flushTextTexture (NVGContext ctx) {
   }
 }
 
-bool nvg__allocTextAtlas (NVGContext ctx) {
+bool nvg__allocTextAtlas (NVGContext ctx) nothrow @trusted @nogc {
   int iw, ih;
   nvg__flushTextTexture(ctx);
   if (ctx.fontImageIdx >= NVG_MAX_FONTIMAGES-1) return false;
@@ -3062,7 +3060,7 @@ bool nvg__allocTextAtlas (NVGContext ctx) {
   return true;
 }
 
-void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) {
+void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   NVGPaint paint = state.fill;
 
@@ -3080,7 +3078,7 @@ void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) {
 }
 
 /// Draws text string at specified location. Returns next x position.
-public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
+public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
   FONStextIter iter, prevIter;
   FONSquad q;
@@ -3145,7 +3143,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) if (is(T
 /** Draws multi-line text string at specified location wrapped at the specified width. If end is specified only the sub-string up to the end is drawn.
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation). */
-public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) if (is(T == char) || is(T == dchar)) {
+public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
   if (state.fontId == FONS_INVALID) return;
 
@@ -3185,7 +3183,9 @@ private template isGoodPositionDelegate(DG) {
 /** Calculates the glyph x positions of the specified text. If end is specified only the sub-string will be used.
  * Measured values are returned in local coordinate space.
  */
-public NVGGlyphPosition[] textGlyphPositions(T) (NVGContext ctx, float x, float y, const(T)[] str, NVGGlyphPosition[] positions) if (is(T == char) || is(T == dchar)) {
+public NVGGlyphPosition[] textGlyphPositions(T) (NVGContext ctx, float x, float y, const(T)[] str, NVGGlyphPosition[] positions) nothrow @trusted @nogc
+if (is(T == char) || is(T == dchar))
+{
   if (str.length == 0 || positions.length == 0) return positions[0..0];
   usize posnum;
   auto len = ctx.textGlyphPositions(x, y, str, (in ref NVGGlyphPosition pos) {
@@ -3254,7 +3254,9 @@ private template isGoodRowDelegate(DG) {
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
  */
-public NVGTextRow[] textBreakLines(T) (NVGContext ctx, const(T)[] str, float breakRowWidth, NVGTextRow[] rows) if (is(T == char) || is(T == dchar)) {
+public NVGTextRow[] textBreakLines(T) (NVGContext ctx, const(T)[] str, float breakRowWidth, NVGTextRow[] rows) nothrow @trusted @nogc
+if (is(T == char) || is(T == dchar))
+{
   if (rows.length == 0) return rows;
   if (rows.length > int.max-1) rows = rows[0..int.max-1];
   int nrow = 0;
@@ -3489,9 +3491,9 @@ private:
   NVGTextAlign fsAlign;
 
 public:
-  this (NVGContext actx, float ax, float ay) { reset(actx, ax, ay); }
+  this (NVGContext actx, float ax, float ay) nothrow @trusted @nogc { reset(actx, ax, ay); }
 
-  void reset (NVGContext actx, float ax, float ay) {
+  void reset (NVGContext actx, float ax, float ay) nothrow @trusted @nogc {
     fsiter = fsiter.init;
     this = this.init;
     if (actx is null) return;
@@ -3516,12 +3518,12 @@ public:
   }
 
   /// Restart iteration. Will not restore font.
-  void restart () {
+  void restart () nothrow @trusted @nogc {
     if (ctx !is null) fsiter.reset(ctx.fs, xscaled, yscaled);
   }
 
   /// Restore font settings for the context.
-  void restoreFont () {
+  void restoreFont () nothrow @trusted @nogc {
     if (ctx !is null) {
       fonsSetSize(ctx.fs, fsSize);
       fonsSetSpacing(ctx.fs, fsSpacing);
@@ -3535,7 +3537,7 @@ public:
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null); }
 
   /// Add chars.
-  void put(T) (const(T)[] str...) if (is(T == char) || is(T == dchar)) {
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
     if (ctx !is null) fsiter.put(str[]);
   }
 
@@ -3543,7 +3545,7 @@ public:
   @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null ? fsiter.advance*invscale : 0); }
 
   /// Return current text bounds.
-  void getBounds (ref float[4] bounds) {
+  void getBounds (ref float[4] bounds) nothrow @trusted @nogc {
     if (ctx !is null) {
       fsiter.getBounds(bounds);
       fonsLineBounds(ctx.fs, yscaled, &bounds[1], &bounds[3]);
@@ -3557,7 +3559,7 @@ public:
   }
 
   /// Return current horizontal text bounds.
-  void getHBounds (out float xmin, out float xmax) {
+  void getHBounds (out float xmin, out float xmax) nothrow @trusted @nogc {
     if (ctx !is null) {
       fsiter.getHBounds(xmin, xmax);
       xmin *= invscale;
@@ -3566,7 +3568,7 @@ public:
   }
 
   /// Return current vertical text bounds.
-  void getVBounds (out float ymin, out float ymax) {
+  void getVBounds (out float ymin, out float ymax) nothrow @trusted @nogc {
     if (ctx !is null) {
       //fsiter.getVBounds(ymin, ymax);
       fonsLineBounds(ctx.fs, yscaled, &ymin, &ymax);
@@ -3676,7 +3678,7 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
 }
 
 /// Returns the vertical metrics based on the current text style. Measured values are returned in local coordinate space.
-public void textMetrics (NVGContext ctx, float* ascender, float* descender, float* lineh) {
+public void textMetrics (NVGContext ctx, float* ascender, float* descender, float* lineh) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
@@ -3779,11 +3781,11 @@ struct FONSparams {
   int width, height;
   ubyte flags;
   void* userPtr;
-  bool function (void* uptr, int width, int height) renderCreate;
-  int function (void* uptr, int width, int height) renderResize;
-  void function (void* uptr, int* rect, const(ubyte)* data) renderUpdate;
-  void function (void* uptr, const(float)* verts, const(float)* tcoords, const(uint)* colors, int nverts) renderDraw;
-  void function (void* uptr) renderDelete;
+  bool function (void* uptr, int width, int height) nothrow @trusted @nogc renderCreate;
+  int function (void* uptr, int width, int height) nothrow @trusted @nogc renderResize;
+  void function (void* uptr, int* rect, const(ubyte)* data) nothrow @trusted @nogc renderUpdate;
+  void function (void* uptr, const(float)* verts, const(float)* tcoords, const(uint)* colors, int nverts) nothrow @trusted @nogc renderDraw;
+  void function (void* uptr) nothrow @trusted @nogc renderDelete;
 }
 
 struct FONSquad {
@@ -3825,7 +3827,7 @@ struct FONStextIter {
     pragma(inline, true);
     static if (is(T == char)) return end; else return dend;
   }
-  ~this () { pragma(inline, true); if (isChar) { str = next = end = null; utf8state = 0; } else { dstr = dnext = dend = null; } }
+  ~this () nothrow @trusted @nogc { pragma(inline, true); if (isChar) { str = next = end = null; utf8state = 0; } else { dstr = dnext = dend = null; } }
 }
 
 
@@ -3842,39 +3844,39 @@ struct FONSttFontImpl {
 
 __gshared FT_Library ftLibrary;
 
-int fons__tt_init (FONScontext* context) {
+int fons__tt_init (FONScontext* context) nothrow @trusted @nogc {
   FT_Error ftError;
   //FONS_NOTUSED(context);
   ftError = FT_Init_FreeType(&ftLibrary);
   return (ftError == 0);
 }
 
-void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) {
+void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) nothrow @trusted @nogc {
   font.mono = v;
 }
 
-int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) {
+int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) nothrow @trusted @nogc {
   FT_Error ftError;
   //font.font.userdata = stash;
   ftError = FT_New_Memory_Face(ftLibrary, cast(const(FT_Byte)*)data, dataSize, 0, &font.font);
   return ftError == 0;
 }
 
-void fons__tt_getFontVMetrics (FONSttFontImpl* font, int* ascent, int* descent, int* lineGap) {
+void fons__tt_getFontVMetrics (FONSttFontImpl* font, int* ascent, int* descent, int* lineGap) nothrow @trusted @nogc {
   *ascent = font.font.ascender;
   *descent = font.font.descender;
   *lineGap = font.font.height-(*ascent - *descent);
 }
 
-float fons__tt_getPixelHeightScale (FONSttFontImpl* font, float size) {
+float fons__tt_getPixelHeightScale (FONSttFontImpl* font, float size) nothrow @trusted @nogc {
   return size/(font.font.ascender-font.font.descender);
 }
 
-int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) {
+int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) nothrow @trusted @nogc {
   return FT_Get_Char_Index(font.font, codepoint);
 }
 
-int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) {
+int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) nothrow @trusted @nogc {
   FT_Error ftError;
   FT_GlyphSlot ftGlyph;
   //version(nanovg_ignore_mono) enum exflags = 0;
@@ -3895,7 +3897,7 @@ int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, floa
   return 1;
 }
 
-void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) {
+void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) nothrow @trusted @nogc {
   FT_GlyphSlot ftGlyph = font.font.glyph;
   //FONS_NOTUSED(glyph); // glyph has already been loaded by fons__tt_buildGlyphBitmap
   //version(nanovg_ignore_mono) enum RenderAA = true;
@@ -3932,7 +3934,7 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
   }
 }
 
-int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) {
+int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) nothrow @trusted @nogc {
   FT_Vector ftKerning;
   version(none) {
     // fitted kerning
@@ -3954,43 +3956,43 @@ struct FONSttFontImpl {
   stbtt_fontinfo font;
 }
 
-int fons__tt_init (FONScontext* context) {
+int fons__tt_init (FONScontext* context) nothrow @trusted @nogc {
   return 1;
 }
 
-void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) {
+void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) nothrow @trusted @nogc {
 }
 
-int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) {
+int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) nothrow @trusted @nogc {
   int stbError;
   font.font.userdata = context;
   stbError = stbtt_InitFont(&font.font, data, 0);
   return stbError;
 }
 
-void fons__tt_getFontVMetrics (FONSttFontImpl* font, int* ascent, int* descent, int* lineGap) {
+void fons__tt_getFontVMetrics (FONSttFontImpl* font, int* ascent, int* descent, int* lineGap) nothrow @trusted @nogc {
   stbtt_GetFontVMetrics(&font.font, ascent, descent, lineGap);
 }
 
-float fons__tt_getPixelHeightScale (FONSttFontImpl* font, float size) {
+float fons__tt_getPixelHeightScale (FONSttFontImpl* font, float size) nothrow @trusted @nogc {
   return stbtt_ScaleForPixelHeight(&font.font, size);
 }
 
-int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) {
+int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) nothrow @trusted @nogc {
   return stbtt_FindGlyphIndex(&font.font, codepoint);
 }
 
-int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) {
+int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) nothrow @trusted @nogc {
   stbtt_GetGlyphHMetrics(&font.font, glyph, advance, lsb);
   stbtt_GetGlyphBitmapBox(&font.font, glyph, scale, scale, x0, y0, x1, y1);
   return 1;
 }
 
-void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) {
+void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) nothrow @trusted @nogc {
   stbtt_MakeGlyphBitmap(&font.font, output, outWidth, outHeight, outStride, scaleX, scaleY, glyph);
 }
 
-int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) {
+int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) nothrow @trusted @nogc {
   return stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2);
 }
 
@@ -4082,11 +4084,11 @@ public struct FONScontext {
   int nscratch;
   FONSstate[FONS_MAX_STATES] states;
   int nstates;
-  void function (void* uptr, int error, int val) handleError;
+  void function (void* uptr, int error, int val) nothrow @trusted @nogc handleError;
   void* errorUptr;
 }
 
-void* fons__tmpalloc (usize size, void* up) {
+void* fons__tmpalloc (usize size, void* up) nothrow @trusted @nogc {
   ubyte* ptr;
   FONScontext* stash = cast(FONScontext*)up;
   // 16-byte align the returned pointer
@@ -4100,7 +4102,7 @@ void* fons__tmpalloc (usize size, void* up) {
   return ptr;
 }
 
-void fons__tmpfree (void* ptr, void* up) {
+void fons__tmpfree (void* ptr, void* up) nothrow @trusted @nogc {
   // empty
 }
 
@@ -4152,13 +4154,13 @@ uint fons__decutf8 (uint* state, uint* codep, uint byte_) {
 */
 
 // Atlas based on Skyline Bin Packer by Jukka Jylänki
-void fons__deleteAtlas (FONSatlas* atlas) {
+void fons__deleteAtlas (FONSatlas* atlas) nothrow @trusted @nogc {
   if (atlas is null) return;
   if (atlas.nodes !is null) free(atlas.nodes);
   free(atlas);
 }
 
-FONSatlas* fons__allocAtlas (int w, int h, int nnodes) {
+FONSatlas* fons__allocAtlas (int w, int h, int nnodes) nothrow @trusted @nogc {
   FONSatlas* atlas = null;
 
   // Allocate memory for the font stash.
@@ -4189,7 +4191,7 @@ error:
   return null;
 }
 
-bool fons__atlasInsertNode (FONSatlas* atlas, int idx, int x, int y, int w) {
+bool fons__atlasInsertNode (FONSatlas* atlas, int idx, int x, int y, int w) nothrow @trusted @nogc {
   // Insert node
   if (atlas.nnodes+1 > atlas.cnodes) {
     atlas.cnodes = (atlas.cnodes == 0 ? 8 : atlas.cnodes*2);
@@ -4204,20 +4206,20 @@ bool fons__atlasInsertNode (FONSatlas* atlas, int idx, int x, int y, int w) {
   return 1;
 }
 
-void fons__atlasRemoveNode (FONSatlas* atlas, int idx) {
+void fons__atlasRemoveNode (FONSatlas* atlas, int idx) nothrow @trusted @nogc {
   if (atlas.nnodes == 0) return;
   for (int i = idx; i < atlas.nnodes-1; ++i) atlas.nodes[i] = atlas.nodes[i+1];
   --atlas.nnodes;
 }
 
-void fons__atlasExpand (FONSatlas* atlas, int w, int h) {
+void fons__atlasExpand (FONSatlas* atlas, int w, int h) nothrow @trusted @nogc {
   // Insert node for empty space
   if (w > atlas.width) fons__atlasInsertNode(atlas, atlas.nnodes, atlas.width, 0, w-atlas.width);
   atlas.width = w;
   atlas.height = h;
 }
 
-void fons__atlasReset (FONSatlas* atlas, int w, int h) {
+void fons__atlasReset (FONSatlas* atlas, int w, int h) nothrow @trusted @nogc {
   atlas.width = w;
   atlas.height = h;
   atlas.nnodes = 0;
@@ -4228,7 +4230,7 @@ void fons__atlasReset (FONSatlas* atlas, int w, int h) {
   ++atlas.nnodes;
 }
 
-bool fons__atlasAddSkylineLevel (FONSatlas* atlas, int idx, int x, int y, int w, int h) {
+bool fons__atlasAddSkylineLevel (FONSatlas* atlas, int idx, int x, int y, int w, int h) nothrow @trusted @nogc {
   // Insert new node
   if (!fons__atlasInsertNode(atlas, idx, x, y+h, w)) return false;
 
@@ -4261,7 +4263,7 @@ bool fons__atlasAddSkylineLevel (FONSatlas* atlas, int idx, int x, int y, int w,
   return true;
 }
 
-int fons__atlasRectFits (FONSatlas* atlas, int i, int w, int h) {
+int fons__atlasRectFits (FONSatlas* atlas, int i, int w, int h) nothrow @trusted @nogc {
   // Checks if there is enough space at the location of skyline span 'i',
   // and return the max height of all skyline spans under that at that location,
   // (think tetris block being dropped at that position). Or -1 if no space found.
@@ -4280,7 +4282,7 @@ int fons__atlasRectFits (FONSatlas* atlas, int i, int w, int h) {
   return y;
 }
 
-bool fons__atlasAddRect (FONSatlas* atlas, int rw, int rh, int* rx, int* ry) {
+bool fons__atlasAddRect (FONSatlas* atlas, int rw, int rh, int* rx, int* ry) nothrow @trusted @nogc {
   int besth = atlas.height, bestw = atlas.width, besti = -1;
   int bestx = -1, besty = -1;
 
@@ -4309,7 +4311,7 @@ bool fons__atlasAddRect (FONSatlas* atlas, int rw, int rh, int* rx, int* ry) {
   return true;
 }
 
-void fons__addWhiteRect (FONScontext* stash, int w, int h) {
+void fons__addWhiteRect (FONScontext* stash, int w, int h) nothrow @trusted @nogc {
   int gx, gy;
   ubyte* dst;
 
@@ -4330,7 +4332,7 @@ void fons__addWhiteRect (FONScontext* stash, int w, int h) {
   stash.dirtyRect.ptr[3] = nvg__max(stash.dirtyRect.ptr[3], gy+h);
 }
 
-public FONScontext* fonsCreateInternal (FONSparams* params) {
+public FONScontext* fonsCreateInternal (FONSparams* params) nothrow @trusted @nogc {
   FONScontext* stash = null;
 
   // Allocate memory for the font stash.
@@ -4386,12 +4388,12 @@ error:
   return null;
 }
 
-FONSstate* fons__getState (FONScontext* stash) {
+FONSstate* fons__getState (FONScontext* stash) nothrow @trusted @nogc {
   pragma(inline, true);
   return &stash.states[stash.nstates-1];
 }
 
-bool fonsAddFallbackFont (FONScontext* stash, int base, int fallback) {
+bool fonsAddFallbackFont (FONScontext* stash, int base, int fallback) nothrow @trusted @nogc {
   FONSfont* baseFont = stash.fonts[base];
   if (baseFont.nfallbacks < FONS_MAX_FALLBACKS) {
     baseFont.fallbacks[baseFont.nfallbacks++] = fallback;
@@ -4400,38 +4402,38 @@ bool fonsAddFallbackFont (FONScontext* stash, int base, int fallback) {
   return false;
 }
 
-public void fonsSetSize (FONScontext* stash, float size) {
+public void fonsSetSize (FONScontext* stash, float size) nothrow @trusted @nogc {
   pragma(inline, true);
   fons__getState(stash).size = size;
 }
 
-public void fonsSetColor (FONScontext* stash, uint color) {
+public void fonsSetColor (FONScontext* stash, uint color) nothrow @trusted @nogc {
   pragma(inline, true);
   fons__getState(stash).color = color;
 }
 
-public void fonsSetSpacing (FONScontext* stash, float spacing) {
+public void fonsSetSpacing (FONScontext* stash, float spacing) nothrow @trusted @nogc {
   pragma(inline, true);
   fons__getState(stash).spacing = spacing;
 }
 
-public void fonsSetBlur (FONScontext* stash, float blur) {
+public void fonsSetBlur (FONScontext* stash, float blur) nothrow @trusted @nogc {
   pragma(inline, true);
   version(nanovg_kill_font_blur) blur = 0;
   fons__getState(stash).blur = blur;
 }
 
-public void fonsSetAlign (FONScontext* stash, NVGTextAlign talign) {
+public void fonsSetAlign (FONScontext* stash, NVGTextAlign talign) nothrow @trusted @nogc {
   pragma(inline, true);
   fons__getState(stash).talign = talign;
 }
 
-public void fonsSetFont (FONScontext* stash, int font) {
+public void fonsSetFont (FONScontext* stash, int font) nothrow @trusted @nogc {
   pragma(inline, true);
   fons__getState(stash).font = font;
 }
 
-public void fonsPushState (FONScontext* stash) {
+public void fonsPushState (FONScontext* stash) nothrow @trusted @nogc {
   if (stash.nstates >= FONS_MAX_STATES) {
     if (stash.handleError) stash.handleError(stash.errorUptr, FONS_STATES_OVERFLOW, 0);
     return;
@@ -4440,7 +4442,7 @@ public void fonsPushState (FONScontext* stash) {
   ++stash.nstates;
 }
 
-public void fonsPopState (FONScontext* stash) {
+public void fonsPopState (FONScontext* stash) nothrow @trusted @nogc {
   if (stash.nstates <= 1) {
     if (stash.handleError) stash.handleError(stash.errorUptr, FONS_STATES_UNDERFLOW, 0);
     return;
@@ -4448,7 +4450,7 @@ public void fonsPopState (FONScontext* stash) {
   --stash.nstates;
 }
 
-public void fonsClearState (FONScontext* stash) {
+public void fonsClearState (FONScontext* stash) nothrow @trusted @nogc {
   FONSstate* state = fons__getState(stash);
   state.size = 12.0f;
   state.color = 0xffffffff;
@@ -4458,14 +4460,14 @@ public void fonsClearState (FONScontext* stash) {
   state.talign.reset; //FONS_ALIGN_LEFT|FONS_ALIGN_BASELINE;
 }
 
-void fons__freeFont (FONSfont* font) {
+void fons__freeFont (FONSfont* font) nothrow @trusted @nogc {
   if (font is null) return;
   if (font.glyphs) free(font.glyphs);
   if (font.freeData && font.data) free(font.data);
   free(font);
 }
 
-int fons__allocFont (FONScontext* stash) {
+int fons__allocFont (FONScontext* stash) nothrow @trusted @nogc {
   FONSfont* font = null;
   if (stash.nfonts+1 > stash.cfonts) {
     stash.cfonts = (stash.cfonts == 0 ? 8 : stash.cfonts*2);
@@ -4492,7 +4494,7 @@ error:
 
 private enum NoAlias = ":noaa";
 
-public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) {
+public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) nothrow @trusted {
   import std.internal.cstring;
 
   FILE* fp = null;
@@ -4533,7 +4535,7 @@ error:
   return FONS_INVALID;
 }
 
-public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, int freeData) {
+public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, int freeData) nothrow @trusted @nogc {
   int i, ascent, descent, fh, lineGap;
   FONSfont* font;
 
@@ -4583,7 +4585,7 @@ error:
   return FONS_INVALID;
 }
 
-public int fonsGetFontByName (FONScontext* s, const(char)[] name) {
+public int fonsGetFontByName (FONScontext* s, const(char)[] name) nothrow @trusted @nogc {
   foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
     if (font.namelen == name.length && font.name[0..font.namelen] == name[]) return cast(int)idx;
   }
@@ -4609,7 +4611,7 @@ public int fonsGetFontByName (FONScontext* s, const(char)[] name) {
 }
 
 
-FONSglyph* fons__allocGlyph (FONSfont* font) {
+FONSglyph* fons__allocGlyph (FONSfont* font) nothrow @trusted @nogc {
   if (font.nglyphs+1 > font.cglyphs) {
     font.cglyphs = (font.cglyphs == 0 ? 8 : font.cglyphs*2);
     font.glyphs = cast(FONSglyph*)realloc(font.glyphs, FONSglyph.sizeof*font.cglyphs);
@@ -4625,7 +4627,7 @@ FONSglyph* fons__allocGlyph (FONSfont* font) {
 enum APREC = 16;
 enum ZPREC = 7;
 
-void fons__blurCols (ubyte* dst, int w, int h, int dstStride, int alpha) {
+void fons__blurCols (ubyte* dst, int w, int h, int dstStride, int alpha) nothrow @trusted @nogc {
   foreach (int y; 0..h) {
     int z = 0; // force zero border
     foreach (int x; 1..w) {
@@ -4643,7 +4645,7 @@ void fons__blurCols (ubyte* dst, int w, int h, int dstStride, int alpha) {
   }
 }
 
-void fons__blurRows (ubyte* dst, int w, int h, int dstStride, int alpha) {
+void fons__blurRows (ubyte* dst, int w, int h, int dstStride, int alpha) nothrow @trusted @nogc {
   foreach (int x; 0..w) {
     int z = 0; // force zero border
     for (int y = dstStride; y < h*dstStride; y += dstStride) {
@@ -4662,7 +4664,7 @@ void fons__blurRows (ubyte* dst, int w, int h, int dstStride, int alpha) {
 }
 
 
-void fons__blur (FONScontext* stash, ubyte* dst, int w, int h, int dstStride, int blur) {
+void fons__blur (FONScontext* stash, ubyte* dst, int w, int h, int dstStride, int blur) nothrow @trusted @nogc {
   import std.math : expf = exp;
   int alpha;
   float sigma;
@@ -4678,7 +4680,7 @@ void fons__blur (FONScontext* stash, ubyte* dst, int w, int h, int dstStride, in
   //fons__blurcols(dst, w, h, dstStride, alpha);
 }
 
-FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, short isize, short iblur) {
+FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, short isize, short iblur) nothrow @trusted @nogc {
   int i, g, advance, lsb, x0, y0, x1, y1, gw, gh, gx, gy, x, y;
   float scale;
   FONSglyph* glyph = null;
@@ -4797,7 +4799,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   return glyph;
 }
 
-void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float scale, float spacing, float* x, float* y, FONSquad* q) {
+void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float scale, float spacing, float* x, float* y, FONSquad* q) nothrow @trusted @nogc {
   //float rx, ry, xoff, yoff, x0, y0, x1, y1;
 
   if (prevGlyphIndex >= 0) {
@@ -4846,7 +4848,7 @@ void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONS
   *x += cast(int)(glyph.xadv/10.0f+0.5f);
 }
 
-void fons__flush (FONScontext* stash) {
+void fons__flush (FONScontext* stash) nothrow @trusted @nogc {
   // Flush texture
   if (stash.dirtyRect.ptr[0] < stash.dirtyRect.ptr[2] && stash.dirtyRect.ptr[1] < stash.dirtyRect.ptr[3]) {
     if (stash.params.renderUpdate !is null) stash.params.renderUpdate(stash.params.userPtr, stash.dirtyRect.ptr, stash.texData);
@@ -4864,7 +4866,7 @@ void fons__flush (FONScontext* stash) {
   }
 }
 
-void fons__vertex (FONScontext* stash, float x, float y, float s, float t, uint c) {
+void fons__vertex (FONScontext* stash, float x, float y, float s, float t, uint c) nothrow @trusted @nogc {
   stash.verts[stash.nverts*2+0] = x;
   stash.verts[stash.nverts*2+1] = y;
   stash.tcoords[stash.nverts*2+0] = s;
@@ -4873,7 +4875,7 @@ void fons__vertex (FONScontext* stash, float x, float y, float s, float t, uint 
   ++stash.nverts;
 }
 
-float fons__getVertAlign (FONScontext* stash, FONSfont* font, NVGTextAlign talign, short isize) {
+float fons__getVertAlign (FONScontext* stash, FONSfont* font, NVGTextAlign talign, short isize) nothrow @trusted @nogc {
   if (stash.params.flags&FONS_ZERO_TOPLEFT) {
     final switch (talign.vertical) {
       case NVGTextAlign.V.Top: return font.ascender*cast(float)isize/10.0f;
@@ -5003,7 +5005,7 @@ public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x
   return true;
 }
 
-public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) {
+public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) nothrow @trusted @nogc {
   if (stash is null || iter is null) return false;
   FONSglyph* glyph = null;
   if (iter.isChar) {
@@ -5050,7 +5052,7 @@ public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* 
   return true;
 }
 
-debug public void fonsDrawDebug (FONScontext* stash, float x, float y) {
+debug public void fonsDrawDebug (FONScontext* stash, float x, float y) nothrow @trusted @nogc {
   int i;
   int w = stash.params.width;
   int h = stash.params.height;
@@ -5112,9 +5114,9 @@ private:
   float minx, miny, maxx, maxy;
 
 public:
-  this (FONScontext* astash, float ax, float ay) { reset(astash, ax, ay); }
+  this (FONScontext* astash, float ax, float ay) nothrow @trusted @nogc { reset(astash, ax, ay); }
 
-  void reset (FONScontext* astash, float ax, float ay) {
+  void reset (FONScontext* astash, float ax, float ay) nothrow @trusted @nogc {
     this = this.init;
     if (astash is null) return;
     stash = astash;
@@ -5212,7 +5214,7 @@ public:
   }
 
   // Return current horizontal text bounds.
-  void getHBounds (out float xmin, out float xmax) {
+  void getHBounds (out float xmin, out float xmax) nothrow @trusted @nogc {
     if (state !is null) {
       float lminx = minx, lmaxx = maxx;
       // align horizontally
@@ -5233,7 +5235,7 @@ public:
   }
 
   // Return current vertical text bounds.
-  void getVBounds (out float ymin, out float ymax) {
+  void getVBounds (out float ymin, out float ymax) nothrow @trusted @nogc {
     if (state !is null) {
       ymin = miny;
       ymax = maxy;
@@ -5241,7 +5243,9 @@ public:
   }
 }
 
-public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
+public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[] str, float[] bounds) nothrow @trusted @nogc
+if (is(T == char) || is(T == dchar))
+{
   FONSstate* state = fons__getState(stash);
   uint codepoint;
   uint utf8state = 0;
@@ -5337,7 +5341,7 @@ public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[]
   return advance;
 }
 
-public void fonsVertMetrics (FONScontext* stash, float* ascender, float* descender, float* lineh) {
+public void fonsVertMetrics (FONScontext* stash, float* ascender, float* descender, float* lineh) nothrow @trusted @nogc {
   FONSfont* font;
   FONSstate* state = fons__getState(stash);
   short isize;
@@ -5353,7 +5357,7 @@ public void fonsVertMetrics (FONScontext* stash, float* ascender, float* descend
   if (lineh) *lineh = font.lineh*isize/10.0f;
 }
 
-public void fonsLineBounds (FONScontext* stash, float y, float* miny, float* maxy) {
+public void fonsLineBounds (FONScontext* stash, float y, float* miny, float* maxy) nothrow @trusted @nogc {
   FONSfont* font;
   FONSstate* state = fons__getState(stash);
   short isize;
@@ -5375,13 +5379,13 @@ public void fonsLineBounds (FONScontext* stash, float y, float* miny, float* max
   }
 }
 
-public const(ubyte)* fonsGetTextureData (FONScontext* stash, int* width, int* height) {
+public const(ubyte)* fonsGetTextureData (FONScontext* stash, int* width, int* height) nothrow @trusted @nogc {
   if (width !is null) *width = stash.params.width;
   if (height !is null) *height = stash.params.height;
   return stash.texData;
 }
 
-public int fonsValidateTexture (FONScontext* stash, int* dirty) {
+public int fonsValidateTexture (FONScontext* stash, int* dirty) nothrow @trusted @nogc {
   if (stash.dirtyRect.ptr[0] < stash.dirtyRect.ptr[2] && stash.dirtyRect.ptr[1] < stash.dirtyRect.ptr[3]) {
     dirty[0] = stash.dirtyRect.ptr[0];
     dirty[1] = stash.dirtyRect.ptr[1];
@@ -5397,7 +5401,7 @@ public int fonsValidateTexture (FONScontext* stash, int* dirty) {
   return 0;
 }
 
-public void fonsDeleteInternal (FONScontext* stash) {
+public void fonsDeleteInternal (FONScontext* stash) nothrow @trusted @nogc {
   if (stash is null) return;
 
   if (stash.params.renderDelete) stash.params.renderDelete(stash.params.userPtr);
@@ -5411,19 +5415,19 @@ public void fonsDeleteInternal (FONScontext* stash) {
   free(stash);
 }
 
-public void fonsSetErrorCallback (FONScontext* stash, void function (void* uptr, int error, int val) callback, void* uptr) {
+public void fonsSetErrorCallback (FONScontext* stash, void function (void* uptr, int error, int val) nothrow @trusted @nogc callback, void* uptr) nothrow @trusted @nogc {
   if (stash is null) return;
   stash.handleError = callback;
   stash.errorUptr = uptr;
 }
 
-public void fonsGetAtlasSize (FONScontext* stash, int* width, int* height) {
+public void fonsGetAtlasSize (FONScontext* stash, int* width, int* height) nothrow @trusted @nogc {
   if (stash is null) return;
   *width = stash.params.width;
   *height = stash.params.height;
 }
 
-public int fonsExpandAtlas (FONScontext* stash, int width, int height) {
+public int fonsExpandAtlas (FONScontext* stash, int width, int height) nothrow @trusted @nogc {
   int i, maxy = 0;
   ubyte* data = null;
   if (stash is null) return 0;
@@ -5473,7 +5477,7 @@ public int fonsExpandAtlas (FONScontext* stash, int width, int height) {
   return 1;
 }
 
-public int fonsResetAtlas (FONScontext* stash, int width, int height) {
+public int fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @trusted @nogc {
   int i, j;
   if (stash is null) return 0;
 
@@ -5925,7 +5929,7 @@ struct GLNVGcontext {
 
 int glnvg__maxi() (int a, int b) { pragma(inline, true); return (a > b ? a : b); }
 
-void glnvg__bindTexture (GLNVGcontext* gl, GLuint tex) {
+void glnvg__bindTexture (GLNVGcontext* gl, GLuint tex) nothrow @trusted @nogc {
   static if (NANOVG_GL_USE_STATE_FILTER) {
     if (gl.boundTexture != tex) {
       gl.boundTexture = tex;
@@ -5936,7 +5940,7 @@ void glnvg__bindTexture (GLNVGcontext* gl, GLuint tex) {
   }
 }
 
-void glnvg__stencilMask (GLNVGcontext* gl, GLuint mask) {
+void glnvg__stencilMask (GLNVGcontext* gl, GLuint mask) nothrow @trusted @nogc {
   static if (NANOVG_GL_USE_STATE_FILTER) {
     if (gl.stencilMask != mask) {
       gl.stencilMask = mask;
@@ -5947,7 +5951,7 @@ void glnvg__stencilMask (GLNVGcontext* gl, GLuint mask) {
   }
 }
 
-void glnvg__stencilFunc (GLNVGcontext* gl, GLenum func, GLint ref_, GLuint mask) {
+void glnvg__stencilFunc (GLNVGcontext* gl, GLenum func, GLint ref_, GLuint mask) nothrow @trusted @nogc {
   static if (NANOVG_GL_USE_STATE_FILTER) {
     if (gl.stencilFunc != func || gl.stencilFuncRef != ref_ || gl.stencilFuncMask != mask) {
       gl.stencilFunc = func;
@@ -5960,7 +5964,7 @@ void glnvg__stencilFunc (GLNVGcontext* gl, GLenum func, GLint ref_, GLuint mask)
   }
 }
 
-GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) {
+GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   GLNVGtexture* tex = null;
   foreach (int i; 0..gl.ntextures) {
     if (gl.textures[i].id == 0) {
@@ -5986,12 +5990,12 @@ GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) {
   return tex;
 }
 
-GLNVGtexture* glnvg__findTexture (GLNVGcontext* gl, int id) {
+GLNVGtexture* glnvg__findTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
   foreach (int i; 0..gl.ntextures) if (gl.textures[i].id == id) return &gl.textures[i];
   return null;
 }
 
-bool glnvg__deleteTexture (GLNVGcontext* gl, int id) {
+bool glnvg__deleteTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
   foreach (int i; 0..gl.ntextures) {
     if (gl.textures[i].id == id) {
       if (gl.textures[i].tex != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &gl.textures[i].tex);
@@ -6002,7 +6006,7 @@ bool glnvg__deleteTexture (GLNVGcontext* gl, int id) {
   return false;
 }
 
-void glnvg__dumpShaderError (GLuint shader, const(char)* name, const(char)* type) {
+void glnvg__dumpShaderError (GLuint shader, const(char)* name, const(char)* type) nothrow @trusted @nogc {
   import core.stdc.stdio : fprintf, stderr;
   GLchar[512+1] str = 0;
   GLsizei len = 0;
@@ -6012,7 +6016,7 @@ void glnvg__dumpShaderError (GLuint shader, const(char)* name, const(char)* type
   fprintf(stderr, "Shader %s/%s error:\n%s\n", name, type, str.ptr);
 }
 
-void glnvg__dumpProgramError (GLuint prog, const(char)* name) {
+void glnvg__dumpProgramError (GLuint prog, const(char)* name) nothrow @trusted @nogc {
   import core.stdc.stdio : fprintf, stderr;
   GLchar[512+1] str = 0;
   GLsizei len = 0;
@@ -6022,7 +6026,7 @@ void glnvg__dumpProgramError (GLuint prog, const(char)* name) {
   fprintf(stderr, "Program %s error:\n%s\n", name, str.ptr);
 }
 
-void glnvg__checkError (GLNVGcontext* gl, const(char)* str) {
+void glnvg__checkError (GLNVGcontext* gl, const(char)* str) nothrow @trusted @nogc {
   GLenum err;
   if ((gl.flags&NVG_DEBUG) == 0) return;
   err = glGetError();
@@ -6033,7 +6037,7 @@ void glnvg__checkError (GLNVGcontext* gl, const(char)* str) {
   }
 }
 
-bool glnvg__createShader (GLNVGshader* shader, const(char)* name, const(char)* header, const(char)* opts, const(char)* vshader, const(char)* fshader) {
+bool glnvg__createShader (GLNVGshader* shader, const(char)* name, const(char)* header, const(char)* opts, const(char)* vshader, const(char)* fshader) nothrow @trusted @nogc {
   GLint status;
   GLuint prog, vert, frag;
   const(char)*[3] str;
@@ -6087,19 +6091,19 @@ bool glnvg__createShader (GLNVGshader* shader, const(char)* name, const(char)* h
   return true;
 }
 
-void glnvg__deleteShader (GLNVGshader* shader) {
+void glnvg__deleteShader (GLNVGshader* shader) nothrow @trusted @nogc {
   if (shader.prog != 0) glDeleteProgram(shader.prog);
   if (shader.vert != 0) glDeleteShader(shader.vert);
   if (shader.frag != 0) glDeleteShader(shader.frag);
 }
 
-void glnvg__getUniforms (GLNVGshader* shader) {
+void glnvg__getUniforms (GLNVGshader* shader) nothrow @trusted @nogc {
   shader.loc[GLNVG_LOC_VIEWSIZE] = glGetUniformLocation(shader.prog, "viewSize");
   shader.loc[GLNVG_LOC_TEX] = glGetUniformLocation(shader.prog, "tex");
   shader.loc[GLNVG_LOC_FRAG] = glGetUniformLocation(shader.prog, "frag");
 }
 
-bool glnvg__renderCreate (void* uptr) {
+bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   enum align_ = 4;
 
@@ -6226,7 +6230,7 @@ bool glnvg__renderCreate (void* uptr) {
   return true;
 }
 
-int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) {
+int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGtexture* tex = glnvg__allocTexture(gl);
 
@@ -6284,12 +6288,12 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
 }
 
 
-bool glnvg__renderDeleteTexture (void* uptr, int image) {
+bool glnvg__renderDeleteTexture (void* uptr, int image) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   return glnvg__deleteTexture(gl, image);
 }
 
-bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) {
+bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
 
@@ -6317,7 +6321,7 @@ bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int
   return true;
 }
 
-bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) {
+bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
   if (tex is null) return false;
@@ -6326,9 +6330,9 @@ bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) {
   return true;
 }
 
-void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) {
-  version(nanosvg_asserts) assert(t.length > 5);
-  version(nanosvg_asserts) assert(m3.length > 11);
+void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) nothrow @trusted @nogc {
+  assert(t.length > 5);
+  assert(m3.length > 11);
   m3.ptr[0] = t.ptr[0];
   m3.ptr[1] = t.ptr[1];
   m3.ptr[2] = 0.0f;
@@ -6343,7 +6347,7 @@ void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) {
   m3.ptr[11] = 0.0f;
 }
 
-NVGColor glnvg__premulColor (NVGColor c) {
+NVGColor glnvg__premulColor (NVGColor c) nothrow @trusted @nogc {
   //pragma(inline, true);
   c.r *= c.a;
   c.g *= c.a;
@@ -6351,7 +6355,7 @@ NVGColor glnvg__premulColor (NVGColor c) {
   return c;
 }
 
-bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* paint, NVGscissor* scissor, float width, float fringe, float strokeThr) {
+bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* paint, NVGscissor* scissor, float width, float fringe, float strokeThr) nothrow @trusted @nogc {
   import core.stdc.math : sqrtf;
   GLNVGtexture* tex = null;
   float[6] invxform;
@@ -6421,7 +6425,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
   return true;
 }
 
-void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) {
+void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow @trusted @nogc {
   GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
   glUniform4fv(gl.shader.loc[GLNVG_LOC_FRAG], NANOVG_GL_UNIFORMARRAY_SIZE, &(frag.uniformArray[0][0]));
   if (image != 0) {
@@ -6433,13 +6437,13 @@ void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) {
   }
 }
 
-void glnvg__renderViewport (void* uptr, int width, int height) {
+void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   gl.view[0] = cast(float)width;
   gl.view[1] = cast(float)height;
 }
 
-void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) {
+void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   GLNVGpath* paths = &gl.paths[call.pathOffset];
   int npaths = call.pathCount;
 
@@ -6480,7 +6484,7 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) {
   glDisable(GL_STENCIL_TEST);
 }
 
-void glnvg__convexFill (GLNVGcontext* gl, GLNVGcall* call) {
+void glnvg__convexFill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   GLNVGpath* paths = &gl.paths[call.pathOffset];
   int npaths = call.pathCount;
 
@@ -6494,7 +6498,7 @@ void glnvg__convexFill (GLNVGcontext* gl, GLNVGcall* call) {
   }
 }
 
-void glnvg__stroke (GLNVGcontext* gl, GLNVGcall* call) {
+void glnvg__stroke (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   GLNVGpath* paths = &gl.paths[call.pathOffset];
   int npaths = call.pathCount;
 
@@ -6534,13 +6538,13 @@ void glnvg__stroke (GLNVGcontext* gl, GLNVGcall* call) {
   }
 }
 
-void glnvg__triangles (GLNVGcontext* gl, GLNVGcall* call) {
+void glnvg__triangles (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   glnvg__setUniforms(gl, call.uniformOffset, call.image);
   glnvg__checkError(gl, "triangles fill");
   glDrawArrays(GL_TRIANGLES, call.triangleOffset, call.triangleCount);
 }
 
-void glnvg__renderCancel (void* uptr) {
+void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   gl.nverts = 0;
   gl.npaths = 0;
@@ -6548,7 +6552,7 @@ void glnvg__renderCancel (void* uptr) {
   gl.nuniforms = 0;
 }
 
-GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) {
+GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) nothrow @trusted @nogc {
   if (factor == NVGBlendFactor.ZERO) return GL_ZERO;
   if (factor == NVGBlendFactor.ONE) return GL_ONE;
   if (factor == NVGBlendFactor.SRC_COLOR) return GL_SRC_COLOR;
@@ -6563,7 +6567,7 @@ GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) {
   return GL_INVALID_ENUM;
 }
 
-void glnvg__blendCompositeOperation (NVGCompositeOperationState op) {
+void glnvg__blendCompositeOperation (NVGCompositeOperationState op) nothrow @trusted @nogc {
   //glBlendFuncSeparate(glnvg_convertBlendFuncFactor(op.srcRGB), glnvg_convertBlendFuncFactor(op.dstRGB), glnvg_convertBlendFuncFactor(op.srcAlpha), glnvg_convertBlendFuncFactor(op.dstAlpha));
   GLenum srcRGB = glnvg_convertBlendFuncFactor(op.srcRGB);
   GLenum dstRGB = glnvg_convertBlendFuncFactor(op.dstRGB);
@@ -6576,7 +6580,7 @@ void glnvg__blendCompositeOperation (NVGCompositeOperationState op) {
   }
 }
 
-void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperation) {
+void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperation) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   if (gl.ncalls > 0) {
     // Setup require GL state.
@@ -6639,7 +6643,7 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
   gl.nuniforms = 0;
 }
 
-int glnvg__maxVertCount (const(NVGpath)* paths, int npaths) {
+int glnvg__maxVertCount (const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
   int count = 0;
   foreach (int i; 0..npaths) {
     count += paths[i].nfill;
@@ -6648,7 +6652,7 @@ int glnvg__maxVertCount (const(NVGpath)* paths, int npaths) {
   return count;
 }
 
-GLNVGcall* glnvg__allocCall (GLNVGcontext* gl) {
+GLNVGcall* glnvg__allocCall (GLNVGcontext* gl) nothrow @trusted @nogc {
   GLNVGcall* ret = null;
   if (gl.ncalls+1 > gl.ccalls) {
     GLNVGcall* calls;
@@ -6663,7 +6667,7 @@ GLNVGcall* glnvg__allocCall (GLNVGcontext* gl) {
   return ret;
 }
 
-int glnvg__allocPaths (GLNVGcontext* gl, int n) {
+int glnvg__allocPaths (GLNVGcontext* gl, int n) nothrow @trusted @nogc {
   int ret = 0;
   if (gl.npaths+n > gl.cpaths) {
     GLNVGpath* paths;
@@ -6678,7 +6682,7 @@ int glnvg__allocPaths (GLNVGcontext* gl, int n) {
   return ret;
 }
 
-int glnvg__allocVerts (GLNVGcontext* gl, int n) {
+int glnvg__allocVerts (GLNVGcontext* gl, int n) nothrow @trusted @nogc {
   int ret = 0;
   if (gl.nverts+n > gl.cverts) {
     NVGvertex* verts;
@@ -6693,7 +6697,7 @@ int glnvg__allocVerts (GLNVGcontext* gl, int n) {
   return ret;
 }
 
-int glnvg__allocFragUniforms (GLNVGcontext* gl, int n) {
+int glnvg__allocFragUniforms (GLNVGcontext* gl, int n) nothrow @trusted @nogc {
   int ret = 0, structSize = gl.fragSize;
   if (gl.nuniforms+n > gl.cuniforms) {
     ubyte* uniforms;
@@ -6708,18 +6712,18 @@ int glnvg__allocFragUniforms (GLNVGcontext* gl, int n) {
   return ret;
 }
 
-GLNVGfragUniforms* nvg__fragUniformPtr (GLNVGcontext* gl, int i) {
+GLNVGfragUniforms* nvg__fragUniformPtr (GLNVGcontext* gl, int i) nothrow @trusted @nogc {
   return cast(GLNVGfragUniforms*)&gl.uniforms[i];
 }
 
-void glnvg__vset (NVGvertex* vtx, float x, float y, float u, float v) {
+void glnvg__vset (NVGvertex* vtx, float x, float y, float u, float v) nothrow @trusted @nogc {
   vtx.x = x;
   vtx.y = y;
   vtx.u = u;
   vtx.v = v;
 }
 
-void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) {
+void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   NVGvertex* quad;
@@ -6797,7 +6801,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderStroke (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) {
+void glnvg__renderStroke (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   int maxverts, offset;
@@ -6848,7 +6852,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderTriangles (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) {
+void glnvg__renderTriangles (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   GLNVGfragUniforms* frag;
@@ -6880,7 +6884,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderDelete (void* uptr) {
+void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   if (gl is null) return;
 
@@ -6904,7 +6908,7 @@ void glnvg__renderDelete (void* uptr) {
 
 /// Creates NanoVG contexts for OpenGL versions.
 /// Flags should be combination of the create flags above.
-public NVGContext createGL2NVG (int flags) {
+public NVGContext createGL2NVG (int flags) nothrow @trusted @nogc {
   NVGparams params;
   NVGContext ctx = null;
   nanovgInitOpenGL(); // why not?
@@ -6943,12 +6947,12 @@ error:
 }
 
 /// Delete NanoVG OpenGL context.
-public void deleteGL2 (NVGContext ctx) {
+public void deleteGL2 (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx !is null) ctx.deleteInternal();
 }
 
 /// Create NanoVG OpenGL image from texture id.
-public int glCreateImageFromHandleGL2 (NVGContext ctx, GLuint textureId, int w, int h, int imageFlags) {
+public int glCreateImageFromHandleGL2 (NVGContext ctx, GLuint textureId, int w, int h, int imageFlags) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)ctx.internalParams().userPtr;
   GLNVGtexture* tex = glnvg__allocTexture(gl);
 
@@ -6964,7 +6968,7 @@ public int glCreateImageFromHandleGL2 (NVGContext ctx, GLuint textureId, int w, 
 }
 
 /// Return OpenGL texture id for NanoVG image.
-public GLuint glImageHandleGL2 (NVGContext ctx, int image) {
+public GLuint glImageHandleGL2 (NVGContext ctx, int image) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)ctx.internalParams().userPtr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
   return tex.tex;
