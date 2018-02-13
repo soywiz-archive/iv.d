@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-// very simple (de)serializer to json-like text format
+/// very simple (de)serializer to json-like text format
 module iv.txtser /*is aliced*/;
 private:
 
@@ -25,9 +25,9 @@ import iv.vfs;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public enum SRZIgnore; // ignore this field
-public struct SRZName { string name; } // rename this field
-public enum SRZNonDefaultOnly; // write only if it has non-default value
+public enum SRZIgnore; /// ignore this field
+public struct SRZName { string name; } /// rename this field
+public enum SRZNonDefaultOnly; /// write only if it has non-default value
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -57,6 +57,7 @@ template isCharType(T) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+///
 public void txtser(T, ST) (in auto ref T v, auto ref ST fl, int indent=0, bool skipstname=false)
 if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
 {
@@ -215,6 +216,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+///
 public enum isGoodSerParser(T) = is(typeof((inout int=0) {
   auto t = T.init;
   char ch = t.curch;
@@ -235,6 +237,7 @@ public enum isGoodSerParser(T) = is(typeof((inout int=0) {
 }));
 
 
+///
 public struct TxtSerParser(ST) if (isReadableStream!ST || (isInputRange!ST && is(Unqual!(ElementEncodingType!ST) == char))) {
 private:
   ST st;
@@ -473,6 +476,7 @@ static assert(isGoodSerParser!(TxtSerParser!VFile));
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+///
 public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST fl)
 if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(ElementEncodingType!ST) == char))))
 {
@@ -481,6 +485,7 @@ if (!is(T == class) && (isReadableStream!ST || (isInputRange!ST && is(Unqual!(El
 }
 
 
+///
 public void txtunser(bool ignoreUnknown=false, T, ST) (out T v, auto ref ST par) if (!is(T == class) && isGoodSerParser!ST) {
   import std.traits : Unqual;
 
