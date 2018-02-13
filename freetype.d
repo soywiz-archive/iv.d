@@ -2140,6 +2140,7 @@ enum {
 }
 
 
+@nogc {
 FT_Error FT_Init_FreeType (FT_Library*);
 FT_Error FT_Done_FreeType (FT_Library);
 FT_Error FT_New_Face (FT_Library, const(char)*, FT_Long, FT_Face*);
@@ -2209,9 +2210,11 @@ FT_Error FT_Bitmap_Done (FT_Library, FT_Bitmap*);
 
 // ftbzip2.h
 FT_Error FT_Stream_OpenBzip2 (FT_Stream, FT_Stream);
+} // @nogc
 
 // ftcache.h
-FT_Error FTC_Manager_New (FT_Library, FT_UInt, FT_UInt, FT_ULong, FTC_Face_Requester, FT_Pointer, FTC_Manager*);
+FT_Error FTC_Manager_New (FT_Library, FT_UInt, FT_UInt, FT_ULong, FTC_Face_Requester, FT_Pointer, FTC_Manager*); //!!!
+@nogc {
 void FTC_Manager_Reset (FTC_Manager);
 void FTC_Manager_Done (FTC_Manager);
 FT_Error FTC_Manager_LookupFace (FTC_Manager, FTC_FaceID, FT_Face*);
@@ -2264,9 +2267,11 @@ void FT_List_Add (FT_List, FT_ListNode);
 void FT_List_Insert (FT_List, FT_ListNode);
 void FT_List_Remove (FT_List, FT_ListNode);
 void FT_List_Up (FT_List, FT_ListNode);
-FT_Error FT_List_Iterate (FT_List, FT_List_Iterator, void*);
-void FT_List_Finalize (FT_List, FT_List_Destructor, FT_Memory, void*);
+} /// @nogc
+FT_Error FT_List_Iterate (FT_List, FT_List_Iterator, void*); //!!!
+void FT_List_Finalize (FT_List, FT_List_Destructor, FT_Memory, void*); //!!!
 
+@nogc {
 // ftlzw.h
 FT_Error FT_Stream_OpenLZW (FT_Stream, FT_Stream);
 
@@ -2287,7 +2292,9 @@ FT_Error FT_Property_Get (FT_Library, const(FT_String)*, const(FT_String)*, void
 FT_Error FT_Reference_Library (FT_Library);
 FT_Error FT_New_Library (FT_Memory, FT_Library*);
 FT_Error FT_Done_Library (FT_Library);
-void FT_Set_Debug_Hook (FT_Library, FT_UInt, FT_DebugHook_Func);
+} // @nogc
+void FT_Set_Debug_Hook (FT_Library, FT_UInt, FT_DebugHook_Func); //!!!
+@nogc {
 void FT_Add_Default_Modules (FT_Library);
 FT_TrueTypeEngineType FT_Get_TrueType_Engine_Type (FT_Library);
 
@@ -2385,3 +2392,4 @@ FT_Error FT_Sfnt_Table_Info (FT_Face, FT_UInt, FT_ULong*, FT_ULong*);
 FT_ULong FT_Get_CMap_Language_ID (FT_CharMap);
 FT_ULong FT_Get_CMap_Format (FT_CharMap);
 FT_Error FT_Get_Sfnt_Name (FT_Face, FT_UInt, FT_SfntName*);
+} // @nogc
