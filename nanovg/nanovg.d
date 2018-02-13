@@ -2723,7 +2723,8 @@ public void roundedRect (NVGContext ctx, float x, float y, float w, float h, flo
   ctx.roundedRectVarying(x, y, w, h, r, r, r, r);
 }
 
-void roundedRectVarying (NVGContext ctx, float x, float y, float w, float h, float radTopLeft, float radTopRight, float radBottomRight, float radBottomLeft) {
+/// Creates new rounded rectangle shaped sub-path. This one allows you to specify different rounding radii for each corner.
+public void roundedRectVarying (NVGContext ctx, float x, float y, float w, float h, float radTopLeft, float radTopRight, float radBottomRight, float radBottomLeft) {
   if (radTopLeft < 0.1f && radTopRight < 0.1f && radBottomRight < 0.1f && radBottomLeft < 0.1f) {
     ctx.rect(x, y, w, h);
   } else {
