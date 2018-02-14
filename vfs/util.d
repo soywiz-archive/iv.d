@@ -217,3 +217,129 @@ version(iv_vfs_hash_test) unittest {
   assert(mur3HashOf(StringRange("Sample string")) == 216753265u);
   assert(mur3HashOf(StringRange("Alice & Miriel")) == 694007271u);
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+version(Posix) {
+  private extern(C) char* secure_getenv (const(char)* name) nothrow @trusted @nogc;
+}
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// get user's home path (always terminated with '/'). if `username` is `null`, use current user name.
+/// returns path in `destBuf` or `null` if there is no room in `destBuf`.
+public char[] getUserHomePath (char[] destBuf, const(char)[] username=null) nothrow @trusted @nogc {
+  if (destBuf.length == 0) return null;
+
+  char[] putAsciiz (const(char)* s) nothrow @trusted @nogc {
+    import core.stdc.string : strlen;
+    assert(s !is null && s[0]);
+    auto slen = strlen(s);
+    if (destBuf.length < slen+(s[slen-1] == '/' ? 0 : 1)) return null; // oops
+    destBuf[0..slen] = s[0..slen];
+    if (s[slen-1] != '/') destBuf[slen] = '/';
+    return destBuf[0..slen+(s[slen-1] == '/' ? 0 : 1)];
+  }
+
+  version(Posix) {
+    import core.stdc.errno : errno, ERANGE;
+    import core.stdc.stdlib : free, malloc, realloc/*, getenv*/;
+    import core.sys.posix.pwd : passwd, getpwnam_r, getpwuid_r;
+    import core.sys.posix.unistd : geteuid;
+    import core.sys.posix.sys.types : uid_t;
+
+    uid_t euid;
+    char* unamez = null; // asciiz username; if null, use euid
+    scope(exit) if (unamez !is null) free(unamez);
+
+    // default user
+    if (username.length == 0) {
+      // try $HOME first
+      auto homedir = secure_getenv("HOME");
+      if (homedir !is null && homedir[0]) return putAsciiz(homedir);
+      // no $HOME, get effectife user id
+      euid = geteuid();
+    } else {
+      // ok, we have user name
+      unamez = cast(char*)malloc(username.length+1);
+      if (unamez is null) assert(0, "out of memory in `getUserHomePath()`");
+      unamez[0..username.length+1] = 0;
+      unamez[0..username.length] = username[];
+    }
+
+    // Reserve C memory for the getpwnam_r() function.
+    uint infoBufSize = 5 * 1024;
+    char* infoBuf = null;
+    scope(exit) if (infoBuf !is null) free(infoBuf);
+
+    passwd result;
+    for (;;) {
+      infoBuf = cast(char*)realloc(infoBuf, infoBufSize*char.sizeof);
+      if (infoBuf is null) assert(0, "out of memory in `getUserHomePath()`");
+      passwd* verify = null;
+      errno = 0;
+      auto xres = (unamez !is null ?
+        getpwnam_r(unamez, &result, infoBuf, infoBufSize, &verify) :
+        getpwuid_r(euid, &result, infoBuf, infoBufSize, &verify));
+      if (xres == 0) {
+        // succeeded if verify points at result
+        if (verify == &result) {
+          if (result.pw_dir !is null && result.pw_dir[0]) return putAsciiz(result.pw_dir);
+          return putAsciiz("./"); // last resort
+        }
+      }
+      if (errno != ERANGE && errno != 0) assert(0, "out of memory in `getUserHomePath()`");
+      import core.checkedint : mulu;
+      bool overflow;
+      infoBufSize = mulu(infoBufSize, 2, overflow);
+      if (overflow) assert(0);
+    }
+    assert(0, "wtf?!");
+  } else {
+    return putAsciiz("./"); // nobody cares
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// expands '~...' path to real path.
+/// returns new path in `destBuf` or `null` if there is no room in `destBuf`.
+/// `destBuf` cannot be the same as `inputPath`!
+public char[] expandTilde (char[] destBuf, const(char)[] inputPath) nothrow @trusted @nogc {
+  if (destBuf.length == 0) {
+    if (inputPath.length == 0) return destBuf;
+    if (destBuf.length < inputPath.length) return null; // no room anyway
+    assert(destBuf.ptr !is inputPath.ptr); // just in case
+  }
+
+  if (inputPath[0] != '~') {
+    // nothing to do
+    destBuf[0..inputPath.length] = inputPath[];
+    version(Posix) {} else {
+      foreach (ref char ch; destBuf[0..inputPath.length]) if (ch == '\\') ch = '/';
+      //if (inputPath.length > 2 && inputPath[1] == ':' && inputPath[2] == '/') destBuf[2] = '\\';
+    }
+    return destBuf[0..inputPath.length];
+  }
+
+  usize pathpos = 1;
+  version(Posix) {
+    while (pathpos < inputPath.length && inputPath.ptr[pathpos] != '/') ++pathpos;
+  } else {
+    while (pathpos < inputPath.length && inputPath.ptr[pathpos] != '/' && inputPath.ptr[pathpos] != '\\') ++pathpos;
+  }
+  const(char)[] uname = inputPath[1..pathpos];
+  if (pathpos < inputPath.length) { assert(inputPath[pathpos] == '/' || inputPath[pathpos] == '\\'); ++pathpos; }
+  // put path into destDir
+  auto hp = getUserHomePath(destBuf, uname);
+  if (hp is null) return null;
+  // append rest of the path
+  if (pathpos >= inputPath.length) return hp;
+  immutable irest = inputPath.length-pathpos;
+  if (destBuf.length-hp.length < irest) return null; // oops, no room
+  destBuf[hp.length..hp.length+irest] = inputPath[pathpos..$];
+  version(Posix) {} else {
+    foreach (ref char ch; destBuf[0..hp.length+irest]) if (ch == '\\') ch = '/';
+    //if (inputPath.length > 2 && inputPath[1] == ':' && inputPath[2] == '/') destBuf[2] = '\\';
+  }
+  return destBuf[0..hp.length+irest];
+}
