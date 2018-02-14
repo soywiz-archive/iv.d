@@ -1,0 +1,120 @@
+WARNING! the policy of "being compatible with Vanilla D" is dropped.
+
+vanilla D (and dmd as its reference compiler) is going to be more and
+more broken. stupid compiler refucktoring, dropping useful features...
+i see it as a complete disaster.
+
+thus, i did a hard fork of dmd, and will not "vanilize" any modules in
+IV anymore.
+
+go get Aliced today if you want to use IV!
+
+
+how to get Aliced
+=================
+it is probably not that easy, but doable. you will need vanilla dmd 2.076
+(other versions aren't tested, and versions starting from 2.078 are outright
+broken).
+
+then do this to get Aliced source code:
+mkdir aliced
+cd aliced
+git clone git://repo.or.cz/ivdmd.git dmd
+cd dmd
+git checkout k8
+cd ..
+git clone git://repo.or.cz/ivdruntime.git druntime
+cd druntime
+git checkout k8
+cd ..
+git clone git://repo.or.cz/ivdphobos.git phobos
+cd phobos
+git checkout k8
+cd ..
+git clone git://repo.or.cz/ivdtools.git tools
+cd tools
+git checkout k8
+cd ..
+
+
+to build aliced:
+cd aliced
+cd dmd
+HOST_DMD=/path/to/your/dmd076/dmd make -f posix.mak
+cd ..
+cd druntime
+make -f posix.mak DMD=../dmd/src/dmd
+cd ..
+cd phobos
+make -f posix.mak DMD=../dmd/src/dmd
+cd ..
+
+
+to install aliced, execute the following shell script from aliced/ directory
+(note that you either have to be root, or have rights to create directories in /opt/):
+
+============================================
+#!/bin/sh
+DMD_INSTALL_PATH=/opt/dmd
+ARCH=32
+
+aliced_dir=`pwd`
+cd "$aliced_dir"
+aliced_dir=`pwd`
+
+if [ -f phobos/generated/linux/release/${ARCH}/libphobos2.a ]; then
+  phorel="release"
+  echo "MSG: RELEASE Phobos found!"
+elif [ -f phobos/generated/linux/debug/${ARCH}/libphobos2.a ]; then
+  phorel="debug"
+  echo "MSG: DEBUG Phobos found!"
+else
+  echo "wtf?! where is Phobos?!"
+  exit 1
+fi
+
+mkdir $DMD_INSTALL_PATH 2>/dev/null
+
+echo "copying dmd..."
+mkdir -p $DMD_INSTALL_PATH/bin
+cp dmd/generated/linux/release/32/dmd $DMD_INSTALL_PATH/bin
+
+echo "copying runtime..."
+cd "$aliced_dir/druntime"
+mkdir -p $DMD_INSTALL_PATH/include/d2
+cp -r import/* $DMD_INSTALL_PATH/include/d2
+cd src
+cp -ar gc $DMD_INSTALL_PATH/include/d2
+
+echo "copying phobos..."
+cd "$aliced_dir/phobos"
+mkdir -p $DMD_INSTALL_PATH/lib
+cp -va generated/linux/$phorel/${ARCH}/libphobos2.a $DMD_INSTALL_PATH/lib
+rm $DMD_INSTALL_PATH/lib/*.o 2>/dev/null
+cp -ar std $DMD_INSTALL_PATH/include/d2
+cp -ar etc $DMD_INSTALL_PATH/include/d2
+rm -rf $DMD_INSTALL_PATH/include/d2/std/experimental 2>/dev/null
+
+( cat <<EOT
+[Environment]
+; the special name %@P% is replaced with the path to this file.
+DFLAGS=-defaultlib=libphobos2.a -I%@P%/../include/d2 -L-L%@P%/../lib -L--no-warn-search-mismatch -L--export-dynamic -L--demangle=dlang
+EOT
+) >$DMD_INSTALL_PATH/bin/dmd.conf
+
+echo "compiling rdmd..."
+cd "$aliced_dir/tools"
+$DMD_INSTALL_PATH/bin/dmd -conf=$DMD_INSTALL_PATH/bin/dmd.conf -O -release -of$DMD_INSTALL_PATH/bin/rdmd rdmd.d rpkgman.d -L-s -wi
+rm $DMD_INSTALL_PATH/bin/*.o 2>/dev/null
+
+strip -s $DMD_INSTALL_PATH/bin/* 2>/dev/null
+
+cd "$aliced_dir"
+============================================
+
+
+now you should have a fully functional Aliced compiler (still named dmd for historical reasons).
+if you can't figure out what to change in case the script is not working, or what to do next,
+Aliced is probably not for you. go get vanilla dmd.
+
+and no, dub is not supported, and never will be.
