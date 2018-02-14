@@ -128,6 +128,7 @@ void main () {
     delegate (KeyEvent event) {
       if (sdwindow.closed) return;
       if (!event.pressed) return;
+      if (event == "C-Q") { sdwindow.close(); return; }
       switch (event.key) {
         case Key.Escape: sdwindow.close(); break;
         case Key.Space: blowup = !blowup; break;

@@ -123,7 +123,7 @@ void ui_handler (int item, UIevent event) {
 
 void init (NVGContext vg) {
   version(nanovg_demo_msfonts) {
-    bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/tahoma.ttf"));
+    bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/tahoma.ttf:noaa"));
   } else {
     bndSetFont(vg.createFont("system", "data/Roboto-Regular.ttf"));
   }

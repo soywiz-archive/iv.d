@@ -56,8 +56,8 @@ public int loadDemoData (NVGContext vg, DemoData* data) {
   }
 
   version(nanovg_demo_msfonts) {
-    enum FNN = "/home/ketmar/ttf/ms/tahoma.ttf";
-    enum FNB = "/home/ketmar/ttf/ms/tahomabd.ttf";
+    enum FNN = "/home/ketmar/ttf/ms/tahoma.ttf:noaa";
+    enum FNB = "/home/ketmar/ttf/ms/tahomabd.ttf:noaa";
   } else {
     enum FNN = "data/Roboto-Regular.ttf";
     enum FNB = "data/Roboto-Bold.ttf";
@@ -1359,7 +1359,7 @@ void drawBlendish (NVGContext _vg, float _x, float _y, float _w, float _h, float
   my += BND_WIDGET_HEIGHT-2.0f;
   bndMenuItem(_vg, mx, my, mw, BND_WIDGET_HEIGHT, BND_DEFAULT, BND_ICONID!(17, 3), "Default");
   my += BND_WIDGET_HEIGHT-2.0f;
-  bndMenuItem(_vg, mx, my, mw, BND_WIDGET_HEIGHT, BND_HOVER, BND_ICONID!(18, 3), "Hovered item");
+  bndMenuItem(_vg, mx, my, mw, BND_WIDGET_HEIGHT, BND_HOVER, BND_ICONID!(18, 3), "Hovered item!");
   my += BND_WIDGET_HEIGHT-2.0f;
   bndMenuItem(_vg, mx, my, mw, BND_WIDGET_HEIGHT, BND_ACTIVE, BND_ICONID!(19, 3), "Active");
 
@@ -1407,6 +1407,7 @@ void drawBlendish (NVGContext _vg, float _x, float _y, float _w, float _h, float
   int t = cast(int)(_t*2);
   int idx1 = (t/textlen)%textlen;
   int idx2 = idx1+(t%(textlen-idx1));
+  //idx2 = idx1;
 
   ry += 25.0f;
   bndTextField(_vg, rx, ry, 240.0f, BND_WIDGET_HEIGHT, BND_CORNER_NONE, BND_DEFAULT, -1, edit_text, idx1, idx2);
