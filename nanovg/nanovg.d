@@ -33,8 +33,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.nanovg /*is aliced*/;
-import iv.alice;
+module iv.nanovg.nanovg is aliced;
+private:
+
+import iv.vfs;
+import iv.vfs.util;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -45,11 +48,12 @@ import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
 //import iv.nanovg.fontstash;
 
-version(aliced) {
+version(nanovg_naked) {
+} else {
   version = nanovg_use_freetype;
   version = nanovg_ft_mon;
   version = nanovg_demo_msfonts;
-  version = nanovg_no_font_aa;
+  version = nanovg_default_no_font_aa;
 }
 
 public:
@@ -58,10 +62,8 @@ alias NVG_PI = PI;
 version = nanovg_use_arsd_image;
 
 version(nanovg_use_arsd_image) {
-  import arsd.color;
-  static if (__traits(compiles, {import arsd.png;})) import arsd.png;
-  static if (__traits(compiles, {import arsd.jpeg;})) import arsd.jpeg;
-  static if (__traits(compiles, {import arsd.image;})) import arsd.image;
+  private import arsd.color;
+  private import arsd.image;
 } else {
   void stbi_set_unpremultiply_on_load (int flag_true_if_should_unpremultiply) {}
   void stbi_convert_iphone_png_to_rgb (int flag_true_if_should_convert) {}
@@ -70,24 +72,21 @@ version(nanovg_use_arsd_image) {
   void stbi_image_free (void* retval_from_stbi_load) {}
 }
 
-version(nanovg_no_font_aa) {
-  __gshared bool NVG_INVERT_FONT_AA = true;
-} else {
-  __gshared bool NVG_INVERT_FONT_AA = false;
-}
+__gshared bool NVG_INVERT_FONT_AA = false;
 
 
-///
-align(1) struct NVGColor {
+/// NanoVG RGBA color
+public align(1) struct NVGColor {
 align(1):
 public:
-  float[4] rgba = 0; // default color is transparent
+  float[4] rgba = 0; /// default color is transparent (a=1 is opaque)
 
 public:
   @property string toString () const @safe { import std.string : format; return "NVGColor(%s,%s,%s,%s)".format(r, g, b, a); }
 
 nothrow @safe @nogc:
 public:
+  ///
   this (ubyte ar, ubyte ag, ubyte ab, ubyte aa=255) pure {
     pragma(inline, true);
     r = ar/255.0f;
@@ -96,6 +95,7 @@ public:
     a = aa/255.0f;
   }
 
+  ///
   this (float ar, float ag, float ab, float aa=1) pure {
     pragma(inline, true);
     r = ar;
@@ -104,7 +104,7 @@ public:
     a = aa;
   }
 
-  // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
+  /// AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
   this (uint c) pure {
     pragma(inline, true);
     r = (c&0xff)/255.0f;
@@ -113,7 +113,7 @@ public:
     a = ((c>>24)&0xff)/255.0f;
   }
 
-  // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
+  /// AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
   @property uint asUint () const pure {
     pragma(inline, true);
     return
@@ -123,8 +123,15 @@ public:
       (cast(uint)(a*255)<<24);
   }
 
-  // AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
-  @property uint asUintHtml () const pure {
+  alias asUintABGR = asUint; /// Ditto.
+
+  /// AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
+  static NVGColor fromUint (uint c) pure => NVGColor(c);
+
+  alias fromUintABGR = fromUint; /// Ditto.
+
+  /// AARRGGBB
+  @property uint asUintARGB () const pure {
     pragma(inline, true);
     return
       cast(uint)(b*255)|
@@ -133,37 +140,37 @@ public:
       (cast(uint)(a*255)<<24);
   }
 
-  static NVGColor fromHtml (uint c) pure {
-    pragma(inline, true);
-    return NVGColor((c>>16)&0xff, (c>>8)&0xff, c&0xff, (c>>24)&0xff);
-  }
+  /// AARRGGBB
+  static NVGColor fromUintARGB (uint c) pure => NVGColor((c>>16)&0xff, (c>>8)&0xff, c&0xff, (c>>24)&0xff);
 
-  @property ref inout(float) r () inout pure @trusted { pragma(inline, true); return rgba.ptr[0]; }
-  @property ref inout(float) g () inout pure @trusted { pragma(inline, true); return rgba.ptr[1]; }
-  @property ref inout(float) b () inout pure @trusted { pragma(inline, true); return rgba.ptr[2]; }
-  @property ref inout(float) a () inout pure @trusted { pragma(inline, true); return rgba.ptr[3]; }
+  @property ref inout(float) r () inout pure @trusted => rgba.ptr[0];
+  @property ref inout(float) g () inout pure @trusted => rgba.ptr[1];
+  @property ref inout(float) b () inout pure @trusted => rgba.ptr[2];
+  @property ref inout(float) a () inout pure @trusted => rgba.ptr[3];
 
-  NVGHSL asHSL() (bool useWeightedLightness=false) const { /*pragma(inline, true);*/ return NVGHSL.fromColor(this, useWeightedLightness); }
-  static fromHSL() (in auto ref NVGHSL hsl) { /*pragma(inline, true);*/ return hsl.asColor; }
+  NVGHSL asHSL() (bool useWeightedLightness=false) const => NVGHSL.fromColor(this, useWeightedLightness);
+  static fromHSL() (in auto ref NVGHSL hsl) => hsl.asColor;
 
   version(nanovg_use_arsd_image) {
-    Color toArsd () const { /*pragma(inline, true);*/ return Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255)); }
-    static NVGColor fromArsd() (in auto ref Color c) const { /*pragma(inline, true);*/ return NVGColor(c.r, c.g, c.b, c.a); }
+    Color toArsd () const => Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255));
+    static NVGColor fromArsd() (in auto ref Color c) const => NVGColor(c.r, c.g, c.b, c.a);
   }
 }
 
 
-align(1) struct NVGHSL {
+/// NanoVG A-HSL color
+public align(1) struct NVGHSL {
 align(1):
-  float h=0, s=0, l=1, a=1;
+  float h=0, s=0, l=1, a=1; ///
 
   string toString () const { import std.format : format; return (a != 1 ? "HSL(%s,%s,%s,%d)".format(h, s, l, a) : "HSL(%s,%s,%s)".format(h, s, l)); }
 
 nothrow @safe @nogc:
 public:
+  ///
   this (float ah, float as, float al, float aa=1) pure { pragma(inline, true); h = ah; s = as; l = al; a = aa; }
 
-  NVGColor asColor () const { /*pragma(inline, true);*/ return nvgHSLA(h, s, l, a); }
+  NVGColor asColor () const => nvgHSLA(h, s, l, a); ///
 
   // taken from Adam's arsd.color
   /** Converts an RGB color into an HSL triplet.
@@ -216,8 +223,8 @@ public:
 }
 
 
-///
-struct NVGPaint {
+/// Paint parameters for various fills. Don't change anything here!
+public struct NVGPaint {
   float[6] xform;
   float[2] extent;
   float radius;
@@ -228,19 +235,19 @@ struct NVGPaint {
 }
 
 ///
-enum NVGWinding {
+public enum NVGWinding {
   CCW = 1, /// Winding for solid shapes
   CW = 2,  /// Winding for holes
 }
 
 ///
-enum NVGSolidity {
+public enum NVGSolidity {
   Solid = 1, /// CCW
   Hole = 2, /// CW
 }
 
 ///
-enum NVGLineCap {
+public enum NVGLineCap {
   Butt, ///
   Round, ///
   Square, ///
@@ -249,7 +256,7 @@ enum NVGLineCap {
 }
 
 /// Text align.
-align(1) struct NVGTextAlign {
+public align(1) struct NVGTextAlign {
 align(1):
   /// Horizontal align.
   enum H : ubyte {
@@ -268,13 +275,13 @@ align(1):
 
 pure nothrow @safe @nogc:
 public:
-  this (H h) { pragma(inline, true); value = h; }
-  this (V v) { pragma(inline, true); value = cast(ubyte)(v<<4); }
-  this (H h, V v) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
-  this (V v, H h) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
-  void reset () { pragma(inline, true); value = 0; }
-  void reset (H h, V v) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
-  void reset (V v, H h) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); }
+  this (H h) { pragma(inline, true); value = h; } ///
+  this (V v) { pragma(inline, true); value = cast(ubyte)(v<<4); } ///
+  this (H h, V v) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); } ///
+  this (V v, H h) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); } ///
+  void reset () { pragma(inline, true); value = 0; } ///
+  void reset (H h, V v) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); } ///
+  void reset (V v, H h) { pragma(inline, true); value = cast(ubyte)(h|(v<<4)); } ///
 @property:
   bool left () const { pragma(inline, true); return ((value&0x0f) == H.Left); } ///
   void left (bool v) { pragma(inline, true); value = cast(ubyte)((value&0xf0)|(v ? H.Left : 0)); } ///
@@ -303,7 +310,7 @@ private:
 }
 
 ///
-enum NVGBlendFactor {
+public enum NVGBlendFactor {
   ZERO = 1<<0,
   ONE = 1<<1,
   SRC_COLOR = 1<<2,
@@ -318,7 +325,7 @@ enum NVGBlendFactor {
 }
 
 ///
-enum NVGCompositeOperation {
+public enum NVGCompositeOperation {
   SOURCE_OVER,
   SOURCE_IN,
   SOURCE_OUT,
@@ -333,7 +340,7 @@ enum NVGCompositeOperation {
 }
 
 ///
-struct NVGCompositeOperationState {
+public struct NVGCompositeOperationState {
   NVGBlendFactor srcRGB;
   NVGBlendFactor dstRGB;
   NVGBlendFactor srcAlpha;
@@ -341,14 +348,14 @@ struct NVGCompositeOperationState {
 }
 
 ///
-struct NVGGlyphPosition {
+public struct NVGGlyphPosition {
   usize strpos;    /// Position of the glyph in the input string.
   float x;          /// The x-coordinate of the logical glyph position.
   float minx, maxx; /// The bounds of the glyph shape.
 }
 
 ///
-struct NVGTextRow {
+public struct NVGTextRow {
   const(char)[] str;
   const(dchar)[] dstr;
   int start;        /// Index in the input text where the row starts.
@@ -378,7 +385,7 @@ struct NVGTextRow {
 }
 
 ///
-enum NVGImageFlags {
+public enum NVGImageFlags {
   None            =    0, /// Nothing special.
   GenerateMipmaps = 1<<0, /// Generate mipmaps during creation of the image.
   RepeatX         = 1<<1, /// Repeat image in X direction.
@@ -575,7 +582,6 @@ float nvg__normalize (float* x, float* y) nothrow @safe @nogc {
   return d;
 }
 
-
 void nvg__deletePathCache (NVGpathCache* c) nothrow @trusted @nogc {
   if (c is null) return;
   if (c.points !is null) free(c.points);
@@ -583,7 +589,6 @@ void nvg__deletePathCache (NVGpathCache* c) nothrow @trusted @nogc {
   if (c.verts !is null) free(c.verts);
   free(c);
 }
-
 
 NVGpathCache* nvg__allocPathCache () nothrow @trusted @nogc {
   NVGpathCache* c = cast(NVGpathCache*)malloc(NVGpathCache.sizeof);
@@ -733,9 +738,13 @@ package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) nothrow @trusted @no
  * frame buffer size. In that case you would set windowWidth/windowHeight to the window size,
  * devicePixelRatio to: `windowWidth/windowHeight`.
  *
+ * Default ratio is `1`.
+ *
+ * Note that fractional ratio can (and will) distort your fonts and images.
+ *
  * see also `glNVGClearFlags()`, which returns necessary flags for `glClear()`.
  */
-public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float devicePixelRatio=float.nan) nothrow @trusted @nogc {
+public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float devicePixelRatio=1.0f) nothrow @trusted @nogc {
   import std.math : isNaN;
   /*
   printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
@@ -771,7 +780,7 @@ public void cancelFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.params.renderCancel(ctx.params.userPtr);
 }
 
-/// Ends drawing flushing remaining render state.
+/// Ends drawing the current frame (flushing remaining render state).
 public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.mWidth = 0;
   ctx.mHeight = 0;
@@ -784,11 +793,11 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
     int j, iw, ih;
     // delete images that smaller than current one
     if (fontImage == 0) return;
-    ctx.imageSize(fontImage, &iw, &ih);
+    ctx.imageSize(fontImage, iw, ih);
     foreach (int i; 0..ctx.fontImageIdx) {
       if (ctx.fontImages[i] != 0) {
         int nw, nh;
-        ctx.imageSize(ctx.fontImages[i], &nw, &nh);
+        ctx.imageSize(ctx.fontImages[i], nw, nh);
         if (nw < iw || nh < ih) {
           ctx.deleteImage(ctx.fontImages[i]);
         } else {
@@ -839,41 +848,29 @@ void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NV
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Color utils</h1>
-/// Colors in NanoVG are stored as unsigned ints in ABGR format.
+/// Colors in NanoVG are stored as ARGB. Zero alpha means "transparent color".
 public alias NVGSectionDummy00 = void;
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 255 (1.0f).
-public NVGColor nvgRGB() (ubyte r, ubyte g, ubyte b) {
-  pragma(inline, true);
-  return NVGColor(r, g, b, 255);
-}
+public NVGColor nvgRGB() (ubyte r, ubyte g, ubyte b) => NVGColor(r, g, b, 255);
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 1.0f.
-public NVGColor nvgRGBf() (float r, float g, float b) {
-  pragma(inline, true);
-  return NVGColor(r, g, b, 1.0f);
-}
+public NVGColor nvgRGBf() (float r, float g, float b) => NVGColor(r, g, b, 1.0f);
 
 /// Returns a color value from red, green, blue and alpha values.
-public NVGColor nvgRGBA() (ubyte r, ubyte g, ubyte b, ubyte a=255) @trusted {
-  pragma(inline, true);
-  return NVGColor(r, g, b, a);
-}
+public NVGColor nvgRGBA() (ubyte r, ubyte g, ubyte b, ubyte a=255) => NVGColor(r, g, b, a);
 
 /// Returns a color value from red, green, blue and alpha values.
-public NVGColor nvgRGBAf() (float r, float g, float b, float a=1) {
-  pragma(inline, true);
-  return NVGColor(r, g, b, a);
-}
+public NVGColor nvgRGBAf() (float r, float g, float b, float a=1.0f) => NVGColor(r, g, b, a);
 
-/// Sets transparency of a color value.
+/// Returns new color with transparency (alpha) set to `a`.
 public NVGColor nvgTransRGBA() (NVGColor c, ubyte a) {
   pragma(inline, true);
   c.a = a/255.0f;
   return c;
 }
 
-/// Sets transparency of a color value.
+/// Ditto.
 public NVGColor nvgTransRGBAf() (NVGColor c, float a) {
   pragma(inline, true);
   c.a = a;
@@ -910,10 +907,9 @@ float nvg__hue() (float h, float m1, float m2) pure nothrow @safe @nogc {
 public alias nvgHSL = nvgHSLA; // trick to allow inlining
 
 /// Returns color value specified by hue, saturation and lightness and alpha.
-/// HSL values are all in range [0..1], alpha in range [0..255]
+/// HSL values are all in range [0..1], alpha in range [0..255].
 public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
   static if (__VERSION__ >= 2072) pragma(inline, true);
-  //float m1, m2;
   NVGColor col = void;
   h = nvg__modf(h, 1.0f);
   if (h < 0.0f) h += 1.0f;
@@ -928,11 +924,11 @@ public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
   return col;
 }
 
-/// Ditto.
+/// Returns color value specified by hue, saturation and lightness and alpha.
+/// HSL values and alpha are all in range [0..1].
 public NVGColor nvgHSLA() (float h, float s, float l, float a) {
   // sorry for copypasta, it is for inliner
   static if (__VERSION__ >= 2072) pragma(inline, true);
-  //float m1, m2;
   NVGColor col = void;
   h = nvg__modf(h, 1.0f);
   if (h < 0.0f) h += 1.0f;
@@ -953,7 +949,7 @@ public NVGColor nvgHSLA() (float h, float s, float l, float a) {
 //
 /** The paths, gradients, patterns and scissor region are transformed by an transformation
  * matrix at the time when they are passed to the API.
- * The current transformation matrix is a affine matrix:
+ * The current transformation matrix is an affine matrix:
  *
  * ----------------------
  *   [sx kx tx]
@@ -1084,20 +1080,14 @@ public void nvgTransformPoint (float* dx, float* dy, const(float)[] t, float sx,
 }
 
 // Converts degrees to radians.
-public float nvgDegToRad() (float deg) {
-  pragma(inline, true);
-  return deg/180.0f*NVG_PI;
-}
+public float nvgDegToRad() (float deg) => deg/180.0f*NVG_PI;
 
 // Converts radians to degrees.
-public float nvgRadToDeg() (float rad) {
-  pragma(inline, true);
-  return rad/NVG_PI*180.0f;
-}
+public float nvgRadToDeg() (float rad) => rad/NVG_PI*180.0f;
 
-void nvg__setPaintColor (NVGPaint* p, NVGColor color) nothrow @trusted @nogc {
+void nvg__setPaintColor (ref NVGPaint p, NVGColor color) nothrow @trusted @nogc {
   //pragma(inline, true);
-  memset(p, 0, (*p).sizeof);
+  memset(&p, 0, p.sizeof);
   nvgTransformIdentity(p.xform[]);
   p.radius = 0.0f;
   p.feather = 1.0f;
@@ -1138,8 +1128,8 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   memset(state, 0, (*state).sizeof);
 
-  nvg__setPaintColor(&state.fill, nvgRGBA(255, 255, 255, 255));
-  nvg__setPaintColor(&state.stroke, nvgRGBA(0, 0, 0, 255));
+  nvg__setPaintColor(state.fill, nvgRGBA(255, 255, 255, 255));
+  nvg__setPaintColor(state.stroke, nvgRGBA(0, 0, 0, 255));
   state.compositeOperation = nvg__compositeOperationState(NVGCompositeOperation.SOURCE_OVER);
   state.strokeWidth = 1.0f;
   state.miterLimit = 10.0f;
@@ -1158,6 +1148,7 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   state.textAlign.reset;
   state.fontId = 0;
 }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Render styles</h1>
@@ -1226,7 +1217,7 @@ public void transform (NVGContext ctx, float a, float b, float c, float d, float
   nvgTransformPremultiply(state.xform[], t[]);
 }
 
-/// Resets current transform to a identity matrix.
+/// Resets current transform to an identity matrix.
 public void resetTransform (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   nvgTransformIdentity(state.xform[]);
@@ -1291,7 +1282,7 @@ public void currentTransform (NVGContext ctx, float[] xform) nothrow @trusted @n
 /// Sets current stroke style to a solid color.
 public void strokeColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  nvg__setPaintColor(&state.stroke, color);
+  nvg__setPaintColor(state.stroke, color);
 }
 
 /// Sets current stroke style to a paint, which can be a one of the gradients or a pattern.
@@ -1304,7 +1295,7 @@ public void strokePaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc 
 /// Sets current fill style to a solid color.
 public void fillColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  nvg__setPaintColor(&state.fill, color);
+  nvg__setPaintColor(state.fill, color);
 }
 
 /// Sets current fill style to a paint, which can be a one of the gradients or a pattern.
@@ -1318,7 +1309,7 @@ public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Images</h1>
 //
-/** NanoVG allows you to load jpg and png (if arsd loaders are in place) files to be used for rendering.
+/** NanoVG allows you to load image files in various formats (if arsd loaders are in place) to be used for rendering.
  * In addition you can upload your own image.
  * The parameter imageFlags is combination of flags defined in NVGImageFlags.
  */
@@ -1326,56 +1317,28 @@ public alias NVGSectionDummy04 = void;
 
 version(nanovg_use_arsd_image) {
   // do we have new arsd API to load images?
-  static if (!is(typeof(MemoryImage.fromImage))) {
-    // oops
-    MemoryImage fromImage(T : const(char)[]) (T filename) @trusted {
-      static if (__traits(compiles, {import arsd.jpeg;}) || __traits(compiles, {import iv.jpegd;})) {
-        // yay, we have jpeg loader here, try it!
-        static if (__traits(compiles, {import arsd.jpeg;})) import arsd.jpeg; else import iv.jpegd;
-        bool goodJpeg = false;
-        try {
-          int w, h, c;
-          goodJpeg = detect_jpeg_image_from_file(filename, w, h, c);
-          if (goodJpeg && (w < 1 || h < 1)) goodJpeg = false;
-        } catch (Exception) {} // sorry
-        if (goodJpeg) return readJpeg(filename);
-        enum HasJpeg = true;
-      } else {
-        enum HasJpeg = false;
-      }
-      static if (__traits(compiles, {import arsd.png;})) {
-        // yay, we have png loader here, try it!
-        import arsd.png;
-        static if (is(T == string)) {
-          return readPng(filename);
-        } else {
-          // std.stdio sux!
-          return readPng(filename.idup);
-        }
-        enum HasPng = true;
-      } else {
-        enum HasPng = false;
-      }
-      static if (HasJpeg || HasPng) {
-        throw new Exception("cannot load image '"~filename.idup~"' in unknown format");
-      } else {
-        static assert(0, "please provide 'arsd.png', 'arsd.jpeg' or both to load images!");
-      }
-    }
-    alias ArsdImage = fromImage;
+  static if (!is(typeof(MemoryImage.fromImageFile))) {
+    static assert(0, "Sorry, your ARSD is too old. Please, update it.");
   } else {
-    alias ArsdImage = MemoryImage.fromImage;
+    alias ArsdImage = MemoryImage.fromImageFile;
   }
 }
 
 /// Creates image by loading it from the disk from specified file name.
-/// Returns handle to the image.
+/// Returns handle to the image or 0 on error.
 public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=NVGImageFlags.None) {
   version(nanovg_use_arsd_image) {
     try {
-      auto img = ArsdImage(filename).getAsTrueColorImage;
-      scope(exit) img.destroy;
-      return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
+      auto oimg = ArsdImage(filename);
+      if (auto img = cast(TrueColorImage)oimg) {
+        scope(exit) delete oimg;
+        return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
+      } else {
+        TrueColorImage img = oimg.getAsTrueColorImage;
+        delete oimg;
+        scope(exit) delete img;
+        return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
+      }
     } catch (Exception) {}
     return 0;
   } else {
@@ -1397,15 +1360,20 @@ public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=N
 
 version(nanovg_use_arsd_image) {
   /// Creates image by loading it from the specified chunk of memory.
-  /// Returns handle to the image.
+  /// Returns handle to the image or 0 on error.
   public int createImageFromMemoryImage (NVGContext ctx, MemoryImage img, int imageFlags=NVGImageFlags.None) {
     if (img is null) return 0;
-    auto tc = img.getAsTrueColorImage;
-    return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
+    if (auto tc = cast(TrueColorImage)img) {
+      return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
+    } else {
+      auto tc = img.getAsTrueColorImage;
+      scope(exit) delete tc;
+      return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
+    }
   }
 } else {
   /// Creates image by loading it from the specified chunk of memory.
-  /// Returns handle to the image.
+  /// Returns handle to the image or 0 on error.
   public int createImageMem (NVGContext ctx, const(ubyte)* data, int ndata, int imageFlags=NVGImageFlags.None) {
     int w, h, n, image;
     ubyte* img = stbi_load_from_memory(data, ndata, &w, &h, &n, 4);
@@ -1420,7 +1388,7 @@ version(nanovg_use_arsd_image) {
 }
 
 /// Creates image from specified image data.
-/// Returns handle to the image.
+/// Returns handle to the image or 0 on error.
 public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, int imageFlags=NVGImageFlags.None) nothrow @trusted @nogc {
   if (w < 1 || h < 1 || data.length < w*h*4) return -1;
   return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
@@ -1428,14 +1396,16 @@ public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, in
 
 /// Updates image data specified by image handle.
 public void updateImage (NVGContext ctx, int image, const(void)[] data) nothrow @trusted @nogc {
-  int w, h;
-  ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
-  ctx.params.renderUpdateTexture(ctx.params.userPtr, image, 0, 0, w, h, cast(const(ubyte)*)data.ptr);
+  if (image > 0) {
+    int w, h;
+    ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
+    ctx.params.renderUpdateTexture(ctx.params.userPtr, image, 0, 0, w, h, cast(const(ubyte)*)data.ptr);
+  }
 }
 
 /// Returns the dimensions of a created image.
-public void imageSize (NVGContext ctx, int image, int* w, int* h) nothrow @trusted @nogc {
-  ctx.params.renderGetTextureSize(ctx.params.userPtr, image, w, h);
+public void imageSize (NVGContext ctx, int image, out int w, out int h) nothrow @trusted @nogc {
+  if (image > 0) ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
 }
 
 /// Deletes created image.
@@ -1574,6 +1544,7 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
   return p;
 }
 
+
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Scissoring</h1>
 //
@@ -1654,6 +1625,8 @@ public void resetScissor (NVGContext ctx) nothrow @trusted @nogc {
   state.scissor.extent[1] = -1.0f;
 }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 int nvg__ptEquals (float x1, float y1, float x2, float y2, float tol) pure nothrow @safe @nogc {
   //pragma(inline, true);
   immutable float dx = x2-x1;
@@ -1676,58 +1649,70 @@ float nvg__distPtSeg (float x, float y, float px, float py, float qx, float qy) 
   return dx*dx+dy*dy;
 }
 
-void nvg__appendCommands (NVGContext ctx, float* vals, int nvals) nothrow @trusted @nogc {
+void nvg__appendCommands (NVGContext ctx, const(float)[] vals...) nothrow @trusted @nogc {
+  int nvals = cast(int)vals.length;
+  if (nvals == 0) return;
+
   NVGstate* state = nvg__getState(ctx);
 
   if (ctx.ncommands+nvals > ctx.ccommands) {
-    float* commands;
     int ccommands = ctx.ncommands+nvals+ctx.ccommands/2;
-    commands = cast(float*)realloc(ctx.commands, (float).sizeof*ccommands);
-    if (commands is null) return;
+    float* commands = cast(float*)realloc(ctx.commands, float.sizeof*ccommands);
+    if (commands is null) assert(0, "NanoVG: out of memory");
     ctx.commands = commands;
     ctx.ccommands = ccommands;
   }
 
-  if (cast(int)vals[0] != NVGcommands.Close && cast(int)vals[0] != NVGcommands.Winding) {
-    ctx.commandx = vals[nvals-2];
-    ctx.commandy = vals[nvals-1];
+  if (cast(int)vals.ptr[0] != NVGcommands.Close && cast(int)vals.ptr[0] != NVGcommands.Winding) {
+    assert(nvals >= 3);
+    ctx.commandx = vals.ptr[nvals-2];
+    ctx.commandy = vals.ptr[nvals-1];
   }
+
+  // copy commands
+  float* vp = &ctx.commands[ctx.ncommands];
+  memcpy(vp, vals.ptr, nvals*float.sizeof);
+  ctx.ncommands += nvals;
 
   // transform commands
-  int i = 0;
-  while (i < nvals) {
-    auto cmd = cast(NVGcommands)vals[i];
-    switch (cmd) {
-    case NVGcommands.MoveTo:
-      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform[], vals[i+1], vals[i+2]);
-      i += 3;
-      break;
-    case NVGcommands.LineTo:
-      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform[], vals[i+1], vals[i+2]);
-      i += 3;
-      break;
-    case NVGcommands.BezierTo:
-      nvgTransformPoint(&vals[i+1], &vals[i+2], state.xform[], vals[i+1], vals[i+2]);
-      nvgTransformPoint(&vals[i+3], &vals[i+4], state.xform[], vals[i+3], vals[i+4]);
-      nvgTransformPoint(&vals[i+5], &vals[i+6], state.xform[], vals[i+5], vals[i+6]);
-      i += 7;
-      break;
-    case NVGcommands.Close:
-      ++i;
-      break;
-    case NVGcommands.Winding:
-      i += 2;
-      break;
-    default:
-      ++i;
+  int i = nvals;
+  while (i > 0) {
+    switch (cast(NVGcommands)(*vp)) {
+      case NVGcommands.MoveTo:
+        assert(i >= 3);
+        nvgTransformPoint(vp+1, vp+2, state.xform[], vp[1], vp[2]);
+        i -= 3;
+        vp += 3;
+        break;
+      case NVGcommands.LineTo:
+        assert(i >= 3);
+        nvgTransformPoint(vp+1, vp+2, state.xform[], vp[1], vp[2]);
+        i -= 3;
+        vp += 3;
+        break;
+      case NVGcommands.BezierTo:
+        assert(i >= 7);
+        nvgTransformPoint(vp+1, vp+2, state.xform[], vp[1], vp[2]);
+        nvgTransformPoint(vp+3, vp+4, state.xform[], vp[3], vp[4]);
+        nvgTransformPoint(vp+5, vp+6, state.xform[], vp[5], vp[6]);
+        i -= 7;
+        vp += 7;
+        break;
+      case NVGcommands.Close:
+        --i;
+        ++vp;
+        break;
+      case NVGcommands.Winding:
+        i -= 2;
+        vp += 2;
+        break;
+      default:
+        --i;
+        ++vp;
+        break;
     }
   }
-
-  memcpy(&ctx.commands[ctx.ncommands], vals, nvals*float.sizeof);
-
-  ctx.ncommands += nvals;
 }
-
 
 void nvg__clearPathCache (NVGContext ctx) nothrow @trusted @nogc {
   ctx.cache.npoints = 0;
@@ -2172,7 +2157,6 @@ NVGvertex* nvg__buttCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, flo
   return dst;
 }
 
-
 NVGvertex* nvg__roundCapStart (NVGvertex* dst, NVGpoint* p, float dx, float dy, float w, int ncap, float aa) nothrow @trusted @nogc {
   immutable float px = p.x;
   immutable float py = p.y;
@@ -2208,7 +2192,6 @@ NVGvertex* nvg__roundCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, fl
   }
   return dst;
 }
-
 
 void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
@@ -2275,7 +2258,6 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
     path.convex = (nleft == path.count) ? 1 : 0;
   }
 }
-
 
 int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
@@ -2537,38 +2519,36 @@ public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
 
 /// Starts new sub-path with specified point as first point.
 public void moveTo (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
-  float[3] vals = [ NVGcommands.MoveTo, x, y ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+  nvg__appendCommands(ctx, NVGcommands.MoveTo, x, y);
 }
 
 /// Adds line segment from the last point in the path to the specified point.
 public void lineTo (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
-  float[3] vals = [ NVGcommands.LineTo, x, y ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+  nvg__appendCommands(ctx, NVGcommands.LineTo, x, y);
 }
 
 /// Adds cubic bezier segment from last point in the path via two control points to the specified point.
 public void bezierTo (NVGContext ctx, float c1x, float c1y, float c2x, float c2y, float x, float y) nothrow @trusted @nogc {
-  float[7] vals = [ NVGcommands.BezierTo, c1x, c1y, c2x, c2y, x, y ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+  nvg__appendCommands(ctx, NVGcommands.BezierTo, c1x, c1y, c2x, c2y, x, y);
 }
 
 /// Adds quadratic bezier segment from last point in the path via a control point to the specified point.
 public void quadTo (NVGContext ctx, float cx, float cy, float x, float y) nothrow @trusted @nogc {
-  float x0 = ctx.commandx;
-  float y0 = ctx.commandy;
-  float[7] vals = [ NVGcommands.BezierTo,
-        x0+2.0f/3.0f*(cx-x0), y0+2.0f/3.0f*(cy-y0),
-        x+2.0f/3.0f*(cx-x), y+2.0f/3.0f*(cy-y),
-        x, y ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+  immutable float x0 = ctx.commandx;
+  immutable float y0 = ctx.commandy;
+  nvg__appendCommands(ctx,
+    NVGcommands.BezierTo,
+    x0+2.0f/3.0f*(cx-x0), y0+2.0f/3.0f*(cy-y0),
+    x+2.0f/3.0f*(cx-x), y+2.0f/3.0f*(cy-y),
+    x, y,
+  );
 }
 
 /// Adds an arc segment at the corner defined by the last path point, and two specified points.
 public void arcTo (NVGContext ctx, float x1, float y1, float x2, float y2, float radius) nothrow @trusted @nogc {
   float x0 = ctx.commandx;
   float y0 = ctx.commandy;
-  float dx0, dy0, dx1, dy1, a, d, cx, cy, a0, a1;
+  float cx, cy, a0, a1;
   NVGWinding dir;
 
   if (ctx.ncommands == 0) return;
@@ -2583,14 +2563,14 @@ public void arcTo (NVGContext ctx, float x1, float y1, float x2, float y2, float
   }
 
   // Calculate tangential circle to lines (x0, y0)-(x1, y1) and (x1, y1)-(x2, y2).
-  dx0 = x0-x1;
-  dy0 = y0-y1;
-  dx1 = x2-x1;
-  dy1 = y2-y1;
+  float dx0 = x0-x1;
+  float dy0 = y0-y1;
+  float dx1 = x2-x1;
+  float dy1 = y2-y1;
   nvg__normalize(&dx0, &dy0);
   nvg__normalize(&dx1, &dy1);
-  a = nvg__acosf(dx0*dx1+dy0*dy1);
-  d = radius/nvg__tanf(a/2.0f);
+  immutable float a = nvg__acosf(dx0*dx1+dy0*dy1);
+  immutable float d = radius/nvg__tanf(a/2.0f);
 
   //printf("a=%f° d=%f\n", a/NVG_PI*180.0f, d);
 
@@ -2620,20 +2600,17 @@ public void arcTo (NVGContext ctx, float x1, float y1, float x2, float y2, float
 
 /// Closes current sub-path with a line segment.
 public void closePath (NVGContext ctx) nothrow @trusted @nogc {
-  float[1] vals = [ NVGcommands.Close ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+  nvg__appendCommands(ctx, NVGcommands.Close);
 }
 
 /// Sets the current sub-path winding, see NVGWinding and NVGSolidity.
 public void pathWinding (NVGContext ctx, NVGWinding dir) nothrow @trusted @nogc {
-  float[2] vals = [ NVGcommands.Winding, cast(float)dir ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+  nvg__appendCommands(ctx, NVGcommands.Winding, cast(float)dir);
 }
 
 /// Ditto.
 public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc {
-  float[2] vals = [ NVGcommands.Winding, cast(float)dir ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+  nvg__appendCommands(ctx, NVGcommands.Winding, cast(float)dir);
 }
 
 /** Creates new circle arc shaped sub-path. The arc center is at (cx, cy), the arc radius is r,
@@ -2641,11 +2618,7 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc
  * Angles are specified in radians.
  */
 public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1, NVGWinding dir) nothrow @trusted @nogc {
-  //float a = 0;
-  //float dx = 0, dy = 0, x = 0, y = 0, tanx = 0, tany = 0;
-  //float px = 0, py = 0, ptanx = 0, ptany = 0;
   float[3+5*7+100] vals = void;
-  //int i, ndivs, nvals;
   int move = (ctx.ncommands > 0 ? NVGcommands.LineTo : NVGcommands.MoveTo);
 
   // Clamp angles
@@ -2683,17 +2656,27 @@ public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1
     immutable float tany = dx*r*kappa;
 
     if (i == 0) {
-      vals[nvals++] = cast(float)move;
-      vals[nvals++] = x;
-      vals[nvals++] = y;
+      if (vals.length-nvals < 3) {
+        // flush
+        nvg__appendCommands(ctx, vals.ptr[0..nvals]);
+        nvals = 0;
+      }
+      vals.ptr[nvals++] = cast(float)move;
+      vals.ptr[nvals++] = x;
+      vals.ptr[nvals++] = y;
     } else {
-      vals[nvals++] = NVGcommands.BezierTo;
-      vals[nvals++] = px+ptanx;
-      vals[nvals++] = py+ptany;
-      vals[nvals++] = x-tanx;
-      vals[nvals++] = y-tany;
-      vals[nvals++] = x;
-      vals[nvals++] = y;
+      if (vals.length-nvals < 7) {
+        // flush
+        nvg__appendCommands(ctx, vals.ptr[0..nvals]);
+        nvals = 0;
+      }
+      vals.ptr[nvals++] = NVGcommands.BezierTo;
+      vals.ptr[nvals++] = px+ptanx;
+      vals.ptr[nvals++] = py+ptany;
+      vals.ptr[nvals++] = x-tanx;
+      vals.ptr[nvals++] = y-tany;
+      vals.ptr[nvals++] = x;
+      vals.ptr[nvals++] = y;
     }
     px = x;
     py = y;
@@ -2701,19 +2684,18 @@ public void arc (NVGContext ctx, float cx, float cy, float r, float a0, float a1
     ptany = tany;
   }
 
-  nvg__appendCommands(ctx, vals.ptr, nvals);
+  nvg__appendCommands(ctx, vals.ptr[0..nvals]);
 }
 
 /// Creates new rectangle shaped sub-path.
 public void rect (NVGContext ctx, float x, float y, float w, float h) nothrow @trusted @nogc {
-  float[13] vals = [
+  nvg__appendCommands(ctx,
     NVGcommands.MoveTo, x, y,
     NVGcommands.LineTo, x, y+h,
     NVGcommands.LineTo, x+w, y+h,
     NVGcommands.LineTo, x+w, y,
-    NVGcommands.Close
-  ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+    NVGcommands.Close,
+  );
 }
 
 /// Creates new rounded rectangle shaped sub-path.
@@ -2732,7 +2714,7 @@ public void roundedRectVarying (NVGContext ctx, float x, float y, float w, float
     immutable float rxBR = nvg__min(radBottomRight, halfw)*nvg__sign(w), ryBR = nvg__min(radBottomRight, halfh)*nvg__sign(h);
     immutable float rxTR = nvg__min(radTopRight, halfw)*nvg__sign(w), ryTR = nvg__min(radTopRight, halfh)*nvg__sign(h);
     immutable float rxTL = nvg__min(radTopLeft, halfw)*nvg__sign(w), ryTL = nvg__min(radTopLeft, halfh)*nvg__sign(h);
-    float[44] vals = [
+    nvg__appendCommands(ctx,
       NVGcommands.MoveTo, x, y+ryTL,
       NVGcommands.LineTo, x, y+h-ryBL,
       NVGcommands.BezierTo, x, y+h-ryBL*(1-NVG_KAPPA90), x+rxBL*(1-NVG_KAPPA90), y+h, x+rxBL, y+h,
@@ -2742,23 +2724,21 @@ public void roundedRectVarying (NVGContext ctx, float x, float y, float w, float
       NVGcommands.BezierTo, x+w, y+ryTR*(1-NVG_KAPPA90), x+w-rxTR*(1-NVG_KAPPA90), y, x+w-rxTR, y,
       NVGcommands.LineTo, x+rxTL, y,
       NVGcommands.BezierTo, x+rxTL*(1-NVG_KAPPA90), y, x, y+ryTL*(1-NVG_KAPPA90), x, y+ryTL,
-      NVGcommands.Close
-    ];
-    nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+      NVGcommands.Close,
+    );
   }
 }
 
 /// Creates new ellipse shaped sub-path.
 public void ellipse (NVGContext ctx, float cx, float cy, float rx, float ry) nothrow @trusted @nogc {
-  float[32] vals = [
+  nvg__appendCommands(ctx,
     NVGcommands.MoveTo, cx-rx, cy,
     NVGcommands.BezierTo, cx-rx, cy+ry*NVG_KAPPA90, cx-rx*NVG_KAPPA90, cy+ry, cx, cy+ry,
     NVGcommands.BezierTo, cx+rx*NVG_KAPPA90, cy+ry, cx+rx, cy+ry*NVG_KAPPA90, cx+rx, cy,
     NVGcommands.BezierTo, cx+rx, cy-ry*NVG_KAPPA90, cx+rx*NVG_KAPPA90, cy-ry, cx, cy-ry,
     NVGcommands.BezierTo, cx-rx*NVG_KAPPA90, cy-ry, cx-rx, cy-ry*NVG_KAPPA90, cx-rx, cy,
-    NVGcommands.Close
-  ];
-  nvg__appendCommands(ctx, vals.ptr, cast(uint)(vals).length);
+    NVGcommands.Close,
+  );
 }
 
 /// Creates new circle shaped sub-path.
@@ -2770,21 +2750,17 @@ public void circle (NVGContext ctx, float cx, float cy, float r) nothrow @truste
 debug public void debugDumpPathCache (NVGContext ctx) nothrow @trusted @nogc {
   import core.stdc.stdio : printf;
   const(NVGpath)* path;
-  int i, j;
-
   printf("Dumping %d cached paths\n", ctx.cache.npaths);
-  for (i = 0; i < ctx.cache.npaths; i++) {
+  for (int i = 0; i < ctx.cache.npaths; ++i) {
     path = &ctx.cache.paths[i];
     printf("-Path %d\n", i);
     if (path.nfill) {
       printf("-fill: %d\n", path.nfill);
-      for (j = 0; j < path.nfill; j++)
-        printf("%f\t%f\n", path.fill[j].x, path.fill[j].y);
+      for (int j = 0; j < path.nfill; ++j) printf("%f\t%f\n", path.fill[j].x, path.fill[j].y);
     }
     if (path.nstroke) {
       printf("-stroke: %d\n", path.nstroke);
-      for (j = 0; j < path.nstroke; j++)
-        printf("%f\t%f\n", path.stroke[j].x, path.stroke[j].y);
+      for (int j = 0; j < path.nstroke; ++j) printf("%f\t%f\n", path.stroke[j].x, path.stroke[j].y);
     }
   }
 }
@@ -2796,10 +2772,11 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
   NVGPaint fillPaint = state.fill;
 
   nvg__flattenPaths(ctx);
-  if (ctx.params.edgeAntiAlias)
+  if (ctx.params.edgeAntiAlias) {
     nvg__expandFill(ctx, ctx.fringeWidth, NVGLineCap.Miter, 2.4f);
-  else
+  } else {
     nvg__expandFill(ctx, 0.0f, NVGLineCap.Miter, 2.4f);
+  }
 
   // Apply global alpha
   fillPaint.innerColor.a *= state.alpha;
@@ -2840,13 +2817,13 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 
   nvg__flattenPaths(ctx);
 
-  if (ctx.params.edgeAntiAlias)
+  if (ctx.params.edgeAntiAlias) {
     nvg__expandStroke(ctx, strokeWidth*0.5f+ctx.fringeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
-  else
+  } else {
     nvg__expandStroke(ctx, strokeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
+  }
 
-  ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, ctx.fringeWidth,
-               strokeWidth, ctx.cache.paths, ctx.cache.npaths);
+  ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, ctx.fringeWidth, strokeWidth, ctx.cache.paths, ctx.cache.npaths);
 
   // Count triangles
   foreach (int i; 0..ctx.cache.npaths) {
@@ -2855,6 +2832,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
     ++ctx.drawCallCount;
   }
 }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Text</h1>
@@ -2894,122 +2872,125 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 public alias NVGSectionDummy08 = void;
 
 /** Creates font by loading it from the disk from specified file name.
- * Returns handle to the font.
- * use "fontname:noaa" as `name` to turn off antialiasing (if font driver supports that). */
+ * Returns handle to the font or FONS_INVALID (aka -1) on error.
+ * use "fontname:noaa" as `name` to turn off antialiasing (if font driver supports that).
+ * Maximum font name length is 63 chars, and it will be truncated. */
 public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) nothrow @trusted {
   return fonsAddFont(ctx.fs, name, path);
 }
 
 /** Creates font by loading it from the specified memory chunk.
- * Returns handle to the font. */
-public int createFontMem (NVGContext ctx, const(char)[] name, ubyte* data, int ndata, int freeData) {
+ * Returns handle to the font or FONS_INVALID (aka -1) on error.
+ * Won't free data on error.
+ * Maximum font name length is 63 chars, and it will be truncated. */
+public int createFontMem (NVGContext ctx, const(char)[] name, ubyte* data, int ndata, bool freeData) nothrow @trusted @nogc {
   return fonsAddFontMem(ctx.fs, name, data, ndata, freeData);
 }
 
-/// Finds a loaded font of specified name, and returns handle to it, or -1 if the font is not found.
-public int findFont (NVGContext ctx, const(char)[] name) {
+/// Finds a loaded font of specified name, and returns handle to it, or FONS_INVALID (aka -1) if the font is not found.
+public int findFont (NVGContext ctx, const(char)[] name) nothrow @trusted @nogc {
   pragma(inline, true);
-  return (name.length == 0 ? -1 : fonsGetFontByName(ctx.fs, name));
+  return (name.length == 0 ? FONS_INVALID : fonsGetFontByName(ctx.fs, name));
 }
 
 /// Sets the font size of current text style.
-public void fontSize (NVGContext ctx, float size) {
+public void fontSize (NVGContext ctx, float size) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).fontSize = size;
 }
 
 /// Gets the font size of current text style.
-public float fontSize (NVGContext ctx) {
+public float fontSize (NVGContext ctx) nothrow @trusted @nogc {
   pragma(inline, true);
   return nvg__getState(ctx).fontSize;
 }
 
 /// Sets the blur of current text style.
-public void fontBlur (NVGContext ctx, float blur) {
+public void fontBlur (NVGContext ctx, float blur) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).fontBlur = blur;
 }
 
 /// Gets the blur of current text style.
-public float fontBlur (NVGContext ctx) {
+public float fontBlur (NVGContext ctx) nothrow @trusted @nogc {
   pragma(inline, true);
   return nvg__getState(ctx).fontBlur;
 }
 
 /// Sets the letter spacing of current text style.
-public void textLetterSpacing (NVGContext ctx, float spacing) {
+public void textLetterSpacing (NVGContext ctx, float spacing) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).letterSpacing = spacing;
 }
 
 /// Gets the letter spacing of current text style.
-public float textLetterSpacing (NVGContext ctx) {
+public float textLetterSpacing (NVGContext ctx) nothrow @trusted @nogc {
   pragma(inline, true);
   return nvg__getState(ctx).letterSpacing;
 }
 
 /// Sets the proportional line height of current text style. The line height is specified as multiple of font size.
-public void textLineHeight (NVGContext ctx, float lineHeight) {
+public void textLineHeight (NVGContext ctx, float lineHeight) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).lineHeight = lineHeight;
 }
 
 /// Gets the proportional line height of current text style. The line height is specified as multiple of font size.
-public float textLineHeight (NVGContext ctx) {
+public float textLineHeight (NVGContext ctx) nothrow @trusted @nogc {
   pragma(inline, true);
   return nvg__getState(ctx).lineHeight;
 }
 
 /// Sets the text align of current text style, see `NVGTextAlign` for options.
-public void textAlign (NVGContext ctx, NVGTextAlign talign) {
+public void textAlign (NVGContext ctx, NVGTextAlign talign) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).textAlign = talign;
 }
 
 /// Ditto.
-public void textAlign (NVGContext ctx, NVGTextAlign.H h) {
+public void textAlign (NVGContext ctx, NVGTextAlign.H h) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).textAlign.horizontal = h;
 }
 
 /// Ditto.
-public void textAlign (NVGContext ctx, NVGTextAlign.V v) {
+public void textAlign (NVGContext ctx, NVGTextAlign.V v) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).textAlign.vertical = v;
 }
 
 /// Ditto.
-public void textAlign (NVGContext ctx, NVGTextAlign.H h, NVGTextAlign.V v) {
+public void textAlign (NVGContext ctx, NVGTextAlign.H h, NVGTextAlign.V v) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).textAlign.reset(h, v);
 }
 
 /// Ditto.
-public void textAlign (NVGContext ctx, NVGTextAlign.V v, NVGTextAlign.H h) {
+public void textAlign (NVGContext ctx, NVGTextAlign.V v, NVGTextAlign.H h) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).textAlign.reset(h, v);
 }
 
 /// Gets the text align of current text style, see `NVGTextAlign` for options.
-public NVGTextAlign textAlign (NVGContext ctx) {
+public NVGTextAlign textAlign (NVGContext ctx) nothrow @trusted @nogc {
   pragma(inline, true);
   return nvg__getState(ctx).textAlign;
 }
 
 /// Sets the font face based on specified id of current text style.
-public void fontFaceId (NVGContext ctx, int font) {
+public void fontFaceId (NVGContext ctx, int font) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).fontId = font;
 }
 
 /// Gets the font face based on specified id of current text style.
-public int fontFaceId (NVGContext ctx) {
+public int fontFaceId (NVGContext ctx) nothrow @trusted @nogc {
   pragma(inline, true);
   return nvg__getState(ctx).fontId;
 }
 
 /// Sets the font face based on specified name of current text style.
-public void fontFace (NVGContext ctx, const(char)[] font) {
+public void fontFace (NVGContext ctx, const(char)[] font) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).fontId = fonsGetFontByName(ctx.fs, font);
 }
@@ -3047,10 +3028,10 @@ bool nvg__allocTextAtlas (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.fontImageIdx >= NVG_MAX_FONTIMAGES-1) return false;
   // if next fontImage already have a texture
   if (ctx.fontImages[ctx.fontImageIdx+1] != 0) {
-    ctx.imageSize(ctx.fontImages[ctx.fontImageIdx+1], &iw, &ih);
+    ctx.imageSize(ctx.fontImages[ctx.fontImageIdx+1], iw, ih);
   } else {
     // calculate the new font image size and create it
-    ctx.imageSize(ctx.fontImages[ctx.fontImageIdx], &iw, &ih);
+    ctx.imageSize(ctx.fontImages[ctx.fontImageIdx], iw, ih);
     if (iw > ih) ih *= 2; else iw *= 2;
     if (iw > NVG_MAX_FONTIMAGE_SIZE || ih > NVG_MAX_FONTIMAGE_SIZE) iw = ih = NVG_MAX_FONTIMAGE_SIZE;
     ctx.fontImages[ctx.fontImageIdx+1] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, (ctx.params.fontAA ? 0 : NVGImageFlags.NoFiltering), null);
@@ -4035,7 +4016,7 @@ struct FONSfont {
   uint namelen;
   ubyte* data;
   int dataSize;
-  ubyte freeData;
+  bool freeData;
   float ascender;
   float descender;
   float lineh;
@@ -4463,91 +4444,105 @@ public void fonsClearState (FONScontext* stash) nothrow @trusted @nogc {
 void fons__freeFont (FONSfont* font) nothrow @trusted @nogc {
   if (font is null) return;
   if (font.glyphs) free(font.glyphs);
-  if (font.freeData && font.data) free(font.data);
+  if (font.freeData && font.data !is null) free(font.data);
   free(font);
 }
 
-int fons__allocFont (FONScontext* stash) nothrow @trusted @nogc {
-  FONSfont* font = null;
-  if (stash.nfonts+1 > stash.cfonts) {
-    stash.cfonts = (stash.cfonts == 0 ? 8 : stash.cfonts*2);
-    stash.fonts = cast(FONSfont**)realloc(stash.fonts, (FONSfont*).sizeof*stash.cfonts);
-    if (stash.fonts is null) return -1;
-  }
-  font = cast(FONSfont*)malloc(FONSfont.sizeof);
-  if (font is null) goto error;
+int fons__allocFont (FONScontext* stash, int atidx=-1) nothrow @trusted @nogc {
+  FONSfont* font = cast(FONSfont*)malloc(FONSfont.sizeof);
+  if (font is null) return FONS_INVALID;
   memset(font, 0, FONSfont.sizeof);
 
   font.glyphs = cast(FONSglyph*)malloc(FONSglyph.sizeof*FONS_INIT_GLYPHS);
-  if (font.glyphs is null) goto error;
+  if (font.glyphs is null) { free(font); return FONS_INVALID; }
   font.cglyphs = FONS_INIT_GLYPHS;
   font.nglyphs = 0;
 
-  stash.fonts[stash.nfonts++] = font;
-  return stash.nfonts-1;
-
-error:
-  fons__freeFont(font);
-
-  return FONS_INVALID;
+  if (atidx < 0) {
+    if (stash.nfonts+1 > stash.cfonts) {
+      stash.cfonts = (stash.cfonts == 0 ? 16 : stash.cfonts+32);
+      stash.fonts = cast(FONSfont**)realloc(stash.fonts, (FONSfont*).sizeof*stash.cfonts);
+      if (stash.fonts is null) assert(0, "out of memory in nanovg fontstash");
+    }
+    assert(stash.nfonts < stash.cfonts);
+    stash.fonts[stash.nfonts] = font;
+    return stash.nfonts++;
+  } else {
+    if (atidx >= stash.cfonts) assert(0, "internal nanovg fontstash error");
+    stash.fonts[atidx] = font;
+    return atidx;
+  }
 }
 
 private enum NoAlias = ":noaa";
 
 public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) nothrow @trusted {
-  import std.internal.cstring;
+  char[64+NoAlias.length] fontnamebuf = 0;
 
-  FILE* fp = null;
-  int dataSize = 0;
-  ubyte* data = null;
+  if (path.length == 0 || name.length == 0 || name == NoAlias) return FONS_INVALID;
+  if (path.length > 1024) return FONS_INVALID; // arbitrary limit
+
+  if (name.length > 63) name = name[0..63];
+  fontnamebuf[0..name.length] = name[];
+  uint blen = cast(uint)name.length;
 
   // if font path ends with ":noaa", add this to font name instead
   if (path.length >= NoAlias.length && path[$-NoAlias.length..$] == NoAlias) {
     path = path[0..$-NoAlias.length];
-    if (name.length < NoAlias.length || name[$-NoAlias.length..$] != NoAlias) name = name.idup~":noaa";
+    if (path.length == 0) return FONS_INVALID;
+    if (name.length < NoAlias.length || name[$-NoAlias.length..$] != NoAlias) {
+      if (name.length+NoAlias.length > 63) return FONS_INVALID;
+      fontnamebuf[name.length..name.length+NoAlias.length] = NoAlias;
+      blen += cast(uint)NoAlias.length;
+    }
+  }
+  assert(fontnamebuf[blen] == 0);
+  //{ import core.stdc.stdio; printf("loading font '%.*s' [%s]...\n", cast(uint)path.length, path.ptr, fontnamebuf.ptr); }
+
+  try {
+    import core.stdc.stdlib : free, malloc;
+    auto fl = VFile(path);
+    auto dataSize = fl.size;
+    if (dataSize < 16 || dataSize > int.max/32) return FONS_INVALID;
+    ubyte* data = cast(ubyte*)malloc(cast(uint)dataSize);
+    if (data is null) assert(0, "out of memory in nanovg fontstash");
+    scope(failure) free(data); // oops
+    fl.rawReadExact(data[0..cast(uint)dataSize]);
+    fl.close();
+    auto xres = fonsAddFontMem(stash, fontnamebuf[0..blen], data, cast(int)dataSize, true);
+    if (xres == FONS_INVALID) free(data);
+    return xres;
+  } catch (Exception e) {
+    // oops; sorry
   }
 
-  if (path.length == 0) return FONS_INVALID;
-  if (name.length == 0 || name == NoAlias) return FONS_INVALID;
-
-  if (path.length && path[0] == '~') {
-    import std.path : expandTilde;
-    path = path.idup.expandTilde;
-  }
-
-  // Read in the font data.
-  fp = fopen(path.tempCString, "rb");
-  if (fp is null) goto error;
-  fseek(fp, 0, SEEK_END);
-  dataSize = cast(int)ftell(fp);
-  fseek(fp, 0, SEEK_SET);
-  data = cast(ubyte*)malloc(dataSize);
-  if (data is null) goto error;
-  fread(data, 1, dataSize, fp);
-  fclose(fp);
-  fp = null;
-
-  return fonsAddFontMem(stash, name, data, dataSize, 1);
-
-error:
-  if (data) free(data);
-  if (fp) fclose(fp);
   return FONS_INVALID;
 }
 
-public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, int freeData) nothrow @trusted @nogc {
+/// This will not free data on error!
+public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, bool freeData) nothrow @trusted @nogc {
   int i, ascent, descent, fh, lineGap;
-  FONSfont* font;
+  FONSfont* oldfont = null;
+  int oldidx = -1;
 
   if (name.length == 0 || name == NoAlias) return FONS_INVALID;
+  if (name.length > FONSfont.name.length-1) return FONS_INVALID; //name = name[0..FONSfont.name.length-1];
 
-  int idx = fons__allocFont(stash);
+  foreach (immutable xidx, FONSfont* xfont; stash.fonts[0..stash.nfonts]) {
+    if (xfont.namelen == name.length && xfont.name[0..xfont.namelen] == name[]) {
+      oldidx = cast(int)xidx;
+      oldfont = xfont;
+    }
+  }
+
+  //{ import core.stdc.stdio; printf("creating font [%.*s] (oidx=%d)...\n", cast(uint)name.length, name.ptr, oldidx); }
+
+  int idx = fons__allocFont(stash, oldidx);
   if (idx == FONS_INVALID) return FONS_INVALID;
 
-  font = stash.fonts[idx];
+  FONSfont* font = stash.fonts[idx];
 
   //strncpy(font.name.ptr, name, (font.name).sizeof);
-  if (name.length > font.name.length-1) name = name[0..font.name.length-1];
   font.name[] = 0;
   font.name[0..name.length] = name[];
   font.namelen = cast(uint)name.length;
@@ -4558,7 +4553,7 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   // Read in the font data.
   font.dataSize = dataSize;
   font.data = data;
-  font.freeData = cast(ubyte)freeData;
+  font.freeData = freeData;
 
   if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
     //{ import core.stdc.stdio : printf; printf("MONO: [%.*s]\n", cast(uint)name.length, name.ptr); }
@@ -4567,22 +4562,27 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
 
   // Init font
   stash.nscratch = 0;
-  if (!fons__tt_loadFont(stash, &font.font, data, dataSize)) goto error;
+  if (!fons__tt_loadFont(stash, &font.font, data, dataSize)) {
+    font.freeData = false; // we promised to don't free data on error
+    fons__freeFont(font);
+    if (oldidx != -1) {
+      stash.fonts[oldidx] = oldfont;
+    } else {
+      --stash.nfonts;
+    }
+    return FONS_INVALID;
+  }
 
   // Store normalized line height. The real line height is got
   // by multiplying the lineh by font size.
-  fons__tt_getFontVMetrics( &font.font, &ascent, &descent, &lineGap);
+  fons__tt_getFontVMetrics(&font.font, &ascent, &descent, &lineGap);
   fh = ascent-descent;
   font.ascender = cast(float)ascent/cast(float)fh;
   font.descender = cast(float)descent/cast(float)fh;
   font.lineh = cast(float)(fh+lineGap)/cast(float)fh;
 
+  //{ import core.stdc.stdio; printf("created font [%.*s] (idx=%d)...\n", cast(uint)name.length, name.ptr, idx); }
   return idx;
-
-error:
-  fons__freeFont(font);
-  stash.nfonts--;
-  return FONS_INVALID;
 }
 
 public int fonsGetFontByName (FONScontext* s, const(char)[] name) nothrow @trusted @nogc {
@@ -5147,7 +5147,7 @@ public:
 public:
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null); }
 
-  void put(T) (const(T)[] str...) if (is(T == char) || is(T == dchar)) {
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
     enum DoCodePointMixin = q{
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
       if (glyph !is null) {
@@ -5529,14 +5529,16 @@ import core.stdc.stdlib : malloc, realloc, free;
 import core.stdc.string : memcpy, memset;
 
 //import iv.nanovg.engine;
-import arsd.simpledisplay;
+//import arsd.simpledisplay;
+import iv.glbinds;
 
 public:
 // sdpy is missing that yet
-static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
+//static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
 
 
 // OpenGL API missing from simpledisplay
+/+
 private extern(System) nothrow @nogc {
   alias GLvoid = void;
   alias GLboolean = ubyte;
@@ -5546,6 +5548,8 @@ private extern(System) nothrow @nogc {
   alias GLsizei = int;
   alias GLfloat = float;
   alias GLsizeiptr = ptrdiff_t;
+
+  enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
 
   enum uint GL_INVALID_ENUM = 0x0500;
 
@@ -5775,6 +5779,7 @@ private extern(System) nothrow @nogc {
     initialized = true;
   }
 }
++/
 
 
 /// Create flags
@@ -5788,6 +5793,8 @@ enum /*NVGcreateFlags*/ {
   NVG_STENCIL_STROKES = 1<<1,
   /// Flag indicating that additional debug checks are done.
   NVG_DEBUG = 1<<2,
+  /// Filter (antialias) fonts
+  NVG_FONT_AA = 1<<7,
   /// Don't filter (antialias) fonts
   NVG_FONT_NOAA = 1<<8,
 }
@@ -6050,7 +6057,7 @@ bool glnvg__createShader (GLNVGshader* shader, const(char)* name, const(char)* h
   str[0] = header;
   str[1] = (opts !is null ? opts : "");
   str[2] = vshader;
-  glShaderSource(vert, 3, cast(const(char*)*)str.ptr, null);
+  glShaderSource(vert, 3, cast(const(char)**)str.ptr, null);
 
   glCompileShader(vert);
   glGetShaderiv(vert, GL_COMPILE_STATUS, &status);
@@ -6062,7 +6069,7 @@ bool glnvg__createShader (GLNVGshader* shader, const(char)* name, const(char)* h
   str[0] = header;
   str[1] = (opts !is null ? opts : "");
   str[2] = fshader;
-  glShaderSource(frag, 3, cast(const(char*)*)str.ptr, null);
+  glShaderSource(frag, 3, cast(const(char)**)str.ptr, null);
 
   glCompileShader(frag);
   glGetShaderiv(frag, GL_COMPILE_STATUS, &status);
@@ -6325,8 +6332,8 @@ bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) nothrow
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
   if (tex is null) return false;
-  *w = tex.width;
-  *h = tex.height;
+  if (w !is null) *w = tex.width;
+  if (h !is null) *h = tex.height;
   return true;
 }
 
@@ -6911,7 +6918,7 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 public NVGContext createGL2NVG (int flags) nothrow @trusted @nogc {
   NVGparams params;
   NVGContext ctx = null;
-  nanovgInitOpenGL(); // why not?
+  //nanovgInitOpenGL(); // why not?
   GLNVGcontext* gl = cast(GLNVGcontext*)malloc(GLNVGcontext.sizeof);
   if (gl is null) goto error;
   memset(gl, 0, GLNVGcontext.sizeof);
@@ -6931,7 +6938,11 @@ public NVGContext createGL2NVG (int flags) nothrow @trusted @nogc {
   params.renderDelete = &glnvg__renderDelete;
   params.userPtr = gl;
   params.edgeAntiAlias = (flags&NVG_ANTIALIAS ? true : false);
-  params.fontAA = (flags&NVG_FONT_NOAA ? NVG_INVERT_FONT_AA : !NVG_INVERT_FONT_AA);
+  if (flags&(NVG_FONT_AA|NVG_FONT_NOAA)) {
+    params.fontAA = (flags&NVG_FONT_NOAA ? NVG_INVERT_FONT_AA : !NVG_INVERT_FONT_AA);
+  } else {
+    params.fontAA = NVG_INVERT_FONT_AA;
+  }
 
   gl.flags = flags;
 

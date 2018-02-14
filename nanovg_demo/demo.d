@@ -716,7 +716,7 @@ public void drawThumbnails (NVGContext vg, float x, float y, float w, float h, c
     ty = y+10;
     tx += (i%2)*(thumb+10);
     ty += (i/2)*(thumb+10);
-    vg.imageSize(images[i], &imgw, &imgh);
+    vg.imageSize(images[i], imgw, imgh);
     if (imgw < imgh) {
       iw = thumb;
       ih = iw*cast(float)imgh/cast(float)imgw;
