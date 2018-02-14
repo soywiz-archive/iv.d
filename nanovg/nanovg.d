@@ -72,7 +72,11 @@ version(nanovg_use_arsd_image) {
   void stbi_image_free (void* retval_from_stbi_load) {}
 }
 
-__gshared bool NVG_INVERT_FONT_AA = false;
+version(nanovg_default_no_font_aa) {
+  __gshared bool NVG_INVERT_FONT_AA = false;
+} else {
+  __gshared bool NVG_INVERT_FONT_AA = true;
+}
 
 
 /// NanoVG RGBA color
