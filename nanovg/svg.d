@@ -775,7 +775,7 @@ const(char)[] fromAsciiz (const(char)[] s) {
   //return s;
   if (s.length) {
     import core.stdc.string : memchr;
-    if (auto zp = memchr(s.ptr, 0, s.length)) return s[0..cast(usize)(zp-s.ptr)];
+    if (auto zp = cast(const(char)*)memchr(s.ptr, 0, s.length)) return s[0..cast(usize)(zp-s.ptr)];
   }
   return s;
 }

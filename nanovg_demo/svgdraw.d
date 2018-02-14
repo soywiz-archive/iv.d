@@ -98,7 +98,7 @@ void main (string[] args) {
   setOpenGLContextVersion(2, 0); // it's enough
   //openGLContextCompatible = false;
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoSVG", OpenGlOptions.yes, Resizablity.fixedSize);
+  auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoSVG", OpenGlOptions.yes, Resizability.fixedSize);
   //sdwindow.hideCursor();
 
   sdwindow.closeQuery = delegate () { doQuit = true; };
@@ -151,7 +151,7 @@ void main (string[] args) {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
+    vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES);
     if (vg is null) {
       import std.stdio;
       writeln("Could not init nanovg.");
