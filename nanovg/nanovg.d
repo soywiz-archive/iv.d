@@ -443,33 +443,22 @@ public struct NVGGlyphPosition {
 }
 
 ///
-public struct NVGTextRow {
-  const(char)[] str;
-  const(dchar)[] dstr;
+public struct NVGTextRow(CT) if (is(CT == char) || is(CT == wchar) || is(CT == dchar)) {
+  alias CharType = CT;
+  //const(char)[] str;
+  //const(dchar)[] dstr;
+  const(CT)[] s;
   int start;        /// Index in the input text where the row starts.
   int end;          /// Index in the input text where the row ends (one past the last character).
   float width;      /// Logical width of the row.
   float minx, maxx; /// Actual bounds of the row. Logical with and bounds can differ because of kerning and some parts over extending.
-  @property bool isChar () const pure nothrow @trusted @nogc { pragma(inline, true); return (str.ptr !is null); } /// Is this char or dchar row?
+  //@property bool isChar () const pure nothrow @trusted @nogc => return (str.ptr !is null); } // Is this char or dchar row?
   /// Get rest of the string.
-  @property const(T)[] rest(T) () const pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
-    pragma(inline, true);
-    static if (is(T == char)) return (end <= str.length ? str[end..$] : null);
-    else return (end <= dstr.length ? dstr[end..$] : null);
-  }
+  @property const(CT)[] rest () const pure nothrow @trusted @nogc => (end <= s.length ? s[end..$] : null);
   /// Get current row.
-  @property const(T)[] row(T) () const pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
-    pragma(inline, true);
-    static if (is(T == char)) return str[start..end]; else return dstr[start..end];
-  }
-  @property const(T)[] string(T) () const pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
-    pragma(inline, true);
-    static if (is(T == char)) return str; else return dstr;
-  }
-  @property void string(T) (const(T)[] v) pure nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
-    pragma(inline, true);
-    static if (is(T == char)) str = v; else dstr = v;
-  }
+  @property const(CT)[] row () const pure nothrow @trusted @nogc => s[start..end];
+  @property const(CT)[] string () const pure nothrow @trusted @nogc => s;
+  @property void string(CT) (const(CT)[] v) pure nothrow @trusted @nogc => s = v;
 }
 
 ///
@@ -3140,9 +3129,9 @@ void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) nothrow @tru
 }
 
 /// Draws text string at specified location. Returns next x position.
-public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
-  FONStextIter iter, prevIter;
+  FONStextIter!T iter, prevIter;
   FONSquad q;
   NVGvertex* verts;
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
@@ -3205,11 +3194,11 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
 /** Draws multi-line text string at specified location wrapped at the specified width. If end is specified only the sub-string up to the end is drawn.
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation). */
-public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
   if (state.fontId == FONS_INVALID) return;
 
-  NVGTextRow[2] rows;
+  NVGTextRow!T[2] rows;
   auto oldAlign = state.textAlign;
   scope(exit) state.textAlign = oldAlign;
   auto halign = state.textAlign.horizontal;
@@ -3223,13 +3212,13 @@ public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, c
     if (rres.length == 0) break;
     foreach (ref row; rres) {
       final switch (halign) {
-        case NVGTextAlign.H.Left: ctx.text(x, y, row.row!T); break;
-        case NVGTextAlign.H.Center: ctx.text(x+breakRowWidth*0.5f-row.width*0.5f, y, row.row!T); break;
-        case NVGTextAlign.H.Right: ctx.text(x+breakRowWidth-row.width, y, row.row!T); break;
+        case NVGTextAlign.H.Left: ctx.text(x, y, row.row); break;
+        case NVGTextAlign.H.Center: ctx.text(x+breakRowWidth*0.5f-row.width*0.5f, y, row.row); break;
+        case NVGTextAlign.H.Right: ctx.text(x+breakRowWidth-row.width, y, row.row); break;
       }
       y += lineh*state.lineHeight;
     }
-    str = rres[$-1].rest!T;
+    str = rres[$-1].rest;
   }
 }
 
@@ -3246,7 +3235,7 @@ private template isGoodPositionDelegate(DG) {
  * Measured values are returned in local coordinate space.
  */
 public NVGGlyphPosition[] textGlyphPositions(T) (NVGContext ctx, float x, float y, const(T)[] str, NVGGlyphPosition[] positions) nothrow @trusted @nogc
-if (is(T == char) || is(T == dchar))
+if (is(T == char) || is(T == wchar) || is(T == dchar))
 {
   if (str.length == 0 || positions.length == 0) return positions[0..0];
   usize posnum;
@@ -3259,7 +3248,7 @@ if (is(T == char) || is(T == dchar))
 
 /// Ditto.
 public int textGlyphPositions(T, DG) (NVGContext ctx, float x, float y, const(T)[] str, scope DG dg)
-if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
+if ((is(T == char) || is(T == wchar) || is(T == dchar)) && isGoodPositionDelegate!DG)
 {
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
@@ -3267,7 +3256,7 @@ if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
-  FONStextIter iter, prevIter;
+  FONStextIter!T iter, prevIter;
   FONSquad q;
   int npos = 0;
 
@@ -3288,11 +3277,7 @@ if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
     }
     prevIter = iter;
     NVGGlyphPosition position = void; //WARNING!
-    static if (is(T == char)) {
-      position.strpos = cast(usize)(iter.str-str.ptr);
-    } else {
-      position.strpos = cast(usize)(iter.dstr-str.ptr);
-    }
+    position.strpos = cast(usize)(iter.string-str.ptr);
     position.x = iter.x*invscale;
     position.minx = nvg__min(iter.x, q.x0)*invscale;
     position.maxx = nvg__max(iter.nextx, q.x1)*invscale;
@@ -3303,10 +3288,10 @@ if (isGoodPositionDelegate!DG && (is(T == char) || is(T == dchar)))
   return npos;
 }
 
-private template isGoodRowDelegate(DG) {
+private template isGoodRowDelegate(CT, DG) {
   private DG dg;
-  static if (is(typeof({ NVGTextRow row; bool res = dg(row); })) ||
-             is(typeof({ NVGTextRow row; dg(row); })))
+  static if (is(typeof({ NVGTextRow!CT row; bool res = dg(row); })) ||
+             is(typeof({ NVGTextRow!CT row; dg(row); })))
     enum isGoodRowDelegate = true;
   else
     enum isGoodRowDelegate = false;
@@ -3316,13 +3301,13 @@ private template isGoodRowDelegate(DG) {
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
  */
-public NVGTextRow[] textBreakLines(T) (NVGContext ctx, const(T)[] str, float breakRowWidth, NVGTextRow[] rows) nothrow @trusted @nogc
-if (is(T == char) || is(T == dchar))
+public NVGTextRow!T[] textBreakLines(T) (NVGContext ctx, const(T)[] str, float breakRowWidth, NVGTextRow!T[] rows) nothrow @trusted @nogc
+if (is(T == char) || is(T == wchar) || is(T == dchar))
 {
   if (rows.length == 0) return rows;
   if (rows.length > int.max-1) rows = rows[0..int.max-1];
   int nrow = 0;
-  auto count = ctx.textBreakLines(str, breakRowWidth, (in ref NVGTextRow row) {
+  auto count = ctx.textBreakLines(str, breakRowWidth, (in ref NVGTextRow!T row) {
     rows[nrow++] = row;
     return (nrow < rows.length);
   });
@@ -3331,7 +3316,7 @@ if (is(T == char) || is(T == dchar))
 
 /// Ditto.
 public int textBreakLines(T, DG) (NVGContext ctx, const(T)[] str, float breakRowWidth, scope DG dg)
-if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
+if ((is(T == char) || is(T == wchar) || is(T == dchar)) && isGoodRowDelegate!(T, DG))
 {
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
@@ -3345,7 +3330,7 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
-  FONStextIter iter, prevIter;
+  FONStextIter!T iter, prevIter;
   FONSquad q;
   int nrows = 0;
   float rowStartX = 0;
@@ -3413,7 +3398,7 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
     }
     if (phase == Phase.SkipBlanks) {
       // fix row start
-      rowStart = cast(int)(iter.string!T-str.ptr);
+      rowStart = cast(int)(iter.string-str.ptr);
       rowEnd = rowStart;
       rowStartX = iter.x;
       rowWidth = iter.nextx-rowStartX; // q.x1-rowStartX;
@@ -3431,8 +3416,8 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
 
     if (type == NVGcodepointType.NewLine) {
       // always handle new lines
-      NVGTextRow row;
-      row.string!T = str;
+      NVGTextRow!T row;
+      row.string = str;
       row.start = rowStart;
       row.end = rowEnd;
       row.width = rowWidth*invscale;
@@ -3445,39 +3430,39 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
       float nextWidth = iter.nextx-rowStartX;
       // track last non-white space character
       if (type == NVGcodepointType.Char) {
-        rowEnd = cast(int)(iter.nextp!T-str.ptr);
+        rowEnd = cast(int)(iter.nextp-str.ptr);
         rowWidth = iter.nextx-rowStartX;
         rowMaxX = q.x1-rowStartX;
       }
       // track last end of a word
       if (ptype == NVGcodepointType.Char && type == NVGcodepointType.Space) {
-        breakEnd = cast(int)(iter.string!T-str.ptr);
+        breakEnd = cast(int)(iter.string-str.ptr);
         breakWidth = rowWidth;
         breakMaxX = rowMaxX;
       }
       // track last beginning of a word
       if (ptype == NVGcodepointType.Space && type == NVGcodepointType.Char) {
-        wordStart = cast(int)(iter.string!T-str.ptr);
+        wordStart = cast(int)(iter.string-str.ptr);
         wordStartX = iter.x;
         wordMinX = q.x0-rowStartX;
       }
       // break to new line when a character is beyond break width
       if (type == NVGcodepointType.Char && nextWidth > breakRowWidth) {
         // the run length is too long, need to break to new line
-        NVGTextRow row;
-        row.string!T = str;
+        NVGTextRow!T row;
+        row.string = str;
         if (breakEnd == rowStart) {
           // the current word is longer than the row length, just break it from here
           row.start = rowStart;
-          row.end = cast(int)(iter.string!T-str.ptr);
+          row.end = cast(int)(iter.string-str.ptr);
           row.width = rowWidth*invscale;
           row.minx = rowMinX*invscale;
           row.maxx = rowMaxX*invscale;
           ++nrows;
           static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
           rowStartX = iter.x;
-          rowStart = cast(int)(iter.string!T-str.ptr);
-          rowEnd = cast(int)(iter.nextp!T-str.ptr);
+          rowStart = cast(int)(iter.string-str.ptr);
+          rowEnd = cast(int)(iter.nextp-str.ptr);
           rowWidth = iter.nextx-rowStartX;
           rowMinX = q.x0-rowStartX;
           rowMaxX = q.x1-rowStartX;
@@ -3496,7 +3481,7 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
           static if (RetBool) { if (!dg(row)) return nrows; } else dg(row);
           rowStartX = wordStartX;
           rowStart = wordStart;
-          rowEnd = cast(int)(iter.nextp!T-str.ptr);
+          rowEnd = cast(int)(iter.nextp-str.ptr);
           rowWidth = iter.nextx-rowStartX;
           rowMinX = wordMinX;
           rowMaxX = q.x1-rowStartX;
@@ -3516,8 +3501,8 @@ if (isGoodRowDelegate!DG && (is(T == char) || is(T == dchar)))
   // break the line from the end of the last word, and start new line from the beginning of the new
   if (phase != Phase.SkipBlanks && rowStart < str.length) {
     //{ import core.stdc.stdio : printf; printf("  rowStart=%u; len=%u\n", rowStart, cast(uint)str.length); }
-    NVGTextRow row;
-    row.string!T = str;
+    NVGTextRow!T row;
+    row.string = str;
     row.start = rowStart;
     row.end = cast(int)str.length;
     row.width = rowWidth*invscale;
@@ -3599,7 +3584,7 @@ public:
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null); }
 
   /// Add chars.
-  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
     if (ctx !is null) fsiter.put(str[]);
   }
 
@@ -3645,7 +3630,7 @@ public:
  * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
  * Measured values are returned in local coordinate space.
  */
-public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
+public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
@@ -3676,9 +3661,9 @@ public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, fl
 }
 
 /// Ditto.
-public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str, float[] bounds) if (is(T == char) || is(T == dchar)) {
+public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str, float[] bounds) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
   NVGstate* state = nvg__getState(ctx);
-  NVGTextRow[2] rows;
+  NVGTextRow!T[2] rows;
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
   float lineh = 0, rminy = 0, rmaxy = 0;
@@ -3728,7 +3713,7 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
       maxy = nvg__max(maxy, y+rmaxy);
       y += lineh*state.lineHeight;
     }
-    str = rres[$-1].rest!T;
+    str = rres[$-1].rest;
   }
 
   if (bounds.length) {
@@ -3855,41 +3840,23 @@ struct FONSquad {
   float x1=0, y1=0, s1=0, t1=0;
 }
 
-struct FONStextIter {
+struct FONStextIter(CT) if (is(CT == char) || is(CT == wchar) || is(CT == dchar)) {
+  alias CharType = CT;
   float x=0, y=0, nextx=0, nexty=0, scale=0, spacing=0;
   uint codepoint;
   short isize, iblur;
   FONSfont* font;
   int prevGlyphIndex;
-  union {
-    // for char
-    struct {
-      const(char)* str;
-      const(char)* next;
-      const(char)* end;
-      uint utf8state;
-    }
-    // for dchar
-    struct {
-      const(dchar)* dstr;
-      const(dchar)* dnext;
-      const(dchar)* dend;
-    }
+  const(CT)* s; // string
+  const(CT)* n; // next
+  const(CT)* e; // end
+  static if (is(CT == char)) {
+    uint utf8state;
   }
-  bool isChar;
-  @property const(T)* string(T) () const pure nothrow @nogc if (is(T == char) || is(T == dchar)) {
-    pragma(inline, true);
-    static if (is(T == char)) return str; else return dstr;
-  }
-  @property const(T)* nextp(T) () const pure nothrow @nogc if (is(T == char) || is(T == dchar)) {
-    pragma(inline, true);
-    static if (is(T == char)) return next; else return dnext;
-  }
-  @property const(T)* endp(T) () const pure nothrow @nogc if (is(T == char) || is(T == dchar)) {
-    pragma(inline, true);
-    static if (is(T == char)) return end; else return dend;
-  }
-  ~this () nothrow @trusted @nogc { pragma(inline, true); if (isChar) { str = next = end = null; utf8state = 0; } else { dstr = dnext = dend = null; } }
+  ~this () nothrow @trusted @nogc { pragma(inline, true); static if (is(CT == char)) utf8state = 0; s = n = e = null; }
+  @property const(CT)* string () const pure nothrow @nogc => s;
+  @property const(CT)* nextp () const pure nothrow @nogc => n;
+  @property const(CT)* endp () const pure nothrow @nogc => e;
 }
 
 
@@ -5035,7 +5002,7 @@ public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* st
 }
 +/
 
-public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == dchar)) {
+public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
   if (stash is null || iter is null) return false;
 
   FONSstate* state = fons__getState(stash);
@@ -5068,32 +5035,29 @@ public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter* iter, float x
   iter.x = iter.nextx = x;
   iter.y = iter.nexty = y;
   iter.spacing = state.spacing;
-  static if (is(T == char)) {
-    if (str.ptr is null) str = "";
-    iter.str = str.ptr;
-    iter.next = str.ptr;
-    iter.end = str.ptr+str.length;
-    iter.isChar = true;
-  } else {
-    iter.dstr = str.ptr;
-    iter.dnext = str.ptr;
-    iter.dend = str.ptr+str.length;
-    iter.isChar = false;
+  if (str.ptr is null) {
+         static if (is(T == char)) str = "";
+    else static if (is(T == wchar)) str = ""w;
+    else static if (is(T == dchar)) str = ""d;
+    else static assert(0, "wtf?!");
   }
+  iter.s = str.ptr;
+  iter.n = str.ptr;
+  iter.e = str.ptr+str.length;
   iter.codepoint = 0;
   iter.prevGlyphIndex = -1;
 
   return true;
 }
 
-public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* quad) nothrow @trusted @nogc {
+public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) nothrow @trusted @nogc if (is(FT : FONStextIter!CT, CT)) {
   if (stash is null || iter is null) return false;
   FONSglyph* glyph = null;
-  if (iter.isChar) {
-    const(char)* str = iter.next;
-    iter.str = iter.next;
-    if (str is iter.end) return false;
-    const(char)*e = iter.end;
+  static if (is(FT.CharType == char)) {
+    const(char)* str = iter.n;
+    iter.s = iter.n;
+    if (str is iter.e) return false;
+    const(char)* e = iter.e;
     for (; str !is e; ++str) {
       /*if (fons__decutf8(&iter.utf8state, &iter.codepoint, *cast(const(ubyte)*)str)) continue;*/
       mixin(DecUtfMixin!("iter.utf8state", "iter.codepoint", "*cast(const(ubyte)*)str"));
@@ -5111,11 +5075,11 @@ public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* 
       }
       break;
     }
-    iter.next = str;
+    iter.n = str;
   } else {
-    const(dchar)* str = iter.dnext;
-    iter.dstr = iter.dnext;
-    if (str is iter.dend) return false;
+    const(FT.CharType)* str = iter.n;
+    iter.s = iter.n;
+    if (str is iter.e) return false;
     iter.codepoint = cast(uint)(*str++);
     if (iter.codepoint > dchar.max) iter.codepoint = '?';
     // Get glyph and quad
@@ -5128,7 +5092,7 @@ public bool fonsTextIterNext (FONScontext* stash, FONStextIter* iter, FONSquad* 
     } else {
       iter.prevGlyphIndex = -1;
     }
-    iter.dnext = str;
+    iter.n = str;
   }
   return true;
 }
@@ -5228,7 +5192,7 @@ public:
 public:
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null); }
 
-  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == dchar)) {
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
     enum DoCodePointMixin = q{
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
       if (glyph !is null) {
@@ -5262,8 +5226,10 @@ public:
         codepoint = '?';
         mixin(DoCodePointMixin);
       }
-      foreach (dchar dch; str) {
-        if (dch > dchar.max) dch = '?';
+      foreach (T dch; str) {
+        static if (is(T == dchar)) {
+          if (dch > dchar.max) dch = '?';
+        }
         codepoint = cast(uint)dch;
         mixin(DoCodePointMixin);
       }
@@ -5325,7 +5291,7 @@ public:
 }
 
 public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[] str, float[] bounds) nothrow @trusted @nogc
-if (is(T == char) || is(T == dchar))
+if (is(T == char) || is(T == wchar) || is(T == dchar))
 {
   FONSstate* state = fons__getState(stash);
   uint codepoint;
@@ -5377,8 +5343,10 @@ if (is(T == char) || is(T == dchar))
       }
     }
   } else {
-    foreach (dchar ch; str) {
-      if (ch > dchar.max) ch = '?';
+    foreach (T ch; str) {
+      static if (is(T == dchar)) {
+        if (ch > dchar.max) ch = '?';
+      }
       codepoint = cast(uint)ch;
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
       if (glyph !is null) {

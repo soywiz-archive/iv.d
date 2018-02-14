@@ -955,7 +955,7 @@ public void drawLines (NVGContext vg, float x, float y, float w, float h, float 
 
 public void drawParagraph (NVGContext vg, float x, float y, float width, float height, float mx, float my) {
   import core.stdc.math : fabsf;
-  NVGTextRow[3] rows;
+  NVGTextRow!char[3] rows;
   NVGGlyphPosition[100] glyphs;
   static string text = "This is longer chunk of text.\n  \n  Would have used lorem ipsum but she    was busy jumping over the lazy dog with the fox and all the men who came to the aid of the party.";
   string start;
@@ -1022,7 +1022,7 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
       start = start[cast(uint)(rows[nrows-1].next-start.ptr)..$];
     }
   } else {
-    vg.textBreakLines(text, width, (in ref NVGTextRow row) {
+    vg.textBreakLines(text, width, (in ref NVGTextRow!char row) {
       //{ import std.stdio; writeln("row! len=", cast(uint)(row.end-row.start)); }
       int hit = (mx > x && mx < x+width && my >= y && my < y+lineh);
 
@@ -1032,12 +1032,12 @@ public void drawParagraph (NVGContext vg, float x, float y, float width, float h
       vg.fill();
 
       vg.fillColor(nvgRGBA(255, 255, 255, 255));
-      vg.text(x, y, row.row!char);
+      vg.text(x, y, row.row);
 
       if (hit) {
         caretx = (mx < x+row.width/2 ? x : x+row.width);
         px = x;
-        auto rglyphs = vg.textGlyphPositions(x, y, row.row!char, glyphs[]);
+        auto rglyphs = vg.textGlyphPositions(x, y, row.row, glyphs[]);
         nglyphs = cast(int)rglyphs.length;
         foreach (immutable j; 0..nglyphs) {
           float x0 = glyphs[j].x;
