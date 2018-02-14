@@ -1,11 +1,12 @@
-module demo /*is aliced*/;
+module demo is aliced;
 private:
 
 import core.stdc.string : strlen;
 
-import iv.alice;
 import iv.nanovg;
 import iv.nanovg.oui;
+
+version = nanovg_demo_msfonts;
 
 
 public struct DemoData {

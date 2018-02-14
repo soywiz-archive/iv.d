@@ -1135,7 +1135,7 @@ void main () {
 
     if (_vg !is null) {
       if (fps !is null) fps.update(dt);
-      _vg.beginFrame(GWidth, GHeight);
+      _vg.beginFrame(GWidth, GHeight, 1);
       draw(_vg, GWidth, GHeight);
       peak_items = (peak_items > uiGetItemCount() ? peak_items : uiGetItemCount());
       peak_alloc = (peak_alloc > uiGetAllocSize() ? peak_alloc : uiGetAllocSize());

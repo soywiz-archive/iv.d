@@ -697,7 +697,7 @@ void main () {
 
     if (nvg !is null) {
       if (fps !is null) fps.update(dt);
-      nvg.beginFrame(owdt, ohgt);
+      nvg.beginFrame(owdt, ohgt, 1);
       draw(nvg, owdt, ohgt);
       //peak_items = (peak_items > uiGetItemCount() ? peak_items : uiGetItemCount());
       //peak_alloc = (peak_alloc > uiGetAllocSize() ? peak_alloc : uiGetAllocSize());

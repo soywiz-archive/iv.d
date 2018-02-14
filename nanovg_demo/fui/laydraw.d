@@ -325,7 +325,7 @@ void main () {
 
     // as font sizes changes slightly, we'll do this hack
     glViewport(0, 0, GWidth, GHeight);
-    nvg.beginFrame(GWidth, GHeight);
+    nvg.beginFrame(GWidth, GHeight, 1);
     ctx.draw();
     nvg.cancelFrame();
 

@@ -133,7 +133,7 @@ void main (string[] args) {
 
     if (vg !is null) {
       if (fps !is null) fps.update(dt);
-      vg.beginFrame(GWidth, GHeight);
+      vg.beginFrame(GWidth, GHeight, 1);
       { // draw image
         vg.beginPath();
         vg.rect(0, 0, GWidth, GHeight);

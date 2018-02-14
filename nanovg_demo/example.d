@@ -25,16 +25,7 @@ import arsd.color;
 import arsd.png;
 import arsd.jpeg;
 
-version(aliced) {
-  version = nanovg_use_freetype;
-  version = nanovg_ft_mon;
-  version = nanovg_demo_msfonts;
-  version = nanovg_no_font_aa;
-}
-
-// sdpy is missing that yet
-static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
-
+version = nanovg_demo_msfonts;
 
 enum GWidth = 1000;
 enum GHeight = 600;
@@ -43,8 +34,6 @@ enum GHeight = 600;
 bool blowup = false;
 bool screenshot = false;
 bool premult = false;
-
-//version = DEMO_MSAA;
 
 
 void main () {
@@ -97,7 +86,7 @@ void main () {
 
     if (vg !is null) {
       if (fps !is null) fps.update(dt);
-      vg.beginFrame(GWidth, GHeight);
+      vg.beginFrame(GWidth, GHeight, 1);
       renderDemo(vg, mx, my, GWidth, GHeight, secs, blowup, &data);
       if (fps !is null) fps.render(vg, 5, 5);
       vg.endFrame();
@@ -110,11 +99,12 @@ void main () {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    version(DEMO_MSAA) {
-      vg = createGL2NVG(NVG_STENCIL_STROKES|NVG_DEBUG);
-    } else {
-      vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
-    }
+    vg = createGL2NVG(
+      NVG_ANTIALIAS|
+      NVG_STENCIL_STROKES|
+      NVG_FONT_NOAA|
+      //NVG_DEBUG|
+      0);
     if (vg is null) assert(0, "Could not init nanovg.");
     if (loadDemoData(vg, &data) == -1) {
       //sdwindow.close();
