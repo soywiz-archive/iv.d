@@ -300,10 +300,12 @@ public:
       } else if (dpath[$-1] == '/') {
         static if (is(T == string)) dataPath = dpath; else dataPath = dpath.idup;
       } else if (dpath[0] == '~') {
-        import std.path : expandTilde;
-        static if (is(T == string)) dataPath = dpath.expandTilde; else dataPath = dpath.idup.expandTilde;
-        if (dataPath.length == 0) dataPath = "./";
-        else if (dataPath[$-1] != '/') dataPath ~= "/";
+        import iv.vfs.util;
+        auto buf = new char[](dpath.length+1025);
+        auto dp = expandTilde(buf[0..$-1], dpath);
+        if (dp is null) assert(0, "out of memory in iv.vfs disk driver");
+        if (dp[$-1] != '/') { buf[dp.length] = '/'; dp = buf[0..dp.length+1]; }
+        dataPath = cast(string)dp; // it is safe to cast here
       } else {
         static if (is(T == string)) dataPath = dpath~"/"; else dataPath = dpath.idup~"/";
       }
@@ -326,23 +328,16 @@ public:
       nbuf[0..fname.length] = fname[];
       nbuf[fname.length] = '\0';
     } else if (fname[0] == '~') {
+      import iv.vfs.util;
       uint nepos = 1;
       while (nepos < fname.length && fname[nepos] != '/') ++nepos;
       uint len = cast(uint)fname.length-nepos+257;
       if (len > 1024*3) return VFile.init;
       nbuf = cast(char*)alloca(len);
-      auto up = findSystemUserPath(nbuf[0..255], fname[0..nepos]);
-      if (up.length == 0) return VFile.init;
-      len = cast(uint)up.length;
-      if (nbuf[len-1] != '/') nbuf[len++] = '/';
-      while (nepos < fname.length && fname[nepos] == '/') ++nepos;
-      if (nepos < fname.length) {
-        fname = fname[nepos..$];
-        nbuf[len..len+fname.length] = fname[];
-        nbuf[len+fname.length] = '\0';
-      } else {
-        nbuf[len] = '\0';
-      }
+      nbuf[0..len] = 0;
+      auto up = expandTilde(nbuf[0..len-1], fname);
+      if (up is null) return VFile.init;
+      assert(nbuf[len-1] == 0);
     } else {
       if (dataPath.length > 4096 || fname.length > 4096 || dataPath.length+fname.length > 1024*3) return VFile.init;
       nbuf = cast(char*)alloca(dataPath.length+fname.length+1);
@@ -918,19 +913,12 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
     if (fname.length == 0) throw new VFSException("can't open file ''");
     if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
     auto mopt = ModeOptions(mode);
-    char[2049] nbuf;
+    char[2049] nbuf = 0;
     if (fname[0] == '~') {
-      uint nepos = 1;
-      while (nepos < fname.length && fname[nepos] != '/') ++nepos;
-      auto up = findSystemUserPath(nbuf[0..$-2], fname[0..nepos]);
-      if (up.length == 0) throw new VFSException("can't open file '"~fname.idup~"'");
-      uint len = cast(uint)up.length;
-      if (nbuf[len-1] != '/') nbuf[len++] = '/';
-      while (nepos < fname.length && fname[nepos] == '/') ++nepos;
-      auto nfn = (nepos < fname.length ? fname[nepos..$] : null);
-      if (len+nfn.length >= nbuf.length-1) throw new VFSException("can't open file '"~fname.idup~"'");
-      if (nfn.length) { nbuf[len..len+nfn.length] = nfn[]; len += nfn.length; }
-      nbuf[len] = '\0';
+      import iv.vfs.util;
+      auto up = expandTilde(nbuf[0..$-1], fname);
+      if (up is null) return VFile.init;
+      assert(nbuf[$-1] == 0);
     } else {
       nbuf[0..fname.length] = fname[];
       nbuf[fname.length] = '\0';
