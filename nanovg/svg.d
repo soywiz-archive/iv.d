@@ -2265,15 +2265,6 @@ void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
   float px = 0, py = 0, ptanx = 0, ptany = 0;
   float[6] t = void;
   float x2 = void, y2 = void;
-  //float rx, ry, rotx;
-  //float x1, y1, x2, y2, cx, cy, dx, dy, d;
-  //float x1p, y1p, cxp, cyp, s, sa, sb;
-  //float ux, uy, vx, vy, a1, da;
-  //float x, y, tanx, tany, a;
-  //float sinrx, cosrx;
-  //int fa, fs;
-  //int i, ndivs;
-  //float hda, kappa;
 
   float rx = fabsf(args[0]);        // y radius
   float ry = fabsf(args[1]);        // x radius
@@ -2340,6 +2331,7 @@ void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
   //if (vecrat(ux, uy, vx, vy) <= -1.0f) da = NSVG_PI;
   //if (vecrat(ux, uy, vx, vy) >= 1.0f) da = 0;
 
+  /* old buggy code, replaced in mainline
   if (fa) {
     // Choose large arc
     if (da > 0.0f)
@@ -2347,6 +2339,9 @@ void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
     else
       da = 2*NSVG_PI+da;
   }
+  */
+       if (fs == 0 && da > 0) da -= 2*NSVG_PI;
+  else if (fs == 1 && da < 0) da += 2*NSVG_PI;
 
   // Approximate the arc using cubic spline segments.
   t[0] = cosrx; t[1] = sinrx;
