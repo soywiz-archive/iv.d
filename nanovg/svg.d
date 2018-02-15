@@ -26,7 +26,7 @@
  *
  * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
-module iv.nanovg.svg /*is aliced*/;
+module iv.nanovg.svg is aliced;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
 import iv.alice;
@@ -1351,7 +1351,81 @@ error:
   }
 }
 
+// We roll our own string to float because the std library one uses locale and messes things up.
+// special hack: stop at '\0' (actually, it stops on any non-digit, so no special code is required)
+float nsvg__atof (const(char)[] s) nothrow @trusted @nogc {
+  /*
+  import core.stdc.stdlib : atof;
+  return cast(float)atof(s.ptr);
+  */
+
+  if (s.length == 0) return 0; // oops
+
+  const(char)* cur = s.ptr;
+  auto left = s.length;
+  double res = 0.0, sign = 1.0;
+  bool hasIntPart = false, hasFracPart = false;
+
+  char peekChar () nothrow @trusted @nogc => (left > 0 ? *cur : '\x00');
+  char getChar () nothrow @trusted @nogc { pragma(inline, true); if (left > 0) { --left; return *cur++; } else return '\x00'; }
+
+  // Parse optional sign
+  switch (peekChar) {
+    case '-': sign = -1; goto case;
+    case '+': getChar(); break;
+    default: break;
+  }
+
+  // Parse integer part
+  if (nsvg__isdigit(peekChar)) {
+    // Parse digit sequence
+    hasIntPart = true;
+    while (nsvg__isdigit(peekChar)) res = res*10.0+(getChar()-'0');
+  }
+
+  // Parse fractional part.
+  if (peekChar == '.') {
+    getChar(); // Skip '.'
+    if (nsvg__isdigit(peekChar)) {
+      // Parse digit sequence
+      hasFracPart = true;
+      int divisor = 1;
+      long num = 0;
+      while (nsvg__isdigit(peekChar)) {
+        divisor *= 10;
+        num = num*10+(getChar()-'0');
+      }
+      res += cast(double)num/divisor;
+    }
+  }
+
+  // A valid number should have integer or fractional part.
+  if (!hasIntPart && !hasFracPart) return 0;
+
+  // Parse optional exponent
+  if (peekChar == 'e' || peekChar == 'E') {
+    getChar(); // skip 'E'
+    // parse optional sign
+    bool epositive = true;
+    switch (peekChar) {
+      case '-': epositive = false; goto case;
+      case '+': getChar(); break;
+      default: break;
+    }
+    int expPart = 0;
+    while (nsvg__isdigit(peekChar)) expPart = expPart*10+(getChar()-'0');
+    if (epositive) {
+      foreach (; 0..expPart) res *= 10.0;
+    } else {
+      foreach (; 0..expPart) res /= 10.0;
+    }
+  }
+
+  return cast(float)(res*sign);
+}
+
 // `it` should be big enough
+// returns number of chars eaten
 int nsvg__parseNumber (const(char)[] s, char[] it) {
   int i = 0;
   it[] = 0;
@@ -1687,10 +1761,9 @@ int nsvg__parseTransformArgs (const(char)[] str, float* args, int maxNa, int* na
 
   while (ptr < end) {
     if (str[ptr] == '-' || str[ptr] == '+' || str[ptr] == '.' || nsvg__isdigit(str[ptr])) {
-      import core.stdc.stdlib : atof;
       if (*na >= maxNa) return 0;
       ptr += nsvg__parseNumber(str[ptr..end], it[]);
-      args[(*na)++] = cast(float)atof(it.ptr); // `it` is guaranteed to be asciiz
+      args[(*na)++] = nsvg__atof(it[]); // `it` is guaranteed to be asciiz, and `nsvg__atof()` will stop
     } else {
       ++ptr;
     }
@@ -2411,8 +2484,7 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
       if (!item[0]) break;
       if (nsvg__isnum(item[0])) {
         if (nargs < 10) {
-          import core.stdc.stdlib : atof;
-          args[nargs++] = cast(float)atof(item.ptr);
+          args[nargs++] = nsvg__atof(item[]);
         }
         if (nargs >= rargs) {
           switch (cmd) {
@@ -2657,10 +2729,9 @@ void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
         const(char)[]s = attr[i+1];
         nargs = 0;
         while (s.length) {
-          import core.stdc.stdlib : atof;
           auto skl = nsvg__getNextPathItem(s, item[]);
           if (skl < s.length) s = s[skl..$]; else s = s[$..$];
-          args[nargs++] = cast(float)atof(item.ptr);
+          args[nargs++] = nsvg__atof(item[]);
           if (nargs >= 2) {
             if (npts == 0) nsvg__moveTo(p, args[0], args[1]); else nsvg__lineTo(p, args[0], args[1]);
             nargs = 0;
