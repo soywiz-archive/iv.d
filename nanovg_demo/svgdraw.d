@@ -38,6 +38,7 @@ void main (string[] args) {
 
   int minw = 32, minh = 32;
   int defw = 256, defh = 256;
+  int addw = 0, addh = 0;
   string fname;
   for (usize idx = 1; idx < args.length; ++idx) {
     import std.conv : to;
@@ -51,6 +52,8 @@ void main (string[] args) {
         a = args[idx];
       }
       if (d == 'w') defw = minw = to!int(a); else defh = minh = to!int(a);
+    } else if (a.length > 2 && a[0] == '0' && (a[1] == 'w' || a[1] == 'h')) {
+      if (a[1] == 'w') defw = minw = to!int(a); else defh = minh = to!int(a);
     } else if (a == "--width") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
@@ -59,6 +62,14 @@ void main (string[] args) {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
       defh = minh = to!int(args[idx]);
+    } else if (a == "--addw") {
+      ++idx;
+      if (idx >= args.length) assert(0, "out of args");
+      addw = to!int(args[idx]);
+    } else if (a == "--addh") {
+      ++idx;
+      if (idx >= args.length) assert(0, "out of args");
+      addh = to!int(args[idx]);
     } else if (a == "--") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
@@ -85,8 +96,8 @@ void main (string[] args) {
   }
 
   printf("size: %f x %f\n", cast(double)svg.width, cast(double)svg.height);
-  GWidth = cast(int)svg.width;
-  GHeight = cast(int)svg.height;
+  GWidth = cast(int)svg.width+addw;
+  GHeight = cast(int)svg.height+addh;
   if (GWidth < minw) GWidth = minw;
   if (GHeight < minh) GHeight = minh;
 
@@ -173,7 +184,7 @@ void main (string[] args) {
         auto stt = MonoTime.currTime;
         writeln("rasterizing...");
         rst.rasterize(svg,
-          0, 0, // ofs
+          addw/2, addh/2, // ofs
           1, // scale
           svgraster.ptr, GWidth, GHeight);
         auto dur = (MonoTime.currTime-stt).total!"msecs";
