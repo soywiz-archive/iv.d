@@ -3149,7 +3149,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
   verts = nvg__allocTempVerts(ctx, cverts);
   if (verts is null) return x;
 
-  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str);
+  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str, FONS_GLYPH_BITMAP_REQUIRED);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     float[4*2] c = void;
@@ -3265,7 +3265,7 @@ if (isAnyCharType!T && isGoodPositionDelegate!DG)
   fonsSetAlign(ctx.fs, state.textAlign);
   fonsSetFont(ctx.fs, state.fontId);
 
-  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str);
+  fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str, FONS_GLYPH_BITMAP_OPTIONAL);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     if (iter.prevGlyphIndex < 0 && nvg__allocTextAtlas(ctx)) { // can not retrieve glyph?
@@ -3362,7 +3362,7 @@ if (isAnyCharType!T && isGoodRowDelegate!(T, DG))
   }
   Phase phase = Phase.SkipBlanks; // don't skip blanks on first line
 
-  fonsTextIterInit(ctx.fs, &iter, 0, 0, str);
+  fonsTextIterInit(ctx.fs, &iter, 0, 0, str, FONS_GLYPH_BITMAP_OPTIONAL);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     if (iter.prevGlyphIndex < 0 && nvg__allocTextAtlas(ctx)) { // can not retrieve glyph?
@@ -3807,6 +3807,12 @@ enum /*FONSalign*/ {
 }
 +/
 
+alias FONSglyphBitmap = int;
+enum /*FONSglyphBitmap*/ {
+  FONS_GLYPH_BITMAP_OPTIONAL = 1,
+  FONS_GLYPH_BITMAP_REQUIRED = 2,
+};
+
 alias FONSerrorCode = int;
 enum /*FONSerrorCode*/ {
   // Font atlas is full.
@@ -3845,6 +3851,7 @@ struct FONStextIter(CT) if (isAnyCharType!CT) {
   const(CT)* s; // string
   const(CT)* n; // next
   const(CT)* e; // end
+  FONSglyphBitmap bitmapOption;
   static if (is(CT == char)) {
     uint utf8state;
   }
@@ -4723,7 +4730,7 @@ void fons__blur (FONScontext* stash, ubyte* dst, int w, int h, int dstStride, in
   //fons__blurcols(dst, w, h, dstStride, alpha);
 }
 
-FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, short isize, short iblur) nothrow @trusted @nogc {
+FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, short isize, short iblur, FONSglyphBitmap bitmapOption) nothrow @trusted @nogc {
   int i, g, advance, lsb, x0, y0, x1, y1, gw, gh, gx, gy, x, y;
   float scale;
   FONSglyph* glyph = null;
@@ -4747,11 +4754,18 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   h = fons__hashint(codepoint)&(FONS_HASH_LUT_SIZE-1);
   i = font.lut[h];
   while (i != -1) {
-    if (font.glyphs[i].codepoint == codepoint && font.glyphs[i].size == isize && font.glyphs[i].blur == iblur) return &font.glyphs[i];
+    //if (font.glyphs[i].codepoint == codepoint && font.glyphs[i].size == isize && font.glyphs[i].blur == iblur) return &font.glyphs[i];
+    if (font.glyphs[i].codepoint == codepoint && font.glyphs[i].size == isize && font.glyphs[i].blur == iblur) {
+      glyph = &font.glyphs[i];
+      // Negative coordinate indicates there is no bitmap data created.
+      if (bitmapOption == FONS_GLYPH_BITMAP_OPTIONAL || (glyph.x0 >= 0 && glyph.y0 >= 0)) return glyph;
+      // At this point, glyph exists but the bitmap data is not yet created.
+      break;
+    }
     i = font.glyphs[i].next;
   }
 
-  // Could not find glyph, create it.
+  // Create a new glyph or rasterize bitmap data for a cached glyph.
   //scale = fons__tt_getPixelHeightScale(&font.font, size);
   g = fons__tt_getGlyphIndex(&font.font, codepoint);
   // Try to find the glyph in fallback fonts.
@@ -4773,20 +4787,34 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   gw = x1-x0+pad*2;
   gh = y1-y0+pad*2;
 
-  // Find free spot for the rect in the atlas
-  added = fons__atlasAddRect(stash.atlas, gw, gh, &gx, &gy);
-  if (added == 0 && stash.handleError !is null) {
-    // Atlas is full, let the user to resize the atlas (or not), and try again.
-    stash.handleError(stash.errorUptr, FONS_ATLAS_FULL, 0);
+  // Determines the spot to draw glyph in the atlas.
+  if (bitmapOption == FONS_GLYPH_BITMAP_REQUIRED) {
+    // Find free spot for the rect in the atlas.
     added = fons__atlasAddRect(stash.atlas, gw, gh, &gx, &gy);
+    if (added == 0 && stash.handleError !is null) {
+      // Atlas is full, let the user to resize the atlas (or not), and try again.
+      stash.handleError(stash.errorUptr, FONS_ATLAS_FULL, 0);
+      added = fons__atlasAddRect(stash.atlas, gw, gh, &gx, &gy);
+    }
+    if (added == 0) return null;
+  } else {
+    // Negative coordinate indicates there is no bitmap data created.
+    gx = -1;
+    gy = -1;
   }
-  if (added == 0) return null;
 
   // Init glyph.
-  glyph = fons__allocGlyph(font);
-  glyph.codepoint = codepoint;
-  glyph.size = isize;
-  glyph.blur = iblur;
+  if (glyph is null) {
+    glyph = fons__allocGlyph(font);
+    glyph.codepoint = codepoint;
+    glyph.size = isize;
+    glyph.blur = iblur;
+    glyph.next = 0;
+
+    // Insert char to hash lookup.
+    glyph.next = font.lut[h];
+    font.lut[h] = font.nglyphs-1;
+  }
   glyph.index = g;
   glyph.x0 = cast(short)gx;
   glyph.y0 = cast(short)gy;
@@ -4795,11 +4823,8 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   glyph.xadv = cast(short)(scale*advance*10.0f);
   glyph.xoff = cast(short)(x0-pad);
   glyph.yoff = cast(short)(y0-pad);
-  glyph.next = 0;
 
-  // Insert char to hash lookup.
-  glyph.next = font.lut[h];
-  font.lut[h] = font.nglyphs-1;
+  if (bitmapOption == FONS_GLYPH_BITMAP_OPTIONAL) return glyph;
 
   // Rasterize
   dst = &stash.texData[(glyph.x0+pad)+(glyph.y0+pad)*stash.params.width];
@@ -4975,7 +5000,7 @@ public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* st
 
   for (; str != end; ++str) {
     if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
-    glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
+    glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_REQUIRED);
     if (glyph !is null) {
       fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
 
@@ -4997,7 +5022,7 @@ public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* st
 }
 +/
 
-public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float x, float y, const(T)[] str) if (isAnyCharType!T) {
+public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float x, float y, const(T)[] str, FONSglyphBitmap bitmapOption) if (isAnyCharType!T) {
   if (stash is null || iter is null) return false;
 
   FONSstate* state = fons__getState(stash);
@@ -5041,6 +5066,7 @@ public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float
   iter.e = str.ptr+str.length;
   iter.codepoint = 0;
   iter.prevGlyphIndex = -1;
+  iter.bitmapOption = bitmapOption;
 
   return true;
 }
@@ -5061,7 +5087,7 @@ public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) 
       // get glyph and quad
       iter.x = iter.nextx;
       iter.y = iter.nexty;
-      glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
+      glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur, iter.bitmapOption);
       if (glyph !is null) {
         fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
         iter.prevGlyphIndex = glyph.index;
@@ -5080,7 +5106,7 @@ public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) 
     // Get glyph and quad
     iter.x = iter.nextx;
     iter.y = iter.nexty;
-    glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur);
+    glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur, iter.bitmapOption);
     if (glyph !is null) {
       fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
       iter.prevGlyphIndex = glyph.index;
@@ -5189,7 +5215,7 @@ public:
 
   void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) {
     enum DoCodePointMixin = q{
-      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
+      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
       if (glyph !is null) {
         fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
@@ -5320,7 +5346,7 @@ if (isAnyCharType!T)
       //if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
       mixin(DecUtfMixin!("utf8state", "codepoint", "(cast(ubyte)ch)"));
       if (utf8state) continue;
-      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
+      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
       if (glyph !is null) {
         fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
@@ -5343,7 +5369,7 @@ if (isAnyCharType!T)
         if (ch > dchar.max) ch = '?';
       }
       codepoint = cast(uint)ch;
-      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
+      glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
       if (glyph !is null) {
         fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
