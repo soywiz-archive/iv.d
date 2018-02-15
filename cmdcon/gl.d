@@ -977,7 +977,7 @@ public __gshared bool glconNoMouseEventsWhenConsoleIsVisible = true; ///
 public __gshared void delegate () oglSetupDG; /// called when window will become visible for the first time
 public __gshared bool delegate () closeQueryDG; /// called when window will going to be closed; return `false` to prevent closing
 public __gshared void delegate () redrawFrameDG; /// frame need to be redrawn (but not rebuilt)
-public __gshared void delegate () nextFrameDG; /// frame need to be rebuilt (but not redrawn)
+public __gshared void delegate () nextFrameDG; /// frame need to be rebuilt (but not redrawn); won't be used for FPS == 0
 public __gshared void delegate (KeyEvent event) keyEventDG; ///
 public __gshared void delegate (MouseEvent event) mouseEventDG; ///
 public __gshared void delegate (dchar ch) charEventDG; ///
@@ -998,23 +998,27 @@ private void glconRunGLWindowInternal (int wdt, int hgt, string title, string kl
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-///
+/// create window and run event loop. use this after you set all the required *DG delegates.
 public void glconRunGLWindow (int wdt, int hgt, string title, string klass=null) {
   glconRunGLWindowInternal(wdt, hgt, title, klass, false);
 }
 
-///
+/// ditto.
 public void glconRunGLWindowResizeable (int wdt, int hgt, string title, string klass=null) {
   glconRunGLWindowInternal(wdt, hgt, title, klass, true);
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private __gshared int glconFPS = 30;
+private __gshared int glconFPS = 30; // 0 means "render on demand"
 private __gshared double nextFrameTime = 0; // in msecs
 
+
+/// <=0 means "render on demand" (i.e. never automatically invoke `glconPostNextFrame()`)
+/// this will automatically seal "r_fps" convar
+/// note that you cannot set FPS to 0 with "r_fps" console variable
 public void glconSetAndSealFPS (int fps) {
-  if (fps < 1) fps = 1; else if (fps > 200) fps = 200;
+  if (fps < 0) fps = 0; else if (fps > 200) fps = 200;
   glconFPS = fps;
   conSealVar("r_fps");
 }
@@ -1028,34 +1032,43 @@ private shared static this () {
   // use `conSealVar("r_fps")` to seal it
 }
 
-/// call this to reset frame timer, and immediately post "rebuild frame" event
-// called automatically when window is shown, if `glconSetupForGLWindow()` is used
+
+/// call this to reset frame timer, and immediately post "rebuild frame" event if FPS > 0
+/// will post repaint event if FPS == 0
+/// called automatically when window is shown, if `glconSetupForGLWindow()` is used
 public void glconResetNextFrame () {
   nextFrameTime = 0;
-  glconPostNextFrame();
+  if (glconFPS <= 0) {
+    glconPostScreenRepaint();
+  } else {
+    glconPostNextFrame();
+  }
 }
 
-/// usually will be called automatically
+/// called automatically if FPS is > 0
+/// noop if FPS == 0
 public void glconPostNextFrame () {
   import iv.pxclock;
-  if (glconCtlWindow.eventQueued!NextFrameEvent) return;
-  ulong nft = cast(ulong)nextFrameTime;
-  auto ctime = clockMilli();
-  if (nft > 0 && nft > ctime) {
-    glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nft-ctime));
-  } else {
-    // next frame time is either now, or passed
-    int fps = glconFPS;
-    if (fps < 1) fps = 1;
-    if (fps > 200) fps = 200;
-    if (nft <= 0) nextFrameTime = ctime;
-    nextFrameTime += 1000.0/fps;
-    nft = cast(ulong)nextFrameTime;
-    if (nft <= ctime) {
-      nextFrameTime = ctime; // too much time passed, reset timer
-      glconCtlWindow.postTimeout(eventNextFrame, 0);
-    } else {
+  if (glconFPS > 0) {
+    if (glconCtlWindow.eventQueued!NextFrameEvent) return;
+    ulong nft = cast(ulong)nextFrameTime;
+    auto ctime = clockMilli();
+    if (nft > 0 && nft > ctime) {
       glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nft-ctime));
+    } else {
+      // next frame time is either now, or passed
+      int fps = glconFPS;
+      if (fps < 1) fps = 1;
+      if (fps > 200) fps = 200;
+      if (nft <= 0) nextFrameTime = ctime;
+      nextFrameTime += 1000.0/fps;
+      nft = cast(ulong)nextFrameTime;
+      if (nft <= ctime) {
+        nextFrameTime = ctime; // too much time passed, reset timer
+        glconCtlWindow.postTimeout(eventNextFrame, 0);
+      } else {
+        glconCtlWindow.postTimeout(eventNextFrame, cast(uint)(nft-ctime));
+      }
     }
   }
 }
@@ -1096,27 +1109,22 @@ public void glconSetupForGLWindow (SimpleWindow w) {
     glconInit(glconCtlWindow.width, glconCtlWindow.height);
     if (oglSetupDG !is null) oglSetupDG();
 
-    glconResetNextFrame();
-    //glconPostNextFrame();
+    if (glconFPS > 0) glconResetNextFrame();
   };
 
   glconCtlWindow.addEventListener((NextFrameEvent evt) {
     glconPostDoConCommands!true();
     if (glconCtlWindow.closed) return;
     if (isQuitRequested) { glconCtlWindow.close(); return; }
-    if (nextFrameDG !is null) nextFrameDG();
-    //{ import core.stdc.stdio; printf("000: FRAME\n"); }
+    if (glconFPS > 0 && nextFrameDG !is null) nextFrameDG();
     glconCtlWindow.redrawOpenGlSceneNow();
-    //{ import core.stdc.stdio; printf("001: FRAME\n"); }
-    glconPostNextFrame();
+    if (glconFPS > 0) glconPostNextFrame();
   });
 
   glconCtlWindow.addEventListener((GLConScreenRepaintEvent evt) {
     if (glconCtlWindow.closed) return;
     if (isQuitRequested) { glconCtlWindow.close(); return; }
-    //{ import core.stdc.stdio; printf("000: SCREPAINT\n"); }
     glconCtlWindow.redrawOpenGlSceneNow();
-    //{ import core.stdc.stdio; printf("001: SCREPAINT\n"); }
   });
 
   glconCtlWindow.addEventListener((GLConDoConsoleCommandsEvent evt) {
@@ -1194,7 +1202,6 @@ public void glconSetupForGLWindow (SimpleWindow w) {
     if (glconCharEvent(ch)) { glconPostScreenRepaint(); return; }
     if (charEventDG !is null) charEventDG(ch);
   };
-
 }
 }
 
