@@ -551,6 +551,7 @@ enum NVGpointFlags : int {
 
 struct NVGstate {
   NVGCompositeOperationState compositeOperation;
+  bool shapeAntiAlias;
   NVGPaint fill;
   NVGPaint stroke;
   float strokeWidth;
@@ -1212,6 +1213,7 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   nvg__setPaintColor(state.fill, nvgRGBA(255, 255, 255, 255));
   nvg__setPaintColor(state.stroke, nvgRGBA(0, 0, 0, 255));
   state.compositeOperation = nvg__compositeOperationState(NVGCompositeOperation.SOURCE_OVER);
+  state.shapeAntiAlias = true;
   state.strokeWidth = 1.0f;
   state.miterLimit = 10.0f;
   state.lineCap = NVGLineCap.Butt;
@@ -1244,6 +1246,12 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
  * and use `integerCoord+0.5f` as pixel coordinates.
  */
 public alias NVGSectionDummy03 = void;
+
+/// Sets whether to draw antialias for `stroke()` and `fill()`. It's enabled by default.
+public void shapeAntiAlias (NVGContext ctx, bool enabled) {
+  NVGstate* state = nvg__getState(ctx);
+  state.shapeAntiAlias = enabled;
+}
 
 /// Sets the stroke width of the stroke style.
 public void strokeWidth (NVGContext ctx, float width) nothrow @trusted @nogc {
@@ -2840,7 +2848,7 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
   NVGPaint fillPaint = state.fill;
 
   nvg__flattenPaths(ctx);
-  if (ctx.params.edgeAntiAlias) {
+  if (ctx.params.edgeAntiAlias && state.shapeAntiAlias) {
     nvg__expandFill(ctx, ctx.fringeWidth, NVGLineCap.Miter, 2.4f);
   } else {
     nvg__expandFill(ctx, 0.0f, NVGLineCap.Miter, 2.4f);
@@ -2884,7 +2892,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 
   nvg__flattenPaths(ctx);
 
-  if (ctx.params.edgeAntiAlias) {
+  if (ctx.params.edgeAntiAlias && state.shapeAntiAlias) {
     nvg__expandStroke(ctx, strokeWidth*0.5f+ctx.fringeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
   } else {
     nvg__expandStroke(ctx, strokeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
