@@ -1141,7 +1141,6 @@ NSVG.Gradient* nsvg__createGradient (Parser* p, const(char)[] id, const(float)* 
   immutable float sl = sqrtf(sw*sw+sh*sh)/sqrtf(2.0f);
 
   if (data.type == NSVG.PaintType.LinearGradient) {
-    //float x1, y1, x2, y2, dx, dy;
     immutable float x1 = nsvg__convertToPixels(p, data.linear.x1, ox, sw);
     immutable float y1 = nsvg__convertToPixels(p, data.linear.y1, oy, sh);
     immutable float x2 = nsvg__convertToPixels(p, data.linear.x2, ox, sw);
@@ -1153,7 +1152,6 @@ NSVG.Gradient* nsvg__createGradient (Parser* p, const(char)[] id, const(float)* 
     grad.xform[2] = dx; grad.xform[3] = dy;
     grad.xform[4] = x1; grad.xform[5] = y1;
   } else {
-    //float cx, cy, fx, fy, r;
     immutable float cx = nsvg__convertToPixels(p, data.radial.cx, ox, sw);
     immutable float cy = nsvg__convertToPixels(p, data.radial.cy, oy, sh);
     immutable float fx = nsvg__convertToPixels(p, data.radial.fx, ox, sw);
@@ -1163,8 +1161,9 @@ NSVG.Gradient* nsvg__createGradient (Parser* p, const(char)[] id, const(float)* 
     grad.xform[0] = r; grad.xform[1] = 0;
     grad.xform[2] = 0; grad.xform[3] = r;
     grad.xform[4] = cx; grad.xform[5] = cy;
-    grad.fx = fx/r;
-    grad.fy = fy/r;
+    // fix from https://github.com/memononen/nanosvg/issues/26#issuecomment-278713651
+    grad.fx = (fx-cx)/r; // was fx/r;
+    grad.fy = (fy-cy)/r; // was fy/r;
   }
 
   nsvg__xformMultiply(grad.xform.ptr, data.xform.ptr);
