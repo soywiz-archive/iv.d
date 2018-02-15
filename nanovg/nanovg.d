@@ -33,6 +33,117 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+/**
+The NanoVG API is modeled loosely on HTML5 canvas API. If you know canvas, you're up to speed with NanoVG in no time.
+
+
+Creating drawing context
+========================
+
+The drawing context is created using platform specific constructor function.
+
+  ---
+  struct NVGContext vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES);
+  ---
+
+The first parameter defines flags for creating the renderer.
+
+- `NVG_ANTIALIAS` means that the renderer adjusts the geometry to include anti-aliasing.
+   If you're using MSAA, you can omit this flags.
+
+- `NVG_STENCIL_STROKES` means that the render uses better quality rendering for (overlapping) strokes.
+  The quality is mostly visible on wider strokes. If you want speed, you can omit this flag.
+
+
+Drawing shapes with NanoVG
+==========================
+
+Drawing a simple shape using NanoVG consists of four steps: 1] begin a new shape,
+2] define the path to draw, 3] set fill or stroke, 4] and finally fill or stroke the path.
+
+  ---
+  vg.beginPath();
+  vg.rect(100, 100, 120, 30);
+  vg.fillColor(nvgRGBA(255, 192, 0, 255));
+  vg.fill();
+  ---
+
+Calling `beginPath()` will clear any existing paths and start drawing from blank slate.
+There are number of number of functions to define the path to draw, such as rectangle,
+rounded rectangle and ellipse, or you can use the common moveTo, lineTo, bezierTo and
+arcTo API to compose the paths step by step.
+
+
+Understanding Composite Paths
+=============================
+
+Because of the way the rendering backend is build in NanoVG, drawing a composite path,
+that is path consisting from multiple paths defining holes and fills, is a bit more
+involved. NanoVG uses even-odd filling rule and by default the paths are wound in counter
+clockwise order. Keep that in mind when drawing using the low level draw API. In order to
+wind one of the predefined shapes as a hole, you should call `pathWinding(NVGSolidity.Hole)`,
+or `pathWinding(NVGSolidity.Solid)` *after* defining the path.
+
+  ---
+  vg.beginPath();
+  vg.rect(100, 100, 120, 30);
+  vg.circle(120, 120, 5);
+  vg.pathWinding(NVGSolidity.Hole); // mark circle as a hole
+  vg.fillColor(nvgRGBA(255, 192, 0, 255));
+  vg.fill();
+  ---
+
+
+Rendering is wrong, what to do?
+===============================
+
+- make sure you have created NanoVG context using one of the `createGL2NVG()` call
+
+- make sure you have initialised OpenGL with *stencil buffer*
+
+- make sure you have cleared stencil buffer
+
+- make sure all rendering calls happen between `beginFrame()` and `endFrame()`
+
+- to enable more checks for OpenGL errors, add `NVG_DEBUG` flag to `createGL2NVG()`
+
+
+OpenGL state touched by the backend
+===================================
+
+The OpenGL back-end touches following states:
+
+When textures are uploaded or updated, the following pixel store is set to defaults:
+`GL_UNPACK_ALIGNMENT`, `GL_UNPACK_ROW_LENGTH`, `GL_UNPACK_SKIP_PIXELS`, `GL_UNPACK_SKIP_ROWS`.
+Texture binding is also affected. Texture updates can happen when the user loads images,
+or when new font glyphs are added. Glyphs are added as needed between calls to `beginFrame()`
+and `endFrame()`.
+
+The data for the whole frame is buffered and flushed in `endFrame()`.
+The following code illustrates the OpenGL state touched by the rendering code:
+
+  ---
+  glUseProgram(prog);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+  glFrontFace(GL_CCW);
+  glEnable(GL_BLEND);
+  glDisable(GL_DEPTH_TEST);
+  glDisable(GL_SCISSOR_TEST);
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glStencilMask(0xffffffff);
+  glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+  glStencilFunc(GL_ALWAYS, 0, 0xffffffff);
+  glActiveTexture(GL_TEXTURE0);
+  glBindBuffer(GL_UNIFORM_BUFFER, buf);
+  glBindVertexArray(arr);
+  glBindBuffer(GL_ARRAY_BUFFER, buf);
+  glBindTexture(GL_TEXTURE_2D, tex);
+  glUniformBlockBinding(... , GLNVG_FRAG_BINDING);
+  ---
+
+ */
 module iv.nanovg.nanovg is aliced;
 private:
 
@@ -79,7 +190,7 @@ version(nanovg_default_no_font_aa) {
 }
 
 
-// this is branchless for ints on x86, and even for longs on x86_64
+/// this is branchless for ints on x86, and even for longs on x86_64
 public ubyte nvgClampToByte(T) (T n) pure nothrow @safe @nogc if (__traits(isIntegral, T)) {
   static if (__VERSION__ > 2067) pragma(inline, true);
   static if (T.sizeof == 2 || T.sizeof == 4) {
