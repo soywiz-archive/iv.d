@@ -1536,18 +1536,6 @@ struct NSVGNamedColor {
 }
 
 static immutable NSVGNamedColor[147] nsvg__colors = [
-  NSVGNamedColor("red", NSVG.Paint.rgb(255, 0, 0)),
-  NSVGNamedColor("green", NSVG.Paint.rgb( 0, 128, 0)),
-  NSVGNamedColor("blue", NSVG.Paint.rgb( 0, 0, 255)),
-  NSVGNamedColor("yellow", NSVG.Paint.rgb(255, 255, 0)),
-  NSVGNamedColor("cyan", NSVG.Paint.rgb( 0, 255, 255)),
-  NSVGNamedColor("magenta", NSVG.Paint.rgb(255, 0, 255)),
-  NSVGNamedColor("black", NSVG.Paint.rgb( 0, 0, 0)),
-  NSVGNamedColor("grey", NSVG.Paint.rgb(128, 128, 128)),
-  NSVGNamedColor("gray", NSVG.Paint.rgb(128, 128, 128)),
-  NSVGNamedColor("white", NSVG.Paint.rgb(255, 255, 255)),
-
-//#ifdef NANOSVG_ALL_COLOR_KEYWORDS
   NSVGNamedColor("aliceblue", NSVG.Paint.rgb(240, 248, 255)),
   NSVGNamedColor("antiquewhite", NSVG.Paint.rgb(250, 235, 215)),
   NSVGNamedColor("aqua", NSVG.Paint.rgb( 0, 255, 255)),
@@ -1555,7 +1543,9 @@ static immutable NSVGNamedColor[147] nsvg__colors = [
   NSVGNamedColor("azure", NSVG.Paint.rgb(240, 255, 255)),
   NSVGNamedColor("beige", NSVG.Paint.rgb(245, 245, 220)),
   NSVGNamedColor("bisque", NSVG.Paint.rgb(255, 228, 196)),
+  NSVGNamedColor("black", NSVG.Paint.rgb( 0, 0, 0)), // basic color
   NSVGNamedColor("blanchedalmond", NSVG.Paint.rgb(255, 235, 205)),
+  NSVGNamedColor("blue", NSVG.Paint.rgb( 0, 0, 255)), // basic color
   NSVGNamedColor("blueviolet", NSVG.Paint.rgb(138, 43, 226)),
   NSVGNamedColor("brown", NSVG.Paint.rgb(165, 42, 42)),
   NSVGNamedColor("burlywood", NSVG.Paint.rgb(222, 184, 135)),
@@ -1566,6 +1556,7 @@ static immutable NSVGNamedColor[147] nsvg__colors = [
   NSVGNamedColor("cornflowerblue", NSVG.Paint.rgb(100, 149, 237)),
   NSVGNamedColor("cornsilk", NSVG.Paint.rgb(255, 248, 220)),
   NSVGNamedColor("crimson", NSVG.Paint.rgb(220, 20, 60)),
+  NSVGNamedColor("cyan", NSVG.Paint.rgb( 0, 255, 255)), // basic color
   NSVGNamedColor("darkblue", NSVG.Paint.rgb( 0, 0, 139)),
   NSVGNamedColor("darkcyan", NSVG.Paint.rgb( 0, 139, 139)),
   NSVGNamedColor("darkgoldenrod", NSVG.Paint.rgb(184, 134, 11)),
@@ -1598,7 +1589,10 @@ static immutable NSVGNamedColor[147] nsvg__colors = [
   NSVGNamedColor("ghostwhite", NSVG.Paint.rgb(248, 248, 255)),
   NSVGNamedColor("gold", NSVG.Paint.rgb(255, 215, 0)),
   NSVGNamedColor("goldenrod", NSVG.Paint.rgb(218, 165, 32)),
+  NSVGNamedColor("gray", NSVG.Paint.rgb(128, 128, 128)), // basic color
+  NSVGNamedColor("green", NSVG.Paint.rgb( 0, 128, 0)), // basic color
   NSVGNamedColor("greenyellow", NSVG.Paint.rgb(173, 255, 47)),
+  NSVGNamedColor("grey", NSVG.Paint.rgb(128, 128, 128)), // basic color
   NSVGNamedColor("honeydew", NSVG.Paint.rgb(240, 255, 240)),
   NSVGNamedColor("hotpink", NSVG.Paint.rgb(255, 105, 180)),
   NSVGNamedColor("indianred", NSVG.Paint.rgb(205, 92, 92)),
@@ -1627,6 +1621,7 @@ static immutable NSVGNamedColor[147] nsvg__colors = [
   NSVGNamedColor("lime", NSVG.Paint.rgb( 0, 255, 0)),
   NSVGNamedColor("limegreen", NSVG.Paint.rgb( 50, 205, 50)),
   NSVGNamedColor("linen", NSVG.Paint.rgb(250, 240, 230)),
+  NSVGNamedColor("magenta", NSVG.Paint.rgb(255, 0, 255)), // basic color
   NSVGNamedColor("maroon", NSVG.Paint.rgb(128, 0, 0)),
   NSVGNamedColor("mediumaquamarine", NSVG.Paint.rgb(102, 205, 170)),
   NSVGNamedColor("mediumblue", NSVG.Paint.rgb( 0, 0, 205)),
@@ -1660,6 +1655,7 @@ static immutable NSVGNamedColor[147] nsvg__colors = [
   NSVGNamedColor("plum", NSVG.Paint.rgb(221, 160, 221)),
   NSVGNamedColor("powderblue", NSVG.Paint.rgb(176, 224, 230)),
   NSVGNamedColor("purple", NSVG.Paint.rgb(128, 0, 128)),
+  NSVGNamedColor("red", NSVG.Paint.rgb(255, 0, 0)), // basic color
   NSVGNamedColor("rosybrown", NSVG.Paint.rgb(188, 143, 143)),
   NSVGNamedColor("royalblue", NSVG.Paint.rgb( 65, 105, 225)),
   NSVGNamedColor("saddlebrown", NSVG.Paint.rgb(139, 69, 19)),
@@ -1683,14 +1679,62 @@ static immutable NSVGNamedColor[147] nsvg__colors = [
   NSVGNamedColor("turquoise", NSVG.Paint.rgb( 64, 224, 208)),
   NSVGNamedColor("violet", NSVG.Paint.rgb(238, 130, 238)),
   NSVGNamedColor("wheat", NSVG.Paint.rgb(245, 222, 179)),
+  NSVGNamedColor("white", NSVG.Paint.rgb(255, 255, 255)), // basic color
   NSVGNamedColor("whitesmoke", NSVG.Paint.rgb(245, 245, 245)),
+  NSVGNamedColor("yellow", NSVG.Paint.rgb(255, 255, 0)), // basic color
   NSVGNamedColor("yellowgreen", NSVG.Paint.rgb(154, 205, 50)),
-//#endif
 ];
 
+enum nsvg__color_name_maxlen = () {
+  int res = 0;
+  foreach (const ref known; nsvg__colors) if (res < known.name.length) res = cast(int)known.name.length;
+  return res;
+}();
+
+
+// `s0` and `s1` are never empty here
+// `s0` is always lowercased
+int xstrcmp (const(char)[] s0, const(char)[] s1) {
+  /*
+  const(char)* sp0 = s0.ptr;
+  const(char)* sp1 = s1.ptr;
+  foreach (; 0..(s0.length < s1.length ? s0.length : s1.length)) {
+    int c1 = cast(int)(*sp1++);
+    if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man's tolower
+    if (auto diff = cast(int)(*sp0++)-c1) return diff;
+  }
+  // equals so far
+  if (s0.length < s1.length) return -1;
+  if (s0.length > s1.length) return 1;
+  return 0;
+  */
+  import core.stdc.string : memcmp;
+  if (auto diff = memcmp(s0.ptr, s1.ptr, (s0.length < s1.length ? s0.length : s1.length))) return diff;
+  // equals so far
+  if (s0.length < s1.length) return -1;
+  if (s0.length > s1.length) return 1;
+  return 0;
+}
+
+
 uint nsvg__parseColorName (const(char)[] str) {
-  foreach (const ref known; nsvg__colors) {
-    if (known.name == str) return known.color;
+  if (str.length == 0 || str.length > nsvg__color_name_maxlen) return NSVG.Paint.rgb(128, 128, 128);
+  // check if `str` contains only letters, and convert it to lowercase
+  char[nsvg__color_name_maxlen] slow = void;
+  foreach (immutable cidx, char ch; str) {
+    if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
+    if (ch < 'a' || ch > 'z') return NSVG.Paint.rgb(128, 128, 128); // alas
+    slow.ptr[cidx] = ch;
+  }
+  int low = 0;
+  int high = cast(int)nsvg__colors.length-1;
+  while (low <= high) {
+    int med = (low+high)/2;
+    assert(med >= 0 && med < nsvg__colors.length);
+    int res = xstrcmp(nsvg__colors.ptr[med].name, str);
+         if (res < 0) low = med+1;
+    else if (res > 0) high = med-1;
+    else return nsvg__colors.ptr[med].color;
   }
   return NSVG.Paint.rgb(128, 128, 128);
 }
@@ -2829,7 +2873,7 @@ void nsvg__parseGradient (Parser* p, AttrList attr, NSVG.PaintType type) {
       } else if (attr[i] == "xlink:href") {
         grad.ref_[] = 0;
         const(char)[] s = attr[i+1];
-        if (s.length > 0) s = s[1..$];
+        if (s.length > 0 && s.ptr[0] == '#') s = s[1..$]; // remove '#'
         if (s.length > grad.ref_.length-1) s = s[0..grad.ref_.length-1];
         grad.ref_[0..s.length] = s[];
       }
