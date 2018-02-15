@@ -3185,7 +3185,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
 
   nvg__renderText(ctx, verts, nverts);
 
-  return iter.x;
+  return iter.nextx/scale;
 }
 
 /** Draws multi-line text string at specified location wrapped at the specified width. If end is specified only the sub-string up to the end is drawn.
