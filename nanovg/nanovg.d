@@ -6554,7 +6554,7 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   // Draw fill
   glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xff);
   glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
-  glDrawArrays(GL_TRIANGLES, call.triangleOffset, call.triangleCount);
+  glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
 
   glDisable(GL_STENCIL_TEST);
 }
@@ -6808,15 +6808,19 @@ void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float 
   if (call is null || npaths < 1) return;
 
   call.type = GLNVG_FILL;
+  call.triangleCount = 4;
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
   call.pathCount = npaths;
   call.image = paint.image;
 
-  if (npaths == 1 && paths[0].convex) call.type = GLNVG_CONVEXFILL;
+  if (npaths == 1 && paths[0].convex) {
+    call.type = GLNVG_CONVEXFILL;
+    call.triangleCount = 0; // Bounding box fill quad not needed for convex fill
+  }
 
   // Allocate vertices for all the paths.
-  maxverts = glnvg__maxVertCount(paths, npaths)+6;
+  maxverts = glnvg__maxVertCount(paths, npaths)+call.triangleCount;
   offset = glnvg__allocVerts(gl, maxverts);
   if (offset == -1) goto error;
 
@@ -6838,20 +6842,16 @@ void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float 
     }
   }
 
-  // Quad
-  call.triangleOffset = offset;
-  call.triangleCount = 6;
-  quad = &gl.verts[call.triangleOffset];
-  glnvg__vset(&quad[0], bounds[0], bounds[3], 0.5f, 1.0f);
-  glnvg__vset(&quad[1], bounds[2], bounds[3], 0.5f, 1.0f);
-  glnvg__vset(&quad[2], bounds[2], bounds[1], 0.5f, 1.0f);
-
-  glnvg__vset(&quad[3], bounds[0], bounds[3], 0.5f, 1.0f);
-  glnvg__vset(&quad[4], bounds[2], bounds[1], 0.5f, 1.0f);
-  glnvg__vset(&quad[5], bounds[0], bounds[1], 0.5f, 1.0f);
-
   // Setup uniforms for draw calls
   if (call.type == GLNVG_FILL) {
+    // Quad
+    call.triangleOffset = offset;
+    quad = &gl.verts[call.triangleOffset];
+    glnvg__vset(&quad[0], bounds[2], bounds[3], 0.5f, 1.0f);
+    glnvg__vset(&quad[1], bounds[2], bounds[1], 0.5f, 1.0f);
+    glnvg__vset(&quad[2], bounds[0], bounds[3], 0.5f, 1.0f);
+    glnvg__vset(&quad[3], bounds[0], bounds[1], 0.5f, 1.0f);
+    // Get uniform
     call.uniformOffset = glnvg__allocFragUniforms(gl, 2);
     if (call.uniformOffset == -1) goto error;
     // Simple shader for stencil
