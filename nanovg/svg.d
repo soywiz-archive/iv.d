@@ -760,6 +760,7 @@ struct Parser {
   NSVG.Path* plist;
   NSVG* image;
   GradientData* gradients;
+  NSVG.Shape* shapesTail;
   float viewMinx, viewMiny, viewWidth, viewHeight;
   int alignX, alignY, alignType;
   float dpi;
@@ -1212,7 +1213,7 @@ void nsvg__getLocalBounds (float* bounds, NSVG.Shape* shape, float* xform) {
 void nsvg__addShape (Parser* p) {
   Attrib* attr = nsvg__getAttr(p);
   float scale = 1.0f;
-  NSVG.Shape* shape, cur, prev;
+  NSVG.Shape* shape;
   NSVG.Path* path;
   int i;
 
@@ -1285,16 +1286,12 @@ void nsvg__addShape (Parser* p) {
   shape.flags = (attr.visible ? NSVG.Visible : 0x00);
 
   // Add to tail
-  prev = null;
-  cur = p.image.shapes;
-  while (cur !is null) {
-    prev = cur;
-    cur = cur.next;
-  }
-  if (prev is null)
+  if (p.image.shapes is null)
     p.image.shapes = shape;
   else
-    prev.next = shape;
+    p.shapesTail.next = shape;
+
+  p.shapesTail = shape;
 
   return;
 
