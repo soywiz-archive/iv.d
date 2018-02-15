@@ -29,13 +29,16 @@
 module iv.nanovg.svg is aliced;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
-import iv.alice;
-import iv.vfs;
+private import iv.vfs;
 
 version = nanosvg_crappy_stylesheet_parser;
 //version = nanosvg_debug_styles;
 //version(rdmd) import iv.strex;
 
+public enum NSVGDefaults {
+  CanvasWidth = 800,
+  CanvasHeight = 600,
+}
 
 // ////////////////////////////////////////////////////////////////////////// //
 // NanoSVG is a simple stupid single-header-file SVG parse. The output of the parser is a list of cubic bezier shapes.
@@ -186,36 +189,37 @@ struct NSVG {
     int npts;        // Total number of bezier points.
     char closed;     // Flag indicating if shapes should be treated as closed.
     float[4] bounds; // Tight bounding box of the shape [minx,miny,maxx,maxy].
-    NSVG.Path* next;  // Pointer to next path, or null if last element.
+    NSVG.Path* next; // Pointer to next path, or null if last element.
   }
 
   static struct Shape {
-    char[64] id = 0;              // Optional 'id' attr of the shape or its group
-    NSVG.Paint fill;           // Fill paint
-    NSVG.Paint stroke;         // Stroke paint
+    char[64] id = 0;          // Optional 'id' attr of the shape or its group
+    NSVG.Paint fill;          // Fill paint
+    NSVG.Paint stroke;        // Stroke paint
     float opacity;            // Opacity of the shape.
     float strokeWidth;        // Stroke width (scaled).
     float strokeDashOffset;   // Stroke dash offset (scaled).
     float[8] strokeDashArray; // Stroke dash array (scaled).
     byte strokeDashCount;     // Number of dash values in dash array.
-    LineJoin strokeLineJoin;      // Stroke join type.
-    LineCap strokeLineCap;       // Stroke cap type.
+    LineJoin strokeLineJoin;  // Stroke join type.
+    LineCap strokeLineCap;    // Stroke cap type.
     float miterLimit;         // Miter limit
-    FillRule fillRule;            // Fill rule, see FillRule.
-    /*Flags*/ubyte flags;              // Logical or of NSVG_FLAGS_* flags
+    FillRule fillRule;        // Fill rule, see FillRule.
+    /*Flags*/ubyte flags;     // Logical or of NSVG_FLAGS_* flags
     float[4] bounds;          // Tight bounding box of the shape [minx,miny,maxx,maxy].
-    NSVG.Path* paths;          // Linked list of paths in the image.
-    NSVG.Shape* next;          // Pointer to next shape, or null if last element.
+    NSVG.Path* paths;         // Linked list of paths in the image.
+    NSVG.Shape* next;         // Pointer to next shape, or null if last element.
   }
 
-  float width;       // Width of the image.
-  float height;      // Height of the image.
+  float width;        // Width of the image.
+  float height;       // Height of the image.
   NSVG.Shape* shapes; // Linked list of shapes in the image.
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
+nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 // sscanf replacement: just enough to replace all our cases
@@ -521,7 +525,7 @@ enum NSVG_XML_TAG = 1;
 enum NSVG_XML_CONTENT = 2;
 enum NSVG_XML_MAX_ATTRIBS = 256;
 
-void nsvg__parseContent (const(char)[] s, scope void function (void* ud, const(char)[] s) contentCb, void* ud) {
+void nsvg__parseContent (const(char)[] s, scope void function (void* ud, const(char)[] s) nothrow @nogc contentCb, void* ud) {
   // Trim start white spaces
   while (s.length && nsvg__isspace(s[0])) s = s[1..$];
   if (s.length == 0) return;
@@ -530,8 +534,8 @@ void nsvg__parseContent (const(char)[] s, scope void function (void* ud, const(c
 }
 
 static void nsvg__parseElement (const(char)[] s,
-                 scope void function (void* ud, const(char)[] el, AttrList attr) startelCb,
-                 scope void function (void* ud, const(char)[] el) endelCb,
+                 scope void function (void* ud, const(char)[] el, AttrList attr) nothrow @nogc startelCb,
+                 scope void function (void* ud, const(char)[] el) nothrow @nogc endelCb,
                  void* ud)
 {
   const(char)[][NSVG_XML_MAX_ATTRIBS] attr;
@@ -606,9 +610,9 @@ static void nsvg__parseElement (const(char)[] s,
 }
 
 void nsvg__parseXML (const(char)[] input,
-                     scope void function (void* ud, const(char)[] el, AttrList attr) startelCb,
-                     scope void function (void* ud, const(char)[] el) endelCb,
-                     scope void function (void* ud, const(char)[] s) contentCb,
+                     scope void function (void* ud, const(char)[] el, AttrList attr) nothrow @nogc startelCb,
+                     scope void function (void* ud, const(char)[] el) nothrow @nogc endelCb,
+                     scope void function (void* ud, const(char)[] s) nothrow @nogc contentCb,
                      void* ud)
 {
   usize cpos = 0;
@@ -766,6 +770,8 @@ struct Parser {
   float dpi;
   bool pathFlag;
   bool defsFlag;
+  int canvaswdt = -1;
+  int canvashgt = -1;
   version(nanosvg_crappy_stylesheet_parser) {
     Style* styles;
     uint styleCount;
@@ -2751,9 +2757,10 @@ void nsvg__parseSVG (Parser* p, AttrList attr) {
   for (usize i = 0; attr.length-i >= 2; i += 2) {
     if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
       if (attr[i] == "width") {
-        p.image.width = nsvg__parseCoordinate(p, attr[i+1], 0.0f, 1.0f);
+        p.image.width = nsvg__parseCoordinate(p, attr[i+1], 0.0f, p.canvaswdt);
+        //{ import core.stdc.stdio; printf("(%d) w=%d [%.*s]\n", p.canvaswdt, cast(int)p.image.width, cast(uint)attr[i+1].length, attr[i+1].ptr); }
       } else if (attr[i] == "height") {
-        p.image.height = nsvg__parseCoordinate(p, attr[i+1], 0.0f, 1.0f);
+        p.image.height = nsvg__parseCoordinate(p, attr[i+1], 0.0f, p.canvashgt);
       } else if (attr[i] == "viewBox") {
         xsscanf(attr[i+1], "%f%*[%%, \t]%f%*[%%, \t]%f%*[%%, \t]%f", p.viewMinx, p.viewMiny, p.viewWidth, p.viewHeight);
       } else if (attr[i] == "preserveAspectRatio") {
@@ -2804,7 +2811,7 @@ void nsvg__parseGradient (Parser* p, AttrList attr, NSVG.PaintType type) {
       if (s.length > grad.id.length-1) s = s[0..grad.id.length-1];
       grad.id[0..s.length] = s[];
     } else if (!nsvg__parseAttr(p, attr[i], attr[i+1])) {
-      if (attr[i] == "gradientUnits") { if (attr[i+1] == "objectBoundingBox") grad.units = GradientUnits.Object; else grad.units = GradientUnits.User; }
+           if (attr[i] == "gradientUnits") { if (attr[i+1] == "objectBoundingBox") grad.units = GradientUnits.Object; else grad.units = GradientUnits.User; }
       else if (attr[i] == "gradientTransform") { nsvg__parseTransform(grad.xform.ptr, attr[i+1]); }
       else if (attr[i] == "cx") { grad.radial.cx = nsvg__parseCoordinateRaw(attr[i+1]); }
       else if (attr[i] == "cy") { grad.radial.cy = nsvg__parseCoordinateRaw(attr[i+1]); }
@@ -3146,7 +3153,7 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
   }
 }
 
-public NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi=96) {
+public NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) {
   Parser* p;
   NSVG* ret = null;
 
@@ -3161,6 +3168,8 @@ public NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi
   p = nsvg__createParser();
   if (p is null) return null;
   p.dpi = dpi;
+  p.canvaswdt = (canvaswdt < 1 ? NSVGDefaults.CanvasWidth : canvaswdt);
+  p.canvashgt = (canvashgt < 1 ? NSVGDefaults.CanvasHeight : canvashgt);
 
   nsvg__parseXML(input, &nsvg__startElement, &nsvg__endElement, &nsvg__content, p);
 
@@ -3173,40 +3182,6 @@ public NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi
   nsvg__deleteParser(p);
 
   return ret;
-}
-
-public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px", float dpi=96) {
-  import core.stdc.stdlib : malloc, free;
-  import core.stdc.stdio : FILE, fopen, fseek, ftell, fread, fclose, SEEK_SET, SEEK_END;
-  import std.internal.cstring : tempCString;
-
-  FILE* fp = null;
-  usize size;
-  char* data = null;
-  NSVG* image = null;
-
-  if (filename.length == 0) return null;
-
-  fp = fopen(filename.tempCString, "rb");
-  if (fp is null) goto error;
-  fseek(fp, 0, SEEK_END);
-  size = cast(usize)ftell(fp);
-  fseek(fp, 0, SEEK_SET);
-  data = cast(char*)malloc(size+1);
-  if (data is null) goto error;
-  if (size > 0) { if (fread(data, 1, size, fp) != size) goto error; }
-  data[size] = '\0'; // not necessary, but meh...
-  fclose(fp);
-  image = nsvgParse(data[0..size], units, dpi);
-  free(data);
-
-  return image;
-
-error:
-  if (fp) fclose(fp);
-  if (data) free(data);
-  if (image) kill(image);
-  return null;
 }
 
 public void kill (NSVG* image) {
@@ -3226,29 +3201,64 @@ public void kill (NSVG* image) {
   xfree(image);
 }
 
-public NSVG* nsvgParseFromFile(ST) (auto ref ST fi, const(char)[] units="px", float dpi=96) if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST) {
+} // nothrow @trusted @nogc
+
+
+public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) nothrow {
+  import core.stdc.stdlib : malloc, free;
+
+  char* data = null;
+  scope(exit) if (data !is null) free(data);
+
+  if (filename.length == 0) return null;
+
+  try {
+    auto fl = VFile(filename);
+    auto size = fl.size;
+    if (size > int.max/8 || size < 1) return null;
+    data = cast(char*)malloc(cast(uint)size+1);
+    if (data is null) return null;
+    fl.rawReadExact(data[0..cast(uint)size]);
+    data[cast(uint)size] = '\0'; // not necessary, but meh...
+    return nsvgParse(data[0..cast(uint)size], units, dpi, canvaswdt, canvashgt);
+  } catch (Exception e) {
+    return null;
+  }
+}
+
+
+public NSVG* nsvgParseFromFile(ST) (auto ref ST fi, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) nothrow
+if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST)
+{
   import core.stdc.stdlib : malloc, free;
 
   usize size;
   char* data = null;
+  scope(exit) if (data is null) free(data);
 
-  auto sz = fi.size;
-  auto pp = fi.tell;
-  if (pp >= sz) return null;
-  sz -= pp;
-  if (sz > 0x3ff_ffff) return null;
-  size = cast(usize)sz;
-  data = cast(char*)malloc(size+1);
-  if (data is null) return null;
-  scope(exit) free(data);
-  fi.rawReadExact(data[0..size]);
-  return nsvgParse(data[0..size], units, dpi);
+  try {
+    auto sz = fi.size;
+    auto pp = fi.tell;
+    if (pp >= sz) return null;
+    sz -= pp;
+    if (sz > 0x3ff_ffff) return null;
+    size = cast(usize)sz;
+    data = cast(char*)malloc(size+1);
+    if (data is null) return null;
+    fi.rawReadExact(data[0..size]);
+    data[cast(usize)size+1] = '\0'; // not necessary, but meh...
+    return nsvgParse(data[0..size], units, dpi, canvaswdt, canvashgt);
+  } catch (Exception e) {
+    return null;
+  }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
 // rasterizer
 private:
+nothrow @trusted @nogc {
+
 enum NSVG__SUBSAMPLES = 5;
 enum NSVG__FIXSHIFT = 10;
 enum NSVG__FIX = 1<<NSVG__FIXSHIFT;
@@ -4421,6 +4431,11 @@ void nsvg__initPaint (NSVGcachedPaint* cache, NSVG.Paint* paint, float opacity) 
 
 }
 
+extern(C) {
+  private alias _compare_fp_t = int function (const void*, const void*) nothrow @nogc;
+  private extern(C) void qsort (scope void* base, size_t nmemb, size_t size, _compare_fp_t compar) nothrow @nogc;
+}
+
 public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float scale, ubyte* dst, int w, int h, int stride=-1) {
   NSVG.Shape* shape = null;
   NSVGedge* e = null;
@@ -4449,7 +4464,7 @@ public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float 
     if (!(shape.flags&NSVG.Visible)) continue;
 
     if (shape.fill.type != NSVG.PaintType.None) {
-      import core.stdc.stdlib : qsort;
+      //import core.stdc.stdlib : qsort; // not @nogc
 
       nsvg__resetPool(r);
       r.freelist = null;
@@ -4475,7 +4490,7 @@ public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float 
       nsvg__rasterizeSortedEdges(r, tx, ty, scale, &cache, shape.fillRule);
     }
     if (shape.stroke.type != NSVG.PaintType.None && (shape.strokeWidth*scale) > 0.01f) {
-      import core.stdc.stdlib : qsort;
+      //import core.stdc.stdlib : qsort; // not @nogc
 
       nsvg__resetPool(r);
       r.freelist = null;
@@ -4511,6 +4526,8 @@ public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float 
   r.height = 0;
   r.stride = 0;
 }
+
+} // nothrow @trusted @nogc
 
 
 // ////////////////////////////////////////////////////////////////////////// //

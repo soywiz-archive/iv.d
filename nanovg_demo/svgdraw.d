@@ -37,6 +37,7 @@ void main (string[] args) {
   PerfGraph fps;
 
   int minw = 32, minh = 32;
+  int defw = 256, defh = 256;
   string fname;
   for (usize idx = 1; idx < args.length; ++idx) {
     import std.conv : to;
@@ -49,15 +50,15 @@ void main (string[] args) {
         if (idx >= args.length) assert(0, "out of args");
         a = args[idx];
       }
-      if (d == 'w') minw = to!int(a); else minh = to!int(a);
+      if (d == 'w') defw = minw = to!int(a); else defh = minh = to!int(a);
     } else if (a == "--width") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
-      minw = to!int(args[idx]);
+      defw = minw = to!int(args[idx]);
     } else if (a == "--height") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
-      minh = to!int(args[idx]);
+      defh = minh = to!int(args[idx]);
     } else if (a == "--") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
@@ -76,7 +77,8 @@ void main (string[] args) {
     import std.stdio : writeln;
     import core.time, std.datetime;
     auto stt = MonoTime.currTime;
-    svg = nsvgParseFromFile(fname);
+    svg = nsvgParseFromFile(fname, "px", 96, defw, defh);
+    if (svg is null) assert(0, "svg parsing error");
     auto dur = (MonoTime.currTime-stt).total!"msecs";
     writeln("loading took ", dur, " milliseconds (", dur/1000.0, " seconds)");
     { import std.stdio; writeln(args.length > 1 ? args[1] : "data/svg/tiger.svg"); }
