@@ -111,6 +111,7 @@ public enum NSVGDefaults {
 
 // ////////////////////////////////////////////////////////////////////////// //
 alias NSVGrasterizer = NSVGrasterizerS*;
+alias NSVGRasterizer = NSVGrasterizer;
 
 struct NSVG {
   @disable this (this);
@@ -492,7 +493,7 @@ void xfree(T) (ref T* p) {
 
 alias AttrList = const(const(char)[])[];
 
-enum NSVG_PI = 3.14159265358979323846264338327f;
+public enum NSVG_PI = 3.14159265358979323846264338327f;
 enum NSVG_KAPPA90 = 0.5522847493f; // Lenght proportional to radius of a cubic bezier handle for 90deg arcs.
 
 enum NSVG_ALIGN_MIN = 0;
@@ -789,44 +790,47 @@ const(char)[] fromAsciiz (const(char)[] s) {
   return s;
 }
 
-void nsvg__xformIdentity (float* t) {
+// ////////////////////////////////////////////////////////////////////////// //
+// matrix operations made public for the sake of... something.
+
+public void nsvg__xformIdentity (float* t) {
   t[0] = 1.0f; t[1] = 0.0f;
   t[2] = 0.0f; t[3] = 1.0f;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
-void nsvg__xformSetTranslation (float* t, float tx, float ty) {
+public void nsvg__xformSetTranslation (float* t, in float tx, in float ty) {
   t[0] = 1.0f; t[1] = 0.0f;
   t[2] = 0.0f; t[3] = 1.0f;
   t[4] = tx; t[5] = ty;
 }
 
-void nsvg__xformSetScale (float* t, float sx, float sy) {
+public void nsvg__xformSetScale (float* t, in float sx, in float sy) {
   t[0] = sx; t[1] = 0.0f;
   t[2] = 0.0f; t[3] = sy;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
-void nsvg__xformSetSkewX (float* t, float a) {
+public void nsvg__xformSetSkewX (float* t, in float a) {
   t[0] = 1.0f; t[1] = 0.0f;
   t[2] = tanf(a); t[3] = 1.0f;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
-void nsvg__xformSetSkewY (float* t, float a) {
+public void nsvg__xformSetSkewY (float* t, in float a) {
   t[0] = 1.0f; t[1] = tanf(a);
   t[2] = 0.0f; t[3] = 1.0f;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
-void nsvg__xformSetRotation (float* t, float a) {
+public void nsvg__xformSetRotation (float* t, in float a) {
   immutable cs = cosf(a), sn = sinf(a);
   t[0] = cs; t[1] = sn;
   t[2] = -sn; t[3] = cs;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
-void nsvg__xformMultiply (float* t, float* s) {
+public void nsvg__xformMultiply (float* t, const(float)* s) {
   immutable t0 = t[0]*s[0]+t[1]*s[2];
   immutable t2 = t[2]*s[0]+t[3]*s[2];
   immutable t4 = t[4]*s[0]+t[5]*s[2]+s[4];
@@ -838,13 +842,13 @@ void nsvg__xformMultiply (float* t, float* s) {
   t[4] = t4;
 }
 
-void nsvg__xformInverse (float* inv, float* t) {
-  double invdet, det = cast(double)t[0]*t[3]-cast(double)t[2]*t[1];
+public void nsvg__xformInverse (float* inv, const(float)* t) {
+  immutable double det = cast(double)t[0]*t[3]-cast(double)t[2]*t[1];
   if (det > -1e-6 && det < 1e-6) {
-    nsvg__xformIdentity(t);
+    nsvg__xformIdentity(inv);
     return;
   }
-  invdet = 1.0/det;
+  immutable double invdet = 1.0/det;
   inv[0] = cast(float)(t[3]*invdet);
   inv[2] = cast(float)(-t[2]*invdet);
   inv[4] = cast(float)((cast(double)t[2]*t[5]-cast(double)t[3]*t[4])*invdet);
@@ -853,43 +857,43 @@ void nsvg__xformInverse (float* inv, float* t) {
   inv[5] = cast(float)((cast(double)t[1]*t[4]-cast(double)t[0]*t[5])*invdet);
 }
 
-void nsvg__xformPremultiply (float* t, float* s) {
-  float[6] s2 = void;
+public void nsvg__xformPremultiply (float* t, const(float)* s) {
+  float[6] s2 = s[0..6];
   //memcpy(s2.ptr, s, float.sizeof*6);
-  s2[] = s[0..6];
   nsvg__xformMultiply(s2.ptr, t);
   //memcpy(t, s2.ptr, float.sizeof*6);
   t[0..6] = s2[];
 }
 
-void nsvg__xformPoint (float* dx, float* dy, float x, float y, float* t) {
-  *dx = x*t[0]+y*t[2]+t[4];
-  *dy = x*t[1]+y*t[3]+t[5];
+public void nsvg__xformPoint (float* dx, float* dy, in float x, in float y, const(float)* t) {
+  if (dx !is null) *dx = x*t[0]+y*t[2]+t[4];
+  if (dy !is null) *dy = x*t[1]+y*t[3]+t[5];
 }
 
-void nsvg__xformVec (float* dx, float* dy, float x, float y, float* t) {
-  *dx = x*t[0]+y*t[2];
-  *dy = x*t[1]+y*t[3];
+public void nsvg__xformVec (float* dx, float* dy, in float x, in float y, const(float)* t) {
+  if (dx !is null) *dx = x*t[0]+y*t[2];
+  if (dy !is null) *dy = x*t[1]+y*t[3];
 }
 
-enum NSVG_EPSILON = (1e-12);
+public enum NSVG_EPSILON = (1e-12);
 
-int nsvg__ptInBounds (float* pt, float* bounds) {
+public int nsvg__ptInBounds (const(float)* pt, const(float)* bounds) {
+  pragma(inline, true);
   return pt[0] >= bounds[0] && pt[0] <= bounds[2] && pt[1] >= bounds[1] && pt[1] <= bounds[3];
 }
 
 
-double nsvg__evalBezier (double t, double p0, double p1, double p2, double p3) {
+public double nsvg__evalBezier (double t, double p0, double p1, double p2, double p3) {
+  pragma(inline, true);
   double it = 1.0-t;
   return it*it*it*p0+3.0*it*it*t*p1+3.0*it*t*t*p2+t*t*t*p3;
 }
 
-void nsvg__curveBounds (float* bounds, float* curve) {
-  //double a, b, c, b2ac, t, v;
-  float* v0 = &curve[0];
-  float* v1 = &curve[2];
-  float* v2 = &curve[4];
-  float* v3 = &curve[6];
+public void nsvg__curveBounds (float* bounds, const(float)* curve) {
+  const float* v0 = &curve[0];
+  const float* v1 = &curve[2];
+  const float* v2 = &curve[4];
+  const float* v3 = &curve[6];
 
   // Start the bounding box by end points
   bounds[0] = nsvg__minf(v0[0], v3[0]);
@@ -2206,7 +2210,7 @@ int nsvg__getArgsPerElement (char cmd) {
   return 0;
 }
 
-void nsvg__pathMoveTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
+void nsvg__pathMoveTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathMoveTo: args=", args[0..2]); }
   if (rel) {
     *cpx += args[0];
@@ -2218,7 +2222,7 @@ void nsvg__pathMoveTo (Parser* p, float* cpx, float* cpy, float* args, int rel) 
   nsvg__moveTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathLineTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
+void nsvg__pathLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathLineTo: args=", args[0..2]); }
   if (rel) {
     *cpx += args[0];
@@ -2230,7 +2234,7 @@ void nsvg__pathLineTo (Parser* p, float* cpx, float* cpy, float* args, int rel) 
   nsvg__lineTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathHLineTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
+void nsvg__pathHLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathHLineTo: args=", args[0..1]); }
   if (rel)
     *cpx += args[0];
@@ -2239,7 +2243,7 @@ void nsvg__pathHLineTo (Parser* p, float* cpx, float* cpy, float* args, int rel)
   nsvg__lineTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathVLineTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
+void nsvg__pathVLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathVLineTo: args=", args[0..1]); }
   if (rel)
     *cpy += args[0];
@@ -2248,7 +2252,7 @@ void nsvg__pathVLineTo (Parser* p, float* cpx, float* cpy, float* args, int rel)
   nsvg__lineTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathCubicBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, float* args, int rel) {
+void nsvg__pathCubicBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathCubicBezTo: args=", args[0..6]); }
   float x2 = void, y2 = void, cx1 = void, cy1 = void, cx2 = void, cy2 = void;
 
@@ -2276,7 +2280,7 @@ void nsvg__pathCubicBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float
   *cpy = y2;
 }
 
-void nsvg__pathCubicBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, float* args, int rel) {
+void nsvg__pathCubicBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathCubicBezShortTo: args=", args[0..4]); }
   float x2 = void, y2 = void, cx2 = void, cy2 = void;
 
@@ -2305,7 +2309,7 @@ void nsvg__pathCubicBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, 
   *cpy = y2;
 }
 
-void nsvg__pathQuadBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, float* args, int rel) {
+void nsvg__pathQuadBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathQuadBezTo: args=", args[0..4]); }
   float x2 = void, y2 = void, cx = void, cy = void;
 
@@ -2337,7 +2341,7 @@ void nsvg__pathQuadBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float*
   *cpy = y2;
 }
 
-void nsvg__pathQuadBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, float* args, int rel) {
+void nsvg__pathQuadBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathQuadBezShortTo: args=", args[0..2]); }
   float x2 = void, y2 = void;
 
@@ -2368,10 +2372,11 @@ void nsvg__pathQuadBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, f
   *cpy = y2;
 }
 
-float nsvg__sqr() (float x) { pragma(inline, true); return x*x; }
-float nsvg__vmag() (float x, float y) { pragma(inline, true); return sqrtf(x*x+y*y); }
+float nsvg__sqr() (in float x) { pragma(inline, true); return x*x; }
+float nsvg__vmag() (in float x, float y) { pragma(inline, true); return sqrtf(x*x+y*y); }
 
 float nsvg__vecrat (float ux, float uy, float vx, float vy) {
+  pragma(inline, true);
   return (ux*vx+uy*vy)/(nsvg__vmag(ux, uy)*nsvg__vmag(vx, vy));
 }
 
@@ -2382,7 +2387,7 @@ float nsvg__vecang (float ux, float uy, float vx, float vy) {
   return ((ux*vy < uy*vx) ? -1.0f : 1.0f)*acosf(r);
 }
 
-void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, float* args, int rel) {
+void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
   // Ported from canvg (https://code.google.com/p/canvg/)
   float px = 0, py = 0, ptanx = 0, ptany = 0;
   float[6] t = void;
@@ -2724,7 +2729,6 @@ void nsvg__parseEllipse (Parser* p, AttrList attr) {
   }
 
   if (rx > 0.0f && ry > 0.0f) {
-
     nsvg__resetPath(p);
 
     nsvg__moveTo(p, cx+rx, cy);
@@ -2765,8 +2769,7 @@ void nsvg__parseLine (Parser* p, AttrList attr) {
 }
 
 void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
-  //const(char)* s;
-  float[2] args;
+  float[2] args = void;
   int nargs, npts = 0;
   char[65] item = 0;
 
@@ -3571,13 +3574,13 @@ void nsvg__flattenCubicBez (NSVGrasterizer r, in float x1, in float y1, in float
   nsvg__flattenCubicBez(r, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
 }
 
-void nsvg__flattenShape (NSVGrasterizer r, NSVG.Shape* shape, float scale) {
-  for (auto path = shape.paths; path !is null; path = path.next) {
+void nsvg__flattenShape (NSVGrasterizer r, const(NSVG.Shape)* shape, float scale) {
+  for (const(NSVG.Path)* path = shape.paths; path !is null; path = path.next) {
     r.npoints = 0;
     // Flatten path
     nsvg__addPathPoint(r, path.pts[0]*scale, path.pts[1]*scale, 0);
     for (int i = 0; i < path.npts-1; i += 3) {
-      float* p = path.pts+(i*2);
+      const(float)* p = path.pts+(i*2);
       nsvg__flattenCubicBez(r, p[0]*scale, p[1]*scale, p[2]*scale, p[3]*scale, p[4]*scale, p[5]*scale, p[6]*scale, p[7]*scale, 0, 0);
     }
     // Close path
@@ -3596,7 +3599,7 @@ enum : ubyte {
   PtFlagsLeft = 0x04,
 }
 
-void nsvg__initClosed (NSVGpoint* left, NSVGpoint* right, NSVGpoint* p0, NSVGpoint* p1, float lineWidth) {
+void nsvg__initClosed (NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p0, const(NSVGpoint)* p1, float lineWidth) {
   immutable float w = lineWidth*0.5f;
   float dx = p1.x-p0.x;
   float dy = p1.y-p0.y;
@@ -3609,7 +3612,7 @@ void nsvg__initClosed (NSVGpoint* left, NSVGpoint* right, NSVGpoint* p0, NSVGpoi
   right.x = rx; right.y = ry;
 }
 
-void nsvg__buttCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoint* p, float dx, float dy, float lineWidth, int connect) {
+void nsvg__buttCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p, float dx, float dy, float lineWidth, int connect) {
   immutable float w = lineWidth*0.5f;
   immutable float px = p.x, py = p.y;
   immutable float dlx = dy, dly = -dx;
@@ -3626,7 +3629,7 @@ void nsvg__buttCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoi
   right.x = rx; right.y = ry;
 }
 
-void nsvg__squareCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoint* p, float dx, float dy, float lineWidth, int connect) {
+void nsvg__squareCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p, float dx, float dy, float lineWidth, int connect) {
   immutable float w = lineWidth*0.5f;
   immutable float px = p.x-dx*w, py = p.y-dy*w;
   immutable float dlx = dy, dly = -dx;
@@ -3643,7 +3646,7 @@ void nsvg__squareCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGp
   right.x = rx; right.y = ry;
 }
 
-void nsvg__roundCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoint* p, float dx, float dy, float lineWidth, int ncap, int connect) {
+void nsvg__roundCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p, float dx, float dy, float lineWidth, int ncap, int connect) {
   immutable float w = lineWidth*0.5f;
   immutable float px = p.x, py = p.y;
   immutable float dlx = dy, dly = -dx;
@@ -3678,7 +3681,7 @@ void nsvg__roundCap (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpo
   right.x = rx; right.y = ry;
 }
 
-void nsvg__bevelJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoint* p0, NSVGpoint* p1, float lineWidth) {
+void nsvg__bevelJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p0, const(NSVGpoint)* p1, float lineWidth) {
   immutable float w = lineWidth*0.5f;
   immutable float dlx0 = p0.dy, dly0 = -p0.dx;
   immutable float dlx1 = p1.dy, dly1 = -p1.dx;
@@ -3697,7 +3700,7 @@ void nsvg__bevelJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGp
   right.x = rx1; right.y = ry1;
 }
 
-void nsvg__miterJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoint* p0, NSVGpoint* p1, float lineWidth) {
+void nsvg__miterJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p0, const(NSVGpoint)* p1, float lineWidth) {
   immutable float w = lineWidth*0.5f;
   immutable float dlx0 = p0.dy, dly0 = -p0.dx;
   immutable float dlx1 = p1.dy, dly1 = -p1.dx;
@@ -3732,7 +3735,7 @@ void nsvg__miterJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGp
   right.x = rx1; right.y = ry1;
 }
 
-void nsvg__roundJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoint* p0, NSVGpoint* p1, float lineWidth, int ncap) {
+void nsvg__roundJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p0, const(NSVGpoint)* p1, float lineWidth, int ncap) {
   int i, n;
   float w = lineWidth*0.5f;
   float dlx0 = p0.dy, dly0 = -p0.dx;
@@ -3772,7 +3775,7 @@ void nsvg__roundJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGp
   right.x = rx; right.y = ry;
 }
 
-void nsvg__straightJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, NSVGpoint* p1, float lineWidth) {
+void nsvg__straightJoin (NSVGrasterizer r, NSVGpoint* left, NSVGpoint* right, const(NSVGpoint)* p1, float lineWidth) {
   float w = lineWidth*0.5f;
   float lx = p1.x-(p1.dmx*w), ly = p1.y-(p1.dmy*w);
   float rx = p1.x+(p1.dmx*w), ry = p1.y+(p1.dmy*w);
@@ -3791,11 +3794,11 @@ int nsvg__curveDivs (float r, float arc, float tol) {
   return divs;
 }
 
-void nsvg__expandStroke (NSVGrasterizer r, NSVGpoint* points, int npoints, int closed, int lineJoin, int lineCap, float lineWidth) {
+void nsvg__expandStroke (NSVGrasterizer r, const(NSVGpoint)* points, int npoints, int closed, int lineJoin, int lineCap, float lineWidth) {
   int ncap = nsvg__curveDivs(lineWidth*0.5f, NSVG_PI, r.tessTol);  // Calculate divisions per half circle.
   //NSVGpoint left = {0, 0, 0, 0, 0, 0, 0, 0}, right = {0, 0, 0, 0, 0, 0, 0, 0}, firstLeft = {0, 0, 0, 0, 0, 0, 0, 0}, firstRight = {0, 0, 0, 0, 0, 0, 0, 0};
   NSVGpoint left, right, firstLeft, firstRight;
-  NSVGpoint* p0, p1;
+  const(NSVGpoint)* p0, p1;
   int j, s, e;
 
   // Build stroke edges
@@ -3918,10 +3921,10 @@ void nsvg__prepareStroke (NSVGrasterizer r, float miterLimit, int lineJoin) {
   }
 }
 
-void nsvg__flattenShapeStroke (NSVGrasterizer r, NSVG.Shape* shape, float scale) {
+void nsvg__flattenShapeStroke (NSVGrasterizer r, const(NSVG.Shape)* shape, float scale) {
   int i, j, closed;
-  NSVG.Path* path;
-  NSVGpoint* p0, p1;
+  const(NSVG.Path)* path;
+  const(NSVGpoint)* p0, p1;
   float miterLimit = shape.miterLimit;
   int lineJoin = shape.strokeLineJoin;
   int lineCap = shape.strokeLineCap;
@@ -3932,7 +3935,7 @@ void nsvg__flattenShapeStroke (NSVGrasterizer r, NSVG.Shape* shape, float scale)
     r.npoints = 0;
     nsvg__addPathPoint(r, path.pts[0]*scale, path.pts[1]*scale, PtFlagsCorner);
     for (i = 0; i < path.npts-1; i += 3) {
-      float* p = &path.pts[i*2];
+      const(float)* p = &path.pts[i*2];
       nsvg__flattenCubicBez(r, p[0]*scale, p[1]*scale, p[2]*scale, p[3]*scale, p[4]*scale, p[5]*scale, p[6]*scale, p[7]*scale, 0, PtFlagsCorner);
     }
     if (r.npoints < 2) continue;
@@ -4029,8 +4032,8 @@ extern(C) int nsvg__cmpEdge (in void *p, in void *q) nothrow @trusted @nogc {
 }
 
 
-static NSVGactiveEdge* nsvg__addActive (NSVGrasterizer r, NSVGedge* e, float startPoint) {
-   NSVGactiveEdge* z;
+static NSVGactiveEdge* nsvg__addActive (NSVGrasterizer r, const(NSVGedge)* e, float startPoint) {
+  NSVGactiveEdge* z;
 
   if (r.freelist !is null) {
     // Restore from freelist.
@@ -4042,7 +4045,7 @@ static NSVGactiveEdge* nsvg__addActive (NSVGrasterizer r, NSVGedge* e, float sta
     if (z is null) return null;
   }
 
-  float dxdy = (e.x1-e.x0)/(e.y1-e.y0);
+  immutable float dxdy = (e.x1-e.x0)/(e.y1-e.y0);
   //STBTT_assert(e.y0 <= start_point);
   // round dx down to avoid going too far
   if (dxdy < 0)
@@ -4092,7 +4095,7 @@ void nsvg__fillScanline (ubyte* scanline, int len, int x0, int x1, int maxWeight
 // note: this routine clips fills that extend off the edges... ideally this
 // wouldn't happen, but it could happen if the truetype glyph bounding boxes
 // are wrong, or if the user supplies a too-small bitmap
-void nsvg__fillActiveEdges (ubyte* scanline, int len, NSVGactiveEdge* e, int maxWeight, int* xmin, int* xmax, char fillRule) {
+void nsvg__fillActiveEdges (ubyte* scanline, int len, const(NSVGactiveEdge)* e, int maxWeight, int* xmin, int* xmax, char fillRule) {
   // non-zero winding fill
   int x0 = 0, w = 0;
   if (fillRule == NSVG.FillRule.NonZero) {
@@ -4104,8 +4107,7 @@ void nsvg__fillActiveEdges (ubyte* scanline, int len, NSVGactiveEdge* e, int max
       } else {
         int x1 = e.x; w += e.dir;
         // if we went to zero, we need to draw
-        if (w == 0)
-          nsvg__fillScanline(scanline, len, x0, x1, maxWeight, xmin, xmax);
+        if (w == 0) nsvg__fillScanline(scanline, len, x0, x1, maxWeight, xmin, xmax);
       }
       e = e.next;
     }
@@ -4148,7 +4150,7 @@ uint nsvg__applyOpacity (uint c, float u) {
 
 int nsvg__div255() (int x) { pragma(inline, true); return ((x+1)*257)>>16; }
 
-void nsvg__scanlineSolid (ubyte* dst, int count, ubyte* cover, int x, int y, float tx, float ty, float scale, NSVGcachedPaint* cache) {
+void nsvg__scanlineSolid (ubyte* dst, int count, ubyte* cover, int x, int y, float tx, float ty, float scale, const(NSVGcachedPaint)* cache) {
   if (cache.type == NSVG.PaintType.Color) {
     int cr = cache.colors[0]&0xff;
     int cg = (cache.colors[0]>>8)&0xff;
@@ -4175,13 +4177,13 @@ void nsvg__scanlineSolid (ubyte* dst, int count, ubyte* cover, int x, int y, flo
       dst[2] = cast(ubyte)b;
       dst[3] = cast(ubyte)a;
 
-      cover++;
+      ++cover;
       dst += 4;
     }
   } else if (cache.type == NSVG.PaintType.LinearGradient) {
     // TODO: spread modes.
     // TODO: plenty of opportunities to optimize.
-    float* t = cache.xform.ptr;
+    const(float)* t = cache.xform.ptr;
     //int i, cr, cg, cb, ca;
     //uint c;
 
@@ -4217,7 +4219,7 @@ void nsvg__scanlineSolid (ubyte* dst, int count, ubyte* cover, int x, int y, flo
       dst[2] = cast(ubyte)b;
       dst[3] = cast(ubyte)a;
 
-      cover++;
+      ++cover;
       dst += 4;
       fx += dx;
     }
@@ -4226,7 +4228,7 @@ void nsvg__scanlineSolid (ubyte* dst, int count, ubyte* cover, int x, int y, flo
     // TODO: plenty of opportunities to optimize.
     // TODO: focus (fx, fy)
     //float fx, fy, dx, gx, gy, gd;
-    float* t = cache.xform.ptr;
+    const(float)* t = cache.xform.ptr;
     //int i, cr, cg, cb, ca;
     //uint c;
 
@@ -4264,15 +4266,15 @@ void nsvg__scanlineSolid (ubyte* dst, int count, ubyte* cover, int x, int y, flo
       dst[2] = cast(ubyte)b;
       dst[3] = cast(ubyte)a;
 
-      cover++;
+      ++cover;
       dst += 4;
       fx += dx;
     }
   }
 }
 
-void nsvg__rasterizeSortedEdges (NSVGrasterizer r, float tx, float ty, float scale, NSVGcachedPaint* cache, char fillRule) {
-  NSVGactiveEdge *active = null;
+void nsvg__rasterizeSortedEdges (NSVGrasterizer r, float tx, float ty, float scale, const(NSVGcachedPaint)* cache, char fillRule) {
+  NSVGactiveEdge* active = null;
   int s;
   int e = 0;
   int maxWeight = (255/NSVG__SUBSAMPLES);  // weight per vertical scanline
@@ -4286,12 +4288,12 @@ void nsvg__rasterizeSortedEdges (NSVGrasterizer r, float tx, float ty, float sca
     for (s = 0; s < NSVG__SUBSAMPLES; ++s) {
       // find center of pixel for this scanline
       float scany = y*NSVG__SUBSAMPLES+s+0.5f;
-      NSVGactiveEdge **step = &active;
+      NSVGactiveEdge** step = &active;
 
       // update all active edges;
       // remove all active edges that terminate before the center of this scanline
       while (*step) {
-        NSVGactiveEdge *z = *step;
+        NSVGactiveEdge* z = *step;
         if (z.ey <= scany) {
           *step = z.next; // delete from list
           //NSVG__assert(z.valid);
@@ -4416,9 +4418,8 @@ void nsvg__unpremultiplyAlpha (ubyte* image, int w, int h, int stride) {
 }
 
 
-void nsvg__initPaint (NSVGcachedPaint* cache, NSVG.Paint* paint, float opacity) {
-  //int i, j;
-  NSVG.Gradient* grad;
+void nsvg__initPaint (NSVGcachedPaint* cache, const(NSVG.Paint)* paint, float opacity) {
+  const(NSVG.Gradient)* grad;
 
   cache.type = paint.type;
 
@@ -4479,8 +4480,8 @@ extern(C) {
   private extern(C) void qsort (scope void* base, size_t nmemb, size_t size, _compare_fp_t compar) nothrow @nogc;
 }
 
-public void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float scale, ubyte* dst, int w, int h, int stride=-1) {
-  NSVG.Shape* shape = null;
+public void rasterize (NSVGrasterizer r, const(NSVG)* image, float tx, float ty, float scale, ubyte* dst, int w, int h, int stride=-1) {
+  const(NSVG.Shape)* shape = null;
   NSVGedge* e = null;
   NSVGcachedPaint cache;
   int i;
