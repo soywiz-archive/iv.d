@@ -74,7 +74,9 @@ too short to contain their labels.
 module iv.nanovg.oui.blendish is aliced;
 private:
 
+import iv.meta;
 import iv.nanovg;
+
 nothrow @trusted @nogc:
 
 
@@ -1096,7 +1098,7 @@ public int bndGetFont () nothrow @trusted @nogc { pragma(inline, true); return b
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndLabel(T=char) (NVGContext ctx, float x, float y, float w, float h, int iconid, const(T)[] label, int align_=BND_LEFT)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   bndIconLabelValue(ctx, x, y, w, h, iconid, bndTheme.regularTheme.textColor, /*BND_LEFT*/align_, BND_LABEL_FONT_SIZE, label);
 }
@@ -1112,7 +1114,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndToolButton(T=char) (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float[4] cr = void;
   NVGColor shadeTop, shadeDown;
@@ -1135,7 +1137,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndRadioButton(T=char) (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float[4] cr = void;
   NVGColor shadeTop, shadeDown;
@@ -1158,7 +1160,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndRadioButton2(T=char) (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float ox, oy;
   NVGColor shadeTop, shadeDown;
@@ -1177,7 +1179,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * See bndTextField for more info.
  */
 public int bndTextFieldTextPosition(T=char) (NVGContext ctx, float x, float y, float w, float h, int iconid, const(T)[] text, int px, int py)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   return bndIconLabelTextPosition(ctx, x, y, w, h, iconid, BND_LABEL_FONT_SIZE, text, px, py);
 }
@@ -1199,7 +1201,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndTextField(T=char) (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(T)[] text, int cbegin, int cend)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float[4] cr = void;
   NVGColor shadeTop, shadeDown;
@@ -1223,7 +1225,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndOptionButton(T=char) (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float ox, oy;
   NVGColor shadeTop, shadeDown;
@@ -1248,7 +1250,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndChoiceButton(T=char) (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, int iconid, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float[4] cr = void;
   NVGColor shadeTop, shadeDown;
@@ -1286,7 +1288,7 @@ public void bndColorButton (NVGContext ctx, float x, float y, float w, float h, 
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndNumberField(T=char) (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, const(T)[] label, const(char)[] value)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float[4] cr = void;
   NVGColor shadeTop, shadeDown;
@@ -1313,7 +1315,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndSlider(T=char,TV=char) (NVGContext ctx, float x, float y, float w, float h, int flags, BNDwidgetState state, float progress, const(T)[] label, const(TV)[] value)
-if ((is(T == char) || is(T == wchar) || is(T == dchar)) && (is(TV == char) || is(TV == wchar) || is(TV == dchar)))
+if (isAnyCharType!T && isAnyCharType!TV)
 {
   float[4] cr = void;
   NVGColor shadeTop, shadeDown;
@@ -1445,7 +1447,7 @@ public void bndTooltipBackground (NVGContext ctx, float x, float y, float w, flo
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndMenuLabel(T=char) (NVGContext ctx, float x, float y, float w, float h, int iconid, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   bndIconLabelValue(ctx, x, y, w, h, iconid, bndTheme.menuTheme.textColor, BND_LEFT, BND_LABEL_FONT_SIZE, label);
 }
@@ -1460,7 +1462,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * widget looks best when height is BND_WIDGET_HEIGHT
  */
 public void bndMenuItem(T=char) (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   if (state != BND_DEFAULT) {
     auto clr = (state == BND_HOVER ? bndOffsetColor(bndTheme.menuItemTheme.innerColor/*innerSelectedColor*/, BND_HOVER_SHADE) : bndTheme.menuItemTheme.innerSelectedColor);
@@ -1519,7 +1521,7 @@ public void bndNodeWire (NVGContext ctx, float x0, float y0, float x1, float y1,
 
 /// Draw a node background with its upper left origin at (x, y) and size of (w, h) where titleColor provides the base color for the title bar
 public void bndNodeBackground(T=char) (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, int iconid, const(T)[] label, NVGColor titleColor)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   bndInnerBox(ctx, x, y, w, BND_NODE_TITLE_HEIGHT+2,
       BND_NODE_RADIUS, BND_NODE_RADIUS, 0, 0,
@@ -1683,7 +1685,7 @@ public void bndJoinAreaOverlay (NVGContext ctx, float x, float y, float w, float
 /// Use these functions to estimate sizes for widgets with your NVGcontext.
 
 /// returns the ideal width for a label with given icon and text
-public float bndLabelWidth(T=char) (NVGContext ctx, int iconid, const(T)[] label) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+public float bndLabelWidth(T=char) (NVGContext ctx, int iconid, const(T)[] label) if (isAnyCharType!T) {
   int w = BND_PAD_LEFT+BND_PAD_RIGHT;
   if (iconid >= 0) w += BND_ICON_SHEET_RES;
   if (label && bndFont >= 0) {
@@ -1696,7 +1698,7 @@ public float bndLabelWidth(T=char) (NVGContext ctx, int iconid, const(T)[] label
 }
 
 /// returns the height for a label with given icon, text and width; this function is primarily useful in conjunction with multiline labels and textboxes
-public float bndLabelHeight(T=char) (NVGContext ctx, int iconid, const(T)[] label, float width) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+public float bndLabelHeight(T=char) (NVGContext ctx, int iconid, const(T)[] label, float width) if (isAnyCharType!T) {
   int h = BND_WIDGET_HEIGHT;
   width -= BND_TEXT_RADIUS*2;
   if (iconid >= 0) width -= BND_ICON_SHEET_RES;
@@ -1924,7 +1926,7 @@ public NVGColor bndTextColor (const(BNDwidgetTheme)* theme, BNDwidgetState state
  * if value is not null, label and value will be drawn with a ":" separator inbetween.
  */
 public void bndIconLabelValue(T=char,TV=char) (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGColor color, int align_, float fontsize, const(T)[] label, const(TV)[] value=null)
-if ((is(T == char) || is(T == wchar) || is(T == dchar)) && (is(TV == char) || is(TV == wchar) || is(TV == dchar)))
+if (isAnyCharType!T && isAnyCharType!TV)
 {
   float pleft = BND_PAD_LEFT;
   if (label.length) {
@@ -1975,7 +1977,7 @@ if ((is(T == char) || is(T == wchar) || is(T == dchar)) && (is(TV == char) || is
  * if label is not null, it will be drawn with the specified alignment, fontsize and color.
  */
 public void bndNodeIconLabel(T=char) (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGColor color, NVGColor shadowColor, int align_, float fontsize, const(T)[] label)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   if (label.length && bndFont >= 0) {
     ctx.fontFaceId(bndFont);
@@ -1996,7 +1998,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
  * See bndIconLabelCaret for more info.
  */
 public int bndIconLabelTextPosition(T=char) (NVGContext ctx, float x, float y, float w, float h, int iconid, float fontsize, const(T)[] label, int px, int py)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float[4] bounds;
   float pleft = BND_TEXT_RADIUS;
@@ -2068,7 +2070,7 @@ if (is(RT : NVGTextRow!CT, CT))
  * cend must be >= cbegin and <= strlen(text) and denotes the end of the caret if cend < cbegin, then no caret will be drawn
  */
 public void bndIconLabelCaret(T=char) (NVGContext ctx, float x, float y, float w, float h, int iconid, NVGColor color, float fontsize, const(T)[] label, NVGColor caretcolor, int cbegin, int cend, NVGColor thinCaretColor=NVGColor.black)
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   float pleft = BND_TEXT_RADIUS;
   if (label.length == 0) return;

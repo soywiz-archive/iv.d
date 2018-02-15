@@ -19,6 +19,7 @@ module iv.nanovg.textlayouter is aliced;
 import arsd.image;
 
 import iv.cmdcon;
+import iv.meta;
 import iv.nanovg;
 import iv.utfutil;
 import iv.vfs;
@@ -144,7 +145,7 @@ public:
   }
 
   /// calculate text width
-  int textWidth(T) (const(T)[] str) nothrow @safe @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+  int textWidth(T) (const(T)[] str) nothrow @safe @nogc if (isAnyCharType!T) {
     import std.algorithm : max;
     float[4] b = void;
     float adv = fs.fonsTextBounds(0, 0, str, b[]);
@@ -162,7 +163,7 @@ public:
 
   /// this returns "width", "width with trailing whitespace", and "width with trailing hypen"
   /// all `*` args can be omited
-  void textWidth2(T) (const(T)[] str, int* w=null, int* wsp=null, int* whyph=null) nothrow @safe @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+  void textWidth2(T) (const(T)[] str, int* w=null, int* wsp=null, int* whyph=null) nothrow @safe @nogc if (isAnyCharType!T) {
     import std.algorithm : max;
     if (w is null && wsp is null && whyph is null) return;
     float minx, maxx;
@@ -208,45 +209,6 @@ public:
     if (desc !is null) *desc = lrintf(d);
     if (lineh !is null) *lineh = lrintf(h);
   }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-private struct CTFECharBuffer(bool allowResize) {
-  char[] buf;
-  uint bufpos = 0;
-  this (uint maxsize) { buf.length = maxsize; }
-  static if (allowResize) {
-    void put (const(char)[] s...) nothrow @trusted {
-      if (s.length == 0) return;
-      if (buf.length-bufpos < s.length) {
-        //FIXME: overflows
-        uint newsz = cast(uint)(s.length-(buf.length-bufpos));
-        if (buf.length < 65536) newsz += cast(uint)buf.length*2; else newsz += 65536;
-        buf.length = newsz;
-      }
-      assert(buf.length-bufpos >= s.length);
-      buf[bufpos..bufpos+s.length] = s[];
-      bufpos += cast(uint)s.length;
-    }
-  } else {
-    void put (const(char)[] s...) nothrow @trusted @nogc {
-      if (s.length == 0) return;
-      if (buf.length-bufpos < s.length) assert(0, "out of buffer");
-      buf[bufpos..bufpos+s.length] = s[];
-      bufpos += cast(uint)s.length;
-    }
-  }
-  void putLoCased() (char ch) nothrow @trusted {
-    if (ch >= 'A' && ch <= 'Z') ch += 32;
-    put(ch);
-  }
-  void putStrLoCasedFirst() (const(char)[] s...) nothrow @trusted {
-    if (s.length == 0) return;
-    putLoCased(s[0]);
-    put(s[1..$]);
-  }
-  @property string asString () const nothrow @trusted @nogc => cast(string)buf[0..bufpos];
 }
 
 
@@ -478,13 +440,15 @@ public alias LayTextW = LayTextImpl!wchar; ///
 public alias LayTextD = LayTextImpl!dchar; ///
 
 // layouted text
-public final class LayTextImpl(TBT=char) if (is(TBT == char) || is(TBT == wchar) || is(TBT == dchar)) {
+public final class LayTextImpl(TBT=char) if (isAnyCharType!TBT) {
 public:
   alias CharType = TBT; ///
 
   // special control characters
   enum dchar EndLineCh = 0x2028; // 0x0085 is treated like whitespace
   enum dchar EndParaCh = 0x2029;
+  enum dchar NonBreakingSpaceCh = 0xa0;
+  enum dchar SoftHyphenCh = 0xad;
 
 private:
   void ensurePool(ubyte pow2, bool clear, T) (uint want, ref T* ptr, ref uint used, ref uint alloced) nothrow @nogc {
@@ -512,7 +476,7 @@ private:
     }
   }
 
-  TBT* ltext;
+  CharType* ltext;
   uint charsUsed, charsAllocated;
 
   static char[] utfEncode (char[] buf, dchar ch) nothrow @trusted @nogc {
@@ -543,7 +507,7 @@ private:
     assert(0, "wtf?!");
   }
 
-  static if (is(TBT == char)) {
+  static if (is(CharType == char)) {
     void putChars (const(char)[] str...) nothrow @nogc {
       import core.stdc.string : memcpy;
       if (str.length == 0) return;
@@ -552,7 +516,7 @@ private:
       memcpy(ltext+charsUsed, str.ptr, cast(uint)str.length);
       charsUsed += cast(uint)str.length;
     }
-    void putChars(XCT) (const(XCT)[] str...) nothrow @nogc if (is(XCT == wchar) || is(XCT == dchar)) {
+    void putChars(XCT) (const(XCT)[] str...) nothrow @nogc if (isWideCharType!XCT) {
       import core.stdc.string : memcpy;
       //if (str.length >= int.max/2) throw new Exception("string too long");
       char[4] buf = void;
@@ -570,24 +534,24 @@ private:
       if (str.length == 0) return;
       if (str.length >= int.max/4/dchar.sizeof) assert(0, "string too long");
       ensurePool!(16, false)(cast(uint)str.length, ltext, charsUsed, charsAllocated);
-      TBT* dp = ltext+charsUsed;
-      foreach (char xch; str) *dp++ = cast(TBT)xch;
+      CharType* dp = ltext+charsUsed;
+      foreach (char xch; str) *dp++ = cast(CharType)xch;
       charsUsed += cast(uint)str.length;
     }
-    void putChars(XCT) (const(XCT)[] str...) nothrow @nogc if (is(XCT == wchar) || is(XCT == dchar)) {
+    void putChars(XCT) (const(XCT)[] str...) nothrow @nogc if (isWideCharType!XCT) {
       import core.stdc.string : memcpy;
       if (str.length == 0) return;
       if (str.length >= int.max/4/dchar.sizeof) assert(0, "string too long");
       ensurePool!(16, false)(cast(uint)str.length, ltext, charsUsed, charsAllocated);
-      static if (is(XCT == TBT)) {
+      static if (is(XCT == CharType)) {
         memcpy(ltext+charsUsed, str.ptr, cast(uint)str.length*dchar.sizeof);
       } else {
-        TBT* dp = ltext+charsUsed;
+        CharType* dp = ltext+charsUsed;
         foreach (XCT xch; str) {
-          static if (is(TBT == wchar)) {
-            *dp++ = cast(TBT)(xch > wchar.max ? '?' : xch);
+          static if (is(CharType == wchar)) {
+            *dp++ = cast(CharType)(xch > wchar.max ? '?' : xch);
           } else {
-            *dp++ = cast(TBT)xch;
+            *dp++ = cast(CharType)xch;
           }
         }
       }
@@ -818,7 +782,7 @@ public:
   LayWord* wordByIndex (uint idx) pure nothrow @trusted @nogc => (idx < wordsUsed ? words+idx : null);
 
   /// get textual representation of the given word
-  @property const(TBT)[] wordText (in ref LayWord w) const pure nothrow @trusted @nogc => (w.wstart <= w.wend ? ltext[w.wstart..w.wend] : null);
+  @property const(CharType)[] wordText (in ref LayWord w) const pure nothrow @trusted @nogc => (w.wstart <= w.wend ? ltext[w.wstart..w.wend] : null);
 
   /// get number of lines
   @property int lineCount () const pure nothrow @safe @nogc => cast(int)linesUsed;
@@ -894,6 +858,12 @@ public:
   /// end current paragraph
   void endPara () nothrow @trusted @nogc => put(EndParaCh);
 
+  /// put non-breaking space
+  void putNBSP () nothrow @trusted @nogc => put(NonBreakingSpaceCh);
+
+  /// put soft hypen
+  void putSoftHypen () nothrow @trusted @nogc => put(SoftHyphenCh);
+
   /// add "object" into text -- special thing that knows it's dimensions
   void putObject (LayObject obj) @trusted {
     import std.algorithm : max, min;
@@ -908,7 +878,7 @@ public:
     just = newJust;
     // create special word
     auto w = allocWord!true();
-    w.wstart = cast(dchar)mObjects.length; // store object index
+    w.wstart = cast(uint)mObjects.length; // store object index
     w.wend = 0;
     mObjects ~= obj;
     w.style = style;
@@ -926,12 +896,6 @@ public:
     w.just = just;
     w.paraPad = -1;
   }
-
-  /// put non-breaking space
-  void putNBSP () nothrow @trusted @nogc { put(cast(dchar)0xa0); }
-
-  /// put soft hypen
-  void putSoftHypen () nothrow @trusted @nogc { put(cast(dchar)0xad); }
 
   /// put "expander" (it will expand to take all unused line width on finalization).
   /// it line contains more than one expander, all expanders will try to get same width.
@@ -971,7 +935,7 @@ public:
   }
 
   /// add text to layouter; it is ok to mix (valid) utf-8 and dchars here
-  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) {
     if (str.length == 0) return;
 
     dchar curCh; // 0: no more chars

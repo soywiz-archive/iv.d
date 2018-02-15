@@ -36,8 +36,8 @@
 module iv.nanovg.nanovg is aliced;
 private:
 
+import iv.meta;
 import iv.vfs;
-import iv.vfs.util;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -443,16 +443,13 @@ public struct NVGGlyphPosition {
 }
 
 ///
-public struct NVGTextRow(CT) if (is(CT == char) || is(CT == wchar) || is(CT == dchar)) {
+public struct NVGTextRow(CT) if (isAnyCharType!CT) {
   alias CharType = CT;
-  //const(char)[] str;
-  //const(dchar)[] dstr;
   const(CT)[] s;
   int start;        /// Index in the input text where the row starts.
   int end;          /// Index in the input text where the row ends (one past the last character).
   float width;      /// Logical width of the row.
   float minx, maxx; /// Actual bounds of the row. Logical with and bounds can differ because of kerning and some parts over extending.
-  //@property bool isChar () const pure nothrow @trusted @nogc => return (str.ptr !is null); } // Is this char or dchar row?
   /// Get rest of the string.
   @property const(CT)[] rest () const pure nothrow @trusted @nogc => (end <= s.length ? s[end..$] : null);
   /// Get current row.
@@ -3129,7 +3126,7 @@ void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) nothrow @tru
 }
 
 /// Draws text string at specified location. Returns next x position.
-public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow @trusted @nogc if (isAnyCharType!T) {
   NVGstate* state = nvg__getState(ctx);
   FONStextIter!T iter, prevIter;
   FONSquad q;
@@ -3194,7 +3191,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
 /** Draws multi-line text string at specified location wrapped at the specified width. If end is specified only the sub-string up to the end is drawn.
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation). */
-public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) nothrow @trusted @nogc if (isAnyCharType!T) {
   NVGstate* state = nvg__getState(ctx);
   if (state.fontId == FONS_INVALID) return;
 
@@ -3235,7 +3232,7 @@ private template isGoodPositionDelegate(DG) {
  * Measured values are returned in local coordinate space.
  */
 public NVGGlyphPosition[] textGlyphPositions(T) (NVGContext ctx, float x, float y, const(T)[] str, NVGGlyphPosition[] positions) nothrow @trusted @nogc
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   if (str.length == 0 || positions.length == 0) return positions[0..0];
   usize posnum;
@@ -3248,7 +3245,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
 
 /// Ditto.
 public int textGlyphPositions(T, DG) (NVGContext ctx, float x, float y, const(T)[] str, scope DG dg)
-if ((is(T == char) || is(T == wchar) || is(T == dchar)) && isGoodPositionDelegate!DG)
+if (isAnyCharType!T && isGoodPositionDelegate!DG)
 {
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
@@ -3302,7 +3299,7 @@ private template isGoodRowDelegate(CT, DG) {
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation).
  */
 public NVGTextRow!T[] textBreakLines(T) (NVGContext ctx, const(T)[] str, float breakRowWidth, NVGTextRow!T[] rows) nothrow @trusted @nogc
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   if (rows.length == 0) return rows;
   if (rows.length > int.max-1) rows = rows[0..int.max-1];
@@ -3316,7 +3313,7 @@ if (is(T == char) || is(T == wchar) || is(T == dchar))
 
 /// Ditto.
 public int textBreakLines(T, DG) (NVGContext ctx, const(T)[] str, float breakRowWidth, scope DG dg)
-if ((is(T == char) || is(T == wchar) || is(T == dchar)) && isGoodRowDelegate!(T, DG))
+if (isAnyCharType!T && isGoodRowDelegate!(T, DG))
 {
   import std.traits : ReturnType;
   static if (is(ReturnType!dg == void)) enum RetBool = false; else enum RetBool = true;
@@ -3581,15 +3578,13 @@ public:
   }
 
   /// Is this iterator valid?
-  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null); }
+  @property bool valid () const pure nothrow @safe @nogc => (ctx !is null);
 
   /// Add chars.
-  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
-    if (ctx !is null) fsiter.put(str[]);
-  }
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) { if (ctx !is null) fsiter.put(str[]); }
 
   /// Return current advance
-  @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null ? fsiter.advance*invscale : 0); }
+  @property float advance () const pure nothrow @safe @nogc => (ctx !is null ? fsiter.advance*invscale : 0);
 
   /// Return current text bounds.
   void getBounds (ref float[4] bounds) nothrow @trusted @nogc {
@@ -3630,7 +3625,7 @@ public:
  * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
  * Measured values are returned in local coordinate space.
  */
-public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, float[] bounds) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, float[] bounds) if (isAnyCharType!T) {
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
@@ -3661,7 +3656,7 @@ public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, fl
 }
 
 /// Ditto.
-public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str, float[] bounds) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str, float[] bounds) if (isAnyCharType!T) {
   NVGstate* state = nvg__getState(ctx);
   NVGTextRow!T[2] rows;
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
@@ -3840,7 +3835,7 @@ struct FONSquad {
   float x1=0, y1=0, s1=0, t1=0;
 }
 
-struct FONStextIter(CT) if (is(CT == char) || is(CT == wchar) || is(CT == dchar)) {
+struct FONStextIter(CT) if (isAnyCharType!CT) {
   alias CharType = CT;
   float x=0, y=0, nextx=0, nexty=0, scale=0, spacing=0;
   uint codepoint;
@@ -5002,7 +4997,7 @@ public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* st
 }
 +/
 
-public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float x, float y, const(T)[] str) if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float x, float y, const(T)[] str) if (isAnyCharType!T) {
   if (stash is null || iter is null) return false;
 
   FONSstate* state = fons__getState(stash);
@@ -5190,9 +5185,9 @@ public:
   }
 
 public:
-  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null); }
+  @property bool valid () const pure nothrow @safe @nogc => (state !is null);
 
-  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (is(T == char) || is(T == wchar) || is(T == dchar)) {
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) {
     enum DoCodePointMixin = q{
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur);
       if (glyph !is null) {
@@ -5291,7 +5286,7 @@ public:
 }
 
 public float fonsTextBounds(T) (FONScontext* stash, float x, float y, const(T)[] str, float[] bounds) nothrow @trusted @nogc
-if (is(T == char) || is(T == wchar) || is(T == dchar))
+if (isAnyCharType!T)
 {
   FONSstate* state = fons__getState(stash);
   uint codepoint;
