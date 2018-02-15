@@ -200,6 +200,7 @@ struct NSVG {
     byte strokeDashCount;     // Number of dash values in dash array.
     LineJoin strokeLineJoin;      // Stroke join type.
     LineCap strokeLineCap;       // Stroke cap type.
+    float miterLimit;         // Miter limit
     FillRule fillRule;            // Fill rule, see FillRule.
     /*Flags*/ubyte flags;              // Logical or of NSVG_FLAGS_* flags
     float[4] bounds;          // Tight bounding box of the shape [minx,miny,maxx,maxy].
@@ -732,6 +733,7 @@ struct Attrib {
   int strokeDashCount;
   NSVG.LineJoin strokeLineJoin;
   NSVG.LineCap strokeLineCap;
+  float miterLimit;
   NSVG.FillRule fillRule;
   float fontSize;
   uint stopColor;
@@ -940,6 +942,7 @@ Parser* nsvg__createParser () {
   p.attr[0].strokeWidth = 1;
   p.attr[0].strokeLineJoin = NSVG.LineJoin.Miter;
   p.attr[0].strokeLineCap = NSVG.LineCap.Butt;
+  p.attr[0].miterLimit = 4;
   p.attr[0].fillRule = NSVG.FillRule.NonZero;
   p.attr[0].hasFill = 1;
   p.attr[0].visible = 1;
@@ -1227,6 +1230,7 @@ void nsvg__addShape (Parser* p) {
   for (i = 0; i < attr.strokeDashCount; i++) shape.strokeDashArray[i] = attr.strokeDashArray[i]*scale;
   shape.strokeLineJoin = attr.strokeLineJoin;
   shape.strokeLineCap = attr.strokeLineCap;
+  shape.miterLimit = attr.miterLimit;
   shape.fillRule = attr.fillRule;
   shape.opacity = attr.opacity;
 
@@ -1629,6 +1633,13 @@ float nsvg__parseOpacity (const(char)[] str) {
   return val;
 }
 
+float nsvg__parseMiterLimit (const(char)[] str) {
+  float val = 0;
+  xsscanf(str, "%f", val);
+  if (val < 0.0f) val = 0.0f;
+  return val;
+}
+
 Units nsvg__parseUnits (const(char)[] units) {
   if (units.length && units.ptr[0] == '%') return Units.percent;
   if (units.length == 2) {
@@ -1964,6 +1975,8 @@ bool nsvg__parseAttr (Parser* p, const(char)[] name, const(char)[] value) {
     attr.strokeLineCap = nsvg__parseLineCap(value);
   } else if (name == "stroke-linejoin") {
     attr.strokeLineJoin = nsvg__parseLineJoin(value);
+  } else if (name == "stroke-miterlimit") {
+    attr.miterLimit = nsvg__parseMiterLimit(value);
   } else if (name == "fill-rule") {
     attr.fillRule = nsvg__parseFillRule(value);
   } else if (name == "font-size") {
@@ -3793,7 +3806,7 @@ void nsvg__flattenShapeStroke (NSVGrasterizer r, NSVG.Shape* shape, float scale)
   int i, j, closed;
   NSVG.Path* path;
   NSVGpoint* p0, p1;
-  float miterLimit = 4;
+  float miterLimit = shape.miterLimit;
   int lineJoin = shape.strokeLineJoin;
   int lineCap = shape.strokeLineCap;
   float lineWidth = shape.strokeWidth*scale;
