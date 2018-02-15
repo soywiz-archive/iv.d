@@ -2974,12 +2974,12 @@ float nsvg__viewAlign (float content, float container, int type) {
 }
 
 void nsvg__scaleGradient (NSVG.Gradient* grad, float tx, float ty, float sx, float sy) {
-  grad.xform[0] *= sx;
-  grad.xform[1] *= sx;
-  grad.xform[2] *= sy;
-  grad.xform[3] *= sy;
-  grad.xform[4] += tx*sx;
-  grad.xform[5] += ty*sx;
+  float[6] t = void;
+  nsvg__xformSetTranslation(t.ptr, tx, ty);
+  nsvg__xformMultiply(grad.xform.ptr, t.ptr);
+
+  nsvg__xformSetScale(t.ptr, sx, sy);
+  nsvg__xformMultiply(grad.xform.ptr, t.ptr);
 }
 
 void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
