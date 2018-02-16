@@ -578,7 +578,7 @@ public struct NVGPaint {
   float[2] extent;
   float radius;
   float feather;
-  NVGColor innerColor;
+  NVGColor innerColor; // this can be used to modulate image fill
   NVGColor outerColor;
   int image;
 }
@@ -7461,4 +7461,3 @@ static if (NVG_HAS_FONTCONFIG) {
     }
   }
 }
-
