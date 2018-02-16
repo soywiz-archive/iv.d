@@ -4257,7 +4257,7 @@ int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, 
         { import core.stdc.stdio : printf; printf("kern for %u:%u: %d %d (size=%g)\n", glyph1, glyph2, ftKerning.x, ftKerning.y, cast(double)size); }
       }
     }
-    return cast(int)(ftKerning.x+(ftKerning.x < 0 ? -32 : 32)>>6); // round up and convert to integer
+    return cast(int)(ftKerning.x+(ftKerning.x < 0 ? -31 : 32)>>6); // round up and convert to integer
   }
 }
 
