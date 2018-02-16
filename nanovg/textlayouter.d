@@ -65,10 +65,11 @@ public abstract class LayObject {
 public final class LayFontStash {
 public:
   FONScontext* fs;
-  // list of known font faces, should be filled by caller when this object created
-  // DO NOT MODIFY!
-  int[string] fontfaces;
-  string[int] fontfaceids;
+
+private:
+  char[64] lastFontFace;
+  int lastFFlen;
+  int lastFFid = -1;
 
 private:
   bool killFontStash;
@@ -77,24 +78,38 @@ private:
 
 public:
   /// create new fontstash
-  this () {
-    FONSparams fontParams;
-    fontParams.width = 1024/*NVG_INIT_FONTIMAGE_SIZE*/;
-    fontParams.height = 1024/*NVG_INIT_FONTIMAGE_SIZE*/;
-    fontParams.flags = FONS_ZERO_TOPLEFT;
-    fs = fonsCreateInternal(&fontParams);
-    if (fs is null) throw new Exception("error creating font stash");
-    killFontStash = true;
-    fs.fonsResetAtlas(1024, 1024);
-    fonsSetSpacing(fs, 0);
-    fonsSetBlur(fs, 0);
-    fonsSetAlign(fs, NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline));
+  /// if `nvg` is not null, use its fontstash.
+  /// WARNING! this object SHOULD NOT outlive `nvg`!
+  this (NVGContext nvg=null) {
+    if (nvg !is null && nvg.fs !is null) {
+      killFontStash = false;
+      fs = nvg.fs;
+      //{ import core.stdc.stdio; printf("*** reusing font stash!\n"); }
+    } else {
+      FONSparams fontParams;
+      // image size doesn't matter, as we won't create font bitmaps here anyway (we only interested in dimensions)
+      fontParams.width = 32;//1024/*NVG_INIT_FONTIMAGE_SIZE*/;
+      fontParams.height = 32;//1024/*NVG_INIT_FONTIMAGE_SIZE*/;
+      fontParams.flags = FONS_ZERO_TOPLEFT;
+      fs = fonsCreateInternal(&fontParams);
+      if (fs is null) throw new Exception("error creating font stash");
+      killFontStash = true;
+      //fs.fonsResetAtlas(1024, 1024);
+      // image size doesn't matter, as we won't create font bitmaps here anyway (we only interested in dimensions)
+      //fs.fonsResetAtlas(32, 32);
+      fonsSetSpacing(fs, 0);
+      fonsSetBlur(fs, 0);
+      fonsSetAlign(fs, NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline));
+    }
   }
 
   ///
   ~this () nothrow @nogc { freeFontStash(); }
 
-  void freeFontStash () nothrow @nogc {
+  ///
+  @property ownsFontContext () const pure nothrow @safe @nogc => killFontStash;
+
+  private void freeFontStash () nothrow @nogc {
     if (killFontStash && fs !is null) fs.fonsDeleteInternal();
     killFontStash = false;
     fs = null;
@@ -106,9 +121,10 @@ public:
       throw new Exception("invalid font face name");
     } else {
       if (name.length == 0) throw new Exception("invalid font face name");
-      if (name in fontfaces) throw new Exception("duplicate font '"~name.idup~"'");
+      //if (name in fontfaces) throw new Exception("duplicate font '"~name.idup~"'");
       int fid = fs.fonsAddFont(name, path);
-      if (fid < 0) throw new Exception("font '"~name~"' is not found at '"~path.idup~"'");
+      if (fid == FONS_INVALID) throw new Exception("font '"~name~"' is not found at '"~path.idup~"'");
+      /*
       static if (is(T == string)) {
         fontfaces[name] = fid;
         fontfaceids[fid] = name;
@@ -117,19 +133,41 @@ public:
         fontfaces[n] = fid;
         fontfaceids[fid] = n;
       }
+      */
+      // reset font cache
+      lastFFlen = 0;
+      lastFFid = -1;
+      //{ import core.stdc.stdio; printf("loaded font: [%.*s] [%.*s]\n", cast(uint)name.length, name.ptr, cast(uint)path.length, path.ptr); }
     }
   }
 
   /// returns "font id" which can be used in `fontFace()`
   @property int fontFaceId (const(char)[] name) nothrow @safe @nogc {
-    if (auto fid = name in fontfaces) return *fid;
-    return -1;
+    if (lastFFlen == name.length && strEquCI(lastFontFace[0..lastFFlen], name)) {
+      assert(lastFFid != -1);
+    } else {
+      lastFFid = fonsGetFontByName(fs, name);
+      if (lastFFid != FONS_INVALID && name.length <= lastFontFace.length) {
+        lastFFlen = cast(int)name.length;
+        lastFontFace[0..lastFFlen] = name[];
+      } else {
+        lastFFlen = 0;
+      }
+    }
+    return lastFFid;
   }
 
-  /// returns font name for the given id (or `null` string)
-  @property string fontFace (int fid) nothrow @safe @nogc {
-    if (auto ff = fid in fontfaceids) return *ff;
-    return null;
+  /// returns font name for the given id (or `null`)
+  @property const(char)[] fontFace (int fid) nothrow @safe @nogc {
+    if (fid < 0) return null;
+    if (fid == lastFFid && lastFFlen > 0) return lastFontFace[0..lastFFlen];
+    auto res = fonsGetNameByIndex(fs, fid);
+    if (res.length > 0 && res.length <= lastFontFace.length) {
+      lastFFlen = cast(int)res.length;
+      lastFontFace[0..lastFFlen] = res[];
+      lastFFid = fid;
+    }
+    return res;
   }
 
   /// set current font according to the given style
@@ -208,6 +246,23 @@ public:
     if (asc !is null) *asc = lrintf(a);
     if (desc !is null) *desc = lrintf(d);
     if (lineh !is null) *lineh = lrintf(h);
+  }
+
+static private:
+  bool strEquCI (const(char)[] s0, const(char)[] s1) nothrow @trusted @nogc {
+    if (s0.length != s1.length) return false;
+    const(char)* sp0 = s0.ptr;
+    const(char)* sp1 = s1.ptr;
+    foreach (; 0..s0.length) {
+      char c0 = *sp0++;
+      char c1 = *sp1++;
+      if (c0 != c1) {
+        if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man tolower
+        if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man tolower
+        if (c0 != c1) return false;
+      }
+    }
+    return true;
   }
 }
 
@@ -850,7 +905,7 @@ public:
   }
 
   /// return font face for the given "font id"
-  @property string fontFace (int fid) nothrow @safe @nogc => (laf !is null ? laf.fontFace(fid) : null);
+  @property const(char)[] fontFace (int fid) nothrow @safe @nogc => (laf !is null ? laf.fontFace(fid) : null);
 
   /// end current line
   void endLine () nothrow @trusted @nogc => put(EndLineCh);
