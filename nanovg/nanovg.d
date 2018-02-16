@@ -4238,7 +4238,7 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
   }
 }
 
-int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
+float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
   FT_Vector ftKerning;
   version(none) {
     // fitted kerning
@@ -4250,14 +4250,27 @@ int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, 
     //FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_UNFITTED, &ftKerning);
     if (glyph1 <= 0 || glyph2 <= 0 || (font.font.face_flags&FT_FACE_FLAG_KERNING) == 0) return 0;
     if (FT_Set_Pixel_Sizes(font.font, 0, cast(FT_UInt)(size*cast(float)font.font.units_per_EM/cast(float)(font.font.ascender-font.font.descender)))) return 0;
-    FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_DEFAULT, &ftKerning);
+    if (FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_DEFAULT, &ftKerning)) return 0;
     version(none) {
       if (ftKerning.x) {
         //{ import core.stdc.stdio : printf; printf("has kerning: %u\n", cast(uint)(font.font.face_flags&FT_FACE_FLAG_KERNING)); }
         { import core.stdc.stdio : printf; printf("kern for %u:%u: %d %d (size=%g)\n", glyph1, glyph2, ftKerning.x, ftKerning.y, cast(double)size); }
       }
     }
-    return cast(int)(ftKerning.x+(ftKerning.x < 0 ? -31 : 32)>>6); // round up and convert to integer
+    version(none) {
+      FT_Vector kk;
+      if (FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_UNSCALED, &kk)) assert(0, "wtf?!");
+      auto kadvfrac = FT_MulFix(kk.x, font.font.size.metrics.x_scale); // 1/64 of pixel
+      //return cast(int)((kadvfrac/*+(kadvfrac < 0 ? -32 : 32)*/)>>6);
+      //assert(ftKerning.x == kadvfrac);
+      if (ftKerning.x || kadvfrac) {
+        { import core.stdc.stdio : printf; printf("kern for %u:%u: %d %d (%d) (size=%g)\n", glyph1, glyph2, ftKerning.x, cast(int)kadvfrac, cast(int)(kadvfrac+(kadvfrac < 0 ? -31 : 32)>>6), cast(double)size); }
+      }
+      //return cast(int)(kadvfrac+(kadvfrac < 0 ? -31 : 32)>>6); // round up and convert to integer
+      return kadvfrac/64.0f;
+    }
+    //return cast(int)(ftKerning.x+(ftKerning.x < 0 ? -31 : 32)>>6); // round up and convert to integer
+    return ftKerning.x/64.0f;
   }
 }
 
@@ -4303,7 +4316,7 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
   stbtt_MakeGlyphBitmap(&font.font, output, outWidth, outHeight, outStride, scaleX, scaleY, glyph);
 }
 
-int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
+float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
   return stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2);
 }
 
@@ -5233,11 +5246,10 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
 }
 
 void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float size, float scale, float spacing, float* x, float* y, FONSquad* q) nothrow @trusted @nogc {
-  //float rx, ry, xoff, yoff, x0, y0, x1, y1;
-
   if (prevGlyphIndex >= 0) {
-    float adv = fons__tt_getGlyphKernAdvance(&font.font, size, prevGlyphIndex, glyph.index)*scale;
-    *x += cast(int)(adv+spacing+0.5f);
+    immutable float adv = fons__tt_getGlyphKernAdvance(&font.font, size, prevGlyphIndex, glyph.index)/**scale*/; //k8: do we really need scale here?
+    //if (adv != 0) { import core.stdc.stdio; printf("adv=%g (scale=%g; spacing=%g)\n", cast(double)adv, cast(double)scale, cast(double)spacing); }
+    *x += cast(int)(adv+spacing /*+0.5f*/); //k8: for me, it looks better this way (with non-aa fonts)
   }
 
   // Each glyph has 2px border to allow good interpolation,
