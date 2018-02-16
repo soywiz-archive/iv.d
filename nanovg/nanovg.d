@@ -4238,7 +4238,7 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
   }
 }
 
-int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) nothrow @trusted @nogc {
+int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
   FT_Vector ftKerning;
   version(none) {
     // fitted kerning
@@ -4247,9 +4247,16 @@ int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) 
     return cast(int)ftKerning.x; // round up and convert to integer
   } else {
     // unfitted kerning
-    FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_UNFITTED, &ftKerning);
-    //{ import core.stdc.stdio : printf; printf("has kerning: %u\n", cast(uint)(font.font.face_flags&FT_FACE_FLAG_KERNING)); }
-    //{ import core.stdc.stdio : printf; printf("kern for %u:%u: %d %d\n", glyph1, glyph2, ftKerning.x, ftKerning.y); }
+    //FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_UNFITTED, &ftKerning);
+    if (glyph1 <= 0 || glyph2 <= 0 || (font.font.face_flags&FT_FACE_FLAG_KERNING) == 0) return 0;
+    if (FT_Set_Pixel_Sizes(font.font, 0, cast(FT_UInt)(size*cast(float)font.font.units_per_EM/cast(float)(font.font.ascender-font.font.descender)))) return 0;
+    FT_Get_Kerning(font.font, glyph1, glyph2, FT_KERNING_DEFAULT, &ftKerning);
+    version(none) {
+      if (ftKerning.x) {
+        //{ import core.stdc.stdio : printf; printf("has kerning: %u\n", cast(uint)(font.font.face_flags&FT_FACE_FLAG_KERNING)); }
+        { import core.stdc.stdio : printf; printf("kern for %u:%u: %d %d (size=%g)\n", glyph1, glyph2, ftKerning.x, ftKerning.y, cast(double)size); }
+      }
+    }
     return cast(int)(ftKerning.x+(ftKerning.x < 0 ? -32 : 32)>>6); // round up and convert to integer
   }
 }
@@ -4296,7 +4303,7 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
   stbtt_MakeGlyphBitmap(&font.font, output, outWidth, outHeight, outStride, scaleX, scaleY, glyph);
 }
 
-int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, int glyph1, int glyph2) nothrow @trusted @nogc {
+int fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
   return stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2);
 }
 
@@ -5225,11 +5232,11 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   return glyph;
 }
 
-void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float scale, float spacing, float* x, float* y, FONSquad* q) nothrow @trusted @nogc {
+void fons__getQuad (FONScontext* stash, FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float size, float scale, float spacing, float* x, float* y, FONSquad* q) nothrow @trusted @nogc {
   //float rx, ry, xoff, yoff, x0, y0, x1, y1;
 
   if (prevGlyphIndex >= 0) {
-    float adv = fons__tt_getGlyphKernAdvance(&font.font, prevGlyphIndex, glyph.index)*scale;
+    float adv = fons__tt_getGlyphKernAdvance(&font.font, size, prevGlyphIndex, glyph.index)*scale;
     *x += cast(int)(adv+spacing+0.5f);
   }
 
@@ -5360,7 +5367,7 @@ public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* st
     if (fons__decutf8(&utf8state, &codepoint, *cast(const(ubyte)*)str)) continue;
     glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_REQUIRED);
     if (glyph !is null) {
-      fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
+      fons__getQuad(stash, font, prevGlyphIndex, glyph, isize/10.0f, scale, state.spacing, &x, &y, &q);
 
       if (stash.nverts+6 > FONS_VERTEX_COUNT) fons__flush(stash);
 
@@ -5447,7 +5454,7 @@ public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) 
       iter.y = iter.nexty;
       glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur, iter.bitmapOption);
       if (glyph !is null) {
-        fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
+        fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.isize/10.0f, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
         iter.prevGlyphIndex = glyph.index;
       } else {
         iter.prevGlyphIndex = -1;
@@ -5466,7 +5473,7 @@ public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) 
     iter.y = iter.nexty;
     glyph = fons__getGlyph(stash, iter.font, iter.codepoint, iter.isize, iter.iblur, iter.bitmapOption);
     if (glyph !is null) {
-      fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
+      fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.isize/10.0f, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
       iter.prevGlyphIndex = glyph.index;
     } else {
       iter.prevGlyphIndex = -1;
@@ -5575,7 +5582,7 @@ public:
     enum DoCodePointMixin = q{
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
       if (glyph !is null) {
-        fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
+        fons__getQuad(stash, font, prevGlyphIndex, glyph, isize/10.0f, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
         if (q.x1 > maxx) maxx = q.x1;
         if (stash.params.flags&FONS_ZERO_TOPLEFT) {
@@ -5706,7 +5713,7 @@ if (isAnyCharType!T)
       if (utf8state) continue;
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
       if (glyph !is null) {
-        fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
+        fons__getQuad(stash, font, prevGlyphIndex, glyph, isize/10.0f, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
         if (q.x1 > maxx) maxx = q.x1;
         if (stash.params.flags&FONS_ZERO_TOPLEFT) {
@@ -5729,7 +5736,7 @@ if (isAnyCharType!T)
       codepoint = cast(uint)ch;
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
       if (glyph !is null) {
-        fons__getQuad(stash, font, prevGlyphIndex, glyph, scale, state.spacing, &x, &y, &q);
+        fons__getQuad(stash, font, prevGlyphIndex, glyph, isize/10.0f, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
         if (q.x1 > maxx) maxx = q.x1;
         if (stash.params.flags&FONS_ZERO_TOPLEFT) {
