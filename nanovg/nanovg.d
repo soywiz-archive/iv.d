@@ -3040,6 +3040,23 @@ public void roundedRect (NVGContext ctx, in float x, in float y, in float w, in 
   ctx.roundedRectVarying(x, y, w, h, r, r, r, r);
 }
 
+/// Creates new rounded rectangle shaped sub-path. Specify ellipse width and height to round corners according to it.
+public void roundedRectEllipse (NVGContext ctx, in float x, in float y, in float w, in float h, in float rw, in float rh) nothrow @trusted @nogc {
+  if (rw < 0.1f || rh < 0.1f) { rect(ctx, x, y, w, h); return; }
+  nvg__appendCommands(ctx,
+    NVGcommands.MoveTo, x+rw, y,
+    NVGcommands.LineTo, x+w-rw, y,
+    NVGcommands.BezierTo, x+w-rw*(1-NVG_KAPPA90), y, x+w, y+rh*(1-NVG_KAPPA90), x+w, y+rh,
+    NVGcommands.LineTo, x+w, y+h-rh,
+    NVGcommands.BezierTo, x+w, y+h-rh*(1-NVG_KAPPA90), x+w-rw*(1-NVG_KAPPA90), y+h, x+w-rw, y+h,
+    NVGcommands.LineTo, x+rw, y+h,
+    NVGcommands.BezierTo, x+rw*(1-NVG_KAPPA90), y+h, x, y+h-rh*(1-NVG_KAPPA90), x, y+h-rh,
+    NVGcommands.LineTo, x, y+rh,
+    NVGcommands.BezierTo, x, y+rh*(1-NVG_KAPPA90), x+rw*(1-NVG_KAPPA90), y, x+rw, y,
+    NVGcommands.Close,
+  );
+}
+
 /// Creates new rounded rectangle shaped sub-path. This one allows you to specify different rounding radii for each corner.
 public void roundedRectVarying (NVGContext ctx, in float x, in float y, in float w, in float h, in float radTopLeft, in float radTopRight, in float radBottomRight, in float radBottomLeft) nothrow @trusted @nogc {
   if (radTopLeft < 0.1f && radTopRight < 0.1f && radBottomRight < 0.1f && radBottomLeft < 0.1f) {
