@@ -5,7 +5,14 @@ import iv.fontconfig;
 void main () {
   if (!FcInit()) assert(0, "cannot init fontconfig");
   //scope(exit) FcFini(); // that segfaults, lol. packard, please, kill yourself.
-  FcPattern* pat = FcNameParse("Arial:pixelsize=16");
+  //FcPattern* pat = FcNameParse("Arial:pixelsize=16");
+  //FcPattern* pat = FcNameParse("Arial"); // works too
+  //FcPattern* pat = FcNameParse("/usr/share/fonts/TTF/arial.ttf"); // returns substitute
+  //FcPattern* pat = FcNameParse("Arial:bold");
+  //FcPattern* pat = FcNameParse("Arial:italic");
+  //FcPattern* pat = FcNameParse("Arial:italic:bold");
+  //FcPattern* pat = FcNameParse("Arial:bold:italic");
+  FcPattern* pat = FcNameParse("Courier New:bold:italic");
   if (pat is null) assert(0, "cannot parse font name");
   if (!FcConfigSubstitute(null, pat, FcMatchPattern)) assert(0, "cannot find fontconfig substitute");
   FcDefaultSubstitute(pat);
