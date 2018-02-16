@@ -19,7 +19,7 @@ void main () {
           FcPatternGetString(font, FC_FAMILY, 0, &family) == FcResultMatch &&
           FcPatternGetString(font, FC_STYLE, 0, &style) == FcResultMatch)
       {
-        conwriteln("file: ", file, " (family: <", family, ">; style: ", style, ")");
+        conwriteln("family: <", family, ">; style: ", style, "); file: ", file);
       }
     }
     FcFontSetDestroy(fs);
