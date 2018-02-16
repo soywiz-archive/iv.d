@@ -795,7 +795,7 @@ enum NVG_MAX_STATES         = 32;
 
 enum NVG_KAPPA90 = 0.5522847493f; // Length proportional to radius of a cubic bezier handle for 90deg arcs.
 
-enum NVGcommands {
+enum Command {
   MoveTo = 0,
   LineTo = 1,
   BezierTo = 2,
@@ -803,7 +803,7 @@ enum NVGcommands {
   Winding = 4,
 }
 
-enum NVGpointFlags : int {
+enum PointFlag : int {
   Corner = 0x01,
   Left = 0x02,
   Bevel = 0x04,
@@ -2018,7 +2018,7 @@ void nvg__appendCommands (NVGContext ctx, const(float)[] vals...) nothrow @trust
     assert(ctx.ncommands+nvals <= ctx.ccommands);
   }
 
-  if (cast(int)vals.ptr[0] != NVGcommands.Close && cast(int)vals.ptr[0] != NVGcommands.Winding) {
+  if (cast(int)vals.ptr[0] != Command.Close && cast(int)vals.ptr[0] != Command.Winding) {
     assert(nvals >= 3);
     ctx.commandx = vals.ptr[nvals-2];
     ctx.commandy = vals.ptr[nvals-1];
@@ -2033,24 +2033,24 @@ void nvg__appendCommands (NVGContext ctx, const(float)[] vals...) nothrow @trust
   int i = nvals;
   while (i > 0) {
     int nlen = 1;
-    final switch (cast(NVGcommands)(*vp)) {
-      case NVGcommands.MoveTo:
-      case NVGcommands.LineTo:
+    final switch (cast(Command)(*vp)) {
+      case Command.MoveTo:
+      case Command.LineTo:
         assert(i >= 3);
         nvgTransformPoint(vp+1, vp+2, state.xform[], vp[1], vp[2]);
         nlen = 3;
         break;
-      case NVGcommands.BezierTo:
+      case Command.BezierTo:
         assert(i >= 7);
         nvgTransformPoint(vp+1, vp+2, state.xform[], vp[1], vp[2]);
         nvgTransformPoint(vp+3, vp+4, state.xform[], vp[3], vp[4]);
         nvgTransformPoint(vp+5, vp+6, state.xform[], vp[5], vp[6]);
         nlen = 7;
         break;
-      case NVGcommands.Close:
+      case Command.Close:
         nlen = 1;
         break;
-      case NVGcommands.Winding:
+      case Command.Winding:
         nlen = 2;
         break;
     }
@@ -2246,37 +2246,37 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
   // flatten
   int i = 0;
   while (i < ctx.ncommands) {
-    final switch (cast(NVGcommands)ctx.commands[i]) {
-      case NVGcommands.MoveTo:
+    final switch (cast(Command)ctx.commands[i]) {
+      case Command.MoveTo:
         assert(i+3 <= ctx.ncommands);
         nvg__addPath(ctx);
         p = &ctx.commands[i+1];
-        nvg__addPoint(ctx, p[0], p[1], NVGpointFlags.Corner);
+        nvg__addPoint(ctx, p[0], p[1], PointFlag.Corner);
         i += 3;
         break;
-      case NVGcommands.LineTo:
+      case Command.LineTo:
         assert(i+3 <= ctx.ncommands);
         p = &ctx.commands[i+1];
-        nvg__addPoint(ctx, p[0], p[1], NVGpointFlags.Corner);
+        nvg__addPoint(ctx, p[0], p[1], PointFlag.Corner);
         i += 3;
         break;
-      case NVGcommands.BezierTo:
+      case Command.BezierTo:
         assert(i+7 <= ctx.ncommands);
         last = nvg__lastPoint(ctx);
         if (last !is null) {
           cp1 = &ctx.commands[i+1];
           cp2 = &ctx.commands[i+3];
           p = &ctx.commands[i+5];
-          nvg__tesselateBezier(ctx, last.x, last.y, cp1[0], cp1[1], cp2[0], cp2[1], p[0], p[1], 0, NVGpointFlags.Corner);
+          nvg__tesselateBezier(ctx, last.x, last.y, cp1[0], cp1[1], cp2[0], cp2[1], p[0], p[1], 0, PointFlag.Corner);
         }
         i += 7;
         break;
-      case NVGcommands.Close:
+      case Command.Close:
         assert(i+1 <= ctx.ncommands);
         nvg__closePath(ctx);
         ++i;
         break;
-      case NVGcommands.Winding:
+      case Command.Winding:
         assert(i+2 <= ctx.ncommands);
         nvg__pathWinding(ctx, cast(NVGWinding)ctx.commands[i+1]);
         i += 2;
@@ -2350,9 +2350,9 @@ NVGvertex* nvg__roundJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
   float dly1 = -p1.dx;
   //NVG_NOTUSED(fringe);
 
-  if (p1.flags&NVGpointFlags.Left) {
+  if (p1.flags&PointFlag.Left) {
     float lx0 = void, ly0 = void, lx1 = void, ly1 = void;
-    nvg__chooseBevel(p1.flags&NVGpointFlags.InnerBevelPR, p0, p1, lw, &lx0, &ly0, &lx1, &ly1);
+    nvg__chooseBevel(p1.flags&PointFlag.InnerBevelPR, p0, p1, lw, &lx0, &ly0, &lx1, &ly1);
     immutable float a0 = nvg__atan2f(-dly0, -dlx0);
     float a1 = nvg__atan2f(-dly1, -dlx1);
     if (a1 > a0) a1 -= NVG_PI*2;
@@ -2375,7 +2375,7 @@ NVGvertex* nvg__roundJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
 
   } else {
     float rx0 = void, ry0 = void, rx1 = void, ry1 = void;
-    nvg__chooseBevel(p1.flags&NVGpointFlags.InnerBevelPR, p0, p1, -rw, &rx0, &ry0, &rx1, &ry1);
+    nvg__chooseBevel(p1.flags&PointFlag.InnerBevelPR, p0, p1, -rw, &rx0, &ry0, &rx1, &ry1);
     immutable float a0 = nvg__atan2f(dly0, dlx0);
     float a1 = nvg__atan2f(dly1, dlx1);
     if (a1 < a0) a1 += NVG_PI*2;
@@ -2409,13 +2409,13 @@ NVGvertex* nvg__bevelJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
   float dly1 = -p1.dx;
   //NVG_NOTUSED(fringe);
 
-  if (p1.flags&NVGpointFlags.Left) {
-    nvg__chooseBevel(p1.flags&NVGpointFlags.InnerBevelPR, p0, p1, lw, &lx0, &ly0, &lx1, &ly1);
+  if (p1.flags&PointFlag.Left) {
+    nvg__chooseBevel(p1.flags&PointFlag.InnerBevelPR, p0, p1, lw, &lx0, &ly0, &lx1, &ly1);
 
     nvg__vset(dst, lx0, ly0, lu, 1); ++dst;
     nvg__vset(dst, p1.x-dlx0*rw, p1.y-dly0*rw, ru, 1); ++dst;
 
-    if (p1.flags&NVGpointFlags.Bevel) {
+    if (p1.flags&PointFlag.Bevel) {
       nvg__vset(dst, lx0, ly0, lu, 1); ++dst;
       nvg__vset(dst, p1.x-dlx0*rw, p1.y-dly0*rw, ru, 1); ++dst;
 
@@ -2439,12 +2439,12 @@ NVGvertex* nvg__bevelJoin (NVGvertex* dst, NVGpoint* p0, NVGpoint* p1, float lw,
     nvg__vset(dst, p1.x-dlx1*rw, p1.y-dly1*rw, ru, 1); ++dst;
 
   } else {
-    nvg__chooseBevel(p1.flags&NVGpointFlags.InnerBevelPR, p0, p1, -rw, &rx0, &ry0, &rx1, &ry1);
+    nvg__chooseBevel(p1.flags&PointFlag.InnerBevelPR, p0, p1, -rw, &rx0, &ry0, &rx1, &ry1);
 
     nvg__vset(dst, p1.x+dlx0*lw, p1.y+dly0*lw, lu, 1); ++dst;
     nvg__vset(dst, rx0, ry0, ru, 1); ++dst;
 
-    if (p1.flags&NVGpointFlags.Bevel) {
+    if (p1.flags&PointFlag.Bevel) {
       nvg__vset(dst, p1.x+dlx0*lw, p1.y+dly0*lw, lu, 1); ++dst;
       nvg__vset(dst, rx0, ry0, ru, 1); ++dst;
 
@@ -2568,27 +2568,27 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
       }
 
       // Clear flags, but keep the corner.
-      p1.flags = (p1.flags&NVGpointFlags.Corner) ? NVGpointFlags.Corner : 0;
+      p1.flags = (p1.flags&PointFlag.Corner) ? PointFlag.Corner : 0;
 
       // Keep track of left turns.
       immutable float cross = p1.dx*p0.dy-p0.dx*p1.dy;
       if (cross > 0.0f) {
         nleft++;
-        p1.flags |= NVGpointFlags.Left;
+        p1.flags |= PointFlag.Left;
       }
 
       // Calculate if we should use bevel or miter for inner join.
       immutable float limit = nvg__max(1.01f, nvg__min(p0.len, p1.len)*iw);
-      if ((dmr2*limit*limit) < 1.0f) p1.flags |= NVGpointFlags.InnerBevelPR;
+      if ((dmr2*limit*limit) < 1.0f) p1.flags |= PointFlag.InnerBevelPR;
 
       // Check to see if the corner needs to be beveled.
-      if (p1.flags&NVGpointFlags.Corner) {
+      if (p1.flags&PointFlag.Corner) {
         if ((dmr2*miterLimit*miterLimit) < 1.0f || lineJoin == NVGLineCap.Bevel || lineJoin == NVGLineCap.Round) {
-          p1.flags |= NVGpointFlags.Bevel;
+          p1.flags |= PointFlag.Bevel;
         }
       }
 
-      if ((p1.flags&(NVGpointFlags.Bevel|NVGpointFlags.InnerBevelPR)) != 0) path.nbevel++;
+      if ((p1.flags&(PointFlag.Bevel|PointFlag.InnerBevelPR)) != 0) path.nbevel++;
 
       p0 = p1++;
     }
@@ -2673,7 +2673,7 @@ int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float
     }
 
     foreach (int j; s..e) {
-      if ((p1.flags&(NVGpointFlags.Bevel|NVGpointFlags.InnerBevelPR)) != 0) {
+      if ((p1.flags&(PointFlag.Bevel|PointFlag.InnerBevelPR)) != 0) {
         if (lineJoin == NVGLineCap.Round) {
           dst = nvg__roundJoin(dst, p0, p1, w, w, 0, 1, ncap, aa);
         } else {
@@ -2751,12 +2751,12 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
       p0 = &pts[path.count-1];
       p1 = &pts[0];
       foreach (int j; 0..path.count) {
-        if (p1.flags&NVGpointFlags.Bevel) {
+        if (p1.flags&PointFlag.Bevel) {
           float dlx0 = p0.dy;
           float dly0 = -p0.dx;
           float dlx1 = p1.dy;
           float dly1 = -p1.dx;
-          if (p1.flags&NVGpointFlags.Left) {
+          if (p1.flags&PointFlag.Left) {
             float lx = p1.x+p1.dmx*woff;
             float ly = p1.y+p1.dmy*woff;
             nvg__vset(dst, lx, ly, 0.5f, 1); ++dst;
@@ -2804,7 +2804,7 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
       p1 = &pts[0];
 
       foreach (int j; 0..path.count) {
-        if ((p1.flags&(NVGpointFlags.Bevel|NVGpointFlags.InnerBevelPR)) != 0) {
+        if ((p1.flags&(PointFlag.Bevel|PointFlag.InnerBevelPR)) != 0) {
           dst = nvg__bevelJoin(dst, p0, p1, lw, rw, lu, ru, ctx.fringeWidth);
         } else {
           nvg__vset(dst, p1.x+(p1.dmx*lw), p1.y+(p1.dmy*lw), lu, 1); ++dst;
@@ -2856,17 +2856,17 @@ public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
 
 /// Starts new sub-path with specified point as first point.
 public void moveTo (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, NVGcommands.MoveTo, x, y);
+  nvg__appendCommands(ctx, Command.MoveTo, x, y);
 }
 
 /// Adds line segment from the last point in the path to the specified point.
 public void lineTo (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, NVGcommands.LineTo, x, y);
+  nvg__appendCommands(ctx, Command.LineTo, x, y);
 }
 
 /// Adds cubic bezier segment from last point in the path via two control points to the specified point.
 public void bezierTo (NVGContext ctx, in float c1x, in float c1y, in float c2x, in float c2y, in float x, in float y) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, NVGcommands.BezierTo, c1x, c1y, c2x, c2y, x, y);
+  nvg__appendCommands(ctx, Command.BezierTo, c1x, c1y, c2x, c2y, x, y);
 }
 
 /// Adds quadratic bezier segment from last point in the path via a control point to the specified point.
@@ -2874,7 +2874,7 @@ public void quadTo (NVGContext ctx, in float cx, in float cy, in float x, in flo
   immutable float x0 = ctx.commandx;
   immutable float y0 = ctx.commandy;
   nvg__appendCommands(ctx,
-    NVGcommands.BezierTo,
+    Command.BezierTo,
     x0+2.0f/3.0f*(cx-x0), y0+2.0f/3.0f*(cy-y0),
     x+2.0f/3.0f*(cx-x), y+2.0f/3.0f*(cy-y),
     x, y,
@@ -2937,17 +2937,17 @@ public void arcTo (NVGContext ctx, in float x1, in float y1, in float x2, in flo
 
 /// Closes current sub-path with a line segment.
 public void closePath (NVGContext ctx) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, NVGcommands.Close);
+  nvg__appendCommands(ctx, Command.Close);
 }
 
 /// Sets the current sub-path winding, see NVGWinding and NVGSolidity.
 public void pathWinding (NVGContext ctx, NVGWinding dir) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, NVGcommands.Winding, cast(float)dir);
+  nvg__appendCommands(ctx, Command.Winding, cast(float)dir);
 }
 
 /// Ditto.
 public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, NVGcommands.Winding, cast(float)dir);
+  nvg__appendCommands(ctx, Command.Winding, cast(float)dir);
 }
 
 /** Creates new circle arc shaped sub-path. The arc center is at (cx, cy), the arc radius is r,
@@ -2956,7 +2956,7 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc
  */
 public void arc (NVGContext ctx, in float cx, in float cy, in float r, in float a0, in float a1, NVGWinding dir) nothrow @trusted @nogc {
   float[3+5*7+100] vals = void;
-  int move = (ctx.ncommands > 0 ? NVGcommands.LineTo : NVGcommands.MoveTo);
+  int move = (ctx.ncommands > 0 ? Command.LineTo : Command.MoveTo);
 
   // Clamp angles
   float da = a1-a0;
@@ -3007,7 +3007,7 @@ public void arc (NVGContext ctx, in float cx, in float cy, in float r, in float 
         nvg__appendCommands(ctx, vals.ptr[0..nvals]);
         nvals = 0;
       }
-      vals.ptr[nvals++] = NVGcommands.BezierTo;
+      vals.ptr[nvals++] = Command.BezierTo;
       vals.ptr[nvals++] = px+ptanx;
       vals.ptr[nvals++] = py+ptany;
       vals.ptr[nvals++] = x-tanx;
@@ -3027,11 +3027,11 @@ public void arc (NVGContext ctx, in float cx, in float cy, in float r, in float 
 /// Creates new rectangle shaped sub-path.
 public void rect (NVGContext ctx, in float x, in float y, in float w, in float h) nothrow @trusted @nogc {
   nvg__appendCommands(ctx,
-    NVGcommands.MoveTo, x, y,
-    NVGcommands.LineTo, x, y+h,
-    NVGcommands.LineTo, x+w, y+h,
-    NVGcommands.LineTo, x+w, y,
-    NVGcommands.Close,
+    Command.MoveTo, x, y,
+    Command.LineTo, x, y+h,
+    Command.LineTo, x+w, y+h,
+    Command.LineTo, x+w, y,
+    Command.Close,
   );
 }
 
@@ -3044,16 +3044,16 @@ public void roundedRect (NVGContext ctx, in float x, in float y, in float w, in 
 public void roundedRectEllipse (NVGContext ctx, in float x, in float y, in float w, in float h, in float rw, in float rh) nothrow @trusted @nogc {
   if (rw < 0.1f || rh < 0.1f) { rect(ctx, x, y, w, h); return; }
   nvg__appendCommands(ctx,
-    NVGcommands.MoveTo, x+rw, y,
-    NVGcommands.LineTo, x+w-rw, y,
-    NVGcommands.BezierTo, x+w-rw*(1-NVG_KAPPA90), y, x+w, y+rh*(1-NVG_KAPPA90), x+w, y+rh,
-    NVGcommands.LineTo, x+w, y+h-rh,
-    NVGcommands.BezierTo, x+w, y+h-rh*(1-NVG_KAPPA90), x+w-rw*(1-NVG_KAPPA90), y+h, x+w-rw, y+h,
-    NVGcommands.LineTo, x+rw, y+h,
-    NVGcommands.BezierTo, x+rw*(1-NVG_KAPPA90), y+h, x, y+h-rh*(1-NVG_KAPPA90), x, y+h-rh,
-    NVGcommands.LineTo, x, y+rh,
-    NVGcommands.BezierTo, x, y+rh*(1-NVG_KAPPA90), x+rw*(1-NVG_KAPPA90), y, x+rw, y,
-    NVGcommands.Close,
+    Command.MoveTo, x+rw, y,
+    Command.LineTo, x+w-rw, y,
+    Command.BezierTo, x+w-rw*(1-NVG_KAPPA90), y, x+w, y+rh*(1-NVG_KAPPA90), x+w, y+rh,
+    Command.LineTo, x+w, y+h-rh,
+    Command.BezierTo, x+w, y+h-rh*(1-NVG_KAPPA90), x+w-rw*(1-NVG_KAPPA90), y+h, x+w-rw, y+h,
+    Command.LineTo, x+rw, y+h,
+    Command.BezierTo, x+rw*(1-NVG_KAPPA90), y+h, x, y+h-rh*(1-NVG_KAPPA90), x, y+h-rh,
+    Command.LineTo, x, y+rh,
+    Command.BezierTo, x, y+rh*(1-NVG_KAPPA90), x+rw*(1-NVG_KAPPA90), y, x+rw, y,
+    Command.Close,
   );
 }
 
@@ -3069,16 +3069,16 @@ public void roundedRectVarying (NVGContext ctx, in float x, in float y, in float
     immutable float rxTR = nvg__min(radTopRight, halfw)*nvg__sign(w), ryTR = nvg__min(radTopRight, halfh)*nvg__sign(h);
     immutable float rxTL = nvg__min(radTopLeft, halfw)*nvg__sign(w), ryTL = nvg__min(radTopLeft, halfh)*nvg__sign(h);
     nvg__appendCommands(ctx,
-      NVGcommands.MoveTo, x, y+ryTL,
-      NVGcommands.LineTo, x, y+h-ryBL,
-      NVGcommands.BezierTo, x, y+h-ryBL*(1-NVG_KAPPA90), x+rxBL*(1-NVG_KAPPA90), y+h, x+rxBL, y+h,
-      NVGcommands.LineTo, x+w-rxBR, y+h,
-      NVGcommands.BezierTo, x+w-rxBR*(1-NVG_KAPPA90), y+h, x+w, y+h-ryBR*(1-NVG_KAPPA90), x+w, y+h-ryBR,
-      NVGcommands.LineTo, x+w, y+ryTR,
-      NVGcommands.BezierTo, x+w, y+ryTR*(1-NVG_KAPPA90), x+w-rxTR*(1-NVG_KAPPA90), y, x+w-rxTR, y,
-      NVGcommands.LineTo, x+rxTL, y,
-      NVGcommands.BezierTo, x+rxTL*(1-NVG_KAPPA90), y, x, y+ryTL*(1-NVG_KAPPA90), x, y+ryTL,
-      NVGcommands.Close,
+      Command.MoveTo, x, y+ryTL,
+      Command.LineTo, x, y+h-ryBL,
+      Command.BezierTo, x, y+h-ryBL*(1-NVG_KAPPA90), x+rxBL*(1-NVG_KAPPA90), y+h, x+rxBL, y+h,
+      Command.LineTo, x+w-rxBR, y+h,
+      Command.BezierTo, x+w-rxBR*(1-NVG_KAPPA90), y+h, x+w, y+h-ryBR*(1-NVG_KAPPA90), x+w, y+h-ryBR,
+      Command.LineTo, x+w, y+ryTR,
+      Command.BezierTo, x+w, y+ryTR*(1-NVG_KAPPA90), x+w-rxTR*(1-NVG_KAPPA90), y, x+w-rxTR, y,
+      Command.LineTo, x+rxTL, y,
+      Command.BezierTo, x+rxTL*(1-NVG_KAPPA90), y, x, y+ryTL*(1-NVG_KAPPA90), x, y+ryTL,
+      Command.Close,
     );
   }
 }
@@ -3086,12 +3086,12 @@ public void roundedRectVarying (NVGContext ctx, in float x, in float y, in float
 /// Creates new ellipse shaped sub-path.
 public void ellipse (NVGContext ctx, in float cx, in float cy, in float rx, in float ry) nothrow @trusted @nogc {
   nvg__appendCommands(ctx,
-    NVGcommands.MoveTo, cx-rx, cy,
-    NVGcommands.BezierTo, cx-rx, cy+ry*NVG_KAPPA90, cx-rx*NVG_KAPPA90, cy+ry, cx, cy+ry,
-    NVGcommands.BezierTo, cx+rx*NVG_KAPPA90, cy+ry, cx+rx, cy+ry*NVG_KAPPA90, cx+rx, cy,
-    NVGcommands.BezierTo, cx+rx, cy-ry*NVG_KAPPA90, cx+rx*NVG_KAPPA90, cy-ry, cx, cy-ry,
-    NVGcommands.BezierTo, cx-rx*NVG_KAPPA90, cy-ry, cx-rx, cy-ry*NVG_KAPPA90, cx-rx, cy,
-    NVGcommands.Close,
+    Command.MoveTo, cx-rx, cy,
+    Command.BezierTo, cx-rx, cy+ry*NVG_KAPPA90, cx-rx*NVG_KAPPA90, cy+ry, cx, cy+ry,
+    Command.BezierTo, cx+rx*NVG_KAPPA90, cy+ry, cx+rx, cy+ry*NVG_KAPPA90, cx+rx, cy,
+    Command.BezierTo, cx+rx, cy-ry*NVG_KAPPA90, cx+rx*NVG_KAPPA90, cy-ry, cx, cy-ry,
+    Command.BezierTo, cx-rx*NVG_KAPPA90, cy-ry, cx-rx, cy-ry*NVG_KAPPA90, cx-rx, cy,
+    Command.Close,
   );
 }
 
