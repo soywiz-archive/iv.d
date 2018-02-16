@@ -166,26 +166,28 @@ struct NSVG {
 
   static struct Paint {
   pure nothrow @safe @nogc:
+    @disable this (this);
     PaintType type;
     union {
       uint color;
       Gradient* gradient;
     }
-    static uint rgb (ubyte r, ubyte g, ubyte b) { pragma(inline, true); return (r|(g<<8)|(b<<16)); }
+    static uint rgb (ubyte r, ubyte g, ubyte b) => (r|(g<<8)|(b<<16));
     @property const {
-      bool isNone () { pragma(inline, true); return (type == PaintType.None); }
-      bool isColor () { pragma(inline, true); return (type == PaintType.Color); }
+      bool isNone () => (type == PaintType.None);
+      bool isColor () => (type == PaintType.Color);
       // gradient types
-      bool isLinear () { pragma(inline, true); return (type == PaintType.LinearGradient); }
-      bool isRadial () { pragma(inline, true); return (type == PaintType.RadialGradient); }
+      bool isLinear () => (type == PaintType.LinearGradient);
+      bool isRadial () => (type == PaintType.RadialGradient);
       // color
-      ubyte r () { pragma(inline, true); return color&0xff; }
-      ubyte g () { pragma(inline, true); return (color>>8)&0xff; }
-      ubyte b () { pragma(inline, true); return (color>>16)&0xff; }
+      ubyte r () => color&0xff;
+      ubyte g () => (color>>8)&0xff;
+      ubyte b () => (color>>16)&0xff;
     }
   }
 
   static struct Path {
+    @disable this (this);
     float* pts;      // Cubic bezier points: x0,y0, [cpx1,cpx1,cpx2,cpy2,x1,y1], ...
     int npts;        // Total number of bezier points.
     char closed;     // Flag indicating if shapes should be treated as closed.
@@ -194,6 +196,7 @@ struct NSVG {
   }
 
   static struct Shape {
+    @disable this (this);
     char[64] id = 0;          // Optional 'id' attr of the shape or its group
     NSVG.Paint fill;          // Fill paint
     NSVG.Paint stroke;        // Stroke paint
@@ -210,11 +213,86 @@ struct NSVG {
     float[4] bounds;          // Tight bounding box of the shape [minx,miny,maxx,maxy].
     NSVG.Path* paths;         // Linked list of paths in the image.
     NSVG.Shape* next;         // Pointer to next shape, or null if last element.
+    @property bool visible () const pure nothrow @safe @nogc => ((flags&Visible) != 0);
+
+    // delegate can accept:
+    //   NSVG.Path*
+    //   const(NSVG.Path)*
+    //   ref NSVG.Path
+    //   in ref NSVG.Path
+    // delegate can return:
+    //   void
+    //   bool (true means `stop`)
+    void forEachPath(DG) (scope DG dg) inout
+    if (__traits(compiles, (){ DG xdg; NSVG.Path s; xdg(&s); }) ||
+        __traits(compiles, (){ DG xdg; NSVG.Path s; xdg(s); }))
+    {
+      if (dg is null) return;
+      enum WantPtr = __traits(compiles, (){ DG xdg; NSVG.Path s; xdg(&s); });
+      static if (WantPtr) {
+        enum HasRes = __traits(compiles, (){ DG xdg; NSVG.Path s; bool res = xdg(&s); });
+      } else {
+        enum HasRes = __traits(compiles, (){ DG xdg; NSVG.Path s; bool res = xdg(s); });
+      }
+      static if (__traits(compiles, (){ NSVG.Path* s = this.paths; })) {
+        alias TP = NSVG.Path*;
+      } else {
+        alias TP = const(NSVG.Path)*;
+      }
+      for (TP path = paths; path !is null; path = path.next) {
+        static if (HasRes) {
+          static if (WantPtr) {
+            if (dg(path)) return;
+          } else {
+            if (dg(*path)) return;
+          }
+        } else {
+          static if (WantPtr) dg(path); else dg(*path);
+        }
+      }
+    }
   }
 
   float width;        // Width of the image.
   float height;       // Height of the image.
   NSVG.Shape* shapes; // Linked list of shapes in the image.
+
+  // delegate can accept:
+  //   NSVG.Shape*
+  //   const(NSVG.Shape)*
+  //   ref NSVG.Shape
+  //   in ref NSVG.Shape
+  // delegate can return:
+  //   void
+  //   bool (true means `stop`)
+  void forEachShape(DG) (scope DG dg) inout
+  if (__traits(compiles, (){ DG xdg; NSVG.Shape s; xdg(&s); }) ||
+      __traits(compiles, (){ DG xdg; NSVG.Shape s; xdg(s); }))
+  {
+    if (dg is null) return;
+    enum WantPtr = __traits(compiles, (){ DG xdg; NSVG.Shape s; xdg(&s); });
+    static if (WantPtr) {
+      enum HasRes = __traits(compiles, (){ DG xdg; NSVG.Shape s; bool res = xdg(&s); });
+    } else {
+      enum HasRes = __traits(compiles, (){ DG xdg; NSVG.Shape s; bool res = xdg(s); });
+    }
+    static if (__traits(compiles, (){ NSVG.Shape* s = this.shapes; })) {
+      alias TP = NSVG.Shape*;
+    } else {
+      alias TP = const(NSVG.Shape)*;
+    }
+    for (TP shape = shapes; shape !is null; shape = shape.next) {
+      static if (HasRes) {
+        static if (WantPtr) {
+          if (dg(shape)) return;
+        } else {
+          if (dg(*shape)) return;
+        }
+      } else {
+        static if (WantPtr) dg(shape); else dg(*shape);
+      }
+    }
+  }
 }
 
 
