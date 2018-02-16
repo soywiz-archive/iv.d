@@ -26,10 +26,142 @@ import arsd.png;
 import arsd.jpeg;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
+void render (NVGContext nvg, const(NSVG)* image, float strokeWidthFactor=1) {
+  NVGPaint createLinearGradient (const(NSVG.Gradient)* gradient, float a) {
+    float[6] inverse = void;
+    float sx, sy, ex, ey;
+
+    nvgTransformInverse(inverse[], gradient.xform[]);
+    nvgTransformPoint(&sx, &sy, inverse[], 0, 0);
+    nvgTransformPoint(&ex, &ey, inverse[], 0, 1);
+
+    if (a < 0) a = 0; else if (a > 1) a = 1;
+    uint aa = cast(uint)(0xff*a)<<24;
+    return nvg.linearGradient(sx, sy, ex, ey,
+      NVGColor.fromUint((gradient.stops.ptr[0].color&0xffffff)|aa),
+      NVGColor.fromUint((gradient.stops.ptr[gradient.nstops-1].color&0xffffff)|aa));
+  }
+
+  NVGPaint createRadialGradient (const(NSVG.Gradient)* gradient, float a) {
+
+    float[6] inverse = void;
+    float cx, cy, r1, r2, inr, outr;
+
+    nvgTransformInverse(inverse[], gradient.xform[]);
+    nvgTransformPoint(&cx, &cy, inverse[], 0, 0);
+    nvgTransformPoint(&r1, &r2, inverse[], 0, 1);
+    outr = r2-cy;
+    inr = (gradient.nstops == 3 ? gradient.stops.ptr[1].offset*outr : 0);
+
+    if (a < 0) a = 0; else if (a > 1) a = 1;
+    uint aa = cast(uint)(0xff*a)<<24;
+    return nvg.radialGradient(cx, cy, inr, outr,
+      NVGColor.fromUint((gradient.stops.ptr[0].color&0xffffff)|aa),
+      NVGColor.fromUint((gradient.stops.ptr[gradient.nstops-1].color&0xffffff)|aa));
+  }
+
+
+  // iterate shapes
+  image.forEachShape((in ref NSVG.Shape shape) {
+    // skip invisible shape
+    if (!shape.visible) return;
+
+    nvg.beginPath();
+    bool pathHole = false;
+
+    // draw paths
+    shape.forEachPath((in ref NSVG.Path path) {
+      nvg.moveTo(path.pts[0], path.pts[1]);
+      for (int i = 0; i < path.npts-1; i += 3) {
+        const(float)* p = &path.pts[i*2];
+        nvg.bezierTo(p[2], p[3], p[4], p[5], p[6], p[7]);
+      }
+      if (path.closed) nvg.lineTo(path.pts[0], path.pts[1]);
+      if (pathHole) nvg.pathWinding(NVGSolidity.Hole); else nvg.pathWinding(NVGSolidity.Solid);
+      //if (pathHole) nvg.pathWinding(NVGSolidity.Hole);// else pathHole = true;
+      //pathHole = !pathHole; //k8
+      if (!pathHole) pathHole = true;
+    });
+
+    // fill
+    switch (shape.fill.type) {
+      case NSVG.PaintType.Color:
+        if (shape.opacity > 0) {
+          nvg.fillColor(NVGColor.fromUint(shape.fill.color));
+          nvg.fill();
+        }
+        break;
+      case NSVG.PaintType.LinearGradient:
+        if (shape.opacity > 0) {
+          nvg.fillPaint(createLinearGradient(shape.fill.gradient, shape.opacity));
+          nvg.fill();
+        }
+        break;
+      case NSVG.PaintType.RadialGradient:
+        if (shape.opacity > 0) {
+          nvg.fillPaint(createRadialGradient(shape.fill.gradient, shape.opacity));
+          nvg.fill();
+        }
+        break;
+      default:
+        break;
+    }
+
+    // set stroke/line
+    NVGLineCap join;
+    switch (shape.strokeLineJoin) {
+      case NSVG.LineJoin.Round: join = NVGLineCap.Round; break;
+      case NSVG.LineJoin.Bevel: join = NVGLineCap.Bevel; break;
+      case NSVG.LineJoin.Miter: goto default;
+      default: join = NVGLineCap.Miter; break;
+    }
+    NVGLineCap cap;
+    switch (shape.strokeLineCap) {
+      case NSVG.LineCap.Butt: cap = NVGLineCap.Butt; break;
+      case NSVG.LineCap.Round: cap = NVGLineCap.Round; break;
+      case NSVG.LineCap.Square: cap = NVGLineCap.Square; break;
+      default: cap = NVGLineCap.Square; break;
+    }
+
+    nvg.lineJoin(join);
+    nvg.lineCap(cap);
+    nvg.strokeWidth(shape.strokeWidth*strokeWidthFactor);
+
+    // draw line
+    switch (shape.stroke.type) {
+      case NSVG.PaintType.Color:
+        if (shape.opacity > 0) {
+          nvg.strokeColor(NVGColor.fromUint(shape.stroke.color));
+          nvg.stroke();
+        }
+        break;
+      case NSVG.PaintType.LinearGradient:
+        if (shape.opacity > 0) {
+          nvg.strokePaint(createLinearGradient(shape.stroke.gradient, shape.opacity));
+          nvg.stroke();
+        }
+        break;
+      case NSVG.PaintType.RadialGradient:
+        if (shape.opacity > 0) {
+          nvg.strokePaint(createRadialGradient(shape.stroke.gradient, shape.opacity));
+          nvg.stroke();
+        }
+        break;
+      default:
+        break;
+    }
+  });
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 __gshared int GWidth = 640;
 __gshared int GHeight = 480;
+__gshared bool useDirectRendering = false;
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 void main (string[] args) {
   import core.time;
 
@@ -70,6 +202,10 @@ void main (string[] args) {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
       addh = to!int(args[idx]);
+    } else if (a == "--nvg") {
+      useDirectRendering = true;
+    } else if (a == "--svg") {
+      useDirectRendering = false;
     } else if (a == "--") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
@@ -147,7 +283,10 @@ void main (string[] args) {
     if (vg !is null) {
       if (fps !is null) fps.update(dt);
       vg.beginFrame(GWidth, GHeight, 1);
-      { // draw image
+      if (useDirectRendering) {
+        vg.render(svg);
+      } else {
+        // draw image
         vg.beginPath();
         vg.rect(0, 0, GWidth, GHeight);
         vg.fillPaint(vg.imagePattern(0, 0, GWidth, GHeight, 0, vgimg, 1));
@@ -205,16 +344,14 @@ void main (string[] args) {
     delegate (KeyEvent event) {
       if (sdwindow.closed) return;
       if (!event.pressed) return;
-      switch (event.key) {
-        case Key.Escape: sdwindow.close(); break;
-        case Key.Space: drawFPS = !drawFPS; break;
-        default:
-      }
+      if (event == "Escape" || event == "C-Q") { sdwindow.close(); return; }
+      if (event == "D" || event == "V") { useDirectRendering = !useDirectRendering; sdwindow.redrawOpenGlScene(); return; }
+      if (event == "Space") { drawFPS = !drawFPS; return; }
     },
     delegate (MouseEvent event) {
     },
     delegate (dchar ch) {
-      if (ch == 'q') { doQuit = true; return; }
+      //if (ch == 'q') { doQuit = true; return; }
     },
   );
   closeWindow();
