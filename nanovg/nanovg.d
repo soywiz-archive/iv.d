@@ -147,6 +147,15 @@ The following code illustrates the OpenGL state touched by the rendering code:
 module iv.nanovg.nanovg is aliced;
 private:
 
+version(Posix) {
+  version(nanovg_disable_fontconfig) {
+    public enum NVG_HAS_FONTCONFIG = false;
+  } else {
+    import iv.fontconfig;
+    public enum NVG_HAS_FONTCONFIG = true;
+  }
+}
+
 import iv.meta;
 import iv.vfs;
 
@@ -862,7 +871,7 @@ private:
   float distTol;
   float fringeWidth;
   float devicePxRatio;
-  FONScontext* fs;
+  public FONScontext* fs; /// this is publis, so i can use it in text layouter, for example; WARNING: DON'T MODIFY!
   int[NVG_MAX_FONTIMAGES] fontImages;
   int fontImageIdx;
   int drawCallCount;
@@ -3201,7 +3210,11 @@ public alias NVGSectionDummy08 = void;
 /** Creates font by loading it from the disk from specified file name.
  * Returns handle to the font or FONS_INVALID (aka -1) on error.
  * use "fontname:noaa" as `name` to turn off antialiasing (if font driver supports that).
- * Maximum font name length is 63 chars, and it will be truncated. */
+ * Maximum font name length is 63 chars, and it will be truncated.
+ *
+ * On POSIX systems it is possible to use fontconfig font names too.
+ * `:noaa` in font path is still allowed, but it must be the last option.
+ */
 public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) nothrow @trusted {
   return fonsAddFont(ctx.fs, name, path);
 }
@@ -4324,6 +4337,7 @@ struct FONSfont {
   FONSttFontImpl font;
   char[64] name;
   uint namelen;
+  char[4096] path; //asciiz; TODO: malloc this?
   ubyte* data;
   int dataSize;
   bool freeData;
@@ -4784,12 +4798,28 @@ int fons__allocFont (FONScontext* stash, int atidx=-1) nothrow @trusted @nogc {
   }
 }
 
+private bool strEquCI (const(char)[] s0, const(char)[] s1) nothrow @trusted @nogc {
+  if (s0.length != s1.length) return false;
+  const(char)* sp0 = s0.ptr;
+  const(char)* sp1 = s1.ptr;
+  foreach (; 0..s0.length) {
+    char c0 = *sp0++;
+    char c1 = *sp1++;
+    if (c0 != c1) {
+      if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man tolower
+      if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man tolower
+      if (c0 != c1) return false;
+    }
+  }
+  return true;
+}
+
 private enum NoAlias = ":noaa";
 
 public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) nothrow @trusted {
   char[64+NoAlias.length] fontnamebuf = 0;
 
-  if (path.length == 0 || name.length == 0 || name == NoAlias) return FONS_INVALID;
+  if (path.length == 0 || name.length == 0 || strEquCI(name, NoAlias)) return FONS_INVALID;
   if (path.length > 1024) return FONS_INVALID; // arbitrary limit
 
   if (name.length > 63) name = name[0..63];
@@ -4797,53 +4827,112 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
   uint blen = cast(uint)name.length;
 
   // if font path ends with ":noaa", add this to font name instead
-  if (path.length >= NoAlias.length && path[$-NoAlias.length..$] == NoAlias) {
+  if (path.length >= NoAlias.length && strEquCI(path[$-NoAlias.length..$], NoAlias)) {
     path = path[0..$-NoAlias.length];
     if (path.length == 0) return FONS_INVALID;
-    if (name.length < NoAlias.length || name[$-NoAlias.length..$] != NoAlias) {
+    if (name.length < NoAlias.length || !strEquCI(name[$-NoAlias.length..$], NoAlias)) {
       if (name.length+NoAlias.length > 63) return FONS_INVALID;
       fontnamebuf[name.length..name.length+NoAlias.length] = NoAlias;
       blen += cast(uint)NoAlias.length;
     }
   }
   assert(fontnamebuf[blen] == 0);
-  //{ import core.stdc.stdio; printf("loading font '%.*s' [%s]...\n", cast(uint)path.length, path.ptr, fontnamebuf.ptr); }
 
-  try {
-    import core.stdc.stdlib : free, malloc;
-    auto fl = VFile(path);
-    auto dataSize = fl.size;
-    if (dataSize < 16 || dataSize > int.max/32) return FONS_INVALID;
-    ubyte* data = cast(ubyte*)malloc(cast(uint)dataSize);
-    if (data is null) assert(0, "out of memory in nanovg fontstash");
-    scope(failure) free(data); // oops
-    fl.rawReadExact(data[0..cast(uint)dataSize]);
-    fl.close();
-    auto xres = fonsAddFontMem(stash, fontnamebuf[0..blen], data, cast(int)dataSize, true);
-    if (xres == FONS_INVALID) free(data);
-    return xres;
-  } catch (Exception e) {
-    // oops; sorry
+  // find a font with the given name
+  int fidx = fonsGetFontByName!false(stash, fontnamebuf[0..blen]); // no substitutes
+  //{ import core.stdc.stdio; printf("loading font '%.*s' [%s] (fidx=%d)...\n", cast(uint)path.length, path.ptr, fontnamebuf.ptr, fidx); }
+
+  int loadFontFile (const(char)[] path) {
+    // check if we already has a loaded font with this name
+    if (fidx >= 0) {
+      import core.stdc.string : strlen;
+      auto plen = strlen(stash.fonts[fidx].path.ptr);
+      version(Posix) {
+        //{ import core.stdc.stdio; printf("+++ font [%.*s] was loaded from [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)stash.fonts[fidx].path.length, stash.fonts[fidx].path.ptr); }
+        if (plen == path.length && stash.fonts[fidx].path.ptr[0..plen] == path) {
+          //{ import core.stdc.stdio; printf("*** font [%.*s] already loaded from [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)plen, path.ptr); }
+          // i found her!
+          return fidx;
+        }
+      } else {
+        if (plen == path.length && strEquCI(stash.fonts[fidx].path.ptr[0..plen],  path)) {
+          // i found her!
+          return fidx;
+        }
+      }
+    }
+    version(Windows) {
+      // special shitdows check
+      foreach (immutable char ch; path) if (ch == ':') return FONS_INVALID;
+    }
+    // either no such font, or another file was loaded
+    //{ import core.stdc.stdio; printf("trying font [%.*s] from file [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)path.length, path.ptr); }
+    try {
+      import core.stdc.stdlib : free, malloc;
+      auto fl = VFile(path);
+      auto dataSize = fl.size;
+      if (dataSize < 16 || dataSize > int.max/32) return FONS_INVALID;
+      ubyte* data = cast(ubyte*)malloc(cast(uint)dataSize);
+      if (data is null) assert(0, "out of memory in nanovg fontstash");
+      scope(failure) free(data); // oops
+      fl.rawReadExact(data[0..cast(uint)dataSize]);
+      fl.close();
+      auto xres = fonsAddFontMem(stash, fontnamebuf[0..blen], data, cast(int)dataSize, true);
+      if (xres == FONS_INVALID) {
+        free(data);
+      } else {
+        // remember path
+        if (path.length <= stash.fonts[xres].path.length) stash.fonts[xres].path.ptr[0..path.length] = path[];
+      }
+      return xres;
+    } catch (Exception e) {
+      // oops; sorry
+    }
+    return FONS_INVALID;
   }
 
-  return FONS_INVALID;
+  // first try direct path
+  auto res = loadFontFile(path);
+  // if loading failed, try fontconfig (if fontconfig is available)
+  static if (NVG_HAS_FONTCONFIG) {
+    if (res == FONS_INVALID && fontconfigAvailable) {
+      import std.internal.cstring : tempCString;
+      FcPattern* pat = FcNameParse(path.tempCString);
+      if (pat !is null) {
+        if (FcConfigSubstitute(null, pat, FcMatchPattern)) {
+          FcDefaultSubstitute(pat);
+          // find the font
+          FcResult result;
+          FcPattern* font = FcFontMatch(null, pat, &result);
+          if (font !is null) {
+            char* file = null;
+            if (FcPatternGetString(font, FC_FILE, 0, &file) == FcResultMatch) {
+              if (file !is null && file[0]) {
+                import core.stdc.string : strlen;
+                res = loadFontFile(file[0..strlen(file)]);
+              }
+            }
+            FcPatternDestroy(font);
+          }
+        }
+      }
+      FcPatternDestroy(pat);
+    }
+  }
+  return res;
 }
 
 /// This will not free data on error!
 public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, bool freeData) nothrow @trusted @nogc {
   int i, ascent, descent, fh, lineGap;
-  FONSfont* oldfont = null;
-  int oldidx = -1;
 
   if (name.length == 0 || name == NoAlias) return FONS_INVALID;
   if (name.length > FONSfont.name.length-1) return FONS_INVALID; //name = name[0..FONSfont.name.length-1];
 
-  foreach (immutable xidx, FONSfont* xfont; stash.fonts[0..stash.nfonts]) {
-    if (xfont.namelen == name.length && xfont.name[0..xfont.namelen] == name[]) {
-      oldidx = cast(int)xidx;
-      oldfont = xfont;
-    }
-  }
+  // find a font with the given name
+  FONSfont* oldfont = null;
+  int oldidx = fonsGetFontByName!false(stash, name); // no substitutes
+  if (oldidx != FONS_INVALID) oldfont = stash.fonts[oldidx];
 
   //{ import core.stdc.stdio; printf("creating font [%.*s] (oidx=%d)...\n", cast(uint)name.length, name.ptr, oldidx); }
 
@@ -4875,7 +4964,7 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   if (!fons__tt_loadFont(stash, &font.font, data, dataSize)) {
     font.freeData = false; // we promised to don't free data on error
     fons__freeFont(font);
-    if (oldidx != -1) {
+    if (oldidx != FONS_INVALID) {
       stash.fonts[oldidx] = oldfont;
     } else {
       --stash.nfonts;
@@ -4895,22 +4984,31 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   return idx;
 }
 
-public int fonsGetFontByName (FONScontext* s, const(char)[] name) nothrow @trusted @nogc {
-  foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
-    if (font.namelen == name.length && font.name[0..font.namelen] == name[]) return cast(int)idx;
+// returns `null` on invalid index
+// WARNING! copy name, as name buffer can be invalidated by next fontstash API call!
+public const(char)[] fonsGetNameByIndex (FONScontext* stash, int idx) nothrow @trusted @nogc {
+  if (idx < 0 || idx >= stash.nfonts) return null;
+  return stash.fonts[idx].name[0..stash.fonts[idx].namelen];
+}
+
+// allowSubstitutes: check AA variants if exact name wasn't found?
+// return `FONS_INVALID` if no font was found
+public int fonsGetFontByName(bool allowSubstitutes=true) (FONScontext* stash, const(char)[] name) nothrow @trusted @nogc {
+  foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
+    if (strEquCI(name, font.name[0..font.namelen])) return cast(int)idx;
   }
   // not found, try variations
   if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
     // search for font name without ":noaa"
     name = name[0..$-NoAlias.length];
-    foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
-      if (font.namelen == name.length && font.name[0..font.namelen] == name[]) return cast(int)idx;
+    foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
+      if (strEquCI(name, font.name[0..font.namelen])) return cast(int)idx;
     }
   } else {
     // search for font name with ":noaa"
-    foreach (immutable idx, FONSfont* font; s.fonts[0..s.nfonts]) {
+    foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
       if (font.namelen == name.length+NoAlias.length) {
-        if (font.name[0..name.length] == name[] && font.name[name.length..font.namelen] == NoAlias) {
+        if (strEquCI(font.name[0..name.length], name[]) && strEquCI(font.name[name.length..font.namelen], NoAlias)) {
           //{ import std.stdio; writeln(font.name[0..name.length], " : ", name, " <", font.name[name.length..$], ">"); }
           return cast(int)idx;
         }
@@ -7312,3 +7410,19 @@ public GLuint glImageHandleGL2 (NVGContext ctx, int image) nothrow @trusted @nog
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
   return tex.tex;
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+static if (NVG_HAS_FONTCONFIG) {
+  __gshared bool fontconfigAvailable = false;
+  // initialize fontconfig
+  shared static this () {
+    if (FcInit()) {
+      fontconfigAvailable = true;
+    } else {
+      import core.stdc.stdio : stderr, fprintf;
+      stderr.fprintf("***NanoVG WARNING: cannot init fontconfig!\n");
+    }
+  }
+}
+
