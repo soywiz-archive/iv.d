@@ -3304,41 +3304,51 @@ public void currStrokeHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
   nvg__pickSceneInsert(ps, pp);
 }
 
-/// Fills ids with a list of the top most maxids ids under the specified position.
-/// Returns the slice of `ids`.
-public int[] hitTestAll (NVGcontext* ctx, float x, float y, uint kind, int[] ids) nothrow @trusted @nogc {
-  NVGpickScene* ps;
+private template IsGoodHitTestDG(DG) {
+  enum IsGoodHitTestDG =
+    __traits(compiles, (){ DG dg; bool res = dg(cast(int)42, cast(int)666); }) ||
+    __traits(compiles, (){ DG dg; dg(cast(int)42, cast(int)666); });
+}
+
+private template IsGoodHitTestInternalDG(DG) {
+  enum IsGoodHitTestInternalDG =
+    __traits(compiles, (){ DG dg; NVGpickPath* pp; bool res = dg(pp); }) ||
+    __traits(compiles, (){ DG dg; NVGpickPath* pp; dg(pp); });
+}
+
+/// Call delegate `dg` for each path under the specified position (in no particular order).
+/// Returns the id of the path for which delegate `dg` returned true or -1.
+/// dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
+public int hitTestDG(DG) (NVGcontext* ctx, float x, float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
+  if (ctx.pickScene is null) return -1;
+
+  NVGpickScene* ps = ctx.pickScene;
+  int levelwidth = 1<<(ps.nlevels-1);
+  int cellx = nvg__clamp(cast(int)(x/ps.xdim), 0, levelwidth);
+  int celly = nvg__clamp(cast(int)(y/ps.ydim), 0, levelwidth);
   int npicked = 0;
-  int hit;
-  int lvl;
-  int id;
-  int levelwidth;
-  int cellx, celly;
 
-  if (ctx.pickScene is null) return ids[0..0];
-
-  ps = ctx.pickScene;
-  levelwidth = 1<<(ps.nlevels-1);
-  cellx = nvg__clamp(cast(int)(x/ps.xdim), 0, levelwidth);
-  celly = nvg__clamp(cast(int)(y/ps.ydim), 0, levelwidth);
-
-  for (lvl = ps.nlevels-1; lvl >= 0; --lvl) {
+  for (int lvl = ps.nlevels-1; lvl >= 0; --lvl) {
     NVGpickPath* pp = ps.levels[lvl][celly*levelwidth+cellx];
     while (pp !is null) {
       if (nvg__pickPathTestBounds(ps, pp, x, y)) {
-        hit = 0;
+        int hit = 0;
         if ((kind&NVGPickKind.Stroke) && (pp.flags&NVG_PICK_STROKE)) hit = nvg__pickPathStroke(ps, pp, x, y);
         if (!hit && (kind&NVGPickKind.Fill) && (pp.flags&NVG_PICK_FILL)) hit = nvg__pickPath(ps, pp, x, y);
         if (hit) {
-          if (npicked == ps.cpicked) {
-            int cpicked = ps.cpicked+ps.cpicked;
-            NVGpickPath** picked = cast(NVGpickPath**)realloc(ps.picked, (NVGpickPath*).sizeof*ps.cpicked);
-            if (picked is null) break;
-            ps.cpicked = cpicked;
-            ps.picked = picked;
+          static if (IsGoodHitTestDG!DG) {
+            static if (__traits(compiles, (){ DG dg; bool res = dg(cast(int)42, cast(int)666); })) {
+              if (dg(pp.id, cast(int)pp.order)) return pp.id;
+            } else {
+              dg(pp.id, cast(int)pp.order);
+            }
+          } else {
+            static if (__traits(compiles, (){ DG dg; NVGpickPath* pp; bool res = dg(pp); })) {
+              if (dg(pp)) return pp.id;
+            } else {
+              dg(pp);
+            }
           }
-          ps.picked[npicked] = pp;
-          ++npicked;
         }
       }
       pp = pp.next;
@@ -3347,6 +3357,30 @@ public int[] hitTestAll (NVGcontext* ctx, float x, float y, uint kind, int[] ids
     celly >>= 1;
     levelwidth >>= 1;
   }
+
+  return -1;
+}
+
+/// Fills ids with a list of the top most hit ids under the specified position.
+/// Returns the slice of `ids`.
+public int[] hitTestAll (NVGcontext* ctx, float x, float y, uint kind, int[] ids) nothrow @trusted @nogc {
+  if (ctx.pickScene is null || ids.length == 0) return ids[0..0];
+
+  int npicked = 0;
+  NVGpickScene* ps = ctx.pickScene;
+
+  ctx.hitTestDG(x, y, kind, delegate (NVGpickPath* pp) {
+    if (npicked == ps.cpicked) {
+      int cpicked = ps.cpicked+ps.cpicked;
+      NVGpickPath** picked = cast(NVGpickPath**)realloc(ps.picked, (NVGpickPath*).sizeof*ps.cpicked);
+      if (picked is null) return true; // abort
+      ps.cpicked = cpicked;
+      ps.picked = picked;
+    }
+    ps.picked[npicked] = pp;
+    ++npicked;
+    return false; // go on
+  });
 
   qsort(ps.picked, npicked, (NVGpickPath*).sizeof, &nvg__comparePaths);
 
@@ -3357,43 +3391,20 @@ public int[] hitTestAll (NVGcontext* ctx, float x, float y, uint kind, int[] ids
   return ids[0..npicked];
 }
 
-/// Returns the id of the pickable shape containing x,y or -1 if not shape is found.
+/// Returns the id of the pickable shape containing x,y or -1 if no shape was found.
 public int hitTest (NVGcontext* ctx, float x, float y, uint kind) nothrow @trusted @nogc {
-  NVGpickScene* ps;
-  int levelwidth;
-  int cellx, celly;
-  int bestOrder = -1;
-  int bestID = -1;
-  int hit = 0;
-  int lvl;
-
   if (ctx.pickScene is null) return -1;
 
-  ps = ctx.pickScene;
+  NVGpickScene* ps = ctx.pickScene;
+  int bestOrder = -1;
+  int bestID = -1;
 
-  levelwidth = 1<<(ps.nlevels-1);
-  cellx = nvg__clamp(cast(int)(x/ps.xdim), 0, levelwidth-1);
-  celly = nvg__clamp(cast(int)(y/ps.ydim), 0, levelwidth-1);
-
-  for (lvl = ps.nlevels-1; lvl >= 0; --lvl) {
-    NVGpickPath* pp = ps.levels[lvl][celly*levelwidth+cellx];
-    while (pp !is null) {
-      if (nvg__pickPathTestBounds(ps, pp, x, y)) {
-        if ((kind&NVGPickKind.Stroke) && (pp.flags&NVG_PICK_STROKE)) hit = nvg__pickPathStroke(ps, pp, x, y);
-        if (!hit && (kind&NVGPickKind.Fill) && (pp.flags&NVG_PICK_FILL)) hit = nvg__pickPath(ps, pp, x, y);
-        if (hit) {
-          if (pp.order > bestOrder) {
-            bestOrder = pp.order;
-            bestID = pp.id;
-          }
-        }
-      }
-      pp = pp.next;
+  ctx.hitTestDG(x, y, kind, delegate (NVGpickPath* pp) {
+    if (pp.order > bestOrder) {
+      bestOrder = pp.order;
+      bestID = pp.id;
     }
-    cellx >>= 1;
-    celly >>= 1;
-    levelwidth >>= 1;
-  }
+  });
 
   return bestID;
 }
@@ -3402,45 +3413,32 @@ public int hitTest (NVGcontext* ctx, float x, float y, uint kind) nothrow @trust
 /// This operation can be done before rasterizing the current path.
 public bool hitTestCurrFill (NVGcontext* ctx, float x, float y) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-
   NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, 0);
-
-  if (nvg__pointInBounds(x, y, pp.bounds) == 0) return false;
-
-  bool hit = nvg__pickPath(ps, pp, x, y);
-
-  nvg__freePickPath(ps, pp);
-
-  ps.npoints = oldnpoints;
-  ps.nsegments = oldnsegments;
-
-  return hit;
+  scope(exit) {
+    nvg__freePickPath(ps, pp);
+    ps.npoints = oldnpoints;
+    ps.nsegments = oldnsegments;
+  }
+  return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPath(ps, pp, x, y) : false);
 }
 
 /// Returns `true` if the given point is within the stroke of the currently defined path.
 /// This operation can be done before rasterizing the current path.
 public bool hitTestCurrStroke (NVGcontext* ctx, float x, float y) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-
   NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, 1);
-
-  if (nvg__pointInBounds(x, y, pp.bounds) == 0) return false;
-
-  bool hit = nvg__pickPathStroke(ps, pp, x, y);
-
-  nvg__freePickPath(ps, pp);
-
-  ps.npoints = oldnpoints;
-  ps.nsegments = oldnsegments;
-
-  return hit;
+  scope(exit) {
+    nvg__freePickPath(ps, pp);
+    ps.npoints = oldnpoints;
+    ps.nsegments = oldnsegments;
+  }
+  return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPathStroke(ps, pp, x, y) : false);
 }
+
 
 nothrow @trusted @nogc {
 extern(C) {
