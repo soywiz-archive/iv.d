@@ -1987,7 +1987,6 @@ int nvg__ptEquals (float x1, float y1, float x2, float y2, float tol) pure nothr
 }
 
 float nvg__distPtSeg (float x, float y, float px, float py, float qx, float qy) pure nothrow @safe @nogc {
-  //float pqx, pqy, dx, dy, d, t;
   immutable float pqx = qx-px;
   immutable float pqy = qy-py;
   float dx = x-px;
@@ -3183,6 +3182,67 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
     ctx.strokeTriCount += path.nstroke-2;
     ++ctx.drawCallCount;
   }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/// <h1>Simple Picking</h1>
+//
+/** This is simple picking API, that allows you to detect if the given point is
+ * inside the latest filled/stroked path. Sadly, this can be done only *after*
+ * you made filling/stroking (i.e. your path is already drawn), so if you want to
+ * change path transparency, for example, you have to do that on the next frame.
+ * Sometimes you still can immediately redraw a path without noticable visual
+ * artefacts (for example, changing color of an opaque path without AA), though.
+ *
+ * Usage examples:
+ *
+ *   ---
+ *   nvg.beginPath();
+ *   nvg.fillColor(nvgRGB(0, 0, 255));
+ *   nvg.circle(100, 50, 20);
+ *   nvg.fill();
+ *   if (nvg.onFilledPath(mx, my)) {
+ *     // it is not recommended to do this, but...
+ *     nvg.fillColor(nvgRGBA(255, 0, 255));
+ *     nvg.fill();
+ *   }
+ *
+ */
+public alias NVGSectionDummy60 = void;
+
+/// Is point (mx, my) on the last stoked path? `tol` is a maximum distance from stroke.
+public bool isOnStroke (NVGContext ctx, in float mx, in float my, float tol=1) {
+  tol *= tol;
+  foreach (const ref path; ctx.cache.paths[0..ctx.cache.npaths]) {
+    if (path.nstroke == 0) continue;
+    for (int i = 0, j = path.nstroke-1; i < path.nstroke; j = i++) {
+      immutable ax = path.stroke[i].x;
+      immutable ay = path.stroke[i].y;
+      immutable bx = path.stroke[j].x;
+      immutable by = path.stroke[j].y;
+      if (nvg__distPtSeg(mx, my, ax, ay, bx, by) < tol) return true;
+    }
+  }
+  return false;
+}
+
+/// Is point (mx, my) on the last filled path?
+public bool isOnFill (NVGContext ctx, in float mx, in float my) {
+  bool res = false;
+  foreach (const ref path; ctx.cache.paths[0..ctx.cache.npaths]) {
+    if (path.nfill == 0) continue;
+    for (int i = 0, j = path.nfill-1; i < path.nfill; j = i++) {
+      immutable ay = path.fill[i].y;
+      immutable by = path.fill[j].y;
+      if ((ay > my) != (by > my)) {
+        immutable ax = path.fill[i].x;
+        immutable bx = path.fill[j].x;
+        if ((mx < (bx-ax)*(my-ay)/(by-ay)+ax)) res = !res;
+      }
+    }
+  }
+  return res;
 }
 
 
