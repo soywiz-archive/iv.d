@@ -79,7 +79,7 @@ Understanding Composite Paths
 
 Because of the way the rendering backend is build in NanoVG, drawing a composite path,
 that is path consisting from multiple paths defining holes and fills, is a bit more
-involved. NanoVG uses even-odd filling rule and by default the paths are wound in counter
+involved. NanoVG uses non-zero filling rule and by default the paths are wound in counter
 clockwise order. Keep that in mind when drawing using the low level draw API. In order to
 wind one of the predefined shapes as a hole, you should call `pathWinding(NVGSolidity.Hole)`,
 or `pathWinding(NVGSolidity.Solid)` *after* defining the path.
@@ -774,7 +774,7 @@ struct NVGparams {
   void function (void* uptr, int width, int height) nothrow @trusted @nogc renderViewport;
   void function (void* uptr) nothrow @trusted @nogc renderCancel;
   void function (void* uptr, NVGCompositeOperationState compositeOperation) nothrow @trusted @nogc renderFlush;
-  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderFill;
+  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc renderFill;
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
   void function (void* uptr) nothrow @trusted @nogc renderDelete;
@@ -829,6 +829,7 @@ struct NVGstate {
   float fontBlur;
   NVGTextAlign textAlign;
   int fontId;
+  bool evenOddMode; // use even-odd filling rule (required for some svgs); otherwise use non-zero fill
 }
 
 struct NVGpoint {
@@ -872,7 +873,7 @@ private:
   float distTol;
   float fringeWidth;
   float devicePxRatio;
-  public FONScontext* fs; /// this is publis, so i can use it in text layouter, for example; WARNING: DON'T MODIFY!
+  public FONScontext* fs; /// this is public, so i can use it in text layouter, for example; WARNING: DON'T MODIFY!
   int[NVG_MAX_FONTIMAGES] fontImages;
   int fontImageIdx;
   int drawCallCount;
@@ -1518,8 +1519,20 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   state.fontBlur = 0.0f;
   state.textAlign.reset;
   state.fontId = 0;
+  state.evenOddMode = false;
 }
 
+/// Sets filling mode to "even-odd".
+public void evenOddFill (NVGContext ctx) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  state.evenOddMode = true;
+}
+
+/// Sets filling mode to "non-zero" (this is default mode).
+public void nonZeroFill (NVGContext ctx) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  state.evenOddMode = false;
+}
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Render styles</h1>
@@ -3172,7 +3185,7 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
   fillPaint.innerColor.a *= state.alpha;
   fillPaint.outerColor.a *= state.alpha;
 
-  ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths);
+  ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
 
   // Count triangles
   foreach (int i; 0..ctx.cache.npaths) {
@@ -7885,6 +7898,7 @@ enum /*GLNVGcallType*/ {
 
 struct GLNVGcall {
   int type;
+  int evenOdd; // for fill
   int image;
   int pathOffset;
   int pathCount;
@@ -8479,16 +8493,21 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
 
   // Draw shapes
   glEnable(GL_STENCIL_TEST);
-  glnvg__stencilMask(gl, 0xff);
-  glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xff);
+  glnvg__stencilMask(gl, 0xffffffffU);
+  glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xffffffffU);
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
   // set bindpoint for solid loc
   glnvg__setUniforms(gl, call.uniformOffset, 0);
   glnvg__checkError(gl, "fill simple");
 
-  glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
-  glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
+  if (call.evenOdd) {
+    glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INVERT);
+    glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_INVERT);
+  } else {
+    glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
+    glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
+  }
   glDisable(GL_CULL_FACE);
   foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
   glEnable(GL_CULL_FACE);
@@ -8500,14 +8519,14 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   glnvg__checkError(gl, "fill fill");
 
   if (gl.flags&NVG_ANTIALIAS) {
-    glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xff);
+    glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xffffffffU);
     glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
     // Draw fringes
     foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
   }
 
   // Draw fill
-  glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xff);
+  glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xffffffffU);
   glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
   glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
 
@@ -8652,10 +8671,13 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
 
     foreach (int i; 0..gl.ncalls) {
       GLNVGcall* call = &gl.calls[i];
-           if (call.type == GLNVG_FILL) glnvg__fill(gl, call);
-      else if (call.type == GLNVG_CONVEXFILL) glnvg__convexFill(gl, call);
-      else if (call.type == GLNVG_STROKE) glnvg__stroke(gl, call);
-      else if (call.type == GLNVG_TRIANGLES) glnvg__triangles(gl, call);
+      switch (call.type) {
+        case GLNVG_FILL: glnvg__fill(gl, call); break;
+        case GLNVG_CONVEXFILL: glnvg__convexFill(gl, call); break;
+        case GLNVG_STROKE: glnvg__stroke(gl, call); break;
+        case GLNVG_TRIANGLES: glnvg__triangles(gl, call); break;
+        default: break;
+      }
     }
 
     glDisableVertexAttribArray(0);
@@ -8753,7 +8775,7 @@ void glnvg__vset (NVGvertex* vtx, float x, float y, float u, float v) nothrow @t
   vtx.v = v;
 }
 
-void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
+void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   NVGvertex* quad;
@@ -8763,6 +8785,7 @@ void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float 
   if (call is null || npaths < 1) return;
 
   call.type = GLNVG_FILL;
+  call.evenOdd = evenOdd;
   call.triangleCount = 4;
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
