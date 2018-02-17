@@ -118,3 +118,22 @@ if you can't figure out what to change in case the script is not working, or wha
 Aliced is probably not for you. go get vanilla dmd.
 
 and no, dub is not supported, and never will be.
+
+
+ok, some last words. to use IV with rdmd, clone IV like this:
+
+  mkdir /opt/dlibs
+  git clone git://repo.or.cz/iv.d.git /opt/dlibs/iv
+
+and add "-I/opt/dlibs" to 'dmd.conf' creation part in Aliced install script.
+it is advisable to add "-J/opt/dlibs/iv" too.
+
+note that it is IMPORTANT to clone IV in the way that it lands in iv/ directory,
+and to -I a directory of one level upper than iv/.
+
+also, it is VERY convenient to clone Adam D. Ruppe's ARSD repo too (i'm using it alot):
+
+  git clone https://github.com/adamdruppe/arsd.git /opt/dlibs/arsd
+
+there is nothing to add to 'dmd.conf' at this stage (only /opt/dlibs is required, and we
+already added it.)
