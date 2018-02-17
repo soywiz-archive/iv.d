@@ -794,6 +794,7 @@ enum NVG_INIT_VERTS_SIZE    = 256;
 enum NVG_MAX_STATES         = 32;
 
 enum NVG_KAPPA90 = 0.5522847493f; // Length proportional to radius of a cubic bezier handle for 90deg arcs.
+enum NVG_MIN_FEATHER = 0.001f; // it should be greater than zero, 'cause it is used in shader for divisions
 
 enum Command {
   MoveTo = 0,
@@ -1782,8 +1783,6 @@ public alias NVGSectionDummy05 = void;
  */
 public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, float ey, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
   NVGPaint p;
-  //float dx, dy, d;
-  //const float large = 1e5;
   enum large = 1e5f;
   //NVG_NOTUSED(ctx);
   memset(&p, 0, p.sizeof);
@@ -1809,7 +1808,7 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
 
   p.radius = 0.0f;
 
-  p.feather = nvg__max(1.0f, d);
+  p.feather = nvg__max(NVG_MIN_FEATHER, d);
 
   p.innerColor = icol;
   p.outerColor = ocol;
@@ -1837,7 +1836,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
 
   p.radius = r;
 
-  p.feather = nvg__max(1.0f, f);
+  p.feather = nvg__max(NVG_MIN_FEATHER, f);
 
   p.innerColor = icol;
   p.outerColor = ocol;
@@ -1865,7 +1864,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
 
   p.radius = r;
 
-  p.feather = nvg__max(1.0f, f);
+  p.feather = nvg__max(NVG_MIN_FEATHER, f);
 
   p.innerColor = icol;
   p.outerColor = ocol;
