@@ -1067,6 +1067,7 @@ package/*(iv.nanovg)*/ NVGparams* internalParams (NVGContext ctx) nothrow @trust
 // Destructor called by the render back-end.
 package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx is null) return;
+
   if (ctx.commands !is null) free(ctx.commands);
   if (ctx.cache !is null) nvg__deletePathCache(ctx.cache);
 
@@ -1083,7 +1084,14 @@ package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) nothrow @trusted @no
 
   if (ctx.pickScene !is null) nvg__deletePickScene(ctx.pickScene);
 
+  if (ctx.cleanup !is null) ctx.cleanup(ctx);
+
   free(ctx);
+}
+
+///
+public void kill (NVGContext ctx) nothrow @trusted @nogc {
+  ctx.deleteInternal();
 }
 
 /** Begin drawing a new frame.
