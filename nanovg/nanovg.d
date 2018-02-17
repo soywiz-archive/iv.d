@@ -660,45 +660,45 @@ private:
 
 ///
 public enum NVGBlendFactor {
-  ZERO = 1<<0,
-  ONE = 1<<1,
-  SRC_COLOR = 1<<2,
-  ONE_MINUS_SRC_COLOR = 1<<3,
-  DST_COLOR = 1<<4,
-  ONE_MINUS_DST_COLOR = 1<<5,
-  SRC_ALPHA = 1<<6,
-  ONE_MINUS_SRC_ALPHA = 1<<7,
-  DST_ALPHA = 1<<8,
-  ONE_MINUS_DST_ALPHA = 1<<9,
-  SRC_ALPHA_SATURATE = 1<<10,
+  ZERO = 1<<0, ///
+  ONE = 1<<1, ///
+  SRC_COLOR = 1<<2, ///
+  ONE_MINUS_SRC_COLOR = 1<<3, ///
+  DST_COLOR = 1<<4, ///
+  ONE_MINUS_DST_COLOR = 1<<5, ///
+  SRC_ALPHA = 1<<6, ///
+  ONE_MINUS_SRC_ALPHA = 1<<7, ///
+  DST_ALPHA = 1<<8, ///
+  ONE_MINUS_DST_ALPHA = 1<<9, ///
+  SRC_ALPHA_SATURATE = 1<<10, ///
 }
 
 ///
 public enum NVGCompositeOperation {
-  SOURCE_OVER,
-  SOURCE_IN,
-  SOURCE_OUT,
-  ATOP,
-  DESTINATION_OVER,
-  DESTINATION_IN,
-  DESTINATION_OUT,
-  DESTINATION_ATOP,
-  LIGHTER,
-  COPY,
-  XOR,
+  SOURCE_OVER, ///
+  SOURCE_IN, ///
+  SOURCE_OUT, ///
+  ATOP, ///
+  DESTINATION_OVER, ///
+  DESTINATION_IN, ///
+  DESTINATION_OUT, ///
+  DESTINATION_ATOP, ///
+  LIGHTER, ///
+  COPY, ///
+  XOR, ///
 }
 
 ///
 public struct NVGCompositeOperationState {
-  NVGBlendFactor srcRGB;
-  NVGBlendFactor dstRGB;
-  NVGBlendFactor srcAlpha;
-  NVGBlendFactor dstAlpha;
+  NVGBlendFactor srcRGB; ///
+  NVGBlendFactor dstRGB; ///
+  NVGBlendFactor srcAlpha; ///
+  NVGBlendFactor dstAlpha; ///
 }
 
 ///
 public struct NVGGlyphPosition {
-  usize strpos;    /// Position of the glyph in the input string.
+  usize strpos;     /// Position of the glyph in the input string.
   float x;          /// The x-coordinate of the logical glyph position.
   float minx, maxx; /// The bounds of the glyph shape.
 }
@@ -1168,18 +1168,18 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
  */
 public alias NVGSectionDummy00_00 = void;
 
-// Sets the composite operation. The op parameter should be one of NVGcompositeOperation.
+/// Sets the composite operation. The op parameter should be one of NVGcompositeOperation.
 void globalCompositeOperation (NVGContext ctx, NVGCompositeOperation op) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.compositeOperation = nvg__compositeOperationState(op);
 }
 
-// Sets the composite operation with custom pixel arithmetic. The parameters should be one of NVGblendFactor.
+/// Sets the composite operation with custom pixel arithmetic. The parameters should be one of NVGblendFactor.
 void globalCompositeBlendFunc (NVGContext ctx, NVGBlendFactor sfactor, NVGBlendFactor dfactor) nothrow @trusted @nogc {
   ctx.globalCompositeBlendFuncSeparate(sfactor, dfactor, sfactor, dfactor);
 }
 
-// Sets the composite operation with custom pixel arithmetic for RGB and alpha components separately. The parameters should be one of NVGblendFactor.
+/// Sets the composite operation with custom pixel arithmetic for RGB and alpha components separately. The parameters should be one of NVGblendFactor.
 void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NVGBlendFactor dstRGB, NVGBlendFactor srcAlpha, NVGBlendFactor dstAlpha) nothrow @trusted @nogc {
   NVGCompositeOperationState op;
   op.srcRGB = srcRGB;
