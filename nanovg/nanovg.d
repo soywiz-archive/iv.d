@@ -858,6 +858,10 @@ public alias NVGContext = NVGcontext*;
 /// Returns FontStash context of the given NanoVG context.
 FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs : null); }
 
+/// This delegate will be called if on `beginPath()` we had some drawn path, and before dropping it.
+/// You can register path for picking here (so your GUI lib can "just draw" controls).
+public void delegate (NVGContext ctx) nothrow @nogc nvgOnBeginPath; // because i'm evil!
+
 private struct NVGcontext {
 private:
   NVGparams params;
@@ -2855,7 +2859,9 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
 public alias NVGSectionDummy07 = void;
 
 /// Clears the current path and sub-paths.
+/// Will call `nvgOnBeginPath()` callback if current path is not empty.
 public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
+  if (ctx.ncommands > 0 && nvgOnBeginPath !is null) nvgOnBeginPath(ctx);
   ctx.ncommands = 0;
   nvg__clearPathCache(ctx);
 }
