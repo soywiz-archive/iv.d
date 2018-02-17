@@ -27,7 +27,9 @@ import arsd.jpeg;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-void render (NVGContext nvg, const(NSVG)* image, float strokeWidthFactor=1) {
+enum PathMode { EvenOdd, Flipping, AllHoles, NoHoles }
+
+void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flipping) {
   NVGPaint createLinearGradient (const(NSVG.Gradient)* gradient, float a) {
     float[6] inverse = void;
     float sx, sy, ex, ey;
@@ -44,15 +46,14 @@ void render (NVGContext nvg, const(NSVG)* image, float strokeWidthFactor=1) {
   }
 
   NVGPaint createRadialGradient (const(NSVG.Gradient)* gradient, float a) {
-
     float[6] inverse = void;
-    float cx, cy, r1, r2, inr, outr;
+    float cx, cy, r1, r2;
 
     nvgTransformInverse(inverse[], gradient.xform[]);
     nvgTransformPoint(&cx, &cy, inverse[], 0, 0);
     nvgTransformPoint(&r1, &r2, inverse[], 0, 1);
-    outr = r2-cy;
-    inr = (gradient.nstops == 3 ? gradient.stops.ptr[1].offset*outr : 0);
+    immutable float outr = r2-cy;
+    immutable float inr = (gradient.nstops == 3 ? gradient.stops.ptr[1].offset*outr : 0);
 
     if (a < 0) a = 0; else if (a > 1) a = 1;
     uint aa = cast(uint)(0xff*a)<<24;
@@ -61,16 +62,18 @@ void render (NVGContext nvg, const(NSVG)* image, float strokeWidthFactor=1) {
       NVGColor.fromUint((gradient.stops.ptr[gradient.nstops-1].color&0xffffff)|aa));
   }
 
+  nvg.save();
+  scope(exit) nvg.restore();
+  if (pathMode == PathMode.EvenOdd) nvg.evenOddFill(); else nvg.nonZeroFill();
 
   // iterate shapes
   image.forEachShape((in ref NSVG.Shape shape) {
     // skip invisible shape
     if (!shape.visible) return;
 
+    // draw paths
     nvg.beginPath();
     bool pathHole = false;
-
-    // draw paths
     shape.forEachPath((in ref NSVG.Path path) {
       nvg.moveTo(path.pts[0], path.pts[1]);
       for (int i = 0; i < path.npts-1; i += 3) {
@@ -78,10 +81,13 @@ void render (NVGContext nvg, const(NSVG)* image, float strokeWidthFactor=1) {
         nvg.bezierTo(p[2], p[3], p[4], p[5], p[6], p[7]);
       }
       if (path.closed) nvg.lineTo(path.pts[0], path.pts[1]);
-      if (pathHole) nvg.pathWinding(NVGSolidity.Hole); else nvg.pathWinding(NVGSolidity.Solid);
-      //if (pathHole) nvg.pathWinding(NVGSolidity.Hole);// else pathHole = true;
-      //pathHole = !pathHole; //k8
-      if (!pathHole) pathHole = true;
+      if (pathMode != PathMode.EvenOdd && pathHole) nvg.pathWinding(NVGSolidity.Hole); else nvg.pathWinding(NVGSolidity.Solid);
+      final switch (pathMode) {
+        case PathMode.EvenOdd: break;
+        case PathMode.Flipping: pathHole = !pathHole; break;
+        case PathMode.AllHoles: pathHole = true; break;
+        case PathMode.NoHoles: break;
+      }
     });
 
     // fill
@@ -126,7 +132,7 @@ void render (NVGContext nvg, const(NSVG)* image, float strokeWidthFactor=1) {
 
     nvg.lineJoin(join);
     nvg.lineCap(cap);
-    nvg.strokeWidth(shape.strokeWidth*strokeWidthFactor);
+    nvg.strokeWidth(shape.strokeWidth);
 
     // draw line
     switch (shape.stroke.type) {
@@ -267,6 +273,7 @@ void main (string[] args) {
   auto curt = prevt;
   float dt = 0, secs = 0;
   //int mxOld = -1, myOld = -1;
+  PathMode pathMode = PathMode.min;
 
   sdwindow.redrawOpenGlScene = delegate () {
     // timers
@@ -284,7 +291,7 @@ void main (string[] args) {
       if (fps !is null) fps.update(dt);
       vg.beginFrame(GWidth, GHeight, 1);
       if (useDirectRendering) {
-        vg.render(svg);
+        vg.render(svg, pathMode);
       } else {
         // draw image
         vg.beginPath();
@@ -346,6 +353,11 @@ void main (string[] args) {
       if (!event.pressed) return;
       if (event == "Escape" || event == "C-Q") { sdwindow.close(); return; }
       if (event == "D" || event == "V") { useDirectRendering = !useDirectRendering; sdwindow.redrawOpenGlScene(); return; }
+      if (event == "F") {
+        if (pathMode == PathMode.max) pathMode = PathMode.min; else ++pathMode;
+        if (useDirectRendering) sdwindow.redrawOpenGlScene();
+        return;
+      }
       if (event == "Space") { drawFPS = !drawFPS; return; }
     },
     delegate (MouseEvent event) {
