@@ -2890,9 +2890,10 @@ public void arcTo (NVGContext ctx, in float x1, in float y1, in float x2, in flo
 
   // Handle degenerate cases.
   if (nvg__ptEquals(x0, y0, x1, y1, ctx.distTol) ||
-    nvg__ptEquals(x1, y1, x2, y2, ctx.distTol) ||
-    nvg__distPtSeg(x1, y1, x0, y0, x2, y2) < ctx.distTol*ctx.distTol ||
-    radius < ctx.distTol) {
+      nvg__ptEquals(x1, y1, x2, y2, ctx.distTol) ||
+      nvg__distPtSeg(x1, y1, x0, y0, x2, y2) < ctx.distTol*ctx.distTol ||
+      radius < ctx.distTol)
+  {
     ctx.lineTo(x1, y1);
     return;
   }
@@ -3212,8 +3213,10 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 public alias NVGSectionDummy60 = void;
 
 /// Is point (mx, my) on the last stoked path? `tol` is a maximum distance from stroke.
-public bool isOnStroke (NVGContext ctx, in float mx, in float my, float tol=1) {
-  tol *= tol;
+public bool isOnStroke (NVGContext ctx, in float mx, in float my, float tol=float.nan) {
+  import std.math : isNaN;
+  if (tol.isNaN) tol = nvg__getState(ctx).strokeWidth*nvg__getAverageScale(nvg__getState(ctx).xform[]);
+  if (tol < 1) tol = 1; else tol *= tol;
   foreach (const ref path; ctx.cache.paths[0..ctx.cache.npaths]) {
     if (path.nstroke == 0) continue;
     for (int i = 0, j = path.nstroke-1; i < path.nstroke; j = i++) {
