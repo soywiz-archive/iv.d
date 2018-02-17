@@ -2982,7 +2982,7 @@ public void arcTo (NVGContext ctx, in float x1, in float y1, in float x2, in flo
     //printf("CCW c=(%f, %f) a0=%f° a1=%f°\n", cx, cy, a0/NVG_PI*180.0f, a1/NVG_PI*180.0f);
   }
 
-  ctx.arc(cx, cy, radius, a0, a1, dir, Command.LineTo);
+  ctx.arc(cx, cy, radius, a0, a1, dir); // first is line
 }
 
 /// Closes current sub-path with a line segment.
@@ -3003,12 +3003,22 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc
 /** Creates new circle arc shaped sub-path. The arc center is at (cx, cy), the arc radius is r,
  * and the arc is drawn from angle a0 to a1, and swept in direction dir (NVGWinding.CCW, or NVGWinding.CW).
  * Angles are specified in radians.
+ *
+ * `mode` is: "original", "move", "line" -- first command will be like original NanoVG, MoveTo, or LineTo
  */
-public void arc (NVGContext ctx, in float cx, in float cy, in float r, in float a0, in float a1, NVGWinding dir, Command firstcmd=Command.MoveTo) nothrow @trusted @nogc {
+public void arc(string mode="original") (NVGContext ctx, in float cx, in float cy, in float r, in float a0, in float a1, NVGWinding dir) nothrow @trusted @nogc {
+  static assert(mode == "original" || mode == "move" || mode == "line");
   float[3+5*7+100] vals = void;
   //int move = (ctx.ncommands > 0 ? Command.LineTo : Command.MoveTo);
-  if (firstcmd != Command.LineTo && firstcmd != Command.MoveTo) assert(0, "invalid `NanoVG.arc()` call");
-  alias move = firstcmd;
+  static if (mode == "original") {
+    immutable int move = (ctx.ncommands > 0 ? Command.LineTo : Command.MoveTo);
+  } else static if (mode == "move") {
+    enum move = Command.MoveTo;
+  } else static if (mode == "line") {
+    enum move = Command.LineTo;
+  } else {
+    static assert(0, "wtf?!");
+  }
 
   // Clamp angles
   float da = a1-a0;
