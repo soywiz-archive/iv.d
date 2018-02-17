@@ -274,6 +274,7 @@ void main (string[] args) {
   float dt = 0, secs = 0;
   //int mxOld = -1, myOld = -1;
   PathMode pathMode = PathMode.min;
+  bool svgAA = true;
 
   sdwindow.redrawOpenGlScene = delegate () {
     // timers
@@ -290,7 +291,20 @@ void main (string[] args) {
     if (vg !is null) {
       if (fps !is null) fps.update(dt);
       vg.beginFrame(GWidth, GHeight, 1);
+
+      vg.fontFace("sans");
+      vg.fontSize(14);
+      vg.textAlign(NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top));
+      vg.fillColor(NVGColor.white);
+      vg.text(10, 10, (useDirectRendering ? "Direct" : "Image"));
+      vg.text(10, 30, (svgAA ? "AA" : "NO AA"));
+      import std.conv : to;
+      vg.text(10, 50, pathMode.to!string);
+
       if (useDirectRendering) {
+        vg.save();
+        scope(exit) vg.restore();
+        vg.shapeAntiAlias = svgAA;
         vg.render(svg, pathMode);
       } else {
         // draw image
@@ -316,7 +330,7 @@ void main (string[] args) {
       writeln("Could not init nanovg.");
       //sdwindow.close();
     }
-    enum FNN = "/home/ketmar/ttf/ms/verdana.ttf";
+    enum FNN = "Verdana:noaa"; //"/home/ketmar/ttf/ms/verdana.ttf";
     vg.createFont("sans", FNN);
     {
       ubyte[] svgraster;
@@ -353,6 +367,7 @@ void main (string[] args) {
       if (!event.pressed) return;
       if (event == "Escape" || event == "C-Q") { sdwindow.close(); return; }
       if (event == "D" || event == "V") { useDirectRendering = !useDirectRendering; sdwindow.redrawOpenGlScene(); return; }
+      if (event == "A") { svgAA = !svgAA; if (useDirectRendering) sdwindow.redrawOpenGlScene(); return; }
       if (event == "F") {
         if (pathMode == PathMode.max) pathMode = PathMode.min; else ++pathMode;
         if (useDirectRendering) sdwindow.redrawOpenGlScene();
