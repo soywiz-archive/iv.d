@@ -3294,6 +3294,7 @@ public bool isOnStroke (NVGContext ctx, in float mx, in float my, float tol=floa
 }
 
 /// Is point (mx, my) on the last filled path?
+/// This doesn't support filling modes yet: it always using non-zero fill mode.
 public bool isOnFill (NVGContext ctx, in float mx, in float my) {
   bool res = false;
   foreach (const ref path; ctx.cache.paths[0..ctx.cache.npaths]) {
@@ -3343,7 +3344,7 @@ public enum NVGPickKind : ubyte {
 /// Note that you can create and mark path without rasterizing it.
 public void currFillHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, 0);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, forStroke:false);
   nvg__pickSceneInsert(ps, pp);
 }
 
@@ -3351,7 +3352,7 @@ public void currFillHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
 /// Note that you can create and mark path without rasterizing it.
 public void currStrokeHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, 1);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, forStroke:true);
   nvg__pickSceneInsert(ps, pp);
 }
 
@@ -3466,7 +3467,8 @@ public bool hitTestCurrFill (NVGcontext* ctx, float x, float y) nothrow @trusted
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, 0);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, forStroke:false);
+  if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
     ps.npoints = oldnpoints;
@@ -3481,7 +3483,8 @@ public bool hitTestCurrStroke (NVGcontext* ctx, float x, float y) nothrow @trust
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, 1);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, forStroke:true);
+  if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
     ps.npoints = oldnpoints;
@@ -3551,6 +3554,7 @@ struct NVGpickPath {
   float miterLimit;
   short lineCap;
   short lineJoin;
+  bool evenOddMode;
 
   float[4] bounds;
   int scissor; // Indexes into ps->points and defines scissor rect as XVec, YVec and Center
@@ -3858,8 +3862,9 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
   }
 }
 
-NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, int forStroke) {
+NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, bool forStroke) {
   NVGpickScene* ps = nvg__pickSceneGet(context);
+  if (ps is null) return null;
 
   int i = 0;
 
@@ -3883,7 +3888,6 @@ NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, int forStroke) {
   NVGsegment* segments = null;
   const(NVGsegment)* seg = null;
   NVGpickSubPath *curpsp;
-  int s;
 
   pp = nvg__allocPickPath(ps);
   if (pp is null) return null;
@@ -3986,6 +3990,7 @@ NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, int forStroke) {
   pp.miterLimit = state.miterLimit;
   pp.lineCap = cast(short)state.lineCap;
   pp.lineJoin = cast(short)state.lineJoin;
+  pp.evenOddMode = nvg__getState(context).evenOddMode;
 
   nvg__initBounds(totalBounds);
 
@@ -3998,7 +4003,7 @@ NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, int forStroke) {
 
     segments = &ps.segments[curpsp.firstSegment];
     nvg__initBounds(curpsp.bounds);
-    for (s = 0; s < curpsp.nsegments; ++s) {
+    for (int s = 0; s < curpsp.nsegments; ++s) {
       seg = &segments[s];
       //NVG_PICK_DEBUG_BOUNDS(seg.bounds);
       nvg__unionBounds(curpsp.bounds, seg.bounds);
@@ -4580,7 +4585,7 @@ int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, f
 //   1  If (x,y) is contained by the path and the path is solid.
 //  -1  If (x,y) is contained by the path and the path is a hole.
 //   0  If (x,y) is not contained by the path.
-int nvg__pickSubPath (const NVGpickScene* ps, const NVGpickSubPath* psp, float x, float y) {
+int nvg__pickSubPath (const NVGpickScene* ps, const NVGpickSubPath* psp, float x, float y, bool evenOddMode) {
   if (nvg__pointInBounds(x, y, psp.bounds) == 0) return 0;
 
   const(NVGsegment)* seg = &ps.segments[psp.firstSegment];
@@ -4590,8 +4595,9 @@ int nvg__pickSubPath (const NVGpickScene* ps, const NVGpickSubPath* psp, float x
   // trace a line from x,y out along the positive x axis and count the number of intersections
   for (int s = 0; s < nsegments; ++s, ++seg) {
     if ((seg.bounds.ptr[1]-NVG_PICK_EPS) < y &&
-      (seg.bounds.ptr[3]-NVG_PICK_EPS) > y &&
-      seg.bounds.ptr[2] > x) {
+        (seg.bounds.ptr[3]-NVG_PICK_EPS) > y &&
+        seg.bounds.ptr[2] > x)
+    {
       // Line hits the box.
       switch (seg.type) {
         case Command.LineTo:
@@ -4618,17 +4624,21 @@ int nvg__pickSubPath (const NVGpickScene* ps, const NVGpickSubPath* psp, float x
     }
   }
 
-  return (nintersections&1 ? (psp.winding == NVGSolidity.Solid ? 1 : -1) : 0);
+  if (evenOddMode) {
+    return nintersections;
+  } else {
+    return (nintersections&1 ? (psp.winding == NVGSolidity.Solid ? 1 : -1) : 0);
+  }
 }
 
 bool nvg__pickPath (const(NVGpickScene)* ps, const(NVGpickPath)* pp, float x, float y) {
   int pickCount = 0;
   const(NVGpickSubPath)* psp = pp.subPaths;
   while (psp !is null) {
-    pickCount += nvg__pickSubPath(ps, psp, x, y);
+    pickCount += nvg__pickSubPath(ps, psp, x, y, pp.evenOddMode);
     psp = psp.next;
   }
-  return (pickCount != 0);
+  return ((pp.evenOddMode ? pickCount&1 : pickCount) != 0);
 }
 
 bool nvg__pickPathStroke (const(NVGpickScene)* ps, const(NVGpickPath)* pp, float x, float y) {
@@ -4664,6 +4674,8 @@ int nvg__countBitsUsed (int v) {
 }
 
 void nvg__pickSceneInsert (NVGpickScene* ps, NVGpickPath* pp) {
+  if (ps is null || pp is null) return;
+
   int[4] cellbounds;
   int base = ps.nlevels-1;
   int level;
