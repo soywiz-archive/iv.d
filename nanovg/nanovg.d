@@ -858,10 +858,6 @@ public alias NVGContext = NVGcontext*;
 /// Returns FontStash context of the given NanoVG context.
 FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs : null); }
 
-/// This delegate will be called if on `beginPath()` we had some drawn path, and before dropping it.
-/// You can register path for picking here (so your GUI lib can "just draw" controls).
-public void delegate (NVGContext ctx) nothrow @nogc nvgOnBeginPath; // because i'm evil!
-
 private struct NVGcontext {
 private:
   NVGparams params;
@@ -885,14 +881,30 @@ private:
   int textTriCount;
   // picking API
   NVGpickScene* pickScene;
+  int pathPickId; // >=0: register all pathes for picking using this id
+  uint pathPickRegistered; // if `pathPickId` >= 0, this is used to avoid double-registration (see `NVGPickKind`); hi 16 bit is check flags, lo 16 bit is mode
   // internals
   int mWidth, mHeight;
   float mDeviceRatio;
+  void delegate (NVGContext ctx) nothrow @trusted @nogc cleanup;
 public:
   // some public info
-  @property int width () const nothrow pure @safe @nogc { pragma(inline, true); return mWidth; } /// valid only inside `beginFrame()`/`endFrame()`
-  @property int height () const nothrow pure @safe @nogc { pragma(inline, true); return mHeight; } /// valid only inside `beginFrame()`/`endFrame()`
-  @property float devicePixelRatio () const nothrow pure @safe @nogc { pragma(inline, true); return mDeviceRatio; } /// valid only inside `beginFrame()`/`endFrame()`
+  const pure nothrow @safe @nogc {
+    @property int width () => mWidth; /// valid only inside `beginFrame()`/`endFrame()`
+    @property int height () => mHeight; /// valid only inside `beginFrame()`/`endFrame()`
+    @property float devicePixelRatio () => mDeviceRatio; /// valid only inside `beginFrame()`/`endFrame()`
+  }
+
+  // path autoregistration
+  pure nothrow @safe @nogc {
+    enum NoPick = -1;
+
+    @property int pickid () const => pathPickId; /// >=0: this pickid will be assigned to all filled/stroked pathes
+    @property void pickid (int v) => pathPickId = v; /// >=0: this pickid will be assigned to all filled/stroked pathes
+
+    @property uint pickmode () const => pathPickRegistered&NVGPickKind.All; /// pick autoregistration mode; see `NVGPickKind`
+    @property void pickmode (uint v) => pathPickRegistered = (pathPickRegistered&0xffff_0000u)|(v&NVGPickKind.All); /// pick autoregistration mode; see `NVGPickKind`
+  }
 }
 
 import core.stdc.math :
@@ -1036,6 +1048,8 @@ package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) nothrow @tr
   ctx.fontImages[0] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, (ctx.params.fontAA ? 0 : NVGImageFlags.NoFiltering), null);
   if (ctx.fontImages[0] == 0) goto error;
   ctx.fontImageIdx = 0;
+
+  ctx.pathPickId = -1;
 
   return ctx;
 
@@ -2861,8 +2875,8 @@ public alias NVGSectionDummy07 = void;
 /// Clears the current path and sub-paths.
 /// Will call `nvgOnBeginPath()` callback if current path is not empty.
 public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
-  if (ctx.ncommands > 0 && nvgOnBeginPath !is null) nvgOnBeginPath(ctx);
   ctx.ncommands = 0;
+  ctx.pathPickRegistered &= NVGPickKind.All; // reset "registered" flags
   nvg__clearPathCache(ctx);
 }
 
@@ -3142,6 +3156,11 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
   const(NVGpath)* path;
   NVGPaint fillPaint = state.fill;
 
+  if (ctx.pathPickId >= 0 && (ctx.pathPickRegistered&(NVGPickKind.Fill|(NVGPickKind.Fill<<16))) == NVGPickKind.Fill) {
+    ctx.pathPickRegistered |= NVGPickKind.Fill<<16;
+    ctx.currFillHitId = ctx.pathPickId;
+  }
+
   nvg__flattenPaths(ctx);
   if (ctx.params.edgeAntiAlias && state.shapeAntiAlias) {
     nvg__expandFill(ctx, ctx.fringeWidth, NVGLineCap.Miter, 2.4f);
@@ -3171,6 +3190,11 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   float strokeWidth = nvg__clamp(state.strokeWidth*scale, 0.0f, 200.0f);
   NVGPaint strokePaint = state.stroke;
   const(NVGpath)* path;
+
+  if (ctx.pathPickId >= 0 && (ctx.pathPickRegistered&(NVGPickKind.Stroke|(NVGPickKind.Stroke<<16))) == NVGPickKind.Stroke) {
+    ctx.pathPickRegistered |= NVGPickKind.Stroke<<16;
+    ctx.currStrokeHitId = ctx.pathPickId;
+  }
 
   if (strokeWidth < ctx.fringeWidth) {
     // If the stroke width is less than pixel size, use alpha to emulate coverage.
