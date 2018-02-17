@@ -3444,6 +3444,10 @@ nothrow @trusted @nogc {
 extern(C) {
   private alias _compare_fp_t = int function (const void*, const void*) nothrow @nogc;
   private extern(C) void qsort (scope void* base, size_t nmemb, size_t size, _compare_fp_t compar) nothrow @nogc;
+
+  extern(C) int nvg__comparePaths (const void* a, const void* b) {
+    return (*cast(const(NVGpickPath)**)b).order-(*cast(const(NVGpickPath)**)a).order;
+  }
 }
 
 enum NVG_PICK_EPS = 0.0001f;
@@ -4085,9 +4089,9 @@ NVGpickScene* nvg__pickSceneGet (NVGcontext* ctx) {
 // lvl1 is 3 points (6 floats)
 // lvl2 is 2 points (4 floats)
 // lvl3 is 1 point (2 floats)
-void nvg__casteljau (const float* points, float t, float* lvl1, float* lvl2, float* lvl3) {
-  int x0 = 0*2+0, x1 = 1*2+0, x2 = 2*2+0, x3 = 3*2+0;
-  int y0 = 0*2+1, y1 = 1*2+1, y2 = 2*2+1, y3 = 3*2+1;
+void nvg__casteljau (const(float)* points, float t, float* lvl1, float* lvl2, float* lvl3) {
+  enum x0 = 0*2+0; enum x1 = 1*2+0; enum x2 = 2*2+0; enum x3 = 3*2+0;
+  enum y0 = 0*2+1; enum y1 = 1*2+1; enum y2 = 2*2+1; enum y3 = 3*2+1;
 
   // Level 1
   lvl1[x0] = (points[x1]-points[x0])*t+points[x0];
@@ -4118,6 +4122,7 @@ void nvg__bezierEval (const(float)* points, float t, ref float[2] tpoint) {
   immutable float omt2 = omt*omt;
   immutable float t3 = t*t*t;
   immutable float t2 = t*t;
+
   tpoint.ptr[0] =
     points[0]*omt3+
     points[2]*3.0f*omt2*t+
@@ -4133,8 +4138,8 @@ void nvg__bezierEval (const(float)* points, float t, ref float[2] tpoint) {
 
 // Splits a cubic bezier curve into two parts at point t.
 void nvg__splitBezier (const(float)* points, float t, float* pointsA, float* pointsB) {
-  int x0 = 0*2+0, x1 = 1*2+0, x2 = 2*2+0, x3 = 3*2+0;
-  int y0 = 0*2+1, y1 = 1*2+1, y2 = 2*2+1, y3 = 3*2+1;
+  enum x0 = 0*2+0; enum x1 = 1*2+0; enum x2 = 2*2+0; enum x3 = 3*2+0;
+  enum y0 = 0*2+1; enum y1 = 1*2+1; enum y2 = 2*2+1; enum y3 = 3*2+1;
 
   float[6] lvl1 = void;
   float[4] lvl2 = void;
@@ -4173,9 +4178,9 @@ void nvg__splitBezier (const(float)* points, float t, float* pointsA, float* poi
 // Appends any found inflection points to the array inflections and increments *ninflections.
 // So finds the parameters where dx/dt or dy/dt is 0
 void nvg__bezierInflections (const(float)* points, int coord, int* ninflections, float* inflections) {
-  float v0 = points[0*2+coord], v1 = points[1*2+coord], v2 = points[2*2+coord], v3 = points[3*2+coord];
+  immutable float v0 = points[0*2+coord], v1 = points[1*2+coord], v2 = points[2*2+coord], v3 = points[3*2+coord];
   float[2] t = void;
-  float a,b,c,d;
+  float a, b, c, d;
   int nvalid = *ninflections;
 
   a = 3.0f*( -v0+3.0f*v1-3.0f*v2+v3 );
@@ -4212,13 +4217,12 @@ void nvg__bezierInflections (const(float)* points, int coord, int* ninflections,
 
 // Sort a small number of floats in ascending order (0 < n < 6)
 void nvg__smallsort (float* values, int n) {
-  float tmp;
   bool bSwapped = true;
   for (int j = 0; j < n-1 && bSwapped; ++j) {
     bSwapped = false;
     for (int i = 0; i < n-1; ++i) {
       if (values[i] > values[i+1]) {
-        tmp = values[i];
+        auto tmp = values[i];
         values[i] = values[i+1];
         values[i+1] = tmp;
       }
@@ -4356,10 +4360,6 @@ void nvg__closestBezier (const(float)* points, float x, float y, float* closest,
 
   // Initial t guess
   float t = 0.5f;
-  //float ty, dty, ddty, errory;
-  //float tx, dtx, ddtx, errorx;
-  //float omt, omt2, omt3, t2, t3;
-  //float n, d;
 
   // A few Newton iterations
   for (int iter = 0; iter < 6; ++iter) {
@@ -4440,30 +4440,19 @@ void nvg__closestBezier (const(float)* points, float x, float y, float* closest,
 //  1  If (x,y) is contained by the stroke of the path
 //  0  If (x,y) is not contained by the path.
 int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, float x, float y, float strokeWidth, int lineCap, int lineJoin) {
-  int nsegments;
-  const(NVGsegment)* seg;
-  float[2] closest = void;
-  float t;
-
-  //float distSqd = 0;
-  float[2] d = void;
-  float strokeWidthSqd;
-
-  const(NVGsegment)* prevseg;
-  int s;
-
   if (nvg__pointInBounds(x, y, psp.bounds) == 0) return 0;
 
-  // Trace a line from x,y out along the positive x axis and count the
-  // number of intersections.
-  nsegments = psp.nsegments;
-  seg = ps.segments+psp.firstSegment;
+  float[2] closest = void;
+  float[2] d = void;
+  float t = void;
 
-  strokeWidthSqd = strokeWidth*strokeWidth;
+  // trace a line from x,y out along the positive x axis and count the number of intersections
+  int nsegments = psp.nsegments;
+  const(NVGsegment)* seg = ps.segments+psp.firstSegment;
+  const(NVGsegment)* prevseg = (psp.closed ? &ps.segments[psp.firstSegment+nsegments-1] : null);
+  immutable float strokeWidthSqd = strokeWidth*strokeWidth;
 
-  prevseg = (psp.closed ? &ps.segments[psp.firstSegment+nsegments-1] : null);
-
-  for (s = 0; s < nsegments; ++s, prevseg = seg, ++seg) {
+  for (int s = 0; s < nsegments; ++s, prevseg = seg, ++seg) {
     if (nvg__pointInBounds(x, y, seg.bounds) != 0) {
       // Line potentially hits stroke.
       switch (seg.type) {
@@ -4541,15 +4530,14 @@ int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, f
 //  -1  If (x,y) is contained by the path and the path is a hole.
 //   0  If (x,y) is not contained by the path.
 int nvg__pickSubPath (const NVGpickScene* ps, const NVGpickSubPath* psp, float x, float y) {
-  int nsegments = psp.nsegments;
-  const(NVGsegment)* seg = &ps.segments[psp.firstSegment];
-  int nintersections = 0;
-  int s;
-
   if (nvg__pointInBounds(x, y, psp.bounds) == 0) return 0;
 
+  const(NVGsegment)* seg = &ps.segments[psp.firstSegment];
+  int nsegments = psp.nsegments;
+  int nintersections = 0;
+
   // trace a line from x,y out along the positive x axis and count the number of intersections
-  for (s = 0; s < nsegments; ++s, ++seg) {
+  for (int s = 0; s < nsegments; ++s, ++seg) {
     if ((seg.bounds.ptr[1]-NVG_PICK_EPS) < y &&
       (seg.bounds.ptr[3]-NVG_PICK_EPS) > y &&
       seg.bounds.ptr[2] > x) {
@@ -4601,13 +4589,6 @@ bool nvg__pickPathStroke (const(NVGpickScene)* ps, const(NVGpickPath)* pp, float
   return false;
 }
 
-extern(C) int nvg__comparePaths (const void* a, const void* b) {
-  const(NVGpickPath)* pathA = *cast(const(NVGpickPath)**)a;
-  const(NVGpickPath)* pathB = *cast(const(NVGpickPath)**)b;
-
-  return pathB.order-pathA.order;
-}
-
 bool nvg__pickPathTestBounds (const NVGpickScene* ps, const NVGpickPath* pp, float x, float y) {
   if (nvg__pointInBounds(x, y, pp.bounds) != 0) {
     if (pp.flags&NVG_PICK_SCISSOR) {
@@ -4654,8 +4635,7 @@ void nvg__pickSceneInsert (NVGpickScene* ps, NVGpickPath* pp) {
   cellbounds.ptr[1] ^= cellbounds.ptr[3];
 
   // Use the number of bits used (countBitsUsed(x) == sizeof(int) * 8 - clz(x);
-  // to calculate the level to insert at (the level at which the bounds fit in a
-  // single cell)
+  // to calculate the level to insert at (the level at which the bounds fit in a single cell)
   level = nvg__min(base-nvg__countBitsUsed(cellbounds.ptr[0]), base-nvg__countBitsUsed(cellbounds.ptr[1]));
   if (level < 0) level = 0;
 
@@ -4671,8 +4651,7 @@ void nvg__pickSceneInsert (NVGpickScene* ps, NVGpickPath* pp) {
   pp.cellnext = *cell;
   *cell = pp;
 
-  if (ps.paths is null)
-    ps.lastPath = pp;
+  if (ps.paths is null) ps.lastPath = pp;
   pp.next = ps.paths;
   ps.paths = pp;
 
@@ -4683,7 +4662,6 @@ void nvg__pickSceneInsert (NVGpickScene* ps, NVGpickPath* pp) {
 
 void nvg__pickBeginFrame (NVGcontext* ctx, int width, int height) {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  float lowestSubDiv;
 
   //NVG_PICK_DEBUG_NEWFRAME();
 
@@ -4701,28 +4679,26 @@ void nvg__pickBeginFrame (NVGcontext* ctx, int width, int height) {
   ps.width = width;
   ps.height = height;
 
-  lowestSubDiv = cast(float)(1<<(ps.nlevels-1));
+  immutable float lowestSubDiv = cast(float)(1<<(ps.nlevels-1));
   ps.xdim = cast(float)width/lowestSubDiv;
   ps.ydim = cast(float)height/lowestSubDiv;
 
   // Allocate the quadtree if required.
   if (ps.levels is null) {
     int ncells = 1;
-    int leveldim;
-    int l, cell;
 
     ps.levels = cast(NVGpickPath***)malloc((NVGpickPath**).sizeof*ps.nlevels);
-    for (l = 0; l < ps.nlevels; ++l) {
-      leveldim = 1<<l;
+    for (int l = 0; l < ps.nlevels; ++l) {
+      int leveldim = 1<<l;
       ncells += leveldim*leveldim;
     }
 
     ps.levels[0] = cast(NVGpickPath**)malloc((NVGpickPath*).sizeof*ncells);
 
-    cell = 1;
-    for (l = 1; l < ps.nlevels; l++) {
+    int cell = 1;
+    for (int l = 1; l < ps.nlevels; ++l) {
       ps.levels[l] = &ps.levels[0][cell];
-      leveldim = 1<<l;
+      int leveldim = 1<<l;
       cell += leveldim*leveldim;
     }
 
@@ -8267,7 +8243,7 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
   tex.flags = imageFlags;
   glnvg__bindTexture(gl, tex.tex);
 
-  glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, tex.width);
   glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
   glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
@@ -8330,9 +8306,9 @@ bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int
   glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
 
   if (tex.type == NVGtexture.RGBA) {
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x,y, w,h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
   } else {
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x,y, w,h, GL_RED, GL_UNSIGNED_BYTE, data);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RED, GL_UNSIGNED_BYTE, data);
   }
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
