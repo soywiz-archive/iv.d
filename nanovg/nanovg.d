@@ -2860,6 +2860,8 @@ public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
   nvg__clearPathCache(ctx);
 }
 
+public alias newPath = beginPath; /// Ditto.
+
 /// Starts new sub-path with specified point as first point.
 public void moveTo (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
   nvg__appendCommands(ctx, Command.MoveTo, x, y);
