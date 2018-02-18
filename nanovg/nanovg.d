@@ -961,7 +961,7 @@ NVGpathCache* nvg__allocPathCache () nothrow @trusted @nogc {
   c.npaths = 0;
   c.cpaths = NVG_INIT_PATHS_SIZE;
 
-  c.verts = cast(NVGvertex*)malloc((NVGvertex).sizeof*NVG_INIT_VERTS_SIZE);
+  c.verts = cast(NVGvertex*)malloc(NVGvertex.sizeof*NVG_INIT_VERTS_SIZE);
   if (c.verts is null) goto error;
   c.nverts = 0;
   c.cverts = NVG_INIT_VERTS_SIZE;
@@ -1009,7 +1009,7 @@ NVGstate* nvg__getState (NVGContext ctx) pure nothrow @trusted @nogc {
 
 // Constructor called by the render back-end.
 package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
-  FONSparams fontParams;
+  FONSparams fontParams = void;
   NVGContext ctx = cast(NVGContext)malloc(NVGcontext.sizeof);
   if (ctx is null) goto error;
   memset(ctx, 0, NVGcontext.sizeof);
@@ -1829,9 +1829,9 @@ public alias NVGSectionDummy05 = void;
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, float ey, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
-  NVGPaint p;
   enum large = 1e5f;
-  //NVG_NOTUSED(ctx);
+
+  NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
   // Calculate transform aligned to the line
@@ -1868,10 +1868,10 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, float outr, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
-  NVGPaint p;
   immutable float r = (inr+outr)*0.5f;
   immutable float f = (outr-inr);
-  //NVG_NOTUSED(ctx);
+
+  NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
   nvgTransformIdentity(p.xform[]);
@@ -1898,8 +1898,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h, float r, float f, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
-  NVGPaint p;
-  //NVG_NOTUSED(ctx);
+  NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
   nvgTransformIdentity(p.xform[]);
@@ -1925,8 +1924,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
 public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float h, float angle, int image, float alpha=1) nothrow @trusted @nogc {
-  NVGPaint p;
-  //NVG_NOTUSED(ctx);
+  NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
   nvgTransformRotate(p.xform[], angle);
@@ -2019,9 +2017,8 @@ public void intersectScissor (NVGContext ctx, float x, float y, float w, float h
 /// Reset and disables scissoring.
 public void resetScissor (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  memset(state.scissor.xform.ptr, 0, (state.scissor.xform.ptr).sizeof);
-  state.scissor.extent[0] = -1.0f;
-  state.scissor.extent[1] = -1.0f;
+  state.scissor.xform[] = 0;
+  state.scissor.extent[] = -1.0f;
 }
 
 
@@ -2115,16 +2112,15 @@ NVGpath* nvg__lastPath (NVGContext ctx) nothrow @trusted @nogc {
 }
 
 void nvg__addPath (NVGContext ctx) nothrow @trusted @nogc {
-  NVGpath* path;
   if (ctx.cache.npaths+1 > ctx.cache.cpaths) {
-    NVGpath* paths;
     int cpaths = ctx.cache.npaths+1+ctx.cache.cpaths/2;
-    paths = cast(NVGpath*)realloc(ctx.cache.paths, NVGpath.sizeof*cpaths);
+    NVGpath* paths = cast(NVGpath*)realloc(ctx.cache.paths, NVGpath.sizeof*cpaths);
     if (paths is null) return;
     ctx.cache.paths = paths;
     ctx.cache.cpaths = cpaths;
   }
-  path = &ctx.cache.paths[ctx.cache.npaths];
+
+  NVGpath* path = &ctx.cache.paths[ctx.cache.npaths];
   memset(path, 0, (*path).sizeof);
   path.first = ctx.cache.npoints;
   path.winding = NVGWinding.CCW;
@@ -2138,11 +2134,10 @@ NVGpoint* nvg__lastPoint (NVGContext ctx) nothrow @trusted @nogc {
 
 void nvg__addPoint (NVGContext ctx, float x, float y, int flags) nothrow @trusted @nogc {
   NVGpath* path = nvg__lastPath(ctx);
-  NVGpoint* pt;
   if (path is null) return;
 
   if (path.count > 0 && ctx.cache.npoints > 0) {
-    pt = nvg__lastPoint(ctx);
+    NVGpoint* pt = nvg__lastPoint(ctx);
     if (nvg__ptEquals(pt.x, pt.y, x, y, ctx.distTol)) {
       pt.flags |= flags;
       return;
@@ -2150,15 +2145,14 @@ void nvg__addPoint (NVGContext ctx, float x, float y, int flags) nothrow @truste
   }
 
   if (ctx.cache.npoints+1 > ctx.cache.cpoints) {
-    NVGpoint* points;
     int cpoints = ctx.cache.npoints+1+ctx.cache.cpoints/2;
-    points = cast(NVGpoint*)realloc(ctx.cache.points, NVGpoint.sizeof*cpoints);
+    NVGpoint* points = cast(NVGpoint*)realloc(ctx.cache.points, NVGpoint.sizeof*cpoints);
     if (points is null) return;
     ctx.cache.points = points;
     ctx.cache.cpoints = cpoints;
   }
 
-  pt = &ctx.cache.points[ctx.cache.npoints];
+  NVGpoint* pt = &ctx.cache.points[ctx.cache.npoints];
   memset(pt, 0, (*pt).sizeof);
   pt.x = x;
   pt.y = y;
@@ -2190,7 +2184,7 @@ float nvg__getAverageScale (float[] t) nothrow @trusted @nogc {
 NVGvertex* nvg__allocTempVerts (NVGContext ctx, int nverts) nothrow @trusted @nogc {
   if (nverts > ctx.cache.cverts) {
     int cverts = (nverts+0xff)&~0xff; // Round up to prevent allocations when things change just slightly.
-    NVGvertex* verts = cast(NVGvertex*)realloc(ctx.cache.verts, (NVGvertex).sizeof*cverts);
+    NVGvertex* verts = cast(NVGvertex*)realloc(ctx.cache.verts, NVGvertex.sizeof*cverts);
     if (verts is null) return null;
     ctx.cache.verts = verts;
     ctx.cache.cverts = cverts;
@@ -8042,12 +8036,14 @@ void glnvg__stencilFunc (GLNVGcontext* gl, GLenum func, GLint ref_, GLuint mask)
 
 GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   GLNVGtexture* tex = null;
+
   foreach (int i; 0..gl.ntextures) {
     if (gl.textures[i].id == 0) {
       tex = &gl.textures[i];
       break;
     }
   }
+
   if (tex is null) {
     if (gl.ntextures+1 > gl.ctextures) {
       GLNVGtexture* textures;
@@ -8295,7 +8291,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   // Create dynamic vertex array
   glGenBuffers(1, &gl.vertBuf);
 
-  gl.fragSize = (GLNVGfragUniforms).sizeof+align_-GLNVGfragUniforms.sizeof%align_;
+  gl.fragSize = GLNVGfragUniforms.sizeof+align_-GLNVGfragUniforms.sizeof%align_;
 
   glnvg__checkError(gl, "create done");
 
@@ -8432,7 +8428,7 @@ NVGColor glnvg__premulColor (NVGColor c) nothrow @trusted @nogc {
 bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* paint, NVGscissor* scissor, float width, float fringe, float strokeThr) nothrow @trusted @nogc {
   import core.stdc.math : sqrtf;
   GLNVGtexture* tex = null;
-  float[6] invxform;
+  float[6] invxform = void;
 
   memset(frag, 0, (*frag).sizeof);
 
@@ -8693,7 +8689,7 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, NVGvertex.sizeof, cast(const(GLvoid)*)cast(usize)0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, NVGvertex.sizeof, cast(const(GLvoid)*)(0+2*(float).sizeof));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, NVGvertex.sizeof, cast(const(GLvoid)*)(0+2*float.sizeof));
 
     // Set view and texture just once per frame.
     glUniform1i(gl.shader.loc[GLNVG_LOC_TEX], 0);
@@ -8739,13 +8735,13 @@ GLNVGcall* glnvg__allocCall (GLNVGcontext* gl) nothrow @trusted @nogc {
   if (gl.ncalls+1 > gl.ccalls) {
     GLNVGcall* calls;
     int ccalls = glnvg__maxi(gl.ncalls+1, 128)+gl.ccalls/2; // 1.5x Overallocate
-    calls = cast(GLNVGcall*)realloc(gl.calls, (GLNVGcall).sizeof*ccalls);
+    calls = cast(GLNVGcall*)realloc(gl.calls, GLNVGcall.sizeof*ccalls);
     if (calls is null) return null;
     gl.calls = calls;
     gl.ccalls = ccalls;
   }
   ret = &gl.calls[gl.ncalls++];
-  memset(ret, 0, (GLNVGcall).sizeof);
+  memset(ret, 0, GLNVGcall.sizeof);
   return ret;
 }
 
@@ -8754,7 +8750,7 @@ int glnvg__allocPaths (GLNVGcontext* gl, int n) nothrow @trusted @nogc {
   if (gl.npaths+n > gl.cpaths) {
     GLNVGpath* paths;
     int cpaths = glnvg__maxi(gl.npaths+n, 128)+gl.cpaths/2; // 1.5x Overallocate
-    paths = cast(GLNVGpath*)realloc(gl.paths, (GLNVGpath).sizeof*cpaths);
+    paths = cast(GLNVGpath*)realloc(gl.paths, GLNVGpath.sizeof*cpaths);
     if (paths is null) return -1;
     gl.paths = paths;
     gl.cpaths = cpaths;
@@ -8769,7 +8765,7 @@ int glnvg__allocVerts (GLNVGcontext* gl, int n) nothrow @trusted @nogc {
   if (gl.nverts+n > gl.cverts) {
     NVGvertex* verts;
     int cverts = glnvg__maxi(gl.nverts+n, 4096)+gl.cverts/2; // 1.5x Overallocate
-    verts = cast(NVGvertex*)realloc(gl.verts, (NVGvertex).sizeof*cverts);
+    verts = cast(NVGvertex*)realloc(gl.verts, NVGvertex.sizeof*cverts);
     if (verts is null) return -1;
     gl.verts = verts;
     gl.cverts = cverts;
@@ -8839,13 +8835,13 @@ void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float 
     if (path.nfill > 0) {
       copy.fillOffset = offset;
       copy.fillCount = path.nfill;
-      memcpy(&gl.verts[offset], path.fill, (NVGvertex).sizeof*path.nfill);
+      memcpy(&gl.verts[offset], path.fill, NVGvertex.sizeof*path.nfill);
       offset += path.nfill;
     }
     if (path.nstroke > 0) {
       copy.strokeOffset = offset;
       copy.strokeCount = path.nstroke;
-      memcpy(&gl.verts[offset], path.stroke, (NVGvertex).sizeof*path.nstroke);
+      memcpy(&gl.verts[offset], path.stroke, NVGvertex.sizeof*path.nstroke);
       offset += path.nstroke;
     }
   }
@@ -8909,7 +8905,7 @@ void glnvg__renderStroke (void* uptr, NVGPaint* paint, NVGscissor* scissor, floa
     if (path.nstroke) {
       copy.strokeOffset = offset;
       copy.strokeCount = path.nstroke;
-      memcpy(&gl.verts[offset], path.stroke, (NVGvertex).sizeof*path.nstroke);
+      memcpy(&gl.verts[offset], path.stroke, NVGvertex.sizeof*path.nstroke);
       offset += path.nstroke;
     }
   }
@@ -8992,7 +8988,7 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 /// Creates NanoVG contexts for OpenGL versions.
 /// Flags should be combination of the create flags above.
 public NVGContext createGL2NVG (int flags) nothrow @trusted @nogc {
-  NVGparams params;
+  NVGparams params = void;
   NVGContext ctx = null;
   //nanovgInitOpenGL(); // why not?
   GLNVGcontext* gl = cast(GLNVGcontext*)malloc(GLNVGcontext.sizeof);
