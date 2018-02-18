@@ -18,11 +18,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.fui.engine /*is aliced*/;
+module iv.nanovega.fui.engine /*is aliced*/;
+
+import arsd.simpledisplay;
 
 import iv.alice;
-import iv.nanovg;
-import arsd.simpledisplay;
+import iv.nanovega.nanovega;
 
 //version = fui_many_asserts;
 

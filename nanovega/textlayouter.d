@@ -14,13 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.textlayouter is aliced;
+module iv.nanovega.textlayouter is aliced;
 
 import arsd.image;
 
 import iv.cmdcon;
 import iv.meta;
-import iv.nanovg;
+import iv.nanovega.nanovega;
 import iv.utfutil;
 import iv.vfs;
 

@@ -26,7 +26,7 @@
  *
  * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
-module iv.nanovg.svg is aliced;
+module iv.nanovega.svg is aliced;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
 private import iv.vfs;

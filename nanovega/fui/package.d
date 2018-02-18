@@ -1,7 +1,9 @@
 /* Invisible Vector Library
- * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
+ * simple FlexBox-based UI layout engine, suitable for using in
+ * immediate mode GUI libraries.
+ *
+ * coded by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  * Understanding is not required. Only obedience.
- * yes, this D port is GPLed.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,8 +18,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.oui /*is aliced*/;
+module iv.nanovega.fui /*is aliced*/;
 
-public import iv.nanovg.oui.blendish;
-public import iv.nanovg.oui.engine;
-public import iv.nanovg.oui.controls;
+public import iv.nanovega.blendish;
+public import iv.nanovega.fui.engine;
+public import iv.nanovega.fui.controls;

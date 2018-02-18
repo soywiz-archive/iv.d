@@ -144,7 +144,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
   ---
 
  */
-module iv.nanovg.nanovg is aliced;
+module iv.nanovega.nanovega is aliced;
 private:
 
 import iv.meta;
@@ -157,7 +157,7 @@ import iv.vfs;
 import core.stdc.stdlib : malloc, realloc, free;
 import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
-//import iv.nanovg.fontstash;
+//import iv.nanovega.fontstash;
 
 version(nanovg_naked) {
   version = nanovg_disable_fontconfig;
@@ -736,7 +736,7 @@ public enum NVGImageFlags {
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-package/*(iv.nanovg)*/:
+package/*(iv.nanovega)*/:
 
 // Internal Render API
 enum NVGtexture {
@@ -1012,7 +1012,7 @@ NVGstate* nvg__getState (NVGContext ctx) pure nothrow @trusted @nogc {
 }
 
 // Constructor called by the render back-end.
-package/*(iv.nanovg)*/ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
+package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
   FONSparams fontParams = void;
   NVGContext ctx = cast(NVGContext)malloc(NVGcontext.sizeof);
   if (ctx is null) goto error;
@@ -1064,12 +1064,12 @@ error:
 }
 
 // Called by render backend.
-package/*(iv.nanovg)*/ NVGparams* internalParams (NVGContext ctx) nothrow @trusted @nogc {
+package/*(iv.nanovega)*/ NVGparams* internalParams (NVGContext ctx) nothrow @trusted @nogc {
   return &ctx.params;
 }
 
 // Destructor called by the render back-end.
-package/*(iv.nanovg)*/ void deleteInternal (ref NVGContext ctx) nothrow @trusted @nogc {
+package/*(iv.nanovega)*/ void deleteInternal (ref NVGContext ctx) nothrow @trusted @nogc {
   if (ctx is null) return;
 
   if (ctx.commands !is null) free(ctx.commands);

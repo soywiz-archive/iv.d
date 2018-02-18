@@ -39,8 +39,7 @@ THE SOFTWARE.
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.oui.engine /*is aliced*/;
-import iv.alice;
+module iv.nanovega.oui.engine is aliced;
 
 import core.stdc.stdlib : malloc, free;
 import core.stdc.string : memset;

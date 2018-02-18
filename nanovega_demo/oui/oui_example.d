@@ -2,9 +2,9 @@
 // based on NanoVG's example code by Mikko Mononen
 import core.time;
 import core.stdc.stdio : snprintf;
-import iv.nanovg;
-import iv.nanovg.oui;
-import iv.nanovg.perf;
+import iv.nanovega;
+import iv.nanovega.oui;
+import iv.nanovega.perf;
 
 import arsd.simpledisplay;
 import arsd.color;
@@ -16,8 +16,10 @@ import std.functional : toDelegate;
 // sdpy is missing that yet
 static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
 
+string toStr(T : const(char)[]) (T buf) {
+  static if (is(T == string)) return buf; else return buf.idup;
+}
 
-////////////////////////////////////////////////////////////////////////////////
 enum GWidth = 650;
 enum GHeight = 650;
 
@@ -33,29 +35,518 @@ float getSeconds () {
 }
 
 
-// ////////////////////////////////////////////////////////////////////////// //
-__gshared NVGContext nvg = null;
+////////////////////////////////////////////////////////////////////////////////
+alias SubType = int;
+enum {
+  // label
+  ST_LABEL = 0,
+  // button
+  ST_BUTTON = 1,
+  // radio button
+  ST_RADIO = 2,
+  // progress slider
+  ST_SLIDER = 3,
+  // column
+  ST_COLUMN = 4,
+  // row
+  ST_ROW = 5,
+  // check button
+  ST_CHECK = 6,
+  // panel
+  ST_PANEL = 7,
+  // text
+  ST_TEXT = 8,
+  //
+  ST_IGNORE = 9,
 
+  ST_DEMOSTUFF = 10,
+  // colored rectangle
+  ST_RECT = 11,
+
+  ST_HBOX = 12,
+  ST_VBOX = 13,
+}
+
+struct UIData {
+  int subtype;
+  UIhandler handler;
+}
+
+struct UIRectData {
+  UIData head;
+  string label;
+  NVGColor color;
+}
+
+struct UIButtonData {
+  UIData head;
+  int iconid;
+  string label;
+}
+
+struct UICheckData {
+  UIData head;
+  string label;
+  int* option;
+}
+
+struct UIRadioData {
+  UIData head;
+  int iconid;
+  string label;
+  int* value;
+}
+
+struct UISliderData {
+  UIData head;
+  string label;
+  float* progress;
+}
+
+struct TextData {
+  char[] text;
+}
+
+struct UITextData {
+  UIData head;
+  TextData* text;
+  int maxsize;
+}
 
 // ////////////////////////////////////////////////////////////////////////// //
+__gshared NVGContext _vg = null;
+
+void ui_handler (int item, UIevent event) {
+  auto data = uiGetHandle!UIData(item);
+  if (data !is null && data.handler !is null) data.handler(item, event);
+}
+
 void init (NVGContext vg) {
   version(nanovg_demo_msfonts) {
-    bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/tahoma.ttf"));
+    bndSetFont(vg.createFont("system", "/home/ketmar/ttf/ms/tahoma.ttf:noaa"));
   } else {
-    bndSetFont(vg.createFont("system", "data/Roboto-Regular.ttf"));
+    bndSetFont(vg.createFont("system", "../data/Roboto-Regular.ttf"));
   }
-  bndSetIconImage(vg.createImage("data/images/blender_icons16.png", 0));
+  bndSetIconImage(vg.createImage("../data/images/blender_icons16.png", 0));
+}
+
+void testrect (NVGContext vg, UIrect rect) {
+  version(none) {
+    vg.beginPath();
+    vg.rect(rect.x+0.5, rect.y+0.5, rect.w-1, rect.h-1);
+    vg.strokeColor(nvgRGBf(1, 0, 0));
+    vg.strokeWidth(1);
+    vg.stroke();
+  }
 }
 
 
-// ////////////////////////////////////////////////////////////////////////// //
+void drawUIItems (NVGContext vg, int item, int corners) {
+  int kid = uiFirstChild(item);
+  while (kid > 0) {
+    drawUI(vg, kid, corners);
+    kid = uiNextSibling(kid);
+  }
+}
+
+void drawUIItemsHbox (NVGContext vg, int item) {
+  int kid = uiFirstChild(item);
+  if (kid < 0) return;
+  int nextkid = uiNextSibling(kid);
+  if (nextkid < 0) {
+    drawUI(vg, kid, BND_CORNER_NONE);
+  } else {
+    drawUI(vg, kid, BND_CORNER_RIGHT);
+    kid = nextkid;
+    while (uiNextSibling(kid) > 0) {
+      drawUI(vg, kid, BND_CORNER_ALL);
+      kid = uiNextSibling(kid);
+    }
+    drawUI(vg, kid, BND_CORNER_LEFT);
+  }
+}
+
+void drawUIItemsVbox (NVGContext vg, int item) {
+  int kid = uiFirstChild(item);
+  if (kid < 0) return;
+  int nextkid = uiNextSibling(kid);
+  if (nextkid < 0) {
+    drawUI(vg, kid, BND_CORNER_NONE);
+  } else {
+    drawUI(vg, kid, BND_CORNER_DOWN);
+    kid = nextkid;
+    while (uiNextSibling(kid) > 0) {
+      drawUI(vg, kid, BND_CORNER_ALL);
+      kid = uiNextSibling(kid);
+    }
+    drawUI(vg, kid, BND_CORNER_TOP);
+  }
+}
+
+void drawUI (NVGContext vg, int item, int corners) {
+  auto head = uiGetHandle!(const UIData)(item);
+  UIrect rect = uiGetRect(item);
+  if (uiGetState(item) == UI_FROZEN) vg.globalAlpha(BND_DISABLED_ALPHA);
+  if (head) {
+    switch (head.subtype) {
+      default:
+        testrect(vg, rect);
+        drawUIItems(vg, item, corners);
+        break;
+      case ST_HBOX:
+        drawUIItemsHbox(vg, item);
+        break;
+      case ST_VBOX:
+        drawUIItemsVbox(vg, item);
+        break;
+      case ST_PANEL:
+        bndBevel(vg, rect.x, rect.y, rect.w, rect.h);
+        drawUIItems(vg, item, corners);
+        break;
+      case ST_LABEL:
+        assert(head);
+        auto data = cast(const(UIButtonData)*)head;
+        bndLabel(vg, rect.x, rect.y, rect.w, rect.h, data.iconid, data.label);
+        break;
+      case ST_BUTTON:
+        auto data = cast(const(UIButtonData)*)head;
+        bndToolButton(vg, rect.x, rect.y, rect.w, rect.h, corners, cast(BNDwidgetState)uiGetState(item), data.iconid, data.label);
+        break;
+      case ST_CHECK:
+        auto data = cast(const(UICheckData)*)head;
+        BNDwidgetState state = cast(BNDwidgetState)uiGetState(item);
+        if (*data.option) state = BND_ACTIVE;
+        bndOptionButton(vg, rect.x, rect.y, rect.w, rect.h, state, data.label);
+        break;
+      case ST_RADIO:
+        auto data = cast(const(UIRadioData)*)head;
+        BNDwidgetState state = cast(BNDwidgetState)uiGetState(item);
+        if (*data.value == item) state = BND_ACTIVE;
+        bndRadioButton(vg, rect.x, rect.y, rect.w, rect.h, corners, state, data.iconid, data.label);
+        break;
+      case ST_SLIDER:
+        auto data = cast(const(UISliderData)*)head;
+        BNDwidgetState state = cast(BNDwidgetState)uiGetState(item);
+        //static char[32] value;
+        //sprintf(value.ptr, "%.0f%%", (*data.progress)*100.0f);
+        import std.string : format;
+        bndSlider(vg, rect.x, rect.y, rect.w, rect.h, corners, state, *data.progress, data.label, "%.0f%%".format((*data.progress)*100.0f));
+        break;
+      case ST_TEXT:
+        auto data = cast(const(UITextData)*)head;
+        BNDwidgetState state = cast(BNDwidgetState)uiGetState(item);
+        int idx = cast(int)data.text.text.length;
+        bndTextField(vg, rect.x, rect.y, rect.w, rect.h, corners, state, -1, data.text.text, idx, idx);
+        break;
+      case ST_DEMOSTUFF:
+        draw_demostuff(vg, rect.x, rect.y, rect.w, rect.h);
+        break;
+      case ST_RECT:
+        auto data = cast(const(UIRectData)*)head;
+        if (rect.w && rect.h) {
+          BNDwidgetState state = cast(BNDwidgetState)uiGetState(item);
+          vg.save();
+          scope(exit) vg.restore();
+          vg.strokeColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.9f));
+          if (state != BND_DEFAULT) {
+            vg.fillColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.5f));
+          } else {
+            vg.fillColor(nvgRGBAf(data.color.r, data.color.g, data.color.b, 0.1f));
+          }
+          vg.strokeWidth(2);
+          vg.beginPath();
+          version(none) {
+            vg.rect(rect.x, rect.y, rect.w, rect.h);
+          } else {
+            vg.roundedRect(rect.x, rect.y, rect.w, rect.h, 3);
+          }
+          vg.fill();
+          vg.stroke();
+
+          if (state != BND_DEFAULT) {
+            vg.fillColor(nvgRGBAf(0.0f, 0.0f, 0.0f, 1.0f));
+            vg.fontSize(15.0f);
+            vg.beginPath();
+            vg.textAlign = NVGTextAlign.V.Top;
+            vg.textAlign = NVGTextAlign.H.Center;
+            vg.textBox(rect.x, rect.y+rect.h*0.3f, rect.w, data.label);
+          }
+        }
+
+        vg.save();
+        scope(exit) vg.restore();
+        vg.intersectScissor(rect.x, rect.y, rect.w, rect.h);
+
+        drawUIItems(vg, item, corners);
+        break;
+    }
+  } else {
+    testrect(vg, rect);
+    drawUIItems(vg, item, corners);
+  }
+
+  if (uiGetState(item) == UI_FROZEN) {
+    vg.globalAlpha(1.0);
+  }
+}
+
+
+int colorrect(T : const(char)[]) (T label, NVGColor color) {
+  int item = uiItem();
+  UIRectData *data = uiAllocHandle!UIRectData(item);
+  data.head.subtype = ST_RECT;
+  data.head.handler = null;
+  data.label = label.toStr;
+  data.color = color;
+  uiSetEvents(item, UI_BUTTON0_DOWN);
+  return item;
+}
+
+int label(T : const(char)[]) (int iconid, T label) {
+  int item = uiItem();
+  uiSetSize(item, 0, BND_WIDGET_HEIGHT);
+  UIButtonData *data = uiAllocHandle!UIButtonData(item);
+  data.head.subtype = ST_LABEL;
+  data.head.handler = null;
+  data.iconid = iconid;
+  data.label = label.toStr;
+  return item;
+}
+
 void demohandler (int item, UIevent event) {
   import std.stdio;
-  writefln("clicked: %s %s", uiGetHandle(item), ctlGetButtonLabel(item));
+  auto data = uiGetHandle!(const UIButtonData)(item);
+  writefln("clicked: %s %s", uiGetHandle(item), data.label);
+}
+
+int button(T : const(char)[]) (int iconid, T label, UIhandler handler) {
+  // create new ui item
+  int item = uiItem();
+  // set size of wiget; horizontal size is dynamic, vertical is fixed
+  uiSetSize(item, 0, BND_WIDGET_HEIGHT);
+  uiSetEvents(item, UI_BUTTON0_HOT_UP);
+  // store some custom data with the button that we use for styling
+  UIButtonData *data = uiAllocHandle!UIButtonData(item);
+  data.head.subtype = ST_BUTTON;
+  data.head.handler = handler;
+  data.iconid = iconid;
+  data.label = label.toStr;
+  return item;
+}
+
+void checkhandler (int item, UIevent event) {
+  auto data = uiGetHandle!UICheckData(item);
+  *data.option = !(*data.option);
+}
+
+int check(T : const(char)[]) (T label, int* option) {
+  // create new ui item
+  int item = uiItem();
+  // set size of wiget; horizontal size is dynamic, vertical is fixed
+  uiSetSize(item, 0, BND_WIDGET_HEIGHT);
+  // attach event handler e.g. demohandler above
+  uiSetEvents(item, UI_BUTTON0_DOWN);
+  // store some custom data with the button that we use for styling
+  UICheckData *data = uiAllocHandle!UICheckData(item);
+  data.head.subtype = ST_CHECK;
+  data.head.handler = toDelegate(&checkhandler);
+  data.label = label.toStr;
+  data.option = option;
+  return item;
+}
+
+// simple logic for a slider
+
+// starting offset of the currently active slider
+__gshared float sliderstart = 0.0;
+
+// event handler for slider (same handler for all sliders)
+void sliderhandler (int item, UIevent event) {
+  // retrieve the custom data we saved with the slider
+  UISliderData *data = uiGetHandle!UISliderData(item);
+  switch (event) {
+    default: break;
+    case UI_BUTTON0_DOWN:
+      // button was pressed for the first time; capture initial slider value.
+      sliderstart = *data.progress;
+      break;
+    case UI_BUTTON0_CAPTURE:
+      // called for every frame that the button is pressed.
+      // get the delta between the click point and the current mouse position
+      UIvec2 pos = uiGetCursorStartDelta();
+      // get the items layouted rectangle
+      UIrect rc = uiGetRect(item);
+      // calculate our new offset and clamp
+      float value = sliderstart+(cast(float)pos.x/cast(float)rc.w);
+      value = (value < 0 ? 0 : (value > 1 ? 1 : value));
+      // assign the new value
+      *data.progress = value;
+      break;
+  }
+}
+
+int slider(T : const(char)[]) (T label, float* progress) {
+  // create new ui item
+  int item = uiItem();
+  // set size of wiget; horizontal size is dynamic, vertical is fixed
+  uiSetSize(item, 0, BND_WIDGET_HEIGHT);
+  // attach our slider event handler and capture two classes of events
+  uiSetEvents(item, UI_BUTTON0_DOWN|UI_BUTTON0_CAPTURE);
+  // store some custom data with the button that we use for styling
+  // and logic, e.g. the pointer to the data we want to alter.
+  UISliderData *data = uiAllocHandle!UISliderData(item);
+  data.head.subtype = ST_SLIDER;
+  data.head.handler = toDelegate(&sliderhandler);
+  data.label = label.toStr;
+  data.progress = progress;
+  return item;
+}
+
+void textboxhandler (int item, UIevent event) {
+  UITextData *data = uiGetHandle!UITextData(item);
+  switch (event) {
+    default: break;
+    case UI_BUTTON0_DOWN:
+      uiFocus(item);
+      break;
+    case UI_KEY_DOWN:
+      uint key = uiGetKey();
+      switch (key) {
+        default: break;
+        case Key.Backspace:
+          if (data.text.text.length == 0) return;
+          data.text.text.length -= 1;
+          break;
+        case Key.Enter:
+          uiFocus(-1);
+          break;
+      }
+      break;
+    case UI_CHAR:
+      uint key = uiGetKey();
+      if (key > 255 || key < 32) return;
+      if (data.text.text.length < data.maxsize) data.text.text ~= cast(char)key;
+      break;
+  }
+}
+
+int textbox (TextData* text, int maxsize) {
+  int item = uiItem();
+  uiSetSize(item, 0, BND_WIDGET_HEIGHT);
+  uiSetEvents(item, UI_BUTTON0_DOWN|UI_KEY_DOWN|UI_CHAR);
+  // store some custom data with the button that we use for styling
+  // and logic, e.g. the pointer to the data we want to alter.
+  UITextData *data = uiAllocHandle!UITextData(item);
+  data.head.subtype = ST_TEXT;
+  data.head.handler = toDelegate(&textboxhandler);
+  data.text = text;
+  data.maxsize = maxsize;
+  return item;
+}
+
+// simple logic for a radio button
+void radiohandler (int item, UIevent event) {
+  UIRadioData *data = uiGetHandle!UIRadioData(item);
+  *data.value = item;
+}
+
+int radio(T : const(char)[]) (int iconid, T label, int *value) {
+  int item = uiItem();
+  uiSetSize(item, (label.length ? 0 : BND_TOOL_WIDTH), BND_WIDGET_HEIGHT);
+  UIRadioData *data = uiAllocHandle!UIRadioData(item);
+  data.head.subtype = ST_RADIO;
+  data.head.handler = toDelegate(&radiohandler);
+  data.iconid = iconid;
+  data.label = label;
+  data.value = value;
+  uiSetEvents(item, UI_BUTTON0_DOWN);
+  return item;
+}
+
+int panel () {
+  int item = uiItem();
+  UIData *data = uiAllocHandle!UIData(item);
+  data.subtype = ST_PANEL;
+  data.handler = null;
+  return item;
+}
+
+int hbox () {
+  int item = uiItem();
+  UIData *data = uiAllocHandle!UIData(item);
+  data.subtype = ST_HBOX;
+  data.handler = null;
+  uiSetBox(item, UI_ROW);
+  return item;
 }
 
 
-// ////////////////////////////////////////////////////////////////////////// //
+int vbox () {
+  int item = uiItem();
+  UIData *data = uiAllocHandle!UIData(item);
+  data.subtype = ST_VBOX;
+  data.handler = null;
+  uiSetBox(item, UI_COLUMN);
+  return item;
+}
+
+
+int column_append (int parent, int item) {
+  uiInsert(parent, item);
+  // fill parent horizontally, anchor to previous item vertically
+  uiSetLayout(item, UI_HFILL);
+  uiSetMargins(item, 0, 1, 0, 0);
+  return item;
+}
+
+int column () {
+  int item = uiItem();
+  uiSetBox(item, UI_COLUMN);
+  return item;
+}
+
+int vgroup_append (int parent, int item) {
+  uiInsert(parent, item);
+  // fill parent horizontally, anchor to previous item vertically
+  uiSetLayout(item, UI_HFILL);
+  return item;
+}
+
+int vgroup () {
+  int item = uiItem();
+  uiSetBox(item, UI_COLUMN);
+  return item;
+}
+
+int hgroup_append (int parent, int item) {
+  uiInsert(parent, item);
+  uiSetLayout(item, UI_HFILL);
+  return item;
+}
+
+int hgroup_append_fixed (int parent, int item) {
+  uiInsert(parent, item);
+  return item;
+}
+
+int hgroup () {
+  int item = uiItem();
+  uiSetBox(item, UI_ROW);
+  return item;
+}
+
+int row_append (int parent, int item) {
+  uiInsert(parent, item);
+  uiSetLayout(item, UI_HFILL);
+  return item;
+}
+
+int row () {
+  int item = uiItem();
+  uiSetBox(item, UI_ROW);
+  return item;
+}
+
 void draw_noodles (NVGContext vg, int x, int y) {
   int w = 200;
   int s = 70;
@@ -78,9 +569,7 @@ void draw_noodles (NVGContext vg, int x, int y) {
   bndNodePort(vg, x+w, y+2*s, BND_ACTIVE, nvgRGBf(0.5f, 0.5f, 0.5f));
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
-void roothandler (int parent, UIevent event) {
+static void roothandler (int parent, UIevent event) {
   import std.stdio;
   switch (event) {
     default: break;
@@ -94,8 +583,6 @@ void roothandler (int parent, UIevent event) {
   }
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void draw_demostuff (NVGContext vg, int x, int y, float w, float h) {
   import core.stdc.math : fmodf, cosf, sinf;
 
@@ -252,12 +739,8 @@ void draw_demostuff (NVGContext vg, int x, int y, float w, float h) {
   bndRadioButton(vg, x, y, BND_TOOL_WIDTH, BND_WIDGET_HEIGHT, BND_CORNER_LEFT, BND_DEFAULT, BND_ICONID!(5, 11), null);
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 __gshared int enum1 = -1;
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void build_democontent (int parent) {
   // some persistent variables for demonstration
   __gshared float progress1 = 0.25f;
@@ -298,7 +781,7 @@ void build_democontent (int parent) {
 
   column_append(col, button(BND_ICON_GHOST, "Item 5", null));
 
-  __gshared CtlTextData text;
+  __gshared TextData text;
   __gshared bool inited = false;
   if (!inited) {
     inited = true;
@@ -311,8 +794,6 @@ void build_democontent (int parent) {
   column_append(col, check("Item 8", &option3));
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 int demorect(T : const(char)[]) (int parent, T label, float hue, int box, int layout, int w, int h, int m1, int m2, int m3, int m4) {
   int item = colorrect(label, nvgHSL(hue, 1.0f, 0.8f));
   uiSetLayout(item, layout);
@@ -323,8 +804,6 @@ int demorect(T : const(char)[]) (int parent, T label, float hue, int box, int la
   return item;
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void build_layoutdemo (int parent) {
   enum int M = 10;
   enum int S = 150;
@@ -345,12 +824,10 @@ void build_layoutdemo (int parent) {
   demorect(box, "Layout(UI_CENTER)", 0.59f, 0, UI_CENTER, S, S, 0, 0, 0, 0);
   demorect(box, "Layout(UI_RIGHT)", 0.57f, 0, UI_RIGHT, S, S, 0, 0, M, 0);
   demorect(box, "Layout(UI_LEFT|UI_DOWN)", 0.55f, 0, UI_LEFT|UI_DOWN, S, S, M, 0, 0, M);
-  demorect(box, "Layout(UI_DOWN)", 0.57f, 0, UI_DOWN, S, S, 0, 0, 0, M);
+  demorect(box, "Layout( UI_DOWN)", 0.57f, 0, UI_DOWN, S, S, 0, 0, 0, M);
   demorect(box, "Layout(UI_RIGHT|UI_DOWN)", 0.55f, 0, UI_RIGHT|UI_DOWN, S, S, 0, 0, M, M);
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void build_rowdemo (int parent) {
   uiSetBox(parent, UI_COLUMN);
 
@@ -384,8 +861,6 @@ void build_rowdemo (int parent) {
   }
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void build_columndemo (int parent) {
   uiSetBox(parent, UI_ROW);
 
@@ -419,15 +894,14 @@ void build_columndemo (int parent) {
   }
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void fill_wrap_row_box (int box) {
   enum int M = 5;
   enum int S = 100;
   enum int T = 50;
 
+  //srand(303);
   import std.random;
-  rndGen.seed(666);
+  rndGen.seed(303);
   for (int i = 0; i < 20; ++i) {
     float hue = cast(float)(uniform!"[)"(0, 360))/360.0f;
     int width = 10+(uniform!"[)"(0, 5))*10;
@@ -453,15 +927,13 @@ void fill_wrap_row_box (int box) {
   }
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void fill_wrap_column_box (int box) {
   enum int M = 5;
   enum int S = 100;
   enum int T = 50;
 
   import std.random;
-  rndGen.seed(666);
+  rndGen.seed(303);
   for (int i = 0; i < 20; ++i) {
     float hue = cast(float)(uniform!"[)"(0, 360))/360.0f;
     int height = 10+(uniform!"[)"(0, 5))*10;
@@ -487,8 +959,6 @@ void fill_wrap_column_box (int box) {
   }
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void build_wrapdemo (int parent) {
   int col = uiItem();
   uiInsert(parent, col);
@@ -517,7 +987,6 @@ void build_wrapdemo (int parent) {
 }
 
 
-// ////////////////////////////////////////////////////////////////////////// //
 int add_menu_option(T : const(char)[]) (int parent, T name, int* choice) {
   int opt = radio(-1, name, choice);
   uiInsert(parent, opt);
@@ -526,8 +995,6 @@ int add_menu_option(T : const(char)[]) (int parent, T name, int* choice) {
   return opt;
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
 void draw (NVGContext vg, float w, float h) {
   bndBackground(vg, 0, 0, w, h);
 
@@ -538,7 +1005,7 @@ void draw (NVGContext vg, float w, float h) {
   int root = panel();
   // position root element
   uiSetSize(0, cast(int)w, cast(int)h);
-  root.ctlSetPanelHandler(toDelegate(&roothandler));
+  (uiGetHandle!UIData(root)).handler = toDelegate(&roothandler);
   uiSetEvents(root, UI_SCROLL|UI_BUTTON0_DOWN);
   uiSetBox(root, UI_COLUMN);
 
@@ -562,24 +1029,12 @@ void draw (NVGContext vg, float w, float h) {
   uiInsert(root, content);
 
   if (choice == opt_blendish_demo) {
-    int democontent = userCtl(
-      (NVGContext vg, int item) {
-        UIrect rect = uiGetRect(item);
-        draw_demostuff(vg, rect.x, rect.y, rect.w, rect.h);
-      },
-      (int item, UIevent event) {
-      },
-    );
-    uiSetLayout(democontent, UI_FILL);
-    uiInsert(content, democontent);
-    /*
     int democontent = uiItem();
     uiSetLayout(democontent, UI_FILL);
     uiInsert(content, democontent);
     UIData *data = uiAllocHandle!UIData(democontent);
     data.handler = null;
     data.subtype = ST_DEMOSTUFF;
-    */
   } else if (choice == opt_oui_demo) {
     int democontent = uiItem();
     uiSetLayout(democontent, UI_TOP);
@@ -625,17 +1080,13 @@ void draw (NVGContext vg, float w, float h) {
     }
   }
 
-  __gshared int prevTime = 0;
-  int curTime = cast(int)(getSeconds()*1000.0);
-  uiProcess(curTime-prevTime);
-  prevTime = curTime;
+  uiProcess(cast(int)(getSeconds()*1000.0));
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 void main () {
   PerfGraph fps;
-  int owdt = -1, ohgt = -1;
 
   double mx = 0, my = 0;
   bool doQuit = false;
@@ -648,26 +1099,19 @@ void main () {
   uiMakeCurrent(uictx);
   uiSetHandler(toDelegate(&ui_handler));
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.fixedSize);
+  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizability.fixedSize);
   //sdwindow.hideCursor();
 
-  void clearWindowData () {
-    if (uictx !is null) uiDestroyContext(uictx);
-    uictx = null;
-    if (!sdwindow.closed && nvg !is null) {
-      nvg.deleteGL2();
-      nvg = null;
-    }
-  }
-
-  sdwindow.closeQuery = delegate () {
-    clearWindowData();
-    doQuit = true;
-  };
+  sdwindow.closeQuery = delegate () { doQuit = true; };
 
   void closeWindow () {
-    clearWindowData();
-    if (!sdwindow.closed) sdwindow.close();
+    if (!sdwindow.closed && _vg !is null) {
+      if (uictx !is null) uiDestroyContext(uictx);
+      uictx = null;
+      _vg.deleteGL2();
+      _vg = null;
+      sdwindow.close();
+    }
   }
 
   auto stt = MonoTime.currTime;
@@ -675,16 +1119,10 @@ void main () {
   auto curt = prevt;
   float dt = 0, secs = 0;
 
-  //int peak_items = 0;
-  //uint peak_alloc = 0;
+  int peak_items = 0;
+  uint peak_alloc = 0;
 
   sdwindow.redrawOpenGlScene = delegate () {
-    if (owdt != sdwindow.width || ohgt != sdwindow.height) {
-      owdt = sdwindow.width;
-      ohgt = sdwindow.height;
-      glViewport(0, 0, owdt, ohgt);
-    }
-
     // timers
     prevt = curt;
     curt = MonoTime.currTime;
@@ -692,17 +1130,18 @@ void main () {
     dt = cast(double)((curt-prevt).total!"msecs")/1000.0;
 
     // Update and render
+    //glViewport(0, 0, fbWidth, fbHeight);
     glClearColor(0, 0, 0, 1);
     glClear(glNVGClearFlags);
 
-    if (nvg !is null) {
+    if (_vg !is null) {
       if (fps !is null) fps.update(dt);
-      nvg.beginFrame(owdt, ohgt, 1);
-      draw(nvg, owdt, ohgt);
-      //peak_items = (peak_items > uiGetItemCount() ? peak_items : uiGetItemCount());
-      //peak_alloc = (peak_alloc > uiGetAllocSize() ? peak_alloc : uiGetAllocSize());
-      if (fps !is null) fps.render(nvg, owdt-200-5, ohgt-35-5);
-      nvg.endFrame();
+      _vg.beginFrame(GWidth, GHeight, 1);
+      draw(_vg, GWidth, GHeight);
+      peak_items = (peak_items > uiGetItemCount() ? peak_items : uiGetItemCount());
+      peak_alloc = (peak_alloc > uiGetAllocSize() ? peak_alloc : uiGetAllocSize());
+      if (fps !is null) fps.render(_vg, GWidth-200-5, GHeight-35-5);
+      _vg.endFrame();
     }
   };
 
@@ -713,16 +1152,16 @@ void main () {
     //glbindLoadFunctions();
 
     version(DEMO_MSAA) {
-      nvg = createGL2NVG(NVG_STENCIL_STROKES|NVG_DEBUG);
+      _vg = createGL2NVG(NVG_STENCIL_STROKES|NVG_DEBUG);
     } else {
-      nvg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
+      _vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_DEBUG);
     }
-    if (nvg is null) {
+    if (_vg is null) {
       import std.stdio;
       writeln("Could not init nanovg.");
       //sdwindow.close();
     }
-    init(nvg);
+    init(_vg);
     fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "system");
     sdwindow.redrawOpenGlScene();
   };

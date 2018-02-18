@@ -35,11 +35,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module iv.nanovg.perf /*is aliced*/;
+module iv.nanovega.perf /*is aliced*/;
 private:
 
 import iv.alice;
-import iv.nanovg;
+import iv.nanovega.nanovega;
 
 public final class PerfGraph {
 public:

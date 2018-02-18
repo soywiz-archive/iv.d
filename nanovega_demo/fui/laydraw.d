@@ -1,8 +1,8 @@
 import core.time;
 import std.stdio;
-import iv.nanovg;
-import iv.nanovg.fui;
-import iv.nanovg.perf;
+import iv.nanovega;
+import iv.nanovega.fui;
+import iv.nanovega.perf;
 
 import arsd.simpledisplay;
 import arsd.color;
@@ -197,7 +197,7 @@ void main () {
   auto ctx = FuiContext.create();
   int prevItemAt = -1;
 
-  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizablity.fixedSize/*allowResizing*/);
+  auto sdwindow = new SimpleWindow(GWidth, GHeight, "OUI", OpenGlOptions.yes, Resizability.fixedSize/*allowResizing*/);
   //sdwindow.hideCursor();
 
   void clearWindowData () {
@@ -271,7 +271,7 @@ void main () {
       ctx.draw();
       if (fps !is null && !perfHidden) fps.render(nvg, owdt-200-5, ohgt-35-5);
       version(none) {
-        import iv.nanovg.fontstash;
+        import iv.nanovega.fontstash;
         //fonsDrawDebug(nvg.fs, 1, 1);
         int w, h;
         const(ubyte)*d = fonsGetTextureData(nvg.fs, &w, &h);

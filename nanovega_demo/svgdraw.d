@@ -16,9 +16,9 @@
 // 3. This notice may not be removed or altered from any source distribution.
 //
 import core.stdc.stdio;
-import iv.nanovg;
-import iv.nanovg.svg;
-import iv.nanovg.perf;
+import iv.nanovega;
+import iv.nanovega.svg;
+import iv.nanovega.perf;
 
 import arsd.simpledisplay;
 import arsd.color;
