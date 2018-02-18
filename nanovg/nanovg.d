@@ -7969,9 +7969,7 @@ struct GLNVGcontext {
   GLNVGshader shader;
   GLNVGtexture* textures;
   float[2] view;
-  int ntextures;
   int ctextures;
-  int textureId;
   GLuint vertBuf;
   int fragSize;
   int flags;
@@ -7989,6 +7987,8 @@ struct GLNVGcontext {
   ubyte* uniforms;
   int cuniforms;
   int nuniforms;
+
+  IdPool32 texidpool;
 
   // cached state
   static if (NANOVG_GL_USE_STATE_FILTER) {
@@ -8040,45 +8040,40 @@ void glnvg__stencilFunc (GLNVGcontext* gl, GLenum func, GLint ref_, GLuint mask)
 GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   GLNVGtexture* tex = null;
 
-  foreach (int i; 0..gl.ntextures) {
-    if (gl.textures[i].id == 0) {
-      tex = &gl.textures[i];
-      break;
-    }
-  }
+  uint tid = gl.texidpool.allocId();
+  if (tid == gl.texidpool.Invalid) return null;
+  assert(tid != 0);
 
-  if (tex is null) {
-    if (gl.ntextures+1 > gl.ctextures) {
-      GLNVGtexture* textures;
-      int ctextures = glnvg__maxi(gl.ntextures+1, 4)+gl.ctextures/2; // 1.5x Overallocate
-      textures = cast(GLNVGtexture*)realloc(gl.textures, GLNVGtexture.sizeof*ctextures);
-      if (textures is null) return null;
-      gl.textures = textures;
-      gl.ctextures = ctextures;
-    }
-    tex = &gl.textures[gl.ntextures++];
+  if (tid-1 >= gl.ctextures) {
+    assert(tid-1 == gl.ctextures);
+    int ctextures = glnvg__maxi(tid, 4)+gl.ctextures/2; // 1.5x Overallocate
+    GLNVGtexture* textures = cast(GLNVGtexture*)realloc(gl.textures, GLNVGtexture.sizeof*ctextures);
+    if (textures is null) return null;
+    gl.textures = textures;
+    gl.ctextures = ctextures;
   }
+  assert(tid-1 < gl.ctextures);
 
+  assert(gl.textures[tid-1].id == 0);
+  tex = &gl.textures[tid-1];
   memset(tex, 0, (*tex).sizeof);
-  tex.id = ++gl.textureId;
+  tex.id = tid;
 
   return tex;
 }
 
 GLNVGtexture* glnvg__findTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
-  foreach (int i; 0..gl.ntextures) if (gl.textures[i].id == id) return &gl.textures[i];
-  return null;
+  if (!gl.texidpool.isAllocated(id)) return null;
+  assert(gl.textures[id-1].id != 0);
+  return &gl.textures[id-1];
 }
 
 bool glnvg__deleteTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
-  foreach (int i; 0..gl.ntextures) {
-    if (gl.textures[i].id == id) {
-      if (gl.textures[i].tex != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &gl.textures[i].tex);
-      memset(&gl.textures[i], 0, (gl.textures[i]).sizeof);
-      return true;
-    }
-  }
-  return false;
+  if (!gl.texidpool.isAllocated(id)) return false;
+  assert(gl.textures[id-1].id != 0);
+  if (gl.textures[id-1].tex != 0 && (gl.textures[id-1].flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &gl.textures[id-1].tex);
+  memset(&gl.textures[id-1], 0, (gl.textures[id-1]).sizeof);
+  return true;
 }
 
 void glnvg__dumpShaderError (GLuint shader, const(char)* name, const(char)* type) nothrow @trusted @nogc {
@@ -8974,7 +8969,7 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 
   if (gl.vertBuf != 0) glDeleteBuffers(1, &gl.vertBuf);
 
-  foreach (int i; 0..gl.ntextures) {
+  foreach (int i; 0..gl.ctextures) {
     if (gl.textures[i].tex != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &gl.textures[i].tex);
   }
   free(gl.textures);
@@ -8983,6 +8978,8 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
   free(gl.verts);
   free(gl.uniforms);
   free(gl.calls);
+
+  gl.texidpool.destroy;
 
   free(gl);
 }
@@ -9062,6 +9059,10 @@ public GLuint glImageHandleGL2 (NVGContext ctx, int image) nothrow @trusted @nog
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private:
+
+alias IdPool32 = IdPoolImpl!uint;
+
 struct IdPoolImpl(IDT, bool allowZero=false) if (is(IDT == ubyte) || is(IDT == ushort) || is(IDT == uint)) {
 public:
   alias Type = IDT; ///
