@@ -166,7 +166,8 @@ version(nanovg_naked) {
   version = nanovg_ft_mon;
   version = nanovg_demo_msfonts;
   version = nanovg_default_no_font_aa;
-  //version = nanovg_builtin_fontconfig_bindings;
+  version = nanovg_builtin_fontconfig_bindings;
+  version = nanovg_builtin_opengl_bindings; // use `arsd.simpledisplay` to get basic bindings
 }
 
 version(Posix) {
@@ -7696,17 +7697,15 @@ public int fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @t
 import core.stdc.stdlib : malloc, realloc, free;
 import core.stdc.string : memcpy, memset;
 
-//import iv.nanovg.engine;
 //import arsd.simpledisplay;
-import iv.glbinds;
+version(nanovg_builtin_opengl_bindings) { import arsd.simpledisplay; } else { import iv.glbinds; }
 
-public:
+private:
 // sdpy is missing that yet
-//static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
+static if (!is(typeof(GL_STENCIL_BUFFER_BIT))) enum uint GL_STENCIL_BUFFER_BIT = 0x00000400;
 
 
 // OpenGL API missing from simpledisplay
-/+
 private extern(System) nothrow @nogc {
   alias GLvoid = void;
   alias GLboolean = ubyte;
@@ -7947,13 +7946,12 @@ private extern(System) nothrow @nogc {
     initialized = true;
   }
 }
-+/
 
 
 /// Create flags
-alias NVGcreateFlags = int;
+public alias NVGcreateFlags = int;
 /// Create flags
-enum /*NVGcreateFlags*/ {
+public enum /*NVGcreateFlags*/ {
   /// Flag indicating if geometry based anti-aliasing is used (may not be needed when using MSAA).
   NVG_ANTIALIAS = 1<<0,
   /** Flag indicating if strokes should be drawn using stencil buffer. The rendering will be a little
@@ -7967,17 +7965,17 @@ enum /*NVGcreateFlags*/ {
   NVG_FONT_NOAA = 1<<8,
 }
 
-enum NANOVG_GL_USE_STATE_FILTER = true;
+public enum NANOVG_GL_USE_STATE_FILTER = true;
 
 // These are additional flags on top of NVGImageFlags.
-alias NVGimageFlagsGL = int;
-enum /*NVGimageFlagsGL*/ {
+public alias NVGimageFlagsGL = int;
+public enum /*NVGimageFlagsGL*/ {
   NVG_IMAGE_NODELETE = 1<<16,  // Do not delete GL texture handle.
 }
 
 
 /// Return flags for glClear().
-uint glNVGClearFlags () pure nothrow @safe @nogc {
+public uint glNVGClearFlags () pure nothrow @safe @nogc {
   pragma(inline, true);
   return (GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
 }
@@ -9095,7 +9093,7 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 public NVGContext createGL2NVG (int flags) nothrow @trusted @nogc {
   NVGparams params = void;
   NVGContext ctx = null;
-  //nanovgInitOpenGL(); // why not?
+  version(nanovg_builtin_opengl_bindings) nanovgInitOpenGL(); // why not?
   GLNVGcontext* gl = cast(GLNVGcontext*)malloc(GLNVGcontext.sizeof);
   if (gl is null) goto error;
   memset(gl, 0, GLNVGcontext.sizeof);
