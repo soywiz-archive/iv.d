@@ -127,7 +127,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
     foreach (immutable _; 0..indent) xput(' ');
   }
 
-  void serData(bool skipstructname=false, T) (in ref T v) {
+  void serData(T) (in ref T v, bool skipstructname) {
     alias UT = arrayElementType!T;
     static if (is(T : const(char)[])) {
       // string
@@ -143,7 +143,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
         indent += Indent;
         foreach (immutable idx, const ref it; v) {
           if (idx == 0 || (v.length >= 56 && idx%42 == 41)) newline();
-          serData!true(it);
+          serData(it, true);
           if (idx != v.length-1) xput(",");
         }
         indent -= Indent;
@@ -160,9 +160,9 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
         auto len = v.length;
         foreach (const kv; v.byKeyValue) {
           newline;
-          serData!true(kv.key);
+          serData(kv.key, true);
           xput(": ");
-          serData!true(kv.value);
+          serData(kv.value, true);
           if (--len) xput(",");
         }
         indent -= Indent;
@@ -179,7 +179,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
       xput(v.to!string);
     } else static if (is(UT == struct)) {
       import std.traits : FieldNameTuple, getUDAs, hasUDA;
-      static if (skipstructname) {
+      if (skipstructname) {
         xput("{");
       } else {
         xput(UT.stringof);
@@ -199,7 +199,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
           newline;
           xput(xname);
           xput(": ");
-          serData!true(__traits(getMember, v, fldname));
+          serData(__traits(getMember, v, fldname), true);
           needComma = true;
         }
       }
@@ -211,7 +211,7 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
     }
   }
 
-  if (skipstname) serData!true(v); else serData(v);
+  serData(v, skipstname);
 }
 
 
