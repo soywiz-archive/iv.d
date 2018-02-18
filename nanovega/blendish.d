@@ -1,5 +1,5 @@
 /*
-Blendish - Blender 2.5 UI based theming functions for NanoVG
+Blendish - Blender 2.5 UI based theming functions for NanoVega
 
 Copyright (c) 2014 Leonard Ritter <leonard.ritter@duangle.com>
 
@@ -45,7 +45,7 @@ Revision 6 (2014-09-21)
 
 Summary
 
-Blendish is a small collection of drawing functions for NanoVG, designed to
+Blendish is a small collection of drawing functions for NanoVega, designed to
 replicate the look of the Blender 2.5+ User Interface. You can use these
 functions to theme your UI library. Several metric constants for faithful
 reproduction are also included.

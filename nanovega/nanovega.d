@@ -34,7 +34,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
-The NanoVG API is modeled loosely on HTML5 canvas API. If you know canvas, you're up to speed with NanoVG in no time.
+The NanoVega API is modeled loosely on HTML5 canvas API.
+If you know canvas, you're up to speed with NanoVega in no time.
 
 
 Creating drawing context
@@ -55,10 +56,10 @@ The first parameter defines flags for creating the renderer.
   The quality is mostly visible on wider strokes. If you want speed, you can omit this flag.
 
 
-Drawing shapes with NanoVG
-==========================
+Drawing shapes with NanoVega
+============================
 
-Drawing a simple shape using NanoVG consists of four steps: 1] begin a new shape,
+Drawing a simple shape using NanoVega consists of four steps: 1] begin a new shape,
 2] define the path to draw, 3] set fill or stroke, 4] and finally fill or stroke the path.
 
   ---
@@ -77,9 +78,9 @@ arcTo API to compose the paths step by step.
 Understanding Composite Paths
 =============================
 
-Because of the way the rendering backend is build in NanoVG, drawing a composite path,
+Because of the way the rendering backend is build in NanoVega, drawing a composite path,
 that is path consisting from multiple paths defining holes and fills, is a bit more
-involved. NanoVG uses non-zero filling rule and by default the paths are wound in counter
+involved. NanoVega uses non-zero filling rule and by default the paths are wound in counter
 clockwise order. Keep that in mind when drawing using the low level draw API. In order to
 wind one of the predefined shapes as a hole, you should call `pathWinding(NVGSolidity.Hole)`,
 or `pathWinding(NVGSolidity.Solid)` *after* defining the path.
@@ -97,7 +98,7 @@ or `pathWinding(NVGSolidity.Solid)` *after* defining the path.
 Rendering is wrong, what to do?
 ===============================
 
-- make sure you have created NanoVG context using one of the `createGL2NVG()` call
+- make sure you have created NanoVega context using one of the `createGL2NVG()` call
 
 - make sure you have initialised OpenGL with *stencil buffer*
 
@@ -229,7 +230,7 @@ public ubyte nvgClampToByte(T) (T n) pure nothrow @safe @nogc if (__traits(isInt
 }
 
 
-/// NanoVG RGBA color
+/// NanoVega RGBA color
 public align(1) struct NVGColor {
 align(1):
 public:
@@ -511,7 +512,7 @@ public:
 }
 
 
-/// NanoVG A-HSL color
+/// NanoVega A-HSL color
 public align(1) struct NVGHSL {
 align(1):
   float h=0, s=0, l=1, a=1; ///
@@ -732,7 +733,7 @@ public enum NVGImageFlags {
   FlipY           = 1<<3, /// Flips (inverses) image in Y direction when rendered.
   Premultiplied   = 1<<4, /// Image data has premultiplied alpha.
   NoFiltering     = 1<<8, /// use GL_NEAREST instead of GL_LINEAR
-  Nearest = NoFiltering,  /// compatibility with original NanoVG
+  Nearest = NoFiltering,  /// compatibility with original NanoVega
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -857,10 +858,10 @@ struct NVGpathCache {
   float[4] bounds;
 }
 
-/// pointer to opaque NanoVG context structure.
+/// pointer to opaque NanoVega context structure.
 public alias NVGContext = NVGcontext*;
 
-/// Returns FontStash context of the given NanoVG context.
+/// Returns FontStash context of the given NanoVega context.
 FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs : null); }
 
 private struct NVGcontext {
@@ -1100,7 +1101,7 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
 
 /** Begin drawing a new frame.
  *
- * Calls to nanovg drawing API should be wrapped in `beginFrame()` and `endFrame()`
+ * Calls to NanoVega drawing API should be wrapped in `beginFrame()` and `endFrame()`
  *
  * `beginFrame()` defines the size of the window to render to in relation currently
  * set viewport (i.e. glViewport on GL backends). Device pixel ration allows to
@@ -1193,7 +1194,7 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /** <h1>Composite operation</h1>
- * The composite operations in NanoVG are modeled after HTML Canvas API, and
+ * The composite operations in NanoVega are modeled after HTML Canvas API, and
  * the blend func is based on OpenGL (see corresponding manuals for more info).
  * The colors in the blending state have premultiplied alpha.
  */
@@ -1224,7 +1225,7 @@ void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NV
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Color utils</h1>
-/// Colors in NanoVG are stored as ARGB. Zero alpha means "transparent color".
+/// Colors in NanoVega are stored as ARGB. Zero alpha means "transparent color".
 public alias NVGSectionDummy00 = void;
 
 /// Returns a color value from string form.
@@ -1482,7 +1483,7 @@ void nvg__setPaintColor (ref NVGPaint p, NVGColor color) nothrow @trusted @nogc 
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>State handling</h1>
 //
-/** NanoVG contains state which represents how paths will be rendered.
+/** NanoVega contains state which represents how paths will be rendered.
  * The state contains transform, fill and stroke styles, text and font styles,
  * and scissor clipping.
  */
@@ -1714,7 +1715,7 @@ public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Images</h1>
 //
-/** NanoVG allows you to load image files in various formats (if arsd loaders are in place) to be used for rendering.
+/** NanoVega allows you to load image files in various formats (if arsd loaders are in place) to be used for rendering.
  * In addition you can upload your own image.
  * The parameter imageFlags is combination of flags defined in NVGImageFlags.
  */
@@ -1823,7 +1824,7 @@ public void deleteImage (NVGContext ctx, int image) nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Paints</h1>
 //
-/** NanoVG supports four types of paints: linear gradient, box gradient, radial gradient and image pattern.
+/** NanoVega supports four types of paints: linear gradient, box gradient, radial gradient and image pattern.
  * These can be used as paints for strokes and fills.
  */
 public alias NVGSectionDummy05 = void;
@@ -2161,7 +2162,7 @@ void nvg__appendCommands (NVGContext ctx, const(float)[] vals...) nothrow @trust
     //int ccommands = ctx.ncommands+nvals+ctx.ccommands/2;
     int ccommands = ((ctx.ncommands+nvals)|0xfff)+1;
     float* commands = cast(float*)realloc(ctx.commands, float.sizeof*ccommands);
-    if (commands is null) assert(0, "NanoVG: out of memory");
+    if (commands is null) assert(0, "NanoVega: out of memory");
     ctx.commands = commands;
     ctx.ccommands = ccommands;
     assert(ctx.ncommands+nvals <= ctx.ccommands);
@@ -2983,7 +2984,7 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
  * to draw common shapes like rectangles and circles, and lower level step-by-step functions,
  * which allow to define a path curve by curve.
  *
- * NanoVG uses even-odd fill rule to draw the shapes. Solid shapes should have counter clockwise
+ * NanoVega uses even-odd fill rule to draw the shapes. Solid shapes should have counter clockwise
  * winding and holes should have counter clockwise order. To specify winding of a path you can
  * call `pathWinding()`. This is useful especially for the common shapes, which are drawn CCW.
  *
@@ -3105,7 +3106,7 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc
  * and the arc is drawn from angle a0 to a1, and swept in direction dir (NVGWinding.CCW, or NVGWinding.CW).
  * Angles are specified in radians.
  *
- * `mode` is: "original", "move", "line" -- first command will be like original NanoVG, MoveTo, or LineTo
+ * `mode` is: "original", "move", "line" -- first command will be like original NanoVega, MoveTo, or LineTo
  */
 public void arc(string mode="original") (NVGContext ctx, in float cx, in float cy, in float r, in float a0, in float a1, NVGWinding dir) nothrow @trusted @nogc {
   static assert(mode == "original" || mode == "move" || mode == "line");
@@ -3382,6 +3383,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
  *     nvg.fillColor(nvgRGBA(255, 0, 255));
  *     nvg.fill();
  *   }
+ *   ---
  *
  */
 public alias NVGSectionDummy60 = void;
@@ -4895,7 +4897,7 @@ void nvg__pickBeginFrame (NVGcontext* ctx, int width, int height) {
 // ////////////////////////////////////////////////////////////////////////// //
 /// <h1>Text</h1>
 //
-/** NanoVG allows you to load .ttf files and use the font to render text.
+/** NanoVega allows you to load .ttf files and use the font to render text.
  *
  * The appearance of the text can be defined by setting the current text style
  * and by specifying the fill color. Common text and font settings such as
@@ -6528,13 +6530,13 @@ int fons__allocFont (FONScontext* stash, int atidx=-1) nothrow @trusted @nogc {
     if (stash.nfonts+1 > stash.cfonts) {
       stash.cfonts = (stash.cfonts == 0 ? 16 : stash.cfonts+32);
       stash.fonts = cast(FONSfont**)realloc(stash.fonts, (FONSfont*).sizeof*stash.cfonts);
-      if (stash.fonts is null) assert(0, "out of memory in nanovg fontstash");
+      if (stash.fonts is null) assert(0, "out of memory in NanoVega fontstash");
     }
     assert(stash.nfonts < stash.cfonts);
     stash.fonts[stash.nfonts] = font;
     return stash.nfonts++;
   } else {
-    if (atidx >= stash.cfonts) assert(0, "internal nanovg fontstash error");
+    if (atidx >= stash.cfonts) assert(0, "internal NanoVega fontstash error");
     stash.fonts[atidx] = font;
     return atidx;
   }
@@ -6615,7 +6617,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
       auto dataSize = fl.size;
       if (dataSize < 16 || dataSize > int.max/32) return FONS_INVALID;
       ubyte* data = cast(ubyte*)malloc(cast(uint)dataSize);
-      if (data is null) assert(0, "out of memory in nanovg fontstash");
+      if (data is null) assert(0, "out of memory in NanoVega fontstash");
       scope(failure) free(data); // oops
       fl.rawReadExact(data[0..cast(uint)dataSize]);
       fl.close();
@@ -9088,7 +9090,7 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 }
 
 
-/// Creates NanoVG contexts for OpenGL versions.
+/// Creates NanoVega contexts for OpenGL versions.
 /// Flags should be combination of the create flags above.
 public NVGContext createGL2NVG (int flags) nothrow @trusted @nogc {
   NVGparams params = void;
@@ -9132,12 +9134,12 @@ error:
   return null;
 }
 
-/// Delete NanoVG OpenGL context.
+/// Delete NanoVega OpenGL context.
 public void deleteGL2 (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx !is null) ctx.deleteInternal();
 }
 
-/// Create NanoVG OpenGL image from texture id.
+/// Create NanoVega OpenGL image from texture id.
 public int glCreateImageFromHandleGL2 (NVGContext ctx, GLuint textureId, int w, int h, int imageFlags) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)ctx.internalParams().userPtr;
   GLNVGtexture* tex = glnvg__allocTexture(gl);
@@ -9153,7 +9155,7 @@ public int glCreateImageFromHandleGL2 (NVGContext ctx, GLuint textureId, int w, 
   return tex.id;
 }
 
-/// Return OpenGL texture id for NanoVG image.
+/// Return OpenGL texture id for NanoVega image.
 public GLuint glImageHandleGL2 (NVGContext ctx, int image) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)ctx.internalParams().userPtr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
@@ -9515,7 +9517,7 @@ static if (NVG_HAS_FONTCONFIG) {
       fontconfigAvailable = true;
     } else {
       import core.stdc.stdio : stderr, fprintf;
-      stderr.fprintf("***NanoVG WARNING: cannot init fontconfig!\n");
+      stderr.fprintf("***NanoVega WARNING: cannot init fontconfig!\n");
     }
   }
 }
