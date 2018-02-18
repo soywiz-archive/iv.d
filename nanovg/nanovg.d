@@ -8049,6 +8049,7 @@ GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
     int ctextures = glnvg__maxi(tid, 4)+gl.ctextures/2; // 1.5x Overallocate
     GLNVGtexture* textures = cast(GLNVGtexture*)realloc(gl.textures, GLNVGtexture.sizeof*ctextures);
     if (textures is null) return null;
+    memset(&textures[gl.ctextures], 0, (ctextures-gl.ctextures)*GLNVGtexture.sizeof);
     gl.textures = textures;
     gl.ctextures = ctextures;
   }
