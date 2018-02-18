@@ -174,6 +174,21 @@ if (!is(T == class) && (isWriteableStream!ST || isOutputRange!(ST, char)))
     } else static if (isCharType!UT) {
       import std.conv : to;
       xput((cast(uint)v).to!string);
+    } else static if (is(UT == enum)) {
+      bool enumFound = false;
+      foreach (string fldname; __traits(allMembers, UT)) {
+        if (v == __traits(getMember, UT, fldname)) {
+          //xput(UT.stringof);
+          //xput(".");
+          xput(fldname);
+          enumFound = true;
+          break;
+        }
+      }
+      if (!enumFound) {
+        import std.conv : to;
+        xput(v.to!string);
+      }
     } else static if (isSimpleType!UT) {
       import std.conv : to;
       xput(v.to!string);
