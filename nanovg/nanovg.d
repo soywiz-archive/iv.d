@@ -147,15 +147,6 @@ The following code illustrates the OpenGL state touched by the rendering code:
 module iv.nanovg.nanovg is aliced;
 private:
 
-version(Posix) {
-  version(nanovg_disable_fontconfig) {
-    public enum NVG_HAS_FONTCONFIG = false;
-  } else {
-    import iv.fontconfig;
-    public enum NVG_HAS_FONTCONFIG = true;
-  }
-}
-
 import iv.meta;
 import iv.vfs;
 
@@ -169,12 +160,24 @@ import std.math : PI;
 //import iv.nanovg.fontstash;
 
 version(nanovg_naked) {
+  version = nanovg_disable_fontconfig;
 } else {
   version = nanovg_use_freetype;
   version = nanovg_ft_mon;
   version = nanovg_demo_msfonts;
   version = nanovg_default_no_font_aa;
+  //version = nanovg_builtin_fontconfig_bindings;
 }
+
+version(Posix) {
+  version(nanovg_disable_fontconfig) {
+    public enum NVG_HAS_FONTCONFIG = false;
+  } else {
+    public enum NVG_HAS_FONTCONFIG = true;
+    version(nanovg_builtin_fontconfig_bindings) {} else import iv.fontconfig;
+  }
+}
+
 
 public:
 alias NVG_PI = PI;
@@ -9059,7 +9062,348 @@ public GLuint glImageHandleGL2 (NVGContext ctx, int image) nothrow @trusted @nog
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+struct IdPoolImpl(IDT, bool allowZero=false) if (is(IDT == ubyte) || is(IDT == ushort) || is(IDT == uint)) {
+public:
+  alias Type = IDT; ///
+  enum Invalid = cast(IDT)IDT.max; /// "invalid id" value
+
+private:
+  static align(1) struct Range {
+  align(1):
+    Type first;
+    Type last;
+  }
+
+  size_t rangesmem; // sorted array of ranges of free IDs; Range*; use `size_t` to force GC ignoring this struct
+  uint rngcount; // number of ranges in list
+  uint rngsize; // total capacity of range list (NOT size in bytes!)
+
+  @property inout(Range)* ranges () const pure inout nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))rangesmem; }
+
+private nothrow @trusted @nogc:
+  // will NOT change rngcount if `doChange` is `false`
+  void growRangeArray(bool doChange) (uint newcount) {
+    enum GrowStep = 128;
+    if (newcount <= rngcount) {
+      static if (doChange) rngcount = newcount;
+      return;
+    }
+    assert(rngcount <= rngsize);
+    if (newcount > rngsize) {
+      // need to grow
+      import core.stdc.stdlib : realloc;
+      if (rngsize >= uint.max/(Range.sizeof+8) || newcount >= uint.max/(Range.sizeof+8)) assert(0, "out of memory");
+      rngsize = ((newcount+(GrowStep-1))/GrowStep)*GrowStep;
+      size_t newmem = cast(size_t)realloc(cast(void*)rangesmem, rngsize*Range.sizeof);
+      if (newmem == 0) assert(0, "out of memory");
+      rangesmem = newmem;
+    }
+    assert(newcount <= rngsize);
+    static if (doChange) rngcount = newcount;
+  }
+
+  void insertRange (uint index) {
+    growRangeArray!false(rngcount+1);
+    if (index < rngcount) {
+      // really inserting
+      import core.stdc.string : memmove;
+      memmove(ranges+index+1, ranges+index, (rngcount-index)*Range.sizeof);
+    }
+    ++rngcount;
+  }
+
+  void destroyRange (uint index) {
+    import core.stdc.string : memmove;
+    assert(rngcount > 0);
+    if (--rngcount > 0) memmove(ranges+index, ranges+index+1, (rngcount-index)*Range.sizeof);
+  }
+
+public:
+  this (Type aMaxId) { reset(aMaxId); }
+
+  ~this () {
+    if (rangesmem) {
+      import core.stdc.stdlib : free;
+      free(cast(void*)rangesmem);
+    }
+  }
+
+  // checks if the given id is in valid id range.
+  static bool isValid (Type id) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    static if (allowZero) return (id != Invalid); else return (id && id != Invalid);
+  }
+
+  // remove all allocated ids, and set maximum available id.
+  void reset (Type aMaxId=Type.max) {
+    if (aMaxId < 1) assert(0, "are you nuts?");
+    if (aMaxId == Type.max) --aMaxId; // to ease my life a little
+    // start with a single range, from 0/1 to max allowed ID (specified)
+    growRangeArray!true(1);
+    static if (allowZero) ranges[0].first = 0; else ranges[0].first = 1;
+    ranges[0].last = aMaxId;
+  }
+
+  // allocate lowest unused id.
+  // returns `Invalid` if there are no more ids left.
+  Type allocId () {
+    if (rngcount == 0) {
+      // wasn't inited, init with defaults
+      growRangeArray!true(1);
+      static if (allowZero) ranges[0].first = 0; else ranges[0].first = 1;
+      ranges[0].last = Type.max-1;
+    }
+    auto rng = ranges;
+    Type id = Invalid;
+    if (rng.first <= rng.last) {
+      id = rng.first;
+      // if current range is full and there is another one, that will become the new current range
+      if (rng.first == rng.last && rngcount > 1) destroyRange(0); else ++rng.first;
+    }
+    // otherwise we have no ranges left
+    return id;
+  }
+
+  // allocate the given id.
+  // returns id, or `Invalid` if this id was alrady allocated.
+  Type allocId (Type aid) {
+    static if (allowZero) {
+      if (aid == Invalid) return Invalid;
+    } else {
+      if (aid == 0 || aid == Invalid) return Invalid;
+    }
+
+    if (rngcount == 0) {
+      // wasn't inited, create two ranges (before and after this id)
+      // but check for special cases first
+      static if (allowZero) enum LowestId = 0; else enum LowestId = 1;
+      // lowest possible id?
+      if (aid == LowestId) {
+        growRangeArray!true(1);
+        ranges[0].first = cast(Type)(LowestId+1);
+        ranges[0].last = Type.max-1;
+        return aid;
+      }
+      // highest possible id?
+      if (aid == Type.max-1) {
+        growRangeArray!true(1);
+        ranges[0].first = cast(Type)LowestId;
+        ranges[0].last = Type.max-2;
+        return aid;
+      }
+      // create two ranges
+      growRangeArray!true(2);
+      ranges[0].first = cast(Type)LowestId;
+      ranges[0].last = cast(Type)(aid-1);
+      ranges[1].first = cast(Type)(aid+1);
+      ranges[1].last = cast(Type)(Type.max-1);
+      return aid;
+    }
+    // already inited, check if the given id is not allocated, and split ranges
+    // binary search of the range list
+    uint i0 = 0, i1 = rngcount-1;
+    for (;;) {
+      uint i = (i0+i1)/2; // guaranteed to not overflow, see `growRangeArray()`
+      Range* rngi = ranges+i;
+      if (aid < rngi.first) {
+        if (i == i0) return Invalid; // already allocated
+        // cull upper half of list
+        i1 = i-1;
+      } else if (aid > rngi.last) {
+        if (i == i1) return Invalid; // already allocated
+        // cull bottom half of list
+        i0 = i+1;
+      } else {
+        // inside a free block, split it
+        // check for corner case: do we want range's starting id?
+        if (rngi.first == aid) {
+          // if current range is full and there is another one, that will become the new current range
+          if (rngi.first == rngi.last && rngcount > 1) destroyRange(i); else ++rngi.first;
+          return aid;
+        }
+        // check for corner case: do we want range's ending id?
+        if (rngi.last == aid) {
+          // if current range is full and there is another one, that will become the new current range
+          if (rngi.first == rngi.last) {
+            if (rngcount > 1) destroyRange(i); else ++rngi.first; // turn range into invalid
+          } else {
+            --rngi.last;
+          }
+          return aid;
+        }
+        // have to split the range in two
+        if (rngcount >= uint.max-2) return Invalid; // no room
+        insertRange(i+1);
+        rngi = ranges+i; // pointer may be invalidated by inserting, so update it
+        rngi[1].last = rngi.last;
+        rngi[1].first = cast(Type)(aid+1);
+        rngi[0].last = cast(Type)(aid-1);
+        assert(rngi[0].first <= rngi[0].last);
+        assert(rngi[1].first <= rngi[1].last);
+        assert(rngi[0].last+2 == rngi[1].first);
+        return aid;
+      }
+    }
+  }
+
+  // release allocated id.
+  // returns `true` if `id` was a valid allocated one.
+  bool releaseId (Type id) { return releaseRange(id, 1); }
+
+  // release allocated id range.
+  // returns `true` if the rage was a valid allocated one.
+  bool releaseRange (Type id, uint count) {
+    if (count == 0 || rngcount == 0) return false;
+    if (count >= Type.max) return false; // too many
+
+    static if (allowZero) {
+      if (id == Invalid) return false;
+    } else {
+      if (id == 0 || id == Invalid) return false;
+    }
+
+    uint endid = id+count;
+    static if (is(Type == uint)) {
+      if (endid <= id) return false; // overflow check; fuck you, C!
+    } else {
+      if (endid <= id || endid > Type.max) return false; // overflow check; fuck you, C!
+    }
+
+    // binary search of the range list
+    uint i0 = 0, i1 = rngcount-1;
+    for (;;) {
+      uint i = (i0+i1)/2; // guaranteed to not overflow, see `growRangeArray()`
+      Range* rngi = ranges+i;
+      if (id < rngi.first) {
+        // before current range, check if neighboring
+        if (endid >= rngi.first) {
+          if (endid != rngi.first) return false; // overlaps a range of free IDs, thus (at least partially) invalid IDs
+          // neighbor id, check if neighboring previous range too
+          if (i > i0 && id-1 == ranges[i-1].last) {
+            // merge with previous range
+            ranges[i-1].last = rngi.last;
+            destroyRange(i);
+          } else {
+            // just grow range
+            rngi.first = id;
+          }
+          return true;
+        } else {
+          // non-neighbor id
+          if (i != i0) {
+            // cull upper half of list
+            i1 = i-1;
+          } else {
+            // found our position in the list, insert the deleted range here
+            insertRange(i);
+            // refresh pointer
+            rngi = ranges+i;
+            rngi.first = id;
+            rngi.last = cast(Type)(endid-1);
+            return true;
+          }
+        }
+      } else if (id > rngi.last) {
+        // after current range, check if neighboring
+        if (id-1 == rngi.last) {
+          // neighbor id, check if neighboring next range too
+          if (i < i1 && endid == ranges[i+1].first) {
+            // merge with next range
+            rngi.last = ranges[i+1].last;
+            destroyRange(i+1);
+          } else {
+            // just grow range
+            rngi.last += count;
+          }
+          return true;
+        } else {
+          // non-neighbor id
+          if (i != i1) {
+            // cull bottom half of list
+            i0 = i+1;
+          } else {
+            // found our position in the list, insert the deleted range here
+            insertRange(i+1);
+            // get pointer to [i+1]
+            rngi = ranges+i+1;
+            rngi.first = id;
+            rngi.last = cast(Type)(endid-1);
+            return true;
+          }
+        }
+      } else {
+        // inside a free block, not a valid ID
+        return false;
+      }
+    }
+  }
+
+  // is the gived id valid and allocated?
+  bool isAllocated (Type id) const {
+    if (rngcount == 0) return false; // anyway, 'cause not inited
+    static if (allowZero) {
+      if (id == Invalid) return false;
+    } else {
+      if (id == 0 || id == Invalid) return false;
+    }
+    // binary search of the range list
+    uint i0 = 0, i1 = rngcount-1;
+    for (;;) {
+      uint i = (i0+i1)/2; // guaranteed to not overflow, see `growRangeArray()`
+      const(Range)* rngi = ranges+i;
+      if (id < rngi.first) {
+        if (i == i0) return true;
+        // cull upper half of list
+        i1 = i-1;
+      } else if (id > rngi.last) {
+        if (i == i1) return true;
+        // cull bottom half of list
+        i0 = i+1;
+      } else {
+        // inside a free block, not a valid ID
+        return false;
+      }
+    }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 static if (NVG_HAS_FONTCONFIG) {
+  version(nanovg_builtin_fontconfig_bindings) {
+    pragma(lib, "fontconfig");
+
+    private extern(C) nothrow @trusted @nogc {
+      enum FC_FILE = "file"; /* String */
+      alias FcBool = int;
+      alias FcChar8 = char;
+      struct FcConfig;
+      struct FcPattern;
+      alias FcMatchKind = int;
+      enum : FcMatchKind {
+        FcMatchPattern,
+        FcMatchFont,
+        FcMatchScan
+      }
+      alias FcResult = int;
+      enum : FcResult {
+        FcResultMatch,
+        FcResultNoMatch,
+        FcResultTypeMismatch,
+        FcResultNoId,
+        FcResultOutOfMemory
+      }
+      FcBool FcInit ();
+      FcBool FcConfigSubstituteWithPat (FcConfig* config, FcPattern* p, FcPattern* p_pat, FcMatchKind kind);
+      void FcDefaultSubstitute (FcPattern* pattern);
+      FcBool FcConfigSubstitute (FcConfig* config, FcPattern* p, FcMatchKind kind);
+      FcPattern* FcFontMatch (FcConfig* config, FcPattern* p, FcResult* result);
+      FcPattern* FcNameParse (const(FcChar8)* name);
+      void FcPatternDestroy (FcPattern* p);
+      FcResult FcPatternGetString (const(FcPattern)* p, const(char)* object, int n, FcChar8** s);
+    }
+  }
+
   __gshared bool fontconfigAvailable = false;
   // initialize fontconfig
   shared static this () {
