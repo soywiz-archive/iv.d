@@ -31,29 +31,33 @@
 //   * it is possible to construct a pathological case where fragmentation would cause n to become large; don't do that
 module iv.idpool;
 
-alias IdPool16 = IdPoolImpl!ushort;
-alias IdPool32 = IdPoolImpl!uint;
+alias IdPool16 = IdPoolImpl!ushort; ///
+alias IdPool32 = IdPoolImpl!uint; ///
 
 
-// WARNING! don't use copies of this struct, it WILL ruin everything!
-// copying is not disabled to allow copying when programmer thinks it is necessary
-// if `allowZero` is true, zero id is valid, otherwise it is never returned
-// `IDT.max` is ALWAYS invalid, and is used as "error result"
+/** eneral IdPool implementation;
+ *
+ * WARNING! don't use copies of this struct, it WILL ruin everything!
+ * copying is not disabled to allow copying when programmer thinks it is necessary.
+ * if `allowZero` is true, zero id is valid, otherwise it is never returned.
+ * `IDT.max` is ALWAYS invalid, and is used as "error result".
+ */
 struct IdPoolImpl(IDT, bool allowZero=false) if (is(IDT == ubyte) || is(IDT == ushort) || is(IDT == uint)) {
 public:
-  alias Type = IDT;
-  enum Invalid = cast(IDT)IDT.max;
+  alias Type = IDT; ///
+  enum Invalid = cast(IDT)IDT.max; /// "invalid id" value
 
 private:
   static align(1) struct Range {
   align(1):
-    IDT first;
-    IDT last;
+    Type first;
+    Type last;
   }
 
   size_t rangesmem; // sorted array of ranges of free IDs; Range*; use `size_t` to force GC ignoring this struct
   uint rngcount; // number of ranges in list
   uint rngsize; // total capacity of range list (NOT size in bytes!)
+  Type idnextmaxid; // next id for `allocNext()`
 
   @property inout(Range)* ranges () const pure inout nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))rangesmem; }
 
@@ -121,8 +125,10 @@ private nothrow @trusted @nogc:
   }
 
 public:
-  this (IDT aMaxId) { reset(aMaxId); }
+  ///
+  this (Type aMaxId) { reset(aMaxId); }
 
+  ///
   ~this () {
     if (rangesmem) {
       import core.stdc.stdlib : free;
@@ -130,22 +136,29 @@ public:
     }
   }
 
+  /// checks if the given id is in valid id range.
   static bool isValid (Type id) pure nothrow @safe @nogc {
     pragma(inline, true);
     static if (allowZero) return (id != Invalid); else return (id && id != Invalid);
   }
 
-  void reset (IDT aMaxId=IDT.max) {
+  /// return next id for `allocNext()`. this is here just for completeness.
+  @property nextSeqId () const pure { pragma(inline, true); static if (allowZero) { return idnextmaxid; } else { return (idnextmaxid ? idnextmaxid : 1); } }
+
+  /// remove all allocated ids, and set maximum available id.
+  void reset (Type aMaxId=Type.max) {
     if (aMaxId < 1) assert(0, "are you nuts?");
-    if (aMaxId == IDT.max) --aMaxId; // to ease my life a little
+    if (aMaxId == Type.max) --aMaxId; // to ease my life a little
     // start with a single range, from 0/1 to max allowed ID (specified)
     growRangeArray!true(1);
     static if (allowZero) ranges[0].first = 0; else ranges[0].first = 1;
     ranges[0].last = aMaxId;
+    idnextmaxid = 0;
   }
 
-  // get one id
-  Type get () {
+  /// allocate lowest unused id.
+  /// returns `Invalid` if there are no more ids left.
+  Type allocId () {
     if (rngcount == 0) {
       // wasn't inited, init with defaults
       growRangeArray!true(1);
@@ -161,11 +174,113 @@ public:
       version(unittest) checkRanges();
     }
     // otherwise we have no ranges left
+    if (id != Invalid && id >= idnextmaxid) idnextmaxid = cast(Type)(id+1);
     return id;
   }
 
-  // get sequential ids
-  Type getRange (uint count) {
+  /// allocate the given id.
+  /// returns id, or `Invalid` if this id was alrady allocated.
+  Type allocId (Type aid) {
+    static if (allowZero) {
+      if (aid == Invalid) return Invalid;
+    } else {
+      if (aid == 0 || aid == Invalid) return Invalid;
+    }
+
+    if (rngcount == 0) {
+      // wasn't inited, create two ranges (before and after this id)
+      if (aid >= idnextmaxid) idnextmaxid = cast(Type)(aid+1); // fix next max id
+      // but check for special cases first
+      static if (allowZero) enum LowestId = 0; else enum LowestId = 1;
+      // lowest possible id?
+      if (aid == LowestId) {
+        growRangeArray!true(1);
+        ranges[0].first = cast(Type)(LowestId+1);
+        ranges[0].last = Type.max-1;
+        version(unittest) checkRanges();
+        return aid;
+      }
+      // highest possible id?
+      if (aid == Type.max-1) {
+        growRangeArray!true(1);
+        ranges[0].first = cast(Type)LowestId;
+        ranges[0].last = Type.max-2;
+        version(unittest) checkRanges();
+        return aid;
+      }
+      // create two ranges
+      growRangeArray!true(2);
+      ranges[0].first = cast(Type)LowestId;
+      ranges[0].last = cast(Type)(aid-1);
+      ranges[1].first = cast(Type)(aid+1);
+      ranges[1].last = cast(Type)(Type.max-1);
+      version(unittest) checkRanges();
+      return aid;
+    }
+    // already inited, check if the given id is not allocated, and split ranges
+    // binary search of the range list
+    uint i0 = 0, i1 = rngcount-1;
+    for (;;) {
+      uint i = (i0+i1)/2; // guaranteed to not overflow, see `growRangeArray()`
+      Range* rngi = ranges+i;
+      if (aid < rngi.first) {
+        if (i == i0) return Invalid; // already allocated
+        // cull upper half of list
+        i1 = i-1;
+      } else if (aid > rngi.last) {
+        if (i == i1) return Invalid; // already allocated
+        // cull bottom half of list
+        i0 = i+1;
+      } else {
+        // inside a free block, split it
+        if (aid >= idnextmaxid) idnextmaxid = cast(Type)(aid+1); // fix next max id (this can be wrong when there are no memory for ranges, but meh)
+        // check for corner case: do we want range's starting id?
+        if (rngi.first == aid) {
+          // if current range is full and there is another one, that will become the new current range
+          if (rngi.first == rngi.last && rngcount > 1) destroyRange(i); else ++rngi.first;
+          version(unittest) checkRanges();
+          return aid;
+        }
+        // check for corner case: do we want range's ending id?
+        if (rngi.last == aid) {
+          // if current range is full and there is another one, that will become the new current range
+          if (rngi.first == rngi.last) {
+            if (rngcount > 1) destroyRange(i); else ++rngi.first; // turn range into invalid
+          } else {
+            --rngi.last;
+          }
+          version(unittest) checkRanges();
+          return aid;
+        }
+        // have to split the range in two
+        if (rngcount >= uint.max-2) return Invalid; // no room
+        insertRange(i+1);
+        rngi = ranges+i; // pointer may be invalidated by inserting, so update it
+        rngi[1].last = rngi.last;
+        rngi[1].first = cast(Type)(aid+1);
+        rngi[0].last = cast(Type)(aid-1);
+        assert(rngi[0].first <= rngi[0].last);
+        assert(rngi[1].first <= rngi[1].last);
+        assert(rngi[0].last+2 == rngi[1].first);
+        version(unittest) checkRanges();
+        return aid;
+      }
+    }
+  }
+
+  /// allocate "next" id. "next" ids are always increasing, and will never duplicate (within the limits).
+  /// returns id, or `Invalid` if this id was alrady allocated.
+  Type allocNext () {
+    static if (!allowZero) {
+      if (idnextmaxid == 0) idnextmaxid = 1;
+    }
+    if (idnextmaxid == Type.max) return Invalid; // no more ids
+    return allocId(idnextmaxid); // should never return `Invalid`, and will fix `idnextmaxid` by itself
+  }
+
+  /// allocate `count` sequential ids with the lowest possible number.
+  /// returns `Invalid` if the request cannot be satisfied.
+  Type allocRange (uint count) {
     if (count == 0) return Invalid;
     if (count >= Type.max) return Invalid; // too many
     if (rngcount == 0) {
@@ -189,11 +304,16 @@ public:
     return Invalid;
   }
 
-  bool release (Type id) { return releaseRange(id, 1); }
+  /// release allocated id.
+  /// returns `true` if `id` was a valid allocated one.
+  bool releaseId (Type id) { return releaseRange(id, 1); }
 
+  /// release allocated id range.
+  /// returns `true` if the rage was a valid allocated one.
   bool releaseRange (Type id, uint count) {
     if (count == 0 || rngcount == 0) return false;
     if (count >= Type.max) return false; // too many
+
     static if (allowZero) {
       if (id == Invalid) return false;
     } else {
@@ -280,6 +400,7 @@ public:
     }
   }
 
+  /// is the gived id valid and allocated?
   bool isAllocated (Type id) const {
     if (rngcount == 0) return false; // anyway, 'cause not inited
     static if (allowZero) {
@@ -307,14 +428,14 @@ public:
     }
   }
 
-  // count available ids
+  /// count number of available free ids.
   uint countAvail () const {
     uint count = rngcount; // we are not keeping empty ranges, so it is safe to start with this
     foreach (const ref Range r; ranges[0..count]) count += r.last-r.first; // `last` is inclusive, but see the previous line
     return count;
   }
 
-  // get largest available continuous range
+  /// get largest available continuous free range.
   uint largestAvailRange () const {
     uint maxCount = 0;
     foreach (const ref Range r; ranges[0..rngcount]) {
@@ -344,6 +465,30 @@ version(iv_unittest_idpool) unittest {
   import iv.prng.pcg32;
   import iv.prng.seeder;
 
+  {
+    IdPool16 xpool;
+    { import core.stdc.stdio; printf("next max=%u\n", xpool.nextSeqId); }
+
+    ulong zseed = getUlongSeed;
+    { import core.stdc.stdio; printf("phase 0 seed: %llu\n", zseed); }
+    PCG32 zprng;
+    zprng.seed(zseed, 42);
+
+    foreach (immutable oit; 0..5) {
+      xpool.reset();
+      foreach (immutable itr; 0..60000) {
+        auto id = xpool.allocNext();
+        assert(id == itr+1);
+        assert(id == xpool.nextSeqId-1);
+        // free random id
+        auto rid = cast(xpool.Type)(zprng.front%(id+1));
+        if (xpool.isAllocated(rid)) xpool.releaseId(rid);
+        assert(!xpool.isAllocated(rid));
+        if (rid == id) assert(!xpool.isAllocated(id)); else assert(xpool.isAllocated(id));
+      }
+    }
+  }
+
   IdPool16 pool;
   static bool[pool.Type.max+1] alloced = false;
 
@@ -352,7 +497,7 @@ version(iv_unittest_idpool) unittest {
   alloced[pool.Invalid] = true;
   uint acount = 0;
   foreach (immutable _; 0..1_000_000) {
-    auto xid = pool.get();
+    auto xid = pool.allocId();
     if (!pool.isValid(xid)) {
       if (acount == pool.Type.max-1) break;
       assert(0, "fuuuuu");
@@ -399,14 +544,14 @@ version(iv_unittest_idpool) unittest {
       // release
       //if (nn == 145915) { import core.stdc.stdio; printf("RELEASING %u\n", cast(uint)xid); }
       assert(alloced[xid]);
-      if (!pool.release(xid)) assert(0, "fuuuu");
+      if (!pool.releaseId(xid)) assert(0, "fuuuu");
       alloced[xid] = false;
       assert(acount > 0);
       --acount;
       ++relCount;
     } else {
       // allocate new id
-      xid = pool.get;
+      xid = pool.allocId;
       assert(pool.isValid(xid));
       if (!pool.isAllocated(xid)) { import core.stdc.stdio; printf("failed at step %u; xid %u is not marked as allocated\n", nn, cast(uint)xid); }
       //assert(pool.isAllocated(xid));
