@@ -1068,7 +1068,7 @@ package/*(iv.nanovg)*/ NVGparams* internalParams (NVGContext ctx) nothrow @trust
 }
 
 // Destructor called by the render back-end.
-package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) nothrow @trusted @nogc {
+package/*(iv.nanovg)*/ void deleteInternal (ref NVGContext ctx) nothrow @trusted @nogc {
   if (ctx is null) return;
 
   if (ctx.commands !is null) free(ctx.commands);
@@ -1093,7 +1093,7 @@ package/*(iv.nanovg)*/ void deleteInternal (NVGContext ctx) nothrow @trusted @no
 }
 
 ///
-public void kill (NVGContext ctx) nothrow @trusted @nogc {
+public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
   ctx.deleteInternal();
 }
 
@@ -1794,7 +1794,7 @@ version(nanovg_use_arsd_image) {
 /// Creates image from specified image data.
 /// Returns handle to the image or 0 on error.
 public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, int imageFlags=NVGImageFlags.None) nothrow @trusted @nogc {
-  if (w < 1 || h < 1 || data.length < w*h*4) return -1;
+  if (w < 1 || h < 1 || data.length < w*h*4) return 0;
   return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
 }
 
@@ -1921,7 +1921,6 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
   return p;
 }
 
-
 /** Creates and returns an image pattern. Parameters `(cx, cy)` specify the left-top location of the image pattern,
  * `(w, h)` the size of one image, `angle` rotation around the top-left corner, `image` is handle to the image to render.
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
@@ -1942,6 +1941,110 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
   p.innerColor = p.outerColor = nvgRGBAf(1, 1, 1, alpha);
 
   return p;
+}
+
+public alias NVGLGS = NVGLGSdata*; ///
+
+private struct NVGLGSdata {
+  int imgid; // 0: invalid
+  // `imagePattern()` arguments
+  float cx, cy, w, h, angle;
+
+  @disable this (this); // no copies
+  public @property bool valid () const pure nothrow @safe @nogc => (imgid > 0); ///
+}
+
+/// Destroy linear gradient with stops
+public void kill (NVGContext ctx, ref NVGLGS lgs) nothrow @trusted @nogc {
+  if (lgs is null) return;
+  if (lgs.imgid > 0) { ctx.deleteImage(lgs.imgid); lgs.imgid = 0; }
+  free(lgs);
+  lgs = null;
+}
+
+/** Sets linear gradient with stops, created with `createLinearGradientWithStops()`.
+ * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
+ */
+public NVGPaint linearGradient (NVGContext ctx, NVGLGS lgs) nothrow @trusted @nogc {
+  if (lgs is null || !lgs.valid) {
+    NVGPaint p = void;
+    memset(&p, 0, p.sizeof);
+    nvg__setPaintColor(p, NVGColor.red);
+    return p;
+  } else {
+    return ctx.imagePattern(lgs.cx, lgs.cy, lgs.w, lgs.h, lgs.angle, lgs.imgid);
+  }
+}
+
+///
+public struct NVGGradientStop {
+  float offset; /// [0..1]
+  NVGColor color; ///
+}
+
+/// Create linear gradient data suitable to use with `linearGradient(res)`.
+/// Don't forget to destroy the result when you don't need it anymore with `ctx.kill(res);`.
+public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy, float ex, float ey, const(NVGGradientStop)[] stops) nothrow @trusted @nogc {
+  // based on the code by Jorge Acereda <jacereda@gmail.com>
+  enum NVG_GRADIENT_SAMPLES = 1024;
+  static void gradientSpan (uint* dst, const(NVGGradientStop)* s0, const(NVGGradientStop)* s1) nothrow @trusted @nogc {
+    float s0o = nvg__clamp(s0.offset, 0.0f, 1.0f);
+    float s1o = nvg__clamp(s1.offset, 0.0f, 1.0f);
+    uint s = cast(uint)(s0o*NVG_GRADIENT_SAMPLES);
+    uint e = cast(uint)(s1o*NVG_GRADIENT_SAMPLES);
+    uint sc = 0xffffffffU;
+    uint sh = 24;
+    uint r = cast(uint)(s0.color.rgba[0]*sc);
+    uint g = cast(uint)(s0.color.rgba[1]*sc);
+    uint b = cast(uint)(s0.color.rgba[2]*sc);
+    uint a = cast(uint)(s0.color.rgba[3]*sc);
+    uint dr = cast(uint)((s1.color.rgba[0]*sc-r)/(e-s));
+    uint dg = cast(uint)((s1.color.rgba[1]*sc-g)/(e-s));
+    uint db = cast(uint)((s1.color.rgba[2]*sc-b)/(e-s));
+    uint da = cast(uint)((s1.color.rgba[3]*sc-a)/(e-s));
+    for (uint i = s; i < e; ++i) {
+      version(BigEndian) {
+        dst[i] = ((r>>sh)<<24)+((g>>sh)<<16)+((b>>sh)<<8)+((a>>sh)<<0);
+      } else {
+        dst[i] = ((a>>sh)<<24)+((b>>sh)<<16)+((g>>sh)<<8)+((r>>sh)<<0);
+      }
+      r += dr;
+      g += dg;
+      b += db;
+      a += da;
+    }
+  }
+
+  uint[NVG_GRADIENT_SAMPLES] data = void;
+  float w = ex-sx;
+  float h = ey-sy;
+  float len = nvg__sqrtf(w*w + h*h);
+  auto s0 = NVGGradientStop(0, nvgRGBAf(0, 0, 0, 1));
+  auto s1 = NVGGradientStop(1, nvgRGBAf(1, 1, 1, 1));
+  int img;
+  if (stops.length > 64) stops = stops[0..64];
+  if (stops.length) {
+    s0.color = stops[0].color;
+    s1.color = stops[$-1].color;
+  }
+  gradientSpan(data.ptr, &s0, (stops.length ? stops.ptr : &s1));
+  if (stops.length) {
+    foreach (immutable i; 0..stops.length-1) gradientSpan(data.ptr, stops.ptr+i, stops.ptr+i+1);
+  }
+  gradientSpan(data.ptr, (stops.length ? stops.ptr+stops.length-1 : &s0), &s1);
+  img = ctx.createImageRGBA(NVG_GRADIENT_SAMPLES, 1, data[], NVGImageFlags.RepeatX|NVGImageFlags.RepeatY);
+  if (img <= 0) return null;
+  // allocate data
+  NVGLGS res = cast(NVGLGS)malloc((*NVGLGS).sizeof);
+  if (res is null) { ctx.deleteImage(img); return null; }
+  // fill result
+  res.imgid = img;
+  res.cx = sx;
+  res.cy = sy;
+  res.w = len;
+  res.h = len;
+  res.angle = nvg__atan2f(ey-sy, ex-sx);
+  return res;
 }
 
 
@@ -8037,6 +8140,7 @@ void glnvg__stencilFunc (GLNVGcontext* gl, GLenum func, GLint ref_, GLuint mask)
   }
 }
 
+// texture id is never zero
 GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   GLNVGtexture* tex = null;
 
