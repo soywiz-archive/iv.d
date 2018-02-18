@@ -1920,7 +1920,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
 }
 
 
-/** Creates and returns an image patter. Parameters `(cx, cy)` specify the left-top location of the image pattern,
+/** Creates and returns an image pattern. Parameters `(cx, cy)` specify the left-top location of the image pattern,
  * `(w, h)` the size of one image, `angle` rotation around the top-left corner, `image` is handle to the image to render.
  * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
  */
