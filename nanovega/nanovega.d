@@ -5641,6 +5641,27 @@ public:
   }
 }
 
+/** Return font line height (without line spacing), measured in local coordinate space. */
+public float textFontHeight (NVGContext ctx) nothrow @trusted @nogc {
+  float res = void;
+  ctx.textMetrics(null, null, &res);
+  return res;
+}
+
+/** Return font ascender, measured in local coordinate space. */
+public float textFontAscender (NVGContext ctx) nothrow @trusted @nogc {
+  float res = void;
+  ctx.textMetrics(&res, null, null);
+  return res;
+}
+
+/** Return font descender, measured in local coordinate space. */
+public float textFontDescender (NVGContext ctx) nothrow @trusted @nogc {
+  float res = void;
+  ctx.textMetrics(null, &res, null);
+  return res;
+}
+
 /** Measures the specified text string. Parameter bounds should be a pointer to float[4],
  * if the bounding box of the text should be returned. The bounds value are [xmin, ymin, xmax, ymax]
  * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
@@ -5743,10 +5764,16 @@ public void textBoxBounds(T) (NVGContext ctx, float x, float y, float breakRowWi
 /// Returns the vertical metrics based on the current text style. Measured values are returned in local coordinate space.
 public void textMetrics (NVGContext ctx, float* ascender, float* descender, float* lineh) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
-  float invscale = 1.0f/scale;
 
-  if (state.fontId == FONS_INVALID) return;
+  if (state.fontId == FONS_INVALID) {
+    if (ascender !is null) *ascender *= 0;
+    if (descender !is null) *descender *= 0;
+    if (lineh !is null) *lineh *= 0;
+    return;
+  }
+
+  immutable float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
+  immutable float invscale = 1.0f/scale;
 
   fonsSetSize(ctx.fs, state.fontSize*scale);
   fonsSetSpacing(ctx.fs, state.letterSpacing*scale);
@@ -7568,10 +7595,13 @@ public void fonsVertMetrics (FONScontext* stash, float* ascender, float* descend
   if (lineh) *lineh = font.lineh*isize/10.0f;
 }
 
-public void fonsLineBounds (FONScontext* stash, float y, float* miny, float* maxy) nothrow @trusted @nogc {
+public void fonsLineBounds (FONScontext* stash, float y, float* minyp, float* maxyp) nothrow @trusted @nogc {
   FONSfont* font;
   FONSstate* state = fons__getState(stash);
   short isize;
+
+  if (minyp !is null) *minyp = 0;
+  if (maxyp !is null) *maxyp = 0;
 
   if (stash is null) return;
   if (state.font < 0 || state.font >= stash.nfonts) return;
@@ -7582,11 +7612,15 @@ public void fonsLineBounds (FONScontext* stash, float y, float* miny, float* max
   y += fons__getVertAlign(stash, font, state.talign, isize);
 
   if (stash.params.flags&FONS_ZERO_TOPLEFT) {
-    *miny = y-font.ascender*cast(float)isize/10.0f;
-    *maxy = *miny+font.lineh*isize/10.0f;
+    immutable float miny = y-font.ascender*cast(float)isize/10.0f;
+    immutable float maxy = miny+font.lineh*isize/10.0f;
+    if (minyp !is null) *minyp = miny;
+    if (maxyp !is null) *maxyp = maxy;
   } else {
-    *maxy = y+font.descender*cast(float)isize/10.0f;
-    *miny = *maxy-font.lineh*isize/10.0f;
+    immutable float maxy = y+font.descender*cast(float)isize/10.0f;
+    immutable float miny = maxy-font.lineh*isize/10.0f;
+    if (minyp !is null) *minyp = miny;
+    if (maxyp !is null) *maxyp = maxy;
   }
 }
 
