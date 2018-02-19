@@ -6207,6 +6207,13 @@ public struct FONScontext {
   int nstates;
   void function (void* uptr, int error, int val) nothrow @trusted @nogc handleError;
   void* errorUptr;
+
+  // reset font cache for name searching
+  void resetFFCC () pure nothrow @safe @nogc { pragma(inline, true); lastfontlen = -1; lastfontidx = -1; }
+
+  char[64] lastfont;
+  int lastfontlen;
+  int lastfontidx;
 }
 
 void* fons__tmpalloc (usize size, void* up) nothrow @trusted @nogc {
@@ -6462,6 +6469,8 @@ public FONScontext* fonsCreateInternal (FONSparams* params) nothrow @trusted @no
   memset(stash, 0, FONScontext.sizeof);
 
   stash.params = *params;
+  stash.lastfontlen = -1;
+  stash.lastfontidx = -1;
 
   // Allocate scratch buffer.
   stash.scratch = cast(ubyte*)malloc(FONS_SCRATCH_BUF_SIZE);
@@ -6655,7 +6664,9 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
   assert(fontnamebuf[blen] == 0);
 
   // find a font with the given name
+  stash.resetFFCC();
   int fidx = fonsGetFontByName!false(stash, fontnamebuf[0..blen]); // no substitutes
+  stash.resetFFCC();
   //{ import core.stdc.stdio; printf("loading font '%.*s' [%s] (fidx=%d)...\n", cast(uint)path.length, path.ptr, fontnamebuf.ptr, fidx); }
 
   int loadFontFile (const(char)[] path) {
@@ -6747,7 +6758,9 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
 
   // find a font with the given name
   FONSfont* oldfont = null;
+  stash.resetFFCC();
   int oldidx = fonsGetFontByName!false(stash, name); // no substitutes
+  stash.resetFFCC();
   if (oldidx != FONS_INVALID) oldfont = stash.fonts[oldidx];
 
   //{ import core.stdc.stdio; printf("creating font [%.*s] (oidx=%d)...\n", cast(uint)name.length, name.ptr, oldidx); }
@@ -6810,27 +6823,49 @@ public const(char)[] fonsGetNameByIndex (FONScontext* stash, int idx) nothrow @t
 // allowSubstitutes: check AA variants if exact name wasn't found?
 // return `FONS_INVALID` if no font was found
 public int fonsGetFontByName(bool allowSubstitutes=true) (FONScontext* stash, const(char)[] name) nothrow @trusted @nogc {
-  foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
-    if (strEquCI(name, font.name[0..font.namelen])) return cast(int)idx;
+  // check cached name
+  if (stash.lastfontlen == name.length && strEquCI(name, stash.lastfont[0..stash.lastfontlen])) {
+    //{ import core.stdc.stdio; printf("fonsGetFontByName: cache hit: id=%d; [%.*s] <%.*s>\n", stash.lastfontidx, stash.lastfontlen, stash.lastfont.ptr, cast(uint)name.length, name.ptr); }
+    return stash.lastfontidx;
   }
-  // not found, try variations
-  if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
-    // search for font name without ":noaa"
-    name = name[0..$-NoAlias.length];
-    foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
-      if (strEquCI(name, font.name[0..font.namelen])) return cast(int)idx;
+
+  int updateCache (usize idx, FONSfont* font) nothrow @trusted @nogc {
+    if (name.length <= stash.lastfont.length) {
+      stash.lastfont[0..name.length] = name[];
+      stash.lastfontlen = cast(int)name.length;
+      stash.lastfontidx = cast(int)idx;
+      //{ import core.stdc.stdio; printf("fonsGetFontByName: new cache: id=%d; [%.*s] <%.*s>\n", stash.lastfontidx, stash.lastfontlen, stash.lastfont.ptr, cast(uint)name.length, name.ptr); }
+    } else {
+      stash.resetFFCC();
     }
-  } else {
-    // search for font name with ":noaa"
-    foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
-      if (font.namelen == name.length+NoAlias.length) {
-        if (strEquCI(font.name[0..name.length], name[]) && strEquCI(font.name[name.length..font.namelen], NoAlias)) {
-          //{ import std.stdio; writeln(font.name[0..name.length], " : ", name, " <", font.name[name.length..$], ">"); }
-          return cast(int)idx;
+    return cast(int)idx;
+  }
+
+  foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
+    if (strEquCI(name, font.name[0..font.namelen])) return updateCache(idx, font);
+  }
+
+  static if (allowSubstitutes) {
+    // not found, try variations
+    if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
+      // search for font name without ":noaa"
+      name = name[0..$-NoAlias.length];
+      foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
+        if (strEquCI(name, font.name[0..font.namelen])) return updateCache(idx, font);
+      }
+    } else {
+      // search for font name with ":noaa"
+      foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
+        if (font.namelen == name.length+NoAlias.length) {
+          if (strEquCI(font.name[0..name.length], name[]) && strEquCI(font.name[name.length..font.namelen], NoAlias)) {
+            //{ import std.stdio; writeln(font.name[0..name.length], " : ", name, " <", font.name[name.length..$], ">"); }
+            return updateCache(idx, font);
+          }
         }
       }
     }
   }
+
   return FONS_INVALID;
 }
 
