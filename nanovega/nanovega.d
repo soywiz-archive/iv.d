@@ -923,6 +923,12 @@ import core.stdc.math :
   nvg__acosf = acosf,
   nvg__ceilf = ceilf;
 
+version(Windows) {
+  private int lrintf (float f) nothrow @trusted @nogc { pragma(inline, true); return cast(int)(f+0.5); }
+} else {
+  import core.stdc.math : lrintf;
+}
+
 auto nvg__min(T) (T a, T b) { pragma(inline, true); return (a < b ? a : b); }
 auto nvg__max(T) (T a, T b) { pragma(inline, true); return (a > b ? a : b); }
 auto nvg__clamp(T) (T a, T mn, T mx) { pragma(inline, true); return (a < mn ? mn : (a > mx ? mx : a)); }
@@ -1357,7 +1363,7 @@ public alias NVGSectionDummy01 = void;
 /// Sets the transform to identity matrix.
 public void nvgTransformIdentity (float[] t) nothrow @trusted @nogc {
   pragma(inline, true);
-  assert(t.length > 5);
+  assert(t.length >= 6);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
   t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
@@ -1366,7 +1372,7 @@ public void nvgTransformIdentity (float[] t) nothrow @trusted @nogc {
 /// Sets the transform to translation matrix matrix.
 public void nvgTransformTranslate (float[] t, float tx, float ty) nothrow @trusted @nogc {
   pragma(inline, true);
-  assert(t.length > 5);
+  assert(t.length >= 6);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
   t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
   t.ptr[4] = tx; t.ptr[5] = ty;
@@ -1375,7 +1381,7 @@ public void nvgTransformTranslate (float[] t, float tx, float ty) nothrow @trust
 /// Sets the transform to scale matrix.
 public void nvgTransformScale (float[] t, float sx, float sy) nothrow @trusted @nogc {
   pragma(inline, true);
-  assert(t.length > 5);
+  assert(t.length >= 6);
   t.ptr[0] = sx; t.ptr[1] = 0.0f;
   t.ptr[2] = 0.0f; t.ptr[3] = sy;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
@@ -1384,7 +1390,7 @@ public void nvgTransformScale (float[] t, float sx, float sy) nothrow @trusted @
 /// Sets the transform to rotate matrix. Angle is specified in radians.
 public void nvgTransformRotate (float[] t, float a) nothrow @trusted @nogc {
   //pragma(inline, true);
-  assert(t.length > 5);
+  assert(t.length >= 6);
   float cs = nvg__cosf(a), sn = nvg__sinf(a);
   t.ptr[0] = cs; t.ptr[1] = sn;
   t.ptr[2] = -sn; t.ptr[3] = cs;
@@ -1394,7 +1400,7 @@ public void nvgTransformRotate (float[] t, float a) nothrow @trusted @nogc {
 /// Sets the transform to skew-x matrix. Angle is specified in radians.
 public void nvgTransformSkewX (float[] t, float a) nothrow @trusted @nogc {
   //pragma(inline, true);
-  assert(t.length > 5);
+  assert(t.length >= 6);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
   t.ptr[2] = nvg__tanf(a); t.ptr[3] = 1.0f;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
@@ -1403,7 +1409,7 @@ public void nvgTransformSkewX (float[] t, float a) nothrow @trusted @nogc {
 /// Sets the transform to skew-y matrix. Angle is specified in radians.
 public void nvgTransformSkewY (float[] t, float a) nothrow @trusted @nogc {
   //pragma(inline, true);
-  assert(t.length > 5);
+  assert(t.length >= 6);
   t.ptr[0] = 1.0f; t.ptr[1] = nvg__tanf(a);
   t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
@@ -1411,8 +1417,8 @@ public void nvgTransformSkewY (float[] t, float a) nothrow @trusted @nogc {
 
 /// Sets the transform to the result of multiplication of two transforms, of A = A*B.
 public void nvgTransformMultiply (float[] t, const(float)[] s) nothrow @trusted @nogc {
-  assert(t.length > 5);
-  assert(s.length > 5);
+  assert(t.length >= 6);
+  assert(s.length >= 6);
   //pragma(inline, true);
   float t0 = t.ptr[0]*s.ptr[0]+t.ptr[1]*s.ptr[2];
   float t2 = t.ptr[2]*s.ptr[0]+t.ptr[3]*s.ptr[2];
@@ -1427,8 +1433,8 @@ public void nvgTransformMultiply (float[] t, const(float)[] s) nothrow @trusted 
 
 /// Sets the transform to the result of multiplication of two transforms, of A = B*A.
 public void nvgTransformPremultiply (float[] t, const(float)[] s) nothrow @trusted @nogc {
-  assert(t.length > 5);
-  assert(s.length > 5);
+  assert(t.length >= 6);
+  assert(s.length >= 6);
   //pragma(inline, true);
   float[6] s2 = s[0..6];
   nvgTransformMultiply(s2[], t);
@@ -1438,8 +1444,8 @@ public void nvgTransformPremultiply (float[] t, const(float)[] s) nothrow @trust
 /// Sets the destination to inverse of specified transform.
 /// Returns `true` if the inverse could be calculated, else `false`.
 public bool nvgTransformInverse (float[] inv, const(float)[] t) nothrow @trusted @nogc {
-  assert(t.length > 5);
-  assert(inv.length > 5);
+  assert(t.length >= 6);
+  assert(inv.length >= 6);
   immutable double det = cast(double)t.ptr[0]*t.ptr[3]-cast(double)t.ptr[2]*t.ptr[1];
   if (det > -1e-6 && det < 1e-6) {
     nvgTransformIdentity(inv);
@@ -1458,9 +1464,9 @@ public bool nvgTransformInverse (float[] inv, const(float)[] t) nothrow @trusted
 /// Transform a point by given transform.
 public void nvgTransformPoint (float* dx, float* dy, const(float)[] t, float sx, float sy) nothrow @trusted @nogc {
   pragma(inline, true);
-  assert(t.length > 5);
-  *dx = sx*t.ptr[0]+sy*t.ptr[2]+t.ptr[4];
-  *dy = sx*t.ptr[1]+sy*t.ptr[3]+t.ptr[5];
+  assert(t.length >= 6);
+  if (dx !is null) *dx = sx*t.ptr[0]+sy*t.ptr[2]+t.ptr[4];
+  if (dy !is null) *dy = sx*t.ptr[1]+sy*t.ptr[3]+t.ptr[5];
 }
 
 // Converts degrees to radians.
@@ -1680,7 +1686,7 @@ public void scale (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
  * There should be space for 6 floats in the return buffer for the values a-f.
  */
 public void currentTransform (NVGContext ctx, float[] xform) nothrow @trusted @nogc {
-  assert(xform.length > 5);
+  assert(xform.length >= 6);
   NVGstate* state = nvg__getState(ctx);
   xform[0..6] = state.xform[0..6];
 }
@@ -2283,7 +2289,7 @@ void nvg__pathWinding (NVGContext ctx, NVGWinding winding) nothrow @trusted @nog
 }
 
 float nvg__getAverageScale (float[] t) nothrow @trusted @nogc {
-  assert(t.length > 5);
+  assert(t.length >= 6);
   immutable float sx = nvg__sqrtf(t.ptr[0]*t.ptr[0]+t.ptr[2]*t.ptr[2]);
   immutable float sy = nvg__sqrtf(t.ptr[1]*t.ptr[1]+t.ptr[3]*t.ptr[3]);
   return (sx+sy)*0.5f;
@@ -5158,7 +5164,11 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
       }
       iter = prevIter;
       fonsTextIterNext(ctx.fs, &iter, &q); // try again
-      if (iter.prevGlyphIndex < 0) break; // still can not find glyph?
+      if (iter.prevGlyphIndex < 0) {
+        // still can not find glyph, try replacement
+        iter = prevIter;
+        if (!fonsTextIterGetDummyChar(ctx.fs, &iter, &q)) break;
+      }
     }
     prevIter = iter;
     // Transform corners.
@@ -5168,6 +5178,8 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
     nvgTransformPoint(&c[6], &c[7], state.xform[], q.x0*invscale, q.y1*invscale);
     // Create triangles
     if (nverts+6 <= cverts) {
+      //FIXME: this is WRONG!
+      if (!ctx.params.fontAA) { foreach (ref float f; c[]) f = lrintf(f); } // remove blurriness
       nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); ++nverts;
       nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); ++nverts;
       nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); ++nverts;
@@ -5265,9 +5277,15 @@ if (isAnyCharType!T && isGoodPositionDelegate!DG)
   fonsTextIterInit(ctx.fs, &iter, x*scale, y*scale, str, FONS_GLYPH_BITMAP_OPTIONAL);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
-    if (iter.prevGlyphIndex < 0 && nvg__allocTextAtlas(ctx)) { // can not retrieve glyph?
+    if (iter.prevGlyphIndex < 0) { // can not retrieve glyph?
+      if (!nvg__allocTextAtlas(ctx)) break; // no memory
       iter = prevIter;
       fonsTextIterNext(ctx.fs, &iter, &q); // try again
+      if (iter.prevGlyphIndex < 0) {
+        // still can not find glyph, try replacement
+        iter = prevIter;
+        if (!fonsTextIterGetDummyChar(ctx.fs, &iter, &q)) break;
+      }
     }
     prevIter = iter;
     NVGGlyphPosition position = void; //WARNING!
@@ -5362,9 +5380,15 @@ if (isAnyCharType!T && isGoodRowDelegate!(T, DG))
   fonsTextIterInit(ctx.fs, &iter, 0, 0, str, FONS_GLYPH_BITMAP_OPTIONAL);
   prevIter = iter;
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
-    if (iter.prevGlyphIndex < 0 && nvg__allocTextAtlas(ctx)) { // can not retrieve glyph?
+    if (iter.prevGlyphIndex < 0) { // can not retrieve glyph?
+      if (!nvg__allocTextAtlas(ctx)) break; // no memory
       iter = prevIter;
       fonsTextIterNext(ctx.fs, &iter, &q); // try again
+      if (iter.prevGlyphIndex < 0) {
+        // still can not find glyph, try replacement
+        iter = prevIter;
+        if (!fonsTextIterGetDummyChar(ctx.fs, &iter, &q)) break;
+      }
     }
     prevIter = iter;
     switch (iter.codepoint) {
@@ -6188,7 +6212,7 @@ private enum DecUtfMixin(string state, string codep, string byte_) =
   `~codep~` = (`~state~` != FONS_UTF8_ACCEPT ? (`~byte_~`&0x3fu)|(`~codep~`<<6) : (0xff>>type_)&`~byte_~`);
   if ((`~state~` = utf8d.ptr[256+`~state~`+type_]) == FONS_UTF8_REJECT) {
     `~state~` = FONS_UTF8_ACCEPT;
-    `~codep~` = '?';
+    `~codep~` = 0xFFFD;
   }
  }`;
 
@@ -7172,6 +7196,22 @@ public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float
   return true;
 }
 
+public bool fonsTextIterGetDummyChar(FT) (FONScontext* stash, FT* iter, FONSquad* quad) nothrow @trusted @nogc if (is(FT : FONStextIter!CT, CT)) {
+  if (stash is null || iter is null) return false;
+  // Get glyph and quad
+  iter.x = iter.nextx;
+  iter.y = iter.nexty;
+  FONSglyph* glyph = fons__getGlyph(stash, iter.font, 0xFFFD, iter.isize, iter.iblur, iter.bitmapOption);
+  if (glyph !is null) {
+    fons__getQuad(stash, iter.font, iter.prevGlyphIndex, glyph, iter.isize/10.0f, iter.scale, iter.spacing, &iter.nextx, &iter.nexty, quad);
+    iter.prevGlyphIndex = glyph.index;
+    return true;
+  } else {
+    iter.prevGlyphIndex = -1;
+    return false;
+  }
+}
+
 public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) nothrow @trusted @nogc if (is(FT : FONStextIter!CT, CT)) {
   if (stash is null || iter is null) return false;
   FONSglyph* glyph = null;
@@ -7203,7 +7243,7 @@ public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) 
     iter.s = iter.n;
     if (str is iter.e) return false;
     iter.codepoint = cast(uint)(*str++);
-    if (iter.codepoint > dchar.max) iter.codepoint = '?';
+    if (iter.codepoint > dchar.max) iter.codepoint = 0xFFFD;
     // Get glyph and quad
     iter.x = iter.nextx;
     iter.y = iter.nexty;
@@ -7345,12 +7385,12 @@ public:
       if (str.length == 0) return;
       if (utf8state) {
         utf8state = 0;
-        codepoint = '?';
+        codepoint = 0xFFFD;
         mixin(DoCodePointMixin);
       }
       foreach (T dch; str) {
         static if (is(T == dchar)) {
-          if (dch > dchar.max) dch = '?';
+          if (dch > dchar.max) dch = 0xFFFD;
         }
         codepoint = cast(uint)dch;
         mixin(DoCodePointMixin);
@@ -7467,7 +7507,7 @@ if (isAnyCharType!T)
   } else {
     foreach (T ch; str) {
       static if (is(T == dchar)) {
-        if (ch > dchar.max) ch = '?';
+        if (ch > dchar.max) ch = 0xFFFD;
       }
       codepoint = cast(uint)ch;
       glyph = fons__getGlyph(stash, font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
@@ -8504,8 +8544,8 @@ bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) nothrow
 }
 
 void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) nothrow @trusted @nogc {
-  assert(t.length > 5);
-  assert(m3.length > 11);
+  assert(t.length >= 6);
+  assert(m3.length >= 12);
   m3.ptr[0] = t.ptr[0];
   m3.ptr[1] = t.ptr[1];
   m3.ptr[2] = 0.0f;
