@@ -444,18 +444,28 @@ public:
     }
     switch (dc) {
       case 3: // rgb
-      case 4: // rgba
+        a = 1.0f;
         r = digs[0]/15.0f;
         g = digs[1]/15.0f;
         b = digs[2]/15.0f;
-        a = (dc == 3 ? 1.0f : digs[3]/15.0f);
+        break;
+      case 4: // argb
+        a = digs[0]/15.0f;
+        r = digs[1]/15.0f;
+        g = digs[2]/15.0f;
+        b = digs[3]/15.0f;
         break;
       case 6: // rrggbb
-      case 8: // aarrggbb
+        a = 1.0f;
         r = (digs[0]*16+digs[1])/255.0f;
         g = (digs[2]*16+digs[3])/255.0f;
         b = (digs[4]*16+digs[5])/255.0f;
-        a = (dc == 6 ? 1.0f : (digs[6]*16+digs[7])/255.0f);
+        break;
+      case 8: // aarrggbb
+        a = (digs[0]*16+digs[1])/255.0f;
+        r = (digs[2]*16+digs[3])/255.0f;
+        g = (digs[4]*16+digs[5])/255.0f;
+        b = (digs[6]*16+digs[7])/255.0f;
         break;
       default:
         break;
