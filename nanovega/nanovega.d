@@ -5167,11 +5167,13 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
   while (fonsTextIterNext(ctx.fs, &iter, &q)) {
     float[4*2] c = void;
     if (iter.prevGlyphIndex < 0) { // can not retrieve glyph?
-      if (!nvg__allocTextAtlas(ctx)) break; // no memory :(
       if (nverts != 0) {
+        // TODO: add back-end bit to do this just once per frame
+        nvg__flushTextTexture(ctx);
         nvg__renderText(ctx, verts, nverts);
         nverts = 0;
       }
+      if (!nvg__allocTextAtlas(ctx)) break; // no memory :(
       iter = prevIter;
       fonsTextIterNext(ctx.fs, &iter, &q); // try again
       if (iter.prevGlyphIndex < 0) {
@@ -5189,7 +5191,15 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
     // Create triangles
     if (nverts+6 <= cverts) {
       //FIXME: this is WRONG!
-      if (!ctx.params.fontAA) { foreach (ref float f; c[]) f = lrintf(f); } // remove blurriness
+      // this doesn't help a little; i need to separate font rendering from image filling to get sharp fonts
+      /*
+      if (!ctx.params.fontAA) {
+        foreach (ref float f; c[]) {
+          { import core.stdc.stdio; printf("f0=%g; f1=%g\n", cast(double)f, cast(double)lrintf(f)); }
+          f = lrintf(f); // remove blurriness
+        }
+      }
+      */
       nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); ++nverts;
       nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); ++nverts;
       nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); ++nverts;
@@ -5200,9 +5210,10 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
   }
 
   // TODO: add back-end bit to do this just once per frame
-  nvg__flushTextTexture(ctx);
-
-  nvg__renderText(ctx, verts, nverts);
+  if (nverts > 0) {
+    nvg__flushTextTexture(ctx);
+    nvg__renderText(ctx, verts, nverts);
+  }
 
   return iter.nextx/scale;
 }
@@ -8624,17 +8635,17 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
 
   if (scissor.extent[0] < -0.5f || scissor.extent[1] < -0.5f) {
     memset(frag.scissorMat.ptr, 0, frag.scissorMat.sizeof);
-    frag.scissorExt[0] = 1.0f;
-    frag.scissorExt[1] = 1.0f;
-    frag.scissorScale[0] = 1.0f;
-    frag.scissorScale[1] = 1.0f;
+    frag.scissorExt.ptr[0] = 1.0f;
+    frag.scissorExt.ptr[1] = 1.0f;
+    frag.scissorScale.ptr[0] = 1.0f;
+    frag.scissorScale.ptr[1] = 1.0f;
   } else {
     nvgTransformInverse(invxform[], scissor.xform[]);
     glnvg__xformToMat3x4(frag.scissorMat[], invxform[]);
-    frag.scissorExt[0] = scissor.extent[0];
-    frag.scissorExt[1] = scissor.extent[1];
-    frag.scissorScale[0] = sqrtf(scissor.xform[0]*scissor.xform[0]+scissor.xform[2]*scissor.xform[2])/fringe;
-    frag.scissorScale[1] = sqrtf(scissor.xform[1]*scissor.xform[1]+scissor.xform[3]*scissor.xform[3])/fringe;
+    frag.scissorExt.ptr[0] = scissor.extent.ptr[0];
+    frag.scissorExt.ptr[1] = scissor.extent.ptr[1];
+    frag.scissorScale.ptr[0] = sqrtf(scissor.xform.ptr[0]*scissor.xform.ptr[0]+scissor.xform.ptr[2]*scissor.xform.ptr[2])/fringe;
+    frag.scissorScale.ptr[1] = sqrtf(scissor.xform.ptr[1]*scissor.xform.ptr[1]+scissor.xform.ptr[3]*scissor.xform.ptr[3])/fringe;
   }
 
   memcpy(frag.extent.ptr, paint.extent.ptr, frag.extent.sizeof);
