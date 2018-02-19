@@ -5218,7 +5218,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
   return iter.nextx/scale;
 }
 
-/** Draws multi-line text string at specified location wrapped at the specified width. If end is specified only the sub-string up to the end is drawn.
+/** Draws multi-line text string at specified location wrapped at the specified width.
  * White space is stripped at the beginning of the rows, the text is split at word boundaries or when new-line characters are encountered.
  * Words longer than the max width are slit at nearest character (i.e. no hyphenation). */
 public void textBox(T) (NVGContext ctx, float x, float y, float breakRowWidth, const(T)[] str) nothrow @trusted @nogc if (isAnyCharType!T) {
