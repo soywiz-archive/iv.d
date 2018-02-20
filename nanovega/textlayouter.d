@@ -1051,19 +1051,20 @@ public:
         flushWord();
         just = newJust;
         firstParaLine = (ch == EndParaCh);
-      } else if (ch == 0x00a0) {
+      } else if (ch == NonBreakingSpaceCh) {
         // non-breaking space
         lastWasSoftHypen = false;
         if (hasWordChars && style != newStyle) flushWord();
         putChars(' ');
-      } else if (ch == 0x0ad) {
+      } else if (ch == SoftHyphenCh) {
         // soft hyphen
         if (!lastWasSoftHypen && hasWordChars) {
           putChars('-');
           lastWasSoftHypen = true; // word flusher is using this flag
           flushWord();
+        } else {
+          lastWasSoftHypen = true;
         }
-        lastWasSoftHypen = true;
       } else if (ch <= ' ' || isWhite(ch)) {
         if (hasWordChars) {
           flushWord();
@@ -1272,17 +1273,20 @@ private:
         // has some words, flush the line and start new one
         uint startIndex = curw;
         int curwdt = ln.w, lastwsp = 0;
+        int hyphenWdt = 0;
         while (curw < endw) {
           // add word width with spacing (i will compensate for that after loop)
           lastwsp = (w.propsOrig.spaced ? w.wsp-w.w : 0);
           curwdt += w.w+lastwsp;
           ++curw; // advance counter here...
+          if (w.propsOrig.hyphen) { hyphenWdt = w.whyph-w.w; if (hyphenWdt < 0) hyphenWdt = 0; } else hyphenWdt = 0;
           if (w.props.canbreak) break; // done with this span
           ++w; // ...and word pointer here (skipping one inc at the end ;-)
         }
         debug(xlay_line_flush) conwriteln("  ", curw-startIndex, " words processed");
         // can i add the span? if this is first span in line, add it unconditionally
-        if (ln.wordCount == 0 || curwdt-lastwsp <= maxWidth) {
+        if (ln.wordCount == 0 || curwdt+hyphenWdt-lastwsp <= maxWidth) {
+          //if (hyphenWdt) { import core.stdc.stdio; printf("curwdt=%d; hwdt=%d; next=%d; max=%d\n", curwdt, hyphenWdt, curwdt+hyphenWdt-lastwsp, maxWidth); }
           // yay, i can!
           ln.wend = curw;
           ln.w = curwdt;
