@@ -8117,6 +8117,8 @@ private extern(System) nothrow @nogc {
 public alias NVGcreateFlags = int;
 /// Create flags
 public enum /*NVGcreateFlags*/ {
+  /// Pass this to `createGL2NVG()` to turn off all default modes
+  NVG_NONE = 0,
   /// Flag indicating if geometry based anti-aliasing is used (may not be needed when using MSAA).
   NVG_ANTIALIAS = 1<<0,
   /** Flag indicating if strokes should be drawn using stencil buffer. The rendering will be a little
@@ -9255,7 +9257,7 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 
 /// Creates NanoVega contexts for OpenGL versions.
 /// Flags should be combination of the create flags above.
-public NVGContext createGL2NVG (int flags) nothrow @trusted @nogc {
+public NVGContext createGL2NVG (int flags=NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_FONT_NOAA) nothrow @trusted @nogc {
   NVGparams params = void;
   NVGContext ctx = null;
   version(nanovg_builtin_opengl_bindings) nanovgInitOpenGL(); // why not?
