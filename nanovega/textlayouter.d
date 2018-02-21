@@ -170,6 +170,30 @@ public:
     return res;
   }
 
+  /// set current font
+  void setSize (int fsz) nothrow @safe @nogc {
+    if (fsz < 1) fsz = 1;
+    fonsSetSize(fs, fsz);
+    lastStyle.fontsize = fsz;
+  }
+
+  /// set current font
+  void setFont (int fid) nothrow @safe @nogc {
+    if (fid == FONS_INVALID) {
+      fontWasSet = false;
+      lastStyle.fontface = -1;
+    } else if (!fontWasSet || lastStyle.fontface != fid) {
+      fonsSetFont(fs, fid);
+      lastStyle.fontface = fid;
+      fontWasSet = true;
+    }
+  }
+
+  /// set current font
+  void setFont (const(char)[] aface) nothrow @safe @nogc {
+    setFont(fontFaceId(aface));
+  }
+
   /// set current font according to the given style
   void setFont() (in auto ref LayFontStyle style) nothrow @safe @nogc {
     int fsz = style.fontsize;
@@ -179,12 +203,14 @@ public:
       if (fsz != lastStyle.fontsize) fonsSetSize(fs, fsz);
       lastStyle = style;
       lastStyle.fontsize = fsz;
+      fontWasSet = true;
     }
   }
 
   /// calculate text width
   int textWidth(T) (const(T)[] str) nothrow @safe @nogc if (isAnyCharType!T) {
     import std.algorithm : max;
+    if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float[4] b = void;
     float adv = fs.fonsTextBounds(0, 0, str, b[]);
     float w = b[2]-b[0];
@@ -193,6 +219,7 @@ public:
 
   /// calculate spaces width
   int spacesWidth (int count) nothrow @safe @nogc {
+    if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     if (count < 1) return 0;
     auto it = FonsTextBoundsIterator(fs, 0, 0);
     it.put(' ');
@@ -203,6 +230,7 @@ public:
   /// all `*` args can be omited
   void textWidth2(T) (const(T)[] str, int* w=null, int* wsp=null, int* whyph=null) nothrow @safe @nogc if (isAnyCharType!T) {
     import std.algorithm : max;
+    if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     if (w is null && wsp is null && whyph is null) return;
     float minx, maxx;
     auto it = FonsTextBoundsIterator(fs, 0, 0);
@@ -233,6 +261,7 @@ public:
   /// calculate text height
   int textHeight () nothrow @trusted @nogc {
     // use line bounds for height
+    if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float y0 = void, y1 = void;
     fs.fonsLineBounds(0, &y0, &y1);
     return lrintf(y1-y0);
@@ -241,6 +270,7 @@ public:
   /// calculate text metrics: ascent, descent, line height
   /// any argument can be `null`
   void textMetrics (int* asc, int* desc, int* lineh) nothrow @trusted @nogc {
+    if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float a = void, d = void, h = void;
     fs.fonsVertMetrics(&a, &d, &h);
     if (asc !is null) *asc = lrintf(a);
