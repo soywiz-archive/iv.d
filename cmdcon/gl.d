@@ -617,9 +617,9 @@ void drawStar (int x0, int y0, int radius) nothrow @trusted @nogc {
       );
     }
   } else {
-    immutable float scale = (radius*2.0f)/BaphometDims;
+    immutable float scale = (radius*2.0f)/ConBaphometDims;
     //{ import core.stdc.stdio; printf("radius=%d; scale=%g; rr=%g\n", radius, cast(double)scale, cast(double)(512*scale)); }
-    baphometRender((int x, int y) @trusted => vsetPixel(x+x0, y+y0, conColor), 0, 0, scale);
+    conBaphometRender((int x, int y) @trusted => vsetPixel(x+x0, y+y0, conColor), 0, 0, scale);
   }
 }
 
@@ -1690,9 +1690,9 @@ private static immutable float[2264] baphometPath =
   0x1.4p+3,]
 ;
 
-public enum BaphometDims = 512; /// it is square
+public enum ConBaphometDims = 512; /// it is square
 
-public void baphometRender (scope void delegate (int x, int y) nothrow @trusted @nogc drawPixel, float ofsx=0, float ofsy=0, float scale=1) nothrow @trusted @nogc { renderPath(drawPixel, baphometPath[], ofsx, ofsy, scale); } ///
+public void conBaphometRender (scope void delegate (int x, int y) nothrow @trusted @nogc drawPixel, float ofsx=0, float ofsy=0, float scale=1) nothrow @trusted @nogc { renderPath(drawPixel, baphometPath[], ofsx, ofsy, scale); } ///
 
 private void renderPath (scope void delegate (int x, int y) nothrow @trusted @nogc drawPixel, const(float)[] path, float ofsx, float ofsy, float scale) nothrow @trusted @nogc {
   import std.math : floor;
