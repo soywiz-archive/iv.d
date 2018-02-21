@@ -122,7 +122,7 @@ public:
     } else {
       if (name.length == 0) throw new Exception("invalid font face name");
       //if (name in fontfaces) throw new Exception("duplicate font '"~name.idup~"'");
-      int fid = fs.fonsAddFont(name, path);
+      int fid = fs.fonsAddFont(name, path, NVG_INVERT_FONT_AA);
       if (fid == FONS_INVALID) throw new Exception("font '"~name~"' is not found at '"~path.idup~"'");
       /*
       static if (is(T == string)) {
