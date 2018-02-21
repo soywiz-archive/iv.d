@@ -3210,6 +3210,7 @@ struct ToxBootstrapServer {
   ushort port;
   bool tcp;
   bool udp;
+  ushort[] tcpports;
 }
 
 
@@ -3226,6 +3227,8 @@ ToxBootstrapServer[] tox_download_bootstrap_list() (string url=null) {
     sv.maintainer = svx["maintainer"].str;
     if (!tox_unhex(sv.pubkey, svx["public_key"].str)) continue;
     //if (tox_hex(sv.pubkey) != svx["public_key"].str) assert(0, "wtf?!");
+    auto loc = svx["location"].str;
+    if (loc.length == 2 && (loc[0] == 'R' || loc[0] == 'r') && (loc[1] == 'U' || loc[1] == 'u')) continue;
     auto v4 = svx["ipv4"].str;
     if (v4.length < 1) continue;
     auto tv4 = new char[](v4.length+1);
@@ -3243,6 +3246,19 @@ ToxBootstrapServer[] tox_download_bootstrap_list() (string url=null) {
     if (svx["status_udp"].type == JSON_TYPE.TRUE) sv.udp = true;
     if (svx["status_tcp"].type == JSON_TYPE.TRUE) sv.tcp = true;
     if (!sv.tcp && !sv.udp) continue;
+    if (sv.tcp) {
+      tcpportloop: foreach (ref tpp; svx["tcp_ports"].array) {
+        if (tpp.type != JSON_TYPE.INTEGER) continue;
+        auto pp = svx["port"].integer;
+        if (pp < 1 || pp > 65535) continue;
+        foreach (immutable ushort t; sv.tcpports) if (t == pp) continue tcpportloop;
+        sv.tcpports ~= cast(ushort)pp;
+      }
+      if (sv.tcpports.length == 0) {
+        sv.tcp = false;
+        if (!sv.udp) continue;
+      }
+    }
     res ~= sv;
   }
   return res;
