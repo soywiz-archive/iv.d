@@ -1244,16 +1244,19 @@ final:
   // plot a limited quadratic Bezier segment
   final void drawQuadBezierSeg (int x0, int y0, int x1, int y1, int x2, int y2, Color fc) {
     int sx = x2-x1, sy = y2-y1;
-    long xx = x0-x1, yy = y0-y1, xy; // relative values for checks
-    double cur = xx*sy-yy*sx; // curvature
+    long xx = x0-x1, yy = y0-y1; // relative values for checks
     assert(xx*sx <= 0 && yy*sy <= 0); // sign of gradient must not change
+    double cur = xx*sy-yy*sx; // curvature
     // begin with longer part
     if (sx*cast(long)sx+sy*cast(long)sy > xx*xx+yy*yy) { x2 = x0; x0 = sx+x1; y2 = y0; y0 = sy+y1; cur = -cur; } // swap P0 P2
     // no straight line
     if (cur != 0) {
       xx += sx; xx *= (sx = x0 < x2 ? 1 : -1); // x step direction
       yy += sy; yy *= (sy = y0 < y2 ? 1 : -1); // y step direction
-      xy = 2*xx*yy; xx *= xx; yy *= yy; // differences 2nd degree
+      // differences 2nd degree
+      long xy = 2*xx*yy;
+      xx *= xx;
+      yy *= yy;
       // negated curvature?
       if (cur*sx*sy < 0) { xx = -xx; yy = -yy; xy = -xy; cur = -cur; }
       double dx = 4.0*sy*cur*(x1-x0)+xx-xy; // differences 1st degree
@@ -1275,10 +1278,8 @@ final:
   // plot any quadratic Bezier curve
   final void drawQuadBezier (int x0, int y0, int x1, int y1, int x2, int y2, Color fc) {
     import std.math : abs, floor;
-
     int x = x0-x1, y = y0-y1;
     double t = x0-2*x1+x2;
-
     // horizontal cut at P4?
     if (cast(long)x*(x2-x1) > 0) {
       // vertical cut at P6 too?
@@ -1315,7 +1316,7 @@ final:
     import std.math : floor, sqrt;
     int sx = x2-x1, sy = y2-y1; // relative values for checks
     double dx = x0-x2, dy = y0-y2, xx = x0-x1, yy = y0-y1;
-    double xy = xx*sy+yy*sx, cur = xx*sy-yy*sx, err; // curvature
+    double xy = xx*sy+yy*sx, cur = xx*sy-yy*sx; // curvature
     assert(xx*sx <= 0.0 && yy*sy <= 0.0); // sign of gradient must not change
     if (cur != 0.0 && w > 0.0) { // no straight line
       // begin with longer part
@@ -1340,7 +1341,7 @@ final:
         drawQuadRationalBezierSeg(sx, sy, cast(int)dx, cast(int)dy, x2, y2, cur, fc);
         return;
       }
-      err = dx+dy-xy; // error 1.step
+      double err = dx+dy-xy; // error 1.step
       do {
         putPixel(x0, y0, fc); // plot curve
         if (x0 == x2 && y0 == y2) return; // last pixel -> curve finished
@@ -1385,14 +1386,10 @@ final:
   final void drawCubicBezierSeg (int x0, int y0, float x1, float y1, float x2, float y2, int x3, int y3, Color fc) {
     import std.math : abs, floor, sqrt;
     immutable double EP = 0.01;
-
-    int f, fx, fy, leg = 1;
+    int leg = 1;
     int sx = (x0 < x3 ? 1 : -1), sy = (y0 < y3 ? 1 : -1); // step direction
     float xc = -abs(x0+x1-x2-x3), xa = xc-4*sx*(x1-x2), xb = sx*(x0-x1-x2+x3);
     float yc = -abs(y0+y1-y2-y3), ya = yc-4*sy*(y1-y2), yb = sy*(y0-y1-y2+y3);
-    double ab, ac, bc, cb, xx, xy, yy, dx, dy, ex;
-    const(double)* pxy;
-
     // check for curve restrains
     // slope P0-P1 == P2-P3   and  (P0-P3 == P1-P2      or  no slope change)
     assert((x1-x0)*(x2-x3) < EP && ((x3-x0)*(x1-x2) < EP || xb*xb < xa*xc+EP));
@@ -1406,27 +1403,40 @@ final:
     }
     x1 = (x1-x0)*(x1-x0)+(y1-y0)*(y1-y0)+1; // line lengths
     x2 = (x2-x3)*(x2-x3)+(y2-y3)*(y2-y3)+1;
-    do { // loop over both ends
-      ab = xa*yb-xb*ya; ac = xa*yc-xc*ya; bc = xb*yc-xc*yb;
-      ex = ab*(ab+ac-3*bc)+ac*ac; // P0 part of self-intersection loop?
-      f = cast(int)(ex > 0 ? 1 : sqrt(1+1024/x1)); // calculate resolution
+    // loop over both ends
+    do {
+      double ab = xa*yb-xb*ya;
+      double ac = xa*yc-xc*ya;
+      double bc = xb*yc-xc*yb;
+      double ex = ab*(ab+ac-3*bc)+ac*ac; // P0 part of self-intersection loop?
+      immutable int f = cast(int)(ex > 0 ? 1 : sqrt(1+1024/x1)); // calculate resolution
       ab *= f; ac *= f; bc *= f; ex *= f*f; // increase resolution
-      xy = 9*(ab+ac+bc)/8; cb = 8*(xa-ya);/* init differences of 1st degree */
-      dx = 27*(8*ab*(yb*yb-ya*yc)+ex*(ya+2*yb+yc))/64-ya*ya*(xy-ya);
-      dy = 27*(8*ab*(xb*xb-xa*xc)-ex*(xa+2*xb+xc))/64-xa*xa*(xy+xa);
+      // init differences of 1st degree
+      double xy = 9*(ab+ac+bc)/8;
+      double cb = 8*(xa-ya);
+      double dx = 27*(8*ab*(yb*yb-ya*yc)+ex*(ya+2*yb+yc))/64-ya*ya*(xy-ya);
+      double dy = 27*(8*ab*(xb*xb-xa*xc)-ex*(xa+2*xb+xc))/64-xa*xa*(xy+xa);
       // init differences of 2nd degree
-      xx = 3*(3*ab*(3*yb*yb-ya*ya-2*ya*yc)-ya*(3*ac*(ya+yb)+ya*cb))/4;
-      yy = 3*(3*ab*(3*xb*xb-xa*xa-2*xa*xc)-xa*(3*ac*(xa+xb)+xa*cb))/4;
+      double xx = 3*(3*ab*(3*yb*yb-ya*ya-2*ya*yc)-ya*(3*ac*(ya+yb)+ya*cb))/4;
+      double yy = 3*(3*ab*(3*xb*xb-xa*xa-2*xa*xc)-xa*(3*ac*(xa+xb)+xa*cb))/4;
       xy = xa*ya*(6*ab+6*ac-3*bc+cb); ac = ya*ya; cb = xa*xa;
       xy = 3*(xy+9*f*(cb*yb*yc-xb*xc*ac)-18*xb*yb*ab)/8;
-      if (ex < 0) { // negate values if inside self-intersection loop
-        dx = -dx; dy = -dy; xx = -xx; yy = -yy; xy = -xy; ac = -ac; cb = -cb;
-      } // init differences of 3rd degree
-      ab = 6*ya*ac; ac = -6*xa*ac; bc = 6*ya*cb; cb = -6*xa*cb;
-      dx += xy; ex = dx+dy; dy += xy; // error of 1st step
-      zzloop: for (pxy = &xy, fx = fy = f; x0 != x3 && y0 != y3; ) {
+      // negate values if inside self-intersection loop
+      if (ex < 0) { dx = -dx; dy = -dy; xx = -xx; yy = -yy; xy = -xy; ac = -ac; cb = -cb; }
+      // init differences of 3rd degree
+      ab = 6*ya*ac;
+      ac = -6*xa*ac;
+      bc = 6*ya*cb;
+      cb = -6*xa*cb;
+      // error of 1st step
+      dx += xy;
+      ex = dx+dy;
+      dy += xy;
+      const(double)* pxy = &xy;
+      zzloop: for (int fx = f, fy = f; x0 != x3 && y0 != y3; ) {
         putPixel(x0, y0, fc); // plot curve
-        do { // move sub-steps of one pixel
+        // move sub-steps of one pixel
+        do {
           if (dx > *pxy || dy < *pxy) break zzloop; // confusing values
           y1 = 2*ex-dy; // save value for test of y step
           if (2*ex >= dx) { fx--; ex += dx += xx; dy += xy += ac; yy += bc; xx += ab; } // x sub-step
@@ -1434,9 +1444,10 @@ final:
         } while (fx > 0 && fy > 0); // pixel complete?
         if (2*fx <= f) { x0 += sx; fx += f; } // x step
         if (2*fy <= f) { y0 += sy; fy += f; } // y step
-        if (pxy == &xy && dx < 0 && dy > 0) pxy = &EP;/* pixel ahead valid */
+        if (pxy == &xy && dx < 0 && dy > 0) pxy = &EP; // pixel ahead valid
       }
-      xx = x0; x0 = x3; x3 = cast(int)xx; sx = -sx; xb = -xb; // swap legs
+      // swap legs
+      xx = x0; x0 = x3; x3 = cast(int)xx; sx = -sx; xb = -xb;
       yy = y0; y0 = y3; y3 = cast(int)yy; sy = -sy; yb = -yb; x1 = x2;
     } while (leg--); // try other end
     drawLine(x0, y0, x3, y3, fc); // remaining part in case of cusp or crunode
@@ -1450,41 +1461,43 @@ final:
     long xb = x0-x1-x2+x3, xd = xb+4*(x1+x2);
     long yc = y0+y1-y2-y3, ya = yc-4*(y1-y2);
     long yb = y0-y1-y2+y3, yd = yb+4*(y1+y2);
-    float fx0 = x0, fx1, fx2, fx3, fy0 = y0, fy1, fy2, fy3;
-    double t1 = xb*xb-xa*xc, t2;
-    double[5] t;
+    float fx0 = x0, fy0 = y0;
+    double t1 = xb*xb-xa*xc;
+    double[5] t = void;
     // sub-divide curve at gradient sign changes
     if (xa == 0) { // horizontal
-      if (abs(xc) < 2*abs(xb)) t[n++] = xc/(2.0*xb); // one change
+      if (abs(xc) < 2*abs(xb)) t.ptr[n++] = xc/(2.0*xb); // one change
     } else if (t1 > 0.0) { // two changes
-      t2 = sqrt(t1);
-      t1 = (xb-t2)/xa; if (abs(t1) < 1.0) t[n++] = t1;
-      t1 = (xb+t2)/xa; if (abs(t1) < 1.0) t[n++] = t1;
+      immutable double t2 = sqrt(t1);
+      t1 = (xb-t2)/xa; if (abs(t1) < 1.0) t.ptr[n++] = t1;
+      t1 = (xb+t2)/xa; if (abs(t1) < 1.0) t.ptr[n++] = t1;
     }
     t1 = yb*yb-ya*yc;
     if (ya == 0) { // vertical
-      if (abs(yc) < 2*abs(yb)) t[n++] = yc/(2.0*yb); // one change
+      if (abs(yc) < 2*abs(yb)) t.ptr[n++] = yc/(2.0*yb); // one change
     } else if (t1 > 0.0) { // two changes
-      t2 = sqrt(t1);
-      t1 = (yb-t2)/ya; if (abs(t1) < 1.0) t[n++] = t1;
-      t1 = (yb+t2)/ya; if (abs(t1) < 1.0) t[n++] = t1;
+      immutable double t2 = sqrt(t1);
+      t1 = (yb-t2)/ya; if (abs(t1) < 1.0) t.ptr[n++] = t1;
+      t1 = (yb+t2)/ya; if (abs(t1) < 1.0) t.ptr[n++] = t1;
     }
     // bubble sort of 4 points
-    for (i = 1; i < n; i++) if ((t1 = t[i-1]) > t[i]) { t[i-1] = t[i]; t[i] = t1; i = 0; }
-    t1 = -1.0; t[n] = 1.0; // begin / end point
+    for (i = 1; i < n; i++) if ((t1 = t.ptr[i-1]) > t.ptr[i]) { t.ptr[i-1] = t.ptr[i]; t.ptr[i] = t1; i = 0; }
+    t1 = -1.0; t.ptr[n] = 1.0; // begin / end point
     for (i = 0; i <= n; i++) { // plot each segment separately
-      t2 = t[i]; // sub-divide at t[i-1], t[i]
-      fx1 = (t1*(t1*xb-2*xc)-t2*(t1*(t1*xa-2*xb)+xc)+xd)/8-fx0;
-      fy1 = (t1*(t1*yb-2*yc)-t2*(t1*(t1*ya-2*yb)+yc)+yd)/8-fy0;
-      fx2 = (t2*(t2*xb-2*xc)-t1*(t2*(t2*xa-2*xb)+xc)+xd)/8-fx0;
-      fy2 = (t2*(t2*yb-2*yc)-t1*(t2*(t2*ya-2*yb)+yc)+yd)/8-fy0;
-      fx0 -= fx3 = (t2*(t2*(3*xb-t2*xa)-3*xc)+xd)/8;
-      fy0 -= fy3 = (t2*(t2*(3*yb-t2*ya)-3*yc)+yd)/8;
+      immutable double t2 = t.ptr[i]; // sub-divide at t[i-1], t[i]
+      float fx1 = (t1*(t1*xb-2*xc)-t2*(t1*(t1*xa-2*xb)+xc)+xd)/8-fx0;
+      float fy1 = (t1*(t1*yb-2*yc)-t2*(t1*(t1*ya-2*yb)+yc)+yd)/8-fy0;
+      float fx2 = (t2*(t2*xb-2*xc)-t1*(t2*(t2*xa-2*xb)+xc)+xd)/8-fx0;
+      float fy2 = (t2*(t2*yb-2*yc)-t1*(t2*(t2*ya-2*yb)+yc)+yd)/8-fy0;
+      immutable float fx3 = (t2*(t2*(3*xb-t2*xa)-3*xc)+xd)/8;
+      immutable float fy3 = (t2*(t2*(3*yb-t2*ya)-3*yc)+yd)/8;
+      fx0 -= fx3;
+      fy0 -= fy3;
       // scale bounds to int
-      x3 = cast(int)floor(fx3+0.5);
-      y3 = cast(int)floor(fy3+0.5);
-      if (fx0 != 0.0) { fx1 *= fx0 = (x0-x3)/fx0; fx2 *= fx0; }
-      if (fy0 != 0.0) { fy1 *= fy0 = (y0-y3)/fy0; fy2 *= fy0; }
+      x3 = cast(int)floor(fx3+0.5f);
+      y3 = cast(int)floor(fy3+0.5f);
+      if (fx0 != 0.0f) { fx1 *= fx0 = (x0-x3)/fx0; fx2 *= fx0; }
+      if (fy0 != 0.0f) { fy1 *= fy0 = (y0-y3)/fy0; fy2 *= fy0; }
       if (x0 != x3 || y0 != y3) drawCubicBezierSeg(x0, y0, x0+fx1, y0+fy1, x0+fx2, y0+fy2, x3, y3, fc); // segment t1 - t2
       x0 = x3; y0 = y3; fx0 = fx3; fy0 = fy3; t1 = t2;
     }
