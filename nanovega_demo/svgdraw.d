@@ -290,16 +290,8 @@ void main (string[] args) {
 
     if (vg !is null) {
       if (fps !is null) fps.update(dt);
-      vg.beginFrame(GWidth, GHeight, 1);
-
-      vg.fontFace("sans");
-      vg.fontSize(14);
-      vg.textAlign(NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top));
-      vg.fillColor(NVGColor.white);
-      vg.text(10, 10, (useDirectRendering ? "Direct" : "Image"));
-      vg.text(10, 30, (svgAA ? "AA" : "NO AA"));
-      import std.conv : to;
-      vg.text(10, 50, pathMode.to!string);
+      vg.beginFrame(GWidth, GHeight);
+      scope(exit) vg.endFrame();
 
       if (useDirectRendering) {
         vg.save();
@@ -308,13 +300,46 @@ void main (string[] args) {
         vg.render(svg, pathMode);
       } else {
         // draw image
+        vg.save();
+        scope(exit) vg.restore();
         vg.beginPath();
         vg.rect(0, 0, GWidth, GHeight);
         vg.fillPaint(vg.imagePattern(0, 0, GWidth, GHeight, 0, vgimg, 1));
         vg.fill();
       }
+
+      //vg.endFrame(); // flush rendering
+      //vg.beginFrame(GWidth, GHeight); // restart frame
+
+      vg.fontFace("sans");
+      vg.fontSize(14);
+      vg.textAlign(NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top));
+
+      {
+        vg.newPath();
+        float[4] b;
+        //vg.textBounds(10, 10, "D", b[]);
+        //printf("b=[%g, %g, %g, %g]\n", cast(double)b[0], cast(double)b[1], cast(double)b[2], cast(double)b[3]);
+        //printf("tw=%g : %g\n", cast(double)vg.textWidth("Direct"), cast(double)vg.textWidth("Image"));
+        auto tw = nvg__max(vg.textWidth("Direct"), vg.textWidth("Image"));
+        foreach (string nn; __traits(allMembers, PathMode)) tw = nvg__max(tw, vg.textWidth(nn));
+        vg.save();
+        scope(exit) vg.restore();
+        //vg.globalCompositeBlendFunc(NVGBlendFactor.ZERO, NVGBlendFactor.SRC_ALPHA);
+        //vg.scissor(0, 0, tw+1, 71);
+        vg.rect(0.5, 0.5, tw+20, 70);
+        vg.fillColor(NVGColor("#8000"));
+        vg.fill();
+        //printf("tw=%g\n", cast(double)tw);
+      }
+
+      vg.fillColor(NVGColor.white);
+      vg.text(10, 10, (useDirectRendering ? "Direct" : "Image"));
+      vg.text(10, 30, (svgAA ? "AA" : "NO AA"));
+      import std.conv : to;
+      vg.text(10, 50, pathMode.to!string);
+
       if (fps !is null && drawFPS) fps.render(vg, 5, 5);
-      vg.endFrame();
     }
   };
 
