@@ -10111,4 +10111,5 @@ public void renderBaphomet(string mode="fs") (NVGContext nvg, float ofsx=0, floa
       default: assert(0, "invalid path command");
     }
   }
+  nvg.newPath();
 }
