@@ -923,7 +923,7 @@ public:
   }
 }
 
-import core.stdc.math :
+public import core.stdc.math :
   nvg__sqrtf = sqrtf,
   nvg__modf = fmodf,
   nvg__sinf = sinf,
@@ -934,19 +934,19 @@ import core.stdc.math :
   nvg__ceilf = ceilf;
 
 version(Windows) {
-  private int lrintf (float f) nothrow @trusted @nogc { pragma(inline, true); return cast(int)(f+0.5); }
+  public int nvg__lrintf (float f) nothrow @trusted @nogc { pragma(inline, true); return cast(int)(f+0.5); }
 } else {
-  import core.stdc.math : lrintf;
+  public import core.stdc.math : nvg__lrintf = lrintf;
 }
 
-auto nvg__min(T) (T a, T b) { pragma(inline, true); return (a < b ? a : b); }
-auto nvg__max(T) (T a, T b) { pragma(inline, true); return (a > b ? a : b); }
-auto nvg__clamp(T) (T a, T mn, T mx) { pragma(inline, true); return (a < mn ? mn : (a > mx ? mx : a)); }
+public auto nvg__min(T) (T a, T b) { pragma(inline, true); return (a < b ? a : b); }
+public auto nvg__max(T) (T a, T b) { pragma(inline, true); return (a > b ? a : b); }
+public auto nvg__clamp(T) (T a, T mn, T mx) { pragma(inline, true); return (a < mn ? mn : (a > mx ? mx : a)); }
 //float nvg__absf() (float a) { pragma(inline, true); return (a >= 0.0f ? a : -a); }
-auto nvg__sign(T) (T a) { pragma(inline, true); return (a >= cast(T)0 ? cast(T)1 : cast(T)(-1)); }
-float nvg__cross() (float dx0, float dy0, float dx1, float dy1) { pragma(inline, true); return (dx1*dy0-dx0*dy1); }
+public auto nvg__sign(T) (T a) { pragma(inline, true); return (a >= cast(T)0 ? cast(T)1 : cast(T)(-1)); }
+public float nvg__cross() (float dx0, float dy0, float dx1, float dy1) { pragma(inline, true); return (dx1*dy0-dx0*dy1); }
 
-private import core.stdc.math : nvg__absf = fabsf;
+public import core.stdc.math : nvg__absf = fabsf;
 
 
 float nvg__normalize (float* x, float* y) nothrow @safe @nogc {
@@ -1112,7 +1112,10 @@ package/*(iv.nanovega)*/ void deleteInternal (ref NVGContext ctx) nothrow @trust
 
 ///
 public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
-  ctx.deleteInternal();
+  if (ctx !is null) {
+    ctx.deleteInternal();
+    ctx = null;
+  }
 }
 
 /** Begin drawing a new frame.
@@ -1216,19 +1219,19 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
  */
 public alias NVGSectionDummy00_00 = void;
 
-/// Sets the composite operation. The op parameter should be one of NVGcompositeOperation.
-void globalCompositeOperation (NVGContext ctx, NVGCompositeOperation op) nothrow @trusted @nogc {
+/// Sets the composite operation.
+public void globalCompositeOperation (NVGContext ctx, NVGCompositeOperation op) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.compositeOperation = nvg__compositeOperationState(op);
 }
 
-/// Sets the composite operation with custom pixel arithmetic. The parameters should be one of NVGblendFactor.
-void globalCompositeBlendFunc (NVGContext ctx, NVGBlendFactor sfactor, NVGBlendFactor dfactor) nothrow @trusted @nogc {
+/// Sets the composite operation with custom pixel arithmetic.
+public void globalCompositeBlendFunc (NVGContext ctx, NVGBlendFactor sfactor, NVGBlendFactor dfactor) nothrow @trusted @nogc {
   ctx.globalCompositeBlendFuncSeparate(sfactor, dfactor, sfactor, dfactor);
 }
 
-/// Sets the composite operation with custom pixel arithmetic for RGB and alpha components separately. The parameters should be one of NVGblendFactor.
-void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NVGBlendFactor dstRGB, NVGBlendFactor srcAlpha, NVGBlendFactor dstAlpha) nothrow @trusted @nogc {
+/// Sets the composite operation with custom pixel arithmetic for RGB and alpha components separately.
+public void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NVGBlendFactor dstRGB, NVGBlendFactor srcAlpha, NVGBlendFactor dstAlpha) nothrow @trusted @nogc {
   NVGCompositeOperationState op;
   op.srcRGB = srcRGB;
   op.dstRGB = dstRGB;
@@ -4956,7 +4959,7 @@ public alias NVGSectionDummy08 = void;
  * `:noaa` in font path is still allowed, but it must be the last option.
  */
 public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) nothrow @trusted {
-  return fonsAddFont(ctx.fs, name, path);
+  return fonsAddFont(ctx.fs, name, path, ctx.params.fontAA);
 }
 
 /** Creates font by loading it from the specified memory chunk.
@@ -4964,7 +4967,7 @@ public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) n
  * Won't free data on error.
  * Maximum font name length is 63 chars, and it will be truncated. */
 public int createFontMem (NVGContext ctx, const(char)[] name, ubyte* data, int ndata, bool freeData) nothrow @trusted @nogc {
-  return fonsAddFontMem(ctx.fs, name, data, ndata, freeData);
+  return fonsAddFontMem(ctx.fs, name, data, ndata, freeData, ctx.params.fontAA);
 }
 
 /// Finds a loaded font of specified name, and returns handle to it, or FONS_INVALID (aka -1) if the font is not found.
@@ -5190,16 +5193,6 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
     nvgTransformPoint(&c[6], &c[7], state.xform[], q.x0*invscale, q.y1*invscale);
     // Create triangles
     if (nverts+6 <= cverts) {
-      //FIXME: this is WRONG!
-      // this doesn't help a little; i need to separate font rendering from image filling to get sharp fonts
-      /*
-      if (!ctx.params.fontAA) {
-        foreach (ref float f; c[]) {
-          { import core.stdc.stdio; printf("f0=%g; f1=%g\n", cast(double)f, cast(double)lrintf(f)); }
-          f = lrintf(f); // remove blurriness
-        }
-      }
-      */
       nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); ++nverts;
       nvg__vset(&verts[nverts], c[4], c[5], q.s1, q.t1); ++nverts;
       nvg__vset(&verts[nverts], c[2], c[3], q.s1, q.t0); ++nverts;
@@ -5258,7 +5251,7 @@ private template isGoodPositionDelegate(DG) {
     enum isGoodPositionDelegate = false;
 }
 
-/** Calculates the glyph x positions of the specified text. If end is specified only the sub-string will be used.
+/** Calculates the glyph x positions of the specified text.
  * Measured values are returned in local coordinate space.
  */
 public NVGGlyphPosition[] textGlyphPositions(T) (NVGContext ctx, float x, float y, const(T)[] str, NVGGlyphPosition[] positions) nothrow @trusted @nogc
@@ -5683,12 +5676,38 @@ public float textFontDescender (NVGContext ctx) nothrow @trusted @nogc {
   return res;
 }
 
-/** Measures the specified text string. Parameter bounds should be a pointer to float[4],
+/** Measures the specified text string. Returns horizontal and vertical sizes of the measured text.
+ * Measured values are returned in local coordinate space.
+ */
+public void textExtents(T) (NVGContext ctx, const(T)[] str, float *w, float *h) nothrow @trusted @nogc if (isAnyCharType!T) {
+  float[4] bnd = void;
+  ctx.textBounds(0, 0, str, bnd[]);
+  if (!fonsGetFontAA(ctx.fs, nvg__getState(ctx).fontId)) {
+    if (w !is null) *w = nvg__lrintf(bnd.ptr[2]-bnd.ptr[0]);
+    if (h !is null) *h = nvg__lrintf(bnd.ptr[3]-bnd.ptr[1]);
+  } else {
+    if (w !is null) *w = bnd.ptr[2]-bnd.ptr[0];
+    if (h !is null) *h = bnd.ptr[3]-bnd.ptr[1];
+  }
+}
+
+/** Measures the specified text string. Returns horizontal size of the measured text.
+ * Measured values are returned in local coordinate space.
+ */
+public float textWidth(T) (NVGContext ctx, const(T)[] str) nothrow @trusted @nogc if (isAnyCharType!T) {
+  float w = void;
+  ctx.textExtents(str, &w, null);
+  return w;
+}
+
+/** Measures the specified text string. Parameter bounds should be a float[4],
  * if the bounding box of the text should be returned. The bounds value are [xmin, ymin, xmax, ymax]
  * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
  * Measured values are returned in local coordinate space.
  */
-public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, float[] bounds) if (isAnyCharType!T) {
+public float textBounds(T) (NVGContext ctx, float x, float y, const(T)[] str, float[] bounds) nothrow @trusted @nogc
+if (isAnyCharType!T)
+{
   NVGstate* state = nvg__getState(ctx);
   float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
   float invscale = 1.0f/scale;
@@ -6074,6 +6093,7 @@ float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1
 // ////////////////////////////////////////////////////////////////////////// //
 struct FONSttFontImpl {
   stbtt_fontinfo font;
+  bool mono; // no aa?
 }
 
 int fons__tt_init (FONScontext* context) nothrow @trusted @nogc {
@@ -6081,6 +6101,7 @@ int fons__tt_init (FONScontext* context) nothrow @trusted @nogc {
 }
 
 void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) nothrow @trusted @nogc {
+  font.mono = v;
 }
 
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) nothrow @trusted @nogc {
@@ -6526,7 +6547,7 @@ FONSstate* fons__getState (FONScontext* stash) nothrow @trusted @nogc {
 bool fonsAddFallbackFont (FONScontext* stash, int base, int fallback) nothrow @trusted @nogc {
   FONSfont* baseFont = stash.fonts[base];
   if (baseFont.nfallbacks < FONS_MAX_FALLBACKS) {
-    baseFont.fallbacks[baseFont.nfallbacks++] = fallback;
+    baseFont.fallbacks.ptr[baseFont.nfallbacks++] = fallback;
     return true;
   }
   return false;
@@ -6561,6 +6582,15 @@ public void fonsSetAlign (FONScontext* stash, NVGTextAlign talign) nothrow @trus
 public void fonsSetFont (FONScontext* stash, int font) nothrow @trusted @nogc {
   pragma(inline, true);
   fons__getState(stash).font = font;
+}
+
+// get AA for current font or for the specified font
+public bool fonsGetFontAA (FONScontext* stash, int font=-1) nothrow @trusted @nogc {
+  FONSstate* state = fons__getState(stash);
+  if (font < 0) font = state.font;
+  if (font < 0 || font >= stash.nfonts) return false;
+  FONSfont* f = stash.fonts[font];
+  return (f !is null ? !f.font.mono : false);
 }
 
 public void fonsPushState (FONScontext* stash) nothrow @trusted @nogc {
@@ -6641,7 +6671,8 @@ private bool strEquCI (const(char)[] s0, const(char)[] s1) nothrow @trusted @nog
 
 private enum NoAlias = ":noaa";
 
-public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path) nothrow @trusted {
+// defAA: antialias flag for fonts without ":noaa"
+public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path, bool defAA) nothrow @trusted {
   char[64+NoAlias.length] fontnamebuf = 0;
 
   if (path.length == 0 || name.length == 0 || strEquCI(name, NoAlias)) return FONS_INVALID;
@@ -6704,7 +6735,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
       scope(failure) free(data); // oops
       fl.rawReadExact(data[0..cast(uint)dataSize]);
       fl.close();
-      auto xres = fonsAddFontMem(stash, fontnamebuf[0..blen], data, cast(int)dataSize, true);
+      auto xres = fonsAddFontMem(stash, fontnamebuf[0..blen], data, cast(int)dataSize, true, defAA);
       if (xres == FONS_INVALID) {
         free(data);
       } else {
@@ -6750,7 +6781,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
 }
 
 /// This will not free data on error!
-public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, bool freeData) nothrow @trusted @nogc {
+public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, bool freeData, bool defAA) nothrow @trusted @nogc {
   int i, ascent, descent, fh, lineGap;
 
   if (name.length == 0 || name == NoAlias) return FONS_INVALID;
@@ -6776,7 +6807,7 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   font.namelen = cast(uint)name.length;
 
   // Init hash lookup.
-  for (i = 0; i < FONS_HASH_LUT_SIZE; ++i) font.lut[i] = -1;
+  font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1;
 
   // Read in the font data.
   font.dataSize = dataSize;
@@ -6786,6 +6817,8 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
     //{ import core.stdc.stdio : printf; printf("MONO: [%.*s]\n", cast(uint)name.length, name.ptr); }
     fons__tt_setMono(stash, &font.font, true);
+  } else {
+    fons__tt_setMono(stash, &font.font, defAA);
   }
 
   // Init font
@@ -6961,7 +6994,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
 
   // Find code point and size.
   h = fons__hashint(codepoint)&(FONS_HASH_LUT_SIZE-1);
-  i = font.lut[h];
+  i = font.lut.ptr[h];
   while (i != -1) {
     //if (font.glyphs[i].codepoint == codepoint && font.glyphs[i].size == isize && font.glyphs[i].blur == iblur) return &font.glyphs[i];
     if (font.glyphs[i].codepoint == codepoint && font.glyphs[i].size == isize && font.glyphs[i].blur == iblur) {
@@ -6980,7 +7013,7 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
   // Try to find the glyph in fallback fonts.
   if (g == 0) {
     for (i = 0; i < font.nfallbacks; ++i) {
-      FONSfont* fallbackFont = stash.fonts[font.fallbacks[i]];
+      FONSfont* fallbackFont = stash.fonts[font.fallbacks.ptr[i]];
       int fallbackIndex = fons__tt_getGlyphIndex(&fallbackFont.font, codepoint);
       if (fallbackIndex != 0) {
         g = fallbackIndex;
@@ -7021,8 +7054,8 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
     glyph.next = 0;
 
     // Insert char to hash lookup.
-    glyph.next = font.lut[h];
-    font.lut[h] = font.nglyphs-1;
+    glyph.next = font.lut.ptr[h];
+    font.lut.ptr[h] = font.nglyphs-1;
   }
   glyph.index = g;
   glyph.x0 = cast(short)gx;
@@ -7143,11 +7176,11 @@ void fons__flush (FONScontext* stash) nothrow @trusted @nogc {
 }
 
 void fons__vertex (FONScontext* stash, float x, float y, float s, float t, uint c) nothrow @trusted @nogc {
-  stash.verts[stash.nverts*2+0] = x;
-  stash.verts[stash.nverts*2+1] = y;
-  stash.tcoords[stash.nverts*2+0] = s;
-  stash.tcoords[stash.nverts*2+1] = t;
-  stash.colors[stash.nverts] = c;
+  stash.verts.ptr[stash.nverts*2+0] = x;
+  stash.verts.ptr[stash.nverts*2+1] = y;
+  stash.tcoords.ptr[stash.nverts*2+0] = s;
+  stash.tcoords.ptr[stash.nverts*2+1] = t;
+  stash.colors.ptr[stash.nverts] = c;
   ++stash.nverts;
 }
 
@@ -7808,7 +7841,7 @@ public int fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @t
   for (i = 0; i < stash.nfonts; i++) {
     FONSfont* font = stash.fonts[i];
     font.nglyphs = 0;
-    for (j = 0; j < FONS_HASH_LUT_SIZE; j++) font.lut[j] = -1;
+    font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1;
   }
 
   stash.params.width = width;
