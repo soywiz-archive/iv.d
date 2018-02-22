@@ -6140,6 +6140,7 @@ float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1
 } // version
 
 
+// ////////////////////////////////////////////////////////////////////////// //
 private:
 enum FONS_SCRATCH_BUF_SIZE = 64000;
 enum FONS_HASH_LUT_SIZE = 256;
@@ -6150,7 +6151,7 @@ enum FONS_VERTEX_COUNT = 1024;
 enum FONS_MAX_STATES = 20;
 enum FONS_MAX_FALLBACKS = 20;
 
-uint fons__hashint() (uint a) {
+uint fons__hashint() (uint a) pure nothrow @safe @nogc {
   pragma(inline, true);
   a += ~(a<<15);
   a ^=  (a>>10);
@@ -6161,6 +6162,36 @@ uint fons__hashint() (uint a) {
   return a;
 }
 
+uint fons__djbhash (const(void)[] s, const(void)[] sfx=null) pure nothrow @safe @nogc {
+  uint hash = 5381;
+  foreach (ubyte b; cast(const(ubyte)[])s) {
+    if (b >= 'A' && b <= 'Z') b += 32; // poor man's tolower
+    hash = ((hash<<5)+hash)+b;
+  }
+  foreach (ubyte b; cast(const(ubyte)[])sfx) {
+    if (b >= 'A' && b <= 'Z') b += 32; // poor man's tolower
+    hash = ((hash<<5)+hash)+b;
+  }
+  return hash;
+}
+
+private bool fons_strequci (const(char)[] s0, const(char)[] s1) nothrow @trusted @nogc {
+  if (s0.length != s1.length) return false;
+  const(char)* sp0 = s0.ptr;
+  const(char)* sp1 = s1.ptr;
+  foreach (; 0..s0.length) {
+    char c0 = *sp0++;
+    char c1 = *sp1++;
+    if (c0 != c1) {
+      if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man tolower
+      if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man tolower
+      if (c0 != c1) return false;
+    }
+  }
+  return true;
+}
+
+
 struct FONSglyph {
   uint codepoint;
   int index;
@@ -6170,14 +6201,57 @@ struct FONSglyph {
   short xadv, xoff, yoff;
 }
 
-struct FONSfont {
-  FONSttFontImpl font;
-  char[64] name;
-  uint namelen;
-  char[4096] path; //asciiz; TODO: malloc this?
+// refcounted
+struct FONSfontData {
   ubyte* data;
   int dataSize;
   bool freeData;
+  int rc;
+
+  @disable this (this); // no copies
+}
+
+// won't set rc to 1
+FONSfontData* fons__createFontData (ubyte* adata, int asize, bool afree) nothrow @trusted @nogc {
+  import core.stdc.stdlib : malloc;
+  assert(adata !is null);
+  assert(asize > 0);
+  auto res = cast(FONSfontData*)malloc(FONSfontData.sizeof);
+  if (res is null) assert(0, "FONS: out of memory");
+  res.data = adata;
+  res.dataSize = asize;
+  res.freeData = afree;
+  res.rc = 0;
+  return res;
+}
+
+void incref (FONSfontData* fd) pure nothrow @trusted @nogc {
+  pragma(inline, true);
+  if (fd !is null) ++fd.rc;
+}
+
+void decref (ref FONSfontData* fd) nothrow @trusted @nogc {
+  if (fd !is null) {
+    if (--fd.rc == 0) {
+      import core.stdc.stdlib : free;
+      if (fd.freeData && fd.data !is null) {
+        free(fd.data);
+        fd.data = null;
+      }
+      free(fd);
+      fd = null;
+    }
+  }
+}
+
+// as creating and destroying fonts is a rare operation, malloc some data
+struct FONSfont {
+  FONSttFontImpl font;
+  char* name; // malloced, strz, always lowercase
+  uint namelen;
+  uint namehash;
+  char* path; // malloced, strz
+  FONSfontData* fdata;
   float ascender;
   float descender;
   float lineh;
@@ -6187,6 +6261,58 @@ struct FONSfont {
   int[FONS_HASH_LUT_SIZE] lut;
   int[FONS_MAX_FALLBACKS] fallbacks;
   int nfallbacks;
+
+  // except glyphs
+  void freeMemory () nothrow @trusted @nogc {
+    import core.stdc.stdlib : free;
+    if (name !is null) { free(name); name = null; }
+    namelen = namehash = 0;
+    if (path !is null) { free(path); path = null; }
+    fdata.decref();
+  }
+
+  // this also calcs name hash
+  void setName (const(char)[] aname, const(char)[] sfx=null) nothrow @trusted @nogc {
+    import core.stdc.stdlib : realloc;
+    if (aname.length > int.max/32 || sfx.length > 1024) assert(0, "FONS: invalid font name");
+    namelen = cast(uint)(aname.length+sfx.length);
+    name = cast(char*)realloc(name, namelen+1);
+    if (name is null) assert(0, "FONS: out of memory");
+    if (aname.length) name[0..aname.length] = aname[];
+    if (sfx.length) name[aname.length..aname.length+sfx.length] = sfx[];
+    name[namelen] = 0;
+    // lowercase it
+    foreach (ref char ch; name[0..namelen]) if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
+    namehash = fons__djbhash(name[0..namelen]);
+  }
+
+  void setPath (const(char)[] apath) nothrow @trusted @nogc {
+    import core.stdc.stdlib : realloc;
+    if (apath.length > int.max/32) assert(0, "FONS: invalid font path");
+    path = cast(char*)realloc(path, apath.length+1);
+    if (path is null) assert(0, "FONS: out of memory");
+    if (apath.length) path[0..apath.length] = apath[];
+    path[apath.length] = 0;
+  }
+
+  // this won't check hash
+  bool nameEqu (const(char)[] aname, const(char)[] sfx=null) nothrow @trusted @nogc {
+    if (aname.length > int.max/32 || sfx.length > 1024) return false;
+    if (namelen != aname.length+sfx.length) return false;
+    const(char)* ns = name;
+    // name part
+    foreach (char ch; aname) {
+      if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
+      if (ch != *ns++) return false;
+    }
+    // suffix part
+    foreach (char ch; sfx) {
+      if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
+      if (ch != *ns++) return false;
+    }
+    // done (length was checked earlier)
+    return true;
+  }
 }
 
 struct FONSstate {
@@ -6209,15 +6335,16 @@ struct FONSatlas {
   int cnodes;
 }
 
+//FIXME: replace direct hash table with font array and indicies in hash, so we can grow hash
 public struct FONScontext {
   FONSparams params;
   float itw, ith;
   ubyte* texData;
   int[4] dirtyRect;
-  FONSfont** fonts;
+  FONSfont** fonts; // actually, a simple hash table; can't grow yet
+  int cfonts; // allocated
+  int nfonts; // used (so we can track hash table stats)
   FONSatlas* atlas;
-  int cfonts;
-  int nfonts;
   float[FONS_VERTEX_COUNT*2] verts;
   float[FONS_VERTEX_COUNT*2] tcoords;
   uint[FONS_VERTEX_COUNT] colors;
@@ -6229,12 +6356,63 @@ public struct FONScontext {
   void function (void* uptr, int error, int val) nothrow @trusted @nogc handleError;
   void* errorUptr;
 
-  // reset font cache for name searching
-  void resetFFCC () pure nothrow @safe @nogc { pragma(inline, true); lastfontlen = -1; lastfontidx = -1; }
+  // simple linear probing; returns `FONS_INVALID` if not found
+  int findNameInHash (const(char)[] name, const(char)[] sfx=null) nothrow @trusted @nogc {
+    if (cfonts == 0) return FONS_INVALID;
+    auto nhash = fons__djbhash(name, sfx);
+    auto res = nhash%cfonts;
+    // hash will never be 100% full, so this loop is safe
+    while (fonts[res] !is null) {
+      if (fonts[res].namehash == nhash && fonts[res].nameEqu(name, sfx)) return cast(int)res;
+      res = (res+1)%cfonts;
+    }
+    return FONS_INVALID;
+  }
 
-  char[64] lastfont;
-  int lastfontlen;
-  int lastfontidx;
+  // won't init `fonts` element, just allocs it (and does rehashing if necessary)
+  int allocHashBucket (const(char)[] name, const(char)[] sfx=null) nothrow @trusted @nogc {
+    import core.stdc.stdlib : realloc;
+    import core.stdc.string : memset;
+    auto nhash = fons__djbhash(name, sfx);
+    // allocate new hash table if there was none
+    if (cfonts == 0) {
+      enum InitSize = 512;
+      auto newlist = cast(FONSfont**)realloc(null, InitSize*(FONSfont*).sizeof);
+      if (newlist is null) assert(0, "FONS: out of memory");
+      memset(newlist, 0, InitSize*(FONSfont*).sizeof);
+      cfonts = InitSize;
+      fonts = newlist;
+    }
+    // no rehashing for now
+    if (nfonts >= cfonts-1) assert(0, "FONS: too many fonts");
+    int res = cast(int)(nhash%cfonts);
+    version(none) {
+      // need to rehash? we want our hash table 50% full at max
+      if (fonts[res] !is null && nfonts >= cfonts/2) {
+        uint nsz = cfonts*2;
+        if (nsz > 128*1024) assert(0, "FONS: out of memory for fonts");
+        auto newlist = cast(FONSfont**)realloc(fonts, nsz*(FONSfont*).sizeof);
+        if (newlist is null) assert(0, "FONS: out of memory");
+        memset(newlist, 0, nsz*(FONSfont*).sizeof);
+        // rehash
+        foreach (FONSfont* ff; fonts[0..cfonts]) {
+          if (ff is null) continue;
+          // find slot for this font (guaranteed to have one)
+          uint newslot = ff.namehash%nsz;
+          while (newlist[newslot] !is null) newslot = (newslot+1)%nsz;
+          newlist[newslot] = ff;
+        }
+        cfonts = nsz;
+        fonts = newlist;
+        // update res
+        res = cast(int)(nhash%cfonts);
+      }
+    }
+    // find slot (guaranteed to have one)
+    while (fonts[res] !is null) res = (res+1)%cfonts;
+    // i found her!
+    return res;
+  }
 }
 
 void* fons__tmpalloc (usize size, void* up) nothrow @trusted @nogc {
@@ -6490,8 +6668,6 @@ public FONScontext* fonsCreateInternal (FONSparams* params) nothrow @trusted @no
   memset(stash, 0, FONScontext.sizeof);
 
   stash.params = *params;
-  stash.lastfontlen = -1;
-  stash.lastfontidx = -1;
 
   // Allocate scratch buffer.
   stash.scratch = cast(ubyte*)malloc(FONS_SCRATCH_BUF_SIZE);
@@ -6507,12 +6683,9 @@ public FONScontext* fonsCreateInternal (FONSparams* params) nothrow @trusted @no
   stash.atlas = fons__allocAtlas(stash.params.width, stash.params.height, FONS_INIT_ATLAS_NODES);
   if (stash.atlas is null) goto error;
 
-  // Allocate space for fonts.
-  stash.fonts = cast(FONSfont**)malloc((FONSfont*).sizeof*FONS_INIT_FONTS);
-  if (stash.fonts is null) goto error;
-  memset(stash.fonts, 0, (FONSfont*).sizeof*FONS_INIT_FONTS);
-  stash.cfonts = FONS_INIT_FONTS;
-  stash.nfonts = 0;
+  // Don't allocate space for fonts: hash manager will do that for us later.
+  //stash.cfonts = 0;
+  //stash.nfonts = 0;
 
   // Create texture for the cache.
   stash.itw = 1.0f/stash.params.width;
@@ -6588,7 +6761,7 @@ public void fonsSetFont (FONScontext* stash, int font) nothrow @trusted @nogc {
 public bool fonsGetFontAA (FONScontext* stash, int font=-1) nothrow @trusted @nogc {
   FONSstate* state = fons__getState(stash);
   if (font < 0) font = state.font;
-  if (font < 0 || font >= stash.nfonts) return false;
+  if (font < 0 || font >= stash.cfonts) return false;
   FONSfont* f = stash.fonts[font];
   return (f !is null ? !f.font.mono : false);
 }
@@ -6623,50 +6796,26 @@ public void fonsClearState (FONScontext* stash) nothrow @trusted @nogc {
 void fons__freeFont (FONSfont* font) nothrow @trusted @nogc {
   if (font is null) return;
   if (font.glyphs) free(font.glyphs);
-  if (font.freeData && font.data !is null) free(font.data);
+  font.freeMemory();
   free(font);
 }
 
-int fons__allocFont (FONScontext* stash, int atidx=-1) nothrow @trusted @nogc {
+FONSfont* fons__allocFontAt (FONScontext* stash, int atidx) nothrow @trusted @nogc {
+  if (atidx < 0 || atidx >= stash.cfonts) assert(0, "internal NanoVega fontstash error");
+
   FONSfont* font = cast(FONSfont*)malloc(FONSfont.sizeof);
-  if (font is null) return FONS_INVALID;
+  if (font is null) assert(0, "FONS: out of memory");
   memset(font, 0, FONSfont.sizeof);
 
   font.glyphs = cast(FONSglyph*)malloc(FONSglyph.sizeof*FONS_INIT_GLYPHS);
-  if (font.glyphs is null) { free(font); return FONS_INVALID; }
+  if (font.glyphs is null) assert(0, "FONS: out of memory");
   font.cglyphs = FONS_INIT_GLYPHS;
   font.nglyphs = 0;
 
-  if (atidx < 0) {
-    if (stash.nfonts+1 > stash.cfonts) {
-      stash.cfonts = (stash.cfonts == 0 ? 16 : stash.cfonts+32);
-      stash.fonts = cast(FONSfont**)realloc(stash.fonts, (FONSfont*).sizeof*stash.cfonts);
-      if (stash.fonts is null) assert(0, "out of memory in NanoVega fontstash");
-    }
-    assert(stash.nfonts < stash.cfonts);
-    stash.fonts[stash.nfonts] = font;
-    return stash.nfonts++;
-  } else {
-    if (atidx >= stash.cfonts) assert(0, "internal NanoVega fontstash error");
-    stash.fonts[atidx] = font;
-    return atidx;
-  }
-}
+  if (stash.fonts[atidx] is null) ++stash.nfonts;
+  stash.fonts[atidx] = font;
 
-private bool strEquCI (const(char)[] s0, const(char)[] s1) nothrow @trusted @nogc {
-  if (s0.length != s1.length) return false;
-  const(char)* sp0 = s0.ptr;
-  const(char)* sp1 = s1.ptr;
-  foreach (; 0..s0.length) {
-    char c0 = *sp0++;
-    char c1 = *sp1++;
-    if (c0 != c1) {
-      if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man tolower
-      if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man tolower
-      if (c0 != c1) return false;
-    }
-  }
-  return true;
+  return font;
 }
 
 private enum NoAlias = ":noaa";
@@ -6675,7 +6824,7 @@ private enum NoAlias = ":noaa";
 public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path, bool defAA) nothrow @trusted {
   char[64+NoAlias.length] fontnamebuf = 0;
 
-  if (path.length == 0 || name.length == 0 || strEquCI(name, NoAlias)) return FONS_INVALID;
+  if (path.length == 0 || name.length == 0 || fons_strequci(name, NoAlias)) return FONS_INVALID;
   if (path.length > 1024) return FONS_INVALID; // arbitrary limit
 
   if (name.length > 63) name = name[0..63];
@@ -6683,10 +6832,10 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
   uint blen = cast(uint)name.length;
 
   // if font path ends with ":noaa", add this to font name instead
-  if (path.length >= NoAlias.length && strEquCI(path[$-NoAlias.length..$], NoAlias)) {
+  if (path.length >= NoAlias.length && fons_strequci(path[$-NoAlias.length..$], NoAlias)) {
     path = path[0..$-NoAlias.length];
     if (path.length == 0) return FONS_INVALID;
-    if (name.length < NoAlias.length || !strEquCI(name[$-NoAlias.length..$], NoAlias)) {
+    if (name.length < NoAlias.length || !fons_strequci(name[$-NoAlias.length..$], NoAlias)) {
       if (name.length+NoAlias.length > 63) return FONS_INVALID;
       fontnamebuf[name.length..name.length+NoAlias.length] = NoAlias;
       blen += cast(uint)NoAlias.length;
@@ -6695,25 +6844,23 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
   assert(fontnamebuf[blen] == 0);
 
   // find a font with the given name
-  stash.resetFFCC();
   int fidx = fonsGetFontByName!false(stash, fontnamebuf[0..blen]); // no substitutes
-  stash.resetFFCC();
   //{ import core.stdc.stdio; printf("loading font '%.*s' [%s] (fidx=%d)...\n", cast(uint)path.length, path.ptr, fontnamebuf.ptr, fidx); }
 
   int loadFontFile (const(char)[] path) {
     // check if we already has a loaded font with this name
     if (fidx >= 0) {
       import core.stdc.string : strlen;
-      auto plen = strlen(stash.fonts[fidx].path.ptr);
+      auto plen = strlen(stash.fonts[fidx].path);
       version(Posix) {
         //{ import core.stdc.stdio; printf("+++ font [%.*s] was loaded from [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)stash.fonts[fidx].path.length, stash.fonts[fidx].path.ptr); }
-        if (plen == path.length && stash.fonts[fidx].path.ptr[0..plen] == path) {
+        if (plen == path.length && stash.fonts[fidx].path[0..plen] == path) {
           //{ import core.stdc.stdio; printf("*** font [%.*s] already loaded from [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)plen, path.ptr); }
           // i found her!
           return fidx;
         }
       } else {
-        if (plen == path.length && strEquCI(stash.fonts[fidx].path.ptr[0..plen],  path)) {
+        if (plen == path.length && fons_strequci(stash.fonts[fidx].path.ptr[0..plen],  path)) {
           // i found her!
           return fidx;
         }
@@ -6740,7 +6887,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
         free(data);
       } else {
         // remember path
-        if (path.length <= stash.fonts[xres].path.length) stash.fonts[xres].path.ptr[0..path.length] = path[];
+        stash.fonts[xres].setPath(path);
       }
       return xres;
     } catch (Exception e) {
@@ -6782,37 +6929,42 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
 
 /// This will not free data on error!
 public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, bool freeData, bool defAA) nothrow @trusted @nogc {
+  FONSfontData* fdata = fons__createFontData(data, dataSize, freeData);
+  fdata.incref();
+  auto res = fonsAddFontWithData(stash, name, fdata, defAA);
+  if (res == FONS_INVALID) {
+    // we promised to not free data on error
+    fdata.freeData = false;
+    fdata.decref(); // this will free `fdata`
+  }
+  return res;
+}
+
+// fdata refcount must be already increased; it won't be changed
+int fonsAddFontWithData (FONScontext* stash, const(char)[] name, FONSfontData* fdata, bool defAA) nothrow @trusted @nogc {
   int i, ascent, descent, fh, lineGap;
 
   if (name.length == 0 || name == NoAlias) return FONS_INVALID;
-  if (name.length > FONSfont.name.length-1) return FONS_INVALID; //name = name[0..FONSfont.name.length-1];
+  if (name.length > 32767) return FONS_INVALID;
+  if (fdata is null) return FONS_INVALID;
 
   // find a font with the given name
+  int newidx;
   FONSfont* oldfont = null;
-  stash.resetFFCC();
   int oldidx = fonsGetFontByName!false(stash, name); // no substitutes
-  stash.resetFFCC();
-  if (oldidx != FONS_INVALID) oldfont = stash.fonts[oldidx];
+  if (oldidx != FONS_INVALID) {
+    // replacement font
+    oldfont = stash.fonts[oldidx];
+    newidx = oldidx;
+  } else {
+    // new font, allocate new bucket
+    newidx = stash.allocHashBucket(name);
+  }
 
-  //{ import core.stdc.stdio; printf("creating font [%.*s] (oidx=%d)...\n", cast(uint)name.length, name.ptr, oldidx); }
-
-  int idx = fons__allocFont(stash, oldidx);
-  if (idx == FONS_INVALID) return FONS_INVALID;
-
-  FONSfont* font = stash.fonts[idx];
-
-  //strncpy(font.name.ptr, name, (font.name).sizeof);
-  font.name[] = 0;
-  font.name[0..name.length] = name[];
-  font.namelen = cast(uint)name.length;
-
-  // Init hash lookup.
-  font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1;
-
-  // Read in the font data.
-  font.dataSize = dataSize;
-  font.data = data;
-  font.freeData = freeData;
+  FONSfont* font = fons__allocFontAt(stash, newidx);
+  font.setName(name);
+  font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1; // init hash lookup
+  font.fdata = fdata; // set the font data (don't change reference count)
 
   if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
     //{ import core.stdc.stdio : printf; printf("MONO: [%.*s]\n", cast(uint)name.length, name.ptr); }
@@ -6821,21 +6973,27 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
     fons__tt_setMono(stash, &font.font, defAA);
   }
 
-  // Init font
+  // init font
   stash.nscratch = 0;
-  if (!fons__tt_loadFont(stash, &font.font, data, dataSize)) {
-    font.freeData = false; // we promised to don't free data on error
+  if (!fons__tt_loadFont(stash, &font.font, fdata.data, fdata.dataSize)) {
+    // we promised to not free data on error, so just clear the data store
+    font.fdata = null;
     fons__freeFont(font);
     if (oldidx != FONS_INVALID) {
+      assert(oldidx == newidx);
       stash.fonts[oldidx] = oldfont;
     } else {
+      stash.fonts[newidx] = null;
       --stash.nfonts;
     }
     return FONS_INVALID;
+  } else {
+    // free old font data, if any
+    if (oldfont) fons__freeFont(oldfont);
   }
 
-  // Store normalized line height. The real line height is got
-  // by multiplying the lineh by font size.
+  // store normalized line height
+  // the real line height is got by multiplying the lineh by font size
   fons__tt_getFontVMetrics(&font.font, &ascent, &descent, &lineGap);
   fh = ascent-descent;
   font.ascender = cast(float)ascent/cast(float)fh;
@@ -6843,63 +7001,33 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   font.lineh = cast(float)(fh+lineGap)/cast(float)fh;
 
   //{ import core.stdc.stdio; printf("created font [%.*s] (idx=%d)...\n", cast(uint)name.length, name.ptr, idx); }
-  return idx;
+  return newidx;
 }
 
 // returns `null` on invalid index
 // WARNING! copy name, as name buffer can be invalidated by next fontstash API call!
 public const(char)[] fonsGetNameByIndex (FONScontext* stash, int idx) nothrow @trusted @nogc {
-  if (idx < 0 || idx >= stash.nfonts) return null;
+  if (idx < 0 || idx >= stash.cfonts || stash.fonts[idx] is null) return null;
   return stash.fonts[idx].name[0..stash.fonts[idx].namelen];
 }
 
 // allowSubstitutes: check AA variants if exact name wasn't found?
 // return `FONS_INVALID` if no font was found
 public int fonsGetFontByName(bool allowSubstitutes=true) (FONScontext* stash, const(char)[] name) nothrow @trusted @nogc {
-  // check cached name
-  if (stash.lastfontlen == name.length && strEquCI(name, stash.lastfont[0..stash.lastfontlen])) {
-    //{ import core.stdc.stdio; printf("fonsGetFontByName: cache hit: id=%d; [%.*s] <%.*s>\n", stash.lastfontidx, stash.lastfontlen, stash.lastfont.ptr, cast(uint)name.length, name.ptr); }
-    return stash.lastfontidx;
-  }
-
-  int updateCache (usize idx, FONSfont* font) nothrow @trusted @nogc {
-    if (name.length <= stash.lastfont.length) {
-      stash.lastfont[0..name.length] = name[];
-      stash.lastfontlen = cast(int)name.length;
-      stash.lastfontidx = cast(int)idx;
-      //{ import core.stdc.stdio; printf("fonsGetFontByName: new cache: id=%d; [%.*s] <%.*s>\n", stash.lastfontidx, stash.lastfontlen, stash.lastfont.ptr, cast(uint)name.length, name.ptr); }
-    } else {
-      stash.resetFFCC();
-    }
-    return cast(int)idx;
-  }
-
-  foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
-    if (strEquCI(name, font.name[0..font.namelen])) return updateCache(idx, font);
-  }
-
   static if (allowSubstitutes) {
+    auto hidx = stash.findNameInHash(name);
+    if (hidx != FONS_INVALID) return hidx; // i found her!
     // not found, try variations
     if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
       // search for font name without ":noaa"
       name = name[0..$-NoAlias.length];
-      foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
-        if (strEquCI(name, font.name[0..font.namelen])) return updateCache(idx, font);
-      }
+      return stash.findNameInHash(name);
     } else {
-      // search for font name with ":noaa"
-      foreach (immutable idx, FONSfont* font; stash.fonts[0..stash.nfonts]) {
-        if (font.namelen == name.length+NoAlias.length) {
-          if (strEquCI(font.name[0..name.length], name[]) && strEquCI(font.name[name.length..font.namelen], NoAlias)) {
-            //{ import std.stdio; writeln(font.name[0..name.length], " : ", name, " <", font.name[name.length..$], ">"); }
-            return updateCache(idx, font);
-          }
-        }
-      }
+      return stash.findNameInHash(name, NoAlias);
     }
+  } else {
+    return stash.findNameInHash(name);
   }
-
-  return FONS_INVALID;
 }
 
 
@@ -7218,9 +7346,9 @@ public float fonsDrawText (FONScontext* stash, float x, float y, const(char)* st
   float width;
 
   if (stash is null || str is null) return x;
-  if (state.font < 0 || state.font >= stash.nfonts) return x;
+  if (state.font < 0 || state.font >= stash.cfonts) return x;
   font = stash.fonts[state.font];
-  if (font.data is null) return x;
+  if (font is null || font.fdata is null) return x;
 
   scale = fons__tt_getPixelHeightScale(&font.font, cast(float)isize/10.0f);
 
@@ -7272,9 +7400,9 @@ public bool fonsTextIterInit(T) (FONScontext* stash, FONStextIter!T* iter, float
   memset(iter, 0, (*iter).sizeof);
 
   if (stash is null) return false;
-  if (state.font < 0 || state.font >= stash.nfonts) return false;
+  if (state.font < 0 || state.font >= stash.cfonts) return false;
   iter.font = stash.fonts[state.font];
-  if (iter.font.data is null) return false;
+  if (iter.font is null || iter.font.fdata is null) return false;
 
   iter.isize = cast(short)(state.size*10.0f);
   iter.iblur = cast(short)state.blur;
@@ -7452,9 +7580,9 @@ public:
     isize = cast(short)(state.size*10.0f);
     iblur = cast(short)state.blur;
 
-    if (state.font < 0 || state.font >= stash.nfonts) { stash = null; return; }
+    if (state.font < 0 || state.font >= stash.cfonts) { stash = null; return; }
     font = stash.fonts[state.font];
-    if (font.data is null) { stash = null; return; }
+    if (font is null || font.fdata is null) { stash = null; return; }
 
     scale = fons__tt_getPixelHeightScale(&font.font, cast(float)isize/10.0f);
 
@@ -7585,9 +7713,9 @@ if (isAnyCharType!T)
   float minx, miny, maxx, maxy;
 
   if (stash is null) return 0;
-  if (state.font < 0 || state.font >= stash.nfonts) return 0;
+  if (state.font < 0 || state.font >= stash.cfonts) return 0;
   font = stash.fonts[state.font];
-  if (font.data is null) return 0;
+  if (font is null || font.fdata is null) return 0;
 
   scale = fons__tt_getPixelHeightScale(&font.font, cast(float)isize/10.0f);
 
@@ -7674,10 +7802,10 @@ public void fonsVertMetrics (FONScontext* stash, float* ascender, float* descend
   short isize;
 
   if (stash is null) return;
-  if (state.font < 0 || state.font >= stash.nfonts) return;
+  if (state.font < 0 || state.font >= stash.cfonts) return;
   font = stash.fonts[state.font];
   isize = cast(short)(state.size*10.0f);
-  if (font.data is null) return;
+  if (font is null || font.fdata is null) return;
 
   if (ascender) *ascender = font.ascender*isize/10.0f;
   if (descender) *descender = font.descender*isize/10.0f;
@@ -7693,10 +7821,10 @@ public void fonsLineBounds (FONScontext* stash, float y, float* minyp, float* ma
   if (maxyp !is null) *maxyp = 0;
 
   if (stash is null) return;
-  if (state.font < 0 || state.font >= stash.nfonts) return;
+  if (state.font < 0 || state.font >= stash.cfonts) return;
   font = stash.fonts[state.font];
   isize = cast(short)(state.size*10.0f);
-  if (font.data is null) return;
+  if (font is null || font.fdata is null) return;
 
   y += fons__getVertAlign(stash, font, state.talign, isize);
 
@@ -7740,7 +7868,7 @@ public void fonsDeleteInternal (FONScontext* stash) nothrow @trusted @nogc {
 
   if (stash.params.renderDelete) stash.params.renderDelete(stash.params.userPtr);
 
-  foreach (int i; 0..stash.nfonts) fons__freeFont(stash.fonts[i]);
+  foreach (int i; 0..stash.cfonts) fons__freeFont(stash.fonts[i]);
 
   if (stash.atlas) fons__deleteAtlas(stash.atlas);
   if (stash.fonts) free(stash.fonts);
@@ -7811,16 +7939,15 @@ public int fonsExpandAtlas (FONScontext* stash, int width, int height) nothrow @
   return 1;
 }
 
-public int fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @trusted @nogc {
-  int i, j;
-  if (stash is null) return 0;
+public bool fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @trusted @nogc {
+  if (stash is null) return false;
 
   // Flush pending glyphs.
   fons__flush(stash);
 
   // Create new texture
   if (stash.params.renderResize !is null) {
-    if (stash.params.renderResize(stash.params.userPtr, width, height) == 0) return 0;
+    if (stash.params.renderResize(stash.params.userPtr, width, height) == 0) return false;
   }
 
   // Reset atlas
@@ -7838,10 +7965,11 @@ public int fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @t
   stash.dirtyRect.ptr[3] = 0;
 
   // Reset cached glyphs
-  for (i = 0; i < stash.nfonts; i++) {
-    FONSfont* font = stash.fonts[i];
-    font.nglyphs = 0;
-    font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1;
+  foreach (FONSfont* font; stash.fonts[0..stash.cfonts]) {
+    if (font !is null) {
+      font.nglyphs = 0;
+      font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1;
+    }
   }
 
   stash.params.width = width;
@@ -7852,7 +7980,7 @@ public int fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @t
   // Add white rect at 0, 0 for debug drawing.
   fons__addWhiteRect(stash, 2, 2);
 
-  return 1;
+  return true;
 }
 
 
