@@ -693,7 +693,7 @@ public enum NVGCompositeOperation {
   SOURCE_OVER, ///
   SOURCE_IN, ///
   SOURCE_OUT, ///
-  ATOP, ///
+  SOURCE_ATOP, ///
   DESTINATION_OVER, ///
   DESTINATION_IN, ///
   DESTINATION_OUT, ///
@@ -1005,7 +1005,7 @@ NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation o
        if (op == NVGCompositeOperation.SOURCE_OVER) { sfactor = NVGBlendFactor.ONE; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA;}
   else if (op == NVGCompositeOperation.SOURCE_IN) { sfactor = NVGBlendFactor.DST_ALPHA; dfactor = NVGBlendFactor.ZERO; }
   else if (op == NVGCompositeOperation.SOURCE_OUT) { sfactor = NVGBlendFactor.ONE_MINUS_DST_ALPHA; dfactor = NVGBlendFactor.ZERO; }
-  else if (op == NVGCompositeOperation.ATOP) { sfactor = NVGBlendFactor.DST_ALPHA; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA; }
+  else if (op == NVGCompositeOperation.SOURCE_ATOP) { sfactor = NVGBlendFactor.DST_ALPHA; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA; }
   else if (op == NVGCompositeOperation.DESTINATION_OVER) { sfactor = NVGBlendFactor.ONE_MINUS_DST_ALPHA; dfactor = NVGBlendFactor.ONE; }
   else if (op == NVGCompositeOperation.DESTINATION_IN) { sfactor = NVGBlendFactor.ZERO; dfactor = NVGBlendFactor.SRC_ALPHA; }
   else if (op == NVGCompositeOperation.DESTINATION_OUT) { sfactor = NVGBlendFactor.ZERO; dfactor = NVGBlendFactor.ONE_MINUS_SRC_ALPHA; }
