@@ -946,6 +946,16 @@ class SdpyDrawBase {
 protected:
   static T abs(T) (T n) pure nothrow @safe @nogc { pragma(inline, true); return (n < 0 ? -n : n); }
 
+  version(Windows) {
+    private static int lrintf (float f) nothrow @trusted @nogc { pragma(inline, true); return cast(int)(f+0.5f); }
+    private static int lrintd (double f) nothrow @trusted @nogc { pragma(inline, true); return cast(int)(f+0.5); }
+  } else {
+    private import core.stdc.math : lrintf, lrintd = lrint;
+  }
+  private import core.stdc.math : sqrtf, sqrtd = sqrt;
+  private import core.stdc.math : floorf, floord = floor;
+  private import core.stdc.math : cosf, sinf;
+
 public:
   GxSize dim;
   GxRect clip;
@@ -1251,8 +1261,8 @@ final:
     if (sx*cast(long)sx+sy*cast(long)sy > xx*xx+yy*yy) { x2 = x0; x0 = sx+x1; y2 = y0; y0 = sy+y1; cur = -cur; } // swap P0 P2
     // no straight line
     if (cur != 0) {
-      xx += sx; xx *= (sx = x0 < x2 ? 1 : -1); // x step direction
-      yy += sy; yy *= (sy = y0 < y2 ? 1 : -1); // y step direction
+      xx += sx; xx *= (sx = (x0 < x2 ? 1 : -1)); // x step direction
+      yy += sy; yy *= (sy = (y0 < y2 ? 1 : -1)); // y step direction
       // differences 2nd degree
       long xy = 2*xx*yy;
       xx *= xx;
@@ -1269,7 +1279,7 @@ final:
         if (x0 == x2 && y0 == y2) return; // last pixel -> curve finished
         y1 = 2*err < dx; // save value for test of y step
         if (2*err > dy) { x0 += sx; dx -= xy; err += dy += yy; } // x step
-        if (    y1    ) { y0 += sy; dy -= xy; err += dx += xx; } // y step
+        if (y1) { y0 += sy; dy -= xy; err += dx += xx; } // y step
       } while (dy < 0 && dx > 0); // gradient negates -> algorithm fails
     }
     drawLine(x0, y0, x2, y2, fc); // plot remaining part to end
@@ -1277,7 +1287,6 @@ final:
 
   // plot any quadratic Bezier curve
   final void drawQuadBezier (int x0, int y0, int x1, int y1, int x2, int y2, Color fc) {
-    import std.math : abs, floor;
     int x = x0-x1, y = y0-y1;
     double t = x0-2*x1+x2;
     // horizontal cut at P4?
@@ -1291,29 +1300,28 @@ final:
       t = (x0-x1)/t;
       double r = (1-t)*((1-t)*y0+2.0*t*y1)+t*t*y2; // By(t=P4)
       t = (x0*x2-x1*x1)*t/(x0-x1); // gradient dP4/dx=0
-      x = cast(int)floor(t+0.5); y = cast(int)floor(r+0.5);
+      x = lrintd(t); y = lrintd(r);
       r = (y1-y0)*(t-x0)/(x1-x0)+y0; // intersect P3 | P0 P1
-      drawQuadBezierSeg(x0, y0, x, cast(int)floor(r+0.5), x, y, fc);
+      drawQuadBezierSeg(x0, y0, x, lrintd(r), x, y, fc);
       r = (y1-y2)*(t-x2)/(x1-x2)+y2; // intersect P4 | P1 P2
-      x0 = x1 = x; y0 = y; y1 = cast(int)floor(r+0.5); // P0 = P4, P1 = P8
+      x0 = x1 = x; y0 = y; y1 = lrintd(r); // P0 = P4, P1 = P8
     }
     // vertical cut at P6?
     if (cast(long)(y0-y1)*(y2-y1) > 0) {
       t = y0-2*y1+y2; t = (y0-y1)/t;
       double r = (1-t)*((1-t)*x0+2.0*t*x1)+t*t*x2; // Bx(t=P6)
       t = (y0*y2-y1*y1)*t/(y0-y1); // gradient dP6/dy=0
-      x = cast(int)floor(r+0.5); y = cast(int)floor(t+0.5);
+      x = lrintd(r); y = lrintd(t);
       r = (x1-x0)*(t-y0)/(y1-y0)+x0; // intersect P6 | P0 P1
-      drawQuadBezierSeg(x0, y0, cast(int)floor(r+0.5), y, x, y, fc);
+      drawQuadBezierSeg(x0, y0, lrintd(r), y, x, y, fc);
       r = (x1-x2)*(t-y2)/(y1-y2)+x2; // intersect P7 | P1 P2
-      x0 = x; x1 = cast(int)floor(r+0.5); y0 = y1 = y; // P0 = P6, P1 = P7
+      x0 = x; x1 = lrintd(r); y0 = y1 = y; // P0 = P6, P1 = P7
     }
     drawQuadBezierSeg(x0, y0, x1, y1, x2, y2, fc); // remaining part
   }
 
   // plot a limited rational Bezier segment, squared weight
   final void drawQuadRationalBezierSeg (int x0, int y0, int x1, int y1, int x2, int y2, float w, Color fc) {
-    import std.math : floor, sqrt;
     int sx = x2-x1, sy = y2-y1; // relative values for checks
     double dx = x0-x2, dy = y0-y2, xx = x0-x1, yy = y0-y1;
     double xy = xx*sy+yy*sx, cur = xx*sy-yy*sx; // curvature
@@ -1332,12 +1340,12 @@ final:
       dy = 4.0*w*(y0-y1)*sx*cur+yy/2.0+xy;
       if (w < 0.5 && dy > dx) {
         // flat ellipse, algorithm fails
-        cur = (w+1.0)/2.0; w = sqrt(w); xy = 1.0/(w+1.0);
-        sx = cast(int)floor((x0+2.0*w*x1+x2)*xy/2.0+0.5); // subdivide curve in half
-        sy = cast(int)floor((y0+2.0*w*y1+y2)*xy/2.0+0.5);
-        dx = floor((w*x1+x0)*xy+0.5); dy = floor((y1*w+y0)*xy+0.5);
+        cur = (w+1.0)/2.0; w = sqrtf(w); xy = 1.0/(w+1.0);
+        sx = lrintd((x0+2.0*w*x1+x2)*xy/2.0); // subdivide curve in half
+        sy = lrintd((y0+2.0*w*y1+y2)*xy/2.0);
+        dx = floord((w*x1+x0)*xy+0.5); dy = floord((y1*w+y0)*xy+0.5);
         drawQuadRationalBezierSeg(x0, y0, cast(int)dx, cast(int)dy, sx, sy, cur, fc);/* plot separately */
-        dx = floor((w*x1+x2)*xy+0.5); dy = floor((y1*w+y2)*xy+0.5);
+        dx = floord((w*x1+x2)*xy+0.5); dy = floord((y1*w+y2)*xy+0.5);
         drawQuadRationalBezierSeg(sx, sy, cast(int)dx, cast(int)dy, x2, y2, cur, fc);
         return;
       }
@@ -1355,15 +1363,14 @@ final:
 
   // rectangle enclosing the ellipse, integer rotation angle
   final void drawRotatedEllipseRect (int x0, int y0, int x1, int y1, long zd, Color fc) {
-    import std.math : floor, sqrt;
     int xd = x1-x0, yd = y1-y0;
     float w = xd*cast(long)yd;
     if (zd == 0) return drawEllipse(x0, y0, x1, y1, fc); // looks nicer
     if (w != 0.0) w = (w-zd)/(w+w); // squared weight of P1
     assert(w <= 1.0 && w >= 0.0); // limit angle to |zd|<=xd*yd
     // snap xe,ye to int
-    xd = cast(int)floor(xd*w+0.5);
-    yd = cast(int)floor(yd*w+0.5);
+    xd = lrintf(xd*w);
+    yd = lrintf(yd*w);
     drawQuadRationalBezierSeg(x0, y0+yd, x0, y0, x0+xd, y0, 1.0-w, fc);
     drawQuadRationalBezierSeg(x0, y0+yd, x0, y1, x1-xd, y1, w, fc);
     drawQuadRationalBezierSeg(x1, y1-yd, x1, y1, x1-xd, y1, 1.0-w, fc);
@@ -1372,19 +1379,17 @@ final:
 
   // plot ellipse rotated by angle (radian)
   final void drawRotatedEllipse (int x, int y, int a, int b, float angle, Color fc) {
-    import std.math : cos, sin, sqrt;
     float xd = cast(long)a*a, yd = cast(long)b*b;
-    float s = sin(angle), zd = (xd-yd)*s; // ellipse rotation
-    xd = sqrt(xd-zd*s), yd = sqrt(yd+zd*s); // surrounding rectangle
-    a = cast(int)(xd+0.5);
-    b = cast(int)(yd+0.5);
+    float s = sinf(angle), zd = (xd-yd)*s; // ellipse rotation
+    xd = sqrtf(xd-zd*s), yd = sqrtf(yd+zd*s); // surrounding rectangle
+    a = lrintf(xd);
+    b = lrintf(yd);
     zd = zd*a*b/(xd*yd); // scale to integer
-    drawRotatedEllipseRect(x-a, y-b, x+a, y+b, cast(long)(4*zd*cos(angle)), fc);
+    drawRotatedEllipseRect(x-a, y-b, x+a, y+b, cast(long)(4*zd*cosf(angle)), fc);
   }
 
   // plot limited cubic Bezier segment
   final void drawCubicBezierSeg (int x0, int y0, float x1, float y1, float x2, float y2, int x3, int y3, Color fc) {
-    import std.math : abs, floor, sqrt;
     immutable double EP = 0.01;
     int leg = 1;
     int sx = (x0 < x3 ? 1 : -1), sy = (y0 < y3 ? 1 : -1); // step direction
@@ -1397,8 +1402,8 @@ final:
     // quadratic Bezier
     if (xa == 0 && ya == 0) {
       // new midpoint
-      sx = cast(int)floor((3*x1-x0+1)/2);
-      sy = cast(int)floor((3*y1-y0+1)/2);
+      sx = cast(int)floorf((3*x1-x0+1)/2);
+      sy = cast(int)floorf((3*y1-y0+1)/2);
       return drawQuadBezierSeg(x0, y0, sx, sy, x3, y3, fc);
     }
     x1 = (x1-x0)*(x1-x0)+(y1-y0)*(y1-y0)+1; // line lengths
@@ -1409,7 +1414,7 @@ final:
       double ac = xa*yc-xc*ya;
       double bc = xb*yc-xc*yb;
       double ex = ab*(ab+ac-3*bc)+ac*ac; // P0 part of self-intersection loop?
-      immutable int f = cast(int)(ex > 0 ? 1 : sqrt(1+1024/x1)); // calculate resolution
+      immutable int f = cast(int)(ex > 0 ? 1 : sqrtf(1+1024/x1)); // calculate resolution
       ab *= f; ac *= f; bc *= f; ex *= f*f; // increase resolution
       // init differences of 1st degree
       double xy = 9*(ab+ac+bc)/8;
@@ -1455,7 +1460,6 @@ final:
 
   // plot any cubic Bezier curve
   final void drawCubicBezier (int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, Color fc) {
-    import std.math : abs, floor, sqrt;
     int n = 0, i = 0;
     long xc = x0+x1-x2-x3, xa = xc-4*(x1-x2);
     long xb = x0-x1-x2+x3, xd = xb+4*(x1+x2);
@@ -1468,7 +1472,7 @@ final:
     if (xa == 0) { // horizontal
       if (abs(xc) < 2*abs(xb)) t.ptr[n++] = xc/(2.0*xb); // one change
     } else if (t1 > 0.0) { // two changes
-      immutable double t2 = sqrt(t1);
+      immutable double t2 = sqrtd(t1);
       t1 = (xb-t2)/xa; if (abs(t1) < 1.0) t.ptr[n++] = t1;
       t1 = (xb+t2)/xa; if (abs(t1) < 1.0) t.ptr[n++] = t1;
     }
@@ -1476,7 +1480,7 @@ final:
     if (ya == 0) { // vertical
       if (abs(yc) < 2*abs(yb)) t.ptr[n++] = yc/(2.0*yb); // one change
     } else if (t1 > 0.0) { // two changes
-      immutable double t2 = sqrt(t1);
+      immutable double t2 = sqrtd(t1);
       t1 = (yb-t2)/ya; if (abs(t1) < 1.0) t.ptr[n++] = t1;
       t1 = (yb+t2)/ya; if (abs(t1) < 1.0) t.ptr[n++] = t1;
     }
@@ -1494,8 +1498,8 @@ final:
       fx0 -= fx3;
       fy0 -= fy3;
       // scale bounds to int
-      x3 = cast(int)floor(fx3+0.5f);
-      y3 = cast(int)floor(fy3+0.5f);
+      x3 = lrintf(fx3);
+      y3 = lrintf(fy3);
       if (fx0 != 0.0f) { fx1 *= fx0 = (x0-x3)/fx0; fx2 *= fx0; }
       if (fy0 != 0.0f) { fy1 *= fy0 = (y0-y3)/fy0; fy2 *= fy0; }
       if (x0 != x3 || y0 != y3) drawCubicBezierSeg(x0, y0, x0+fx1, y0+fy1, x0+fx2, y0+fy2, x3, y3, fc); // segment t1 - t2
