@@ -5085,6 +5085,210 @@ public void fontFace (NVGContext ctx, const(char)[] font) nothrow @trusted @nogc
   nvg__getState(ctx).fontId = fonsGetFontByName(ctx.fs, font);
 }
 
+/// Adds glyph outlines to the current path. Vertical 0 is baseline.
+/// The glyph is not scaled in any way, so you have to use NanoVega transformations instead.
+/// Returns `false` if there are no such glyph, or current font is not scalable.
+public bool charToPath (NVGContext ctx, dchar dch, float[] bounds=null) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  fonsSetFont(ctx.fs, state.fontId);
+  return fonsToPath(ctx.fs, ctx, dch, bounds);
+}
+
+/// Returns bounds of the glyph outlines. Vertical 0 is baseline.
+/// The glyph is not scaled in any way.
+/// Returns `false` if there are no such glyph, or current font is not scalable.
+public bool charPathBounds (NVGContext ctx, dchar dch, float[] bounds) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  fonsSetFont(ctx.fs, state.fontId);
+  return fonsPathBounds(ctx.fs, dch, bounds);
+}
+
+/** `charOutline()` will return malloced `NVGGlyphOutline`.
+ *
+ * some usage samples:
+ *
+ * ---
+    float[4] bounds = void;
+
+    nvg.scale(0.5, 0.5);
+    nvg.translate(500, 800);
+    nvg.evenOddFill;
+
+    nvg.newPath();
+    nvg.charToPath('&', bounds[]);
+    conwriteln(bounds[]);
+    nvg.fillPaint(nvg.linearGradient(0, 0, 600, 600, NVGColor("#f70"), NVGColor("#ff0")));
+    nvg.strokeColor(NVGColor("#0f0"));
+    nvg.strokeWidth = 3;
+    nvg.fill();
+    nvg.stroke();
+    // glyph bounds
+    nvg.newPath();
+    nvg.rect(bounds[0], bounds[1], bounds[2]-bounds[0], bounds[3]-bounds[1]);
+    nvg.strokeColor(NVGColor("#00f"));
+    nvg.stroke();
+
+    nvg.newPath();
+    nvg.charToPath('g', bounds[]);
+    conwriteln(bounds[]);
+    nvg.fill();
+    nvg.strokeColor(NVGColor("#0f0"));
+    nvg.stroke();
+    // glyph bounds
+    nvg.newPath();
+    nvg.rect(bounds[0], bounds[1], bounds[2]-bounds[0], bounds[3]-bounds[1]);
+    nvg.strokeColor(NVGColor("#00f"));
+    nvg.stroke();
+
+    nvg.newPath();
+    nvg.moveTo(0, 0);
+    nvg.lineTo(600, 0);
+    nvg.strokeColor(NVGColor("#0ff"));
+    nvg.stroke();
+
+    if (auto ol = nvg.charOutline('Q')) {
+      scope(exit) ol.kill();
+      nvg.newPath();
+      conwriteln("==== length: ", ol.length, " ====");
+      foreach (const ref cmd; ol.commands) {
+        //conwriteln("  ", cmd.code, ": ", cmd.args[]);
+        assert(cmd.valid);
+        final switch (cmd.code) {
+          case cmd.Kind.MoveTo: nvg.moveTo(cmd.args[0], cmd.args[1]); break;
+          case cmd.Kind.LineTo: nvg.lineTo(cmd.args[0], cmd.args[1]); break;
+          case cmd.Kind.QuadTo: nvg.quadTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3]); break;
+          case cmd.Kind.BezierTo: nvg.bezierTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5]); break;
+        }
+      }
+      nvg.strokeColor(NVGColor("#f00"));
+      nvg.stroke();
+    }
+ * ---
+ */
+public struct NVGGlyphOutline {
+public:
+  /// commands
+  static struct Command {
+    enum Kind : ubyte {
+      MoveTo, ///
+      LineTo, ///
+      QuadTo, ///
+      BezierTo, ///
+    }
+    Kind code; ///
+    const(float)[] args; ///
+    @property bool valid () const pure nothrow @safe @nogc => (code >= 0 && code <= 3 && args.length >= 2); ///
+  }
+
+  @disable this (this); // no copies
+
+private:
+  ubyte* data;
+  uint used;
+  uint size;
+  uint ccount; // number of commands
+
+private:
+  void clear () nothrow @trusted @nogc {
+    import core.stdc.stdlib : free;
+    if (data !is null) { free(data); data = null; }
+    used = size = ccount = 0;
+    bounds[] = 0;
+  }
+
+public:
+  float[4] bounds = 0;
+
+  @property int length () const pure => ccount;
+
+public:
+  /// Return forward range with all glyph commands.
+  /// WARNING! returned rande should not outlive parent struct!
+  auto commands () nothrow @trusted @nogc {
+    static struct Range {
+    private nothrow @trusted @nogc:
+      const(ubyte)* data;
+      uint cleft; // number of commands left
+    public:
+      @property bool empty () const pure => (cleft == 0);
+      @property int length () const pure => cleft;
+      @property Range save () const pure { pragma(inline, true); Range res = this; return res; }
+      @property Command front () const {
+        Command res = void;
+        if (cleft > 0) {
+          res.code = cast(Command.Kind)data[0];
+          switch (res.code) {
+            case Command.Kind.MoveTo:
+            case Command.Kind.LineTo:
+              res.args = (cast(const(float*))(data+1))[0..1*2];
+              break;
+            case Command.Kind.QuadTo:
+              res.args = (cast(const(float*))(data+1))[0..2*2];
+              break;
+            case Command.Kind.BezierTo:
+              res.args = (cast(const(float*))(data+1))[0..3*2];
+              break;
+            default:
+              res.code = cast(Command.Kind)255;
+              res.args = null;
+              break;
+          }
+        } else {
+          res.code = cast(Command.Kind)255;
+          res.args = null;
+        }
+        return res;
+      }
+      void popFront () {
+        if (cleft == 0) return;
+        if (--cleft == 0) return; // don't waste time skipping last command
+        switch (data[0]) {
+          case Command.Kind.MoveTo:
+          case Command.Kind.LineTo:
+            data += 1+1*2*cast(uint)float.sizeof;
+            break;
+          case Command.Kind.QuadTo:
+            data += 1+2*2*cast(uint)float.sizeof;
+            break;
+          case Command.Kind.BezierTo:
+            data += 1+3*2*cast(uint)float.sizeof;
+            break;
+          default:
+            cleft = 0;
+            break;
+        }
+      }
+    }
+    return Range(data, ccount);
+  }
+}
+
+public void kill (ref NVGGlyphOutline* ol) nothrow @trusted @nogc {
+  if (ol !is null) {
+    import core.stdc.stdlib : free;
+    ol.clear();
+    free(ol);
+    ol = null;
+  }
+}
+
+/// Returns glyph outlines as array of commands. Vertical 0 is baseline.
+/// The glyph is not scaled in any way, so you have to use NanoVega transformations instead.
+/// Returns `null` if there are no such glyph, or current font is not scalable.
+public NVGGlyphOutline* charOutline (NVGContext ctx, dchar dch) nothrow @trusted @nogc {
+  import core.stdc.stdlib : malloc;
+  import core.stdc.string : memcpy;
+  NVGstate* state = nvg__getState(ctx);
+  fonsSetFont(ctx.fs, state.fontId);
+  NVGGlyphOutline oline;
+  if (!fonsToOutline(ctx.fs, dch, &oline)) { oline.clear(); return null; }
+  auto res = cast(NVGGlyphOutline*)malloc(NVGGlyphOutline.sizeof);
+  if (res is null) { oline.clear(); return null; }
+  memcpy(res, &oline, oline.sizeof);
+  return res;
+}
+
+
 float nvg__quantize (float a, float d) pure nothrow @safe @nogc {
   pragma(inline, true);
   return (cast(int)(a/d+0.5f))*d;
@@ -6099,6 +6303,158 @@ float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1
     return ftKerning.x/64.0f;
   }
 }
+
+extern(C) nothrow @trusted @nogc {
+  static struct OutlinerData {
+    @disable this (this);
+    NVGContext vg;
+    NVGGlyphOutline* ol;
+    FT_BBox outlineBBox;
+  nothrow @trusted @nogc:
+    int transx (int v) const pure => v;
+    int transy (int v) const pure => -v;
+    void putBytes (const(void)[] b) {
+      assert(b.length <= 512);
+      if (b.length == 0) return;
+      if (ol.used+cast(uint)b.length > ol.size) {
+        import core.stdc.stdlib : realloc;
+        uint newsz = (ol.size == 0 ? 2048 : ol.size < 32768 ? ol.size*2 : ol.size+8192);
+        assert(ol.used+cast(uint)b.length <= newsz);
+        auto nd = cast(ubyte*)realloc(ol.data, newsz);
+        if (nd is null) assert(0, "FONS: out of memory");
+        ol.size = newsz;
+        ol.data = nd;
+      }
+      import core.stdc.string : memcpy;
+      memcpy(ol.data+ol.used, b.ptr, b.length);
+      ol.used += cast(uint)b.length;
+    }
+    void newCommand (ubyte cmd) { pragma(inline, true); ++ol.ccount; putBytes((&cmd)[0..1]); }
+    void putArg (float f) { putBytes((&f)[0..1]); }
+  }
+
+  int fons__nvg__moveto_cb (const(FT_Vector)* to, void* user) {
+    auto odata = cast(OutlinerData*)user;
+    if (odata.vg !is null) odata.vg.moveTo(odata.transx(to.x), odata.transy(to.y));
+    if (odata.ol !is null) {
+      odata.newCommand(odata.ol.Command.Kind.MoveTo);
+      odata.putArg(odata.transx(to.x));
+      odata.putArg(odata.transy(to.y));
+    }
+    return 0;
+  }
+
+  int fons__nvg__lineto_cb (const(FT_Vector)* to, void* user) {
+    auto odata = cast(OutlinerData*)user;
+    if (odata.vg !is null) odata.vg.lineTo(odata.transx(to.x), odata.transy(to.y));
+    if (odata.ol !is null) {
+      odata.newCommand(odata.ol.Command.Kind.LineTo);
+      odata.putArg(odata.transx(to.x));
+      odata.putArg(odata.transy(to.y));
+    }
+    return 0;
+  }
+
+  int fons__nvg__quadto_cb (const(FT_Vector)* c1, const(FT_Vector)* to, void* user) {
+    auto odata = cast(OutlinerData*)user;
+    if (odata.vg !is null) odata.vg.quadTo(odata.transx(c1.x), odata.transy(c1.y), odata.transx(to.x), odata.transy(to.y));
+    if (odata.ol !is null) {
+      odata.newCommand(odata.ol.Command.Kind.QuadTo);
+      odata.putArg(odata.transx(c1.x));
+      odata.putArg(odata.transy(c1.y));
+      odata.putArg(odata.transx(to.x));
+      odata.putArg(odata.transy(to.y));
+    }
+    return 0;
+  }
+
+  int fons__nvg__cubicto_cb (const(FT_Vector)* c1, const(FT_Vector)* c2, const(FT_Vector)* to, void* user) {
+    auto odata = cast(OutlinerData*)user;
+    if (odata.vg !is null) odata.vg.bezierTo(odata.transx(c1.x), odata.transy(c1.y), odata.transx(c2.x), odata.transy(c2.y), odata.transx(to.x), odata.transy(to.y));
+    if (odata.ol !is null) {
+      odata.newCommand(odata.ol.Command.Kind.BezierTo);
+      odata.putArg(odata.transx(c1.x));
+      odata.putArg(odata.transy(c1.y));
+      odata.putArg(odata.transx(c2.x));
+      odata.putArg(odata.transy(c2.y));
+      odata.putArg(odata.transx(to.x));
+      odata.putArg(odata.transy(to.y));
+    }
+    return 0;
+  }
+}
+
+bool fons__nvg__toPath (NVGContext vg, FONSttFontImpl* font, uint glyphidx, float[] bounds=null) nothrow @trusted @nogc {
+  if (bounds.length > 4) bounds = bounds.ptr[0..4];
+
+  FT_Outline_Funcs funcs;
+  funcs.move_to = &fons__nvg__moveto_cb;
+  funcs.line_to = &fons__nvg__lineto_cb;
+  funcs.conic_to = &fons__nvg__quadto_cb;
+  funcs.cubic_to = &fons__nvg__cubicto_cb;
+
+  auto err = FT_Load_Glyph(font.font, glyphidx, FT_LOAD_NO_BITMAP|FT_LOAD_NO_SCALE);
+  if (err) { bounds[] = 0; return false; }
+  if (font.font.glyph.format != FT_GLYPH_FORMAT_OUTLINE) { bounds[] = 0; return false; }
+
+  FT_Outline outline = font.font.glyph.outline;
+
+  OutlinerData odata;
+  odata.vg = vg;
+  FT_Outline_Get_CBox(&outline, &odata.outlineBBox);
+
+  err = FT_Outline_Decompose(&outline, &funcs, &odata);
+  if (err) { bounds[] = 0; return false; }
+  if (bounds.length > 0) bounds.ptr[0] = odata.outlineBBox.xMin;
+  if (bounds.length > 1) bounds.ptr[1] = -odata.outlineBBox.yMax;
+  if (bounds.length > 2) bounds.ptr[2] = odata.outlineBBox.xMax;
+  if (bounds.length > 3) bounds.ptr[3] = -odata.outlineBBox.yMin;
+  return true;
+}
+
+bool fons__nvg__toOutline (FONSttFontImpl* font, uint glyphidx, NVGGlyphOutline* ol) nothrow @trusted @nogc {
+  FT_Outline_Funcs funcs;
+  funcs.move_to = &fons__nvg__moveto_cb;
+  funcs.line_to = &fons__nvg__lineto_cb;
+  funcs.conic_to = &fons__nvg__quadto_cb;
+  funcs.cubic_to = &fons__nvg__cubicto_cb;
+
+  auto err = FT_Load_Glyph(font.font, glyphidx, FT_LOAD_NO_BITMAP|FT_LOAD_NO_SCALE);
+  if (err) return false;
+  if (font.font.glyph.format != FT_GLYPH_FORMAT_OUTLINE) return false;
+
+  FT_Outline outline = font.font.glyph.outline;
+
+  OutlinerData odata;
+  odata.ol = ol;
+  FT_Outline_Get_CBox(&outline, &odata.outlineBBox);
+
+  err = FT_Outline_Decompose(&outline, &funcs, &odata);
+  if (err) return false;
+  ol.bounds.ptr[0] = odata.outlineBBox.xMin;
+  ol.bounds.ptr[1] = -odata.outlineBBox.yMax;
+  ol.bounds.ptr[2] = odata.outlineBBox.xMax;
+  ol.bounds.ptr[3] = -odata.outlineBBox.yMin;
+  return true;
+}
+
+bool fons__nvg__bounds (FONSttFontImpl* font, uint glyphidx, float[] bounds) nothrow @trusted @nogc {
+  if (bounds.length > 4) bounds = bounds.ptr[0..4];
+
+  auto err = FT_Load_Glyph(font.font, glyphidx, FT_LOAD_NO_BITMAP|FT_LOAD_NO_SCALE);
+  if (err) return false;
+  if (font.font.glyph.format != FT_GLYPH_FORMAT_OUTLINE) { bounds[] = 0; return false; }
+
+  FT_Outline outline = font.font.glyph.outline;
+  FT_BBox outlineBBox;
+  FT_Outline_Get_CBox(&outline, &outlineBBox);
+  if (bounds.length > 0) bounds.ptr[0] = outlineBBox.xMin;
+  if (bounds.length > 1) bounds.ptr[1] = -outlineBBox.yMax;
+  if (bounds.length > 2) bounds.ptr[2] = outlineBBox.xMax;
+  if (bounds.length > 3) bounds.ptr[3] = -outlineBBox.yMin;
+  return true;
+}
+
 
 } else {
 // ////////////////////////////////////////////////////////////////////////// //
@@ -7126,6 +7482,94 @@ FONSglyph* fons__allocGlyph (FONSfont* font) nothrow @trusted @nogc {
 }
 
 
+// 0: ooops
+int fons__findGlyphForCP (FONScontext* stash, FONSfont *font, dchar dch, FONSfont** renderfont) nothrow @trusted @nogc {
+  if (renderfont !is null) *renderfont = font;
+  if (stash is null) return 0;
+  if (font is null || font.fdata is null) return 0;
+  auto g = fons__tt_getGlyphIndex(&font.font, cast(uint)dch);
+  // try to find the glyph in fallback fonts
+  if (g == 0) {
+    foreach (immutable i; 0..font.nfallbacks) {
+      FONSfont* fallbackFont = stash.fonts[font.fallbacks.ptr[i]];
+      if (fallbackFont !is null) {
+        int fallbackIndex = fons__tt_getGlyphIndex(&fallbackFont.font, cast(uint)dch);
+        if (fallbackIndex != 0) {
+          if (renderfont !is null) *renderfont = fallbackFont;
+          return g;
+        }
+      }
+    }
+    // no char, try to find replacement one
+    if (dch != 0xFFFD) {
+      g = fons__tt_getGlyphIndex(&font.font, 0xFFFD);
+      if (g == 0) {
+        foreach (immutable i; 0..font.nfallbacks) {
+          FONSfont* fallbackFont = stash.fonts[font.fallbacks.ptr[i]];
+          if (fallbackFont !is null) {
+            int fallbackIndex = fons__tt_getGlyphIndex(&fallbackFont.font, 0xFFFD);
+            if (fallbackIndex != 0) {
+              if (renderfont !is null) *renderfont = fallbackFont;
+              return g;
+            }
+          }
+        }
+      }
+    }
+  }
+  return g;
+}
+
+public bool fonsPathBounds (FONScontext* stash, dchar dch, float[] bounds) nothrow @trusted @nogc {
+  if (bounds.length > 4) bounds = bounds.ptr[0..4];
+  static if (is(typeof(&fons__nvg__bounds))) {
+    if (stash is null) { bounds[] = 0; return false; }
+    FONSstate* state = fons__getState(stash);
+    if (state.font < 0 || state.font >= stash.nfonts) { bounds[] = 0; return false; }
+    FONSfont* font;
+    auto g = fons__findGlyphForCP(stash, stash.fonts[state.font], dch, &font);
+    if (g == 0) { bounds[] = 0; return false; }
+    assert(font !is null);
+    return fons__nvg__bounds(&font.font, g, bounds);
+  } else {
+    bounds[] = 0;
+    return false;
+  }
+}
+
+public bool fonsToPath (FONScontext* stash, NVGContext vg, dchar dch, float[] bounds=null) nothrow @trusted @nogc {
+  if (bounds.length > 4) bounds = bounds.ptr[0..4];
+  static if (is(typeof(&fons__nvg__toPath))) {
+    if (vg is null || stash is null) { bounds[] = 0; return false; }
+    FONSstate* state = fons__getState(stash);
+    if (state.font < 0 || state.font >= stash.nfonts) { bounds[] = 0; return false; }
+    FONSfont* font;
+    auto g = fons__findGlyphForCP(stash, stash.fonts[state.font], dch, &font);
+    if (g == 0) { bounds[] = 0; return false; }
+    assert(font !is null);
+    return fons__nvg__toPath(vg, &font.font, g, bounds);
+  } else {
+    bounds[] = 0;
+    return false;
+  }
+}
+
+public bool fonsToOutline (FONScontext* stash, dchar dch, NVGGlyphOutline* ol) nothrow @trusted @nogc {
+  if (stash is null || ol is null) return false;
+  static if (is(typeof(&fons__nvg__toOutline))) {
+    FONSstate* state = fons__getState(stash);
+    if (state.font < 0 || state.font >= stash.nfonts) return false;
+    FONSfont* font;
+    auto g = fons__findGlyphForCP(stash, stash.fonts[state.font], dch, &font);
+    if (g == 0) return false;
+    assert(font !is null);
+    return fons__nvg__toOutline(&font.font, g, ol);
+  } else {
+    return false;
+  }
+}
+
+
 // Based on Exponential blur, Jani Huhtanen, 2006
 
 enum APREC = 16;
@@ -7221,23 +7665,10 @@ FONSglyph* fons__getGlyph (FONScontext* stash, FONSfont* font, uint codepoint, s
 
   // Create a new glyph or rasterize bitmap data for a cached glyph.
   //scale = fons__tt_getPixelHeightScale(&font.font, size);
-  g = fons__tt_getGlyphIndex(&font.font, codepoint);
-  // Try to find the glyph in fallback fonts.
-  if (g == 0) {
-    for (i = 0; i < font.nfallbacks; ++i) {
-      FONSfont* fallbackFont = stash.fonts[font.fallbacks.ptr[i]];
-      if (fallbackFont !is null) {
-        int fallbackIndex = fons__tt_getGlyphIndex(&fallbackFont.font, codepoint);
-        if (fallbackIndex != 0) {
-          g = fallbackIndex;
-          renderFont = fallbackFont;
-          break;
-        }
-      }
-    }
-    // It is possible that we did not find a fallback glyph.
-    // In that case the glyph index 'g' is 0, and we'll proceed below and cache empty glyph.
-  }
+  g = fons__findGlyphForCP(stash, font, cast(dchar)codepoint, &renderFont);
+  // It is possible that we did not find a fallback glyph.
+  // In that case the glyph index 'g' is 0, and we'll proceed below and cache empty glyph.
+
   scale = fons__tt_getPixelHeightScale(&renderFont.font, size);
   fons__tt_buildGlyphBitmap(&renderFont.font, g, size, scale, &advance, &lsb, &x0, &y0, &x1, &y1);
   gw = x1-x0+pad*2;
@@ -7389,7 +7820,7 @@ void fons__flush (FONScontext* stash) nothrow @trusted @nogc {
   }
 }
 
-void fons__vertex (FONScontext* stash, float x, float y, float s, float t, uint c) nothrow @trusted @nogc {
+debug(nanovega) void fons__vertex (FONScontext* stash, float x, float y, float s, float t, uint c) nothrow @trusted @nogc {
   stash.verts.ptr[stash.nverts*2+0] = x;
   stash.verts.ptr[stash.nverts*2+1] = y;
   stash.tcoords.ptr[stash.nverts*2+0] = s;
@@ -7589,7 +8020,7 @@ public bool fonsTextIterNext(FT) (FONScontext* stash, FT* iter, FONSquad* quad) 
   return true;
 }
 
-debug public void fonsDrawDebug (FONScontext* stash, float x, float y) nothrow @trusted @nogc {
+debug(nanovega) public void fonsDrawDebug (FONScontext* stash, float x, float y) nothrow @trusted @nogc {
   int i;
   int w = stash.params.width;
   int h = stash.params.height;
