@@ -5085,6 +5085,12 @@ public void fontFace (NVGContext ctx, const(char)[] font) nothrow @trusted @nogc
   nvg__getState(ctx).fontId = fonsGetFontByName(ctx.fs, font);
 }
 
+static if (is(typeof(&fons__nvg__toPath))) {
+  public enum NanoVegaHasCharToPath = true; ///
+} else {
+  public enum NanoVegaHasCharToPath = false; ///
+}
+
 /// Adds glyph outlines to the current path. Vertical 0 is baseline.
 /// The glyph is not scaled in any way, so you have to use NanoVega transformations instead.
 /// Returns `false` if there are no such glyph, or current font is not scalable.
@@ -5092,6 +5098,12 @@ public bool charToPath (NVGContext ctx, dchar dch, float[] bounds=null) nothrow 
   NVGstate* state = nvg__getState(ctx);
   fonsSetFont(ctx.fs, state.fontId);
   return fonsToPath(ctx.fs, ctx, dch, bounds);
+}
+
+static if (is(typeof(&fons__nvg__bounds))) {
+  public enum NanoVegaHasCharPathBounds = true; ///
+} else {
+  public enum NanoVegaHasCharPathBounds = false; ///
 }
 
 /// Returns bounds of the glyph outlines. Vertical 0 is baseline.
@@ -5270,6 +5282,12 @@ public void kill (ref NVGGlyphOutline* ol) nothrow @trusted @nogc {
     free(ol);
     ol = null;
   }
+}
+
+static if (is(typeof(&fons__nvg__toOutline))) {
+  public enum NanoVegaHasCharOutline = true; ///
+} else {
+  public enum NanoVegaHasCharOutline = false; ///
 }
 
 /// Returns glyph outlines as array of commands. Vertical 0 is baseline.
