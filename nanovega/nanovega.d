@@ -1740,23 +1740,22 @@ public void globalAlpha (NVGContext ctx, float alpha) nothrow @trusted @nogc {
  *   [0 0 1]
  * ----------------------
  */
-public void transform (NVGContext ctx, float a, float b, float c, float d, float e, float f) nothrow @trusted @nogc {
+public void transform (NVGContext ctx, const(float)[] mt...) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  //float[6] t = [ a, b, c, d, e, f ];
   float[6] t = void;
-  t.ptr[0] = a;
-  t.ptr[1] = b;
-  t.ptr[2] = c;
-  t.ptr[3] = d;
-  t.ptr[4] = e;
-  t.ptr[5] = f;
+  if (mt.length < 6) {
+    t[] = nvgIdentity[];
+    t[0..mt.length] = mt[];
+  } else {
+    t[] = mt.ptr[0..6];
+  }
   nvgTransformPremultiply(state.xform[], t[]);
 }
 
 /// Resets current transform to an identity matrix.
 public void resetTransform (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  nvgTransformIdentity(state.xform[]);
+  state.xform[] = nvgIdentity[];
 }
 
 /// Translates current coordinate system.
@@ -1809,10 +1808,41 @@ public void scale (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
  *
  * There should be space for 6 floats in the return buffer for the values a-f.
  */
-public void currentTransform (NVGContext ctx, float[] xform) nothrow @trusted @nogc {
+public void getCurrentTransform (NVGContext ctx, float[] xform) nothrow @trusted @nogc {
   assert(xform.length >= 6);
   NVGstate* state = nvg__getState(ctx);
   xform.ptr[0..6] = state.xform.ptr[0..6];
+}
+
+/** Replaces Stores the top part (a-f) of the current transformation matrix with the new one.
+ *
+ * ----------------------
+ *   [a c e]
+ *   [b d f]
+ *   [0 0 1]
+ * ----------------------
+ */
+public void currentTransform (NVGContext ctx, const(float)[] xform...) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  if (xform.length < 6) {
+    state.xform[] = nvgIdentity[];
+    state.xform.ptr[0..xform.length] = xform[];
+  } else {
+    state.xform[] = xform.ptr[0..6];
+  }
+}
+
+/** Returns the top part (a-f) of the current transformation matrix.
+ *
+ * ----------------------
+ *   [a c e]
+ *   [b d f]
+ *   [0 0 1]
+ * ----------------------
+ */
+public NVGMatrix currentTransform (NVGContext ctx) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  return NVGMatrix(state.xform[]);
 }
 
 /// Sets current stroke style to a solid color.
