@@ -1701,7 +1701,7 @@ public void scale (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
 public void currentTransform (NVGContext ctx, float[] xform) nothrow @trusted @nogc {
   assert(xform.length >= 6);
   NVGstate* state = nvg__getState(ctx);
-  xform[0..6] = state.xform[0..6];
+  xform.ptr[0..6] = state.xform.ptr[0..6];
 }
 
 /// Sets current stroke style to a solid color.
@@ -1874,8 +1874,8 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
   p.xform.ptr[2] = dx; p.xform.ptr[3] = dy;
   p.xform.ptr[4] = sx-dx*large; p.xform.ptr[5] = sy-dy*large;
 
-  p.extent[0] = large;
-  p.extent[1] = large+d*0.5f;
+  p.extent.ptr[0] = large;
+  p.extent.ptr[1] = large+d*0.5f;
 
   p.radius = 0.0f;
 
@@ -1902,8 +1902,8 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
   p.xform.ptr[4] = cx;
   p.xform.ptr[5] = cy;
 
-  p.extent[0] = r;
-  p.extent[1] = r;
+  p.extent.ptr[0] = r;
+  p.extent.ptr[1] = r;
 
   p.radius = r;
 
@@ -1929,8 +1929,8 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
   p.xform.ptr[4] = x+w*0.5f;
   p.xform.ptr[5] = y+h*0.5f;
 
-  p.extent[0] = w*0.5f;
-  p.extent[1] = h*0.5f;
+  p.extent.ptr[0] = w*0.5f;
+  p.extent.ptr[1] = h*0.5f;
 
   p.radius = r;
 
@@ -1954,8 +1954,8 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
   p.xform.ptr[4] = cx;
   p.xform.ptr[5] = cy;
 
-  p.extent[0] = w;
-  p.extent[1] = h;
+  p.extent.ptr[0] = w;
+  p.extent.ptr[1] = h;
 
   p.image = image;
 
@@ -2089,8 +2089,8 @@ public void scissor (NVGContext ctx, float x, float y, float w, float h) nothrow
   state.scissor.xform.ptr[5] = y+h*0.5f;
   nvgTransformMultiply(state.scissor.xform[], state.xform[]);
 
-  state.scissor.extent[0] = w*0.5f;
-  state.scissor.extent[1] = h*0.5f;
+  state.scissor.extent.ptr[0] = w*0.5f;
+  state.scissor.extent.ptr[1] = h*0.5f;
 }
 
 void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) nothrow @trusted @nogc {
@@ -2115,7 +2115,7 @@ public void intersectScissor (NVGContext ctx, float x, float y, float w, float h
   NVGstate* state = nvg__getState(ctx);
 
   // If no previous scissor has been set, set the scissor as current scissor.
-  if (state.scissor.extent[0] < 0) {
+  if (state.scissor.extent.ptr[0] < 0) {
     ctx.scissor(x, y, w, h);
     return;
   }
@@ -2128,8 +2128,8 @@ public void intersectScissor (NVGContext ctx, float x, float y, float w, float h
   // Transform the current scissor rect into current transform space.
   // If there is difference in rotation, this will be approximation.
   memcpy(pxform.ptr, state.scissor.xform.ptr, float.sizeof*6);
-  immutable float ex = state.scissor.extent[0];
-  immutable float ey = state.scissor.extent[1];
+  immutable float ex = state.scissor.extent.ptr[0];
+  immutable float ey = state.scissor.extent.ptr[1];
   nvgTransformInverse(invxorm[], state.xform[]);
   nvgTransformMultiply(pxform[], invxorm[]);
   immutable float tex = ex*nvg__absf(pxform.ptr[0])+ey*nvg__absf(pxform.ptr[2]);
@@ -4145,7 +4145,7 @@ NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, bool forStroke) {
   }
 
   // Store the scissor rect if present.
-  if (state.scissor.extent[0] != -1.0f) {
+  if (state.scissor.extent.ptr[0] != -1.0f) {
     // Use points storage to store the scissor data
     float* scissor = null;
     pp.scissor = nvg__pickSceneAddPoints(ps, null, 4);
@@ -8209,8 +8209,8 @@ struct GLNVGpath {
   int strokeCount;
 }
 
-enum NANOVG_GL_UNIFORMARRAY_SIZE = 11;
 struct GLNVGfragUniforms {
+  enum UNIFORM_ARRAY_SIZE = 11;
   // note: after modifying layout or size of uniform array,
   // don't forget to also update the fragment shader source!
   union {
@@ -8229,7 +8229,7 @@ struct GLNVGfragUniforms {
       float texType;
       float type;
     }
-    float[4][NANOVG_GL_UNIFORMARRAY_SIZE] uniformArray;
+    float[4][UNIFORM_ARRAY_SIZE] uniformArray;
   }
 }
 
@@ -8703,7 +8703,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
   frag.innerCol = glnvg__premulColor(paint.innerColor);
   frag.outerCol = glnvg__premulColor(paint.outerColor);
 
-  if (scissor.extent[0] < -0.5f || scissor.extent[1] < -0.5f) {
+  if (scissor.extent.ptr[0] < -0.5f || scissor.extent.ptr[1] < -0.5f) {
     memset(frag.scissorMat.ptr, 0, frag.scissorMat.sizeof);
     frag.scissorExt.ptr[0] = 1.0f;
     frag.scissorExt.ptr[1] = 1.0f;
@@ -8765,7 +8765,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
 
 void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow @trusted @nogc {
   GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
-  glUniform4fv(gl.shader.loc[GLNVG_LOC_FRAG], NANOVG_GL_UNIFORMARRAY_SIZE, &(frag.uniformArray[0][0]));
+  glUniform4fv(gl.shader.loc[GLNVG_LOC_FRAG], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
   if (image != 0) {
     GLNVGtexture* tex = glnvg__findTexture(gl, image);
     glnvg__bindTexture(gl, tex !is null ? tex.tex : 0);
@@ -8777,8 +8777,8 @@ void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow
 
 void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
-  gl.view[0] = cast(float)width;
-  gl.view[1] = cast(float)height;
+  gl.view.ptr[0] = cast(float)width;
+  gl.view.ptr[1] = cast(float)height;
 }
 
 void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
