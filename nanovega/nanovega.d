@@ -4970,6 +4970,13 @@ public int createFontMem (NVGContext ctx, const(char)[] name, ubyte* data, int n
   return fonsAddFontMem(ctx.fs, name, data, ndata, freeData, ctx.params.fontAA);
 }
 
+/// Add fonts from another context.
+/// This is more effective than reloading fonts, 'cause font data will be shared.
+public void addFontsFrom (NVGContext ctx, NVGContext source) nothrow @trusted @nogc {
+  if (ctx is null || source is null) return;
+  ctx.fs.fonsAddStashFonts(source.fs);
+}
+
 /// Finds a loaded font of specified name, and returns handle to it, or FONS_INVALID (aka -1) if the font is not found.
 public int findFont (NVGContext ctx, const(char)[] name) nothrow @trusted @nogc {
   pragma(inline, true);
@@ -5974,6 +5981,10 @@ void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) nothr
   font.mono = v;
 }
 
+bool fons__tt_getMono (FONScontext* context, FONSttFontImpl* font) nothrow @trusted @nogc {
+  return font.mono;
+}
+
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) nothrow @trusted @nogc {
   FT_Error ftError;
   //font.font.userdata = stash;
@@ -6102,6 +6113,10 @@ int fons__tt_init (FONScontext* context) nothrow @trusted @nogc {
 
 void fons__tt_setMono (FONScontext* context, FONSttFontImpl* font, bool v) nothrow @trusted @nogc {
   font.mono = v;
+}
+
+bool fons__tt_getMono (FONScontext* context, FONSttFontImpl* font) nothrow @trusted @nogc {
+  return font.mono;
 }
 
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) nothrow @trusted @nogc {
@@ -6851,7 +6866,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
     // check if we already has a loaded font with this name
     if (fidx >= 0) {
       import core.stdc.string : strlen;
-      auto plen = strlen(stash.fonts[fidx].path);
+      auto plen = (stash.fonts[fidx].path !is null ? strlen(stash.fonts[fidx].path) : 0);
       version(Posix) {
         //{ import core.stdc.stdio; printf("+++ font [%.*s] was loaded from [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)stash.fonts[fidx].path.length, stash.fonts[fidx].path.ptr); }
         if (plen == path.length && stash.fonts[fidx].path[0..plen] == path) {
@@ -6860,7 +6875,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
           return fidx;
         }
       } else {
-        if (plen == path.length && fons_strequci(stash.fonts[fidx].path.ptr[0..plen],  path)) {
+        if (plen == path.length && fons_strequci(stash.fonts[fidx].path.ptr[0..plen], path)) {
           // i found her!
           return fidx;
         }
@@ -6940,6 +6955,37 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   return res;
 }
 
+/// Add fonts from another font stash
+/// This is more effective than reloading fonts, 'cause font data will be shared.
+public void fonsAddStashFonts (FONScontext* stash, FONScontext* source) nothrow @trusted @nogc {
+  if (stash is null || source is null) return;
+  foreach (FONSfont* font; source.fonts[0..source.cfonts]) {
+    if (font !is null) {
+      auto newidx = fonsAddCookedFont(stash, font);
+      FONSfont* newfont = stash.fonts[newidx];
+      assert(newfont !is null);
+      assert(newfont.path is null);
+      // copy path
+      if (font.path !is null && font.path[0]) {
+        import core.stdc.stdlib : malloc;
+        import core.stdc.string : strcpy, strlen;
+        newfont.path = cast(char*)malloc(strlen(font.path)+1);
+        if (newfont.path is null) assert(0, "FONS: out of memory");
+        strcpy(newfont.path, font.path);
+      }
+    }
+  }
+}
+
+// used to add font from another fontstash
+int fonsAddCookedFont (FONScontext* stash, FONSfont* font) nothrow @trusted @nogc {
+  if (font is null || font.fdata is null) return FONS_INVALID;
+  font.fdata.incref();
+  auto res = fonsAddFontWithData(stash, font.name[0..font.namelen], font.fdata, font.font.mono);
+  if (res == FONS_INVALID) font.fdata.decref(); // oops
+  return res;
+}
+
 // fdata refcount must be already increased; it won't be changed
 int fonsAddFontWithData (FONScontext* stash, const(char)[] name, FONSfontData* fdata, bool defAA) nothrow @trusted @nogc {
   int i, ascent, descent, fh, lineGap;
@@ -6976,7 +7022,7 @@ int fonsAddFontWithData (FONScontext* stash, const(char)[] name, FONSfontData* f
   // init font
   stash.nscratch = 0;
   if (!fons__tt_loadFont(stash, &font.font, fdata.data, fdata.dataSize)) {
-    // we promised to not free data on error, so just clear the data store
+    // we promised to not free data on error, so just clear the data store (it will be freed by the caller)
     font.fdata = null;
     fons__freeFont(font);
     if (oldidx != FONS_INVALID) {
