@@ -88,6 +88,76 @@ int digitInBase (char ch, int base=10) pure nothrow @trusted @nogc {
 }
 
 
+alias atof = atofd!float; /// very simple atof/atod converter. accepts exponents. returns NaN on error.
+alias atod = atofd!double; /// very simple atof/atod converter. accepts exponents. returns NaN on error.
+
+/// very simple atof/atod converter. accepts exponents.
+/// returns NaN on error.
+T atofd(T) (const(char)[] str) pure nothrow @trusted @nogc if (is(T == float) || is(T == double)) {
+  if (str.length == 0) return T.nan; // oops
+
+  const(char)[] s = str;
+  double res = 0.0, sign = 1.0;
+  bool hasIntPart = false, hasFracPart = false;
+
+  char peekChar () nothrow @trusted @nogc => (s.length ? s.ptr[0] : '\0');
+  void skipChar () nothrow @trusted @nogc { pragma(inline, true); if (s.length > 0) s = s[1..$]; }
+  char getChar () nothrow @trusted @nogc { pragma(inline, true); char ch = 0; if (s.length > 0) { ch = s.ptr[0]; s = s[1..$]; } return ch; }
+
+  // optional sign
+  switch (peekChar) {
+    case '-': sign = -1; goto case;
+    case '+': skipChar(); break;
+    default: break;
+  }
+
+  // integer part
+  if (isdigit(peekChar)) {
+    hasIntPart = true;
+    while (isdigit(peekChar)) res = res*10.0+(getChar()-'0');
+  }
+
+  // fractional part.
+  if (peekChar == '.') {
+    skipChar(); // skip '.'
+    if (isdigit(peekChar)) {
+      hasFracPart = true;
+      int divisor = 1;
+      long num = 0;
+      while (isdigit(peekChar)) {
+        divisor *= 10;
+        num = num*10+(getChar()-'0');
+      }
+      res += cast(double)num/divisor;
+    }
+  }
+
+  // valid number should have integer or fractional part
+  if (!hasIntPart && !hasFracPart) return T.nan;
+
+  // optional exponent
+  if (peekChar == 'e' || peekChar == 'E') {
+    skipChar(); // skip 'E'
+    // optional sign
+    bool epositive = true;
+    switch (peekChar) {
+      case '-': epositive = false; goto case;
+      case '+': skipChar(); break;
+      default: break;
+    }
+    int expPart = 0;
+    while (isdigit(peekChar)) expPart = expPart*10+(getChar()-'0');
+    if (epositive) {
+      foreach (; 0..expPart) res *= 10.0;
+    } else {
+      foreach (; 0..expPart) res /= 10.0;
+    }
+  }
+
+  return cast(T)(res*sign);
+}
+
+
 // ascii only
 bool strEquCI (const(char)[] s0, const(char)[] s1) pure nothrow @trusted @nogc {
   if (s0.length != s1.length) return false;
