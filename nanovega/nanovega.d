@@ -6177,13 +6177,9 @@ uint fons__hashint() (uint a) pure nothrow @safe @nogc {
   return a;
 }
 
-uint fons__djbhash (const(void)[] s, const(void)[] sfx=null) pure nothrow @safe @nogc {
+uint fons__djbhash (const(void)[] s) pure nothrow @safe @nogc {
   uint hash = 5381;
   foreach (ubyte b; cast(const(ubyte)[])s) {
-    if (b >= 'A' && b <= 'Z') b += 32; // poor man's tolower
-    hash = ((hash<<5)+hash)+b;
-  }
-  foreach (ubyte b; cast(const(ubyte)[])sfx) {
     if (b >= 'A' && b <= 'Z') b += 32; // poor man's tolower
     hash = ((hash<<5)+hash)+b;
   }
@@ -6287,18 +6283,19 @@ struct FONSfont {
   }
 
   // this also calcs name hash
-  void setName (const(char)[] aname, const(char)[] sfx=null) nothrow @trusted @nogc {
+  void setName (const(char)[] aname) nothrow @trusted @nogc {
+    //{ import core.stdc.stdio; printf("setname: [%.*s]\n", cast(uint)aname.length, aname.ptr); }
     import core.stdc.stdlib : realloc;
-    if (aname.length > int.max/32 || sfx.length > 1024) assert(0, "FONS: invalid font name");
-    namelen = cast(uint)(aname.length+sfx.length);
+    if (aname.length > int.max/32) assert(0, "FONS: invalid font name");
+    namelen = cast(uint)aname.length;
     name = cast(char*)realloc(name, namelen+1);
     if (name is null) assert(0, "FONS: out of memory");
     if (aname.length) name[0..aname.length] = aname[];
-    if (sfx.length) name[aname.length..aname.length+sfx.length] = sfx[];
     name[namelen] = 0;
     // lowercase it
     foreach (ref char ch; name[0..namelen]) if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
     namehash = fons__djbhash(name[0..namelen]);
+    //{ import core.stdc.stdio; printf("  [%s] [%.*s] [0x%08x]\n", name, namelen, name, namehash); }
   }
 
   void setPath (const(char)[] apath) nothrow @trusted @nogc {
@@ -6311,17 +6308,12 @@ struct FONSfont {
   }
 
   // this won't check hash
-  bool nameEqu (const(char)[] aname, const(char)[] sfx=null) nothrow @trusted @nogc {
-    if (aname.length > int.max/32 || sfx.length > 1024) return false;
-    if (namelen != aname.length+sfx.length) return false;
+  bool nameEqu (const(char)[] aname) nothrow @trusted @nogc {
+    //{ import core.stdc.stdio; printf("nameEqu: aname=[%.*s]; namelen=%u; aslen=%u\n", cast(uint)aname.length, aname.ptr, namelen, cast(uint)aname.length); }
+    if (namelen != aname.length) return false;
     const(char)* ns = name;
     // name part
     foreach (char ch; aname) {
-      if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
-      if (ch != *ns++) return false;
-    }
-    // suffix part
-    foreach (char ch; sfx) {
       if (ch >= 'A' && ch <= 'Z') ch += 32; // poor man's tolower
       if (ch != *ns++) return false;
     }
@@ -6372,23 +6364,26 @@ public struct FONScontext {
   void* errorUptr;
 
   // simple linear probing; returns `FONS_INVALID` if not found
-  int findNameInHash (const(char)[] name, const(char)[] sfx=null) nothrow @trusted @nogc {
+  int findNameInHash (const(char)[] name) nothrow @trusted @nogc {
     if (cfonts == 0) return FONS_INVALID;
-    auto nhash = fons__djbhash(name, sfx);
+    auto nhash = fons__djbhash(name);
+    //{ import core.stdc.stdio; printf("findinhash: name=[%.*s]; nhash=0x%08x\n", cast(uint)name.length, name.ptr, nhash); }
     auto res = nhash%cfonts;
     // hash will never be 100% full, so this loop is safe
     while (fonts[res] !is null) {
-      if (fonts[res].namehash == nhash && fonts[res].nameEqu(name, sfx)) return cast(int)res;
+      //{ import core.stdc.stdio; printf("  nhash=0x%08x; hh=0x%08x\n", nhash, fonts[res].namehash); }
+      if (fonts[res].namehash == nhash && fonts[res].nameEqu(name)) return cast(int)res;
       res = (res+1)%cfonts;
     }
     return FONS_INVALID;
   }
 
   // won't init `fonts` element, just allocs it (and does rehashing if necessary)
-  int allocHashBucket (const(char)[] name, const(char)[] sfx=null) nothrow @trusted @nogc {
+  int allocHashBucket (const(char)[] name) nothrow @trusted @nogc {
     import core.stdc.stdlib : realloc;
     import core.stdc.string : memset;
-    auto nhash = fons__djbhash(name, sfx);
+    auto nhash = fons__djbhash(name);
+    //{ import core.stdc.stdio; printf("addtohash: name=[%.*s]; nhash=0x%08x\n", cast(uint)name.length, name.ptr, nhash); }
     // allocate new hash table if there was none
     if (cfonts == 0) {
       enum InitSize = 512;
@@ -6837,33 +6832,28 @@ private enum NoAlias = ":noaa";
 
 // defAA: antialias flag for fonts without ":noaa"
 public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] path, bool defAA) nothrow @trusted {
-  char[64+NoAlias.length] fontnamebuf = 0;
-
   if (path.length == 0 || name.length == 0 || fons_strequci(name, NoAlias)) return FONS_INVALID;
-  if (path.length > 1024) return FONS_INVALID; // arbitrary limit
+  if (path.length > 32768) return FONS_INVALID; // arbitrary limit
 
-  if (name.length > 63) name = name[0..63];
-  fontnamebuf[0..name.length] = name[];
-  uint blen = cast(uint)name.length;
-
-  // if font path ends with ":noaa", add this to font name instead
+  // if font path ends with ":noaa", turn off antialiasing
   if (path.length >= NoAlias.length && fons_strequci(path[$-NoAlias.length..$], NoAlias)) {
     path = path[0..$-NoAlias.length];
     if (path.length == 0) return FONS_INVALID;
-    if (name.length < NoAlias.length || !fons_strequci(name[$-NoAlias.length..$], NoAlias)) {
-      if (name.length+NoAlias.length > 63) return FONS_INVALID;
-      fontnamebuf[name.length..name.length+NoAlias.length] = NoAlias;
-      blen += cast(uint)NoAlias.length;
-    }
+    defAA = false;
   }
-  assert(fontnamebuf[blen] == 0);
+
+  // if font name ends with ":noaa", turn off antialiasing
+  if (name.length > NoAlias.length && fons_strequci(name[$-NoAlias.length..$], NoAlias)) {
+    name = name[0..$-NoAlias.length];
+    defAA = false;
+  }
 
   // find a font with the given name
-  int fidx = fonsGetFontByName!false(stash, fontnamebuf[0..blen]); // no substitutes
+  int fidx = stash.findNameInHash(name);
   //{ import core.stdc.stdio; printf("loading font '%.*s' [%s] (fidx=%d)...\n", cast(uint)path.length, path.ptr, fontnamebuf.ptr, fidx); }
 
   int loadFontFile (const(char)[] path) {
-    // check if we already has a loaded font with this name
+    // check if existing font (if any) has the same path
     if (fidx >= 0) {
       import core.stdc.string : strlen;
       auto plen = (stash.fonts[fidx].path !is null ? strlen(stash.fonts[fidx].path) : 0);
@@ -6885,7 +6875,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
       // special shitdows check
       foreach (immutable char ch; path) if (ch == ':') return FONS_INVALID;
     }
-    // either no such font, or another file was loaded
+    // either no such font, or different path
     //{ import core.stdc.stdio; printf("trying font [%.*s] from file [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)path.length, path.ptr); }
     try {
       import core.stdc.stdlib : free, malloc;
@@ -6897,9 +6887,12 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
       scope(failure) free(data); // oops
       fl.rawReadExact(data[0..cast(uint)dataSize]);
       fl.close();
-      auto xres = fonsAddFontMem(stash, fontnamebuf[0..blen], data, cast(int)dataSize, true, defAA);
+      // create font data
+      FONSfontData* fdata = fons__createFontData(data, cast(int)dataSize, true); // free data
+      fdata.incref();
+      auto xres = fonsAddFontWithData(stash, name, fdata, defAA);
       if (xres == FONS_INVALID) {
-        free(data);
+        fdata.decref(); // this will free `data` and `fdata`
       } else {
         // remember path
         stash.fonts[xres].setPath(path);
@@ -6919,12 +6912,14 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
       import std.internal.cstring : tempCString;
       FcPattern* pat = FcNameParse(path.tempCString);
       if (pat !is null) {
+        scope(exit) FcPatternDestroy(pat);
         if (FcConfigSubstitute(null, pat, FcMatchPattern)) {
           FcDefaultSubstitute(pat);
           // find the font
           FcResult result;
           FcPattern* font = FcFontMatch(null, pat, &result);
           if (font !is null) {
+            scope(exit) FcPatternDestroy(font);
             char* file = null;
             if (FcPatternGetString(font, FC_FILE, 0, &file) == FcResultMatch) {
               if (file !is null && file[0]) {
@@ -6932,11 +6927,9 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
                 res = loadFontFile(file[0..strlen(file)]);
               }
             }
-            FcPatternDestroy(font);
           }
         }
       }
-      FcPatternDestroy(pat);
     }
   }
   return res;
@@ -6981,7 +6974,7 @@ public void fonsAddStashFonts (FONScontext* stash, FONScontext* source) nothrow 
 int fonsAddCookedFont (FONScontext* stash, FONSfont* font) nothrow @trusted @nogc {
   if (font is null || font.fdata is null) return FONS_INVALID;
   font.fdata.incref();
-  auto res = fonsAddFontWithData(stash, font.name[0..font.namelen], font.fdata, font.font.mono);
+  auto res = fonsAddFontWithData(stash, font.name[0..font.namelen], font.fdata, !font.font.mono);
   if (res == FONS_INVALID) font.fdata.decref(); // oops
   return res;
 }
@@ -6990,14 +6983,14 @@ int fonsAddCookedFont (FONScontext* stash, FONSfont* font) nothrow @trusted @nog
 int fonsAddFontWithData (FONScontext* stash, const(char)[] name, FONSfontData* fdata, bool defAA) nothrow @trusted @nogc {
   int i, ascent, descent, fh, lineGap;
 
-  if (name.length == 0 || name == NoAlias) return FONS_INVALID;
+  if (name.length == 0 || fons_strequci(name, NoAlias)) return FONS_INVALID;
   if (name.length > 32767) return FONS_INVALID;
   if (fdata is null) return FONS_INVALID;
 
   // find a font with the given name
   int newidx;
   FONSfont* oldfont = null;
-  int oldidx = fonsGetFontByName!false(stash, name); // no substitutes
+  int oldidx = stash.findNameInHash(name);
   if (oldidx != FONS_INVALID) {
     // replacement font
     oldfont = stash.fonts[oldidx];
@@ -7012,11 +7005,11 @@ int fonsAddFontWithData (FONScontext* stash, const(char)[] name, FONSfontData* f
   font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1; // init hash lookup
   font.fdata = fdata; // set the font data (don't change reference count)
 
-  if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
+  if (name.length >= NoAlias.length && fons_strequci(name[$-NoAlias.length..$], NoAlias)) {
     //{ import core.stdc.stdio : printf; printf("MONO: [%.*s]\n", cast(uint)name.length, name.ptr); }
     fons__tt_setMono(stash, &font.font, true);
   } else {
-    fons__tt_setMono(stash, &font.font, defAA);
+    fons__tt_setMono(stash, &font.font, !defAA);
   }
 
   // init font
@@ -7059,21 +7052,14 @@ public const(char)[] fonsGetNameByIndex (FONScontext* stash, int idx) nothrow @t
 
 // allowSubstitutes: check AA variants if exact name wasn't found?
 // return `FONS_INVALID` if no font was found
-public int fonsGetFontByName(bool allowSubstitutes=true) (FONScontext* stash, const(char)[] name) nothrow @trusted @nogc {
-  static if (allowSubstitutes) {
-    auto hidx = stash.findNameInHash(name);
-    if (hidx != FONS_INVALID) return hidx; // i found her!
-    // not found, try variations
-    if (name.length >= NoAlias.length && name[$-NoAlias.length..$] == NoAlias) {
-      // search for font name without ":noaa"
-      name = name[0..$-NoAlias.length];
-      return stash.findNameInHash(name);
-    } else {
-      return stash.findNameInHash(name, NoAlias);
-    }
-  } else {
-    return stash.findNameInHash(name);
+public int fonsGetFontByName (FONScontext* stash, const(char)[] name) nothrow @trusted @nogc {
+  //{ import core.stdc.stdio; printf("fonsGetFontByName: [%.*s]\n", cast(uint)name.length, name.ptr); }
+  // remove ":noaa" suffix
+  if (name.length >= NoAlias.length && fons_strequci(name[$-NoAlias.length..$], NoAlias)) {
+    name = name[0..$-NoAlias.length];
   }
+  if (name.length == 0) return FONS_INVALID;
+  return stash.findNameInHash(name);
 }
 
 
