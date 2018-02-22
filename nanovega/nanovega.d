@@ -516,8 +516,16 @@ public:
   static fromHSL() (in auto ref NVGHSL hsl) => hsl.asColor;
 
   version(nanovg_use_arsd_image) {
-    Color toArsd () const => Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255));
-    static NVGColor fromArsd() (in auto ref Color c) const => NVGColor(c.r, c.g, c.b, c.a);
+    Color toArsd () const => Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255)); ///
+    static NVGColor fromArsd (in Color c) => NVGColor(c.r, c.g, c.b, c.a); ///
+    ///
+    this (in Color c) {
+      pragma(inline, true);
+      r = c.r/255.0f;
+      g = c.g/255.0f;
+      b = c.b/255.0f;
+      a = c.a/255.0f;
+    }
   }
 }
 
@@ -561,8 +569,6 @@ public:
       // this is a little more accurate than plain HSL numbers
       res.l = 0.2126*r1+0.7152*g1+0.0722*b1;
     }
-    //res.s = 0;
-    //res.h = 0;
     if (maxColor != minColor) {
       if (res.l < 0.5) {
         res.s = (maxColor-minColor)/(maxColor+minColor);
@@ -743,7 +749,7 @@ public enum NVGImageFlags {
   FlipY           = 1<<3, /// Flips (inverses) image in Y direction when rendered.
   Premultiplied   = 1<<4, /// Image data has premultiplied alpha.
   NoFiltering     = 1<<8, /// use GL_NEAREST instead of GL_LINEAR
-  Nearest = NoFiltering,  /// compatibility with original NanoVega
+  Nearest = NoFiltering,  /// compatibility with original NanoVG
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1024,8 +1030,8 @@ NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation o
 }
 
 NVGstate* nvg__getState (NVGContext ctx) pure nothrow @trusted @nogc {
-  //pragma(inline, true);
-  return ctx.states.ptr+(ctx.nstates-1);
+  pragma(inline, true);
+  return &ctx.states.ptr[ctx.nstates-1];
 }
 
 // Constructor called by the render back-end.
@@ -1053,7 +1059,7 @@ package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @
 
   if (!ctx.params.renderCreate(ctx.params.userPtr)) goto error;
 
-  // Init font rendering
+  // init font rendering
   memset(&fontParams, 0, fontParams.sizeof);
   fontParams.width = NVG_INIT_FONTIMAGE_SIZE;
   fontParams.height = NVG_INIT_FONTIMAGE_SIZE;
@@ -1066,7 +1072,7 @@ package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @
   ctx.fs = fonsCreateInternal(&fontParams);
   if (ctx.fs is null) goto error;
 
-  // Create font texture
+  // create font texture
   ctx.fontImages[0] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, (ctx.params.fontAA ? 0 : NVGImageFlags.NoFiltering), null);
   if (ctx.fontImages[0] == 0) goto error;
   ctx.fontImageIdx = 0;
@@ -1186,7 +1192,7 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.params.renderFlush(ctx.params.userPtr, state.compositeOperation);
   if (ctx.fontImageIdx != 0) {
     int fontImage = ctx.fontImages[ctx.fontImageIdx];
-    int j, iw, ih;
+    int j = 0, iw, ih;
     // delete images that smaller than current one
     if (fontImage == 0) return;
     ctx.imageSize(fontImage, iw, ih);
@@ -1249,39 +1255,39 @@ public alias NVGSectionDummy00 = void;
 
 /// Returns a color value from string form.
 /// Supports: "#rgb", "#rrggbb", "#argb", "#aarrggbb"
-public NVGColor nvgRGB() (const(char)[] srgb) => NVGColor(srgb);
+public NVGColor nvgRGB (const(char)[] srgb) nothrow @trusted @nogc => NVGColor(srgb);
 
 /// Ditto.
-public NVGColor nvgRGBA() (const(char)[] srgb) => NVGColor(srgb);
+public NVGColor nvgRGBA (const(char)[] srgb) nothrow @trusted @nogc => NVGColor(srgb);
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 255 (1.0f).
-public NVGColor nvgRGB() (int r, int g, int b) => NVGColor(r, g, b, 255);
+public NVGColor nvgRGB (int r, int g, int b) nothrow @trusted @nogc => NVGColor(r, g, b, 255);
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 1.0f.
-public NVGColor nvgRGBf() (float r, float g, float b) => NVGColor(r, g, b, 1.0f);
+public NVGColor nvgRGBf (float r, float g, float b) nothrow @trusted @nogc => NVGColor(r, g, b, 1.0f);
 
 /// Returns a color value from red, green, blue and alpha values.
-public NVGColor nvgRGBA() (int r, int g, int b, int a=255) => NVGColor(r, g, b, a);
+public NVGColor nvgRGBA (int r, int g, int b, int a=255) nothrow @trusted @nogc => NVGColor(r, g, b, a);
 
 /// Returns a color value from red, green, blue and alpha values.
-public NVGColor nvgRGBAf() (float r, float g, float b, float a=1.0f) => NVGColor(r, g, b, a);
+public NVGColor nvgRGBAf (float r, float g, float b, float a=1.0f) nothrow @trusted @nogc => NVGColor(r, g, b, a);
 
 /// Returns new color with transparency (alpha) set to `a`.
-public NVGColor nvgTransRGBA() (NVGColor c, ubyte a) {
+public NVGColor nvgTransRGBA (NVGColor c, ubyte a) nothrow @trusted @nogc {
   pragma(inline, true);
   c.a = a/255.0f;
   return c;
 }
 
 /// Ditto.
-public NVGColor nvgTransRGBAf() (NVGColor c, float a) {
+public NVGColor nvgTransRGBAf (NVGColor c, float a) nothrow @trusted @nogc {
   pragma(inline, true);
   c.a = a;
   return c;
 }
 
 /// Linearly interpolates from color c0 to c1, and returns resulting color value.
-public NVGColor nvgLerpRGBA() (in auto ref NVGColor c0, in auto ref NVGColor c1, float u) {
+public NVGColor nvgLerpRGBA() (in auto ref NVGColor c0, in auto ref NVGColor c1, float u) nothrow @trusted @nogc {
   NVGColor cint = void;
   u = nvg__clamp(u, 0.0f, 1.0f);
   float oneminu = 1.0f-u;
@@ -1296,7 +1302,7 @@ public NVGColor nvgHSL() (float h, float s, float l) {
 }
 */
 
-float nvg__hue() (float h, float m1, float m2) pure nothrow @safe @nogc {
+float nvg__hue (float h, float m1, float m2) pure nothrow @safe @nogc {
   if (h < 0) h += 1;
   if (h > 1) h -= 1;
   if (h < 1.0f/6.0f) return m1+(m2-m1)*h*6.0f;
@@ -1311,8 +1317,8 @@ public alias nvgHSL = nvgHSLA; // trick to allow inlining
 
 /// Returns color value specified by hue, saturation and lightness and alpha.
 /// HSL values are all in range [0..1], alpha in range [0..255].
-public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
-  static if (__VERSION__ >= 2072) pragma(inline, true);
+public NVGColor nvgHSLA (float h, float s, float l, ubyte a=255) nothrow @trusted @nogc {
+  pragma(inline, true);
   NVGColor col = void;
   h = nvg__modf(h, 1.0f);
   if (h < 0.0f) h += 1.0f;
@@ -1329,7 +1335,7 @@ public NVGColor nvgHSLA() (float h, float s, float l, ubyte a=255) {
 
 /// Returns color value specified by hue, saturation and lightness and alpha.
 /// HSL values and alpha are all in range [0..1].
-public NVGColor nvgHSLA() (float h, float s, float l, float a) {
+public NVGColor nvgHSLA (float h, float s, float l, float a) nothrow @trusted @nogc {
   // sorry for copypasta, it is for inliner
   static if (__VERSION__ >= 2072) pragma(inline, true);
   NVGColor col = void;
@@ -1373,8 +1379,91 @@ public NVGColor nvgHSLA() (float h, float s, float l, float a) {
  */
 public alias NVGSectionDummy01 = void;
 
-///
-public alias NVGMatrix = float[6];
+/** Matrix class. Usually using this instead of dedicated matrix operations is slightly slower,
+ * but more convenient. Note that `NVGMatrix` can be passed to any NanoVega matrix operations.
+ *
+ * Note that `mt.scale(3, 3).translate(100, 100)` will apply transformations starting from the last.
+ */
+public struct NVGMatrix {
+public:
+  // identity
+  float[6] mat = [
+    1.0f, 0.0f,
+    0.0f, 1.0f,
+    0.0f, 0.0f,
+  ];
+
+  alias mat this;
+
+public nothrow @trusted @nogc:
+  ///
+  this (const(float)[] amat...) {
+    pragma(inline, true);
+    if (amat.length >= 6) {
+      mat.ptr[0..6] = amat.ptr[0..6];
+    } else {
+      mat.ptr[0..6] = 0;
+      mat.ptr[0..amat.length] = amat[];
+    }
+  }
+
+  /// used to check validity of `inverted()` result
+  @property bool valid () const { import core.stdc.math : isfinite; return (isfinite(mat.ptr[0]) != 0); }
+
+  ///
+  NVGMatrix inverted () const {
+    pragma(inline, true);
+    NVGMatrix res = void;
+    if (!nvgTransformInverse(res, this)) res[] = float.nan;
+    return res;
+  }
+
+  ///
+  ref NVGMatrix invert () {
+    float[6] temp = void;
+    if (!nvgTransformInverse(temp, this)) mat[] = float.nan; else mat[] = temp[];
+    return this;
+  }
+
+  ref NVGMatrix translate (float tx, float ty) { pragma(inline, true); this *= Translate(tx, ty); return this; } ///
+  ref NVGMatrix scale (float sx, float sy) { pragma(inline, true); this *= Scale(sx, sy); return this; } ///
+  ref NVGMatrix rotate (float a) { pragma(inline, true); this *= Rotate(a); return this; } ///
+  ref NVGMatrix skewX (float a) { pragma(inline, true); this *= SkewX(a); return this; } ///
+  ref NVGMatrix skewY (float a) { pragma(inline, true); this *= SkewY(a); return this; } ///
+
+  /// Transform point with this matrix. `null` destinations are allowed.
+  void point (float* dx, float* dy, float sx, float sy) nothrow @trusted @nogc {
+    pragma(inline, true);
+    nvgTransformPoint(dx, dy, mat[], sx, sy);
+  }
+
+  /// Transform point with this matrix.
+  void point (ref float x, ref float y) nothrow @trusted @nogc {
+    pragma(inline, true);
+    nvgTransformPoint(x, y, mat[]);
+  }
+
+  /// this*B
+  NVGMatrix opBinary(string op="*") (const(float)[] b) const {
+    pragma(inline, true);
+    NVGMatrix res = this;
+    nvgTransformMultiply(res, b);
+    return res;
+  }
+
+  /// this*B
+  ref NVGMatrix opOpAssign(string op="*") (const(float)[] b) {
+    nvgTransformMultiply(this, b);
+    return this;
+  }
+
+  static NVGMatrix Identity () => NVGMatrix.init; ///
+  static NVGMatrix Translate (float tx, float ty) { pragma(inline, true); NVGMatrix res = void; nvgTransformTranslate(res, tx, ty); return res; } ///
+  static NVGMatrix Scale (float sx, float sy) { pragma(inline, true); NVGMatrix res = void; nvgTransformScale(res, sx, sy); return res; } ///
+  static NVGMatrix Rotate (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformRotate(res, a); return res; } ///
+  static NVGMatrix SkewX (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformSkewX(res, a); return res; } ///
+  static NVGMatrix SkewY (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformSkewY(res, a); return res; } ///
+}
 
 ///
 public static immutable float[6] nvgIdentity = [
@@ -1501,11 +1590,14 @@ public void nvgTransformPoint (ref float x, ref float y, const(float)[] t) nothr
   y = ny;
 }
 
-// Converts degrees to radians.
+/// Converts degrees to radians.
 public float nvgDegToRad() (float deg) => deg/180.0f*NVG_PI;
+public alias nvgRadians = nvgDegToRad; /// Ditto.
 
-// Converts radians to degrees.
+/// Converts radians to degrees.
 public float nvgRadToDeg() (float rad) => rad/NVG_PI*180.0f;
+public alias nvgDegrees = nvgRadToDeg; /// Ditto.
+
 
 void nvg__setPaintColor (ref NVGPaint p, NVGColor color) nothrow @trusted @nogc {
   //pragma(inline, true);
@@ -2718,7 +2810,6 @@ NVGvertex* nvg__roundCapEnd (NVGvertex* dst, NVGpoint* p, float dx, float dy, fl
 
 void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
-  //int i, j;
   float iw = 0.0f;
 
   if (w > 0.0f) iw = 1.0f/w;
