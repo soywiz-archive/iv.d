@@ -1373,13 +1373,21 @@ public NVGColor nvgHSLA() (float h, float s, float l, float a) {
  */
 public alias NVGSectionDummy01 = void;
 
+///
+public alias NVGMatrix = float[6];
+
+///
+public static immutable float[6] nvgIdentity = [
+  1.0f, 0.0f,
+  0.0f, 1.0f,
+  0.0f, 0.0f,
+];
+
 /// Sets the transform to identity matrix.
 public void nvgTransformIdentity (float[] t) nothrow @trusted @nogc {
   pragma(inline, true);
   assert(t.length >= 6);
-  t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
-  t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
-  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
+  t.ptr[0..6] = nvgIdentity.ptr[0..6];
 }
 
 /// Sets the transform to translation matrix matrix.
@@ -1475,11 +1483,22 @@ public bool nvgTransformInverse (float[] inv, const(float)[] t) nothrow @trusted
 }
 
 /// Transform a point by given transform.
+/// `sx` and `sy` is the source point. `dx` and `dy` may point to the same variables.
 public void nvgTransformPoint (float* dx, float* dy, const(float)[] t, float sx, float sy) nothrow @trusted @nogc {
   pragma(inline, true);
   assert(t.length >= 6);
   if (dx !is null) *dx = sx*t.ptr[0]+sy*t.ptr[2]+t.ptr[4];
   if (dy !is null) *dy = sx*t.ptr[1]+sy*t.ptr[3]+t.ptr[5];
+}
+
+/// Transform a point by given transform, in place.
+public void nvgTransformPoint (ref float x, ref float y, const(float)[] t) nothrow @trusted @nogc {
+  pragma(inline, true);
+  assert(t.length >= 6);
+  immutable float nx = x*t.ptr[0]+y*t.ptr[2]+t.ptr[4];
+  immutable float ny = x*t.ptr[1]+y*t.ptr[3]+t.ptr[5];
+  x = nx;
+  y = ny;
 }
 
 // Converts degrees to radians.
@@ -5190,6 +5209,49 @@ public:
     Kind code; ///
     const(float)[] args; ///
     @property bool valid () const pure nothrow @safe @nogc => (code >= 0 && code <= 3 && args.length >= 2); ///
+
+    /// perform NanoVega command with stored data.
+    void perform (NVGContext ctx) const nothrow @trusted @nogc {
+      if (ctx is null) return;
+      switch (code) {
+        case Kind.MoveTo:
+          if (args.length > 1) ctx.moveTo(args.ptr[0], args.ptr[1]);
+          break;
+        case Kind.LineTo:
+          if (args.length > 1) ctx.lineTo(args.ptr[0], args.ptr[1]);
+          break;
+        case Kind.QuadTo:
+          if (args.length > 3) ctx.quadTo(args.ptr[0], args.ptr[1], args.ptr[2], args.ptr[3]);
+          break;
+        case Kind.BezierTo:
+          if (args.length > 5) ctx.bezierTo(args.ptr[0], args.ptr[1], args.ptr[2], args.ptr[3], args.ptr[4], args.ptr[5]);
+          break;
+        default:
+      }
+    }
+
+    /// perform NanoVega command with stored data, transforming points with `xform` transformation matrix.
+    void perform (NVGContext ctx, const(float)[] xform) const nothrow @trusted @nogc {
+      if (ctx is null || !valid) return;
+      float[6] pts = void;
+      pts[0..args.length] = args[];
+      foreach (immutable pidx; 0..args.length/2) nvgTransformPoint(pts.ptr[pidx*2+0], pts.ptr[pidx*2+1], xform[]);
+      switch (code) {
+        case Kind.MoveTo:
+          if (args.length > 1) ctx.moveTo(pts.ptr[0], pts.ptr[1]);
+          break;
+        case Kind.LineTo:
+          if (args.length > 1) ctx.lineTo(pts.ptr[0], pts.ptr[1]);
+          break;
+        case Kind.QuadTo:
+          if (args.length > 3) ctx.quadTo(pts.ptr[0], pts.ptr[1], pts.ptr[2], pts.ptr[3]);
+          break;
+        case Kind.BezierTo:
+          if (args.length > 5) ctx.bezierTo(pts.ptr[0], pts.ptr[1], pts.ptr[2], pts.ptr[3], pts.ptr[4], pts.ptr[5]);
+          break;
+        default:
+      }
+    }
   }
 
   @disable this (this); // no copies
