@@ -2469,16 +2469,18 @@ void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, const(float)* args, int
   // Ported from canvg (https://code.google.com/p/canvg/)
   float px = 0, py = 0, ptanx = 0, ptany = 0;
   float[6] t = void;
-  float x2 = void, y2 = void;
 
-  float rx = fabsf(args[0]);        // y radius
-  float ry = fabsf(args[1]);        // x radius
-  immutable float rotx = args[2]/180.0f*NSVG_PI;    // x rotation engle
+  float rx = fabsf(args[0]); // y radius
+  float ry = fabsf(args[1]); // x radius
+  immutable float rotx = args[2]/180.0f*NSVG_PI; // x rotation engle
   immutable float fa = fabsf(args[3]) > 1e-6 ? 1 : 0; // Large arc
   immutable float fs = fabsf(args[4]) > 1e-6 ? 1 : 0; // Sweep direction
-  immutable float x1 = *cpx;              // start point
+  immutable float x1 = *cpx; // start point
   immutable float y1 = *cpy;
-  if (rel) {              // end point
+
+  // end point
+  float x2 = void, y2 = void;
+  if (rel) {
     x2 = *cpx+args[5];
     y2 = *cpy+args[6];
   } else {
@@ -2530,28 +2532,16 @@ void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, const(float)* args, int
   immutable float uy = (y1p-cyp)/ry;
   immutable float vx = (-x1p-cxp)/rx;
   immutable float vy = (-y1p-cyp)/ry;
-  immutable float a1 = nsvg__vecang(1.0f, 0.0f, ux, uy);  // Initial angle
-  float da = nsvg__vecang(ux, uy, vx, vy);    // Delta angle
+  immutable float a1 = nsvg__vecang(1.0f, 0.0f, ux, uy); // Initial angle
+  float da = nsvg__vecang(ux, uy, vx, vy); // Delta angle
 
-  //if (vecrat(ux, uy, vx, vy) <= -1.0f) da = NSVG_PI;
-  //if (vecrat(ux, uy, vx, vy) >= 1.0f) da = 0;
-
-  /* old buggy code, replaced in mainline
-  if (fa) {
-    // Choose large arc
-    if (da > 0.0f)
-      da = da-2*NSVG_PI;
-    else
-      da = 2*NSVG_PI+da;
-  }
-  */
        if (fs == 0 && da > 0) da -= 2*NSVG_PI;
   else if (fs == 1 && da < 0) da += 2*NSVG_PI;
 
   // Approximate the arc using cubic spline segments.
-  t[0] = cosrx; t[1] = sinrx;
-  t[2] = -sinrx; t[3] = cosrx;
-  t[4] = cx; t[5] = cy;
+  t.ptr[0] = cosrx; t.ptr[1] = sinrx;
+  t.ptr[2] = -sinrx; t.ptr[3] = cosrx;
+  t.ptr[4] = cx; t.ptr[5] = cy;
 
   // Split arc into max 90 degree segments.
   // The loop assumes an iteration per end point (including start and end), this +1.
@@ -3261,13 +3251,13 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
     if (shape.fill.type == NSVG.PaintType.LinearGradient || shape.fill.type == NSVG.PaintType.RadialGradient) {
       nsvg__scaleGradient(shape.fill.gradient, tx, ty, sx, sy);
       //memcpy(t.ptr, shape.fill.gradient.xform.ptr, float.sizeof*6);
-      t[0..6] = shape.fill.gradient.xform[0..6];
+      t.ptr[0..6] = shape.fill.gradient.xform[0..6];
       nsvg__xformInverse(shape.fill.gradient.xform.ptr, t.ptr);
     }
     if (shape.stroke.type == NSVG.PaintType.LinearGradient || shape.stroke.type == NSVG.PaintType.RadialGradient) {
       nsvg__scaleGradient(shape.stroke.gradient, tx, ty, sx, sy);
       //memcpy(t.ptr, shape.stroke.gradient.xform.ptr, float.sizeof*6);
-      t[0..6] = shape.stroke.gradient.xform[0..6];
+      t.ptr[0..6] = shape.stroke.gradient.xform[0..6];
       nsvg__xformInverse(shape.stroke.gradient.xform.ptr, t.ptr);
     }
 
