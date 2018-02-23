@@ -343,3 +343,33 @@ public char[] expandTilde (char[] destBuf, const(char)[] inputPath) nothrow @tru
   }
   return destBuf[0..hp.length+irest];
 }
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+inout(char)[] removeExtension (inout(char)[] fn) {
+  foreach_reverse (immutable cidx, char ch; fn) {
+    version(Posix) {
+      if (ch == '/') break;
+    } else {
+      if (ch == '/' || ch == '\\' || ch == ':') break;
+    }
+    if (ch == '.') { fn = fn[0..cidx]; break; }
+  }
+  return fn;
+}
+
+
+inout(char)[] getExtension (inout(char)[] fn) {
+  foreach_reverse (immutable cidx, char ch; fn) {
+    version(Posix) {
+      if (ch == '/') return null;
+    } else {
+      if (ch == '/' || ch == '\\' || ch == ':') return null;
+    }
+    if (ch == '.') {
+      if (cidx == fn.length) return null;
+      return fn[cidx..$];
+    }
+  }
+  return null;
+}
