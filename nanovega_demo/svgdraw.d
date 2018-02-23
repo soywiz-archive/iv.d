@@ -19,6 +19,9 @@ import core.stdc.stdio;
 import iv.nanovega;
 import iv.nanovega.svg;
 import iv.nanovega.perf;
+import iv.strex;
+import iv.vfs;
+import iv.vfs.util;
 
 import arsd.simpledisplay;
 import arsd.color;
@@ -210,6 +213,9 @@ void main (string[] args) {
   int minw = 32, minh = 32;
   int defw = 256, defh = 256;
   int addw = 0, addh = 0;
+  bool stencilStrokes = true;
+  bool contextAA = true;
+  bool maxSize = false;
   string fname;
   for (usize idx = 1; idx < args.length; ++idx) {
     import std.conv : to;
@@ -241,10 +247,22 @@ void main (string[] args) {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
       addh = to!int(args[idx]);
-    } else if (a == "--nvg") {
+    } else if (a == "--nvg" || a == "--native") {
       useDirectRendering = true;
-    } else if (a == "--svg") {
+    } else if (a == "--svg" || a == "--raster") {
       useDirectRendering = false;
+    } else if (a == "--stencil") {
+      stencilStrokes = true;
+    } else if (a == "--fast") {
+      stencilStrokes = false;
+    } else if (a == "--aa") {
+      contextAA = true;
+    } else if (a == "--noaa" || a == "--sharp") {
+      contextAA = false;
+    } else if (a == "--max") {
+      maxSize = true;
+    } else if (a == "--normal") {
+      maxSize = false;
     } else if (a == "--") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
@@ -257,13 +275,29 @@ void main (string[] args) {
   }
   if (fname.length == 0) assert(0, "no filename");
 
+  VFile infile;
+
+  if (fname.getExtension.strEquCI(".zip")) {
+    auto did = vfsAddPak!("normal", true)(fname, ":::");
+    vfsForEachFileInPak(did, delegate (in ref de) {
+      if (de.name.getExtension.strEquCI(".svg")) {
+        //{ import iv.vfs.io; writeln(de.name); }
+        infile = VFile(de.name);
+        return 1;
+      }
+      return 0;
+    });
+  } else {
+    infile = VFile(fname);
+  }
+
   NSVG* svg;
   scope(exit) svg.kill();
   {
     import std.stdio : writeln;
     import core.time, std.datetime;
     auto stt = MonoTime.currTime;
-    svg = nsvgParseFromFile(fname, "px", 96, defw, defh);
+    svg = nsvgParseFromFile(infile, "px", 96, defw, defh);
     if (svg is null) assert(0, "svg parsing error");
     auto dur = (MonoTime.currTime-stt).total!"msecs";
     writeln("loading took ", dur, " milliseconds (", dur/1000.0, " seconds)");
@@ -273,11 +307,30 @@ void main (string[] args) {
   printf("size: %f x %f\n", cast(double)svg.width, cast(double)svg.height);
   GWidth = cast(int)svg.width+addw;
   GHeight = cast(int)svg.height+addh;
+  float scale = 1;
+
+  enum MaxWidth = 1900;
+  enum MaxHeight = 1100;
+
+  if (GWidth > MaxWidth && GHeight > MaxHeight) {
+    scale = (GWidth > GHeight ? cast(float)MaxWidth/GWidth : cast(float)MaxHeight/GHeight);
+  } else if (GWidth > MaxWidth) {
+    scale = cast(float)MaxWidth/GWidth;
+  } else if (GHeight > MaxHeight) {
+    scale = cast(float)MaxHeight/GHeight;
+  } else if (maxSize) {
+    scale = (GWidth > GHeight ? cast(float)MaxWidth/GWidth : cast(float)MaxHeight/GHeight);
+  }
+
+  if (scale != 1) {
+    GWidth = cast(int)(GWidth*scale);
+    GHeight = cast(int)(GHeight*scale);
+  }
+
   if (GWidth < minw) GWidth = minw;
   if (GHeight < minh) GHeight = minh;
 
   int vgimg;
-
 
   bool doQuit = false;
   bool drawFPS = false;
@@ -307,7 +360,7 @@ void main (string[] args) {
   float dt = 0, secs = 0;
   //int mxOld = -1, myOld = -1;
   PathMode pathMode = PathMode.min;
-  bool svgAA = true;
+  bool svgAA = false;
   bool help = true;
 
   sdwindow.redrawOpenGlScene = delegate () {
@@ -335,6 +388,8 @@ void main (string[] args) {
         import std.stdio : writeln;
         import core.time, std.datetime;
         auto stt = MonoTime.currTime;
+        vg.translate(addw, addh);
+        vg.scale(scale, scale);
         vg.render(svg, pathMode);
         auto dur = (MonoTime.currTime-stt).total!"msecs";
         writeln("rendering took ", dur, " milliseconds (", dur/1000.0, " seconds)");
@@ -391,7 +446,11 @@ void main (string[] args) {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    vg = createGL2NVG(NVG_ANTIALIAS|NVG_STENCIL_STROKES);
+    vg = createGL2NVG(
+      (contextAA ? NVG_ANTIALIAS : 0)|
+      (stencilStrokes ? NVG_STENCIL_STROKES : 0)|
+      0
+    );
     if (vg is null) {
       import std.stdio;
       writeln("Could not init nanovg.");
@@ -412,7 +471,7 @@ void main (string[] args) {
         writeln("rasterizing...");
         rst.rasterize(svg,
           addw/2, addh/2, // ofs
-          1, // scale
+          scale, // scale
           svgraster.ptr, GWidth, GHeight);
         auto dur = (MonoTime.currTime-stt).total!"msecs";
         writeln("rasterizing took ", dur, " milliseconds (", dur/1000.0, " seconds)");
