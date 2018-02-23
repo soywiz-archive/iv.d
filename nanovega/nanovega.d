@@ -1977,7 +1977,7 @@ public void imageSize (NVGContext ctx, int image, out int w, out int h) nothrow 
 
 /// Deletes created image.
 public void deleteImage (NVGContext ctx, int image) nothrow @trusted @nogc {
-  if (ctx is null || image < 0) return;
+  if (ctx is null || image <= 0) return;
   ctx.params.renderDeleteTexture(ctx.params.userPtr, image);
 }
 
