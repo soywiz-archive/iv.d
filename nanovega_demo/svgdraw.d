@@ -27,9 +27,24 @@ import arsd.jpeg;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-enum PathMode { EvenOdd, Flipping, AllHoles, NoHoles }
+bool nativeGradients = true;
+bool nativeFill = true;
+bool nativeStroke = true;
+
+enum PathMode { Original, EvenOdd, Flipping, AllHoles, NoHoles }
 
 void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flipping) {
+  NVGColor xcolor (uint clr, float a) {
+    if (a <= 0 || (clr>>24) == 0) return NVGColor.transparent;
+    if (a > 1) a = 1;
+    float ca = (clr>>24)/255.0f;
+    a *= ca;
+    if (a <= 0) return NVGColor.transparent;
+    if (a > 1) a = 1;
+    uint aa = cast(uint)(0xff*a)<<24;
+    return NVGColor.fromUint((clr&0xffffff)|aa);
+  }
+
   NVGPaint createLinearGradient (const(NSVG.Gradient)* gradient, float a) {
     float[6] inverse = void;
     float sx, sy, ex, ey;
@@ -38,11 +53,9 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
     nvgTransformPoint(&sx, &sy, inverse[], 0, 0);
     nvgTransformPoint(&ex, &ey, inverse[], 0, 1);
 
-    if (a < 0) a = 0; else if (a > 1) a = 1;
-    uint aa = cast(uint)(0xff*a)<<24;
     return nvg.linearGradient(sx, sy, ex, ey,
-      NVGColor.fromUint((gradient.stops.ptr[0].color&0xffffff)|aa),
-      NVGColor.fromUint((gradient.stops.ptr[gradient.nstops-1].color&0xffffff)|aa));
+             xcolor(gradient.stops.ptr[0].color, a),
+             xcolor(gradient.stops.ptr[gradient.nstops-1].color, a));
   }
 
   NVGPaint createRadialGradient (const(NSVG.Gradient)* gradient, float a) {
@@ -58,18 +71,34 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
     if (a < 0) a = 0; else if (a > 1) a = 1;
     uint aa = cast(uint)(0xff*a)<<24;
     return nvg.radialGradient(cx, cy, inr, outr,
-      NVGColor.fromUint((gradient.stops.ptr[0].color&0xffffff)|aa),
-      NVGColor.fromUint((gradient.stops.ptr[gradient.nstops-1].color&0xffffff)|aa));
+             xcolor(gradient.stops.ptr[0].color, a),
+             xcolor(gradient.stops.ptr[gradient.nstops-1].color, a));
   }
 
   nvg.save();
   scope(exit) nvg.restore();
-  if (pathMode == PathMode.EvenOdd) nvg.evenOddFill(); else nvg.nonZeroFill();
+
+  switch (pathMode) {
+    case PathMode.Original: break;
+    case PathMode.EvenOdd: nvg.evenOddFill(); break;
+    default: nvg.nonZeroFill(); break;
+  }
 
   // iterate shapes
   image.forEachShape((in ref NSVG.Shape shape) {
     // skip invisible shape
     if (!shape.visible) return;
+
+    if (shape.fill.type == NSVG.PaintType.None && shape.stroke.type == NSVG.PaintType.None) return;
+    if (shape.opacity <= 0) return;
+
+    if (pathMode == PathMode.Original) {
+      //{ import iv.vfs.io; writeln(shape.fillRule); }
+      final switch (shape.fillRule) {
+        case NSVG.FillRule.NonZero: nvg.nonZeroFill(); break;
+        case NSVG.FillRule.EvenOdd: nvg.evenOddFill(); break;
+      }
+    }
 
     // draw paths
     nvg.beginPath();
@@ -81,37 +110,41 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
         nvg.bezierTo(p[2], p[3], p[4], p[5], p[6], p[7]);
       }
       if (path.closed) nvg.lineTo(path.pts[0], path.pts[1]);
-      if (pathMode != PathMode.EvenOdd && pathHole) nvg.pathWinding(NVGSolidity.Hole); else nvg.pathWinding(NVGSolidity.Solid);
-      final switch (pathMode) {
-        case PathMode.EvenOdd: break;
-        case PathMode.Flipping: pathHole = !pathHole; break;
-        case PathMode.AllHoles: pathHole = true; break;
-        case PathMode.NoHoles: break;
+
+      if (pathMode != PathMode.Original) {
+        if (pathMode != PathMode.EvenOdd && pathHole) nvg.pathWinding(NVGSolidity.Hole); else nvg.pathWinding(NVGSolidity.Solid);
+        final switch (pathMode) {
+          case PathMode.Original: break;
+          case PathMode.EvenOdd: break;
+          case PathMode.Flipping: pathHole = !pathHole; break;
+          case PathMode.AllHoles: pathHole = true; break;
+          case PathMode.NoHoles: break;
+        }
       }
     });
 
     // fill
-    switch (shape.fill.type) {
-      case NSVG.PaintType.Color:
-        if (shape.opacity > 0) {
-          nvg.fillColor(NVGColor.fromUint(shape.fill.color));
+    if (nativeFill) {
+      switch (shape.fill.type) {
+        case NSVG.PaintType.Color:
+          nvg.fillColor(xcolor(shape.fill.color, shape.opacity));
           nvg.fill();
-        }
-        break;
-      case NSVG.PaintType.LinearGradient:
-        if (shape.opacity > 0) {
-          nvg.fillPaint(createLinearGradient(shape.fill.gradient, shape.opacity));
-          nvg.fill();
-        }
-        break;
-      case NSVG.PaintType.RadialGradient:
-        if (shape.opacity > 0) {
-          nvg.fillPaint(createRadialGradient(shape.fill.gradient, shape.opacity));
-          nvg.fill();
-        }
-        break;
-      default:
-        break;
+          break;
+        case NSVG.PaintType.LinearGradient:
+          if (nativeGradients) {
+            nvg.fillPaint(createLinearGradient(shape.fill.gradient, shape.opacity));
+            nvg.fill();
+          }
+          break;
+        case NSVG.PaintType.RadialGradient:
+          if (nativeGradients) {
+            nvg.fillPaint(createRadialGradient(shape.fill.gradient, shape.opacity));
+            nvg.fill();
+          }
+          break;
+        default:
+          break;
+      }
     }
 
     // set stroke/line
@@ -135,27 +168,27 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
     nvg.strokeWidth(shape.strokeWidth);
 
     // draw line
-    switch (shape.stroke.type) {
-      case NSVG.PaintType.Color:
-        if (shape.opacity > 0) {
-          nvg.strokeColor(NVGColor.fromUint(shape.stroke.color));
+    if (nativeStroke) {
+      switch (shape.stroke.type) {
+        case NSVG.PaintType.Color:
+          nvg.strokeColor(xcolor(shape.stroke.color, shape.opacity));
           nvg.stroke();
-        }
-        break;
-      case NSVG.PaintType.LinearGradient:
-        if (shape.opacity > 0) {
-          nvg.strokePaint(createLinearGradient(shape.stroke.gradient, shape.opacity));
-          nvg.stroke();
-        }
-        break;
-      case NSVG.PaintType.RadialGradient:
-        if (shape.opacity > 0) {
-          nvg.strokePaint(createRadialGradient(shape.stroke.gradient, shape.opacity));
-          nvg.stroke();
-        }
-        break;
-      default:
-        break;
+          break;
+        case NSVG.PaintType.LinearGradient:
+          if (nativeGradients) {
+            nvg.strokePaint(createLinearGradient(shape.stroke.gradient, shape.opacity));
+            nvg.stroke();
+          }
+          break;
+        case NSVG.PaintType.RadialGradient:
+          if (nativeGradients) {
+            nvg.strokePaint(createRadialGradient(shape.stroke.gradient, shape.opacity));
+            nvg.stroke();
+          }
+          break;
+        default:
+          break;
+      }
     }
   });
 }
@@ -275,6 +308,7 @@ void main (string[] args) {
   //int mxOld = -1, myOld = -1;
   PathMode pathMode = PathMode.min;
   bool svgAA = true;
+  bool help = true;
 
   sdwindow.redrawOpenGlScene = delegate () {
     // timers
@@ -297,6 +331,7 @@ void main (string[] args) {
         vg.save();
         scope(exit) vg.restore();
         vg.shapeAntiAlias = svgAA;
+        //vg.translate(0.5, 0.5);
         vg.render(svg, pathMode);
       } else {
         // draw image
@@ -315,29 +350,31 @@ void main (string[] args) {
       vg.fontSize(14);
       vg.textAlign(NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top));
 
-      {
-        vg.newPath();
-        float[4] b;
-        //vg.textBounds(10, 10, "D", b[]);
-        //printf("b=[%g, %g, %g, %g]\n", cast(double)b[0], cast(double)b[1], cast(double)b[2], cast(double)b[3]);
-        //printf("tw=%g : %g\n", cast(double)vg.textWidth("Direct"), cast(double)vg.textWidth("Image"));
-        auto tw = nvg__max(vg.textWidth("Direct"), vg.textWidth("Image"));
-        foreach (string nn; __traits(allMembers, PathMode)) tw = nvg__max(tw, vg.textWidth(nn));
-        vg.save();
-        scope(exit) vg.restore();
-        //vg.globalCompositeBlendFunc(NVGBlendFactor.ZERO, NVGBlendFactor.SRC_ALPHA);
-        //vg.scissor(0, 0, tw+1, 71);
-        vg.rect(0.5, 0.5, tw+20, 70);
-        vg.fillColor(NVGColor("#8000"));
-        vg.fill();
-        //printf("tw=%g\n", cast(double)tw);
-      }
+      if (help) {
+        {
+          vg.newPath();
+          float[4] b;
+          //vg.textBounds(10, 10, "D", b[]);
+          //printf("b=[%g, %g, %g, %g]\n", cast(double)b[0], cast(double)b[1], cast(double)b[2], cast(double)b[3]);
+          //printf("tw=%g : %g\n", cast(double)vg.textWidth("Direct"), cast(double)vg.textWidth("Image"));
+          auto tw = nvg__max(vg.textWidth("Direct"), vg.textWidth("Image"));
+          foreach (string nn; __traits(allMembers, PathMode)) tw = nvg__max(tw, vg.textWidth(nn));
+          vg.save();
+          scope(exit) vg.restore();
+          //vg.globalCompositeBlendFunc(NVGBlendFactor.ZERO, NVGBlendFactor.SRC_ALPHA);
+          //vg.scissor(0, 0, tw+1, 71);
+          vg.rect(0.5, 0.5, tw+20, 70);
+          vg.fillColor(NVGColor("#8000"));
+          vg.fill();
+          //printf("tw=%g\n", cast(double)tw);
+        }
 
-      vg.fillColor(NVGColor.white);
-      vg.text(10, 10, (useDirectRendering ? "Direct" : "Image"));
-      vg.text(10, 30, (svgAA ? "AA" : "NO AA"));
-      import std.conv : to;
-      vg.text(10, 50, pathMode.to!string);
+        vg.fillColor(NVGColor.white);
+        vg.text(10, 10, (useDirectRendering ? "Direct" : "Image"));
+        vg.text(10, 30, (svgAA ? "AA" : "NO AA"));
+        import std.conv : to;
+        vg.text(10, 50, pathMode.to!string);
+      }
 
       if (fps !is null && drawFPS) fps.render(vg, 5, 5);
     }
@@ -381,7 +418,7 @@ void main (string[] args) {
     sdwindow.redrawOpenGlScene();
   };
 
-  sdwindow.eventLoop(1000/62,
+  sdwindow.eventLoop(0 /*1000/30*/,
     delegate () {
       if (sdwindow.closed) return;
       if (doQuit) { closeWindow(); return; }
@@ -391,14 +428,18 @@ void main (string[] args) {
       if (sdwindow.closed) return;
       if (!event.pressed) return;
       if (event == "Escape" || event == "C-Q") { sdwindow.close(); return; }
-      if (event == "D" || event == "V") { useDirectRendering = !useDirectRendering; sdwindow.redrawOpenGlScene(); return; }
-      if (event == "A") { svgAA = !svgAA; if (useDirectRendering) sdwindow.redrawOpenGlScene(); return; }
-      if (event == "F") {
+      if (event == "D" || event == "V") { useDirectRendering = !useDirectRendering; sdwindow.redrawOpenGlSceneNow(); return; }
+      if (event == "A") { svgAA = !svgAA; if (useDirectRendering) sdwindow.redrawOpenGlSceneNow(); return; }
+      if (event == "M") {
         if (pathMode == PathMode.max) pathMode = PathMode.min; else ++pathMode;
-        if (useDirectRendering) sdwindow.redrawOpenGlScene();
+        if (useDirectRendering) sdwindow.redrawOpenGlSceneNow();
         return;
       }
-      if (event == "Space") { drawFPS = !drawFPS; return; }
+      if (event == "G") { nativeGradients = !nativeGradients; sdwindow.redrawOpenGlSceneNow(); return; }
+      if (event == "F") { nativeFill = !nativeFill; sdwindow.redrawOpenGlSceneNow(); return; }
+      if (event == "S") { nativeStroke = !nativeStroke; sdwindow.redrawOpenGlSceneNow(); return; }
+      //if (event == "Space") { drawFPS = !drawFPS; return; }
+      if (event == "Space") { help = !help; sdwindow.redrawOpenGlSceneNow(); return; }
     },
     delegate (MouseEvent event) {
     },
