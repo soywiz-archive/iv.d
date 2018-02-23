@@ -332,7 +332,12 @@ void main (string[] args) {
         scope(exit) vg.restore();
         vg.shapeAntiAlias = svgAA;
         //vg.translate(0.5, 0.5);
+        import std.stdio : writeln;
+        import core.time, std.datetime;
+        auto stt = MonoTime.currTime;
         vg.render(svg, pathMode);
+        auto dur = (MonoTime.currTime-stt).total!"msecs";
+        writeln("rendering took ", dur, " milliseconds (", dur/1000.0, " seconds)");
       } else {
         // draw image
         vg.save();
