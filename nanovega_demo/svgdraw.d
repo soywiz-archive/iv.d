@@ -312,19 +312,16 @@ void main (string[] args) {
   enum MaxWidth = 1900;
   enum MaxHeight = 1100;
 
-  if (GWidth > MaxWidth && GHeight > MaxHeight) {
-    scale = (GWidth > GHeight ? cast(float)MaxWidth/GWidth : cast(float)MaxHeight/GHeight);
-  } else if (GWidth > MaxWidth) {
-    scale = cast(float)MaxWidth/GWidth;
-  } else if (GHeight > MaxHeight) {
-    scale = cast(float)MaxHeight/GHeight;
-  } else if (maxSize) {
-    scale = (GWidth > GHeight ? cast(float)MaxWidth/GWidth : cast(float)MaxHeight/GHeight);
+  if (GWidth > MaxWidth || GHeight > MaxHeight || maxSize) {
+    float sx = cast(float)MaxWidth/GWidth;
+    float sy = cast(float)MaxHeight/GHeight;
+    scale = (GWidth*sx <= MaxWidth && GHeight*sx < MaxHeight ? sx : sy);
   }
 
   if (scale != 1) {
     GWidth = cast(int)(GWidth*scale);
     GHeight = cast(int)(GHeight*scale);
+    printf("new size: %d x %d\n", GWidth, GHeight);
   }
 
   if (GWidth < minw) GWidth = minw;
