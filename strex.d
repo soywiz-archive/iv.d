@@ -100,9 +100,9 @@ T atofd(T) (const(char)[] str) pure nothrow @trusted @nogc if (is(T == float) ||
   double res = 0.0, sign = 1.0;
   bool hasIntPart = false, hasFracPart = false;
 
-  char peekChar () nothrow @trusted @nogc => (s.length ? s.ptr[0] : '\0');
+  char peekChar () nothrow @trusted @nogc { pragma(inline, true); return (s.length ? s.ptr[0] : '\0'); }
   void skipChar () nothrow @trusted @nogc { pragma(inline, true); if (s.length > 0) s = s[1..$]; }
-  char getChar () nothrow @trusted @nogc { pragma(inline, true); char ch = 0; if (s.length > 0) { ch = s.ptr[0]; s = s[1..$]; } return ch; }
+  char getChar () nothrow @trusted @nogc { char ch = 0; if (s.length > 0) { ch = s.ptr[0]; s = s[1..$]; } return ch; }
 
   // optional sign
   switch (peekChar) {
@@ -148,9 +148,9 @@ T atofd(T) (const(char)[] str) pure nothrow @trusted @nogc if (is(T == float) ||
     int expPart = 0;
     while (isdigit(peekChar)) expPart = expPart*10+(getChar()-'0');
     if (epositive) {
-      foreach (; 0..expPart) res *= 10.0;
+      foreach (immutable _; 0..expPart) res *= 10.0;
     } else {
-      foreach (; 0..expPart) res /= 10.0;
+      foreach (immutable _; 0..expPart) res /= 10.0;
     }
   }
 
