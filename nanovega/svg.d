@@ -1032,7 +1032,7 @@ Parser* nsvg__createParser () {
   p.attr[0].strokeLineJoin = NSVG.LineJoin.Miter;
   p.attr[0].strokeLineCap = NSVG.LineCap.Butt;
   p.attr[0].miterLimit = 4;
-  p.attr[0].fillRule = NSVG.FillRule.NonZero;
+  p.attr[0].fillRule = NSVG.FillRule.EvenOdd;
   p.attr[0].hasFill = 1;
   p.attr[0].visible = 1;
 
@@ -2037,7 +2037,7 @@ NSVG.FillRule nsvg__parseFillRule (const(char)[] str) {
   if (str == "nonzero") return NSVG.FillRule.NonZero;
   if (str == "evenodd") return NSVG.FillRule.EvenOdd;
   // TODO: handle inherit.
-  return NSVG.FillRule.NonZero;
+  return NSVG.FillRule.EvenOdd;
 }
 
 
