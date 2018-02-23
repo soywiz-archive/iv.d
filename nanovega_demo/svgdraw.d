@@ -291,20 +291,22 @@ void main (string[] args) {
   }
   if (fname.length == 0) assert(0, "no filename");
 
-  VFile infile;
+  static if (NanoSVGHasIVVFS) {
+    VFile infile;
 
-  if (fname.getExtension.strEquCI(".zip")) {
-    auto did = vfsAddPak!("normal", true)(fname, ":::");
-    vfsForEachFileInPak(did, delegate (in ref de) {
-      if (de.name.getExtension.strEquCI(".svg")) {
-        //{ import iv.vfs.io; writeln(de.name); }
-        infile = VFile(de.name);
-        return 1;
-      }
-      return 0;
-    });
-  } else {
-    infile = VFile(fname);
+    if (fname.getExtension.strEquCI(".zip")) {
+      auto did = vfsAddPak!("normal", true)(fname, ":::");
+      vfsForEachFileInPak(did, delegate (in ref de) {
+        if (de.name.getExtension.strEquCI(".svg")) {
+          //{ import iv.vfs.io; writeln(de.name); }
+          infile = VFile(de.name);
+          return 1;
+        }
+        return 0;
+      });
+    } else {
+      infile = VFile(fname);
+    }
   }
 
   NSVG* svg;
@@ -313,7 +315,11 @@ void main (string[] args) {
     import std.stdio : writeln;
     import core.time, std.datetime;
     auto stt = MonoTime.currTime;
-    svg = nsvgParseFromFile(infile, "px", 96, defw, defh);
+    static if (NanoSVGHasIVVFS) {
+      svg = nsvgParseFromFile(infile, "px", 96, defw, defh);
+    } else {
+      svg = nsvgParseFromFile(fname, "px", 96, defw, defh);
+    }
     if (svg is null) assert(0, "svg parsing error");
     auto dur = (MonoTime.currTime-stt).total!"msecs";
     writeln("loading took ", dur, " milliseconds (", dur/1000.0, " seconds)");
@@ -355,7 +361,9 @@ void main (string[] args) {
   auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoSVG", OpenGlOptions.yes, Resizability.fixedSize);
   //sdwindow.hideCursor();
 
-  sdwindow.closeQuery = delegate () { doQuit = true; };
+  static if (is(typeof(&sdwindow.closeQuery))) {
+    sdwindow.closeQuery = delegate () { doQuit = true; };
+  }
 
   void closeWindow () {
     if (!sdwindow.closed && vg !is null) {
