@@ -30,10 +30,11 @@ import arsd.jpeg;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-bool nativeGradients = true;
-bool nativeFill = true;
-bool nativeStroke = true;
-bool nativeOnlyBeziers = false;
+__gshared int bezierCount = 0;
+__gshared bool nativeGradients = true;
+__gshared bool nativeFill = true;
+__gshared bool nativeStroke = true;
+__gshared bool nativeOnlyBeziers = false;
 
 enum PathMode { Original, EvenOdd, Flipping, AllHoles, NoHoles }
 
@@ -115,6 +116,7 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
           if (args.length == 2) {
             nvg.moveTo(args);
           } else {
+            ++bezierCount;
             nvg.bezierTo(args);
           }
         });
@@ -124,8 +126,8 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
           final switch (cmd) {
             case NSVG.Command.MoveTo: nvg.moveTo(args); break;
             case NSVG.Command.LineTo: nvg.lineTo(args); break;
-            case NSVG.Command.QuadTo: nvg.quadTo(args); break;
-            case NSVG.Command.BezierTo: nvg.bezierTo(args); break;
+            case NSVG.Command.QuadTo: nvg.quadTo(args); ++bezierCount; break;
+            case NSVG.Command.BezierTo: nvg.bezierTo(args); ++bezierCount; break;
           }
         });
       }
@@ -411,9 +413,10 @@ void main (string[] args) {
         auto stt = MonoTime.currTime;
         vg.translate(addw, addh);
         vg.scale(scale, scale);
+        bezierCount = 0;
         vg.render(svg, pathMode);
         auto dur = (MonoTime.currTime-stt).total!"msecs";
-        writeln("*** rendering took ", dur, " milliseconds (", dur/1000.0, " seconds)");
+        writeln("*** rendering took ", dur, " milliseconds (", dur/1000.0, " seconds), ", bezierCount, " beziers rendered.");
       } else {
         // draw image
         if (vgimg == 0) {
@@ -501,6 +504,7 @@ void main (string[] args) {
     enum FNN = "Verdana:noaa"; //"/home/ketmar/ttf/ms/verdana.ttf";
     vg.createFont("sans", FNN);
     fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
+    { import iv.vfs.io; writeln("bezier tesselator: ", vg.tesselation); }
     sdwindow.redrawOpenGlScene();
   };
 
@@ -525,6 +529,12 @@ void main (string[] args) {
       if (event == "F") { nativeFill = !nativeFill; sdwindow.redrawOpenGlSceneNow(); return; }
       if (event == "S") { nativeStroke = !nativeStroke; sdwindow.redrawOpenGlSceneNow(); return; }
       if (event == "B") { nativeOnlyBeziers = !nativeOnlyBeziers; sdwindow.redrawOpenGlSceneNow(); return; }
+      if (event == "T") {
+        vg.tesselation = cast(NVGTesselation)(vg.tesselation == NVGTesselation.max ? NVGTesselation.min : vg.tesselation+1);
+        { import iv.vfs.io; writeln("bezier tesselator: ", vg.tesselation); }
+        sdwindow.redrawOpenGlSceneNow();
+        return;
+      }
       //if (event == "Space") { drawFPS = !drawFPS; return; }
       if (event == "Space") { help = !help; sdwindow.redrawOpenGlSceneNow(); return; }
     },

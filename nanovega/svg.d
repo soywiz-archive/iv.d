@@ -3982,6 +3982,21 @@ float nsvg__normalize (float *x, float* y) {
 void nsvg__flattenCubicBez (NSVGrasterizer r, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) {
   if (level > 10) return;
 
+  // check for collinear points, and use AFD tesselator on such curves (it is WAY faster for this case)
+  version(none) {
+    if (level == 0) {
+      static bool collinear (in float v0x, in float v0y, in float v1x, in float v1y, in float v2x, in float v2y) nothrow @trusted @nogc {
+        immutable float cz = (v1x-v0x)*(v2y-v0y)-(v2x-v0x)*(v1y-v0y);
+        return (fabsf(cz*cz) <= 0.01f);
+      }
+      if (collinear(x1, y1, x2, y2, x3, y3) && collinear(x2, y2, x3, y3, x3, y4)) {
+        //{ import core.stdc.stdio; printf("AFD fallback!\n"); }
+        nsvg__flattenCubicBezAFD(r, x1, y1, x2, y2, x3, y3, x4, y4, type);
+        return;
+      }
+    }
+  }
+
   immutable x12 = (x1+x2)*0.5f;
   immutable y12 = (y1+y2)*0.5f;
   immutable x23 = (x2+x3)*0.5f;
@@ -4008,6 +4023,106 @@ void nsvg__flattenCubicBez (NSVGrasterizer r, in float x1, in float y1, in float
 
   nsvg__flattenCubicBez(r, x1, y1, x12, y12, x123, y123, x1234, y1234, level+1, 0);
   nsvg__flattenCubicBez(r, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
+}
+
+// Adaptive forward differencing for bezier tesselation.
+// See Lien, Sheue-Ling, Michael Shantz, and Vaughan Pratt.
+// "Adaptive forward differencing for rendering curves and surfaces."
+// ACM SIGGRAPH Computer Graphics. Vol. 21. No. 4. ACM, 1987.
+// original code by Taylor Holliday <taylor@audulus.com>
+void nsvg__flattenCubicBezAFD (NSVGrasterizer r, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int type) nothrow @trusted @nogc {
+  enum AFD_ONE = (1<<10);
+
+  // power basis
+  immutable float ax = -x1+3*x2-3*x3+x4;
+  immutable float ay = -y1+3*y2-3*y3+y4;
+  immutable float bx = 3*x1-6*x2+3*x3;
+  immutable float by = 3*y1-6*y2+3*y3;
+  immutable float cx = -3*x1+3*x2;
+  immutable float cy = -3*y1+3*y2;
+
+  // Transform to forward difference basis (stepsize 1)
+  float px = x1;
+  float py = y1;
+  float dx = ax+bx+cx;
+  float dy = ay+by+cy;
+  float ddx = 6*ax+2*bx;
+  float ddy = 6*ay+2*by;
+  float dddx = 6*ax;
+  float dddy = 6*ay;
+
+  //printf("dx: %f, dy: %f\n", dx, dy);
+  //printf("ddx: %f, ddy: %f\n", ddx, ddy);
+  //printf("dddx: %f, dddy: %f\n", dddx, dddy);
+
+  int t = 0;
+  int dt = AFD_ONE;
+
+  immutable float tol = r.tessTol*4;
+
+  while (t < AFD_ONE) {
+    // Flatness measure.
+    float d = ddx*ddx+ddy*ddy+dddx*dddx+dddy*dddy;
+
+    // printf("d: %f, th: %f\n", d, th);
+
+    // Go to higher resolution if we're moving a lot or overshooting the end.
+    while ((d > tol && dt > 1) || (t+dt > AFD_ONE)) {
+      // printf("up\n");
+
+      // Apply L to the curve. Increase curve resolution.
+      dx = 0.5f*dx-(1.0f/8.0f)*ddx+(1.0f/16.0f)*dddx;
+      dy = 0.5f*dy-(1.0f/8.0f)*ddy+(1.0f/16.0f)*dddy;
+      ddx = (1.0f/4.0f)*ddx-(1.0f/8.0f)*dddx;
+      ddy = (1.0f/4.0f)*ddy-(1.0f/8.0f)*dddy;
+      dddx = (1.0f/8.0f)*dddx;
+      dddy = (1.0f/8.0f)*dddy;
+
+      // Half the stepsize.
+      dt >>= 1;
+
+      // Recompute d
+      d = ddx*ddx+ddy*ddy+dddx*dddx+dddy*dddy;
+    }
+
+    // Go to lower resolution if we're really flat
+    // and we aren't going to overshoot the end.
+    // XXX: tol/32 is just a guess for when we are too flat.
+    while ((d > 0 && d < tol/32.0f && dt < AFD_ONE) && (t+2*dt <= AFD_ONE)) {
+      // printf("down\n");
+
+      // Apply L^(-1) to the curve. Decrease curve resolution.
+      dx = 2*dx+ddx;
+      dy = 2*dy+ddy;
+      ddx = 4*ddx+4*dddx;
+      ddy = 4*ddy+4*dddy;
+      dddx = 8*dddx;
+      dddy = 8*dddy;
+
+      // Double the stepsize.
+      dt <<= 1;
+
+      // Recompute d
+      d = ddx*ddx+ddy*ddy+dddx*dddx+dddy*dddy;
+    }
+
+    // Forward differencing.
+    px += dx;
+    py += dy;
+    dx += ddx;
+    dy += ddy;
+    ddx += dddx;
+    ddy += dddy;
+
+    // Output a point.
+    nsvg__addPathPoint(r, px, py, (t > 0 ? type : 0));
+
+    // Advance along the curve.
+    t += dt;
+
+    // Ensure we don't overshoot.
+    assert(t <= AFD_ONE);
+  }
 }
 
 void nsvg__flattenShape (NSVGrasterizer r, const(NSVG.Shape)* shape, float scale) {
