@@ -216,7 +216,7 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
 // ////////////////////////////////////////////////////////////////////////// //
 __gshared int GWidth = 640;
 __gshared int GHeight = 480;
-__gshared bool useDirectRendering = false;
+__gshared bool useDirectRendering = true;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -343,7 +343,7 @@ void main (string[] args) {
   if (GWidth < minw) GWidth = minw;
   if (GHeight < minh) GHeight = minh;
 
-  int vgimg;
+  int vgimg = 0;
 
   bool doQuit = false;
   bool drawFPS = false;
@@ -360,7 +360,7 @@ void main (string[] args) {
   void closeWindow () {
     if (!sdwindow.closed && vg !is null) {
       vg.deleteImage(vgimg);
-      vgimg = -1;
+      vgimg = 0;
       vg.deleteGL2();
       vg = null;
       sdwindow.close();
@@ -408,6 +408,27 @@ void main (string[] args) {
         writeln("*** rendering took ", dur, " milliseconds (", dur/1000.0, " seconds)");
       } else {
         // draw image
+        if (vgimg == 0) {
+          // image is not rasterized, do it now
+          ubyte[] svgraster;
+          scope(exit) svgraster.destroy;
+          {
+            import std.stdio : writeln;
+            auto rst = nsvgCreateRasterizer();
+            scope(exit) rst.kill();
+            svgraster = new ubyte[](GWidth*GHeight*4);
+            import core.time, std.datetime;
+            auto stt = MonoTime.currTime;
+            writeln("rasterizing...");
+            rst.rasterize(svg,
+              addw/2, addh/2, // ofs
+              scale, // scale
+              svgraster.ptr, GWidth, GHeight);
+            auto dur = (MonoTime.currTime-stt).total!"msecs";
+            writeln("rasterizing took ", dur, " milliseconds (", dur/1000.0, " seconds)");
+          }
+          vgimg = vg.createImageRGBA(GWidth, GHeight, svgraster[]);
+        }
         vg.save();
         scope(exit) vg.restore();
         vg.beginPath();
@@ -471,26 +492,6 @@ void main (string[] args) {
     }
     enum FNN = "Verdana:noaa"; //"/home/ketmar/ttf/ms/verdana.ttf";
     vg.createFont("sans", FNN);
-    {
-      ubyte[] svgraster;
-      scope(exit) svgraster.destroy;
-      {
-        import std.stdio : writeln;
-        auto rst = nsvgCreateRasterizer();
-        scope(exit) rst.kill();
-        svgraster = new ubyte[](GWidth*GHeight*4);
-        import core.time, std.datetime;
-        auto stt = MonoTime.currTime;
-        writeln("rasterizing...");
-        rst.rasterize(svg,
-          addw/2, addh/2, // ofs
-          scale, // scale
-          svgraster.ptr, GWidth, GHeight);
-        auto dur = (MonoTime.currTime-stt).total!"msecs";
-        writeln("rasterizing took ", dur, " milliseconds (", dur/1000.0, " seconds)");
-      }
-      vgimg = vg.createImageRGBA(GWidth, GHeight, svgraster[]);
-    }
     fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
     sdwindow.redrawOpenGlScene();
   };
