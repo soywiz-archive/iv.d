@@ -313,8 +313,8 @@ void main (string[] args) {
   enum MaxHeight = 1100;
 
   if (GWidth > MaxWidth || GHeight > MaxHeight || maxSize) {
-    float sx = cast(float)MaxWidth/GWidth;
-    float sy = cast(float)MaxHeight/GHeight;
+    float sx = cast(float)(MaxWidth-4)/GWidth;
+    float sy = cast(float)(MaxHeight-4)/GHeight;
     scale = (GWidth*sx <= MaxWidth && GHeight*sx < MaxHeight ? sx : sy);
   }
 
