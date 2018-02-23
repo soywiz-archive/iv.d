@@ -690,8 +690,8 @@ public void drawSpinner (NVGContext vg, float cx, float cy, float r, float t) {
   vg.save();
 
   vg.beginPath();
-  vg.arc(cx, cy, r0, a0, a1, NVGWinding.CW);
-  vg.arc(cx, cy, r1, a1, a0, NVGWinding.CCW);
+  vg.arc(NVGWinding.CW, cx, cy, r0, a0, a1);
+  vg.arc(NVGWinding.CCW, cx, cy, r1, a1, a0);
   vg.closePath();
   ax = cx+cosf(a0)*(r0+r1)*0.5f;
   ay = cy+sinf(a0)*(r0+r1)*0.5f;
@@ -851,8 +851,8 @@ public void drawColorwheel (NVGContext vg, float x, float y, float w, float h, f
     float a0 = cast(float)i/6.0f*NVG_PI*2.0f-aeps;
     float a1 = cast(float)(i+1.0f)/6.0f*NVG_PI*2.0f+aeps;
     vg.beginPath();
-    vg.arc(cx, cy, r0, a0, a1, NVGWinding.CW);
-    vg.arc(cx, cy, r1, a1, a0, NVGWinding.CCW);
+    vg.arc(NVGWinding.CW, cx, cy, r0, a0, a1);
+    vg.arc(NVGWinding.CCW, cx, cy, r1, a1, a0);
     vg.closePath();
     ax = cx+cosf(a0)*(r0+r1)*0.5f;
     ay = cy+sinf(a0)*(r0+r1)*0.5f;

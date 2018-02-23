@@ -33,6 +33,7 @@ import arsd.jpeg;
 bool nativeGradients = true;
 bool nativeFill = true;
 bool nativeStroke = true;
+bool nativeOnlyBeziers = false;
 
 enum PathMode { Original, EvenOdd, Flipping, AllHoles, NoHoles }
 
@@ -107,12 +108,27 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
     nvg.beginPath();
     bool pathHole = false;
     shape.forEachPath((in ref NSVG.Path path) {
-      nvg.moveTo(path.pts[0], path.pts[1]);
-      for (int i = 0; i < path.npts-1; i += 3) {
-        const(float)* p = &path.pts[i*2];
-        nvg.bezierTo(p[2], p[3], p[4], p[5], p[6], p[7]);
+      if (nativeOnlyBeziers) {
+        // get 2-arg for `moveTo` and 6-arg for `bezierTo`
+        path.asCubics!true(delegate (const(float)[] args) nothrow @trusted @nogc {
+          assert(args.length == 2 || args.length == 6);
+          if (args.length == 2) {
+            nvg.moveTo(args);
+          } else {
+            nvg.bezierTo(args);
+          }
+        });
+        if (path.closed) nvg.lineTo(path.startX, path.startY);
+      } else {
+        path.forEachCommand!true(delegate (NSVG.Command cmd, const(float)[] args) nothrow @trusted @nogc {
+          final switch (cmd) {
+            case NSVG.Command.MoveTo: nvg.moveTo(args); break;
+            case NSVG.Command.LineTo: nvg.lineTo(args); break;
+            case NSVG.Command.QuadTo: nvg.quadTo(args); break;
+            case NSVG.Command.BezierTo: nvg.bezierTo(args); break;
+          }
+        });
       }
-      if (path.closed) nvg.lineTo(path.pts[0], path.pts[1]);
 
       if (pathMode != PathMode.Original) {
         if (pathMode != PathMode.EvenOdd && pathHole) nvg.pathWinding(NVGSolidity.Hole); else nvg.pathWinding(NVGSolidity.Solid);
@@ -389,7 +405,7 @@ void main (string[] args) {
         vg.scale(scale, scale);
         vg.render(svg, pathMode);
         auto dur = (MonoTime.currTime-stt).total!"msecs";
-        writeln("rendering took ", dur, " milliseconds (", dur/1000.0, " seconds)");
+        writeln("*** rendering took ", dur, " milliseconds (", dur/1000.0, " seconds)");
       } else {
         // draw image
         vg.save();
@@ -499,6 +515,7 @@ void main (string[] args) {
       if (event == "G") { nativeGradients = !nativeGradients; sdwindow.redrawOpenGlSceneNow(); return; }
       if (event == "F") { nativeFill = !nativeFill; sdwindow.redrawOpenGlSceneNow(); return; }
       if (event == "S") { nativeStroke = !nativeStroke; sdwindow.redrawOpenGlSceneNow(); return; }
+      if (event == "B") { nativeOnlyBeziers = !nativeOnlyBeziers; sdwindow.redrawOpenGlSceneNow(); return; }
       //if (event == "Space") { drawFPS = !drawFPS; return; }
       if (event == "Space") { help = !help; sdwindow.redrawOpenGlSceneNow(); return; }
     },
