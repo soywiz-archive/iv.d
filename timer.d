@@ -16,9 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 // this essentially duplicates std.datetime.StopWatch, but meh...
-module iv.timer /*is aliced*/;
+module iv.timer;
 
-import iv.alice;
 import iv.pxclock;
 
 
@@ -37,29 +36,9 @@ public:
 
 public:
   string toString () const @trusted {
-    import core.stdc.stdio : snprintf;
     char[128] buf = void;
-    ulong d;
-    final switch (mState) {
-      case State.Stopped: case State.Paused: d = mAccumMicro; break;
-      case State.Running: d = mAccumMicro+(clockMicro-mSTimeMicro); break;
-    }
-    immutable uint micro = cast(uint)(d%1000);
-    d /= 1000;
-    immutable uint milli = cast(uint)(d%1000);
-    d /= 1000;
-    immutable uint seconds = cast(uint)(d%60);
-    d /= 60;
-    immutable uint minutes = cast(uint)(d%60);
-    d /= 60;
-    immutable uint hours = cast(uint)d;
-    usize len;
-         if (hours) len = snprintf(buf.ptr, buf.length, "%u:%02u:%02u.%03u", hours, minutes, seconds, milli);
-    else if (minutes) len = snprintf(buf.ptr, buf.length, "%u:%02u.%03u", minutes, seconds, milli);
-    else if (seconds) len = snprintf(buf.ptr, buf.length, "%u.%03u", seconds, milli);
-    else if (micro != 0) len = snprintf(buf.ptr, buf.length, "%ums:%umcs", milli, micro);
-    else len = snprintf(buf.ptr, buf.length, "%ums", milli);
-    return buf.ptr[0..len].idup;
+    auto t = toBuffer(buf[]);
+    return t.idup;
   }
 
 nothrow @trusted @nogc:
@@ -125,5 +104,34 @@ nothrow @trusted @nogc:
     } else if (mState == State.Stopped) {
       start();
     }
+  }
+
+  // 128 chars should be enough for everyone
+  char[] toBuffer (char[] dest) const nothrow @trusted @nogc {
+    import core.stdc.stdio : snprintf;
+    char[128] buf = void;
+    ulong d;
+    final switch (mState) {
+      case State.Stopped: case State.Paused: d = mAccumMicro; break;
+      case State.Running: d = mAccumMicro+(clockMicro-mSTimeMicro); break;
+    }
+    immutable uint micro = cast(uint)(d%1000);
+    d /= 1000;
+    immutable uint milli = cast(uint)(d%1000);
+    d /= 1000;
+    immutable uint seconds = cast(uint)(d%60);
+    d /= 60;
+    immutable uint minutes = cast(uint)(d%60);
+    d /= 60;
+    immutable uint hours = cast(uint)d;
+    uint len;
+         if (hours) len = cast(uint)snprintf(buf.ptr, buf.length, "%u:%02u:%02u.%03u", hours, minutes, seconds, milli);
+    else if (minutes) len = cast(uint)snprintf(buf.ptr, buf.length, "%u:%02u.%03u", minutes, seconds, milli);
+    else if (seconds) len = cast(uint)snprintf(buf.ptr, buf.length, "%u.%03u", seconds, milli);
+    else if (micro != 0) len = cast(uint)snprintf(buf.ptr, buf.length, "%ums:%umcs", milli, micro);
+    else len = cast(uint)snprintf(buf.ptr, buf.length, "%ums", milli);
+    if (len > dest.length) len = dest.length;
+    dest.ptr[0..len] = buf.ptr[0..len];
+    return dest.ptr[0..len];
   }
 }
