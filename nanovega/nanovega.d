@@ -180,6 +180,7 @@ version(Posix) {
   }
 }
 
+//version = nanovg_bench_flatten;
 
 public:
 alias NVG_PI = PI;
@@ -2219,19 +2220,27 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy,
 public alias NVGSectionDummy06 = void;
 
 /// Sets the current scissor rectangle. The scissor rectangle is transformed by the current transform.
-public void scissor (NVGContext ctx, float x, float y, float w, float h) nothrow @trusted @nogc {
+/// Arguments: [x, y, w, h]*
+public void scissor (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 4;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `scissor()` call");
+  if (args.length < ArgC) return;
   NVGstate* state = nvg__getState(ctx);
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable x = *aptr++;
+    immutable y = *aptr++;
+    immutable w = nvg__max(0.0f, *aptr++);
+    immutable h = nvg__max(0.0f, *aptr++);
 
-  w = nvg__max(0.0f, w);
-  h = nvg__max(0.0f, h);
+    nvgTransformIdentity(state.scissor.xform[]);
+    state.scissor.xform.ptr[4] = x+w*0.5f;
+    state.scissor.xform.ptr[5] = y+h*0.5f;
+    nvgTransformMultiply(state.scissor.xform[], state.xform[]);
 
-  nvgTransformIdentity(state.scissor.xform[]);
-  state.scissor.xform.ptr[4] = x+w*0.5f;
-  state.scissor.xform.ptr[5] = y+h*0.5f;
-  nvgTransformMultiply(state.scissor.xform[], state.xform[]);
-
-  state.scissor.extent.ptr[0] = w*0.5f;
-  state.scissor.extent.ptr[1] = h*0.5f;
+    state.scissor.extent.ptr[0] = w*0.5f;
+    state.scissor.extent.ptr[1] = h*0.5f;
+  }
 }
 
 void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) nothrow @trusted @nogc {
@@ -2251,35 +2260,47 @@ void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float 
  * the current one, the intersection will be done between the specified
  * rectangle and the previous scissor rectangle transformed in the current
  * transform space. The resulting shape is always rectangle.
+ *
+ * Arguments: [x, y, w, h]*
  */
-public void intersectScissor (NVGContext ctx, float x, float y, float w, float h) nothrow @trusted @nogc {
+public void intersectScissor (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 4;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `intersectScissor()` call");
+  if (args.length < ArgC) return;
   NVGstate* state = nvg__getState(ctx);
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable x = *aptr++;
+    immutable y = *aptr++;
+    immutable w = *aptr++;
+    immutable h = *aptr++;
 
-  // If no previous scissor has been set, set the scissor as current scissor.
-  if (state.scissor.extent.ptr[0] < 0) {
-    ctx.scissor(x, y, w, h);
-    return;
+    // If no previous scissor has been set, set the scissor as current scissor.
+    if (state.scissor.extent.ptr[0] < 0) {
+      ctx.scissor(x, y, w, h);
+      continue;
+    }
+
+    float[6] pxform = void;
+    float[6] invxorm = void;
+    float[4] rect = void;
+
+    // Transform the current scissor rect into current transform space.
+    // If there is difference in rotation, this will be approximation.
+    memcpy(pxform.ptr, state.scissor.xform.ptr, float.sizeof*6);
+    immutable float ex = state.scissor.extent.ptr[0];
+    immutable float ey = state.scissor.extent.ptr[1];
+    nvgTransformInverse(invxorm[], state.xform[]);
+    nvgTransformMultiply(pxform[], invxorm[]);
+    immutable float tex = ex*nvg__absf(pxform.ptr[0])+ey*nvg__absf(pxform.ptr[2]);
+    immutable float tey = ex*nvg__absf(pxform.ptr[1])+ey*nvg__absf(pxform.ptr[3]);
+
+    // Intersect rects.
+    nvg__isectRects(rect.ptr, pxform.ptr[4]-tex, pxform.ptr[5]-tey, tex*2, tey*2, x, y, w, h);
+
+    //ctx.scissor(rect.ptr[0], rect.ptr[1], rect.ptr[2], rect.ptr[3]);
+    ctx.scissor(rect.ptr[0..4]);
   }
-
-  float[6] pxform = void;
-  float[6] invxorm = void;
-  float[4] rect = void;
-  //float ex, ey, tex, tey;
-
-  // Transform the current scissor rect into current transform space.
-  // If there is difference in rotation, this will be approximation.
-  memcpy(pxform.ptr, state.scissor.xform.ptr, float.sizeof*6);
-  immutable float ex = state.scissor.extent.ptr[0];
-  immutable float ey = state.scissor.extent.ptr[1];
-  nvgTransformInverse(invxorm[], state.xform[]);
-  nvgTransformMultiply(pxform[], invxorm[]);
-  immutable float tex = ex*nvg__absf(pxform.ptr[0])+ey*nvg__absf(pxform.ptr[2]);
-  immutable float tey = ex*nvg__absf(pxform.ptr[1])+ey*nvg__absf(pxform.ptr[3]);
-
-  // Intersect rects.
-  nvg__isectRects(rect.ptr, pxform.ptr[4]-tex, pxform.ptr[5]-tey, tex*2, tey*2, x, y, w, h);
-
-  ctx.scissor(rect.ptr[0], rect.ptr[1], rect.ptr[2], rect.ptr[3]);
 }
 
 /// Reset and disables scissoring.
@@ -2312,35 +2333,47 @@ float nvg__distPtSeg (float x, float y, float px, float py, float qx, float qy) 
   return dx*dx+dy*dy;
 }
 
-void nvg__appendCommands (NVGContext ctx, const(float)[] vals...) nothrow @trusted @nogc {
+void nvg__appendCommands(bool useCommand=true) (NVGContext ctx, Command acmd, const(float)[] vals...) nothrow @trusted @nogc {
   int nvals = cast(int)vals.length;
-  assert(nvals != 0);
+  static if (useCommand) {
+    enum addon = 1;
+  } else {
+    enum addon = 0;
+    if (nvals == 0) return; // nothing to do
+  }
 
   NVGstate* state = nvg__getState(ctx);
 
-  if (ctx.ncommands+nvals > ctx.ccommands) {
+  if (ctx.ncommands+nvals+addon > ctx.ccommands) {
     //int ccommands = ctx.ncommands+nvals+ctx.ccommands/2;
-    int ccommands = ((ctx.ncommands+nvals)|0xfff)+1;
+    int ccommands = ((ctx.ncommands+(nvals+addon))|0xfff)+1;
     float* commands = cast(float*)realloc(ctx.commands, float.sizeof*ccommands);
     if (commands is null) assert(0, "NanoVega: out of memory");
     ctx.commands = commands;
     ctx.ccommands = ccommands;
-    assert(ctx.ncommands+nvals <= ctx.ccommands);
+    assert(ctx.ncommands+(nvals+addon) <= ctx.ccommands);
   }
 
-  if (cast(int)vals.ptr[0] != Command.Close && cast(int)vals.ptr[0] != Command.Winding) {
-    assert(nvals >= 3);
+  static if (!useCommand) acmd = cast(Command)vals.ptr[0];
+
+  if (acmd != Command.Close && acmd != Command.Winding) {
+    //assert(nvals+addon >= 3);
     ctx.commandx = vals.ptr[nvals-2];
     ctx.commandy = vals.ptr[nvals-1];
   }
 
   // copy commands
   float* vp = ctx.commands+ctx.ncommands;
-  memcpy(vp, vals.ptr, nvals*float.sizeof);
-  ctx.ncommands += nvals;
+  static if (useCommand) {
+    vp[0] = cast(float)acmd;
+    if (nvals > 0) memcpy(vp+1, vals.ptr, nvals*float.sizeof);
+  } else {
+    memcpy(vp, vals.ptr, nvals*float.sizeof);
+  }
+  ctx.ncommands += nvals+addon;
 
   // transform commands
-  int i = nvals;
+  int i = nvals+addon;
   while (i > 0) {
     int nlen = 1;
     final switch (cast(Command)(*vp)) {
@@ -2537,7 +2570,14 @@ void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2
   nvg__tesselateBezier(ctx, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
 }
 
+version(nanovg_bench_flatten) import iv.timer : Timer;
+
 void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
+  version(nanovg_bench_flatten) {
+    Timer timer;
+    char[128] tmbuf;
+    int bzcount;
+  }
   NVGpathCache* cache = ctx.cache;
   NVGpoint* last;
   NVGpoint* p0;
@@ -2551,6 +2591,7 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
   if (cache.npaths > 0) return;
 
   // flatten
+  version(nanovg_bench_flatten) timer.restart();
   int i = 0;
   while (i < ctx.ncommands) {
     final switch (cast(Command)ctx.commands[i]) {
@@ -2575,6 +2616,7 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
           cp2 = &ctx.commands[i+3];
           p = &ctx.commands[i+5];
           nvg__tesselateBezier(ctx, last.x, last.y, cp1[0], cp1[1], cp2[0], cp2[1], p[0], p[1], 0, PointFlag.Corner);
+          version(nanovg_bench_flatten) ++bzcount;
         }
         i += 7;
         break;
@@ -2590,11 +2632,18 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
         break;
     }
   }
+  version(nanovg_bench_flatten) {{
+    timer.stop();
+    auto xb = timer.toBuffer(tmbuf[]);
+    import core.stdc.stdio : printf;
+    printf("flattening time: [%.*s] (%d beziers)\n", cast(uint)xb.length, xb.ptr, bzcount);
+  }}
 
   cache.bounds.ptr[0] = cache.bounds.ptr[1] = 1e6f;
   cache.bounds.ptr[2] = cache.bounds.ptr[3] = -1e6f;
 
   // calculate the direction and length of line segments
+  version(nanovg_bench_flatten) timer.restart();
   foreach (int j; 0..cache.npaths) {
     path = &cache.paths[j];
     pts = &cache.points[path.first];
@@ -2629,6 +2678,12 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
       p0 = p1++;
     }
   }
+  version(nanovg_bench_flatten) {{
+    timer.stop();
+    auto xb = timer.toBuffer(tmbuf[]);
+    import core.stdc.stdio : printf;
+    printf("segment calculation time: [%.*s]\n", cast(uint)xb.length, xb.ptr);
+  }}
 }
 
 int nvg__curveDivs (float r, float arc, float tol) nothrow @trusted @nogc {
@@ -3165,85 +3220,125 @@ public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
 public alias newPath = beginPath; /// Ditto.
 
 /// Starts new sub-path with specified point as first point.
-public void moveTo (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, Command.MoveTo, x, y);
+/// Arguments: [x, y]*
+public void moveTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 2;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `moveTo()` call");
+  if (args.length < ArgC) return;
+  nvg__appendCommands(ctx, Command.MoveTo, args[$-2..$]);
 }
 
 /// Adds line segment from the last point in the path to the specified point.
-public void lineTo (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, Command.LineTo, x, y);
+/// Arguments: [x, y]*
+public void lineTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 2;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `lineTo()` call");
+  if (args.length < ArgC) return;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    nvg__appendCommands(ctx, Command.LineTo, args.ptr[idx*ArgC..idx*ArgC+ArgC]);
+  }
 }
 
 /// Adds cubic bezier segment from last point in the path via two control points to the specified point.
-public void bezierTo (NVGContext ctx, in float c1x, in float c1y, in float c2x, in float c2y, in float x, in float y) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx, Command.BezierTo, c1x, c1y, c2x, c2y, x, y);
+/// Arguments: [c1x, c1y, c2x, c2y, x, y]*
+public void bezierTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 6;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `bezierTo()` call");
+  if (args.length < ArgC) return;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    nvg__appendCommands(ctx, Command.BezierTo, args.ptr[idx*ArgC..idx*ArgC+ArgC]);
+  }
 }
 
 /// Adds quadratic bezier segment from last point in the path via a control point to the specified point.
-public void quadTo (NVGContext ctx, in float cx, in float cy, in float x, in float y) nothrow @trusted @nogc {
-  immutable float x0 = ctx.commandx;
-  immutable float y0 = ctx.commandy;
-  nvg__appendCommands(ctx,
-    Command.BezierTo,
-    x0+2.0f/3.0f*(cx-x0), y0+2.0f/3.0f*(cy-y0),
-    x+2.0f/3.0f*(cx-x), y+2.0f/3.0f*(cy-y),
-    x, y,
-  );
+/// Arguments: [cx, cy, x, y]*
+public void quadTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 4;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `quadTo()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable float x0 = ctx.commandx;
+    immutable float y0 = ctx.commandy;
+    immutable float cx = *aptr++;
+    immutable float cy = *aptr++;
+    immutable float x = *aptr++;
+    immutable float y = *aptr++;
+    nvg__appendCommands(ctx,
+      Command.BezierTo,
+      x0+2.0f/3.0f*(cx-x0), y0+2.0f/3.0f*(cy-y0),
+      x+2.0f/3.0f*(cx-x), y+2.0f/3.0f*(cy-y),
+      x, y,
+    );
+  }
 }
 
 /// Adds an arc segment at the corner defined by the last path point, and two specified points.
-public void arcTo (NVGContext ctx, in float x1, in float y1, in float x2, in float y2, in float radius) nothrow @trusted @nogc {
-  float x0 = ctx.commandx;
-  float y0 = ctx.commandy;
-  float cx, cy, a0, a1;
-  NVGWinding dir;
+/// Arguments: [x1, y1, x2, y2, radius]*
+public void arcTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 5;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `arcTo()` call");
+  if (args.length < ArgC) return;
 
   if (ctx.ncommands == 0) return;
 
-  // Handle degenerate cases.
-  if (nvg__ptEquals(x0, y0, x1, y1, ctx.distTol) ||
-      nvg__ptEquals(x1, y1, x2, y2, ctx.distTol) ||
-      nvg__distPtSeg(x1, y1, x0, y0, x2, y2) < ctx.distTol*ctx.distTol ||
-      radius < ctx.distTol)
-  {
-    ctx.lineTo(x1, y1);
-    return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable float x0 = ctx.commandx;
+    immutable float y0 = ctx.commandy;
+    immutable float x1 = *aptr++;
+    immutable float y1 = *aptr++;
+    immutable float x2 = *aptr++;
+    immutable float y2 = *aptr++;
+    immutable float radius = *aptr++;
+
+    // handle degenerate cases
+    if (nvg__ptEquals(x0, y0, x1, y1, ctx.distTol) ||
+        nvg__ptEquals(x1, y1, x2, y2, ctx.distTol) ||
+        nvg__distPtSeg(x1, y1, x0, y0, x2, y2) < ctx.distTol*ctx.distTol ||
+        radius < ctx.distTol)
+    {
+      ctx.lineTo(x1, y1);
+      continue;
+    }
+
+    // calculate tangential circle to lines (x0, y0)-(x1, y1) and (x1, y1)-(x2, y2)
+    float dx0 = x0-x1;
+    float dy0 = y0-y1;
+    float dx1 = x2-x1;
+    float dy1 = y2-y1;
+    nvg__normalize(&dx0, &dy0);
+    nvg__normalize(&dx1, &dy1);
+    immutable float a = nvg__acosf(dx0*dx1+dy0*dy1);
+    immutable float d = radius/nvg__tanf(a/2.0f);
+
+    //printf("a=%f° d=%f\n", a/NVG_PI*180.0f, d);
+
+    if (d > 10000.0f) {
+      ctx.lineTo(x1, y1);
+      continue;
+    }
+
+    float cx = void, cy = void, a0 = void, a1 = void;
+    NVGWinding dir;
+    if (nvg__cross(dx0, dy0, dx1, dy1) > 0.0f) {
+      cx = x1+dx0*d+dy0*radius;
+      cy = y1+dy0*d+-dx0*radius;
+      a0 = nvg__atan2f(dx0, -dy0);
+      a1 = nvg__atan2f(-dx1, dy1);
+      dir = NVGWinding.CW;
+      //printf("CW c=(%f, %f) a0=%f° a1=%f°\n", cx, cy, a0/NVG_PI*180.0f, a1/NVG_PI*180.0f);
+    } else {
+      cx = x1+dx0*d+-dy0*radius;
+      cy = y1+dy0*d+dx0*radius;
+      a0 = nvg__atan2f(-dx0, dy0);
+      a1 = nvg__atan2f(dx1, -dy1);
+      dir = NVGWinding.CCW;
+      //printf("CCW c=(%f, %f) a0=%f° a1=%f°\n", cx, cy, a0/NVG_PI*180.0f, a1/NVG_PI*180.0f);
+    }
+
+    ctx.arc(dir, cx, cy, radius, a0, a1); // first is line
   }
-
-  // Calculate tangential circle to lines (x0, y0)-(x1, y1) and (x1, y1)-(x2, y2).
-  float dx0 = x0-x1;
-  float dy0 = y0-y1;
-  float dx1 = x2-x1;
-  float dy1 = y2-y1;
-  nvg__normalize(&dx0, &dy0);
-  nvg__normalize(&dx1, &dy1);
-  immutable float a = nvg__acosf(dx0*dx1+dy0*dy1);
-  immutable float d = radius/nvg__tanf(a/2.0f);
-
-  //printf("a=%f° d=%f\n", a/NVG_PI*180.0f, d);
-
-  if (d > 10000.0f) {
-    ctx.lineTo(x1, y1);
-    return;
-  }
-
-  if (nvg__cross(dx0, dy0, dx1, dy1) > 0.0f) {
-    cx = x1+dx0*d+dy0*radius;
-    cy = y1+dy0*d+-dx0*radius;
-    a0 = nvg__atan2f(dx0, -dy0);
-    a1 = nvg__atan2f(-dx1, dy1);
-    dir = NVGWinding.CW;
-    //printf("CW c=(%f, %f) a0=%f° a1=%f°\n", cx, cy, a0/NVG_PI*180.0f, a1/NVG_PI*180.0f);
-  } else {
-    cx = x1+dx0*d+-dy0*radius;
-    cy = y1+dy0*d+dx0*radius;
-    a0 = nvg__atan2f(-dx0, dy0);
-    a1 = nvg__atan2f(dx1, -dy1);
-    dir = NVGWinding.CCW;
-    //printf("CCW c=(%f, %f) a0=%f° a1=%f°\n", cx, cy, a0/NVG_PI*180.0f, a1/NVG_PI*180.0f);
-  }
-
-  ctx.arc(cx, cy, radius, a0, a1, dir); // first is line
 }
 
 /// Closes current sub-path with a line segment.
@@ -3265,162 +3360,251 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc
  * and the arc is drawn from angle a0 to a1, and swept in direction dir (NVGWinding.CCW, or NVGWinding.CW).
  * Angles are specified in radians.
  *
+ * Arguments: [cx, cy, r, a0, a1]*
+ *
  * `mode` is: "original", "move", "line" -- first command will be like original NanoVega, MoveTo, or LineTo
  */
-public void arc(string mode="original") (NVGContext ctx, in float cx, in float cy, in float r, in float a0, in float a1, NVGWinding dir) nothrow @trusted @nogc {
+public void arc(string mode="original") (NVGContext ctx, NVGWinding dir, in float[] args...) nothrow @trusted @nogc {
   static assert(mode == "original" || mode == "move" || mode == "line");
-  float[3+5*7+100] vals = void;
-  //int move = (ctx.ncommands > 0 ? Command.LineTo : Command.MoveTo);
-  static if (mode == "original") {
-    immutable int move = (ctx.ncommands > 0 ? Command.LineTo : Command.MoveTo);
-  } else static if (mode == "move") {
-    enum move = Command.MoveTo;
-  } else static if (mode == "line") {
-    enum move = Command.LineTo;
-  } else {
-    static assert(0, "wtf?!");
-  }
+  enum ArgC = 5;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `arc()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable cx = *aptr++;
+    immutable cy = *aptr++;
+    immutable r = *aptr++;
+    immutable a0 = *aptr++;
+    immutable a1 = *aptr++;
 
-  // Clamp angles
-  float da = a1-a0;
-  if (dir == NVGWinding.CW) {
-    if (nvg__absf(da) >= NVG_PI*2) {
-      da = NVG_PI*2;
+    float[3+5*7+100] vals = void;
+    //int move = (ctx.ncommands > 0 ? Command.LineTo : Command.MoveTo);
+    static if (mode == "original") {
+      immutable int move = (ctx.ncommands > 0 ? Command.LineTo : Command.MoveTo);
+    } else static if (mode == "move") {
+      enum move = Command.MoveTo;
+    } else static if (mode == "line") {
+      enum move = Command.LineTo;
     } else {
-      while (da < 0.0f) da += NVG_PI*2;
+      static assert(0, "wtf?!");
     }
-  } else {
-    if (nvg__absf(da) >= NVG_PI*2) {
-      da = -NVG_PI*2;
-    } else {
-      while (da > 0.0f) da -= NVG_PI*2;
-    }
-  }
 
-  // Split arc into max 90 degree segments.
-  immutable int ndivs = nvg__max(1, nvg__min(cast(int)(nvg__absf(da)/(NVG_PI*0.5f)+0.5f), 5));
-  immutable float hda = (da/cast(float)ndivs)/2.0f;
-  float kappa = nvg__absf(4.0f/3.0f*(1.0f-nvg__cosf(hda))/nvg__sinf(hda));
-
-  if (dir == NVGWinding.CCW) kappa = -kappa;
-
-  int nvals = 0;
-  float px = 0, py = 0, ptanx = 0, ptany = 0;
-  foreach (int i; 0..ndivs+1) {
-    immutable float a = a0+da*(i/cast(float)ndivs);
-    immutable float dx = nvg__cosf(a);
-    immutable float dy = nvg__sinf(a);
-    immutable float x = cx+dx*r;
-    immutable float y = cy+dy*r;
-    immutable float tanx = -dy*r*kappa;
-    immutable float tany = dx*r*kappa;
-
-    if (i == 0) {
-      if (vals.length-nvals < 3) {
-        // flush
-        nvg__appendCommands(ctx, vals.ptr[0..nvals]);
-        nvals = 0;
+    // Clamp angles
+    float da = a1-a0;
+    if (dir == NVGWinding.CW) {
+      if (nvg__absf(da) >= NVG_PI*2) {
+        da = NVG_PI*2;
+      } else {
+        while (da < 0.0f) da += NVG_PI*2;
       }
-      vals.ptr[nvals++] = cast(float)move;
-      vals.ptr[nvals++] = x;
-      vals.ptr[nvals++] = y;
     } else {
-      if (vals.length-nvals < 7) {
-        // flush
-        nvg__appendCommands(ctx, vals.ptr[0..nvals]);
-        nvals = 0;
+      if (nvg__absf(da) >= NVG_PI*2) {
+        da = -NVG_PI*2;
+      } else {
+        while (da > 0.0f) da -= NVG_PI*2;
       }
-      vals.ptr[nvals++] = Command.BezierTo;
-      vals.ptr[nvals++] = px+ptanx;
-      vals.ptr[nvals++] = py+ptany;
-      vals.ptr[nvals++] = x-tanx;
-      vals.ptr[nvals++] = y-tany;
-      vals.ptr[nvals++] = x;
-      vals.ptr[nvals++] = y;
     }
-    px = x;
-    py = y;
-    ptanx = tanx;
-    ptany = tany;
-  }
 
-  nvg__appendCommands(ctx, vals.ptr[0..nvals]);
+    // Split arc into max 90 degree segments.
+    immutable int ndivs = nvg__max(1, nvg__min(cast(int)(nvg__absf(da)/(NVG_PI*0.5f)+0.5f), 5));
+    immutable float hda = (da/cast(float)ndivs)/2.0f;
+    float kappa = nvg__absf(4.0f/3.0f*(1.0f-nvg__cosf(hda))/nvg__sinf(hda));
+
+    if (dir == NVGWinding.CCW) kappa = -kappa;
+
+    int nvals = 0;
+    float px = 0, py = 0, ptanx = 0, ptany = 0;
+    foreach (int i; 0..ndivs+1) {
+      immutable float a = a0+da*(i/cast(float)ndivs);
+      immutable float dx = nvg__cosf(a);
+      immutable float dy = nvg__sinf(a);
+      immutable float x = cx+dx*r;
+      immutable float y = cy+dy*r;
+      immutable float tanx = -dy*r*kappa;
+      immutable float tany = dx*r*kappa;
+
+      if (i == 0) {
+        if (vals.length-nvals < 3) {
+          // flush
+          nvg__appendCommands!false(ctx, Command.MoveTo, vals.ptr[0..nvals]); // ignore command
+          nvals = 0;
+        }
+        vals.ptr[nvals++] = cast(float)move;
+        vals.ptr[nvals++] = x;
+        vals.ptr[nvals++] = y;
+      } else {
+        if (vals.length-nvals < 7) {
+          // flush
+          nvg__appendCommands!false(ctx, Command.MoveTo, vals.ptr[0..nvals]); // ignore command
+          nvals = 0;
+        }
+        vals.ptr[nvals++] = Command.BezierTo;
+        vals.ptr[nvals++] = px+ptanx;
+        vals.ptr[nvals++] = py+ptany;
+        vals.ptr[nvals++] = x-tanx;
+        vals.ptr[nvals++] = y-tany;
+        vals.ptr[nvals++] = x;
+        vals.ptr[nvals++] = y;
+      }
+      px = x;
+      py = y;
+      ptanx = tanx;
+      ptany = tany;
+    }
+
+    nvg__appendCommands!false(ctx, Command.MoveTo, vals.ptr[0..nvals]); // ignore command
+  }
 }
 
 /// Creates new rectangle shaped sub-path.
-public void rect (NVGContext ctx, in float x, in float y, in float w, in float h) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx,
-    Command.MoveTo, x, y,
-    Command.LineTo, x, y+h,
-    Command.LineTo, x+w, y+h,
-    Command.LineTo, x+w, y,
-    Command.Close,
-  );
-}
-
-/// Creates new rounded rectangle shaped sub-path.
-public void roundedRect (NVGContext ctx, in float x, in float y, in float w, in float h, in float r) nothrow @trusted @nogc {
-  ctx.roundedRectVarying(x, y, w, h, r, r, r, r);
-}
-
-/// Creates new rounded rectangle shaped sub-path. Specify ellipse width and height to round corners according to it.
-public void roundedRectEllipse (NVGContext ctx, in float x, in float y, in float w, in float h, in float rw, in float rh) nothrow @trusted @nogc {
-  if (rw < 0.1f || rh < 0.1f) { rect(ctx, x, y, w, h); return; }
-  nvg__appendCommands(ctx,
-    Command.MoveTo, x+rw, y,
-    Command.LineTo, x+w-rw, y,
-    Command.BezierTo, x+w-rw*(1-NVG_KAPPA90), y, x+w, y+rh*(1-NVG_KAPPA90), x+w, y+rh,
-    Command.LineTo, x+w, y+h-rh,
-    Command.BezierTo, x+w, y+h-rh*(1-NVG_KAPPA90), x+w-rw*(1-NVG_KAPPA90), y+h, x+w-rw, y+h,
-    Command.LineTo, x+rw, y+h,
-    Command.BezierTo, x+rw*(1-NVG_KAPPA90), y+h, x, y+h-rh*(1-NVG_KAPPA90), x, y+h-rh,
-    Command.LineTo, x, y+rh,
-    Command.BezierTo, x, y+rh*(1-NVG_KAPPA90), x+rw*(1-NVG_KAPPA90), y, x+rw, y,
-    Command.Close,
-  );
-}
-
-/// Creates new rounded rectangle shaped sub-path. This one allows you to specify different rounding radii for each corner.
-public void roundedRectVarying (NVGContext ctx, in float x, in float y, in float w, in float h, in float radTopLeft, in float radTopRight, in float radBottomRight, in float radBottomLeft) nothrow @trusted @nogc {
-  if (radTopLeft < 0.1f && radTopRight < 0.1f && radBottomRight < 0.1f && radBottomLeft < 0.1f) {
-    ctx.rect(x, y, w, h);
-  } else {
-    immutable float halfw = nvg__absf(w)*0.5f;
-    immutable float halfh = nvg__absf(h)*0.5f;
-    immutable float rxBL = nvg__min(radBottomLeft, halfw)*nvg__sign(w), ryBL = nvg__min(radBottomLeft, halfh)*nvg__sign(h);
-    immutable float rxBR = nvg__min(radBottomRight, halfw)*nvg__sign(w), ryBR = nvg__min(radBottomRight, halfh)*nvg__sign(h);
-    immutable float rxTR = nvg__min(radTopRight, halfw)*nvg__sign(w), ryTR = nvg__min(radTopRight, halfh)*nvg__sign(h);
-    immutable float rxTL = nvg__min(radTopLeft, halfw)*nvg__sign(w), ryTL = nvg__min(radTopLeft, halfh)*nvg__sign(h);
-    nvg__appendCommands(ctx,
-      Command.MoveTo, x, y+ryTL,
-      Command.LineTo, x, y+h-ryBL,
-      Command.BezierTo, x, y+h-ryBL*(1-NVG_KAPPA90), x+rxBL*(1-NVG_KAPPA90), y+h, x+rxBL, y+h,
-      Command.LineTo, x+w-rxBR, y+h,
-      Command.BezierTo, x+w-rxBR*(1-NVG_KAPPA90), y+h, x+w, y+h-ryBR*(1-NVG_KAPPA90), x+w, y+h-ryBR,
-      Command.LineTo, x+w, y+ryTR,
-      Command.BezierTo, x+w, y+ryTR*(1-NVG_KAPPA90), x+w-rxTR*(1-NVG_KAPPA90), y, x+w-rxTR, y,
-      Command.LineTo, x+rxTL, y,
-      Command.BezierTo, x+rxTL*(1-NVG_KAPPA90), y, x, y+ryTL*(1-NVG_KAPPA90), x, y+ryTL,
+/// Arguments: [x, y, w, h]*
+public void rect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 4;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `rect()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable x = *aptr++;
+    immutable y = *aptr++;
+    immutable w = *aptr++;
+    immutable h = *aptr++;
+    nvg__appendCommands!false(ctx, Command.MoveTo, // ignore command
+      Command.MoveTo, x, y,
+      Command.LineTo, x, y+h,
+      Command.LineTo, x+w, y+h,
+      Command.LineTo, x+w, y,
       Command.Close,
     );
   }
 }
 
+/// Creates new rounded rectangle shaped sub-path.
+/// Arguments: [x, y, w, h, radius]*
+public void roundedRect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 5;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRect()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable x = *aptr++;
+    immutable y = *aptr++;
+    immutable w = *aptr++;
+    immutable h = *aptr++;
+    immutable r = *aptr++;
+    ctx.roundedRectVarying(x, y, w, h, r, r, r, r);
+  }
+}
+
+/// Creates new rounded rectangle shaped sub-path. Specify ellipse width and height to round corners according to it.
+/// Arguments: [x, y, w, h, rw, rh]*
+public void roundedRectEllipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 6;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRectEllipse()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable x = *aptr++;
+    immutable y = *aptr++;
+    immutable w = *aptr++;
+    immutable h = *aptr++;
+    immutable rw = *aptr++;
+    immutable rh = *aptr++;
+    if (rw < 0.1f || rh < 0.1f) {
+      rect(ctx, x, y, w, h);
+    } else {
+      nvg__appendCommands!false(ctx, Command.MoveTo, // ignore command
+        Command.MoveTo, x+rw, y,
+        Command.LineTo, x+w-rw, y,
+        Command.BezierTo, x+w-rw*(1-NVG_KAPPA90), y, x+w, y+rh*(1-NVG_KAPPA90), x+w, y+rh,
+        Command.LineTo, x+w, y+h-rh,
+        Command.BezierTo, x+w, y+h-rh*(1-NVG_KAPPA90), x+w-rw*(1-NVG_KAPPA90), y+h, x+w-rw, y+h,
+        Command.LineTo, x+rw, y+h,
+        Command.BezierTo, x+rw*(1-NVG_KAPPA90), y+h, x, y+h-rh*(1-NVG_KAPPA90), x, y+h-rh,
+        Command.LineTo, x, y+rh,
+        Command.BezierTo, x, y+rh*(1-NVG_KAPPA90), x+rw*(1-NVG_KAPPA90), y, x+rw, y,
+        Command.Close,
+      );
+    }
+  }
+}
+
+/// Creates new rounded rectangle shaped sub-path. This one allows you to specify different rounding radii for each corner.
+/// Arguments: [x, y, w, h, radTopLeft, radTopRight, radBottomRight, radBottomLeft]*
+public void roundedRectVarying (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 8;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRectVarying()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable x = *aptr++;
+    immutable y = *aptr++;
+    immutable w = *aptr++;
+    immutable h = *aptr++;
+    immutable radTopLeft = *aptr++;
+    immutable radTopRight = *aptr++;
+    immutable radBottomRight = *aptr++;
+    immutable radBottomLeft = *aptr++;
+    if (radTopLeft < 0.1f && radTopRight < 0.1f && radBottomRight < 0.1f && radBottomLeft < 0.1f) {
+      ctx.rect(x, y, w, h);
+    } else {
+      immutable float halfw = nvg__absf(w)*0.5f;
+      immutable float halfh = nvg__absf(h)*0.5f;
+      immutable float rxBL = nvg__min(radBottomLeft, halfw)*nvg__sign(w), ryBL = nvg__min(radBottomLeft, halfh)*nvg__sign(h);
+      immutable float rxBR = nvg__min(radBottomRight, halfw)*nvg__sign(w), ryBR = nvg__min(radBottomRight, halfh)*nvg__sign(h);
+      immutable float rxTR = nvg__min(radTopRight, halfw)*nvg__sign(w), ryTR = nvg__min(radTopRight, halfh)*nvg__sign(h);
+      immutable float rxTL = nvg__min(radTopLeft, halfw)*nvg__sign(w), ryTL = nvg__min(radTopLeft, halfh)*nvg__sign(h);
+      nvg__appendCommands!false(ctx, Command.MoveTo, // ignore command
+        Command.MoveTo, x, y+ryTL,
+        Command.LineTo, x, y+h-ryBL,
+        Command.BezierTo, x, y+h-ryBL*(1-NVG_KAPPA90), x+rxBL*(1-NVG_KAPPA90), y+h, x+rxBL, y+h,
+        Command.LineTo, x+w-rxBR, y+h,
+        Command.BezierTo, x+w-rxBR*(1-NVG_KAPPA90), y+h, x+w, y+h-ryBR*(1-NVG_KAPPA90), x+w, y+h-ryBR,
+        Command.LineTo, x+w, y+ryTR,
+        Command.BezierTo, x+w, y+ryTR*(1-NVG_KAPPA90), x+w-rxTR*(1-NVG_KAPPA90), y, x+w-rxTR, y,
+        Command.LineTo, x+rxTL, y,
+        Command.BezierTo, x+rxTL*(1-NVG_KAPPA90), y, x, y+ryTL*(1-NVG_KAPPA90), x, y+ryTL,
+        Command.Close,
+      );
+    }
+  }
+}
+
 /// Creates new ellipse shaped sub-path.
-public void ellipse (NVGContext ctx, in float cx, in float cy, in float rx, in float ry) nothrow @trusted @nogc {
-  nvg__appendCommands(ctx,
-    Command.MoveTo, cx-rx, cy,
-    Command.BezierTo, cx-rx, cy+ry*NVG_KAPPA90, cx-rx*NVG_KAPPA90, cy+ry, cx, cy+ry,
-    Command.BezierTo, cx+rx*NVG_KAPPA90, cy+ry, cx+rx, cy+ry*NVG_KAPPA90, cx+rx, cy,
-    Command.BezierTo, cx+rx, cy-ry*NVG_KAPPA90, cx+rx*NVG_KAPPA90, cy-ry, cx, cy-ry,
-    Command.BezierTo, cx-rx*NVG_KAPPA90, cy-ry, cx-rx, cy-ry*NVG_KAPPA90, cx-rx, cy,
-    Command.Close,
-  );
+/// Arguments: [cx, cy, rx, ry]*
+public void ellipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 4;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `ellipse()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable cx = *aptr++;
+    immutable cy = *aptr++;
+    immutable rx = *aptr++;
+    immutable ry = *aptr++;
+    nvg__appendCommands!false(ctx, Command.MoveTo, // ignore command
+      Command.MoveTo, cx-rx, cy,
+      Command.BezierTo, cx-rx, cy+ry*NVG_KAPPA90, cx-rx*NVG_KAPPA90, cy+ry, cx, cy+ry,
+      Command.BezierTo, cx+rx*NVG_KAPPA90, cy+ry, cx+rx, cy+ry*NVG_KAPPA90, cx+rx, cy,
+      Command.BezierTo, cx+rx, cy-ry*NVG_KAPPA90, cx+rx*NVG_KAPPA90, cy-ry, cx, cy-ry,
+      Command.BezierTo, cx-rx*NVG_KAPPA90, cy-ry, cx-rx, cy-ry*NVG_KAPPA90, cx-rx, cy,
+      Command.Close,
+    );
+  }
 }
 
 /// Creates new circle shaped sub-path.
-public void circle (NVGContext ctx, in float cx, in float cy, in float r) nothrow @trusted @nogc {
-  ctx.ellipse(cx, cy, r, r);
+/// Arguments: [cx, cy, r]*
+public void circle (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
+  enum ArgC = 3;
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `circle()` call");
+  if (args.length < ArgC) return;
+  const(float)* aptr = args.ptr;
+  foreach (immutable idx; 0..args.length/ArgC) {
+    immutable cx = *aptr++;
+    immutable cy = *aptr++;
+    immutable r = *aptr++;
+    ctx.ellipse(cx, cy, r, r);
+  }
 }
 
 /// Debug function to dump cached path data.
@@ -5335,19 +5519,11 @@ public:
     void perform (NVGContext ctx) const nothrow @trusted @nogc {
       if (ctx is null) return;
       switch (code) {
-        case Kind.MoveTo:
-          if (args.length > 1) ctx.moveTo(args.ptr[0], args.ptr[1]);
-          break;
-        case Kind.LineTo:
-          if (args.length > 1) ctx.lineTo(args.ptr[0], args.ptr[1]);
-          break;
-        case Kind.QuadTo:
-          if (args.length > 3) ctx.quadTo(args.ptr[0], args.ptr[1], args.ptr[2], args.ptr[3]);
-          break;
-        case Kind.BezierTo:
-          if (args.length > 5) ctx.bezierTo(args.ptr[0], args.ptr[1], args.ptr[2], args.ptr[3], args.ptr[4], args.ptr[5]);
-          break;
-        default:
+        case Kind.MoveTo: if (args.length > 1) ctx.moveTo(args.ptr[0..2]); break;
+        case Kind.LineTo: if (args.length > 1) ctx.lineTo(args.ptr[0..2]); break;
+        case Kind.QuadTo: if (args.length > 3) ctx.quadTo(args.ptr[0..4]); break;
+        case Kind.BezierTo: if (args.length > 5) ctx.bezierTo(args.ptr[0..6]); break;
+        default: break;
       }
     }
 
@@ -5358,19 +5534,11 @@ public:
       pts[0..args.length] = args[];
       foreach (immutable pidx; 0..args.length/2) nvgTransformPoint(pts.ptr[pidx*2+0], pts.ptr[pidx*2+1], xform[]);
       switch (code) {
-        case Kind.MoveTo:
-          if (args.length > 1) ctx.moveTo(pts.ptr[0], pts.ptr[1]);
-          break;
-        case Kind.LineTo:
-          if (args.length > 1) ctx.lineTo(pts.ptr[0], pts.ptr[1]);
-          break;
-        case Kind.QuadTo:
-          if (args.length > 3) ctx.quadTo(pts.ptr[0], pts.ptr[1], pts.ptr[2], pts.ptr[3]);
-          break;
-        case Kind.BezierTo:
-          if (args.length > 5) ctx.bezierTo(pts.ptr[0], pts.ptr[1], pts.ptr[2], pts.ptr[3], pts.ptr[4], pts.ptr[5]);
-          break;
-        default:
+        case Kind.MoveTo: if (args.length > 1) ctx.moveTo(pts.ptr[0..2]); break;
+        case Kind.LineTo: if (args.length > 1) ctx.lineTo(pts.ptr[0..2]); break;
+        case Kind.QuadTo: if (args.length > 3) ctx.quadTo(pts.ptr[0..4]); break;
+        case Kind.BezierTo: if (args.length > 5) ctx.bezierTo(pts.ptr[0..6]); break;
+        default: break;
       }
     }
   }
