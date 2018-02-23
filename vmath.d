@@ -1046,6 +1046,7 @@ const:
     mixin(ImportCoreMath!(double, "fabs"));
     alias v0 = this;
     immutable Float det = cast(Float)((v0-v1)*(v0-v2)-(v0-v2)*(v0-v1));
+    return (fabs(det) <= EPSILON!Float);
   }
 
   static if (dims == 2) {
