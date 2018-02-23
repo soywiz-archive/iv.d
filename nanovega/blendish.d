@@ -71,11 +71,35 @@ to the equivalent of 72 dpi in the Blender system settings.
 Support for label truncation is missing. Text rendering breaks when widgets are
 too short to contain their labels.
 */
-module iv.nanovega.blendish is aliced;
+module iv.nanovega.blendish;
 private:
 
-import iv.meta;
 import iv.nanovega.nanovega;
+version(aliced) {
+  import iv.meta;
+} else {
+  private alias usize = size_t;
+  // i fear phobos!
+  private template Unqual(T) {
+         static if (is(T U ==          immutable U)) alias Unqual = U;
+    else static if (is(T U == shared inout const U)) alias Unqual = U;
+    else static if (is(T U == shared inout       U)) alias Unqual = U;
+    else static if (is(T U == shared       const U)) alias Unqual = U;
+    else static if (is(T U == shared             U)) alias Unqual = U;
+    else static if (is(T U ==        inout const U)) alias Unqual = U;
+    else static if (is(T U ==        inout       U)) alias Unqual = U;
+    else static if (is(T U ==              const U)) alias Unqual = U;
+    else alias Unqual = T;
+  }
+  private template isAnyCharType(T, bool unqual=false) {
+    static if (unqual) private alias UT = Unqual!T; else private alias UT = T;
+    enum isAnyCharType = is(UT == char) || is(UT == wchar) || is(UT == dchar);
+  }
+  private template isWideCharType(T, bool unqual=false) {
+    static if (unqual) private alias UT = Unqual!T; else private alias UT = T;
+    enum isWideCharType = is(UT == wchar) || is(UT == dchar);
+  }
+}
 
 nothrow @trusted @nogc:
 

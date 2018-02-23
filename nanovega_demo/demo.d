@@ -33,7 +33,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-module demo is aliced;
+module demo;
 private:
 
 import core.stdc.string : strlen;

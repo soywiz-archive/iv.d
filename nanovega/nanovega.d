@@ -145,12 +145,45 @@ The following code illustrates the OpenGL state touched by the rendering code:
   ---
 
  */
-module iv.nanovega.nanovega is aliced;
+module iv.nanovega.nanovega;
 private:
 
-import iv.meta;
-import iv.vfs;
-
+version(aliced) {
+  import iv.meta;
+  import iv.vfs;
+} else {
+  private alias usize = size_t;
+  // i fear phobos!
+  private template Unqual(T) {
+         static if (is(T U ==          immutable U)) alias Unqual = U;
+    else static if (is(T U == shared inout const U)) alias Unqual = U;
+    else static if (is(T U == shared inout       U)) alias Unqual = U;
+    else static if (is(T U == shared       const U)) alias Unqual = U;
+    else static if (is(T U == shared             U)) alias Unqual = U;
+    else static if (is(T U ==        inout const U)) alias Unqual = U;
+    else static if (is(T U ==        inout       U)) alias Unqual = U;
+    else static if (is(T U ==              const U)) alias Unqual = U;
+    else alias Unqual = T;
+  }
+  private template isAnyCharType(T, bool unqual=false) {
+    static if (unqual) private alias UT = Unqual!T; else private alias UT = T;
+    enum isAnyCharType = is(UT == char) || is(UT == wchar) || is(UT == dchar);
+  }
+  private template isWideCharType(T, bool unqual=false) {
+    static if (unqual) private alias UT = Unqual!T; else private alias UT = T;
+    enum isWideCharType = is(UT == wchar) || is(UT == dchar);
+  }
+  version(nanovg_disable_vfs) {
+    enum NanoVegaHasIVVFS = false;
+  } else {
+    static if (is(typeof((){import iv.vfs;}))) {
+      enum NanoVegaHasIVVFS = true;
+      import iv.vfs;
+    } else {
+      enum NanoVegaHasIVVFS = false;
+    }
+  }
+}
 
 // ////////////////////////////////////////////////////////////////////////// //
 // engine
@@ -160,22 +193,25 @@ import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
 //import iv.nanovega.fontstash;
 
-version(nanovg_naked) {
-  version = nanovg_disable_fontconfig;
+version(aliced) {
+  version(nanovg_naked) {
+    version = nanovg_disable_fontconfig;
+  } else {
+    version = nanovg_use_freetype;
+    version = nanovg_default_no_font_aa;
+    version = nanovg_builtin_fontconfig_bindings;
+    version = nanovg_builtin_opengl_bindings; // use `arsd.simpledisplay` to get basic bindings
+  }
 } else {
-  version = nanovg_use_freetype;
-  version = nanovg_ft_mon;
-  version = nanovg_demo_msfonts;
-  version = nanovg_default_no_font_aa;
   version = nanovg_builtin_fontconfig_bindings;
   version = nanovg_builtin_opengl_bindings; // use `arsd.simpledisplay` to get basic bindings
 }
 
 version(Posix) {
   version(nanovg_disable_fontconfig) {
-    public enum NVG_HAS_FONTCONFIG = false;
+    public enum NanoVegaHasFontConfig = false;
   } else {
-    public enum NVG_HAS_FONTCONFIG = true;
+    public enum NanoVegaHasFontConfig = true;
     version(nanovg_builtin_fontconfig_bindings) {} else import iv.fontconfig;
   }
 }
@@ -474,9 +510,9 @@ public:
   }
 
   /// Is this color completely opaque?
-  @property bool isOpaque () const pure nothrow @trusted @nogc => (rgba.ptr[3] >= 1.0f);
+  @property bool isOpaque () const pure nothrow @trusted @nogc { pragma(inline, true); return (rgba.ptr[3] >= 1.0f); }
   /// Is this color completely transparent?
-  @property bool isTransparent () const pure nothrow @trusted @nogc => (rgba.ptr[3] <= 0.0f);
+  @property bool isTransparent () const pure nothrow @trusted @nogc { pragma(inline, true); return (rgba.ptr[3] <= 0.0f); }
 
   /// AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
   @property uint asUint () const pure {
@@ -491,7 +527,7 @@ public:
   alias asUintABGR = asUint; /// Ditto.
 
   /// AABBGGRR (same format as little-endian RGBA image, coincidentally, the same as arsd.color)
-  static NVGColor fromUint (uint c) pure => NVGColor(c);
+  static NVGColor fromUint (uint c) pure { pragma(inline, true); return NVGColor(c); }
 
   alias fromUintABGR = fromUint; /// Ditto.
 
@@ -506,19 +542,19 @@ public:
   }
 
   /// AARRGGBB
-  static NVGColor fromUintARGB (uint c) pure => NVGColor((c>>16)&0xff, (c>>8)&0xff, c&0xff, (c>>24)&0xff);
+  static NVGColor fromUintARGB (uint c) pure { pragma(inline, true); return NVGColor((c>>16)&0xff, (c>>8)&0xff, c&0xff, (c>>24)&0xff); }
 
-  @property ref inout(float) r () inout pure @trusted => rgba.ptr[0];
-  @property ref inout(float) g () inout pure @trusted => rgba.ptr[1];
-  @property ref inout(float) b () inout pure @trusted => rgba.ptr[2];
-  @property ref inout(float) a () inout pure @trusted => rgba.ptr[3];
+  @property ref inout(float) r () inout pure @trusted { pragma(inline, true); return rgba.ptr[0]; } ///
+  @property ref inout(float) g () inout pure @trusted { pragma(inline, true); return rgba.ptr[1]; } ///
+  @property ref inout(float) b () inout pure @trusted { pragma(inline, true); return rgba.ptr[2]; } ///
+  @property ref inout(float) a () inout pure @trusted { pragma(inline, true); return rgba.ptr[3]; } ///
 
-  NVGHSL asHSL() (bool useWeightedLightness=false) const => NVGHSL.fromColor(this, useWeightedLightness);
-  static fromHSL() (in auto ref NVGHSL hsl) => hsl.asColor;
+  NVGHSL asHSL() (bool useWeightedLightness=false) const { pragma(inline, true); return NVGHSL.fromColor(this, useWeightedLightness); } ///
+  static fromHSL() (in auto ref NVGHSL hsl) { pragma(inline, true); return hsl.asColor; } ///
 
   version(nanovg_use_arsd_image) {
-    Color toArsd () const => Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255)); ///
-    static NVGColor fromArsd (in Color c) => NVGColor(c.r, c.g, c.b, c.a); ///
+    Color toArsd () const { pragma(inline, true); return Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255)); } ///
+    static NVGColor fromArsd (in Color c) { pragma(inline, true); return NVGColor(c.r, c.g, c.b, c.a); } ///
     ///
     this (in Color c) {
       pragma(inline, true);
@@ -543,7 +579,7 @@ public:
   ///
   this (float ah, float as, float al, float aa=1) pure { pragma(inline, true); h = ah; s = as; l = al; a = aa; }
 
-  NVGColor asColor () const => nvgHSLA(h, s, l, a); ///
+  NVGColor asColor () const { pragma(inline, true); return nvgHSLA(h, s, l, a); } ///
 
   // taken from Adam's arsd.color
   /** Converts an RGB color into an HSL triplet.
@@ -734,11 +770,11 @@ public struct NVGTextRow(CT) if (isAnyCharType!CT) {
   float width;      /// Logical width of the row.
   float minx, maxx; /// Actual bounds of the row. Logical with and bounds can differ because of kerning and some parts over extending.
   /// Get rest of the string.
-  @property const(CT)[] rest () const pure nothrow @trusted @nogc => (end <= s.length ? s[end..$] : null);
+  @property const(CT)[] rest () const pure nothrow @trusted @nogc { pragma(inline, true); return (end <= s.length ? s[end..$] : null); }
   /// Get current row.
-  @property const(CT)[] row () const pure nothrow @trusted @nogc => s[start..end];
-  @property const(CT)[] string () const pure nothrow @trusted @nogc => s;
-  @property void string(CT) (const(CT)[] v) pure nothrow @trusted @nogc => s = v;
+  @property const(CT)[] row () const pure nothrow @trusted @nogc { pragma(inline, true); return s[start..end]; }
+  @property const(CT)[] string () const pure nothrow @trusted @nogc { pragma(inline, true); return s; }
+  @property void string(CT) (const(CT)[] v) pure nothrow @trusted @nogc { pragma(inline, true); s = v; }
 }
 
 ///
@@ -913,20 +949,20 @@ private:
 public:
   // some public info
   const pure nothrow @safe @nogc {
-    @property int width () => mWidth; /// valid only inside `beginFrame()`/`endFrame()`
-    @property int height () => mHeight; /// valid only inside `beginFrame()`/`endFrame()`
-    @property float devicePixelRatio () => mDeviceRatio; /// valid only inside `beginFrame()`/`endFrame()`
+    @property int width () { pragma(inline, true); return mWidth; } /// valid only inside `beginFrame()`/`endFrame()`
+    @property int height () { pragma(inline, true); return mHeight; } /// valid only inside `beginFrame()`/`endFrame()`
+    @property float devicePixelRatio () { pragma(inline, true); return mDeviceRatio; } /// valid only inside `beginFrame()`/`endFrame()`
   }
 
   // path autoregistration
   pure nothrow @safe @nogc {
     enum NoPick = -1;
 
-    @property int pickid () const => pathPickId; /// >=0: this pickid will be assigned to all filled/stroked pathes
-    @property void pickid (int v) => pathPickId = v; /// >=0: this pickid will be assigned to all filled/stroked pathes
+    @property int pickid () const { pragma(inline, true); return pathPickId; } /// >=0: this pickid will be assigned to all filled/stroked pathes
+    @property void pickid (int v) { pragma(inline, true); pathPickId = v; } /// >=0: this pickid will be assigned to all filled/stroked pathes
 
-    @property uint pickmode () const => pathPickRegistered&NVGPickKind.All; /// pick autoregistration mode; see `NVGPickKind`
-    @property void pickmode (uint v) => pathPickRegistered = (pathPickRegistered&0xffff_0000u)|(v&NVGPickKind.All); /// pick autoregistration mode; see `NVGPickKind`
+    @property uint pickmode () const { pragma(inline, true); return pathPickRegistered&NVGPickKind.All; } /// pick autoregistration mode; see `NVGPickKind`
+    @property void pickmode (uint v) { pragma(inline, true); pathPickRegistered = (pathPickRegistered&0xffff_0000u)|(v&NVGPickKind.All); } /// pick autoregistration mode; see `NVGPickKind`
   }
 }
 
@@ -1256,22 +1292,22 @@ public alias NVGSectionDummy00 = void;
 
 /// Returns a color value from string form.
 /// Supports: "#rgb", "#rrggbb", "#argb", "#aarrggbb"
-public NVGColor nvgRGB (const(char)[] srgb) nothrow @trusted @nogc => NVGColor(srgb);
+public NVGColor nvgRGB (const(char)[] srgb) nothrow @trusted @nogc { pragma(inline, true); return NVGColor(srgb); }
 
 /// Ditto.
-public NVGColor nvgRGBA (const(char)[] srgb) nothrow @trusted @nogc => NVGColor(srgb);
+public NVGColor nvgRGBA (const(char)[] srgb) nothrow @trusted @nogc { pragma(inline, true); return NVGColor(srgb); }
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 255 (1.0f).
-public NVGColor nvgRGB (int r, int g, int b) nothrow @trusted @nogc => NVGColor(r, g, b, 255);
+public NVGColor nvgRGB (int r, int g, int b) nothrow @trusted @nogc { pragma(inline, true); return NVGColor(r, g, b, 255); }
 
 /// Returns a color value from red, green, blue values. Alpha will be set to 1.0f.
-public NVGColor nvgRGBf (float r, float g, float b) nothrow @trusted @nogc => NVGColor(r, g, b, 1.0f);
+public NVGColor nvgRGBf (float r, float g, float b) nothrow @trusted @nogc { pragma(inline, true); return NVGColor(r, g, b, 1.0f); }
 
 /// Returns a color value from red, green, blue and alpha values.
-public NVGColor nvgRGBA (int r, int g, int b, int a=255) nothrow @trusted @nogc => NVGColor(r, g, b, a);
+public NVGColor nvgRGBA (int r, int g, int b, int a=255) nothrow @trusted @nogc { pragma(inline, true); return NVGColor(r, g, b, a); }
 
 /// Returns a color value from red, green, blue and alpha values.
-public NVGColor nvgRGBAf (float r, float g, float b, float a=1.0f) nothrow @trusted @nogc => NVGColor(r, g, b, a);
+public NVGColor nvgRGBAf (float r, float g, float b, float a=1.0f) nothrow @trusted @nogc { pragma(inline, true); return NVGColor(r, g, b, a); }
 
 /// Returns new color with transparency (alpha) set to `a`.
 public NVGColor nvgTransRGBA (NVGColor c, ubyte a) nothrow @trusted @nogc {
@@ -1458,7 +1494,7 @@ public nothrow @trusted @nogc:
     return this;
   }
 
-  static NVGMatrix Identity () => NVGMatrix.init; ///
+  static NVGMatrix Identity () { pragma(inline, true); return NVGMatrix.init; } ///
   static NVGMatrix Translate (float tx, float ty) { pragma(inline, true); NVGMatrix res = void; nvgTransformTranslate(res, tx, ty); return res; } ///
   static NVGMatrix Scale (float sx, float sy) { pragma(inline, true); NVGMatrix res = void; nvgTransformScale(res, sx, sy); return res; } ///
   static NVGMatrix Rotate (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformRotate(res, a); return res; } ///
@@ -1592,11 +1628,11 @@ public void nvgTransformPoint (ref float x, ref float y, const(float)[] t) nothr
 }
 
 /// Converts degrees to radians.
-public float nvgDegToRad() (float deg) => deg/180.0f*NVG_PI;
+public float nvgDegToRad() (float deg) pure nothrow @safe @nogc { pragma(inline, true); return deg/180.0f*NVG_PI; }
 public alias nvgRadians = nvgDegToRad; /// Ditto.
 
 /// Converts radians to degrees.
-public float nvgRadToDeg() (float rad) => rad/NVG_PI*180.0f;
+public float nvgRadToDeg() (float rad) pure nothrow @safe @nogc { pragma(inline, true); return rad/NVG_PI*180.0f; }
 public alias nvgDegrees = nvgRadToDeg; /// Ditto.
 
 
@@ -2114,7 +2150,7 @@ private struct NVGLGSdata {
   float cx, cy, w, h, angle;
 
   @disable this (this); // no copies
-  public @property bool valid () const pure nothrow @safe @nogc => (imgid > 0); ///
+  public @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (imgid > 0); } ///
 }
 
 /// Destroy linear gradient with stops
@@ -2664,7 +2700,7 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
       if (path.winding == NVGWinding.CW && area > 0.0f) nvg__polyReverse(pts, path.count);
     }
 
-    foreach (; 0..path.count) {
+    foreach (immutable _; 0..path.count) {
       // calculate segment direction and length
       p0.dx = p1.x-p0.x;
       p0.dy = p1.y-p0.y;
@@ -3800,7 +3836,7 @@ public enum NVGPickKind : ubyte {
 /// Note that you can create and mark path without rasterizing it.
 public void currFillHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, forStroke:false);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, /*forStroke:*/false);
   nvg__pickSceneInsert(ps, pp);
 }
 
@@ -3808,7 +3844,7 @@ public void currFillHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
 /// Note that you can create and mark path without rasterizing it.
 public void currStrokeHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, forStroke:true);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, /*forStroke:*/true);
   nvg__pickSceneInsert(ps, pp);
 }
 
@@ -3923,7 +3959,7 @@ public bool hitTestCurrFill (NVGcontext* ctx, float x, float y) nothrow @trusted
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, forStroke:false);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, /*forStroke:*/false);
   if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
@@ -3939,7 +3975,7 @@ public bool hitTestCurrStroke (NVGcontext* ctx, float x, float y) nothrow @trust
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, forStroke:true);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, /*forStroke:*/true);
   if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
@@ -4091,9 +4127,10 @@ void nvg__intersectBounds (ref float[4] bounds, in ref float[4] boundsB) {
   bounds.ptr[3] = nvg__max(bounds.ptr[1], bounds.ptr[3]);
 }
 
-bool nvg__pointInBounds (in float x, in float y, in ref float[4] bounds) =>
-  (x >= bounds.ptr[0] && x <= bounds.ptr[2] && y >= bounds.ptr[1] && y <= bounds.ptr[3]);
-
+bool nvg__pointInBounds (in float x, in float y, in ref float[4] bounds) {
+  pragma(inline, true);
+  return (x >= bounds.ptr[0] && x <= bounds.ptr[2] && y >= bounds.ptr[1] && y <= bounds.ptr[3]);
+}
 
 //
 // Building paths & sub paths
@@ -5513,7 +5550,7 @@ public:
     }
     Kind code; ///
     const(float)[] args; ///
-    @property bool valid () const pure nothrow @safe @nogc => (code >= 0 && code <= 3 && args.length >= 2); ///
+    @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (code >= 0 && code <= 3 && args.length >= 2); } ///
 
     /// perform NanoVega command with stored data.
     void perform (NVGContext ctx) const nothrow @trusted @nogc {
@@ -5562,7 +5599,7 @@ private:
 public:
   float[4] bounds = 0;
 
-  @property int length () const pure => ccount;
+  @property int length () const pure { pragma(inline, true); return ccount; }
 
 public:
   /// Return forward range with all glyph commands.
@@ -5573,8 +5610,8 @@ public:
       const(ubyte)* data;
       uint cleft; // number of commands left
     public:
-      @property bool empty () const pure => (cleft == 0);
-      @property int length () const pure => cleft;
+      @property bool empty () const pure { pragma(inline, true); return (cleft == 0); }
+      @property int length () const pure { pragma(inline, true); return cleft; }
       @property Range save () const pure { pragma(inline, true); Range res = this; return res; }
       @property Command front () const {
         Command res = void;
@@ -6193,13 +6230,13 @@ public:
   }
 
   /// Is this iterator valid?
-  @property bool valid () const pure nothrow @safe @nogc => (ctx !is null);
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null); }
 
   /// Add chars.
-  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) { if (ctx !is null) fsiter.put(str[]); }
+  void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) { pragma(inline, true); if (ctx !is null) fsiter.put(str[]); }
 
   /// Return current advance
-  @property float advance () const pure nothrow @safe @nogc => (ctx !is null ? fsiter.advance*invscale : 0);
+  @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null ? fsiter.advance*invscale : 0); }
 
   /// Return current text bounds.
   void getBounds (ref float[4] bounds) nothrow @trusted @nogc {
@@ -6524,9 +6561,9 @@ struct FONStextIter(CT) if (isAnyCharType!CT) {
     uint utf8state;
   }
   ~this () nothrow @trusted @nogc { pragma(inline, true); static if (is(CT == char)) utf8state = 0; s = n = e = null; }
-  @property const(CT)* string () const pure nothrow @nogc => s;
-  @property const(CT)* nextp () const pure nothrow @nogc => n;
-  @property const(CT)* endp () const pure nothrow @nogc => e;
+  @property const(CT)* string () const pure nothrow @nogc { pragma(inline, true); return s; }
+  @property const(CT)* nextp () const pure nothrow @nogc { pragma(inline, true); return n; }
+  @property const(CT)* endp () const pure nothrow @nogc { pragma(inline, true); return e; }
 }
 
 
@@ -6680,8 +6717,8 @@ extern(C) nothrow @trusted @nogc {
     NVGGlyphOutline* ol;
     FT_BBox outlineBBox;
   nothrow @trusted @nogc:
-    int transx (int v) const pure => v;
-    int transy (int v) const pure => -v;
+    int transx (int v) const pure { pragma(inline, true); return v; }
+    int transy (int v) const pure { pragma(inline, true); return -v; }
     void putBytes (const(void)[] b) {
       assert(b.length <= 512);
       if (b.length == 0) return;
@@ -6827,6 +6864,22 @@ bool fons__nvg__bounds (FONSttFontImpl* font, uint glyphidx, float[] bounds) not
 
 } else {
 // ////////////////////////////////////////////////////////////////////////// //
+// sorry
+import std.traits : isFunctionPointer, isDelegate;
+private auto assumeNoThrowNoGC(T) (scope T t) if (isFunctionPointer!T || isDelegate!T) {
+  import std.traits;
+  enum attrs = functionAttributes!T|FunctionAttribute.nogc|FunctionAttribute.nothrow_;
+  return cast(SetFunctionAttributes!(T, functionLinkage!T, attrs)) t;
+}
+
+private auto forceNoThrowNoGC(T) (scope T t) if (isFunctionPointer!T || isDelegate!T) {
+  try {
+    return assumeNoThrowNoGC(t)();
+  } catch (Exception e) {
+    assert(0, "OOPS!");
+  }
+}
+
 struct FONSttFontImpl {
   stbtt_fontinfo font;
   bool mono; // no aa?
@@ -6847,34 +6900,34 @@ bool fons__tt_getMono (FONScontext* context, FONSttFontImpl* font) nothrow @trus
 int fons__tt_loadFont (FONScontext* context, FONSttFontImpl* font, ubyte* data, int dataSize) nothrow @trusted @nogc {
   int stbError;
   font.font.userdata = context;
-  stbError = stbtt_InitFont(&font.font, data, 0);
+  forceNoThrowNoGC({ stbError = stbtt_InitFont(&font.font, data, 0); });
   return stbError;
 }
 
 void fons__tt_getFontVMetrics (FONSttFontImpl* font, int* ascent, int* descent, int* lineGap) nothrow @trusted @nogc {
-  stbtt_GetFontVMetrics(&font.font, ascent, descent, lineGap);
+  forceNoThrowNoGC({ stbtt_GetFontVMetrics(&font.font, ascent, descent, lineGap); });
 }
 
 float fons__tt_getPixelHeightScale (FONSttFontImpl* font, float size) nothrow @trusted @nogc {
-  return stbtt_ScaleForPixelHeight(&font.font, size);
+  return forceNoThrowNoGC({ return stbtt_ScaleForPixelHeight(&font.font, size); });
 }
 
 int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) nothrow @trusted @nogc {
-  return stbtt_FindGlyphIndex(&font.font, codepoint);
+  return forceNoThrowNoGC({ return stbtt_FindGlyphIndex(&font.font, codepoint); });
 }
 
 int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) nothrow @trusted @nogc {
-  stbtt_GetGlyphHMetrics(&font.font, glyph, advance, lsb);
-  stbtt_GetGlyphBitmapBox(&font.font, glyph, scale, scale, x0, y0, x1, y1);
+  forceNoThrowNoGC({ stbtt_GetGlyphHMetrics(&font.font, glyph, advance, lsb); });
+  forceNoThrowNoGC({ stbtt_GetGlyphBitmapBox(&font.font, glyph, scale, scale, x0, y0, x1, y1); });
   return 1;
 }
 
 void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWidth, int outHeight, int outStride, float scaleX, float scaleY, int glyph) nothrow @trusted @nogc {
-  stbtt_MakeGlyphBitmap(&font.font, output, outWidth, outHeight, outStride, scaleX, scaleY, glyph);
+  forceNoThrowNoGC({ stbtt_MakeGlyphBitmap(&font.font, output, outWidth, outHeight, outStride, scaleX, scaleY, glyph); });
 }
 
 float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
-  return stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2);
+  return forceNoThrowNoGC({ return stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2); });
 }
 
 } // version
@@ -6915,7 +6968,7 @@ private bool fons_strequci (const(char)[] s0, const(char)[] s1) nothrow @trusted
   if (s0.length != s1.length) return false;
   const(char)* sp0 = s0.ptr;
   const(char)* sp1 = s1.ptr;
-  foreach (; 0..s0.length) {
+  foreach (immutable _; 0..s0.length) {
     char c0 = *sp0++;
     char c1 = *sp1++;
     if (c0 != c1) {
@@ -7657,14 +7710,37 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
     //{ import core.stdc.stdio; printf("trying font [%.*s] from file [%.*s]\n", cast(uint)blen, fontnamebuf.ptr, cast(uint)path.length, path.ptr); }
     try {
       import core.stdc.stdlib : free, malloc;
-      auto fl = VFile(path);
-      auto dataSize = fl.size;
-      if (dataSize < 16 || dataSize > int.max/32) return FONS_INVALID;
-      ubyte* data = cast(ubyte*)malloc(cast(uint)dataSize);
-      if (data is null) assert(0, "out of memory in NanoVega fontstash");
-      scope(failure) free(data); // oops
-      fl.rawReadExact(data[0..cast(uint)dataSize]);
-      fl.close();
+      static if (NanoVegaHasIVVFS) {
+        auto fl = VFile(path);
+        auto dataSize = fl.size;
+        if (dataSize < 16 || dataSize > int.max/32) return FONS_INVALID;
+        ubyte* data = cast(ubyte*)malloc(cast(uint)dataSize);
+        if (data is null) assert(0, "out of memory in NanoVega fontstash");
+        scope(failure) free(data); // oops
+        fl.rawReadExact(data[0..cast(uint)dataSize]);
+        fl.close();
+      } else {
+        import core.stdc.stdio : FILE, fopen, fclose, fread, ftell, fseek;
+        import std.internal.cstring : tempCString;
+        auto fl = fopen(path.tempCString, "rb");
+        if (fl is null) return FONS_INVALID;
+        scope(exit) fclose(fl);
+        if (fseek(fl, 0, 2/*SEEK_END*/) != 0) return FONS_INVALID;
+        auto dataSize = ftell(fl);
+        if (fseek(fl, 0, 0/*SEEK_SET*/) != 0) return FONS_INVALID;
+        if (dataSize < 16 || dataSize > int.max/32) return FONS_INVALID;
+        ubyte* data = cast(ubyte*)malloc(cast(uint)dataSize);
+        if (data is null) assert(0, "out of memory in NanoVega fontstash");
+        scope(failure) free(data); // oops
+        ubyte* dptr = data;
+        auto left = cast(uint)dataSize;
+        while (left > 0) {
+          auto rd = fread(dptr, 1, left, fl);
+          if (rd == 0) return FONS_INVALID; // unexpected EOF or reading error, it doesn't matter
+          dptr += rd;
+          left -= rd;
+        }
+      }
       // create font data
       FONSfontData* fdata = fons__createFontData(data, cast(int)dataSize, true); // free data
       fdata.incref();
@@ -7685,7 +7761,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
   // first try direct path
   auto res = loadFontFile(path);
   // if loading failed, try fontconfig (if fontconfig is available)
-  static if (NVG_HAS_FONTCONFIG) {
+  static if (NanoVegaHasFontConfig) {
     if (res == FONS_INVALID && fontconfigAvailable) {
       import std.internal.cstring : tempCString;
       FcPattern* pat = FcNameParse(path.tempCString);
@@ -8482,7 +8558,7 @@ public:
   }
 
 public:
-  @property bool valid () const pure nothrow @safe @nogc => (state !is null);
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null); }
 
   void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) {
     enum DoCodePointMixin = q{
@@ -10655,7 +10731,7 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-static if (NVG_HAS_FONTCONFIG) {
+static if (NanoVegaHasFontConfig) {
   version(nanovg_builtin_fontconfig_bindings) {
     pragma(lib, "fontconfig");
 
@@ -11126,7 +11202,7 @@ public:
 
   // number of (x,y) pairs for this command
   static int argCount (in Command cmd) nothrow @safe @nogc {
-    pragma(inline, true);
+    version(aliced) pragma(inline, true);
          if (cmd == Command.Bounds) return 2;
     else if (cmd == Command.MoveTo || cmd == Command.LineTo) return 1;
     else if (cmd == Command.CubicTo) return 3;
@@ -11161,8 +11237,8 @@ public void addBaphometBack (NVGContext nvg, float ofsx=0, float ofsy=0, float s
 
   auto path = ThePath(baphometPath);
 
-  float getScaledX () nothrow @trusted @nogc => (ofsx+path.getFloat()*scalex);
-  float getScaledY () nothrow @trusted @nogc => (ofsy+path.getFloat()*scaley);
+  float getScaledX () nothrow @trusted @nogc { pragma(inline, true); return (ofsx+path.getFloat()*scalex); }
+  float getScaledY () nothrow @trusted @nogc { pragma(inline, true); return (ofsy+path.getFloat()*scaley); }
 
   bool inPath = false;
   while (!path.empty) {
@@ -11208,8 +11284,8 @@ public void addBaphometPupils(bool left=true, bool right=true) (NVGContext nvg, 
 
   auto path = ThePath(baphometPath);
 
-  float getScaledX () nothrow @trusted @nogc => (ofsx+path.getFloat()*scalex);
-  float getScaledY () nothrow @trusted @nogc => (ofsy+path.getFloat()*scaley);
+  float getScaledX () nothrow @trusted @nogc { pragma(inline, true); return (ofsx+path.getFloat()*scalex); }
+  float getScaledY () nothrow @trusted @nogc { pragma(inline, true); return (ofsy+path.getFloat()*scaley); }
 
   bool inPath = false;
   bool pupLeft = true;
@@ -11275,8 +11351,8 @@ public void renderBaphomet(string mode="fs") (NVGContext nvg, float ofsx=0, floa
 
   auto path = ThePath(baphometPath);
 
-  float getScaledX () nothrow @trusted @nogc => (ofsx+path.getFloat()*scalex);
-  float getScaledY () nothrow @trusted @nogc => (ofsy+path.getFloat()*scaley);
+  float getScaledX () nothrow @trusted @nogc { pragma(inline, true); return (ofsx+path.getFloat()*scalex); }
+  float getScaledY () nothrow @trusted @nogc { pragma(inline, true); return (ofsy+path.getFloat()*scaley); }
 
   int mode = 0;
   int sw = ThePath.Command.NormalStroke;
