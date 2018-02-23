@@ -26,10 +26,25 @@
  *
  * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
-module iv.nanovega.svg is aliced;
+module iv.nanovega.svg;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
-private import iv.vfs;
+//private import iv.vfs;
+
+version(nanosvg_disable_vfs) {
+  enum NanoSVGHasIVVFS = false;
+} else {
+  static if (is(typeof((){import iv.vfs;}))) {
+    enum NanoSVGHasIVVFS = true;
+    import iv.vfs;
+  } else {
+    enum NanoSVGHasIVVFS = false;
+  }
+}
+
+version(aliced) {} else {
+  private alias usize = size_t;
+}
 
 version = nanosvg_crappy_stylesheet_parser;
 //version = nanosvg_debug_styles;
@@ -188,18 +203,18 @@ struct NSVG {
       uint color;
       Gradient* gradient;
     }
-    static uint rgb (ubyte r, ubyte g, ubyte b) => (r|(g<<8)|(b<<16));
+    static uint rgb (ubyte r, ubyte g, ubyte b) { pragma(inline, true); return (r|(g<<8)|(b<<16)); }
     @property const {
-      bool isNone () => (type == PaintType.None);
-      bool isColor () => (type == PaintType.Color);
+      bool isNone () { pragma(inline, true); return (type == PaintType.None); }
+      bool isColor () { pragma(inline, true); return (type == PaintType.Color); }
       // gradient types
-      bool isLinear () => (type == PaintType.LinearGradient);
-      bool isRadial () => (type == PaintType.RadialGradient);
+      bool isLinear () { pragma(inline, true); return (type == PaintType.LinearGradient); }
+      bool isRadial () { pragma(inline, true); return (type == PaintType.RadialGradient); }
       // color
-      ubyte r () => color&0xff;
-      ubyte g () => (color>>8)&0xff;
-      ubyte b () => (color>>16)&0xff;
-      ubyte a () => (color>>24)&0xff;
+      ubyte r () { pragma(inline, true); return color&0xff; }
+      ubyte g () { pragma(inline, true); return (color>>8)&0xff; }
+      ubyte b () { pragma(inline, true); return (color>>16)&0xff; }
+      ubyte a () { pragma(inline, true); return (color>>24)&0xff; }
     }
   }
 
@@ -395,7 +410,7 @@ struct NSVG {
     NSVG.Path* paths;         // Linked list of paths in the image.
     NSVG.Shape* next;         // Pointer to next shape, or null if last element.
 
-    @property bool visible () const pure nothrow @safe @nogc => ((flags&Visible) != 0);
+    @property bool visible () const pure nothrow @safe @nogc { pragma(inline, true); return ((flags&Visible) != 0); }
 
     // delegate can accept:
     //   NSVG.Path*
@@ -1810,8 +1825,8 @@ float nsvg__atof (const(char)[] s) nothrow @trusted @nogc {
   double res = 0.0, sign = 1.0;
   bool hasIntPart = false, hasFracPart = false;
 
-  char peekChar () nothrow @trusted @nogc => (left > 0 ? *cur : '\x00');
-  char getChar () nothrow @trusted @nogc { pragma(inline, true); if (left > 0) { --left; return *cur++; } else return '\x00'; }
+  char peekChar () nothrow @trusted @nogc { pragma(inline, true); return (left > 0 ? *cur : '\x00'); }
+  char getChar () nothrow @trusted @nogc { if (left > 0) { --left; return *cur++; } else return '\x00'; }
 
   // Parse optional sign
   switch (peekChar) {
@@ -1859,9 +1874,9 @@ float nsvg__atof (const(char)[] s) nothrow @trusted @nogc {
     int expPart = 0;
     while (nsvg__isdigit(peekChar)) expPart = expPart*10+(getChar()-'0');
     if (epositive) {
-      foreach (; 0..expPart) res *= 10.0;
+      foreach (immutable _; 0..expPart) res *= 10.0;
     } else {
-      foreach (; 0..expPart) res /= 10.0;
+      foreach (immutable _; 0..expPart) res /= 10.0;
     }
   }
 
@@ -3655,12 +3670,35 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
   if (filename.length == 0) return null;
 
   try {
-    auto fl = VFile(filename);
-    auto size = fl.size;
-    if (size > int.max/8 || size < 1) return null;
-    data = cast(char*)malloc(cast(uint)size+1);
-    if (data is null) return null;
-    fl.rawReadExact(data[0..cast(uint)size]);
+    static if (NanoSVGHasIVVFS) {
+      auto fl = VFile(filename);
+      auto size = fl.size;
+      if (size > int.max/8 || size < 1) return null;
+      data = cast(char*)malloc(cast(uint)size+1);
+      if (data is null) return null;
+      fl.rawReadExact(data[0..cast(uint)size]);
+      fl.close();
+    } else {
+      import core.stdc.stdio : FILE, fopen, fclose, fread, ftell, fseek;
+      import std.internal.cstring : tempCString;
+      auto fl = fopen(filename.tempCString, "rb");
+      if (fl is null) return null;
+      scope(exit) fclose(fl);
+      if (fseek(fl, 0, 2/*SEEK_END*/) != 0) return null;
+      auto size = ftell(fl);
+      if (fseek(fl, 0, 0/*SEEK_SET*/) != 0) return null;
+      if (size < 16 || size > int.max/32) return null;
+      data = cast(char*)malloc(cast(uint)size+1);
+      if (data is null) assert(0, "out of memory in NanoVega fontstash");
+      char* dptr = data;
+      auto left = cast(uint)size;
+      while (left > 0) {
+        auto rd = fread(dptr, 1, left, fl);
+        if (rd == 0) return null; // unexpected EOF or reading error, it doesn't matter
+        dptr += rd;
+        left -= rd;
+      }
+    }
     data[cast(uint)size] = '\0'; // not necessary, but meh...
     return nsvgParse(data[0..cast(uint)size], units, dpi, canvaswdt, canvashgt);
   } catch (Exception e) {
@@ -3669,6 +3707,7 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
 }
 
 
+static if (NanoSVGHasIVVFS) {
 public NSVG* nsvgParseFromFile(ST) (auto ref ST fi, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) nothrow
 if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST)
 {
@@ -3693,6 +3732,7 @@ if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST)
   } catch (Exception e) {
     return null;
   }
+}
 }
 
 

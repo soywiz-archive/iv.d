@@ -38,7 +38,7 @@
 module iv.nanovega.perf /*is aliced*/;
 private:
 
-import iv.alice;
+//import iv.alice;
 import iv.nanovega.nanovega;
 
 public final class PerfGraph {

@@ -8044,11 +8044,12 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
         auto left = cast(uint)dataSize;
         while (left > 0) {
           auto rd = fread(dptr, 1, left, fl);
-          if (rd == 0) return FONS_INVALID; // unexpected EOF or reading error, it doesn't matter
+          if (rd == 0) { free(data); return FONS_INVALID; } // unexpected EOF or reading error, it doesn't matter
           dptr += rd;
           left -= rd;
         }
       }
+      scope(failure) free(data); // oops
       // create font data
       FONSfontData* fdata = fons__createFontData(data, cast(int)dataSize, true); // free data
       fdata.incref();
@@ -10654,9 +10655,15 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 }
 
 
+version(aliced) {
+  private enum NanoVegaDefaultCreationFlags = NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_FONT_NOAA;
+} else {
+  private enum NanoVegaDefaultCreationFlags = NVG_ANTIALIAS|NVG_STENCIL_STROKES;
+}
+
 /// Creates NanoVega contexts for OpenGL versions.
 /// Flags should be combination of the create flags above.
-public NVGContext createGL2NVG (int flags=NVG_ANTIALIAS|NVG_STENCIL_STROKES|NVG_FONT_NOAA) nothrow @trusted @nogc {
+public NVGContext createGL2NVG (int flags=NanoVegaDefaultCreationFlags) nothrow @trusted @nogc {
   NVGparams params = void;
   NVGContext ctx = null;
   version(nanovg_builtin_opengl_bindings) nanovgInitOpenGL(); // why not?
