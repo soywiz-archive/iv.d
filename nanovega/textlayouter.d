@@ -214,7 +214,7 @@ public:
     float[4] b = void;
     float adv = fs.fonsTextBounds(0, 0, str, b[]);
     float w = b[2]-b[0];
-    return lrintf(max(adv, w));
+    return cast(int)lrintf(max(adv, w));
   }
 
   /// calculate spaces width
@@ -223,7 +223,7 @@ public:
     if (count < 1) return 0;
     auto it = FonsTextBoundsIterator(fs, 0, 0);
     it.put(' ');
-    return lrintf(it.advance*count);
+    return cast(int)lrintf(it.advance*count);
   }
 
   /// this returns "width", "width with trailing whitespace", and "width with trailing hypen"
@@ -237,24 +237,24 @@ public:
     it.put(str);
     if (w !is null) {
       it.getHBounds(minx, maxx);
-      *w = lrintf(max(it.advance, maxx-minx));
+      *w = cast(int)lrintf(max(it.advance, maxx-minx));
     }
     if (wsp !is null && whyph is null) {
       it.put(" ");
       it.getHBounds(minx, maxx);
-      *wsp = lrintf(max(it.advance, maxx-minx));
+      *wsp = cast(int)lrintf(max(it.advance, maxx-minx));
     } else if (wsp is null && whyph !is null) {
       it.put(cast(dchar)45);
       it.getHBounds(minx, maxx);
-      *whyph = lrintf(max(it.advance, maxx-minx));
+      *whyph = cast(int)lrintf(max(it.advance, maxx-minx));
     } else if (wsp !is null && whyph !is null) {
       auto sit = it;
       it.put(" ");
       it.getHBounds(minx, maxx);
-      *wsp = lrintf(max(it.advance, maxx-minx));
+      *wsp = cast(int)lrintf(max(it.advance, maxx-minx));
       sit.put(cast(dchar)45);
       sit.getHBounds(minx, maxx);
-      *whyph = lrintf(max(sit.advance, maxx-minx));
+      *whyph = cast(int)lrintf(max(sit.advance, maxx-minx));
     }
   }
 
@@ -264,7 +264,7 @@ public:
     if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float y0 = void, y1 = void;
     fs.fonsLineBounds(0, &y0, &y1);
-    return lrintf(y1-y0);
+    return cast(int)lrintf(y1-y0);
   }
 
   /// calculate text metrics: ascent, descent, line height
@@ -273,9 +273,9 @@ public:
     if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float a = void, d = void, h = void;
     fs.fonsVertMetrics(&a, &d, &h);
-    if (asc !is null) *asc = lrintf(a);
-    if (desc !is null) *desc = lrintf(d);
-    if (lineh !is null) *lineh = lrintf(h);
+    if (asc !is null) *asc = cast(int)lrintf(a);
+    if (desc !is null) *desc = cast(int)lrintf(d);
+    if (lineh !is null) *lineh = cast(int)lrintf(h);
   }
 
 static private:

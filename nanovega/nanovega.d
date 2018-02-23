@@ -7019,8 +7019,8 @@ extern(C) nothrow @trusted @nogc {
     NVGGlyphOutline* ol;
     FT_BBox outlineBBox;
   nothrow @trusted @nogc:
-    int transx (int v) const pure { pragma(inline, true); return v; }
-    int transy (int v) const pure { pragma(inline, true); return -v; }
+    T transx(T) (T v) const pure { pragma(inline, true); return v; }
+    T transy(T) (T v) const pure { pragma(inline, true); return -v; }
     void putBytes (const(void)[] b) {
       assert(b.length <= 512);
       if (b.length == 0) return;
