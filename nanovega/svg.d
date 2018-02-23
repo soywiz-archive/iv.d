@@ -35,17 +35,20 @@ version = nanosvg_crappy_stylesheet_parser;
 //version = nanosvg_debug_styles;
 //version(rdmd) import iv.strex;
 
+//version = nanosvg_use_beziers; // convert everything to beziers
+//version = nanosvg_only_cubic_beziers; // convert everything to cubic beziers
+
 public enum NSVGDefaults {
   CanvasWidth = 800,
   CanvasHeight = 600,
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-// NanoSVG is a simple stupid single-header-file SVG parse. The output of the parser is a list of cubic bezier shapes.
+// NanoSVG is a simple stupid SVG parser. The output of the parser is a list of drawing commands.
 //
 // The library suits well for anything from rendering scalable icons in your editor application to prototyping a game.
 //
-// NanoSVG supports a wide range of SVG features, but something may be missing, feel free to create a pull request!
+// NanoSVG supports a wide range of SVG features, but something may be missing. Your's Captain Obvious.
 //
 // The shapes in the SVG images are transformed by the viewBox and converted to specified units.
 // That is, you should get the same looking data as your designed in your favorite app.
@@ -67,14 +70,20 @@ public enum NSVGDefaults {
   NSVG* image = nsvgParseFromFile("test.svg", "px", 96);
   printf("size: %f x %f\n", image.width, image.height);
   // Use...
-  for (NSVG.Shape *shape = image.shapes; shape !is null; shape = shape.next) {
-    for (NSVG.Path *path = shape.paths; path !is null; path = path.next) {
-      for (int i = 0; i < path.npts-1; i += 3) {
-        float* p = &path.pts[i*2];
-        drawCubicBez(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-      }
-    }
-  }
+  image.forEachShape((in ref NSVG.Shape shape) {
+    if (!shape.visible) return;
+    shape.forEachPath((in ref NSVG.Path path) {
+      // this will issue final `LineTo` for closed pathes
+      path.forEachCommand!true(delegate (NSVG.Command cmd, const(float)[] args) nothrow @trusted @nogc {
+        final switch (cmd) {
+          case NSVG.Command.MoveTo: nvg.moveTo(args); break;
+          case NSVG.Command.LineTo: nvg.lineTo(args); break;
+          case NSVG.Command.QuadTo: nvg.quadTo(args); break;
+          case NSVG.Command.BezierTo: nvg.bezierTo(args); break;
+        }
+      });
+    });
+  });
   // Delete
   image.kill();
 */
@@ -115,6 +124,13 @@ alias NSVGRasterizer = NSVGrasterizer;
 
 struct NSVG {
   @disable this (this);
+
+  enum Command : int {
+    MoveTo, // synthesized command, always first
+    LineTo,
+    QuadTo,
+    BezierTo, // cubic bezier
+  }
 
   enum PaintType : ubyte {
     None,
@@ -183,16 +199,181 @@ struct NSVG {
       ubyte r () => color&0xff;
       ubyte g () => (color>>8)&0xff;
       ubyte b () => (color>>16)&0xff;
+      ubyte a () => (color>>24)&0xff;
     }
   }
 
   static struct Path {
     @disable this (this);
-    float* pts;      // Cubic bezier points: x0,y0, [cpx1,cpx1,cpx2,cpy2,x1,y1], ...
-    int npts;        // Total number of bezier points.
-    char closed;     // Flag indicating if shapes should be treated as closed.
+    float* stream;   // Command, args...; Cubic bezier points: x0,y0, [cpx1,cpx1,cpx2,cpy2,x1,y1], ...
+    int nsflts;      // Total number of floats in stream.
+    bool closed;     // Flag indicating if shapes should be treated as closed.
     float[4] bounds; // Tight bounding box of the shape [minx,miny,maxx,maxy].
     NSVG.Path* next; // Pointer to next path, or null if last element.
+
+    ///
+    @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (nsflts == 0); }
+
+    ///
+    float startX () const nothrow @trusted @nogc {
+      pragma(inline, true);
+      return (nsflts >= 3 && cast(Command)stream[0] == Command.MoveTo ? stream[1] : float.nan);
+    }
+
+    ///
+    float startY () const nothrow @trusted @nogc {
+      pragma(inline, true);
+      return (nsflts >= 3 && cast(Command)stream[0] == Command.MoveTo ? stream[2] : float.nan);
+    }
+
+    ///
+    bool startPoint (float* dx, float* dy) const nothrow @trusted @nogc {
+      if (nsflts >= 3 && cast(Command)stream[0] == Command.MoveTo) {
+        if (dx !is null) *dx = stream[1];
+        if (dy !is null) *dy = stream[2];
+        return true;
+      } else {
+        if (dx !is null) *dx = 0;
+        if (dy !is null) *dy = 0;
+        return false;
+      }
+    }
+
+    ///
+    int countCubics () const nothrow @trusted @nogc {
+      if (nsflts < 3) return 0;
+      int res = 0, argc;
+      for (int pidx = 0; pidx+3 <= nsflts; ) {
+        final switch (cast(Command)stream[pidx++]) {
+          case Command.MoveTo: argc = 2; break;
+          case Command.LineTo: argc = 2; ++res; break;
+          case Command.QuadTo: argc = 4; ++res; break;
+          case Command.BezierTo: argc = 6; ++res; break;
+        }
+        if (pidx+argc > nsflts) break; // just in case
+        pidx += argc;
+      }
+      return res;
+    }
+
+    ///
+    int countCommands(bool synthesizeCloseCommand=true) () const nothrow @trusted @nogc {
+      if (nsflts < 3) return 0;
+      int res = 0, argc;
+      for (int pidx = 0; pidx+3 <= nsflts; ) {
+        ++res;
+        final switch (cast(Command)stream[pidx++]) {
+          case Command.MoveTo: argc = 2; break;
+          case Command.LineTo: argc = 2; break;
+          case Command.QuadTo: argc = 4; break;
+          case Command.BezierTo: argc = 6; break;
+        }
+        if (pidx+argc > nsflts) break; // just in case
+        pidx += argc;
+      }
+      static if (synthesizeCloseCommand) { if (closed) ++res; }
+      return res;
+    }
+
+    /// emits cubic beziers.
+    /// if `withMoveTo` is `false`, issue 8-arg commands for cubic beziers (i.e. include starting point).
+    /// if `withMoveTo` is `true`, issue 2-arg command for `moveTo`, and 6-arg command for cubic beziers.
+    void asCubics(bool withMoveTo=false, DG) (scope DG dg) inout if (__traits(compiles, (){ DG xdg; float[] f; xdg(f); })) {
+      if (dg is null) return;
+      if (nsflts < 3) return;
+      enum HasRes = __traits(compiles, (){ DG xdg; float[] f; bool res = xdg(f); });
+      float cx = 0, cy = 0;
+      float[8] cubic = void;
+
+      void synthLine (in float cx, in float cy, in float x, in float y) nothrow @trusted @nogc {
+        immutable float dx = x-cx;
+        immutable float dy = y-cy;
+        cubic.ptr[0] = cx;
+        cubic.ptr[1] = cy;
+        cubic.ptr[2] = cx+dx/3.0f;
+        cubic.ptr[3] = cy+dy/3.0f;
+        cubic.ptr[4] = x-dx/3.0f;
+        cubic.ptr[5] = y-dy/3.0f;
+        cubic.ptr[6] = x;
+        cubic.ptr[7] = y;
+      }
+
+      void synthQuad (in float cx, in float cy, in float x1, in float y1, in float x2, in float y2) nothrow @trusted @nogc {
+        immutable float cx1 = x1+2.0f/3.0f*(cx-x1);
+        immutable float cy1 = y1+2.0f/3.0f*(cy-y1);
+        immutable float cx2 = x2+2.0f/3.0f*(cx-x2);
+        immutable float cy2 = y2+2.0f/3.0f*(cy-y2);
+        cubic.ptr[0] = cx;
+        cubic.ptr[1] = cy;
+        cubic.ptr[2] = cx1;
+        cubic.ptr[3] = cy2;
+        cubic.ptr[4] = cx2;
+        cubic.ptr[5] = cy2;
+        cubic.ptr[6] = x2;
+        cubic.ptr[7] = y2;
+      }
+
+      for (int pidx = 0; pidx+3 <= nsflts; ) {
+        final switch (cast(Command)stream[pidx++]) {
+          case Command.MoveTo:
+            static if (withMoveTo) {
+              static if (HasRes) { if (dg(stream[pidx+0..pidx+2])) return; } else { dg(stream[pidx+0..pidx+2]); }
+            }
+            cx = stream[pidx++];
+            cy = stream[pidx++];
+            continue;
+          case Command.LineTo:
+            synthLine(cx, cy, stream[pidx+0], stream[pidx+1]);
+            pidx += 2;
+            break;
+          case Command.QuadTo:
+            synthQuad(cx, cy, stream[pidx+0], stream[pidx+1], stream[pidx+2], stream[pidx+3]);
+            pidx += 4;
+            break;
+          case Command.BezierTo:
+            cubic.ptr[0] = cx;
+            cubic.ptr[1] = cy;
+            cubic.ptr[2..8] = stream[pidx..pidx+6];
+            pidx += 6;
+            break;
+        }
+        cx = cubic.ptr[6];
+        cy = cubic.ptr[7];
+        static if (withMoveTo) {
+          static if (HasRes) { if (dg(cubic[2..8])) return; } else { dg(cubic[2..8]); }
+        } else {
+          static if (HasRes) { if (dg(cubic[])) return; } else { dg(cubic[]); }
+        }
+      }
+    }
+
+    /// if `synthesizeCloseCommand` is true, and the path is closed, this emits line to the first point.
+    void forEachCommand(bool synthesizeCloseCommand=true, DG) (scope DG dg) inout
+    if (__traits(compiles, (){ DG xdg; Command c; const(float)[] f; xdg(c, f); }))
+    {
+      if (dg is null) return;
+      if (nsflts < 3) return;
+      enum HasRes = __traits(compiles, (){ DG xdg; Command c; const(float)[] f; bool res = xdg(c, f); });
+      int argc;
+      Command cmd;
+      for (int pidx = 0; pidx+3 <= nsflts; ) {
+        cmd = cast(Command)stream[pidx++];
+        final switch (cmd) {
+          case Command.MoveTo: argc = 2; break;
+          case Command.LineTo: argc = 2; break;
+          case Command.QuadTo: argc = 4; break;
+          case Command.BezierTo: argc = 6; break;
+        }
+        if (pidx+argc > nsflts) break; // just in case
+        static if (HasRes) { if (dg(cmd, stream[pidx..pidx+argc])) return; } else { dg(cmd, stream[pidx..pidx+argc]); }
+        pidx += argc;
+      }
+      static if (synthesizeCloseCommand) {
+        if (closed && cast(Command)stream[0] == Command.MoveTo) {
+          static if (HasRes) { if (dg(Command.LineTo, stream[1..3])) return; } else { dg(Command.LineTo, stream[1..3]); }
+        }
+      }
+    }
   }
 
   static struct Shape {
@@ -213,6 +394,7 @@ struct NSVG {
     float[4] bounds;          // Tight bounding box of the shape [minx,miny,maxx,maxy].
     NSVG.Path* paths;         // Linked list of paths in the image.
     NSVG.Shape* next;         // Pointer to next shape, or null if last element.
+
     @property bool visible () const pure nothrow @safe @nogc => ((flags&Visible) != 0);
 
     // delegate can accept:
@@ -837,9 +1019,9 @@ struct Style {
 struct Parser {
   Attrib[NSVG_MAX_ATTR] attr;
   int attrHead;
-  float* pts;
-  int npts;
-  int cpts;
+  float* stream;
+  int nsflts;
+  int csflts;
   NSVG.Path* plist;
   NSVG* image;
   GradientData* gradients;
@@ -1049,7 +1231,7 @@ error:
 void nsvg__deletePaths (NSVG.Path* path) {
   while (path !is null) {
     NSVG.Path* next = path.next;
-    xfree(path.pts);
+    xfree(path.stream);
     xfree(path);
     path = next;
   }
@@ -1074,53 +1256,78 @@ void nsvg__deleteParser (Parser* p) {
     nsvg__deletePaths(p.plist);
     nsvg__deleteGradientData(p.gradients);
     kill(p.image);
-    xfree(p.pts);
+    xfree(p.stream);
     version(nanosvg_crappy_stylesheet_parser) xfree(p.styles);
     xfree(p);
   }
 }
 
 void nsvg__resetPath (Parser* p) {
-  p.npts = 0;
+  p.nsflts = 0;
 }
 
-void nsvg__addPoint (Parser* p, float x, float y) {
-  if (p.npts+1 > p.cpts) {
+void nsvg__addToStream (Parser* p, in float v) {
+  if (p.nsflts+1 > p.csflts) {
     import core.stdc.stdlib : realloc;
-    p.cpts = (p.cpts ? p.cpts*2 : 8);
-    p.pts = cast(float*)realloc(p.pts, p.cpts*2*float.sizeof+256);
-    if (p.pts is null) assert(0, "nanosvg: out of memory");
+    p.csflts = (p.csflts == 0 ? 32 : p.csflts < 16384 ? p.csflts*2 : p.csflts+4096); //k8: arbitrary
+    p.stream = cast(float*)realloc(p.stream, p.csflts*float.sizeof);
+    if (p.stream is null) assert(0, "nanosvg: out of memory");
   }
-  p.pts[p.npts*2+0] = x;
-  p.pts[p.npts*2+1] = y;
-  ++p.npts;
+  p.stream[p.nsflts++] = v;
 }
 
-void nsvg__moveTo (Parser* p, float x, float y) {
+void nsvg__addCommand (Parser* p, NSVG.Command c) {
+  nsvg__addToStream(p, cast(float)c);
+}
+
+void nsvg__addPoint (Parser* p, in float x, in float y) {
+  nsvg__addToStream(p, x);
+  nsvg__addToStream(p, y);
+}
+
+void nsvg__moveTo (Parser* p, in float x, in float y) {
+  // this is always called right after `nsvg__resetPath()`
+  if (p.nsflts != 0) assert(0, "internal error in NanoSVG");
+  nsvg__addCommand(p, NSVG.Command.MoveTo);
+  nsvg__addPoint(p, x, y);
+  /*
   if (p.npts > 0) {
     p.pts[(p.npts-1)*2+0] = x;
     p.pts[(p.npts-1)*2+1] = y;
   } else {
     nsvg__addPoint(p, x, y);
   }
+  */
 }
 
 void nsvg__lineTo (Parser* p, in float x, in float y) {
-  //float px, py, dx, dy;
-  if (p.npts > 0) {
-    immutable float px = p.pts[(p.npts-1)*2+0];
-    immutable float py = p.pts[(p.npts-1)*2+1];
-    immutable float dx = x-px;
-    immutable float dy = y-py;
-    nsvg__addPoint(p, px+dx/3.0f, py+dy/3.0f);
-    nsvg__addPoint(p, x-dx/3.0f, y-dy/3.0f);
-    nsvg__addPoint(p, x, y);
+  if (p.nsflts > 0) {
+    version(nanosvg_use_beziers) {
+      immutable float px = p.pts[(p.npts-1)*2+0];
+      immutable float py = p.pts[(p.npts-1)*2+1];
+      immutable float dx = x-px;
+      immutable float dy = y-py;
+      nsvg__addCommand(NSVG.Command.BezierTo);
+      nsvg__addPoint(p, px+dx/3.0f, py+dy/3.0f);
+      nsvg__addPoint(p, x-dx/3.0f, y-dy/3.0f);
+      nsvg__addPoint(p, x, y);
+    } else {
+      nsvg__addCommand(p, NSVG.Command.LineTo);
+      nsvg__addPoint(p, x, y);
+    }
   }
 }
 
 void nsvg__cubicBezTo (Parser* p, in float cpx1, in float cpy1, in float cpx2, in float cpy2, in float x, in float y) {
+  nsvg__addCommand(p, NSVG.Command.BezierTo);
   nsvg__addPoint(p, cpx1, cpy1);
   nsvg__addPoint(p, cpx2, cpy2);
+  nsvg__addPoint(p, x, y);
+}
+
+void nsvg__quadBezTo (Parser* p, in float cpx1, in float cpy1, in float x, in float y) {
+  nsvg__addCommand(p, NSVG.Command.QuadTo);
+  nsvg__addPoint(p, cpx1, cpy1);
   nsvg__addPoint(p, x, y);
 }
 
@@ -1267,12 +1474,98 @@ float nsvg__getAverageScale (float* t) {
   return (sx+sy)*0.5f;
 }
 
-void nsvg__getLocalBounds (float* bounds, NSVG.Shape* shape, float* xform) {
-  NSVG.Path* path;
-  float[4*2] curve = void;
-  float[4] curveBounds = void;
+void nsvg__quadBounds (float* bounds, const(float)* curve) nothrow @trusted @nogc {
+  // cheat: convert quadratic bezier to cubic bezier
+  immutable float cx = curve[0];
+  immutable float cy = curve[1];
+  immutable float x1 = curve[2];
+  immutable float y1 = curve[3];
+  immutable float x2 = curve[4];
+  immutable float y2 = curve[5];
+  immutable float cx1 = x1+2.0f/3.0f*(cx-x1);
+  immutable float cy1 = y1+2.0f/3.0f*(cy-y1);
+  immutable float cx2 = x2+2.0f/3.0f*(cx-x2);
+  immutable float cy2 = y2+2.0f/3.0f*(cy-y2);
+  float[8] cubic = void;
+  cubic.ptr[0] = cx;
+  cubic.ptr[1] = cy;
+  cubic.ptr[2] = cx1;
+  cubic.ptr[3] = cy1;
+  cubic.ptr[4] = cx2;
+  cubic.ptr[5] = cy2;
+  cubic.ptr[6] = x2;
+  cubic.ptr[7] = y2;
+  nsvg__curveBounds(bounds, cubic.ptr);
+}
+
+void nsvg__getLocalBounds (float* bounds, NSVG.Shape* shape, const(float)* xform) {
   bool first = true;
-  for (path = shape.paths; path !is null; path = path.next) {
+
+  void addPoint (in float x, in float y) nothrow @trusted @nogc {
+    if (!first) {
+      bounds[0] = nsvg__minf(bounds[0], x);
+      bounds[1] = nsvg__minf(bounds[1], y);
+      bounds[2] = nsvg__maxf(bounds[2], x);
+      bounds[3] = nsvg__maxf(bounds[3], y);
+    } else {
+      bounds[0] = bounds[2] = x;
+      bounds[1] = bounds[3] = y;
+      first = false;
+    }
+  }
+
+  void addRect (in float x0, in float y0, in float x1, in float y1) nothrow @trusted @nogc {
+    addPoint(x0, y0);
+    addPoint(x1, y0);
+    addPoint(x1, y1);
+    addPoint(x0, y1);
+  }
+
+  float cx = 0, cy = 0;
+  for (NSVG.Path* path = shape.paths; path !is null; path = path.next) {
+    path.forEachCommand!false(delegate (NSVG.Command cmd, const(float)[] args) nothrow @trusted @nogc {
+      import core.stdc.string : memmove;
+      assert(args.length <= 6);
+      float[8] xpt = void;
+      // transform points
+      foreach (immutable n; 0..args.length/2) {
+        nsvg__xformPoint(&xpt.ptr[n*2+0], &xpt.ptr[n*2+1], args.ptr[n*2+0], args.ptr[n*2+1], xform);
+      }
+      // add to bounds
+      final switch (cmd) {
+        case NSVG.Command.MoveTo:
+          cx = xpt.ptr[0];
+          cy = xpt.ptr[1];
+          break;
+        case NSVG.Command.LineTo:
+          addPoint(cx, cy);
+          addPoint(xpt.ptr[0], xpt.ptr[1]);
+          cx = xpt.ptr[0];
+          cy = xpt.ptr[1];
+          break;
+        case NSVG.Command.QuadTo:
+          memmove(xpt.ptr+2, xpt.ptr, 4); // make room for starting point
+          xpt.ptr[0] = cx;
+          xpt.ptr[1] = cy;
+          float[4] curveBounds = void;
+          nsvg__quadBounds(curveBounds.ptr, xpt.ptr);
+          addRect(curveBounds.ptr[0], curveBounds.ptr[1], curveBounds.ptr[2], curveBounds.ptr[3]);
+          cx = xpt.ptr[4];
+          cy = xpt.ptr[5];
+          break;
+        case NSVG.Command.BezierTo:
+          memmove(xpt.ptr+2, xpt.ptr, 6); // make room for starting point
+          xpt.ptr[0] = cx;
+          xpt.ptr[1] = cy;
+          float[4] curveBounds = void;
+          nsvg__curveBounds(curveBounds.ptr, xpt.ptr);
+          addRect(curveBounds.ptr[0], curveBounds.ptr[1], curveBounds.ptr[2], curveBounds.ptr[3]);
+          cx = xpt.ptr[6];
+          cy = xpt.ptr[7];
+          break;
+      }
+    });
+    /*
     nsvg__xformPoint(&curve.ptr[0], &curve.ptr[1], path.pts[0], path.pts[1], xform);
     for (int i = 0; i < path.npts-1; i += 3) {
       nsvg__xformPoint(&curve.ptr[2], &curve.ptr[3], path.pts[(i+1)*2], path.pts[(i+1)*2+1], xform);
@@ -1294,6 +1587,7 @@ void nsvg__getLocalBounds (float* bounds, NSVG.Shape* shape, float* xform) {
       curve.ptr[0] = curve.ptr[6];
       curve.ptr[1] = curve.ptr[7];
     }
+    */
   }
 }
 
@@ -1386,45 +1680,113 @@ error:
   if (shape) xfree(shape);
 }
 
-void nsvg__addPath (Parser* p, char closed) {
+void nsvg__addPath (Parser* p, bool closed) {
   Attrib* attr = nsvg__getAttr(p);
-  NSVG.Path* path = null;
+
+  if (p.nsflts < 4) return;
+
+  if (closed) {
+    auto cmd = cast(NSVG.Command)p.stream[0];
+    if (cmd != NSVG.Command.MoveTo) assert(0, "NanoSVG: invalid path");
+    nsvg__lineTo(p, p.stream[1], p.stream[2]);
+  }
+
+  float cx = 0, cy = 0;
   float[4] bounds = void;
-  float* curve;
-  int i;
+  bool first = true;
 
-  if (p.npts < 4) return;
-
-  if (closed) nsvg__lineTo(p, p.pts[0], p.pts[1]);
-
-  path = xalloc!(NSVG.Path);
+  NSVG.Path* path = xalloc!(NSVG.Path);
   if (path is null) goto error;
   //memset(path, 0, NSVG.Path.sizeof);
 
-  path.pts = xcalloc!float(p.npts*2);
-  if (path.pts is null) goto error;
+  path.stream = xcalloc!float(p.nsflts);
+  if (path.stream is null) goto error;
   path.closed = closed;
-  path.npts = p.npts;
+  path.nsflts = p.nsflts;
 
-  // Transform path.
-  for (i = 0; i < p.npts; ++i) nsvg__xformPoint(&path.pts[i*2], &path.pts[i*2+1], p.pts[i*2], p.pts[i*2+1], attr.xform.ptr);
-
-  // Find bounds
-  for (i = 0; i < path.npts-1; i += 3) {
-    curve = &path.pts[i*2];
-    nsvg__curveBounds(bounds.ptr, curve);
-    if (i == 0) {
-      path.bounds[0] = bounds.ptr[0];
-      path.bounds[1] = bounds.ptr[1];
-      path.bounds[2] = bounds.ptr[2];
-      path.bounds[3] = bounds.ptr[3];
+  // transform path and calculate bounds
+  void addPoint (in float x, in float y) nothrow @trusted @nogc {
+    if (!first) {
+      bounds[0] = nsvg__minf(bounds[0], x);
+      bounds[1] = nsvg__minf(bounds[1], y);
+      bounds[2] = nsvg__maxf(bounds[2], x);
+      bounds[3] = nsvg__maxf(bounds[3], y);
     } else {
-      path.bounds[0] = nsvg__minf(path.bounds[0], bounds.ptr[0]);
-      path.bounds[1] = nsvg__minf(path.bounds[1], bounds.ptr[1]);
-      path.bounds[2] = nsvg__maxf(path.bounds[2], bounds.ptr[2]);
-      path.bounds[3] = nsvg__maxf(path.bounds[3], bounds.ptr[3]);
+      bounds[0] = bounds[2] = x;
+      bounds[1] = bounds[3] = y;
+      first = false;
     }
   }
+
+  void addRect (in float x0, in float y0, in float x1, in float y1) nothrow @trusted @nogc {
+    addPoint(x0, y0);
+    addPoint(x1, y0);
+    addPoint(x1, y1);
+    addPoint(x0, y1);
+  }
+
+  version(none) {
+    foreach (immutable idx, float f; p.stream[0..p.nsflts]) {
+      import core.stdc.stdio;
+      printf("idx=%u; f=%g\n", cast(uint)idx, cast(double)f);
+    }
+  }
+
+  for (int i = 0; i+3 <= p.nsflts; ) {
+    int argc = 0; // pair of coords
+    NSVG.Command cmd = cast(NSVG.Command)p.stream[i];
+    final switch (cmd) {
+      case NSVG.Command.MoveTo: argc = 1; break;
+      case NSVG.Command.LineTo: argc = 1; break;
+      case NSVG.Command.QuadTo: argc = 2; break;
+      case NSVG.Command.BezierTo: argc = 3; break;
+    }
+    // copy command
+    path.stream[i] = p.stream[i];
+    ++i;
+    auto starti = i;
+    // transform points
+    while (argc-- > 0) {
+      nsvg__xformPoint(&path.stream[i+0], &path.stream[i+1], p.stream[i+0], p.stream[i+1], attr.xform.ptr);
+      i += 2;
+    }
+    // do bounds
+    final switch (cmd) {
+      case NSVG.Command.MoveTo:
+        cx = path.stream[starti+0];
+        cy = path.stream[starti+1];
+        break;
+      case NSVG.Command.LineTo:
+        addPoint(cx, cy);
+        cx = path.stream[starti+0];
+        cy = path.stream[starti+1];
+        addPoint(cx, cy);
+        break;
+      case NSVG.Command.QuadTo:
+        float[6] curve = void;
+        curve.ptr[0] = cx;
+        curve.ptr[1] = cy;
+        curve.ptr[2..6] = path.stream[starti+0..starti+4];
+        cx = path.stream[starti+2];
+        cy = path.stream[starti+3];
+        float[4] curveBounds = void;
+        nsvg__quadBounds(curveBounds.ptr, curve.ptr);
+        addRect(curveBounds.ptr[0], curveBounds.ptr[1], curveBounds.ptr[2], curveBounds.ptr[3]);
+        break;
+      case NSVG.Command.BezierTo:
+        float[8] curve = void;
+        curve.ptr[0] = cx;
+        curve.ptr[1] = cy;
+        curve.ptr[2..8] = path.stream[starti+0..starti+6];
+        cx = path.stream[starti+4];
+        cy = path.stream[starti+5];
+        float[4] curveBounds = void;
+        nsvg__curveBounds(curveBounds.ptr, curve.ptr);
+        addRect(curveBounds.ptr[0], curveBounds.ptr[1], curveBounds.ptr[2], curveBounds.ptr[3]);
+        break;
+    }
+  }
+  path.bounds[0..4] = bounds[0..4];
 
   path.next = p.plist;
   p.plist = path;
@@ -1433,7 +1795,7 @@ void nsvg__addPath (Parser* p, char closed) {
 
 error:
   if (path !is null) {
-    if (path.pts !is null) xfree(path.pts);
+    if (path.stream !is null) xfree(path.stream);
     xfree(path);
   }
 }
@@ -1441,11 +1803,6 @@ error:
 // We roll our own string to float because the std library one uses locale and messes things up.
 // special hack: stop at '\0' (actually, it stops on any non-digit, so no special code is required)
 float nsvg__atof (const(char)[] s) nothrow @trusted @nogc {
-  /*
-  import core.stdc.stdlib : atof;
-  return cast(float)atof(s.ptr);
-  */
-
   if (s.length == 0) return 0; // oops
 
   const(char)* cur = s.ptr;
@@ -1552,8 +1909,6 @@ int nsvg__parseNumber (const(char)[] s, char[] it) {
       s = s[1..$];
     }
   }
-
-  //{ import std.stdio; writeln("size=", size, "; i=", i, "; it=", it[0..i].quote, "; os=", os.quote); }
 
   return cast(int)(s.ptr-os.ptr);
 }
@@ -2260,94 +2615,65 @@ void nsvg__parseAttribs (Parser* p, AttrList attr) {
 
 int nsvg__getArgsPerElement (char cmd) {
   switch (cmd) {
-    case 'v':
-    case 'V':
-    case 'h':
-    case 'H':
+    case 'v': case 'V':
+    case 'h': case 'H':
       return 1;
-    case 'm':
-    case 'M':
-    case 'l':
-    case 'L':
-    case 't':
-    case 'T':
+    case 'm': case 'M':
+    case 'l': case 'L':
+    case 't': case 'T':
       return 2;
-    case 'q':
-    case 'Q':
-    case 's':
-    case 'S':
+    case 'q': case 'Q':
+    case 's': case 'S':
       return 4;
-    case 'c':
-    case 'C':
+    case 'c': case 'C':
       return 6;
-    case 'a':
-    case 'A':
+    case 'a': case 'A':
       return 7;
     default:
   }
   return 0;
 }
 
-void nsvg__pathMoveTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
+void nsvg__pathMoveTo (Parser* p, float* cpx, float* cpy, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathMoveTo: args=", args[0..2]); }
-  if (rel) {
-    *cpx += args[0];
-    *cpy += args[1];
-  } else {
-    *cpx = args[0];
-    *cpy = args[1];
-  }
+  if (rel) { *cpx += args[0]; *cpy += args[1]; } else { *cpx = args[0]; *cpy = args[1]; }
   nsvg__moveTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
+void nsvg__pathLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathLineTo: args=", args[0..2]); }
-  if (rel) {
-    *cpx += args[0];
-    *cpy += args[1];
-  } else {
-    *cpx = args[0];
-    *cpy = args[1];
-  }
+  if (rel) { *cpx += args[0]; *cpy += args[1]; } else { *cpx = args[0]; *cpy = args[1]; }
   nsvg__lineTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathHLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
+void nsvg__pathHLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathHLineTo: args=", args[0..1]); }
-  if (rel)
-    *cpx += args[0];
-  else
-    *cpx = args[0];
+  if (rel) *cpx += args[0]; else *cpx = args[0];
   nsvg__lineTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathVLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
+void nsvg__pathVLineTo (Parser* p, float* cpx, float* cpy, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathVLineTo: args=", args[0..1]); }
-  if (rel)
-    *cpy += args[0];
-  else
-    *cpy = args[0];
+  if (rel) *cpy += args[0]; else *cpy = args[0];
   nsvg__lineTo(p, *cpx, *cpy);
 }
 
-void nsvg__pathCubicBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
+void nsvg__pathCubicBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathCubicBezTo: args=", args[0..6]); }
-  float x2 = void, y2 = void, cx1 = void, cy1 = void, cx2 = void, cy2 = void;
+  float cx1 = args[0];
+  float cy1 = args[1];
+  float cx2 = args[2];
+  float cy2 = args[3];
+  float x2 = args[4];
+  float y2 = args[5];
 
   if (rel) {
-    cx1 = *cpx+args[0];
-    cy1 = *cpy+args[1];
-    cx2 = *cpx+args[2];
-    cy2 = *cpy+args[3];
-    x2 = *cpx+args[4];
-    y2 = *cpy+args[5];
-  } else {
-    cx1 = args[0];
-    cy1 = args[1];
-    cx2 = args[2];
-    cy2 = args[3];
-    x2 = args[4];
-    y2 = args[5];
+    cx1 += *cpx;
+    cy1 += *cpy;
+    cx2 += *cpx;
+    cy2 += *cpy;
+    x2 += *cpx;
+    y2 += *cpy;
   }
 
   nsvg__cubicBezTo(p, cx1, cy1, cx2, cy2, x2, y2);
@@ -2358,22 +2684,21 @@ void nsvg__pathCubicBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float
   *cpy = y2;
 }
 
-void nsvg__pathCubicBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
+void nsvg__pathCubicBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathCubicBezShortTo: args=", args[0..4]); }
-  float x2 = void, y2 = void, cx2 = void, cy2 = void;
 
+  float cx2 = args[0];
+  float cy2 = args[1];
+  float x2 = args[2];
+  float y2 = args[3];
   immutable float x1 = *cpx;
   immutable float y1 = *cpy;
+
   if (rel) {
-    cx2 = *cpx+args[0];
-    cy2 = *cpy+args[1];
-    x2 = *cpx+args[2];
-    y2 = *cpy+args[3];
-  } else {
-    cx2 = args[0];
-    cy2 = args[1];
-    x2 = args[2];
-    y2 = args[3];
+    cx2 += *cpx;
+    cy2 += *cpy;
+    x2 += *cpx;
+    y2 += *cpy;
   }
 
   immutable float cx1 = 2*x1-*cpx2;
@@ -2387,31 +2712,33 @@ void nsvg__pathCubicBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, 
   *cpy = y2;
 }
 
-void nsvg__pathQuadBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
+void nsvg__pathQuadBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathQuadBezTo: args=", args[0..4]); }
-  float x2 = void, y2 = void, cx = void, cy = void;
 
+  float cx = args[0];
+  float cy = args[1];
+  float x2 = args[2];
+  float y2 = args[3];
   immutable float x1 = *cpx;
   immutable float y1 = *cpy;
+
   if (rel) {
-    cx = *cpx+args[0];
-    cy = *cpy+args[1];
-    x2 = *cpx+args[2];
-    y2 = *cpy+args[3];
-  } else {
-    cx = args[0];
-    cy = args[1];
-    x2 = args[2];
-    y2 = args[3];
+    cx += *cpx;
+    cy += *cpy;
+    x2 += *cpx;
+    y2 += *cpy;
   }
 
-  // Convert to cubic bezier
-  immutable float cx1 = x1+2.0f/3.0f*(cx-x1);
-  immutable float cy1 = y1+2.0f/3.0f*(cy-y1);
-  immutable float cx2 = x2+2.0f/3.0f*(cx-x2);
-  immutable float cy2 = y2+2.0f/3.0f*(cy-y2);
-
-  nsvg__cubicBezTo(p, cx1, cy1, cx2, cy2, x2, y2);
+  version(nanosvg_only_cubic_beziers) {
+    // convert to cubic bezier
+    immutable float cx1 = x1+2.0f/3.0f*(cx-x1);
+    immutable float cy1 = y1+2.0f/3.0f*(cy-y1);
+    immutable float cx2 = x2+2.0f/3.0f*(cx-x2);
+    immutable float cy2 = y2+2.0f/3.0f*(cy-y2);
+    nsvg__cubicBezTo(p, cx1, cy1, cx2, cy2, x2, y2);
+  } else {
+    nsvg__quadBezTo(p, cx, cy, x2, y2);
+  }
 
   *cpx2 = cx;
   *cpy2 = cy;
@@ -2419,30 +2746,32 @@ void nsvg__pathQuadBezTo (Parser* p, float* cpx, float* cpy, float* cpx2, float*
   *cpy = y2;
 }
 
-void nsvg__pathQuadBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, int rel) {
+void nsvg__pathQuadBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, float* cpy2, const(float)* args, bool rel) {
   debug(nanosvg) { import std.stdio; writeln("nsvg__pathQuadBezShortTo: args=", args[0..2]); }
-  float x2 = void, y2 = void;
 
+  float x2 = args[0];
+  float y2 = args[1];
   immutable float x1 = *cpx;
   immutable float y1 = *cpy;
+
   if (rel) {
-    x2 = *cpx+args[0];
-    y2 = *cpy+args[1];
-  } else {
-    x2 = args[0];
-    y2 = args[1];
+    x2 += *cpx;
+    y2 += *cpy;
   }
 
   immutable float cx = 2*x1-*cpx2;
   immutable float cy = 2*y1-*cpy2;
 
-  // Convert to cubix bezier
-  immutable float cx1 = x1+2.0f/3.0f*(cx-x1);
-  immutable float cy1 = y1+2.0f/3.0f*(cy-y1);
-  immutable float cx2 = x2+2.0f/3.0f*(cx-x2);
-  immutable float cy2 = y2+2.0f/3.0f*(cy-y2);
-
-  nsvg__cubicBezTo(p, cx1, cy1, cx2, cy2, x2, y2);
+  version(nanosvg_only_cubic_beziers) {
+    // convert to cubic bezier
+    immutable float cx1 = x1+2.0f/3.0f*(cx-x1);
+    immutable float cy1 = y1+2.0f/3.0f*(cy-y1);
+    immutable float cx2 = x2+2.0f/3.0f*(cx-x2);
+    immutable float cy2 = y2+2.0f/3.0f*(cy-y2);
+    nsvg__cubicBezTo(p, cx1, cy1, cx2, cy2, x2, y2);
+  } else {
+    nsvg__quadBezTo(p, cx, cy, x2, y2);
+  }
 
   *cpx2 = cx;
   *cpy2 = cy;
@@ -2450,49 +2779,42 @@ void nsvg__pathQuadBezShortTo (Parser* p, float* cpx, float* cpy, float* cpx2, f
   *cpy = y2;
 }
 
-float nsvg__sqr() (in float x) { pragma(inline, true); return x*x; }
-float nsvg__vmag() (in float x, float y) { pragma(inline, true); return sqrtf(x*x+y*y); }
+float nsvg__sqr (in float x) pure nothrow @safe @nogc { pragma(inline, true); return x*x; }
+float nsvg__vmag (in float x, float y) nothrow @safe @nogc { pragma(inline, true); return sqrtf(x*x+y*y); }
 
-float nsvg__vecrat (float ux, float uy, float vx, float vy) {
+float nsvg__vecrat (float ux, float uy, float vx, float vy) nothrow @safe @nogc {
   pragma(inline, true);
   return (ux*vx+uy*vy)/(nsvg__vmag(ux, uy)*nsvg__vmag(vx, vy));
 }
 
-float nsvg__vecang (float ux, float uy, float vx, float vy) {
+float nsvg__vecang (float ux, float uy, float vx, float vy) nothrow @safe @nogc {
   float r = nsvg__vecrat(ux, uy, vx, vy);
   if (r < -1.0f) r = -1.0f;
   if (r > 1.0f) r = 1.0f;
-  return ((ux*vy < uy*vx) ? -1.0f : 1.0f)*acosf(r);
+  return (ux*vy < uy*vx ? -1.0f : 1.0f)*acosf(r);
 }
 
-void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, const(float)* args, int rel) {
-  // Ported from canvg (https://code.google.com/p/canvg/)
-  float px = 0, py = 0, ptanx = 0, ptany = 0;
-  float[6] t = void;
-
+void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, const(float)* args, bool rel) {
+  // ported from canvg (https://code.google.com/p/canvg/)
   float rx = fabsf(args[0]); // y radius
   float ry = fabsf(args[1]); // x radius
   immutable float rotx = args[2]/180.0f*NSVG_PI; // x rotation engle
-  immutable float fa = fabsf(args[3]) > 1e-6 ? 1 : 0; // Large arc
-  immutable float fs = fabsf(args[4]) > 1e-6 ? 1 : 0; // Sweep direction
+  immutable float fa = (fabsf(args[3]) > 1e-6 ? 1 : 0); // large arc
+  immutable float fs = (fabsf(args[4]) > 1e-6 ? 1 : 0); // sweep direction
   immutable float x1 = *cpx; // start point
   immutable float y1 = *cpy;
 
   // end point
-  float x2 = void, y2 = void;
-  if (rel) {
-    x2 = *cpx+args[5];
-    y2 = *cpy+args[6];
-  } else {
-    x2 = args[5];
-    y2 = args[6];
-  }
+  float x2 = args[5];
+  float y2 = args[6];
+
+  if (rel) { x2 += *cpx; y2 += *cpy; }
 
   float dx = x1-x2;
   float dy = y1-y2;
-  float d = sqrtf(dx*dx+dy*dy);
-  if (d < 1e-6f || rx < 1e-6f || ry < 1e-6f) {
-    // The arc degenerates to a line
+  immutable float d0 = sqrtf(dx*dx+dy*dy);
+  if (d0 < 1e-6f || rx < 1e-6f || ry < 1e-6f) {
+    // the arc degenerates to a line
     nsvg__lineTo(p, x2, y2);
     *cpx = x2;
     *cpy = y2;
@@ -2502,16 +2824,16 @@ void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, const(float)* args, int
   immutable float sinrx = sinf(rotx);
   immutable float cosrx = cosf(rotx);
 
-  // Convert to center point parameterization.
+  // convert to center point parameterization
   // http://www.w3.org/TR/SVG11/implnote.html#ArcImplementationNotes
   // 1) Compute x1', y1'
   immutable float x1p = cosrx*dx/2.0f+sinrx*dy/2.0f;
   immutable float y1p = -sinrx*dx/2.0f+cosrx*dy/2.0f;
-  d = nsvg__sqr(x1p)/nsvg__sqr(rx)+nsvg__sqr(y1p)/nsvg__sqr(ry);
-  if (d > 1) {
-    d = sqrtf(d);
-    rx *= d;
-    ry *= d;
+  immutable float d1 = nsvg__sqr(x1p)/nsvg__sqr(rx)+nsvg__sqr(y1p)/nsvg__sqr(ry);
+  if (d1 > 1) {
+    immutable float d2 = sqrtf(d1);
+    rx *= d2;
+    ry *= d2;
   }
   // 2) Compute cx', cy'
   float s = 0.0f;
@@ -2538,26 +2860,28 @@ void nsvg__pathArcTo (Parser* p, float* cpx, float* cpy, const(float)* args, int
        if (fs == 0 && da > 0) da -= 2*NSVG_PI;
   else if (fs == 1 && da < 0) da += 2*NSVG_PI;
 
-  // Approximate the arc using cubic spline segments.
+  float[6] t = void;
+  // approximate the arc using cubic spline segments
   t.ptr[0] = cosrx; t.ptr[1] = sinrx;
   t.ptr[2] = -sinrx; t.ptr[3] = cosrx;
   t.ptr[4] = cx; t.ptr[5] = cy;
 
-  // Split arc into max 90 degree segments.
-  // The loop assumes an iteration per end point (including start and end), this +1.
+  // split arc into max 90 degree segments
+  // the loop assumes an iteration per end point (including start and end), this +1
   immutable ndivs = cast(int)(fabsf(da)/(NSVG_PI*0.5f)+1.0f);
   immutable float hda = (da/cast(float)ndivs)/2.0f;
   float kappa = fabsf(4.0f/3.0f*(1.0f-cosf(hda))/sinf(hda));
   if (da < 0.0f) kappa = -kappa;
 
   immutable float ndivsf = cast(float)ndivs;
+  float px = 0, py = 0, ptanx = 0, ptany = 0;
   foreach (int i; 0..ndivs+1) {
     float x = void, y = void, tanx = void, tany = void;
     immutable float a = a1+da*(i/ndivsf);
-    dx = cosf(a);
-    dy = sinf(a);
-    nsvg__xformPoint(&x, &y, dx*rx, dy*ry, t.ptr); // position
-    nsvg__xformVec(&tanx, &tany, -dy*rx*kappa, dx*ry*kappa, t.ptr); // tangent
+    immutable float loopdx = cosf(a);
+    immutable float loopdy = sinf(a);
+    nsvg__xformPoint(&x, &y, loopdx*rx, loopdy*ry, t.ptr); // position
+    nsvg__xformVec(&tanx, &tany, -loopdy*rx*kappa, loopdx*ry*kappa, t.ptr); // tangent
     if (i > 0) nsvg__cubicBezTo(p, px+ptanx, py+ptany, x-tanx, y-tany, x, y);
     px = x;
     py = y;
@@ -2576,7 +2900,7 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
   int nargs;
   int rargs = 0;
   float cpx = void, cpy = void, cpx2 = void, cpy2 = void;
-  char closedFlag = 0;
+  bool closedFlag = false;
   char[65] item = void;
 
   for (usize i = 0; attr.length-i >= 2; i += 2) {
@@ -2596,7 +2920,7 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
     cpy = 0;
     cpx2 = 0;
     cpy2 = 0;
-    closedFlag = 0;
+    closedFlag = false;
     nargs = 0;
 
     while (s.length) {
@@ -2610,8 +2934,7 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
         }
         if (nargs >= rargs) {
           switch (cmd) {
-            case 'm':
-            case 'M':
+            case 'm': case 'M': // move to
               nsvg__pathMoveTo(p, &cpx, &cpy, args.ptr, (cmd == 'm' ? 1 : 0));
               // Moveto can be followed by multiple coordinate pairs,
               // which should be treated as linetos.
@@ -2619,39 +2942,31 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
               rargs = nsvg__getArgsPerElement(cmd);
               cpx2 = cpx; cpy2 = cpy;
               break;
-            case 'l':
-            case 'L':
+            case 'l': case 'L': // line to
               nsvg__pathLineTo(p, &cpx, &cpy, args.ptr, (cmd == 'l' ? 1 : 0));
               cpx2 = cpx; cpy2 = cpy;
               break;
-            case 'H':
-            case 'h':
+            case 'H': case 'h': // horizontal line to
               nsvg__pathHLineTo(p, &cpx, &cpy, args.ptr, (cmd == 'h' ? 1 : 0));
               cpx2 = cpx; cpy2 = cpy;
               break;
-            case 'V':
-            case 'v':
+            case 'V': case 'v': // vertical line to
               nsvg__pathVLineTo(p, &cpx, &cpy, args.ptr, (cmd == 'v' ? 1 : 0));
               cpx2 = cpx; cpy2 = cpy;
               break;
-            case 'C':
-            case 'c':
+            case 'C': case 'c': // cubic bezier
               nsvg__pathCubicBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args.ptr, (cmd == 'c' ? 1 : 0));
               break;
-            case 'S':
-            case 's':
+            case 'S': case 's': // "short" cubic bezier
               nsvg__pathCubicBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args.ptr, (cmd == 's' ? 1 : 0));
               break;
-            case 'Q':
-            case 'q':
+            case 'Q': case 'q': // quadratic bezier
               nsvg__pathQuadBezTo(p, &cpx, &cpy, &cpx2, &cpy2, args.ptr, (cmd == 'q' ? 1 : 0));
               break;
-            case 'T':
-            case 't':
+            case 'T': case 't': // "short" quadratic bezier
               nsvg__pathQuadBezShortTo(p, &cpx, &cpy, &cpx2, &cpy2, args.ptr, cmd == 't' ? 1 : 0);
               break;
-            case 'A':
-            case 'a':
+            case 'A': case 'a': // arc
               nsvg__pathArcTo(p, &cpx, &cpy, args.ptr, cmd == 'a' ? 1 : 0);
               cpx2 = cpx; cpy2 = cpy;
               break;
@@ -2659,7 +2974,8 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
               if (nargs >= 2) {
                 cpx = args[nargs-2];
                 cpy = args[nargs-1];
-                cpx2 = cpx; cpy2 = cpy;
+                cpx2 = cpx;
+                cpy2 = cpy;
               }
               break;
           }
@@ -2670,31 +2986,33 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
         rargs = nsvg__getArgsPerElement(cmd);
         if (cmd == 'M' || cmd == 'm') {
           // commit path
-          if (p.npts > 0) nsvg__addPath(p, closedFlag);
+          if (p.nsflts > 0) nsvg__addPath(p, closedFlag);
           // start new subpath
           nsvg__resetPath(p);
-          closedFlag = 0;
+          closedFlag = false;
           nargs = 0;
         } else if (cmd == 'Z' || cmd == 'z') {
-          closedFlag = 1;
+          closedFlag = true;
           // commit path
-          if (p.npts > 0) {
+          if (p.nsflts > 0) {
             // move current point to first point
-            cpx = p.pts[0];
-            cpy = p.pts[1];
-            cpx2 = cpx; cpy2 = cpy;
+            if ((cast(NSVG.Command)p.stream[0]) != NSVG.Command.MoveTo) assert(0, "NanoSVG: invalid path");
+            cpx = p.stream[1];
+            cpy = p.stream[2];
+            cpx2 = cpx;
+            cpy2 = cpy;
             nsvg__addPath(p, closedFlag);
           }
           // start new subpath
           nsvg__resetPath(p);
           nsvg__moveTo(p, cpx, cpy);
-          closedFlag = 0;
+          closedFlag = false;
           nargs = 0;
         }
       }
     }
     // commit path
-    if (p.npts) nsvg__addPath(p, closedFlag);
+    if (p.nsflts) nsvg__addPath(p, closedFlag);
   }
 
   nsvg__addShape(p);
@@ -2836,7 +3154,7 @@ void nsvg__parseLine (Parser* p, AttrList attr) {
   nsvg__addShape(p);
 }
 
-void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
+void nsvg__parsePoly (Parser* p, AttrList attr, bool closeFlag) {
   float[2] args = void;
   int nargs, npts = 0;
   char[65] item = 0;
@@ -2862,7 +3180,7 @@ void nsvg__parsePoly (Parser* p, AttrList attr, int closeFlag) {
     }
   }
 
-  nsvg__addPath(p, cast(char)closeFlag);
+  nsvg__addPath(p, closeFlag);
 
   nsvg__addShape(p);
 }
@@ -3180,7 +3498,6 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
   float tx = void, ty = void, sx = void, sy = void, us = void, avgs = void;
   float[4] bounds = void;
   float[6] t = void;
-  int i;
   float* pt;
 
   // Guess image size if not set completely.
@@ -3241,10 +3558,21 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
       path.bounds[1] = (path.bounds[1]+ty)*sy;
       path.bounds[2] = (path.bounds[2]+tx)*sx;
       path.bounds[3] = (path.bounds[3]+ty)*sy;
-      for (i =0; i < path.npts; i++) {
-        pt = &path.pts[i*2];
-        pt[0] = (pt[0]+tx)*sx;
-        pt[1] = (pt[1]+ty)*sy;
+      for (int i = 0; i+3 <= path.nsflts; ) {
+        int argc = 0; // pair of coords
+        NSVG.Command cmd = cast(NSVG.Command)path.stream[i++];
+        final switch (cmd) {
+          case NSVG.Command.MoveTo: argc = 1; break;
+          case NSVG.Command.LineTo: argc = 1; break;
+          case NSVG.Command.QuadTo: argc = 2; break;
+          case NSVG.Command.BezierTo: argc = 3; break;
+        }
+        // scale points
+        while (argc-- > 0) {
+          path.stream[i+0] = (path.stream[i+0]+tx)*sx;
+          path.stream[i+1] = (path.stream[i+1]+ty)*sy;
+          i += 2;
+        }
       }
     }
 
@@ -3263,7 +3591,7 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
 
     shape.strokeWidth *= avgs;
     shape.strokeDashOffset *= avgs;
-    for (i = 0; i < shape.strokeDashCount; i++) shape.strokeDashArray[i] *= avgs;
+    foreach (immutable int i; 0..shape.strokeDashCount) shape.strokeDashArray[i] *= avgs;
   }
 }
 
@@ -3645,7 +3973,25 @@ void nsvg__flattenCubicBez (NSVGrasterizer r, in float x1, in float y1, in float
 void nsvg__flattenShape (NSVGrasterizer r, const(NSVG.Shape)* shape, float scale) {
   for (const(NSVG.Path)* path = shape.paths; path !is null; path = path.next) {
     r.npoints = 0;
+    if (path.empty) continue;
+    // first point
+    float x0, y0;
+    path.startPoint(&x0, &y0);
+    nsvg__addPathPoint(r, x0*scale, y0*scale, 0);
+    // cubic beziers
+    path.asCubics(delegate (const(float)[] cubic) {
+      assert(cubic.length >= 8);
+      nsvg__flattenCubicBez(r,
+        cubic.ptr[0]*scale, cubic.ptr[1]*scale,
+        cubic.ptr[2]*scale, cubic.ptr[3]*scale,
+        cubic.ptr[4]*scale, cubic.ptr[5]*scale,
+        cubic.ptr[6]*scale, cubic.ptr[7]*scale,
+        0, 0);
+    });
+    // close path
+    nsvg__addPathPoint(r, x0*scale, y0*scale, 0);
     // Flatten path
+    /+
     nsvg__addPathPoint(r, path.pts[0]*scale, path.pts[1]*scale, 0);
     for (int i = 0; i < path.npts-1; i += 3) {
       const(float)* p = path.pts+(i*2);
@@ -3653,6 +3999,7 @@ void nsvg__flattenShape (NSVGrasterizer r, const(NSVG.Shape)* shape, float scale
     }
     // Close path
     nsvg__addPathPoint(r, path.pts[0]*scale, path.pts[1]*scale, 0);
+    +/
     // Build edges
     for (int i = 0, j = r.npoints-1; i < r.npoints; j = i++) {
       nsvg__addEdge(r, r.points[j].x, r.points[j].y, r.points[i].x, r.points[i].y);
@@ -4001,11 +4348,31 @@ void nsvg__flattenShapeStroke (NSVGrasterizer r, const(NSVG.Shape)* shape, float
   for (path = shape.paths; path !is null; path = path.next) {
     // Flatten path
     r.npoints = 0;
+    if (!path.empty) {
+      // first point
+      {
+        float x0, y0;
+        path.startPoint(&x0, &y0);
+        nsvg__addPathPoint(r, x0*scale, y0*scale, PtFlagsCorner);
+      }
+      // cubic beziers
+      path.asCubics(delegate (const(float)[] cubic) {
+        assert(cubic.length >= 8);
+        nsvg__flattenCubicBez(r,
+          cubic.ptr[0]*scale, cubic.ptr[1]*scale,
+          cubic.ptr[2]*scale, cubic.ptr[3]*scale,
+          cubic.ptr[4]*scale, cubic.ptr[5]*scale,
+          cubic.ptr[6]*scale, cubic.ptr[7]*scale,
+          0, PtFlagsCorner);
+      });
+    }
+    /+
     nsvg__addPathPoint(r, path.pts[0]*scale, path.pts[1]*scale, PtFlagsCorner);
     for (i = 0; i < path.npts-1; i += 3) {
       const(float)* p = &path.pts[i*2];
       nsvg__flattenCubicBez(r, p[0]*scale, p[1]*scale, p[2]*scale, p[3]*scale, p[4]*scale, p[5]*scale, p[6]*scale, p[7]*scale, 0, PtFlagsCorner);
     }
+    +/
     if (r.npoints < 2) continue;
 
     closed = path.closed;
