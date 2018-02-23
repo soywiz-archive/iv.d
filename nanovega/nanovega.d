@@ -173,15 +173,15 @@ version(aliced) {
     static if (unqual) private alias UT = Unqual!T; else private alias UT = T;
     enum isWideCharType = is(UT == wchar) || is(UT == dchar);
   }
-  version(nanovg_disable_vfs) {
-    enum NanoVegaHasIVVFS = false;
+}
+version(nanovg_disable_vfs) {
+  enum NanoVegaHasIVVFS = false;
+} else {
+  static if (is(typeof((){import iv.vfs;}))) {
+    enum NanoVegaHasIVVFS = true;
+    import iv.vfs;
   } else {
-    static if (is(typeof((){import iv.vfs;}))) {
-      enum NanoVegaHasIVVFS = true;
-      import iv.vfs;
-    } else {
-      enum NanoVegaHasIVVFS = false;
-    }
+    enum NanoVegaHasIVVFS = false;
   }
 }
 
@@ -193,27 +193,27 @@ import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
 //import iv.nanovega.fontstash;
 
+version(Posix) {
+  version = nanovg_use_freetype;
+} else {
+  version = nanovg_disable_fontconfig;
+}
 version(aliced) {
-  version(nanovg_naked) {
-    version = nanovg_disable_fontconfig;
-  } else {
-    version = nanovg_use_freetype;
-    version = nanovg_default_no_font_aa;
-    version = nanovg_builtin_fontconfig_bindings;
-    version = nanovg_builtin_opengl_bindings; // use `arsd.simpledisplay` to get basic bindings
-  }
+  version = nanovg_default_no_font_aa;
+  version = nanovg_builtin_fontconfig_bindings;
+  version = nanovg_builtin_freetype_bindings;
+  version = nanovg_builtin_opengl_bindings; // use `arsd.simpledisplay` to get basic bindings
 } else {
   version = nanovg_builtin_fontconfig_bindings;
+  version = nanovg_builtin_freetype_bindings;
   version = nanovg_builtin_opengl_bindings; // use `arsd.simpledisplay` to get basic bindings
 }
 
-version(Posix) {
-  version(nanovg_disable_fontconfig) {
-    public enum NanoVegaHasFontConfig = false;
-  } else {
-    public enum NanoVegaHasFontConfig = true;
-    version(nanovg_builtin_fontconfig_bindings) {} else import iv.fontconfig;
-  }
+version(nanovg_disable_fontconfig) {
+  public enum NanoVegaHasFontConfig = false;
+} else {
+  public enum NanoVegaHasFontConfig = true;
+  version(nanovg_builtin_fontconfig_bindings) {} else import iv.fontconfig;
 }
 
 //version = nanovg_bench_flatten;
@@ -221,10 +221,11 @@ version(Posix) {
 public:
 alias NVG_PI = PI;
 
-version = nanovg_use_arsd_image;
+enum NanoVegaHasArsdColor = (is(typeof((){ import arsd.color; })));
+enum NanoVegaHasArsdImage = (is(typeof((){ import arsd.color; import arsd.image; })));
 
-version(nanovg_use_arsd_image) {
-  private import arsd.color;
+static if (NanoVegaHasArsdColor) private import arsd.color;
+static if (NanoVegaHasArsdImage) {
   private import arsd.image;
 } else {
   void stbi_set_unpremultiply_on_load (int flag_true_if_should_unpremultiply) {}
@@ -552,7 +553,7 @@ public:
   NVGHSL asHSL() (bool useWeightedLightness=false) const { pragma(inline, true); return NVGHSL.fromColor(this, useWeightedLightness); } ///
   static fromHSL() (in auto ref NVGHSL hsl) { pragma(inline, true); return hsl.asColor; } ///
 
-  version(nanovg_use_arsd_image) {
+  static if (NanoVegaHasArsdColor) {
     Color toArsd () const { pragma(inline, true); return Color(cast(int)(r*255), cast(int)(g*255), cast(int)(b*255), cast(int)(a*255)); } ///
     static NVGColor fromArsd (in Color c) { pragma(inline, true); return NVGColor(c.r, c.g, c.b, c.a); } ///
     ///
@@ -1918,7 +1919,7 @@ public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
  */
 public alias NVGSectionDummy04 = void;
 
-version(nanovg_use_arsd_image) {
+static if (NanoVegaHasArsdImage) {
   // do we have new arsd API to load images?
   static if (!is(typeof(MemoryImage.fromImageFile))) {
     static assert(0, "Sorry, your ARSD is too old. Please, update it.");
@@ -1930,7 +1931,7 @@ version(nanovg_use_arsd_image) {
 /// Creates image by loading it from the disk from specified file name.
 /// Returns handle to the image or 0 on error.
 public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=NVGImageFlags.None) {
-  version(nanovg_use_arsd_image) {
+  static if (NanoVegaHasArsdImage) {
     try {
       auto oimg = ArsdImage(filename);
       if (auto img = cast(TrueColorImage)oimg) {
@@ -1961,7 +1962,7 @@ public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=N
   }
 }
 
-version(nanovg_use_arsd_image) {
+static if (NanoVegaHasArsdImage) {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image or 0 on error.
   public int createImageFromMemoryImage (NVGContext ctx, MemoryImage img, int imageFlags=NVGImageFlags.None) {
@@ -6458,28 +6459,51 @@ version(nanovg_force_detect) {} else version(nanovg_use_freetype) { version = na
 version(nanovg_ignore_iv_stb_ttf) enum nanovg_ignore_iv_stb_ttf = true; else enum nanovg_ignore_iv_stb_ttf = false;
 //version(nanovg_ignore_mono);
 
+version (nanovg_builtin_freetype_bindings) {
+  version(Posix) {
+    private enum NanoVegaForceFreeType = true;
+  } else {
+    private enum NanoVegaForceFreeType = false;
+  }
+} else {
+  version(Posix) {
+    private enum NanoVegaForceFreeType = true;
+  } else {
+    private enum NanoVegaForceFreeType = false;
+  }
+}
+
 version(nanovg_use_freetype_ii) {
-  enum HasAST = false;
+  enum NanoVegaIsUsingSTBTTF = false;
   //pragma(msg, "iv.freetype: forced");
 } else {
-  static if (!nanovg_ignore_iv_stb_ttf && __traits(compiles, { import iv.stb.ttf; })) {
-    import iv.stb.ttf;
-    enum HasAST = true;
-    //pragma(msg, "iv.stb.ttf");
-  } else static if (__traits(compiles, { import arsd.ttf; })) {
-    import arsd.ttf;
-    enum HasAST = true;
-    //pragma(msg, "arsd.ttf");
-  } else static if (__traits(compiles, { import stb_truetype; })) {
-    import stb_truetype;
-    enum HasAST = true;
-    //pragma(msg, "stb_truetype");
-  } else static if (__traits(compiles, { import iv.freetype; })) {
-    import iv.freetype;
-    enum HasAST = false;
-    //pragma(msg, "iv.freetype");
+  static if (NanoVegaForceFreeType) {
+    enum NanoVegaIsUsingSTBTTF = false;
   } else {
-    static assert(0, "no stb_ttf/iv.freetype found!");
+    static if (!nanovg_ignore_iv_stb_ttf && __traits(compiles, { import iv.stb.ttf; })) {
+      import iv.stb.ttf;
+      enum NanoVegaIsUsingSTBTTF = true;
+      //pragma(msg, "iv.stb.ttf");
+    } else static if (__traits(compiles, { import arsd.ttf; })) {
+      import arsd.ttf;
+      enum NanoVegaIsUsingSTBTTF = true;
+      //pragma(msg, "arsd.ttf");
+    } else static if (__traits(compiles, { import stb_truetype; })) {
+      import stb_truetype;
+      enum NanoVegaIsUsingSTBTTF = true;
+      //pragma(msg, "stb_truetype");
+    } else static if (__traits(compiles, { import iv.freetype; })) {
+      version (nanovg_builtin_freetype_bindings) {
+        enum NanoVegaIsUsingSTBTTF = false;
+        version = nanovg_builtin_freetype_bindings;
+      } else {
+        import iv.freetype;
+        enum NanoVegaIsUsingSTBTTF = false;
+      }
+      //pragma(msg, "iv.freetype");
+    } else {
+      static assert(0, "no stb_ttf/iv.freetype found!");
+    }
   }
 }
 
@@ -6570,8 +6594,286 @@ struct FONStextIter(CT) if (isAnyCharType!CT) {
 // ////////////////////////////////////////////////////////////////////////// //
 //static if (!HasAST) version = nanovg_use_freetype_ii_x;
 
-/*version(nanovg_use_freetype_ii_x)*/ static if (!HasAST) {
-import iv.freetype;
+/*version(nanovg_use_freetype_ii_x)*/ static if (!NanoVegaIsUsingSTBTTF) {
+version(nanovg_builtin_freetype_bindings) {
+  import iv.freetype;
+} else {
+pragma(lib, "freetype");
+private extern(C) nothrow @trusted @nogc {
+private import core.stdc.config : c_long, c_ulong;
+alias FT_Pos = c_long;
+// config/ftconfig.h
+alias FT_Int16 = short;
+alias FT_UInt16 = ushort;
+alias FT_Int32 = int;
+alias FT_UInt32 = uint;
+alias FT_Fast = int;
+alias FT_UFast = uint;
+alias FT_Int64 = long;
+alias FT_Uint64 = ulong;
+// fttypes.h
+alias FT_Bool = ubyte;
+alias FT_FWord = short;
+alias FT_UFWord = ushort;
+alias FT_Char = char;
+alias FT_Byte = ubyte;
+alias FT_Bytes = FT_Byte*;
+alias FT_Tag = FT_UInt32;
+alias FT_String = char;
+alias FT_Short = short;
+alias FT_UShort = ushort;
+alias FT_Int = int;
+alias FT_UInt = uint;
+alias FT_Long = c_long;
+alias FT_ULong = c_ulong;
+alias FT_F2Dot14 = short;
+alias FT_F26Dot6 = c_long;
+alias FT_Fixed = c_long;
+alias FT_Error = int;
+alias FT_Pointer = void*;
+alias FT_Offset = usize;
+alias FT_PtrDist = ptrdiff_t;
+
+struct FT_UnitVector {
+  FT_F2Dot14 x;
+  FT_F2Dot14 y;
+}
+
+struct FT_Matrix {
+  FT_Fixed xx, xy;
+  FT_Fixed yx, yy;
+}
+
+struct FT_Data {
+  const(FT_Byte)* pointer;
+  FT_Int length;
+}
+alias FT_Face = FT_FaceRec*;
+struct FT_FaceRec {
+  FT_Long num_faces;
+  FT_Long face_index;
+  FT_Long face_flags;
+  FT_Long style_flags;
+  FT_Long num_glyphs;
+  FT_String* family_name;
+  FT_String* style_name;
+  FT_Int num_fixed_sizes;
+  FT_Bitmap_Size* available_sizes;
+  FT_Int num_charmaps;
+  FT_CharMap* charmaps;
+  FT_Generic generic;
+  FT_BBox bbox;
+  FT_UShort units_per_EM;
+  FT_Short ascender;
+  FT_Short descender;
+  FT_Short height;
+  FT_Short max_advance_width;
+  FT_Short max_advance_height;
+  FT_Short underline_position;
+  FT_Short underline_thickness;
+  FT_GlyphSlot glyph;
+  FT_Size size;
+  FT_CharMap charmap;
+  FT_Driver driver;
+  FT_Memory memory;
+  FT_Stream stream;
+  FT_ListRec sizes_list;
+  FT_Generic autohint;
+  void* extensions;
+  FT_Face_Internal internal;
+}
+struct FT_Bitmap_Size {
+  FT_Short height;
+  FT_Short width;
+  FT_Pos size;
+  FT_Pos x_ppem;
+  FT_Pos y_ppem;
+}
+alias FT_CharMap = FT_CharMapRec*;
+struct FT_CharMapRec {
+  FT_Face face;
+  FT_Encoding encoding;
+  FT_UShort platform_id;
+  FT_UShort encoding_id;
+}
+extern(C) nothrow @nogc { alias FT_Generic_Finalizer = void function (void* object); }
+struct FT_Generic {
+  void* data;
+  FT_Generic_Finalizer finalizer;
+}
+struct FT_Vector {
+  FT_Pos x;
+  FT_Pos y;
+}
+struct FT_BBox {
+  FT_Pos xMin, yMin;
+  FT_Pos xMax, yMax;
+}
+alias FT_Pixel_Mode = int;
+enum {
+  FT_PIXEL_MODE_NONE = 0,
+  FT_PIXEL_MODE_MONO,
+  FT_PIXEL_MODE_GRAY,
+  FT_PIXEL_MODE_GRAY2,
+  FT_PIXEL_MODE_GRAY4,
+  FT_PIXEL_MODE_LCD,
+  FT_PIXEL_MODE_LCD_V,
+  FT_PIXEL_MODE_MAX
+}
+struct FT_Bitmap {
+  uint rows;
+  uint width;
+  int pitch;
+  ubyte* buffer;
+  ushort num_grays;
+  ubyte pixel_mode;
+  ubyte palette_mode;
+  void* palette;
+}
+struct FT_Outline {
+  short n_contours;
+  short n_points;
+  FT_Vector* points;
+  byte* tags;
+  short* contours;
+  int flags;
+}
+alias FT_GlyphSlot = FT_GlyphSlotRec*;
+struct FT_GlyphSlotRec {
+  FT_Library library;
+  FT_Face face;
+  FT_GlyphSlot next;
+  FT_UInt reserved;
+  FT_Generic generic;
+  FT_Glyph_Metrics metrics;
+  FT_Fixed linearHoriAdvance;
+  FT_Fixed linearVertAdvance;
+  FT_Vector advance;
+  FT_Glyph_Format format;
+  FT_Bitmap bitmap;
+  FT_Int bitmap_left;
+  FT_Int bitmap_top;
+  FT_Outline outline;
+  FT_UInt num_subglyphs;
+  FT_SubGlyph subglyphs;
+  void* control_data;
+  c_long control_len;
+  FT_Pos lsb_delta;
+  FT_Pos rsb_delta;
+  void* other;
+  FT_Slot_Internal internal;
+}
+alias FT_Size = FT_SizeRec*;
+struct FT_SizeRec {
+  FT_Face face;
+  FT_Generic generic;
+  FT_Size_Metrics metrics;
+  FT_Size_Internal internal;
+}
+alias FT_Encoding = FT_Tag;
+alias FT_Face_Internal = void*;
+alias FT_Driver = void*;
+alias FT_Memory = void*;
+alias FT_Stream = void*;
+alias FT_Library = void*;
+alias FT_SubGlyph = void*;
+alias FT_Slot_Internal = void*;
+alias FT_Size_Internal = void*;
+alias FT_ListNode = FT_ListNodeRec*;
+alias FT_List = FT_ListRec*;
+struct FT_ListNodeRec {
+  FT_ListNode prev;
+  FT_ListNode next;
+  void* data;
+}
+struct FT_ListRec {
+  FT_ListNode head;
+  FT_ListNode tail;
+}
+struct FT_Glyph_Metrics {
+  FT_Pos width;
+  FT_Pos height;
+  FT_Pos horiBearingX;
+  FT_Pos horiBearingY;
+  FT_Pos horiAdvance;
+  FT_Pos vertBearingX;
+  FT_Pos vertBearingY;
+  FT_Pos vertAdvance;
+}
+alias FT_Glyph_Format = FT_Tag;
+FT_Tag FT_MAKE_TAG (char x1, char x2, char x3, char x4) pure nothrow @safe @nogc {
+  pragma(inline, true);
+  return cast(FT_UInt32)((x1<<24)|(x2<<16)|(x3<<8)|x4);
+}
+enum : FT_Tag {
+  FT_GLYPH_FORMAT_NONE = 0,
+  FT_GLYPH_FORMAT_COMPOSITE = FT_MAKE_TAG('c','o','m','p'),
+  FT_GLYPH_FORMAT_BITMAP = FT_MAKE_TAG('b','i','t','s'),
+  FT_GLYPH_FORMAT_OUTLINE = FT_MAKE_TAG('o','u','t','l'),
+  FT_GLYPH_FORMAT_PLOTTER = FT_MAKE_TAG('p','l','o','t'),
+}
+struct FT_Size_Metrics {
+  FT_UShort x_ppem;
+  FT_UShort y_ppem;
+
+  FT_Fixed x_scale;
+  FT_Fixed y_scale;
+
+  FT_Pos ascender;
+  FT_Pos descender;
+  FT_Pos height;
+  FT_Pos max_advance;
+}
+enum FT_LOAD_DEFAULT = 0x0U;
+enum FT_LOAD_NO_SCALE = 1U<<0;
+enum FT_LOAD_NO_HINTING = 1U<<1;
+enum FT_LOAD_RENDER = 1U<<2;
+enum FT_LOAD_NO_BITMAP = 1U<<3;
+enum FT_LOAD_VERTICAL_LAYOUT = 1U<<4;
+enum FT_LOAD_FORCE_AUTOHINT = 1U<<5;
+enum FT_LOAD_CROP_BITMAP = 1U<<6;
+enum FT_LOAD_PEDANTIC = 1U<<7;
+enum FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH = 1U<<9;
+enum FT_LOAD_NO_RECURSE = 1U<<10;
+enum FT_LOAD_IGNORE_TRANSFORM = 1U<<11;
+enum FT_LOAD_MONOCHROME = 1U<<12;
+enum FT_LOAD_LINEAR_DESIGN = 1U<<13;
+enum FT_LOAD_NO_AUTOHINT = 1U<<15;
+enum FT_LOAD_COLOR = 1U<<20;
+enum FT_LOAD_COMPUTE_METRICS = 1U<<21;
+enum FT_FACE_FLAG_KERNING = 1U<<6;
+alias FT_Kerning_Mode = int;
+enum /*FT_Kerning_Mode*/ {
+  FT_KERNING_DEFAULT = 0,
+  FT_KERNING_UNFITTED,
+  FT_KERNING_UNSCALED
+}
+extern(C) nothrow @nogc {
+  alias FT_Outline_MoveToFunc = int function (const(FT_Vector)*, void*);
+  alias FT_Outline_LineToFunc = int function (const(FT_Vector)*, void*);
+  alias FT_Outline_ConicToFunc = int function (const(FT_Vector)*, const(FT_Vector)*, void*);
+  alias FT_Outline_CubicToFunc = int function (const(FT_Vector)*, const(FT_Vector)*, const(FT_Vector)*, void*);
+}
+struct FT_Outline_Funcs {
+  FT_Outline_MoveToFunc move_to;
+  FT_Outline_LineToFunc line_to;
+  FT_Outline_ConicToFunc conic_to;
+  FT_Outline_CubicToFunc cubic_to;
+  int shift;
+  FT_Pos delta;
+}
+
+FT_Error FT_Init_FreeType (FT_Library*);
+FT_Error FT_New_Memory_Face (FT_Library, const(FT_Byte)*, FT_Long, FT_Long, FT_Face*);
+FT_UInt FT_Get_Char_Index (FT_Face, FT_ULong);
+FT_Error FT_Set_Pixel_Sizes (FT_Face, FT_UInt, FT_UInt);
+FT_Error FT_Load_Glyph (FT_Face, FT_UInt, FT_Int32);
+FT_Error FT_Get_Advance (FT_Face, FT_UInt, FT_Int32, FT_Fixed*);
+FT_Error FT_Get_Kerning (FT_Face, FT_UInt, FT_UInt, FT_UInt, FT_Vector*);
+void FT_Outline_Get_CBox (const(FT_Outline)*, FT_BBox*);
+FT_Error FT_Outline_Decompose (FT_Outline*, const(FT_Outline_Funcs)*, void*);
+}
+}
 
 struct FONSttFontImpl {
   FT_Face font;
@@ -6909,11 +7211,15 @@ void fons__tt_getFontVMetrics (FONSttFontImpl* font, int* ascent, int* descent, 
 }
 
 float fons__tt_getPixelHeightScale (FONSttFontImpl* font, float size) nothrow @trusted @nogc {
-  return forceNoThrowNoGC({ return stbtt_ScaleForPixelHeight(&font.font, size); });
+  float res = void;
+  forceNoThrowNoGC({ res = stbtt_ScaleForPixelHeight(&font.font, size); });
+  return res;
 }
 
 int fons__tt_getGlyphIndex (FONSttFontImpl* font, int codepoint) nothrow @trusted @nogc {
-  return forceNoThrowNoGC({ return stbtt_FindGlyphIndex(&font.font, codepoint); });
+  int res;
+  forceNoThrowNoGC({ res = stbtt_FindGlyphIndex(&font.font, codepoint); });
+  return res;
 }
 
 int fons__tt_buildGlyphBitmap (FONSttFontImpl* font, int glyph, float size, float scale, int* advance, int* lsb, int* x0, int* y0, int* x1, int* y1) nothrow @trusted @nogc {
@@ -6927,7 +7233,9 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
 }
 
 float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
-  return forceNoThrowNoGC({ return stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2); });
+  float res = void;
+  forceNoThrowNoGC({ res = stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2); });
+  return res;
 }
 
 } // version
@@ -7696,7 +8004,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
           return fidx;
         }
       } else {
-        if (plen == path.length && fons_strequci(stash.fonts[fidx].path.ptr[0..plen], path)) {
+        if (plen == path.length && fons_strequci(stash.fonts[fidx].path[0..plen], path)) {
           // i found her!
           return fidx;
         }
