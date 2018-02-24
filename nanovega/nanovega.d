@@ -10773,7 +10773,14 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   // Draw fill
   glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xffffffffU);
   glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
-  glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
+  if (call.evenOdd) {
+    glDisable(GL_CULL_FACE);
+    glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
+    //foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+    glEnable(GL_CULL_FACE);
+  } else {
+    glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
+  }
 
   glDisable(GL_STENCIL_TEST);
 }
