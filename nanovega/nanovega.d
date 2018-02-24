@@ -550,6 +550,14 @@ public:
   @property ref inout(float) b () inout pure @trusted { pragma(inline, true); return rgba.ptr[2]; } ///
   @property ref inout(float) a () inout pure @trusted { pragma(inline, true); return rgba.ptr[3]; } ///
 
+  ref NVGColor applyTint() (in auto ref NVGColor tint) nothrow @trusted @nogc {
+    if (tint.a == 0) return this;
+    foreach (immutable idx, ref float v; rgba[0..3]) {
+      v = nvg__clamp(v+tint.rgba.ptr[idx]*tint.a, 0.0f, 1.0f);
+    }
+    return this;
+  }
+
   NVGHSL asHSL() (bool useWeightedLightness=false) const { pragma(inline, true); return NVGHSL.fromColor(this, useWeightedLightness); } ///
   static fromHSL() (in auto ref NVGHSL hsl) { pragma(inline, true); return hsl.asColor; } ///
 
@@ -864,6 +872,7 @@ struct NVGparams {
   bool fontAA;
   bool function (void* uptr) nothrow @trusted @nogc renderCreate;
   int function (void* uptr, NVGtexture type, int w, int h, int imageFlags, const(ubyte)* data) nothrow @trusted @nogc renderCreateTexture;
+  bool function (void* uptr, int image) nothrow @trusted @nogc renderTextureIncRef;
   bool function (void* uptr, int image) nothrow @trusted @nogc renderDeleteTexture;
   bool function (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) nothrow @trusted @nogc renderUpdateTexture;
   bool function (void* uptr, int image, int* w, int* h) nothrow @trusted @nogc renderGetTextureSize;
@@ -955,6 +964,8 @@ struct NVGpathCache {
   float strokeWidth;
   float fringeWidth;
   bool evenOddMode;
+  NVGPaint fillColor;
+  NVGPaint strokeColor;
   // non-saved path will not have this
   float* commands;
   int ncommands;
@@ -1430,17 +1441,21 @@ private:
     pickscene = ps;
   }
 
-  void replay (NVGContext ctx) nothrow @trusted @nogc {
+  void replay (NVGContext ctx, in ref NVGColor fillTint, in ref NVGColor strokeTint) nothrow @trusted @nogc {
     NVGstate* state = nvg__getState(ctx);
+
     foreach (ref cc; caches[0..ncaches]) {
       if (cc.npaths <= 0) continue;
 
       if (cc.fillReady) {
-        NVGPaint fillPaint = state.fill;
+        NVGPaint fillPaint = cc.fillColor;
 
         // apply global alpha
         fillPaint.innerColor.a *= state.alpha;
         fillPaint.outerColor.a *= state.alpha;
+
+        fillPaint.innerColor.applyTint(fillTint);
+        fillPaint.outerColor.applyTint(fillTint);
 
         ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
 
@@ -1454,7 +1469,7 @@ private:
       }
 
       if (cc.strokeReady) {
-        NVGPaint strokePaint = state.stroke;
+        NVGPaint strokePaint = cc.strokeColor;
 
         strokePaint.innerColor.a *= cc.strokeAlphaMul;
         strokePaint.outerColor.a *= cc.strokeAlphaMul;
@@ -1462,6 +1477,9 @@ private:
         // apply global alpha
         strokePaint.innerColor.a *= state.alpha;
         strokePaint.outerColor.a *= state.alpha;
+
+        strokePaint.innerColor.applyTint(strokeTint);
+        strokePaint.outerColor.applyTint(strokeTint);
 
         ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
 
@@ -1494,7 +1512,7 @@ public:
     for (int lvl = ps.nlevels-1; lvl >= 0; --lvl) {
       NVGpickPath* pp = ps.levels[lvl][celly*levelwidth+cellx];
       while (pp !is null) {
-        if (nvg__pickPathTestBounds(ps, pp, x, y)) {
+        if (nvg__pickPathTestBounds(svctx, ps, pp, x, y)) {
           int hit = 0;
           if ((kind&NVGPickKind.Stroke) && (pp.flags&NVGPathFlags.Stroke)) hit = nvg__pickPathStroke(ps, pp, x, y);
           if (!hit && (kind&NVGPickKind.Fill) && (pp.flags&NVGPathFlags.Fill)) hit = nvg__pickPath(ps, pp, x, y);
@@ -1600,6 +1618,8 @@ void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted 
 
   NVGpathCache* cc = &svp.caches[svp.ncaches++];
   cc.copyFrom(ctx.cache);
+  ctx.params.renderTextureIncRef(ctx.params.userPtr, cc.fillColor.image);
+  ctx.params.renderTextureIncRef(ctx.params.userPtr, cc.strokeColor.image);
   cc.fillReady = ctx.cache.fillReady;
   cc.strokeReady = ctx.cache.strokeReady;
   // copy path commands (we may need 'em for picking)
@@ -1636,7 +1656,13 @@ public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, tru
 public void clear (NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null) {
     import core.stdc.stdlib : free;
-    foreach (ref cc; svp.caches[0..svp.ncaches]) cc.clear();
+    foreach (ref cc; svp.caches[0..svp.ncaches]) {
+      if (svp.svctx !is null) {
+        svp.svctx.params.renderDeleteTexture(svp.svctx.params.userPtr, cc.fillColor.image);
+        svp.svctx.params.renderDeleteTexture(svp.svctx.params.userPtr, cc.strokeColor.image);
+      }
+      cc.clear();
+    }
     svp.ncaches = 0;
   }
 }
@@ -1660,7 +1686,7 @@ public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @no
   ctx.recstart = (svp !is null ? svp.ncaches : -1);
 }
 
-/// Commit recorded pathes. It is save to call this when recording is not started.
+/// Commit recorded pathes. It is safe to call this when recording is not started.
 public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recset !is null && ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   //ctx.appendCurrentPathToCache(ctx.recset); // save last path
@@ -1681,10 +1707,16 @@ public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
 }
 
 /// Replay saved path set.
-public void replayRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+public void replayRecording() (NVGContext ctx, NVGPathSet svp, in auto ref NVGColor fillTint, in auto ref NVGColor strokeTint) nothrow @trusted @nogc {
   if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
-  svp.replay(ctx);
+  svp.replay(ctx, fillTint, strokeTint);
 }
+
+/// Ditto.
+public void replayRecording() (NVGContext ctx, NVGPathSet svp, in auto ref NVGColor fillTint) nothrow @trusted @nogc { ctx.replayRecording(svp, fillTint, NVGColor.transparent); }
+
+/// Ditto.
+public void replayRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc { ctx.replayRecording(svp, NVGColor.transparent, NVGColor.transparent); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -2883,7 +2915,7 @@ public NVGMatrix affineGPU (NVGContext ctx) nothrow @safe @nogc {
 }
 
 /// "Untransform" point using current GPU affine matrix.
-public void gpuUntransformPoint (NVGContext ctx, float *dx, float *dy, in float x, in float y) {
+public void gpuUntransformPoint (NVGContext ctx, float *dx, float *dy, in float x, in float y) nothrow @safe @nogc {
   if (ctx.gpuAffine[] == nvgIdentity[]) {
     if (dx !is null) *dx = x;
     if (dy !is null) *dy = y;
@@ -4319,6 +4351,8 @@ void nvg__prepareFill (NVGContext ctx) nothrow @trusted @nogc {
 
   cache.evenOddMode = state.evenOddMode;
   cache.fringeWidth = ctx.fringeWidth;
+  cache.fillColor = state.fill;
+  cache.strokeColor = NVGPaint.init;
   cache.fillReady = true;
   cache.strokeReady = false;
 }
@@ -4351,6 +4385,8 @@ void nvg__prepareStroke (NVGContext ctx) nothrow @trusted @nogc {
   }
 
   cache.fringeWidth = ctx.fringeWidth;
+  cache.fillColor = NVGPaint.init;
+  cache.strokeColor = state.stroke;
   cache.fillReady = false;
   cache.strokeReady = true;
 }
@@ -4504,7 +4540,7 @@ private template IsGoodHitTestInternalDG(DG) {
 /// Returns the id of the path for which delegate `dg` returned true or -1.
 /// dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
 public int hitTestDG(DG) (NVGContext ctx, in float x, in float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
-  if (ctx.pickScene is null) return -1;
+  if (ctx.pickScene is null || ctx.pickScene.npaths == 0) return -1;
 
   NVGpickScene* ps = ctx.pickScene;
   int levelwidth = 1<<(ps.nlevels-1);
@@ -4512,14 +4548,18 @@ public int hitTestDG(DG) (NVGContext ctx, in float x, in float y, uint kind, sco
   int celly = nvg__clamp(cast(int)(y/ps.ydim), 0, levelwidth);
   int npicked = 0;
 
+  //{ import core.stdc.stdio; printf("npaths=%d\n", ps.npaths); }
   for (int lvl = ps.nlevels-1; lvl >= 0; --lvl) {
     NVGpickPath* pp = ps.levels[lvl][celly*levelwidth+cellx];
     while (pp !is null) {
-      if (nvg__pickPathTestBounds(ps, pp, x, y)) {
+      //{ import core.stdc.stdio; printf("... pos=(%g,%g); bounds=(%g,%g)-(%g,%g); flags=0x%02x; kind=0x%02x\n", x, y, pp.bounds[0], pp.bounds[1], pp.bounds[2], pp.bounds[3], pp.flags, kind); }
+      if (nvg__pickPathTestBounds(ctx, ps, pp, x, y)) {
+        //{ import core.stdc.stdio; printf("in bounds!\n"); }
         int hit = 0;
         if ((kind&NVGPickKind.Stroke) && (pp.flags&NVGPathFlags.Stroke)) hit = nvg__pickPathStroke(ps, pp, x, y);
         if (!hit && (kind&NVGPickKind.Fill) && (pp.flags&NVGPathFlags.Fill)) hit = nvg__pickPath(ps, pp, x, y);
         if (hit) {
+          //{ import core.stdc.stdio; printf("  HIT!\n"); }
           static if (IsGoodHitTestDG!DG) {
             static if (__traits(compiles, (){ DG dg; bool res = dg(cast(int)42, cast(int)666); })) {
               if (dg(pp.id, cast(int)pp.order)) return pp.id;
@@ -4579,7 +4619,6 @@ public int[] hitTestAll (NVGContext ctx, in float x, in float y, uint kind, int[
 public int hitTest (NVGContext ctx, in float x, in float y, uint kind) nothrow @trusted @nogc {
   if (ctx.pickScene is null) return -1;
 
-  NVGpickScene* ps = ctx.pickScene;
   int bestOrder = -1;
   int bestID = -1;
 
@@ -5619,7 +5658,7 @@ void nvg__closestBezier (const(float)* points, float x, float y, float* closest,
 //  1  If (x,y) is contained by the stroke of the path
 //  0  If (x,y) is not contained by the path.
 int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, float x, float y, float strokeWidth, int lineCap, int lineJoin) {
-  if (nvg__pointInBounds(x, y, psp.bounds) == 0) return 0;
+  if (!nvg__pointInBounds(x, y, psp.bounds)) return 0;
 
   float[2] closest = void;
   float[2] d = void;
@@ -5632,7 +5671,7 @@ int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, f
   immutable float strokeWidthSqd = strokeWidth*strokeWidth;
 
   for (int s = 0; s < nsegments; ++s, prevseg = seg, ++seg) {
-    if (nvg__pointInBounds(x, y, seg.bounds) != 0) {
+    if (nvg__pointInBounds(x, y, seg.bounds)) {
       // Line potentially hits stroke.
       switch (seg.type) {
         case Command.LineTo:
@@ -5709,7 +5748,7 @@ int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, f
 //  -1  If (x,y) is contained by the path and the path is a hole.
 //   0  If (x,y) is not contained by the path.
 int nvg__pickSubPath (const NVGpickScene* ps, const NVGpickSubPath* psp, float x, float y, bool evenOddMode) {
-  if (nvg__pointInBounds(x, y, psp.bounds) == 0) return 0;
+  if (!nvg__pointInBounds(x, y, psp.bounds)) return 0;
 
   const(NVGsegment)* seg = &ps.segments[psp.firstSegment];
   int nsegments = psp.nsegments;
@@ -5773,15 +5812,21 @@ bool nvg__pickPathStroke (const(NVGpickScene)* ps, const(NVGpickPath)* pp, float
   return false;
 }
 
-bool nvg__pickPathTestBounds (const NVGpickScene* ps, const NVGpickPath* pp, float x, float y) {
-  if (nvg__pointInBounds(x, y, pp.bounds) != 0) {
+bool nvg__pickPathTestBounds (NVGContext ctx, const NVGpickScene* ps, const NVGpickPath* pp, float x, float y) {
+  if (nvg__pointInBounds(x, y, pp.bounds)) {
+    //{ import core.stdc.stdio; printf("  (0): in bounds!\n"); }
     if (pp.flags&NVGPathFlags.Scissor) {
       const(float)* scissor = &ps.points[pp.scissor*2];
-      float rx = x-scissor[4];
-      float ry = y-scissor[5];
+      // untransform scissor translation
+      float stx = void, sty = void;
+      ctx.gpuUntransformPoint(&stx, &sty, scissor[4], scissor[5]);
+      immutable float rx = x-stx;
+      immutable float ry = y-sty;
+      //{ import core.stdc.stdio; printf("  (1): rxy=(%g,%g); scissor=[%g,%g,%g,%g,%g] [%g,%g]!\n", rx, ry, scissor[0], scissor[1], scissor[2], scissor[3], scissor[4], scissor[5], scissor[6], scissor[7]); }
       if (nvg__absf((scissor[0]*rx)+(scissor[1]*ry)) > scissor[6] ||
           nvg__absf((scissor[2]*rx)+(scissor[3]*ry)) > scissor[7])
       {
+        //{ import core.stdc.stdio; printf("    (1): scissor reject!\n"); }
         return false;
       }
     }
@@ -10209,6 +10254,8 @@ struct GLNVGtexture {
   int width, height;
   NVGtexture type;
   int flags;
+  int rc;
+  int nextfree;
 }
 
 alias GLNVGcallType = int;
@@ -10271,6 +10318,8 @@ struct GLNVGcontext {
   GLNVGshader shader;
   GLNVGtexture* textures;
   float[2] view;
+  int freetexid; // -1: none
+  int ntextures;
   int ctextures;
   GLuint vertBuf;
   int fragSize;
@@ -10289,8 +10338,6 @@ struct GLNVGcontext {
   ubyte* uniforms;
   int cuniforms;
   int nuniforms;
-
-  IdPool32 texidpool;
 
   // cached state
   static if (NANOVG_GL_USE_STATE_FILTER) {
@@ -10343,40 +10390,54 @@ void glnvg__stencilFunc (GLNVGcontext* gl, GLenum func, GLint ref_, GLuint mask)
 GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   GLNVGtexture* tex = null;
 
-  uint tid = gl.texidpool.allocId();
-  if (tid == gl.texidpool.Invalid) return null;
-  assert(tid != 0);
-
-  if (tid-1 >= gl.ctextures) {
-    assert(tid-1 == gl.ctextures);
-    int ctextures = glnvg__maxi(tid, 4)+gl.ctextures/2; // 1.5x Overallocate
-    GLNVGtexture* textures = cast(GLNVGtexture*)realloc(gl.textures, GLNVGtexture.sizeof*ctextures);
-    if (textures is null) return null;
-    memset(&textures[gl.ctextures], 0, (ctextures-gl.ctextures)*GLNVGtexture.sizeof);
-    gl.textures = textures;
-    gl.ctextures = ctextures;
+  int tid = gl.freetexid;
+  if (tid == -1) {
+    if (gl.ntextures >= gl.ctextures) {
+      assert(gl.ntextures == gl.ctextures);
+      int ctextures = (gl.ctextures == 0 ? 16 : glnvg__maxi(tid+1, 4)+gl.ctextures/2); // 1.5x overallocate
+      GLNVGtexture* textures = cast(GLNVGtexture*)realloc(gl.textures, GLNVGtexture.sizeof*ctextures);
+      if (textures is null) return null;
+      memset(&textures[gl.ctextures], 0, (ctextures-gl.ctextures)*GLNVGtexture.sizeof);
+      //{ import core.stdc.stdio; printf("allocated more textures (n=%d; c=%d; nc=%d)\n", gl.ntextures, gl.ctextures, ctextures); }
+      gl.textures = textures;
+      gl.ctextures = ctextures;
+    }
+    tid = gl.ntextures++;
+  } else {
+    gl.freetexid = gl.textures[tid].nextfree;
   }
-  assert(tid-1 < gl.ctextures);
+  assert(tid < gl.ctextures);
 
-  assert(gl.textures[tid-1].id == 0);
-  tex = &gl.textures[tid-1];
+  assert(gl.textures[tid].id == 0);
+  tex = &gl.textures[tid];
   memset(tex, 0, (*tex).sizeof);
-  tex.id = tid;
+  tex.id = tid+1;
+  tex.rc = 1;
+  tex.nextfree = -1;
 
   return tex;
 }
 
 GLNVGtexture* glnvg__findTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
-  if (!gl.texidpool.isAllocated(id)) return null;
-  assert(gl.textures[id-1].id != 0);
+  if (id <= 0 || id >= gl.ntextures) return null;
+  if (gl.textures[id-1].id == 0) return null; // free one
+  assert(gl.textures[id-1].id == id);
   return &gl.textures[id-1];
 }
 
 bool glnvg__deleteTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
-  if (!gl.texidpool.isAllocated(id)) return false;
-  assert(gl.textures[id-1].id != 0);
-  if (gl.textures[id-1].tex != 0 && (gl.textures[id-1].flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &gl.textures[id-1].tex);
-  memset(&gl.textures[id-1], 0, (gl.textures[id-1]).sizeof);
+  if (id <= 0 || id >= gl.ntextures) return false;
+  auto tx = &gl.textures[id-1];
+  if (tx.id == 0) return false; // free one
+  assert(tx.id == id);
+  assert(tx.tex != 0);
+  if (--tx.rc == 0) {
+    if ((tx.flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &tx.tex);
+    memset(tx, 0, (*tx).sizeof);
+    //{ import core.stdc.stdio; printf("deleting texture with id %d\n", id); }
+    tx.nextfree = gl.freetexid;
+    gl.freetexid = id-1;
+  }
   return true;
 }
 
@@ -10667,10 +10728,18 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
   return tex.id;
 }
 
-
 bool glnvg__renderDeleteTexture (void* uptr, int image) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   return glnvg__deleteTexture(gl, image);
+}
+
+bool glnvg__renderTextureIncRef (void* uptr, int image) nothrow @trusted @nogc {
+  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  GLNVGtexture* tex = glnvg__findTexture(gl, image);
+  if (tex is null) return false;
+  ++tex.rc;
+  //{ import core.stdc.stdio; printf("texture #%d: incref; newref=%d\n", image, tex.rc); }
+  return true;
 }
 
 bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) nothrow @trusted @nogc {
@@ -11320,17 +11389,19 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 
   if (gl.vertBuf != 0) glDeleteBuffers(1, &gl.vertBuf);
 
-  foreach (int i; 0..gl.ctextures) {
-    if (gl.textures[i].tex != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &gl.textures[i].tex);
+  foreach (int i; 0..gl.ntextures) {
+    if (gl.textures[i].id != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0) {
+      assert(gl.textures[i].tex != 0);
+      glDeleteTextures(1, &gl.textures[i].tex);
+    }
   }
+  //gl.texidpool.reset();
   free(gl.textures);
 
   free(gl.paths);
   free(gl.verts);
   free(gl.uniforms);
   free(gl.calls);
-
-  gl.texidpool.destroy;
 
   free(gl);
 }
@@ -11355,6 +11426,7 @@ public NVGContext createGL2NVG (int flags=NanoVegaDefaultCreationFlags) nothrow 
   memset(&params, 0, params.sizeof);
   params.renderCreate = &glnvg__renderCreate;
   params.renderCreateTexture = &glnvg__renderCreateTexture;
+  params.renderTextureIncRef = &glnvg__renderTextureIncRef;
   params.renderDeleteTexture = &glnvg__renderDeleteTexture;
   params.renderUpdateTexture = &glnvg__renderUpdateTexture;
   params.renderGetTextureSize = &glnvg__renderGetTextureSize;
@@ -11375,6 +11447,7 @@ public NVGContext createGL2NVG (int flags=NanoVegaDefaultCreationFlags) nothrow 
   }
 
   gl.flags = flags;
+  gl.freetexid = -1;
 
   ctx = createInternal(&params);
   if (ctx is null) goto error;
@@ -11419,315 +11492,6 @@ public GLuint glImageHandleGL2 (NVGContext ctx, int image) nothrow @trusted @nog
 // ////////////////////////////////////////////////////////////////////////// //
 private:
 
-alias IdPool32 = IdPoolImpl!uint;
-
-struct IdPoolImpl(IDT, bool allowZero=false) if (is(IDT == ubyte) || is(IDT == ushort) || is(IDT == uint)) {
-public:
-  alias Type = IDT; ///
-  enum Invalid = cast(IDT)IDT.max; /// "invalid id" value
-
-private:
-  static align(1) struct Range {
-  align(1):
-    Type first;
-    Type last;
-  }
-
-  size_t rangesmem; // sorted array of ranges of free IDs; Range*; use `size_t` to force GC ignoring this struct
-  uint rngcount; // number of ranges in list
-  uint rngsize; // total capacity of range list (NOT size in bytes!)
-
-  @property inout(Range)* ranges () const pure inout nothrow @trusted @nogc { pragma(inline, true); return cast(typeof(return))rangesmem; }
-
-private nothrow @trusted @nogc:
-  // will NOT change rngcount if `doChange` is `false`
-  void growRangeArray(bool doChange) (uint newcount) {
-    enum GrowStep = 128;
-    if (newcount <= rngcount) {
-      static if (doChange) rngcount = newcount;
-      return;
-    }
-    assert(rngcount <= rngsize);
-    if (newcount > rngsize) {
-      // need to grow
-      import core.stdc.stdlib : realloc;
-      if (rngsize >= uint.max/(Range.sizeof+8) || newcount >= uint.max/(Range.sizeof+8)) assert(0, "out of memory");
-      rngsize = ((newcount+(GrowStep-1))/GrowStep)*GrowStep;
-      size_t newmem = cast(size_t)realloc(cast(void*)rangesmem, rngsize*Range.sizeof);
-      if (newmem == 0) assert(0, "out of memory");
-      rangesmem = newmem;
-    }
-    assert(newcount <= rngsize);
-    static if (doChange) rngcount = newcount;
-  }
-
-  void insertRange (uint index) {
-    growRangeArray!false(rngcount+1);
-    if (index < rngcount) {
-      // really inserting
-      import core.stdc.string : memmove;
-      memmove(ranges+index+1, ranges+index, (rngcount-index)*Range.sizeof);
-    }
-    ++rngcount;
-  }
-
-  void destroyRange (uint index) {
-    import core.stdc.string : memmove;
-    assert(rngcount > 0);
-    if (--rngcount > 0) memmove(ranges+index, ranges+index+1, (rngcount-index)*Range.sizeof);
-  }
-
-public:
-  this (Type aMaxId) { reset(aMaxId); }
-
-  ~this () {
-    if (rangesmem) {
-      import core.stdc.stdlib : free;
-      free(cast(void*)rangesmem);
-    }
-  }
-
-  // checks if the given id is in valid id range.
-  static bool isValid (Type id) pure nothrow @safe @nogc {
-    pragma(inline, true);
-    static if (allowZero) return (id != Invalid); else return (id && id != Invalid);
-  }
-
-  // remove all allocated ids, and set maximum available id.
-  void reset (Type aMaxId=Type.max) {
-    if (aMaxId < 1) assert(0, "are you nuts?");
-    if (aMaxId == Type.max) --aMaxId; // to ease my life a little
-    // start with a single range, from 0/1 to max allowed ID (specified)
-    growRangeArray!true(1);
-    static if (allowZero) ranges[0].first = 0; else ranges[0].first = 1;
-    ranges[0].last = aMaxId;
-  }
-
-  // allocate lowest unused id.
-  // returns `Invalid` if there are no more ids left.
-  Type allocId () {
-    if (rngcount == 0) {
-      // wasn't inited, init with defaults
-      growRangeArray!true(1);
-      static if (allowZero) ranges[0].first = 0; else ranges[0].first = 1;
-      ranges[0].last = Type.max-1;
-    }
-    auto rng = ranges;
-    Type id = Invalid;
-    if (rng.first <= rng.last) {
-      id = rng.first;
-      // if current range is full and there is another one, that will become the new current range
-      if (rng.first == rng.last && rngcount > 1) destroyRange(0); else ++rng.first;
-    }
-    // otherwise we have no ranges left
-    return id;
-  }
-
-  // allocate the given id.
-  // returns id, or `Invalid` if this id was alrady allocated.
-  Type allocId (Type aid) {
-    static if (allowZero) {
-      if (aid == Invalid) return Invalid;
-    } else {
-      if (aid == 0 || aid == Invalid) return Invalid;
-    }
-
-    if (rngcount == 0) {
-      // wasn't inited, create two ranges (before and after this id)
-      // but check for special cases first
-      static if (allowZero) enum LowestId = 0; else enum LowestId = 1;
-      // lowest possible id?
-      if (aid == LowestId) {
-        growRangeArray!true(1);
-        ranges[0].first = cast(Type)(LowestId+1);
-        ranges[0].last = Type.max-1;
-        return aid;
-      }
-      // highest possible id?
-      if (aid == Type.max-1) {
-        growRangeArray!true(1);
-        ranges[0].first = cast(Type)LowestId;
-        ranges[0].last = Type.max-2;
-        return aid;
-      }
-      // create two ranges
-      growRangeArray!true(2);
-      ranges[0].first = cast(Type)LowestId;
-      ranges[0].last = cast(Type)(aid-1);
-      ranges[1].first = cast(Type)(aid+1);
-      ranges[1].last = cast(Type)(Type.max-1);
-      return aid;
-    }
-    // already inited, check if the given id is not allocated, and split ranges
-    // binary search of the range list
-    uint i0 = 0, i1 = rngcount-1;
-    for (;;) {
-      uint i = (i0+i1)/2; // guaranteed to not overflow, see `growRangeArray()`
-      Range* rngi = ranges+i;
-      if (aid < rngi.first) {
-        if (i == i0) return Invalid; // already allocated
-        // cull upper half of list
-        i1 = i-1;
-      } else if (aid > rngi.last) {
-        if (i == i1) return Invalid; // already allocated
-        // cull bottom half of list
-        i0 = i+1;
-      } else {
-        // inside a free block, split it
-        // check for corner case: do we want range's starting id?
-        if (rngi.first == aid) {
-          // if current range is full and there is another one, that will become the new current range
-          if (rngi.first == rngi.last && rngcount > 1) destroyRange(i); else ++rngi.first;
-          return aid;
-        }
-        // check for corner case: do we want range's ending id?
-        if (rngi.last == aid) {
-          // if current range is full and there is another one, that will become the new current range
-          if (rngi.first == rngi.last) {
-            if (rngcount > 1) destroyRange(i); else ++rngi.first; // turn range into invalid
-          } else {
-            --rngi.last;
-          }
-          return aid;
-        }
-        // have to split the range in two
-        if (rngcount >= uint.max-2) return Invalid; // no room
-        insertRange(i+1);
-        rngi = ranges+i; // pointer may be invalidated by inserting, so update it
-        rngi[1].last = rngi.last;
-        rngi[1].first = cast(Type)(aid+1);
-        rngi[0].last = cast(Type)(aid-1);
-        assert(rngi[0].first <= rngi[0].last);
-        assert(rngi[1].first <= rngi[1].last);
-        assert(rngi[0].last+2 == rngi[1].first);
-        return aid;
-      }
-    }
-  }
-
-  // release allocated id.
-  // returns `true` if `id` was a valid allocated one.
-  bool releaseId (Type id) { return releaseRange(id, 1); }
-
-  // release allocated id range.
-  // returns `true` if the rage was a valid allocated one.
-  bool releaseRange (Type id, uint count) {
-    if (count == 0 || rngcount == 0) return false;
-    if (count >= Type.max) return false; // too many
-
-    static if (allowZero) {
-      if (id == Invalid) return false;
-    } else {
-      if (id == 0 || id == Invalid) return false;
-    }
-
-    uint endid = id+count;
-    static if (is(Type == uint)) {
-      if (endid <= id) return false; // overflow check; fuck you, C!
-    } else {
-      if (endid <= id || endid > Type.max) return false; // overflow check; fuck you, C!
-    }
-
-    // binary search of the range list
-    uint i0 = 0, i1 = rngcount-1;
-    for (;;) {
-      uint i = (i0+i1)/2; // guaranteed to not overflow, see `growRangeArray()`
-      Range* rngi = ranges+i;
-      if (id < rngi.first) {
-        // before current range, check if neighboring
-        if (endid >= rngi.first) {
-          if (endid != rngi.first) return false; // overlaps a range of free IDs, thus (at least partially) invalid IDs
-          // neighbor id, check if neighboring previous range too
-          if (i > i0 && id-1 == ranges[i-1].last) {
-            // merge with previous range
-            ranges[i-1].last = rngi.last;
-            destroyRange(i);
-          } else {
-            // just grow range
-            rngi.first = id;
-          }
-          return true;
-        } else {
-          // non-neighbor id
-          if (i != i0) {
-            // cull upper half of list
-            i1 = i-1;
-          } else {
-            // found our position in the list, insert the deleted range here
-            insertRange(i);
-            // refresh pointer
-            rngi = ranges+i;
-            rngi.first = id;
-            rngi.last = cast(Type)(endid-1);
-            return true;
-          }
-        }
-      } else if (id > rngi.last) {
-        // after current range, check if neighboring
-        if (id-1 == rngi.last) {
-          // neighbor id, check if neighboring next range too
-          if (i < i1 && endid == ranges[i+1].first) {
-            // merge with next range
-            rngi.last = ranges[i+1].last;
-            destroyRange(i+1);
-          } else {
-            // just grow range
-            rngi.last += count;
-          }
-          return true;
-        } else {
-          // non-neighbor id
-          if (i != i1) {
-            // cull bottom half of list
-            i0 = i+1;
-          } else {
-            // found our position in the list, insert the deleted range here
-            insertRange(i+1);
-            // get pointer to [i+1]
-            rngi = ranges+i+1;
-            rngi.first = id;
-            rngi.last = cast(Type)(endid-1);
-            return true;
-          }
-        }
-      } else {
-        // inside a free block, not a valid ID
-        return false;
-      }
-    }
-  }
-
-  // is the gived id valid and allocated?
-  bool isAllocated (Type id) const {
-    if (rngcount == 0) return false; // anyway, 'cause not inited
-    static if (allowZero) {
-      if (id == Invalid) return false;
-    } else {
-      if (id == 0 || id == Invalid) return false;
-    }
-    // binary search of the range list
-    uint i0 = 0, i1 = rngcount-1;
-    for (;;) {
-      uint i = (i0+i1)/2; // guaranteed to not overflow, see `growRangeArray()`
-      const(Range)* rngi = ranges+i;
-      if (id < rngi.first) {
-        if (i == i0) return true;
-        // cull upper half of list
-        i1 = i-1;
-      } else if (id > rngi.last) {
-        if (i == i1) return true;
-        // cull bottom half of list
-        i0 = i+1;
-      } else {
-        // inside a free block, not a valid ID
-        return false;
-      }
-    }
-  }
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
 static if (NanoVegaHasFontConfig) {
   version(nanovg_builtin_fontconfig_bindings) {
     pragma(lib, "fontconfig");
