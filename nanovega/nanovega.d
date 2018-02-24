@@ -829,13 +829,16 @@ struct NVGpath {
   int nstroke;
   NVGWinding winding;
   int convex;
+  bool cloned;
 
   @disable this (this); // no copies
 
   void clear () nothrow @trusted @nogc {
     import core.stdc.stdlib : free;
-    if (fill !is null) free(fill);
-    if (stroke !is null) free(stroke);
+    if (cloned) {
+      if (stroke !is null && stroke !is fill) free(stroke);
+      if (fill !is null) free(fill);
+    }
     this = this.init;
   }
 
@@ -845,7 +848,12 @@ struct NVGpath {
     assert(src !is null);
     memcpy(&this, src, NVGpath.sizeof);
     this.fill = xdup(src.fill, src.nfill);
-    this.stroke = xdup(src.stroke, src.nstroke);
+    if (src.stroke is src.fill) {
+      this.stroke = this.fill;
+    } else {
+      this.stroke = xdup(src.stroke, src.nstroke);
+    }
+    this.cloned = true;
   }
 }
 
@@ -1033,6 +1041,7 @@ private:
   NVGPathSet recset;
   int recstart; // used to cancel recording
   // internals
+  float[6] gpuAffine;
   int mWidth, mHeight;
   float mDeviceRatio;
   void delegate (NVGContext ctx) nothrow @trusted @nogc cleanup;
@@ -1112,17 +1121,17 @@ NVGpathCache* nvg__allocPathCache () nothrow @trusted @nogc {
 
   c.points = cast(NVGpoint*)malloc(NVGpoint.sizeof*NVG_INIT_POINTS_SIZE);
   if (c.points is null) goto error;
-  //c.npoints = 0;
+  assert(c.npoints == 0);
   c.cpoints = NVG_INIT_POINTS_SIZE;
 
   c.paths = cast(NVGpath*)malloc(NVGpath.sizeof*NVG_INIT_PATHS_SIZE);
   if (c.paths is null) goto error;
-  //c.npaths = 0;
+  assert(c.npaths == 0);
   c.cpaths = NVG_INIT_PATHS_SIZE;
 
   c.verts = cast(NVGvertex*)malloc(NVGvertex.sizeof*NVG_INIT_VERTS_SIZE);
   if (c.verts is null) goto error;
-  //c.nverts = 0;
+  assert(c.nverts == 0);
   c.cverts = NVG_INIT_VERTS_SIZE;
 
   return c;
@@ -1315,6 +1324,8 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
   ctx.fillTriCount = 0;
   ctx.strokeTriCount = 0;
   ctx.textTriCount = 0;
+
+  ctx.gpuAffine[] = nvgIdentity;
 
   nvg__pickBeginFrame(ctx, windowWidth, windowHeight);
 }
@@ -2738,8 +2749,23 @@ public alias NVGSectionDummy010 = void;
 
 /// Set GPU affine transformatin matrix. Don't do scaling or skewing here.
 /// This matrix won't be saved/restored with context state save/restore operations, as it is not a part of that state.
-public void affineGPU (NVGContext ctx, const(float)[] mat) nothrow @safe @nogc {
-  ctx.params.renderSetAffine(ctx.params.userPtr, mat);
+public void affineGPU (NVGContext ctx, const(float)[] mat) nothrow @trusted @nogc {
+  if (mat.length == 4) {
+    // no translation
+    ctx.gpuAffine.ptr[0..4] = mat.ptr[0..4];
+    ctx.gpuAffine.ptr[4..6] = 0;
+  } else if (mat.length >= 6) {
+    ctx.gpuAffine.ptr[0..6] = mat.ptr[0..6];
+  } else {
+    ctx.gpuAffine[] = nvgIdentity[];
+  }
+  ctx.params.renderSetAffine(ctx.params.userPtr, ctx.gpuAffine[]);
+}
+
+/// Get current GPU affine transformatin matrix.
+public NVGMatrix affineGPU (NVGContext ctx) nothrow @safe @nogc {
+  pragma(inline, true);
+  return NVGMatrix(ctx.gpuAffine[]);
 }
 
 
@@ -2836,6 +2862,8 @@ void nvg__appendCommands(bool useCommand=true) (NVGContext ctx, Command acmd, co
 }
 
 void nvg__clearPathCache (NVGContext ctx) nothrow @trusted @nogc {
+  // no need to clear pathes, as data is not copied there
+  //foreach (ref p; ctx.cache.paths[0..ctx.cache.npaths]) p.clear();
   ctx.cache.npoints = 0;
   ctx.cache.npaths = 0;
   ctx.cache.fillReady = ctx.cache.strokeReady = false;
@@ -2846,20 +2874,21 @@ NVGpath* nvg__lastPath (NVGContext ctx) nothrow @trusted @nogc {
 }
 
 void nvg__addPath (NVGContext ctx) nothrow @trusted @nogc {
+  import core.stdc.stdlib : realloc;
+  import core.stdc.string : memset;
+
   if (ctx.cache.npaths+1 > ctx.cache.cpaths) {
     int cpaths = ctx.cache.npaths+1+ctx.cache.cpaths/2;
     NVGpath* paths = cast(NVGpath*)realloc(ctx.cache.paths, NVGpath.sizeof*cpaths);
-    if (paths is null) return;
+    if (paths is null) assert(0, "NanoVega: out of memory");
     ctx.cache.paths = paths;
     ctx.cache.cpaths = cpaths;
   }
 
-  NVGpath* path = &ctx.cache.paths[ctx.cache.npaths];
-  memset(path, 0, (*path).sizeof);
+  NVGpath* path = &ctx.cache.paths[ctx.cache.npaths++];
+  memset(path, 0, NVGpath.sizeof);
   path.first = ctx.cache.npoints;
   path.winding = NVGWinding.CCW;
-
-  ++ctx.cache.npaths;
 }
 
 NVGpoint* nvg__lastPoint (NVGContext ctx) nothrow @trusted @nogc {
@@ -3500,8 +3529,6 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
 
 void nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
-  NVGvertex* verts;
-  NVGvertex* dst;
   immutable float aa = ctx.fringeWidth;
   int ncap = nvg__curveDivs(w, NVG_PI, ctx.tessTol); // Calculate divisions per half circle.
 
@@ -3527,7 +3554,7 @@ void nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, floa
     }
   }
 
-  verts = nvg__allocTempVerts(ctx, cverts);
+  NVGvertex* verts = nvg__allocTempVerts(ctx, cverts);
   if (verts is null) return;
 
   foreach (int i; 0..cache.npaths) {
@@ -3542,7 +3569,7 @@ void nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, floa
 
     // Calculate fringe or stroke
     immutable bool loop = path.closed;
-    dst = verts;
+    NVGvertex* dst = verts;
     path.stroke = dst;
 
     if (loop) {
@@ -3605,8 +3632,6 @@ void nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, floa
 
 void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
-  NVGvertex* verts;
-  NVGvertex* dst;
   immutable float aa = ctx.fringeWidth;
   bool fringe = (w > 0.0f);
 
@@ -3620,7 +3645,7 @@ void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
     if (fringe) cverts += (path.count+path.nbevel*5+1)*2; // plus one for loop
   }
 
-  verts = nvg__allocTempVerts(ctx, cverts);
+  NVGvertex* verts = nvg__allocTempVerts(ctx, cverts);
   if (verts is null) return;
 
   bool convex = (cache.npaths == 1 && cache.paths[0].convex);
@@ -3631,7 +3656,7 @@ void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
 
     // Calculate shape vertices.
     immutable float woff = 0.5f*aa;
-    dst = verts;
+    NVGvertex* dst = verts;
     path.fill = dst;
 
     if (fringe) {
@@ -4356,7 +4381,7 @@ public enum NVGPickKind : ubyte {
 /// Note that you can create and mark path without rasterizing it.
 public void currFillHitId (NVGContext ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], id, /*forStroke:*/false);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], id, ctx.gpuAffine[], /*forStroke:*/false);
   nvg__pickSceneInsert(ps, pp);
 }
 
@@ -4364,7 +4389,7 @@ public void currFillHitId (NVGContext ctx, int id) nothrow @trusted @nogc {
 /// Note that you can create and mark path without rasterizing it.
 public void currStrokeHitId (NVGContext ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], id, /*forStroke:*/true);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], id, ctx.gpuAffine[], /*forStroke:*/true);
   nvg__pickSceneInsert(ps, pp);
 }
 
@@ -4375,7 +4400,7 @@ public void pathSetFillHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow @t
   if (svp.svctx !is ctx) assert(0, "NanoVega: cannot register path set from different context");
   foreach (ref cp; svp.caches[0..svp.ncaches]) {
     NVGpickScene* ps = nvg__pickSceneGet(ctx);
-    NVGpickPath* pp = nvg__pickPathCreate(ctx, cp.commands[0..cp.ncommands], id, /*forStroke:*/false);
+    NVGpickPath* pp = nvg__pickPathCreate(ctx, cp.commands[0..cp.ncommands], id, ctx.gpuAffine[], /*forStroke:*/false);
     nvg__pickSceneInsert(ps, pp);
   }
 }
@@ -4387,7 +4412,7 @@ public void pathSetStrokeHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow 
   if (svp.svctx !is ctx) assert(0, "NanoVega: cannot register path set from different context");
   foreach (ref cp; svp.caches[0..svp.ncaches]) {
     NVGpickScene* ps = nvg__pickSceneGet(ctx);
-    NVGpickPath* pp = nvg__pickPathCreate(ctx, cp.commands[0..cp.ncommands], id, /*forStroke:*/true);
+    NVGpickPath* pp = nvg__pickPathCreate(ctx, cp.commands[0..cp.ncommands], id, ctx.gpuAffine[], /*forStroke:*/true);
     nvg__pickSceneInsert(ps, pp);
   }
 }
@@ -4407,8 +4432,12 @@ private template IsGoodHitTestInternalDG(DG) {
 /// Call delegate `dg` for each path under the specified position (in no particular order).
 /// Returns the id of the path for which delegate `dg` returned true or -1.
 /// dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
-public int hitTestDG(DG) (NVGContext ctx, float x, float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
+/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
+public int hitTestDG(DG) (NVGContext ctx, in float xx, in float yy, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
   if (ctx.pickScene is null) return -1;
+
+  float x = void, y = void;
+  nvg__untransformGPU(ctx, &x, &y, xx, yy);
 
   NVGpickScene* ps = ctx.pickScene;
   int levelwidth = 1<<(ps.nlevels-1);
@@ -4421,8 +4450,8 @@ public int hitTestDG(DG) (NVGContext ctx, float x, float y, uint kind, scope DG 
     while (pp !is null) {
       if (nvg__pickPathTestBounds(ps, pp, x, y)) {
         int hit = 0;
-        if ((kind&NVGPickKind.Stroke) && (pp.flags&NVG_PICK_STROKE)) hit = nvg__pickPathStroke(ps, pp, x, y);
-        if (!hit && (kind&NVGPickKind.Fill) && (pp.flags&NVG_PICK_FILL)) hit = nvg__pickPath(ps, pp, x, y);
+        if ((kind&NVGPickKind.Stroke) && (pp.flags&NVGPathFlags.Stroke)) hit = nvg__pickPathStroke(ps, pp, x, y);
+        if (!hit && (kind&NVGPickKind.Fill) && (pp.flags&NVGPathFlags.Fill)) hit = nvg__pickPath(ps, pp, x, y);
         if (hit) {
           static if (IsGoodHitTestDG!DG) {
             static if (__traits(compiles, (){ DG dg; bool res = dg(cast(int)42, cast(int)666); })) {
@@ -4451,7 +4480,8 @@ public int hitTestDG(DG) (NVGContext ctx, float x, float y, uint kind, scope DG 
 
 /// Fills ids with a list of the top most hit ids under the specified position.
 /// Returns the slice of `ids`.
-public int[] hitTestAll (NVGContext ctx, float x, float y, uint kind, int[] ids) nothrow @trusted @nogc {
+/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
+public int[] hitTestAll (NVGContext ctx, in float x, in float y, uint kind, int[] ids) nothrow @trusted @nogc {
   if (ctx.pickScene is null || ids.length == 0) return ids[0..0];
 
   int npicked = 0;
@@ -4480,7 +4510,8 @@ public int[] hitTestAll (NVGContext ctx, float x, float y, uint kind, int[] ids)
 }
 
 /// Returns the id of the pickable shape containing x,y or -1 if no shape was found.
-public int hitTest (NVGContext ctx, float x, float y, uint kind) nothrow @trusted @nogc {
+/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
+public int hitTest (NVGContext ctx, in float x, in float y, uint kind) nothrow @trusted @nogc {
   if (ctx.pickScene is null) return -1;
 
   NVGpickScene* ps = ctx.pickScene;
@@ -4499,33 +4530,37 @@ public int hitTest (NVGContext ctx, float x, float y, uint kind) nothrow @truste
 
 /// Returns `true` if the given point is within the fill of the currently defined path.
 /// This operation can be done before rasterizing the current path.
-public bool hitTestCurrFill (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
+public bool hitTestCurrFill (NVGContext ctx, in float xx, in float yy) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], 1, /*forStroke:*/false);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], 1, ctx.gpuAffine[], /*forStroke:*/false);
   if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
     ps.npoints = oldnpoints;
     ps.nsegments = oldnsegments;
   }
+  float x = void, y = void;
+  nvg__untransformGPU(ctx, &x, &y, xx, yy);
   return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPath(ps, pp, x, y) : false);
 }
 
 /// Returns `true` if the given point is within the stroke of the currently defined path.
 /// This operation can be done before rasterizing the current path.
-public bool hitTestCurrStroke (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
+public bool hitTestCurrStroke (NVGContext ctx, in float xx, in float yy) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], 1, /*forStroke:*/true);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], 1, ctx.gpuAffine[], /*forStroke:*/true);
   if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
     ps.npoints = oldnpoints;
     ps.nsegments = oldnsegments;
   }
+  float x = void, y = void;
+  nvg__untransformGPU(ctx, &x, &y, xx, yy);
   return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPathStroke(ps, pp, x, y) : false);
 }
 
@@ -4540,24 +4575,22 @@ extern(C) {
   }
 }
 
-enum NVG_PICK_EPS = 0.0001f;
+enum NVGPickEPS = 0.0001f;
 
 // Segment flags
-alias NVGsegmentFlags = uint;
-enum /*NVGsegmentFlags*/ : uint {
-  NVG_PICK_CORNER = 1,
-  NVG_PICK_BEVEL = 2,
-  NVG_PICK_INNERBEVEL = 4,
-  NVG_PICK_CAP = 8,
-  NVG_PICK_ENDCAP = 16,
+enum NVGSegmentFlags {
+  Corner = 1,
+  Bevel = 2,
+  InnerBevel = 4,
+  Cap = 8,
+  Endcap = 16,
 }
 
 // Path flags
-alias NVGpathFlags = uint;
-enum /*NVGpathFlags*/ : uint {
-  NVG_PICK_SCISSOR = 1,
-  NVG_PICK_STROKE = 2,
-  NVG_PICK_FILL = 4,
+enum NVGPathFlags {
+  Scissor = 1,
+  Stroke = 2,
+  Fill = 4,
 }
 
 struct NVGsegment {
@@ -4591,11 +4624,12 @@ struct NVGpickPath {
   short lineCap;
   short lineJoin;
   bool evenOddMode;
+  float[6] gpuAffine;
 
   float[4] bounds;
   int scissor; // Indexes into ps->points and defines scissor rect as XVec, YVec and Center
 
-  NVGpickSubPath*  subPaths;
+  NVGpickSubPath* subPaths;
   NVGpickPath* next;
   NVGpickPath* cellnext;
 }
@@ -4623,11 +4657,11 @@ struct NVGpickScene {
   int csegments;
 
   // Implicit quadtree
-  float xdim;   // Width / (1 << nlevels)
-  float ydim;   // Height / (1 << nlevels)
-  int ncells;   // Total number of cells in all levels
+  float xdim; // Width / (1 << nlevels)
+  float ydim; // Height / (1 << nlevels)
+  int ncells; // Total number of cells in all levels
   int nlevels;
-  NVGpickPath*** levels;  // Index: [Level][LevelY * LevelW + LevelX] Value: Linked list of paths
+  NVGpickPath*** levels; // Index: [Level][LevelY * LevelW + LevelX] Value: Linked list of paths
 
   // Temp storage for picking
   int cpicked;
@@ -4635,18 +4669,28 @@ struct NVGpickScene {
 }
 
 
-//
-// Bounds Utilities
-//
+void nvg__untransformGPU (NVGContext ctx, float *dx, float *dy, in float x, in float y) {
+  if (ctx.gpuAffine[] == nvgIdentity[]) {
+    *dx = x;
+    *dy = y;
+  } else {
+    // inverse GPU transformation
+    float[6] igpu = void;
+    nvgTransformInverse(igpu[], ctx.gpuAffine[]);
+    nvgTransformPoint(dx, dy, igpu[], x, y);
+  }
+}
+
+
+// bounds utilities
 void nvg__initBounds (ref float[4] bounds) {
   bounds.ptr[0] = bounds.ptr[1] = 1e6f;
   bounds.ptr[2] = bounds.ptr[3] = -1e6f;
 }
 
 void nvg__expandBounds (ref float[4] bounds, const(float)* points, int npoints) {
-  int i;
   npoints *= 2;
-  for (i = 0; i < npoints; i += 2) {
+  for (int i = 0; i < npoints; i += 2) {
     bounds.ptr[0] = nvg__min(bounds.ptr[0], points[i]);
     bounds.ptr[1] = nvg__min(bounds.ptr[1], points[i+1]);
     bounds.ptr[2] = nvg__max(bounds.ptr[2], points[i]);
@@ -4676,14 +4720,14 @@ bool nvg__pointInBounds (in float x, in float y, in ref float[4] bounds) {
   return (x >= bounds.ptr[0] && x <= bounds.ptr[2] && y >= bounds.ptr[1] && y <= bounds.ptr[3]);
 }
 
-//
-// Building paths & sub paths
-//
+// building paths & sub paths
 int nvg__pickSceneAddPoints (NVGpickScene* ps, const(float)* xy, int n) {
+  import core.stdc.string : memcpy;
   if (ps.npoints+n > ps.cpoints) {
+    import core.stdc.stdlib : realloc;
     int cpoints = ps.npoints+n+(ps.cpoints<<1);
     float* points = cast(float*)realloc(ps.points, float.sizeof*2*cpoints);
-    if (points is null) return -1;
+    if (points is null) assert(0, "NanoVega: out of memory");
     ps.points = points;
     ps.cpoints = cpoints;
   }
@@ -4698,7 +4742,7 @@ void nvg__pickSubPathAddSegment (NVGpickScene* ps, NVGpickSubPath* psp, int firs
   if (ps.nsegments == ps.csegments) {
     int csegments = 1+ps.csegments+(ps.csegments<<1);
     NVGsegment* segments = cast(NVGsegment*)realloc(ps.segments, NVGsegment.sizeof*csegments);
-    if (segments is null) return;
+    if (segments is null) assert(0, "NanoVega: out of memory");
     ps.segments = segments;
     ps.csegments = csegments;
   }
@@ -4712,8 +4756,8 @@ void nvg__pickSubPathAddSegment (NVGpickScene* ps, NVGpickSubPath* psp, int firs
   seg.flags = flags;
   ++psp.nsegments;
 
-  nvg__segmentDir(ps, psp, seg,  0, seg.startDir);
-  nvg__segmentDir(ps, psp, seg,  1, seg.endDir);
+  nvg__segmentDir(ps, psp, seg, 0, seg.startDir);
+  nvg__segmentDir(ps, psp, seg, 1, seg.endDir);
 }
 
 void nvg__segmentDir (NVGpickScene* ps, NVGpickSubPath* psp, NVGsegment* seg, float t, ref float[2] d) {
@@ -4740,6 +4784,7 @@ void nvg__segmentDir (NVGpickScene* ps, NVGpickSubPath* psp, NVGsegment* seg, fl
         3.0f*omt2*(x1-x0)+
         6.0f*omt*t*(x2-x1)+
         3.0f*t2*(x3-x2);
+
       d.ptr[1] =
         3.0f*omt2*(y1-y0)+
         6.0f*omt*t*(y2-y1)+
@@ -4779,8 +4824,8 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
   int firstPoint, lastPoint;
 
   if (!closed) {
-    segments[0].flags |= NVG_PICK_CAP;
-    segments[nsegments-1].flags |= NVG_PICK_ENDCAP;
+    segments[0].flags |= NVGSegmentFlags.Cap;
+    segments[nsegments-1].flags |= NVGSegmentFlags.Endcap;
   }
 
   for (int s = 0; s < nsegments; ++s) {
@@ -4806,7 +4851,7 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
     supportingPoints.ptr[ns++] = points[lastPoint]+seg.endDir.ptr[1]*strokeWidth;
     supportingPoints.ptr[ns++] = points[lastPoint+1]-seg.endDir.ptr[0]*strokeWidth;
 
-    if (seg.flags&NVG_PICK_CORNER && prevseg !is null) {
+    if (seg.flags&NVGSegmentFlags.Corner && prevseg !is null) {
       seg.miterDir.ptr[0] = 0.5f*(-prevseg.endDir.ptr[1]-seg.startDir.ptr[1]);
       seg.miterDir.ptr[1] = 0.5f*(prevseg.endDir.ptr[0]+seg.startDir.ptr[0]);
 
@@ -4829,7 +4874,7 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
         // Set a corner as beveled if the join type is bevel or mitered and
         // miterLimit is hit.
         if (lineJoin == NVGLineCap.Bevel || (M2*miterLimit*miterLimit) < 1.0f) {
-          seg.flags |= NVG_PICK_BEVEL;
+          seg.flags |= NVGSegmentFlags.Bevel;
         } else {
           // Corner is mitered - add miter point as a support
           supportingPoints.ptr[ns++] = points[firstPoint]+seg.miterDir.ptr[0]*strokeWidth;
@@ -4845,21 +4890,20 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
       }
     }
 
-    if (seg.flags&NVG_PICK_CAP) {
+    if (seg.flags&NVGSegmentFlags.Cap) {
       switch (lineCap) {
         case NVGLineCap.Butt:
-          // Supports for butt already added.
+          // supports for butt already added
           break;
         case NVGLineCap.Square:
-          // Square cap supports are just the original two supports moved
-          // out along the direction
+          // square cap supports are just the original two supports moved out along the direction
           supportingPoints.ptr[ns++] = supportingPoints.ptr[0]-seg.startDir.ptr[0]*strokeWidth;
           supportingPoints.ptr[ns++] = supportingPoints.ptr[1]-seg.startDir.ptr[1]*strokeWidth;
           supportingPoints.ptr[ns++] = supportingPoints.ptr[2]-seg.startDir.ptr[0]*strokeWidth;
           supportingPoints.ptr[ns++] = supportingPoints.ptr[3]-seg.startDir.ptr[1]*strokeWidth;
           break;
         case NVGLineCap.Round:
-          // Add one additional support for the round cap along the dir
+          // add one additional support for the round cap along the dir
           supportingPoints.ptr[ns++] = points[firstPoint]-seg.startDir.ptr[0]*strokeWidth;
           supportingPoints.ptr[ns++] = points[firstPoint+1]-seg.startDir.ptr[1]*strokeWidth;
           break;
@@ -4868,23 +4912,22 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
       }
     }
 
-    if (seg.flags&NVG_PICK_ENDCAP) {
-      // End supporting points, either side of line
+    if (seg.flags&NVGSegmentFlags.Endcap) {
+      // end supporting points, either side of line
       int end = 4;
       switch(lineCap) {
         case NVGLineCap.Butt:
-          // Supports for butt already added.
+          // supports for butt already added
           break;
         case NVGLineCap.Square:
-          // Square cap supports are just the original two supports moved
-          // out along the direction
+          // square cap supports are just the original two supports moved out along the direction
           supportingPoints.ptr[ns++] = supportingPoints.ptr[end+0]+seg.endDir.ptr[0]*strokeWidth;
           supportingPoints.ptr[ns++] = supportingPoints.ptr[end+1]+seg.endDir.ptr[1]*strokeWidth;
           supportingPoints.ptr[ns++] = supportingPoints.ptr[end+2]+seg.endDir.ptr[0]*strokeWidth;
           supportingPoints.ptr[ns++] = supportingPoints.ptr[end+3]+seg.endDir.ptr[1]*strokeWidth;
           break;
         case NVGLineCap.Round:
-          // Add one additional support for the round cap along the dir
+          // add one additional support for the round cap along the dir
           supportingPoints.ptr[ns++] = points[lastPoint]+seg.endDir.ptr[0]*strokeWidth;
           supportingPoints.ptr[ns++] = points[lastPoint+1]+seg.endDir.ptr[1]*strokeWidth;
           break;
@@ -4899,7 +4942,7 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
   }
 }
 
-NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, int id, bool forStroke) {
+NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, int id, const(float)[] gpuAffine, bool forStroke) {
   NVGpickScene* ps = nvg__pickSceneGet(context);
   if (ps is null) return null;
 
@@ -4910,18 +4953,18 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
 
   NVGpickPath* pp = null;
   NVGpickSubPath* psp = null;
-  float[2] start;
+  float[2] start = void;
   int firstPoint;
 
   int hasHoles = 0;
   NVGpickSubPath* prev = null;
 
-  float[8] points;
-  float[2] inflections;
+  float[8] points = void;
+  float[2] inflections = void;
   int ninflections = 0;
 
   NVGstate* state = nvg__getState(context);
-  float[4] totalBounds;
+  float[4] totalBounds = void;
   NVGsegment* segments = null;
   const(NVGsegment)* seg = null;
   NVGpickSubPath *curpsp;
@@ -4930,6 +4973,7 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
   if (pp is null) return null;
 
   pp.id = id;
+  pp.gpuAffine.ptr[0..6] = (gpuAffine.length >= 6 ? gpuAffine.ptr[0..6] : nvgIdentity.ptr[0..6]);
 
   while (i < ncommands) {
     int cmd = cast(int)commands[i];
@@ -4938,8 +4982,7 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
         start.ptr[0] = commands[i+1];
         start.ptr[1] = commands[i+2];
 
-        // Start a new path for each sub path to handle sub paths that
-        // intersect other sub paths.
+        // start a new path for each sub path to handle sub paths that intersect other sub paths
         prev = psp;
         psp = nvg__allocPickSubPath(ps);
         if (psp is null) { psp = prev; break; }
@@ -4952,7 +4995,7 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
         break;
       case Command.LineTo:
         firstPoint = nvg__pickSceneAddPoints(ps, &commands[i+1], 1);
-        nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, NVG_PICK_CORNER);
+        nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, NVGSegmentFlags.Corner);
         i += 3;
         break;
       case Command.BezierTo:
@@ -4974,12 +5017,11 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
         if (ninflections) {
           float previnfl = 0;
           float[8] pointsA = void, pointsB = void;
-          int infl;
 
           nvg__smallsort(inflections.ptr, ninflections);
 
-          for (infl = 0; infl < ninflections; ++infl) {
-            if (nvg__absf(inflections.ptr[infl]-previnfl) < NVG_PICK_EPS) continue;
+          for (int infl = 0; infl < ninflections; ++infl) {
+            if (nvg__absf(inflections.ptr[infl]-previnfl) < NVGPickEPS) continue;
 
             immutable float t = (inflections.ptr[infl]-previnfl)*(1.0f/(1.0f-previnfl));
 
@@ -4988,7 +5030,7 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
             nvg__splitBezier(points.ptr, t, pointsA.ptr, pointsB.ptr);
 
             firstPoint = nvg__pickSceneAddPoints(ps, &pointsA.ptr[2], 3);
-            nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, (infl == 0) ? NVG_PICK_CORNER : 0);
+            nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, (infl == 0) ? NVGSegmentFlags.Corner : 0);
 
             memcpy(points.ptr, pointsB.ptr, float.sizeof*8);
           }
@@ -4997,17 +5039,17 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
           nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, 0);
         } else {
           firstPoint = nvg__pickSceneAddPoints(ps, &commands[i+1], 3);
-          nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, NVG_PICK_CORNER);
+          nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, NVGSegmentFlags.Corner);
         }
         i += 7;
         break;
       case Command.Close:
         if (ps.points[(ps.npoints-1)*2] != start.ptr[0] || ps.points[(ps.npoints-1)*2+1] != start.ptr[1]) {
           firstPoint = nvg__pickSceneAddPoints(ps, start.ptr, 1);
-          nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, Command.LineTo, NVG_PICK_CORNER);
+          nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, Command.LineTo, NVGSegmentFlags.Corner);
         }
         psp.closed = true;
-        i++;
+        i += 1;
         break;
       case Command.Winding:
         psp.winding = cast(short)cast(int)commands[i+1];
@@ -5015,12 +5057,12 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
         i += 2;
         break;
       default:
-        i++;
+        i += 1;
         break;
     }
   }
 
-  pp.flags = (forStroke ? NVG_PICK_STROKE : NVG_PICK_FILL);
+  pp.flags = (forStroke ? NVGPathFlags.Stroke : NVGPathFlags.Fill);
   pp.subPaths = psp;
   pp.strokeWidth = state.strokeWidth*0.5f;
   pp.miterLimit = state.miterLimit;
@@ -5051,14 +5093,13 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
   // Store the scissor rect if present.
   if (state.scissor.extent.ptr[0] != -1.0f) {
     // Use points storage to store the scissor data
-    float* scissor = null;
     pp.scissor = nvg__pickSceneAddPoints(ps, null, 4);
-    scissor = &ps.points[pp.scissor*2];
+    float* scissor = &ps.points[pp.scissor*2];
 
     memcpy(scissor, state.scissor.xform.ptr, 6*float.sizeof);
     memcpy(scissor+6, state.scissor.extent.ptr, 2*float.sizeof);
 
-    pp.flags |= NVG_PICK_SCISSOR;
+    pp.flags |= NVGPathFlags.Scissor;
   }
 
   memcpy(pp.bounds.ptr, totalBounds.ptr, float.sizeof*4);
@@ -5112,7 +5153,7 @@ NVGpickSubPath* nvg__allocPickSubPath (NVGpickScene* ps) {
   return psp;
 }
 
-void nvg__returnPickSubPath(NVGpickScene* ps, NVGpickSubPath* psp) {
+void nvg__returnPickSubPath (NVGpickScene* ps, NVGpickSubPath* psp) {
   psp.next = ps.freeSubPaths;
   ps.freeSubPaths = psp;
 }
@@ -5272,22 +5313,21 @@ void nvg__splitBezier (const(float)* points, float t, float* pointsA, float* poi
 void nvg__bezierInflections (const(float)* points, int coord, int* ninflections, float* inflections) {
   immutable float v0 = points[0*2+coord], v1 = points[1*2+coord], v2 = points[2*2+coord], v3 = points[3*2+coord];
   float[2] t = void;
-  float a, b, c, d;
   int nvalid = *ninflections;
 
-  a = 3.0f*( -v0+3.0f*v1-3.0f*v2+v3 );
-  b = 6.0f*( v0-2.0f*v1+v2 );
-  c = 3.0f*( v1-v0 );
+  immutable float a = 3.0f*( -v0+3.0f*v1-3.0f*v2+v3 );
+  immutable float b = 6.0f*( v0-2.0f*v1+v2 );
+  immutable float c = 3.0f*( v1-v0 );
 
-  d = b*b-4.0f*a*c;
-  if (nvg__absf(d-0.0f) < NVG_PICK_EPS) {
+  float d = b*b-4.0f*a*c;
+  if (nvg__absf(d-0.0f) < NVGPickEPS) {
     // Zero or one root
     t.ptr[0] = -b/2.0f*a;
-    if (t.ptr[0] > NVG_PICK_EPS && t.ptr[0] < (1.0f-NVG_PICK_EPS)) {
+    if (t.ptr[0] > NVGPickEPS && t.ptr[0] < (1.0f-NVGPickEPS)) {
       inflections[nvalid] = t.ptr[0];
       ++nvalid;
     }
-  } else if (d > NVG_PICK_EPS) {
+  } else if (d > NVGPickEPS) {
     // zero, one or two roots
     d = nvg__sqrtf(d);
 
@@ -5295,7 +5335,7 @@ void nvg__bezierInflections (const(float)* points, int coord, int* ninflections,
     t.ptr[1] = (-b-d)/(2.0f*a);
 
     for (int i = 0; i < 2; ++i) {
-      if (t.ptr[i] > NVG_PICK_EPS && t.ptr[i] < (1.0f-NVG_PICK_EPS)) {
+      if (t.ptr[i] > NVGPickEPS && t.ptr[i] < (1.0f-NVGPickEPS)) {
         inflections[nvalid] = t.ptr[i];
         ++nvalid;
       }
@@ -5334,8 +5374,7 @@ void nvg__bezierBounds (const(float)* points, ref float[4] bounds) {
   nvg__expandBounds(bounds, &points[0], 1);
   nvg__expandBounds(bounds, &points[6], 1);
 
-  // Calculate dx==0 and dy==0 inflection points and add then
-  // to the bounds
+  // Calculate dx==0 and dy==0 inflection points and add then to the bounds
 
   nvg__bezierInflections(points, 0, &ninflections, inflections.ptr);
   nvg__bezierInflections(points, 1, &ninflections, inflections.ptr);
@@ -5356,7 +5395,7 @@ bool nvg__intersectLine (const(float)* points, float x, float y) {
   immutable float x2 = points[2];
   immutable float y2 = points[3];
   immutable float d = y2-y1;
-  if (d > NVG_PICK_EPS || d < -NVG_PICK_EPS) {
+  if (d > NVGPickEPS || d < -NVGPickEPS) {
     immutable float s = (x2-x1)/d;
     immutable float lineX = x1+(y-y1)*s;
     return (lineX > x);
@@ -5365,8 +5404,7 @@ bool nvg__intersectLine (const(float)* points, float x, float y) {
   }
 }
 
-// Checks to see if a line originating from x,y along the +ve x axis
-// intersects the given bezier.
+// Checks to see if a line originating from x,y along the +ve x axis intersects the given bezier.
 // It is assumed that the line originates from within the bounding box of
 // the bezier and that the curve has no dy=0 inflection points.
 // Returns the number of intersections found (which is either 1 or 0).
@@ -5561,23 +5599,23 @@ int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, f
       d.ptr[0] = x-closest.ptr[0];
       d.ptr[1] = y-closest.ptr[1];
 
-      if ((t >= NVG_PICK_EPS && t <= 1.0f-NVG_PICK_EPS) ||
-          (seg.flags&(NVG_PICK_CORNER|NVG_PICK_CAP|NVG_PICK_ENDCAP)) == 0 ||
+      if ((t >= NVGPickEPS && t <= 1.0f-NVGPickEPS) ||
+          (seg.flags&(NVGSegmentFlags.Corner|NVGSegmentFlags.Cap|NVGSegmentFlags.Endcap)) == 0 ||
           (lineJoin == NVGLineCap.Round))
       {
         // Closest point is in the middle of the line/curve, at a rounded join/cap
         // or at a smooth join
         immutable float distSqd = d.ptr[0]*d.ptr[0]+d.ptr[1]*d.ptr[1];
         if (distSqd < strokeWidthSqd) return 1;
-      } else if ( ( (t > (1.0f-NVG_PICK_EPS)) && (seg.flags&NVG_PICK_ENDCAP)) ||
-            ( (t < NVG_PICK_EPS) && (seg.flags&NVG_PICK_CAP) ) ) {
+      } else if ((t > 1.0f-NVGPickEPS && (seg.flags&NVGSegmentFlags.Endcap)) ||
+                 (t < NVGPickEPS && (seg.flags&NVGSegmentFlags.Cap))) {
         switch (lineCap) {
           case NVGLineCap.Butt:
             immutable float distSqd = d.ptr[0]*d.ptr[0]+d.ptr[1]*d.ptr[1];
-            immutable float dirD = (t < NVG_PICK_EPS ?
+            immutable float dirD = (t < NVGPickEPS ?
               -(d.ptr[0]*seg.startDir.ptr[0]+d.ptr[1]*seg.startDir.ptr[1]) :
                 d.ptr[0]*seg.endDir.ptr[0]+d.ptr[1]*seg.endDir.ptr[1]);
-            if (dirD < -NVG_PICK_EPS && distSqd < strokeWidthSqd) return 1;
+            if (dirD < -NVGPickEPS && distSqd < strokeWidthSqd) return 1;
             break;
           case NVGLineCap.Square:
             if (nvg__absf(d.ptr[0]) < strokeWidth && nvg__absf(d.ptr[1]) < strokeWidth) return 1;
@@ -5589,11 +5627,11 @@ int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, f
           default:
             break;
         }
-      } else if (seg.flags&NVG_PICK_CORNER) {
+      } else if (seg.flags&NVGSegmentFlags.Corner) {
         // Closest point is at a corner
         const(NVGsegment)* seg0, seg1;
 
-        if (t < NVG_PICK_EPS) {
+        if (t < NVGPickEPS) {
           seg0 = prevseg;
           seg1 = seg;
         } else {
@@ -5601,7 +5639,7 @@ int nvg__pickSubPathStroke (const NVGpickScene* ps, const NVGpickSubPath* psp, f
           seg1 = (s == nsegments-1 ? &ps.segments[psp.firstSegment] : seg+1);
         }
 
-        if (!(seg1.flags&NVG_PICK_BEVEL)) {
+        if (!(seg1.flags&NVGSegmentFlags.Bevel)) {
           immutable float prevNDist = -seg0.endDir.ptr[1]*d.ptr[0]+seg0.endDir.ptr[0]*d.ptr[1];
           immutable float curNDist = seg1.startDir.ptr[1]*d.ptr[0]-seg1.startDir.ptr[0]*d.ptr[1];
           if (nvg__absf(prevNDist) < strokeWidth && nvg__absf(curNDist) < strokeWidth) return 1;
@@ -5630,8 +5668,8 @@ int nvg__pickSubPath (const NVGpickScene* ps, const NVGpickSubPath* psp, float x
 
   // trace a line from x,y out along the positive x axis and count the number of intersections
   for (int s = 0; s < nsegments; ++s, ++seg) {
-    if ((seg.bounds.ptr[1]-NVG_PICK_EPS) < y &&
-        (seg.bounds.ptr[3]-NVG_PICK_EPS) > y &&
+    if ((seg.bounds.ptr[1]-NVGPickEPS) < y &&
+        (seg.bounds.ptr[3]-NVGPickEPS) > y &&
         seg.bounds.ptr[2] > x)
     {
       // Line hits the box.
@@ -5688,7 +5726,7 @@ bool nvg__pickPathStroke (const(NVGpickScene)* ps, const(NVGpickPath)* pp, float
 
 bool nvg__pickPathTestBounds (const NVGpickScene* ps, const NVGpickPath* pp, float x, float y) {
   if (nvg__pointInBounds(x, y, pp.bounds) != 0) {
-    if (pp.flags&NVG_PICK_SCISSOR) {
+    if (pp.flags&NVGPathFlags.Scissor) {
       const(float)* scissor = &ps.points[pp.scissor*2];
       float rx = x-scissor[4];
       float ry = y-scissor[5];
