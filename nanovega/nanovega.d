@@ -4432,12 +4432,8 @@ private template IsGoodHitTestInternalDG(DG) {
 /// Call delegate `dg` for each path under the specified position (in no particular order).
 /// Returns the id of the path for which delegate `dg` returned true or -1.
 /// dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
-/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
-public int hitTestDG(DG) (NVGContext ctx, in float xx, in float yy, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
+public int hitTestDG(DG) (NVGContext ctx, in float x, in float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
   if (ctx.pickScene is null) return -1;
-
-  float x = void, y = void;
-  nvg__untransformGPU(ctx, &x, &y, xx, yy);
 
   NVGpickScene* ps = ctx.pickScene;
   int levelwidth = 1<<(ps.nlevels-1);
@@ -4480,7 +4476,6 @@ public int hitTestDG(DG) (NVGContext ctx, in float xx, in float yy, uint kind, s
 
 /// Fills ids with a list of the top most hit ids under the specified position.
 /// Returns the slice of `ids`.
-/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
 public int[] hitTestAll (NVGContext ctx, in float x, in float y, uint kind, int[] ids) nothrow @trusted @nogc {
   if (ctx.pickScene is null || ids.length == 0) return ids[0..0];
 
@@ -4510,7 +4505,6 @@ public int[] hitTestAll (NVGContext ctx, in float x, in float y, uint kind, int[
 }
 
 /// Returns the id of the pickable shape containing x,y or -1 if no shape was found.
-/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
 public int hitTest (NVGContext ctx, in float x, in float y, uint kind) nothrow @trusted @nogc {
   if (ctx.pickScene is null) return -1;
 
@@ -4530,7 +4524,7 @@ public int hitTest (NVGContext ctx, in float x, in float y, uint kind) nothrow @
 
 /// Returns `true` if the given point is within the fill of the currently defined path.
 /// This operation can be done before rasterizing the current path.
-public bool hitTestCurrFill (NVGContext ctx, in float xx, in float yy) nothrow @trusted @nogc {
+public bool hitTestCurrFill (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
@@ -4541,14 +4535,12 @@ public bool hitTestCurrFill (NVGContext ctx, in float xx, in float yy) nothrow @
     ps.npoints = oldnpoints;
     ps.nsegments = oldnsegments;
   }
-  float x = void, y = void;
-  nvg__untransformGPU(ctx, &x, &y, xx, yy);
   return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPath(ps, pp, x, y) : false);
 }
 
 /// Returns `true` if the given point is within the stroke of the currently defined path.
 /// This operation can be done before rasterizing the current path.
-public bool hitTestCurrStroke (NVGContext ctx, in float xx, in float yy) nothrow @trusted @nogc {
+public bool hitTestCurrStroke (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
@@ -4559,8 +4551,6 @@ public bool hitTestCurrStroke (NVGContext ctx, in float xx, in float yy) nothrow
     ps.npoints = oldnpoints;
     ps.nsegments = oldnsegments;
   }
-  float x = void, y = void;
-  nvg__untransformGPU(ctx, &x, &y, xx, yy);
   return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPathStroke(ps, pp, x, y) : false);
 }
 
@@ -4666,24 +4656,6 @@ struct NVGpickScene {
   // Temp storage for picking
   int cpicked;
   NVGpickPath** picked;
-}
-
-
-void nvg__untransformGPU (NVGContext ctx, float *dx, float *dy, in float x, in float y) {
-  version(none) {
-    if (ctx.gpuAffine[] == nvgIdentity[]) {
-      *dx = x;
-      *dy = y;
-    } else {
-      // inverse GPU transformation
-      float[6] igpu = void;
-      nvgTransformInverse(igpu[], ctx.gpuAffine[]);
-      nvgTransformPoint(dx, dy, igpu[], x, y);
-    }
-  } else {
-    *dx = x;
-    *dy = y;
-  }
 }
 
 
