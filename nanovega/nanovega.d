@@ -855,12 +855,15 @@ struct NVGPathSetS {
 private:
   NVGpathCache* caches;
   int ncaches, ccaches;
+  NVGContext svctx; // used to do some sanity checks
 
 public:
   @disable this (this); // no copies
 
   /// Fill saved path set using saved fill mode.
   void fill (NVGContext ctx) nothrow @trusted @nogc {
+    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
+    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
     foreach (ref cc; caches[0..ncaches]) {
       if (cc.npaths <= 0) continue;
 
@@ -885,6 +888,8 @@ public:
 
   /// Stroking will use saved stroke width.
   void stroke (NVGContext ctx) nothrow @trusted @nogc {
+    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
+    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
     foreach (ref cc; caches[0..ncaches]) {
       if (cc.npaths <= 0) continue;
 
@@ -913,6 +918,7 @@ public:
 /// Append current path to existing path set. Is is safe to call this with `null` `svp`.
 void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
   if (ctx is null || svp is null) return;
+  if (ctx !is svp.svctx) assert(0, "NanoVega: cannot save pathes from different contexts");
   if (ctx.ncommands == 0) {
     assert(ctx.cache.npaths == 0);
     return;
@@ -953,9 +959,10 @@ public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc;
   import core.stdc.string : memset;
   if (ctx is null) return null;
-  NVGPathSet res = cast(NVGPathSet)malloc((NVGPathSet*).sizeof);
+  NVGPathSet res = cast(NVGPathSet)malloc(NVGPathSetS.sizeof);
   if (res is null) assert(0, "NanoVega: out of memory");
   memset(res, 0, NVGPathSetS.sizeof);
+  res.svctx = ctx;
   return res;
 }
 
@@ -972,13 +979,13 @@ public void clear (NVGPathSet svp) nothrow @trusted @nogc {
 }
 
 /// Destroy path set (frees allocated memory).
-public void kill (ref NVGPathSet p) nothrow @trusted @nogc {
-  if (p !is null) {
+public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
+  if (svp !is null) {
     import core.stdc.stdlib : free;
-    p.clear();
-    if (p.caches !is null) free(p.caches);
-    free(p);
-    p = null;
+    svp.clear();
+    if (svp.caches !is null) free(svp.caches);
+    free(svp);
+    svp = null;
   }
 }
 
