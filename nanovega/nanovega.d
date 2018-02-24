@@ -552,8 +552,8 @@ public:
 
   ref NVGColor applyTint() (in auto ref NVGColor tint) nothrow @trusted @nogc {
     if (tint.a == 0) return this;
-    foreach (immutable idx, ref float v; rgba[0..3]) {
-      v = nvg__clamp(v+tint.rgba.ptr[idx]*tint.a, 0.0f, 1.0f);
+    foreach (immutable idx, ref float v; rgba[0..4]) {
+      v = nvg__clamp(v+tint.rgba.ptr[idx], 0.0f, 1.0f);
     }
     return this;
   }
@@ -1051,6 +1051,7 @@ private:
   // path recording
   NVGPathSet recset;
   int recstart; // used to cancel recording
+  bool recblockdraw;
   // internals
   float[6] gpuAffine;
   int mWidth, mHeight;
@@ -1418,6 +1419,10 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
  *
  * Finishing frame with `endFrame()` will automatically commit current recording, and
  * calling `cancelFrame()` will cancel recording by calling `cancelRecording()`.
+ *
+ * Note that commit recording will clear current picking scene (but cancelling won't).
+ *
+ * Calling `startRecording()` without commiting or cancelling recoriding will commit.
  */
 public alias NVGSectionDummy001 = void;
 
@@ -1682,16 +1687,32 @@ public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
 /// Start path recording. `svp` should be alive until recording is cancelled or stopped.
 public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
+  ctx.stopRecording();
   ctx.recset = svp;
   ctx.recstart = (svp !is null ? svp.ncaches : -1);
+  ctx.recblockdraw = false;
+}
+
+/// Start path recording. `svp` should be alive until recording is cancelled or stopped.
+/// This will block all rendering, so you can call your rendering functions to record pathes without actual drawing.
+/// Commiting or cancelling will enable rendering.
+/// You can call this with `null` svp to block rendering without recording any pathes.
+public void startBlockingRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+  if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
+  ctx.stopRecording();
+  ctx.recset = svp;
+  ctx.recstart = (svp !is null ? svp.ncaches : -1);
+  ctx.recblockdraw = true;
 }
 
 /// Commit recorded pathes. It is safe to call this when recording is not started.
 public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recset !is null && ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   //ctx.appendCurrentPathToCache(ctx.recset); // save last path
+  if (ctx.recset !is null) ctx.recset.takeCurrentPickScene(ctx);
   ctx.recset = null;
   ctx.recstart = -1;
+  ctx.recblockdraw = false;
 }
 
 /// Cancel path recording.
@@ -1704,9 +1725,11 @@ public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
     ctx.recset = null;
     ctx.recstart = -1;
   }
+  ctx.recblockdraw = false;
 }
 
 /// Replay saved path set.
+/// Replaying record while you're recording another one is undefined behavior.
 public void replayRecording() (NVGContext ctx, NVGPathSet svp, in auto ref NVGColor fillTint, in auto ref NVGColor strokeTint) nothrow @trusted @nogc {
   if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   svp.replay(ctx, fillTint, strokeTint);
@@ -4409,6 +4432,8 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
 
   ctx.appendCurrentPathToCache(ctx.recset);
 
+  if (ctx.recblockdraw) return;
+
   ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
 
   // count triangles
@@ -4442,6 +4467,8 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   strokePaint.outerColor.a *= state.alpha;
 
   ctx.appendCurrentPathToCache(ctx.recset);
+
+  if (ctx.recblockdraw) return;
 
   ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
 
