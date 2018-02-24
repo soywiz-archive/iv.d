@@ -1342,7 +1342,10 @@ public void cancelFrame (NVGContext ctx) nothrow @trusted @nogc {
 
 /// Ends drawing the current frame (flushing remaining render state). Commits recorded pathes.
 public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
-  ctx.appendCurrentPathToCache(ctx.recset); // save last path
+  if (ctx.recset !is null) {
+    //ctx.appendCurrentPathToCache(ctx.recset); // save last path
+    ctx.recset.takeCurrentPickScene(ctx);
+  }
   ctx.stopRecording();
   ctx.mWidth = 0;
   ctx.mHeight = 0;
@@ -1414,63 +1417,158 @@ struct NVGPathSetS {
 private:
   NVGpathCache* caches;
   int ncaches, ccaches;
+  NVGpickScene* pickscene;
+  //int npickscenes, cpickscenes;
   NVGContext svctx; // used to do some sanity checks
 
-public:
-  @disable this (this); // no copies
+private:
+  void takeCurrentPickScene (NVGContext ctx) nothrow @trusted @nogc {
+    NVGpickScene* ps = ctx.pickScene;
+    if (ps is null) return; // nothing to do
+    if (ps.npaths == 0) return; // pick scene is empty
+    ctx.pickScene = null;
+    pickscene = ps;
+  }
 
-  /// Fill saved path set using saved fill mode.
-  void fill (NVGContext ctx) nothrow @trusted @nogc {
-    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
-    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
+  void replay (NVGContext ctx) nothrow @trusted @nogc {
+    NVGstate* state = nvg__getState(ctx);
     foreach (ref cc; caches[0..ncaches]) {
       if (cc.npaths <= 0) continue;
 
-      NVGstate* state = nvg__getState(ctx);
-      NVGPaint fillPaint = state.fill;
+      if (cc.fillReady) {
+        NVGPaint fillPaint = state.fill;
 
-      // apply global alpha
-      fillPaint.innerColor.a *= state.alpha;
-      fillPaint.outerColor.a *= state.alpha;
+        // apply global alpha
+        fillPaint.innerColor.a *= state.alpha;
+        fillPaint.outerColor.a *= state.alpha;
 
-      ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
+        ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
 
-      // count triangles
-      foreach (int i; 0..cc.npaths) {
-        NVGpath* path = &cc.paths[i];
-        ctx.fillTriCount += path.nfill-2;
-        ctx.fillTriCount += path.nstroke-2;
-        ctx.drawCallCount += 2;
+        // count triangles
+        foreach (int i; 0..cc.npaths) {
+          NVGpath* path = &cc.paths[i];
+          ctx.fillTriCount += path.nfill-2;
+          ctx.fillTriCount += path.nstroke-2;
+          ctx.drawCallCount += 2;
+        }
+      }
+
+      if (cc.strokeReady) {
+        NVGPaint strokePaint = state.stroke;
+
+        strokePaint.innerColor.a *= cc.strokeAlphaMul;
+        strokePaint.outerColor.a *= cc.strokeAlphaMul;
+
+        // apply global alpha
+        strokePaint.innerColor.a *= state.alpha;
+        strokePaint.outerColor.a *= state.alpha;
+
+        ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
+
+        // count triangles
+        foreach (int i; 0..cc.npaths) {
+          NVGpath* path = &cc.paths[i];
+          ctx.strokeTriCount += path.nstroke-2;
+          ++ctx.drawCallCount;
+        }
       }
     }
   }
 
-  /// Stroking will use saved stroke width.
-  void stroke (NVGContext ctx) nothrow @trusted @nogc {
-    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
-    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
-    foreach (ref cc; caches[0..ncaches]) {
-      if (cc.npaths <= 0) continue;
+public:
+  @disable this (this); // no copies
 
-      NVGstate* state = nvg__getState(ctx);
-      NVGPaint strokePaint = state.stroke;
+  // pick test
+  // Call delegate `dg` for each path under the specified position (in no particular order).
+  // Returns the id of the path for which delegate `dg` returned true or -1.
+  // dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
+  int hitTestDG(DG) (in float x, in float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
+    if (pickscene is null) return -1;
 
-      strokePaint.innerColor.a *= cc.strokeAlphaMul;
-      strokePaint.outerColor.a *= cc.strokeAlphaMul;
+    NVGpickScene* ps = pickscene;
+    int levelwidth = 1<<(ps.nlevels-1);
+    int cellx = nvg__clamp(cast(int)(x/ps.xdim), 0, levelwidth);
+    int celly = nvg__clamp(cast(int)(y/ps.ydim), 0, levelwidth);
+    int npicked = 0;
 
-      // apply global alpha
-      strokePaint.innerColor.a *= state.alpha;
-      strokePaint.outerColor.a *= state.alpha;
-
-      ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
-
-      // count triangles
-      foreach (int i; 0..cc.npaths) {
-        NVGpath* path = &cc.paths[i];
-        ctx.strokeTriCount += path.nstroke-2;
-        ++ctx.drawCallCount;
+    for (int lvl = ps.nlevels-1; lvl >= 0; --lvl) {
+      NVGpickPath* pp = ps.levels[lvl][celly*levelwidth+cellx];
+      while (pp !is null) {
+        if (nvg__pickPathTestBounds(ps, pp, x, y)) {
+          int hit = 0;
+          if ((kind&NVGPickKind.Stroke) && (pp.flags&NVGPathFlags.Stroke)) hit = nvg__pickPathStroke(ps, pp, x, y);
+          if (!hit && (kind&NVGPickKind.Fill) && (pp.flags&NVGPathFlags.Fill)) hit = nvg__pickPath(ps, pp, x, y);
+          if (hit) {
+            static if (IsGoodHitTestDG!DG) {
+              static if (__traits(compiles, (){ DG dg; bool res = dg(cast(int)42, cast(int)666); })) {
+                if (dg(pp.id, cast(int)pp.order)) return pp.id;
+              } else {
+                dg(pp.id, cast(int)pp.order);
+              }
+            } else {
+              static if (__traits(compiles, (){ DG dg; NVGpickPath* pp; bool res = dg(pp); })) {
+                if (dg(pp)) return pp.id;
+              } else {
+                dg(pp);
+              }
+            }
+          }
+        }
+        pp = pp.next;
       }
+      cellx >>= 1;
+      celly >>= 1;
+      levelwidth >>= 1;
     }
+
+    return -1;
+  }
+
+  // Fills ids with a list of the top most hit ids under the specified position.
+  // Returns the slice of `ids`.
+  int[] hitTestAll (in float x, in float y, uint kind, int[] ids) nothrow @trusted @nogc {
+    if (pickscene is null || ids.length == 0) return ids[0..0];
+
+    int npicked = 0;
+    NVGpickScene* ps = pickscene;
+
+    hitTestDG(x, y, kind, delegate (NVGpickPath* pp) nothrow @trusted @nogc {
+      if (npicked == ps.cpicked) {
+        int cpicked = ps.cpicked+ps.cpicked;
+        NVGpickPath** picked = cast(NVGpickPath**)realloc(ps.picked, (NVGpickPath*).sizeof*ps.cpicked);
+        if (picked is null) return true; // abort
+        ps.cpicked = cpicked;
+        ps.picked = picked;
+      }
+      ps.picked[npicked] = pp;
+      ++npicked;
+      return false; // go on
+    });
+
+    qsort(ps.picked, npicked, (NVGpickPath*).sizeof, &nvg__comparePaths);
+
+    assert(npicked >= 0);
+    if (npicked > ids.length) npicked = cast(int)ids.length;
+    foreach (immutable nidx, ref int did; ids[0..npicked]) did = ps.picked[nidx].id;
+
+    return ids[0..npicked];
+  }
+
+  // Returns the id of the pickable shape containing x,y or -1 if no shape was found.
+  int hitTest (in float x, in float y, uint kind) nothrow @trusted @nogc {
+    if (pickscene is null) return -1;
+
+    int bestOrder = -1;
+    int bestID = -1;
+
+    hitTestDG(x, y, kind, delegate (NVGpickPath* pp) nothrow @trusted @nogc {
+      if (pp.order > bestOrder) {
+        bestOrder = pp.order;
+        bestID = pp.id;
+      }
+    });
+
+    return bestID;
   }
 }
 
@@ -1482,6 +1580,8 @@ void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted 
     assert(ctx.cache.npaths == 0);
     return;
   }
+  if (!ctx.cache.fillReady && !ctx.cache.strokeReady) return;
+
   // grow buffer
   if (svp.ncaches+1 > svp.ccaches) {
     import core.stdc.stdlib : realloc;
@@ -1495,21 +1595,25 @@ void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted 
   assert(svp.ncaches < svp.ccaches);
 
   // tesselate current path
-  if (!ctx.cache.fillReady) nvg__prepareFill(ctx);
-  if (!ctx.cache.strokeReady) nvg__prepareStroke(ctx);
+  //if (!ctx.cache.fillReady) nvg__prepareFill(ctx);
+  //if (!ctx.cache.strokeReady) nvg__prepareStroke(ctx);
 
   NVGpathCache* cc = &svp.caches[svp.ncaches++];
   cc.copyFrom(ctx.cache);
+  cc.fillReady = ctx.cache.fillReady;
+  cc.strokeReady = ctx.cache.strokeReady;
   // copy path commands (we may need 'em for picking)
-  cc.ncommands = ctx.ncommands;
-  if (cc.ncommands) {
-    import core.stdc.stdlib : malloc;
-    import core.stdc.string : memcpy;
-    cc.commands = cast(float*)malloc(ctx.ncommands*float.sizeof);
-    if (cc.commands is null) assert(0, "NanoVega: out of memory");
-    memcpy(cc.commands, ctx.commands, ctx.ncommands*float.sizeof);
-  } else {
-    cc.commands = null;
+  version(none) {
+    cc.ncommands = ctx.ncommands;
+    if (cc.ncommands) {
+      import core.stdc.stdlib : malloc;
+      import core.stdc.string : memcpy;
+      cc.commands = cast(float*)malloc(ctx.ncommands*float.sizeof);
+      if (cc.commands is null) assert(0, "NanoVega: out of memory");
+      memcpy(cc.commands, ctx.commands, ctx.ncommands*float.sizeof);
+    } else {
+      cc.commands = null;
+    }
   }
 }
 
@@ -1544,19 +1648,22 @@ public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
     svp.clear();
     if (svp.caches !is null) free(svp.caches);
     free(svp);
+    if (svp.pickscene !is null) nvg__deletePickScene(svp.pickscene);
     svp = null;
   }
 }
 
 /// Start path recording. `svp` should be alive until recording is cancelled or stopped.
 public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+  if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   ctx.recset = svp;
   ctx.recstart = (svp !is null ? svp.ncaches : -1);
 }
 
 /// Commit recorded pathes. It is save to call this when recording is not started.
 public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
-  ctx.appendCurrentPathToCache(ctx.recset); // save last path
+  if (ctx.recset !is null && ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
+  //ctx.appendCurrentPathToCache(ctx.recset); // save last path
   ctx.recset = null;
   ctx.recstart = -1;
 }
@@ -1564,12 +1671,19 @@ public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
 /// Cancel path recording.
 public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recset !is null) {
+    if (ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
     assert(ctx.recstart >= 0 && ctx.recstart <= ctx.recset.ncaches);
     foreach (ref cp; ctx.recset.caches[ctx.recstart..ctx.recset.ncaches]) cp.clear();
     ctx.recset.ncaches = ctx.recstart;
     ctx.recset = null;
     ctx.recstart = -1;
   }
+}
+
+/// Replay saved path set.
+public void replayRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+  if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
+  svp.replay(ctx);
 }
 
 
@@ -3775,7 +3889,7 @@ public alias NVGSectionDummy011 = void;
 /// Clears the current path and sub-paths.
 /// Will call `nvgOnBeginPath()` callback if current path is not empty.
 public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
-  ctx.appendCurrentPathToCache(ctx.recset);
+  //ctx.appendCurrentPathToCache(ctx.recset);
   ctx.ncommands = 0;
   ctx.pathPickRegistered &= NVGPickKind.All; // reset "registered" flags
   nvg__clearPathCache(ctx);
@@ -4206,6 +4320,7 @@ void nvg__prepareFill (NVGContext ctx) nothrow @trusted @nogc {
   cache.evenOddMode = state.evenOddMode;
   cache.fringeWidth = ctx.fringeWidth;
   cache.fillReady = true;
+  cache.strokeReady = false;
 }
 
 // Flatten path, prepare it for stroke operation.
@@ -4236,6 +4351,7 @@ void nvg__prepareStroke (NVGContext ctx) nothrow @trusted @nogc {
   }
 
   cache.fringeWidth = ctx.fringeWidth;
+  cache.fillReady = false;
   cache.strokeReady = true;
 }
 
@@ -4254,6 +4370,8 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
   NVGPaint fillPaint = state.fill;
   fillPaint.innerColor.a *= state.alpha;
   fillPaint.outerColor.a *= state.alpha;
+
+  ctx.appendCurrentPathToCache(ctx.recset);
 
   ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
 
@@ -4286,6 +4404,8 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   // apply global alpha
   strokePaint.innerColor.a *= state.alpha;
   strokePaint.outerColor.a *= state.alpha;
+
+  ctx.appendCurrentPathToCache(ctx.recset);
 
   ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
 
@@ -4383,7 +4503,6 @@ private template IsGoodHitTestInternalDG(DG) {
 /// Call delegate `dg` for each path under the specified position (in no particular order).
 /// Returns the id of the path for which delegate `dg` returned true or -1.
 /// dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
-/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
 public int hitTestDG(DG) (NVGContext ctx, in float x, in float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
   if (ctx.pickScene is null) return -1;
 
@@ -4428,14 +4547,13 @@ public int hitTestDG(DG) (NVGContext ctx, in float x, in float y, uint kind, sco
 
 /// Fills ids with a list of the top most hit ids under the specified position.
 /// Returns the slice of `ids`.
-/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
 public int[] hitTestAll (NVGContext ctx, in float x, in float y, uint kind, int[] ids) nothrow @trusted @nogc {
   if (ctx.pickScene is null || ids.length == 0) return ids[0..0];
 
   int npicked = 0;
   NVGpickScene* ps = ctx.pickScene;
 
-  ctx.hitTestDG(x, y, kind, delegate (NVGpickPath* pp) {
+  ctx.hitTestDG(x, y, kind, delegate (NVGpickPath* pp) nothrow @trusted @nogc {
     if (npicked == ps.cpicked) {
       int cpicked = ps.cpicked+ps.cpicked;
       NVGpickPath** picked = cast(NVGpickPath**)realloc(ps.picked, (NVGpickPath*).sizeof*ps.cpicked);
@@ -4458,7 +4576,6 @@ public int[] hitTestAll (NVGContext ctx, in float x, in float y, uint kind, int[
 }
 
 /// Returns the id of the pickable shape containing x,y or -1 if no shape was found.
-/// WARNING! GPU affine transformation matrix should be the same as it was when the path was created.
 public int hitTest (NVGContext ctx, in float x, in float y, uint kind) nothrow @trusted @nogc {
   if (ctx.pickScene is null) return -1;
 
