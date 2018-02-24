@@ -793,6 +793,16 @@ public enum NVGImageFlags {
 // ////////////////////////////////////////////////////////////////////////// //
 package/*(iv.nanovega)*/:
 
+static T* xdup(T) (const(T)* ptr, int count) nothrow @trusted @nogc {
+  import core.stdc.stdlib : malloc;
+  import core.stdc.string : memcpy;
+  if (count == 0) return null;
+  T* res = cast(T*)malloc(T.sizeof*count);
+  if (res is null) assert(0, "NanoVega: out of memory");
+  memcpy(res, ptr, T.sizeof*count);
+  return res;
+}
+
 // Internal Render API
 enum NVGtexture {
   Alpha = 0x01,
@@ -819,6 +829,128 @@ struct NVGpath {
   int nstroke;
   NVGWinding winding;
   int convex;
+
+  @disable this (this); // no copies
+
+  /*
+  NVGpath* clone () const nothrow @trusted @nogc {
+    import core.stdc.stdlib : malloc;
+    NVGpath* res = cast(NVGpath*)malloc(NVGpath.sizeof);
+    if (res is null) assert(0, "NanoVega: out of memory");
+    res.copyFrom(&this);
+    return res;
+  }
+  */
+
+  void clear () nothrow @trusted @nogc {
+    import core.stdc.stdlib : free;
+    if (fill !is null) free(fill);
+    if (stroke !is null) free(stroke);
+    this = this.init;
+  }
+
+  // won't clear current path
+  void copyFrom (const NVGpath* src) nothrow @trusted @nogc {
+    import core.stdc.string : memcpy;
+    assert(src !is null);
+    memcpy(&this, src, NVGpath.sizeof);
+    this.fill = xdup(src.fill, src.nfill);
+    this.stroke = xdup(src.stroke, src.nstroke);
+  }
+}
+
+public alias NVGSavedPath = NVGSavedPathS*; ///
+
+struct NVGSavedPathS {
+private:
+  NVGpathCache cache;
+
+public:
+  bool evenOddMode; /// This can be changed for saved path.
+
+public:
+  @disable this (this); // no copies
+
+  ///
+  void fill (NVGContext ctx) nothrow @trusted @nogc {
+    if (cache.npaths <= 0) return;
+
+    NVGstate* state = nvg__getState(ctx);
+    NVGPaint fillPaint = state.fill;
+
+    // apply global alpha
+    fillPaint.innerColor.a *= state.alpha;
+    fillPaint.outerColor.a *= state.alpha;
+
+    ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cache.fringeWidth, cache.bounds.ptr, cache.paths, cache.npaths, evenOddMode);
+
+    // count triangles
+    foreach (int i; 0..cache.npaths) {
+      NVGpath* path = &ctx.cache.paths[i];
+      ctx.fillTriCount += path.nfill-2;
+      ctx.fillTriCount += path.nstroke-2;
+      ctx.drawCallCount += 2;
+    }
+  }
+
+  /// Stroking will use saved stroke width.
+  void stroke (NVGContext ctx) nothrow @trusted @nogc {
+    if (cache.npaths <= 0) return;
+
+    NVGstate* state = nvg__getState(ctx);
+    NVGPaint strokePaint = state.stroke;
+
+    strokePaint.innerColor.a *= cache.strokeAlphaMul;
+    strokePaint.outerColor.a *= cache.strokeAlphaMul;
+
+    // apply global alpha
+    strokePaint.innerColor.a *= state.alpha;
+    strokePaint.outerColor.a *= state.alpha;
+
+    ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cache.fringeWidth, cache.strokeWidth, cache.paths, cache.npaths);
+
+    // count triangles
+    foreach (int i; 0..ctx.cache.npaths) {
+      NVGpath* path = &ctx.cache.paths[i];
+      ctx.strokeTriCount += path.nstroke-2;
+      ++ctx.drawCallCount;
+    }
+  }
+}
+
+public NVGSavedPathS* savePath (NVGContext ctx) nothrow @trusted @nogc {
+  import core.stdc.stdlib : malloc;
+  import core.stdc.string : memset;
+  if (ctx is null || ctx.cache is null) return null;
+  NVGstate* state = nvg__getState(ctx);
+  NVGSavedPathS* res = cast(NVGSavedPathS*)malloc(NVGSavedPathS.sizeof);
+  if (res is null) assert(0, "NanoVega: out of memory");
+  memset(res, 0, NVGSavedPathS.sizeof);
+
+  if (!ctx.cache.fillReady) {
+    //{ import core.stdc.stdio; printf("preparing fill...\n"); }
+    nvg__prepareFill(ctx);
+  }
+  if (!ctx.cache.strokeReady) {
+    //{ import core.stdc.stdio; printf("preparing strokes...\n"); }
+    nvg__prepareStroke(ctx);
+  }
+
+  res.cache.copyFrom(ctx.cache);
+  res.evenOddMode = state.evenOddMode;
+
+  //{ import core.stdc.stdio; printf("saving: strokeWidth=%g; fringeWidth=%g; strokeAlphaMul=%g\n", res.cache.strokeWidth, res.cache.fringeWidth, res.cache.strokeAlphaMul); }
+
+  return res;
+}
+
+public void kill (ref NVGSavedPathS* p) nothrow @trusted @nogc {
+  import core.stdc.stdlib : free;
+  if (p !is null) {
+    p.cache.clear();
+    free(p);
+    p = null;
+  }
 }
 
 struct NVGparams {
@@ -836,6 +968,7 @@ struct NVGparams {
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc renderFill;
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
   void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
+  void function (void* uptr, const(float)[] mat...) nothrow @trusted @nogc renderSetAffine;
   void function (void* uptr) nothrow @trusted @nogc renderDelete;
 }
 
@@ -910,6 +1043,43 @@ struct NVGpathCache {
   int nverts;
   int cverts;
   float[4] bounds;
+  bool strokeReady;
+  bool fillReady;
+  float strokeAlphaMul;
+  float strokeWidth;
+  float fringeWidth;
+
+  @disable this (this); // no copies
+
+  // won't clear current path
+  void copyFrom (const NVGpathCache* src) nothrow @trusted @nogc {
+    import core.stdc.stdlib : malloc;
+    import core.stdc.string : memcpy, memset;
+    assert(src !is null);
+    memcpy(&this, src, NVGpathCache.sizeof);
+    this.points = xdup(src.points, src.npoints);
+    this.cpoints = src.npoints;
+    this.verts = xdup(src.verts, src.nverts);
+    this.cverts = src.nverts;
+    if (src.npaths > 0) {
+      this.paths = cast(NVGpath*)malloc(src.npaths*NVGpath.sizeof);
+      memset(this.paths, 0, npaths*NVGpath.sizeof);
+      foreach (immutable pidx; 0..npaths) this.paths[pidx].copyFrom(&src.paths[pidx]);
+    } else {
+      this.npaths = this.cpaths = 0;
+    }
+  }
+
+  void clear () nothrow @trusted @nogc {
+    import core.stdc.stdlib : free;
+    if (paths !is null) {
+      foreach (ref p; paths[0..npaths]) p.clear();
+      free(paths);
+    }
+    if (points !is null) free(points);
+    if (verts !is null) free(verts);
+    this = this.init;
+  }
 }
 
 /// Pointer to opaque NanoVega context structure.
@@ -1541,6 +1711,18 @@ public nothrow @trusted @nogc:
     return this;
   }
 
+  /// This is the same as doing: `mat.identity.rotate(a).translate(tx, ty)`, only faster
+  ref NVGMatrix rotateTransform (in float a, in float tx, in float ty) {
+    immutable float cs = nvg__cosf(a), sn = nvg__sinf(a);
+    this.ptr[0] = cs;
+    this.ptr[1] = sn;
+    this.ptr[2] = -sn;
+    this.ptr[3] = cs;
+    this.ptr[4] = tx;
+    this.ptr[5] = ty;
+    return this;
+  }
+
   static NVGMatrix Identity () { pragma(inline, true); return NVGMatrix.init; } ///
   static NVGMatrix Translate (float tx, float ty) { pragma(inline, true); NVGMatrix res = void; nvgTransformTranslate(res, tx, ty); return res; } ///
   static NVGMatrix Scale (float sx, float sy) { pragma(inline, true); NVGMatrix res = void; nvgTransformScale(res, sx, sy); return res; } ///
@@ -1553,6 +1735,13 @@ public nothrow @trusted @nogc:
   static NVGMatrix ScaleRotateTransform (in float xscale, in float yscale, in float a, in float tx, in float ty) {
     NVGMatrix res = void;
     res.scaleRotateTransform(xscale, yscale, a, tx, ty);
+    return res;
+  }
+
+  /// This is the same as doing: `NVGMatrix.Identity.rotate(a).translate(tx, ty)`, only faster
+  static NVGMatrix RotateTransform (in float a, in float tx, in float ty) {
+    NVGMatrix res = void;
+    res.rotateTransform(a, tx, ty);
     return res;
   }
 }
@@ -2313,9 +2502,9 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy,
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// <h1>Scissoring</h1>
-//
-/** Scissoring allows you to clip the rendering into a rectangle. This is useful for various
+/** <h1>Scissoring</h1>
+ *
+ * Scissoring allows you to clip the rendering into a rectangle. This is useful for various
  * user interface cases like rendering a text edit or a timeline.
  */
 public alias NVGSectionDummy06 = void;
@@ -2409,6 +2598,27 @@ public void resetScissor (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.scissor.xform[] = 0;
   state.scissor.extent[] = -1.0f;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+/** <h1>Render-Time Affine Transformations</h1>
+ *
+ * It is possible to set affine transformation matrix for GPU. That matrix will
+ * be applied by the shader code. This can be used to quickly translate and rotate
+ * saved pathes. Call this *only* between `beginFrame()` and `endFrame()`.
+ *
+ * Note that `beginFrame()` resets this matrix to identity one.
+ *
+ * WARNING! Don't use this for scaling or skewing, it will result in heavily
+ *          distorted image!
+ */
+public alias NVGSectionDummy200 = void;
+
+/// Set GPU affine transformatin matrix. Don't do scaling or skewing here.
+/// This matrix won't be saved/restored with context state save/restore operations, as it is not a part of that state.
+public void affineGPU (NVGContext ctx, const(float)[] mat) nothrow @safe @nogc {
+  ctx.params.renderSetAffine(ctx.params.userPtr, mat);
 }
 
 
@@ -2507,6 +2717,7 @@ void nvg__appendCommands(bool useCommand=true) (NVGContext ctx, Command acmd, co
 void nvg__clearPathCache (NVGContext ctx) nothrow @trusted @nogc {
   ctx.cache.npoints = 0;
   ctx.cache.npaths = 0;
+  ctx.cache.fillReady = ctx.cache.strokeReady = false;
 }
 
 NVGpath* nvg__lastPath (NVGContext ctx) nothrow @trusted @nogc {
@@ -3819,33 +4030,75 @@ debug public void debugDumpPathCache (NVGContext ctx) nothrow @trusted @nogc {
   }
 }
 
-/// Fills the current path with current fill style.
-public void fill (NVGContext ctx) nothrow @trusted @nogc {
+// Flatten path, prepare it for fill operation.
+void nvg__prepareFill (NVGContext ctx) nothrow @trusted @nogc {
+  NVGpathCache* cache = ctx.cache;
   NVGstate* state = nvg__getState(ctx);
-  const(NVGpath)* path;
-  NVGPaint fillPaint = state.fill;
-
-  if (ctx.pathPickId >= 0 && (ctx.pathPickRegistered&(NVGPickKind.Fill|(NVGPickKind.Fill<<16))) == NVGPickKind.Fill) {
-    ctx.pathPickRegistered |= NVGPickKind.Fill<<16;
-    ctx.currFillHitId = ctx.pathPickId;
-  }
 
   nvg__flattenPaths(ctx);
+
   if (ctx.params.edgeAntiAlias && state.shapeAntiAlias) {
     nvg__expandFill(ctx, ctx.fringeWidth, NVGLineCap.Miter, 2.4f);
   } else {
     nvg__expandFill(ctx, 0.0f, NVGLineCap.Miter, 2.4f);
   }
 
-  // Apply global alpha
+  cache.fringeWidth = ctx.fringeWidth;
+  cache.fillReady = true;
+}
+
+// Flatten path, prepare it for stroke operation.
+void nvg__prepareStroke (NVGContext ctx) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  NVGpathCache* cache = ctx.cache;
+
+  nvg__flattenPaths(ctx);
+
+  immutable float scale = nvg__getAverageScale(state.xform[]);
+  float strokeWidth = nvg__clamp(state.strokeWidth*scale, 0.0f, 200.0f);
+
+  if (strokeWidth < ctx.fringeWidth) {
+    // If the stroke width is less than pixel size, use alpha to emulate coverage.
+    // Since coverage is area, scale by alpha*alpha.
+    immutable float alpha = nvg__clamp(strokeWidth/ctx.fringeWidth, 0.0f, 1.0f);
+    cache.strokeAlphaMul = alpha*alpha;
+    strokeWidth = ctx.fringeWidth;
+  } else {
+    cache.strokeAlphaMul = 1.0f;
+  }
+  cache.strokeWidth = strokeWidth;
+
+  if (ctx.params.edgeAntiAlias && state.shapeAntiAlias) {
+    nvg__expandStroke(ctx, strokeWidth*0.5f+ctx.fringeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
+  } else {
+    nvg__expandStroke(ctx, strokeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
+  }
+
+  cache.fringeWidth = ctx.fringeWidth;
+  cache.strokeReady = true;
+}
+
+/// Fills the current path with current fill style.
+public void fill (NVGContext ctx) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+
+  if (ctx.pathPickId >= 0 && (ctx.pathPickRegistered&(NVGPickKind.Fill|(NVGPickKind.Fill<<16))) == NVGPickKind.Fill) {
+    ctx.pathPickRegistered |= NVGPickKind.Fill<<16;
+    ctx.currFillHitId = ctx.pathPickId;
+  }
+
+  nvg__prepareFill(ctx);
+
+  // apply global alpha
+  NVGPaint fillPaint = state.fill;
   fillPaint.innerColor.a *= state.alpha;
   fillPaint.outerColor.a *= state.alpha;
 
   ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
 
-  // Count triangles
+  // count triangles
   foreach (int i; 0..ctx.cache.npaths) {
-    path = &ctx.cache.paths[i];
+    NVGpath* path = &ctx.cache.paths[i];
     ctx.fillTriCount += path.nfill-2;
     ctx.fillTriCount += path.nstroke-2;
     ctx.drawCallCount += 2;
@@ -3855,42 +4108,29 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
 /// Fills the current path with current stroke style.
 public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float scale = nvg__getAverageScale(state.xform[]);
-  float strokeWidth = nvg__clamp(state.strokeWidth*scale, 0.0f, 200.0f);
-  NVGPaint strokePaint = state.stroke;
-  const(NVGpath)* path;
 
   if (ctx.pathPickId >= 0 && (ctx.pathPickRegistered&(NVGPickKind.Stroke|(NVGPickKind.Stroke<<16))) == NVGPickKind.Stroke) {
     ctx.pathPickRegistered |= NVGPickKind.Stroke<<16;
     ctx.currStrokeHitId = ctx.pathPickId;
   }
 
-  if (strokeWidth < ctx.fringeWidth) {
-    // If the stroke width is less than pixel size, use alpha to emulate coverage.
-    // Since coverage is area, scale by alpha*alpha.
-    float alpha = nvg__clamp(strokeWidth/ctx.fringeWidth, 0.0f, 1.0f);
-    strokePaint.innerColor.a *= alpha*alpha;
-    strokePaint.outerColor.a *= alpha*alpha;
-    strokeWidth = ctx.fringeWidth;
-  }
+  nvg__prepareStroke(ctx);
 
-  // Apply global alpha
+  NVGpathCache* cache = ctx.cache;
+
+  NVGPaint strokePaint = state.stroke;
+  strokePaint.innerColor.a *= cache.strokeAlphaMul;
+  strokePaint.outerColor.a *= cache.strokeAlphaMul;
+
+  // apply global alpha
   strokePaint.innerColor.a *= state.alpha;
   strokePaint.outerColor.a *= state.alpha;
 
-  nvg__flattenPaths(ctx);
+  ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
 
-  if (ctx.params.edgeAntiAlias && state.shapeAntiAlias) {
-    nvg__expandStroke(ctx, strokeWidth*0.5f+ctx.fringeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
-  } else {
-    nvg__expandStroke(ctx, strokeWidth*0.5f, state.lineCap, state.lineJoin, state.miterLimit);
-  }
-
-  ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, ctx.fringeWidth, strokeWidth, ctx.cache.paths, ctx.cache.npaths);
-
-  // Count triangles
+  // count triangles
   foreach (int i; 0..ctx.cache.npaths) {
-    path = &ctx.cache.paths[i];
+    NVGpath* path = &ctx.cache.paths[i];
     ctx.strokeTriCount += path.nstroke-2;
     ++ctx.drawCallCount;
   }
@@ -9706,12 +9946,12 @@ public uint glNVGClearFlags () pure nothrow @safe @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 private:
 
-alias GLNVGuniformLoc = int;
-enum /*GLNVGuniformLoc*/ {
-  GLNVG_LOC_VIEWSIZE,
-  GLNVG_LOC_TEX,
-  GLNVG_LOC_FRAG,
-  GLNVG_MAX_LOCS,
+enum GLNVGuniformLoc {
+  ViewSize,
+  Tex,
+  Frag,
+  TMat,
+  TTr,
 }
 
 alias GLNVGshaderType = int;
@@ -9726,7 +9966,7 @@ struct GLNVGshader {
   GLuint prog;
   GLuint frag;
   GLuint vert;
-  GLint[GLNVG_MAX_LOCS] loc;
+  GLint[GLNVGuniformLoc.max+1] loc;
 }
 
 struct GLNVGtexture {
@@ -9744,6 +9984,7 @@ enum /*GLNVGcallType*/ {
   GLNVG_CONVEXFILL,
   GLNVG_STROKE,
   GLNVG_TRIANGLES,
+  GLNVG_AFFINE, // change affine transformation matrix
 }
 
 struct GLNVGcall {
@@ -9755,6 +9996,7 @@ struct GLNVGcall {
   int triangleOffset;
   int triangleCount;
   int uniformOffset;
+  float[6] affine;
 }
 
 struct GLNVGpath {
@@ -9993,9 +10235,11 @@ void glnvg__deleteShader (GLNVGshader* shader) nothrow @trusted @nogc {
 }
 
 void glnvg__getUniforms (GLNVGshader* shader) nothrow @trusted @nogc {
-  shader.loc[GLNVG_LOC_VIEWSIZE] = glGetUniformLocation(shader.prog, "viewSize");
-  shader.loc[GLNVG_LOC_TEX] = glGetUniformLocation(shader.prog, "tex");
-  shader.loc[GLNVG_LOC_FRAG] = glGetUniformLocation(shader.prog, "frag");
+  shader.loc[GLNVGuniformLoc.ViewSize] = glGetUniformLocation(shader.prog, "viewSize");
+  shader.loc[GLNVGuniformLoc.Tex] = glGetUniformLocation(shader.prog, "tex");
+  shader.loc[GLNVGuniformLoc.Frag] = glGetUniformLocation(shader.prog, "frag");
+  shader.loc[GLNVGuniformLoc.TMat] = glGetUniformLocation(shader.prog, "tmat");
+  shader.loc[GLNVGuniformLoc.TTr] = glGetUniformLocation(shader.prog, "ttr");
 }
 
 bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
@@ -10010,10 +10254,15 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     attribute vec2 tcoord;
     varying vec2 ftcoord;
     varying vec2 fpos;
+    uniform vec4 tmat; /* abcd of affine matrix: xyzw */
+    uniform vec2 ttr; /* tx and ty of affine matrix */
     void main (void) {
+      /* affine transformation */
+      float nx = vertex.x*tmat.x+vertex.y*tmat.z+ttr.x;
+      float ny = vertex.x*tmat.y+vertex.y*tmat.w+ttr.y;
       ftcoord = tcoord;
-      fpos = vertex;
-      gl_Position = vec4(2.0*vertex.x/viewSize.x-1.0, 1.0-2.0*vertex.y/viewSize.y, 0, 1);
+      fpos = vec2(nx, ny);
+      gl_Position = vec4(2.0*nx/viewSize.x-1.0, 1.0-2.0*ny/viewSize.y, 0, 1);
     }
   };
 
@@ -10320,7 +10569,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
 
 void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow @trusted @nogc {
   GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
-  glUniform4fv(gl.shader.loc[GLNVG_LOC_FRAG], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
+  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
   if (image != 0) {
     GLNVGtexture* tex = glnvg__findTexture(gl, image);
     glnvg__bindTexture(gl, tex !is null ? tex.tex : 0);
@@ -10442,6 +10691,14 @@ void glnvg__triangles (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc
   glDrawArrays(GL_TRIANGLES, call.triangleOffset, call.triangleCount);
 }
 
+void glnvg__affine (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
+  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, call.affine.ptr);
+  glnvg__checkError(gl, "affine");
+  glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, call.affine.ptr+4);
+  glnvg__checkError(gl, "affine");
+  glnvg__setUniforms(gl, call.uniformOffset, call.image);
+}
+
 void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   gl.nverts = 0;
@@ -10475,6 +10732,26 @@ void glnvg__blendCompositeOperation (NVGCompositeOperationState op) nothrow @tru
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
   } else {
     glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+  }
+}
+
+void glnvg__renderSetAffine (void* uptr, const(float)[] mat...) nothrow @trusted @nogc {
+  assert(mat.length == 4 || mat.length == 6);
+  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  GLNVGcall* call;
+  // if last operation was GLNVG_AFFINE, simply replace the matrix
+  if (gl.ncalls > 0 && gl.calls[gl.ncalls-1].type == GLNVG_AFFINE) {
+    call = &gl.calls[gl.ncalls-1];
+  } else {
+    call = glnvg__allocCall(gl);
+    if (call is null) return;
+    call.type = GLNVG_AFFINE;
+  }
+  if (mat.length == 4) {
+    call.affine.ptr[0..4] = mat.ptr[0..4];
+    call.affine.ptr[4..6] = 0.0f;
+  } else if (mat.length >= 6) {
+    call.affine.ptr[0..6] = mat.ptr[0..6];
   }
 }
 
@@ -10515,8 +10792,11 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, NVGvertex.sizeof, cast(const(GLvoid)*)(0+2*float.sizeof));
 
     // Set view and texture just once per frame.
-    glUniform1i(gl.shader.loc[GLNVG_LOC_TEX], 0);
-    glUniform2fv(gl.shader.loc[GLNVG_LOC_VIEWSIZE], 1, gl.view.ptr);
+    glUniform1i(gl.shader.loc[GLNVGuniformLoc.Tex], 0);
+    glUniform2fv(gl.shader.loc[GLNVGuniformLoc.ViewSize], 1, gl.view.ptr);
+    // Reset affine transformations.
+    glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, nvgIdentity.ptr);
+    glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, nvgIdentity.ptr+4);
 
     foreach (int i; 0..gl.ncalls) {
       GLNVGcall* call = &gl.calls[i];
@@ -10525,6 +10805,7 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
         case GLNVG_CONVEXFILL: glnvg__convexFill(gl, call); break;
         case GLNVG_STROKE: glnvg__stroke(gl, call); break;
         case GLNVG_TRIANGLES: glnvg__triangles(gl, call); break;
+        case GLNVG_AFFINE: glnvg__affine(gl, call); break;
         default: break;
       }
     }
@@ -10838,6 +11119,7 @@ public NVGContext createGL2NVG (int flags=NanoVegaDefaultCreationFlags) nothrow 
   params.renderFill = &glnvg__renderFill;
   params.renderStroke = &glnvg__renderStroke;
   params.renderTriangles = &glnvg__renderTriangles;
+  params.renderSetAffine = &glnvg__renderSetAffine;
   params.renderDelete = &glnvg__renderDelete;
   params.userPtr = gl;
   params.edgeAntiAlias = (flags&NVG_ANTIALIAS ? true : false);
