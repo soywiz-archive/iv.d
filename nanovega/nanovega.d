@@ -1282,7 +1282,8 @@ public alias NVGSectionDummy000 = void;
  *
  * Note that fractional ratio can (and will) distort your fonts and images.
  *
- * This call also resets pick marks (see picking API for non-rasterized pathes) and path recording.
+ * This call also resets pick marks (see picking API for non-rasterized pathes),
+ * path recording, and GPU affine transformatin matrix.
  *
  * see also `glNVGClearFlags()`, which returns necessary flags for `glClear()`.
  */
@@ -1331,7 +1332,6 @@ public void cancelFrame (NVGContext ctx) nothrow @trusted @nogc {
 /// Ends drawing the current frame (flushing remaining render state). Commits recorded pathes.
 public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.appendCurrentPathToCache(ctx.recset); // save last path
-  //{ import core.stdc.stdio; printf("!!! %p %d\n", ctx.recset, ctx.recstart); }
   ctx.stopRecording();
   ctx.mWidth = 0;
   ctx.mHeight = 0;
@@ -1541,20 +1541,17 @@ public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
 public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
   ctx.recset = svp;
   ctx.recstart = (svp !is null ? svp.ncaches : -1);
-  //{ import core.stdc.stdio; printf("recordPathesTo: %p %d\n", ctx.recset, ctx.recstart); }
 }
 
 /// Commit recorded pathes. It is save to call this when recording is not started.
 public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
   ctx.appendCurrentPathToCache(ctx.recset); // save last path
-  //{ import core.stdc.stdio; printf("stopRecording: %p %d %d\n", ctx.recset, ctx.recstart, (ctx.recset ? ctx.recset.ncaches : -1)); }
   ctx.recset = null;
   ctx.recstart = -1;
 }
 
 /// Cancel path recording.
 public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
-  //{ import core.stdc.stdio; printf("cancelRecording: %p %d %d\n", ctx.recset, ctx.recstart, (ctx.recset ? ctx.recset.ncaches : -1)); }
   if (ctx.recset !is null) {
     assert(ctx.recstart >= 0 && ctx.recstart <= ctx.recset.ncaches);
     foreach (ref cp; ctx.recset.caches[ctx.recstart..ctx.recset.ncaches]) cp.clear();
@@ -4357,18 +4354,42 @@ public enum NVGPickKind : ubyte {
 
 /// Marks the fill of the current path as pickable with the specified id.
 /// Note that you can create and mark path without rasterizing it.
-public void currFillHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
+public void currFillHitId (NVGContext ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, /*forStroke:*/false);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], id, /*forStroke:*/false);
   nvg__pickSceneInsert(ps, pp);
 }
 
 /// Marks the stroke of the current path as pickable with the specified id.
 /// Note that you can create and mark path without rasterizing it.
-public void currStrokeHitId (NVGcontext* ctx, int id) nothrow @trusted @nogc {
+public void currStrokeHitId (NVGContext ctx, int id) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, id, /*forStroke:*/true);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], id, /*forStroke:*/true);
   nvg__pickSceneInsert(ps, pp);
+}
+
+// Marks the saved path set (fill) as pickable with the specified id.
+// WARNING: this doesn't work right yet (it is using current context transformation and other settings instead of record settings)!
+public void pathSetFillHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow @trusted @nogc {
+  if (svp is null) return;
+  if (svp.svctx !is ctx) assert(0, "NanoVega: cannot register path set from different context");
+  foreach (ref cp; svp.caches[0..svp.ncaches]) {
+    NVGpickScene* ps = nvg__pickSceneGet(ctx);
+    NVGpickPath* pp = nvg__pickPathCreate(ctx, cp.commands[0..cp.ncommands], id, /*forStroke:*/false);
+    nvg__pickSceneInsert(ps, pp);
+  }
+}
+
+// Marks the saved path set (stroke) as pickable with the specified id.
+// WARNING: this doesn't work right yet (it is using current context transformation and other settings instead of record settings)!
+public void pathSetStrokeHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow @trusted @nogc {
+  if (svp is null) return;
+  if (svp.svctx !is ctx) assert(0, "NanoVega: cannot register path set from different context");
+  foreach (ref cp; svp.caches[0..svp.ncaches]) {
+    NVGpickScene* ps = nvg__pickSceneGet(ctx);
+    NVGpickPath* pp = nvg__pickPathCreate(ctx, cp.commands[0..cp.ncommands], id, /*forStroke:*/true);
+    nvg__pickSceneInsert(ps, pp);
+  }
 }
 
 private template IsGoodHitTestDG(DG) {
@@ -4386,7 +4407,7 @@ private template IsGoodHitTestInternalDG(DG) {
 /// Call delegate `dg` for each path under the specified position (in no particular order).
 /// Returns the id of the path for which delegate `dg` returned true or -1.
 /// dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
-public int hitTestDG(DG) (NVGcontext* ctx, float x, float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
+public int hitTestDG(DG) (NVGContext ctx, float x, float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
   if (ctx.pickScene is null) return -1;
 
   NVGpickScene* ps = ctx.pickScene;
@@ -4430,7 +4451,7 @@ public int hitTestDG(DG) (NVGcontext* ctx, float x, float y, uint kind, scope DG
 
 /// Fills ids with a list of the top most hit ids under the specified position.
 /// Returns the slice of `ids`.
-public int[] hitTestAll (NVGcontext* ctx, float x, float y, uint kind, int[] ids) nothrow @trusted @nogc {
+public int[] hitTestAll (NVGContext ctx, float x, float y, uint kind, int[] ids) nothrow @trusted @nogc {
   if (ctx.pickScene is null || ids.length == 0) return ids[0..0];
 
   int npicked = 0;
@@ -4459,7 +4480,7 @@ public int[] hitTestAll (NVGcontext* ctx, float x, float y, uint kind, int[] ids
 }
 
 /// Returns the id of the pickable shape containing x,y or -1 if no shape was found.
-public int hitTest (NVGcontext* ctx, float x, float y, uint kind) nothrow @trusted @nogc {
+public int hitTest (NVGContext ctx, float x, float y, uint kind) nothrow @trusted @nogc {
   if (ctx.pickScene is null) return -1;
 
   NVGpickScene* ps = ctx.pickScene;
@@ -4478,11 +4499,11 @@ public int hitTest (NVGcontext* ctx, float x, float y, uint kind) nothrow @trust
 
 /// Returns `true` if the given point is within the fill of the currently defined path.
 /// This operation can be done before rasterizing the current path.
-public bool hitTestCurrFill (NVGcontext* ctx, float x, float y) nothrow @trusted @nogc {
+public bool hitTestCurrFill (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, /*forStroke:*/false);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], 1, /*forStroke:*/false);
   if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
@@ -4494,11 +4515,11 @@ public bool hitTestCurrFill (NVGcontext* ctx, float x, float y) nothrow @trusted
 
 /// Returns `true` if the given point is within the stroke of the currently defined path.
 /// This operation can be done before rasterizing the current path.
-public bool hitTestCurrStroke (NVGcontext* ctx, float x, float y) nothrow @trusted @nogc {
+public bool hitTestCurrStroke (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
   int oldnpoints = ps.npoints;
   int oldnsegments = ps.nsegments;
-  NVGpickPath* pp = nvg__pickPathCreate(ctx, 1, /*forStroke:*/true);
+  NVGpickPath* pp = nvg__pickPathCreate(ctx, ctx.commands[0..ctx.ncommands], 1, /*forStroke:*/true);
   if (pp is null) return false; // oops
   scope(exit) {
     nvg__freePickPath(ps, pp);
@@ -4878,14 +4899,14 @@ void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, f
   }
 }
 
-NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, bool forStroke) {
+NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, int id, bool forStroke) {
   NVGpickScene* ps = nvg__pickSceneGet(context);
   if (ps is null) return null;
 
   int i = 0;
 
-  int ncommands = context.ncommands;
-  float* commands = context.commands;
+  int ncommands = cast(int)acommands.length;
+  const(float)* commands = acommands.ptr;
 
   NVGpickPath* pp = null;
   NVGpickSubPath* psp = null;
@@ -5149,7 +5170,7 @@ void nvg__deletePickScene (NVGpickScene* ps) {
   free(ps);
 }
 
-NVGpickScene* nvg__pickSceneGet (NVGcontext* ctx) {
+NVGpickScene* nvg__pickSceneGet (NVGContext ctx) {
   if (ctx.pickScene is null) ctx.pickScene = nvg__allocPickScene();
   return ctx.pickScene;
 }
@@ -5738,7 +5759,7 @@ void nvg__pickSceneInsert (NVGpickScene* ps, NVGpickPath* pp) {
   ++ps.npaths;
 }
 
-void nvg__pickBeginFrame (NVGcontext* ctx, int width, int height) {
+void nvg__pickBeginFrame (NVGContext ctx, int width, int height) {
   NVGpickScene* ps = nvg__pickSceneGet(ctx);
 
   //NVG_PICK_DEBUG_NEWFRAME();
