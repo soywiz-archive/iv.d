@@ -337,7 +337,7 @@ public:
       nbuf[0..len] = 0;
       auto up = expandTilde(nbuf[0..len-1], fname);
       if (up is null) return VFile.init;
-      assert(nbuf[len-1] == 0);
+      up.ptr[up.length] = 0;
     } else {
       if (dataPath.length > 4096 || fname.length > 4096 || dataPath.length+fname.length > 1024*3) return VFile.init;
       nbuf = cast(char*)alloca(dataPath.length+fname.length+1);
@@ -914,25 +914,42 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
     if (fname.length > 2048) throw new VFSException("can't open file '"~fname.idup~"'");
     auto mopt = ModeOptions(mode);
     char[2049] nbuf = 0;
+    uint nblen = 0;
     if (fname[0] == '~') {
       import iv.vfs.util;
       auto up = expandTilde(nbuf[0..$-1], fname);
-      if (up is null) return VFile.init;
+      if (up is null) throw new VFSException("can't open file '"~fname.idup~"'");
+      up.ptr[up.length] = 0;
       assert(nbuf[$-1] == 0);
+      nblen = cast(uint)up.length;
     } else {
       nbuf[0..fname.length] = fname[];
       nbuf[fname.length] = '\0';
+      nblen = cast(uint)fname.length;
     }
     static if (VFS_NORMAL_OS) if (mopt.ignoreCase == mopt.bool3.yes || (mopt.ignoreCase == mopt.bool3.def && vfsIgnoreCaseDisk)) {
       // we have to lock here, as `findPathCI()` is not thread-safe
       auto lock = vfsLockIntr();
-      auto pt = findPathCI(nbuf[0..fname.length]);
+      auto pt = findPathCI(nbuf[0..nblen]);
       if (pt is null) {
         // restore filename for correct error message
-        nbuf[0..fname.length] = fname[];
-        nbuf[fname.length] = '\0';
+        nbuf[] = 0;
+        if (fname[0] == '~') {
+          import iv.vfs.util;
+          auto up = expandTilde(nbuf[0..$-1], fname);
+          assert(up !is null);
+          assert(nbuf[$-1] == 0);
+          up.ptr[up.length] = 0;
+          assert(nbuf[$-1] == 0);
+          nblen = cast(uint)up.length;
+        } else {
+          nbuf[0..fname.length] = fname[];
+          nbuf[fname.length] = '\0';
+          nblen = cast(uint)fname.length;
+        }
       } else {
         nbuf[pt.length] = '\0';
+        nblen = cast(uint)pt.length;
       }
     }
     // try packs?
@@ -961,7 +978,7 @@ public VFile vfsDiskOpen(T:const(char)[], bool usefname=true) (T fname, const(ch
       static if (usefname) {
         return VFile(fl, fname);
       } else {
-        return VFile(fl, nbuf); //???
+        return VFile(fl, nbuf[0..strlen(nbuf)]); //???
       }
     } catch (Exception e) {
       // chain
