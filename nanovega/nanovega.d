@@ -1482,27 +1482,28 @@ public nothrow @trusted @nogc:
     return this;
   }
 
-  ref NVGMatrix translate (float tx, float ty) { pragma(inline, true); this *= Translate(tx, ty); return this; } ///
-  ref NVGMatrix scale (float sx, float sy) { pragma(inline, true); this *= Scale(sx, sy); return this; } ///
-  ref NVGMatrix rotate (float a) { pragma(inline, true); this *= Rotate(a); return this; } ///
-  ref NVGMatrix skewX (float a) { pragma(inline, true); this *= SkewX(a); return this; } ///
-  ref NVGMatrix skewY (float a) { pragma(inline, true); this *= SkewY(a); return this; } ///
+  ref NVGMatrix identity () { pragma(inline, true); mat[] = nvgIdentity[]; return this; } ///
+  ref NVGMatrix translate (in float tx, in float ty) { version(aliced) pragma(inline, true); this *= Translate(tx, ty); return this; } ///
+  ref NVGMatrix scale (in float sx, in float sy) { version(aliced) pragma(inline, true); this *= Scale(sx, sy); return this; } ///
+  ref NVGMatrix rotate (in float a) { version(aliced) pragma(inline, true); this *= Rotate(a); return this; } ///
+  ref NVGMatrix skewX (in float a) { version(aliced) pragma(inline, true); this *= SkewX(a); return this; } ///
+  ref NVGMatrix skewY (in float a) { version(aliced) pragma(inline, true); this *= SkewY(a); return this; } ///
 
   /// Transform point with this matrix. `null` destinations are allowed.
   void point (float* dx, float* dy, float sx, float sy) nothrow @trusted @nogc {
-    pragma(inline, true);
+    version(aliced) pragma(inline, true);
     nvgTransformPoint(dx, dy, mat[], sx, sy);
   }
 
   /// Transform point with this matrix.
   void point (ref float x, ref float y) nothrow @trusted @nogc {
-    pragma(inline, true);
+    version(aliced) pragma(inline, true);
     nvgTransformPoint(x, y, mat[]);
   }
 
   /// this*B
   NVGMatrix opBinary(string op="*") (const(float)[] b) const {
-    pragma(inline, true);
+    version(aliced) pragma(inline, true);
     NVGMatrix res = this;
     nvgTransformMultiply(res, b);
     return res;
@@ -1510,7 +1511,33 @@ public nothrow @trusted @nogc:
 
   /// this*B
   ref NVGMatrix opOpAssign(string op="*") (const(float)[] b) {
+    version(aliced) pragma(inline, true);
     nvgTransformMultiply(this, b);
+    return this;
+  }
+
+  float scaleX () const { pragma(inline, true); return nvg__sqrtf(mat.ptr[0]*mat.ptr[0]+mat.ptr[2]*mat.ptr[2]); } /// Returns x scaling of this matrix.
+  float scaleY () const { pragma(inline, true); return nvg__sqrtf(mat.ptr[1]*mat.ptr[1]+mat.ptr[3]*mat.ptr[3]); } /// Returns y scaling of this matrix.
+  float rotation () const { pragma(inline, true); return nvg__atan2f(mat.ptr[1], mat.ptr[0]); } /// Returns rotation of this matrix.
+  float tx () const { pragma(inline, true); return mat.ptr[4]; } /// Returns x translation of this matrix.
+  float ty () const { pragma(inline, true); return mat.ptr[5]; } /// Returns y translation of this matrix.
+
+  ref NVGMatrix scaleX (in float v) { pragma(inline, true); return scaleRotateTransform(v, scaleY, rotation, tx, ty); } /// Sets x scaling of this matrix.
+  ref NVGMatrix scaleY (in float v) { pragma(inline, true); return scaleRotateTransform(scaleX, v, rotation, tx, ty); } /// Sets y scaling of this matrix.
+  ref NVGMatrix rotation (in float v) { pragma(inline, true); return scaleRotateTransform(scaleX, scaleY, v, tx, ty); } /// Sets rotation of this matrix.
+  ref NVGMatrix tx (in float v) { pragma(inline, true); mat.ptr[4] = v; return this; } /// Sets x translation of this matrix.
+  ref NVGMatrix ty (in float v) { pragma(inline, true); mat.ptr[5] = v; return this; } /// Sets y translation of this matrix.
+
+  /// Utility function to be used in `setXXX()`.
+  /// This is the same as doing: `mat.identity.rotate(a).scale(xs, ys).translate(tx, ty)`, only faster
+  ref NVGMatrix scaleRotateTransform (in float xscale, in float yscale, in float a, in float tx, in float ty) {
+    immutable float cs = nvg__cosf(a), sn = nvg__sinf(a);
+    this.ptr[0] = xscale*cs;
+    this.ptr[1] = yscale*sn;
+    this.ptr[2] = xscale*-sn;
+    this.ptr[3] = yscale*cs;
+    this.ptr[4] = tx;
+    this.ptr[5] = ty;
     return this;
   }
 
@@ -1520,6 +1547,14 @@ public nothrow @trusted @nogc:
   static NVGMatrix Rotate (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformRotate(res, a); return res; } ///
   static NVGMatrix SkewX (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformSkewX(res, a); return res; } ///
   static NVGMatrix SkewY (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformSkewY(res, a); return res; } ///
+
+  /// Utility function to be used in `setXXX()`.
+  /// This is the same as doing: `NVGMatrix.Identity.rotate(a).scale(xs, ys).translate(tx, ty)`, only faster
+  static NVGMatrix ScaleRotateTransform (in float xscale, in float yscale, in float a, in float tx, in float ty) {
+    NVGMatrix res = void;
+    res.scaleRotateTransform(xscale, yscale, a, tx, ty);
+    return res;
+  }
 }
 
 ///
@@ -1537,7 +1572,7 @@ public void nvgTransformIdentity (float[] t) nothrow @trusted @nogc {
 }
 
 /// Sets the transform to translation matrix matrix.
-public void nvgTransformTranslate (float[] t, float tx, float ty) nothrow @trusted @nogc {
+public void nvgTransformTranslate (float[] t, in float tx, in float ty) nothrow @trusted @nogc {
   pragma(inline, true);
   assert(t.length >= 6);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
@@ -1546,7 +1581,7 @@ public void nvgTransformTranslate (float[] t, float tx, float ty) nothrow @trust
 }
 
 /// Sets the transform to scale matrix.
-public void nvgTransformScale (float[] t, float sx, float sy) nothrow @trusted @nogc {
+public void nvgTransformScale (float[] t, in float sx, in float sy) nothrow @trusted @nogc {
   pragma(inline, true);
   assert(t.length >= 6);
   t.ptr[0] = sx; t.ptr[1] = 0.0f;
@@ -1555,17 +1590,17 @@ public void nvgTransformScale (float[] t, float sx, float sy) nothrow @trusted @
 }
 
 /// Sets the transform to rotate matrix. Angle is specified in radians.
-public void nvgTransformRotate (float[] t, float a) nothrow @trusted @nogc {
+public void nvgTransformRotate (float[] t, in float a) nothrow @trusted @nogc {
   //pragma(inline, true);
   assert(t.length >= 6);
-  float cs = nvg__cosf(a), sn = nvg__sinf(a);
+  immutable float cs = nvg__cosf(a), sn = nvg__sinf(a);
   t.ptr[0] = cs; t.ptr[1] = sn;
   t.ptr[2] = -sn; t.ptr[3] = cs;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
 /// Sets the transform to skew-x matrix. Angle is specified in radians.
-public void nvgTransformSkewX (float[] t, float a) nothrow @trusted @nogc {
+public void nvgTransformSkewX (float[] t, in float a) nothrow @trusted @nogc {
   //pragma(inline, true);
   assert(t.length >= 6);
   t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
@@ -1574,11 +1609,20 @@ public void nvgTransformSkewX (float[] t, float a) nothrow @trusted @nogc {
 }
 
 /// Sets the transform to skew-y matrix. Angle is specified in radians.
-public void nvgTransformSkewY (float[] t, float a) nothrow @trusted @nogc {
+public void nvgTransformSkewY (float[] t, in float a) nothrow @trusted @nogc {
   //pragma(inline, true);
   assert(t.length >= 6);
   t.ptr[0] = 1.0f; t.ptr[1] = nvg__tanf(a);
   t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
+  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
+}
+
+/// Sets the transform to skew-x matrix. Angle is specified in radians.
+public void nvgTransformSkewXY (float[] t, in float ax, in float ay) nothrow @trusted @nogc {
+  //pragma(inline, true);
+  assert(t.length >= 6);
+  t.ptr[0] = 1.0f; t.ptr[1] = nvg__tanf(ay);
+  t.ptr[2] = nvg__tanf(ax); t.ptr[3] = 1.0f;
   t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
 }
 
@@ -1587,9 +1631,9 @@ public void nvgTransformMultiply (float[] t, const(float)[] s) nothrow @trusted 
   assert(t.length >= 6);
   assert(s.length >= 6);
   //pragma(inline, true);
-  float t0 = t.ptr[0]*s.ptr[0]+t.ptr[1]*s.ptr[2];
-  float t2 = t.ptr[2]*s.ptr[0]+t.ptr[3]*s.ptr[2];
-  float t4 = t.ptr[4]*s.ptr[0]+t.ptr[5]*s.ptr[2]+s.ptr[4];
+  immutable float t0 = t.ptr[0]*s.ptr[0]+t.ptr[1]*s.ptr[2];
+  immutable float t2 = t.ptr[2]*s.ptr[0]+t.ptr[3]*s.ptr[2];
+  immutable float t4 = t.ptr[4]*s.ptr[0]+t.ptr[5]*s.ptr[2]+s.ptr[4];
   t.ptr[1] = t.ptr[0]*s.ptr[1]+t.ptr[1]*s.ptr[3];
   t.ptr[3] = t.ptr[2]*s.ptr[1]+t.ptr[3]*s.ptr[3];
   t.ptr[5] = t.ptr[4]*s.ptr[1]+t.ptr[5]*s.ptr[3]+s.ptr[5];
@@ -1648,12 +1692,13 @@ public void nvgTransformPoint (ref float x, ref float y, const(float)[] t) nothr
 }
 
 /// Converts degrees to radians.
-public float nvgDegToRad() (float deg) pure nothrow @safe @nogc { pragma(inline, true); return deg/180.0f*NVG_PI; }
-public alias nvgRadians = nvgDegToRad; /// Ditto.
+public float nvgDegToRad() (in float deg) pure nothrow @safe @nogc { pragma(inline, true); return deg/180.0f*NVG_PI; }
 
 /// Converts radians to degrees.
-public float nvgRadToDeg() (float rad) pure nothrow @safe @nogc { pragma(inline, true); return rad/NVG_PI*180.0f; }
-public alias nvgDegrees = nvgRadToDeg; /// Ditto.
+public float nvgRadToDeg() (in float rad) pure nothrow @safe @nogc { pragma(inline, true); return rad/NVG_PI*180.0f; }
+
+public alias nvgDegrees = nvgDegToRad; /// Use this like `42.nvgDegrees`
+public float nvgRadians() (in float rad) pure nothrow @safe @nogc { pragma(inline, true); return rad; } /// Use this like `0.1.nvgRadians`
 
 
 void nvg__setPaintColor (ref NVGPaint p, NVGColor color) nothrow @trusted @nogc {
