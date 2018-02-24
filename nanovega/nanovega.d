@@ -4670,14 +4670,19 @@ struct NVGpickScene {
 
 
 void nvg__untransformGPU (NVGContext ctx, float *dx, float *dy, in float x, in float y) {
-  if (ctx.gpuAffine[] == nvgIdentity[]) {
+  version(none) {
+    if (ctx.gpuAffine[] == nvgIdentity[]) {
+      *dx = x;
+      *dy = y;
+    } else {
+      // inverse GPU transformation
+      float[6] igpu = void;
+      nvgTransformInverse(igpu[], ctx.gpuAffine[]);
+      nvgTransformPoint(dx, dy, igpu[], x, y);
+    }
+  } else {
     *dx = x;
     *dy = y;
-  } else {
-    // inverse GPU transformation
-    float[6] igpu = void;
-    nvgTransformInverse(igpu[], ctx.gpuAffine[]);
-    nvgTransformPoint(dx, dy, igpu[], x, y);
   }
 }
 
@@ -4975,12 +4980,37 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
   pp.id = id;
   pp.gpuAffine.ptr[0..6] = (gpuAffine.length >= 6 ? gpuAffine.ptr[0..6] : nvgIdentity.ptr[0..6]);
 
+  bool needUnGPU = (pp.gpuAffine[] != nvgIdentity[]);
+
+  float[8] tfxy = void; // transformed with gpuAffine
+
+  // advances `i`
+  void loadXYs (int xycount) nothrow @trusted @nogc {
+    assert(xycount >= 0 && xycount < 4);
+    if (xycount == 0) return;
+    if (!needUnGPU) {
+      tfxy.ptr[0..xycount*2] = commands[i..i+xycount*2];
+    } else {
+      //{ import core.stdc.stdio; printf("transformation: [%g,%g,%g,%g,%g,%g]\n", pp.gpuAffine[0], pp.gpuAffine[1], pp.gpuAffine[2], pp.gpuAffine[3], pp.gpuAffine[4], pp.gpuAffine[5]); }
+      const(float)* s = commands+i;
+      float* d = tfxy.ptr;
+      foreach (immutable pidx; 0..xycount) {
+        nvgTransformPoint(d, d+1, pp.gpuAffine[], s[0], s[1]);
+        d += 2;
+        s += 2;
+      }
+    }
+    i += xycount*2;
+  }
+
   while (i < ncommands) {
-    int cmd = cast(int)commands[i];
+    int cmd = cast(int)commands[i++];
     switch (cmd) {
       case Command.MoveTo:
-        start.ptr[0] = commands[i+1];
-        start.ptr[1] = commands[i+2];
+        loadXYs(1); // one coordinate pair
+
+        // new starting point
+        start.ptr[0..2] = tfxy.ptr[0..2];
 
         // start a new path for each sub path to handle sub paths that intersect other sub paths
         prev = psp;
@@ -4990,15 +5020,16 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
         psp.winding = NVGSolidity.Solid;
         psp.next = prev;
 
-        nvg__pickSceneAddPoints(ps, &commands[i+1], 1);
-        i += 3;
+        nvg__pickSceneAddPoints(ps, tfxy.ptr, 1);
         break;
       case Command.LineTo:
-        firstPoint = nvg__pickSceneAddPoints(ps, &commands[i+1], 1);
+        loadXYs(1); // one coordinate pair
+        firstPoint = nvg__pickSceneAddPoints(ps, tfxy.ptr, 1);
         nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, NVGSegmentFlags.Corner);
-        i += 3;
         break;
       case Command.BezierTo:
+        loadXYs(3); // three coordinate pairs
+
         // Split the curve at it's dx==0 or dy==0 inflection points.
         // Thus:
         //    A horizontal line only ever interects the curves once.
@@ -5008,7 +5039,7 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
         // NOTE: We could just split on dy==0 here.
 
         memcpy(&points.ptr[0], &ps.points[(ps.npoints-1)*2], float.sizeof*2);
-        memcpy(&points.ptr[2], &commands[i+1], float.sizeof*2*3);
+        memcpy(&points.ptr[2], tfxy.ptr, float.sizeof*2*3);
 
         ninflections = 0;
         nvg__bezierInflections(points.ptr, 1, &ninflections, inflections.ptr);
@@ -5038,10 +5069,9 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
           firstPoint = nvg__pickSceneAddPoints(ps, &pointsB.ptr[2], 3);
           nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, 0);
         } else {
-          firstPoint = nvg__pickSceneAddPoints(ps, &commands[i+1], 3);
+          firstPoint = nvg__pickSceneAddPoints(ps, tfxy.ptr, 3);
           nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, cmd, NVGSegmentFlags.Corner);
         }
-        i += 7;
         break;
       case Command.Close:
         if (ps.points[(ps.npoints-1)*2] != start.ptr[0] || ps.points[(ps.npoints-1)*2+1] != start.ptr[1]) {
@@ -5049,15 +5079,13 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
           nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, Command.LineTo, NVGSegmentFlags.Corner);
         }
         psp.closed = true;
-        i += 1;
         break;
       case Command.Winding:
-        psp.winding = cast(short)cast(int)commands[i+1];
+        psp.winding = cast(short)cast(int)commands[i];
         if (psp.winding == NVGSolidity.Hole) hasHoles = 1;
-        i += 2;
+        i += 1;
         break;
       default:
-        i += 1;
         break;
     }
   }
