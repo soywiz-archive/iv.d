@@ -731,18 +731,7 @@ T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   import core.stdc.stdlib : malloc;
   if (T.sizeof == 0 && addmem == 0) addmem = 1;
   auto res = cast(ubyte*)malloc(T.sizeof+addmem+256);
-  if (res is null) return null;
-  /+
-  static if (is(T == struct)) {
-    import core.stdc.string : memcpy;
-    static immutable T i = T.init;
-    memcpy(res, &i, T.sizeof);
-    if (addmem) res[T.sizeof..T.sizeof+addmem] = 0;
-    res[0..T.sizeof+addmem] = 0;
-  } else {
-    res[0..T.sizeof+addmem] = 0;
-  }
-  +/
+  if (res is null) assert(0, "NanoSVG: out of memory");
   res[0..T.sizeof+addmem] = 0;
   return cast(T*)res;
 }
@@ -752,7 +741,7 @@ T* xcalloc(T) (usize count) if (!is(T == class) && !is(T == struct)) {
   usize sz = T.sizeof*count;
   if (sz == 0) sz = 1;
   auto res = cast(ubyte*)malloc(sz+256);
-  if (res is null) return null;
+  if (res is null) assert(0, "NanoSVG: out of memory");
   res[0..sz] = 0;
   return cast(T*)res;
 }
@@ -1427,7 +1416,7 @@ NSVG.Gradient* nsvg__createGradient (Parser* p, const(char)[] id, const(float)* 
   }
   if (stops is null) return null;
 
-  grad = xalloc!(NSVG.Gradient)(NSVG.GradientStop.sizeof*(nstops-1));
+  grad = xalloc!(NSVG.Gradient)(NSVG.GradientStop.sizeof*nstops);
   if (grad is null) return null;
 
   // The shape width and height.
@@ -3663,6 +3652,7 @@ public void kill (NSVG* image) {
 
 public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) nothrow {
   import core.stdc.stdlib : malloc, free;
+  enum AddedBytes = 8;
 
   char* data = null;
   scope(exit) if (data !is null) free(data);
@@ -3674,8 +3664,9 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
       auto fl = VFile(filename);
       auto size = fl.size;
       if (size > int.max/8 || size < 1) return null;
-      data = cast(char*)malloc(cast(uint)size+1);
+      data = cast(char*)malloc(cast(uint)size+AddedBytes);
       if (data is null) return null;
+      data[0..cast(uint)size+AddedBytes] = 0;
       fl.rawReadExact(data[0..cast(uint)size]);
       fl.close();
     } else {
@@ -3688,8 +3679,9 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
       auto size = ftell(fl);
       if (fseek(fl, 0, 0/*SEEK_SET*/) != 0) return null;
       if (size < 16 || size > int.max/32) return null;
-      data = cast(char*)malloc(cast(uint)size+1);
+      data = cast(char*)malloc(cast(uint)size+AddedBytes);
       if (data is null) assert(0, "out of memory in NanoVega fontstash");
+      data[0..cast(uint)size+AddedBytes] = 0;
       char* dptr = data;
       auto left = cast(uint)size;
       while (left > 0) {
@@ -3699,7 +3691,6 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
         left -= rd;
       }
     }
-    data[cast(uint)size] = '\0'; // not necessary, but meh...
     return nsvgParse(data[0..cast(uint)size], units, dpi, canvaswdt, canvashgt);
   } catch (Exception e) {
     return null;
@@ -5292,7 +5283,7 @@ public NSVG* nsvgUnserialize(ST) (auto ref ST fi) if (isWriteableStream!ST) {
       auto stopCount = fi.readXInt!uint;
       if (stopCount > 65535) throw new VFSNamedException!"NSVG"("too many gradient stops");
       //
-      auto g = xalloc!(NSVG.Gradient)(stopCount*NSVG.GradientStop.sizeof);
+      auto g = xalloc!(NSVG.Gradient)((stopCount+1)*NSVG.GradientStop.sizeof);
       if (g is null) throw new VFSNamedException!"NSVG"("out of memory"); // it is unlikely that we can, but...
       p.gradient = g;
       g.xform[] = gg.xform[];
