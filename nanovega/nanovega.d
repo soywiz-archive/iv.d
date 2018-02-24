@@ -637,7 +637,7 @@ public struct NVGPaint {
   float[2] extent;
   float radius;
   float feather;
-  NVGColor innerColor; // this can be used to modulate image fill
+  NVGColor innerColor; // this can be used to modulate images (fill/font)
   NVGColor outerColor;
   int image;
 }
@@ -10153,12 +10153,15 @@ struct GLNVGpath {
   int strokeCount;
 }
 
-struct GLNVGfragUniforms {
+align(1) struct GLNVGfragUniforms {
+align(1):
   enum UNIFORM_ARRAY_SIZE = 11;
   // note: after modifying layout or size of uniform array,
   // don't forget to also update the fragment shader source!
-  union {
-    struct {
+  align(1) union {
+  align(1):
+    align(1) struct {
+    align(1):
       float[12] scissorMat; // matrices are actually 3 vec4s
       float[12] paintMat;
       NVGColor innerCol;
@@ -10393,7 +10396,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   enum align_ = 4;
 
-  enum shaderHeader = "#define UNIFORMARRAY_SIZE 11\n";
+  enum shaderHeader = "#define UNIFORM_ARRAY_SIZE 11\n";
 
   enum fillVertShader = q{
     uniform vec2 viewSize;
@@ -10414,7 +10417,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   };
 
   enum fillFragShader = q{
-    uniform vec4 frag[UNIFORMARRAY_SIZE];
+    uniform vec4 frag[UNIFORM_ARRAY_SIZE];
     uniform sampler2D tex;
     varying vec2 ftcoord;
     varying vec2 fpos;
@@ -10432,18 +10435,19 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     #define texType int(frag[10].z)
     #define type int(frag[10].w)
 
-    float sdroundrect (vec2 pt, vec2 ext, float rad) {
+    float sdroundrect (in vec2 pt, in vec2 ext, in float rad) {
       vec2 ext2 = ext-vec2(rad, rad);
       vec2 d = abs(pt)-ext2;
       return min(max(d.x, d.y), 0.0)+length(max(d, 0.0))-rad;
     }
 
     // Scissoring
-    float scissorMask (vec2 p) {
+    float scissorMask (in vec2 p) {
       vec2 sc = (abs((scissorMat*vec3(p, 1.0)).xy)-scissorExt);
       sc = vec2(0.5, 0.5)-sc*scissorScale;
       return clamp(sc.x, 0.0, 1.0)*clamp(sc.y, 0.0, 1.0);
     }
+
     #ifdef EDGE_AA
     // Stroke - from [0..1] to clipped pyramid, where the slope is 1px.
     float strokeMask () {
@@ -10460,7 +10464,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
       #else
       float strokeAlpha = 1.0;
       #endif
-      if (type == 0) {
+      if (type == 0) { /* NSVG_SHADER_FILLGRAD */
         // Gradient
         // Calculate gradient color using box gradient
         vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
@@ -10469,28 +10473,28 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
         // Combine alpha
         color *= strokeAlpha*scissor;
         result = color;
-      } else if (type == 1) {
+      } else if (type == 1) { /* NSVG_SHADER_FILLIMG */
         // Image
         // Calculate color from texture
         vec2 pt = (paintMat*vec3(fpos, 1.0)).xy/extent;
         vec4 color = texture2D(tex, pt);
         if (texType == 1) color = vec4(color.xyz*color.w, color.w);
         if (texType == 2) color = vec4(color.x);
-        // Apply color tint and alpha.
+        // Apply color tint and alpha
         color *= innerCol;
         // Combine alpha
         color *= strokeAlpha*scissor;
         result = color;
-      } else if (type == 2) {
+      } else if (type == 2) { /* NSVG_SHADER_SIMPLE */
         // Stencil fill
         result = vec4(1, 1, 1, 1);
-      } else if (type == 3) {
+      } else if (type == 3) { /* NSVG_SHADER_IMG */
         // Textured tris
         vec4 color = texture2D(tex, ftcoord);
         if (texType == 1) color = vec4(color.xyz*color.w, color.w);
         if (texType == 2) color = vec4(color.x);
         color *= scissor;
-        result = color*innerCol;
+        result = color*innerCol; // Apply color tint
       }
       gl_FragColor = result;
     }
