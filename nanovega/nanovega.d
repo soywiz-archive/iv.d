@@ -811,7 +811,7 @@ struct NVGvertex {
 struct NVGpath {
   int first;
   int count;
-  ubyte closed;
+  bool closed;
   int nbevel;
   NVGvertex* fill;
   int nfill;
@@ -2567,7 +2567,7 @@ void nvg__addPoint (NVGContext ctx, float x, float y, int flags) nothrow @truste
 void nvg__closePath (NVGContext ctx) nothrow @trusted @nogc {
   NVGpath* path = nvg__lastPath(ctx);
   if (path is null) return;
-  path.closed = 1;
+  path.closed = true;
 }
 
 void nvg__pathWinding (NVGContext ctx, NVGWinding winding) nothrow @trusted @nogc {
@@ -2793,14 +2793,6 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
     int bzcount;
   }
   NVGpathCache* cache = ctx.cache;
-  NVGpoint* last;
-  NVGpoint* p0;
-  NVGpoint* p1;
-  NVGpoint* pts;
-  NVGpath* path;
-  float* cp1;
-  float* cp2;
-  float* p;
 
   if (cache.npaths > 0) return;
 
@@ -2810,25 +2802,25 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
   while (i < ctx.ncommands) {
     final switch (cast(Command)ctx.commands[i]) {
       case Command.MoveTo:
-        assert(i+3 <= ctx.ncommands);
+        //assert(i+3 <= ctx.ncommands);
         nvg__addPath(ctx);
-        p = &ctx.commands[i+1];
+        const p = &ctx.commands[i+1];
         nvg__addPoint(ctx, p[0], p[1], PointFlag.Corner);
         i += 3;
         break;
       case Command.LineTo:
-        assert(i+3 <= ctx.ncommands);
-        p = &ctx.commands[i+1];
+        //assert(i+3 <= ctx.ncommands);
+        const p = &ctx.commands[i+1];
         nvg__addPoint(ctx, p[0], p[1], PointFlag.Corner);
         i += 3;
         break;
       case Command.BezierTo:
-        assert(i+7 <= ctx.ncommands);
-        last = nvg__lastPoint(ctx);
+        //assert(i+7 <= ctx.ncommands);
+        const last = nvg__lastPoint(ctx);
         if (last !is null) {
-          cp1 = &ctx.commands[i+1];
-          cp2 = &ctx.commands[i+3];
-          p = &ctx.commands[i+5];
+          const cp1 = &ctx.commands[i+1];
+          const cp2 = &ctx.commands[i+3];
+          const p = &ctx.commands[i+5];
           if (ctx.tesselatortype != NVGTesselation.AFD) {
             nvg__tesselateBezier(ctx, last.x, last.y, cp1[0], cp1[1], cp2[0], cp2[1], p[0], p[1], 0, PointFlag.Corner);
           } else {
@@ -2839,12 +2831,12 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
         i += 7;
         break;
       case Command.Close:
-        assert(i+1 <= ctx.ncommands);
+        //assert(i+1 <= ctx.ncommands);
         nvg__closePath(ctx);
-        ++i;
+        i += 1;
         break;
       case Command.Winding:
-        assert(i+2 <= ctx.ncommands);
+        //assert(i+2 <= ctx.ncommands);
         nvg__pathWinding(ctx, cast(NVGWinding)ctx.commands[i+1]);
         i += 2;
         break;
@@ -2863,16 +2855,16 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
   // calculate the direction and length of line segments
   version(nanovg_bench_flatten) timer.restart();
   foreach (int j; 0..cache.npaths) {
-    path = &cache.paths[j];
-    pts = &cache.points[path.first];
+    NVGpath* path = &cache.paths[j];
+    NVGpoint* pts = &cache.points[path.first];
 
     // if the first and last points are the same, remove the last, mark as closed path
-    p0 = &pts[path.count-1];
-    p1 = &pts[0];
+    NVGpoint* p0 = &pts[path.count-1];
+    NVGpoint* p1 = &pts[0];
     if (nvg__ptEquals(p0.x, p0.y, p1.x, p1.y, ctx.distTol)) {
       --path.count;
       p0 = &pts[path.count-1];
-      path.closed = 1;
+      path.closed = true;
     }
 
     // enforce winding
@@ -3139,9 +3131,7 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
       immutable float dmr2 = p1.dmx*p1.dmx+p1.dmy*p1.dmy;
       if (dmr2 > 0.000001f) {
         float scale = 1.0f/dmr2;
-        if (scale > 600.0f) {
-          scale = 600.0f;
-        }
+        if (scale > 600.0f) scale = 600.0f;
         p1.dmx *= scale;
         p1.dmy *= scale;
       }
@@ -3176,26 +3166,26 @@ void nvg__calculateJoins (NVGContext ctx, float w, int lineJoin, float miterLimi
   }
 }
 
-int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float miterLimit) nothrow @trusted @nogc {
+void nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
   NVGvertex* verts;
   NVGvertex* dst;
-  int cverts; //, i, j;
-  float aa = ctx.fringeWidth;
+  immutable float aa = ctx.fringeWidth;
   int ncap = nvg__curveDivs(w, NVG_PI, ctx.tessTol); // Calculate divisions per half circle.
 
   nvg__calculateJoins(ctx, w, lineJoin, miterLimit);
 
   // Calculate max vertex usage.
-  cverts = 0;
+  int cverts = 0;
   foreach (int i; 0..cache.npaths) {
     NVGpath* path = &cache.paths[i];
-    int loop = (path.closed == 0) ? 0 : 1;
-    if (lineJoin == NVGLineCap.Round)
+    immutable bool loop = path.closed;
+    if (lineJoin == NVGLineCap.Round) {
       cverts += (path.count+path.nbevel*(ncap+2)+1)*2; // plus one for loop
-    else
+    } else {
       cverts += (path.count+path.nbevel*5+1)*2; // plus one for loop
-    if (loop == 0) {
+    }
+    if (!loop) {
       // space for caps
       if (lineCap == NVGLineCap.Round) {
         cverts += (ncap*2+2)*2;
@@ -3206,21 +3196,20 @@ int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float
   }
 
   verts = nvg__allocTempVerts(ctx, cverts);
-  if (verts is null) return 0;
+  if (verts is null) return;
 
   foreach (int i; 0..cache.npaths) {
     NVGpath* path = &cache.paths[i];
     NVGpoint* pts = &cache.points[path.first];
     NVGpoint* p0;
     NVGpoint* p1;
-    int s, e, loop;
-    float dx, dy;
+    int s, e;
 
     path.fill = null;
     path.nfill = 0;
 
     // Calculate fringe or stroke
-    loop = (path.closed == 0) ? 0 : 1;
+    immutable bool loop = path.closed;
     dst = verts;
     path.stroke = dst;
 
@@ -3238,17 +3227,14 @@ int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float
       e = path.count-1;
     }
 
-    if (loop == 0) {
+    if (!loop) {
       // Add cap
-      dx = p1.x-p0.x;
-      dy = p1.y-p0.y;
+      float dx = p1.x-p0.x;
+      float dy = p1.y-p0.y;
       nvg__normalize(&dx, &dy);
-      if (lineCap == NVGLineCap.Butt)
-        dst = nvg__buttCapStart(dst, p0, dx, dy, w, -aa*0.5f, aa);
-      else if (lineCap == NVGLineCap.Butt || lineCap == NVGLineCap.Square)
-        dst = nvg__buttCapStart(dst, p0, dx, dy, w, w-aa, aa);
-      else if (lineCap == NVGLineCap.Round)
-        dst = nvg__roundCapStart(dst, p0, dx, dy, w, ncap, aa);
+           if (lineCap == NVGLineCap.Butt) dst = nvg__buttCapStart(dst, p0, dx, dy, w, -aa*0.5f, aa);
+      else if (lineCap == NVGLineCap.Butt || lineCap == NVGLineCap.Square) dst = nvg__buttCapStart(dst, p0, dx, dy, w, w-aa, aa);
+      else if (lineCap == NVGLineCap.Round) dst = nvg__roundCapStart(dst, p0, dx, dy, w, ncap, aa);
     }
 
     foreach (int j; s..e) {
@@ -3271,31 +3257,26 @@ int nvg__expandStroke (NVGContext ctx, float w, int lineCap, int lineJoin, float
       nvg__vset(dst, verts[1].x, verts[1].y, 1, 1); ++dst;
     } else {
       // Add cap
-      dx = p1.x-p0.x;
-      dy = p1.y-p0.y;
+      float dx = p1.x-p0.x;
+      float dy = p1.y-p0.y;
       nvg__normalize(&dx, &dy);
-      if (lineCap == NVGLineCap.Butt)
-        dst = nvg__buttCapEnd(dst, p1, dx, dy, w, -aa*0.5f, aa);
-      else if (lineCap == NVGLineCap.Butt || lineCap == NVGLineCap.Square)
-        dst = nvg__buttCapEnd(dst, p1, dx, dy, w, w-aa, aa);
-      else if (lineCap == NVGLineCap.Round)
-        dst = nvg__roundCapEnd(dst, p1, dx, dy, w, ncap, aa);
+           if (lineCap == NVGLineCap.Butt) dst = nvg__buttCapEnd(dst, p1, dx, dy, w, -aa*0.5f, aa);
+      else if (lineCap == NVGLineCap.Butt || lineCap == NVGLineCap.Square) dst = nvg__buttCapEnd(dst, p1, dx, dy, w, w-aa, aa);
+      else if (lineCap == NVGLineCap.Round) dst = nvg__roundCapEnd(dst, p1, dx, dy, w, ncap, aa);
     }
 
     path.nstroke = cast(int)(dst-verts);
 
     verts = dst;
   }
-
-  return 1;
 }
 
-bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) nothrow @trusted @nogc {
+void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) nothrow @trusted @nogc {
   NVGpathCache* cache = ctx.cache;
   NVGvertex* verts;
   NVGvertex* dst;
-  float aa = ctx.fringeWidth;
-  int fringe = w > 0.0f;
+  immutable float aa = ctx.fringeWidth;
+  bool fringe = (w > 0.0f);
 
   nvg__calculateJoins(ctx, w, lineJoin, miterLimit);
 
@@ -3308,42 +3289,38 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
   }
 
   verts = nvg__allocTempVerts(ctx, cverts);
-  if (verts is null) return false;
+  if (verts is null) return;
 
   bool convex = (cache.npaths == 1 && cache.paths[0].convex);
 
   foreach (int i; 0..cache.npaths) {
     NVGpath* path = &cache.paths[i];
     NVGpoint* pts = &cache.points[path.first];
-    NVGpoint* p0;
-    NVGpoint* p1;
-    float rw, lw, woff;
-    float ru, lu;
 
     // Calculate shape vertices.
-    woff = 0.5f*aa;
+    immutable float woff = 0.5f*aa;
     dst = verts;
     path.fill = dst;
 
     if (fringe) {
       // Looping
-      p0 = &pts[path.count-1];
-      p1 = &pts[0];
+      NVGpoint* p0 = &pts[path.count-1];
+      NVGpoint* p1 = &pts[0];
       foreach (int j; 0..path.count) {
         if (p1.flags&PointFlag.Bevel) {
-          float dlx0 = p0.dy;
-          float dly0 = -p0.dx;
-          float dlx1 = p1.dy;
-          float dly1 = -p1.dx;
+          immutable float dlx0 = p0.dy;
+          immutable float dly0 = -p0.dx;
+          immutable float dlx1 = p1.dy;
+          immutable float dly1 = -p1.dx;
           if (p1.flags&PointFlag.Left) {
-            float lx = p1.x+p1.dmx*woff;
-            float ly = p1.y+p1.dmy*woff;
+            immutable float lx = p1.x+p1.dmx*woff;
+            immutable float ly = p1.y+p1.dmy*woff;
             nvg__vset(dst, lx, ly, 0.5f, 1); ++dst;
           } else {
-            float lx0 = p1.x+dlx0*woff;
-            float ly0 = p1.y+dly0*woff;
-            float lx1 = p1.x+dlx1*woff;
-            float ly1 = p1.y+dly1*woff;
+            immutable float lx0 = p1.x+dlx0*woff;
+            immutable float ly0 = p1.y+dly0*woff;
+            immutable float lx1 = p1.x+dlx1*woff;
+            immutable float ly1 = p1.y+dly1*woff;
             nvg__vset(dst, lx0, ly0, 0.5f, 1); ++dst;
             nvg__vset(dst, lx1, ly1, 0.5f, 1); ++dst;
           }
@@ -3364,10 +3341,10 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
 
     // Calculate fringe
     if (fringe) {
-      lw = w+woff;
-      rw = w-woff;
-      lu = 0;
-      ru = 1;
+      float lw = w+woff;
+      immutable float rw = w-woff;
+      float lu = 0;
+      immutable float ru = 1;
       dst = verts;
       path.stroke = dst;
 
@@ -3379,8 +3356,8 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
       }
 
       // Looping
-      p0 = &pts[path.count-1];
-      p1 = &pts[0];
+      NVGpoint* p0 = &pts[path.count-1];
+      NVGpoint* p1 = &pts[0];
 
       foreach (int j; 0..path.count) {
         if ((p1.flags&(PointFlag.Bevel|PointFlag.InnerBevelPR)) != 0) {
@@ -3403,8 +3380,6 @@ bool nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
       path.nstroke = 0;
     }
   }
-
-  return true;
 }
 
 
@@ -4405,7 +4380,7 @@ void nvg__pickSubPathAddFillSupports (NVGpickScene* ps, NVGpickSubPath* psp) {
 }
 
 void nvg__pickSubPathAddStrokeSupports (NVGpickScene* ps, NVGpickSubPath* psp, float strokeWidth, int lineCap, int lineJoin, float miterLimit) {
-  bool closed = psp.closed;
+  immutable bool closed = psp.closed;
   const(float)* points = ps.points;
   NVGsegment* seg = null;
   NVGsegment* segments = &ps.segments[psp.firstSegment];
@@ -4645,7 +4620,6 @@ NVGpickPath* nvg__pickPathCreate (NVGcontext* context, int id, bool forStroke) {
           nvg__pickSubPathAddSegment(ps, psp, firstPoint-1, Command.LineTo, NVG_PICK_CORNER);
         }
         psp.closed = true;
-
         i++;
         break;
       case Command.Winding:
