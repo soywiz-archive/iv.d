@@ -849,146 +849,6 @@ struct NVGpath {
   }
 }
 
-public alias NVGPathSet = NVGPathSetS*; ///
-
-struct NVGPathSetS {
-private:
-  NVGpathCache* caches;
-  int ncaches, ccaches;
-  NVGContext svctx; // used to do some sanity checks
-
-public:
-  @disable this (this); // no copies
-
-  /// Fill saved path set using saved fill mode.
-  void fill (NVGContext ctx) nothrow @trusted @nogc {
-    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
-    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
-    foreach (ref cc; caches[0..ncaches]) {
-      if (cc.npaths <= 0) continue;
-
-      NVGstate* state = nvg__getState(ctx);
-      NVGPaint fillPaint = state.fill;
-
-      // apply global alpha
-      fillPaint.innerColor.a *= state.alpha;
-      fillPaint.outerColor.a *= state.alpha;
-
-      ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
-
-      // count triangles
-      foreach (int i; 0..cc.npaths) {
-        NVGpath* path = &cc.paths[i];
-        ctx.fillTriCount += path.nfill-2;
-        ctx.fillTriCount += path.nstroke-2;
-        ctx.drawCallCount += 2;
-      }
-    }
-  }
-
-  /// Stroking will use saved stroke width.
-  void stroke (NVGContext ctx) nothrow @trusted @nogc {
-    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
-    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
-    foreach (ref cc; caches[0..ncaches]) {
-      if (cc.npaths <= 0) continue;
-
-      NVGstate* state = nvg__getState(ctx);
-      NVGPaint strokePaint = state.stroke;
-
-      strokePaint.innerColor.a *= cc.strokeAlphaMul;
-      strokePaint.outerColor.a *= cc.strokeAlphaMul;
-
-      // apply global alpha
-      strokePaint.innerColor.a *= state.alpha;
-      strokePaint.outerColor.a *= state.alpha;
-
-      ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
-
-      // count triangles
-      foreach (int i; 0..cc.npaths) {
-        NVGpath* path = &cc.paths[i];
-        ctx.strokeTriCount += path.nstroke-2;
-        ++ctx.drawCallCount;
-      }
-    }
-  }
-}
-
-/// Append current path to existing path set. Is is safe to call this with `null` `svp`.
-void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
-  if (ctx is null || svp is null) return;
-  if (ctx !is svp.svctx) assert(0, "NanoVega: cannot save pathes from different contexts");
-  if (ctx.ncommands == 0) {
-    assert(ctx.cache.npaths == 0);
-    return;
-  }
-  // grow buffer
-  if (svp.ncaches+1 > svp.ccaches) {
-    import core.stdc.stdlib : realloc;
-    import core.stdc.string : memset;
-    int newsz = (svp.ccaches == 0 ? 8 : svp.ccaches <= 1024 ? svp.ccaches*2 : svp.ccaches+1024);
-    svp.caches = cast(NVGpathCache*)realloc(svp.caches, newsz*NVGpathCache.sizeof);
-    if (svp.caches is null) assert(0, "NanoVega: out of memory");
-    //memset(svp.caches+svp.ccaches, 0, (newsz-svp.ccaches)*NVGpathCache.sizeof);
-    svp.ccaches = newsz;
-  }
-  assert(svp.ncaches < svp.ccaches);
-
-  // tesselate current path
-  if (!ctx.cache.fillReady) nvg__prepareFill(ctx);
-  if (!ctx.cache.strokeReady) nvg__prepareStroke(ctx);
-
-  NVGpathCache* cc = &svp.caches[svp.ncaches++];
-  cc.copyFrom(ctx.cache);
-  // copy path commands (we may need 'em for picking)
-  cc.ncommands = ctx.ncommands;
-  if (cc.ncommands) {
-    import core.stdc.stdlib : malloc;
-    import core.stdc.string : memcpy;
-    cc.commands = cast(float*)malloc(ctx.ncommands*float.sizeof);
-    if (cc.commands is null) assert(0, "NanoVega: out of memory");
-    memcpy(cc.commands, ctx.commands, ctx.ncommands*float.sizeof);
-  } else {
-    cc.commands = null;
-  }
-}
-
-/// Create new empty path set.
-public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
-  import core.stdc.stdlib : malloc;
-  import core.stdc.string : memset;
-  if (ctx is null) return null;
-  NVGPathSet res = cast(NVGPathSet)malloc(NVGPathSetS.sizeof);
-  if (res is null) assert(0, "NanoVega: out of memory");
-  memset(res, 0, NVGPathSetS.sizeof);
-  res.svctx = ctx;
-  return res;
-}
-
-/// Is the given path set empty? Empty path set can be `null` too.
-public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, true); return (svp is null || svp.ncaches == 0); }
-
-/// Clear path set contents. Will release *some* allocated memory (this function is meant to clear something that will be reused).
-public void clear (NVGPathSet svp) nothrow @trusted @nogc {
-  if (svp !is null) {
-    import core.stdc.stdlib : free;
-    foreach (ref cc; svp.caches[0..svp.ncaches]) cc.clear();
-    svp.ncaches = 0;
-  }
-}
-
-/// Destroy path set (frees allocated memory).
-public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
-  if (svp !is null) {
-    import core.stdc.stdlib : free;
-    svp.clear();
-    if (svp.caches !is null) free(svp.caches);
-    free(svp);
-    svp = null;
-  }
-}
-
 
 struct NVGparams {
   void* userPtr;
@@ -1398,6 +1258,14 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
   }
 }
 
+// ////////////////////////////////////////////////////////////////////////// //
+/** <h1>Frame Management</h1>
+ *
+ * To start drawing with NanoVega context, you have to "begin frame", and then
+ * "end frame" to flush your rendering commands to GPU.
+ */
+public alias NVGSectionDummy000 = void;
+
 /** Begin drawing a new frame.
  *
  * Calls to NanoVega drawing API should be wrapped in `beginFrame()` and `endFrame()`
@@ -1497,8 +1365,180 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
   }
 }
 
+// ////////////////////////////////////////////////////////////////////////// //
+/** <h1>Recording and Replaying Pathes</h1>
+ *
+ * It is posible to record render commands and replay them later. This will allow
+ * you to skip possible time-consuming tesselation stage. Potential uses of this
+ * feature is, for example, rendering alot of similar complex pathes, like game
+ * tiles, or enemy sprites.
+ *
+ * Path replaying has some limitations, though: you cannot change stroke width,
+ * fringe size, tesselation tolerance, or rescale path. But you can change fill
+ * color/pattern, stroke color, translate and/or rotate saved pathes.
+ *
+ * Note that text rendering commands are not saved, as technically text rendering
+ * is not a path.
+ *
+ * To translate or rotate a record, use `affineGPU()` API call.
+ *
+ * To record render commands, you must create new path set with `newPathSet()`
+ * function, then start recording with `startRecording()`. You can cancel current
+ * recording with `cancelRecording()`, or commit (save) recording with `stopRecording()`.
+ *
+ * You can resume recording with `startRecording()` after `stopRecording()` call.
+ * Calling `cancelRecording()` will cancel only current recording session (i.e. it
+ * will forget everything from the very latest `startRecording()`, not the whole
+ * record).
+ *
+ * Finishing frame with `endFrame()` will automatically commit current recording, and
+ * calling `cancelFrame()` will cancel recording by calling `cancelRecording()`.
+ */
+public alias NVGSectionDummy001 = void;
+
+/// Saved path set.
+public alias NVGPathSet = NVGPathSetS*;
+
+struct NVGPathSetS {
+private:
+  NVGpathCache* caches;
+  int ncaches, ccaches;
+  NVGContext svctx; // used to do some sanity checks
+
+public:
+  @disable this (this); // no copies
+
+  /// Fill saved path set using saved fill mode.
+  void fill (NVGContext ctx) nothrow @trusted @nogc {
+    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
+    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
+    foreach (ref cc; caches[0..ncaches]) {
+      if (cc.npaths <= 0) continue;
+
+      NVGstate* state = nvg__getState(ctx);
+      NVGPaint fillPaint = state.fill;
+
+      // apply global alpha
+      fillPaint.innerColor.a *= state.alpha;
+      fillPaint.outerColor.a *= state.alpha;
+
+      ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
+
+      // count triangles
+      foreach (int i; 0..cc.npaths) {
+        NVGpath* path = &cc.paths[i];
+        ctx.fillTriCount += path.nfill-2;
+        ctx.fillTriCount += path.nstroke-2;
+        ctx.drawCallCount += 2;
+      }
+    }
+  }
+
+  /// Stroking will use saved stroke width.
+  void stroke (NVGContext ctx) nothrow @trusted @nogc {
+    //TODO: actually, we can retesselate the path, as we have (almost) all the required info
+    if (ctx !is svctx) assert(0, "NanoVega: cannot replay path set on different context");
+    foreach (ref cc; caches[0..ncaches]) {
+      if (cc.npaths <= 0) continue;
+
+      NVGstate* state = nvg__getState(ctx);
+      NVGPaint strokePaint = state.stroke;
+
+      strokePaint.innerColor.a *= cc.strokeAlphaMul;
+      strokePaint.outerColor.a *= cc.strokeAlphaMul;
+
+      // apply global alpha
+      strokePaint.innerColor.a *= state.alpha;
+      strokePaint.outerColor.a *= state.alpha;
+
+      ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
+
+      // count triangles
+      foreach (int i; 0..cc.npaths) {
+        NVGpath* path = &cc.paths[i];
+        ctx.strokeTriCount += path.nstroke-2;
+        ++ctx.drawCallCount;
+      }
+    }
+  }
+}
+
+// Append current path to existing path set. Is is safe to call this with `null` `svp`.
+void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+  if (ctx is null || svp is null) return;
+  if (ctx !is svp.svctx) assert(0, "NanoVega: cannot save pathes from different contexts");
+  if (ctx.ncommands == 0) {
+    assert(ctx.cache.npaths == 0);
+    return;
+  }
+  // grow buffer
+  if (svp.ncaches+1 > svp.ccaches) {
+    import core.stdc.stdlib : realloc;
+    import core.stdc.string : memset;
+    int newsz = (svp.ccaches == 0 ? 8 : svp.ccaches <= 1024 ? svp.ccaches*2 : svp.ccaches+1024);
+    svp.caches = cast(NVGpathCache*)realloc(svp.caches, newsz*NVGpathCache.sizeof);
+    if (svp.caches is null) assert(0, "NanoVega: out of memory");
+    //memset(svp.caches+svp.ccaches, 0, (newsz-svp.ccaches)*NVGpathCache.sizeof);
+    svp.ccaches = newsz;
+  }
+  assert(svp.ncaches < svp.ccaches);
+
+  // tesselate current path
+  if (!ctx.cache.fillReady) nvg__prepareFill(ctx);
+  if (!ctx.cache.strokeReady) nvg__prepareStroke(ctx);
+
+  NVGpathCache* cc = &svp.caches[svp.ncaches++];
+  cc.copyFrom(ctx.cache);
+  // copy path commands (we may need 'em for picking)
+  cc.ncommands = ctx.ncommands;
+  if (cc.ncommands) {
+    import core.stdc.stdlib : malloc;
+    import core.stdc.string : memcpy;
+    cc.commands = cast(float*)malloc(ctx.ncommands*float.sizeof);
+    if (cc.commands is null) assert(0, "NanoVega: out of memory");
+    memcpy(cc.commands, ctx.commands, ctx.ncommands*float.sizeof);
+  } else {
+    cc.commands = null;
+  }
+}
+
+/// Create new empty path set.
+public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
+  import core.stdc.stdlib : malloc;
+  import core.stdc.string : memset;
+  if (ctx is null) return null;
+  NVGPathSet res = cast(NVGPathSet)malloc(NVGPathSetS.sizeof);
+  if (res is null) assert(0, "NanoVega: out of memory");
+  memset(res, 0, NVGPathSetS.sizeof);
+  res.svctx = ctx;
+  return res;
+}
+
+/// Is the given path set empty? Empty path set can be `null`.
+public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, true); return (svp is null || svp.ncaches == 0); }
+
+/// Clear path set contents. Will release *some* allocated memory (this function is meant to clear something that will be reused).
+public void clear (NVGPathSet svp) nothrow @trusted @nogc {
+  if (svp !is null) {
+    import core.stdc.stdlib : free;
+    foreach (ref cc; svp.caches[0..svp.ncaches]) cc.clear();
+    svp.ncaches = 0;
+  }
+}
+
+/// Destroy path set (frees all allocated memory).
+public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
+  if (svp !is null) {
+    import core.stdc.stdlib : free;
+    svp.clear();
+    if (svp.caches !is null) free(svp.caches);
+    free(svp);
+    svp = null;
+  }
+}
+
 /// Start path recording. `svp` should be alive until recording is cancelled or stopped.
-public void recordPathesTo (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
   ctx.recset = svp;
   ctx.recstart = (svp !is null ? svp.ncaches : -1);
   //{ import core.stdc.stdio; printf("recordPathesTo: %p %d\n", ctx.recset, ctx.recstart); }
@@ -1527,11 +1567,12 @@ public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
 
 // ////////////////////////////////////////////////////////////////////////// //
 /** <h1>Composite operation</h1>
+ *
  * The composite operations in NanoVega are modeled after HTML Canvas API, and
  * the blend func is based on OpenGL (see corresponding manuals for more info).
  * The colors in the blending state have premultiplied alpha.
  */
-public alias NVGSectionDummy00_00 = void;
+public alias NVGSectionDummy002 = void;
 
 /// Sets the composite operation.
 public void globalCompositeOperation (NVGContext ctx, NVGCompositeOperation op) nothrow @trusted @nogc {
@@ -1557,9 +1598,11 @@ public void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor src
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/// <h1>Color utils</h1>
-/// Colors in NanoVega are stored as ARGB. Zero alpha means "transparent color".
-public alias NVGSectionDummy00 = void;
+/** <h1>Color utils</h1>
+ *
+ * Colors in NanoVega are stored as ARGB. Zero alpha means "transparent color".
+ */
+public alias NVGSectionDummy003 = void;
 
 /// Returns a color value from string form.
 /// Supports: "#rgb", "#rrggbb", "#argb", "#aarrggbb"
@@ -1685,7 +1728,7 @@ public NVGColor nvgHSLA (float h, float s, float l, float a) nothrow @trusted @n
  * The following functions can be used to make calculations on 2x3 transformation matrices.
  * A 2x3 matrix is represented as float[6].
  */
-public alias NVGSectionDummy01 = void;
+public alias NVGSectionDummy004 = void;
 
 /** Matrix class. Usually using this instead of dedicated matrix operations is slightly slower,
  * but more convenient. Note that `NVGMatrix` can be passed to any NanoVega matrix operations.
@@ -1989,7 +2032,7 @@ void nvg__setPaintColor (ref NVGPaint p, NVGColor color) nothrow @trusted @nogc 
  * The state contains transform, fill and stroke styles, text and font styles,
  * and scissor clipping.
  */
-public alias NVGSectionDummy02 = void;
+public alias NVGSectionDummy005 = void;
 
 /** Pushes and saves the current render state into a state stack.
  * A matching `restore()` must be used to restore the state.
@@ -2061,7 +2104,7 @@ public void nonZeroFill (NVGContext ctx) nothrow @trusted @nogc {
  * Note that if you want "almost perfect" pixel rendering, you should set aspect ratio to 1,
  * and use `integerCoord+0.5f` as pixel coordinates.
  */
-public alias NVGSectionDummy03 = void;
+public alias NVGSectionDummy006 = void;
 
 /// Sets whether to draw antialias for `stroke()` and `fill()`. It's enabled by default.
 public void shapeAntiAlias (NVGContext ctx, bool enabled) {
@@ -2251,7 +2294,7 @@ public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
  * In addition you can upload your own image.
  * The parameter imageFlags is combination of flags defined in NVGImageFlags.
  */
-public alias NVGSectionDummy04 = void;
+public alias NVGSectionDummy007 = void;
 
 static if (NanoVegaHasArsdImage) {
   // do we have new arsd API to load images?
@@ -2359,7 +2402,7 @@ public void deleteImage (NVGContext ctx, int image) nothrow @trusted @nogc {
 /** NanoVega supports four types of paints: linear gradient, box gradient, radial gradient and image pattern.
  * These can be used as paints for strokes and fills.
  */
-public alias NVGSectionDummy05 = void;
+public alias NVGSectionDummy008 = void;
 
 /** Creates and returns a linear gradient. Parameters `(sx, sy) (ex, ey)` specify the start and end coordinates
  * of the linear gradient, icol specifies the start color and ocol the end color.
@@ -2588,7 +2631,7 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy,
  * Scissoring allows you to clip the rendering into a rectangle. This is useful for various
  * user interface cases like rendering a text edit or a timeline.
  */
-public alias NVGSectionDummy06 = void;
+public alias NVGSectionDummy009 = void;
 
 /// Sets the current scissor rectangle. The scissor rectangle is transformed by the current transform.
 /// Arguments: [x, y, w, h]*
@@ -2694,7 +2737,7 @@ public void resetScissor (NVGContext ctx) nothrow @trusted @nogc {
  * WARNING! Don't use this for scaling or skewing, it will result in heavily
  *          distorted image!
  */
-public alias NVGSectionDummy200 = void;
+public alias NVGSectionDummy010 = void;
 
 /// Set GPU affine transformatin matrix. Don't do scaling or skewing here.
 /// This matrix won't be saved/restored with context state save/restore operations, as it is not a part of that state.
@@ -3692,7 +3735,7 @@ void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
  *
  * The curve segments and sub-paths are transformed by the current transform.
  */
-public alias NVGSectionDummy07 = void;
+public alias NVGSectionDummy011 = void;
 
 /// Clears the current path and sub-paths.
 /// Will call `nvgOnBeginPath()` callback if current path is not empty.
@@ -4245,7 +4288,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
  *   ---
  *
  */
-public alias NVGSectionDummy60 = void;
+public alias NVGSectionDummy012 = void;
 
 /// Is point (mx, my) on the last stoked path? `tol` is a maximum distance from stroke.
 public bool isOnStroke (NVGContext ctx, in float mx, in float my, float tol=float.nan) {
@@ -4299,7 +4342,7 @@ public bool isOnFill (NVGContext ctx, in float mx, in float my) {
  * effects, for example. Note that you can call `beginPath()` without rasterizing
  * if everything you want is hit detection.
  */
-public alias NVGSectionDummy61 = void;
+public alias NVGSectionDummy013 = void;
 
 // most of the code is by Michael Wynne <mike@mikesspace.net>
 // https://github.com/memononen/nanovg/pull/230
@@ -5788,7 +5831,7 @@ void nvg__pickBeginFrame (NVGcontext* ctx, int width, int height) {
  *
  * Note: currently only solid color fill is supported for text.
  */
-public alias NVGSectionDummy08 = void;
+public alias NVGSectionDummy014 = void;
 
 /** Creates font by loading it from the disk from specified file name.
  * Returns handle to the font or FONS_INVALID (aka -1) on error.
