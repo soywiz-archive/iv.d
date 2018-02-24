@@ -832,16 +832,6 @@ struct NVGpath {
 
   @disable this (this); // no copies
 
-  /*
-  NVGpath* clone () const nothrow @trusted @nogc {
-    import core.stdc.stdlib : malloc;
-    NVGpath* res = cast(NVGpath*)malloc(NVGpath.sizeof);
-    if (res is null) assert(0, "NanoVega: out of memory");
-    res.copyFrom(&this);
-    return res;
-  }
-  */
-
   void clear () nothrow @trusted @nogc {
     import core.stdc.stdlib : free;
     if (fill !is null) free(fill);
@@ -859,99 +849,139 @@ struct NVGpath {
   }
 }
 
-public alias NVGSavedPath = NVGSavedPathS*; ///
+public alias NVGPathSet = NVGPathSetS*; ///
 
-struct NVGSavedPathS {
+struct NVGPathSetS {
 private:
-  NVGpathCache cache;
-
-public:
-  bool evenOddMode; /// This can be changed for saved path.
+  NVGpathCache* caches;
+  int ncaches, ccaches;
 
 public:
   @disable this (this); // no copies
 
-  ///
+  /// Fill saved path set using saved fill mode.
   void fill (NVGContext ctx) nothrow @trusted @nogc {
-    if (cache.npaths <= 0) return;
+    foreach (ref cc; caches[0..ncaches]) {
+      if (cc.npaths <= 0) continue;
 
-    NVGstate* state = nvg__getState(ctx);
-    NVGPaint fillPaint = state.fill;
+      NVGstate* state = nvg__getState(ctx);
+      NVGPaint fillPaint = state.fill;
 
-    // apply global alpha
-    fillPaint.innerColor.a *= state.alpha;
-    fillPaint.outerColor.a *= state.alpha;
+      // apply global alpha
+      fillPaint.innerColor.a *= state.alpha;
+      fillPaint.outerColor.a *= state.alpha;
 
-    ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cache.fringeWidth, cache.bounds.ptr, cache.paths, cache.npaths, evenOddMode);
+      ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
 
-    // count triangles
-    foreach (int i; 0..cache.npaths) {
-      NVGpath* path = &ctx.cache.paths[i];
-      ctx.fillTriCount += path.nfill-2;
-      ctx.fillTriCount += path.nstroke-2;
-      ctx.drawCallCount += 2;
+      // count triangles
+      foreach (int i; 0..cc.npaths) {
+        NVGpath* path = &cc.paths[i];
+        ctx.fillTriCount += path.nfill-2;
+        ctx.fillTriCount += path.nstroke-2;
+        ctx.drawCallCount += 2;
+      }
     }
   }
 
   /// Stroking will use saved stroke width.
   void stroke (NVGContext ctx) nothrow @trusted @nogc {
-    if (cache.npaths <= 0) return;
+    foreach (ref cc; caches[0..ncaches]) {
+      if (cc.npaths <= 0) continue;
 
-    NVGstate* state = nvg__getState(ctx);
-    NVGPaint strokePaint = state.stroke;
+      NVGstate* state = nvg__getState(ctx);
+      NVGPaint strokePaint = state.stroke;
 
-    strokePaint.innerColor.a *= cache.strokeAlphaMul;
-    strokePaint.outerColor.a *= cache.strokeAlphaMul;
+      strokePaint.innerColor.a *= cc.strokeAlphaMul;
+      strokePaint.outerColor.a *= cc.strokeAlphaMul;
 
-    // apply global alpha
-    strokePaint.innerColor.a *= state.alpha;
-    strokePaint.outerColor.a *= state.alpha;
+      // apply global alpha
+      strokePaint.innerColor.a *= state.alpha;
+      strokePaint.outerColor.a *= state.alpha;
 
-    ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cache.fringeWidth, cache.strokeWidth, cache.paths, cache.npaths);
+      ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
 
-    // count triangles
-    foreach (int i; 0..ctx.cache.npaths) {
-      NVGpath* path = &ctx.cache.paths[i];
-      ctx.strokeTriCount += path.nstroke-2;
-      ++ctx.drawCallCount;
+      // count triangles
+      foreach (int i; 0..cc.npaths) {
+        NVGpath* path = &cc.paths[i];
+        ctx.strokeTriCount += path.nstroke-2;
+        ++ctx.drawCallCount;
+      }
     }
   }
 }
 
-public NVGSavedPathS* savePath (NVGContext ctx) nothrow @trusted @nogc {
+/// Append current path to existing path set. Is is safe to call this with `null` `svp`.
+void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+  if (ctx is null || svp is null) return;
+  if (ctx.ncommands == 0) {
+    assert(ctx.cache.npaths == 0);
+    return;
+  }
+  // grow buffer
+  if (svp.ncaches+1 > svp.ccaches) {
+    import core.stdc.stdlib : realloc;
+    import core.stdc.string : memset;
+    int newsz = (svp.ccaches == 0 ? 8 : svp.ccaches <= 1024 ? svp.ccaches*2 : svp.ccaches+1024);
+    svp.caches = cast(NVGpathCache*)realloc(svp.caches, newsz*NVGpathCache.sizeof);
+    if (svp.caches is null) assert(0, "NanoVega: out of memory");
+    //memset(svp.caches+svp.ccaches, 0, (newsz-svp.ccaches)*NVGpathCache.sizeof);
+    svp.ccaches = newsz;
+  }
+  assert(svp.ncaches < svp.ccaches);
+
+  // tesselate current path
+  if (!ctx.cache.fillReady) nvg__prepareFill(ctx);
+  if (!ctx.cache.strokeReady) nvg__prepareStroke(ctx);
+
+  NVGpathCache* cc = &svp.caches[svp.ncaches++];
+  cc.copyFrom(ctx.cache);
+  // copy path commands (we may need 'em for picking)
+  cc.ncommands = ctx.ncommands;
+  if (cc.ncommands) {
+    import core.stdc.stdlib : malloc;
+    import core.stdc.string : memcpy;
+    cc.commands = cast(float*)malloc(ctx.ncommands*float.sizeof);
+    if (cc.commands is null) assert(0, "NanoVega: out of memory");
+    memcpy(cc.commands, ctx.commands, ctx.ncommands*float.sizeof);
+  } else {
+    cc.commands = null;
+  }
+}
+
+/// Create new empty path set.
+public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc;
   import core.stdc.string : memset;
-  if (ctx is null || ctx.cache is null) return null;
-  NVGstate* state = nvg__getState(ctx);
-  NVGSavedPathS* res = cast(NVGSavedPathS*)malloc(NVGSavedPathS.sizeof);
+  if (ctx is null) return null;
+  NVGPathSet res = cast(NVGPathSet)malloc((NVGPathSet*).sizeof);
   if (res is null) assert(0, "NanoVega: out of memory");
-  memset(res, 0, NVGSavedPathS.sizeof);
-
-  if (!ctx.cache.fillReady) {
-    //{ import core.stdc.stdio; printf("preparing fill...\n"); }
-    nvg__prepareFill(ctx);
-  }
-  if (!ctx.cache.strokeReady) {
-    //{ import core.stdc.stdio; printf("preparing strokes...\n"); }
-    nvg__prepareStroke(ctx);
-  }
-
-  res.cache.copyFrom(ctx.cache);
-  res.evenOddMode = state.evenOddMode;
-
-  //{ import core.stdc.stdio; printf("saving: strokeWidth=%g; fringeWidth=%g; strokeAlphaMul=%g\n", res.cache.strokeWidth, res.cache.fringeWidth, res.cache.strokeAlphaMul); }
-
+  memset(res, 0, NVGPathSetS.sizeof);
   return res;
 }
 
-public void kill (ref NVGSavedPathS* p) nothrow @trusted @nogc {
-  import core.stdc.stdlib : free;
+/// Is the given path set empty? Empty path set can be `null` too.
+public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, true); return (svp is null || svp.ncaches == 0); }
+
+/// Clear path set contents. Will release *some* allocated memory (this function is meant to clear something that will be reused).
+public void clear (NVGPathSet svp) nothrow @trusted @nogc {
+  if (svp !is null) {
+    import core.stdc.stdlib : free;
+    foreach (ref cc; svp.caches[0..svp.ncaches]) cc.clear();
+    svp.ncaches = 0;
+  }
+}
+
+/// Destroy path set (frees allocated memory).
+public void kill (ref NVGPathSet p) nothrow @trusted @nogc {
   if (p !is null) {
-    p.cache.clear();
+    import core.stdc.stdlib : free;
+    p.clear();
+    if (p.caches !is null) free(p.caches);
     free(p);
     p = null;
   }
 }
+
 
 struct NVGparams {
   void* userPtr;
@@ -1043,11 +1073,16 @@ struct NVGpathCache {
   int nverts;
   int cverts;
   float[4] bounds;
+  // this is required for saved pathes
   bool strokeReady;
   bool fillReady;
   float strokeAlphaMul;
   float strokeWidth;
   float fringeWidth;
+  bool evenOddMode;
+  // non-saved path will not have this
+  float* commands;
+  int ncommands;
 
   @disable this (this); // no copies
 
@@ -1061,6 +1096,7 @@ struct NVGpathCache {
     this.cpoints = src.npoints;
     this.verts = xdup(src.verts, src.nverts);
     this.cverts = src.nverts;
+    this.commands = xdup(src.commands, src.ncommands);
     if (src.npaths > 0) {
       this.paths = cast(NVGpath*)malloc(src.npaths*NVGpath.sizeof);
       memset(this.paths, 0, npaths*NVGpath.sizeof);
@@ -1078,6 +1114,7 @@ struct NVGpathCache {
     }
     if (points !is null) free(points);
     if (verts !is null) free(verts);
+    if (commands !is null) free(commands);
     this = this.init;
   }
 }
@@ -1125,6 +1162,9 @@ private:
   NVGpickScene* pickScene;
   int pathPickId; // >=0: register all pathes for picking using this id
   uint pathPickRegistered; // if `pathPickId` >= 0, this is used to avoid double-registration (see `NVGPickKind`); hi 16 bit is check flags, lo 16 bit is mode
+  // path recording
+  NVGPathSet recset;
+  int recstart; // used to cancel recording
   // internals
   int mWidth, mHeight;
   float mDeviceRatio;
@@ -1191,12 +1231,11 @@ float nvg__normalize (float* x, float* y) nothrow @safe @nogc {
   return d;
 }
 
-void nvg__deletePathCache (NVGpathCache* c) nothrow @trusted @nogc {
-  if (c is null) return;
-  if (c.points !is null) free(c.points);
-  if (c.paths !is null) free(c.paths);
-  if (c.verts !is null) free(c.verts);
-  free(c);
+void nvg__deletePathCache (ref NVGpathCache* c) nothrow @trusted @nogc {
+  if (c !is null) {
+    c.clear();
+    free(c);
+  }
 }
 
 NVGpathCache* nvg__allocPathCache () nothrow @trusted @nogc {
@@ -1206,20 +1245,21 @@ NVGpathCache* nvg__allocPathCache () nothrow @trusted @nogc {
 
   c.points = cast(NVGpoint*)malloc(NVGpoint.sizeof*NVG_INIT_POINTS_SIZE);
   if (c.points is null) goto error;
-  c.npoints = 0;
+  //c.npoints = 0;
   c.cpoints = NVG_INIT_POINTS_SIZE;
 
   c.paths = cast(NVGpath*)malloc(NVGpath.sizeof*NVG_INIT_PATHS_SIZE);
   if (c.paths is null) goto error;
-  c.npaths = 0;
+  //c.npaths = 0;
   c.cpaths = NVG_INIT_PATHS_SIZE;
 
   c.verts = cast(NVGvertex*)malloc(NVGvertex.sizeof*NVG_INIT_VERTS_SIZE);
   if (c.verts is null) goto error;
-  c.nverts = 0;
+  //c.nverts = 0;
   c.cverts = NVG_INIT_VERTS_SIZE;
 
   return c;
+
 error:
   nvg__deletePathCache(c);
   return null;
@@ -1323,7 +1363,7 @@ package/*(iv.nanovega)*/ void deleteInternal (ref NVGContext ctx) nothrow @trust
   if (ctx is null) return;
 
   if (ctx.commands !is null) free(ctx.commands);
-  if (ctx.cache !is null) nvg__deletePathCache(ctx.cache);
+  nvg__deletePathCache(ctx.cache);
 
   if (ctx.fs) fonsDeleteInternal(ctx.fs);
 
@@ -1367,7 +1407,7 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
  *
  * Note that fractional ratio can (and will) distort your fonts and images.
  *
- * This call also resets pick marks (see picking API for non-rasterized pathes).
+ * This call also resets pick marks (see picking API for non-rasterized pathes) and path recording.
  *
  * see also `glNVGClearFlags()`, which returns necessary flags for `glClear()`.
  */
@@ -1392,6 +1432,9 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
   ctx.mHeight = windowHeight;
   ctx.mDeviceRatio = devicePixelRatio;
 
+  ctx.recset = null;
+  ctx.recstart = -1;
+
   ctx.drawCallCount = 0;
   ctx.fillTriCount = 0;
   ctx.strokeTriCount = 0;
@@ -1400,8 +1443,9 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
   nvg__pickBeginFrame(ctx, windowWidth, windowHeight);
 }
 
-/// Cancels drawing the current frame.
+/// Cancels drawing the current frame. Cancels path recording.
 public void cancelFrame (NVGContext ctx) nothrow @trusted @nogc {
+  ctx.cancelRecording();
   ctx.mWidth = 0;
   ctx.mHeight = 0;
   ctx.mDeviceRatio = 0;
@@ -1409,8 +1453,11 @@ public void cancelFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.params.renderCancel(ctx.params.userPtr);
 }
 
-/// Ends drawing the current frame (flushing remaining render state).
+/// Ends drawing the current frame (flushing remaining render state). Commits recorded pathes.
 public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
+  ctx.appendCurrentPathToCache(ctx.recset); // save last path
+  //{ import core.stdc.stdio; printf("!!! %p %d\n", ctx.recset, ctx.recstart); }
+  ctx.stopRecording();
   ctx.mWidth = 0;
   ctx.mHeight = 0;
   ctx.mDeviceRatio = 0;
@@ -1440,6 +1487,33 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
     ctx.fontImageIdx = 0;
     // clear all images after j
     ctx.fontImages[j..NVG_MAX_FONTIMAGES] = 0;
+  }
+}
+
+/// Start path recording. `svp` should be alive until recording is cancelled or stopped.
+public void recordPathesTo (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+  ctx.recset = svp;
+  ctx.recstart = (svp !is null ? svp.ncaches : -1);
+  //{ import core.stdc.stdio; printf("recordPathesTo: %p %d\n", ctx.recset, ctx.recstart); }
+}
+
+/// Commit recorded pathes. It is save to call this when recording is not started.
+public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
+  ctx.appendCurrentPathToCache(ctx.recset); // save last path
+  //{ import core.stdc.stdio; printf("stopRecording: %p %d %d\n", ctx.recset, ctx.recstart, (ctx.recset ? ctx.recset.ncaches : -1)); }
+  ctx.recset = null;
+  ctx.recstart = -1;
+}
+
+/// Cancel path recording.
+public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
+  //{ import core.stdc.stdio; printf("cancelRecording: %p %d %d\n", ctx.recset, ctx.recstart, (ctx.recset ? ctx.recset.ncaches : -1)); }
+  if (ctx.recset !is null) {
+    assert(ctx.recstart >= 0 && ctx.recstart <= ctx.recset.ncaches);
+    foreach (ref cp; ctx.recset.caches[ctx.recstart..ctx.recset.ncaches]) cp.clear();
+    ctx.recset.ncaches = ctx.recstart;
+    ctx.recset = null;
+    ctx.recstart = -1;
   }
 }
 
@@ -3616,6 +3690,7 @@ public alias NVGSectionDummy07 = void;
 /// Clears the current path and sub-paths.
 /// Will call `nvgOnBeginPath()` callback if current path is not empty.
 public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
+  ctx.appendCurrentPathToCache(ctx.recset);
   ctx.ncommands = 0;
   ctx.pathPickRegistered &= NVGPickKind.All; // reset "registered" flags
   nvg__clearPathCache(ctx);
@@ -4043,6 +4118,7 @@ void nvg__prepareFill (NVGContext ctx) nothrow @trusted @nogc {
     nvg__expandFill(ctx, 0.0f, NVGLineCap.Miter, 2.4f);
   }
 
+  cache.evenOddMode = state.evenOddMode;
   cache.fringeWidth = ctx.fringeWidth;
   cache.fillReady = true;
 }
