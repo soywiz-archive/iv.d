@@ -50,12 +50,11 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
   }
 
   NVGPaint createLinearGradient (const(NSVG.Gradient)* gradient, float a) {
-    float[6] inverse = void;
     float sx, sy, ex, ey;
 
-    nvgTransformInverse(inverse[], gradient.xform[]);
-    nvgTransformPoint(&sx, &sy, inverse[], 0, 0);
-    nvgTransformPoint(&ex, &ey, inverse[], 0, 1);
+    NVGMatrix inverse = NVGMatrix(gradient.xform).inverted;
+    inverse.point(&sx, &sy, 0, 0);
+    inverse.point(&ex, &ey, 0, 1);
 
     return nvg.linearGradient(sx, sy, ex, ey,
              xcolor(gradient.stops.ptr[0].color, a),
@@ -63,12 +62,11 @@ void render (NVGContext nvg, const(NSVG)* image, PathMode pathMode=PathMode.Flip
   }
 
   NVGPaint createRadialGradient (const(NSVG.Gradient)* gradient, float a) {
-    float[6] inverse = void;
     float cx, cy, r1, r2;
 
-    nvgTransformInverse(inverse[], gradient.xform[]);
-    nvgTransformPoint(&cx, &cy, inverse[], 0, 0);
-    nvgTransformPoint(&r1, &r2, inverse[], 0, 1);
+    NVGMatrix inverse = NVGMatrix(gradient.xform).inverted;
+    inverse.point(&cx, &cy, 0, 0);
+    inverse.point(&r1, &r2, 0, 1);
     immutable float outr = r2-cy;
     immutable float inr = (gradient.nstops == 3 ? gradient.stops.ptr[1].offset*outr : 0);
 
