@@ -152,39 +152,6 @@ The following code illustrates the OpenGL state touched by the rendering code:
     To start drawing with NanoVega context, you have to "begin frame", and then
     "end frame" to flush your rendering commands to GPU.
 
-  path_recording =
-    ## Recording and Replaying Pathes
-
-    It is posible to record render commands and replay them later. This will allow
-    you to skip possible time-consuming tesselation stage. Potential uses of this
-    feature is, for example, rendering alot of similar complex pathes, like game
-    tiles, or enemy sprites.
-
-    Path replaying has some limitations, though: you cannot change stroke width,
-    fringe size, tesselation tolerance, or rescale path. But you can change fill
-    color/pattern, stroke color, translate and/or rotate saved pathes.
-
-    Note that text rendering commands are not saved, as technically text rendering
-    is not a path.
-
-    To translate or rotate a record, use `affineGPU()` API call.
-
-    To record render commands, you must create new path set with `newPathSet()`
-    function, then start recording with `startRecording()`. You can cancel current
-    recording with `cancelRecording()`, or commit (save) recording with `stopRecording()`.
-
-    You can resume recording with `startRecording()` after `stopRecording()` call.
-    Calling `cancelRecording()` will cancel only current recording session (i.e. it
-    will forget everything from the very latest `startRecording()`, not the whole
-    record).
-
-    Finishing frame with `endFrame()` will automatically commit current recording, and
-    calling `cancelFrame()` will cancel recording by calling `cancelRecording()`.
-
-    Note that commit recording will clear current picking scene (but cancelling won't).
-
-    Calling `startRecording()` without commiting or cancelling recoriding will commit.
-
   composite_operation =
     ## Composite Operation
 
@@ -271,13 +238,13 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     It is possible to set affine transformation matrix for GPU. That matrix will
     be applied by the shader code. This can be used to quickly translate and rotate
-    saved pathes. Call this $(B only) between `beginFrame()` and `endFrame()`.
+    saved paths. Call this $(B only) between `beginFrame()` and `endFrame()`.
 
     Note that `beginFrame()` resets this matrix to identity one.
 
     WARNING! Don't use this for scaling or skewing, it will result in heavily distorted image!
 
-  pathes =
+  paths =
     ## Paths
 
     Drawing a new shape starts with `beginPath()`, it clears all the currently defined paths.
@@ -297,16 +264,14 @@ The following code illustrates the OpenGL state touched by the rendering code:
   picking_api =
     ## Picking API
 
-    This is picking API that works directly on patches, without rasterizing 'em
-    first.
+    This is picking API that works directly on paths, without rasterizing them first.
 
-    `beginFrame()` resets picking state. Then you can create pathes as usual, but
+    [beginFrame] resets picking state. Then you can create paths as usual, but
     there is a possibility to perform hit checks $(B before) rasterizing a path.
     Call either id assigning functions (`currFillHitId()`/`currStrokeHitId()`), or
     immediate hit test functions (`hitTestCurrFill()`/`hitTestCurrStroke()`)
     before rasterizing (i.e. calling `fill()` or `stroke()`) to perform hover
-    effects, for example. Note that you can call `beginPath()` without rasterizing
-    if everything you want is hit detection.
+    effects, for example.
 
     Also note that picking API is ignoring GPU affine transformation matrix.
     You can "untransform" picking coordinates before checking with `gpuUntransformPoint()`.
@@ -345,6 +310,48 @@ The following code illustrates the OpenGL state touched by the rendering code:
     ----------------------
 
     Note: currently only solid color fill is supported for text.
+
+  path_recording =
+    ## Recording and Replaying Pathes
+
+    $(B WARNING! This API is hightly experimental, and is subject to change.
+                 While I will try to keep it compatible in future NanoVega
+                 versions, no promises are made. Also note that NanoVega
+                 rendering is quite fast, so you prolly don't need this
+                 functionality. If you really want to render-once-and-copy,
+                 consider rendering to FBO, and use imaging API to blit
+                 FBO texture instead. Note that NanoVega supports alot of
+                 blit/copy modes.)
+
+    It is posible to record render commands and replay them later. This will allow
+    you to skip possible time-consuming tesselation stage. Potential uses of this
+    feature is, for example, rendering alot of similar complex paths, like game
+    tiles, or enemy sprites.
+
+    Path replaying has some limitations, though: you cannot change stroke width,
+    fringe size, tesselation tolerance, or rescale path. But you can change fill
+    color/pattern, stroke color, translate and/or rotate saved paths.
+
+    Note that text rendering commands are not saved, as technically text rendering
+    is not a path.
+
+    To translate or rotate a record, use `affineGPU()` API call.
+
+    To record render commands, you must create new path set with `newPathSet()`
+    function, then start recording with `startRecording()`. You can cancel current
+    recording with `cancelRecording()`, or commit (save) recording with `stopRecording()`.
+
+    You can resume recording with `startRecording()` after `stopRecording()` call.
+    Calling `cancelRecording()` will cancel only current recording session (i.e. it
+    will forget everything from the very latest `startRecording()`, not the whole
+    record).
+
+    Finishing frame with `endFrame()` will automatically commit current recording, and
+    calling `cancelFrame()` will cancel recording by calling `cancelRecording()`.
+
+    Note that commit recording will clear current picking scene (but cancelling won't).
+
+    Calling `startRecording()` without commiting or cancelling recoriding will commit.
 
  */
 module iv.nanovega.nanovega;
@@ -756,7 +763,7 @@ public:
   ref NVGColor applyTint() (in auto ref NVGColor tint) nothrow @trusted @nogc {
     if (tint.a == 0) return this;
     foreach (immutable idx, ref float v; rgba[0..4]) {
-      v = nvg__clamp(v+tint.rgba.ptr[idx], 0.0f, 1.0f);
+      v = nvg__clamp(v*tint.rgba.ptr[idx], 0.0f, 1.0f);
     }
     return this;
   }
@@ -856,14 +863,14 @@ public struct NVGPaint {
 }
 
 /// Path winding.
-/// Group: pathes
+/// Group: paths
 public enum NVGWinding {
   CCW = 1, /// Winding for solid shapes
   CW = 2,  /// Winding for holes
 }
 
 /// Path solidity.
-/// Group: pathes
+/// Group: paths
 public enum NVGSolidity {
   Solid = 1, /// Solid shape (CCW winding).
   Hole = 2, /// Hole (CW winding).
@@ -1173,15 +1180,13 @@ struct NVGpathCache {
   int nverts;
   int cverts;
   float[4] bounds;
-  // this is required for saved pathes
+  // this is required for saved paths
   bool strokeReady;
   bool fillReady;
   float strokeAlphaMul;
   float strokeWidth;
   float fringeWidth;
   bool evenOddMode;
-  NVGPaint fillColor;
-  NVGPaint strokeColor;
   // non-saved path will not have this
   float* commands;
   int ncommands;
@@ -1263,7 +1268,7 @@ private:
   NVGTesselation tesselatortype;
   // picking API
   NVGpickScene* pickScene;
-  int pathPickId; // >=0: register all pathes for picking using this id
+  int pathPickId; // >=0: register all paths for picking using this id
   uint pathPickRegistered; // if `pathPickId` >= 0, this is used to avoid double-registration (see `NVGPickKind`); hi 16 bit is check flags, lo 16 bit is mode
   // path recording
   NVGPathSet recset;
@@ -1286,8 +1291,8 @@ public:
   pure nothrow @safe @nogc {
     enum NoPick = -1; ///
 
-    @property int pickid () const { pragma(inline, true); return pathPickId; } /// >=0: this pickid will be assigned to all filled/stroked pathes
-    @property void pickid (int v) { pragma(inline, true); pathPickId = v; } /// >=0: this pickid will be assigned to all filled/stroked pathes
+    @property int pickid () const { pragma(inline, true); return pathPickId; } /// >=0: this pickid will be assigned to all filled/stroked paths
+    @property void pickid (int v) { pragma(inline, true); pathPickId = v; } /// >=0: this pickid will be assigned to all filled/stroked paths
 
     @property uint pickmode () const { pragma(inline, true); return pathPickRegistered&NVGPickKind.All; } /// pick autoregistration mode; see `NVGPickKind`
     @property void pickmode (uint v) { pragma(inline, true); pathPickRegistered = (pathPickRegistered&0xffff_0000u)|(v&NVGPickKind.All); } /// pick autoregistration mode; see `NVGPickKind`
@@ -1516,7 +1521,7 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
  *
  * Note that fractional ratio can (and will) distort your fonts and images.
  *
- * This call also resets pick marks (see picking API for non-rasterized pathes),
+ * This call also resets pick marks (see picking API for non-rasterized paths),
  * path recording, and GPU affine transformatin matrix.
  *
  * see also `glNVGClearFlags()`, which returns necessary flags for `glClear()`.
@@ -1568,13 +1573,10 @@ public void cancelFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.params.renderCancel(ctx.params.userPtr);
 }
 
-/// Ends drawing the current frame (flushing remaining render state). Commits recorded pathes.
+/// Ends drawing the current frame (flushing remaining render state). Commits recorded paths.
 /// Group: frame_management
 public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
-  if (ctx.recset !is null) {
-    //ctx.appendCurrentPathToCache(ctx.recset); // save last path
-    ctx.recset.takeCurrentPickScene(ctx);
-  }
+  if (ctx.recset !is null) ctx.recset.takeCurrentPickScene(ctx);
   ctx.stopRecording();
   ctx.mWidth = 0;
   ctx.mHeight = 0;
@@ -1616,13 +1618,59 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
 /// Group: path_recording
 public alias NVGPathSet = NVGPathSetS*;
 
+
+//TODO: save scissor info?
 struct NVGPathSetS {
 private:
-  NVGpathCache* caches;
-  int ncaches, ccaches;
+  // either path cache, or text item
+  static struct Node {
+    NVGPaint paint;
+    NVGpathCache* path;
+  }
+
+private:
+  Node* nodes;
+  int nnodes, cnodes;
   NVGpickScene* pickscene;
   //int npickscenes, cpickscenes;
-  NVGContext svctx; // used to do some sanity checks
+  NVGContext svctx; // used to do some sanity checks, and to free resources
+
+private:
+  Node* allocNode () nothrow @trusted @nogc {
+    import core.stdc.string : memset;
+    // grow buffer if necessary
+    if (nnodes+1 > cnodes) {
+      import core.stdc.stdlib : realloc;
+      int newsz = (cnodes == 0 ? 8 : cnodes <= 1024 ? cnodes*2 : cnodes+1024);
+      nodes = cast(Node*)realloc(nodes, newsz*Node.sizeof);
+      if (nodes is null) assert(0, "NanoVega: out of memory");
+      //memset(svp.caches+svp.ccaches, 0, (newsz-svp.ccaches)*NVGpathCache.sizeof);
+      cnodes = newsz;
+    }
+    assert(nnodes < cnodes);
+    memset(nodes+nnodes, 0, Node.sizeof);
+    return &nodes[nnodes++];
+  }
+
+  Node* allocPathNode () nothrow @trusted @nogc {
+    import core.stdc.stdlib : malloc;
+    import core.stdc.string : memset;
+    auto node = allocNode();
+    // allocate path cache
+    auto pc = cast(NVGpathCache*)malloc(NVGpathCache.sizeof);
+    if (pc is null) assert(0, "NanoVega: out of memory");
+    node.path = pc;
+    return node;
+  }
+
+  void clearNode (int idx) nothrow @trusted @nogc {
+    if (idx < 0 || idx >= nnodes) return;
+    Node* node = &nodes[idx];
+    if (svctx !is null && node.paint.image > 0) {
+      svctx.params.renderDeleteTexture(svctx.params.userPtr, node.paint.image);
+    }
+    if (node.path !is null) node.path.clear();
+  }
 
 private:
   void takeCurrentPickScene (NVGContext ctx) nothrow @trusted @nogc {
@@ -1635,51 +1683,52 @@ private:
 
   void replay (NVGContext ctx, in ref NVGColor fillTint, in ref NVGColor strokeTint) nothrow @trusted @nogc {
     NVGstate* state = nvg__getState(ctx);
+    foreach (ref node; nodes[0..nnodes]) {
+      if (auto cc = node.path) {
+        if (cc.npaths <= 0) continue;
 
-    foreach (ref cc; caches[0..ncaches]) {
-      if (cc.npaths <= 0) continue;
+        if (cc.fillReady) {
+          NVGPaint fillPaint = node.paint;
 
-      if (cc.fillReady) {
-        NVGPaint fillPaint = cc.fillColor;
+          // apply global alpha
+          fillPaint.innerColor.a *= state.alpha;
+          fillPaint.outerColor.a *= state.alpha;
 
-        // apply global alpha
-        fillPaint.innerColor.a *= state.alpha;
-        fillPaint.outerColor.a *= state.alpha;
+          fillPaint.innerColor.applyTint(fillTint);
+          fillPaint.outerColor.applyTint(fillTint);
 
-        fillPaint.innerColor.applyTint(fillTint);
-        fillPaint.outerColor.applyTint(fillTint);
+          ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
 
-        ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
-
-        // count triangles
-        foreach (int i; 0..cc.npaths) {
-          NVGpath* path = &cc.paths[i];
-          ctx.fillTriCount += path.nfill-2;
-          ctx.fillTriCount += path.nstroke-2;
-          ctx.drawCallCount += 2;
+          // count triangles
+          foreach (int i; 0..cc.npaths) {
+            NVGpath* path = &cc.paths[i];
+            ctx.fillTriCount += path.nfill-2;
+            ctx.fillTriCount += path.nstroke-2;
+            ctx.drawCallCount += 2;
+          }
         }
-      }
 
-      if (cc.strokeReady) {
-        NVGPaint strokePaint = cc.strokeColor;
+        if (cc.strokeReady) {
+          NVGPaint strokePaint = node.paint;
 
-        strokePaint.innerColor.a *= cc.strokeAlphaMul;
-        strokePaint.outerColor.a *= cc.strokeAlphaMul;
+          strokePaint.innerColor.a *= cc.strokeAlphaMul;
+          strokePaint.outerColor.a *= cc.strokeAlphaMul;
 
-        // apply global alpha
-        strokePaint.innerColor.a *= state.alpha;
-        strokePaint.outerColor.a *= state.alpha;
+          // apply global alpha
+          strokePaint.innerColor.a *= state.alpha;
+          strokePaint.outerColor.a *= state.alpha;
 
-        strokePaint.innerColor.applyTint(strokeTint);
-        strokePaint.outerColor.applyTint(strokeTint);
+          strokePaint.innerColor.applyTint(strokeTint);
+          strokePaint.outerColor.applyTint(strokeTint);
 
-        ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
+          ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
 
-        // count triangles
-        foreach (int i; 0..cc.npaths) {
-          NVGpath* path = &cc.paths[i];
-          ctx.strokeTriCount += path.nstroke-2;
-          ++ctx.drawCallCount;
+          // count triangles
+          foreach (int i; 0..cc.npaths) {
+            NVGpath* path = &cc.paths[i];
+            ctx.strokeTriCount += path.nstroke-2;
+            ++ctx.drawCallCount;
+          }
         }
       }
     }
@@ -1783,39 +1832,26 @@ public:
 }
 
 // Append current path to existing path set. Is is safe to call this with `null` `svp`.
-void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
+void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp, in ref NVGPaint paint) nothrow @trusted @nogc {
   if (ctx is null || svp is null) return;
-  if (ctx !is svp.svctx) assert(0, "NanoVega: cannot save pathes from different contexts");
+  if (ctx !is svp.svctx) assert(0, "NanoVega: cannot save paths from different contexts");
   if (ctx.ncommands == 0) {
     assert(ctx.cache.npaths == 0);
     return;
   }
   if (!ctx.cache.fillReady && !ctx.cache.strokeReady) return;
 
-  // grow buffer
-  if (svp.ncaches+1 > svp.ccaches) {
-    import core.stdc.stdlib : realloc;
-    import core.stdc.string : memset;
-    int newsz = (svp.ccaches == 0 ? 8 : svp.ccaches <= 1024 ? svp.ccaches*2 : svp.ccaches+1024);
-    svp.caches = cast(NVGpathCache*)realloc(svp.caches, newsz*NVGpathCache.sizeof);
-    if (svp.caches is null) assert(0, "NanoVega: out of memory");
-    //memset(svp.caches+svp.ccaches, 0, (newsz-svp.ccaches)*NVGpathCache.sizeof);
-    svp.ccaches = newsz;
-  }
-  assert(svp.ncaches < svp.ccaches);
-
   // tesselate current path
   //if (!ctx.cache.fillReady) nvg__prepareFill(ctx);
   //if (!ctx.cache.strokeReady) nvg__prepareStroke(ctx);
 
-  NVGpathCache* cc = &svp.caches[svp.ncaches++];
+  auto node = svp.allocPathNode();
+  NVGpathCache* cc = node.path;
   cc.copyFrom(ctx.cache);
-  ctx.params.renderTextureIncRef(ctx.params.userPtr, cc.fillColor.image);
-  ctx.params.renderTextureIncRef(ctx.params.userPtr, cc.strokeColor.image);
-  cc.fillReady = ctx.cache.fillReady;
-  cc.strokeReady = ctx.cache.strokeReady;
+  node.paint = paint;
+  ctx.params.renderTextureIncRef(ctx.params.userPtr, node.paint.image);
   // copy path commands (we may need 'em for picking)
-  version(none) {
+  version(all) {
     cc.ncommands = ctx.ncommands;
     if (cc.ncommands) {
       import core.stdc.stdlib : malloc;
@@ -1844,21 +1880,15 @@ public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
 
 /// Is the given path set empty? Empty path set can be `null`.
 /// Group: path_recording
-public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, true); return (svp is null || svp.ncaches == 0); }
+public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, true); return (svp is null || svp.nnodes == 0); }
 
 /// Clear path set contents. Will release $(B some) allocated memory (this function is meant to clear something that will be reused).
 /// Group: path_recording
 public void clear (NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null) {
     import core.stdc.stdlib : free;
-    foreach (ref cc; svp.caches[0..svp.ncaches]) {
-      if (svp.svctx !is null) {
-        svp.svctx.params.renderDeleteTexture(svp.svctx.params.userPtr, cc.fillColor.image);
-        svp.svctx.params.renderDeleteTexture(svp.svctx.params.userPtr, cc.strokeColor.image);
-      }
-      cc.clear();
-    }
-    svp.ncaches = 0;
+    foreach (immutable idx; 0.. svp.nnodes) svp.clearNode(idx);
+    svp.nnodes = 0;
   }
 }
 
@@ -1868,7 +1898,7 @@ public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null) {
     import core.stdc.stdlib : free;
     svp.clear();
-    if (svp.caches !is null) free(svp.caches);
+    if (svp.nodes !is null) free(svp.nodes);
     free(svp);
     if (svp.pickscene !is null) nvg__deletePickScene(svp.pickscene);
     svp = null;
@@ -1881,15 +1911,15 @@ public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @no
   if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   ctx.stopRecording();
   ctx.recset = svp;
-  ctx.recstart = (svp !is null ? svp.ncaches : -1);
+  ctx.recstart = (svp !is null ? svp.nnodes : -1);
   ctx.recblockdraw = false;
 }
 
 /** Start path recording. `svp` should be alive until recording is cancelled or stopped.
  *
- * This will block all rendering, so you can call your rendering functions to record pathes without actual drawing.
+ * This will block all rendering, so you can call your rendering functions to record paths without actual drawing.
  * Commiting or cancelling will re-enable rendering.
- * You can call this with `null` svp to block rendering without recording any pathes.
+ * You can call this with `null` svp to block rendering without recording any paths.
  *
  * Group: path_recording
  */
@@ -1897,15 +1927,14 @@ public void startBlockingRecording (NVGContext ctx, NVGPathSet svp) nothrow @tru
   if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   ctx.stopRecording();
   ctx.recset = svp;
-  ctx.recstart = (svp !is null ? svp.ncaches : -1);
+  ctx.recstart = (svp !is null ? svp.nnodes : -1);
   ctx.recblockdraw = true;
 }
 
-/// Commit recorded pathes. It is safe to call this when recording is not started.
+/// Commit recorded paths. It is safe to call this when recording is not started.
 /// Group: path_recording
 public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recset !is null && ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
-  //ctx.appendCurrentPathToCache(ctx.recset); // save last path
   if (ctx.recset !is null) ctx.recset.takeCurrentPickScene(ctx);
   ctx.recset = null;
   ctx.recstart = -1;
@@ -1917,9 +1946,9 @@ public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
 public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recset !is null) {
     if (ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
-    assert(ctx.recstart >= 0 && ctx.recstart <= ctx.recset.ncaches);
-    foreach (ref cp; ctx.recset.caches[ctx.recstart..ctx.recset.ncaches]) cp.clear();
-    ctx.recset.ncaches = ctx.recstart;
+    assert(ctx.recstart >= 0 && ctx.recstart <= ctx.recset.nnodes);
+    foreach (immutable idx; ctx.recstart..ctx.recset.nnodes) ctx.recset.clearNode(idx);
+    ctx.recset.nnodes = ctx.recstart;
     ctx.recset = null;
     ctx.recstart = -1;
   }
@@ -3200,7 +3229,7 @@ void nvg__appendCommands(bool useCommand=true) (NVGContext ctx, Command acmd, co
 }
 
 void nvg__clearPathCache (NVGContext ctx) nothrow @trusted @nogc {
-  // no need to clear pathes, as data is not copied there
+  // no need to clear paths, as data is not copied there
   //foreach (ref p; ctx.cache.paths[0..ctx.cache.npaths]) p.clear();
   ctx.cache.npoints = 0;
   ctx.cache.npaths = 0;
@@ -4082,9 +4111,8 @@ void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
 
 /// Clears the current path and sub-paths.
 /// Will call `nvgOnBeginPath()` callback if current path is not empty.
-/// Group: pathes
+/// Group: paths
 public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
-  //ctx.appendCurrentPathToCache(ctx.recset);
   ctx.ncommands = 0;
   ctx.pathPickRegistered &= NVGPickKind.All; // reset "registered" flags
   nvg__clearPathCache(ctx);
@@ -4094,7 +4122,7 @@ public alias newPath = beginPath; /// Ditto.
 
 /// Starts new sub-path with specified point as first point.
 /// Arguments: [x, y]*
-/// Group: pathes
+/// Group: paths
 public void moveTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 2;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `moveTo()` call");
@@ -4104,7 +4132,7 @@ public void moveTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 
 /// Adds line segment from the last point in the path to the specified point.
 /// Arguments: [x, y]*
-/// Group: pathes
+/// Group: paths
 public void lineTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 2;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `lineTo()` call");
@@ -4116,7 +4144,7 @@ public void lineTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 
 /// Adds cubic bezier segment from last point in the path via two control points to the specified point.
 /// Arguments: [c1x, c1y, c2x, c2y, x, y]*
-/// Group: pathes
+/// Group: paths
 public void bezierTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 6;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `bezierTo()` call");
@@ -4128,7 +4156,7 @@ public void bezierTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc
 
 /// Adds quadratic bezier segment from last point in the path via a control point to the specified point.
 /// Arguments: [cx, cy, x, y]*
-/// Group: pathes
+/// Group: paths
 public void quadTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `quadTo()` call");
@@ -4152,7 +4180,7 @@ public void quadTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 
 /// Adds an arc segment at the corner defined by the last path point, and two specified points.
 /// Arguments: [x1, y1, x2, y2, radius]*
-/// Group: pathes
+/// Group: paths
 public void arcTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 5;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `arcTo()` call");
@@ -4220,13 +4248,13 @@ public void arcTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 }
 
 /// Closes current sub-path with a line segment.
-/// Group: pathes
+/// Group: paths
 public void closePath (NVGContext ctx) nothrow @trusted @nogc {
   nvg__appendCommands(ctx, Command.Close);
 }
 
 /// Sets the current sub-path winding, see NVGWinding and NVGSolidity.
-/// Group: pathes
+/// Group: paths
 public void pathWinding (NVGContext ctx, NVGWinding dir) nothrow @trusted @nogc {
   nvg__appendCommands(ctx, Command.Winding, cast(float)dir);
 }
@@ -4244,7 +4272,7 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc
  *
  * `mode` is: "original", "move", "line" -- first command will be like original NanoVega, MoveTo, or LineTo
  *
- * Group: pathes
+ * Group: paths
  */
 public void arc(string mode="original") (NVGContext ctx, NVGWinding dir, in float[] args...) nothrow @trusted @nogc {
   static assert(mode == "original" || mode == "move" || mode == "line");
@@ -4340,7 +4368,7 @@ public void arc(string mode="original") (NVGContext ctx, NVGWinding dir, in floa
 
 /// Creates new rectangle shaped sub-path.
 /// Arguments: [x, y, w, h]*
-/// Group: pathes
+/// Group: paths
 public void rect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `rect()` call");
@@ -4363,7 +4391,7 @@ public void rect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 
 /// Creates new rounded rectangle shaped sub-path.
 /// Arguments: [x, y, w, h, radius]*
-/// Group: pathes
+/// Group: paths
 public void roundedRect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 5;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRect()` call");
@@ -4381,7 +4409,7 @@ public void roundedRect (NVGContext ctx, in float[] args...) nothrow @trusted @n
 
 /// Creates new rounded rectangle shaped sub-path. Specify ellipse width and height to round corners according to it.
 /// Arguments: [x, y, w, h, rw, rh]*
-/// Group: pathes
+/// Group: paths
 public void roundedRectEllipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 6;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRectEllipse()` call");
@@ -4415,7 +4443,7 @@ public void roundedRectEllipse (NVGContext ctx, in float[] args...) nothrow @tru
 
 /// Creates new rounded rectangle shaped sub-path. This one allows you to specify different rounding radii for each corner.
 /// Arguments: [x, y, w, h, radTopLeft, radTopRight, radBottomRight, radBottomLeft]*
-/// Group: pathes
+/// Group: paths
 public void roundedRectVarying (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 8;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRectVarying()` call");
@@ -4457,7 +4485,7 @@ public void roundedRectVarying (NVGContext ctx, in float[] args...) nothrow @tru
 
 /// Creates new ellipse shaped sub-path.
 /// Arguments: [cx, cy, rx, ry]*
-/// Group: pathes
+/// Group: paths
 public void ellipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `ellipse()` call");
@@ -4481,7 +4509,7 @@ public void ellipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc 
 
 /// Creates new circle shaped sub-path.
 /// Arguments: [cx, cy, r]*
-/// Group: pathes
+/// Group: paths
 public void circle (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 3;
   if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `circle()` call");
@@ -4529,8 +4557,6 @@ void nvg__prepareFill (NVGContext ctx) nothrow @trusted @nogc {
 
   cache.evenOddMode = state.evenOddMode;
   cache.fringeWidth = ctx.fringeWidth;
-  cache.fillColor = state.fill;
-  cache.strokeColor = NVGPaint.init;
   cache.fillReady = true;
   cache.strokeReady = false;
 }
@@ -4563,14 +4589,12 @@ void nvg__prepareStroke (NVGContext ctx) nothrow @trusted @nogc {
   }
 
   cache.fringeWidth = ctx.fringeWidth;
-  cache.fillColor = NVGPaint.init;
-  cache.strokeColor = state.stroke;
   cache.fillReady = false;
   cache.strokeReady = true;
 }
 
 /// Fills the current path with current fill style.
-/// Group: pathes
+/// Group: paths
 public void fill (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
 
@@ -4586,7 +4610,7 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
   fillPaint.innerColor.a *= state.alpha;
   fillPaint.outerColor.a *= state.alpha;
 
-  ctx.appendCurrentPathToCache(ctx.recset);
+  ctx.appendCurrentPathToCache(ctx.recset, state.fill);
 
   if (ctx.recblockdraw) return;
 
@@ -4602,7 +4626,7 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
 }
 
 /// Fills the current path with current stroke style.
-/// Group: pathes
+/// Group: paths
 public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
 
@@ -4623,7 +4647,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   strokePaint.innerColor.a *= state.alpha;
   strokePaint.outerColor.a *= state.alpha;
 
-  ctx.appendCurrentPathToCache(ctx.recset);
+  ctx.appendCurrentPathToCache(ctx.recset, state.stroke);
 
   if (ctx.recblockdraw) return;
 
@@ -4674,6 +4698,7 @@ public void currStrokeHitId (NVGContext ctx, int id) nothrow @trusted @nogc {
 // Marks the saved path set (fill) as pickable with the specified id.
 // WARNING: this doesn't work right yet (it is using current context transformation and other settings instead of record settings)!
 // Group: picking_api
+/+
 public void pathSetFillHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow @trusted @nogc {
   if (svp is null) return;
   if (svp.svctx !is ctx) assert(0, "NanoVega: cannot register path set from different context");
@@ -4683,10 +4708,12 @@ public void pathSetFillHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow @t
     nvg__pickSceneInsert(ps, pp);
   }
 }
++/
 
 // Marks the saved path set (stroke) as pickable with the specified id.
 // WARNING: this doesn't work right yet (it is using current context transformation and other settings instead of record settings)!
 // Group: picking_api
+/+
 public void pathSetStrokeHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow @trusted @nogc {
   if (svp is null) return;
   if (svp.svctx !is ctx) assert(0, "NanoVega: cannot register path set from different context");
@@ -4696,6 +4723,7 @@ public void pathSetStrokeHitId (NVGContext ctx, NVGPathSet svp, int id) nothrow 
     nvg__pickSceneInsert(ps, pp);
   }
 }
++/
 
 private template IsGoodHitTestDG(DG) {
   enum IsGoodHitTestDG =
@@ -12198,7 +12226,7 @@ public void addBaphometBack (NVGContext nvg, float ofsx=0, float ofsy=0, float s
   }
 }
 
-// this will add baphomet's pupil pathes to the current NanoVega path, so you can fill it.
+// this will add baphomet's pupil paths to the current NanoVega path, so you can fill it.
 public void addBaphometPupils(bool left=true, bool right=true) (NVGContext nvg, float ofsx=0, float ofsy=0, float scalex=1, float scaley=1) nothrow @trusted @nogc {
   // pupils starts with "fill-and-stroke" mode
   if (nvg is null) return;
