@@ -10425,15 +10425,16 @@ GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
       GLNVGtexture* textures = cast(GLNVGtexture*)realloc(gl.textures, GLNVGtexture.sizeof*ctextures);
       if (textures is null) return null;
       memset(&textures[gl.ctextures], 0, (ctextures-gl.ctextures)*GLNVGtexture.sizeof);
-      //{ import core.stdc.stdio; printf("allocated more textures (n=%d; c=%d; nc=%d)\n", gl.ntextures, gl.ctextures, ctextures); }
+      version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("allocated more textures (n=%d; c=%d; nc=%d)\n", gl.ntextures, gl.ctextures, ctextures); }}
       gl.textures = textures;
       gl.ctextures = ctextures;
     }
     tid = gl.ntextures++;
+    version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("  got next free texture id %d, ntextures=%d\n", tid+1, gl.ntextures); }}
   } else {
     gl.freetexid = gl.textures[tid].nextfree;
   }
-  assert(tid < gl.ctextures);
+  assert(tid <= gl.ntextures);
 
   assert(gl.textures[tid].id == 0);
   tex = &gl.textures[tid];
@@ -10442,24 +10443,28 @@ GLNVGtexture* glnvg__allocTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   tex.rc = 1;
   tex.nextfree = -1;
 
+  version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("allocated texture with id %d (%d)\n", tex.id, tid+1); }}
+
   return tex;
 }
 
 GLNVGtexture* glnvg__findTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
-  if (id <= 0 || id >= gl.ntextures) return null;
+  if (id <= 0 || id > gl.ntextures) return null;
   if (gl.textures[id-1].id == 0) return null; // free one
   assert(gl.textures[id-1].id == id);
   return &gl.textures[id-1];
 }
 
 bool glnvg__deleteTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
-  if (id <= 0 || id >= gl.ntextures) return false;
+  if (id <= 0 || id > gl.ntextures) return false;
   auto tx = &gl.textures[id-1];
   if (tx.id == 0) return false; // free one
   assert(tx.id == id);
   assert(tx.tex != 0);
+  version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("decrefing texture with id %d (%d)\n", tx.id, id); }}
   if (--tx.rc == 0) {
     if ((tx.flags&NVG_IMAGE_NODELETE) == 0) glDeleteTextures(1, &tx.tex);
+    version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("deleted texture with id %d (%d); glid=%u\n", tx.id, id, tx.tex); }}
     memset(tx, 0, (*tx).sizeof);
     //{ import core.stdc.stdio; printf("deleting texture with id %d\n", id); }
     tx.nextfree = gl.freetexid;
@@ -10711,6 +10716,8 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
   tex.flags = imageFlags;
   glnvg__bindTexture(gl, tex.tex);
 
+  version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("created texture with id %d; glid=%u\n", tex.id, tex.tex); }}
+
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, tex.width);
   glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
@@ -10763,9 +10770,12 @@ bool glnvg__renderDeleteTexture (void* uptr, int image) nothrow @trusted @nogc {
 bool glnvg__renderTextureIncRef (void* uptr, int image) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
-  if (tex is null) return false;
+  if (tex is null) {
+    version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("CANNOT incref texture with id %d\n", image); }}
+    return false;
+  }
   ++tex.rc;
-  //{ import core.stdc.stdio; printf("texture #%d: incref; newref=%d\n", image, tex.rc); }
+  version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("texture #%d: incref; newref=%d\n", image, tex.rc); }}
   return true;
 }
 
@@ -10773,7 +10783,13 @@ bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
 
-  if (tex is null) return false;
+  if (tex is null) {
+    version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("CANNOT update texture with id %d\n", image); }}
+    return false;
+  }
+
+  version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("updated texture with id %d; glid=%u\n", tex.id, image, tex.tex); }}
+
   glnvg__bindTexture(gl, tex.tex);
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -10800,10 +10816,15 @@ bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int
 bool glnvg__renderGetTextureSize (void* uptr, int image, int* w, int* h) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGtexture* tex = glnvg__findTexture(gl, image);
-  if (tex is null) return false;
-  if (w !is null) *w = tex.width;
-  if (h !is null) *h = tex.height;
-  return true;
+  if (tex is null) {
+    if (w !is null) *w = 0;
+    if (h !is null) *h = 0;
+    return false;
+  } else {
+    if (w !is null) *w = tex.width;
+    if (h !is null) *h = tex.height;
+    return true;
+  }
 }
 
 void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) nothrow @trusted @nogc {
@@ -11416,13 +11437,12 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 
   if (gl.vertBuf != 0) glDeleteBuffers(1, &gl.vertBuf);
 
-  foreach (int i; 0..gl.ntextures) {
-    if (gl.textures[i].id != 0 && (gl.textures[i].flags&NVG_IMAGE_NODELETE) == 0) {
-      assert(gl.textures[i].tex != 0);
-      glDeleteTextures(1, &gl.textures[i].tex);
+  foreach (ref GLNVGtexture tex; gl.textures[0..gl.ntextures]) {
+    if (tex.id != 0 && (tex.flags&NVG_IMAGE_NODELETE) == 0) {
+      assert(tex.tex != 0);
+      glDeleteTextures(1, &tex.tex);
     }
   }
-  //gl.texidpool.reset();
   free(gl.textures);
 
   free(gl.paths);
