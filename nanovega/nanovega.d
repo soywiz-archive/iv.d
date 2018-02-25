@@ -7241,7 +7241,7 @@ alias FONSglyphBitmap = int;
 enum /*FONSglyphBitmap*/ {
   FONS_GLYPH_BITMAP_OPTIONAL = 1,
   FONS_GLYPH_BITMAP_REQUIRED = 2,
-};
+}
 
 alias FONSerrorCode = int;
 enum /*FONSerrorCode*/ {
