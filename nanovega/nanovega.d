@@ -51,8 +51,13 @@ The drawing context is created using platform specific constructor function.
 Drawing shapes with NanoVega
 ============================
 
-Drawing a simple shape using NanoVega consists of four steps: 1] begin a new shape,
-2] define the path to draw, 3] set fill or stroke, 4] and finally fill or stroke the path.
+Drawing a simple shape using NanoVega consists of four steps:
+$(LIST
+  * begin a new shape,
+  * define the path to draw,
+  * set fill or stroke,
+  * and finally fill or stroke the path.
+)
 
   ---
   vg.beginPath();
@@ -70,12 +75,12 @@ arcTo API to compose the paths step by step.
 Understanding Composite Paths
 =============================
 
-Because of the way the rendering backend is build in NanoVega, drawing a composite path,
+Because of the way the rendering backend is built in NanoVega, drawing a composite path,
 that is path consisting from multiple paths defining holes and fills, is a bit more
-involved. NanoVega uses non-zero filling rule and by default the paths are wound in counter
+involved. NanoVega uses non-zero filling rule and by default, and paths are wound in counter
 clockwise order. Keep that in mind when drawing using the low level draw API. In order to
 wind one of the predefined shapes as a hole, you should call `pathWinding(NVGSolidity.Hole)`,
-or `pathWinding(NVGSolidity.Solid)` *after* defining the path.
+or `pathWinding(NVGSolidity.Solid)` $(B after) defining the path.
 
   ---
   vg.beginPath();
@@ -91,8 +96,8 @@ Rendering is wrong, what to do?
 ===============================
 
 $(LIST
-  * make sure you have created NanoVega context using one of the `nvgCreateContext()` call
-  * make sure you have initialised OpenGL with *stencil buffer*
+  * make sure you have created NanoVega context using `nvgCreateContext()` call
+  * make sure you have initialised OpenGL with $(B stencil buffer)
   * make sure you have cleared stencil buffer
   * make sure all rendering calls happen between `beginFrame()` and `endFrame()`
   * to enable more checks for OpenGL errors, add `NVGContextFlag.Debug` flag to `nvgCreateContext()`
@@ -266,7 +271,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     It is possible to set affine transformation matrix for GPU. That matrix will
     be applied by the shader code. This can be used to quickly translate and rotate
-    saved pathes. Call this *only* between `beginFrame()` and `endFrame()`.
+    saved pathes. Call this $(B only) between `beginFrame()` and `endFrame()`.
 
     Note that `beginFrame()` resets this matrix to identity one.
 
@@ -296,7 +301,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
     first.
 
     `beginFrame()` resets picking state. Then you can create pathes as usual, but
-    there is a possibility to perform hit checks *before* rasterizing a path.
+    there is a possibility to perform hit checks $(B before) rasterizing a path.
     Call either id assigning functions (`currFillHitId()`/`currStrokeHitId()`), or
     immediate hit test functions (`hitTestCurrFill()`/`hitTestCurrStroke()`)
     before rasterizing (i.e. calling `fill()` or `stroke()`) to perform hover
@@ -961,7 +966,7 @@ public enum NVGCompositeOperation {
   Xor, ///
 }
 
-///
+/// Composite operation state.
 /// Group: composite_operation
 public struct NVGCompositeOperationState {
   NVGBlendFactor srcRGB; ///
@@ -1841,7 +1846,7 @@ public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
 /// Group: path_recording
 public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, true); return (svp is null || svp.ncaches == 0); }
 
-/// Clear path set contents. Will release *some* allocated memory (this function is meant to clear something that will be reused).
+/// Clear path set contents. Will release $(B some) allocated memory (this function is meant to clear something that will be reused).
 /// Group: path_recording
 public void clear (NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null) {
@@ -6289,7 +6294,7 @@ static if (is(typeof(&fons__nvg__toPath))) {
 
 /// Adds glyph outlines to the current path. Vertical 0 is baseline.
 /// The glyph is not scaled in any way, so you have to use NanoVega transformations instead.
-/// Returns `false` if there are no such glyph, or current font is not scalable.
+/// Returns `false` if there is no such glyph, or current font is not scalable.
 /// Group: text_api
 public bool charToPath (NVGContext ctx, dchar dch, float[] bounds=null) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
@@ -6305,7 +6310,7 @@ static if (is(typeof(&fons__nvg__bounds))) {
 
 /// Returns bounds of the glyph outlines. Vertical 0 is baseline.
 /// The glyph is not scaled in any way.
-/// Returns `false` if there are no such glyph, or current font is not scalable.
+/// Returns `false` if there is no such glyph, or current font is not scalable.
 /// Group: text_api
 public bool charPathBounds (NVGContext ctx, dchar dch, float[] bounds) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
@@ -6521,7 +6526,7 @@ static if (is(typeof(&fons__nvg__toOutline))) {
 
 /// Returns glyph outlines as array of commands. Vertical 0 is baseline.
 /// The glyph is not scaled in any way, so you have to use NanoVega transformations instead.
-/// Returns `null` if there are no such glyph, or current font is not scalable.
+/// Returns `null` if there is no such glyph, or current font is not scalable.
 /// Group: text_api
 public NVGGlyphOutline* charOutline (NVGContext ctx, dchar dch) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc;
@@ -8330,7 +8335,7 @@ public struct FONScontext {
     return FONS_INVALID;
   }
 
-  // should be called *before* freeing `fonts[fidx]`
+  // should be called $(B before) freeing `fonts[fidx]`
   private void removeIndexFromHash (int fidx) nothrow @trusted @nogc {
     if (fidx < 0 || fidx >= nfonts) assert(0, "FONS internal error");
     if (fonts[fidx] is null) assert(0, "FONS internal error");
@@ -8958,7 +8963,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
   return res;
 }
 
-/// This will not free data on error!
+// This will not free data on error!
 public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, int dataSize, bool freeData, bool defAA) nothrow @trusted @nogc {
   FONSfontData* fdata = fons__createFontData(data, dataSize, freeData);
   fdata.incref();
@@ -8971,8 +8976,8 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   return res;
 }
 
-/// Add fonts from another font stash
-/// This is more effective than reloading fonts, 'cause font data will be shared.
+// Add fonts from another font stash
+// This is more effective than reloading fonts, 'cause font data will be shared.
 public void fonsAddStashFonts (FONScontext* stash, FONScontext* source) nothrow @trusted @nogc {
   if (stash is null || source is null) return;
   foreach (FONSfont* font; source.fonts[0..source.nfonts]) {
@@ -10314,7 +10319,7 @@ private extern(System) nothrow @nogc {
 /// Context creation flags.
 /// Group: context_management
 public enum NVGContextFlag : int {
-  /// Pass this to `nvgCreateContext()` to turn off all default modes
+  /// Nothing special, i.e. empty flag.
   None = 0,
   /// Flag indicating if geometry based anti-aliasing is used (may not be needed when using MSAA).
   Antialias = 1<<0,
