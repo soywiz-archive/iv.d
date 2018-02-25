@@ -1,5 +1,5 @@
 //
-// based on NanoVG's example code by Mikko Mononen
+// based on NanoVega's example code by Mikko Mononen
 import core.time;
 import core.stdc.stdio : snprintf;
 import iv.nanovega;
