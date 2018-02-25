@@ -834,7 +834,7 @@ public:
 /// Paint parameters for various fills. Don't change anything here!
 /// Group: render_styles
 public struct NVGPaint {
-  float[6] xform;
+  NVGMatrix xform;
   float[2] extent;
   float radius;
   float feather;
@@ -1022,7 +1022,7 @@ enum NVGtexture {
 }
 
 struct NVGscissor {
-  float[6] xform;
+  NVGMatrix xform;
   float[2] extent;
 }
 
@@ -1131,7 +1131,7 @@ struct NVGstate {
   NVGLineCap lineJoin;
   NVGLineCap lineCap;
   float alpha;
-  float[6] xform;
+  NVGMatrix xform;
   NVGscissor scissor;
   float fontSize;
   float letterSpacing;
@@ -1258,7 +1258,7 @@ private:
   int recstart; // used to cancel recording
   bool recblockdraw;
   // internals
-  float[6] gpuAffine;
+  NVGMatrix gpuAffine;
   int mWidth, mHeight;
   float mDeviceRatio;
   void delegate (NVGContext ctx) nothrow @trusted @nogc cleanup;
@@ -1540,7 +1540,7 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
   ctx.strokeTriCount = 0;
   ctx.textTriCount = 0;
 
-  ctx.gpuAffine[] = nvgIdentity;
+  ctx.gpuAffine = NVGMatrix.Identity;
 
   nvg__pickBeginFrame(ctx, windowWidth, windowHeight);
 }
@@ -2077,16 +2077,20 @@ public NVGColor nvgHSLA (float h, float s, float l, float a) nothrow @trusted @n
 // ////////////////////////////////////////////////////////////////////////// //
 // Matrices and Transformations
 
-/** Matrix class. Usually using this instead of dedicated matrix operations is slightly slower,
- * but more convenient. Note that `NVGMatrix` can be passed to any NanoVega matrix operations.
- *
- * Note that `mt.scale(3, 3).translate(100, 100)` will apply transformations starting from the last.
+/** Matrix class.
  *
  * Group: matrices
  */
 public struct NVGMatrix {
+private:
+  static immutable float[6] IdentityMat = [
+    1.0f, 0.0f,
+    0.0f, 1.0f,
+    0.0f, 0.0f,
+  ];
+
 public:
-  // identity
+  /// Matrix values. Initial value is identity matrix.
   float[6] mat = [
     1.0f, 0.0f,
     0.0f, 1.0f,
@@ -2096,7 +2100,7 @@ public:
   alias mat this;
 
 public nothrow @trusted @nogc:
-  ///
+  /// Create Matrix with the given values.
   this (const(float)[] amat...) {
     pragma(inline, true);
     if (amat.length >= 6) {
@@ -2107,55 +2111,146 @@ public nothrow @trusted @nogc:
     }
   }
 
-  /// used to check validity of `inverted()` result
+  /// Can be used to check validity of `inverted()` result
   @property bool valid () const { import core.stdc.math : isfinite; return (isfinite(mat.ptr[0]) != 0); }
 
-  ///
+  /// Returns `true` if this matrix is identity matrix.
+  @property bool isIdentity () const { pragma(inline, true); return (mat[] == IdentityMat[]); }
+
+  /// Returns new inverse matrix.
+  /// If inverted matrix cannot be calculated, `res.valid` fill be `false`.
   NVGMatrix inverted () const {
-    pragma(inline, true);
-    NVGMatrix res = void;
-    if (!nvgTransformInverse(res, this)) res[] = float.nan;
+    NVGMatrix res = this;
+    res.invert;
     return res;
   }
 
-  ///
+  /// Inverts this matrix.
+  /// If inverted matrix cannot be calculated, `this.valid` fill be `false`.
   ref NVGMatrix invert () {
-    float[6] temp = void;
-    if (!nvgTransformInverse(temp, this)) mat[] = float.nan; else mat[] = temp[];
+    float[6] inv = void;
+    immutable double det = cast(double)mat.ptr[0]*mat.ptr[3]-cast(double)mat.ptr[2]*mat.ptr[1];
+    if (det > -1e-6 && det < 1e-6) {
+      inv[] = float.nan;
+    } else {
+      immutable double invdet = 1.0/det;
+      inv.ptr[0] = cast(float)(mat.ptr[3]*invdet);
+      inv.ptr[2] = cast(float)(-mat.ptr[2]*invdet);
+      inv.ptr[4] = cast(float)((cast(double)mat.ptr[2]*mat.ptr[5]-cast(double)mat.ptr[3]*mat.ptr[4])*invdet);
+      inv.ptr[1] = cast(float)(-mat.ptr[1]*invdet);
+      inv.ptr[3] = cast(float)(mat.ptr[0]*invdet);
+      inv.ptr[5] = cast(float)((cast(double)mat.ptr[1]*mat.ptr[4]-cast(double)mat.ptr[0]*mat.ptr[5])*invdet);
+    }
+    mat.ptr[0..6] = inv.ptr[0..6];
     return this;
   }
 
-  ref NVGMatrix identity () { pragma(inline, true); mat[] = nvgIdentity[]; return this; } ///
-  ref NVGMatrix translate (in float tx, in float ty) { version(aliced) pragma(inline, true); this *= Translate(tx, ty); return this; } ///
-  ref NVGMatrix scale (in float sx, in float sy) { version(aliced) pragma(inline, true); this *= Scale(sx, sy); return this; } ///
-  ref NVGMatrix rotate (in float a) { version(aliced) pragma(inline, true); this *= Rotate(a); return this; } ///
-  ref NVGMatrix skewX (in float a) { version(aliced) pragma(inline, true); this *= SkewX(a); return this; } ///
-  ref NVGMatrix skewY (in float a) { version(aliced) pragma(inline, true); this *= SkewY(a); return this; } ///
+  /// Sets this matrix to identity matrix.
+  ref NVGMatrix identity () { pragma(inline, true); mat[] = IdentityMat[]; return this; }
+
+  /// Translate this matrix.
+  ref NVGMatrix translate (in float tx, in float ty) {
+    version(aliced) pragma(inline, true);
+    this *= Translated(tx, ty);
+    return this;
+  }
+
+  /// Scale this matrix.
+  ref NVGMatrix scale (in float sx, in float sy) {
+    version(aliced) pragma(inline, true);
+    this *= Scaled(sx, sy);
+    return this;
+  }
+
+  /// Rotate this matrix.
+  ref NVGMatrix rotate (in float a) {
+    version(aliced) pragma(inline, true);
+    this *= Rotated(a);
+    return this;
+  }
+
+  /// Skew this matrix by X axis.
+  ref NVGMatrix skewX (in float a) {
+    version(aliced) pragma(inline, true);
+    this *= SkewedX(a);
+    return this;
+  }
+
+  /// Skew this matrix by Y axis.
+  ref NVGMatrix skewY (in float a) {
+    version(aliced) pragma(inline, true);
+    this *= SkewedY(a);
+    return this;
+  }
+
+  /// Skew this matrix by both axes.
+  ref NVGMatrix skewY (in float ax, in float ay) {
+    version(aliced) pragma(inline, true);
+    this *= SkewedXY(ax, ay);
+    return this;
+  }
 
   /// Transform point with this matrix. `null` destinations are allowed.
+  /// `sx` and `sy` is the source point. `dx` and `dy` may point to the same variables.
   void point (float* dx, float* dy, float sx, float sy) nothrow @trusted @nogc {
     version(aliced) pragma(inline, true);
-    nvgTransformPoint(dx, dy, mat[], sx, sy);
+    if (dx !is null) *dx = sx*mat.ptr[0]+sy*mat.ptr[2]+mat.ptr[4];
+    if (dy !is null) *dy = sx*mat.ptr[1]+sy*mat.ptr[3]+mat.ptr[5];
   }
 
   /// Transform point with this matrix.
   void point (ref float x, ref float y) nothrow @trusted @nogc {
     version(aliced) pragma(inline, true);
-    nvgTransformPoint(x, y, mat[]);
+    immutable float nx = x*mat.ptr[0]+y*mat.ptr[2]+mat.ptr[4];
+    immutable float ny = x*mat.ptr[1]+y*mat.ptr[3]+mat.ptr[5];
+    x = nx;
+    y = ny;
   }
 
-  /// this*B
-  NVGMatrix opBinary(string op="*") (const(float)[] b) const {
+  /// Sets this matrix to the result of multiplication of `this` and `s` (this * S).
+  ref NVGMatrix mul() (in auto ref NVGMatrix s) {
+    immutable float t0 = mat.ptr[0]*s.ptr[0]+mat.ptr[1]*s.ptr[2];
+    immutable float t2 = mat.ptr[2]*s.ptr[0]+mat.ptr[3]*s.ptr[2];
+    immutable float t4 = mat.ptr[4]*s.ptr[0]+mat.ptr[5]*s.ptr[2]+s.ptr[4];
+    mat.ptr[1] = mat.ptr[0]*s.ptr[1]+mat.ptr[1]*s.ptr[3];
+    mat.ptr[3] = mat.ptr[2]*s.ptr[1]+mat.ptr[3]*s.ptr[3];
+    mat.ptr[5] = mat.ptr[4]*s.ptr[1]+mat.ptr[5]*s.ptr[3]+s.ptr[5];
+    mat.ptr[0] = t0;
+    mat.ptr[2] = t2;
+    mat.ptr[4] = t4;
+    return this;
+  }
+
+  /// Sets this matrix to the result of multiplication of `s` and `this` (S * this).
+  /// Sets the transform to the result of multiplication of two transforms, of A = B*A.
+  /// Group: matrices
+  ref NVGMatrix premul() (in auto ref NVGMatrix s) {
+    immutable float t0 = s.ptr[0]*mat.ptr[0]+s.ptr[1]*mat.ptr[2];
+    immutable float t2 = s.ptr[2]*mat.ptr[0]+s.ptr[3]*mat.ptr[2];
+    immutable float t4 = s.ptr[4]*mat.ptr[0]+s.ptr[5]*mat.ptr[2]+mat.ptr[4];
+    mat.ptr[1] = s.ptr[0]*mat.ptr[1]+s.ptr[1]*mat.ptr[3];
+    mat.ptr[3] = s.ptr[2]*mat.ptr[1]+s.ptr[3]*mat.ptr[3];
+    mat.ptr[5] = s.ptr[4]*mat.ptr[1]+s.ptr[5]*mat.ptr[3]+mat.ptr[5];
+    mat.ptr[0] = t0;
+    mat.ptr[2] = t2;
+    mat.ptr[4] = t4;
+    return this;
+  }
+
+  /// res = B * this (i.e. inverted multiplication).
+  /// This is inverted multiplication, so matrix operation can be expressed as first-to-last, instead of last-to-first.
+  NVGMatrix opBinary(string op="*") (in auto ref NVGMatrix b) const {
     version(aliced) pragma(inline, true);
-    NVGMatrix res = this;
-    nvgTransformMultiply(res, b);
+    NVGMatrix res = b;
+    res.mul(this);
     return res;
   }
 
-  /// this*B
-  ref NVGMatrix opOpAssign(string op="*") (const(float)[] b) {
+  /// this = B * this (i.e. inverted multiplication).
+  /// This is inverted multiplication, so matrix operation can be expressed as first-to-last, instead of last-to-first.
+  ref NVGMatrix opOpAssign(string op="*") (in auto ref NVGMatrix b) {
     version(aliced) pragma(inline, true);
-    nvgTransformMultiply(this, b);
+    this.premul(b);
     return this;
   }
 
@@ -2196,175 +2291,86 @@ public nothrow @trusted @nogc:
     return this;
   }
 
-  static NVGMatrix Identity () { pragma(inline, true); return NVGMatrix.init; } ///
-  static NVGMatrix Translate (float tx, float ty) { pragma(inline, true); NVGMatrix res = void; nvgTransformTranslate(res, tx, ty); return res; } ///
-  static NVGMatrix Scale (float sx, float sy) { pragma(inline, true); NVGMatrix res = void; nvgTransformScale(res, sx, sy); return res; } ///
-  static NVGMatrix Rotate (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformRotate(res, a); return res; } ///
-  static NVGMatrix SkewX (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformSkewX(res, a); return res; } ///
-  static NVGMatrix SkewY (float a) { pragma(inline, true); NVGMatrix res = void; nvgTransformSkewY(res, a); return res; } ///
+  /// Returns new identity matrix.
+  static NVGMatrix Identity () { pragma(inline, true); return NVGMatrix.init; }
+
+  /// Returns new translation matrix.
+  static NVGMatrix Translated (in float tx, in float ty) {
+    version(aliced) pragma(inline, true);
+    NVGMatrix res = void;
+    res.mat.ptr[0] = 1.0f; res.mat.ptr[1] = 0.0f;
+    res.mat.ptr[2] = 0.0f; res.mat.ptr[3] = 1.0f;
+    res.mat.ptr[4] = tx; res.mat.ptr[5] = ty;
+    return res;
+  }
+
+  /// Returns new scaling matrix.
+  static NVGMatrix Scaled (in float sx, in float sy) {
+    version(aliced) pragma(inline, true);
+    NVGMatrix res = void;
+    res.mat.ptr[0] = sx; res.mat.ptr[1] = 0.0f;
+    res.mat.ptr[2] = 0.0f; res.mat.ptr[3] = sy;
+    res.mat.ptr[4] = 0.0f; res.mat.ptr[5] = 0.0f;
+    return res;
+  }
+
+  /// Returns new rotation matrix. Angle is specified in radians.
+  static NVGMatrix Rotated (in float a) {
+    version(aliced) pragma(inline, true);
+    immutable float cs = nvg__cosf(a), sn = nvg__sinf(a);
+    NVGMatrix res = void;
+    res.mat.ptr[0] = cs; res.mat.ptr[1] = sn;
+    res.mat.ptr[2] = -sn; res.mat.ptr[3] = cs;
+    res.mat.ptr[4] = 0.0f; res.mat.ptr[5] = 0.0f;
+    return res;
+  }
+
+  /// Returns new x-skewing matrix. Angle is specified in radians.
+  static NVGMatrix SkewedX (in float a) {
+    version(aliced) pragma(inline, true);
+    NVGMatrix res = void;
+    res.mat.ptr[0] = 1.0f; res.mat.ptr[1] = 0.0f;
+    res.mat.ptr[2] = nvg__tanf(a); res.mat.ptr[3] = 1.0f;
+    res.mat.ptr[4] = 0.0f; res.mat.ptr[5] = 0.0f;
+    return res;
+  }
+
+  /// Returns new y-skewing matrix. Angle is specified in radians.
+  static NVGMatrix SkewedY (in float a) {
+    version(aliced) pragma(inline, true);
+    NVGMatrix res = void;
+    res.mat.ptr[0] = 1.0f; res.mat.ptr[1] = nvg__tanf(a);
+    res.mat.ptr[2] = 0.0f; res.mat.ptr[3] = 1.0f;
+    res.mat.ptr[4] = 0.0f; res.mat.ptr[5] = 0.0f;
+    return res;
+  }
+
+  /// Returns new xy-skewing matrix. Angles are specified in radians.
+  static NVGMatrix SkewedXY (in float ax, in float ay) {
+    version(aliced) pragma(inline, true);
+    NVGMatrix res = void;
+    res.mat.ptr[0] = 1.0f; res.mat.ptr[1] = nvg__tanf(ay);
+    res.mat.ptr[2] = nvg__tanf(ax); res.mat.ptr[3] = 1.0f;
+    res.mat.ptr[4] = 0.0f; res.mat.ptr[5] = 0.0f;
+    return res;
+  }
 
   /// Utility function to be used in `setXXX()`.
   /// This is the same as doing: `NVGMatrix.Identity.rotate(a).scale(xs, ys).translate(tx, ty)`, only faster
-  static NVGMatrix ScaleRotateTransform (in float xscale, in float yscale, in float a, in float tx, in float ty) {
+  static NVGMatrix ScaledRotatedTransformed (in float xscale, in float yscale, in float a, in float tx, in float ty) {
     NVGMatrix res = void;
     res.scaleRotateTransform(xscale, yscale, a, tx, ty);
     return res;
   }
 
   /// This is the same as doing: `NVGMatrix.Identity.rotate(a).translate(tx, ty)`, only faster
-  static NVGMatrix RotateTransform (in float a, in float tx, in float ty) {
+  static NVGMatrix RotatedTransformed (in float a, in float tx, in float ty) {
     NVGMatrix res = void;
     res.rotateTransform(a, tx, ty);
     return res;
   }
 }
 
-/// Identity matrix.
-/// Group: matrices
-public static immutable float[6] nvgIdentity = [
-  1.0f, 0.0f,
-  0.0f, 1.0f,
-  0.0f, 0.0f,
-];
-
-/// Sets the transform to identity matrix.
-/// Group: matrices
-public void nvgTransformIdentity (float[] t) nothrow @trusted @nogc {
-  pragma(inline, true);
-  assert(t.length >= 6);
-  t.ptr[0..6] = nvgIdentity.ptr[0..6];
-}
-
-/// Sets the transform to translation matrix matrix.
-/// Group: matrices
-public void nvgTransformTranslate (float[] t, in float tx, in float ty) nothrow @trusted @nogc {
-  pragma(inline, true);
-  assert(t.length >= 6);
-  t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
-  t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
-  t.ptr[4] = tx; t.ptr[5] = ty;
-}
-
-/// Sets the transform to scale matrix.
-/// Group: matrices
-public void nvgTransformScale (float[] t, in float sx, in float sy) nothrow @trusted @nogc {
-  pragma(inline, true);
-  assert(t.length >= 6);
-  t.ptr[0] = sx; t.ptr[1] = 0.0f;
-  t.ptr[2] = 0.0f; t.ptr[3] = sy;
-  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
-}
-
-/// Sets the transform to rotate matrix. Angle is specified in radians.
-/// Group: matrices
-public void nvgTransformRotate (float[] t, in float a) nothrow @trusted @nogc {
-  //pragma(inline, true);
-  assert(t.length >= 6);
-  immutable float cs = nvg__cosf(a), sn = nvg__sinf(a);
-  t.ptr[0] = cs; t.ptr[1] = sn;
-  t.ptr[2] = -sn; t.ptr[3] = cs;
-  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
-}
-
-/// Sets the transform to skew-x matrix. Angle is specified in radians.
-/// Group: matrices
-public void nvgTransformSkewX (float[] t, in float a) nothrow @trusted @nogc {
-  //pragma(inline, true);
-  assert(t.length >= 6);
-  t.ptr[0] = 1.0f; t.ptr[1] = 0.0f;
-  t.ptr[2] = nvg__tanf(a); t.ptr[3] = 1.0f;
-  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
-}
-
-/// Sets the transform to skew-y matrix. Angle is specified in radians.
-/// Group: matrices
-public void nvgTransformSkewY (float[] t, in float a) nothrow @trusted @nogc {
-  //pragma(inline, true);
-  assert(t.length >= 6);
-  t.ptr[0] = 1.0f; t.ptr[1] = nvg__tanf(a);
-  t.ptr[2] = 0.0f; t.ptr[3] = 1.0f;
-  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
-}
-
-/// Sets the transform to skew-x matrix. Angle is specified in radians.
-/// Group: matrices
-public void nvgTransformSkewXY (float[] t, in float ax, in float ay) nothrow @trusted @nogc {
-  //pragma(inline, true);
-  assert(t.length >= 6);
-  t.ptr[0] = 1.0f; t.ptr[1] = nvg__tanf(ay);
-  t.ptr[2] = nvg__tanf(ax); t.ptr[3] = 1.0f;
-  t.ptr[4] = 0.0f; t.ptr[5] = 0.0f;
-}
-
-/// Sets the transform to the result of multiplication of two transforms, of A = A*B.
-/// Group: matrices
-public void nvgTransformMultiply (float[] t, const(float)[] s) nothrow @trusted @nogc {
-  assert(t.length >= 6);
-  assert(s.length >= 6);
-  //pragma(inline, true);
-  immutable float t0 = t.ptr[0]*s.ptr[0]+t.ptr[1]*s.ptr[2];
-  immutable float t2 = t.ptr[2]*s.ptr[0]+t.ptr[3]*s.ptr[2];
-  immutable float t4 = t.ptr[4]*s.ptr[0]+t.ptr[5]*s.ptr[2]+s.ptr[4];
-  t.ptr[1] = t.ptr[0]*s.ptr[1]+t.ptr[1]*s.ptr[3];
-  t.ptr[3] = t.ptr[2]*s.ptr[1]+t.ptr[3]*s.ptr[3];
-  t.ptr[5] = t.ptr[4]*s.ptr[1]+t.ptr[5]*s.ptr[3]+s.ptr[5];
-  t.ptr[0] = t0;
-  t.ptr[2] = t2;
-  t.ptr[4] = t4;
-}
-
-/// Sets the transform to the result of multiplication of two transforms, of A = B*A.
-/// Group: matrices
-public void nvgTransformPremultiply (float[] t, const(float)[] s) nothrow @trusted @nogc {
-  assert(t.length >= 6);
-  assert(s.length >= 6);
-  //pragma(inline, true);
-  float[6] s2 = s[0..6];
-  nvgTransformMultiply(s2[], t);
-  t[0..6] = s2[];
-}
-
-/// Sets the destination to inverse of specified transform.
-/// Returns `true` if the inverse could be calculated, else `false`.
-/// Group: matrices
-public bool nvgTransformInverse (float[] inv, const(float)[] t) nothrow @trusted @nogc {
-  assert(t.length >= 6);
-  assert(inv.length >= 6);
-  immutable double det = cast(double)t.ptr[0]*t.ptr[3]-cast(double)t.ptr[2]*t.ptr[1];
-  if (det > -1e-6 && det < 1e-6) {
-    nvgTransformIdentity(inv);
-    return false;
-  }
-  immutable double invdet = 1.0/det;
-  inv.ptr[0] = cast(float)(t.ptr[3]*invdet);
-  inv.ptr[2] = cast(float)(-t.ptr[2]*invdet);
-  inv.ptr[4] = cast(float)((cast(double)t.ptr[2]*t.ptr[5]-cast(double)t.ptr[3]*t.ptr[4])*invdet);
-  inv.ptr[1] = cast(float)(-t.ptr[1]*invdet);
-  inv.ptr[3] = cast(float)(t.ptr[0]*invdet);
-  inv.ptr[5] = cast(float)((cast(double)t.ptr[1]*t.ptr[4]-cast(double)t.ptr[0]*t.ptr[5])*invdet);
-  return true;
-}
-
-/// Transform a point by given transform.
-/// `sx` and `sy` is the source point. `dx` and `dy` may point to the same variables.
-/// Group: matrices
-public void nvgTransformPoint (float* dx, float* dy, const(float)[] t, float sx, float sy) nothrow @trusted @nogc {
-  pragma(inline, true);
-  assert(t.length >= 6);
-  if (dx !is null) *dx = sx*t.ptr[0]+sy*t.ptr[2]+t.ptr[4];
-  if (dy !is null) *dy = sx*t.ptr[1]+sy*t.ptr[3]+t.ptr[5];
-}
-
-/// Transform a point by given transform, in place.
-/// Group: matrices
-public void nvgTransformPoint (ref float x, ref float y, const(float)[] t) nothrow @trusted @nogc {
-  pragma(inline, true);
-  assert(t.length >= 6);
-  immutable float nx = x*t.ptr[0]+y*t.ptr[2]+t.ptr[4];
-  immutable float ny = x*t.ptr[1]+y*t.ptr[3]+t.ptr[5];
-  x = nx;
-  y = ny;
-}
 
 /// Converts degrees to radians.
 /// Group: matrices
@@ -2382,7 +2388,7 @@ public float nvgRadians() (in float rad) pure nothrow @safe @nogc { pragma(inlin
 void nvg__setPaintColor (ref NVGPaint p, NVGColor color) nothrow @trusted @nogc {
   //pragma(inline, true);
   memset(&p, 0, p.sizeof);
-  nvgTransformIdentity(p.xform[]);
+  p.xform.identity;
   p.radius = 0.0f;
   p.feather = 1.0f;
   p.innerColor = color;
@@ -2429,7 +2435,7 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   state.lineCap = NVGLineCap.Butt;
   state.lineJoin = NVGLineCap.Miter;
   state.alpha = 1.0f;
-  nvgTransformIdentity(state.xform[]);
+  state.xform.identity;
 
   state.scissor.extent.ptr[0] = -1.0f;
   state.scissor.extent.ptr[1] = -1.0f;
@@ -2518,7 +2524,8 @@ public void strokeColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc 
 public void strokePaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.stroke = paint;
-  nvgTransformMultiply(state.stroke.xform[], state.xform[]);
+  //nvgTransformMultiply(state.stroke.xform[], state.xform[]);
+  state.stroke.xform.mul(state.xform);
 }
 
 /// Sets current fill style to a solid color.
@@ -2533,136 +2540,87 @@ public void fillColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc {
 public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.fill = paint;
-  nvgTransformMultiply(state.fill.xform[], state.xform[]);
+  //nvgTransformMultiply(state.fill.xform[], state.xform[]);
+  state.fill.xform.mul(state.xform);
 }
 
-/** Premultiplies current coordinate system by specified matrix.
- *
- * The parameters are interpreted as matrix as follows:
- *
- * ----------------------
- *   [a c e]
- *   [b d f]
- *   [0 0 1]
- * ----------------------
- *
- * Group: render_styles
- */
-public void transform (NVGContext ctx, const(float)[] mt...) nothrow @trusted @nogc {
+/// Premultiplies current coordinate system by specified matrix.
+/// Group: render_styles
+public void transform() (NVGContext ctx, in auto ref NVGMatrix mt) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t = void;
-  if (mt.length < 6) {
-    t[] = nvgIdentity[];
-    t[0..mt.length] = mt[];
-  } else {
-    t[] = mt.ptr[0..6];
-  }
-  nvgTransformPremultiply(state.xform[], t[]);
+  //nvgTransformPremultiply(state.xform[], t[]);
+  state.xform *= mt;
+}
+
+/// Returns current transformation matrix.
+/// Group: render_styles
+public NVGMatrix currTransform (NVGContext ctx) pure nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  return state.xform;
+}
+
+/// Sets current transformation matrix.
+/// Group: render_styles
+public void currTransform() (NVGContext ctx, in auto ref NVGMatrix m) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  state.xform = m;
 }
 
 /// Resets current transform to an identity matrix.
 /// Group: render_styles
 public void resetTransform (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  state.xform[] = nvgIdentity[];
+  state.xform.identity;
 }
 
 /// Translates current coordinate system.
 /// Group: render_styles
-public void translate (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
+public void translate (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t = void;
-  nvgTransformTranslate(t[], x, y);
-  nvgTransformPremultiply(state.xform[], t[]);
+  //NVGMatrix t = void;
+  //nvgTransformTranslate(t[], x, y);
+  //nvgTransformPremultiply(state.xform[], t[]);
+  state.xform *= NVGMatrix.Translated(x, y);
 }
 
 /// Rotates current coordinate system. Angle is specified in radians.
 /// Group: render_styles
-public void rotate (NVGContext ctx, float angle) nothrow @trusted @nogc {
+public void rotate (NVGContext ctx, in float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t = void;
-  nvgTransformRotate(t[], angle);
-  nvgTransformPremultiply(state.xform[], t[]);
+  //NVGMatrix t = void;
+  //nvgTransformRotate(t[], angle);
+  //nvgTransformPremultiply(state.xform[], t[]);
+  state.xform *= NVGMatrix.Rotated(angle);
 }
 
 /// Skews the current coordinate system along X axis. Angle is specified in radians.
 /// Group: render_styles
-public void skewX (NVGContext ctx, float angle) nothrow @trusted @nogc {
+public void skewX (NVGContext ctx, in float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t = void;
-  nvgTransformSkewX(t[], angle);
-  nvgTransformPremultiply(state.xform[], t[]);
+  //NVGMatrix t = void;
+  //nvgTransformSkewX(t[], angle);
+  //nvgTransformPremultiply(state.xform[], t[]);
+  state.xform *= NVGMatrix.SkewedX(angle);
 }
 
 /// Skews the current coordinate system along Y axis. Angle is specified in radians.
 /// Group: render_styles
-public void skewY (NVGContext ctx, float angle) nothrow @trusted @nogc {
+public void skewY (NVGContext ctx, in float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t = void;
-  nvgTransformSkewY(t[], angle);
-  nvgTransformPremultiply(state.xform[], t[]);
+  //NVGMatrix t = void;
+  //nvgTransformSkewY(t[], angle);
+  //nvgTransformPremultiply(state.xform[], t[]);
+  state.xform *= NVGMatrix.SkewedY(angle);
 }
 
 /// Scales the current coordinate system.
 /// Group: render_styles
-public void scale (NVGContext ctx, float x, float y) nothrow @trusted @nogc {
+public void scale (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  float[6] t = void;
-  nvgTransformScale(t[], x, y);
-  nvgTransformPremultiply(state.xform[], t[]);
-}
-
-/** Stores the top part (a-f) of the current transformation matrix in to the specified buffer.
- *
- * ----------------------
- *   [a c e]
- *   [b d f]
- *   [0 0 1]
- * ----------------------
- *
- * There should be space for 6 floats in the return buffer for the values a-f.
- *
- * Group: render_styles
- */
-public void getCurrentTransform (NVGContext ctx, float[] xform) nothrow @trusted @nogc {
-  assert(xform.length >= 6);
-  NVGstate* state = nvg__getState(ctx);
-  xform.ptr[0..6] = state.xform.ptr[0..6];
-}
-
-/** Replaces Stores the top part (a-f) of the current transformation matrix with the new one.
- *
- * ----------------------
- *   [a c e]
- *   [b d f]
- *   [0 0 1]
- * ----------------------
- *
- * Group: render_styles
- */
-public void currentTransform (NVGContext ctx, const(float)[] xform...) nothrow @trusted @nogc {
-  NVGstate* state = nvg__getState(ctx);
-  if (xform.length < 6) {
-    state.xform[] = nvgIdentity[];
-    state.xform.ptr[0..xform.length] = xform[];
-  } else {
-    state.xform[] = xform.ptr[0..6];
-  }
-}
-
-/** Returns the top part (a-f) of the current transformation matrix.
- *
- * ----------------------
- *   [a c e]
- *   [b d f]
- *   [0 0 1]
- * ----------------------
- *
- * Group: render_styles
- */
-public NVGMatrix currentTransform (NVGContext ctx) nothrow @trusted @nogc {
-  NVGstate* state = nvg__getState(ctx);
-  return NVGMatrix(state.xform[]);
+  //NVGMatrix t = void;
+  //nvgTransformScale(t[], x, y);
+  //nvgTransformPremultiply(state.xform[], t[]);
+  state.xform *= NVGMatrix.Scaled(x, y);
 }
 
 
@@ -2833,7 +2791,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
-  nvgTransformIdentity(p.xform[]);
+  p.xform.identity;
   p.xform.ptr[4] = cx;
   p.xform.ptr[5] = cy;
 
@@ -2862,7 +2820,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
-  nvgTransformIdentity(p.xform[]);
+  p.xform.identity;
   p.xform.ptr[4] = x+w*0.5f;
   p.xform.ptr[5] = y+h*0.5f;
 
@@ -2889,7 +2847,7 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
-  nvgTransformRotate(p.xform[], angle);
+  p.xform.identity.rotate(angle);
   p.xform.ptr[4] = cx;
   p.xform.ptr[5] = cy;
 
@@ -3038,10 +2996,11 @@ public void scissor (NVGContext ctx, in float[] args...) nothrow @trusted @nogc 
     immutable w = nvg__max(0.0f, *aptr++);
     immutable h = nvg__max(0.0f, *aptr++);
 
-    nvgTransformIdentity(state.scissor.xform[]);
+    state.scissor.xform.identity;
     state.scissor.xform.ptr[4] = x+w*0.5f;
     state.scissor.xform.ptr[5] = y+h*0.5f;
-    nvgTransformMultiply(state.scissor.xform[], state.xform[]);
+    //nvgTransformMultiply(state.scissor.xform[], state.xform[]);
+    state.scissor.xform.mul(state.xform);
 
     state.scissor.extent.ptr[0] = w*0.5f;
     state.scissor.extent.ptr[1] = h*0.5f;
@@ -3088,8 +3047,8 @@ public void intersectScissor (NVGContext ctx, in float[] args...) nothrow @trust
       continue;
     }
 
-    float[6] pxform = void;
-    float[6] invxorm = void;
+    NVGMatrix pxform = void;
+    NVGMatrix invxorm = void;
     float[4] rect = void;
 
     // Transform the current scissor rect into current transform space.
@@ -3097,8 +3056,10 @@ public void intersectScissor (NVGContext ctx, in float[] args...) nothrow @trust
     memcpy(pxform.ptr, state.scissor.xform.ptr, float.sizeof*6);
     immutable float ex = state.scissor.extent.ptr[0];
     immutable float ey = state.scissor.extent.ptr[1];
-    nvgTransformInverse(invxorm[], state.xform[]);
-    nvgTransformMultiply(pxform[], invxorm[]);
+    //nvgTransformInverse(invxorm[], state.xform[]);
+    invxorm = state.xform.inverted;
+    //nvgTransformMultiply(pxform[], invxorm[]);
+    pxform.mul(invxorm);
     immutable float tex = ex*nvg__absf(pxform.ptr[0])+ey*nvg__absf(pxform.ptr[2]);
     immutable float tey = ex*nvg__absf(pxform.ptr[1])+ey*nvg__absf(pxform.ptr[3]);
 
@@ -3122,40 +3083,31 @@ public void resetScissor (NVGContext ctx) nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 // Render-Time Affine Transformations
 
-/// Set GPU affine transformatin matrix. Don't do scaling or skewing here.
+/// Sets GPU affine transformatin matrix. Don't do scaling or skewing here.
 /// This matrix won't be saved/restored with context state save/restore operations, as it is not a part of that state.
 /// Group: gpu_affine
-public void affineGPU (NVGContext ctx, const(float)[] mat) nothrow @trusted @nogc {
-  if (mat.length == 4) {
-    // no translation
-    ctx.gpuAffine.ptr[0..4] = mat.ptr[0..4];
-    ctx.gpuAffine.ptr[4..6] = 0;
-  } else if (mat.length >= 6) {
-    ctx.gpuAffine.ptr[0..6] = mat.ptr[0..6];
-  } else {
-    ctx.gpuAffine[] = nvgIdentity[];
-  }
-  ctx.params.renderSetAffine(ctx.params.userPtr, ctx.gpuAffine[]);
+public void affineGPU() (NVGContext ctx, in auto ref NVGMatrix mat) nothrow @trusted @nogc {
+  ctx.gpuAffine = mat;
+  ctx.params.renderSetAffine(ctx.params.userPtr, ctx.gpuAffine.mat[]);
 }
 
 /// Get current GPU affine transformatin matrix.
 /// Group: gpu_affine
 public NVGMatrix affineGPU (NVGContext ctx) nothrow @safe @nogc {
   pragma(inline, true);
-  return NVGMatrix(ctx.gpuAffine[]);
+  return ctx.gpuAffine;
 }
 
 /// "Untransform" point using current GPU affine matrix.
 /// Group: gpu_affine
 public void gpuUntransformPoint (NVGContext ctx, float *dx, float *dy, in float x, in float y) nothrow @safe @nogc {
-  if (ctx.gpuAffine[] == nvgIdentity[]) {
+  if (ctx.gpuAffine.isIdentity) {
     if (dx !is null) *dx = x;
     if (dy !is null) *dy = y;
   } else {
     // inverse GPU transformation
-    float[6] igpu = void;
-    nvgTransformInverse(igpu[], ctx.gpuAffine[]);
-    nvgTransformPoint(dx, dy, igpu[], x, y);
+    NVGMatrix igpu = ctx.gpuAffine.inverted;
+    igpu.point(dx, dy, x, y);
   }
 }
 
@@ -3231,14 +3183,14 @@ void nvg__appendCommands(bool useCommand=true) (NVGContext ctx, Command acmd, co
       case Command.MoveTo:
       case Command.LineTo:
         assert(i >= 3);
-        nvgTransformPoint(vp+1, vp+2, state.xform[], vp[1], vp[2]);
+        state.xform.point(vp+1, vp+2, vp[1], vp[2]);
         nlen = 3;
         break;
       case Command.BezierTo:
         assert(i >= 7);
-        nvgTransformPoint(vp+1, vp+2, state.xform[], vp[1], vp[2]);
-        nvgTransformPoint(vp+3, vp+4, state.xform[], vp[3], vp[4]);
-        nvgTransformPoint(vp+5, vp+6, state.xform[], vp[5], vp[6]);
+        state.xform.point(vp+1, vp+2, vp[1], vp[2]);
+        state.xform.point(vp+3, vp+4, vp[3], vp[4]);
+        state.xform.point(vp+5, vp+6, vp[5], vp[6]);
         nlen = 7;
         break;
       case Command.Close:
@@ -3330,10 +3282,10 @@ void nvg__pathWinding (NVGContext ctx, NVGWinding winding) nothrow @trusted @nog
   path.winding = winding;
 }
 
-float nvg__getAverageScale (float[] t) nothrow @trusted @nogc {
+float nvg__getAverageScale() (in auto ref NVGMatrix t) nothrow @trusted @nogc {
   assert(t.length >= 6);
-  immutable float sx = nvg__sqrtf(t.ptr[0]*t.ptr[0]+t.ptr[2]*t.ptr[2]);
-  immutable float sy = nvg__sqrtf(t.ptr[1]*t.ptr[1]+t.ptr[3]*t.ptr[3]);
+  immutable float sx = nvg__sqrtf(t.mat.ptr[0]*t.mat.ptr[0]+t.mat.ptr[2]*t.mat.ptr[2]);
+  immutable float sy = nvg__sqrtf(t.mat.ptr[1]*t.mat.ptr[1]+t.mat.ptr[3]*t.mat.ptr[3]);
   return (sx+sy)*0.5f;
 }
 
@@ -4101,8 +4053,8 @@ void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
       // Create only half a fringe for convex shapes so that
       // the shape can be rendered without stenciling.
       if (convex) {
-        lw = woff;  // This should generate the same vertex as fill inset above.
-        lu = 0.5f;  // Set outline fade at middle.
+        lw = woff; // This should generate the same vertex as fill inset above.
+        lu = 0.5f; // Set outline fade at middle.
       }
 
       // Looping
@@ -4598,7 +4550,7 @@ void nvg__prepareStroke (NVGContext ctx) nothrow @trusted @nogc {
 
   nvg__flattenPaths(ctx);
 
-  immutable float scale = nvg__getAverageScale(state.xform[]);
+  immutable float scale = nvg__getAverageScale(state.xform);
   float strokeWidth = nvg__clamp(state.strokeWidth*scale, 0.0f, 200.0f);
 
   if (strokeWidth < ctx.fringeWidth) {
@@ -6464,11 +6416,11 @@ public:
     }
 
     /// perform NanoVega command with stored data, transforming points with `xform` transformation matrix.
-    void perform (NVGContext ctx, const(float)[] xform) const nothrow @trusted @nogc {
+    void perform() (NVGContext ctx, in auto ref NVGMatrix xform) const nothrow @trusted @nogc {
       if (ctx is null || !valid) return;
       float[6] pts = void;
       pts[0..args.length] = args[];
-      foreach (immutable pidx; 0..args.length/2) nvgTransformPoint(pts.ptr[pidx*2+0], pts.ptr[pidx*2+1], xform[]);
+      foreach (immutable pidx; 0..args.length/2) xform.point(pts.ptr[pidx*2+0], pts.ptr[pidx*2+1]);
       switch (code) {
         case Kind.MoveTo: if (args.length > 1) ctx.moveTo(pts.ptr[0..2]); break;
         case Kind.LineTo: if (args.length > 1) ctx.lineTo(pts.ptr[0..2]); break;
@@ -6501,7 +6453,7 @@ public:
   @property int length () const pure { pragma(inline, true); return ccount; }
 
 public:
-  /// Return forward range with all glyph commands.
+  /// Returns forward range with all glyph commands.
   /// WARNING! returned rande should not outlive parent struct!
   auto commands () nothrow @trusted @nogc {
     static struct Range {
@@ -6604,7 +6556,7 @@ float nvg__quantize (float a, float d) pure nothrow @safe @nogc {
 
 float nvg__getFontScale (NVGstate* state) nothrow @safe @nogc {
   pragma(inline, true);
-  return nvg__min(nvg__quantize(nvg__getAverageScale(state.xform[]), 0.01f), 4.0f);
+  return nvg__min(nvg__quantize(nvg__getAverageScale(state.xform), 0.01f), 4.0f);
 }
 
 void nvg__flushTextTexture (NVGContext ctx) nothrow @trusted @nogc {
@@ -6707,10 +6659,10 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
     }
     prevIter = iter;
     // Transform corners.
-    nvgTransformPoint(&c[0], &c[1], state.xform[], q.x0*invscale, q.y0*invscale);
-    nvgTransformPoint(&c[2], &c[3], state.xform[], q.x1*invscale, q.y0*invscale);
-    nvgTransformPoint(&c[4], &c[5], state.xform[], q.x1*invscale, q.y1*invscale);
-    nvgTransformPoint(&c[6], &c[7], state.xform[], q.x0*invscale, q.y1*invscale);
+    state.xform.point(&c[0], &c[1], q.x0*invscale, q.y0*invscale);
+    state.xform.point(&c[2], &c[3], q.x1*invscale, q.y0*invscale);
+    state.xform.point(&c[4], &c[5], q.x1*invscale, q.y1*invscale);
+    state.xform.point(&c[6], &c[7], q.x0*invscale, q.y1*invscale);
     // Create triangles
     if (nverts+6 <= cverts) {
       nvg__vset(&verts[nverts], c[0], c[1], q.s0, q.t0); ++nverts;
@@ -7147,10 +7099,10 @@ public:
   /// Add chars.
   void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) { pragma(inline, true); if (ctx !is null) fsiter.put(str[]); }
 
-  /// Return current advance
+  /// Returns current advance
   @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (ctx !is null ? fsiter.advance*invscale : 0); }
 
-  /// Return current text bounds.
+  /// Returns current text bounds.
   void getBounds (ref float[4] bounds) nothrow @trusted @nogc {
     if (ctx !is null) {
       fsiter.getBounds(bounds);
@@ -7164,7 +7116,7 @@ public:
     }
   }
 
-  /// Return current horizontal text bounds.
+  /// Returns current horizontal text bounds.
   void getHBounds (out float xmin, out float xmax) nothrow @trusted @nogc {
     if (ctx !is null) {
       fsiter.getHBounds(xmin, xmax);
@@ -7173,7 +7125,7 @@ public:
     }
   }
 
-  /// Return current vertical text bounds.
+  /// Returns current vertical text bounds.
   void getVBounds (out float ymin, out float ymax) nothrow @trusted @nogc {
     if (ctx !is null) {
       //fsiter.getVBounds(ymin, ymax);
@@ -7184,7 +7136,7 @@ public:
   }
 }
 
-/// Return font line height (without line spacing), measured in local coordinate space.
+/// Returns font line height (without line spacing), measured in local coordinate space.
 /// Group: text_api
 public float textFontHeight (NVGContext ctx) nothrow @trusted @nogc {
   float res = void;
@@ -7192,7 +7144,7 @@ public float textFontHeight (NVGContext ctx) nothrow @trusted @nogc {
   return res;
 }
 
-/// Return font ascender, measured in local coordinate space.
+/// Returns font ascender, measured in local coordinate space.
 /// Group: text_api
 public float textFontAscender (NVGContext ctx) nothrow @trusted @nogc {
   float res = void;
@@ -7200,7 +7152,7 @@ public float textFontAscender (NVGContext ctx) nothrow @trusted @nogc {
   return res;
 }
 
-/// Return font descender, measured in local coordinate space.
+/// Returns font descender, measured in local coordinate space.
 /// Group: text_api
 public float textFontDescender (NVGContext ctx) nothrow @trusted @nogc {
   float res = void;
@@ -9795,7 +9747,7 @@ public:
     bounds[3] = maxy;
   }
 
-  // Return current horizontal text bounds.
+  // Returns current horizontal text bounds.
   void getHBounds (out float xmin, out float xmax) nothrow @trusted @nogc {
     if (state !is null) {
       float lminx = minx, lmaxx = maxx;
@@ -9816,7 +9768,7 @@ public:
     }
   }
 
-  // Return current vertical text bounds.
+  // Returns current vertical text bounds.
   void getVBounds (out float ymin, out float ymax) nothrow @trusted @nogc {
     if (state !is null) {
       ymin = miny;
@@ -10398,7 +10350,7 @@ public enum NVGImageFlagsGL : int {
 }
 
 
-/// Return flags for glClear().
+/// Returns flags for glClear().
 /// Group: context_management
 public uint glNVGClearFlags () pure nothrow @safe @nogc {
   pragma(inline, true);
@@ -10461,7 +10413,7 @@ struct GLNVGcall {
   int triangleOffset;
   int triangleCount;
   int uniformOffset;
-  float[6] affine;
+  NVGMatrix affine;
 }
 
 struct GLNVGpath {
@@ -11012,7 +10964,7 @@ NVGColor glnvg__premulColor (NVGColor c) nothrow @trusted @nogc {
 bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* paint, NVGscissor* scissor, float width, float fringe, float strokeThr) nothrow @trusted @nogc {
   import core.stdc.math : sqrtf;
   GLNVGtexture* tex = null;
-  float[6] invxform = void;
+  NVGMatrix invxform = void;
 
   memset(frag, 0, (*frag).sizeof);
 
@@ -11026,7 +10978,8 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     frag.scissorScale.ptr[0] = 1.0f;
     frag.scissorScale.ptr[1] = 1.0f;
   } else {
-    nvgTransformInverse(invxform[], scissor.xform[]);
+    //nvgTransformInverse(invxform[], scissor.xform[]);
+    invxform = scissor.xform.inverted;
     glnvg__xformToMat3x4(frag.scissorMat[], invxform[]);
     frag.scissorExt.ptr[0] = scissor.extent.ptr[0];
     frag.scissorExt.ptr[1] = scissor.extent.ptr[1];
@@ -11043,12 +10996,13 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     if (tex is null) return false;
     if ((tex.flags&NVGImageFlags.FlipY) != 0) {
       /*
-      float[6] flipped;
+      NVGMatrix flipped;
       nvgTransformScale(flipped[], 1.0f, -1.0f);
       nvgTransformMultiply(flipped[], paint.xform[]);
       nvgTransformInverse(invxform[], flipped[]);
       */
-      float[6] m1 = void, m2 = void;
+      /*
+      NVGMatrix m1 = void, m2 = void;
       nvgTransformTranslate(m1[], 0.0f, frag.extent.ptr[1]*0.5f);
       nvgTransformMultiply(m1[], paint.xform[]);
       nvgTransformScale(m2[], 1.0f, -1.0f);
@@ -11056,8 +11010,17 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
       nvgTransformTranslate(m1[], 0.0f, -frag.extent.ptr[1]*0.5f);
       nvgTransformMultiply(m1[], m2[]);
       nvgTransformInverse(invxform[], m1[]);
+      */
+      NVGMatrix m1 = NVGMatrix.Translated(0.0f, frag.extent.ptr[1]*0.5f);
+      m1.mul(paint.xform);
+      NVGMatrix m2 = NVGMatrix.Scaled(1.0f, -1.0f);
+      m2.mul(m1);
+      m1 = NVGMatrix.Translated(0.0f, -frag.extent.ptr[1]*0.5f);
+      m1.mul(m2);
+      invxform = m1.inverted;
     } else {
-      nvgTransformInverse(invxform[], paint.xform[]);
+      //nvgTransformInverse(invxform[], paint.xform[]);
+      invxform = paint.xform.inverted;
     }
     frag.type = NSVG_SHADER_FILLIMG;
 
@@ -11071,7 +11034,8 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     frag.type = NSVG_SHADER_FILLGRAD;
     frag.radius = paint.radius;
     frag.feather = paint.feather;
-    nvgTransformInverse(invxform[], paint.xform[]);
+    //nvgTransformInverse(invxform[], paint.xform[]);
+    invxform = paint.xform.inverted;
   }
 
   glnvg__xformToMat3x4(frag.paintMat[], invxform[]);
@@ -11314,8 +11278,8 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
     glUniform1i(gl.shader.loc[GLNVGuniformLoc.Tex], 0);
     glUniform2fv(gl.shader.loc[GLNVGuniformLoc.ViewSize], 1, gl.view.ptr);
     // Reset affine transformations.
-    glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, nvgIdentity.ptr);
-    glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, nvgIdentity.ptr+4);
+    glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, NVGMatrix.IdentityMat.ptr);
+    glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, NVGMatrix.IdentityMat.ptr+4);
 
     foreach (int i; 0..gl.ncalls) {
       GLNVGcall* call = &gl.calls[i];
@@ -11686,7 +11650,7 @@ public int glCreateImageFromHandleGL2 (NVGContext ctx, GLuint textureId, int w, 
   return tex.id;
 }
 
-/// Return OpenGL texture id for NanoVega image.
+/// Returns OpenGL texture id for NanoVega image.
 /// Group: images
 public GLuint glImageHandleGL2 (NVGContext ctx, int image) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)ctx.internalParams().userPtr;
