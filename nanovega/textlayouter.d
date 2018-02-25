@@ -81,9 +81,9 @@ public:
   /// if `nvg` is not null, use its fontstash.
   /// WARNING! this object SHOULD NOT outlive `nvg`!
   this (NVGContext nvg=null) {
-    if (nvg !is null && nvg.fs !is null) {
+    if (nvg !is null && nvg.fonsContext !is null) {
       killFontStash = false;
-      fs = nvg.fs;
+      fs = nvg.fonsContext;
       //{ import core.stdc.stdio; printf("*** reusing font stash!\n"); }
     } else {
       FONSparams fontParams;
