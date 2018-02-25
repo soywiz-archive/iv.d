@@ -18,7 +18,6 @@
 import core.stdc.stdio;
 import iv.nanovega;
 import iv.nanovega.svg;
-import iv.nanovega.perf;
 import iv.strex;
 import iv.vfs;
 import iv.vfs.util;
@@ -225,8 +224,7 @@ __gshared bool useDirectRendering = true;
 void main (string[] args) {
   import core.time;
 
-  NVGContext vg = null;
-  PerfGraph fps;
+  NVGContext nvg = null;
 
   int minw = 32, minh = 32;
   int defw = 256, defh = 256;
@@ -368,11 +366,11 @@ void main (string[] args) {
   }
 
   void closeWindow () {
-    if (!sdwindow.closed && vg !is null) {
-      vg.deleteImage(vgimg);
+    if (!sdwindow.closed && nvg !is null) {
+      nvg.deleteImage(vgimg);
       vgimg = 0;
-      vg.deleteGL2();
-      vg = null;
+      nvg.deleteGL2();
+      nvg = null;
       sdwindow.close();
     }
   }
@@ -386,6 +384,22 @@ void main (string[] args) {
   bool svgAA = false;
   bool help = true;
 
+  sdwindow.visibleForTheFirstTime = delegate () {
+    sdwindow.setAsCurrentOpenGlContext(); // make this window active
+    sdwindow.vsync = false;
+
+    nvg = createGL2NVG(
+      (contextAA ? NVG_ANTIALIAS : 0)|
+      (stencilStrokes ? NVG_STENCIL_STROKES : 0)|
+      0
+    );
+    if (nvg is null) assert(0, "Could not init nanovg.");
+
+    nvg.createFont("sans", "Tahoma");
+    { import iv.vfs.io; writeln("bezier tesselator: ", nvg.tesselation); }
+    sdwindow.redrawOpenGlScene();
+  };
+
   sdwindow.redrawOpenGlScene = delegate () {
     // timers
     prevt = curt;
@@ -398,23 +412,22 @@ void main (string[] args) {
     glClearColor(0.3, 0.3, 0.3, 0);
     glClear(glNVGClearFlags);
 
-    if (vg !is null) {
-      if (fps !is null) fps.update(dt);
-      vg.beginFrame(GWidth, GHeight);
-      scope(exit) vg.endFrame();
+    if (nvg !is null) {
+      nvg.beginFrame(GWidth, GHeight);
+      scope(exit) nvg.endFrame();
 
       if (useDirectRendering) {
-        vg.save();
-        scope(exit) vg.restore();
-        vg.shapeAntiAlias = svgAA;
+        nvg.save();
+        scope(exit) nvg.restore();
+        nvg.shapeAntiAlias = svgAA;
         //vg.translate(0.5, 0.5);
         import std.stdio : writeln;
         import core.time, std.datetime;
         auto stt = MonoTime.currTime;
-        vg.translate(addw, addh);
-        vg.scale(scale, scale);
+        nvg.translate(addw, addh);
+        nvg.scale(scale, scale);
         bezierCount = 0;
-        vg.render(svg, pathMode);
+        nvg.render(svg, pathMode);
         auto dur = (MonoTime.currTime-stt).total!"msecs";
         writeln("*** rendering took ", dur, " milliseconds (", dur/1000.0, " seconds), ", bezierCount, " beziers rendered.");
       } else {
@@ -438,77 +451,57 @@ void main (string[] args) {
             auto dur = (MonoTime.currTime-stt).total!"msecs";
             writeln("rasterizing took ", dur, " milliseconds (", dur/1000.0, " seconds)");
           }
-          vgimg = vg.createImageRGBA(GWidth, GHeight, svgraster[]);
+          vgimg = nvg.createImageRGBA(GWidth, GHeight, svgraster[]);
         }
-        vg.save();
-        scope(exit) vg.restore();
-        vg.beginPath();
-        vg.rect(0, 0, GWidth, GHeight);
-        vg.fillPaint(vg.imagePattern(0, 0, GWidth, GHeight, 0, vgimg, 1));
-        vg.fill();
+        nvg.save();
+        scope(exit) nvg.restore();
+        nvg.beginPath();
+        nvg.rect(0, 0, GWidth, GHeight);
+        nvg.fillPaint(nvg.imagePattern(0, 0, GWidth, GHeight, 0, vgimg, 1));
+        nvg.fill();
       }
 
       //vg.endFrame(); // flush rendering
       //vg.beginFrame(GWidth, GHeight); // restart frame
 
-      vg.fontFace("sans");
-      vg.fontSize(14);
-      vg.textAlign(NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top));
-
       if (help) {
+        nvg.save();
+        scope(exit) nvg.restore();
+
+        nvg.fontFace = "sans";
+        nvg.fontSize = 14;
+        nvg.textAlign(NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Top));
+
+        auto tw = nvg__max(nvg.textWidth("Direct"), nvg.textWidth("Image"));
+        foreach (string mn; __traits(allMembers, PathMode)) tw = nvg__max(tw, nvg.textWidth(mn));
+        auto th = nvg.textFontHeight;
+        auto rw = tw+10;
+        auto rh = (th+3)*3+10;
+
+        nvg.translate(nvg.width-rw-2, nvg.height-rh-2);
+
         {
-          vg.newPath();
-          float[4] b;
-          //vg.textBounds(10, 10, "D", b[]);
-          //printf("b=[%g, %g, %g, %g]\n", cast(double)b[0], cast(double)b[1], cast(double)b[2], cast(double)b[3]);
-          //printf("tw=%g : %g\n", cast(double)vg.textWidth("Direct"), cast(double)vg.textWidth("Image"));
-          auto tw = nvg__max(vg.textWidth("Direct"), vg.textWidth("Image"));
-          foreach (string nn; __traits(allMembers, PathMode)) tw = nvg__max(tw, vg.textWidth(nn));
-          vg.save();
-          scope(exit) vg.restore();
+          nvg.newPath();
+          nvg.save();
+          scope(exit) nvg.restore();
           //vg.globalCompositeBlendFunc(NVGBlendFactor.ZERO, NVGBlendFactor.SRC_ALPHA);
           //vg.scissor(0, 0, tw+1, 71);
-          vg.rect(0.5, 0.5, tw+20, 70);
-          vg.fillColor(NVGColor("#8000"));
-          vg.fill();
+          nvg.rect(0.5, 0.5, rw, rh);
+          nvg.fillColor(NVGColor("#8000"));
+          nvg.fill();
           //printf("tw=%g\n", cast(double)tw);
         }
 
-        vg.fillColor(NVGColor.white);
-        vg.text(10, 10, (useDirectRendering ? "Direct" : "Image"));
-        vg.text(10, 30, (svgAA ? "AA" : "NO AA"));
+        nvg.fillColor(NVGColor.white);
+        nvg.text(5, 5+(th+3)*0, (useDirectRendering ? "Direct" : "Image"));
+        nvg.text(5, 5+(th+3)*1, (svgAA ? "AA" : "NO AA"));
         import std.conv : to;
-        vg.text(10, 50, pathMode.to!string);
+        nvg.text(5, 5+(th+3)*2, pathMode.to!string);
       }
-
-      if (fps !is null && drawFPS) fps.render(vg, 5, 5);
     }
   };
 
-  sdwindow.visibleForTheFirstTime = delegate () {
-    sdwindow.setAsCurrentOpenGlContext(); // make this window active
-    sdwindow.vsync = false;
-    //sdwindow.useGLFinish = false;
-    //glbindLoadFunctions();
-
-    vg = createGL2NVG(
-      (contextAA ? NVG_ANTIALIAS : 0)|
-      (stencilStrokes ? NVG_STENCIL_STROKES : 0)|
-      0
-    );
-    if (vg is null) {
-      import std.stdio;
-      writeln("Could not init nanovg.");
-      //sdwindow.close();
-    }
-    enum FNN = "Verdana:noaa"; //"/home/ketmar/ttf/ms/verdana.ttf";
-    vg.createFont("sans", FNN);
-    fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
-    { import iv.vfs.io; writeln("bezier tesselator: ", vg.tesselation); }
-    sdwindow.redrawOpenGlScene();
-  };
-
-  sdwindow.eventLoop(0 /*1000/30*/,
+  sdwindow.eventLoop(0/*1000/30*/,
     delegate () {
       if (sdwindow.closed) return;
       if (doQuit) { closeWindow(); return; }
@@ -530,8 +523,8 @@ void main (string[] args) {
       if (event == "S") { nativeStroke = !nativeStroke; sdwindow.redrawOpenGlSceneNow(); return; }
       if (event == "B") { nativeOnlyBeziers = !nativeOnlyBeziers; sdwindow.redrawOpenGlSceneNow(); return; }
       if (event == "T") {
-        vg.tesselation = cast(NVGTesselation)(vg.tesselation == NVGTesselation.max ? NVGTesselation.min : vg.tesselation+1);
-        { import iv.vfs.io; writeln("bezier tesselator: ", vg.tesselation); }
+        nvg.tesselation = cast(NVGTesselation)(nvg.tesselation == NVGTesselation.max ? NVGTesselation.min : nvg.tesselation+1);
+        { import iv.vfs.io; writeln("bezier tesselator: ", nvg.tesselation); }
         sdwindow.redrawOpenGlSceneNow();
         return;
       }
