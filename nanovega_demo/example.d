@@ -1533,7 +1533,7 @@ void main () {
   void closeWindow () {
     if (!sdwindow.closed && vg !is null) {
       freeDemoData(vg, &data);
-      vg.deleteGL2();
+      vg.kill();
       vg = null;
       sdwindow.close();
     }
@@ -1572,19 +1572,14 @@ void main () {
     //sdwindow.useGLFinish = false;
     //glbindLoadFunctions();
 
-    vg = createGL2NVG(
-      NVG_ANTIALIAS|
-      NVG_STENCIL_STROKES|
-      NVG_FONT_NOAA|
-      //NVG_DEBUG|
-      0);
+    vg = nvgCreateContext();
     if (vg is null) assert(0, "Could not init nanovg.");
     if (loadDemoData(vg, &data) == -1) {
       //sdwindow.close();
       import std.stdio;
       writeln("cannot load demo data");
       freeDemoData(vg, &data);
-      vg.deleteGL2();
+      vg.kill();
       vg = null;
       return;
     }

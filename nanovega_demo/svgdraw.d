@@ -369,7 +369,7 @@ void main (string[] args) {
     if (!sdwindow.closed && nvg !is null) {
       nvg.deleteImage(vgimg);
       vgimg = 0;
-      nvg.deleteGL2();
+      nvg.kill();
       nvg = null;
       sdwindow.close();
     }
@@ -388,10 +388,10 @@ void main (string[] args) {
     sdwindow.setAsCurrentOpenGlContext(); // make this window active
     sdwindow.vsync = false;
 
-    nvg = createGL2NVG(
-      (contextAA ? NVG_ANTIALIAS : 0)|
-      (stencilStrokes ? NVG_STENCIL_STROKES : 0)|
-      0
+    nvg = nvgCreateContext(
+      (contextAA ? NVGContextFlag.Antialias : NVGContextFlag.None)|
+      (stencilStrokes ? NVGContextFlag.StencilStrokes : NVGContextFlag.None)|
+      NVGContextFlag.None
     );
     if (nvg is null) assert(0, "Could not init nanovg.");
 
