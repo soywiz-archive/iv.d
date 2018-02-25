@@ -181,7 +181,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
     Calling `startRecording()` without commiting or cancelling recoriding will commit.
 
   composite_operation =
-    ## Composite operation
+    ## Composite Operation
 
     The composite operations in NanoVega are modeled after HTML Canvas API, and
     the blend func is based on OpenGL (see corresponding manuals for more info).
@@ -217,14 +217,14 @@ The following code illustrates the OpenGL state touched by the rendering code:
     A 2x3 matrix is represented as float[6].
 
   state_handling =
-    ## State handling
+    ## State Handling
 
     NanoVega contains state which represents how paths will be rendered.
     The state contains transform, fill and stroke styles, text and font styles,
     and scissor clipping.
 
   render_styles =
-    ## Render styles
+    ## Render Styles
 
     Fill and stroke render style can be either a solid color or a paint which is a gradient or a pattern.
     Solid color is simply defined as a color value, different kinds of paints can be created
@@ -234,6 +234,19 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     Note that if you want "almost perfect" pixel rendering, you should set aspect ratio to 1,
     and use `integerCoord+0.5f` as pixel coordinates.
+
+  render_transformations =
+    ## Render Transformations
+
+    Transformation matrix management for the current rendering style. Transformations are applied in
+    backwards order. I.e. if you first translate, and then rotate, your path will be rotated around
+    it's origin, and then translated to the destination point.
+
+  scissoring =
+    ## Scissoring
+
+    Scissoring allows you to clip the rendering into a rectangle. This is useful for various
+    user interface cases like rendering a text edit or a timeline.
 
   images =
     ## Images
@@ -247,12 +260,6 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     NanoVega supports four types of paints: linear gradient, box gradient, radial gradient and image pattern.
     These can be used as paints for strokes and fills.
-
-  scissoring =
-    ## Scissoring
-
-    Scissoring allows you to clip the rendering into a rectangle. This is useful for various
-    user interface cases like rendering a text edit or a timeline.
 
   gpu_affine =
     ## Render-Time Affine Transformations
@@ -2081,7 +2088,8 @@ public NVGColor nvgHSLA (float h, float s, float l, float a) nothrow @trusted @n
  *
  * Group: matrices
  */
-public struct NVGMatrix {
+public align(1) struct NVGMatrix {
+align(1):
 private:
   static immutable float[6] IdentityMat = [
     1.0f, 0.0f,
@@ -2096,8 +2104,6 @@ public:
     0.0f, 1.0f,
     0.0f, 0.0f,
   ];
-
-  alias mat this;
 
 public nothrow @trusted @nogc:
   /// Create Matrix with the given values.
@@ -2151,43 +2157,37 @@ public nothrow @trusted @nogc:
   /// Translate this matrix.
   ref NVGMatrix translate (in float tx, in float ty) {
     version(aliced) pragma(inline, true);
-    this *= Translated(tx, ty);
-    return this;
+    return this.mul(Translated(tx, ty));
   }
 
   /// Scale this matrix.
   ref NVGMatrix scale (in float sx, in float sy) {
     version(aliced) pragma(inline, true);
-    this *= Scaled(sx, sy);
-    return this;
+    return this.mul(Scaled(sx, sy));
   }
 
   /// Rotate this matrix.
   ref NVGMatrix rotate (in float a) {
     version(aliced) pragma(inline, true);
-    this *= Rotated(a);
-    return this;
+    return this.mul(Rotated(a));
   }
 
   /// Skew this matrix by X axis.
   ref NVGMatrix skewX (in float a) {
     version(aliced) pragma(inline, true);
-    this *= SkewedX(a);
-    return this;
+    return this.mul(SkewedX(a));
   }
 
   /// Skew this matrix by Y axis.
   ref NVGMatrix skewY (in float a) {
     version(aliced) pragma(inline, true);
-    this *= SkewedY(a);
-    return this;
+    return this.mul(SkewedY(a));
   }
 
   /// Skew this matrix by both axes.
   ref NVGMatrix skewY (in float ax, in float ay) {
     version(aliced) pragma(inline, true);
-    this *= SkewedXY(ax, ay);
-    return this;
+    return this.mul(SkewedXY(ax, ay));
   }
 
   /// Transform point with this matrix. `null` destinations are allowed.
@@ -2209,12 +2209,12 @@ public nothrow @trusted @nogc:
 
   /// Sets this matrix to the result of multiplication of `this` and `s` (this * S).
   ref NVGMatrix mul() (in auto ref NVGMatrix s) {
-    immutable float t0 = mat.ptr[0]*s.ptr[0]+mat.ptr[1]*s.ptr[2];
-    immutable float t2 = mat.ptr[2]*s.ptr[0]+mat.ptr[3]*s.ptr[2];
-    immutable float t4 = mat.ptr[4]*s.ptr[0]+mat.ptr[5]*s.ptr[2]+s.ptr[4];
-    mat.ptr[1] = mat.ptr[0]*s.ptr[1]+mat.ptr[1]*s.ptr[3];
-    mat.ptr[3] = mat.ptr[2]*s.ptr[1]+mat.ptr[3]*s.ptr[3];
-    mat.ptr[5] = mat.ptr[4]*s.ptr[1]+mat.ptr[5]*s.ptr[3]+s.ptr[5];
+    immutable float t0 = mat.ptr[0]*s.mat.ptr[0]+mat.ptr[1]*s.mat.ptr[2];
+    immutable float t2 = mat.ptr[2]*s.mat.ptr[0]+mat.ptr[3]*s.mat.ptr[2];
+    immutable float t4 = mat.ptr[4]*s.mat.ptr[0]+mat.ptr[5]*s.mat.ptr[2]+s.mat.ptr[4];
+    mat.ptr[1] = mat.ptr[0]*s.mat.ptr[1]+mat.ptr[1]*s.mat.ptr[3];
+    mat.ptr[3] = mat.ptr[2]*s.mat.ptr[1]+mat.ptr[3]*s.mat.ptr[3];
+    mat.ptr[5] = mat.ptr[4]*s.mat.ptr[1]+mat.ptr[5]*s.mat.ptr[3]+s.mat.ptr[5];
     mat.ptr[0] = t0;
     mat.ptr[2] = t2;
     mat.ptr[4] = t4;
@@ -2225,33 +2225,26 @@ public nothrow @trusted @nogc:
   /// Sets the transform to the result of multiplication of two transforms, of A = B*A.
   /// Group: matrices
   ref NVGMatrix premul() (in auto ref NVGMatrix s) {
-    immutable float t0 = s.ptr[0]*mat.ptr[0]+s.ptr[1]*mat.ptr[2];
-    immutable float t2 = s.ptr[2]*mat.ptr[0]+s.ptr[3]*mat.ptr[2];
-    immutable float t4 = s.ptr[4]*mat.ptr[0]+s.ptr[5]*mat.ptr[2]+mat.ptr[4];
-    mat.ptr[1] = s.ptr[0]*mat.ptr[1]+s.ptr[1]*mat.ptr[3];
-    mat.ptr[3] = s.ptr[2]*mat.ptr[1]+s.ptr[3]*mat.ptr[3];
-    mat.ptr[5] = s.ptr[4]*mat.ptr[1]+s.ptr[5]*mat.ptr[3]+mat.ptr[5];
-    mat.ptr[0] = t0;
-    mat.ptr[2] = t2;
-    mat.ptr[4] = t4;
+    NVGMatrix s2 = s;
+    s2.mul(this);
+    mat[] = s2.mat[];
     return this;
   }
 
-  /// res = B * this (i.e. inverted multiplication).
-  /// This is inverted multiplication, so matrix operation can be expressed as first-to-last, instead of last-to-first.
-  NVGMatrix opBinary(string op="*") (in auto ref NVGMatrix b) const {
+  /// Multiply this matrix by `s`, return result as new matrix.
+  /// Performs operations in this left-to-right order.
+  NVGMatrix opBinary(string op="*") (in auto ref NVGMatrix s) const {
     version(aliced) pragma(inline, true);
-    NVGMatrix res = b;
-    res.mul(this);
+    NVGMatrix res = this;
+    res.mul(s);
     return res;
   }
 
-  /// this = B * this (i.e. inverted multiplication).
-  /// This is inverted multiplication, so matrix operation can be expressed as first-to-last, instead of last-to-first.
-  ref NVGMatrix opOpAssign(string op="*") (in auto ref NVGMatrix b) {
+  /// Multiply this matrix by `s`.
+  /// Performs operations in this left-to-right order.
+  ref NVGMatrix opOpAssign(string op="*") (in auto ref NVGMatrix s) {
     version(aliced) pragma(inline, true);
-    this.premul(b);
-    return this;
+    return this.mul(s);
   }
 
   float scaleX () const { pragma(inline, true); return nvg__sqrtf(mat.ptr[0]*mat.ptr[0]+mat.ptr[2]*mat.ptr[2]); } /// Returns x scaling of this matrix.
@@ -2270,24 +2263,18 @@ public nothrow @trusted @nogc:
   /// This is the same as doing: `mat.identity.rotate(a).scale(xs, ys).translate(tx, ty)`, only faster
   ref NVGMatrix scaleRotateTransform (in float xscale, in float yscale, in float a, in float tx, in float ty) {
     immutable float cs = nvg__cosf(a), sn = nvg__sinf(a);
-    this.ptr[0] = xscale*cs;
-    this.ptr[1] = yscale*sn;
-    this.ptr[2] = xscale*-sn;
-    this.ptr[3] = yscale*cs;
-    this.ptr[4] = tx;
-    this.ptr[5] = ty;
+    mat.ptr[0] = xscale*cs; mat.ptr[1] = yscale*sn;
+    mat.ptr[2] = xscale*-sn; mat.ptr[3] = yscale*cs;
+    mat.ptr[4] = tx; mat.ptr[5] = ty;
     return this;
   }
 
   /// This is the same as doing: `mat.identity.rotate(a).translate(tx, ty)`, only faster
   ref NVGMatrix rotateTransform (in float a, in float tx, in float ty) {
     immutable float cs = nvg__cosf(a), sn = nvg__sinf(a);
-    this.ptr[0] = cs;
-    this.ptr[1] = sn;
-    this.ptr[2] = -sn;
-    this.ptr[3] = cs;
-    this.ptr[4] = tx;
-    this.ptr[5] = ty;
+    mat.ptr[0] = cs; mat.ptr[1] = sn;
+    mat.ptr[2] = -sn; mat.ptr[3] = cs;
+    mat.ptr[4] = tx; mat.ptr[5] = ty;
     return this;
   }
 
@@ -2544,83 +2531,83 @@ public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
   state.fill.xform.mul(state.xform);
 }
 
-/// Premultiplies current coordinate system by specified matrix.
-/// Group: render_styles
-public void transform() (NVGContext ctx, in auto ref NVGMatrix mt) nothrow @trusted @nogc {
-  NVGstate* state = nvg__getState(ctx);
-  //nvgTransformPremultiply(state.xform[], t[]);
-  state.xform *= mt;
-}
-
 /// Returns current transformation matrix.
-/// Group: render_styles
+/// Group: render_transformations
 public NVGMatrix currTransform (NVGContext ctx) pure nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   return state.xform;
 }
 
 /// Sets current transformation matrix.
-/// Group: render_styles
+/// Group: render_transformations
 public void currTransform() (NVGContext ctx, in auto ref NVGMatrix m) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.xform = m;
 }
 
 /// Resets current transform to an identity matrix.
-/// Group: render_styles
+/// Group: render_transformations
 public void resetTransform (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.xform.identity;
 }
 
+/// Premultiplies current coordinate system by specified matrix.
+/// Group: render_transformations
+public void transform() (NVGContext ctx, in auto ref NVGMatrix mt) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+  //nvgTransformPremultiply(state.xform[], t[]);
+  state.xform *= mt;
+}
+
 /// Translates current coordinate system.
-/// Group: render_styles
+/// Group: render_transformations
 public void translate (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   //NVGMatrix t = void;
   //nvgTransformTranslate(t[], x, y);
   //nvgTransformPremultiply(state.xform[], t[]);
-  state.xform *= NVGMatrix.Translated(x, y);
+  state.xform.premul(NVGMatrix.Translated(x, y));
 }
 
 /// Rotates current coordinate system. Angle is specified in radians.
-/// Group: render_styles
+/// Group: render_transformations
 public void rotate (NVGContext ctx, in float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   //NVGMatrix t = void;
   //nvgTransformRotate(t[], angle);
   //nvgTransformPremultiply(state.xform[], t[]);
-  state.xform *= NVGMatrix.Rotated(angle);
+  state.xform.premul(NVGMatrix.Rotated(angle));
 }
 
 /// Skews the current coordinate system along X axis. Angle is specified in radians.
-/// Group: render_styles
+/// Group: render_transformations
 public void skewX (NVGContext ctx, in float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   //NVGMatrix t = void;
   //nvgTransformSkewX(t[], angle);
   //nvgTransformPremultiply(state.xform[], t[]);
-  state.xform *= NVGMatrix.SkewedX(angle);
+  state.xform.premul(NVGMatrix.SkewedX(angle));
 }
 
 /// Skews the current coordinate system along Y axis. Angle is specified in radians.
-/// Group: render_styles
+/// Group: render_transformations
 public void skewY (NVGContext ctx, in float angle) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   //NVGMatrix t = void;
   //nvgTransformSkewY(t[], angle);
   //nvgTransformPremultiply(state.xform[], t[]);
-  state.xform *= NVGMatrix.SkewedY(angle);
+  state.xform.premul(NVGMatrix.SkewedY(angle));
 }
 
 /// Scales the current coordinate system.
-/// Group: render_styles
+/// Group: render_transformations
 public void scale (NVGContext ctx, in float x, in float y) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   //NVGMatrix t = void;
   //nvgTransformScale(t[], x, y);
   //nvgTransformPremultiply(state.xform[], t[]);
-  state.xform *= NVGMatrix.Scaled(x, y);
+  state.xform.premul(NVGMatrix.Scaled(x, y));
 }
 
 
@@ -2761,9 +2748,9 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
     dy = 1;
   }
 
-  p.xform.ptr[0] = dy; p.xform.ptr[1] = -dx;
-  p.xform.ptr[2] = dx; p.xform.ptr[3] = dy;
-  p.xform.ptr[4] = sx-dx*large; p.xform.ptr[5] = sy-dy*large;
+  p.xform.mat.ptr[0] = dy; p.xform.mat.ptr[1] = -dx;
+  p.xform.mat.ptr[2] = dx; p.xform.mat.ptr[3] = dy;
+  p.xform.mat.ptr[4] = sx-dx*large; p.xform.mat.ptr[5] = sy-dy*large;
 
   p.extent.ptr[0] = large;
   p.extent.ptr[1] = large+d*0.5f;
@@ -2792,8 +2779,8 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
   memset(&p, 0, p.sizeof);
 
   p.xform.identity;
-  p.xform.ptr[4] = cx;
-  p.xform.ptr[5] = cy;
+  p.xform.mat.ptr[4] = cx;
+  p.xform.mat.ptr[5] = cy;
 
   p.extent.ptr[0] = r;
   p.extent.ptr[1] = r;
@@ -2821,8 +2808,8 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
   memset(&p, 0, p.sizeof);
 
   p.xform.identity;
-  p.xform.ptr[4] = x+w*0.5f;
-  p.xform.ptr[5] = y+h*0.5f;
+  p.xform.mat.ptr[4] = x+w*0.5f;
+  p.xform.mat.ptr[5] = y+h*0.5f;
 
   p.extent.ptr[0] = w*0.5f;
   p.extent.ptr[1] = h*0.5f;
@@ -2848,8 +2835,8 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
   memset(&p, 0, p.sizeof);
 
   p.xform.identity.rotate(angle);
-  p.xform.ptr[4] = cx;
-  p.xform.ptr[5] = cy;
+  p.xform.mat.ptr[4] = cx;
+  p.xform.mat.ptr[5] = cy;
 
   p.extent.ptr[0] = w;
   p.extent.ptr[1] = h;
@@ -2997,8 +2984,8 @@ public void scissor (NVGContext ctx, in float[] args...) nothrow @trusted @nogc 
     immutable h = nvg__max(0.0f, *aptr++);
 
     state.scissor.xform.identity;
-    state.scissor.xform.ptr[4] = x+w*0.5f;
-    state.scissor.xform.ptr[5] = y+h*0.5f;
+    state.scissor.xform.mat.ptr[4] = x+w*0.5f;
+    state.scissor.xform.mat.ptr[5] = y+h*0.5f;
     //nvgTransformMultiply(state.scissor.xform[], state.xform[]);
     state.scissor.xform.mul(state.xform);
 
@@ -3053,18 +3040,19 @@ public void intersectScissor (NVGContext ctx, in float[] args...) nothrow @trust
 
     // Transform the current scissor rect into current transform space.
     // If there is difference in rotation, this will be approximation.
-    memcpy(pxform.ptr, state.scissor.xform.ptr, float.sizeof*6);
+    //memcpy(pxform.mat.ptr, state.scissor.xform.ptr, float.sizeof*6);
+    pxform = state.scissor.xform;
     immutable float ex = state.scissor.extent.ptr[0];
     immutable float ey = state.scissor.extent.ptr[1];
     //nvgTransformInverse(invxorm[], state.xform[]);
     invxorm = state.xform.inverted;
     //nvgTransformMultiply(pxform[], invxorm[]);
     pxform.mul(invxorm);
-    immutable float tex = ex*nvg__absf(pxform.ptr[0])+ey*nvg__absf(pxform.ptr[2]);
-    immutable float tey = ex*nvg__absf(pxform.ptr[1])+ey*nvg__absf(pxform.ptr[3]);
+    immutable float tex = ex*nvg__absf(pxform.mat.ptr[0])+ey*nvg__absf(pxform.mat.ptr[2]);
+    immutable float tey = ex*nvg__absf(pxform.mat.ptr[1])+ey*nvg__absf(pxform.mat.ptr[3]);
 
     // Intersect rects.
-    nvg__isectRects(rect.ptr, pxform.ptr[4]-tex, pxform.ptr[5]-tey, tex*2, tey*2, x, y, w, h);
+    nvg__isectRects(rect.ptr, pxform.mat.ptr[4]-tex, pxform.mat.ptr[5]-tey, tex*2, tey*2, x, y, w, h);
 
     //ctx.scissor(rect.ptr[0], rect.ptr[1], rect.ptr[2], rect.ptr[3]);
     ctx.scissor(rect.ptr[0..4]);
@@ -3075,7 +3063,7 @@ public void intersectScissor (NVGContext ctx, in float[] args...) nothrow @trust
 /// Group: scissoring
 public void resetScissor (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  state.scissor.xform[] = 0;
+  state.scissor.xform.mat[] = 0.0f;
   state.scissor.extent[] = -1.0f;
 }
 
@@ -3283,7 +3271,6 @@ void nvg__pathWinding (NVGContext ctx, NVGWinding winding) nothrow @trusted @nog
 }
 
 float nvg__getAverageScale() (in auto ref NVGMatrix t) nothrow @trusted @nogc {
-  assert(t.length >= 6);
   immutable float sx = nvg__sqrtf(t.mat.ptr[0]*t.mat.ptr[0]+t.mat.ptr[2]*t.mat.ptr[2]);
   immutable float sy = nvg__sqrtf(t.mat.ptr[1]*t.mat.ptr[1]+t.mat.ptr[3]*t.mat.ptr[3]);
   return (sx+sy)*0.5f;
@@ -5370,7 +5357,8 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
     pp.scissor = nvg__pickSceneAddPoints(ps, null, 4);
     float* scissor = &ps.points[pp.scissor*2];
 
-    memcpy(scissor, state.scissor.xform.ptr, 6*float.sizeof);
+    //memcpy(scissor, state.scissor.xform.ptr, 6*float.sizeof);
+    scissor[0..6] = state.scissor.xform.mat[];
     memcpy(scissor+6, state.scissor.extent.ptr, 2*float.sizeof);
 
     pp.flags |= NVGPathFlags.Scissor;
@@ -10980,11 +10968,11 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
   } else {
     //nvgTransformInverse(invxform[], scissor.xform[]);
     invxform = scissor.xform.inverted;
-    glnvg__xformToMat3x4(frag.scissorMat[], invxform[]);
+    glnvg__xformToMat3x4(frag.scissorMat[], invxform.mat[]);
     frag.scissorExt.ptr[0] = scissor.extent.ptr[0];
     frag.scissorExt.ptr[1] = scissor.extent.ptr[1];
-    frag.scissorScale.ptr[0] = sqrtf(scissor.xform.ptr[0]*scissor.xform.ptr[0]+scissor.xform.ptr[2]*scissor.xform.ptr[2])/fringe;
-    frag.scissorScale.ptr[1] = sqrtf(scissor.xform.ptr[1]*scissor.xform.ptr[1]+scissor.xform.ptr[3]*scissor.xform.ptr[3])/fringe;
+    frag.scissorScale.ptr[0] = sqrtf(scissor.xform.mat.ptr[0]*scissor.xform.mat.ptr[0]+scissor.xform.mat.ptr[2]*scissor.xform.mat.ptr[2])/fringe;
+    frag.scissorScale.ptr[1] = sqrtf(scissor.xform.mat.ptr[1]*scissor.xform.mat.ptr[1]+scissor.xform.mat.ptr[3]*scissor.xform.mat.ptr[3])/fringe;
   }
 
   memcpy(frag.extent.ptr, paint.extent.ptr, frag.extent.sizeof);
@@ -11038,7 +11026,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     invxform = paint.xform.inverted;
   }
 
-  glnvg__xformToMat3x4(frag.paintMat[], invxform[]);
+  glnvg__xformToMat3x4(frag.paintMat[], invxform.mat[]);
 
   return true;
 }
@@ -11175,9 +11163,9 @@ void glnvg__triangles (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc
 }
 
 void glnvg__affine (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
-  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, call.affine.ptr);
+  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, call.affine.mat.ptr);
   glnvg__checkError(gl, "affine");
-  glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, call.affine.ptr+4);
+  glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, call.affine.mat.ptr+4);
   glnvg__checkError(gl, "affine");
   glnvg__setUniforms(gl, call.uniformOffset, call.image);
 }
@@ -11231,10 +11219,10 @@ void glnvg__renderSetAffine (void* uptr, const(float)[] mat...) nothrow @trusted
     call.type = GLNVG_AFFINE;
   }
   if (mat.length == 4) {
-    call.affine.ptr[0..4] = mat.ptr[0..4];
-    call.affine.ptr[4..6] = 0.0f;
+    call.affine.mat.ptr[0..4] = mat.ptr[0..4];
+    call.affine.mat.ptr[4..6] = 0.0f;
   } else if (mat.length >= 6) {
-    call.affine.ptr[0..6] = mat.ptr[0..6];
+    call.affine.mat.ptr[0..6] = mat.ptr[0..6];
   }
 }
 
