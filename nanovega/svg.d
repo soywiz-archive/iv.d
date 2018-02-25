@@ -26,6 +26,57 @@
  *
  * ported by Ketmar // Invisible Vector <ketmar@ketmar.no-ip.org>
  */
+/**
+  NanoVega.SVG is a simple stupid SVG parser. The output of the parser is a list of drawing commands.
+
+  The library suits well for anything from rendering scalable icons in your editor application to prototyping a game.
+
+  NanoVega.SVG supports a wide range of SVG features, but something may be missing. Your's Captain Obvious.
+
+
+  The shapes in the SVG images are transformed by the viewBox and converted to specified units.
+  That is, you should get the same looking data as your designed in your favorite app.
+
+  NanoVega.SVG can return the paths in few different units. For example if you want to render an image, you may choose
+  to get the paths in pixels, or if you are feeding the data into a CNC-cutter, you may want to use millimeters.
+
+  The units passed to NanoVega.SVG should be one of: 'px', 'pt', 'pc', 'mm', 'cm', 'in'.
+  DPI (dots-per-inch) controls how the unit conversion is done.
+
+  If you don't know or care about the units stuff, "px" and 96 should get you going.
+
+  Example Usage:
+
+  ---
+    // Load
+    NSVG* image = nsvgParseFromFile("test.svg", "px", 96);
+    printf("size: %f x %f\n", image.width, image.height);
+    // Use...
+    image.forEachShape((in ref NSVG.Shape shape) {
+      if (!shape.visible) return;
+      shape.forEachPath((in ref NSVG.Path path) {
+        // this will issue final `LineTo` for closed pathes
+        path.forEachCommand!true(delegate (NSVG.Command cmd, const(float)[] args) nothrow @trusted @nogc {
+          final switch (cmd) {
+            case NSVG.Command.MoveTo: nvg.moveTo(args); break;
+            case NSVG.Command.LineTo: nvg.lineTo(args); break;
+            case NSVG.Command.QuadTo: nvg.quadTo(args); break;
+            case NSVG.Command.BezierTo: nvg.bezierTo(args); break;
+          }
+        });
+      });
+    });
+
+    NSVGrasterizer rast = nsvgCreateRasterizer();
+    // Allocate memory for image
+    ubyte* img = malloc(w*h*4);
+    // Rasterize
+    nsvgRasterize(rast, image, 0, 0, 1, img, w, h, w*4);
+
+    // Delete
+    image.kill();
+  ---
+ */
 module iv.nanovega.svg;
 
 private import core.stdc.math : fabs, fabsf, atan2f, acosf, cosf, sinf, tanf, sqrt, sqrtf, floorf, ceilf, fmodf;
@@ -53,178 +104,116 @@ version = nanosvg_crappy_stylesheet_parser;
 //version = nanosvg_use_beziers; // convert everything to beziers
 //version = nanosvg_only_cubic_beziers; // convert everything to cubic beziers
 
+///
 public enum NSVGDefaults {
   CanvasWidth = 800,
   CanvasHeight = 600,
 }
 
-// ////////////////////////////////////////////////////////////////////////// //
-// NanoSVG is a simple stupid SVG parser. The output of the parser is a list of drawing commands.
-//
-// The library suits well for anything from rendering scalable icons in your editor application to prototyping a game.
-//
-// NanoSVG supports a wide range of SVG features, but something may be missing. Your's Captain Obvious.
-//
-// The shapes in the SVG images are transformed by the viewBox and converted to specified units.
-// That is, you should get the same looking data as your designed in your favorite app.
-//
-// NanoSVG can return the paths in few different units. For example if you want to render an image, you may choose
-// to get the paths in pixels, or if you are feeding the data into a CNC-cutter, you may want to use millimeters.
-//
-// The units passed to NanoSVG should be one of: 'px', 'pt', 'pc', 'mm', 'cm', 'in'.
-// DPI (dots-per-inch) controls how the unit conversion is done.
-//
-// If you don't know or care about the units stuff, "px" and 96 should get you going.
-//
-// NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px", float dpi=96);
-// NSVG* nsvgParse (char* input, const(char)[] units="px", float dpi=96); // WARNING! input WILL be modified!
-// void kill (NSVG* image);
-
-/* Example Usage:
-  // Load
-  NSVG* image = nsvgParseFromFile("test.svg", "px", 96);
-  printf("size: %f x %f\n", image.width, image.height);
-  // Use...
-  image.forEachShape((in ref NSVG.Shape shape) {
-    if (!shape.visible) return;
-    shape.forEachPath((in ref NSVG.Path path) {
-      // this will issue final `LineTo` for closed pathes
-      path.forEachCommand!true(delegate (NSVG.Command cmd, const(float)[] args) nothrow @trusted @nogc {
-        final switch (cmd) {
-          case NSVG.Command.MoveTo: nvg.moveTo(args); break;
-          case NSVG.Command.LineTo: nvg.lineTo(args); break;
-          case NSVG.Command.QuadTo: nvg.quadTo(args); break;
-          case NSVG.Command.BezierTo: nvg.bezierTo(args); break;
-        }
-      });
-    });
-  });
-  // Delete
-  image.kill();
-*/
-
-/* Example Usage:
-  // Load SVG
-  struct SNVGImage* image = nsvgParseFromFile("test.svg");
-
-  // Create rasterizer (can be used to render multiple images).
-  NSVGrasterizer rast = nsvgCreateRasterizer();
-  // Allocate memory for image
-  ubyte* img = malloc(w*h*4);
-  // Rasterize
-  nsvgRasterize(rast, image, 0, 0, 1, img, w, h, w*4);
-*/
-
-// Allocated rasterizer context.
-//NSVGrasterizer nsvgCreateRasterizer ();
-
-// Rasterizes SVG image, returns RGBA image (non-premultiplied alpha)
-//   r - pointer to rasterizer context
-//   image - pointer to image to rasterize
-//   tx, ty - image offset (applied after scaling)
-//   scale - image scale
-//   dst - pointer to destination image data, 4 bytes per pixel (RGBA)
-//   w - width of the image to render
-//   h - height of the image to render
-//   stride - number of bytes per scaleline in the destination buffer
-//void rasterize (NSVGrasterizer r, NSVG* image, float tx, float ty, float scale, ubyte* dst, int w, int h, int stride=-1);
-
-// Deletes rasterizer context.
-//void kill (NSVGrasterizer r);
-
 
 // ////////////////////////////////////////////////////////////////////////// //
-alias NSVGrasterizer = NSVGrasterizerS*;
-alias NSVGRasterizer = NSVGrasterizer;
+public alias NSVGrasterizer = NSVGrasterizerS*; ///
+public alias NSVGRasterizer = NSVGrasterizer; ///
 
+///
 struct NSVG {
   @disable this (this);
 
+  ///
   enum Command : int {
-    MoveTo, // synthesized command, always first
-    LineTo,
-    QuadTo,
-    BezierTo, // cubic bezier
+    MoveTo, ///
+    LineTo, ///
+    QuadTo, ///
+    BezierTo, /// cubic bezier
   }
 
+  ///
   enum PaintType : ubyte {
-    None,
-    Color,
-    LinearGradient,
-    RadialGradient,
+    None, ///
+    Color, ///
+    LinearGradient, ///
+    RadialGradient, ///
   }
 
+  ///
   enum SpreadType : ubyte {
-    Pad,
-    Reflect,
-    Repeat,
+    Pad, ///
+    Reflect, ///
+    Repeat, ///
   }
 
+  ///
   enum LineJoin : ubyte {
-    Miter,
-    Round,
-    Bevel,
+    Miter, ///
+    Round, ///
+    Bevel, ///
   }
 
+  ///
   enum LineCap : ubyte {
-    Butt,
-    Round,
-    Square,
+    Butt, ///
+    Round, ///
+    Square, ///
   }
 
+  ///
   enum FillRule : ubyte {
-    NonZero,
-    EvenOdd,
+    NonZero, ///
+    EvenOdd, ///
   }
 
-  alias Flags = ubyte;
+  alias Flags = ubyte; ///
   enum : ubyte {
-    Visible = 0x01,
+    Visible = 0x01, ///
   }
 
+  ///
   static struct GradientStop {
-    uint color;
-    float offset;
+    uint color; ///
+    float offset; ///
   }
 
+  ///
   static struct Gradient {
-    float[6] xform;
-    SpreadType spread;
-    float fx, fy;
-    int nstops;
-    GradientStop[0] stops;
+    float[6] xform; ///
+    SpreadType spread; ///
+    float fx, fy; ///
+    int nstops; ///
+    GradientStop[0] stops; ///
   }
 
+  ///
   static struct Paint {
   pure nothrow @safe @nogc:
     @disable this (this);
-    PaintType type;
+    PaintType type; ///
     union {
-      uint color;
-      Gradient* gradient;
+      uint color; ///
+      Gradient* gradient; ///
     }
-    static uint rgb (ubyte r, ubyte g, ubyte b) { pragma(inline, true); return (r|(g<<8)|(b<<16)); }
+    static uint rgb (ubyte r, ubyte g, ubyte b) { pragma(inline, true); return (r|(g<<8)|(b<<16)); } ///
     @property const {
-      bool isNone () { pragma(inline, true); return (type == PaintType.None); }
-      bool isColor () { pragma(inline, true); return (type == PaintType.Color); }
+      bool isNone () { pragma(inline, true); return (type == PaintType.None); } ///
+      bool isColor () { pragma(inline, true); return (type == PaintType.Color); } ///
       // gradient types
-      bool isLinear () { pragma(inline, true); return (type == PaintType.LinearGradient); }
-      bool isRadial () { pragma(inline, true); return (type == PaintType.RadialGradient); }
+      bool isLinear () { pragma(inline, true); return (type == PaintType.LinearGradient); } ///
+      bool isRadial () { pragma(inline, true); return (type == PaintType.RadialGradient); } ///
       // color
-      ubyte r () { pragma(inline, true); return color&0xff; }
-      ubyte g () { pragma(inline, true); return (color>>8)&0xff; }
-      ubyte b () { pragma(inline, true); return (color>>16)&0xff; }
-      ubyte a () { pragma(inline, true); return (color>>24)&0xff; }
+      ubyte r () { pragma(inline, true); return color&0xff; } ///
+      ubyte g () { pragma(inline, true); return (color>>8)&0xff; } ///
+      ubyte b () { pragma(inline, true); return (color>>16)&0xff; } ///
+      ubyte a () { pragma(inline, true); return (color>>24)&0xff; } ///
     }
   }
 
+  ///
   static struct Path {
     @disable this (this);
-    float* stream;   // Command, args...; Cubic bezier points: x0,y0, [cpx1,cpx1,cpx2,cpy2,x1,y1], ...
-    int nsflts;      // Total number of floats in stream.
-    bool closed;     // Flag indicating if shapes should be treated as closed.
-    float[4] bounds; // Tight bounding box of the shape [minx,miny,maxx,maxy].
-    NSVG.Path* next; // Pointer to next path, or null if last element.
+    float* stream;   /// Command, args...; Cubic bezier points: x0,y0, [cpx1,cpx1,cpx2,cpy2,x1,y1], ...
+    int nsflts;      /// Total number of floats in stream.
+    bool closed;     /// Flag indicating if shapes should be treated as closed.
+    float[4] bounds; /// Tight bounding box of the shape [minx,miny,maxx,maxy].
+    NSVG.Path* next; /// Pointer to next path, or null if last element.
 
     ///
     @property bool empty () const pure nothrow @safe @nogc { pragma(inline, true); return (nsflts == 0); }
@@ -391,35 +380,36 @@ struct NSVG {
     }
   }
 
+  ///
   static struct Shape {
     @disable this (this);
-    char[64] id = 0;          // Optional 'id' attr of the shape or its group
-    NSVG.Paint fill;          // Fill paint
-    NSVG.Paint stroke;        // Stroke paint
-    float opacity;            // Opacity of the shape.
-    float strokeWidth;        // Stroke width (scaled).
-    float strokeDashOffset;   // Stroke dash offset (scaled).
-    float[8] strokeDashArray; // Stroke dash array (scaled).
-    byte strokeDashCount;     // Number of dash values in dash array.
-    LineJoin strokeLineJoin;  // Stroke join type.
-    LineCap strokeLineCap;    // Stroke cap type.
-    float miterLimit;         // Miter limit
-    FillRule fillRule;        // Fill rule, see FillRule.
-    /*Flags*/ubyte flags;     // Logical or of NSVG_FLAGS_* flags
-    float[4] bounds;          // Tight bounding box of the shape [minx,miny,maxx,maxy].
-    NSVG.Path* paths;         // Linked list of paths in the image.
-    NSVG.Shape* next;         // Pointer to next shape, or null if last element.
+    char[64] id = 0;          /// Optional 'id' attr of the shape or its group
+    NSVG.Paint fill;          /// Fill paint
+    NSVG.Paint stroke;        /// Stroke paint
+    float opacity;            /// Opacity of the shape.
+    float strokeWidth;        /// Stroke width (scaled).
+    float strokeDashOffset;   /// Stroke dash offset (scaled).
+    float[8] strokeDashArray; /// Stroke dash array (scaled).
+    byte strokeDashCount;     /// Number of dash values in dash array.
+    LineJoin strokeLineJoin;  /// Stroke join type.
+    LineCap strokeLineCap;    /// Stroke cap type.
+    float miterLimit;         /// Miter limit
+    FillRule fillRule;        /// Fill rule, see FillRule.
+    /*Flags*/ubyte flags;     /// Logical or of NSVG_FLAGS_* flags
+    float[4] bounds;          /// Tight bounding box of the shape [minx,miny,maxx,maxy].
+    NSVG.Path* paths;         /// Linked list of paths in the image.
+    NSVG.Shape* next;         /// Pointer to next shape, or null if last element.
 
-    @property bool visible () const pure nothrow @safe @nogc { pragma(inline, true); return ((flags&Visible) != 0); }
+    @property bool visible () const pure nothrow @safe @nogc { pragma(inline, true); return ((flags&Visible) != 0); } ///
 
-    // delegate can accept:
-    //   NSVG.Path*
-    //   const(NSVG.Path)*
-    //   ref NSVG.Path
-    //   in ref NSVG.Path
-    // delegate can return:
-    //   void
-    //   bool (true means `stop`)
+    /// delegate can accept:
+    ///   NSVG.Path*
+    ///   const(NSVG.Path)*
+    ///   ref NSVG.Path
+    ///   in ref NSVG.Path
+    /// delegate can return:
+    ///   void
+    ///   bool (true means `stop`)
     void forEachPath(DG) (scope DG dg) inout
     if (__traits(compiles, (){ DG xdg; NSVG.Path s; xdg(&s); }) ||
         __traits(compiles, (){ DG xdg; NSVG.Path s; xdg(s); }))
@@ -450,18 +440,18 @@ struct NSVG {
     }
   }
 
-  float width;        // Width of the image.
-  float height;       // Height of the image.
-  NSVG.Shape* shapes; // Linked list of shapes in the image.
+  float width;        /// Width of the image.
+  float height;       /// Height of the image.
+  NSVG.Shape* shapes; /// Linked list of shapes in the image.
 
-  // delegate can accept:
-  //   NSVG.Shape*
-  //   const(NSVG.Shape)*
-  //   ref NSVG.Shape
-  //   in ref NSVG.Shape
-  // delegate can return:
-  //   void
-  //   bool (true means `stop`)
+  /// delegate can accept:
+  ///   NSVG.Shape*
+  ///   const(NSVG.Shape)*
+  ///   ref NSVG.Shape
+  ///   in ref NSVG.Shape
+  /// delegate can return:
+  ///   void
+  ///   bool (true means `stop`)
   void forEachShape(DG) (scope DG dg) inout
   if (__traits(compiles, (){ DG xdg; NSVG.Shape s; xdg(&s); }) ||
       __traits(compiles, (){ DG xdg; NSVG.Shape s; xdg(s); }))
@@ -731,7 +721,7 @@ T* xalloc(T) (usize addmem=0) if (!is(T == class)) {
   import core.stdc.stdlib : malloc;
   if (T.sizeof == 0 && addmem == 0) addmem = 1;
   auto res = cast(ubyte*)malloc(T.sizeof+addmem+256);
-  if (res is null) assert(0, "NanoSVG: out of memory");
+  if (res is null) assert(0, "NanoVega.SVG: out of memory");
   res[0..T.sizeof+addmem] = 0;
   return cast(T*)res;
 }
@@ -741,7 +731,7 @@ T* xcalloc(T) (usize count) if (!is(T == class) && !is(T == struct)) {
   usize sz = T.sizeof*count;
   if (sz == 0) sz = 1;
   auto res = cast(ubyte*)malloc(sz+256);
-  if (res is null) assert(0, "NanoSVG: out of memory");
+  if (res is null) assert(0, "NanoVega.SVG: out of memory");
   res[0..sz] = 0;
   return cast(T*)res;
 }
@@ -757,7 +747,7 @@ void xfree(T) (ref T* p) {
 
 alias AttrList = const(const(char)[])[];
 
-public enum NSVG_PI = 3.14159265358979323846264338327f;
+public enum NSVG_PI = 3.14159265358979323846264338327f; ///
 enum NSVG_KAPPA90 = 0.5522847493f; // Lenght proportional to radius of a cubic bezier handle for 90deg arcs.
 
 enum NSVG_ALIGN_MIN = 0;
@@ -1057,36 +1047,42 @@ const(char)[] fromAsciiz (const(char)[] s) {
 // ////////////////////////////////////////////////////////////////////////// //
 // matrix operations made public for the sake of... something.
 
+///
 public void nsvg__xformIdentity (float* t) {
   t[0] = 1.0f; t[1] = 0.0f;
   t[2] = 0.0f; t[3] = 1.0f;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
+///
 public void nsvg__xformSetTranslation (float* t, in float tx, in float ty) {
   t[0] = 1.0f; t[1] = 0.0f;
   t[2] = 0.0f; t[3] = 1.0f;
   t[4] = tx; t[5] = ty;
 }
 
+///
 public void nsvg__xformSetScale (float* t, in float sx, in float sy) {
   t[0] = sx; t[1] = 0.0f;
   t[2] = 0.0f; t[3] = sy;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
+///
 public void nsvg__xformSetSkewX (float* t, in float a) {
   t[0] = 1.0f; t[1] = 0.0f;
   t[2] = tanf(a); t[3] = 1.0f;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
+///
 public void nsvg__xformSetSkewY (float* t, in float a) {
   t[0] = 1.0f; t[1] = tanf(a);
   t[2] = 0.0f; t[3] = 1.0f;
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
+///
 public void nsvg__xformSetRotation (float* t, in float a) {
   immutable cs = cosf(a), sn = sinf(a);
   t[0] = cs; t[1] = sn;
@@ -1094,6 +1090,7 @@ public void nsvg__xformSetRotation (float* t, in float a) {
   t[4] = 0.0f; t[5] = 0.0f;
 }
 
+///
 public void nsvg__xformMultiply (float* t, const(float)* s) {
   immutable t0 = t[0]*s[0]+t[1]*s[2];
   immutable t2 = t[2]*s[0]+t[3]*s[2];
@@ -1106,6 +1103,7 @@ public void nsvg__xformMultiply (float* t, const(float)* s) {
   t[4] = t4;
 }
 
+///
 public void nsvg__xformInverse (float* inv, const(float)* t) {
   immutable double det = cast(double)t[0]*t[3]-cast(double)t[2]*t[1];
   if (det > -1e-6 && det < 1e-6) {
@@ -1121,6 +1119,7 @@ public void nsvg__xformInverse (float* inv, const(float)* t) {
   inv[5] = cast(float)((cast(double)t[1]*t[4]-cast(double)t[0]*t[5])*invdet);
 }
 
+///
 public void nsvg__xformPremultiply (float* t, const(float)* s) {
   float[6] s2 = s[0..6];
   //memcpy(s2.ptr, s, float.sizeof*6);
@@ -1129,30 +1128,35 @@ public void nsvg__xformPremultiply (float* t, const(float)* s) {
   t[0..6] = s2[];
 }
 
+///
 public void nsvg__xformPoint (float* dx, float* dy, in float x, in float y, const(float)* t) {
   if (dx !is null) *dx = x*t[0]+y*t[2]+t[4];
   if (dy !is null) *dy = x*t[1]+y*t[3]+t[5];
 }
 
+///
 public void nsvg__xformVec (float* dx, float* dy, in float x, in float y, const(float)* t) {
   if (dx !is null) *dx = x*t[0]+y*t[2];
   if (dy !is null) *dy = x*t[1]+y*t[3];
 }
 
+///
 public enum NSVG_EPSILON = (1e-12);
 
+///
 public int nsvg__ptInBounds (const(float)* pt, const(float)* bounds) {
   pragma(inline, true);
   return pt[0] >= bounds[0] && pt[0] <= bounds[2] && pt[1] >= bounds[1] && pt[1] <= bounds[3];
 }
 
-
+///
 public double nsvg__evalBezier (double t, double p0, double p1, double p2, double p3) {
   pragma(inline, true);
   double it = 1.0-t;
   return it*it*it*p0+3.0*it*it*t*p1+3.0*it*t*t*p2+t*t*t*p3;
 }
 
+///
 public void nsvg__curveBounds (float* bounds, const(float)* curve) {
   const float* v0 = &curve[0];
   const float* v1 = &curve[2];
@@ -1198,6 +1202,8 @@ public void nsvg__curveBounds (float* bounds, const(float)* curve) {
   }
 }
 
+
+// ////////////////////////////////////////////////////////////////////////// //
 Parser* nsvg__createParser () {
   Parser* p = xalloc!Parser;
   if (p is null) goto error;
@@ -1291,7 +1297,7 @@ void nsvg__addPoint (Parser* p, in float x, in float y) {
 
 void nsvg__moveTo (Parser* p, in float x, in float y) {
   // this is always called right after `nsvg__resetPath()`
-  if (p.nsflts != 0) assert(0, "internal error in NanoSVG");
+  if (p.nsflts != 0) assert(0, "internal error in NanoVega.SVG");
   nsvg__addCommand(p, NSVG.Command.MoveTo);
   nsvg__addPoint(p, x, y);
   /*
@@ -1691,7 +1697,7 @@ void nsvg__addPath (Parser* p, bool closed) {
 
   if (closed) {
     auto cmd = cast(NSVG.Command)p.stream[0];
-    if (cmd != NSVG.Command.MoveTo) assert(0, "NanoSVG: invalid path");
+    if (cmd != NSVG.Command.MoveTo) assert(0, "NanoVega.SVG: invalid path");
     nsvg__lineTo(p, p.stream[1], p.stream[2]);
   }
 
@@ -3000,7 +3006,7 @@ void nsvg__parsePath (Parser* p, AttrList attr) {
           // commit path
           if (p.nsflts > 0) {
             // move current point to first point
-            if ((cast(NSVG.Command)p.stream[0]) != NSVG.Command.MoveTo) assert(0, "NanoSVG: invalid path");
+            if ((cast(NSVG.Command)p.stream[0]) != NSVG.Command.MoveTo) assert(0, "NanoVega.SVG: invalid path");
             cpx = p.stream[1];
             cpy = p.stream[2];
             cpx2 = cpx;
@@ -3599,6 +3605,7 @@ void nsvg__scaleToViewbox (Parser* p, const(char)[] units) {
   }
 }
 
+///
 public NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) {
   Parser* p;
   NSVG* ret = null;
@@ -3630,6 +3637,7 @@ public NSVG* nsvgParse (const(char)[] input, const(char)[] units="px", float dpi
   return ret;
 }
 
+///
 public void kill (NSVG* image) {
   import core.stdc.string : memset;
   NSVG.Shape* snext, shape;
@@ -3650,6 +3658,7 @@ public void kill (NSVG* image) {
 } // nothrow @trusted @nogc
 
 
+///
 public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) nothrow {
   import core.stdc.stdlib : malloc, free;
   enum AddedBytes = 8;
@@ -3699,6 +3708,7 @@ public NSVG* nsvgParseFromFile (const(char)[] filename, const(char)[] units="px"
 
 
 static if (NanoSVGHasIVVFS) {
+///
 public NSVG* nsvgParseFromFile(ST) (auto ref ST fi, const(char)[] units="px", float dpi=96, int canvaswdt=-1, int canvashgt=-1) nothrow
 if (isReadableStream!ST && isSeekableStream!ST && streamHasSize!ST)
 {
@@ -3803,6 +3813,8 @@ struct NSVGrasterizerS {
   int width, height, stride;
 }
 
+
+///
 public NSVGrasterizer nsvgCreateRasterizer () {
   NSVGrasterizer r = xalloc!NSVGrasterizerS;
   if (r is null) goto error;
@@ -3817,6 +3829,7 @@ error:
   return null;
 }
 
+///
 public void kill (NSVGrasterizer r) {
   NSVGmemPage* p;
 
@@ -5063,6 +5076,19 @@ extern(C) {
   private extern(C) void qsort (scope void* base, size_t nmemb, size_t size, _compare_fp_t compar) nothrow @nogc;
 }
 
+/**
+ * Rasterizes SVG image, returns RGBA image (non-premultiplied alpha).
+ *
+ * Params:
+ *   r = pointer to rasterizer context
+ *   image = pointer to SVG image to rasterize
+ *   tx, ty = image offset (applied after scaling)
+ *   scale = image scale
+ *   dst = pointer to destination image data, 4 bytes per pixel (RGBA)
+ *   w = width of the image to render
+ *   h = height of the image to render
+ *   stride = number of bytes per scaleline in the destination buffer
+ */
 public void rasterize (NSVGrasterizer r, const(NSVG)* image, float tx, float ty, float scale, ubyte* dst, int w, int h, int stride=-1) {
   const(NSVG.Shape)* shape = null;
   NSVGedge* e = null;
