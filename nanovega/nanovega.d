@@ -66,7 +66,7 @@ $(LIST
   vg.fill();
   ---
 
-Calling `beginPath()` will clear any existing paths and start drawing from blank slate.
+Calling [beginPath] will clear any existing paths and start drawing from blank slate.
 There are number of number of functions to define the path to draw, such as rectangle,
 rounded rectangle and ellipse, or you can use the common moveTo, lineTo, bezierTo and
 arcTo API to compose the paths step by step.
@@ -96,11 +96,11 @@ Rendering is wrong, what to do?
 ===============================
 
 $(LIST
-  * make sure you have created NanoVega context using `nvgCreateContext()` call
+  * make sure you have created NanoVega context using [nvgCreateContext] call
   * make sure you have initialised OpenGL with $(B stencil buffer)
   * make sure you have cleared stencil buffer
-  * make sure all rendering calls happen between `beginFrame()` and `endFrame()`
-  * to enable more checks for OpenGL errors, add `NVGContextFlag.Debug` flag to `nvgCreateContext()`
+  * make sure all rendering calls happen between [beginFrame] and [endFrame]
+  * to enable more checks for OpenGL errors, add `NVGContextFlag.Debug` flag to [nvgCreateContext]
 )
 
 
@@ -112,10 +112,10 @@ The OpenGL back-end touches following states:
 When textures are uploaded or updated, the following pixel store is set to defaults:
 `GL_UNPACK_ALIGNMENT`, `GL_UNPACK_ROW_LENGTH`, `GL_UNPACK_SKIP_PIXELS`, `GL_UNPACK_SKIP_ROWS`.
 Texture binding is also affected. Texture updates can happen when the user loads images,
-or when new font glyphs are added. Glyphs are added as needed between calls to `beginFrame()`
-and `endFrame()`.
+or when new font glyphs are added. Glyphs are added as needed between calls to [beginFrame]
+and [endFrame].
 
-The data for the whole frame is buffered and flushed in `endFrame()`.
+The data for the whole frame is buffered and flushed in [endFrame].
 The following code illustrates the OpenGL state touched by the rendering code:
 
   ---
@@ -180,10 +180,10 @@ The following code illustrates the OpenGL state touched by the rendering code:
     Where: (sx, sy) define scaling, (kx, ky) skewing, and (tx, ty) translation.
     The last row is assumed to be (0, 0, 1) and is not stored.
 
-    Apart from `resetTransform()`, each transformation function first creates
+    Apart from [resetTransform], each transformation function first creates
     specific transformation matrix and pre-multiplies the current transformation by it.
 
-    Current coordinate system (transformation) can be saved and restored using `save()` and `restore()`.
+    Current coordinate system (transformation) can be saved and restored using [save] and [restore].
 
     The following functions can be used to make calculations on 2x3 transformation matrices.
     A 2x3 matrix is represented as float[6].
@@ -200,9 +200,9 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     Fill and stroke render style can be either a solid color or a paint which is a gradient or a pattern.
     Solid color is simply defined as a color value, different kinds of paints can be created
-    using `linearGradient()`, `boxGradient()`, `radialGradient()` and `imagePattern()`.
+    using [linearGradient], [boxGradient], [radialGradient] and [imagePattern].
 
-    Current render style can be saved and restored using `save()` and `restore()`.
+    Current render style can be saved and restored using [save] and [restore].
 
     Note that if you want "almost perfect" pixel rendering, you should set aspect ratio to 1,
     and use `integerCoord+0.5f` as pixel coordinates.
@@ -238,26 +238,26 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     It is possible to set affine transformation matrix for GPU. That matrix will
     be applied by the shader code. This can be used to quickly translate and rotate
-    saved paths. Call this $(B only) between `beginFrame()` and `endFrame()`.
+    saved paths. Call this $(B only) between [beginFrame] and [endFrame].
 
-    Note that `beginFrame()` resets this matrix to identity one.
+    Note that [beginFrame] resets this matrix to identity one.
 
     WARNING! Don't use this for scaling or skewing, it will result in heavily distorted image!
 
   paths =
     ## Paths
 
-    Drawing a new shape starts with `beginPath()`, it clears all the currently defined paths.
+    Drawing a new shape starts with [beginPath], it clears all the currently defined paths.
     Then you define one or more paths and sub-paths which describe the shape. The are functions
     to draw common shapes like rectangles and circles, and lower level step-by-step functions,
     which allow to define a path curve by curve.
 
     NanoVega uses even-odd fill rule to draw the shapes. Solid shapes should have counter clockwise
     winding and holes should have counter clockwise order. To specify winding of a path you can
-    call `pathWinding()`. This is useful especially for the common shapes, which are drawn CCW.
+    call [pathWinding]. This is useful especially for the common shapes, which are drawn CCW.
 
-    Finally you can fill the path using current fill style by calling `fill()`, and stroke it
-    with current stroke style by calling `stroke()`.
+    Finally you can fill the path using current fill style by calling [fill], and stroke it
+    with current stroke style by calling [stroke].
 
     The curve segments and sub-paths are transformed by the current transform.
 
@@ -268,13 +268,13 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     [beginFrame] resets picking state. Then you can create paths as usual, but
     there is a possibility to perform hit checks $(B before) rasterizing a path.
-    Call either id assigning functions (`currFillHitId()`/`currStrokeHitId()`), or
-    immediate hit test functions (`hitTestCurrFill()`/`hitTestCurrStroke()`)
-    before rasterizing (i.e. calling `fill()` or `stroke()`) to perform hover
+    Call either id assigning functions ([currFillHitId]/[currStrokeHitId]), or
+    immediate hit test functions ([hitTestCurrFill]/[hitTestCurrStroke])
+    before rasterizing (i.e. calling [fill] or [stroke]) to perform hover
     effects, for example.
 
     Also note that picking API is ignoring GPU affine transformation matrix.
-    You can "untransform" picking coordinates before checking with `gpuUntransformPoint()`.
+    You can "untransform" picking coordinates before checking with [gpuUntransformPoint].
 
   text_api =
     ## Text
@@ -335,24 +335,27 @@ The following code illustrates the OpenGL state touched by the rendering code:
     Note that text rendering commands are not saved, as technically text rendering
     is not a path.
 
-    To translate or rotate a record, use `affineGPU()` API call.
+    To translate or rotate a record, use [affineGPU] API call.
 
-    To record render commands, you must create new path set with `newPathSet()`
-    function, then start recording with `startRecording()`. You can cancel current
-    recording with `cancelRecording()`, or commit (save) recording with `stopRecording()`.
+    To record render commands, you must create new path set with [newPathSet]
+    function, then start recording with [startRecording]. You can cancel current
+    recording with [cancelRecording], or commit (save) recording with [stopRecording].
 
-    You can resume recording with `startRecording()` after `stopRecording()` call.
-    Calling `cancelRecording()` will cancel only current recording session (i.e. it
-    will forget everything from the very latest `startRecording()`, not the whole
+    You can resume recording with [startRecording] after [stopRecording] call.
+    Calling [cancelRecording] will cancel only current recording session (i.e. it
+    will forget everything from the very latest [startRecording], not the whole
     record).
 
-    Finishing frame with `endFrame()` will automatically commit current recording, and
-    calling `cancelFrame()` will cancel recording by calling `cancelRecording()`.
+    Finishing frame with [endFrame] will automatically commit current recording, and
+    calling [cancelFrame] will cancel recording by calling [cancelRecording].
 
     Note that commit recording will clear current picking scene (but cancelling won't).
 
-    Calling `startRecording()` without commiting or cancelling recoriding will commit.
+    Calling [startRecording] without commiting or cancelling recoriding will commit.
 
+    $(B WARNING! Text output is not recorded now. Neither is scissor, so if you are using
+                 scissoring or text in your pathes (UI, for example), things will not
+                 work as you may expect.)
  */
 module iv.nanovega.nanovega;
 private:
@@ -803,7 +806,7 @@ public:
 
   // taken from Adam's arsd.color
   /** Converts an RGB color into an HSL triplet.
-   * `useWeightedLightness` will try to get a better value for luminosity for the human eye,
+   * [useWeightedLightness] will try to get a better value for luminosity for the human eye,
    * which is more sensitive to green than red and more to red than blue.
    * If it is false, it just does average of the rgb. */
   static NVGHSL fromColor() (in auto ref NVGColor c, bool useWeightedLightness=false) pure {
@@ -1228,7 +1231,7 @@ struct NVGpathCache {
 
 /// Pointer to opaque NanoVega context structure.
 /// Group: context_management
-public alias NVGContext = NVGcontext*;
+public alias NVGContext = NVGcontextinternal*;
 
 // Returns FontStash context of the given NanoVega context.
 public FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs : null); }
@@ -1242,9 +1245,58 @@ public enum NVGTesselation {
   AFD, /// adaptive forward differencing
 }
 
-public __gshared NVGTesselation NVG_DEFAULT_TESSELATOR = NVGTesselation.Combined; /// Default tesselator for Bezier curves.
+/// Default tesselator for Bezier curves.
+public __gshared NVGTesselation NVG_DEFAULT_TESSELATOR = NVGTesselation.Combined;
 
-private struct NVGcontext {
+
+// some public info
+
+/// valid only inside [beginFrame]/[endFrame]
+/// Group: context_management
+public int width (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null ? ctx.mWidth : 0); }
+
+/// valid only inside [beginFrame]/[endFrame]
+/// Group: context_management
+public int height (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null ? ctx.mHeight : 0); }
+
+/// valid only inside [beginFrame]/[endFrame]
+/// Group: context_management
+public float devicePixelRatio (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null ? ctx.mDeviceRatio : float.nan); }
+
+// path autoregistration
+
+/// [pickid] to stop autoregistration.
+/// Group: context_management
+public enum NVGNoPick = -1;
+
+/// >=0: this pickid will be assigned to all filled/stroked paths
+/// Group: context_management
+public int pickid (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null ? ctx.pathPickId : NVGNoPick); }
+
+/// >=0: this pickid will be assigned to all filled/stroked paths
+/// Group: context_management
+public void pickid (NVGContext ctx, int v) nothrow @trusted @nogc { pragma(inline, true); if (ctx !is null) ctx.pathPickId = v; }
+
+/// pick autoregistration mode; see [NVGPickKind]
+/// Group: context_management
+public uint pickmode (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null ? ctx.pathPickRegistered&NVGPickKind.All : 0); }
+
+/// pick autoregistration mode; see [NVGPickKind]
+/// Group: context_management
+public void pickmode (NVGContext ctx, uint v) nothrow @trusted @nogc { pragma(inline, true); if (ctx !is null) ctx.pathPickRegistered = (ctx.pathPickRegistered&0xffff_0000u)|(v&NVGPickKind.All); }
+
+// tesselator options
+
+///
+/// Group: context_management
+public NVGTesselation tesselation (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null ? ctx.tesselatortype : NVGTesselation.Combined); }
+
+///
+/// Group: context_management
+public void tesselation (NVGContext ctx, NVGTesselation v) nothrow @trusted @nogc { pragma(inline, true); if (ctx !is null) ctx.tesselatortype = v; }
+
+
+private struct NVGcontextinternal {
 private:
   NVGparams params;
   float* commands;
@@ -1269,7 +1321,7 @@ private:
   // picking API
   NVGpickScene* pickScene;
   int pathPickId; // >=0: register all paths for picking using this id
-  uint pathPickRegistered; // if `pathPickId` >= 0, this is used to avoid double-registration (see `NVGPickKind`); hi 16 bit is check flags, lo 16 bit is mode
+  uint pathPickRegistered; // if [pathPickId] >= 0, this is used to avoid double-registration (see [NVGPickKind]); hi 16 bit is check flags, lo 16 bit is mode
   // path recording
   NVGPathSet recset;
   int recstart; // used to cancel recording
@@ -1279,30 +1331,8 @@ private:
   int mWidth, mHeight;
   float mDeviceRatio;
   void delegate (NVGContext ctx) nothrow @trusted @nogc cleanup;
-public:
-  // some public info
-  const pure nothrow @safe @nogc {
-    @property int width () { pragma(inline, true); return mWidth; } /// valid only inside `beginFrame()`/`endFrame()`
-    @property int height () { pragma(inline, true); return mHeight; } /// valid only inside `beginFrame()`/`endFrame()`
-    @property float devicePixelRatio () { pragma(inline, true); return mDeviceRatio; } /// valid only inside `beginFrame()`/`endFrame()`
-  }
 
-  // path autoregistration
-  pure nothrow @safe @nogc {
-    enum NoPick = -1; ///
-
-    @property int pickid () const { pragma(inline, true); return pathPickId; } /// >=0: this pickid will be assigned to all filled/stroked paths
-    @property void pickid (int v) { pragma(inline, true); pathPickId = v; } /// >=0: this pickid will be assigned to all filled/stroked paths
-
-    @property uint pickmode () const { pragma(inline, true); return pathPickRegistered&NVGPickKind.All; } /// pick autoregistration mode; see `NVGPickKind`
-    @property void pickmode (uint v) { pragma(inline, true); pathPickRegistered = (pathPickRegistered&0xffff_0000u)|(v&NVGPickKind.All); } /// pick autoregistration mode; see `NVGPickKind`
-  }
-
-  // tesselator options
-  pure nothrow @safe @nogc {
-    NVGTesselation tesselation () const { pragma(inline, true); return tesselatortype; } ///
-    void tesselation (NVGTesselation v) { pragma(inline, true); tesselatortype = v; } ///
-  }
+  @disable this (this); // no copies
 }
 
 public import core.stdc.math :
@@ -1413,9 +1443,9 @@ NVGstate* nvg__getState (NVGContext ctx) pure nothrow @trusted @nogc {
 // Constructor called by the render back-end.
 package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
   FONSparams fontParams = void;
-  NVGContext ctx = cast(NVGContext)malloc(NVGcontext.sizeof);
+  NVGContext ctx = cast(NVGContext)malloc(NVGcontextinternal.sizeof);
   if (ctx is null) goto error;
-  memset(ctx, 0, NVGcontext.sizeof);
+  memset(ctx, 0, NVGcontextinternal.sizeof);
 
   ctx.params = *params;
   ctx.fontImages[0..NVG_MAX_FONTIMAGES] = 0;
@@ -1507,9 +1537,9 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
 
 /** Begin drawing a new frame.
  *
- * Calls to NanoVega drawing API should be wrapped in `beginFrame()` and `endFrame()`
+ * Calls to NanoVega drawing API should be wrapped in [beginFrame] and [endFrame]
  *
- * `beginFrame()` defines the size of the window to render to in relation currently
+ * [beginFrame] defines the size of the window to render to in relation currently
  * set viewport (i.e. glViewport on GL backends). Device pixel ration allows to
  * control the rendering on Hi-DPI devices.
  *
@@ -1524,7 +1554,7 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
  * This call also resets pick marks (see picking API for non-rasterized paths),
  * path recording, and GPU affine transformatin matrix.
  *
- * see also `glNVGClearFlags()`, which returns necessary flags for `glClear()`.
+ * see also [glNVGClearFlags], which returns necessary flags for [glClear].
  *
  * Group: frame_management
  */
@@ -1738,9 +1768,9 @@ public:
   @disable this (this); // no copies
 
   // pick test
-  // Call delegate `dg` for each path under the specified position (in no particular order).
-  // Returns the id of the path for which delegate `dg` returned true or -1.
-  // dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
+  // Call delegate [dg] for each path under the specified position (in no particular order).
+  // Returns the id of the path for which delegate [dg] returned true or -1.
+  // dg is: `bool delegate (int id, int order)` -- [order] is path ordering (ascending).
   int hitTestDG(DG) (in float x, in float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
     if (pickscene is null) return -1;
 
@@ -1784,7 +1814,7 @@ public:
   }
 
   // Fills ids with a list of the top most hit ids under the specified position.
-  // Returns the slice of `ids`.
+  // Returns the slice of [ids].
   int[] hitTestAll (in float x, in float y, uint kind, int[] ids) nothrow @trusted @nogc {
     if (pickscene is null || ids.length == 0) return ids[0..0];
 
@@ -1831,7 +1861,7 @@ public:
   }
 }
 
-// Append current path to existing path set. Is is safe to call this with `null` `svp`.
+// Append current path to existing path set. Is is safe to call this with `null` [svp].
 void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp, in ref NVGPaint paint) nothrow @trusted @nogc {
   if (ctx is null || svp is null) return;
   if (ctx !is svp.svctx) assert(0, "NanoVega: cannot save paths from different contexts");
@@ -1905,7 +1935,7 @@ public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
   }
 }
 
-/// Start path recording. `svp` should be alive until recording is cancelled or stopped.
+/// Start path recording. [svp] should be alive until recording is cancelled or stopped.
 /// Group: path_recording
 public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
@@ -1915,7 +1945,7 @@ public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @no
   ctx.recblockdraw = false;
 }
 
-/** Start path recording. `svp` should be alive until recording is cancelled or stopped.
+/** Start path recording. [svp] should be alive until recording is cancelled or stopped.
  *
  * This will block all rendering, so you can call your rendering functions to record paths without actual drawing.
  * Commiting or cancelling will re-enable rendering.
@@ -2029,7 +2059,7 @@ public NVGColor nvgRGBA (int r, int g, int b, int a=255) nothrow @trusted @nogc 
 /// Group: color_utils
 public NVGColor nvgRGBAf (float r, float g, float b, float a=1.0f) nothrow @trusted @nogc { pragma(inline, true); return NVGColor(r, g, b, a); }
 
-/// Returns new color with transparency (alpha) set to `a`.
+/// Returns new color with transparency (alpha) set to [a].
 /// Group: color_utils
 public NVGColor nvgTransRGBA (NVGColor c, ubyte a) nothrow @trusted @nogc {
   pragma(inline, true);
@@ -2151,7 +2181,7 @@ public nothrow @trusted @nogc:
     }
   }
 
-  /// Can be used to check validity of `inverted()` result
+  /// Can be used to check validity of [inverted] result
   @property bool valid () const { import core.stdc.math : isfinite; return (isfinite(mat.ptr[0]) != 0); }
 
   /// Returns `true` if this matrix is identity matrix.
@@ -2225,7 +2255,7 @@ public nothrow @trusted @nogc:
   }
 
   /// Transform point with this matrix. `null` destinations are allowed.
-  /// `sx` and `sy` is the source point. `dx` and `dy` may point to the same variables.
+  /// [sx] and [sy] is the source point. [dx] and [dy] may point to the same variables.
   void point (float* dx, float* dy, float sx, float sy) nothrow @trusted @nogc {
     version(aliced) pragma(inline, true);
     if (dx !is null) *dx = sx*mat.ptr[0]+sy*mat.ptr[2]+mat.ptr[4];
@@ -2241,7 +2271,7 @@ public nothrow @trusted @nogc:
     y = ny;
   }
 
-  /// Sets this matrix to the result of multiplication of `this` and `s` (this * S).
+  /// Sets this matrix to the result of multiplication of `this` and [s] (this * S).
   ref NVGMatrix mul() (in auto ref NVGMatrix s) {
     immutable float t0 = mat.ptr[0]*s.mat.ptr[0]+mat.ptr[1]*s.mat.ptr[2];
     immutable float t2 = mat.ptr[2]*s.mat.ptr[0]+mat.ptr[3]*s.mat.ptr[2];
@@ -2255,7 +2285,7 @@ public nothrow @trusted @nogc:
     return this;
   }
 
-  /// Sets this matrix to the result of multiplication of `s` and `this` (S * this).
+  /// Sets this matrix to the result of multiplication of [s] and `this` (S * this).
   /// Sets the transform to the result of multiplication of two transforms, of A = B*A.
   /// Group: matrices
   ref NVGMatrix premul() (in auto ref NVGMatrix s) {
@@ -2265,7 +2295,7 @@ public nothrow @trusted @nogc:
     return this;
   }
 
-  /// Multiply this matrix by `s`, return result as new matrix.
+  /// Multiply this matrix by [s], return result as new matrix.
   /// Performs operations in this left-to-right order.
   NVGMatrix opBinary(string op="*") (in auto ref NVGMatrix s) const {
     version(aliced) pragma(inline, true);
@@ -2274,7 +2304,7 @@ public nothrow @trusted @nogc:
     return res;
   }
 
-  /// Multiply this matrix by `s`.
+  /// Multiply this matrix by [s].
   /// Performs operations in this left-to-right order.
   ref NVGMatrix opOpAssign(string op="*") (in auto ref NVGMatrix s) {
     version(aliced) pragma(inline, true);
@@ -2421,7 +2451,7 @@ void nvg__setPaintColor (ref NVGPaint p, NVGColor color) nothrow @trusted @nogc 
 // State handling
 
 /** Pushes and saves the current render state into a state stack.
- * A matching `restore()` must be used to restore the state.
+ * A matching [restore] must be used to restore the state.
  * Returns `false` if state stack overflowed.
  *
  * Group: state_handling
@@ -2488,7 +2518,7 @@ public void nonZeroFill (NVGContext ctx) nothrow @trusted @nogc {
   state.evenOddMode = false;
 }
 
-/// Sets whether to draw antialias for `stroke()` and `fill()`. It's enabled by default.
+/// Sets whether to draw antialias for [stroke] and [fill]. It's enabled by default.
 /// Group: render_styles
 public void shapeAntiAlias (NVGContext ctx, bool enabled) {
   NVGstate* state = nvg__getState(ctx);
@@ -2760,7 +2790,7 @@ public void deleteImage (NVGContext ctx, int image) nothrow @trusted @nogc {
 
 /** Creates and returns a linear gradient. Parameters `(sx, sy) (ex, ey)` specify the start and end coordinates
  * of the linear gradient, icol specifies the start color and ocol the end color.
- * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
+ * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
  *
  * Group: paints
  */
@@ -2801,7 +2831,7 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
 
 /** Creates and returns a radial gradient. Parameters (cx, cy) specify the center, inr and outr specify
  * the inner and outer radius of the gradient, icol specifies the start color and ocol the end color.
- * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
+ * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
  *
  * Group: paints
  */
@@ -2833,7 +2863,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
  * drop shadows or highlights for boxes. Parameters (x, y) define the top-left corner of the rectangle,
  * (w, h) define the size of the rectangle, r defines the corner radius, and f feather. Feather defines how blurry
  * the border of the rectangle is. Parameter icol specifies the inner color and ocol the outer color of the gradient.
- * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
+ * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
  *
  * Group: paints
  */
@@ -2859,8 +2889,8 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
 }
 
 /** Creates and returns an image pattern. Parameters `(cx, cy)` specify the left-top location of the image pattern,
- * `(w, h)` the size of one image, `angle` rotation around the top-left corner, `image` is handle to the image to render.
- * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
+ * `(w, h)` the size of one image, [angle] rotation around the top-left corner, [image] is handle to the image to render.
+ * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
  *
  * Group: paints
  */
@@ -2889,7 +2919,7 @@ public alias NVGLGS = NVGLGSdata*;
 
 private struct NVGLGSdata {
   int imgid; // 0: invalid
-  // `imagePattern()` arguments
+  // [imagePattern] arguments
   float cx, cy, w, h, angle;
 
   @disable this (this); // no copies
@@ -2906,8 +2936,8 @@ public void kill (NVGContext ctx, ref NVGLGS lgs) nothrow @trusted @nogc {
   lgs = null;
 }
 
-/** Sets linear gradient with stops, created with `createLinearGradientWithStops()`.
- * The gradient is transformed by the current transform when it is passed to `fillPaint()` or `strokePaint()`.
+/** Sets linear gradient with stops, created with [createLinearGradientWithStops].
+ * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
  *
  * WARNING: THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!
  * Group: paints
@@ -3007,7 +3037,7 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy,
 /// Group: scissoring
 public void scissor (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `scissor()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [scissor] call");
   if (args.length < ArgC) return;
   NVGstate* state = nvg__getState(ctx);
   const(float)* aptr = args.ptr;
@@ -3052,7 +3082,7 @@ void nvg__isectRects (float* dst, float ax, float ay, float aw, float ah, float 
  */
 public void intersectScissor (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `intersectScissor()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [intersectScissor] call");
   if (args.length < ArgC) return;
   NVGstate* state = nvg__getState(ctx);
   const(float)* aptr = args.ptr;
@@ -4110,7 +4140,7 @@ void nvg__expandFill (NVGContext ctx, float w, int lineJoin, float miterLimit) n
 // Paths
 
 /// Clears the current path and sub-paths.
-/// Will call `nvgOnBeginPath()` callback if current path is not empty.
+/// Will call [nvgOnBeginPath] callback if current path is not empty.
 /// Group: paths
 public void beginPath (NVGContext ctx) nothrow @trusted @nogc {
   ctx.ncommands = 0;
@@ -4125,7 +4155,7 @@ public alias newPath = beginPath; /// Ditto.
 /// Group: paths
 public void moveTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 2;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `moveTo()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [moveTo] call");
   if (args.length < ArgC) return;
   nvg__appendCommands(ctx, Command.MoveTo, args[$-2..$]);
 }
@@ -4135,7 +4165,7 @@ public void moveTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 /// Group: paths
 public void lineTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 2;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `lineTo()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [lineTo] call");
   if (args.length < ArgC) return;
   foreach (immutable idx; 0..args.length/ArgC) {
     nvg__appendCommands(ctx, Command.LineTo, args.ptr[idx*ArgC..idx*ArgC+ArgC]);
@@ -4147,7 +4177,7 @@ public void lineTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 /// Group: paths
 public void bezierTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 6;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `bezierTo()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [bezierTo] call");
   if (args.length < ArgC) return;
   foreach (immutable idx; 0..args.length/ArgC) {
     nvg__appendCommands(ctx, Command.BezierTo, args.ptr[idx*ArgC..idx*ArgC+ArgC]);
@@ -4159,7 +4189,7 @@ public void bezierTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc
 /// Group: paths
 public void quadTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `quadTo()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [quadTo] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4183,7 +4213,7 @@ public void quadTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 /// Group: paths
 public void arcTo (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 5;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `arcTo()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [arcTo] call");
   if (args.length < ArgC) return;
 
   if (ctx.ncommands == 0) return;
@@ -4270,14 +4300,14 @@ public void pathWinding (NVGContext ctx, NVGSolidity dir) nothrow @trusted @nogc
  *
  * Arguments: [cx, cy, r, a0, a1]*
  *
- * `mode` is: "original", "move", "line" -- first command will be like original NanoVega, MoveTo, or LineTo
+ * [mode] is: "original", "move", "line" -- first command will be like original NanoVega, MoveTo, or LineTo
  *
  * Group: paths
  */
 public void arc(string mode="original") (NVGContext ctx, NVGWinding dir, in float[] args...) nothrow @trusted @nogc {
   static assert(mode == "original" || mode == "move" || mode == "line");
   enum ArgC = 5;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `arc()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [arc] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4371,7 +4401,7 @@ public void arc(string mode="original") (NVGContext ctx, NVGWinding dir, in floa
 /// Group: paths
 public void rect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `rect()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [rect] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4394,7 +4424,7 @@ public void rect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
 /// Group: paths
 public void roundedRect (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 5;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRect()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [roundedRect] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4412,7 +4442,7 @@ public void roundedRect (NVGContext ctx, in float[] args...) nothrow @trusted @n
 /// Group: paths
 public void roundedRectEllipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 6;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRectEllipse()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [roundedRectEllipse] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4446,7 +4476,7 @@ public void roundedRectEllipse (NVGContext ctx, in float[] args...) nothrow @tru
 /// Group: paths
 public void roundedRectVarying (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 8;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `roundedRectVarying()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [roundedRectVarying] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4488,7 +4518,7 @@ public void roundedRectVarying (NVGContext ctx, in float[] args...) nothrow @tru
 /// Group: paths
 public void ellipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 4;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `ellipse()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [ellipse] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4512,7 +4542,7 @@ public void ellipse (NVGContext ctx, in float[] args...) nothrow @trusted @nogc 
 /// Group: paths
 public void circle (NVGContext ctx, in float[] args...) nothrow @trusted @nogc {
   enum ArgC = 3;
-  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid `circle()` call");
+  if (args.length%ArgC != 0) assert(0, "NanoVega: invalid [circle] call");
   if (args.length < ArgC) return;
   const(float)* aptr = args.ptr;
   foreach (immutable idx; 0..args.length/ArgC) {
@@ -4669,7 +4699,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 // https://github.com/memononen/nanovg/pull/230
 // https://github.com/MikeWW/nanovg
 
-/// Pick type query. Used in `hitTest()` and `hitTestAll()`.
+/// Pick type query. Used in [hitTest] and [hitTestAll].
 /// Group: picking_api
 public enum NVGPickKind : ubyte {
   Fill = 0x01, ///
@@ -4737,9 +4767,9 @@ private template IsGoodHitTestInternalDG(DG) {
     __traits(compiles, (){ DG dg; NVGpickPath* pp; dg(pp); });
 }
 
-/// Call delegate `dg` for each path under the specified position (in no particular order).
-/// Returns the id of the path for which delegate `dg` returned true or -1.
-/// dg is: `bool delegate (int id, int order)` -- `order` is path ordering (ascending).
+/// Call delegate [dg] for each path under the specified position (in no particular order).
+/// Returns the id of the path for which delegate [dg] returned true or -1.
+/// dg is: `bool delegate (int id, int order)` -- [order] is path ordering (ascending).
 /// Group: picking_api
 public int hitTestDG(DG) (NVGContext ctx, in float x, in float y, uint kind, scope DG dg) if (IsGoodHitTestDG!DG || IsGoodHitTestInternalDG!DG) {
   if (ctx.pickScene is null || ctx.pickScene.npaths == 0) return -1;
@@ -4788,7 +4818,7 @@ public int hitTestDG(DG) (NVGContext ctx, in float x, in float y, uint kind, sco
 }
 
 /// Fills ids with a list of the top most hit ids under the specified position.
-/// Returns the slice of `ids`.
+/// Returns the slice of [ids].
 /// Group: picking_api
 public int[] hitTestAll (NVGContext ctx, in float x, in float y, uint kind, int[] ids) nothrow @trusted @nogc {
   if (ctx.pickScene is null || ids.length == 0) return ids[0..0];
@@ -6161,7 +6191,7 @@ void nvg__pickBeginFrame (NVGContext ctx, int width, int height) {
 
 /** Creates font by loading it from the disk from specified file name.
  * Returns handle to the font or FONS_INVALID (aka -1) on error.
- * use "fontname:noaa" as `name` to turn off antialiasing (if font driver supports that).
+ * use "fontname:noaa" as [name] to turn off antialiasing (if font driver supports that).
  * Maximum font name length is 63 chars, and it will be truncated.
  *
  * On POSIX systems it is possible to use fontconfig font names too.
@@ -6255,7 +6285,7 @@ public float textLineHeight (NVGContext ctx) nothrow @trusted @nogc {
   return nvg__getState(ctx).lineHeight;
 }
 
-/// Sets the text align of current text style, see `NVGTextAlign` for options.
+/// Sets the text align of current text style, see [NVGTextAlign] for options.
 /// Group: text_api
 public void textAlign (NVGContext ctx, NVGTextAlign talign) nothrow @trusted @nogc {
   pragma(inline, true);
@@ -6286,7 +6316,7 @@ public void textAlign (NVGContext ctx, NVGTextAlign.V v, NVGTextAlign.H h) nothr
   nvg__getState(ctx).textAlign.reset(h, v);
 }
 
-/// Gets the text align of current text style, see `NVGTextAlign` for options.
+/// Gets the text align of current text style, see [NVGTextAlign] for options.
 /// Group: text_api
 public NVGTextAlign textAlign (NVGContext ctx) nothrow @trusted @nogc {
   pragma(inline, true);
@@ -6346,7 +6376,7 @@ public bool charPathBounds (NVGContext ctx, dchar dch, float[] bounds) nothrow @
   return fonsPathBounds(ctx.fs, dch, bounds);
 }
 
-/** `charOutline()` will return malloced `NVGGlyphOutline`.
+/** [charOutline] will return malloced [NVGGlyphOutline].
 
  some usage samples:
 
@@ -6436,7 +6466,7 @@ public:
       }
     }
 
-    /// perform NanoVega command with stored data, transforming points with `xform` transformation matrix.
+    /// perform NanoVega command with stored data, transforming points with [xform] transformation matrix.
     void perform() (NVGContext ctx, in auto ref NVGMatrix xform) const nothrow @trusted @nogc {
       if (ctx is null || !valid) return;
       float[6] pts = void;
@@ -7052,11 +7082,11 @@ if (isAnyCharType!T && isGoodRowDelegate!(T, DG))
  * guesswork ("will advancement for this space stay the same?"), and Schlemiel's
  * algorithm. Note that you can copy the returned struct to save iterator state.
  *
- * You can check if iterator is valid with `valid` property, put new chars with
- * `put()` method, get current advance with `advance` property, and current
+ * You can check if iterator is valid with [valid] property, put new chars with
+ * [put] method, get current advance with [advance] property, and current
  * bounds with `getBounds(ref float[4] bounds)` method.
  *
- * WARNING! Don't change font parameters while iterating! Or use `restoreFont()`
+ * WARNING! Don't change font parameters while iterating! Or use [restoreFont]
  *          method.
  *
  * Group: text_api
@@ -8330,8 +8360,8 @@ public struct FONScontext {
   FONSfont** fonts; // actually, a simple hash table; can't grow yet
   int cfonts; // allocated
   int nfonts; // used (so we can track hash table stats)
-  int* hashidx; // `hsize` items; holds indicies in `fonts` array
-  int hused, hsize;// used items and total items in `hashidx`
+  int* hashidx; // [hsize] items; holds indicies in [fonts] array
+  int hused, hsize;// used items and total items in [hashidx]
   FONSatlas* atlas;
   float[FONS_VERTEX_COUNT*2] verts;
   float[FONS_VERTEX_COUNT*2] tcoords;
@@ -8344,7 +8374,7 @@ public struct FONScontext {
   void function (void* uptr, int error, int val) nothrow @trusted @nogc handleError;
   void* errorUptr;
 
-  // simple linear probing; returns `FONS_INVALID` if not found
+  // simple linear probing; returns [FONS_INVALID] if not found
   int findNameInHash (const(char)[] name) nothrow @trusted @nogc {
     if (nfonts == 0) return FONS_INVALID;
     auto nhash = fons__djbhash(name);
@@ -8426,7 +8456,7 @@ public struct FONScontext {
       }
       hsize = nsz;
       hashidx = newlist;
-      // we added everything, includin `idx`, so nothing more to do here
+      // we added everything, including [idx], so nothing more to do here
     } else {
       // find slot (guaranteed to have one)
       while (hashidx[res] != -1) res = (res+1)%hsize;
@@ -8948,7 +8978,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
       fdata.incref();
       auto xres = fonsAddFontWithData(stash, name, fdata, defAA);
       if (xres == FONS_INVALID) {
-        fdata.decref(); // this will free `data` and `fdata`
+        fdata.decref(); // this will free [data] and [fdata]
       } else {
         // remember path
         stash.fonts[xres].setPath(path);
@@ -8999,7 +9029,7 @@ public int fonsAddFontMem (FONScontext* stash, const(char)[] name, ubyte* data, 
   if (res == FONS_INVALID) {
     // we promised to not free data on error
     fdata.freeData = false;
-    fdata.decref(); // this will free `fdata`
+    fdata.decref(); // this will free [fdata]
   }
   return res;
 }
@@ -9106,7 +9136,7 @@ public const(char)[] fonsGetNameByIndex (FONScontext* stash, int idx) nothrow @t
 }
 
 // allowSubstitutes: check AA variants if exact name wasn't found?
-// return `FONS_INVALID` if no font was found
+// return [FONS_INVALID] if no font was found
 public int fonsGetFontByName (FONScontext* stash, const(char)[] name) nothrow @trusted @nogc {
   //{ import core.stdc.stdio; printf("fonsGetFontByName: [%.*s]\n", cast(uint)name.length, name.ptr); }
   // remove ":noaa" suffix
@@ -11602,12 +11632,12 @@ version(aliced) {
   private enum NVGDefaultContextFlagsXX = NVGContextFlag.Antialias|NVGContextFlag.StencilStrokes;
 }
 
-/// Default flags for `nvgCreateContext()`.
+/// Default flags for [nvgCreateContext].
 /// Group: context_management
 public enum NVGDefaultContextFlags = NVGDefaultContextFlagsXX;
 
 /// Creates NanoVega contexts for OpenGL2+.
-/// Flags should be combination (bitwise or) of the `NVGContextFlag` members.
+/// Flags should be combination (bitwise or) of the [NVGContextFlag] members.
 /// Group: context_management
 public NVGContext nvgCreateContext (int flags=NVGDefaultContextFlags) nothrow @trusted @nogc {
   NVGparams params = void;
