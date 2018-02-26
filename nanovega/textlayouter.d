@@ -14,6 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+/**
+FAST! Text Layouting Engine with support for various text alignmen, justification,
+and other fancy stuff. Did I mentioned that it is FAST!?
+*/
 module iv.nanovega.textlayouter is aliced;
 
 import arsd.image;
@@ -34,6 +38,7 @@ version(Windows) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+
 /// non-text object (image, for example); can be inserted in text.
 /// all object's properties should be constant
 public abstract class LayObject {
@@ -50,26 +55,11 @@ public abstract class LayObject {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-/** This object is used to get various text dimensions.
- *
- * We need to have such fonts in stash:
- *   text -- normal
- *   texti -- italic
- *   textb -- bold
- *   textz -- italic and bold
- *   mono -- normal
- *   monoi -- italic
- *   monob -- bold
- *   monoz -- italic and bold
- */
+
+/// This object is used to get various text dimensions.
 public final class LayFontStash {
 public:
-  FONScontext* fs;
-
-private:
-  char[64] lastFontFace;
-  int lastFFlen;
-  int lastFFid = -1;
+  FONScontext* fs; ///
 
 private:
   bool killFontStash;
@@ -88,15 +78,12 @@ public:
     } else {
       FONSparams fontParams;
       // image size doesn't matter, as we won't create font bitmaps here anyway (we only interested in dimensions)
-      fontParams.width = 32;//1024/*NVG_INIT_FONTIMAGE_SIZE*/;
-      fontParams.height = 32;//1024/*NVG_INIT_FONTIMAGE_SIZE*/;
+      fontParams.width = 32;
+      fontParams.height = 32;
       fontParams.flags = FONS_ZERO_TOPLEFT;
       fs = fonsCreateInternal(&fontParams);
       if (fs is null) throw new Exception("error creating font stash");
       killFontStash = true;
-      //fs.fonsResetAtlas(1024, 1024);
-      // image size doesn't matter, as we won't create font bitmaps here anyway (we only interested in dimensions)
-      //fs.fonsResetAtlas(32, 32);
       fonsSetSpacing(fs, 0);
       fonsSetBlur(fs, 0);
       fonsSetAlign(fs, NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline));
@@ -116,58 +103,21 @@ public:
   }
 
   /// add new font to stash
-  void addFont(T : const(char)[], TP : const(char)[]) (T name, TP path) {
-    static if (is(T == typeof(null))) {
-      throw new Exception("invalid font face name");
-    } else {
-      if (name.length == 0) throw new Exception("invalid font face name");
-      //if (name in fontfaces) throw new Exception("duplicate font '"~name.idup~"'");
-      int fid = fs.fonsAddFont(name, path, NVG_INVERT_FONT_AA);
-      if (fid == FONS_INVALID) throw new Exception("font '"~name~"' is not found at '"~path.idup~"'");
-      /*
-      static if (is(T == string)) {
-        fontfaces[name] = fid;
-        fontfaceids[fid] = name;
-      } else {
-        string n = name.idup;
-        fontfaces[n] = fid;
-        fontfaceids[fid] = n;
-      }
-      */
-      // reset font cache
-      lastFFlen = 0;
-      lastFFid = -1;
-      //{ import core.stdc.stdio; printf("loaded font: [%.*s] [%.*s]\n", cast(uint)name.length, name.ptr, cast(uint)path.length, path.ptr); }
-    }
+  void addFont (const(char)[] name, const(char)[] path) {
+    if (name.length == 0) throw new Exception("invalid font face name");
+    int fid = fs.fonsAddFont(name, path, NVG_INVERT_FONT_AA);
+    if (fid == FONS_INVALID) throw new Exception("font '"~name.idup~"' is not found at '"~path.idup~"'");
   }
 
   /// returns "font id" which can be used in `fontFace()`
   @property int fontFaceId (const(char)[] name) nothrow @safe @nogc {
-    if (lastFFlen == name.length && strEquCI(lastFontFace[0..lastFFlen], name)) {
-      assert(lastFFid != -1);
-    } else {
-      lastFFid = fonsGetFontByName(fs, name);
-      if (lastFFid != FONS_INVALID && name.length <= lastFontFace.length) {
-        lastFFlen = cast(int)name.length;
-        lastFontFace[0..lastFFlen] = name[];
-      } else {
-        lastFFlen = 0;
-      }
-    }
-    return lastFFid;
+    return fonsGetFontByName(fs, name);
   }
 
   /// returns font name for the given id (or `null`)
   @property const(char)[] fontFace (int fid) nothrow @safe @nogc {
     if (fid < 0) return null;
-    if (fid == lastFFid && lastFFlen > 0) return lastFontFace[0..lastFFlen];
-    auto res = fonsGetNameByIndex(fs, fid);
-    if (res.length > 0 && res.length <= lastFontFace.length) {
-      lastFFlen = cast(int)res.length;
-      lastFontFace[0..lastFFlen] = res[];
-      lastFFid = fid;
-    }
-    return res;
+    return fonsGetNameByIndex(fs, fid);
   }
 
   /// set current font
@@ -277,27 +227,11 @@ public:
     if (desc !is null) *desc = cast(int)lrintf(d);
     if (lineh !is null) *lineh = cast(int)lrintf(h);
   }
-
-static private:
-  bool strEquCI (const(char)[] s0, const(char)[] s1) nothrow @trusted @nogc {
-    if (s0.length != s1.length) return false;
-    const(char)* sp0 = s0.ptr;
-    const(char)* sp1 = s1.ptr;
-    foreach (; 0..s0.length) {
-      char c0 = *sp0++;
-      char c1 = *sp1++;
-      if (c0 != c1) {
-        if (c0 >= 'A' && c0 <= 'Z') c0 += 32; // poor man tolower
-        if (c1 >= 'A' && c1 <= 'Z') c1 += 32; // poor man tolower
-        if (c0 != c1) return false;
-      }
-    }
-    return true;
-  }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+
 /// generic text style
 /// note that you must manually fix `fontface` after changing attrs. sorry.
 public align(1) struct LayFontStyle {
@@ -369,12 +303,12 @@ align(1):
     flags = 0;
     if (fontface == -1 && layFixFontDG !is null) layFixFontDG(this);
   }
-  ///
   bool opEquals() (in auto ref LayFontStyle s) const pure nothrow @safe @nogc { pragma(inline, true); return (flags == s.flags && fontface == s.fontface && color == s.color && bgcolor == s.bgcolor && fontsize == s.fontsize); }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+
 /// line align style
 public align(1) struct LayLineStyle {
 align(1):
@@ -424,19 +358,20 @@ align(1):
   }());
   //bool opEquals() (in auto ref LayLineStyle s) const pure nothrow @safe @nogc { pragma(inline, true); return (mode == s.mode && lpad == s.lpad); }
   @property pure nothrow @safe @nogc {
-    int leftpad () const { pragma(inline, true); return lpad; }
-    void leftpad (int v) { pragma(inline, true); lpad = (v < short.min ? short.min : v > short.max ? short.max : cast(short)v); }
-    int rightpad () const { pragma(inline, true); return rpad; }
-    void rightpad (int v) { pragma(inline, true); rpad = (v < short.min ? short.min : v > short.max ? short.max : cast(short)v); }
-    int toppad () const { pragma(inline, true); return tpad; }
-    void toppad (int v) { pragma(inline, true); tpad = (v < 0 ? 0 : v > short.max ? short.max : cast(short)v); }
-    int bottompad () const { pragma(inline, true); return bpad; }
-    void bottompad (int v) { pragma(inline, true); bpad = (v < 0 ? 0 : v > short.max ? short.max : cast(short)v); }
+    int leftpad () const { pragma(inline, true); return lpad; } ///
+    void leftpad (int v) { pragma(inline, true); lpad = (v < short.min ? short.min : v > short.max ? short.max : cast(short)v); } ///
+    int rightpad () const { pragma(inline, true); return rpad; } ///
+    void rightpad (int v) { pragma(inline, true); rpad = (v < short.min ? short.min : v > short.max ? short.max : cast(short)v); } ///
+    int toppad () const { pragma(inline, true); return tpad; } ///
+    void toppad (int v) { pragma(inline, true); tpad = (v < 0 ? 0 : v > short.max ? short.max : cast(short)v); } ///
+    int bottompad () const { pragma(inline, true); return bpad; } ///
+    void bottompad (int v) { pragma(inline, true); bpad = (v < 0 ? 0 : v > short.max ? short.max : cast(short)v); } ///
   }
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+
 /// layouted text word
 public align(1) struct LayWord {
 align(1):
@@ -444,7 +379,7 @@ align(1):
   static align(1) struct Props {
   align(1):
     /// note that if word is softhyphen candidate, i have hyphen mark at [wend].
-    /// if props.hyphen is set, wend is including that mark, otherwise it isn't.
+    /// if props.hyphen is set, [wend] is including that mark, otherwise it isn't.
     enum Flag : uint {
       CanBreak  = 1<<0, /// can i break line at this word?
       Spaced    = 1<<1, /// should this word be whitespaced at the end?
