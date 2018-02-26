@@ -67,6 +67,10 @@ private:
   LayFontStyle lastStyle;
 
 public:
+  /// you can set this delegate, and it will be called if fontstyle's fontface is -1; it should set it to proper font id
+  void delegate (LayFontStash las, ref LayFontStyle st) nothrow @safe @nogc fixFontDG;
+
+public:
   /// create new fontstash
   /// if `nvg` is not null, use its fontstash.
   /// WARNING! this object SHOULD NOT outlive `nvg`!
@@ -288,9 +292,6 @@ align(1):
       res.put("; else flags &= ~Flag.");
       res.put(s);
       res.put("; ");
-      static if (__traits(getMember, Flag, s)&StyleMask) {
-        res.put("if (fontface == -1 && layFixFontDG !is null) layFixFontDG(this);");
-      }
       res.put("}\n");
     }
     return res.asString; // it is safe to cast here
@@ -301,7 +302,6 @@ align(1):
       if (flags&StyleMask) fontface = -1;
     }
     flags = 0;
-    if (fontface == -1 && layFixFontDG !is null) layFixFontDG(this);
   }
   bool opEquals() (in auto ref LayFontStyle s) const pure nothrow @safe @nogc { pragma(inline, true); return (flags == s.flags && fontface == s.fontface && color == s.color && bgcolor == s.bgcolor && fontsize == s.fontsize); }
 }
@@ -380,6 +380,7 @@ align(1):
   align(1):
     /// note that if word is softhyphen candidate, i have hyphen mark at [wend].
     /// if props.hyphen is set, [wend] is including that mark, otherwise it isn't.
+    /// this will prevent correct kerning, but meh...
     enum Flag : uint {
       CanBreak  = 1<<0, /// can i break line at this word?
       Spaced    = 1<<1, /// should this word be whitespaced at the end?
@@ -440,6 +441,7 @@ align(1):
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+
 /// layouted text line
 public struct LayLine {
   uint wstart, wend; /// indicies in word array
@@ -453,7 +455,6 @@ public struct LayLine {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public void delegate (ref LayFontStyle st) nothrow @safe @nogc layFixFontDG; /// you can set this delegate, and it will be called if fontstyle's fontface is -1; it should set it to proper font id
 
 public alias LayTextC = LayTextImpl!char; ///
 public alias LayTextW = LayTextImpl!wchar; ///
@@ -678,13 +679,15 @@ public:
     if (awidth < 1) awidth = 1;
     laf = alaf;
     maxWidth = awidth;
-    if (newStyle.fontface == -1 && layFixFontDG !is null) layFixFontDG(newStyle);
+    if (newStyle.fontface == -1 && alaf.fixFontDG !is null) alaf.fixFontDG(alaf, newStyle);
     if (newStyle.fontsize == 0) newStyle.fontsize = 16;
     style = newStyle;
   }
 
+  ///
   ~this () nothrow @trusted @nogc { freeMemory(); }
 
+  ///
   void freeMemory () nothrow @trusted @nogc {
     import core.stdc.stdlib : free;
     if (lines !is null) { free(lines); lines = null; }
@@ -708,6 +711,7 @@ public:
       mObjects.length = 0;
       mObjects.assumeSafeAppend;
     }
+    if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
     style = newStyle;
     just = newJust;
     firstParaLine = true;
@@ -724,7 +728,7 @@ public:
   /// push current font and justify
   void pushStyles () nothrow @trusted @nogc {
     ensurePool!(4, false)(1, styleStack, ststackUsed, ststackAllocated);
-    if (newStyle.fontface == -1 && layFixFontDG !is null) layFixFontDG(newStyle);
+    if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
     auto si = styleStack+(ststackUsed++);
     si.fs = newStyle;
     si.ls = newJust;
@@ -736,7 +740,7 @@ public:
     auto si = styleStack+(--ststackUsed);
     newStyle = si.fs;
     newJust = si.ls;
-    if (newStyle.fontface == -1 && layFixFontDG !is null) layFixFontDG(newStyle);
+    if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
   }
 
   @property int textHeight () const pure nothrow @safe @nogc => mTextHeight; /// total text height
@@ -994,7 +998,10 @@ public:
 
     // process stream dchars
     if (curCh == 0) return;
-    if (!hasWordChars) style = newStyle;
+    if (!hasWordChars) {
+      if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
+      style = newStyle;
+    }
     if (wordsUsed == 0 || words[wordsUsed-1].propsOrig.someend) just = newJust;
     while (curCh) {
       import std.uni;
@@ -1019,6 +1026,7 @@ public:
       } else if (ch == NonBreakingSpaceCh) {
         // non-breaking space
         lastWasSoftHypen = false;
+        if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
         if (hasWordChars && style != newStyle) flushWord();
         putChars(' ');
       } else if (ch == SoftHyphenCh) {
@@ -1037,12 +1045,14 @@ public:
           lw.propsOrig.canbreak = true;
           lw.propsOrig.spaced = true;
         } else {
+          if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
           style = newStyle;
         }
         lastWasSoftHypen = false;
       } else {
         lastWasSoftHypen = false;
         if (ch > dchar.max || ch.isSurrogate || ch.isPrivateUse || ch.isNonCharacter || ch.isMark || ch.isFormat || ch.isControl) ch = '?';
+        if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
         if (hasWordChars && style != newStyle) flushWord();
         putChars(ch);
         if (isDash(ch) && charsUsed-lastWordStart > 1 && !isDash(ltext[charsUsed-2])) flushWord();
@@ -1066,7 +1076,7 @@ public:
     scope(exit) {
       while (ststackUsed > odepth) popStyles();
     }
-    if (newStyle.fontface == -1 && layFixFontDG !is null) layFixFontDG(newStyle);
+    if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
     maxWidth = newWidth;
     linesUsed = 0;
     if (linesAllocated > 0) {
@@ -1142,6 +1152,7 @@ private:
     }
     w.just = just;
     w.paraPad = -1;
+    if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
     style = newStyle;
     return w;
   }
@@ -1188,6 +1199,7 @@ private:
       w.paraPad = -1;
       lastWordStart = charsUsed;
     }
+    if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
     style = newStyle;
   }
 
