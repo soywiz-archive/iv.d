@@ -7520,8 +7520,6 @@ struct FONStextIter(CT) if (isAnyCharType!CT) {
 
 /*version(nanovg_use_freetype_ii_x)*/ static if (!NanoVegaIsUsingSTBTTF) {
 version(nanovg_builtin_freetype_bindings) {
-  import iv.freetype;
-} else {
 pragma(lib, "freetype");
 private extern(C) nothrow @trusted @nogc {
 private import core.stdc.config : c_long, c_ulong;
@@ -7797,6 +7795,8 @@ FT_Error FT_Get_Kerning (FT_Face, FT_UInt, FT_UInt, FT_UInt, FT_Vector*);
 void FT_Outline_Get_CBox (const(FT_Outline)*, FT_BBox*);
 FT_Error FT_Outline_Decompose (FT_Outline*, const(FT_Outline_Funcs)*, void*);
 }
+} else {
+import iv.freetype;
 }
 
 struct FONSttFontImpl {
