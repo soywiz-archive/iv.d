@@ -2185,7 +2185,7 @@ public nothrow @trusted @nogc:
   @property bool valid () const { import core.stdc.math : isfinite; return (isfinite(mat.ptr[0]) != 0); }
 
   /// Returns `true` if this matrix is identity matrix.
-  @property bool isIdentity () const { pragma(inline, true); return (mat[] == IdentityMat[]); }
+  @property bool isIdentity () const { version(aliced) pragma(inline, true); return (mat[] == IdentityMat[]); }
 
   /// Returns new inverse matrix.
   /// If inverted matrix cannot be calculated, `res.valid` fill be `false`.
