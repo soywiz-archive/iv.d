@@ -9998,7 +9998,7 @@ public int fonsValidateTexture (FONScontext* stash, int* dirty) nothrow @trusted
 public void fonsDeleteInternal (FONScontext* stash) nothrow @trusted @nogc {
   if (stash is null) return;
 
-  if (stash.params.renderDelete) stash.params.renderDelete(stash.params.userPtr);
+  if (stash.params.renderDelete !is null) stash.params.renderDelete(stash.params.userPtr);
 
   foreach (int i; 0..stash.nfonts) fons__freeFont(stash.fonts[i]);
 
