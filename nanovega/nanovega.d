@@ -2732,7 +2732,7 @@ public int createImage() (NVGContext ctx, const(char)[] filename, int imageFlags
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
       return 0;
     }
-    image = ctx.createImageRGBA(w, h, imageFlags, img[0..w*h*4]);
+    image = ctx.createImageRGBA(w, h, img[0..w*h*4], imageFlags);
     stbi_image_free(img);
     return image;
   }
@@ -2756,7 +2756,7 @@ static if (NanoVegaHasArsdImage) {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageMem (NVGContext ctx, const(ubyte)* data, int ndata, int imageFlags=NVGImageFlags.None) {
+  public int createImageMem() (NVGContext ctx, const(ubyte)* data, int ndata, int imageFlags=NVGImageFlags.None) {
     int w, h, n, image;
     ubyte* img = stbi_load_from_memory(data, ndata, &w, &h, &n, 4);
     if (img is null) {
