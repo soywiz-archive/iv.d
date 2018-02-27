@@ -1472,7 +1472,7 @@ package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @
   fontParams.flags = FONS_ZERO_TOPLEFT;
   fontParams.renderCreate = null;
   fontParams.renderUpdate = null;
-  fontParams.renderDraw = null;
+  debug(nanovega) fontParams.renderDraw = null;
   fontParams.renderDelete = null;
   fontParams.userPtr = null;
   ctx.fs = fonsCreateInternal(&fontParams);
@@ -7487,7 +7487,9 @@ struct FONSparams {
   bool function (void* uptr, int width, int height) nothrow @trusted @nogc renderCreate;
   int function (void* uptr, int width, int height) nothrow @trusted @nogc renderResize;
   void function (void* uptr, int* rect, const(ubyte)* data) nothrow @trusted @nogc renderUpdate;
-  void function (void* uptr, const(float)* verts, const(float)* tcoords, const(uint)* colors, int nverts) nothrow @trusted @nogc renderDraw;
+  debug(nanovega) {
+    void function (void* uptr, const(float)* verts, const(float)* tcoords, const(uint)* colors, int nverts) nothrow @trusted @nogc renderDraw;
+  }
   void function (void* uptr) nothrow @trusted @nogc renderDelete;
 }
 
