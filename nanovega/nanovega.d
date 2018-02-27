@@ -945,9 +945,9 @@ public:
 /// Group: render_styles
 public struct NVGPaint {
   NVGMatrix xform;
-  float[2] extent;
-  float radius;
-  float feather;
+  float[2] extent = 0.0f;
+  float radius = 0.0f;
+  float feather = 0.0f;
   NVGColor innerColor; /// this can be used to modulate images (fill/font)
   NVGColor outerColor;
   NVGImage image;
@@ -1162,7 +1162,7 @@ enum NVGtexture {
 
 struct NVGscissor {
   NVGMatrix xform;
-  float[2] extent;
+  float[2] extent = -1.0f;
 }
 
 struct NVGvertex {
@@ -1262,25 +1262,25 @@ enum PointFlag : int {
 
 struct NVGstate {
   NVGCompositeOperationState compositeOperation;
-  bool shapeAntiAlias;
+  bool shapeAntiAlias = true;
   NVGPaint fill;
   NVGPaint stroke;
-  float strokeWidth;
-  float miterLimit;
-  NVGLineCap lineJoin;
-  NVGLineCap lineCap;
-  float alpha;
+  float strokeWidth = 1.0f;
+  float miterLimit = 10.0f;
+  NVGLineCap lineJoin = NVGLineCap.Miter;
+  NVGLineCap lineCap = NVGLineCap.Butt;
+  float alpha = 1.0f;
   NVGMatrix xform;
   NVGscissor scissor;
-  float fontSize;
-  float letterSpacing;
-  float lineHeight;
-  float fontBlur;
+  float fontSize = 16.0f;
+  float letterSpacing = 0.0f;
+  float lineHeight = 1.0f;
+  float fontBlur = 0.0f;
   NVGTextAlign textAlign;
-  int fontId;
-  bool evenOddMode; // use even-odd filling rule (required for some svgs); otherwise use non-zero fill
+  int fontId = 0;
+  bool evenOddMode = false; // use even-odd filling rule (required for some svgs); otherwise use non-zero fill
 
-  void clear () nothrow @trusted @nogc {
+  void clearPaint () nothrow @trusted @nogc {
     fill.clear();
     stroke.clear();
   }
@@ -1726,7 +1726,7 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
 
   if (isNaN(devicePixelRatio)) devicePixelRatio = (windowHeight > 0 ? cast(float)windowWidth/cast(float)windowHeight : 1024.0/768.0);
 
-  foreach (ref NVGstate st; ctx.states[0..ctx.nstates]) st.clear();
+  foreach (ref NVGstate st; ctx.states[0..ctx.nstates]) st.clearPaint();
   ctx.nstates = 0;
   ctx.save();
   ctx.reset();
@@ -2625,7 +2625,7 @@ public bool save (NVGContext ctx) nothrow @trusted @nogc {
 /// Group: state_handling
 public bool restore (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.nstates <= 1) return false;
-  ctx.states[ctx.nstates-1].clear();
+  ctx.states[ctx.nstates-1].clearPaint();
   --ctx.nstates;
   return true;
 }
@@ -2634,8 +2634,7 @@ public bool restore (NVGContext ctx) nothrow @trusted @nogc {
 /// Group: state_handling
 public void reset (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  //memset(state, 0, (*state).sizeof);
-  state.clear();
+  state.clearPaint();
 
   nvg__setPaintColor(state.fill, nvgRGBA(255, 255, 255, 255));
   nvg__setPaintColor(state.stroke, nvgRGBA(0, 0, 0, 255));
@@ -2648,8 +2647,7 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   state.alpha = 1.0f;
   state.xform.identity;
 
-  state.scissor.extent.ptr[0] = -1.0f;
-  state.scissor.extent.ptr[1] = -1.0f;
+  state.scissor.extent[] = -1.0f;
 
   state.fontSize = 16.0f;
   state.letterSpacing = 0.0f;
