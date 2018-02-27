@@ -2695,12 +2695,14 @@ public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=N
     try {
       auto oimg = ArsdImage(filename);
       if (auto img = cast(TrueColorImage)oimg) {
-        scope(exit) delete oimg;
+        oimg = null;
+        scope(exit) { delete img.imageData.bytes; delete img; }
         return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
       } else {
         TrueColorImage img = oimg.getAsTrueColorImage;
-        delete oimg;
-        scope(exit) delete img;
+        if (auto xi = cast(IndexedImage)oimg) { delete xi.palette; delete xi.data; delete xi; }
+        oimg = null;
+        scope(exit) { delete img.imageData.bytes; delete img; }
         return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
       }
     } catch (Exception) {}
@@ -2732,7 +2734,7 @@ static if (NanoVegaHasArsdImage) {
       return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
     } else {
       auto tc = img.getAsTrueColorImage;
-      scope(exit) delete tc;
+      scope(exit) { delete tc.imageData.bytes; delete tc; }
       return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
     }
   }
