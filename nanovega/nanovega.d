@@ -2967,7 +2967,7 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
 }
 
 /// Linear gradient with multiple stops.
-/// $(WARNING THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!(
+/// $(WARNING THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!)
 /// Group: paints
 public alias NVGLGS = NVGLGSdata*;
 
