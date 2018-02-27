@@ -225,7 +225,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     NanoVega allows you to load image files in various formats (if arsd loaders are in place) to be used for rendering.
     In addition you can upload your own image.
-    The parameter imageFlags is combination of flags defined in NVGImageFlags.
+    The parameter imageFlags is combination of flags defined in [NVGImageFlags].
 
   paints =
     ## Paints
@@ -280,6 +280,10 @@ The following code illustrates the OpenGL state touched by the rendering code:
     ## Text
 
     NanoVega allows you to load .ttf files and use the font to render text.
+    You have to load some font, and set proper font size before doing anything
+    with text, as there is no "default" font provided by NanoVega. Also, don't
+    forget to check return value of `createFont()`, 'cause NanoVega fon't fail
+    if it cannot load font, it will silently try to render nothing.
 
     The appearance of the text can be defined by setting the current text style
     and by specifying the fill color. Common text and font settings such as
@@ -305,7 +309,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
        string txt = "Text me up.";
        vg.textBounds(x, y, txt, bounds);
        vg.beginPath();
-       vg.roundedRect(bounds[0], bounds[1], bounds[2]-bounds[0], bounds[3]-bounds[1]);
+       vg.roundedRect(bounds[0], bounds[1], bounds[2]-bounds[0], bounds[3]-bounds[1], 6);
        vg.fill();
     ----------------------
 
