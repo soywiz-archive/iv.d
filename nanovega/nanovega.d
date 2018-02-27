@@ -285,7 +285,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
     NanoVega allows you to load .ttf files and use the font to render text.
     You have to load some font, and set proper font size before doing anything
     with text, as there is no "default" font provided by NanoVega. Also, don't
-    forget to check return value of `createFont()`, 'cause NanoVega fon't fail
+    forget to check return value of `createFont()`, 'cause NanoVega won't fail
     if it cannot load font, it will silently try to render nothing.
 
     The appearance of the text can be defined by setting the current text style
