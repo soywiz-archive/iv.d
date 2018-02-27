@@ -2708,7 +2708,7 @@ public void scale (NVGContext ctx, in float x, in float y) nothrow @trusted @nog
 /// Creates image by loading it from the disk from specified file name.
 /// Returns handle to the image or 0 on error.
 /// Group: images
-public int createImage() (NVGContext ctx, const(char)[] filename, const(/*NVGImageFlag*/uint)[] imageFlagsList...) {
+public int createImage() (NVGContext ctx, const(char)[] filename, const(NVGImageFlag)[] imageFlagsList...) {
   uint imageFlags = 0;
   foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
   static if (NanoVegaHasArsdImage) {
@@ -2753,7 +2753,7 @@ static if (NanoVegaHasArsdImage) {
   /// Creates image by loading it from the specified memory image.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageFromMemoryImage() (NVGContext ctx, MemoryImage img, const(/*NVGImageFlag*/uint)[] imageFlagsList...) {
+  public int createImageFromMemoryImage() (NVGContext ctx, MemoryImage img, const(NVGImageFlag)[] imageFlagsList...) {
     if (img is null) return 0;
     uint imageFlags = 0;
     foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
@@ -2769,7 +2769,7 @@ static if (NanoVegaHasArsdImage) {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageMem() (NVGContext ctx, const(ubyte)* data, int ndata, const(/*NVGImageFlag*/uint)[] imageFlagsList...) {
+  public int createImageMem() (NVGContext ctx, const(ubyte)* data, int ndata, const(NVGImageFlag)[] imageFlagsList...) {
     int w, h, n, image;
     ubyte* img = stbi_load_from_memory(data, ndata, &w, &h, &n, 4);
     if (img is null) {
@@ -2787,7 +2787,7 @@ static if (NanoVegaHasArsdImage) {
 /// Creates image from specified image data.
 /// Returns handle to the image or 0 on error.
 /// Group: images
-public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, const(/*NVGImageFlag*/uint)[] imageFlagsList...) nothrow @trusted @nogc {
+public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, const(NVGImageFlag)[] imageFlagsList...) nothrow @trusted @nogc {
   if (w < 1 || h < 1 || data.length < w*h*4) return 0;
   uint imageFlags = 0;
   foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
@@ -10629,16 +10629,18 @@ public enum NVGContextFlag : int {
   /// Nothing special, i.e. empty flag.
   None = 0,
   /// Flag indicating if geometry based anti-aliasing is used (may not be needed when using MSAA).
-  Antialias = 1<<0,
+  Antialias = 1U<<0,
   /** Flag indicating if strokes should be drawn using stencil buffer. The rendering will be a little
     * slower, but path overlaps (i.e. self-intersecting or sharp turns) will be drawn just once. */
-  StencilStrokes = 1<<1,
+  StencilStrokes = 1U<<1,
   /// Flag indicating that additional debug checks are done.
-  Debug = 1<<2,
+  Debug = 1U<<2,
   /// Filter (antialias) fonts
-  FontAA = 1<<7,
+  FontAA = 1U<<7,
   /// Don't filter (antialias) fonts
-  FontNoAA = 1<<8,
+  FontNoAA = 1U<<8,
+  /// You can use this as a substitute for default flags, for cases like this: `nvgCreateContext(NVGContextFlag.Default, NVGContextFlag.Debug);`.
+  Default = 1U<<31,
 }
 
 public enum NANOVG_GL_USE_STATE_FILTER = true;
@@ -11869,20 +11871,28 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 }
 
 
-version(aliced) {
-  private enum NVGDefaultContextFlagsXX = NVGContextFlag.Antialias|NVGContextFlag.StencilStrokes|NVGContextFlag.FontNoAA;
-} else {
-  private enum NVGDefaultContextFlagsXX = NVGContextFlag.Antialias|NVGContextFlag.StencilStrokes;
-}
-
-/// Default flags for [nvgCreateContext].
-/// Group: context_management
-public enum NVGDefaultContextFlags = NVGDefaultContextFlagsXX;
-
-/// Creates NanoVega contexts for OpenGL2+.
-/// Flags should be combination (bitwise or) of the [NVGContextFlag] members.
-/// Group: context_management
-public NVGContext nvgCreateContext (int flags=NVGDefaultContextFlags) nothrow @trusted @nogc {
+/** Creates NanoVega contexts for OpenGL2+.
+ *
+ * Specify creation flags as additional arguments, like this:
+ * `nvgCreateContext(NVGContextFlag.Antialias, NVGContextFlag.StencilStrokes);`
+ *
+ * If you won't specify any flags, defaults will be used:
+ * `[NVGContextFlag.Antialias, NVGContextFlag.StencilStrokes]`.
+ *
+ * Group: context_management
+ */
+public NVGContext nvgCreateContext (const(NVGContextFlag)[] flagList...) nothrow @trusted @nogc {
+  version(aliced) {
+    enum DefaultFlags = NVGContextFlag.Antialias|NVGContextFlag.StencilStrokes|NVGContextFlag.FontNoAA;
+  } else {
+    enum DefaultFlags = NVGContextFlag.Antialias|NVGContextFlag.StencilStrokes;
+  }
+  uint flags = 0;
+  if (flagList.length != 0) {
+    foreach (immutable flg; flagList) flags |= (flg != NVGContextFlag.Default ? flg : DefaultFlags);
+  } else {
+    flags = DefaultFlags;
+  }
   NVGparams params = void;
   NVGContext ctx = null;
   version(nanovg_builtin_opengl_bindings) nanovgInitOpenGL(); // why not?
