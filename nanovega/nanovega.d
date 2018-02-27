@@ -225,7 +225,10 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     NanoVega allows you to load image files in various formats (if arsd loaders are in place) to be used for rendering.
     In addition you can upload your own image.
-    The parameter imageFlags is combination of flags defined in [NVGImageFlags].
+    The parameter imageFlags is combination of flags defined in [NVGImageFlag].
+
+    If you will use your image as fill pattern, it will be scaled by default. To make it repeat, pass
+    [NVGImageFlag.RepeatX] and [NVGImageFlag.RepeatY] flags to image creation function respectively.
 
   paints =
     ## Paints
@@ -1016,7 +1019,7 @@ public struct NVGTextRow(CT) if (isAnyCharType!CT) {
 
 /// Image creation flags.
 /// Group: images
-public enum NVGImageFlags : uint {
+public enum NVGImageFlag : uint {
   None            =    0, /// Nothing special.
   GenerateMipmaps = 1<<0, /// Generate mipmaps during creation of the image.
   RepeatX         = 1<<1, /// Repeat image in X direction.
@@ -1026,6 +1029,8 @@ public enum NVGImageFlags : uint {
   NoFiltering     = 1<<8, /// use GL_NEAREST instead of GL_LINEAR
   Nearest = NoFiltering,  /// compatibility with original NanoVG
 }
+
+alias NVGImageFlags = NVGImageFlag; /// Backwards compatibility for [NVGImageFlag].
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1483,7 +1488,7 @@ package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @
   if (ctx.fs is null) goto error;
 
   // create font texture
-  ctx.fontImages[0] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, (ctx.params.fontAA ? 0 : NVGImageFlags.NoFiltering), null);
+  ctx.fontImages[0] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, (ctx.params.fontAA ? 0 : NVGImageFlag.NoFiltering), null);
   if (ctx.fontImages[0] == 0) goto error;
   ctx.fontImageIdx = 0;
 
@@ -2703,7 +2708,9 @@ public void scale (NVGContext ctx, in float x, in float y) nothrow @trusted @nog
 /// Creates image by loading it from the disk from specified file name.
 /// Returns handle to the image or 0 on error.
 /// Group: images
-public int createImage() (NVGContext ctx, const(char)[] filename, int imageFlags=NVGImageFlags.None) {
+public int createImage() (NVGContext ctx, const(char)[] filename, const(/*NVGImageFlag*/uint)[] imageFlagsList...) {
+  uint imageFlags = 0;
+  foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
   static if (NanoVegaHasArsdImage) {
     import arsd.image;
     // do we have new arsd API to load images?
@@ -2746,8 +2753,10 @@ static if (NanoVegaHasArsdImage) {
   /// Creates image by loading it from the specified memory image.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageFromMemoryImage() (NVGContext ctx, MemoryImage img, int imageFlags=NVGImageFlags.None) {
+  public int createImageFromMemoryImage() (NVGContext ctx, MemoryImage img, const(/*NVGImageFlag*/uint)[] imageFlagsList...) {
     if (img is null) return 0;
+    uint imageFlags = 0;
+    foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
     if (auto tc = cast(TrueColorImage)img) {
       return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
     } else {
@@ -2760,13 +2769,15 @@ static if (NanoVegaHasArsdImage) {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageMem() (NVGContext ctx, const(ubyte)* data, int ndata, int imageFlags=NVGImageFlags.None) {
+  public int createImageMem() (NVGContext ctx, const(ubyte)* data, int ndata, const(/*NVGImageFlag*/uint)[] imageFlagsList...) {
     int w, h, n, image;
     ubyte* img = stbi_load_from_memory(data, ndata, &w, &h, &n, 4);
     if (img is null) {
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
       return 0;
     }
+    uint imageFlags = 0;
+    foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
     image = ctx.createImageRGBA(w, h, img[0..w*h*4], imageFlags);
     stbi_image_free(img);
     return image;
@@ -2776,8 +2787,10 @@ static if (NanoVegaHasArsdImage) {
 /// Creates image from specified image data.
 /// Returns handle to the image or 0 on error.
 /// Group: images
-public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, int imageFlags=NVGImageFlags.None) nothrow @trusted @nogc {
+public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, const(/*NVGImageFlag*/uint)[] imageFlagsList...) nothrow @trusted @nogc {
   if (w < 1 || h < 1 || data.length < w*h*4) return 0;
+  uint imageFlags = 0;
+  foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
   return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
 }
 
@@ -3071,7 +3084,7 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy,
     foreach (immutable i; 0..stops.length-1) gradientSpan(data.ptr, stops.ptr+i, stops.ptr+i+1);
   }
   gradientSpan(data.ptr, (stops.length ? stops.ptr+stops.length-1 : &s0), &s1);
-  img = ctx.createImageRGBA(NVG_GRADIENT_SAMPLES, 1, data[], NVGImageFlags.RepeatX|NVGImageFlags.RepeatY);
+  img = ctx.createImageRGBA(NVG_GRADIENT_SAMPLES, 1, data[], NVGImageFlag.RepeatX, NVGImageFlag.RepeatY);
   if (img <= 0) return null;
   // allocate data
   NVGLGS res = cast(NVGLGS)malloc((*NVGLGS).sizeof);
@@ -6866,7 +6879,7 @@ bool nvg__allocTextAtlas (NVGContext ctx) nothrow @trusted @nogc {
     ctx.imageSize(ctx.fontImages[ctx.fontImageIdx], iw, ih);
     if (iw > ih) ih *= 2; else iw *= 2;
     if (iw > NVG_MAX_FONTIMAGE_SIZE || ih > NVG_MAX_FONTIMAGE_SIZE) iw = ih = NVG_MAX_FONTIMAGE_SIZE;
-    ctx.fontImages[ctx.fontImageIdx+1] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, (ctx.params.fontAA ? 0 : NVGImageFlags.NoFiltering), null);
+    ctx.fontImages[ctx.fontImageIdx+1] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, (ctx.params.fontAA ? 0 : NVGImageFlag.NoFiltering), null);
   }
   ++ctx.fontImageIdx;
   fonsResetAtlas(ctx.fs, iw, ih);
@@ -10626,7 +10639,7 @@ public enum NVGContextFlag : int {
 
 public enum NANOVG_GL_USE_STATE_FILTER = true;
 
-/// These are additional flags on top of NVGImageFlags.
+/// These are additional flags on top of [NVGImageFlag].
 /// Group: images
 public enum NVGImageFlagsGL : int {
   NoDelete = 1<<16,  // Do not delete GL texture handle.
@@ -11116,7 +11129,7 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
   glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
 
   // GL 1.4 and later has support for generating mipmaps using a tex parameter.
-  if ((imageFlags&(NVGImageFlags.GenerateMipmaps|NVGImageFlags.NoFiltering)) == NVGImageFlags.GenerateMipmaps) glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+  if ((imageFlags&(NVGImageFlag.GenerateMipmaps|NVGImageFlag.NoFiltering)) == NVGImageFlag.GenerateMipmaps) glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 
   if (type == NVGtexture.RGBA) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
@@ -11124,20 +11137,20 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, data);
   }
 
-  if ((imageFlags&(NVGImageFlags.GenerateMipmaps|NVGImageFlags.NoFiltering)) == NVGImageFlags.GenerateMipmaps) {
+  if ((imageFlags&(NVGImageFlag.GenerateMipmaps|NVGImageFlag.NoFiltering)) == NVGImageFlag.GenerateMipmaps) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (imageFlags&NVGImageFlags.NoFiltering ? GL_NEAREST : GL_LINEAR));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (imageFlags&NVGImageFlag.NoFiltering ? GL_NEAREST : GL_LINEAR));
   }
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (imageFlags&NVGImageFlags.NoFiltering ? GL_NEAREST : GL_LINEAR));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (imageFlags&NVGImageFlag.NoFiltering ? GL_NEAREST : GL_LINEAR));
 
-  if (imageFlags&NVGImageFlags.RepeatX) {
+  if (imageFlags&NVGImageFlag.RepeatX) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   } else {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   }
 
-  if (imageFlags&NVGImageFlags.RepeatY) {
+  if (imageFlags&NVGImageFlag.RepeatY) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   } else {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -11277,7 +11290,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
   if (paint.image != 0) {
     tex = glnvg__findTexture(gl, paint.image);
     if (tex is null) return false;
-    if ((tex.flags&NVGImageFlags.FlipY) != 0) {
+    if ((tex.flags&NVGImageFlag.FlipY) != 0) {
       /*
       NVGMatrix flipped;
       nvgTransformScale(flipped[], 1.0f, -1.0f);
@@ -11308,7 +11321,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     frag.type = NSVG_SHADER_FILLIMG;
 
     if (tex.type == NVGtexture.RGBA) {
-      frag.texType = (tex.flags&NVGImageFlags.Premultiplied ? 0 : 1);
+      frag.texType = (tex.flags&NVGImageFlag.Premultiplied ? 0 : 1);
     } else {
       frag.texType = 2;
     }
