@@ -6431,8 +6431,7 @@ void nvg__pickBeginFrame (NVGContext ctx, int width, int height) {
 
 /** Creates font by loading it from the disk from specified file name.
  * Returns handle to the font or FONS_INVALID (aka -1) on error.
- * use "fontname:noaa" as [name] to turn off antialiasing (if font driver supports that).
- * Maximum font name length is 63 chars, and it will be truncated.
+ * Use "fontname:noaa" as [name] to turn off antialiasing (if font driver supports that).
  *
  * On POSIX systems it is possible to use fontconfig font names too.
  * `:noaa` in font path is still allowed, but it must be the last option.
@@ -6446,7 +6445,6 @@ public int createFont (NVGContext ctx, const(char)[] name, const(char)[] path) n
 /** Creates font by loading it from the specified memory chunk.
  * Returns handle to the font or FONS_INVALID (aka -1) on error.
  * Won't free data on error.
- * Maximum font name length is 63 chars, and it will be truncated.
  *
  * Group: text_api
  */
@@ -6577,8 +6575,14 @@ public int fontFaceId (NVGContext ctx) nothrow @trusted @nogc {
   return nvg__getState(ctx).fontId;
 }
 
-/// Sets the font face based on specified name of current text style.
-/// Group: text_api
+/** Sets the font face based on specified name of current text style.
+ *
+ * The underlying implementation is using O(1) data structure to lookup
+ * font names, so you probably should use this function instead of [fontFaceId]
+ * to make your code more robust and less error-prone.
+ *
+ * Group: text_api
+ */
 public void fontFace (NVGContext ctx, const(char)[] font) nothrow @trusted @nogc {
   pragma(inline, true);
   nvg__getState(ctx).fontId = fonsGetFontByName(ctx.fs, font);
