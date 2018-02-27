@@ -2696,22 +2696,18 @@ public void scale (NVGContext ctx, in float x, in float y) nothrow @trusted @nog
 // ////////////////////////////////////////////////////////////////////////// //
 // Images
 
-static if (NanoVegaHasArsdImage) {
-  // do we have new arsd API to load images?
-  static if (!is(typeof(MemoryImage.fromImageFile))) {
-    static assert(0, "Sorry, your ARSD is too old. Please, update it.");
-  } else {
-    alias ArsdImage = MemoryImage.fromImageFile;
-  }
-}
-
 /// Creates image by loading it from the disk from specified file name.
 /// Returns handle to the image or 0 on error.
 /// Group: images
-public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=NVGImageFlags.None) {
+public int createImage() (NVGContext ctx, const(char)[] filename, int imageFlags=NVGImageFlags.None) {
   static if (NanoVegaHasArsdImage) {
+    import arsd.image;
+    // do we have new arsd API to load images?
+    static if (!is(typeof(MemoryImage.fromImageFile))) {
+      static assert(0, "Sorry, your ARSD is too old. Please, update it.");
+    }
     try {
-      auto oimg = ArsdImage(filename);
+      auto oimg = MemoryImage.fromImageFile(filename);
       if (auto img = cast(TrueColorImage)oimg) {
         oimg = null;
         scope(exit) { delete img.imageData.bytes; delete img; }
@@ -2743,10 +2739,10 @@ public int createImage (NVGContext ctx, const(char)[] filename, int imageFlags=N
 }
 
 static if (NanoVegaHasArsdImage) {
-  /// Creates image by loading it from the specified chunk of memory.
+  /// Creates image by loading it from the specified memory image.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageFromMemoryImage (NVGContext ctx, MemoryImage img, int imageFlags=NVGImageFlags.None) {
+  public int createImageFromMemoryImage() (NVGContext ctx, MemoryImage img, int imageFlags=NVGImageFlags.None) {
     if (img is null) return 0;
     if (auto tc = cast(TrueColorImage)img) {
       return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
