@@ -9383,7 +9383,6 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
         // remember path
         stash.fonts[xres].setPath(path);
       }
-      return xres;
     } catch (Exception e) {
       // oops; sorry
     }
@@ -10603,6 +10602,8 @@ private extern(System) nothrow @nogc {
   enum uint GL_DST_COLOR = 0x0306;
   enum uint GL_ONE_MINUS_DST_COLOR = 0x0307;
   enum uint GL_SRC_ALPHA_SATURATE = 0x0308;
+
+  enum uint GL_INVERT = 0x150AU;
 
   /*
   version(Windows) {
