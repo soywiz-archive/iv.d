@@ -410,7 +410,6 @@ version(nanovg_disable_vfs) {
 import core.stdc.stdlib : malloc, realloc, free;
 import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
-//import iv.nanovega.fontstash;
 
 version(Posix) {
   version = nanovg_use_freetype;
@@ -1142,7 +1141,7 @@ alias NVGImageFlags = NVGImageFlag; /// Backwards compatibility for [NVGImageFla
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-package/*(iv.nanovega)*/:
+private:
 
 static T* xdup(T) (const(T)* ptr, int count) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc;
@@ -1590,7 +1589,7 @@ NVGstate* nvg__getState (NVGContext ctx) pure nothrow @trusted @nogc {
 }
 
 // Constructor called by the render back-end.
-package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
+NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
   FONSparams fontParams = void;
   NVGContext ctx = cast(NVGContext)malloc(NVGcontextinternal.sizeof);
   if (ctx is null) goto error;
@@ -1647,12 +1646,12 @@ error:
 }
 
 // Called by render backend.
-package/*(iv.nanovega)*/ NVGparams* internalParams (NVGContext ctx) nothrow @trusted @nogc {
+NVGparams* internalParams (NVGContext ctx) nothrow @trusted @nogc {
   return &ctx.params;
 }
 
 // Destructor called by the render back-end.
-package/*(iv.nanovega)*/ void deleteInternal (ref NVGContext ctx) nothrow @trusted @nogc {
+void deleteInternal (ref NVGContext ctx) nothrow @trusted @nogc {
   if (ctx is null) return;
   if (ctx.contextAlive) {
     if (ctx.commands !is null) free(ctx.commands);
@@ -1686,9 +1685,10 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
   }
 }
 
-/// Delete NanoVega context.
+/// Returns `true` if the given context is not `null` and can be used for painting.
 /// Group: context_management
 public bool valid (in NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null && ctx.contextAlive); }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Frame Management
