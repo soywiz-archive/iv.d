@@ -349,7 +349,7 @@ void main (string[] args) {
   if (GWidth < minw) GWidth = minw;
   if (GHeight < minh) GHeight = minh;
 
-  int vgimg = 0;
+  NVGImage vgimg;
 
   bool doQuit = false;
   bool drawFPS = false;
@@ -365,14 +365,13 @@ void main (string[] args) {
     sdwindow.closeQuery = delegate () { doQuit = true; };
   }
 
+  sdwindow.onClosing = delegate () {
+    vgimg.clear();
+    nvg.kill();
+  };
+
   void closeWindow () {
-    if (!sdwindow.closed && nvg !is null) {
-      nvg.deleteImage(vgimg);
-      vgimg = 0;
-      nvg.kill();
-      nvg = null;
-      sdwindow.close();
-    }
+    if (!sdwindow.closed) sdwindow.close();
   }
 
   auto stt = MonoTime.currTime;
@@ -432,7 +431,7 @@ void main (string[] args) {
         writeln("*** rendering took ", dur, " milliseconds (", dur/1000.0, " seconds), ", bezierCount, " beziers rendered.");
       } else {
         // draw image
-        if (vgimg == 0) {
+        if (!vgimg.valid) {
           // image is not rasterized, do it now
           ubyte[] svgraster;
           scope(exit) svgraster.destroy;

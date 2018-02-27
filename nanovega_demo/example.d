@@ -66,7 +66,7 @@ version = nanovg_demo_msfonts;
 
 public struct DemoData {
   int fontNormal, fontBold, fontIcons;
-  int[13] images;
+  NVGImage[13] images;
 }
 
 public __gshared float bndX = 42.0f;
@@ -97,8 +97,8 @@ public int loadDemoData (NVGContext vg, DemoData* data) {
 
   for (i = 0; i < 12; i++) {
     import std.string : format;
-    data.images[i] = vg.createImage("data/images/image%d.jpg".format(i+1), 0);
-    if (data.images[i] == 0) {
+    data.images[i] = vg.createImage("data/images/image%d.jpg".format(i+1));
+    if (!data.images[i].valid) {
       printf("Could not load image #%d.\n", i+1);
       return -1;
     }
@@ -131,8 +131,8 @@ public int loadDemoData (NVGContext vg, DemoData* data) {
 
   //bndSetFont(vg.createFont("droidsans", "data/DroidSans.ttf"));
   bndSetFont(data.fontNormal);
-  data.images[$-1] = vg.createImage("data/images/blender_icons16.png", 0);
-  if (data.images[$-1] == 0) {
+  data.images[$-1] = vg.createImage("data/images/blender_icons16.png");
+  if (!data.images[$-1].valid) {
     printf("Could not load icons image.\n");
     return -1;
   }
@@ -144,7 +144,7 @@ public int loadDemoData (NVGContext vg, DemoData* data) {
 
 public void freeDemoData (NVGContext vg, DemoData* data) {
   if (vg == null) return;
-  foreach (int i; data.images[]) vg.deleteImage(i);
+  foreach (ref NVGImage i; data.images[]) vg.deleteImage(i);
 }
 
 
@@ -214,7 +214,7 @@ public void renderDemo (NVGContext vg, float mx, float my, float width, float he
     drawButton(vg, 0, "Cancel", x+170, y, 110, 28, nvgRGBA(0, 0, 0, 0));
 
     // Thumbnails box
-    drawThumbnails(vg, 365, popy-30, 160, 300, data.images.ptr, 12, t);
+    drawThumbnails(vg, 365, popy-30, 160, 300, data.images[0..12], t);
   }
 
   void drawBnd () {
@@ -725,8 +725,9 @@ public void drawSpinner (NVGContext vg, float cx, float cy, float r, float t) {
 }
 
 
-public void drawThumbnails (NVGContext vg, float x, float y, float w, float h, const(int)* images, int nimages, float t) {
+public void drawThumbnails (NVGContext vg, float x, float y, float w, float h, NVGImage[] images, float t) {
   import core.stdc.math : pow, cosf, sinf, sqrtf;
+  immutable int nimages = cast(int)images.length;
   float cornerRadius = 3.0f;
   NVGPaint shadowPaint, imgPaint, fadePaint;
   float ix, iy, iw, ih;
@@ -1530,13 +1531,19 @@ void main () {
 
   version(X11) sdwindow.closeQuery = delegate () { doQuit = true; };
 
-  void closeWindow () {
-    if (!sdwindow.closed && vg !is null) {
+  sdwindow.onClosing = delegate () {
+    if (vg !is null) {
+      { import core.stdc.stdio; printf("freeing demo data...\n"); }
       freeDemoData(vg, &data);
+      { import core.stdc.stdio; printf("clearing blendish icon image...\n"); }
+      bndClearIconImage();
+      { import core.stdc.stdio; printf("killing context...\n"); }
       vg.kill();
-      vg = null;
-      sdwindow.close();
     }
+  };
+
+  void closeWindow () {
+    if (!sdwindow.closed) sdwindow.close();
   }
 
   auto stt = MonoTime.currTime;
