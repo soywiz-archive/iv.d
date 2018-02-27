@@ -225,7 +225,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     NanoVega allows you to load image files in various formats (if arsd loaders are in place) to be used for rendering.
     In addition you can upload your own image.
-    The parameter imageFlags is combination of flags defined in [NVGImageFlag].
+    The parameter imageFlagsList is a list of flags defined in [NVGImageFlag].
 
     If you will use your image as fill pattern, it will be scaled by default. To make it repeat, pass
     [NVGImageFlag.RepeatX] and [NVGImageFlag.RepeatY] flags to image creation function respectively.
@@ -786,7 +786,7 @@ public:
     static NVGColor fromArsd (in Color c) { pragma(inline, true); return NVGColor(c.r, c.g, c.b, c.a); } ///
     ///
     this (in Color c) {
-      pragma(inline, true);
+      version(aliced) pragma(inline, true);
       r = c.r/255.0f;
       g = c.g/255.0f;
       b = c.b/255.0f;
@@ -860,6 +860,87 @@ public:
 }
 
 
+//version = nanovega_debug_image_manager;
+//version = nanovega_debug_image_manager_rc;
+
+/** NanoVega image handle.
+ *
+ * This is refcounted struct, so you don't need to do anything special to free it once it is allocated.
+ *
+ * Group: images
+ */
+struct NVGImage {
+private:
+  NVGContext ctx;
+  int id; // backend image id
+
+public:
+  ///
+  this() (in auto ref NVGImage src) nothrow @trusted @nogc {
+    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p created from %p (imgid=%d)\n", &this, src, src.id); }
+    ctx = cast(NVGContext)src.ctx;
+    id = src.id;
+    if (ctx !is null) ctx.nvg__imageIncRef(id);
+  }
+
+  ///
+  ~this () nothrow @trusted @nogc { version(aliced) pragma(inline, true); clear(); }
+
+  ///
+  this (this) nothrow @trusted @nogc {
+    if (ctx !is null) {
+      version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p postblit (imgid=%d)\n", &this, id); }
+      ctx.nvg__imageIncRef(id);
+    }
+  }
+
+  ///
+  void opAssign() (in auto ref NVGImage src) nothrow @trusted @nogc {
+    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p (imgid=%d) assigned from %p (imgid=%d)\n", &this, id, &src, src.id); }
+    if (src.ctx !is null) (cast(NVGContext)src.ctx).nvg__imageIncRef(src.id);
+    if (ctx !is null) ctx.nvg__imageDecRef(id);
+    ctx = cast(NVGContext)src.ctx;
+    id = src.id;
+  }
+
+  /// Is this image valid?
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (id > 0 && ctx.valid); }
+
+  /// Is this image valid?
+  @property bool isSameContext (const(NVGContext) actx) const pure nothrow @safe @nogc { pragma(inline, true); return (actx !is null && ctx is actx); }
+
+  /// Returns image width, or zero for invalid image.
+  int width () const nothrow @trusted @nogc {
+    int w = 0;
+    if (valid) {
+      int h = void;
+      ctx.params.renderGetTextureSize(cast(void*)ctx.params.userPtr, id, &w, &h);
+    }
+    return w;
+  }
+
+  /// Returns image height, or zero for invalid image.
+  int height () const nothrow @trusted @nogc {
+    int h = 0;
+    if (valid) {
+      int w = void;
+      ctx.params.renderGetTextureSize(cast(void*)ctx.params.userPtr, id, &w, &h);
+    }
+    return h;
+  }
+
+  /// Free this image.
+  void clear () nothrow @trusted @nogc {
+    if (ctx !is null) {
+      version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p cleared (imgid=%d)\n", &this, id); }
+      ctx.nvg__imageDecRef(id);
+      ctx = null;
+      id = 0;
+    }
+  }
+}
+
+
 /// Paint parameters for various fills. Don't change anything here!
 /// Group: render_styles
 public struct NVGPaint {
@@ -869,7 +950,34 @@ public struct NVGPaint {
   float feather;
   NVGColor innerColor; /// this can be used to modulate images (fill/font)
   NVGColor outerColor;
-  int image;
+  NVGImage image;
+
+  this() (in auto ref NVGPaint p) nothrow @trusted @nogc {
+    xform = p.xform;
+    extent[] = p.extent[];
+    radius = p.radius;
+    feather = p.feather;
+    innerColor = p.innerColor;
+    outerColor = p.outerColor;
+    image = p.image;
+  }
+
+  void opAssign() (in auto ref NVGPaint p) nothrow @trusted @nogc {
+    xform = p.xform;
+    extent[] = p.extent[];
+    radius = p.radius;
+    feather = p.feather;
+    innerColor = p.innerColor;
+    outerColor = p.outerColor;
+    image = p.image;
+  }
+
+  void clear () nothrow @trusted @nogc {
+    version(aliced) pragma(inline, true);
+    import core.stdc.string : memset;
+    image.clear();
+    memset(&this, 0, this.sizeof);
+  }
 }
 
 /// Path winding.
@@ -1171,6 +1279,11 @@ struct NVGstate {
   NVGTextAlign textAlign;
   int fontId;
   bool evenOddMode; // use even-odd filling rule (required for some svgs); otherwise use non-zero fill
+
+  void clear () nothrow @trusted @nogc {
+    fill.clear();
+    stroke.clear();
+  }
 }
 
 struct NVGpoint {
@@ -1320,7 +1433,7 @@ private:
   float fringeWidth;
   float devicePxRatio;
   FONScontext* fs;
-  int[NVG_MAX_FONTIMAGES] fontImages;
+  NVGImage[NVG_MAX_FONTIMAGES] fontImages;
   int fontImageIdx;
   int drawCallCount;
   int fillTriCount;
@@ -1339,10 +1452,37 @@ private:
   NVGMatrix gpuAffine;
   int mWidth, mHeight;
   float mDeviceRatio;
-  void delegate (NVGContext ctx) nothrow @trusted @nogc cleanup;
+  // image manager
+  int imageCount; // number of alive images in this context
+  bool contextAlive; // context can be dead, but still contain some images
 
   @disable this (this); // no copies
 }
+
+void nvg__imageIncRef (NVGContext ctx, int imgid) nothrow @trusted @nogc {
+  if (ctx !is null && imgid > 0) {
+    ++ctx.imageCount;
+    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("image[++]ref: context %p: %d image refs (%d)\n", ctx, ctx.imageCount, imgid); }
+    if (ctx.contextAlive) ctx.params.renderTextureIncRef(ctx.params.userPtr, imgid);
+  }
+}
+
+void nvg__imageDecRef (NVGContext ctx, int imgid) nothrow @trusted @nogc {
+  if (ctx !is null && imgid > 0) {
+    assert(ctx.imageCount > 0);
+    --ctx.imageCount;
+    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("image[--]ref: context %p: %d image refs (%d)\n", ctx, ctx.imageCount, imgid); }
+    if (ctx.contextAlive) ctx.params.renderDeleteTexture(ctx.params.userPtr, imgid);
+    version(nanovega_debug_image_manager) if (!ctx.contextAlive) { import core.stdc.stdio; printf("image[--]ref: zombie context %p: %d image refs (%d)\n", ctx, ctx.imageCount, imgid); }
+    if (!ctx.contextAlive && ctx.imageCount == 0) {
+      // it is finally safe to free context memory
+      import core.stdc.stdlib : free;
+      version(nanovega_debug_image_manager) { import core.stdc.stdio; printf("killed zombie context %p\n", ctx); }
+      free(ctx);
+    }
+  }
+}
+
 
 public import core.stdc.math :
   nvg__sqrtf = sqrtf,
@@ -1456,8 +1596,10 @@ package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @
   if (ctx is null) goto error;
   memset(ctx, 0, NVGcontextinternal.sizeof);
 
+  ctx.contextAlive = true;
+
   ctx.params = *params;
-  ctx.fontImages[0..NVG_MAX_FONTIMAGES] = 0;
+  //ctx.fontImages[0..NVG_MAX_FONTIMAGES] = 0;
 
   ctx.commands = cast(float*)malloc(float.sizeof*NVG_INIT_COMMANDS_SIZE);
   if (ctx.commands is null) goto error;
@@ -1488,8 +1630,10 @@ package/*(iv.nanovega)*/ NVGContext createInternal (NVGparams* params) nothrow @
   if (ctx.fs is null) goto error;
 
   // create font texture
-  ctx.fontImages[0] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, (ctx.params.fontAA ? 0 : NVGImageFlag.NoFiltering), null);
-  if (ctx.fontImages[0] == 0) goto error;
+  ctx.fontImages[0].id = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, fontParams.width, fontParams.height, (ctx.params.fontAA ? 0 : NVGImageFlag.NoFiltering), null);
+  if (ctx.fontImages[0].id == 0) goto error;
+  ctx.fontImages[0].ctx = ctx;
+  ctx.nvg__imageIncRef(ctx.fontImages[0].id);
   ctx.fontImageIdx = 0;
 
   ctx.pathPickId = -1;
@@ -1510,26 +1654,27 @@ package/*(iv.nanovega)*/ NVGparams* internalParams (NVGContext ctx) nothrow @tru
 // Destructor called by the render back-end.
 package/*(iv.nanovega)*/ void deleteInternal (ref NVGContext ctx) nothrow @trusted @nogc {
   if (ctx is null) return;
+  if (ctx.contextAlive) {
+    if (ctx.commands !is null) free(ctx.commands);
+    nvg__deletePathCache(ctx.cache);
 
-  if (ctx.commands !is null) free(ctx.commands);
-  nvg__deletePathCache(ctx.cache);
+    if (ctx.fs) fonsDeleteInternal(ctx.fs);
 
-  if (ctx.fs) fonsDeleteInternal(ctx.fs);
+    foreach (uint i; 0..NVG_MAX_FONTIMAGES) ctx.fontImages[i].clear();
 
-  foreach (uint i; 0..NVG_MAX_FONTIMAGES) {
-    if (ctx.fontImages[i] != 0) {
-      ctx.deleteImage(ctx.fontImages[i]);
-      ctx.fontImages[i] = 0;
+    if (ctx.params.renderDelete !is null) ctx.params.renderDelete(ctx.params.userPtr);
+
+    if (ctx.pickScene !is null) nvg__deletePickScene(ctx.pickScene);
+
+    ctx.contextAlive = false;
+
+    if (ctx.imageCount == 0) {
+      version(nanovega_debug_image_manager) { import core.stdc.stdio; printf("destroyed context %p\n", ctx); }
+      free(ctx);
+    } else {
+      version(nanovega_debug_image_manager) { import core.stdc.stdio; printf("context %p is zombie now (%d image refs)\n", ctx, ctx.imageCount); }
     }
   }
-
-  if (ctx.params.renderDelete !is null) ctx.params.renderDelete(ctx.params.userPtr);
-
-  if (ctx.pickScene !is null) nvg__deletePickScene(ctx.pickScene);
-
-  if (ctx.cleanup !is null) ctx.cleanup(ctx);
-
-  free(ctx);
 }
 
 /// Delete NanoVega context.
@@ -1540,6 +1685,10 @@ public void kill (ref NVGContext ctx) nothrow @trusted @nogc {
     ctx = null;
   }
 }
+
+/// Delete NanoVega context.
+/// Group: context_management
+public bool valid (in NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null && ctx.contextAlive); }
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Frame Management
@@ -1577,6 +1726,7 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
 
   if (isNaN(devicePixelRatio)) devicePixelRatio = (windowHeight > 0 ? cast(float)windowWidth/cast(float)windowHeight : 1024.0/768.0);
 
+  foreach (ref NVGstate st; ctx.states[0..ctx.nstates]) st.clear();
   ctx.nstates = 0;
   ctx.save();
   ctx.reset();
@@ -1624,13 +1774,13 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   ctx.params.renderFlush(ctx.params.userPtr, state.compositeOperation);
   if (ctx.fontImageIdx != 0) {
-    int fontImage = ctx.fontImages[ctx.fontImageIdx];
+    auto fontImage = ctx.fontImages[ctx.fontImageIdx];
     int j = 0, iw, ih;
     // delete images that smaller than current one
-    if (fontImage == 0) return;
+    if (!fontImage.valid) return;
     ctx.imageSize(fontImage, iw, ih);
     foreach (int i; 0..ctx.fontImageIdx) {
-      if (ctx.fontImages[i] != 0) {
+      if (ctx.fontImages[i].valid) {
         int nw, nh;
         ctx.imageSize(ctx.fontImages[i], nw, nh);
         if (nw < iw || nh < ih) {
@@ -1645,7 +1795,7 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
     ctx.fontImages[0] = fontImage;
     ctx.fontImageIdx = 0;
     // clear all images after j
-    ctx.fontImages[j..NVG_MAX_FONTIMAGES] = 0;
+    ctx.fontImages[j..NVG_MAX_FONTIMAGES] = NVGImage.init;
   }
 }
 
@@ -1705,9 +1855,7 @@ private:
   void clearNode (int idx) nothrow @trusted @nogc {
     if (idx < 0 || idx >= nnodes) return;
     Node* node = &nodes[idx];
-    if (svctx !is null && node.paint.image > 0) {
-      svctx.params.renderDeleteTexture(svctx.params.userPtr, node.paint.image);
-    }
+    if (svctx !is null && node.paint.image.valid) node.paint.image.clear();
     if (node.path !is null) node.path.clear();
   }
 
@@ -1888,7 +2036,6 @@ void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp, in ref NVGPaint p
   NVGpathCache* cc = node.path;
   cc.copyFrom(ctx.cache);
   node.paint = paint;
-  ctx.params.renderTextureIncRef(ctx.params.userPtr, node.paint.image);
   // copy path commands (we may need 'em for picking)
   version(all) {
     cc.ncommands = ctx.ncommands;
@@ -2446,8 +2593,7 @@ public float nvgRadians() (in float rad) pure nothrow @safe @nogc { pragma(inlin
 
 // ////////////////////////////////////////////////////////////////////////// //
 void nvg__setPaintColor() (ref NVGPaint p, in auto ref NVGColor color) nothrow @trusted @nogc {
-  //pragma(inline, true);
-  memset(&p, 0, p.sizeof);
+  p.clear();
   p.xform.identity;
   p.radius = 0.0f;
   p.feather = 1.0f;
@@ -2467,7 +2613,10 @@ void nvg__setPaintColor() (ref NVGPaint p, in auto ref NVGColor color) nothrow @
  */
 public bool save (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.nstates >= NVG_MAX_STATES) return false;
-  if (ctx.nstates > 0) memcpy(&ctx.states[ctx.nstates], &ctx.states[ctx.nstates-1], NVGstate.sizeof);
+  if (ctx.nstates > 0) {
+    //memcpy(&ctx.states[ctx.nstates], &ctx.states[ctx.nstates-1], NVGstate.sizeof);
+    ctx.states[ctx.nstates] = ctx.states[ctx.nstates-1];
+  }
   ++ctx.nstates;
   return true;
 }
@@ -2476,6 +2625,7 @@ public bool save (NVGContext ctx) nothrow @trusted @nogc {
 /// Group: state_handling
 public bool restore (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.nstates <= 1) return false;
+  ctx.states[ctx.nstates-1].clear();
   --ctx.nstates;
   return true;
 }
@@ -2484,7 +2634,8 @@ public bool restore (NVGContext ctx) nothrow @trusted @nogc {
 /// Group: state_handling
 public void reset (NVGContext ctx) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
-  memset(state, 0, (*state).sizeof);
+  //memset(state, 0, (*state).sizeof);
+  state.clear();
 
   nvg__setPaintColor(state.fill, nvgRGBA(255, 255, 255, 255));
   nvg__setPaintColor(state.stroke, nvgRGBA(0, 0, 0, 255));
@@ -2708,9 +2859,7 @@ public void scale (NVGContext ctx, in float x, in float y) nothrow @trusted @nog
 /// Creates image by loading it from the disk from specified file name.
 /// Returns handle to the image or 0 on error.
 /// Group: images
-public int createImage() (NVGContext ctx, const(char)[] filename, const(NVGImageFlag)[] imageFlagsList...) {
-  uint imageFlags = 0;
-  foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
+public NVGImage createImage() (NVGContext ctx, const(char)[] filename, const(NVGImageFlag)[] imageFlagsList...) {
   static if (NanoVegaHasArsdImage) {
     import arsd.image;
     // do we have new arsd API to load images?
@@ -2722,28 +2871,28 @@ public int createImage() (NVGContext ctx, const(char)[] filename, const(NVGImage
       if (auto img = cast(TrueColorImage)oimg) {
         oimg = null;
         scope(exit) { delete img.imageData.bytes; delete img; }
-        return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
+        return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlagsList);
       } else {
         TrueColorImage img = oimg.getAsTrueColorImage;
         if (auto xi = cast(IndexedImage)oimg) { delete xi.palette; delete xi.data; delete xi; }
         oimg = null;
         scope(exit) { delete img.imageData.bytes; delete img; }
-        return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlags);
+        return ctx.createImageRGBA(img.width, img.height, img.imageData.bytes[], imageFlagsList);
       }
     } catch (Exception) {}
-    return 0;
+    return NVGImage.init;
   } else {
     import std.internal.cstring;
     ubyte* img;
-    int w, h, n, image;
+    int w, h, n;
     stbi_set_unpremultiply_on_load(1);
     stbi_convert_iphone_png_to_rgb(1);
     img = stbi_load(filename.tempCString, &w, &h, &n, 4);
     if (img is null) {
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
-      return 0;
+      return NVGImage.init;
     }
-    image = ctx.createImageRGBA(w, h, img[0..w*h*4], imageFlags);
+    auto image = ctx.createImageRGBA(w, h, img[0..w*h*4], imageFlagsList);
     stbi_image_free(img);
     return image;
   }
@@ -2753,32 +2902,28 @@ static if (NanoVegaHasArsdImage) {
   /// Creates image by loading it from the specified memory image.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageFromMemoryImage() (NVGContext ctx, MemoryImage img, const(NVGImageFlag)[] imageFlagsList...) {
-    if (img is null) return 0;
-    uint imageFlags = 0;
-    foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
+  public NVGImage createImageFromMemoryImage() (NVGContext ctx, MemoryImage img, const(NVGImageFlag)[] imageFlagsList...) {
+    if (img is null) return NVGImage.init;
     if (auto tc = cast(TrueColorImage)img) {
-      return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
+      return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlagsList);
     } else {
       auto tc = img.getAsTrueColorImage;
       scope(exit) { delete tc.imageData.bytes; delete tc; }
-      return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlags);
+      return ctx.createImageRGBA(tc.width, tc.height, tc.imageData.bytes[], imageFlagsList);
     }
   }
 } else {
   /// Creates image by loading it from the specified chunk of memory.
   /// Returns handle to the image or 0 on error.
   /// Group: images
-  public int createImageMem() (NVGContext ctx, const(ubyte)* data, int ndata, const(NVGImageFlag)[] imageFlagsList...) {
+  public NVGImage createImageMem() (NVGContext ctx, const(ubyte)* data, int ndata, const(NVGImageFlag)[] imageFlagsList...) {
     int w, h, n, image;
     ubyte* img = stbi_load_from_memory(data, ndata, &w, &h, &n, 4);
     if (img is null) {
       //printf("Failed to load %s - %s\n", filename, stbi_failure_reason());
-      return 0;
+      return NVGImage.init;
     }
-    uint imageFlags = 0;
-    foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
-    image = ctx.createImageRGBA(w, h, img[0..w*h*4], imageFlags);
+    image = ctx.createImageRGBA(w, h, img[0..w*h*4], imageFlagsList);
     stbi_image_free(img);
     return image;
   }
@@ -2787,34 +2932,45 @@ static if (NanoVegaHasArsdImage) {
 /// Creates image from specified image data.
 /// Returns handle to the image or 0 on error.
 /// Group: images
-public int createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, const(NVGImageFlag)[] imageFlagsList...) nothrow @trusted @nogc {
-  if (w < 1 || h < 1 || data.length < w*h*4) return 0;
+public NVGImage createImageRGBA (NVGContext ctx, int w, int h, const(void)[] data, const(NVGImageFlag)[] imageFlagsList...) nothrow @trusted @nogc {
+  if (w < 1 || h < 1 || data.length < w*h*4) return NVGImage.init;
   uint imageFlags = 0;
   foreach (immutable uint flag; imageFlagsList) imageFlags |= flag;
-  return ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
+  NVGImage res;
+  res.id = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
+  if (res.id > 0) {
+    res.ctx = ctx;
+    ctx.nvg__imageIncRef(res.id);
+  }
+  return res;
 }
 
 /// Updates image data specified by image handle.
 /// Group: images
-public void updateImage (NVGContext ctx, int image, const(void)[] data) nothrow @trusted @nogc {
-  if (image > 0) {
+public void updateImage() (NVGContext ctx, auto ref NVGImage image, const(void)[] data) nothrow @trusted @nogc {
+  if (image.valid) {
     int w, h;
-    ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
-    ctx.params.renderUpdateTexture(ctx.params.userPtr, image, 0, 0, w, h, cast(const(ubyte)*)data.ptr);
+    if (image.ctx !is ctx) assert(0, "NanoVega: you cannot use image from one context in another context");
+    ctx.params.renderGetTextureSize(ctx.params.userPtr, image.id, &w, &h);
+    ctx.params.renderUpdateTexture(ctx.params.userPtr, image.id, 0, 0, w, h, cast(const(ubyte)*)data.ptr);
   }
 }
 
 /// Returns the dimensions of a created image.
 /// Group: images
-public void imageSize (NVGContext ctx, int image, out int w, out int h) nothrow @trusted @nogc {
-  if (image > 0) ctx.params.renderGetTextureSize(ctx.params.userPtr, image, &w, &h);
+public void imageSize() (NVGContext ctx, in auto ref NVGImage image, out int w, out int h) nothrow @trusted @nogc {
+  if (image.valid) {
+    if (image.ctx !is ctx) assert(0, "NanoVega: you cannot use image from one context in another context");
+    ctx.params.renderGetTextureSize(cast(void*)ctx.params.userPtr, image.id, &w, &h);
+  }
 }
 
 /// Deletes created image.
 /// Group: images
-public void deleteImage (NVGContext ctx, int image) nothrow @trusted @nogc {
-  if (ctx is null || image <= 0) return;
-  ctx.params.renderDeleteTexture(ctx.params.userPtr, image);
+public void deleteImage() (NVGContext ctx, ref NVGImage image) nothrow @trusted @nogc {
+  if (ctx is null || !image.valid) return;
+  if (image.ctx !is ctx) assert(0, "NanoVega: you cannot use image from one context in another context");
+  image.clear();
 }
 
 
@@ -2965,7 +3121,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
  *
  * Group: paints
  */
-public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float h, float angle, int image, float alpha=1) nothrow @trusted @nogc {
+public NVGPaint imagePattern() (NVGContext ctx, float cx, float cy, float w, float h, float angle, in auto ref NVGImage image, float alpha=1) nothrow @trusted @nogc {
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
 
@@ -2986,41 +3142,32 @@ public NVGPaint imagePattern (NVGContext ctx, float cx, float cy, float w, float
 /// Linear gradient with multiple stops.
 /// $(WARNING THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!)
 /// Group: paints
-public alias NVGLGS = NVGLGSdata*;
-
-private struct NVGLGSdata {
-  int imgid; // 0: invalid
+public struct NVGLGS {
+private:
+  NVGImage imgid;
   // [imagePattern] arguments
-  float cx, cy, w, h, angle;
+  float cx, cy, dim, angle;
 
+public:
   @disable this (this); // no copies
-  public @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (imgid > 0); } ///
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return imgid.valid; } ///
+  void clear ()  nothrow @safe @nogc { pragma(inline, true); imgid.clear(); } ///
 }
 
-/// Destroy linear gradient with stops
-/// $(WARNING THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!)
-/// Group: paints
-public void kill (NVGContext ctx, ref NVGLGS lgs) nothrow @trusted @nogc {
-  if (lgs is null) return;
-  if (lgs.imgid > 0) { ctx.deleteImage(lgs.imgid); lgs.imgid = 0; }
-  free(lgs);
-  lgs = null;
-}
-
-/** Sets linear gradient with stops, created with [createLinearGradientWithStops].
+/** Returns [NVGPaint] for linear gradient with stops, created with [createLinearGradientWithStops].
  * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
  *
  * $(WARNING THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!)
  * Group: paints
  */
-public NVGPaint linearGradient (NVGContext ctx, NVGLGS lgs) nothrow @trusted @nogc {
-  if (lgs is null || !lgs.valid) {
+public NVGPaint asPaint() (NVGContext ctx, in auto ref NVGLGS lgs) nothrow @trusted @nogc {
+  if (!lgs.valid) {
     NVGPaint p = void;
     memset(&p, 0, p.sizeof);
     nvg__setPaintColor(p, NVGColor.red);
     return p;
   } else {
-    return ctx.imagePattern(lgs.cx, lgs.cy, lgs.w, lgs.h, lgs.angle, lgs.imgid);
+    return ctx.imagePattern(lgs.cx, lgs.cy, lgs.dim, lgs.dim, lgs.angle, lgs.imgid);
   }
 }
 
@@ -3028,20 +3175,24 @@ public NVGPaint linearGradient (NVGContext ctx, NVGLGS lgs) nothrow @trusted @no
 /// $(WARNING THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!)
 /// Group: paints
 public struct NVGGradientStop {
-  float offset; /// [0..1]
+  float offset = 0; /// [0..1]
   NVGColor color; ///
+
+  ///
+  this() (in float aofs, in auto ref NVGColor aclr) nothrow @trusted @nogc { pragma(inline, true); offset = aofs; color = aclr; }
+  this() (in float aofs, in Color aclr) nothrow @trusted @nogc { pragma(inline, true); offset = aofs; color = NVGColor(aclr); }
 }
 
 /// Create linear gradient data suitable to use with `linearGradient(res)`.
 /// Don't forget to destroy the result when you don't need it anymore with `ctx.kill(res);`.
 /// $(WARNING THIS IS EXPERIMENTAL API AND MAY BE CHANGED/BROKEN IN NEXT RELEASES!)
 /// Group: paints
-public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy, float ex, float ey, const(NVGGradientStop)[] stops) nothrow @trusted @nogc {
+public NVGLGS createLinearGradientWithStops (NVGContext ctx, in float sx, in float sy, in float ex, in float ey, const(NVGGradientStop)[] stops...) nothrow @trusted @nogc {
   // based on the code by Jorge Acereda <jacereda@gmail.com>
   enum NVG_GRADIENT_SAMPLES = 1024;
   static void gradientSpan (uint* dst, const(NVGGradientStop)* s0, const(NVGGradientStop)* s1) nothrow @trusted @nogc {
-    float s0o = nvg__clamp(s0.offset, 0.0f, 1.0f);
-    float s1o = nvg__clamp(s1.offset, 0.0f, 1.0f);
+    immutable float s0o = nvg__clamp(s0.offset, 0.0f, 1.0f);
+    immutable float s1o = nvg__clamp(s1.offset, 0.0f, 1.0f);
     uint s = cast(uint)(s0o*NVG_GRADIENT_SAMPLES);
     uint e = cast(uint)(s1o*NVG_GRADIENT_SAMPLES);
     uint sc = 0xffffffffU;
@@ -3054,11 +3205,12 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy,
     uint dg = cast(uint)((s1.color.rgba[1]*sc-g)/(e-s));
     uint db = cast(uint)((s1.color.rgba[2]*sc-b)/(e-s));
     uint da = cast(uint)((s1.color.rgba[3]*sc-a)/(e-s));
-    for (uint i = s; i < e; ++i) {
+    dst += s;
+    foreach (immutable _; s..e) {
       version(BigEndian) {
-        dst[i] = ((r>>sh)<<24)+((g>>sh)<<16)+((b>>sh)<<8)+((a>>sh)<<0);
+        *dst++ = ((r>>sh)<<24)+((g>>sh)<<16)+((b>>sh)<<8)+((a>>sh)<<0);
       } else {
-        dst[i] = ((a>>sh)<<24)+((b>>sh)<<16)+((g>>sh)<<8)+((r>>sh)<<0);
+        *dst++ = ((a>>sh)<<24)+((b>>sh)<<16)+((g>>sh)<<8)+((r>>sh)<<0);
       }
       r += dr;
       g += dg;
@@ -3067,35 +3219,33 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, float sx, float sy,
     }
   }
 
+  NVGLGS res;
+
   uint[NVG_GRADIENT_SAMPLES] data = void;
-  float w = ex-sx;
-  float h = ey-sy;
-  float len = nvg__sqrtf(w*w + h*h);
-  auto s0 = NVGGradientStop(0, nvgRGBAf(0, 0, 0, 1));
-  auto s1 = NVGGradientStop(1, nvgRGBAf(1, 1, 1, 1));
-  int img;
-  if (stops.length > 64) stops = stops[0..64];
-  if (stops.length) {
-    s0.color = stops[0].color;
-    s1.color = stops[$-1].color;
-  }
-  gradientSpan(data.ptr, &s0, (stops.length ? stops.ptr : &s1));
-  if (stops.length) {
-    foreach (immutable i; 0..stops.length-1) gradientSpan(data.ptr, stops.ptr+i, stops.ptr+i+1);
-  }
-  gradientSpan(data.ptr, (stops.length ? stops.ptr+stops.length-1 : &s0), &s1);
-  img = ctx.createImageRGBA(NVG_GRADIENT_SAMPLES, 1, data[], NVGImageFlag.RepeatX, NVGImageFlag.RepeatY);
-  if (img <= 0) return null;
-  // allocate data
-  NVGLGS res = cast(NVGLGS)malloc((*NVGLGS).sizeof);
-  if (res is null) { ctx.deleteImage(img); return null; }
-  // fill result
-  res.imgid = img;
+  immutable float w = ex-sx;
+  immutable float h = ey-sy;
+  res.dim = nvg__sqrtf(w*w+h*h);
+
   res.cx = sx;
   res.cy = sy;
-  res.w = len;
-  res.h = len;
-  res.angle = nvg__atan2f(ey-sy, ex-sx);
+  res.angle =
+    (/*nvg__absf(h) < 0.0001 ? 0 :
+     nvg__absf(w) < 0.0001 ? 90.nvgDegrees :*/
+     nvg__atan2f(h/*ey-sy*/, w/*ex-sx*/));
+
+  if (stops.length > 0) {
+    auto s0 = NVGGradientStop(0, nvgRGBAf(0, 0, 0, 1));
+    auto s1 = NVGGradientStop(1, nvgRGBAf(1, 1, 1, 1));
+    if (stops.length > 64) stops = stops[0..64];
+    if (stops.length) {
+      s0.color = stops[0].color;
+      s1.color = stops[$-1].color;
+    }
+    gradientSpan(data.ptr, &s0, (stops.length ? stops.ptr : &s1));
+    foreach (immutable i; 0..stops.length-1) gradientSpan(data.ptr, stops.ptr+i, stops.ptr+i+1);
+    gradientSpan(data.ptr, (stops.length ? stops.ptr+stops.length-1 : &s0), &s1);
+    res.imgid = ctx.createImageRGBA(NVG_GRADIENT_SAMPLES, 1, data[], NVGImageFlag.RepeatX, NVGImageFlag.RepeatY);
+  }
   return res;
 }
 
@@ -6857,16 +7007,16 @@ float nvg__getFontScale (NVGstate* state) nothrow @safe @nogc {
 void nvg__flushTextTexture (NVGContext ctx) nothrow @trusted @nogc {
   int[4] dirty = void;
   if (fonsValidateTexture(ctx.fs, dirty.ptr)) {
-    int fontImage = ctx.fontImages[ctx.fontImageIdx];
+    auto fontImage = &ctx.fontImages[ctx.fontImageIdx];
     // Update texture
-    if (fontImage != 0) {
+    if (fontImage.valid) {
       int iw, ih;
       const(ubyte)* data = fonsGetTextureData(ctx.fs, &iw, &ih);
       int x = dirty[0];
       int y = dirty[1];
       int w = dirty[2]-dirty[0];
       int h = dirty[3]-dirty[1];
-      ctx.params.renderUpdateTexture(ctx.params.userPtr, fontImage, x, y, w, h, data);
+      ctx.params.renderUpdateTexture(ctx.params.userPtr, fontImage.id, x, y, w, h, data);
     }
   }
 }
@@ -6876,14 +7026,18 @@ bool nvg__allocTextAtlas (NVGContext ctx) nothrow @trusted @nogc {
   nvg__flushTextTexture(ctx);
   if (ctx.fontImageIdx >= NVG_MAX_FONTIMAGES-1) return false;
   // if next fontImage already have a texture
-  if (ctx.fontImages[ctx.fontImageIdx+1] != 0) {
+  if (ctx.fontImages[ctx.fontImageIdx+1].valid) {
     ctx.imageSize(ctx.fontImages[ctx.fontImageIdx+1], iw, ih);
   } else {
     // calculate the new font image size and create it
     ctx.imageSize(ctx.fontImages[ctx.fontImageIdx], iw, ih);
     if (iw > ih) ih *= 2; else iw *= 2;
     if (iw > NVG_MAX_FONTIMAGE_SIZE || ih > NVG_MAX_FONTIMAGE_SIZE) iw = ih = NVG_MAX_FONTIMAGE_SIZE;
-    ctx.fontImages[ctx.fontImageIdx+1] = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, (ctx.params.fontAA ? 0 : NVGImageFlag.NoFiltering), null);
+    ctx.fontImages[ctx.fontImageIdx+1].id = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.Alpha, iw, ih, (ctx.params.fontAA ? 0 : NVGImageFlag.NoFiltering), null);
+    if (ctx.fontImages[ctx.fontImageIdx+1].id > 0) {
+      ctx.fontImages[ctx.fontImageIdx+1].ctx = ctx;
+      ctx.nvg__imageIncRef(ctx.fontImages[ctx.fontImageIdx+1].id);
+    }
   }
   ++ctx.fontImageIdx;
   fonsResetAtlas(ctx.fs, iw, ih);
@@ -11293,8 +11447,8 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
   frag.strokeMult = (width*0.5f+fringe*0.5f)/fringe;
   frag.strokeThr = strokeThr;
 
-  if (paint.image != 0) {
-    tex = glnvg__findTexture(gl, paint.image);
+  if (paint.image.valid) {
+    tex = glnvg__findTexture(gl, paint.image.id);
     if (tex is null) return false;
     if ((tex.flags&NVGImageFlag.FlipY) != 0) {
       /*
@@ -11486,6 +11640,7 @@ void glnvg__affine (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
 
 void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  foreach (ref GLNVGcall c; gl.calls[0..gl.ncalls]) if (c.image > 0) glnvg__deleteTexture(gl, c.image);
   gl.nverts = 0;
   gl.npaths = 0;
   gl.ncalls = 0;
@@ -11587,6 +11742,8 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
         case GLNVG_AFFINE: glnvg__affine(gl, call); break;
         default: break;
       }
+      // and free texture, why not
+      glnvg__deleteTexture(gl, call.image);
     }
 
     glDisableVertexAttribArray(0);
@@ -11699,7 +11856,8 @@ void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float 
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
   call.pathCount = npaths;
-  call.image = paint.image;
+  call.image = paint.image.id;
+  if (call.image > 0) glnvg__renderTextureIncRef(uptr, call.image);
 
   if (npaths == 1 && paths[0].convex) {
     call.type = GLNVG_CONVEXFILL;
@@ -11774,7 +11932,8 @@ void glnvg__renderStroke (void* uptr, NVGPaint* paint, NVGscissor* scissor, floa
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
   call.pathCount = npaths;
-  call.image = paint.image;
+  call.image = paint.image.id;
+  if (call.image > 0) glnvg__renderTextureIncRef(uptr, call.image);
 
   // Allocate vertices for all the paths.
   maxverts = glnvg__maxVertCount(paths, npaths);
@@ -11822,7 +11981,8 @@ void glnvg__renderTriangles (void* uptr, NVGPaint* paint, NVGscissor* scissor, c
   if (call is null) return;
 
   call.type = GLNVG_TRIANGLES;
-  call.image = paint.image;
+  call.image = paint.image.id;
+  if (call.image > 0) glnvg__renderTextureIncRef(uptr, call.image);
 
   // Allocate vertices for all the paths.
   call.triangleOffset = glnvg__allocVerts(gl, nverts);
