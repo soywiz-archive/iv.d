@@ -8365,10 +8365,12 @@ public struct FONScontext {
   int* hashidx; // [hsize] items; holds indicies in [fonts] array
   int hused, hsize;// used items and total items in [hashidx]
   FONSatlas* atlas;
-  float[FONS_VERTEX_COUNT*2] verts;
-  float[FONS_VERTEX_COUNT*2] tcoords;
-  uint[FONS_VERTEX_COUNT] colors;
-  int nverts;
+  debug(nanovega) {
+    float[FONS_VERTEX_COUNT*2] verts;
+    float[FONS_VERTEX_COUNT*2] tcoords;
+    uint[FONS_VERTEX_COUNT] colors;
+    int nverts;
+  }
   ubyte* scratch;
   int nscratch;
   FONSstate[FONS_MAX_STATES] states;
@@ -9490,10 +9492,12 @@ void fons__flush (FONScontext* stash) nothrow @trusted @nogc {
     stash.dirtyRect.ptr[3] = 0;
   }
 
-  // Flush triangles
-  if (stash.nverts > 0) {
-    if (stash.params.renderDraw !is null) stash.params.renderDraw(stash.params.userPtr, stash.verts.ptr, stash.tcoords.ptr, stash.colors.ptr, stash.nverts);
-    stash.nverts = 0;
+  debug(nanovega) {
+    // Flush triangles
+    if (stash.nverts > 0) {
+      if (stash.params.renderDraw !is null) stash.params.renderDraw(stash.params.userPtr, stash.verts.ptr, stash.tcoords.ptr, stash.colors.ptr, stash.nverts);
+      stash.nverts = 0;
+    }
   }
 }
 
