@@ -466,10 +466,41 @@ public:
   alias CharType = TBT; ///
 
   // special control characters
+  enum dchar LTRMarkCh = 0x200e; // left-to-right mark
+  enum dchar RTLMarkCh = 0x200f; // right-to-left mark
+
+  enum dchar LTREmbedCh = 0x202a; // left-to-right embedding
+  enum dchar RTLEmbedCh = 0x202b; // right-to-left embedding
+
+  enum dchar LTROverrideCh = 0x202d; // left-to-right override
+  enum dchar RTLOverrideCh = 0x202e; // right-to-left override
+
+  enum dchar LTRIsolateCh = 0x2066; // left-to-right isolate
+  enum dchar RTLIsolateCh = 0x2068; // right-to-left isolate
+
+  enum dchar HyphenCh = 0x2010;
+  enum dchar NBHyphenCh = 0x2011;
+  enum dchar HyphenPointCh = 0x2027;
+  enum dchar SoftHyphenCh = 0x00ad;
+
+  enum dchar WordJoinerCh = 0x2060;
+
+  enum dchar EllipsisCh = 0x2026;
+
+  enum dchar ZWSpaceCh = 0x200b; // zero width space
+  enum dchar ZWNBSpaceCh = 0xfeff; // zero width non-breaking space
+  enum dchar NBSpaceCh = 0x00a0;
+  enum dchar NarrowNBSpaceCh = 0x202f;
+
   enum dchar EndLineCh = 0x2028; // 0x0085 is treated like whitespace
   enum dchar EndParaCh = 0x2029;
-  enum dchar NonBreakingSpaceCh = 0xa0;
-  enum dchar SoftHyphenCh = 0xad;
+
+  enum dchar AnnoStartCh = 0xfff9; // interlinear annotation anchor, marks start of annotated text
+  enum dchar AnnoSepCh = 0xfffa; // interlinear annotation separator, marks start of annotating character(s)
+  enum dchar AnnoEndCh = 0xfffb; // interlinear annotation terminator, marks end of annotation block
+
+  enum dchar ObjectCh = 0xfffc; // object replacement character
+  enum dchar UnknownCh = 0xfffd; // replacement character used to replace an unknown or unrepresentable character
 
 private:
   void ensurePool(ubyte pow2, bool clear, T) (uint want, ref T* ptr, ref uint used, ref uint alloced) nothrow @nogc {
@@ -883,7 +914,7 @@ public:
   void endPara () nothrow @trusted @nogc => put(EndParaCh);
 
   /// put non-breaking space
-  void putNBSP () nothrow @trusted @nogc => put(NonBreakingSpaceCh);
+  void putNBSP () nothrow @trusted @nogc => put(NBSpaceCh);
 
   /// put soft hypen
   void putSoftHypen () nothrow @trusted @nogc => put(SoftHyphenCh);
@@ -1023,7 +1054,7 @@ public:
         flushWord();
         just = newJust;
         firstParaLine = (ch == EndParaCh);
-      } else if (ch == NonBreakingSpaceCh) {
+      } else if (ch == NBSpaceCh || ch == NarrowNBSpaceCh) {
         // non-breaking space
         lastWasSoftHypen = false;
         if (newStyle.fontface == -1 && laf.fixFontDG !is null) laf.fixFontDG(laf, newStyle);
