@@ -9370,7 +9370,7 @@ public int fonsAddFont (FONScontext* stash, const(char)[] name, const(char)[] pa
       }
     }
     version(Windows) {
-      // special shitdows check
+      // special shitdows check: this will reject fontconfig font names (but still allow things like "c:myfont")
       foreach (immutable char ch; path[(path.length >= 2 && path[1] == ':' ? 2 : 0)..$]) if (ch == ':') return FONS_INVALID;
     }
     // either no such font, or different path
