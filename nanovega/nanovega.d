@@ -1220,10 +1220,10 @@ struct NVGparams {
   bool function (void* uptr, int image, int* w, int* h) nothrow @trusted @nogc renderGetTextureSize;
   void function (void* uptr, int width, int height) nothrow @trusted @nogc renderViewport;
   void function (void* uptr) nothrow @trusted @nogc renderCancel;
-  void function (void* uptr, NVGCompositeOperationState compositeOperation) nothrow @trusted @nogc renderFlush;
-  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc renderFill;
-  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
-  void function (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
+  void function (void* uptr) nothrow @trusted @nogc renderFlush;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc renderFill;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
   void function (void* uptr, in ref NVGMatrix mat) nothrow @trusted @nogc renderSetAffine;
   void function (void* uptr) nothrow @trusted @nogc renderDelete;
 }
@@ -1580,6 +1580,7 @@ NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation o
   state.dstRGB = dfactor;
   state.srcAlpha = sfactor;
   state.dstAlpha = dfactor;
+
   return state;
 }
 
@@ -1775,7 +1776,7 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
   ctx.mDeviceRatio = 0;
   // flush render queue
   NVGstate* state = nvg__getState(ctx);
-  ctx.params.renderFlush(ctx.params.userPtr, state.compositeOperation);
+  ctx.params.renderFlush(ctx.params.userPtr);
   if (ctx.fontImageIdx != 0) {
     auto fontImage = ctx.fontImages[ctx.fontImageIdx];
     int j = 0, iw, ih;
@@ -1887,7 +1888,7 @@ private:
           fillPaint.innerColor.applyTint(fillTint);
           fillPaint.outerColor.applyTint(fillTint);
 
-          ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
+          ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
 
           // count triangles
           foreach (int i; 0..cc.npaths) {
@@ -1911,7 +1912,7 @@ private:
           strokePaint.innerColor.applyTint(strokeTint);
           strokePaint.outerColor.applyTint(strokeTint);
 
-          ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
+          ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
 
           // count triangles
           foreach (int i; 0..cc.npaths) {
@@ -5034,7 +5035,7 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
 
   if (ctx.recblockdraw) return;
 
-  ctx.params.renderFill(ctx.params.userPtr, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
+  ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
 
   // count triangles
   foreach (int i; 0..ctx.cache.npaths) {
@@ -5071,7 +5072,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 
   if (ctx.recblockdraw) return;
 
-  ctx.params.renderStroke(ctx.params.userPtr, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
+  ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
 
   // count triangles
   foreach (int i; 0..ctx.cache.npaths) {
@@ -7089,7 +7090,7 @@ void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) nothrow @tru
   paint.innerColor.a *= state.alpha;
   paint.outerColor.a *= state.alpha;
 
-  ctx.params.renderTriangles(ctx.params.userPtr, &paint, &state.scissor, verts, nverts);
+  ctx.params.renderTriangles(ctx.params.userPtr, state.compositeOperation, &paint, &state.scissor, verts, nverts);
 
   ++ctx.drawCallCount;
   ctx.textTriCount += nverts/3;
@@ -10886,6 +10887,13 @@ struct GLNVGtexture {
   int nextfree;
 }
 
+struct GLNVGblend {
+  GLenum srcRGB;
+  GLenum dstRGB;
+  GLenum srcAlpha;
+  GLenum dstAlpha;
+}
+
 alias GLNVGcallType = int;
 enum /*GLNVGcallType*/ {
   GLNVG_NONE = 0,
@@ -10906,6 +10914,7 @@ struct GLNVGcall {
   int triangleCount;
   int uniformOffset;
   NVGMatrix affine;
+  GLNVGblend blendFunc;
 }
 
 struct GLNVGpath {
@@ -10974,6 +10983,7 @@ struct GLNVGcontext {
     GLenum stencilFunc;
     GLint stencilFuncRef;
     GLuint stencilFuncMask;
+    GLNVGblend blendFunc;
   }
 }
 
@@ -11683,7 +11693,7 @@ void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
   gl.nuniforms = 0;
 }
 
-GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) nothrow @trusted @nogc {
+GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) pure nothrow @trusted @nogc {
   if (factor == NVGBlendFactor.Zero) return GL_ZERO;
   if (factor == NVGBlendFactor.One) return GL_ONE;
   if (factor == NVGBlendFactor.SrcColor) return GL_SRC_COLOR;
@@ -11698,16 +11708,28 @@ GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) nothrow @trusted @no
   return GL_INVALID_ENUM;
 }
 
-void glnvg__blendCompositeOperation (NVGCompositeOperationState op) nothrow @trusted @nogc {
+GLNVGblend glnvg__buildBlendFunc (NVGCompositeOperationState op) pure nothrow @trusted @nogc {
+  GLNVGblend res;
+  res.srcRGB = glnvg_convertBlendFuncFactor(op.srcRGB);
+  res.dstRGB = glnvg_convertBlendFuncFactor(op.dstRGB);
+  res.srcAlpha = glnvg_convertBlendFuncFactor(op.srcAlpha);
+  res.dstAlpha = glnvg_convertBlendFuncFactor(op.dstAlpha);
+  if (res.srcRGB == GL_INVALID_ENUM || res.dstRGB == GL_INVALID_ENUM || res.srcAlpha == GL_INVALID_ENUM || res.dstAlpha == GL_INVALID_ENUM) {
+    res.srcRGB = res.srcAlpha = res.dstRGB = res.dstAlpha = GL_INVALID_ENUM;
+  }
+  return res;
+}
+
+void glnvg__blendCompositeOperation() (GLNVGcontext* gl, in auto ref GLNVGblend op) nothrow @trusted @nogc {
   //glBlendFuncSeparate(glnvg_convertBlendFuncFactor(op.srcRGB), glnvg_convertBlendFuncFactor(op.dstRGB), glnvg_convertBlendFuncFactor(op.srcAlpha), glnvg_convertBlendFuncFactor(op.dstAlpha));
-  GLenum srcRGB = glnvg_convertBlendFuncFactor(op.srcRGB);
-  GLenum dstRGB = glnvg_convertBlendFuncFactor(op.dstRGB);
-  GLenum srcAlpha = glnvg_convertBlendFuncFactor(op.srcAlpha);
-  GLenum dstAlpha = glnvg_convertBlendFuncFactor(op.dstAlpha);
-  if (srcRGB == GL_INVALID_ENUM || dstRGB == GL_INVALID_ENUM || srcAlpha == GL_INVALID_ENUM || dstAlpha == GL_INVALID_ENUM) {
+  static if (NANOVG_GL_USE_STATE_FILTER) {
+    if (gl.blendFunc.srcRGB == op.srcRGB && gl.blendFunc.dstRGB == op.dstRGB && gl.blendFunc.srcAlpha == op.srcAlpha && gl.blendFunc.dstAlpha == op.dstAlpha) return;
+    gl.blendFunc = op;
+  }
+  if (op.srcRGB == GL_INVALID_ENUM || op.dstRGB == GL_INVALID_ENUM || op.srcAlpha == GL_INVALID_ENUM || op.dstAlpha == GL_INVALID_ENUM) {
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
   } else {
-    glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+    glBlendFuncSeparate(op.srcRGB, op.dstRGB, op.srcAlpha, op.dstAlpha);
   }
 }
 
@@ -11725,14 +11747,18 @@ void glnvg__renderSetAffine (void* uptr, in ref NVGMatrix mat) nothrow @trusted 
   call.affine.mat.ptr[0..6] = mat.mat.ptr[0..6];
 }
 
-void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperation) nothrow @trusted @nogc {
+void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   if (gl.ncalls > 0) {
     // Setup require GL state.
     glUseProgram(gl.shader.prog);
 
     //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glnvg__blendCompositeOperation(compositeOperation);
+    static if (NANOVG_GL_USE_STATE_FILTER) {
+      gl.blendFunc.srcRGB = gl.blendFunc.dstRGB = gl.blendFunc.srcAlpha = gl.blendFunc.dstAlpha = GL_INVALID_ENUM;
+      //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    //glnvg__blendCompositeOperation(gl, glnvg__buildBlendFunc(compositeOperation));
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
@@ -11770,6 +11796,7 @@ void glnvg__renderFlush (void* uptr, NVGCompositeOperationState compositeOperati
 
     foreach (int i; 0..gl.ncalls) {
       GLNVGcall* call = &gl.calls[i];
+      glnvg__blendCompositeOperation(gl, call.blendFunc);
       switch (call.type) {
         case GLNVG_FILL: glnvg__fill(gl, call); break;
         case GLNVG_CONVEXFILL: glnvg__convexFill(gl, call); break;
@@ -11877,7 +11904,7 @@ void glnvg__vset (NVGvertex* vtx, float x, float y, float u, float v) nothrow @t
   vtx.v = v;
 }
 
-void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc {
+void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   NVGvertex* quad;
@@ -11888,6 +11915,7 @@ void glnvg__renderFill (void* uptr, NVGPaint* paint, NVGscissor* scissor, float 
 
   call.type = GLNVG_FILL;
   call.evenOdd = evenOdd;
+  call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.triangleCount = 4;
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
@@ -11957,7 +11985,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderStroke (void* uptr, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
+void glnvg__renderStroke (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   int maxverts, offset;
@@ -11965,6 +11993,7 @@ void glnvg__renderStroke (void* uptr, NVGPaint* paint, NVGscissor* scissor, floa
   if (call is null || npaths < 1) return;
 
   call.type = GLNVG_STROKE;
+  call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
   call.pathCount = npaths;
@@ -12009,7 +12038,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderTriangles (void* uptr, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc {
+void glnvg__renderTriangles (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   GLNVGfragUniforms* frag;
@@ -12017,6 +12046,7 @@ void glnvg__renderTriangles (void* uptr, NVGPaint* paint, NVGscissor* scissor, c
   if (call is null) return;
 
   call.type = GLNVG_TRIANGLES;
+  call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.image = paint.image.id;
   if (call.image > 0) glnvg__renderTextureIncRef(uptr, call.image);
 
