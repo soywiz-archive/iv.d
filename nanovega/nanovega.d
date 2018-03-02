@@ -11266,7 +11266,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     #endif
 
     void main (void) {
-      vec4 result;
+      vec4 color;
       float scissor = scissorMask(fpos);
       if (scissor == 0.0) discard; //k8: is it really faster?
       #ifdef EDGE_AA
@@ -11276,43 +11276,40 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
       float strokeAlpha = 1.0;
       #endif
       if (type == 0) { /* NSVG_SHADER_FILLCOLOR */
-        vec4 color = innerCol;
+        color = innerCol;
         // Combine alpha
         color *= strokeAlpha*scissor;
-        result = color;
       } else if (type == 1) { /* NSVG_SHADER_FILLGRAD */
         // Gradient
         // Calculate gradient color using box gradient
         vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
         float d = clamp((sdroundrect(pt, extent, radius)+feather*0.5)/feather, 0.0, 1.0);
-        vec4 color = mix(innerCol, outerCol, d);
+        color = mix(innerCol, outerCol, d);
         // Combine alpha
         color *= strokeAlpha*scissor;
-        result = color;
       } else if (type == 2) { /* NSVG_SHADER_FILLIMG */
         // Image
         // Calculate color from texture
         vec2 pt = (paintMat*vec3(fpos, 1.0)).xy/extent;
-        vec4 color = texture2D(tex, pt);
+        color = texture2D(tex, pt);
         if (texType == 1) color = vec4(color.xyz*color.w, color.w);
         if (texType == 2) color = vec4(color.x);
         // Apply color tint and alpha
         color *= innerCol;
         // Combine alpha
         color *= strokeAlpha*scissor;
-        result = color;
       } else if (type == 3) { /* NSVG_SHADER_SIMPLE */
         // Stencil fill
-        result = vec4(1, 1, 1, 1);
+        color = vec4(1, 1, 1, 1);
       } else if (type == 4) { /* NSVG_SHADER_IMG */
         // Textured tris
-        vec4 color = texture2D(tex, ftcoord);
+        color = texture2D(tex, ftcoord);
         if (texType == 1) color = vec4(color.xyz*color.w, color.w);
         if (texType == 2) color = vec4(color.x);
         color *= scissor;
-        result = color*innerCol; // Apply color tint
+        color *= innerCol; // Apply color tint
       }
-      gl_FragColor = result;
+      gl_FragColor = color;
     }
   };
 
