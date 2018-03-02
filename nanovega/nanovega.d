@@ -11544,7 +11544,6 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     //printf("frag.texType = %d\n", frag.texType);
   } else {
     frag.type = (paint.simpleColor ? NSVG_SHADER_FILLCOLOR : NSVG_SHADER_FILLGRAD);
-    frag.type = NSVG_SHADER_FILLGRAD;
     frag.radius = paint.radius;
     frag.feather = paint.feather;
     //nvgTransformInverse(invxform[], paint.xform[]);
