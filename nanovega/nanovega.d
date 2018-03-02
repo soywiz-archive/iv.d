@@ -1576,10 +1576,23 @@ NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation o
   else { sfactor = NVGBlendFactor.One; dfactor = NVGBlendFactor.OneMinusSrcAlpha;} // default value for invalid op: SourceOver
 
   NVGCompositeOperationState state;
-  state.srcRGB = sfactor;
-  state.dstRGB = dfactor;
+
   state.srcAlpha = sfactor;
   state.dstAlpha = dfactor;
+
+  NVGBlendFactor convertFactor (NVGBlendFactor fc) pure nothrow @safe @nogc {
+    switch (fc) {
+      case NVGBlendFactor.SrcAlpha: return NVGBlendFactor.SrcColor;
+      case NVGBlendFactor.OneMinusSrcAlpha: return NVGBlendFactor.OneMinusSrcColor;
+      case NVGBlendFactor.DstAlpha: return NVGBlendFactor.DstColor;
+      case NVGBlendFactor.OneMinusDstAlpha: return NVGBlendFactor.OneMinusDstColor;
+      default: break;
+    }
+    return fc;
+  }
+
+  state.srcRGB = convertFactor(sfactor);
+  state.dstRGB = convertFactor(dfactor);
 
   return state;
 }
