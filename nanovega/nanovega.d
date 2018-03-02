@@ -950,6 +950,7 @@ public struct NVGPaint {
   NVGColor innerColor; /// this can be used to modulate images (fill/font)
   NVGColor outerColor;
   NVGImage image;
+  bool simpleColor; /// if `true`, only innerColor is used, and this is solid-color paint
 
   this() (in auto ref NVGPaint p) nothrow @trusted @nogc {
     xform = p.xform;
@@ -959,6 +960,7 @@ public struct NVGPaint {
     innerColor = p.innerColor;
     outerColor = p.outerColor;
     image = p.image;
+    simpleColor = p.simpleColor;
   }
 
   void opAssign() (in auto ref NVGPaint p) nothrow @trusted @nogc {
@@ -969,6 +971,7 @@ public struct NVGPaint {
     innerColor = p.innerColor;
     outerColor = p.outerColor;
     image = p.image;
+    simpleColor = p.simpleColor;
   }
 
   void clear () nothrow @trusted @nogc {
@@ -976,6 +979,7 @@ public struct NVGPaint {
     import core.stdc.string : memset;
     image.clear();
     memset(&this, 0, this.sizeof);
+    simpleColor = true;
   }
 }
 
@@ -2611,6 +2615,7 @@ void nvg__setPaintColor() (ref NVGPaint p, in auto ref NVGColor color) nothrow @
   p.feather = 1.0f;
   p.innerColor = color;
   p.outerColor = color;
+  p.simpleColor = true;
 }
 
 
@@ -3009,6 +3014,7 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
 
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
+  p.simpleColor = false;
 
   // Calculate transform aligned to the line
   float dx = ex-sx;
@@ -3063,6 +3069,7 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
 
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
+  p.simpleColor = false;
 
   p.xform.identity;
   p.xform.mat.ptr[4] = cx;
@@ -3106,6 +3113,7 @@ public NVGPaint boxGradient (NVGContext ctx, in float x, in float y, in float w,
 public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h, float r, float f, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
+  p.simpleColor = false;
 
   p.xform.identity;
   p.xform.mat.ptr[4] = x+w*0.5f;
@@ -3133,6 +3141,7 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
 public NVGPaint imagePattern() (NVGContext ctx, float cx, float cy, float w, float h, float angle, in auto ref NVGImage image, float alpha=1) nothrow @trusted @nogc {
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
+  p.simpleColor = false;
 
   p.xform.identity.rotate(angle);
   p.xform.mat.ptr[4] = cx;
@@ -10872,6 +10881,7 @@ enum GLNVGuniformLoc {
 
 alias GLNVGshaderType = int;
 enum /*GLNVGshaderType*/ {
+  NSVG_SHADER_FILLCOLOR,
   NSVG_SHADER_FILLGRAD,
   NSVG_SHADER_FILLIMG,
   NSVG_SHADER_SIMPLE,
@@ -11258,13 +11268,19 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     void main (void) {
       vec4 result;
       float scissor = scissorMask(fpos);
+      if (scissor == 0.0) discard; //k8: is it really faster?
       #ifdef EDGE_AA
       float strokeAlpha = strokeMask();
       if (strokeAlpha < strokeThr) discard;
       #else
       float strokeAlpha = 1.0;
       #endif
-      if (type == 0) { /* NSVG_SHADER_FILLGRAD */
+      if (type == 0) { /* NSVG_SHADER_FILLCOLOR */
+        vec4 color = innerCol;
+        // Combine alpha
+        color *= strokeAlpha*scissor;
+        result = color;
+      } else if (type == 1) { /* NSVG_SHADER_FILLGRAD */
         // Gradient
         // Calculate gradient color using box gradient
         vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
@@ -11273,7 +11289,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
         // Combine alpha
         color *= strokeAlpha*scissor;
         result = color;
-      } else if (type == 1) { /* NSVG_SHADER_FILLIMG */
+      } else if (type == 2) { /* NSVG_SHADER_FILLIMG */
         // Image
         // Calculate color from texture
         vec2 pt = (paintMat*vec3(fpos, 1.0)).xy/extent;
@@ -11285,10 +11301,10 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
         // Combine alpha
         color *= strokeAlpha*scissor;
         result = color;
-      } else if (type == 2) { /* NSVG_SHADER_SIMPLE */
+      } else if (type == 3) { /* NSVG_SHADER_SIMPLE */
         // Stencil fill
         result = vec4(1, 1, 1, 1);
-      } else if (type == 3) { /* NSVG_SHADER_IMG */
+      } else if (type == 4) { /* NSVG_SHADER_IMG */
         // Textured tris
         vec4 color = texture2D(tex, ftcoord);
         if (texType == 1) color = vec4(color.xyz*color.w, color.w);
@@ -11346,30 +11362,18 @@ int glnvg__renderCreateTexture (void* uptr, NVGtexture type, int w, int h, int i
   // GL 1.4 and later has support for generating mipmaps using a tex parameter.
   if ((imageFlags&(NVGImageFlag.GenerateMipmaps|NVGImageFlag.NoFiltering)) == NVGImageFlag.GenerateMipmaps) glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 
-  if (type == NVGtexture.RGBA) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-  } else {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, data);
-  }
+  immutable ttype = (type == NVGtexture.RGBA ? GL_RGBA : GL_RED);
+  glTexImage2D(GL_TEXTURE_2D, 0, ttype, w, h, 0, ttype, GL_UNSIGNED_BYTE, data);
 
-  if ((imageFlags&(NVGImageFlag.GenerateMipmaps|NVGImageFlag.NoFiltering)) == NVGImageFlag.GenerateMipmaps) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (imageFlags&NVGImageFlag.NoFiltering ? GL_NEAREST : GL_LINEAR));
-  }
+  immutable tfmin =
+    (imageFlags&NVGImageFlag.NoFiltering ? GL_NEAREST :
+     imageFlags&NVGImageFlag.GenerateMipmaps ? GL_LINEAR_MIPMAP_LINEAR :
+     GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, tfmin);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (imageFlags&NVGImageFlag.NoFiltering ? GL_NEAREST : GL_LINEAR));
 
-  if (imageFlags&NVGImageFlag.RepeatX) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  }
-
-  if (imageFlags&NVGImageFlag.RepeatY) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  }
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (imageFlags&NVGImageFlag.RepeatX ? GL_REPEAT : GL_CLAMP_TO_EDGE));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (imageFlags&NVGImageFlag.RepeatY ? GL_REPEAT : GL_CLAMP_TO_EDGE));
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -11417,11 +11421,8 @@ bool glnvg__renderUpdateTexture (void* uptr, int image, int x, int y, int w, int
   glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
   glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
 
-  if (tex.type == NVGtexture.RGBA) {
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
-  } else {
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RED, GL_UNSIGNED_BYTE, data);
-  }
+  immutable ttype = (tex.type == NVGtexture.RGBA ? GL_RGBA : GL_RED);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, ttype, GL_UNSIGNED_BYTE, data);
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -11542,6 +11543,7 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
     }
     //printf("frag.texType = %d\n", frag.texType);
   } else {
+    frag.type = (paint.simpleColor ? NSVG_SHADER_FILLCOLOR : NSVG_SHADER_FILLGRAD);
     frag.type = NSVG_SHADER_FILLGRAD;
     frag.radius = paint.radius;
     frag.feather = paint.feather;
