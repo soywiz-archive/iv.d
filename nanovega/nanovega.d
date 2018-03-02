@@ -2675,6 +2675,19 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   state.evenOddMode = false;
 }
 
+/** Returns `true` if we have any room in state stack.
+ * It is guaranteed to have at least 32 stack slots.
+ *
+ * Group: state_handling
+ */
+public bool canSave (NVGContext ctx) nothrow @trusted @nogc { pragma(inline, true); return (ctx.nstates < NVG_MAX_STATES); }
+
+/** Returns `true` if we have any saved state.
+ *
+ * Group: state_handling
+ */
+public bool canRestore (NVGContext ctx) nothrow @trusted @nogc { pragma(inline, true); return (ctx.nstates > 1); }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // Render styles
