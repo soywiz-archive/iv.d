@@ -1104,6 +1104,18 @@ public struct NVGCompositeOperationState {
   NVGBlendFactor dstAlpha; ///
 }
 
+/// Mask combining more
+/// Group: masking
+public enum NVGClipMode {
+  None, /// normal rendering (i.e. render path instead of modifying clip region)
+  And, /// old mask will be masked with the current one (logical `AND` operation); this is the default mode for [clip]
+  Or, /// new mask will be added to the current one (logical `OR` operation);
+  Xor, /// new mask will be logically `XOR`ed with the current one
+  Sub, /// "subtract" current path from mask
+  Replace, /// replace current mask
+  Add = Or, /// Synonym
+}
+
 /// Glyph position info.
 /// Group: text_api
 public struct NVGGlyphPosition {
@@ -1223,9 +1235,13 @@ struct NVGparams {
   bool function (void* uptr, int image) nothrow @trusted @nogc renderDeleteTexture;
   bool function (void* uptr, int image, int x, int y, int w, int h, const(ubyte)* data) nothrow @trusted @nogc renderUpdateTexture;
   bool function (void* uptr, int image, int* w, int* h) nothrow @trusted @nogc renderGetTextureSize;
-  void function (void* uptr, int width, int height) nothrow @trusted @nogc renderViewport;
+  void function (void* uptr, int width, int height) nothrow @trusted @nogc renderViewport; // called in [beginFrame]
   void function (void* uptr) nothrow @trusted @nogc renderCancel;
   void function (void* uptr) nothrow @trusted @nogc renderFlush;
+  void function (void* uptr) nothrow @trusted @nogc renderPushClip; // backend should support stack of at least [NVG_MAX_STATES] elements
+  void function (void* uptr) nothrow @trusted @nogc renderPopClip; // backend should support stack of at least [NVG_MAX_STATES] elements
+  void function (void* uptr) nothrow @trusted @nogc renderResetClip; // reset current clip region to `non-clipped`
+  void function (void* uptr, NVGClipMode clipmode) nothrow @trusted @nogc renderSetClipMode; // next fill/stroke/triangles operation will use this clipping mode
   void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc renderFill;
   void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
   void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
@@ -1452,6 +1468,8 @@ private:
   NVGPathSet recset;
   int recstart; // used to cancel recording
   bool recblockdraw;
+  // clipping
+  NVGClipMode clipmode;
   // internals
   NVGMatrix gpuAffine;
   int mWidth, mHeight;
@@ -1735,6 +1753,9 @@ public void beginFrame (NVGContext ctx, int windowWidth, int windowHeight, float
          ctx.drawCallCount, ctx.fillTriCount, ctx.strokeTriCount, ctx.textTriCount,
          ctx.fillTriCount+ctx.strokeTriCount+ctx.textTriCount);
   */
+
+  if (windowWidth < 1) windowWidth = 1;
+  if (windowHeight < 1) windowHeight = 1;
 
   if (isNaN(devicePixelRatio)) devicePixelRatio = (windowHeight > 0 ? cast(float)windowWidth/cast(float)windowHeight : 1024.0/768.0);
 
@@ -2633,6 +2654,7 @@ public bool save (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.nstates > 0) {
     //memcpy(&ctx.states[ctx.nstates], &ctx.states[ctx.nstates-1], NVGstate.sizeof);
     ctx.states[ctx.nstates] = ctx.states[ctx.nstates-1];
+    ctx.params.renderPushClip(ctx.params.userPtr);
   }
   ++ctx.nstates;
   return true;
@@ -2643,6 +2665,7 @@ public bool save (NVGContext ctx) nothrow @trusted @nogc {
 public bool restore (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.nstates <= 1) return false;
   ctx.states[ctx.nstates-1].clearPaint();
+  ctx.params.renderPopClip(ctx.params.userPtr);
   --ctx.nstates;
   return true;
 }
@@ -2673,6 +2696,8 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   state.textAlign.reset;
   state.fontId = 0;
   state.evenOddMode = false;
+
+  ctx.params.renderResetClip(ctx.params.userPtr);
 }
 
 /** Returns `true` if we have any room in state stack.
@@ -10947,6 +10972,7 @@ struct GLNVGcall {
   int uniformOffset;
   NVGMatrix affine;
   GLNVGblend blendFunc;
+  NVGClipMode clipmode;
 }
 
 struct GLNVGpath {
@@ -10985,6 +11011,7 @@ align(1):
 
 struct GLNVGcontext {
   GLNVGshader shader;
+  GLNVGshader fboshader;
   GLNVGtexture* textures;
   float[2] view;
   int freetexid; // -1: none
@@ -10993,6 +11020,14 @@ struct GLNVGcontext {
   GLuint vertBuf;
   int fragSize;
   int flags;
+  // FBOs for masks
+  GLuint[4] fbos;
+  GLuint[4][2] fboTexs; // FBO textures: [0] is RGBA, [1] is stencil
+  int fboWidth, fboHeight;
+  int currMaskLayer; // -1: none; 0-3: first FBO (RGBA), and so on
+  bool[NVG_MAX_STATES] maskStack; // `true`: mask is initialized
+  int msp; // mask stack pointer; starts from `0`; points to next free item; see below for logic description
+  NVGClipMode clipmode;
 
   // Per frame buffers
   GLNVGcall* calls;
@@ -11098,10 +11133,10 @@ GLNVGtexture* glnvg__findTexture (GLNVGcontext* gl, int id) nothrow @trusted @no
   return &gl.textures[id-1];
 }
 
-bool glnvg__deleteTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
+bool glnvg__deleteTexture (GLNVGcontext* gl, ref int id) nothrow @trusted @nogc {
   if (id <= 0 || id > gl.ntextures) return false;
   auto tx = &gl.textures[id-1];
-  if (tx.id == 0) return false; // free one
+  if (tx.id == 0) { id = 0; return false; } // free one
   assert(tx.id == id);
   assert(tx.tex != 0);
   version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("decrefing texture with id %d (%d)\n", tx.id, id); }}
@@ -11113,6 +11148,7 @@ bool glnvg__deleteTexture (GLNVGcontext* gl, int id) nothrow @trusted @nogc {
     tx.nextfree = gl.freetexid;
     gl.freetexid = id-1;
   }
+  id = 0;
   return true;
 }
 
@@ -11213,6 +11249,95 @@ void glnvg__getUniforms (GLNVGshader* shader) nothrow @trusted @nogc {
   shader.loc[GLNVGuniformLoc.Frag] = glGetUniformLocation(shader.prog, "frag");
   shader.loc[GLNVGuniformLoc.TMat] = glGetUniformLocation(shader.prog, "tmat");
   shader.loc[GLNVGuniformLoc.TTr] = glGetUniformLocation(shader.prog, "ttr");
+}
+
+void glnvg__killFBOs (GLNVGcontext* gl) nothrow @trusted @nogc {
+  foreach (immutable fidx, ref GLuint fbo; gl.fbos[]) {
+    if (fbo != 0) {
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+      if (gl.fboTexs.ptr[fidx].ptr[0] != 0) glDeleteTextures(1, &gl.fboTexs.ptr[fidx].ptr[0]);
+      if (gl.fboTexs.ptr[fidx].ptr[1] != 0) glDeleteTextures(1, &gl.fboTexs.ptr[fidx].ptr[1]);
+      gl.fboTexs.ptr[fidx][] = 0;
+      glDeleteFramebuffers(1, &fbo);
+      fbo = 0;
+    }
+  }
+  gl.fboWidth = gl.fboHeight = 0;
+}
+
+void glnvg__allocFBOs (GLNVGcontext* gl) nothrow @trusted @nogc {
+  assert(gl.fboWidth > 0);
+  assert(gl.fboHeight > 0);
+  foreach (immutable fidx, ref GLuint fbo; gl.fbos[]) {
+    if (fbo == 0) {
+      glGenFramebuffers(1, &fbo);
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+      scope(exit) glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      // attach 2D texture to this FBO
+      GLuint tidRGBA = 0;
+      glGenTextures(1, &tidRGBA);
+      if (tidRGBA == 0) assert(0, "NanoVega: cannot create RGBA texture for FBO");
+      glBindTexture(GL_TEXTURE_2D, tidRGBA);
+      //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
+      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      //FIXME: linear or nearest?
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      // empty texture
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gl.fboWidth, gl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tidRGBA, 0);
+      // attach stencil texture to this FBO
+      GLuint tidStencil = 0;
+      glGenTextures(1, &tidStencil);
+      if (tidStencil == 0) assert(0, "NanoVega: cannot create RGBA texture for FBO");
+      glBindTexture(GL_TEXTURE_2D, tidStencil);
+      //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
+      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      //FIXME: linear or nearest?
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      // empty texture
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, gl.fboWidth, gl.fboHeight, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_BYTE, null);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, tidStencil, 0);
+      // done
+      glBindTexture(GL_TEXTURE_2D, 0);
+      // clear 'em all
+      glClearColor(0, 0, 0, 0);
+      glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+      // save texture ids
+      gl.fboTexs.ptr[fidx].ptr[0] = tidRGBA;
+      gl.fboTexs.ptr[fidx].ptr[1] = tidStencil;
+      return;
+    }
+  }
+  assert(0, "NanoVega: out of free FBOs");
+}
+
+// the logic is like this: each `pushClip` increases msp, and sets the corresponding stack item to `false`.
+// any clip operation will either init texture part to all `0`, or copy the previous one,
+// and will set the corresponding stack item to `true` (thus allocating a new clip layer).
+// on `popClip` we'll check if current clip layer is initialized, and will deallocate it.
+// this way we will have almost no overhead for noclip operations, and will only allocate
+// as much clip FBOs as strictly necessary
+
+void glnvg__renderPushClip (void* uptr) nothrow @trusted @nogc {
+  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+}
+
+void glnvg__renderPopClip (void* uptr) nothrow @trusted @nogc {
+  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+}
+
+void glnvg__renderResetClip (void* uptr) nothrow @trusted @nogc {
+  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+}
+
+void glnvg__renderSetClipMode (void* uptr, NVGClipMode clipmode) nothrow @trusted @nogc {
+  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  gl.clipmode = clipmode;
 }
 
 bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
@@ -11326,16 +11451,83 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     }
   };
 
+  enum clipFragShader = q{
+    uniform vec4 frag[UNIFORM_ARRAY_SIZE];
+    uniform sampler2D tex;
+    varying vec2 ftcoord;
+    varying vec2 fpos;
+    #define scissorMat mat3(frag[0].xyz, frag[1].xyz, frag[2].xyz)
+    #define viewWidth (frag[3].x)
+    #define viewHeight (frag[3].y)
+    #define viewPort (frag[3].xy)
+    #define mask (frag[4]) /* mask values should be strictly 1 or 0 */
+    /* [5..7] is unused */
+    #define scissorExt frag[8].xy
+    #define scissorScale frag[8].zw
+    #define extent frag[9].xy
+    #define radius frag[9].z
+    #define feather frag[9].w
+    #define strokeMult frag[10].x
+    #define strokeThr frag[10].y
+    #define type int(frag[10].w) /* NVGClipMode */
+
+    // Scissoring
+    float scissorMask (in vec2 p) {
+      vec2 sc = (abs((scissorMat*vec3(p, 1.0)).xy)-scissorExt);
+      sc = vec2(0.5, 0.5)-sc*scissorScale;
+      return clamp(sc.x, 0.0, 1.0)*clamp(sc.y, 0.0, 1.0);
+    }
+
+    #ifdef EDGE_AA
+    // Stroke - from [0..1] to clipped pyramid, where the slope is 1px.
+    float strokeMask () {
+      return min(1.0, (1.0-abs(ftcoord.x*2.0-1.0))*strokeMult)*min(1.0, ftcoord.y);
+    }
+    #endif
+
+    void main (void) {
+      float scissor = scissorMask(fpos);
+      if (scissor == 0.0) discard; //k8: is it really faster?
+      #ifdef EDGE_AA
+      float strokeAlpha = strokeMask();
+      if (strokeAlpha < strokeThr) discard;
+      #endif
+      gl_FragColor = mask;
+    }
+  };
+
+  /*
+  None, /// normal rendering (i.e. render path instead of modifying clip region)
+  And, /// old mask will be masked with the current one (logical `AND` operation); this is the default mode for [clip]
+  Or, /// new mask will be added to the current one (logical `OR` operation)
+  Xor, /// new mask will be logically `XOR`ed with the current one
+  Sub, /// "subtract" current path from mask
+  Replace, /// replace current mask
+
+  glEnable(GL_COLOR_LOGIC_OP)
+
+  And:
+    glLogicOp(GL_AND)
+  Or:
+    glLogicOp(GL_OR)
+    glLogicOp(GL_SET) // why not
+  Xor:
+    glLogicOp(GL_XOR)
+  Sub:
+    glLogicOp(GL_CLEAR)
+  Replace:
+    glLogicOp(GL_COPY)
+  */
+
   glnvg__checkError(gl, "init");
 
-  if (gl.flags&NVGContextFlag.Antialias) {
-    if (!glnvg__createShader(&gl.shader, "shader", shaderHeader, "#define EDGE_AA 1\n", fillVertShader, fillFragShader)) return false;
-  } else {
-    if (!glnvg__createShader(&gl.shader, "shader", shaderHeader, null, fillVertShader, fillFragShader)) return false;
-  }
+  string defines = (gl.flags&NVGContextFlag.Antialias ? "#define EDGE_AA 1\n" : null);
+  if (!glnvg__createShader(&gl.shader, "shader", shaderHeader, defines.ptr, fillVertShader, fillFragShader)) return false;
+  if (!glnvg__createShader(&gl.fboshader, "fboshader", shaderHeader, defines.ptr, fillVertShader, clipFragShader)) return false;
 
   glnvg__checkError(gl, "uniform locations");
   glnvg__getUniforms(&gl.shader);
+  glnvg__getUniforms(&gl.fboshader);
 
   // Create dynamic vertex array
   glGenBuffers(1, &gl.vertBuf);
@@ -11581,6 +11773,15 @@ void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted 
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   gl.view.ptr[0] = cast(float)width;
   gl.view.ptr[1] = cast(float)height;
+  // kill FBOs if we need to create new ones (flushing will recreate 'em if necessary)
+  if (width != gl.fboWidth || height != gl.fboHeight) {
+    glnvg__killFBOs(gl);
+    gl.fboWidth = width;
+    gl.fboHeight = height;
+  }
+  gl.currMaskLayer = -1;
+  gl.msp = 0;
+  gl.clipmode = NVGClipMode.None;
 }
 
 void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
@@ -11591,6 +11792,7 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   glEnable(GL_STENCIL_TEST);
   glnvg__stencilMask(gl, 0xffffffffU);
   glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xffffffffU);
+
   glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
   // set bindpoint for solid loc
@@ -11711,6 +11913,9 @@ void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
   gl.npaths = 0;
   gl.ncalls = 0;
   gl.nuniforms = 0;
+  gl.currMaskLayer = -1;
+  gl.msp = 0;
+  gl.clipmode = NVGClipMode.None;
 }
 
 GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) pure nothrow @trusted @nogc {
@@ -11859,11 +12064,8 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
     glnvg__bindTexture(gl, 0);
   }
 
-  // Reset calls
-  gl.nverts = 0;
-  gl.npaths = 0;
-  gl.ncalls = 0;
-  gl.nuniforms = 0;
+  // this will do all necessary cleanup
+  glnvg__renderCancel(gl);
 }
 
 int glnvg__maxVertCount (const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
@@ -11957,6 +12159,7 @@ void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperatio
 
   call.type = GLNVG_FILL;
   call.evenOdd = evenOdd;
+  call.clipmode = gl.clipmode;
   call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.triangleCount = 4;
   call.pathOffset = glnvg__allocPaths(gl, npaths);
@@ -12035,6 +12238,7 @@ void glnvg__renderStroke (void* uptr, NVGCompositeOperationState compositeOperat
   if (call is null || npaths < 1) return;
 
   call.type = GLNVG_STROKE;
+  call.clipmode = gl.clipmode;
   call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
@@ -12088,6 +12292,7 @@ void glnvg__renderTriangles (void* uptr, NVGCompositeOperationState compositeOpe
   if (call is null) return;
 
   call.type = GLNVG_TRIANGLES;
+  call.clipmode = gl.clipmode;
   call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.image = paint.image.id;
   if (call.image > 0) glnvg__renderTextureIncRef(uptr, call.image);
@@ -12118,7 +12323,9 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   if (gl is null) return;
 
+  glnvg__killFBOs(gl);
   glnvg__deleteShader(&gl.shader);
+  glnvg__deleteShader(&gl.fboshader);
 
   if (gl.vertBuf != 0) glDeleteBuffers(1, &gl.vertBuf);
 
@@ -12178,6 +12385,10 @@ public NVGContext nvgCreateContext (const(NVGContextFlag)[] flagList...) nothrow
   params.renderViewport = &glnvg__renderViewport;
   params.renderCancel = &glnvg__renderCancel;
   params.renderFlush = &glnvg__renderFlush;
+  params.renderPushClip = &glnvg__renderPushClip;
+  params.renderPopClip = &glnvg__renderPopClip;
+  params.renderResetClip = &glnvg__renderResetClip;
+  params.renderSetClipMode = &glnvg__renderSetClipMode;
   params.renderFill = &glnvg__renderFill;
   params.renderStroke = &glnvg__renderStroke;
   params.renderTriangles = &glnvg__renderTriangles;
