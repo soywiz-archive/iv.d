@@ -1093,6 +1093,7 @@ public enum NVGCompositeOperation {
 /// Composite operation state.
 /// Group: composite_operation
 public struct NVGCompositeOperationState {
+  bool simple; /// `true`: use `glBlendFunc()` instead of `glBlendFuncSeparate()`
   NVGBlendFactor srcRGB; ///
   NVGBlendFactor dstRGB; ///
   NVGBlendFactor srcAlpha; ///
@@ -1561,7 +1562,9 @@ void nvg__setDevicePixelRatio (NVGContext ctx, float ratio) pure nothrow @safe @
 }
 
 NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation op) pure nothrow @safe @nogc {
+  NVGCompositeOperationState state;
   NVGBlendFactor sfactor, dfactor;
+
        if (op == NVGCompositeOperation.SourceOver) { sfactor = NVGBlendFactor.One; dfactor = NVGBlendFactor.OneMinusSrcAlpha;}
   else if (op == NVGCompositeOperation.SourceIn) { sfactor = NVGBlendFactor.DstAlpha; dfactor = NVGBlendFactor.Zero; }
   else if (op == NVGCompositeOperation.SourceOut) { sfactor = NVGBlendFactor.OneMinusDstAlpha; dfactor = NVGBlendFactor.Zero; }
@@ -1572,28 +1575,19 @@ NVGCompositeOperationState nvg__compositeOperationState (NVGCompositeOperation o
   else if (op == NVGCompositeOperation.DestinationAtop) { sfactor = NVGBlendFactor.OneMinusDstAlpha; dfactor = NVGBlendFactor.SrcAlpha; }
   else if (op == NVGCompositeOperation.Lighter) { sfactor = NVGBlendFactor.One; dfactor = NVGBlendFactor.One; }
   else if (op == NVGCompositeOperation.Copy) { sfactor = NVGBlendFactor.One; dfactor = NVGBlendFactor.Zero;  }
-  else if (op == NVGCompositeOperation.Xor) { sfactor = NVGBlendFactor.OneMinusDstAlpha; dfactor = NVGBlendFactor.OneMinusSrcAlpha; }
-  else { sfactor = NVGBlendFactor.One; dfactor = NVGBlendFactor.OneMinusSrcAlpha;} // default value for invalid op: SourceOver
+  else if (op == NVGCompositeOperation.Xor) {
+    state.simple = false;
+    state.srcRGB = NVGBlendFactor.OneMinusDstColor;
+    state.srcAlpha = NVGBlendFactor.OneMinusDstAlpha;
+    state.dstRGB = NVGBlendFactor.OneMinusSrcColor;
+    state.dstAlpha = NVGBlendFactor.OneMinusSrcAlpha;
+    return state;
+  }
+  else { sfactor = NVGBlendFactor.One; dfactor = NVGBlendFactor.OneMinusSrcAlpha; } // default value for invalid op: SourceOver
 
-  NVGCompositeOperationState state;
-
+  state.simple = true;
   state.srcAlpha = sfactor;
   state.dstAlpha = dfactor;
-
-  NVGBlendFactor convertFactor (NVGBlendFactor fc) pure nothrow @safe @nogc {
-    switch (fc) {
-      case NVGBlendFactor.SrcAlpha: return NVGBlendFactor.SrcColor;
-      case NVGBlendFactor.OneMinusSrcAlpha: return NVGBlendFactor.OneMinusSrcColor;
-      case NVGBlendFactor.DstAlpha: return NVGBlendFactor.DstColor;
-      case NVGBlendFactor.OneMinusDstAlpha: return NVGBlendFactor.OneMinusDstColor;
-      default: break;
-    }
-    return fc;
-  }
-
-  state.srcRGB = convertFactor(sfactor);
-  state.dstRGB = convertFactor(dfactor);
-
   return state;
 }
 
@@ -2196,6 +2190,7 @@ public void globalCompositeBlendFunc (NVGContext ctx, NVGBlendFactor sfactor, NV
 /// Group: composite_operation
 public void globalCompositeBlendFuncSeparate (NVGContext ctx, NVGBlendFactor srcRGB, NVGBlendFactor dstRGB, NVGBlendFactor srcAlpha, NVGBlendFactor dstAlpha) nothrow @trusted @nogc {
   NVGCompositeOperationState op;
+  op.simple = false;
   op.srcRGB = srcRGB;
   op.dstRGB = dstRGB;
   op.srcAlpha = srcAlpha;
@@ -10901,6 +10896,7 @@ struct GLNVGtexture {
 }
 
 struct GLNVGblend {
+  bool simple;
   GLenum srcRGB;
   GLenum dstRGB;
   GLenum srcAlpha;
@@ -11723,12 +11719,20 @@ GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) pure nothrow @truste
 
 GLNVGblend glnvg__buildBlendFunc (NVGCompositeOperationState op) pure nothrow @trusted @nogc {
   GLNVGblend res;
+  res.simple = op.simple;
   res.srcRGB = glnvg_convertBlendFuncFactor(op.srcRGB);
   res.dstRGB = glnvg_convertBlendFuncFactor(op.dstRGB);
   res.srcAlpha = glnvg_convertBlendFuncFactor(op.srcAlpha);
   res.dstAlpha = glnvg_convertBlendFuncFactor(op.dstAlpha);
-  if (res.srcRGB == GL_INVALID_ENUM || res.dstRGB == GL_INVALID_ENUM || res.srcAlpha == GL_INVALID_ENUM || res.dstAlpha == GL_INVALID_ENUM) {
-    res.srcRGB = res.srcAlpha = res.dstRGB = res.dstAlpha = GL_INVALID_ENUM;
+  if (res.simple) {
+    if (res.srcAlpha == GL_INVALID_ENUM || res.dstAlpha == GL_INVALID_ENUM) {
+      res.srcRGB = res.srcAlpha = res.dstRGB = res.dstAlpha = GL_INVALID_ENUM;
+    }
+  } else {
+    if (res.srcRGB == GL_INVALID_ENUM || res.dstRGB == GL_INVALID_ENUM || res.srcAlpha == GL_INVALID_ENUM || res.dstAlpha == GL_INVALID_ENUM) {
+      res.simple = true;
+      res.srcRGB = res.srcAlpha = res.dstRGB = res.dstAlpha = GL_INVALID_ENUM;
+    }
   }
   return res;
 }
@@ -11736,13 +11740,27 @@ GLNVGblend glnvg__buildBlendFunc (NVGCompositeOperationState op) pure nothrow @t
 void glnvg__blendCompositeOperation() (GLNVGcontext* gl, in auto ref GLNVGblend op) nothrow @trusted @nogc {
   //glBlendFuncSeparate(glnvg_convertBlendFuncFactor(op.srcRGB), glnvg_convertBlendFuncFactor(op.dstRGB), glnvg_convertBlendFuncFactor(op.srcAlpha), glnvg_convertBlendFuncFactor(op.dstAlpha));
   static if (NANOVG_GL_USE_STATE_FILTER) {
-    if (gl.blendFunc.srcRGB == op.srcRGB && gl.blendFunc.dstRGB == op.dstRGB && gl.blendFunc.srcAlpha == op.srcAlpha && gl.blendFunc.dstAlpha == op.dstAlpha) return;
+    if (gl.blendFunc.simple == op.simple) {
+      if (op.simple) {
+        if (gl.blendFunc.srcAlpha == op.srcAlpha && gl.blendFunc.dstAlpha == op.dstAlpha) return;
+      } else {
+        if (gl.blendFunc.srcRGB == op.srcRGB && gl.blendFunc.dstRGB == op.dstRGB && gl.blendFunc.srcAlpha == op.srcAlpha && gl.blendFunc.dstAlpha == op.dstAlpha) return;
+      }
+    }
     gl.blendFunc = op;
   }
-  if (op.srcRGB == GL_INVALID_ENUM || op.dstRGB == GL_INVALID_ENUM || op.srcAlpha == GL_INVALID_ENUM || op.dstAlpha == GL_INVALID_ENUM) {
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  if (op.simple) {
+    if (op.srcAlpha == GL_INVALID_ENUM || op.dstAlpha == GL_INVALID_ENUM) {
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+      glBlendFunc(op.srcAlpha, op.dstAlpha);
+    }
   } else {
-    glBlendFuncSeparate(op.srcRGB, op.dstRGB, op.srcAlpha, op.dstAlpha);
+    if (op.srcRGB == GL_INVALID_ENUM || op.dstRGB == GL_INVALID_ENUM || op.srcAlpha == GL_INVALID_ENUM || op.dstAlpha == GL_INVALID_ENUM) {
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+      glBlendFuncSeparate(op.srcRGB, op.dstRGB, op.srcAlpha, op.dstAlpha);
+    }
   }
 }
 
