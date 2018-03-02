@@ -2680,13 +2680,13 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
  *
  * Group: state_handling
  */
-public bool canSave (NVGContext ctx) nothrow @trusted @nogc { pragma(inline, true); return (ctx.nstates < NVG_MAX_STATES); }
+public bool canSave (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx.nstates < NVG_MAX_STATES); }
 
 /** Returns `true` if we have any saved state.
  *
  * Group: state_handling
  */
-public bool canRestore (NVGContext ctx) nothrow @trusted @nogc { pragma(inline, true); return (ctx.nstates > 1); }
+public bool canRestore (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx.nstates > 1); }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
