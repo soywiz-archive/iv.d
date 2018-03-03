@@ -1105,9 +1105,11 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
   nvg.clip();
   //nvg.clipStroke();
 
-  nvg.newPath();
-  nvg.ellipse(_x+150, _y+180, 90, 120);
-  nvg.clip(NVGClipMode.Union);
+  version(all) {
+    nvg.newPath();
+    nvg.ellipse(_x+150, _y+180, 90, 120);
+    nvg.clip(NVGClipMode.Union);
+  }
 
   version(all) {
     nvg.save();
@@ -1117,20 +1119,21 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
     nvg.ellipse(_x+150, _y+180, 60, 160);
     nvg.clip(NVGClipMode.Xor);
 
-/*
+    /*
     nvg.newPath();
     nvg.rect(0, 0, 1000, 1000);
     nvg.fillColor = NVGColor.yellow;
     nvg.fill();
-*/
+    */
   }
 
   scope(exit) {
     nvg.newPath();
     //nvg.rect(_x+50, _y+80, 160, 140);
     //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
-    nvg.ellipse(_x+150, _y+180, 120, 90);
-    version(all) {
+    //nvg.ellipse(_x+150, _y+180, 120, 90);
+    nvg.rect(_x+30, _y+30, 400, 400);
+    version(none) {
       nvg.strokeWidth = 1;
       nvg.strokeColor = NVGColor.yellow;
       //nvg.stroke();
@@ -1281,7 +1284,7 @@ void main () {
   sdwindow.visibleForTheFirstTime = delegate () {
     sdwindow.vsync = false;
 
-    nvg = nvgCreateContext();
+    nvg = nvgCreateContext(NVGContextFlag.Default, NVGContextFlag.Debug);
     if (nvg is null) fatal("cannot init NanoVega");
     if (!nvg.loadDemoData(data)) fatal("cannot load demo data");
 
