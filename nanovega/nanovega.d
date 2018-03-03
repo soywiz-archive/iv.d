@@ -10902,7 +10902,7 @@ public enum NVGImageFlagsGL : int {
 /// Group: context_management
 public uint glNVGClearFlags () pure nothrow @safe @nogc {
   pragma(inline, true);
-  return (GL_COLOR_BUFFER_BIT/*|GL_DEPTH_BUFFER_BIT*/|GL_STENCIL_BUFFER_BIT);
+  return (GL_COLOR_BUFFER_BIT|/*GL_DEPTH_BUFFER_BIT|*/GL_STENCIL_BUFFER_BIT);
 }
 
 
@@ -10915,6 +10915,8 @@ enum GLNVGuniformLoc {
   Frag,
   TMat,
   TTr,
+  ClipTex,
+  ViewPort,
 }
 
 alias GLNVGshaderType = int;
@@ -10922,7 +10924,7 @@ enum /*GLNVGshaderType*/ {
   NSVG_SHADER_FILLCOLOR,
   NSVG_SHADER_FILLGRAD,
   NSVG_SHADER_FILLIMG,
-  NSVG_SHADER_SIMPLE,
+  NSVG_SHADER_SIMPLE, // also used for clipfill
   NSVG_SHADER_IMG,
 }
 
@@ -10959,6 +10961,9 @@ enum /*GLNVGcallType*/ {
   GLNVG_STROKE,
   GLNVG_TRIANGLES,
   GLNVG_AFFINE, // change affine transformation matrix
+  GLNVG_PUSHCLIP,
+  GLNVG_POPCLIP,
+  GLNVG_RESETCLIP,
 }
 
 struct GLNVGcall {
@@ -10984,7 +10989,7 @@ struct GLNVGpath {
 
 align(1) struct GLNVGfragUniforms {
 align(1):
-  enum UNIFORM_ARRAY_SIZE = 11;
+  enum UNIFORM_ARRAY_SIZE = 12;
   // note: after modifying layout or size of uniform array,
   // don't forget to also update the fragment shader source!
   align(1) union {
@@ -11004,14 +11009,21 @@ align(1):
       float strokeThr;
       float texType;
       float type;
+      float doclip;
+      float unused1, unused2, unused3;
     }
     float[4][UNIFORM_ARRAY_SIZE] uniformArray;
   }
 }
 
+enum GLMaskState {
+  DontMask = -1,
+  Uninitialized = 0,
+  Initialized = 1,
+}
+
 struct GLNVGcontext {
   GLNVGshader shader;
-  GLNVGshader fboshader;
   GLNVGtexture* textures;
   float[2] view;
   int freetexid; // -1: none
@@ -11021,11 +11033,11 @@ struct GLNVGcontext {
   int fragSize;
   int flags;
   // FBOs for masks
-  GLuint[4] fbos;
-  GLuint[4][2] fboTexs; // FBO textures: [0] is RGBA, [1] is stencil
+  GLuint[NVG_MAX_STATES] fbo;
+  GLuint[2][NVG_MAX_STATES] fboTex; // FBO textures: [0] is color, [1] is stencil
   int fboWidth, fboHeight;
-  int currMaskLayer; // -1: none; 0-3: first FBO (RGBA), and so on
-  bool[NVG_MAX_STATES] maskStack; // `true`: mask is initialized
+  //int currMaskLayer; // -1: none; 0-3: first FBO (RGBA), and so on
+  GLMaskState[NVG_MAX_STATES] maskStack;
   int msp; // mask stack pointer; starts from `0`; points to next free item; see below for logic description
   NVGClipMode clipmode;
 
@@ -11055,6 +11067,11 @@ struct GLNVGcontext {
 }
 
 int glnvg__maxi() (int a, int b) { pragma(inline, true); return (a > b ? a : b); }
+
+void glnvg__bindTextureForced (GLNVGcontext* gl, GLuint tex) nothrow @trusted @nogc {
+  static if (NANOVG_GL_USE_STATE_FILTER) gl.boundTexture = gl.boundTexture.max;
+  glBindTexture(GL_TEXTURE_2D, tex);
+}
 
 void glnvg__bindTexture (GLNVGcontext* gl, GLuint tex) nothrow @trusted @nogc {
   static if (NANOVG_GL_USE_STATE_FILTER) {
@@ -11172,9 +11189,11 @@ void glnvg__dumpProgramError (GLuint prog, const(char)* name) nothrow @trusted @
   fprintf(stderr, "Program %s error:\n%s\n", name, str.ptr);
 }
 
-void glnvg__checkError (GLNVGcontext* gl, const(char)* str) nothrow @trusted @nogc {
+void glnvg__checkError(bool force=false) (GLNVGcontext* gl, const(char)* str) nothrow @trusted @nogc {
   GLenum err;
-  if ((gl.flags&NVGContextFlag.Debug) == 0) return;
+  static if (!force) {
+    if ((gl.flags&NVGContextFlag.Debug) == 0) return;
+  }
   err = glGetError();
   if (err != GL_NO_ERROR) {
     import core.stdc.stdio : fprintf, stderr;
@@ -11249,16 +11268,16 @@ void glnvg__getUniforms (GLNVGshader* shader) nothrow @trusted @nogc {
   shader.loc[GLNVGuniformLoc.Frag] = glGetUniformLocation(shader.prog, "frag");
   shader.loc[GLNVGuniformLoc.TMat] = glGetUniformLocation(shader.prog, "tmat");
   shader.loc[GLNVGuniformLoc.TTr] = glGetUniformLocation(shader.prog, "ttr");
+  shader.loc[GLNVGuniformLoc.ClipTex] = glGetUniformLocation(shader.prog, "clipTex");
+  shader.loc[GLNVGuniformLoc.ViewPort] = glGetUniformLocation(shader.prog, "viewPort");
 }
 
 void glnvg__killFBOs (GLNVGcontext* gl) nothrow @trusted @nogc {
-  foreach (immutable fidx, ref GLuint fbo; gl.fbos[]) {
+  foreach (immutable fidx, ref GLuint fbo; gl.fbo[]) {
     if (fbo != 0) {
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-      if (gl.fboTexs.ptr[fidx].ptr[0] != 0) glDeleteTextures(1, &gl.fboTexs.ptr[fidx].ptr[0]);
-      if (gl.fboTexs.ptr[fidx].ptr[1] != 0) glDeleteTextures(1, &gl.fboTexs.ptr[fidx].ptr[1]);
-      gl.fboTexs.ptr[fidx][] = 0;
+      foreach (ref GLuint tid; gl.fboTex[fidx][]) if (tid != 0) { glDeleteTextures(1, &tid); tid = 0; }
       glDeleteFramebuffers(1, &fbo);
       fbo = 0;
     }
@@ -11266,73 +11285,217 @@ void glnvg__killFBOs (GLNVGcontext* gl) nothrow @trusted @nogc {
   gl.fboWidth = gl.fboHeight = 0;
 }
 
-void glnvg__allocFBOs (GLNVGcontext* gl) nothrow @trusted @nogc {
+// returns `true` is new FBO was created
+// will not unbind buffer, if it was created
+bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @trusted @nogc {
+  assert(fidx >= 0 && fidx < gl.fbo.length);
   assert(gl.fboWidth > 0);
   assert(gl.fboHeight > 0);
-  foreach (immutable fidx, ref GLuint fbo; gl.fbos[]) {
-    if (fbo == 0) {
-      glGenFramebuffers(1, &fbo);
-      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-      scope(exit) glBindFramebuffer(GL_FRAMEBUFFER, 0);
-      // attach 2D texture to this FBO
-      GLuint tidRGBA = 0;
-      glGenTextures(1, &tidRGBA);
-      if (tidRGBA == 0) assert(0, "NanoVega: cannot create RGBA texture for FBO");
-      glBindTexture(GL_TEXTURE_2D, tidRGBA);
-      //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
-      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      //FIXME: linear or nearest?
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      // empty texture
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gl.fboWidth, gl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tidRGBA, 0);
-      // attach stencil texture to this FBO
-      GLuint tidStencil = 0;
-      glGenTextures(1, &tidStencil);
-      if (tidStencil == 0) assert(0, "NanoVega: cannot create RGBA texture for FBO");
-      glBindTexture(GL_TEXTURE_2D, tidStencil);
-      //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
-      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      //FIXME: linear or nearest?
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      // empty texture
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, gl.fboWidth, gl.fboHeight, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_BYTE, null);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, tidStencil, 0);
-      // done
-      glBindTexture(GL_TEXTURE_2D, 0);
-      // clear 'em all
-      glClearColor(0, 0, 0, 0);
-      glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
-      // save texture ids
-      gl.fboTexs.ptr[fidx].ptr[0] = tidRGBA;
-      gl.fboTexs.ptr[fidx].ptr[1] = tidStencil;
-      return;
+
+  //{ import core.stdc.stdio; printf("fidx=%d; fbo=%u\n", fidx, gl.fbo.ptr[fidx]); }
+  if (gl.fbo[fidx] != 0) return false; // nothing to do, this FBO is already initialized
+
+  glGetError();
+
+  glnvg__bindTextureForced(gl, 0);
+
+  // allocate FBO object
+  GLuint fbo = 0;
+  glGenFramebuffers(1, &fbo);
+  if (fbo == 0) assert(0, "NanoVega: cannot create FBO");
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glGenFramebuffers");
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  //scope(exit) glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  // attach 2D texture to this FBO
+  GLuint tidColor = 0;
+  glGenTextures(1, &tidColor);
+  if (tidColor == 0) assert(0, "NanoVega: cannot create RGBA texture for FBO");
+  glnvg__bindTextureForced(gl, tidColor);
+  //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glTexParameterf: GL_TEXTURE_WRAP_S");
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glTexParameterf: GL_TEXTURE_WRAP_T");
+  //FIXME: linear or nearest?
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glTexParameterf: GL_TEXTURE_MIN_FILTER");
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glTexParameterf: GL_TEXTURE_MAG_FILTER");
+  // empty texture
+  //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gl.fboWidth, gl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+  // create texture with only one color channel
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, gl.fboWidth, gl.fboHeight, 0, GL_RED, GL_UNSIGNED_BYTE, null);
+  //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gl.fboWidth, gl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glTexImage2D (color)");
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tidColor, 0);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glFramebufferTexture2D (color)");
+
+  // attach stencil texture to this FBO
+  GLuint tidStencil = 0;
+  glGenTextures(1, &tidStencil);
+  if (tidStencil == 0) assert(0, "NanoVega: cannot create RGBA texture for FBO");
+  glnvg__bindTextureForced(gl, tidStencil);
+  //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
+  //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  //FIXME: linear or nearest?
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  // empty texture
+  //glTexImage2D(GL_TEXTURE_2D, 0, /*GL_DEPTH_STENCIL*/GL_DEPTH24_STENCIL8, gl.fboWidth, gl.fboHeight, 0, /*GL_DEPTH_STENCIL*/GL_DEPTH24_STENCIL8, GL_UNSIGNED_BYTE, null);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, gl.fboWidth, gl.fboHeight, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, null);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glTexImage2D (stencil)");
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, tidStencil, 0);
+  glnvg__checkError!true(gl, "glnvg__allocFBO: glFramebufferTexture2D (stencil)");
+
+  {
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+      version(all) {
+        import core.stdc.stdio;
+        if (status == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT) printf("fucked attachement\n");
+        if (status == GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS) printf("fucked dimensions\n");
+        if (status == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT) printf("missing attachement\n");
+        if (status == GL_FRAMEBUFFER_UNSUPPORTED) printf("unsupported\n");
+      }
+      assert(0, "NanoVega: framebuffer creation failed");
     }
   }
-  assert(0, "NanoVega: out of free FBOs");
+
+  // done
+  glnvg__bindTextureForced(gl, 0);
+
+  // clear 'em all
+  if (doclear) {
+    glClearColor(1, 1, 1, 1);
+    glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+  }
+
+  // save texture ids
+  gl.fbo[fidx] = fbo;
+  gl.fboTex[fidx][0] = tidColor;
+  gl.fboTex[fidx][1] = tidStencil;
+
+  return true;
 }
 
-// the logic is like this: each `pushClip` increases msp, and sets the corresponding stack item to `false`.
-// any clip operation will either init texture part to all `0`, or copy the previous one,
-// and will set the corresponding stack item to `true` (thus allocating a new clip layer).
-// on `popClip` we'll check if current clip layer is initialized, and will deallocate it.
-// this way we will have almost no overhead for noclip operations, and will only allocate
-// as much clip FBOs as strictly necessary
+// will not unbind buffer
+void glnvg__clearFBO (GLNVGcontext* gl, int fidx) nothrow @trusted @nogc {
+  assert(fidx >= 0 && fidx < gl.fbo.length);
+  assert(gl.fboWidth > 0);
+  assert(gl.fboHeight > 0);
+  assert(gl.fbo[fidx] != 0);
+  glnvg__bindTextureForced(gl, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[fidx]);
+  glClearColor(1, 1, 1, 1);
+  glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+  //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// will not unbind buffer
+void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @trusted @nogc {
+  assert(didx >= 0 && didx < gl.fbo.length);
+  assert(sidx >= 0 && sidx < gl.fbo.length);
+  assert(gl.fboWidth > 0);
+  assert(gl.fboHeight > 0);
+  assert(gl.fbo[didx] != 0);
+  assert(gl.fbo[sidx] != 0);
+  if (didx == sidx) return;
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[didx]);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND); // restore it!
+  glDisable(GL_SCISSOR_TEST);
+  //glnvg__bindTexture(gl, gl.fboTex.ptr[sidx].ptr[0]);
+  glUseProgram(0); // restore it!
+  //glClearColor(1, 1, 1, 1);
+  //glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+  enum x = 0;
+  enum y = 0;
+  immutable int w = gl.fboWidth;
+  immutable int h = gl.fboHeight;
+  glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y); // top-left
+    glTexCoord2f(1.0f, 0.0f); glVertex2i(w, y); // top-right
+    glTexCoord2f(1.0f, 1.0f); glVertex2i(w, h); // bottom-right
+    glTexCoord2f(0.0f, 1.0f); glVertex2i(x, h); // bottom-left
+  glEnd();
+  glnvg__bindTexture(gl, 0);
+  glUseProgram(gl.shader.prog);
+  glEnable(GL_BLEND); // restore it!
+  //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// prepareIt==true: we are going to perform clip operation, prepare FBO texture for it
+// returns index in `gl.fbo`, or -1 for "don't mask"
+int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted @nogc {
+  assert(gl.msp > 0 && gl.msp <= gl.maskStack.length);
+  // if we don't need "prepared" FBO, just take the last one which is ready
+  if (!prepareIt) {
+    //TODO: cache found index
+    if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.DontMask) return -1; // shortcut
+    int fboidx = -1;
+    foreach (immutable sp, GLMaskState mst; gl.maskStack.ptr[0..gl.msp]; reverse) {
+      final switch (mst) {
+        case GLMaskState.DontMask: fboidx = -1; break;
+        case GLMaskState.Uninitialized: break;
+        case GLMaskState.Initialized: fboidx = cast(int)sp; break;
+      }
+    }
+    if (fboidx >= 0) {
+      assert(gl.fbo[fboidx] != 0);
+    }
+    return fboidx;
+  }
+  // hard case: we need initialized FBO, even for "don't mask" case
+  // for this, look back in stack, and either copy initialized FBO,
+  // or stop at first uninitialized one, and clear it
+  if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.Initialized) {
+    // shortcut
+    glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[gl.msp-1]);
+    return gl.msp-1;
+  }
+  foreach (immutable sp; 0..gl.msp; reverse) {
+    final switch (gl.maskStack.ptr[sp]) {
+      case GLMaskState.DontMask:
+        // clear it
+        if (!glnvg__allocFBO(gl, gl.msp-1)) glnvg__clearFBO(gl, gl.msp-1);
+        gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
+        return gl.msp-1;
+      case GLMaskState.Uninitialized: break; // do nothing
+      case GLMaskState.Initialized:
+        // i found her! copy to TOS
+        glnvg__allocFBO(gl, gl.msp-1, false);
+        glnvg__copyFBOToFrom(gl, gl.msp-1, sp);
+        gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
+        return gl.msp-1;
+    }
+  }
+  // nothing was initialized, lol
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[gl.msp-1]);
+  gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
+  return gl.msp-1;
+}
 
 void glnvg__renderPushClip (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  GLNVGcall* call = glnvg__allocCall(gl);
+  if (call is null) return;
+  call.type = GLNVG_PUSHCLIP;
 }
 
 void glnvg__renderPopClip (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  GLNVGcall* call = glnvg__allocCall(gl);
+  if (call is null) return;
+  call.type = GLNVG_POPCLIP;
 }
 
 void glnvg__renderResetClip (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  GLNVGcall* call = glnvg__allocCall(gl);
+  if (call is null) return;
+  call.type = GLNVG_RESETCLIP;
 }
 
 void glnvg__renderSetClipMode (void* uptr, NVGClipMode clipmode) nothrow @trusted @nogc {
@@ -11341,10 +11504,14 @@ void glnvg__renderSetClipMode (void* uptr, NVGClipMode clipmode) nothrow @truste
 }
 
 bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
+  import core.stdc.stdio : snprintf;
+
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   enum align_ = 4;
 
-  enum shaderHeader = "#define UNIFORM_ARRAY_SIZE 11\n";
+  char[64] shaderHeader = void;
+  //enum shaderHeader = "#define UNIFORM_ARRAY_SIZE 12\n";
+  snprintf(shaderHeader.ptr, shaderHeader.length, "#define UNIFORM_ARRAY_SIZE %u\n", cast(uint)GLNVGfragUniforms.UNIFORM_ARRAY_SIZE);
 
   enum fillVertShader = q{
     uniform vec2 viewSize;
@@ -11367,6 +11534,8 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   enum fillFragShader = q{
     uniform vec4 frag[UNIFORM_ARRAY_SIZE];
     uniform sampler2D tex;
+    uniform sampler2D clipTex;
+    uniform vec2 viewPort;
     varying vec2 ftcoord;
     varying vec2 fpos;
     #define scissorMat mat3(frag[0].xyz, frag[1].xyz, frag[2].xyz)
@@ -11382,6 +11551,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     #define strokeThr frag[10].y
     #define texType int(frag[10].z)
     #define type int(frag[10].w)
+    #define doclip int(frag[11].x)
 
     float sdroundrect (in vec2 pt, in vec2 ext, in float rad) {
       vec2 ext2 = ext-vec2(rad, rad);
@@ -11406,93 +11576,62 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     void main (void) {
       vec4 color;
       float scissor = scissorMask(fpos);
-      if (scissor == 0.0) discard; //k8: is it really faster?
+      //if (scissor <= 0.0) discard; //k8: is it really faster?
       #ifdef EDGE_AA
       float strokeAlpha = strokeMask();
       if (strokeAlpha < strokeThr) discard;
       #else
       float strokeAlpha = 1.0;
       #endif
-      if (type == 0) { /* NSVG_SHADER_FILLCOLOR */
-        color = innerCol;
-        // Combine alpha
-        color *= strokeAlpha*scissor;
-      } else if (type == 1) { /* NSVG_SHADER_FILLGRAD */
-        // Gradient
-        // Calculate gradient color using box gradient
-        vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
-        float d = clamp((sdroundrect(pt, extent, radius)+feather*0.5)/feather, 0.0, 1.0);
-        color = mix(innerCol, outerCol, d);
-        // Combine alpha
-        color *= strokeAlpha*scissor;
-      } else if (type == 2) { /* NSVG_SHADER_FILLIMG */
-        // Image
-        // Calculate color from texture
-        vec2 pt = (paintMat*vec3(fpos, 1.0)).xy/extent;
-        color = texture2D(tex, pt);
-        if (texType == 1) color = vec4(color.xyz*color.w, color.w);
-        if (texType == 2) color = vec4(color.x);
-        // Apply color tint and alpha
-        color *= innerCol;
-        // Combine alpha
-        color *= strokeAlpha*scissor;
-      } else if (type == 3) { /* NSVG_SHADER_SIMPLE */
-        // Stencil fill
-        color = vec4(1, 1, 1, 1);
-      } else if (type == 4) { /* NSVG_SHADER_IMG */
-        // Textured tris
-        color = texture2D(tex, ftcoord);
-        if (texType == 1) color = vec4(color.xyz*color.w, color.w);
-        if (texType == 2) color = vec4(color.x);
-        color *= scissor;
-        color *= innerCol; // Apply color tint
+      // clipping
+      if (doclip != 0) {
+        //vec4 clr = texture2D(clipTex, vec2(gl_FragCoord.x/viewPort.x, gl_FragCoord.y/viewPort.y));
+        //if (clr.r == 0.0) discard;
+        //if (gl_FragCoord.x < 320) discard;
+        //color = vec4(1, 1, 1, 1);
+        //color = texture2D(clipTex, vec2(gl_FragCoord.x/viewPort.x, gl_FragCoord.y/viewPort.y));
+        //color = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
+        vec4 clr = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
+        if (clr.r == 0.0) discard;
+      }
+      {
+        // rendering
+        if (type == 0) { /* NSVG_SHADER_FILLCOLOR */
+          color = innerCol;
+          // Combine alpha
+          color *= strokeAlpha*scissor;
+        } else if (type == 1) { /* NSVG_SHADER_FILLGRAD */
+          // Gradient
+          // Calculate gradient color using box gradient
+          vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
+          float d = clamp((sdroundrect(pt, extent, radius)+feather*0.5)/feather, 0.0, 1.0);
+          color = mix(innerCol, outerCol, d);
+          // Combine alpha
+          color *= strokeAlpha*scissor;
+        } else if (type == 2) { /* NSVG_SHADER_FILLIMG */
+          // Image
+          // Calculate color from texture
+          vec2 pt = (paintMat*vec3(fpos, 1.0)).xy/extent;
+          color = texture2D(tex, pt);
+          if (texType == 1) color = vec4(color.xyz*color.w, color.w);
+          if (texType == 2) color = vec4(color.x);
+          // Apply color tint and alpha
+          color *= innerCol;
+          // Combine alpha
+          color *= strokeAlpha*scissor;
+        } else if (type == 3) { /* NSVG_SHADER_SIMPLE */
+          // Stencil fill
+          color = vec4(1, 1, 1, 1);
+        } else if (type == 4) { /* NSVG_SHADER_IMG */
+          // Textured tris
+          color = texture2D(tex, ftcoord);
+          if (texType == 1) color = vec4(color.xyz*color.w, color.w);
+          if (texType == 2) color = vec4(color.x);
+          color *= scissor;
+          color *= innerCol; // Apply color tint
+        }
       }
       gl_FragColor = color;
-    }
-  };
-
-  enum clipFragShader = q{
-    uniform vec4 frag[UNIFORM_ARRAY_SIZE];
-    uniform sampler2D tex;
-    varying vec2 ftcoord;
-    varying vec2 fpos;
-    #define scissorMat mat3(frag[0].xyz, frag[1].xyz, frag[2].xyz)
-    #define viewWidth (frag[3].x)
-    #define viewHeight (frag[3].y)
-    #define viewPort (frag[3].xy)
-    #define mask (frag[4]) /* mask values should be strictly 1 or 0 */
-    /* [5..7] is unused */
-    #define scissorExt frag[8].xy
-    #define scissorScale frag[8].zw
-    #define extent frag[9].xy
-    #define radius frag[9].z
-    #define feather frag[9].w
-    #define strokeMult frag[10].x
-    #define strokeThr frag[10].y
-    #define type int(frag[10].w) /* NVGClipMode */
-
-    // Scissoring
-    float scissorMask (in vec2 p) {
-      vec2 sc = (abs((scissorMat*vec3(p, 1.0)).xy)-scissorExt);
-      sc = vec2(0.5, 0.5)-sc*scissorScale;
-      return clamp(sc.x, 0.0, 1.0)*clamp(sc.y, 0.0, 1.0);
-    }
-
-    #ifdef EDGE_AA
-    // Stroke - from [0..1] to clipped pyramid, where the slope is 1px.
-    float strokeMask () {
-      return min(1.0, (1.0-abs(ftcoord.x*2.0-1.0))*strokeMult)*min(1.0, ftcoord.y);
-    }
-    #endif
-
-    void main (void) {
-      float scissor = scissorMask(fpos);
-      if (scissor == 0.0) discard; //k8: is it really faster?
-      #ifdef EDGE_AA
-      float strokeAlpha = strokeMask();
-      if (strokeAlpha < strokeThr) discard;
-      #endif
-      gl_FragColor = mask;
     }
   };
 
@@ -11522,12 +11661,10 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   glnvg__checkError(gl, "init");
 
   string defines = (gl.flags&NVGContextFlag.Antialias ? "#define EDGE_AA 1\n" : null);
-  if (!glnvg__createShader(&gl.shader, "shader", shaderHeader, defines.ptr, fillVertShader, fillFragShader)) return false;
-  if (!glnvg__createShader(&gl.fboshader, "fboshader", shaderHeader, defines.ptr, fillVertShader, clipFragShader)) return false;
+  if (!glnvg__createShader(&gl.shader, "shader", shaderHeader.ptr, defines.ptr, fillVertShader, fillFragShader)) return false;
 
   glnvg__checkError(gl, "uniform locations");
   glnvg__getUniforms(&gl.shader);
-  glnvg__getUniforms(&gl.fboshader);
 
   // Create dynamic vertex array
   glGenBuffers(1, &gl.vertBuf);
@@ -11667,12 +11804,14 @@ void glnvg__xformToMat3x4 (float[] m3, const(float)[] t) nothrow @trusted @nogc 
   m3.ptr[11] = 0.0f;
 }
 
-NVGColor glnvg__premulColor (NVGColor c) nothrow @trusted @nogc {
+NVGColor glnvg__premulColor() (in auto ref NVGColor c) nothrow @trusted @nogc {
   //pragma(inline, true);
-  c.r *= c.a;
-  c.g *= c.a;
-  c.b *= c.a;
-  return c;
+  NVGColor res = void;
+  res.r = c.r*c.a;
+  res.g = c.g*c.a;
+  res.b = c.b*c.a;
+  res.a = c.a;
+  return res;
 }
 
 bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* paint, NVGscissor* scissor, float width, float fringe, float strokeThr) nothrow @trusted @nogc {
@@ -11759,10 +11898,43 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
 
 void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow @trusted @nogc {
   GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
+  {
+    /*
+    immutable int clipTexId = glnvg__getFBOClipTexture(gl, false); // don't create texture if it is not necessary
+    if (clipTexId >= 0) {
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, gl.fboTex[clipTexId][0]);
+      glActiveTexture(GL_TEXTURE0);
+      //glBindTexture(GL_TEXTURE_2D, 0);
+      frag.doclip = 1;
+    } else {
+      frag.doclip = 0;
+    }
+    */
+    if (gl.fbo[0] == 0) {
+      glnvg__allocFBO(gl, 0);
+      glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[0]);
+      glClearColor(1, 1, 1, 1);
+      //glClearColor(0, 0, 0, 0);
+      glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+      //glnvg__clearFBO(gl, 0);
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      { import core.stdc.stdio; printf("!!!\n"); }
+    }
+    {
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, gl.fboTex[0][0]);
+      glActiveTexture(GL_TEXTURE0);
+      //glBindTexture(GL_TEXTURE_2D, 0);
+      frag.doclip = 1;
+    }
+    frag.doclip = 1;
+  }
   glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
   if (image != 0) {
     GLNVGtexture* tex = glnvg__findTexture(gl, image);
-    glnvg__bindTexture(gl, tex !is null ? tex.tex : 0);
+    glnvg__bindTexture(gl, (tex !is null ? tex.tex : 0));
     glnvg__checkError(gl, "tex paint tex");
   } else {
     glnvg__bindTexture(gl, 0);
@@ -11779,8 +11951,9 @@ void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted 
     gl.fboWidth = width;
     gl.fboHeight = height;
   }
-  gl.currMaskLayer = -1;
-  gl.msp = 0;
+  //gl.currMaskLayer = -1;
+  gl.msp = 1;
+  gl.maskStack.ptr[0] = GLMaskState.DontMask;
   gl.clipmode = NVGClipMode.None;
 }
 
@@ -11788,67 +11961,72 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   GLNVGpath* paths = &gl.paths[call.pathOffset];
   int npaths = call.pathCount;
 
-  // Draw shapes
-  glEnable(GL_STENCIL_TEST);
-  glnvg__stencilMask(gl, 0xffffffffU);
-  glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xffffffffU);
+  if (call.clipmode == NVGClipMode.None) {
+    // Draw shapes
+    glEnable(GL_STENCIL_TEST);
+    glnvg__stencilMask(gl, 0xffffffffU);
+    glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xffffffffU);
 
-  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glnvg__setUniforms(gl, call.uniformOffset, 0);
+    glnvg__checkError(gl, "fill simple");
 
-  // set bindpoint for solid loc
-  glnvg__setUniforms(gl, call.uniformOffset, 0);
-  glnvg__checkError(gl, "fill simple");
-
-  if (call.evenOdd) {
-    glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INVERT);
-    glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_INVERT);
-  } else {
-    glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
-    glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
-  }
-  glDisable(GL_CULL_FACE);
-  foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
-  glEnable(GL_CULL_FACE);
-
-  // Draw anti-aliased pixels
-  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-  glnvg__setUniforms(gl, call.uniformOffset+gl.fragSize, call.image);
-  glnvg__checkError(gl, "fill fill");
-
-  if (gl.flags&NVGContextFlag.Antialias) {
-    glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xffffffffU);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-    // Draw fringes
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
-  }
-
-  // Draw fill
-  glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xffffffffU);
-  glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
-  if (call.evenOdd) {
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    if (call.evenOdd) {
+      glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INVERT);
+      glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_INVERT);
+    } else {
+      glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
+      glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
+    }
     glDisable(GL_CULL_FACE);
-    glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
-    //foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
     glEnable(GL_CULL_FACE);
-  } else {
-    glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
-  }
 
-  glDisable(GL_STENCIL_TEST);
+    // Draw anti-aliased pixels
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glnvg__setUniforms(gl, call.uniformOffset+gl.fragSize, call.image);
+    glnvg__checkError(gl, "fill fill");
+
+    if (gl.flags&NVGContextFlag.Antialias) {
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xffffffffU);
+      glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+      // Draw fringes
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+    }
+
+    // Draw fill
+    glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xffffffffU);
+    glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+    if (call.evenOdd) {
+      glDisable(GL_CULL_FACE);
+      glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
+      //foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+      glEnable(GL_CULL_FACE);
+    } else {
+      glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
+    }
+
+    glDisable(GL_STENCIL_TEST);
+  } else {
+    // create clip mask
+    //int cliptid = glnvg__getFBOClipTexture(gl, true);
+    //glUseProgram(gl.shader.prog);
+  }
 }
 
 void glnvg__convexFill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   GLNVGpath* paths = &gl.paths[call.pathOffset];
   int npaths = call.pathCount;
 
-  glnvg__setUniforms(gl, call.uniformOffset, call.image);
-  glnvg__checkError(gl, "convex fill");
-
-  foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
-  if (gl.flags&NVGContextFlag.Antialias) {
-    // Draw fringes
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+  if (call.clipmode == NVGClipMode.None) {
+    glnvg__setUniforms(gl, call.uniformOffset, call.image);
+    glnvg__checkError(gl, "convex fill");
+    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+    if (gl.flags&NVGContextFlag.Antialias) {
+      // Draw fringes
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+    }
+  } else {
   }
 }
 
@@ -11856,46 +12034,52 @@ void glnvg__stroke (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   GLNVGpath* paths = &gl.paths[call.pathOffset];
   int npaths = call.pathCount;
 
-  if (gl.flags&NVGContextFlag.StencilStrokes) {
-    glEnable(GL_STENCIL_TEST);
-    glnvg__stencilMask(gl, 0xff);
+  if (call.clipmode == NVGClipMode.None) {
+    if (gl.flags&NVGContextFlag.StencilStrokes) {
+      glEnable(GL_STENCIL_TEST);
+      glnvg__stencilMask(gl, 0xff);
 
-    // Fill the stroke base without overlap
-    glnvg__stencilFunc(gl, GL_EQUAL, 0x0, 0xff);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
-    glnvg__setUniforms(gl, call.uniformOffset+gl.fragSize, call.image);
-    glnvg__checkError(gl, "stroke fill 0");
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+      // Fill the stroke base without overlap
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x0, 0xff);
+      glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+      glnvg__setUniforms(gl, call.uniformOffset+gl.fragSize, call.image);
+      glnvg__checkError(gl, "stroke fill 0");
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
 
-    // Draw anti-aliased pixels.
-    glnvg__setUniforms(gl, call.uniformOffset, call.image);
-    glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xff);
-    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+      // Draw anti-aliased pixels.
+      glnvg__setUniforms(gl, call.uniformOffset, call.image);
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xff);
+      glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
 
-    // Clear stencil buffer.
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    glnvg__stencilFunc(gl, GL_ALWAYS, 0x0, 0xff);
-    glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
-    glnvg__checkError(gl, "stroke fill 1");
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+      // Clear stencil buffer.
+      glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+      glnvg__stencilFunc(gl, GL_ALWAYS, 0x0, 0xff);
+      glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+      glnvg__checkError(gl, "stroke fill 1");
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+      glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-    glDisable(GL_STENCIL_TEST);
+      glDisable(GL_STENCIL_TEST);
 
-    //glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, strokeWidth, fringe, 1.0f-0.5f/255.0f);
+      //glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, strokeWidth, fringe, 1.0f-0.5f/255.0f);
+    } else {
+      glnvg__setUniforms(gl, call.uniformOffset, call.image);
+      glnvg__checkError(gl, "stroke fill");
+      // Draw Strokes
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+    }
   } else {
-    glnvg__setUniforms(gl, call.uniformOffset, call.image);
-    glnvg__checkError(gl, "stroke fill");
-    // Draw Strokes
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
   }
 }
 
 void glnvg__triangles (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
-  glnvg__setUniforms(gl, call.uniformOffset, call.image);
-  glnvg__checkError(gl, "triangles fill");
-  glDrawArrays(GL_TRIANGLES, call.triangleOffset, call.triangleCount);
+  if (call.clipmode == NVGClipMode.None) {
+    glnvg__setUniforms(gl, call.uniformOffset, call.image);
+    glnvg__checkError(gl, "triangles fill");
+    glDrawArrays(GL_TRIANGLES, call.triangleOffset, call.triangleCount);
+  } else {
+  }
 }
 
 void glnvg__affine (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
@@ -11903,19 +12087,25 @@ void glnvg__affine (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   glnvg__checkError(gl, "affine");
   glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, call.affine.mat.ptr+4);
   glnvg__checkError(gl, "affine");
-  glnvg__setUniforms(gl, call.uniformOffset, call.image);
+  //glnvg__setUniforms(gl, call.uniformOffset, call.image);
 }
 
-void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
-  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
-  foreach (ref GLNVGcall c; gl.calls[0..gl.ncalls]) if (c.image > 0) glnvg__deleteTexture(gl, c.image);
+void glnvg__renderCancelInternal (GLNVGcontext* gl, bool clearTextures) nothrow @trusted @nogc {
+  if (clearTextures) {
+    foreach (ref GLNVGcall c; gl.calls[0..gl.ncalls]) if (c.image > 0) glnvg__deleteTexture(gl, c.image);
+  }
   gl.nverts = 0;
   gl.npaths = 0;
   gl.ncalls = 0;
   gl.nuniforms = 0;
-  gl.currMaskLayer = -1;
-  gl.msp = 0;
+  //gl.currMaskLayer = -1;
+  gl.msp = 1;
+  gl.maskStack.ptr[0] = GLMaskState.DontMask;
   gl.clipmode = NVGClipMode.None;
+}
+
+void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
+  glnvg__renderCancelInternal(cast(GLNVGcontext*)uptr, true);
 }
 
 GLenum glnvg_convertBlendFuncFactor (NVGBlendFactor factor) pure nothrow @trusted @nogc {
@@ -11994,11 +12184,27 @@ void glnvg__renderSetAffine (void* uptr, in ref NVGMatrix mat) nothrow @trusted 
   call.affine.mat.ptr[0..6] = mat.mat.ptr[0..6];
 }
 
+// clip stack logic is like this:
+//
+// each `pushClip` increases msp, and sets the corresponding stack item to `false`.
+// any clip operation will either init texture part to all `0`, or copy the  previous
+// one, and will set the corresponding stack item to `true` (thus allocating a new
+// clip layer).
+// on `popClip` we'll check if current clip layer is initialized, and will deallocate it.
+// this way we will have almost no overhead for noclip operations, and will only allocate
+// as much clip FBOs as strictly necessary
+//
 void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+  enum ShaderType { None, Fill, Clip }
+  auto lastShader = ShaderType.None;
   if (gl.ncalls > 0) {
     // Setup require GL state.
     glUseProgram(gl.shader.prog);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
 
     //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     static if (NANOVG_GL_USE_STATE_FILTER) {
@@ -12036,21 +12242,52 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
 
     // Set view and texture just once per frame.
     glUniform1i(gl.shader.loc[GLNVGuniformLoc.Tex], 0);
-    glUniform2fv(gl.shader.loc[GLNVGuniformLoc.ViewSize], 1, gl.view.ptr);
+    if (gl.shader.loc[GLNVGuniformLoc.ClipTex] != -1) {
+      //{ import core.stdc.stdio; printf("%d\n", gl.shader.loc[GLNVGuniformLoc.ClipTex]); }
+      glUniform1i(gl.shader.loc[GLNVGuniformLoc.ClipTex], 1);
+    }
+    if (gl.shader.loc[GLNVGuniformLoc.ViewSize] != -1) {
+      glUniform2fv(gl.shader.loc[GLNVGuniformLoc.ViewSize], 1, gl.view.ptr);
+    }
     // Reset affine transformations.
     glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, NVGMatrix.IdentityMat.ptr);
     glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, NVGMatrix.IdentityMat.ptr+4);
+    // viewport
+    if (gl.shader.loc[GLNVGuniformLoc.ViewPort] != -1) {
+      glUniform2fv(gl.shader.loc[GLNVGuniformLoc.ViewPort], 1, gl.view.ptr);
+    }
+    glnvg__checkError(gl, "affine");
 
     foreach (int i; 0..gl.ncalls) {
       GLNVGcall* call = &gl.calls[i];
-      glnvg__blendCompositeOperation(gl, call.blendFunc);
       switch (call.type) {
-        case GLNVG_FILL: glnvg__fill(gl, call); break;
-        case GLNVG_CONVEXFILL: glnvg__convexFill(gl, call); break;
-        case GLNVG_STROKE: glnvg__stroke(gl, call); break;
-        case GLNVG_TRIANGLES: glnvg__triangles(gl, call); break;
+        case GLNVG_FILL: glnvg__blendCompositeOperation(gl, call.blendFunc); glnvg__fill(gl, call); break;
+        case GLNVG_CONVEXFILL: glnvg__blendCompositeOperation(gl, call.blendFunc); glnvg__convexFill(gl, call); break;
+        case GLNVG_STROKE: glnvg__blendCompositeOperation(gl, call.blendFunc); glnvg__stroke(gl, call); break;
+        case GLNVG_TRIANGLES: glnvg__blendCompositeOperation(gl, call.blendFunc); glnvg__triangles(gl, call); break;
         case GLNVG_AFFINE: glnvg__affine(gl, call); break;
-        default: break;
+        // clip region management
+        case GLNVG_PUSHCLIP:
+          if (gl.msp >= gl.maskStack.length) assert(0, "NanoVega: mask stack overflow in OpenGL backend");
+          gl.maskStack.ptr[gl.msp++] = GLMaskState.Uninitialized;
+          break;
+        case GLNVG_POPCLIP:
+          if (gl.msp == 1) assert(0, "NanoVega: mask stack underflow in OpenGL backend");
+          --gl.msp;
+          glActiveTexture(GL_TEXTURE1);
+          glBindTexture(GL_TEXTURE_2D, 0);
+          glActiveTexture(GL_TEXTURE0);
+          break;
+        case GLNVG_RESETCLIP:
+          // mark current mask as "don't mask"
+          if (gl.msp > 0) {
+            gl.maskStack.ptr[gl.msp-1] = GLMaskState.DontMask;
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glActiveTexture(GL_TEXTURE0);
+          }
+          break;
+        default: assert(0, "NanoVega: invalid command in OpenGL backend (fatal internal error)");
       }
       // and free texture, why not
       glnvg__deleteTexture(gl, call.image);
@@ -12065,7 +12302,7 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
   }
 
   // this will do all necessary cleanup
-  glnvg__renderCancel(gl);
+  glnvg__renderCancelInternal(gl, false); // no need to clear textures
 }
 
 int glnvg__maxVertCount (const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
@@ -12325,7 +12562,6 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
 
   glnvg__killFBOs(gl);
   glnvg__deleteShader(&gl.shader);
-  glnvg__deleteShader(&gl.fboshader);
 
   if (gl.vertBuf != 0) glDeleteBuffers(1, &gl.vertBuf);
 
@@ -12404,6 +12640,7 @@ public NVGContext nvgCreateContext (const(NVGContextFlag)[] flagList...) nothrow
 
   gl.flags = flags;
   gl.freetexid = -1;
+  gl.clipmode = NVGClipMode.None;
 
   ctx = createInternal(&params);
   if (ctx is null) goto error;
