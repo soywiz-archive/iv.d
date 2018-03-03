@@ -1117,10 +1117,12 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
     nvg.ellipse(_x+150, _y+180, 60, 160);
     nvg.clip(NVGClipMode.Xor);
 
+/*
     nvg.newPath();
     nvg.rect(0, 0, 1000, 1000);
     nvg.fillColor = NVGColor.yellow;
     nvg.fill();
+*/
   }
 
   scope(exit) {
@@ -1277,7 +1279,6 @@ void main () {
   float dt = 0, secs = 0;
 
   sdwindow.visibleForTheFirstTime = delegate () {
-    //sdwindow.setAsCurrentOpenGlContext(); // make this window active
     sdwindow.vsync = false;
 
     nvg = nvgCreateContext();
@@ -1308,7 +1309,7 @@ void main () {
     }
   };
 
-  sdwindow.eventLoop(1000/30,
+  sdwindow.eventLoop(1000/60,
     delegate () {
       if (sdwindow.closed) return;
       if (doQuit) { sdwindow.close(); return; }
