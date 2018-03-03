@@ -1102,12 +1102,26 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
   //nvg.rect(_x+50, _y+80, 160, 140);
   //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
   nvg.ellipse(_x+150, _y+180, 120, 90);
-  //nvg.clip();
-  nvg.clipStroke();
+  nvg.clip();
+  //nvg.clipStroke();
 
   nvg.newPath();
   nvg.ellipse(_x+150, _y+180, 90, 120);
-  nvg.clip(NVGClipMode.Sub);
+  nvg.clip(NVGClipMode.Union);
+
+  {
+    nvg.save();
+    scope(exit) nvg.restore();
+
+    nvg.newPath();
+    nvg.ellipse(_x+150, _y+180, 60, 160);
+    nvg.clip(NVGClipMode.Xor);
+
+    nvg.newPath();
+    nvg.rect(0, 0, 1000, 1000);
+    nvg.fillColor = NVGColor.yellow;
+    nvg.fill();
+  }
 
   scope(exit) {
     nvg.newPath();
@@ -1123,7 +1137,6 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
       nvg.fill();
     }
   }
-  //return;
 
   nvg.globalAlpha(bndMoving ? 0.4 : 0.9);
 

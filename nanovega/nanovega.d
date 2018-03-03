@@ -1108,7 +1108,7 @@ public struct NVGCompositeOperationState {
 /// Group: clipping
 public enum NVGClipMode {
   None, /// normal rendering (i.e. render path instead of modifying clip region)
-  And, /// old mask will be masked with the current one (logical `AND` operation); this is the default mode for [clip]
+  Union, /// old mask will be masked with the current one; this is the default mode for [clip]
   Or, /// new mask will be added to the current one (logical `OR` operation);
   Xor, /// new mask will be logically `XOR`ed with the current one
   Sub, /// "subtract" current path from mask
@@ -5140,7 +5140,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 
 /// Sets current path as clipping region.
 /// Group: clipping
-public void clip (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.And) nothrow @trusted @nogc {
+public void clip (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.Union) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
 
   if (aclipmode == NVGClipMode.None) return;
@@ -5181,7 +5181,7 @@ public alias clipFill = clip;
 
 /// Sets current path' stroke as clipping region.
 /// Group: clipping
-public void clipStroke (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.And) nothrow @trusted @nogc {
+public void clipStroke (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.Union) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
 
   if (aclipmode == NVGClipMode.None) return;
@@ -11012,6 +11012,7 @@ enum /*GLNVGshaderType*/ {
   NSVG_SHADER_SIMPLE, // also used for clipfill
   NSVG_SHADER_IMG,
   NSVG_SHADER_CLIP,
+  NSVG_SHADER_CLIP_COPY,
 }
 
 struct GLNVGshader {
@@ -11127,6 +11128,7 @@ struct GLNVGcontext {
   GLMaskState[NVG_MAX_STATES] maskStack;
   int msp; // mask stack pointer; starts from `0`; points to next free item; see below for logic description
   int lastClipUniOfs;
+  bool doClipUnion; // specal mode
 
   // Per frame buffers
   GLNVGcall* calls;
@@ -11436,14 +11438,6 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
     gl.fboTex.ptr[0][0] = tidStencil;
   }
   glnvg__bindTextureForced(gl, tidStencil);
-  //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
-  //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  //FIXME: linear or nearest?
-  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  // empty texture
-  //glTexImage2D(GL_TEXTURE_2D, 0, /*GL_DEPTH_STENCIL*/GL_DEPTH24_STENCIL8, gl.fboWidth, gl.fboHeight, 0, /*GL_DEPTH_STENCIL*/GL_DEPTH24_STENCIL8, GL_UNSIGNED_BYTE, null);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, gl.fboWidth, gl.fboHeight, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, null);
   glnvg__checkError!true(gl, "glnvg__allocFBO: glTexImage2D (stencil)");
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, tidStencil, 0);
@@ -11497,6 +11491,7 @@ void glnvg__clearFBO (GLNVGcontext* gl, int fidx) nothrow @trusted @nogc {
 
 // will not unbind buffer
 void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @trusted @nogc {
+  import core.stdc.string : memset;
   assert(didx >= 0 && didx < gl.fbo.length);
   assert(sidx >= 0 && sidx < gl.fbo.length);
   assert(gl.fboWidth > 0);
@@ -11504,15 +11499,20 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
   assert(gl.fbo[didx] != 0);
   assert(gl.fbo[sidx] != 0);
   if (didx == sidx) return;
+
+  GLNVGfragUniforms uni = void;
+  memset(&uni, 0, uni.sizeof);
+
+  uni.type = NSVG_SHADER_CLIP_COPY;
+  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], uni.UNIFORM_ARRAY_SIZE, &(uni.uniformArray.ptr[0].ptr[0]));
+  glnvg__resetAffine(gl);
+
   glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[didx]);
   glDisable(GL_CULL_FACE);
-  glDisable(GL_BLEND); // restore it!
+  glDisable(GL_BLEND);
   glDisable(GL_SCISSOR_TEST);
-  //glnvg__bindTexture(gl, gl.fboTex.ptr[sidx].ptr[0]);
-  glUseProgram(0); // restore it!
-  glColor4f(1, 1, 1, 1);
-  //glClearColor(1, 1, 1, 1);
-  //glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+  glnvg__bindTextureForced(gl, gl.fboTex.ptr[sidx].ptr[0]);
+  // copy texture by drawing full quad
   enum x = 0;
   enum y = 0;
   immutable int w = gl.fboWidth;
@@ -11523,10 +11523,12 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
     glTexCoord2f(1.0f, 1.0f); glVertex2i(w, h); // bottom-right
     glTexCoord2f(0.0f, 1.0f); glVertex2i(x, h); // bottom-left
   glEnd();
-  glnvg__bindTexture(gl, 0);
-  glUseProgram(gl.shader.prog);
-  glEnable(GL_BLEND); // restore it!
-  //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  // restore state (but don't unbind FBO)
+  glnvg__bindTextureForced(gl, 0);
+  glEnable(GL_CULL_FACE);
+  glEnable(GL_BLEND);
+  glnvg__restoreAffine(gl);
 }
 
 // prepareIt==true: we are going to perform clip operation, prepare FBO texture for it
@@ -11687,6 +11689,8 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
       vec4 color;
       if (type == 5) { /* NSVG_SHADER_CLIP */
         color = vec4(1, 1, 1, 1);
+      } else if (type == 6) { /* NSVG_SHADER_CLIP_COPY */
+        color = texelFetch(tex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
       } else {
         float scissor = scissorMask(fpos);
         if (scissor <= 0.0) discard; //k8: is it really faster?
@@ -11991,41 +11995,18 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
 
 void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow @trusted @nogc {
   GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
-  {
-    version(all) {
-      immutable int clipTexId = glnvg__getFBOClipTexture(gl, false); // don't create texture if it is not necessary
-      if (clipTexId >= 0) {
-        //{ import core.stdc.stdio; printf("cliptex: %d\n", clipTexId); }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, gl.fboTex[clipTexId][0]);
-        glActiveTexture(GL_TEXTURE0);
-        //glBindTexture(GL_TEXTURE_2D, 0);
-        frag.doclip = 1;
-      } else {
-        //{ import core.stdc.stdio; printf("NO cliptex: %d\n", clipTexId); }
-        frag.doclip = 0;
-      }
-    } else {
-      if (gl.fbo[0] == 0) {
-        glnvg__allocFBO(gl, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[0]);
-        glClearColor(1, 1, 1, 1);
-        //glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
-        //glnvg__clearFBO(gl, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        { import core.stdc.stdio; printf("!!!\n"); }
-      }
-      {
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, gl.fboTex[0][0]);
-        glActiveTexture(GL_TEXTURE0);
-        //glBindTexture(GL_TEXTURE_2D, 0);
-        frag.doclip = 1;
-      }
-      frag.doclip = 1;
-    }
+  immutable int clipTexId = glnvg__getFBOClipTexture(gl, false); // don't create texture if it is not necessary
+  if (clipTexId >= 0) {
+    //{ import core.stdc.stdio; printf("cliptex: %d\n", clipTexId); }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gl.fboTex[clipTexId][0]);
+    glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, 0);
+    frag.doclip = 1;
+  } else {
+    //{ import core.stdc.stdio; printf("NO cliptex: %d\n", clipTexId); }
+    frag.doclip = 0;
   }
   glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
   if (image != 0) {
@@ -12049,8 +12030,14 @@ void glnvg__finishClip (GLNVGcontext* gl, NVGClipMode clipmode) nothrow @trusted
     glDisable(GL_BLEND);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glEnable(GL_STENCIL_TEST);
-    glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x00, 0xff);
-    glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+    if (gl.doClipUnion) {
+      // for "and" we should clear everything that is NOT stencil-masked
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xff);
+      glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+    } else {
+      glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x00, 0xff);
+      glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+    }
     glBegin(GL_QUADS);
       glVertex2i(0, 0);
       glVertex2i(0, gl.fboHeight);
@@ -12071,6 +12058,7 @@ void glnvg__finishClip (GLNVGcontext* gl, NVGClipMode clipmode) nothrow @trusted
 
 void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode clipmode) nothrow @trusted @nogc {
   assert(clipmode != NVGClipMode.None);
+  GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
   // just in case: unbind unit 1 texture
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -12082,9 +12070,8 @@ void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode cl
   assert(clipTexId >= 0);
   //glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[clipTexId]);
-  // upload uniforms
-  GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
   // set logic op for clip
+  gl.doClipUnion = false;
   if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.JustCleared) {
     // it is cleared to zero, we cat just draw a path
     //glLogicOp(GL_COPY);
@@ -12094,7 +12081,7 @@ void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode cl
     glEnable(GL_COLOR_LOGIC_OP);
     final switch (clipmode) {
       case NVGClipMode.None: assert(0, "wtf?!");
-      case NVGClipMode.And: glLogicOp(GL_AND); break;
+      case NVGClipMode.Union: glLogicOp(GL_CLEAR); gl.doClipUnion = true; break; // use `GL_CLEAR` to avoid adding another shader mode
       case NVGClipMode.Or: glLogicOp(GL_COPY); break; // GL_OR
       case NVGClipMode.Xor: glLogicOp(GL_XOR); break;
       case NVGClipMode.Sub: glLogicOp(GL_CLEAR); break;
