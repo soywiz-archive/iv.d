@@ -10909,6 +10909,8 @@ public uint glNVGClearFlags () pure nothrow @safe @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 private:
 
+version = nanovega_shared_stencil;
+
 enum GLNVGuniformLoc {
   ViewSize,
   Tex,
@@ -11333,8 +11335,20 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
 
   // attach stencil texture to this FBO
   GLuint tidStencil = 0;
-  glGenTextures(1, &tidStencil);
-  if (tidStencil == 0) assert(0, "NanoVega: cannot create RGBA texture for FBO");
+  version(nanovega_shared_stencil) {
+    if (gl.fboTex.ptr[0][0] == 0) {
+      glGenTextures(1, &tidStencil);
+      if (tidStencil == 0) assert(0, "NanoVega: cannot create stencil texture for FBO");
+      gl.fboTex.ptr[0][0] = tidStencil;
+    } else {
+      tidStencil = gl.fboTex.ptr[0][0];
+    }
+    if (fidx != 0) gl.fboTex.ptr[fidx][1] = 0; // stencil texture is shared among FBOs
+  } else {
+    glGenTextures(1, &tidStencil);
+    if (tidStencil == 0) assert(0, "NanoVega: cannot create stencil texture for FBO");
+    gl.fboTex.ptr[0][0] = tidStencil;
+  }
   glnvg__bindTextureForced(gl, tidStencil);
   //scope(exit) glBindTexture(GL_TEXTURE_2D, 0);
   //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -11375,7 +11389,9 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
   // save texture ids
   gl.fbo[fidx] = fbo;
   gl.fboTex[fidx][0] = tidColor;
-  gl.fboTex[fidx][1] = tidStencil;
+  version(nanovega_shared_stencil) {} else {
+    gl.fboTex[fidx][1] = tidStencil;
+  }
 
   return true;
 }
