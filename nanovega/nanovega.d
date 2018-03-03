@@ -279,6 +279,18 @@ The following code illustrates the OpenGL state touched by the rendering code:
     Also note that picking API is ignoring GPU affine transformation matrix.
     You can "untransform" picking coordinates before checking with [gpuUntransformPoint].
 
+    $(WARNING Picking API completely ignores clipping. If you want to check for
+              clip regions, you have to manuall register them as fill/stroke pathes,
+              and perform the necessary logic. See [hitTestForId] function.)
+
+  clipping =
+    ## Cliping with paths
+
+    If scissoring is not enough for you, you can clip rendering with arbitrary path,
+    or with combination of paths. Clip region is saved by [save] and restored by
+    [restore] NanoVega functions. You can combine clip paths with various logic
+    operations, see [NVGClipMode].
+
   text_api =
     ## Text
 
@@ -5409,6 +5421,24 @@ public int hitTest (NVGContext ctx, in float x, in float y, NVGPickKind kind=NVG
   return bestID;
 }
 
+/// Returns `true` if the path with the given id contains x,y.
+/// Group: picking_api
+public bool hitTestForId (NVGContext ctx, in int id, in float x, in float y, NVGPickKind kind=NVGPickKind.All) nothrow @trusted @nogc {
+  if (ctx.pickScene is null || id == NVGNoPick) return false;
+
+  bool res = false;
+
+  ctx.hitTestDG!false(x, y, kind, delegate (NVGpickPath* pp) {
+    if (pp.id == id) {
+      res = true;
+      return true; // stop
+    }
+    return false; // continue
+  });
+
+  return res;
+}
+
 /// Returns `true` if the given point is within the fill of the currently defined path.
 /// This operation can be done before rasterizing the current path.
 /// Group: picking_api
@@ -5425,6 +5455,8 @@ public bool hitTestCurrFill (NVGContext ctx, in float x, in float y) nothrow @tr
   }
   return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPath(ps, pp, x, y) : false);
 }
+
+alias isPointInPath = hitTestCurrFill; /// Ditto.
 
 /// Returns `true` if the given point is within the stroke of the currently defined path.
 /// This operation can be done before rasterizing the current path.
