@@ -11568,6 +11568,13 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
   assert(gl.fbo.ptr[sidx] != 0);
   if (didx == sidx) return;
 
+  /*
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[didx]);
+  glClearColor(0, 0, 0, 0);
+  glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+  return;
+  */
+
   //{ import core.stdc.stdio; printf("copy from %d to %d\n", sidx, didx); }
 
   glUseProgram(gl.shaderCopyFBO.prog);
@@ -11685,7 +11692,6 @@ int glnvg__generateFBOClipTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   // nothing was initialized, lol
   //{ import core.stdc.stdio; printf("03: CLIPTEX: %d)!\n", gl.msp-1); }
   if (!glnvg__allocFBO(gl, gl.msp-1)) glnvg__clearFBO(gl, gl.msp-1);
-  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[gl.msp-1]);
   gl.maskStack.ptr[gl.msp-1] = GLMaskState.JustCleared;
   return gl.msp-1;
 }
@@ -12179,13 +12185,12 @@ void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode cl
   immutable int clipTexId = glnvg__generateFBOClipTexture(gl);
   assert(clipTexId >= 0);
   glUseProgram(gl.shaderFillFBO.prog);
-  //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glnvg__checkError(gl, "use");
   glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[clipTexId]);
   // set logic op for clip
   gl.doClipUnion = false;
   if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.JustCleared) {
-    // it is cleared to zero, we cat just draw a path
-    //glLogicOp(GL_COPY);
+    // it is cleared to zero, we can just draw a path
     glDisable(GL_COLOR_LOGIC_OP);
     gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
   } else {
@@ -12199,7 +12204,6 @@ void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode cl
       case NVGClipMode.Replace: glLogicOp(GL_COPY); break;
     }
   }
-  glnvg__checkError(gl, "use");
   // set affine matrix
   glUniform4fv(gl.shaderFillFBO.loc[GLNVGuniformLoc.TMat], 1, gl.lastAffine.mat.ptr);
   glnvg__checkError(gl, "affine 0");
@@ -12583,6 +12587,7 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
         case GLNVG_POPCLIP:
           if (gl.msp <= 1) assert(0, "NanoVega: mask stack underflow in OpenGL backend");
           --gl.msp;
+          //{ import core.stdc.stdio; printf("popped; new msp is %d; state is %d\n", gl.msp, gl.maskStack.ptr[gl.msp]); }
           // check popped item
           final switch (gl.maskStack.ptr[gl.msp]) {
             case GLMaskState.DontMask: glnvg__resetFBOClipTextureCache(gl); break;
