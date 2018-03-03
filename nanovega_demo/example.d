@@ -1109,7 +1109,7 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
   nvg.ellipse(_x+150, _y+180, 90, 120);
   nvg.clip(NVGClipMode.Union);
 
-  {
+  version(all) {
     nvg.save();
     scope(exit) nvg.restore();
 
@@ -1308,7 +1308,7 @@ void main () {
     }
   };
 
-  sdwindow.eventLoop(1000/35,
+  sdwindow.eventLoop(1000/30,
     delegate () {
       if (sdwindow.closed) return;
       if (doQuit) { sdwindow.close(); return; }
