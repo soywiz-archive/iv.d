@@ -10902,7 +10902,7 @@ public enum NVGImageFlagsGL : int {
 /// Group: context_management
 public uint glNVGClearFlags () pure nothrow @safe @nogc {
   pragma(inline, true);
-  return (GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+  return (GL_COLOR_BUFFER_BIT/*|GL_DEPTH_BUFFER_BIT*/|GL_STENCIL_BUFFER_BIT);
 }
 
 
