@@ -127,10 +127,12 @@ The following code illustrates the OpenGL state touched by the rendering code:
   glEnable(GL_BLEND);
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_SCISSOR_TEST);
+  glDisable(GL_COLOR_LOGIC_OP);
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glStencilMask(0xffffffff);
   glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
   glStencilFunc(GL_ALWAYS, 0, 0xffffffff);
+  glActiveTexture(GL_TEXTURE1);
   glActiveTexture(GL_TEXTURE0);
   glBindBuffer(GL_UNIFORM_BUFFER, buf);
   glBindVertexArray(arr);
@@ -10796,7 +10798,8 @@ private extern(System) nothrow @nogc {
 
   enum uint GL_RED = 0x1903;
 
-  enum uint GL_TEXTURE0 = 0x84C0;
+  enum uint GL_TEXTURE0 = 0x84C0U;
+  enum uint GL_TEXTURE1 = 0x84C1U;
 
   enum uint GL_ARRAY_BUFFER = 0x8892;
 
@@ -10811,6 +10814,24 @@ private extern(System) nothrow @nogc {
   enum uint GL_SRC_ALPHA_SATURATE = 0x0308;
 
   enum uint GL_INVERT = 0x150AU;
+
+  enum uint GL_DEPTH_STENCIL = 0x84F9U;
+  enum uint GL_UNSIGNED_INT_24_8 = 0x84FAU;
+
+  enum uint GL_FRAMEBUFFER = 0x8D40U;
+  enum uint GL_COLOR_ATTACHMENT0 = 0x8CE0U;
+  enum uint GL_DEPTH_STENCIL_ATTACHMENT = 0x821AU;
+
+  enum uint GL_FRAMEBUFFER_COMPLETE = 0x8CD5U;
+  enum uint GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT = 0x8CD6U;
+  enum uint GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT = 0x8CD7U;
+  enum uint GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS = 0x8CD9U;
+  enum uint GL_FRAMEBUFFER_UNSUPPORTED = 0x8CDDU;
+
+  enum uint GL_COLOR_LOGIC_OP = 0x0BF2U;
+  enum uint GL_CLEAR = 0x1500U;
+  enum uint GL_COPY = 0x1503U;
+  enum uint GL_XOR = 0x1506U;
 
   /*
   version(Windows) {
@@ -10904,6 +10925,19 @@ private extern(System) nothrow @nogc {
   alias glbfn_glBlendFuncSeparate = void function(GLenum, GLenum, GLenum, GLenum);
   __gshared glbfn_glBlendFuncSeparate glBlendFuncSeparate_NVGLZ; alias glBlendFuncSeparate = glBlendFuncSeparate_NVGLZ;
 
+  alias glbfn_glLogicOp = void function (GLenum opcode);
+  __gshared glbfn_glLogicOp glLogicOp_NVGLZ; alias glLogicOp = glLogicOp_NVGLZ;
+  alias glbfn_glFramebufferTexture2D = void function (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+  __gshared glbfn_glFramebufferTexture2D glFramebufferTexture2D_NVGLZ; alias glFramebufferTexture2D = glFramebufferTexture2D_NVGLZ;
+  alias glbfn_glDeleteFramebuffers = void function (GLsizei n, const(GLuint)* framebuffers);
+  __gshared glbfn_glDeleteFramebuffers glDeleteFramebuffers_NVGLZ; alias glDeleteFramebuffers = glDeleteFramebuffers_NVGLZ;
+  alias glbfn_glGenFramebuffers = void function (GLsizei n, GLuint* framebuffers);
+  __gshared glbfn_glGenFramebuffers glGenFramebuffers_NVGLZ; alias glGenFramebuffers = glGenFramebuffers_NVGLZ;
+  alias glbfn_glCheckFramebufferStatus = GLenum function (GLenum target);
+  __gshared glbfn_glCheckFramebufferStatus glCheckFramebufferStatus_NVGLZ; alias glCheckFramebufferStatus = glCheckFramebufferStatus_NVGLZ;
+  alias glbfn_glBindFramebuffer = void function (GLenum target, GLuint framebuffer);
+  __gshared glbfn_glBindFramebuffer glBindFramebuffer_NVGLZ; alias glBindFramebuffer = glBindFramebuffer_NVGLZ;
+
   private void nanovgInitOpenGL () {
     __gshared bool initialized = false;
     if (initialized) return;
@@ -10979,6 +11013,20 @@ private extern(System) nothrow @nogc {
     if (glDeleteBuffers_NVGLZ is null) assert(0, `OpenGL function 'glDeleteBuffers' not found!`);
     glBlendFuncSeparate_NVGLZ = cast(glbfn_glBlendFuncSeparate)glbindGetProcAddress(`glBlendFuncSeparate`);
     if (glBlendFuncSeparate_NVGLZ is null) assert(0, `OpenGL function 'glBlendFuncSeparate' not found!`);
+
+    glLogicOp_NVGLZ = cast(glbfn_glLogicOp)glbindGetProcAddress(`glLogicOp`);
+    if (glLogicOp_NVGLZ is null) assert(0, `OpenGL function 'glLogicOp' not found!`);
+    glFramebufferTexture2D_NVGLZ = cast(glbfn_glFramebufferTexture2D)glbindGetProcAddress(`glFramebufferTexture2D`);
+    if (glFramebufferTexture2D_NVGLZ is null) assert(0, `OpenGL function 'glFramebufferTexture2D' not found!`);
+    glDeleteFramebuffers_NVGLZ = cast(glbfn_glDeleteFramebuffers)glbindGetProcAddress(`glDeleteFramebuffers`);
+    if (glDeleteFramebuffers_NVGLZ is null) assert(0, `OpenGL function 'glDeleteFramebuffers' not found!`);
+    glGenFramebuffers_NVGLZ = cast(glbfn_glGenFramebuffers)glbindGetProcAddress(`glGenFramebuffers`);
+    if (glGenFramebuffers_NVGLZ is null) assert(0, `OpenGL function 'glGenFramebuffers' not found!`);
+    glCheckFramebufferStatus_NVGLZ = cast(glbfn_glCheckFramebufferStatus)glbindGetProcAddress(`glCheckFramebufferStatus`);
+    if (glCheckFramebufferStatus_NVGLZ is null) assert(0, `OpenGL function 'glCheckFramebufferStatus' not found!`);
+    glBindFramebuffer_NVGLZ = cast(glbfn_glBindFramebuffer)glbindGetProcAddress(`glBindFramebuffer`);
+    if (glBindFramebuffer_NVGLZ is null) assert(0, `OpenGL function 'glBindFramebuffer' not found!`);
+
     initialized = true;
   }
 }
@@ -11398,7 +11446,7 @@ void glnvg__killFBOs (GLNVGcontext* gl) nothrow @trusted @nogc {
   foreach (immutable fidx, ref GLuint fbo; gl.fbo[]) {
     if (fbo != 0) {
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
       foreach (ref GLuint tid; gl.fboTex.ptr[fidx][]) if (tid != 0) { glDeleteTextures(1, &tid); tid = 0; }
       glDeleteFramebuffers(1, &fbo);
       fbo = 0;
@@ -11576,7 +11624,7 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
       return -1;
     }
     int fboidx = -1;
-    mainloop: foreach (immutable sp, GLMaskState mst; gl.maskStack.ptr[0..gl.msp]; reverse) {
+    mainloop: foreach_reverse (immutable sp, GLMaskState mst; gl.maskStack.ptr[0..gl.msp]/*; reverse*/) {
       final switch (mst) {
         case GLMaskState.DontMask: fboidx = -1; break mainloop;
         case GLMaskState.Uninitialized: break;
@@ -11599,7 +11647,7 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
     glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[gl.msp-1]);
     return gl.msp-1;
   }
-  foreach (immutable sp; 0..gl.msp; reverse) {
+  foreach_reverse (immutable sp; 0..gl.msp/*; reverse*/) {
     final switch (gl.maskStack.ptr[sp]) {
       case GLMaskState.DontMask:
         // clear it
