@@ -1241,10 +1241,9 @@ struct NVGparams {
   void function (void* uptr) nothrow @trusted @nogc renderPushClip; // backend should support stack of at least [NVG_MAX_STATES] elements
   void function (void* uptr) nothrow @trusted @nogc renderPopClip; // backend should support stack of at least [NVG_MAX_STATES] elements
   void function (void* uptr) nothrow @trusted @nogc renderResetClip; // reset current clip region to `non-clipped`
-  void function (void* uptr, NVGClipMode clipmode) nothrow @trusted @nogc renderSetClipMode; // next fill/stroke/triangles operation will use this clipping mode
-  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc renderFill;
-  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
-  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGClipMode clipmode, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc renderFill;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGClipMode clipmode, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc renderStroke;
+  void function (void* uptr, NVGCompositeOperationState compositeOperation, NVGClipMode clipmode, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc renderTriangles;
   void function (void* uptr, in ref NVGMatrix mat) nothrow @trusted @nogc renderSetAffine;
   void function (void* uptr) nothrow @trusted @nogc renderDelete;
 }
@@ -1332,6 +1331,7 @@ struct NVGpathCache {
   float strokeWidth;
   float fringeWidth;
   bool evenOddMode;
+  NVGClipMode clipmode;
   // non-saved path will not have this
   float* commands;
   int ncommands;
@@ -1468,8 +1468,6 @@ private:
   NVGPathSet recset;
   int recstart; // used to cancel recording
   bool recblockdraw;
-  // clipping
-  NVGClipMode clipmode;
   // internals
   NVGMatrix gpuAffine;
   int mWidth, mHeight;
@@ -1920,7 +1918,7 @@ private:
           fillPaint.innerColor.applyTint(fillTint);
           fillPaint.outerColor.applyTint(fillTint);
 
-          ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
+          ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, cc.clipmode, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
 
           // count triangles
           foreach (int i; 0..cc.npaths) {
@@ -1944,7 +1942,7 @@ private:
           strokePaint.innerColor.applyTint(strokeTint);
           strokePaint.outerColor.applyTint(strokeTint);
 
-          ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
+          ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, cc.clipmode, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
 
           // count triangles
           foreach (int i; 0..cc.npaths) {
@@ -3572,6 +3570,7 @@ void nvg__clearPathCache (NVGContext ctx) nothrow @trusted @nogc {
   ctx.cache.npoints = 0;
   ctx.cache.npaths = 0;
   ctx.cache.fillReady = ctx.cache.strokeReady = false;
+  ctx.cache.clipmode = NVGClipMode.None;
 }
 
 NVGpath* nvg__lastPath (NVGContext ctx) nothrow @trusted @nogc {
@@ -5035,6 +5034,7 @@ void nvg__prepareFill (NVGContext ctx) nothrow @trusted @nogc {
   cache.fringeWidth = ctx.fringeWidth;
   cache.fillReady = true;
   cache.strokeReady = false;
+  cache.clipmode = NVGClipMode.None;
 }
 
 // Flatten path, prepare it for stroke operation.
@@ -5067,6 +5067,7 @@ void nvg__prepareStroke (NVGContext ctx) nothrow @trusted @nogc {
   cache.fringeWidth = ctx.fringeWidth;
   cache.fillReady = false;
   cache.strokeReady = true;
+  cache.clipmode = NVGClipMode.None;
 }
 
 /// Fills the current path with current fill style.
@@ -5090,7 +5091,7 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
 
   if (ctx.recblockdraw) return;
 
-  ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
+  ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, NVGClipMode.None, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
 
   // count triangles
   foreach (int i; 0..ctx.cache.npaths) {
@@ -5127,7 +5128,7 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 
   if (ctx.recblockdraw) return;
 
-  ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
+  ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, NVGClipMode.None, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
 
   // count triangles
   foreach (int i; 0..ctx.cache.npaths) {
@@ -7145,7 +7146,7 @@ void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) nothrow @tru
   paint.innerColor.a *= state.alpha;
   paint.outerColor.a *= state.alpha;
 
-  ctx.params.renderTriangles(ctx.params.userPtr, state.compositeOperation, &paint, &state.scissor, verts, nverts);
+  ctx.params.renderTriangles(ctx.params.userPtr, state.compositeOperation, NVGClipMode.None, &paint, &state.scissor, verts, nverts);
 
   ++ctx.drawCallCount;
   ctx.textTriCount += nverts/3;
@@ -11041,7 +11042,6 @@ struct GLNVGcontext {
   //int currMaskLayer; // -1: none; 0-3: first FBO (RGBA), and so on
   GLMaskState[NVG_MAX_STATES] maskStack;
   int msp; // mask stack pointer; starts from `0`; points to next free item; see below for logic description
-  NVGClipMode clipmode;
 
   // Per frame buffers
   GLNVGcall* calls;
@@ -11514,11 +11514,6 @@ void glnvg__renderResetClip (void* uptr) nothrow @trusted @nogc {
   call.type = GLNVG_RESETCLIP;
 }
 
-void glnvg__renderSetClipMode (void* uptr, NVGClipMode clipmode) nothrow @trusted @nogc {
-  GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
-  gl.clipmode = clipmode;
-}
-
 bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   import core.stdc.stdio : snprintf;
 
@@ -11592,7 +11587,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     void main (void) {
       vec4 color;
       float scissor = scissorMask(fpos);
-      //if (scissor <= 0.0) discard; //k8: is it really faster?
+      if (scissor <= 0.0) discard; //k8: is it really faster?
       #ifdef EDGE_AA
       float strokeAlpha = strokeMask();
       if (strokeAlpha < strokeThr) discard;
@@ -11915,37 +11910,38 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
 void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow @trusted @nogc {
   GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
   {
-    /*
-    immutable int clipTexId = glnvg__getFBOClipTexture(gl, false); // don't create texture if it is not necessary
-    if (clipTexId >= 0) {
-      glBindFramebuffer(GL_FRAMEBUFFER, 0);
-      glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, gl.fboTex[clipTexId][0]);
-      glActiveTexture(GL_TEXTURE0);
-      //glBindTexture(GL_TEXTURE_2D, 0);
-      frag.doclip = 1;
+    version(all) {
+      immutable int clipTexId = glnvg__getFBOClipTexture(gl, false); // don't create texture if it is not necessary
+      if (clipTexId >= 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, gl.fboTex[clipTexId][0]);
+        glActiveTexture(GL_TEXTURE0);
+        //glBindTexture(GL_TEXTURE_2D, 0);
+        frag.doclip = 1;
+      } else {
+        frag.doclip = 0;
+      }
     } else {
-      frag.doclip = 0;
-    }
-    */
-    if (gl.fbo[0] == 0) {
-      glnvg__allocFBO(gl, 0);
-      glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[0]);
-      glClearColor(1, 1, 1, 1);
-      //glClearColor(0, 0, 0, 0);
-      glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
-      //glnvg__clearFBO(gl, 0);
-      glBindFramebuffer(GL_FRAMEBUFFER, 0);
-      { import core.stdc.stdio; printf("!!!\n"); }
-    }
-    {
-      glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, gl.fboTex[0][0]);
-      glActiveTexture(GL_TEXTURE0);
-      //glBindTexture(GL_TEXTURE_2D, 0);
+      if (gl.fbo[0] == 0) {
+        glnvg__allocFBO(gl, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[0]);
+        glClearColor(1, 1, 1, 1);
+        //glClearColor(0, 0, 0, 0);
+        glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+        //glnvg__clearFBO(gl, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        { import core.stdc.stdio; printf("!!!\n"); }
+      }
+      {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, gl.fboTex[0][0]);
+        glActiveTexture(GL_TEXTURE0);
+        //glBindTexture(GL_TEXTURE_2D, 0);
+        frag.doclip = 1;
+      }
       frag.doclip = 1;
     }
-    frag.doclip = 1;
   }
   glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
   if (image != 0) {
@@ -11970,7 +11966,6 @@ void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted 
   //gl.currMaskLayer = -1;
   gl.msp = 1;
   gl.maskStack.ptr[0] = GLMaskState.DontMask;
-  gl.clipmode = NVGClipMode.None;
 }
 
 void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
@@ -12117,7 +12112,6 @@ void glnvg__renderCancelInternal (GLNVGcontext* gl, bool clearTextures) nothrow 
   //gl.currMaskLayer = -1;
   gl.msp = 1;
   gl.maskStack.ptr[0] = GLMaskState.DontMask;
-  gl.clipmode = NVGClipMode.None;
 }
 
 void glnvg__renderCancel (void* uptr) nothrow @trusted @nogc {
@@ -12401,7 +12395,7 @@ void glnvg__vset (NVGvertex* vtx, float x, float y, float u, float v) nothrow @t
   vtx.v = v;
 }
 
-void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc {
+void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperation, NVGClipMode clipmode, NVGPaint* paint, NVGscissor* scissor, float fringe, const(float)* bounds, const(NVGpath)* paths, int npaths, bool evenOdd) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   NVGvertex* quad;
@@ -12412,7 +12406,7 @@ void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperatio
 
   call.type = GLNVG_FILL;
   call.evenOdd = evenOdd;
-  call.clipmode = gl.clipmode;
+  call.clipmode = clipmode;
   call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.triangleCount = 4;
   call.pathOffset = glnvg__allocPaths(gl, npaths);
@@ -12483,7 +12477,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderStroke (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
+void glnvg__renderStroke (void* uptr, NVGCompositeOperationState compositeOperation, NVGClipMode clipmode, NVGPaint* paint, NVGscissor* scissor, float fringe, float strokeWidth, const(NVGpath)* paths, int npaths) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   int maxverts, offset;
@@ -12491,7 +12485,7 @@ void glnvg__renderStroke (void* uptr, NVGCompositeOperationState compositeOperat
   if (call is null || npaths < 1) return;
 
   call.type = GLNVG_STROKE;
-  call.clipmode = gl.clipmode;
+  call.clipmode = clipmode;
   call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.pathOffset = glnvg__allocPaths(gl, npaths);
   if (call.pathOffset == -1) goto error;
@@ -12537,7 +12531,7 @@ error:
   if (gl.ncalls > 0) --gl.ncalls;
 }
 
-void glnvg__renderTriangles (void* uptr, NVGCompositeOperationState compositeOperation, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc {
+void glnvg__renderTriangles (void* uptr, NVGCompositeOperationState compositeOperation, NVGClipMode clipmode, NVGPaint* paint, NVGscissor* scissor, const(NVGvertex)* verts, int nverts) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   GLNVGcall* call = glnvg__allocCall(gl);
   GLNVGfragUniforms* frag;
@@ -12545,7 +12539,7 @@ void glnvg__renderTriangles (void* uptr, NVGCompositeOperationState compositeOpe
   if (call is null) return;
 
   call.type = GLNVG_TRIANGLES;
-  call.clipmode = gl.clipmode;
+  call.clipmode = clipmode;
   call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.image = paint.image.id;
   if (call.image > 0) glnvg__renderTextureIncRef(uptr, call.image);
@@ -12640,7 +12634,6 @@ public NVGContext nvgCreateContext (const(NVGContextFlag)[] flagList...) nothrow
   params.renderPushClip = &glnvg__renderPushClip;
   params.renderPopClip = &glnvg__renderPopClip;
   params.renderResetClip = &glnvg__renderResetClip;
-  params.renderSetClipMode = &glnvg__renderSetClipMode;
   params.renderFill = &glnvg__renderFill;
   params.renderStroke = &glnvg__renderStroke;
   params.renderTriangles = &glnvg__renderTriangles;
@@ -12656,7 +12649,6 @@ public NVGContext nvgCreateContext (const(NVGContextFlag)[] flagList...) nothrow
 
   gl.flags = flags;
   gl.freetexid = -1;
-  gl.clipmode = NVGClipMode.None;
 
   ctx = createInternal(&params);
   if (ctx is null) goto error;
