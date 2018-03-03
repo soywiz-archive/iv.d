@@ -1216,8 +1216,9 @@ void main () {
   double mx = 0, my = 0;
   bool doQuit = false;
 
-  setOpenGLContextVersion(2, 0); // it's enough
+  setOpenGLContextVersion(3, 0); // it's enough
 
+  sdpyWindowClass = "NANOVEGA_EXAMPLE";
   auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoVega", OpenGlOptions.yes, Resizability.fixedSize);
 
   version(X11) sdwindow.closeQuery = delegate () { doQuit = true; };
