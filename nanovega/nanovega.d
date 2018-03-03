@@ -11367,7 +11367,7 @@ void glnvg__killFBOs (GLNVGcontext* gl) nothrow @trusted @nogc {
     if (fbo != 0) {
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-      foreach (ref GLuint tid; gl.fboTex[fidx][]) if (tid != 0) { glDeleteTextures(1, &tid); tid = 0; }
+      foreach (ref GLuint tid; gl.fboTex.ptr[fidx][]) if (tid != 0) { glDeleteTextures(1, &tid); tid = 0; }
       glDeleteFramebuffers(1, &fbo);
       fbo = 0;
     }
@@ -11383,7 +11383,7 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
   assert(gl.fboHeight > 0);
 
   //{ import core.stdc.stdio; printf("fidx=%d; fbo=%u\n", fidx, gl.fbo.ptr[fidx]); }
-  if (gl.fbo[fidx] != 0) return false; // nothing to do, this FBO is already initialized
+  if (gl.fbo.ptr[fidx] != 0) return false; // nothing to do, this FBO is already initialized
 
   glGetError();
 
@@ -11424,18 +11424,18 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
   // attach stencil texture to this FBO
   GLuint tidStencil = 0;
   version(nanovega_shared_stencil) {
-    if (gl.fboTex.ptr[0][0] == 0) {
+    if (gl.fboTex.ptr[0].ptr[0] == 0) {
       glGenTextures(1, &tidStencil);
       if (tidStencil == 0) assert(0, "NanoVega: cannot create stencil texture for FBO");
-      gl.fboTex.ptr[0][0] = tidStencil;
+      gl.fboTex.ptr[0].ptr[0] = tidStencil;
     } else {
-      tidStencil = gl.fboTex.ptr[0][0];
+      tidStencil = gl.fboTex.ptr[0].ptr[0];
     }
-    if (fidx != 0) gl.fboTex.ptr[fidx][1] = 0; // stencil texture is shared among FBOs
+    if (fidx != 0) gl.fboTex.ptr[fidx].ptr[1] = 0; // stencil texture is shared among FBOs
   } else {
     glGenTextures(1, &tidStencil);
     if (tidStencil == 0) assert(0, "NanoVega: cannot create stencil texture for FBO");
-    gl.fboTex.ptr[0][0] = tidStencil;
+    gl.fboTex.ptr[0].ptr[0] = tidStencil;
   }
   glnvg__bindTextureForced(gl, tidStencil);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, gl.fboWidth, gl.fboHeight, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, null);
@@ -11467,10 +11467,10 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
   }
 
   // save texture ids
-  gl.fbo[fidx] = fbo;
-  gl.fboTex[fidx][0] = tidColor;
+  gl.fbo.ptr[fidx] = fbo;
+  gl.fboTex.ptr[fidx].ptr[0] = tidColor;
   version(nanovega_shared_stencil) {} else {
-    gl.fboTex[fidx][1] = tidStencil;
+    gl.fboTex.ptr[fidx].ptr[1] = tidStencil;
   }
 
   return true;
@@ -11481,9 +11481,9 @@ void glnvg__clearFBO (GLNVGcontext* gl, int fidx) nothrow @trusted @nogc {
   assert(fidx >= 0 && fidx < gl.fbo.length);
   assert(gl.fboWidth > 0);
   assert(gl.fboHeight > 0);
-  assert(gl.fbo[fidx] != 0);
+  assert(gl.fbo.ptr[fidx] != 0);
   glnvg__bindTextureForced(gl, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[fidx]);
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[fidx]);
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
   //glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -11496,8 +11496,8 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
   assert(sidx >= 0 && sidx < gl.fbo.length);
   assert(gl.fboWidth > 0);
   assert(gl.fboHeight > 0);
-  assert(gl.fbo[didx] != 0);
-  assert(gl.fbo[sidx] != 0);
+  assert(gl.fbo.ptr[didx] != 0);
+  assert(gl.fbo.ptr[sidx] != 0);
   if (didx == sidx) return;
 
   GLNVGfragUniforms uni = void;
@@ -11507,7 +11507,7 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
   glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], uni.UNIFORM_ARRAY_SIZE, &(uni.uniformArray.ptr[0].ptr[0]));
   glnvg__resetAffine(gl);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[didx]);
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[didx]);
   glDisable(GL_CULL_FACE);
   glDisable(GL_BLEND);
   glDisable(GL_SCISSOR_TEST);
@@ -11553,7 +11553,7 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
       }
     }
     if (fboidx >= 0) {
-      assert(gl.fbo[fboidx] != 0);
+      assert(gl.fbo.ptr[fboidx] != 0);
       //{ import core.stdc.stdio; printf("CLIPTEX: %d!\n", fboidx); }
     }
     return fboidx;
@@ -11564,7 +11564,7 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
   if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.Initialized) {
     // shortcut
     //{ import core.stdc.stdio; printf("00: CLIPTEX: %d!\n", gl.msp-1); }
-    glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[gl.msp-1]);
+    glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[gl.msp-1]);
     return gl.msp-1;
   }
   foreach (immutable sp; 0..gl.msp; reverse) {
@@ -11589,7 +11589,7 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
   // nothing was initialized, lol
   //{ import core.stdc.stdio; printf("03: CLIPTEX: %d)!\n", gl.msp-1); }
   if (!glnvg__allocFBO(gl, gl.msp-1)) glnvg__clearFBO(gl, gl.msp-1);
-  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[gl.msp-1]);
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[gl.msp-1]);
   gl.maskStack.ptr[gl.msp-1] = GLMaskState.JustCleared;
   return gl.msp-1;
 }
@@ -12000,7 +12000,7 @@ void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow
     //{ import core.stdc.stdio; printf("cliptex: %d\n", clipTexId); }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, gl.fboTex[clipTexId][0]);
+    glBindTexture(GL_TEXTURE_2D, gl.fboTex.ptr[clipTexId].ptr[0]);
     glActiveTexture(GL_TEXTURE0);
     //glBindTexture(GL_TEXTURE_2D, 0);
     frag.doclip = 1;
@@ -12069,7 +12069,7 @@ void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode cl
   immutable int clipTexId = glnvg__getFBOClipTexture(gl, true); // create texture if necessary
   assert(clipTexId >= 0);
   //glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[clipTexId]);
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[clipTexId]);
   // set logic op for clip
   gl.doClipUnion = false;
   if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.JustCleared) {
